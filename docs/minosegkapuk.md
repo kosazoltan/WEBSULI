@@ -101,6 +101,12 @@ viszi bukásra.
 - **A hook NEM biztonsági határ** a szándékos megkerülés ellen (pl. a hook kikapcsolása, szkriptfájlból indított push, idézés- /
   escape-trükk a parancsnévben, `git send-pack`, `gh api graphql` merge-mutáció): a figyelmetlen
   hibát fogja meg. A megkerülés tilos, és az orkesztrátornál a `pre-merge-gate` mindenképp lefut.
+- **Időtúllépéskor is tilt (kanban #100):** ha a `git` / `gh` nem válaszol a konfigurált korláton belül (`gates.config.json`:
+  `hookGitTimeoutMs` 10 s, `hookGhTimeoutMs` 15 s, a teljes keret `hookBudgetMs` 45 s, a Claude Code 60 s-os hook-időkorlátja
+  alatt), a hook DENY-t ad („a repó állapota nem állapítható meg — próbáld újra”). Az ügynök teendője: néhány másodperc múlva
+  ugyanazt az egyszerű parancsot újra kiadni; a kaput megkerülni tilos. „Más repó”-nak csak a gyors, nem nulla kilépés számít, és
+  az sem, ha a mappa vagy a parancs a WEBSULI-ra utal. Értelmező + szkriptfájl (pl. `node kanban.mjs note 5 "…"`) idézett
+  argumentumában a „push” szó nem kapu-köteles; `-e` / `-c` kiértékelésnél, láncolásnál továbbra is tilt.
 - **Feltöltés munkafából alügynökként:** az alügynök parancsai a fő checkoutból indulnak (a `cd` nem marad meg, láncolni tilos),
   ezért a munkafa ágát a fő checkoutból kell felküldeni egyszerű parancsként: `git push origin <ág>`. A hook ilyenkor a megnevezett
   helyi ág fejére szóló bizonyítékot nézi.

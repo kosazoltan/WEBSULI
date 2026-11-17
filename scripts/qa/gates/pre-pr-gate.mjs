@@ -146,7 +146,7 @@ async function main() {
   const cls = classifyChanges(changed, cfg);
   const dockerOk = () => exec('docker', ['version', '--format', '{{.Server.Version}}'], { cwd: root, timeoutMs: 30_000 }).code === 0;
   const specFiles = readdirSync(join(src, 'tests')).filter((f) => f.endsWith('.spec.ts')).sort();
-  const { runs, warning } = pickE2eSpecs({ classification: cls, specFiles, readSpec: (s) => { try { return readFileSync(join(src, 'tests', s), 'utf8'); } catch { return ''; } }, cfg, changed });
+  const { runs, warning } = pickE2eSpecs({ classification: cls, specFiles, readSpec: (s) => { /* olvashatatlan spec → '' → legfeljebb kevesebb UI-spec + WARN (ártalmatlan) */ try { return readFileSync(join(src, 'tests', s), 'utf8'); } catch { return ''; } }, cfg, changed });
 
   if (warning) gate.add('böngészős út (UI)', STATUS.WARN, warning);
   if (!runs.length && !warning) gate.add('böngészős út (CI-azonos)', STATUS.SKIP, 'nincs játék- / UI-változás');

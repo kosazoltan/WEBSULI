@@ -235,6 +235,7 @@ export function collectDiff(repo, base, head, mode, paths, opts = {}) {
   return { diff, added, changed: names.filter((p) => !isExcludedPath(p)), skippedPaths: allNames.filter((p) => isExcludedPath(p)) };
 }
 export function showFile(repo, head, p) {
+  // null: a spec-olvasó erre hibát dob (megáll); a teljes fájl kimarad a küldésből (kevesebb bemenet, ártalmatlan).
   try { return git(repo, ["show", `${head}:${p}`]); } catch { return null; }
 }
 export function extractSections(text, regexSrc) {

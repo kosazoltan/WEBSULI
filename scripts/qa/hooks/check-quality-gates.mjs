@@ -41,6 +41,9 @@ const GIT_PATH_PUSH = new RegExp(`git(?:\\.exe)?['"]?\\s[\\s\\S]*${W('push')}`, 
 const GH_PATH_PR = new RegExp(`gh(?:\\.exe)?['"]?\\s[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
 // ENGEDŐ lista (visszaellenőrzés AA1): csak ezek a NEM futtató eszközök kaphatnak „git push” / „gh pr merge” szöveget idézett
 // argumentumban; minden más fej (értelmező, burkoló, ismeretlen eszköz) + kapu-köteles szöveg → fail-closed DENY.
+const INTERPRETERS = new Set(['node', 'python', 'python3', 'py', 'deno', 'bun', 'perl', 'ruby']);
+const SCRIPT_FILE = /^[^-][^\s]*\.(?:mjs|cjs|js|ts|mts|py|pl|rb)$/i;
+const EVAL_FLAGS = new Set(['-e', '-p', '--eval', '--print', '-c', '-E', '-pe', '-ne', 'eval', 'run', '-r', '--require', '--import', '--loader']);
 const NON_EXEC = new Set(['echo', 'printf', 'grep', 'egrep', 'fgrep', 'rg', 'cat', 'head', 'tail', 'wc', 'less', 'more', 'findstr',
   'write-output', 'write-host', 'select-string', 'get-content', 'type', 'sls', 'gc']);
 const GH_PR = new RegExp(`${W('gh(?:\\.exe)?')}[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
@@ -178,23 +181,68 @@ export function planCommand(raw) {
   // Z2: önálló, nem futtató eszköz (echo, grep, rg, cat …), amelyben a „git push” csak idézett szövegként áll → nem kibocsátás.
   const base = (x) => x.replace(/\\/g, '/').split('/').pop().toLowerCase().replace(/\.(?:exe|cmd|bat|com)$/, '');
   const toolish = (x) => ['git', 'gh'].includes(base(x));
-  if (!/[\\/]/.test(w[0]) && NON_EXEC.has(base(head)) && !w.some((x) => x === 'push' || x === 'pr' || toolish(x))) return { kind: 'none' };
+  const onlyQuoted = !w.some((x) => x === 'push' || x === 'pr' || toolish(x));
+  if (!/[\\/]/.test(w[0]) && NON_EXEC.has(base(head)) && onlyQuoted) return { kind: 'none' };
+  // Kanban #100: értelmező + szkriptfájl (pl. `node kanban.mjs note 5 "… push …"`), kiértékelő kapcsoló nélkül → a kapu-köteles
+  // szöveg csak adat egy idézett argumentumban. Az `-e` / `-p` / `--eval` / `-c` kiértékelés, a burkoló és a láncolás DENY marad.
+  if (!/[\\/]/.test(w[0]) && INTERPRETERS.has(base(head)) && SCRIPT_FILE.test(w[1] ?? '') && !w.slice(1).some((x) => EVAL_FLAGS.has(x)) && onlyQuoted) return { kind: 'none' };
   return { kind: 'deny', reason: `${SIMPLE_HINT} (A parancs nem közvetlenül \`git push\` / \`gh pr …\`: burkoló, változó, alias vagy más eszköz.)` };
 }
 
-// Időkorlátok: a hook teljes ideje 15 s (settings.json) — git 3 s, gh 8 s.
-function run(file, args, cwd, timeout = 3000) {
-  return execFileSync(file, args, { cwd, encoding: 'utf8', timeout, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+// ---- Futtatás határidővel, fail-closed (kanban #100) --------------------------------------------------------------------
+// A korlátok a gates.config.json-ból (a hook saját repójának konfigja); alapérték: git 10 s, gh 15 s, a teljes keret 45 s — a
+// .claude/settings.json hook-időkorlátja (60 s) alatt, hogy a Claude Code soha ne a saját időkorlátjával (= fail-open) állítsa le.
+function hookConfig() {
+  try {
+    const p = new URL('../gates/gates.config.json', import.meta.url);
+    const c = JSON.parse(readFileSync(p, 'utf8'));
+    return { gitMs: Number(c.hookGitTimeoutMs) || 10_000, ghMs: Number(c.hookGhTimeoutMs) || 15_000, budgetMs: Number(c.hookBudgetMs) || 45_000 };
+  } catch { return { gitMs: 10_000, ghMs: 15_000, budgetMs: 45_000 }; } // a konfig hiánya csak az alapértéket hozza — szigorúság nem változik
 }
 
-function repoInfo(dir) {
+/** A hívott program NEM adott választ (időtúllépés, jelzéssel leállítva, indítási hiba) — szemben a gyors, nem nulla kilépéssel. */
+export function noAnswer(e) {
+  return Boolean(e) && (e.code === 'ETIMEDOUT' || e.code === 'ENOENT' || e.code === 'EPERM' || e.code === 'EACCES' || e.killed === true
+    || Boolean(e.signal) || e.status === null || e.status === undefined);
+}
+
+export class NoAnswerError extends Error {}
+
+/**
+ * Futtató-környezet: `exec` befecskendezhető (tesztek), a határidő a hook teljes keretéből fogy. A „nem válaszolt” hibát
+ * `NoAnswerError`-ra fordítja (→ DENY a main catch-ében); a gyors, nem nulla kilépést eredeti hibaként adja tovább.
+ */
+export function makeRunner({ exec = execFileSync, now = Date.now, cfg = hookConfig() } = {}) {
+  const deadline = now() + cfg.budgetMs;
+  return function run(file, args, cwd, kind = 'git') {
+    const left = deadline - now() - 500;
+    if (left <= 0) throw new NoAnswerError(`a minőségkapu-hook ideje elfogyott (${Math.round(cfg.budgetMs / 1000)} s) — próbáld újra`);
+    const timeout = Math.min(kind === 'gh' ? cfg.ghMs : cfg.gitMs, left);
+    try {
+      return String(exec(file, args, { cwd, encoding: 'utf8', timeout, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })).trim();
+    } catch (e) {
+      if (noAnswer(e)) throw new NoAnswerError(`a repó állapota nem állapítható meg (a(z) ${file} nem válaszolt ${Math.round(timeout / 1000)} s alatt) — próbáld újra`);
+      throw e;
+    }
+  };
+}
+
+function repoInfo(dir, run, raw) {
   let top;
-  try { top = run('git', ['rev-parse', '--show-toplevel'], dir); } catch { return null; }
+  try {
+    top = run('git', ['rev-parse', '--show-toplevel'], dir);
+  } catch (e) {
+    if (e instanceof NoAnswerError) throw e; // nem válaszolt → DENY (nem „más repó”)
+    // A git gyorsan, nem nulla kóddal kilépett: nem git-repó. Ha a mappa vagy a parancs a WEBSULI-ra utal, ez gyanús → DENY.
+    if (/websuli/i.test(String(dir)) || /websuli/i.test(String(raw))) throw new NoAnswerError('a WEBSULI-ra utaló mappában / parancsban a git nem talált repót — a kapu nem ellenőrizhető');
+    return null;
+  }
   if (!existsSync(join(top, 'scripts', 'qa', 'gates', 'pre-push-gate.mjs'))) return null; // nem WEBSULI / még kapu nélküli ág
-  let common = run('git', ['rev-parse', '--git-common-dir'], top);
+  let common = run('git', ['rev-parse', '--git-common-dir'], top); // hiba → kivétel → DENY
   if (!isAbsolute(common)) common = resolve(top, common);
   const evDir = process.env.WEBSULI_QA_EVIDENCE_DIR || join(common, 'websuli-qa-evidence');
   let maxMin = 15;
+  // A konfig hiánya / hibája az alapértéket (15 perc) hozza — ugyanaz, mint a kapu alapértéke; nem enyhít.
   try { maxMin = JSON.parse(readFileSync(join(top, 'scripts', 'qa', 'gates', 'gates.config.json'), 'utf8')).mergeEvidenceMaxMinutes ?? 15; } catch { /* alap */ }
   return { top, evDir, maxMin };
 }
@@ -202,57 +250,73 @@ function repoInfo(dir) {
 function readEv(evDir, name) {
   const p = join(evDir, `${name}.json`);
   if (!existsSync(p)) return null;
+  // Sérült bizonyíték → „bukott” (TILT), nem „hiányzik / engedélyezett”.
   try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return { ok: false, broken: true }; }
 }
 
-function currentBranch(top) {
-  try { return run('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], top); } catch { return null; }
+function currentBranch(top, run) {
+  try { return run('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], top); } catch (e) {
+    if (e instanceof NoAnswerError) throw e; // nem válaszolt → DENY a valódi okkal
+    return null; // leválasztott HEAD — a hívók erre TILTANAK
+  }
+}
+
+function localSha(run, top, ref, notFound) {
+  try { return run('git', ['rev-parse', '--verify', `refs/heads/${ref}^{commit}`], top); } catch (e) {
+    if (e instanceof NoAnswerError) throw e;
+    throw new Error(notFound); // nincs ilyen helyi ág → TILT
+  }
 }
 
 /** Egy terv ellenőrzése a bizonyíték alapján; DENY-indokot ad vissza, vagy null-t (enged). */
-export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '' } = {}) {
+export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '', run = makeRunner() } = {}) {
   if (plan.kind === 'none' || plan.kind === 'push-delete') return null;
-  const info = repoInfo(cwd);
+  const info = repoInfo(cwd, run, raw);
   if (!info) {
     // Más repó: nem a mi dolgunk — kivéve, ha a parancs a WEBSULI-ra mutat (pl. -R …/WEBSULI, cd …/WEBSULI): akkor fail-closed.
     return /websuli/i.test(raw) ? 'A WEBSULI-ra szóló push / PR / merge parancsot a WEBSULI munkafájából add ki, egyszerű parancsként.' : null;
   }
   if (plan.kind === 'deny') return plan.reason;
-  if (plan.kind === 'push') {
-    let sha;
-    let label;
-    if (plan.ref) {
-      try { sha = run('git', ['rev-parse', '--verify', `refs/heads/${plan.ref}^{commit}`], info.top); } catch { return `A pusholt ág (\`${plan.ref}\`) nem helyi ág — csak helyi ágat pusholj, a saját kimenő commitjára szóló bizonyítékkal.`; }
-      label = plan.ref;
-    } else {
-      const cur = currentBranch(info.top);
-      if (!cur) return 'Leválasztott HEAD-ről pusholni nem engedett — pusholj megnevezett helyi ágat.';
-      if (plan.sameAsCurrent && plan.sameAsCurrent !== cur) return `A \`HEAD:${plan.sameAsCurrent}\` más ágra töltene fel, mint az aktuális (\`${cur}\`) — nem engedett.`;
-      sha = run('git', ['rev-parse', '--verify', 'HEAD^{commit}'], info.top);
-      label = cur;
+  try {
+    if (plan.kind === 'push') {
+      let sha;
+      let label;
+      if (plan.ref) {
+        sha = localSha(run, info.top, plan.ref, `A pusholt ág (\`${plan.ref}\`) nem helyi ág — csak helyi ágat pusholj, a saját kimenő commitjára szóló bizonyítékkal.`);
+        label = plan.ref;
+      } else {
+        const cur = currentBranch(info.top, run);
+        if (!cur) return 'Leválasztott HEAD-ről pusholni nem engedett — pusholj megnevezett helyi ágat.';
+        if (plan.sameAsCurrent && plan.sameAsCurrent !== cur) return `A \`HEAD:${plan.sameAsCurrent}\` más ágra töltene fel, mint az aktuális (\`${cur}\`) — nem engedett.`;
+        sha = run('git', ['rev-parse', '--verify', 'HEAD^{commit}'], info.top);
+        label = cur;
+      }
+      const ev = readEv(info.evDir, `pre-push-${sha}`);
+      const pr = readEv(info.evDir, `pre-pr-${sha}`);
+      if (ev?.ok === true || pr?.ok === true) return null;
+      const why = ev ? `az utolsó futás erre a commitra BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték erre a commitra';
+      return `A push előtti kapu nem zöld a kimenő ${sha.slice(0, 12)} commitra (${label}; ${why}). Futtasd a munkafa gyökeréből: npm run gate:push — és ha zöld, pusholj újra.`;
     }
-    const ev = readEv(info.evDir, `pre-push-${sha}`);
-    const pr = readEv(info.evDir, `pre-pr-${sha}`);
-    if (ev?.ok === true || pr?.ok === true) return null;
-    const why = ev ? `az utolsó futás erre a commitra BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték erre a commitra';
-    return `A push előtti kapu nem zöld a kimenő ${sha.slice(0, 12)} commitra (${label}; ${why}). Futtasd a munkafa gyökeréből: npm run gate:push — és ha zöld, pusholj újra.`;
-  }
-  if (plan.kind === 'pr-create') {
-    if (plan.repoFlag && !/(?:^|\/)WEBSULI$/i.test(plan.repoFlag)) return null;
-    let sha;
-    if (plan.ref) {
-      try { sha = run('git', ['rev-parse', '--verify', `refs/heads/${plan.ref}^{commit}`], info.top); } catch { return `A --head ág (\`${plan.ref}\`) nem helyi ág — a PR-kapu bizonyítéka nem ellenőrizhető.`; }
-    } else {
-      if (!currentBranch(info.top)) return 'Leválasztott HEAD-ről PR-t nyitni nem engedett.';
-      sha = run('git', ['rev-parse', '--verify', 'HEAD^{commit}'], info.top);
+    if (plan.kind === 'pr-create') {
+      if (plan.repoFlag && !/(?:^|\/)WEBSULI$/i.test(plan.repoFlag)) return null;
+      let sha;
+      if (plan.ref) {
+        sha = localSha(run, info.top, plan.ref, `A --head ág (\`${plan.ref}\`) nem helyi ág — a PR-kapu bizonyítéka nem ellenőrizhető.`);
+      } else {
+        if (!currentBranch(info.top, run)) return 'Leválasztott HEAD-ről PR-t nyitni nem engedett.';
+        sha = run('git', ['rev-parse', '--verify', 'HEAD^{commit}'], info.top);
+      }
+      const ev = readEv(info.evDir, `pre-pr-${sha}`);
+      if (ev?.ok === true) return null;
+      const why = ev ? `az utolsó futás BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték';
+      return `A PR előtti kapu nem zöld a ${sha.slice(0, 12)} fejre (${why}). Előbb a független ellenőr (websuli-fejlesztesi-ellenor skill), aztán: npm run gate:pr -- --body-file <PR-leírás.md>.`;
     }
-    const ev = readEv(info.evDir, `pre-pr-${sha}`);
-    if (ev?.ok === true) return null;
-    const why = ev ? `az utolsó futás BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték';
-    return `A PR előtti kapu nem zöld a ${sha.slice(0, 12)} fejre (${why}). Előbb a független ellenőr (websuli-fejlesztesi-ellenor skill), aztán: npm run gate:pr -- --body-file <PR-leírás.md>.`;
+  } catch (e) {
+    if (e instanceof NoAnswerError) throw e;
+    return String(e?.message ?? e).split('\n')[0]; // minden más hiba is TILT
   }
   if (plan.kind === 'pr-merge') {
-    const view = (ghView ?? defaultGhView)(plan, info.top);
+    const view = (ghView ?? ((p, top) => defaultGhView(p, top, run)))(plan, info.top);
     if (!view?.number || !view?.headRefOid) return 'A PR száma / feje nem olvasható a gh-tól — merge-bizonyíték nélkül nem engedhető. Futtasd: npm run gate:merge -- <PR-szám>.';
     const ev = readEv(info.evDir, `merge-${view.number}-${view.headRefOid}`);
     if (!ev || ev.ok !== true) {
@@ -265,10 +329,12 @@ export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '' } = 
   return 'Ismeretlen kibocsátó művelet — nem engedhető.';
 }
 
-function defaultGhView(plan, top) {
+function defaultGhView(plan, top, run) {
   const args = ['pr', 'view', ...(plan.target ? [plan.target] : []), ...(plan.repoFlag ? ['-R', plan.repoFlag] : []), '--json', 'number,headRefOid'];
-  try { return JSON.parse(run('gh', args, top, 8000)); } catch { return null; }
+  // Bármely hiba (gh nem válaszol, nincs PR) → null → a hívó TILT.
+  try { return JSON.parse(run('gh', args, top, 'gh')); } catch { return null; }
 }
+
 
 function main() {
   let raw = '';
@@ -279,7 +345,9 @@ function main() {
     raw = String(payload.tool_input?.command ?? '');
     cwd = payload.cwd || cwd;
   } catch {
-    process.exit(0); // értelmezhetetlen bemenet: nem kibocsátó parancsként kezeljük
+    // Értelmezhetetlen hook-bemenet: a Claude Code mindig JSON-t ad; ha mégsem, a parancs nem olvasható — itt a tiltás MINDEN
+    // eszközhívást megállítana, ezért enged (dokumentált kivétel). A merge-kaput az orkesztrátor ettől függetlenül lefuttatja.
+    process.exit(0);
   }
   let reason;
   try { reason = checkAction(planCommand(raw), cwd, { raw }); } catch (e) { reason = `A minőségkapu-ellenőrzés hibára futott (${String(e?.message ?? e).split('\n')[0]}) — a kibocsátás nem engedhető.`; }

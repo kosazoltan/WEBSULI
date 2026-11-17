@@ -174,3 +174,54 @@ test('más repó: nincs kimenet (láncolva sem) — kivéve, ha a parancs a WEBS
   assert.ok(denied(runHook('cd /d/repo/WEBSULI && git push', other)));
   assert.equal(runHook('git push', other, 'Edit'), null, 'csak Bash / PowerShell');
 });
+
+// ---- Kanban #100: fail-closed időtúllépéskor (befecskendezett futtatóval, a gép sebességétől függetlenül) ------------------------
+import { makeRunner, noAnswer, NoAnswerError } from './check-quality-gates.mjs';
+const errOf = (props) => Object.assign(new Error('x'), props);
+const cfgFast = { gitMs: 10_000, ghMs: 15_000, budgetMs: 45_000 };
+
+test('noAnswer: időtúllépés / jelzés / indítási hiba igen; gyors, nem nulla kilépés nem', () => {
+  for (const e of [errOf({ code: 'ETIMEDOUT', status: null, signal: 'SIGTERM' }), errOf({ killed: true, status: null }), errOf({ signal: 'SIGKILL', status: null }),
+    errOf({ code: 'ENOENT' }), errOf({ code: 'EPERM' })]) assert.equal(noAnswer(e), true, JSON.stringify(e));
+  assert.equal(noAnswer(errOf({ status: 128, signal: null })), false);
+});
+
+test('időtúllépő / indítási hibás git → DENY (NoAnswerError), nem „más repó”', () => {
+  const plan = { kind: 'push', remote: 'origin', ref: null, upstream: false };
+  for (const e of [errOf({ code: 'ETIMEDOUT', status: null, signal: 'SIGTERM' }), errOf({ code: 'ENOENT' })]) {
+    const run = makeRunner({ exec: () => { throw e; }, cfg: cfgFast });
+    assert.throws(() => checkAction(plan, '/x/mas-mappa', { run, raw: 'git push' }), NoAnswerError);
+  }
+});
+
+test('valódi „nem git-repó” (gyors, nem nulla kilépés) → más repó, nincs tiltás; WEBSULI-utalású mappában → DENY', () => {
+  const plan = { kind: 'push', remote: 'origin', ref: null, upstream: false };
+  const run = makeRunner({ exec: () => { throw errOf({ status: 128, signal: null }); }, cfg: cfgFast });
+  assert.equal(checkAction(plan, '/x/mas-mappa', { run, raw: 'git push' }), null);
+  assert.throws(() => checkAction(plan, 'D:/repo/WEBSULI/.claude/worktrees/x', { run, raw: 'git push' }), NoAnswerError);
+});
+
+test('a keret kimerülése → DENY, mielőtt a Claude Code hook-időkorlátja lejárna', () => {
+  let t = 0;
+  const run = makeRunner({ exec: () => { t += 50_000; return '/r'; }, now: () => t, cfg: cfgFast });
+  assert.equal(run('git', ['rev-parse'], '.'), '/r');
+  assert.throws(() => run('git', ['rev-parse'], '.'), NoAnswerError);
+});
+
+test('a futtató a konfigurált korláttal hív (git 10 s, gh 15 s), a maradék kerettel felülről korlátozva', () => {
+  const seen = [];
+  const run = makeRunner({ exec: (f, a, o) => { seen.push([f, o.timeout]); return ''; }, now: () => 0, cfg: cfgFast });
+  run('git', [], '.');
+  run('gh', [], '.', 'gh');
+  assert.deepEqual(seen, [['git', 10_000], ['gh', 15_000]]);
+});
+
+test('kanban #100: értelmező + szkriptfájl idézett „push” szöveggel nem kapu-köteles; a lánc és a kiértékelés tilt', () => {
+  assert.equal(kind('node kanban.mjs note 5 "a kiadást a git push után ellenőrizd"'), 'none');
+  assert.equal(kind('node D:/x/scripts/kanban.mjs note 5 "gh pr merge 9 után"'), 'none');
+  assert.equal(kind('echo x && git push'), 'deny');
+  assert.equal(kind('node -e "require(\'child_process\').execSync(\'git push\')"'), 'deny');
+  assert.equal(kind('node kanban.mjs note 5 "x" && git push'), 'deny');
+  assert.equal(kind('python3 -c "import os; os.system(\'git push\')"'), 'deny');
+  assert.equal(kind('node kanban.mjs git push'), 'deny', 'nem idézett git push szavak → tilt');
+});

@@ -128,7 +128,7 @@ export function makeGit(exec, cwd) {
           const buf = readFileSync(join(dir, f));
           if (buf.length > 2 * 1024 * 1024 || buf.includes(0)) continue;
           buf.toString('utf8').replace(/\r\n/g, '\n').split('\n').forEach((text, i) => res.push({ file: f.replace(/\\/g, '/'), line: i + 1, text }));
-        } catch { /* eltűnt közben */ }
+        } catch { /* eltűnt közben: a fájl már nincs a munkafában, nincs mit szkennelni (ártalmatlan) */ }
       }
       return res;
     },
@@ -184,7 +184,7 @@ export function writeLog(dir, gate, step, text) {
     const p = join(d, `${gate}-${step.replace(/[^A-Za-z0-9_-]+/g, '_')}.log`);
     writeFileSync(p, redact(text));
     return p;
-  } catch { return null; }
+  } catch { return null; } // a napló csak diagnosztika; a hiánya a lépés eredményét nem változtatja (ártalmatlan)
 }
 
 // ---- Lépésenkénti futtató (D2) --------------------------------------------------------------------------------------
