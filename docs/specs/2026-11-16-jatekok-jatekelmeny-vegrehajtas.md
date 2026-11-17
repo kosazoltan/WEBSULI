@@ -1582,6 +1582,26 @@ fizika-esetek (pattogás, határok) változatlanok.
   küszöbbel éri el). Az értékeket úgy választottuk, hogy a tervezett viselkedés-tulajdonságok teljesüljenek: az erős modell végigviszi,
   a gyenge kérdés nélkül nem, a kérdés segít (az `Ú1` teszt), a menet ~3 perc — nem a valós ügyességből mérve. Javasolt horgony (jegyre
   kerül): a lapon szkriptelt játékos ütközés / perc mérése, amelyhez a `DODGE_*` és a `LATERAL_OVERLAP` illeszthető.
+- **Teszt-elvárások és bot-konstansok átvilágítása (teszt-integritás, 2026-11-17):**
+  - `T/space-asteroid-crystals.test.ts:89` („a kristály nem ér a hajó legfelső helyére”): eredeti elvárás `hit-alj > PLAYER_Y_MAX + 1,5`
+    (a 40ac73b4 commitban, a kristály-zóna merev „hajó fölötti padló + rés” tervével); a 9f0d08c5 commit `− 0,3`-ra lazította, amikor a zónát a
+    kérdés-kártya alá csúsztattuk (hosszú kérdésnél a zóna a hajó felső sávjába nyúlhat). A lazítás a TESZT bemenetén (normál zóna) NEM volt
+    szükséges: a `+1,5` a mai kóddal is teljesül — **mérce-igazítás volt, nem spec-változás, ezért visszaállítva `+1,5`-re** (a szűk zóna esetét
+    a „felső perembe kapaszkodó minimum-magasság” teszt külön őrzi).
+  - Bot-konstansok (`sim.ts`: `DODGE_IMPACT` 1,2 → 0,40, `DODGE_FIGHTER` 1,2 → 0,95, `DODGE_BOSS` 1,1 → 0,8, `PICKUP_CATCH_EASE` 0,95 → 0,85): a
+    6a3c42df-i modell minden nem lelőtt ellenfelet ütköztetett és nem ismert felvehető elemet; a #486 M3 után a sim a lap szabályait
+    (felvehető elemek, oldalirányú átfedés) használja, ezért a küszöbök újrahangolása a MODELLVÁLTÁS következménye, nem a bukás elkerülése.
+    Mérés (20 seed, 900 mp, ugyanazon a mai játékkódon, győzelem kérdéssel / nélkül):
+
+    | konstansok | AVG | STRONG | WEAK | YOUNG (3. évf.) |
+    |---|---|---|---|---|
+    | régi: 1,2 / 1,2 / 1,1 / 0,95 | 20 / 20 | 20 / 20 | 11 / 3 | 19 / 18 |
+    | b526c8cd: 0,65 / 1,1 / 0,85 / 0,95 | 20 / 19 | 20 / 20 | 4 / 0 | 17 / 14 |
+    | mai: 0,40 / 0,95 / 0,8 / 0,85 | 18 / 13 | 20 / 19 | 3 / 0 | 14 / 5 |
+
+    Az új küszöbök a botot NEHEZEBBEN játszatják (kevesebb győzelem) — az elfogadási pontok NEM könnyebben teljesülnek: a régi értékekkel a „kérdés
+    nélkül is el lehet veszíteni” (gyenge: 3/20 nyer) és az „átlagos játékos olykor veszít” (20/20) elbukna, vagyis a régi értékek a mai modellben
+    LAZÁBBAK voltak. A kalibráció a gyerek modellezése, nem a teszt kiszolgálása.
 - **Tartott tűz jelzése:** ha a lövedék átmegy a kristályon (nem élesített / régi nyomás), „Engedd el a tűzgombot, és lőj újra a válaszhoz!”
   jelenik meg 3,5 mp-re, amíg a gyerek lövéssel egyszer még nem válaszolt (`sa-hold-hint`).
 - **Átméretezés nyitott kérdésnél:** a mag új aréna-méretből újraszámolja a kristályok helyét (`rezoneCrystals`), az élesítés újraindul.

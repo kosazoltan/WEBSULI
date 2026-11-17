@@ -86,7 +86,7 @@ test("a kristályok a zónájukban lebegnek és soha nem érnek a hajó legfels�
       for (let step = 0; step < 3600; step++) {
         stepCrystals(cs, 1 / 60);
         for (const c of cs) {
-          assert.ok(c.y - CRYSTAL_RADIUS * CRYSTAL_HIT_FACTOR > PLAYER_Y_MAX - 0.3, `seed ${seed}: a kristály (${c.y.toFixed(2)}) a hajó legfelső helyére ért`);
+          assert.ok(c.y - CRYSTAL_RADIUS * CRYSTAL_HIT_FACTOR > PLAYER_Y_MAX + 1.5, `seed ${seed}: a kristály (${c.y.toFixed(2)}) a hajó legfelső helyére ért`);
           assert.ok(c.y >= b.minY - 1e-9 && c.y <= b.maxY + 1e-9, `seed ${seed}: kiesett a zónából (${c.y})`);
           assert.ok(c.x >= b.minX - 1e-9 && c.x <= b.maxX + 1e-9, `seed ${seed}: kiesett a zónából (${c.x})`);
         }
