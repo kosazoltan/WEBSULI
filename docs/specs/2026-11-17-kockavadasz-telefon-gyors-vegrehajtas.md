@@ -23,7 +23,7 @@ Minden parancs a munkafa gyökeréből. Push / PR csak orkesztrátori jelre; a P
 2. `source/client/src/lib/voxelSunShade.ts`:
    - `sunShadeAt(solidAt, leafAt, x, y, z, maxY): 0 | 1 | 2` — a (x, y+k, z−k) és a (x, y+k, z−k+1) cellákon lépked k = 1 … (maxY − y):
      tömör (nem lomb) találat → 2 (árnyék); csak lomb találat → 1 (lombszűrte); semmi → 0. A `solidAt(x, y, z)` a rácson kívül hamis.
-   - `SUN_SHADE_TINT: readonly [r, g, b][]` = `[[1, 1, 1], [0.8, 0.84, 0.86], [0.56, 0.6, 0.7]]`.
+   - `SUN_SHADE_TINT: readonly [r, g, b][]` = `[[1, 1, 1], [0.58, 0.62, 0.72], [0.46, 0.5, 0.62]]`.
    Teszt: `source/tests/voxel-sun-shade.test.ts` (szabad ég → 0; közvetlenül a nap felőli átlóban tömör → 2; csak lomb → 1; lomb
    mögött tömör → 2; a rács széle → 0; a naptól elfelé eső blokk nem árnyékol).
 3. `source/client/src/game-engine/perf/perfStats.ts`, `perfOverlay.ts`, `source/tests/perf-stats.test.ts` — változatlan áthozás a

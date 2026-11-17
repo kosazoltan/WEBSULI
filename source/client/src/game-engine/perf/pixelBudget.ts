@@ -1,0 +1,32 @@
+/**
+ * Képpontszám-plafon a 3D vászonra és a „könnyű grafika” döntése (terv: docs/specs/2026-11-17-kockavadasz-telefon-gyors.md, 3/f).
+ *
+ * A felbontás alapértéke NEM csökken: a plafon csak könnyű grafika módban hat (gyenge eszköz jelei — ugyanaz a szabály, mint a
+ * Szökőár `isLowEnd`-je), illetve a `?perf=1` panel kapcsolójával. A HUD natív DOM, azt a plafon nem érinti.
+ */
+
+/** A 3D vászon legfeljebb ennyi képpontot rajzol könnyű grafika módban. */
+export const LIGHT_GRAPHICS_MAX_PIXELS = 1_000_000;
+
+export type LightGraphicsEnv = {
+  tier: string;
+  reducedMotion: boolean;
+  /** `navigator.deviceMemory` GB-ban; null, ha a böngésző nem adja. */
+  memoryGb: number | null;
+};
+
+/** Az ESZKÖZ képessége dönt, egyszer, betöltéskor — nem az ablak mérete és nem a mutató fajtája. */
+export function isLightGraphicsFrom(env: LightGraphicsEnv): boolean {
+  return env.tier === "low" || env.reducedMotion || (env.memoryGb !== null && env.memoryGb <= 4);
+}
+
+/**
+ * A renderer képpontaránya adott CSS-méretű vászonhoz. Ha nincs plafon, vagy a `base` aránnyal a kép belefér, `base`;
+ * különben az az arány, amellyel a képpontszám éppen a plafon (a képarány változatlan). Soha nem nagyobb `base`-nél.
+ */
+export function pixelRatioForBudget(cssWidth: number, cssHeight: number, basePixelRatio: number, maxPixels: number | null): number {
+  const area = cssWidth * cssHeight;
+  if (maxPixels === null || !(area > 0) || !(maxPixels > 0)) return basePixelRatio;
+  if (area * basePixelRatio * basePixelRatio <= maxPixels) return basePixelRatio;
+  return Math.min(basePixelRatio, Math.sqrt(maxPixels / area));
+}
