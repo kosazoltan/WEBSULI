@@ -5,7 +5,7 @@ description: Hiányos, hibás HTML vagy Studio JSON tananyagok forráshű, mente
 
 # Tananyag javítása — fúzió 7.4
 
-> **Befejezési mandátum (tulajdonosi utasítás 2026-11-01/03).** A megkezdett készítés/javítás nem hagyható félbe: a kiadott kérés teljes elkészültéig fut, a session végén tételes teljességellenőrzés kell, objektív blokkolónál NOT DONE + ok + kockázat. Minden hibából csapda-bejegyzés lesz ([`docs/agent-csapdak.md`](../../../docs/agent-csapdak.md)). Részletek: [`AGENTS.md`](../../../AGENTS.md) „Befejezési mandátum”.
+> **Befejezési mandátum** (tulajdonosi utasítás 2026-11-01/03): félbehagyás tilos, session végén teljességellenőrzés, NOT DONE + ok + kockázat, minden hibából csapda ([`docs/agent-csapdak.md`](../../../docs/agent-csapdak.md)) — [`AGENTS.md`](../../../AGENTS.md) „Befejezési mandátum”.
 
 > **Utasításrendszer runtime-3 (2026-09-30).** A runtime-3 utasításrendszer tényleges működése: [közös módszer — „Utasításrendszer runtime-3”](../../../docs/lesson-improvement.md). A javító út régi-alak ellenőrzése: nem létező régi alak determinisztikus hiba (ragozva is); összetett régi alak („föld-változása”) csak jelölt, a javító-lektor dönt — a régi szó más értelemben („a Föld”) nem hiba.
 
