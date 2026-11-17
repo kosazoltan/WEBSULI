@@ -172,3 +172,20 @@ megtartott meglévő viselkedés: Bash-ben a `#` közönséges karakter (a szó 
   SHALL a normál bizonyíték-ellenőrzést futtatni (nem idézés-tiltást).
 - H9 WHEN a kapu-hook bármelyik eszköz-bejegyzése hiányzik, vagy az időkorlátja nincs a hook saját kerete fölött THEN the settings-teszt
   SHALL bukni; a hook folyamata az eszköz nevét átadja (folyamat-szintű teszt).
+
+
+### 11.3 Megjegyzés, here-string, kapcsoló-értelmezés, ismeretlen eszköz (kanban #100, 4. kör — a visszaellenőrzés 3. körének leletei)
+
+A 11.2 PowerShell-ága két alak-osztályt átengedett, amelyet az előző fej még tiltott; Bash-ben a szó eleji `#` kezelése a héjjal
+ellentétes volt. **Döntés:** (1) a szó eleji, idézőjelen kívüli `#` mindkét héjban megjegyzés a SOR VÉGÉIG; az utána álló újsor a
+szokott módon láncolás (tilt); a „#<szám>” megjegyzés érthető tiltás („a PR számát # nélkül add meg”). **SPEC-VÁLTOZÁS:** a
+`check-quality-gates.test.mjs` korábbi elvárása (a `… #9` cél = 9) a héjjal ellentétes volt, mostantól tiltás. (2) PowerShell
+here-string nyitása tilt. (3) A `--auto` / `--disable-auto` a kapcsolók értelmezése UTÁN dől el. (4) PowerShellben az idézőjelen kívüli
+nem ASCII szóköz tilt. (5) Ismeretlen / hiányzó eszköznév: mindkét héj szabálya szerint; bármelyik tilt → tilt, eltérő kapu-terv → tilt.
+(6) Az ellenőr 152 támadó alakja a rögzített próbatáblába, a valódi héjas eredménnyel (Git Bash, PowerShell 7, Windows PowerShell 5.1).
+
+**Elfogadás (EARS).**
+- H10 WHEN egy megjegyzés után új sorban kapu-köteles parancs áll THEN the hook SHALL tiltani (mindkét héjban).
+- H11 WHEN a próbatábla bármely alakját a valódi héj kapu-köteles hívással futtatja THEN the hook terve SHALL kapu vagy tiltás lenni
+  (soha „nem kapu-köteles”), és kapu-tervnél a hook szavai SHALL egyezni a héj által átadott argumentumokkal.
+- H12 WHEN a hook ismeretlen eszköznevet kap THEN SHALL mindkét héj szabálya szerint dönteni (a szigorúbb).
