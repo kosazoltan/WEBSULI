@@ -1287,6 +1287,27 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
   esnek (a válasz a két oldali rúnagombbal megy, a célkereszt és az érc szabad) — J3c-jegy (kisebb ív fekvőben vagy a kártya
   eltolása).
 
+#### J3a — a második visszaellenőrzés (N1–N3) utáni döntések (a javítás ELŐTT rögzítve, 2026-11-17)
+
+Mért kiinduló állapot (böngésző, a lap saját vetítésével; a kő képernyő-téglalapjának takaratlan része a kártya, rúnagombok,
+HUD, tárcsa, akciógombok, chipsor, hotbar ellen): 360×640 rövid kérdésnél B 0%, C 0%; leghosszabb kérdés + leghosszabb
+válaszok mellett mind a négy kő 0%, és a kérdéskártya rátakar az A/B rúnagombra; 390×844 leghosszabbnál B, C 0%; 844×390 mind 0%.
+
+- **N1 — a kövek a képernyő szabad sávjában.** A lap képkockánként a kamerához igazítja a köveket: a sáv a kérdéskártya alja és
+  a rúnagombok (álló) / az alsó vezérlők (fekvő) teteje között, fekvőben a két rúnaoszlop között. Elrendezés 2×2, a
+  rúnagombok kiosztása szerint (álló: A bal-fent, B jobb-fent, C bal-lent, D jobb-lent; fekvő: A, B bal oszlop, C, D jobb). A
+  kövek a világban maradnak (a kamera előtt, a vetített érc mellett, ha van hely), a terep nem takarja őket (`depthTest` ki).
+- **A kérdéskártya zár alatt a szabad helyhez igazodik:** a prompt sorszáma (`--bc-pq-lines`) úgy csökken, hogy a kártya, a
+  kősáv és a rúnagombok ne fedjék egymást; a hosszabb szöveg a közös „Mutasd”-dal olvasható (a játék közben áll). Ez javítja a
+  360×640-es gombtakarást is.
+- **B1 nem gyengül, N2 megszűnik:** a vászon-koppintás (`tapRay`) nem választ, ha a sugár az ércet metszi (bármelyik
+  kőelrendezésnél, a játékos bármely helyzetéből). A mag `runeStoneLayout`-ja (kezdő elrendezés, sim) változatlan; a reviewer
+  `stone-overlap` mérője fixture marad (0 / 1500), a `stone-overlap2` (körbejárás) a `tapRay` szabályával 0%.
+- **Elfogadás:** mindhárom mérőnézetben, a leghosszabb kérdés + leghosszabb válaszok és a rövid kérdés mellett mind a négy kő
+  vetülete ≥ 70%-ban takaratlan; a kő ↔ rúnagomb megfeleltetés (szín / betű, elhelyezés) egyezik; e2e mért értékkel, mutációs
+  ellenpróba. Az álló és fekvő képernyőképek újrakészülnek.
+- **Nem ebben a PR-ban:** N3, L4 maradéka, L6 (tulajdonosi döntés), a közös `pointerTap.ts`.
+
 ### J3b — nappal–éjjel ciklus, sebző mobok, kard, életek
 
 1. Állapot-sor commit.
