@@ -104,6 +104,16 @@ export function winReward(args: {
   });
 }
 
+/**
+ * Kupon (lecke-jutalom) mód: csak tananyag jöhet, ezért a kis lecke se fogyjon el (önellenőrző lista b). Az `n`. ismétlés
+ * a tananyag körbejárásával a következő tétel, KÖRÖNKÉNT saját kulccsal (a director egy menetben egy kulcsot csak egyszer
+ * ad; kupon módban ismétlési sor nincs). Üres tananyagnál null (a játék kérdés nélkül fut — terv 8.1).
+ */
+export function couponRepeat<T>(items: readonly T[], n: number): { item: T; keySuffix: string } | null {
+  if (items.length === 0 || !(n >= 0)) return null;
+  return { item: items[n % items.length]!, keySuffix: `~${Math.floor(n / items.length) + 2}` };
+}
+
 /* ------------------------------------------------------------------------------------------------------------------ */
 /* A közös mag                                                                                                         */
 /* ------------------------------------------------------------------------------------------------------------------ */

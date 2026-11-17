@@ -95,7 +95,10 @@ for (const viewport of VIEWPORTS) {
       await tapCenter(page, anchor);
       const quiz = page.getByTestId("tornado-quiz");
       await expect(quiz).toBeVisible({ timeout: 5_000 });
-      await expect(quiz).toContainText("Horgonyzási kérdés");
+      // SPEC-VÁLTOZÁS 2026-11-17 (terv 5.7, 9.; végrehajtás J7b 3.–4.: a megállító overlay megszűnt): a horgony-kérdés a közös,
+      // nem blokkoló kérdés-sávon jön (gomb-mód); a fajtáját a kérdés mellett a „⚓ Horgonyzási kérdés” felirat mutatja.
+      await expect(quiz).toHaveAttribute("data-mode", "buttons");
+      await expect(page.getByTestId("tornado-question-kind")).toContainText("Horgonyzási kérdés");
       await shot(page, testInfo, "anchor-question");
       await quiz.locator('[data-correct="true"]').first().click();
       await expect(page.getByText(/Horgony rögzítve|Túl|Sáros|Hibás/).first()).toBeVisible({ timeout: 5_000 });
@@ -116,7 +119,9 @@ for (const viewport of VIEWPORTS) {
       await shot(page, testInfo, "result-breakdown");
     });
 
-    test("hibás horgony-válasz: megjelenik a magyarázó kártya (a vezetés folytatását a J7b méri)", async ({ page }, testInfo) => {
+    // SPEC-VÁLTOZÁS 2026-11-17 (terv 9., J5; a J7a ezt a J7b-nek adta át): hibás válaszra NEM nyílik magától kártya — a
+    // helyes válasz a sávban látszik, a magyarázókártyát a „Miért?” nyitja (szünettel). A mérce nem lazul: a kártya elérhető.
+    test("hibás horgony-válasz: blokkoló kártya nincs, a „Miért?” megnyitja a magyarázó kártyát", async ({ page }, testInfo) => {
       await startPlaying(page);
       await force(page, { nearTornadoKm: 0.65 });
       const anchor = page.getByRole("button", { name: "⚓", exact: true });
@@ -125,6 +130,9 @@ for (const viewport of VIEWPORTS) {
       const quiz = page.getByTestId("tornado-quiz");
       await expect(quiz).toBeVisible({ timeout: 5_000 });
       await quiz.locator('[data-correct="false"]').first().click();
+      await expect(quiz.locator('[data-state="correct"]')).toHaveCount(1);
+      await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+      await page.getByTestId("play-why").click();
       await expect(page.getByTestId("quiz-feedback")).toBeVisible({ timeout: 5_000 });
       await shot(page, testInfo, "wrong");
     });

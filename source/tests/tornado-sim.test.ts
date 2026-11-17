@@ -5,6 +5,7 @@ import test from "node:test";
 import { SIM_AVERAGE, SIM_WEAK, SIM_YOUNG, medianOf, runSim, runSimSeeds, simSeeds, type SimGameFactory } from "./support/game-sim";
 import {
   advanceTornado,
+  couponRepeat,
   createChaseDriver,
   createSimGame,
   levelForGrade,
@@ -205,4 +206,53 @@ test("#83 L3: a pozíció-bónusz a horgonyzás pillanatának távolságából s
   const later = spec.anchorBand.max * 1.6; // a hold ideje alatt a tölcsér elhaladt
   const base = { level, secondsUsed: 70, anchorAttempts: 1, peakWind: spec.windPeak, correctAnswers: 3, wrongAnswers: 0 };
   assert.ok(winReward({ ...base, anchoredDistanceKm: atAnchor }).breakdown.positionBonus > winReward({ ...base, anchoredDistanceKm: later }).breakdown.positionBonus);
+});
+
+/* ---- önellenőrző lista (b), (e): kupon módban nem fogy el a kérdés; győzelem és vereség nem fordul át ---- */
+
+test("(b) kupon módban 3 tételes leckével sem fogy el a kérdés: a tananyag körönként, saját kulccsal ismétlődik", async () => {
+  const { createQuestionDirector, materialPlayQuestion } = await import("../client/src/game-engine/play/questionDirector");
+  const { createReviewQueue } = await import("../client/src/game-engine/play/reviewQueue");
+  const { createRng } = await import("../shared/game-rng");
+  const material = [1, 2, 3].map((n) => ({ id: `lecke-${n}`, prompt: `Lecke-kérdés ${n}?`, options: ["a", "b", "c", "d"], correctIndex: 0 }));
+  let unseen = 0;
+  let repeats = 0;
+  const director = createQuestionDirector({
+    config: { ...tornadoDirectorConfig(5), promptFits: undefined, readingAware: false },
+    provider: {
+      couponOnly: true,
+      material: () => {
+        if (unseen < material.length) return materialPlayQuestion(material[unseen++]!, { coupon: true });
+        const again = couponRepeat(material, repeats++);
+        return again ? { ...materialPlayQuestion(again.item, { coupon: true }), key: `mat:${again.item.id}${again.keySuffix}` } : null;
+      },
+      fresh: () => null,
+      restore: () => null,
+    },
+    review: createReviewQueue(null),
+    rng: createRng("kupon"),
+    startBand: 0.4,
+    now: () => 0,
+  });
+  const ids: string[] = [];
+  for (let i = 0; i < 30; i++) {
+    const p = director.request("rescue", i * 5000);
+    assert.ok(p, `${i + 1}. kérdés: elfogyott a kérdés kupon módban`);
+    ids.push(p.question.quiz.id);
+    director.answer(p.id, 0, i * 5000 + 1000);
+  }
+  assert.deepEqual(new Set(ids), new Set(["lecke-1", "lecke-2", "lecke-3"]), "csak a lecke tételei");
+  assert.equal(couponRepeat([], 0), null, "üres tananyagnál nincs kitalált kérdés");
+});
+
+test("(e) győzelem és vereség nem fordul át: a horgonyzott menet nem veszít, a lezárt menet állapota nem változik", () => {
+  for (const seed of simSeeds(GAME, 10)) {
+    const g = createSimGame({ seed, grade: 7, questions: true });
+    runSim(() => g as never, SIM_AVERAGE, { seed, seconds: 600 });
+    const before = g.fingerprint();
+    const won = g.won();
+    for (let i = 0; i < 600; i++) g.step(1000 / 60, { skillRoll: 0.5 });
+    assert.equal(g.won(), won, "a kimenet a lezárás után megváltozott");
+    assert.equal(g.fingerprint(), before, "a lezárt menet tovább futott");
+  }
 });

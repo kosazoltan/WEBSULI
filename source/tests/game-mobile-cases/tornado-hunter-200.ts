@@ -20,13 +20,18 @@ async function playReady(page: Page): Promise<void> {
   }
 }
 
-/** Rossz válasz (M9, M10): a teszt-kampó kvízt dob fel, és az első rossz válaszgombra koppint. */
+/**
+ * Rossz válasz (M9, M10, K1/K3): a teszt-kampó kérdést nyit (J7b: turbó-kérdés a nem blokkoló kérdés-sávon, gomb-mód),
+ * a gyerek az első rossz válaszra koppint. A magyarázókártya (`quiz-feedback`) már NEM nyílik magától (terv 9., J5) — a
+ * „Miért?” gomb nyitja, szünettel; a K1/K3 mérés így a „Miért?” kártyán fut.
+ */
 async function answerWrong(page: Page): Promise<void> {
   await page.waitForFunction(() => typeof (window as unknown as GameTestWindow).__websuliGame?.forceState === "function");
   await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ screen: "play", phase: "quiz" }));
   const quiz = page.getByTestId("tornado-quiz");
   await expect(quiz).toBeVisible({ timeout: 10_000 });
   await quiz.locator('[data-correct="false"]').first().click();
+  await page.getByTestId("play-why").click();
 }
 
 export const CASE: GameMobileCase = {
@@ -40,7 +45,9 @@ export const CASE: GameMobileCase = {
   touchControlsTestId: "tornado-touch-controls",
   resultForce: { screen: "play", phase: "result_win" },
   resultTestId: "th-result",
-  quizScope: '[data-testid="tornado-quiz"]',
+  // J7b: a gomb-módú kérdés (turbó / horgony — a forceState ezt nyitja) a mért kérdés-állapot. Az elágazás sáv-módú kérdése
+  // nem blokkol: a válasz az áthajtott tábla, a DOM-gombsor ott akadálymentességi (vizuálisan rejtett) réteg, nem érintési cél.
+  quizScope: '[data-testid="tornado-quiz"][data-mode="buttons"]',
   quizForce: { screen: "play", phase: "quiz" },
   answerWrong,
   orientation: "landscape",

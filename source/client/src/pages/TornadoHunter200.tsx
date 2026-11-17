@@ -166,7 +166,7 @@ import {
 } from "@/lib/tornado/controls";
 import { shouldDisposeGeometry } from "@/tornado/meshLifetime";
 import { applyRunResult } from "@/lib/tornado/runResult";
-import { advanceTornado, createChaseDriver, tornadoDirectorConfig, winReward, type ChaseDriver, type ChaseEvent, type QuestionKind } from "@/lib/tornado/sim";
+import { advanceTornado, couponRepeat, createChaseDriver, tornadoDirectorConfig, winReward, type ChaseDriver, type ChaseEvent, type QuestionKind } from "@/lib/tornado/sim";
 import type { QuestionOutcome, QuestionPresentation } from "@/game-engine/play";
 import { NITRO_ACCEL_FACTOR, NITRO_SPEED_FACTOR, TURBO_PAD_RADIUS, gatePoint, type Junction, type TurboPad } from "@/lib/tornado/junctions";
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
@@ -1556,7 +1556,9 @@ function PlayScreen(props: {
     pad: THREE.Mesh;
   } | null>(null);
   /** A vászon CSS-mérete (a táblafeliratok vetítéséhez). */
-  const sizeRef = useRef({ w: 640, h: 480 });
+  const sizeRef = useRef({ w: 640, h: 480, top: 0 });
+  /** A kérdés-sáv kártyájának alja (képernyő-px, 10 Hz-en mérve): a táblafeliratok ez alá kerülnek, nem a kártya mögé. */
+  const cardBottomRef = useRef(0);
 
   const rafRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
@@ -1602,13 +1604,12 @@ function PlayScreen(props: {
         if (pool.length === 0) {
           // Kupon (lecke-jutalom) módban csak tananyag jöhet: a kis lecke se fogyjon el — körönként újra, saját kulccsal
           // (a director egy menetben egy kulcsot csak egyszer ad; kupon módban ismétlési sor nincs).
-          const all = materialRef.current;
-          if (!couponRef.current.active || all.length === 0) return null;
-          const n = couponRepeatRef.current++;
-          const again = all[n % all.length]!;
-          const play = toPlay(again, null);
-          const key = `${play.key}~${Math.floor(n / all.length) + 2}`;
-          questionMetaRef.current.set(key, again);
+          const again = couponRef.current.active ? couponRepeat(materialRef.current, couponRepeatRef.current) : null;
+          if (!again) return null;
+          couponRepeatRef.current += 1;
+          const play = toPlay(again.item, null);
+          const key = `${play.key}${again.keySuffix}`;
+          questionMetaRef.current.set(key, again.item);
           return { ...play, key };
         }
         const fits = ctx?.accept ? pool.filter((m) => ctx.accept!(asQuiz(m))) : [];
@@ -1832,7 +1833,7 @@ function PlayScreen(props: {
 
     // J7b: elágazás-táblák (3) és turbópad — egyszer létrehozva, láthatóság / hely / szín képkockánként (KSZ-5, KSZ-6).
     const poleGeo = new THREE.CylinderGeometry(0.28, 0.28, 7, 8);
-    const boardGeo = new THREE.PlaneGeometry(6.4, 2.8);
+    const boardGeo = new THREE.PlaneGeometry(4.2, 1.8);
     const poleMat = new THREE.MeshStandardMaterial({ color: "#334155" });
     const signs: THREE.Group[] = [];
     for (let i = 0; i < 3; i++) {
@@ -1883,7 +1884,7 @@ function PlayScreen(props: {
       const w = Math.max(1, Math.floor(rect?.width ?? 640));
       const h = Math.max(1, Math.floor(rect?.height ?? 480));
       renderer.setSize(w, h, false);
-      sizeRef.current = { w, h };
+      sizeRef.current = { w, h, top: rect?.top ?? 0 };
       postFx.setSize(w, h);
       dust.setViewportHeight(h * renderer.getPixelRatio(), camera.fov);
       camera.aspect = w / h;
@@ -1966,6 +1967,39 @@ function PlayScreen(props: {
       if (w.__websuliTornado === api) delete w.__websuliTornado;
     };
   }, []);
+
+  /* ------- K.2 teszt-kampó: `probe()` (a kötelező mezők + a J7b mérései) ------- */
+  useEffect(() => {
+    const ref = props.probeRef;
+    ref.current = () => {
+      const ctl = qRef.current;
+      const d = driverRef.current;
+      const st = ctl.director?.stats(d?.core.clockMs() ?? 0);
+      const shown = ctl.view().presentation;
+      const p = playerRef.current;
+      return {
+        simTime: d?.loop.simTimeMs() ?? 0,
+        questionOpen: ctl.active() ? 1 : 0,
+        questionsAnswered: st?.answered ?? 0,
+        questionsCorrect: st?.correct ?? 0,
+        fps: Math.round(fpsRef.current),
+        band: ctl.director?.band() ?? null,
+        intensity: ctl.director?.intensity() ?? null,
+        questionKind: shown ? d?.core.kindOf(shown.id) ?? null : null,
+        questionId: shown?.id ?? null,
+        reveal: ctl.view().reveal ? 1 : 0,
+        nitroMs: d?.core.nitroLeftMs() ?? 0,
+        detourSec: d?.core.detourTotalSec() ?? 0,
+        x: p.x,
+        z: p.z,
+        speed: p.speed,
+        phase: phaseRef.current,
+      };
+    };
+    return () => {
+      ref.current = null;
+    };
+  }, [props.probeRef]);
 
   /* ------- keyboard ------- */
   useEffect(() => {
@@ -2516,16 +2550,29 @@ function PlayScreen(props: {
     signOrder.length = 0;
     for (let i = 0; i < sc.signs.length; i++) if (Number.isFinite(signX[i]!)) signOrder.push(i);
     signOrder.sort((a, b) => signX[a]! - signX[b]!);
-    for (let k = 1; k < signOrder.length; k++) {
-      const prev = signX[signOrder[k - 1]!]!;
-      if (signX[signOrder[k]!]! < prev + labelW + 6) signX[signOrder[k]!] = prev + labelW + 6;
+    const left = labelW / 2 + 4;
+    const right = w - labelW / 2 - 4;
+    const spread = () => {
+      for (let k = 1; k < signOrder.length; k++) {
+        const prev = signX[signOrder[k - 1]!]!;
+        if (signX[signOrder[k]!]! < prev + labelW + 6) signX[signOrder[k]!] = prev + labelW + 6;
+      }
+    };
+    if (signOrder.length) {
+      if (signX[signOrder[0]!]! < left) signX[signOrder[0]!] = left;
+      spread();
+      const overflow = signX[signOrder[signOrder.length - 1]!]! - right;
+      if (overflow > 0) for (const i of signOrder) signX[i] = signX[i]! - overflow;
+      if (signX[signOrder[0]!]! < left) {
+        signX[signOrder[0]!] = left;
+        spread();
+      }
     }
-    const overflow = signOrder.length ? signX[signOrder[signOrder.length - 1]!]! - (w - labelW / 2 - 4) : 0;
     for (const i of signOrder) {
       const el = signRefs.current[i];
       if (!el) continue;
-      const x = Math.max(labelW / 2 + 4, signX[i]! - Math.max(0, overflow));
-      const y = Math.max(96, Math.min(h - 120, signY[i]!));
+      const x = signX[i]!;
+      const y = Math.max(96, cardBottomRef.current - sizeRef.current.top + 46, Math.min(h - 120, signY[i]!));
       el.style.visibility = "visible";
       el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
     }
@@ -2662,6 +2709,8 @@ function PlayScreen(props: {
     hudTickRef.current += dt;
     if (hudTickRef.current > 0.1) {
       hudTickRef.current = 0;
+      const card = junctionRef.current ? document.querySelector('[data-testid="tornado-quiz"] .play-question-card') : null;
+      cardBottomRef.current = card ? card.getBoundingClientRect().bottom : 0;
       const w = windRef.current;
       const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
       const targetBearing = bearingBetween(p.x, p.z, tornadoPosRef.current.x, tornadoPosRef.current.z);
@@ -2689,6 +2738,22 @@ function PlayScreen(props: {
   const pres = q.state.presentation;
   const qKind: QuestionKind | null = pres ? driverRef.current?.core.kindOf(pres.id) ?? "junction" : null;
   const qMeta = pres ? questionMetaRef.current.get(pres.question.key) : undefined;
+  /**
+   * Alacsony fekvő nézetben (a közös kérdés-sáv itt a két szélre teszi a gombokat, középre fent a kártyát) a kérdés
+   * fajtája lent középen áll, és gomb-módban a bal felső panel elrejtve — különben a bal gombsor alá kerülne.
+   */
+  const shortLandscape = typeof window !== "undefined" && window.matchMedia?.("(orientation: landscape) and (max-height: 520px)").matches === true;
+  /** A bal felső panel ott rejtett, ahol a kérdés-sáv kártyája / gombsora alá kerülne. */
+  const hidePanel = qKind !== null && (shortLandscape ? qKind !== "junction" : qKind === "junction");
+  /** A kérdés fajtájának helye: fekvőn lent középen; állón sáv-módban lent balra, gomb-módban a bal felső panelben. */
+  const chipSpot: "panel" | "bottom-center" | "bottom-left" | null = !qKind ? null : shortLandscape ? "bottom-center" : qKind === "junction" ? "bottom-left" : "panel";
+  const kindChip =
+    pres && qKind ? (
+      <div data-testid="tornado-question-kind" data-kind={qKind} className="px-2 py-1 rounded-lg bg-amber-400/90 text-slate-950 text-xs font-bold">
+        {QUESTION_KIND_LABEL[qKind]} · {quizTopicLabelHu(qMeta?.topic ?? null, qMeta ? SUBJECT_LABEL[qMeta.subject] : undefined)}
+        {qMeta?.source === "material" ? " · tananyag" : ""}
+      </div>
+    ) : null;
 
   const stage = stageForLevel(props.level);
   const timeTone = hud.timeLeft <= 10 ? "bad" : hud.timeLeft <= 30 ? "warn" : "default";
@@ -2705,6 +2770,9 @@ function PlayScreen(props: {
 
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden" data-tornado-play>
+      {/* J7b: a gomb-módú kérdés a vezérlősáv (a tárcsa = 2 × akciógomb magas) FÖLÖTT álljon — a közös alapérték csak egy
+          akciógombnyit hagy, álló telefonon a gombsor a tárcsára lógott. Lapra szűkített változó-felülírás (a közös CSS-t nem érinti). */}
+      <style>{`.play-question[data-testid="tornado-quiz"] { --play-question-bottom: calc(max(8px, var(--game-safe-bottom)) + 2 * var(--game-action-size) + 16px); }`}</style>
       {/* Teljes képernyős 3D jelenet: a HUD és a vezérlők áttetszően fölötte (mobiljáték-elrendezés). */}
       <div className="absolute inset-0 bg-black">
         <canvas ref={canvasRef} className="w-full h-full block touch-none" />
@@ -2748,7 +2816,7 @@ function PlayScreen(props: {
 
       <div className="relative flex-1 min-h-0">
           {/* Szint / szél / horgony kijelző */}
-          <div className="absolute top-2 left-2 flex flex-col items-start gap-1 text-xs font-bold pointer-events-none max-w-[70%] z-10">
+          <div className={`absolute top-2 left-2 flex flex-col items-start gap-1 text-xs font-bold pointer-events-none max-w-[70%] z-10 ${hidePanel ? "hidden" : ""}`}>
             <div className="px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm" style={{ color: stage.color }}>
               SZINT {props.level}/200 · VIHAR: {stormLabel(props.level)}
             </div>
@@ -2767,12 +2835,7 @@ function PlayScreen(props: {
               <Anchor className="w-3.5 h-3.5" /> HORGONY: {hud.anchorReady ? "KÉSZ" : playerRef.current.anchored ? "RÖGZÍTVE" : "…"} ·{" "}
               {SURFACE_LABEL[hud.surface]}
             </div>
-            {pres && qKind && (
-              <div data-testid="tornado-question-kind" data-kind={qKind} className="px-2 py-1 rounded-lg bg-amber-400/90 text-slate-950">
-                {QUESTION_KIND_LABEL[qKind]} · {quizTopicLabelHu(qMeta?.topic ?? null, qMeta ? SUBJECT_LABEL[qMeta.subject] : undefined)}
-                {qMeta?.source === "material" ? " · tananyag" : ""}
-              </div>
-            )}
+            {chipSpot === "panel" && kindChip}
             {hud.nitro && (
               <div data-testid="tornado-nitro" className="px-2 py-1 rounded-lg bg-cyan-400/90 text-slate-950">
                 ⚡ TURBÓ
@@ -2780,13 +2843,13 @@ function PlayScreen(props: {
             )}
           </div>
 
-          {/* Vehicle name — alacsony fekvő nézetben elhagyva, ott minden képpont a jeleneté. */}
-          <div
+          {/* Vehicle name — alacsony fekvő nézetben elhagyva, ott minden képpont a jeleneté; kérdés alatt a helyén a kérdés fajtája. */}
+          {!pres && <div
             className="absolute left-2 px-2 py-1 rounded-lg bg-black/60 text-xs font-semibold pointer-events-none z-10 [@media(max-height:500px)]:hidden"
             style={{ bottom: aboveControls }}
           >
             {props.vehicle.name.toUpperCase()}
-          </div>
+          </div>}
 
           {/* G-9b: céljelző nyíl.
               Mérve (Pixel 7, 1. pálya): a cél 3,25 km-re volt, az álló telefon
@@ -2856,6 +2919,11 @@ function PlayScreen(props: {
           {/* Szünet alatt a magyarázó kártya rejtve: a z-[90]-es kártya különben a szünet menü fölé kerülne. */}
           {feedback && !paused && <QuizFeedbackCard card={feedback} onDismiss={closeWhy} />}
 
+          {(chipSpot === "bottom-center" || chipSpot === "bottom-left") && kindChip && (
+            <div className={`absolute inset-x-2 flex pointer-events-none z-10 ${chipSpot === "bottom-center" ? "justify-center" : "justify-start"}`} style={{ bottom: aboveControls }}>
+              <div className={chipSpot === "bottom-center" ? "max-w-[40vw] text-center" : "max-w-[70%]"}>{kindChip}</div>
+            </div>
+          )}
           {chaseMsg && (
             <div className="absolute inset-x-0 top-[56%] flex justify-center pointer-events-none z-10" role="status" aria-live="polite">
               <div
