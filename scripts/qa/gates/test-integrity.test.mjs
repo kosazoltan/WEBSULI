@@ -311,6 +311,9 @@ test('R2: a terv-pont csak címsorban / listaelemben / táblázatsorban igazol, 
   assert.match(headerMarker(lines, fNew), new RegExp(MK));
   assert.equal(headerMarker(lines, fOld), null, 'régi fejjelölés nem ment fel');
   assert.equal(headerMarker(['const a = 1;', ` * ${mk.slice(3)}`], fNew), null, 'kódsor utáni jelölés nem fejkomment');
+  const doc = `// a jelölés alakja: ${MK} <dátum> (docs/specs/<terv>.md <pont>)`;
+  const fDoc = parseDiff(fileDiff('source/tests/a.test.ts', [['+', doc]], { oldStart: 1, newStart: 1 }))[0];
+  assert.equal(headerMarker([doc, 'test("a", () => {});'], fDoc), null, 'a szintaxist leíró, dátum nélküli sor nem jelölés');
   assert.match(headerMarker(['import { test } from "x";', '', '/**', ` * ${mk.slice(3)}`, ' */'], fNew), new RegExp(MK), 'import-sor után álló fejkomment');
 });
 

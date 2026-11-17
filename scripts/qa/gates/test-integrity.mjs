@@ -541,7 +541,8 @@ export function headerMarker(lines, f) {
     // az import-sorok a fejkomment előtt / között megengedettek; az első más kódsor lezárja a fejet
     if (/^\s*(?:import\b|export\s+\*\s+from\b|\}\s*from\b|["'`]use strict)/.test(t)) continue;
     if (!/^\s*(?:$|\/\/|\/\*|\*|#!)/.test(t)) break;
-    if (MARKER.test(t) && added.has(norm(t))) return t;
+    // csak valódi (dátumos) jelölés — a jelölés-szintaxist leíró doksi-sor nem
+    if (MARKER.test(t) && MARKER_DATE.test(t) && added.has(norm(t))) return t;
   }
   return null;
 }
@@ -641,7 +642,7 @@ export function analyze({ range, commits = [], finalText = () => null, prBody = 
     const fl = viaCommit ? finalLines(x.file) : null;
     let marker = findMarker({ f, finding: x, window: ti.markerWindow, finalLines: fl });
     let markerVia = marker ? 'line' : null;
-    if (!marker) {
+    if (!marker && x.rule !== 'gate-changed') {
       // R2 (szoletra-ág hamis riasztásai): a fájl fejkommentjében álló jelölés az egész fájlra szól — de CSAK ha ebben a
       // változásban került be (egy régi fejjelölés nem menthet fel későbbi lazítást).
       marker = headerMarker(finalLines(x.file), f);
