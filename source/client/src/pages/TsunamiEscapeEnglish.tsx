@@ -734,6 +734,14 @@ export default function TsunamiEscapeEnglish() {
   const [stormFlash, setStormFlash] = useState(false);
   /** D-J1a-17 (ÚK2): annak a kérdésnek az azonosítója, amelynek JÓ kapuján a gyerek bemenet nélkül futott át. */
   const [idleGoodId, setIdleGoodId] = useState<number | null>(null);
+  /**
+   * Élesítés (átmeneti kapu 3a): a válaszcélok (táblák, lista módban a gombok) akkor jelennek meg, amikor a meghajtó már
+   * elfogadja az érintést (`driver.armedPresentationId()`, a kérdés-órával: `ANSWER_ARM_MS`). Korábban 450 ms valós idő
+   * után — lassú képkockánál (a kérdés-óra képkockánként legfeljebb 250 ms-ot lép) a tábla már látszott, de az érintést a
+   * meghajtó még elnyelte. A képkocka-hurok állítja, kérdésenként egyszer.
+   */
+  const [armedId, setArmedId] = useState<number | null>(null);
+  const armedNowRef = useRef<number | null>(null);
   /** A menet kulcsa: minden indítás növeli, a képkocka-hurok effektje ezen is újraindul (review #483). */
   const [runKey, setRunKey] = useState(0);
 
@@ -1090,6 +1098,9 @@ export default function TsunamiEscapeEnglish() {
   const startGame = useCallback(() => {
     runIdRef.current += 1;
     runIndexRef.current += 1;
+    // Új menet: a kérdés-azonosítók újra 1-től indulnak — a régi élesítés ne öröklődjön.
+    armedNowRef.current = null;
+    setArmedId(null);
     const seed = seedFrom(seedBase, runIndexRef.current);
     runSeedRef.current = seed;
     pickRngRef.current = createRng(seedFrom(TSUNAMI_GAME_ID, seed, "pick"));
@@ -1456,6 +1467,11 @@ export default function TsunamiEscapeEnglish() {
       // A meghajtó képkockája (a sim ugyanezt hívja): kérdés-óra → menetvégnél a kérdés lezárása → kérdés-sáv → kapu →
       // időskála (szünet 0, nyitott kérdés slowMo) → fix lépés → események (hitstop + nézet).
       viewRef.current.alpha = driver.frame(dt, isPaused, onEvent);
+      const armed = driver.armedPresentationId();
+      if (armed !== null && armedNowRef.current !== armed) {
+        armedNowRef.current = armed;
+        setArmedId(armed);
+      }
       const shake = shakeRef.current;
       if (shake) {
         const off = shakeOff.current;
@@ -1525,16 +1541,6 @@ export default function TsunamiEscapeEnglish() {
   const presLabelsRef = useRef<string[]>([]);
   presLabelsRef.current = q.state.presentation?.options.map((o) => o.label) ?? [];
   const [gatesFitH, setGatesFitH] = useState(true);
-  /**
-   * Élesítés (átmeneti kapu 3a): a válaszcélok (táblák, lista módban a gombok) a kérdés megjelenése után 450 ms-mal jelennek
-   * meg; a meghajtó a 400 ms előtti érintést / billentyűt amúgy sem fogadja el (`ANSWER_ARM_MS`).
-   */
-  const [armedId, setArmedId] = useState<number | null>(null);
-  useEffect(() => {
-    if (presId === null) return;
-    const t = window.setTimeout(() => setArmedId(presId), 450);
-    return () => window.clearTimeout(t);
-  }, [presId]);
   // D-J1a-17 (ÚK2): a „Jó kapu!” felirat helye a kártya alján (a közös kérdés-sáv állapotsora mellett, annak helyén).
   const revealNow = q.state.reveal;
   const idleGoodNow = presId !== null && !!revealNow && revealNow.pickedOptionIndex === null && idleGoodId === presId;

@@ -355,6 +355,31 @@ test("egy válasz / kérdés (terv 8.4): a kapu-tábla két egyidejű érintés�
   assert.equal(st.correct, 0);
 });
 
+test("élesítés = elfogadás: a lap a `armedPresentationId` szerint mutatja a válaszcélokat; előtte az érintés nem válasz, onnantól igen — normál és lassú (250 ms-os) képkockánál is", () => {
+  for (const frameMs of [1000 / 60, 250]) {
+    const sim = createSimGame({ seed: 21, grade: 7, questions: true });
+    let q = sim.question();
+    for (let i = 0; i < 60 * 20 && !q; i++) {
+      sim.step(STEP, { skillRoll: 0 });
+      q = sim.question();
+    }
+    assert.ok(q, "20 mp-en belül nyílik kérdés");
+    let armedAt = -1;
+    for (let f = 0; f < 40 && armedAt < 0; f++) {
+      const armed = sim.driver.armedPresentationId();
+      if (armed === null) {
+        assert.equal(sim.driver.tapOption(q.correctOption), null, `${frameMs} ms-os képkocka, ${f}. kocka: élesítés előtt az érintés nem válasz`);
+      } else {
+        armedAt = f;
+        assert.notEqual(sim.driver.tapOption(q.correctOption), null, `${frameMs} ms-os képkocka: az élesnek mutatott célra eső érintés válasz`);
+      }
+      if (armedAt < 0) sim.step(frameMs, { skillRoll: 0 });
+    }
+    assert.ok(armedAt >= 0, `${frameMs} ms-os képkocka: a célok élessé válnak`);
+    assert.equal(sim.stats().answered, 1);
+  }
+});
+
 test("K1 (review #483, D-J1a-12): botlás közben induló kérdésnél is az ablak vége előtt ér a futó a kapuhoz (4,5 / 6 / 9 mp, 0–800 ms botlás)", () => {
   for (const windowMs of [4500, 6000, 9000]) {
     for (const stumble of [0, 300, 500, 800]) {

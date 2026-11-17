@@ -655,3 +655,29 @@ for (const viewport of [
     });
   });
 }
+
+test.describe("390x844: lassú képkockánál is: ami élesnek látszik, arra az érintés válasz (élesítés = elfogadás)", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("CPU-lassítás mellett a válaszcélok csak akkor élesek, amikor a meghajtó elfogadja: az élesítés utáni első koppintás válasz", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/tsunami-english?seed=11&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").tap();
+    await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 20 });
+    try {
+      await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
+      const quiz = page.getByTestId("ts-quiz");
+      await expect(gates(page)).toHaveCount(3, { timeout: 30_000 });
+      await expect(quiz).toHaveAttribute("data-armed", "true", { timeout: 30_000 });
+      // Azonnal az élesítés után: koppintás egy rossz táblán.
+      const wrong = (await page.locator('[data-testid="ts-quiz"] .ts-gate[data-correct="false"]').first().boundingBox())!;
+      await page.touchscreen.tap(wrong.x + wrong.width / 2, wrong.y + wrong.height / 2);
+      await expect.poll(async () => (await probe(page)).questionsAnswered, { timeout: 30_000, message: "az élesnek mutatott táblára eső koppintás válasz" }).toBe(1);
+      expect((await probe(page)).questionsCorrect).toBe(0);
+    } finally {
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+    }
+  });
+});

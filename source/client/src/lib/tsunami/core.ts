@@ -724,6 +724,8 @@ export type TsunamiDriver = {
   frame(realDtMs: number, paused: boolean, onEvent?: (e: TsunamiEvent) => void): number;
   /** Érintés / billentyű a kapu-táblán: a sávba fut és azonnal választ (D-J1a-2). */
   tapOption(optionIndex: number): QuestionOutcome | null;
+  /** A nyitott kérdés azonosítója, ha a válaszcélok már élesek (`tapOption` elfogadná); különben null. */
+  armedPresentationId(): number | null;
   /** A kérdés-sáv kimenete → a világ (a lap / sim `onOutcome`-ja hívja). */
   onOutcome(o: QuestionOutcome, p: QuestionPresentation): void;
   drain(onEvent?: (e: TsunamiEvent) => void): void;
@@ -796,13 +798,21 @@ export function createTsunamiDriver(opts: {
       drain(onEvent);
       return alpha;
     },
+    armedPresentationId() {
+      if (!q) return null;
+      const act = q.active();
+      const g = core.state().gates;
+      if (!act || !g || g.presentationId !== act.id || g.resolved) return null;
+      return clock - act.startedAtSimMs >= ANSWER_ARM_MS ? act.id : null;
+    },
     tapOption(optionIndex) {
       if (!q) return null;
       const act = q.active();
       const g = core.state().gates;
       if (!act || !g || g.presentationId !== act.id || g.resolved) return null;
       // Élesítés (átmeneti kapu 3a): a kérdés megjelenése utáni első 400 ms érintése / billentyűje nem válasz (olvasás nélkül
-      // vagy a megjelenés pillanatában a tábla helyére eső ujj).
+      // vagy a megjelenés pillanatában a tábla helyére eső ujj). A lap a válaszcélokat ugyanezzel a feltétellel mutatja
+      // (`armedPresentationId`) — a kérdés-órával, nem valós idővel, így lassú képkockánál sem nyel el érintést.
       if (clock - act.startedAtSimMs < ANSWER_ARM_MS) return null;
       core.markInput();
       core.steerToOption(optionIndex);
