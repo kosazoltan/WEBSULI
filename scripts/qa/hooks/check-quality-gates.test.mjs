@@ -90,11 +90,25 @@ test('visszaellenőrzés V1–V3, J3, J4 maradéka: átirányítás, érték né
   const kinds = (c) => findActions(c, '/r').map((x) => x.kind);
   assert.deepEqual(kinds('gh api repos/o/WEBSULI/pulls/9/merge'), [], 'V3: olvasó GET nem merge');
   assert.deepEqual(kinds('gh api repos/o/WEBSULI/pulls/9/merge -f merge_method=squash'), ['pr-merge']);
-  for (const c of ['git \\\n  push origin x', 'git `\r\n push origin x', 'bash -lc "git push origin x"', 'sh -ec "git push"', 'sudo -u bob git push',
+  assert.deepEqual(findActions('git `\r\n push origin x', '/r', 0, 'PowerShell').map((x) => x.kind), ['push'], 'PowerShell backtick-folytatás');
+  for (const c of ['git \\\n  push origin x', 'bash -lc "git push origin x"', 'sh -ec "git push"', 'sudo -u bob git push',
     'env -u FOO git push', 'if true; then git push; fi', 'for i in 1; do git push; done', 'iex "git push origin x"']) {
     assert.deepEqual(kinds(c), ['push'], JSON.stringify(c));
   }
   assert.deepEqual(kinds('powershell -NoProfile -ExecutionPolicy Bypass -Command "git push"'), ['push']);
+});
+
+test('2. visszaellenőrzés W1–W4: PowerShell sor végi \\ nem folytatás; /C és -C; -XPUT; -ec / -enc DENY', () => {
+  const kinds = (c, tool = 'Bash') => findActions(c, '/r', 0, tool).map((x) => x.kind);
+  assert.deepEqual(kinds('cd D:\\repo\\WEBSULI\\\ngit push origin other', 'PowerShell'), ['push'], 'W1');
+  assert.deepEqual(kinds('Set-Location D:\\repo\\x\\\r\ngit push origin other', 'PowerShell'), ['push'], 'W1');
+  assert.deepEqual(kinds('cmd /C git push origin a'), ['push'], 'W2');
+  assert.deepEqual(kinds('powershell -C "git push origin a"'), ['push'], 'W2');
+  assert.deepEqual(kinds('bash -ec "git push"'), ['push'], 'bash -ec = errexit + command');
+  assert.deepEqual(kinds('gh api -XPUT repos/o/WEBSULI/pulls/9/merge'), ['pr-merge'], 'W3');
+  assert.deepEqual(kinds('gh api --method=PUT repos/o/WEBSULI/pulls/9/merge'), ['pr-merge']);
+  for (const f of ['-ec', '-enc', '-e', '-EncodedCommand']) assert.deepEqual(kinds(`powershell ${f} ZwBpAHQA`), ['deny'], `W4 ${f}`);
+  assert.deepEqual(kinds('powershell -ExecutionPolicy Bypass -Command "git status"'), [], 'az -ExecutionPolicy nem kódolt parancs');
 });
 
 test('review J1: WEBSULI-n kívüli mappából -R …/WEBSULI → DENY; más repóra nincs kimenet', () => {

@@ -78,7 +78,9 @@ const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'pwsh', 'powershell', 'cmd'
 // érték nélkül is érvényes — azok csak `=`-es alakban kapnak értéket, ezért NINCSENEK itt (visszaellenőrzés V2).
 const PUSH_VALUE_OPTS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
 // Rövid shell-kapcsoló, amely parancsszöveget vár: -c, -lc, -ec, -xc … (a hosszú PowerShell-kapcsolók külön).
-const SHELL_CMD_FLAG = /^(?:-[a-z]{0,3}c[a-z]{0,3}|-command|\/c|-encodedcommand)$/;
+const SHELL_CMD_FLAG = /^(?:-[a-z]{0,3}c|-command|\/c)$/i;
+// PowerShell -EncodedCommand és rövidítései (-e, -ec, -en, -enc, … ) — vizsgálhatatlan, DENY (visszaellenőrzés W4).
+const ENCODED_FLAG = /^-e(?:n(?:c(?:o(?:d(?:e(?:d(?:c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?)?)?)?)?)?)?|c)?$/i;
 
 /** Átirányítások és a magában álló `&` eltávolítása (`2>&1`, `>log`, `> log`, `2>/dev/null`, záró `&`) — visszaellenőrzés V1. */
 export function dropRedirections(words) {
@@ -97,11 +99,13 @@ export function dropRedirections(words) {
  * A kibocsátó műveletek kigyűjtése: `[{ kind: 'push'|'pr-create'|'pr-merge'|'deny', dir, refs?, pr?, repoFlag?, skip?, reason? }]`.
  * Burkolók (`env`, `sudo`, `&`, `(`…), beágyazott shell (`bash -c "…"`, `powershell -c "…"`) és `gh api …/merge` is (review J4).
  */
-export function findActions(cmd, cwd, depth = 0) {
+export function findActions(cmd, cwd, depth = 0, tool = 'Bash') {
   const actions = [];
   let dir = cwd;
-  // Sorfolytatás (bash `\` + újsor, PowerShell backtick + újsor) egy parancs — visszaellenőrzés J3.
-  const joined = String(cmd ?? '').replace(/[\\`]\r?\n/g, ' ');
+  // Sorfolytatás egy parancs (visszaellenőrzés J3) — eszközönként: Bash-ben `\` + újsor, PowerShellben backtick + újsor. PowerShellben
+  // a sor végi `\` útvonal része (`cd D:\repo\x\`), NEM folytatás (visszaellenőrzés W1).
+  const raw = String(cmd ?? '');
+  const joined = tool === 'PowerShell' ? raw.replace(/`\r?\n/g, ' ') : tool === 'Bash' ? raw.replace(/\\\r?\n/g, ' ') : raw;
   for (const seg of splitSegments(joined)) {
     let w = dropRedirections(seg.map((x, i) => (i === 0 ? x.replace(/^[({]+/, '') : x).replace(/[)}]+$/, '')).filter((x) => x !== ''));
     let nested = null;
@@ -118,15 +122,17 @@ export function findActions(cmd, cwd, depth = 0) {
       }
       break;
     }
-    if (nested && depth < 3) { actions.push(...findActions(nested, dir, depth + 1)); continue; }
+    if (nested && depth < 3) { actions.push(...findActions(nested, dir, depth + 1, tool)); continue; }
     if (!w.length) continue;
     const head = exe(w[0]);
     if (SHELLS.has(head) && depth < 3) {
-      const ci = w.findIndex((x, i) => i > 0 && (SHELL_CMD_FLAG.test(x) || /^-(?:command|encodedcommand)$/i.test(x)));
-      if (ci > 0 && w[ci + 1]) {
-        if (/^-encodedcommand$/i.test(w[ci])) actions.push({ kind: 'deny', reason: 'Kódolt PowerShell-parancs (-EncodedCommand) nem vizsgálható — írd ki a parancsot olvashatóan.' });
-        else actions.push(...findActions(w.slice(ci + 1).join(' '), dir, depth + 1));
+      const ps = head === 'pwsh' || head === 'powershell';
+      if (ps && w.some((x, i) => i > 0 && ENCODED_FLAG.test(x))) {
+        actions.push({ kind: 'deny', reason: 'Kódolt PowerShell-parancs (-EncodedCommand / -e / -ec / -enc) nem vizsgálható — írd ki a parancsot olvashatóan.' });
+        continue;
       }
+      const ci = w.findIndex((x, i) => i > 0 && SHELL_CMD_FLAG.test(x));
+      if (ci > 0 && w[ci + 1]) actions.push(...findActions(w.slice(ci + 1).join(' '), dir, depth + 1, ps ? 'PowerShell' : head === 'cmd' ? 'Cmd' : 'Bash'));
       continue;
     }
     if (['cd', 'set-location', 'pushd', 'sl'].includes(head)) {
@@ -180,7 +186,9 @@ export function findActions(cmd, cwd, depth = 0) {
         const m = plain.map((x) => /repos\/([^/\s]+\/[^/\s]+)\/pulls\/(\d+)\/merge\b/.exec(x)).find(Boolean);
         // Csak író hívás (PUT / POST, vagy mezők → implicit POST) merge-el; az olvasó GET nem (visszaellenőrzés V3).
         const mi = plain.findIndex((x) => x === '-X' || x === '--method');
-        const method = mi >= 0 ? String(plain[mi + 1] ?? '').toUpperCase() : (plain.find((x) => /^--method=/i.test(x)) ?? '').split('=')[1]?.toUpperCase();
+        // Összevont alak is: `-XPUT`, `--method=PUT` (visszaellenőrzés W3).
+        const glued = plain.map((x) => /^-X(\w+)$/.exec(x)?.[1] ?? /^--method=(\w+)$/i.exec(x)?.[1]).find(Boolean);
+        const method = mi >= 0 ? String(plain[mi + 1] ?? '').toUpperCase() : glued?.toUpperCase();
         const writes = ['PUT', 'POST', 'PATCH'].includes(method) || (!method && plain.some((x) => ['-f', '-F', '--field', '--raw-field', '--input'].includes(x)));
         if (m && writes) actions.push({ kind: 'pr-merge', dir, pr: m[2], target: m[2], repoFlag: m[1] });
         continue;
@@ -285,7 +293,7 @@ function main() {
   try {
     const payload = JSON.parse(readFileSync(0, 'utf8') || '{}');
     if (payload.tool_name !== 'Bash' && payload.tool_name !== 'PowerShell') process.exit(0);
-    actions = findActions(String(payload.tool_input?.command ?? ''), payload.cwd || process.cwd());
+    actions = findActions(String(payload.tool_input?.command ?? ''), payload.cwd || process.cwd(), 0, payload.tool_name);
   } catch {
     process.exit(0); // értelmezhetetlen bemenet: nem kibocsátó parancsként kezeljük
   }

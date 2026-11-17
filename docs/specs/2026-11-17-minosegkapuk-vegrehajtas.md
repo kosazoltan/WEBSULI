@@ -220,6 +220,9 @@ futásidőben, darabokból kell összerakni, hogy a `no-real-emails-guard` ne l�
   `--force-with-lease` érték nélkül — megkerülés), V3 (olvasó `gh api` GET), J3 maradéka (sorfolytatás), J4 maradéka (`-lc`, `-ec`,
   `sudo -u`, `env -u`, `then` / `do`, `iex`), V4 (a runbook pontos állításai). A független ellenőr a regressziót a javító commit után
   fogta meg — pontosan ez a skill célja.
+- **2. visszaellenőrzés (fej `1ed350e9`, NEM) — javítva:** W1 (a sorfolytatás eszközfüggő: PowerShellben a sor végi `\` nem
+  folytatás — a hook megkapja a `tool_name`-et), W2 (a shell-kapcsoló minta újra kis- és nagybetű-független: `cmd /C`, `-C`), W3
+  (`-XPUT`), W4 (`-e` / `-ec` / `-enc` kódolt parancs → DENY). W5 (idézett `'<ag>'` ref) maradó kockázat a runbookban.
 - **Külső (Gemini) ellenőr — külön, második PR:** a tulajdonos 2026-11-17-i kiegészítése (`external-review.mjs`, ellenőrzőlisták,
   skill-menet, figyelmeztető lépés a PR- / merge-kapuban) ebbe a PR-ba nem kerül: a PR már ~3500 soros, és az átadó a munka végén még
   nem készült el. A kapuk úgy készültek, hogy a figyelmeztető lépés egy újabb `gate.step`-pel bővíthető.
