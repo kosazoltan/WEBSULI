@@ -15,6 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import * as THREE from "three";
 import { createGameRenderer, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
+import type { PerfControls, PerfOverlay } from "@/game-engine/perf/perfOverlay";
+import { perfEnabledFrom } from "@/game-engine/perf/perfStats";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Blocks, Gem, Pause, RefreshCw } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
@@ -1134,6 +1136,9 @@ export default function BlockCraftQuiz() {
   const runningRef = useRef(false);
   /** #58: a lefutott render-lépések száma (teszt-kampó `probe().frames`: méri, hogy a ciklus áll-e). */
   const frameCountRef = useRef(0);
+  /** `?perf=1`: a lap React-renderjeinek futó számlálója (a mérőpanel „React-render / s” sora). */
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
   /** A scene-effect által beállított render-lépés — a loop-vezérlő effect innen indítja újra. */
   const stepRef = useRef<((now: number) => void) | null>(null);
   /** A crosshair alatt lévő blokk (a render-loop frissíti minden frame-ben). */
@@ -1956,7 +1961,8 @@ export default function BlockCraftQuiz() {
     const scene = new THREE.Scene();
     const skyColor = new THREE.Color(cfg0.skyTint.day);
     scene.background = skyColor;
-    scene.fog = new THREE.FogExp2(skyColor, cfg0.weather === "sandstorm" ? 0.035 : 0.022);
+    const fog = new THREE.FogExp2(skyColor, cfg0.weather === "sandstorm" ? 0.035 : 0.022);
+    scene.fog = fog;
 
     // Meleg, barátságos fénymérleg: égbolt-kék felülről, meleg föld-visszaverődés alulról,
     // plusz oldalról-felülről érkező napfény — a kocka oldalai így jól elkülönülnek.
@@ -2071,6 +2077,21 @@ export default function BlockCraftQuiz() {
     // A teljes újraépítés csak új pályánál és WebGL-visszaállásnál fut.
     type TypeMesh = { mesh: THREE.InstancedMesh; cells: number[] };
     const typeMeshes = new Map<number, TypeMesh>();
+    // `?perf=1` „Anyag: egyszerű” kapcsoló: ugyanazok a textúrák olcsó Lambert-anyagon (lustán épül, csak a mérőpanel kéri).
+    let simpleOn = false;
+    let simpleMats: Map<number, THREE.Material | THREE.Material[]> | null = null;
+    const toSimple = (m: THREE.MeshStandardMaterial) =>
+      new THREE.MeshLambertMaterial({
+        map: m.map,
+        transparent: m.transparent,
+        opacity: m.opacity,
+        alphaTest: m.alphaTest,
+        emissive: m.emissive,
+        emissiveMap: m.emissiveMap,
+        emissiveIntensity: m.emissiveIntensity,
+      });
+    const materialFor = (t: number): THREE.Material | THREE.Material[] | undefined =>
+      (simpleOn ? simpleMats?.get(t) : undefined) ?? blockMaterials.get(t);
     const cellSlot = new Int32Array(WX * WY * WZ).fill(-1);
     const cellType = new Uint8Array(WX * WY * WZ);
     /** Szabad ég alatti vízfelszín-cellák (x, y, z hármasok) a csillanásokhoz (teljes újraépítéskor számolva — kozmetika). */
@@ -2084,9 +2105,9 @@ export default function BlockCraftQuiz() {
       typeMeshes.clear();
     };
     const makeTypeMesh = (t: number, capacity: number): TypeMesh | null => {
-      const mat = blockMaterials.get(t);
+      const mat = materialFor(t);
       if (!mat) return null;
-      const mesh = new THREE.InstancedMesh(blockGeometry, mat as THREE.Material | THREE.Material[], Math.max(16, capacity));
+      const mesh = new THREE.InstancedMesh(blockGeometry, mat, Math.max(16, capacity));
       mesh.count = 0;
       // A példányok a világ bármely pontjára kerülhetnek: a (lusta) befoglaló gömb elavulna → nincs mesh-szintű vágás.
       mesh.frustumCulled = false;
@@ -2216,6 +2237,50 @@ export default function BlockCraftQuiz() {
       rebuildBeacons();
     };
     let builtVersion = -1;
+
+    // --- `?perf=1`: eszközön belüli mérőpanel (terv: docs/specs/2026-11-17-kockavadasz-telefon.md, 6. szakasz) ---
+    // A modul csak a paraméterrel töltődik be; nélküle a hurokban három `null`-ellenőrzés a többlet.
+    const basePixelRatio = renderer.getPixelRatio();
+    const perfControls: PerfControls = {
+      shadowsAvailable: shadowsOn,
+      setShadows(on) {
+        sun.castShadow = on;
+        renderer.shadowMap.needsUpdate = true;
+      },
+      setResolution(scale) {
+        renderer.setPixelRatio(basePixelRatio * scale);
+        appliedW = 0;
+        syncSize();
+      },
+      setSimpleMaterials(on) {
+        if (on && !simpleMats) {
+          const built = new Map<number, THREE.Material | THREE.Material[]>();
+          blockMaterials.forEach((mat, t) => built.set(t, Array.isArray(mat) ? mat.map(toSimple) : toSimple(mat)));
+          simpleMats = built;
+        }
+        simpleOn = on;
+        typeMeshes.forEach((tm, t) => {
+          const mat = materialFor(t);
+          if (mat) tm.mesh.material = mat;
+        });
+      },
+      setFog(on) {
+        scene.fog = on ? fog : null;
+      },
+    };
+    let perf: PerfOverlay | null = null;
+    if (perfEnabledFrom(window.location.search) && canvas.parentElement) {
+      const host = canvas.parentElement;
+      import("@/game-engine/perf/perfOverlay").then(
+        (mod) => {
+          if (disposed) return;
+          perf = mod.createPerfOverlay({ renderer, host, tier, title: "Kockavadász", controls: perfControls, getReactRenders: () => renderCountRef.current });
+        },
+        () => {
+          // A mérőpanel nélkül a játék változatlanul fut.
+        },
+      );
+    }
 
     // --- Cél-keret (sárga, pulzáló) a crosshair-blokkon ---
     const hlGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004));
@@ -2462,7 +2527,6 @@ export default function BlockCraftQuiz() {
       (u.horizonColor.value as THREE.Color).copy(horizon);
       (u.bottomColor.value as THREE.Color).copy(horizon).multiplyScalar(0.85);
       skyColor.copy(horizon);
-      const fog = scene.fog as THREE.FogExp2;
       fog.color.copy(horizon);
       fog.density = cfg.weather === "sandstorm" ? 0.035 : 0.022;
       hemi.color.copy(horizon).lerp(white, 0.35);
@@ -2565,6 +2629,7 @@ export default function BlockCraftQuiz() {
         fpsAcc = 0;
         fpsFrames = 0;
       }
+      perf?.frameStart(now);
       syncSize();
 
       // Új pálya → új égbolt/köd/időjárás (a scene egyszer épül, a pálya viszont váltakozik).
@@ -2765,7 +2830,9 @@ export default function BlockCraftQuiz() {
         b.mat.opacity = Math.min(1, b.life / 0.35);
       }
 
+      perf?.beforeRender();
       renderer.render(scene, camera);
+      perf?.afterRender();
     };
     lastTRef.current = null;
     // G1: a loop indítását/leállítását a phase-vezérelt effect végzi (lentebb).
@@ -2774,6 +2841,11 @@ export default function BlockCraftQuiz() {
 
     return () => {
       disposed = true;
+      perf?.dispose();
+      perf = null;
+      simpleMats?.forEach((mat) => {
+        for (const m of Array.isArray(mat) ? mat : [mat]) m.dispose();
+      });
       runningRef.current = false;
       stepRef.current = null;
       cancelGameFrame(rafRef.current);
