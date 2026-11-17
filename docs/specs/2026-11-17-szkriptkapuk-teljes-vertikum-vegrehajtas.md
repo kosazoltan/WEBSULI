@@ -39,6 +39,25 @@ Elv: a terv 6.3a „Bevezetési lépcsők” szakasza szerint MINDEN új kapu `w
 7. **Egyéb:** K5 (bővebb parancssor- és kimenet-szűrés az `evidence-run`-ban), K8 (a doksik és a kód egyeztetése), K9 (a számok
    forrással), K1 és K3 maradéka jegyre / a megfeleltetési táblába.
 
+## R2 — Második javítókör (visszaellenőrzés `beeb4ec2`: NEM; jelentés: a scratchpad `review-szkriptkapuk/jelentes-2.md`)
+
+1. **S8-B1:** felmentés („nem a PR hibája”) KIZÁRÓLAG a `known-flaky.json` jegyhez kötött, le nem járt (`reviewBy`) elemére; a
+   rangsor szerinti, listán kívüli „ingadozó” új állapot: „ingadozó-gyanú, jegy kell” — nem ment fel; a lista `exclude` része
+   (pl. a `joystick-response:629` block-craft eset, #106) és a „tartós bukás” soha nem ment fel.
+2. **S8-M1:** a bukó teszt területe (`gates.config.json` `games` leképezés + közös játékmotor; bizonytalan teszt + termékkód-változás
+   = érinti) → ha a PR érinti: „a PR hibája lehet — érintett terület”; ugyanaz a teszt a PR futásának több kísérletében bukott: nem
+   ingadozó. A kimenet utolsó sora és a runbook: az ítélet csak JAVASLAT a bukott job újraindítására, a zöld futást NEM pótolja,
+   merge csak zöld kötelező ellenőrzésekkel.
+3. **S8-M2:** piros kísérlet + 0 értelmezhető tesztnév → „nem értelmezhető bukás”, kód 1.
+4. **M2-maradék:** átírt rekord (hash-eltérés) MINDIG bukás; láncon kívüli / lánc nélküli rekord: `warn` módban az állítás
+   „NEM IGAZOLT” (WARN, nem PASS), `block` módban bukás; `--repair` után az újra-láncolt (régi) rekord NEM igazolt bizonyíték — a
+   kaput újra kell futtatni. A `record-review` kivétel-ága `block` módban megtagad.
+5. **Közepesek:** zár — a türelem (45 s) > az árva-küszöb (30 s), élő PID zárját nem törli, az elmaradt rekord hangos és nem nulla
+   kilépés; többsoros állítás a VALÓDI diff-alakkal (változatlan nyitó sor + megváltozott belső sor); a súlyos (BLOKKOLÓ / MAGAS)
+   lelet jelölt idézet nélkül → WARN, a sablon előírja; üres listák + „minden zöld” próza → WARN; a terv-pont címsor / listapont
+   szerint (nem részsztring); a `Nem létezik:` nagybetűvel; a szoletra-ág hamis riasztásai (nem-szám konstans, hunk-on belüli
+   párosítás, a teljes bal oldal mint alany, fájl-fejléc jelölés); K1 a tiltásra váltás előfeltételei közé.
+
 Szabályok minden szeletre: a `source/` futásidejű kódja nem módosul; minden szkript Node ESM, függőség nélkül, injektálható futtatóval
 (`exec`), `node --test` tesztekkel, Windows x64 / ARM64 / Linux; regexet csak Edit / Write eszközzel írj és olvasd vissza; tesztet
 gyengíteni tilos; titok / e-mail-cím / kapcsolati szöveg sehova (a tesztben a mintát futásidőben, darabokból); mutációs ellenpróba
