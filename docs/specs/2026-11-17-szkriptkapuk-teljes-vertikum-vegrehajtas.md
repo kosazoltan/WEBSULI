@@ -79,7 +79,7 @@ NEM nyúlunk (nyitott PR-ok); a `docs/agent-csapdak.md`-t nem módosítjuk. Amí
 | `test-removed` | egy fájlban a törölt `test(` / `it(` / `describe(` hívások száma nagyobb, mint a hozzáadottaké |
 | `assert-removed` | egy fájlban a törölt állítás-sorok (`assert…(`, `expect(`, `t.assert`) száma nagyobb a hozzáadottakénál, és a többlet törölt sor egyike sincs meg szó szerint a hozzáadottak között (mozgatás) |
 | `assert-commented` | hozzáadott sor: `//` vagy `/*` után állítás / teszt-hívás |
-| `threshold-changed` | a törölt állítás-sorral párosított (≥ 0,5 token-hasonlóság, sok-az-egyhez) hozzáadott sorban más a szám, a relációs jel, vagy új `± <szám>` tag van; ha az irány egyértelműen SZIGORÚBB (alsó korlát nő / felső csökken / `>=` → `>`), nem lelet, csak megjegyzés |
+| `threshold-changed` | a törölt állítás-sorral párosított (azonos alany és ≥ 0,4 token-hasonlóság, ismeretlen alanynál ≥ 0,8; sok-az-egyhez — K8) hozzáadott sorban más a szám, a relációs jel, vagy új `± <szám>` tag van; ha az irány egyértelműen SZIGORÚBB (alsó korlát nő / felső csökken / `>=` → `>`), nem lelet, csak megjegyzés |
 | `matcher-loosened` | a párban szigorú matcher (`toBe`, `toEqual`, `toStrictEqual`, `strictEqual`, `deepStrictEqual`, `equal`, `deepEqual`, `toHaveLength`, `toHaveCount`, `toHaveText`) lazára vált (`toBeGreaterThan*`, `toBeLessThan*`, `toContain*`, `toMatch`, `toBeTruthy`, `toBeDefined`, `ok`, `match`, `toBeCloseTo`) |
 | `timeout-raised` | párban `timeout` / `setTimeout(` / `retries` száma nő; vagy módosított (nem új) fájlba `retries` kerül |
 | `force-or-fixed-wait` | hozzáadott `force: true` vagy `waitForTimeout(` |
@@ -101,8 +101,8 @@ Rekord: `test-integrity-<fej>.json` (`findings`, `mode`, `ms`).
 
 ### S1.5 Lépések
 
-1. `test-integrity.mjs`: tiszta függvények (`parseDiff`, `analyzeFile`, `pairLines`, `classifyThreshold`, `findMarker`,
-   `verifyMarker`, `analyze`) + `runTestIntegrityStep({ gate, ctx, mode, prBody })` + CLI (`--base`, `--mode warn|block`,
+1. `test-integrity.mjs`: tiszta függvények (megvalósítva — K8: `parseDiff`, `analyzeFile`, `subjectOf`, `thresholdDirection`,
+   `stripGuard`, `joinLogical`, `findMarker`, `verifyMarker`, `analyze`) + `runTestIntegrityStep({ gate, ctx, mode, prBody })` + CLI (`--base`, `--mode warn|block`,
    `--body-file`, `--pr-body-env <VÁLTOZÓ>`, `--json`). Parancs: `node --test scripts/qa/gates/test-integrity.test.mjs` → zöld.
 2. Tesztek: minden szabályra pozitív ÉS negatív eset (új teszt nem lelet; szigorítás nem lelet; mozgatott állítás nem lelet; jelölt +
    igazolt átmegy; jelölt, de spec nélkül nem igazolt; commit-módú lazítás, amelyet később visszacsináltak, nem lelet); a J7b-eset
@@ -125,7 +125,8 @@ Rekord: `test-integrity-<fej>.json` (`findings`, `mode`, `ms`).
 
 - Új: `scripts/qa/gates/evidence-chain.mjs` (rekord + `chain.jsonl`, `appendRecord`, `verifyChain`), `scripts/qa/gates/evidence-run.mjs`
   (tetszőleges parancs futtatása és rögzítése: `node scripts/qa/gates/evidence-run.mjs -- <parancs> <arg…>` → `run-<id>`),
-  `scripts/qa/gates/verify-report.mjs` (+ `*.test.mjs` mindháromhoz), `scripts/qa/gates/report-template.md` (jelentés-sablon).
+  `scripts/qa/gates/verify-report.mjs`, `scripts/qa/gates/report-template.md` (jelentés-sablon); tesztek (K8: megvalósult):
+  `verify-report.test.mjs` (a verify-report, az evidence-run és a record-review esetei) és `evidence-chain.test.mjs`.
 - Módosul: `scripts/qa/gates/stage-gate.mjs` és `pre-push-gate.mjs` `main()`-je (lánc-rekord a meglévő mellé), `AGENTS.md`
   („Minőségkapuk” szakasz végén egy mondat), `.agents/skills/websuli-pr-elotti-kapu/SKILL.md` + tükre, `docs/minosegkapuk.md`.
 
@@ -149,7 +150,7 @@ A jelentés végén egy kerített blokk, info-sztringje `json allitasok` (JSON, 
 }
 ```
 
-### S2.3 Az ellenőrzések (`verify-report.mjs --report <jelentés.md> [--cwd <munkafa>] [--no-gh]`)
+### S2.3 Az ellenőrzések (`verify-report.mjs --report <jelentés.md> [--head <ref>] [--base <ref>] [--no-gh]`; a fej és a bázis a hívótól — az R-kör M1 pontja szerint, ez felülírja a lenti „a blokk adja” részleteket)
 
 1. Van pontosan egy `json allitasok` blokk, érvényes JSON, `schema` ismert; különben `FAIL` („érvénytelen jelentés”).
 2. `head` létező commit, és az ág (`branch`) feje (`git rev-parse <branch>`); ha van `pr`, a PR `headRefOid`-ja is.
@@ -233,7 +234,7 @@ szeleted-fejezete — a kód ELŐTT egy commitban frissítsd az „Állapot” s
   van; `[x]` pipa csak akkor, ha a fejre szóló bizonyíték (`pre-push-<fej>` teljes egységteszt PASS, vagy `run-<id>` a megnevezett
   fájlra, 0 kóddal) megvan; a `— kézi:` pont nem pipálható gépi bizonyíték nélkül, csak indoklással a PR-leírásban.
 - **Elfogadás:** WHEN egy `[x]` pontnak nincs teszt-hivatkozása vagy bizonyítéka THEN `WARN` (később `FAIL`) a pont ID-jával; a mai
-  10 jelölővel ellátott specen (`grep -l "acceptance-checklist" docs/specs`) futtatva a hamis riasztás számolva a PR-ban.
+  21 jelölővel ellátott specen (a mainen 2026-11-17-én, `git grep -l "acceptance-checklist" -- docs/specs`) futtatva a hamis riasztás számolva a PR-ban.
 - **Fájlok, amelyekhez NEM nyúl:** `lib.mjs`, `pre-pr-gate.mjs` (a #490 után egy külön hunk), a játékok.
 
 ### S5 — Telepítés utáni füstpróba + keretek (párhuzamosan futhat; diszjunkt)

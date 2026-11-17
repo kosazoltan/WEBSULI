@@ -30,12 +30,13 @@ jobs:
         run: node scripts/qa/gates/skills-sync-check.mjs
       - name: Háromfázisú rend ellenőrzése
         run: node scripts/qa/three-phase-check.mjs --base origin/${{ github.base_ref }}
-      # S1 teszt-integritás (docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md): a mérce jelöletlen lazítása itt BUKÁS.
-      # A PR-leírás környezeti változóban megy át (nem a parancssorban), a jelölések PR-listáját ellenőrzi.
-      - name: Teszt-integritás (S1, tiltó mód)
+      # S1 teszt-integritás (docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md 6.3a): bevezetési lépcső — a mód a
+      # gates.config.json `modes.test-integrity.ci` értéke (most: warn → a job NEM bukik miatta); a leletek a job-összefoglalóba
+      # kerülnek. A tiltás feltétele mérve: a nyitott PR-ok korpuszán ≤ 10% hamis riasztás. A PR-leírás környezeti változóban megy át.
+      - name: Teszt-integritás (S1)
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: node scripts/qa/gates/test-integrity.mjs --base origin/${{ github.base_ref }} --mode block --pr-body-env PR_BODY
+        run: node scripts/qa/gates/test-integrity.mjs --base origin/${{ github.base_ref }} --pr-body-env PR_BODY
 
   lint-typecheck:
     name: Lint & Typecheck

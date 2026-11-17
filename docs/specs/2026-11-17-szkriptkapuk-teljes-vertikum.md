@@ -191,10 +191,10 @@ Rögzített lista; minden új szelet célja, hogy egy-egy tételét szűkítse.
 
 A meglévő tár (`<git-common-dir>/websuli-qa-evidence/`, D4 a minőségkapu-tervben) bővül:
 
-- **Rekord** (`<kind>-<azonosító>.json`): `kind`, `head` (40 jegy), `cmd` (a futtatott parancs, titok nélkül), `code` (kilépési kód),
-  `ok`, `outSha256` (a teljes, szűrt kimenet hash-e), `at` (ISO), `prev` (a lánc előző rekordjának `sha256`-ja), `sha256` (a rekord
-  saját hash-e a `sha256` mező nélkül), a kapuknál `steps`.
-- **Lánc** (`chain.jsonl`): rekordonként egy sor (`kind`, `id`, `head`, `sha256`, `prev`). Az ellenőrző (S2) a láncot végigszámolja: egy
+- **Rekord** (`<kind>-<azonosító>.json`; a megvalósult mezők — K8): `kind`, `head` (40 jegy), a futás-rekordnál `cmd` (szűrve),
+  `code`, `ok`, `ms`, `outSha256`, `counts`, `dirty`, `at`; a kapuknál `ok`, `steps`, `dirty`. A hash NEM a rekordban, hanem a láncban.
+- **Lánc** (`chain.jsonl`): rekordonként egy sor (`name`, `head`, `sha256` = a rekordfájl hash-e, `prev` = az előző lánc-sor hash-e,
+  `at`; javítás után `repair: true`). Az ellenőrző (S2) a láncot végigszámolja: egy
   utólag kézzel átírt rekord a hash-nél bukik. A lánc nem biztonsági határ (a tár helyben írható) — a cél a figyelmetlen vagy kitalált
   állítás kiszűrése, nem a szándékos csalás ellen véd (az ellen a CI a határ).
 - **Új rekordtípusok:** `run-<id>` (`evidence-run.mjs`: tetszőleges parancs futtatása és rögzítése), `stage-<fej>` (a szakasz-kapu),

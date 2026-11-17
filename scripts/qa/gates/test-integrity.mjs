@@ -3,18 +3,23 @@
 // A tesztfájlok (és a sim-kalibrációs fájlok) diffjében keresi a mérce dokumentálatlan lazítását: törölt / kikommentezett teszt és
 // állítás, megváltozott számküszöb vagy relációs jel, lazább matcher, megnövelt timeout / retries, `force: true` / fix várakozás,
 // forrásszöveget vizsgáló „teszt”, bot-kalibrációs konstans. Átengedés csak igazolt `SPEC-VÁLTOZÁS <dátum> (<hivatkozás>)` jelöléssel.
-// Két nézet: a main-hez képesti tartomány ÉS commitonként (a PR-on belüli lazítás a main-hez képest „új fájlként” látszana).
+// Két nézet (a független review B2 után): (1) a DÖNTŐ nézet a main CSÚCSÁHOZ képesti, összefésült diff (`git merge-tree`; a CI-ban
+// a merge-commit maga) — ez tilthat (`block` módban); (2) kiegészítő commit-nézet CSAK a PR saját (`--cherry-pick --right-only`)
+// commitjain és CSAK a mainen még nem létező fájlokon (a PR-on belüli lazítás a main-hez képest „új fájlként” látszana) — ez SOHA
+// nem tilt, csak jelez. Bevezetési lépcső: alapból `warn` helyben ÉS a CI-ban (terv 6.3a).
 //
 // Használat: node scripts/qa/gates/test-integrity.mjs [--base origin/main] [--head <ref>] [--mode warn|block]
 //            [--body-file <PR-leírás.md>] [--pr-body-env <VÁLTOZÓ>] [--json]
-//   --head  csak olvasó ellenpróba egy másik ágon (munkafa nélkül); alapérték: a munkafa (HEAD + commitolatlan + nem követett)
-// Kilépési kód: 0 = nincs jelöletlen / nem igazolt lelet, vagy `warn` mód; 1 = `block` módban van ilyen lelet.
+//   --head  csak olvasó ellenpróba egy másik ágon / fejen (munkafa nélkül); alapérték: a munkafa (HEAD + commitolatlan + nem követett)
+//   --json  egyetlen JSON-objektum a stdout-on (terv 6.6a); a CI-ban a leletek a job-összefoglalóba is kerülnek ($GITHUB_STEP_SUMMARY)
+// Kilépési kód: 0 = nincs tiltó lelet (vagy `warn` mód); 1 = `block` módban jelöletlen mérce-lelet a döntő nézetben; 2 = nem futott.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import {
-  STATUS, argValue, createGate, isMain, makeContext, redact, writeEvidence,
+  STATUS, argValue, createGate, isMain, makeContext, redact,
 } from './lib.mjs';
+import { appendRecord } from './evidence-chain.mjs';
 
 export const GATE = 'test-integrity';
 
@@ -23,11 +28,12 @@ export const GATE = 'test-integrity';
  * mindenütt csak figyelmeztetés — kockázatos minta, de nem a mérce lazítása (a 2026-11-17-i ellenpróba szerint az új e2e-k fele
  * használja; a tiltásához előbb a meglévő esetek kiváltása kell).
  */
-export const HYGIENE_RULES = new Set(['force-or-fixed-wait', 'source-regex-test']);
+export const HYGIENE_RULES = new Set(['force-or-fixed-wait', 'source-regex-test', 'timeout-added', 'gate-changed']);
 
 export const DEFAULTS = Object.freeze({
-  testPatterns: ['\\.(?:test|spec)\\.[cm]?[jt]sx?$', '\\.browser\\.ts$', '^source/tests/game-mobile-cases/', '^source/playwright[^/]*\\.config\\.[cm]?ts$'],
+  testPatterns: ['\\.(?:test|spec)\\.[cm]?[jt]sx?$', '\\.browser\\.ts$', '^source/tests/game-mobile-cases/', '^source/playwright[^/]*\\.config\\.[cm]?ts$', '\\.integration\\.ts$', '^source/tests/support/'],
   calibrationPatterns: ['^source/client/src/lib/[^/]+/sim\\.ts$'],
+  gateFiles: [],
   markerWindow: 8,
 });
 
@@ -96,7 +102,8 @@ const TEST_CALL = /^\s*(?:test|it|describe)(?:\.(?:serial|parallel|describe|conc
 const COMMENTED = /^\s*(?:\/\/+|\/\*+)\s*(?:await\s+)?(?:assert(?:\.[A-Za-z]+)*\s*\(|expect\s*\(|(?:test|it|describe)\s*\(\s*["'`]).*[;){,]\s*(?:\*\/)?\s*$/;
 const FORCE = /\bforce\s*:\s*true\b/;
 const FIXED_WAIT = /\bwaitForTimeout\s*\(/;
-const SKIP_ADDED = [/\.todo\s*\(/, /\btest\.fail\s*\(/, /\bskip\s*:\s*(?!true\b|false\b)[^\s,}]/];
+// A `.only` / `.skip` / `fixme` helyben a lint-kapu FAIL-je is; a CI-ban a lint-kapu nem fut, ezért itt is (M4: 10–11. mutáció).
+const SKIP_ADDED = [/\.todo\s*\(/, /\btest\.fail\s*\(/, /\bskip\s*:\s*(?!false\b)[^\s,}]/,/\b(?:test|it|describe)\.(?:skip|only|fixme)\s*\(/, /\b(?:xit|xdescribe|xtest)\s*\(/];
 const READ_FILE = /\breadFile(?:Sync)?\s*\(/;
 const SOURCE_PATH = /["'`][^"'`\n]*(?:client\/src\/|server\/|shared\/|\/pages\/|\/lib\/)[^"'`\n]*["'`]/;
 const CALIBRATION_CONST = /^\s*(?:export\s+)?const\s+([A-Z][A-Z0-9_]{2,})\s*(?::[^=]+)?=\s*([^;]+);?\s*(?:\/\/.*)?$/;
@@ -246,14 +253,56 @@ export function thresholdDirection(oldLine, newLine) {
   return 'unknown';
 }
 
-const NUMS = (s) => (stripStrings(s).match(/(?<![\w$.])\d+(?:[._]\d+)*/g) ?? []).join(',');
-const OPS = (s) => (stripStrings(s).match(/[<>]=?|[!=]==?/g) ?? []).join(',');
-const TIMEOUT_KEYS = /\b(timeout|retries|setTimeout|waitForTimeout)\b\s*[:(]\s*([\d_]+)/g;
+// A számok / relációs jelek csak az ÁLLÍTÁS-részből (egy sorban előtte álló más utasítás — `const x = …; expect(x)…` — nem számít).
+const assertPart = (s) => { const i = String(s).search(/\b(?:assert|expect)\b/); return i >= 0 ? String(s).slice(i) : String(s); };
+const NUMS = (s) => (stripStrings(assertPart(s)).match(/(?<![\w$.])\d+(?:[._]\d+)*/g) ?? []).join(',');
+const OPS = (s) => (stripStrings(assertPart(s)).match(/[<>]=?|[!=]==?/g) ?? []).join(',');
+const TIMEOUT_KEYS = /\b(timeout|setTimeout|waitForTimeout)\b\s*[:(]\s*([\d_]+)/g;
+const RETRIES_EXPR = /\bretries\s*:\s*([^,}\n]+)/;
 
 function timeoutMap(s) {
   const m = new Map();
   for (const x of s.matchAll(TIMEOUT_KEYS)) m.set(x[1], Number(x[2].replace(/_/g, '')));
+  // retries kifejezésben is (`retries: process.env.CI ? 5 : 1` → 5): a legnagyobb szám
+  const r = RETRIES_EXPR.exec(stripStrings(s));
+  if (r) { const ns = (r[1].match(/\d+/g) ?? []).map(Number); if (ns.length) m.set('retries', Math.max(...ns)); }
   return m;
+}
+
+/** Az állítás elejéről a feltétel-őr (`if (…)`) és az `else` levétele: `{ rest, guarded }` (zárójel-egyensúllyal). */
+export function stripGuard(s) {
+  let t = String(s).replace(/^\s*\}?\s*else\s+/, '');
+  const m = /^\s*if\s*\(/.exec(t);
+  if (!m) return { rest: t.trim(), guarded: false };
+  let depth = 0;
+  for (let i = m[0].length - 1; i < t.length; i += 1) {
+    if (t[i] === '(') depth += 1;
+    else if (t[i] === ')') { depth -= 1; if (depth === 0) { t = t.slice(i + 1).replace(/^\s*\{?\s*/, ''); return { rest: t.trim(), guarded: true }; } }
+  }
+  return { rest: String(s).trim(), guarded: false };
+}
+
+/**
+ * Többsoros állítás egyetlen logikai sorrá: egy hunkon belül az azonos típusú (+ / −), egymást követő sorokat összefűzi, amíg az
+ * állítás zárójelei ki nem egyenlítődnek (legfeljebb 8 sor). A sorszám az első soré.
+ */
+export function joinLogical(lines) {
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const l = lines[i];
+    if ((l.t !== '+' && l.t !== '-') || !isAssert(l.text)) { out.push(l); continue; }
+    let text = l.text;
+    let bal = (stripStrings(text).match(/\(/g) ?? []).length - (stripStrings(text).match(/\)/g) ?? []).length;
+    let j = i;
+    while (bal > 0 && j + 1 < lines.length && j - i < 7 && lines[j + 1].t === l.t) {
+      j += 1;
+      text = `${text} ${lines[j].text.trim()}`;
+      bal += (stripStrings(lines[j].text).match(/\(/g) ?? []).length - (stripStrings(lines[j].text).match(/\)/g) ?? []).length;
+    }
+    out.push({ ...l, text });
+    i = j;
+  }
+  return out;
 }
 
 // ---- Elemzés -----------------------------------------------------------------------------------------------------------
@@ -267,19 +316,24 @@ const finding = (rule, file, l, extra = {}) => ({ rule, file, line: l.newLine ??
 export function analyzeFile(f, kind) {
   const findings = [];
   const notes = [];
-  const all = f.hunks.flatMap((h, hi) => h.lines.map((l) => ({ ...l, hi })));
+  const all = f.hunks.flatMap((h, hi) => joinLogical(h.lines).map((l) => ({ ...l, hi })));
   const added = all.filter((l) => l.t === '+');
   const removed = all.filter((l) => l.t === '-');
 
-  if (kind === 'calibration') {
+  // NAGYBETŰS szám-konstans értékváltozása: sim-fájlban bot-kalibráció, tesztfájlban tűrés / küszöb-konstans (M4: 16–17. mutáció).
+  const constChanges = (rule) => {
     const oldC = new Map();
     for (const l of removed) { const m = CALIBRATION_CONST.exec(l.text); if (m) oldC.set(m[1], { v: norm(m[2]), l }); }
     for (const l of added) {
       const m = CALIBRATION_CONST.exec(l.text);
-      if (m && oldC.has(m[1]) && oldC.get(m[1]).v !== norm(m[2])) findings.push(finding('sim-calibration', f.path, l, { was: oldC.get(m[1]).v }));
+      if (m && oldC.has(m[1]) && oldC.get(m[1]).v !== norm(m[2]) && /\d/.test(m[2] + oldC.get(m[1]).v)) findings.push(finding(rule, f.path, l, { was: oldC.get(m[1]).v }));
     }
+  };
+  if (kind === 'calibration') {
+    constChanges('sim-calibration');
     return { findings, notes };
   }
+  constChanges('tolerance-changed');
 
   if (f.status === 'D') {
     findings.push({ rule: 'test-file-deleted', file: f.path, line: 0, side: 'old', text: '(a tesztfájl törölve)' });
@@ -314,6 +368,14 @@ export function analyzeFile(f, kind) {
     if (!best) continue;
     pairedOld.add(best);
     if (norm(a.text) === norm(best.text)) continue;
+    // Feltétel-őr: az ugyanolyan állítás feltétel nélkülivé vált → szigorúbb; feltétel mögé került → lazítás (B2: tsunami-play:407).
+    const ga = stripGuard(a.text);
+    const gb = stripGuard(best.text);
+    if (norm(ga.rest) === norm(gb.rest)) {
+      if (ga.guarded && !gb.guarded) findings.push(finding('assert-conditional', f.path, a, { was: norm(best.text), direction: 'looser' }));
+      else notes.push(`${f.path}:${a.newLine} feltétel ${gb.guarded && !ga.guarded ? 'elhagyva (szigorúbb)' : 'változatlan / else-ág'} (nem lelet)`);
+      continue;
+    }
     const om = matcherOf(best.text);
     const nm = matcherOf(a.text);
     if (om && nm && om !== nm && STRICT_MATCHERS.has(om) && LOOSE_MATCHERS.has(nm)) {
@@ -336,10 +398,13 @@ export function analyzeFile(f, kind) {
     }
     const to = timeoutMap(best.text);
     const tn = timeoutMap(a.text);
-    for (const [k, v] of tn) if (to.has(k) && v > to.get(k)) findings.push(finding('timeout-raised', f.path, a, { was: norm(best.text) }));
-    const noT = (s) => s.replace(TIMEOUT_KEYS, '');
-    if (NUMS(noT(a.text)) !== NUMS(noT(best.text)) || OPS(a.text) !== OPS(best.text)) {
-      const dir = thresholdDirection(best.text, a.text);
+    for (const [k, v] of tn) {
+      if (to.has(k) && v > to.get(k)) findings.push(finding('timeout-raised', f.path, a, { was: norm(best.text) }));
+      else if (!to.has(k)) findings.push(finding('timeout-added', f.path, a, { was: norm(best.text) }));
+    }
+    const noT = (s) => s.replace(TIMEOUT_KEYS, '').replace(RETRIES_EXPR, '');
+    if (NUMS(noT(ga.rest)) !== NUMS(noT(gb.rest)) || OPS(ga.rest) !== OPS(gb.rest)) {
+      const dir = thresholdDirection(gb.rest, ga.rest);
       if (dir === 'stricter' || dir === 'same') notes.push(`${f.path}:${a.newLine} szigorúbb / azonos küszöb (nem lelet)`);
       else findings.push(finding('threshold-changed', f.path, a, { was: norm(best.text), direction: dir }));
     }
@@ -363,8 +428,10 @@ export function analyzeFile(f, kind) {
     for (const [k, v] of tn) {
       if ((k === 'timeout' || k === 'setTimeout' || k === 'retries') && to.has(k) && v > to.get(k)) findings.push(finding('timeout-raised', f.path, a, { was: norm(best.text) }));
       else if (k === 'retries' && !to.has(k) && f.status !== 'A' && v > 0) findings.push(finding('timeout-raised', f.path, a));
+      else if ((k === 'timeout' || k === 'setTimeout') && !to.has(k) && f.status !== 'A') findings.push(finding('timeout-added', f.path, a));
     }
   }
+  for (const a of added) if (/\btest\.slow\s*\(/.test(stripStrings(a.text)) && f.status !== 'A') findings.push(finding('timeout-added', f.path, a));
 
   for (const a of added) {
     if (COMMENTED.test(a.text)) findings.push(finding('assert-commented', f.path, a));
@@ -429,18 +496,34 @@ export const testStem = (path) => basename(path).replace(/\..*$/, '');
  * `SPEC-VÁLTOZÁS` szó; ha van PR-leírás, abban a teszt töve és a `SPEC-VÁLTOZÁS`.
  * @returns {{ ok: boolean, why: string, pending?: string }}
  */
-export function verifyMarker({ marker, file, specAdded, prBody }) {
+/** A hivatkozás „pontja” a terv-út után (pl. `10.4`, `D-J1a-8`, `9.`): a terven belül keresendő azonosító, vagy null. */
+export function refPoint(ref, path) {
+  const after = path ? ref.slice(ref.indexOf(path) + path.length) : ref;
+  const m = /(?:^|[\s,;(])([A-Z][\w]*-[\w-]*\d[\w-]*|\d+(?:\.\d+)*[a-z]?)(?=[\s.,;:)„]|$)/.exec(after);
+  return m ? m[1] : null;
+}
+
+export function verifyMarker({ marker, file, specAdded, prBody, specAt = () => null }) {
   if (SOURCE_GUARD_MARKER.test(marker) && !MARKER.test(marker)) return { ok: true, why: 'FORRÁS-ŐR jelölés indoklással' };
   const date = MARKER_DATE.exec(marker)?.[1];
   const ref = MARKER_REF.exec(marker)?.[1] ?? '';
   if (!date || !ref.trim()) return { ok: false, why: `a jelölésből hiányzik a ${!date ? 'dátum (ÉÉÉÉ-HH-NN)' : ''}${!date && !ref.trim() ? ' és a ' : ''}${!ref.trim() ? 'zárójeles hivatkozás' : ''}` };
   const stem = testStem(file);
   const path = SPEC_PATH.exec(ref)?.[0];
-  const mentions = (lines) => lines.some((t) => t.includes(stem) || MARKER.test(t));
+  // K3: a spec diffjében a TESZT NEVE kell (a puszta jelölő szó nem elég).
+  const mentions = (lines) => lines.some((t) => t.includes(stem));
   if (path) {
-    if (!specAdded.has(path)) return { ok: false, why: `a hivatkozott ${path} nem változik ebben a diffben (a döntés nincs rögzítve)` };
-    if (!mentions(specAdded.get(path))) return { ok: false, why: `a ${path} diffje nem említi a tesztet (${stem}) / a SPEC-VÁLTOZÁS-t` };
-  } else if (![...specAdded.values()].some((ls) => ls.some((t) => t.includes(stem)))) {
+    const inDiff = specAdded.has(path) && mentions(specAdded.get(path));
+    if (!inDiff) {
+      // B2/3: a terv jellemzően korábbi PR-ban, a kód ELŐTT kerül be — a FEJEN meglévő terv hivatkozott pontja is igazol.
+      const spec = specAt(path);
+      if (spec == null) return { ok: false, why: `a hivatkozott ${path} sem a diffben, sem a fejen nem létezik` };
+      const point = refPoint(ref, path);
+      if (point ? !spec.includes(point) : !spec.includes(stem)) {
+        return { ok: false, why: point ? `a ${path} a fejen nem tartalmazza a hivatkozott pontot (${point})` : `a ${path} a fejen nem említi a tesztet (${stem}), és a jelölés nem nevez meg pontot` };
+      }
+    }
+  } else if (![...specAdded.values()].some((ls) => mentions(ls))) {
     return { ok: false, why: `a hivatkozás nem útvonal, és egyetlen változott docs/specs fájl sem említi a tesztet (${stem})` };
   }
   if (prBody == null) return { ok: true, why: 'igazolt jelölés', pending: 'a PR-leírás itt nem ellenőrizhető (a CI és a PR-kapu nézi)' };
@@ -464,6 +547,7 @@ function classifier(cfg) {
  */
 export function analyze({ range, commits = [], finalText = () => null, prBody = null, cfg }) {
   const { ti, kindOf } = classifier(cfg);
+  const gateRes = (ti.gateFiles ?? []).map((p) => new RegExp(p));
   const specAdded = new Map();
   for (const f of range) {
     if (/^docs\/specs\/.+\.md$/.test(f.path)) specAdded.set(f.path, f.hunks.flatMap((h) => h.lines.filter((l) => l.t === '+').map((l) => l.text)));
@@ -477,35 +561,48 @@ export function analyze({ range, commits = [], finalText = () => null, prBody = 
     if (!finalCache.has(p)) { const t = finalText(p); finalCache.set(p, t == null ? null : String(t).replace(/\r\n/g, '\n').split('\n')); }
     return finalCache.get(p);
   };
+  const specAt = (p) => finalText(p);
   const push = (f, x, viaCommit) => {
     const k = key(x);
     if (seen.has(k)) return;
     seen.add(k);
     const fl = viaCommit ? finalLines(x.file) : null;
     const marker = findMarker({ f, finding: x, window: ti.markerWindow, finalLines: fl });
-    const v = marker ? verifyMarker({ marker, file: x.file, specAdded, prBody }) : { ok: false, why: 'jelöletlen' };
+    const v = marker ? verifyMarker({ marker, file: x.file, specAdded, prBody, specAt }) : { ok: false, why: 'jelöletlen' };
     // Commit-nézetben a sor a JELENLEGI fájlban (ha megtalálható) — a commit-beli sorszám a `commitLine`.
     const idx = fl && x.side === 'new' ? fl.findIndex((t) => norm(t) === norm(x.text)) : -1;
     const line = idx >= 0 ? idx + 1 : x.line;
-    out.push({ ...x, line, commitLine: viaCommit ? x.line : undefined, commit: viaCommit ? f.commit : undefined, marker: marker ? norm(marker).slice(0, 160) : null, verified: v.ok, why: v.why, pending: v.pending });
+    out.push({ ...x, line, via: viaCommit ? 'commit' : 'range', commitLine: viaCommit ? x.line : undefined, commit: viaCommit ? f.commit : undefined, marker: marker ? norm(marker).slice(0, 160) : null, verified: v.ok, why: v.why, pending: v.pending });
   };
   for (const f of range) {
+    if (gateRes.some((re) => re.test(f.path))) push(f, { rule: 'gate-changed', file: f.path, line: 0, side: 'new', text: '(a kapu maga változik ebben a PR-ban — a CI a PR saját változatát futtatja)' }, false);
     const kind = kindOf(f.path);
     if (!kind) continue;
     const r = analyzeFile(f, kind);
     notes.push(...r.notes);
     for (const x of r.findings) push(f, x, false);
   }
+  // A lazított sor „jelenléte” a végső fájlban: szó szerint, VAGY azonos alany + azonos számok / relációk (egy kozmetikai commit —
+  // pl. az üzenet átírása — nem tünteti el a leletet; független review M4/2).
+  const stillThere = (fl, text) => {
+    if (fl.some((t) => norm(t) === norm(text))) return true;
+    const s = subjectOf(text);
+    if (s == null) return false;
+    return fl.some((t) => isAssert(t) && subjectOf(t) === s && NUMS(t) === NUMS(text) && OPS(t) === OPS(text));
+  };
   for (const f of commits) {
     const kind = kindOf(f.path);
     if (!kind) continue;
     const fl = finalLines(f.path);
     for (const x of analyzeFile(f, kind).findings) {
-      // A később visszacsinált lazítás nem lelet: a hozzáadott (lazított) sor már nincs meg / a törölt sor visszakerült.
       if (fl) {
-        const present = fl.some((t) => norm(t) === norm(x.text));
-        if (x.side === 'new' && !present) continue;
-        if (x.side === 'old' && x.rule !== 'test-file-deleted' && present) continue;
+        if (x.side === 'new' && !stillThere(fl, x.text)) continue; // később visszacsinálták
+        if (x.side === 'old' && x.rule !== 'test-file-deleted') {
+          if (fl.some((t) => norm(t) === norm(x.text))) continue; // a törölt sor visszakerült
+          // a törölt állítás alanyára a végső fájlban van állítás: összevonás / a lazítás VISSZAÁLLÍTÁSA, nem törlés (M4/3)
+          const s = subjectOf(x.text);
+          if (x.rule === 'assert-removed' && s != null && fl.some((t) => isAssert(t) && subjectOf(t) === s)) continue;
+        }
       } else if (x.rule !== 'test-file-deleted') continue; // a fájl már nem létezik: a tartomány-nézet felel érte
       push(f, x, true);
     }
@@ -515,14 +612,48 @@ export function analyze({ range, commits = [], finalText = () => null, prBody = 
 
 // ---- Begyűjtés és kapu-lépés -------------------------------------------------------------------------------------------
 
-/** Diffek begyűjtése gittel (egyetlen `git diff` + egyetlen `git log -p`). */
+/** `git cat-file --batch` kimenetének értelmezése: `<oid> <type> <size>\n<tartalom>\n` vagy `<név> missing`. */
+export function parseCatFileBatch(buf, names) {
+  const out = new Map();
+  let pos = 0;
+  const s = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf), 'utf8');
+  for (const name of names) {
+    const nl = s.indexOf(0x0a, pos);
+    if (nl < 0) break;
+    const header = s.slice(pos, nl).toString('utf8');
+    pos = nl + 1;
+    const m = /^\S+ (\w+) (\d+)$/.exec(header);
+    if (!m) { out.set(name, null); continue; }
+    const size = Number(m[2]);
+    out.set(name, m[1] === 'blob' ? s.slice(pos, pos + size).toString('utf8') : null);
+    pos += size + 1;
+  }
+  return out;
+}
+
+/**
+ * Diffek begyűjtése. A döntő tartomány-nézet: `--head` / CI esetén a main CSÚCSA és az összefésült fa (`git merge-tree
+ * --write-tree <bázis> <fej>`) közti diff — a CI-ban futó merge-commit nézetével azonos, és a squash-sel már összevont előzmény-ág
+ * commitjait nem rója fel; helyi munkafa-módban a merge-base óta (munkafával együtt). A commit-nézet: `--cherry-pick --right-only`
+ * (a mainen tartalmilag már meglévő commit kimarad), és csak a bázis csúcsán NEM létező fájlok (a többire a tartomány-nézet elég).
+ * A végső tartalmak egyetlen `git cat-file --batch` hívással (K10).
+ */
 export function collect({ ctx, head = null }) {
-  const { git, root, base } = ctx;
+  const { git, root, base, exec } = ctx;
   const q = ['-c', 'core.quotePath=false'];
-  const mb = git.out(['merge-base', base, head ?? 'HEAD']);
-  const rangeText = git.out([...q, 'diff', '-U6', '--no-color', '-M', mb, ...(head ? [head] : []), '--']);
-  const range = parseDiff(rangeText);
-  if (!head) {
+  const ci = process.env.GITHUB_ACTIONS === 'true';
+  const target = head ?? 'HEAD';
+  let rangeFrom;
+  let rangeTo = head ? [head] : [];
+  let view = 'merge-base';
+  if (head || ci) {
+    const mt = git.run(['merge-tree', '--write-tree', base, target]);
+    const tree = mt.code === 0 ? mt.stdout.split('\n')[0].trim() : null;
+    if (tree && /^[0-9a-f]{40}$/.test(tree)) { rangeFrom = base; rangeTo = [tree]; view = 'merged'; }
+  }
+  if (!rangeFrom) rangeFrom = git.out(['merge-base', base, target]);
+  const range = parseDiff(git.out([...q, 'diff', '-U6', '--no-color', '-M', rangeFrom, ...rangeTo, '--']));
+  if (!head && !ci) {
     for (const p of git.untracked().map((s) => s.replace(/\\/g, '/'))) {
       try {
         const buf = readFileSync(join(root, p));
@@ -530,14 +661,26 @@ export function collect({ ctx, head = null }) {
       } catch { /* eltűnt közben */ }
     }
   }
-  const logText = git.out([...q, 'log', '-p', '-U6', '--no-color', '--no-merges', '-M', '--format=@@commit %H', `${base}..${head ?? 'HEAD'}`, '--']);
-  const commits = parseDiff(logText);
+  const onBase = new Set(git.out([...q, 'ls-tree', '-r', '--name-only', base]).split('\n').map((s) => s.trim()).filter(Boolean));
+  const logText = git.out([...q, 'log', '-p', '-U6', '--no-color', '--no-merges', '--cherry-pick', '--right-only', '-M', '--format=@@commit %H', `${base}...${target}`, '--']);
+  const commits = parseDiff(logText).filter((f) => !onBase.has(f.path));
+  const want = [...new Set([...range, ...commits].map((f) => f.path).concat(range.filter((f) => /^docs\/specs\//.test(f.path)).map((f) => f.path)))];
+  let batch = new Map();
+  if (head || ci) {
+    const r = exec('git', [...q, 'cat-file', '--batch'], { cwd: root, input: want.map((p) => `${target}:${p}`).join('\n') + (want.length ? '\n' : ''), timeoutMs: 120_000 });
+    if (r.code === 0) batch = parseCatFileBatch(r.stdout, want);
+  }
+  const extra = new Map();
   const finalText = (p) => {
-    if (head) { const r = git.run([...q, 'show', `${head}:${p}`]); return r.code === 0 ? r.stdout : null; }
+    if (batch.has(p)) return batch.get(p);
+    if (head || ci) {
+      if (!extra.has(p)) { const r = git.run([...q, 'show', `${target}:${p}`]); extra.set(p, r.code === 0 ? r.stdout : null); }
+      return extra.get(p);
+    }
     const abs = join(root, p);
     return existsSync(abs) ? readFileSync(abs, 'utf8') : null;
   };
-  return { range, commits, finalText, commitCount: new Set(commits.map((f) => f.commit)).size };
+  return { range, commits, finalText, view, commitCount: new Set(commits.map((f) => f.commit)).size };
 }
 
 export function resolveMode(cfg, explicit) {
@@ -546,9 +689,13 @@ export function resolveMode(cfg, explicit) {
   return (process.env.GITHUB_ACTIONS === 'true' ? m.ci : m.local) ?? 'warn';
 }
 
+/** A PR-leírás: `--body-file` (nem létező fájl → kivétel, K3), vagy környezeti változó, vagy null. */
 export function readPrBody({ bodyFile, bodyEnv, argv = process.argv }) {
   const file = bodyFile ?? argValue(argv.slice(2), '--body-file');
-  if (file && existsSync(file)) return readFileSync(file, 'utf8');
+  if (file) {
+    if (!existsSync(file)) throw new Error(`a --body-file nem létezik: ${file}`);
+    return readFileSync(file, 'utf8');
+  }
   if (bodyEnv && process.env[bodyEnv] != null) return process.env[bodyEnv];
   return null;
 }
@@ -562,50 +709,73 @@ export function formatFinding(x) {
 /** A kapu-lépés (a `lint-gate.mjs` `runLintSteps` hívja, így a szakasz-, push- és PR-kapuban is fut). */
 export async function runTestIntegrityStep({ gate, ctx, mode, prBody, head = null }) {
   const m = resolveMode(ctx.cfg, mode);
-  const body = prBody === undefined ? readPrBody({}) : prBody;
   let rec = null;
   const r = await gate.step(`teszt-integritás (S1, ${m})`, () => {
     const t0 = Date.now();
+    const body = prBody === undefined ? readPrBody({}) : prBody;
     const c = collect({ ctx, head });
     const res = analyze({ range: c.range, commits: c.commits, finalText: c.finalText, prBody: body, cfg: ctx.cfg });
     const bad = res.findings.filter((x) => !x.verified);
-    const badMeasure = bad.filter((x) => !HYGIENE_RULES.has(x.rule));
+    // Tiltani CSAK a döntő (main-csúcshoz képesti) nézet mérce-lelete tud; a commit-nézet és a higiénia csak jelez (B2/2).
+    const blocking = bad.filter((x) => !HYGIENE_RULES.has(x.rule) && x.via !== 'commit');
+    const commitOnly = bad.filter((x) => !HYGIENE_RULES.has(x.rule) && x.via === 'commit');
     const badHygiene = bad.filter((x) => HYGIENE_RULES.has(x.rule));
     const ok = res.findings.length - bad.length;
-    rec = { kind: GATE, mode: m, at: new Date().toISOString(), ms: Date.now() - t0, commits: c.commitCount, findings: res.findings, notes: res.notes };
+    rec = { kind: GATE, mode: m, view: c.view, at: new Date().toISOString(), ms: Date.now() - t0, commits: c.commitCount, findings: res.findings, notes: res.notes };
     const pending = res.findings.some((x) => x.verified && x.pending);
     if (!bad.length) {
-      return { status: STATUS.PASS, note: `${c.commitCount} commit + tartomány; ${ok} igazolt jelölés${pending ? ' (a PR-leírást a CI / PR-kapu nézi)' : ''}` };
+      return { status: STATUS.PASS, note: `${c.view === 'merged' ? 'összefésült nézet' : 'merge-base nézet'} + ${c.commitCount} saját commit; ${ok} igazolt jelölés${pending ? ' (a PR-leírást a CI / PR-kapu nézi)' : ''}` };
     }
     const parts = [];
-    if (badMeasure.length) parts.push(`${badMeasure.length} jelöletlen / nem igazolt MÉRCE-változás`);
-    if (badHygiene.length) parts.push(`${badHygiene.length} higiénia-jelzés (fix várakozás / force / forrás-vizsgálat — csak figyelmeztetés)`);
+    if (blocking.length) parts.push(`${blocking.length} jelöletlen / nem igazolt MÉRCE-változás`);
+    if (commitOnly.length) parts.push(`${commitOnly.length} commit-nézetbeli jelzés (csak figyelmeztet)`);
+    if (badHygiene.length) parts.push(`${badHygiene.length} higiénia-jelzés (csak figyelmeztet)`);
     if (ok) parts.push(`${ok} igazolt`);
     return {
-      status: m === 'block' && badMeasure.length ? STATUS.FAIL : STATUS.WARN,
-      note: `${parts.join(', ')} — a mércét ne lazítsd; ha valódi spec-változás: \`// SPEC-VÁLTOZÁS <dátum> (docs/specs/<terv>.md <pont>)\` + a spec diffje + a PR-leírás`,
-      detail: [...badMeasure, ...badHygiene].map(formatFinding).join('\n'),
+      status: m === 'block' && blocking.length ? STATUS.FAIL : STATUS.WARN,
+      note: `${parts.join(', ')} — a mércét ne lazítsd; ha valódi spec-változás: \`// SPEC-VÁLTOZÁS <dátum> (docs/specs/<terv>.md <pont>)\` + a terv (a diffben vagy a fejen) + a PR-leírás`,
+      detail: [...blocking, ...commitOnly, ...badHygiene].map(formatFinding).join('\n'),
     };
   });
   if (rec) {
     try {
       const h = head ? ctx.git.out(['rev-parse', head]) : ctx.git.head();
-      writeEvidence(ctx.evDir, `${GATE}-${h}`, { ...rec, head: h, status: r.status });
+      appendRecord(ctx.evDir, `${GATE}-${h}`, { ...rec, head: h, status: r.status });
     } catch { /* a bizonyíték írása nem döntheti el a kaput */ }
   }
   return { record: rec, result: r };
 }
 
+/** A CI job-összefoglalója (markdown) a leletekből. */
+export function stepSummary(record, status) {
+  const fs = (record?.findings ?? []).filter((x) => !x.verified);
+  const rows = fs.slice(0, 80).map((x) => `| \`${x.file}:${x.line}\` | ${x.rule} | ${x.via === 'commit' ? 'commit (csak jelzés)' : 'döntő'} | ${x.marker ? 'jelölt, nem igazolt' : 'jelöletlen'} |`);
+  return [`### Teszt-integritás (S1) — ${status} (mód: ${record?.mode ?? '?'}, ${record?.view ?? '?'} nézet)`, '',
+    fs.length ? '| Hely | Szabály | Nézet | Jelölés |\n|---|---|---|---|' : 'Nincs jelöletlen / nem igazolt lelet.', ...rows,
+    fs.length > 80 ? `\n… és még ${fs.length - 80} lelet (a teljes lista a job naplójában).` : '', ''].join('\n');
+}
+
 async function main() {
   const args = process.argv.slice(2);
-  const ctx = makeContext({ base: argValue(args, '--base') });
-  const gate = createGate(GATE);
-  const { record } = await runTestIntegrityStep({
-    gate, ctx, mode: argValue(args, '--mode'), head: argValue(args, '--head') ?? null,
-    prBody: readPrBody({ bodyFile: argValue(args, '--body-file'), bodyEnv: argValue(args, '--pr-body-env'), argv: ['', '', ...args] }),
-  });
-  if (args.includes('--json') && record) process.stdout.write(`${JSON.stringify({ findings: record.findings.map((x) => ({ ...x, text: redact(x.text) })), ms: record.ms }, null, 2)}\n`);
-  process.exit(gate.finish());
+  const json = args.includes('--json');
+  let ctx;
+  try { ctx = makeContext({ base: argValue(args, '--base') }); } catch (e) { process.stderr.write(`[test-integrity] NEM FUTOTT: ${e.message}\n`); process.exit(2); }
+  // K4: --json mellett a stdout-on CSAK a JSON-objektum.
+  const gate = createGate(GATE, json ? { log: () => {} } : {});
+  let prBody;
+  try { prBody = readPrBody({ bodyFile: argValue(args, '--body-file'), bodyEnv: argValue(args, '--pr-body-env'), argv: ['', '', ...args] }); } catch (e) { process.stderr.write(`[test-integrity] NEM FUTOTT: ${e.message}\n`); process.exit(2); }
+  const { record, result } = await runTestIntegrityStep({ gate, ctx, mode: argValue(args, '--mode'), head: argValue(args, '--head') ?? null, prBody });
+  const code = gate.finish();
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, stepSummary(record, result.status)); } catch { /* az összefoglaló nem dönti el a kaput */ }
+  }
+  if (json) {
+    const items = (record?.findings ?? []).map((x) => ({ id: `${x.rule}:${x.file}:${x.line}`, status: x.verified ? 'PASS' : (HYGIENE_RULES.has(x.rule) || x.via === 'commit' ? 'WARN' : (record.mode === 'block' ? 'FAIL' : 'WARN')), ref: `${x.file}:${x.line}`, detail: redact(formatFinding(x)) }));
+    const counts = {};
+    for (const it of items) counts[it.status] = (counts[it.status] ?? 0) + 1;
+    process.stdout.write(`${JSON.stringify({ schema: 'websuli-check/1', tool: GATE, head: null, ok: code === 0, exitCode: code, counts, items, view: record?.view, mode: record?.mode, ms: record?.ms }, null, 2)}\n`);
+  }
+  process.exit(code);
 }
 
 if (isMain(import.meta.url)) main();

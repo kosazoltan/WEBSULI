@@ -7,8 +7,8 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { STATUS } from './lib.mjs';
 import {
-  analyze, analyzeFile, comparison, findMarker, formatFinding, linear, parseDiff, runTestIntegrityStep, similarity, subjectOf, testStem,
-  thresholdDirection, verifyMarker,
+  analyze, analyzeFile, comparison, findMarker, formatFinding, joinLogical, linear, parseCatFileBatch, parseDiff, readPrBody, refPoint,
+  runTestIntegrityStep, similarity, stepSummary, stripGuard, subjectOf, testStem, thresholdDirection, verifyMarker,
 } from './test-integrity.mjs';
 import { fakeCtx, statusOf } from './_fake.mjs';
 
@@ -37,7 +37,8 @@ function j7bCommit(extraAbove = []) {
   return fileDiff(T, [[' ', CTX], ...extraAbove.map((s) => ['+', s]), ['-', OLD_K4], ['+', NEW_WEAK], ['+', NEW_ELSE]], { commit: 'a'.repeat(40) });
 }
 
-const finalOf = (lines) => () => lines.join('\n');
+/** A végső tartalom CSAK a tesztfájlra (más útra — pl. a tervre — null, hacsak külön meg nem adjuk). */
+const finalOf = (lines, others = {}) => (p) => (p === T ? lines.join('\n') : others[p] ?? null);
 
 test('parseDiff: sorszámok, commit-elválasztó, új / törölt fájl', () => {
   const text = [j7bCommit(), fileDiff('source/tests/x.test.ts', [['+', 'test("a", () => {});']], { status: 'A', oldStart: 0, newStart: 1 }),
@@ -84,7 +85,13 @@ test('jelölés: dátum + útvonal + a spec diffje említi a tesztet + PR-leír�
   assert.match(noBody.why, /PR-leírás nem sorolja fel/);
   const noSpec = analyze({ range: [], commits, finalText: finalOf(finalLines), prBody: body }).findings[0];
   assert.equal(noSpec.verified, false);
-  assert.match(noSpec.why, /nem változik ebben a diffben/);
+  assert.match(noSpec.why, /sem a diffben, sem a fejen/);
+  // B2/3: a terv a FEJEN már megvan (korábbi PR-ban került be), és tartalmazza a hivatkozott pontot (21.) → igazolt
+  const onHead = analyze({ range: [], commits, finalText: finalOf(finalLines, { 'docs/specs/2026-11-16-jatek.md': '## 21. A gyenge modell ±1 menete' }), prBody: body }).findings[0];
+  assert.equal(onHead.verified, true, onHead.why);
+  const noPoint = analyze({ range: [], commits, finalText: finalOf(finalLines, { 'docs/specs/2026-11-16-jatek.md': '## 20. más' }), prBody: body }).findings[0];
+  assert.equal(noPoint.verified, false);
+  assert.match(noPoint.why, /nem tartalmazza a hivatkozott pontot \(21\)/);
 });
 
 test('verifyMarker: dátum vagy hivatkozás nélkül nem igazolt; útvonal nélküli hivatkozásnál a spec említse a tesztet', () => {
@@ -240,4 +247,95 @@ test('runTestIntegrityStep: lelet nélkül PASS; a konfig módja érvényes, ha 
   await runTestIntegrityStep({ gate, ctx, prBody: null });
   assert.equal(statusOf(gate, 'teszt-integritás'), STATUS.PASS);
   assert.ok(gate.results[0].name.includes(ctx.cfg.modes['test-integrity'].local));
+});
+
+// ---- a független review (B2, M4) utáni szabályok ----
+
+test('feltétel-őr: az állítás feltétel nélkülivé válik → szigorúbb (nem lelet, B2: tsunami-play:407); feltétel mögé kerül → lazítás', () => {
+  assert.deepEqual(one('source/tests/a.spec.ts', [['-', '    if (viewport.width < 400) expect(long, "keskeny").toBe(true);'], ['+', '    expect(long, "minden nézetben").toBe(true);']]), []);
+  assert.deepEqual(one('source/tests/a.spec.ts', [['-', '    expect(long).toBe(true);'], ['+', '    if (process.env.CI) expect(long).toBe(true);']]).map((x) => [x.rule, x.direction]), [['assert-conditional', 'looser']]);
+  assert.deepEqual(stripGuard('  if (a(b) > 1) expect(x).toBe(1);'), { rest: 'expect(x).toBe(1);', guarded: true });
+  assert.deepEqual(stripGuard('  else assert.ok(x)'), { rest: 'assert.ok(x)', guarded: false });
+});
+
+test('B2: más utasítás ugyanabban a sorban (keresés átírása) nem küszöb-változás — csak az állítás-rész számít (remaining-learning:103)', () => {
+  assert.deepEqual(one('source/tests/a.spec.ts', [['-', 'const text=await quiz.innerText();const entry=bank.find(q=>text.includes(q.prompt));expect(entry,`nincs`).toBeTruthy();'], ['+', 'const entry=bank.find(q=>q.prompt===prompt);expect(entry,`nincs`).toBeTruthy();']]), []);
+});
+
+test('M4/22: a többsoros állítás küszöbe (a J7b-lazítás tördelt alakja) lelet', () => {
+  const f = one('source/tests/a.test.ts', [['-', '    assert.ok('], ['-', '      withQ >= without,'], ['-', '      "üzenet",'], ['-', '    );'], ['+', '    assert.ok('], ['+', '      withQ >= without - 1,'], ['+', '      "üzenet",'], ['+', '    );']]);
+  assert.deepEqual(f.map((x) => [x.rule, x.direction]), [['threshold-changed', 'looser']]);
+  assert.equal(joinLogical([{ t: '+', text: 'assert.ok(' }, { t: '+', text: 'x > 1);' }]).length, 1);
+});
+
+test('M4/16–17: tűrés-konstans a tesztfájlban (0,1 → 0,4) lelet; új konstans nem', () => {
+  assert.deepEqual(one('source/tests/a.test.ts', [['-', 'const TOLERANCE = 0.1;'], ['+', 'const TOLERANCE = 0.4;'], ['+', 'const NEW_ONE = 2;']]).map((x) => [x.rule, x.was]), [['tolerance-changed', '0.1']]);
+});
+
+test('M4/10–15: .skip( / .only( / fixme a CI-ban is lelet; új időkorlát módosított fájlban és test.slow higiénia-jelzés; retries kifejezésben', () => {
+  assert.deepEqual(one('source/tests/a.test.ts', [['+', '  test.skip(process.env.CI === "true", "lassú");']]).map((x) => x.rule), ['skip-added']);
+  assert.deepEqual(one('source/tests/a.spec.ts', [[' ', 'test("x", async () => {'], ['+', '  test.slow();']]).map((x) => x.rule), ['timeout-added']);
+  assert.deepEqual(one('source/tests/a.spec.ts', [['-', '  await expect(p).toBeVisible();'], ['+', '  await expect(p).toBeVisible({ timeout: 30_000 });']]).map((x) => x.rule), ['timeout-added']);
+  assert.deepEqual(one('source/playwright.config.ts', [['-', '  retries: process.env.CI ? 1 : 0,'], ['+', '  retries: process.env.CI ? 5 : 0,']]).map((x) => x.rule), ['timeout-raised']);
+  assert.deepEqual(one('source/tests/uj.spec.ts', [['+', 'test("x", async () => { await expect(p).toBeVisible({ timeout: 30_000 }); });']], { status: 'A', oldStart: 0, newStart: 1 }), [], 'új fájlban nem');
+});
+
+test('M4/1: az integrációs és a support-mintájú fájlok is tesztfájlok', () => {
+  const res = analyze({ range: parseDiff([fileDiff('source/tests/x.integration.ts', [['-', 'assert.ok(n >= 5);'], ['+', 'assert.ok(n >= 4);']]), fileDiff('source/tests/support/meter.ts', [['-', '  expect(px).toBeGreaterThanOrEqual(48);'], ['+', '  expect(px).toBeGreaterThanOrEqual(40);']])].join('\n')) });
+  assert.deepEqual(res.findings.map((x) => [x.file, x.rule]), [['source/tests/x.integration.ts', 'threshold-changed'], ['source/tests/support/meter.ts', 'threshold-changed']]);
+});
+
+test('commit-nézet: a lazítás VISSZAÁLLÍTÁSA nem lelet (M4/3); kozmetikai commit után a lazítás megmarad (M4/2); a commit-lelet nem tilt', async () => {
+  const fixCommit = fileDiff(T, [[' ', CTX], ['-', NEW_WEAK], ['-', NEW_ELSE], ['+', OLD_K4]], { commit: 'c'.repeat(40) });
+  const restored = analyze({ range: [], commits: parseDiff([j7bCommit(), fixCommit].join('\n')), finalText: finalOf([CTX, OLD_K4]) });
+  assert.deepEqual(restored.findings, [], 'aki javít, nem bukik');
+  const cosmetic = NEW_WEAK.replace('≪ kérdés nélkül', 'kevesebb, mint kérdés nélkül');
+  const res = analyze({ range: [], commits: parseDiff(j7bCommit()), finalText: finalOf([CTX, cosmetic, NEW_ELSE]) });
+  assert.deepEqual(res.findings.map((x) => [x.rule, x.via]), [['threshold-changed', 'commit']]);
+  // a munkafában ott a lazított végső fájl (különben a commit-lelet „a fájl már nem létezik” okkal kiesne, és a teszt üres lenne)
+  const { ctx, gate } = fakeCtx({
+    changed: [T], contents: { [T]: [CTX, NEW_WEAK, NEW_ELSE].join('\n') },
+    respond: (cmd, args) => (cmd === 'git' && args.join(' ').includes(' log -p ') ? { code: 0, stdout: j7bCommit() } : undefined),
+  });
+  const { record } = await runTestIntegrityStep({ gate, ctx, mode: 'block', prBody: null });
+  assert.deepEqual(record.findings.map((x) => [x.rule, x.via]), [['threshold-changed', 'commit']], 'a lelet megvan');
+  assert.equal(statusOf(gate, 'teszt-integritás'), STATUS.WARN, 'a csak commit-nézetbeli lelet block módban sem tilt');
+});
+
+test('K2: a kapu saját fájljainak változása hangos (higiénia) jelzés', () => {
+  const cfg = { testIntegrity: { gateFiles: ['^scripts/qa/gates/test-integrity\\.mjs$'] } };
+  const res = analyze({ range: parseDiff(fileDiff('scripts/qa/gates/test-integrity.mjs', [['+', '// x']])), cfg });
+  assert.deepEqual(res.findings.map((x) => x.rule), ['gate-changed']);
+});
+
+test('K3 / K4 / K10: nem létező --body-file kivétel; refPoint; cat-file kötegelt kimenet; job-összefoglaló', () => {
+  assert.throws(() => readPrBody({ bodyFile: join('nincs', 'ilyen.md') }), /nem létezik/);
+  assert.equal(refPoint('docs/specs/a.md 10.4 „Tiltás”', 'docs/specs/a.md'), '10.4');
+  assert.equal(refPoint('docs/specs/a.md D-J1a-8', 'docs/specs/a.md'), 'D-J1a-8');
+  assert.equal(refPoint('docs/specs/a.md', 'docs/specs/a.md'), null);
+  const batch = `${'1'.repeat(40)} blob 3\nabc\nx/y missing\n${'2'.repeat(40)} blob 3\nhé\n`;
+  assert.deepEqual([...parseCatFileBatch(batch, ['a', 'x/y', 'b']).entries()], [['a', 'abc'], ['x/y', null], ['b', 'hé']]);
+  assert.match(stepSummary({ mode: 'warn', view: 'merged', findings: [{ file: 'a.test.ts', line: 3, rule: 'threshold-changed', via: 'range', verified: false }] }, 'WARN'), /\| `a.test.ts:3` \| threshold-changed \| döntő \| jelöletlen \|/);
+});
+
+// ---- ISMERT KORLÁTOK (a független review hamis negatív táblája; dokumentálva, nem elrejtve — docs/minosegkapuk.md „Mit NEM fog meg”) ----
+// Ezek a tesztek azt rögzítik, hogy a kapu ezeket NEM látja; ha egy jövőbeli szabály megfogja, a tesztet a szabály PR-ja frissíti.
+
+test('ismert korlát: tautológia, könnyített bemenet, korai visszatérés, try/catch, saját kampó, feltétel-blokk (külön sorokon) — nem lelet', () => {
+  const cases = [
+    [['-', '  assert.equal(score(input), 42);'], ['+', '  assert.equal(42, 42);']],
+    [['-', '  const seeds = simSeeds(GAME, 20);'], ['+', '  const seeds = simSeeds(GAME, 3);']],
+    [['+', '  return;'], [' ', '  assert.equal(score(input), 42);']],
+    [['+', '  try {'], [' ', '  assert.equal(score(input), 42);'], ['+', '  } catch {}']],
+    [['-', '  assert.equal(measured(), 42);'], ['+', '  assert.equal(hook.value, 42);']],
+    [['+', '  if (process.env.CI) {'], [' ', '  assert.equal(score(input), 42);'], ['+', '  }']],
+  ];
+  for (const rows of cases) assert.deepEqual(one('source/tests/a.test.ts', rows), [], JSON.stringify(rows));
+});
+
+test('ismert korlát: tesztfájl átnevezése nem-teszt névre, és a lazítás egyetlen commitba vonva egy új fájlban', () => {
+  const renamed = parseDiff(['diff --git a/source/tests/a.test.ts b/source/tests/a.helper.ts', 'similarity index 100%', 'rename from source/tests/a.test.ts', 'rename to source/tests/a.helper.ts'].join('\n'));
+  assert.deepEqual(analyze({ range: renamed }).findings, []);
+  const born = parseDiff(fileDiff(T, [['+', NEW_WEAK]], { status: 'A', oldStart: 0, newStart: 1, commit: 'd'.repeat(40) }));
+  assert.deepEqual(analyze({ range: [], commits: born, finalText: finalOf([NEW_WEAK]) }).findings, [], 'eleve lazított mércével érkező új teszt');
 });

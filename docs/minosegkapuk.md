@@ -116,44 +116,99 @@ viszi bukásra.
 Őszintén: a játéklogikai hibák (1, 4, 5, 6) jellemzően szándék- és állapottér-hibák; ezeket determinisztikus kapu általánosan nem
 ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy az ellenőr ne az olcsó hibákra költsön.
 
-## Teszt-integritás (S1, 2026-11-17)
+## Teszt-integritás (S1, 2026-11-17; a független review után átdolgozva)
 
-`scripts/qa/gates/test-integrity.mjs` (terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md`, végrehajtás S1). A lint-kapu
-lépéseként fut (így a szakasz-, push- és PR-kapuban is: helyben `WARN`), a CI „Háromfázisú rend” jobjában tiltó módban (`FAIL`).
-A tesztfájlok és a sim-kalibrációs fájlok (`source/client/src/lib/*/sim.ts`) diffjét KÉT nézetben nézi: a main-hez képest és
-commitonként (a PR-on belüli lazítás a main-hez képest „új fájlként” látszana — így maradt rejtve a J7b `tornado-sim.test.ts`
-„`withQ >= without - 1`” lazítása).
+`scripts/qa/gates/test-integrity.mjs` (terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` 6.3a, végrehajtás S1 és R). A
+lint-kapu lépéseként fut (szakasz-, push-, PR-kapu) és a CI „Háromfázisú rend” jobjában. **Bevezetési lépcső: mindenütt `warn`** — a
+job NEM bukik miatta; a CI a leleteket a job-összefoglalóba írja. A tiltás (`modes.test-integrity.*: block`) feltétele mérve: a nyitott
+PR-ok korpuszán ≤ 10% hamis riasztás.
 
-- **Mérce-szabályok (CI-ban bukás):** törölt tesztfájl / teszteset / állítás (pótlás nélkül), kikommentezett állítás, megváltozott
-  számküszöb / relációs jel / várt érték ugyanazon az alanyon (a biztosan szigorúbb irány nem lelet), szigorú → laza matcher,
-  megnövelt `timeout` / `retries`, új `.todo(` / `test.fail(` / feltételes `skip`, bot-kalibrációs NAGYBETŰS konstans értékváltozása.
-- **Higiénia-szabályok (mindenütt csak figyelmeztetés):** új `force: true` / `waitForTimeout(`; forrásfájlt beolvasó teszt
-  (jelölhető `// FORRÁS-ŐR: <indok>`-kal).
-- **Átengedés:** a sorban vagy fölötte ≤ 8 sorban `// SPEC-VÁLTOZÁS <ÉÉÉÉ-HH-NN> (docs/specs/<terv>.md <pont>)`, ÉS a hivatkozott spec
-  ugyanebben a diffben változik és említi a tesztet (útvonal nélküli hivatkozásnál bármely változott spec említse), ÉS a PR-leírás
-  felsorolja (a teszt neve + `SPEC-VÁLTOZÁS`). A PR-leírást a CI a `github.event.pull_request.body`-ból, a PR-kapu a `--body-file`-ból
-  olvassa; a szakasz- / push-kapu „később ellenőrzendő” megjegyzést ad.
-- **Kézi futtatás / ellenpróba másik ágon:** `node scripts/qa/gates/test-integrity.mjs --head origin/<ág> [--json]`. Bizonyíték:
-  `test-integrity-<fej>.json` (a leletek listája — a hamis riasztás méréséhez).
-- **Mód:** `gates.config.json` → `modes.test-integrity` (`local: warn`, `ci: block`).
+- **Két nézet.** (1) DÖNTŐ: a main CSÚCSÁHOZ képesti, összefésült diff (`git merge-tree --write-tree`; a CI-ban a merge-commit) —
+  a squash-sel már összevont előzmény-ág commitjait nem rója fel; ez tilthat (majd, `block` módban). (2) KIEGÉSZÍTŐ commit-nézet: csak a
+  PR saját commitjai (`--cherry-pick --right-only`) és csak a mainen még NEM létező fájlok — a PR-on belüli lazítás itt látszik (a J7b
+  `tornado-sim.test.ts` `withQ >= without - 1` esete); ez SOHA nem tilt. A később visszaállított lazítás és az ugyanarra az alanyra
+  megmaradó állítás nem lelet; egy kozmetikai commit (üzenet-átírás) nem tünteti el a leletet (alany + számok szerinti követés).
+- **Mérce-szabályok:** törölt tesztfájl / teszteset / állítás (pótlás nélkül), kikommentezett állítás, megváltozott számküszöb /
+  relációs jel / várt érték ugyanazon az alanyon (a biztosan szigorúbb irány — és a feltétel ELHAGYÁSA — nem lelet), állítás feltétel
+  mögé helyezése ugyanazon a soron, többsoros állítás küszöbe, szigorú → laza matcher, megnövelt `timeout` / `retries` (kifejezésben
+  is), `.skip(` / `.only(` / `fixme(` / `.todo(` / `test.fail(` / feltételes `skip`, NAGYBETŰS szám-konstans (bot-kalibráció a
+  `source/client/src/lib/*/sim.ts`-ben, tűrés a tesztfájlban). Tesztfájl: `*.test|spec.*`, `*.browser.ts`, `*.integration.ts`,
+  `source/tests/support/`, `source/tests/game-mobile-cases/`, `source/playwright*.config.ts`.
+- **Higiénia-szabályok (mindig csak figyelmeztetés):** új `force: true` / `waitForTimeout(`; új időkorlát / `test.slow()` módosított
+  fájlban; forrásfájlt beolvasó teszt (jelölhető `// FORRÁS-ŐR: <indok>`-kal); a kapu saját fájljainak (szkript, konfig, CI)
+  változása — a CI a PR saját változatát futtatja, ezért a kapu ugyanabban a PR-ban semlegesíthető (K2): ezt a jelzés hangosítja.
+- **Átengedés:** a sorban vagy fölötte ≤ 8 sorban `// SPEC-VÁLTOZÁS <ÉÉÉÉ-HH-NN> (docs/specs/<terv>.md <pont>)`, ÉS a terv vagy
+  ugyanebben a diffben változik és a TESZT NEVÉT említi, vagy a FEJEN már megvan és tartalmazza a hivatkozott pontot (a terv a kód előtt,
+  korábbi PR-ban kerül be), ÉS a PR-leírás felsorolja (a teszt neve + `SPEC-VÁLTOZÁS`). Nem létező `--body-file` → a kapu nem fut (kód 2).
+- **Kézi futtatás egy másik ág / PR fejére (csak olvas):** `git fetch origin`, majd
+  `node scripts/qa/gates/test-integrity.mjs --base origin/main --head origin/<ág> [--body-file <PR-leírás.md>] [--mode block] [--json]`.
+  A commit-nézet mindig fut (nincs kapcsolója). Bizonyíték: `test-integrity-<fej>.json`.
 
-## Állítás- és hivatkozás-ellenőrző, láncolt bizonyíték (S2, 2026-11-17)
+### Mit NEM fog meg az S1 (ismert korlátok — „ismert korlát” tesztként is rögzítve)
 
-- `node scripts/qa/gates/verify-report.mjs (--report <jelentés.md> | --body-file <leírás.md>) [--head <ref>] [--no-gh] [--json]` —
-  egy md minden gépileg ellenőrizhető hivatkozását a FEJEN nézi: `fájl:sor`, `fájl:sor-sor` (a közvetlenül utána backtickben álló
-  kódrészlet ±3 soron belül), backtickes útvonal, `npm run <név>` (gyökér vagy `source/package.json`), `node scripts/…`, commit-hash,
-  `PR #n`, „N/M teszt” (csak a sorban álló bizonyíték-azonosítóval). Kimenet: IGAZ / HAMIS / NEM ELLENŐRIZHETŐ tételenként. `--report`
-  módban a `json allitasok` gépi blokk is kötelező (sablon: `scripts/qa/gates/report-template.md`): fej = ág feje, módosított fájlok =
-  `git diff`, PASS = bizonyíték 0 kóddal a fejen, PR / CI = GitHub, kapu-lánc hiánytalan, bizonyíték-lánc hash-ei. Kilépési kód: 0 /
-  1 (HAMIS vagy eltérés) / 2 (nem futott — a hívó bukásnak veszi). Rekord: `claims-<hash>.json`.
-- `node scripts/qa/gates/evidence-run.mjs -- <parancs>` — futtat és rögzít (`run-<id>`: fej, parancs szűrve, kód, kimenet-hash,
-  node:test darabszámok). A szakasz-kapu `stage-<fej>`, a push-kapu és a `record-review` a meglévő rekordját láncba köti
-  (`chain.jsonl`; `scripts/qa/gates/evidence-chain.mjs`). A lánc nem biztonsági határ — a kitalált / figyelmetlen állítást szűri.
-- `record-review`: hamis hivatkozású ellenőri jelentésből ítélet nem rögzíthető.
+A független review 31 szándékos lazításából mérve; AST nélkül megbízhatatlan esetekre a kapu NEM találgat:
+
+- állítás **feltétel-BLOKKBA** tétele külön sorokon (`if (…) {` … `}`), **korai visszatérés**, **try/catch** az állítás körül;
+- **tautológia** (`assert.equal(42, 42)`), a mért érték helyett a teszt **saját kampójának** állítása;
+- **könnyített bemenet** (kevesebb seed, kisebb N, könnyebb adat);
+- a tesztfájl **átnevezése nem-teszt névre**, a futtató **fájlmintájának szűkítése**;
+- az **eleve rossz mércével érkező új teszt** (pl. a J6a „≤ 1.3” ±10% helyett), és a lazítás, amely EGY commitban születik a fájllal;
+- a **matcher-csere** más (nem szigorú → laza) matcherre és a regex-alakú állítás átírása (szerkezeti változás, nem küszöb);
+- a tűrés-konstans **másik, nem teszt fájlban** (a `sim.ts` kivételével).
+
+Ezekre a független ellenőr ellenőrzőlistája marad (a kapu célzottan a felsorolt sorokra irányítja a figyelmét).
+
+## Állítás- és hivatkozás-ellenőrző, láncolt bizonyíték (S2, 2026-11-17; a független review után átdolgozva)
+
+- `node scripts/qa/gates/verify-report.mjs (--report <jelentés.md> | --body-file <md>) [--head <ref>] [--base <ref>] [--no-gh] [--json]`
+  — a fej és a bázis a HÍVÓTÓL jön (alapból `HEAD` és `origin/main`). Tételes IGAZ / HAMIS / NEM ELLENŐRIZHETŐ lista; kilépési kód 0 /
+  1 / 2 (a 2 = nem futott, bukásnak veendő).
+- **Hivatkozás-szabályok (ezt kövesse a jelentés-író is — sablon: `scripts/qa/gates/report-template.md`):**
+  - `fájl:sor`, `fájl:sor-sor`, „fájl N. sorában”, `fájl#L<N>`: a fájl és a sor a fejen; a fájl repó-gyökérhez relatív (a `source/`
+    előtag elhagyható; egyértelmű utótag / név is elég).
+  - **Kódidézet CSAK explicit jelöléssel:** `fájl:sor` → `kód`, vagy `fájl:sor` idézet: `kód` (≥ 8 karakter, ±3 soron belül). A
+    hivatkozás utáni próza soha nem idézet.
+  - **Más fej:** `<fej>:fájl:sor`, vagy egy `# … fej <hash>` címsor / `- … (fej <hash>) …` lista-elem alatti szöveg — a visszaellenőrzés
+    korábbi körei így a SAJÁT fejükön ellenőrzöttek.
+  - **Hiány-lelet:** `!fájl` (backtickben) vagy „nem létezik: `fájl`” → IGAZ, ha a fájl tényleg nincs a fejen.
+  - A fejen nem létező út **NEM ELLENŐRIZHETŐ** (más ág, munkafa, scratchpad, tervezett fájl), KIVÉVE a teljes, ismert gyökérmappás
+    `fájl:sor`-t, amely a repó teljes történetében sem létezik — az HAMIS. Rövidítés-előtag (`WT/`, `L/` …), `…`-os és helyőrzős
+    (`<x>`) alak: NEM ELLENŐRIZHETŐ / kihagyva. A NEM ELLENŐRIZHETŐ arány kiíródik; 50% fölött (5+ hivatkozásnál) figyelmeztet
+    (`gates.config.json` → `claims.unknownWarnRatio`).
+  - `npm run <név>` (mondatvégi írásjel, `-et` / `-t` toldalék levágva), `node scripts/…`, `commit <hash>`, `PR #n`, „N/M teszt” a
+    sorban álló bizonyíték-azonosítóval (rövidített azonosító: egyértelmű előtag).
+- **`--report` (alügynök-jelentés) gépi blokk:** kötelező mezők (`schema`, `head`, `branch`, `changedFiles`, `commands`, `tests`, `gates`,
+  `notRun` — üres lista is megadandó); a blokk feje = a hívó feje; állapot csak `PASS` / `FAIL` / `NOT RUN`; a PASS bizonyítéka a fejre
+  szól, 0 kóddal, és a rögzített parancs = az állított (normalizálva; kapu-rekordnál a kapu-parancs); darabszám-állítás csak rögzített
+  darabszámmal; a prózai „N/M teszt” állítás a blokk egy igazolt tételével egyezzen; PR-állapot `gh` nélkül FAIL (`--no-gh`: WARN).
+- **Bevezetési lépcső (terv 6.3a):** a `record-review` és (a #490 után) a `gate:pr` a HAMIS hivatkozást `warn` módban csak jelzi
+  (az ítélet rögzül, a lista a kimenetben és a rekordban); `modes.claims-verify: block` mellett a rögzítés megtagadva. A váltás
+  feltétele: a regressziós korpuszon 0 hamis HAMIS + 10 egymást követő új valódi jelentés hamis riasztás nélkül.
+- **Regressziós korpusz (helyi):** `node scripts/qa/gates/verify-report-corpus.mjs --root <scratchpad> [--doc <md>]…` — a valódi
+  ellenőri jelentések a scratchpadban maradnak (nyilvános repó); a CI a `verify-report.test.mjs` anonimizált, hibaosztályonkénti
+  mintáit futtatja. Mérés 2026-11-17: 13 valódi jelentés + 6 saját doksi → HAMIS 128 → 4; a megmaradt 4 VALÓDI hiba (a #482-es jelentés
+  `upgrades.ts:203-224` stb. sorszámai a fájl egyetlen változatában sem léteztek; az `effectiveStats` a 129. soron van).
 - **A #490 után beillesztendő (egy sor a `pre-pr-gate.mjs`-be, a „PR-leírás sablon” lépés után):**
-  `await runReferenceStep({ gate, ctx, text: prTexts[0] ?? '', label: 'PR-leírás' });` (import: `./verify-report.mjs`; a
-  `prTexts[0]` a lépés után a `--body-file` vagy a nyitott PR leírása). Addig a PR-leírást a
-  `verify-report.mjs --body-file` kézi futtatása ellenőrzi (a `websuli-pr-elotti-kapu` skill menete).
+  `await runReferenceStep({ gate, ctx, text: prTexts[0] ?? '', label: 'PR-leírás' });` (import: `./verify-report.mjs`); és a
+  `pre-pr-gate` bizonyíték-írása után `linkRecord(ctx.evDir, 'pre-pr-<fej>')` / `'pre-push-<fej>'` (addig a pre-pr rekord láncon kívüli
+  — az ellenőrző ezt csak figyelmezteti).
+
+### A bizonyíték-lánc — mit garantál és mit NEM
+
+`scripts/qa/gates/evidence-chain.mjs`: a tár (`<git-common-dir>/websuli-qa-evidence/`) rekordjai mellé `chain.jsonl` (rekord-hash +
+az előző lánc-sor hash-e); a hozzáfűzés kizáró zárfájllal (`chain.lock`, `wx`, korlátos újrapróba, a 30 s-nál régebbi zár elárvultnak
+számít — törlés + napló) atomi: 8 párhuzamos író × 200 rekord → 0 törés (teszt).
+
+- **Garantálja** a véletlen vagy hanyag hamisítás és az utólagos átírás ÉSZLELÉSÉT: kézzel írt, láncon kívüli rekord; átírt rekord;
+  kivágott lánc-sor; törölt lánc (`no-chain`, ha van rekord); útvonal-bejárás az azonosítóban (csak `[a-z0-9-]`).
+- **NEM véd** egy, a tárat írni tudó, szándékosan csaló ügynök ellen: a teljes lánc újraszámolható. A megkerülhetetlen pont a CI.
+- **Bevezetési lépcső:** a lánc-hiba most csak figyelmeztet (`modes.evidence-chain: warn`); tiltás: 2 hét `--verify` törés nélkül.
+- **Ellenőrzés / javítás:** `node scripts/qa/gates/evidence-chain.mjs --verify [--json]` (0 ép / 1 törött / 2 nem futott);
+  `node scripts/qa/gates/evidence-chain.mjs --repair` — a törött láncot `chain.broken-<időbélyeg>.jsonl` néven archiválja (nem törli),
+  új láncot indít a meglévő rekordokból `repair: true` jelöléssel, és a `chain-repair.log`-ba naplóz; az ellenőrző a javított rekordot
+  „javítás után” figyelmeztetéssel fogadja el.
+- `node scripts/qa/gates/evidence-run.mjs -- <parancs>`: futtat és rögzít (`run-<id>`); a parancssorból és a kimenetből a token-alakok,
+  a jelszó-kapcsoló, a `NÉV=érték` titok, a JWT és a szolgáltatói kulcs-előtagok szűrve (K5).
 
 ## Ingadozó tesztek nyilvántartása (S8, 2026-11-17)
 
