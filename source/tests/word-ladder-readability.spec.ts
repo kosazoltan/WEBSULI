@@ -129,11 +129,12 @@ const measure = (page: Page) =>
       blank: null as null | { w: number; border: number },
     };
     if (focus) {
-      // Szó közbeni törés: egy szó (a szöveg-csomópontokon belül) több sorra eső téglalapokat kap.
+      // Szó közbeni törés: egy szó (a szöveg-csomópontokon belül) több sorra eső téglalapokat kap. Kötőjeles összetételnél a
+      // kötőjel UTÁNI sortörés helyesírási sortörés, nem szó közbeni: a kötőjelig tartó részek külön szavak.
       const walker = document.createTreeWalker(focus, NodeFilter.SHOW_TEXT);
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
         const text = n.textContent ?? "";
-        const re = /\S+/gu;
+        const re = /[^\s-]+-?/gu;
         for (let m = re.exec(text); m; m = re.exec(text)) {
           const r = document.createRange();
           r.setStart(n, m.index);

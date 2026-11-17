@@ -6,7 +6,7 @@ kiinduló számok, döntések A–F, EARS SZ-1…SZ-10). **Állapot:** folyamatb
 
 ## Hatókör
 
-Módosítható: `source/client/src/lib/wordLadder/{pacing.ts (új),sim.ts}`, `source/client/src/pages/WordLadderHuEn.tsx`,
+Módosítható: `source/client/src/lib/wordLadder/{pacing.ts (új),focus.ts (új),sim.ts}`, `source/client/src/game-engine/play/promptFocus.ts` (új), `source/client/src/data/wordLadder/validate.ts`, `source/tests/{game-explanation-pause.spec.ts,vocab-question-focus.test.ts (új),word-ladder-focus.test.ts (új)}`, `source/client/src/pages/WordLadderHuEn.tsx`,
 `source/client/src/game-engine/play/InlineQuestion.tsx` (CSAK az opcionális `promptFocus` prop), `source/client/src/index.css`
 (CSAK új `.play-question-frame` / `-focus` / `-blank` szabályok a `@layer components`-ben), `source/client/src/game-engine/vocab/
 questionGenerator.ts` (CSAK az opcionális `focus` mező), `source/client/src/data/wordLadder/{types,en,de,fr}.ts` (`focus` mező),
@@ -103,10 +103,35 @@ haladás); Normál: 6,9 / 6,6 / 6,4 / 6,5, −0,08 s, 0,5×; Gyors: a régi. Hib
 | átlagos (0,8×, 75%) | 1,8–6,7% | 100% | 96–99% |
 | erős (1,2×, 92%) | 37–48% | 100% | 100% |
 
-**Győzelem / menethossz / kérdés-perc (Nyugodt, 1. pálya → 6. pálya; évf. 3 / 5 / 8 / 11)**
+**Győzelem a 20 menetből — a review K6 javítása UTÁN (a megoldás-kijelzés alatt is a tempó lassítása), évf. 3 / 5 / 8 / 11**
 
-- átlagos olvasó: 15 / 14 / 17 / 15 győzelem a 20-ból (1. pálya), 17 / 14 / 18 / 11 (6. pálya); menet medián 124–193 s (1.),
-  227–279 s (6.); 4,5–5,6 kérdés / perc. Előtte (régi tempón) ugyanez a profil: 0/20.
-- lassú olvasó: 3–7 / 20 (1. pálya), 1–3 / 20 (6.); erős: 20 / 20.
+| Pálya, tempó | 45% pontos (lassú olvasás) | 65% (lassú olvasó) | átlagos (75%) | erős (92%) |
+|---|---|---|---|---|
+| 1., Nyugodt | 1 / 2 / 0 / 0 | 5 / 12 / 4 / 6 | 17 / 18 / 19 / 17 | 20 / 20 / 20 / 20 |
+| 1., Normál | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 13 / 9 / 16 / 7 | 20 / 20 / 20 / 20 |
+| 1., Gyors (régi) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| 6., Nyugodt | 1 / 1 / 0 / 0 | 6 / 7 / 5 / 3 | 19 / 19 / 20 / 13 | 20 / 20 / 20 / 20 |
+| 6., Normál | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 14 / 9 / 13 / 6 | 20 / 20 / 20 / 20 |
+| 6., Gyors (régi) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+
+- Menethossz medián (Nyugodt): átlagos 124–193 s (1. pálya), 227–287 s (6.); lassú olvasó 268–310 s (1.), 384–434 s (6.);
+  kérdés / perc 3,4–5,5. A Gyors tempó számai a régi tempóé (az olvasó-bot ott szinte semmit nem tud időben elolvasni).
+- **Az olvasó-bot hitelessége (review A14):** a profilok olvasási sebességei forrás nélküliek (a közös `reading.ts` becslése
+  is az); a „0% → 99%” modell-következmény (ablak és bot ugyanabból a képletből), nem valódi gyerekek mérése.
+- **A közös botokkal (megfigyelő teszt, nem buktató; review K3):** Nyugodt, 6. pálya, 4. évf.: SIM_AVERAGE 20/20 (92 s),
+  SIM_YOUNG 20/20 (106 s), SIM_STRONG 20/20 (36 s), SIM_WEAK 3/20 (449 s) — a terv J9 (2–5 perc) és az „50–80%” sáv az alap
+  tempón ezekkel a botokkal NEM teljesül (tulajdonosi döntés: az alap tempó nehézsége).
 - pontosság szerint (4. és 8. évf.): monoton (teszt); kérdéssel ≥ kérdés nélkül (teszt).
 - Gyors tempón a régi elvárások: SIM_AVERAGE ≥ 10 kérdés / perc, 50–80% győzelem, 2–5 perc (teszt).
+
+**Review K2 — a kérdés-kártya és a fogások (e2e, `word-ladder-readability.spec.ts`, kérdés- és megoldás-állapot; teljes
+tábla: `docs/measurements/jatekok-jatekelmeny/J2-olvashatosag/k2-kartya-fogas-meres.txt`, 210 sor, 3 nyelv × 3 nézet)**
+
+- A javítás ELŐTT (első futás) átfedés: 360×640 `en4-family-006` megoldás (kártya alja 384 > fogások 368), `de4-060`
+  megoldás (327 > 257), `de4-body-006` kérdés (363 > 335); 844×390 `de4-body-006` (a tanító sort fedte). Ez a mutációs
+  ellenpróba: a mérés a hibát megfogta.
+- A javítás UTÁN (lépcsőzetes helycsinálás a lapon) 360×640-en a legkisebb rés: `de4-060` megoldás 15 px, `de4-body-006`
+  megoldás 17 px, `en4-family-006` kérdés 21 px, `en4-health-016` kérdés 26 px, `de4-nature-014` megoldás 43 px; 390×844-en
+  ≥ 126 px; 844×390-en nincs metszés a fogás-oszlopokkal és a tanító sorral; levágás sehol. A célkártya hosszú mondatnál
+  360×640-en és fekvőben 20 px-re kicsinyedik (a 16 px-es keretsor 1,25-szöröse); egy szó mindig ≥ 26 px (1,6×).
+

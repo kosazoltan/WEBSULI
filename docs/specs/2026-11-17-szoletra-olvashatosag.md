@@ -109,6 +109,9 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
   így a menet percben a 2–5 perces sávban marad (terv J9).
 - Hibás / lejárt válasz után a megoldás 3 s-ig látszik (a közös sáv `revealWrongMs`-e, a régi 2 s helyett) — minden
   tempón, mert a közös `usePlayQuestion` a kérdés-sávot laponként egyszer hozza létre (menet közben nem váltható).
+- **Review K6:** a megoldás-kijelzés alatt is a tempó `slowMo`-jával lép a világ (Nyugodt 0,35, Normál 0,5, Gyors 1 — a
+  régi viselkedés), hogy a gyerek ne akkor veszítsen teret, amikor a megoldást olvassa. A lap az időskálát maga állítja
+  (`!canAsk()` = nyitott kérdés vagy kijelzés); a közös sáv változatlan; a sim ugyanígy.
 - Szabad fogás (kérdés nélkül) ütemezése a tempóval arányos (`ladderFreeGripMs`), hogy kérdés nélkül ne legyen könnyebb.
 - Az időcsík a Szólétrában az utolsó pillanatig a nyugodt színátmenet (a közös „kevés idő” csíkozás a lap stílusában
   felülírva); a gumiszalag marad ±10% (KSZ-16).
@@ -134,8 +137,16 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
 - A lap a célrészt kérdés-azonosító szerint tartja (a `speakText` mintájára), és a közös sávnak adja.
 - Közös `InlineQuestion` (KIVÉTELES, visszafelé kompatibilis): ÚJ opcionális `promptFocus?: string | null`. Ha nincs
   megadva (minden más játék): a megjelenés bitre változatlan. Ha megadva és a prompt tartalmazza: a prompt két sorra bomlik —
-  keretsor (kicsi, halvány; a célrész helyén „…”) és célkártya (`data-testid="<promptTestId>-focus"`, világos alap, sötét,
-  vastag, ≥ 1,6× betű, `overflow-wrap: normal`, a hiány `.play-question-blank` vastag narancs keretben). A prompt teljes
+  keretsor (16 px, a törzsszöveggel azonos erős szín — review A4: a feladat típusa és a zárójeles adat a megoldáshoz kell;
+  a célrész helyén „…”) és célkártya (`data-testid="<promptTestId>-focus"`, világos alap, sötét, vastag, szónál ≥ 1,6×
+  (26–32 px), mondatnál 26–28 px, `overflow-wrap: normal`, a hiány `.play-question-blank` vastag narancs keretben).
+- **Review K2:** a célkártya nem takarhatja a fogásokat (álló nézet) és nem lóghat ki (fekvő nézet): a lap a rendelkezésre
+  álló magassághoz kicsinyíti a kártya betűjét (legfeljebb 20 px-ig = a keretsor 1,25-szöröse), a megoldás-kijelzés sorának
+  helyét előre fenntartva. Mondatnál így a betűarány ≥ 1,25 (helyhiánykor), szónál ≥ 1,6.
+- **Review K1:** a kézi bank célrésze azonosító szerint is kereshető (`L/wordLadder/focus.ts`), így a menetek közötti
+  ismétlésből (a közös sor pillanatképéből) visszatérő tétel is kiemelve jön.
+- **Review A1/A2:** a célrész nem lehet feladat-utasítás (helyzetleírásnál elhagyható), és a célnyelvi kérdő mondat záró
+  „?”-e a célrésszel marad — a validátor mindkettőt fogja (`de4-060` célrésze törölve, 16 angol tétel javítva). A prompt teljes
   szövege (`innerText`) olvasható marad a meglévő tesztekhez; `aria-label` a teljes prompt.
 - A felolvasás változatlanul a választ el nem áruló `speakText` (cél → magyar: a célszó; hiányos mondat: a mondat).
 
@@ -189,8 +200,10 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
 - [ ] SZ-4 WHEN a játékos tempót választ (Nyugodt / Normál / Gyors) THEN the system SHALL azt tárolni és újratöltés után
   visszaállítani; alapérték Nyugodt.
 - [ ] SZ-5 WHEN a kérdés célszó-adatot hordoz THEN the system SHALL a célrészt külön kártyán, a keretszöveg ≥ 1,6-szeres
-  betűméretével, ≥ 3:1 kontraszttal, kilógás és szó közbeni törés nélkül mutatni mindhárom nézetben (360×640, 390×844,
-  844×390), a bank leghosszabb célszavaival és a hiányos mondatos típussal is; a hiány helye kiemelt.
+  (mondatnál helyhiánykor ≥ 1,25-szörös) betűméretével, ≥ 3:1 kontraszttal, kilógás, a fogások / HUD takarása és szó
+  közbeni törés nélkül mutatni mindhárom nézetben (360×640, 390×844, 844×390), kérdés- és megoldás-állapotban, az angol,
+  német és francia bank leghosszabb célszavaival és a hiányos mondatos típussal is; a hiány helye kiemelt; a keretsor
+  ≥ 16 px, ≥ 4,5:1 kontraszttal, nem halványított.
 - [ ] SZ-6 WHEN egy másik játék használja az `InlineQuestion`-t `promptFocus` nélkül THEN the system SHALL a mostani
   megjelenést adni (a közös mobil mérő, a meta-mérő és a többi játék kérdés-sávos tesztjei zöldek).
 - [ ] SZ-7 WHEN a szimuláció emberi olvasási idővel fut Nyugodt tempón THEN the system SHALL: a „lassú olvasó” a kérdések

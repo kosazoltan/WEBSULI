@@ -164,6 +164,8 @@ const MENU_BACKGROUND =
 
 /** A célkártya legkisebb betűje helyhiánynál (review K2; a 16 px-es keretsor 1,25-szöröse). */
 const FOCUS_MIN_PX = 20;
+/** Egy szó / rövid kifejezés célkártyájának legkisebb betűje (a 16 px-es keretsor 1,6-szorosa). */
+const FOCUS_WORD_MIN_PX = 26;
 /** Új kérdésnél a megoldás-kijelzés sorának (állapotsor + „Miért?”) fenntartott magassága. */
 const REVEAL_RESERVE_PX = 64;
 
@@ -1261,33 +1263,55 @@ export default function WordLadderHuEn() {
   const retryLabel = result?.won ? (level > result.level ? `Tovább: ${level}. pálya` : "Újra") : "Visszavágó!";
 
   /**
-   * Review K2: a célkártya ne takarja a fogásokat (álló nézet) / ne lógjon ki a nézetből (fekvő nézet) — hosszú mondatnál
-   * a kártya betűje a rendelkezésre álló magassághoz kicsinyedik (legfeljebb `FOCUS_MIN_PX`-ig). Új kérdésnél a megoldás-
-   * kijelzés sorának helyét is fenntartja (`REVEAL_RESERVE_PX`), hogy a kijelzéskor ne kelljen ugrania; kijelzéskor csak
-   * tovább kicsinyíthet. Közvetlen DOM-írás (a közös kérdés-sáv változatlan).
+   * Review K2: a kérdés-kártya ne takarja a fogásokat (álló nézet) / a tanító sort és ne lógjon ki (fekvő nézet). Ha nem
+   * fér, lépcsőzetesen helyet csinál: (1) a tanító sor (csak tipp) elrejtése, (2) a célkártya betűje 22 px-ig, (3) tömörebb
+   * fogás-panel (16 px, a fogás ≥ 48 px marad), (4) a célkártya betűje `FOCUS_MIN_PX`-ig, (5) megoldás-kijelzéskor a
+   * „A jó válasz: …” szöveg vizuálisan rejtett (a zölden világító fogás mutatja; a képernyőolvasó továbbra is felolvassa).
+   * Új kérdésnél a kijelzés sorának helyét is fenntartja (`REVEAL_RESERVE_PX`), hogy a kijelzéskor ne kelljen ugrania;
+   * kijelzéskor csak tovább szűkíthet. Közvetlen DOM-írás (a közös kérdés-sáv változatlan).
    */
   const fitFocus = useCallback(
     (reset: boolean) => {
-      const focusEl = document.querySelector<HTMLElement>('[data-testid="wl-question"] [data-testid="wl-prompt-focus"]');
-      const card = focusEl?.closest<HTMLElement>(".play-question-card");
-      if (!focusEl || !card) return;
-      if (reset) focusEl.style.fontSize = "";
-      const revealing = card.querySelector('[data-testid="play-question-status"]')?.textContent?.trim() ? true : false;
+      const root = document.querySelector<HTMLElement>('[data-testid="wl-question"]');
+      const card = root?.querySelector<HTMLElement>(".play-question-card");
+      const holds = holdsRef.current;
+      if (!root || !card || !holds) return;
+      const focusEl = card.querySelector<HTMLElement>('[data-testid="wl-prompt-focus"]');
+      if (reset) {
+        if (focusEl) focusEl.style.fontSize = "";
+        holds.dataset.fit = "0";
+        root.dataset.wlTight = "false";
+      }
+      const revealing = !!card.querySelector('[data-testid="play-question-status"]')?.textContent?.trim();
       const reserve = revealing ? 0 : REVEAL_RESERVE_PX;
-      let limit = window.innerHeight - 8;
-      if (landscapePhone) {
-        const t = document.querySelector<HTMLElement>('[data-testid="wl-teach"]');
-        if (t) limit = Math.min(limit, t.getBoundingClientRect().top - 6);
-      } else if (holdsRef.current) {
-        limit = Math.min(limit, holdsRef.current.getBoundingClientRect().top - 6);
-      }
-      let size = parseFloat(getComputedStyle(focusEl).fontSize);
-      const start = size;
-      while (card.getBoundingClientRect().bottom + reserve > limit && size > FOCUS_MIN_PX) {
-        size -= 1;
-        focusEl.style.fontSize = `${size}px`;
-      }
-      focusEl.dataset.fit = size < start || focusEl.style.fontSize ? "shrunk" : "full";
+      const limit = () => {
+        let l = window.innerHeight - 8;
+        if (landscapePhone) {
+          const teach = holds.querySelector<HTMLElement>('[data-testid="wl-teach"]');
+          if (teach && getComputedStyle(teach).display !== "none") l = Math.min(l, teach.getBoundingClientRect().top - 6);
+        } else {
+          l = Math.min(l, holds.getBoundingClientRect().top - 6);
+        }
+        return l;
+      };
+      const over = () => card.getBoundingClientRect().bottom + reserve > limit();
+      const shrinkTo = (min: number) => {
+        if (!focusEl) return;
+        // Egy szó / rövid kifejezés a keretsor ≥ 1,6-szorosa marad (26 px); csak a mondat kicsinyedhet tovább.
+        const floor = focusEl.dataset.kind === "word" ? Math.max(min, FOCUS_WORD_MIN_PX) : min;
+        let size = Math.floor(parseFloat(getComputedStyle(focusEl).fontSize));
+        while (over() && size > floor) {
+          size -= 1;
+          focusEl.style.fontSize = `${size}px`;
+        }
+      };
+      const level = () => Number(holds.dataset.fit ?? "0");
+      if (over() && level() < 1) holds.dataset.fit = "1";
+      shrinkTo(22);
+      if (over() && level() < 2) holds.dataset.fit = "2";
+      shrinkTo(FOCUS_MIN_PX);
+      if (over() && revealing) root.dataset.wlTight = "true";
+      if (focusEl) focusEl.dataset.fit = focusEl.style.fontSize ? "shrunk" : "full";
     },
     [landscapePhone],
   );
@@ -1648,6 +1672,14 @@ export default function WordLadderHuEn() {
           border: 1.5px solid #fbbf2455; box-shadow: 0 -6px 24px #0007, inset 0 1px 0 #ffffff1f;
         }
         .wl-teach { margin: 0 0 8px; text-align: center; font-size: 15px; font-weight: 800; color: #fde68a; line-height: 1.25; }
+        /* Review K2: helyhiánykor (a lap mérése szerint) a tanító sor rejtve, a fogás-panel tömörebb (a fogás ≥ 48 px marad). */
+        .game-shell-fixed[data-game="WordLadderHuEn"] .wl-holds:is([data-fit="1"], [data-fit="2"]) .wl-teach { display: none; }
+        .game-shell-fixed[data-game="WordLadderHuEn"] .wl-holds[data-fit="2"] { padding: 6px; }
+        ${HOLD_SCOPE}[data-fit="2"] .wl-answers { gap: 6px; }
+        ${HOLD_SCOPE}[data-fit="2"] .wl-hold { min-height: 48px; padding: 3px 8px; font-size: 16px; line-height: 1.12; }
+        .play-question[data-testid="wl-question"][data-wl-tight="true"] .play-question-status {
+          position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
         .wl-answers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .wl-answers[data-long="true"] { grid-template-columns: 1fr; gap: 8px; }
         ${HOLD} {
