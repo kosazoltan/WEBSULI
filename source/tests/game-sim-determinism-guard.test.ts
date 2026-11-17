@@ -119,6 +119,9 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
   ],
   // J2a: a Szólétra lapján nincs kivétel (a kapaszkodó-tétel sorsolása a menet seedelt RNG-jéből: `pickRngRef`).
   "WordLadderHuEn.tsx": [],
+  // J7b: a Tornado lapján nincs kivétel (a szél, a tölcsér kezdőszöge és a kérdés-sorsolás a menet seedelt RNG-jéből, a villám
+  // külön seedelt `fxRng`-ből).
+  "TornadoHunter200.tsx": [],
 };
 
 const PAGE_FORBIDDEN = FORBIDDEN.filter(({ name }) => name === "Math.random" || name === "Date.now");

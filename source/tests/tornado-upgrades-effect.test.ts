@@ -220,6 +220,10 @@ test("review K2: a műszer-fejlesztés nem emeli a pontot — a jutalom az ALAP 
     assert.equal(interceptReward({ spec, ...args }).score, base, `${lvl}. szint`);
   }
   const finish = page.slice(page.indexOf("const finishRun = useCallback("), page.indexOf("const finishRunRef"));
-  assert.match(finish, /interceptReward\(\{[\s\S]{0,700}\bspec,\s/, "a finishRun az alap specet adja át");
+  // SPEC-VÁLTOZÁS 2026-11-17 (végrehajtás „J7b döntések” 10., a szelethez csatolt C): a jutalom a `sim.ts` `winReward`-ja,
+  // amely SZINTSZÁMOT kap (szélesített sávot nem kaphat); a viselkedést `T/tornado-sim.test.ts` „K2” tesztje méri minden
+  // műszer-szinten. A lap a közös függvényt hívja, közvetlen `interceptReward`-ot nem.
+  assert.match(finish, /winReward\(\{[\s\S]{0,400}\blevel: props\.level,/, "a finishRun a közös, szintszámos jutalmat hívja");
+  assert.doesNotMatch(finish, /interceptReward\(/, "a finishRun nem számol saját jutalmat");
   assert.doesNotMatch(finish, /spec:\s*bandSpec/, "a finishRun nem adhatja át a szélesített specet");
 });

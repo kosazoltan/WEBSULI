@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- a mért szimulációs értékek naplója (a PR és a jelentés ebből idéz) */
 import assert from "node:assert/strict";
 import test from "node:test";
 

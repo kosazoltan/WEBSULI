@@ -229,8 +229,8 @@ export function createChaseCore(opts: { seed: number | string; questions: ChaseQ
       }
     },
     onOutcome(o, p) {
+      // A fajta a megoldás-kijelzés alatt is kell (a lap a sáv módját és a táblák színét ebből rajzolja) — nem törlődik.
       const kind = kinds.get(p.id);
-      kinds.delete(p.id);
       if (kind === "junction") {
         const j = junction && junction.questionId === p.id ? junction : null;
         junction = null;
