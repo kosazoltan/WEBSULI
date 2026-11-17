@@ -263,6 +263,19 @@ export function evaluateOpenAnswerV1(answer: string, task: OpenTask): AnswerScor
 }
 
 /**
+ * Review K1 (2026-11-17): számolós feladat rövid, HIBÁS válaszánál a tényleges ok jelenik meg (hibás / hiányzó végeredmény, hiányzó
+ * mértékegység, kért alak) — a hosszú ág üzeneteivel azonos szöveggel —, nem a „nincs benne minden fogalom”. Null, ha nincs típusos
+ * rész, vagy minden részeredmény helyes (akkor a rövid ág általános ítélete dönt).
+ */
+function typedShortFailure(answer: string, task: OpenTask): AnswerScore | null {
+  if (!task.typedAnswers?.length) return null;
+  const grade = gradeTypedAnswers(answer, task.typedAnswers);
+  if (grade.undecidable) return { state: "fail", score: 0, reason: "A feladat referenciaértéke nem értelmezhető; szólj a tanárnak." };
+  if (grade.correct === grade.total) return null;
+  return { state: "fail", score: 0, reason: grade.verdicts.find(v => !v.ok)?.reason ?? "A végeredmény hiányzik vagy hibás." };
+}
+
+/**
  * A v2 feladat rövid válasza tartalmilag teljes-e. Számolós feladatnál (van `typedAnswers`) a tartalom a VÉGEREDMÉNY: minden részeredmény
  * helyes (és a kvóták megvannak) — a szöveges `required` hiánya itt sem nulláz, ahogy az elég hosszú válasznál sem (lent: a típusos
  * feladat a hiányzó fogalmak miatt nem bukik, csak fél pontra esik). Szöveges feladatnál minden fogalom, kifejezés és a sorrend kell.
@@ -289,7 +302,7 @@ export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerS
   const answer = answerWindow(rawAnswer);
   const tokens = tokensOfV2(answer);
   const wordCount = tokens.filter(t => !OPERATOR_TOKEN.test(t)).length;
-  if (wordCount < task.minWords) return shortVerdict(contentCompleteV2(answer, tokens, task), task.minWords);
+  if (wordCount < task.minWords) return typedShortFailure(answer, task) ?? shortVerdict(contentCompleteV2(answer, tokens, task), task.minWords);
   let partialReason: string | null = null;
   if (task.typedAnswers?.length) {
     const grade = gradeTypedAnswers(answer, task.typedAnswers);

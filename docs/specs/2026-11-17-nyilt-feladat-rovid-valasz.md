@@ -71,6 +71,15 @@ válasznál a hiányzó szöveges fogalom miatt eddig sem nullázott (`lesson-ex
 vonatkozik), csak fél pontra vitt — a rövid ág ezzel lett egységes. Teljes pont továbbra is csak kifejtve. A hibás érték, a
 hiányzó mértékegység és a felcserélt részeredmény röviden is 0.
 
+**3. Számolós feladat rövid, HIBÁS válasza (független review K1, 2026-11-17).** Az üzenet a tényleges okot nevezi meg, a hosszú ág
+meglévő szövegével („A(z) a rész eredménye hiányzik vagy hibás.”, „…a(z) cm mértékegységgel hiányzik vagy hibás.”, „…egyszerűsített
+törtként várjuk.”) — nem a „Még nincs benne minden fontos fogalom…” üzenetet. Pont: 0 (változatlan). A v1-ben és a `ee_evaluate`-ben
+nincs típusos mező, a paritás nem érintett. Teszt: `tests/open-answer-short.test.ts`; mutáció megfogva.
+
+**Jegyre (review, nem ennek a szeletnek a része):** az egycsoportos igen / nem / szám rubrikák (563 éles feladat; ide tartozik a
+„nem tudom” 13 esete); az `OPEN_ANSWER_RULES_HU` 1. és 3. pontjának pontosítása a következő promptverziónál; a kérdés szövegének
+visszamásolása mint régi gyengeség.
+
 **1. A nyelvtani alak / sorrend hiánya rövid válasznál.**
 
 A tömör válasz, amelyből a kért nyelvtani kifejezés vagy sorrend hiányzik („desk, room” a „There's a desk in the room.” fordítására),

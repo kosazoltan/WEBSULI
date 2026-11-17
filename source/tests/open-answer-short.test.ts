@@ -95,10 +95,19 @@ test("v2 (számolós): helyes végeredmény röviden → fél pont; hibás ért�
     const verdict = evaluateOpenAnswer(answer, task);
     assert.deepEqual({ state: verdict.state, score: verdict.score, reason: verdict.reason }, { state: "partial", score: 0.5, reason: shortButCompleteReason(4) }, answer);
   }
+  // Review K1: a rövid, HIBÁS számolós válasznál a tényleges ok jelenik meg (a hosszú ág üzenetével azonos), nem a „fogalom hiányzik”.
   for (const answer of ["35 cm", "36", "36 m", "cm", ""]) {
     const verdict = evaluateOpenAnswer(answer, task);
-    assert.deepEqual({ state: verdict.state, score: verdict.score, reason: verdict.reason }, { state: "fail", score: 0, reason: shortAndIncompleteReason(4) }, JSON.stringify(answer));
+    assert.deepEqual({ state: verdict.state, score: verdict.score, reason: verdict.reason },
+      { state: "fail", score: 0, reason: "A(z) a rész eredménye a(z) cm mértékegységgel hiányzik vagy hibás." }, JSON.stringify(answer));
+    assert.equal(verdict.reason, evaluateOpenAnswer(`Szerintem ez lett a végső válaszom: ${answer}`, task).reason, "azonos a hosszú ág üzenetével");
+    assert.doesNotMatch(verdict.reason, /fogalom/);
   }
+  const noUnit = base({ required: [["eredmény"]], minWords: 4, sample: "Az eredmény tehát: 8 : 2 = 4.", typedAnswers: [{ part: "a", kind: "number", value: "4" }] });
+  assert.deepEqual([evaluateOpenAnswer("8 : 2 = 5", noUnit).score, evaluateOpenAnswer("8 : 2 = 5", noUnit).reason], [0, "A(z) a rész eredménye hiányzik vagy hibás."]);
+  const fraction = base({ required: [["eredmény"]], minWords: 4, sample: "Az eredmény egyszerűsítve 1/2.", typedAnswers: [{ part: "a", kind: "fraction", value: "1/2", form: "simplified-fraction" }] });
+  assert.deepEqual([evaluateOpenAnswer("2/4", fraction).score, evaluateOpenAnswer("2/4", fraction).reason], [0, "A(z) a rész eredményét egyszerűsített törtként várjuk."]);
+  assert.equal(evaluateOpenAnswer("1/2", fraction).score, 0.5);
   assert.equal(evaluateOpenAnswer("A szorzat eredménye 36 cm.", task).score, 1);
   const two = base({ required: [["eredmény"]], minWords: 6, sample: "Az eredmény 5, a másik eredmény 3.", typedAnswers: [{ part: "a", kind: "number", value: "5" }, { part: "b", kind: "number", value: "3" }] });
   assert.equal(evaluateOpenAnswer("5, 3", two).score, 0.5);
