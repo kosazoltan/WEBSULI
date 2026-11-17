@@ -1568,7 +1568,7 @@ A mért előtte / utána tábla a PR-leírásban.
 
 ## J7 — Tornado Hunter 200: üldözés kérdés-útjelzőkkel (J7a, J7b, J7c)
 
-**Állapot (J7a):** folyamatban – 2026-11-17, ág feat/jatek-j7a-tornado-javitasok, munkafa .claude/worktrees/jatek-j7a, kanban #82 · **Állapot (J7b):** nem kezdődött · **Állapot (J7c):** nem kezdődött
+**Állapot (J7a):** folyamatban – 2026-11-17, ág feat/jatek-j7a-tornado-javitasok, munkafa .claude/worktrees/jatek-j7a, kanban #82 · **Állapot (J7b):** folyamatban – 2026-11-17, ág feat/jatek-j7b-tornado-utelagazas, munkafa .claude/worktrees/jatek-j7b, kanban #87 · **Állapot (J7c):** nem kezdődött
 **Függ:** J0c merge (4. hullám). **Elfogadás:** J-TH, J1–J10, J12, J16, M1–M12. Terv: 5.7.
 
 ### Fájlok
