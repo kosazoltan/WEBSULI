@@ -1445,7 +1445,7 @@ fizika-esetek (pattogás, határok) változatlanok.
 
 ## J6 — Galaktikus Aszteroida: folyamatos lövöldözős kérdés-kristályokkal (J6a, J6b)
 
-**Állapot (J6a):** nem kezdődött · **Állapot (J6b):** nem kezdődött
+**Állapot (J6a):** folyamatban – 2026-11-17, ág feat/jatek-j6a-aszteroida-kristaly, munkafa .claude/worktrees/jatek-j6a, kanban #81 · **Állapot (J6b):** nem kezdődött
 **Függ:** J0c merge (3. hullám). **Elfogadás:** J-SA, J1–J10, J16, M1–M12. Terv: 5.6.
 
 ### Fájlok
