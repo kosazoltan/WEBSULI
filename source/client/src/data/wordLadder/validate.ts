@@ -43,6 +43,15 @@ export function ladderBankProblems(items: readonly LadderItem[], lang: WordLadde
     if (/(?:^|[^\p{L}])(első|második|harmadik|negyedik)\s+(válasz|opció|lehetőség)|(?:^|[^\p{L}])[ABCD]\)/u.test(why)) {
       problems.push(`${at}: a magyarázat sorrendre hivatkozik`);
     }
+    // Célrész (docs/specs/2026-11-17-szoletra-olvashatosag.md D): a kérdés-sáv ezt emeli ki — a prompt rész-szövege.
+    const blank = /_{3,}/u.test(item.prompt);
+    if (item.focus !== undefined) {
+      if (item.focus.trim().length === 0) problems.push(`${at}: üres célrész (focus)`);
+      else if (!item.prompt.includes(item.focus)) problems.push(`${at}: a célrész (focus) nem rész-szövege a promptnak`);
+      else if (blank && !/_{3,}/u.test(item.focus)) problems.push(`${at}: hiányos mondatnál a célrész tartalmazza a hiányt`);
+    } else if (item.prompt.includes("„") || /: \S/u.test(item.prompt)) {
+      problems.push(`${at}: hiányzik a célrész (focus) — idézőjeles / kettőspontos kérdés`);
+    }
   }
   if (checkMinimums) {
     for (const tier of [0, 1, 2, 3, 4] as LadderTier[]) {
