@@ -61,16 +61,29 @@
       "\\.(?:test|spec)\\.[cm]?[jt]sx?$",
       "\\.browser\\.ts$",
       "^source/tests/game-mobile-cases/",
-      "^source/playwright[^/]*\\.config\\.[cm]?ts$"
+      "^source/playwright[^/]*\\.config\\.[cm]?ts$",
+      "\\.integration\\.ts$",
+      "^source/tests/support/"
     ],
     "calibrationPatterns": [
       "^source/client/src/lib/[^/]+/sim\\.ts$"
     ],
+    "gateFiles": [
+      "^scripts/qa/gates/test-integrity\\.mjs$",
+      "^scripts/qa/gates/gates\\.config\\.json$",
+      "^\\.github/workflows/ci\\.yml$"
+    ],
     "markerWindow": 8
   },
+  "claims": {
+    "$comment": "S2 hivatkozás-ellenőrző: a NEM ELLENŐRIZHETŐ hivatkozások aránya e fölött (legalább 5 hivatkozásnál) figyelmeztet.",
+    "unknownWarnRatio": 0.5
+  },
   "modes": {
-    "$comment": "Kapunkénti mód: warn = WARN (a lánc zöld marad), block = FAIL. A CI a --mode block kapcsolóval hív. Átállás warn → block helyben: < 10% hamis riasztás (terv 6.3).",
-    "test-integrity": { "local": "warn", "ci": "block" }
+    "$comment": "Kapunkénti mód: warn = WARN (a lánc zöld marad), block = FAIL. ALAPÉRTÉK mindenütt warn; a tiltásra váltás feltételei mérve: docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md 6.3a.",
+    "test-integrity": { "local": "warn", "ci": "warn" },
+    "claims-verify": { "local": "warn", "ci": "warn" },
+    "evidence-chain": { "local": "warn", "ci": "warn" }
   },
   "mergeEvidenceMaxMinutes": 15,
   "rtStatusUrl": "https://websuli.vip/api/rt/status",

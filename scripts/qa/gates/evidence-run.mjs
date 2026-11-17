@@ -10,6 +10,20 @@ import { createHash } from 'node:crypto';
 import { STATUS, isMain, makeContext, realExec, redact, tail } from './lib.mjs';
 import { appendRecord } from './evidence-chain.mjs';
 
+// K5 (független review): a lib.redact az ismert token-alakokat szűri; itt a parancssor és a kimenet további titok-alakjai is
+// (jelszó-kapcsoló, NÉV=érték titok, JWT, szolgáltatói kulcs-előtagok). A lib.mjs-hez a #490 miatt nem nyúlunk.
+const MORE = [
+  [/(--?(?:password|passwd|pass|token|secret|api-?key|auth)(?:=|\s+))\S+/gi, '$1<titok>'],
+  [/\b([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|CREDENTIALS?))=\S+/g, '$1=<titok>'],
+  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '<jwt>'],
+  [/\b(?:sk-proj-|sk_live_|sk_test_|rk_live_|AIza|xox[abposr]-|rnd_|glpat-|npm_)[A-Za-z0-9_-]{10,}\b/g, '<token>'],
+];
+export function redactMore(text) {
+  let out = redact(text);
+  for (const [re, rep] of MORE) out = out.replace(re, rep);
+  return out;
+}
+
 /** node:test (spec és TAP) összesítőjéből a darabszámok; ha nincs, null. */
 export function testCounts(out) {
   const s = String(out);
@@ -26,8 +40,8 @@ export function testCounts(out) {
  */
 export function buildRunRecord({ head, dirty, cmd, args, result, now = () => new Date() }) {
   const at = now().toISOString();
-  const cmdline = redact([cmd, ...args].join(' '));
-  const out = redact(`${result.stdout}\n${result.stderr}`);
+  const cmdline = redactMore([cmd, ...args].join(' '));
+  const out = redactMore(`${result.stdout}\n${result.stderr}`);
   const id = createHash('sha256').update(`${head}\n${cmdline}\n${at}`).digest('hex').slice(0, 12);
   return {
     id: `run-${id}`,
@@ -49,8 +63,8 @@ function main() {
   const dirty = ctx.git.trackedDirty().length > 0;
   const [cmd, ...args] = rest;
   const result = realExec(cmd, args, { cwd: process.cwd() });
-  process.stdout.write(result.stdout);
-  process.stderr.write(result.stderr);
+  process.stdout.write(redactMore(result.stdout));
+  process.stderr.write(redactMore(result.stderr));
   try {
     const { id, record } = buildRunRecord({ head, dirty, cmd, args, result });
     appendRecord(ctx.evDir, id, record);
