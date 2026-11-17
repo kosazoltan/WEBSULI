@@ -171,6 +171,10 @@ export type TsunamiState = {
   y: number;
   vy: number;
   distance: number;
+  /** Az előző lépés távolsága, oldalhelye és magassága (a nézet interpolál: K.4/9). */
+  prevDistance: number;
+  prevX: number;
+  prevY: number;
   /** A futó pillanatnyi sebessége (m/s). */
   speed: number;
   waveGap: number;
@@ -255,6 +259,9 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
     y: 0,
     vy: 0,
     distance: 0,
+    prevDistance: 0,
+    prevX: 0,
+    prevY: 0,
     speed: tuning.speed,
     waveGap: tuning.startGap,
     obstacles: pools.obstacles,
@@ -320,6 +327,9 @@ export function createTsunamiCore(opts: { seed: number | string; tuning: Tsunami
       if (st.phase !== "run") return result;
       const dt = dtMs / 1000;
       st.timeMs += dtMs;
+      st.prevDistance = st.distance;
+      st.prevX = st.x;
+      st.prevY = st.y;
       const tutorial = st.timeMs < TUTORIAL_SEC * 1000;
 
       // --- oldalirány: húzás (sávváltás) vagy analóg tárcsa (sávsegéddel) ---
