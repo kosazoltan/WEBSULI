@@ -122,21 +122,38 @@ export function expired(entry, today = new Date().toISOString().slice(0, 10)) {
   return !/^\d{4}-\d{2}-\d{2}$/.test(String(entry?.reviewBy ?? '')) || entry.reviewBy < today;
 }
 
+/** Biztosan nem termékkód: dokumentáció, a QA-szkriptek, tesztfájlok (a bukó tesztfájlt a hívó külön vizsgálja). */
+export const NON_PRODUCT = [/^docs\//, /^scripts\/qa\//, /^[^/]+\.md$/, /^source\/tests\//, /^\.agents\//, /^\.claude\/skills\//];
+/** Egy játék SAJÁT területének gyökerei: ezek alatt a játék mintájára illő út csak azé a játéké (alapérték, a konfig felülírhatja). */
+export const DEFAULT_GAME_OWN_ROOTS = ['source/client/src/pages/', 'source/client/src/lib/'];
+
 /**
- * A bukó teszt „területe” (S8-M1): a `gates.config.json` `games` leképezése a teszt nevére; a PR akkor ÉRINTI, ha egy termékkód-fájlja
- * (source/, nem source/tests/) illik a terület mintájára, vagy a közös játékmotort módosítja. Ha a teszt területe nem azonosítható,
- * a termékkód bármely változása „érinti” (konzervatív közelítés).
+ * A bukó teszt „területe” (S8-M1; F1, fail-closed): felmentés csak akkor jöhet szóba, ha a PR MINDEN termékkód-változása
+ * EGYÉRTELMŰEN egy MÁSIK játék saját területén van (a `gameOwnRoots` gyökér alatt, a `games` minta szerint pontosan egy, a tesztétől
+ * eltérő játékra illik), vagy a PR egyáltalán nem érint termékkódot. Minden más — közös hook / komponens, `shared/`, szerver, séma,
+ * útvonal, build- és függőség-konfig, `package.json`, CI, ismeretlen besorolású fájl, a teszt saját játéka, azonosítatlan
+ * tesztterület termékkód mellett — „érinti”.
  */
 export function touchesArea(id, prFiles, cfg) {
   const file = testFileOf(id) ?? '';
-  const product = prFiles.filter((f) => f.startsWith('source/') && !f.startsWith('source/tests/'));
+  const product = prFiles.filter((f) => !NON_PRODUCT.some((re) => re.test(f)));
   if (!product.length) return { touched: false };
+  const games = Object.entries(cfg?.games ?? {});
+  const roots = cfg?.gameOwnRoots ?? DEFAULT_GAME_OWN_ROOTS;
   const name = `${file} ${id}`;
-  const areas = Object.entries(cfg?.games ?? {}).filter(([, re]) => new RegExp(re, 'i').test(name));
-  if ((cfg?.sharedGamePatterns ?? []).some((p) => product.some((f) => f.startsWith(p)))) return { touched: true, why: 'a PR a közös játékmotort módosítja' };
-  if (!areas.length) return { touched: true, why: `a teszt területe nem azonosítható, és a PR termékkódot módosít (${product.slice(0, 3).join(', ')})` };
-  const hit = product.filter((f) => areas.some(([, re]) => new RegExp(re, 'i').test(f)));
-  return hit.length ? { touched: true, why: `a PR a teszt területét módosítja (${areas.map(([g]) => g).join(', ')}: ${hit.slice(0, 3).join(', ')})` } : { touched: false };
+  const mine = games.filter(([, re]) => new RegExp(re, 'i').test(name)).map(([g]) => g);
+  if (!mine.length) return { touched: true, why: `a teszt területe nem azonosítható, és a PR termékkódot módosít (${product.slice(0, 3).join(', ')})` };
+  const ownerOf = (f) => {
+    const root = roots.find((r) => f.startsWith(r));
+    if (!root) return null;
+    const owners = games.filter(([, re]) => new RegExp(re, 'i').test(f.slice(root.length))).map(([g]) => g);
+    return owners.length === 1 ? owners[0] : null;
+  };
+  const own = product.filter((f) => mine.includes(ownerOf(f)));
+  if (own.length) return { touched: true, why: `a PR a teszt saját területét módosítja (${mine.join(', ')}: ${own.slice(0, 3).join(', ')})` };
+  const shared = product.filter((f) => ownerOf(f) == null);
+  if (shared.length) return { touched: true, why: `közös / ismeretlen terület: a PR olyan termékkódot módosít, amely nem egyértelműen egy másik játék saját területe (${shared.slice(0, 3).join(', ')})` };
+  return { touched: false };
 }
 
 export const ADVICE = 'Az ítélet csak JAVASLAT a bukott job újraindítására; a zöld futást NEM pótolja — merge csak zöld kötelező ellenőrzésekkel lehet.';

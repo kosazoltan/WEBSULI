@@ -41,8 +41,14 @@ export function pidAlive(pid) {
 
 export const LOCK_TIMEOUT_MS = 45_000;
 export const LOCK_STALE_MS = 30_000;
+/**
+ * Felső korlát (független review F2): a zár alatti művelet ezredmásodperces (hozzáfűzés; a `--repair` is másodperces), ezért a
+ * 40 s-nál öregebb zár akkor is elvehető, ha a benne álló PID él — az csak PID-újrahasznosítás vagy beragadt idegen folyamat lehet.
+ * A korlát a várakozási időnél (45 s) kisebb: a várakozó minden esetben bejut, a kapuk nem állnak meg.
+ */
+export const LOCK_MAX_AGE_MS = 40_000;
 
-export function withLock(dir, fn, { timeoutMs = LOCK_TIMEOUT_MS, staleMs = LOCK_STALE_MS, sleep = sleepSync, now = () => Date.now(), alive = pidAlive } = {}) {
+export function withLock(dir, fn, { timeoutMs = LOCK_TIMEOUT_MS, staleMs = LOCK_STALE_MS, maxAgeMs = LOCK_MAX_AGE_MS, sleep = sleepSync, now = () => Date.now(), alive = pidAlive } = {}) {
   mkdirSync(dir, { recursive: true });
   const lock = join(dir, LOCK_FILE);
   const t0 = now();
@@ -53,9 +59,12 @@ export function withLock(dir, fn, { timeoutMs = LOCK_TIMEOUT_MS, staleMs = LOCK_
       if (!['EEXIST', 'EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw e;
       try {
         const pid = Number.parseInt(readFileSync(lock, 'utf8').trim(), 10);
-        if (now() - statSync(lock).mtimeMs > staleMs && !(pid !== process.pid && alive(pid))) {
+        const age = now() - statSync(lock).mtimeMs;
+        const live = pid !== process.pid && alive(pid);
+        if ((age > staleMs && !live) || age > maxAgeMs) {
           unlinkSync(lock);
-          appendFileSync(join(dir, REPAIR_LOG), `${new Date().toISOString()} elárvult zár törölve (${staleMs} ms-nál régebbi, PID ${Number.isNaN(pid) ? '?' : pid} nem él)\n`);
+          const why = live ? `${maxAgeMs} ms-os felső korlát fölött, a PID ${pid} él (PID-újrahasznosítás / beragadt idegen folyamat)` : `${staleMs} ms-nál régebbi, PID ${Number.isNaN(pid) ? '?' : pid} nem él`;
+          appendFileSync(join(dir, REPAIR_LOG), `${new Date().toISOString()} elárvult zár törölve (${why})\n`);
           continue;
         }
       } catch { /* közben eltűnt: újra */ }
@@ -182,7 +191,12 @@ async function main() {
   let ctx;
   try { ctx = makeContext({}); } catch (e) { process.stderr.write(`[evidence-chain] NEM FUTOTT: ${e.message}\n`); process.exit(2); }
   if (args.includes('--repair')) {
-    const r = repairChain(ctx.evDir);
+    let r;
+    try { r = repairChain(ctx.evDir); } catch (e) {
+      // F2: nem kezeletlen kivétel — érthető hiba és teendő, 2-es kód
+      process.stderr.write(`[evidence-chain] NEM FUTOTT: a javítás nem sikerült (${String(e?.message ?? e).split('\n')[0]}). Teendő: néhány másodperc múlva futtasd újra; ha a zár 40 s-nál öregebb, a következő futás magától átveszi (napló: ${join(ctx.evDir, REPAIR_LOG)}).\n`);
+      process.exit(2);
+    }
     process.stdout.write(`[evidence-chain] javítva: ${r.archived ? `a régi lánc archiválva (${r.archived})` : 'nem volt lánc'}; ${r.relinked} rekord újra-láncolva\n`);
     process.exit(0);
   }

@@ -25,6 +25,10 @@
     "tornado-hunter-200": "tornado",
     "word-ladder-hu-en": "word-?ladder"
   },
+  "gameOwnRoots": [
+    "source/client/src/pages/",
+    "source/client/src/lib/"
+  ],
   "sharedGamePatterns": [
     "source/client/src/game-engine/",
     "source/client/src/pages/Games.tsx"

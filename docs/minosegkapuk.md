@@ -217,8 +217,13 @@ Ezekre a független ellenőr ellenőrzőlistája marad (a kapu célzottan a fels
 az előző lánc-sor hash-e); a hozzáfűzés kizáró zárfájllal (`chain.lock`, `wx`, benne az író PID-je; korlátos újrapróba 45 s-ig; a 30
 s-nál régebbi zár elárvultnak számít és törlődik + napló, DE csak ha a PID már nem él) atomi: 8 párhuzamos író × 200 rekord → 0 törés
 (teszt). A rekord vagy a lánc-sor írásának hibája nem csendes: a szakasz- és a push-kapu, a `record-review` hibát ír és nem nulla
-kóddal lép ki (a kaput újra kell futtatni); a test-integrity lépés figyelmeztetésre vált. Maradó kockázat: PID-újrahasznosítás
-(egy elárvult zár PID-jét azóta más folyamat kapta) — ekkor a zár a várakozás végéig (45 s) nem szabadul, a kapu hangosan hibázik.
+kóddal lép ki (a kaput újra kell futtatni); a test-integrity lépés figyelmeztetésre vált. **Felső korlát:** a 40 s-nál öregebb zár
+akkor is elvehető, ha a benne álló PID él (a zár alatti művelet ezredmásodperces; ilyen zár csak PID-újrahasznosításból vagy beragadt
+idegen folyamatból maradhat) — a `chain-repair.log` ezt külön sorral naplózza.
+
+- **Mit lát az ügynök, mit tegyen:** „a lánc zárja 45000 ms után sem szabadult fel” (kapu: 2-es kód; `--repair`: „NEM FUTOTT: a
+  javítás nem sikerült”, 2-es kód) → a zár egy épp dolgozó másik munkafa kapujáé volt; futtasd újra a kaput. Ismétlődésnél nézd meg a
+  `chain-repair.log`-ot és a `chain.lock` korát; kézi törlés nem kell (a 40 s-nál öregebb zárat a következő futás átveszi).
 
 - **Garantálja** a véletlen vagy hanyag hamisítás és az utólagos átírás ÉSZLELÉSÉT: kézzel írt, láncon kívüli rekord; átírt rekord;
   kivágott lánc-sor; törölt lánc (`no-chain`, ha van rekord); útvonal-bejárás az azonosítóban (csak `[a-z0-9-]`).
@@ -247,8 +252,12 @@ paraméterezett tesztek egy soron élnek.
     ismétlődik a PR több kísérletében.
   - **„a PR hibája lehet”** (kód 1) minden más esetben: listán kívüli teszt (a main rangsorában ingadozónak látszó is: „ingadozó-gyanú,
     jegy kell”), az `exclude` listán álló (regresszió-gyanús) teszt — pl. a #106-os block-craft eset —, „tartós bukás”, lejárt vagy
-    hiányzó `reviewBy`, jegy nélküli elem, **érintett terület**: a teszt játékához tartozó fájl (a `gates.config.json` játék →
-    minta táblája), a közös játékmotor, vagy ismeretlen területű teszt mellett bármely termékkód-változás (bizonytalan = érintett).
+    hiányzó `reviewBy`, jegy nélküli elem, **érintett terület (fail-closed)**: felmentés csak akkor, ha a PR egyáltalán nem érint
+    termékkódot (csak `docs/`, `scripts/qa/`, gyökér `*.md`, tesztfájlok — a bukó tesztfájl kivételével), vagy MINDEN termékkód-
+    változása EGYÉRTELMŰEN egy MÁSIK játék saját területe (`gates.config.json` `gameOwnRoots` — a játék lapja, `lib/<játék>/` — és a
+    `games` minta pontosan egy, a tesztétől eltérő játékra illik). Minden más — a teszt saját játéka, közös hook / komponens,
+    `shared/`, szerver, séma, útvonal, build- és függőség-konfig, `package.json`, `index.css`, CI, ismeretlen besorolású fájl,
+    azonosítatlan tesztterület termékkód mellett — „a PR hibája lehet — közös / ismeretlen terület”.
   - **„nem értelmezhető bukás”** (kód 1): piros kísérlet, de a naplóból egyetlen tesztnév sem olvasható ki (build-, telepítés-,
     időtúllépés-hiba) — kézi vizsgálat kell, nem „nincs bukás”.
   - Ez a push-fegyelem 2. pontjának gépi támasza: ismert ingadozó bukásra nem reagálunk termékkód-pushsal, de a döntést a zöld

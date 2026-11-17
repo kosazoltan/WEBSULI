@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { CHAIN_FILE, LOCK_FILE, LOCK_STALE_MS, LOCK_TIMEOUT_MS, REPAIR_LOG, appendRecord, pidAlive, chainStatus, linkRecord, repairChain, validId, verifyChain, withLock } from './evidence-chain.mjs';
+import { CHAIN_FILE, LOCK_FILE, LOCK_MAX_AGE_MS, LOCK_STALE_MS, LOCK_TIMEOUT_MS, REPAIR_LOG, appendRecord, pidAlive, chainStatus, linkRecord, repairChain, validId, verifyChain, withLock } from './evidence-chain.mjs';
 
 const H = 'a'.repeat(40);
 const tmp = () => mkdtempSync(join(tmpdir(), 'ev-chain-'));
@@ -63,12 +63,20 @@ test('withLock: az elárvult (régi) zárat törli és naplózza; a friss zárn�
 test('withLock (R2): a régi zárat NEM veszi el, ha a benne álló PID él; a várakozási idő alapból nagyobb az elárvulási küszöbnél', () => {
   const dir = tmp();
   writeFileSync(join(dir, LOCK_FILE), '4242\n');
-  const old = new Date(Date.now() - 120_000);
+  // a küszöb (30 s) és a felső korlát (40 s) közötti korú zár: élő PID mellett nem vehető el
+  const old = new Date(Date.now() - (LOCK_STALE_MS + LOCK_MAX_AGE_MS) / 2);
   utimesSync(join(dir, LOCK_FILE), old, old);
   assert.throws(() => withLock(dir, () => 1, { timeoutMs: 50, staleMs: 30_000, alive: (p) => p === 4242 }), /sem szabadult fel/);
   assert.ok(existsSync(join(dir, LOCK_FILE)), 'az élő író zárja megmaradt');
   assert.equal(withLock(dir, () => 7, { staleMs: 30_000, alive: () => false }), 7, 'halott PID: átveszi');
   assert.ok(LOCK_TIMEOUT_MS > LOCK_STALE_MS, 'a várakozó a saját időtúllépése előtt átveszi az elárvult zárat');
+  // F2: élő IDEGEN PID-et hordozó, a felső korlátnál öregebb zár (PID-újrahasznosítás / beragadt folyamat) elvehető, naplózva
+  writeFileSync(join(dir, LOCK_FILE), '4242\n');
+  const older = new Date(Date.now() - LOCK_MAX_AGE_MS - 5_000);
+  utimesSync(join(dir, LOCK_FILE), older, older);
+  assert.equal(withLock(dir, () => 9, { timeoutMs: 50, alive: () => true }), 9);
+  assert.match(readFileSync(join(dir, REPAIR_LOG), 'utf8'), /felső korlát fölött, a PID 4242 él/);
+  assert.ok(LOCK_MAX_AGE_MS < LOCK_TIMEOUT_MS && LOCK_MAX_AGE_MS > LOCK_STALE_MS, 'a várakozó a korlát után mindig bejut');
   assert.equal(pidAlive(process.pid), true);
   assert.equal(pidAlive(0), false);
 });

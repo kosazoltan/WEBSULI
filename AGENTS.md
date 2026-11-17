@@ -172,7 +172,8 @@ A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja
 
 **Szkript-kapuk (2026-11-17, `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md`):** ügynök állítása nem bizonyíték. Az
 orkesztrátor alügynök-jelentést csak `node scripts/qa/gates/verify-report.mjs --report <jelentés.md>` zöldje után fogad el (sablon:
-`scripts/qa/gates/report-template.md`; „PASS” csak `evidence-run.mjs` / kapu-bizonyíték azonosítóval). A tesztmérce jelöletlen
+`scripts/qa/gates/report-template.md`; „PASS” csak `evidence-run.mjs` / kapu-bizonyíték azonosítóval; a „NEM IGAZOLT” jelzésű
+állítás akkor sem fogadható el késznek, ha a kilépési kód 0). A tesztmérce jelöletlen
 lazítását a `test-integrity.mjs` jelzi (most figyelmeztet; a tiltás mért feltételei és a „Mit NEM fog meg” lista:
 `docs/minosegkapuk.md`) — a valódi spec-változás jelölése: `// SPEC-VÁLTOZÁS <dátum> (docs/specs/<terv>.md <pont>)`.
 

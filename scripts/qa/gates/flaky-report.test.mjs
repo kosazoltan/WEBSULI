@@ -126,6 +126,28 @@ test('S8-M1: érintett terület (a teszt játéka / a közös motor / ismeretlen
   assert.equal(touchesArea(WL, ['docs/a.md'], GAMES).touched, false);
 });
 
+test('F1 (fail-closed): felmentés csak termékkód nélküli PR-ra, vagy ha MINDEN termékkód-változás egy MÁSIK játék saját területe', () => {
+  const ranking = aggregate([run(1, [A(1, 'success', [], [WL])])]);
+  // a #491 valódi fájllistája: közös hook (négy játék használja) + perf-szkript → nincs felmentés
+  const pr491 = ['docs/specs/2026-11-17-kerdesbank-hook-memo-vegrehajtas.md', 'docs/specs/2026-11-17-kerdesbank-hook-memo.md', 'source/client/src/hooks/useMaterialQuizzes.ts', 'source/scripts/perf/measure-game-frames.mjs', 'source/tests/material-quizzes-hook-memo.test.ts'];
+  const d491 = dec({ failed: [WL], ranking, prFiles: pr491 });
+  assert.equal(d491.verdict, 'a PR hibája lehet');
+  assert.match(d491.items[0].why, /közös \/ ismeretlen terület.*useMaterialQuizzes/);
+  assert.equal(dec({ failed: [WL], ranking, prFiles: ['docs/a.md', 'scripts/qa/gates/x.mjs', 'source/tests/other.test.ts', 'AGENTS.md'] }).verdict, 'nem a PR hibája', 'csak-docs / QA / másik teszt');
+  assert.equal(dec({ failed: [WL], ranking, prFiles: ['source/client/src/pages/BrainRotSteal.tsx', 'source/client/src/lib/brainRot/core.ts'] }).verdict, 'nem a PR hibája', 'másik játék saját lapja és lib-je');
+  assert.equal(dec({ failed: [WL], ranking, prFiles: ['source/client/src/pages/BrainRotSteal.tsx', 'source/client/src/components/QuizCard.tsx'] }).verdict, 'a PR hibája lehet', 'vegyes: másik játék + közös komponens');
+  // a saját-terület gyökerén kívüli, játéknevű fájl (közös hook) és a két játékra is illő út nem „egyértelműen másik játéké”
+  assert.equal(dec({ failed: [WL], ranking, prFiles: ['source/client/src/hooks/useBrainRot.ts'] }).verdict, 'a PR hibája lehet', 'gyökér nélküli játéknevű hook');
+  assert.equal(dec({ failed: [WL], ranking, prFiles: ['source/client/src/pages/BrainRotBlockCraft.tsx'] }).verdict, 'a PR hibája lehet', 'két játékra illő lap');
+  // azonosítatlan tesztterület mellett egy másik játék saját lapja sem ment fel (nem tudni, melyik a „másik”)
+  const unknownArea = 'e2e:tests/admin-panel.spec.ts:5 › x';
+  const unknownKnown = [{ id: 'e2e:tests/admin-panel.spec.ts:5', ticket: 1, reviewBy: '2026-12-17' }];
+  assert.equal(dec({ failed: [unknownArea], ranking, known: unknownKnown, prFiles: ['source/client/src/pages/BrainRotSteal.tsx'] }).verdict, 'a PR hibája lehet', 'azonosítatlan teszt + játéklap');
+  for (const f of ['source/shared/schema.ts', 'source/server/routes.ts', 'source/package.json', 'package.json', 'source/client/src/index.css', 'source/vite.config.ts', '.github/workflows/ci.yml', 'source/client/src/pages/Games.tsx']) {
+    assert.equal(dec({ failed: [WL], ranking, prFiles: [f] }).verdict, 'a PR hibája lehet', f);
+  }
+});
+
 test('S8-M2: piros kísérlet értelmezhető tesztnév nélkül → „nem értelmezhető bukás”, nem „nincs bukás”', () => {
   const d = dec({ failed: [], conclusion: 'failure' });
   assert.equal(d.verdict, 'nem értelmezhető bukás');
