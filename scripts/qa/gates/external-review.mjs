@@ -18,6 +18,7 @@
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import https from "node:https";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
@@ -258,17 +259,34 @@ export function classifyHttp(status, bodyText) {
   if (status === 429 || status >= 500) return "retry";
   return "fatal";
 }
-async function postJson(url, key, body, timeoutMs) {
-  const r = await fetch(url, { method: "POST", headers: { "x-goog-api-key": key, "content-type": "application/json" },
-    body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
-  return { status: r.status, text: await r.text(), retryAfter: r.headers.get("retry-after") };
+/**
+ * node:https, nem fetch: a Node beépített fetch-e (undici) 300 s-os headersTimeout-tal dolgozik, a nem-streamelő
+ * generateContent pedig a fejlécet csak a teljes (akár 10+ perces, magas gondolkodású) válasz végén küldi → a fetch
+ * 5 percnél megszakad, és a hívás feleslegesen újraindul (mérve 2026-11-17). Itt csak a saját teljes időkorlát él.
+ */
+function postJson(url, key, body, timeoutMs) {
+  const data = Buffer.from(JSON.stringify(body));
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, { method: "POST", headers: { "x-goog-api-key": key, "content-type": "application/json", "content-length": data.length } }, (res) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString("utf8"), retryAfter: res.headers["retry-after"] ?? null }));
+      res.on("error", reject);
+    });
+    req.setTimeout(0);
+    req.on("socket", (s) => s.setKeepAlive(true, 30_000));
+    const timer = setTimeout(() => req.destroy(Object.assign(new Error(`időtúllépés ${Math.round(timeoutMs / 60000)} perc után`), { code: "TIMEOUT" })), timeoutMs);
+    req.on("close", () => clearTimeout(timer));
+    req.on("error", reject);
+    req.end(data);
+  });
 }
 export async function countTokens(model, key, systemText, userText) {
   const r = await postJson(`${API}${model}:countTokens`, key, { contents: [{ role: "user", parts: [{ text: `${systemText}\n\n${userText}` }] }] }, 120_000);
   if (r.status !== 200) return { error: `HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 400)}` };
   return { totalTokens: JSON.parse(r.text).totalTokens };
 }
-export async function generate({ model, key, systemText, userText, thinking, timeoutMs = 20 * 60_000, retries = 3, log = () => {} }) {
+export async function generate({ model, key, systemText, userText, thinking, timeoutMs = 30 * 60_000, retries = 3, log = () => {} }) {
   const body = {
     systemInstruction: { parts: [{ text: systemText }] },
     contents: [{ role: "user", parts: [{ text: userText }] }],
@@ -285,7 +303,7 @@ export async function generate({ model, key, systemText, userText, thinking, tim
       if (cls !== "retry") throw last;
       last.waitMs = retryWaitMs(r);
     } catch (e) {
-      if (e.code === "quota" || e.code === "fatal") throw e;
+      if (e.code === "quota" || e.code === "fatal" || e.code === "TIMEOUT") throw e; // időtúllépést nem ismétlünk (költség)
       last = e.code ? e : Object.assign(new Error(maskSecrets(e?.cause?.message || e.message, key)), { code: "retry" });
     }
     if (attempt < retries) { const w = Math.max(last.waitMs ?? 0, 15_000 * 2 ** attempt); log(`újrapróbálás ${attempt + 1}/${retries} ${w / 1000} s múlva: ${maskSecrets(last.message, key).slice(0, 160)}`); await new Promise((r) => setTimeout(r, w)); }
