@@ -75,6 +75,8 @@ test("hibás válasz: a megoldás ≥ 1,8 mp-ig látszik; a „Miért?” a kije
   const correct = openFirst(s);
   const wrong = (correct + 1) % 4;
   s.ui.pick(wrong, 1000);
+  // SPEC-VÁLTOZÁS (J4b, main CI 43943054869): a kijelzés a válasz utáni első képkockától számít — itt ugyanabban a pillanatban.
+  s.ui.frame(1000, { tick: false });
   assert.deepEqual(s.ui.view().reveal, { correctOptionIndex: correct, pickedOptionIndex: wrong });
   assert.ok(REVEAL_WRONG_MS >= 1800);
   s.ui.frame(1000 + 1799, { tick: false });
@@ -105,10 +107,37 @@ test("a kijelzés legalább 1,8 mp akkor is, ha rövidebbet kérnek (revealWrong
   assert.notEqual(ui.view().reveal, null);
 });
 
+test("main CI 43943054869: két képkocka közti koppintásnál a kijelzés és a „Miért?” a KÖVETKEZŐ képkockától számít", () => {
+  // A lap az előző képkocka órájával hív (pick(i, clockRef)), a zöld drón csak a következő képkockán látszik: ha a kijelzés a
+  // koppintás órájától számítana, lassú gépen (200 ms-os képkocka) a LÁTHATÓ kijelzés 1,8 mp alá csúszna.
+  const s = setup();
+  const correct = openFirst(s);
+  s.ui.frame(1000, { tick: false });
+  s.ui.pick((correct + 1) % 4, 1000); // a koppintás 1000 és 1200 között; az óra az előző képkockáé
+  s.ui.frame(1200, { tick: false }); // ezen a képkockán jelenik meg a megoldás
+  s.ui.frame(1200 + REVEAL_WRONG_MS - 1, { tick: false });
+  assert.notEqual(s.ui.view().reveal, null, "a kijelzés a megjelenéstől számítva teljes ideig látszik");
+  s.ui.frame(1200 + REVEAL_WRONG_MS, { tick: false });
+  assert.equal(s.ui.view().reveal, null);
+  s.ui.frame(1200 + REVEAL_WRONG_MS + WHY_LINGER_MS - 1, { tick: false });
+  assert.equal(s.ui.view().whyVisible, true, "a „Miért?”-ablak ugyanannyival tolódik");
+  s.ui.frame(1200 + REVEAL_WRONG_MS + WHY_LINGER_MS, { tick: false });
+  assert.equal(s.ui.view().whyVisible, false);
+  // A képkockán belüli lezárás (lejárat) nem tolódik: ugyanabban a képkockában élesedik.
+  const s2 = setup();
+  const t1 = runUntil(s2, 0, 20_000, () => s2.ui.view().presentation !== null, { calm: true });
+  const tRev = runUntil(s2, t1 + STEP, 20_000, () => s2.ui.view().reveal !== null, { calm: true });
+  s2.ui.frame(tRev + REVEAL_WRONG_MS - 1, { tick: false });
+  assert.notEqual(s2.ui.view().reveal, null);
+  s2.ui.frame(tRev + REVEAL_WRONG_MS, { tick: false });
+  assert.equal(s2.ui.view().reveal, null);
+});
+
 test("helyes válasz: rövid visszajelzés, nincs „Miért?”", () => {
   const s = setup();
   const correct = openFirst(s);
   s.ui.pick(correct, 800);
+  s.ui.frame(800, { tick: false }); // SPEC-VÁLTOZÁS (J4b): a kijelzés az első képkockától számít — itt ugyanabban a pillanatban
   assert.equal(s.outcomes.at(-1)?.result, "correct");
   assert.equal(s.ui.view().whyVisible, false);
   s.ui.frame(800 + REVEAL_CORRECT_MS, { tick: false });
@@ -151,6 +180,7 @@ test("review #446/1: kijelzés alatt beérkező kérés NEM vágja el a megoldá
     const s = setup();
     const correct = openFirst(s);
     s.ui.pick((correct + 1) % 4, 2000);
+    s.ui.frame(2000, { tick: false }); // SPEC-VÁLTOZÁS (J4b): a kijelzés az első képkockától számít — itt ugyanabban a pillanatban
     assert.equal(s.ui.request(reason, 2100), null, `${reason}: kijelzés közben nem nyit`);
     assert.equal(s.ui.view().pending, reason);
     // A kijelzés teljes ideje alatt a helyes megoldás látszik, új kérdés nincs.
@@ -168,6 +198,7 @@ test("review #446/1: több függő kérésből a legsürgősebb marad (rescue > 
   const s = setup();
   const correct = openFirst(s);
   s.ui.pick((correct + 1) % 4, 2000);
+  s.ui.frame(2000, { tick: false }); // SPEC-VÁLTOZÁS (J4b): a kijelzés az első képkockától számít — itt ugyanabban a pillanatban
   s.ui.request("boss", 2100);
   s.ui.request("trigger", 2200);
   assert.equal(s.ui.view().pending, "boss");

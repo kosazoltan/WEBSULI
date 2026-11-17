@@ -1340,6 +1340,33 @@ függvényeket (feladatgenerátor, időzítés) nézők változatlanok.
 - U-J4-1: a `generatedTaskForGrade` paraméterezhető-e operandussal — felderítés: `sed -n 560,640p P/SpeedQuizMath.tsx`.
 - U-J4-2: `MathTowerScene3D` költsége további drónokkal low-tier-en — J11 mérés dönti el; túllépésnél a drónok 2D DOM-elemek.
 
+### J4-utójavítás — a megoldás-kijelzés az első képkockától számít (main CI 43943054869)
+
+**Állapot:** folyamatban — ág `fix/jatek-kijelzes-elso-kepkocka`, munkafa `.claude/worktrees/jatek-kijelzes`.
+
+**Gyökérok (mérve).** A main CI-ban a `speed-math-play.spec.ts:69` bukott („a megoldás ≥ 1,8 mp-ig látszik” + a
+`quiz-feedback` nem jelent meg):
+1. *Mérési torzulás:* a teszt a Playwright oldaláról mért (`waitForTimeout(1500)` + parancs-oda-vissza utak), ami a lassú,
+   szoftveres WebGL-es CI-n 2 mp fölé nyúlt — a már lezárt kijelzést nézte.
+2. *Mozgó gomb:* a „Miért?” koppintás a kijelzés végére esett, amikor a kártya „Miért?”-csippé, majd új feladattá alakul.
+3. *Termékoldali rés:* a koppintás két képkocka közé esik; a `pick()` az előző képkocka órájával indította a kijelzést, a
+   zöld cél viszont csak a következő képkockán látszik. SwiftShader + 6× CPU-lassítás mellett a LÁTHATÓ kijelzés 1815–1936 ms
+   volt a `REVEAL_WRONG_MS = 2000` helyett.
+
+**Lépések (AI-végrehajtás).**
+1. `GE/play/questionUi.ts`: a kijelzés (`rev.until`) és a hozzá tartozó „Miért?”-ablak a válasz utáni ELSŐ `frame()`-től
+   számít (`Math.max`, csak hosszabbodhat); a képkockán belüli lezárás (lejárat) nem tolódik. Mind a hét játék és a Párbaj
+   ugyanazt kapja.
+2. `T/game-play-question-ui.test.ts`: új determinisztikus eset (két képkocka közti koppintás → a kijelzés és a „Miért?” a
+   következő képkockától; képkockán belüli lejárat nem tolódik); mutációs próbán bukik. A meglévő 4 esetben SPEC-VÁLTOZÁS:
+   a válasz után azonos órájú élesítő képkocka, az állítások változatlanok.
+3. `T/speed-math-play.spec.ts`: a kijelzés hossza lapon belül, képkockánként (a `game-explanation-pause.spec.ts` mintája), a
+   mérce ≥ 1,8 mp változatlan; a „Miért?” a kijelzés alatt, álló gombon.
+4. Ellenőrzés: célzott egységtesztek, check / lint / check:test, teljes mobil mérő + meta-mérő, `game-explanation-pause`,
+   Párbaj e2e-k; SwiftShader + 4× lassítás, előtte / utána 2×10 ismétlés.
+
+**Elfogadás.** A kijelzés lapon mért hossza lassított gépen is ≥ 1,8 mp; a fenti ellenőrzések zöldek; a CI zöld.
+
 ---
 
 ## J5 — Brain Rot Lopás: „Lény-aréna” (J5a, J5b)

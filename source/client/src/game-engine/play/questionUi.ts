@@ -94,7 +94,10 @@ const URGENCY: Record<QuestionRequestReason, number> = { trigger: 0, boss: 1, re
  *  - kijelzés alatt új kérdés nem jelenik meg (se ütemezett, se kért, se boss / rescue): a kérés függőben vár;
  *  - a „Miért?” határideje a hibához tartozik (kijelzés vége + 4 mp), az új kérdés megjelenése nem nullázza;
  *  - minden idő a kérdés-óra (szünetben áll): a kijelzés és a „Miért?” ablaka is megáll szünetben;
- *  - válasz csak a határidő előtt számít; utána a válasz lejáratként záródik.
+ *  - válasz csak a határidő előtt számít; utána a válasz lejáratként záródik;
+ *  - a kijelzés (és a „Miért?” ablaka) a válasz utáni ELSŐ képkockától számít, nem a válasz pillanatának órájától: a
+ *    koppintás két képkocka közé esik (az óra az előző képkockáé), a zöld drón pedig csak a következő képkockán látszik —
+ *    lassú gépen (~200 ms-os képkocka) a látható kijelzés így a 2 mp helyett 1,8 mp alá csúszhatott (main CI 43943054869).
  */
 export function createQuestionUi(opts: {
   director: () => QuestionDirector | null;
@@ -110,7 +113,7 @@ export function createQuestionUi(opts: {
   const whyMs = opts.whyMs ?? WHY_LINGER_MS;
 
   let open: QuestionPresentation | null = null;
-  let rev: { p: QuestionPresentation; reveal: QuestionReveal; until: number; frozenMs: number } | null = null;
+  let rev: { p: QuestionPresentation; reveal: QuestionReveal; until: number; frozenMs: number; dur: number; armed: boolean } | null = null;
   let pending: QuestionRequestReason | null = null;
   let why: { item: QuestionWhyItem; until: number } | null = null;
   let lastOutcome: QuestionOutcome | null = null;
@@ -176,6 +179,8 @@ export function createQuestionUi(opts: {
         reveal: { correctOptionIndex: correctIdx, pickedOptionIndex: pickedIdx === -1 ? null : pickedIdx },
         until: clock + dur,
         frozenMs: Math.max(0, deadline(p) - clock),
+        dur,
+        armed: false,
       };
       if (o.result === "wrong" || o.result === "timeout") {
         why = { item: { quiz: p.question.quiz, pickedOriginalIndex: o.pickedOriginalIndex, presentationId: p.id }, until: clock + dur + whyMs };
@@ -199,6 +204,13 @@ export function createQuestionUi(opts: {
         const act = d.active();
         if (!act || act.id !== open.id) open = null; // a sim-mag maga válaszolt / szakította meg
         else if (clockMs >= deadline(open)) settle(d.expire(clockMs), open);
+      }
+      if (rev && !rev.armed) {
+        // Az első képkocka a válasz után: innen számít a kijelzés (és a hozzá tartozó „Miért?”-ablak) — csak hosszabbodhat.
+        rev.armed = true;
+        const until = Math.max(rev.until, clockMs + rev.dur);
+        if (why && why.item.presentationId === rev.p.id) why.until += until - rev.until;
+        rev.until = until;
       }
       if (rev && clockMs >= rev.until) rev = null;
       // A menetvég / tartás ellenőrzése az új kérdés indítása ELŐTT (review #446).
