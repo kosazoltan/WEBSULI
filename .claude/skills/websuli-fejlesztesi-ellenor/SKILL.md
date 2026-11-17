@@ -119,7 +119,8 @@ node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head <fe
 
 - Modell: `gemini-4-carbon`, `thinkingLevel: HIGH`; a küldés ELŐTT titok-szűrés (találatnál 4-gyel megáll, érték nélkül); a kulcs
   soha nem kerül kimenetbe, jelentésbe, bizonyítékba. Kilépés: 0 lefutott / KIHAGYVA (nincs kulcs, kvóta), 2 nincs kulcs `--strict`
-  mellett, 3 API-hiba, 4 titok-szűrés, 5 túl nagy bemenet (bontsd `--paths`-szal). Költség ~0,4–1,5 USD / PR.
+  mellett, 3 API-hiba, 4 titok-szűrés, 5 túl nagy bemenet (bontsd `--paths`-szal), 1 egyéb hiba (pl. hiányzó argumentum). A `--save-input <fájl>` a pontosan
+  elküldött szöveget menti (a scratchpadba, ne a repóba). Költség ~0,4–1,5 USD / PR.
 - Az orkesztrátor beolvassa a jelentést második véleményként, és minden kritikus / magas lelet állítását a KÓDBÓL visszaellenőrzi
   (MEGERŐSÍTVE / CÁFOLVA / NEM ELDÖNTHETŐ) — a külső modell nem lát a repóba, csak a kapott diffet / fájlokat, és hallucinálhat.
   A megerősített leletet a Claude-ellenőr visszaellenőrző körébe is add be.

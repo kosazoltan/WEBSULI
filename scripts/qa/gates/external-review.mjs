@@ -83,6 +83,8 @@ export const SECRET_PATTERNS = [
   { kind: "Slack-token", re: /\bxox[abprs]-[A-Za-z0-9-]{10,}/ },
   { kind: "Stripe-kulcs", re: /\b(?:sk|rk)_live_[A-Za-z0-9]{20,}/ },
   { kind: "Resend-kulcs", re: /\bre_[A-Za-z0-9]{8,}_[A-Za-z0-9]{16,}/ },
+  { kind: "Render-kulcs", re: /\brnd_[A-Za-z0-9]{20,}/ },
+  { kind: "Neon-jelszó", re: /\bnpg_[A-Za-z0-9]{12,}/ },
   { kind: "privát kulcs", re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/ },
   { kind: "jelszavas kapcsolati URL", re: /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s:@/'"`]+:[^\s@/'"`$<{]{6,}@/i },
   { kind: "JWT", re: /\beyJ[A-Za-z0-9_-]{15,}\.eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}/ },
@@ -117,8 +119,7 @@ export function isAllowedEmail(address) {
 
 /**
  * Titok / valódi e-mail keresése. A találat értékét SOSEM adja vissza, csak a forrás nevét, a sorszámot és a fajtát.
- * diff:true esetén a törölt ("-") sorokat kihagyja (azok már a nyilvános történetben vannak, a küldött diffben viszont benne
- * maradnak — ezért alapból mégis szkenneljük: a hívó dönti el).
+ * A skipRemoved csak olyan szövegnél használható, amelynek a törölt sorai NEM mennek ki; a diffet a fő folyamat teljes egészében szűri.
  */
 export function scanSecrets(text, source, { skipRemoved = false } = {}) {
   const hits = [];
@@ -297,7 +298,10 @@ export async function generate({ model, key, systemText, userText, thinking, tim
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const r = await postJson(`${API}${model}:generateContent`, key, body, timeoutMs);
-      if (r.status === 200) return JSON.parse(r.text);
+      if (r.status === 200) {
+        // Hibás JSON egy 200-as válaszban: nem ismételjük (a drága generálás újra lefutna) — review J-c.
+        try { return JSON.parse(r.text); } catch { throw Object.assign(new Error("A 200-as válasz nem értelmezhető JSON (nem ismételjük)."), { code: "fatal" }); }
+      }
       const cls = classifyHttp(r.status, r.text);
       last = Object.assign(new Error(`HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 600)}`), { code: cls });
       if (cls !== "retry") throw last;
@@ -389,11 +393,14 @@ export async function main(argv) {
 
   // 2. titok-szűrés (küldés előtt, mindenre)
   const hits = [];
-  if (diff) hits.push(...scanSecrets(diff, "diff", { skipRemoved: true }));
+  // A törölt ("-") sorok is kimennek a diffben → azokat is szűrjük (független review B1: a kiszivárgott kulcs eltávolítása a leggyakoribb eset).
+  if (diff) hits.push(...scanSecrets(diff, "diff"));
   for (const f of files) hits.push(...scanSecrets(f.text, f.path));
   for (const s of specs) hits.push(...scanSecrets(s.text, s.label));
   for (const e of extras) hits.push(...scanSecrets(e.text, e.label));
   hits.push(...scanSecrets(lista, "lista"), ...scanSecrets(feladat, "feladat"));
+  // A rendszer-utasítás és a cím is kimegy (review J-a).
+  hits.push(...scanSecrets(systemText, "rendszer-utasítás"), ...scanSecrets(String(o.cim ?? ""), "cím"));
   if (hits.length) {
     const msg = `TITOK-SZŰRÉS: ${hits.length} gyanús találat, a bemenet NEM lett elküldve:\n` + hits.slice(0, 50).map((h) => `  - ${h.source}:${h.line} (${h.kind})`).join("\n");
     throw Object.assign(new Error(msg), { code: "SECRET" });
@@ -450,7 +457,7 @@ export async function main(argv) {
     log(status.slice(0, 300));
     process.stdout.write(JSON.stringify({ status: e.code === "quota" ? "quota" : "error", sentKb, estTokens, countTokens: ct.totalTokens ?? null, ms: Date.now() - started }) + "\n");
     record(o, headHash, e.code === "quota" ? "quota" : "error", null);
-    return e.code === "quota" && !o.strict ? 0 : 3;
+    return e.code === "quota" ? (o.strict ? 2 : 0) : 3; // K2: kvóta / keret --strict mellett 2 (review J-b)
   }
   const cand = res.candidates?.[0];
   const text = (cand?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? "").join("");

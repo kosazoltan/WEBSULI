@@ -163,3 +163,23 @@ describe("bizonyíték (--record) és a kapuk figyelmeztetése (K4)", () => {
     assert.equal(externalResult({ head: h, status: "ok", model: "m" }, h).status, STATUS.PASS);
   });
 });
+
+describe("független review B1 / J-a / J-d", () => {
+  it("a diff TÖRÖLT sorában álló titok is megállítja a küldést (4), hálózat nélkül", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ke-b1-"));
+    const g = (...a) => execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", `user.email=t${"@"}example.com`, ...a], { encoding: "utf8" }).trim();
+    g("init", "-q");
+    const tok = ["gh", "p_", "Q".repeat(36)].join("");
+    fs.writeFileSync(path.join(dir, "a.txt"), `kulcs=${tok}\n`); g("add", "-A"); g("commit", "-q", "-m", "a");
+    const base = g("rev-parse", "HEAD");
+    fs.writeFileSync(path.join(dir, "a.txt"), "kulcs=<környezeti változó>\n"); g("commit", "-q", "-am", "b");
+    const saved = process.env.GEMINI_API_KEY; process.env.GEMINI_API_KEY = FAKE_KEY;
+    try {
+      await assert.rejects(main(["--repo", dir, "--base", base, "--head", "HEAD", "--ki", path.join(dir, "o.md")]), (e) => e.code === "SECRET" && !e.message.includes(tok));
+    } finally { if (saved !== undefined) process.env.GEMINI_API_KEY = saved; else delete process.env.GEMINI_API_KEY; }
+  });
+  it("Render / Neon kulcs-alak is titok", () => {
+    assert.equal(scanSecrets(["rnd_", "a".repeat(24)].join(""), "f").length, 1);
+    assert.equal(scanSecrets(["npg_", "b".repeat(14)].join(""), "f").length, 1);
+  });
+});
