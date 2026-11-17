@@ -170,7 +170,11 @@ test("review #159 P2: ugyanaz az elem két csoportban nem két példa — séma 
 
 test("review #159: a műveleti jel nem szó (minWords), és az 500. szó utáni érték nem ér pontot", () => {
   const task = base({ minWords: 4, sample: "Az eredmény tehát: 8 : 2 = 4.", typedAnswers: [{ part: "a", kind: "number", value: "4" }] });
-  assert.equal(evaluateOpenAnswer("8 : 2 = 4", task).score, 0, "három szám + két jel: 3 szó < 4 (a jel nem szó)");
+  // SPEC-VÁLTOZÁS 2026-11-17 (nyilt-feladat-rovid-valasz): régi elvárt pont 0, új 0.5 — a rövid, de helyes végeredményű válasz részpont.
+  // A teszt eredeti állítása (a műveleti jel nem szó: 3 szó < 4) megmarad: a RÖVID ág üzenete jön; ha a jel szó volna, 1 pont járna.
+  assert.equal(evaluateOpenAnswer("8 : 2 = 4", task).score, 0.5, "három szám + két jel: 3 szó < 4 (a jel nem szó) — rövid, de a végeredmény helyes");
+  assert.equal(evaluateOpenAnswer("8 : 2 = 4", task).reason, "A lényeg megvan. Teljes pontért fejtsd ki egész mondatban, legalább 4 szóval.");
+  assert.equal(evaluateOpenAnswer("8 : 2 = 5", task).score, 0, "rövid ÉS hibás végeredmény: nulla");
   assert.equal(evaluateOpenAnswer("Az eredmény tehát 4", task).score, 1);
   const filler = Array.from({ length: 500 }, () => "alma").join(" "); // betűsor: a „szó4” alak számjegye maga is érték lenne
   assert.equal(evaluateOpenAnswer(`Az eredmény: ${filler} 4`, task).score, 0, "az 500. szó utáni érték már nem számít");

@@ -167,6 +167,18 @@ export function missingAnswerConcepts(answer: string, task: Pick<OpenTask, "requ
 }
 export type AnswerScore = { state: "ok" | "partial" | "fail"; score: number; reason: string };
 
+/**
+ * Spec 2026-11-17-nyilt-feladat-rovid-valasz: a `minWords`-nél rövidebb válasz üzenetei és ítélete. A tartalmilag teljes (minden kötelező
+ * tartalmi feltételt teljesítő) rövid válasz FÉL pont — a 2026-09-11-i szerződés szerint a puszta kulcsszólista részpont, nem nulla —,
+ * teljes pontot rövid válasz soha nem kap. Az üzenet megmondja a teendőt, és nem utal írásjelre / mondatformára.
+ */
+export const shortButCompleteReason = (minWords: number): string => `A lényeg megvan. Teljes pontért fejtsd ki egész mondatban, legalább ${minWords} szóval.`;
+export const shortAndIncompleteReason = (minWords: number): string => `Még nincs benne minden fontos fogalom, és rövid is: írj legalább ${minWords} szót.`;
+export const NEEDS_SENTENCE_REASON = "A fogalmak megvannak. Teljes pontért kösd össze őket kötőszóval (mert, hogy, és, ezért…) — az írásjel nem számít.";
+function shortVerdict(complete: boolean, minWords: number): AnswerScore {
+  return complete ? { state: "partial", score: 0.5, reason: shortButCompleteReason(minWords) } : { state: "fail", score: 0, reason: shortAndIncompleteReason(minWords) };
+}
+
 /** A típusos (v2) feladat ismérve: van részeredmény-lista vagy kategóriakvóta. */
 export const isTypedTask = (task: Pick<OpenTask, "typedAnswers" | "requiredDistinct" | "requiredPhrases" | "requiredOrder">): boolean => Boolean(task.typedAnswers?.length || task.requiredDistinct?.length || task.requiredPhrases?.length || task.requiredOrder?.length);
 
@@ -236,18 +248,34 @@ export function missingPhrases(answer: string, task: Pick<OpenTask, "requiredPhr
 /** v1 — a régi kulcsszó-pontozó, változatlan viselkedéssel (régi leckék, HTML-pontozó paritás). */
 export function evaluateOpenAnswerV1(answer: string, task: OpenTask): AnswerScore {
   const tokens = tokensOf(answer).slice(0, 500);
-  if (tokens.length < task.minWords) return { state: "fail", score: 0, reason: "A válasz még túl rövid." };
   const hits = task.required.filter(c => conceptHit(tokens, c)).length;
+  if (tokens.length < task.minWords) return shortVerdict(task.required.length > 0 && hits === task.required.length, task.minWords);
   if (hits < Math.ceil(task.required.length / 2)) return { state: "fail", score: 0, reason: "A lényegi fogalmak még hiányoznak." };
   // A correct sentence may use only rubric words. Off-rubric filler cannot prove
   // originality, and adding a bonus term must never lower an otherwise correct score.
   const connective = tokens.some(t => (SENTENCE_CONNECTIVES as readonly string[]).includes(t));
   const hasUnexpectedNegation = unexpectedNegation(answer, task.sample);
   if (hits < task.required.length || (task.needsSentence && !connective) || hasUnexpectedNegation) {
-    const reason = hits < task.required.length ? `Részben jó. Még ${task.required.length - hits} kötelező fogalom hiányzik.` : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : "A fogalmak megvannak; fogalmazd őket összefüggő mondattá.";
+    const reason = hits < task.required.length ? `Részben jó. Még ${task.required.length - hits} kötelező fogalom hiányzik.` : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : NEEDS_SENTENCE_REASON;
     return { state: "partial", score: 0.5, reason };
   }
   return { state: "ok", score: 1, reason: "A szükséges fogalmak és a megfogalmazás is rendben vannak." };
+}
+
+/**
+ * A v2 feladat rövid válasza tartalmilag teljes-e. Számolós feladatnál (van `typedAnswers`) a tartalom a VÉGEREDMÉNY: minden részeredmény
+ * helyes (és a kvóták megvannak) — a szöveges `required` hiánya itt sem nulláz, ahogy az elég hosszú válasznál sem (lent: a típusos
+ * feladat a hiányzó fogalmak miatt nem bukik, csak fél pontra esik). Szöveges feladatnál minden fogalom, kifejezés és a sorrend kell.
+ */
+function contentCompleteV2(answer: string, tokens: string[], task: OpenTask): boolean {
+  const typed = task.typedAnswers ?? [], distinct = task.requiredDistinct ?? [], phrases = task.requiredPhrases ?? [];
+  const hasOrder = Boolean(task.requiredOrder?.length);
+  if (!(typed.length + distinct.length + task.required.length + phrases.length + (hasOrder ? 1 : 0))) return false;
+  if (typed.length) { const grade = gradeTypedAnswers(answer, typed); if (grade.undecidable || grade.correct < grade.total) return false; }
+  if (distinct.some(rule => distinctHits(tokens, rule.from) < rule.count)) return false;
+  if (typed.length) return true;
+  if (task.required.some(c => !conceptHit(tokens, c, tokensOfV2)) || phrases.some(g => !phraseHit(tokens, g))) return false;
+  return !hasOrder || orderSatisfied(tokens, task.requiredOrder!);
 }
 
 /**
@@ -261,7 +289,7 @@ export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerS
   const answer = answerWindow(rawAnswer);
   const tokens = tokensOfV2(answer);
   const wordCount = tokens.filter(t => !OPERATOR_TOKEN.test(t)).length;
-  if (wordCount < task.minWords) return { state: "fail", score: 0, reason: "A válasz még túl rövid." };
+  if (wordCount < task.minWords) return shortVerdict(contentCompleteV2(answer, tokens, task), task.minWords);
   let partialReason: string | null = null;
   if (task.typedAnswers?.length) {
     const grade = gradeTypedAnswers(answer, task.typedAnswers);
@@ -287,7 +315,7 @@ export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerS
   const connective = tokens.some(t => (SENTENCE_CONNECTIVES as readonly string[]).includes(t));
   const hasUnexpectedNegation = unexpectedNegation(answer, task.sample);
   if (partialReason || hits < total || (task.needsSentence && !connective) || hasUnexpectedNegation) {
-    const reason = partialReason ?? (conceptHits < task.required.length ? `Részben jó. Még ${task.required.length - conceptHits} kötelező fogalom hiányzik.` : phraseHits < phraseGroups.length ? "Részben jó. A helyes nyelvtani alak vagy szórend még hiányzik." : hasOrder && !orderHit ? "Részben jó. A lépések / fogalmak sorrendje nem megfelelő." : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : "A fogalmak megvannak; fogalmazd őket összefüggő mondattá.");
+    const reason = partialReason ?? (conceptHits < task.required.length ? `Részben jó. Még ${task.required.length - conceptHits} kötelező fogalom hiányzik.` : phraseHits < phraseGroups.length ? "Részben jó. A helyes nyelvtani alak vagy szórend még hiányzik." : hasOrder && !orderHit ? "Részben jó. A lépések / fogalmak sorrendje nem megfelelő." : hasUnexpectedNegation ? "A tagadás eltér a mintaválasz állításától; ellenőrizd a jelentést." : NEEDS_SENTENCE_REASON);
     return { state: "partial", score: 0.5, reason };
   }
   return { state: "ok", score: 1, reason: "A végeredmény, a szükséges fogalmak és a megfogalmazás is rendben vannak." };

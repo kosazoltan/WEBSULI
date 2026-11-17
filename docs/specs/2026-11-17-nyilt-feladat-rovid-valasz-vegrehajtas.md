@@ -18,10 +18,10 @@ v1 (`evaluateOpenAnswerV1`): a `hits` számítása a hosszvizsgálat ELÉ kerül
 `required.length > 0 && hits === required.length` → `{ state: "partial", score: 0.5, reason: shortButCompleteReason }`, különben
 `{ state: "fail", score: 0, reason: shortAndIncompleteReason }`. A mondat-ág üzenete `NEEDS_SENTENCE_REASON`.
 
-v2 (`evaluateOpenAnswerV2`): a hosszvizsgálat a tartalmi feltételek kiszámítása UTÁNRA kerül egy helyi `short` jelzővel; rövid
-válasznál: teljes (minden típusos rész helyes és nem eldönthetetlen, minden kvóta megvan, `hits === total`, és van legalább egy
-tartalmi feltétel) → 0,5 + V1 üzenet; különben 0 + V2 üzenet. Nem rövid válasznál a régi ágak sorrendje és üzenetei változatlanok
-(a mondat-ág üzenete `NEEDS_SENTENCE_REASON`).
+v2 (`evaluateOpenAnswerV2`): a hosszvizsgálat helyén `shortVerdict(contentCompleteV2(answer, tokens, task), minWords)`. A
+`contentCompleteV2`: számolós feladatnál minden típusos rész helyes (nem eldönthetetlen) és a kvóták megvannak; szöveges feladatnál
+minden fogalom, kifejezés és a sorrend; tartalmi feltétel nélkül hamis. Nem rövid válasznál a régi ágak sorrendje és üzenetei
+változatlanok (a mondat-ág üzenete `NEEDS_SENTENCE_REASON`).
 
 ## T2 — HTML-referencia (`server/ai/lesson-html-spec.ts`, `ee_evaluate`)
 
@@ -46,7 +46,9 @@ kiegészül: „rövid, de minden kötelező fogalom megvan → 0.5”.
 
 A teljes egységteszt-futás bukó eseteit EGYENKÉNT kell megvizsgálni: csak akkor írható át, ha (a) a válasz rövid és tartalmilag
 teljes (0 → 0,5, `fail` → `partial`), vagy (b) a teszt a régi üzenetszöveget várja. Minden más bukás implementációs hiba. Az átírt
-esetek listája (fájl:eset, régi → új) ide és a tervbe kerül a futás után.
+esetek (2 db) a terv „SPEC-VÁLTOZÁS” táblájában: `tests/fixtures/scorer-corpus.json` „túl rövid válasz” (0 → 0,5, `specChange`
+mezővel, mellé új „rövid ÉS hiányos → 0” eset) és `tests/scoring-v2.test.ts` „review #159” („8 : 2 = 4”: 0 → 0,5, az üzenet
+ellenőrzésével és új „8 : 2 = 5 → 0” esettel).
 
 ## T5 — mérés éles adaton (scratchpad-szkript, csak olvasó, már letöltött adat)
 

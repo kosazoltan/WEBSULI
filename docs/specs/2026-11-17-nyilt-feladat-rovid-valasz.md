@@ -44,9 +44,11 @@ helyreállítása: „a minden fogalmat tartalmazó természetes mondat teljes p
 
 ## A helyes viselkedés
 
-„Tartalmilag teljes” a válasz, ha a feladat minden kötelező tartalmi feltétele teljesül: minden `required` csoport, minden
-`requiredPhrases` csoport, a `requiredOrder`, minden `typedAnswers` részeredmény és minden `requiredDistinct` kvóta — és van
-legalább egy ilyen feltétel.
+„Tartalmilag teljes” a rövid válasz:
+- szöveges feladatnál, ha minden `required` csoport, minden `requiredPhrases` csoport és a `requiredOrder` teljesül (és van
+  legalább egy ilyen feltétel);
+- számolós feladatnál (van `typedAnswers`), ha MINDEN részeredmény helyes (érték, alak, mértékegység, sorrend) és a
+  `requiredDistinct` kvóták megvannak — a szöveges `required` hiánya itt nem nulláz (lásd a 2. döntési pontot).
 
 - V1. Rövid (`szószám < minWords`) ÉS tartalmilag teljes → `partial`, 0,5 pont, üzenet:
   „A lényeg megvan. Teljes pontért fejtsd ki egész mondatban, legalább N szóval.” (N = `minWords`).
@@ -58,7 +60,18 @@ legalább egy ilyen feltétel.
 - V5. A v1, a v2 és a `ee_evaluate` azonosan dönt (a HTML-referenciában nincs típusos mező: ott a „tartalmilag teljes” = minden
   `required` csoport).
 
-## Döntési pont (rögzítve): a nyelvtani alak / sorrend hiánya rövid válasznál
+## Döntési pontok (rögzítve)
+
+**0. Tulajdonosi döntés (Kósa Zoltán, 2026-11-17, az orkesztrátor közlése szerint szó szerint: „Legyen javaslatod szerint.”):** a
+helyes, de tömör válasz FÉL pontot kap, nem teljeset — az (1) + (2) opció a végleges cél; a teljes pontos változat nem kell.
+
+**2. Számolós feladat, csak a végeredmény („36 cm”) röviden → fél pont.** Mérés: 1335 éles számolós feladatból 1278-nál a csak
+értékekből álló, HELYES válasz 0 pontot kapott a `minWords` miatt (ponttal és pont nélkül azonosan). A v2 pontozó az elég hosszú
+válasznál a hiányzó szöveges fogalom miatt eddig sem nullázott (`lesson-experience-score.ts`: a fele-szabály típusos feladatra nem
+vonatkozik), csak fél pontra vitt — a rövid ág ezzel lett egységes. Teljes pont továbbra is csak kifejtve. A hibás érték, a
+hiányzó mértékegység és a felcserélt részeredmény röviden is 0.
+
+**1. A nyelvtani alak / sorrend hiánya rövid válasznál.**
 
 A tömör válasz, amelyből a kért nyelvtani kifejezés vagy sorrend hiányzik („desk, room” a „There's a desk in the room.” fordítására),
 NEM tartalmilag teljes → marad 0 pont a V2 üzenettel. Indok: fordítási / nyelvtani feladatnál két főnév fél pontja hamis elfogadás
@@ -66,8 +79,44 @@ volna; a szabály célja a tartalmilag teljes válasz megmentése.
 
 ## SPEC-VÁLTOZÁS a meglévő tesztekben (régi → új, tételesen; más elvárás nem lazul)
 
-A végrehajtási utasítás T4 pontja sorolja fel fájl:eset szinten — csak azok az esetek változnak, ahol a rövid válasz tartalmilag
-teljes (0 → 0,5), illetve ahol a teszt az üzenet régi szövegét várja.
+A teljes egységteszt-futás (3744 teszt) a változás után pontosan 2 meglévő esetet buktatott (3 tesztfutás); mindkettő rövid, de
+tartalmilag teljes válasz:
+
+| Fájl : eset | Válasz | Régi | Új | Megőrzött állítás |
+|---|---|---|---|---|
+| `tests/fixtures/scorer-corpus.json` : „túl rövid válasz” (v1 és `ee_evaluate` is ezen fut) | „fotoszintézis” (`minWords` 4, egyetlen kötelező csoport) | 0 | 0,5 | új korpusz-eset mellé: rövid ÉS hiányos → 0 |
+| `tests/scoring-v2.test.ts` : „review #159: a műveleti jel nem szó…” | „8 : 2 = 4” (`minWords` 4, típusos érték 4) | 0 | 0,5 | a jel nem szó: a RÖVID ág üzenete jön (ha a jel szó volna, 1 pont járna); új: „8 : 2 = 5” → 0 |
+
+Üzenetszövegre egyetlen meglévő teszt sem illesztett. A paritástesztek (`lesson-html-score`, `v1-kotojeles-szam`,
+`score-english-negation`) módosítás nélkül zöldek.
+
+## Mért eloszlás éles adaton (241 lecke, 14 027 nyílt feladat; régi → új pont, darab)
+
+| Próba | 0 → 0,5 | 0 → 0 | 0,5 → 0,5 | 1 → 1 | bármi → 1 (új teljes pont) |
+|---|---|---|---|---|---|
+| Tömör válasz, vesszővel (12 134 szöveges feladat) | 8912 | 1188 | 174 | 1860 | 0 |
+| Ugyanaz ponttal a végén | 8912 | 1188 | 174 | 1860 | 0 |
+| Kulcsszó-bedobálás: minden fogalom véletlen sorrendben, kötőszó nélkül | 8565 | 1535 | 396 | 1638 | 0 |
+| Egy fogalom hiányzik, tömören (11 422 feladat ≥ 2 csoporttal) | 130 | 11 122 | 155 | 15 | 0 |
+| Számolós: csak az értékek (1335 feladat) | 1278 | 3 | 51 | 3 | 0 |
+| Üres / írásjel / töltelék (7 válasz × 14 027) | 13 | 98 176 | 0 | 0 | 0 |
+| A mintaválasz pontja | — | — | — | — | 0 eltérés mind a 14 027 feladaton |
+
+- A rövid válasz egyetlen feladaton sem kapott 1 pontot; az 1 → 1 sorok a régi szabály szerint is teljes pontos (elég hosszú) válaszok.
+- A tömör válasz 1188 „0 → 0” esete: hiányzó nyelvtani kifejezés / sorrend (1. döntési pont), pl. „desk, room” → 0, „Még nincs benne
+  minden fontos fogalom, és rövid is: írj legalább 6 szót.”
+- „Egy fogalom hiányzik” 130 esete: a megmaradt szavak a rubrika illesztője szerint (tövezés, átfedő alternatívák) az elhagyott
+  csoportot is igazolják — ugyanezt a `minWords` nélkül a régi szabály is elfogadta volna.
+- Ismert korlát — a töltelékválasz 13 esete (0,013%): 11 feladat egyetlen kötelező csoportja a „nem” / „tudom” szó (eldöntendő
+  kérdés), ezeken a „nem tudom” fél pontot kap; 2 feladatnál a „hát” ékezet nélkül a „hat” (6) számnévvel egyezik. A gyenge,
+  egyszavas rubrika hibája (elég hosszú válasznál a régi szabály ezekre teljes pontot is adott) — jegyre javasolt, nem ennek a
+  szeletnek a regressziója.
+
+## Mutációs ellenpróba (2026-11-17)
+
+Nyolc mutáció, mindegyiket megfogják a tesztek (`open-answer-short`, `scorer-corpus`, `scoring-v2`): rövid + teljes → 1 pont (8 bukás);
+→ 0, a régi szabály (8); a teljesség-feltétel elhagyva a v1-ben (4), a v2-ben (3); a kifejezés / sorrend feltétel elhagyva (1); a
+`ee_evaluate` feltétele mindig igaz (2) / mindig hamis (2); a mondat-üzenet a régi szöveg (2).
 
 ## Edge case-ek
 
@@ -89,6 +138,11 @@ teljes (0 → 0,5), illetve ahol a teszt az üzenet régi szövegét várja.
 - E7. Böngészőben, helyi leckén: tömör helyes válasz → fél pont + V1 üzenet; kifejtett válasz → teljes pont; a beküldött válaszból a
   szerveroldali pontozó ugyanazt számolja.
 - E8. A bank promptjának szövege (`OPEN_ANSWER_RULES_HU`) bájtra változatlan.
+
+Megjegyzés: az `OPEN_ANSWER_RULES_HU` 1. pontja („ennél kevesebb szó = 0 pont”) a rövid, teljes válaszra már nem pontos (0,5). A
+szöveg szándékosan nem változik (promptverzió, mért alapvonal); a gyártót a szigorúbb leírás a helyes irányba tereli (a `minWords`
+a legrövidebb teljes válasz szószáma legyen). A szöveg pontosítása a következő tervezett promptverzió-emeléskor esedékes (jegy).
+A `server/ai/lesson-html-spec.ts` (a `WEB_RESEARCH_PIPELINE=html` régi út szerzői referenciája) szövege a paritás miatt változik.
 
 <!-- acceptance-checklist -->
 - [ ] E1 – rövid + teljes → 0,5 (v1, v2, ee_evaluate)
