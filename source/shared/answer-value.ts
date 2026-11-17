@@ -178,9 +178,10 @@ const withoutSentenceEnd = (s: string): string => s.replace(/[.!?…]+(?=\s|$)/g
  * Review K1 (2026-11-17): a lépés után írásjel NÉLKÜL, szóközzel vagy új sorban írt következő szám („3 · 7 21”, „3 · 7⏎21”) se olvadjon
  * össze a lépéssel — a szám / záró zárójel és a következő szám / nyitó zárójel közti szóköz elválasztó. Kivétel (a szám része marad): a
  * szóközös ezres tagolás („12 000”) és a vegyes tört („1 1/2”) — különben a „35 + 64 − 12 000” a „35 + 64 − 12” lépésnek látszana.
- * PR #493 (Sourcery, mérve): a keskeny szóköz (U+2009) és a számköz (U+2007) is ezres tagoló — nélkülük hamis elfogadás volt.
+ * PR #493 (Sourcery + review K4, mérve): MINDEN vízszintes szóköz ezres tagoló lehet (U+2009, U+2007, U+2002…U+200A, U+205F, U+3000,
+ * U+1680 is) — különben a rés-elválasztó (`\s+`) ezeket szétvágná, és hamis elfogadás lenne. Az új sor és a tabulátor elválasztó marad.
  */
-const GAP_OR_NUMBER = /\d+\s+\d+\s*\/\s*\d+|\d{1,3}(?:[ \u00a0\u202f\u2009\u2007]\d{3})+(?!\d)|([\d)])\s+(?=[\d(])/g;
+const GAP_OR_NUMBER = /\d+\s+\d+\s*\/\s*\d+|\d{1,3}(?:[^\S\r\n\t]\d{3})+(?!\d)|([\d)])\s+(?=[\d(])/g;
 const withGapSeparators = (s: string): string => s.replace(GAP_OR_NUMBER, (m: string, end: string | undefined) => (end === undefined ? m : `${end};`));
 /** A válasz összevetési alakjai a kért köztes lépéshez: a régi (szóköz nélküli) alak, és az, amelyben a számok közti szóköz elválasztó. */
 function answerExpressionForms(answer: string): string[] {
