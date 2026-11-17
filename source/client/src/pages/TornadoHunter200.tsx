@@ -2015,6 +2015,8 @@ function PlayScreen(props: {
         questionId: shown?.id ?? null,
         reveal: ctl.view().reveal ? 1 : 0,
         nitroMs: d?.core.nitroLeftMs() ?? 0,
+        junctionFrozen: d?.core.junction()?.frozen ? 1 : 0,
+        intent: d?.core.intentSeen() ? 1 : 0,
         detourSec: d?.core.detourTotalSec() ?? 0,
         x: p.x,
         z: p.z,
@@ -2894,7 +2896,7 @@ function PlayScreen(props: {
       {/* J7b: az elágazás táblái — a feliratuk a tábla vetített helyén (a helyzetet a rajzoló hurok írja, React-állapot nélkül).
           Koppintással is választhatók (mozgó cél: `pointerTapHandlers`, J7b döntések 13.); hosszú válasznál a tábla csak a jelet
           mutatja, a teljes válaszok a kártya alatti listában (15.). */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden" data-tornado-signs={pres && qKind === "junction" ? "open" : undefined}>
+      <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden" data-tornado-signs={pres && qKind === "junction" ? "open" : undefined}>
         {pres && qKind === "junction" && compactSigns && (
           <ol
             ref={answersRef}
@@ -3061,7 +3063,8 @@ function PlayScreen(props: {
           {/* Szünet alatt a magyarázó kártya rejtve: a z-[90]-es kártya különben a szünet menü fölé kerülne. */}
           {feedback && !paused && <QuizFeedbackCard card={feedback} onDismiss={closeWhy} />}
 
-          {(chipSpot === "bottom-center" || chipSpot === "bottom-left") && kindChip && (
+          {/* Fekvőn a teljes válaszok listája (hosszú válasz) középen áll — ott a fajta-címke elmarad (a lista maga mutatja). */}
+          {(chipSpot === "bottom-left" || (chipSpot === "bottom-center" && !compactSigns)) && kindChip && (
             <div className={`absolute inset-x-2 flex pointer-events-none z-10 ${chipSpot === "bottom-center" ? "justify-center" : "justify-start"}`} style={{ bottom: aboveControls }}>
               <div className={chipSpot === "bottom-center" ? "max-w-[40vw] text-center" : "max-w-[70%]"}>{kindChip}</div>
             </div>

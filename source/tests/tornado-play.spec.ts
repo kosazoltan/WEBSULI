@@ -14,7 +14,7 @@ type Probe = Record<string, number | string | null>;
 type GameWindow = {
   __websuliGame?: { forceState: (patch: Record<string, unknown>) => void; probe?: () => Probe };
   __websuliTornado?: {
-    getJunction: () => { ox: number; oz: number; fx: number; fz: number; rx: number; rz: number; line: number; gates: number; questionId: number } | null;
+    getJunction: () => { ox: number; oz: number; fx: number; fz: number; rx: number; rz: number; line: number; gates: number; spacing: number; frozen: boolean; questionId: number } | null;
     setPlayer: (patch: Record<string, number | boolean>) => void;
     getPlayer: () => { x: number; z: number; heading: number; speed: number };
   };
@@ -55,12 +55,21 @@ async function waitJunction(page: Page): Promise<void> {
   await page.waitForFunction(() => (window as unknown as GameWindow).__websuliGame?.probe?.().questionKind === "junction", undefined, { timeout: 40_000 });
 }
 
-/** A jármű a(z) `gate`. kapu elé kerül, a kapuvonal felé néz, és a saját fizikájával áthajt rajta. */
+/** Szándék (J7b döntések 12.): rövid kormánymozdulat — a táblák rögzülnek. */
+async function commitIntent(page: Page): Promise<void> {
+  await page.keyboard.down("a");
+  await page.waitForTimeout(250);
+  await page.keyboard.up("a");
+  await page.waitForFunction(() => (window as unknown as GameWindow).__websuliGame?.probe?.().junctionFrozen === 1, undefined, { timeout: 10_000 });
+}
+
+/** A jármű a rögzült (`gate`.) kapu elé kerül, a kapuvonal felé néz, és a saját fizikájával áthajt rajta. */
 async function driveThroughGate(page: Page, gate: number): Promise<void> {
+  await commitIntent(page);
   await page.evaluate((g) => {
     const api = (window as unknown as GameWindow).__websuliTornado!;
     const j = api.getJunction()!;
-    const off = (g - (j.gates - 1) / 2) * 20;
+    const off = (g - (j.gates - 1) / 2) * j.spacing;
     const x = j.ox + j.fx * (j.line - 3) + j.rx * off;
     const z = j.oz + j.fz * (j.line - 3) + j.rz * off;
     api.setPlayer({ x, z, heading: Math.atan2(j.fx, -j.fz), speed: 14 });
@@ -207,6 +216,80 @@ for (const viewport of VIEWPORTS) {
       const box = (await btn.boundingBox())!;
       await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
       await expect(page.getByTestId("tornado-nitro")).toBeVisible({ timeout: 3_000 });
+    });
+  });
+}
+
+for (const viewport of VIEWPORTS) {
+  test.describe(`J7b ellenőrzés után ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test("B1: szándék nélkül (a vezérlőhöz nem nyúlva) a táblák várnak, nincs válasz — a kérdés lejár", async ({ page }) => {
+      await startPlaying(page);
+      await waitJunction(page);
+      const id = (await probe(page)).questionId;
+      await page.waitForFunction((qid) => (window as unknown as GameWindow).__websuliGame?.probe?.().questionId !== qid, id, { timeout: 15_000 });
+      const p = await probe(page);
+      expect(p.questionsAnswered, "szándék nélkül nyilvántartott válasz").toBe(0);
+      expect(p.junctionFrozen).toBe(0);
+    });
+
+    test("M3: a leghosszabb válaszok a táblákon jellel, a teljes szöveg a kártya alatti listában — levágás és átfedés nélkül", async ({ page }, testInfo) => {
+      await startPlaying(page);
+      await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ junction: "long" }));
+      const list = page.getByTestId("tornado-sign-answers");
+      const wide = viewport.width > 600;
+      if (!wide) await expect(list).toBeVisible({ timeout: 10_000 });
+      await page.waitForTimeout(400);
+      const m = await page.evaluate(() => {
+        const card = document.querySelector('[data-testid="tornado-quiz"] .play-question-card')!.getBoundingClientRect();
+        const lst = document.querySelector<HTMLElement>('[data-testid="tornado-sign-answers"]');
+        const items = lst ? Array.from(lst.querySelectorAll("li")).map((li) => ({ text: li.textContent ?? "", cut: li.scrollWidth > li.clientWidth + 1 })) : [];
+        const signs = [0, 1, 2].map((i) => {
+          const el = document.querySelector<HTMLElement>(`[data-testid="tornado-sign-${i}"]`)!;
+          const r = el.getBoundingClientRect();
+          return { top: r.top, h: r.height, w: r.width, cut: el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1, text: el.textContent ?? "" };
+        });
+        return { cardBottom: card.bottom, listTop: lst?.getBoundingClientRect().top ?? null, listBottom: lst?.getBoundingClientRect().bottom ?? null, items, signs };
+      });
+      for (const s of m.signs) {
+        expect(s.cut, `levágott tábla: ${s.text}`).toBe(false);
+        expect(s.h).toBeGreaterThanOrEqual(48);
+        expect(s.top, "a tábla a kártya alá csúszik").toBeGreaterThanOrEqual(m.cardBottom - 1);
+      }
+      if (m.listTop !== null) {
+        expect(m.listTop, "a lista a kártya alatt").toBeGreaterThanOrEqual(m.cardBottom - 1);
+        expect(m.items.map((x) => x.text).join(" | ")).toContain("maradj a helyeden fedezékben");
+        expect(m.items.map((x) => x.text).join(" | ")).toContain("If I were there, I would help.");
+        for (const it of m.items) expect(it.cut).toBe(false);
+        for (const s of m.signs) expect(s.top, "a tábla a lista alá kerül").toBeGreaterThanOrEqual((m.listBottom ?? 0) - 1);
+      } else {
+        // Széles nézetben a teljes szöveg a táblán befér.
+        expect(m.signs.map((x) => x.text).join(" | ")).toContain("maradj a helyeden fedezékben");
+      }
+      await shot(page, testInfo, "long-answers");
+      // Koppintás a helyes táblára (valódi érintés) = válasz.
+      const correct = page.locator('[data-tornado-signs="open"] [data-correct="true"]').first();
+      const box = (await correct.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect.poll(async () => Number((await probe(page)).questionsCorrect), { timeout: 3_000 }).toBe(1);
+    });
+
+    test("K2: nitró alatt a tárcsa hátrahúzása megszakítja a nitrót (érintéssel is lehet fékezni)", async ({ page }) => {
+      await startPlaying(page);
+      await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ question: true }));
+      const btn = page.getByTestId("tornado-quiz").locator('[data-correct="true"]').first();
+      const box = (await btn.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect.poll(async () => Number((await probe(page)).nitroMs), { timeout: 3_000 }).toBeGreaterThan(0);
+      const stick = (await page.getByTestId("virtual-joystick").boundingBox())!;
+      const cx = stick.x + stick.width / 2;
+      const cy = stick.y + stick.height / 2;
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: cy, id: 1 }] });
+      for (let k = 1; k <= 6; k++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx, y: cy + (stick.height / 2) * (k / 6), id: 1 }] });
+      await expect.poll(async () => Number((await probe(page)).nitroMs), { timeout: 2_000 }).toBe(0);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     });
   });
 }

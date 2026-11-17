@@ -45,10 +45,12 @@ export const CASE: GameMobileCase = {
   touchControlsTestId: "tornado-touch-controls",
   resultForce: { screen: "play", phase: "result_win" },
   resultTestId: "th-result",
-  // J7b: a gomb-módú kérdés (turbó / horgony — a forceState ezt nyitja) a mért kérdés-állapot. Az elágazás sáv-módú kérdése
-  // nem blokkol: a válasz az áthajtott tábla, a DOM-gombsor ott akadálymentességi (vizuálisan rejtett) réteg, nem érintési cél.
-  quizScope: '[data-testid="tornado-quiz"][data-mode="buttons"]',
-  quizForce: { screen: "play", phase: "quiz" },
+  // J7b (a független ellenőrzés M3 lelete után): a mért kérdés-állapot az ELÁGAZÁS a bank leghosszabb válaszaival
+  // (`forceState({ junction: "long" })`) — a koppintható, a kamerával együtt mozgó táblák (`quizMoving`): érintési méret,
+  // képernyőn belül, nem fedik egymást; a betűméret (M3) a táblákon és a teljes válaszok listáján is mérve.
+  quizScope: '[data-tornado-signs="open"]',
+  quizForce: { screen: "play", junction: "long" },
+  quizMoving: true,
   answerWrong,
   orientation: "landscape",
 };
