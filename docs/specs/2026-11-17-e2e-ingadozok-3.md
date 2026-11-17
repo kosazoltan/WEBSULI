@@ -53,22 +53,23 @@ Ha egy tesztnél 3 megközelítés után sincs bizonyított gyökérok: megáll�
 - AMIKOR a fenti tesztek a CI-azonos úton, CPU-lassítással 20-szor futnak, MINDEGYIK zöld; a javítás visszavonásával a mért bukás
   visszajön (ellenpróba), vagy a jelentés megmondja, miért nem hozható elő.
 - A tesztek küszöbei és elvárásai változatlanok (diff-ben ellenőrizhető).
-- A joystick-javítás a #484 ágán is zöld. (A joystick-tétel kikerült ebből a PR-ból — kanban #106.)
+- A joystick-javítás a #483 helyi fején is zöld (a #484 ágán a 2. változat 7/7; a 3. változat ott NOT RUN — a #484 közben a mainre ér).
 - A CI teljes Playwright E2E-je zöld.
 
 <!-- acceptance-checklist -->
-- [ ] 1: joystick-response › block-craft-quiz renderszámláló — KIVÉVE ebből a PR-ból — külön szelet (kanban #106). A teszt-oldali
-  gyökérok-jelölt (álló/rezgő szakasz hossz-aszimmetria) és két javítás-változat mérve, de a PR előtti kapu böngészős lépésében a
-  2. változattal a Szökőár bukott (lapon +25, tárcsán +27; álló 2876 ms / 19 render, rezgő 1898 ms / 38 render). A termék-vs-teszt
-  kérdés NYITOTT (a lap mozgás közben ~20, álló helyzetben ~6,6 render/s). A spec a main változatára visszaállítva; a 180 → 240 s-os
-  keretemelés ezzel megszűnt.
+- [x] 1: joystick-response renderszámláló (kanban #76, #106; commit `f0e544a6`) — gyökérok: kérdéssel érintett render-ablak (a
+  Szökőárnál kérdés alatt a 24 Hz-es hurok áll); javítás: tiszta ablakok ismétléssel; Szökőár main 10/10, #483 10/10 (2× CPU), a
+  teljes spec 8/8; mutációs ellenpróba 3/3 bukik (+29…+33).
 - [x] 2: lesson-result-email — gyökérok (kanban #31), javítás, célzott kísérlet előtte 5/5 bukik / utána 5/5 + 20/20 zöld.
-- [ ] 3: duel-online „EGYSZERRE Visszavágó” — gyökérok (CI-riport + 6×: 4/20) és javítás (WebSocket-visszatartás) kész, de a
-  „20-ból mindegyik zöld” elfogadás betű szerint NEM teljesült: utána 19/20. Az egy bukás a vizsgált lépés UTÁN, a lezárásban, a
-  150 s-os kereten; az oka („terhelt gép”) NEM bizonyított (UNVERIFIED). Az első CI-körökben a teszt idejét figyelni kell.
+- [x] 3: duel-online „EGYSZERRE Visszavágó” — gyökérok (CI-riport + 6×: 4/20), javítás (WebSocket-visszatartás; Sourcery
+  4603648594 után a szívverés átmegy, a lezárás párhuzamos); utána 6×-en **20/20** (két 10-es adag). A korábbi 19/20 egy bukásának
+  oka: UNVERIFIED (a ping-visszatartás igazolt kockázat — 45 s-os kísérlet: előtte 2/2 bont, utána 0/2 —, de hogy az az egy bukás
+  ebből jött-e, nem bizonyított). Az első CI-körökben a teszt idejét figyelni kell.
 - [x] 4: game-win-paths (animáció közbeni mérés) — kísérlet 3/3 igazolja az ablakot; javítás; utána 160/160.
-- [ ] 5: speed-math-play menetvégi hurok — a mechanizmus kísérlettel igazolva (2/2), javítás kész; a természetes hurok-időtúllépés
-  35 futásból nem jött elő (NOT REPRODUCED). A „mindegyik zöld” elfogadás NEM teljesült: 4×-en 11/15 — a 4 bukás a korai,
-  nem gyökérokozott koppintás-mechanizmus (UNVERIFIED; külön jegyre megy, a független ellenőr J2-es leletével).
+- [x] 5: speed-math-play MENETVÉGI HUROK (ennek a PR-nak ez a tárgya) — a mechanizmus kísérlettel igazolva (2/2: `count()` után eltűnő
+  drón → a `boundingBox()` a teljes időkorlátot kivárta), javítás (atomi lap-hívás); utána 4×-en a hurok egyszer sem akadt el (15
+  futás, leghosszabb 92 s). A korai lépések koppintás-bukása (4×: 4/15) NEM része ennek a pontnak: termékhiba-gyanúként külön jegyre
+  ment (a drón alatti fosztogató elnyelheti a koppintást).
 - [x] 6: word-ladder-play:48 megfigyelései átadva (nem hatókör).
+- [x] 7: Brain Rot e2e-időzítés — a `fix/brainrot-e2e-idozites` ág beolvasztva (a gazdája mérte és a reviewere jóváhagyta; lásd a végrehajtási fájl 6. pontját).
 - [ ] Helyi kapuk zöldek; független ellenőr IGEN; PR; CI zöld.

@@ -8,8 +8,9 @@
 - `source/tests/lesson-result-email.spec.ts` (1)
 - `source/tests/duel-online.spec.ts` (2)
 - `source/tests/game-win-paths.spec.ts` (3)
-- `source/tests/joystick-response.spec.ts` (4) — KIVÉVE ebből a PR-ból (a main változatára visszaállítva; kanban #106)
+- `source/tests/joystick-response.spec.ts` (4) — ebben a PR-ban, kanban #106 (a koordinátor 2026-11-17-i döntése: a #483 CI-ját is feltartja)
 - `source/tests/speed-math-play.spec.ts` (5)
+- `source/tests/brainrot-play.spec.ts`, `source/tests/brainrot-core.test.ts` (6) — a `fix/brainrot-e2e-idozites` ág beolvasztva (a Brain Rot gazdájának munkája)
 - `docs/specs/2026-11-17-e2e-ingadozok-3*.md`
 
 Termékkódhoz csak akkor nyúlunk, ha a gyökérok termékhiba ÉS a fájl nincs a párhuzamos PR-ok listáján (terv „Nem cél”).
@@ -40,19 +41,41 @@ $env:REPRO_CPU='6'; node --import tsx scripts/run-e2e-tests.ts --config playwrig
    másik fél kérésének megérkezésekor lecserélődött. Javítás: `holdableRt(ctx)` — `context.routeWebSocket` a valós idejű csatornán
    (`RT_PATH`), a szerver → kliens irány visszatartható; mindkét kontextusban `hold()`, két `tap()`, várakozás, amíg mindkét
    `room:rematch` kérés elment, majd `release()`. (Az első próbált változat — azonnali `page.evaluate`-kattintás — a versenyt csak
-   szűkítette: 2/20 bukás az előfeltételen; elvetve.)
+   szűkítette: 2/20 bukás az előfeltételen; elvetve.) Kiegészítés (Sourcery 4603648594): a visszatartás CSAK az alkalmazás-üzenetet
+   (Engine.IO „4…”) tartja vissza, a szívverés („2” ping) azonnal megy; a két kontextus lezárása párhuzamos.
 3. **game-win-paths** — a mérés előtt `waitForStable(page, '[data-testid="<eredmény>"] button')`
    (`tests/support/game-mobile-quality.ts`): a gombok beállt dobozára vár (C-33: végállapotú elem).
-4. **joystick-response renderszámláló** — KIVÉVE ebből a PR-ból, külön szelet (kanban #106); az alábbi a mért, de nem szállított változat: az álló szakasz (változatlan sorrendben, elöl) a 30 várakozás után még 30 × a lépcsőkben
-   MÉRT átlagos `touchMove`-idő ideig tart (`touchMoveCost`, `hold(false, 30 * perTouchMs)`), így a hossza a rezgőével összemérhető;
-   a JOY_RESULT-ban az álló nyers száma és hossza is (`renderStill`, `stillMs`); a tesztkeret 180 → 240 s (mérés lent). (Az első
-   változat — rezgő előbb, az álló `moving.ms`-ig — a Szökőárnál bukott: lásd Mérés 4.)
+4. **joystick-response renderszámláló** (kanban #106) — (a) tiszta ablakok: a render-olvasás ugyanabban a lap-hívásban adja vissza,
+   látszott-e kérdés-jel az ablak alatt (`quizSelector`: a játék saját kérdés-rétege, `play-question-timer`, `quiz-feedback`;
+   képkockánkénti figyelő `rendersOpen` → `rendersClose`); ha az álló VAGY a rezgő ablakot kérdés érintette, azt az ablakot
+   ismételjük (ablakonként legfeljebb 5×, utána érthető üzenettel bukik), nem arányosítjuk. (b) Az álló szakasz a 30 várakozás után még 30 × a lépcsőkben
+   mért átlagos `touchMove`-idő ideig tart (egyetlen `waitForTimeout`). (c) A lépcső ablakába lógó kérdés (`StepQuizError`) akkor is
+   ismétlést vált ki, ha a kérdés a `clearQuiz` előtt magától bezárult. (d) A kör győzelemmel is véget érhet („Következő kör”): új
+   kör. (e) `JOY_CI_LAG_MS` / `JOY_CPU` reprodukciós kapcsolók (alapból kikapcsolva). A JOY_RESULT-ban `renderStill`, `stillMs`,
+   `renderPairs`. A küszöb (≤ 6) és a mért mennyiség változatlan; a tesztkeret 240 s (mérés lent).
 5. **speed-math-play menetvégi hurok** — a hurok állapotát egy atomi `page.evaluate` olvassa (vége? / koppintható rossz drón
    középpontja), a `count()` → `boundingBox()` pár helyett.
 6. Kapuk: `git diff --check`, `npx.cmd eslint <változott fájlok> --max-warnings 0`, `npm run check`, `npm run check:test`, az
    érintett specek ismételt futtatása; push előtt teljes kapu (lint, check, check:test, `npm test`,
    `node scripts/qa/three-phase-check.mjs --base origin/main`).
-7. A joystick-spec a #484 ágán (`origin/feat/jatek-j3a-kockavadasz-runabanya`, leválasztott munkafa, csak futtatás) is.
+7. A joystick-spec a #484 ágán (`origin/feat/jatek-j3a-kockavadasz-runabanya`) és a #483 helyi fején (`feat/jatek-j1a-szokoar-hegyre-fel`)
+   is, leválasztott munkafában, csak futtatásra.
+8. **Brain Rot e2e-időzítés** (6) — a `fix/brainrot-e2e-idozites` ág beolvasztása; tartalom és mérés lent („6. Brain Rot”).
+
+## Futtatható parancsok (a munkafa `source/` mappájából, PowerShell; mind a CI útja: buildelt szerver, eldobható Postgres)
+
+| Feladat | Parancs | Várt kimenet |
+|---|---|---|
+| 1 | `node --import tsx scripts/run-e2e-tests.ts tests/lesson-result-email.spec.ts --repeat-each=20` | `20 passed` |
+| 2 | `node --import tsx scripts/run-e2e-tests.ts tests/duel-online.spec.ts --grep=EGYSZERRE --repeat-each=10` | `10 passed` |
+| 3 | `node --import tsx scripts/run-e2e-tests.ts tests/game-win-paths.spec.ts --repeat-each=5` | `40 passed` |
+| 4 | `node --import tsx scripts/run-e2e-tests.ts tests/joystick-response.spec.ts --repeat-each=3` | `12 passed`; a JOY_RESULT-sorokban `renderDelta` ≤ 6 |
+| 4 (CI-lassítva) | `$env:JOY_CPU='4'; $env:JOY_CI_LAG_MS='500'; node --import tsx scripts/run-e2e-tests.ts tests/joystick-response.spec.ts --grep=tsunami --repeat-each=10` | `10 passed` |
+| 5 | `node --import tsx scripts/run-e2e-tests.ts tests/speed-math-play.spec.ts --repeat-each=5` | `20 passed` (4 eset × 5) |
+| 6 | `node --import tsx scripts/run-e2e-tests.ts tests/brainrot-play.spec.ts --repeat-each=3` | `33 passed` (11 eset × 3) |
+| kapuk | `npm run gate:stage`, majd `npm run gate:push` (a munkafa gyökeréből) | `== stage-gate: ZÖLD ==`, `== pre-push-gate: ZÖLD ==` |
+
+A harness szabad portot választ, és a végén leállítja a saját konténerét (`[E2E-HARNESS] Owned disposable database removed.`).
 
 ## Mérés
 
@@ -87,6 +110,11 @@ változat ugyanazon az úton).
   oka a terhelés, az NEM bizonyított (UNVERIFIED; alternatíva: a `routeWebSocket`-tel átvezetett csatorna lassítja a meccset vagy a
   `ctx.close()`-t). A „20-ból mindegyik zöld” elfogadás így betű szerint NEM teljesült (19/20). Az első CI-körökben a teszt idejét
   figyelni kell; ha a 150 s-os keret újra előjön, külön jegy nyomkövetéssel.
+- Kiegészítés (Sourcery 4603648594, 4603648602): a visszatartás alatt a szerver Engine.IO-pingje („2”) is sorba állt (a gateway
+  `pingInterval` 25 s, `pingTimeout` 20 s: `server/realtime/gateway.ts:206-207`). Kísérlet (ideiglenes másolat, 45 s-os
+  visszatartás): a régi változattal mindkét kapcsolat bontott (2/2), a javítottal egyik sem (0/2). Javítás: csak a „4…” keret áll
+  sorba; a két kontextus lezárása párhuzamos. Utána 6×-en **20/20** (két 10-es adag, `--grep=EGYSZERRE`). Hogy a korábbi 19/20 egy
+  bukása (a lezárásban) ebből jött-e: UNVERIFIED.
 
 ### 3. game-win-paths (Tornado; a közös eredményképernyő)
 - Tünet (helyben, egy másik ügynök 8 futásából 1): a gomb 43,96 px < 44.
@@ -97,14 +125,33 @@ változat ugyanazon az úton).
 - Javítás: `tests/game-win-paths.spec.ts` — `waitForStable(page, '[data-testid="<eredmény>"] button')` a mérés előtt.
 - Utána: a teljes spec (8 eset × 20, 1×): **160/160 zöld**; a beállt méret a kísérletben 48,0–48,15 px.
 
-### 4. joystick-response › block-craft-quiz renderszámláló (kanban #76) — KIVÉVE ebből a PR-ból, külön szelet (kanban #106)
+### 4. joystick-response renderszámláló (kanban #76, #106) — ebben a PR-ban (commit `f0e544a6`, csak ez a fájl)
 
-**Állapot:** a spec a main változatára visszaállítva (a mért 2. változat a scratchpadban, `joystick-response.v3.spec.ts`); a
-180 → 240 s-os keretemelés ezzel megszűnt. Ok: a PR előtti kapu (`gate:pr`, `695b063b`) böngészős lépésében a 2. változattal a
-Szökőár bukott — „többlet-render a lapon” +25, a tárcsán +27; álló szakasz 2876 ms / 19 lap-render (~6,6/s), rezgő 1898 ms / 38
-lap-render (~20/s). A termék-vs-teszt kérdés NYITOTT: lehet a szakaszok közti állapotkülönbség (pálya széle — teszt), de lehet
-mozgással arányos lapszintű renderelés is (termék — épp ezt hivatott a teszt megfogni). Eldöntése a külön szelet dolga, mért
-bizonyítékkal (a render forrása mindkét szakaszban, a játékos helyzete). Az alábbi mérések e szelet bemenetei.
+**Állapot:** a `3ef88682`-ben a main változatára visszaállított spec helyett a 3. változat (a koordinátor 2026-11-17-i döntése: a
+#483 CI 44124385498 mindhárom próbája a Szökőár-eseten bukott — többlet 11, 34, majd „nincs mérhető lépcső … képkockák 22”).
+
+**Gyökérok (a kódból, a független ellenőr levezetése, mérve megerősítve):** a Szökőár lapját a játékhurok rendereli ~24 Hz-en, álló
+ujjnál is; kérdés ALATT a hurok áll, csak az 1 mp-es visszaszámláló renderel. Ha az álló vagy a rezgő ablakba nyitott kérdés lógott,
+a két render-szám nem összevethető (a `695b063b` kapu-bukása: álló 2876 ms / 19 render — ~0,9 s játék + ~2 s kérdés). A „pálya
+széle” feltevést a kód nem támasztja alá. A lépcső-ág („nincs mérhető lépcső”): a lépcső ablakában kérdés volt, de mire a
+`clearQuiz` ránézett, magától bezárult → a régi kód nem ismételt, hanem bukott.
+
+**Javítás (3. változat):** tiszta ablakok (a render-olvasás ugyanabban a lap-hívásban adja a kérdés-jelzőt; kérdéssel érintett
+ablak ismétlése, ablakonként ≤ 5×, utána érthető bukás); a lépcső kérdés-érintése is ismétlés (`StepQuizError`); a győzelem /
+„Újra” is új kör; az álló szakasz a mért érintés-idővel hosszabbodik (egyetlen `waitForTimeout`); `JOY_CPU`, `JOY_CI_LAG_MS`.
+
+**Mérés (CI-azonos út, buildelt szerver, SwiftShader, 1 worker; E2E-sorompóval, ≤ 15 perces adagokban):**
+- Szökőár, a PR ága (main-alapú), `JOY_CPU=2`: **10/10**, többlet (lap) −4…+5, ablakok száma 2–4 (azaz 0–2 ismételt ablak).
+- Szökőár, a #483 helyi feje (`9a246c27`, leválasztott munkafa, saját build), `JOY_CPU=2`: **10/10**, többlet (lap) −1…+1,
+  ablakok 2–5. (Előtte egy 10-es adagban 9/10 — az egy bukás a #483 „Újra” gombja volt a kör végén; javítva, utána a 10/10.)
+- A teljes spec (4 játék) main, 1×: **8/8** (Tornado +1, Aszteroida 0…+2, Szökőár −2…+4, Kockavadász −1…0).
+- `JOY_CPU=4` + `JOY_CI_LAG_MS=500` túl erős volt (a Szökőár-eset a 240 s-os kereten bukott: a lassított kör kérdésekkel telt) —
+  a CI-n a Szökőár-eset 34–53 s alatt fut, ezért a 2× lassítást használtuk.
+- **Mutációs ellenpróba** (a #483 munkafában, ideiglenes `setState` a Szökőár tárcsa-kezelőjében, NEM commitolva, utána
+  visszaállítva): **3/3 bukik**, többlet a lapon **+29 / +31 / +33** (küszöb ≤ 6) — a mérő nem érzéketlen.
+- Tesztkeret: 240 s (lent a korábbi mérés: a Kockavadász main CI 134–145 s + a hosszabb álló szakasz).
+
+Korábbi mérések (1–2. változat, a döntés előzményei):
 
 - Tünet: main run 44049286407 (csak-doksi commit): „a mozgás-események többlet-renderje a tárcsán” 23 > 6, majd 18 > 6; a CI
   JOY_RESULT-sorai ugyanazon a lapon: többlet −12, −6, +23, +18 — kétértékű, nem folytonos szórás.
@@ -144,6 +191,18 @@ bizonyítékkal (a render forrása mindkét szakaszban, a játékos helyzete). A
 - Javítás: `tests/speed-math-play.spec.ts` — atomi `page.evaluate` (vége? / koppintható rossz drón középpontja).
 - Utána: 4×: 11/15 zöld, a 4 bukás ugyanaz a korai, nem gyökérokozott koppintás-mechanizmus, mint előtte (6/15); a menetvégi
   hurok egyszer sem lógott (a leghosszabb futás 92 s, előtte 165 s).
+
+### 6. Brain Rot e2e-időzítés (a `fix/brainrot-e2e-idozites` ág, fej `50c31a29`, beolvasztva)
+A Brain Rot gazdájának munkája (négy, csak-teszt commit: `507deb88`, `65475b01`, `f6769be5`, `50c31a29`; `origin/main` `b4b84db6`-ról;
+termékkódot nem érint), a CI-stabilizáló PR-ba olvasztva. Összefoglaló a gazda jelentéséből (a Brain Rot reviewere a `87d3d5d8`
+tartalmán jóváhagyta; ebben a PR-ban a beolvasztás gépiessége az ellenőrzés tárgya):
+- A main CI 44095911311 két Brain Rot-bukása tesztidőzítés volt. B1: a teszt a Playwright-hívások közti valós időre épült, a CI-n a
+  „400 ms-os tolás” 750–1217 ms lett a kérdés-órán (az elfogadott, ≥ 600 ms-ig tartott joystick esete); helyben 20× lassítás +
+  1300 ms késés mellett reprodukálva. Ú1: a 20 lépéses húzás-ciklus túllépte a kérdés ablakát, 3/3 reprodukálva.
+- Javítás: a mozdulat a lapon belül, a játék óráján; a B1 a legközelebbi ketrec felé tol és ellenőrzi az előfeltételt (felengedéskor
+  egy ketrec sem éles, a vadász ketrec területén áll). 10/10 + 10/10 lassítással; a mutációs ellenpróba megbuktatja.
+- Megállapítás: KÉT óra van (kérdés-óra ≤ 250 ms / képkocka: `BrainRotSteal.tsx:977`; játékidő ≤ 5 lépés / képkocka: `loop.ts:57`),
+  ~7 fps alatt szétcsúsznak — a rövidebb döntési idő külön jegyen.
 
 ### Nem megfogott / nem hatókör
 - speed-math-play, korai lépések ≥ 4× lassítással: a jó / rossz drónra koppintás néha nem regisztrál. Kísérlet: a drón a
