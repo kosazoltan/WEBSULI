@@ -143,6 +143,9 @@ test("review #426: kilépés és újrakezdés után az elhagyott kör képkocká
   }
   assert.match(functionBody(page, /const exitToMenu = useCallback\(\(\) =>/), /qRef\.current\.finish\(\);/, "kilépéskor a nyitott kérdés lezárul");
   assert.match(page, /if \(phaseNowRef\.current !== "play" \|\| runIdRef\.current !== runId\) return;/);
+  // Review #483: a szünetmenü „Újrakezdés”-e a „play” fázisban marad — a hurok effektje a menet kulcsán is újraindul.
+  assert.match(functionBody(page, /const startGame = useCallback\(\(\) =>/), /setRunKey\(\(k\) => k \+ 1\);/);
+  assert.match(page, /\}, \[phase, onEvent, runKey\]\);/, "a képkocka-hurok effektje a menet kulcsától is függ");
 });
 
 test("review #426: elavult képkocka / hívás nem válthat fázist (szinkron fázis-tükör)", () => {

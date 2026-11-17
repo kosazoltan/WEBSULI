@@ -151,7 +151,25 @@ test.describe("valódi érintés", () => {
     await expect(over, "a menet vége után nincs automatikus újraindítás").toBeVisible();
     await page.getByTestId("button-tsunami-retry").tap();
     await expect(page.getByTestId("ts-distance")).toContainText("0 m");
+    // Az új menet valóban fut (a távolság nő).
+    await expect.poll(async () => Number((await page.getByTestId("ts-distance").innerText()).replace(/\D/g, "")), { timeout: 10_000 }).toBeGreaterThan(5);
     expect(errors.filter((e) => !/401|Failed to fetch/i.test(e))).toEqual([]);
+  });
+
+  test("review #483: szünet → Újrakezdés (érintéssel) után az új menet fut: a távolság nő és kérdés érkezik", async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.goto("/games/tsunami-english?difficulty=easy");
+    await page.getByTestId("button-tsunami-start").tap();
+    await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+    const dist = async () => Number((await page.getByTestId("ts-distance").innerText()).replace(/\D/g, ""));
+    await expect.poll(dist, { timeout: 10_000 }).toBeGreaterThan(5);
+    await page.getByTestId("game-pause").tap();
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    await page.getByTestId("game-restart").tap();
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+    await expect(page.getByTestId("ts-distance")).toContainText("0 m");
+    await expect.poll(dist, { timeout: 10_000, message: "az újrakezdett menetben a távolság nő" }).toBeGreaterThan(5);
+    await expect(gates(page), "az újrakezdett menetben kérdés érkezik").toHaveCount(3, { timeout: 30_000 });
   });
 
   test("két ujj egyszerre (K.4/15): a tárcsa jobbra kormányoz, miközben az Ugrás gomb ugrik — mindkét hatás mérve", async ({ page }) => {
@@ -209,6 +227,11 @@ test.describe("J1 / J5: a játék a kérdés alatt fut (lassítva, ≥ 0,35×), 
     await page.getByTestId("game-pause").click();
     await expect(page.getByTestId("game-pause-menu")).toBeVisible();
     expect((await rate(600)).r, "szünetben a szimuláció áll").toBe(0);
+    // Review #483: a szünetmenü „Újrakezdés”-e után az új menet fut (a fázis „play” marad, a hurok mégis újraindul).
+    await page.getByTestId("game-restart").click();
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+    await expect.poll(async () => (await probe(page)).simTime, { timeout: 5_000, message: "az újrakezdett menet szimulációja fut" }).toBeGreaterThan(500);
+    expect((await rate(800)).r, "az újrakezdett menet teljes sebességgel fut").toBeGreaterThan(0.5);
   });
 
   test("billentyűzet: ←/→ sávot vált, ↑ ugrik (egy sáv / lenyomás)", async ({ page }) => {

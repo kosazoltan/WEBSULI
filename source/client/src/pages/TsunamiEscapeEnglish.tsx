@@ -679,6 +679,8 @@ export default function TsunamiEscapeEnglish() {
   const [hud, setHud] = useState({ distance: 0, goal: 1600, gap: 30, shells: 0, score: 0, combo: 0, multiplier: 1, lane: 1, hint: 0, danger: 0 });
   const [result, setResult] = useState<RunResult | null>(null);
   const [stormFlash, setStormFlash] = useState(false);
+  /** A menet kulcsa: minden indítás növeli, a képkocka-hurok effektje ezen is újraindul (review #483). */
+  const [runKey, setRunKey] = useState(0);
 
   /** A billentyűk (a bemenet-mérő `inX`-éhez) és a tárcsa analóg értéke. */
   const keysRef = useRef({ left: false, right: false });
@@ -1017,6 +1019,8 @@ export default function TsunamiEscapeEnglish() {
     setResult(null);
     const st = driverRef.current.core.state();
     setHud({ distance: 0, goal: levelDistanceFor(difficulty), gap: st.waveGap, shells: 0, score: 0, combo: 0, multiplier: 1, lane: 1, hint: 1, danger: 0 });
+    // Review #483: a szünetmenü „Újrakezdés”-e a „play” fázisban marad — a képkocka-hurok a menet kulcsára is újraindul.
+    setRunKey((k) => k + 1);
     goPhase("play");
   }, [difficulty, subject, userGrade, levels.level, q, seedBase]);
 
@@ -1323,7 +1327,7 @@ export default function TsunamiEscapeEnglish() {
     };
     raf = requestGameFrame(tick);
     return () => cancelGameFrame(raf);
-  }, [phase, onEvent]);
+  }, [phase, onEvent, runKey]);
 
   // HUD ≤ 10 Hz (KSZ-9). Szünetben és a magyarázat alatt nem frissül (az óra is áll). A villám díszlet (M9: csökkentett
   // mozgásnál nincs).
