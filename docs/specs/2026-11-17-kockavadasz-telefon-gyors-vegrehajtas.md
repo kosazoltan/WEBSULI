@@ -107,4 +107,54 @@ szelet ott ütközni fog. A feloldásnál a #484 kódját kell megtartani, és e
 
 ## Mért eredmények
 
-(A 4–5. feladat után töltjük ki.)
+### Mérés előtte / utána (asztali GPU — valódi telefonon NEM mért)
+
+Gép: AMD Radeon 890M (integrált), fejes Chrome, vsync-plafon nélkül (`--disable-gpu-vsync --disable-frame-rate-limit`).
+„Előtte” = `origin/main` `b4b84db6`, „utána” = ez az ág; mindkettő teszt-kampós build, `look=medium`, ugyanaz a magozott világ
+(a `Math.random` az indítás előtt újramagozva, mag: 21), `/api` csonkolva (éles hívás nincs). GPU-idő =
+`EXT_disjoint_timer_query_webgl2` a képkocka-visszahívás körül (3 s átlaga); a szinkron képkocka-költség (`readPixels`) ~3,5 ms
+állandó többletet tartalmaz. Szkript és nyers adatok a repón kívül (scratchpad `kockavadasz-telefon/ab-measure.mjs`, `runs/ab-*.json`).
+
+**Kihajtott nézet (827×896 CSS, dpr 2,625 → vászon 1240×1252 = 1,55 Mpx — előtte és utána AZONOS)**
+
+| Jelenet | GPU-idő r1 (előtte → utána) | GPU-idő r2 | fps r1 | fps r2 | szinkron ms r1 | hívás / háromszög |
+|---|---|---|---|---|---|---|
+| kezdő (talaj) | 2,42 → 1,68 ms (−31 %) | 2,71 → 1,66 (−39 %) | 308 → 408 | 376 → 381 | 5,5 → 4,7 | 24 / 80 076 |
+| horizont | 2,94 → 1,94 (−34 %) | 2,85 → 1,52 (−47 %) | 317 → 408 | 312 → 408 | 5,7 → 4,7 | 35 / 80 220 |
+| erdő | 1,80 → 1,41 (−22 %) | 2,57 → 1,29 (−50 %) | 410 → 446 | 374 → 430 | 5,3 → 4,5 | 26 / 80 112 |
+| víz felé | 2,60 → 1,62 (−38 %) | 2,57 → 1,64 (−36 %) | 369 → 473 | 355 → 450 | 5,1 → 4,1 | 27 / 80 460 |
+
+**Telefon (390×844 CSS, dpr 3 → vászon 585×1174 = 0,69 Mpx — azonos)**
+
+| Jelenet | GPU-idő r1 | GPU-idő r2 | fps r1 | fps r2 | hívás / háromszög |
+|---|---|---|---|---|---|
+| kezdő (talaj) | 2,20 → 0,80 ms (−64 %) | 2,48 → 1,30 (−48 %) | 452 → 492 | 352 → 663 | 24 / 80 076 |
+| horizont | 2,10 → 0,76 (−64 %) | 2,50 → 1,29 (−48 %) | 454 → 459 | 369 → 562 | 27 / 80 124 |
+| erdő | 1,59 → 1,17 (−26 %) | 2,03 → 1,15 (−43 %) | 527 → 487 | 396 → 600 | 23 / 80 076 |
+| víz felé | 1,61 → 1,48 (−8 %) | 2,04 → 1,03 (−50 %) | 526 → 501 | 391 → 614 | 26 / 80 112 |
+
+Olvasat, őszintén: a GPU-idő minden jelenetben és mindkét futásban csökkent (kihajtva −22 … −50 %, telefon-nézetben −8 … −64 %);
+a szórás nagy (n = 2, a 390×844 r1 futásban két jelenet fps-e az „utána” oldalon kisebb volt — zaj). A rajzolási hívások és a
+háromszögszám NEM változott (ez a szelet a képpont-költséget csökkenti, nem a geometriát). A vászon képpontmérete változatlan
+(G-5). Mindez asztali, azonnali módú GPU-n igaz; a telefon csempés GPU-ján az árnyék-mintavétel és az anizotróp szűrés aránya más
+lehet (UNVERIFIED) — a tulajdonos `?perf=1` fotója dönt. NOT RUN: valódi telefon; séta / bányászás közbeni mérés; low és high szint.
+
+### Képi ellenőrzés (megnézve, előtte / utána párban)
+
+Képek: `docs/measurements/2026-11-17-kockavadasz-telefon-gyors/` — `lap-fold.jpg`, `lap-p390.jpg`, `lap-p360.jpg`, `lap-l844.jpg`
+(összevető lapok: kezdő nézet, horizont, három fordulat — erdő, domboldal, víz —, két séta utáni nézet, lomb alulról, kérdés
+nyitva), `par-viz-arnyek.jpg` (nagyított pár), `elotte/` és `utana/` (a kihajtott és a 390×844 nézet egyenkénti képei). Mag: 21,
+`look=medium`.
+
+Megállapítások: a színek, a textúra élessége, a köd és a HUD a párokban megegyezik; hiányzó blokk, csíkozódás, levágott HUD nincs.
+Látható különbségek: (1) a fák talajra vetett árnyéka megvan, de kockánkénti (szögletes folt a törzs mellett), kisebb és
+keményebb szélű, mint az árnyéktérkép lágy, hosszú árnyéka; (2) a víz csillanása a part mentén halványabb; (3) a lomb teljesen
+fedő (a 7 %-os áttetszőség eltűnt) — képen nem észrevehető. A kép nem lapos: a domboldalak árnyékos oldala, a lomb alja és a fák
+alja sötétebb. Barlang / fedett rész a kezdő pályán a magból nem érhető el a szkripttel — NOT RUN (a legközelebbi megfelelő a lomb
+alatti és a domb mögötti rész). Időjárásos pályák (eső, hó, homokvihar): NOT RUN.
+
+### Tesztek
+
+- `node --import tsx --test tests/perf-stats.test.ts tests/pixel-budget.test.ts tests/voxel-sun-shade.test.ts` → 26 / 26.
+- `npm run test:e2e -- tests/blockcraft-perf-panel.spec.ts tests/blockcraft-two-finger.spec.ts --workers=1` → `9 passed (1.0m)`.
+- `npx playwright test -c playwright.game-mobile.config.ts -g "block-craft" --workers=1` (közös mobil mérő, meta-mérő, joystick-reakció block-craft esetei) → `40 passed (4.3m)`.
