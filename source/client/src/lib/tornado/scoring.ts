@@ -176,3 +176,55 @@ export function interceptReward(args: RewardArgs): RewardResult {
 export function freeRoamAnswerScore(spec: LevelSpec): number {
   return Math.round(120 + spec.tornadoIntensity * 45);
 }
+
+/* ===================== J7a — horgony csak a sávban, pont-bontás, sorozat ===================== */
+
+export type AnchorBandState = "in_band" | "too_close" | "too_far";
+
+/**
+ * A ⚓ csak a mérési sávban dobható (terv 5.7 Q2): a sávon kívül nincs kérdés. A sáv határai benne vannak.
+ * (A sebesség-feltétel — „előbb állj meg” — külön marad: az nem a sáv része.)
+ */
+export function anchorBandState(distanceKm: number, band: { min: number; max: number }): AnchorBandState {
+  if (distanceKm < band.min) return "too_close";
+  if (distanceKm > band.max) return "too_far";
+  return "in_band";
+}
+
+/** Gyerekbarát üzenet a sávon kívüli ⚓ nyomásra (kérdés nélkül). */
+export function anchorBandMessage(state: Exclude<AnchorBandState, "in_band">): string {
+  return state === "too_far"
+    ? "Túl messze vagy — menj közelebb a tornádóhoz, a sávban dobhatsz horgonyt!"
+    : "Túl közel vagy a tornádóhoz! Hátrébb, a sávban dobhatsz horgonyt.";
+}
+
+export type BreakdownRow = { id: keyof RewardResult["breakdown"]; label: string; value: number };
+
+const BREAKDOWN_LABELS: ReadonlyArray<readonly [keyof RewardResult["breakdown"], string]> = [
+  ["base", "Alap"],
+  ["speedBonus", "Gyorsaság"],
+  ["stormBonus", "Vihar ereje"],
+  ["answerBonus", "Helyes válaszok"],
+  ["positionBonus", "Jó pozíció"],
+];
+
+/** Az eredményképernyő pont-bontásának sorai; az értékek összege a menet pontszáma (az `interceptReward` garantálja). */
+export function breakdownRows(breakdown: RewardResult["breakdown"]): BreakdownRow[] {
+  return BREAKDOWN_LABELS.map(([id, label]) => ({ id, label, value: breakdown[id] }));
+}
+
+/**
+ * A menet legjobb helyes-válasz sorozata (a `runStreak` a ranglistára, a `maxStreak` az eredményekhez).
+ * Hibás válasz nullázza az aktuálist, a legjobb megmarad.
+ */
+export type StreakTracker = { current: number; best: number };
+
+export function createStreakTracker(): StreakTracker {
+  return { current: 0, best: 0 };
+}
+
+export function recordStreak(t: StreakTracker, correct: boolean): StreakTracker {
+  if (!correct) return { current: 0, best: t.best };
+  const current = t.current + 1;
+  return { current, best: Math.max(t.best, current) };
+}
