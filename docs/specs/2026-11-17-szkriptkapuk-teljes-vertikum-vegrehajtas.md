@@ -3,7 +3,7 @@
 > Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` · Kanban: #91
 > Ágak: `docs/szkriptkapuk-terv` (S0) → `chore/kapu-teszt-integritas` (S1, az S0-ra építve) → `chore/kapu-allitas-ellenor` (S2, az
 > S1-re építve). Munkafa: `.claude/worktrees/szkriptkapuk`.
-> **Állapot:** S0 kész (terv-PR) · S1 végrehajtás alatt (`chore/kapu-teszt-integritas`) · S2 utána · S3, S5, S6, S7, S8 kiadható megbízás (lent) · S4 az összevonások után.
+> **Állapot:** S0 kész (terv-PR) · S1 kész (`chore/kapu-teszt-integritas`) · S2 végrehajtás alatt (`chore/kapu-allitas-ellenor`) · S3, S5, S6, S7, S8 kiadható megbízás (lent) · S4 az összevonások után.
 
 Szabályok minden szeletre: a `source/` futásidejű kódja nem módosul; minden szkript Node ESM, függőség nélkül, injektálható futtatóval
 (`exec`), `node --test` tesztekkel, Windows x64 / ARM64 / Linux; regexet csak Edit / Write eszközzel írj és olvasd vissza; tesztet
