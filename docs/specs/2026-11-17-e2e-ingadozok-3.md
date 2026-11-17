@@ -56,10 +56,13 @@ Ha egy tesztnél 3 megközelítés után sincs bizonyított gyökérok: megáll�
 - A CI teljes Playwright E2E-je zöld.
 
 <!-- acceptance-checklist -->
-- [ ] 1: joystick-response › block-craft-quiz renderszámláló — gyökérok, javítás, előtte/utána, ellenpróba, #484-en is.
-- [ ] 2: lesson-result-email — gyökérok (kanban #31), javítás, előtte/utána, ellenpróba.
-- [ ] 3: duel-online „EGYSZERRE Visszavágó” — gyökérok, javítás, előtte/utána.
-- [ ] 4: game-win-paths Tornado (animáció közbeni mérés) — javítás, előtte/utána.
-- [ ] 5: speed-math-play menetvégi hurok — gyökérok, javítás, előtte/utána.
-- [ ] 6: word-ladder-play:48 megfigyelései átadva (nem hatókör).
+- [x] 1: joystick-response › block-craft-quiz renderszámláló — gyökérok (álló/rezgő szakasz hossz-aszimmetria), javítás,
+  előtte (#484 1/10) / utána (main 12/12, #484 12/12), ellenpróba a befagyasztott régi specen.
+- [x] 2: lesson-result-email — gyökérok (kanban #31), javítás, célzott kísérlet előtte 5/5 bukik / utána 5/5 + 20/20 zöld.
+- [x] 3: duel-online „EGYSZERRE Visszavágó” — gyökérok (CI-riport + 6×: 4/20), javítás (WebSocket-visszatartás), utána 19/20
+  (az egy: terhelt gép tesztkerete a lezárásban, a vizsgált lépés után).
+- [x] 4: game-win-paths (animáció közbeni mérés) — kísérlet 3/3 igazolja az ablakot; javítás; utána 160/160.
+- [x] 5: speed-math-play menetvégi hurok — a mechanizmus kísérlettel igazolva (2/2), javítás; a természetes hurok-időtúllépés
+  35 futásból nem jött elő (NOT REPRODUCED), a korai koppintás-bukás gyökéroka UNVERIFIED (külön jelentve).
+- [x] 6: word-ladder-play:48 megfigyelései átadva (nem hatókör).
 - [ ] Helyi kapuk zöldek; független ellenőr IGEN; PR; CI zöld.
