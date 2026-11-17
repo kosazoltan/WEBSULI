@@ -174,6 +174,18 @@ export function normalizeExpressionText(s: string): string {
  * nem szóköz: a `normalizeExpressionText` a szóközt törli, és a következő szám összeolvadna a lépéssel („3 · 7. 21.” → „3·721”).
  */
 const withoutSentenceEnd = (s: string): string => s.replace(/[.!?…]+(?=\s|$)/g, ";");
+/**
+ * Review K1 (2026-11-17): a lépés után írásjel NÉLKÜL, szóközzel vagy új sorban írt következő szám („3 · 7 21”, „3 · 7⏎21”) se olvadjon
+ * össze a lépéssel — a szám / záró zárójel és a következő szám / nyitó zárójel közti szóköz elválasztó. Kivétel (a szám része marad): a
+ * szóközös ezres tagolás („12 000”) és a vegyes tört („1 1/2”) — különben a „35 + 64 − 12 000” a „35 + 64 − 12” lépésnek látszana.
+ */
+const GAP_OR_NUMBER = /\d+\s+\d+\s*\/\s*\d+|\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?!\d)|([\d)])\s+(?=[\d(])/g;
+const withGapSeparators = (s: string): string => s.replace(GAP_OR_NUMBER, (m: string, end: string | undefined) => (end === undefined ? m : `${end};`));
+/** A válasz összevetési alakjai a kért köztes lépéshez: a régi (szóköz nélküli) alak, és az, amelyben a számok közti szóköz elválasztó. */
+function answerExpressionForms(answer: string): string[] {
+  const cleaned = withoutSentenceEnd(answer);
+  return [normalizeExpressionText(cleaned), normalizeExpressionText(withGapSeparators(cleaned))];
+}
 
 const ATOM_RE = new RegExp(`(?:${SIGN}(?=\\d))?(?:${ATOM})`, "g");
 
@@ -220,7 +232,8 @@ export function gradeTypedAnswers(rawAnswer: string, answers: readonly TypedAnsw
       if (!isExpressionText(expected.value)) { undecidable = true; verdicts.push({ part: expected.part, ok: false, undecidable: true, reason: `A(z) ${expected.part} rész kért köztes alakja nem értelmezhető.` }); continue; }
       // Spec 2026-11-17-szoveges-valasz-irasjel: a lépés utáni mondatvégi írásjel („35 + 64 − 12.”) nem számfolytatás — csak a VÁLASZ
       // oldalán, szóköz vagy szövegvég előtt; a tizedes („12.5”) és a hosszabb szám („120”) továbbra sem egyezik.
-      const ok = containsExpressionState(normalizeExpressionText(withoutSentenceEnd(answer)), normalizeExpressionText(expected.value));
+      const want = normalizeExpressionText(expected.value);
+      const ok = answerExpressionForms(answer).some((form) => containsExpressionState(form, want));
       verdicts.push({ part: expected.part, ok, reason: ok ? "A kért lépés szerepel." : `A(z) ${expected.part} részhez a kért alak (${expected.value}) hiányzik — értékazonos más alak nem elég.` });
       continue;
     }

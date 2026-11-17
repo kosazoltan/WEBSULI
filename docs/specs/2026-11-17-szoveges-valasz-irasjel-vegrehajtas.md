@@ -40,6 +40,14 @@ Teszt: `tests/scoring-v2.test.ts` ÚJ esetei (meglévő eset nem módosul): „3
 „35 + 64 − 12.5”, „35 + 64 − 120” → hibás; „3 · 7. 21.” két részeredménnyel → 2 / 2.
 Parancs: `node --import tsx --test tests/scoring-v2.test.ts tests/lesson-html-score.test.ts tests/scorer-corpus.test.ts`.
 
+## T3b — review K1: a lépés utáni szám írásjel nélkül
+
+`shared/answer-value.ts`: a válasz KÉT összevetési alakja (`answerExpressionForms`): a régi (a szóköz törölve) és az, amelyben a
+szám / `)` és a következő szám / `(` közti szóköz pontosvessző (`withGapSeparators`); a lépés bármelyikben szerepelhet. A szóközös
+ezres tagolás (`\d{1,3}( \d{3})+`) és a vegyes tört (`\d+ \d+/\d+`) a szám része marad. Teszt: `tests/scoring-v2.test.ts` új
+esete (pozitív: „3 · 7 21”, „3 · 7⏎21”, a két éles feladat; negatív: „35 + 64 − 12 000”, „1 1/2 + 3”). Mutációs ellenpróba: a
+rés-elválasztó, az ezres védelem, a vegyes tört védelme és a mondatvég-csere kikapcsolása egyenként buktatja a tesztet.
+
 ## T4 — böngészős próba (valódi, helyi lecke)
 
 `tests/lesson-progress-persistence.spec.ts` mintájára (ugyanaz a config / ál-API) ÚJ spec: `tests/fill-blank-punctuation.spec.ts`

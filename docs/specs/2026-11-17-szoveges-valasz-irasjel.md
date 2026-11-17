@@ -6,6 +6,14 @@ Végrehajtási utasítás: [`2026-11-17-szoveges-valasz-irasjel-vegrehajtas.md`]
 Tulajdonosi hibajelentés (2026-11-17, szó szerint): „Egy újabb hiba, hogy a szöveges feladatoknál ha rak pontot a tanuló, azt is
 hibának veszi, ha nem rak pontot, azt is. Ezt is szüntesd meg.”
 
+## Amit ez a szelet NEM old meg (független review, 2026-11-17 — M1)
+
+A tulajdonos „szöveges feladata” nagy valószínűséggel a Feladatok fül NYÍLT feladata (élesben ~14 000), nem a kitöltős blokk (19,
+nem pontozott gyakorlat). A nyílt feladat pontozója az írásjelre nem érzékeny; a „ponttal is, pont nélkül is hibás” élményt ott a
+`minWords` („A válasz még túl rövid.” → 0 pont) és a `needsSentence` üzenete („fogalmazd őket összefüggő mondattá”) adja. Ezt a
+külön szelet kezeli: `docs/specs/2026-11-17-nyilt-feladat-rovid-valasz.md` (ág `fix/nyilt-feladat-rovid-valasz`). Ez a szelet a
+két valódi, írásjelre érzékeny helyet javítja (kitöltős blokk, kért köztes lépés) — a panasz megszűnését önmagában NEM állítja.
+
 ## Cél
 
 A begépelt válasz összevetése ne bukjon el a mondatvégi írásjelen (`.` `!` `?` `…`), a szélső / többszörös szóközön, a kis- és
@@ -71,6 +79,8 @@ tagolás („50  000”) nem egy szám.
 - Kulcs „Dr.”, válasz „dr” → helyes (a záró pont mindkét oldalon lemarad). Kulcs „stb.”, válasz „stb” → helyes.
 - Válasz „.” / „?!” / „  ” → hibás. Kulcs „?” (írásjel a megoldás) → a normalizált kulcs üres: a NYERS, szóköztelenített alak
   pontos egyezése dönt („?” = „?”, „.” ≠ „?”).
+- Review K1: a lépés utáni szám írásjel NÉLKÜL, szóközzel vagy új sorban („3 · 7 21”, „3 · 7⏎21”) → a lépés szerepel, a 21 külön
+  részeredmény; a szóközös ezres tagolás („35 + 64 − 12 000”) és a vegyes tört („1 1/2 + 3” az „1/2 + 3” lépésre) nem egyezik.
 - Köztes lépés: „35 + 64 − 12.” és „35+64-12!” → szerepel; „35 + 64 − 12.5” és „35 + 64 − 120” → nem szerepel; „3 · 7. 21.” →
   a lépés szerepel, a 21 külön részeredmény.
 
@@ -82,6 +92,8 @@ tagolás („50  000”) nem egy szám.
 - E3. AMIKOR a válasz üres vagy csak írásjel, A RENDSZER nem fogadja el.
 - E4. AMIKOR a típusos feladat kért köztes lépése után a tanuló mondatvégi írásjelet tesz, A RENDSZER a lépést megtalálja; a
   tizedes folytatás („12.5”) és a hosszabb szám („120”) továbbra sem egyezik.
+- E4b. AMIKOR a kért köztes lépés után a tanuló írásjel nélkül, szóközzel vagy új sorban írja a következő számot, A RENDSZER a
+  lépést megtalálja; az ezres tagolású szám és a vegyes tört a szám része marad (nincs hamis elfogadás).
 - E5. A nyílt feladatok pontozója (v1 / v2) és a `ee_evaluate` paritás változatlan: a meglévő tesztek módosítás nélkül zöldek.
 - E6. Böngészőben, valódi (helyi) leckén: a kitöltős feladat pont nélkül és ponttal is „Helyes!”.
 
@@ -92,12 +104,15 @@ tagolás („50  000”) nem egy szám.
 2. Belső vessző — javaslat: számít (helyesírás), a mérésben nem okozott panaszt.
 3. Számformátum — javaslat: szám alakú kulcsnál a tizedesvessző = tizedespont (megvalósítva); az ezres tagolás külön döntés.
 4. A két régi HTML-anyag — javaslat: Stúdió-átalakítás a meglévő úton (fizetős), vagy levétel.
-5. `needsSentence` üzenet és két eredmény szóközzel — javaslat: külön jegy (pontozó-szerződés, HTML-paritás).
+5. `needsSentence` / `minWords` — eldöntve (2026-11-17): külön szelet, `2026-11-17-nyilt-feladat-rovid-valasz.md`.
+6. Jegyre (review K2, K3): polinomos feladatnál a „10x…” / „10x..” zárás 0 pont (54 éles feladat); két számeredmény egyetlen
+   szóközzel („120 360”) ezres tagolásnak olvasódik (13 éles feladat). Ebben a szeletben nem változik.
 
 <!-- acceptance-checklist -->
 - [x] E1 – fillBlank ponttal / pont nélkül helyes (egységteszt + böngésző)
 - [x] E2 – ékezet / belső írásjel / más szó hibás
 - [x] E3 – üres és csak írásjel hibás
 - [x] E4 – köztes lépés mondatvégi írásjellel
+- [x] E4b – köztes lépés írásjel nélkül (szóköz / új sor), hamis elfogadás nélkül; 4 mutáció megfogva
 - [x] E5 – a meglévő pontozó- és paritástesztek változatlanul zöldek
 - [x] E6 – böngészős próba helyi leckén
