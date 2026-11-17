@@ -4,7 +4,7 @@ import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import { tsunamiWaterPace } from "@/game-engine/tsunamiTiming";
 import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocation } from "wouter";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { useQuery } from "@tanstack/react-query";
@@ -611,6 +611,52 @@ function gateLayout(stageW: number, laneX: readonly number[]): { centers: [numbe
   const spacing = Math.max(width + 12, Math.min(proj, (stageW - 2 * margin - width) / 2));
   return { centers: [mid - spacing, mid, mid + spacing], width };
 }
+
+/**
+ * Érintős vezérlősáv (tárcsa + Ugrás). `memo`: a lap a HUD (10 Hz) és a menet közben nyitott kérdés órája miatt is
+ * újrarenderel; a tárcsának ezekhez semmi köze, csak a saját (stabil) propjai változásakor renderel (joystick-reakció
+ * #49 render-mérője, PR #483 CI: a kérdés-renderek a tárcsán is megjelentek).
+ */
+const TsunamiTouchControls = memo(function TsunamiTouchControls({
+  joyReset,
+  onJoystick,
+  jumpStart,
+  jumpEnd,
+}: {
+  joyReset: number;
+  onJoystick: (v: JoystickVector) => void;
+  jumpStart: () => void;
+  jumpEnd: () => void;
+}) {
+  return (
+    /* G-8: touch-action:none — hosszú nyomásra a böngésző eddig kijelölt és görgetett, a futás megállt.
+       S9: csak érintős eszközön; a sáv a biztonsági sávon belül, a hüvelykujjak alatt. D-J1a-1: a tárcsa
+       analóg oldalirányú kormányzás a húzás mellett; az Ugrás akciógomb a jobb hüvelykujjnak. */
+    <div
+      className="tsunami-controls game-touch-layer"
+      data-game-controls
+      data-testid="tsunami-touch-controls"
+      style={{
+        touchAction: "none",
+        userSelect: "none",
+        WebkitTouchCallout: "none",
+        WebkitTapHighlightColor: "transparent",
+      }}
+    >
+      <VirtualJoystick label="Futás iránya" radius="auto" resetSignal={joyReset} onChange={onJoystick} />
+      <HoldButton
+        label="Ugrás"
+        size="auto"
+        onHoldStart={jumpStart}
+        onHoldEnd={jumpEnd}
+        className="flex-col gap-0.5 border-2 border-amber-100/70 bg-gradient-to-b from-amber-300 to-orange-500 text-slate-950 font-black shadow-[0_8px_24px_rgba(245,158,11,0.55)] active:scale-95 transition-transform"
+      >
+        <ArrowUp className="h-7 w-7" aria-hidden="true" />
+        <span className="text-[13px] leading-none tracking-wide">UGRÁS</span>
+      </HoldButton>
+    </div>
+  );
+});
 
 export default function TsunamiEscapeEnglish() {
   // Spec 2026-09-29: URL-paraméter nélkül a könnyű/közepes/nehéz alapértéke az évfolyamból jön.
@@ -1932,32 +1978,7 @@ export default function TsunamiEscapeEnglish() {
           )}
 
           {phase === "play" && touch && (
-            /* G-8: touch-action:none — hosszú nyomásra a böngésző eddig kijelölt és görgetett, a futás megállt.
-               S9: csak érintős eszközön; a sáv a biztonsági sávon belül, a hüvelykujjak alatt. D-J1a-1: a tárcsa
-               analóg oldalirányú kormányzás a húzás mellett; az Ugrás akciógomb a jobb hüvelykujjnak. */
-            <div
-              className="tsunami-controls game-touch-layer"
-              data-game-controls
-              data-testid="tsunami-touch-controls"
-              style={{
-                touchAction: "none",
-                userSelect: "none",
-                WebkitTouchCallout: "none",
-                WebkitTapHighlightColor: "transparent",
-              }}
-            >
-              <VirtualJoystick label="Futás iránya" radius="auto" resetSignal={joyReset} onChange={onJoystick} />
-              <HoldButton
-                label="Ugrás"
-                size="auto"
-                onHoldStart={jumpStart}
-                onHoldEnd={jumpEnd}
-                className="flex-col gap-0.5 border-2 border-amber-100/70 bg-gradient-to-b from-amber-300 to-orange-500 text-slate-950 font-black shadow-[0_8px_24px_rgba(245,158,11,0.55)] active:scale-95 transition-transform"
-              >
-                <ArrowUp className="h-7 w-7" aria-hidden="true" />
-                <span className="text-[13px] leading-none tracking-wide">UGRÁS</span>
-              </HoldButton>
-            </div>
+            <TsunamiTouchControls joyReset={joyReset} onJoystick={onJoystick} jumpStart={jumpStart} jumpEnd={jumpEnd} />
           )}
           {phase === "play" && !touch && (
             <p
