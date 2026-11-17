@@ -115,8 +115,26 @@ import {
   windForceOn,
   type WindState,
 } from "@/lib/tornado/wind";
-import { anchorOutcome, interceptReward, freeRoamAnswerScore } from "@/lib/tornado/scoring";
-import { MAX_UPGRADE_LEVEL, UPGRADE_TRACKS, statMultiplier, upgradeCost } from "@/lib/tornado/upgrades";
+import {
+  anchorBandMessage,
+  anchorBandState,
+  anchorOutcome,
+  breakdownRows,
+  createStreakTracker,
+  freeRoamAnswerScore,
+  interceptReward,
+  recordStreak,
+  type RewardResult,
+} from "@/lib/tornado/scoring";
+import {
+  MAX_UPGRADE_LEVEL,
+  UPGRADE_TRACKS,
+  effectiveAnchorBand,
+  effectiveStats,
+  effectiveSurfaceGrip,
+  softenImpact,
+  upgradeCost,
+} from "@/lib/tornado/upgrades";
 import ScrollPane from "@/tornado/ScrollPane";
 import VehicleArt from "@/tornado/VehicleArt";
 import {
@@ -259,6 +277,8 @@ export default function TornadoHunter200() {
   /** Teszt-kampó jelzők (növekvő sorszám): a PlayScreen csak a változásra reagál, újraindításkor nem. */
   const [forceResult, setForceResult] = useState(0);
   const [forceQuiz, setForceQuiz] = useState(0);
+  /** J7a teszt-kampó: a játékos a tölcsértől ennyi km-re kerül (a mérési sávba állításhoz); `n` a jelző sorszáma. */
+  const [forceNear, setForceNear] = useState<{ n: number; km: number }>({ n: 0, km: 0 });
   /** A közös keret állapota játék közben (játszik / szünet / eredmény) — a PlayScreen jelenti. */
   const [playState, setPlayState] = useState<GameScreenState>("playing");
   /** A „Következő szint” új futást indít: a kulcs váltása újraszereli a PlayScreent. */
@@ -298,6 +318,10 @@ export default function TornadoHunter200() {
           setScreen("play");
           setForceQuiz((n) => n + 1);
         }
+        const nearKm = (patch as { nearTornadoKm?: unknown }).nearTornadoKm;
+        if (typeof nearKm === "number" && Number.isFinite(nearKm) && nearKm > 0) {
+          setForceNear((cur) => ({ n: cur.n + 1, km: nearKm }));
+        }
       },
     });
   }, []);
@@ -307,6 +331,7 @@ export default function TornadoHunter200() {
     if (screen !== "play") {
       setForceResult(0);
       setForceQuiz(0);
+      setForceNear({ n: 0, km: 0 });
       setPlayState("playing");
     }
   }, [screen]);
@@ -487,6 +512,7 @@ export default function TornadoHunter200() {
             syncEligible={Boolean(syncEligibility?.eligible)}
             forceResult={forceResult}
             forceQuiz={forceQuiz}
+            forceNear={forceNear}
             gradeLevel={runGradeLevel}
             onGradeLevelWin={() => {
               if (runGradeLevel != null) levels.complete(runGradeLevel);
@@ -702,6 +728,8 @@ function GarageScreen(props: {
   };
 
   const detailUpgrades = upgradesFor(progress, detail.id);
+  // J7a: ugyanaz a közös számítás, amelyből a játék is dolgozik — a sávok és a vezetés nem térhet el.
+  const detailStats = effectiveStats(detail, detailUpgrades);
   const isOwned = owned.has(detail.id);
   const isLocked = detail.unlockLevel > progress.highestLevelUnlocked;
 
@@ -753,11 +781,13 @@ function GarageScreen(props: {
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         <StatBar label="Sebesség" value={detail.speed} max={260} />
-        <StatBar label="Gyorsulás" value={detail.acceleration * statMultiplier(detailUpgrades, "engine")} max={130} />
-        <StatBar label="Irányítás" value={detail.handling * statMultiplier(detailUpgrades, "suspension")} max={130} />
-        <StatBar label="Stabilitás" value={detail.stability * statMultiplier(detailUpgrades, "chassis")} max={130} />
-        <StatBar label="Szélállóság" value={detail.windResistance} max={120} />
-        <StatBar label="Horgony" value={detail.anchorPower * statMultiplier(detailUpgrades, "anchor")} max={130} />
+        <StatBar label="Gyorsulás" value={detailStats.acceleration} max={130} />
+        <StatBar label="Irányítás" value={detailStats.handling} max={130} />
+        <StatBar label="Tapadás" value={detailStats.grip} max={130} />
+        <StatBar label="Stabilitás" value={detailStats.stability} max={130} />
+        <StatBar label="Szélállóság" value={detailStats.windResistance} max={130} />
+        <StatBar label="Horgony" value={detailStats.anchorPower} max={130} />
+        <StatBar label="Mérősáv" value={detailStats.instruments} max={130} />
       </div>
 
       {!isOwned && (
@@ -1271,6 +1301,8 @@ function PlayScreen(props: {
   forceResult: number;
   /** Teszt-kampó (növekvő sorszám): > 0 és változik → kvíz feldobása (M9/M10 rossz válasz). */
   forceQuiz: number;
+  /** J7a teszt-kampó: `n` > 0 és változik → a játékos `km` távolságra kerül a tölcsértől. */
+  forceNear: { n: number; km: number };
   /** A menü pályaválasztójából indított futás pályája (1–10), különben `null`. */
   gradeLevel: number | null;
   onGradeLevelWin: () => void;
@@ -1299,6 +1331,23 @@ function PlayScreen(props: {
     [spec, props.gradeLevel],
   );
   const quality = props.progress.settings.quality;
+  /**
+   * J7a: az öt fejlesztés hatása — ugyanaz a közös számítás (`upgrades.ts`), amelyet a garázs sávjai is mutatnak.
+   * A kiválasztott jármű fejlesztései futás közben nem változnak, ezért képkockánként nem számoljuk újra.
+   */
+  const eff = useMemo(
+    () => effectiveStats(props.vehicle, upgradesFor(props.progress, props.vehicle.id)),
+    [props.vehicle, props.progress.upgrades],
+  );
+  const effRef = useRef(eff);
+  effRef.current = eff;
+  /** A szint a fejlesztett (a `instruments` szerint szélesebb) mérési sávval: minden horgony-szabály ezt olvassa. */
+  const bandSpec = useMemo<LevelSpec>(
+    () => ({ ...spec, anchorBand: effectiveAnchorBand(spec.anchorBand, eff.bandWidthFactor) }),
+    [spec, eff.bandWidthFactor],
+  );
+  const bandSpecRef = useRef(bandSpec);
+  bandSpecRef.current = bandSpec;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -1311,6 +1360,8 @@ function PlayScreen(props: {
     /** A cél iránya a jármű orrához képest — a G-9b céljelzőnek. */
     targetRelDeg: 0,
     anchorReady: false,
+    /** J7a: a távolság a mérési sávban van (a ⚓ csak itt aktív; a sebesség-feltétel nélkül). */
+    inBand: false,
     surface: "grass" as ReturnType<typeof surfaceAt>,
     timeLeft: runTimeLimit,
     stormPct: 0,
@@ -1337,6 +1388,8 @@ function PlayScreen(props: {
     total: number;
     best: number;
     isNewBest: boolean;
+    /** J7a: a pont-bontás az eredményképernyőre (csak győzelemnél van értelmes bontás). */
+    breakdown: RewardResult["breakdown"] | null;
   } | null>(null);
   /**
    * S12: a szünet KÜLÖN állapot, nem fázis — így a kvíz / horgonyzás közben kért szünet után a fázis érintetlen,
@@ -1380,6 +1433,8 @@ function PlayScreen(props: {
   const scoreRef = useRef(0);
   const correctRef = useRef(0);
   const wrongRef = useRef(0);
+  /** J7a: a menet legjobb helyes-válasz sorozata (`runStreak` a ranglistára, `maxStreak` az eredményekhez). */
+  const streakRef = useRef(createStreakTracker());
   const anchorAttemptsRef = useRef(1);
   const lastQuizAtRef = useRef(0);
   const lastEvalAtRef = useRef(-Infinity);
@@ -1543,6 +1598,7 @@ function PlayScreen(props: {
     scoreRef.current = 0;
     correctRef.current = 0;
     wrongRef.current = 0;
+    streakRef.current = createStreakTracker();
     anchorAttemptsRef.current = 1;
     lastQuizAtRef.current = 0;
     lastEvalAtRef.current = -Infinity;
@@ -1847,6 +1903,15 @@ function PlayScreen(props: {
     if (phaseRef.current !== "approach" && phaseRef.current !== "seeking") return;
     const p = playerRef.current;
     const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
+    // J7a (terv 5.7 Q2): a horgonyzási kérdés csak a mérési sávban érkezik; a sávon kívül csak üzenet jön.
+    // A sáv-ellenőrzés a sebesség-ellenőrzés ELŐTT áll (review L4): a gyerek ne álljon meg fölöslegesen.
+    const band = anchorBandState(distKm, bandSpecRef.current.anchorBand);
+    if (band !== "in_band") {
+      setAnchorMsg(anchorBandMessage(band));
+      sfxWarning();
+      scheduleTimeout(() => setAnchorMsg(null), 2200);
+      return;
+    }
     // Must be roughly stopped to anchor.
     if (Math.abs(p.speed) > STOPPED_SPEED) {
       setAnchorMsg("Előbb állj meg a horgonyzáshoz!");
@@ -1854,8 +1919,7 @@ function PlayScreen(props: {
       scheduleTimeout(() => setAnchorMsg(null), 1600);
       return;
     }
-    // The scoring quiz — the brief's core mechanic. Distance/ground are checked
-    // after the answer in `resolveAnchor`, so the child always answers first.
+    // The scoring quiz — the brief's core mechanic. A talajt a válasz után a `resolveAnchor` ellenőrzi.
     pendingAnchorRef.current = { distanceKm: distKm };
     raiseQuiz("anchor");
   };
@@ -1870,6 +1934,8 @@ function PlayScreen(props: {
       const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
       const reward = won
         ? interceptReward({
+            // Review K2: a pozíció-bónusz az ALAP sávhoz mér — a műszer-fejlesztés csak a sáv elérhetőségét
+            // könnyíti, a ranglista-pontot nem emeli (azonos távolság → azonos pont).
             spec,
             secondsUsed: elapsedRef.current,
             anchorAttempts: anchorAttemptsRef.current,
@@ -1898,6 +1964,7 @@ function PlayScreen(props: {
         total: correctRef.current + wrongRef.current,
         best: bestNow.best,
         isNewBest: bestNow.isNewBest,
+        breakdown: won ? reward.breakdown : null,
       });
       setPhase(won ? "result_win" : "result_lose");
       if (won) sfxLevelUp();
@@ -1924,7 +1991,7 @@ function PlayScreen(props: {
         xpGained: reward.score,
         correctAnswers: correctRef.current,
         wrongAnswers: wrongRef.current,
-        maxStreak: correctRef.current,
+        maxStreak: streakRef.current.best,
         perfect: won && wrongRef.current === 0 && correctRef.current >= 5,
         fullClear: won && props.level === 200,
         highestLevel: props.level,
@@ -1942,7 +2009,7 @@ function PlayScreen(props: {
           gameId: GAME_ID,
           difficulty: props.level >= 150 ? "hard" : props.level >= 70 ? "normal" : "easy",
           runXp: reward.score,
-          runStreak: correctRef.current,
+          runStreak: streakRef.current.best,
           runSeconds: Math.round(elapsedRef.current),
           runId: newScoreRunId(),
         })
@@ -1965,6 +2032,11 @@ function PlayScreen(props: {
   useEffect(() => {
     if (props.forceQuiz > 0 && !finishedRef.current) raiseQuizRef.current("roam");
   }, [props.forceQuiz]);
+  useEffect(() => {
+    if (props.forceNear.n <= 0 || finishedRef.current) return;
+    const tp = tornadoPosRef.current;
+    playerRef.current = { ...playerRef.current, x: tp.x, z: tp.z + fromKm(props.forceNear.km), speed: 0 };
+  }, [props.forceNear.n]);
 
   const resolveAnchor = useCallback(
     (answerCorrect: boolean) => {
@@ -1973,7 +2045,7 @@ function PlayScreen(props: {
       const grip = gripAt(p.x, p.z);
       const outcome = anchorOutcome({
         distanceKm: pending?.distanceKm ?? toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z)),
-        spec,
+        spec: bandSpec,
         answerCorrect,
         surfaceGrip: grip,
       });
@@ -1992,7 +2064,8 @@ function PlayScreen(props: {
         haptics("hit");
         setPhase("approach");
         // Hold the anchor until the funnel's lifetime elapses → win. Játékórán: szünetben áll, újrakezdés törli.
-        scheduleGame(() => finishRunRef.current(true), 2600);
+        // J7a: a horgony-fejlesztés rövidíti a készenléti időt (alap 2,6 s).
+        scheduleGame(() => finishRunRef.current(true), effRef.current.anchorHoldMs);
       } else {
         anchorAttemptsRef.current += 1;
         sfxError();
@@ -2000,7 +2073,7 @@ function PlayScreen(props: {
       }
       pendingAnchorRef.current = null;
     },
-    [spec, finishRun, haptics, quality],
+    [bandSpec, finishRun, haptics, quality],
   );
 
   /* ------- answer handling ------- */
@@ -2011,6 +2084,7 @@ function PlayScreen(props: {
       answerLockedRef.current = true;
       const correct = idx === quiz.correctIndex;
       adaptiveRef.current.answer(correct);
+      streakRef.current = recordStreak(streakRef.current, correct);
       setQuizFlash({ idx, correct });
       if (correct) {
         correctRef.current += 1;
@@ -2093,6 +2167,7 @@ function PlayScreen(props: {
     scoreRef.current = 0;
     correctRef.current = 0;
     wrongRef.current = 0;
+    streakRef.current = createStreakTracker();
     anchorAttemptsRef.current = 1;
     lastQuizAtRef.current = 0;
     lastEvalAtRef.current = -Infinity;
@@ -2150,7 +2225,7 @@ function PlayScreen(props: {
 
       // --- vehicle control ---
       const p = playerRef.current;
-      const upg = upgradesFor(props.progress, props.vehicle.id);
+      const stats = effRef.current;
       const vehicleDims = vehicleDimensions(props.vehicle.silhouette);
 
       const k = keysRef.current;
@@ -2166,7 +2241,8 @@ function PlayScreen(props: {
       const steer = clampStick((k.right ? 1 : 0) - (k.left ? 1 : 0) + t.steer + pad.steer);
 
       if (!p.anchored) {
-        const windPush = windDriftUnits(windForceOn(windRef.current, props.vehicle.windResistance));
+        // J7a: az alváz (stabilitás) a szélsodrást is csökkenti — a garázs „Szélállóság” sávja ugyanezt a számot mutatja.
+        const windPush = windDriftUnits(windForceOn(windRef.current, stats.windResistance));
         const windAngle = (windRef.current.windDirection * Math.PI) / 180;
         const brake = k.brake || pad.brake;
         // One vehicle step of `dt` seconds: drive, then the collision pass with that same dt.
@@ -2177,9 +2253,10 @@ function PlayScreen(props: {
             dt,
             {
               speedKmh: props.vehicle.speed,
-              acceleration: props.vehicle.acceleration * statMultiplier(upg, "engine"),
-              handling: props.vehicle.handling * statMultiplier(upg, "suspension"),
-              grip: gripAt(p.x, p.z),
+              acceleration: stats.acceleration,
+              handling: stats.handling,
+              // J7a: a gumik a talaj tapadását szorozzák (sáron, füvön kisebb a kanyar-csúszás).
+              grip: effectiveSurfaceGrip(gripAt(p.x, p.z), stats.gripFactor),
               windPush,
               windAngle,
             },
@@ -2194,7 +2271,8 @@ function PlayScreen(props: {
           p.x = nx;
           p.z = nz;
           p.heading = next.heading;
-          p.speed = solid.speed;
+          // J7a: az alváz tompítja az ütközés sebességvesztését (a hely-kitolás nem változik).
+          p.speed = softenImpact(next.speed, solid.speed, stats.crashLossFactor);
         };
         // Spec 2026-09-29-tornado-ut-kormanyzas D5: a slow frame is split into ≤ 1/60 s steps, so a fast
         // car cannot jump through a fence in one go.
@@ -2253,7 +2331,7 @@ function PlayScreen(props: {
         if (!p.anchored) finishRun(false);
       }
       // Too close, un-anchored, in a strong storm = thrown → lose.
-      if (!p.anchored && distKm < spec.anchorBand.min * 0.4 && windRef.current.currentWindSpeed > spec.windPeak * 0.8) {
+      if (!p.anchored && distKm < bandSpec.anchorBand.min * 0.4 && windRef.current.currentWindSpeed > spec.windPeak * 0.8) {
         finishRun(false);
       }
 
@@ -2328,7 +2406,8 @@ function PlayScreen(props: {
         distanceKm: distKm,
         // A jármű iránya radiánban tárolódik, 0 = észak, az óramutató irányában.
         targetRelDeg: ((targetBearing - (p.heading * 180) / Math.PI + 540) % 360) - 180,
-        anchorReady: distKm >= spec.anchorBand.min && distKm <= spec.anchorBand.max && Math.abs(p.speed) < STOPPED_SPEED,
+        anchorReady: anchorBandState(distKm, bandSpec.anchorBand) === "in_band" && Math.abs(p.speed) < STOPPED_SPEED,
+        inBand: anchorBandState(distKm, bandSpec.anchorBand) === "in_band",
         surface: surfaceAt(p.x, p.z),
         timeLeft: timeLeftRef.current,
         stormPct: Math.min(100, (w.currentWindSpeed / spec.windPeak) * 100),
@@ -2417,7 +2496,7 @@ function PlayScreen(props: {
             if (!marker.visible) return null;
             return (
               <div
-                className={`absolute top-[40%] -translate-y-1/2 ${marker.side === "right" ? "right-2" : "left-2"} z-10 pointer-events-none flex flex-col items-center gap-1`}
+                className={`absolute top-[40%] [@media(max-height:500px)]:top-[34%] -translate-y-1/2 ${marker.side === "right" ? "right-2" : "left-2"} z-10 pointer-events-none flex flex-col items-center gap-1`}
                 data-testid="tornado-target-marker"
                 data-side={marker.side}
               >
@@ -2425,7 +2504,12 @@ function PlayScreen(props: {
                 <div className="px-3 py-2 rounded-full bg-amber-500/90 text-slate-950 text-2xl font-black leading-none shadow-[0_0_18px_rgba(245,158,11,0.75)] motion-safe:animate-pulse">
                   {marker.side === "right" ? "▶" : "◀"}
                 </div>
-                <span className="px-2 py-0.5 rounded-lg bg-black/70 text-xs font-bold text-amber-200">
+                {/* J7a (audit #64): alacsony fekvő nézetben a „Menj közelebb” buborék ráfeküdt erre a feliratra; ott
+                    elhagyjuk — a távolság ugyanott a felső HUD „Tornádó” értékében is látszik. */}
+                <span
+                  data-testid="tornado-target-marker-km"
+                  className="px-2 py-0.5 rounded-lg bg-black/70 text-xs font-bold text-amber-200 [@media(max-height:500px)]:hidden"
+                >
                   {hud.distanceKm.toFixed(1)} km
                 </span>
               </div>
@@ -2435,6 +2519,7 @@ function PlayScreen(props: {
           {/* Anchor guidance */}
           {(phase === "seeking" || phase === "approach") && !activeQuiz && !result && (
             <div
+              data-testid="tornado-anchor-guidance"
               className={`absolute right-2 px-3 py-1.5 rounded-lg text-sm font-bold pointer-events-none max-w-[60%] text-right z-10 transition-colors ${
                 hud.anchorReady ? "bg-emerald-600/85 text-white" : "bg-sky-900/75"
               }`}
@@ -2446,9 +2531,9 @@ function PlayScreen(props: {
                   ? touch
                     ? "Jó pozíció! Nyomd a ⚓ gombot!"
                     : "Jó pozíció! Nyomd az F / Horgony gombot!"
-                  : hud.distanceKm > spec.anchorBand.max
+                  : hud.distanceKm > bandSpec.anchorBand.max
                     ? "Menj közelebb a tornádóhoz!"
-                    : hud.distanceKm < spec.anchorBand.min
+                    : hud.distanceKm < bandSpec.anchorBand.min
                       ? "Túl közel! Állj meg biztonságos sávban."
                       : "Keresd a tornádót, közelítsd meg és állj meg!"}
             </div>
@@ -2456,7 +2541,7 @@ function PlayScreen(props: {
 
           {anchorMsg && (
             <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">
-              <div className="px-3 py-2 rounded-lg bg-black/80 border border-white/20 text-sm font-bold max-w-[80%] text-center">
+              <div className="px-3 py-2 rounded-lg bg-black/80 border border-white/20 text-sm font-bold max-w-[min(80%,calc(100%-8.5rem))] text-center">
                 {anchorMsg}
               </div>
             </div>
@@ -2518,6 +2603,7 @@ function PlayScreen(props: {
           touchRef={touchRef}
           resetSignal={touchReset}
           anchorReady={hud.anchorReady && !playerRef.current.anchored}
+          anchorEnabled={hud.inBand && !playerRef.current.anchored}
           onAnchor={() => tryAnchorRef.current()}
           onCamera={() => {
             const next = toggleCamera(settingsRef.current.cameraMode);
@@ -2588,6 +2674,20 @@ function PlayScreen(props: {
                     : "A tornádó elhaladt. Próbáld újra!"}
                 </span>
               </p>
+              {result.breakdown && (
+                <dl
+                  data-testid="tornado-score-breakdown"
+                  aria-label="Honnan jött a pontszám"
+                  className="grid grid-cols-2 gap-x-3 gap-y-0.5 rounded-lg bg-white/5 px-3 py-2 text-xs"
+                >
+                  {breakdownRows(result.breakdown).map((row) => (
+                    <div key={row.id} className="flex items-baseline justify-between gap-2" data-testid={`tornado-breakdown-${row.id}`}>
+                      <dt className="text-white/70">{row.label}</dt>
+                      <dd className="font-bold text-white tabular-nums">+{fmt(row.value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
               {next && (
                 <button type="button" data-testid="tornado-next-level" className="game-btn game-btn-secondary w-full" onClick={next.go}>
                   Tovább: {next.label}
@@ -2779,6 +2879,8 @@ function TouchControls(props: {
   resetSignal: number;
   /** Jó horgonyzási pozíció: a ⚓ gomb világít és pulzál (csökkentett mozgásnál csak világít). */
   anchorReady: boolean;
+  /** J7a: a ⚓ csak a mérési sávban aktív; a sávon kívül letiltott és halvány. */
+  anchorEnabled: boolean;
   onAnchor: () => void;
   onCamera: () => void;
 }) {
@@ -2802,7 +2904,7 @@ function TouchControls(props: {
   const pedals = (
     <div className={`flex gap-3 items-end ${props.leftHanded ? "flex-row-reverse" : ""}`}>
       <TouchBtn onDown={() => props.onCamera()} onUp={() => {}} label="Kamera" small />
-      <TouchBtn onDown={() => props.onAnchor()} onUp={() => {}} label="⚓" accent glow={props.anchorReady} />
+      <TouchBtn onDown={() => props.onAnchor()} onUp={() => {}} label="⚓" accent glow={props.anchorReady} disabled={!props.anchorEnabled} />
     </div>
   );
 
@@ -2843,15 +2945,19 @@ function TouchBtn(props: {
   small?: boolean;
   accent?: boolean;
   glow?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <HoldButton
       label={props.label}
+      disabled={props.disabled}
       onHoldStart={props.onDown}
       onHoldEnd={props.onUp}
       className={`rounded-full border-2 font-bold flex items-center justify-center shadow-lg backdrop-blur-sm transition-[transform,box-shadow] duration-150 active:scale-90 ${
         props.small ? "w-12 h-12 text-sm" : "game-action-btn text-2xl"
       } ${props.accent ? "bg-amber-500/85 border-amber-200/80 text-slate-950" : "bg-slate-900/70 border-white/25"} ${
+        props.disabled ? "opacity-40 saturate-50" : ""
+      } ${
         props.glow ? "ring-4 ring-emerald-300/80 shadow-[0_0_24px_rgba(52,211,153,0.85)] motion-safe:animate-pulse" : ""
       }`}
     >
