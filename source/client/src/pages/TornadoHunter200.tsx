@@ -2539,7 +2539,7 @@ function PlayScreen(props: {
 
           {anchorMsg && (
             <div className="absolute inset-x-0 top-1/3 flex justify-center pointer-events-none">
-              <div className="px-3 py-2 rounded-lg bg-black/80 border border-white/20 text-sm font-bold max-w-[min(80%,calc(100%-7rem))] text-center">
+              <div className="px-3 py-2 rounded-lg bg-black/80 border border-white/20 text-sm font-bold max-w-[min(80%,calc(100%-8.5rem))] text-center">
                 {anchorMsg}
               </div>
             </div>
