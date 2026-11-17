@@ -12,10 +12,10 @@ import { isPlayableQuestion, uniqueQuizContent } from "../shared/game-quiz-contr
  * a LEGUTÓBBI N tananyagához kapcsolt kvízeket (`listLatestMaterialQuizzes`).
  */
 import { gzipSync } from "node:zlib";
-import { and, desc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, notInArray, or, sql } from "drizzle-orm";
 import { db } from "./db";
-import { gameQuizItems, htmlFiles, lessons } from "@shared/schema";
-import { canonicalLessonQuiz, type CanonicalQuizRow } from "./studio/canonical-quiz-bank";
+import { gameQuizItems, htmlFiles, knowledgeMaps, lessons } from "@shared/schema";
+import { canonicalLessonQuiz, quizTopic, type CanonicalQuizRow } from "./studio/canonical-quiz-bank";
 import { COUPON_GAME_IDS } from "./studio/quiz-export";
 import { logger } from "./lib/logger";
 
@@ -44,6 +44,13 @@ export type GameQuizBankRow = {
   questionVersion?: string;
   coversConceptIds?: string[];
   feedbackPerOption?: string[];
+  /**
+   * Kanban #84 (J7b): a forrás-lecke VALÓDI tantárgya `quizTopic`-alakban („english” / „math” / „nature” / „hungarian” /
+   * a lecke tantárgy-felirata). Csak a `material-quizzes` válasz hordozza; ha nem állapítható meg, a mező HIÁNYZIK
+   * (a régi kliensek és a többi játék változatlanul működik). A `topic` régi Stúdió-exportnál a lecke címe, ezért abból
+   * nem lehet tantárgyat kitalálni.
+   */
+  subject?: string;
 };
 
 /**
@@ -354,6 +361,57 @@ export async function gameQuizBankResponse(gameId: string): Promise<GameQuizBank
   return game;
 }
 
+/* ------------------------------------------------------------------------------------------------------------------ *
+ * Kanban #84 — a `material-quizzes` tétel tantárgya (végrehajtás J7b, „J7b döntések” 9.)
+ * ------------------------------------------------------------------------------------------------------------------ */
+
+/** A kérdés-generátor (`gameQuizGeneratorService`) témái: a régi, generált soroknál ezek tantárgyak, nem címek. */
+const GENERATOR_SUBJECT_TOPICS = new Set(["english", "math", "nature", "hungarian"]);
+
+function withSubject<T extends GameQuizBankRow>(row: T, subject: string | null | undefined): T {
+  const s = typeof subject === "string" ? subject.trim() : "";
+  return s ? { ...row, subject: s } : row;
+}
+
+/** A kanonikus tétel `topic`-ja maga a lecke tantárgya (`quizTopic(lesson.subject)`, `canonical-quiz-bank.ts`). */
+const canonicalWithSubject = (item: CanonicalQuizRow): CanonicalQuizRow & { subject?: string } => withSubject(item, item.topic);
+
+type LegacySource = { lessonId: string | null; sourceMaterialId: string | null; topic: string | null };
+
+/**
+ * A régi exportok tantárgya: a lecke (közvetlenül a `lessonId`-n, vagy az anyagán át — a legfrissebb verzió) tudástérképének
+ * tantárgya `quizTopic`-pal; a generált sornál a téma; különben nincs (a mező hiányzik). Egyetlen, `json` nélküli lekérdezés.
+ */
+async function legacySubjects(rows: readonly LegacySource[]): Promise<(row: LegacySource) => string | undefined> {
+  const lessonIds = [...new Set(rows.map((r) => r.lessonId).filter((v): v is string => !!v))];
+  const materialIds = [...new Set(rows.map((r) => r.sourceMaterialId).filter((v): v is string => !!v))];
+  const byLesson = new Map<string, string>();
+  const byMaterial = new Map<string, string>();
+  if (lessonIds.length || materialIds.length) {
+    const found = await db
+      .select({ id: lessons.id, htmlFileId: lessons.htmlFileId, subject: knowledgeMaps.subject })
+      .from(lessons)
+      .innerJoin(knowledgeMaps, eq(knowledgeMaps.id, lessons.mapId))
+      .where(or(
+        lessonIds.length ? inArray(lessons.id, lessonIds) : undefined,
+        materialIds.length ? inArray(lessons.htmlFileId, materialIds) : undefined,
+      ))
+      .orderBy(desc(lessons.version));
+    for (const f of found) {
+      const subject = quizTopic(f.subject);
+      if (!subject) continue;
+      byLesson.set(f.id, subject);
+      if (f.htmlFileId && !byMaterial.has(f.htmlFileId)) byMaterial.set(f.htmlFileId, subject);
+    }
+  }
+  return (row) => {
+    if (row.lessonId && byLesson.has(row.lessonId)) return byLesson.get(row.lessonId);
+    if (row.sourceMaterialId && byMaterial.has(row.sourceMaterialId)) return byMaterial.get(row.sourceMaterialId);
+    const topic = (row.topic ?? "").trim().toLowerCase();
+    return GENERATOR_SUBJECT_TOPICS.has(topic) ? topic : undefined;
+  };
+}
+
 export type LatestMaterialQuizzes = {
   classroom: number;
   materials: { id: string; title: string; createdAt: string }[];
@@ -383,9 +441,15 @@ export async function listLatestMaterialQuizzes(
     const [material] = lesson.htmlFileId ? await db.select().from(htmlFiles).where(eq(htmlFiles.id, lesson.htmlFileId)).limit(1) : [];
     const canonical = canonicalLessonQuiz(lesson);
     const legacy = canonical === null ? await db.select().from(gameQuizItems).where(and(eq(gameQuizItems.lessonId, lessonId), eq(gameQuizItems.isActive, true))) : [];
+    const subjectOf = await legacySubjects(legacy);
+    const legacyItems: GameQuizBankRow[] = [];
+    for (const r of legacy) {
+      const s = sanitizeRow(r);
+      if (s) legacyItems.push(withSubject(s, subjectOf(r)));
+    }
     return { classroom: material?.classroom ?? cls,
       materials: material ? [{ id: material.id, title: material.title, createdAt: material.createdAt.toISOString() }] : [],
-      items: uniqueQuizContent(canonical ?? legacy.map(sanitizeRow).filter((q): q is GameQuizBankRow => q !== null)) };
+      items: uniqueQuizContent(canonical ? canonical.map(canonicalWithSubject) : legacyItems) };
   }
 
   const latestMaterials = await db
@@ -420,11 +484,12 @@ export async function listLatestMaterialQuizzes(
     .orderBy(gameQuizItems.sourceMaterialId, gameQuizItems.prompt, gameQuizItems.options, gameQuizItems.correctIndex, gameQuizItems.explanation, desc(gameQuizItems.createdAt))
     .limit(200);
 
-  const items: GameQuizBankRow[] = [...canonical.items];
-  for (const r of rows) {
-    if ((r.lessonId && canonical.lessonIds.has(r.lessonId)) || (r.sourceMaterialId && canonical.materialIds.has(r.sourceMaterialId))) continue;
+  const items: GameQuizBankRow[] = canonical.items.map(canonicalWithSubject);
+  const kept = rows.filter((r) => !((r.lessonId && canonical.lessonIds.has(r.lessonId)) || (r.sourceMaterialId && canonical.materialIds.has(r.sourceMaterialId))));
+  const subjectOf = await legacySubjects(kept);
+  for (const r of kept) {
     const s = sanitizeRow(r);
-    if (s) items.push(s);
+    if (s) items.push(withSubject(s, subjectOf(r)));
   }
 
   return {

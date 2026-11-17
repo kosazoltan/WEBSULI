@@ -107,7 +107,12 @@ test("tananyag-sor tárgya: csak a bizonyítható téma számít biztosnak, mind
     ["matematika", "Mennyi 2 + 2?", "math", true],
     ["english", "Weather magyarul:", "english", true],
     ["Angol nyelv", "Weather magyarul:", "english", true],
-    ["", "Tempête magyarul:", "english", true],
+    // SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md „J7b döntések” 9., kanban #84 — a review
+    // két maradék hamis pozitívja): az „X magyarul:” kérdés-alak nem bizonyít angolt (a „Hund magyarul:” német), és a
+    // matek-előtag mellett más tantárgy szava bizonytalan. A szigor nő: kevesebb tétel számít biztosnak; a tantárgyat a szerver adja.
+    ["", "Tempête magyarul:", "math", false],
+    ["", "Hund magyarul:", "math", false],
+    ["matek: angol számnevek", "Hogy mondod angolul: 7?", "math", false],
     // Review (vercel): kifejezett matek témát a kérdés szövege nem ír át.
     ["math", "Mi a 7 ellentéte: 7 vagy -7?", "math", true],
     ["math", "Hogy mondod magyarul: 3 × 4 = ?", "math", true],
@@ -124,8 +129,9 @@ test("tananyag-sor tárgya: csak a bizonyítható téma számít biztosnak, mind
     assert.deepEqual(materialSubject(topic, prompt), { subject, certain }, `${topic} | ${prompt}`);
   }
   const mapped = materialToQuestions(MATERIAL_ROWS, 4);
-  assert.deepEqual(mapped.map((q) => q.subject), ["math", "english", "math", "english", "math"]);
-  assert.deepEqual(mapped.map((q) => q.certain), [true, true, false, true, false]);
+  // SPEC-VÁLTOZÁS 2026-11-17 (lásd fent): a téma nélküli „Tempête magyarul:” (m-4) már nem biztos angol.
+  assert.deepEqual(mapped.map((q) => q.subject), ["math", "english", "math", "math", "math"]);
+  assert.deepEqual(mapped.map((q) => q.certain), [true, true, false, false, false]);
 });
 
 test("a 22 valós cím-téma: „csak matek” és „csak angol” módban soha, vegyes módban igen", () => {
