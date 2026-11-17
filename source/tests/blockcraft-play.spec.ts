@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
   // képkockái helyben). Alapból nincs lassítás.
   const throttle = Number(process.env.BC_CPU_THROTTLE ?? 0);
   if (throttle > 1) {
-    test.setTimeout(180_000);
+    test.setTimeout(300_000);
     await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: throttle });
   }
   await page.addInitScript(() => {
@@ -362,8 +362,10 @@ test("B1 + M3: a tartott Bányász gombbal megérintett ércnél a zár nyílik,
   // Tartva marad az élesítésen túl, majd felengedi (a gomb ekkor már rejtett / letiltott).
   await expect.poll(async () => (await probe(page)).armed, { timeout: 15_000 }).toBe(1);
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  const f0 = Number(opened.frames);
-  await expect.poll(async () => Number((await probe(page)).frames), { timeout: 15_000 }).toBeGreaterThan(f0 + 2);
+  // A felengedés UTÁN legalább 4 render-lépés fusson le (egy beragadt tartás ezalatt bányászna / választana) — a d296f39b eredeti
+  // mércéje; a válasz lépése ma már nem függ a válaszablaktól (`answerArmedLockNow`), így ezt nem kell rövidíteni.
+  const f0 = Number((await probe(page)).frames);
+  await expect.poll(async () => Number((await probe(page)).frames), { timeout: 30_000 }).toBeGreaterThan(f0 + 3);
   const p = await probe(page);
   expect(p.questionsAnswered, "a felengedés nem válasz").toBe(0);
   expect(p.pressing, "nincs beragadt tartás").toBe(0);

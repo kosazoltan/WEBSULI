@@ -1308,6 +1308,21 @@ válaszok mellett mind a négy kő 0%, és a kérdéskártya rátakar az A/B rú
   ellenpróba. Az álló és fekvő képernyőképek újrakészülnek.
 - **Nem ebben a PR-ban:** N3, L4 maradéka, L6 (tulajdonosi döntés), a közös `pointerTap.ts`.
 
+**Meglévő tesztelvárások változásai ebben a PR-ban (tételes, a gépi teszt-integritás ellenpróba nyomán):**
+- `T/blockcraft-play.spec.ts` M3-teszt, a felengedés utáni render-lépés várakozás: a d296f39b-ben „a felengedés UTÁN > 3
+  képkocka” volt (egy beragadt tartás ezalatt bányászna / választana). A 40e12749 ezt „a zár nyitása óta > 2”-re
+  rövidítette, mert helyben a teszt a válaszablak lejárta miatt bukott — ez a mérce lazítása volt. **Visszaállítva** „a
+  felengedés után > 3”-ra; a válasz lépése ma már nem függ az ablaktól (`answerArmedLockNow`).
+- B1-teszt: a „taps után a zár még nyitva (`lockOpen` 1, `reveal` 0)” elvárás helyett (9083a7c0) a lapon belüli mérés: ≥ 2
+  koppintás érte a nyitott, élesített zárat, és 0 válasz. Ok: a CI-n (0,5–1,3 s / Playwright-hívás) a válaszablak a hívássor
+  alatt lejárt; a mérés tárgya (a bányászó koppintás nem válasz) nem változott, a lapon mért feltétel szigorúbb a koppintás
+  pillanatára nézve.
+- B1 / M3 ellenpróba és L7: a jó rúnagomb választása valódi érintés helyett a gomb billentyűs útján (`click`, `detail === 0`)
+  egy lapfeladatban; a valódi érintéses rúnagomb-út a „Rúna-zár” és „jó rúnakő” tesztekben marad. Az L7 szigorodott: 1 s
+  maradék idővel, és a győzelem után az óra nem léphet.
+- A korábbi, megjelölt SPEC-VÁLTOZÁS-ok (élesítés a `openLock`-ban és a mobil eset `answerWrong`-jában; új arany lenyomat; a
+  mag-tesztek kőelrendezés és L2) a sorok fölötti megjegyzésben.
+
 **Megvalósult (mérve):**
 - A kövek takaratlan része (rövid / leghosszabb kérdés): 360×640 100/100/100/100% mindkettőnél (kis álló nézetben a sáv a
   gombsor alatt, a tárcsa és az Ugrás között); 390×844 100% (leghosszabbnál 92–100%); 844×390 83–100%. A 360×640-es
