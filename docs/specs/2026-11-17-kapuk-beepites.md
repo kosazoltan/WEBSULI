@@ -57,8 +57,9 @@ gyorstábla, az átfedő kézi szabályok hivatkozása a kapukra, „a csapda-ka
 - A telepítő nem ír felül idegen hookot, és `core.hooksPath` mellett megáll; a régit archiválja (`.bak-<dátum>`), nem törli.
 - Hermes: minden profil a SAJÁT `SOUL.md`-jét tölti (`agent/context_file_sources.py`: `home / "SOUL.md"`); közös alap-soul nincs.
   A projekt `AGENTS.md`-jét a Hermes is betölti munkakönyvtárból (`discover_context_files`), karakterkorláttal: a profil
-  `context_file_max_chars` nélkül a dinamikus alsó határ 20 000 karakter — az `AGENTS.md` ma 21 410 karakter. Ezért a B) részben az
-  `AGENTS.md` célmérete ≤ 20 000 karakter, és a „Minőségkapuk” az elejére kerül.
+  `context_file_max_chars` nélkül a dinamikus alsó határ 20 000 karakter (a `coder`, `planner`, `ellenor1` profil nem állítja be) —
+  az `AGENTS.md` ma 19 785 karakter (21 410 bájt), alig a határ alatt; túllépésnél a közepe vágódik (fej 70% / vég 20%). Ezért a B)
+  részben az `AGENTS.md` célmérete ≤ 18 000 karakter, és a „Minőségkapuk” az elejére kerül.
 
 ## 5. Edge case-ek
 
@@ -96,3 +97,39 @@ gyorstábla, az átfedő kézi szabályok hivatkozása a kapukra, „a csapda-ka
 ## 9. Végrehajtási utasítás
 
 - Végrehajtás: `docs/specs/2026-11-17-kapuk-beepites-vegrehajtas.md`
+
+## 10. A B) rész kész terve (a #490 összevonása után alkalmazandó)
+
+Alap: a diéta-spec 10. pontja (`docs/specs/2026-11-17-vezerles-dieta.md`) — az ott felsorolt összevonások változatlanul. Kiegészítés:
+
+1. **A „Minőségkapuk” szakasz az Alapelvek UTÁN** (a kezelt `agentic-qa-kit` blokk elé), a #490 által módosított szöveggel, és az
+   elején ez a gyorstábla (a parancsok a kapu-regiszterből, `docs/minosegkapuk.md`):
+
+   | Fázis | Parancs (a munkafa gyökeréből) |
+   |---|---|
+   | Terv | első commit: terv + `*-vegrehajtas.md`; `node scripts/qa/three-phase-check.mjs --base origin/main` |
+   | Minden szakasz után | `npm run gate:stage` — csak zöld után tovább |
+   | Push előtt | `npm run gate:push` → `.audit-ok` → `git push` önálló, egyszerű parancsként |
+   | PR előtt | független ellenőr (`websuli-fejlesztesi-ellenor`) → `node scripts/qa/gates/record-review.mjs …` → `npm run gate:pr -- --body-file <leírás.md>` → `gh pr create --body-file …` |
+   | Merge előtt (közvetlenül) | `npm run gate:merge -- <PR>` (benne a futásőr) → `gh pr merge` |
+   | Telepítés után | a regiszterben felvett telepítés utáni kapu (a szkriptkapuk-terv füstpróbája, ha bekerült) |
+
+2. **Átfedő kézi szabályok → hivatkozás, az erősség megtartásával:**
+   - „Verifikáció” (repó-saját): a „legkisebb ellenőrzési kör” = `gate:stage`, a „teljes suite” = `gate:push`; a „bukó parancs
+     változatlan újrafuttatása tilos” mondat marad.
+   - „Git” (repó-saját): + „push / PR / merge csak zöld kapuval (hook: Claude Code; git-hook: bármely kliens)”.
+   - „Zárás” (repó-saját): a futtatott ellenőrzések bizonyítéka a kapu összesítő táblája (PASS / FAIL / NOT RUN); a fájl- és
+     kockázatlista marad.
+   - Kezelt blokkok („Teszt-integritás”, „PR-méret”, „Review-evidencia”, „Evidence-before-completion”, Codex-protokoll, közös
+     minőségkapu): kézzel NEM írjuk át; a „Minőségkapuk” szakasz egy sora mondja ki, hogy ezek közül a gépiesen ellenőrzött részt
+     (tiltott `.only` / `.skip`, PR-méret figyelmeztetés, háromfázisú rend, zöld-állítás bizonyítéka) a kapu adja, a többi kézi
+     szabály változatlanul érvényes.
+3. **Csapda-katalógus:** az „Alapelvek”-be egy sor: „`docs/agent-csapdak.md`: elég az INDEXET olvasni; részlet csak a releváns
+   azonosítónál.”
+4. **Méret:** az `AGENTS.md` célmérete ≤ 18 000 karakter (a Hermes-profil dinamikus alsó korlátja 20 000; ma 19 785). Becsült megtakarítás a
+   diéta-spec szerint ~3 500–4 000 karakter, a gyorstábla ~+900 karakter.
+5. `docs/agent-haromfazisu-munka.md`: a 3. fázis mondatához „szakaszonként `npm run gate:stage`; a háromfázisú rendet a `gate:push`
+   és a CI ellenőrzi”; a mandátum-bekezdés hivatkozásra. `docs/telepites-elotti-or.md`: „az őrt a `gate:merge` is futtatja”; a 6–7.
+   pont hivatkozásra (C-62 / C-63, `docs/minosegkapuk.md` „Push-fegyelem”). `docs/kanban.md`: a munkafolyamat 3. pontjához „a lezáró
+   jegyzet bizonyítéka a kapu-összesítő (gate:push / gate:pr)”.
+6. A szabály-leltár folytatása (a B) rész tételei: AGENTS.md repó-saját részének minden pontja → új hely) a PR-leírásban.
