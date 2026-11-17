@@ -35,6 +35,8 @@ export const OWN_BANK_MAX_GRADE = 6;
 export type Question = {
   id: string;
   subject: Subject;
+  /** J7a: `false` → a tantárgy csak találgatás (tananyag-sor, ismeretlen téma): csak vegyes / kupon módban jön. */
+  certain?: boolean;
   topic?: string | null;
   /** School grade, 1..12 (the built-in bank covers 1..6). */
   grade: number;
@@ -161,17 +163,27 @@ export type MaterialRow = {
 };
 
 /**
- * J7a: a tananyag-sor tárgya. A játék két tárgyat ismer (matek, angol); a nyelvi (angol, német, francia …) és
- * szókincses témák az „angol” ágra kerülnek, így „csak matek” módban nem jelennek meg. Ismeretlen téma marad matek.
+ * J7a (review #482 K1): a tananyag-sor tárgya. A `/api/games/material-quizzes` válasza NEM ad tantárgyat, csak
+ * `topic`-ot, amely a valóságban háromféle: az AI-generátor egy szava (`english` / `math` / `nature` / `hungarian`),
+ * a kanonikus bank tantárgy-felirata („angol nyelv”), vagy a régi Stúdió-leckéknél a lecke CÍME („Present Simple”,
+ * „A francia forradalom”). A cím szövegéből tantárgyat kitalálni mindkét irányban téved, ezért a besorolás
+ * KONZERVATÍV: tantárgya (`certain: true`) csak annak van, aminek a témája bizonyíthatóan matek vagy angol
+ * (az egész téma ez a szó, vagy matek-előtaggal kezdődik). Minden más bizonytalan: „csak matek” és „csak angol”
+ * módban nem jelenik meg, vegyes és kupon módban igen. (A végleges megoldás a szerver oldalán a forrás-lecke
+ * tantárgyának kiadása — lásd a PR „ORKESZTRÁTOR-KÉRÉS” részét.)
  */
-const LANGUAGE_TOPIC = /english|angol|német|francia|olasz|spanyol|vocab|szókincs|grammar/i;
+const MATH_TOPIC = /^(math|matek|matematik\p{L}*)(?![\p{L}])/u;
+const ENGLISH_TOPIC = /^(english|angol|angol nyelv|angol szókincs)$/u;
 
-export function materialSubject(topic: string, prompt: string): Subject {
-  if (LANGUAGE_TOPIC.test(topic)) return "english";
-  // A szóbank-szerű kérdés („X magyarul:”) csak AKKOR nyelvi, ha a téma üres: a kifejezetten megjelölt témát
-  // (pl. „matek”) a kérdés szövege nem írhatja felül (review: „ellentéte” matekban is előfordul).
-  if (topic.trim() === "" && /magyarul:/i.test(prompt)) return "english";
-  return "math";
+export type MaterialSubject = { subject: Subject; certain: boolean };
+
+export function materialSubject(topic: string, prompt: string): MaterialSubject {
+  const t = topic.trim().toLowerCase();
+  if (ENGLISH_TOPIC.test(t)) return { subject: "english", certain: true };
+  if (MATH_TOPIC.test(t)) return { subject: "math", certain: true };
+  // Téma nélkül a szóbank-szerű „X magyarul:” kérdés nyelvi; kifejezett témát a szöveg nem ír felül.
+  if (t === "" && /magyarul:/i.test(prompt)) return { subject: "english", certain: true };
+  return { subject: "math", certain: false };
 }
 
 /**
@@ -189,7 +201,7 @@ export function materialToQuestions(rows: readonly MaterialRow[], grade: number)
     const topic = (row.topic ?? "").toLowerCase();
     out.push({
       id: row.id ?? `material-${idx}`,
-      subject: materialSubject(topic, row.prompt),
+      ...materialSubject(topic, row.prompt),
       grade,
       prompt: row.prompt,
       options: options as string[],
@@ -488,7 +500,9 @@ export function pickQuestion(args: PickArgs): Question {
   const grades = new Set(resolved.map((g) => Math.min(g, OWN_BANK_MAX_GRADE)));
   const recent = new Set(args.recent ?? []);
 
-  const material = (args.material ?? []).filter((q) => args.mode === "mixed" || q.subject === subject);
+  const material = (args.material ?? []).filter(
+    (q) => args.mode === "mixed" || (q.subject === subject && q.certain !== false),
+  );
   const materialOnly = args.materialOnly === true && material.length > 0;
   // S13 / átfogó review H1: the priority goes to material NOT asked yet (recent window or this run's
   // gradeSeen), as in the other games' `pickUnseenMaterial`. Gating on the whole list made the vocab bank

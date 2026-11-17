@@ -195,6 +195,8 @@ test("bekötés: a ⚓ a sávon kívül letiltott, a kérdés csak a sávban ny�
   const tryAnchor = page.slice(page.indexOf("tryAnchorRef.current = () => {"), page.indexOf("const pendingAnchorRef"));
   assert.ok(tryAnchor.indexOf("anchorBandState(") > 0 && tryAnchor.indexOf("anchorBandState(") < tryAnchor.indexOf('raiseQuiz("anchor")'));
   assert.match(tryAnchor, /band !== "in_band"[\s\S]{0,200}return;/);
+  // Review L4: a sáv-ellenőrzés a sebesség-ellenőrzés ELŐTT áll (a gyerek ne álljon meg fölöslegesen).
+  assert.ok(tryAnchor.indexOf("anchorBandState(") < tryAnchor.indexOf("STOPPED_SPEED"), "a sáv a sebesség előtt");
 });
 
 test("bekötés: pont-bontás az eredményen, a sorozat a legjobb sorozat", () => {
@@ -203,4 +205,21 @@ test("bekötés: pont-bontás az eredményen, a sorozat a legjobb sorozat", () =
   assert.match(page, /runStreak: streakRef\.current\.best/);
   assert.match(page, /maxStreak: streakRef\.current\.best/);
   assert.doesNotMatch(page, /runStreak: correctRef\.current/);
+});
+
+test("review K2: a műszer-fejlesztés nem emeli a pontot — a jutalom az ALAP sávhoz mér", () => {
+  const spec = levelSpec(50);
+  const d = (spec.anchorBand.min + spec.anchorBand.max) / 2;
+  const args = { secondsUsed: 80, anchorAttempts: 1, peakWind: spec.windPeak * 0.8, distanceKm: d, correctAnswers: 4, wrongAnswers: 1 };
+  const base = interceptReward({ spec, ...args }).score;
+  // A szélesített sávval a pozíció-bónusz más lenne — ezért a lap NEM adhatja át a szélesített specet.
+  const wide = effectiveAnchorBand(spec.anchorBand, effectiveStats(vehicle, maxed("instruments")).bandWidthFactor);
+  assert.notEqual(interceptReward({ spec: { ...spec, anchorBand: wide }, ...args }).score, base, "a szélesített sáv eltérne");
+  // Minden műszer-szinten azonos távolságból azonos pont, ha az alap specet kapja.
+  for (let lvl = 0; lvl <= MAX_UPGRADE_LEVEL; lvl++) {
+    assert.equal(interceptReward({ spec, ...args }).score, base, `${lvl}. szint`);
+  }
+  const finish = page.slice(page.indexOf("const finishRun = useCallback("), page.indexOf("const finishRunRef"));
+  assert.match(finish, /interceptReward\(\{[\s\S]{0,700}\bspec,\s/, "a finishRun az alap specet adja át");
+  assert.doesNotMatch(finish, /spec:\s*bandSpec/, "a finishRun nem adhatja át a szélesített specet");
 });

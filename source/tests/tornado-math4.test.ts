@@ -64,12 +64,29 @@ const GRADE_FIXTURE: GradeQuizItem[] = [7, 9, 12].flatMap((grade) =>
   ),
 );
 
+const row = (id: string, prompt: string, topic: string | null) => ({
+  id,
+  prompt,
+  options: ["a", "b", "c", "d"],
+  correctIndex: 1,
+  topic,
+});
+
+/** A valós témaformák (review #482): AI-generátor szó, kanonikus tantárgy-felirat, régi Stúdió-lecke CÍME. */
 const MATERIAL_ROWS = [
-  { id: "m-1", prompt: "Mennyi 6 × 7?", options: ["40", "42", "44", "46"], correctIndex: 1, topic: "Szorzás" },
-  { id: "m-2", prompt: "Weather magyarul:", options: ["idő", "víz", "szél", "nap"], correctIndex: 0, topic: "Angol szavak" },
-  { id: "m-3", prompt: "Wetter magyarul:", options: ["idő", "víz", "szél", "nap"], correctIndex: 0, topic: "Német – időjárás" },
-  { id: "m-4", prompt: "Tempête magyarul:", options: ["vihar", "víz", "szél", "nap"], correctIndex: 0, topic: null },
-  { id: "m-5", prompt: "Sunny magyarul:", options: ["napos", "víz", "szél", "nap"], correctIndex: 0, topic: "Past Simple (English)" },
+  row("m-1", "Mennyi 6 × 7?", "math"),
+  row("m-2", "Weather magyarul:", "english"),
+  row("m-3", "Wetter magyarul:", "Német – időjárás"),
+  row("m-4", "Tempête magyarul:", null),
+  row("m-5", "Sunny magyarul:", "Past Simple (English)"),
+];
+
+/** Cím-témák: a tantárgy nem bizonyítható belőlük → csak vegyes / kupon módban jöhetnek. */
+const TITLE_TOPICS = [
+  "Present Simple", "Irregular verbs", "Colours", "My family", "latin", "orosz", "deutsch", "spanish",
+  "A francia forradalom", "Német egység", "Angol polgári forradalom", "Spanyolország földrajza", "Olaszország",
+  "Angola", "Valószínűség – francia kártya", "nature", "hungarian", "Természetismeret", "Magyar nyelvtan",
+  "Szorzás", "Törtek", "Past Simple (English)",
 ];
 
 const ENGLISH_VOCAB: Question = {
@@ -83,18 +100,51 @@ const ENGLISH_VOCAB: Question = {
   source: "bank",
 };
 
-test("tananyag-sor tárgya: nyelvi téma és szóbank-szerű kérdés az angol ágra kerül", () => {
-  assert.equal(materialSubject("szorzás", "Mennyi 6 × 7?"), "math");
-  assert.equal(materialSubject("angol szavak", "Weather magyarul:"), "english");
-  assert.equal(materialSubject("német – időjárás", "Wetter magyarul:"), "english");
-  assert.equal(materialSubject("", "Tempête magyarul:"), "english");
-  assert.equal(materialSubject("ismeretlen", "Mennyi 2 + 2?"), "math", "ismeretlen téma matek marad");
-  // Review (vercel): a kifejezetten megjelölt matek témát a kérdés szövege nem írja át angolra.
-  assert.equal(materialSubject("matek", "Mi a 7 ellentéte: 7 vagy -7?"), "math");
-  assert.equal(materialSubject("matek", "Hogy mondod magyarul: 3 × 4 = ?"), "math");
-  assert.equal(materialSubject("", "Mi a 7 ellentéte: 7 vagy -7?"), "math", "az „ellentéte:” önmagában nem nyelvi jel");
+test("tananyag-sor tárgya: csak a bizonyítható téma számít biztosnak, minden más bizonytalan", () => {
+  const cases: Array<[string, string, "math" | "english", boolean]> = [
+    ["math", "Mennyi 6 × 7?", "math", true],
+    ["Matek – törtek", "Mennyi 1/2 + 1/4?", "math", true],
+    ["matematika", "Mennyi 2 + 2?", "math", true],
+    ["english", "Weather magyarul:", "english", true],
+    ["Angol nyelv", "Weather magyarul:", "english", true],
+    ["", "Tempête magyarul:", "english", true],
+    // Review (vercel): kifejezett matek témát a kérdés szövege nem ír át.
+    ["math", "Mi a 7 ellentéte: 7 vagy -7?", "math", true],
+    ["math", "Hogy mondod magyarul: 3 × 4 = ?", "math", true],
+    // Bizonytalan (K1): se matek-, se angol-bizonyíték.
+    ["", "Mi a 7 ellentéte: 7 vagy -7?", "math", false],
+    ["Valószínűség – francia kártya", "Mennyi az esély?", "math", false],
+    ["A francia forradalom", "Mikor volt?", "math", false],
+    ["Angola", "Hol van?", "math", false],
+    ["Present Simple", "went magyarul:", "math", false],
+    ["nature", "Mi a víz?", "math", false],
+    ["hungarian", "Melyik főnév?", "math", false],
+  ];
+  for (const [topic, prompt, subject, certain] of cases) {
+    assert.deepEqual(materialSubject(topic, prompt), { subject, certain }, `${topic} | ${prompt}`);
+  }
   const mapped = materialToQuestions(MATERIAL_ROWS, 4);
-  assert.deepEqual(mapped.map((q) => q.subject), ["math", "english", "english", "english", "english"]);
+  assert.deepEqual(mapped.map((q) => q.subject), ["math", "english", "math", "english", "math"]);
+  assert.deepEqual(mapped.map((q) => q.certain), [true, true, false, true, false]);
+});
+
+test("a 22 valós cím-téma: „csak matek” és „csak angol” módban soha, vegyes módban igen", () => {
+  const material = materialToQuestions(TITLE_TOPICS.map((t, i) => row(`t-${i}`, `Kérdés ${i}?`, t)), 5);
+  // A bizonyítottan matek ('Szorzás' és 'Törtek' nem az: nincs matek-előtag) → mind bizonytalan.
+  assert.ok(material.every((q) => q.certain === false), "cím-téma nem lehet biztos tantárgyú");
+  const ids = new Set(material.map((q) => q.id));
+  for (const mode of ["math", "english"] as const) {
+    for (let seed = 1; seed <= 40; seed++) {
+      const q = pickQuestion({ level: 70, school: 5, mode, material, rng: makeRng(seed) });
+      assert.ok(!ids.has(q.id), `${mode} módban cím-témájú tananyag jött: ${q.id}`);
+    }
+  }
+  const seen = new Set<string>();
+  for (let seed = 1; seed <= 400; seed++) {
+    const q = pickQuestion({ level: 70, school: 5, mode: "mixed", material, rng: makeRng(seed), recent: [...seen] });
+    if (ids.has(q.id)) seen.add(q.id);
+  }
+  assert.ok(seen.size > 0, "vegyes módban a bizonytalan tananyag is megjelenik");
 });
 
 test("„csak matek” módban egyetlen húzás sem angol — bank, évfolyam-bank, tananyag, szóbank mellett sem", () => {

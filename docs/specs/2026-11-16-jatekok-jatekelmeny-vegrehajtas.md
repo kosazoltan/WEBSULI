@@ -1603,6 +1603,7 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
    nincs angol tétel.
 6. `runStreak` (`:1766`): a menet legjobb sorozata.
 7. Tesztek: egységtesztek a fenti 5 pontra (`T/tornado-upgrades-effect.test.ts`, `T/tornado-math4.test.ts`).
+   *Megvalósítási megjegyzés (2026-11-17, #482):* a horgony-fejlesztés (3. pont) a készenléti időt adja, ezért a `T/tornado-mobile-shell.test.ts` szó szerinti `2600` elvárása `effRef.current.anchorHoldMs`-ra cserélődött (`// SPEC-VÁLTOZÁS`, az alap `ANCHOR_HOLD_BASE_MS` = 2600 ms külön tesztelt; a játékóra és a friss `finishRun` szigora megmaradt) — ez a J7 elfogadási sorának „roam-kvíz megszűnése” indokán kívüli, a terv 5.7 „Javítás” pontjából következő csere.
 
 ### J7b — útelágazás (Q1), turbó-töltés (Q3), a roam-kvíz megszűnése (Opus)
 

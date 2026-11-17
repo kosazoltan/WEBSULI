@@ -1903,20 +1903,20 @@ function PlayScreen(props: {
     if (phaseRef.current !== "approach" && phaseRef.current !== "seeking") return;
     const p = playerRef.current;
     const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
-    // Must be roughly stopped to anchor.
-    if (Math.abs(p.speed) > STOPPED_SPEED) {
-      setAnchorMsg("Előbb állj meg a horgonyzáshoz!");
-      sfxWarning();
-      scheduleTimeout(() => setAnchorMsg(null), 1600);
-      return;
-    }
-    // J7a (terv 5.7 Q2): a horgonyzási kérdés csak a mérési sávban érkezik; a sávon kívül nincs kérdés,
-    // csak üzenet — a gyerek nem válaszol egy olyan kérdésre, amelynek úgyis csak „túl messze” lenne a vége.
+    // J7a (terv 5.7 Q2): a horgonyzási kérdés csak a mérési sávban érkezik; a sávon kívül csak üzenet jön.
+    // A sáv-ellenőrzés a sebesség-ellenőrzés ELŐTT áll (review L4): a gyerek ne álljon meg fölöslegesen.
     const band = anchorBandState(distKm, bandSpecRef.current.anchorBand);
     if (band !== "in_band") {
       setAnchorMsg(anchorBandMessage(band));
       sfxWarning();
       scheduleTimeout(() => setAnchorMsg(null), 2200);
+      return;
+    }
+    // Must be roughly stopped to anchor.
+    if (Math.abs(p.speed) > STOPPED_SPEED) {
+      setAnchorMsg("Előbb állj meg a horgonyzáshoz!");
+      sfxWarning();
+      scheduleTimeout(() => setAnchorMsg(null), 1600);
       return;
     }
     // The scoring quiz — the brief's core mechanic. A talajt a válasz után a `resolveAnchor` ellenőrzi.
@@ -1934,7 +1934,9 @@ function PlayScreen(props: {
       const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
       const reward = won
         ? interceptReward({
-            spec: bandSpec,
+            // Review K2: a pozíció-bónusz az ALAP sávhoz mér — a műszer-fejlesztés csak a sáv elérhetőségét
+            // könnyíti, a ranglista-pontot nem emeli (azonos távolság → azonos pont).
+            spec,
             secondsUsed: elapsedRef.current,
             anchorAttempts: anchorAttemptsRef.current,
             peakWind: windRef.current.maximumWindSpeed,
@@ -2015,7 +2017,7 @@ function PlayScreen(props: {
           .catch(() => {});
       }
     },
-    [props, spec, bandSpec],
+    [props, spec],
   );
 
   // Teszt-kampók: csak a jelző VÁLTOZÁSÁRA futnak (a régi `forceResult === true` minden renderkor újra lefutott,

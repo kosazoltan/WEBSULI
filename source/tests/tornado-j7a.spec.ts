@@ -116,7 +116,7 @@ for (const viewport of VIEWPORTS) {
       await shot(page, testInfo, "result-breakdown");
     });
 
-    test("hibás horgony-válasz: magyarázó kártya, a vezetés a kártya bezárása után folytatódik", async ({ page }, testInfo) => {
+    test("hibás horgony-válasz: megjelenik a magyarázó kártya (a vezetés folytatását a J7b méri)", async ({ page }, testInfo) => {
       await startPlaying(page);
       await force(page, { nearTornadoKm: 0.65 });
       const anchor = page.getByRole("button", { name: "⚓", exact: true });
@@ -131,17 +131,21 @@ for (const viewport of VIEWPORTS) {
   });
 }
 
-test.describe("J7a garázs", () => {
-  test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+for (const viewport of VIEWPORTS) {
+  test.describe(`J7a garázs ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
 
-  test("a Vihargarázs a közös hatás-számítás nyolc sávját mutatja", async ({ page }, testInfo) => {
-    await page.goto("/games/tornado-hunter-200");
-    await page.getByText("Vihargarázs").click();
-    for (const label of ["Sebesség", "Gyorsulás", "Irányítás", "Tapadás", "Stabilitás", "Szélállóság", "Horgony", "Mérősáv"]) {
-      await expect(page.getByTestId("tornado-garage-detail").getByText(label, { exact: true })).toBeVisible();
-    }
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    expect(overflow).toBeLessThanOrEqual(1);
-    await shot(page, testInfo, "garage");
+    test("a Vihargarázs a közös hatás-számítás nyolc sávját mutatja, nincs túlcsordulás", async ({ page }, testInfo) => {
+      await page.goto("/games/tornado-hunter-200");
+      await page.getByText("Vihargarázs").click();
+      const detail = page.getByTestId("tornado-garage-detail");
+      for (const label of ["Sebesség", "Gyorsulás", "Irányítás", "Tapadás", "Stabilitás", "Szélállóság", "Horgony", "Mérősáv"]) {
+        await detail.getByText(label, { exact: true }).scrollIntoViewIfNeeded();
+        await expect(detail.getByText(label, { exact: true })).toBeVisible();
+      }
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(1);
+      await shot(page, testInfo, "garage");
+    });
   });
-});
+}
