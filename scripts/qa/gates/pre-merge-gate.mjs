@@ -6,7 +6,7 @@
 
 import { join } from 'node:path';
 import {
-  STATUS, createGate, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence,
+  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence,
 } from './lib.mjs';
 import { evidenceRecord } from './pre-push-gate.mjs';
 
@@ -33,7 +33,7 @@ export function requiredChecks(required, checkRuns = [], statuses = []) {
  * Tiszta döntés a begyűjtött adatokból (a tesztek közvetlenül ezt hívják).
  * @returns {{ name: string, status: string, note: string }[]}
  */
-export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files, verdict, guard, rt, repoWidePatterns }) {
+export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files, verdict, external = null, guard, rt, repoWidePatterns }) {
   const out = [];
   const add = (name, status, note = '') => out.push({ name, status, note });
 
@@ -62,6 +62,7 @@ export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSh
   }
 
   out.push({ name: 'független ellenőr ítélete a fejre', ...verdictResult(verdict, pr.headRefOid) });
+  out.push({ name: 'külső (Gemini) ellenőr — második vélemény', ...externalResult(external, pr.headRefOid) });
 
   if (guard.code === 0) add('futásőr (active-runs-guard.sh)', STATUS.PASS, guard.summary || 'nincs aktív futás');
   else if (guard.code === 1) add('futásőr (active-runs-guard.sh)', STATUS.FAIL, `van aktív gyártás / javítás — NE vonj össze; ${guard.summary}`);
@@ -129,7 +130,7 @@ async function main() {
     const rt = await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl);
     for (const r of decideMerge({
       pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files: (pr.files ?? []).map((f) => f.path), verdict,
-      guard: { code: g.code, summary }, rt, repoWidePatterns: cfg.repoWidePatterns,
+      external: readEvidence(ctx.evDir, `external-${head}`), guard: { code: g.code, summary }, rt, repoWidePatterns: cfg.repoWidePatterns,
     })) gate.add(r.name, r.status, r.note);
   } catch (e) {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);

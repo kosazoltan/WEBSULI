@@ -38,6 +38,13 @@ terhelésétől függően ±50%.
 | PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet; a push-kapu minden lépése; `npm run build`; játék / UI: CI-azonos böngészős út; DB: `test:learning-db` | 214 s böngészős út nélkül (build 20 s); böngészős futásonként + ~160 s (füstpróba: 1 spec, 11 eset, 164 s) |
 | Merge előtt | `npm run gate:merge -- <PR>` | CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
 
+### Külső (Gemini) ellenőr — második vélemény
+
+`scripts/qa/gates/external-review.mjs` (terv: `docs/specs/2026-11-17-kulso-ellenor.md`; menet: `websuli-fejlesztesi-ellenor` skill
+4/b). A Claude-alügynökös ellenőr MELLETT, ugyanarra a fejre; kulcs csak `GEMINI_API_KEY` / `--env-file`; titok-szűrés a küldés előtt;
+`--record` → `external-<fej>.json`. A `pre-pr-gate` és a `pre-merge-gate` „külső (Gemini) ellenőr” lépése csak `WARN` / `PASS` —
+soha nem bukás. Ellenőrzőlisták: `scripts/qa/gates/external-review/checklist-{game,general}.md`.
+
 ### Tiltott minták (a diff hozzáadott soraiban, `FAIL`, érték kiírása nélkül)
 
 `.only(` / `.skip(` / `fixme(` / `xit(` / `{ only: true }` tesztfájlban; `git … --no-verify` szkriptben (`scripts/`, `*.sh`,

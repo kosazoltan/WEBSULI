@@ -33,6 +33,8 @@ test('decideMerge: minden zöld → nincs FAIL; a source/ változás „telepít
   const res = decideMerge(base());
   assert.ok(!res.some((r) => r.status === STATUS.FAIL), JSON.stringify(res.filter((r) => r.status === STATUS.FAIL)));
   assert.match(res.find((r) => r.name === 'telepítés').note, /TELEPÍTÉST INDÍT/);
+  assert.equal(st(res, 'külső (Gemini)'), STATUS.WARN, 'a külső jelentés hiánya csak figyelmeztetés');
+  assert.equal(st(decideMerge(base({ external: { head: HEAD, status: 'ok', model: 'm' } })), 'külső (Gemini)'), STATUS.PASS);
 });
 
 test('decideMerge: nem CLEAN / piszkozat / zárt → FAIL', () => {
