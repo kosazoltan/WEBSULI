@@ -1509,6 +1509,15 @@ fizika-esetek (pattogás, határok) változatlanok.
 20. **A jelölt mód a zóna és a nézet minden változásakor újraszámol (Ú6).** A lap a kártya / jelmagyarázat / tábla mérésekor
     (ResizeObserver, elforgatás) a beférést újra eldönti, és a magnak a zónával együtt adja át. e2e: elforgatás nyitott
     kérdés alatt.
+22. **A ketrec peremén álló vadász szándékkal választhat (Vercel 4597845275, visszaellenőrzés V1).** Az élesítés feltétele a
+    szigorú „bent áll” (a vadász közepe a ketrecben); a ketrecek közti folyosón / a peremen álló vadász mellett a ketrec
+    élesedik, de a perem-átfedés nem belépés. Belépésnek számít a peremről is: (a) a nyitás után erre a ketrecre böködött
+    friss cél (bökés, ketrecgomb), lendülettől függetlenül; (b) az élesítés UTÁN indított joystick-mozdulat a ketrec belseje
+    felé. A tehetetlenség (bemenet nélkül, vagy a nyitáskor már tolt, el nem engedett joystick) nem belépés — a reviewer
+    javasolta középpont-élű belépésnél ez szigorúbb (Ú3 nem tágul). A peremen álló, nem töltődő sávnál a súgó: „Bökj a
+    választott ketrecre!”. Mérce: a reviewer `edge.ts` mindkét esete válaszol, `edgefreq.ts` „ezt választotta és lejárt” 0,
+    `measure.ts` (≤ 500 ms), `tap.ts`, `drag.ts` 0; core-teszt mind a 4 ketrecre, álló és fekvő, bökéssel és joystickkal;
+    sim: a peremről induló bot lejárata nem nő. Fekvőben a jelmagyarázat a HUD idősávja alá kerül.
 21. **Mérőkép az élesítés után (Ú5).** A kérdés-képek a beúszás és a 600 ms-os előjelzés után készülnek.
     Jegyre: Ú3 (≥ 600 ms tartott joystick — a mechanika szándékolt alakja, a J5b-ben újramérve); a 7-es küszöb az átlagosnak
     könnyű (a J5b rivális-győzelme váltja ki).

@@ -537,6 +537,13 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
   let intent: { x: number; y: number } | null = null;
   /** Ú1: a ketrecek nyitásakor igaz — a lenyomva tartott ujj húzása (`"move"`) új lenyomásig elvetve. */
   let staleDrag = false;
+  /**
+   * Joystick-szándék (review #485, Vercel 4597845275): lent van-e a joystick, a nyitáskor már lent volt-e (tehetetlenség —
+   * nem szándék, amíg el nem engedik), és a mostani tolás mikor kezdődött (ketrec-kor, ms; -1: nyitott ketrec nélkül).
+   */
+  let stickDown = false;
+  let stickStale = false;
+  let stickStartAge = -1;
   const events: BrainRotEvent[] = Array.from({ length: EVENT_CAP }, () => ({ type: "spawn" as BrainRotEventType, x: 0, y: 0, id: -1, n: 0 }));
   let evHead = 0;
   let evCount = 0;
@@ -700,7 +707,13 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
       if (!(m > 0) || !Number.isFinite(m)) {
         inputX = 0;
         inputY = 0;
+        stickDown = false;
+        stickStale = false;
         return;
+      }
+      if (!stickDown) {
+        stickDown = true;
+        stickStartAge = st.cagesOpen ? st.cageAgeMs : -1;
       }
       const k = m > 1 ? 1 / m : 1;
       inputX = x * k;
@@ -861,6 +874,15 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
           // Belépés éle az élesítés után: csak a lendülettel érkező (szándékos) belépés választhat; a lassú becsúszás
           // (a kérdés megjelenése utáni tehetetlenség) nem — review #485 B1.
           if (!wasInside) cage.entered = moving;
+          // A ketrec peremén (kibővített zónájában) már álló vadász SZÁNDÉKKAL is választhat, kilépés nélkül (review #485,
+          // Vercel 4597845275 — fal / sarok mellett ki sem tudna lépni): a nyitás után erre a ketrecre böködött cél, vagy az
+          // élesítés UTÁN indított joystick-mozdulat a ketrec belseje felé. A tehetetlenség (bemenet nélkül, vagy a nyitáskor
+          // már tolt, el nem engedett joystick) továbbra sem belépés.
+          if (!cage.entered) {
+            const tapped = intent !== null && playerInCage(intent.x, intent.y, cage);
+            const stick = stickDown && !stickStale && stickStartAge >= CAGE_ARM_MS && moving && p.vx * (cage.x - p.x) + p.vy * (cage.y - p.y) > 0;
+            if (tapped || stick) cage.entered = true;
+          }
           if (!cage.entered) {
             cage.dwellMs = 0;
             continue;
@@ -888,6 +910,9 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
       intent = null;
       // Ú1: a már lenyomott ujj húzása elengedtetett — új lenyomásig nem ad célt.
       staleDrag = true;
+      // A nyitáskor már tolt joystick tehetetlenség: elengedésig nem szándék.
+      stickStale = stickDown;
+      stickStartAge = -1;
       inputX = 0;
       inputY = 0;
       st.player.vx = 0;

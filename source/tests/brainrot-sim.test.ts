@@ -187,3 +187,28 @@ test("review #485 K1: kupon módban 8 / 5 / 3 tételes leckével sem fogy el a k
     }
   }
 });
+
+test("review #485 (Vercel 4597845275): ha a vadász a nyitáskor egy ketrec peremén áll, a bot így is válaszol (a lejárat nem nő), idő előtti válasz nincs", () => {
+  for (const [player, grade] of [[SIM_AVERAGE, 7], [SIM_YOUNG, 4], [SIM_STRONG, 7]] as const) {
+    for (const input of ["stick", "tap", "drag"] as const) {
+      const run = (startInCageZone: boolean) => {
+        let timeouts = 0;
+        let premature = 0;
+        let asked = 0;
+        for (const seed of simSeeds(GAME)) {
+          const g = createSimGame({ seed, grade, questions: true, input, startInCageZone });
+          const r = runSim(() => g, player, { seed, seconds: 180, grade });
+          timeouts += r.stats.timeouts;
+          premature += g.prematureAnswers();
+          asked += r.stats.asked;
+        }
+        return { timeouts, premature, asked };
+      };
+      const base = run(false);
+      const edge = run(true);
+      assert.equal(edge.premature, 0, `${input}: idő előtti válasz a peremről`);
+      // A javítás nélkül (mérve): átlagos bökésnél 75 lejárat a 14 helyett.
+      assert.ok(edge.timeouts <= base.timeouts + 3, `${input}: lejárat a peremről ${edge.timeouts}/${edge.asked}, alap ${base.timeouts}/${base.asked}`);
+    }
+  }
+});

@@ -32,6 +32,8 @@ import {
   BRAIN_ROT_GAME_ID,
   brainRotDirectorConfig,
   createBrainRotDriver,
+  PLAYER_RADIUS,
+  playerInCage,
   type BrainRotDriver,
   type BrainRotEvent,
   type BrainRotState,
@@ -78,6 +80,11 @@ export type BrainRotSimOptions = {
   input?: "stick" | "tap" | "drag";
   /** Húzásos módban az ujj ennyi egységgel a lény ELŐTT (a vadász felől nézve túl) — a reviewer `drag.ts` esetei. */
   dragLead?: number;
+  /**
+   * Review #485 (Vercel 4597845275): a nyitáskor a vadász egy (seedelten választott) ketrec PEREMÉN áll — a közepe kint, a
+   * pereme bent. A bot ilyenkor is tudjon válaszolni (bármelyik ketrecre), és ne legyen idő előtti válasz.
+   */
+  startInCageZone?: boolean;
 };
 
 export type BrainRotSim = {
@@ -161,6 +168,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
       shownAt = driver ? driver.clockMs() : 0;
       holdFor = opts.releaseMs === undefined || opts.releaseMs === "human" ? 150 + botRng.next() * 350 : opts.releaseMs;
       driver!.core.openCages(p.options.length, p.id);
+      if (opts.startInCageZone) placeOnCageEdge();
     },
     onOutcome: (o, p) => {
       chosen = null;
@@ -181,6 +189,29 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
   const d = driver;
   const core = d.core;
   const botRng = createRng(seedFrom(BRAIN_ROT_GAME_ID, seed, "bot-release"));
+  const edgeRng = createRng(seedFrom(BRAIN_ROT_GAME_ID, seed, "cage-edge"));
+  /** A vadász egy ketrec peremére (a közepe kint, a pereme bent; csak ezt az egy ketrecet érintve), ha van ilyen hely. */
+  function placeOnCageEdge(): void {
+    const st = core.state();
+    const n = st.cageCount;
+    const first = Math.floor(edgeRng.next() * n);
+    const m = PLAYER_RADIUS * 0.5 * 0.6;
+    for (let t = 0; t < n; t++) {
+      const i = (first + t) % n;
+      const c = st.cages[i]!;
+      for (const [x, y] of [[c.x, c.y - c.h / 2 - m], [c.x, c.y + c.h / 2 + m], [c.x - c.w / 2 - m, c.y], [c.x + c.w / 2 + m, c.y]] as const) {
+        if (x < st.player.r || y < st.player.r || x > st.arenaW - st.player.r || y > st.arenaH - st.player.r) continue;
+        if (!playerInCage(x, y, c)) continue;
+        let other = false;
+        for (let j = 0; j < n; j++) if (j !== i && playerInCage(x, y, st.cages[j]!)) other = true;
+        if (other) continue;
+        st.player.x = x;
+        st.player.y = y;
+        c.inside = true;
+        return;
+      }
+    }
+  }
   const tapMode = opts.input === "tap";
   const dragMode = opts.input === "drag";
   const dragLead = opts.dragLead ?? 0;

@@ -139,7 +139,8 @@ type HudSnap = {
   creatures: Array<{ id: number; kind: number; size: number; warning: boolean; opacity: number; dazed: boolean; carried: boolean }>;
   arena: ArenaRot[];
   carrying: boolean;
-  hint: 0 | 1 | 2;
+  /** 0: nincs; 1: futás; 2: „Állj meg a jó ketrecben!”; 3: a ketrec peremén áll, a sáv nem töltődik (review #485). */
+  hint: 0 | 1 | 2 | 3;
 };
 
 type RunResult = { score: number; caught: number; missed: number; lost: number; correct: number; total: number; wrong: number; bestStreak: number; maxMultiplier: number; seconds: number };
@@ -1032,7 +1033,11 @@ export default function BrainRotSteal() {
         creatures.push({ id: c.id, kind: c.kind, size, warning, opacity, dazed: c.dazed, carried: c.state === "carried" });
         if (c.state === "free") arena.push({ id: c.id, x: c.x * u, y: c.y * u, size, warning, opacity });
       }
-      const hint: HudSnap["hint"] = st.worldMs < TUTORIAL_MS ? (firstCageSeenRef.current ? 2 : 1) : 0;
+      // Review #485: a ketrecek közti folyosón / egy ketrec peremén álló vadásznál (a sáv nem töltődik) a súgó megmondja,
+      // mit kell tenni — ez nem csak a tanító szakaszban jelenik meg.
+      const slowNow = Math.hypot(st.player.vx, st.player.vy) < 0.1;
+      const onEdge = st.cagesOpen && slowNow && st.cages.slice(0, st.cageCount).some((c) => c.armed && c.inside && !c.entered);
+      const hint: HudSnap["hint"] = onEdge ? 3 : st.worldMs < TUTORIAL_MS ? (firstCageSeenRef.current ? 2 : 1) : 0;
       // Változatlan lény-lista: ugyanaz a tömb (a memo-s réteg nem rajzol újra).
       setHud((prev) => {
         const sameList =
@@ -1071,7 +1076,10 @@ export default function BrainRotSteal() {
       // ketrecsornak — a kártya MELLÉ, jobbra, ha ott elfér (≥ 170 px).
       const sideRoom = window.innerWidth - c.right - 16;
       const side = window.innerWidth > window.innerHeight && window.innerHeight <= 520 && sideRoom >= 170;
-      const next = side ? { top: c.top, left: c.right + 8, width: Math.min(300, sideRoom) } : { top: c.bottom + 6, left: c.left, width: c.width };
+      // Fekvőben a HUD idősávjának felirata („87 mp”) alá (review #485: ne súrolja).
+      const hudBar = document.querySelector<HTMLElement>(".game-hud-progress")?.getBoundingClientRect();
+      const sideTop = Math.max(c.top, hudBar ? hudBar.bottom + 6 : 0);
+      const next = side ? { top: sideTop, left: c.right + 8, width: Math.min(300, sideRoom) } : { top: c.bottom + 6, left: c.left, width: c.width };
       setLegendTop((prev) =>
         prev && Math.abs(prev.top - next.top) < 1 && Math.abs(prev.left - next.left) < 1 && Math.abs(prev.width - next.width) < 1 ? prev : next,
       );
@@ -1229,7 +1237,11 @@ export default function BrainRotSteal() {
         : "Bökj a táblára vagy nyilazz!"
       : hud.hint === 2 && questionOpen
         ? "Állj meg a jó ketrecben!"
-        : null;
+        : hud.hint === 3 && questionOpen
+          ? touchCapable
+            ? "Bökj a választott ketrecre!"
+            : "Kattints a választott ketrecre!"
+          : null;
   /* Kombó-szorzó jelvény (csak ha él; változáskor „pop”) — a vezérlősávban / a súgó mellett, nem a ketrecek fölött. */
   const comboBadge =
     hud.multiplier > 1 ? (

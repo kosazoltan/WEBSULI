@@ -686,3 +686,106 @@ test("review #485 Ú5 (e2e-lelet): a ketrecek keresztezésénél álló vadász 
   assert.equal(st.hitCage, -1, "álló vadásznál nincs válasz");
   assert.ok(cages.every((c) => !c.entered));
 });
+
+/**
+ * Review #485 (Vercel, 4597845275): a vadász az élesítéskor egy ketrec kibővített (perem-) zónájában áll — a szándékos,
+ * élesítés utáni friss bökés / joystick-mozdulat arra a ketrecre válaszoljon (ne ragadjon be a válasz). Mind a négy
+ * ketrec, álló és fekvő elrendezés; a perem a ketrec mind a négy oldalán kipróbálva, ahol a vadász közepe kint van.
+ */
+function zoneStarts(core: BrainRotCore, i: number): { x: number; y: number }[] {
+  const st = core.state();
+  const c = st.cages[i]!;
+  const m = 0.075 * 0.5 * 0.6; // a perem (PLAYER_RADIUS × 0,5) 60%-a: a közép kint, a perem bent
+  const out: { x: number; y: number }[] = [];
+  for (const [x, y] of [[c.x, c.y - c.h / 2 - m], [c.x, c.y + c.h / 2 + m], [c.x - c.w / 2 - m, c.y], [c.x + c.w / 2 + m, c.y]] as const) {
+    if (x < 0.08 || y < 0.08 || x > st.arenaW - 0.08 || y > st.arenaH - 0.08) continue;
+    if (!playerInCage(x, y, c)) continue;
+    // csak ez az egy ketrec érintett (a vadász tényleg „e mellett” áll)
+    if (st.cages.slice(0, 4).some((o, j) => j !== i && playerInCage(x, y, o))) continue;
+    out.push({ x, y });
+  }
+  return out;
+}
+
+function standInZoneAndArm(arenaW: number, arenaH: number, i: number, at: { x: number; y: number } | null): { core: BrainRotCore; starts: { x: number; y: number }[] } {
+  const core = createBrainRotCore({ seed: 4, arenaW, arenaH });
+  core.setCageZone(0.3, false);
+  core.forceCatch();
+  core.openCages(4, 1);
+  const st = core.state();
+  const starts = zoneStarts(core, i);
+  const s = at ?? starts[0]!;
+  st.player.x = s.x;
+  st.player.y = s.y;
+  st.cages[i]!.inside = true; // már bent állt (a perem) — nem friss belépés
+  for (let k = 0; k < Math.ceil(CAGE_ARM_MS / DT) + 2; k++) core.step(DT, 0.4, 0.6);
+  assert.equal(st.hitCage, -1, "az élesítésig nincs válasz");
+  assert.ok(st.cages[i]!.armed, "a ketrec élesedett (a vadász közepe kint)");
+  return { core, starts };
+}
+
+for (const [label, aw, ah] of [["álló", 1, 1.5], ["fekvő", 2.16, 1]] as const) {
+  test(`review #485 (Vercel): ${label} — a ketrec peremén álló vadász szándékos bökéssel és joystickkal is tud válaszolni mind a négy ketrecre`, () => {
+    for (let i = 0; i < 4; i++) {
+      const { starts } = standInZoneAndArm(aw, ah, i, null);
+      assert.ok(starts.length > 0, `${label} ${i}: van peremhelyzet`);
+      for (const s of starts) {
+        // Bökés (friss lenyomás) a ketrec közepére.
+        let { core } = standInZoneAndArm(aw, ah, i, s);
+        let st = core.state();
+        let hit = -1;
+        core.setTarget(st.cages[i]!.x, st.cages[i]!.y, "down");
+        for (let k = 0; k < 180 && hit < 0; k++) {
+          core.step(DT, 0.4, 0.6);
+          hit = st.hitCage;
+        }
+        assert.equal(hit, i, `${label} ${i} bökés (${s.x.toFixed(3)}, ${s.y.toFixed(3)})`);
+        // Joystick: élesítés után indított mozdulat a ketrec belseje felé, majd elengedés (megállás).
+        ({ core } = standInZoneAndArm(aw, ah, i, s));
+        st = core.state();
+        const c = st.cages[i]!;
+        const dx = c.x - st.player.x;
+        const dy = c.y - st.player.y;
+        const len = Math.hypot(dx, dy);
+        core.setInput(dx / len, dy / len);
+        for (let k = 0; k < 6; k++) core.step(DT, 0.4, 0.6);
+        core.setInput(0, 0);
+        hit = -1;
+        for (let k = 0; k < 180 && hit < 0; k++) {
+          core.step(DT, 0.4, 0.6);
+          hit = st.hitCage;
+        }
+        assert.equal(hit, i, `${label} ${i} joystick (${s.x.toFixed(3)}, ${s.y.toFixed(3)})`);
+      }
+    }
+  });
+}
+
+test("review #485 (Vercel): a peremen álló vadász bemenet nélkül, és a nyitás ELŐTT tolt, át nem engedett joystickkal sem válaszol", () => {
+  const { core } = standInZoneAndArm(1, 1.5, 0, null);
+  const st = core.state();
+  for (let k = 0; k < 120; k++) core.step(DT, 0.4, 0.6);
+  assert.equal(st.hitCage, -1, "álló vadász: nincs válasz");
+  // A nyitás előtt tolt joystick (a lap folyamatosan küldi) — a ketrec felé, elengedés nélkül, majd elengedve.
+  const core2 = createBrainRotCore({ seed: 4, arenaW: 1, arenaH: 1.5 });
+  core2.setCageZone(0.3, false);
+  core2.setInput(0, 1); // a gyerek lefelé tol
+  core2.forceCatch();
+  core2.openCages(4, 1);
+  const st2 = core2.state();
+  const s = zoneStarts(core2, 0)[0]!;
+  st2.player.x = s.x;
+  st2.player.y = s.y;
+  st2.cages[0]!.inside = true;
+  const c = st2.cages[0]!;
+  const dx = c.x - s.x;
+  const dy = c.y - s.y;
+  const len = Math.hypot(dx, dy);
+  for (let k = 0; k < Math.ceil(CAGE_ARM_MS / DT) + 8; k++) {
+    core2.setInput(dx / len, dy / len); // ugyanaz a (nyitás előtt kezdett) tolás, elengedés nélkül
+    core2.step(DT, 0.4, 0.6);
+  }
+  core2.setInput(0, 0);
+  for (let k = 0; k < 60; k++) core2.step(DT, 0.4, 0.6);
+  assert.equal(st2.hitCage, -1, "a nyitáskor már tolt joystick (tehetetlenség) nem szándék");
+});
