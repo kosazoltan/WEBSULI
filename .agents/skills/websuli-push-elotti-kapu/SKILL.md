@@ -12,7 +12,7 @@ Runbook: `docs/minosegkapuk.md`. A hook (`scripts/qa/hooks/check-quality-gates.m
 ## Menet
 
 ```bash
-git status --short                      # 1. minden commitolva (piszkos fán a kapu bukik)
+git status --short                      # 1. minden commitolva, nem követett fájl sincs (különben a kapu bukik)
 git fetch origin && git merge origin/main   # 2. friss main beolvasztva (rebase / force-push TILOS)
 npm run gate:push                       # 3. a kapu (a munkafa gyökeréből); --slice: a közös modulok érintése is figyelmeztet
 touch .audit-ok                         # 4. KÜLÖN parancsban, közvetlenül a push előtt, a munkafa gyökerében …
@@ -40,7 +40,9 @@ tiszta munkafa → `git fetch` → teljes lint kapu (`--full`) → teljes egysé
 
 ## Ha bukik
 
-- `tiszta munkafa FAIL`: commitold (commit-üzenet fájlból: `git commit -F <fájl>`), és futtasd újra.
+- `tiszta munkafa FAIL`: commitold (commit-üzenet fájlból: `git commit -F <fájl>`), a nem követett fájlt vedd fel / tedd .gitignore-ba /
+  vidd a scratchpadba, és futtasd újra.
+- `git push --all / --mirror`, `git --git-dir … push`: a hook megtagadja — ágonként, `git -C <munkafa> push origin <ág>` alakban.
 - `háromfázisú rend FAIL`: hiányzik / későn jött a végrehajtási fájl (C-37) — pusholt ágon a sorrend nem javítható; ezért a legelső
   push ELŐTT kell zöldnek lennie.
 - `friss main … FAIL`: `git merge origin/main`, oldd fel, javítsd a repó-szintű őrt, futtasd újra.

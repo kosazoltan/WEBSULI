@@ -211,5 +211,13 @@ futásidőben, darabokból kell összerakni, hogy a `no-real-emails-guard` ne l�
 - **Commit-attribúció:** a megbízás „Claude Fable 5.2” sort kért; a commitok a futtató modell valós nevét viselik (Claude Opus 5.5) a
   rendszer-attribúció szerint.
 - **A bizonyíték nem írja felül a zöld push-bizonyítékot:** a bukott `pre-pr-gate` csak a `pre-pr-<fej>` fájlt írja.
+- **Független review (fej `c975c532`, IGEN, FELTÉTELLEL) leletei ebben a PR-ban javítva:** J1 (`-R …/WEBSULI` idegen mappából →
+  DENY), J2 (vegyes push + törlés vizsgálva), J3 (minden refspec; `--all` / `--mirror` → DENY), J4 (burkolók, beágyazott shell,
+  `gh api …/merge`), J6 (`record-review` egyezteti a jelentés `Ítélet:` sorával), J7 (nem követett fájl → a push-kapu bukik), J9
+  (értékes kapcsolók), J10 (`gh pr merge --auto` → DENY), J11 (jelre is takarít), J13 (`scripts/qa` tesztek a push-kapuban), J14
+  (git 3 s, gh 8 s időkorlát). Maradó kockázat (runbook „Ismert korlátok”): J5 önbevallásos ítélet-sor, J8 here-doc hamis DENY, alias.
+- **Külső (Gemini) ellenőr — külön, második PR:** a tulajdonos 2026-11-17-i kiegészítése (`external-review.mjs`, ellenőrzőlisták,
+  skill-menet, figyelmeztető lépés a PR- / merge-kapuban) ebbe a PR-ba nem kerül: a PR már ~3500 soros, és az átadó a munka végén még
+  nem készült el. A kapuk úgy készültek, hogy a figyelmeztető lépés egy újabb `gate.step`-pel bővíthető.
 - **Megfigyelt mellékcsapda (meglévő hook, nem módosítva):** a `check-audit-ok` `\bgit\b…\bpush\b` mintája egy `.git/…/pre-push-…`
   útvonalat tartalmazó olvasó parancsot is push-nak vett (DENY). Kerülőút: a naplót Read / Grep eszközzel olvasni. Jegyre javasolt.

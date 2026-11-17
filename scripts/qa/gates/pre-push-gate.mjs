@@ -120,6 +120,10 @@ async function mergedGuardCheck(ctx) {
     if (existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
     git.run(['worktree', 'prune']);
   };
+  // Review J11: Ctrl-C / SIGTERM esetén is takarítson (különben a csomópont-hivatkozás ottmarad egy későbbi rekurzív törlés útjában).
+  const onSignal = (sig) => { cleanup(); process.exit(sig === 'SIGINT' ? 130 : 143); };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
   try {
     const add = git.run(['worktree', 'add', '--detach', tmp, 'HEAD']);
     if (add.code !== 0) return { status: STATUS.FAIL, note: 'ideiglenes munkafa nem jött létre', detail: add.stderr };
@@ -135,6 +139,8 @@ async function mergedGuardCheck(ctx) {
     if (r.code !== 0) return { status: STATUS.FAIL, note: `az összefésült állapoton (HEAD + ${base}) bukik egy repó-szintű őr — olvaszd be a maint és javítsd (C-61)`, detail: `${r.stdout}\n${r.stderr}` };
     return { status: STATUS.PASS, note: `${guards.length} őr-teszt az összefésült állapoton zöld` };
   } finally {
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
     cleanup();
   }
 }
@@ -143,9 +149,16 @@ async function mergedGuardCheck(ctx) {
 export async function runPrePushSteps({ gate, ctx, slice = false }) {
   const { exec, git, root, src, base, cfg, node } = ctx;
 
-  await gate.step('tiszta munkafa (nincs commitolatlan követett változás)', () => {
+  await gate.step('tiszta munkafa (nincs commitolatlan és nem követett fájl)', () => {
     const d = git.trackedDirty();
-    return d.length ? { status: STATUS.FAIL, note: 'commitold előbb — a bizonyíték a fej-commitra szól', detail: d.join('\n') } : { status: STATUS.PASS };
+    // Review J7: a nem követett fájl a helyi tsc-t / tesztet zöldre viheti, miközben a commitban nincs benne → csak a CI bukna.
+    const u = git.untracked();
+    if (!d.length && !u.length) return { status: STATUS.PASS };
+    return {
+      status: STATUS.FAIL,
+      note: `${d.length ? 'commitolatlan változás' : ''}${d.length && u.length ? ' + ' : ''}${u.length ? 'nem követett fájl (git add, .gitignore, vagy a scratchpadba vele)' : ''} — a bizonyíték a fej-commitra szól`,
+      detail: [...d, ...u.map((f) => `?? ${f}`)].join('\n'),
+    };
   });
 
   await gate.step(`git fetch (${base})`, () => {
@@ -168,6 +181,16 @@ export async function runPrePushSteps({ gate, ctx, slice = false }) {
     const d = decideNativeArch({ failures, doctorCode });
     return { ...d, detail: d.status === STATUS.FAIL ? `${r.stdout}\n${r.stderr}` : '' };
   });
+
+  if (changed.some((f) => f.startsWith('scripts/qa/'))) {
+    // Review J13: a scripts/qa saját tesztjei a push előtt is (a CI „Háromfázisú rend” jobja futtatja őket).
+    await gate.step('scripts/qa saját tesztjei', () => {
+      const files = ['', 'gates', 'hooks'].flatMap((sub) => listFiles(join(root, 'scripts', 'qa', sub), /\.test\.mjs$/).map((f) => `scripts/qa/${sub ? `${sub}/` : ''}${f}`));
+      const r = exec(node, ['--test', ...files], { cwd: root });
+      writeLog(ctx.evDir, 'pre-push-gate', 'qa-tests', `${r.stdout}\n${r.stderr}`);
+      return cmdResult(r, `${files.length} fájl`);
+    });
+  }
 
   await gate.step('háromfázisú rend (three-phase-check)', () => cmdResult(exec(node, [join(root, 'scripts/qa/three-phase-check.mjs'), '--base', base], { cwd: root })));
 

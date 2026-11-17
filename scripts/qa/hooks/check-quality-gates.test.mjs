@@ -48,13 +48,41 @@ test('splitSegments / findActions: idézett „git push” nem számít; cd és 
   const a = findActions('cd /tmp/a && git -C sub push -u origin feat/x', '/r');
   assert.equal(a.length, 1);
   assert.equal(a[0].kind, 'push');
-  assert.equal(a[0].ref, 'feat/x');
+  assert.deepEqual(a[0].refs, ['feat/x']);
   assert.ok(a[0].dir.replace(/\\/g, '/').endsWith('/a/sub'));
   for (const c of ['git push origin --delete feat/x', 'git push origin :feat/x', 'git push -d origin feat/x', 'git push --dry-run']) assert.equal(findActions(c, '/r')[0].skip, true, c);
   assert.equal(findActions('GIT_TRACE=1 git push', '/r')[0].skip, false);
   assert.deepEqual(findActions('gh pr merge 482 --squash', '/r').map((x) => [x.kind, x.pr]), [['pr-merge', '482']]);
   assert.deepEqual(findActions('gh pr create --title x --body-file b.md', '/r').map((x) => x.kind), ['pr-create']);
   assert.deepEqual(findActions('gh pr view 5; gh pr merge --disable-auto 5', '/r'), []);
+});
+
+test('review-javítások: burkolók, beágyazott shell, vegyes törlés, több ref, értékes kapcsolók, --all, --auto, gh api merge', () => {
+  const kinds = (c) => findActions(c, '/r').map((x) => x.kind);
+  for (const c of ['env git push', 'sudo git push', 'command git push', '& git push', "& 'C:/Program Files/Git/cmd/git.exe' push", '(git push)', '{ git push; }',
+    'bash -c "git push origin x"', 'powershell -NoProfile -Command "git push"', 'time git push', 'GIT_TRACE=1 env git push']) {
+    assert.deepEqual(kinds(c), ['push'], c);
+  }
+  const mixed = findActions('git push origin feat/a :torolt', '/r')[0];
+  assert.equal(mixed.skip, false, 'vegyes push + törlés nem vizsgálat nélküli');
+  assert.deepEqual(mixed.refs, ['feat/a']);
+  assert.deepEqual(findActions('git push origin feat/a feat/b', '/r')[0].refs, ['feat/a', 'feat/b']);
+  assert.deepEqual(findActions('git push -o ci.skip origin feat/c', '/r')[0].refs, ['feat/c'], 'a -o értéke nem remote');
+  assert.equal(findActions('git push origin :a :b', '/r')[0].skip, true);
+  assert.deepEqual(kinds('git push --all origin'), ['deny']);
+  assert.deepEqual(kinds('git push --dry-run --all origin'), []);
+  assert.deepEqual(kinds('git --git-dir=/x/.git push'), ['deny']);
+  assert.deepEqual(kinds('gh pr merge 5 --auto --squash'), ['deny']);
+  assert.deepEqual(kinds('powershell -EncodedCommand ZwBpAHQA'), ['deny']);
+  const api = findActions('gh api -X PUT repos/kosazoltan/WEBSULI/pulls/9/merge', '/r')[0];
+  assert.deepEqual([api.kind, api.pr, api.repoFlag], ['pr-merge', '9', 'kosazoltan/WEBSULI']);
+});
+
+test('review J1: WEBSULI-n kívüli mappából -R …/WEBSULI → DENY; más repóra nincs kimenet', () => {
+  const other = mkdtempSync(join(tmpdir(), 'qg-kivul-'));
+  assert.ok(denied(runHook('gh pr merge 5 -R kosazoltan/WEBSULI --squash', other)));
+  assert.ok(denied(runHook('gh pr create -R kosazoltan/WEBSULI --title t', other)));
+  assert.equal(runHook('gh pr create -R valaki/mas-repo --title t', other), null);
 });
 
 test('git push: bizonyíték nélkül DENY magyar teendővel; zöld pre-push bizonyítékkal enged — munkafából ÉS a fő checkoutból', () => {

@@ -87,6 +87,15 @@ test('runPrePushSteps: commitolatlan változás → FAIL; bukó háromfázisú e
   assert.equal(gate.finish(), 1);
 });
 
+test('review J7 / J13: nem követett fájl → FAIL; scripts/qa változásnál a saját tesztek is futnak', async () => {
+  const { ctx, gate, calls } = prePushFake({ changed: ['scripts/qa/gates/lib.mjs'], untracked: ['uj-modul.ts'] });
+  await runPrePushSteps({ gate, ctx });
+  assert.equal(statusOf(gate, 'tiszta munkafa'), STATUS.FAIL);
+  assert.match(gate.results.find((r) => r.name.startsWith('tiszta munkafa')).note, /nem követett fájl/);
+  assert.equal(statusOf(gate, 'scripts/qa saját tesztjei'), STATUS.PASS);
+  assert.ok(calls.some((c) => c.cmd === 'node' && c.args[0] === '--test'));
+});
+
 test('runPrePushSteps: native-arch az egyetlen bukás + bukó doctor:arch → KIVÉTEL, a kapu zöld marad', async () => {
   const { ctx, gate } = prePushFake({
     respond: (cmd, args) => {

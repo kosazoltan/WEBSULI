@@ -1,7 +1,7 @@
 // docs/specs/2026-11-17-minosegkapuk.md D9: a független ellenőr ítéletének rögzítése.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRecord, normalizeVerdict } from './record-review.mjs';
+import { buildRecord, normalizeVerdict, reportVerdict } from './record-review.mjs';
 import { resolveVerdict } from './lib.mjs';
 
 const FULL = '0123456789abcdef0123456789abcdef01234567';
@@ -23,6 +23,17 @@ test('buildRecord: teljes fej, ítélet, jelentés-hash; a PR-sor visszaolvashat
   assert.match(r.record.reportSha256, /^[0-9a-f]{64}$/);
   assert.equal(r.line, `Független ellenőr ítélete: IGEN (fej: ${FULL.slice(0, 12)})`);
   assert.deepEqual(resolveVerdict({ head: FULL, texts: [r.line] }), { verdict: 'IGEN', source: 'PR-leírás' });
+});
+
+test('reportVerdict / review J6: a --verdict a jelentés utolsó ítéletével egyezzen', () => {
+  assert.equal(reportVerdict('## Ítélet: ÖSSZEVONHATÓ — NEM (a B1 javítása után: IGEN, FELTÉTELLEL)'), 'NEM');
+  assert.equal(reportVerdict('## Ítélet: **IGEN, FELTÉTELLEL**'), 'IGEN, FELTÉTELLEL');
+  assert.equal(reportVerdict('## Ítélet: NEM\n…\n# Visszaellenőrzés\n## Ítélet: ÖSSZEVONHATÓ — IGEN'), 'IGEN');
+  assert.equal(reportVerdict('nincs ilyen sor'), null);
+  const mismatch = buildRecord({ head: FULL, verdict: 'IGEN', report: 'n.md', resolveHead: ok.resolveHead, readReport: () => '## Ítélet: NEM' });
+  assert.equal(mismatch.ok, false);
+  assert.match(mismatch.error, /eltér/);
+  assert.equal(buildRecord({ head: FULL, verdict: 'IGEN', report: 'x.md', resolveHead: ok.resolveHead, readReport: () => 'jelentés ítélet nélkül' }).ok, false);
 });
 
 test('buildRecord: hibás ítélet / fej / hiányzó vagy üres jelentés → hiba', () => {

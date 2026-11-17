@@ -19,6 +19,15 @@ export function normalizeVerdict(v) {
   return null;
 }
 
+/** A jelentés utolsó `Ítélet:` sorának első ítélet-szava (`ÖSSZEVONHATÓ — NEM (… IGEN …)` → NEM). */
+export function reportVerdict(text) {
+  const lines = String(text).split(/\r?\n/).filter((l) => /Ítélet\s*:/i.test(l));
+  if (!lines.length) return null;
+  const m = /Ítélet\s*:(.*)$/i.exec(lines[lines.length - 1]);
+  const w = /(IGEN,\s*FELTÉTELLEL|IGEN|NEM)(?![A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű])/i.exec(m[1].replace(/\*/g, ''));
+  return w ? normalizeVerdict(w[1]) : null;
+}
+
 /**
  * @returns {{ ok: true, record: object, line: string } | { ok: false, error: string }}
  */
@@ -32,6 +41,10 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, no
   const text = readReport(report);
   if (text == null) return { ok: false, error: `a jelentés nem olvasható: ${report}` };
   if (!text.trim()) return { ok: false, error: 'a jelentés üres' };
+  // Review J6: a --verdict a jelentés UTOLSÓ „Ítélet:” sorával (visszaellenőrzésnél az a friss) egyezzen.
+  const inReport = reportVerdict(text);
+  if (!inReport) return { ok: false, error: 'a jelentésben nincs „Ítélet: IGEN | IGEN, FELTÉTELLEL | NEM” sor (a megbízás-sablon kötelező része)' };
+  if (inReport !== v) return { ok: false, error: `a --verdict (${v}) eltér a jelentés utolsó ítéletétől (${inReport})` };
   return {
     ok: true,
     record: { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() },

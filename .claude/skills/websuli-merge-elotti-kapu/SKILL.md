@@ -14,6 +14,8 @@ npm run gate:merge -- <PR>        # = node scripts/qa/gates/pre-merge-gate.mjs <
 gh pr merge <PR> --squash         # csak zöld kapu után, 15 percen belül; a hook ellenőrzi
 ```
 
+A `gh pr merge --auto` tilos (a hook megtagadja): az összevonás később, futásőr és `/api/rt/status` nélkül történne.
+
 ## Mit ellenőriz
 
 1. A PR nyitott, nem piszkozat, `mergeStateStatus = CLEAN` (UNKNOWN: várd meg az újraszámolást, ne erőltesd).

@@ -35,8 +35,8 @@ terhelésétől függően ±50%.
 | Lint, teljes | `npm run gate:lint` | a fenti + teljes `npm run lint` + mindkét `tsc` | 146 s (lint 12 s, check 45 s, check:test 40–70 s) |
 | Szakasz | `npm run gate:stage` | lint gyors + a változott fájlokhoz leképezett egységtesztek + minden `*-guard.test.ts` (23 db) + a `scripts/qa` tesztjei, ha érintett | 47 s (tsc nélkül); tsc-vel ~115 s |
 | Push előtt | `npm run gate:push` | tiszta fa; `git fetch`; lint teljes; teljes egységteszt; háromfázisú rend; PR-méret; friss main (ha nincs beolvasztva: őr-tesztek az összefésült állapoton); közös fájlok; `.audit-ok`; „zöld CI utáni push” | 251 s (ebből a teljes egységteszt 132 s) |
-| PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet; a push-kapu minden lépése; `npm run build`; játék / UI: CI-azonos böngészős út; DB: `test:learning-db` | MÉRÉS: lásd a PR-leírást (a saját ágon böngészős út nélkül) |
-| Merge előtt | `npm run gate:merge -- <PR>` | CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | MÉRÉS: lásd a PR-leírást |
+| PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet; a push-kapu minden lépése; `npm run build`; játék / UI: CI-azonos böngészős út; DB: `test:learning-db` | 214 s böngészős út nélkül (build 20 s); böngészős futásonként + ~160 s (füstpróba: 1 spec, 11 eset, 164 s) |
+| Merge előtt | `npm run gate:merge -- <PR>` | CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
 
 ### Tiltott minták (a diff hozzáadott soraiban, `FAIL`, érték kiírása nélkül)
 
@@ -63,8 +63,14 @@ viszi bukásra.
   - `git push` → zöld `pre-push-<fej>` vagy `pre-pr-<fej>` kell (a megnevezett ág feje, különben a HEAD);
   - `gh pr create` → zöld `pre-pr-<fej>`;
   - `gh pr merge [n]` → a PR JELENLEGI fejére szóló, legfeljebb 15 perces zöld `merge-<n>-<fej>` (a fejet a `gh`-tól kéri);
-  - vizsgálat nélkül enged: távoli ág törlése (`--delete`, `-d`, `:ág`), `--dry-run`, idézőjelben / `echo`-ban álló szöveg, más repó
-    (amelyben nincs `scripts/qa/gates/pre-push-gate.mjs` — ez a még kapu nélküli, régebbi ágakat is jelenti);
+  - vizsgálat nélkül enged: távoli ág törlése (`--delete`, `-d`, vagy CSAK `:ág` refspec-ek), `--dry-run`, idézőjelben / `echo`-ban
+    álló szöveg, más repó (amelyben nincs `scripts/qa/gates/pre-push-gate.mjs` — ez a még kapu nélküli, régebbi ágakat is jelenti);
+  - felismeri a burkolókat (`env`, `sudo`, `command`, `time`, `&`, `( … )`, `{ …; }`, `bash -c "…"`, `powershell -Command "…"`),
+    több refspec-et (mindegyik fejére kell bizonyíték), az értékes kapcsolókat (`-o`, `--push-option`, `--repo` …) és a
+    `gh api …/pulls/<n>/merge` alakot;
+  - DENY vizsgálat nélkül: `git push --all / --mirror` (ágonként pusholj), `git --git-dir … push` (használd a `-C`-t),
+    `gh pr merge --auto` (az összevonás később, futásőr nélkül történne), `-EncodedCommand`, és WEBSULI-n kívüli mappából
+    `-R …/WEBSULI`-vel kiadott `gh pr` parancs;
   - hibánál (pl. `gh` nem válaszol) a kibocsátó parancsra DENY. A meglévő `check-audit-ok`, `check-destructive`, `enforce-repo-rules`
     hookok változatlanok és függetlenek.
 - A hook csak a WEBSULI-ból indított Claude Code munkamenetekre hat (a `.claude/settings.json`-t a munkamenet induláskor olvassa —
@@ -87,6 +93,15 @@ viszi bukásra.
 
 Őszintén: a játéklogikai hibák (1, 4, 5, 6) jellemzően szándék- és állapottér-hibák; ezeket determinisztikus kapu általánosan nem
 ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy az ellenőr ne az olcsó hibákra költsön.
+
+## Ismert korlátok (maradó kockázat)
+
+- **Az ítélet önbevallásos** (review J5): a `Független ellenőr ítélete: IGEN (fej: …)` sort bárki beírhatja a PR-leírásba; a kapu
+  a sor meglétét ellenőrzi, nem a jelentés valódiságát. A helyi `review-<fej>.json` a jelentés hash-ét is rögzíti, és a
+  `record-review` a jelentés saját `Ítélet:` sorával egyezteti — a merge-et végző orkesztrátor ezt a helyi bizonyítékot nézze.
+- **Git-alias** (`git config alias.p push`) és a here-doc / here-string törzsében sor elején álló `git push` szöveg: az alias nem
+  ismerhető fel olcsón (átcsúszik), a here-doc sor hamis DENY-t ad — commit-üzenetet fájlból (`git commit -F <fájl>`) adj.
+- A hook csak a Claude Code munkamenetekre hat; Codex / Cursor / ember a skillek és az `AGENTS.md` szerint futtatja a kapukat.
 
 ## Ha bukik
 
