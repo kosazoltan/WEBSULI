@@ -109,7 +109,9 @@ export const SECRET_PATTERNS = [
  */
 const URL_WITH_USERINFO = /\b([a-z][a-z0-9+.-]{1,20}):\/\/([^\s/@'"`<>]*)@(\[[^\]\s]+\]|[^\s/:?#'"`<>]+)/gi;
 const QUERY_SECRET = /[?&](?:password|passwd|pwd|pass|secret|token|access_token|api_key|apikey|key|auth)=([^&#\s'"`<>]+)/gi;
-const PLACEHOLDER = /^(?:\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|<[^>]*>|%[A-Za-z_]+%|\{\{[^}]*\}\}|\*+|x{3,}|\.\.\.)$/i;
+// Csak az egyértelmű helyőrző mentes (fail-closed, visszaellenőrzés C1): `${…}`, csupa nagybetűs `$VALTOZO` / `%VALTOZO%`, `<…>`,
+// `{{…}}`, `***`, `xxx`, `...`. Egy `$`-ral kezdődő valódi jelszó (pl. `$Ab12cd`) titok.
+const PLACEHOLDER = /^(?:\$\{[^}]*\}|\$[A-Z_][A-Z0-9_]*|<[^>]*>|%[A-Z_]+%|\{\{[^}]*\}\}|\*+|[xX]{3,}|\.\.\.)$/;
 export function isLoopbackHost(host) {
   const h = String(host).toLowerCase().replace(/^\[|\]$/g, "");
   return h === "localhost" || /^127(?:\.\d{1,3}){3}$/.test(h) || h === "::1" || h === "0:0:0:0:0:0:0:1";
@@ -357,7 +359,12 @@ export function evaluateResponse(res) {
   if (res?.blockReason || BLOCK_FINISH.has(String(res?.finishReason ?? ""))) return { status: "blocked", reason: `blokkolva (${res.blockReason ?? res.finishReason})` };
   if (res?.finishReason !== "STOP") return { status: "incomplete", reason: `finishReason=${res?.finishReason ?? "nincs"}` };
   if (!text.trim()) return { status: "incomplete", reason: "üres válasz" };
-  if (!VERDICT_RE.test(text)) return { status: "incomplete", reason: "nincs ítélet-fejezet a válaszban" };
+  // A kódblokkokon kívüli szöveg számít (visszaellenőrzés: a kódblokkban álló vagy visszhangzott sablon ne legyen „ok”).
+  const prose = text.replace(/```[\s\S]*?(?:```|$)/g, "");
+  if (!VERDICT_RE.test(prose)) return { status: "incomplete", reason: "nincs ítélet-fejezet a válaszban" };
+  const missing = ["Blokkoló leletek", "Egyéb leletek", "Mit vizsgált"].filter((h) => !new RegExp(`^#{1,3}\\s*${h}`, "im").test(prose));
+  if (missing.length) return { status: "incomplete", reason: `hiányzó kötelező fejezet: ${missing.join(", ")}` };
+  if (/\(egy sor: ÖSSZEVONHATÓ — IGEN \/ IGEN, FELTÉTELLEL \/ NEM/.test(prose)) return { status: "incomplete", reason: "a válasz a sablont ismétli" };
   return { status: "ok", reason: "" };
 }
 

@@ -265,7 +265,7 @@ describe("#490 (1): kapcsolati URL-ek egyenként, fail-closed (táblázat)", () 
 
 describe("#490 (2): siker csak kész, ítéletes jelentéssel — helyettesített HTTPS-válaszokkal", () => {
   const ev = (o) => `data: ${JSON.stringify(o)}\r\n\r\n`;
-  const okText = "## Ítélet\nÖSSZEVONHATÓ — IGEN, FELTÉTELLEL: apróságok.\n## Blokkoló leletek\nnincs";
+  const okText = "## Ítélet\nÖSSZEVONHATÓ — IGEN, FELTÉTELLEL: apróságok.\n## Blokkoló leletek\nnincs\n## Egyéb leletek\n- x\n## Mit vizsgált\n- diff";
   const transport = (text, status = 200) => async () => ({ status, text, retryAfter: null, complete: true });
   const call = (raw, status) => generate({ model: "m", key: "k", systemText: "s", userText: "u", thinking: "high", transport: transport(raw, status), sleep: async () => {} });
   it("kész, ítéletes válasz → ok", async () => {
@@ -313,5 +313,19 @@ describe("#490 (2): siker csak kész, ítéletes jelentéssel — helyettesítet
     const h = "d".repeat(40);
     assert.match(externalResult({ head: h, status: "incomplete", reason: "MAX_TOKENS" }, h).note, /HIÁNYZIK/);
     assert.match(externalResult({ head: h, status: "blocked" }, h).note, /HIÁNYZIK/);
+  });
+});
+
+describe("visszaellenőrzés (a3cf2bbf): C1 és a szigorúbb siker-feltétel", () => {
+  it("C1: a $-ral kezdődő valódi jelszó titok; a csupa nagybetűs $VALTOZO helyőrző", () => {
+    assert.equal(scanConnectionUrls(["postgres://app:", "$Ab12cd", "@", "db.pelda.io/x"].join("")).length, 1);
+    assert.equal(scanConnectionUrls(["postgres://app:", "$DB_PASSWORD", "@", "db.pelda.io/x"].join("")).length, 0);
+  });
+  const stop = (text) => ({ text, finishReason: "STOP" });
+  const fence = "`".repeat(3);
+  it("kódblokkban álló ítélet, csak ítélet-fejezet, sablon-visszhang → incomplete", () => {
+    assert.equal(evaluateResponse(stop(`${fence}\n## Ítélet\nIGEN\n## Blokkoló leletek\n## Egyéb leletek\n## Mit vizsgált\n${fence}`)).status, "incomplete");
+    assert.equal(evaluateResponse(stop("## Ítélet\nIGEN")).status, "incomplete");
+    assert.equal(evaluateResponse(stop("## Ítélet\n(egy sor: ÖSSZEVONHATÓ — IGEN / IGEN, FELTÉTELLEL / NEM; …)\n## Blokkoló leletek\n## Egyéb leletek\n## Mit vizsgált")).status, "incomplete");
   });
 });
