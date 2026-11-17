@@ -741,7 +741,13 @@ export async function runTestIntegrityStep({ gate, ctx, mode, prBody, head = nul
     try {
       const h = head ? ctx.git.out(['rev-parse', head]) : ctx.git.head();
       appendRecord(ctx.evDir, `${GATE}-${h}`, { ...rec, head: h, status: r.status });
-    } catch { /* a bizonyíték írása nem döntheti el a kaput */ }
+    } catch (e) {
+      // R2: nem csendes — a lépés-eredmény jegyzetébe és a hibakimenetre is (warn módban a kaput nem dönti el)
+      const msg = `a test-integrity bizonyíték nem írható (${String(e?.message ?? e).split('\n')[0]})`;
+      process.stderr.write(`[test-integrity] FIGYELEM: ${msg}\n`);
+      r.note = `${r.note ?? ''} — ${msg}`;
+      if (r.status === STATUS.PASS) r.status = STATUS.WARN;
+    }
   }
   return { record: rec, result: r };
 }

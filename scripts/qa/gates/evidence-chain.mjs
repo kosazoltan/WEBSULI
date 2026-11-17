@@ -30,9 +30,19 @@ const sleepSync = (ms) => { if (ms > 0) Atomics.wait(new Int32Array(new SharedAr
 
 /**
  * Kizáró zár a lánc köré: `chain.lock` létrehozása `wx`-szel; foglaltnál korlátos újrapróba (véletlen várakozással); a `staleMs`-nél
- * régebbi zár elárvultnak számít (egy összeomlott író hagyta) — törlés + napló. Időtúllépésnél kivétel (a hívó kapu nem dől el rajta).
+ * régebbi zár elárvultnak számít (egy összeomlott író hagyta) — törlés + napló, DE csak ha a benne álló PID már nem él (független review
+ * R2: egy élő, lassú író zárját nem vesszük el). A várakozási idő (45 s) nagyobb az elárvulási küszöbnél (30 s), így egy összeomlott író
+ * zárját a várakozó még a saját időtúllépése előtt átveszi. Időtúllépésnél kivétel: a hívó HANGOSAN jelzi (nem csendes rekordhiány).
  */
-export function withLock(dir, fn, { timeoutMs = 20_000, staleMs = 30_000, sleep = sleepSync, now = () => Date.now() } = {}) {
+export function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+}
+
+export const LOCK_TIMEOUT_MS = 45_000;
+export const LOCK_STALE_MS = 30_000;
+
+export function withLock(dir, fn, { timeoutMs = LOCK_TIMEOUT_MS, staleMs = LOCK_STALE_MS, sleep = sleepSync, now = () => Date.now(), alive = pidAlive } = {}) {
   mkdirSync(dir, { recursive: true });
   const lock = join(dir, LOCK_FILE);
   const t0 = now();
@@ -42,9 +52,10 @@ export function withLock(dir, fn, { timeoutMs = 20_000, staleMs = 30_000, sleep 
       // Windows: a törlés alatt álló zárfájlra EPERM / EACCES jön — ugyanúgy „foglalt”, újrapróba
       if (!['EEXIST', 'EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw e;
       try {
-        if (now() - statSync(lock).mtimeMs > staleMs) {
+        const pid = Number.parseInt(readFileSync(lock, 'utf8').trim(), 10);
+        if (now() - statSync(lock).mtimeMs > staleMs && !(pid !== process.pid && alive(pid))) {
           unlinkSync(lock);
-          appendFileSync(join(dir, REPAIR_LOG), `${new Date().toISOString()} elárvult zár törölve (${staleMs} ms-nál régebbi)\n`);
+          appendFileSync(join(dir, REPAIR_LOG), `${new Date().toISOString()} elárvult zár törölve (${staleMs} ms-nál régebbi, PID ${Number.isNaN(pid) ? '?' : pid} nem él)\n`);
           continue;
         }
       } catch { /* közben eltűnt: újra */ }

@@ -112,7 +112,11 @@ async function main() {
       kind: 'stage', head, ok: code === 0, dirty: ctx.git.trackedDirty().length > 0 || ctx.git.untracked().length > 0,
       at: new Date().toISOString(), steps: gate.results.map((r) => ({ name: r.name, status: r.status })),
     });
-  } catch { /* a bizonyíték írása nem dönti el a kaput */ }
+  } catch (e) {
+    // R2 (független review): a hiányzó rekord nem lehet csendes — hangos hiba és nem nulla kód (2 = a kapu nem futott le teljesen).
+    process.stderr.write(`[stage-gate] HIBA: a szakasz-bizonyíték nem írható (${String(e?.message ?? e).split('\n')[0]}) — futtasd újra a kaput\n`);
+    process.exit(code || 2);
+  }
   process.exit(code);
 }
 

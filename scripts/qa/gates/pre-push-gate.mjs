@@ -266,8 +266,12 @@ async function main() {
   await runPrePushSteps({ gate, ctx, slice: args.includes('--slice') });
   const code = gate.finish();
   const p = writeEvidence(ctx.evDir, `pre-push-${head}`, evidenceRecord('pre-push', head, gate));
-  try { linkRecord(ctx.evDir, `pre-push-${head}`); } catch { /* S2 lánc: a hiány a verify-report-ban derül ki */ }
   gate.log(`[pre-push-gate] bizonyíték: ${p.replace(/\\/g, '/')} (ok=${code === 0})`);
+  try { linkRecord(ctx.evDir, `pre-push-${head}`); } catch (e) {
+    // R2: a lánc-sor hiánya nem csendes — hangos hiba, nem nulla kód (a láncon kívüli rekord a verify-report-ban NEM IGAZOLT lenne)
+    process.stderr.write(`[pre-push-gate] HIBA: a bizonyíték láncba kötése nem sikerült (${String(e?.message ?? e).split('\n')[0]}) — futtasd újra a kaput\n`);
+    process.exit(code || 2);
+  }
   process.exit(code);
 }
 

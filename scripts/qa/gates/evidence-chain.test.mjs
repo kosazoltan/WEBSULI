@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { CHAIN_FILE, LOCK_FILE, REPAIR_LOG, appendRecord, chainStatus, linkRecord, repairChain, validId, verifyChain, withLock } from './evidence-chain.mjs';
+import { CHAIN_FILE, LOCK_FILE, LOCK_STALE_MS, LOCK_TIMEOUT_MS, REPAIR_LOG, appendRecord, pidAlive, chainStatus, linkRecord, repairChain, validId, verifyChain, withLock } from './evidence-chain.mjs';
 
 const H = 'a'.repeat(40);
 const tmp = () => mkdtempSync(join(tmpdir(), 'ev-chain-'));
@@ -54,10 +54,23 @@ test('withLock: az elárvult (régi) zárat törli és naplózza; a friss zárn�
   writeFileSync(join(dir, LOCK_FILE), '999\n');
   const old = new Date(Date.now() - 120_000);
   utimesSync(join(dir, LOCK_FILE), old, old);
-  assert.equal(withLock(dir, () => 42, { staleMs: 30_000 }), 42);
+  assert.equal(withLock(dir, () => 42, { staleMs: 30_000, alive: () => false }), 42);
   assert.match(readFileSync(join(dir, REPAIR_LOG), 'utf8'), /elárvult zár törölve/);
   writeFileSync(join(dir, LOCK_FILE), '999\n');
-  assert.throws(() => withLock(dir, () => 1, { timeoutMs: 50, staleMs: 60_000 }), /sem szabadult fel/);
+  assert.throws(() => withLock(dir, () => 1, { timeoutMs: 50, staleMs: 60_000, alive: () => false }), /sem szabadult fel/);
+});
+
+test('withLock (R2): a régi zárat NEM veszi el, ha a benne álló PID él; a várakozási idő alapból nagyobb az elárvulási küszöbnél', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, LOCK_FILE), '4242\n');
+  const old = new Date(Date.now() - 120_000);
+  utimesSync(join(dir, LOCK_FILE), old, old);
+  assert.throws(() => withLock(dir, () => 1, { timeoutMs: 50, staleMs: 30_000, alive: (p) => p === 4242 }), /sem szabadult fel/);
+  assert.ok(existsSync(join(dir, LOCK_FILE)), 'az élő író zárja megmaradt');
+  assert.equal(withLock(dir, () => 7, { staleMs: 30_000, alive: () => false }), 7, 'halott PID: átveszi');
+  assert.ok(LOCK_TIMEOUT_MS > LOCK_STALE_MS, 'a várakozó a saját időtúllépése előtt átveszi az elárvult zárat');
+  assert.equal(pidAlive(process.pid), true);
+  assert.equal(pidAlive(0), false);
 });
 
 test('repairChain: a törött láncot archiválja, újat indít (repair: true), naplóz — a rekordok utána „ok, javított”', () => {

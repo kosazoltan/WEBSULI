@@ -564,7 +564,7 @@ async function main() {
   const sha = createHash('sha256').update(md).digest('hex');
   try {
     appendRecord(ctx.evDir, `claims-${sha.slice(0, 16)}`, { kind: 'claims', head, report: basename(file), reportSha256: sha, ok: code === 0, counts, at: new Date().toISOString() });
-  } catch { /* a rekord írása nem dönti el az ítéletet */ }
+  } catch (e) { process.stderr.write(`[verify-report] FIGYELEM: a claims-rekord nem írható (${String(e?.message ?? e).split('\n')[0]})\n`); }
   if (json) process.stdout.write(`${JSON.stringify({ schema: 'websuli-check/1', tool: 'verify-report', head, ok: code === 0, exitCode: code, counts, items, ms: Date.now() - t0 }, null, 2)}\n`);
   process.exit(code);
 }

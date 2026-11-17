@@ -91,7 +91,10 @@ function main() {
     process.stderr.write(`[record-review] FIGYELEM (claims-verify: warn): ${res.warnings.length} HAMIS hivatkozás a jelentésben — az ítélet rögzül, de javítsd / jelöld:\n${res.warnings.map((b) => `  - ${b}`).join('\n')}\n`);
   }
   writeEvidence(ctx.evDir, `review-${res.record.head}`, res.record);
-  try { linkRecord(ctx.evDir, `review-${res.record.head}`); } catch { /* a lánc-sor hiánya a verify-report-ban derül ki */ }
+  try { linkRecord(ctx.evDir, `review-${res.record.head}`); } catch (e) {
+    process.stderr.write(`[record-review] HIBA: az ítélet-rekord láncba kötése nem sikerült (${String(e?.message ?? e).split('\n')[0]}) — futtasd újra\n`);
+    process.exit(2);
+  }
   process.stdout.write(`[record-review] rögzítve: review-${res.record.head.slice(0, 12)} — ${res.record.verdict}\n`);
   process.stdout.write(`[record-review] a PR-leírásba / kommentbe ezt a sort tedd (más részletet a nyilvános repóra ne):\n${res.line}\n`);
   process.exit(0);
