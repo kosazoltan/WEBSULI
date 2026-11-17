@@ -1690,14 +1690,21 @@ function PlayScreen(props: {
   const qRef = useRef<ReturnType<typeof usePlayQuestion>>(null as unknown as ReturnType<typeof usePlayQuestion>);
   const driverRef = useRef<ChaseDriver | null>(null);
   const onOutcomeRef = useRef<(o: QuestionOutcome, p: QuestionPresentation) => void>(() => {});
-  const q = usePlayQuestion({
-    setup: { config: directorConfig, provider, startBand: adaptiveRef.current.band, seed: runSeedRef.current },
-    // A rezgést a lap adja a játékbeli következménnyel együtt (egy kimenet = egy visszajelzés).
-    haptics: false,
-    onShow: (p) => driverRef.current?.core.onShow(p),
-    onOutcome: (o, p) => onOutcomeRef.current(o, p),
-  });
-  qRef.current = q;
+  // A kérdés-sáv horga a levél-komponensben (`TornadoQuestionLayer`) él: a ≈ 10 Hz-es időcsík ott renderel, a lap csak a
+  // kérdés eseményeire (nyílás, kijelzés, lezárás) — a lapszintű időzített újrarenderelés a telefonos akadás forrása.
+  // A horog API-ja a `qRef`-ben (a levél minden renderje után frissíti), a lap a `qView` tükrön át renderel.
+  const questionSetup = { config: directorConfig, provider, startBand: adaptiveRef.current.band, seed: runSeedRef.current };
+  const onQuestionShow = useCallback((p: QuestionPresentation) => driverRef.current?.core.onShow(p), []);
+  const onQuestionOutcome = useCallback((o: QuestionOutcome, p: QuestionPresentation) => onOutcomeRef.current(o, p), []);
+  const [qView, setQView] = useState<TornadoQuestionView>(EMPTY_QUESTION_VIEW);
+  const onQuestionView = useCallback(
+    (v: TornadoQuestionView) => setQView((cur) => (cur.presentation === v.presentation && cur.reveal === v.reveal ? cur : v)),
+    [],
+  );
+  const barWindowFor = useCallback((id: number) => {
+    const j = junctionRef.current;
+    return j && j.questionId === id ? j.barWindowMs : 0;
+  }, []);
   /** A fix lépésű szimuláció egy lépése (a jármű, a tölcsér, a szél) — lent definiálva, a meghajtó ezt hívja. */
   const simStepRef = useRef<(dt: number) => { x: number; z: number; heading: number; speed: number; hold: boolean }>(() => ({ x: 0, z: 0, heading: 0, speed: 0, hold: true }));
   const makeDriver = (seed: string): ChaseDriver =>
@@ -2856,7 +2863,7 @@ function PlayScreen(props: {
     onProgressRef.current((latest) => updateSettings(latest, { cameraMode: next }));
   }, []);
   /** J7b: a kérdés-sáv állapota (≈ 10 Hz + eseményre) és a kérdés fajtája (elágazás: sáv mód; turbó / horgony: gomb mód). */
-  const pres = q.state.presentation;
+  const pres = qView.presentation;
   const qKind: QuestionKind | null = pres ? driverRef.current?.core.kindOf(pres.id) ?? "junction" : null;
   const qMeta = pres ? questionMetaRef.current.get(pres.question.key) : undefined;
   /**
@@ -2880,12 +2887,6 @@ function PlayScreen(props: {
   })();
   /** A bal felső panel ott rejtett, ahol a kérdés-sáv kártyája / gombsora alá kerülne (R4: fekvőn a válaszlista helyén is). */
   const hidePanel = qKind !== null && (shortLandscape ? qKind !== "junction" || compactSigns : qKind === "junction");
-  // J7b döntések 27.: rögzülés után az időcsík a rögzüléskori helyéről simán a meghosszabbított határidőn fogy el (nem töltődik vissza).
-  const barJunction = junctionRef.current;
-  const barPresentation =
-    q.bind.presentation && barJunction && barJunction.barWindowMs > 0 && barJunction.questionId === q.bind.presentation.id
-      ? { ...q.bind.presentation, windowMs: barJunction.barWindowMs }
-      : q.bind.presentation;
   // K5: a válaszlista magassága kérdésenként egyszer (a rajzoló hurok ebből számol, képkockánként nem olvas layoutot).
   useLayoutEffect(() => {
     answersTopRef.current = -1;
@@ -2945,7 +2946,8 @@ function PlayScreen(props: {
         )}
         {pres && qKind === "junction" &&
           pres.options.map((opt, i) => {
-            const st = !q.state.reveal ? "idle" : i === q.state.reveal.correctOptionIndex ? "correct" : i === q.state.reveal.pickedOptionIndex ? "wrong" : "dim";
+            const rv = qView.reveal;
+            const st = !rv ? "idle" : i === rv.correctOptionIndex ? "correct" : i === rv.pickedOptionIndex ? "wrong" : "dim";
             const tap = pointerTapHandlers(signTracker, i, () => {
               if (pausedRef.current || feedbackRef.current) return;
               qRef.current.pick(i);
@@ -3115,20 +3117,17 @@ function PlayScreen(props: {
 
       {/* J7b (terv 5.7, 9.): a megállító overlay megszűnt — nem blokkoló kérdés-sáv; a vezetés közben megy tovább.
           Elágazás: sáv (a válasz az áthajtott tábla), turbó / horgony: nagy gombok. A régi `tornado-quiz` azonosító marad. */}
-      <InlineQuestion
-        {...q.bind}
-        presentation={barPresentation}
+      <TornadoQuestionLayer
+        setup={questionSetup}
+        onShow={onQuestionShow}
+        onOutcome={onQuestionOutcome}
+        apiRef={qRef}
+        onView={onQuestionView}
+        barWindowFor={barWindowFor}
         mode={qKind === "junction" ? "bar" : "buttons"}
-        skin="storm"
         disabled={paused || feedback !== null}
         onWhy={openWhy}
-        testId="tornado-quiz"
-        onExpand={() => {
-          expandedRef.current = true;
-        }}
-        onCollapse={() => {
-          expandedRef.current = false;
-        }}
+        expandedRef={expandedRef}
       />
 
       {touch && (
@@ -3218,7 +3217,7 @@ function PlayScreen(props: {
                   ))}
                 </dl>
               )}
-              <ResultReview items={q.director?.wrongList() ?? []} />
+              <ResultReview items={qRef.current?.director?.wrongList() ?? []} />
               {next && (
                 <button type="button" data-testid="tornado-next-level" className="game-btn game-btn-secondary w-full" onClick={next.go}>
                   Tovább: {next.label}
@@ -3444,6 +3443,63 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
 
 /* ------- touch controls ------- */
 /** K5: memózva — a propjai (a jelzőkön kívül) stabilak, így a lap kérdés-sáv miatti újrarajzolása nem éri el. */
+/** A lap által tükrözött, eseményszintű kérdés-állapot (az időcsík maradéka NEM része: az a levélben renderel). */
+type PlayQuestionApi = ReturnType<typeof usePlayQuestion>;
+type TornadoQuestionView = Pick<PlayQuestionApi["state"], "presentation" | "reveal">;
+const EMPTY_QUESTION_VIEW: TornadoQuestionView = { presentation: null, reveal: null };
+
+/**
+ * A kérdés-sáv levél-komponense: itt él a `usePlayQuestion` (≈ 10 Hz-es állapot), és itt renderel az `InlineQuestion`. A lapnak
+ * csak eseményre jelez (`onView`: új / lezárt kérdés, megoldás-kijelzés) — az időcsík fogyása nem rendereli újra a lapot.
+ * J7b döntések 27.: rögzülés után a csík a rögzüléskori helyéről simán a meghosszabbított határidőn fogy el (`barWindowFor`).
+ */
+const TornadoQuestionLayer = memo(function TornadoQuestionLayer(props: {
+  setup: Parameters<typeof usePlayQuestion>[0]["setup"];
+  onShow: (p: QuestionPresentation) => void;
+  onOutcome: (o: QuestionOutcome, p: QuestionPresentation) => void;
+  apiRef: React.MutableRefObject<PlayQuestionApi>;
+  onView: (v: TornadoQuestionView) => void;
+  barWindowFor: (presentationId: number) => number;
+  mode: "bar" | "buttons";
+  disabled: boolean;
+  onWhy: () => void;
+  expandedRef: React.MutableRefObject<boolean>;
+}) {
+  const q = usePlayQuestion({
+    setup: props.setup,
+    // A rezgést a lap adja a játékbeli következménnyel együtt (egy kimenet = egy visszajelzés).
+    haptics: false,
+    onShow: props.onShow,
+    onOutcome: props.onOutcome,
+  });
+  const { apiRef, onView, expandedRef } = props;
+  useLayoutEffect(() => {
+    apiRef.current = q;
+  });
+  const { presentation, reveal } = q.state;
+  useLayoutEffect(() => {
+    onView({ presentation, reveal });
+  }, [presentation, reveal, onView]);
+  const bar = presentation ? props.barWindowFor(presentation.id) : 0;
+  return (
+    <InlineQuestion
+      {...q.bind}
+      presentation={presentation && bar > 0 ? { ...presentation, windowMs: bar } : presentation}
+      mode={props.mode}
+      skin="storm"
+      disabled={props.disabled}
+      onWhy={props.onWhy}
+      testId="tornado-quiz"
+      onExpand={() => {
+        expandedRef.current = true;
+      }}
+      onCollapse={() => {
+        expandedRef.current = false;
+      }}
+    />
+  );
+});
+
 const TouchControls = memo(TouchControlsImpl);
 function TouchControlsImpl(props: {
   leftHanded: boolean;
