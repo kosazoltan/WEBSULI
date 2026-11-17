@@ -157,6 +157,13 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
   rögzített seeddel és rövid fallal fut: ÚJ `?wall=<n>` (csak teszt-kampós / fejlesztői buildben, mint a `?seed=`), így a
   menet játékidőben korlátos; a mérce (valódi érintés, mászás, megcsúszás, eredmény, „Gyakorold még”, nincs automatikus
   újraindítás, visszavágó) változatlan.
+- **Bizonyíték:** a #484 (futás 44067540915, job 133985792633) naplója szerint mindhárom próbálkozás `Test timeout of
+  330000ms` a ciklusban (az eredmény 300 s alatt nem jött el) — a 2. gyökérok; a main 44028107372 naplójában a
+  „Received: 1” párbeszédablak — az 1. gyökérok. Helyben 6× CPU-lassítással, 10 egymás utáni futással: a Nyugodt tempón
+  10-ből 1 még 330 s fölé nyúlt; a Gyors tempóval próbálva 10-ből 1 jó fogás nélkül veszített (kevés kérdés jutott a rövid
+  menetre). A harmadik ok tehát a teszt „játékosának” saját lassúsága volt: körönként ~10 automatikusan váró lokátorhívás
+  (lassú gépen kérdésenként több másodperc). Javítás: körönként két `page.evaluate` (állapot; megoldás-kijelzés), a lap alap
+  (Nyugodt) tempóján.
 
 ## 5. Edge case-ek
 

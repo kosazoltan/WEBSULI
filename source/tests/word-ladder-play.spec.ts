@@ -20,6 +20,10 @@ import { expect, test, type Page } from "@playwright/test";
  *   (szoftveres WebGL) a rivális a falióránál lassabban halad, a 24–35 fokos menet 300 s fölé nyúlt („Test timeout of
  *   330000ms”). Most rögzített seeddel (`?seed=`) és rövid fallal (`?wall=4`, csak teszt-kampós buildben) fut: a menet
  *   játékidőben korlátos. A fogás az előjelzés (600 ms) után élesedik — a teszt az engedélyezett fogásra vár.
+ * - a „játékos” lassú gépen se maradjon le a saját oda-vissza útjai miatt: körönként két `page.evaluate` (állapot, majd a
+ *   megoldás-kijelzés), nem tíz automatikusan váró lokátorhívás. 6× CPU-lassítással a régi, sok-hívásos ciklus a Nyugodt
+ *   tempón 10-ből 1-szer 330 s fölé nyúlt, a Gyors tempón 10-ből 1-szer egyetlen jó fogás nélkül veszített (kevés kérdés
+ *   jutott a rövid menetre). A teszt a lap alap (Nyugodt) tempóján fut.
  * - helyi lassú-gép próba: `E2E_CPU_THROTTLE=6` (CDP CPU-lassítás) — a CI-ben nincs megadva.
  */
 
@@ -40,14 +44,6 @@ async function stubApi(page: Page) {
   });
 }
 
-const rungText = async (page: Page) => (await page.getByTestId("wl-rung").innerText()).trim();
-
-/** Egyetlen olvasás (C-64): látszik-e az eredmény, és hány párbeszédablak van az eredményképernyőn KÍVÜL. */
-const screenState = (page: Page) =>
-  page.evaluate(() => ({
-    result: document.querySelector('[data-testid="wl-won"]') !== null,
-    dialogs: Array.from(document.querySelectorAll('[role="dialog"]')).filter((d) => !d.closest("[data-game-result]")).length,
-  }));
 
 test("Szikla-verseny: egy teljes menet valódi érintéssel, kampó nélkül — mászás, megcsúszás, eredmény, visszavágó", async ({ page }) => {
   test.setTimeout(330_000);
@@ -67,35 +63,60 @@ test("Szikla-verseny: egy teljes menet valódi érintéssel, kampó nélkül —
   const result = page.getByTestId("wl-won");
   let climbed = false;
   let slipped = false;
+  /** Egyetlen olvasás (C-64): menetvég, párbeszédablak, a nyitott kérdés és a fok — automatikusan váró lokátor nélkül. */
+  const readState = () =>
+    page.evaluate(() => {
+      const opts = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid^="wl-option-"]'));
+      return {
+        result: document.querySelector('[data-testid="wl-won"]') !== null,
+        dialogs: Array.from(document.querySelectorAll('[role="dialog"]')).filter((d) => !d.closest("[data-game-result]")).length,
+        enabled: opts.filter((b) => !b.disabled).length,
+        qid: document.querySelector<HTMLElement>('[data-testid="wl-question"]')?.dataset.questionId ?? "",
+        prompt: (document.querySelector<HTMLElement>('[data-testid="wl-prompt"]')?.innerText ?? "").trim(),
+        labels: opts.map((b) => (b.querySelector<HTMLElement>(".wl-hold-label")?.innerText ?? "").trim()),
+        rung: (document.querySelector<HTMLElement>('[data-testid="wl-rung"]')?.innerText ?? "").trim(),
+      };
+    });
+  /** A kép a koppintás után: a zöld (helyes) kapaszkodó felirata és a megfogott fogás állapota (vagy null, ha még nincs). */
+  const readReveal = (idx: number) =>
+    page.evaluate((i) => {
+      const green = document.querySelector<HTMLElement>('[data-testid^="wl-option-"][data-state="correct"]');
+      if (!green) return null;
+      return {
+        label: (green.querySelector<HTMLElement>(".wl-hold-label")?.innerText ?? "").trim(),
+        picked: document.querySelector<HTMLElement>(`[data-testid="wl-option-${i}"]`)?.dataset.state ?? "",
+      };
+    }, idx);
   const deadline = Date.now() + 300_000;
+  let lastQid = "";
   while (Date.now() < deadline) {
-    const s = await screenState(page);
+    const s = await readState();
     // Menet közben soha nincs blokkoló kártya (a „Miért?” nélkül); az eredményképernyő a menet vége.
     expect(s.dialogs, "menet közben nincs blokkoló párbeszédablak").toBe(0);
     if (s.result) break;
-    const enabled = page.locator('[data-testid^="wl-option-"]:not([disabled])');
-    if ((await enabled.count()) !== 4) {
-      await page.waitForTimeout(120);
+    if (s.enabled !== 4 || s.qid === lastQid) {
+      await page.waitForTimeout(100);
       continue;
     }
-    const prompt = (await page.getByTestId("wl-prompt").innerText().catch(() => "")).trim();
-    const labels = await holds.locator(".wl-hold-label").allInnerTexts();
-    const want = known.get(prompt);
-    let idx = want ? labels.findIndex((l) => l.trim() === want) : -1;
+    lastQid = s.qid;
+    const want = known.get(s.prompt);
+    let idx = want ? s.labels.findIndex((l) => l === want) : -1;
     if (idx < 0) idx = 0;
-    const before = await rungText(page).catch(() => "");
     await holds.nth(idx).tap({ timeout: 2_000 }).catch(() => undefined);
     // A kép: a helyes kapaszkodó zöld (jó fogásnál a megfogott, rossznál a másik).
-    const green = page.locator('[data-testid^="wl-option-"][data-state="correct"]');
-    if (await green.first().isVisible({ timeout: 1_500 }).catch(() => false)) {
-      const label = (await green.first().locator(".wl-hold-label").innerText({ timeout: 1_000 }).catch(() => "")).trim();
-      if (prompt && label) known.set(prompt, label);
-      const state = await holds.nth(idx).getAttribute("data-state", { timeout: 1_000 }).catch(() => null);
-      if (state === "wrong") slipped = true;
-      if (state === "correct") {
-        // A HUD ≤ 10 Hz-cel frissül: a fok-szám a következő pillanatképben nő.
-        await expect.poll(() => rungText(page).catch(() => before), { timeout: 1_000 }).not.toBe(before).catch(() => undefined);
-        if ((await rungText(page).catch(() => before)) !== before) climbed = true;
+    let rev: Awaited<ReturnType<typeof readReveal>> = null;
+    for (let k = 0; k < 20 && !rev; k++) {
+      rev = await readReveal(idx);
+      if (!rev) await page.waitForTimeout(100);
+    }
+    if (!rev) continue;
+    if (s.prompt && rev.label) known.set(s.prompt, rev.label);
+    if (rev.picked === "wrong") slipped = true;
+    if (rev.picked === "correct") {
+      // A HUD ≤ 10 Hz-cel frissül: a fok-szám a következő pillanatképben nő.
+      for (let k = 0; k < 15 && !climbed; k++) {
+        if ((await readState()).rung !== s.rung) climbed = true;
+        else await page.waitForTimeout(100);
       }
     }
   }
