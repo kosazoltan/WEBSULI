@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/eredmeny-email-kviz`
+**Állapot:** S1a kész; S1b (félbehagyott kvíz, dátum, korkorlát) folyamatban – 2026-11-17, ág `fix/eredmeny-email-kviz`
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -85,12 +85,58 @@ egy tartalmaz `mailto:` hivatkozást, a `sendResultEmail` hívását egyik sem (
 - E7. A meglévő tesztek (`lesson-result-email.test.ts`, `learner-attribution.test.ts`, `lesson-result-email.spec.ts`) módosítás nélkül
   zöldek.
 
+## S1b — félbehagyott kvíz, dátum a levélben, korkorlát (független review M1/1 és K1; orkesztrátori döntés 2026-11-17)
+
+**Mit old meg és mit nem.** Az S1a a „mind megválaszolva, csak a gomb maradt el” esetet javítja. Az S1b a FÉLBEHAGYOTT helyi kvízt
+(pl. 18 / 25 kérdés után bezárt lap) is elküldi. A bejelentkezett felhasználó szerveres kvíze külön szelet (S2:
+`2026-11-17-eredmeny-email-foglalas.md`, ág `fix/eredmeny-email-foglalas`). Ez az ág önmagában tehát a panaszt a vendég / párosított
+tanuló útján oldja meg, a bejelentkezett úton nem.
+
+**Választott megoldás: késleltetett, szerveroldali küldés a legutolsó pillanatképből.** A kliens a lap háttérbe kerülésekor
+(`visibilitychange` → rejtett) és elhagyásakor (`pagehide`) elküldi a kör PILLANATKÉPÉT (`partial: true`), ha van legalább egy
+válasz és több, mint a legutóbb elküldött pillanatképben. A szerver a pillanatképet memóriában tartja (körönként a legutolsót), és
+csak akkor küld „félbehagyva” levelet, ha 15 percig nem érkezik újabb pillanatkép vagy végleges beküldés. A végleges beküldés (kör
+lezárva / mind megválaszolva) törli a várakozó pillanatképet.
+- Miért nem azonnali küldés: telefonon a megbízható esemény a `visibilitychange`, amely alkalmazásváltáskor is jön — azonnali
+  küldéssel a szülő „3 / 25 félbehagyva” levelet kapna, miközben a gyerek folytatja; körönként egyszeri korláttal pedig a későbbi,
+  pontosabb állapot nem menne el. A késleltetés körönként legfeljebb EGY, a legutolsó állapotot mutató „félbehagyva” levelet ad.
+- Nincs ellentmondó levélpár: ha a gyerek a 15 percen belül befejezi, csak a végleges levél megy. Ha később (a „félbehagyva” levél
+  után) fejezi be, a végleges levél kimondja: „Ez a befejezett kör eredménye — a korábbi, »félbehagyva« jelzésű levél helyébe lép.”
+- Ár (vállalt, dokumentált): a várakozó pillanatkép memóriában él — szerver-újraindításkor (telepítés) a még el nem küldött
+  „félbehagyva” levél elvész (a végleges levelet ez nem érinti). Adatbázis-séma nem változik. Több példány esetén a pillanatkép és
+  a végleges beküldés más példányra eshet (ma egy példány fut) — akkor a „félbehagyva” levél a végleges mellett is kimehet; a
+  végleges levél felülíró mondata ezt az esetet is kezeli.
+- Védelem: a `/results` végpont CSRF-tokenes (nem kivétel a `server/routes.ts:826-845` listáján) → a pillanatkép `fetch` +
+  `keepalive: true` hívással megy, a már gyorsítótárazott tokennel (a `sendBeacon` nem tud fejlécet küldeni); a tokent a kliens az
+  első kvízválasznál előre lekéri. GET-en nincs mellékhatás. Külön korlát a pillanatképekre (40 / 15 perc / IP), hogy a végleges
+  beküldés kerete (20 / 15 perc) ne fogyjon el.
+- Alsó küszöb: 0 megválaszolt kérdésnél nincs pillanatkép, nincs levél.
+
+**A „félbehagyva” levél tartalma:** tárgy „… — Kvíz (félbehagyva: 18 / 25) — 72% (…)”; a pont és a százalék a MEGVÁLASZOLT
+kérdésekre vonatkozik (13 / 18), a lista csak a megválaszolt kérdéseket mutatja; a fejben: „Állapot: félbehagyva — 18 / 25 kérdésre
+válaszolt; a pont a megválaszolt kérdésekre vonatkozik.”
+
+**Dátum (K1):** minden eredménylevél fejében „Beküldve: 2026. 11. 17. 20:41 (magyar idő)” (Europe/Budapest), és ha a kliens küldi,
+„A kör kezdete: …”. A kérés új, opcionális `startedAt` mezője (ezredmásodperc; a szerver csak a múltbeli, 400 napnál nem régebbi
+értéket fogadja el megjelenítésre).
+
+**Korkorlát (K1), N = 7 nap:** a 7 napnál régebben kezdett, LE NEM ZÁRT kör utólag nem megy el (sem „mind megválaszolva”, sem
+pillanatképként). Indok: a tároló leckénként egy kört őriz; egy hétnél régebbi, félbehagyott kör levele már nem a mostani tanulást
+mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kifejezett döntése) korlát nélkül megy, mint eddig.
+
+Elfogadás (S1b):
+- E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
+  pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
+- E9. AMIKOR egy pillanatkép után 15 percig nem jön újabb pillanatkép vagy végleges beküldés, A RENDSZER egy „félbehagyva” levelet
+  küld a legutolsó pillanatképből; a végleges beküldés a várakozó pillanatképet törli.
+- E10. AMIKOR a „félbehagyva” levél után a kör végleges eredménye megjön, A RENDSZER a végleges levélben jelzi a felülírást.
+- E11. Minden eredménylevél tartalmazza a beküldés idejét magyar idő szerint.
+- E12. A 7 napnál régebbi, le nem zárt kör nem megy el.
+
 ## Tulajdonosi döntést igénylő pontok
 
-1. Részben kitöltött, le nem zárt kvíz: (A — javasolt) nem megy el, mint a feladatoknál; (B) az oldal elhagyásakor a megválaszolt
-   rész elmegy „félbehagyva” jelöléssel.
-2. Bejelentkezett felhasználó szerveres kvíze: ott is csak a lezárás küld. (A — javasolt) az utolsó válasz után a kliens
-   automatikusan lezárja a kört (jutalom is ekkor jár) — a kézbesítés versenyhelyzetének javítása UTÁN; (B) marad.
+1. Részben kitöltött, le nem zárt kvíz — ELDÖNTVE (orkesztrátor, 2026-11-17): elmegy „félbehagyva” jelöléssel (S1b).
+2. Bejelentkezett felhasználó szerveres kvíze — ELDÖNTVE (orkesztrátor, 2026-11-17): külön szelet (S2), a kézbesítés-foglalással.
 3. Címzettek: ma az `ADMIN_EMAILS` közös listája. (A — javasolt) marad; (B) tanulónkénti szülőcím a párosításhoz kötve (új adat,
    adatvédelmi terv kell).
 4. Egy közös levél a feladatokról és a kvízről: (A — javasolt) marad a két külön levél; (B) napi összesítő.
@@ -103,3 +149,8 @@ egy tartalmaz `mailto:` hivatkozást, a `sendResultEmail` hívását egyik sem (
 - [x] E5 – mintaválasz a feladatok levelében
 - [x] E6 – escape
 - [x] E7 – a meglévő tesztek változatlanul zöldek
+- [ ] E8 – pillanatkép háttérbe kerüléskor / elhagyáskor (böngésző)
+- [ ] E9 – késleltetett „félbehagyva” levél a legutolsó pillanatképből; a végleges törli (valódi DB)
+- [ ] E10 – a végleges levél jelzi a felülírást
+- [ ] E11 – dátum a levélben (Europe/Budapest)
+- [ ] E12 – 7 napos korkorlát a le nem zárt körre
