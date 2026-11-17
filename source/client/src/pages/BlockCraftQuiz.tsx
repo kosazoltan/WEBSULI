@@ -2802,7 +2802,7 @@ export default function BlockCraftQuiz() {
         // K.2: azonnali kérdés — rúnaérc a játékos elé és Rúna-zár (a „quiz” kompatibilis álnév, terv 9.).
         if (patch.question === true || patch.phase === "quiz") {
           const mine = mineRef.current;
-          const quiz = patch.quiz as { prompt?: unknown; options?: unknown; correctIndex?: unknown } | undefined;
+          const quiz = (patch as { quiz?: unknown }).quiz as { prompt?: unknown; options?: unknown; correctIndex?: unknown } | undefined;
           if (quiz && typeof quiz.prompt === "string" && Array.isArray(quiz.options) && typeof quiz.correctIndex === "number") {
             forcedQuizRef.current = { id: `forced-${++forcedSeqRef.current}`, prompt: quiz.prompt, options: quiz.options.map(String), correctIndex: quiz.correctIndex };
           }
@@ -3356,7 +3356,7 @@ export default function BlockCraftQuiz() {
                 className={`bc-runes ${wrongShake && !reducedMotion ? "animate-shake" : ""}`}
                 data-testid="bc-quiz"
                 data-state={reveal ? "reveal" : "open"}
-                data-long={presentation.options.some((o) => o.label.length > 22) ? "true" : "false"}
+                data-long={presentation.options.some((o) => o.label.length > 60) ? "xl" : presentation.options.some((o) => o.label.length > 22) ? "true" : "false"}
                 role="group"
                 aria-label="Rúnakövek — koppints a jó válaszra"
               >
@@ -3668,6 +3668,12 @@ export default function BlockCraftQuiz() {
         .bc-runes { position: absolute; z-index: 24; left: 50%; transform: translateX(-50%); bottom: calc(max(8px, var(--game-safe-bottom)) + 136px); width: min(94vw, 560px); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; pointer-events: none; }
         .bc-runes[data-long="true"] .bc-rune { font-size: 14px; line-height: 1.15; padding-top: 5px; padding-bottom: 5px; }
         .bc-runes[data-long="true"] .bc-rune-letter { width: 30px; height: 30px; font-size: 17px; }
+        /* Szélsőséges (> 60 karakteres) tananyag-válasz: kisebb betű és szorosabb gomb — a felirat így is teljes (nincs vágás). */
+        .bc-runes[data-long="xl"] { gap: 6px; width: min(98vw, 600px); }
+        /* Nagyon magas rúnasornál a saját szünetgomb a kérdéskártyára lógna — ilyenkor a HUD (mindig látható) szünetgombja marad. */
+        .bc-runes[data-long="xl"] .bc-rune-pause { display: none; }
+        .bc-runes[data-long="xl"] .bc-rune { font-size: 13px; line-height: 1.12; gap: 6px; padding: 4px 6px 4px 4px; }
+        .bc-runes[data-long="xl"] .bc-rune-letter { width: 26px; height: 26px; font-size: 15px; border-radius: 8px; }
         .bc-runes.animate-shake { animation: bc-rune-shake 0.16s ease-in-out 2; }
         @keyframes bc-rune-shake {0%,100% { transform: translateX(-50%); }25% { transform: translateX(calc(-50% - 5px)); }75% { transform: translateX(calc(-50% + 5px)); }}
         .bc-rune { pointer-events: auto; display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 6px 10px 6px 6px; border-radius: 14px; text-align: left; color: #fff; font-weight: 800; font-size: 16px; line-height: 1.2;
@@ -3691,6 +3697,7 @@ export default function BlockCraftQuiz() {
           .bc-bottom[data-touch="true"] button { pointer-events: auto; }
           .bc-bottom[data-touch="true"] .bc-hotbar-empty { display: none; }
           .bc-runes { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(54vw, 520px); bottom: calc(max(8px, var(--game-safe-bottom)) + 64px); gap: 8px; }
+          .bc-runes[data-long="xl"] { width: min(68vw, 640px); }
           .bc-rune { min-height: 50px; font-size: 15px; }
           .play-question[data-skin="mine"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 64px); }
           /* A chipsor a bal oldalon törik (a kérdéskártya fent középen, 40vw széles — nem takarhatja el az iránytűt). */

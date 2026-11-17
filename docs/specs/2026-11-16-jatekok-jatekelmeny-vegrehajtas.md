@@ -1216,6 +1216,12 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
   választhatók. A kérdés-sáv `bc-question` / `bc-prompt`; a `bc-quiz-pause` a rúnaréteg saját 52 px-es szünetgombja (a
   sáv közös 48 px-es ikongombja Pixel 7 sűrűségen 47,x px-re kerekedett — mérve, M2). Nyitott zárnál a Lerak / Bányász rejtett.
 - **A pálya ideje** a menet kezdő sávjából (`adaptiveTimeBudget(timeLimit, runStartBand)`), a válaszok nem módosítják.
+  Review #484: a pálya-cél teljesülése után (a megoldás-kijelzés még fut) a visszaszámlálás áll (`levelClockTick`) — az időkeret
+  végén kinyitott utolsó rúnazár győzelem; ha a lejárat jön előbb (a zár még nyitott), a pálya lejár, a kérdés megszakítva zárul.
+  A „Mutasd” (kibontott hosszú kérdés) alatt szünet (világ, pálya-óra, kérdés-óra). A rúnasor alulról igazodik (a joystick
+  fölé), hosszú válasznál kisebb betűvel felfelé nő — a felirat nem vágódik (mérve a bank leghosszabb válaszaival és ~110
+  karakteres tananyag-válasszal, `T/blockcraft-play.spec.ts`; a régi, felülről igazított elrendezés a ~110 karakteresnél a
+  játéktér alá lógott).
 - **Teszt-változás (SPEC-VÁLTOZÁS, terv 5.3 / 9.):** `T/blockcraft-mobile.test.ts` (a `shouldRun` „quiz” fázis nélkül),
   `T/block-craft-real-touch.spec.ts` (kérdés helyett kibányászott blokk 20 s-on belül), `T/game-mobile-cases/block-craft-quiz.ts`
   (rossz válasz → „Miért?” → kártya). A terv 9. szakasza szerint ezek „változatlanul zöldek” lettek volna — a `shouldRun`

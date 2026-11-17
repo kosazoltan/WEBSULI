@@ -181,7 +181,19 @@ const MATERIAL_LONG_QUIZ = {
   correctIndex: 0,
 };
 
-for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) for (const [name, LONG] of [["évfolyam-bank", LONGEST_RUNE_QUIZ], ["tananyag, ~60 karakter", MATERIAL_LONG_QUIZ]] as const) {
+/** Szélsőséges tananyag-válasz (~110 karakter; a játék-kérdés szerződése nem korlátozza a hosszt). */
+const MATERIAL_XLONG_QUIZ = {
+  prompt: "Melyik állítás igaz a vízkörforgásra?",
+  options: [
+    "a nap melege elpárologtatja a tengerek vizét, a pára felhővé sűrűsödik, majd csapadékként visszahullik a földre",
+    "a folyók vize a tengerbe ömlik, ahol örökre ott marad, mert a tengervíz sós, ezért soha nem tud elpárologni",
+    "a felhők a hegyekből szivárgó forrásvízből lesznek, és csak télen hullhat belőlük csapadék a síkságokra is",
+    "az esővíz kizárólag a talajban marad, a növények nem veszik fel, és a levegőbe sem jut vissza semmilyen úton",
+  ],
+  correctIndex: 0,
+};
+
+for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) for (const [name, LONG] of [["évfolyam-bank", LONGEST_RUNE_QUIZ], ["tananyag, ~60 karakter", MATERIAL_LONG_QUIZ], ["tananyag, ~110 karakter", MATERIAL_XLONG_QUIZ]] as const) {
   test.describe(`${vp.width}x${vp.height}`, () => {
     test.use({ viewport: vp });
     test(`leghosszabb válaszok (${name}): a rúnagombok szövege nem vágódik, a gombok a játéktéren belül, ≥ 48 px, nem fedik egymást`, async ({ page }) => {
@@ -216,9 +228,15 @@ for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { wi
         });
         // A kérdéskártyát sem takarhatják (a prompt olvasható marad).
         const card = document.querySelector(".play-question-card")?.getBoundingClientRect();
-        if (card) for (const [i, r] of boxes.entries()) if (r.top < card.bottom - 1 && r.bottom > card.top + 1 && r.left < card.right && r.right > card.left) problems.push(`${i}: a kérdéskártyára lóg`);
+        const pause = document.querySelector<HTMLElement>('[data-testid="bc-quiz-pause"]');
+        const pauseBox = pause && getComputedStyle(pause).display !== "none" ? pause.getBoundingClientRect() : null;
+        const all: Array<[string, DOMRect]> = boxes.map((r, i) => [String(i), r]);
+        if (pauseBox) all.push(["szünetgomb", pauseBox]);
+        if (card) for (const [i, r] of all) if (r.top < card.bottom - 1 && r.bottom > card.top + 1 && r.left < card.right && r.right > card.left) problems.push(`${i}: a kérdéskártyára lóg`);
         return problems;
       });
+      const dir = process.env.BC_PLAY_SHOT_DIR;
+      if (dir) await page.screenshot({ path: `${dir}/block-craft-quiz-${vp.width}x${vp.height}-long-${LONG.options[0]!.length}.jpg`, type: "jpeg", quality: 70, scale: "css" });
       expect(report).toEqual([]);
     });
   });
