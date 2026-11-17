@@ -1550,6 +1550,9 @@ export default function SpaceAsteroidQuiz() {
     // A főellenfél legyőzése VÉGLEGES (review #486 M1): az 1,5 mp-es robbanás-ablakban semmi nem írhatja át „Kör vége”-re.
     const won = wonIn || bossDefeatedRef.current;
     runOverRef.current = true;
+    // A kör végén nyomva tartott tűzgomb (a közös `HoldButton` lecsatoláskor nem hív `onHoldEnd`-et, kanban #98) ne tüzeljen a
+    // következő körben: a vezérlők a kör végén ÉS indulásakor is nullázódnak (`startNewRun`).
+    releaseControls();
     const ctl = qRef.current;
     if (!ctl.finished()) ctl.finish();
     const clock = driverRef.current?.clockMs() ?? 0;
@@ -1564,7 +1567,7 @@ export default function SpaceAsteroidQuiz() {
     setGameWon(won);
     publishHud(true);
     setPhase("over");
-  }, []);
+  }, [releaseControls]);
 
   /* ============== „Miért?”: szünet + a valódi magyarázókártya ============== */
 
@@ -1683,6 +1686,7 @@ export default function SpaceAsteroidQuiz() {
           crystalsArmed: crystalsArmed() ? 1 : 0,
           longLabels: crystalLayerRef.current?.dataset.long === "true" ? 1 : 0,
           bossDefeated: bossDefeatedRef.current ? 1 : 0,
+          firing: keysRef.current.fire || touchRef.current.fire ? 1 : 0,
           crystalClock: armClockRef.current,
           crystalShownAt: Number.isFinite(crystalShownAtRef.current) ? crystalShownAtRef.current : -1,
           // A mag találati helye vászon-pixelben (a kirajzolt gombbal vethető össze; átméretezés-teszt).

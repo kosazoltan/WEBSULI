@@ -278,7 +278,9 @@ test.describe("grafika", () => {
       ext?.loseContext();
       return Boolean(ext);
     });
-    test.skip(!lost, "a WEBGL_lose_context kiterjesztés nem elérhető ebben a böngészőben");
+    // A teszt MINDIG fut és állít: a WEBGL_lose_context minden vizsgált Chrome-háttéren (GPU, SwiftShader) elérhető; ha nem az,
+    // az a teszt-környezet hibája, nem csendes kihagyás.
+    expect(lost, "a WEBGL_lose_context kiterjesztés elérhető (a környezet előfeltétele)").toBe(true);
     // szünet + újraindító gomb; a menet áll
     await expect(page.getByTestId("sa-gfx-lost")).toBeVisible({ timeout: 5_000 });
     const t1 = (await probe(page)).simTime as number;
@@ -536,5 +538,29 @@ test.describe("review #486 — elforgatás nyitott kérdésnél", () => {
         expect(b.b, "alsó").toBeLessThanOrEqual(g.ih);
       }
     }
+  });
+});
+
+test.describe("a kör végén nyomva tartott tűzgomb (közös HoldButton, kanban #98)", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("a következő kör nem tüzel magától: a vezérlők a kör végén és indulásakor nullázódnak", async ({ page }) => {
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    // a tűzgomb lenyomva, felengedés nélkül (a lecsatolás nem küld felengedést)
+    const fire = (await page.getByRole("button", { name: "Tűz" }).boundingBox())!;
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: fire.x + fire.width / 2, y: fire.y + fire.height / 2, id: 7 }] });
+    await expect.poll(async () => (await probe(page)).firing).toBe(1);
+    await force(page, { phase: "over", gameWon: false });
+    await expect(page.getByTestId("sa-over")).toBeVisible();
+    expect((await probe(page)).firing, "a kör végén a tűz nullázódik").toBe(0);
+    await page.getByRole("button", { name: "Új kör" }).tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible();
+    await page.waitForTimeout(500);
+    expect((await probe(page)).firing, "az új kör nem tüzel magától").toBe(0);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   });
 });

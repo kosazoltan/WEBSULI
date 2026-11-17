@@ -207,3 +207,11 @@ test("review #486 (kis UX): a tartott tűz átmegy a kristályon — rövid szö
   assert.match(code, /bulletAnsweredRef\.current = true;\s*holdHintUntilRef\.current = 0;/);
   assert.match(code, /data-testid="sa-hold-hint"/);
 });
+
+test("a kör végén nyomva tartott tűzgomb: a vezérlők az endRun-ban és a startNewRun-ban is nullázódnak (a közös HoldButton nem hív onHoldEnd-et lecsatoláskor)", () => {
+  const end = code.slice(code.indexOf("const endRun = useCallback("), code.indexOf("const openWhy"));
+  assert.match(end, /runOverRef\.current = true;[\s\S]{0,400}releaseControls\(\);/);
+  assert.match(end, /\}, \[releaseControls\]\);/);
+  const start = code.slice(code.indexOf("const startNewRun = useCallback("));
+  assert.match(start.slice(0, 3500), /releaseControls\(\);/);
+});
