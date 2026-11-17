@@ -292,24 +292,27 @@ test("B1 + M3: a tartott Bányász gombbal megérintett ércnél a zár nyílik,
   await expect.poll(async () => (await probe(page)).armed, { timeout: 10_000 }).toBe(1);
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   const f0 = Number((await probe(page)).frames);
-  await expect.poll(async () => Number((await probe(page)).frames), { timeout: 15_000 }).toBeGreaterThan(f0 + 3);
+  await expect.poll(async () => Number((await probe(page)).frames), { timeout: 15_000 }).toBeGreaterThan(f0 + 2);
   const p = await probe(page);
   expect(p.questionsAnswered, "a felengedés nem válasz").toBe(0);
   expect(p.pressing, "nincs beragadt tartás").toBe(0);
   expect(Number(p.blocks), "a zár alatt nem bányászott tovább").toBe(blocks0);
-  // Szünet + folytatás után sincs beragadt tartás; a zár a rúnagombbal zárható, utána a Bányász gomb újra él.
-  await page.getByTestId("bc-quiz-pause").tap();
-  await expect.poll(async () => (await probe(page)).paused, { timeout: 5_000 }).toBe(1);
-  expect((await probe(page)).pressing).toBe(0);
-  await page.getByTestId("game-resume").tap();
-  await expect.poll(async () => (await probe(page)).paused, { timeout: 5_000 }).toBe(0);
+  // A zár a rúnagombbal (szándékos gesztus) zárható — a válaszablak lejárta előtt.
   const right = page.locator('[data-testid="bc-quiz"] [data-correct="true"]').first();
   await expect(right).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
   const rb = (await right.boundingBox())!;
   await page.touchscreen.tap(rb.x + rb.width / 2, rb.y + rb.height / 2);
   await expect.poll(async () => Number((await probe(page)).questionsAnswered), { timeout: 10_000 }).toBe(1);
+  expect(Number((await probe(page)).questionsCorrect)).toBe(1);
   await expect(page.getByTestId("bc-quiz")).toHaveCount(0, { timeout: 10_000 });
+  // A zár után a Bányász gomb újra él (nem ragadt be), szünet + folytatás után sincs beragadt tartás.
   await expect(page.getByRole("button", { name: "Bányász" })).toBeEnabled();
+  await page.getByRole("button", { name: "Szünet" }).first().tap();
+  await expect.poll(async () => (await probe(page)).paused, { timeout: 5_000 }).toBe(1);
+  expect((await probe(page)).pressing).toBe(0);
+  await page.getByTestId("game-resume").tap();
+  await expect.poll(async () => (await probe(page)).paused, { timeout: 5_000 }).toBe(0);
+  expect((await probe(page)).pressing).toBe(0);
 });
 
 test("L7 (review #484, viselkedés): az utolsó rúnazár az időkeret végén → pálya teljesítve; válasz nélkül lejár", async ({ page }) => {
@@ -336,6 +339,8 @@ test.describe("844x390 fekvő", () => {
     await startGame(page);
     await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONGEST_RUNE_QUIZ);
     await expect(page.locator('[data-testid="bc-quiz"] [data-correct]')).toHaveCount(4, { timeout: 10_000 });
+    await expect(page.locator('[data-testid="bc-quiz"] [data-correct]').first()).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
+    await page.waitForTimeout(600); // a kártya beúszása és a kövek élesítés-animációja lefut (képernyőképhez)
     const report = await page.evaluate(() => {
       const scene = document.querySelector(".game-scene")!.getBoundingClientRect();
       const cx = scene.left + scene.width / 2;

@@ -1255,6 +1255,24 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
 - **L1/L3/L5:** a WebGL-leállás alatt a pálya órája áll; a lejárat nem a `setTimeLeft` frissítőjében dönt; kibontott kérdésnél
   (és szünetben) az 1–4 billentyű sem válaszol.
 
+**Megvalósult eltérések és mért eredmények (a review #484 javítása után):**
+
+- **M1 — darabolás helyett cellánkénti frissítés:** a 16×16-os darabok típusonként 9-szer annyi draw call-t adtak volna (mobilon
+  ez drágább, mint amit megspórol). Helyette típusonként EGY `InstancedMesh` marad, és blokkváltozáskor csak a cella és 6
+  szomszédja frissül (cserés törlés + hozzáfűzés, O(1)); a teljes újraépítés csak új pályánál és WebGL-visszaállásnál fut. A
+  rúnaérc „átköltözése” saját eseményt kapott (`runeGone`), hogy a régi helye is frissüljön. Mérés (4× CPU, low tier, folyamatos
+  E-tartás 16 s): a CPU-profilban a világ-építés nem jelenik meg; az egyetlen > 50 ms feladat az első kibányászott blokknál van
+  (egyszeri: a közös `audioEngine` első `AudioContext`-je ~186 ms + az első porfelhő shader-fordítása) — ez közös jegy.
+  K.4/7: geometriák 5 → 7 → 7, textúrák 17 → 20 → 20 a menet elején / 2 / 4 pályaváltás után (nem nő tovább).
+- **H1 / B1 — szimuláció (20 seed, 180 s):** rúnavadász SIM_AVERAGE 10,4 / YOUNG 9,0 / WEAK 8,5 / STRONG 12,7 kérdés/perc,
+  max. rés 8,4 s; bányászó (a menetidő 46–67%-a bányászás) 8,7 / 8,4 / 8,3 / 9,0 kérdés/perc, max. rés 6,4 s, futásonként
+  medián 20 felfedezett rúnaérc. „Tovább bányászó” koppintás: ~980 / modell, téves válasz 0. Ellenpróba: a kövek régi (érc
+  előtti) elhelyezésével a fixture 78/201 sugárnál követ talál, és a bot téves választ ad.
+- **A felfedezés megállítja a tartást:** az előbukkanó rúnaércet a lenyomott ujj nem érinti meg magától (nincs előjelzés nélküli
+  kérdés), a gyerek látja, és szándékosan érinti meg.
+- **L5:** a közös `InlineQuestion` kibontott nézetben már nem fogadja az 1–4-et (`answering` feltétel); a lap a `disabled`-et is
+  átadja (kettős védelem).
+
 ### J3b — nappal–éjjel ciklus, sebző mobok, kard, életek
 
 1. Állapot-sor commit.
