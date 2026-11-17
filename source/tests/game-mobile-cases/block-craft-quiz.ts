@@ -29,6 +29,8 @@ async function answerWrong(page: Page): Promise<void> {
   await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ phase: "quiz" }));
   const wrong = page.locator('[data-testid="bc-quiz"] [data-correct="false"]').first();
   await expect(wrong).toBeVisible({ timeout: 10_000 });
+  // Review #484 B1: a zár 400 ms élesítés után fogad választ.
+  await expect(wrong).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
   await wrong.click();
   await expect(page.locator('[data-testid="bc-quiz"] [data-state="correct"]').first()).toBeVisible({ timeout: 5_000 });
   await page.getByTestId("play-why").click();

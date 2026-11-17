@@ -43,6 +43,8 @@ async function startGame(page: Page): Promise<void> {
 async function openLock(page: Page): Promise<void> {
   await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true }));
   await expect(page.locator('[data-testid="bc-quiz"] [data-correct="false"]').first()).toBeVisible({ timeout: 15_000 });
+  // SPEC-VÁLTOZÁS (review #484 B1): a zár 400 ms élesítés után fogad választ — a gyerek is csak ekkor koppinthat érvényesen.
+  await expect(page.locator('[data-testid="bc-quiz"] [data-correct="false"]').first()).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
 }
 
 test("sima blokk kérdés nélkül: a Bányász gomb 3 valódi koppintása kibányászik egy blokkot, kérdés nem nyílik", async ({ page }) => {
@@ -241,3 +243,117 @@ for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { wi
     });
   });
 }
+
+/* ------------------------- review #484: nincs véletlen válasz (B1), beragadó tartás (M3), óra (L7), fekvő (M4) ------------------------- */
+
+/** Rúnaérc a játékos elé, zár nélkül; a célkereszt (a vászon közepe) az ércre néz. Visszaadja a vászon közepét. */
+async function oreAhead(page: Page): Promise<{ x: number; y: number }> {
+  await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ runeAhead: true }));
+  // Egy render-lépés, hogy a kamera az ércre forduljon (CI szoftveres WebGL: lassú képkockák).
+  const f0 = Number((await probe(page)).frames);
+  await expect.poll(async () => Number((await probe(page)).frames), { timeout: 15_000 }).toBeGreaterThan(f0 + 1);
+  const box = (await page.locator("canvas").first().boundingBox())!;
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+test("B1: gyors dupla / többszörös valódi koppintás az ércre — a zár megnyílik, de válasz NEM születik; a rúnagomb (szándékos gesztus) válaszol", async ({ page }) => {
+  await startGame(page);
+  const c = await oreAhead(page);
+  await page.touchscreen.tap(c.x, c.y); // 1. koppintás: a rúnaérc érintése → Rúna-zár
+  await expect.poll(async () => (await probe(page)).lockOpen, { timeout: 10_000 }).toBe(1);
+  // Bányászó gyerek: tovább koppint az ércre (a közepére és mellé, az érc lapján) — az élesítés előtt és után is.
+  await page.touchscreen.tap(c.x + 18, c.y - 14);
+  await page.touchscreen.tap(c.x - 16, c.y + 12);
+  await expect.poll(async () => (await probe(page)).armed, { timeout: 10_000 }).toBe(1);
+  for (const [dx, dy] of [[0, 0], [20, 0], [-20, 0], [0, -20], [0, 18]] as const) await page.touchscreen.tap(c.x + dx, c.y + dy);
+  const p = await probe(page);
+  expect(p.questionsAnswered, "a bányászó koppintásokból nem lett válasz").toBe(0);
+  expect(p.lockOpen).toBe(1);
+  expect(p.reveal).toBe(0);
+  // Ellenpróba: a szándékos gesztus (élesített zárnál a rúnagomb koppintása) válaszol — a mérés nem üres.
+  const right = page.locator('[data-testid="bc-quiz"] [data-correct="true"]').first();
+  await expect(right).toHaveAttribute("data-armed", "true");
+  const rb = (await right.boundingBox())!;
+  await page.touchscreen.tap(rb.x + rb.width / 2, rb.y + rb.height / 2);
+  await expect.poll(async () => Number((await probe(page)).questionsAnswered), { timeout: 10_000 }).toBe(1);
+});
+
+test("B1 + M3: a tartott Bányász gombbal megérintett ércnél a zár nyílik, a tartás elenged, a felengedés nem válasz és nem bányászik tovább", async ({ page }) => {
+  await startGame(page);
+  await oreAhead(page);
+  const btn = (await page.getByRole("button", { name: "Bányász" }).boundingBox())!;
+  const cdp = await page.context().newCDPSession(page);
+  const pt = { x: btn.x + btn.width / 2, y: btn.y + btn.height / 2, id: 7 };
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [pt] });
+  await expect.poll(async () => (await probe(page)).lockOpen, { timeout: 10_000 }).toBe(1);
+  expect((await probe(page)).pressing, "a zár nyitása elengedte a tartást").toBe(0);
+  const blocks0 = Number((await probe(page)).blocks);
+  // Tartva marad az élesítésen túl, majd felengedi (a gomb ekkor már rejtett / letiltott).
+  await expect.poll(async () => (await probe(page)).armed, { timeout: 10_000 }).toBe(1);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  const f0 = Number((await probe(page)).frames);
+  await expect.poll(async () => Number((await probe(page)).frames), { timeout: 15_000 }).toBeGreaterThan(f0 + 3);
+  const p = await probe(page);
+  expect(p.questionsAnswered, "a felengedés nem válasz").toBe(0);
+  expect(p.pressing, "nincs beragadt tartás").toBe(0);
+  expect(Number(p.blocks), "a zár alatt nem bányászott tovább").toBe(blocks0);
+  // Szünet + folytatás után sincs beragadt tartás; a zár a rúnagombbal zárható, utána a Bányász gomb újra él.
+  await page.getByTestId("bc-quiz-pause").tap();
+  await expect.poll(async () => (await probe(page)).paused, { timeout: 5_000 }).toBe(1);
+  expect((await probe(page)).pressing).toBe(0);
+  await page.getByTestId("game-resume").tap();
+  await expect.poll(async () => (await probe(page)).paused, { timeout: 5_000 }).toBe(0);
+  const right = page.locator('[data-testid="bc-quiz"] [data-correct="true"]').first();
+  await expect(right).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
+  const rb = (await right.boundingBox())!;
+  await page.touchscreen.tap(rb.x + rb.width / 2, rb.y + rb.height / 2);
+  await expect.poll(async () => Number((await probe(page)).questionsAnswered), { timeout: 10_000 }).toBe(1);
+  await expect(page.getByTestId("bc-quiz")).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "Bányász" })).toBeEnabled();
+});
+
+test("L7 (review #484, viselkedés): az utolsó rúnazár az időkeret végén → pálya teljesítve; válasz nélkül lejár", async ({ page }) => {
+  await startGame(page);
+  await openLock(page);
+  await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ runesLeft: 1, timeLeft: 2 }));
+  const right = page.locator('[data-testid="bc-quiz"] [data-correct="true"]').first();
+  const rb = (await right.boundingBox())!;
+  await page.touchscreen.tap(rb.x + rb.width / 2, rb.y + rb.height / 2);
+  // A cél teljesült: a megoldás-kijelzés alatt sem jár le az óra (2 mp-nél több telik el), eredményképernyő jön.
+  await expect(page.getByTestId("bc-level-complete")).toBeVisible({ timeout: 20_000 });
+  expect((await probe(page)).phase).toBe("levelComplete");
+  // Fordítva: a zár nyitva, válasz nincs → a pálya lejár.
+  await page.reload();
+  await startGame(page);
+  await openLock(page);
+  await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ runesLeft: 1, timeLeft: 1 }));
+  await expect.poll(async () => (await probe(page)).phase, { timeout: 20_000 }).toBe("over");
+});
+
+test.describe("844x390 fekvő", () => {
+  test.use({ viewport: { width: 844, height: 390 } });
+  test("M4: fekvőben a rúnagombok a két oldalon, a jelenet közepét (érc, célkereszt) és a kérdéskártyát szabadon hagyják", async ({ page }) => {
+    await startGame(page);
+    await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONGEST_RUNE_QUIZ);
+    await expect(page.locator('[data-testid="bc-quiz"] [data-correct]')).toHaveCount(4, { timeout: 10_000 });
+    const report = await page.evaluate(() => {
+      const scene = document.querySelector(".game-scene")!.getBoundingClientRect();
+      const cx = scene.left + scene.width / 2;
+      const cy = scene.top + scene.height / 2;
+      // A jelenet közepe: a célkereszt körüli sáv (a szélesség 30%-a × a magasság 40%-a) — itt van az érc és a rúnakövek.
+      const mid = { left: cx - scene.width * 0.15, right: cx + scene.width * 0.15, top: cy - scene.height * 0.2, bottom: cy + scene.height * 0.2 };
+      const problems: string[] = [];
+      const runes = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="bc-quiz"] [data-correct]'));
+      runes.forEach((el, i) => {
+        const r = el.getBoundingClientRect();
+        if (r.left < mid.right && r.right > mid.left && r.top < mid.bottom && r.bottom > mid.top) problems.push(`${i}: a jelenet közepére lóg`);
+        const side = i < 2 ? r.right <= cx : r.left >= cx;
+        if (!side) problems.push(`${i}: nem a saját oldalán (${i < 2 ? "bal" : "jobb"})`);
+      });
+      return problems;
+    });
+    const dir = process.env.BC_PLAY_SHOT_DIR;
+    if (dir) await page.screenshot({ path: `${dir}/block-craft-quiz-844x390-question-sides.jpg`, type: "jpeg", quality: 70, scale: "css" });
+    expect(report).toEqual([]);
+  });
+});

@@ -393,6 +393,8 @@ export type RuneMineEvent =
   | { type: "runeOpen"; ore: Pos; presentationId: number }
   | { type: "runeBreak"; ore: Pos; result: QuestionResult | "free"; crystals: number; xp: number; combo: number }
   | { type: "runeSpawn"; ore: Pos }
+  /** A legtávolabbi rúnaérc „átköltözött” (a helye levegő lett) — a lap a világ-mesht frissíti. */
+  | { type: "runeGone"; ore: Pos }
   | { type: "goal" };
 
 export type RuneMineState = {
@@ -526,6 +528,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
       });
       const gone = st.ores[far]!;
       vSet(st.world, gone.x, gone.y, gone.z, AIR);
+      emit({ type: "runeGone", ore: gone });
       st.ores.splice(far, 1);
     }
     const ore = spawnRuneOreNear(st.world, rng, p.x, p.z);
@@ -592,16 +595,18 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
    * nincs később, előjelzés nélkül megnyíló kérdés — a gyerek újra megérinti). Üres forrásnál (terv 8.1) a zár kérdés nélkül
    * törik. Visszaadja, hogy történt-e valami (zár / kérdés nélküli törés).
    */
-  function touchRune(ore: Pos): boolean {
+  function touchRune(at: Pos): boolean {
     if (st.phase !== "play") return false;
     if (st.lock && !st.lock.resolved) return false; // egyszerre egy zár
-    if (vGet(st.world, ore.x, ore.y, ore.z) !== RUNE_ORE) return false;
+    if (vGet(st.world, at.x, at.y, at.z) !== RUNE_ORE) return false;
     const q = opts.questions();
+    if (q && (q.finished() || !q.canAsk())) return false;
+    // Saját másolat csak tényleges érintéskor (a tartás minden lépésben hívja — a hurokban nincs foglalás, review #484 L4).
+    const ore = { x: at.x, y: at.y, z: at.z };
     if (!q) {
       breakRune(ore, "free");
       return true;
     }
-    if (q.finished() || !q.canAsk()) return false;
     st.pendingOre = ore;
     const p = q.request("trigger", clock); // siker esetén a noteShow (onShow) köti a zárhoz, szinkron
     st.pendingOre = null;
@@ -629,7 +634,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     if (m.pressing && aimed) {
       const t = vGet(st.world, aimed.x, aimed.y, aimed.z);
       if (t === RUNE_ORE) {
-        if (!(st.lock && !st.lock.resolved)) touchRune({ x: aimed.x, y: aimed.y, z: aimed.z });
+        if (!(st.lock && !st.lock.resolved)) touchRune(aimed);
       } else if (vMineable(t)) {
         const k = keyOf(aimed);
         if (k !== m.key) {

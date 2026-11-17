@@ -311,8 +311,9 @@ test("lejárt ablak = rossz válasz (kisebb zsákmány); a kijelzés alatt megé
   assert.equal(st.lock, null, "a kijelzés után sem nyílt meg magától zár");
   assert.equal(r.ui!.active(), null);
   r.mine.hit(b!);
-  assert.ok(st.lock && st.lock.resolved === null, "újra megérintve a második zár megnyílt");
-  assert.deepEqual(st.lock.ore, b);
+  const reopened = r.mine.state().lock;
+  assert.ok(reopened && reopened.resolved === null, "újra megérintve a második zár megnyílt");
+  assert.deepEqual(reopened.ore, b);
 });
 
 test("kérdés nélküli mód és üres forrás (terv 8.1): a rúnaérc zár nélkül törik, a pálya így is teljesíthető", () => {
@@ -549,7 +550,8 @@ test("H1 (review #484): a bányászó gyerek is kap kérdést — RUNE_REVEAL_GA
   r.tick(500);
   assert.equal(st.lock, null, "a lenyomott ujj alatt nem nyílik magától kérdés");
   r.mine.hit({ x: 21, y: 5, z: 20 });
-  assert.ok(st.lock && st.lock.resolved === null, "szándékos érintésre zár");
+  const touched = r.mine.state().lock;
+  assert.ok(touched && touched.resolved === null, "szándékos érintésre zár");
   // Kérdés nélküli módban nincs felfedezés.
   const q = rig({ questions: false });
   vSet(q.mine.state().world, 21, 5, 20, GRASS);
