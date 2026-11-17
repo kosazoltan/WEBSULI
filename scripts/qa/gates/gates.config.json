@@ -55,6 +55,23 @@
     "websuli-pr-elotti-kapu",
     "websuli-merge-elotti-kapu"
   ],
+  "testIntegrity": {
+    "$comment": "S1 teszt-integritás kapu (docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum-vegrehajtas.md S1). Regex-minták a repó-gyökérhez relatív útra.",
+    "testPatterns": [
+      "\\.(?:test|spec)\\.[cm]?[jt]sx?$",
+      "\\.browser\\.ts$",
+      "^source/tests/game-mobile-cases/",
+      "^source/playwright[^/]*\\.config\\.[cm]?ts$"
+    ],
+    "calibrationPatterns": [
+      "^source/client/src/lib/[^/]+/sim\\.ts$"
+    ],
+    "markerWindow": 8
+  },
+  "modes": {
+    "$comment": "Kapunkénti mód: warn = WARN (a lánc zöld marad), block = FAIL. A CI a --mode block kapcsolóval hív. Átállás warn → block helyben: < 10% hamis riasztás (terv 6.3).",
+    "test-integrity": { "local": "warn", "ci": "block" }
+  },
   "mergeEvidenceMaxMinutes": 15,
   "rtStatusUrl": "https://websuli.vip/api/rt/status",
   "auditSentinel": ".audit-ok",

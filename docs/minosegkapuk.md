@@ -116,6 +116,27 @@ viszi bukásra.
 Őszintén: a játéklogikai hibák (1, 4, 5, 6) jellemzően szándék- és állapottér-hibák; ezeket determinisztikus kapu általánosan nem
 ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy az ellenőr ne az olcsó hibákra költsön.
 
+## Teszt-integritás (S1, 2026-11-17)
+
+`scripts/qa/gates/test-integrity.mjs` (terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md`, végrehajtás S1). A lint-kapu
+lépéseként fut (így a szakasz-, push- és PR-kapuban is: helyben `WARN`), a CI „Háromfázisú rend” jobjában tiltó módban (`FAIL`).
+A tesztfájlok és a sim-kalibrációs fájlok (`source/client/src/lib/*/sim.ts`) diffjét KÉT nézetben nézi: a main-hez képest és
+commitonként (a PR-on belüli lazítás a main-hez képest „új fájlként” látszana — így maradt rejtve a J7b `tornado-sim.test.ts`
+„`withQ >= without - 1`” lazítása).
+
+- **Mérce-szabályok (CI-ban bukás):** törölt tesztfájl / teszteset / állítás (pótlás nélkül), kikommentezett állítás, megváltozott
+  számküszöb / relációs jel / várt érték ugyanazon az alanyon (a biztosan szigorúbb irány nem lelet), szigorú → laza matcher,
+  megnövelt `timeout` / `retries`, új `.todo(` / `test.fail(` / feltételes `skip`, bot-kalibrációs NAGYBETŰS konstans értékváltozása.
+- **Higiénia-szabályok (mindenütt csak figyelmeztetés):** új `force: true` / `waitForTimeout(`; forrásfájlt beolvasó teszt
+  (jelölhető `// FORRÁS-ŐR: <indok>`-kal).
+- **Átengedés:** a sorban vagy fölötte ≤ 8 sorban `// SPEC-VÁLTOZÁS <ÉÉÉÉ-HH-NN> (docs/specs/<terv>.md <pont>)`, ÉS a hivatkozott spec
+  ugyanebben a diffben változik és említi a tesztet (útvonal nélküli hivatkozásnál bármely változott spec említse), ÉS a PR-leírás
+  felsorolja (a teszt neve + `SPEC-VÁLTOZÁS`). A PR-leírást a CI a `github.event.pull_request.body`-ból, a PR-kapu a `--body-file`-ból
+  olvassa; a szakasz- / push-kapu „később ellenőrzendő” megjegyzést ad.
+- **Kézi futtatás / ellenpróba másik ágon:** `node scripts/qa/gates/test-integrity.mjs --head origin/<ág> [--json]`. Bizonyíték:
+  `test-integrity-<fej>.json` (a leletek listája — a hamis riasztás méréséhez).
+- **Mód:** `gates.config.json` → `modes.test-integrity` (`local: warn`, `ci: block`).
+
 ## Ismert korlátok (maradó kockázat)
 
 - **Az ítélet önbevallásos** (review J5): a `Független ellenőr ítélete: IGEN (fej: …)` sort bárki beírhatja a PR-leírásba; a kapu

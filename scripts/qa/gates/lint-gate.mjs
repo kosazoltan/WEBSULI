@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import {
   STATUS, argValue, cmdResult, createGate, isMain, makeContext, writeLog,
 } from './lib.mjs';
+import { runTestIntegrityStep } from './test-integrity.mjs';
 
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 const LINTABLE = /^source\/(?:client\/src|server)\/.+\.(?:ts|tsx|js|jsx)$/;
@@ -193,6 +194,9 @@ export async function runLintSteps({ gate, ctx, mode }) {
     log('no-real-emails', r);
     return cmdResult(r);
   });
+
+  // S1 (docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md): itt fut, így a szakasz-, push- és PR-kapuban is; mód a konfigból.
+  await runTestIntegrityStep({ gate, ctx });
 
   if (changed.some((f) => /^\.(?:agents|claude)\/skills\//.test(f))) {
     await gate.step('skill-tükör (.agents ↔ .claude)', () => {
