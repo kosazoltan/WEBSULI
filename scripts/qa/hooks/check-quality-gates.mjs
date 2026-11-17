@@ -192,12 +192,23 @@ export function planCommand(raw) {
 // ---- Futtatás határidővel, fail-closed (kanban #100) --------------------------------------------------------------------
 // A korlátok a gates.config.json-ból (a hook saját repójának konfigja); alapérték: git 10 s, gh 15 s, a teljes keret 45 s — a
 // .claude/settings.json hook-időkorlátja (60 s) alatt, hogy a Claude Code soha ne a saját időkorlátjával (= fail-open) állítsa le.
-function hookConfig() {
+export function hookConfig() {
   try {
     const p = new URL('../gates/gates.config.json', import.meta.url);
     const c = JSON.parse(readFileSync(p, 'utf8'));
-    return { gitMs: Number(c.hookGitTimeoutMs) || 10_000, ghMs: Number(c.hookGhTimeoutMs) || 15_000, budgetMs: Number(c.hookBudgetMs) || 45_000 };
-  } catch { return { gitMs: 10_000, ghMs: 15_000, budgetMs: 45_000 }; } // a konfig hiánya csak az alapértéket hozza — szigorúság nem változik
+    return testOverride({ gitMs: Number(c.hookGitTimeoutMs) || 10_000, ghMs: Number(c.hookGhTimeoutMs) || 15_000, budgetMs: Number(c.hookBudgetMs) || 45_000 });
+  } catch { return testOverride({ gitMs: 10_000, ghMs: 15_000, budgetMs: 45_000 }); } // a konfig hiánya csak az alapértéket hozza — szigorúság nem változik
+}
+
+/**
+ * Csak a `node --test` alatt (NODE_TEST_CONTEXT): a valódi gites hook-tesztek a gép terhelésétől függetlenül fussanak (kanban #100:
+ * terhelt gépen a 10 s-os git-korlát lejárt → a hook helyesen tiltott, a teszt mégis ingadozott). Éles hook-futásban (Claude Code)
+ * nincs NODE_TEST_CONTEXT, így a keret soha nem nőhet a settings.json 60 s-os hook-időkorlátja fölé (ami fail-open lenne).
+ */
+function testOverride(cfg) {
+  if (!process.env.NODE_TEST_CONTEXT) return cfg;
+  const n = (v, d) => (Number(v) > 0 ? Number(v) : d);
+  return { gitMs: n(process.env.WEBSULI_HOOK_GIT_TIMEOUT_MS, cfg.gitMs), ghMs: n(process.env.WEBSULI_HOOK_GH_TIMEOUT_MS, cfg.ghMs), budgetMs: n(process.env.WEBSULI_HOOK_BUDGET_MS, cfg.budgetMs) };
 }
 
 /** A hívott program NEM adott választ (időtúllépés, jelzéssel leállítva, indítási hiba) — szemben a gyors, nem nulla kilépéssel. */

@@ -35,6 +35,8 @@ function writeEv(ev, name, obj) {
 const runHook = (command, cwd, tool = 'Bash') => {
   const env = { ...process.env };
   delete env.WEBSULI_QA_EVIDENCE_DIR;
+  // Kanban #100: a valódi gites eseteknél hosszabb, a géptől független korlát (csak node --test alatt érvényes, lásd testOverride).
+  Object.assign(env, { WEBSULI_HOOK_GIT_TIMEOUT_MS: '120000', WEBSULI_HOOK_GH_TIMEOUT_MS: '120000', WEBSULI_HOOK_BUDGET_MS: '600000' });
   const out = execFileSync(process.execPath, [hook], { input: JSON.stringify({ tool_name: tool, tool_input: { command }, cwd }), encoding: 'utf8', env });
   return out ? JSON.parse(out) : null;
 };
@@ -224,4 +226,13 @@ test('kanban #100: értelmező + szkriptfájl idézett „push” szöveggel nem
   assert.equal(kind('node kanban.mjs note 5 "x" && git push'), 'deny');
   assert.equal(kind('python3 -c "import os; os.system(\'git push\')"'), 'deny');
   assert.equal(kind('node kanban.mjs git push'), 'deny', 'nem idézett git push szavak → tilt');
+});
+
+test('a tesztes korlát-felülírás csak node --test alatt él; éles futásban a konfig (≤ 45 s keret) számít', () => {
+  const hookUrl = new URL('./check-quality-gates.mjs', import.meta.url).href;
+  const env = { ...process.env, WEBSULI_HOOK_BUDGET_MS: '600000' };
+  delete env.NODE_TEST_CONTEXT;
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', `import(${JSON.stringify(hookUrl)}).then((m) => console.log(m.hookConfig().budgetMs))`], { env, encoding: 'utf8' });
+  assert.equal(Number(out.trim()), 45000);
+  assert.ok(process.env.NODE_TEST_CONTEXT, 'a teszt-futtató beállítja a NODE_TEST_CONTEXT-et');
 });
