@@ -43,6 +43,15 @@ cd source && node --import tsx scripts/run-e2e-tests.ts --config playwright.gate
 (a kapu a pontos parancsot kiírja; közös `game-engine/` változásnál minden játék fut) → DB-változásnál (`source/server/**`,
 `source/shared/schema*`, `source/migrations/**`) `npm run test:learning-db` Dockerrel.
 
+## Állítások gépi ellenőrzése (S2, 2026-11-17)
+
+- A PR-leírás hivatkozásait (fájl:sor + kódrészlet, útvonal, `npm run`, `node scripts/…`, commit, PR, „N/M teszt” bizonyítékkal) a
+  PR megnyitása előtt ellenőrizd a fejen: `node scripts/qa/gates/verify-report.mjs --body-file <leírás.md>` — HAMIS = javítsd a
+  leírást. (A `gate:pr`-ba a #490 összevonása után épül be, lásd a végrehajtási fájl S2.5 pontját.)
+- Alügynök-jelentést az orkesztrátor csak `node scripts/qa/gates/verify-report.mjs --report <jelentés.md>` zöldje után fogad el
+  (sablon: `scripts/qa/gates/report-template.md`). A `record-review` hamis hivatkozású ellenőri jelentésből nem rögzít ítéletet.
+- „PASS” állítás csak bizonyítékkal: `node scripts/qa/gates/evidence-run.mjs -- <parancs>` → `run-<id>`.
+
 ## A kimenet és ha bukik
 
 - Zöld → `pre-pr-<fej>.json` ÉS `pre-push-<fej>.json` (a push is mehet).

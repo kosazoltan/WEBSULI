@@ -13,6 +13,7 @@ import {
 } from './lib.mjs';
 import { runLintSteps } from './lint-gate.mjs';
 import { listFiles } from './stage-gate.mjs';
+import { linkRecord } from './evidence-chain.mjs';
 
 export const NATIVE_ARCH_TEST = 'native-arch.test.ts';
 
@@ -265,6 +266,7 @@ async function main() {
   await runPrePushSteps({ gate, ctx, slice: args.includes('--slice') });
   const code = gate.finish();
   const p = writeEvidence(ctx.evDir, `pre-push-${head}`, evidenceRecord('pre-push', head, gate));
+  try { linkRecord(ctx.evDir, `pre-push-${head}`); } catch { /* S2 lánc: a hiány a verify-report-ban derül ki */ }
   gate.log(`[pre-push-gate] bizonyíték: ${p.replace(/\\/g, '/')} (ok=${code === 0})`);
   process.exit(code);
 }

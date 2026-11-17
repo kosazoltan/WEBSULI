@@ -137,6 +137,24 @@ commitonként (a PR-on belüli lazítás a main-hez képest „új fájlként”
   `test-integrity-<fej>.json` (a leletek listája — a hamis riasztás méréséhez).
 - **Mód:** `gates.config.json` → `modes.test-integrity` (`local: warn`, `ci: block`).
 
+## Állítás- és hivatkozás-ellenőrző, láncolt bizonyíték (S2, 2026-11-17)
+
+- `node scripts/qa/gates/verify-report.mjs (--report <jelentés.md> | --body-file <leírás.md>) [--head <ref>] [--no-gh] [--json]` —
+  egy md minden gépileg ellenőrizhető hivatkozását a FEJEN nézi: `fájl:sor`, `fájl:sor-sor` (a közvetlenül utána backtickben álló
+  kódrészlet ±3 soron belül), backtickes útvonal, `npm run <név>` (gyökér vagy `source/package.json`), `node scripts/…`, commit-hash,
+  `PR #n`, „N/M teszt” (csak a sorban álló bizonyíték-azonosítóval). Kimenet: IGAZ / HAMIS / NEM ELLENŐRIZHETŐ tételenként. `--report`
+  módban a `json allitasok` gépi blokk is kötelező (sablon: `scripts/qa/gates/report-template.md`): fej = ág feje, módosított fájlok =
+  `git diff`, PASS = bizonyíték 0 kóddal a fejen, PR / CI = GitHub, kapu-lánc hiánytalan, bizonyíték-lánc hash-ei. Kilépési kód: 0 /
+  1 (HAMIS vagy eltérés) / 2 (nem futott — a hívó bukásnak veszi). Rekord: `claims-<hash>.json`.
+- `node scripts/qa/gates/evidence-run.mjs -- <parancs>` — futtat és rögzít (`run-<id>`: fej, parancs szűrve, kód, kimenet-hash,
+  node:test darabszámok). A szakasz-kapu `stage-<fej>`, a push-kapu és a `record-review` a meglévő rekordját láncba köti
+  (`chain.jsonl`; `scripts/qa/gates/evidence-chain.mjs`). A lánc nem biztonsági határ — a kitalált / figyelmetlen állítást szűri.
+- `record-review`: hamis hivatkozású ellenőri jelentésből ítélet nem rögzíthető.
+- **A #490 után beillesztendő (egy sor a `pre-pr-gate.mjs`-be, a „PR-leírás sablon” lépés után):**
+  `await runReferenceStep({ gate, ctx, text: prTexts[0] ?? '', label: 'PR-leírás' });` (import: `./verify-report.mjs`; a
+  `prTexts[0]` a lépés után a `--body-file` vagy a nyitott PR leírása). Addig a PR-leírást a
+  `verify-report.mjs --body-file` kézi futtatása ellenőrzi (a `websuli-pr-elotti-kapu` skill menete).
+
 ## Ismert korlátok (maradó kockázat)
 
 - **Az ítélet önbevallásos** (review J5): a `Független ellenőr ítélete: IGEN (fej: …)` sort bárki beírhatja a PR-leírásba; a kapu

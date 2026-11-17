@@ -170,6 +170,11 @@ Skillek (`.agents/skills/` forrás, `.claude/skills/` tükör): `websuli-lint-el
 `websuli-push-elotti-kapu`, `websuli-pr-elotti-kapu`, `websuli-merge-elotti-kapu`. Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md).
 A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 
+**Szkript-kapuk (2026-11-17, `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md`):** ügynök állítása nem bizonyíték. Az
+orkesztrátor alügynök-jelentést csak `node scripts/qa/gates/verify-report.mjs --report <jelentés.md>` zöldje után fogad el (sablon:
+`scripts/qa/gates/report-template.md`; „PASS” csak `evidence-run.mjs` / kapu-bizonyíték azonosítóval); a tesztmérce lazítása csak
+igazolt `SPEC-VÁLTOZÁS` jelöléssel megy át (`test-integrity.mjs`, a CI-ban tiltó).
+
 ## Verifikáció
 
 A változáshoz illő legkisebb ellenőrzési kört futtasd: célzott teszt/lint/typecheck

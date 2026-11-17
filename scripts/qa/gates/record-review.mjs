@@ -9,6 +9,8 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { VERDICTS, argValue, isMain, makeContext, verdictLine, writeEvidence } from './lib.mjs';
+import { linkRecord } from './evidence-chain.mjs';
+import { FALSE, checkReferences, makeRepo } from './verify-report.mjs';
 
 /** Az ítélet normalizálása (ASCII-alak is elfogadott: IGEN-FELTETELLEL). */
 export function normalizeVerdict(v) {
@@ -31,7 +33,7 @@ export function reportVerdict(text) {
 /**
  * @returns {{ ok: true, record: object, line: string } | { ok: false, error: string }}
  */
-export function buildRecord({ head, verdict, report, resolveHead, readReport, now = () => new Date() }) {
+export function buildRecord({ head, verdict, report, resolveHead, readReport, checkRefs = null, now = () => new Date() }) {
   const v = normalizeVerdict(verdict);
   if (!v) return { ok: false, error: `ismeretlen ítélet: „${verdict}” — elfogadott: ${VERDICTS.join(' | ')}` };
   if (!head || !/^[0-9a-f]{7,40}$/i.test(head)) return { ok: false, error: 'a --head 7–40 jegyű commit-hash legyen' };
@@ -45,6 +47,11 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, no
   const inReport = reportVerdict(text);
   if (!inReport) return { ok: false, error: 'a jelentésben nincs „Ítélet: IGEN | IGEN, FELTÉTELLEL | NEM” sor (a megbízás-sablon kötelező része)' };
   if (inReport !== v) return { ok: false, error: `a --verdict (${v}) eltér a jelentés utolsó ítéletétől (${inReport})` };
+  // S2.5 (tulajdonosi utasítás 2026-11-17 este): hamis hivatkozású jelentésből ítélet nem rögzíthető.
+  const bad = checkRefs ? checkRefs(text, full) : [];
+  if (bad.length) {
+    return { ok: false, error: `a jelentésben ${bad.length} HAMIS hivatkozás van — hamis hivatkozású jelentésből ítélet nem rögzíthető:\n${bad.map((b) => `  - ${b}`).join('\n')}` };
+  }
   return {
     ok: true,
     record: { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() },
@@ -64,9 +71,12 @@ function main() {
       return r.code === 0 ? r.stdout.trim() : null;
     },
     readReport: (p) => (existsSync(p) ? readFileSync(p, 'utf8') : null),
+    checkRefs: (text, full) => checkReferences(text, makeRepo({ ctx, head: full }))
+      .filter((x) => x.status === FALSE).map((x) => `${x.line}. sor: ${x.ref} — ${x.detail}`),
   });
   if (!res.ok) { process.stderr.write(`[record-review] HIBA: ${res.error}\n`); process.exit(1); }
   writeEvidence(ctx.evDir, `review-${res.record.head}`, res.record);
+  try { linkRecord(ctx.evDir, `review-${res.record.head}`); } catch { /* a lánc-sor hiánya a verify-report-ban derül ki */ }
   process.stdout.write(`[record-review] rögzítve: review-${res.record.head.slice(0, 12)} — ${res.record.verdict}\n`);
   process.stdout.write(`[record-review] a PR-leírásba / kommentbe ezt a sort tedd (más részletet a nyilvános repóra ne):\n${res.line}\n`);
   process.exit(0);

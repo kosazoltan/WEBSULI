@@ -160,8 +160,8 @@ A `pre-pr-gate.mjs` és a `lib.mjs` a #490-ben mozog, ezért a bekötés két ki
 alatt EXPORTÁLT függvényként szállít, a hívást pedig a #490 összevonása után egy commitban illesztjük be:
 
 - `verify-report.mjs` exportja: `runReferenceStep({ gate, ctx, text, label })` — egy kapu-lépés („hivatkozások: <label>”), HAMIS → FAIL.
-- `pre-pr-gate.mjs` (#490 után): a „PR-leírás sablon” lépés UTÁN egy sor: `await runReferenceStep({ gate, ctx, text: body, label: 'PR-leírás' });`
-  (a `body` ott már be van olvasva).
+- `pre-pr-gate.mjs` (#490 után): a „PR-leírás sablon” lépés UTÁN egy sor: `await runReferenceStep({ gate, ctx, text: prTexts[0] ?? '', label: 'PR-leírás' });`
+  + az import (`./verify-report.mjs`); a `prTexts[0]` a lépés után a `--body-file` tartalma vagy a nyitott PR leírása.
 - `record-review.mjs` (a #490 nem módosítja — ezért EBBEN a szeletben beköthető): a `buildRecord` előtt a jelentés hivatkozásai a
   `head`-en; HAMIS hivatkozásnál a rögzítés megtagadva („hamis hivatkozású jelentésből ítélet nem rögzíthető”), a hamis tételek
   listájával.
