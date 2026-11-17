@@ -26,3 +26,18 @@
 - [ ] titok → 4, érték nélkül, hálózat nélkül (teszt)
 - [ ] a kapuk csak figyelmeztetnek (teszt)
 - [ ] skill, AGENTS.md, runbook
+
+
+## C-61 pontosítása (kanban #92) — végrehajtás
+
+1. Ez a doksi-commit (terv 10. szakasz + ez az alfejezet), a kód előtt.
+2. `scripts/qa/gates/gates.config.json`: `repoWidePatterns` helyett `repoWideScopes` (`pattern`, `mainScope[]`, `why`), a terv táblázata szerint.
+3. `scripts/qa/gates/pre-merge-gate.mjs`: `compareFiles` (a compare végpont `files[].filename`, csonka ≥ 300), `decideMerge` új
+   paraméterei `mainFiles` (null = olvashatatlan) és `repoWideScopes`; a C-61 döntés a terv fail-closed szabályai szerint.
+4. `scripts/qa/gates/pre-merge-gate.test.mjs`: C1–C5 táblázatos tesztek; a meglévő C-61 tesztek az új paraméterekkel.
+5. `docs/minosegkapuk.md`: a C-61 új viselkedése (WARN / FAIL, mikor), és egy mondat: alügynökként a munkafa ágát a fő checkoutból,
+   a feltöltés egyszerű parancsával, az ág nevével kell felküldeni.
+6. `npm run gate:stage` zöld; mutációs ellenpróba commit után (egy-egy fail-closed ág kivétele → a teszt bukik); visszaállítás csak
+   commitolt állapotra, `cmp`-pal ellenőrizve (C-70).
+
+- [ ] C1–C5 teszt · [ ] runbook · [ ] mutációs ellenpróba · [ ] gate:stage zöld
