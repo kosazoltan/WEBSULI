@@ -6,6 +6,7 @@ import { Clock, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatRemaining } from "./coupon-clock";
+import { GAME_HALT_EVENT, setCouponExpired } from "./mobile/modalLayer";
 import type { CouponSession } from "./useCouponSession";
 
 /**
@@ -90,6 +91,10 @@ export function CouponExpiredOverlay({ session }: { session: CouponSession }) {
     // Belt and braces: focus that still lands outside the dialog comes straight back to the button.
     document.addEventListener("focusin", keepFocus, true);
     document.documentElement.dataset.gameCouponExpired = "true";
+    // #58: a játék MEGÁLL — a saját szünet-útján (GameShell automatikus szünet: hurok, óra, bemenet), a szünet menü
+    // nélkül (a `PauseMenu` a lejárt kupon alatt nem rajzol). Korábban a játékok a párbeszéd alatt tovább futottak.
+    setCouponExpired(true);
+    window.dispatchEvent(new Event(GAME_HALT_EVENT));
 
     // The dialog is the only thing that receives keys. A capture listener on `window` runs
     // before every bubble-phase `window` listener (QuizFeedbackCard, PauseMenu, the games'
@@ -113,6 +118,7 @@ export function CouponExpiredOverlay({ session }: { session: CouponSession }) {
       document.removeEventListener("focusin", keepFocus, true);
       for (const el of inerted) el.removeAttribute("inert");
       delete document.documentElement.dataset.gameCouponExpired;
+      setCouponExpired(false);
     };
   }, [expired]);
 

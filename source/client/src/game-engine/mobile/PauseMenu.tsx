@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import AudioToggleButton from "@/components/AudioToggleButton";
 
 import { useReducedMotion } from "../useReducedMotion";
-import { setPauseMenuOpen, useModalLayer } from "./modalLayer";
+import { setPauseMenuOpen, useCouponExpired, useModalLayer } from "./modalLayer";
 
 /**
  * S2 / terv 4.5 „Folyamat” — szünet menü: folytatás, újrakezdés, hang, kilépés.
@@ -27,8 +27,11 @@ export type PauseMenuProps = {
   children?: ReactNode;
 };
 
-export default function PauseMenu({ open, onResume, onRestart, onExit, exitLabel = "Kilépés", children }: PauseMenuProps) {
+export default function PauseMenu({ open: requested, onResume, onRestart, onExit, exitLabel = "Kilépés", children }: PauseMenuProps) {
   const reduced = useReducedMotion();
+  // #58: a lejárt kupon a játékot a szünet-úton állítja meg, de a menü nem rajzol — a lejárati párbeszéd az egyetlen réteg.
+  const couponExpired = useCouponExpired();
+  const open = requested && !couponExpired;
   const resumeRef = useRef<HTMLButtonElement>(null);
   const onResumeRef = useRef(onResume);
   onResumeRef.current = onResume;

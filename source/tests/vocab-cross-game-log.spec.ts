@@ -69,12 +69,21 @@ test("A5 két játék között: a Szólétrában látott szó a Szökőárban ne
     await expect(right).toBeVisible({ timeout: 10_000 });
     const asked = await page.locator('[data-testid="ts-quiz"] p').first().innerText();
     await right.click();
-    // a kvíz bezárul — vagy a játék maga hoz egy újat (a Szökőár futás közben is kérdez): a kérdés szövege más
+    // a kvíz bezárul — vagy a játék maga hoz egy újat (a Szökőár futás közben is kérdez): a kérdés szövege más.
+    // #58 (2. kör): az állapotot EGY lap-hívás olvassa. Korábban `count()` után egy automatikusan VÁRAKOZÓ `innerText()`
+    // jött: ha a kvíz épp a kettő között zárult (a helyes válasz után 420 ms-mal), az `innerText()` a KÖVETKEZŐ kvízre
+    // várt (a Szökőár ~9,5 mp-enként kérdez), és a poll 10 s után az utolsó „ugyanaz” értékkel bukott — a CI-ben a
+    // kvíz addigra bezárult, a válasz beszámított (run 43907199578, 43916330845, 43934797679).
     await expect
-      .poll(async () => {
-        if ((await page.getByTestId("ts-quiz").count()) === 0) return "zárva";
-        return (await page.locator('[data-testid="ts-quiz"] p').first().innerText()) === asked ? "ugyanaz" : "új";
-      }, { timeout: 10_000 })
+      .poll(
+        () =>
+          page.evaluate((prev) => {
+            const q = document.querySelector('[data-testid="ts-quiz"]');
+            if (!q) return "zárva";
+            return (q.querySelector("p") as HTMLElement | null)?.innerText === prev ? "ugyanaz" : "új";
+          }, asked),
+        { timeout: 10_000 },
+      )
       .not.toBe("ugyanaz");
     const dismiss = page.getByTestId("quiz-feedback-dismiss");
     if (await dismiss.isVisible().catch(() => false)) await dismiss.click();

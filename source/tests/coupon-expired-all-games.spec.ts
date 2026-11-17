@@ -124,3 +124,62 @@ test("block-craft-quiz: lejáratkor a játék megáll — a render-ciklus és a 
   await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
   await expect(page.getByTestId("coupon-expired-back")).toBeFocused();
 });
+
+/**
+ * #58, 2. kör (docs/specs/2026-11-16-e2e-ingadozok-2.md): MIND AZ 5 kuponos játék megáll lejáratkor. Mérve (előtte): a
+ * Szökőár, a Brain Rot, az Aszteroida és a Viharvadász a párbeszéd alatt tovább játszott — az óra lépett (pl. 86 → 83 mp,
+ * 299 → 296 s), a pont / víz változott, a 3D-jelenet ~40–80 képkocka/s-mal rajzolt. A Szólétra és a Matek sprint nem indul
+ * kuponnal (nincs lejárati párbeszédük).
+ *  - képkocka-számláló: a WebGL rajzolási hívások (drawArrays / drawElements) száma — a render-ciklus valódi GPU-munkája
+ *    (a lap DOM-díszítő animációi, pl. a Szökőár buborékjai, ebbe nem számítanak);
+ *  - a HUD (óra, pont, cél) szövege nem változik;
+ *  - a szünet menü nem jelenik meg, a „Vissza a leckéhez” fókuszban marad.
+ * Az idő itt maga a mért mennyiség: 1,5 s alatt egy futó ciklus sok rajzolást, egy 1 s-os óra legalább egy lépést tenne.
+ */
+for (const c of GAMES) {
+  test(`${c.id}: lejáratkor a játék megáll — nincs rajzolás, a HUD áll, szünet menü nélkül`, async ({ page }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __draws: number };
+      w.__draws = 0;
+      for (const proto of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
+        for (const name of ["drawArrays", "drawElements", "drawArraysInstanced", "drawElementsInstanced"] as const) {
+          const orig = (proto as unknown as Record<string, ((...a: unknown[]) => unknown) | undefined>)[name];
+          if (typeof orig !== "function") continue;
+          (proto as unknown as Record<string, unknown>)[name] = function (this: unknown, ...a: unknown[]) {
+            w.__draws++;
+            return orig.apply(this, a);
+          };
+        }
+      }
+    });
+    const draws = () => page.evaluate(() => (window as unknown as { __draws: number }).__draws);
+    const hud = () =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll('.game-hud, [role="progressbar"]'))
+          .map((e) => `${(e as HTMLElement).innerText}|${e.getAttribute("aria-label") ?? ""}`)
+          .join(" / "),
+      );
+    const state = await openWithCoupon(page, c);
+    const d0 = await draws();
+    await expect.poll(draws, { message: "lejárat előtt a jelenet rajzol (a mérés érvényes)" }).toBeGreaterThan(d0);
+
+    state.remaining = 0;
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.getByTestId("coupon-expired")).toBeVisible({ timeout: 10_000 });
+    await expect
+      .poll(async () => {
+        const a = await draws();
+        await page.waitForTimeout(300);
+        return (await draws()) - a;
+      }, { message: "a lejárt párbeszéd alatt a rajzolás leáll" })
+      .toBe(0);
+
+    const d1 = await draws();
+    const h1 = await hud();
+    await page.waitForTimeout(1_500);
+    expect(await draws(), "a lejárt párbeszéd alatt a jelenet nem rajzol").toBe(d1);
+    expect(await hud(), "a lejárt párbeszéd alatt az óra / a pont nem változik").toBe(h1);
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+    await expect(page.getByTestId("coupon-expired-back")).toBeFocused();
+  });
+}

@@ -130,6 +130,64 @@ function subscribe(l: () => void): () => void {
   return () => listeners.delete(l);
 }
 
+/* ---------------- a lejárt kupon (#58): a játék megáll, a szünet menü nem rajzol ---------------- */
+
+/**
+ * #58 (docs/specs/2026-11-16-e2e-ingadozok-2.md): a lejárt kupon a játékot a SAJÁT szünet-útján állítja meg (a
+ * `GameShell` automatikus szünete, `GAME_HALT_EVENT`) — így minden játék hurka, órája és bemenete áll, hét külön
+ * folt nélkül. A szünet menü ilyenkor nem rajzol: a lejárati párbeszéd az egyetlen réteg („Vissza a leckéhez”).
+ */
+export const GAME_HALT_EVENT = "websuli:game-halt";
+
+let couponExpired = false;
+
+export function setCouponExpired(expired: boolean): void {
+  if (couponExpired === expired) return;
+  couponExpired = expired;
+  emit();
+}
+
+export function isCouponExpired(): boolean {
+  return couponExpired;
+}
+
+export function useCouponExpired(): boolean {
+  return useSyncExternalStore(subscribe, isCouponExpired, () => false);
+}
+
+/* A lejárt kupon alatt a játékok képkocka-hurka is áll (#58): `requestGameFrame` a `requestAnimationFrame` helyett. */
+
+const parkedFrames = new Map<number, FrameRequestCallback>();
+let nextParkedId = -1;
+
+/**
+ * Mint a `requestAnimationFrame`, de a lejárt kupon alatt a kérést félreteszi (nincs képkocka, nincs GPU-munka); ha a
+ * kupon újra érvényes lenne, a félretett kérések a következő képkockában futnak. A hívó a visszakapott azonosítót a
+ * `cancelGameFrame`-mel törli (a félretett kérésé negatív).
+ */
+export function requestGameFrame(cb: FrameRequestCallback): number {
+  if (!couponExpired) return requestAnimationFrame(cb);
+  const id = nextParkedId--;
+  parkedFrames.set(id, cb);
+  return id;
+}
+
+export function cancelGameFrame(id: number): void {
+  if (id < 0) parkedFrames.delete(id);
+  else cancelAnimationFrame(id);
+}
+
+subscribe(() => {
+  if (couponExpired || parkedFrames.size === 0 || typeof requestAnimationFrame === "undefined") return;
+  for (const [id, cb] of Array.from(parkedFrames)) {
+    requestAnimationFrame((t) => {
+      // A közben lecsatolt hívó (`cancelGameFrame`) kérése nem fut le.
+      if (!parkedFrames.delete(id)) return;
+      cb(t);
+    });
+  }
+});
+
 /**
  * Igaz, amíg a szünet menü nyitva van. A `QuizFeedbackCard` ezzel rejti el magát szünetben (K3): a kártya (z 90)
  * különben a szünet menü (z 80) fölé kerülne, a menü gombjai elérhetetlenek lennének, az Esc pedig a láthatatlan

@@ -16,6 +16,7 @@ export { detectTouchCapable, useTouchCapable, type TouchEnv } from "./touch";
 export { HAPTIC_PATTERNS, shouldVibrate, useHaptics, type HapticKind } from "./haptics";
 export { orientationFrom, useOrientation } from "./orientation";
 export { attachAutoPause, useAutoPause, type AutoPauseTarget } from "./autoPause";
+export { cancelGameFrame, requestGameFrame } from "./modalLayer";
 export { computeStars } from "./stars";
 export { controlRadiusFor } from "./controlSize";
 export { GAME_BEST_KEY, readBest, writeBest, useBestScore } from "./bestScore";

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+import { GAME_HALT_EVENT } from "./modalLayer";
+
 /**
  * S2 / terv 4.5 „Folyamat” — automatikus szünet, ha a lap háttérbe kerül vagy a telefon elfordul.
  *
@@ -27,10 +29,13 @@ export function attachAutoPause(target: AutoPauseTarget, onPause: () => void): (
   doc.addEventListener("visibilitychange", onVisibility);
   win.addEventListener("pagehide", onLeave);
   win.addEventListener("orientationchange", onLeave);
+  // #58: a lejárt kupon (`CouponExpiredOverlay`) ugyanezen az úton állítja meg a játékot (`GAME_HALT_EVENT`).
+  win.addEventListener(GAME_HALT_EVENT, onLeave);
   return () => {
     doc.removeEventListener("visibilitychange", onVisibility);
     win.removeEventListener("pagehide", onLeave);
     win.removeEventListener("orientationchange", onLeave);
+    win.removeEventListener(GAME_HALT_EVENT, onLeave);
   };
 }
 
