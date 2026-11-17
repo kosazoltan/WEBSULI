@@ -381,3 +381,42 @@ test("#84 (J7b): material-quizzes — a tétel a forrás-lecke VALÓDI tantárgy
     await db.delete(knowledgeMaps).where(eq(knowledgeMaps.id, "qbs-map-en"));
   }
 });
+
+test("#84 / review #487 L1, L2, I1: közzétett lecke, rendezés, lessonId-elsőbbség, térkép a generátor-téma előtt", async () => {
+  await db.insert(knowledgeMaps).values([
+    { id: "qbs-map-x1", title: "Angol", subject: "angol nyelv", classroom: 0, sourceFiles: [], inputHash: "qbs-x1" },
+    { id: "qbs-map-x2", title: "Természet", subject: "természetismeret", classroom: 0, sourceFiles: [], inputHash: "qbs-x2" },
+  ]);
+  await db.insert(htmlFiles).values([
+    { id: "qbs-x-1", title: "QBS több leckés anyag", content: "lesson", classroom: 0 },
+    { id: "qbs-x-2", title: "QBS generált + térkép", content: "lesson", classroom: 0 },
+  ]);
+  await db.insert(lessons).values([
+    // Több lecke ugyanahhoz az anyaghoz: a v1 (angol) régebben, a v2 (természet) később közzétéve; a v3 (matek) NEM közzétett.
+    { id: "qbs-x-1-v1", mapId: "qbs-map-x1", htmlFileId: "qbs-x-1", json: legacyJson(601), version: 1, publishedAt: new Date(T0 + 8_000_000) },
+    { id: "qbs-x-1-v2", mapId: "qbs-map-x2", htmlFileId: "qbs-x-1", json: legacyJson(602), version: 2, publishedAt: new Date(T0 + 8_100_000) },
+    { id: "qbs-x-1-v3", mapId: "qbs-map", htmlFileId: "qbs-x-1", json: legacyJson(603), version: 3, publishedAt: null as unknown as Date },
+    // Generátor-téma ↔ térkép: a matek-térképes anyag generált „nature” tétele.
+    { id: "qbs-x-2-v1", mapId: "qbs-map", htmlFileId: "qbs-x-2", json: legacyJson(604), version: 1, publishedAt: new Date(T0 + 8_200_000) },
+  ]);
+  const prompts = ["QBS x anyag-tétel?", "QBS x lessonId-tétel?", "QBS x generált?"];
+  await db.insert(gameQuizItems).values([
+    { gameId: "tornado-hunter-200", tier: "1", sourceMaterialId: "qbs-x-1", topic: "Cím", prompt: prompts[0]!, options: ["a", "b", "c"], correctIndex: 0 },
+    // lessonId (angol térkép) és anyag (természet a legfrissebb közzétett) együtt: a lessonId nyer.
+    { gameId: "tornado-hunter-200", tier: "1", sourceMaterialId: "qbs-x-1", lessonId: "qbs-x-1-v1", topic: "Cím", prompt: prompts[1]!, options: ["a", "b", "c"], correctIndex: 0 },
+    { gameId: "tornado-hunter-200", tier: "1", sourceMaterialId: "qbs-x-2", topic: "nature", prompt: prompts[2]!, options: ["a", "b", "c"], correctIndex: 0 },
+  ]);
+  try {
+    const res = await svc.listLatestMaterialQuizzes(0, 3);
+    const by = new Map(res.items.map((q) => [q.prompt, q.subject]));
+    // Nem közzétett (matek) lecke kizárva; a két közzétett közül a `latestPublishedRows` rendezése (verzió, közzététel) dönt.
+    assert.equal(by.get(prompts[0]!), "nature");
+    assert.equal(by.get(prompts[1]!), "english", "a tétel saját leckéje (lessonId) elsőbb az anyag leckéjénél");
+    assert.equal(by.get(prompts[2]!), "math", "a lecke térképe elsőbb a generátor tételenkénti témájánál (L2, rögzített döntés)");
+  } finally {
+    await db.delete(gameQuizItems).where(inArray(gameQuizItems.prompt, prompts));
+    await db.delete(lessons).where(like(lessons.id, "qbs-x-%"));
+    await db.delete(htmlFiles).where(like(htmlFiles.id, "qbs-x-%"));
+    await db.delete(knowledgeMaps).where(inArray(knowledgeMaps.id, ["qbs-map-x1", "qbs-map-x2"]));
+  }
+});

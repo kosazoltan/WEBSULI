@@ -1676,8 +1676,8 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
 
 #### #84 — a `material-quizzes` tétel valódi tantárgya (a J7b-hez csatolt kiegészítés, külön PR)
 
-**Állapot (#84):** folyamatban – 2026-11-17, ág fix/material-quizzes-subject, munkafa .claude/worktrees/jatek-j7b-84, kanban #84
-(a J7b — `feat/jatek-j7b-tornado-utelagazas` — erre épül; a méret miatt külön, első PR).
+**Állapot (#84):** kész — #487 (25fc2841, 2026-11-17), kanban #84; a review alacsony leletei (L1, L2 rögzítése, L4, I1, I2) a
+J7b PR-ban (5. pont).
 
 1. **Tünet:** a végpont csak `topic`-ot ad, ami a régi Stúdió-exportoknál a lecke CÍME — a J7a óta a Tornado „csak matek” /
    „csak angol” módja konzervatív, így a címmel exportált valódi matek / angol leckék csak vegyes módban jönnek; a
@@ -1695,6 +1695,11 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
    `lessonId`-n át, kanonikusan, generátor-témából; tantárgy nélküli régi sor → a mező hiányzik, a route JSON-jában is);
    kliens (`T/tornado-material-subject.test.ts`: a J7a 22 cím-témája és 15 téma / kérdés esete a `subject`-tel; a két
    hamis pozitív `T/tornado-math4.test.ts`-ben SPEC-VÁLTOZÁS jelöléssel, szigorúbb elvárással).
+5. **Review #487 utómunka (a J7b PR-ban):** L1 — a tantárgy-keresés csak KÖZZÉTETT leckét néz, a `latestPublishedRows`
+   rendezésével (`version DESC, published_at DESC`); L2 — rögzített döntés: a lecke tudástérképének tantárgya elsőbb a
+   generátor tételenkénti témájánál (a tétel abból a leckéből jön; konzervatív); I1 — DB-teszt a `lessonId` ↔ anyag
+   elsőbbségre, a több leckés anyagra, a generátor ↔ térkép ütközésre és a nem közzétett lecke kizárására; I2 — üres témánál
+   a kérdés címkéje a szerver tantárgya (`questionSubjectLabel`: „Természet”, bizonytalannál „Kvíz”, nem „Matek”).
 
 ### Elfogadás (J7)
 

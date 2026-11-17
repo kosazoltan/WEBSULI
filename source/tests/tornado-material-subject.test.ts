@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { makeRng, materialSubject, materialToQuestions, pickQuestion } from "../client/src/lib/tornado/questions";
+import { makeRng, materialSubject, materialToQuestions, pickQuestion, questionSubjectLabel } from "../client/src/lib/tornado/questions";
 
 /**
  * J7b — kanban #84: a `material-quizzes` tétel a szervertől a forrás-lecke VALÓDI tantárgyát kapja (`subject`), a Tornado
@@ -82,4 +82,16 @@ test("a címmel exportált, de valódi matek / angol lecke a tantárggyal vissza
       assert.ok(q.id !== "forradalom" && q.id !== "regi", `${mode}: bizonytalan tantárgyú tananyag jött`);
     }
   }
+});
+
+test("review #487 I2: üres témánál a címke a szerver tantárgya — a természet-kérdés nem „Matek”", () => {
+  const [nature, math, uncertain, bank] = materialToQuestions(
+    [row("termeszet", "", "nature"), row("matek", null, "math"), row("bizonytalan", "", undefined), row("cim", "Present Simple", "english")],
+    4,
+  );
+  assert.equal(questionSubjectLabel(nature), "Természet");
+  assert.equal(questionSubjectLabel(math), "Matek");
+  assert.equal(questionSubjectLabel(uncertain), undefined, "bizonytalan tantárgynál nincs kitalált „Matek”");
+  assert.equal(questionSubjectLabel(bank), "Angol");
+  assert.equal(questionSubjectLabel({ subject: "english", certain: true }), "Angol");
 });

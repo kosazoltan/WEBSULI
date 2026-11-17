@@ -110,8 +110,8 @@ import {
   resolveGrades,
   schoolLevelLabel,
   QUIZ_MODE_LABEL,
-  SUBJECT_LABEL,
   isVocabQuestion,
+  questionSubjectLabel,
   vocabToQuestion,
   type Question,
   type SchoolLevel,
@@ -2750,7 +2750,7 @@ function PlayScreen(props: {
   const kindChip =
     pres && qKind ? (
       <div data-testid="tornado-question-kind" data-kind={qKind} className="px-2 py-1 rounded-lg bg-amber-400/90 text-slate-950 text-xs font-bold">
-        {QUESTION_KIND_LABEL[qKind]} · {quizTopicLabelHu(qMeta?.topic ?? null, qMeta ? SUBJECT_LABEL[qMeta.subject] : undefined)}
+        {QUESTION_KIND_LABEL[qKind]} · {quizTopicLabelHu(qMeta?.topic ?? null, questionSubjectLabel(qMeta))}
         {qMeta?.source === "material" ? " · tananyag" : ""}
       </div>
     ) : null;

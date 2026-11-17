@@ -379,6 +379,9 @@ const canonicalWithSubject = (item: CanonicalQuizRow): CanonicalQuizRow & { subj
 type LegacySource = { lessonId: string | null; sourceMaterialId: string | null; topic: string | null };
 
 /**
+ * Review #487 L2 (rögzített döntés): a lecke tudástérképének tantárgya ELSŐBB, mint a generátor tételenkénti témája — a
+ * tétel abból a leckéből jön (konzervatív: a térképtől eltérő generált téma nem lesz „biztos” más tantárgy).
+ *
  * A régi exportok tantárgya: a lecke (közvetlenül a `lessonId`-n, vagy az anyagán át — a legfrissebb verzió) tudástérképének
  * tantárgya `quizTopic`-pal; a generált sornál a téma; különben nincs (a mező hiányzik). Egyetlen, `json` nélküli lekérdezés.
  */
@@ -392,11 +395,16 @@ async function legacySubjects(rows: readonly LegacySource[]): Promise<(row: Lega
       .select({ id: lessons.id, htmlFileId: lessons.htmlFileId, subject: knowledgeMaps.subject })
       .from(lessons)
       .innerJoin(knowledgeMaps, eq(knowledgeMaps.id, lessons.mapId))
-      .where(or(
-        lessonIds.length ? inArray(lessons.id, lessonIds) : undefined,
-        materialIds.length ? inArray(lessons.htmlFileId, materialIds) : undefined,
+      // Review #487 L1: csak KÖZZÉTETT lecke, és a `latestPublishedRows` rendezése (a `version` leckénként külön számláló,
+      // két lecke között a közzététel ideje dönt) — az anyag tantárgya a legfrissebb közzétett leckéé.
+      .where(and(
+        isNotNull(lessons.publishedAt),
+        or(
+          lessonIds.length ? inArray(lessons.id, lessonIds) : undefined,
+          materialIds.length ? inArray(lessons.htmlFileId, materialIds) : undefined,
+        ),
       ))
-      .orderBy(desc(lessons.version));
+      .orderBy(desc(lessons.version), desc(lessons.publishedAt));
     for (const f of found) {
       const subject = quizTopic(f.subject);
       if (!subject) continue;

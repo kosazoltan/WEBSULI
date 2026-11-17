@@ -1,4 +1,5 @@
 import { isPlayableQuestion } from "../../../../shared/game-quiz-contract";
+import { quizTopicLabelHu } from "../quizTopicLabel";
 import type { GradeQuizItem } from "../../data/gradeQuizBank/types";
 import {
   createGradeQuizSeen,
@@ -37,6 +38,8 @@ export type Question = {
   subject: Subject;
   /** J7a: `false` → a tantárgy csak találgatás (tananyag-sor, ismeretlen téma): csak vegyes / kupon módban jön. */
   certain?: boolean;
+  /** Review #487 I2: a szerver tantárgya (`quizTopic`-alak) a címkéhez — a nem matek / angol tantárgy is helyes feliratot kap. */
+  serverSubject?: string;
   topic?: string | null;
   /** School grade, 1..12 (the built-in bank covers 1..6). */
   grade: number;
@@ -215,6 +218,7 @@ export function materialToQuestions(rows: readonly MaterialRow[], grade: number)
     out.push({
       id: row.id ?? `material-${idx}`,
       ...materialSubject(topic, row.prompt, row.subject),
+      ...(typeof row.subject === "string" && row.subject.trim() ? { serverSubject: row.subject.trim() } : {}),
       grade,
       prompt: row.prompt,
       options: options as string[],
@@ -598,6 +602,16 @@ export const SUBJECT_LABEL: Record<Subject, string> = {
   math: "Matek",
   english: "Angol",
 };
+
+/**
+ * A kérdés tantárgy-címkéje üres témánál (review #487 I2): a szerver tantárgya, ha van (pl. „Természet”); bizonytalan
+ * tantárgyú tananyagnál a semleges „Kvíz” (nem a belső „math” tartalék); egyébként a tétel tantárgya.
+ */
+export function questionSubjectLabel(q: Pick<Question, "subject" | "certain" | "serverSubject"> | undefined): string | undefined {
+  if (!q) return undefined;
+  if (q.serverSubject) return quizTopicLabelHu(q.serverSubject);
+  return q.certain === false ? undefined : SUBJECT_LABEL[q.subject];
+}
 
 export const QUIZ_MODE_LABEL: Record<QuizMode, string> = {
   math: "Matek",
