@@ -993,6 +993,7 @@ export default function TsunamiEscapeEnglish() {
 
   /** Teszt-kampó (D-J1a-11): a következő kérdés a forrásokban talált leghosszabb válaszokat hordozza. */
   const forceLongRef = useRef(false);
+  const forceLongPromptRef = useRef(false);
   /** Teszt-kampó (D-J1a-18): a következő kérdés pontosan ezekkel a válaszokkal (az első a helyes). */
   const forceAnswersRef = useRef<string[] | null>(null);
   const forcedSeqRef = useRef(0);
@@ -1003,7 +1004,17 @@ export default function TsunamiEscapeEnglish() {
     for (const m of materialQuizzesRef.current) for (const o of m.options) all.add(o);
     for (const g of loadedGradeItems()) for (const o of g.options) all.add(o);
     const top = [...all].sort((a, b) => b.length - a.length || a.localeCompare(b)).slice(0, 3);
-    return { id: "test-long-answers", prompt: "Melyik válasz a leghosszabb a játék kérdései közül? (próba)", options: top, correctIndex: 0, subject: "english" };
+    // ÚK3 (újra-review #483): `longPrompt` — a leghosszabb kérdés-szöveg is a forrásokból (a legnehezebb álló elrendezés).
+    let prompt = "Melyik válasz a leghosszabb a játék kérdései közül? (próba)";
+    if (forceLongPromptRef.current) {
+      forceLongPromptRef.current = false;
+      const prompts: string[] = [];
+      for (const pools of Object.values(mergedPoolsRef.current)) for (const tier of [pools.easy, pools.med, pools.hard]) for (const item of tier) prompts.push(item.prompt);
+      for (const m of materialQuizzesRef.current) prompts.push(m.prompt);
+      for (const g of loadedGradeItems()) prompts.push(g.prompt);
+      prompt = prompts.sort((a, b) => b.length - a.length || a.localeCompare(b))[0] ?? prompt;
+    }
+    return { id: "test-long-answers", prompt, options: top, correctIndex: 0, subject: "english" };
   };
 
   const provider = useMemo<QuestionProvider>(
@@ -1681,6 +1692,7 @@ export default function TsunamiEscapeEnglish() {
           if (phaseNowRef.current !== "play") startGame();
           // `longAnswers: true` (mobil mérő, D-J1a-11): a leghosszabb válaszokkal — a „lista mód” mérésére.
           if ((patch as { longAnswers?: boolean }).longAnswers) forceLongRef.current = true;
+          if ((patch as { longPrompt?: boolean }).longPrompt) forceLongPromptRef.current = true;
           const answers = (patch as { answers?: unknown }).answers;
           if (Array.isArray(answers) && answers.length >= 2 && answers.every((a) => typeof a === "string")) forceAnswersRef.current = answers as string[];
           qRef.current.request("trigger", driverRef.current!.clockMs());
@@ -1717,6 +1729,14 @@ export default function TsunamiEscapeEnglish() {
   // szöveggel mutatja a válaszokat (a kulcs-kör a kapu színe + szimbóluma), táblák nélkül.
   // D-J1a-18: magasságban is — ha a táblák nem férnek a kártya alja és a futó feje közé, szintén lista mód.
   const longMode = !!pres && (!pres.options.every((o) => gateLabelFits(o.label, gateBox.width - 22)) || !gatesFitH);
+  // D-J1a-18 / újra-review #483: a becslés után a VALÓDI kirajzolás dönt — ha egy tábla felirata mégis levágódna (a vastag
+  // betű szélesebb a becsültnél; mérve: 360x640, „sárga banán a polcon”), a kérdés lista módra vált. Stabil: lista módban nincs
+  // tábla, ami visszaválthatna; a következő kérdés / átméretezés újra dönt.
+  useLayoutEffect(() => {
+    if (presId === null || longMode) return;
+    const clipped = Array.from(gatesRef.current?.querySelectorAll<HTMLElement>(".ts-gate-label") ?? []).some((el) => el.scrollHeight > el.clientHeight + 1);
+    if (clipped) setGatesFitH(false);
+  }, [presId, longMode]);
   // D-J1a-17 (ÚK2): „Jó kapu!” felirat a jó kapun bemenet nélkül átfutó gyereknek (a nyilvántartásban „nem válaszolt”).
   const idleGoodShown = !!pres && !!reveal && reveal.pickedOptionIndex === null && idleGoodId === pres.id;
   const questionBar = (inside: boolean) => (
@@ -2210,6 +2230,18 @@ const TSUNAMI_CSS = `
 .ts-idle-status { order: -1; }
 .ts-gates[data-state="reveal"] .ts-gate[data-state="wrong"] { opacity: .75; }
 /* D-J1a-11: „lista mód” — a kérdés-sáv gombjainak kulcs-köre a kapu színe és szimbóluma (a 3D kapuval párban). */
+/* Újra-review #483 ÚK3: álló nézetben a lista a kártyával együtt FENT áll (nem alul, flex-end) — nem takarja a futót, és nem
+   lóg a tárcsa találati területére (a tárcsa marad). Fekvőben a közös elrendezés (display: block, oldalsó oszlopok) érvényes. */
+.ts-gates[data-long="true"] .play-question[data-mode="buttons"] { justify-content: flex-start; }
+/* Alacsony álló képernyőn (mérve: 360x640, a leghosszabb kérdés + válaszok) a lista tömörebb, hogy a futó feje fölött érjen
+   véget; a gomb érintési magassága ≥ 44 px marad. */
+@media (orientation: portrait) and (max-height: 720px) {
+  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] { gap: 6px; }
+  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-options { gap: 6px; }
+  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-option { min-height: 44px; padding: 3px 10px; gap: 8px; font-size: 15px; }
+  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-label { line-height: 1.15; }
+  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-key { width: 26px; height: 26px; }
+}
 .ts-gates[data-long="true"] .play-question-key { font-size: 0; color: #0f172a; box-shadow: none; }
 .ts-gates[data-long="true"] .play-question-key::before { font-size: 15px; font-weight: 900; }
 .ts-gates[data-long="true"] .play-question-option[data-option-index="0"] .play-question-key { background: ${TSUNAMI_LANE_COLORS[0]}; }

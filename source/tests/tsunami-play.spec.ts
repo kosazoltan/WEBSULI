@@ -289,6 +289,8 @@ test.describe("J1 / J5: a játék a kérdés alatt fut (lassítva, ≥ 0,35×), 
 /** D-J1a-18: egysoros (minden nézetben egy sorba férő) és fekvő nézetben kétsoros, de szélességben beférő válaszok. */
 const SHORT_ANSWERS = ["cat", "dog", "sun"];
 const TWO_LINE_ANSWERS = ["zöld körte a tálban", "sárga banán a polcon", "kék szilva a kosárban"];
+/** Újra-review #483: álló nézetben 2–3 sorra törő, de a táblába levágás nélkül beférő válaszok. */
+const PORTRAIT_MULTI_LINE_ANSWERS = ["piros alma a fán", "zöld körte a tálon", "kék szilva a fán"];
 
 async function openQuestion(page: Page, patch: Record<string, unknown> = { question: true }): Promise<void> {
   await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: { forceState?: unknown } }).__websuliGame?.forceState === "function");
@@ -565,3 +567,87 @@ test.describe("844x390: kétsoros válaszok fekvőben — a táblák magasságba
     await expect(quiz).toHaveAttribute("data-long", "false");
   });
 });
+
+for (const viewport of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+]) {
+  test.describe(`${viewport.width}x${viewport.height}: álló lista mód — nem takarja a futót, nem fedi a tárcsát (újra-review #483 ÚK3)`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test("leghosszabb kérdés + leghosszabb válaszok: a lista és a tárcsa nem metszi egymást, a futó szabad, nincs vízszintes görgetés, gomb ≥ 44 px, a tárcsa ívén koppintás nem válasz", async ({ page }) => {
+      await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
+      await page.getByTestId("button-tsunami-start").tap();
+      await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+      await openQuestion(page, { question: true, longAnswers: true, longPrompt: true });
+      const quiz = page.getByTestId("ts-quiz");
+      await expect(quiz).toHaveAttribute("data-long", "true", { timeout: 10_000 });
+      await expect(quiz).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+      await page.waitForTimeout(250);
+      const m = await page.evaluate(() => {
+        const r = (el: Element) => {
+          const b = el.getBoundingClientRect();
+          return { l: b.left, r: b.right, t: b.top, b: b.bottom, h: b.height };
+        };
+        const options = Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-option')).map(r);
+        const joy = r(document.querySelector('[data-testid="virtual-joystick"]')!);
+        const api = (window as unknown as { __websuliGame: { probe: () => { runnerTopY: number } } }).__websuliGame;
+        const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+        const x = stage.left + stage.width / 2;
+        const head = stage.top + api.probe().runnerTopY * stage.height;
+        const covered = [head + 4, head + 30].map((y) => document.elementsFromPoint(x, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]')));
+        return { options, joy, covered, overflowX: document.documentElement.scrollWidth - innerWidth, state: document.querySelector('[data-testid="ts-quiz"]')?.getAttribute("data-state") };
+      });
+      expect(m.state, "a mérés nyitott kérdésnél").toBe("open");
+      expect(m.options.length).toBe(3);
+      for (const o of m.options) {
+        const hit = Math.min(o.r, m.joy.r) - Math.max(o.l, m.joy.l) > 0 && Math.min(o.b, m.joy.b) - Math.max(o.t, m.joy.t) > 0;
+        expect(hit, `(a) a válaszgomb (${Math.round(o.t)}–${Math.round(o.b)}) és a tárcsa (${Math.round(m.joy.t)}–${Math.round(m.joy.b)}) téglalapja nem metszi egymást`).toBe(false);
+        expect(o.h, "(d) a válaszgomb mért magassága ≥ 44 px").toBeGreaterThanOrEqual(44);
+      }
+      expect(m.covered, "(b) a futó feje / mellkasa nincs takarva").toEqual([false, false]);
+      expect(m.overflowX, "(c) nincs vízszintes görgetés lista módban").toBeLessThanOrEqual(1);
+      await shot(page, `tsunami-${viewport.width}x${viewport.height}-long.jpg`);
+      // (e) Koppintás a tárcsa felső ívén kérdés közben nem ad választ.
+      await page.touchscreen.tap(m.joy.l + (m.joy.r - m.joy.l) / 2, m.joy.t + 6);
+      await page.waitForTimeout(300);
+      expect((await probe(page)).questionsAnswered, "(e) a tárcsa ívén koppintás nem válasz").toBe(0);
+      await expect(quiz).toHaveAttribute("data-state", "open");
+    });
+
+    test("2–3 soros, szélességben beférő válaszok álló nézetben: táblák, levágás nélkül, a kártya alatt és a futó feje fölött (D-J1a-18)", async ({ page }) => {
+      await page.goto("/games/tsunami-english?seed=11&difficulty=easy");
+      await page.getByTestId("button-tsunami-start").tap();
+      await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+      await openQuestion(page, { question: true, answers: PORTRAIT_MULTI_LINE_ANSWERS });
+      await expect(gates(page)).toHaveCount(3, { timeout: 10_000 });
+      await expect(page.getByTestId("ts-quiz")).toHaveAttribute("data-long", "false");
+      await page.waitForTimeout(600);
+      await expect(page.getByTestId("ts-quiz"), "a valódi kirajzolásban sincs levágás (nem váltott lista módra)").toHaveAttribute("data-long", "false");
+      const m = await page.evaluate(() => {
+        const api = (window as unknown as { __websuliGame: { probe: () => { runnerTopY: number } } }).__websuliGame;
+        const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+        const head = stage.top + api.probe().runnerTopY * stage.height;
+        const card = document.querySelector('[data-testid="ts-quiz"] .play-question-card')!.getBoundingClientRect();
+        return Array.from(document.querySelectorAll('[data-testid="ts-quiz"] .ts-gate')).map((el) => {
+          const b = el.getBoundingClientRect();
+          const label = el.querySelector(".ts-gate-label")!;
+          return {
+            text: (label as HTMLElement).innerText,
+            lines: Math.round(label.getBoundingClientRect().height / parseFloat(getComputedStyle(label).lineHeight)),
+            clipped: label.scrollHeight > label.clientHeight + 1,
+            belowCard: b.top - card.bottom,
+            aboveHead: b.bottom - head,
+          };
+        });
+      });
+      expect(m.length).toBe(3);
+      expect(Math.max(...m.map((g) => g.lines)), "legalább egy felirat két- / háromsoros").toBeGreaterThanOrEqual(2);
+      for (const g of m) {
+        expect(g.clipped, `levágott: ${g.text}`).toBe(false);
+        expect(g.belowCard, "a tábla a kérdés-kártya alatt").toBeGreaterThanOrEqual(0);
+        expect(g.aboveHead, "a tábla a futó feje fölött").toBeLessThanOrEqual(1);
+      }
+    });
+  });
+}
