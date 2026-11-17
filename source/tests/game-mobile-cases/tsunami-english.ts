@@ -44,7 +44,8 @@ export const CASE: GameMobileCase = {
       undefined,
       { timeout: 15_000 },
     );
-    await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ phase: "quiz" }));
+    // D-J1a-18: a táblás hibás válasz kényszerített egysoros válaszokkal (fekvőben a kétsoros véletlen tétel jogosan lista mód).
+    await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ phase: "quiz", answers: ["cat", "dog", "sun"] }));
     const wrong = page.locator('[data-testid="ts-quiz"] .ts-gate[data-correct="false"]').first();
     await expect(wrong).toBeVisible({ timeout: 10_000 });
     await wrong.click();
