@@ -43,8 +43,10 @@ $env:REPRO_CPU='6'; node --import tsx scripts/run-e2e-tests.ts --config playwrig
    szűkítette: 2/20 bukás az előfeltételen; elvetve.)
 3. **game-win-paths** — a mérés előtt `waitForStable(page, '[data-testid="<eredmény>"] button')`
    (`tests/support/game-mobile-quality.ts`): a gombok beállt dobozára vár (C-33: végállapotú elem).
-4. **joystick-response renderszámláló** — a rezgő szakasz fut előbb, az álló legalább ugyanannyi ideig tart (`hold(false, moving.ms)`);
-   a JOY_RESULT-ban az álló nyers száma és hossza is (`renderStill`, `stillMs`); a tesztkeret 180 → 240 s (mérés lent).
+4. **joystick-response renderszámláló** — az álló szakasz (változatlan sorrendben, elöl) a 30 várakozás után még 30 × a lépcsőkben
+   MÉRT átlagos `touchMove`-idő ideig tart (`touchMoveCost`, `hold(false, 30 * perTouchMs)`), így a hossza a rezgőével összemérhető;
+   a JOY_RESULT-ban az álló nyers száma és hossza is (`renderStill`, `stillMs`); a tesztkeret 180 → 240 s (mérés lent). (Az első
+   változat — rezgő előbb, az álló `moving.ms`-ig — a Szökőárnál bukott: lásd Mérés 4.)
 5. **speed-math-play menetvégi hurok** — a hurok állapotát egy atomi `page.evaluate` olvassa (vége? / koppintható rossz drón
    középpontja), a `count()` → `boundingBox()` pár helyett.
 6. Kapuk: `git diff --check`, `npx.cmd eslint <változott fájlok> --max-warnings 0`, `npm run check`, `npm run check:test`, az
@@ -99,13 +101,19 @@ változat ugyanazon az úton).
   vár; az álló szakasz ezért jóval rövidebb, a kis álló szám (0–2) nagy szorzóval arányosítódik. CI-azonos úton mérve: main 1×:
   álló 1,4–9,0 s a rezgő 10,8–22,4 s mellett, többlet −7…+4 (0/10 bukás); **#484 ága 1×: álló 1,2–4,1 s a rezgő 10,7–20,2 s
   mellett, többlet −8…+9, 1/10 bukás („a lapon” 9 > 6)**. A main CI-n a szorzó ~20–30 (a −12 / +23 ugrás egy render-különbség).
-- Javítás: `tests/joystick-response.spec.ts` — a rezgő szakasz előbb, az álló `hold(false, moving.ms)` legalább ugyanannyi ideig;
-  a JOY_RESULT-ban `renderStill` / `stillMs` is. A küszöb (≤ 6) és a tárcsa ≤ lap + 2 szabály változatlan.
-- Tesztkeret: main CI nyomkövetés nélküli kísérletei a javítás ELŐTT 134 s és 145 s; a hozzáadott álló idő = a rezgő hossza a
-  CI-n (17,6–22,6 s) → 152–168 s, a 180 s 84–93%-a → 240 s.
-- Utána: 6× lassítással (a CI-nél lassabb, a régi spec itt 4/6-szor a 180 s-os keretbe futott) main **18/18 zöld** (a harness 60
-  perces korlátja állította meg), többlet −3…+2; CI-azonos 1×: **main 12/12 zöld** (többlet a lapon −4…+4, a tárcsán −1…+1; álló
-  10,6–16,4 s ≈ rezgő 10,5–16,2 s), **#484 ága 12/12 zöld** (lap −1…+2, tárcsa −1…+1; álló 9,9–25,9 s ≈ rezgő 9,7–25,8 s).
+- 1. javítás-változat (ELVETVE): a rezgő szakasz előbb, az álló `moving.ms`-ig. A Kockavadászra jó volt (main 12/12, #484 12/12,
+  többlet −4…+4), de a teljes spec Szökőár-esete 2/2 bukott: az utána következő álló szakaszban a Szökőár lap-renderje a felére
+  esett (16–30 a rezgő 48–59-ével szemben, azonos hosszon) → többlet +32 / +29. A sorrend megfordítása a „mindkét szakaszban
+  azonos mozgás” feltételt sértette (a régi sorrendben a CI-n a Szökőár többlete −3…+1 volt).
+- Javítás (2. változat): `tests/joystick-response.spec.ts` — a sorrend marad (álló, majd rezgő); az álló a 30 várakozás után még
+  30 × a lépcsőkben mért átlagos `touchMove`-idő ideig tart; a JOY_RESULT-ban `renderStill` / `stillMs` is. A küszöb (≤ 6) és a
+  tárcsa ≤ lap + 2 szabály változatlan.
+- Tesztkeret: main CI nyomkövetés nélküli kísérletei a javítás ELŐTT 134 s és 145 s; az álló szakasz helyben a rezgő 1,0–1,7-szerese
+  lett → a CI-n legfeljebb ~1,7 × 22,6 ≈ 38 s többlet → ~183 s, a 180 s-on túl → 240 s.
+- Utána (2. változat, CI-azonos 1×): a teljes spec (4 játék × 3) **12/12 zöld** (Tornado +1…+3, Aszteroida −3…+1, Szökőár −15…+1,
+  Kockavadász −4…+1); Kockavadász külön: **main 7/7 zöld** (összesen 10/10; lap −2…+1, tárcsa −1…+0; álló 14,2–16,7 s, rezgő
+  9,6–11,0 s), **#484 ága 7/7 zöld** (lap −1…+1, tárcsa 0…+1; álló 13,3–14,9 s, rezgő 8,8–10,4 s; ugyanaz a spec-fájl,
+  leválasztott munkafában, a #484 9083a7c0 fején, saját buildjével).
 
 ### 5. speed-math-play menetvégi hurok (kanban #76)
 - Tünet (#76): 6× lassítással 2/10 túllépte a 180 s-ot a menetvégi hurokban.

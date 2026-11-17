@@ -197,11 +197,21 @@ async function stickGeometry(page: Page): Promise<Stick> {
   return s;
 }
 
+/** E2E-ingadozók 3. kör: a `touchMove` CDP-hívások mért ideje (darab, összes ms) — az álló render-szakasz hosszához. */
+const touchMoveCost = new WeakMap<CDPSession, { n: number; ms: number }>();
+
 async function touch(cdp: CDPSession, type: "touchStart" | "touchMove" | "touchEnd", x?: number, y?: number) {
+  const t0 = Date.now();
   await cdp.send("Input.dispatchTouchEvent", {
     type,
     touchPoints: type === "touchEnd" ? [] : [{ x: x!, y: y!, id: 1, radiusX: 4, radiusY: 4, force: 1 }],
   });
+  if (type === "touchMove") {
+    const c = touchMoveCost.get(cdp) ?? { n: 0, ms: 0 };
+    c.n += 1;
+    c.ms += Date.now() - t0;
+    touchMoveCost.set(cdp, c);
+  }
 }
 
 /**
@@ -450,24 +460,31 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
   // Render-szám: ugyanolyan hosszú, ugyanolyan kitérésű tartás kétszer — egyszer 30, kis amplitúdóval rezgő mozgással,
   // egyszer álló ujjal (2 esemény). A játék mozgása (és vele a HUD / állapot-renderek) mindkettőben azonos, így a
   // különbség az eseményenkénti render.
-  // E2E-ingadozók 3. kör (kanban #76): a két szakasznak a valós időben is azonos hosszúnak kell lennie. A rezgő szakaszban
-  // minden CDP-érintés megvárja, hogy a lap feldolgozza (szoftveres WebGL-en egy képkocka), az álló szakasz csak 30 × 16 ms-ot
-  // vár — a régi álló szakasz így jóval rövidebb volt (helyben, CI-azonos úton mérve 1,2 s a rezgő 11 s mellett), és a kis
+  // E2E-ingadozók 3. kör (kanban #76): a két szakasznak a valós időben is közel azonos hosszúnak kell lennie. A rezgő szakaszban
+  // minden CDP-érintés megvárja, hogy a lap feldolgozza (szoftveres WebGL-en képkockányi idő), az álló szakasz csak 30 × 16 ms-ot
+  // várt — a régi álló szakasz így jóval rövidebb volt (helyben, CI-azonos úton mérve 1,2 s a rezgő 11 s mellett), és a kis
   // álló darabszám (0–2) egy ~9–30-szoros szorzóval arányosítódott. Egy render többé-kevésbé az álló ablakban a „többletet”
-  // ±9…30-cal tolta el (main CI 44049286407: tárcsa 23 > 6, a korábbi futásokban ugyanott −12 és −6). Most előbb a rezgő
-  // szakasz fut, és az álló legalább ugyanannyi ideig tart (a nyers számok a JOY_RESULT-ban); a küszöb (≤ 6) változatlan.
+  // ±9…30-cal tolta el (main CI 44049286407: tárcsa 23 > 6, a korábbi futásokban ugyanott −12 és −6). Most az álló szakasz a 30
+  // várakozás után még 30 × (a lépcsőkben MÉRT átlagos érintés-idő)-t tart, így a hossza a rezgőével összemérhető. A sorrend
+  // marad (álló, majd rezgő): fordított sorrendben a Szökőárnál az utána következő álló szakasz lap-renderje a felére esett
+  // (16–30 a rezgő 48–59-ével szemben, azonos hosszon) — a „mindkét szakaszban azonos mozgás” feltétel sérült.
+  // A küszöb (≤ 6) változatlan; a nyers álló számok a JOY_RESULT-ban.
   const s = await stickGeometry(page);
-  const hold = async (jiggle: boolean, minMs = 0): Promise<{ counts: Record<string, number>; ms: number }> => {
+  const cost = touchMoveCost.get(cdp);
+  const perTouchMs = cost && cost.n > 0 ? cost.ms / cost.n : 0;
+  const hold = async (jiggle: boolean, extraMs = 0): Promise<{ counts: Record<string, number>; ms: number }> => {
     await ensurePlaying(page, g);
     const y = s.cy + g.dy * s.r;
     await touch(cdp, "touchStart", s.cx, s.cy);
     await touch(cdp, "touchMove", s.cx + 0.8 * s.r, y);
     const a = await renders(page);
     const t0 = Date.now();
-    for (let i = 1; i <= 30 || Date.now() - t0 < minMs; i++) {
-      if (jiggle && i <= 30) await touch(cdp, "touchMove", s.cx + (i % 2 === 0 ? 0.75 : 0.85) * s.r, y);
+    for (let i = 1; i <= 30; i++) {
+      if (jiggle) await touch(cdp, "touchMove", s.cx + (i % 2 === 0 ? 0.75 : 0.85) * s.r, y);
       await page.waitForTimeout(16);
     }
+    const until = Date.now() + extraMs;
+    while (Date.now() < until) await page.waitForTimeout(Math.min(50, Math.max(1, until - Date.now())));
     const b = await renders(page);
     const ms = Date.now() - t0;
     // Képernyőkép húzás közben (a gomb az ujj alatt), ha kérik: JOY_SHOT_DIR=<mappa>.
@@ -486,8 +503,8 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
     for (const k of Object.keys(b)) counts[k] = (b[k] ?? 0) - (a[k] ?? 0);
     return { counts, ms };
   };
+  const still = await hold(false, 30 * perTouchMs);
   const moving = await hold(true);
-  const still = await hold(false, moving.ms);
   const renderDelta: Record<string, number> = {};
   const renderDrag = moving.counts;
   for (const k of Object.keys(moving.counts)) {
@@ -543,9 +560,10 @@ function assertAccepted(g: GameSpec, m: Awaited<ReturnType<typeof measureGame>>)
 
 for (const g of GAMES) {
   test(`joystick-reakció: ${g.case.id}`, async ({ page }) => {
-    // E2E-ingadozók 3. kör: a javított render-mérés álló szakasza a rezgővel azonos hosszú (a CI-n a rezgő 17,6–22,6 s volt).
-    // Mérve (main CI 44049286407, a Kockavadász nyomkövetés nélküli kísérletei): 134 s és 145 s a javítás ELŐTT; +17,6…22,6 s
-    // → 152–168 s, a 180 s-os keret 84–93%-a. A keret ezért 240 s (a lépések nem lassabbak, csak eggyel több szükséges lépés van).
+    // E2E-ingadozók 3. kör: a javított render-mérés álló szakasza a rezgővel összemérhető hosszú (a CI-n a rezgő 17,6–22,6 s volt;
+    // helyben, CI-azonos úton az új álló szakasz a rezgő 1,0–1,7-szerese). Mérve (main CI 44049286407, a Kockavadász nyomkövetés
+    // nélküli kísérletei): 134 s és 145 s a javítás ELŐTT; + legfeljebb 1,7 × 22,6 ≈ 38 s → ~183 s, a 180 s-os kereten túl. A keret
+    // ezért 240 s (a lépések nem lassabbak, csak a mérés egy szükséges szakasza hosszabb).
     test.setTimeout(MEASURE ? 300_000 : 240_000);
     await startGame(page, g);
     const cpus = MEASURE ? [1, 4, 6] : [1];
