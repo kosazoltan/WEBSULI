@@ -9,7 +9,11 @@
  *
  * Ez a modul a TISZTA logikát tartalmazza (worldgen, fizika, raycast) —
  * Three.js renderelés és React-integráció a BlockCraftQuiz.tsx-ben marad.
+ *
+ * J3a (végrehajtás K.6 táblázat, KSZ-2): a világgenerálás seedelt — a hívó a menet seedelt RNG-jét adja
+ * (`generateVoxelWorld(cfg, rng.next)`); azonos seed → azonos világ (párbaj, napi kihívás, node-szimuláció).
  */
+import { createRng, seedFrom } from "@shared/game-rng";
 
 /* ============== Blokk-típusok ============== */
 
@@ -31,6 +35,11 @@ export const WATER = 12;
 export const ZOMBIE = 13;
 export const SKELETON = 14;
 export const SPIDER = 15;
+/**
+ * J3a „Rúnabánya”: rúnaérc — a felszínen álló, világító érc. Megérintése Rúna-zárat nyit (kérdés a világban); a sima
+ * blokkok kérdés nélkül bányászhatók. Szolid és bányászható, de nem lerakható (a hotbarba nem kerül).
+ */
+export const RUNE_ORE = 16;
 
 /* ============== Világ-dimenziók ============== */
 
@@ -70,9 +79,11 @@ export function vMineable(t: number): boolean {
 
 /* ============== Worldgen ============== */
 
-function ri(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+/**
+ * Seedelt alapértelmezés a hívó RNG-je nélküli (régi) hívásokhoz: modulszintű, állapotot tartó sorozat — egymás utáni
+ * hívások különböző, de futásonként azonos világokat adnak. A játék és a szimuláció mindig saját seedelt RNG-t ad.
+ */
+const defaultWorldRandom = createRng(seedFrom("voxelcraft", "default-world")).next;
 
 export type VoxelGenConfig = {
   /** Érc-szorzó (1.0 alap). */
@@ -101,8 +112,9 @@ export type VoxelGenConfig = {
  *  - néhány tavacska (víz + homokos meder) és homok-folt
  *  - 2-3 kis barlang-üreg a kő-rétegben, mob-spawnnal a falain
  */
-export function generateVoxelWorld(cfg: VoxelGenConfig): VoxelWorld {
+export function generateVoxelWorld(cfg: VoxelGenConfig, random: () => number = defaultWorldRandom): VoxelWorld {
   const w: VoxelWorld = new Uint8Array(WX * WY * WZ);
+  const ri = (min: number, max: number): number => Math.floor(random() * (max - min + 1)) + min;
 
   // Heightmap: sík terep ±2 enyhe dombokkal (két átfedő szinusz).
   const heights: number[] = new Array(WX * WZ);
@@ -130,7 +142,7 @@ export function generateVoxelWorld(cfg: VoxelGenConfig): VoxelWorld {
         if (y === h) { w[i] = GRASS; continue; }
         if (y >= h - 2) { w[i] = DIRT; continue; }
         // Kő-réteg + ércek
-        const roll = Math.random();
+        const roll = random();
         const dP = y <= 3 ? diamondPDeep : diamondPShallow;
         if (roll < dP) w[i] = DIAMOND;
         else if (roll < dP + ironP) w[i] = IRON;
@@ -235,7 +247,7 @@ export function generateVoxelWorld(cfg: VoxelGenConfig): VoxelWorld {
     const h = heights[mz * WX + mx]!;
     if (vGet(w, mx, h, mz) !== GRASS) continue;
     if (vGet(w, mx, h + 1, mz) !== AIR) continue;
-    const useZombie = cfg.allowZombies && Math.random() < 0.4;
+    const useZombie = cfg.allowZombies && random() < 0.4;
     vSet(w, mx, h + 1, mz, useZombie ? ZOMBIE : CREEPER);
     placed++;
   }
@@ -253,7 +265,7 @@ export function generateVoxelWorld(cfg: VoxelGenConfig): VoxelWorld {
       vGet(w, mx, my + 1, mz) === AIR || vGet(w, mx, my - 1, mz) === AIR ||
       vGet(w, mx, my, mz + 1) === AIR || vGet(w, mx, my, mz - 1) === AIR;
     if (!hasAirNeighbor) continue;
-    vSet(w, mx, my, mz, Math.random() < 0.5 ? SKELETON : SPIDER);
+    vSet(w, mx, my, mz, random() < 0.5 ? SKELETON : SPIDER);
     cavePlaced++;
   }
 
@@ -306,6 +318,10 @@ export function lookDirection(yaw: number, pitch: number): { x: number; y: numbe
  * „Bányász” gomb és a koppintás semmit sem csinált, így nem jött kvíz. A kezdő nézést úgy választjuk, hogy a
  * célkereszt egy bányászható blokkra mutasson `maxDist` távolságon belül: az alap nézéssel kezdünk, majd egyre
  * lejjebb billentünk és körbeforgunk. Ha sehol nincs találat, az alap nézés marad.
+ *
+ * J3a (audit, kanban #64 „induláskor lombkoronába néz”): az `accept` szűrő kizárhat célokat (a lap a lombot és a
+ * szem fölötti blokkot — a kezdő nézés így a talajra / egy közeli blokkra esik, nem a fák koronájába). Hiányában a régi
+ * viselkedés (bármely bányászható blokk).
  */
 export function pickStartLook(
   w: VoxelWorld,
@@ -313,6 +329,7 @@ export function pickStartLook(
   baseYaw: number,
   basePitch: number,
   maxDist = 3.2,
+  accept?: (hit: VoxelHit) => boolean,
 ): { yaw: number; pitch: number } {
   const ex = spawn.x, ey = spawn.y + PLAYER_EYE, ez = spawn.z;
   const pitches = [basePitch, -0.35, -0.55, -0.75, -0.95, -1.15];
@@ -322,10 +339,15 @@ export function pickStartLook(
       const yaw = baseYaw + (k * Math.PI) / 8;
       const d = lookDirection(yaw, pitch);
       const hit = raycastVoxel(w, ex, ey, ez, d.x, d.y, d.z, maxDist);
-      if (hit && vMineable(hit.t)) return { yaw, pitch };
+      if (hit && vMineable(hit.t) && (!accept || accept(hit))) return { yaw, pitch };
     }
   }
   return { yaw: baseYaw, pitch: basePitch };
+}
+
+/** A kezdő nézés szűrője (kanban #64): nem lomb és nem a szem fölött (a fa koronája / törzse fent). */
+export function groundStartTarget(spawnY: number): (hit: VoxelHit) => boolean {
+  return (hit) => hit.t !== LEAVES && hit.y < spawnY + 1;
 }
 export const MOVE_SPEED_BPS = 4.3;
 export const JUMP_VELOCITY = 8.2;

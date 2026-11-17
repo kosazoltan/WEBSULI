@@ -1153,7 +1153,7 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
 
 ## J3 — Kockavadász: „Rúnabánya” (J3a, J3b, J3c)
 
-**Állapot (J3a):** nem kezdődött · **Állapot (J3b):** nem kezdődött · **Állapot (J3c):** nem kezdődött
+**Állapot (J3a):** folyamatban – 2026-11-17, ág feat/jatek-j3a-kockavadasz-runabanya, munkafa .claude/worktrees/jatek-j3a, kanban #79 · **Állapot (J3b):** nem kezdődött · **Állapot (J3c):** nem kezdődött
 **Függ:** J0c merge (a 4. hullámban, a J1/J2/J4 tapasztalata után). **Elfogadás:** J-BC, J1–J11, J16, M1–M12. Terv: 5.3.
 
 ### Fájlok
@@ -1199,6 +1199,93 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
 5. Tesztek: `T/blockcraft-core.test.ts` (sima blokk kérdés nélkül; rúnaérc mindig elérhető 15 mp-en belül;
    zár-feloldás), `T/blockcraft-sim.test.ts` (J2 ≥ 7/perc, J3 ≤ 15 mp; kérdés nélküli mód — J3a-ban még nincs
    vereség: a sim ezt az esetet J3b-ig `won()`-nal jelzi; a „van vesztési feltétel” pont J3b elfogadása).
+
+#### Megvalósult eltérések (J3a, mérés alapján)
+
+- **Közös meghajtó:** `createRuneMine` (`L/blockcraft/core.ts`) — a lap és a sim ugyanazt a fix lépésű hurkot, kérdés-sáv
+  állapotgépet (`tick: false`, csak `request("trigger")`) és rúnazár-logikát futtatja; csak a `movePlayer` más (lap: voxel-fizika,
+  sim: rácson járó bot). `slowMo` 0,5; director: `optionCount 4`, `minGap 1,5 s`, `maxGap 15 s`, `7/perc`, ablak 5 s, olvasás-tudatos.
+- **Pálya-cél = a kinyitott zárak száma** (3/4/5/6/7): rossz / lejárt válasznál is kinyílik a zár (a cél nem akad el), csak a
+  zsákmány kisebb (1 kristály a 2 helyett, kombó megszakad, 10 XP a 60 × szorzó helyett). Kérdés nélkül / üres forrásnál zár
+  nélkül törik (1 kristály). A rúnaérc a felszínen álló, önvilágító blokk (`RUNE_ORE`), fényoszloppal és HUD-iránytűvel.
+- **Rúnaérc-elérhetőség:** 500 ms-onként, ha a játékos 8 blokkos körzetében nincs érc, 4–7 blokkra nő egy (legfeljebb 24 a
+  világban; a legtávolabbi átköltözik). Mért (20 seed × 180 s): SIM_AVERAGE 10,8 kérdés/perc (min 9,9), leghosszabb rés ≤ 7,8 s;
+  SIM_WEAK 8,7/perc; az 5 pálya mediánja 139 s.
+- **Rúnakövek:** a világban 4 színkódolt, betűs (A–D) kő az érc körül (U-J3-1), mellettük azonos színű DOM-rúnagombok a válasz
+  szövegével (`bc-quiz` réteg, `bc-rune-<i>`, `pointerTapHandlers`); a kövek a vásznon koppintással / célkereszttel is
+  választhatók. A kérdés-sáv `bc-question` / `bc-prompt`; a `bc-quiz-pause` a rúnaréteg saját 52 px-es szünetgombja (a
+  sáv közös 48 px-es ikongombja Pixel 7 sűrűségen 47,x px-re kerekedett — mérve, M2). Nyitott zárnál a Lerak / Bányász rejtett.
+- **A pálya ideje** a menet kezdő sávjából (`adaptiveTimeBudget(timeLimit, runStartBand)`), a válaszok nem módosítják.
+  Review #484: a pálya-cél teljesülése után (a megoldás-kijelzés még fut) a visszaszámlálás áll (`levelClockTick`) — az időkeret
+  végén kinyitott utolsó rúnazár győzelem; ha a lejárat jön előbb (a zár még nyitott), a pálya lejár, a kérdés megszakítva zárul.
+  A „Mutasd” (kibontott hosszú kérdés) alatt szünet (világ, pálya-óra, kérdés-óra). A rúnasor alulról igazodik (a joystick
+  fölé), hosszú válasznál kisebb betűvel felfelé nő — a felirat nem vágódik (mérve a bank leghosszabb válaszaival és ~110
+  karakteres tananyag-válasszal, `T/blockcraft-play.spec.ts`; a régi, felülről igazított elrendezés a ~110 karakteresnél a
+  játéktér alá lógott).
+- **Teszt-változás (SPEC-VÁLTOZÁS, terv 5.3 / 9.):** `T/blockcraft-mobile.test.ts` (a `shouldRun` „quiz” fázis nélkül),
+  `T/block-craft-real-touch.spec.ts` (kérdés helyett kibányászott blokk 20 s-on belül), `T/game-mobile-cases/block-craft-quiz.ts`
+  (rossz válasz → „Miért?” → kártya). A terv 9. szakasza szerint ezek „változatlanul zöldek” lettek volna — a `shouldRun`
+  forrásőr azonban a megszűnt „quiz” fázist szó szerint kérte.
+
+#### J3a — a független review (#484) utáni döntések (a javítás ELŐTT rögzítve, 2026-11-17)
+
+- **B1 — nincs véletlen válasz.** (1) Élesítés: a Rúna-zár a megnyílása után `RUNE_ARM_MS = 400` ms-ig (a kérdés-órában)
+  semmilyen bemenetre nem válaszol, és ez látszik is (a kövek 0-ról nőnek ki, a rúnagombok halványak / „…”) — KSZ-11. (2) Csak az
+  élesítés UTÁN indult lenyomás választhat (a lenyomás kérdés-órás időbélyege ≥ az élesítés vége; a zár előtt / alatt lenyomott ujj
+  felengedése, a billentyű-ismétlés nem). (3) A bányászó gesztusok (E, Bányász gomb, egér-bányászás, tartás) SOHA nem választanak
+  rúnakövet; a válasz szándékos gesztus: a rúnagomb, a vásznon a rúnakőre (nem az ércre) eső koppintás, vagy az 1–4 billentyű.
+  (4) A kövek az érc körül, a nézésre merőleges síkban, az érc FÖLÖTTI íven állnak (1,35 sugár), nem az érc és a játékos között:
+  az ércre célzott sugár 0%-ban talál követ (a review geometria-szkriptje fixture-ként); a kő találati gömbje a látványhoz
+  igazodik (0,3). A vásznon a kőtalálat csak akkor számít, ha a kő közelebb van a sugár első voxel-találatánál.
+- **Kérdés késleltetett megnyitása nincs (L2):** a megoldás-kijelzés / minGap alatt megérintett érc nem nyit később, előjelzés
+  nélkül kérdést; a gyerek újra megérinti.
+- **H1 — a szimuláció bányászik.** A bot az ércig utat vág (a terep a voxel-világ: a lépésnyinél magasabb oszlopot / fejmagasságú
+  blokkot kibányássza `MINE_MS` szerint), és két játékosmodell fut: „rúnavadász” és „bányászó, nem siető” (a zárak között a menetidő
+  ~50%-ában blokkot bányászik). **Rúnaérc-felfedezés (a terv „legkésőbb 15 mp-en belül elérhető rúnaérc” garanciája bányászás
+  közben):** ha az utolsó kérdés indítása óta `RUNE_REVEAL_GAP_MS = 7000` ms telt el, a következő kibányászott sima blokk helyén
+  rúnaérc bukkan elő (a zsákmány megmarad) — így a bányászó gyerek is a célrés szerint kap kérdést. A küszöbök (J2 ≥ 7 / perc, J3
+  ≤ 15 s) nem lazulnak, minden modellre mérve.
+- **M3:** a zár megnyílása, feloldása, a szünet és a lapváltás mindig elengedi a tartást; nyitott zár alatt a tartás nem indul.
+- **M4:** fekvő nézetben a rúnagombok két oszlopban a képernyő szélein (bal: A–B, jobb: C–D), a jelenet közepe (érc, kövek,
+  célkereszt) szabad; a chipsor a zár alatt rejtett.
+- **M1:** a világ-mesh 16×16-os oszlop-darabokban (chunk) épül; blokkváltozáskor csak az érintett (és a szomszédos peremű)
+  darab épül újra, nem a teljes világ.
+- **M5:** a kérdés nélküli zár ugyanannyit ér, mint a rossz válasz (10 XP, 1 kristály). A kupon-kimerülés közös javítása a #483-ból
+  jön (beolvasztás után kupon-eset a szimulációba).
+- **L1/L3/L5:** a WebGL-leállás alatt a pálya órája áll; a lejárat nem a `setTimeLeft` frissítőjében dönt; kibontott kérdésnél
+  (és szünetben) az 1–4 billentyű sem válaszol.
+
+**Megvalósult eltérések és mért eredmények (a review #484 javítása után):**
+
+- **M1 — darabolás helyett cellánkénti frissítés:** a 16×16-os darabok típusonként 9-szer annyi draw call-t adtak volna (mobilon
+  ez drágább, mint amit megspórol). Helyette típusonként EGY `InstancedMesh` marad, és blokkváltozáskor csak a cella és 6
+  szomszédja frissül (cserés törlés + hozzáfűzés, O(1)); a teljes újraépítés csak új pályánál és WebGL-visszaállásnál fut. A
+  rúnaérc „átköltözése” saját eseményt kapott (`runeGone`), hogy a régi helye is frissüljön. Mérés (4× CPU, low tier, folyamatos
+  E-tartás 16 s): a CPU-profilban a világ-építés nem jelenik meg; az egyetlen > 50 ms feladat az első kibányászott blokknál van
+  (egyszeri: a közös `audioEngine` első `AudioContext`-je ~186 ms + az első porfelhő shader-fordítása) — ez közös jegy.
+  K.4/7: geometriák 5 → 7 → 7, textúrák 17 → 20 → 20 a menet elején / 2 / 4 pályaváltás után (nem nő tovább).
+- **H1 / B1 — szimuláció (20 seed, 180 s):** rúnavadász SIM_AVERAGE 10,4 / YOUNG 9,0 / WEAK 8,5 / STRONG 12,7 kérdés/perc,
+  max. rés 8,4 s; bányászó (a menetidő 46–67%-a bányászás) 8,7 / 8,4 / 8,3 / 9,0 kérdés/perc, max. rés 6,4 s, futásonként
+  medián 20 felfedezett rúnaérc. „Tovább bányászó” koppintás: ~980 / modell, téves válasz 0. Ellenpróba: a kövek régi (érc
+  előtti) elhelyezésével a fixture 78/201 sugárnál követ talál, és a bot téves választ ad.
+- **A felfedezés megállítja a tartást:** az előbukkanó rúnaércet a lenyomott ujj nem érinti meg magától (nincs előjelzés nélküli
+  kérdés), a gyerek látja, és szándékosan érinti meg.
+- **L5:** a közös `InlineQuestion` kibontott nézetben már nem fogadja az 1–4-et (`answering` feltétel); a lap a `disabled`-et is
+  átadja (kettős védelem).
+- **Teszt-jelölő az élesítéshez igazítva:** a `data-correct` (csak teszt-kampós buildben) a rúnagombon az élesítés után jelenik
+  meg — a választható célt jelöli. A közös mobil mérő (`T/support/game-mobile-quality.ts`) a kérdés megjelenése után azonnal
+  koppint; élesítés-tudatos várakozás a közös mérőbe: orkesztrátori jegy.
+- **CI-bukás a 3e2a8b18 fejen (a három új e2e teszt), gyökérok: a TESZT időzítése.** A CI-trace szerint egy Playwright-hívás
+  0,5–1,3 s; a B1/M3 teszt 10–12 hívása a zár nyitása után kifutott az 5 s-os válaszablakból (a lap helyesen nem válaszolt, a
+  végső rúnagomb-koppintás már a lejárat után érkezett), az L7-ben a `timeLeft: 2` beállítása és a koppintás között 2 s telt el
+  (lejárat). Javítás a mérce lazítása nélkül: a koppintások pillanatában a zár állapotát a LAPON rögzítjük (≥ 2 koppintás a
+  nyitott, élesített záron, válasz 0), az ellenpróba válasza és az L7 óra-beállítás + válasz egy lapfeladatban fut, hosszú
+  (9 s) válaszablakú kérdéssel. Reprodukció helyben: `BC_CPU_THROTTLE` (CPU-lassítás) és `BC_CI_LAG_MS` (a CI hívás-késése)
+  környezeti változó a `T/blockcraft-play.spec.ts`-ben; a régi teszt 18×-on (L7) és 1200 ms késéssel (M3) bukott, az új 18× +
+  1200 ms mellett 5/5 egymást követő futásban zöld.
+- **Fekvő nézet maradéka:** az érc fölötti rúnakövek alacsony fekvő képernyőn részben a fent középen álló kérdéskártya alá
+  esnek (a válasz a két oldali rúnagombbal megy, a célkereszt és az érc szabad) — J3c-jegy (kisebb ív fekvőben vagy a kártya
+  eltolása).
 
 ### J3b — nappal–éjjel ciklus, sebző mobok, kard, életek
 
