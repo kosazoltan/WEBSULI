@@ -23,6 +23,12 @@ a független audit szerint ~15 percen belül három éles telepítés is lefutot
    `activeMatches` mezőjét is (`source/server/realtime/index.ts`): a folyamatban lévő meccsek is megszakadnak
    telepítéskor. Nullánál nagyobb érték esetén ugyanúgy várj.
 
+6. **A főág kötelező ellenőrzései** (`gh api repos/kosazoltan/WEBSULI/branches/main/protection`): Háromfázisú rend, Lint & Typecheck,
+   Unit Tests, Playwright E2E. Megkerülni tulajdonosi engedély nélkül nem szabad („csak tesztfájl változott” sem ok); a Playwright E2E
+   ~1 óra. Zöld CI után ne tölts fel további commitot: újraindítja az E2E-t (`docs/agent-csapdak.md` C-62, C-63).
+7. **Több zöld PR egy ablakban:** minden egyes összevonás ELŐTT futtasd az őrt. Az első összevonás után a többi PR összevonási állapota
+   átmenetileg `UNKNOWN`; várd meg, amíg a GitHub újraszámolja, ne erőltesd.
+
 ## Használat
 
 ```bash
