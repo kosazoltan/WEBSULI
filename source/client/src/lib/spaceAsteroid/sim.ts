@@ -49,6 +49,7 @@ import {
   PLAYER_Y_MAX,
   SPAWN_Y_MAX,
   SPAWN_Y_MIN,
+  TUTORIAL_SEC,
   enemyHp,
   pickEnemyKind,
   pickRockSize,
@@ -320,6 +321,11 @@ export function createAsteroidWorld(opts: { seed: number | string; band: () => n
 
   const loseLife = (): void => {
     if (invuln > 0 || shield > 0) return;
+    // Tanító szakasz (K.4/25): az első TUTORIAL_SEC mp-ben az ütközés nem von le életet.
+    if (clock < TUTORIAL_SEC) {
+      invuln = HIT_INVULN_SEC;
+      return;
+    }
     hits += 1;
     lives -= 1;
     combo = 0;

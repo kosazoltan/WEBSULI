@@ -185,6 +185,13 @@ export const WAVE_BANNER_SEC = 2;
 export const SPAWN_Y_MIN = 8.6;
 export const SPAWN_Y_MAX = 10.2;
 
+/**
+ * Tanító szakasz (K.4/25): a menet első 30 mp-ében az ütközés NEM von le életet (a találat képe / hangja / rázása megvan, a
+ * hajó 2 mp-ig sérthetetlen) — egy mechanika (mozogj és lőj), halál nélkül. A súgó (≤ 1 sor) az első `HINT_SEC` mp-ben látszik.
+ */
+export const TUTORIAL_SEC = 30;
+export const HINT_SEC = 8;
+
 /** Ütközés után ennyi mp-ig sérthetetlen a hajó (végrehajtás J6a: „az ütközés csak élet −1 és 2 mp sérthetetlenség”). */
 export const HIT_INVULN_SEC = 2;
 

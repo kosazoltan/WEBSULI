@@ -108,3 +108,24 @@ test("J6a: a HUD ≤ 10 Hz-es pillanatkép — a játékhurok nem ír React-áll
   assert.match(code, /const HUD_STEP_MS = 100;/);
   assert.match(code, /publishHud\(\);/);
 });
+
+test("J6a: a renderer a közös gyárral készül (KSZ-8), a WebGL-környezet elvesztése kezelt (K.4/7), a menüben nincs rajzolás (kanban #69)", () => {
+  assert.doesNotMatch(code, /new THREE\.WebGLRenderer/, "saját renderer-gyártás maradt");
+  assert.match(code, /createGameRenderer\(canvas, tier,/);
+  assert.match(code, /addEventListener\("webglcontextlost", onContextLost\)/);
+  assert.match(code, /removeEventListener\("webglcontextlost", onContextLost\)/);
+  assert.match(code, /data-testid="sa-gfx-restart"/);
+  // a menüben (osztályválasztó / kezdőképernyő) a rajzoló függvény azonnal kilép: a hurok nem fogyaszt GPU-t
+  const render = code.slice(code.indexOf("const render = (now: number)"), code.indexOf("tickRef.current = tick;"));
+  assert.match(render, /if \(phaseRef\.current === "grade" \|\| phaseRef\.current === "intro"\) return;/);
+  assert.ok(render.indexOf('phaseRef.current === "intro"') < render.indexOf("starScrollY"), "a menü-kilépés a csillagmező-görgetés ELŐTT áll");
+  assert.ok(render.indexOf('phaseRef.current === "intro"') < render.indexOf("refs.postFx.render()"), "a menüben nincs postFx.render()");
+});
+
+test("J6a: a kristály-gombok a kérdés-sáv alatti zónába kerülnek (mért kártya-alj), és a nem látható gomb láthatósága képkockánként egyeztetett", () => {
+  assert.match(code, /document\.querySelector<HTMLElement>\('\[data-testid="sa-question"\] \.play-question-card'\)/);
+  assert.match(code, /rezoneCrystals\(list, computeCrystalBounds\(\), 0\.35\)/);
+  assert.match(code, /if \(chip\.style\.visibility !== vis\) chip\.style\.visibility = vis;/);
+  // a koppintás mozgó célra: pointer-események (közös `pointerTapHandlers`), nem `click`
+  assert.match(code, /\{\.\.\.pointerTapHandlers\(crystalTaps, idx, \(\) => onAnswer\(idx\)\)\}/);
+});

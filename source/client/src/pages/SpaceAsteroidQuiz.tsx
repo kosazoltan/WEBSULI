@@ -58,9 +58,11 @@ import {
   CAMERA_Z,
   CAMERA_LOOK_Y,
   BOSS_WAVE,
+  HINT_SEC,
   HIT_INVULN_SEC,
   SPAWN_Y_MAX,
   SPAWN_Y_MIN,
+  TUTORIAL_SEC,
   WAVE_BANNER_SEC,
   WAVE_COUNT,
   enemyHp,
@@ -869,10 +871,12 @@ type Hud = {
   enemiesKilled: number;
   /** A „HULLÁM n” felirat (0 = nincs); a hullámok közt nincs kapu, csak ez a felirat. */
   banner: number;
+  /** A tanító súgó (≤ 1 sor) az első másodpercekben látszik. */
+  hint: boolean;
   /** A menet előrehaladása 0..1 (a hullámok és a főellenfél felé): a HUD sávja idő helyett ezt mutatja. */
   progress: number;
 };
-const INITIAL_HUD: Hud = { score: 0, wave: 1, lives: 3, combo: 0, powerLevel: 0, powerTimer: 0, shieldTimer: 0, bombs: 0, bossHp: null, enemiesKilled: 0, banner: 0, progress: 0 };
+const INITIAL_HUD: Hud = { score: 0, wave: 1, lives: 3, combo: 0, powerLevel: 0, powerTimer: 0, shieldTimer: 0, bombs: 0, bossHp: null, enemiesKilled: 0, banner: 0, progress: 0, hint: false };
 /** A HUD legsűrűbb frissítése (ms): 10 Hz. */
 const HUD_STEP_MS = 100;
 
@@ -1392,6 +1396,7 @@ export default function SpaceAsteroidQuiz() {
       bossHp: bossHpRef.current,
       enemiesKilled: enemiesKilledRef.current,
       banner: bannerLeftRef.current > 0 ? waveRef.current : 0,
+      hint: gameElapsedRef.current < HINT_SEC && !runOverRef.current,
       progress: Math.min(1, (waveRef.current - 1 + (enemiesPerWaveRef.current > 0 ? Math.min(1, enemiesSpawnedThisWaveRef.current / enemiesPerWaveRef.current) : 0)) / (WAVE_COUNT + 1)),
     });
   };
@@ -1587,6 +1592,10 @@ export default function SpaceAsteroidQuiz() {
           // A főellenfél hulláma (9.) és a kapuk hiánya: a hullám-váltás a `waveChanges`-ben látszik.
           waveChanges: waveChangesRef.current,
           invuln: playerRef.current.invuln,
+          // K.4/2, K.4/7: rajzolási hívások és GPU-memória (a menet alatt nem nőhet: minden elem poolból / törléskor eldobva).
+          drawCalls: sceneRefs.current?.renderer.info.render.calls ?? null,
+          geometries: sceneRefs.current?.renderer.info.memory.geometries ?? null,
+          textures: sceneRefs.current?.renderer.info.memory.textures ?? null,
         };
       },
       forceState: (patch) => {
@@ -1754,6 +1763,34 @@ export default function SpaceAsteroidQuiz() {
       answerMeshes.push(m);
     }
 
+    // Shader-előmelegítés (K.4/8): minden ellenfél- / pickup-anyag egyszer lefordul a MENÜ alatt (a jelenet a lap betöltésekor
+    // épül), nem az első megjelenéskor játék közben — a 4×-es CPU-lassításon az első-használati fordítások 50–130 ms-os
+    // hosszú feladatok voltak. Aszinkron fordítás (`compileAsync`): az előmelegítő elemeket a fordítás VÉGÉN töröljük (a
+    // fordítás közbeni törlés `GL_INVALID_VALUE` figyelmeztetést ad). A csoport a kamera mögött áll, a rajzban nem látszik.
+    let sceneDisposed = false;
+    {
+      const warm = new THREE.Group();
+      warm.position.set(0, 0, -400);
+      scene.add(warm);
+      for (const m of [
+        buildRockMesh(3), buildRockMesh(2), buildRockMesh(1), buildCrystalMesh(), buildAlienMesh(), buildFighterMesh(), buildBossMesh(),
+        buildLifePickupMesh(), buildShieldPickupMesh(), buildBombPickupMesh(), buildPowerPickupMesh(),
+      ]) warm.add(m);
+      const cleanup = () => {
+        if (sceneDisposed) return;
+        warm.traverse((o) => {
+          if (o instanceof THREE.Mesh) {
+            o.geometry.dispose();
+            for (const mat of Array.isArray(o.material) ? o.material : [o.material]) mat.dispose();
+          } else if (o instanceof THREE.Sprite) {
+            o.material.dispose(); // a közös izzás-textúra marad (a `glowTexture()` gyorsítótárból él)
+          }
+        });
+        scene.remove(warm);
+      };
+      void renderer.compileAsync(scene, camera).then(cleanup, cleanup);
+    }
+
     const postFx = createPostFx(renderer, scene, camera, tier, { strength: 0.7, radius: 0.45, threshold: 0.86 });
 
     sceneRefs.current = {
@@ -1817,6 +1854,7 @@ export default function SpaceAsteroidQuiz() {
     rafRef.current = requestGameFrame(loop);
 
     return () => {
+      sceneDisposed = true;
       cancelGameFrame(rafRef.current);
       canvas.removeEventListener("webglcontextlost", onContextLost);
       window.removeEventListener("resize", handleResize);
@@ -1890,6 +1928,7 @@ export default function SpaceAsteroidQuiz() {
       bannerLeftRef.current = Math.max(0, bannerLeftRef.current - dt);
       if (bannerLeftRef.current === 0) markHud();
     }
+    if (gameElapsedRef.current < HINT_SEC && gameElapsedRef.current + dt >= HINT_SEC) markHud();
 
     // Lövés
     if ((keysRef.current.fire || touchRef.current.fire) && p.cooldown <= 0) {
@@ -2560,19 +2599,24 @@ export default function SpaceAsteroidQuiz() {
         burstAt.set(playerRef.current.x, playerRef.current.y, 0.3);
         refs.sparkles.emit(burstAt, {
           count: Math.round(36 * motionScale(reducedMotionRef.current).particles),
-          color: "#ff4d6d",
+          color: "#ff9f43",
           speed: 5,
           life: 0.7,
           size: 0.3,
         });
       }
-      spawnShockwave(playerRef.current.x, playerRef.current.y, 0.9, "#ff4d6d");
+      spawnShockwave(playerRef.current.x, playerRef.current.y, 0.9, "#ff9f43");
     }
     addTrauma(0.5);
     driverRef.current?.feel.hitstop(80);
     driverRef.current?.pace.signal("damage");
     // Az ütköző ellenfél azonnal eltűnik a pályáról (mesh + állapot).
     enemiesRef.current = enemiesRef.current.filter((en) => !en.dead);
+    // Tanító szakasz (K.4/25): az első 30 mp-ben az ütközés nem von le életet (a kép / hang / rázás megvan).
+    if (gameElapsedRef.current < TUTORIAL_SEC) {
+      playerRef.current.invuln = HIT_INVULN_SEC;
+      return;
+    }
     comboRef.current = 0;
     // ÉLET-MECHANIKA: ütközés = −1 élet. 0 életnél a menet véget ér.
     const nextLives = Math.max(0, livesRef.current - 1);
@@ -3341,7 +3385,7 @@ export default function SpaceAsteroidQuiz() {
             */}
             <div className={`sa-stage ${stageVisible ? "" : "hidden"}`}>
                 <div ref={sceneBoxRef} className="sa-scene game-scene relative rounded-2xl overflow-hidden border border-cyan-400/40 shadow-[0_0_28px_rgba(0,240,255,0.18)] w-full bg-black">
-                  <canvas ref={canvasRef} className="block touch-manipulation w-full h-full" style={{ width: "100%", height: "100%" }} />
+                  <canvas key={sceneEpoch} ref={canvasRef} className="block touch-manipulation w-full h-full" style={{ width: "100%", height: "100%" }} />
                   <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_56%,rgba(0,0,0,0.32)_100%)]" />
                   {/*
                     Kérdés-kristályok (J6a): a válasz a célpont. A DOM-gombok a 3D kristályok vetített helyén ülnek (a hurok
@@ -3387,6 +3431,11 @@ export default function SpaceAsteroidQuiz() {
                         );
                       })}
                     </div>
+                  )}
+                  {inRun && hud.hint && banner === 0 && (
+                    <p className="sa-hint pointer-events-none" data-testid="sa-hint" role="status">
+                      {touchCapable ? "Bal ujj: mozgás · jobb ujj: tűz" : "Nyilak: mozgás · Szóköz: tűz"}
+                    </p>
                   )}
                   {inRun && banner > 0 && (
                     <div className="pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 text-center" data-testid="sa-wave-banner" role="status">
@@ -3552,20 +3601,19 @@ export default function SpaceAsteroidQuiz() {
         />
       )}
 
-      {/* K.4/7: elveszett WebGL-környezet — szünet + újraindítás (a menet állapota megmarad). */}
-      {gfxLost && (
-        <div role="alertdialog" aria-label="Grafika" className="sa-gfx-lost" data-testid="sa-gfx-lost">
-          <p>A grafika megakadt. A játék szünetel.</p>
-          <button type="button" className="game-btn game-btn-primary" data-testid="sa-gfx-restart" onClick={restartGraphics}>
-            Grafika újraindítása
-          </button>
-        </div>
-      )}
-
       <PauseMenu open={paused && inRun} onResume={resumeGame} onRestart={startNewRun} onExit={endRound} exitLabel="Kör vége">
         <p className="text-sm text-slate-300">
           Hullám {wave >= BOSS_FINAL_WAVE ? "BOSS" : `${wave}/${WAVE_COUNT}`} · {score.toLocaleString("hu-HU")} pont · ♥ {lives}
         </p>
+        {/* K.4/7: elveszett WebGL-környezet — a menet szünetel (ez a menü), az újraindítás új vásznat és renderert ad; a menet állapota megmarad. */}
+        {gfxLost && (
+          <div className="mt-3 flex flex-col items-center gap-2" role="alert" data-testid="sa-gfx-lost">
+            <p className="text-sm font-semibold text-amber-200">A grafika megakadt.</p>
+            <button type="button" className="game-btn game-btn-primary min-h-12" data-testid="sa-gfx-restart" onClick={restartGraphics}>
+              Grafika újraindítása
+            </button>
+          </div>
+        )}
       </PauseMenu>
 
       <ResultScreen
@@ -3649,13 +3697,13 @@ export default function SpaceAsteroidQuiz() {
         .sa-crystal[data-state="dim"] { opacity: 0.5; }
         @keyframes sa-bob { 0%, 100% { transform: translateY(-2px); } 50% { transform: translateY(2px); } }
         @media (prefers-reduced-motion: reduce) { .sa-crystal-gem { animation: none; } }
+        .sa-hint {
+          position: absolute; left: 50%; top: 58%; transform: translateX(-50%); max-width: 92%; margin: 0; padding: 4px 12px; text-align: center;
+          border-radius: 9999px; font-size: 14px; font-weight: 800; color: #fff; background: rgba(8, 5, 27, 0.72); border: 1px solid rgba(165, 180, 252, 0.6);
+        }
         .sa-wave-banner {
           display: inline-block; padding: 6px 16px; border-radius: 9999px; font-size: 20px; font-weight: 900; letter-spacing: 0.08em;
           color: #fff; background: rgba(8, 5, 27, 0.72); border: 2px solid rgba(165, 180, 252, 0.8);
-        }
-        .sa-gfx-lost {
-          position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-          padding: 16px; text-align: center; color: #fff; background: rgba(2, 4, 26, 0.88); font-weight: 700;
         }
         /* A kérdés-sáv a HUD (és a hullám-sáv) alatt kezdődik. */
         .play-question[data-skin="space"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 96px); }

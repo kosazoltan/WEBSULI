@@ -15,7 +15,7 @@ import {
   createSimGame,
   questionTotals,
 } from "../client/src/lib/spaceAsteroid/sim";
-import { BOSS_WAVE, HIT_INVULN_SEC, WAVE_COUNT, waveEnemyCount } from "../client/src/lib/spaceAsteroid/physics";
+import { BOSS_WAVE, HIT_INVULN_SEC, TUTORIAL_SEC, WAVE_COUNT, waveEnemyCount } from "../client/src/lib/spaceAsteroid/physics";
 
 /**
  * J6a — Galaktikus Aszteroida szimulációs elfogadás a közös harness-szel (végrehajtás K.6, J6a 5.; terv 6.2: J2, J3, J4, J6,
@@ -172,8 +172,9 @@ test("ütközés: élet −1 és 2 mp sérthetetlenség, nem kvíz; a pajzs és 
   assert.equal(START_LIVES, 3);
   let damage = 0;
   const w = createAsteroidWorld({ seed: 1, band: () => 0.4, signal: (k) => { if (k === "damage") damage += 1; } });
-  // a menet eleji rövid sérthetetlenség (1 mp) lejár, mielőtt a próba kezdődik
-  for (let i = 0; i < 70; i++) w.step(SIM_STEP_MS, { dodgeRoll: 0 });
+  // a tanító szakasz (30 mp, nincs életvesztés) és a menet eleji sérthetetlenség lejár, mielőtt a próba kezdődik
+  for (let i = 0; i < 31 * 60; i++) w.step(SIM_STEP_MS, { dodgeRoll: 0 });
+  assert.equal(w.state().lives, START_LIVES);
   // egy közvetlenül a hajónál lévő szikla, a kitérés sikertelen (dobás 5 ≥ küszöb)
   w.shatter({ x: 0, y: -4.5 });
   for (let i = 0; i < 90; i++) w.step(SIM_STEP_MS, { dodgeRoll: 5 });
@@ -241,4 +242,20 @@ test("közös meghajtó (K.6): eltérő képkocka-időknél, lépés-indexhez k�
     assert.equal(run(frameMs), base, `${frameMs.toFixed(1)} ms-os képkockákkal más állapot`);
   }
   assert.equal(JSON.parse(base).steps, N);
+});
+
+test("tanító szakasz (K.4/25): az első 30 mp-ben az ütközés nem von le életet, utána igen", () => {
+  assert.equal(TUTORIAL_SEC, 30);
+  const w = createAsteroidWorld({ seed: 3, band: () => 0.4, signal: () => {} });
+  // 20 mp-nél: közvetlenül a hajónál lévő szikla, sikertelen kitérés
+  for (let i = 0; i < 20 * 60; i++) w.step(SIM_STEP_MS, { dodgeRoll: 0 });
+  w.shatter({ x: 0, y: -4.5 });
+  w.step(SIM_STEP_MS, { dodgeRoll: 5 });
+  assert.equal(w.state().lives, START_LIVES, "a tanító szakaszban az ütközés nem vesz életet");
+  assert.equal(w.state().hits, 0);
+  // 35 mp-nél már igen (a sérthetetlenség közben lejárt)
+  for (let i = 0; i < 15 * 60; i++) w.step(SIM_STEP_MS, { dodgeRoll: 0 });
+  w.shatter({ x: 0, y: -4.5 });
+  w.step(SIM_STEP_MS, { dodgeRoll: 5 });
+  assert.equal(w.state().lives, START_LIVES - 1);
 });

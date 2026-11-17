@@ -213,3 +213,44 @@ test.describe("valódi érintés", () => {
     await expect(page.locator('[role="dialog"]')).toHaveCount(0);
   });
 });
+
+test.describe("grafika", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("WebGL-környezet elvesztése (K.4/7): szünet + „Grafika újraindítása”, a menet és a kérdés-kristályok utána is működnek", async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await page.waitForTimeout(1_200);
+    const lost = await page.evaluate(() => {
+      const canvas = document.querySelector("canvas");
+      const gl = (canvas?.getContext("webgl2") ?? canvas?.getContext("webgl")) as WebGLRenderingContext | null | undefined;
+      const ext = gl?.getExtension("WEBGL_lose_context");
+      ext?.loseContext();
+      return Boolean(ext);
+    });
+    test.skip(!lost, "a WEBGL_lose_context kiterjesztés nem elérhető ebben a böngészőben");
+    // szünet + újraindító gomb; a menet áll
+    await expect(page.getByTestId("sa-gfx-lost")).toBeVisible({ timeout: 5_000 });
+    const t1 = (await probe(page)).simTime as number;
+    await page.waitForTimeout(600);
+    expect(((await probe(page)).simTime as number) - t1, "a grafika-hiba alatt áll a menet").toBeLessThanOrEqual(34);
+    await page.getByTestId("sa-gfx-restart").tap();
+    await expect(page.getByTestId("sa-gfx-lost")).toHaveCount(0);
+    // az újraindítás után a szünet menü vár (a gyerek dönt a folytatásról), a menet állapota megmaradt
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    await page.getByTestId("game-resume").tap();
+    await expect.poll(async () => ((await probe(page)).simTime as number) - t1, { timeout: 5_000 }).toBeGreaterThan(500);
+    // az új jeleneten a kérdés-kristályok is megjelennek
+    await force(page, { question: true });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    // K.4/2, K.4/7: a rajzolási hívások és a GPU-memória korlátos
+    const info = await probe(page);
+    expect(info.drawCalls as number, "rajzolási hívások (medium tier ≤ 200)").toBeLessThanOrEqual(200);
+    expect(errors.filter((e) => !/401|Failed to fetch|WebGL|context/i.test(e))).toEqual([]);
+  });
+});
