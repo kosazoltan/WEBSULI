@@ -1,17 +1,24 @@
 #!/usr/bin/env node
 // PreToolUse hook: minőségkapu-bizonyíték a kibocsátó parancsok előtt (docs/minosegkapuk.md; terv D6–D8, E10–E12).
 // Matcher: Bash | PowerShell. CSAK OLVAS: a kapuk által írt bizonyíték-fájlt nézi (és a merge-nél a PR fejét a gh-tól), kaput nem futtat.
-//   git push          → zöld `pre-push-<fej>` vagy `pre-pr-<fej>` kell        (npm run gate:push)
-//   gh pr create      → zöld `pre-pr-<fej>` kell                              (npm run gate:pr)
-//   gh pr merge [n]   → zöld, ≤ 15 perces `merge-<n>-<PR-fej>` kell           (npm run gate:merge -- <n>)
-// Kivétel (vizsgálat nélkül enged): távoli ág törlése (`--delete`, `-d`, `:ág`), `--dry-run`, más repó (amelyben nincs
-// scripts/qa/gates/pre-push-gate.mjs), minden más parancs. A bizonyíték a közös git-könyvtárban van
-// (`<git-common-dir>/websuli-qa-evidence/`), ezért a fő checkout és minden munkafa ugyanazt látja.
-// Hibánál a kibocsátó ágon DENY (szigorúbb ág); minden más parancsnál nincs kimenet. Vészkijárat nincs.
+//
+// FAIL-CLOSED (orkesztrátori döntés a #489 bot-leletei után): a shell-nyelvtan végtelen, ezért nem a megkerüléseket foltozzuk
+// egyenként, hanem a kapu-köteles műveletet (git push, gh pr create, gh pr merge) CSAK önálló, egyszerű, ismert alakú parancsként
+// engedjük át. Láncolás (&&, ||, ;, |, &, újsor), alshell / parancshelyettesítés, átirányítás, könyvtárváltás, környezet-burkoló
+// (cd, pushd, env, git -C, --git-dir, GIT_*=, &, Start-Process, cmd /c …) vagy ismeretlen kapcsoló mellett → DENY.
+//   git push [-u] [<remote> [<ág> | HEAD | HEAD:<aktuális ág>]]  → zöld `pre-push-<kimenő commit>` / `pre-pr-<…>`   (npm run gate:push)
+//   git push <remote> --delete <ág>                               → kapu nélkül (távoli ág törlése)
+//   gh pr create [ismert kapcsolók]                               → zöld `pre-pr-<fej>`                            (npm run gate:pr)
+//   gh pr merge [<szám>|<URL>|<ág>] [ismert kapcsolók]            → zöld, ≤ 15 perces `merge-<n>-<PR-fej>`        (npm run gate:merge -- <n>)
+// A bizonyíték a közös git-könyvtárban van (`<git-common-dir>/websuli-qa-evidence/`): a fő checkout és minden munkafa ugyanazt látja.
+// A hook NEM biztonsági határ a szándékos megkerülés ellen (pl. a hook kikapcsolása) — a figyelmetlen hibát fogja meg; a megkerülés
+// tilos, és az orkesztrátor a pre-merge-gate-et mindenképp lefuttatja.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
+
+const SIMPLE_HINT = 'A push / PR / merge külön, egyszerű parancsként fusson a munkafa gyökeréből (láncolás, cd / env / -C, alshell, átirányítás nélkül; PR-leírás: --body-file).';
 
 function deny(reason) {
   process.stdout.write(JSON.stringify({
@@ -24,197 +31,148 @@ function deny(reason) {
   process.exit(0);
 }
 
-/** Idézőjel-tudatos bontás parancs-szakaszokra (`&&`, `||`, `;`, `|`, újsor), majd szavakra. */
-export function splitSegments(cmd) {
-  const segs = [];
-  let cur = [];
+/** Van-e a parancs szövegében BÁRHOL kapu-köteles művelet (szándékosan tág: kétség esetén a szigorú ág fut). */
+// Önálló szó: nem része útvonalnak / névnek (`.git/`, `pre-push-gate`, `gate:push` nem számít).
+const W = (x) => `(?<![\\w./:-])${x}(?![\\w./:-])`;
+const GIT_PUSH = new RegExp(`${W('git(?:\\.exe)?')}[\\s\\S]*${W('push')}`, 'i');
+// Útvonallal megadott git (`C:/…/git.exe' push`, `/usr/bin/git push`): a név után idézőjel és / vagy szóköz jön.
+const GIT_PATH_PUSH = new RegExp(`git(?:\\.exe)?['"]?\\s[\\s\\S]*${W('push')}`, 'i');
+const GH_PR = new RegExp(`${W('gh(?:\\.exe)?')}[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
+export function detectGated(raw) {
+  const s = String(raw ?? '');
+  return GIT_PUSH.test(s) || GIT_PATH_PUSH.test(s) || GH_PR.test(s) || /\/pulls\/\d+\/merge\b/i.test(s);
+}
+
+/**
+ * Egyszerű parancs szavakra bontása. `{ ok: false, reason }`, ha a parancs nem egyetlen egyszerű parancs: idézőjelen kívül
+ * láncoló / átirányító / csoportosító jel (`& | ; < > ( ) { }`, újsor), bárhol parancshelyettesítés (`$(`, backtick), vagy lezáratlan
+ * idézőjel. Az egyszeres idézőjelen belüli szöveg szó szerinti.
+ */
+export function tokenizeSimple(raw) {
+  const s = String(raw ?? '').trim();
+  const words = [];
   let word = '';
-  let hasWord = false;
+  let has = false;
   let q = null;
-  const pushWord = () => { if (hasWord) cur.push(word); word = ''; hasWord = false; };
-  const pushSeg = () => { pushWord(); if (cur.length) segs.push(cur); cur = []; };
-  const s = String(cmd ?? '');
   for (let i = 0; i < s.length; i += 1) {
     const c = s[i];
-    if (q) {
-      if (c === q) q = null;
-      else if (c === '\\' && q === '"' && (s[i + 1] === '"' || s[i + 1] === '\\')) { word += s[i + 1]; i += 1; }
+    if (q === "'") { if (c === "'") q = null; else word += c; continue; }
+    if (c === '`' || (c === '$' && s[i + 1] === '(')) return { ok: false, reason: 'parancshelyettesítés (`$(…)` / backtick)' };
+    if (q === '"') {
+      if (c === '"') q = null;
+      else if (c === '\\' && (s[i + 1] === '"' || s[i + 1] === '\\')) { word += s[i + 1]; i += 1; }
       else word += c;
       continue;
     }
-    if (c === '"' || c === "'") { q = c; hasWord = true; continue; }
-    if (c === '&' && s[i + 1] === '&') { pushSeg(); i += 1; continue; }
-    if (c === '|' && s[i + 1] === '|') { pushSeg(); i += 1; continue; }
-    if (c === ';' || c === '|' || c === '\n' || c === '\r') { pushSeg(); continue; }
-    if (c === ' ' || c === '\t') { pushWord(); continue; }
+    if (c === '"' || c === "'") { q = c; has = true; continue; }
+    if ('&|;<>(){}\n\r'.includes(c)) return { ok: false, reason: `láncolás / átirányítás / alshell (\`${c === '\n' || c === '\r' ? 'újsor' : c}\`)` };
+    if (c === ' ' || c === '\t') { if (has) words.push(word); word = ''; has = false; continue; }
     word += c;
-    hasWord = true;
+    has = true;
   }
-  pushSeg();
-  return segs;
+  if (q) return { ok: false, reason: 'lezáratlan idézőjel' };
+  if (has) words.push(word);
+  return { ok: true, words };
 }
 
-/** Git Bash-útvonal (`/d/repo/x`) → Windows-alak; egyébként változatlan. */
-export function normPath(p) {
-  if (process.platform === 'win32') {
-    const m = /^\/([a-zA-Z])(\/.*)?$/.exec(p);
-    if (m) return `${m[1].toUpperCase()}:${m[2] ?? '/'}`;
+const NAME = /^[A-Za-z0-9._-]+$/;
+const BRANCH = /^[A-Za-z0-9._/-]+$/;
+
+/** `git push` engedett alakjai (fail-closed whitelist). */
+function planPush(args) {
+  let a = args.slice();
+  // Távoli ág törlése: CSAK a `--delete` alak, pontosan egy ággal.
+  if (a.includes('--delete')) {
+    const rest = a.filter((x) => x !== '--delete');
+    if (rest.length === 2 && NAME.test(rest[0]) && BRANCH.test(rest[1]) && !rest.some((x) => x.startsWith('-'))) return { kind: 'push-delete' };
+    return { kind: 'deny', reason: 'A távoli ág törlése: `git push <remote> --delete <ág>` (egy ág, más kapcsoló nélkül).' };
   }
-  return p;
+  let upstream = false;
+  if (a[0] === '-u' || a[0] === '--set-upstream') { upstream = true; a = a.slice(1); }
+  const bad = a.find((x) => x.startsWith('-'));
+  if (bad) {
+    const why = /^--force|^-f$|^\+/.test(bad) ? ' (a force-push a repó szabálya szerint tilos)' : '';
+    return { kind: 'deny', reason: `A \`git push\` ismeretlen / nem engedett kapcsolóval (\`${bad}\`)${why}. Engedett: git push [-u] [<remote> [<ág> | HEAD]].` };
+  }
+  if (a.length > 2) return { kind: 'deny', reason: 'A `git push` egyszerre csak egy ágat tölthet fel (több refspec nem engedett).' };
+  const [remote, spec] = a;
+  if (remote !== undefined && !NAME.test(remote)) return { kind: 'deny', reason: `Nem egyértelmű remote: \`${remote}\`.` };
+  if (spec === undefined) return { kind: 'push', remote: remote ?? null, ref: null, upstream };
+  if (spec.startsWith(':')) return { kind: 'deny', reason: 'A `:<ág>` / `:` refspec nem engedett — távoli ág törlésére használd a `git push <remote> --delete <ág>` alakot.' };
+  if (spec.startsWith('+')) return { kind: 'deny', reason: 'A `+` (force) refspec nem engedett — a force-push a repó szabálya szerint tilos.' };
+  if (spec === 'HEAD') return { kind: 'push', remote, ref: null, upstream };
+  const m = /^HEAD:(?:refs\/heads\/)?([A-Za-z0-9._/-]+)$/.exec(spec);
+  if (m) return { kind: 'push', remote, ref: null, sameAsCurrent: m[1], upstream };
+  if (BRANCH.test(spec) && !spec.includes(':')) return { kind: 'push', remote, ref: spec, upstream };
+  return { kind: 'deny', reason: `Nem engedett refspec: \`${spec}\` (engedett: <ág>, HEAD, HEAD:<aktuális ág>).` };
 }
 
-const exe = (w) => w.replace(/\\/g, '/').split('/').pop().toLowerCase().replace(/\.(?:exe|cmd)$/, '');
+const CREATE_VALUE = new Set(['--title', '-t', '--body', '-b', '--body-file', '-F', '--base', '-B', '--head', '-H', '--label', '-l', '--assignee', '-a', '--reviewer', '-r', '--milestone', '-m', '--project', '-p', '--repo', '-R', '--template', '-T']);
+const CREATE_FLAG = new Set(['--draft', '-d', '--fill', '-f', '--fill-first', '--fill-verbose', '--web', '-w', '--no-maintainer-edit', '--dry-run']);
+const MERGE_VALUE = new Set(['--subject', '-t', '--body', '-b', '--body-file', '-F', '--match-head-commit', '--author-email', '-A', '--repo', '-R']);
+const MERGE_FLAG = new Set(['--squash', '-s', '--merge', '-m', '--rebase', '-r', '--delete-branch', '-d', '--admin']);
+
+function parseFlags(args, valueSet, flagSet) {
+  const pos = [];
+  const vals = {};
+  for (let i = 0; i < args.length; i += 1) {
+    const x = args[i];
+    const eq = /^(--[a-z-]+)=(.*)$/.exec(x);
+    if (eq && valueSet.has(eq[1])) { vals[eq[1]] = eq[2]; continue; }
+    if (valueSet.has(x)) { if (i + 1 >= args.length) return { error: `a \`${x}\` kapcsolónak nincs értéke` }; vals[x] = args[i + 1]; i += 1; continue; }
+    if (flagSet.has(x)) { vals[x] = true; continue; }
+    if (x.startsWith('-')) return { error: `ismeretlen / nem engedett kapcsoló: \`${x}\`` };
+    pos.push(x);
+  }
+  return { pos, vals };
+}
 
 /**
- * A kibocsátó műveletek kigyűjtése: `[{ kind: 'push'|'pr-create'|'pr-merge', dir, ref?, pr?, repoFlag?, skip? }]`.
+ * Egy parancs terve: `{ kind: 'none' }` (nem kapu-köteles), `{ kind: 'deny', reason }`, `push`, `push-delete`, `pr-create`, `pr-merge`.
  */
-const WRAPPERS = new Set(['env', 'sudo', 'command', 'nohup', 'time', 'exec', 'call', 'xargs', 'start-process']);
-const EVAL_WRAPPERS = new Set(['iex', 'invoke-expression', 'eval']);
-const KEYWORDS = new Set(['then', 'do', 'else', 'elif', 'if', 'while', 'until', '!']);
-// Burkolók értéket váró kapcsolói (`sudo -u x`, `env -u X`): az utánuk álló szó nem parancs (visszaellenőrzés J4).
-const WRAPPER_VALUE_OPTS = new Set(['-u', '-g', '--user', '--group', '--unset', '-C', '--chdir']);
-const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'pwsh', 'powershell', 'cmd']);
-// `git push` értékes kapcsolói: az utánuk álló szó nem remote / ref (review J9). A `--signed` és a `--force-with-lease`
-// érték nélkül is érvényes — azok csak `=`-es alakban kapnak értéket, ezért NINCSENEK itt (visszaellenőrzés V2).
-const PUSH_VALUE_OPTS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
-// Rövid shell-kapcsoló, amely parancsszöveget vár: -c, -lc, -ec, -xc … (a hosszú PowerShell-kapcsolók külön).
-const SHELL_CMD_FLAG = /^(?:-[a-z]{0,3}c|-command|\/c)$/i;
-// PowerShell -EncodedCommand és rövidítései (-e, -ec, -en, -enc, … ) — vizsgálhatatlan, DENY (visszaellenőrzés W4).
-const ENCODED_FLAG = /^-e(?:n(?:c(?:o(?:d(?:e(?:d(?:c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?)?)?)?)?)?)?|c)?$/i;
-
-/** Átirányítások és a magában álló `&` eltávolítása (`2>&1`, `>log`, `> log`, `2>/dev/null`, záró `&`) — visszaellenőrzés V1. */
-export function dropRedirections(words) {
-  const out = [];
-  for (let i = 0; i < words.length; i += 1) {
-    const x = words[i];
-    if (/^\d*(?:>>?|<)$/.test(x) || /^&>>?$/.test(x)) { i += 1; continue; }
-    if (/^\d*(?:>>?|<)\S/.test(x) || /^&>/.test(x)) continue;
-    if (x === '&' && i > 0) continue;
-    out.push(x);
+export function planCommand(raw) {
+  if (!detectGated(raw)) return { kind: 'none' };
+  const t = tokenizeSimple(raw);
+  if (!t.ok) return { kind: 'deny', reason: `${SIMPLE_HINT} (Talált: ${t.reason}.)` };
+  const w = t.words;
+  const head = (w[0] ?? '').toLowerCase();
+  if (head === 'git' || head === 'git.exe') {
+    if (!w.includes('push')) return { kind: 'none' }; // pl. git commit -m "… push …", git log — nem kibocsátás
+    if (w[1] !== 'push') return { kind: 'deny', reason: `${SIMPLE_HINT} (A \`git\` és a \`push\` közé nem kerülhet kapcsoló: -C, -c, --git-dir, --work-tree.)` };
+    return planPush(w.slice(2));
   }
-  return out;
+  if (head === 'gh' || head === 'gh.exe') {
+    if (w[1] === 'api' && !w.some((x) => /\/pulls\/\d+\/merge\b/i.test(x))) return { kind: 'none' };
+    if (w[1] !== 'api' && !(w.includes('pr') && (w.includes('create') || w.includes('merge')))) return { kind: 'none' };
+    if (w[1] === 'api') return { kind: 'deny', reason: 'A PR-t `gh api`-n át összevonni nem engedett — használd a `gh pr merge <n>` parancsot a merge-kapu után.' };
+    if (w[1] !== 'pr') return { kind: 'deny', reason: `${SIMPLE_HINT} (A \`gh\` és a \`pr\` közé nem kerülhet kapcsoló.)` };
+    if (w[2] === 'create') {
+      const p = parseFlags(w.slice(3), CREATE_VALUE, CREATE_FLAG);
+      if (p.error || p.pos.length) return { kind: 'deny', reason: `\`gh pr create\`: ${p.error ?? 'váratlan pozicionális argumentum'}.` };
+      const repoFlag = p.vals['--repo'] ?? p.vals['-R'] ?? null;
+      const h = p.vals['--head'] ?? p.vals['-H'] ?? null;
+      if (h && !BRANCH.test(h.split(':').pop())) return { kind: 'deny', reason: `\`gh pr create\`: nem egyértelmű --head: \`${h}\`.` };
+      return { kind: 'pr-create', ref: h ? h.split(':').pop() : null, repoFlag };
+    }
+    if (w[2] === 'merge') {
+      const rest = w.slice(3);
+      if (rest.includes('--auto')) return { kind: 'deny', reason: 'A `gh pr merge --auto` később, futásőr és `/api/rt/status` nélkül vonna össze — a merge-et közvetlenül a `npm run gate:merge -- <PR>` után, kézzel indítsd.' };
+      if (rest.includes('--disable-auto')) return { kind: 'none' };
+      const p = parseFlags(rest, MERGE_VALUE, MERGE_FLAG);
+      if (p.error) return { kind: 'deny', reason: `\`gh pr merge\`: ${p.error}.` };
+      if (p.pos.length > 1) return { kind: 'deny', reason: `\`gh pr merge\`: nem egyértelmű cél (${p.pos.length} pozicionális argumentum).` };
+      const target = p.pos[0] ?? null;
+      if (target && !(/^#?\d+$/.test(target) || /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/.test(target) || BRANCH.test(target))) {
+        return { kind: 'deny', reason: `\`gh pr merge\`: nem egyértelmű cél: \`${target}\` (szám, PR-URL vagy ág).` };
+      }
+      return { kind: 'pr-merge', target: target ? target.replace(/^#/, '') : null, repoFlag: p.vals['--repo'] ?? p.vals['-R'] ?? null };
+    }
+    return { kind: 'deny', reason: SIMPLE_HINT };
+  }
+  return { kind: 'deny', reason: `${SIMPLE_HINT} (A parancs nem közvetlenül \`git push\` / \`gh pr …\`: burkoló, változó, alias vagy más eszköz.)` };
 }
 
-/**
- * A kibocsátó műveletek kigyűjtése: `[{ kind: 'push'|'pr-create'|'pr-merge'|'deny', dir, refs?, pr?, repoFlag?, skip?, reason? }]`.
- * Burkolók (`env`, `sudo`, `&`, `(`…), beágyazott shell (`bash -c "…"`, `powershell -c "…"`) és `gh api …/merge` is (review J4).
- */
-export function findActions(cmd, cwd, depth = 0, tool = 'Bash') {
-  const actions = [];
-  let dir = cwd;
-  // Sorfolytatás egy parancs (visszaellenőrzés J3) — eszközönként: Bash-ben `\` + újsor, PowerShellben backtick + újsor. PowerShellben
-  // a sor végi `\` útvonal része (`cd D:\repo\x\`), NEM folytatás (visszaellenőrzés W1).
-  const raw = String(cmd ?? '');
-  const joined = tool === 'PowerShell' ? raw.replace(/`\r?\n/g, ' ') : tool === 'Bash' ? raw.replace(/\\\r?\n/g, ' ') : raw;
-  for (const seg of splitSegments(joined)) {
-    let w = dropRedirections(seg.map((x, i) => (i === 0 ? x.replace(/^[({]+/, '') : x).replace(/[)}]+$/, '')).filter((x) => x !== ''));
-    let nested = null;
-    for (;;) {
-      while (w.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]) || /^\$env:/i.test(w[0]) || KEYWORDS.has(w[0]))) w.shift();
-      if (w.length && EVAL_WRAPPERS.has(exe(w[0]))) { nested = w.slice(1).filter((x) => !x.startsWith('-')).join(' '); w = []; break; }
-      if (w.length && (w[0] === '&' || w[0] === '.' || WRAPPERS.has(exe(w[0])))) {
-        w.shift();
-        // Előbb a burkoló értékes kapcsolója (`env -C <dir>`), csak utána a shell-kapcsoló minta (visszaellenőrzés X1).
-        while (w.length && w[0].startsWith('-') && (WRAPPER_VALUE_OPTS.has(w[0]) || !SHELL_CMD_FLAG.test(w[0]))) {
-          const opt = w.shift();
-          if (WRAPPER_VALUE_OPTS.has(opt)) w.shift();
-        }
-        continue;
-      }
-      break;
-    }
-    if (nested && depth < 3) { actions.push(...findActions(nested, dir, depth + 1, tool)); continue; }
-    if (!w.length) continue;
-    const head = exe(w[0]);
-    if (SHELLS.has(head) && depth < 3) {
-      const ps = head === 'pwsh' || head === 'powershell';
-      if (ps && w.some((x, i) => i > 0 && ENCODED_FLAG.test(x))) {
-        actions.push({ kind: 'deny', reason: 'Kódolt PowerShell-parancs (-EncodedCommand / -e / -ec / -enc) nem vizsgálható — írd ki a parancsot olvashatóan.' });
-        continue;
-      }
-      const ci = w.findIndex((x, i) => i > 0 && SHELL_CMD_FLAG.test(x));
-      if (ci > 0 && w[ci + 1]) actions.push(...findActions(w.slice(ci + 1).join(' '), dir, depth + 1, ps ? 'PowerShell' : head === 'cmd' ? 'Cmd' : 'Bash'));
-      continue;
-    }
-    if (['cd', 'set-location', 'pushd', 'sl'].includes(head)) {
-      const target = w.slice(1).find((a) => !a.startsWith('-'));
-      if (target) dir = isAbsolute(normPath(target)) ? normPath(target) : resolve(dir, normPath(target));
-      continue;
-    }
-    if (head === 'git') {
-      let d = dir;
-      let i = 1;
-      let gitDir = false;
-      while (i < w.length && w[i].startsWith('-')) {
-        if (w[i] === '-C' && w[i + 1]) { d = isAbsolute(normPath(w[i + 1])) ? normPath(w[i + 1]) : resolve(d, normPath(w[i + 1])); i += 2; continue; }
-        if (w[i] === '--git-dir' || w[i] === '--work-tree') { gitDir = true; i += 2; continue; }
-        if (/^--(?:git-dir|work-tree)=/.test(w[i])) { gitDir = true; i += 1; continue; }
-        if (w[i] === '-c') { i += 2; continue; }
-        i += 1;
-      }
-      if (w[i] !== 'push') continue;
-      const rest = w.slice(i + 1);
-      const flags = rest.filter((a) => a.startsWith('-'));
-      const pos = [];
-      for (let k = 0; k < rest.length; k += 1) {
-        if (PUSH_VALUE_OPTS.has(rest[k])) { k += 1; continue; }
-        if (!rest[k].startsWith('-')) pos.push(rest[k]);
-      }
-      const refspecs = pos.slice(1);
-      const dry = flags.some((a) => a === '--dry-run' || a === '-n');
-      const delFlag = flags.some((a) => a === '--delete' || a === '-d');
-      // Csak akkor vizsgálat nélküli, ha MINDEN refspec törlés (review J2).
-      const allDeletes = refspecs.length > 0 && refspecs.every((r) => r.startsWith(':') && r.length > 1);
-      if (gitDir && !dry && !delFlag && !allDeletes) { actions.push({ kind: 'deny', reason: 'A `git --git-dir / --work-tree … push` alak nem vizsgálható — használd a `git -C <munkafa> push` alakot.' }); continue; }
-      if (flags.some((a) => a === '--all' || a === '--mirror' || a === '--branches')) {
-        if (!dry) actions.push({ kind: 'deny', reason: 'A `git push --all / --mirror` több ágat tölt fel egyszerre — ágonként pusholj, mindegyikre zöld push-kapuval (review J3).' });
-        continue;
-      }
-      const refs = refspecs.filter((r) => !(r.startsWith(':') && r.length > 1)).map((r) => r.replace(/^\+/, '').split(':')[0]).map((r) => (r === 'HEAD' || r === '' ? null : r));
-      actions.push({ kind: 'push', dir: d, refs: refs.length ? refs : [null], skip: dry || delFlag || allDeletes });
-      continue;
-    }
-    if (head === 'gh') {
-      const a = w.slice(1);
-      let repoFlag = null;
-      const plain = [];
-      for (let k = 0; k < a.length; k += 1) {
-        if (a[k] === '-R' || a[k] === '--repo') { repoFlag = a[k + 1]; k += 1; continue; }
-        if (a[k].startsWith('--repo=')) { repoFlag = a[k].slice(7); continue; }
-        plain.push(a[k]);
-      }
-      if (plain[0] === 'api') {
-        const m = plain.map((x) => /repos\/([^/\s]+\/[^/\s]+)\/pulls\/(\d+)\/merge\b/.exec(x)).find(Boolean);
-        // Csak író hívás (PUT / POST, vagy mezők → implicit POST) merge-el; az olvasó GET nem (visszaellenőrzés V3).
-        const mi = plain.findIndex((x) => x === '-X' || x === '--method');
-        // Összevont alak is: `-XPUT`, `--method=PUT` (visszaellenőrzés W3).
-        const glued = plain.map((x) => /^-X(\w+)$/.exec(x)?.[1] ?? /^--method=(\w+)$/i.exec(x)?.[1]).find(Boolean);
-        const method = mi >= 0 ? String(plain[mi + 1] ?? '').toUpperCase() : glued?.toUpperCase();
-        const writes = ['PUT', 'POST', 'PATCH'].includes(method) || (!method && plain.some((x) => ['-f', '-F', '--field', '--raw-field', '--input'].includes(x)));
-        if (m && writes) actions.push({ kind: 'pr-merge', dir, pr: m[2], target: m[2], repoFlag: m[1] });
-        continue;
-      }
-      if (plain[0] !== 'pr') continue;
-      if (plain[1] === 'create') {
-        const hi = plain.indexOf('--head');
-        const hv = hi >= 0 ? plain[hi + 1] : (plain.find((x) => x.startsWith('--head=')) ?? '').slice(7) || null;
-        actions.push({ kind: 'pr-create', dir, refs: [hv ? hv.split(':').pop() : null], repoFlag });
-      } else if (plain[1] === 'merge') {
-        if (plain.includes('--disable-auto')) continue;
-        if (plain.includes('--auto')) {
-          actions.push({ kind: 'deny', reason: 'A `gh pr merge --auto` később, futásőr és `/api/rt/status` nélkül vonna össze — a merge-et közvetlenül a `npm run gate:merge -- <PR>` után, kézzel indítsd (review J10; docs/telepites-elotti-or.md 1. pont).' });
-          continue;
-        }
-        const target = plain.slice(2).find((x) => !x.startsWith('-'));
-        const num = target ? (/^#?(\d+)$/.exec(target)?.[1] ?? /\/pull\/(\d+)/.exec(target)?.[1] ?? null) : null;
-        actions.push({ kind: 'pr-merge', dir, pr: num, target: target ?? null, repoFlag });
-      }
-    }
-  }
-  return actions;
-}
-
-// Időkorlátok: a hook teljes ideje 15 s (settings.json) — git 3 s, gh 8 s (review J14).
+// Időkorlátok: a hook teljes ideje 15 s (settings.json) — git 3 s, gh 8 s.
 function run(file, args, cwd, timeout = 3000) {
   return execFileSync(file, args, { cwd, encoding: 'utf8', timeout, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 }
@@ -237,41 +195,54 @@ function readEv(evDir, name) {
   try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return { ok: false, broken: true }; }
 }
 
-function resolveSha(top, ref) {
-  return run('git', ['rev-parse', '--verify', `${ref ?? 'HEAD'}^{commit}`], top);
+function currentBranch(top) {
+  try { return run('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], top); } catch { return null; }
 }
 
-/** Egy művelet ellenőrzése; DENY-indokot ad vissza, vagy null-t (enged). */
-export function checkAction(a, { now = Date.now(), ghView } = {}) {
-  if (a.kind === 'deny') return a.reason;
-  if (a.kind === 'push' && a.skip) return null;
-  const info = repoInfo(a.dir);
+/** Egy terv ellenőrzése a bizonyíték alapján; DENY-indokot ad vissza, vagy null-t (enged). */
+export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '' } = {}) {
+  if (plan.kind === 'none' || plan.kind === 'push-delete') return null;
+  const info = repoInfo(cwd);
   if (!info) {
-    // Review J1: WEBSULI-n kívüli mappából, `-R …/WEBSULI`-vel kiadott gh-parancs nem csúszhat át.
-    if (a.repoFlag && /(?:^|\/)WEBSULI$/i.test(a.repoFlag)) return 'A WEBSULI-ra szóló gh-parancsot a WEBSULI munkafájából add ki (ott van a kapu-bizonyíték), ne más mappából -R-rel.';
-    return null;
+    // Más repó: nem a mi dolgunk — kivéve, ha a parancs a WEBSULI-ra mutat (pl. -R …/WEBSULI, cd …/WEBSULI): akkor fail-closed.
+    return /websuli/i.test(raw) ? 'A WEBSULI-ra szóló push / PR / merge parancsot a WEBSULI munkafájából add ki, egyszerű parancsként.' : null;
   }
-  if (a.kind === 'push') {
-    for (const ref of a.refs ?? [null]) {
-      let sha;
-      try { sha = resolveSha(info.top, ref); } catch { return `A pusholt ref (${ref}) nem oldható fel helyi commitra — a push nem vizsgálható; pusholj helyi ágat.`; }
-      const ev = readEv(info.evDir, `pre-push-${sha}`);
-      const pr = readEv(info.evDir, `pre-pr-${sha}`);
-      if (ev?.ok === true || pr?.ok === true) continue;
-      const why = ev ? `az utolsó futás erre a fejre BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték erre a fejre';
-      return `A push előtti kapu nem zöld a ${sha.slice(0, 12)} fejre${ref ? ` (${ref})` : ''} (${why}). Futtasd a munkafa gyökeréből: npm run gate:push — és ha zöld, pusholj újra.`;
+  if (plan.kind === 'deny') return plan.reason;
+  if (plan.kind === 'push') {
+    let sha;
+    let label;
+    if (plan.ref) {
+      try { sha = run('git', ['rev-parse', '--verify', `refs/heads/${plan.ref}^{commit}`], info.top); } catch { return `A pusholt ág (\`${plan.ref}\`) nem helyi ág — csak helyi ágat pusholj, a saját kimenő commitjára szóló bizonyítékkal.`; }
+      label = plan.ref;
+    } else {
+      const cur = currentBranch(info.top);
+      if (!cur) return 'Leválasztott HEAD-ről pusholni nem engedett — pusholj megnevezett helyi ágat.';
+      if (plan.sameAsCurrent && plan.sameAsCurrent !== cur) return `A \`HEAD:${plan.sameAsCurrent}\` más ágra töltene fel, mint az aktuális (\`${cur}\`) — nem engedett.`;
+      sha = run('git', ['rev-parse', '--verify', 'HEAD^{commit}'], info.top);
+      label = cur;
     }
-    return null;
+    const ev = readEv(info.evDir, `pre-push-${sha}`);
+    const pr = readEv(info.evDir, `pre-pr-${sha}`);
+    if (ev?.ok === true || pr?.ok === true) return null;
+    const why = ev ? `az utolsó futás erre a commitra BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték erre a commitra';
+    return `A push előtti kapu nem zöld a kimenő ${sha.slice(0, 12)} commitra (${label}; ${why}). Futtasd a munkafa gyökeréből: npm run gate:push — és ha zöld, pusholj újra.`;
   }
-  if (a.kind === 'pr-create') {
-    const sha = resolveSha(info.top, a.refs?.[0] ?? null);
+  if (plan.kind === 'pr-create') {
+    if (plan.repoFlag && !/(?:^|\/)WEBSULI$/i.test(plan.repoFlag)) return null;
+    let sha;
+    if (plan.ref) {
+      try { sha = run('git', ['rev-parse', '--verify', `refs/heads/${plan.ref}^{commit}`], info.top); } catch { return `A --head ág (\`${plan.ref}\`) nem helyi ág — a PR-kapu bizonyítéka nem ellenőrizhető.`; }
+    } else {
+      if (!currentBranch(info.top)) return 'Leválasztott HEAD-ről PR-t nyitni nem engedett.';
+      sha = run('git', ['rev-parse', '--verify', 'HEAD^{commit}'], info.top);
+    }
     const ev = readEv(info.evDir, `pre-pr-${sha}`);
     if (ev?.ok === true) return null;
     const why = ev ? `az utolsó futás BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték';
     return `A PR előtti kapu nem zöld a ${sha.slice(0, 12)} fejre (${why}). Előbb a független ellenőr (websuli-fejlesztesi-ellenor skill), aztán: npm run gate:pr -- --body-file <PR-leírás.md>.`;
   }
-  if (a.kind === 'pr-merge') {
-    const view = (ghView ?? defaultGhView)(a, info.top);
+  if (plan.kind === 'pr-merge') {
+    const view = (ghView ?? defaultGhView)(plan, info.top);
     if (!view?.number || !view?.headRefOid) return 'A PR száma / feje nem olvasható a gh-tól — merge-bizonyíték nélkül nem engedhető. Futtasd: npm run gate:merge -- <PR-szám>.';
     const ev = readEv(info.evDir, `merge-${view.number}-${view.headRefOid}`);
     if (!ev || ev.ok !== true) {
@@ -281,28 +252,28 @@ export function checkAction(a, { now = Date.now(), ghView } = {}) {
     if (!(age <= info.maxMin)) return `A #${view.number} merge-bizonyítéka ${Number.isFinite(age) ? Math.round(age) : '?'} perces (legfeljebb ${info.maxMin} perc; a futásőr „közvetlenül előtte” szabálya). Futtasd újra: npm run gate:merge -- ${view.number}.`;
     return null;
   }
-  return null;
+  return 'Ismeretlen kibocsátó művelet — nem engedhető.';
 }
 
-function defaultGhView(a, top) {
-  const args = ['pr', 'view', ...(a.target ? [a.target] : []), ...(a.repoFlag ? ['-R', a.repoFlag] : []), '--json', 'number,headRefOid'];
+function defaultGhView(plan, top) {
+  const args = ['pr', 'view', ...(plan.target ? [plan.target] : []), ...(plan.repoFlag ? ['-R', plan.repoFlag] : []), '--json', 'number,headRefOid'];
   try { return JSON.parse(run('gh', args, top, 8000)); } catch { return null; }
 }
 
 function main() {
-  let actions = [];
+  let raw = '';
+  let cwd = process.cwd();
   try {
     const payload = JSON.parse(readFileSync(0, 'utf8') || '{}');
     if (payload.tool_name !== 'Bash' && payload.tool_name !== 'PowerShell') process.exit(0);
-    actions = findActions(String(payload.tool_input?.command ?? ''), payload.cwd || process.cwd(), 0, payload.tool_name);
+    raw = String(payload.tool_input?.command ?? '');
+    cwd = payload.cwd || cwd;
   } catch {
     process.exit(0); // értelmezhetetlen bemenet: nem kibocsátó parancsként kezeljük
   }
-  for (const a of actions) {
-    let reason;
-    try { reason = checkAction(a); } catch (e) { reason = `A minőségkapu-ellenőrzés hibára futott (${String(e?.message ?? e).split('\n')[0]}) — a kibocsátás nem engedhető.`; }
-    if (reason) deny(reason);
-  }
+  let reason;
+  try { reason = checkAction(planCommand(raw), cwd, { raw }); } catch (e) { reason = `A minőségkapu-ellenőrzés hibára futott (${String(e?.message ?? e).split('\n')[0]}) — a kibocsátás nem engedhető.`; }
+  if (reason) deny(reason);
   process.exit(0);
 }
 

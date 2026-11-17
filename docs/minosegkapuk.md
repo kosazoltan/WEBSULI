@@ -58,28 +58,42 @@ viszi bukásra.
 - A kapuk a fej-commitra írnak bizonyítékot: `<git-common-dir>/websuli-qa-evidence/{pre-push,pre-pr}-<fej>.json`,
   `merge-<PR>-<fej>.json`, `review-<fej>.json`. A közös git-könyvtárat a fő checkout és minden munkafa ugyanúgy látja (a fő
   checkoutban `.git/`, munkafában a `git rev-parse --git-common-dir`), ezért a munkafában futtatott kapu bizonyítékát a fő checkoutból
-  kiadott parancs (`git -C <munkafa> push`, `cd <munkafa> && git push`) hookja is megtalálja. Nem commitolható.
-- `scripts/qa/hooks/check-quality-gates.mjs` (PreToolUse, Bash + PowerShell) — CSAK OLVAS:
-  - `git push` → zöld `pre-push-<fej>` vagy `pre-pr-<fej>` kell (a megnevezett ág feje, különben a HEAD);
-  - `gh pr create` → zöld `pre-pr-<fej>`;
-  - `gh pr merge [n]` → a PR JELENLEGI fejére szóló, legfeljebb 15 perces zöld `merge-<n>-<fej>` (a fejet a `gh`-tól kéri);
-  - vizsgálat nélkül enged: távoli ág törlése (`--delete`, `-d`, vagy CSAK `:ág` refspec-ek), `--dry-run`, idézőjelben / `echo`-ban
-    álló szöveg, más repó (amelyben nincs `scripts/qa/gates/pre-push-gate.mjs` — ez a még kapu nélküli, régebbi ágakat is jelenti);
-  - felismeri (egységteszttel mérve): a burkolókat (`env [-u X]`, `sudo [-u x]`, `command`, `time`, `nohup`, PowerShell `&`,
-    `( … )`, `{ …; }`), a vezérlő kulcsszavakat (`if … then`, `for … do`), a beágyazott shellt (`bash -c / -lc / -ec "…"`,
-    `powershell [-NoProfile …] -Command / -C "…"`, `cmd /C …`), az `iex "…"` / `eval` alakot, a sorfolytatást (a Bash eszköznél
-    `\` + újsor, a PowerShell eszköznél backtick + újsor; PowerShellben a sor végi `\` útvonal, nem folytatás), az
-    átirányításokat (`2>&1`, `> log`, záró `&`), több refspec-et (mindegyik fejére kell bizonyíték), az értékes kapcsolókat (`-o`,
-    `--push-option`, `--repo`, `--receive-pack`, `--exec`; a `--signed` / `--force-with-lease` csak `=`-es alakban kap értéket) és
-    az író `gh api …/pulls/<n>/merge` hívást (`-X PUT`, `-XPUT`, `--method=PUT`, mezők; az olvasó GET-et nem);
-  - DENY vizsgálat nélkül: `git push --all / --mirror` (ágonként pusholj), `git --git-dir … push` (használd a `-C`-t),
-    `gh pr merge --auto` (az összevonás később, futásőr nélkül történne), kódolt PowerShell-parancs (`-EncodedCommand`, `-e`, `-ec`,
-    `-enc` …), és WEBSULI-n kívüli mappából
-    `-R …/WEBSULI`-vel kiadott `gh pr` parancs;
-  - hibánál (pl. `gh` nem válaszol) a kibocsátó parancsra DENY. A meglévő `check-audit-ok`, `check-destructive`, `enforce-repo-rules`
-    hookok változatlanok és függetlenek.
+  kiadott (ott egyszerű parancsként futó) push hookja is megtalálja. Nem commitolható.
+- `scripts/qa/hooks/check-quality-gates.mjs` (PreToolUse, Bash + PowerShell) — CSAK OLVAS, **FAIL-CLOSED** (a #489 bot-leletei
+  után): a kapu-köteles műveletet CSAK önálló, egyszerű, ismert alakú parancsként engedi át. Ha ugyanabban a parancsban láncolás
+  (`&&`, `||`, `;`, `|`, `&`, újsor), alshell / parancshelyettesítés (`( )`, `{ }`, `$( )`, backtick), átirányítás
+  (`<`, `>`), könyvtárváltás vagy környezet-burkoló (`cd`, `pushd`, `Set-Location`, `env`, `sudo`, `GIT_*=`, `git -C`,
+  `-c`, `--git-dir`, `--work-tree`, PowerShell `&`, `Start-Process`, `cmd /c`, `bash -c`, `iex`) vagy ismeretlen kapcsoló van
+  → DENY: „a push / PR / merge külön, egyszerű parancsként fusson a munkafa gyökeréből”.
+  - **Engedett `git push` alakok:** `git push`, `git push <remote>`, `git push [-u] <remote> <helyi ág>`, `git push <remote> HEAD`,
+    `git push <remote> HEAD:<az aktuális ág>`. A bizonyíték a ténylegesen kimenő commitra kell (a megnevezett helyi ág feje, nem a
+    HEAD, ha eltér): zöld `pre-push-<commit>` vagy `pre-pr-<commit>`.
+  - **Távoli ág törlése kapu nélkül:** CSAK `git push <remote> --delete <ág>`; a `:<ág>` alak DENY („használd a --delete alakot”).
+  - **DENY:** `:` / `+` refspec, `--all`, `--mirror`, `--tags`, `--repo`, `--force*` / `-f` (a force-push a repó szabálya
+    szerint amúgy is tilos; a `check-destructive` a main/master force-pusht külön is tiltja), több refspec, `HEAD:<más ág>`,
+    leválasztott HEAD, bármely más kapcsoló.
+  - **`gh pr create`:** ismert kapcsolók (`--title`, `--body-file`, `--base`, `--head`, `--draft`, `--label` …); zöld
+    `pre-pr-<fej>` kell. A leírást `--body-file`-lal add (a backtick / `$( )` a parancsban DENY).
+  - **`gh pr merge [<szám>|<PR-URL>|<ág>]`:** az értékes kapcsolók (`--subject`, `--body`, `--body-file`, `--match-head-commit`,
+    `--author-email`, `-R/--repo`) értéke nem cél; több / nem egyértelmű cél → DENY; cél nélkül az aktuális ág PR-ját a hook
+    `gh pr view --json number,headRefOid`-dal oldja fel. A PR JELENLEGI fejére szóló, legfeljebb 15 perces zöld `merge-<n>-<fej>`
+    kell. `--auto` → DENY; `gh api …/pulls/<n>/merge` → DENY.
+  - Más repó (amelyben nincs `scripts/qa/gates/pre-push-gate.mjs`): nincs kimenet — kivéve, ha a parancs szövege a WEBSULI-ra mutat.
+  - Hibánál (pl. a `gh` nem válaszol) a kibocsátó parancsra DENY. A meglévő `check-audit-ok`, `check-destructive`,
+    `enforce-repo-rules` hookok változatlanok és függetlenek.
+- **A hook NEM biztonsági határ** a szándékos megkerülés ellen (pl. a hook kikapcsolása, szkriptfájlból indított push): a figyelmetlen
+  hibát fogja meg. A megkerülés tilos, és az orkesztrátornál a `pre-merge-gate` mindenképp lefut.
 - A hook csak a WEBSULI-ból indított Claude Code munkamenetekre hat (a `.claude/settings.json`-t a munkamenet induláskor olvassa —
   a merge után induló munkamenetektől érvényes). Más ügynököt (Codex, Cursor) az `AGENTS.md`, a skillek és a `.cursor/rules` köt.
+
+## Push-fegyelem (átmeneti kapu-szabály 5–8., 2026-11-17)
+
+1. Main-merge-et CSAK akkor pusholj, ha a PR ütközik a mainnel, vagy ha az orkesztrátor kéri — a csak-merge push is újraindítja az
+   ~1 órás kötelező E2E-t (helyben beolvaszthatod a push előtti kapuhoz).
+2. Lecserélt (régi) fej CI-bukására ne reagálj új pushsal: előbb a JELENLEGI fej CI-ja, és hogy a bukó teszt ismert ingadozó-e;
+   ingadozás-gyanúnál ne módosíts termékkódot találomra — jelentsd a teszt nevével és a hibaüzenettel.
+3. Push után EGY hosszú figyelő a CI végére; közbenső „még fut” jelentés nélkül.
+4. Zöld CI-jú fejre csak blokkoló lelet javításáért pusholj — és akkor is mindent egy pushban.
 
 ## Melyik mért hibát melyik kapu fogja meg
 
@@ -104,17 +118,13 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
 - **Az ítélet önbevallásos** (review J5): a `Független ellenőr ítélete: IGEN (fej: …)` sort bárki beírhatja a PR-leírásba; a kapu
   a sor meglétét ellenőrzi, nem a jelentés valódiságát. A helyi `review-<fej>.json` a jelentés hash-ét is rögzíti, és a
   `record-review` a jelentés saját `Ítélet:` sorával egyezteti — a merge-et végző orkesztrátor ezt a helyi bizonyítékot nézze.
-- **Nem felismert alakok:** változóba tett parancs (`$c = '…'; & $c`), shell-függvény, szkriptfájlból indított feltöltés, és
-  általában minden, amit a parancssor szövege nem mutat — ezekre a kapu-szabály (AGENTS.md) és a skillek vonatkoznak.
-- **Hamis DENY szkript-argumentumon:** `pwsh -File x.ps1 -e prod` — az `-e` kódolt-parancs rövidítésnek számít (szigorúbb irányba
-  téved; jegyre javasolt).
+- **Hamis DENY (fail-closed):** láncolt parancsban, idézett szövegként előforduló `git … push` / `gh pr merge` is DENY-t ad (pl.
+  `git add . && git commit -m "push fix"`) — a commit-üzenetet fájlból add (`git commit -F <fájl>`), a kibocsátást külön parancsban.
 - **A main-elmozdulás mérése** a CI-futás `base.sha`-ján alapul; ha az üres, a PR `baseRefOid`-jára esik vissza (UNVERIFIED, hogy
   minden esetben a CI alapja-e — jegyre javasolt).
-- **Idézett, `<` / `>` jellel kezdődő ref** (`'<ag>'`) átirányításnak számít (ilyen ágnév gyakorlatilag nincs).
 - **A merge-kapu a PR-kommentek szerzőjét nem szűri** (nyilvános repó: bárki írhat ítélet-sort) — a helyi `review-<fej>.json` a
   megbízható forrás.
-- **Git-alias** (`git config alias.p push`) és a here-doc / here-string törzsében sor elején álló `git push` szöveg: az alias nem
-  ismerhető fel olcsón (átcsúszik), a here-doc sor hamis DENY-t ad — commit-üzenetet fájlból (`git commit -F <fájl>`) adj.
+- **Git-alias** (`git config alias.p push`): `git p` nem ismerhető fel olcsón — a hook nem biztonsági határ (lásd fent).
 - A hook csak a Claude Code munkamenetekre hat; Codex / Cursor / ember a skillek és az `AGENTS.md` szerint futtatja a kapukat.
 
 ## Ha bukik
