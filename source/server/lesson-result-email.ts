@@ -20,17 +20,17 @@ import { contributorKey, maybeRelaxTightening, recordTaskResults } from "./task-
  * nem függ tőle. Körönként egy levél (lesson_result_emails egyedi kulcs), a pontozás a szerveren fut (a kliens pontszámát nem
  * fogadjuk), a címzettek az ADMIN_EMAILS listája.
  */
-export type Sender = (subject: string, html: string, to: string) => Promise<unknown>;
+export type Sender = (subject: string, html: string, to: string, idempotencyKey: string) => Promise<unknown>;
 let sender: Sender | null = null;
 /** Teszthez: a valódi Resend-küldő helyett. */
 export function setResultSender(next: Sender | null) { sender = next; }
-async function send(subject: string, html: string, to: string) {
-  if (sender) return sender(subject, html, to);
+async function send(subject: string, html: string, to: string, idempotencyKey: string) {
+  if (sender) return sender(subject, html, to, idempotencyKey);
   // Biztonság: tesztfuttatásban (NODE_ENV=test) valódi levél sosem megy, csak a teszt által beállított küldőn át.
   if (process.env.NODE_ENV === "test") throw new Error("Tesztkörnyezetben nincs valódi e-mail-küldés.");
   const { sendAdminNotification } = await import("./resend");
   // Átfogó review: a tárgy a tanuló keresztnevét tartalmazhatja — csendes küldés (a név nem kerül a naplóba).
-  return sendAdminNotification(subject, html, to, { quiet: true });
+  return sendAdminNotification(subject, html, to, { quiet: true, idempotencyKey });
 }
 
 /** Review K3: a naplóba csak a hiba osztálya és (ha van) kódja kerül — üzenet, paraméter, cím nem. */
@@ -40,6 +40,19 @@ export function errorClass(error: unknown): string {
   const code = [e?.code, e?.cause?.code].find(c => (typeof c === "string" || typeof c === "number") && /^[A-Za-z0-9_]{1,40}$/.test(String(c)));
   return code === undefined ? name : `${name} (${code})`;
 }
+
+/**
+ * Review (2026-11-17): a szolgáltatónak adott idempotencia-kulcs — ugyanarra a körre és címzettre mindig ugyanaz (az időkorlát utáni
+ * újrapróba így nem kézbesít másodszor, ha az első küldés mégis célba ért), más körre / fajtára / címzettre más. Lenyomat: a kulcsban
+ * nincs e-mail-cím.
+ */
+export function resultIdempotencyKey(lessonId: string, kind: string, roundKey: string, to: string): string {
+  return `lesson-result/${createHash("sha256").update([lessonId, kind, roundKey, to.trim().toLowerCase()].join("|")).digest("hex")}`;
+}
+/** Az újrapróba késleltetése (a meghiúsult címzett és a váratlan kivétel után is). */
+let retryDelayMs = 60_000;
+/** Teszthez: a késleltetés rövidítése; a korábbi értéket adja vissza. */
+export function setRetryDelay(ms: number): number { const previous = retryDelayMs; retryDelayMs = ms; return previous; }
 
 /** Review K2: a levélküldés időkorlátja (a szolgáltató hívása nem tarthatja korlátlanul a kézbesítés-foglalást). */
 let sendTimeoutMs = 30_000;
@@ -94,7 +107,7 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
       }
       if (!claimed.length) return { sent: 0, duplicate: true };
       // Review K2: a lefagyott küldés nem tarthatja a foglalást — időkorlát után bukottnak számít (felszabadul, az újrapróba pótolja).
-      const results = await Promise.allSettled(claimed.map(to => withSendTimeout(send(mail.subject, mail.html, to))));
+      const results = await Promise.allSettled(claimed.map(to => withSendTimeout(send(mail.subject, mail.html, to, resultIdempotencyKey(input.lessonId, input.graded.kind, input.roundKey, to)))));
       ok.push(...claimed.filter((_, i) => results[i].status === "fulfilled"));
     } finally {
       // Review K1: a felszabadítás `finally` ágban — bármilyen kivétel (adatbázis, küldő) után a nem kézbesített címzett foglalása
@@ -106,12 +119,14 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
     }
     if (ok.length < claimed.length) {
       logger.warn(`[LESSON-RESULT] ${claimed.length - ok.length} címzettnek nem ment el${retry ? " — 60 s múlva újrapróbálja" : ""}.`);
-      if (retry) setTimeout(() => { void sendLessonResult(input, false); }, 60_000).unref?.();
+      if (retry) setTimeout(() => { void sendLessonResult(input, false); }, retryDelayMs).unref?.();
     }
     return { sent: ok.length, duplicate: false };
   } catch (error) {
     // Review K3: csak a hiba osztálya / kódja — a lekérdezés hibaüzenete a paramétereket (e-mail-címet) is tartalmazná.
-    logger.error(`[LESSON-RESULT] a küldés nem sikerült: ${errorClass(error)}`);
+    logger.error(`[LESSON-RESULT] a küldés nem sikerült: ${errorClass(error)}${retry ? " — újrapróbálja" : ""}`);
+    // Review (2026-11-17): a váratlan kivétel (az `allSettled`-en kívül: adatbázis, foglalás) után is egy újrapróba — levél ne vesszen el.
+    if (retry) setTimeout(() => { void sendLessonResult(input, false); }, retryDelayMs).unref?.();
     return { sent: 0, duplicate: false };
   }
 }

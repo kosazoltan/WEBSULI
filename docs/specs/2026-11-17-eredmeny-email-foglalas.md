@@ -89,3 +89,7 @@ A lezárás hívása ezután a foglalás miatt nem küld újra. A válasz menté
   az időkorlát után felszabadul, a másik címzett megkapja; adatbázishiba → a naplósorban nincs `@`. Mutáció: a felszabadítás
   kikapcsolva → 4 teszt bukik; a nyers hiba naplózva → a K3 teszt bukik. A K2 időkorlát elhagyásával a teszt nem tér vissza
   (nem futtatva: a harness 300 s-os korlátjáig állna).
+- **Második visszanézés (2026-11-17):** (1) `idempotencyKey` a szolgáltató felé (`resultIdempotencyKey`: lecke + fajta + körkulcs +
+  címzett lenyomata; a `sendAdminNotification` opcióként adja át, a többi hívó változatlan) — az időkorlát utáni újrapróba így nem
+  kézbesít másodszor, ha az első küldés mégis célba ért; (2) az egyszeri újrapróba a külső `catch` ágban is ütemeződik. Valódi DB:
+  202 / 202. Jegyre: kanban #127 (az `errorClass` a három régi naplósorban), #128 (véglegesült, de a válasz elveszett foglalás).

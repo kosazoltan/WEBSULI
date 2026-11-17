@@ -209,13 +209,64 @@ test("review K3: adatbázishiba a foglalás közben — a napló csak a hiba osz
     const result = await sendLessonResult({ lessonId: "result-published", roundKey: "x".repeat(80), learner: "admin-a@example.test nevű tanuló", graded }, false);
     assert.deepEqual(result, { sent: 0, duplicate: false });
     assert.equal(lines.length, 1);
-    assert.match(lines[0], /^\[LESSON-RESULT\] a küldés nem sikerült: [A-Za-z0-9_]+( \([A-Za-z0-9_]+\))?$/);
+    assert.match(lines[0], /^\[LESSON-RESULT\] a küldés nem sikerült: [A-Za-z0-9_]+( \([A-Za-z0-9_]+\))?$/); // újrapróba nélküli hívás: nincs utótag
     assert.ok(!lines.join(" ").includes("@"), "a napló nem tartalmaz e-mail-címet");
   } finally { logger.error = original; }
   assert.equal(errorClass(Object.assign(new Error("titok: admin-a@example.test"), { code: "23505" })), "Error (23505)");
   assert.equal(errorClass(Object.assign(new Error("x"), { name: "admin-a@example.test" })), "Error", "a nem szabályos név nem kerül ki");
   assert.equal(errorClass("admin-a@example.test"), "Error");
   assert.equal(errorClass(Object.assign(new Error("x"), { cause: { code: "22001" } })), "Error (22001)");
+});
+
+test("review: idempotencia-kulcs — ugyanarra a körre és címzettre ugyanaz megy (pótláskor is), más körre / címzettre más; a kulcsban nincs cím", async () => {
+  const { resultIdempotencyKey } = await import("../server/lesson-result-email");
+  const keys: Array<{ to: string; key: string }> = [];
+  let failB = true;
+  setResultSender(async (_subject, _html, to, key) => { keys.push({ to, key }); if (to === "admin-b@example.test" && failB) throw new Error("átmeneti hiba"); });
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    const call = (round: string) => sendLessonResult({ lessonId: "result-published", roundKey: roundKeyOf("t", "quiz", round), learner: "Vendég tanuló", graded }, false);
+    await call("round-idem-1");
+    failB = false;
+    await call("round-idem-1"); // pótlás a bukott címzettnek: UGYANAZZAL a kulccsal
+    await call("round-idem-2");
+    const of = (to: string) => keys.filter(k => k.to === to).map(k => k.key);
+    const [b1, b1retry, b2] = of("admin-b@example.test");
+    assert.equal(of("admin-b@example.test").length, 3);
+    assert.equal(b1, b1retry, "az újraküldés ugyanazzal a kulccsal megy");
+    assert.notEqual(b1, b2, "más kör: más kulcs");
+    const [a1, a2] = of("admin-a@example.test");
+    assert.notEqual(a1, b1, "más címzett: más kulcs");
+    assert.notEqual(a1, a2);
+    assert.equal(b1, resultIdempotencyKey("result-published", "quiz", roundKeyOf("t", "quiz", "round-idem-1"), "admin-b@example.test"));
+    assert.notEqual(b1, resultIdempotencyKey("result-published", "tasks", roundKeyOf("t", "quiz", "round-idem-1"), "admin-b@example.test"), "más fajta: más kulcs");
+    for (const { key } of keys) { assert.match(key, /^lesson-result\/[a-f0-9]{64}$/); assert.ok(!key.includes("@")); }
+  } finally { setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); }); }
+});
+
+test("review: váratlan kivétel (az allSettled-en kívül) után is ütemeződik EGY újrapróba; újrapróba nélküli hívásnál nem", async () => {
+  const { setRetryDelay } = await import("../server/lesson-result-email");
+  const { logger } = await import("../server/lib/logger");
+  const lines: string[] = [];
+  const original = logger.error;
+  logger.error = ((...args: unknown[]) => { lines.push(args.map(String).join(" ")); }) as typeof logger.error;
+  const previous = setRetryDelay(150);
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    // Tartós adatbázishiba (64-nél hosszabb körkulcs): az első hívás és az EGY újrapróba is ide fut.
+    assert.deepEqual(await sendLessonResult({ lessonId: "result-published", roundKey: "y".repeat(80), learner: "Vendég tanuló", graded }), { sent: 0, duplicate: false });
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /— újrapróbálja$/);
+    await new Promise(r => setTimeout(r, 900));
+    assert.equal(lines.length, 2, "pontosan egy újrapróba futott (az újrapróba nem ütemez továbbit)");
+    assert.doesNotMatch(lines[1], /újrapróbálja/);
+    lines.length = 0;
+    await sendLessonResult({ lessonId: "result-published", roundKey: "z".repeat(80), learner: "Vendég tanuló", graded }, false);
+    await new Promise(r => setTimeout(r, 600));
+    assert.equal(lines.length, 1, "újrapróba nélküli hívás nem ütemez");
+  } finally { setRetryDelay(previous); logger.error = original; }
 });
 
 /* Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény + a szigorítás automatikus lazítása, valódi DB-n és HTTP-n. */

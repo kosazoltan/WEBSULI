@@ -219,7 +219,8 @@ export async function sendAdminNotification(
   htmlBody: string,
   adminEmail?: string,
   /** Review #292: a tanulói levél címzettje és tárgya (név) nem kerül az alkalmazásnaplóba — a részletek az adatbázisban. */
-  opts: { quiet?: boolean } = {},
+  /** Review (2026-11-17): `idempotencyKey` — a szolgáltató ugyanazzal a kulccsal érkező ismételt küldést nem kézbesíti másodszor. */
+  opts: { quiet?: boolean; idempotencyKey?: string } = {},
 ) {
   const recipientEmail = adminEmail || process.env.ADMIN_EMAIL || 'admin@websuli.org';
   // Admin mails (daily view summary, material results) are logged too, so the diagnostics
@@ -244,7 +245,7 @@ export async function sendAdminNotification(
       to: [recipientEmail],
       subject: subject,
       html: htmlBody
-    });
+    }, opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : undefined);
 
     if (result && 'error' in result && result.error) {
       throw new Error(`Resend error: ${result.error.message || 'Unknown error'}`);
