@@ -111,9 +111,11 @@ export async function connectRt(opts: ConnectRtOptions): Promise<RtConnection> {
   });
 
   if (opts.onEvent) socket.onAny(opts.onEvent);
-  socket.on("welcome", (w: RtServerPayload<"welcome">) => {
+  socket.on("welcome", (w: RtServerPayload<"welcome">, ack?: () => void) => {
     if (w.resumeToken) resumeToken = w.resumeToken;
     if (w.playerId) playerId = w.playerId;
+    // JM3a-2 (review K1): az új token átvételének nyugtája — a szerver csak ezután érvényteleníti az előzőt.
+    if (typeof ack === "function") ack();
   });
   socket.on("room:state", (s: RtRoomState) => {
     // Sorrenden kívüli / ismételt állapot (pl. újracsatlakozás közben) nem írja felül az újabbat.

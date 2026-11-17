@@ -375,6 +375,8 @@ describe("JM2 room-machine — kapcsolat, kilépés, gazda-váltás meccs közbe
       kér: (id: string): Ev => (f) => step(f.s, { type: "rematch", playerId: id }, f.t),
       kész: (id: string, ready = true): Ev => (f) => step(f.s, { type: "ready", playerId: id, ready }, f.t),
       kilép: (id: string): Ev => (f) => step(f.s, { type: "leave", playerId: id }, f.t),
+      indít: (): Ev => (f) => step(f.s, { type: "start", playerId: A }, f.t),
+      kirúg: (target: string): Ev => (f) => step(f.s, { type: "kick", playerId: A, target }, f.t),
       csatlakozik: (): Ev => (f) => step(f.s, { type: "join", playerId: Z, nickname: "Idegen", avatar: null, grade: 5 }, f.t),
       lejár: (): Ev => (f) => step(f.s, { type: "tick" }, f.s.rematch?.deadlineMs ?? f.t + 45_000),
       megszakadVissza: (id: string): Ev => (f) => step(step(f.s, { type: "disconnect", playerId: id }, f.t).state, { type: "reconnect", playerId: id }, f.t + 1000),
@@ -392,6 +394,20 @@ describe("JM2 room-machine — kapcsolat, kilépés, gazda-váltás meccs közbe
       ["R + kilép(B), majd kér(A) → L", fin, (f) => step(ev.kilép(B)(f).state, { type: "rematch", playerId: A }, f.t + 1), { phase: "lobby", status: "left", by: A }],
       ["R + csatlakozik(Z) → ROOM_STARTED", fin, ev.csatlakozik(), { phase: "finished", error: "ROOM_STARTED" }],
       ["R + megszakad-és-visszatér(B) → R", fin, ev.megszakadVissza(B), { phase: "finished", status: null }],
+      // start / kick (review K3) — a gazda (A) nyers üzenetei
+      ["R + start → BAD_PHASE", fin, ev.indít(), { phase: "finished", error: "BAD_PHASE" }],
+      ["R + kick(B) → R (a maradó kérése → L)", fin, (f) => step(ev.kirúg(B)(f).state, { type: "rematch", playerId: A }, f.t + 1), { phase: "lobby", status: "left", by: A }],
+      ["P(B, vendég kért) + start (gazda) → countdown (a gazda indítása = elfogadás)", () => P(B), ev.indít(), { phase: "countdown", status: null }],
+      ["P(A, gazda kért) + start → NOT_ENOUGH_PLAYERS (B nem fogadott el)", () => P(A), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["P(B) + kick(B) → L", () => P(B), ev.kirúg(B), { phase: "lobby", status: "left", by: B }],
+      ["P(A) + kick(B) → L", () => P(A), ev.kirúg(B), { phase: "lobby", status: "left", by: A }],
+      ["ACC(B kért, kiesett) + start (A) → NOT_ENOUGH_PLAYERS", () => ACC(B, A), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["ACC(B kért, kiesett) + kick(B) (A gazda) → L", () => ACC(B, A), ev.kirúg(B), { phase: "lobby", status: "left", by: B }],
+      ["E(B, vendég kért) + start → NOT_ENOUGH_PLAYERS (lejáratkor senki sem kész — K3)", () => EXP(B), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["E(A) + start → NOT_ENOUGH_PLAYERS", () => EXP(A), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["E(B) + kick(B) → L", () => EXP(B), ev.kirúg(B), { phase: "lobby", status: "left", by: B }],
+      ["L(A maradt) + start → NOT_ENOUGH_PLAYERS", () => LEFT(A, B), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["L(A maradt) + kick(B) → NOT_IN_ROOM", () => LEFT(A, B), ev.kirúg(B), { phase: "lobby", error: "NOT_IN_ROOM" }],
     );
     // --- P(X) mindkét irányban (gazda kér / vendég kér) ---
     for (const [x, y] of [[A, B], [B, A]] as const) {

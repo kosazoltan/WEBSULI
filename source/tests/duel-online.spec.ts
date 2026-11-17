@@ -380,7 +380,9 @@ test("review #464: újratöltés a váróteremben (vendég, tárolt tokennel) é
       await C.page.getByTestId("duel-join-go").tap();
       await expect(C.page.getByTestId("duel-error")).toHaveAttribute("data-code", "ROOM_STARTED", { timeout: 15_000 });
       await expect(B.page.getByTestId("duel-rematch-gone")).toBeVisible();
-      await expect(B.page.getByTestId("duel-new")).toBeVisible();
+      // Review K4: B vendég (nem nyithat szobát) — „Új szoba” helyett „Vissza a párbajhoz” (kód beírása / belépés).
+      await expect(B.page.getByTestId("duel-new")).toHaveCount(0);
+      await expect(B.page.getByTestId("duel-home")).toBeVisible();
     } finally {
       await C.ctx.close();
     }

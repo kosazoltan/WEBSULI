@@ -140,6 +140,7 @@ const ERROR_EXTRA: Record<string, string> = {
   SESSION_MOVED: "Ugyanezt a játékot egy másik lapon vagy eszközön nyitottad meg, ott folytatódik. Ezt a lapot bezárhatod.",
   RECONNECT_TIMEOUT: "Megszakadt a kapcsolat, és egy percen belül nem jött vissza. Nyiss új szobát, vagy csatlakozz újra!",
   DISCONNECTED: "Megszakadt a kapcsolat a szobával.",
+  SEAT_LOST: "Ezen a lapon a játék már nem folytatható — lehet, hogy egy másik lapon vagy eszközön megy tovább, vagy a szoba bezárult.",
   ROOM_CLOSED: "A szoba bezárult.",
   INVALID_CODE: "Ez nem szobakód: 6 jel, betűk és számok (0, O, 1, I nélkül).",
   NO_QUESTIONS: "Nem sikerült betölteni a kérdéseket (lehet, hogy nincs internet). Próbáld újra!",
@@ -320,7 +321,10 @@ export default function DuelOnline() {
     if (screen.name !== "session" || !session || snap.conn !== "closed") return;
     if (snap.closedCode === "LEFT") return;
     if (snap.state?.result && snap.closedCode !== "SESSION_MOVED") return;
-    setScreen({ name: "error", code: snap.closedCode ?? "DISCONNECTED", retry: null });
+    // Review K4: egy már futó lap visszaülése ROOM_NOT_FOUND-dal bukik (pl. a háttérbe tett régi lapfül, miközben a játék egy
+    // másik lapon megy tovább) — pontos szöveg a félrevezető „a szoba már nem létezik” helyett.
+    const code = snap.closedCode === "ROOM_NOT_FOUND" ? "SEAT_LOST" : (snap.closedCode ?? "DISCONNECTED");
+    setScreen({ name: "error", code, retry: null });
   }, [screen.name, session, snap.conn, snap.closedCode, snap.state]);
 
   // Gépi módban a lap háttérbe kerülésekor a meccs áll (review #464 A6); online nincs szünet (a szerver órája megy).
@@ -410,10 +414,15 @@ export default function DuelOnline() {
           snap={snap}
           feedback={feedback}
           onExit={backHome}
-          onNewSetup={() => {
-            endSession();
-            setScreen({ name: "setup", mode: snap.kind === "bot" ? "bot" : "create" });
-          }}
+          // Review K4: online „Új szoba” csak annak, aki szobát nyithat (mint a megtelt-szoba képernyőn); gépi módban mindig.
+          onNewSetup={
+            snap.kind === "bot" || canCreate
+              ? () => {
+                  endSession();
+                  setScreen({ name: "setup", mode: snap.kind === "bot" ? "bot" : "create" });
+                }
+              : null
+          }
         />
       ) : null}
       {screen.name === "session" && session && !st ? <BusyScreen label="Kapcsolódás…" onCancel={backHome} /> : null}
@@ -726,7 +735,7 @@ function ErrorScreen({ code, onRetry, onBack, onNewRoom }: { code: string; onRet
 // ---------------------------------------------------------------------------------------------------------------------
 // Munkamenet: váróterem → meccs → győzteshirdetés
 
-function SessionView(props: { session: DuelSession; snap: DuelSnapshot; feedback: ReturnType<typeof useDuelFeedback>; onExit: () => void; onNewSetup: () => void }) {
+function SessionView(props: { session: DuelSession; snap: DuelSnapshot; feedback: ReturnType<typeof useDuelFeedback>; onExit: () => void; onNewSetup: (() => void) | null }) {
   const { session, snap } = props;
   const st = snap.state!;
   const me = st.you.playerId;
@@ -1151,7 +1160,8 @@ function ResultView(props: {
   snap: DuelSnapshot;
   me: string;
   onExit: () => void;
-  onNewSetup: () => void;
+  /** `null`: a néző nem nyithat szobát (vendég) — helyette „Vissza a párbajhoz” (kód beírása / belépés). */
+  onNewSetup: (() => void) | null;
   feedback: ReturnType<typeof useDuelFeedback>;
   /** Megjelenítési névtár (a már kilépett játékos neve is kiírható). */
   nameHint?: Record<string, string>;
@@ -1282,9 +1292,15 @@ function ResultView(props: {
             Visszavágó
           </button>
         ) : null}
-        <button type="button" className="game-btn game-btn-secondary" data-testid="duel-new" onClick={props.onNewSetup}>
-          {isBot ? "Új beállítás" : "Új szoba"}
-        </button>
+        {props.onNewSetup ? (
+          <button type="button" className="game-btn game-btn-secondary" data-testid="duel-new" onClick={props.onNewSetup}>
+            {isBot ? "Új beállítás" : "Új szoba"}
+          </button>
+        ) : (
+          <button type="button" className="game-btn game-btn-secondary" data-testid="duel-home" onClick={() => void session.leave().then(props.onExit)}>
+            Vissza a párbajhoz
+          </button>
+        )}
         <Link href="/games" className="game-btn game-btn-ghost" onClick={() => void session.leave()}>
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           Játékok

@@ -664,6 +664,8 @@ function tick(s: RoomState, nowMs: number, cfg: RoomConfig, effects: RoomEffect[
       const r = s.rematch;
       if (r?.status === "pending" && r.deadlineMs !== null && nowMs >= r.deadlineMs) {
         s.rematch = { ...r, status: "expired", deadlineMs: null };
+        // Review K3: a lejárt kérés „kész” jelzése sem él tovább (a gazda nyers `start`-ja nem indíthat rá).
+        for (const p of s.players) p.ready = false;
         effects.push({ type: "emitState" });
       }
       if (nowMs >= s.lastActivityMs + lobbyTtl(s, t)) {

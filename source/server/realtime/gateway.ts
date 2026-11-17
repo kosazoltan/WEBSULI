@@ -63,6 +63,11 @@ type Seat = {
   resumeToken: string;
   /** A folytatási token kiadásának ideje (szerveroldali lejárat: `RESUME_TOKEN_MAX_AGE_MS`). */
   resumeIssuedAt: number;
+  /**
+   * JM3a-2 (review K1): a forgatás a kliens nyugtájáig nem végleges — addig az ELŐZŐ (a kliensnél biztosan meglévő) token is
+   * visszaültet erre az egy helyre, legfeljebb `until`-ig. A `welcome` nyugtája után `null` (a régi token érvénytelen).
+   */
+  prevResume: { token: string; until: number } | null;
   socketId: string | null;
   rtt: number[];
   /** A helyet foglaló kapcsolat IP-kulcsa (kitiltáshoz, IP-nkénti szobaplafonhoz) — kifelé soha nem megy. */
@@ -279,6 +284,8 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
   function releaseSeat(seat: Seat): void {
     if (seatsByIdentity.get(seat.identity) === seat) seatsByIdentity.delete(seat.identity);
     seatsByResume.delete(seat.resumeToken);
+    if (seat.prevResume) seatsByResume.delete(seat.prevResume.token);
+    seat.prevResume = null;
     seatsByPlayer.delete(seat.playerId);
     const s = socketOfSeat(seat);
     if (s) {
@@ -396,7 +403,7 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
 
   function newSeat(identity: string, roomCode: string, playerId: string, socket: Socket): Seat {
     const data = socket.data as SocketData;
-    const seat: Seat = { identity, roomCode, playerId, resumeToken: randomBytes(24).toString("base64url"), resumeIssuedAt: deps.now(), socketId: socket.id, rtt: [], ip: data.ip, kind: data.claims?.kind ?? null };
+    const seat: Seat = { identity, roomCode, playerId, resumeToken: randomBytes(24).toString("base64url"), resumeIssuedAt: deps.now(), prevResume: null, socketId: socket.id, rtt: [], ip: data.ip, kind: data.claims?.kind ?? null };
     seatsByIdentity.set(identity, seat);
     seatsByResume.set(seat.resumeToken, seat);
     seatsByPlayer.set(playerId, seat);
@@ -406,14 +413,39 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
   }
 
   /**
-   * JM3a-2 (review #464 ÚJ-2): a folytatási token EGYSZER használható — minden sikeres visszaülésnél új tokent kap a hely, a
-   * régi azonnal érvénytelen (szinkron lépés: két párhuzamos kézfogás közül csak az egyik ülhet vissza vele).
+   * JM3a-2 (review #464 ÚJ-2, review K1): minden sikeres visszaülésnél új token. `pending` (kézfogás): a régi token a kliens
+   * nyugtájáig — legfeljebb a türelmi ideig — még visszaültet erre a helyre (egy elveszett `welcome` nem zárja ki a játékost);
+   * ismételt elvesztésnél a legrégebbi, nyugtázott token marad a tartalék, a soha meg nem érkezett közbülső token törlődik.
+   * `hard` (új jeggyel saját helyre ülés): a régi token azonnal érvénytelen.
    */
-  function rotateResume(seat: Seat): void {
-    seatsByResume.delete(seat.resumeToken);
+  function rotateResume(seat: Seat, mode: "pending" | "hard"): void {
+    const old = seat.resumeToken;
+    if (mode === "hard") {
+      seatsByResume.delete(old);
+      if (seat.prevResume) seatsByResume.delete(seat.prevResume.token);
+      seat.prevResume = null;
+    } else if (seat.prevResume) {
+      seatsByResume.delete(old); // a meg nem érkezett közbülső token
+      seat.prevResume = { token: seat.prevResume.token, until: deps.now() + RT_RECONNECT_GRACE_MS };
+    } else {
+      seat.prevResume = { token: old, until: deps.now() + RT_RECONNECT_GRACE_MS };
+    }
     seat.resumeToken = randomBytes(24).toString("base64url");
     seat.resumeIssuedAt = deps.now();
     seatsByResume.set(seat.resumeToken, seat);
+  }
+
+  function releaseResumeTokens(seat: Seat): void {
+    seatsByResume.delete(seat.resumeToken);
+    if (seat.prevResume) seatsByResume.delete(seat.prevResume.token);
+    seat.prevResume = null;
+  }
+
+  /** A kliens nyugtázta az új tokent (`welcome` ack): a forgatás végleges, az előző token érvénytelen. */
+  function confirmResume(seat: Seat, socketId: string, token: string): void {
+    if (seat.socketId !== socketId || seat.resumeToken !== token || !seat.prevResume) return;
+    if (seatsByResume.get(seat.prevResume.token) === seat) seatsByResume.delete(seat.prevResume.token);
+    seat.prevResume = null;
   }
 
   function welcome(socket: Socket, seat: Seat | null, resumed: boolean): void {
@@ -425,7 +457,8 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
       : data.claims!.intent.kind === "join"
         ? { kind: "join" as const, code: data.claims!.intent.code }
         : { kind: "create" as const, code: null };
-    send(socket, "welcome", {
+    const issued = seat?.resumeToken ?? null;
+    const payload: RtServerPayload<"welcome"> = {
       protocol: PROTOCOL_VERSION,
       playerId: seat?.playerId ?? null,
       nickname: me?.nickname ?? data.claims?.nickname ?? "Játékos",
@@ -441,7 +474,10 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
         maxPlayers: RT_MAX_PLAYERS,
       },
       intent,
-    });
+    };
+    if (!socket.connected) return;
+    // A kliens a token átvétele után nyugtáz (K1): csak ekkor véglegesedik a forgatás.
+    socket.emit("welcome", payload, () => guard("welcome-ack", () => seat && issued && confirmResume(seat, socket.id, issued)));
   }
 
   // --- Kézfogás: jegy vagy folytatási token -------------------------------------------------------------------------
@@ -481,10 +517,17 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
       if (!seat || !registry.get(seat.roomCode)) return fail("ROOM_NOT_FOUND");
       // Szerveroldali lejárat: a túl régi (pl. egy elfelejtett lapfülben ülő) token nem ad vissza helyet.
       if (deps.now() - seat.resumeIssuedAt > RESUME_TOKEN_MAX_AGE_MS) {
-        seatsByResume.delete(seat.resumeToken);
+        releaseResumeTokens(seat);
         return fail("ROOM_NOT_FOUND");
       }
-      rotateResume(seat);
+      // Az előző (nyugtázatlan forgatás előtti) token csak a türelmi időn belül, és csak erre a helyre ültet vissza.
+      if (auth.data.resume !== seat.resumeToken) {
+        if (!seat.prevResume || seat.prevResume.token !== auth.data.resume || deps.now() > seat.prevResume.until) {
+          seatsByResume.delete(auth.data.resume);
+          return fail("ROOM_NOT_FOUND");
+        }
+      }
+      rotateResume(seat, "pending");
       data.seat = seat;
       data.intentUsed = true;
       socket.data = data;
@@ -688,7 +731,7 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
             stale.socketId = socket.id;
             stale.ip = data.ip;
             data.seat = stale;
-            rotateResume(stale); // a régi (pl. egy elhagyott lapfülben tárolt) token érvénytelen
+            rotateResume(stale, "hard"); // a régi (pl. egy elhagyott lapfülben tárolt) token érvénytelen
             reply(null, { roomCode: code, playerId: stale.playerId, resumeToken: stale.resumeToken });
             const room = registry.get(code);
             if (room) send(socket, "room:state", roomStateView(room, stale.playerId, deps.now(), deps.roomConfig));
