@@ -449,13 +449,10 @@ for (const viewport of [
       await shot(page, `tsunami-${viewport.width}x${viewport.height}-start.jpg`);
       await page.getByTestId("button-tsunami-start").tap();
       await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
-      if (process.env.TS_SHOT_DIR) {
-        await page.waitForTimeout(5_000);
-        await shot(page, `tsunami-${viewport.width}x${viewport.height}-play.jpg`);
-      }
       // D-J1a-18 (orkesztrátori döntés): a táblás eset KÉNYSZERÍTETT egysoros válaszokkal — a véletlen kérdésforrás
       // (kétsoros felirat fekvőben, hosszú válasz → lista mód) nem dönthet a mérésről; a küszöbök változatlanok. A kétsoros
-      // és a hosszú esetet külön teszt méri.
+      // és a hosszú esetet külön teszt méri. (A „play” képernyőkép a teszt végén készül: az előtte töltött 5 mp alatt nyíló és
+      // lejáró természetes kérdés ismétlésként megelőzte volna a kényszerített kérdést.)
       await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
       await expect(gates(page)).toHaveCount(3, { timeout: 10_000 });
       await expect(page.getByTestId("ts-quiz")).toHaveAttribute("data-long", "false");
@@ -518,6 +515,11 @@ for (const viewport of [
       expect(aboveReveal.length).toBe(3);
       for (const d of aboveReveal) expect(d, "megoldás-kijelzés: a tábla a futó feje fölött").toBeLessThanOrEqual(1);
       if (viewport.width !== 390) await shot(page, `tsunami-${viewport.width}x${viewport.height}-wrong.jpg`);
+      if (process.env.TS_SHOT_DIR) {
+        await expect(page.getByTestId("ts-quiz")).toHaveCount(0, { timeout: 15_000 });
+        await page.waitForTimeout(1_000);
+        await shot(page, `tsunami-${viewport.width}x${viewport.height}-play.jpg`);
+      }
     });
   });
 }

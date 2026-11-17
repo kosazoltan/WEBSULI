@@ -1734,7 +1734,11 @@ export default function TsunamiEscapeEnglish() {
   // tábla, ami visszaválthatna; a következő kérdés / átméretezés újra dönt.
   useLayoutEffect(() => {
     if (presId === null || longMode) return;
-    const clipped = Array.from(gatesRef.current?.querySelectorAll<HTMLElement>(".ts-gate-label") ?? []).some((el) => el.scrollHeight > el.clientHeight + 1);
+    // A sorlevágás (line-clamp) legalább egy egész sort rejt el; a tört sormagasság / árnyék néhány px-es eltérése nem levágás.
+    const clipped = Array.from(gatesRef.current?.querySelectorAll<HTMLElement>(".ts-gate-label") ?? []).some((el) => {
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 18;
+      return el.scrollHeight - el.clientHeight > lh * 0.5;
+    });
     if (clipped) setGatesFitH(false);
   }, [presId, longMode]);
   // D-J1a-17 (ÚK2): „Jó kapu!” felirat a jó kapun bemenet nélkül átfutó gyereknek (a nyilvántartásban „nem válaszolt”).
