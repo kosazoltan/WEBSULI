@@ -66,9 +66,14 @@ az éles websuli.vip oldalon).
 - AC4: WHEN a bemenet nagy, vegyes minta (játszható és nem játszható tételek, ismétlődő tartalom, vegyes topic) THEN the system SHALL bájtra
   azonos eredményt adni a régi számítással (ugyanaz a sorrend és szűrés), minden `topicFilter`-értékre.
 - AC5: WHEN a memoizálást kivesszük (mutációs ellenpróba) THEN az AC1 / AC3 teszt SHALL bukni.
-- AC6: WHEN a Kockavadászt a kihajtott nézeten (827×896, dpr 2,625) és 390×844-en, valódi GPU-val, buildelt klienssel mérjük THEN séta,
-  körbenézés és bányászás közben a képkocka p95 SHALL ≤ 20 ms, a hosszú feladatok összideje SHALL ≤ 50 ms/s, az E → kvíz idő SHALL ≤ 200 ms
-  (ELŐTTE / UTÁNA tábla ugyanazzal a szkripttel). A másik három játék füstmérése SHALL NOT romlani (p95 és hosszú feladat).
+- AC6 (orkesztrátori cél, a mért alapvonalhoz kötve): WHEN a Kockavadászt és a Szökőárt a kihajtott nézeten (827×896, dpr 2,625), 1× CPU,
+  valódi GPU-val, buildelt klienssel mérjük THEN játék közben (tétlen / séta / körbenézés / bányászás, ill. futás) az átlagos fps
+  („képkockák / idő”, nem medián) SHALL ≥ 50, a főszál 50 ms feletti blokkjainak összege SHALL < 100 ms/s, a Kockavadász „E → kvíz” ideje
+  SHALL < 200 ms (ELŐTTE / UTÁNA tábla ugyanazzal a szkripttel). A 390×844-es nézet és a 4× CPU tájékoztató; a Brain Rot és a Szólétra
+  füstmérése SHALL NOT romlani. Ha a hook-javítás után is marad főszál-blokk (pl. a másodpercenkénti játékóra-render), azt ez a PR
+  nem javítja, hanem számokkal jelenti (a lapok nem érinthetők).
+  Alapvonal (diagnózis `jelentes.md`): Kockavadász kihajtva 3,6–7,7 fps, ~950 ms/s hosszú feladat, E → kvíz 1754 ms; Szökőár kihajtva
+  1,4–2,2 fps (üres bankkal 58–60).
 
 ## 8. Tesztterv
 
@@ -86,14 +91,32 @@ az éles websuli.vip oldalon).
   hívás. Visszavonás: a commit revertje (egy fájl).
 - A jsdom tranzitív függőség; ha egyszer kikerül a fából, a hook-teszt importja bukik (látható hiba, nem csendes).
 
-## 10. Végrehajtási utasítás
+## 10. Kiegészítő ellenőrzés: a külső ellenőr b05 F-02 lelete (`subject` vs. `topic` szűrés) — NEM javítjuk ebben a PR-ban
+
+Lelet (Gemini, Claude-visszaellenőrzés „RÉSZBEN”): a szerver a `/api/games/material-quizzes` tételeihez `subject` mezőt ad
+(`server/gameQuizBankService.ts:47-53` típus, `:371-374` `withSubject`, `:385-412` `legacySubjects`), a kliens `MaterialQuizItem` típusában
+nincs `subject`, és a hook `topicFilter`-e csak a `topic`-ot nézi → a Szólétra (`"english"` szűrő) kiejthetné a címmel exportált
+(`topic` = lecke címe) angol tételeket.
+
+- **Kód (igazolva):** a hiány valós. A kanonikus tételnél `subject = topic` (`canonicalWithSubject`, `:377`), eltérés csak régi
+  Stúdió-exportnál lehet, ahol a `topic` a lecke címe és a `subject` a tudástérkép tantárgyából jön.
+- **Éles adat (csak olvasó GET, 2026-11-17, `?classroom=0…8&limit=3`):** minden évfolyamon minden tételnél `subject === topic`
+  (0: Digitális kultúra / Informatika; 2: math; 3: english 194 + math 97; 4: Pályaorientáció / nature; 5: hungarian / nature;
+  6: nature / english 97 / hungarian; 7: nature / Történelem / math; 8: math / hungarian / nature; 1: üres). `subject=english`: 3. évf. 194,
+  6. évf. 97 tétel; ebből a mostani `topic`-szűrő **0-t ejt ki**; `subject` nélküli tétel: 0. Az új (subject-előbb) szabály sem adna
+  egyetlen többlet-tételt sem a Szólétrának → mért tanulási hatás ma: +0 tétel minden évfolyamon.
+- **Döntés:** a lelet ma élesben nem okoz kiesést (látens hiány, csak egy régi, címmel exportált anyag a legutóbbi 3 között váltaná ki),
+  ezért az orkesztrátori utasítás szerint („ha a lelet nem áll meg, ne javíts”) ebben a PR-ban nincs változtatás; orkesztrátori döntésre
+  jelentve (javasolt: külön kis PR a `subject`-előbb szűrővel és régi-tétel teszttel, ha a látens esetet is le akarjuk zárni).
+
+## 11. Végrehajtási utasítás
 
 - Végrehajtás: `docs/specs/2026-11-17-kerdesbank-hook-memo-vegrehajtas.md`
 
 <!-- acceptance-checklist -->
-- [ ] AC1 referencia-stabil újrarendereléskor, a szűrő nem fut újra
-- [ ] AC2 adat- / topicFilter-váltáskor új, helyes eredmény
-- [ ] AC3 betöltés alatt stabil üres referencia
-- [ ] AC4 bájtra azonos a régi számítással
-- [ ] AC5 mutációs ellenpróba: memo nélkül bukik
-- [ ] AC6 böngészős ELŐTTE / UTÁNA mérés a célszámokkal
+- [x] AC1 referencia-stabil újrarendereléskor, a szűrő nem fut újra
+- [x] AC2 adat- / topicFilter-váltáskor új, helyes eredmény
+- [x] AC3 betöltés alatt stabil üres referencia
+- [x] AC4 bájtra azonos a régi számítással
+- [x] AC5 mutációs ellenpróba: memo nélkül bukik
+- [x] AC6 böngészős ELŐTTE / UTÁNA mérés a célszámokkal (Kockavadász + Szökőár kihajtva)
