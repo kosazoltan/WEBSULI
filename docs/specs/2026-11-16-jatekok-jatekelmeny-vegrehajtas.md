@@ -1275,6 +1275,14 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
 - **Teszt-jelölő az élesítéshez igazítva:** a `data-correct` (csak teszt-kampós buildben) a rúnagombon az élesítés után jelenik
   meg — a választható célt jelöli. A közös mobil mérő (`T/support/game-mobile-quality.ts`) a kérdés megjelenése után azonnal
   koppint; élesítés-tudatos várakozás a közös mérőbe: orkesztrátori jegy.
+- **CI-bukás a 3e2a8b18 fejen (a három új e2e teszt), gyökérok: a TESZT időzítése.** A CI-trace szerint egy Playwright-hívás
+  0,5–1,3 s; a B1/M3 teszt 10–12 hívása a zár nyitása után kifutott az 5 s-os válaszablakból (a lap helyesen nem válaszolt, a
+  végső rúnagomb-koppintás már a lejárat után érkezett), az L7-ben a `timeLeft: 2` beállítása és a koppintás között 2 s telt el
+  (lejárat). Javítás a mérce lazítása nélkül: a koppintások pillanatában a zár állapotát a LAPON rögzítjük (≥ 2 koppintás a
+  nyitott, élesített záron, válasz 0), az ellenpróba válasza és az L7 óra-beállítás + válasz egy lapfeladatban fut, hosszú
+  (9 s) válaszablakú kérdéssel. Reprodukció helyben: `BC_CPU_THROTTLE` (CPU-lassítás) és `BC_CI_LAG_MS` (a CI hívás-késése)
+  környezeti változó a `T/blockcraft-play.spec.ts`-ben; a régi teszt 18×-on (L7) és 1200 ms késéssel (M3) bukott, az új 18× +
+  1200 ms mellett 5/5 egymást követő futásban zöld.
 - **Fekvő nézet maradéka:** az érc fölötti rúnakövek alacsony fekvő képernyőn részben a fent középen álló kérdéskártya alá
   esnek (a válasz a két oldali rúnagombbal megy, a célkereszt és az érc szabad) — J3c-jegy (kisebb ív fekvőben vagy a kártya
   eltolása).

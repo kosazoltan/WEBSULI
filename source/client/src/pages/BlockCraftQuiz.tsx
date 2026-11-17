@@ -2920,13 +2920,14 @@ export default function BlockCraftQuiz() {
         if (patch.phase === "menu") setPhase("menu");
         if (patch.phase === "play" && phaseRef.current !== "play") startGameRef.current();
         if (patch.phase === "levelComplete" || patch.phase === "over") setPhase(patch.phase);
+        // A következő rúnazár kérdése (teszt): a `question` és a `runeAhead` kampóval is használható.
+        const quiz = (patch as { quiz?: unknown }).quiz as { prompt?: unknown; options?: unknown; correctIndex?: unknown } | undefined;
+        if (quiz && typeof quiz.prompt === "string" && Array.isArray(quiz.options) && typeof quiz.correctIndex === "number") {
+          forcedQuizRef.current = { id: `forced-${++forcedSeqRef.current}`, prompt: quiz.prompt, options: quiz.options.map(String), correctIndex: quiz.correctIndex };
+        }
         // K.2: azonnali kérdés — rúnaérc a játékos elé és Rúna-zár (a „quiz” kompatibilis álnév, terv 9.).
         if (patch.question === true || patch.phase === "quiz") {
           const mine = mineRef.current;
-          const quiz = (patch as { quiz?: unknown }).quiz as { prompt?: unknown; options?: unknown; correctIndex?: unknown } | undefined;
-          if (quiz && typeof quiz.prompt === "string" && Array.isArray(quiz.options) && typeof quiz.correctIndex === "number") {
-            forcedQuizRef.current = { id: `forced-${++forcedSeqRef.current}`, prompt: quiz.prompt, options: quiz.options.map(String), correctIndex: quiz.correctIndex };
-          }
           if (mine && phaseRef.current === "play") {
             const p = playerRef.current;
             const f = lookDirection(p.yaw, 0);

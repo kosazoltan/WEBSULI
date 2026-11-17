@@ -18,6 +18,13 @@ type Probe = Record<string, number | string | null>;
 type GameTestWindow = { __websuliGame?: { forceState: (patch: Record<string, unknown>) => void; probe: () => Probe } };
 
 test.beforeEach(async ({ page }) => {
+  // CI-reprodukció (review #484 utómunka): `BC_CPU_THROTTLE=<n>` → n-szeres CPU-lassítás (a CI szoftveres WebGL-jének lassú
+  // képkockái helyben). Alapból nincs lassítás.
+  const throttle = Number(process.env.BC_CPU_THROTTLE ?? 0);
+  if (throttle > 1) {
+    test.setTimeout(180_000);
+    await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: throttle });
+  }
   await page.addInitScript(() => {
     localStorage.setItem("websuli.classroomGrade", "5");
   });
@@ -31,7 +38,22 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-const probe = (page: Page) => page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.probe());
+/**
+ * CI-reprodukció (review #484 utómunka): a CI-n egy Playwright-hívás 0,5–1,3 s (a 3e2a8b18 fej trace-e: koppintás ~1,3 s,
+ * `evaluate` ~0,5 s), a lap órája közben a falióra szerint halad. `BC_CI_LAG_MS=<ms>` ezt a késést teszi minden koppintás és
+ * mérés után helyben (alapból 0).
+ */
+const CI_LAG_MS = Number(process.env.BC_CI_LAG_MS ?? 0);
+const ciLag = () => (CI_LAG_MS > 0 ? new Promise<void>((r) => setTimeout(r, CI_LAG_MS)) : Promise.resolve());
+const probe = async (page: Page) => {
+  const p = await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.probe());
+  await ciLag();
+  return p;
+};
+const tapAt = async (page: Page, x: number, y: number) => {
+  await page.touchscreen.tap(x, y);
+  await ciLag();
+};
 
 async function startGame(page: Page): Promise<void> {
   await page.goto("/games/block-craft-quiz?seed=11");
@@ -246,9 +268,15 @@ for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { wi
 
 /* ------------------------- review #484: nincs véletlen válasz (B1), beragadó tartás (M3), óra (L7), fekvő (M4) ------------------------- */
 
+/** Hosszú kérdésszöveg → hosszú válaszablak (`windowMsFor` olvasási pótlék, ≤ 9 s); rövid válaszok. */
+const LONG_WINDOW_QUIZ = { prompt: LONG_PROMPT_QUIZ.prompt, options: ["5", "4", "6", "3"], correctIndex: 0 };
+
 /** Rúnaérc a játékos elé, zár nélkül; a célkereszt (a vászon közepe) az ércre néz. Visszaadja a vászon közepét. */
 async function oreAhead(page: Page): Promise<{ x: number; y: number }> {
-  await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ runeAhead: true }));
+  // Hosszú kérdés (olvasási pótlékkal ~9 s válaszablak): a CI szoftveres WebGL-jén (~0,7 s / képkocka) a lépések sora is
+  // beférjen az ablakba — a mérés a véletlen választ nézi, nem az ablak lejártát.
+  await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ runeAhead: true, quiz }), LONG_WINDOW_QUIZ);
+  await ciLag();
   // Egy render-lépés, hogy a kamera az ércre forduljon (CI szoftveres WebGL: lassú képkockák).
   const f0 = Number((await probe(page)).frames);
   await expect.poll(async () => Number((await probe(page)).frames), { timeout: 15_000 }).toBeGreaterThan(f0 + 1);
@@ -256,29 +284,71 @@ async function oreAhead(page: Page): Promise<{ x: number; y: number }> {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
+/**
+ * A vászon-koppintások pillanatában a zár állapota, a LAPON belül rögzítve (C-64 / C-65): a CI-n egy Playwright-hívás 0,5–1,3 s,
+ * ezért a „hány koppintás érte a nyitott, élesített zárat” a lapon mérve determinisztikus, nem a hívások közti időzítésen múlik.
+ */
+async function recordCanvasTaps(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as GameTestWindow & { __bcTaps?: Array<{ open: number; armed: number }> };
+    w.__bcTaps = [];
+    document.querySelector("canvas")!.addEventListener(
+      "pointerup",
+      () => {
+        const p = w.__websuliGame!.probe();
+        w.__bcTaps!.push({ open: Number(p.lockOpen), armed: Number(p.armed) });
+      },
+      { capture: true },
+    );
+  });
+}
+
+/**
+ * A szándékos gesztus ellenpróbája: ha a zár nyitva és élesítve van, a jó rúnagomb választ UGYANABBAN a lapfeladatban (a gomb
+ * billentyűs útja, `click` `detail === 0` — a valódi érintéses út a fenti Rúna-zár tesztekben); ha közben (lassú gépen) lejárt
+ * a válaszablak, egyszer friss zár nyílik a hosszú kérdéssel, és arra válaszol.
+ */
+async function answerArmedLockNow(page: Page): Promise<void> {
+  const once = () =>
+    page.evaluate((quiz) => {
+      const w = window as unknown as GameTestWindow & { __bcReopened?: boolean };
+      const p = w.__websuliGame!.probe();
+      const btn = document.querySelector<HTMLButtonElement>('[data-testid="bc-quiz"] [data-correct="true"]');
+      if (p.lockOpen === 1 && p.armed === 1 && btn) {
+        btn.click();
+        return true;
+      }
+      if (p.lockOpen !== 1 && p.reveal !== 1 && !w.__bcReopened) {
+        w.__bcReopened = true;
+        w.__websuliGame!.forceState({ question: true, quiz });
+      }
+      return false;
+    }, LONG_WINDOW_QUIZ);
+  await expect.poll(once, { timeout: 30_000 }).toBe(true);
+}
+
 test("B1: gyors dupla / többszörös valódi koppintás az ércre — a zár megnyílik, de válasz NEM születik; a rúnagomb (szándékos gesztus) válaszol", async ({ page }) => {
+  test.setTimeout(Math.max(test.info().timeout, 120_000));
   await startGame(page);
   const c = await oreAhead(page);
-  await page.touchscreen.tap(c.x, c.y); // 1. koppintás: a rúnaérc érintése → Rúna-zár
+  await recordCanvasTaps(page);
+  await tapAt(page, c.x, c.y); // 1. koppintás: a rúnaérc érintése → Rúna-zár
   await expect.poll(async () => (await probe(page)).lockOpen, { timeout: 10_000 }).toBe(1);
-  // Bányászó gyerek: tovább koppint az ércre (a közepére és mellé, az érc lapján) — az élesítés előtt és után is.
-  await page.touchscreen.tap(c.x + 18, c.y - 14);
-  await page.touchscreen.tap(c.x - 16, c.y + 12);
-  await expect.poll(async () => (await probe(page)).armed, { timeout: 10_000 }).toBe(1);
-  for (const [dx, dy] of [[0, 0], [20, 0], [-20, 0], [0, -20], [0, 18]] as const) await page.touchscreen.tap(c.x + dx, c.y + dy);
-  const p = await probe(page);
-  expect(p.questionsAnswered, "a bányászó koppintásokból nem lett válasz").toBe(0);
-  expect(p.lockOpen).toBe(1);
-  expect(p.reveal).toBe(0);
-  // Ellenpróba: a szándékos gesztus (élesített zárnál a rúnagomb koppintása) válaszol — a mérés nem üres.
-  const right = page.locator('[data-testid="bc-quiz"] [data-correct="true"]').first();
-  await expect(right).toHaveAttribute("data-armed", "true");
-  const rb = (await right.boundingBox())!;
-  await page.touchscreen.tap(rb.x + rb.width / 2, rb.y + rb.height / 2);
+  // Bányászó gyerek: tovább koppint az ércre (mellé, az érc lapján) — az élesítés előtt és után is.
+  await tapAt(page, c.x + 18, c.y - 14);
+  await expect.poll(async () => (await probe(page)).armed, { timeout: 15_000 }).toBe(1);
+  for (const [dx, dy] of [[0, 0], [20, 0], [-18, 16]] as const) await tapAt(page, c.x + dx, c.y + dy);
+  const taps = await page.evaluate(() => (window as unknown as { __bcTaps: Array<{ open: number; armed: number }> }).__bcTaps);
+  const onArmedLock = taps.filter((t) => t.open === 1 && t.armed === 1).length;
+  expect(onArmedLock, `a mérés nem üres: ${onArmedLock} koppintás érte a nyitott, élesített zárat (${JSON.stringify(taps)})`).toBeGreaterThanOrEqual(2);
+  expect((await probe(page)).questionsAnswered, "a bányászó koppintásokból nem lett válasz").toBe(0);
+  // Ellenpróba: a szándékos gesztus (élesített zárnál a jó rúnagomb) válaszol — a mérés nem üres.
+  await answerArmedLockNow(page);
   await expect.poll(async () => Number((await probe(page)).questionsAnswered), { timeout: 10_000 }).toBe(1);
 });
 
 test("B1 + M3: a tartott Bányász gombbal megérintett ércnél a zár nyílik, a tartás elenged, a felengedés nem válasz és nem bányászik tovább", async ({ page }) => {
+  test.setTimeout(Math.max(test.info().timeout, 120_000));
   await startGame(page);
   await oreAhead(page);
   const btn = (await page.getByRole("button", { name: "Bányász" }).boundingBox())!;
@@ -286,25 +356,23 @@ test("B1 + M3: a tartott Bányász gombbal megérintett ércnél a zár nyílik,
   const pt = { x: btn.x + btn.width / 2, y: btn.y + btn.height / 2, id: 7 };
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [pt] });
   await expect.poll(async () => (await probe(page)).lockOpen, { timeout: 10_000 }).toBe(1);
-  expect((await probe(page)).pressing, "a zár nyitása elengedte a tartást").toBe(0);
-  const blocks0 = Number((await probe(page)).blocks);
+  const opened = await probe(page);
+  expect(opened.pressing, "a zár nyitása elengedte a tartást").toBe(0);
+  const blocks0 = Number(opened.blocks);
   // Tartva marad az élesítésen túl, majd felengedi (a gomb ekkor már rejtett / letiltott).
-  await expect.poll(async () => (await probe(page)).armed, { timeout: 10_000 }).toBe(1);
+  await expect.poll(async () => (await probe(page)).armed, { timeout: 15_000 }).toBe(1);
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  const f0 = Number((await probe(page)).frames);
+  const f0 = Number(opened.frames);
   await expect.poll(async () => Number((await probe(page)).frames), { timeout: 15_000 }).toBeGreaterThan(f0 + 2);
   const p = await probe(page);
   expect(p.questionsAnswered, "a felengedés nem válasz").toBe(0);
   expect(p.pressing, "nincs beragadt tartás").toBe(0);
   expect(Number(p.blocks), "a zár alatt nem bányászott tovább").toBe(blocks0);
-  // A zár a rúnagombbal (szándékos gesztus) zárható — a válaszablak lejárta előtt.
-  const right = page.locator('[data-testid="bc-quiz"] [data-correct="true"]').first();
-  await expect(right).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
-  const rb = (await right.boundingBox())!;
-  await page.touchscreen.tap(rb.x + rb.width / 2, rb.y + rb.height / 2);
+  // A zár szándékos gesztussal zárható (ha lassú gépen közben lejárt, friss zárral).
+  await answerArmedLockNow(page);
   await expect.poll(async () => Number((await probe(page)).questionsAnswered), { timeout: 10_000 }).toBe(1);
   expect(Number((await probe(page)).questionsCorrect)).toBe(1);
-  await expect(page.getByTestId("bc-quiz")).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.getByTestId("bc-quiz")).toHaveCount(0, { timeout: 15_000 });
   // A zár után a Bányász gomb újra él (nem ragadt be), szünet + folytatás után sincs beragadt tartás.
   await expect(page.getByRole("button", { name: "Bányász" })).toBeEnabled();
   await page.getByRole("button", { name: "Szünet" }).first().tap();
@@ -315,21 +383,32 @@ test("B1 + M3: a tartott Bányász gombbal megérintett ércnél a zár nyílik,
   expect((await probe(page)).pressing).toBe(0);
 });
 
-test("L7 (review #484, viselkedés): az utolsó rúnazár az időkeret végén → pálya teljesítve; válasz nélkül lejár", async ({ page }) => {
+test("L7 (review #484, viselkedés): az utolsó rúnazár az időkeret utolsó másodpercében → pálya teljesítve, a győzelem után az óra nem lép; válasz nélkül lejár", async ({ page }) => {
   await startGame(page);
-  await openLock(page);
-  await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ runesLeft: 1, timeLeft: 2 }));
+  await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONG_WINDOW_QUIZ);
+  await ciLag();
   const right = page.locator('[data-testid="bc-quiz"] [data-correct="true"]').first();
-  const rb = (await right.boundingBox())!;
-  await page.touchscreen.tap(rb.x + rb.width / 2, rb.y + rb.height / 2);
-  // A cél teljesült: a megoldás-kijelzés alatt sem jár le az óra (2 mp-nél több telik el), eredményképernyő jön.
-  await expect(page.getByTestId("bc-level-complete")).toBeVisible({ timeout: 20_000 });
-  expect((await probe(page)).phase).toBe("levelComplete");
+  await expect(right).toHaveAttribute("data-armed", "true", { timeout: 15_000 });
+  // 1 mp van hátra, a cél egy rúnaércnyire — és a jó válasz UGYANABBAN a lapfeladatban (a rúnagomb billentyűs útja, `click`
+  // `detail === 0`): az óra-lépés (setInterval) nem kerülhet a beállítás és a válasz közé (a CI-n egy Playwright-hívás 0,5–1,3 s).
+  await page.evaluate(() => {
+    (window as unknown as GameTestWindow).__websuliGame!.forceState({ runesLeft: 1, timeLeft: 1 });
+    document.querySelector<HTMLButtonElement>('[data-testid="bc-quiz"] [data-correct="true"]')!.click();
+  });
+  const p0 = await probe(page);
+  expect(Number(p0.runes), "a jó válasz a célt teljesítette").toBe(Number(p0.runeGoal));
+  // A megoldás-kijelzés alatt és után az óra nem lép (2,5 s > 1 s maradék), eredményképernyő jön, nem vereség.
+  await page.waitForTimeout(2_500);
+  await expect(page.getByTestId("bc-level-complete")).toBeVisible({ timeout: 30_000 });
+  const after = await probe(page);
+  expect(after.phase).toBe("levelComplete");
+  expect(Number(after.timeLeft), "a győzelem után az óra nem lépett").toBe(1);
   // Fordítva: a zár nyitva, válasz nincs → a pálya lejár.
   await page.reload();
   await startGame(page);
   await openLock(page);
   await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ runesLeft: 1, timeLeft: 1 }));
+  await ciLag();
   await expect.poll(async () => (await probe(page)).phase, { timeout: 20_000 }).toBe("over");
 });
 
@@ -338,6 +417,7 @@ test.describe("844x390 fekvő", () => {
   test("M4: fekvőben a rúnagombok a két oldalon, a jelenet közepét (érc, célkereszt) és a kérdéskártyát szabadon hagyják", async ({ page }) => {
     await startGame(page);
     await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONGEST_RUNE_QUIZ);
+    await ciLag();
     await expect(page.locator('[data-testid="bc-quiz"] [data-correct]')).toHaveCount(4, { timeout: 10_000 });
     await expect(page.locator('[data-testid="bc-quiz"] [data-correct]').first()).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
     await page.waitForTimeout(600); // a kártya beúszása és a kövek élesítés-animációja lefut (képernyőképhez)
