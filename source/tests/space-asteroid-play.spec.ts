@@ -41,6 +41,15 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+/** Rövid, kristályra férő tétel a kampós (kényszerített) kérdésekhez: a hosszú válaszú tétel a listát magától megnyitja (a világ áll). */
+const SHORT_ITEM = { id: "short-q", prompt: "Mennyi 6 × 7?", options: ["36", "42", "48", "54"], correctIndex: 1 };
+
+/** Ha a természetes kérdés hosszú válaszú volt, a „Válaszok” lista magától nyílt: bezárjuk (az élesítés ezután indul újra). */
+async function closeList(page: Page): Promise<void> {
+  const close = page.getByTestId("sa-answers-close");
+  if (await close.isVisible().catch(() => false)) await close.click();
+}
+
 const crystals = (page: Page) => page.locator('[data-testid="sa-crystals"] [data-correct]');
 type Probe = Record<string, number | string | null>;
 const probe = (page: Page) => page.evaluate(() => (window as unknown as { __websuliGame: { probe: () => Probe } }).__websuliGame.probe());
@@ -50,6 +59,8 @@ const force = (page: Page, patch: Record<string, unknown>) =>
 /** Koppintás egy elem közepére valódi érintéssel (a kristály a helyén áll; a zónát a mag egyszer dönti el, az élesítés 500 ms). */
 async function tapCenter(page: Page, selector: string): Promise<void> {
   const el = page.locator(selector).first();
+  await expect(page.getByTestId("sa-crystals")).toBeVisible({ timeout: 15_000 });
+  await closeList(page);
   await expect(el).toBeVisible({ timeout: 15_000 });
   // FELTÉTELES várakozás (fix idő helyett): a kristályok élesedtek (500 ms), és a gomb két mintavétel között nem mozdul.
   await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 15_000 });
@@ -127,7 +138,7 @@ test.describe("valódi érintés", () => {
     await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
 
     // J1: nyitott kérdés alatt a szimuláció-idő / valós idő ≥ 0,35 (a lapon belül, egyetlen page.evaluate-ben mérve, C-64 / C-65).
-    await force(page, { question: true });
+    await force(page, { question: true, questionItem: SHORT_ITEM });
     await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
     const open = await page.evaluate(
       () =>
@@ -216,6 +227,7 @@ test.describe("valódi érintés", () => {
     const RUN_MS = 90_000;
     let answered = 0;
     while (Date.now() - started < RUN_MS) {
+      await closeList(page);
       const good = page.locator('[data-testid="sa-crystals"][data-armed="true"] [data-correct="true"][data-state="idle"]').first();
       if (await good.isVisible().catch(() => false)) {
         const box = await good.boundingBox().catch(() => null);
@@ -279,7 +291,7 @@ test.describe("grafika", () => {
     await page.getByTestId("game-resume").tap();
     await expect.poll(async () => ((await probe(page)).simTime as number) - t1, { timeout: 5_000 }).toBeGreaterThan(500);
     // az új jeleneten a kérdés-kristályok is megjelennek
-    await force(page, { question: true });
+    await force(page, { question: true, questionItem: SHORT_ITEM });
     await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
     // K.4/2, K.4/7: a rajzolási hívások és a GPU-memória korlátos
     const info = await probe(page);
@@ -320,7 +332,7 @@ test.describe("review #486 — M2: élesítés és tartott tűz (billentyűzet)"
     await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
 
     // 1) az 1–4 billentyű szándékos, azonnali válasz (az élesítés a lövedékre vonatkozik)
-    await force(page, { question: true });
+    await force(page, { question: true, questionItem: SHORT_ITEM });
     await expect(page.getByTestId("sa-crystals")).toBeVisible({ timeout: 5_000 });
     await page.keyboard.press("1");
     await expect.poll(async () => (await probe(page)).questionsAnswered, { timeout: 3_000 }).toBe(1);
@@ -328,7 +340,7 @@ test.describe("review #486 — M2: élesítés és tartott tűz (billentyűzet)"
     // 2) tartott tűz a kérdés előtt kezdve, a hajó végigsöpör a sávon: a kérdés nyitva marad
     await expect(crystals(page)).toHaveCount(0, { timeout: 8_000 });
     await page.keyboard.down("Space");
-    await force(page, { question: true });
+    await force(page, { question: true, questionItem: SHORT_ITEM });
     await expect(page.getByTestId("sa-crystals")).toBeVisible({ timeout: 5_000 });
     await page.keyboard.down("ArrowRight");
     await page.waitForTimeout(1_500);
@@ -336,6 +348,9 @@ test.describe("review #486 — M2: élesítés és tartott tűz (billentyűzet)"
     const held = await probe(page);
     expect(held.questionOpen, "a tartott tűz (söprő hajóval) nem válaszolt").toBe(1);
     expect(held.questionsAnswered, "a tartott tűz nem válaszolt").toBe(1);
+    // kis UX: a lövedék átment a kristályon → rövid szöveges jelzés jelenik meg
+    await expect(page.getByTestId("sa-hold-hint")).toHaveAttribute("data-visible", "true", { timeout: 1_500 });
+    await expect(page.getByTestId("sa-hold-hint")).toContainText("lőj újra");
 
     // 3) szándékos új nyomás (elengedés + újra), söprő hajóval: válaszol
     await page.keyboard.up("Space");
@@ -343,6 +358,8 @@ test.describe("review #486 — M2: élesítés és tartott tűz (billentyűzet)"
     await page.keyboard.down("ArrowLeft");
     await page.keyboard.down("Space");
     await expect.poll(async () => (await probe(page)).questionsAnswered, { timeout: 2_500 }).toBe(2);
+    // a szándékos lövéses válasz után a jelzés eltűnik (és nem tér vissza)
+    await expect(page.getByTestId("sa-hold-hint")).toHaveAttribute("data-visible", "false", { timeout: 1_500 });
     await page.keyboard.up("ArrowLeft");
     await page.keyboard.up("Space");
   });
@@ -367,13 +384,16 @@ test.describe(`review #486 — hosszú válaszok és rajz-arány (${vp.width}×$
     await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
     await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
     await force(page, { questionItem: { id: "long-answers", prompt: item.prompt, options: [...item.options], correctIndex: item.correctIndex }, question: true });
-    // a kristályokon sorszám; a lista NEM nyílik magától (a pálya nem áll meg a játékos kérése nélkül) — a „Válaszok” gombra nyílik
+    // Ú5: hosszú válaszú tételnél a lista a kérdéssel együtt MAGÁTÓL nyílik; a világ és a kérdés-óra áll, a kristály nem található el
     await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-long", "true", { timeout: 5_000 });
-    await expect(page.getByTestId("sa-answers")).toHaveCount(0);
-    const tWorld0 = (await probe(page)).simTime as number;
-    await page.waitForTimeout(500);
-    expect(((await probe(page)).simTime as number) - tWorld0, "a lista zárva: a világ fut (a megállított világ <= 34 ms-ot lépne; szoftveres WebGL-en kevés képkocka jut)").toBeGreaterThan(50);
-    await page.getByTestId("sa-answers-open").tap();
+    await expect(page.getByTestId("sa-answers")).toBeVisible({ timeout: 5_000 });
+    const tOpen = (await probe(page)).simTime as number;
+    const clockOpen = (await probe(page)).questionsAnswered;
+    await page.keyboard.down("Space");
+    await page.waitForTimeout(600);
+    await page.keyboard.up("Space");
+    expect(((await probe(page)).simTime as number) - tOpen, "a lista nyitva: a világ áll").toBeLessThanOrEqual(34);
+    expect((await probe(page)).questionsAnswered, "a lista nyitva: lövéssel nem lehet kristályt eltalálni").toBe(clockOpen);
     const list = page.getByTestId("sa-answers");
     await expect(list).toBeVisible({ timeout: 5_000 });
     // minden válasz TELJES szöveggel, vágás nélkül; a lista a nézeten belül, a gombok elérhetők (görgetéssel is)
@@ -415,6 +435,13 @@ test.describe(`review #486 — hosszú válaszok és rajz-arány (${vp.width}×$
     const t0 = (await probe(page)).simTime as number;
     await page.waitForTimeout(700);
     expect(((await probe(page)).simTime as number) - t0, "a lista nyitva: a világ áll").toBeLessThanOrEqual(34);
+    // bezárás: a világ fut tovább, az élesítés ÚJRA indul (majd lejár); a „Válaszok” gomb újranyitja
+    await page.getByTestId("sa-answers-close").click();
+    await expect(page.getByTestId("sa-answers")).toHaveCount(0);
+    await expect.poll(async () => ((await probe(page)).simTime as number) - t0, { timeout: 4_000 }).toBeGreaterThan(100);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 3_000 });
+    await page.getByTestId("sa-answers-open").click();
+    await expect(list).toBeVisible();
     // élesítés után a lista válaszol (a jó válasz), a lista bezárul és a világ fut tovább
     await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 3_000 });
     const goodText = item.options[item.correctIndex]!;
@@ -460,7 +487,7 @@ test.describe("review #486 — elforgatás nyitott kérdésnél", () => {
     await page.getByTestId("sa-start").tap();
     await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
     await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
-    await force(page, { question: true });
+    await force(page, { question: true, questionItem: SHORT_ITEM });
     await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
     const px = async () => JSON.parse(String((await probe(page)).crystalPx)) as Array<[number, number] | null>;
     const geometry = async () =>
@@ -485,7 +512,7 @@ test.describe("review #486 — elforgatás nyitott kérdésnél", () => {
       await page.setViewportSize(vp);
       // előbb megvárjuk, hogy a geometria TÉNYLEG megváltozzon (a találati hely új aréna-méretből számolódik)
       await expect.poll(async () => JSON.stringify(await px()), { timeout: 5_000 }).not.toBe(before);
-      expect((await probe(page)).crystalShownAt as number, "érdemi elmozdulásnál az élesítés újraindul").toBeGreaterThan(shownBefore);
+      await expect.poll(async () => (await probe(page)).crystalShownAt as number, { timeout: 3_000, message: "érdemi elmozdulásnál az élesítés újraindul" }).toBeGreaterThan(shownBefore);
       await expect.poll(async () => (await probe(page)).crystalsArmed, { timeout: 3_000 }).toBe(1);
       // a gomb-helyek a következő képkockára követik a magot
       await expect

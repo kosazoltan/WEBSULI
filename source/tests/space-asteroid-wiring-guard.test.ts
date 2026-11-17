@@ -160,9 +160,11 @@ test("review #486 M2: a kristályt a lövedék csak élesítés után, új tűz-
   assert.doesNotMatch(code, /chip\.disabled !== lock/, "a koppintás / billentyű szándékos: nincs élesítési tiltás (az élesítés a lövedékre vonatkozik)");
 });
 
-test("review #486: a hosszú válaszok listája — a lista az egyetlen megállítási ok mellett válaszol, a világ áll alatta, és csak a „Válaszok” gombra nyílik", () => {
-  assert.match(code, /setLongLabels\(!crystalLabelsFit\(p\.options\.map\(\(o\) => o\.label\)\)\);/);
-  assert.doesNotMatch(code, /if \(long\) setExpanded\(true\)/, "a lista nem nyílik magától (a pálya nem áll meg kérés nélkül)");
+test("review #486: a hosszú válaszok listája — a lista az egyetlen megállítási ok mellett válaszol, a világ áll alatta, és a hosszú válaszú kérdéssel magától nyílik", () => {
+  assert.match(code, /const long = !crystalLabelsFit\(p\.options\.map\(\(o\) => o\.label\)\);\s*setLongLabels\(long\);/);
+  // SPEC-VÁLTOZÁS 2026-11-17 (review #486 Ú5, orkesztrátori döntés): a hosszú válaszú tételnél a lista a kérdéssel együtt MAGÁTÓL megnyílik; a szigor nő.
+  assert.match(code, /if \(long\) setExpanded\(true\);/);
+  assert.match(code, /const closeAnswerList = \(\) => \{\s*setExpanded\(false\);\s*crystalShownAtRef\.current = armClockRef\.current;/, "a lista zárása újraindítja az élesítést");
   assert.match(code, /listHoldRef\.current = expanded && longLabels && !paused && !gfxLost && feedback === null;/);
   assert.match(code, /data-testid="sa-answers"/);
   assert.match(code, /className="sa-answer-text"/);
@@ -197,4 +199,11 @@ test("review #486 (Vercel): átméretezés / elforgatás nyitott kérdésnél a 
   assert.match(code, /camera\.updateProjectionMatrix\(\);\s*rezoneNowRef\.current\(\);/);
   assert.match(code, /rezoneCrystals\(list, decideCrystalZone\(pres\.question\.quiz\.prompt\), 1\)/);
   assert.match(code, /crystalShownAtRef\.current = armClockRef\.current;\s*\n?\s*};/);
+});
+
+test("review #486 (kis UX): a tartott tűz átmegy a kristályon — rövid szöveges jelzés, amíg a gyerek lövéssel még nem válaszolt", () => {
+  assert.match(code, /holdHintUntilRef\.current = armClockRef\.current \+ 3500/);
+  assert.match(code, /if \(!bulletAnsweredRef\.current && crystalAt\(crystals, b\.x, b\.y\)\)/);
+  assert.match(code, /bulletAnsweredRef\.current = true;\s*holdHintUntilRef\.current = 0;/);
+  assert.match(code, /data-testid="sa-hold-hint"/);
 });

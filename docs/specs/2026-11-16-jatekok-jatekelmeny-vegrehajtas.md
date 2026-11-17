@@ -1547,7 +1547,7 @@ fizika-esetek (pattogás, határok) változatlanok.
   évfolyam-bank választóban „látottnak” véve); ha mégis ilyen jön (tananyag, kupon-mód; a banki tételek ~5,7%-a, a leghosszabb
   válasz 38 karakter — mérve a `T/space-asteroid-rules.test.ts`-ben), a kristályokon a SORSZÁM áll, a válaszok TELJES szövege a
   vászonra nyíló „Válaszok” listán (`sa-answers`, törés, nincs vágás, a legrosszabb tétel becsült magassága a vászon 72%-án belül,
-  fölötte görgethető) olvasható; a lista NEM nyílik magától (a pálya nem áll meg a játékos kérése nélkül), a „Válaszok” gombra nyílik, és nyitva tartása alatt a világ és a kérdés-óra áll, az 1–4 billentyű és a lista
+  fölötte görgethető) olvasható; a lista a kérdéssel együtt MAGÁTÓL megnyílik (orkesztrátori döntés, review #486 Ú5 — így nem lehet olvasás nélkül kilőni egy számozott kristályt), nyitva tartása alatt a világ és a kérdés-óra áll; a gyerek zárja be, és csak utána indul az élesítés (a „Válaszok” gomb újranyitja, a zárás újra indítja az élesítést), az 1–4 billentyű és a lista
   gombjai válaszolnak, a „Vissza a pályához” gomb bezárja, a „Válaszok” gomb újranyitja — NINCS csonkolás (review #486 K2;
   a „2 sorra vág” engedmény megszűnt).
 - **U-J6-2:** a `space-asteroid-quiz-slot.test.ts` változatlanul zöld; forrás-őre a `pickGradeSlotWithVocab({ pick: () => pickGradeQuiz({
@@ -1564,6 +1564,13 @@ fizika-esetek (pattogás, határok) változatlanok.
   (`lifeLossOutcome`, a lap és a szimuláció közös szabálya), az eredmény nem írható felül (`endRun(false)` a győzelmet megtartja);
   e2e: `forceState({ bossFinale: true })` — egy élet, elesett főellenfél, a hajón repülő ellenséges lövedék → „Legyőzted a főellenfelet!”.
 - **Interpolált rajz (K.4/9, KSZ-4):** a fix lépés előző és mostani helyzete között a rajz az `alpha`-val interpolál (`interpolate`).
+- **A pálya sűrűségét a JÁTÉK-intenzitás hajtja (review #486 Ú1, terv 4.1/6):** `waveSpawnInterval(wave, intensity)` — a `pace.intensity()`
+  (sérülés / közeli veszély) csak enyhíti (≤ +30%); a KÉRDÉS-sáv a pálya sűrűségét nem hajtja, csak a kérdések nehézségét / ablakát.
+  Így a jó válasz mindig előny, a rossz válasz nem könnyít. Sim-teszt: 3 évfolyamsáv × 20 / 45 / 75 / 95%: a győzelem a pontossággal nem
+  csökken (−1/20 tűréssel), és kérdéssel nem kevesebb, mint kérdés nélkül.
+- **Tartott tűz jelzése:** ha a lövedék átmegy a kristályon (nem élesített / régi nyomás), „Engedd el a tűzgombot, és lőj újra a válaszhoz!”
+  jelenik meg 3,5 mp-re, amíg a gyerek lövéssel egyszer még nem válaszolt (`sa-hold-hint`).
+- **Átméretezés nyitott kérdésnél:** a mag új aréna-méretből újraszámolja a kristályok helyét (`rezoneCrystals`), az élesítés újraindul.
 - **Évfolyam-sáv (review #486 M3):** 3–4. évfolyamon a világ könnyebb (`gradeEase`: ritkább érkezés, lassabb ellenfél), hogy a tudás
   segítsen és egy harmadikos-negyedikes végigvigye; a szimuláció győzelmi arány-állításai: `SIM_YOUNG` ≥ 12/20 kérdéssel, és minden
   modellre kérdéssel nem több a vereség, mint nélküle.

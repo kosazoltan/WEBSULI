@@ -225,9 +225,9 @@ const range = (u: number, lo: number, hi: number): number => lo + u * (hi - lo);
  * a hulló elemeket (élet / pajzs / erő / bomba) is felveszi — ugyanazzal a drop-táblával, mint a lap (`physics.ts`).
  * Kalibráció (20 seed, 2026-11-17, review #486 M3): lásd `T/space-asteroid-sim.test.ts` fejkommentje.
  */
-export const DODGE_IMPACT = 0.65;
-export const DODGE_FIGHTER = 1.1;
-export const DODGE_BOSS = 0.85;
+export const DODGE_IMPACT = 0.38;
+export const DODGE_FIGHTER = 0.9;
+export const DODGE_BOSS = 0.75;
 
 export const BOSS_TOTAL_HP = 90;
 const BOSS_PHASE_HP = [50, 25, 15] as const;
@@ -267,7 +267,7 @@ export type AsteroidWorld = {
   skipToBoss(): void;
 };
 
-export function createAsteroidWorld(opts: { seed: number | string; grade?: number | null; /** a hajó oszlopába érés esélye (alapértelmezés: `LATERAL_OVERLAP`; a tesztek 1-gyel kényszerítik az ütközést) */ overlap?: number; band: () => number; signal: (kind: "damage" | "nearThreat", dtSec?: number) => void }): AsteroidWorld {
+export function createAsteroidWorld(opts: { seed: number | string; grade?: number | null; /** a hajó oszlopába érés esélye (alapértelmezés: `LATERAL_OVERLAP`; a tesztek 1-gyel kényszerítik az ütközést) */ overlap?: number; /** a JÁTÉK-intenzitás (`pace.intensity()`), nem a kérdés-sáv */ intensity: () => number; signal: (kind: "damage" | "nearThreat", dtSec?: number) => void }): AsteroidWorld {
   const rng = createRng(seedFrom(ASTEROID_GAME_ID, opts.seed, "world"));
   const crystalRng = createRng(seedFrom(ASTEROID_GAME_ID, opts.seed, "crystals"));
   const ease = gradeEase(opts.grade ?? null);
@@ -371,7 +371,7 @@ export function createAsteroidWorld(opts: { seed: number | string; grade?: numbe
 
       // Érkezés: a hullám ellenfelei az `waveSpawnInterval` szerint (a főellenfél: egyetlen).
       const want = waveEnemyCount(wave);
-      if (spawned < want && (threats.length === 0 || clock >= lastSpawn + waveSpawnInterval(wave, opts.band()) * ease.spawnScale)) {
+      if (spawned < want && (threats.length === 0 || clock >= lastSpawn + waveSpawnInterval(wave, opts.intensity()) * ease.spawnScale)) {
         spawnThreat();
         lastSpawn = clock;
       }
@@ -401,7 +401,7 @@ export function createAsteroidWorld(opts: { seed: number | string; grade?: numbe
           // A hajóhoz érő ellenfél: kitérés (az ügyesség dobása) vagy ütközés.
           threats = threats.filter((x) => x !== t);
           // (kitért: az ellenfél a hajó mellett elhalad, nem ér pontot)
-          if (rng.next() < (opts.overlap ?? LATERAL_OVERLAP) && input.dodgeRoll >= DODGE_IMPACT) loseLife();
+          if (rng.next() < (opts.overlap ?? LATERAL_OVERLAP * (t.kind === "rock" ? 0.55 + 0.15 * t.size : 1)) && input.dodgeRoll >= DODGE_IMPACT) loseLife();
         }
       }
       // Felvehető elemek: a bot a hulló elemet ügyessége szerint éri el.
@@ -565,7 +565,7 @@ export function createSimGame(opts: { seed: number; grade: number; questions: bo
   const world = createAsteroidWorld({
     seed: opts.seed,
     grade: opts.grade,
-    band: () => (opts.questions ? director.band() : 0.4),
+    intensity: () => driver?.pace.intensity() ?? 0,
     signal: (kind, dt) => driver?.pace.signal(kind, dt),
   });
   const ui = createQuestionUi({

@@ -15,7 +15,7 @@ import {
   createSimGame,
   questionTotals,
 } from "../client/src/lib/spaceAsteroid/sim";
-import { BOSS_WAVE, HIT_INVULN_SEC, TUTORIAL_SEC, WAVE_COUNT, waveEnemyCount } from "../client/src/lib/spaceAsteroid/physics";
+import { BOSS_WAVE, HIT_INVULN_SEC, TUTORIAL_SEC, WAVE_COUNT, waveEnemyCount, waveSpawnInterval } from "../client/src/lib/spaceAsteroid/physics";
 
 /**
  * J6a — Galaktikus Aszteroida szimulációs elfogadás a közös harness-szel (végrehajtás K.6, J6a 5.; terv 6.2: J2, J3, J4, J6,
@@ -33,8 +33,8 @@ import { BOSS_WAVE, HIT_INVULN_SEC, TUTORIAL_SEC, WAVE_COUNT, waveEnemyCount } f
  * érő ellenfél csak `LATERAL_OVERLAP` eséllyel ütközik (a hajó oszlopába ér), a bot a hulló elemeket felveszi. Nem minden
  * ellenfél ütközik, ami nincs lelőve.
  *
- * Mért értékek (2026-11-17, ezen a gépen, 20 seed, 900 mp): győzelem kérdéssel / kérdés nélkül — SIM_YOUNG (3. évf.) 17 / 14,
- * SIM_AVERAGE 19 / 14, SIM_STRONG 20 / 20, SIM_WEAK 1 / 0; a pontos számokat a `console.log` sorok adják (`node --test`).
+ * Mért értékek (2026-11-17, ezen a gépen, 20 seed, 900 mp): győzelem kérdéssel / kérdés nélkül — SIM_YOUNG (3. évf.) 15 / 5,
+ * SIM_AVERAGE 18 / 13, SIM_STRONG 20 / 19, SIM_WEAK 4 / 0 (a pálya sűrűségét a játék-intenzitás hajtja, nem a kérdés-sáv — Ú1); a pontos számokat a `console.log` sorok adják (`node --test`).
  */
 
 const factory = createSimGame as unknown as SimGameFactory;
@@ -155,7 +155,7 @@ test("hullámok: 8 hullám + főellenfél, a hullám-váltás kapu nélküli (az
 });
 
 test("a rossz kristály 3 apró sziklára hasad; a jó válasz fejlesztése az intenzitás szerint: pajzs / hármas lövés / bomba", () => {
-  const w = createAsteroidWorld({ seed: 5, band: () => 0.4, signal: () => {} });
+  const w = createAsteroidWorld({ seed: 5, intensity: () => 0, signal: () => {} });
   assert.equal(w.state().threats.length, 0);
   w.shatter({ x: 1, y: 5 });
   assert.equal(w.state().threats.length, 3);
@@ -178,7 +178,7 @@ test("ütközés: élet −1 és 2 mp sérthetetlenség, nem kvíz; a pajzs és 
   assert.equal(HIT_INVULN_SEC, 2);
   assert.equal(START_LIVES, 3);
   let damage = 0;
-  const w = createAsteroidWorld({ seed: 1, overlap: 1, band: () => 0.4, signal: (k) => { if (k === "damage") damage += 1; } });
+  const w = createAsteroidWorld({ seed: 1, overlap: 1, intensity: () => 0, signal: (k) => { if (k === "damage") damage += 1; } });
   // a tanító szakasz (30 mp, nincs életvesztés) és a menet eleji sérthetetlenség lejár, mielőtt a próba kezdődik
   for (let i = 0; i < 31 * 60; i++) w.step(SIM_STEP_MS, { dodgeRoll: 0 });
   assert.equal(w.state().lives, START_LIVES);
@@ -228,7 +228,7 @@ test("közös meghajtó (K.6): eltérő képkocka-időknél, lépés-indexhez k�
   // képkocka-időktől nem. A bemenet a lépés SORSZÁMÁNAK függvénye; az N. lépés után a világ nem lép tovább (azonos végpont).
   const N = 1800;
   const run = (frameMs: number): string => {
-    const world = createAsteroidWorld({ seed: 77, band: () => 0.4, signal: () => {} });
+    const world = createAsteroidWorld({ seed: 77, intensity: () => 0, signal: () => {} });
     const roll = (n: number) => ((n * 2654435761) % 1000) / 1000;
     const driver = createAsteroidDriver({
       seed: 77,
@@ -253,7 +253,7 @@ test("közös meghajtó (K.6): eltérő képkocka-időknél, lépés-indexhez k�
 
 test("tanító szakasz (K.4/25): az első 30 mp-ben az ütközés nem von le életet, utána igen", () => {
   assert.equal(TUTORIAL_SEC, 30);
-  const w = createAsteroidWorld({ seed: 3, overlap: 1, band: () => 0.4, signal: () => {} });
+  const w = createAsteroidWorld({ seed: 3, overlap: 1, intensity: () => 0, signal: () => {} });
   // 20 mp-nél: közvetlenül a hajónál lévő szikla, sikertelen kitérés
   for (let i = 0; i < 20 * 60; i++) w.step(SIM_STEP_MS, { dodgeRoll: 0 });
   w.shatter({ x: 0, y: -4.5 });
@@ -307,4 +307,39 @@ test("J7 — a menet első kérdése a tananyag (material) tétele, utána a ban
   assert.equal(sim.stats().firstSource, "material");
   assert.deepEqual(keys.slice(0, 3), ["mat:m1", "mat:m2", "mat:m3"]);
   assert.ok(keys.length > 3 && keys.slice(3).every((k) => !k.startsWith("mat:")), "a tananyag elfogyása után a bank folytatja");
+});
+
+test("review #486 Ú1 — a pálya sűrűségét a JÁTÉK-intenzitás hajtja, nem a kérdés-sáv: a győzelem a pontossággal nem csökken, és a kérdés sosem rosszabb, mint a kérdés nélküli menet (3 évfolyamsáv × 20 / 45 / 75 / 95%)", () => {
+  const rows: string[] = [];
+  for (const [name, base, grade] of [
+    ["3–4. évf.", SIM_YOUNG, 3],
+    ["5–8. évf.", SIM_AVERAGE, 6],
+    ["9–12. évf.", SIM_AVERAGE, 10],
+  ] as const) {
+    const q: number[] = [];
+    const n: number[] = [];
+    for (const accuracy of [0.2, 0.45, 0.75, 0.95]) {
+      const player = { ...base, accuracy };
+      q.push(runSimSeeds(factory, player, { gameId: GAME, seconds: 900, grade, questions: true }).filter((r) => r.won).length);
+      n.push(runSimSeeds(factory, player, { gameId: GAME, seconds: 900, grade, questions: false }).filter((r) => r.won).length);
+    }
+    rows.push(`${name}: kérdéssel ${q.join(" / ")} · nélkül ${n.join(" / ")} (20 / 45 / 75 / 95%)`);
+    for (let i = 0; i < q.length; i++) {
+      // 20 seed, kis szórás: legfeljebb 1 győzelem tűrés (−1/20)
+      assert.ok(q[i]! >= n[i]! - 1, `${name}: ${[20, 45, 75, 95][i]}% pontosság — kérdéssel ${q[i]} < kérdés nélkül ${n[i]} (−1 tűrés)`);
+      if (i > 0) assert.ok(q[i]! >= q[i - 1]! - 1, `${name}: a győzelem a pontossággal csökken (${q.join(" / ")})`);
+    }
+    // a pontos játékos kérdéssel legalább annyira nyer, mint nélküle (a jó válasz mindig előny)
+    assert.ok(q[3]! >= n[3]!, `${name}: a 95%-os modell kérdéssel ${q[3]} < kérdés nélkül ${n[3]}`);
+    if (grade === 3) assert.ok(q[2]! >= 12, `${name}: a 3–4. évfolyamos (75%) modell ${q[2]}/20 (kell ≥ 12)`);
+  }
+  console.log(`[space-asteroid-sim] Ú1 — ${rows.join(" | ")}`);
+});
+
+test("review #486 Ú1 — a kérdés-sáv a pálya érkezési sűrűségét nem változtatja (csak az intenzitás enyhít)", () => {
+  assert.equal(waveSpawnInterval(3, 0), waveSpawnInterval(3, 0), "determinisztikus");
+  assert.ok(waveSpawnInterval(3, 1) > waveSpawnInterval(3, 0), "sérülés után ritkább az érkezés (levegő)");
+  assert.ok(waveSpawnInterval(3, 1) / waveSpawnInterval(3, 0) <= 1.3, "az intenzitás hatása plafonozott (KSZ-16)");
+  const sig = (w: number) => waveSpawnInterval(w, 0);
+  assert.ok(sig(8) < sig(1), "a hullámmal sűrűsödik");
 });

@@ -1293,6 +1293,10 @@ export default function SpaceAsteroidQuiz() {
   const safeProbeRef = useRef<HTMLDivElement>(null);
   const crystalLayerRef = useRef<HTMLDivElement>(null);
   const listHoldRef = useRef(false);
+  /** „Engedd el, és lőj újra” jelzés: eddig látszik (kristály-óra, ms); `bulletAnsweredRef`: a gyerek már válaszolt lövéssel. */
+  const holdHintUntilRef = useRef(0);
+  const bulletAnsweredRef = useRef(false);
+  const holdHintElRef = useRef<HTMLParagraphElement>(null);
   /** Átméretezés / elforgatás nyitott kérdésnél: a mag új aréna-méretet kap, a kristályok helye újraszámolódik. */
   const rezoneNowRef = useRef<() => void>(() => {});
   const bossFinaleRef = useRef<() => void>(() => {});
@@ -1372,9 +1376,12 @@ export default function SpaceAsteroidQuiz() {
       crystalsRef.current = spawnCrystals(p, decideCrystalZone(p.question.quiz.prompt), runRngRef.current.crystal.next);
       // Élesítés (review #486 M2, KSZ-11): a kristály ≥ CRYSTAL_ARM_MS-ig látszik, mielőtt választható; a korábbi tűz-nyomás nem válaszol.
       crystalShownAtRef.current = armClockRef.current;
-      // Hosszú (> 22 karakteres) válasznál a kristályon csak a sorszám látszik, a TELJES szövegek a „Válaszok” gombra nyíló listában
-      // (a világ és a kérdés-óra a lista nyitva tartása alatt áll). Nem nyílik magától: a pálya nem áll meg a játékos kérése nélkül.
-      setLongLabels(!crystalLabelsFit(p.options.map((o) => o.label)));
+      // Hosszú (> 22 karakteres) válasznál a kristályon csak a sorszám látszik, a TELJES szövegek a „Válaszok” listában, amely a
+      // kérdéssel együtt MAGÁTÓL megnyílik (review #486 Ú5): a világ és a kérdés-óra áll, amíg nyitva van; a gyerek zárja be, és
+      // csak utána indul az élesítés — így nem lehet olvasás nélkül kilőni egy számozott kristályt.
+      const long = !crystalLabelsFit(p.options.map((o) => o.label));
+      setLongLabels(long);
+      if (long) setExpanded(true);
     },
     onOutcome: (o, p) => {
       // A hosszú válaszok listája a válasszal (vagy a menet végével) bezárul: a világ fut tovább.
@@ -1587,6 +1594,12 @@ export default function SpaceAsteroidQuiz() {
     if (listHoldRef.current) return void qRef.current.pick(idx, driverRef.current?.clockMs());
     if (pausedRef.current) return;
     qRef.current.pick(idx, driverRef.current?.clockMs());
+  };
+
+  /** A „Válaszok” lista bezárása: a világ fut tovább, az élesítés (500 ms) ÚJRA indul (Ú5). */
+  const closeAnswerList = () => {
+    setExpanded(false);
+    crystalShownAtRef.current = armClockRef.current;
   };
 
   /** A válasz következménye a játékvilágban (≤ 2 s, K.4/23): fejlesztés (jó) vagy hasadás (rossz). */
@@ -2100,11 +2113,18 @@ export default function SpaceAsteroidQuiz() {
         for (const b of bulletsRef.current) {
           if (b.life <= 0 || b.fromEnemy) continue;
           // Csak az élesítés UTÁNI tűz-nyomással kilőtt lövedék válaszol; a többi átrepül a kristályon (nem fogy el).
-          if (!bulletCountsAsAnswer({ nowMs: armClockRef.current, shownAtMs: crystalShownAtRef.current, pressAtMs: b.pressAtMs ?? Number.NEGATIVE_INFINITY })) continue;
+          const counts = bulletCountsAsAnswer({ nowMs: armClockRef.current, shownAtMs: crystalShownAtRef.current, pressAtMs: b.pressAtMs ?? Number.NEGATIVE_INFINITY });
+          if (!counts) {
+            // Rövid szöveges jelzés (amíg a gyerek lövéssel még nem válaszolt): a lövedék átment a kristályon.
+            if (!bulletAnsweredRef.current && crystalAt(crystals, b.x, b.y)) holdHintUntilRef.current = armClockRef.current + 3500;
+            continue;
+          }
           const c = crystalAt(crystals, b.x, b.y);
           if (c) {
             b.life = 0;
             onAnswer(c.optionIndex);
+            bulletAnsweredRef.current = true;
+            holdHintUntilRef.current = 0;
             break;
           }
         }
@@ -2118,7 +2138,7 @@ export default function SpaceAsteroidQuiz() {
 
     // Spawn logika a hullámon belül — elapsed óra, nem fali idő (kvíz alatt áll)
     if (!waveIntermissionRef.current && enemiesSpawnedThisWaveRef.current < enemiesPerWaveRef.current) {
-      const spawnInterval = waveSpawnInterval(waveRef.current, qRef.current.director?.band() ?? adaptiveRef.current.band) * gradeEase(gradeRef.current).spawnScale;
+      const spawnInterval = waveSpawnInterval(waveRef.current, driverRef.current?.pace.intensity() ?? 0) * gradeEase(gradeRef.current).spawnScale;
       const emptyField = enemiesRef.current.length === 0;
       if (spawnReady({
         elapsed: gameElapsedRef.current,
@@ -3078,6 +3098,11 @@ export default function SpaceAsteroidQuiz() {
       // Élesítés: a lövedék nem választ, amíg a kristály-óra el nem éri a megjelenés + CRYSTAL_ARM_MS értéket;
       // addig látható jelzés (halvány, pulzáló gyűrű, `data-armed="false"`) mutatja, hogy „készül”. A zónát a mag döntötte el.
       const armed = crystalsArmed();
+      const hintEl = holdHintElRef.current;
+      if (hintEl) {
+        const on = armClockRef.current < holdHintUntilRef.current ? "true" : "false";
+        if (hintEl.dataset.visible !== on) hintEl.dataset.visible = on;
+      }
       const layer = crystalLayerRef.current;
       if (layer && layer.dataset.armed !== (armed ? "true" : "false")) {
         layer.dataset.armed = armed ? "true" : "false";
@@ -3587,6 +3612,9 @@ export default function SpaceAsteroidQuiz() {
                         Hosszú válaszok (> 22 karakter): a kristályon a sorszám áll, a TELJES szövegek ebben a listában olvashatók
                         (törés, nincs vágás; a világ áll, amíg nyitva — a kérdés-óra is). A lista gombjai ugyanazt a választ adják.
                       */}
+                      <p ref={holdHintElRef} className="sa-hold-hint" data-testid="sa-hold-hint" data-visible="false" role="status">
+                        Engedd el a tűzgombot, és lőj újra a válaszhoz!
+                      </p>
                       {longLabels && !qView.reveal && expanded && (
                         <div className="sa-answers" role="group" aria-label="Válaszok" data-testid="sa-answers">
                           {qView.presentation.options.map((opt, idx) => (
@@ -3602,7 +3630,7 @@ export default function SpaceAsteroidQuiz() {
                               <span className="sa-answer-text">{opt.label}</span>
                             </button>
                           ))}
-                          <button type="button" className="sa-answers-close" data-testid="sa-answers-close" aria-label="Vissza a pályához" {...pointerTapHandlers(crystalTaps, 20, () => setExpanded(false))}>
+                          <button type="button" className="sa-answers-close" data-testid="sa-answers-close" aria-label="Vissza a pályához" {...pointerTapHandlers(crystalTaps, 20, closeAnswerList)}>
                             <span className="sa-answers-close-text">Vissza a pályához</span>
                             <span className="sa-answers-close-x" aria-hidden="true">✕</span>
                           </button>
@@ -3902,6 +3930,8 @@ export default function SpaceAsteroidQuiz() {
           .sa-answers .sa-answers-close { grid-column: 3; grid-row: 1 / span 2; padding: 0; min-width: 56px; }
           .sa-answers-close-text { display: none; }
         }
+        .sa-hold-hint { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); max-width: 92%; margin: 0; padding: 8px 14px; border-radius: 12px; background: #0b1033ee; border: 1px solid #fde68a; color: #fff; font-size: 15px; font-weight: 800; text-align: center; pointer-events: none; opacity: 0; visibility: hidden; }
+        .sa-hold-hint[data-visible="true"] { opacity: 1; visibility: visible; }
         .sa-answers-close-x { display: none; font-size: 20px; }
         @media (orientation: landscape) and (max-height: 520px) { .sa-answers-close-x { display: inline; } }
         .sa-answers-close, .sa-answers-open {

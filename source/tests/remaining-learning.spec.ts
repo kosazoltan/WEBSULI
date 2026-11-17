@@ -50,6 +50,9 @@ test('asteroid wrong-answer explanation: no blocking dialog, the Why? card stays
   await page.evaluate(()=>(window as unknown as {__websuliGame:{forceState:(p:object)=>void}}).__websuliGame.forceState({question:true}));
   await expect(crystals.locator('[data-correct]')).toHaveCount(4,{timeout:15000});
   await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+  // hosszú válaszú tételnél a „Válaszok” lista magától nyílik (a világ áll): bezárjuk, utána a kristályra kattintunk
+  const closeList=page.getByTestId('sa-answers-close');
+  if(await closeList.isVisible().catch(()=>false))await closeList.click();
  };
  // Spec 2026-09-29-jatekok-3-12-evfolyam, 3–4. döntés: 3–12. évfolyamon (itt 7.) a kérdés a közös évfolyam-bankból jön,
  // ezért a várt tételek a játék saját bankja ÉS a közös bank fájljai.

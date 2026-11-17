@@ -3,6 +3,8 @@ import { expect, type Page } from "@playwright/test";
 import { GRADE_QUIZ_ITEMS } from "../../client/src/data/gradeQuizBank";
 import type { GameMobileCase } from "../support/game-mobile-quality";
 
+const SHORT_ITEM = { id: "short-q", prompt: "Mennyi 6 × 7?", options: ["36", "42", "48", "54"], correctIndex: 1 };
+
 type GameTestWindow = { __websuliGame?: { forceState: (patch: Record<string, unknown>) => void } };
 
 /**
@@ -36,7 +38,8 @@ export const CASE: GameMobileCase = {
   resultForce: { phase: "over", gameWon: true, correctCount: 12 },
   resultTestId: "sa-over",
   quizScope: '[data-testid="sa-crystals"]',
-  quizForce: { question: true },
+  // rövid, kristályra férő tétel: a hosszú válaszú tétel a listát magától megnyitja (a világ áll), a mérő a szokásos kristály-állapotot várja
+  quizForce: { question: true, questionItem: SHORT_ITEM },
   quizMoving: true,
   answerWrong: async (page: Page) => {
     await page.waitForFunction(
@@ -44,7 +47,7 @@ export const CASE: GameMobileCase = {
       undefined,
       { timeout: 15_000 },
     );
-    await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ question: true }));
+    await page.evaluate((item) => (window as unknown as GameTestWindow).__websuliGame?.forceState({ question: true, questionItem: item }), SHORT_ITEM);
     const wrong = page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first();
     await expect(wrong).toBeVisible({ timeout: 10_000 });
     // Review #486: nincs `force` — a kristály élesedése (500 ms) után, mozdulatlanul kattintható gombra kattintunk.

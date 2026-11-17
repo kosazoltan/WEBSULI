@@ -168,10 +168,14 @@ export function waveEnemyCount(wave: number): number {
   return 4 + Math.min(Math.max(1, Math.floor(wave)) * 2, 18);
 }
 
-/** Két ellenfél érkezése között eltelő játékidő (mp): a hullámmal sűrűsödik, a gyengébb játékosnál (alacsony sáv) ritkább. */
-export function waveSpawnInterval(wave: number, band: number): number {
-  const b = Math.min(1, Math.max(0, Number.isFinite(band) ? band : 0.4));
-  return clamp(1.4 - wave * 0.06, 0.4, 1.4) * (1.4 - b * 0.6);
+/**
+ * Két ellenfél érkezése között eltelő játékidő (mp): a hullámmal sűrűsödik; a JÁTÉK-intenzitás (`pace.intensity()`, 0..1: sérülés
+ * és közeli veszély hajtja) csak enyhíti — sérülés után ritkább az érkezés (levegő), nyugodt menetben a névleges. A KÉRDÉS-sáv
+ * (jó / rossz válasz) a pálya sűrűségét NEM hajtja (review #486 Ú1, terv 4.1/6): a kérdés nem büntetés, a jó válasz mindig előny.
+ */
+export function waveSpawnInterval(wave: number, intensity: number): number {
+  const i = Math.min(1, Math.max(0, Number.isFinite(intensity) ? intensity : 0));
+  return clamp(1.4 - wave * 0.06, 0.4, 1.4) * (1.15 + i * 0.3);
 }
 
 /** A hullám-felirat („HULLÁM n”) látszási ideje (mp) — a hullámok közt nincs kapu, csak ez a felirat. */
