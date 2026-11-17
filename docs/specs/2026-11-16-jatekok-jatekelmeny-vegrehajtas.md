@@ -1661,6 +1661,37 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
     `slowMo: 1`, `readingAware`, `promptFits` (a Matek mintájára); az ütemezett kérdés az elágazás, legkorábban 15–20 mp-cel
     (seedelt) az előző elágazás után (`calm`), legkésőbb a director `maxGapMs` kényszere szerint.
 
+#### J7b döntések — a PR előtti független ellenőrzés után (2026-11-17, a kód előtt; az 1. és 3. pontot pontosítják)
+
+12. **Szándék (B1, a Szökőár D-J1a-13 mintájára):** válasz csak SZÁNDÉKOS bemenetből lesz a kérdés megjelenése óta:
+    kormány- / tárcsa-elmozdulás a megjelenéskori értéktől > 0,3, előre-hátra gáz / fék-váltás, 1–3 billentyű, koppintás egy
+    táblára. Szándék nélkül nincs kapuátlépés (lásd 13.): a kérdés lejár, a nyilvántartásba „lejárt”-ként kerül (ismétlési sor,
+    statisztika, `recordRun`), kupon-bónusz nincs, a tétel visszatér; játékbeli büntetés nincs.
+13. **Olvasási idő (M1) — „várakozó táblák” (az ellenőr B változata):** a három tábla a megjelenéskori menetirányban a jármű
+    előtt ÁLLANDÓ távolságban halad vele, amíg a gyerek nem jelez szándékot; a szándék pillanatában rögzül, a vonal a
+    pillanatnyi (nitróval együtt vett) sebességgel ≥ 2,4 s-ra kerül (+10 egység). Így a gyerek a kérdés teljes ablakában olvashat,
+    és a döntés után mindig marad idő a kormányzásra; ha a döntés túl későn jön, a kapu az ablak vége után érne — ez lejárat,
+    nem rossz válasz. Indok a teljes-ablaknyi távolság (A) és a kérdés-lassítás (C) helyett: (A) 30 egység/s × 9,4 s = 280
+    egység, a tábla a ködben láthatatlan és sokszor akadály / pályaszél mögé esik; (C) a vezetés lassítása töri a játékérzetet
+    (a terv szerint a vezetés nem áll). A tábla koppintással is választható (mozgó cél: `pointerTapHandlers`), így az
+    elágazás a közös mobil mérő hatókörébe kerül vissza.
+14. **Akadály (M2):** a táblák csak olyan helyre rögzülhetnek, ahová a jármű helyéről mindhárom kapuhoz ütközőmentes egyenes
+    folyosó vezet (a világ ütközői, a jármű fél szélességével bővítve); ha a próbált távolságok (+0…+48 egység) és
+    kapu-közök (20 / 16 / 13) egyike sem szabad, a táblák tovább várnak (a kérdés későbbi rögzüléssel / lejárattal folytatódik).
+15. **Hosszú válasz (M3):** a tábla felirata szóközépen nem törik; ha bármely válasz a tábla valódi szélességén (15 px) 2 sornál
+    hosszabb, a táblák csak a jelet (szám + szín) mutatják, és a kérdés-kártya alatt a teljes válaszok listája jelenik meg
+    ugyanazzal a jelöléssel.
+16. **Kerülő (K1):** a rossz kapu kerülője nem okozhat azonnali vereséget: a menet órája és a tölcsér élettartama legfeljebb úgy
+    lép előre, hogy legalább 5 s maradjon (a megoldás-kijelzés ≥ 1,8 s látszik). Szándék nélküli átlépés nincs (12–13.).
+17. **Fék nitró alatt (K2):** a tárcsa / billentyű hátrahúzása (gáz < −0,2) vagy a fék a nitrót megszakítja.
+18. **Horgony-kérdés (K3):** amíg a horgony-kérdés nyitva van (és a kijelzése tart), a jármű áll a ⚓-kori helyén, és a vereség
+    feltételei nem teljesülhetnek (a kérdés a horgonyzás része).
+19. **Forrás nélkül (K4):** ha a turbópadon a director 1,5 s alatt sem ad kérdést (üres kupon-lecke, kérdés nélküli mód), a pad
+    kérdés nélkül ad nitrót és eltűnik — nem ragad be.
+20. **Teljesítmény (K5):** a gamepadet képkockánként egyszer olvassuk, a fix lépés nem foglal új objektumot a lap kódjában; a
+    nehéz, propjaikban nem változó gyermekek memózva. A K.4/8 (0 hosszú feladat 4× lassítással) a mainen sem teljesül — NOT DONE,
+    jegy.
+
 ### J7c — zaj-alapú tornádópálya, Műszer-kalibrálás (Q2), szupercella (Opus)
 
 1. Állapot-sor commit.
