@@ -295,6 +295,8 @@ test('H5: nem egyértelműen értelmezhető idézés + kapu-köteles kulcsszó �
   // PowerShell-ben a `#` megjegyzést kezd: kapu-köteles kulcsszóval együtt tilt; Bash-eszköznél a régi viselkedés marad.
   assert.equal(planCommand('node x.mjs "a" # git push', { tool: 'PowerShell' }).kind, 'deny');
   assert.equal(planCommand('gh pr merge 9 --squash # megjegyzés', { tool: 'PowerShell' }).kind, 'deny');
+  // PowerShell-ben a #9 megjegyzés: a héj cél nélkül (az aktuális ág PR-ját) vonná össze, a terv viszont a 9-et nézné → DENY.
+  assert.equal(planCommand('gh pr merge #9 --squash', { tool: 'PowerShell' }).kind, 'deny');
   assert.equal(planCommand('gh pr merge 9 --squash', { tool: 'PowerShell' }).kind, 'pr-merge');
   const intended = [
     'node kanban.mjs note 5 "a kiadást a git push után ellenőrizd"',

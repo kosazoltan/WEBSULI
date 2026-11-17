@@ -21,11 +21,11 @@
 
 ## Elfogadási ellenőrzőlista
 
-- [ ] kulcs csak env / `--env-file`, soha kimenetben (teszt)
-- [ ] kulcs nélkül KIHAGYVA, `--strict` → 2 (teszt)
-- [ ] titok → 4, érték nélkül, hálózat nélkül (teszt)
-- [ ] a kapuk csak figyelmeztetnek (teszt)
-- [ ] skill, AGENTS.md, runbook
+- [x] kulcs csak env / `--env-file`, soha kimenetben (teszt)
+- [x] kulcs nélkül KIHAGYVA, `--strict` → 2 (teszt)
+- [x] titok → 4, érték nélkül, hálózat nélkül (teszt)
+- [x] a kapuk csak figyelmeztetnek (teszt)
+- [x] skill, AGENTS.md, runbook
 
 
 ## C-61 pontosítása (kanban #92) — végrehajtás
@@ -40,7 +40,7 @@
 6. `npm run gate:stage` zöld; mutációs ellenpróba commit után (egy-egy fail-closed ág kivétele → a teszt bukik); visszaállítás csak
    commitolt állapotra, `cmp`-pal ellenőrizve (C-70).
 
-- [ ] C1–C5 teszt · [ ] runbook · [ ] mutációs ellenpróba · [ ] gate:stage zöld
+- [x] C1–C5 teszt · [x] runbook · [x] mutációs ellenpróba · [x] gate:stage zöld
 
 
 ## A hook fail-closed viselkedése időtúllépéskor (kanban #100) — végrehajtás
