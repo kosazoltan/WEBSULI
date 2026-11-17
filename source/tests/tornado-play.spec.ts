@@ -55,12 +55,22 @@ async function waitJunction(page: Page): Promise<void> {
   await page.waitForFunction(() => (window as unknown as GameWindow).__websuliGame?.probe?.().questionKind === "junction", undefined, { timeout: 40_000 });
 }
 
-/** Szándék (J7b döntések 12., 21.): egy fék-koppintás (azonnali szándék) — a táblák rögzülnek. */
+/**
+ * Rögzítés (J7b döntések 25.): a kérdés megjelenése után ≥ 1 s-mal (kérdés-óra) lenyomott fék. A kérdés-óra lassú gépen a
+ * falióránál lassabban járhat, ezért fék-koppintás, amíg a táblák nem rögzülnek (minden koppintás új felfutó él).
+ */
 async function commitIntent(page: Page): Promise<void> {
-  await page.keyboard.down(" ");
-  await page.waitForTimeout(120);
-  await page.keyboard.up(" ");
-  await page.waitForFunction(() => (window as unknown as GameWindow).__websuliGame?.probe?.().junctionFrozen === 1, undefined, { timeout: 10_000 });
+  for (let i = 0; i < 20; i++) {
+    await page.keyboard.down(" ");
+    await page.waitForTimeout(120);
+    await page.keyboard.up(" ");
+    const frozen = await page
+      .waitForFunction(() => (window as unknown as GameWindow).__websuliGame?.probe?.().junctionFrozen === 1, undefined, { timeout: 500 })
+      .then(() => true)
+      .catch(() => false);
+    if (frozen) return;
+  }
+  throw new Error("a táblák a fék után sem rögzültek");
 }
 
 /** A jármű a rögzült (`gate`.) kapu elé kerül, a kapuvonal felé néz, és a saját fizikájával áthajt rajta. */
@@ -224,10 +234,21 @@ for (const viewport of VIEWPORTS) {
   test.describe(`J7b ellenőrzés után ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport, hasTouch: true, isMobile: true });
 
-    test("B1: szándék nélkül (a vezérlőhöz nem nyúlva) a táblák várnak, nincs válasz — a kérdés lejár", async ({ page }) => {
+    test("B1 / 25.: kormányzás és az első 1 s-ban lenyomott fék mellett a táblák várnak, nincs válasz — a kérdés lejár", async ({ page }) => {
       await startPlaying(page);
       await waitJunction(page);
       const id = (await probe(page)).questionId;
+      // Akadály miatti fék a kérdés első másodpercében (tovább tartva), közben 1,5 s kanyar: egyik sem szándék.
+      await page.keyboard.down(" ");
+      await page.keyboard.down("a");
+      await page.waitForTimeout(1500);
+      await page.keyboard.up("a");
+      await page.keyboard.up(" ");
+      const mid = await probe(page);
+      if (mid.questionId === id) {
+        expect(mid.intent, "a kormány / a korai fék szándéknak számított").toBe(0);
+        expect(mid.junctionFrozen).toBe(0);
+      }
       await page.waitForFunction((qid) => (window as unknown as GameWindow).__websuliGame?.probe?.().questionId !== qid, id, { timeout: 15_000 });
       const p = await probe(page);
       expect(p.questionsAnswered, "szándék nélkül nyilvántartott válasz").toBe(0);

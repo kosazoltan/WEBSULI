@@ -27,7 +27,14 @@ import {
   planJunction,
   planTurboPad,
 } from "../client/src/lib/tornado/junctions";
-import { createChaseCore, tornadoDirectorConfig, type ChaseEvent } from "../client/src/lib/tornado/sim";
+import {
+  createChaseCore,
+  FREEZE_DEADLINE_MARGIN_MS,
+  FREEZE_EXTEND_CAP_MS,
+  FREEZE_PATH_SLACK,
+  tornadoDirectorConfig,
+  type ChaseEvent,
+} from "../client/src/lib/tornado/sim";
 import { collidersNear, resolveVehicleCollisions } from "../client/src/lib/tornado/collision";
 import { ROAD_SPACING } from "../client/src/lib/tornado/world";
 import { bankPlayQuestion, createQuestionDirector, restoreReviewQuestion } from "../client/src/game-engine/play/questionDirector";
@@ -180,8 +187,8 @@ function driveThrough(h: ReturnType<typeof harness>, gate: number | "none" | "pa
     // "passive": egyenesen halad, a vezérlőhöz nem nyúl; "none": áll, és nem nyúl semmihez.
     if (typeof gate === "number" && j.frozen) x += Math.max(-0.5, Math.min(0.5, j.ox + gateOffset(j, gate) - x));
     if (gate !== "none") z -= 0.25;
-    // A döntés jelzése: koppintás (a lap a táblára koppintást / billentyűt így jelzi).
-    h.core.step(1000 / 60, { x, z, heading: 0, speed: 15, tap: typeof gate === "number" && i === 30 }, { hold: false });
+    // A rögzítés: a minimális olvasás (1 s) UTÁN lenyomott fék (J7b döntések 25.); utána a kormány visz a kapuhoz.
+    h.core.step(1000 / 60, { x, z, heading: 0, speed: 15, brake: typeof gate === "number" && i === 70 }, { hold: false });
     events.push(...h.core.drainEvents());
   }
   return events;
@@ -227,53 +234,76 @@ test("B1: szándék nélkül egyenesen hajtva sincs válasz — a táblák várn
   assert.equal(h.outcomes[0]!.picked, null);
 });
 
-test("B1 / R1: a tartott kormány és a rezgés nem szándék; a ≥ 1 s olvasás után FENNTARTOTT (≥ 0,6, 0,5 s) kitérés az", () => {
+test("25.: a kormány SOHA nem szándék — tartott, rezgő, fenntartott kanyar, elengedett kanyar; 1 s után sem", () => {
   const h = harness();
-  const step = (i: number, steer: number, extra: { tap?: boolean; reverse?: boolean } = {}) =>
-    h.core.step(1000 / 60, { x: 0, z: -i * 0.25, heading: 0, speed: 15, steer, ...extra }, { hold: false });
-  step(0, 0.8); // a kérdés a már tartott kormánnyal nyílik
-  for (let i = 1; i < 40; i++) step(i, 0.8);
-  assert.equal(h.core.intentSeen(), false, "a megjelenéskori kormány nem szándék");
-  // Rezgés: nagy, de rövid kitérések váltakozó irányba — nem szándék.
-  for (let i = 40; i < 160; i++) step(i, i % 20 < 10 ? 0.1 : 1.5);
-  assert.equal(h.core.intentSeen(), false, "a rövid / váltakozó kitérés nem szándék");
-  // Az első 1 s-ban a fenntartott kitérés sem számít (minimális olvasás): új kérdésen mérve.
-  const h2 = harness();
-  h2.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 15, steer: 0 }, { hold: false });
-  for (let i = 1; i < 50; i++) h2.core.step(1000 / 60, { x: 0, z: -i * 0.25, heading: 0, speed: 15, steer: -0.9 }, { hold: false });
-  assert.equal(h2.core.intentSeen(), false, "1 s olvasás előtt a kormány nem szándék");
-  for (let i = 50; i < 100; i++) h2.core.step(1000 / 60, { x: 0, z: -i * 0.25, heading: 0, speed: 15, steer: -0.9 }, { hold: false });
-  assert.equal(h2.core.intentSeen(), true, "1 s után a fenntartott kitérés szándék");
-  assert.equal(h2.core.junction()!.frozen, true, "a szándék után rögzül");
-  // A koppintás és a hátrahúzott gáz (R5) azonnal szándék.
-  const h3 = harness();
-  h3.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 15 }, { hold: false });
-  h3.core.step(1000 / 60, { x: 0, z: -0.25, heading: 0, speed: 15, reverse: true }, { hold: false });
-  assert.equal(h3.core.intentSeen(), true, "a hátrahúzott gáz szándék");
+  const step = (i: number, extra: { brake?: boolean; reverse?: boolean } = {}, heading = 0) =>
+    h.core.step(1000 / 60, { x: 0, z: -i * 0.25, heading, speed: 15, ...extra }, { hold: false });
+  step(0);
+  // A jármű iránya kanyarban, egyenesítve, rezegve változik — a mag a kormányt nem is kapja meg (a típusból kikerült).
+  for (let i = 1; i < 300; i++) step(i, {}, i < 90 ? i * 0.01 : Math.sin(i / 10) * 0.3);
+  assert.equal(h.core.intentSeen(), false, "kanyar / egyenesítés / rezgés nem szándék");
+  assert.equal(h.core.junction()?.frozen ?? false, false, "nem rögzül");
 });
 
-test("R1: rögzüléskor a kapuk a PILLANATNYI menetirányhoz igazodnak (a középső egyenesen előre)", () => {
+test("25.: a fék / a hátrahúzott gáz csak a minimális olvasás UTÁN lenyomva rögzít (felfutó él); a korábbi, tartott nem", () => {
+  const run = (pattern: (i: number) => { brake?: boolean; reverse?: boolean }, steps = 200) => {
+    const h = harness();
+    for (let i = 0; i < steps; i++) h.core.step(1000 / 60, { x: 0, z: -i * 0.25, heading: 0, speed: 15, ...pattern(i) }, { hold: false });
+    return h.core.intentSeen();
+  };
+  assert.equal(run(() => ({ brake: true })), false, "a megjelenéskor már tartott fék (akadály) nem szándék, 1 s után sem");
+  assert.equal(run(() => ({ reverse: true })), false, "a megjelenéskor már tartott tolatás nem szándék");
+  assert.equal(run((i) => ({ brake: i >= 20 && i < 50 })), false, "az első 1 s-ban lenyomott és elengedett fék nem szándék");
+  assert.equal(run((i) => ({ brake: i >= 20 })), false, "az első 1 s-ban lenyomott, tovább tartott fék nem szándék");
+  assert.equal(run((i) => ({ reverse: i >= 20 })), false, "az első 1 s-ban kezdett, tovább tartott tolatás nem szándék");
+  assert.equal(run((i) => ({ brake: i >= 70 })), true, "1 s után lenyomott fék rögzít");
+  assert.equal(run((i) => ({ reverse: i >= 70 && i < 75 })), true, "1 s után hátrahúzott gáz rögzít");
+  assert.equal(run((i) => ({ brake: (i >= 20 && i < 50) || i >= 90 })), true, "elengedés után 1 s-on túl újra lenyomott fék rögzít");
+});
+
+test("R1 / 25.: rögzüléskor a kapuk a PILLANATNYI menetirányhoz igazodnak (a középső egyenesen előre)", () => {
   const h = harness();
-  h.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 15 }, { hold: false });
-  h.core.step(1000 / 60, { x: 0, z: -0.25, heading: 0.6, speed: 15, tap: true }, { hold: false });
+  for (let i = 0; i < 70; i++) h.core.step(1000 / 60, { x: 0, z: -i * 0.25, heading: 0, speed: 15 }, { hold: false });
+  h.core.step(1000 / 60, { x: 0, z: -70 * 0.25, heading: 0.6, speed: 15, brake: true }, { hold: false });
   const j = h.core.junction()!;
   assert.equal(j.frozen, true);
   assert.ok(Math.abs(j.fx - Math.sin(0.6)) < 1e-9 && Math.abs(j.fz + Math.cos(0.6)) < 1e-9, "a tengely a rögzüléskori irány");
 });
 
-test("R2: rögzüléskor a kérdés határideje legalább a kapuig érés + 0,4 s", () => {
+test("26.: rögzüléskor a határidő legalább a legtávolabbi kapuig vezető út + 0,6 s — legfeljebb az eredeti ablak + 5 s", () => {
   const h = harness();
   h.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 15 }, { hold: false });
   const p = h.ui.active()!;
-  // Az ablak vége előtt 0,5 s-mal jelez szándékot.
+  const base = p.windowMs;
+  // Az ablak vége előtt 0,5 s-mal fékez.
   const until = p.startedAtSimMs + p.windowMs - 500;
   let i = 1;
   while (h.core.clockMs() < until) h.core.step(1000 / 60, { x: 0, z: -(i++) * 0.25, heading: 0, speed: 15 }, { hold: false });
-  h.core.step(1000 / 60, { x: 0, z: -i * 0.25, heading: 0, speed: 15, tap: true }, { hold: false });
+  const leftBefore = p.startedAtSimMs + p.windowMs - (h.core.clockMs() + 1000 / 60);
+  h.core.step(1000 / 60, { x: 0, z: -i * 0.25, heading: 0, speed: 15, brake: true }, { hold: false });
   const j = h.core.junction()!;
   assert.ok(j.frozen);
+  const reach = Math.hypot(j.line, ((j.gates - 1) / 2) * j.spacing) * FREEZE_PATH_SLACK;
+  const want = Math.min(p.startedAtSimMs + base + FREEZE_EXTEND_CAP_MS, h.core.clockMs() + (reach / 15) * 1000 + FREEZE_DEADLINE_MARGIN_MS);
   const deadline = p.startedAtSimMs + p.windowMs;
-  assert.ok(deadline >= h.core.clockMs() + (j.line / 15) * 1000 + 400 - 1, `határidő ${deadline} < kapuig érés`);
+  assert.ok(deadline >= want - 1, `határidő ${deadline} < ${want}`);
+  assert.ok(p.windowMs <= base + FREEZE_EXTEND_CAP_MS, "legfeljebb +5 s");
+  // 27.: az időcsík a rögzüléskor ugyanott áll (arány), és a végső határidőn fogy el.
+  const leftAfter = deadline - h.core.clockMs();
+  assert.ok(j.barWindowMs > 0);
+  assert.ok(Math.abs(leftAfter / j.barWindowMs - leftBefore / base) < 0.01, "a csík nem töltődik vissza");
+});
+
+test("Ú5: álló járműnél a rögzülés legfeljebb +5 s-mal hosszabbít", () => {
+  const h = harness();
+  h.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 0 }, { hold: false });
+  const p = h.ui.active()!;
+  const base = p.windowMs;
+  for (let i = 1; i < 70; i++) h.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 0 }, { hold: false });
+  h.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 0, brake: true }, { hold: false });
+  for (let i = 0; i < 400 && !h.core.junction()!.frozen; i++) h.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 0 }, { hold: false });
+  assert.ok(h.core.junction()!.frozen);
+  assert.ok(p.windowMs <= base + FREEZE_EXTEND_CAP_MS, `ablak ${p.windowMs} > ${base} + 5000`);
 });
 
 test("horgonyzott / mérési sávbeli tartásnál nem nyílik elágazás és nem jön turbópad", () => {

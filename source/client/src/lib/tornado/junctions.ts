@@ -87,6 +87,11 @@ export type Junction = {
   frozen: boolean;
   /** Ennyi másodperc a kerülő ára, ha rossz kapun hajt át (seedelt, a kérdés megjelenésekor sorsolt). */
   detourSec: number;
+  /**
+   * Az időcsík teljes hossza (ms) a rögzülés után (J7b döntések 27.): a csík a rögzüléskor ugyanott áll, és simán a meghosszabbított
+   * határidőn fogy el. 0 = a kérdés saját ablaka.
+   */
+  barWindowMs: number;
 };
 
 export type TurboPad = { x: number; z: number; expiresAtMs: number };
@@ -142,6 +147,7 @@ export function planJunction(args: {
     spacing: JUNCTION_GATE_SPACING,
     frozen: false,
     detourSec: detourSeconds(args.rng),
+    barWindowMs: 0,
   };
 }
 

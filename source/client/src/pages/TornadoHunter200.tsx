@@ -1191,6 +1191,8 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
           <p>W/S — gáz/fék · A/D — kormány · Szóköz — kézifék · F — horgony · C — kamera · Esc — menü</p>
           <p className="font-semibold text-white/70 mt-2 mb-1">Mobil</p>
           <p>Bal: kormány · Jobb: gáz, fék, horgony. A gombok az irányítás-móddal oldalt válthatók.</p>
+          <p className="font-semibold text-white/70 mt-2 mb-1">Elágazás</p>
+          <p>Koppints a jó táblára (vagy 1–3), vagy fékezz, és hajts át a kapuján.</p>
         </div>
       </CardContent>
     </Card>
@@ -2438,7 +2440,7 @@ function PlayScreen(props: {
   };
 
   /** A fix lépés kimenete — egyetlen, újrahasznált objektum (K5: a lépésben nincs foglalás). */
-  const simOutRef = useRef({ x: 0, z: 0, heading: 0, speed: 0, steer: 0, brake: false, reverse: false, hold: false });
+  const simOutRef = useRef({ x: 0, z: 0, heading: 0, speed: 0, brake: false, reverse: false, hold: false });
   const vehicleDimsRef = useRef(vehicleDimensions(props.vehicle.silhouette));
   vehicleDimsRef.current = vehicleDimensions(props.vehicle.silhouette);
   /** A gamepad képkockánként egyszer olvasva (K5). */
@@ -2463,7 +2465,6 @@ function PlayScreen(props: {
       out.z = p0.z;
       out.heading = p0.heading;
       out.speed = p0.speed;
-      out.steer = 0;
       out.brake = false;
       out.reverse = false;
       out.hold = true;
@@ -2579,14 +2580,13 @@ function PlayScreen(props: {
       }
     }
 
-    // A szándék-figyeléshez a lépés bemenete (B1): kormány és fék; a választ a mag csak rögzült kapunál fogadja el.
+    // A rögzítő szándékhoz a lépés bemenete (J7b döntések 25.): fék és hátrahúzott gáz — a mag felfutó élt néz a minimális
+    // olvasás után; a kormány nem szándék. A választ a mag csak rögzült kapunál fogadja el (a táblára koppintás közvetlen).
     out.x = p.x;
     out.z = p.z;
     out.heading = p.heading;
     out.speed = p.speed;
-    out.steer = steer;
     out.brake = brake;
-    // R5: a hátrahúzott gáz is szándék (J7b döntések 12., 21.).
     out.reverse = rawThrottle < -0.2;
     out.hold = anchorAsking || p.anchored || anchorBandState(distKm, bandSpecRef.current.anchorBand) === "in_band";
     return out;
@@ -2880,6 +2880,12 @@ function PlayScreen(props: {
   })();
   /** A bal felső panel ott rejtett, ahol a kérdés-sáv kártyája / gombsora alá kerülne (R4: fekvőn a válaszlista helyén is). */
   const hidePanel = qKind !== null && (shortLandscape ? qKind !== "junction" || compactSigns : qKind === "junction");
+  // J7b döntések 27.: rögzülés után az időcsík a rögzüléskori helyéről simán a meghosszabbított határidőn fogy el (nem töltődik vissza).
+  const barJunction = junctionRef.current;
+  const barPresentation =
+    q.bind.presentation && barJunction && barJunction.barWindowMs > 0 && barJunction.questionId === q.bind.presentation.id
+      ? { ...q.bind.presentation, windowMs: barJunction.barWindowMs }
+      : q.bind.presentation;
   // K5: a válaszlista magassága kérdésenként egyszer (a rajzoló hurok ebből számol, képkockánként nem olvas layoutot).
   useLayoutEffect(() => {
     answersTopRef.current = -1;
@@ -3111,6 +3117,7 @@ function PlayScreen(props: {
           Elágazás: sáv (a válasz az áthajtott tábla), turbó / horgony: nagy gombok. A régi `tornado-quiz` azonosító marad. */}
       <InlineQuestion
         {...q.bind}
+        presentation={barPresentation}
         mode={qKind === "junction" ? "bar" : "buttons"}
         skin="storm"
         disabled={paused || feedback !== null}
@@ -3244,7 +3251,7 @@ const LONG_ANSWER_FIXTURE: Question = {
 
 /** J7b: a kérdés fajtájának felirata (a kérdés-sáv mellett, a bal felső panelben). */
 const QUESTION_KIND_LABEL: Record<QuestionKind, string> = {
-  junction: "🔀 Elágazás — kormányozz a jó tábla felé, vagy koppints rá",
+  junction: "🔀 Elágazás — koppints a jó táblára, vagy fékezz, és hajts át a kapuján",
   turbo: "⚡ Turbópad",
   anchor: "⚓ Horgonyzási kérdés",
 };
