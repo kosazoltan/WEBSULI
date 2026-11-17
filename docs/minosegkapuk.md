@@ -101,6 +101,17 @@ viszi bukásra.
 - **A hook NEM biztonsági határ** a szándékos megkerülés ellen (pl. a hook kikapcsolása, szkriptfájlból indított push, idézés- /
   escape-trükk a parancsnévben, `git send-pack`, `gh api graphql` merge-mutáció): a figyelmetlen
   hibát fogja meg. A megkerülés tilos, és az orkesztrátornál a `pre-merge-gate` mindenképp lefut.
+- **Feltöltés munkafából alügynökként:** az alügynök parancsai a fő checkoutból indulnak (a `cd` nem marad meg, láncolni tilos),
+  ezért a munkafa ágát a fő checkoutból kell felküldeni egyszerű parancsként: `git push origin <ág>`. A hook ilyenkor a megnevezett
+  helyi ág fejére szóló bizonyítékot nézi.
+- **C-61 (main elmozdult a PR CI-ja óta, kanban #92):** a `pre-merge-gate` a main elmozdulásának fájllistáját a GitHub compare
+  végpontjából olvassa, és a `gates.config.json` `repoWideScopes` táblázata szerint dönt. **FAIL**, ha a PR egy repó-szintű
+  ellenőrzést érint (`*-guard.test.ts`, `scripts/qa/**`, `.github/workflows/**`), és a main olyan fájlt változtatott, amelyet az
+  ellenőrzés olvas: az őröknél és a workflow-nál bármit (`.*`), a `scripts/qa/`-nál a `scripts/qa/`, `docs/specs/`,
+  `render.yaml`, `.agents/skills/`, `.claude/skills/`, `.github/workflows/` alatt (indoklás fájl:sorral a konfigban). FAIL akkor
+  is, ha a fájllista nem olvasható, csonka (≥ 300) vagy üres eltérő SHA mellett, illetve ha a hatókör-táblázat hiányzik vagy hibás.
+  **WARN**, ha a main elmozdult, de nincs metszet (pl. csak játékkód változott egy `scripts/qa`-s PR mellett). **PASS**, ha a CI a
+  jelenlegi mainnel futott.
 - A hook csak a WEBSULI-ból indított Claude Code munkamenetekre hat (a `.claude/settings.json`-t a munkamenet induláskor olvassa —
   a merge után induló munkamenetektől érvényes). Más ügynököt (Codex, Cursor) az `AGENTS.md`, a skillek és a `.cursor/rules` köt.
 

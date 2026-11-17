@@ -33,7 +33,42 @@ export function requiredChecks(required, checkRuns = [], statuses = []) {
  * Tiszta döntés a begyűjtött adatokból (a tesztek közvetlenül ezt hívják).
  * @returns {{ name: string, status: string, note: string }[]}
  */
-export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files, verdict, external = null, guard, rt, repoWidePatterns }) {
+export const COMPARE_FILE_LIMIT = 300; // a GitHub compare végpont legfeljebb ennyi fájlt ad vissza
+
+/** Egy hatókör-bejegyzés mintáinak fordítása; hibás / hiányzó hatókör → `.*` (fail-closed). */
+function scopeRegexes(entry) {
+  const list = Array.isArray(entry?.mainScope) && entry.mainScope.length ? entry.mainScope : ['.*'];
+  return list.map((p) => { try { return new RegExp(p); } catch { return /.*/; } });
+}
+
+/**
+ * C-61 (kanban #92): a main elmozdult a PR CI-ja óta. FAIL csak akkor, ha a PR egy repó-szintű ellenőrzést érint, és a main
+ * elmozdulása az adott ellenőrzés által olvasott fájlkört érinti. Fail-closed: olvashatatlan / csonka (≥ 300) / üres main-fájllista
+ * eltérő SHA mellett → FAIL; hibás vagy hiányzó hatókör → `.*`.
+ * @returns {{ status: string, note: string }}
+ */
+export function decideMainMoved({ base, mainSha, files = [], mainFiles, mainFilesTruncated = false, repoWideScopes = [] }) {
+  if (!mainSha || !base) return { status: STATUS.FAIL, note: 'a main csúcsa vagy a CI alapja nem olvasható' };
+  if (mainSha === base) return { status: STATUS.PASS, note: 'a CI a jelenlegi mainnel futott' };
+  const moved = `a main elmozdult (${base.slice(0, 8)} → ${mainSha.slice(0, 8)})`;
+  if (!Array.isArray(repoWideScopes) || !repoWideScopes.length) return { status: STATUS.FAIL, note: `${moved}; a repoWideScopes hatókör-táblázat hiányzik a gates.config.json-ból (fail-closed)` };
+  const touched = [];
+  for (const f of files) {
+    const hits = repoWideScopes.filter((s) => { try { return new RegExp(s.pattern).test(f); } catch { return true; } });
+    if (hits.length) touched.push({ file: f, scopes: hits.flatMap(scopeRegexes) });
+  }
+  if (!touched.length) return { status: STATUS.WARN, note: `${moved}; repó-szintű őrt / ellenőrzést nem érint` };
+  const wide = touched.map((t) => t.file).join(', ');
+  const failMsg = (why) => ({ status: STATUS.FAIL, note: `${moved}, és a PR repó-szintű őrt / ellenőrzést érint (${wide}); ${why} — előbb olvaszd be a maint, és várd meg az új CI-t` });
+  if (!Array.isArray(mainFiles)) return failMsg('a main elmozdulásának fájllistája nem olvasható');
+  if (mainFilesTruncated || mainFiles.length >= COMPARE_FILE_LIMIT) return failMsg(`a main elmozdulásának fájllistája csonka (≥ ${COMPARE_FILE_LIMIT})`);
+  if (!mainFiles.length) return failMsg('a main elmozdulásának fájllistája üres, pedig a SHA eltér');
+  const overlap = [...new Set(mainFiles.filter((m) => touched.some((t) => t.scopes.some((re) => re.test(m)))))];
+  if (overlap.length) return failMsg(`a main az ellenőrzés által olvasott fájlt változtatott (${overlap.slice(0, 10).join(', ')}${overlap.length > 10 ? ', …' : ''})`);
+  return { status: STATUS.WARN, note: `${moved}; a PR repó-szintű ellenőrzést érint (${wide}), de a main ${mainFiles.length} változott fájlja közül egyik sem esik a hatókörébe (pl. ${mainFiles.slice(0, 5).join(', ')})` };
+}
+
+export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files, verdict, external = null, guard, rt, repoWideScopes, mainFiles = null, mainFilesTruncated = false }) {
   const out = [];
   const add = (name, status, note = '') => out.push({ name, status, note });
 
@@ -52,14 +87,8 @@ export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSh
     open ? `${open} nyitott szál — a jogos leletet javítsd teszttel, válaszolj, és CSAK a megválaszolt szálat zárd le` : `0 / ${threads.length}`);
 
   const base = ciBaseSha ?? pr.baseRefOid;
-  if (!mainSha || !base) add('main elmozdulása a PR CI-ja óta (C-61)', STATUS.FAIL, 'a main csúcsa vagy a CI alapja nem olvasható');
-  else if (mainSha === base) add('main elmozdulása a PR CI-ja óta (C-61)', STATUS.PASS, 'a CI a jelenlegi mainnel futott');
-  else {
-    const res = (repoWidePatterns ?? []).map((p) => new RegExp(p));
-    const wide = files.filter((f) => res.some((re) => re.test(f)));
-    if (wide.length) add('main elmozdulása a PR CI-ja óta (C-61)', STATUS.FAIL, `a main elmozdult, és a PR repó-szintű őrt / ellenőrzést érint (${wide.join(', ')}) — előbb olvaszd be a maint, és várd meg az új CI-t`);
-    else add('main elmozdulása a PR CI-ja óta (C-61)', STATUS.WARN, `a main elmozdult (${base.slice(0, 8)} → ${mainSha.slice(0, 8)}); repó-szintű őrt nem érint`);
-  }
+  const c61 = decideMainMoved({ base, mainSha, files, mainFiles, mainFilesTruncated, repoWideScopes });
+  add('main elmozdulása a PR CI-ja óta (C-61)', c61.status, c61.note);
 
   out.push({ name: 'független ellenőr ítélete a fejre', ...verdictResult(verdict, pr.headRefOid) });
   out.push({ name: 'külső (Gemini) ellenőr — második vélemény', ...externalResult(external, pr.headRefOid) });
@@ -122,6 +151,17 @@ async function main() {
     const runs = ghJson(exec, root, ['api', `repos/${repo}/actions/runs?head_sha=${head}&event=pull_request&per_page=20`]).workflow_runs ?? [];
     const ci = runs.filter((r) => r.name === 'CI').sort((a, b) => b.id - a.id)[0];
     const ciBaseSha = ci?.pull_requests?.[0]?.base?.sha ?? null;
+    // C-61 (kanban #92): a main elmozdulásának fájllistája a compare végpontból; hiba esetén null → a döntés fail-closed.
+    const cmpBase = ciBaseSha ?? pr.baseRefOid;
+    let mainFiles = null;
+    let mainFilesTruncated = false;
+    if (cmpBase && mainSha && cmpBase !== mainSha) {
+      try {
+        const cmp = ghJson(exec, root, ['api', `repos/${repo}/compare/${cmpBase}...${mainSha}`]);
+        mainFiles = (cmp?.files ?? []).map((f) => f.filename);
+        mainFilesTruncated = mainFiles.length >= COMPARE_FILE_LIMIT;
+      } catch { mainFiles = null; }
+    }
     const verdict = resolveVerdict({
       head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: [pr.body, ...(pr.comments ?? []).map((c) => c.body)],
     });
@@ -130,7 +170,8 @@ async function main() {
     const rt = await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl);
     for (const r of decideMerge({
       pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files: (pr.files ?? []).map((f) => f.path), verdict,
-      external: readEvidence(ctx.evDir, `external-${head}`), guard: { code: g.code, summary }, rt, repoWidePatterns: cfg.repoWidePatterns,
+      external: readEvidence(ctx.evDir, `external-${head}`), guard: { code: g.code, summary }, rt, repoWideScopes: cfg.repoWideScopes ?? [],
+      mainFiles, mainFilesTruncated,
     })) gate.add(r.name, r.status, r.note);
   } catch (e) {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);
