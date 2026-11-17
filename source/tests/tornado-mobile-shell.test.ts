@@ -68,7 +68,10 @@ test("visszajelzés: rezgés jó / rossz válaszra és befogásra", () => {
 
 test("elavult időzítők: a fázisváltás játékórán fut, az újrakezdés érvényteleníti a függő időzítőket", () => {
   assert.match(page, /scheduleGame\(advance,\s*750\)/, "a jó válasz utáni továbblépés nem a játékórán fut");
-  assert.match(page, /scheduleGame\(\(\)\s*=>\s*finishRunRef\.current\(true\),\s*2600\)/, "a horgonyzás utáni győzelem nem a játékórán / a friss finishRun-nal fut");
+  // SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 5.7 „Javítás”, J7a): a horgony-fejlesztés
+  // a készenléti időt adja — a 2600 ms az alap (`ANCHOR_HOLD_BASE_MS`, `T/tornado-upgrades-effect.test.ts`), a hívás
+  // továbbra is játékórán fut és a friss finishRun-t hívja.
+  assert.match(page, /scheduleGame\(\(\)\s*=>\s*finishRunRef\.current\(true\),\s*effRef\.current\.anchorHoldMs\)/, "a horgonyzás utáni győzelem nem a játékórán / a friss finishRun-nal fut");
   const finish = block(page, "const finishRun = useCallback(", "const finishRunRef");
   assert.match(
     finish,
