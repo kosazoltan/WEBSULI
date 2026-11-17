@@ -1069,6 +1069,7 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
 
 **Állapot (J2a):** kész — #454 (d5c91060, 2026-11-16), kanban #45 · **Állapot (J2b):** nem kezdődött
 **Függ:** J0c merge. Párhuzamosan futhat a J4-gyel. **Elfogadás:** J-WL, J1–J10, J14, J16, M1–M12. Terv: 5.2.
+**Olvashatósági javítás (tulajdonosi visszajelzés 2026-11-17, kanban #89):** `docs/specs/2026-11-17-szoletra-olvashatosag.md` és `-vegrehajtas.md` — tempó, olvasásalapú ablak, kiemelt célszó; a J2a `slowMo: 1` pontját felülírja (SPEC-VÁLTOZÁS).
 
 ### Fájlok
 
