@@ -18,15 +18,14 @@ A token korábbi Git-történetben és külső rendszerben való jelenléte ett�
 
 ## `SESSION_SECRET` rotáció — a játékos-fiók következményei (runbook, 2026-11-16)
 
-A `SESSION_SECRET`-ből levezetett kulcs (`server/player/codes.ts` `playerAuthKey`) hash-eli a belépőkódokat, a tanulói
-linkeket és a törölt, tiltott játékos-fiókok cím nélküli tiltás-ujjlenyomatát (`player_ban_fingerprints`, megőrzés: 12 hónap).
-Rotáció előtt:
+A `SESSION_SECRET`-ből levezetett kulcs (`server/player/codes.ts` `playerAuthKey`) hash-eli a belépőkódokat és a tanulói
+linkeket; a törölt, tiltott játékos-fiókok cím nélküli tiltás-ujjlenyomatát (`player_ban_fingerprints`, megőrzés: 12 hónap) a
+külön `PLAYER_BAN_KEY` — ennek hiányában szintén a `SESSION_SECRET`. Rotáció előtt:
 
-1. Admin → „Játékosok” → „Törölt, de tiltva maradt fiókok”: vedd tudomásul, hogy ezek a bejegyzések a rotáció után NEM
-   egyeznek többé (a HMAC visszafejthetetlen, nem migrálható) — az érintett címekkel ismét tiltatlan fiók nyitható. Ha ez
-   elfogadhatatlan, a rotációt halaszd a bejegyzések lejártáig.
-2. Az élő tiltott fiókok tiltása megmarad (`player_accounts.banned_at`), az ujjlenyomatuk a fiók következő belépésekor az új
-   kulccsal magától újraképződik.
+1. Ha a `PLAYER_BAN_KEY` NINCS beállítva: Admin → „Játékosok” → „Törölt, de tiltva maradt fiókok” — ezek a bejegyzések a rotáció
+   után NEM egyeznek többé (a HMAC visszafejthetetlen, nem migrálható); az érintett címekkel ismét tiltatlan fiók nyitható. A
+   sorokat semmi nem törli kulcs alapján (12 hónap után a megőrzés). Javasolt előbb a `PLAYER_BAN_KEY`-t beállítani.
+2. Az élő tiltott fiókok tiltása kulcstól független (`player_accounts.banned_at` + a kanonikus cím összevetése) — megmarad.
 3. A függő belépőkódok (10 perc) és a tanulói linkek érvénytelenek lesznek (a tanulói eszközöket újra kell párosítani).
 
 ## Stage-kapu

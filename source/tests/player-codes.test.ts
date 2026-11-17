@@ -140,6 +140,32 @@ describe("JM7a — review #445 (A3): ütemezett kódrekord-takarítás", () => {
     await run(); // a hiba nem dob ki
     assert.equal(calls, 2);
   });
+
+  it("K1b (Ú3): a tiltás-karbantartás csak átadva fut, és a három lépés független (egyik hibája nem akasztja meg a többit)", async () => {
+    const timers = { setInterval: () => ({ unref: () => {} }) };
+    const seen: string[] = [];
+    const run = startPlayerCodeSweeper(async () => { seen.push("codes"); throw new Error("kód le"); }, timers, {
+      countForeign: async () => { seen.push("count"); throw new Error("számlálás le"); },
+      purgeExpired: async () => { seen.push("purge"); return 0; },
+    });
+    void run; // az indulási futást a sweeper maga indítja; itt csak a befejezését várjuk meg (nem hívjuk újra)
+    await new Promise((r) => setTimeout(r, 0));
+    assert.deepEqual(seen, ["codes", "count", "purge"], "pontosan egy futás, mindhárom lépés a hibák ellenére");
+    const none: string[] = [];
+    startPlayerCodeSweeper(async () => { none.push("codes"); return [0, 0]; }, timers, null);
+    await new Promise((r) => setTimeout(r, 0));
+    assert.deepEqual(none, ["codes"], "karbantartás nélkül csak a kódtakarítás");
+  });
+
+  it("K1b (Ú1): a tiltás-karbantartás csak élesben vagy kifejezett kapcsolóval engedélyezett", async () => {
+    const { banMaintenanceEnabled } = await import("../server/player/account-store");
+    const cases: [Record<string, string | undefined>, boolean][] = [
+      [{ NODE_ENV: "production" }, true], [{ NODE_ENV: "development" }, false], [{}, false],
+      [{ NODE_ENV: "development", PLAYER_BAN_MAINTENANCE: "on" }, true], [{ NODE_ENV: "production", PLAYER_BAN_MAINTENANCE: "off" }, false],
+      [{ NODE_ENV: "test", PLAYER_BAN_MAINTENANCE: "1" }, false],
+    ];
+    for (const [env, want] of cases) assert.equal(banMaintenanceEnabled(env as NodeJS.ProcessEnv), want, JSON.stringify(env));
+  });
 });
 
 describe("JM7a — PLAYER_ACCOUNTS flag", () => {

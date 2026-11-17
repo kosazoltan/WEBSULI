@@ -639,6 +639,15 @@ a szerver ettől még 403-at ad; (d) átfogó jogosultsági mátrix-teszt nincs 
   regisztrált játékos közvetlen URL-lel sem éri el az admin felületet; (d) regressziós őr: új route az admin előtagok alatt
   csak `isAuthenticatedAdmin`-nal regisztrálható (a router-verem statikus bejárása a tesztben bukik, ha nincs).
 
+**Tiltás és megőrzése (tulajdonosi döntések 2026-11-16; végrehajtás: „JM7b-utójavítás K1 / K1b”).** A tiltás a kanonikus címre
+(postafiókra: gmail-pont, `+alias`, googlemail összevonva) szól. (A) ÉLŐ fióknál az igazságforrás a fiók tiltási ideje; az
+azonos postafiókú új / meglévő fiók a tiltott élő fiókkal való közvetlen összevetéssel tiltott — ehhez nem kell titok vagy
+ujjlenyomat. (B) TÖRÖLT tiltott fióknál a cím kulcsolt, visszafejthetetlen ujjlenyomata marad meg, legfeljebb 12 hónapig a
+tiltástól; a kulcs külön, stabil változó (`PLAYER_BAN_KEY`, visszaesés a munkamenet-titokra). Kulcsváltáskor a régi (B) sorok
+dokumentáltan nem illenek, de semmi nem törli őket kulcs alapján (csak a 12 hónapos megőrzés); a feloldás az azonos tiltáshoz
+tartozó, más kulccsal készült sort is törli. A karbantartás (számlálás, megőrzés-takarítás) csak élesben fut. Minden tiltást író
+művelet egy kulcsfüggetlen, címenkénti zárral sorosított. Üzemeltetés: `docs/jatek-fiok-uzemeltetes.md`.
+
 ### 10.4a Hibrid jogosultság — lezárt tulajdonosi döntés (2026-11-16)
 
 **Szó szerint:** „Kell, hogy legyen saját miniprofilja a jelentkező állandó játékosoknak, de ennek nem szabad keveredni az
