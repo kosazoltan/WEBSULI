@@ -3,7 +3,6 @@ import test from "node:test";
 
 import { medianOf, runSim, runSimSeeds, simSeeds, SIM_AVERAGE, SIM_STRONG, SIM_WEAK, SIM_YOUNG, type SimGameFactory, type SimPlayer } from "./support/game-sim";
 import { createSimGame } from "../client/src/lib/brainRot/sim";
-import { couponBaseKey } from "../client/src/lib/brainRot/couponRepeat";
 import { ROUND_MS } from "../client/src/lib/brainRot/core";
 
 /**
@@ -164,28 +163,86 @@ test("review #485 Ú4: a győzelem a pontossággal monoton nem csökken (20 / 45
   }
 });
 
+/**
+ * Review #485 K1 + J5a 23. (kanban #95): kupon módban a kimerülést és az ismétlést a közös director kupon-ága kezeli
+ * (D-J1a-10 / D-J1a-16). A kivett lapi tartalék (`couponRepeat.ts`) és a `brainrot-coupon-repeat.test.ts` elvárásai
+ * ide kerültek (a megfeleltetés a végrehajtási fájl J5a 23. pontjában és a jelentésben).
+ */
+const couponLesson = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: `lecke-${i}`, prompt: `Lecke-kérdés ${i}?`, options: [`jó${i}`, `b${i}`, `c${i}`, `d${i}`], correctIndex: i % 4 }));
+
 test("review #485 K1: kupon módban 8 / 5 / 3 tételes leckével sem fogy el a kérdés (nincs kérdés nélküli megtartás), és a győzelmi arány nem rosszabb a kupon nélkülinél", () => {
-  const lesson = (n: number) =>
-    Array.from({ length: n }, (_, i) => ({ id: `lecke-${i}`, prompt: `Lecke-kérdés ${i}?`, options: [`jó${i}`, `b${i}`, `c${i}`, `d${i}`], correctIndex: i % 4 }));
   for (const [player, grade] of [[SIM_AVERAGE, 7], [SIM_YOUNG, 4]] as const) {
     const plain = runSimSeeds(factory(), player, { gameId: GAME, seconds: 180, grade }).filter((r) => r.won).length;
     for (const n of [8, 5, 3]) {
       let wins = 0;
       for (const seed of simSeeds(GAME)) {
-        const g = createSimGame({ seed, grade, questions: true, coupon: true, material: lesson(n) });
+        const g = createSimGame({ seed, grade, questions: true, coupon: true, material: couponLesson(n) });
         const r = runSim(() => g, player, { seed, seconds: 180, grade });
         if (r.won) wins += 1;
         assert.equal(g.state().direct, 0, `${n} tétel, seed ${seed}: kérdés nélküli megtartás`);
         const keys = g.askedKeys();
         assert.ok(keys.length >= 10, `${n} tétel: ${keys.length} kérdés`);
-        assert.ok(keys.every((k) => k.startsWith("mat:lecke-")), "csak a lecke anyaga");
+        // SPEC-VÁLTOZÁS 2026-11-17 (J5a 23.): az ismétlés az EREDETI kulcs (`mat:lecke-<i>`, a régi tartalék `…#ism<n>`-t adott)
+        // — szigorúbb: a közvetlen ismétlést a pontos kulcs méri.
+        assert.ok(keys.every((k) => /^mat:lecke-\d+$/.test(k)), "csak a lecke anyaga, eredeti kulccsal");
         for (let i = 1; i < keys.length; i++) {
-          assert.notEqual(couponBaseKey(keys[i]!), couponBaseKey(keys[i - 1]!), `${n} tétel: közvetlen ismétlés`);
+          assert.notEqual(keys[i], keys[i - 1], `${n} tétel, seed ${seed}: közvetlen ismétlés (${keys.slice(Math.max(0, i - 2), i + 1).join(" | ")})`);
         }
       }
       assert.ok(wins >= plain, `${n} tétel: kuponnal ${wins}/20, kupon nélkül ${plain}/20`);
     }
   }
+});
+
+test("J5a 23. (a kivett `couponRepeat` elvárásai a közös szabállyal): a hibázott tétel visszajön, minden lecke-tétel sorra kerül, a forrás `coupon`", () => {
+  for (const [player, grade] of [[SIM_AVERAGE, 7], [SIM_YOUNG, 4], [SIM_WEAK, 7]] as const) {
+    for (const n of [8, 5, 3]) {
+      let missed = 0;
+      for (const seed of simSeeds(GAME)) {
+        const g = createSimGame({ seed, grade, questions: true, coupon: true, material: couponLesson(n) });
+        runSim(() => g, player, { seed, seconds: 180, grade });
+        const out = g.outcomes();
+        // (régi: „kimerüléskor előbb a hibázott”, „a hibázott a következő körben jön”) — a közös szabály a hibázott tételt
+        // menet közben (3.–6. kérdésként, ≤ 30% ismétléssel) vagy a kimerülés utáni körben hozza vissza: legfeljebb
+        // min(2n, 10) kérdés múlva (mérve, 20 seed × 3 modell: 3 tételnél ≤ 3, 5 tételnél ≤ 6, 8 tételnél ≤ 10).
+        const within = Math.min(2 * n, 10);
+        out.forEach((o, i) => {
+          if (o.result !== "wrong" && o.result !== "timeout") return;
+          if (out.length - i - 1 < within) return;
+          missed += 1;
+          const back = out.slice(i + 1).findIndex((x) => x.key === o.key);
+          assert.ok(back >= 0 && back + 1 <= within, `${n} tétel, seed ${seed}: a hibázott ${o.key} (${i + 1}.) ${back < 0 ? "nem jött vissza" : `${back + 1} kérdés múlva jött`}`);
+        });
+        // (régi: „utána a legrégebben látott”) — körforgás. SPEC-VÁLTOZÁS 2026-11-17 (J5a 23.): a régi tartalék ≥ 2n
+        // kérdésnél minden tételt kétszer adott; a közös szabály ismétlési slotjai (≤ 30%) a hibázottakat előzik, így:
+        // minden tétel sorra kerül (≥ n kérdésnél), ≥ 3n kérdésnél kétszer, és egy tétel két feltevése között ≤ 2n kérdés
+        // (mérve, 20 seed × 3 modell: 3 tételnél ≤ 3, 5 tételnél ≤ 7, 8 tételnél ≤ 12).
+        const keys = g.askedKeys();
+        for (let i = 0; i < n; i++) {
+          const at = keys.flatMap((k, j) => (k === `mat:lecke-${i}` ? [j] : []));
+          if (keys.length >= n) assert.ok(at.length >= 1, `${n} tétel, seed ${seed}: a ${i}. tétel nem került sorra`);
+          if (keys.length >= 3 * n) assert.ok(at.length >= 2, `${n} tétel, seed ${seed}: a ${i}. tétel csak egyszer`);
+          for (let j = 1; j < at.length; j++) assert.ok(at[j]! - at[j - 1]! <= 2 * n, `${n} tétel, seed ${seed}: a ${i}. tétel ${at[j]! - at[j - 1]!} kérdés múlva jött újra`);
+        }
+        // D-J1a-16: az ismétlés is kupon-forrású tétel (a tartalék `material`-ra eshetett vissza).
+        assert.ok(g.director.stats(g.simTimeMs()).firstSource === "coupon", `${n} tétel: első forrás`);
+      }
+      assert.ok(missed > 0, `${n} tétel: érdemi minta (hibázott tétel)`);
+    }
+  }
+});
+
+test("J5a 23. (régi: „egy tételnél ugyanaz”, „üres készletnél nincs ismétlés”): 1 tételes kupon-lecke — mindig van kérdés (ugyanaz); 0 tétel és üres forrás — kérdés nélküli megtartás", () => {
+  const one = createSimGame({ seed: 7, grade: 7, questions: true, coupon: true, material: couponLesson(1) });
+  runSim(() => one, SIM_AVERAGE, { seed: 7, seconds: 180, grade: 7 });
+  assert.equal(one.state().direct, 0, "1 tétel: nincs kérdés nélküli megtartás");
+  assert.ok(one.askedKeys().length >= 10 && one.askedKeys().every((k) => k === "mat:lecke-0"), "1 tétel: ugyanaz ismétlődik");
+  // Valódi forráshiány (0 lecke-tétel, üres bank): a játék kérdés nélkül megy, az elkapás közvetlenül megmarad.
+  const none = createSimGame({ seed: 7, grade: 7, questions: true, coupon: true, material: [], bankSize: 0 });
+  runSim(() => none, SIM_AVERAGE, { seed: 7, seconds: 180, grade: 7 });
+  assert.equal(none.askedKeys().length, 0);
+  assert.ok(none.state().direct > 0, "0 tétel: kérdés nélküli megtartás");
 });
 
 test("review #485 (Vercel 4597845275): ha a vadász a nyitáskor egy ketrec peremén áll, a bot így is válaszol (a lejárat nem nő), idő előtti válasz nincs", () => {
