@@ -95,9 +95,11 @@ export const CARRY_RESOLVE_MS = 1600;
 export const EVENT_CAP = 32;
 
 /** A lény-fajták (a régi lap táblája; a név a `CollectibleAvatar` képét választja). */
-/** Ketrec-választás: ennyi világidő-ms bent töltött idő, VAGY megállás (`CAGE_STOP_SPEED` alatt) legalább `CAGE_STOP_MIN_MS` után. */
-export const CAGE_DWELL_MS = 450;
-export const CAGE_STOP_MIN_MS = 100;
+/**
+ * Ketrec-választás: a ketrecben MEGÁLLVA (a sebesség a vitt tempó `CAGE_STOP_SPEED`-szerese alatt) eltöltött, folyamatos
+ * `CAGE_DWELL_MS` (vadász-idő). Az átfutás nem választ (review #485).
+ */
+export const CAGE_DWELL_MS = 160;
 export const CAGE_STOP_SPEED = 0.35;
 /** A ketrec ennyi szabad helyet hagy a vadász körül, ha a nyíláskor rá esne (`clearCagesFrom`). */
 export const CAGE_PLAYER_CLEAR = 0.06;
@@ -681,11 +683,12 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
             cage.dwellMs = 0;
             continue;
           }
-          // Beállás a ketrecbe: megállás (lassú vadász) vagy `CAGE_DWELL_MS` bent töltött idő. A teljes sebességű
-          // átfutás (egy másik ketrechez tartva) nem választ — a ketrec rövidebb idő alatt átszelhető.
-          cage.dwellMs += playerDtMs;
+          // Beállás a ketrecbe = MEGÁLLÁS benne: a lassú (megálló) vadász ideje gyűlik, és `CAGE_DWELL_MS` folyamatos
+          // lassú bent tartózkodás választ. Az átfutás (bármely irányban, egy másik ketrec felé) nem választ, bármilyen
+          // hosszan tart is — review #485: a puszta bent töltött időt a széles ketrecen vízszintes átfutás is elérte.
           const slow = Math.hypot(p.vx, p.vy) < CAGE_STOP_SPEED * PLAYER_SPEED * CARRY_SPEED_FACTOR;
-          if (cage.dwellMs >= CAGE_DWELL_MS || (slow && cage.dwellMs >= CAGE_STOP_MIN_MS)) {
+          cage.dwellMs = slow ? cage.dwellMs + playerDtMs : 0;
+          if (cage.dwellMs >= CAGE_DWELL_MS) {
             st.hitCage = i;
             st.cagesOpen = false;
             emit("cageHit", cage.x, cage.y, st.carry?.id ?? -1, i);

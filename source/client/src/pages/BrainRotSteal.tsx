@@ -786,6 +786,10 @@ export default function BrainRotSteal() {
           reveal: ctl.view().reveal ? 1 : 0,
           questionId: p?.id ?? null,
           questionSeconds: p ? p.windowMs / 1000 : null,
+          // A mag választerületei px-ben a táblához képest (review #485: a kirajzolt ketrecekkel össze kell esniük).
+          cageRects: JSON.stringify(
+            st.cages.slice(0, st.cageCount).map((c) => [(c.x - c.w / 2) * unitRef.current, (c.y - c.h / 2) * unitRef.current, c.w * unitRef.current, c.h * unitRef.current]),
+          ),
         };
       },
       forceState: (patch: GameForcePatch) => {
@@ -1285,6 +1289,7 @@ export default function BrainRotSteal() {
                   reveal={view.reveal}
                   cages={coreState.cages}
                   unitPx={unitPx}
+                  layoutKey={`${board.w}x${board.h}`}
                   disabled={paused}
                   onCage={goToCage}
                   ringRef={setCageRing}
@@ -1449,6 +1454,11 @@ const CageLayer = memo(function CageLayer({
   reveal: { correctOptionIndex: number; pickedOptionIndex: number | null } | null;
   cages: readonly Cage[];
   unitPx: number;
+  /**
+   * A tábla mérete: a ketrecek helyét a mag átméretezéskor HELYBEN írja (ugyanaz a tömb), és csak a hosszabbik oldal is
+   * változhat (az `unitPx` marad) — ez a kulcs rajzoltatja újra a memo-s réteget (review #485).
+   */
+  layoutKey: string;
   disabled: boolean;
   onCage: (i: number) => void;
   ringRef: (i: number, el: HTMLSpanElement | null) => void;

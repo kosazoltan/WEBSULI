@@ -1420,9 +1420,14 @@ fizika-esetek (pattogás, határok) változatlanok.
 1. **A vadász a kérdés alatt nem lassul, csak a világ (0,6×):** a lassított joystick bemeneti késésnek érződne, és a 6 mp-es
    ablakba (gondolkodás + futás a ketrecig) nem fért bele — a 20 seedes előmérésen kompenzáció nélkül az átlagos bot a
    kérdések ~16%-ánál kifutott az időből. A kompenzáció a lépés bemenete (`step(dt, band, timeScale)`), determinisztikus.
-2. **Ketrec-választás beállással:** a ketrecbe érve megállás (≥ 100 ms) vagy 450 ms bent töltött idő választ; a teljes
-   sebességű átfutás (egy másik ketrec felé) nem. Mérve: enélkül a 95%-os bot a kérdések ~30%-át egy útba eső ketrecen
-   átfutva rontotta el.
+2. **Ketrec-választás beállással (MEGÁLLÁS):** a ketrecben megállva (sebesség < a vitt tempó 35%-a) folyamatosan eltöltött
+   160 ms választ; az átfutás bármely irányban (vízszintes, függőleges, átlós) nem, akármeddig tart. Az első változat
+   „megállás VAGY 450 ms bent” szabályát a review #485 (vercel, Codex P2) jogosan kifogásolta: a 0,44 széles ketrecen a
+   vízszintes átfutás 472 ms — a helyes ketrec felé tartó gyerek az útba eső rossz ketrecet „választotta” (tanulási kár: a
+   kérdés az ügyességi balesetet mérte volna). A cél felé tartó bemenet figyelése helyett a megállás a szabály, mert
+   joystickkal, böködéssel (a célnál a vadász magától megáll) és billentyűvel is egyértelmű, és a gyerek a súgóból tudja
+   („állj meg benne”). Teszt: minden ketrecpár A → B közepére tartva csak B választ; a review forgatókönyve; a mindig a jó
+   ketrecet választó bot 20 seeden 0 téves válasz (C-56).
 3. **A nyíláskor a vadászra eső ketrec arrébb kerül** (a vadász ne „álljon bele” egy válaszba olvasás közben); ha nincs
    szabad hely, a ketrec csak kilépés után élesedik.
 4. **Egyujjas / egeres mód (K.4/17):** böködés vagy húzás a táblán = oda fut a vadász (a ketrecre bökve is FUTÁS, nem azonnali
@@ -1437,6 +1442,9 @@ fizika-esetek (pattogás, határok) változatlanok.
    rivális elleni győzelemre cseréli, a J9 (2–5 perces menet) a J5b három fordulójával mérhető.
 9. **Felirat-átfedés (kanban #64):** az egyszerre születő lebegő feliratok sávokra osztva, egymás fölé kerülnek (nem
    csúsznak egymásra), a tábla szélén belül maradnak; a közel egyidejű szökések egy összesítő feliratot kapnak.
+10. **Átméretezés nyitott kérdésnél (review #485):** a mag a ketrecek helyét átméretezéskor helyben írja; a memo-s
+    ketrecréteg kulcsa a tábla mérete is (`layoutKey`), így csak-magasság-változásnál (mobil böngésző eszköztára) is a mag
+    választerületein rajzol — e2e lapon belül mérve (a `probe().cageRects` és a kirajzolt dobozok ≤ 2 px).
 
 ### J5b — rivális tolvaj, Visszalopás-párbaj, Arany lény, fordulók, Tolvajkirály
 

@@ -99,3 +99,9 @@ test("arany visszajátszás: fix seed + bot-bemenet → azonos végállapot és 
   assert.deepEqual(ra, rb);
   assert.equal(a.hash(), b.hash());
 });
+
+test("C-56 / review #485: a mindig a jó ketrecet választó bot egyetlen kérdést sem ront el (átfutás nem választ)", () => {
+  const perfect: SimPlayer = { accuracy: 1, reactionMedianMs: 2000, skill: 0.9 };
+  const runs = runSimSeeds(factory(), perfect, { gameId: GAME, seconds: 180 });
+  for (const r of runs) assert.equal(r.stats.wrong, 0, `téves válasz: ${r.stats.wrong}`);
+});

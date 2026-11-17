@@ -6,8 +6,9 @@
  *
  * A bot (a harness megállapodása szerint): lépésenként a célja felé tolja a joystickot, ha az ügyességi dobása sikerül
  * (`skillRoll < 1`), különben az adott lépésben nem kormányoz. Cél: nyitott kérdésnél — miután a harness a reakcióidő után
- * „választott” (`answer`) — a választott ketrec; különben a legközelebbi szabad lény (a fáradt előnyben). A válasz így
- * VALÓDI futás a ketrecig: ha a reakció + az út nem fér az ablakba, lejárat.
+ * „választott” (`answer`) — a választott ketrec (oda fut és megáll benne, mint a böködéses célzásnál); különben a
+ * legközelebbi szabad lény (a fáradt előnyben). A válasz így VALÓDI futás a ketrecig: ha a reakció + az út nem fér az
+ * ablakba, lejárat.
  *
  * Aréna: egy tipikus álló telefon táblája (360 × 560 px → 1 × 1,56 egység), az évfolyam hangolásával (`lib/brainRotTuning.ts`).
  * A kérdésforrás alapból szintetikus (≥ 200 egyedi tétel, a terv 6.2 változatosság-mérésének feltétele); a teszt
@@ -153,11 +154,11 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     let tx: number | null = null;
     let ty = 0;
     if (chosen && st.cagesOpen && ui.active()?.id === chosen.id) {
+      // A választott ketrec: oda fut és MEGÁLL benne (a böködéses célzás mintája — a válasz a beállás, review #485).
       const cage = st.cages[chosen.option];
-      if (cage) {
-        tx = cage.x;
-        ty = cage.y;
-      }
+      if (cage && skillRoll < 1) core.setTarget(cage.x, cage.y);
+      core.setInput(0, 0);
+      return;
     } else if (!st.carry) {
       let best = Infinity;
       for (const c of st.creatures) {

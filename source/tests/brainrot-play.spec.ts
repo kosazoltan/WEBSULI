@@ -192,6 +192,33 @@ test.describe("kampóval mért szabályok", () => {
     await expect.poll(() => page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.probe().simTime!), { timeout: 5_000 }).toBeGreaterThan(0);
   });
 
+  test("review #485: nyitott kérdésnél a nézet magasságának változása után a kirajzolt ketrecek a mag választerületein állnak", async ({ page }) => {
+    await startWithQuestion(page);
+    const coreRects = () => page.evaluate(() => String((window as unknown as GameWindow).__websuliGame!.probe().cageRects));
+    const before = await coreRects();
+    // Álló mobilon a böngésző eszköztára megjelenik / eltűnik: csak a magasság változik (a rövidebb oldal, az egység marad).
+    await page.setViewportSize({ width: 390, height: 760 });
+    // Előbb a mag tényleg átrendezze a ketreceket (különben a mérés a régi, még egyező állapotot látná).
+    await expect.poll(coreRects, { timeout: 5_000, message: "a mag átrendezte a ketreceket" }).not.toBe(before);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const g = (window as unknown as { __websuliGame: { probe: () => Record<string, number | string | null> } }).__websuliGame;
+            const core = JSON.parse(String(g.probe().cageRects)) as number[][];
+            const board = document.querySelector('[data-testid="br-board"]')!.getBoundingClientRect();
+            const drawn = Array.from(document.querySelectorAll('[data-testid^="br-cage-"]')).map((el) => {
+              const r = el.getBoundingClientRect();
+              return [r.x - board.x - 2, r.y - board.y - 2, r.width, r.height]; // a tábla 2 px-es kerete
+            });
+            if (core.length !== 4 || drawn.length !== 4) return Infinity;
+            return Math.max(...core.flatMap((c, i) => c.map((v, k) => Math.abs(v - drawn[i]![k]!))));
+          }),
+        { timeout: 5_000, message: "a ketrecek kirajzolt helye = a mag választerülete (px)" },
+      )
+      .toBeLessThan(2);
+  });
+
   test("K.4/16: balkezes tükrözés — a beállítás a joystickot a jobb oldalra teszi (és megmarad)", async ({ page }) => {
     await page.goto("/games/brain-rot-steal");
     const left = page.getByTestId("br-hand-left");

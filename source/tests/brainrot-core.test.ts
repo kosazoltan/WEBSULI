@@ -194,6 +194,27 @@ test("ketrec-zár: a ketrecbe beállás (megállás) választ; a teljes sebessé
     if (st.player.y > c2.y) core.setInput(0, 0); // a 2. ketrecben megáll
   }
   assert.equal(hit, 2, "az átfutott 0. ketrec nem választott, a megállás a 2.-ben igen");
+  // Review #485 (Codex, vercel): vízszintes és átlós átfutás sem választ — a felső sor bal széléről a jobb ketrec közepére
+  // teljes sebességgel (a széles ketrecen az átfutás tovább tart, mint a régi 450 ms-os küszöb), és onnan átlósan a bal alsóba.
+  const pairs: Array<[number, number]> = [];
+  for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) if (a !== b) pairs.push([a, b]);
+  for (const [from, to] of pairs) {
+    const c3 = createBrainRotCore({ seed: 6, arenaW: 1, arenaH: 1.5 });
+    openWithCarry(c3, 0.5, 0.3);
+    const s3 = c3.state();
+    for (const cage of s3.cages) cage.armed = true;
+    const a = s3.cages[from]!;
+    const b = s3.cages[to]!;
+    s3.player.x = a.x - Math.sign(b.x - a.x || 1) * (a.w / 2 - 0.01);
+    s3.player.y = a.y - Math.sign(b.y - a.y) * (a.h / 2 - 0.01);
+    c3.setTarget(b.x, b.y);
+    let hit3 = -1;
+    for (let i = 0; i < 600 && hit3 < 0; i++) {
+      c3.step(DT, 0.4);
+      if (s3.hitCage >= 0) hit3 = s3.hitCage;
+    }
+    assert.equal(hit3, to, `átfutás ${from} → ${to}: csak a cél-ketrec választ`);
+  }
   // Egy helyben állva a beállási idő után is választ (dwell).
   const core2 = createBrainRotCore({ seed: 6, arenaW: 1, arenaH: 1.5 });
   openWithCarry(core2, 0.5, 0.3);
@@ -388,3 +409,22 @@ test("J10: a ketrec-kérdés ablaka rövid tételnél 6 mp (3–4. évf. 7,5 mp)
 });
 
 const GOLDEN_42 = "play|30000000000|75000|1485000|6|6|3|0|350|0|11|free|868072|983527|12|free|463255|695928|13|free|440353|599082|10|free|274199|1163889";
+
+test("review #485: a bot által leírt forgatókönyv — a felső sor bal széléről a jobb ketrec közepére tartva a bal ketrec nem választódik", () => {
+  const core = createBrainRotCore({ seed: 13, arenaW: 1, arenaH: 1.5 });
+  openWithCarry(core, 0.5, 1.2);
+  const st = core.state();
+  for (const c of st.cages) c.armed = true;
+  const left = st.cages[0]!;
+  const right = st.cages[1]!;
+  st.player.x = left.x - left.w / 2 + 0.01;
+  st.player.y = left.y;
+  core.setInput(1, 0); // teljes sebességgel jobbra (joystick), majd a jobb ketrecben elengedi
+  let hit = -1;
+  for (let i = 0; i < 600 && hit < 0; i++) {
+    if (st.player.x >= right.x) core.setInput(0, 0);
+    core.step(DT, 0.4);
+    if (st.hitCage >= 0) hit = st.hitCage;
+  }
+  assert.equal(hit, 1);
+});
