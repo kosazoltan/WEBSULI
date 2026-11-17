@@ -1446,6 +1446,36 @@ fizika-esetek (pattogás, határok) változatlanok.
     ketrecréteg kulcsa a tábla mérete is (`layoutKey`), így csak-magasság-változásnál (mobil böngésző eszköztára) is a mag
     választerületein rajzol — e2e lapon belül mérve (a `probe().cageRects` és a kirajzolt dobozok ≤ 2 px).
 
+#### J5a — a független review (#485, „összevonható: nem”) döntései (2026-11-17, a kód előtt)
+
+11. **Nincs véletlen válasz (B1, KSZ-11).** Mérve (reviewer, 20 seed): ha a gyerek a kérdés megjelenése után még 150–500 ms-ig
+    tolja a joystickot, a kérdések 9,5–18%-ára a döntés ELŐTT jött „válasz” (~75–80%-ban rossz) — a ketrec a mozgó vadász alatt,
+    előjelzés nélkül élesedett, és a régi böködési cél is beszaladhatott egy ketrecbe. Új szabály:
+    (a) elkapáskor és a ketrecek nyitásakor a böködés célja, a bemenet és a vadász sebessége törlődik (a vadász megáll; a
+    gyerek új irányítása mozdítja újra);
+    (b) a ketrecek 600 ms látható előjelzés („nyílik” állapot) után élesednek, és csak az élesítés UTÁNI, lendülettel történő
+    belépés (a vitt tempó ≥ 35%-ával) + megállás választ; aki az élesítéskor bent áll vagy lassan csúszik be, annak ki kell
+    lépnie és újra be kell futnia;
+    (c) a sim botja emberi reakcióval engedi el a joystickot (a kérdés után még 150–500 ms-ig tol), és teszt méri, hogy a
+    döntés előtti válasz aránya 0 minden játékosmodellnél, joystickkal és böködéssel is.
+12. **A válasz teljes szövege mindig olvasható (B2, K3).** A lap a ketrec VALÓDI feliratszélességével (a ketrec px-szélessége
+    mínusz keret, belső margó, jel) ellenőriz, 14 px-es betűvel, legfeljebb 3 sorban, a közös `estimateLines` becslővel (a
+    `promptFit.ts` változatlan). Ha egy felirat nem fér: **jelölt mód** — a ketrecekben nagy szám + szín (nem csak szín), a
+    kérdés-kártya alatt jelmagyarázat a teljes válaszokkal ugyanazzal a jelöléssel. A ketrecek zónája mindig a kérdés-kártya
+    (és a jelmagyarázat) MÉRT alja alatt kezdődik (álló és fekvő nézetben, a megoldás-kijelzés alatt is); az áthelyezés sem
+    teheti fölé. A mobil mérő esetfájlja leghosszabb-válasz esetet kap (a bank és a lap leghosszabb válaszai, programmal kikeresve).
+13. **Győzelem csak ketrecben megtartott lénnyel; a gyengébb játékos is nyerhet néha (K2, K1 iránya).** A kérdés nélküli
+    (közvetlen) megtartás pontot ad, de nem számít a győzelembe, a pályanyitásba és a napi kihívásba — így a kérdés soha nem
+    ronthat a győzelmi esélyen a kérdés nélküli úthoz képest (kérdés nélkül nem lehet nyerni). A győzelmi küszöb 8 megtartott
+    lény (a 10 a gyengébb modellnek — kb. 14 kérdés, 45% — szerkezetileg elérhetetlen volt); mérce: a gyengébb modell
+    kérdéssel ≥ 3/20, a 3–4. évfolyamos ≥ 12/20. A J5b a rivális elleni győzelemre cseréli.
+14. **Apróságok (L1–L5):** a tanító súgó minden nézetben egy sor (rövid szövegek); a meghajtó-determinizmus teszt kérdéssel is
+    fut (azonos képkocka-sorozat → azonos állapot; a képkocka-felosztástól függetlenség a kérdés-óra miatt csak a kérdés
+    nélküli világra áll — a kérdés-óra a K.2 szerint valós idejű); az esemény-ürítés nem gyárt képkockánként új függvényt; a
+    kor-fagyasztás tiszta függvényének tesztje a K.1/11 szerint változatlan marad, az új követelményt („a kérdés alatt a lények
+    kora 0,6×-sel telik”) külön mag-teszt méri; az eredménylap késleltetése menetenként nullázódik, a ketrecfelirat nem
+    választ el nyelvjelölés nélkül.
+
 ### J5b — rivális tolvaj, Visszalopás-párbaj, Arany lény, fordulók, Tolvajkirály
 
 1. Állapot-sor commit.
