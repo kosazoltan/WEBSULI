@@ -228,3 +228,16 @@ test("SZ-2 / kapu 3(a): az előjelzés alatti koppintás hatástalan — nem vá
   assert.equal(g.stats().answered, 1);
   assert.equal(g.stats().correct, 1);
 });
+
+test("MEGFIGYELŐ (nem buktató, review K3): a közös botok a Nyugodt (alap) tempón — győzelem és menethossz a 6. pályán", () => {
+  // A közös SIM_* botok reakcióideje független a szöveg hosszától; a Nyugodt tempót ezekkel a terv J9 (2–5 perc) és az
+  // „50–80% győzelem” sávja NEM jellemzi (a gyors bot itt mindig nyer, rövid menettel) — ez tulajdonosi döntés (az alap tempó
+  // nehézsége), ezért a teszt csak kiírja a mért értéket.
+  const rows: string[] = [];
+  for (const [name, bot] of [["SIM_AVERAGE", SIM_AVERAGE], ["SIM_YOUNG", SIM_YOUNG], ["SIM_STRONG", SIM_STRONG], ["SIM_WEAK", SIM_WEAK]] as const) {
+    const runs = runSimSeeds(factory({ tempo: "calm" }), bot, { gameId: GAME, seconds: 600, grade: 4 });
+    rows.push(`${name}: ${runs.filter((r) => r.won).length}/20 győzelem, medián ${medianOf(runs.map((r) => r.durationSec)).toFixed(0)} s`);
+  }
+  console.log(`[megfigyelés] Nyugodt tempó, 6. pálya, 4. évf.: ${rows.join(" | ")}`);
+  assert.equal(rows.length, 4);
+});

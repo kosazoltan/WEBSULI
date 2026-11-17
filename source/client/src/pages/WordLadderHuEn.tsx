@@ -19,7 +19,7 @@ import {
   pickUnseen,
   type SeenItem,
 } from "@/game-engine/no-repeat";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, Flame, X } from "lucide-react";
@@ -88,9 +88,11 @@ import {
   loadLadderTempo,
   paceDirector,
   saveLadderTempo,
+  tempoParams,
   type LadderTempo,
 } from "@/lib/wordLadder/pacing";
 import { generateVocabQuestion, type VocabQuestionType } from "@/game-engine/vocab/questionGenerator";
+import { ladderFocusFor, manualFocusIndex } from "@/lib/wordLadder/focus";
 import type { VocabEntry } from "@/data/vocabBank/types";
 import { createRunWordGuard, ownsReviewKey } from "@/lib/wordLadder/review";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
@@ -159,6 +161,11 @@ const TEACH_HINT = "Koppints a jó szóra — azzal kapaszkodsz feljebb!";
 /** A kezdőképernyő sötét égbolt-háttere: a világos réti színen a fehér feliratok nem olvashatók. */
 const MENU_BACKGROUND =
   "radial-gradient(ellipse 90% 55% at 50% 18%, #38bdf84d, transparent 70%), linear-gradient(175deg, #0c2a5c 0%, #10406a 45%, #0f5a4a 80%, #14532d 100%)";
+
+/** A célkártya legkisebb betűje helyhiánynál (review K2; a 16 px-es keretsor 1,25-szöröse). */
+const FOCUS_MIN_PX = 20;
+/** Új kérdésnél a megoldás-kijelzés sorának (állapotsor + „Miért?”) fenntartott magassága. */
+const REVEAL_RESERVE_PX = 64;
 
 /** Ennél hosszabb kapaszkodó-felirat (kifejezés, mondat) esetén álló nézetben egy oszlopban jönnek a fogások. */
 const LONG_HOLD = 24;
@@ -416,6 +423,11 @@ export default function WordLadderHuEn() {
    * viszi tovább, ezért itt őrizzük (a `speakText` mintájára).
    */
   const focusByIdRef = useRef(new Map<string, string>());
+  /**
+   * A nyelv kézi bankjának célrészei azonosító szerint (review K1): a menetek közötti ismétlésből visszatérő kézi tétel a
+   * közös sor tárolt pillanatképéből épül (`focus` nélkül) — új lapbetöltés után is kiemelve jelenjen meg.
+   */
+  const manualFocus = useMemo(() => manualFocusIndex(WORD_LADDER_BANKS[lang] ?? []), [lang]);
   /**
    * A készlet a futás kezdete UTÁN épül (setTimeout 0): a teljes bankon szintenként 60 kérdés generálása telefonon
    * érezhető — az indítást nem akaszthatja meg. Addig (az első fogás előtt) a kézi bank kérdez.
@@ -1015,7 +1027,10 @@ export default function WordLadderHuEn() {
           setFreeHold(wantFree);
         }
       }
-      loop.setTimeScale(isPaused ? 0 : ctl.timeScale());
+      // Review K6: a megoldás-kijelzés alatt (a gyerek a megoldást olvassa) a rivális ugyanúgy lassít, mint a kérdés alatt —
+      // a menet tempójának `slowMo`-jával (Gyors: 1, a régi viselkedés). Nyitott kérdés vagy kijelzés: `!canAsk()`.
+      const runSlowMo = tempoParams(runRef.current.tempo).slowMo;
+      loop.setTimeScale(isPaused ? 0 : ctl.canAsk() || ctl.finished() ? 1 : runSlowMo);
       loop.frame(now);
       feelRef.current.update(isPaused ? 0 : dt);
       // A rivális lépései (és a vég) a mag eseményeiből.
@@ -1162,6 +1177,7 @@ export default function WordLadderHuEn() {
           combo: st.combo.count,
           phase: phaseRef.current === "play" ? st.phase : phaseRef.current,
           questionId: p?.id ?? null,
+          questionKey: p?.question.key ?? null,
           reveal: ctl?.view().reveal ? 1 : 0,
           paused: pausedRef.current ? 1 : 0,
           clock: clockRef.current,
@@ -1243,6 +1259,63 @@ export default function WordLadderHuEn() {
   // Fekvő telefonon a fogások a két szélen vannak, a kártya fent: a mászók lejjebb ülnek a képen.
   const landscapePhone = orientation === "landscape" && typeof window !== "undefined" && window.innerHeight <= 520;
   const retryLabel = result?.won ? (level > result.level ? `Tovább: ${level}. pálya` : "Újra") : "Visszavágó!";
+
+  /**
+   * Review K2: a célkártya ne takarja a fogásokat (álló nézet) / ne lógjon ki a nézetből (fekvő nézet) — hosszú mondatnál
+   * a kártya betűje a rendelkezésre álló magassághoz kicsinyedik (legfeljebb `FOCUS_MIN_PX`-ig). Új kérdésnél a megoldás-
+   * kijelzés sorának helyét is fenntartja (`REVEAL_RESERVE_PX`), hogy a kijelzéskor ne kelljen ugrania; kijelzéskor csak
+   * tovább kicsinyíthet. Közvetlen DOM-írás (a közös kérdés-sáv változatlan).
+   */
+  const fitFocus = useCallback(
+    (reset: boolean) => {
+      const focusEl = document.querySelector<HTMLElement>('[data-testid="wl-question"] [data-testid="wl-prompt-focus"]');
+      const card = focusEl?.closest<HTMLElement>(".play-question-card");
+      if (!focusEl || !card) return;
+      if (reset) focusEl.style.fontSize = "";
+      const revealing = card.querySelector('[data-testid="play-question-status"]')?.textContent?.trim() ? true : false;
+      const reserve = revealing ? 0 : REVEAL_RESERVE_PX;
+      let limit = window.innerHeight - 8;
+      if (landscapePhone) {
+        const t = document.querySelector<HTMLElement>('[data-testid="wl-teach"]');
+        if (t) limit = Math.min(limit, t.getBoundingClientRect().top - 6);
+      } else if (holdsRef.current) {
+        limit = Math.min(limit, holdsRef.current.getBoundingClientRect().top - 6);
+      }
+      let size = parseFloat(getComputedStyle(focusEl).fontSize);
+      const start = size;
+      while (card.getBoundingClientRect().bottom + reserve > limit && size > FOCUS_MIN_PX) {
+        size -= 1;
+        focusEl.style.fontSize = `${size}px`;
+      }
+      focusEl.dataset.fit = size < start || focusEl.style.fontSize ? "shrunk" : "full";
+    },
+    [landscapePhone],
+  );
+  const questionKey = presentation ? presentation.id : null;
+  const revealOn = !!reveal;
+  useLayoutEffect(() => {
+    if (phase !== "play" || questionKey === null) return;
+    fitFocus(true);
+    const raf = requestAnimationFrame(() => fitFocus(false));
+    return () => cancelAnimationFrame(raf);
+  }, [phase, questionKey, teach, fitFocus]);
+  useLayoutEffect(() => {
+    if (phase !== "play" || questionKey === null || !revealOn) return;
+    fitFocus(false);
+  }, [phase, questionKey, revealOn, fitFocus]);
+  useEffect(() => {
+    if (phase !== "play") return;
+    const onResize = () => fitFocus(true);
+    window.addEventListener("resize", onResize);
+    let alive = true;
+    void document.fonts?.ready.then(() => {
+      if (alive) fitFocus(true);
+    });
+    return () => {
+      alive = false;
+      window.removeEventListener("resize", onResize);
+    };
+  }, [phase, fitFocus]);
 
   return (
     <GameShell
@@ -1532,7 +1605,7 @@ export default function WordLadderHuEn() {
                 onCollapse={() => setExpanded(false)}
                 testId="wl-question"
                 promptTestId="wl-prompt"
-                promptFocus={presentation ? focusByIdRef.current.get(String(presentation.question.quiz.id ?? "")) ?? null : null}
+                promptFocus={presentation ? ladderFocusFor(presentation.question.quiz, focusByIdRef.current, manualFocus) : null}
               />
             )}
           </>

@@ -11,7 +11,7 @@
  *  - a megoldás-kijelzés a közös kérdés-sáv szabálya: jó válasz után 900 ms, hibás / lejárt után a lap
  *    `LADDER_REVEAL_WRONG_MS`-e (3 s) — ezalatt új fogás nem jelenik meg;
  *  - a világ (a rivális) a lap meghajtójával lép: `createFixedLoop` (fix 1/60 s, ≤ 5 lépés / képkocka), nyitott kérdés
- *    alatt (előjelzéssel együtt) a tempó `slowMo`-jával (K.6 „Közös meghajtó”);
+ *    alatt (előjelzéssel együtt) és a megoldás-kijelzés alatt a tempó `slowMo`-jával (K.6 „Közös meghajtó”, review K6);
  *  - ha a forrás nem ad tételt (terv 8.1) vagy `questions: false`: szabad fogás `FREE_GRIP_COOLDOWN_MS`-onként, a
  *    játékos ügyességi dobásával (a bot `FREE_TAP_MS` után koppint).
  *
@@ -51,6 +51,7 @@ import {
   DEFAULT_LADDER_TEMPO,
   LADDER_BASE_WINDOW_MS,
   LADDER_REVEAL_WRONG_MS,
+  LEAD_IN_MS,
   armedAt,
   ladderFreeGripMs,
   ladderRivalSecPerRung,
@@ -199,6 +200,18 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
   let freeAt = Number.POSITIVE_INFINITY;
   let freeTapAt = Number.POSITIVE_INFINITY;
   let early = 0;
+  /**
+   * Menetvégkor nyitva maradt (megszakított) kérdés kezdete. A közös menet-statisztika a megszakított kérdést 0 ms-os
+   * válaszidővel zárja, így a menet végi „kérdés nélküli szakasz” a kérdés KEZDETÉTŐL számítana, holott végig nyitva volt
+   * (a Nyugodt tempó ≥ 12 s-os ablakánál ez 8 s fölé mehet). A statisztikát ezért a megszakítás pillanatában vesszük, a
+   * kérdés kezdetekor (ORKESZTRÁTOR-KÉRÉS: a közös `abort` / `runStats` ezt maga kezelhetné).
+   */
+  let abortedAt: number | null = null;
+  const abortOpen = () => {
+    const open = director.active();
+    if (open && abortedAt === null) abortedAt = Math.max(0, open.startedAtSimMs - LEAD_IN_MS);
+    director.abort();
+  };
 
   const settle = (o: QuestionOutcome | null) => {
     if (!o || o.result === "aborted") return;
@@ -233,11 +246,11 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
       t += dtMs;
       const active = director.active();
       if (active && t >= active.startedAtSimMs + active.windowMs) settle(director.expire(t));
-      // A lap: `loop.setTimeScale(open ? slowMo : 1)` — nyitott kérdés (előjelzéssel együtt) alatt lassít.
-      loop.setTimeScale(director.active() ? config.slowMo : 1);
+      // A lap: nyitott kérdés (előjelzéssel együtt) ÉS a megoldás-kijelzés alatt a tempó `slowMo`-jával lassít (review K6).
+      loop.setTimeScale(director.active() || t < revealUntil ? config.slowMo : 1);
       loop.frame(t);
       if (state.phase !== "play") {
-        director.abort();
+        abortOpen();
         drainEvents(state);
         return;
       }
@@ -272,11 +285,11 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
         return;
       }
       settle(director.answer(id, option, t));
-      if (state.phase !== "play") director.abort();
+      if (state.phase !== "play") abortOpen();
     },
     done: () => state.phase !== "play",
     won: () => state.phase === "won",
-    stats: () => director.stats(t),
+    stats: () => director.stats(abortedAt ?? t),
     simTimeMs: () => t,
     band: () => director.band(),
     intensity: () => director.intensity(),

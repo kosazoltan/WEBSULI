@@ -1,7 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { WORD_LADDER_DE } from "../client/src/data/wordLadder/de";
 import { WORD_LADDER_EN } from "../client/src/data/wordLadder/en";
+import { WORD_LADDER_FR } from "../client/src/data/wordLadder/fr";
+import { VOCAB_DE } from "../client/src/data/vocabBank/vocab-de";
 import { VOCAB_EN } from "../client/src/data/vocabBank/vocab-en";
+import { VOCAB_FR } from "../client/src/data/vocabBank/vocab-fr";
 import { canGameCloze } from "../client/src/game-engine/vocab/questionGenerator";
 
 /**
@@ -15,6 +19,10 @@ import { canGameCloze } from "../client/src/game-engine/vocab/questionGenerator"
  *   tételek a valódi kérdés-úton jönnek (`?wlItems=`, csak teszt-kampós buildben); a leghosszabbakat a spec a bankfájlokból
  *   keresi ki.
  * - SZ-4: a tempó-választó működik, és újratöltés után megmarad.
+ * - Review K2 / A4 / A7 (SPEC-VÁLTOZÁS 2026-11-17, szoletra-olvashatosag): a kártya a fogás-panelt / HUD-ot nem fedi és
+ *   nincs levágva — kérdés- ÉS megoldás-állapotban, az angol, a német és a francia bank leghosszabb célrészeivel és a
+ *   megnevezett hosszú tételekkel; a keretsor ≥ 16 px, ≥ 4,5:1 kontraszt, nem halványított; a célszó ≥ 1,6×, mondatnál
+ *   (helyhiánykor kicsinyedő kártya) ≥ 1,25× a keretsor; a kézi tételek tűrés nélkül mérve.
  */
 
 test.use({ serviceWorkers: "block", hasTouch: true });
@@ -44,42 +52,35 @@ async function stub(page: Page, grade = "4") {
 
 const probe = (page: Page) => page.evaluate(() => (window as unknown as { __websuliGame: Api }).__websuliGame.probe());
 
-/** A leghosszabb célrészek a bankokból (programmal kikeresve): kézi bank (a leghosszabb szó és a leghosszabb kifejezés),
- *  szóbank típusonként (magyar → angol, angol → magyar, hiányos mondat, mondat-jelentés). */
-function longestItems(): string[] {
-  const longestWord = (s: string) => Math.max(...s.split(/\s+/u).map((w) => w.length));
-  const manual = WORD_LADDER_EN.filter((i) => i.focus);
-  const byWord = [...manual].sort((a, b) => longestWord(b.focus!) - longestWord(a.focus!))[0]!;
-  const byLen = [...manual].sort((a, b) => b.focus!.length - a.focus!.length)[0]!;
-  const manualCloze = [...manual].filter((i) => /_{3,}/u.test(i.focus!)).sort((a, b) => b.focus!.length - a.focus!.length)[0]!;
-  const pick = (score: (e: (typeof VOCAB_EN)[number]) => number, n = 3, filter: (e: (typeof VOCAB_EN)[number]) => boolean = () => true) =>
-    [...VOCAB_EN].filter(filter).sort((a, b) => score(b) - score(a)).slice(0, n);
-  const ids = [byWord.id, byLen.id, manualCloze.id];
-  for (const e of pick((e) => longestWord(e.hu) * 100 + e.hu.length)) ids.push(`vocab:${e.id}:hu-to-target`);
-  for (const e of pick((e) => longestWord(e.term) * 100 + e.term.length)) ids.push(`vocab:${e.id}:target-to-hu`);
-  for (const e of pick((e) => e.example.length, 3, (e) => canGameCloze(e))) ids.push(`vocab:${e.id}:cloze`);
-  for (const e of pick((e) => e.example.length, 3, (e) => e.kind === "phrase")) ids.push(`vocab:${e.id}:phrase-meaning`);
+type Bank = readonly { id: string; focus?: string }[];
+type Vocab = readonly { id: string; hu: string; term: string; example: string; kind: string; pos?: string }[];
+const longestWord = (s: string) => Math.max(...s.split(/\s+/u).map((w) => w.length));
+
+/** A leghosszabb célrészek egy nyelv bankjaiból (programmal kikeresve): kézi bank (a leghosszabb szó, a leghosszabb
+ *  célrész, a leghosszabb hiányos mondat), szóbank típusonként (magyar → cél, cél → magyar, hiányos mondat, mondat-jelentés). */
+function longestItems(manualBank: Bank, vocab: Vocab, opts: { cloze: boolean } = { cloze: true }): string[] {
+  const manual = manualBank.filter((i) => i.focus);
+  const ids = [
+    [...manual].sort((a, b) => longestWord(b.focus!) - longestWord(a.focus!))[0]!.id,
+    [...manual].sort((a, b) => b.focus!.length - a.focus!.length)[0]!.id,
+  ];
+  const manualCloze = [...manual].filter((i) => /_{3,}/u.test(i.focus!)).sort((a, b) => b.focus!.length - a.focus!.length)[0];
+  if (manualCloze) ids.push(manualCloze.id);
+  const pick = (score: (e: Vocab[number]) => number, n: number, filter: (e: Vocab[number]) => boolean = () => true) =>
+    [...vocab].filter(filter).sort((a, b) => score(b) - score(a)).slice(0, n);
+  for (const e of pick((e) => longestWord(e.hu) * 100 + e.hu.length, 2)) ids.push(`vocab:${e.id}:hu-to-target`);
+  for (const e of pick((e) => longestWord(e.term) * 100 + e.term.length, 2)) ids.push(`vocab:${e.id}:target-to-hu`);
+  if (opts.cloze) for (const e of pick((e) => e.example.length, 2, (e) => canGameCloze(e as Parameters<typeof canGameCloze>[0]))) ids.push(`vocab:${e.id}:cloze`);
+  for (const e of pick((e) => e.example.length, 2, (e) => e.kind === "phrase")) ids.push(`vocab:${e.id}:phrase-meaning`);
   return [...new Set(ids)];
 }
 
-/** A célkártya mérése a lapon belül: betűarány, kontraszt, kilógás, szó közbeni törés. */
-const measureFocus = (page: Page) =>
+/** A célkártya és az elrendezés mérése a lapon belül, egy olvasással (C-64). */
+const measure = (page: Page) =>
   page.evaluate(() => {
     const focus = document.querySelector<HTMLElement>('[data-testid="wl-prompt-focus"]');
-    if (!focus) return null;
-    const frame = document.querySelector<HTMLElement>('[data-testid="wl-prompt-frame"]');
-    const card = focus.closest<HTMLElement>(".play-question-card")!;
-    const fs = parseFloat(getComputedStyle(focus).fontSize);
-    // A keretsor betűmérete (ha nincs keretsor — játék-alakú hiányos mondat —, ugyanaz a stílus egy próbaelemen).
-    let frameFs: number;
-    if (frame) frameFs = parseFloat(getComputedStyle(frame).fontSize);
-    else {
-      const probeEl = document.createElement("span");
-      probeEl.className = "play-question-frame";
-      focus.parentElement!.appendChild(probeEl);
-      frameFs = parseFloat(getComputedStyle(probeEl).fontSize);
-      probeEl.remove();
-    }
+    const card = document.querySelector<HTMLElement>('[data-testid="wl-question"] .play-question-card');
+    if (!card) return null;
     const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
     const lum = (c: number[]) => {
       const [r, g, b] = c.map((v) => {
@@ -88,78 +89,174 @@ const measureFocus = (page: Page) =>
       });
       return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
     };
-    const L1 = lum(rgb(getComputedStyle(focus).color));
-    const L2 = lum(rgb(getComputedStyle(focus).backgroundColor));
-    const contrast = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
-    const fr = focus.getBoundingClientRect();
-    const cr = card.getBoundingClientRect();
-    const overflow = focus.scrollWidth > focus.clientWidth + 1 || fr.right > cr.right + 1 || fr.left < cr.left - 1 || fr.right > window.innerWidth || fr.bottom > window.innerHeight;
-    // Szó közbeni törés: egy szó (a szöveg-csomópontokon belül) több sorra eső téglalapokat kap.
-    const broken: string[] = [];
-    const walker = document.createTreeWalker(focus, NodeFilter.SHOW_TEXT);
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      const text = n.textContent ?? "";
-      const re = /\S+/gu;
-      for (let m = re.exec(text); m; m = re.exec(text)) {
-        const r = document.createRange();
-        r.setStart(n, m.index);
-        r.setEnd(n, m.index + m[0].length);
-        const tops = new Set(Array.from(r.getClientRects()).map((x) => Math.round(x.top)));
-        if (tops.size > 1) broken.push(m[0]);
-      }
-    }
-    const blank = focus.querySelector<HTMLElement>('[data-testid="play-question-blank"]');
-    return {
-      text: focus.innerText,
-      kind: focus.dataset.kind ?? "",
-      fs,
-      frameFs,
-      contrast,
-      overflow,
-      broken,
-      blank: blank ? { w: blank.getBoundingClientRect().width, border: parseFloat(getComputedStyle(blank).borderTopWidth) } : null,
+    const contrastOf = (fg: string, bg: string) => {
+      const L1 = lum(rgb(fg));
+      const L2 = lum(rgb(bg));
+      return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
     };
+    const cr = card.getBoundingClientRect();
+    const hud = document.querySelector<HTMLElement>(".game-hud")?.getBoundingClientRect() ?? null;
+    const landscape = window.innerWidth > window.innerHeight && window.innerHeight <= 520;
+    const panel = document.querySelector<HTMLElement>('[data-testid="wl-quiz"]')!.getBoundingClientRect();
+    const opts = Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="wl-option-"]')).map((b) => b.getBoundingClientRect());
+    const teach = document.querySelector<HTMLElement>('[data-testid="wl-teach"]')?.getBoundingClientRect() ?? null;
+    const hit = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+    // Álló nézetben a fogás-panel (benne a tanító sor) a kártya alatt; fekvőben a fogások a két szélen, a tanító sor középen.
+    const holdsTop = landscape ? Math.min(...opts.map((o) => o.top)) : panel.top;
+    const overHolds = landscape ? opts.some((o) => hit(o, cr)) || (teach !== null && hit(teach, cr)) : cr.bottom > panel.top + 0.5;
+    const overHud = hud !== null && cr.top < hud.bottom - 0.5;
+    const clipped = cr.bottom > window.innerHeight + 0.5 || card.scrollHeight > card.clientHeight + 1 || (focus !== null && focus.scrollHeight > focus.clientHeight + 1);
+    const frame = document.querySelector<HTMLElement>('[data-testid="wl-prompt-frame"]');
+    const cardBg = getComputedStyle(card).backgroundColor;
+    const out = {
+      key: "",
+      text: focus?.innerText ?? "",
+      kind: focus?.dataset.kind ?? "",
+      fit: focus?.dataset.fit ?? "",
+      fs: focus ? parseFloat(getComputedStyle(focus).fontSize) : 0,
+      frameFs: frame ? parseFloat(getComputedStyle(frame).fontSize) : 16,
+      frameContrast: frame ? contrastOf(getComputedStyle(frame).color, cardBg) : null,
+      frameOpacity: frame ? parseFloat(getComputedStyle(frame).opacity) : 1,
+      contrast: focus ? contrastOf(getComputedStyle(focus).color, getComputedStyle(focus).backgroundColor) : 0,
+      cardBottom: Math.round(cr.bottom),
+      holdsTop: Math.round(holdsTop),
+      gap: Math.round(holdsTop - cr.bottom),
+      overHolds,
+      overHud,
+      clipped,
+      overflowX: focus !== null && (focus.scrollWidth > focus.clientWidth + 1 || focus.getBoundingClientRect().right > cr.right + 1),
+      broken: [] as string[],
+      blank: null as null | { w: number; border: number },
+    };
+    if (focus) {
+      // Szó közbeni törés: egy szó (a szöveg-csomópontokon belül) több sorra eső téglalapokat kap.
+      const walker = document.createTreeWalker(focus, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const text = n.textContent ?? "";
+        const re = /\S+/gu;
+        for (let m = re.exec(text); m; m = re.exec(text)) {
+          const r = document.createRange();
+          r.setStart(n, m.index);
+          r.setEnd(n, m.index + m[0].length);
+          const tops = new Set(Array.from(r.getClientRects()).map((x) => Math.round(x.top)));
+          if (tops.size > 1) out.broken.push(m[0]);
+        }
+      }
+      const blank = focus.querySelector<HTMLElement>('[data-testid="play-question-blank"]');
+      if (blank) out.blank = { w: blank.getBoundingClientRect().width, border: parseFloat(getComputedStyle(blank).borderTopWidth) };
+    }
+    return out;
   });
 
+type Row = NonNullable<Awaited<ReturnType<typeof measure>>> & { state: "kérdés" | "megoldás" };
+
+/**
+ * A `?wlItems=` tételein végigmegy: minden kérdésnél az élesítés után mér (kérdés-állapot), majd ROSSZ fogással a
+ * megoldás-kijelzést is méri (a kártya ekkor állapotsorral és „Miért?” gombbal nő). A kulcs a probe `questionKey`-e.
+ */
+async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "fr"; grade: string }): Promise<Row[]> {
+  await page.addInitScript((o) => {
+    localStorage.setItem("websuli.classroomGrade", o.grade);
+    localStorage.setItem("websuli.wordladder.lang", o.lang);
+  }, opts);
+  await page.goto(`/games/word-ladder-hu-en?seed=11&wall=60&wlItems=${encodeURIComponent(ids.join(","))}`);
+  await page.getByTestId("wl-start").click();
+  const rows: Row[] = [];
+  let lastId: string | number | null = null;
+  const deadline = Date.now() + 200_000;
+  let asked = 0;
+  while (Date.now() < deadline && asked < ids.length + 6) {
+    const p = await probe(page);
+    if (p.questionOpen === 1 && p.questionId !== lastId && p.reveal === 0) {
+      lastId = p.questionId;
+      asked += 1;
+      // Az élesítésig várunk (a fogás addig nem számít), a mérés a kész elrendezésen.
+      await expect.poll(async () => { const q = await probe(page); return Number(q.clock) >= Number(q.armedAt); }, { timeout: 5_000 }).toBe(true);
+      await page.waitForTimeout(150);
+      const key = String(p.questionKey ?? "");
+      const q = await measure(page);
+      if (q) rows.push({ ...q, key, state: "kérdés" });
+      const wrong = page.locator('[data-testid^="wl-option-"][data-correct="false"]:not([disabled])').first();
+      if (await wrong.click({ timeout: 3_000 }).then(() => true, () => false)) {
+        await expect(page.locator('[data-testid^="wl-option-"][data-state="correct"]').first()).toBeVisible({ timeout: 3_000 });
+        await page.waitForTimeout(300);
+        const r = await measure(page);
+        if (r) rows.push({ ...r, key, state: "megoldás" });
+      }
+    }
+    await page.waitForTimeout(150);
+  }
+  return rows;
+}
+
+const keyOf = (id: string) => (id.startsWith("vocab:") ? `vocab:${id.split(":")[1]!.slice(0, 2)}:${id.split(":")[1]}` : `bank:word-ladder-hu-en:${id}`);
+
+/** Az elvárások: a szabályból (C-15). Szó: ≥ 1,6× a keretsor; mondat: ≥ 1,25× (helyhiánynál a kártya kicsinyedik, review K2). */
+function check(rows: Row[], label: string) {
+  for (const m of rows) {
+    const at = `${label} ${m.state} ${m.key} „${m.text.slice(0, 40)}”`;
+    expect(m.overHolds, `${at}: a kérdés-kártya fedi a fogásokat (alja ${m.cardBottom}, fogások ${m.holdsTop})`).toBe(false);
+    expect(m.overHud, `${at}: a kérdés-kártya fedi a HUD-ot`).toBe(false);
+    expect(m.clipped, `${at}: levágás`).toBe(false);
+    if (!m.text) continue;
+    expect(m.frameFs, `${at}: keretsor betű`).toBeGreaterThanOrEqual(16);
+    if (m.frameContrast !== null) expect(m.frameContrast, `${at}: keretsor kontraszt`).toBeGreaterThanOrEqual(4.5);
+    expect(m.frameOpacity, `${at}: a keretsor nem halványított`).toBe(1);
+    expect(m.fs / m.frameFs, `${at}: betűarány ${m.fs}/${m.frameFs}`).toBeGreaterThanOrEqual(m.kind === "word" ? 1.6 : 1.25);
+    expect(m.contrast, `${at}: kontraszt`).toBeGreaterThanOrEqual(3);
+    expect(m.overflowX, `${at}: vízszintesen kilóg`).toBe(false);
+    expect(m.broken, `${at}: szó közben tör`).toEqual([]);
+    if (m.blank) {
+      expect(m.blank.w, "a hiány helye látható szélességű").toBeGreaterThanOrEqual(24);
+      expect(m.blank.border, "a hiány vastag kerettel jelölt").toBeGreaterThanOrEqual(2);
+    }
+  }
+}
+
+function report(rows: Row[], label: string) {
+  for (const m of rows) {
+    console.log(`K2|${label}|${m.state}|${m.key}|${m.kind}|${m.fs}px|${m.fit}|kártya alja ${m.cardBottom}|fogások ${m.holdsTop}|rés ${m.gap}|fed ${m.overHolds}|vág ${m.clipped}`);
+  }
+}
+
 for (const vp of VIEWS) {
-  test(`SZ-5 célkártya @ ${vp.width}x${vp.height}: ≥ 1,6× betű, kontraszt, nincs kilógás, nincs szó közbeni törés — a leghosszabb célszavakkal`, async ({ page }) => {
-    test.setTimeout(240_000);
+  test(`SZ-5 célkártya @ ${vp.width}x${vp.height} (angol): betűarány, kontraszt, nincs kilógás / takarás / szó közbeni törés — a leghosszabb célszavakkal, kérdés- és megoldás-állapotban`, async ({ page }) => {
+    test.setTimeout(300_000);
     await page.setViewportSize(vp);
     await stub(page);
-    const ids = longestItems();
-    await page.goto(`/games/word-ladder-hu-en?seed=11&wall=60&wlItems=${encodeURIComponent(ids.join(","))}`);
-    await page.getByTestId("wl-start").click();
-    const seen = new Map<string, NonNullable<Awaited<ReturnType<typeof measureFocus>>>>();
-    let lastId: string | number | null = null;
-    const deadline = Date.now() + 180_000;
-    while (Date.now() < deadline && seen.size < ids.length) {
-      const p = await probe(page);
-      if (p.questionOpen === 1 && p.questionId !== lastId && p.reveal === 0) {
-        // Az élesítésig várunk (a fogás addig nem számít), a mérés a kész elrendezésen.
-        await expect.poll(async () => Number((await probe(page)).clock) >= Number((await probe(page)).armedAt), { timeout: 5_000 }).toBe(true);
-        const m = await measureFocus(page);
-        lastId = p.questionId;
-        if (m) seen.set(m.text, m);
-        const right = page.locator('[data-testid^="wl-option-"][data-correct="true"]:not([disabled])').first();
-        await right.click({ timeout: 3_000 }).catch(() => undefined);
-      }
-      await page.waitForTimeout(150);
-      // A tesztlista elfogyott: a többi kérdés már a szokásos forrásból jön.
-      if (Number(p.questionsAnswered) > ids.length + 4) break;
+    const ids = [...longestItems(WORD_LADDER_EN, VOCAB_EN), "vocab:en4-family-006:phrase-meaning", "vocab:en4-health-016:phrase-meaning"];
+    const rows = await runItems(page, ids, { lang: "en", grade: "11" });
+    report(rows, `en ${vp.width}x${vp.height}`);
+    const keys = new Set(rows.filter((r) => r.text).map((r) => r.key));
+    // Review A7: a kézi tételek (és a megnevezett szóbankos tételek) tűrés nélkül mérve.
+    for (const id of ids) {
+      if (!id.startsWith("vocab:") || id.startsWith("vocab:en4-")) expect(keys.has(keyOf(id)), `mérve: ${id}`).toBe(true);
     }
-    const all = [...seen.values()];
-    expect(all.length, `mért célkártyák: ${all.map((m) => m.text).join(" | ")}`).toBeGreaterThanOrEqual(ids.length - 3);
-    expect(all.some((m) => m.blank), "hiányos mondatos típus is mérve").toBe(true);
-    for (const m of all) {
-      expect(m.fs / m.frameFs, `${m.text}: betűarány ${m.fs}/${m.frameFs}`).toBeGreaterThanOrEqual(1.6);
-      expect(m.contrast, `${m.text}: kontraszt`).toBeGreaterThanOrEqual(3);
-      expect(m.overflow, `${m.text}: kilóg`).toBe(false);
-      expect(m.broken, `${m.text}: szó közben tör`).toEqual([]);
-      if (m.blank) {
-        expect(m.blank.w, "a hiány helye látható szélességű").toBeGreaterThanOrEqual(24);
-        expect(m.blank.border, "a hiány vastag kerettel jelölt").toBeGreaterThanOrEqual(2);
-      }
-    }
+    expect(keys.size, `mért célkártyák: ${[...keys].join(" | ")}`).toBeGreaterThanOrEqual(ids.length - 2);
+    expect(rows.some((m) => m.blank), "hiányos mondatos típus is mérve").toBe(true);
+    expect(rows.some((m) => m.state === "megoldás"), "megoldás-állapot is mérve").toBe(true);
+    check(rows, "en");
+  });
+
+  test(`K2 célkártya @ ${vp.width}x${vp.height} (német és francia): a megnevezett hosszú tételek és a bankok leghosszabb célrészei, kérdés- és megoldás-állapotban`, async ({ page, browser }) => {
+    test.setTimeout(400_000);
+    await page.setViewportSize(vp);
+    await stub(page);
+    const de = ["de4-060", "vocab:de4-body-006:phrase-meaning", "vocab:de4-nature-014:phrase-meaning", ...longestItems(WORD_LADDER_DE, VOCAB_DE, { cloze: false })];
+    const deRows = await runItems(page, [...new Set(de)], { lang: "de", grade: "11" });
+    report(deRows, `de ${vp.width}x${vp.height}`);
+    const deKeys = new Set(deRows.map((r) => r.key));
+    for (const id of ["de4-060", "vocab:de4-body-006:phrase-meaning", "vocab:de4-nature-014:phrase-meaning"]) expect(deKeys.has(keyOf(id)), `mérve: ${id}`).toBe(true);
+    check(deRows, "de");
+    const ctx = await browser.newContext({ viewport: vp, hasTouch: true, serviceWorkers: "block" });
+    const fr = await ctx.newPage();
+    await stub(fr);
+    const frIds = longestItems(WORD_LADDER_FR, VOCAB_FR, { cloze: false });
+    const frRows = await runItems(fr, frIds, { lang: "fr", grade: "11" });
+    report(frRows, `fr ${vp.width}x${vp.height}`);
+    expect(new Set(frRows.filter((r) => r.text).map((r) => r.key)).size, "francia célkártyák mérve").toBeGreaterThanOrEqual(frIds.length - 2);
+    check(frRows, "fr");
+    await ctx.close();
   });
 }
 
