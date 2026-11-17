@@ -53,4 +53,3 @@ A CLI `list` a hiteles forrás; ez a pillanatkép a 2026-10-05-i higiéniai söp
 Higiénia 2026-10-05: a review-ban ragadt #189/#191/#196/#197 és a doing #999 bizonyítékkal lezárva, a #202 duplikátum zárva;
 munkafák (s10, s11, s116, continuous-release) eltávolítva; 107 beolvasztott helyi és 121 távoli ág törölve, a nem beolvasztott
 `backup/pr-128-*` ágak `archive/*` tagben; a gyökér- és `source/` naplók a `tmp/_archiv-2026-10-05/` alá kerültek.
-
