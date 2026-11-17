@@ -161,6 +161,19 @@ export type MaterialRow = {
 };
 
 /**
+ * J7a: a tananyag-sor tárgya. A játék két tárgyat ismer (matek, angol); a nyelvi (angol, német, francia …) és
+ * szókincses témák az „angol” ágra kerülnek, így „csak matek” módban nem jelennek meg. Ismeretlen téma marad matek.
+ */
+const LANGUAGE_TOPIC = /english|angol|német|francia|olasz|spanyol|vocab|szókincs|grammar/i;
+
+export function materialSubject(topic: string, prompt: string): Subject {
+  if (LANGUAGE_TOPIC.test(topic)) return "english";
+  // A szóbank-szerű kérdés („X magyarul:”) akkor is nyelvi, ha a téma üres.
+  if (/magyarul|ellentéte:/i.test(prompt)) return "english";
+  return "math";
+}
+
+/**
  * Convert `/api/games/material-quizzes` rows into questions.
  *
  * Anything malformed is dropped rather than repaired: a three- or four-option multiple
@@ -175,7 +188,7 @@ export function materialToQuestions(rows: readonly MaterialRow[], grade: number)
     const topic = (row.topic ?? "").toLowerCase();
     out.push({
       id: row.id ?? `material-${idx}`,
-      subject: topic.includes("english") || topic.includes("angol") ? "english" : "math",
+      subject: materialSubject(topic, row.prompt),
       grade,
       prompt: row.prompt,
       options: options as string[],
