@@ -3,7 +3,7 @@
 > Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` · Kanban: #91
 > Ágak: `docs/szkriptkapuk-terv` (S0) → `chore/kapu-teszt-integritas` (S1, az S0-ra építve) → `chore/kapu-allitas-ellenor` (S2, az
 > S1-re építve). Munkafa: `.claude/worktrees/szkriptkapuk`.
-> **Állapot:** S0 kész (terv-PR) · S1 kész (`chore/kapu-teszt-integritas`) · S2 végrehajtás alatt (`chore/kapu-allitas-ellenor`) · S3, S5, S6, S7, S8 kiadható megbízás (lent) · S4 az összevonások után.
+> **Állapot:** S0 kész (terv-PR) · S1 kész (`chore/kapu-teszt-integritas`) · S2 kész (`chore/kapu-allitas-ellenor`; az S0–S2 EGY PR-ban, orkesztrátori döntés 2026-11-17) · S8 végrehajtás alatt (`chore/kapu-ingadozo`, push nélkül) · S3, S5, S6, S7 kiadható megbízás (lent) · S4 az összevonások után.
 
 Szabályok minden szeletre: a `source/` futásidejű kódja nem módosul; minden szkript Node ESM, függőség nélkül, injektálható futtatóval
 (`exec`), `node --test` tesztekkel, Windows x64 / ARM64 / Linux; regexet csak Edit / Write eszközzel írj és olvasd vissza; tesztet
@@ -247,7 +247,7 @@ szeleted-fejezete — a kód ELŐTT egy commitban frissítsd az „Állapot” s
 
 ### S8 — Ingadozó-követő (párhuzamosan futhat; diszjunkt)
 
-- **Hatókör:** új `scripts/qa/flaky-report.mjs` + teszt (rögzített napló-mintákkal), új `scripts/qa/known-flaky.json`;
+- **Hatókör:** új `scripts/qa/gates/flaky-report.mjs` + teszt (rögzített napló-mintákkal), új `scripts/qa/gates/known-flaky.json` (a szkript-kapuk fájlköre: `scripts/qa/gates/`);
   `docs/minosegkapuk.md` egy sor.
 - **Működés:** `gh run list --branch main --workflow CI --limit <N>` + `gh run view <id> --log-failed` (a job-naplóból a bukó
   Playwright / node:test tesztnevek, kimenet-szűrve); egy teszt „ingadozó”, ha ugyanazon a fejen ismétlésre zöldült, vagy N futásból

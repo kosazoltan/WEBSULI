@@ -317,7 +317,7 @@ Részletes, kiadható megbízás-szöveg: a végrehajtási fájl „Megbízások
 | **S5** | telepítés utáni füstpróba | új: `scripts/qa/post-deploy-smoke.mjs` + teszt; mód.: `websuli-merge-elotti-kapu` skill (merge utáni lépés) | `node --test` (injektált fetch) | tájékoztató → kötelező lépés | igen (diszjunkt) |
 | **S6** | folyamat-higiénia | új: `scripts/qa/hygiene-check.mjs` + teszt; mód.: `pre-push-gate.mjs` (csak-merge / zöld-fej push lépés) | `node --test` | warn | igen; a `pre-push-gate.mjs` hunk miatt az S2 / S3 után vonandó össze |
 | **S7** | teljesítmény-keret | új: `scripts/qa/perf-budget.mjs`, `source/tests/game-perf.spec.ts`, `perf-budget.json`; mód.: (egyeztetve) `tests/support/game-mobile-quality.ts` nézetlista | e2e | tájékoztató → block | a játék-PR-ok után |
-| **S8** | ingadozó-követő | új: `scripts/qa/flaky-report.mjs` + teszt, `scripts/qa/known-flaky.json` | `node --test` (rögzített napló-mintákkal) | tájékoztató | igen (diszjunkt) |
+| **S8** | ingadozó-követő | új: `scripts/qa/gates/flaky-report.mjs` + teszt, `scripts/qa/gates/known-flaky.json` | `node --test` (rögzített napló-mintákkal) | tájékoztató | igen (diszjunkt) |
 | **S9** | termék futásidejű kapui | csak javaslat-doksi (3.2 „Szkripttel még” oszlop) | — | tulajdonosi döntés | — |
 | **S10** | metrikák | új: `scripts/qa/gate-metrics.mjs`, `false-alarm.mjs`; az ellenőri jelentés leleteinek `gép: igen / nem / részben` címkéje | `node --test` | — | a #490 után (a skill ott változik) |
 
