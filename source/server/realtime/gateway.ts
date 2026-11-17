@@ -413,21 +413,23 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
   }
 
   /**
-   * JM3a-2 (review #464 ÚJ-2, review K1): minden sikeres visszaülésnél új token. `pending` (kézfogás): a régi token a kliens
-   * nyugtájáig — legfeljebb a türelmi ideig — még visszaültet erre a helyre (egy elveszett `welcome` nem zárja ki a játékost);
-   * ismételt elvesztésnél a legrégebbi, nyugtázott token marad a tartalék, a soha meg nem érkezett közbülső token törlődik.
-   * `hard` (új jeggyel saját helyre ülés): a régi token azonnal érvénytelen.
+   * JM3a-2 (review #464 ÚJ-2, review K1, visszaellenőrzés Ú1/Ú2): minden sikeres visszaülésnél új token.
+   * `pending` (kézfogás, `presented` = a bemutatott token): a kliens nyugtájáig egy tartalék token is visszaültet erre a helyre.
+   *  - a JELENLEGI tokennel jött → a kliens bizonyítottan megkapta: ez lesz az új tartalék, a régebbi tartalék törlődik;
+   *  - a TARTALÉKKAL jött → a jelenlegi soha nem érkezett meg: az törlődik, a tartalék marad.
+   * A tartalékidő a tartalékká váláskor EGYSZER rögzül (utód első kiadása + türelmi idő), és nem hosszabbodik.
+   * `hard` (új jeggyel saját helyre ülés): minden korábbi token azonnal érvénytelen.
    */
-  function rotateResume(seat: Seat, mode: "pending" | "hard"): void {
+  function rotateResume(seat: Seat, mode: "pending" | "hard", presented?: string): void {
     const old = seat.resumeToken;
     if (mode === "hard") {
       seatsByResume.delete(old);
       if (seat.prevResume) seatsByResume.delete(seat.prevResume.token);
       seat.prevResume = null;
-    } else if (seat.prevResume) {
-      seatsByResume.delete(old); // a meg nem érkezett közbülső token
-      seat.prevResume = { token: seat.prevResume.token, until: deps.now() + RT_RECONNECT_GRACE_MS };
+    } else if (seat.prevResume && presented === seat.prevResume.token) {
+      seatsByResume.delete(old); // a meg nem érkezett jelenlegi token; a tartalék határideje változatlan
     } else {
+      if (seat.prevResume) seatsByResume.delete(seat.prevResume.token);
       seat.prevResume = { token: old, until: deps.now() + RT_RECONNECT_GRACE_MS };
     }
     seat.resumeToken = randomBytes(24).toString("base64url");
@@ -527,7 +529,7 @@ export function createGateway(httpServer: HttpServer, deps: GatewayDeps, opts: {
           return fail("ROOM_NOT_FOUND");
         }
       }
-      rotateResume(seat, "pending");
+      rotateResume(seat, "pending", auth.data.resume);
       data.seat = seat;
       data.intentUsed = true;
       socket.data = data;

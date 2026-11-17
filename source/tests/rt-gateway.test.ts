@@ -341,6 +341,53 @@ describe("JM3a-2 gateway — folytatási token forgatása és lejárata (review 
     h.clock.offsetMs = 0;
   });
 
+  it("visszaellenőrzés Ú1/Ú2: többszörös nyugtavesztés — a kliensnél lévő token sosem vész el (két- és háromlépcsős lánc); a tartalék határideje nem hosszabbodik", async () => {
+    const { io } = await import("socket.io-client");
+    const { PROTOCOL_VERSION, RT_PATH, RT_RECONNECT_GRACE_MS } = await import("../shared/duel/protocol");
+    const h = await harness();
+    const { host, code } = await createRoom(h);
+    const guest = await addPlayer(h, code, 6);
+    const gId = guest.playerId!;
+    const t1 = guest.resumeToken!;
+    guest.socket.io.reconnection(false);
+    guest.socket.io.engine.close();
+    await host.waitFor("room:state", (s) => s.players.some((p: any) => p.id === gId && !p.connected));
+    /** Nyers visszaülés nyugta nélkül (a nyugta / a következő `welcome` elveszett), majd megszakad; az új tokent adja vissza. */
+    const resumeNoAck = (token: string) =>
+      new Promise<string>((resolve, reject) => {
+        const s = io(`http://127.0.0.1:${h.port}`, { path: RT_PATH, addTrailingSlash: false, transports: ["websocket"], reconnection: false, auth: { v: PROTOCOL_VERSION, resume: token }, extraHeaders: { origin: h.origin } });
+        s.on("welcome", (w: any) => {
+          assert.equal(w.playerId, gId);
+          s.close();
+          setTimeout(() => resolve(w.resumeToken), 60);
+        });
+        s.on("connect_error", (e: Error & { data?: { code?: string } }) => {
+          s.close();
+          reject(Object.assign(new Error(e.data?.code ?? e.message), { code: e.data?.code ?? e.message }));
+        });
+      });
+    // Ú1, kétlépcsős: T1 → T2 (nyugta elvész) → T2-vel vissza → T3 (a welcome elvész) → a kliens T2-vel próbál: visszaül.
+    const t2 = await resumeNoAck(t1);
+    const t3 = await resumeNoAck(t2);
+    assert.notEqual(t3, t2);
+    const t4 = await resumeNoAck(t2);
+    // Háromlépcsős lánc: a mindig a legutóbb megkapott tokennel visszaülő kliens nem zárul ki.
+    const t5 = await resumeNoAck(t4);
+    const t6 = await resumeNoAck(t5);
+    assert.ok(t6);
+    // A régebbi tartalékok a jelenlegi bemutatásakor törlődtek.
+    for (const old of [t1, t2, t3]) await assert.rejects(resumeNoAck(old), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    // Ú2: a tartalékkal végzett ismételt visszaülés NEM hosszabbít — a tartalék (t5) határideje a t6 kiadásától számított türelmi idő.
+    h.clock.offsetMs = Math.floor(RT_RECONNECT_GRACE_MS / 2);
+    const t7 = await resumeNoAck(t5);
+    h.clock.offsetMs = RT_RECONNECT_GRACE_MS - 2000;
+    await resumeNoAck(t5);
+    h.clock.offsetMs = RT_RECONNECT_GRACE_MS + 1000;
+    await assert.rejects(resumeNoAck(t5), (e: Error & { code?: string }) => e.code === "ROOM_NOT_FOUND");
+    assert.ok(t7);
+    h.clock.offsetMs = 0;
+  });
+
   it("szerveroldali lejárat: a túl régi token nem ül vissza; az új jeggyel saját helyre ülés is új tokent ad", async () => {
     const { io } = await import("socket.io-client");
     const { connectRt } = await import("../client/src/lib/rt/rtClient");

@@ -402,6 +402,11 @@ describe("JM2 room-machine — kapcsolat, kilépés, gazda-váltás meccs közbe
       ["P(B) + kick(B) → L", () => P(B), ev.kirúg(B), { phase: "lobby", status: "left", by: B }],
       ["P(A) + kick(B) → L", () => P(A), ev.kirúg(B), { phase: "lobby", status: "left", by: A }],
       ["ACC(B kért, kiesett) + start (A) → NOT_ENOUGH_PLAYERS", () => ACC(B, A), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      // A kérő a GAZDA, és ő esik ki (visszaellenőrzés): a gazdaság B-re száll, de B nyers start / kick-je sem indít meccset.
+      ["ACC(A, gazda kért, kiesett) + start (az új gazda, B) → NOT_ENOUGH_PLAYERS", () => ACC(A, B), (f) => step(f.s, { type: "start", playerId: f.s.hostId! }, f.t), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["ACC(A, gazda kért, kiesett) + kick(A) (az új gazda, B) → L", () => ACC(A, B), (f) => step(f.s, { type: "kick", playerId: f.s.hostId!, target: A }, f.t), { phase: "lobby", status: "left", by: A }],
+      ["P(A, gazda kért) + A kiesik + start (az új gazda, B) → NOT_ENOUGH_PLAYERS", () => P(A), (f) => { const s = step(f.s, { type: "disconnect", playerId: A }, f.t).state; return step(s, { type: "start", playerId: s.hostId! }, f.t + 1); }, { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
+      ["E(A, gazda kért) + A kiesik + start (az új gazda, B) → NOT_ENOUGH_PLAYERS (lejáratkor senki sem kész)", () => EXP(A), (f) => { const s = step(f.s, { type: "disconnect", playerId: A }, f.t).state; return step(s, { type: "start", playerId: s.hostId! }, f.t + 1); }, { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
       ["ACC(B kért, kiesett) + kick(B) (A gazda) → L", () => ACC(B, A), ev.kirúg(B), { phase: "lobby", status: "left", by: B }],
       ["E(B, vendég kért) + start → NOT_ENOUGH_PLAYERS (lejáratkor senki sem kész — K3)", () => EXP(B), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
       ["E(A) + start → NOT_ENOUGH_PLAYERS", () => EXP(A), ev.indít(), { phase: "lobby", error: "NOT_ENOUGH_PLAYERS" }],
