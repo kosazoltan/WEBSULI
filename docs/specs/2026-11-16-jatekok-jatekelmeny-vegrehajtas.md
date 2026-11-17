@@ -1308,6 +1308,16 @@ válaszok mellett mind a négy kő 0%, és a kérdéskártya rátakar az A/B rú
   ellenpróba. Az álló és fekvő képernyőképek újrakészülnek.
 - **Nem ebben a PR-ban:** N3, L4 maradéka, L6 (tulajdonosi döntés), a közös `pointerTap.ts`.
 
+**Megvalósult (mérve):**
+- A kövek takaratlan része (rövid / leghosszabb kérdés): 360×640 100/100/100/100% mindkettőnél (kis álló nézetben a sáv a
+  gombsor alatt, a tárcsa és az Ugrás között); 390×844 100% (leghosszabbnál 92–100%); 844×390 83–100%. A 360×640-es
+  kártya–gomb átfedés megszűnt (a prompt ott 2 sor + „Mutasd”).
+- A kövek az áttetsző menetben, utolsóként rajzolódnak, mélységteszt nélkül (a lomb különben fölülírta őket — böngészőben
+  látott hiba, javítva).
+- B1: a reviewer `stone-overlap` mérője 0 / 1500; N2: a körbejárásos mérés (`stone-overlap2` mintájára, 6 szög × 3 távolság × 4
+  magasság) a `tapRay`-jel 0 találat, a nyers geometria érc-szabály nélkül talál (ellenpróba a tesztben). Mutációs ellenpróba: az
+  érc-szabály nélkül az N2-teszt bukik; a sávos elhelyezés nélkül mind a 6 N1 e2e eset bukik.
+
 ### J3b — nappal–éjjel ciklus, sebző mobok, kard, életek
 
 1. Állapot-sor commit.
