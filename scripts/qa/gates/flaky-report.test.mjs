@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { aggregate, checkKnown, cleanLine, collectRun, decidePr, ghRun, KNOWN_FILE, knownEntry, parseJobLog, testFileOf } from './flaky-report.mjs';
+import { aggregate, checkKnown, cleanLine, collectRun, decidePr, expired, ghRun, KNOWN_FILE, knownEntry, parseJobLog, testFileOf, touchesArea } from './flaky-report.mjs';
 
 const P = (s) => `Playwright E2E\tUNKNOWN STEP\t2026-11-17T12:07:04.4291875Z ${s}`;
 const U = (s) => `Unit Tests\tRun unit tests\t2026-11-17T12:07:04.4291875Z ${s}`;
@@ -70,28 +70,80 @@ test('aggregate: Playwright-újrapróba, újraindításra zöld, nem egymást k�
   assert.equal(r2[0].cls, 'tartós bukás');
 });
 
-test('decidePr: csak ismert ingadozó bukás → „nem a PR hibája”; új bukás vagy a PR által módosított teszt → „a PR hibája lehet”', () => {
+const TODAY = '2026-11-17';
+const OK_ENTRY = { id: 'e2e:tests/word-ladder-play.spec.ts:48', ticket: 95, reviewBy: '2026-12-17' };
+const GAMES = { games: { 'word-ladder-hu-en': 'word-?ladder', 'block-craft-quiz': 'block-?craft', 'brain-rot-steal': 'brain-?rot' }, sharedGamePatterns: ['source/client/src/game-engine/'] };
+const dec = (o) => decidePr({ ranking: [], known: [OK_ENTRY], exclude: [], prFiles: [], cfg: GAMES, today: TODAY, ...o });
+
+test('decidePr: felmentés CSAK jegyes, le nem járt listaelemre; a PR által módosított teszt nem ment fel', () => {
   const ranking = aggregate([run(2, [A(1, 'failure', [WL]), A(2, 'success')]), run(1, [A(1, 'success')])]);
-  const known = [{ id: 'e2e:tests/word-ladder-play.spec.ts:48', ticket: 95, note: 'kérdés-sáv időzítés' }];
-  const ok = decidePr({ failed: [WL], ranking, known, prFiles: ['source/client/src/pages/X.tsx'] });
+  const ok = dec({ failed: [WL], ranking, prFiles: ['docs/x.md'] });
   assert.equal(ok.verdict, 'nem a PR hibája');
   assert.match(ok.items[0].why, /jegy: #95/);
-  const touched = decidePr({ failed: [WL], ranking, known, prFiles: ['source/tests/word-ladder-play.spec.ts'] });
-  assert.equal(touched.verdict, 'a PR hibája lehet');
-  const fresh = decidePr({ failed: [WL, 'unit:új hiba'], ranking, known, prFiles: [] });
-  assert.equal(fresh.verdict, 'a PR hibája lehet');
-  assert.equal(fresh.items[1].status, 'A PR HIBÁJA LEHET');
-  assert.equal(decidePr({ failed: [], ranking, known, prFiles: [] }).verdict, 'nincs bukás');
+  assert.match(ok.advice, /csak JAVASLAT.*NEM pótolja.*zöld kötelező/);
+  assert.equal(dec({ failed: [WL], ranking, prFiles: ['source/tests/word-ladder-play.spec.ts'] }).verdict, 'a PR hibája lehet');
+  assert.equal(dec({ failed: [WL, 'unit:új hiba'], ranking }).verdict, 'a PR hibája lehet');
+  assert.equal(dec({ failed: [], conclusion: 'success', ranking }).verdict, 'nincs bukás');
+  assert.equal(dec({ failed: [WL], ranking, known: [{ ...OK_ENTRY, reviewBy: '2026-11-01' }] }).verdict, 'a PR hibája lehet', 'lejárt felülvizsgálat');
+  assert.equal(dec({ failed: [WL], ranking, known: [{ ...OK_ENTRY, reviewBy: undefined }] }).verdict, 'a PR hibája lehet', 'hiányzó felülvizsgálati dátum');
+  assert.equal(dec({ failed: [WL], ranking, known: [{ ...OK_ENTRY, ticket: null }] }).verdict, 'a PR hibája lehet', 'jegy nélkül');
 });
 
-test('checkKnown / knownEntry: jegy nélküli ingadozó és jegy nélküli listaelem hiba; cím nélküli elem a sor minden esetére illik', () => {
-  const ranking = aggregate([run(1, [A(1, 'success', [], [JT, 'e2e:tests/mas.spec.ts:3 › m'])])]);
-  const p = checkKnown(ranking, [{ id: 'e2e:tests/joystick-response.spec.ts:629', ticket: 96 }, { id: 'e2e:tests/x.spec.ts:1', ticket: null }]);
-  assert.equal(p.length, 2, p.join('\n'));
+test('S8-B1 (valódi eset, anonimizálva): a kizárt, regresszió-gyanús teszt a main rangsorában „ingadozó”, mégsem ment fel', () => {
+  // a 629-es block-craft eset: a legfrissebb main-futásban épp nem bukott, ezért a rangsor „ingadozó”-t mond
+  const ranking = aggregate([run(3, [A(1, 'success')]), run(2, [A(1, 'failure', [JB])]), run(1, [A(1, 'success', [], [JB])])]);
+  assert.equal(ranking.find((r) => r.id === JB).cls, 'ingadozó');
+  const exclude = [{ id: JB, ticket: 106, reason: 'regresszió-gyanú' }];
+  const d = dec({ failed: [JB], ranking, known: [OK_ENTRY, { id: 'e2e:tests/joystick-response.spec.ts:629', ticket: 76, reviewBy: '2026-12-17' }], exclude, prFiles: ['docs/x.md'] });
+  assert.equal(d.verdict, 'a PR hibája lehet');
+  assert.match(d.items[0].why, /KIZÁRT.*#106/);
+});
+
+test('S8-B1 (valódi eset, anonimizálva): listán kívüli, a mainen egyszer újrapróbán átment teszt — „ingadozó-gyanú, jegy kell”, nem ment fel', () => {
+  const RL = 'e2e:tests/remaining-learning.spec.ts:209 › valami';
+  const ranking = aggregate([run(2, [A(1, 'success', [], [RL])]), run(1, [A(1, 'success')])]);
+  const d = dec({ failed: [RL], ranking });
+  assert.equal(d.verdict, 'a PR hibája lehet');
+  assert.match(d.items[0].why, /INGADOZÓ-GYANÚ, JEGY KELL/);
+});
+
+test('S8-B1: a „tartós bukás” akkor sem ment fel, ha a listán van', () => {
+  const ranking = aggregate([run(2, [A(1, 'failure', [WL])]), run(1, [A(1, 'failure', [WL])])]);
+  assert.equal(dec({ failed: [WL], ranking }).verdict, 'a PR hibája lehet');
+});
+
+test('S8-M1: érintett terület (a teszt játéka / a közös motor / ismeretlen terület + termékkód) és a PR több kísérletében ismétlődő bukás nem ment fel', () => {
+  const ranking = aggregate([run(1, [A(1, 'success', [], [WL])])]);
+  for (const f of ['source/client/src/pages/WordLadderHuEn.tsx', 'source/client/src/lib/wordLadder/core.ts', 'source/client/src/game-engine/play/questionUi.ts']) {
+    const d = dec({ failed: [WL], ranking, prFiles: [f] });
+    assert.equal(d.verdict, 'a PR hibája lehet', f);
+    assert.match(d.items[0].why, /érintett terület/);
+  }
+  assert.equal(dec({ failed: [WL], ranking, prFiles: ['source/client/src/pages/BrainRotSteal.tsx'] }).verdict, 'nem a PR hibája', 'más játék területe');
+  const unknownArea = 'e2e:tests/admin-panel.spec.ts:5 › x';
+  assert.equal(dec({ failed: [unknownArea], ranking, known: [{ id: 'e2e:tests/admin-panel.spec.ts:5', ticket: 1, reviewBy: '2026-12-17' }], prFiles: ['source/server/routes.ts'] }).verdict, 'a PR hibája lehet', 'ismeretlen terület + termékkód = érinti');
+  assert.equal(dec({ failed: [WL], ranking, repeated: [WL] }).verdict, 'a PR hibája lehet');
+  assert.equal(touchesArea(WL, ['docs/a.md'], GAMES).touched, false);
+});
+
+test('S8-M2: piros kísérlet értelmezhető tesztnév nélkül → „nem értelmezhető bukás”, nem „nincs bukás”', () => {
+  const d = dec({ failed: [], conclusion: 'failure' });
+  assert.equal(d.verdict, 'nem értelmezhető bukás');
+  assert.equal(d.items[0].status, 'A PR HIBÁJA LEHET');
+  assert.equal(dec({ failed: [], conclusion: 'cancelled' }).verdict, 'nem értelmezhető bukás');
+});
+
+test('checkKnown / knownEntry / expired: jegy, felülvizsgálati dátum, listán kívüli ingadozó; a kizárt nem kér listaelemet', () => {
+  const ranking = aggregate([run(1, [A(1, 'success', [], [JT, JB, 'e2e:tests/mas.spec.ts:3 › m'])])]);
+  const p = checkKnown(ranking, [{ id: 'e2e:tests/joystick-response.spec.ts:629 › joystick-reakció: tsunami-english', ticket: 96, reviewBy: '2026-12-17' }, { id: 'e2e:tests/x.spec.ts:1', ticket: null, reviewBy: '2026-12-17' }, { id: 'e2e:tests/y.spec.ts:1', ticket: 3, reviewBy: '2026-01-01' }], [{ id: JB, ticket: 106 }], TODAY);
+  assert.equal(p.length, 3, p.join('\n'));
   assert.ok(p.some((s) => s.includes('tests/mas.spec.ts:3') && s.includes('NINCS a known-flaky.json-ban')));
   assert.ok(p.some((s) => s.includes('x.spec.ts:1') && s.includes('nincs kanban-jegy')));
+  assert.ok(p.some((s) => s.includes('y.spec.ts:1') && s.includes('lejárt')));
   assert.ok(knownEntry([{ id: 'e2e:tests/joystick-response.spec.ts:629', ticket: 96 }], JB));
   assert.equal(knownEntry([{ id: JT, ticket: 96 }], JB), null, 'címes elem csak a saját esetére');
+  assert.equal(expired({ reviewBy: '2026-11-17' }, TODAY), false);
+  assert.equal(expired({ reviewBy: '2026-11-16' }, TODAY), true);
 });
 
 test('collectRun: minden kísérlet, bukott job + a zöld E2E job naplója (flaky), gyorsítótár nélkül', () => {
@@ -128,10 +180,12 @@ test('ghRun: átmeneti hibánál legfeljebb 3 kísérlet növekvő várakozássa
 });
 
 test('known-flaky.json: érvényes, minden elemnek van jegye, és a tartós bukás (629 block-craft, #106) nincs rajta', () => {
-  const known = JSON.parse(readFileSync(KNOWN_FILE, 'utf8')).tests;
+  const j = JSON.parse(readFileSync(KNOWN_FILE, 'utf8'));
+  const known = j.tests;
   assert.ok(known.length > 0);
-  assert.ok(known.every((k) => Number.isInteger(k.ticket) && typeof k.id === 'string'));
+  assert.ok(known.every((k) => Number.isInteger(k.ticket) && typeof k.id === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(k.reviewBy)));
   assert.equal(knownEntry(known, JB), null);
+  assert.ok(knownEntry(j.exclude, JB), 'a 629 block-craft eset a kizártak között (#106)');
   assert.ok(knownEntry(known, JT));
   assert.ok(knownEntry(known, WL.replace('szólétra: a kérdés-sáv', 'bármely cím')));
 });

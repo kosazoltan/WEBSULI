@@ -1,13 +1,60 @@
 {
-  "$comment": "Ismert ingadozó tesztek (S8; scripts/qa/gates/flaky-report.mjs). Minden elemhez KÖTELEZŐ a kanban-jegy (ticket) — nincs csendes elfogadás. id: a flaky-report azonosítója (e2e:<spec>:<sor> › <cím>, vagy cím nélkül a sor minden paraméterezett esetére; unit:<tesztnév>). Új elemet csak a flaky-report kimenete alapján, jeggyel vegyél fel; ha a jegy lezárul (a teszt javítva), az elemet töröld. TARTÓS bukást (regresszió-gyanú) ide felvenni tilos: a joystick-response.spec.ts:629 block-craft-quiz esete kanban #106, ezért itt a 629-es sor csak címmel, esetenként szerepel.",
+  "$comment": "Ismert ingadozó tesztek (S8; scripts/qa/gates/flaky-report.mjs). „tests”: CSAK ezek menthetnek fel („nem a PR hibája”), és csak ha van kanban-jegyük (ticket) ÉS a felülvizsgálati dátumuk (reviewBy, ÉÉÉÉ-HH-NN) nem járt le. „exclude”: soha nem mentő esetek (pl. regresszió-gyanú / tartós bukás) — akkor sem, ha a main rangsorában ingadozónak látszanak. id: e2e:<spec>:<sor> › <cím>, vagy cím nélkül a sor minden esetére; unit:<tesztnév>. Új elemet csak a flaky-report kimenete alapján, jeggyel; lezárt jegynél az elemet töröld.",
   "tests": [
-    { "id": "e2e:tests/word-ladder-play.spec.ts:48", "ticket": 76, "note": "Szikla-verseny teljes menet; flaky-report 2026-11-17: 1 bukás, 1 Playwright-újrapróba (12 main-futás)" },
-    { "id": "e2e:tests/lesson-result-email.spec.ts:59", "ticket": 76, "note": "flaky-report 2026-11-17: 2 Playwright-újrapróba" },
-    { "id": "e2e:tests/speed-math-play.spec.ts:69", "ticket": 76, "note": "flaky-report 2026-11-17: 2 Playwright-újrapróba" },
-    { "id": "e2e:tests/joystick-response.spec.ts:593", "ticket": 76, "note": "block-craft-quiz; flaky-report 2026-11-17: 1 Playwright-újrapróba" },
-    { "id": "e2e:tests/joystick-response.spec.ts:629 › joystick-reakció: tsunami-english", "ticket": 76, "note": "flaky-report 2026-11-17: 1 Playwright-újrapróba" },
-    { "id": "e2e:tests/joystick-response.spec.ts:629 › joystick-reakció: space-asteroid-quiz", "ticket": 76, "note": "flaky-report 2026-11-17: 1 Playwright-újrapróba" },
-    { "id": "e2e:tests/vocab-cross-game-log.spec.ts:49", "ticket": 105, "note": "flaky-report 2026-11-17: 2 Playwright-újrapróba" },
-    { "id": "e2e:tests/remaining-learning.spec.ts:74", "ticket": 105, "note": "flaky-report 2026-11-17: 1 Playwright-újrapróba" }
+    {
+      "id": "e2e:tests/word-ladder-play.spec.ts:48",
+      "ticket": 76,
+      "note": "Szikla-verseny teljes menet; flaky-report 2026-11-17: 1 bukás, 1 Playwright-újrapróba (12 main-futás)",
+      "reviewBy": "2026-12-17"
+    },
+    {
+      "id": "e2e:tests/lesson-result-email.spec.ts:59",
+      "ticket": 76,
+      "note": "flaky-report 2026-11-17: 2 Playwright-újrapróba",
+      "reviewBy": "2026-12-17"
+    },
+    {
+      "id": "e2e:tests/speed-math-play.spec.ts:69",
+      "ticket": 76,
+      "note": "flaky-report 2026-11-17: 2 Playwright-újrapróba",
+      "reviewBy": "2026-12-17"
+    },
+    {
+      "id": "e2e:tests/joystick-response.spec.ts:593",
+      "ticket": 76,
+      "note": "block-craft-quiz; flaky-report 2026-11-17: 1 Playwright-újrapróba",
+      "reviewBy": "2026-12-17"
+    },
+    {
+      "id": "e2e:tests/joystick-response.spec.ts:629 › joystick-reakció: tsunami-english",
+      "ticket": 76,
+      "note": "flaky-report 2026-11-17: 1 Playwright-újrapróba",
+      "reviewBy": "2026-12-17"
+    },
+    {
+      "id": "e2e:tests/joystick-response.spec.ts:629 › joystick-reakció: space-asteroid-quiz",
+      "ticket": 76,
+      "note": "flaky-report 2026-11-17: 1 Playwright-újrapróba",
+      "reviewBy": "2026-12-17"
+    },
+    {
+      "id": "e2e:tests/vocab-cross-game-log.spec.ts:49",
+      "ticket": 105,
+      "note": "flaky-report 2026-11-17: 2 Playwright-újrapróba",
+      "reviewBy": "2026-12-17"
+    },
+    {
+      "id": "e2e:tests/remaining-learning.spec.ts:74",
+      "ticket": 105,
+      "note": "flaky-report 2026-11-17: 1 Playwright-újrapróba",
+      "reviewBy": "2026-12-17"
+    }
+  ],
+  "exclude": [
+    {
+      "id": "e2e:tests/joystick-response.spec.ts:629 › joystick-reakció: block-craft-quiz",
+      "ticket": 106,
+      "reason": "tartós bukás / regresszió-gyanú a mainen (2026-11-17)"
+    }
   ]
 }

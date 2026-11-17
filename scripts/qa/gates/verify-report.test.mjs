@@ -7,7 +7,7 @@ import { STATUS } from './lib.mjs';
 import { buildRunRecord, redactMore, testCounts } from './evidence-run.mjs';
 import { buildRecord } from './record-review.mjs';
 import {
-  FALSE, SCHEMA, TRUE, UNKNOWN, checkClaims, checkReferences, extractClaimsBlock, extractRefs, normCmd, stripFences, summarizeRefs,
+  FALSE, GREEN_PROSE, SCHEMA, TRUE, UNKNOWN, checkClaims, checkReferences, extractClaimsBlock, extractRefs, normCmd, severeWithoutQuote, stripFences, summarizeRefs,
 } from './verify-report.mjs';
 
 const H = 'a'.repeat(40);
@@ -223,15 +223,27 @@ test('M1: PR-állapot gh nélkül: --no-gh mellett WARN, különben FAIL', () =>
   assert.ok(fails(checkClaims(claims(), env({ pr: () => undefined, noGh: false }))).includes('PR #492'));
 });
 
-test('M2: kézzel írt (láncon kívüli), lánc nélküli, átírt rekord és útvonal-bejáró azonosító', () => {
+test('M2 + M2-maradék: átírt rekord MINDIG bukás; láncon kívüli / lánc nélküli / javított rekord warn módban NEM IGAZOLT (nem PASS), block módban bukás', () => {
+  const T = 'teszt: node --test x.test.mjs';
+  const row = (r) => r.find((x) => x.name === T);
+  const only = (status, extra = {}) => (id) => (id === 'run-0123456789ab' ? { status, ...extra } : { status: 'ok' });
+  // block mód (chainEnforce)
   for (const status of ['not-in-chain', 'no-chain', 'mismatch']) {
-    const r = checkClaims(claims(), env({ chain: (id) => ({ status: id === 'run-0123456789ab' ? status : 'ok' }) }));
-    assert.ok(fails(r).some((n) => n.startsWith('lánc: run-0123456789ab')), status);
+    assert.equal(row(checkClaims(claims(), env({ chain: only(status) }))).status, STATUS.FAIL, `block / ${status}`);
   }
-  const warnOnly = checkClaims(claims(), env({ chainEnforce: false, chain: () => ({ status: 'not-in-chain' }) }));
-  assert.deepEqual(fails(warnOnly), [], 'bevezetési lépcső: chainEnforce nélkül csak figyelmeztet');
+  assert.equal(row(checkClaims(claims(), env({ chain: only('ok', { repaired: true }) }))).status, STATUS.FAIL, 'block / javított');
+  // warn mód: az átírt rekord akkor is bukás
+  assert.equal(row(checkClaims(claims(), env({ chainEnforce: false, chain: only('mismatch') }))).status, STATUS.FAIL, 'warn / átírt');
+  for (const [status, extra] of [['not-in-chain', {}], ['no-chain', {}], ['ok', { repaired: true }]]) {
+    const r = row(checkClaims(claims(), env({ chainEnforce: false, chain: only(status, extra) })));
+    assert.equal(r.status, STATUS.WARN, `warn / ${status}`);
+    assert.match(r.note, /NEM IGAZOLT/);
+  }
+  // a NEM IGAZOLT tétel darabszáma nem igazolja a prózai állítást
+  const prose = checkClaims(claims(), env({ chainEnforce: false, chain: only('not-in-chain'), proseCounts: [{ ref: '29/29 teszt', pass: 29, total: 29 }] }));
+  assert.ok(fails(prose).some((n) => n.startsWith('prózai')));
   const legacy = checkClaims(claims(), env({ chain: (id) => ({ status: id.startsWith('pre-pr-') ? 'not-in-chain' : 'ok' }) }));
-  assert.ok(!fails(legacy).some((n) => n.startsWith('lánc: pre-pr')), 'a pre-pr író a #490 után kap láncot: addig WARN');
+  assert.equal(legacy.find((x) => x.name === 'kapu: pr').status, STATUS.WARN, 'a pre-pr író a #490 után kap láncot: addig WARN, NEM IGAZOLT');
   assert.ok(fails(checkClaims(claims({ commands: [{ cmd: 'npm test', status: 'PASS', evidence: '../r-forged' }], tests: [], gates: [] }), env())).includes('parancs: npm test'));
 });
 
@@ -260,6 +272,31 @@ test('record-review: warn módban a hamis hivatkozású jelentésből is rögzü
   assert.match(block.error, /HAMIS hivatkozás/);
   const good = buildRecord({ ...base, readReport: () => 'Lelet: `scripts/qa/gates/verify-report.mjs:2` → `export function verifyReport`\nÍtélet: IGEN', checkRefs, refMode: 'block' });
   assert.equal(good.ok, true, good.error);
+  // R2: a le nem futott ellenőrzés (null) block módban megtagadás, warn módban hangos figyelmeztetés — nem csendes átengedés
+  const notRun = () => null;
+  const nb = buildRecord({ ...base, readReport: () => text, checkRefs: notRun, refMode: 'block' });
+  assert.equal(nb.ok, false);
+  assert.match(nb.error, /nem futott le/);
+  const nw = buildRecord({ ...base, readReport: () => text, checkRefs: notRun, refMode: 'warn' });
+  assert.equal(nw.ok, true);
+  assert.match(nw.warnings[0], /nem futott le/);
+  assert.deepEqual(nw.record.refCheck, { mode: 'warn', ran: false });
+});
+
+test('R2: súlyos (BLOKKOLÓ / MAGAS) lelet jelölt kódidézet nélkül → jelzés; idézettel nem; „minden zöld” próza mintája', () => {
+  const md = (body) => ['# Jelentés', '## BLOKKOLÓ leletek', '### B1 — hiba', body, '## Alacsony', '- `scripts/qa/gates/verify-report.mjs:4`', 'Ítélet: NEM'].join('\n');
+  const bare = md('- `scripts/qa/gates/verify-report.mjs:2`: rossz');
+  const r1 = severeWithoutQuote(bare, extractRefs(bare));
+  assert.equal(r1.length, 1);
+  assert.match(r1[0].heading, /B1/);
+  const quoted = md('- `scripts/qa/gates/verify-report.mjs:2` → `export function verifyReport`');
+  assert.deepEqual(severeWithoutQuote(quoted, extractRefs(quoted)), []);
+  const low = ['## Alacsony', '- `scripts/qa/gates/verify-report.mjs:2`'].join('\n');
+  assert.deepEqual(severeWithoutQuote(low, extractRefs(low)), [], 'nem súlyos szakasz nem kér idézetet');
+  assert.ok(GREEN_PROSE.test('Minden teszt zöld.'));
+  assert.ok(GREEN_PROSE.test('az összes ellenőrzés átment'));
+  assert.ok(GREEN_PROSE.test('A CI zöld'));
+  assert.ok(!GREEN_PROSE.test('A teszt 3/4 esetben bukott.'));
 });
 
 // ---- evidence-run: darabszám, titok-szűrés (K5) ----

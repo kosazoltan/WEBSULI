@@ -49,14 +49,16 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, ch
   if (inReport !== v) return { ok: false, error: `a --verdict (${v}) eltér a jelentés utolsó ítéletétől (${inReport})` };
   // S2.5 + bevezetési lépcső (terv 6.3a; független review B1): a hivatkozások ellenőrzése `warn` módban csak figyelmeztet (az ítélet
   // rögzül, a HAMIS lista a kimenetbe és a rekordba kerül); `block` módban hamis hivatkozású jelentésből ítélet nem rögzíthető.
-  const bad = checkRefs ? checkRefs(text, full) : [];
+  const res = checkRefs ? checkRefs(text, full) : [];
+  if (res === null && refMode === 'block') return { ok: false, error: 'a hivatkozás-ellenőrzés nem futott le (claims-verify: block) — az ítélet így nem rögzíthető' };
+  const bad = res ?? ['(a hivatkozás-ellenőrzés nem futott le — a jelentés hivatkozásai ellenőrizetlenek)'];
   if (bad.length && refMode === 'block') {
     return { ok: false, error: `a jelentésben ${bad.length} HAMIS hivatkozás van — hamis hivatkozású jelentésből ítélet nem rögzíthető (claims-verify: block):\n${bad.map((b) => `  - ${b}`).join('\n')}` };
   }
   return {
     ok: true,
     warnings: bad,
-    record: { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), refCheck: checkRefs ? { mode: refMode, false: bad.length } : null, at: now().toISOString() },
+    record: { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), refCheck: checkRefs ? (res === null ? { mode: refMode, ran: false } : { mode: refMode, false: bad.length }) : null, at: now().toISOString() },
     line: verdictLine(v, full),
   };
 }
@@ -79,7 +81,7 @@ function main() {
           .filter((x) => x.status === FALSE).map((x) => `${x.line}. sor: ${x.ref} — ${x.detail}`);
       } catch (e) {
         process.stderr.write(`[record-review] FIGYELEM: a hivatkozás-ellenőrzés nem futott (${String(e?.message ?? e).split('\n')[0]})\n`);
-        return [];
+        return null; // nem futott: block módban megtagadás, warn módban hangos figyelmeztetés (nem csendes átengedés)
       }
     },
     refMode: claimsMode(ctx.cfg),

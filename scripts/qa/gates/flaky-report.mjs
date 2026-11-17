@@ -111,38 +111,84 @@ export function testFileOf(id) {
   return m[1].startsWith('source/') ? m[1] : `source/${m[1]}`;
 }
 
-/**
- * Döntés egy PR bukásairól. @returns {{ verdict: 'nem a PR hibája' | 'a PR hibája lehet' | 'nincs bukás', items: object[] }}
- */
-export function decidePr({ failed, ranking, known, prFiles }) {
-  if (!failed.length) return { verdict: 'nincs bukás', items: [] };
-  const byId = new Map(ranking.map((r) => [r.id, r]));
-  const items = failed.map((id) => {
-    const r = byId.get(id);
-    const k = knownEntry(known, id);
-    const file = testFileOf(id);
-    const touched = file && prFiles.includes(file);
-    if (touched) return { id, status: 'A PR HIBÁJA LEHET', why: `a PR módosította a tesztfájlt (${file}) — gépileg nem minősíthető ingadozónak` };
-    if (r?.cls === 'ingadozó' || k) {
-      const ev = r ? `${r.fails} bukás, ${r.flakyRetries} Playwright-újrapróba, ${r.rerunPass} újraindításra zöld a main utolsó futásaiban (futások: ${r.runs.slice(0, 5).join(', ')})` : 'a known-flaky.json listáján';
-      return { id, status: 'ISMERT INGADOZÓ', why: `${ev}${k?.ticket ? `; jegy: #${k.ticket}` : '; JEGY NINCS'}` };
-    }
-    return { id, status: 'A PR HIBÁJA LEHET', why: r ? `a mainen ${r.cls} (${r.fails} bukás) — nem ingadozó minta` : 'a mainen nem bukott a vizsgált futásokban' };
-  });
-  return { verdict: items.every((x) => x.status === 'ISMERT INGADOZÓ') ? 'nem a PR hibája' : 'a PR hibája lehet', items };
-}
-
-/** A `known-flaky.json` ellenőrzése: minden ingadozóhoz jegy kell (nincs csendes elfogadás). */
-/** A lista eleme egy azonosítóra: pontos egyezés, vagy cím nélküli `e2e:<spec>:<sor>` elem a sor minden paraméterezett esetére. */
+/** A lista (`tests`) érvényes eleme egy azonosítóra: pontos egyezés, vagy cím nélküli `e2e:<spec>:<sor>` elem a sor minden esetére. */
 export function knownEntry(known, id) {
   const base = id.split(' › ')[0];
   return (known ?? []).find((k) => k.id === id || k.id === base) ?? null;
 }
 
-export function checkKnown(ranking, known) {
+/** Lejárt-e a lista eleme (`reviewBy`: ÉÉÉÉ-HH-NN; hiánya = lejárt — a felülvizsgálati dátum kötelező). */
+export function expired(entry, today = new Date().toISOString().slice(0, 10)) {
+  return !/^\d{4}-\d{2}-\d{2}$/.test(String(entry?.reviewBy ?? '')) || entry.reviewBy < today;
+}
+
+/**
+ * A bukó teszt „területe” (S8-M1): a `gates.config.json` `games` leképezése a teszt nevére; a PR akkor ÉRINTI, ha egy termékkód-fájlja
+ * (source/, nem source/tests/) illik a terület mintájára, vagy a közös játékmotort módosítja. Ha a teszt területe nem azonosítható,
+ * a termékkód bármely változása „érinti” (konzervatív közelítés).
+ */
+export function touchesArea(id, prFiles, cfg) {
+  const file = testFileOf(id) ?? '';
+  const product = prFiles.filter((f) => f.startsWith('source/') && !f.startsWith('source/tests/'));
+  if (!product.length) return { touched: false };
+  const name = `${file} ${id}`;
+  const areas = Object.entries(cfg?.games ?? {}).filter(([, re]) => new RegExp(re, 'i').test(name));
+  if ((cfg?.sharedGamePatterns ?? []).some((p) => product.some((f) => f.startsWith(p)))) return { touched: true, why: 'a PR a közös játékmotort módosítja' };
+  if (!areas.length) return { touched: true, why: `a teszt területe nem azonosítható, és a PR termékkódot módosít (${product.slice(0, 3).join(', ')})` };
+  const hit = product.filter((f) => areas.some(([, re]) => new RegExp(re, 'i').test(f)));
+  return hit.length ? { touched: true, why: `a PR a teszt területét módosítja (${areas.map(([g]) => g).join(', ')}: ${hit.slice(0, 3).join(', ')})` } : { touched: false };
+}
+
+export const ADVICE = 'Az ítélet csak JAVASLAT a bukott job újraindítására; a zöld futást NEM pótolja — merge csak zöld kötelező ellenőrzésekkel lehet.';
+
+/**
+ * Döntés egy PR bukásairól (független review S8-B1 / M1 / M2 után). Felmentés („ISMERT INGADOZÓ”) KIZÁRÓLAG a `known-flaky.json`
+ * jegyhez kötött, le nem járt, ki nem zárt elemére; a rangsor szerinti, listán kívüli „ingadozó” csak gyanú (jegy kell); a „tartós
+ * bukás” soha nem ment fel; ha a PR a teszt területét / fájlját érinti, vagy ugyanaz a teszt a PR futásának több kísérletében is
+ * bukott, nem ment fel; piros kísérlet értelmezhető tesztnév nélkül: „nem értelmezhető bukás”.
+ * @returns {{ verdict: 'nem a PR hibája' | 'a PR hibája lehet' | 'nincs bukás' | 'nem értelmezhető bukás', items: object[], advice: string }}
+ */
+export function decidePr({ failed, conclusion = 'failure', ranking, known, exclude = [], prFiles, cfg, repeated = [], today }) {
+  if (!failed.length) {
+    if (conclusion && conclusion !== 'success') return { verdict: 'nem értelmezhető bukás', items: [{ id: '(nincs tesztnév)', status: 'A PR HIBÁJA LEHET', why: `a kísérlet eredménye „${conclusion}”, de a naplóból egyetlen bukó tesztnév sem olvasható ki (lint, időtúllépés, infrastruktúra?) — kézzel kell megnézni` }], advice: ADVICE };
+    return { verdict: 'nincs bukás', items: [], advice: ADVICE };
+  }
+  const byId = new Map(ranking.map((r) => [r.id, r]));
+  const items = failed.map((id) => {
+    const r = byId.get(id);
+    const k = knownEntry(known, id);
+    const x = knownEntry(exclude, id);
+    const file = testFileOf(id);
+    const bad = (why) => ({ id, status: 'A PR HIBÁJA LEHET', why });
+    if (x) return bad(`KIZÁRT (nem ingadozó, hanem regresszió-gyanú${x.ticket ? `, jegy: #${x.ticket}` : ''}${x.reason ? `: ${x.reason}` : ''}) — soha nem ment fel`);
+    if (r?.cls === 'tartós bukás') return bad(`a mainen TARTÓS bukás (a két legfrissebb futásban egymás után) — soha nem ment fel`);
+    if (file && prFiles.includes(file)) return bad(`a PR módosította a tesztfájlt (${file})`);
+    const area = touchesArea(id, prFiles, cfg);
+    if (area.touched) return bad(`érintett terület: ${area.why}`);
+    if (repeated.includes(id)) return bad('ugyanaz a teszt a PR futásának több kísérletében is bukott — nem ingadozó minta');
+    if (!k) {
+      return bad(r?.cls === 'ingadozó'
+        ? `INGADOZÓ-GYANÚ, JEGY KELL: a mainen ${r.fails} bukás / ${r.flakyRetries} újrapróba / ${r.rerunPass} újraindítás, de nincs a known-flaky.json-ban — felmentés csak jegyes listaelemre`
+        : r ? `a mainen ${r.cls} (${r.fails} bukás) — nem ingadozó minta` : 'a mainen nem bukott a vizsgált futásokban');
+    }
+    if (!Number.isInteger(k.ticket)) return bad('a listaelemnek nincs kanban-jegye');
+    if (expired(k, today)) return bad(`a listaelem felülvizsgálati dátuma lejárt / hiányzik (reviewBy: ${k.reviewBy ?? '—'}) — nem ment fel`);
+    const ev = r ? `${r.fails} bukás, ${r.flakyRetries} Playwright-újrapróba, ${r.rerunPass} újraindításra zöld a main utolsó futásaiban (futások: ${r.runs.slice(0, 5).join(', ')})` : 'a main vizsgált futásaiban nem jelent meg';
+    return { id, status: 'ISMERT INGADOZÓ', why: `${ev}; jegy: #${k.ticket}, felülvizsgálat: ${k.reviewBy}` };
+  });
+  return { verdict: items.every((i) => i.status === 'ISMERT INGADOZÓ') ? 'nem a PR hibája' : 'a PR hibája lehet', items, advice: ADVICE };
+}
+
+/** A `known-flaky.json` ellenőrzése: jegy, felülvizsgálati dátum; minden rangsor szerinti ingadozóhoz listaelem (nincs csendes elfogadás). */
+export function checkKnown(ranking, known, exclude = [], today) {
   const problems = [];
-  for (const k of known ?? []) if (!Number.isInteger(k.ticket)) problems.push(`${k.id}: a known-flaky.json elemén nincs kanban-jegy (ticket)`);
-  for (const r of ranking) if (r.cls === 'ingadozó' && !knownEntry(known, r.id)) problems.push(`${r.id}: ingadozó (${r.fails} bukás, ${r.flakyRetries} újrapróba, ${r.rerunPass} újraindítás), de NINCS a known-flaky.json-ban jeggyel`);
+  for (const k of known ?? []) {
+    if (!Number.isInteger(k.ticket)) problems.push(`${k.id}: a known-flaky.json elemén nincs kanban-jegy (ticket)`);
+    if (expired(k, today)) problems.push(`${k.id}: a felülvizsgálati dátum (reviewBy) lejárt vagy hiányzik — a jegyet nézd meg, és frissítsd vagy töröld az elemet`);
+  }
+  for (const r of ranking) {
+    if (r.cls === 'ingadozó' && !knownEntry(known, r.id) && !knownEntry(exclude, r.id)) problems.push(`${r.id}: ingadozó (${r.fails} bukás, ${r.flakyRetries} újrapróba, ${r.rerunPass} újraindítás), de NINCS a known-flaky.json-ban jeggyel`);
+  }
   return problems;
 }
 
@@ -206,9 +252,11 @@ export function collectRun({ exec, root, run, cacheDir, sleep = sleepSync, delay
   return { id: run.databaseId, sha: run.headSha, createdAt: run.createdAt, attempts };
 }
 
+/** A lista: `tests` (felmentő, jegyes, `reviewBy`-os elemek) és `exclude` (soha nem mentő, pl. regresszió-gyanú). */
 export function readKnown(path = KNOWN_FILE) {
-  if (!existsSync(path)) return [];
-  return JSON.parse(readFileSync(path, 'utf8')).tests ?? [];
+  if (!existsSync(path)) return { tests: [], exclude: [] };
+  const j = JSON.parse(readFileSync(path, 'utf8'));
+  return { tests: j.tests ?? [], exclude: j.exclude ?? [] };
 }
 
 async function main() {
@@ -232,12 +280,13 @@ async function main() {
       .filter((r) => r.status === 'completed' && r.event === 'push').slice(0, limit);
     const runs = list.map((run) => collectRun({ exec, root, run, cacheDir }));
     ranking = aggregate(runs);
-    const known = readKnown();
-    problems = checkKnown(ranking, known);
+    const { tests: known, exclude } = readKnown();
+    problems = checkKnown(ranking, known, exclude);
     gate.add(`vizsgált ${branch}-futások`, STATUS.PASS, `${runs.length} futás, ${runs.reduce((n, r) => n + r.attempts.length, 0)} kísérlet`);
     for (const r of ranking.slice(0, 15)) {
       // A tartós bukás (regresszió-gyanú a mainen) is jól látható jelzés, nem „rendben”.
-      gate.add(r.id.slice(0, 80), r.cls === 'egyszeri bukás' ? STATUS.PASS : STATUS.WARN, `${r.cls}: ${r.fails} bukás, ${r.flakyRetries} Playwright-újrapróba, ${r.rerunPass} újraindításra zöld (futások: ${r.runs.slice(0, 4).join(', ')})`);
+      // Minden main-bukás jelzés (a friss egyszeri bukás sem „rendben” — független review S8).
+      gate.add(r.id.slice(0, 80), STATUS.WARN, `${r.cls}: ${r.fails} bukás, ${r.flakyRetries} Playwright-újrapróba, ${r.rerunPass} újraindításra zöld (futások: ${r.runs.slice(0, 4).join(', ')})`);
     }
     // --pr módban a kilépési kód a PR ítéletéé (a jegyek hiánya nem a PR hibája) — ott csak figyelmeztet.
     for (const p of problems) gate.add('jegy nélküli ingadozó', prArg ? STATUS.WARN : STATUS.FAIL, p);
@@ -252,9 +301,14 @@ async function main() {
         const want = attemptArg ? Number(attemptArg) : pr0.attempts.length;
         const fin = pr0.attempts.find((a) => a.attempt === want);
         if (!fin) throw new Error(`a ${pr0.id} futásnak nincs ${want}. kísérlete (${pr0.attempts.length} van)`);
-        decision = decidePr({ failed: fin.failed, ranking, known, prFiles: (pr.files ?? []).map((f) => f.path) });
+        // ugyanaz a teszt a PR futásának több kísérletében is bukott → nem ingadozó minta
+        const counts = new Map();
+        for (const a of pr0.attempts) for (const id of a.failed) counts.set(id, (counts.get(id) ?? 0) + 1);
+        const repeated = [...counts].filter(([, n]) => n >= 2).map(([id]) => id);
+        decision = decidePr({ failed: fin.failed, conclusion: fin.conclusion, ranking, known, exclude, cfg: ctx.cfg, repeated, prFiles: (pr.files ?? []).map((f) => f.path) });
         for (const it of decision.items) gate.add(`PR #${prArg}: ${it.id}`.slice(0, 80), it.status === 'ISMERT INGADOZÓ' ? STATUS.PASS : STATUS.FAIL, `${it.status} — ${it.why}`);
-        gate.add(`PR #${prArg} ítélet`, decision.verdict === 'a PR hibája lehet' ? STATUS.FAIL : STATUS.PASS, `${decision.verdict} (futás ${pr0.id}, kísérlet ${fin.attempt}, fej ${pr.headRefOid.slice(0, 12)})`);
+        gate.add(`PR #${prArg} ítélet`, ['a PR hibája lehet', 'nem értelmezhető bukás'].includes(decision.verdict) ? STATUS.FAIL : STATUS.PASS, `${decision.verdict} (futás ${pr0.id}, kísérlet ${fin.attempt}, fej ${pr.headRefOid.slice(0, 12)})`);
+        gate.add('FIGYELEM', STATUS.WARN, decision.advice);
       }
     }
   } catch (e) {
@@ -265,13 +319,13 @@ async function main() {
   const code = gate.finish();
   if (json) {
     const items = [
-      ...ranking.map((r) => ({ id: r.id, status: r.cls === 'ingadozó' ? STATUS.WARN : STATUS.PASS, ref: r.id, detail: `${r.cls}: ${r.fails}/${r.flakyRetries}/${r.rerunPass}`, ...r })),
+      ...ranking.map((r) => ({ id: r.id, status: STATUS.WARN, ref: r.id, detail: `${r.cls}: ${r.fails}/${r.flakyRetries}/${r.rerunPass}`, ...r })),
       ...problems.map((p) => ({ id: 'known-flaky', status: STATUS.FAIL, ref: 'known-flaky.json', detail: p })),
       ...(decision?.items ?? []).map((x) => ({ id: `pr:${x.id}`, status: x.status === 'ISMERT INGADOZÓ' ? STATUS.PASS : STATUS.FAIL, ref: x.id, detail: `${x.status} — ${x.why}` })),
     ];
     const counts = {};
     for (const x of items) counts[x.status] = (counts[x.status] ?? 0) + 1;
-    process.stdout.write(`${JSON.stringify({ schema: 'websuli-check/1', tool: 'flaky-report', head: null, ok: code === 0, exitCode: code, counts, items, verdict: decision?.verdict ?? null, ms: Date.now() - t0 }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ schema: 'websuli-check/1', tool: 'flaky-report', head: null, ok: code === 0, exitCode: code, counts, items, verdict: decision?.verdict ?? null, advice: decision?.advice ?? null, ms: Date.now() - t0 }, null, 2)}\n`);
   }
   process.exit(code);
 }

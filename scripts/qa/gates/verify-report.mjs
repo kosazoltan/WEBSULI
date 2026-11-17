@@ -42,7 +42,7 @@ const FILE_NAME = new RegExp(`^${PATH}$`);
 const FILE_LINE_HASH =new RegExp(`(?<![\\w/.\\\\@-])(${PATH})#L(\\d+)(?:-L?(\\d+))?(?![\\w])`, 'g');
 const FILE_NTH_LINE = new RegExp(`(?<![\\w/.\\\\@-])(${PATH})\`?\\s+(\\d+)\\.\\s*sor(?:ában|ában|án|a|ától|áig)?\\b`, 'g');
 const QUOTE_AFTER = /^`?\s*(?:→|->|idézet\s*:)\s*`([^`\n]+)`/;
-const NEGATIVE = new RegExp(`(?:!\`(${PATH}|[\\w.@-]+(?:/[\\w.@-]+)+)\`|nem létezik:\\s*\`([^\`\\n]+)\`)`, 'g');
+const NEGATIVE = new RegExp(`(?:!\`(${PATH}|[\\w.@-]+(?:/[\\w.@-]+)+)\`|[Nn]em létezik:\\s*\`([^\`\\n]+)\`)`, 'g');
 const BACKTICK = /`([^`\n]+)`/g;
 const KNOWN_ROOT = /^(?:source|scripts|docs|\.github|\.claude|\.agents|\.cursor)\//;
 const PATH_LIKE = new RegExp(`^(?:source|scripts|docs|\\.github|\\.claude|\\.agents|\\.cursor|tests|client|server|shared)/|\\.(?:${FILE_EXT})$`);
@@ -247,6 +247,34 @@ export function checkReferences(md, env) {
   return extractRefs(md).map((r) => ({ ...r, ...checkRef(r, env) }));
 }
 
+// A `\b` az ékezetes betű (ó) után nem határ, ezért kézi betűosztály-határ (C-11-jellegű csapda).
+const SEVERE = /(?<![\p{L}\p{N}])(?:blokkoló|magas)(?![\p{L}\p{N}])/iu;
+
+/**
+ * A súlyos (BLOKKOLÓ / MAGAS) leletek, amelyeknél nincs jelölt (ellenőrizhető) kódidézet: a jelentés-sablon szerint ott kötelező
+ * (független review R2). Egy súlyos szakasz (címsor, amelyben „blokkoló” / „magas” áll) alcímenként egy lelet; ha nincs alcím, maga
+ * a szakasz. @returns {{ heading: string, line: number }[]}
+ */
+export function severeWithoutQuote(md, refs) {
+  const lines = stripFences(md);
+  const heads = lines.map((t, i) => ({ i, m: /^(#{1,6})\s+(.*)$/.exec(t) })).filter((x) => x.m).map((x) => ({ line: x.i + 1, level: x.m[1].length, text: x.m[2] }));
+  const out = [];
+  heads.forEach((h, idx) => {
+    if (!SEVERE.test(h.text)) return;
+    const end = heads.slice(idx + 1).find((x) => x.level <= h.level)?.line ?? lines.length + 1;
+    const subs = heads.filter((x) => x.line > h.line && x.line < end && x.level > h.level);
+    const units = subs.length ? subs.map((s, k) => ({ heading: s.text, from: s.line, to: (subs[k + 1]?.line ?? end) })) : [{ heading: h.text, from: h.line, to: end }];
+    for (const u of units) {
+      const inU = refs.filter((r) => r.kind === 'file-line' && r.line > u.from && r.line < u.to);
+      if (inU.length && !inU.some((r) => r.snippet)) out.push({ heading: u.heading.slice(0, 80), line: u.from });
+    }
+  });
+  return out;
+}
+
+/** „Minden zöld”-jellegű, szám nélküli próza (üres parancs- / teszt-lista mellett gyanús). */
+export const GREEN_PROSE = /(?<![\p{L}\p{N}])(?:minden|összes)(?![\p{L}\p{N}])[^.\n]{0,40}(?<![\p{L}\p{N}])(?:teszt|ellenőrzés|kapu)\p{L}*[^.\n]{0,40}(?<![\p{L}\p{N}])(?:zöld|átment|sikeres|pass)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:CI|build|lint)\s+(?:zöld|átment|tiszta)(?![\p{L}\p{N}])/iu;
+
 /** Összesítés: darabszámok + a NEM ELLENŐRIZHETŐ arány és a küszöb-figyelmeztetés. */
 export function summarizeRefs(items, unknownWarnRatio = 0.5) {
   const n = { [TRUE]: 0, [FALSE]: 0, [UNKNOWN]: 0 };
@@ -322,6 +350,19 @@ export function checkClaims(c, env) {
   }
   const ids = [];
   const verifiedCounts = [];
+  // Lánc (független review M2 + M2-maradék): az ÁTÍRT rekord (hash-eltérés) és a hiányzó rekord MINDIG bukás; a láncon kívüli /
+  // lánc nélküli / javítás (--repair) után újra-láncolt rekord NEM IGAZOLT bizonyíték — `warn` módban az állítás WARN (nem PASS),
+  // `block` módban bukás. A még lánc nélküli írók (pre-pr-, merge-: a #490 után kapnak láncot) addig WARN, NEM IGAZOLT.
+  const chainCheck = (id) => {
+    const s = env.chain(id);
+    if (s.status === 'ok' && !s.repaired) return null;
+    if (s.status === 'mismatch') return { status: STATUS.FAIL, note: `${id}: a rekord tartalma eltér a láncba írt hash-től — ÁTÍRT bizonyíték` };
+    if (s.status === 'missing' || s.status === 'invalid-id') return { status: STATUS.FAIL, note: `${id}: ${s.status === 'missing' ? 'a rekordfájl hiányzik' : 'érvénytelen azonosító'}` };
+    const legacy = /^(?:pre-pr|merge)-/.test(id) && (s.status === 'not-in-chain' || s.status === 'no-chain');
+    const why = s.repaired ? 'javítás (--repair) után újra-láncolt rekord — futtasd újra a kaput / parancsot, hogy új, igazolt bizonyíték legyen'
+      : { 'not-in-chain': 'láncon kívüli rekord (kézzel írt vagy lánc nélküli író)', 'no-chain': 'van rekord, de nincs lánc (chain.jsonl)' }[s.status] ?? s.status;
+    return { status: env.chainEnforce && !legacy ? STATUS.FAIL : STATUS.WARN, note: `NEM IGAZOLT — ${id}: ${why}${legacy ? ' (a pre-pr / merge író a #490 után kap láncot)' : ''}` };
+  };
   for (const k of ['commands', 'tests']) {
     for (const x of Array.isArray(c[k]) ? c[k] : []) {
       const label = `${k === 'tests' ? 'teszt' : 'parancs'}: ${x?.cmd ?? '?'}`;
@@ -339,8 +380,10 @@ export function checkClaims(c, env) {
       if (x.pass != null || x.fail != null) {
         if (!rec.counts) { add(label, STATUS.FAIL, `darabszámot állít (${x.pass} pass), de a ${x.evidence} nem rögzített darabszámot`); continue; }
         if ((x.pass != null && rec.counts.pass !== x.pass) || (x.fail != null && rec.counts.fail !== x.fail)) { add(label, STATUS.FAIL, `a rekord ${rec.counts.pass} pass / ${rec.counts.fail} fail, a jelentés ${x.pass} / ${x.fail}`); continue; }
-        verifiedCounts.push(rec.counts);
       }
+      const ch = chainCheck(x.evidence);
+      if (ch) { add(label, ch.status, ch.note); continue; }
+      if (x.pass != null) verifiedCounts.push(rec.counts);
       add(label, STATUS.PASS, `${x.evidence}${rec.dirty ? ' (FIGYELEM: commitolatlan változás mellett futott)' : ''}`);
     }
   }
@@ -368,18 +411,9 @@ export function checkClaims(c, env) {
     const cands = need[g];
     if (!cands) { add(`kapu: ${g}`, STATUS.FAIL, 'ismeretlen kapu (stage | push | review | pr)'); continue; }
     const hit = cands.map((n) => [n, env.record(n)]).find(([, r]) => r && (r.ok === true || r.verdict === 'IGEN' || r.verdict === 'IGEN, FELTÉTELLEL'));
-    add(`kapu: ${g}`, hit ? STATUS.PASS : STATUS.FAIL, hit ? hit[0].replace(head, head.slice(0, 12)) : `nincs zöld bizonyíték a fejre (${cands.map((n) => n.replace(head, '<fej>')).join(' / ')})`);
-    if (hit) ids.push(hit[0]);
-  }
-  // Lánc: láncon kívüli / átírt / lánc nélküli rekord érvénytelen. A még lánc nélküli írók (pre-pr-, merge-: a #490 után kapnak
-  // láncot) csak figyelmeztetnek. Bevezetési lépcső (terv 6.3a): `chainEnforce` nélkül minden lánc-hiba WARN.
-  for (const id of [...new Set(ids)]) {
-    const s = env.chain(id);
-    if (s.status === 'ok') { if (s.repaired) add(`lánc: ${id.slice(0, 24)}`, STATUS.WARN, 'javítás (--repair) után újra-láncolt rekord'); continue; }
-    const legacy = /^(?:pre-pr|merge)-/.test(id) && (s.status === 'not-in-chain' || s.status === 'no-chain');
-    const sev = legacy || !env.chainEnforce ? STATUS.WARN : STATUS.FAIL;
-    const why = { 'not-in-chain': 'láncon kívüli rekord (kézzel írt vagy lánc nélküli író)', 'no-chain': 'van rekord, de nincs lánc (chain.jsonl)', mismatch: 'a rekord tartalma eltér a láncba írt hash-től (átírták)', missing: 'a rekordfájl hiányzik', 'invalid-id': 'érvénytelen azonosító' }[s.status] ?? s.status;
-    add(`lánc: ${id.slice(0, 24)}`, sev, `${why}${legacy ? ' — a pre-pr / merge író a #490 után kap láncot' : ''}${!env.chainEnforce && !legacy ? ' (bevezetési lépcső: csak figyelmeztet)' : ''}`);
+    if (!hit) { add(`kapu: ${g}`, STATUS.FAIL, `nincs zöld bizonyíték a fejre (${cands.map((n) => n.replace(head, '<fej>')).join(' / ')})`); continue; }
+    const ch = chainCheck(hit[0]);
+    add(`kapu: ${g}`, ch ? ch.status : STATUS.PASS, ch ? ch.note : hit[0].replace(head, head.slice(0, 12)));
   }
   for (const n of Array.isArray(c.notRun) ? c.notRun : []) if (!n?.reason) add(`NOT RUN: ${n?.what ?? '?'}`, STATUS.FAIL, 'ok (reason) nélkül');
   return out;
@@ -502,10 +536,14 @@ async function main() {
   for (const x of refItems) gate.add(`${x.kind} ${x.ref}`.slice(0, 70), x.status === FALSE ? STATUS.FAIL : x.status === UNKNOWN ? STATUS.WARN : STATUS.PASS, `${x.status} — ${basename(file)}:${x.line}: ${x.detail}`);
   const s = summarizeRefs(refItems, ctx.cfg?.claims?.unknownWarnRatio ?? 0.5);
   if (s.unknownWarn) gate.add('NEM ELLENŐRIZHETŐ arány', STATUS.WARN, `${Math.round(s.unknownRatio * 100)}% (${s[UNKNOWN]} / ${s.total}) — a küszöb fölött`);
+  for (const u of severeWithoutQuote(md, refItems)) gate.add(`idézet nélküli súlyos lelet`.slice(0, 70), STATUS.WARN, `${basename(file)}:${u.line} „${u.heading}” — BLOKKOLÓ / MAGAS leletnél jelölt kódidézet kötelező (\`fájl:sor\` → \`idézet\`)`);
   if (reportPath) {
     const block = extractClaimsBlock(md);
     if (block.error) gate.add('gépi blokk (json allitasok)', STATUS.FAIL, block.error);
-    else {
+    else if (!block.claims.commands?.length && !block.claims.tests?.length && GREEN_PROSE.test(stripFences(md).join('\n'))) {
+      gate.add('nincs igazolt állítás', STATUS.WARN, 'a gépi blokk parancs- és tesztlistája üres, a próza mégis „minden zöld / átment” jellegű — bizonyíték nélküli állítás');
+    }
+    if (!block.error) {
       const chainEnforce = (ctx.cfg?.modes?.['evidence-chain']?.local ?? 'warn') === 'block';
       const results = checkClaims(block.claims, {
         head, base, resolve: env.resolve, record: env.record, noGh, pr: env.pr, refEnv: env, chainEnforce,
