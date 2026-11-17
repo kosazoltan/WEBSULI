@@ -1415,6 +1415,29 @@ fizika-esetek (pattogás, határok) változatlanok.
    - teszt-API: `forceState({ question: true })` (egy lény a játékos mellett elkapva), probe K.2.
 4. `L/brainRot/sim.ts`; tesztek: core (menekülés, elkapás, ketrec-feloldás, óra a kérdés alatt), sim (J2 ≥ 8, J3 ≤ 12 mp).
 
+#### J5a — a szelet döntései (2026-11-17, a kód előtt; a terv keretén belül, mérés alapján)
+
+1. **A vadász a kérdés alatt nem lassul, csak a világ (0,6×):** a lassított joystick bemeneti késésnek érződne, és a 6 mp-es
+   ablakba (gondolkodás + futás a ketrecig) nem fért bele — a 20 seedes előmérésen kompenzáció nélkül az átlagos bot a
+   kérdések ~16%-ánál kifutott az időből. A kompenzáció a lépés bemenete (`step(dt, band, timeScale)`), determinisztikus.
+2. **Ketrec-választás beállással:** a ketrecbe érve megállás (≥ 100 ms) vagy 450 ms bent töltött idő választ; a teljes
+   sebességű átfutás (egy másik ketrec felé) nem. Mérve: enélkül a 95%-os bot a kérdések ~30%-át egy útba eső ketrecen
+   átfutva rontotta el.
+3. **A nyíláskor a vadászra eső ketrec arrébb kerül** (a vadász ne „álljon bele” egy válaszba olvasás közben); ha nincs
+   szabad hely, a ketrec csak kilépés után élesedik.
+4. **Egyujjas / egeres mód (K.4/17):** böködés vagy húzás a táblán = oda fut a vadász (a ketrecre bökve is FUTÁS, nem azonnali
+   válasz); billentyűzet: nyilak / WASD, a kérdés-sáv rejtett gombsora 1–4-gyel (terv 8.11).
+5. **Menekülés és segítség:** a menekülő lény 1,4 s után kifárad (lassú, elkapható); 5 s elkapás nélküli világidő után a
+   legközelebbi lény elfárad és kivárja a vadászt — a kérdés nélküli szakasz így nem nyúlik 12 mp fölé (terv 6.2).
+6. **Elkapás kérdés nélkül:** ha nincs kérdés (üres forrás — terv 8.1 —, elfogyott kupon-tananyag, 1,6 s alatt nem jön
+   kérdés), a lény közvetlenül megmarad, alap ponttal, kombó nélkül.
+7. **Kombó:** a közös `combo.ts` (×1…×5), pont = a lény értéke × szorzó, `runStreak = combo.best`. Az élettartam lejárta
+   („Elszökött!”) nem töri meg a kombót (az a jó válaszok sorozata), a rossz ketrec / lejárat igen.
+8. **Győzelem J5a-ban:** ≥ 10 megtartott lény a 90 mp végén (a meglévő küszöb, a következő pályát is ez nyitja); a J5b a
+   rivális elleni győzelemre cseréli, a J9 (2–5 perces menet) a J5b három fordulójával mérhető.
+9. **Felirat-átfedés (kanban #64):** az egyszerre születő lebegő feliratok sávokra osztva, egymás fölé kerülnek (nem
+   csúsznak egymásra), a tábla szélén belül maradnak; a közel egyidejű szökések egy összesítő feliratot kapnak.
+
 ### J5b — rivális tolvaj, Visszalopás-párbaj, Arany lény, fordulók, Tolvajkirály
 
 1. Állapot-sor commit.
