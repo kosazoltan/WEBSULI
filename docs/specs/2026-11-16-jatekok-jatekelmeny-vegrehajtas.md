@@ -1454,7 +1454,7 @@ függvényeket (feladatgenerátor, időzítés) nézők változatlanok.
 
 ## J5 — Brain Rot Lopás: „Lény-aréna” (J5a, J5b)
 
-**Állapot (J5a):** nem kezdődött · **Állapot (J5b):** nem kezdődött
+**Állapot (J5a):** folyamatban – 2026-11-17, ág feat/jatek-j5a-brainrot-lenyarena, munkafa .claude/worktrees/jatek-j5a, kanban #80 · **Állapot (J5b):** nem kezdődött
 **Függ:** J0c merge (3. hullám). **Elfogadás:** J-BR, J1–J10, J16, M1–M12. Terv: 5.5.
 
 ### Fájlok
@@ -1497,6 +1497,113 @@ fizika-esetek (pattogás, határok) változatlanok.
    - score: `runXp` = menet-pont, `runStreak = combo.best`;
    - teszt-API: `forceState({ question: true })` (egy lény a játékos mellett elkapva), probe K.2.
 4. `L/brainRot/sim.ts`; tesztek: core (menekülés, elkapás, ketrec-feloldás, óra a kérdés alatt), sim (J2 ≥ 8, J3 ≤ 12 mp).
+
+#### J5a — a szelet döntései (2026-11-17, a kód előtt; a terv keretén belül, mérés alapján)
+
+1. **A vadász a kérdés alatt nem lassul, csak a világ (0,6×):** a lassított joystick bemeneti késésnek érződne, és a 6 mp-es
+   ablakba (gondolkodás + futás a ketrecig) nem fért bele — a 20 seedes előmérésen kompenzáció nélkül az átlagos bot a
+   kérdések ~16%-ánál kifutott az időből. A kompenzáció a lépés bemenete (`step(dt, band, timeScale)`), determinisztikus.
+2. **Ketrec-választás beállással (MEGÁLLÁS):** a ketrecben megállva (sebesség < a vitt tempó 35%-a) folyamatosan eltöltött
+   160 ms választ; az átfutás bármely irányban (vízszintes, függőleges, átlós) nem, akármeddig tart. Az első változat
+   „megállás VAGY 450 ms bent” szabályát a review #485 (vercel, Codex P2) jogosan kifogásolta: a 0,44 széles ketrecen a
+   vízszintes átfutás 472 ms — a helyes ketrec felé tartó gyerek az útba eső rossz ketrecet „választotta” (tanulási kár: a
+   kérdés az ügyességi balesetet mérte volna). A cél felé tartó bemenet figyelése helyett a megállás a szabály, mert
+   joystickkal, böködéssel (a célnál a vadász magától megáll) és billentyűvel is egyértelmű, és a gyerek a súgóból tudja
+   („állj meg benne”). Teszt: minden ketrecpár A → B közepére tartva csak B választ; a review forgatókönyve; a mindig a jó
+   ketrecet választó bot 20 seeden 0 téves válasz (C-56).
+3. **A nyíláskor a vadászra eső ketrec arrébb kerül** (a vadász ne „álljon bele” egy válaszba olvasás közben); ha nincs
+   szabad hely, a ketrec csak kilépés után élesedik.
+4. **Egyujjas / egeres mód (K.4/17):** böködés vagy húzás a táblán = oda fut a vadász (a ketrecre bökve is FUTÁS, nem azonnali
+   válasz); billentyűzet: nyilak / WASD, a kérdés-sáv rejtett gombsora 1–4-gyel (terv 8.11).
+5. **Menekülés és segítség:** a menekülő lény 1,4 s után kifárad (lassú, elkapható); 5 s elkapás nélküli világidő után a
+   legközelebbi lény elfárad és kivárja a vadászt — a kérdés nélküli szakasz így nem nyúlik 12 mp fölé (terv 6.2).
+6. **Elkapás kérdés nélkül:** ha nincs kérdés (üres forrás — terv 8.1 —, elfogyott kupon-tananyag, 1,6 s alatt nem jön
+   kérdés), a lény közvetlenül megmarad, alap ponttal, kombó nélkül.
+7. **Kombó:** a közös `combo.ts` (×1…×5), pont = a lény értéke × szorzó, `runStreak = combo.best`. Az élettartam lejárta
+   („Elszökött!”) nem töri meg a kombót (az a jó válaszok sorozata), a rossz ketrec / lejárat igen.
+8. **Győzelem J5a-ban:** ≥ 10 megtartott lény a 90 mp végén (a meglévő küszöb, a következő pályát is ez nyitja); a J5b a
+   rivális elleni győzelemre cseréli, a J9 (2–5 perces menet) a J5b három fordulójával mérhető.
+9. **Felirat-átfedés (kanban #64):** az egyszerre születő lebegő feliratok sávokra osztva, egymás fölé kerülnek (nem
+   csúsznak egymásra), a tábla szélén belül maradnak; a közel egyidejű szökések egy összesítő feliratot kapnak.
+10. **Átméretezés nyitott kérdésnél (review #485):** a mag a ketrecek helyét átméretezéskor helyben írja; a memo-s
+    ketrecréteg kulcsa a tábla mérete is (`layoutKey`), így csak-magasság-változásnál (mobil böngésző eszköztára) is a mag
+    választerületein rajzol — e2e lapon belül mérve (a `probe().cageRects` és a kirajzolt dobozok ≤ 2 px).
+
+#### J5a — a független review (#485, „összevonható: nem”) döntései (2026-11-17, a kód előtt)
+
+11. **Nincs véletlen válasz (B1, KSZ-11).** Mérve (reviewer, 20 seed): ha a gyerek a kérdés megjelenése után még 150–500 ms-ig
+    tolja a joystickot, a kérdések 9,5–18%-ára a döntés ELŐTT jött „válasz” (~75–80%-ban rossz) — a ketrec a mozgó vadász alatt,
+    előjelzés nélkül élesedett, és a régi böködési cél is beszaladhatott egy ketrecbe. Új szabály:
+    (a) elkapáskor és a ketrecek nyitásakor a böködés célja, a bemenet és a vadász sebessége törlődik (a vadász megáll; a
+    gyerek új irányítása mozdítja újra);
+    (b) a ketrecek 600 ms látható előjelzés („nyílik” állapot) után élesednek, és csak az élesítés UTÁNI, lendülettel történő
+    belépés (a vitt tempó ≥ 35%-ával) + megállás választ; aki az élesítéskor bent áll vagy lassan csúszik be, annak ki kell
+    lépnie és újra be kell futnia — kivéve, ha a nyitás UTÁN épp ebbe a ketrecbe bökött (kifejezett szándék; a gyors böködőnek
+    nem kell kilépnie, a joystick-tehetetlenség nem szándék);
+    (c) a sim botja emberi reakcióval engedi el a joystickot (a kérdés után még 150–500 ms-ig tol), és teszt méri, hogy a
+    döntés előtti válasz aránya 0 minden játékosmodellnél, joystickkal és böködéssel is.
+12. **A válasz teljes szövege mindig olvasható (B2, K3).** A lap a ketrec VALÓDI feliratszélességével (a ketrec px-szélessége
+    mínusz keret, belső margó, jel) ellenőriz, 14 px-es betűvel, legfeljebb 3 sorban, a közös `estimateLines` becslővel (a
+    `promptFit.ts` változatlan). Ha egy felirat nem fér: **jelölt mód** — a ketrecekben nagy szám + szín (nem csak szín), a
+    kérdés-kártya alatt (fekvő telefonon a kártya mellett, jobbra — alatta nem férne egy ketrecsor) jelmagyarázat a teljes
+    válaszokkal ugyanazzal a jelöléssel. A ketrecek zónája mindig a kérdés-kártya
+    (és a jelmagyarázat) MÉRT alja alatt kezdődik (álló és fekvő nézetben, a megoldás-kijelzés alatt is); az áthelyezés sem
+    teheti fölé. A mobil mérő esetfájlja leghosszabb-válasz esetet kap (a bank és a lap leghosszabb válaszai, programmal kikeresve).
+13. **Győzelem csak ketrecben megtartott lénnyel; a gyengébb játékos is nyerhet néha (K2, K1 iránya).** A kérdés nélküli
+    (közvetlen) megtartás pontot ad, de nem számít a győzelembe, a pályanyitásba és a napi kihívásba — így a kérdés soha nem
+    ronthat a győzelmi esélyen a kérdés nélküli úthoz képest (kérdés nélkül nem lehet nyerni). A győzelmi küszöb 7 megtartott
+    lény (a 10 a gyengébb modellnek — kb. 14 kérdés, 45% — szerkezetileg elérhetetlen volt; a 8-cal a 20 seedes mérésen a
+    gyengébb modell 1/20); a menekülés tempója a nehézség-sáv szerint ±10% (KSZ-16, kicsi, nyílt gumiszalag). Mérce: a gyengébb
+    modell kérdéssel ≥ 3/20, a 3–4. évfolyamos ≥ 12/20. A J5b a rivális elleni győzelemre cseréli.
+14. **Apróságok (L1–L5):** a tanító súgó minden nézetben egy sor (rövid szövegek); a meghajtó-determinizmus teszt kérdéssel is
+    fut (azonos képkocka-sorozat → azonos állapot; a képkocka-felosztástól függetlenség a kérdés-óra miatt csak a kérdés
+    nélküli világra áll — a kérdés-óra a K.2 szerint valós idejű); az esemény-ürítés nem gyárt képkockánként új függvényt; a
+    kor-fagyasztás tiszta függvényének tesztje a K.1/11 szerint változatlan marad, az új követelményt („a kérdés alatt a lények
+    kora 0,6×-sel telik”) külön mag-teszt méri; az eredménylap késleltetése menetenként nullázódik, a ketrecfelirat nem
+    választ el nyelvjelölés nélkül.
+15. **Önellenőrző lista (tulajdonosi kapu-szabály, 2026-11-17) — (e) és (f).** (e) A menet végén a győzelem / vereség rögzül: a
+    lezárt menetben vagy vitt lény nélkül érkező késői kimenet (`applyOutcome`) nem ír a magba (sem megtartás, sem szökés) —
+    a kijelzés alatt nem fordulhat át. (f) A megállítási okok VAGY-kapcsolatban állnak (`szünet || „Miért?” || kibontott
+    kérdés`; a háttérbe tett lap és a lejárt kupon a közös `useAutoPause` / `GAME_HALT_EVENT` útján a szünetet kapcsolja, a
+    lejárt kupon a képkocka-hurkot is megállítja), egyik zárása sem oldja fel a másikat. Mindkettőre teszt (mag + böngésző).
+
+#### J5a — az újra-review (#485, `e17e1ff8`) döntései (2026-11-17, a kód előtt)
+
+16. **Húzás nem szándék (Ú1, KSZ-11).** A ketrecek nyitásakor a már lenyomott ujj húzása „elengedtetett”: a mag a nyitás
+    után a MOZGÁSBÓL jövő célt figyelmen kívül hagyja, amíg új lenyomás nem jön (`setTarget(x, y, "move")` → elvetve; a
+    `"down"` — friss `pointerdown`, ketrecgomb — oldja fel). Szándék (a 11. pont kivétele) csak a nyitás utáni friss
+    lenyomásból és a ketrecgombból jöhet. A sim `input: "drag"` botja a nyitás előtt húz, az ujját lent tartja és mozgatja;
+    mérce: döntés előtti válasz 0 (20 seed, átlagos és 3–4. évfolyamos, az ujj a lényen és 0,15 egységgel előtte).
+17. **Kupon mód: a kérdés nem fogy el (K1, a #483-ig lapszintű tartalék).** Ha a lecke tananyaga kimerült, a lap ismétli:
+    előbb a menetben hibázott (még nem javított) tételt, utána a legrégebben látottat; ≥ 2 tételnél soha nem a közvetlenül
+    előzőt. Az ismétlés kulcsa `<kulcs>#ism<n>` és `noReview` (a director a menetben feltett kulcsot nem kérdezi újra; az
+    ismétlési sorba a tétel az első feltevéskor már bekerült, a változat-kulcs nem szennyezi). A közvetlen (kérdés nélküli)
+    megtartás csak valódi forráshiánynál (0 tétel) marad. A tartalék egy helyen van (`lib/brainRot/couponRepeat.ts` + a
+    provider `material` ága, `// #483 után törölhető`); a #483 közös javítása után kivehető. Mérce (sim, 8 / 5 / 3 tételes
+    lecke): minden elkapáshoz kérdés, a győzelmi arány nem rosszabb a kupon nélkülinél.
+18. **Gumiszalag a lemaradónak (Ú4, KSZ-16).** A menekülés tempója már nem a válasz-pontosság sávját követi (a jól válaszoló
+    nem kaphat gyorsabb lényt), hanem a menet lemaradását: ha a ketrecben megtartott lények száma elmarad a győzelmi tempótól
+    (7 × eltelt világidő / 90 mp), legfeljebb −10% menekülési tempó; előnynél nincs gyorsítás. A születési tempó a régi lap
+    képlete marad (`spawnEveryMs`). Az arany lenyomat ezért újra rögzítve. Az üres „kérdéssel sosem több a vereség” teszt
+    helyett: a győzelem a pontossággal monoton nem csökken (20 / 45 / 75 / 95%, 3–4., 5–8., 9–12. évfolyam, tűrés 1/20).
+19. **Mély ketrec-zóna álló nézetben (Ú2).** Ha a kártya (és a jelmagyarázat) alatt nem fér két ketrecsor (≥ 2 × 0,14 + 0,05
+    egység), a 4 ketrec egy sorba kerül a tábla alján (≥ 48 px széles, egymástól ≥ 12 px); a beférést a lap ezzel a
+    szélességgel számolja (`cageWidthU(..., top)`). Mérő: a leghosszabb prompt ÉS a leghosszabb válaszok együtt.
+20. **A jelölt mód a zóna és a nézet minden változásakor újraszámol (Ú6).** A lap a kártya / jelmagyarázat / tábla mérésekor
+    (ResizeObserver, elforgatás) a beférést újra eldönti, és a magnak a zónával együtt adja át. e2e: elforgatás nyitott
+    kérdés alatt.
+22. **A ketrec peremén álló vadász szándékkal választhat (Vercel 4597845275, visszaellenőrzés V1).** Az élesítés feltétele a
+    szigorú „bent áll” (a vadász közepe a ketrecben); a ketrecek közti folyosón / a peremen álló vadász mellett a ketrec
+    élesedik, de a perem-átfedés nem belépés. Belépésnek számít a peremről is: (a) a nyitás után erre a ketrecre böködött
+    friss cél (bökés, ketrecgomb), lendülettől függetlenül; (b) az élesítés UTÁN indított joystick-mozdulat a ketrec belseje
+    felé. A tehetetlenség (bemenet nélkül, vagy a nyitáskor már tolt, el nem engedett joystick) nem belépés — a reviewer
+    javasolta középpont-élű belépésnél ez szigorúbb (Ú3 nem tágul). A peremen álló, nem töltődő sávnál a súgó: „Bökj a
+    választott ketrecre!”. Mérce: a reviewer `edge.ts` mindkét esete válaszol, `edgefreq.ts` „ezt választotta és lejárt” 0,
+    `measure.ts` (≤ 500 ms), `tap.ts`, `drag.ts` 0; core-teszt mind a 4 ketrecre, álló és fekvő, bökéssel és joystickkal;
+    sim: a peremről induló bot lejárata nem nő. Fekvőben a jelmagyarázat a HUD idősávja alá kerül.
+21. **Mérőkép az élesítés után (Ú5).** A kérdés-képek a beúszás és a 600 ms-os előjelzés után készülnek.
+    Jegyre: Ú3 (≥ 600 ms tartott joystick — a mechanika szándékolt alakja, a J5b-ben újramérve); a 7-es küszöb az átlagosnak
+    könnyű (a J5b rivális-győzelme váltja ki).
 
 ### J5b — rivális tolvaj, Visszalopás-párbaj, Arany lény, fordulók, Tolvajkirály
 

@@ -126,6 +126,8 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
       why: "a villám-felvillanás tisztán kozmetikai díszlet (a játék kimenetelét nem érinti); csökkentett mozgásnál nincs (M9, s13-őr)",
     },
   ],
+  // J5a: a Brain Rot lapján nincs kivétel (a tétel-sorsolás a menet seedelt RNG-jéből: `pickRngRef`; a világ a magban).
+  "BrainRotSteal.tsx": [],
 };
 
 const PAGE_FORBIDDEN = FORBIDDEN.filter(({ name }) => name === "Math.random" || name === "Date.now");
