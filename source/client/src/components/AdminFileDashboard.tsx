@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
+import { matchesMaterialSearch } from "@shared/material-title";
 import {
   DndContext,
   closestCenter,
@@ -160,8 +161,8 @@ export default function AdminFileDashboard({
   const filteredFiles = files.filter(file => {
     const q = searchQuery.toLowerCase();
     // Az évfolyam-feliratra is talál („8. osztály”, „Nincs osztály”) — docs/specs/2026-11-16-tananyag-evfolyam-jeloles.md.
-    const matchesSearch = file.title.toLowerCase().includes(q) ||
-      (file.description || "").toLowerCase().includes(q) ||
+    // A közös illesztés az osztály-kifejezésekre is talál („5.o”, „ötödik”) — docs/specs/2026-11-17-tananyag-cim-osztaly.md.
+    const matchesSearch = matchesMaterialSearch(file, searchQuery) ||
       classroomDisplayLabel(file.classroom).toLowerCase().includes(q);
     // Hiányzó / érvénytelen évfolyam csak az „Összes” nézetben látszik („Nincs osztály” jelvénnyel), nem hamisan az 1.-ben.
     const matchesClassroom = classroomFilter === "all" || file.classroom === classroomFilter;

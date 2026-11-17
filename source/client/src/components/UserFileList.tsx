@@ -16,6 +16,7 @@ import WelcomeCard from "@/components/WelcomeCard";
 import { displayTopic } from "@shared/daily-reminder";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, normalizeClassroom } from "@shared/classrooms";
+import { materialTitleGradePrefix, TITLE_GRADE_SEPARATOR } from "@shared/material-title";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
@@ -158,6 +159,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   const renderCard = (file: HtmlFileApi) => {
     const classroom = file.classroom ?? 1;
     const gradeValue = normalizeClassroom(file.classroom);
+    // Spec 2026-11-17-tananyag-cim-osztaly: az osztály a cím előtt is áll, ha a tárolt cím nem nevezi meg (nincs duplázás).
+    const titleGrade = materialTitleGradePrefix(file.title, file.classroom);
     // Spec 2026-11-03-fooldal-boritokartyak: az évfolyamsáv színe, formája és ikonja; a kezdőkép bélyegképe és a cím.
     const theme = homeCardTheme(classroom);
     const BandIcon = BAND_ICON[theme.band];
@@ -209,7 +212,12 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                 Most tanuljuk
               </span>
             )}
-            <h3 className="home-card-title line-clamp-2">{file.title}</h3>
+            <h3 className="home-card-heading line-clamp-3">
+              {titleGrade !== null && (
+                <span className="home-card-title-grade" data-testid={`title-grade-${file.id}`}>{`${titleGrade}${TITLE_GRADE_SEPARATOR}`}</span>
+              )}
+              <span className="home-card-title">{file.title}</span>
+            </h3>
             <p className="home-card-desc line-clamp-2">{file.description || "Kattints a megtekintéshez"}</p>
             <div className="home-card-footer">
               <LikeButton
@@ -366,7 +374,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/70 z-10" />
             <Input
-              placeholder="Keresés…"
+              placeholder="Keresés: cím, tantárgy, osztály…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 h-8 text-xs bg-white/20 border-white/40 text-white placeholder:text-white/60 focus:bg-white/30 focus:border-white/60 focus-visible:ring-white/50"

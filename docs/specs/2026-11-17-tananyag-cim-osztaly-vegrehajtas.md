@@ -29,7 +29,10 @@ Függőség: `./classrooms` (`normalizeClassroom`, `classroomDisplayLabel`), `./
   - sorszámnév (első … tizenkettedik), opcionális „-s / -es / -os…” képzővel és osztály-szóval;
   - „prog”, „prog.”, „programoz…”, opcionálisan „alapismeretek” / „alapok” → 0;
   - `grades`: a kiolvasott osztályok növekvő sorrendben, ismétlés nélkül; `rest`: a maradék betű- / számsorozatok, az „osztály…” és
-    „évfolyam…” kezdetű szavak nélkül.
+    „évfolyam…” kezdetű szavak, valamint a kötőszók / névelők („és”, „vagy”, „a”, „az”) nélkül;
+  - pontosítás (megvalósítás közben, a tesztek alapján): a szám utáni képző közvetlenül vagy kötőjellel kapcsolódik („5-ös”,
+    „5.-es”), szóközzel nem („5. és 6. osztály” → 5 és 6, az „és” nem képző); a sorszámnév képzője csak „-s / -es / -os”, utána
+    legfeljebb többes szám és „-nak / -nek” („ötödikeseknek”) — az „elsősegély”, „elsősorban” nem osztály.
 - `matchesMaterialSearch(file: { title: string; description?: string | null; subject?: string | null; classroom?: unknown }, query: string): boolean`:
   - üres / csak szóköz kifejezés → `true`;
   - szöveges találat: a hajtogatott, szóközöktől megtisztított kifejezés részszövege a megjelenítendő címnek, a leírásnak vagy a
@@ -105,3 +108,9 @@ regresszió: `npx.cmd playwright test -c playwright.classroom-badge.config.ts --
 - A terv elfogadási listájának tételes újraellenőrzése (kód, teszt, böngészős próba alapján).
 - `npm run gate:push` → zöld (a `native-arch` C-38 kivétel megengedett).
 - Megállás: a fej-hash jelentése az orkesztrátornak; push / PR nincs.
+
+## Kiegészítés a böngészős próba alapján (2026-11-17)
+
+- Az admin kártyán a kijelölő + fogantyú réteg (`AdminFileDashboard.tsx:99-113`, `absolute top-2 left-2`) eddig is rátakart a cím első
+  betűjére keskeny nézetben („előtte” kép); az előtaggal ez az osztály SZÁMÁT takarná. Javítás: a `FileCard.tsx` címoszlopa `ml-3`
+  bal margót kap; a spec ellenőrzi, hogy a `<h3>` nem kerül a fogantyú alá (360×640, 390×844, asztali).

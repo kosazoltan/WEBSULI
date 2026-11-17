@@ -1,6 +1,6 @@
 # Osztály a tananyag címénél és a keresőben (FIX, kanban #116)
 
-**Állapot:** folyamatban – 2026-11-17, ág `fix/tananyag-cim-osztaly`
+**Állapot:** S1 kész (helyben ellenőrizve, PR előtt) – 2026-11-17, ág `fix/tananyag-cim-osztaly`
 Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](2026-11-17-tananyag-cim-osztaly-vegrehajtas.md)
 
 ## A tulajdonos hibajelentése (szó szerint, 2026-11-17)
@@ -92,7 +92,9 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - 0. osztály → „Programozás · Cím”; ha a címben már szerepel a „programoz…” szó, nincs előtag.
 - A címben már benne van: „5. osztály - Törtek”, „Törtek (5. osztály)”, „5. osztályos törtek”, „5.osztály”, „5 osztály”, „5.o”,
   „9. évfolyam”, „ötödik osztály”, „ötödikeseknek” → nincs előtag.
-- Nem osztály a címben: „Az 5 legfontosabb szabály”, „1956”, „12 pont”, „A második világháború”, „Első lépések” → van előtag.
+- Nem osztály a címben: „Az 5 legfontosabb szabály”, „1956”, „12 pont”, „A második világháború”, „Első lépések”, „Elsősegély” →
+  van előtag.
+- Keresés több osztályra: „5. és 6. osztály” → mindkét osztály anyagai (a kötőszó és a névelő nem keresőszó).
 - A cím más osztályt nevez meg, mint a mező → nincs előtag (lásd fent).
 - Érvénytelen érték (13, -1, 2.5, `null`, `undefined`, `"7"`) → nincs előtag.
 - Üres / csak szóköz cím → az előtag nélküli (üres) cím marad; a kártya nem áll csak előtagból.
@@ -113,20 +115,20 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 
 <!-- acceptance-checklist -->
 
-- [ ] E1 WHEN a főoldal tananyagkártyái megjelennek THEN the system SHALL a cím előtt az osztály feliratát mutatni („N. osztály · ”,
+- [x] E1 WHEN a főoldal tananyagkártyái megjelennek THEN the system SHALL a cím előtt az osztály feliratát mutatni („N. osztály · ”,
   0-nál „Programozás · ”) minden olyan kártyán, amelynek érvényes az osztálya és a tárolt címe nem nevez meg osztályt.
-- [ ] E2 WHEN a tárolt cím már megnevez osztályt (vagy 0. osztálynál a programozást) THEN the system SHALL a címet előtag nélkül mutatni.
-- [ ] E3 WHEN az osztály érvénytelen vagy hiányzik THEN the system SHALL előtagot nem mutatni.
-- [ ] E4 WHEN a látogató a főoldali keresőbe osztály-kifejezést ír („5”, „5.”, „5.o”, „5 osztaly”, „5. osztályos”, „5. évfolyam”,
+- [x] E2 WHEN a tárolt cím már megnevez osztályt (vagy 0. osztálynál a programozást) THEN the system SHALL a címet előtag nélkül mutatni.
+- [x] E3 WHEN az osztály érvénytelen vagy hiányzik THEN the system SHALL előtagot nem mutatni.
+- [x] E4 WHEN a látogató a főoldali keresőbe osztály-kifejezést ír („5”, „5.”, „5.o”, „5 osztaly”, „5. osztályos”, „5. évfolyam”,
   „5-ös”, „ötödik”, „ötödikes”) THEN the system SHALL az adott osztály minden tananyagát megtalálni, a tárolt címtől függetlenül.
-- [ ] E5 WHEN a kifejezés osztályt és további szavakat tartalmaz („5. osztály törtek”) THEN the system SHALL az adott osztály azon
+- [x] E5 WHEN a kifejezés osztályt és további szavakat tartalmaz („5. osztály törtek”) THEN the system SHALL az adott osztály azon
   anyagait megtalálni, amelyeknél minden további szó szerepel a címben, a leírásban vagy a tantárgynévben.
-- [ ] E6 WHEN a keresés „programozás” vagy „prog” THEN the system SHALL a 0. osztály minden anyagát megtalálni.
-- [ ] E7 The system SHALL minden olyan anyagot megtalálni, amelyet az eddigi kereső megtalált (a kereső csak bővül).
-- [ ] E8 WHEN a kifejezés tört, tizedes, tartomány vagy 12-nél nagyobb szám THEN the system SHALL azt nem osztályként értelmezni.
-- [ ] E9 WHEN az admin a „Tananyagok” fülön keres THEN the system SHALL ugyanazzal az illesztéssel keresni, és a „Nincs osztály”
+- [x] E6 WHEN a keresés „programozás” vagy „prog” THEN the system SHALL a 0. osztály minden anyagát megtalálni.
+- [x] E7 The system SHALL minden olyan anyagot megtalálni, amelyet az eddigi kereső megtalált (a kereső csak bővül).
+- [x] E8 WHEN a kifejezés tört, tizedes, tartomány vagy 12-nél nagyobb szám THEN the system SHALL azt nem osztályként értelmezni.
+- [x] E9 WHEN az admin a „Tananyagok” fülön keres THEN the system SHALL ugyanazzal az illesztéssel keresni, és a „Nincs osztály”
   feliratra is találni; a kártya címe előtt ugyanaz az előtag áll.
-- [ ] E10 WHEN a nézet 360×640, 390×844 vagy asztali THEN the system SHALL a címet és az előtagot kilógás, vízszintes görgetés és
+- [x] E10 WHEN a nézet 360×640, 390×844 vagy asztali THEN the system SHALL a címet és az előtagot kilógás, vízszintes görgetés és
   gombtakarás nélkül megjeleníteni.
-- [ ] E11 The system SHALL a megjelenítendő címet és a kereső-illesztést egyetlen közös modulból képezni, egységtesztekkel.
-- [ ] E12 The system SHALL nem módosítani adatbázist, migrációt, tárolt címet, éles adatot, gyártási promptot, játékfájlt.
+- [x] E11 The system SHALL a megjelenítendő címet és a kereső-illesztést egyetlen közös modulból képezni, egységtesztekkel.
+- [x] E12 The system SHALL nem módosítani adatbázist, migrációt, tárolt címet, éles adatot, gyártási promptot, játékfájlt.

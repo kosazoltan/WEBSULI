@@ -57,3 +57,17 @@ test("keresés: cím, leírás és tantárgynév, kis-nagybetűtől és ékezett
   assert.equal(matchesHomeSearch({ title: "Anyag", description: null, subject: null }, "Egyéb"), false, "tantárgy nélkül nincs tantárgynév-találat");
   assert.equal(matchesHomeSearch({ title: "Ókori Róma", subject: "tortenelem" }, "tortenelem"), true);
 });
+
+// docs/specs/2026-11-17-tananyag-cim-osztaly.md (E4–E7): a főoldali kereső az osztályra is talál, a tárolt címtől függetlenül.
+test("keresés: az osztály-kifejezés a tananyag osztálya alapján is talál; a korábbi találatok megmaradnak", () => {
+  const tortek = { title: "Törtek összeadása", description: "Közös nevezővel", subject: "matematika", classroom: 5 };
+  for (const query of ["5. osztály", "5.o", "5 osztaly", "ötödik", "5. osztály törtek", "törtek"]) {
+    assert.equal(matchesHomeSearch(tortek, query), true, query);
+  }
+  for (const query of ["6. osztály", "hatodik", "5. osztály igék", "programozás"]) {
+    assert.equal(matchesHomeSearch(tortek, query), false, query);
+  }
+  assert.equal(matchesHomeSearch({ title: "Python kezdőknek", subject: "informatika", classroom: 0 }, "prog"), true);
+  assert.equal(matchesHomeSearch({ title: "Osztály nélküli régi anyag", classroom: 13 }, "13"), false);
+  assert.equal(matchesHomeSearch({ title: "Osztály nélküli régi anyag" }, "régi anyag"), true, "osztály-mező nélkül a szöveges keresés működik");
+});
