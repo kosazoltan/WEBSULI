@@ -1995,6 +1995,8 @@ const TSUNAMI_CSS = `
 .tsunami-level-picker button { min-height: 52px; }
 .tsunami-level-picker p { font-size: 14px; }
 .ts-gates { position: absolute; left: 0; right: 0; z-index: 35; height: 0; pointer-events: none; }
+/* Mért (Pixel 7, 2,625-ös képpontarány): a pontosan 48 px-es ikongomb 47,9 px-nek mérődik — a kérdés-sáv szünetgombja itt 52 px. */
+.ts-gates .play-question-icon-btn { width: 52px; height: 52px; }
 .ts-gate {
   position: absolute; top: 0; transform: translateX(-50%); width: var(--ts-gate-w, 110px); min-height: 56px; padding: 6px 8px 7px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-align: center;
