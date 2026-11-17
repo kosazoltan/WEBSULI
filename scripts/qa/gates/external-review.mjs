@@ -339,12 +339,17 @@ function record(o, head, status, usage) {
 // ---------------------------------------------------------------- fő folyamat
 export function readLocal(p) { return fs.readFileSync(p, "utf8"); }
 
+// A futás kulcsa a legfelső hibaág maszkolásához (K1).
+let activeKey = null;
+export const currentKeyForMasking = () => activeKey;
+
 export async function main(argv) {
   const o = parseArgs(argv);
   const started = Date.now();
   const log = (m) => process.stderr.write(`[external-review] ${m}\n`);
   let key = process.env.GEMINI_API_KEY || null;
   if (!key && o["env-file"]) key = readKeyFromEnvFile(o["env-file"]);
+  activeKey = key; // a fő hibaág is ezt maszkolja (az --env-file kulcsa nincs a process.env-ben)
 
   // 1. bemenet
   let diff = null, changed = [], added = new Set(), skippedPaths = [], baseHash = "-", headHash = "-";
@@ -464,7 +469,7 @@ export async function main(argv) {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main(process.argv.slice(2)).then((c) => process.exit(c), (e) => {
-    process.stderr.write(`[external-review] HIBA (${e.code ?? "?"}): ${maskSecrets(e.message, process.env.GEMINI_API_KEY)}\n`);
+    process.stderr.write(`[external-review] HIBA (${e.code ?? "?"}): ${maskSecrets(e.message, activeKey || process.env.GEMINI_API_KEY)}\n`);
     process.exit(e.code === "SECRET" ? 4 : e.code === "TOO_BIG" ? 5 : 1);
   });
 }
