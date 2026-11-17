@@ -70,7 +70,8 @@ import {
   pickBlockCraftGradeSlot,
   type BlockCraftSubject,
 } from "@/lib/blockCraftSubjects";
-import { GRADE_QUIZ_ITEMS, GRADE_SUBJECTS } from "@/data/gradeQuizBank";
+import { GRADE_SUBJECTS } from "@/data/gradeQuizBank";
+import { loadedGradeItems } from "@/data/gradeQuizBank/loader";
 import type { GradeQuizItem } from "@/data/gradeQuizBank/types";
 import {
   createGradeQuizSeen,
@@ -1529,7 +1530,7 @@ export default function BlockCraftQuiz() {
         if (!ownsReviewKey(it.key)) return null;
         const q = restoreReviewQuestion(it, {
           vocab: (l) => (l === "en" ? vocabRef.current : null),
-          gradeItem: (id) => GRADE_QUIZ_ITEMS.find((g) => g.id === id) ?? null,
+          gradeItem: (id) => loadedGradeItems().find((g) => g.id === id) ?? null,
         });
         if (q) markGradeQuizSeen(gradeSeenRef.current, { id: q.quiz.id, prompt: q.quiz.prompt });
         return q;
