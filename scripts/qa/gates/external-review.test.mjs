@@ -183,3 +183,135 @@ describe("független review B1 / J-a / J-d", () => {
     assert.equal(scanSecrets(["npg_", "b".repeat(14)].join(""), "f").length, 1);
   });
 });
+
+import { parseSse } from "./external-review.mjs";
+describe("SSE-feldolgozás", () => {
+  it("összefűzi a szöveget, kihagyja a gondolatot, az utolsó usage-t és finishReason-t veszi", () => {
+    const ev = (o) => `data: ${JSON.stringify(o)}\r\n\r\n`;
+    const raw = ev({ candidates: [{ content: { parts: [{ text: "titkos gondolat", thought: true }] } }] })
+      + ev({ candidates: [{ content: { parts: [{ text: "Hel" }] } }], usageMetadata: { promptTokenCount: 5 } })
+      + ev({ candidates: [{ content: { parts: [{ text: "ló" }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 5, thoughtsTokenCount: 9, candidatesTokenCount: 2 }, modelVersion: "m" });
+    const p = parseSse(raw);
+    assert.equal(p.text, "Helló"); assert.equal(p.finishReason, "STOP"); assert.equal(p.usage.thoughtsTokenCount, 9); assert.equal(p.events, 3);
+  });
+  it("finishReason nélküli folyam: finishReason null (a hívó HIBA-ként kezeli)", () => {
+    assert.equal(parseSse(`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: "fél" }] } }] })}\n\n`).finishReason, null);
+  });
+});
+
+import { parseInteraction } from "./external-review.mjs";
+describe("Interactions-válasz", () => {
+  it("csak a model_output szövegét veszi, a usage-t generateContent-alakra fordítja", () => {
+    const j = { status: "completed", model: "gemini-4-carbon", usage: { total_input_tokens: 10, total_thought_tokens: 20, total_output_tokens: 5, total_tokens: 35 },
+      steps: [{ type: "user_input", content: [{ type: "text", text: "kérdés" }] }, { type: "thought", signature: "x" }, { type: "model_output", content: [{ type: "text", text: "Vál" }, { type: "text", text: "asz" }] }] };
+    const p = parseInteraction(j);
+    assert.equal(p.text, "Válasz"); assert.equal(p.finishReason, "STOP"); assert.equal(p.usage.thoughtsTokenCount, 20); assert.equal(p.usage.promptTokenCount, 10);
+  });
+  it("nem completed állapot: finishReason ≠ STOP", () => assert.equal(parseInteraction({ status: "incomplete", steps: [] }).finishReason, "INCOMPLETE"));
+});
+
+// ---- #490 bot-leletek: (1) minden kapcsolati URL külön, fail-closed; (2) hamis PASS ellen a válasz-minősítés -------------------------
+import { evaluateResponse, generate, isBankData, isLoopbackHost, scanConnectionUrls } from "./external-review.mjs";
+const J = (...p) => p.join("");
+const AT_ = "@";
+describe("#490 (1): kapcsolati URL-ek egyenként, fail-closed (táblázat)", () => {
+  const local = J("postgres://postgres:", "postgres", AT_, "localhost:5432/x");
+  const remote = J("postgres://admin:", "S3cretPw9", AT_, "db.pelda-szolgaltato.io/prod");
+  const secretCases = {
+    "helyi, utána távoli (egy sorban)": `${local} ${remote}`,
+    "távoli, utána helyi": `${remote} ${local}`,
+    "IP-címes gazda": J("mysql://u:", "Pw12345678", AT_, "10.0.0.5:3306/db"),
+    "IPv6 gazda": J("postgresql://u:", "Pw12345678", AT_, "[2001:db8::7]/db"),
+    "URL-kódolt jelszó": J("postgres://u:", "p%40ss%3Aw0rd", AT_, "ep-x.neon.tech/db"),
+    "mongodb+srv": J("mongodb+srv://u:", "Pw12345678", AT_, "cluster0.pelda.mongodb.net/db"),
+    "redis": J("redis://default:", "Pw12345678", AT_, "cache.pelda.io:6379"),
+    "amqp": J("amqp://u:", "Pw12345678", AT_, "mq.pelda.io/vhost"),
+    "jelszó a lekérdezésben": J("postgres://db.pelda.io/x?user=u&", "password=", "Pw12345678"),
+    "Authorization-fejléc": J("Authorization: ", "Bearer ", "abcdef0123456789abcdef"),
+    "Bearer önmagában": J("curl -H 'x: ", "Bearer ", "abcdefghijklmnopqrstuvwxyz0123'"),
+    "Google-kulcs": J("AI", "za", "Sy", "Q".repeat(33)),
+    "OpenAI-kulcs": J("sk-", "a".repeat(40)),
+    "GitHub-token": J("gh", "p_", "Z".repeat(36)),
+    "PEM-blokk": J("-----BEGIN ", "RSA ", "PRIVATE KEY-----"),
+  };
+  for (const [name, line] of Object.entries(secretCases)) {
+    it(`titok: ${name}`, () => {
+      const hits = scanSecrets(line, "f");
+      assert.ok(hits.length >= 1, name);
+      assert.ok(hits.every((h) => !JSON.stringify(h).includes("S3cretPw9") && !JSON.stringify(h).includes("Pw12345678")), "érték nem szivárog");
+    });
+  }
+  const cleanCases = {
+    "csak helyi": local,
+    "127.0.0.1": J("postgres://postgres:", "postgres", AT_, "127.0.0.1:5432/x"),
+    "[::1]": J("postgres://p:", "p", AT_, "[::1]:5432/x"),
+    "helyőrző-jelszó": J("postgresql://postgres:", "${password}", AT_, "${address}/x"),
+    "jelszó nélküli userinfo": J("https://git", AT_, "github.com/x/y"),
+    "helyőrző a lekérdezésben": J("https://x.pelda.io/?", "token=", "<TOKEN>"),
+  };
+  for (const [name, line] of Object.entries(cleanCases)) it(`nem titok: ${name}`, () => assert.deepEqual(scanConnectionUrls(line), []));
+  it("isLoopbackHost", () => {
+    for (const h of ["localhost", "127.0.0.1", "127.1.2.3", "[::1]", "::1"]) assert.equal(isLoopbackHost(h), true, h);
+    for (const h of ["10.0.0.1", "db.pelda.io", "[2001:db8::1]", "localhost.pelda.io"]) assert.equal(isLoopbackHost(h), false, h);
+  });
+  it("a nyers szó- / évfolyam-bank adatfájl alapból kimarad", () => {
+    assert.equal(isBankData("source/client/src/data/vocabBank/de/level-2.ts"), true);
+    assert.equal(isBankData("source/client/src/data/gradeQuizBank/grade-07.ts"), true);
+    assert.equal(isBankData("source/client/src/data/gradeQuizBank/loader.ts"), false);
+    assert.equal(isExcludedPath("source/client/src/data/gradeQuizBank/grade-07.ts"), true);
+    assert.equal(isExcludedPath("source/client/src/data/gradeQuizBank/grade-07.ts", { includeBankData: true }), false);
+  });
+});
+
+describe("#490 (2): siker csak kész, ítéletes jelentéssel — helyettesített HTTPS-válaszokkal", () => {
+  const ev = (o) => `data: ${JSON.stringify(o)}\r\n\r\n`;
+  const okText = "## Ítélet\nÖSSZEVONHATÓ — IGEN, FELTÉTELLEL: apróságok.\n## Blokkoló leletek\nnincs";
+  const transport = (text, status = 200) => async () => ({ status, text, retryAfter: null, complete: true });
+  const call = (raw, status) => generate({ model: "m", key: "k", systemText: "s", userText: "u", thinking: "high", transport: transport(raw, status), sleep: async () => {} });
+  it("kész, ítéletes válasz → ok", async () => {
+    const r = await call(ev({ candidates: [{ content: { parts: [{ text: okText }] }, finishReason: "STOP" }] }));
+    assert.deepEqual(evaluateResponse(r), { status: "ok", reason: "" });
+  });
+  it("blokkolt prompt (csak promptFeedback.blockReason) → blocked", async () => {
+    const r = await call(ev({ promptFeedback: { blockReason: "SAFETY" } }));
+    assert.equal(evaluateResponse(r).status, "blocked");
+  });
+  it("tartalomszűrés (finishReason SAFETY) → blocked", async () => {
+    const r = await call(ev({ candidates: [{ content: { parts: [] }, finishReason: "SAFETY" }] }));
+    assert.equal(evaluateResponse(r).status, "blocked");
+  });
+  it("üres válasz STOP-pal → incomplete", async () => {
+    const r = await call(ev({ candidates: [{ content: { parts: [] }, finishReason: "STOP" }] }));
+    assert.equal(evaluateResponse(r).status, "incomplete");
+  });
+  it("MAX_TOKENS (a gondolkodás kimerítette a keretet) → incomplete", async () => {
+    const r = await call(ev({ candidates: [{ content: { parts: [{ text: "abc" }] }, finishReason: "MAX_TOKENS" }] }));
+    assert.equal(evaluateResponse(r).status, "incomplete");
+  });
+  it("ítélet nélküli szöveg → incomplete", async () => {
+    const r = await call(ev({ candidates: [{ content: { parts: [{ text: "Hosszú elemzés ".repeat(40) }] }, finishReason: "STOP" }] }));
+    assert.deepEqual(evaluateResponse(r), { status: "incomplete", reason: "nincs ítélet-fejezet a válaszban" });
+  });
+  it("megszakadt folyam (finishReason nélkül, csonka utolsó esemény) → INCOMPLETE hiba, újrapróba nélkül", async () => {
+    let calls = 0;
+    const t = async () => { calls++; return { status: 200, text: `${ev({ candidates: [{ content: { parts: [{ text: "fél" }] } }] })}data: {"candid`, retryAfter: null, complete: false }; };
+    await assert.rejects(generate({ model: "m", key: "k", systemText: "s", userText: "u", thinking: "high", transport: t, sleep: async () => {} }), (e) => e.code === "INCOMPLETE");
+    assert.equal(calls, 1);
+  });
+  it("időtúllépés / megszakadt kapcsolat: NINCS újrapróba; 503: van", async () => {
+    let calls = 0;
+    const t = async () => { calls++; throw Object.assign(new Error("időtúllépés"), { code: "TIMEOUT" }); };
+    await assert.rejects(generate({ model: "m", key: "k", systemText: "s", userText: "u", thinking: "high", transport: t, sleep: async () => {} }), (e) => e.code === "TIMEOUT");
+    assert.equal(calls, 1);
+    let n = 0;
+    const t2 = async () => { n++; return n < 2 ? { status: 503, text: "", retryAfter: "0" } : { status: 200, text: ev({ candidates: [{ content: { parts: [{ text: okText }] }, finishReason: "STOP" }] }), retryAfter: null, complete: true }; };
+    const r = await generate({ model: "m", key: "k", systemText: "s", userText: "u", thinking: "high", transport: t2, sleep: async () => {} });
+    assert.equal(n, 2);
+    assert.equal(evaluateResponse(r).status, "ok");
+  });
+  it("a kapu a hiányos / blokkolt bizonyítékot „HIÁNYZIK” figyelmeztetésként mutatja", () => {
+    const h = "d".repeat(40);
+    assert.match(externalResult({ head: h, status: "incomplete", reason: "MAX_TOKENS" }, h).note, /HIÁNYZIK/);
+    assert.match(externalResult({ head: h, status: "blocked" }, h).note, /HIÁNYZIK/);
+  });
+});

@@ -45,6 +45,14 @@ terhelésétől függően ±50%.
 `--record` → `external-<fej>.json`. A `pre-pr-gate` és a `pre-merge-gate` „külső (Gemini) ellenőr” lépése csak `WARN` / `PASS` —
 soha nem bukás. Ellenőrzőlisták: `scripts/qa/gates/external-review/checklist-{game,general}.md`.
 
+- **Költségkorlát:** `--dry-run` (csak `countTokens`, ingyenes) előbb; hívásonként a kimenet + gondolkodás felső korlátja
+  131 072 token (Interactions háttér-mód); a stdout utolsó sora és a jelentés vége a token-felhasználást (bemenet / gondolkodás /
+  kimenet) rögzíti. Időtúllépést / megszakadt kapcsolatot nem ismétel (már számlázott), csak 429 / 5xx-et.
+- **Siker csak kész jelentéssel:** nem üres válasz + `finishReason` STOP + ítélet-fejezet; különben `.hianyos.md`, nem nulla
+  kilépés, `incomplete` / `blocked` bizonyíték → a kapu: „a második vélemény HIÁNYZIK”.
+- **A külső modell állításai nem tények:** nem lát a repóba; minden kritikus / magas leletét az orkesztrátor a kódból visszaellenőrzi
+  (MEGERŐSÍTVE / CÁFOLVA / NEM ELDÖNTHETŐ).
+
 ### Tiltott minták (a diff hozzáadott soraiban, `FAIL`, érték kiírása nélkül)
 
 `.only(` / `.skip(` / `fixme(` / `xit(` / `{ only: true }` tesztfájlban; `git … --no-verify` szkriptben (`scripts/`, `*.sh`,

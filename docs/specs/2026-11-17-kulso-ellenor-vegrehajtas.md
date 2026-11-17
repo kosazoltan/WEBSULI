@@ -12,6 +12,13 @@
 5. Skill (`.agents` forrás → `skills-sync-check --fix`), `AGENTS.md` egy mondat, `docs/minosegkapuk.md` szakasz.
 6. Kapuk: `gate:stage`, független ellenőr (Claude-alügynök), `record-review`, `gate:pr`; PR a `chore/minosegkapuk` bázisra.
 
+## A #490 bot-leletei után
+
+7. A repó-szkript a scratchpad működő (éles futásban mért) változatára alapozva újra (Interactions háttér-mód, stream-keret, nem
+   ismételt időtúllépés, költségnapló, bank-adat kizárás), a korábbi repó-adaptációkkal (címek futásidőben, `--record`, teljes diff
+   szűrése, rendszer-utasítás / cím szűrése, kvóta `--strict` → 2, `activeKey`). Új: `scanConnectionUrls` (URL-enként, fail-closed),
+   `evaluateResponse` (siker csak kész, ítéletes jelentéssel), injektálható `transport` a tesztekhez. Táblázatos tesztek.
+
 ## Elfogadási ellenőrzőlista
 
 - [ ] kulcs csak env / `--env-file`, soha kimenetben (teszt)

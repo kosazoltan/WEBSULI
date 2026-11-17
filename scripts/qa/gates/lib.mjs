@@ -289,7 +289,8 @@ export function externalResult(ev, head) {
   const how = `node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head ${head.slice(0, 12)} --spec <terv.md>#<fejezet> --lista scripts/qa/gates/external-review/checklist-general.md --ki <jelentés.md> --record`;
   if (!ev || ev.head !== head) return { status: STATUS.WARN, note: `nincs külső (Gemini) második vélemény erre a fejre — ajánlott: ${how}` };
   if (ev.status === 'ok') return { status: STATUS.PASS, note: `lefutott (${ev.model ?? '?'}) — a leleteit az orkesztrátor a kódból visszaellenőrzi` };
-  return { status: STATUS.WARN, note: `külső ellenőr: ${ev.status === 'skipped' ? 'KIHAGYVA (nincs GEMINI_API_KEY)' : ev.status === 'quota' ? 'KIHAGYVA (kvóta / keret)' : `SIKERTELEN (${ev.status})`} — nem bukás` };
+  const why = { skipped: 'KIHAGYVA (nincs GEMINI_API_KEY)', quota: 'KIHAGYVA (kvóta / keret)', blocked: 'BLOKKOLT válasz', incomplete: 'HIÁNYOS válasz (nincs kész jelentés)' }[ev.status] ?? `SIKERTELEN (${ev.status})`;
+  return { status: STATUS.WARN, note: `a második vélemény HIÁNYZIK — külső ellenőr: ${why}${ev.reason ? `, ${ev.reason}` : ''} — nem bukás` };
 }
 
 /**

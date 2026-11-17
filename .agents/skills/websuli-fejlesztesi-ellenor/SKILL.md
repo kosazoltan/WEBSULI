@@ -117,7 +117,15 @@ node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head <fe
 # előtte ingyenes próba: --dry-run (csak countTokens)
 ```
 
-- Modell: `gemini-4-carbon`, `thinkingLevel: HIGH`; a küldés ELŐTT titok-szűrés (találatnál 4-gyel megáll, érték nélkül); a kulcs
+- Modell: `gemini-4-carbon`, gondolkodási szint `high` (tulajdonosi döntés; nem max / xhigh). Alapból az Interactions API háttér-módja
+  (`background: true`, `max_output_tokens` 131 072 — ez a hívásonkénti költségfék, ~1,3 USD kimenet); az interakció-azonosító azonnal
+  `<jelentés>.interaction-id`-be kerül, megszakadt kliens után `--resume-id`-vel lekérdezhető. `--api stream`: 65 536-os keret, a
+  gondolkodás is ebbe számít (~100 ezer token bemenet fölött MAX_TOKENS → hiányos). Időtúllépést / megszakadt kapcsolatot NEM
+  ismétel (már számlázott hívás), csak 429 / 5xx-et. A nyers szó- / évfolyam-bank adatfájlok alapból kimaradnak
+  (`--include-bank-data`).
+- Siker CSAK: nem üres válasz + `finishReason` STOP + ítélet-fejezet; különben `<jelentés>.hianyos.md`, 3-as kilépés, és a
+  bizonyíték `incomplete` / `blocked` — a második vélemény HIÁNYZIK (a kapu így jelzi, nem „megvan”).
+- A küldés ELŐTT titok-szűrés (találatnál 4-gyel megáll, érték nélkül; minden kapcsolati URL külön, fail-closed); a kulcs
   soha nem kerül kimenetbe, jelentésbe, bizonyítékba. Kilépés: 0 lefutott / KIHAGYVA (nincs kulcs, kvóta), 2 nincs kulcs `--strict`
   mellett, 3 API-hiba, 4 titok-szűrés, 5 túl nagy bemenet (bontsd `--paths`-szal), 1 egyéb hiba (pl. hiányzó argumentum). A `--save-input <fájl>` a pontosan
   elküldött szöveget menti (a scratchpadba, ne a repóba). Költség ~0,4–1,5 USD / PR.

@@ -33,6 +33,10 @@ orkesztrátor második véleményként olvassa be; az állításait a kódból e
 - K4 — Bizonyíték: a szkript `--record` kapcsolóval `external-<fej>.json`-t ír a bizonyíték-tárba (állapot, modell, token-összegek,
   jelentés útja és SHA-256-ja — kulcs és jelentés-szöveg nélkül). A `pre-pr-gate` / `pre-merge-gate` ezt csak FIGYELMEZTETÉSKÉNT nézi
   (`WARN`, ha hiányzik vagy KIHAGYVA; `PASS`, ha lefutott). Soha nem `FAIL`.
+- K6 — Siker CSAK nem üres válasz + `finishReason` STOP + ítélet-fejezet esetén; különben `incomplete` / `blocked` bizonyíték,
+  `.hianyos.md`, nem nulla kilépés (a #490 bot-lelete). Minden kapcsolati URL külön vizsgálva, fail-closed (a #490 bot-lelete).
+- K7 — A működő állapot (éles futásból): Interactions háttér-mód `max_output_tokens` 131 072-vel (költségfék), az azonosító
+  azonnal mentve; időtúllépést / megszakadt kapcsolatot nem ismétel; szint `high`; nyers bank-adat alapból kizárva.
 - K5 — A forrásban e-mail-alakú szöveg nincs (a nyilvános repó címőre miatt): az engedélyezett címeket futásidőben rakja össze.
 
 ## 5. Edge case-ek

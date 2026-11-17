@@ -10,8 +10,11 @@
  * Egyéb: --feladat <helyi fájl> (a kérdések), --model gemini-4-carbon, --thinking high,
  *   --max-input-tokens 600000, --max-diff-kb N, --dry-run (nem hív generateContent-et, csak countTokens),
  *   --env-file <fájl> (csak a GEMINI_API_KEY sort olvassa), --strict (kulcs / kvóta hiánya = bukás),
- *   --record (external-<fej>.json a kapuk bizonyíték-tárába; a pre-pr / pre-merge kapu figyelmeztetésként olvassa),
- *   --rendszer <helyi fájl> (a rendszer-utasítás felülírása, pl. szintézishez).
+ *   --rendszer <helyi fájl> (a rendszer-utasítás felülírása, pl. szintézishez),
+ *   --api interactions|stream (alap: interactions, háttér-mód + lekérdezés), --max-output-tokens N, --resume-id <azonosító>,
+ *   --save-input <fájl> (a pontosan elküldött szöveg), --include-bank-data (a nyers szó- / évfolyam-bank adatfájlok is),
+ *   --record (external-<fej>.json a kapuk bizonyíték-tárába; a pre-pr / pre-merge kapu figyelmeztetésként olvassa).
+ * Siker CSAK: nem üres válasz + finishReason STOP + ítélet-fejezet a jelentésben; minden más hiányos / blokkolt, nem nulla kilépés.
  *
  * A kulcs: GEMINI_API_KEY környezeti változó, vagy --env-file. Soha nem kerül kimenetbe: minden szöveg, amely a
  * folyamatból kimegy (hiba, jelentés), átmegy a maskSecrets()-en.
@@ -28,13 +31,16 @@ export const DEFAULT_MODEL = "gemini-4-carbon";
 // generateContent REST: ThinkingConfig.thinkingLevel enum (MINIMAL/LOW/MEDIUM/HIGH/XHIGH). Tulajdonosi döntés: sima HIGH.
 export const DEFAULT_THINKING = "high";
 export const DEFAULT_MAX_INPUT_TOKENS = 600_000;
-export const MAX_OUTPUT_TOKENS = 32_768; // a gemini-4-carbon outputTokenLimit-je (GET /v1beta/models/gemini-4-carbon)
+export const MAX_OUTPUT_TOKENS = 32_768; // a gemini-4-carbon outputTokenLimit-je nem-streamelve (GET /v1beta/models/gemini-4-carbon)
+// Interactions háttér-mód: a gondolkodás + kimenet közös kerete; 131 072 = legfeljebb ~1,31 USD kimenet hívásonként (költségfék).
+export const INTERACTION_MAX_OUTPUT_TOKENS = 131_072;
+export const STREAM_MAX_OUTPUT_TOKENS = 65_536; // streamelve (aistudio.google.com/docs/thinking: „Streaming … up to 65,536 tokens”); a gondolkodás is ebbe számít
 const API = "https://generativelanguage.googleapis.com/v1beta/models/";
 
 // ---------------------------------------------------------------- argumentumok
 export function parseArgs(argv) {
   const multi = new Set(["spec", "paths", "fajl", "extra"]);
-  const flags = new Set(["dry-run", "strict", "no-diff", "record"]);
+  const flags = new Set(["dry-run", "strict", "no-diff", "record", "include-bank-data"]);
   const o = { spec: [], paths: [], fajl: [], extra: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -61,8 +67,13 @@ export function isEnvFile(p) {
   const base = p.split("/").pop();
   return /^\.env(\..*)?$/i.test(base) && !/\.example$|\.sample$|\.template$/i.test(base);
 }
-export function isExcludedPath(p) {
+// A nyers szó- / évfolyam-bank adatfájlok (több ezer sor szöveg) alapból kimaradnak: drágák, és kódhibát nem hordoznak.
+const BANK_DATA = /(^|\/)source\/client\/src\/data\/(?:vocabBank\/[^/]+\/level-\d+\.ts|gradeQuizBank\/grade-\d+\.ts)$/;
+export function isBankData(p) { return BANK_DATA.test(p.replace(/\\/g, "/")); }
+const isExcludedPathBase = (p, opts) => isExcludedPath(p, opts);
+export function isExcludedPath(p, { includeBankData = false } = {}) {
   const n = p.replace(/\\/g, "/");
+  if (!includeBankData && isBankData(n)) return true;
   if (isEnvFile(n)) return true;
   if (BINARY_EXT.test(n)) return true;
   if (/(^|\/)docs\/measurements\//.test(n)) return true;
@@ -85,10 +96,38 @@ export const SECRET_PATTERNS = [
   { kind: "Resend-kulcs", re: /\bre_[A-Za-z0-9]{8,}_[A-Za-z0-9]{16,}/ },
   { kind: "Render-kulcs", re: /\brnd_[A-Za-z0-9]{20,}/ },
   { kind: "Neon-jelszó", re: /\bnpg_[A-Za-z0-9]{12,}/ },
-  { kind: "privát kulcs", re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/ },
-  { kind: "jelszavas kapcsolati URL", re: /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s:@/'"`]+:[^\s@/'"`$<{]{6,}@/i },
+  { kind: "privát kulcs", re: /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----/ },
   { kind: "JWT", re: /\beyJ[A-Za-z0-9_-]{15,}\.eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}/ },
+  { kind: "Authorization-fejléc", re: /\bAuthorization\s*["']?\s*[:=]\s*["']?\s*(?:Bearer|Basic|Token|token)\s+[A-Za-z0-9._~+/=-]{8,}/i },
+  { kind: "Bearer-token", re: /\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*/ },
 ];
+
+/**
+ * Kapcsolati URL-ek: MINDEN előfordulás külön vizsgálva (a független review / Codex P1 / Vercel: a soronkénti loopback-kivétel egy
+ * utána álló távoli, jelszavas URL-t is felmentett). Fail-closed: jelszavas userinfo NEM-loopback gazdán, vagy jelszó a
+ * lekérdezésben → titok. Mentes csak a loopback gazda (localhost, 127.x, ::1) és az egyértelmű helyőrző-jelszó (`${…}`, `<…>`, `$VAR`).
+ */
+const URL_WITH_USERINFO = /\b([a-z][a-z0-9+.-]{1,20}):\/\/([^\s/@'"`<>]*)@(\[[^\]\s]+\]|[^\s/:?#'"`<>]+)/gi;
+const QUERY_SECRET = /[?&](?:password|passwd|pwd|pass|secret|token|access_token|api_key|apikey|key|auth)=([^&#\s'"`<>]+)/gi;
+const PLACEHOLDER = /^(?:\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|<[^>]*>|%[A-Za-z_]+%|\{\{[^}]*\}\}|\*+|x{3,}|\.\.\.)$/i;
+export function isLoopbackHost(host) {
+  const h = String(host).toLowerCase().replace(/^\[|\]$/g, "");
+  return h === "localhost" || /^127(?:\.\d{1,3}){3}$/.test(h) || h === "::1" || h === "0:0:0:0:0:0:0:1";
+}
+export function scanConnectionUrls(line) {
+  const kinds = [];
+  for (const m of line.matchAll(URL_WITH_USERINFO)) {
+    const userinfo = m[2];
+    const cut = userinfo.indexOf(":");
+    if (cut < 0) continue; // jelszó nélküli userinfo
+    const pw = userinfo.slice(cut + 1);
+    if (!pw || PLACEHOLDER.test(pw)) continue;
+    if (isLoopbackHost(m[3])) continue;
+    kinds.push("jelszavas kapcsolati URL");
+  }
+  for (const m of line.matchAll(QUERY_SECRET)) if (!PLACEHOLDER.test(m[1])) kinds.push("titok URL-paraméterben");
+  return kinds;
+}
 const ALLOWED_EMAIL_DOMAINS = ["pelda.hu", "example.com", "example.org", "example.net", "example.co.uk", "websuli.vip",
   "mail.web-suli.vip", "websuli.org", "resend.dev", "notresend.dev", "users.noreply.github.com", "x.hu", "b.hu", "c.hu",
   "-c.hu", "c-.hu", "-websuli.vip", "websuli-.vip", "iskola.hu"];
@@ -127,18 +166,13 @@ export function scanSecrets(text, source, { skipRemoved = false } = {}) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (skipRemoved && line.startsWith("-") && !line.startsWith("---")) continue;
-    for (const p of SECRET_PATTERNS) if (p.re.test(line) && !isLoopbackDbUrl(p, line)) hits.push({ source, line: i + 1, kind: p.kind });
+    for (const p of SECRET_PATTERNS) if (p.re.test(line)) hits.push({ source, line: i + 1, kind: p.kind });
+    for (const kind of scanConnectionUrls(line)) hits.push({ source, line: i + 1, kind });
     for (const m of line.matchAll(EMAIL)) if (!isAllowedEmail(m[0])) hits.push({ source, line: i + 1, kind: "nem engedélyezett e-mail-cím" });
   }
   return hits;
 }
 
-/** Helyi teszt-adatbázis (CI szolgáltatás-konténer, fejlesztői alapérték) kapcsolati URL-je nem titok. */
-function isLoopbackDbUrl(p, line) {
-  if (p.kind !== "jelszavas kapcsolati URL") return false;
-  const m = /:\/\/[^\s:@/'"`]+:[^\s@/'"`]+@([^\s:/'"`]+)/i.exec(line);
-  return Boolean(m && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(m[1]));
-}
 
 // ---------------------------------------------------------------- kulcs és maszkolás
 export function readKeyFromEnvFile(file) {
@@ -187,7 +221,8 @@ export function pathspecExcludes() {
   return [":(exclude,glob)**/.env", ":(exclude,glob)**/.env.*", ":(exclude,glob)**/docs/measurements/**",
     ":(exclude,glob)**/package-lock.json", ":(exclude,glob)**/node_modules/**"];
 }
-export function collectDiff(repo, base, head, mode, paths) {
+export function collectDiff(repo, base, head, mode, paths, opts = {}) {
+  const isExcludedPath = (p) => isExcludedPathBase(p, opts);
   const range = mode === "range" ? `${base}..${head}` : `${base}...${head}`;
   const spec = [...(paths.length ? paths : ["."]), ...pathspecExcludes()];
   const added = new Set(git(repo, ["diff", "--name-only", "--diff-filter=A", range, "--", ...spec]).split("\n").filter(Boolean));
@@ -287,32 +322,162 @@ export async function countTokens(model, key, systemText, userText) {
   if (r.status !== 200) return { error: `HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 400)}` };
   return { totalTokens: JSON.parse(r.text).totalTokens };
 }
-export async function generate({ model, key, systemText, userText, thinking, timeoutMs = 30 * 60_000, retries = 3, log = () => {} }) {
+/**
+ * SSE-folyam (streamGenerateContent?alt=sse) feldolgozása: a darabok szövegét összefűzi (a `thought: true` részeket nem),
+ * a `usageMetadata`-t és a `finishReason`-t az utolsó előfordulásból veszi. Tiszta függvény (tesztelhető).
+ */
+export function parseSse(raw) {
+  let text = "", usage = null, finishReason = null, modelVersion = null, events = 0, blockReason = null;
+  for (const block of raw.split(/\r?\n\r?\n/)) {
+    const data = block.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trimStart()).join("\n");
+    if (!data || data === "[DONE]") continue;
+    let j;
+    try { j = JSON.parse(data); } catch { continue; } // csonka utolsó esemény (megszakadt folyam): a finishReason hiánya jelzi
+    events++;
+    if (j.promptFeedback?.blockReason) blockReason = j.promptFeedback.blockReason;
+    const c = j.candidates?.[0];
+    for (const p of c?.content?.parts ?? []) if (!p.thought && typeof p.text === "string") text += p.text;
+    if (c?.finishReason) finishReason = c.finishReason;
+    if (j.usageMetadata) usage = j.usageMetadata;
+    if (j.modelVersion) modelVersion = j.modelVersion;
+  }
+  return { text, usage, finishReason, modelVersion, events, blockReason };
+}
+
+const VERDICT_RE = /^#{1,3}\s*Ítélet\b[^\n]*\n+(?:\s*\n)*[^\n]*?\b(IGEN,\s*FELTÉTELLEL|IGEN|NEM|RENDBEN|FELTÉTELLEL|KOCKÁZATOS)(?![A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű])/imu;
+const BLOCK_FINISH = new Set(["SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "RECITATION", "IMAGE_SAFETY", "BLOCKED"]);
+/**
+ * A válasz minősítése (Codex P2 / Vercel a #490-en: HTTP 200, de nincs jelölt / szöveg → hamis „ok”). Siker CSAK: nem üres
+ * szöveg, finishReason STOP (Interactions: completed → STOP), és a szövegben ítélet-fejezet (IGEN / IGEN, FELTÉTELLEL / NEM; köteg:
+ * RENDBEN / FELTÉTELLEL / KOCKÁZATOS). Minden más `blocked` vagy `incomplete`.
+ * @returns {{ status: 'ok'|'blocked'|'incomplete', reason: string }}
+ */
+export function evaluateResponse(res) {
+  const text = String(res?.text ?? "");
+  if (res?.blockReason || BLOCK_FINISH.has(String(res?.finishReason ?? ""))) return { status: "blocked", reason: `blokkolva (${res.blockReason ?? res.finishReason})` };
+  if (res?.finishReason !== "STOP") return { status: "incomplete", reason: `finishReason=${res?.finishReason ?? "nincs"}` };
+  if (!text.trim()) return { status: "incomplete", reason: "üres válasz" };
+  if (!VERDICT_RE.test(text)) return { status: "incomplete", reason: "nincs ítélet-fejezet a válaszban" };
+  return { status: "ok", reason: "" };
+}
+
+function postStream(url, key, body, timeoutMs) {
+  const data = Buffer.from(JSON.stringify(body));
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, { method: "POST", headers: { "x-goog-api-key": key, "content-type": "application/json", accept: "text/event-stream", "content-length": data.length } }, (res) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString("utf8"), retryAfter: res.headers["retry-after"] ?? null, complete: res.complete }));
+      res.on("aborted", () => reject(Object.assign(new Error("a folyam megszakadt (aborted)"), { code: "CONN" })));
+      res.on("error", (e) => reject(Object.assign(e, { code: "CONN" })));
+    });
+    req.setTimeout(0);
+    req.on("socket", (s) => s.setKeepAlive(true, 30_000));
+    const timer = setTimeout(() => req.destroy(Object.assign(new Error(`időtúllépés ${Math.round(timeoutMs / 60000)} perc után`), { code: "TIMEOUT" })), timeoutMs);
+    req.on("close", () => clearTimeout(timer));
+    req.on("error", (e) => reject(e.code === "TIMEOUT" ? e : Object.assign(e, { code: "CONN" })));
+    req.end(data);
+  });
+}
+
+/**
+ * Streamelt hívás, maxOutputTokens 65 536 (a gemini-4-carbon streamelve ennyit enged; nem-streamelve 32 768, és a
+ * gondolkodás is ebbe számít — mérve: high szinten 32 765 gondolkodási tokennél MAX_TOKENS, üres válasz).
+ * Újrapróbálás CSAK 429 / 5xx válaszkódra (a jelzett várakozással); időtúllépés / megszakadt kapcsolat / finishReason
+ * nélküli folyam = hiba, nincs ismétlés (a szerver valószínűleg már kiszámlázta).
+ */
+export async function generate({ model, key, systemText, userText, thinking, maxOutputTokens = STREAM_MAX_OUTPUT_TOKENS, timeoutMs = 30 * 60_000, retries = 3, log = () => {}, transport = postStream, sleep = (ms) => new Promise((res) => setTimeout(res, ms)) }) {
   const body = {
     systemInstruction: { parts: [{ text: systemText }] },
     contents: [{ role: "user", parts: [{ text: userText }] }],
     // A Gemini 4 modellek a temperature/topP/topK-t figyelmen kívül hagyják (aistudio.google.com/docs/text-generation), ezért nem küldjük.
-    generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, thinkingConfig: { thinkingLevel: thinking.toUpperCase() } },
+    generationConfig: { maxOutputTokens, thinkingConfig: { thinkingLevel: thinking.toUpperCase() } },
   };
-  let last;
+  let last, attempts = 0;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    attempts++;
+    let r;
     try {
-      const r = await postJson(`${API}${model}:generateContent`, key, body, timeoutMs);
-      if (r.status === 200) {
-        // Hibás JSON egy 200-as válaszban: nem ismételjük (a drága generálás újra lefutna) — review J-c.
-        try { return JSON.parse(r.text); } catch { throw Object.assign(new Error("A 200-as válasz nem értelmezhető JSON (nem ismételjük)."), { code: "fatal" }); }
-      }
-      const cls = classifyHttp(r.status, r.text);
-      last = Object.assign(new Error(`HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 600)}`), { code: cls });
-      if (cls !== "retry") throw last;
-      last.waitMs = retryWaitMs(r);
+      r = await transport(`${API}${model}:streamGenerateContent?alt=sse`, key, body, timeoutMs);
     } catch (e) {
-      if (e.code === "quota" || e.code === "fatal" || e.code === "TIMEOUT") throw e; // időtúllépést nem ismétlünk (költség)
-      last = e.code ? e : Object.assign(new Error(maskSecrets(e?.cause?.message || e.message, key)), { code: "retry" });
+      throw Object.assign(new Error(maskSecrets(e.message, key)), { code: e.code ?? "CONN", attempts });
     }
-    if (attempt < retries) { const w = Math.max(last.waitMs ?? 0, 15_000 * 2 ** attempt); log(`újrapróbálás ${attempt + 1}/${retries} ${w / 1000} s múlva: ${maskSecrets(last.message, key).slice(0, 160)}`); await new Promise((r) => setTimeout(r, w)); }
+    if (r.status === 200) {
+      const p = parseSse(r.text);
+      if (!p.finishReason && p.blockReason) return { ...p, finishReason: "BLOCKED", attempts };
+      if (!p.finishReason) throw Object.assign(new Error(`a folyam finishReason nélkül ért véget (${p.events} esemény, complete=${r.complete})`), { code: "INCOMPLETE", attempts, usage: p.usage });
+      return { ...p, attempts };
+    }
+    const cls = classifyHttp(r.status, r.text);
+    last = Object.assign(new Error(`HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 600)}`), { code: cls, attempts });
+    if (cls !== "retry") throw last;
+    if (attempt < retries) { const w = Math.max(retryWaitMs(r), 15_000 * 2 ** attempt); log(`újrapróbálás ${attempt + 1}/${retries} ${w / 1000} s múlva: ${maskSecrets(last.message, key).slice(0, 160)}`); await sleep(w); }
   }
   throw last;
+}
+
+/** Interactions-válaszból a végleges szöveg (a model_output lépések text tartalma) és a usage generateContent-alakra fordítva. */
+export function parseInteraction(j) {
+  let text = "";
+  for (const s of j.steps ?? []) if (s.type === "model_output") for (const c of s.content ?? []) if (c.type === "text" && typeof c.text === "string") text += c.text;
+  const u = j.usage ?? {};
+  const usage = { promptTokenCount: u.total_input_tokens, thoughtsTokenCount: u.total_thought_tokens, candidatesTokenCount: u.total_output_tokens, totalTokenCount: u.total_tokens, cachedContentTokenCount: u.total_cached_tokens };
+  return { text, usage, status: j.status, finishReason: j.status === "completed" ? "STOP" : String(j.status ?? "?").toUpperCase(), modelVersion: j.model, events: (j.steps ?? []).length };
+}
+
+function reqJson(method, url, key, body, timeoutMs = 120_000) {
+  const data = body ? Buffer.from(JSON.stringify(body)) : null;
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, { method, headers: { "x-goog-api-key": key, "content-type": "application/json", ...(data ? { "content-length": data.length } : {}) } }, (res) => {
+      const chunks = []; res.on("data", (c) => chunks.push(c));
+      res.on("end", () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString("utf8"), retryAfter: res.headers["retry-after"] ?? null }));
+      res.on("error", (e) => reject(Object.assign(e, { code: "CONN" })));
+    });
+    const timer = setTimeout(() => req.destroy(Object.assign(new Error("időtúllépés"), { code: "TIMEOUT" })), timeoutMs);
+    req.on("close", () => clearTimeout(timer));
+    req.on("error", (e) => reject(e.code === "TIMEOUT" ? e : Object.assign(e, { code: "CONN" })));
+    req.end(data);
+  });
+}
+
+/**
+ * Interactions API, háttér-mód (aistudio.google.com/docs/long-decode): `background: true`, `max_output_tokens` > 65 536 →
+ * a szerver futtatja a folytatási lépéseket, mi lekérdezzük. Így a `high` gondolkodás nem fogyasztja el a keretet
+ * (mérve: generateContent-tel 104 ezer token bemenetnél 65 533 gondolkodási tokennél MAX_TOKENS, üres válasz).
+ * Az interakció-azonosítót azonnal elmenti (`onId`), hogy megszakadt kliens után is lekérdezhető legyen (`--resume-id`).
+ */
+export async function generateInteraction({ model, key, systemText, userText, thinking, maxOutputTokens = INTERACTION_MAX_OUTPUT_TOKENS, pollMs = 20_000, timeoutMs = 90 * 60_000, retries = 3, resumeId = null, onId = () => {}, log = () => {} }) {
+  const B = "https://generativelanguage.googleapis.com/v1beta/interactions";
+  let id = resumeId, attempts = 0;
+  if (!id) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      attempts++;
+      const r = await reqJson("POST", B, key, { model, system_instruction: systemText, input: userText, background: true,
+        generation_config: { max_output_tokens: maxOutputTokens, thinking_level: thinking.toLowerCase() } }, 300_000)
+        .catch((e) => { throw Object.assign(new Error(maskSecrets(e.message, key)), { code: e.code ?? "CONN", attempts }); });
+      if (r.status === 200) { id = JSON.parse(r.text).id; break; }
+      const cls = classifyHttp(r.status, r.text);
+      const err = Object.assign(new Error(`HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 600)}`), { code: cls, attempts });
+      if (cls !== "retry" || attempt === retries) throw err;
+      const w = Math.max(retryWaitMs(r), 15_000 * 2 ** attempt); log(`újrapróbálás ${attempt + 1}/${retries} ${w / 1000} s múlva: ${err.message.slice(0, 160)}`); await new Promise((res) => setTimeout(res, w));
+    }
+  }
+  onId(id);
+  const t0 = Date.now();
+  let pollErrors = 0;
+  while (true) {
+    if (Date.now() - t0 > timeoutMs) throw Object.assign(new Error(`időtúllépés: az interakció ${Math.round(timeoutMs / 60000)} perc után sem zárult le (azonosító elmentve)`), { code: "TIMEOUT", attempts: Math.max(attempts, 1), interactionId: id });
+    await new Promise((res) => setTimeout(res, pollMs));
+    let r;
+    try { r = await reqJson("GET", `${B}/${encodeURIComponent(id)}`, key); } catch (e) { if (++pollErrors > 10) throw Object.assign(new Error(maskSecrets(e.message, key)), { code: "CONN", attempts, interactionId: id }); continue; }
+    if (r.status !== 200) { if (r.status >= 500 || r.status === 429) { if (++pollErrors > 10) throw Object.assign(new Error(`lekérdezés: HTTP ${r.status}`), { code: "CONN", attempts, interactionId: id }); continue; }
+      throw Object.assign(new Error(`lekérdezés: HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 400)}`), { code: "fatal", attempts, interactionId: id }); }
+    const j = JSON.parse(r.text);
+    if (["in_progress", "queued"].includes(j.status)) continue;
+    const p = parseInteraction(j);
+    if (j.status !== "completed") throw Object.assign(new Error(`az interakció állapota: ${j.status}`), { code: "INCOMPLETE", attempts: Math.max(attempts, 1), usage: p.usage, interactionId: id, partial: p });
+    return { ...p, attempts: Math.max(attempts, 1), interactionId: id };
+  }
 }
 
 /** 429-nél a válaszban jelzett várakozás (Retry-After fejléc vagy RetryInfo.retryDelay, pl. "37s"), ezredmásodpercben. */
@@ -322,30 +487,29 @@ export function retryWaitMs(r) {
   return m ? Math.ceil(Number(m[1]) * 1000) + 1000 : 0;
 }
 
-// ---------------------------------------------------------------- bizonyíték (--record)
-/**
- * `external-<fej>.json` a kapuk bizonyíték-tárába (docs/specs/2026-11-17-kulso-ellenor.md K4): állapot, modell, token-összegek, a
- * jelentés útja és SHA-256-ja. Kulcs és jelentés-szöveg NINCS benne. A pre-pr / pre-merge kapu csak figyelmeztetésként olvassa.
- */
-export function externalRecord({ head, status, model, thinking, usage, report, now = () => new Date() }) {
-  let sha = null;
-  try { sha = createHash("sha256").update(fs.readFileSync(report)).digest("hex"); } catch { /* nincs jelentés */ }
-  return { kind: "external", head, status, ok: status === "ok", model, thinking, at: now().toISOString(), report: path.resolve(report), reportSha256: sha,
-    usage: usage ? { prompt: usage.promptTokenCount ?? null, thoughts: usage.thoughtsTokenCount ?? null, output: usage.candidatesTokenCount ?? null, total: usage.totalTokenCount ?? null } : null };
-}
-function record(o, head, status, usage) {
-  if (!o.record || !o.repo || head === "-") return;
-  let common = git(o.repo, ["rev-parse", "--git-common-dir"]).trim();
-  if (!path.isAbsolute(common)) common = path.resolve(o.repo, common);
-  writeEvidence(evidenceDir(common), `external-${head}`, externalRecord({ head, status, model: o.model, thinking: o.thinking, usage, report: o.ki }));
-}
-
 // ---------------------------------------------------------------- fő folyamat
 export function readLocal(p) { return fs.readFileSync(p, "utf8"); }
 
-// A futás kulcsa a legfelső hibaág maszkolásához (K1).
+// ---------------------------------------------------------------- bizonyíték (--record)
+/**
+ * `external-<fej>.json` a kapuk bizonyíték-tárába (docs/specs/2026-11-17-kulso-ellenor.md K4): állapot (ok / incomplete / blocked /
+ * error / quota / skipped), modell, token-összegek, a jelentés útja és SHA-256-ja. Kulcs és jelentés-szöveg NINCS benne.
+ */
+export function externalRecord({ head, status, model, thinking, usage, report, reason = "", now = () => new Date() }) {
+  let sha = null;
+  try { sha = createHash("sha256").update(fs.readFileSync(report)).digest("hex"); } catch { /* nincs jelentés */ }
+  return { kind: "external", head, status, ok: status === "ok", reason, model, thinking, at: now().toISOString(), report: path.resolve(report), reportSha256: sha,
+    usage: usage ? { prompt: usage.promptTokenCount ?? null, thoughts: usage.thoughtsTokenCount ?? null, output: usage.candidatesTokenCount ?? null, total: usage.totalTokenCount ?? null } : null };
+}
+function record(o, head, status, usage, report, reason = "") {
+  if (!o.record || !o.repo || head === "-") return;
+  let common = git(o.repo, ["rev-parse", "--git-common-dir"]).trim();
+  if (!path.isAbsolute(common)) common = path.resolve(o.repo, common);
+  writeEvidence(evidenceDir(common), `external-${head}`, externalRecord({ head, status, model: o.model, thinking: o.thinking, usage, report, reason }));
+}
+
+// A futás kulcsa a legfelső hibaág maszkolásához (K1: az --env-file kulcsa nincs a process.env-ben).
 let activeKey = null;
-export const currentKeyForMasking = () => activeKey;
 
 export async function main(argv) {
   const o = parseArgs(argv);
@@ -353,7 +517,7 @@ export async function main(argv) {
   const log = (m) => process.stderr.write(`[external-review] ${m}\n`);
   let key = process.env.GEMINI_API_KEY || null;
   if (!key && o["env-file"]) key = readKeyFromEnvFile(o["env-file"]);
-  activeKey = key; // a fő hibaág is ezt maszkolja (az --env-file kulcsa nincs a process.env-ben)
+  activeKey = key;
 
   // 1. bemenet
   let diff = null, changed = [], added = new Set(), skippedPaths = [], baseHash = "-", headHash = "-";
@@ -361,7 +525,7 @@ export async function main(argv) {
   if (hasRepo) headHash = git(o.repo, ["rev-parse", o.head]).trim();
   if (hasRepo && o.base) baseHash = git(o.repo, ["rev-parse", o.base]).trim();
   if (!o["no-diff"]) {
-    ({ diff, changed, added, skippedPaths } = collectDiff(o.repo, o.base, o.head, o["diff-mode"], o.paths));
+    ({ diff, changed, added, skippedPaths } = collectDiff(o.repo, o.base, o.head, o["diff-mode"], o.paths, { includeBankData: Boolean(o["include-bank-data"]) }));
     if (o["max-diff-kb"] && Buffer.byteLength(diff) > Number(o["max-diff-kb"]) * 1024) throw Object.assign(new Error(`A diff ${Math.round(Buffer.byteLength(diff) / 1024)} KB, a --max-diff-kb ${o["max-diff-kb"]} — bontsd kisebbre.`), { code: "TOO_BIG" });
   }
   const specs = [];
@@ -386,7 +550,7 @@ export async function main(argv) {
   const forced = new Set(o.fajl);
   if (hasRepo) for (const p of fileSet) {
     if (added.has(p) && !forced.has(p)) continue;
-    if (isExcludedPath(p)) continue;
+    if (isExcludedPath(p, { includeBankData: Boolean(o["include-bank-data"]) })) continue;
     const t = showFile(o.repo, o.head, p);
     if (t !== null && !t.includes("\u0000")) files.push({ path: p, text: t });
   }
@@ -420,7 +584,7 @@ export async function main(argv) {
     "",
     "> Külső, más rendszerű ellenőr (Google Gemini); nem lát a repóba, csak a kapott diffet / fájlokat — állításait a kódból ellenőrizni kell.",
     "",
-    `- Modell: \`${o.model}\` · gondolkodási szint: \`${thinking}\` (thinkingConfig.thinkingLevel=${thinking.toUpperCase()})`,
+    `- Modell: \`${o.model}\` · gondolkodási szint: \`${thinking}\` (${(o.api ?? "interactions") === "stream" ? `streamGenerateContent, thinkingLevel=${thinking.toUpperCase()}` : `Interactions API háttér-mód, thinking_level=${thinking}, max_output_tokens=${o["max-output-tokens"] ?? INTERACTION_MAX_OUTPUT_TOKENS}`})`,
     `- Dátum (UTC): ${new Date().toISOString()}`,
     `- Base / head: \`${baseHash}\` / \`${headHash}\``,
     `- Küldött anyag: ${sentKb} KB, becsült ~${estTokens} token${usage?.countTokens ? `, countTokens: ${usage.countTokens}` : ""}; teljes fájl: ${included.length} db, kihagyott teljes fájl: ${omitted.length} db`,
@@ -436,42 +600,51 @@ export async function main(argv) {
     const msg = "KIHAGYVA: nincs GEMINI_API_KEY (környezeti változó vagy --env-file).";
     fs.writeFileSync(o.ki, header(msg) + "\n");
     log(msg);
-    record(o, headHash, "skipped", null);
+    record(o, headHash, "skipped", null, o.ki, "nincs GEMINI_API_KEY");
     return o.strict ? 2 : 0;
   }
   const ct = await countTokens(o.model, key, systemText, userText).catch((e) => ({ error: maskSecrets(e.message, key) }));
   if (ct.totalTokens && ct.totalTokens > 1_000_000) throw Object.assign(new Error(`countTokens: ${ct.totalTokens} > 1 000 000`), { code: "TOO_BIG" });
   if (o["dry-run"]) {
     const msg = `PRÓBA (dry-run): generateContent nem futott. countTokens: ${ct.totalTokens ?? ct.error}`;
-    fs.writeFileSync(o.ki, header(msg, { countTokens: ct.totalTokens }, o.thinking) + "\n");
+    fs.writeFileSync(o.ki + ".proba.md", header(msg, { countTokens: ct.totalTokens }, o.thinking) + "\n"); // a valódi jelentést nem írja felül
     log(msg);
     process.stdout.write(JSON.stringify({ status: "dry-run", sentKb, estTokens, countTokens: ct.totalTokens ?? null, files: included.length, omitted: omitted.length }) + "\n");
     return 0;
   }
   let res;
   try {
-    res = await generate({ model: o.model, key, systemText, userText, thinking: o.thinking, log });
+    const api = o.api ?? "interactions";
+    const maxOut = o["max-output-tokens"] ? Number(o["max-output-tokens"]) : undefined;
+    res = api === "stream"
+      ? await generate({ model: o.model, key, systemText, userText, thinking: o.thinking, maxOutputTokens: maxOut, log })
+      : await generateInteraction({ model: o.model, key, systemText, userText, thinking: o.thinking, maxOutputTokens: maxOut, resumeId: o["resume-id"] ?? null, log,
+        onId: (id) => { fs.writeFileSync(o.ki + ".interaction-id", id + "\n"); log(`interakció: ${id}`); } });
   } catch (e) {
-    const status = e.code === "quota" ? `KIHAGYVA (kvóta / keret): ${maskSecrets(e.message, key)}` : `SIKERTELEN: ${maskSecrets(e.message, key)}`;
-    fs.writeFileSync(o.ki, header(status, { countTokens: ct.totalTokens }, o.thinking) + "\n");
+    const status = e.code === "quota" ? `KIHAGYVA (kvóta / keret): ${maskSecrets(e.message, key)}` : `SIKERTELEN (${e.code ?? "?"}, ${e.attempts ?? 1} próba): ${maskSecrets(e.message, key)}`;
+    fs.writeFileSync(o.ki + ".hiba.md", header(status, { countTokens: ct.totalTokens }, o.thinking) + "\n");
     log(status.slice(0, 300));
-    process.stdout.write(JSON.stringify({ status: e.code === "quota" ? "quota" : "error", sentKb, estTokens, countTokens: ct.totalTokens ?? null, ms: Date.now() - started }) + "\n");
-    record(o, headHash, e.code === "quota" ? "quota" : "error", null);
+    // „eredmény nélkül elégett”: ha nem 4xx-szel utasította el a szerver, a bemenet (és a gondolkodás) valószínűleg számlázott
+    const burned = ["TIMEOUT", "CONN", "INCOMPLETE"].includes(e.code) ? (ct.totalTokens ?? 0) * (e.attempts ?? 1) : 0;
+    process.stdout.write(JSON.stringify({ status: e.code === "quota" ? "quota" : "error", code: e.code, attempts: e.attempts ?? 1, burnedInputTokens: burned, usage: e.usage ?? undefined, sentKb, estTokens, countTokens: ct.totalTokens ?? null, ms: Date.now() - started }) + "\n");
+    record(o, headHash, e.code === "quota" ? "quota" : e.code === "INCOMPLETE" ? "incomplete" : "error", e.usage ?? null, o.ki + ".hiba.md", String(e.code ?? "hiba"));
     return e.code === "quota" ? (o.strict ? 2 : 0) : 3; // K2: kvóta / keret --strict mellett 2 (review J-b)
   }
-  const cand = res.candidates?.[0];
-  const text = (cand?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? "").join("");
-  const u = res.usageMetadata ?? {};
+  const u = res.usage ?? {};
   const ms = Date.now() - started;
   const usageMd = ["", "---", "", "## Token-felhasználás", "",
     `- Bemenet (promptTokenCount): ${u.promptTokenCount ?? "?"}`, `- Gondolkodás (thoughtsTokenCount): ${u.thoughtsTokenCount ?? "?"}`,
     `- Kimenet (candidatesTokenCount): ${u.candidatesTokenCount ?? "?"}`, `- Összesen (totalTokenCount): ${u.totalTokenCount ?? "?"}`,
-    `- finishReason: ${cand?.finishReason ?? "?"} · modellverzió: ${res.modelVersion ?? "?"} · futásidő: ${(ms / 1000).toFixed(1)} s`].join("\n");
-  const status = cand?.finishReason === "STOP" ? "LEFUTOTT" : `LEFUTOTT, DE finishReason=${cand?.finishReason ?? "?"} (a válasz csonka lehet)`;
-  fs.writeFileSync(o.ki, maskSecrets(header(status, { countTokens: ct.totalTokens }, o.thinking) + "\n" + text + "\n" + usageMd + "\n", key));
-  record(o, headHash, "ok", u);
-  process.stdout.write(JSON.stringify({ status: "ok", finishReason: cand?.finishReason, sentKb, estTokens, countTokens: ct.totalTokens ?? null, usage: u, ms }) + "\n");
-  return 0;
+    `- finishReason: ${res.finishReason} · modellverzió: ${res.modelVersion ?? "?"} · lépések / események: ${res.events} · próbák: ${res.attempts}${res.interactionId ? ` · interakció: ${res.interactionId}` : ""} · futásidő: ${(ms / 1000).toFixed(1)} s`].join("\n");
+  const ev = evaluateResponse(res);
+  const ok = ev.status === "ok";
+  const status = ok ? "LEFUTOTT" : `${ev.status === "blocked" ? "BLOKKOLT" : "HIÁNYOS"}: ${ev.reason}, ${res.text.length} karakter szöveg — NEM kész jelentés, a második vélemény HIÁNYZIK`;
+  // Hiányos / blokkolt választ nem mentünk a végleges néven (ne olvassa senki késznek).
+  const out = ok ? o.ki : o.ki + ".hianyos.md";
+  fs.writeFileSync(out, maskSecrets(header(status, { countTokens: ct.totalTokens }, o.thinking) + "\n" + res.text + "\n" + usageMd + "\n", key));
+  record(o, headHash, ev.status, u, out, ev.reason);
+  process.stdout.write(JSON.stringify({ status: ev.status, reason: ev.reason, finishReason: res.finishReason, textChars: res.text.length, sentKb, estTokens, countTokens: ct.totalTokens ?? null, usage: u, ms }) + "\n");
+  return ok ? 0 : 3;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
