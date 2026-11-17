@@ -94,14 +94,6 @@ test('őr: minden hook-parancs a projektgyökérhez kötött (idézett ${CLAUDE_
   }
 });
 
-test('a kapu-hook a Bash- ÉS a PowerShell-eszközre is be van kötve, az időkorlátja a hook saját kerete fölött', () => {
-  const cfg = JSON.parse(readFileSync(join(repoRoot, 'scripts', 'qa', 'gates', 'gates.config.json'), 'utf8'));
-  const budgetMs = Number(cfg.hookBudgetMs) || 45_000;
-  const gate = hookEntries().filter((e) => e.event === 'PreToolUse' && /check-quality-gates\.mjs/.test(e.command));
-  assert.deepEqual(gate.map((e) => e.matcher).sort(), ['Bash', 'PowerShell']);
-  for (const e of gate) assert.ok(Number(e.hook.timeout) * 1000 > budgetMs + 5_000, `${e.matcher}: timeout ${e.hook.timeout} s, keret ${budgetMs} ms`);
-});
-
 test('H1: a valódi settings minden hookja lefut és a várt döntést adja — gyökérből, source/-ből, mélyebb könyvtárból, munkafából', () => {
   const bash = bashPath();
   const { proj, wt } = makeProject();

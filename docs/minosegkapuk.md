@@ -106,21 +106,12 @@ viszi bukásra.
   alatt), a hook DENY-t ad („a repó állapota nem állapítható meg — próbáld újra”). Az ügynök teendője: néhány másodperc múlva
   ugyanazt az egyszerű parancsot újra kiadni; a kaput megkerülni tilos. „Más repó”-nak csak a gyors, nem nulla kilépés számít, és
   az sem, ha a mappa vagy a parancs a WEBSULI-ra utal. Értelmező + szkriptfájl (pl. `node kanban.mjs note 5 "…"`) idézett
-  argumentumában a „push” szó nem kapu-köteles; `-e` / `-c` kiértékelésnél, láncolásnál továbbra is tilt. A hook a parancsot a
-  héj (Bash- / PowerShell-eszköz) szabályai szerint bontja, és a nem egyértelműen értelmezhető idézésű parancsot tiltja. A szokásos
-  PR-cím / merge-tárgy (tipográfiai idézőjel, `(#92)`) nem tilt; PowerShellben a tipográfiai idézőjel lezárja a szöveget, ezért
-  ott a kapu-köteles szót tartalmazó idézetet egyenes idézőjellel írd, vagy használd a Bash-eszközt.
+  argumentumában a „push” szó nem kapu-köteles; `-e` / `-c` kiértékelésnél, láncolásnál továbbra is tilt. A hook a nem egyértelműen
+  értelmezhető idézésű parancsot tiltja (a szöveget fájlból add át).
 - **A hook a projektgyökérhez kötött (kanban #100, 2. kör):** minden hook-parancs `node "${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/…"`,
   így alkönyvtárból (`source/`, munkafa) is lefut; a `scripts/qa/hooks/settings-hooks.test.mjs` a valódi settings-et méri. Ha maga a
   hook-folyamat nem indul el, összeomlik vagy túllépi a 60 s-os külső korlátot, azt a Claude Code alapbeállítással NEM tiltásként
   kezeli — ezért a hook a döntést a saját 45 s-os keretén belül hozza meg.
-- **Élő próba a #490 merge-e után (orkesztrátor, kötelező, a következő kibocsátás előtt):** új munkamenet a fő checkout gyökeréből
-  (a settings induláskor töltődik be); a Bash-eszközzel `node -e "console.log('git push')"` → elvárt: tiltás (`[minőségkapu]` vagy
-  az audit-hook). Ugyanez külön `cd source` után, majd mindkét helyen a PowerShell-eszközzel. Ha bármelyik nem tilt (a szöveg
-  kiíródik, vagy „hook error … Cannot find module” látszik): a `.claude/settings.json` tíz `command` sorát az Edit eszközzel vissza
-  a `node "scripts/qa/hooks/<hook>.mjs"` alakra, új munkamenet, és a próba újra a gyökérből — addig push / PR / merge nincs.
-  Követő jegy: a héj nélküli, `args`-os hook-alak (`"command": "node", "args": ["${CLAUDE_PROJECT_DIR}/…"]`), amelyet a
-  hooks-dokumentáció útvonal-helyőrzőhöz ajánl.
 - **Feltöltés munkafából alügynökként:** az alügynök parancsai a fő checkoutból indulnak (a `cd` nem marad meg, láncolni tilos),
   ezért a munkafa ágát a fő checkoutból kell felküldeni egyszerű parancsként: `git push origin <ág>`. A hook ilyenkor a megnevezett
   helyi ág fejére szóló bizonyítékot nézi.

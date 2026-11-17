@@ -47,70 +47,42 @@ const EVAL_FLAGS = new Set(['-e', '-p', '--eval', '--print', '-c', '-E', '-pe', 
 const NON_EXEC = new Set(['echo', 'printf', 'grep', 'egrep', 'fgrep', 'rg', 'cat', 'head', 'tail', 'wc', 'less', 'more', 'findstr',
   'write-output', 'write-host', 'select-string', 'get-content', 'type', 'sls', 'gc']);
 const GH_PR = new RegExp(`${W('gh(?:\\.exe)?')}[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
+// A tokenizáló által nem hűen követhető idézés-alakok (a valódi héj másképp zárhatja le a szöveget).
+const AMBIGUOUS_QUOTING = /\$['"]|\\"|[‘-‟]/;
 export function detectGated(raw) {
   const s = String(raw ?? '');
   return GIT_PUSH.test(s) || GIT_PATH_PUSH.test(s) || GH_PR.test(s) || GH_PATH_PR.test(s) || /\/pulls\/\d+\/merge\b/i.test(s);
 }
 
-// PowerShell idézőjel-karakterei (a tipográfiaiak is idézőjelek ott); Bash-ben ezek közönséges karakterek.
-const PS_SQ = new Set(["'", '‘', '’', '‚', '‛']);
-const PS_DQ = new Set(['"', '“', '”', '„']);
-
 /**
- * Egyszerű parancs szavakra bontása a héj (`tool`: Bash | PowerShell) szabályai szerint. `{ ok: false, reason }`, ha a parancs nem
- * egyetlen egyszerű parancs: idézőjelen kívül láncoló / átirányító / csoportosító jel (`& | ; < > ( ) { }`, újsor), bárhol
- * parancshelyettesítés (`$(`, backtick), lezáratlan idézőjel, vagy olyan idézés, amelyet a tokenizáló az adott héjjal egyezően
- * nem tud feldolgozni (kanban #100, 2. kör).
- * - Bash: az egyszeres idézőjelen belül minden szó szerinti; a kettősön belül a `\` csak a `"`, `\`, `$` előtt escape; idézőjelen
- *   kívül a `\` a következő karaktert teszi szó szerintivé; a `$'…'` / `$"…"` nem egyértelmű → nem ok. A tipográfiai idézőjel
- *   közönséges karakter.
- * - PowerShell: a `\` mindig szó szerinti; a tipográfiai idézőjelek is idézőjelek; a duplázott idézőjel szó szerinti; a szó elején,
- *   idézőjelen kívül álló `#` megjegyzést kezd (a sor többi része nem fut); a `--%` (értelmezés leállítása) nem ok.
+ * Egyszerű parancs szavakra bontása. `{ ok: false, reason }`, ha a parancs nem egyetlen egyszerű parancs: idézőjelen kívül
+ * láncoló / átirányító / csoportosító jel (`& | ; < > ( ) { }`, újsor), bárhol parancshelyettesítés (`$(`, backtick), vagy lezáratlan
+ * idézőjel. Az egyszeres idézőjelen belüli szöveg szó szerinti.
  */
-export function tokenizeSimple(raw, { tool = 'Bash' } = {}) {
-  const ps = tool === 'PowerShell';
-  const isSq = (c) => (ps ? PS_SQ.has(c) : c === "'");
-  const isDq = (c) => (ps ? PS_DQ.has(c) : c === '"');
+export function tokenizeSimple(raw) {
   const s = String(raw ?? '').trim();
   const words = [];
   let word = '';
   let has = false;
   let q = null;
-  const push = () => { if (has) words.push(word); word = ''; has = false; };
   for (let i = 0; i < s.length; i += 1) {
     const c = s[i];
-    const n = s[i + 1];
-    if (q === 'sq') {
-      if (!isSq(c)) word += c;
-      else if (ps && n !== undefined && isSq(n)) { word += n; i += 1; }
-      else q = null;
-      continue;
-    }
-    if (c === '`' || (c === '$' && n === '(')) return { ok: false, reason: 'parancshelyettesítés / escape (`$(…)` / backtick)' };
-    if (q === 'dq') {
-      if (isDq(c)) {
-        if (ps && n !== undefined && isDq(n)) { word += n; i += 1; } else q = null;
-      } else if (!ps && c === '\\' && (n === '"' || n === '\\' || n === '$')) { word += n; i += 1; }
+    if (q === "'") { if (c === "'") q = null; else word += c; continue; }
+    if (c === '`' || (c === '$' && s[i + 1] === '(')) return { ok: false, reason: 'parancshelyettesítés (`$(…)` / backtick)' };
+    if (q === '"') {
+      if (c === '"') q = null;
+      else if (c === '\\' && (s[i + 1] === '"' || s[i + 1] === '\\')) { word += s[i + 1]; i += 1; }
       else word += c;
       continue;
     }
-    if (!ps && c === '$' && (n === "'" || n === '"')) return { ok: false, reason: 'nem egyértelműen értelmezhető idézés' };
-    if (ps && c === '#' && !has) break; // megjegyzés: a sor többi része nem fut
-    if (isSq(c)) { q = 'sq'; has = true; continue; }
-    if (isDq(c)) { q = 'dq'; has = true; continue; }
-    if (!ps && c === '\\') {
-      if (n === undefined || n === '\n' || n === '\r') return { ok: false, reason: 'sorfolytatás / lezáratlan escape' };
-      word += n; has = true; i += 1;
-      continue;
-    }
+    if (c === '"' || c === "'") { q = c; has = true; continue; }
     if ('&|;<>(){}\n\r'.includes(c)) return { ok: false, reason: `láncolás / átirányítás / alshell (\`${c === '\n' || c === '\r' ? 'újsor' : c}\`)` };
-    if (c === ' ' || c === '\t') { push(); continue; }
+    if (c === ' ' || c === '\t') { if (has) words.push(word); word = ''; has = false; continue; }
     word += c;
     has = true;
   }
   if (q) return { ok: false, reason: 'lezáratlan idézőjel' };
-  push();
-  if (ps && words.includes('--%')) return { ok: false, reason: 'nem egyértelműen értelmezhető idézés (`--%`)' };
+  if (has) words.push(word);
   return { ok: true, words };
 }
 
@@ -170,10 +142,12 @@ function parseFlags(args, valueSet, flagSet) {
  * Egy parancs terve: `{ kind: 'none' }` (nem kapu-köteles), `{ kind: 'deny', reason }`, `push`, `push-delete`, `pr-create`, `pr-merge`.
  */
 export function planCommand(raw, { tool = 'Bash' } = {}) {
-  // Kanban #100, 2. kör: a tokenizáló a héj (Bash / PowerShell) szabályai szerint bont; amit nem tud hűen feldolgozni → DENY.
-  const t = tokenizeSimple(raw, { tool });
-  // A kapu-kötelesség a nyers szövegen ÉS az idézés feloldása utáni szavakon is (a parancsnévbe szúrt idézőjel nem rejti el).
-  if (!detectGated(raw) && !(t.ok && detectGated(t.words.join(' ')))) return { kind: 'none' };
+  if (!detectGated(raw)) return { kind: 'none' };
+  // Kanban #100, 2. kör: olyan idézés, amelyet a tokenizáló nem tud a valódi héjjal egyezően értelmezni → kétség esetén DENY.
+  if (AMBIGUOUS_QUOTING.test(raw) || (tool === 'PowerShell' && raw.includes('#'))) {
+    return { kind: 'deny', reason: `${SIMPLE_HINT} (A parancs nem egyértelműen értelmezhető idézést tartalmaz — egyszerű idézéssel, vagy a szöveget fájlból add át.)` };
+  }
+  const t = tokenizeSimple(raw);
   if (!t.ok) return { kind: 'deny', reason: `${SIMPLE_HINT} (Talált: ${t.reason}.)` };
   const w = t.words;
   const head = (w[0] ?? '').toLowerCase();
