@@ -114,7 +114,8 @@ export function findActions(cmd, cwd, depth = 0, tool = 'Bash') {
       if (w.length && EVAL_WRAPPERS.has(exe(w[0]))) { nested = w.slice(1).filter((x) => !x.startsWith('-')).join(' '); w = []; break; }
       if (w.length && (w[0] === '&' || w[0] === '.' || WRAPPERS.has(exe(w[0])))) {
         w.shift();
-        while (w.length && w[0].startsWith('-') && !SHELL_CMD_FLAG.test(w[0])) {
+        // Előbb a burkoló értékes kapcsolója (`env -C <dir>`), csak utána a shell-kapcsoló minta (visszaellenőrzés X1).
+        while (w.length && w[0].startsWith('-') && (WRAPPER_VALUE_OPTS.has(w[0]) || !SHELL_CMD_FLAG.test(w[0]))) {
           const opt = w.shift();
           if (WRAPPER_VALUE_OPTS.has(opt)) w.shift();
         }

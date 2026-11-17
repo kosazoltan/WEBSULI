@@ -106,6 +106,10 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
   `record-review` a jelentés saját `Ítélet:` sorával egyezteti — a merge-et végző orkesztrátor ezt a helyi bizonyítékot nézze.
 - **Nem felismert alakok:** változóba tett parancs (`$c = '…'; & $c`), shell-függvény, szkriptfájlból indított feltöltés, és
   általában minden, amit a parancssor szövege nem mutat — ezekre a kapu-szabály (AGENTS.md) és a skillek vonatkoznak.
+- **Hamis DENY szkript-argumentumon:** `pwsh -File x.ps1 -e prod` — az `-e` kódolt-parancs rövidítésnek számít (szigorúbb irányba
+  téved; jegyre javasolt).
+- **A main-elmozdulás mérése** a CI-futás `base.sha`-ján alapul; ha az üres, a PR `baseRefOid`-jára esik vissza (UNVERIFIED, hogy
+  minden esetben a CI alapja-e — jegyre javasolt).
 - **Idézett, `<` / `>` jellel kezdődő ref** (`'<ag>'`) átirányításnak számít (ilyen ágnév gyakorlatilag nincs).
 - **A merge-kapu a PR-kommentek szerzőjét nem szűri** (nyilvános repó: bárki írhat ítélet-sort) — a helyi `review-<fej>.json` a
   megbízható forrás.

@@ -109,6 +109,7 @@ test('2. visszaellenőrzés W1–W4: PowerShell sor végi \\ nem folytatás; /C 
   assert.deepEqual(kinds('gh api --method=PUT repos/o/WEBSULI/pulls/9/merge'), ['pr-merge']);
   for (const f of ['-ec', '-enc', '-e', '-EncodedCommand']) assert.deepEqual(kinds(`powershell ${f} ZwBpAHQA`), ['deny'], `W4 ${f}`);
   assert.deepEqual(kinds('powershell -ExecutionPolicy Bypass -Command "git status"'), [], 'az -ExecutionPolicy nem kódolt parancs');
+  assert.deepEqual(kinds('env -C /d/repo/WEBSULI git push origin a'), ['push'], 'X1: env -C <dir> nem shell-kapcsoló');
 });
 
 test('review J1: WEBSULI-n kívüli mappából -R …/WEBSULI → DENY; más repóra nincs kimenet', () => {
