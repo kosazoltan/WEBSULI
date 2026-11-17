@@ -372,7 +372,7 @@ test.describe(`review #486 — hosszú válaszok és rajz-arány (${vp.width}×$
     await expect(page.getByTestId("sa-answers")).toHaveCount(0);
     const tWorld0 = (await probe(page)).simTime as number;
     await page.waitForTimeout(500);
-    expect(((await probe(page)).simTime as number) - tWorld0, "a lista zárva: a világ fut").toBeGreaterThan(200);
+    expect(((await probe(page)).simTime as number) - tWorld0, "a lista zárva: a világ fut (a megállított világ <= 34 ms-ot lépne; szoftveres WebGL-en kevés képkocka jut)").toBeGreaterThan(50);
     await page.getByTestId("sa-answers-open").tap();
     const list = page.getByTestId("sa-answers");
     await expect(list).toBeVisible({ timeout: 5_000 });
@@ -447,5 +447,67 @@ test.describe(`review #486 — hosszú válaszok és rajz-arány (${vp.width}×$
     );
     expect(alphas.every((a) => Number.isFinite(a) && a >= 0 && a <= 1), "a rajz-arány mindig 0..1").toBe(true);
     console.log(`[space-asteroid-play] rajz-arány: ${alphas.length} minta, ${new Set(alphas.map((a) => a.toFixed(2))).size} különböző érték`);
+  });
+});
+
+test.describe("review #486 — elforgatás nyitott kérdésnél", () => {
+  // fekvőben indul: az álló nézet keskenyebb, ott a régi (széles) helyen maradó kristály kilógna
+  test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+  test("álló ↔ fekvő váltás: minden kristály-gomb a vásznon belül, a kirajzolt hely a mag találati helye; az élesítés újraindul", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { question: true });
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    const px = async () => JSON.parse(String((await probe(page)).crystalPx)) as Array<[number, number] | null>;
+    const geometry = async () =>
+      page.evaluate(() => {
+        const chips = [...document.querySelectorAll<HTMLElement>('[data-testid="sa-crystals"] .sa-crystal')];
+        return {
+          iw: innerWidth,
+          ih: innerHeight,
+          boxes: chips.map((c) => {
+            const r = c.getBoundingClientRect();
+            return { l: r.left, r: r.right, t: r.top, b: r.bottom, cx: r.left + r.width / 2, cy: r.top + r.height / 2, vis: getComputedStyle(c).visibility };
+          }),
+        };
+      });
+    for (const vp of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+      { width: 360, height: 640 },
+    ]) {
+      const before = JSON.stringify(await px());
+      const shownBefore = (await probe(page)).crystalShownAt as number;
+      await page.setViewportSize(vp);
+      // előbb megvárjuk, hogy a geometria TÉNYLEG megváltozzon (a találati hely új aréna-méretből számolódik)
+      await expect.poll(async () => JSON.stringify(await px()), { timeout: 5_000 }).not.toBe(before);
+      expect((await probe(page)).crystalShownAt as number, "érdemi elmozdulásnál az élesítés újraindul").toBeGreaterThan(shownBefore);
+      await expect.poll(async () => (await probe(page)).crystalsArmed, { timeout: 3_000 }).toBe(1);
+      // a gomb-helyek a következő képkockára követik a magot
+      await expect
+        .poll(
+          async () => {
+            const [g, hits] = [await geometry(), await px()];
+            return g.boxes.every((b, i) => {
+              const h = hits[i];
+              return !!h && Math.abs(b.cx - h[0]) <= 3 && Math.abs(b.cy - h[1]) <= 3 && b.vis === "visible";
+            });
+          },
+          { timeout: 5_000 },
+        )
+        .toBe(true);
+      const g = await geometry();
+      expect(g.boxes.length).toBe(4);
+      for (const b of g.boxes) {
+        expect(b.l, `${vp.width}×${vp.height}: gomb a vásznon belül (bal)`).toBeGreaterThanOrEqual(0);
+        expect(b.r, "jobb").toBeLessThanOrEqual(g.iw);
+        expect(b.t, "felső").toBeGreaterThanOrEqual(0);
+        expect(b.b, "alsó").toBeLessThanOrEqual(g.ih);
+      }
+    }
   });
 });

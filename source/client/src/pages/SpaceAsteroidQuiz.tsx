@@ -89,6 +89,7 @@ import {
   crystalShards,
   crystalZoneFor,
   hitCrystal,
+  rezoneCrystals,
   spawnCrystals,
   stepCrystals,
   type Crystal,
@@ -1292,6 +1293,8 @@ export default function SpaceAsteroidQuiz() {
   const safeProbeRef = useRef<HTMLDivElement>(null);
   const crystalLayerRef = useRef<HTMLDivElement>(null);
   const listHoldRef = useRef(false);
+  /** Átméretezés / elforgatás nyitott kérdésnél: a mag új aréna-méretet kap, a kristályok helye újraszámolódik. */
+  const rezoneNowRef = useRef<() => void>(() => {});
   const bossFinaleRef = useRef<() => void>(() => {});
   /** A fix lépések közti rajz-arány (0..1): a meghajtó visszaadja; szünetben 1. */
   const alphaRef = useRef(1);
@@ -1346,6 +1349,17 @@ export default function SpaceAsteroidQuiz() {
       safeTopPx,
     });
   }, []);
+
+  rezoneNowRef.current = () => {
+    const list = crystalsRef.current;
+    const pres = qRef.current?.view().presentation;
+    if (list.length === 0 || !pres) return;
+    const before = list.map((c) => ({ x: c.homeX, y: c.homeY }));
+    // A mag az új aréna-méretből számol; a találat-vizsgálat (`crystalAt`) és a rajz ugyanezt a helyet olvassa.
+    rezoneCrystals(list, decideCrystalZone(pres.question.quiz.prompt), 1);
+    // Érdemi elmozdulásnál az élesítés újraindul (a kristály az új helyén is kapjon előjelzést).
+    if (list.some((c, i) => Math.hypot(c.homeX - before[i]!.x, c.homeY - before[i]!.y) > 0.3)) crystalShownAtRef.current = armClockRef.current;
+  };
 
   const q = usePlayQuestion({
     setup: { config: directorConfig, provider, startBand: adaptiveRef.current.band, seed: runSeedRef.current },
@@ -1657,6 +1671,18 @@ export default function SpaceAsteroidQuiz() {
           longLabels: crystalLayerRef.current?.dataset.long === "true" ? 1 : 0,
           bossDefeated: bossDefeatedRef.current ? 1 : 0,
           crystalClock: armClockRef.current,
+          crystalShownAt: Number.isFinite(crystalShownAtRef.current) ? crystalShownAtRef.current : -1,
+          // A mag találati helye vászon-pixelben (a kirajzolt gombbal vethető össze; átméretezés-teszt).
+          crystalPx: JSON.stringify(
+            crystalsRef.current.map((c) => {
+              const cam = sceneRefs.current?.camera;
+              const cv = sceneRefs.current?.renderer.domElement;
+              if (!cam || !cv) return null;
+              const v = new THREE.Vector3(c.x, c.y, 0.2).project(cam);
+              const r = cv.getBoundingClientRect();
+              return [Math.round(r.left + (v.x * 0.5 + 0.5) * r.width), Math.round(r.top + (-v.y * 0.5 + 0.5) * r.height)];
+            }),
+          ),
         };
       },
       forceState: (rawPatch) => {
@@ -1903,6 +1929,7 @@ export default function SpaceAsteroidQuiz() {
         visibleHalfWidth(camera.fov, camera.aspect, camera.position.z),
       );
       camera.updateProjectionMatrix();
+      rezoneNowRef.current();
     };
     handleResize();
     const ro = new ResizeObserver(handleResize);

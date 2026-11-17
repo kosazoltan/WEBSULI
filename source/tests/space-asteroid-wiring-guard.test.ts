@@ -131,7 +131,8 @@ test("J6a: a kristály-zónát a mag dönti el egyszer (nincs DOM-mérés / kép
   assert.match(code, /crystalZoneFor\(\{/);
   assert.match(code, /spawnCrystals\(p, decideCrystalZone\(p\.question\.quiz\.prompt\), runRngRef\.current\.crystal\.next\)/);
   assert.doesNotMatch(code, /querySelector<HTMLElement>\('\[data-testid="sa-question"\]/, "a lap nem méri a kérdés-kártyát");
-  assert.doesNotMatch(code, /rezoneCrystals\(/, "a rajz nem rendezi át a kristályokat");
+  // SPEC-VÁLTOZÁS 2026-11-17 (Vercel-lelet, átméretezés): az átrendezés csak az átméretezés ágon (`rezoneNowRef`) engedett; a RAJZ továbbra sem rendez át.
+  assert.doesNotMatch(code.slice(code.indexOf("const render = (now: number)")), /rezoneCrystals\(/, "a rajz nem rendezi át a kristályokat");
   assert.match(code, /if \(chip\.style\.visibility !== vis\) chip\.style\.visibility = vis;/);
   // a koppintás mozgó célra: pointer-események (közös `pointerTapHandlers`), nem `click`
   assert.match(code, /\{\.\.\.pointerTapHandlers\(crystalTaps, idx, \(\) => onAnswer\(idx\)\)\}/);
@@ -190,4 +191,10 @@ test("review #486 (CI): a shader-előmelegítés csak a KHR_parallel_shader_comp
   assert.match(code, /void renderer\.compileAsync\(scene, camera\)\.then\(cleanup, cleanup\);/);
   assert.match(code, /renderer\.compile\(scene, camera\);[\s\S]{0,80}window\.setTimeout\(cleanup, 1500\)/);
   assert.equal(code.split("compileAsync(").length - 1, 1, "a compileAsync egyetlen, feltételes hívás");
+});
+
+test("review #486 (Vercel): átméretezés / elforgatás nyitott kérdésnél a mag új aréna-méretből számolja újra a kristályok helyét, és az élesítés újraindul", () => {
+  assert.match(code, /camera\.updateProjectionMatrix\(\);\s*rezoneNowRef\.current\(\);/);
+  assert.match(code, /rezoneCrystals\(list, decideCrystalZone\(pres\.question\.quiz\.prompt\), 1\)/);
+  assert.match(code, /crystalShownAtRef\.current = armClockRef\.current;\s*\n?\s*};/);
 });
