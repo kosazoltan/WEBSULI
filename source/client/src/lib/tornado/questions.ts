@@ -160,29 +160,42 @@ export type MaterialRow = {
   correctIndex: number;
   explanation?: string | null;
   topic?: string | null;
+  /**
+   * Kanban #84 (J7b): a forrás-lecke VALÓDI tantárgya a szervertől (`quizTopic`-alak: „english” / „math” / „nature” /
+   * „hungarian” / felirat). Opcionális: régi szerver / ismeretlen tantárgy esetén hiányzik.
+   */
+  subject?: string | null;
 };
 
 /**
- * J7a (review #482 K1): a tananyag-sor tárgya. A `/api/games/material-quizzes` válasza NEM ad tantárgyat, csak
- * `topic`-ot, amely a valóságban háromféle: az AI-generátor egy szava (`english` / `math` / `nature` / `hungarian`),
- * a kanonikus bank tantárgy-felirata („angol nyelv”), vagy a régi Stúdió-leckéknél a lecke CÍME („Present Simple”,
- * „A francia forradalom”). A cím szövegéből tantárgyat kitalálni mindkét irányban téved, ezért a besorolás
- * KONZERVATÍV: tantárgya (`certain: true`) csak annak van, aminek a témája bizonyíthatóan matek vagy angol
- * (az egész téma ez a szó, vagy matek-előtaggal kezdődik). Minden más bizonytalan: „csak matek” és „csak angol”
- * módban nem jelenik meg, vegyes és kupon módban igen. (A végleges megoldás a szerver oldalán a forrás-lecke
- * tantárgyának kiadása — lásd a PR „ORKESZTRÁTOR-KÉRÉS” részét.)
+ * A tananyag-sor tárgya. Elsődleges forrás a szerver `subject` mezője (kanban #84): ha van, az dönt — angol / matek
+ * biztos, minden más tantárgy (természet, magyar, történelem …) a „csak matek” / „csak angol” módban nem jön.
+ *
+ * Tantárgy NÉLKÜLI (régi) tételnél a `topic` maradt, amely régi Stúdió-leckéknél a lecke CÍME („Present Simple”,
+ * „A francia forradalom”) — a cím szövegéből kitalálni mindkét irányban téved, ezért KONZERVATÍV (J7a, review #482 K1):
+ * biztos csak az egész téma angol / matek szava, illetve matek-előtag, ha a téma más tantárgy szavát nem tartalmazza
+ * (review: „matek: angol számnevek”). Az „X magyarul:” kérdés-alak nem bizonyít angolt (review: „Hund magyarul:” német).
+ * Minden más bizonytalan: „csak matek” és „csak angol” módban nem jelenik meg, vegyes és kupon módban igen.
  */
 const MATH_TOPIC = /^(math|matek|matematik\p{L}*)(?![\p{L}])/u;
 const ENGLISH_TOPIC = /^(english|angol|angol nyelv|angol szókincs)$/u;
+/** Matek-előtag mellett ezek bármelyike más (vagy vegyes) tantárgyat jelez → bizonytalan. */
+const OTHER_SUBJECT_WORD = /(?<![\p{L}])(angol|english|német|deutsch|francia|spanyol|olasz|orosz|latin|magyar|nyelvtan|irodalom|történelem|földrajz|biológia|kémia|fizika|ének|rajz)/u;
+const SERVER_ENGLISH = /^(english|angol(?: nyelv)?)$/u;
+const SERVER_MATH = /^(math|matek|matematika)$/u;
 
 export type MaterialSubject = { subject: Subject; certain: boolean };
 
-export function materialSubject(topic: string, prompt: string): MaterialSubject {
+export function materialSubject(topic: string, _prompt: string, serverSubject?: string | null): MaterialSubject {
+  const s = (serverSubject ?? "").trim().toLowerCase();
+  if (s) {
+    if (SERVER_ENGLISH.test(s)) return { subject: "english", certain: true };
+    if (SERVER_MATH.test(s)) return { subject: "math", certain: true };
+    return { subject: "math", certain: false };
+  }
   const t = topic.trim().toLowerCase();
   if (ENGLISH_TOPIC.test(t)) return { subject: "english", certain: true };
-  if (MATH_TOPIC.test(t)) return { subject: "math", certain: true };
-  // Téma nélkül a szóbank-szerű „X magyarul:” kérdés nyelvi; kifejezett témát a szöveg nem ír felül.
-  if (t === "" && /magyarul:/i.test(prompt)) return { subject: "english", certain: true };
+  if (MATH_TOPIC.test(t) && !OTHER_SUBJECT_WORD.test(t)) return { subject: "math", certain: true };
   return { subject: "math", certain: false };
 }
 
@@ -201,7 +214,7 @@ export function materialToQuestions(rows: readonly MaterialRow[], grade: number)
     const topic = (row.topic ?? "").toLowerCase();
     out.push({
       id: row.id ?? `material-${idx}`,
-      ...materialSubject(topic, row.prompt),
+      ...materialSubject(topic, row.prompt, row.subject),
       grade,
       prompt: row.prompt,
       options: options as string[],
