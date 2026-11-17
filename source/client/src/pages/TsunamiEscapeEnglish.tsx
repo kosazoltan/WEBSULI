@@ -1538,7 +1538,12 @@ export default function TsunamiEscapeEnglish() {
       const card = gatesRef.current?.querySelector<HTMLElement>(".play-question-card");
       if (!stage) return;
       const sr = stage.getBoundingClientRect();
-      const cardBottom = card ? card.getBoundingClientRect().bottom - sr.top : 200;
+      // D-J1a-18: a kártya alja a „sáv” (táblás) elrendezés szerint, a mód- és animációfüggetlen elrendezési dobozból — lista
+      // módban álló nézetben a kártya lecsúszik (flex-end), a belépő animáció pedig 10 px-et told rajta; ezekkel mérve a döntés
+      // beragadna a lista módba.
+      const bar = card?.parentElement;
+      const barTop = card && bar ? (getComputedStyle(bar).display === "block" ? card.offsetTop : parseFloat(getComputedStyle(bar).paddingTop) || 0) : 0;
+      const cardBottom = card && bar ? bar.getBoundingClientRect().top + barTop + card.offsetHeight - sr.top : 200;
       const { centers, width } = gateLayout(sr.width, viewRef.current.laneScreenX);
       // D-J1a-15 (review #483, K4): a táblák alsó széle ne lógjon a futó vetített feje alá (fekvő nézetben a kártya nő).
       // D-J1a-18: a tábla várható magassága a feliratból; ha a táblák így nem férnek a kártya és a fej közé → lista mód.
