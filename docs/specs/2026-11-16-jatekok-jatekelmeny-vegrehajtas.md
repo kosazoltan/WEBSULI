@@ -1707,6 +1707,27 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
 24. **Fekvő lista (R4):** alacsony fekvő nézetben a teljes válaszok listája a bal oldalon áll (a bal felső panel helyén), nem a
     jármű és az út fölött; a lista méretét kérdésenként egyszer mérjük (nincs képkockánkénti layout-olvasás).
 
+#### J7b döntések — a harmadik ellenőrzés után (2026-11-17; orkesztrátori döntés: (B) opció; a 12., 21. és 22. pontot felülírják)
+
+25. **Szándék csak egyértelmű gesztus (V1, a 21. pont helyett):** a VÁLASZT koppintás egy táblára (az a tábla a válasz) vagy az
+    1–3 billentyű adja azonnal. A kapukat a kérdés megjelenése után ≥ 1 s-mal (minimális olvasás) LENYOMOTT fék vagy hátrahúzott
+    gáz rögzíti (felfutó él: a megjelenés előtt / az első 1 s-ban lenyomott és tovább tartott fék vagy tolatás nem szándék — az
+    akadály miatti fékezés nem válaszol), a pillanatnyi menetirányhoz igazítva; utána a kormány visz a kiválasztott kapuhoz. A
+    kormánymozdulat ÖNMAGÁBAN soha nem szándék és nem rögzít (kanyar, úttartás, egyenesítés, rezgés nem válaszolhat). A
+    feladat-felirat egy sorban megmondja: „koppints a jó táblára, vagy fékezz, és hajts át a kapuján” (a súgóban is).
+26. **Határidő (R2 maradéka, a 22. pont pontosítása):** rögzüléskor az ablak legalább a LEGTÁVOLABBI kapuig vezető út
+    (egyenes táv × 1,3 a fordulás miatt) ideje + 0,6 s; az érkezést legalább 8 egység/s-mal számoljuk, és a hosszabbítás
+    legfeljebb +5 s (álló járműnél nem nő az ablak korlátlanul, Ú5). A rögzítés után a jó kapu felé kormányzó bot nem jár le.
+27. **Időcsík (R2-mellékhatás):** a hosszabbítás a közös `QuestionPresentation.windowMs`-t írja (a lejárat, a `pick` és az
+    áramlat ugyanazt olvassa). A csík nem töltődik vissza: rögzüléskor a lap a csík teljes hosszát úgy számolja (`barWindowMs` =
+    maradék_új × ablak_régi / maradék_régi), hogy a csík a rögzülés pillanatában ugyanott álljon, és simán a végső határidőn
+    fogyjon el. A másodperc-kijelzés a valódi maradékot mutatja.
+28. **Teszt-integritás (V2):** a K4 elvárása (minden modellnél kérdéssel ≥ kérdés nélkül, 20 seed) változatlanul visszaáll; a
+    gyenge modell vereségének okát a játékban javítjuk, nem a tesztben.
+29. **Sim-botok (Ú4, Ú8):** a nem olvasó vezető botok a kérdés ALATT is vezetnek (rezgés, a kérdéssel induló kanyar +
+    egyenesítés, 7 s-onkénti útkanyar, véletlen kormány, az olvasási küszöb előtti fékezés / tolatás) — véletlen válasz 0. A mindig
+    jót választó bot két úton mér: koppintás (közvetlen válasz, mint a lapon) és fék + kormány (rögzítés, áthajtás).
+
 ### J7c — zaj-alapú tornádópálya, Műszer-kalibrálás (Q2), szupercella (Opus)
 
 1. Állapot-sor commit.
