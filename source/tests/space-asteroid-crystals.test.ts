@@ -3,8 +3,9 @@ import test from "node:test";
 
 import { createRng } from "../shared/game-rng";
 import {
+  CRYSTAL_FLOOR_CLEARANCE,
   CRYSTAL_HIT_FACTOR,
-  CRYSTAL_PLAYER_GAP,
+  CRYSTAL_MIN_ZONE_HEIGHT,
   CRYSTAL_RADIUS,
   CRYSTAL_SHARD_COUNT,
   CRYSTAL_SHARD_VY_MAX,
@@ -13,6 +14,7 @@ import {
   crystalBounds,
   crystalShards,
   hitCrystal,
+  rezoneCrystals,
   spawnCrystals,
   stepCrystals,
   type CrystalPresentation,
@@ -29,11 +31,23 @@ const pres = (n: 3 | 4, correct = 0, id = 1): CrystalPresentation => ({
   options: Array.from({ length: n }, (_, i) => ({ label: `válasz ${i + 1}`, correct: i === correct })),
 });
 const bounds = (halfWidth = 8.9) => crystalBounds({ halfWidth, minY: 0.5, maxY: 6.2 });
+/** A modul nem nulla lebegést is helyesen kezeli (az alapérték 0: a cél áll) — a mozgás-tesztek ezt kérik. */
+const DRIFT = { x: 0.4, y: 0.35 };
 
-test("a kristályzóna a játékos mozgássávja fölött marad, akármilyen alsó szélt kérünk", () => {
-  const b = crystalBounds({ halfWidth: 9, minY: -20, maxY: 40 });
-  assert.ok(b.minY >= PLAYER_Y_MAX + CRYSTAL_PLAYER_GAP + CRYSTAL_RADIUS - 1e-9, `minY ${b.minY}`);
-  assert.ok(b.maxY >= b.minY);
+test("a kristályzóna a hajó legfelső helye fölött marad, ha van hely; különben a felső perembe kapaszkodva a minimum-magasságot tartja", () => {
+  // elég hely: a kért alsó perem a hajó fölötti padló alá nem mehet
+  const roomy = crystalBounds({ halfWidth: 9, minY: -20, maxY: 6 });
+  assert.ok(roomy.minY >= PLAYER_Y_MAX + CRYSTAL_FLOOR_CLEARANCE - 1e-9, `minY ${roomy.minY}`);
+  assert.ok(roomy.maxY - roomy.minY >= CRYSTAL_MIN_ZONE_HEIGHT - 1e-9);
+  // szűk hely (hosszú kérdés: a kártya alatt alig maradt hely): a zóna a felső pereméből lefelé nyúlik, a magassága megvan
+  const tight = crystalBounds({ halfWidth: 9, minY: 3.5, maxY: 4.5 });
+  assert.ok(Math.abs(tight.maxY - tight.minY - CRYSTAL_MIN_ZONE_HEIGHT) < 1e-9, `magasság ${tight.maxY - tight.minY}`);
+  assert.equal(tight.maxY, 4.5);
+  // a pálya tetején belül marad
+  const high = crystalBounds({ halfWidth: 9, minY: 3, maxY: 40 });
+  assert.ok(high.maxY <= 12 - CRYSTAL_RADIUS + 1e-9);
+  assert.ok(high.maxY >= high.minY);
+  const b = roomy;
   // érvénytelen félszélesség: biztonságos alapérték, nem NaN
   const bad = crystalBounds({ halfWidth: Number.NaN, minY: 0, maxY: 6 });
   assert.ok(Number.isFinite(bad.minX) && bad.minX < bad.maxX);
@@ -64,15 +78,15 @@ test("spawn: azonos seed → azonos kristályok; más seed → más lebegés (de
   assert.notDeepEqual(a.map((x) => x.phase), c.map((x) => x.phase));
 });
 
-test("a kristályok a felső sávban lebegnek és soha nem érnek a játékos mozgássávjába (60 mp lebegés, sok seed, keskeny és széles nézet)", () => {
+test("a kristályok a zónájukban lebegnek és soha nem érnek a hajó legfelső helyére (60 mp lebegés, sok seed, keskeny és széles nézet)", () => {
   for (const halfWidth of [6.2, 8.9, 20]) {
     for (let seed = 1; seed <= 30; seed++) {
       const b = bounds(halfWidth);
-      const cs = spawnCrystals(pres(seed % 2 === 0 ? 4 : 3), b, createRng(seed).next);
+      const cs = spawnCrystals(pres(seed % 2 === 0 ? 4 : 3), b, createRng(seed).next, DRIFT);
       for (let step = 0; step < 3600; step++) {
         stepCrystals(cs, 1 / 60);
         for (const c of cs) {
-          assert.ok(c.y - CRYSTAL_RADIUS * CRYSTAL_HIT_FACTOR > PLAYER_Y_MAX + 1.5, `seed ${seed}: a kristály (${c.y.toFixed(2)}) a hajó sávjába ért`);
+          assert.ok(c.y - CRYSTAL_RADIUS * CRYSTAL_HIT_FACTOR > PLAYER_Y_MAX - 0.3, `seed ${seed}: a kristály (${c.y.toFixed(2)}) a hajó legfelső helyére ért`);
           assert.ok(c.y >= b.minY - 1e-9 && c.y <= b.maxY + 1e-9, `seed ${seed}: kiesett a zónából (${c.y})`);
           assert.ok(c.x >= b.minX - 1e-9 && c.x <= b.maxX + 1e-9, `seed ${seed}: kiesett a zónából (${c.x})`);
         }
@@ -84,7 +98,7 @@ test("a kristályok a felső sávban lebegnek és soha nem érnek a játékos mo
 test("a kristályok soha nem fedik egymást: két kristály középpontja ≥ 2 × sugár (a mobil mérő M2 pontja)", () => {
   for (const halfWidth of [5.5, 8.9, 20]) {
     for (let seed = 1; seed <= 40; seed++) {
-      const cs = spawnCrystals(pres(4), bounds(halfWidth), createRng(seed * 31).next);
+      const cs = spawnCrystals(pres(4), bounds(halfWidth), createRng(seed * 31).next, DRIFT);
       for (let step = 0; step < 1800; step++) {
         stepCrystals(cs, 1 / 60);
         for (let i = 0; i < cs.length; i++) {
@@ -99,7 +113,7 @@ test("a kristályok soha nem fedik egymást: két kristály középpontja ≥ 2 
 });
 
 test("stepCrystals: a halott kristály áll, a nem pozitív lépés nem mozdít", () => {
-  const cs = spawnCrystals(pres(3), bounds(), createRng(3).next);
+  const cs = spawnCrystals(pres(3), bounds(), createRng(3).next, DRIFT);
   const before = cs.map((c) => [c.x, c.y]);
   stepCrystals(cs, 0);
   stepCrystals(cs, -1);
@@ -148,4 +162,38 @@ test("hasadás: a rossz kristályból 3 apró (1-es) szikla hasad, szétnyílva,
   assert.ok(shards[0]!.vx < shards[2]!.vx);
   assert.ok(shards[0]!.x < shards[1]!.x && shards[1]!.x < shards[2]!.x);
   assert.deepEqual(shards, crystalShards({ x: 2, y: 4 }, createRng(21).next));
+});
+
+test("rezoneCrystals: a zóna változásakor a kristályok az új zónába húzódnak (nem ugranak), és közben sem fedik egymást", () => {
+  const cs = spawnCrystals(pres(4), bounds(), createRng(4).next, DRIFT);
+  const before = cs.map((c) => c.homeY);
+  // a kártya megnőtt: a zóna lejjebb csúszik
+  const lower = crystalBounds({ halfWidth: 8.9, minY: -0.5, maxY: 3.6 });
+  rezoneCrystals(cs, lower, 0.3, DRIFT);
+  assert.ok(cs.every((c, i) => c.homeY < before[i]!), "egy lépésben elindul lefelé");
+  assert.ok(cs.every((c) => c.homeY > lower.minY - 0.01), "de nem ugrik át a célon");
+  for (let k = 0; k < 40; k++) {
+    rezoneCrystals(cs, lower, 0.3, DRIFT);
+    stepCrystals(cs, 1 / 60);
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) assert.ok(Math.hypot(cs[i]!.x - cs[j]!.x, cs[i]!.y - cs[j]!.y) >= CRYSTAL_RADIUS * 2);
+  }
+  for (const c of cs) {
+    assert.ok(c.y >= lower.minY - 1e-6 && c.y <= lower.maxY + 1e-6, `kiesett az új zónából: ${c.y}`);
+    assert.ok(c.x >= lower.minX - 1e-6 && c.x <= lower.maxX + 1e-6);
+  }
+  // ease = 1: azonnal átrendez; egy kristálynál nincs mit
+  rezoneCrystals(cs, bounds(), 1, DRIFT);
+  assert.ok(cs.every((c) => c.homeY >= bounds().minY - 1e-9 && c.homeY <= bounds().maxY + 1e-9));
+  rezoneCrystals([cs[0]!], bounds(), 1, DRIFT);
+});
+
+test("alapértelmezésben a válaszcél ÁLL (a lebegés a nézeté): hosszú lépésnél sem mozdul, és a lebegő változat tényleg mozog (a modul mindkettőt kezeli)", () => {
+  const still = spawnCrystals(pres(4), bounds(), createRng(8).next);
+  const start = still.map((c) => [c.x, c.y]);
+  for (let i = 0; i < 600; i++) stepCrystals(still, 1 / 60);
+  assert.deepEqual(still.map((c) => [c.x, c.y]), start, "az álló célpont elmozdult");
+  const moving = spawnCrystals(pres(4), bounds(), createRng(8).next, DRIFT);
+  const m0 = moving.map((c) => [c.x, c.y]);
+  for (let i = 0; i < 120; i++) stepCrystals(moving, 1 / 60);
+  assert.notDeepEqual(moving.map((c) => [c.x, c.y]), m0, "a lebegő célpont nem mozdul");
 });

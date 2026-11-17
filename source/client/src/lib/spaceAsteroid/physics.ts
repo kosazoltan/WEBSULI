@@ -177,6 +177,14 @@ export function waveSpawnInterval(wave: number, band: number): number {
 /** A hullám-felirat („HULLÁM n”) látszási ideje (mp) — a hullámok közt nincs kapu, csak ez a felirat. */
 export const WAVE_BANNER_SEC = 2;
 
+/**
+ * Az ellenfelek érkezési magassága: közvetlenül a látható sáv teteje fölött (a kamera a játéksíkból a +8,15 magasságig lát,
+ * `CAMERA_*`): az első szikla ~1 mp-en belül a képen van (terv 5.6 „az első sziklák 1 mp-nél”), nincs néma, üres kezdés. A
+ * korábbi 12,6–14,2 magasságról a szikla ~4–5 mp-ig a kép fölött utazott.
+ */
+export const SPAWN_Y_MIN = 8.6;
+export const SPAWN_Y_MAX = 10.2;
+
 /** Ütközés után ennyi mp-ig sérthetetlen a hajó (végrehajtás J6a: „az ütközés csak élet −1 és 2 mp sérthetetlenség”). */
 export const HIT_INVULN_SEC = 2;
 

@@ -50,3 +50,61 @@ test("a komment-szűrő önellenőrzése: kikommentezett hívás nem számít", 
   const fake = `integratePlayer(p, i, dt);\n// integratePlayer(\n/* integratePlayer( */`;
   assert.equal(countCalls(stripComments(fake), "integratePlayer"), 1);
 });
+
+/* ------------------------------------------------------------------------------------------------------------------ *
+ * J6a — a kvíz-kapuk megszűntek; a kérdés a világban, kristály-válaszként érkezik (végrehajtás J6a 3–4.; terv 5.6).
+ * A régi „kvíz-kapu” bekötést ez a fájl nem rögzítette (nincs `enqueueQuiz` / hullám-vég kapu eset), ezért nincs mit cserélni;
+ * az új bekötés külön esetekben: `director.tick` (a meghajtón át) és `director.answer` (a kristály-ütközésben).
+ * ------------------------------------------------------------------------------------------------------------------ */
+
+const sim = stripComments(readFileSync(join(root, "client/src/lib/spaceAsteroid/sim.ts"), "utf8"));
+
+test("J6a: nincs kvíz-kapu — se induló, se hullám-vég, se ütközés-kvíz, se idő-limit", () => {
+  assert.doesNotMatch(code, /enqueueQuiz|ROUND_LIMIT_SEC|QuizReason|quizReason|activeQuiz|setTimeLeft|timeLeft/, "kvíz-kapu / kör-óra maradt a lapon");
+  assert.doesNotMatch(code, /role="dialog"|aria-modal|Mini-teszt/, "modális kvízréteg maradt a lapon");
+  // az ütközés csak élet −1 és 2 mp sérthetetlenség
+  const hit = code.slice(code.indexOf("const handleHit"), code.indexOf("const applyPickup"));
+  assert.match(hit, /livesRef\.current = nextLives;/);
+  assert.match(hit, /playerRef\.current\.invuln = HIT_INVULN_SEC;/);
+  assert.doesNotMatch(hit, /quiz|request\(/i, "az ütközés kérdést indít");
+  // a hamis „Megúsztál egy kvízt!” felirat helyett „+1 élet!”
+  assert.doesNotMatch(code, /Megúsztál/);
+  assert.match(code, /setSavedToast\("\+1 élet!"\)/);
+});
+
+test("J6a: a kérdés-ütemező a meghajtóban fut (director.tick), a kristály-ütközés a választ adja (director.answer)", () => {
+  assert.ok(countCalls(code, "usePlayQuestion") >= 1, "nincs usePlayQuestion");
+  assert.ok(countCalls(code, "createAsteroidDriver") >= 1, "nincs közös meghajtó");
+  // a hurok a meghajtót hívja a valós képkocka-idővel és a szünet-állapottal (a fix lépésű hurok a meghajtóé)
+  assert.match(code, /driver\.frame\(realDt, pausedRef\.current\)/);
+  assert.match(code, /step: \(dtMs\) => tickRef\.current\(dtMs \/ 1000\)/, "a világ lépése nem a fix lépésű hurokból jön");
+  // a meghajtó a nyugodt pillanatban hívja a kérdés-sáv képkockáját (az a director.tick-et)
+  assert.match(sim, /q\.frame\(clock, \{ calm: pace\.calm\(\) \}\)/);
+  assert.match(sim, /loop\.setTimeScale\(paused \? 0 : q \? q\.timeScale\(\) : 1\)/);
+  // a lövedék-kristály ütközés = válasz (a választ a kérdés-sáv állapotgépe adja a directornak)
+  const tick = code.slice(code.indexOf("const tick = (dt: number)"), code.indexOf("const enemyRadius"));
+  assert.match(tick, /crystalAt\(crystals, b\.x, b\.y\)[\s\S]{0,160}onAnswer\(c\.optionIndex\)/);
+  assert.match(code, /qRef\.current\.pick\(idx, driverRef\.current\?\.clockMs\(\)\)/);
+  assert.match(code, /const onAnswer = \(idx: number\) => \{/);
+});
+
+test("J6a: a célzássegéd csak az ellenfeleket kapja — a kristály kiválasztása a játékosé (U-J6-1)", () => {
+  const call = code.slice(code.indexOf("aimAssistVx("), code.indexOf("aimAssistVx(") + 200);
+  assert.match(call, /enemiesRef\.current\.map/);
+  assert.doesNotMatch(call, /crystal/i, "a célzássegéd a kristályokat is célpontnak veszi");
+});
+
+test("J6a: a lap játékmenet-kódja seedelt — nincs Math.random / Date.now (K.6 őr), a hullám-képlet a physics.ts-ből jön", () => {
+  assert.doesNotMatch(code, /\bMath\s*\.\s*random\b|\bDate\s*\.\s*now\b/);
+  for (const name of ["waveEnemyCount", "waveSpawnInterval", "pickEnemyKind", "pickRockSize", "enemyHp", "waveBaseVy"]) {
+    assert.ok(countCalls(code, name) >= 1, `a lap nem a közös ${name}-t hívja`);
+  }
+  assert.equal(code.match(/const BOSS_FINAL_WAVE = BOSS_WAVE;/)?.length, 1);
+});
+
+test("J6a: a HUD ≤ 10 Hz-es pillanatkép — a játékhurok nem ír React-állapotot (KSZ-9)", () => {
+  const tick = code.slice(code.indexOf("const tick = (dt: number)"), code.indexOf("const enemyRadius"));
+  assert.doesNotMatch(tick, /\bset[A-Z]\w*\(/, "React setState a tick-ben");
+  assert.match(code, /const HUD_STEP_MS = 100;/);
+  assert.match(code, /publishHud\(\);/);
+});

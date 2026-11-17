@@ -34,6 +34,7 @@ import { fitsAllViewports } from "@/game-engine/play/promptFit";
 import type { RunStatsSnapshot } from "@/game-engine/play/runStats";
 
 import {
+  crystalLabelsFit,
   crystalShards,
   hitCrystal,
   spawnCrystals,
@@ -46,6 +47,8 @@ import {
   GAME_H,
   HIT_INVULN_SEC,
   PLAYER_Y_MAX,
+  SPAWN_Y_MAX,
+  SPAWN_Y_MIN,
   enemyHp,
   pickEnemyKind,
   pickRockSize,
@@ -87,7 +90,7 @@ export function asteroidDirectorConfig(grade: number | null): DirectorConfig {
     slowMo: ASTEROID_SLOW_MO,
     grade,
     readingAware: true,
-    promptFits: (quiz) => fitsAllViewports(quiz, { grade, baseWindowMs }).ok,
+    promptFits: (quiz) => crystalLabelsFit(quiz.options) && fitsAllViewports(quiz, { grade, baseWindowMs }).ok,
   };
 }
 
@@ -285,7 +288,7 @@ export function createAsteroidWorld(opts: { seed: number | string; band: () => n
     const size = kind === "rock" ? pickRockSize(rng.next()) : 3;
     const baseVy = waveBaseVy(wave);
     const vy = kind === "alien" ? -0.55 : kind === "fighter" ? -0.85 : baseVy + range(rng.next(), -0.4, 0) - (3 - size) * 0.25;
-    threats.push({ id: nextId++, kind, size, hp: enemyHp(kind, size), y: GAME_H / 2 + range(rng.next(), 0.6, 2.2), vy, fire: kind === "fighter" ? range(rng.next(), 1.0, 2.0) : 0 });
+    threats.push({ id: nextId++, kind, size, hp: enemyHp(kind, size), y: range(rng.next(), SPAWN_Y_MIN, SPAWN_Y_MAX), vy, fire: kind === "fighter" ? range(rng.next(), 1.0, 2.0) : 0 });
   };
 
   const addScore = (t: WorldThreat): void => {

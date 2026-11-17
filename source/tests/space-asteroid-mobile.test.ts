@@ -83,14 +83,19 @@ test("érintés-észlelés: useTouchCapable (useCoarsePointer helyett), képerny
 
 /* ------------------------------- szünet ------------------------------- */
 
-test("szünet: HUD-gomb, automatikus szünet, kvízréteg saját szünetgombja, P billentyű", () => {
+// SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md J6a 3.: „a `"quiz"` fázis és a modál megszűnik”;
+// K.2: a `sa-quiz-pause` testid a kérdés-sáv `pauseTestId` propján él): a teljes képernyős kvízréteg megszűnt, ezért a szünetgomb a
+// NEM modális kérdés-sávon van (`InlineQuestion` `pauseTestId` + `onPause`) — a követelmény változatlan: a kérdés alatt is meg lehet állni.
+test("szünet: HUD-gomb, automatikus szünet, a kérdés-sáv saját szünetgombja, P billentyű", () => {
   assert.match(page, /<GameHud[\s\S]{0,120}onPause=\{pauseGame\}/);
   assert.match(page, /onAutoPause=\{pauseGame\}/);
-  assert.match(page, /data-testid="sa-quiz-pause"[\s\S]{0,60}onClick=\{pauseGame\}/);
+  assert.match(page, /pauseTestId="sa-quiz-pause"[\s\S]{0,60}onPause=\{pauseGame\}/);
   assert.match(page, /<PauseMenu open=\{paused && inRun\} onResume=\{resumeGame\} onRestart=\{startNewRun\} onExit=\{endRound\}/);
   assert.match(page, /if \(pausedRef\.current\) resumeGame\(\);\s*else pauseGame\(\);/);
-  // A kvíz közben is meg lehet állni (nem csak „play” fázisban).
-  assert.match(body("pauseGame"), /phaseRef\.current !== "play" && phaseRef\.current !== "quiz"/);
+  // SPEC-VÁLTOZÁS 2026-11-17 (J6a 3.): nincs „quiz” fázis — a kérdés a `play` alatti al-állapot, a szünet bármikor kérhető a `play`-ben.
+  assert.match(body("pauseGame"), /if \(phaseRef\.current !== "play"\) return;/);
+  // (a `forceState({ phase: "quiz" })` kompatibilis álnév marad — K.2 —, de nincs `quiz` FÁZIS és nincs `setPhase("quiz")`)
+  assert.doesNotMatch(page, /type Phase = [^;]*"quiz"|setPhase("quiz")|phaseRef.current === "quiz"/, "a „quiz” fázis megszűnt (J6a)");
 });
 
 test("szünetkor és fókuszvesztéskor a vezérlés elenged (touchRef, keysRef, joystick)", () => {
@@ -102,10 +107,16 @@ test("szünetkor és fókuszvesztéskor a vezérlés elenged (touchRef, keysRef,
   assert.match(page, /const onBlur = \(\) => releaseControls\(\);/);
 });
 
-test("a játékóra és az erő-időzítő a kvíz alatt és szünetben áll", () => {
-  const clocks = page.match(/if \(phase !== "play" \|\| paused\) return;/g) ?? [];
-  assert.ok(clocks.length >= 2, "a kör-óra és az erő-időzítő is csak play && !paused alatt fut");
-  assert.match(page, /if \(phaseRef\.current !== "play" \|\| pausedRef\.current\) \{/, "a tick nem áll szünetben / kvízben");
+// SPEC-VÁLTOZÁS 2026-11-17 (J6a 3.: „`ROUND_LIMIT_SEC` óra megszűnik”, életalapú vég): a kör-óra (`setInterval`) megszűnt, az erő- és a
+// pajzs-időzítő a tick-ben, JÁTÉKIDŐBEN fogy (a meghajtó szünetben és a „Miért?” alatt nem lépteti a világot) — a követelmény
+// változatlan: szünetben egyik óra sem megy.
+test("nincs kör-óra; az erő- és a pajzs-időzítő a tick-ben fogy, szünetben és a „Miért?” alatt áll", () => {
+  assert.doesNotMatch(page, /ROUND_LIMIT_SEC|setInterval\(/, "a kör-óra / valós idejű időzítő megszűnt (életalapú vég)");
+  assert.match(page, /powerTimerRef\.current = Math\.max\(0, powerTimerRef\.current - dt\);/, "az erő-időzítő nem a tick-ben fogy");
+  assert.match(page, /shieldTimerRef\.current = Math\.max\(0, shieldTimerRef\.current - dt\);/, "a pajzs-időzítő nem a tick-ben fogy");
+  assert.match(page, /if \(phaseRef\.current !== "play" \|\| pausedRef\.current\) \{/, "a tick nem áll szünetben");
+  assert.match(page, /pausedRef\.current = paused \|\| whyOpen;/, "a „Miért?” nem szünetelteti a játékot");
+  assert.match(page, /driver\.frame\(realDt, pausedRef\.current\)/, "a meghajtó nem kapja meg a szünetet");
   assert.match(body("detonateBomb"), /phaseRef\.current !== "play" \|\| pausedRef\.current/);
 });
 
@@ -120,11 +131,12 @@ test("új futás / kör vége / menü: új futás-azonosító és a függő idő
   assert.match(body("pushRunTimeout"), /if \(runIdRef\.current !== runId\) return;/);
 });
 
-test("a győzelmi robbanás utáni eredmény-váltás futáshoz kötött, és szünet / kvíz alatt kivár", () => {
+// SPEC-VÁLTOZÁS 2026-11-17 (J6a 3.): nincs kvíz-fázis — a robbanás utáni eredmény-váltás a szünetben vár ki (a „Miért?” szünet is).
+test("a győzelmi robbanás utáni eredmény-váltás futáshoz kötött, és szünet alatt kivár", () => {
   assert.doesNotMatch(page, /pushTimeout\(\(\) => setPhase\("over"\)/, "kötetlen késleltetett fázisváltás maradt");
   const fin = body("finishRunAfter");
   assert.match(fin, /pushRunTimeout\(/);
-  assert.match(fin, /if \(pausedRef\.current \|\| phaseRef\.current === "quiz"\) \{\s*finishRunAfter\(250\);/);
+  assert.match(fin, /if \(pausedRef\.current\) \{\s*finishRunAfter\(250\);/);
   assert.match(fin, /if \(phaseRef\.current !== "play"\) return;/);
   assert.match(page, /finishRunAfter\(1500\)/);
 });
@@ -137,10 +149,13 @@ test("rezgés: rossz válasz error, jó success, találat / robbanás hit", () =
   assert.ok((page.match(/haptics\("hit"\)/g) ?? []).length >= 4, "találat, robbanás, ütközés, bomba");
 });
 
-test("csökkentett mozgás: nincs kvíz-rázás, kevesebb részecske, a kamera-rázás marad kikapcsolva", () => {
+test("csökkentett mozgás: nincs kristály-rázás, kevesebb részecske, a kamera-rázás marad kikapcsolva", () => {
   assert.match(page, /if \(!reducedMotionRef\.current\) \{\s*setWrongShake\(true\);/);
   assert.ok((page.match(/motionScale\(reducedMotionRef\.current\)\.particles/g) ?? []).length >= 4);
-  assert.match(page, /shakeRef\.current > 0 && !reducedMotionRef\.current/);
+  // SPEC-VÁLTOZÁS 2026-11-17 (J6a, K.5 KSZ-10): a kamera-rázás a közös `feel`-en át megy (trauma², plafon), nem saját `shakeRef`-fel;
+  // csökkentett mozgásnál továbbra is kikapcsolt (a feltétel a `feel.shakeOffset` hívásán).
+  assert.match(page, /feel && !reducedMotionRef\.current && phaseRef\.current === "play"/);
+  assert.doesNotMatch(page, /shakeRef/, "saját rázás-állapot maradt (KSZ-10: csak a feel.addTrauma)");
 });
 
 test("látványosabb robbanás: lökéshullám ellenségre, bossra és bombára", () => {

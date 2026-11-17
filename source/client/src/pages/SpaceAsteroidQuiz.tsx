@@ -3,10 +3,13 @@ import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import {
   createGradeQuizSeen,
   gradeForGame,
+  isGradeQuizSeen,
   markGradeQuizSeen,
+  normalizePrompt,
   pickGradeQuiz,
   pickGradeSlotWithVocab,
   pickUnseenMaterial,
+  type GradeQuizSeen,
 } from "@/game-engine/gradeQuiz";
 import { loadClassroomGrade, saveClassroomGrade } from "@/lib/classroomStore";
 import { useGradeLevel } from "@/game-engine/useGradeLevel";
@@ -15,8 +18,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import * as THREE from "three";
-import { ArrowLeft, Pause, ShieldAlert, Sparkles, Zap } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, ShieldAlert, Sparkles, Zap } from "lucide-react";
+import { motion } from "framer-motion";
 import {
   cancelGameFrame,
   GameHud,
@@ -37,7 +40,6 @@ import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { gameSyncBannerText, useSyncEligibilityQuery } from "@/hooks/useGameScoreSync";
 import AudioToggleButton from "@/components/AudioToggleButton";
-import { useStreakProtector } from "@/hooks/useStreakProtector";
 import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import {
@@ -55,9 +57,60 @@ import {
   CAMERA_Y,
   CAMERA_Z,
   CAMERA_LOOK_Y,
+  BOSS_WAVE,
+  HIT_INVULN_SEC,
+  SPAWN_Y_MAX,
+  SPAWN_Y_MIN,
+  WAVE_BANNER_SEC,
+  WAVE_COUNT,
+  enemyHp,
+  pickEnemyKind,
+  pickRockSize,
+  waveBaseVy,
+  waveEnemyCount,
+  waveSpawnInterval,
 } from "@/lib/spaceAsteroid/physics";
+import {
+  CRYSTAL_LABEL_MAX_CHARS,
+  CRYSTAL_MIN_ZONE_HEIGHT,
+  CRYSTAL_RADIUS,
+  crystalAt,
+  crystalBounds,
+  crystalLabelsFit,
+  crystalShards,
+  hitCrystal,
+  rezoneCrystals,
+  spawnCrystals,
+  stepCrystals,
+  type Crystal,
+} from "@/lib/spaceAsteroid/crystals";
+import {
+  ASTEROID_GAME_ID,
+  asteroidDirectorConfig,
+  createAsteroidDriver,
+  questionTotals,
+  type AsteroidDriver,
+} from "@/lib/spaceAsteroid/sim";
+import {
+  InlineQuestion,
+  ResultReview,
+  bankPlayQuestion,
+  createPointerTapTracker,
+  gradePlayQuestion,
+  materialPlayQuestion,
+  pointerTapHandlers,
+  restoreReviewQuestion,
+  usePlayQuestion,
+  vocabPlayQuestion,
+  type PlayQuestion,
+  type QuestionProvider,
+  type ShakeOffset,
+} from "@/game-engine/play";
+import type { GradeQuizItem } from "@/data/gradeQuizBank/types";
+import { loadedGradeItems } from "@/data/gradeQuizBank/loader";
+import { createRng, seedFrom, type Rng } from "@shared/game-rng";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
-import { sfxSuccess, sfxError, sfxShoot, sfxHit, sfxExplode, sfxPickup, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
+import { sfxSuccess, sfxError, sfxShoot, sfxHit, sfxExplode, sfxPickup, sfxLevelUp, sfxWarning, sfxWhoosh } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
@@ -68,12 +121,12 @@ import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
 import { shapeJoystick } from "@/game-engine/joystick";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
-import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
+import { correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 import {
   LOOK_BUDGET,
   SparkleField,
-  applyRendererLook,
+  createGameRenderer,
   createGlowSprite,
   createPostFx,
   createRoomEnvironment,
@@ -93,17 +146,21 @@ import {
 /* =====================================================================
  * Galaktikus Aszteroida Kvíz Vadász – Three.js 3D űrharc
  *
- * Játékmenet összefoglaló:
+ * Játékmenet összefoglaló (J6a, 2026-11-17 — a kvíz-kapuk megszűntek):
  *  1. Indítás előtt: osztály-választó (1–12). Az osztály alapján a szerver
  *     visszaadja a játékos legutóbbi 3 tananyagához kapcsolt kvíz-tételeket
  *     (`/api/games/material-quizzes?classroom=N&limit=3`). Ha üres a halmaz,
  *     a játék statikus fallback bankra vált.
- *  2. Minden hullám ELEJÉN egy kvíz jelenik meg — csak helyes válaszra
- *     indul a hullám. Rossz válasz → új kvíz, marad a kvíz fázisban.
- *  3. Aszteroida-ütközéskor szintén kvíz: a játék megáll, csak helyes
- *     válaszra folytatódik. Rossz válasz → új kvíz.
- *  4. +1 ÉLET pickup esetén az "élet" mellett megjelenik a felirat:
- *     „Megúsztál egy kvízt!" — minden életpont egy elnyert kvíz-bónusz.
+ *  2. A játék AZONNAL indul, nincs induló kvíz és nincs hullám-kapu: 8 hullám
+ *     folyamatosan vált (2 mp „HULLÁM n” felirattal), a 9. hullámban a főellenfél.
+ *     Nincs idő-limit: a menet az életek elfogytáig vagy a főellenfél legyőzéséig tart.
+ *  3. A kérdés a játék világában érkezik: a kérdés-ütemező (`usePlayQuestion`)
+ *     3–4 feliratozott KRISTÁLYT enged a felső sávba. A helyes kristály
+ *     kilövése (vagy megérintése) fejlesztést ad (pajzs / hármas lövés / bomba az
+ *     áramlat szerint), a rossz kristály 3 apró sziklára hasad, a helyes 1,8 mp-ig
+ *     világít. A játék a kérdés alatt fut (0,7× lassítás), nincs modális réteg.
+ *  4. Aszteroida-ütközés: −1 élet és 2 mp sérthetetlenség (nincs kvíz).
+ *     +1 ÉLET pickup: „+1 élet!”.
  *  5. Mobil-első irányítás (touch gombok) + billentyűzet. Reszponzív.
  *
  * Three.js architektúra:
@@ -180,8 +237,8 @@ type PickupState = {
   rot: number;
 };
 
-type Phase = "grade" | "intro" | "play" | "quiz" | "over";
-type QuizReason = "wave" | "hit";
+/** J6a: nincs „quiz” fázis — a kérdés a `play` alatti, nem blokkoló al-állapot (kristályok a világban). */
+type Phase = "grade" | "intro" | "play" | "over";
 
 type MaterialQuizApi = {
   classroom: number;
@@ -206,7 +263,12 @@ const BULLET_SPEED = 14;
 const BULLET_COOLDOWN = 0.18;
 const BULLET_TRIPLE_COOLDOWN = 0.10;
 const POWER_DURATION = 10; // sec
-const ROUND_LIMIT_SEC = 360;
+/** A jó kristály-válasz pajzsa (mp) — ugyanannyi, mint a pajzs-pickupé. */
+const CRYSTAL_SHIELD_SEC = 8;
+/** A kristály-gomb fél magassága (px): 48 px a legkisebb érintési cél + a lebegés ráhagyása. */
+const CRYSTAL_CHIP_HALF_H = 26;
+/** A kristályok kérdés-zónájának legalsó pereme a vászon magasságának ekkora hányadánál (a kártya alatti sáv alja, ha több hely van). */
+const CRYSTAL_ZONE_BOTTOM = 0.52;
 
 /** Statikus fallback kvíz-bank — ha nincs tananyaghoz kötött kérdés a DB-ben. */
 const FALLBACK_QUIZZES: Quiz[] = [
@@ -265,7 +327,8 @@ const ENEMY_BASE_XP: Record<EnemyKind, number> = {
 /** Boss össz-HP — 3 fázisra elosztva (50/25/15 = 90 hit a teljes legyőzéshez). */
 const BOSS_TOTAL_HP = 90;
 const BOSS_PHASE_HP = [50, 25, 15] as const;
-const BOSS_FINAL_WAVE = 12;
+/** J6a: 8 hullám + a 9. hullámban a főellenfél (`physics.ts` `BOSS_WAVE`). */
+const BOSS_FINAL_WAVE = BOSS_WAVE;
 
 /* ============================ Helpers ============================ */
 
@@ -273,8 +336,15 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
-function randRange(min: number, max: number) {
-  return min + Math.random() * (max - min);
+/**
+ * Kozmetikai véletlen (ELLENFÉL-szóródás nincs benne): a menet `fxRng`-jéből jön, így a lapon nincs `Math.random` (K.6 őr).
+ * A modul-szintű építők (`buildRockMesh`) ezt hívják; a lap a menet indításakor a menet seedelt `fx` forrására állítja.
+ */
+let cosmeticRandom: () => number = () => 0.5;
+
+/** Egyenletes érték a [min, max) tartományban a megadott (seedelt) forrásból. */
+function randRange(rng: () => number, min: number, max: number) {
+  return min + rng() * (max - min);
 }
 
 /** localStorage segéd — SSR-safe. */
@@ -433,7 +503,7 @@ function buildRockMesh(size: 1 | 2 | 3): THREE.Mesh {
   const base = new THREE.Color(size === 3 ? "#c56cf0" : size === 2 ? "#ff9f43" : "#ff6b6b");
   const dark = base.clone().multiplyScalar(0.42);
   const light = base.clone().lerp(new THREE.Color("#fff4e0"), 0.35);
-  const seed = Math.random() * 10;
+  const seed = cosmeticRandom() * 10;
   const tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -479,6 +549,30 @@ function buildCrystalMesh(): THREE.Mesh {
     opacity: 0.92,
   });
   return new THREE.Mesh(geo, mat);
+}
+
+/**
+ * Kérdés-kristály (J6a): a válasz maga a célpont. Nagyobb és fényesebb, mint a „Drágakő” meteor (arany-bíbor, gyűrűvel,
+ * kilövés-jelzéssel), hogy a gyerek ne keverje össze a sima ellenséggel; a felirat a DOM-gombon van (≥ 12 px).
+ * A színeket a lap állítja (`setCrystalState`): lebegés = arany, helyes (megoldás) = zöld, elhalványuló = szürke.
+ */
+function buildAnswerCrystalMesh(): THREE.Group {
+  const group = new THREE.Group();
+  const gem = new THREE.Mesh(
+    new THREE.OctahedronGeometry(CRYSTAL_RADIUS, 0),
+    new THREE.MeshStandardMaterial({ color: "#ffd86b", emissive: "#a8561a", emissiveIntensity: 0.9, roughness: 0.2, metalness: 0.25, flatShading: true }),
+  );
+  gem.scale.set(1, 1.28, 1);
+  gem.name = "gem";
+  group.add(gem);
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(CRYSTAL_RADIUS * 1.25, 0.05, 8, 36),
+    new THREE.MeshBasicMaterial({ color: "#fff1b0", transparent: true, opacity: 0.8 }),
+  );
+  ring.rotation.x = Math.PI / 2.4;
+  ring.name = "ring";
+  group.add(ring);
+  return group;
 }
 
 /** Alien csészealj — torus + félgömb fölé, kupola sárga emisszió. */
@@ -761,8 +855,72 @@ function buildPowerPickupMesh(): THREE.Group {
 
 /* ===================== Komponens ===================== */
 
+/** A HUD pillanatképe: a játékhurok ref-eket ír, a React ≤ 10 Hz-cel kap pillanatképet (K.4/10, KSZ-9). */
+type Hud = {
+  score: number;
+  wave: number;
+  lives: number;
+  combo: number;
+  powerLevel: number;
+  powerTimer: number;
+  shieldTimer: number;
+  bombs: number;
+  bossHp: number | null;
+  enemiesKilled: number;
+  /** A „HULLÁM n” felirat (0 = nincs); a hullámok közt nincs kapu, csak ez a felirat. */
+  banner: number;
+  /** A menet előrehaladása 0..1 (a hullámok és a főellenfél felé): a HUD sávja idő helyett ezt mutatja. */
+  progress: number;
+};
+const INITIAL_HUD: Hud = { score: 0, wave: 1, lives: 3, combo: 0, powerLevel: 0, powerTimer: 0, shieldTimer: 0, bombs: 0, bossHp: null, enemiesKilled: 0, banner: 0, progress: 0 };
+/** A HUD legsűrűbb frissítése (ms): 10 Hz. */
+const HUD_STEP_MS = 100;
+
+/** A menet seedelt véletlen-forrásai: a világ (érkezés, hasadás, pickup), a kozmetika és a kérdés-kristályok külön. */
+type RunRng = { world: Rng; fx: Rng; crystal: Rng; pick: Rng };
+function makeRunRng(seed: string | number): RunRng {
+  return {
+    world: createRng(seedFrom(ASTEROID_GAME_ID, seed, "world")),
+    fx: createRng(seedFrom(ASTEROID_GAME_ID, seed, "fx")),
+    crystal: createRng(seedFrom(ASTEROID_GAME_ID, seed, "crystals")),
+    pick: createRng(seedFrom(ASTEROID_GAME_ID, seed, "pick")),
+  };
+}
+
+/** A kamera képpont-sorához (a vászon tetejétől, 0..1) tartozó játéksík-magasság (z = 0). Nem a forró úton hívjuk. */
+const unprojectTmp = new THREE.Vector3();
+function worldYAtScreenFrac(camera: THREE.PerspectiveCamera, frac: number): number {
+  unprojectTmp.set(0, 1 - 2 * frac, 0.5).unproject(camera);
+  unprojectTmp.sub(camera.position);
+  if (Math.abs(unprojectTmp.z) < 1e-6) return CAMERA_LOOK_Y;
+  const t = -camera.position.z / unprojectTmp.z;
+  return camera.position.y + unprojectTmp.y * t;
+}
+
+/**
+ * Az évfolyam-bank azon tételei, amelyek opciója nem fér a kristály-feliratba, a választónak „már látott”-nak számítanak
+ * (a futás valódi `seen`-je érintetlen marad): előbb a beférő tétel jön, csak ha az elfogy, a hosszabb opciójú.
+ */
+function seenWithUnfit(seen: GradeQuizSeen, grade: number): GradeQuizSeen {
+  const out: GradeQuizSeen = { ids: new Set(seen.ids), prompts: new Set(seen.prompts) };
+  for (const it of loadedGradeItems()) {
+    if (Math.abs(it.grade - grade) > 1 || crystalLabelsFit(it.options)) continue;
+    if (it.id) out.ids.add(it.id);
+    out.prompts.add(normalizePrompt(it.prompt));
+  }
+  return out;
+}
+
+/** A lap tétele a közös szűrőnek (`DirectorConfig.promptFits`): azonosító nélküli kézi tételnél üres azonosító. */
+const asFourChoice = (q: Quiz) => ({ id: q.id ?? "", prompt: q.prompt, options: q.options, correctIndex: q.correctIndex });
+
+/** Kristály-állapot a megoldás-kijelzéshez: a helyes zölden világít, a választott rossz elmarad (hasadt), a többi elhalványul. */
+type CrystalLook = "idle" | "correct" | "gone";
+
+
 export default function SpaceAsteroidQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const sceneBoxRef = useRef<HTMLDivElement>(null);
   // S10 / terv 4.5: közös érintés-észlelés (any-pointer: coarse + valódi érintés) — érintős laptop is kap vezérlőt.
   const touchCapable = useTouchCapable();
   const touchCapableRef = useRef(touchCapable);
@@ -779,69 +937,30 @@ export default function SpaceAsteroidQuiz() {
   // ----- Játékállapot (UI) -----
   const [phase, setPhase] = useState<Phase>(initialGrade() != null ? "intro" : "grade");
   const [grade, setGrade] = useState<number | null>(initialGrade());
-  /** S10: a futás kvíz-mérlege az eredményképernyőhöz (jó válaszok / összes válasz). */
+  /** A futás kérdés-mérlege az eredményképernyőhöz (a director valós statisztikájából, a menet végén). */
   const [quizCorrect, setQuizCorrect] = useState(0);
   const [quizTotal, setQuizTotal] = useState(0);
   /** S10: a joystick húzásának megszakítása szünetkor / fókuszvesztéskor (VirtualJoystick resetSignal). */
   const [joyReset, setJoyReset] = useState(0);
-  const [score, setScore] = useState(0);
-  const [wave, setWave] = useState(1);
-  const [lives, setLives] = useState(3);
-  const [combo, setCombo] = useState(0);
-  const [powerLevel, setPowerLevel] = useState(0);
-  const [powerTimer, setPowerTimer] = useState(0);
-  // Pajzs (8-20s teljes invuln) + bomb-készlet (max 5)
-  const [shieldTimer, setShieldTimer] = useState(0);
-  const [bombs, setBombs] = useState(0);
-  // Boss HP (null ha nincs aktív boss)
-  const [bossHp, setBossHp] = useState<number | null>(null);
-  const bossHpRef = useRef<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState(ROUND_LIMIT_SEC);
-  const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
-  const [quizReason, setQuizReason] = useState<QuizReason>("wave");
+  const [hud, setHud] = useState<Hud>(INITIAL_HUD);
   const [wrongShake, setWrongShake] = useState(false);
-  // Helyes-válasz felfedés a kvíz-modálban (zöld outline) + a hibás opció
-  // piros outline-ja, 1.5s alatt fade-elődik, majd új kvíz / play.
-  const [revealCorrectIdx, setRevealCorrectIdx] = useState<number | null>(null);
-  const [wrongIdx, setWrongIdx] = useState<number | null>(null);
-  const streakProtector = useStreakProtector();
   const [savedToast, setSavedToast] = useState<string | null>(null);
-  const [enemiesKilled, setEnemiesKilled] = useState(0);
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   const [paused, setPaused] = useState(false);
   const [gameWon, setGameWon] = useState(false);
+  // „Miért?” — a játékos kérte magyarázat (a közös QuizFeedbackCard). Amíg nyitva van, a játék áll: az olvasásért nem jár
+  // büntetés (terv 9.: a „magyarázat olvasása közben áll az óra” követelmény megmarad).
+  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const whyOpen = feedback !== null || expanded;
+  // K.4/7: a WebGL-környezet elvesztése → szünet + „Grafika újraindítása”; az újraindítás új vászon + új renderer.
+  const [gfxLost, setGfxLost] = useState(false);
+  const [sceneEpoch, setSceneEpoch] = useState(0);
   // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet): 10 pálya évfolyamonként (3–12.); a futás pályája a startkor rögzül.
   const levels = useGradeLevel("asteroid", grade);
   const runLevelRef = useRef<number | null>(null);
   const levelClearedRef = useRef(false);
-
-  useEffect(() => {
-    return installGameTestApi({
-      probe: () => {
-        const band = adaptiveRef.current.band;
-        return { level: runLevelRef.current, band, spawnFactor: 1.4 - band * 0.6 };
-      },
-      forceState: (patch) => {
-        if (patch.phase === "intro" || patch.phase === "grade" || patch.phase === "play" || patch.phase === "over") {
-          setPaused(false);
-          setPhase(patch.phase);
-        }
-        // S10 (M9, M10): rossz válasz kiváltásához egy kvíz megnyitása a futó játékban.
-        if (patch.phase === "quiz") {
-          setPaused(false);
-          enqueueQuizRef.current("wave");
-        }
-        if (typeof patch.gameWon === "boolean") setGameWon(patch.gameWon);
-        if (typeof patch.correctCount === "number") {
-          const n = Math.max(0, patch.correctCount);
-          setScore(n * 10);
-          setWave(12);
-          setQuizCorrect(n);
-          setQuizTotal(n);
-        }
-      },
-    });
-  }, []);
+  const { score, wave, lives, combo, powerLevel, powerTimer, shieldTimer, bombs, bossHp, enemiesKilled, banner } = hud;
 
   const scoreSubmittedRef = useRef(false);
   const { data: syncEligibility } = useSyncEligibilityQuery();
@@ -881,7 +1000,18 @@ export default function SpaceAsteroidQuiz() {
   /** Alien UFO kill-számláló — az alien_killer jelvényhez (10 alien / futás). */
   const alienKillsRef = useRef(0);
   const scoreRef = useRef(0);
-  const shakeRef = useRef(0);
+  const bossHpRef = useRef<number | null>(null);
+  /** Hány hullám-váltás történt a menetben (teszt-kampó: a hullámok kapu nélkül váltják egymást). */
+  const waveChangesRef = useRef(0);
+  /** A „HULLÁM n” felirat hátralévő játékideje (mp). */
+  const bannerLeftRef = useRef(0);
+  /** A menet vége (győzelem / vereség): új kérdés nem indul, az eredményképernyő a robbanás után jön. */
+  const runOverRef = useRef(false);
+  /** A menet valós kérdés-számai és ideje az eredményhez / jelvényhez / pontszám-szinkronhoz (a menet végén rögzül). */
+  const runTotalsRef = useRef({ correct: 0, wrong: 0, total: 0, seconds: 0 });
+  const hudDirtyRef = useRef(true);
+  const hudStampRef = useRef(0);
+  const fpsRef = useRef(60);
   /** G-11: a hajó vízszintes határa, a kamera látómezejéből újraszámolva. */
   const playerXLimitRef = useRef<number | undefined>(undefined);
   // G-5: a rajzoló hurok ref-ekből olvas, ezért a beállítást ide tükrözzük.
@@ -941,8 +1071,6 @@ export default function SpaceAsteroidQuiz() {
   }, []);
   /** S10: robbanás-lökéshullámok (a render-hurok tágítja és törli őket). */
   const shockwavesRef = useRef<Shockwave[]>([]);
-  /** A teszt-API (forceState) a legfrissebb kvíz-indítót hívja. */
-  const enqueueQuizRef = useRef<(reason: QuizReason) => void>(() => {});
 
   // Three.js objektumok — useEffect-ben hozzuk létre, refbe tesszük.
   const sceneRefs = useRef<{
@@ -967,6 +1095,8 @@ export default function SpaceAsteroidQuiz() {
     pickupsGroup: THREE.Group;
     /** S10: robbanás-lökéshullámok rétege. */
     fxGroup: THREE.Group;
+    /** J6a: a kérdés-kristályok előre gyártott meshei (poolból; nem látszó = `visible = false`). */
+    answerMeshes: THREE.Group[];
     enemyMeshById: Map<number, THREE.Object3D>;
     bulletMeshById: Map<number, THREE.Object3D>;
     pickupMeshById: Map<number, THREE.Object3D>;
@@ -1005,17 +1135,11 @@ export default function SpaceAsteroidQuiz() {
     return coupon.active && fromMat.length ? fromMat : [...fromMat, ...fb];
   }, [materialQuizData, coupon.active]);
 
-  const recentQuizPromptsRef = useRef<string[]>([]);
-  const RECENT_WINDOW = 12;
   /** Spec 2026-09-29: a futásban már feltett kérdések (azonosító + prompt) — a közös bank ismétlés-tilalma. */
   const gradeSeenRef = useRef(createGradeQuizSeen());
+  /** Csak a futás KIINDULÓ sávját adja (pálya szerint); a futás közbeni sávot a kérdés-ütemező áramlat-vezérlője mozgatja. */
   const adaptiveRef = useRef(createAdaptiveSession(4));
 
-  /**
-   * Kihúz egy nem-régen-mutatott kvízt. Tananyag-kérdéseket részesít előnyben.
-   * 3–12. évfolyamon (spec 2026-09-29): nem látott tananyag-kvíz → közös évfolyam-bank
-   * (az adaptív sáv szerinti szinten) → a régi általános bank, ha a közös bank üres/kimerült.
-   */
   /**
    * S10 / terv A8: az angol kérdés-hely a központi szóbankból (közös napló mind a hét játékra). `null`, amíg
    * tölt, vagy ha a betöltés hibázott — ilyenkor a kézi `FALLBACK_QUIZZES` / évfolyam-bank megy, változatlanul.
@@ -1023,79 +1147,188 @@ export default function SpaceAsteroidQuiz() {
    */
   const vocab = useVocabQuizSource("en", true);
 
-  const pickQuiz = useCallback((): Quiz => {
-    const sharedGrade = gradeForGame(grade);
-    const couponMaterialOnly = coupon.active && quizPool.some((q) => q.source === "material");
-    const seen = gradeSeenRef.current;
-    if (sharedGrade != null && !couponMaterialOnly) {
-      const material = pickUnseenMaterial(quizPool.filter((q) => q.source === "material"), seen);
-      if (material) {
-        markGradeQuizSeen(seen, material);
-        return material;
-      }
-    }
+  /* ============== Kérdésforrás a kérdés-ütemezőhöz (J6a) ============== */
 
-    // A tananyag-ág UTÁN: ha a kérdés-hely angol, a szóbankból kérdez. A lap nem sorsol tárgyat előre — a tárgy a
-    // meglévő választásból (évfolyam-bank tétele, ill. a régi bank `topic: "english"` tétele) derül ki, így az
-    // eloszlás a régi marad, csak az angol tétel forrása cserélődik.
-    const fromVocab = (): Quiz | null => {
-      const vq = vocab?.next(vocabLevelForGrade(grade, adaptiveRef.current.band)) ?? null;
-      if (!vq) return null;
-      markGradeQuizSeen(seen, vq);
-      return {
-        id: vq.id,
-        prompt: vq.prompt,
-        options: [...vq.options],
-        correctIndex: vq.correctIndex,
-        explanation: vq.explanation,
-        topic: "english",
-        source: "vocab",
-      };
-    };
-    /** Kézi angol kérdés: a helyes válasza a közös naplóba, hogy a szóbank ne kérdezze vissza ugyanazt a szót. */
-    const manualEnglish = (q: Quiz): Quiz => {
-      if (q.topic === "english" && q.source !== "material") vocab?.markExternal(q.options[q.correctIndex]!);
-      return q;
-    };
+  // A forrás stabil (a director a létrehozáskor kapja meg), ezért ref-eken át olvassa a lap friss állapotát.
+  const quizPoolRef = useRef(quizPool);
+  quizPoolRef.current = quizPool;
+  const gradeRef = useRef(grade);
+  gradeRef.current = grade;
+  const couponActiveRef = useRef(coupon.active);
+  couponActiveRef.current = coupon.active;
+  const vocabRef = useRef(vocab);
+  vocabRef.current = vocab;
+  const runRngRef = useRef<RunRng>(makeRunRng(seedFrom(ASTEROID_GAME_ID, "init")));
 
-    if (sharedGrade != null && !couponMaterialOnly) {
-      // A kiválasztott tétel MINDIG fogy (Brain Rot review #424), akkor is, ha a szóbank váltja ki — különben a
-      // `pickGradeQuiz` a legelső nem üres sávban ragadna, és a nem angol tételek elfogyta után csak angolt adna.
-      const slot = pickGradeSlotWithVocab({
-        pick: () => pickGradeQuiz({ grade: sharedGrade, band: adaptiveRef.current.band, seen }),
-        seen,
-        vocabNext: fromVocab,
-      });
-      if (slot?.kind === "vocab") return slot.quiz;
-      if (slot) {
-        const item = slot.item;
-        return manualEnglish({
-          id: item.id,
-          prompt: item.prompt,
-          options: [...item.options],
-          correctIndex: item.correctIndex,
-          explanation: item.explanation,
-          topic: item.subject === "science" ? "nature" : item.subject,
-          source: "grade",
-          grade: item.grade,
+  /**
+   * A kérdés-ütemező forrása: a régi `pickQuiz` sorrendje szétbontva a közös forrásrendhez (K.2): `material()` = nem látott
+   * tananyag-kvíz (`pickUnseenMaterial`), `fresh()` = évfolyam-bank (a szóbank váltja ki az angol helyet) → a régi kézi
+   * bank; `restore()` = ismétlés (csak a saját játék / angol szóbank / évfolyam-bank / tananyag tétele).
+   */
+  const provider = useMemo<QuestionProvider>(() => {
+    const couponMaterialOnly = () => couponActiveRef.current && quizPoolRef.current.some((q) => q.source === "material");
+    const toMaterialPlay = (m: Quiz): PlayQuestion =>
+      materialPlayQuestion(
+        { id: m.id ?? "", prompt: m.prompt, options: m.options, correctIndex: m.correctIndex, explanation: m.explanation ?? undefined },
+        { subject: m.topic ?? undefined, coupon: couponActiveRef.current },
+      );
+    return {
+      get couponOnly() {
+        return couponMaterialOnly();
+      },
+      material: (ctx) => {
+        const seen = gradeSeenRef.current;
+        const mats = quizPoolRef.current.filter((q) => q.source === "material");
+        if (mats.length === 0) return null;
+        // J0c-b: a sávban elolvasható / beférő tétel előbb; a többi hátra kerül (nem jelöljük látottnak).
+        const pick = (ctx?.accept ? pickUnseenMaterial(mats.filter((q) => ctx.accept!(asFourChoice(q))), seen) : null) ?? pickUnseenMaterial(mats, seen);
+        if (!pick) return null;
+        markGradeQuizSeen(seen, pick);
+        return toMaterialPlay(pick);
+      },
+      fresh: ({ band, accept }) => {
+        const seen = gradeSeenRef.current;
+        const vocab = vocabRef.current;
+        const grade = gradeRef.current;
+        const sharedGrade = gradeForGame(grade);
+        const rng = runRngRef.current.pick.next;
+        // S10 / terv A8: az angol kérdés-hely a központi szóbankból (a tananyag-ág UTÁN); `null`, amíg tölt / hibázott.
+        const fromVocab = (): PlayQuestion | null => {
+          const vq = vocab?.next(vocabLevelForGrade(grade, band)) ?? null;
+          if (!vq) return null;
+          markGradeQuizSeen(seen, vq);
+          return vocabPlayQuestion(vq);
+        };
+        /** Kézi angol kérdés: a helyes válasza a közös naplóba, hogy a szóbank ne kérdezze vissza ugyanazt a szót. */
+        const manual = (q: Quiz): PlayQuestion => {
+          if (q.topic === "english" && q.source !== "material") vocab?.markExternal(q.options[q.correctIndex]!);
+          return bankPlayQuestion(ASTEROID_GAME_ID, { id: q.id ?? "", prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, explanation: q.explanation ?? undefined }, q.topic ?? undefined);
+        };
+        if (sharedGrade != null) {
+          // A kristály-feliratba nem férő (hosszú opciójú) tételek hátrébb kerülnek: a választó ezeket „látottnak” veszi,
+          // és csak ha nincs más, adja őket (a hosszú tételt a sáv csonkítás nélkül mutatja, a kristály 2 sorra vág).
+          const pickSeen = seenWithUnfit(seen, sharedGrade);
+          // A kiválasztott tétel MINDIG fogy (Brain Rot review #424), akkor is, ha a szóbank váltja ki — különben a
+          // `pickGradeQuiz` a legelső nem üres sávban ragadna, és a nem angol tételek elfogyta után csak angolt adna.
+          const slot = pickGradeSlotWithVocab({
+            pick: () => pickGradeQuiz({ grade: sharedGrade, band, seen: pickSeen, rng }) ?? pickGradeQuiz({ grade: sharedGrade, band, seen, rng }),
+            seen,
+            vocabNext: fromVocab,
+          });
+          if (slot?.kind === "vocab") return slot.quiz;
+          if (slot) {
+            const item = slot.item;
+            if (item.subject === "english") vocab?.markExternal(item.options[item.correctIndex]!);
+            return gradePlayQuestion(item);
+          }
+        }
+        // A régi (kézi) bank: a még nem látott tételek közül; az angol hely előbb a szóbankból.
+        const manualPool = FALLBACK_QUIZZES.filter((q) => !isGradeQuizSeen(seen, q));
+        if (manualPool.length === 0) return null;
+        const accepted = accept ? manualPool.filter((q) => accept(asFourChoice(q))) : manualPool;
+        const candidates = accepted.length > 0 ? accepted : manualPool;
+        const picked = candidates[Math.min(candidates.length - 1, Math.floor(rng() * candidates.length))]!;
+        markGradeQuizSeen(seen, picked);
+        if (picked.topic === "english" && !couponMaterialOnly()) {
+          const vq = fromVocab();
+          if (vq) return vq;
+        }
+        return manual({ ...picked, source: "fallback" });
+      },
+      // Az ismétlési sor KÖZÖS a hét játékban: csak a saját (Aszteroida) kézi tétel, az angol szóbank, az évfolyam-bank és a
+      // tananyag állítható vissza; a más játék kézi bankja a sorban marad (a director a menetre átugorja).
+      restore: (item) => {
+        if (item.key.startsWith("bank:") && !item.key.startsWith(`bank:${ASTEROID_GAME_ID}:`)) return null;
+        return restoreReviewQuestion(item, {
+          vocab: (lang) => (lang === "en" ? vocabRef.current : null),
+          gradeItem: (id) => loadedGradeItems().find((q: GradeQuizItem) => q.id === id) ?? null,
         });
+      },
+    };
+  }, []);
+
+  /* ============== A menet meghajtója, a kérdés-sáv, a kristályok ============== */
+
+  const seedBase = useMemo(() => readGameSeed() ?? seedFrom(ASTEROID_GAME_ID, new Date().toISOString().slice(0, 10)), []);
+  const runIndexRef = useRef(0);
+  const runSeedRef = useRef<string | number>(seedFrom(seedBase, 0));
+  const directorConfig = useMemo(() => asteroidDirectorConfig(grade), [grade]);
+  const driverRef = useRef<AsteroidDriver | null>(null);
+  const crystalsRef = useRef<Crystal[]>([]);
+  /** A kérdés-kristályok DOM-gombjai (a hurok közvetlenül mozgatja őket, nincs képkockánkénti setState). */
+  const chipRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const crystalTaps = useMemo(() => createPointerTapTracker(), []);
+  /** A kristály-zóna utolsó mérése (a kérdés-kártya alja alapján), hogy a kristályok ne a kártya alá kerüljenek. */
+  const zoneRef = useRef({ at: 0, cardBottom: -1 });
+  const qRef = useRef<ReturnType<typeof usePlayQuestion>>(null as unknown as ReturnType<typeof usePlayQuestion>);
+
+  const makeDriver = (seed: string | number): AsteroidDriver =>
+    createAsteroidDriver({
+      seed,
+      questions: {
+        frame: (clock, ctx) => qRef.current?.frame(clock, ctx),
+        timeScale: () => qRef.current?.timeScale() ?? 1,
+        finished: () => qRef.current?.finished() ?? true,
+        finish: () => qRef.current?.finish(),
+      },
+      // A világ egy fix lépése; a tick maga őrzi, hogy csak `play` fázisban és nem szünetben fut.
+      step: (dtMs) => tickRef.current(dtMs / 1000),
+      over: () => runOverRef.current,
+      reducedMotion,
+    });
+
+  /** A kristály-zóna a játéksíkon: a kérdés-kártya ALATT (mért), legalább 64 px magas; `halfWidth` a látható félszélesség. */
+  const computeCrystalBounds = useCallback(() => {
+    const refs = sceneRefs.current;
+    const box = sceneBoxRef.current;
+    if (!refs || !box) return crystalBounds({ halfWidth: 8.9, minY: 0.5, maxY: 6 });
+    const rect = box.getBoundingClientRect();
+    const h = Math.max(1, rect.height);
+    const card = document.querySelector<HTMLElement>('[data-testid="sa-question"] .play-question-card');
+    const cardBottom = card ? card.getBoundingClientRect().bottom : rect.top + 0.3 * h;
+    zoneRef.current.cardBottom = cardBottom;
+    // A kristály KÖZEPE a kártya alja + 10 px + a gomb fél magassága (26 px) alá kerül: a gomb teteje sem csúszik a kártya alá.
+    const topFrac = Math.min(0.7, Math.max(0.05, (cardBottom + 10 + CRYSTAL_CHIP_HALF_H - rect.top) / h));
+    const minPx = 72;
+    const bottomFrac = Math.min(0.85, Math.max(topFrac + minPx / h, CRYSTAL_ZONE_BOTTOM));
+    const camera = refs.camera;
+    const topY = worldYAtScreenFrac(camera, topFrac);
+    const bottomY = worldYAtScreenFrac(camera, bottomFrac);
+    return crystalBounds({
+      // A kristályok a JÁTÉKTÉR fölött lebegnek (fekvő telefonon a látható sáv szélesebb a pályánál: a szélek a vezérlőké).
+      halfWidth: Math.min(GAME_W / 2, visibleHalfWidth(camera.fov, camera.aspect, camera.position.z)),
+      minY: bottomY,
+      maxY: topY,
+      // A legkisebb zónamagasság a KÉPPONTBÓL jön (a két sor ≥ 72 px-re van egymástól, a gomb ~52 px magas): a játéksík
+      // egység-px aránya a vászon méretétől függ, a fix egység-érték fekvő telefonon kevés volt (M2: fedő válaszcélok).
+      minHeight: Math.max(CRYSTAL_MIN_ZONE_HEIGHT, topY - worldYAtScreenFrac(camera, topFrac + minPx / h)),
+    });
+  }, []);
+
+  const q = usePlayQuestion({
+    setup: { config: directorConfig, provider, startBand: adaptiveRef.current.band, seed: runSeedRef.current },
+    // Hang és rezgés a lapé (alább, a játékbeli következménnyel együtt): egy kimenet = egy visszajelzés.
+    sound: false,
+    haptics: false,
+    onShow: (p) => {
+      sfxWhoosh();
+      // A kérdés kristályai a kártya alatti zónába érkeznek (a kártya magassága ekkor még becslés: a hurok újramér).
+      crystalsRef.current = spawnCrystals(p, computeCrystalBounds(), runRngRef.current.crystal.next);
+    },
+    onOutcome: (o, p) => {
+      if (o.result === "aborted") {
+        crystalsRef.current = [];
+        return;
       }
-    }
-    const pool = quizPool.length > 0 ? quizPool : FALLBACK_QUIZZES;
-    const recent = recentQuizPromptsRef.current;
-    const matFirst = pool.filter((q) => q.source === "material" && !recent.includes(q.prompt));
-    const fbFiltered = pool.filter((q) => q.source !== "material" && !recent.includes(q.prompt));
-    const candidates = matFirst.length > 0 ? matFirst : fbFiltered.length > 0 ? fbFiltered : pool;
-    const picked = candidates[Math.floor(Math.random() * candidates.length)] ?? FALLBACK_QUIZZES[0]!;
-    recent.push(picked.prompt);
-    while (recent.length > RECENT_WINDOW) recent.shift();
-    // A régi bank angol helye (1–2. évfolyam, vagy kimerült közös bank): előbb a szóbank, utána a kézi tétel.
-    if (picked.topic === "english" && picked.source !== "material" && !couponMaterialOnly) {
-      const vq = fromVocab();
-      if (vq) return vq;
-    }
-    return manualEnglish(picked);
-  }, [quizPool, grade, coupon.active, vocab]);
+      const idx = o.pickedOriginalIndex === null ? -1 : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
+      const picked = idx >= 0 ? crystalsRef.current[idx] : undefined;
+      if (picked?.alive) hitCrystal(crystalsRef.current, picked.id);
+      // A lecke-kupon bónusza: a valós (eredeti) opció-index.
+      if (o.pickedOriginalIndex !== null) maybeClaimCouponBonus(coupon, p.question.quiz.id, o.pickedOriginalIndex);
+      onCrystalOutcome(o.result, picked ?? null);
+    },
+  });
+  qRef.current = q;
 
   /* ============== Phase / játékvezérlés ============== */
 
@@ -1117,14 +1350,16 @@ export default function SpaceAsteroidQuiz() {
     setJoyReset((n) => n + 1);
   }, []);
 
+  // A játék áll szünetben ÉS amíg a „Miért?” kártya nyitva van (a kérdés-óra és a világ is).
   useEffect(() => {
-    pausedRef.current = paused;
+    pausedRef.current = paused || whyOpen;
     if (paused) releaseControls();
-  }, [paused, releaseControls]);
+    else if (whyOpen) releaseControls();
+  }, [paused, whyOpen, releaseControls]);
 
-  /** S10: a szünet játék és kvíz közben is elérhető (HUD-gomb, kvízréteg gombja, P, automatikus szünet). */
+  /** A szünet játék közben mindig elérhető (HUD-gomb, a kérdés-sáv gombja, P, automatikus szünet). */
   const pauseGame = useCallback(() => {
-    if (phaseRef.current !== "play" && phaseRef.current !== "quiz") return;
+    if (phaseRef.current !== "play") return;
     pausedRef.current = true;
     setPaused(true);
   }, []);
@@ -1135,86 +1370,39 @@ export default function SpaceAsteroidQuiz() {
     setPaused(false);
   }, []);
 
-  useEffect(() => {
-    livesRef.current = lives;
-  }, [lives]);
+  /** A HUD-hoz tartozó ref-ek változtak: a következő (≤ 10 Hz-es) pillanatkép már az újat mutatja. */
+  const markHud = () => {
+    hudDirtyRef.current = true;
+  };
+  /** HUD-pillanatkép (≤ 10 Hz, KSZ-9): a képkocka-hurok innen frissíti a React-állapotot, nem minden képkockában. */
+  const publishHud = (force = false) => {
+    const now = performance.now();
+    if (!force && (!hudDirtyRef.current || now - hudStampRef.current < HUD_STEP_MS)) return;
+    hudStampRef.current = now;
+    hudDirtyRef.current = false;
+    setHud({
+      score: scoreRef.current,
+      wave: waveRef.current,
+      lives: livesRef.current,
+      combo: comboRef.current,
+      powerLevel: powerLevelRef.current,
+      powerTimer: Math.ceil(powerTimerRef.current),
+      shieldTimer: Math.ceil(shieldTimerRef.current),
+      bombs: bombsRef.current,
+      bossHp: bossHpRef.current,
+      enemiesKilled: enemiesKilledRef.current,
+      banner: bannerLeftRef.current > 0 ? waveRef.current : 0,
+      progress: Math.min(1, (waveRef.current - 1 + (enemiesPerWaveRef.current > 0 ? Math.min(1, enemiesSpawnedThisWaveRef.current / enemiesPerWaveRef.current) : 0)) / (WAVE_COUNT + 1)),
+    });
+  };
 
-  useEffect(() => {
-    waveRef.current = wave;
-  }, [wave]);
-
-  useEffect(() => {
-    powerLevelRef.current = powerLevel;
-  }, [powerLevel]);
-
-  useEffect(() => {
-    powerTimerRef.current = powerTimer;
-  }, [powerTimer]);
-
-  useEffect(() => {
-    comboRef.current = combo;
-  }, [combo]);
-
-  useEffect(() => {
-    enemiesKilledRef.current = enemiesKilled;
-  }, [enemiesKilled]);
-
-  useEffect(() => {
-    scoreRef.current = score;
-  }, [score]);
-
-  /** Kör-óra: másodpercenként számol vissza. Szünetben (paused) áll. */
-  useEffect(() => {
-    // JAVÍTÁS: a szünet korábban nem állította meg az órát → pause alatt is fogyott az idő.
-    if (phase !== "play" || paused) return;
-    const id = window.setInterval(() => {
-      setTimeLeft((s) => {
-        if (s <= 1) {
-          setPhase("over");
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [phase, paused]);
-
-  /** Power-timer (sec). Szünetben (paused) áll. */
-  useEffect(() => {
-    if (phase !== "play" || paused) return;
-    if (powerTimer <= 0) return;
-    const id = window.setInterval(() => {
-      setPowerTimer((t) => {
-        if (t <= 1) {
-          setPowerLevel(0);
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [phase, paused, powerTimer]);
-
-  const answerLockedRef = useRef(false);
-  /** G-1: magyarázó kártya rossz válaszra. */
-  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
-
-  const enqueueQuiz = useCallback((reason: QuizReason) => {
-    answerLockedRef.current = false;
-    setQuizReason(reason);
-    setActiveQuiz(pickQuiz());
-    setPhase("quiz");
-  }, [pickQuiz]);
-  enqueueQuizRef.current = enqueueQuiz;
-
-  /** Hullám indítása: spawn count + intro-banner. A kvíz ezt MEGELŐZI. */
+  /** Hullám indítása: spawn count + felirat. Nincs kapu: a hullám azonnal indul. */
   const beginWaveSpawning = useCallback(() => {
     waveIntermissionRef.current = false;
     enemiesSpawnedThisWaveRef.current = 0;
-    // Boss-pálya: a 12. hullám egy boss
-    enemiesPerWaveRef.current = waveRef.current === BOSS_FINAL_WAVE
-      ? 1
-      : 4 + Math.min(waveRef.current * 2, 18);
+    enemiesPerWaveRef.current = waveEnemyCount(waveRef.current);
+    bannerLeftRef.current = WAVE_BANNER_SEC;
+    hudDirtyRef.current = true;
   }, []);
 
   const startNewRun = useCallback(() => {
@@ -1222,6 +1410,7 @@ export default function SpaceAsteroidQuiz() {
     runIdRef.current += 1;
     clearPendingTimeouts();
     setFeedback(null);
+    setExpanded(false);
     setWrongShake(false);
     setQuizCorrect(0);
     setQuizTotal(0);
@@ -1231,11 +1420,17 @@ export default function SpaceAsteroidQuiz() {
     levelClearedRef.current = false;
     adaptiveRef.current.reset(grade ?? 4, runLevelRef.current);
     gradeSeenRef.current = createGradeQuizSeen();
-    answerLockedRef.current = false;
     scoreSubmittedRef.current = false;
-    streakProtector.resetProtector();
-    setRevealCorrectIdx(null);
-    setWrongIdx(null);
+    // A menet seedje (K.4/13): azonos seed → azonos hullám-érkezés, hasadás, pickup és kérdéssor.
+    runIndexRef.current += 1;
+    const seed = seedFrom(seedBase, runIndexRef.current);
+    runSeedRef.current = seed;
+    runRngRef.current = makeRunRng(seed);
+    cosmeticRandom = runRngRef.current.fx.next;
+    driverRef.current = makeDriver(seed);
+    crystalsRef.current = [];
+    runOverRef.current = false;
+    runTotalsRef.current = { correct: 0, wrong: 0, total: 0, seconds: 0 };
     enemiesRef.current = [];
     bulletsRef.current = [];
     pickupsRef.current = [];
@@ -1252,18 +1447,9 @@ export default function SpaceAsteroidQuiz() {
     enemiesKilledRef.current = 0;
     alienKillsRef.current = 0;
     bossDefeatedRef.current = false;
+    bossHpRef.current = null;
+    waveChangesRef.current = 0;
     scoreRef.current = 0;
-    shakeRef.current = 0;
-    setScore(0);
-    setWave(1);
-    setLives(3);
-    setCombo(0);
-    setPowerLevel(0);
-    setPowerTimer(0);
-    setShieldTimer(0);
-    setBombs(0);
-    setTimeLeft(ROUND_LIMIT_SEC);
-    setEnemiesKilled(0);
     setGameWon(false);
     setPaused(false);
     setSavedToast(null);
@@ -1273,80 +1459,160 @@ export default function SpaceAsteroidQuiz() {
     lastTimeRef.current = null;
     gameElapsedRef.current = 0;
     lastSpawnAtRef.current = 0;
-    enqueueQuiz("wave");
-  }, [enqueueQuiz, grade, levels.level, clearPendingTimeouts, releaseControls]);
+    bannerLeftRef.current = 0;
+    // Nincs induló kvíz: az első hullám AZONNAL indul (5.6: 0–10 mp azonnal akció, az első szikla 1 mp-nél).
+    q.reset(seed, adaptiveRef.current.band);
+    beginWaveSpawning();
+    publishHud(true);
+    setPhase("play");
+  }, [grade, levels.level, clearPendingTimeouts, releaseControls, seedBase, q, beginWaveSpawning]);
 
-  const dismissFeedback = useCallback(() => {
+  /**
+   * A menet vége (győzelem / vereség / „Kör vége”): a kérdés lezárul (a nyitott kérdés „aborted”, nem hiba és nem ismétlés),
+   * az eredmény a director VALÓS statisztikájából jön (a régi „leszedett ellenfél ≈ helyes válasz” közelítés megszűnt).
+   */
+  const endRun = useCallback((won: boolean, forcedCorrect?: number) => {
+    runOverRef.current = true;
+    const ctl = qRef.current;
+    if (!ctl.finished()) ctl.finish();
+    const clock = driverRef.current?.clockMs() ?? 0;
+    const totals = questionTotals(ctl.director?.stats(clock));
+    const correct = Math.max(totals.correct, forcedCorrect ?? 0);
+    const total = Math.max(correct, totals.total);
+    runTotalsRef.current = { correct, wrong: Math.max(0, total - correct), total, seconds: Math.round(clock / 1000) };
+    setQuizCorrect(correct);
+    setQuizTotal(total);
     setFeedback(null);
-    setRevealCorrectIdx(null);
-    setWrongIdx(null);
-    setActiveQuiz(pickQuiz());
-    answerLockedRef.current = false;
-  }, [pickQuiz]);
+    setExpanded(false);
+    setGameWon(won);
+    publishHud(true);
+    setPhase("over");
+  }, []);
 
-  /* ============== Quiz választ feldolgoz ============== */
+  /* ============== „Miért?”: szünet + a valódi magyarázókártya ============== */
 
+  const openWhy = useCallback(() => {
+    const item = qRef.current.view().whyItem;
+    if (!item) return;
+    setFeedback(
+      buildFeedback({
+        quiz: item.quiz,
+        chosenIndex: item.pickedOriginalIndex,
+        // Egyetlen próbálkozás van (a megoldás mutatása utáni újrapróba megszűnt — terv 5.6, J-SA).
+        attempt: 1,
+        ageBand: "kid",
+      }),
+    );
+  }, []);
+  const closeWhy = useCallback(() => setFeedback(null), []);
+
+  /* ============== Kristály-válasz ============== */
+
+  /** A kristályok DOM-gombja / billentyű (1–4): a válasz a kristály „kilövése” — csak játék közben, nem szünetben. */
   const onAnswer = (idx: number) => {
-    // S13 / review K1: szünetben nincs válasz (a háttér inert, de a billentyűs út ellen is védünk).
-    if (!activeQuiz || phase !== "quiz" || answerLockedRef.current || pausedRef.current) return;
-    answerLockedRef.current = true;
-    adaptiveRef.current.answer(idx === activeQuiz.correctIndex);
-    if (revealCorrectIdx !== null) return; // 1.5s reveal alatt nincs ismételt válasz
-    maybeClaimCouponBonus(coupon, activeQuiz.id, idx);
-    setQuizTotal((n) => n + 1);
-    if (idx !== activeQuiz.correctIndex) {
-      sfxError();
-      haptics("error");
-      // M9: csökkentett mozgásnál nincs rázás (a piros keret és a magyarázó kártya jelez).
-      if (!reducedMotionRef.current) {
-        setWrongShake(true);
-        pushRunTimeout(() => setWrongShake(false), 320);
+    // K1: szünetben (és a „Miért?” alatt) nincs válasz — a billentyűs út ellen is védünk.
+    if (phaseRef.current !== "play" || pausedRef.current) return;
+    qRef.current.pick(idx, driverRef.current?.clockMs());
+  };
+
+  /** A válasz következménye a játékvilágban (≤ 2 s, K.4/23): fejlesztés (jó) vagy hasadás (rossz). */
+  const onCrystalOutcome = (result: "correct" | "wrong" | "timeout", crystal: Crystal | null) => {
+    const refs = sceneRefs.current;
+    const k = motionScale(reducedMotionRef.current).particles;
+    if (result === "correct") {
+      sfxSuccess();
+      haptics("success");
+      applyCrystalUpgrade();
+      scoreRef.current += 50;
+      driverRef.current?.pace.signal("combat");
+      if (refs && crystal) {
+        burstAt.set(crystal.x, crystal.y, 0.3);
+        refs.sparkles.emit(burstAt, { count: Math.round(56 * k), color: "#ffe27a", speed: 7, life: 0.8, size: 0.32 });
+        refs.sparkles.emit(burstAt, { count: Math.round(18 * k), color: "#ffffff", speed: 3, life: 0.4, size: 0.5 });
+        spawnShockwave(crystal.x, crystal.y, CRYSTAL_RADIUS, "#ffe27a");
       }
-      setRevealCorrectIdx(activeQuiz.correctIndex);
-      setWrongIdx(idx);
-      const outcome = streakProtector.handleWrong({ streak: combo });
-      if (outcome === "warned") sfxWarning();
-      else setCombo(0);
-      // G-1: a másfél másodperces felfedés megmutatta, MELYIK a jó válasz, de azt
-      // nem, hogy MIÉRT. A téves fogalom így érintetlenül maradt — pedig épp azt
-      // kellene javítani. A kártya addig áll, amíg a gyerek be nem zárja.
-      setFeedback(
-        buildFeedback({
-          quiz: {
-            prompt: activeQuiz.prompt,
-            options: activeQuiz.options,
-            correctIndex: activeQuiz.correctIndex,
-            // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
-            explanation: activeQuiz.explanation ?? undefined,
-          },
-          chosenIndex: idx,
-          attempt: 0,
-          ageBand: "kid",
-        }),
-      );
+      markHud();
       return;
     }
-    // Helyes válasz
-    sfxSuccess();
-    haptics("success");
-    setQuizCorrect((n) => n + 1);
-
-    setActiveQuiz(null);
-    setRevealCorrectIdx(null);
-    setWrongIdx(null);
-    if (quizReason === "wave") {
-      sfxLevelUp();
-      // A hullám elindítja a spawning-ot
-      beginWaveSpawning();
-      // Bónusz pontok jó válaszért
-      setScore((s) => s + 50);
-      scoreRef.current += 50;
-    } else {
-      // Hit-quiz után rövid invuln idő
-      playerRef.current.invuln = 2.0;
+    sfxError();
+    haptics("error");
+    // M9: csökkentett mozgásnál nincs rázás (a narancs keret és a „Miért?” jelez).
+    if (!reducedMotionRef.current) {
+      setWrongShake(true);
+      pushRunTimeout(() => setWrongShake(false), 320);
     }
-    setPhase("play");
+    driverRef.current?.pace.signal("wrong");
+    // A rossz kristály 3 apró sziklára hasad (a hajó felé hullnak) — veszély, nem menetvég. Lejáratnál nem hasad semmi.
+    if (result === "wrong" && crystal) {
+      if (refs) {
+        burstAt.set(crystal.x, crystal.y, 0.3);
+        refs.sparkles.emit(burstAt, { count: Math.round(30 * k), color: "#ff9f43", speed: 5, life: 0.6, size: 0.28 });
+        spawnShockwave(crystal.x, crystal.y, CRYSTAL_RADIUS, "#ff9f43");
+      }
+      for (const s of crystalShards({ x: crystal.x, y: crystal.y }, runRngRef.current.world.next)) addShardRock(s);
+    }
+    markHud();
   };
+
+  /* ============== teszt-kampó (K.2) ============== */
+  useEffect(() => {
+    return installGameTestApi({
+      probe: () => {
+        const ctl = qRef.current;
+        const driver = driverRef.current;
+        const clock = driver?.clockMs() ?? 0;
+        const st = ctl.director?.stats(clock);
+        const band = ctl.director?.band() ?? adaptiveRef.current.band;
+        const view = ctl.view();
+        return {
+          simTime: driver?.loop.simTimeMs() ?? 0,
+          questionOpen: ctl.active() ? 1 : 0,
+          questionsAnswered: st?.answered ?? 0,
+          questionsCorrect: st?.correct ?? 0,
+          fps: fpsRef.current,
+          band,
+          intensity: ctl.director?.intensity() ?? null,
+          level: runLevelRef.current,
+          spawnFactor: 1.4 - band * 0.6,
+          questionId: view.presentation?.id ?? null,
+          reveal: view.reveal ? 1 : 0,
+          wave: waveRef.current,
+          lives: livesRef.current,
+          score: scoreRef.current,
+          crystals: crystalsRef.current.filter((c) => c.alive).length,
+          enemies: enemiesRef.current.length,
+          paused: pausedRef.current ? 1 : 0,
+          over: runOverRef.current ? 1 : 0,
+          clock,
+          // A főellenfél hulláma (9.) és a kapuk hiánya: a hullám-váltás a `waveChanges`-ben látszik.
+          waveChanges: waveChangesRef.current,
+          invuln: playerRef.current.invuln,
+        };
+      },
+      forceState: (patch) => {
+        if (patch.phase === "intro" || patch.phase === "grade") {
+          setPaused(false);
+          setPhase(patch.phase);
+        }
+        // `phase: "play"`: a futó menet marad; ha nem fut, új menet indul (a régi „csak fázist vált” viselkedés helyett,
+        // mert a játék a meghajtó nélkül nem fut).
+        if (patch.phase === "play" && phaseRef.current !== "play") startNewRun();
+        // `phase: "quiz"` a `question: true` kompatibilis álneve (terv 9.): azonnal nyit egy kérdést.
+        if (patch.question || patch.phase === "quiz") {
+          setPaused(false);
+          qRef.current.request("trigger", driverRef.current?.clockMs() ?? 0);
+        }
+        if (typeof patch.gameWon === "boolean") setGameWon(patch.gameWon);
+        if (typeof patch.correctCount === "number") {
+          const n = Math.max(0, patch.correctCount);
+          scoreRef.current = n * 10;
+          waveRef.current = WAVE_COUNT;
+          markHud();
+        }
+        if (patch.phase === "over") endRun(patch.gameWon === true, typeof patch.correctCount === "number" ? Math.max(0, patch.correctCount) : undefined);
+      },
+    });
+  }, [endRun, startNewRun]);
 
   /* ============== Three.js inicializálás ============== */
 
@@ -1355,9 +1621,18 @@ export default function SpaceAsteroidQuiz() {
     if (!canvas) return;
     const tier = detectLookTier();
     const budget = LOOK_BUDGET[tier];
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: tier !== "low", alpha: false });
-    applyRendererLook(renderer, tier, { exposure: 0.95, shadows: false });
+    // KSZ-8: a közös renderer-gyár (pixelarány a tier plafonján, ACES, sRGB); WebGL nélkül nincs jelenet (a menü működik).
+    const renderer = createGameRenderer(canvas, tier, { exposure: 0.95, shadows: false });
+    if (!renderer) return;
     renderer.setClearColor("#02041a");
+    // K.4/7: a WebGL-környezet elvesztése → szünet + „Grafika újraindítása” gomb (új vászon + új renderer).
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+      setGfxLost(true);
+      pausedRef.current = true;
+      setPaused(true);
+    };
+    canvas.addEventListener("webglcontextlost", onContextLost);
 
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2("#050a2a", 0.012);
@@ -1470,6 +1745,14 @@ export default function SpaceAsteroidQuiz() {
     scene.add(pickupsGroup);
     const fxGroup = new THREE.Group();
     scene.add(fxGroup);
+    // J6a: a kérdés-kristályok meshei egyszer, előre (KSZ-6: pool; a nem látszó elem `visible = false`).
+    const answerMeshes: THREE.Group[] = [];
+    for (let i = 0; i < 4; i++) {
+      const m = buildAnswerCrystalMesh();
+      m.visible = false;
+      scene.add(m);
+      answerMeshes.push(m);
+    }
 
     const postFx = createPostFx(renderer, scene, camera, tier, { strength: 0.7, radius: 0.45, threshold: 0.86 });
 
@@ -1477,7 +1760,7 @@ export default function SpaceAsteroidQuiz() {
       scene, camera, renderer, starfield, nebula, playerGroup, thrusterMesh, shieldMesh, shieldFullMesh,
       brightStars, planet, postFx, sparkles, thrusterGlow, bulletGlow,
       reducedParticles: budget.particleScale,
-      enemiesGroup, bulletsGroup, pickupsGroup, fxGroup,
+      enemiesGroup, bulletsGroup, pickupsGroup, fxGroup, answerMeshes,
       enemyMeshById: new Map(),
       bulletMeshById: new Map(),
       pickupMeshById: new Map(),
@@ -1518,11 +1801,15 @@ export default function SpaceAsteroidQuiz() {
     const loop = (t: number) => {
       const last = lastTimeRef.current;
       lastTimeRef.current = t;
-      const dt = last == null ? 0 : Math.min(0.05, (t - last) / 1000);
-      lastDtRef.current = dt;
-
-      tickRef.current(dt);
+      // A valós képkocka-idő (ms, legfeljebb 50): a meghajtó ebből fix 1/60 s-os lépéseket gyárt (KSZ-4); a rajz a valós
+      // időt használja (csillagok, részecskék).
+      const realDt = last == null ? 0 : Math.min(50, t - last);
+      lastDtRef.current = realDt / 1000;
+      if (realDt > 0) fpsRef.current = fpsRef.current * 0.9 + (1000 / realDt) * 0.1;
+      const driver = driverRef.current;
+      if (driver && phaseRef.current === "play") driver.frame(realDt, pausedRef.current);
       renderRef.current(t / 1000);
+      publishHud();
 
       rafRef.current = requestGameFrame(loop);
     };
@@ -1531,6 +1818,7 @@ export default function SpaceAsteroidQuiz() {
 
     return () => {
       cancelGameFrame(rafRef.current);
+      canvas.removeEventListener("webglcontextlost", onContextLost);
       window.removeEventListener("resize", handleResize);
       ro.disconnect();
       // Dispose minden mesh / material / texture (a közös glow-textúra kivételével)
@@ -1554,14 +1842,13 @@ export default function SpaceAsteroidQuiz() {
       shockwavesRef.current = [];
       sceneRefs.current = null;
     };
-  }, []);
+  }, [sceneEpoch]);
 
   /* ===================== Tick (game logic) ===================== */
   const tick = (dt: number) => {
     if (phaseRef.current !== "play" || pausedRef.current) {
-      // Kvíz / szünet alatt nincs játéklogika. A csillagmezőt a render()
-      // animálja (egy helyen — korábban itt IS futott, ami dupla-sebességet
-      // okozott kvíz alatt).
+      // Szünet / „Miért?” alatt nincs játéklogika (a meghajtó ilyenkor nem is lépteti). A csillagmezőt a render()
+      // animálja (egy helyen — korábban itt IS futott, ami dupla-sebességet okozott).
       void dt;
       return;
     }
@@ -1586,14 +1873,22 @@ export default function SpaceAsteroidQuiz() {
     p.bobPhase = integrated.bobPhase;
     if (p.cooldown > 0) p.cooldown -= dt;
     if (p.invuln > 0) p.invuln -= dt;
-    // Pajzs-időzítő — másodpercenként, közben a render már 1s-os granuláris
+    // Pajzs- és erő-időzítő, a „HULLÁM n” felirat: játékidőben (szünetben és a „Miért?” alatt a meghajtó nem lép, ezért áll);
+    // a HUD-pillanatkép (≤ 10 Hz) másodpercenként egyszer kap új értéket (KSZ-9).
     if (shieldTimerRef.current > 0) {
+      const before = Math.ceil(shieldTimerRef.current);
       shieldTimerRef.current = Math.max(0, shieldTimerRef.current - dt);
-      // 1 másodpercenként frissítjük a state-et a HUD-hoz (perf)
-      const ceiled = Math.ceil(shieldTimerRef.current);
-      if (ceiled !== Math.ceil(shieldTimerRef.current + dt)) {
-        setShieldTimer(ceiled);
-      }
+      if (Math.ceil(shieldTimerRef.current) !== before) markHud();
+    }
+    if (powerTimerRef.current > 0) {
+      const before = Math.ceil(powerTimerRef.current);
+      powerTimerRef.current = Math.max(0, powerTimerRef.current - dt);
+      if (powerTimerRef.current <= 0) powerLevelRef.current = 0;
+      if (Math.ceil(powerTimerRef.current) !== before) markHud();
+    }
+    if (bannerLeftRef.current > 0) {
+      bannerLeftRef.current = Math.max(0, bannerLeftRef.current - dt);
+      if (bannerLeftRef.current === 0) markHud();
     }
 
     // Lövés
@@ -1623,11 +1918,32 @@ export default function SpaceAsteroidQuiz() {
       if (b.y > GAME_H / 2 + 1 || b.y < -GAME_H / 2 - 1 || Math.abs(b.x) > GAME_W / 2 + 1) b.life = 0;
     }
 
+    // Kérdés-kristályok (J6a): lassú lebegés; a játékos lövedéke a kristályt „kilövi” — ez a válasz. A célzássegéd
+    // (`aimAssistVx`) csak az ellenfeleket kapja: a kristály kiválasztása a játékosé (U-J6-1).
+    const crystals = crystalsRef.current;
+    if (crystals.length > 0) {
+      stepCrystals(crystals, dt);
+      if (qRef.current.active()) {
+        for (const b of bulletsRef.current) {
+          if (b.life <= 0 || b.fromEnemy) continue;
+          const c = crystalAt(crystals, b.x, b.y);
+          if (c) {
+            b.life = 0;
+            onAnswer(c.optionIndex);
+            break;
+          }
+        }
+      } else if (!qRef.current.view().presentation) {
+        // a kérdés és a megoldás-kijelzés lezárult: a kristályok eltűnnek
+        crystalsRef.current = [];
+      }
+    }
+
     gameElapsedRef.current += dt;
 
     // Spawn logika a hullámon belül — elapsed óra, nem fali idő (kvíz alatt áll)
     if (!waveIntermissionRef.current && enemiesSpawnedThisWaveRef.current < enemiesPerWaveRef.current) {
-      const spawnInterval = clamp(1.4 - waveRef.current * 0.06, 0.4, 1.4) * (1.4 - adaptiveRef.current.band * 0.6);
+      const spawnInterval = waveSpawnInterval(waveRef.current, qRef.current.director?.band() ?? adaptiveRef.current.band);
       const emptyField = enemiesRef.current.length === 0;
       if (spawnReady({
         elapsed: gameElapsedRef.current,
@@ -1659,7 +1975,7 @@ export default function SpaceAsteroidQuiz() {
         e.y += e.vy * dt;
         e.fireCooldown -= dt;
         if (e.fireCooldown <= 0 && e.y > -GAME_H / 2 + 5) {
-          e.fireCooldown = randRange(1.4, 2.2);
+          e.fireCooldown = randRange(runRngRef.current.world.next, 1.4, 2.2);
           // Lövedék a játékos felé
           const dxh = playerRef.current.x - e.x;
           const dyh = playerRef.current.y - e.y;
@@ -1731,7 +2047,7 @@ export default function SpaceAsteroidQuiz() {
       if (e.y < -GAME_H / 2 - 1.2) {
         e.dead = true;
         comboRef.current = 0;
-        setCombo(0);
+        markHud();
       }
     }
 
@@ -1772,6 +2088,15 @@ export default function SpaceAsteroidQuiz() {
       }
     }
 
+    // Közeli veszély → a mini-Director intenzitása nő (a kérdés a nyugodt pillanatot részesíti előnyben, KSZ-15).
+    for (const e of enemiesRef.current) {
+      if (e.dead || e.kind === "boss") continue;
+      if (e.y > p.y && e.y - p.y < 4.5 && Math.abs(e.x - p.x) < 3) {
+        driverRef.current?.pace.signal("nearThreat", dt);
+        break;
+      }
+    }
+
     // Ellenfél × játékos ütközés (vagy ellenséges lövedék × játékos)
     // Pajzs aktív → minden ütközés blokkolva (mintha invuln lenne)
     if (p.invuln <= 0 && shieldTimerRef.current <= 0) {
@@ -1782,7 +2107,7 @@ export default function SpaceAsteroidQuiz() {
         const dy = e.y - p.y;
         if (dx * dx + dy * dy < radius * radius) {
           handleHit(e);
-          return; // azonnal meg kell állnunk és kvíz dialógra váltanunk
+          return; // a találat a lépés végét jelenti (a 2 mp sérthetetlenség a következő lépéstől védi a hajót)
         }
       }
       for (const b of bulletsRef.current) {
@@ -1827,30 +2152,30 @@ export default function SpaceAsteroidQuiz() {
     ) {
       waveIntermissionRef.current = true;
       const newWave = waveRef.current + 1;
-      if (newWave > 12) {
+      if (newWave > BOSS_FINAL_WAVE) {
         // Győzelem (elvileg ide csak akkor jutunk, ha a boss-ág nem futott le)
-        setGameWon(true);
-        setPhase("over");
+        endRun(true);
         return;
       }
+      // J6a: nincs hullám-kapu — a hullám AZONNAL vált, a „HULLÁM n” felirat 2 mp-ig látszik; a hullám-bónusz teljesítményhez
+      // kötött és determinisztikus (a régi „+50 a jó induló kvízért” helyett).
       waveRef.current = newWave;
-      setWave(newWave);
-      // Új hullám kvízzel indul
-      enqueueQuiz("wave");
+      waveChangesRef.current += 1;
+      scoreRef.current += 50;
+      sfxLevelUp();
+      beginWaveSpawning();
     }
-
-    if (shakeRef.current > 0) shakeRef.current = Math.max(0, shakeRef.current - dt * 8);
 
     // Boss HP-szinkron a HUD-hoz
     const boss = enemiesRef.current.find((e) => !e.dead && e.kind === "boss");
     if (boss) {
       if (bossHpRef.current !== boss.hp) {
         bossHpRef.current = boss.hp;
-        setBossHp(boss.hp);
+        markHud();
       }
     } else if (bossHpRef.current !== null) {
       bossHpRef.current = null;
-      setBossHp(null);
+      markHud();
     }
   };
 
@@ -1894,6 +2219,8 @@ export default function SpaceAsteroidQuiz() {
       fireCooldown: 1.5, // pre-fight pause
     };
     enemiesRef.current.push(e);
+    // A főellenfél érkezése: figyelmeztető hang (a ≥ 600 ms-os előjelzés a lassú ereszkedés + az első lövés 1,5 mp-es késleltetése).
+    sfxWarning();
     const refs = sceneRefs.current;
     if (refs) {
       const mesh = buildBossMesh();
@@ -1903,9 +2230,19 @@ export default function SpaceAsteroidQuiz() {
     }
   };
 
-  /** Hullám-spawn: a hullámszámmal súlyozottan vegyíti az ellenfél-típusokat. */
+  /** Egy ellenfél a jelenethez (építés a fajta szerint): a spawn és a render (újraindított jelenet) is ezt hívja. */
+  const makeEnemyMesh = (e: EnemyState): THREE.Object3D => {
+    if (e.kind === "boss") return buildBossMesh();
+    if (e.kind === "rock") return buildRockMesh(e.size);
+    if (e.kind === "crystal") return buildCrystalMesh();
+    if (e.kind === "alien") return buildAlienMesh();
+    return buildFighterMesh();
+  };
+
+  /** Hullám-spawn: a hullámszámmal súlyozottan vegyíti az ellenfél-típusokat (a képlet a `physics.ts`-ben, a szimulációval közös). */
   const spawnEnemyForWave = () => {
-    // Boss-pálya: 12. hullám első spawn = boss, utána semmi
+    const rng = runRngRef.current.world.next;
+    // Boss-pálya: a 9. hullám első spawn = boss, utána semmi
     if (waveRef.current === BOSS_FINAL_WAVE) {
       if (enemiesSpawnedThisWaveRef.current === 0) {
         spawnBoss();
@@ -1913,51 +2250,95 @@ export default function SpaceAsteroidQuiz() {
       return;
     }
     enemiesSpawnedThisWaveRef.current += 1;
+    markHud();
     const w = waveRef.current;
     // Minden hullámmal több crystal/alien/fighter — első hullámban főleg sziklák.
-    const roll = Math.random();
-    let kind: EnemyKind = "rock";
-    if (w >= 2 && roll < 0.10) kind = "crystal";
-    else if (w >= 3 && roll < 0.25) kind = "alien";
-    else if (w >= 4 && roll < 0.40) kind = "fighter";
-    else if (w >= 2 && roll < 0.55) kind = "crystal";
+    const kind: EnemyKind = pickEnemyKind(w, rng());
     // ha rock → 70% nagy, 25% közepes, 5% kicsi (rendszerint nagy spawnol, és majd hasad)
-    let size: 1 | 2 | 3 = 3;
-    if (kind === "rock") {
-      const r2 = Math.random();
-      size = r2 < 0.70 ? 3 : r2 < 0.95 ? 2 : 1;
-    }
+    const size: 1 | 2 | 3 = kind === "rock" ? pickRockSize(rng()) : 3;
     const id = nextEntityIdRef.current++;
-    const x = randRange(-GAME_W / 2 + 1.2, GAME_W / 2 - 1.2);
-    const y = GAME_H / 2 + randRange(0.6, 2.2);
-    const baseVy = -1.0 - Math.min(w * 0.10, 1.6);
+    const x = randRange(rng, -GAME_W / 2 + 1.2, GAME_W / 2 - 1.2);
+    const y = randRange(rng, SPAWN_Y_MIN, SPAWN_Y_MAX);
+    const baseVy = waveBaseVy(w);
     const e: EnemyState = {
       id, kind, size,
       x, y,
-      vx: kind === "fighter" ? 0 : randRange(-0.7, 0.7),
-      vy: kind === "alien" ? -0.55 : kind === "fighter" ? -0.85 : baseVy + randRange(-0.4, 0.0) - (3 - size) * 0.25,
-      rot: Math.random() * Math.PI * 2,
-      rotSpeed: kind === "rock" || kind === "crystal" ? randRange(-1.4, 1.4) : 0.6,
-      hp: kind === "rock" ? size : kind === "crystal" ? 1 : kind === "alien" ? 2 : 3,
+      vx: kind === "fighter" ? 0 : randRange(rng, -0.7, 0.7),
+      vy: kind === "alien" ? -0.55 : kind === "fighter" ? -0.85 : baseVy + randRange(rng, -0.4, 0.0) - (3 - size) * 0.25,
+      rot: rng() * Math.PI * 2,
+      rotSpeed: kind === "rock" || kind === "crystal" ? randRange(rng, -1.4, 1.4) : 0.6,
+      hp: enemyHp(kind, size),
       flash: 0,
       dead: false,
-      spawnAt: (lastTimeRef.current ?? 0) / 1000,
+      spawnAt: gameElapsedRef.current,
       phase: 0,
-      fireCooldown: kind === "fighter" ? randRange(1.0, 2.0) : 0,
+      fireCooldown: kind === "fighter" ? randRange(rng, 1.0, 2.0) : 0,
     };
     enemiesRef.current.push(e);
     // Mesh hozzáadása a Three.js scenehez
     const refs = sceneRefs.current;
     if (refs) {
-      let mesh: THREE.Object3D;
-      if (kind === "rock") mesh = buildRockMesh(size);
-      else if (kind === "crystal") mesh = buildCrystalMesh();
-      else if (kind === "alien") mesh = buildAlienMesh();
-      else mesh = buildFighterMesh();
+      const mesh = makeEnemyMesh(e);
       mesh.position.set(x, y, 0);
       refs.enemiesGroup.add(mesh);
       refs.enemyMeshById.set(id, mesh);
     }
+  };
+
+  /** A rossz kristály hasadéka: egy apró (1-es) szikla a jelenetbe és az ellenfelek közé. */
+  const addShardRock = (shard: { x: number; y: number; vx: number; vy: number }) => {
+    const rng = runRngRef.current.world.next;
+    const e: EnemyState = {
+      id: nextEntityIdRef.current++,
+      kind: "rock",
+      size: 1,
+      x: shard.x,
+      y: shard.y,
+      vx: shard.vx,
+      vy: shard.vy,
+      rot: rng() * Math.PI * 2,
+      rotSpeed: (rng() - 0.5) * 3.6,
+      hp: enemyHp("rock", 1),
+      flash: 0,
+      dead: false,
+      spawnAt: gameElapsedRef.current,
+      phase: 0,
+      fireCooldown: 0,
+    };
+    enemiesRef.current.push(e);
+    const refs = sceneRefs.current;
+    if (refs) {
+      const mesh = makeEnemyMesh(e);
+      mesh.position.set(e.x, e.y, 0);
+      refs.enemiesGroup.add(mesh);
+      refs.enemyMeshById.set(e.id, mesh);
+    }
+  };
+
+  /** A képernyőrázás egyetlen útja (KSZ-10): trauma² a közös `feel`-ben (plafon, lecsengés, csökkentett mozgásnál 0). */
+  const addTrauma = (amount: number) => {
+    driverRef.current?.feel.addTrauma(amount);
+  };
+
+  /**
+   * A jó kristály-válasz fejlesztése (végrehajtás J6a): az áramlat-intenzitás szerint — alacsonynál PAJZS (a nehézségben lévő
+   * játékos védelmet kap), közepesnél HÁRMAS LÖVÉS, magasnál BOMBA. Játékbeli következmény ≤ 2 mp-en belül (K.4/23).
+   */
+  const applyCrystalUpgrade = () => {
+    const intensity = qRef.current.director?.intensity() ?? 0.4;
+    if (intensity < 0.34) {
+      shieldTimerRef.current = Math.min(20, shieldTimerRef.current + CRYSTAL_SHIELD_SEC);
+      setSavedToast("Pajzs!");
+    } else if (intensity < 0.67) {
+      powerLevelRef.current = 2;
+      powerTimerRef.current = POWER_DURATION;
+      setSavedToast("Hármas lövés!");
+    } else {
+      bombsRef.current = Math.min(5, bombsRef.current + 1);
+      setSavedToast("Bomba a tárba!");
+    }
+    pushRunTimeout(() => setSavedToast(null), 1800);
+    markHud();
   };
 
   /**
@@ -1970,12 +2351,12 @@ export default function SpaceAsteroidQuiz() {
    */
   const finishRunAfter = (ms: number) => {
     pushRunTimeout(() => {
-      if (pausedRef.current || phaseRef.current === "quiz") {
+      if (pausedRef.current) {
         finishRunAfter(250);
         return;
       }
       if (phaseRef.current !== "play") return;
-      setPhase("over");
+      endRun(true);
     }, ms);
   };
 
@@ -2009,19 +2390,17 @@ export default function SpaceAsteroidQuiz() {
     e.dead = true;
     comboRef.current = comboRef.current + 1;
     if (comboRef.current > bestComboRef.current) bestComboRef.current = comboRef.current; // D2
-    setCombo(comboRef.current);
     enemiesKilledRef.current += 1;
-    setEnemiesKilled(enemiesKilledRef.current);
     if (e.kind === "alien") alienKillsRef.current += 1;
     const baseXp = ENEMY_BASE_XP[e.kind] * (e.kind === "rock" ? e.size : 1);
     const comboBonus = Math.min(20, comboRef.current * 4);
     const total = baseXp + comboBonus;
     scoreRef.current += total;
-    setScore(scoreRef.current);
+    markHud();
 
-    // BOSS megsemmisült → játék-győzelem (12. hullám clear)
+    // BOSS megsemmisült → játék-győzelem (a 9. hullám, a főellenfél legyőzése)
     if (e.kind === "boss") {
-      shakeRef.current = 2.5;
+      addTrauma(1);
       const refs = sceneRefs.current;
       if (refs) {
         const k = motionScale(reducedMotionRef.current).particles;
@@ -2063,6 +2442,8 @@ export default function SpaceAsteroidQuiz() {
       // PÁRHUZAMOSAN (azonnal) over-re váltson — így a 1.5s robbanás-pause
       // ténylegesen lejátszódik a phase-átmenet előtt.
       bossDefeatedRef.current = true;
+      // A menet vége: új kérdés nem indul; a nyitott kérdés „aborted” (nem hiba, nem ismétlés).
+      runOverRef.current = true;
       setGameWon(true);
       finishRunAfter(1500); // robbanás-effekt ideje
       return;
@@ -2073,7 +2454,7 @@ export default function SpaceAsteroidQuiz() {
       const parentSize = e.size as 2 | 3;
       const shards = splitRock(
         { x: e.x, y: e.y, vx: e.vx, vy: e.vy, size: parentSize },
-        Math.random,
+        runRngRef.current.world.next,
       );
       for (const shard of shards) {
         const id = nextEntityIdRef.current++;
@@ -2085,8 +2466,8 @@ export default function SpaceAsteroidQuiz() {
           y: shard.y,
           vx: shard.vx,
           vy: shard.vy,
-          rot: Math.random() * Math.PI * 2,
-          rotSpeed: (Math.random() - 0.5) * 3.6,
+          rot: runRngRef.current.world.next() * Math.PI * 2,
+          rotSpeed: (runRngRef.current.world.next() - 0.5) * 3.6,
           hp: shard.size,
           flash: 0,
           dead: false,
@@ -2107,9 +2488,9 @@ export default function SpaceAsteroidQuiz() {
     } else {
       // Pickup-esély: kis aszteroida vagy crystal/alien/fighter ölés esetén
       const dropChance = e.kind === "rock" ? 0.18 : e.kind === "crystal" ? 0.32 : e.kind === "alien" ? 0.40 : 0.32;
-      if (Math.random() < dropChance) {
+      if (runRngRef.current.world.next() < dropChance) {
         // 4-féle pickup: 40% life, 30% power, 20% shield, 10% bomb
-        const r = Math.random();
+        const r = runRngRef.current.world.next();
         const kind: PickupState["kind"] =
           r < 0.40 ? "life" : r < 0.70 ? "power" : r < 0.90 ? "shield" : "bomb";
         const pid = nextEntityIdRef.current++;
@@ -2162,15 +2543,17 @@ export default function SpaceAsteroidQuiz() {
       });
     }
     spawnShockwave(e.x, e.y, enemyRadius(e), EXPLOSION_COLORS[e.kind]);
-    shakeRef.current = 0.4;
+    addTrauma(0.16);
   };
 
-  /** Hit-quiz mechanika: kvízig pause, ellenfelet eltávolítjuk az ütközéskor. */
+  /**
+   * Ütközés (J6a): −1 élet és 2 mp sérthetetlenség — nincs kvíz, a játék nem áll meg. A mini-Director sérülés-jelzést kap
+   * (a kérdés a nyugodt pillanatot részesíti előnyben), a találat rövid hitstoppal és mértékletes rázással jár (KSZ-10).
+   */
   const handleHit = (e: EnemyState | null) => {
     haptics("hit");
     if (e) {
       e.dead = true;
-      shakeRef.current = 1.0;
       const refs = sceneRefs.current;
       if (refs) {
         refs.flashLight.intensity = reducedMotionRef.current ? 2.5 : 5.5;
@@ -2185,24 +2568,22 @@ export default function SpaceAsteroidQuiz() {
       }
       spawnShockwave(playerRef.current.x, playerRef.current.y, 0.9, "#ff4d6d");
     }
-    // AZONNALI takarítás: a tick a kvíz-fázisban korán kilép, a halott
-    // ellenfél egyébként a kvíz-overlay alatt a pályán maradna (mesh + state).
+    addTrauma(0.5);
+    driverRef.current?.feel.hitstop(80);
+    driverRef.current?.pace.signal("damage");
+    // Az ütköző ellenfél azonnal eltűnik a pályáról (mesh + állapot).
     enemiesRef.current = enemiesRef.current.filter((en) => !en.dead);
     comboRef.current = 0;
-    setCombo(0);
-    // ÉLET-MECHANIKA: ütközés = -1 élet. 0 életnél game over (a HUD szívei
-    // eddig csak dekoráció voltak — a lives sosem csökkent).
+    // ÉLET-MECHANIKA: ütközés = −1 élet. 0 életnél a menet véget ér.
     const nextLives = Math.max(0, livesRef.current - 1);
     livesRef.current = nextLives;
-    setLives(nextLives);
+    markHud();
     if (nextLives <= 0) {
       sfxExplode();
-      setGameWon(false);
-      setPhase("over");
+      endRun(false);
       return;
     }
-    playerRef.current.invuln = 0.3; // rövid pre-quiz invuln
-    enqueueQuiz("hit");
+    playerRef.current.invuln = HIT_INVULN_SEC;
   };
 
   /** Pickup begyűjtése. */
@@ -2211,36 +2592,31 @@ export default function SpaceAsteroidQuiz() {
     if (pu.kind === "life") {
       const next = Math.min(9, livesRef.current + 1);
       livesRef.current = next;
-      setLives(next);
-      setSavedToast("Megúsztál egy kvízt!");
+      setSavedToast("+1 élet!");
       pushTimeout(() => setSavedToast(null), 2200);
       scoreRef.current += 35;
-      setScore(scoreRef.current);
+      markHud();
     } else if (pu.kind === "shield") {
       // Pajzs: 8s teljes invuln (kék gyűrű mutat). Stack-elhető (eddigi shieldTimer + 8s).
       shieldTimerRef.current = Math.min(20, shieldTimerRef.current + 8);
-      setShieldTimer(shieldTimerRef.current);
       setSavedToast("Pajzs aktiválva!");
       pushTimeout(() => setSavedToast(null), 1800);
       scoreRef.current += 25;
-      setScore(scoreRef.current);
+      markHud();
     } else if (pu.kind === "bomb") {
       // Bomb: +1 készletre, B-billentyűvel vagy touch-gombbal süthető le.
       bombsRef.current = Math.min(5, bombsRef.current + 1);
-      setBombs(bombsRef.current);
       setSavedToast("Bomba a tárba!");
       pushTimeout(() => setSavedToast(null), 1800);
       scoreRef.current += 30;
-      setScore(scoreRef.current);
+      markHud();
     } else {
       // Power-up: 1 vagy 2-szintű, mindkét esetben +10s
       const next = Math.min(2, powerLevelRef.current + 1);
       powerLevelRef.current = next;
-      setPowerLevel(next);
       powerTimerRef.current = POWER_DURATION;
-      setPowerTimer(POWER_DURATION);
       scoreRef.current += 20;
-      setScore(scoreRef.current);
+      markHud();
     }
   };
 
@@ -2259,10 +2635,10 @@ export default function SpaceAsteroidQuiz() {
     if (bombsRef.current <= 0) return;
     if (phaseRef.current !== "play" || pausedRef.current) return;
     bombsRef.current = Math.max(0, bombsRef.current - 1);
-    setBombs(bombsRef.current);
     sfxExplode();
     haptics("hit");
-    shakeRef.current = 1.5;
+    addTrauma(0.7);
+    markHud();
     const refs = sceneRefs.current;
     if (refs) {
       const k = motionScale(reducedMotionRef.current).particles;
@@ -2293,7 +2669,7 @@ export default function SpaceAsteroidQuiz() {
     if (killedAny) {
       comboRef.current = comboBefore + 1;
       if (comboRef.current > bestComboRef.current) bestComboRef.current = comboRef.current; // D2
-      setCombo(comboRef.current);
+      markHud();
     }
     // Ellenséges lövedékek is törlődnek
     for (const b of bulletsRef.current) {
@@ -2308,9 +2684,17 @@ export default function SpaceAsteroidQuiz() {
   const exhaustOrigin = useMemo(() => new THREE.Vector3(), []);
   const exhaustDir = useMemo(() => new THREE.Vector3(0, -1, 0), []);
   const burstAt = useMemo(() => new THREE.Vector3(), []);
+  /** A rázás (feel) kimenete — a forró úton nincs allokáció (KSZ-5). */
+  const shakeOut = useMemo<ShakeOffset>(() => ({ x: 0, y: 0, rot: 0 }), []);
+  const projectTmp = useMemo(() => new THREE.Vector3(), []);
+  /** A kristály-mesh utolsó kirajzolt állapota (színváltás csak változáskor). */
+  const crystalLookRef = useRef<Array<CrystalLook | "hidden">>(["hidden", "hidden", "hidden", "hidden"]);
   const render = (now: number) => {
     const refs = sceneRefs.current;
     if (!refs) return;
+    // Kanban #69 (havi audit): a menüben (osztályválasztó / kezdőképernyő) a vászon rejtett — nincs mit rajzolni, a jelenet
+    // és a hurok nem fogyaszt GPU-t. A játék / eredmény alatt rajzol.
+    if (phaseRef.current === "grade" || phaseRef.current === "intro") return;
     const { camera, starfield, playerGroup, thrusterMesh, shieldMesh, shieldFullMesh, flashLight } = refs;
     const frameDt = lastDtRef.current;
 
@@ -2345,18 +2729,18 @@ export default function SpaceAsteroidQuiz() {
     playerGroup.rotation.y = tilt * 0.18;
     // Thruster pulzálás
     const moving2 = phaseRef.current === "play";
-    thrusterMesh.scale.set(1 + Math.random() * 0.2, moving2 ? 1.4 + Math.random() * 0.5 : 0.5, 1);
+    thrusterMesh.scale.set(1 + cosmeticRandom() * 0.2, moving2 ? 1.4 + cosmeticRandom() * 0.5 : 0.5, 1);
     thrusterMesh.material.opacity = moving2 ? 0.85 : 0.4;
-    refs.thrusterGlow.material.opacity = moving2 ? 0.6 + Math.random() * 0.25 : 0.3;
+    refs.thrusterGlow.material.opacity = moving2 ? 0.6 + cosmeticRandom() * 0.25 : 0.3;
     // Hajtómű-csóva: meleg szikrák a hajó mögött (mozgáscsökkentésnél ritkábban).
     if (moving2 && playerGroup.visible && frameDt > 0) {
       const rate = (reducedMotionRef.current ? 18 : 70) * refs.reducedParticles;
-      const count = Math.floor(rate * frameDt + Math.random());
+      const count = Math.floor(rate * frameDt + cosmeticRandom());
       if (count > 0) {
         exhaustOrigin.set(p.x, p.y - 1.15, 0.1);
         refs.sparkles.emit(exhaustOrigin, {
           count,
-          color: Math.random() < 0.5 ? "#ffcf4a" : "#ff7a3d",
+          color: cosmeticRandom() < 0.5 ? "#ffcf4a" : "#ff7a3d",
           speed: 2.6,
           life: 0.45,
           size: 0.22,
@@ -2391,8 +2775,13 @@ export default function SpaceAsteroidQuiz() {
 
     // Ellenfelek mesh-pozíciók
     for (const e of enemiesRef.current) {
-      const mesh = refs.enemyMeshById.get(e.id);
-      if (!mesh) continue;
+      let mesh = refs.enemyMeshById.get(e.id);
+      if (!mesh) {
+        // K.4/7: a „Grafika újraindítása” új jelenetet épít — a futó ellenfelek meshe itt épül újra.
+        mesh = makeEnemyMesh(e);
+        refs.enemiesGroup.add(mesh);
+        refs.enemyMeshById.set(e.id, mesh);
+      }
       mesh.position.set(e.x, e.y, 0);
       const spin = enemyRenderSpin(e.kind, now, e.rot, e.vx);
       mesh.rotation.set(spin.x, spin.y, spin.z);
@@ -2465,8 +2854,15 @@ export default function SpaceAsteroidQuiz() {
 
     // Pickupok
     for (const pu of pickupsRef.current) {
-      const mesh = refs.pickupMeshById.get(pu.id);
-      if (!mesh) continue;
+      let mesh = refs.pickupMeshById.get(pu.id);
+      if (!mesh) {
+        mesh = pu.kind === "life" ? buildLifePickupMesh()
+          : pu.kind === "shield" ? buildShieldPickupMesh()
+          : pu.kind === "bomb" ? buildBombPickupMesh()
+          : buildPowerPickupMesh();
+        refs.pickupsGroup.add(mesh);
+        refs.pickupMeshById.set(pu.id, mesh);
+      }
       mesh.position.set(pu.x, pu.y, 0);
       mesh.rotation.set(now * 1.6, now * 1.6, pu.rot);
     }
@@ -2486,6 +2882,62 @@ export default function SpaceAsteroidQuiz() {
       }
     });
     deadPickupIds.forEach((id) => refs.pickupMeshById.delete(id));
+
+    // Kérdés-kristályok (J6a): a 3D mesh és a DOM-gomb (a koppintható / billentyűzetes cél) ugyanazon a világ-pozíción.
+    // Nyitott kérdésnél minden kristály látszik; megoldás-kijelzés közben csak a helyes (zölden világít, ≥ 1,8 mp), a többi
+    // (köztük a kiválasztott, szétesett rossz) elmarad. A DOM-gombokat közvetlenül mozgatjuk (nincs képkockánkénti setState).
+    {
+      const view = qRef.current.view();
+      const reveal = view.reveal;
+      const open = view.presentation !== null && !reveal;
+      const list = crystalsRef.current;
+      const canvasEl = refs.renderer.domElement;
+      const cw = canvasEl.clientWidth;
+      const ch = canvasEl.clientHeight;
+      // A kártya magassága a hosszú prompttól / a megoldás-sortól függ: ~5 képkockánként újramérjük a zónát.
+      if (list.length > 0 && now - zoneRef.current.at > 0.2) {
+        zoneRef.current.at = now;
+        rezoneCrystals(list, computeCrystalBounds(), 0.35);
+      }
+      for (let i = 0; i < refs.answerMeshes.length; i++) {
+        const mesh = refs.answerMeshes[i]!;
+        const c = list[i];
+        const chip = chipRefs.current[i];
+        let look: CrystalLook | "hidden" = "hidden";
+        if (c) {
+          if (open) look = c.alive ? "idle" : "hidden";
+          else if (reveal) look = reveal.correctOptionIndex === i ? "correct" : "hidden";
+        }
+        if (crystalLookRef.current[i] !== look) {
+          crystalLookRef.current[i] = look;
+          mesh.visible = look !== "hidden";
+          const gem = mesh.getObjectByName("gem") as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> | undefined;
+          if (gem) {
+            gem.material.color.set(look === "correct" ? "#6cff9c" : "#ffd86b");
+            gem.material.emissive.set(look === "correct" ? "#117a3a" : "#a8561a");
+          }
+        }
+        // A gomb láthatósága KÉPKOCKÁNKÉNT egyeztetve (nem csak váltáskor): a következő kérdés gombjai új DOM-elemek, amelyek
+        // rejtve indulnak — a „look” változatlan „idle” maradhat az előző kérdésről.
+        if (chip) {
+          const vis = look === "hidden" ? "hidden" : "visible";
+          if (chip.style.visibility !== vis) chip.style.visibility = vis;
+        }
+        if (!c || look === "hidden") continue;
+        mesh.position.set(c.x, c.y + (reducedMotionRef.current ? 0 : Math.sin(now * 1.7 + i * 1.3) * 0.16), 0.2);
+        mesh.rotation.y = reducedMotionRef.current ? 0 : now * 0.9 + i;
+        const pulse = look === "correct" ? 1.18 + (reducedMotionRef.current ? 0 : Math.sin(now * 8) * 0.06) : 1;
+        // A 3D kristály a DOM-gomb körül „kikandikál” (a gomb a felirat és a koppintható cél; a kristály a fény és a találati gömb).
+        const size = pulse * 1.55;
+        mesh.scale.set(size, size, size);
+        if (chip && cw > 0 && ch > 0) {
+          projectTmp.set(c.x, c.y, 0.2).project(camera);
+          const px = (projectTmp.x * 0.5 + 0.5) * cw;
+          const py = (-projectTmp.y * 0.5 + 0.5) * ch;
+          chip.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) translate(-50%, -50%)`;
+        }
+      }
+    }
 
     // S10: lökéshullám-gyűrűk tágulása és elhalványulása (szünetben megáll, mint a játék).
     if (shockwavesRef.current.length > 0) {
@@ -2516,9 +2968,14 @@ export default function SpaceAsteroidQuiz() {
     // G-5: mozgáscsökkentésnél teljesen elmarad. A rázás okozza a rosszullétet,
     // nem a részecskék — és aki rosszul lesz tőle, nem hibát jelent, hanem
     // abbahagyja a játékot.
-    if (shakeRef.current > 0 && !reducedMotionRef.current) {
-      camera.position.x = (Math.random() - 0.5) * shakeRef.current * 0.6;
-      camera.position.y = CAMERA_Y + (Math.random() - 0.5) * shakeRef.current * 0.4;
+    const feel = driverRef.current?.feel;
+    const canvasH = refs.renderer.domElement.clientHeight;
+    if (feel && !reducedMotionRef.current && phaseRef.current === "play" && !pausedRef.current && canvasH > 0) {
+      // A feel képpontban adja az elmozdulást (a nézet magasságának legfeljebb 1%-a); játéksíkra váltva.
+      feel.shakeOffset(shakeOut, canvasH);
+      const unitsPerPx = (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.position.z) / canvasH;
+      camera.position.x = shakeOut.x * unitsPerPx;
+      camera.position.y = CAMERA_Y + shakeOut.y * unitsPerPx;
     } else {
       camera.position.x = 0;
       camera.position.y = CAMERA_Y;
@@ -2546,7 +3003,7 @@ export default function SpaceAsteroidQuiz() {
         case "ArrowDown": case "s": case "S": keysRef.current.down = true; break;
         case " ": keysRef.current.fire = true; break;
         case "p": case "P":
-          if (phaseRef.current === "play" || phaseRef.current === "quiz") {
+          if (phaseRef.current === "play") {
             if (pausedRef.current) resumeGame();
             else pauseGame();
           }
@@ -2613,33 +3070,17 @@ export default function SpaceAsteroidQuiz() {
       difficulty: "normal",
       runXp: scoreRef.current,
       runStreak: bestComboRef.current, // D2: run-level best, not current
-      runSeconds: ROUND_LIMIT_SEC - timeLeft,
+      // A menet VALÓS ideje (a kérdés-óra, szünetben nem fut): nincs idő-limit, a hossz az életekből / a főellenfélből jön.
+      runSeconds: runTotalsRef.current.seconds,
       runId: newScoreRunId(),
     })
       .then(() => void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] }))
       .catch(() => { scoreSubmittedRef.current = false; });
-  }, [phase, syncEligibility, timeLeft]);
+  }, [phase, syncEligibility]);
 
   // Achievement + Daily — egyszer fut "over" átmenetkor.
   const achievementCheckedRef = useRef(false);
 
-  // D6 a11y: quiz-overlay dialog ref + Escape + auto-focus
-  const quizDialogRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (phase !== "quiz") return;
-    const t = window.setTimeout(() => {
-      const first = quizDialogRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]");
-      first?.focus();
-    }, 50);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [phase]);
   useEffect(() => {
     if (phase !== "over") {
       achievementCheckedRef.current = false;
@@ -2651,8 +3092,9 @@ export default function SpaceAsteroidQuiz() {
     const newOnes = recordRun({
       game: "space-asteroid-quiz",
       xpGained: scoreRef.current,
-      correctAnswers: enemiesKilledRef.current, // ≈ a leszedett ellenfél = helyes válasz proxy
-      wrongAnswers: 0,
+      // Valós kérdés-statisztika a directorból (K.2 „Menet-statisztika”); a lejárt kérdés hibának számít.
+      correctAnswers: runTotalsRef.current.correct,
+      wrongAnswers: runTotalsRef.current.wrong,
       maxStreak: bestComboRef.current, // D2: run-level best, not current
       enemiesKilled: enemiesKilledRef.current,
       alienKills: alienKillsRef.current,
@@ -2667,7 +3109,7 @@ export default function SpaceAsteroidQuiz() {
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
   }, [phase, gameWon]);
 
-  // A győzelem (12 hullám / boss) a következő pályát oldja fel; a menü azt ajánlja.
+  // A győzelem (8 hullám + a főellenfél) a következő pályát oldja fel; a menü azt ajánlja.
   useEffect(() => {
     if (phase === "over" && gameWon && runLevelRef.current != null && !levelClearedRef.current) {
       levelClearedRef.current = true;
@@ -2689,15 +3131,22 @@ export default function SpaceAsteroidQuiz() {
     releaseControls();
     setFeedback(null);
     setPaused(false);
-    setPhase("over");
-  }, [clearPendingTimeouts, releaseControls]);
+    endRun(false);
+  }, [clearPendingTimeouts, releaseControls, endRun]);
 
   const backToMenu = useCallback(() => {
     runIdRef.current += 1;
     clearPendingTimeouts();
     setPaused(false);
+    runOverRef.current = true;
     setPhase("intro");
   }, [clearPendingTimeouts]);
+
+  /** K.4/7: „Grafika újraindítása” — új vászon és új renderer; a futó ellenfelek meshe a rajzoláskor újraépül. */
+  const restartGraphics = useCallback(() => {
+    setGfxLost(false);
+    setSceneEpoch((n) => n + 1);
+  }, []);
 
   /* ===================== Render JSX ===================== */
   const onPickGrade = (g: number) => {
@@ -2708,7 +3157,9 @@ export default function SpaceAsteroidQuiz() {
     setPhase("intro");
   };
 
-  const inRun = phase === "play" || phase === "quiz";
+  // A kérdés-sáv nézete (≈ 10 Hz): a kristály-gombok ebből épülnek, a pozíciót a hurok közvetlenül mozgatja.
+  const qView = q.state;
+  const inRun = phase === "play";
   const stageVisible = inRun || phase === "over";
   const screen: GameScreenState =
     phase === "grade" || phase === "intro" ? "start" : phase === "over" ? "result" : paused ? "paused" : "playing";
@@ -2716,13 +3167,16 @@ export default function SpaceAsteroidQuiz() {
     {
       id: "wave",
       label: "Hullám",
-      value: wave === BOSS_FINAL_WAVE ? "BOSS" : `${wave}/12`,
-      tone: wave === BOSS_FINAL_WAVE ? "bad" : "default",
+      value: wave >= BOSS_FINAL_WAVE ? "BOSS" : `${wave}/${WAVE_COUNT}`,
+      tone: wave >= BOSS_FINAL_WAVE ? "bad" : "default",
     },
     { id: "score", label: "Pont", value: score.toLocaleString("hu-HU") },
     { id: "lives", label: "Élet", value: `♥ ${lives}`, tone: lives <= 1 ? "bad" : "good" },
   ];
-  const timeTone = timeLeft < 30 ? "bad" : timeLeft < 60 ? "warn" : "default";
+  // J6a: idő helyett hullám / élet — a sáv a menet előrehaladása (a hullámok és a főellenfél felé), nincs visszaszámláló.
+  const progressMax = WAVE_COUNT + 1;
+  const progressValue = Math.min(progressMax, hud.progress * progressMax);
+  const progressLabel = wave >= BOSS_FINAL_WAVE ? "Főellenfél" : `Hullám ${wave}/${WAVE_COUNT}`;
   const gradeButtons = (
     <div className="grid grid-cols-4 gap-2" role="group" aria-label="Osztály választása">
       {GRADES.map((g) => (
@@ -2763,7 +3217,7 @@ export default function SpaceAsteroidQuiz() {
         <GameHud
           stats={hudStats}
           onPause={pauseGame}
-          progress={{ value: timeLeft, max: ROUND_LIMIT_SEC, label: `${timeLeft} mp`, tone: timeTone }}
+          progress={{ value: progressValue, max: progressMax, label: progressLabel, tone: lives <= 1 ? "warn" : "default" }}
         />
       )}
       <main
@@ -2804,7 +3258,7 @@ export default function SpaceAsteroidQuiz() {
         {phase === "intro" && (
           <StartScreen
             title="Galaktikus Aszteroida"
-            subtitle="Lődd szét az aszteroidákat! Minden hullám előtt egy gyors kvíz — jó válaszra indul a csata."
+            subtitle="Lődd szét az aszteroidákat! A kérdések kristályokban érkeznek: lődd ki a helyeset, és erősödik a hajód."
             icon={<span>🚀</span>}
             startLabel={`Indulhat — ${grade}. osztály`}
             startTestId="sa-start"
@@ -2845,7 +3299,7 @@ export default function SpaceAsteroidQuiz() {
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { name: "Szikla", note: "3 méret · szétesik", cls: "border-cyan-500/50 text-cyan-200" },
-                    { name: "Kristály", note: "+60 pont · ajándék", cls: "border-sky-400/50 text-sky-200" },
+                    { name: "Drágakő", note: "+60 pont · ajándék", cls: "border-sky-400/50 text-sky-200" },
                     { name: "Ufó", note: "cikkcakk · +80 pont", cls: "border-lime-400/50 text-lime-200" },
                     { name: "Vadászgép", note: "visszalő · +120 pont", cls: "border-rose-400/50 text-rose-200" },
                   ].map((x) => (
@@ -2865,12 +3319,12 @@ export default function SpaceAsteroidQuiz() {
             <GamePedagogyPanel
               accent="cyan"
               className="mt-2 text-left"
-              kidMission={'Lődd ki az aszteroidákat, alien csészealjakat és ellenséges vadászgépeket! Minden hullám előtt és minden ütközés után egy gyors kvíz jön — a saját osztályod tananyagából. Helyes válasz → tovább, rossz → új kérdés. Életet adó pickup mellé jár egy bónusz: Megúsztál egy kvízt!'}
+              kidMission={'Lődd ki az aszteroidákat, alien csészealjakat és ellenséges vadászgépeket! Közben feliratos kristályok lebegnek be: a saját osztályod tananyagából jön a kérdés, és a helyes választ tartalmazó kristályt kell kilőnöd (vagy megérintened). A helyes kristály erősít — pajzs, hármas lövés vagy bomba —, a rossz kristály apró sziklákra hasad. Ütközésnél csak egy életed megy el, a játék nem áll meg.'}
               parentBody={
                 <>
                   <strong className="text-cyan-100/90">Tananyag:</strong> a játékos osztálya és a legutóbbi 3 feltöltött tananyaga alapján a backend automatikusan szállítja a kérdéseket. Ha még nincs kapcsolt kvíz, általános bank szolgál; az angol szavak a központi szóbankból jönnek, ismétlés nélkül.
                   <br />
-                  <strong className="text-cyan-100/90">Fejleszt:</strong> reakcióidő, térbeli figyelem, számolás / olvasás gyors döntés mellett, kitartás (új kvíz rossz válasz után).
+                  <strong className="text-cyan-100/90">Fejleszt:</strong> reakcióidő, térbeli figyelem, számolás / olvasás gyors döntés mellett; a hibázott tétel később visszatér (térközös ismétlés).
                   <br />
                   <span className="text-white/55">A klasszikus akadály + teszt + jutalom ciklust egy 3D shooter formába helyezi.</span>
                 </>
@@ -2886,9 +3340,59 @@ export default function SpaceAsteroidQuiz() {
               és nem kell minden átmenetnél a teljes 3D scene-t újraépíteni.
             */}
             <div className={`sa-stage ${stageVisible ? "" : "hidden"}`}>
-                <div className="sa-scene game-scene relative rounded-2xl overflow-hidden border border-cyan-400/40 shadow-[0_0_28px_rgba(0,240,255,0.18)] w-full bg-black">
+                <div ref={sceneBoxRef} className="sa-scene game-scene relative rounded-2xl overflow-hidden border border-cyan-400/40 shadow-[0_0_28px_rgba(0,240,255,0.18)] w-full bg-black">
                   <canvas ref={canvasRef} className="block touch-manipulation w-full h-full" style={{ width: "100%", height: "100%" }} />
                   <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_56%,rgba(0,0,0,0.32)_100%)]" />
+                  {/*
+                    Kérdés-kristályok (J6a): a válasz a célpont. A DOM-gombok a 3D kristályok vetített helyén ülnek (a hurok
+                    közvetlenül mozgatja őket): koppintható, billentyűzettel (1–4) és képernyőolvasóval is elérhető; a lövedék
+                    a 3D kristályt találja el. ≥ 48 px, a felirat ≤ 2 sor (a hosszabb tételt a forrás hátrébb sorolja).
+                  */}
+                  {inRun && qView.presentation && (
+                    <div
+                      className={`sa-crystals ${wrongShake ? "animate-shake-spq" : ""}`}
+                      data-testid="sa-crystals"
+                      data-quiz-id={qView.presentation.question.quiz.id ?? undefined}
+                      data-quiz-source={qView.presentation.question.source}
+                      data-open={qView.reveal ? "false" : "true"}
+                    >
+                      {qView.presentation.options.map((opt, idx) => {
+                        const st = qView.reveal ? (idx === qView.reveal.correctOptionIndex ? "correct" : "dim") : "idle";
+                        // Megoldás-kijelzés közben csak a helyes kristály marad (zölden világít); a többi (köztük a kiválasztott,
+                        // szétesett rossz) eltűnik a rétegből — a mérők és a képernyőolvasó sem találkozik láthatatlan gombbal.
+                        if (st === "dim") return null;
+                        return (
+                          <button
+                            key={`${qView.presentation!.id}-${idx}`}
+                            ref={(el) => {
+                              chipRefs.current[idx] = el;
+                            }}
+                            type="button"
+                            className="sa-crystal"
+                            data-testid={`sa-crystal-${idx}`}
+                            data-state={st}
+                            data-option-index={idx}
+                            style={{ transform: "translate3d(-200px, -200px, 0)", visibility: "hidden" }}
+                            aria-label={`Kristály: ${opt.label}`}
+                            aria-disabled={qView.reveal || paused ? "true" : undefined}
+                            aria-keyshortcuts={String(idx + 1)}
+                            {...pointerTapHandlers(crystalTaps, idx, () => onAnswer(idx))}
+                            {...correctDataAttrs(opt.correct)}
+                          >
+                            <span className="sa-crystal-gem" aria-hidden="true" />
+                            <span className="sa-crystal-label" data-long={opt.label.length > CRYSTAL_LABEL_MAX_CHARS || /S{9,}/.test(opt.label) ? "true" : "false"}>
+                              {opt.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {inRun && banner > 0 && (
+                    <div className="pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 text-center" data-testid="sa-wave-banner" role="status">
+                      <span className="sa-wave-banner">{banner >= BOSS_FINAL_WAVE ? "FŐELLENFÉL!" : `HULLÁM ${banner}`}</span>
+                    </div>
+                  )}
                   {inRun && (powerLevel > 0 || shieldTimer > 0) && (
                     <div className="pointer-events-none absolute left-2 top-2 flex flex-col gap-1.5">
                       {powerLevel > 0 && (
@@ -2937,7 +3441,7 @@ export default function SpaceAsteroidQuiz() {
                       initial={reducedMotion ? false : { y: -12, opacity: 0, scale: 0.9 }}
                       animate={{ y: 0, opacity: 1, scale: 1 }}
                       exit={{ y: -12, opacity: 0 }}
-                      className="absolute top-14 left-1/2 -translate-x-1/2 rounded-xl bg-emerald-400/95 text-slate-950 font-extrabold text-sm px-3 py-1.5 shadow-md flex items-center gap-1.5 pointer-events-none whitespace-nowrap"
+                      className="absolute top-[66%] left-1/2 -translate-x-1/2 rounded-xl bg-emerald-400/95 text-slate-950 font-extrabold text-sm px-3 py-1.5 shadow-md flex items-center gap-1.5 pointer-events-none whitespace-nowrap"
                     >
                       <ShieldAlert className="w-4 h-4" aria-hidden="true" />
                       {savedToast}
@@ -3026,112 +3530,41 @@ export default function SpaceAsteroidQuiz() {
               </div>
       </main>
 
-      {/* Quiz overlay — phase==="quiz" */}
-      <AnimatePresence>
-        {phase === "quiz" && activeQuiz && (
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Kvíz kérdés"
-            className="sa-quiz-layer fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-[3px]"
-            initial={reducedMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              ref={quizDialogRef}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Mini-teszt"
-              data-quiz-id={activeQuiz.id ?? undefined}
-              data-quiz-source={activeQuiz.source ?? "fallback"}
-              initial={reducedMotion ? false : { y: 40, opacity: 0, scale: 0.98 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              transition={{ type: "spring", stiffness: 420, damping: 32 }}
-              className={`game-quiz sa-quiz w-full max-w-lg max-h-full overflow-y-auto rounded-3xl border border-cyan-300/50 bg-slate-950/95 p-4 shadow-[0_20px_56px_rgba(34,211,238,0.28)] ${wrongShake ? "animate-shake-spq" : ""}`}
-            >
-              <div className="flex flex-wrap items-center gap-2 pr-14">
-                <span className={`text-xs font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-full border ${
-                  quizReason === "wave"
-                    ? "bg-cyan-600/70 text-cyan-50 border-cyan-300/60"
-                    : "bg-rose-600/70 text-rose-50 border-rose-300/60"
-                }`}>
-                  {quizReason === "wave" ? `Hullám ${wave} kvíz` : "Vészhelyzet — kvíz!"}
-                </span>
-                <span className="text-xs font-bold text-cyan-300 uppercase tracking-wide">
-                  {activeQuiz.source === "material"
-                    ? "Tananyagodból"
-                    : activeQuiz.source === "vocab"
-                      ? "Angol szókincs"
-                      : activeQuiz.source === "grade"
-                        ? `${activeQuiz.grade ?? grade}. osztály`
-                        : "Általános"}
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-white/70">
-                {quizReason === "wave"
-                  ? "A hullám jó válaszra indul. Rossz válasz → új kérdés. Az óra addig áll."
-                  : "Jó válasz után folytatódik a játék — minden rossz válaszra új kérdés jön. Az óra addig áll."}
-              </p>
-              <p className="mt-3 text-lg sm:text-xl font-bold leading-snug text-white">{activeQuiz.prompt}</p>
-              <div className="game-quiz-answers mt-3 grid gap-2">
-                {activeQuiz.options.map((o, i) => {
-                  const isCorrect = revealCorrectIdx === i;
-                  const isWrong = wrongIdx === i;
-                  const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
-                  const cls = isCorrect
-                    ? "border-emerald-200 bg-emerald-600 font-extrabold"
-                    : isWrong
-                      ? "border-rose-200 bg-rose-700"
-                      : dim
-                        ? "border-white/10 bg-white/5 text-white/45"
-                        : "border-cyan-200/35 bg-slate-900/95 hover:bg-cyan-700/45 active:bg-cyan-700/60";
-                  return (
-                    <button
-                      key={`${o}-${i}`}
-                      type="button"
-                      className={`game-answer-btn flex w-full items-center gap-3 rounded-2xl border px-3 py-2 text-left font-semibold text-white transition-colors ${cls}`}
-                      disabled={revealCorrectIdx !== null}
-                      onClick={() => onAnswer(i)}
-                      {...correctDataAttrs(i === activeQuiz.correctIndex)}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-black text-cyan-100"
-                      >
-                        {"ABCD"[i] ?? i + 1}
-                      </span>
-                      <span className="min-w-0 flex-1">{o}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {streakProtector.warning && (
-                <p className="mt-3 text-sm text-amber-300/95 font-semibold">⚠ {streakProtector.warning}</p>
-              )}
-              {revealCorrectIdx !== null && wrongIdx !== null && (
-                <p className="mt-3 text-sm text-emerald-300/95">
-                  A helyes válasz: <strong>{activeQuiz.options[revealCorrectIdx]}</strong>
-                </p>
-              )}
-            </motion.div>
-            {/* Review #426: a teljes képernyős kvízréteg eltakarja a HUD szünetgombját — itt is lehet megállni. */}
-            <button
-              type="button"
-              data-testid="sa-quiz-pause"
-              aria-label="Szünet"
-              onClick={pauseGame}
-              className="sa-quiz-pause absolute inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/25 bg-slate-900/80 text-white hover:bg-white/20"
-            >
-              <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/*
+        A kérdés-sáv (J6a): NEM modális — a játék alatta fut (0,7× lassítás), nincs inert háttér, nincs fókuszlopás. A prompt a
+        felső sávban, a válaszok a vásznon lebegő kristályok; a sáv saját szünetgombja és a „Miért?” a közös komponensből.
+      */}
+      {phase === "play" && (
+        <InlineQuestion
+          {...q.bind}
+          onPick={onAnswer}
+          mode="bar"
+          skin="space"
+          disabled={paused}
+          onWhy={openWhy}
+          testId="sa-question"
+          promptTestId="sa-prompt"
+          optionTestId={(i) => `sa-option-${i}`}
+          pauseTestId="sa-quiz-pause"
+          onPause={pauseGame}
+          onExpand={() => setExpanded(true)}
+          onCollapse={() => setExpanded(false)}
+        />
+      )}
+
+      {/* K.4/7: elveszett WebGL-környezet — szünet + újraindítás (a menet állapota megmarad). */}
+      {gfxLost && (
+        <div role="alertdialog" aria-label="Grafika" className="sa-gfx-lost" data-testid="sa-gfx-lost">
+          <p>A grafika megakadt. A játék szünetel.</p>
+          <button type="button" className="game-btn game-btn-primary" data-testid="sa-gfx-restart" onClick={restartGraphics}>
+            Grafika újraindítása
+          </button>
+        </div>
+      )}
 
       <PauseMenu open={paused && inRun} onResume={resumeGame} onRestart={startNewRun} onExit={endRound} exitLabel="Kör vége">
         <p className="text-sm text-slate-300">
-          Hullám {wave === BOSS_FINAL_WAVE ? "BOSS" : `${wave}/12`} · {score.toLocaleString("hu-HU")} pont · ♥ {lives}
+          Hullám {wave >= BOSS_FINAL_WAVE ? "BOSS" : `${wave}/${WAVE_COUNT}`} · {score.toLocaleString("hu-HU")} pont · ♥ {lives}
         </p>
       </PauseMenu>
 
@@ -3139,7 +3572,7 @@ export default function SpaceAsteroidQuiz() {
         badges={newlyUnlocked}
         open={phase === "over"}
         testId="sa-over"
-        title={gameWon ? "Mind a 12 hullám teljesítve!" : "Kör vége"}
+        title={gameWon ? "Legyőzted a főellenfelet!" : "Kör vége"}
         won={gameWon}
         score={score}
         best={bestInfo?.best ?? bestScore.best}
@@ -3152,8 +3585,9 @@ export default function SpaceAsteroidQuiz() {
         extra={
           <div className="flex flex-col gap-2">
             <p>
-              Hullám: <strong>{wave}/12</strong> · Kilőve: <strong>{enemiesKilled}</strong>
+              Hullám: <strong>{Math.min(wave, WAVE_COUNT)}/{WAVE_COUNT}</strong> · Kilőve: <strong>{enemiesKilled}</strong>
             </p>
+            <ResultReview items={q.director?.wrongList() ?? []} />
             <p className={syncEligibility?.eligible ? "text-emerald-300" : "text-slate-300"}>
               {syncEligibility?.eligible ? "Eredmény elküldve." : syncBanner}
             </p>
@@ -3194,10 +3628,37 @@ export default function SpaceAsteroidQuiz() {
           border-width: 1px; background: #0b172dcc; font-size: 13px; font-weight: 800;
           -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
         }
-        .sa-quiz-layer {
-          padding: max(8px, var(--game-safe-top)) max(8px, var(--game-safe-right)) max(8px, var(--game-safe-bottom)) max(8px, var(--game-safe-left));
+        .sa-crystals { position: absolute; inset: 0; z-index: 20; pointer-events: none; overflow: hidden; }
+        .sa-crystal {
+          position: absolute; left: 0; top: 0; pointer-events: auto; touch-action: manipulation; will-change: transform;
+          min-width: 64px; max-width: 98px; min-height: 52px; padding: 6px 13px; margin: 0; border: 0; background: none; cursor: pointer;
+          display: inline-flex; align-items: center; justify-content: center; text-align: center; color: #1b1203; font-weight: 800;
+          filter: drop-shadow(0 0 9px rgba(255, 210, 63, 0.75));
         }
-        .sa-quiz-pause { top: max(8px, var(--game-safe-top)); right: max(8px, var(--game-safe-right)); }
+        /* a gomb alakja: lapos tetejű, csúcsos oldalú kristály (hatszög) — a felirat fölötte, a fény a gomb körül */
+        .sa-crystal-gem {
+          position: absolute; inset: 0; z-index: 0; animation: sa-bob 2.6s ease-in-out infinite;
+          clip-path: polygon(14% 0, 86% 0, 100% 50%, 86% 100%, 14% 100%, 0 50%);
+          background: linear-gradient(160deg, #fffbe0 0%, #ffe27a 38%, #ffb52e 100%);
+        }
+        .sa-crystal:focus-visible { outline: 3px solid #fff; outline-offset: 3px; border-radius: 12px; }
+        .sa-crystal-label { position: relative; z-index: 1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 14px; line-height: 1.15; }
+        .sa-crystal-label[data-long="true"] { font-size: 12px; }
+        .sa-crystal[data-state="correct"] { filter: drop-shadow(0 0 14px rgba(74, 222, 128, 0.95)); }
+        .sa-crystal[data-state="correct"] .sa-crystal-gem { background: linear-gradient(160deg, #eafff1 0%, #86efac 40%, #22c55e 100%); }
+        .sa-crystal[data-state="dim"] { opacity: 0.5; }
+        @keyframes sa-bob { 0%, 100% { transform: translateY(-2px); } 50% { transform: translateY(2px); } }
+        @media (prefers-reduced-motion: reduce) { .sa-crystal-gem { animation: none; } }
+        .sa-wave-banner {
+          display: inline-block; padding: 6px 16px; border-radius: 9999px; font-size: 20px; font-weight: 900; letter-spacing: 0.08em;
+          color: #fff; background: rgba(8, 5, 27, 0.72); border: 2px solid rgba(165, 180, 252, 0.8);
+        }
+        .sa-gfx-lost {
+          position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+          padding: 16px; text-align: center; color: #fff; background: rgba(2, 4, 26, 0.88); font-weight: 700;
+        }
+        /* A kérdés-sáv a HUD (és a hullám-sáv) alatt kezdődik. */
+        .play-question[data-skin="space"] { --play-question-top: calc(max(4px, var(--game-safe-top)) + 96px); }
         @media (max-height: 500px) and (min-width: 560px) {
           /* Fekvő kezdőképernyő: a súgó a jobb hasábba, az indítógomb alá (a közös rács egész sorát nem foglalja). */
           [data-game="SpaceAsteroidQuiz"] .game-start-head { grid-row: 1 / span 2; }
@@ -3210,11 +3671,9 @@ export default function SpaceAsteroidQuiz() {
           /* Fekvő telefonon a vezérlők a vászon két szélére kerülnek (a pálya középen van, a szélek üresek). */
           .sa-controls { position: absolute; left: 6px; right: 6px; bottom: 6px; pointer-events: none; }
           .sa-controls > * { pointer-events: auto; }
-          .sa-quiz { max-width: 640px; }
-          .sa-quiz .game-quiz-answers { grid-template-columns: 1fr 1fr; }
         }
       `}</style>
-      {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
+      {feedback && <QuizFeedbackCard card={feedback} onDismiss={closeWhy} />}
     </GameShell>
   );
 }
