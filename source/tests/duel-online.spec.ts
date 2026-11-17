@@ -21,6 +21,7 @@ import pg from "pg";
 import { io as ioClient } from "socket.io-client";
 
 import { connectRt } from "../client/src/lib/rt/rtClient";
+import { RT_PATH } from "../shared/duel/protocol";
 import { answerNextRound, assertMobileQuality, playToResult, probe, shot } from "./support/duel-e2e";
 import { emulateSafeArea, waitForStable } from "./support/game-mobile-quality";
 import { expectMetaScreenOk, insetsFor, metaShot } from "./support/game-meta-quality";
@@ -153,6 +154,42 @@ async function joinRoom(page: Page, code: string, via: "code" | "link", grade = 
   await expect(page.getByTestId("duel-lobby")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("duel-ready").tap();
   await expect(page.getByTestId("duel-ready")).toHaveAttribute("aria-pressed", "true");
+}
+
+/**
+ * E2E-ingadozók 3. kör: a valós idejű csatorna (Socket.IO WebSocket-szála, `RT_PATH`) a kontextusban átengedve, de a szerver →
+ * kliens irány visszatartható. `hold()` után a szerver üzenetei sorba állnak, `release()` sorrendben továbbítja őket; a kliens →
+ * szerver irány mindig azonnal megy. `upgraded()`: az Engine.IO frissítés („5”) megtörtént, a forgalom a WebSocketen fut.
+ */
+async function holdableRt(ctx: BrowserContext) {
+  let held = false;
+  let upgraded = false;
+  let rematchSent = false;
+  const queue: Array<() => void> = [];
+  // A kliens `addTrailingSlash: false`-szal kapcsolódik: `/api/rt/io?EIO=4&transport=websocket…`.
+  await ctx.routeWebSocket((url) => url.pathname.replace(/\/$/, "") === RT_PATH, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((m) => {
+      if (m === "5") upgraded = true;
+      if (typeof m === "string" && m.includes('"room:rematch"')) rematchSent = true;
+      server.send(m);
+    });
+    server.onMessage((m) => {
+      if (held) queue.push(() => ws.send(m));
+      else ws.send(m);
+    });
+  });
+  return {
+    upgraded: () => upgraded,
+    rematchSent: () => rematchSent,
+    hold: () => {
+      held = true;
+    },
+    release: () => {
+      held = false;
+      for (const send of queue.splice(0)) send();
+    },
+  };
 }
 
 test("A nyit, B kóddal csatlakozik: váróterem → teljes meccs érintéssel → győzteshirdetés mindkettőn → visszavágó", async ({ browser }) => {
@@ -396,6 +433,8 @@ test("PR #476 review (Codex 4591991467): mindkét játékos EGYSZERRE nyomja a V
   test.setTimeout(150_000);
   const A = await phone(browser, on.url, { width: 390, height: 844 }, { learner: true });
   const B = await phone(browser, on.url, { width: 360, height: 640 });
+  const gateA = await holdableRt(A.ctx);
+  const gateB = await holdableRt(B.ctx);
   try {
     const code = await openRoom(A.page);
     await joinRoom(B.page, code, "link", 4);
@@ -410,8 +449,20 @@ test("PR #476 review (Codex 4591991467): mindkét játékos EGYSZERRE nyomja a V
       lastB = rb;
     }
     for (const p of [A.page, B.page]) await expect(p.getByTestId("duel-rematch")).toBeVisible({ timeout: 30_000 });
+    // A visszatartás csak WebSocket-szálon működik (a Socket.IO a kör elején pollingról frissít): mindkettő legyen már azon.
+    await expect.poll(() => gateA.upgraded() && gateB.upgraded(), { message: "mindkét kliens WebSocket-en van" }).toBe(true);
     // Egyszerre: egyik kliens sem látja még a másik kérését, amikor a sajátját elküldi.
+    // E2E-ingadozók 3. kör: a két `tap()` korábban versenyzett — a tap képkockákig vár a gomb stabilitására, közben a gyorsabb fél
+    // kérése megérkezett a másikhoz, ott a `duel-rematch` gomb helyére a kérés-kártya került, és a tap a soha vissza nem térő
+    // gombra várt a 150 s-os keretig (CI 44042768012; helyben 6× CPU-lassítással 3/20). Az „egyszerre” előfeltételt ezért nem
+    // az időzítésre bízzuk: a szerver → kliens üzeneteket mindkét kontextusban visszatartjuk, amíg MINDKÉT kérés el nem ment a
+    // szerverhez, és csak utána engedjük tovább (sorrendben). Így mindkét kliens a saját gombjával kér, a másik kérését nem látva.
+    gateA.hold();
+    gateB.hold();
     await Promise.all([A.page.getByTestId("duel-rematch").tap(), B.page.getByTestId("duel-rematch").tap()]);
+    await expect.poll(() => gateA.rematchSent() && gateB.rematchSent(), { message: "mindkét kliens elküldte a visszavágó-kérést" }).toBe(true);
+    gateA.release();
+    gateB.release();
     for (const p of [A.page, B.page]) await expect(p.getByTestId("duel-countdown")).toBeVisible({ timeout: 10_000 });
   } finally {
     await A.ctx.close();
