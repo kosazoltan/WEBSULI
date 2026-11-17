@@ -134,4 +134,3 @@ tábla: `docs/measurements/jatekok-jatekelmeny/J2-olvashatosag/k2-kartya-fogas-m
   megoldás 17 px, `en4-family-006` kérdés 21 px, `en4-health-016` kérdés 26 px, `de4-nature-014` megoldás 43 px; 390×844-en
   ≥ 126 px; 844×390-en nincs metszés a fogás-oszlopokkal és a tanító sorral; levágás sehol. A célkártya hosszú mondatnál
   360×640-en és fekvőben 20 px-re kicsinyedik (a 16 px-es keretsor 1,25-szöröse); egy szó mindig ≥ 26 px (1,6×).
-
