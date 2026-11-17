@@ -112,6 +112,11 @@ viszi bukásra.
   így alkönyvtárból (`source/`, munkafa) is lefut; a `scripts/qa/hooks/settings-hooks.test.mjs` a valódi settings-et méri. Ha maga a
   hook-folyamat nem indul el, összeomlik vagy túllépi a 60 s-os külső korlátot, azt a Claude Code alapbeállítással NEM tiltásként
   kezeli — ezért a hook a döntést a saját 45 s-os keretén belül hozza meg.
+- **`onFailure: "block"` a kapu-hookon (külön commit, tulajdonosi jóváhagyásra):** a hook-folyamat hibája / időtúllépése is tiltás.
+  **Kiút, ha a hook-szkript elromlik** (ilyenkor MINDEN Bash / PowerShell hívás tiltott): az Edit / Write eszköz nem Bash — azzal
+  javítsd a `scripts/qa/hooks/check-quality-gates.mjs`-t, vagy töröld a két `"onFailure": "block"` sort a `.claude/settings.json`-ból;
+  a settings-változás érvényesítéséhez a Claude Code `/hooks` menüje vagy új munkamenet kell. Ha ez sem megy, a tulajdonos
+  kézzel szerkeszti a fájlt. Visszavonás egy lépésben: a bevezető commit revertje.
 - **Feltöltés munkafából alügynökként:** az alügynök parancsai a fő checkoutból indulnak (a `cd` nem marad meg, láncolni tilos),
   ezért a munkafa ágát a fő checkoutból kell felküldeni egyszerű parancsként: `git push origin <ág>`. A hook ilyenkor a megnevezett
   helyi ág fejére szóló bizonyítékot nézi.

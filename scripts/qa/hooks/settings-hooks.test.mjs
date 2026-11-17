@@ -94,6 +94,13 @@ test('őr: minden hook-parancs a projektgyökérhez kötött (idézett ${CLAUDE_
   }
 });
 
+// Külön commit (tulajdonosi jóváhagyásra; egy reverttel visszavonható): a kapu-hook saját hibája / időtúllépése is tiltás.
+test('a kapu-hook mindkét bejegyzésén onFailure: "block"', () => {
+  const gate = hookEntries().filter((e) => /check-quality-gates\.mjs/.test(e.command));
+  assert.deepEqual(gate.map((e) => e.matcher).sort(), ['Bash', 'PowerShell']);
+  for (const e of gate) assert.equal(e.hook.onFailure, 'block', e.matcher);
+});
+
 test('H1: a valódi settings minden hookja lefut és a várt döntést adja — gyökérből, source/-ből, mélyebb könyvtárból, munkafából', () => {
   const bash = bashPath();
   const { proj, wt } = makeProject();
