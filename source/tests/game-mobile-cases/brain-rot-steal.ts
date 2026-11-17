@@ -46,7 +46,8 @@ export const CASE: GameMobileCase = {
   resultTestId: "br-over",
   quizScope: '[data-testid="br-cages"]',
   // Review #485 B2: a kérdés-állapot a LEGHOSSZABB válaszú tétellel (a kézi és az évfolyam-bankból programmal kikeresve) —
-  // a mérő így a jelölt módot / a leghosszabb ketrecfeliratot is méri (M2, M3, átfedés) mindhárom nézetben.
-  quizForce: { phase: "quiz-long" },
+  // a mérő így a jelölt módot / a leghosszabb ketrecfeliratot is méri (M2, M3, átfedés) mindhárom nézetben. Review #485 Ú2:
+  // a leghosszabb prompttal EGYÜTT (a legmélyebb ketrec-zóna).
+  quizForce: { phase: "quiz-longboth" },
   answerWrong,
 };

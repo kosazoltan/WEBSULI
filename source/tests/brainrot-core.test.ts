@@ -6,6 +6,8 @@ import {
   CAGE_ARM_MS,
   CAGE_DWELL_MS,
   cageLabelsFit,
+  cageSingleRow,
+  cageWidthU,
   CARRY_RESOLVE_MS,
   CARRY_SPEED_FACTOR,
   FLEE_RADIUS,
@@ -178,6 +180,35 @@ function openWithCarry(core: BrainRotCore, px: number, py: number): void {
   core.forceCatch();
   core.openCages(4, 1);
 }
+
+test("review #485 Ú1: a nyitáskor lent lévő ujj húzása nem ad célt (és szándékot sem) — csak a friss lenyomás; a kérdés után újra vadászhat", () => {
+  const core = createBrainRotCore({ seed: 6, arenaW: 1, arenaH: 1.5 });
+  const st = core.state();
+  st.player.x = 0.5;
+  st.player.y = 0.3;
+  core.setTarget(0.5, 0.35, "down"); // a gyerek a lény felé húz
+  core.forceCatch();
+  core.openCages(4, 1);
+  const cage = st.cages[2]!;
+  // A lent tartott ujj egy ketrec helyére csúszik: a vadász nem indul el, az élesítés után sem választ.
+  for (let i = 0; i < 90; i++) {
+    core.setTarget(cage.x, cage.y, "move");
+    core.step(DT, 0.4, 1);
+  }
+  assert.ok(Math.hypot(st.player.x - 0.5, st.player.y - 0.3) < 1e-9, "a húzás nem mozdít");
+  assert.equal(st.hitCage, -1);
+  assert.ok(st.cages.slice(0, 4).every((c) => !c.entered), "nincs szándékos belépés");
+  // Friss lenyomás a ketrecre: oda fut (és ez a szándék).
+  core.setTarget(cage.x, cage.y, "down");
+  core.step(DT, 0.4, 1);
+  assert.ok(Math.hypot(st.player.x - 0.5, st.player.y - 0.3) > 0, "a friss lenyomás mozdít");
+  // A kimenet után a lent tartott ujj húzása újra vadászik.
+  core.applyOutcome("wrong", 0);
+  const x0 = st.player.x;
+  core.setTarget(x0 + 0.3, st.player.y, "move");
+  core.step(DT, 0.4, 1);
+  assert.ok(st.player.x > x0, "a ketrecek zárása után a húzás újra célt ad");
+});
 
 test("ketrec-zár: a ketrecbe beállás (megállás) választ; a teljes sebességű átfutás nem", () => {
   const core = createBrainRotCore({ seed: 6, arenaW: 1, arenaH: 1.5 });
@@ -538,8 +569,8 @@ test("J10: a ketrec-kérdés ablaka rövid tételnél 6 mp (3–4. évf. 7,5 mp)
   assert.ok(windowMsFor("x".repeat(400), 3, cfg.baseWindowMs) <= 9000);
 });
 
-// A review #485 után (a közvetlen megtartás nem számít a `caught`-ba; ±10% gumiszalag a menekülésben) újrarögzítve.
-const GOLDEN_42 = "play|30000000000|75000|1485000|0|6|3|0|350|0|11|free|872913|984957|12|free|463255|695928|13|free|440353|599082|10|free|277224|1167666";
+// SPEC-VÁLTOZÁS (J5a 18., review #485 Ú4): a gumiszalag a lemaradást követi (nem a válasz-pontosság sávját) — újrarögzítve.
+const GOLDEN_42 = "play|30000000000|75000|1485000|0|6|3|0|350|0|11|free|884747|990645|12|free|463255|695928|13|free|440353|599082|10|free|287754|1183800";
 
 test("review #485: a bot által leírt forgatókönyv — a felső sor bal széléről a jobb ketrec közepére tartva a bal ketrec nem választódik", () => {
   const core = createBrainRotCore({ seed: 13, arenaW: 1, arenaH: 1.5 });
@@ -608,4 +639,50 @@ test("önellenőrzés (e): 6 megtartásnál a menet vége után érkező jó vá
   core.applyOutcome("correct", 0);
   assert.equal(core.state().caught, 6);
   assert.equal(core.won(), false);
+});
+
+test("review #485 Ú2: álló 360×640 (344 × 420 px-es tábla) — a mély ketrec-zóna fölé egy ketrec sem lóg; ha két sor nem fér, egy sor (≥ 48 px széles, ≥ 12 px rés)", () => {
+  const unit = 344;
+  for (const topPx of [75, 150, 200, 250, 270, 300, 330]) {
+    for (const compact of [false, true]) {
+      const core = createBrainRotCore({ seed: 1, arenaW: 1, arenaH: 420 / unit });
+      core.setCageZone(topPx / unit, compact);
+      core.forceCatch();
+      core.openCages(4, 1);
+      const cages = core.state().cages.slice(0, 4);
+      for (const c of cages) {
+        assert.ok((c.y - c.h / 2) * unit >= topPx - 0.5, `zóna ${topPx} px: a ketrec teteje ${((c.y - c.h / 2) * unit).toFixed(0)} px`);
+        assert.ok(c.w * unit >= 48 && c.h * unit >= 48, `zóna ${topPx} px: ${(c.w * unit).toFixed(0)} × ${(c.h * unit).toFixed(0)} px`);
+      }
+      for (let i = 0; i < 4; i++) {
+        for (let j = i + 1; j < 4; j++) {
+          const a = cages[i]!;
+          const b = cages[j]!;
+          const gapX = Math.abs(a.x - b.x) - (a.w + b.w) / 2;
+          const gapY = Math.abs(a.y - b.y) - (a.h + b.h) / 2;
+          assert.ok(Math.max(gapX, gapY) * unit >= 12, `zóna ${topPx} px: ${i}–${j} rés ${(Math.max(gapX, gapY) * unit).toFixed(1)} px`);
+        }
+      }
+      // A lap a beférést ugyanezzel a szélességgel számolja.
+      assert.ok(Math.abs(cageWidthU(1, 420 / unit, 4, topPx / unit) - cages[0]!.w) < 1e-9);
+    }
+  }
+  assert.equal(cageSingleRow(1, 420 / unit, 150 / unit), false);
+  assert.equal(cageSingleRow(1, 420 / unit, 300 / unit), true);
+});
+
+test("review #485 Ú5 (e2e-lelet): a ketrecek keresztezésénél álló vadász (a pereme mind a négyet érinti) mellett is élesednek, de mozdulat nélkül nincs válasz", () => {
+  const core = createBrainRotCore({ seed: 1, arenaW: 1, arenaH: 1.2537 });
+  core.setCageZone(0.748, true);
+  const st = core.state();
+  st.player.x = 0.5;
+  st.player.y = 0.964;
+  core.forceCatch();
+  core.openCages(4, 1);
+  for (let i = 0; i < 120; i++) core.step(DT, 0.4, 0.6);
+  const cages = st.cages.slice(0, 4);
+  assert.ok(cages.every((c) => playerInCage(st.player.x, st.player.y, c)), "a perem mind a négyet érinti (a mérő helyzete)");
+  assert.ok(cages.every((c) => c.armed), "mind élesedett");
+  assert.equal(st.hitCage, -1, "álló vadásznál nincs válasz");
+  assert.ok(cages.every((c) => !c.entered));
 });

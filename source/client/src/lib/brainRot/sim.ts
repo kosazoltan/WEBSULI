@@ -37,6 +37,7 @@ import {
   type BrainRotState,
   type BrainRotTuning,
 } from "./core";
+import { createCouponRepeat } from "./couponRepeat";
 
 /** A sim táblája (CSS px): tipikus álló telefon a HUD alatt. */
 export const SIM_BOARD = { w: 360, h: 560 } as const;
@@ -60,14 +61,23 @@ export type BrainRotSimOptions = {
   questions: boolean;
   /** Tananyag-tételek (a forrásrend 1. helye, terv J7). */
   material?: readonly FourChoiceQuiz[];
+  /**
+   * Kupon mód (review #485 K1): csak a `material` lecke-tételei, kimerüléskor a lap tartalékával ismételve
+   * (`couponRepeat.ts` — ugyanaz a kód, mint a lapon). #483 után törölhető (a közös director adja).
+   */
+  coupon?: boolean;
   /** A szintetikus bank mérete (alap 600). 0 → üres forrás (terv 8.1: a játék kérdés nélkül fut). */
   bankSize?: number;
   /**
    * Review #485 B1 — emberi bemenet: a bot a kérdés megjelenése után még ennyi ms-ig tolja a joystickot a régi irányba,
    * mielőtt elengedi és olvas (alap: seedelten 150–500 ms; 0 = azonnal elenged). `"tap"`: böködéses mód (a lényre bök).
+   * `"drag"` (review #485 Ú1): húzásos mód — a gyerek a lény felé húzza a lenyomott ujját, a ketrecek nyitásakor az ujj
+   * lent marad és 100 ms-onként kicsit mozdul; döntés után felemeli és a választott ketrecre bök.
    */
   releaseMs?: number | "human";
-  input?: "stick" | "tap";
+  input?: "stick" | "tap" | "drag";
+  /** Húzásos módban az ujj ennyi egységgel a lény ELŐTT (a vadász felől nézve túl) — a reviewer `drag.ts` esetei. */
+  dragLead?: number;
 };
 
 export type BrainRotSim = {
@@ -108,11 +118,19 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
   const material = opts.material ?? [];
   let freshCursor = 0;
   let materialCursor = 0;
+  const coupon = opts.coupon === true;
+  const couponRepeat = createCouponRepeat(); // #483 után törölhető
   const director = createQuestionDirector({
     config: brainRotDirectorConfig(grade),
     provider: {
-      couponOnly: false,
-      material: () => (materialCursor < material.length ? materialPlayQuestion(material[materialCursor++]!) : null),
+      couponOnly: coupon && material.length > 0,
+      material: () => {
+        if (materialCursor < material.length) return materialPlayQuestion(material[materialCursor++]!);
+        if (!coupon) return null;
+        // #483 után törölhető — a lap kupon-tartaléka (ugyanaz a szabály).
+        const again = couponRepeat.next(material, (q) => materialPlayQuestion(q).key);
+        return again ? { ...materialPlayQuestion(again.item), key: again.key, noReview: true } : null;
+      },
       fresh: () => {
         if (freshCursor >= bankSize) return null;
         const q = syntheticQuiz(freshCursor);
@@ -138,6 +156,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     onView: () => {},
     onShow: (p) => {
       asked.push(p.question.key);
+      if (coupon) couponRepeat.asked(p.question.key);
       chosen = null;
       shownAt = driver ? driver.clockMs() : 0;
       holdFor = opts.releaseMs === undefined || opts.releaseMs === "human" ? 150 + botRng.next() * 350 : opts.releaseMs;
@@ -145,6 +164,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     },
     onOutcome: (o, p) => {
       chosen = null;
+      if (coupon) couponRepeat.outcome(p.question.key, o.result);
       const picked = o.pickedOriginalIndex === null ? null : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
       driver!.core.applyOutcome(o.result, picked === -1 ? null : picked);
     },
@@ -162,6 +182,12 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
   const core = d.core;
   const botRng = createRng(seedFrom(BRAIN_ROT_GAME_ID, seed, "bot-release"));
   const tapMode = opts.input === "tap";
+  const dragMode = opts.input === "drag";
+  const dragLead = opts.dragLead ?? 0;
+  /** Húzásos mód: lent van-e az ujj, hol, és mikor mozdult utoljára. */
+  let fingerDown = false;
+  let finger = { x: 0, y: 0 };
+  let lastJitter = 0;
   let lastDir = { x: 0, y: 0 };
   let premature = 0;
 
@@ -172,7 +198,15 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     let tx: number | null = null;
     let ty = 0;
     const open = ui.active();
-    if (open && st.cagesOpen && !tapMode && d.clockMs() - shownAt < holdFor) {
+    if (dragMode && open && st.cagesOpen && !(chosen && chosen.id === open.id)) {
+      // Ú1: a döntés előtt az ujj lent marad a régi helyén, és kicsit mozdul (a mag ezt nem veheti szándéknak).
+      if (fingerDown && d.clockMs() - lastJitter >= 100) {
+        lastJitter = d.clockMs();
+        core.setTarget(finger.x + 0.002, finger.y, "move");
+      }
+      return;
+    }
+    if (open && st.cagesOpen && !tapMode && !dragMode && d.clockMs() - shownAt < holdFor) {
       // Emberi reakció: a gyerek a kérdés megjelenése után még tolja a régi irányba (review #485 B1).
       core.setInput(lastDir.x, lastDir.y);
       return;
@@ -180,7 +214,11 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     if (chosen && st.cagesOpen && ui.active()?.id === chosen.id) {
       // A választott ketrec: oda fut és MEGÁLL benne (a böködéses célzás mintája — a válasz a beállás, review #485).
       const cage = st.cages[chosen.option];
-      if (cage && skillRoll < 1) core.setTarget(cage.x, cage.y);
+      if (cage && skillRoll < 1) {
+        // Húzásos módban a döntés után az ujj felemelkedik, és a gyerek a ketrecre bök (friss lenyomás).
+        core.setTarget(cage.x, cage.y, "down");
+        fingerDown = false;
+      }
       core.setInput(0, 0);
       return;
     } else if (!st.carry) {
@@ -197,6 +235,15 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     }
     if (tx === null || skillRoll >= 1) {
       core.setInput(0, 0);
+      return;
+    }
+    if (dragMode) {
+      const dx = tx - p.x;
+      const dy = ty - p.y;
+      const len = Math.hypot(dx, dy) || 1;
+      finger = { x: tx + (dx / len) * dragLead, y: ty + (dy / len) * dragLead };
+      core.setTarget(finger.x, finger.y, fingerDown ? "move" : "down");
+      fingerDown = true;
       return;
     }
     if (tapMode) {

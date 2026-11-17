@@ -48,6 +48,7 @@ import {
   type BrainRotTuning,
   type Cage,
 } from "@/lib/brainRot/core";
+import { createCouponRepeat } from "@/lib/brainRot/couponRepeat"; // #483 után törölhető
 import {
   GameHud,
   GameShell,
@@ -350,6 +351,8 @@ export default function BrainRotSteal() {
 
   /** Spec 2026-09-29: a futásban már feltett kérdések (azonosító + prompt). */
   const gradeSeenRef = useRef(createGradeQuizSeen());
+  /** Kupon mód: a lecke tananyagának ismétlése kimerüléskor (review #485 K1; `lib/brainRot/couponRepeat.ts`). #483 után törölhető. */
+  const couponRepeatRef = useRef(createCouponRepeat());
 
   /**
    * S8 / terv A8: az angol kérdés-hely a központi szóbankból (közös napló mind a hét játékra). `null`, amíg
@@ -381,7 +384,16 @@ export default function BrainRotSteal() {
         const sharedGrade = gradeForGame(gradeRef.current);
         const couponMaterialOnly = couponRef.current.active && poolRef.current.some((q) => q.fromMaterial);
         if (sharedGrade == null && !couponMaterialOnly) return null;
-        const material = pickUnseenMaterial(poolRef.current.filter((q) => q.fromMaterial), gradeSeenRef.current);
+        const lesson = poolRef.current.filter((q) => q.fromMaterial);
+        const material = pickUnseenMaterial(lesson, gradeSeenRef.current);
+        if (!material && couponMaterialOnly) {
+          // #483 után törölhető — kupon módban a lecke anyaga kimerüléskor ismétlődik (hibázott → legrégebben látott; review
+          // #485 K1, végrehajtás J5a 17.). Közvetlen (kérdés nélküli) megtartás csak 0 tételnél marad.
+          const toQuestion = (q: Quiz) =>
+            materialPlayQuestion(asFour(q), { subject: q.topic ?? q.category, coupon: true, ...(sharedGrade != null ? { grade: sharedGrade } : {}) });
+          const again = couponRepeatRef.current.next(lesson, (q) => toQuestion(q).key);
+          return again ? { ...toQuestion(again.item), key: again.key, noReview: true } : null;
+        }
         if (!material) return null;
         markGradeQuizSeen(gradeSeenRef.current, material);
         return materialPlayQuestion(asFour(material), {
@@ -495,6 +507,19 @@ export default function BrainRotSteal() {
   if (!driverRef.current) driverRef.current = makeDriver(runSeedRef.current);
   const maxMultiplierRef = useRef(1);
   const firstCageSeenRef = useRef(false);
+  /** A nyitott kérdés válaszfeliratai (a jelölt mód újraszámolásához — Ú2, Ú6). */
+  const cageLabelsRef = useRef<string[]>([]);
+  /** Jelölt mód kell-e a megadott ketrec-zónánál: a ketrec VALÓDI szélességével (álló, mély zónánál egysoros, keskenyebb). */
+  const cageCompactFor = (topU: number): boolean => {
+    const labels = cageLabelsRef.current;
+    if (labels.length === 0) return false;
+    // A tábla mostani mérete (elforgatáskor a ResizeObserver-sorrendtől függetlenül friss — Ú6).
+    const el = boardRef.current;
+    const w = el ? Math.max(1, el.clientWidth) : boardSizeRef.current.w;
+    const h = el ? Math.max(1, el.clientHeight) : boardSizeRef.current.h;
+    const unit = Math.min(w, h);
+    return !cageLabelsFit(labels, cageWidthU(w / unit, h / unit, labels.length, topU) * unit);
+  };
 
   const q = usePlayQuestion({
     setup: { config: directorConfig, provider, startBand: difficultyRef.current, seed: runSeedRef.current },
@@ -502,12 +527,14 @@ export default function BrainRotSteal() {
     haptics: false,
     onShow: (p) => {
       firstCageSeenRef.current = true;
+      if (couponRef.current.active) couponRepeatRef.current.asked(p.question.key); // #483 után törölhető
       const core = driverRef.current?.core;
       if (!core) return;
       // B2: a ketrec valódi feliratszélességével ellenőrzünk; ha egy válasz nem fér, jelölt mód (szám + szín + jelmagyarázat).
+      // A zóna mérésekor és elforgatáskor a lap újra eldönti (Ú2, Ú6: `cageCompactFor`).
       const st = core.state();
-      const widthPx = cageWidthU(st.arenaW, st.arenaH, p.options.length) * unitRef.current;
-      const compact = !cageLabelsFit(p.options.map((o) => o.label), widthPx);
+      cageLabelsRef.current = p.options.map((o) => o.label);
+      const compact = cageCompactFor(st.cageTop);
       setCageCompact(compact);
       core.setCageZone(st.cageTop, compact);
       // Q1 Ketrec-zár: a 4 válasz 4 ketrec (az előjelzés után élesednek).
@@ -518,6 +545,7 @@ export default function BrainRotSteal() {
       const picked = o.pickedOriginalIndex === null ? -1 : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
       // ≤ 2 s játékbeli következmény (K.4/23): jó → a lény a ketrecben marad; rossz / lejárat → elszökik.
       driverRef.current?.core.applyOutcome(o.result, picked < 0 ? null : picked);
+      if (couponRef.current.active) couponRepeatRef.current.outcome(p.question.key, o.result); // #483 után törölhető
       if (o.result === "aborted") return;
       const good = o.result === "correct";
       if (o.pickedOriginalIndex !== null) maybeClaimCouponBonus(couponRef.current, p.question.quiz.id, o.pickedOriginalIndex);
@@ -686,6 +714,7 @@ export default function BrainRotSteal() {
     bestSubmittedRef.current = false;
     difficultyRef.current = levelStartBand(runLevelRef.current, startingDifficulty(userGrade ?? 4));
     gradeSeenRef.current = createGradeQuizSeen();
+    couponRepeatRef.current.reset(); // #483 után törölhető
     answerHistoryRef.current = [];
     maxMultiplierRef.current = 1;
     firstCageSeenRef.current = false;
@@ -811,21 +840,29 @@ export default function BrainRotSteal() {
           cageRects: JSON.stringify(
             st.cages.slice(0, st.cageCount).map((c) => [(c.x - c.w / 2) * unitRef.current, (c.y - c.h / 2) * unitRef.current, c.w * unitRef.current, c.h * unitRef.current]),
           ),
+          // A ketrecek élesítése (1 = éles) és a ketrec-kor (ms) — az előjelzés mérőjéhez.
+          cageArmed: st.cages.slice(0, st.cageCount).map((c) => (c.armed ? 1 : 0)).join(""),
+          cageAgeMs: st.cageAgeMs,
+          playerXY: `${st.player.x.toFixed(3)},${st.player.y.toFixed(3)}`,
         };
       },
       forceState: (patch: GameForcePatch) => {
-        if (patch.phase === "quiz-long" || patch.phase === "quiz-longprompt") {
+        const longPhase = patch.phase === "quiz-long" || patch.phase === "quiz-longprompt" || patch.phase === "quiz-longboth";
+        if (longPhase) {
           // A kézi bank és a betöltött évfolyam-bank leghosszabb válaszú / promptú tétele (programmal kikeresve).
           const candidates = [
             ...ALL_QUIZZES.map((q) => ({ quiz: asFour(q), subject: q.category as string, grade: undefined as number | undefined })),
             ...loadedGradeItems().map((g) => ({ quiz: { id: g.id, prompt: g.prompt, options: g.options.slice(), correctIndex: g.correctIndex, explanation: g.explanation }, subject: g.subject as string, grade: g.grade })),
           ];
-          const score = (q: { prompt: string; options: string[] }) =>
-            patch.phase === "quiz-long" ? Math.max(...q.options.map((o) => o.length)) : q.prompt.length;
-          const best = candidates.reduce((a, b) => (score(b.quiz) > score(a.quiz) ? b : a));
-          forcedQuizRef.current = bankPlayQuestion(BRAIN_ROT_GAME_ID, best.quiz, best.subject, best.grade);
+          const answerLen = (q: { options: string[] }) => Math.max(...q.options.map((o) => o.length));
+          const longestAnswers = candidates.reduce((a, b) => (answerLen(b.quiz) > answerLen(a.quiz) ? b : a));
+          const longestPrompt = candidates.reduce((a, b) => (b.quiz.prompt.length > a.quiz.prompt.length ? b : a));
+          const best = patch.phase === "quiz-longprompt" ? longestPrompt : longestAnswers;
+          // „quiz-longboth” (review #485 Ú2): a leghosszabb prompt ÉS a leghosszabb válaszok együtt (szintetikus mérő-tétel).
+          const quiz = patch.phase === "quiz-longboth" ? { ...longestAnswers.quiz, id: `${longestAnswers.quiz.id}-longboth`, prompt: longestPrompt.quiz.prompt } : best.quiz;
+          forcedQuizRef.current = bankPlayQuestion(BRAIN_ROT_GAME_ID, quiz, best.subject, best.grade);
         }
-        if (patch.question || patch.phase === "quiz" || patch.phase === "quiz-long" || patch.phase === "quiz-longprompt") {
+        if (patch.question || patch.phase === "quiz" || longPhase) {
           // `phase: "quiz"` a `question: true` kompatibilis álneve (terv 9.): azonnal egy lény a vadász kezében, és kérdés.
           setPaused(false);
           const d = driverRef.current!;
@@ -1041,12 +1078,16 @@ export default function BrainRotSteal() {
       const legend = legendRef.current?.getBoundingClientRect();
       const bottom = Math.max(c.bottom, legend ? legend.bottom : 0);
       const b = boardEl.getBoundingClientRect();
-      const topU = Math.max(0, bottom - b.top - 2) / unitRef.current;
+      const topU = Math.max(0, bottom - b.top - 2) / Math.max(1, Math.min(boardEl.clientWidth, boardEl.clientHeight));
       const core = driverRef.current?.core;
       if (!core) return;
       const before = core.state().cageTop;
-      core.setCageZone(topU, core.state().cageCompact);
-      if (Math.abs(before - core.state().cageTop) > 0.005) setCageZoneVersion((v) => v + 1);
+      const beforeCompact = core.state().cageCompact;
+      // Ú2 / Ú6: a jelölt mód a mért zónával (és a mostani nézettel — elforgatás után is) újra eldől.
+      const compact = cageCompactFor(topU);
+      core.setCageZone(topU, compact);
+      if (compact !== beforeCompact) setCageCompact(compact);
+      if (Math.abs(before - core.state().cageTop) > 0.005 || compact !== beforeCompact) setCageZoneVersion((v) => v + 1);
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
@@ -1059,12 +1100,13 @@ export default function BrainRotSteal() {
 
   /* --- Bemenet a táblán: böködés / húzás = oda fut a vadász (egyujjas és egeres mód, K.4/17; KSZ-14) --- */
   const boardPointerRef = useRef<number | null>(null);
-  const targetFrom = useCallback((clientX: number, clientY: number) => {
+  /** `kind`: friss lenyomás (`"down"`) vagy a lent tartott ujj húzása (`"move"` — a ketrecek nyitása után nem szándék, Ú1). */
+  const targetFrom = useCallback((clientX: number, clientY: number, kind: "down" | "move") => {
     const el = boardRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     const u = unitRef.current;
-    driverRef.current?.core.setTarget((clientX - r.left) / u, (clientY - r.top) / u);
+    driverRef.current?.core.setTarget((clientX - r.left) / u, (clientY - r.top) / u, kind);
   }, []);
   const onBoardPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -1075,14 +1117,14 @@ export default function BrainRotSteal() {
         /* a szintetikus esemény nem foglalható le — a böködés így is számít */
       }
       boardPointerRef.current = e.pointerId;
-      targetFrom(e.clientX, e.clientY);
+      targetFrom(e.clientX, e.clientY, "down");
     },
     [targetFrom],
   );
   const onBoardPointerMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (e.pointerId !== boardPointerRef.current || pausedRef.current) return;
-      targetFrom(e.clientX, e.clientY);
+      targetFrom(e.clientX, e.clientY, "move");
     },
     [targetFrom],
   );
@@ -1096,7 +1138,7 @@ export default function BrainRotSteal() {
     const st = driverRef.current?.core.state();
     const cage = st?.cages[i];
     if (!st || !cage || pausedRef.current) return;
-    driverRef.current!.core.setTarget(cage.x, cage.y);
+    driverRef.current!.core.setTarget(cage.x, cage.y, "down");
   }, []);
 
   /* --- Eredmény beküldése --- */

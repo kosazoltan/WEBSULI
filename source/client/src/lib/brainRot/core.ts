@@ -250,8 +250,12 @@ export type BrainRotCore = {
   setCageZone(top: number, compact: boolean): void;
   /** Joystick / billentyű: képernyő-irány (y LEFELÉ), nagyság 0..1. Nem nulla bemenet a böködött célt törli. */
   setInput(x: number, y: number): void;
-  /** Böködés / húzás a táblán: ide fut a vadász (null: nincs cél). */
-  setTarget(x: number | null, y?: number): void;
+  /**
+   * Böködés / húzás a táblán: ide fut a vadász (null: nincs cél). `kind`: `"down"` — friss lenyomás / ketrecgomb (alap);
+   * `"move"` — a lenyomott ujj húzása. A ketrecek nyitásakor a már lent lévő ujj húzása elengedtetett: amíg új lenyomás
+   * nem jön, a `"move"` cél elvetve (review #485 Ú1 — a húzás nem szándék).
+   */
+  setTarget(x: number | null, y?: number, kind?: "down" | "move"): void;
   /**
    * Egy világ-lépés. `timeScale`: a hurok aktuális szorzója (kérdés alatt `slowMo`) — a VADÁSZ ezzel kompenzál (a világ
    * lassul, a gyerek irányítása nem: a lassított joystick bemeneti késésnek érződne). Determinisztikus: a lépés bemenete.
@@ -293,12 +297,33 @@ export type BrainRotCore = {
 export function cageLayout(w: number, h: number, count: number, out: Cage[], top = 0, compact = false): void {
   const wide = w > h * 1.25;
   const n = Math.max(1, Math.min(count, out.length));
-  const cw = cageWidthU(w, h, n);
+  const cw = cageWidthU(w, h, n, top);
   // A ketrec-zóna teteje: a kérdés-kártya (és a jelmagyarázat) mért alja alatt (review #485 B2b, K3).
-  const zoneTop = Math.max(0.02, Math.min(h - 0.3, top + 0.03));
+  const zoneTop = cageZoneTop(h, top);
   const xs = [0.255, 0.745];
   let ch = wide ? (compact ? 0.22 : 0.3) : compact ? 0.15 : 0.21;
   let ys: number[];
+  const row = cageSingleRow(w, h, top);
+  if (row && !wide) {
+    // Ú2: álló nézetben a mély zóna alatt nem fér két sor — egy sor a tábla alján, egymástól CAGE_ROW_GAP távolságra.
+    const room = h - 0.02 - zoneTop;
+    ch = Math.max(0.14, Math.min(ch, room));
+    const y = Math.max(zoneTop + ch / 2, h - 0.02 - ch / 2);
+    const span = n * cw + (n - 1) * CAGE_ROW_GAP;
+    const x0 = (w - span) / 2 + cw / 2;
+    for (let i = 0; i < n; i++) {
+      const c = out[i]!;
+      c.w = cw;
+      c.h = ch;
+      c.x = x0 + i * (cw + CAGE_ROW_GAP);
+      c.y = Math.min(h - ch / 2 - 0.02, y);
+      c.armed = false;
+      c.dwellMs = 0;
+      c.entered = false;
+      c.inside = false;
+    }
+    return;
+  }
   if (wide) {
     // Ha a zóna alatt nem fér a teljes magasság, a ketrec alacsonyabb lesz (de >= 0,16 egység, kb. 48 px).
     const room = h - 0.02 - zoneTop;
@@ -309,7 +334,8 @@ export function cageLayout(w: number, h: number, count: number, out: Cage[], top
     const bottom = h - 0.02;
     const room = bottom - zoneTop;
     if (room < 2 * ch + gap) ch = Math.max(0.14, (room - gap) / 2);
-    const lower = Math.min(0.84 * h, bottom - ch / 2);
+    // Ú2: ha a felső sor a zóna alatt kezdődne, az alsó sor lejjebb csúszik (a két sor + rés a zónába fér, lásd fent).
+    const lower = Math.min(bottom - ch / 2, Math.max(Math.min(0.84 * h, bottom - ch / 2), zoneTop + ch / 2 + ch + gap));
     const upper = Math.min(Math.max(0.47 * h, zoneTop + ch / 2), lower - ch - gap);
     ys = [upper, lower];
   }
@@ -336,10 +362,32 @@ export function cageLayout(w: number, h: number, count: number, out: Cage[], top
   }
 }
 
-/** A ketrec szélessége egységben (a lap ebből számolja a felirat valódi px-szélességét a beférés-ellenőrzéshez). */
-export function cageWidthU(w: number, h: number, count: number): number {
+/** A ketrec-zóna teteje egységben (a mért alj + rés, a táblán belül). */
+function cageZoneTop(h: number, top: number): number {
+  return Math.max(0.02, Math.min(h - 0.3, top + 0.03));
+}
+
+/** Egysoros elrendezésnél a ketrecek közti rés (egység; ≥ 12 px a 344 px-es táblán is). */
+export const CAGE_ROW_GAP = 0.04;
+
+/**
+ * Álló nézetben két sor kell (2 × ≥ 0,14 + 0,05 egység rés); ha a kártya / jelmagyarázat alatt ennyi nincs, egy sor
+ * (review #485 Ú2). Fekvő nézetben mindig egy sor.
+ */
+export function cageSingleRow(w: number, h: number, top: number): boolean {
+  if (w > h * 1.25) return true;
+  return h - 0.02 - cageZoneTop(h, top) < 2 * 0.14 + 0.05;
+}
+
+/**
+ * A ketrec szélessége egységben (a lap ebből számolja a felirat valódi px-szélességét a beférés-ellenőrzéshez). `top`: a
+ * ketrec-zóna teteje — álló nézetben mély zónánál egy sorba kerülnek, és keskenyebbek (Ú2).
+ */
+export function cageWidthU(w: number, h: number, count: number, top = 0): number {
   const n = Math.max(1, Math.min(4, count));
-  return w > h * 1.25 ? Math.min(0.62, (w * 0.88) / n) : Math.min(0.46, w * 0.44);
+  if (w > h * 1.25) return Math.min(0.62, (w * 0.88) / n);
+  if (cageSingleRow(w, h, top)) return Math.min(0.46, (w - 0.04 - (n - 1) * CAGE_ROW_GAP) / n);
+  return Math.min(0.46, w * 0.44);
 }
 
 /** A ketrecfelirat betűmérete (px) és sorainak felső határa — a CSS-sel egyező értékek (`.br-cage-label`). */
@@ -487,6 +535,8 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
    * élesítéskor ez a ketrec választható (a gyors böködő gyereknek nem kell kilépnie). A joystick-tehetetlenség nem szándék.
    */
   let intent: { x: number; y: number } | null = null;
+  /** Ú1: a ketrecek nyitásakor igaz — a lenyomva tartott ujj húzása (`"move"`) új lenyomásig elvetve. */
+  let staleDrag = false;
   const events: BrainRotEvent[] = Array.from({ length: EVENT_CAP }, () => ({ type: "spawn" as BrainRotEventType, x: 0, y: 0, id: -1, n: 0 }));
   let evHead = 0;
   let evCount = 0;
@@ -658,11 +708,14 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
       target = null;
       intent = null;
     },
-    setTarget(x, y) {
+    setTarget(x, y, kind = "down") {
       if (x === null || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) {
         target = null;
         return;
       }
+      // Ú1: a nyitáskor lent lévő ujj húzása új lenyomásig nem ad célt (és szándékot sem).
+      if (kind === "move" && staleDrag) return;
+      if (kind === "down") staleDrag = false;
       target = { x: clampX(x, st.player.r), y: clampY(y, st.player.r) };
       intent = st.cagesOpen ? { x: target.x, y: target.y } : null;
     },
@@ -704,6 +757,8 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
       }
 
       /* ---- lények ---- */
+      // Lemaradás a győzelmi tempótól (0..1): 2 lény hiány = teljes (a világidő a kérdés alatt lassabb — megengedő mérce).
+      const behind = Math.min(1, Math.max(0, (CLEAR_CATCHES * Math.min(1, st.worldMs / ROUND_MS) - st.caught) / 2));
       bounds.width = st.arenaW;
       bounds.height = st.arenaH;
       for (const c of st.creatures) {
@@ -736,8 +791,9 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
         const d = Math.hypot(ddx, ddy);
         if (!c.dazed && d < FLEE_RADIUS && d > 1e-6) {
           const tired = c.stamina <= 0;
-          // KSZ-16: kicsi, nyílt gumiszalag — a nehézség-sáv szerint ±10% menekülési tempó (a gyengébb játékos lassabb lényt kap).
-          const rubber = 0.9 + 0.2 * Math.min(1, Math.max(0, band));
+          // KSZ-16: kicsi, nyílt gumiszalag a LEMARADÓNAK (review #485 Ú4, J5a 18.) — ha a ketrecben megtartott lények
+          // elmaradnak a győzelmi tempótól, legfeljebb −10% menekülési tempó; előnyben nincs gyorsítás (a jó válasz nem nehezít).
+          const rubber = 1 - 0.1 * behind;
           const strength = FLEE_SPEED * tuning.speedScale * rubber * Math.sqrt(1 - d / FLEE_RADIUS) * (tired ? TIRED_FACTOR : 1);
           fx = (ddx / d) * strength;
           fy = (ddy / d) * strength;
@@ -785,7 +841,11 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
             // Előjelzés (`CAGE_ARM_MS`), utána élesedik — de csak ha a vadász kint áll; aki bent van, annak ki kell lépnie.
             // Kivétel: a nyitás után ebbe a ketrecbe böködött (szándékos) cél — az élesítéskor rögtön választható.
             if (st.cageAgeMs >= CAGE_ARM_MS) {
-              if (!inside) cage.armed = true;
+              // A „bent áll” itt szigorú (a vadász KÖZEPE a ketrecben): a ketrecek közti keresztezésnél álló vadász a
+              // peremével mind a négyet érinti — ettől még élesednek, de a perem-átfedés nem belépés (`wasInside` igaz marad,
+              // a válaszhoz ki kell lépni és lendülettel visszajönni).
+              const centreIn = Math.abs(p.x - cage.x) <= cage.w / 2 && Math.abs(p.y - cage.y) <= cage.h / 2;
+              if (!centreIn) cage.armed = true;
               else if (intent && playerInCage(intent.x, intent.y, cage)) {
                 cage.armed = true;
                 cage.entered = true;
@@ -826,6 +886,8 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
       // A vadász megáll: a böködés célja, a bemenet és a lendület törlődik (a gyerek új irányítása mozdítja) — review #485 B1.
       target = null;
       intent = null;
+      // Ú1: a már lenyomott ujj húzása elengedtetett — új lenyomásig nem ad célt.
+      staleDrag = true;
       inputX = 0;
       inputY = 0;
       st.player.vx = 0;
@@ -840,6 +902,8 @@ export function createBrainRotCore(opts: { seed: number | string; arenaW?: numbe
     applyOutcome(result, pickedOption) {
       st.cagesOpen = false;
       st.hitCage = -1;
+      // A ketrecek zárva: a lent tartott ujj húzása újra vadászhat (nincs mibe válaszolni).
+      staleDrag = false;
       const carry = st.carry;
       st.carry = null;
       st.sinceCatchMs = 0;

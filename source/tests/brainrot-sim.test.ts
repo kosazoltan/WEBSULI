@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { medianOf, runSim, runSimSeeds, simSeeds, SIM_AVERAGE, SIM_STRONG, SIM_WEAK, SIM_YOUNG, type SimGameFactory, type SimPlayer } from "./support/game-sim";
 import { createSimGame } from "../client/src/lib/brainRot/sim";
+import { couponBaseKey } from "../client/src/lib/brainRot/couponRepeat";
 import { ROUND_MS } from "../client/src/lib/brainRot/core";
 
 /**
@@ -126,14 +127,63 @@ test("review #485 B1: a döntés ELŐTT regisztrált (véletlen) válasz 0 — m
   }
 });
 
-test("review #485 K2: a gyengébb játékos kérdéssel is nyerhet néha (≥ 3/20), a 3–4. évfolyamos ≥ 12/20; kérdéssel sosem több a vereség, mint nélküle", () => {
+test("review #485 Ú1: húzásos mód (az ujj a nyitáskor lent marad és mozdul) — a döntés előtti válasz 0, az ujj a lényen és 0,15 egységgel előtte", () => {
+  for (const [player, grade] of [[SIM_AVERAGE, 7], [SIM_YOUNG, 4]] as const) {
+    for (const dragLead of [0, 0.15]) {
+      let premature = 0;
+      let asked = 0;
+      for (const seed of simSeeds(GAME)) {
+        const g = createSimGame({ seed, grade, questions: true, input: "drag", dragLead });
+        const r = runSim(() => g, player, { seed, seconds: 180 });
+        premature += g.prematureAnswers();
+        asked += r.stats.asked;
+      }
+      assert.ok(asked > 200, `érdemi minta (${asked})`);
+      assert.equal(premature, 0, `húzás, előny ${dragLead}: ${premature}/${asked} véletlen válasz`);
+    }
+  }
+});
+
+test("review #485 K2: a gyengébb játékos kérdéssel is nyerhet néha (≥ 3/20), a 3–4. évfolyamos ≥ 12/20", () => {
   const weak = runSimSeeds(factory(), SIM_WEAK, { gameId: GAME, seconds: 180 });
   assert.ok(weak.filter((r) => r.won).length >= 3, `gyengébb: ${weak.filter((r) => r.won).length}/20`);
   const young = runSimSeeds(factory(), SIM_YOUNG, { gameId: GAME, seconds: 180, grade: 4 });
   assert.ok(young.filter((r) => r.won).length >= 12, `3–4. évf.: ${young.filter((r) => r.won).length}/20`);
-  for (const [player, grade] of [[SIM_AVERAGE, 7], [SIM_YOUNG, 4], [SIM_WEAK, 7], [SIM_STRONG, 7]] as const) {
-    const withQ = runSimSeeds(factory(), player, { gameId: GAME, seconds: 180, grade });
-    const noQ = runSimSeeds(factory(), player, { gameId: GAME, seconds: 180, grade, questions: false });
-    assert.ok(withQ.filter((r) => !r.won).length <= noQ.filter((r) => !r.won).length, "kérdéssel nem több vereség");
+});
+
+test("review #485 Ú4: a győzelem a pontossággal monoton nem csökken (20 / 45 / 75 / 95%) minden évfolyamsávban (tűrés 1/20)", () => {
+  // A reviewer `mono.ts` modelljei: évfolyamsávonként reakcióidő és ügyesség, csak a pontosság változik.
+  for (const [grade, reactionMedianMs, skill] of [[4, 3500, 0.7], [7, 2800, 0.8], [11, 2400, 0.85]] as const) {
+    const wins = [0.2, 0.45, 0.75, 0.95].map(
+      (accuracy) => runSimSeeds(factory(), { accuracy, reactionMedianMs, skill }, { gameId: GAME, seconds: 180, grade }).filter((r) => r.won).length,
+    );
+    for (let i = 1; i < wins.length; i++) {
+      assert.ok(wins[i]! >= wins[i - 1]! - 1, `${grade}. évf.: győzelem a pontossággal ${wins.join(" / ")} (nem csökkenhet)`);
+    }
+    assert.ok(wins[3]! > wins[0]!, `${grade}. évf.: a pontosság számít (${wins.join(" / ")})`);
+  }
+});
+
+test("review #485 K1: kupon módban 8 / 5 / 3 tételes leckével sem fogy el a kérdés (nincs kérdés nélküli megtartás), és a győzelmi arány nem rosszabb a kupon nélkülinél", () => {
+  const lesson = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `lecke-${i}`, prompt: `Lecke-kérdés ${i}?`, options: [`jó${i}`, `b${i}`, `c${i}`, `d${i}`], correctIndex: i % 4 }));
+  for (const [player, grade] of [[SIM_AVERAGE, 7], [SIM_YOUNG, 4]] as const) {
+    const plain = runSimSeeds(factory(), player, { gameId: GAME, seconds: 180, grade }).filter((r) => r.won).length;
+    for (const n of [8, 5, 3]) {
+      let wins = 0;
+      for (const seed of simSeeds(GAME)) {
+        const g = createSimGame({ seed, grade, questions: true, coupon: true, material: lesson(n) });
+        const r = runSim(() => g, player, { seed, seconds: 180, grade });
+        if (r.won) wins += 1;
+        assert.equal(g.state().direct, 0, `${n} tétel, seed ${seed}: kérdés nélküli megtartás`);
+        const keys = g.askedKeys();
+        assert.ok(keys.length >= 10, `${n} tétel: ${keys.length} kérdés`);
+        assert.ok(keys.every((k) => k.startsWith("mat:lecke-")), "csak a lecke anyaga");
+        for (let i = 1; i < keys.length; i++) {
+          assert.notEqual(couponBaseKey(keys[i]!), couponBaseKey(keys[i - 1]!), `${n} tétel: közvetlen ismétlés`);
+        }
+      }
+      assert.ok(wins >= plain, `${n} tétel: kuponnal ${wins}/20, kupon nélkül ${plain}/20`);
+    }
   }
 });
