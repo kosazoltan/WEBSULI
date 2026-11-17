@@ -104,7 +104,9 @@ test("E6: „programozás”, „prog” → 0. osztály", () => {
   for (const form of ["programozás", "Programozas", "prog", "prog.", "programozási alapismeretek", "programozás alapok", "0", "0. osztály"]) {
     assert.deepEqual(parseGradeQuery(form), { grades: [0], rest: [] }, form);
   }
-  assert.deepEqual(parseGradeQuery("program").grades, [], "a „program” nem a programozási sáv");
+  // Review U4 (koordinátori döntés): a „programozás” legalább 4 betűs eleje is a programozási sáv; a „programok”, „progresszió” nem.
+  for (const form of ["progr", "progra", "program", "programo", "programoz", "programozá"]) assert.deepEqual(parseGradeQuery(form), { grades: [0], rest: [] }, form);
+  for (const form of ["pro", "programok", "programterv", "progresszió", "prognózis"]) assert.deepEqual(parseGradeQuery(form).grades, [], form);
 });
 
 test("E8: tört, tizedes, tartomány, hosszabb vagy 12-nél nagyobb szám nem osztály", () => {
@@ -219,7 +221,7 @@ test("K2: a megjelenített előtag részszövege nem találat — csak a tárolt
   assert.equal(matchesMaterialSearch(file, "1. osztály"), false);
   assert.equal(matchesMaterialSearch(file, "osztály"), false, "az „osztály” szó csak a tárolt szövegben keres");
   assert.equal(matchesMaterialSearch(file, "11. osztály · Törtek"), true, "a teljes megjelenített cím az osztály-ágon találat");
-  assert.equal(matchesMaterialSearch({ title: "Python", classroom: 0 }, "program"), false, "a „program” nem a programozási sáv");
+  assert.equal(matchesMaterialSearch({ title: "Python", classroom: 0 }, "programok"), false, "a „programok” nem a programozási sáv, és az előtag nem keresett szöveg");
 });
 
 test("A2: osztálybetű, ragozott és római alakok", () => {
@@ -295,4 +297,39 @@ test("A1: az osztály melletti szó szókezdetre illik — az „ötödik elem�
   assert.equal(matchesMaterialSearch(history, "5. osztály egyip"), true);
   assert.equal(matchesMaterialSearch(history, "5. osztály nílus ókori"), true);
   assert.equal(matchesMaterialSearch(history, "5. osztály jándék"), false, "szó belseje nem találat");
+});
+
+// ---- A második ellenőri kör (2026-11-17): U1, U4 — gépelés közben a találati lista nem eshet össze ----
+
+/** A kifejezés minden eleje a `from` hosszától a teljes alakig. */
+const typed = (full: string, from: number) => Array.from({ length: full.length - from + 1 }, (_, i) => full.slice(0, from + i));
+
+test("U1: a félig beírt osztály-szó nem keresőszó — minden leütésnél ugyanaz a találathalmaz, mint a kész alaknál", () => {
+  const cases: Array<[string, number, string]> = [
+    ["5. osztály", 2, "ab"], ["5. osztályos", 2, "ab"], ["5. osztályosoknak", 2, "ab"], ["5. évfolyam", 2, "ab"], ["5. évfolyamban", 2, "ab"],
+    ["5.osztály", 2, "ab"], ["6 osztály", 3, "c"], ["6 évfolyam", 3, "c"], ["ötödik osztály", 6, "ab"], ["ötödik évfolyam", 6, "ab"],
+    ["8. osztály", 2, "d"], ["9.osztályos", 2, "j"], ["V. osztály", 6, "ab"], ["V. évfolyam", 6, "ab"],
+  ];
+  for (const [full, from, ids] of cases) {
+    assert.equal(found(full), ids, full);
+    for (const prefix of typed(full, from)) assert.equal(found(prefix), ids, JSON.stringify(prefix));
+  }
+});
+
+test("U1: a félig beírt osztály-szó után a keresőszó érvényes marad; a hasonló kezdetű valódi szó keresőszó", () => {
+  assert.deepEqual(parseGradeQuery("5. oszt törtek"), { grades: [5], rest: ["tortek"] });
+  assert.deepEqual(parseGradeQuery("5. évfo törtek"), { grades: [5], rest: ["tortek"] });
+  assert.deepEqual(parseGradeQuery("5 osztályozás"), { grades: [5], rest: ["osztalyozas"] });
+  assert.deepEqual(parseGradeQuery("5 évszak"), { grades: [5], rest: ["evszak"] });
+  assert.deepEqual(parseGradeQuery("5 olvasás"), { grades: [5], rest: ["olvasas"] });
+  assert.deepEqual(parseGradeQuery("ötödik elem"), { grades: [5], rest: ["elem"] });
+  assert.deepEqual(parseGradeQuery("V o").grades, [], "római számnál egy betű nem elég az osztály-szóból");
+});
+
+test("U4: a „programozás” gépelése közben a programozási sáv végig megvan („prog” … „programozás”)", () => {
+  for (const prefix of typed("programozás", 4)) assert.equal(found(prefix), "ef", prefix);
+  for (const prefix of typed("programozási alapismeretek", 4)) {
+    const hits = found(prefix);
+    assert.ok(hits.includes("f"), `${prefix} → ${hits}`);
+  }
 });

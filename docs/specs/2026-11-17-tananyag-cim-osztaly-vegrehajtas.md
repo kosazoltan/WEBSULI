@@ -147,3 +147,20 @@ Jelentés: a session scratchpadjében (`review-tananyag-cim/jelentes.md`); íté
 9. A böngészős spec fogta meg (admin, „1. osztály” → az 1. ÉS a 11. osztály): az admin kereső felirat-részszöveg ága
    (`AdminFileDashboard.tsx`, a #54 óta) ugyanazt a K2-hibát hordozta. Javítás: a felirat-ág csak érvénytelen osztályú anyagra
    („Nincs osztály”) érvényes; az érvényes osztályt a közös illesztés találja.
+
+## 10. A második ellenőri kör (fej `b6350a16`, ítélet: IGEN, FELTÉTELLEL) — U1 és U4 a push előtt
+
+1. `source/shared/material-title.ts`
+   - U1: `TYPED_GRADE_WORD` — a szám / sorszámnév után álló, félig beírt osztály-szó („o”, „os”, „osz” … „osztály”, „e”, „év” …
+     „évfolyam”, és a ragozott alakok eleje) az osztály-kifejezés része. Római számnál legalább három betű kell az osztály-szóból.
+     A hasonló kezdetű valódi szó („osztályozás”, „évszak”, „olvasás”, „elem”) keresőszó marad.
+   - U4: a „programozás” legalább 4 betűs eleje a 0. sáv („prog”, „progr”, „progra”, „program”, „programo”, „programoz…”).
+     Koordinátori döntés; a korábbi „a »program« nem a programozási sáv” teszt-elvárás ennek megfelelően változott.
+2. `source/tests/material-title.test.ts`: minden leütésre azonos találathalmaz a kész alakkal („5. osztály”, „5. osztályosoknak”,
+   „5. évfolyamban”, „5.osztály”, „6 osztály”, „ötödik osztály”, „V. osztály” stb.); „prog” … „programozás”; ellenpéldák.
+3. Mérés valós adaton (243 anyag; az ellenőr `d.mts` és `a.mts` szkriptjével):
+   - „8. o” … „8. osztály”: végig 49; „8.o” … „8.osztály”: végig 49; „5. é” … „5. évfolyam”: végig 53; „ötödik o” … „ötödik osztály”:
+     végig 53; „prog” … „program”: 12, „programo” … „programozás”: 9 (a kész alak 9 — nem esik alá).
+   - Regresszió: recall minden osztályra és alakra 100%, új hamis találat 0, 81 850 régi találatból 0 veszett el.
+4. Nem javítva, a terv „Nyitott tételek” szakaszában: U2 (tulajdonosi döntés), U3, U5, az A3 maradéka (jegy).
+5. Utána: `gate:stage`; a három böngészős spec `--workers=1` (sorompó külön lépésben); `gate:push`.

@@ -92,6 +92,13 @@ export function materialDisplayTitle(title: string, classroom: unknown, style: T
 
 /** A keresőben az osztály-szó ragozott alakjai („osztályos”, „osztálynak”, „évfolyamban”) — az „osztályozás”, „osztályfőnöki” nem az. */
 const QUERY_GRADE_WORD = "(?:osztaly|evfolyam)(?:os|es)?(?:ok|ek)?(?:nak|nek|ban|ben|ba|be|ra|re|at|t|a)?";
+/**
+ * Gépelés közben (review U1): az osztály-kifejezést követő, FÉLIG beírt osztály-szó („8. os”, „8. osztá”, „5. évfo”, „5. osztályo”)
+ * is az osztály-kifejezés része, nem keresőszó — a találati lista ne essen össze, amíg a szó elkészül.
+ */
+const TYPED_GRADE_WORD_START = "(?:osz(?:t(?:a(?:l)?)?)?|evf(?:o(?:l(?:y(?:a)?)?)?)?)";
+const TYPED_GRADE_WORD_TAIL = "(?:osztaly|evfolyam)(?:[oe]s?)?(?:[oe]k?)?(?:n[ae]?k?|b[ae]?n?|r[ae]?|at?|t)?";
+const TYPED_GRADE_WORD = `(?:${TYPED_GRADE_WORD_TAIL}|${TYPED_GRADE_WORD_START}|os?|ev?)`;
 /** Tört, tizedes, tartomány vagy művelet része nem osztály: „3/4”, „3,5”, „1-2”. */
 const NUMBER_GLUE = ".,/:+*=\\-";
 const QUERY_NUMBER = new RegExp(
@@ -100,21 +107,21 @@ const QUERY_NUMBER = new RegExp(
   + `(?:[./]${CLASS_LETTER}(?![\\p{L}\\p{N}])|\\s*\\.)?`
   // A képző közvetlenül vagy kötőjellel kapcsolódik („5-ös”, „5.-es”, „5-ösöknek”, „5-ödikes”); szóközzel nem („5. és 6.”).
   + `(?:(?:\\s?-\\s?)?(?:(?:edik|odik|adik|dik|ik)(?:es|os)?|es|os|as)(?:ek|ok|ak)?(?:nek|nak)?)?`
-  + `(?:\\s*(?:${QUERY_GRADE_WORD}|oszt\\.?|evf\\.?|o\\.?))?`
+  + `(?:\\s*(?:${TYPED_GRADE_WORD}|oszt\\.?|evf\\.?|o\\.?))?`
   + `(?![\\p{L}\\p{N}]|[${NUMBER_GLUE}]\\S)`,
   "gu",
 );
 const QUERY_ORDINAL = new RegExp(
-  `${CAPTURED_WORD_START}(${ORDINAL_ALT})(?:${ORDINAL_SUFFIX})?(?:\\s+${QUERY_GRADE_WORD})?${WORD_END}`,
+  `${CAPTURED_WORD_START}(${ORDINAL_ALT})(?:${ORDINAL_SUFFIX})?(?:\\s+${TYPED_GRADE_WORD})?${WORD_END}`,
   "gu",
 );
 // Római szám csak osztály-szóval együtt osztály („V. osztály”, „IX.b osztály”) — a „IV. Béla”, „i.e.” nem az.
 const QUERY_ROMAN = new RegExp(
-  `${CAPTURED_WORD_START}(${ROMAN_ALT})\\.?(?:[./]?${CLASS_LETTER})?\\s*(?:${QUERY_GRADE_WORD}|oszt\\.?|evf\\.?)${WORD_END}`,
+  `${CAPTURED_WORD_START}(${ROMAN_ALT})\\.?(?:[./]?${CLASS_LETTER})?\\s*(?:${TYPED_GRADE_WORD_TAIL}|${TYPED_GRADE_WORD_START}|oszt\\.?|evf\\.?)${WORD_END}`,
   "gu",
 );
 const QUERY_PROGRAMMING = new RegExp(
-  `${CAPTURED_WORD_START}prog(?:ramoz\\p{L}*)?\\.?(?:\\s+(?:alapismeret\\p{L}*|alapok))?${WORD_END}`,
+  `${CAPTURED_WORD_START}prog(?:r(?:a(?:m(?:o(?:z\\p{L}*)?)?)?)?)?\\.?(?:\\s+(?:alapismeret\\p{L}*|alapok))?${WORD_END}`,
   "gu",
 );
 const GRADE_WORD_ONLY = new RegExp(`^${QUERY_GRADE_WORD}$`, "u");

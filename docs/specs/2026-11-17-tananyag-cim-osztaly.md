@@ -23,7 +23,7 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 
 | Mérés | Anyag | Érvénytelen `classroom` | A cím megnevez osztályt | Előtagot kap | Programozás a címben (nincs előtag) |
 |---|---|---|---|---|---|
-| 1. mérés, kb. 18:05 (a terv írásakor) | 245 | 0 | 133 | 110 | 2 |
+| 1. mérés, 19:02 (a mentett lista fájlideje; a terv írásakor) | 245 | 0 | 133 | 110 | 2 |
 | 2. mérés, 20:31 (a független ellenőr 243-as mérésével egyezik) | **243** | **0** | **141** | **100** | 2 |
 
 - Az 1. mérés „a címből hiányzik: 112” száma = 110 előtagos + 2 programozási cím. A két mérés közti eltérés az éles adat változása
@@ -92,6 +92,9 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - **Osztályszűrő + osztály-keresés** (review K1): ha a kifejezés az aktív szűrőtől ELTÉRŐ osztályt nevez meg, a keresés minden
   osztályban fut, „Keresés minden osztályban” jelzéssel; a szűrő állapota nem íródik át, a keresés törlésekor újra érvényes. Ha a
   kifejezés nem nevez meg osztályt, vagy ugyanazt nevezi meg, a szűrő érvényes (a korábbi viselkedés). Főoldalon és adminban egyformán.
+- **Gépelés közben a lista nem esik össze** (2. review, U1, U4): az osztály-kifejezést követő, félig beírt osztály-szó („8. os”,
+  „8. osztá”, „5. évfo”, „5. osztályo”) az osztály-kifejezés része, nem keresőszó; a „programozás” legalább 4 betűs eleje („prog”,
+  „progr”, „program”, „programo”) a programozási sávot jelenti (a „programok”, „progresszió” nem).
 - **A kereső csak bővül:** minden, amit a mostani kereső megtalál (a teljes kifejezés a címben, a leírásban vagy a tantárgynévben),
   ezután is találat; az osztály-értelmezés ehhez AD hozzá. Így a „második világháború” keresés nem szűkül a 2. osztályra.
 - **Osztály-értelmezés:** a keresőkifejezésből kiolvasott osztály(ok) + a maradék szavak: találat, ha az anyag osztálya a kiolvasottak
@@ -119,6 +122,22 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - Régi HTML / PDF anyag és Stúdió-lecke: ugyanaz a szabály (a lista mindkettőnél a `html_files` sort mutatja).
 - Hosszú cím (éles maximum 120 karakter) 360 px széles kétoszlopos rácsban: a címsor 3 sor után levág (három pont), a kártyából nem lóg ki.
 - Keresés: „5” önmagában → az 5. osztály anyagai és minden, aminek a szövegében „5” van (mint eddig); „0” / „prog” → programozás.
+
+## Nyitott tételek (a 2. független review-ból — ebben a szeletben NEM javítva)
+
+- **U2 — tulajdonosi döntés:** a szűrő-átlépés puszta számra és sorszámnévre is megtörténik („Első”, „10-es átlépés”, „1”, „7”), és
+  ilyenkor más osztályú, a keresett szöveget tartalmazó anyagok is megjelennek a „Keresés minden osztályban” jelzéssel. Találat nem
+  vész el (mérve: 17 181 régi szűrt találatból 0). Lehetőségek: (a) marad így; (b) puszta szám / sorszámnév csak akkor lépje át a
+  szűrőt, ha a szűrt találat üres, vagy ha a kifejezés kifejezetten osztály-alak (osztály-szó, „.o”, képző, osztálybetű).
+- **U3 — jegy:** az osztály + szó keresésnél a szó szókezdetre illik, ezért az összetett szavak utótagját nem találja
+  („9. osztály rács” nem találja a „kristályrácsok” szót; „5. osztály anyag” a „tananyag” szót). Az `origin/main` keresőjéhez képest
+  nincs veszteség. Lehetséges finomítás: 4+ karakteres szóra részszöveg-illesztés.
+- **U5 — jegy:** apróságok — a „-ben / -ban” ragos sorszámnév a CÍMBEN is osztálynak számít („Elsőben”, „A harmadikban” című anyag
+  nem kap előtagot); „Az ív osztályozása”, „Vi osztály”, „I. osztályú” cím osztálynak számít, a keresőben „ív osztály” → 4. osztály;
+  az adminban az „osztály” szó önmagában már nem hoz minden érvényes osztályú anyagot (a K2 javítás következménye). Valós adaton
+  egyik sem fordul elő.
+- **A3 maradéka — jegy:** két angol című anyag dupla jelölést kap („6. osztály · 6. Class …”, „4. osztály · … 4th Grade”); az
+  „5-6. osztály” kötőjeles tartomány a keresőben nem osztály (a nagykötőjeles igen).
 
 ## Szeletek
 
@@ -152,4 +171,6 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - [x] E14 WHEN a kifejezés „1. osztály”, „2. osztály” vagy „0. osztály” THEN the system SHALL nem találni a 11., 12., 10. osztály
   anyagait pusztán a megjelenített előtag miatt.
 - [x] E15 The system SHALL a keresőkifejezést leütésenként egyszer elemezni (nem anyagonként).
+- [x] E16 WHEN a látogató osztály-kifejezést gépel („8. o” … „8. osztály”, „5. é” … „5. évfolyam”, „prog” … „programozás”) THEN the
+  system SHALL minden leütésnél legalább a kész alak találatait mutatni (a lista nem esik a végső alak alá).
 - [x] E12 The system SHALL nem módosítani adatbázist, migrációt, tárolt címet, éles adatot, gyártási promptot, játékfájlt.
