@@ -1,8 +1,9 @@
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createRng, seedFrom } from "@shared/game-rng";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link, useLocation } from "wouter";
 import CollectibleAvatar from "@/components/CollectibleAvatar";
-import { ArrowLeft, Pause, ShieldAlert, Zap } from "lucide-react";
+import { ArrowLeft, Pause, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { queryClient } from "@/lib/queryClient";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -13,8 +14,7 @@ import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { levelAdaptBand, levelStartBand } from "@/game-engine/levelTuning";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
-import { useStreakProtector } from "@/hooks/useStreakProtector";
-import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
+import { sfxClick, sfxLevelUp } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { quizTopicLabelHu } from "@/lib/quizTopicLabel";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
@@ -24,8 +24,6 @@ import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
-import { xpForAttempt } from "@/game-engine/retry-policy";
-import { stepBrainRot } from "@/lib/brainRotPhysics";
 import {
   BRAIN_ROT_WARNING_MS,
   brainRotAgeMs,
@@ -34,13 +32,28 @@ import {
   brainRotSpeedScaleFor,
 } from "@/lib/brainRotTuning";
 import {
+  BRAIN_ROT_GAME_ID,
+  BRAIN_ROT_KINDS,
+  CAGE_DWELL_MS,
+  CLEAR_CATCHES,
+  ROUND_MS,
+  brainRotDirectorConfig,
+  createBrainRotDriver,
+  type BrainRotDriver,
+  type BrainRotEvent,
+  type BrainRotTuning,
+} from "@/lib/brainRot/core";
+import {
   GameHud,
   GameShell,
   PauseMenu,
   ResultScreen,
   StartScreen,
+  cancelGameFrame,
+  requestGameFrame,
   useBestScore,
   useHaptics,
+  useTouchCapable,
   type GameScreenState,
 } from "@/game-engine/mobile";
 import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
@@ -53,11 +66,42 @@ import {
   pickGradeSlotWithVocab,
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
+import { loadedGradeItems } from "@/data/gradeQuizBank/loader";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
-import { correctDataAttrs, installGameTestApi, type GameForcePatch } from "@/game-engine/game-test-hooks";
-import BrainRotArena3D, { type ArenaBurst } from "@/game-engine/scenes/BrainRotArena3D";
+import { correctDataAttrs, installGameTestApi, readGameSeed, type GameForcePatch } from "@/game-engine/game-test-hooks";
+import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { shapeJoystick } from "@/game-engine/joystick";
+import BrainRotArena3D, { type ArenaBurst, type ArenaRot } from "@/game-engine/scenes/BrainRotArena3D";
+import {
+  InlineQuestion,
+  ResultReview,
+  bankPlayQuestion,
+  gradePlayQuestion,
+  materialPlayQuestion,
+  restoreReviewQuestion,
+  usePlayQuestion,
+  vocabPlayQuestion,
+  type PlayQuestion,
+  type QuestionProvider,
+} from "@/game-engine/play";
 
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
+
+/**
+ * J5a — Brain Rot Lopás „Lény-aréna” (végrehajtás J5 / J5a; terv 5.5; K.2, K.4, K.5).
+ *
+ * A játék: a vadász joystickkal (vagy a táblára bökve / húzva) fut az arénában, a lények elmenekülnek előle (falnál
+ * csúsznak, menekülés közben kifáradnak). Elkapás = érintkezés. Elkapáskor a közös kérdés-ütemező kérdést ad: a kérdés a
+ * HUD alatti sávban (`InlineQuestion mode="bar"`), a 4 válasz 4 KETREC az aréna négy negyedében — a jó ketrecbe futás =
+ * válasz (beállás: megállás vagy rövid bent tartózkodás). Jó: a lény megmarad + kombó; rossz / lejárat: elszökik, a helyes
+ * ketrec ≥ 1,8 mp-ig zölden világít. A kérdés alatt a világ 0,6×-re lassul, a 90 mp-es óra JÁR (a régi „álló óra”
+ * megszűnt). Blokkoló kártya nincs: a „Miért?” nyitja a magyarázatot (szünettel).
+ *
+ * Rétegek (KSZ-1): a játéklogika a tiszta magban (`lib/brainRot/core.ts`, a node-szimulációval közös meghajtó); a lap a
+ * rAF-ban a meghajtót lépteti és a DOM-elemek helyét REF-eken át írja (nincs képkockánkénti React-állapot, KSZ-9); a HUD
+ * 10 Hz-es pillanatképet kap. A 3D aréna dekoráció (a lények padló-gyűrűi, robbanások).
+ */
+
 /* --- Típusok --- */
 type Quiz = {
   topic?: string;
@@ -73,75 +117,39 @@ type Quiz = {
   fromMaterial?: boolean;
 };
 
-type BrainRot = {
-  id: number;
-  emoji: string;
-  name: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  size: number;
-  rotation: number;
-  rotSpeed: number;
-  xpValue: number;
-  spawnTime: number;
-  /** S8: élettartam (ms) az évfolyamból — kisebb gyereknek tovább marad. */
-  lifetime: number;
-  /** S8: a futás befagyott (kvíz / szünet) idejének összege a születéskor — a kor ezt nem számolja. */
-  pausedTotalAtSpawn: number;
-  caught: boolean;
-  escaping: boolean;
-  pulsePhase: number;
+type Phase = "menu" | "play" | "over";
+
+/** Lebegő felirat (+XP, Elszökött!) — eseményre születik (ritka), a CSS animálja; a sávja nem fedi a többit (kanban #64). */
+type FloatingText = { id: number; x: number; y: number; text: string; color: string; kind: "gain" | "escape" | "info" };
+
+/** A HUD 10 Hz-es pillanatképe (KSZ-9): a lények listája (a DOM-elemek kulcsa), a pont, az idő. */
+type HudSnap = {
+  score: number;
+  caught: number;
+  combo: number;
+  multiplier: number;
+  timeLeft: number;
+  creatures: Array<{ id: number; kind: number; size: number; warning: boolean; opacity: number; dazed: boolean; carried: boolean }>;
+  arena: ArenaRot[];
+  carrying: boolean;
+  hint: 0 | 1 | 2;
 };
 
-type Particle = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  color: string;
-  size: number;
-  emoji?: string;
-};
-
-type FloatingText = {
-  id: number;
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  life: number;
-};
-
-type Phase = "menu" | "play" | "quiz" | "over";
+type RunResult = { score: number; caught: number; missed: number; lost: number; correct: number; total: number; wrong: number; bestStreak: number; maxMultiplier: number; seconds: number };
 
 /* --- Konstansok --- */
-const ROUND_LIMIT = 90;
+const ROUND_LIMIT = ROUND_MS / 1000;
 const STREAK_GOAL = 7;
-const SPAWN_INTERVAL_BASE = 2200;
-const SPAWN_INTERVAL_MIN = 900;
-const MAX_BRAIN_ROTS = 8;
-/** Sikeres futás: ennyi elkapás (a napi kihívás meglévő küszöbe) — ez oldja fel a következő pályát is. */
-const BRAIN_ROT_CLEAR_CATCHES = 10;
-
-const BRAIN_ROT_EMOJIS = [
-  { emoji: "\u{1F9E0}", name: "Agy", xp: 30 },
-  { emoji: "\u{1F92F}", name: "Felrobbanó fej", xp: 40 },
-  { emoji: "\u{1F480}", name: "Koponya", xp: 35 },
-  { emoji: "\u{1F47E}", name: "Űrlény", xp: 50 },
-  { emoji: "\u{1F916}", name: "Robot", xp: 45 },
-  { emoji: "\u{1F47B}", name: "Szellem", xp: 55 },
-  { emoji: "\u{1F9A0}", name: "Vírus", xp: 60 },
-  { emoji: "\u{1F300}", name: "Örvény", xp: 70 },
-  { emoji: "\u{1F4AB}", name: "Csillag", xp: 65 },
-  { emoji: "\u{1F52E}", name: "Kristálygömb", xp: 80 },
-  { emoji: "\u{1F3AD}", name: "Maszk", xp: 45 },
-  { emoji: "\u{1F9FF}", name: "Nazar szem", xp: 75 },
-  { emoji: "\u26A1", name: "Villám", xp: 55 },
-];
+/** Sikeres futás: ennyi megtartott lény (a napi kihívás meglévő küszöbe) — ez oldja fel a következő pályát is. */
+const BRAIN_ROT_CLEAR_CATCHES = CLEAR_CATCHES;
+/** Az első 30 mp tanító szakasz (K.4/25): egysoros súgó. */
+const TUTORIAL_MS = 30_000;
+/** A lebegő felirat élete (ms) — a CSS-animáció hossza. */
+const FLOAT_MS = 1300;
+/** Ennyin belüli szökések egy összesítő feliratot kapnak (kanban #64). */
+const ESCAPE_MERGE_MS = 450;
+const FLOAT_LANE_PX = 26;
+const EMPTY_HUD: HudSnap = { score: 0, caught: 0, combo: 0, multiplier: 1, timeLeft: ROUND_LIMIT, creatures: [], arena: [], carrying: false, hint: 1 };
 
 /* --- Quiz bank --- */
 
@@ -239,83 +247,39 @@ const CATEGORY_LABELS: Record<Quiz["category"], { label: string; color: string; 
   history: { label: "Történelem", color: "text-orange-300", icon: "\u{1F3DB}\u{FE0F}" },
 };
 
-const CATEGORY_BORDERS: Record<Quiz["category"], string> = {
-  english: "border-cyan-500/50",
-  math: "border-amber-500/50",
-  hungarian: "border-emerald-500/50",
-  science: "border-lime-500/50",
-  history: "border-orange-500/50",
-};
-
 /* --- Segédfüggvények --- */
-function randInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+function asFour(q: Quiz) {
+  return { id: q.id ?? "", prompt: q.prompt, options: q.options.slice(), correctIndex: q.correctIndex, ...(q.explanation ? { explanation: q.explanation } : {}) };
 }
 
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]!;
+/** A felirat leghosszabb szava (a ketrec-felirat kisebb betűt kap, ha egy szó nem fér ki — ne törjön a szó közepén). */
+function longestWord(label: string): number {
+  let best = 0;
+  for (const w of label.split(" ")) best = Math.max(best, w.length);
+  return best;
 }
 
-let nextId = 0;
+function categoryOf(subject: string | undefined): Quiz["category"] {
+  return subject && subject in CATEGORY_LABELS ? (subject as Quiz["category"]) : "english";
+}
 
-/**
- * S8: a lény mérete a táblához és az évfolyamhoz, élettartama és sebessége az évfolyamhoz igazodik
- * (`lib/brainRotTuning.ts`). A pozíció a lény FELE + 4 px-es peremen belül sorsolódik (a régi kód teljes
- * átmérőnyi peremet hagyott, ami nagy lénynél kis táblán üres sávot — vagy fordított tartományt — adott).
- */
-function spawnBrainRot(boardW: number, boardH: number, grade: number | null | undefined, pausedTotal: number): BrainRot {
-  const template = pickRandom(BRAIN_ROT_EMOJIS);
-  const size = brainRotSizeFor({ grade, boardW, boardH });
-  const margin = Math.ceil(size / 2) + 4;
-  const x = randInt(margin, Math.max(margin, Math.floor(boardW - margin)));
-  const y = randInt(margin, Math.max(margin, Math.floor(boardH - margin)));
-  const speed = (0.3 + Math.random() * 1.2) * brainRotSpeedScaleFor(grade);
-  const angle = Math.random() * Math.PI * 2;
-  return {
-    id: nextId++,
-    emoji: template.emoji,
-    name: template.name,
-    x,
-    y,
-    vx: Math.cos(angle) * speed,
-    vy: Math.sin(angle) * speed,
-    size,
-    rotation: Math.random() * 360,
-    rotSpeed: (Math.random() - 0.5) * 4,
-    xpValue: template.xp,
-    spawnTime: Date.now(),
-    lifetime: brainRotLifetimeFor(grade),
-    pausedTotalAtSpawn: pausedTotal,
-    caught: false,
-    escaping: false,
-    pulsePhase: Math.random() * Math.PI * 2,
-  };
+/** A közös ismétlési sorból csak a saját (Brain Rot) tétel, a tananyag, az évfolyam-bank és az angol szóbank jön vissza. */
+function ownsReviewKey(key: string): boolean {
+  return key.startsWith(`bank:${BRAIN_ROT_GAME_ID}:`) || key.startsWith("mat:") || key.startsWith("grade:") || key.startsWith("vocab:en:");
 }
 
 /* --- Fo komponens --- */
 export default function BrainRotSteal() {
   const boardRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>("menu");
-  /** S8 / terv 4.5: szünet (a `Phase` változatlan) — szünetben az időzítő és a rAF-ciklus áll. */
+  /** Szünet (a `Phase` változatlan) — szünetben a kérdés-óra, a 90 mp-es óra és a világ áll. */
   const [paused, setPaused] = useState(false);
   const [, navigate] = useLocation();
   const haptics = useHaptics();
   const best = useBestScore("brain-rot-steal");
-  /** A tesztes API a legutóbbi renderelés `forceState`-jét hívja (az effekt csak egyszer települ). */
-  const forceStateRef = useRef<(patch: GameForcePatch) => void>(() => {});
-
-  useEffect(() => {
-    return installGameTestApi({
-      probe: () => ({
-        level: runLevelRef.current,
-        band: difficultyRef.current,
-        paceScale: 1.4 - difficultyRef.current * 0.55,
-        paused: pausedRef.current ? 1 : 0,
-        pausedTotal: pausedTotalRef.current,
-      }),
-      forceState: (patch) => forceStateRef.current(patch),
-    });
-  }, []);
+  const touchCapable = useTouchCapable();
+  // G-5: csökkentett mozgásnál nincs pattanás, villanás, rázás (M9).
+  const reducedMotion = useReducedMotion();
 
   /**
    * LS-3b: the play-time coupon earned in a lesson, if there is one.
@@ -323,45 +287,17 @@ export default function BrainRotSteal() {
    * Inert without a coupon — free play stays exactly as it was.
    */
   const coupon = useCouponSession();
-  const [brainRots, setBrainRots] = useState<BrainRot[]>([]);
-  const [particles, setParticles] = useState<Particle[]>([]);
-  const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
-  // 3D aréna: elkapáskor szikra-robbanás a lény padlópontján (csak látvány).
-  const [arenaBursts, setArenaBursts] = useState<ArenaBurst[]>([]);
-  const arenaBurstIdRef = useRef(0);
-  const [quiz, setQuiz] = useState<Quiz | null>(null);
-  const [caughtRot, setCaughtRot] = useState<BrainRot | null>(null);
-  /** A2: ugyanazon lény második helyes válaszánál csökkentett XP. */
-  const quizAttemptRef = useRef(0);
-  const [wrongShake, setWrongShake] = useState(false);
-  const [revealCorrectIdx, setRevealCorrectIdx] = useState<number | null>(null);
-  const [wrongIdx, setWrongIdx] = useState<number | null>(null);
-  const streakProtector = useStreakProtector();
-  const [sessionXp, setSessionXp] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-  const [totalCaught, setTotalCaught] = useState(0);
-  const [totalMissed, setTotalMissed] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(ROUND_LIMIT);
-  const [runSeconds, setRunSeconds] = useState(0);
-  // Ref-tükör a rAF loop-nak: a runSeconds state dependency az animációs
-  // useEffect-et másodpercenként újraindította (loop + lastTime reset).
-  const runSecondsRef = useRef(0);
+  const couponRef = useRef(coupon);
+  couponRef.current = coupon;
 
-  /**
-   * G-4: adaptív nehézség.
-   *
-   * Eddig a spawn-ütem tisztán az eltelt időtől függött
-   * (`SPAWN_INTERVAL_BASE - runSeconds * 15`), vagyis a játék akkor is
-   * gyorsult, ha a gyerek épp minden kérdést elrontott — a frusztrációra még
-   * több nyomással válaszolt. Mostantól a sáv a VÁLASZOKAT követi: három jó
-   * után nehezít, két rossz után (gyorsabban) könnyít.
-   */
   // Tananyag-kvíz: a játékos osztályának legutóbbi 3 anyagából (Claude-generált).
   const { grade: userGrade } = useClassroomGrade();
-  /** A rAF-ciklus (egyszer települ futásonként) a mostani évfolyamot olvassa a lény méretéhez / élettartamához. */
   const gradeRef = useRef(userGrade);
   gradeRef.current = userGrade;
+  /**
+   * G-4: adaptív nehézség — a sáv a VÁLASZOKAT követi (három jó után nehezít, két rossz után könnyít), a pálya körül
+   * tartva. A spawn-tempó (`spawnEveryMs`) és a kérdés-sáv (évfolyam-bank) ebből jön.
+   */
   // Spec 2026-09-29: a kezdő sáv a játékos évfolyamából (évfolyam nélkül a régi 4. osztályos sáv).
   const difficultyRef = useRef(startingDifficulty(userGrade ?? 4));
   const answerHistoryRef = useRef<boolean[]>([]);
@@ -381,49 +317,13 @@ export default function BrainRotSteal() {
       runLevelRef.current,
     );
   }, []);
-  const [comboMultiplier, setComboMultiplier] = useState(1);
-  /** Futáson belüli max combo — a combo_4x jelvényhez (a végső combo gyakran 1-re reset). */
-  const maxComboRef = useRef(1);
-  const [screenFlash, setScreenFlash] = useState<string | null>(null);
-  const scoreSubmittedRef = useRef(false);
-  const lastSpawnRef = useRef(0);
-  const animRef = useRef(0);
-  const floatIdRef = useRef(0);
-  const timeoutsRef = useRef<number[]>([]);
-  // JAVÍTÁS: a rossz kvízválasz eddig sehol nem volt számolva, így a statisztika
-  // hibás volt és a `perfect` akkor is igaz lett, ha a játékos sokat hibázott.
-  const wrongQuizAnswersRef = useRef(0);
-  // D5: RAF re-render throttle — utolsó setState hívás időpontja (ms)
-  const lastRenderMsRef = useRef(0);
-  /** A futás jó / rossz kvízválaszai az eredményképernyő „Jó válaszok: x/y” sorához. */
-  const [correctAnswers, setCorrectAnswers] = useState(0);
-  const [wrongAnswers, setWrongAnswers] = useState(0);
-  /** Az új rekord-jelzés az eredményképernyőn (futásonként egyszer számolva). */
-  const [isNewBest, setIsNewBest] = useState(false);
-  const bestSubmittedRef = useRef(false);
-
-  /**
-   * S8 hibajavítás: a lények kora a kvíz és a szünet alatt NEM telik.
-   *
-   * A régi kód a kort `Date.now() - spawnTime`-mal számolta; a mozgatóciklus a kvíz alatt állt, a falióra nem,
-   * így aki 6 másodpercig gondolkodott egy kérdésen, annak a pályán maradt lényei a kvíz után azonnal
-   * elszöktek. `pausedAtRef` a most folyó befagyás kezdete, `pausedTotalRef` a futás lezárt befagyásainak összege
-   * (a kor: `brainRotAgeMs`).
-   */
-  const pausedAtRef = useRef<number | null>(null);
-  const pausedTotalRef = useRef(0);
-  const pausedRef = useRef(false);
-  pausedRef.current = paused;
-
-  // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
-  useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
 
   const { data: syncEligibility } = useSyncEligibilityQuery();
   const syncBanner = useMemo(() => gameSyncBannerText(syncEligibility), [syncEligibility]);
 
   const { items: materialItems } = useMaterialQuizzes(userGrade, undefined, coupon.lessonId);
 
-  /* --- Quiz valasztas --- */
+  /* --- Kérdésforrás --- */
   const fullQuizPool = useMemo(() => {
     const matMapped: Quiz[] = materialItems
       .filter(isPlayableQuestion)
@@ -435,8 +335,8 @@ export default function BrainRotSteal() {
           prompt: q.prompt,
           options: [...q.options],
           correctIndex: q.correctIndex,
-        // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
-        explanation: q.explanation ?? undefined,
+          // T-1: a bankból jövő magyarázat, ha a lecke exportja hozta.
+          explanation: q.explanation ?? undefined,
           category: cat,
           topic: q.topic ?? undefined,
           fromMaterial: true,
@@ -444,115 +344,242 @@ export default function BrainRotSteal() {
       });
     return coupon.active && matMapped.length ? matMapped : [...matMapped, ...ALL_QUIZZES];
   }, [materialItems, coupon.active]);
+  const poolRef = useRef(fullQuizPool);
+  poolRef.current = fullQuizPool;
 
   /** Spec 2026-09-29: a futásban már feltett kérdések (azonosító + prompt). */
   const gradeSeenRef = useRef(createGradeQuizSeen());
 
   /**
-   * 3–12. évfolyamon: nem látott tananyag-kvíz → közös évfolyam-bank (a sáv szerinti szinten,
-   * minden tárgyból) → a régi véletlen választás, ha a közös bank üres/kimerült.
-   */
-  /**
    * S8 / terv A8: az angol kérdés-hely a központi szóbankból (közös napló mind a hét játékra). `null`, amíg
    * tölt, vagy ha a betöltés hibázott — ilyenkor a kézi `ENGLISH_QUIZZES` / évfolyam-bank megy, változatlanul.
-   * A bekötés EGY helyen kapcsolható ki: itt (`enabled`).
    */
   const vocab = useVocabQuizSource("en", true);
+  const vocabRef = useRef(vocab);
+  vocabRef.current = vocab;
 
-  const pickQuiz = useCallback((): Quiz => {
-    const sharedGrade = gradeForGame(userGrade);
-    const couponMaterialOnly = coupon.active && fullQuizPool.some((q) => q.fromMaterial);
-    const seen = gradeSeenRef.current;
-    if (sharedGrade != null && !couponMaterialOnly) {
-      const material = pickUnseenMaterial(fullQuizPool.filter((q) => q.fromMaterial), seen);
-      if (material) {
-        markGradeQuizSeen(seen, material);
-        return material;
-      }
-    }
-    if (couponMaterialOnly) return pickRandom(fullQuizPool);
+  /** A menet seedje (K.4/13): a tétel-sorsolás és a világ is ebből — azonos seed, azonos menet. */
+  const seedBase = useMemo(() => readGameSeed() ?? seedFrom(BRAIN_ROT_GAME_ID, new Date().toISOString().slice(0, 10)), []);
+  const runIndexRef = useRef(0);
+  const runSeedRef = useRef<string>(seedFrom(seedBase, 0));
+  const pickRngRef = useRef<() => number>(createRng(seedFrom(BRAIN_ROT_GAME_ID, runSeedRef.current, "pick")).next);
 
-    // A tananyag-ág UTÁN: ha a kérdés-hely angol, a szóbankból kérdez (a kategória a meglévő választásból
-    // derül ki — a lap nem sorsol kategóriát előre, ezért az eloszlás a régi marad, csak az angol tétel forrása
-    // cserélődik). A kiváltott évfolyam-banki tétel is fogy (lent), hogy a választó továbblépjen.
-    const fromVocab = (): Quiz | null => {
-      const vq = vocab?.next(vocabLevelForGrade(userGrade, difficultyRef.current)) ?? null;
-      if (!vq) return null;
-      markGradeQuizSeen(seen, vq);
-      return {
-        id: vq.id,
-        prompt: vq.prompt,
-        options: [...vq.options],
-        correctIndex: vq.correctIndex,
-        explanation: vq.explanation,
-        category: "english",
-      };
-    };
-    /** Kézi angol kérdés: a helyes válasza a közös naplóba, hogy a szóbank ne kérdezze vissza ugyanazt a szót. */
-    const manualEnglish = (q: Quiz): Quiz => {
-      if (q.category === "english" && !q.fromMaterial) vocab?.markExternal(q.options[q.correctIndex]!);
-      return q;
-    };
-
-    if (sharedGrade != null) {
-      // A kiválasztott tétel MINDIG fogy (review #424), akkor is, ha a szóbank váltja ki — különben a
-      // `pickGradeQuiz` a legelső nem üres sávban ragadna, és a nem angol tételek elfogyta után csak angolt adna.
-      const slot = pickGradeSlotWithVocab({
-        pick: () => pickGradeQuiz({ grade: sharedGrade, band: difficultyRef.current, seen }),
-        seen,
-        vocabNext: fromVocab,
-      });
-      if (slot?.kind === "vocab") return slot.quiz;
-      if (slot) {
-        const item = slot.item;
-        return manualEnglish({
-          id: item.id,
-          prompt: item.prompt,
-          options: [...item.options],
-          correctIndex: item.correctIndex,
-          explanation: item.explanation,
-          category: item.subject,
+  /**
+   * A kérdés-ütemező forrása (K.2 forrásrend): (1) nem látott tananyag → (2) évfolyam-bank (az angol hely a szóbankból) →
+   * (3) a lap kézi bankja. Kupon módban csak tananyag. Stabil objektum: a mostani állapotot ref-ekből olvassa (a director
+   * menetenként egyszer kapja meg).
+   */
+  const provider = useMemo<QuestionProvider>(
+    () => ({
+      get couponOnly() {
+        return couponRef.current.active && poolRef.current.some((q) => q.fromMaterial);
+      },
+      material: () => {
+        const sharedGrade = gradeForGame(gradeRef.current);
+        const couponMaterialOnly = couponRef.current.active && poolRef.current.some((q) => q.fromMaterial);
+        if (sharedGrade == null && !couponMaterialOnly) return null;
+        const material = pickUnseenMaterial(poolRef.current.filter((q) => q.fromMaterial), gradeSeenRef.current);
+        if (!material) return null;
+        markGradeQuizSeen(gradeSeenRef.current, material);
+        return materialPlayQuestion(asFour(material), {
+          subject: material.topic ?? material.category,
+          coupon: couponRef.current.active,
+          ...(sharedGrade != null ? { grade: sharedGrade } : {}),
         });
+      },
+      fresh: () => {
+        const grade = gradeRef.current;
+        const sharedGrade = gradeForGame(grade);
+        const seen = gradeSeenRef.current;
+        const rng = pickRngRef.current;
+        const vocabSource = vocabRef.current;
+        // A tananyag-ág UTÁN: ha a kérdés-hely angol, a szóbankból kérdez (a kiváltott évfolyam-banki tétel is fogy).
+        const fromVocab = (): PlayQuestion | null => {
+          const vq = vocabSource?.next(vocabLevelForGrade(grade, difficultyRef.current)) ?? null;
+          if (!vq) return null;
+          markGradeQuizSeen(seen, vq);
+          return { ...vocabPlayQuestion(vq), subject: "english" };
+        };
+        /** Kézi angol kérdés: a helyes válasza a közös naplóba, hogy a szóbank ne kérdezze vissza ugyanazt a szót. */
+        const manualEnglish = (q: Quiz): Quiz => {
+          if (q.category === "english" && !q.fromMaterial) vocabSource?.markExternal(q.options[q.correctIndex]!);
+          return q;
+        };
+        if (sharedGrade != null) {
+          // A kiválasztott tétel MINDIG fogy (review #424), akkor is, ha a szóbank váltja ki.
+          const slot = pickGradeSlotWithVocab({
+            pick: () => pickGradeQuiz({ grade: sharedGrade, band: difficultyRef.current, seen, rng }),
+            seen,
+            vocabNext: fromVocab,
+          });
+          if (slot?.kind === "vocab") return slot.quiz;
+          if (slot) {
+            const item = slot.item;
+            manualEnglish({ id: item.id, prompt: item.prompt, options: [...item.options], correctIndex: item.correctIndex, category: item.subject });
+            return gradePlayQuestion(item);
+          }
+        }
+        const pool = poolRef.current;
+        if (pool.length === 0) return null;
+        const fallback = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
+        if (fallback.category === "english" && !fallback.fromMaterial) {
+          const vq = fromVocab();
+          if (vq) return vq;
+        }
+        if (fallback.fromMaterial) return materialPlayQuestion(asFour(fallback), { subject: fallback.topic ?? fallback.category });
+        return bankPlayQuestion(BRAIN_ROT_GAME_ID, asFour(manualEnglish(fallback)), fallback.category, sharedGrade ?? undefined);
+      },
+      // A közös ismétlési sorból csak a saját tétel jön vissza; az évfolyamot a director közös szabálya szűri.
+      restore: (item) => {
+        if (!ownsReviewKey(item.key)) return null;
+        return restoreReviewQuestion(item, {
+          vocab: (lang) => (lang === "en" ? vocabRef.current : null),
+          gradeItem: (id) => loadedGradeItems().find((g) => g.id === id) ?? null,
+        });
+      },
+    }),
+    [],
+  );
+
+  const directorConfig = useMemo(() => brainRotDirectorConfig(gradeForGame(userGrade) ?? null), [userGrade]);
+
+  /* --- A menet meghajtója (a node-szimulációval közös: `createBrainRotDriver`) --- */
+  const boardSizeRef = useRef({ w: 360, h: 560 });
+  const [board, setBoard] = useState({ w: 360, h: 560 });
+  const unitPx = Math.max(1, Math.min(board.w, board.h));
+  const unitRef = useRef(unitPx);
+  unitRef.current = unitPx;
+  /** A lény mérete, élettartama, sebessége és kora a hangolóból (`lib/brainRotTuning.ts`) — a tábla és az évfolyam szerint. */
+  const tuningFor = (w: number, h: number): BrainRotTuning => ({
+    sizePx: (rng) => brainRotSizeFor({ grade: gradeRef.current, boardW: w, boardH: h }, rng),
+    unitPx: Math.max(1, Math.min(w, h)),
+    lifetimeMs: brainRotLifetimeFor(gradeRef.current),
+    speedScale: brainRotSpeedScaleFor(gradeRef.current),
+    ageMs: brainRotAgeMs,
+  });
+  // a `usePlayQuestion` hívás után azonnal kitöltve (lent); a meghajtó csak képkockában / eseményben olvassa
+  const qRef = useRef<ReturnType<typeof usePlayQuestion>>(null as unknown as ReturnType<typeof usePlayQuestion>);
+  const makeDriver = (seed: string): BrainRotDriver => {
+    const { w, h } = boardSizeRef.current;
+    const unit = Math.max(1, Math.min(w, h));
+    return createBrainRotDriver({
+      seed,
+      questions: {
+        frame: (c, ctx) => qRef.current?.frame(c, ctx),
+        timeScale: () => qRef.current?.timeScale() ?? 1,
+        finished: () => qRef.current?.finished() ?? true,
+        finish: () => qRef.current?.finish(),
+        request: (reason, c) => qRef.current?.request(reason, c) ?? null,
+        abort: () => qRef.current?.abort(),
+        canAsk: () => qRef.current?.canAsk() ?? false,
+        active: () => qRef.current?.active() ?? null,
+        pick: (i, c) => qRef.current?.pick(i, c),
+      },
+      band: () => difficultyRef.current,
+      tuning: tuningFor(w, h),
+      arenaW: w / unit,
+      arenaH: h / unit,
+      reducedMotion,
+    });
+  };
+  const driverRef = useRef<BrainRotDriver | null>(null);
+  if (!driverRef.current) driverRef.current = makeDriver(runSeedRef.current);
+  const maxMultiplierRef = useRef(1);
+  const firstCageSeenRef = useRef(false);
+
+  const q = usePlayQuestion({
+    setup: { config: directorConfig, provider, startBand: difficultyRef.current, seed: runSeedRef.current },
+    // A rezgést a lap adja (a játékbeli következménnyel együtt), hogy egy kimenet = egy visszajelzés.
+    haptics: false,
+    onShow: (p) => {
+      firstCageSeenRef.current = true;
+      // Q1 Ketrec-zár: a 4 válasz 4 ketrec az aréna négy negyedében.
+      driverRef.current?.core.openCages(p.options.length, p.id);
+    },
+    onOutcome: (o, p) => {
+      const picked = o.pickedOriginalIndex === null ? -1 : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
+      // ≤ 2 s játékbeli következmény (K.4/23): jó → a lény a ketrecben marad; rossz / lejárat → elszökik.
+      driverRef.current?.core.applyOutcome(o.result, picked < 0 ? null : picked);
+      if (o.result === "aborted") return;
+      const good = o.result === "correct";
+      if (o.pickedOriginalIndex !== null) maybeClaimCouponBonus(couponRef.current, p.question.quiz.id, o.pickedOriginalIndex);
+      recordDifficultyAnswer(good);
+      if (good) haptics("success");
+      else haptics("error");
+    },
+  });
+  qRef.current = q;
+
+  /**
+   * „Miért?” — a játékos kérte magyarázat (a közös QuizFeedbackCard). Amíg nyitva van, a játék áll: az olvasásért nem
+   * jár büntetés (terv 9.: a „magyarázat olvasása közben áll az óra” követelmény megmarad).
+   */
+  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const whyOpen = feedback !== null || expanded;
+  const pausedRef = useRef(false);
+  pausedRef.current = paused || whyOpen;
+
+  const [hud, setHud] = useState<HudSnap>(EMPTY_HUD);
+  const [result, setResult] = useState<RunResult | null>(null);
+  const [floats, setFloats] = useState<FloatingText[]>([]);
+  const floatsRef = useRef<FloatingText[]>([]);
+  const floatIdRef = useRef(0);
+  const lastEscapeRef = useRef<{ at: number; id: number; n: number } | null>(null);
+  // 3D aréna: elkapáskor szikra-robbanás a lény padlópontján (csak látvány).
+  const [arenaBursts, setArenaBursts] = useState<ArenaBurst[]>([]);
+  const arenaBurstIdRef = useRef(0);
+  const [screenFlash, setScreenFlash] = useState<string | null>(null);
+  const timeoutsRef = useRef<number[]>([]);
+  const scoreSubmittedRef = useRef(false);
+  /** Az új rekord-jelzés az eredményképernyőn (futásonként egyszer számolva). */
+  const [isNewBest, setIsNewBest] = useState(false);
+  const bestSubmittedRef = useRef(false);
+  const fpsRef = useRef(60);
+  const creatureEls = useRef(new Map<number, HTMLDivElement>());
+  const playerElRef = useRef<HTMLDivElement>(null);
+  const cageRingRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  /** A joystick húzásának megszakítása szünetkor / fókuszvesztéskor (VirtualJoystick resetSignal). */
+  const [joyReset, setJoyReset] = useState(0);
+
+  // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
+  useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
+
+  /* --- Lebegő feliratok: sávokra osztva, nem fedik egymást (kanban #64) --- */
+  const addFloat = useCallback((x: number, y: number, text: string, color: string, kind: FloatingText["kind"]) => {
+    const now = performance.now();
+    if (kind === "escape") {
+      // A közel egyidejű szökések egy összesítő feliratot kapnak (két egymásra csúszó „Elszökött!” helyett).
+      const prev = lastEscapeRef.current;
+      if (prev && now - prev.at < ESCAPE_MERGE_MS && floatsRef.current.some((f) => f.id === prev.id)) {
+        prev.n += 1;
+        prev.at = now;
+        floatsRef.current = floatsRef.current.map((f) => (f.id === prev.id ? { ...f, text: `${prev.n} elszökött!` } : f));
+        setFloats(floatsRef.current);
+        return;
       }
     }
-    const fallback = pickRandom(fullQuizPool);
-    if (fallback.category === "english" && !fallback.fromMaterial) {
-      const vq = fromVocab();
-      if (vq) return vq;
+    const w = boardSizeRef.current.w;
+    const fx = Math.min(w - 64, Math.max(64, x));
+    let fy = y;
+    for (let k = 0; k < 5; k++) {
+      if (!floatsRef.current.some((f) => Math.abs(f.x - fx) < 110 && Math.abs(f.y - fy) < FLOAT_LANE_PX)) break;
+      fy -= FLOAT_LANE_PX;
     }
-    return manualEnglish(fallback);
-  }, [fullQuizPool, userGrade, coupon.active, vocab]);
-
-  // G-5: a mérés szerint ez a játék nulla helyen vette figyelembe a
-  // prefers-reduced-motion beállítást. S8: a pop, a pulzálás, a villanás és a rázás is ehhez igazodik.
-  const reducedMotion = useReducedMotion();
-
-  /* --- Reszecskek --- */
-  const spawnParticles = useCallback((x: number, y: number, color: string, count: number, emoji?: string) => {
-    const newParticles: Particle[] = [];
-    for (let i = 0; i < count; i++) {
-      newParticles.push({
-        x: x + randInt(-10, 10),
-        y: y + randInt(-10, 10),
-        vx: (Math.random() - 0.5) * 8,
-        vy: (Math.random() - 0.5) * 8 - 3,
-        life: 0.6 + Math.random() * 0.8,
-        maxLife: 0.6 + Math.random() * 0.8,
-        color,
-        size: 3 + Math.random() * 6,
-        emoji: emoji && Math.random() > 0.5 ? emoji : undefined,
-      });
-    }
-    setParticles((prev) => [...prev, ...newParticles].slice(-80));
-  }, []);
-
-  /* --- Lebego szoveg --- */
-  const addFloatingText = useCallback((x: number, y: number, text: string, color: string) => {
+    fy = Math.max(16, fy);
     const id = floatIdRef.current++;
-    setFloatingTexts((prev) => [...prev, { id, x, y, text, color, life: 1.5 }]);
+    floatsRef.current = [...floatsRef.current, { id, x: fx, y: fy, text, color, kind }].slice(-8);
+    setFloats(floatsRef.current);
+    if (kind === "escape") lastEscapeRef.current = { at: now, id, n: 1 };
+    timeoutsRef.current.push(
+      window.setTimeout(() => {
+        floatsRef.current = floatsRef.current.filter((f) => f.id !== id);
+        setFloats(floatsRef.current);
+      }, FLOAT_MS),
+    );
   }, []);
 
-  /** 3D aréna-robbanás: elkapáskor arany szikraeső, elszökéskor rövid piros füst (csak látvány). */
+  /** 3D aréna-robbanás: elkapáskor arany szikraeső, elszökéskor rövid füst (csak látvány). */
   const pushArenaBurst = useCallback((x: number, y: number, kind: ArenaBurst["kind"]) => {
     const burstId = arenaBurstIdRef.current++;
     setArenaBursts((prev) => [...prev.slice(-5), { id: burstId, x, y, kind }]);
@@ -561,241 +588,202 @@ export default function BrainRotSteal() {
     );
   }, []);
 
-  /* --- Brain rot elkap --- */
-  const handleCatchBrainRot = useCallback(
-    (rot: BrainRot) => {
-      if (phase !== "play" || paused || rot.caught) return;
-      haptics("hit");
-      // Azonnali visszajelzés a koppintásra: lila szikra a lény helyén (a kvíz előtt is látszik).
-      if (!reducedMotion) spawnParticles(rot.x, rot.y, "#c084fc", 12);
-      setBrainRots((prev) => prev.map((r) => (r.id === rot.id ? { ...r, caught: true } : r)));
-      setCaughtRot(rot);
-      setQuiz(pickQuiz());
-      quizAttemptRef.current = 0;
-      setPhase("quiz");
-    },
-    [phase, paused, pickQuiz, haptics, spawnParticles],
-  );
-
-  /**
-   * G-1: magyarázó kártya rossz válaszra.
-   *
-   * A brain rot a kártya alatt is a helyén marad — a gyerek ugyanazt a lényt
-   * kapja el újra, miután megértette, mit rontott el.
-   */
-  const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
-
-  const dismissFeedback = useCallback(() => {
-    setFeedback(null);
-    setRevealCorrectIdx(null);
-    setWrongIdx(null);
-  }, []);
-
-  /* --- Válasz kezelés --- */
-  const onAnswer = useCallback(
-    (idx: number) => {
-      if (!quiz || !caughtRot) return;
-      // S13 / review K1: szünetben nincs válasz (a háttér inert, de a billentyűs út ellen is védünk).
-      if (pausedRef.current) return;
-      if (revealCorrectIdx !== null) return;
-
-      if (quizAttemptRef.current === 0) maybeClaimCouponBonus(coupon, quiz.id, idx);
-      if (idx !== quiz.correctIndex) {
-        sfxError();
-        haptics("error");
-        wrongQuizAnswersRef.current += 1;
-        setWrongAnswers((n) => n + 1);
-        // Csökkentett mozgásnál nincs rázás (M9): a piros keret és a magyarázókártya jelzi a hibát.
-        if (!reducedMotion) {
-          setWrongShake(true);
-          timeoutsRef.current.push(window.setTimeout(() => setWrongShake(false), 400));
+  /* --- A mag eseményei → hang, rezgés, felirat, robbanás (eseményre, nem képkockánként) --- */
+  const onEvent = useCallback(
+    (e: BrainRotEvent) => {
+      const u = unitRef.current;
+      const x = e.x * u;
+      const y = e.y * u;
+      if (e.type === "catch") {
+        haptics("hit");
+      } else if (e.type === "kept" || e.type === "direct") {
+        pushArenaBurst(x, y, "catch");
+        addFloat(x, y - 24, `+${e.n} XP`, "#fbbf24", "gain");
+        const m = driverRef.current?.core.state().combo.multiplier ?? 1;
+        if (m > maxMultiplierRef.current) maxMultiplierRef.current = m;
+        if (e.type === "direct") haptics("success");
+        if (e.type === "kept" && m >= 2) {
+          sfxLevelUp();
+          // Csökkentett mozgásnál nincs villanás (M9).
+          if (!reducedMotion) {
+            setScreenFlash("rgba(251, 191, 36, 0.15)");
+            timeoutsRef.current.push(window.setTimeout(() => setScreenFlash(null), 300));
+          }
         }
-        setRevealCorrectIdx(quiz.correctIndex);
-        setWrongIdx(idx);
-        recordDifficultyAnswer(false);
-        const outcome = streakProtector.handleWrong({ streak });
-        if (outcome === "warned") {
-          sfxWarning();
-        } else {
-          setStreak(0);
-          setComboMultiplier(1);
-        }
-        // G-1: a másfél másodperces felfedés megmutatta, MELYIK a jó válasz, de
-        // azt nem, hogy MIÉRT — a téves szó ugyanúgy megmaradt a gyerekben. A
-        // kártya addig áll, amíg be nem zárja; a felfedést a bezárás oldja.
-        setFeedback(
-          buildFeedback({
-            quiz: {
-              prompt: quiz.prompt,
-              options: quiz.options,
-              correctIndex: quiz.correctIndex,
-              // A séma `null`-t is enged (régi sor); a motor `undefined`-ot vár.
-              explanation: quiz.explanation ?? undefined,
-            },
-            chosenIndex: idx,
-            attempt: quizAttemptRef.current,
-            ageBand: "kid",
-          }),
-        );
-        quizAttemptRef.current = 1;
-        return;
+      } else if (e.type === "lost" || e.type === "escape") {
+        // Látható „elszökött” visszajelzés: füst az arénában + felirat (narancs, nem telített piros — K.4/20). A rossz
+        // ketrecnél a felirat a ketrec FÖLÖTT (ne a vadászra és a ketrec feliratára essen).
+        pushArenaBurst(x, y, "escape");
+        addFloat(x, e.type === "lost" ? y - 0.17 * u : y - 18, "Elszökött!", "#fdba74", "escape");
+      } else if (e.type === "dazed") {
+        addFloat(x, y - 34, "Elfáradt!", "#67e8f9", "info");
       }
-
-      // Helyes válasz!
-      recordDifficultyAnswer(true);
-      sfxSuccess();
-      haptics("success");
-      setCorrectAnswers((n) => n + 1);
-
-      setRevealCorrectIdx(null);
-      setWrongIdx(null);
-      const isRetry = quizAttemptRef.current > 0;
-      const multiplier = isRetry ? 1 : comboMultiplier;
-      const full = Math.round(caughtRot.xpValue * multiplier);
-      const xpGain = isRetry ? xpForAttempt(caughtRot.xpValue, 1) : full;
-      setSessionXp((x) => x + xpGain);
-      setStreak((s) => {
-        if (isRetry) return s;
-        const newStreak = s + 1;
-        setBestStreak((bs) => Math.max(bs, newStreak));
-        return newStreak;
-      });
-      setTotalCaught((c) => c + 1);
-      setComboMultiplier((m) => {
-        if (isRetry) return m;
-        const next = Math.min(4, m + 0.25);
-        if (next > maxComboRef.current) maxComboRef.current = next;
-        return next;
-      });
-      quizAttemptRef.current = 0;
-
-      // Vizuális visszajelzés
-      spawnParticles(caughtRot.x, caughtRot.y, "#fbbf24", reducedMotion ? 6 : 24,"\u2B50");
-      addFloatingText(caughtRot.x, caughtRot.y - 30, `+${xpGain} XP`, "#fbbf24");
-      // 3D robbanás az arénában (a jelenet a `particleScale` költségkerettel méretezi).
-      pushArenaBurst(caughtRot.x, caughtRot.y, "catch");
-
-      if (multiplier >= 2) {
-        sfxLevelUp();
-        // Csökkentett mozgásnál nincs villanás (M9).
-        if (!reducedMotion) {
-          setScreenFlash("rgba(251, 191, 36, 0.15)");
-          timeoutsRef.current.push(window.setTimeout(() => setScreenFlash(null), 300));
-        }
-      }
-
-      // Brain rot törlése
-      setBrainRots((prev) => prev.filter((r) => r.id !== caughtRot.id));
-      setCaughtRot(null);
-      setQuiz(null);
-      setPhase("play");
     },
-    [quiz, caughtRot, comboMultiplier, spawnParticles, addFloatingText, revealCorrectIdx, streak, streakProtector, haptics, reducedMotion, pushArenaBurst],
+    [addFloat, haptics, pushArenaBurst, reducedMotion],
   );
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
 
   /* --- Játék indítása --- */
   const startGame = useCallback(() => {
+    // K.4/22: a hang (AudioContext) az indító koppintáson indul — nem az első kérdés pillanatában (az a játékban akadás volt).
+    sfxClick();
+    runIndexRef.current += 1;
+    const seed = seedFrom(seedBase, runIndexRef.current);
+    runSeedRef.current = seed;
+    pickRngRef.current = createRng(seedFrom(BRAIN_ROT_GAME_ID, seed, "pick")).next;
     runLevelRef.current = levels.level;
     levelClearedRef.current = false;
     scoreSubmittedRef.current = false;
-    streakProtector.resetProtector();
-    setRevealCorrectIdx(null);
-    setWrongIdx(null);
-    nextId = 0;
-    setBrainRots([]);
-    setParticles([]);
-    setFloatingTexts([]);
-    setSessionXp(0);
-    setStreak(0);
-    setBestStreak(0);
-    setTotalCaught(0);
-    setTotalMissed(0);
-    setTimeLeft(ROUND_LIMIT);
-    setRunSeconds(0);
-    runSecondsRef.current = 0;
+    bestSubmittedRef.current = false;
     difficultyRef.current = levelStartBand(runLevelRef.current, startingDifficulty(userGrade ?? 4));
     gradeSeenRef.current = createGradeQuizSeen();
     answerHistoryRef.current = [];
-    setComboMultiplier(1);
-    maxComboRef.current = 1;
-    wrongQuizAnswersRef.current = 0;
-    setCorrectAnswers(0);
-    setWrongAnswers(0);
-    setIsNewBest(false);
-    bestSubmittedRef.current = false;
-    pausedAtRef.current = null;
-    pausedTotalRef.current = 0;
-    setPaused(false);
-    setQuiz(null);
-    setCaughtRot(null);
-    setFeedback(null);
+    maxMultiplierRef.current = 1;
+    firstCageSeenRef.current = false;
+    driverRef.current = makeDriver(seed);
+    q.reset(seed, difficultyRef.current);
+    floatsRef.current = [];
+    lastEscapeRef.current = null;
+    setFloats([]);
+    setArenaBursts([]);
     setScreenFlash(null);
-    lastSpawnRef.current = 0;
+    setFeedback(null);
+    setExpanded(false);
+    setHud(EMPTY_HUD);
+    setResult(null);
+    setIsNewBest(false);
+    setPaused(false);
     setPhase("play");
-  }, [streakProtector, userGrade, levels.level]);
+    // `makeDriver` a mostani tábla-méretet és hangolást olvassa (ref-ekből).
+  }, [userGrade, levels.level, q, seedBase]);
 
-  /**
-   * A lények korának „befagyasztása” (S8 hibajavítás): kvíz alatt (a magyarázókártyával együtt) és szünetben
-   * a kor nem telik. A befagyás végén az eltelt idő a `pausedTotalRef`-be kerül, és a következő spawn ideje
-   * is ennyivel tolódik — különben a kvíz után azonnal új lény ugrana be.
-   */
-  useEffect(() => {
-    const frozen = phase === "quiz" || (phase === "play" && paused);
-    if (frozen && pausedAtRef.current == null) {
-      pausedAtRef.current = Date.now();
-    } else if (!frozen && pausedAtRef.current != null) {
-      const frozenFor = Math.max(0, Date.now() - pausedAtRef.current);
-      pausedAtRef.current = null;
-      if (phase === "play") {
-        pausedTotalRef.current += frozenFor;
-        lastSpawnRef.current += frozenFor;
-      }
-    }
-  }, [phase, paused]);
-
-  /** A lény kora (ms) a befagyott idő nélkül — a lejárat, a figyelmeztetés és a halványodás közös mércéje. */
-  const ageOf = (rot: BrainRot, now: number) =>
-    brainRotAgeMs({
-      now,
-      spawnTime: rot.spawnTime,
-      pausedTotal: pausedTotalRef.current,
-      pausedTotalAtSpawn: rot.pausedTotalAtSpawn,
-      pausedAt: pausedAtRef.current,
+  /** A menet lezárása: a horog már lezárta a kérdést (settled); az eredmény a director valós statisztikájából. */
+  const endRun = useCallback((forcedCorrect?: number) => {
+    const ctl = qRef.current;
+    if (!ctl.finished()) ctl.finish();
+    const d = driverRef.current!;
+    const st = d.core.state();
+    const stats = ctl.director?.stats(d.clockMs());
+    const correct = Math.max(stats?.correct ?? 0, forcedCorrect ?? 0);
+    const wrong = (stats?.wrong ?? 0) + (stats?.timeouts ?? 0);
+    setFeedback(null);
+    setExpanded(false);
+    setResult({
+      score: st.score,
+      caught: Math.max(st.caught, forcedCorrect ?? 0),
+      missed: st.missed,
+      lost: st.lost,
+      correct,
+      total: correct + wrong,
+      wrong,
+      bestStreak: st.combo.best,
+      maxMultiplier: maxMultiplierRef.current,
+      seconds: Math.round(Math.min(ROUND_MS, d.clockMs()) / 1000),
     });
+    setPhase("over");
+  }, []);
+  const endRunRef = useRef(endRun);
+  endRunRef.current = endRun;
 
   const pause = useCallback(() => {
-    if (phase === "play" || phase === "quiz") setPaused(true);
+    if (phase === "play") setPaused(true);
   }, [phase]);
   const resume = useCallback(() => setPaused(false), []);
   const exitToGames = useCallback(() => {
     setPaused(false);
+    qRef.current.finish();
     navigate("/games");
   }, [navigate]);
 
-  /* --- Tesztes API: a `forceState` a mostani állapotra épít (lásd fent) --- */
-  forceStateRef.current = (patch) => {
-    if (patch.phase === "quiz") {
-      // M9 / M10 mérés: kvíz egy (nem a pályán lévő) lénnyel, a valós választóból.
-      const boardEl = boardRef.current;
-      const rot = spawnBrainRot(boardEl?.clientWidth ?? 360, boardEl?.clientHeight ?? 400, userGrade, pausedTotalRef.current);
-      setPaused(false);
-      setCaughtRot({ ...rot, caught: true });
-      setQuiz(pickQuiz());
-      quizAttemptRef.current = 0;
-      setPhase("quiz");
-      return;
-    }
-    if (patch.phase === "over" || patch.phase === "menu" || patch.phase === "play") {
-      if (patch.phase === "over" && typeof patch.correctCount === "number") {
-        setTotalCaught(patch.correctCount);
-        setCorrectAnswers(patch.correctCount);
-      }
-      setPaused(false);
-      setPhase(patch.phase);
-    }
-  };
+  // Szünetkor a joystick elenged (a folytatás után új érintés kell — ne vezessen tovább magától).
+  useEffect(() => {
+    if (!paused) return;
+    setJoyReset((n) => n + 1);
+    driverRef.current?.core.setInput(0, 0);
+  }, [paused]);
 
-  // R = quick-restart az "over" / "menu" képernyőn.
+  /* --- „Miért?”: szünet + a valódi magyarázókártya --- */
+  const openWhy = useCallback(() => {
+    const item = qRef.current.view().whyItem;
+    if (!item) return;
+    setFeedback(
+      buildFeedback({
+        quiz: item.quiz,
+        chosenIndex: item.pickedOriginalIndex,
+        // Egyetlen próbálkozás van (a felfedett válasz visszakoppintása megszűnt — terv 5.5, J-BR).
+        attempt: 1,
+        ageBand: "kid",
+      }),
+    );
+  }, []);
+  const closeWhy = useCallback(() => setFeedback(null), []);
+
+  /**
+   * Billentyűs válasz (a kérdés-sáv 1–4-e is ezt hívja): szünetben nincs válasz (S13 / review K1 — a háttér inert, de a
+   * billentyűs út ellen is védünk).
+   */
+  const onAnswer = useCallback((idx: number) => {
+    if (pausedRef.current) return;
+    qRef.current.pick(idx, driverRef.current!.clockMs());
+  }, []);
+
+  /* --- Tesztes API (K.2): `forceState({ question: true })` / `phase: "quiz"` → egy lény a vadász kezében + ketrecek --- */
+  useEffect(() => {
+    return installGameTestApi({
+      probe: () => {
+        const ctl = qRef.current;
+        const d = driverRef.current!;
+        const st = d.core.state();
+        const stats = ctl.director?.stats(d.clockMs());
+        const p = ctl.view().presentation;
+        return {
+          simTime: d.loop.simTimeMs(),
+          questionOpen: ctl.active() ? 1 : 0,
+          questionsAnswered: stats?.answered ?? 0,
+          questionsCorrect: stats?.correct ?? 0,
+          fps: fpsRef.current,
+          band: difficultyRef.current,
+          intensity: ctl.director?.intensity() ?? null,
+          level: runLevelRef.current,
+          paceScale: 1.4 - difficultyRef.current * 0.55,
+          paused: pausedRef.current ? 1 : 0,
+          clock: d.clockMs(),
+          timeLeft: d.remainingMs() / 1000,
+          caught: st.caught,
+          carry: st.carry ? 1 : 0,
+          cagesOpen: st.cagesOpen ? 1 : 0,
+          playerX: st.player.x,
+          playerY: st.player.y,
+          creatures: st.creatures.filter((c) => c.active && c.state === "free").length,
+          reveal: ctl.view().reveal ? 1 : 0,
+          questionId: p?.id ?? null,
+          questionSeconds: p ? p.windowMs / 1000 : null,
+        };
+      },
+      forceState: (patch: GameForcePatch) => {
+        if (patch.question || patch.phase === "quiz") {
+          // `phase: "quiz"` a `question: true` kompatibilis álneve (terv 9.): azonnal egy lény a vadász kezében, és kérdés.
+          setPaused(false);
+          const d = driverRef.current!;
+          d.core.forceCatch();
+          d.resolve();
+          return;
+        }
+        if (patch.phase === "play") startGame();
+        if (patch.phase === "menu") {
+          setPaused(false);
+          setPhase("menu");
+        }
+        if (patch.phase === "over") {
+          setPaused(false);
+          endRun(typeof patch.correctCount === "number" ? patch.correctCount : undefined);
+        }
+      },
+    });
+  }, [endRun, startGame]);
+
+  // R = quick-restart az "over" / "menu" képernyőn (csak a gyerek billentyűjére — nincs automatikus újraindítás).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "r" && e.key !== "R") return;
@@ -808,159 +796,212 @@ export default function BrainRotSteal() {
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, startGame]);
 
-  /* --- Idozito --- */
+  // Asztali gépen: nyilak / WASD = futás, P / Escape = szünet (a ketreceket a kérdés-sáv 1–4 billentyűje is választja).
   useEffect(() => {
-    if (phase !== "play" || paused) return;
-    const id = setInterval(() => {
-      runSecondsRef.current += 1;
-      setRunSeconds((s) => s + 1);
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          setPhase("over");
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [phase, paused]);
-
-  /* --- Animacio + spawn --- */
-  useEffect(() => {
-    if (phase !== "play" || paused) return;
-    let lastTime = performance.now();
-    // Szünet / kvíz után az első fojtott lépés ne a teljes kihagyott időt kapja (a fizika úgyis vágja 120 ms-ra).
-    lastRenderMsRef.current = lastTime;
-
-    const loop = (now: number) => {
-      const dt = Math.min(0.05, (now - lastTime) / 1000);
-      lastTime = now;
-
-      const boardEl = boardRef.current;
-      const boardW = boardEl?.clientWidth ?? 400;
-      const boardH = boardEl?.clientHeight ?? 400;
-
-      // Spawn brain rots
-      // A nehézség-sáv és az eltelt idő EGYÜTT szabja meg az ütemet: az idő
-      // adja az alapívet, a sáv pedig azt, hogy a konkrét gyereknek gyorsuljon
-      // vagy lassuljon. A padlón (0.15) másfélszer lassabb, a tetején (1)
-      // negyedével gyorsabb az alapnál.
-      const paceScale = 1.4 - difficultyRef.current * 0.55;
-      const spawnEvery = Math.max(
-        SPAWN_INTERVAL_MIN,
-        (SPAWN_INTERVAL_BASE - runSecondsRef.current * 15) * paceScale,
-      );
-      if (now - lastSpawnRef.current > spawnEvery) {
-        lastSpawnRef.current = now;
-        setBrainRots((prev) => {
-          if (prev.filter((r) => !r.caught).length >= MAX_BRAIN_ROTS) return prev;
-          return [...prev, spawnBrainRot(boardW, boardH, gradeRef.current, pausedTotalRef.current)];
-        });
-      }
-
-      // D5: RAF throttle — setState legfeljebb ~10 FPS-enként (100ms), nem minden frame-ben
-      const shouldRender = now - lastRenderMsRef.current >= 100;
-      if (shouldRender) {
-        // A ténylegesen eltelt idő, nem a névleges 100 ms: terhelt telefonon a
-        // fojtott lépés hosszabb, és a fizikának ezt kell tudnia.
-        const stepMs = now - lastRenderMsRef.current;
-        lastRenderMsRef.current = now;
-
-        // Update brain rots
-        setBrainRots((prev) => {
-          const nowMs = Date.now();
-          return prev
-            .map((rot) => {
-              if (rot.caught) return rot;
-
-              // Lejárat: az évfolyamhoz igazított élettartam, a kvíz- és szünetidő nélkül (S8).
-              if (ageOf(rot, nowMs) > rot.lifetime && !rot.escaping) {
-                return { ...rot, escaping: true };
-              }
-
-              // G-10: idő-alapú lépés. Korábban `x += vx` volt, vagyis a
-              // sebesség a képkockaszámtól függött (120 Hz-en dupla tempó), és
-              // a 100 ms-os fojtás miatt a lény tízszer akkorát ugrott, mint
-              // amekkorát a szem folyamatosnak lát.
-              const moved = stepBrainRot(
-                {
-                  x: rot.x,
-                  y: rot.y,
-                  vx: rot.vx,
-                  vy: rot.vy,
-                  size: rot.size,
-                  rotation: rot.rotation,
-                  rotSpeed: rot.rotSpeed,
-                },
-                stepMs,
-                { width: boardW, height: boardH },
-              );
-
-              return { ...rot, ...moved };
-            })
-            .filter((rot) => {
-              if (rot.escaping) {
-                setTotalMissed((m) => m + 1);
-                setStreak(0);
-                setComboMultiplier(1);
-                // Látható „elszökött” visszajelzés: piros füst az arénában + felirat.
-                pushArenaBurst(rot.x, rot.y, "escape");
-                addFloatingText(rot.x, rot.y - 20, "Elszökött!", "#fb7185");
-                return false;
-              }
-              return true;
-            });
-        });
-
-        // Update particles
-        setParticles((prev) =>
-          prev
-            .map((p) => ({
-              ...p,
-              x: p.x + p.vx * dt * 60,
-              y: p.y + p.vy * dt * 60,
-              vy: p.vy + 5 * dt * 60,
-              life: p.life - dt,
-            }))
-            .filter((p) => p.life > 0),
-        );
-
-        // Update floating texts
-        setFloatingTexts((prev) =>
-          prev
-            .map((ft) => ({
-              ...ft,
-              y: ft.y - 1.5,
-              life: ft.life - dt,
-            }))
-            .filter((ft) => ft.life > 0),
-        );
-      }
-
-      animRef.current = requestAnimationFrame(loop);
+    if (phase !== "play") return;
+    const keys = new Set<string>();
+    const apply = () => {
+      const x = (keys.has("right") ? 1 : 0) - (keys.has("left") ? 1 : 0);
+      const y = (keys.has("down") ? 1 : 0) - (keys.has("up") ? 1 : 0);
+      driverRef.current?.core.setInput(x, y);
     };
+    const dirOf = (k: string): string | null =>
+      k === "ArrowLeft" || k === "a" || k === "A" ? "left" : k === "ArrowRight" || k === "d" || k === "D" ? "right" : k === "ArrowUp" || k === "w" || k === "W" ? "up" : k === "ArrowDown" || k === "s" || k === "S" ? "down" : null;
+    const onDown = (e: KeyboardEvent) => {
+      if (pausedRef.current || document.documentElement.dataset.gameCouponExpired === "true") return;
+      if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+        e.preventDefault();
+        setPaused(true);
+        return;
+      }
+      const dir = dirOf(e.key);
+      if (!dir) return;
+      e.preventDefault();
+      keys.add(dir);
+      apply();
+    };
+    const onUp = (e: KeyboardEvent) => {
+      const dir = dirOf(e.key);
+      if (!dir || !keys.delete(dir)) return;
+      apply();
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+    };
+  }, [phase]);
 
-    animRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animRef.current);
+  /* --- A tábla mérete: az aréna egysége (rövidebb oldal) és a hangolás --- */
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el || phase !== "play") return;
+    const measure = () => {
+      const w = Math.max(1, el.clientWidth);
+      const h = Math.max(1, el.clientHeight);
+      boardSizeRef.current = { w, h };
+      const unit = Math.min(w, h);
+      driverRef.current?.core.setArena(w / unit, h / unit, tuningFor(w, h));
+      setBoard((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [phase]);
+
+  /* --- Képkocka-hurok (rAF): kérdés-óra, sim, a DOM-elemek helye ref-eken át (nincs React-állapot, KSZ-9) --- */
+  const paint = useCallback(() => {
+    const st = driverRef.current!.core.state();
+    const u = unitRef.current;
+    const pl = playerElRef.current;
+    if (pl) pl.style.transform = `translate3d(${(st.player.x * u).toFixed(1)}px, ${(st.player.y * u).toFixed(1)}px, 0)`;
+    for (const c of st.creatures) {
+      if (!c.active) continue;
+      const el = creatureEls.current.get(c.id);
+      if (el) el.style.transform = `translate3d(${(c.x * u).toFixed(1)}px, ${(c.y * u).toFixed(1)}px, 0)`;
+    }
+    for (let i = 0; i < st.cageCount; i++) {
+      const ring = cageRingRefs.current[i];
+      if (ring) ring.style.setProperty("--dwell", String(Math.min(1, st.cages[i]!.dwellMs / CAGE_DWELL_MS)));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "play") return;
+    let raf = 0;
+    let last: number | null = null;
+    let fpsAcc = 0;
+    let fpsFrames = 0;
+    let endAt: number | null = null;
+    const tick = (now: number) => {
+      const dt = last === null ? 0 : Math.min(250, Math.max(0, now - last));
+      last = now;
+      fpsAcc += dt;
+      fpsFrames += 1;
+      if (fpsAcc >= 500) {
+        fpsRef.current = Math.round((fpsFrames * 1000) / fpsAcc);
+        fpsAcc = 0;
+        fpsFrames = 0;
+      }
+      const d = driverRef.current!;
+      // A meghajtó képkockája (a sim ugyanezt hívja): kérdés-óra (szünetben áll) → az óra lejárta → kérdés-sáv →
+      // időskála (szünet 0, nyitott kérdés slowMo) → fix lépés → elkapás / ketrec → események.
+      d.frame(dt, pausedRef.current, onEventRef.current);
+      paint();
+      if (!d.core.running() && qRef.current.settled()) {
+        // A menet vége: a futó megoldás-kijelzés lefutott; egy pillanat, és az eredménylap.
+        if (endAt === null) endAt = now + 500;
+        if (now >= endAt) {
+          endRunRef.current();
+          return;
+        }
+      }
+      // #58: `requestGameFrame` — a lejárt kupon alatt a képkocka-hurok áll.
+      raf = requestGameFrame(tick);
+    };
+    raf = requestGameFrame(tick);
+    return () => cancelGameFrame(raf);
+  }, [phase, paint]);
+
+  // HUD ≤ 10 Hz (KSZ-9): a lények listája (a DOM-elemek kulcsa), a pont, az idő. Szünetben nem frissül (az óra is áll).
+  useEffect(() => {
+    if (phase !== "play" || paused) return;
+    const id = window.setInterval(() => {
+      const d = driverRef.current!;
+      const st = d.core.state();
+      const u = unitRef.current;
+      const creatures: HudSnap["creatures"] = [];
+      const arena: ArenaRot[] = [];
+      for (const c of st.creatures) {
+        if (!c.active) continue;
+        // A lény kora a VILÁG idejében (szünetben áll, a kérdés alatt lassul) — figyelmeztetés az utolsó 1,5 s-ban.
+        const age = brainRotAgeMs({ now: st.worldMs, spawnTime: c.bornMs, pausedTotal: 0, pausedTotalAtSpawn: 0, pausedAt: null });
+        const frac = age / c.lifeMs;
+        const warning = c.state === "free" && !c.dazed && c.lifeMs - age <= BRAIN_ROT_WARNING_MS;
+        const opacity = c.state === "escaping" ? 0.45 : frac > 0.8 && !c.dazed ? Math.max(0.4, 1 - ((frac - 0.8) / 0.2) * 0.6) : 1;
+        const size = Math.round(c.r * 2 * u);
+        creatures.push({ id: c.id, kind: c.kind, size, warning, opacity, dazed: c.dazed, carried: c.state === "carried" });
+        if (c.state === "free") arena.push({ id: c.id, x: c.x * u, y: c.y * u, size, warning, opacity });
+      }
+      const hint: HudSnap["hint"] = st.worldMs < TUTORIAL_MS ? (firstCageSeenRef.current ? 2 : 1) : 0;
+      setHud({
+        score: st.score,
+        caught: st.caught,
+        combo: st.combo.count,
+        multiplier: st.combo.multiplier,
+        timeLeft: Math.ceil(d.remainingMs() / 1000),
+        creatures,
+        arena,
+        carrying: st.carry !== null,
+        hint,
+      });
+    }, 100);
+    return () => window.clearInterval(id);
   }, [phase, paused]);
+
+  /* --- Bemenet a táblán: böködés / húzás = oda fut a vadász (egyujjas és egeres mód, K.4/17; KSZ-14) --- */
+  const boardPointerRef = useRef<number | null>(null);
+  const targetFrom = useCallback((clientX: number, clientY: number) => {
+    const el = boardRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const u = unitRef.current;
+    driverRef.current?.core.setTarget((clientX - r.left) / u, (clientY - r.top) / u);
+  }, []);
+  const onBoardPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (pausedRef.current || (e.button !== undefined && e.button > 0)) return;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* a szintetikus esemény nem foglalható le — a böködés így is számít */
+      }
+      boardPointerRef.current = e.pointerId;
+      targetFrom(e.clientX, e.clientY);
+    },
+    [targetFrom],
+  );
+  const onBoardPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.pointerId !== boardPointerRef.current || pausedRef.current) return;
+      targetFrom(e.clientX, e.clientY);
+    },
+    [targetFrom],
+  );
+  const releaseBoardPointer = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerId !== boardPointerRef.current) return;
+    boardPointerRef.current = null;
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  }, []);
+  /** Billentyűvel fókuszált ketrec (Enter / Szóköz): a vadász oda fut — a válasz a beállás, mint érintéssel. */
+  const goToCage = useCallback((i: number) => {
+    const st = driverRef.current?.core.state();
+    const cage = st?.cages[i];
+    if (!st || !cage || pausedRef.current) return;
+    driverRef.current!.core.setTarget(cage.x, cage.y);
+  }, []);
 
   /* --- Eredmény beküldése --- */
   useEffect(() => {
-    if (phase !== "over" || !syncEligibility?.eligible || scoreSubmittedRef.current) return;
+    if (phase !== "over" || !result || !syncEligibility?.eligible || scoreSubmittedRef.current) return;
     scoreSubmittedRef.current = true;
     void postGameScore({
       gameId: "brain-rot-steal",
       difficulty: "normal",
-      runXp: sessionXp,
-      runStreak: bestStreak,
-      runSeconds,
+      runXp: result.score,
+      // A menet LEGJOBB kombó-sorozata (K.2 „Pontszám-szerződés”, J12).
+      runStreak: result.bestStreak,
+      runSeconds: result.seconds,
       runId: newScoreRunId(),
     })
       .then(() => void queryClient.invalidateQueries({ queryKey: ["/api/games/leaderboard"] }))
       .catch(() => {
         scoreSubmittedRef.current = false;
       });
-  }, [phase, syncEligibility, sessionXp, bestStreak, runSeconds]);
+  }, [phase, syncEligibility, result]);
 
   // Achievement + Daily — egyszer fut "over" átmenetkor.
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
@@ -970,29 +1011,30 @@ export default function BrainRotSteal() {
       achievementCheckedRef.current = false;
       return;
     }
-    if (achievementCheckedRef.current) return;
+    if (achievementCheckedRef.current || !result) return;
     achievementCheckedRef.current = true;
     const wasDailyAvailable = isTodaysGameAvailable("brain-rot-steal");
     const newOnes = recordRun({
       game: "brain-rot-steal",
-      xpGained: sessionXp,
-      correctAnswers: totalCaught,
-      wrongAnswers: totalMissed + wrongQuizAnswersRef.current,
-      maxStreak: bestStreak,
-      brainRotsCaught: totalCaught,
-      maxComboMultiplier: maxComboRef.current,
-      perfect: totalMissed === 0 && wrongQuizAnswersRef.current === 0 && totalCaught >= 5,
+      xpGained: result.score,
+      // Valós kérdés-statisztika a directorból (K.2 „Menet-statisztika”); a lejárt kérdés is hibának számít.
+      correctAnswers: result.correct,
+      wrongAnswers: result.wrong,
+      maxStreak: result.bestStreak,
+      brainRotsCaught: result.caught,
+      maxComboMultiplier: result.maxMultiplier,
+      perfect: result.wrong === 0 && result.missed + result.lost === 0 && result.caught >= 5,
     });
-    // Daily: ha a játékos legalább 10 brain rot-ot kapott el → "teljesítve".
-    // (A Brain Rot-nak nincs "won" fázisa — a 10 elkapás a sikeres futás kritériuma.)
-    if (wasDailyAvailable && totalCaught >= BRAIN_ROT_CLEAR_CATCHES) {
+    // Daily: ha a játékos legalább 10 brain rot-ot megtartott → "teljesítve".
+    if (wasDailyAvailable && result.caught >= BRAIN_ROT_CLEAR_CATCHES) {
       const daily = markDailyCompleted();
       if (daily.achievements.length > 0) newOnes.push(...daily.achievements);
     }
     if (newOnes.length > 0) setNewlyUnlocked(newOnes);
-  }, [phase, sessionXp, totalCaught, totalMissed, bestStreak, comboMultiplier]);
+  }, [phase, result]);
 
   // A sikeres futás (legalább 10 elkapás a kör végén) a következő pályát oldja fel; a menü azt ajánlja.
+  const totalCaught = result?.caught ?? 0;
   useEffect(() => {
     if (phase === "over" && totalCaught >= BRAIN_ROT_CLEAR_CATCHES && runLevelRef.current != null && !levelClearedRef.current) {
       levelClearedRef.current = true;
@@ -1002,30 +1044,60 @@ export default function BrainRotSteal() {
 
   /* --- Legjobb eredmény: helyi mentés (névtelen látogatónál is működik), futásonként egyszer --- */
   useEffect(() => {
-    if (phase !== "over" || bestSubmittedRef.current) return;
+    if (phase !== "over" || !result || bestSubmittedRef.current) return;
     bestSubmittedRef.current = true;
-    const res = best.submit(sessionXp);
-    setIsNewBest(res.isNewBest && sessionXp > 0);
-  }, [phase, sessionXp, best]);
+    const res = best.submit(result.score);
+    setIsNewBest(res.isNewBest && result.score > 0);
+  }, [phase, result, best]);
 
   /* --- Render --- */
   const screenState: GameScreenState =
     phase === "menu" ? "start" : phase === "over" ? "result" : paused ? "paused" : "playing";
-  const inRun = phase === "play" || phase === "quiz";
+  const inRun = phase === "play";
   const won = totalCaught >= BRAIN_ROT_CLEAR_CATCHES;
-  const nowMs = Date.now();
-  const liveRots = brainRots.filter((r) => !r.caught);
-  /** A lény látható állapota: figyelmeztetés az utolsó 1,5 s-ban, halványodás az élettartam utolsó ötödében. */
-  const rotView = (rot: BrainRot) => {
-    const age = ageOf(rot, nowMs);
-    const frac = age / rot.lifetime;
-    return {
-      warning: rot.lifetime - age <= BRAIN_ROT_WARNING_MS,
-      // Kisebb gyereknek is látható marad a végéig (legalább 40%): a lény nem „tűnik el” a koppintás előtt.
-      opacity: frac > 0.8 ? Math.max(0.4, 1 - ((frac - 0.8) / 0.2) * 0.6) : 1,
-    };
-  };
-  const timeTone = timeLeft <= ROUND_LIMIT * 0.15 ? "bad" : timeLeft <= ROUND_LIMIT * 0.3 ? "warn" : "default";
+  const timeTone = hud.timeLeft <= ROUND_LIMIT * 0.15 ? "bad" : hud.timeLeft <= ROUND_LIMIT * 0.3 ? "warn" : "default";
+  const view = q.state;
+  const pres = view.presentation;
+  const coreState = driverRef.current!.core.state();
+  const showCages = inRun && !!pres && coreState.cageQuestionId === pres.id;
+  const questionOpen = !!pres && !view.reveal;
+  const carried = hud.creatures.find((c) => c.carried) ?? null;
+  const carriedKind = carried ? BRAIN_ROT_KINDS[carried.kind]! : null;
+  const presCategory = categoryOf(pres?.question.subject);
+  const playerSize = Math.round(Math.max(44, 0.075 * 2 * unitPx * 1.2));
+  const hintText =
+    hud.hint === 1
+      ? touchCapable
+        ? "Húzd a joystickot, és kapd el a lényeket!"
+        : "Bökj a táblára vagy használd a nyilakat: kapd el a lényeket!"
+      : hud.hint === 2 && questionOpen
+        ? "Vidd a lényt a jó válasz ketrecébe, és állj meg benne!"
+        : null;
+  /* Kombó-szorzó jelvény (csak ha él; változáskor „pop”) — a vezérlősávban / a súgó mellett, nem a ketrecek fölött. */
+  const comboBadge =
+    hud.multiplier > 1 ? (
+      <span
+        key={hud.multiplier}
+        data-testid="br-combo"
+        className={`brainrot-combo ${reducedMotion ? "" : "brainrot-pop"}`}
+        aria-label={`Kombó szorzó ×${hud.multiplier}`}
+      >
+        <Zap className="h-4 w-4" aria-hidden="true" />×{hud.multiplier}
+      </span>
+    ) : null;
+  const hintEl = hintText ? (
+    <p className="br-hint" data-testid="br-hint" role="status">
+      {hintText}
+    </p>
+  ) : null;
+  const statusPill =
+    questionOpen && carriedKind ? (
+      <p className="br-status" data-testid="br-status">
+        <span aria-hidden="true">{CATEGORY_LABELS[presCategory].icon}</span>{" "}
+        {quizTopicLabelHu(pres?.question.subject, CATEGORY_LABELS[presCategory].label)} · {carriedKind.name}{" "}
+        <span className="text-amber-300 font-black">{carriedKind.xp * Math.max(1, hud.multiplier)} XP</span>
+      </p>
+    ) : null;
 
   return (
     <GameShell
@@ -1039,24 +1111,6 @@ export default function BrainRotSteal() {
     >
       <ClassroomGateModal accent="fuchsia" />
       <AchievementToast achievements={newlyUnlocked} />
-      {/* Háttér: halványan pulzáló csillagok (csökkentett mozgásnál állnak) */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        {Array.from({ length: 30 }).map((_, i) => (
-          <div
-            key={`star-${i}`}
-            className={`absolute rounded-full opacity-20 ${reducedMotion ? "" : "animate-pulse"}`}
-            style={{
-              left: `${(i * 3.7 + 11) % 100}%`,
-              top: `${(i * 7.3 + 5) % 100}%`,
-              width: `${2 + (i % 3) * 2}px`,
-              height: `${2 + (i % 3) * 2}px`,
-              backgroundColor: ["#a855f7", "#ec4899", "#3b82f6", "#fbbf24"][i % 4],
-              animationDelay: `${(i * 0.7) % 5}s`,
-              animationDuration: `${2 + (i % 4)}s`,
-            }}
-          />
-        ))}
-      </div>
 
       {/* LS-3b: earned play time. Renders nothing when the child has no coupon. */}
       <CouponHud session={coupon} />
@@ -1081,7 +1135,7 @@ export default function BrainRotSteal() {
         <main className="relative z-10 w-full">
           <StartScreen
             title="Brain Rot Lopás"
-            subtitle="Kapd el a lényeket, mielőtt eltűnnek! Minden elkapás után egy gyors kvíz jön."
+            subtitle="Üldözd a menekülő lényeket, kapd el őket, és vidd mindet a jó válasz ketrecébe!"
             icon={<span className="brainrot-start-icon">{"\u{1F9E0}"}</span>}
             startLabel="Vadászat indítása!"
             onStart={startGame}
@@ -1105,18 +1159,19 @@ export default function BrainRotSteal() {
                 ) : null}
                 <GamePedagogyPanel
                   accent="fuchsia"
-                  kidMission="Kapd el a Brain Rot-okat, mielőtt eltűnnek! Minden elkapás után kvíz: angol, matek, vagy magyar nyelvtan. Helyes válasz = XP + kombó szorzó! Minél gyorsabb vagy, annál több pont!"
+                  kidMission="Fuss a joystickkal, és kapd el a menekülő lényeket! Elkapáskor négy ketrec nyílik a válaszokkal: vidd a lényt a jó ketrecbe. Jó válasz = a lény a tiéd + kombó! A 90 másodperc közben is megy."
                   parentBody={
                     <>
                       <strong className="text-fuchsia-100/90">Tananyag:</strong> angol szókincs (a központi szóbankból,
                       az évfolyamhoz illő szinten), alap matematika (műveletek, mértékegységek, geometria), magyar
                       nyelvtan (szófajok, ragozás, helyesírás).
                       <br />
-                      <strong className="text-fuchsia-100/90">Fejleszt:</strong> gyors döntéshozatal, olvasásértés, kéz-szem
-                      koordináció, matematikai készségek, magyar nyelvtan.
+                      <strong className="text-fuchsia-100/90">Fejleszt:</strong> gyors döntéshozatal, olvasásértés, térbeli
+                      tájékozódás és mozgáskoordináció, matematikai készségek, magyar nyelvtan.
                       <br />
                       <span className="text-white/70">
-                        A kisebbeknek nagyobb és lassabb lények jönnek, amelyek tovább maradnak a pályán.
+                        A kérdés alatt a játék lelassul, de nem áll meg; a rossz válasz után a helyes ketrec kivilágít, és a
+                        tétel később visszatér. A kisebbeknek nagyobb, lassabb lények jönnek, amelyek tovább maradnak.
                       </span>
                     </>
                   }
@@ -1149,233 +1204,197 @@ export default function BrainRotSteal() {
           <GameHud
             onPause={pause}
             stats={[
-              { id: "xp", label: "Pont", value: sessionXp },
+              { id: "xp", label: "Pont", value: hud.score },
               {
                 id: "streak",
                 label: "Sorozat",
-                value: streak >= STREAK_GOAL ? `${streak} \u{1F525}` : `${streak}/${STREAK_GOAL}`,
-                tone: streak >= STREAK_GOAL ? "good" : "default",
+                value: hud.combo >= STREAK_GOAL ? `${hud.combo} \u{1F525}` : `${hud.combo}/${STREAK_GOAL}`,
+                tone: hud.combo >= STREAK_GOAL ? "good" : "default",
               },
-              { id: "caught", label: "Elkapva", value: totalCaught },
+              { id: "caught", label: "Elkapva", value: hud.caught },
             ]}
-            progress={{ value: timeLeft, max: ROUND_LIMIT, label: `${timeLeft} mp`, tone: timeTone }}
+            progress={{ value: hud.timeLeft, max: ROUND_LIMIT, label: `${hud.timeLeft} mp`, tone: timeTone }}
           />
-          <main className="relative z-10 w-full mx-auto flex flex-col" style={{ paddingTop: 6 }}>
+          <main className="br-main relative z-10 w-full mx-auto" data-touch-controls={touchCapable ? "true" : "false"}>
             <div
               ref={boardRef}
               data-collectible-world
               data-testid="br-board"
-              className="relative w-full flex-1 rounded-2xl overflow-hidden border-2 border-purple-500/40 shadow-[0_0_40px_rgba(147,51,234,0.25)]"
-              style={{ minHeight: 0, touchAction: "manipulation" }}
+              className="br-board relative rounded-2xl overflow-hidden border-2 border-purple-500/40 shadow-[0_0_40px_rgba(147,51,234,0.25)]"
+              style={{ touchAction: "none" }}
+              onPointerDown={onBoardPointerDown}
+              onPointerMove={onBoardPointerMove}
+              onPointerUp={releaseBoardPointer}
+              onPointerCancel={releaseBoardPointer}
+              onLostPointerCapture={releaseBoardPointer}
             >
-              {/* 3D aréna-háttér (dekoráció; a lények DOM-gombok fölötte) */}
-              <BrainRotArena3D
-                rots={liveRots.map((r) => {
-                  const v = rotView(r);
-                  return { id: r.id, x: r.x, y: r.y, size: r.size, warning: v.warning, opacity: v.opacity };
-                })}
-                bursts={arenaBursts}
-              />
+              {/* 3D aréna-háttér (dekoráció; a lények, a vadász és a ketrecek DOM-elemek fölötte) */}
+              <BrainRotArena3D rots={hud.arena} bursts={arenaBursts} />
 
-              {/* Kombó-szorzó jelvény a pálya sarkában (csak ha él; változáskor „pop”) */}
-              {comboMultiplier > 1 && (
-                <span
-                  key={comboMultiplier}
-                  data-testid="br-combo"
-                  className={`brainrot-combo ${reducedMotion ? "" : "brainrot-pop"}`}
-                  aria-label={`Kombó szorzó ×${comboMultiplier.toFixed(2)}`}
-                >
-                  <Zap className="h-4 w-4" aria-hidden="true" />×{String(Number(comboMultiplier.toFixed(2)))}
-                </span>
+              {/* Q1 Ketrec-zár: a 4 válasz 4 ketrec — a vadász befut és megáll benne (a ketrecre bökve is oda fut). */}
+              {showCages && pres && (
+                <div className="br-cages" data-testid="br-cages" role="group" aria-label="Ketrecek: vidd a lényt a jó válasz ketrecébe">
+                  {pres.options.map((opt, i) => {
+                    const cage = coreState.cages[i];
+                    if (!cage) return null;
+                    const st = view.reveal
+                      ? i === view.reveal.correctOptionIndex
+                        ? "correct"
+                        : i === view.reveal.pickedOptionIndex
+                          ? "wrong"
+                          : "dim"
+                      : "idle";
+                    return (
+                      <button
+                        key={`${pres.id}-${i}`}
+                        type="button"
+                        data-testid={`br-cage-${i}`}
+                        data-state={st}
+                        className="br-cage"
+                        style={{
+                          left: (cage.x - cage.w / 2) * unitPx,
+                          top: (cage.y - cage.h / 2) * unitPx,
+                          width: cage.w * unitPx,
+                          height: cage.h * unitPx,
+                        }}
+                        aria-label={`${i + 1}. ketrec: ${opt.label}`}
+                        aria-disabled={view.reveal || paused ? "true" : undefined}
+                        onClick={() => goToCage(i)}
+                        {...correctDataAttrs(opt.correct)}
+                      >
+                        <span
+                          ref={(el) => {
+                            cageRingRefs.current[i] = el;
+                          }}
+                          className="br-cage-dwell"
+                          aria-hidden="true"
+                        />
+                        <span className="br-cage-key" aria-hidden="true">
+                          {st === "correct" ? "✓" : st === "wrong" ? "✗" : i + 1}
+                        </span>
+                        <span className="br-cage-label" data-long={opt.label.length > 18 || longestWord(opt.label) > 9 ? "true" : "false"}>
+                          {opt.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
 
-              {/* Lények: átlátszó, legalább 56×56-os koppintási doboz a rajz körül (M2) */}
-              {liveRots.map((rot) => {
-                const v = rotView(rot);
-                const hit = Math.max(56, rot.size + 12);
+              {/* Lények (DOM; a helyüket a rAF írja ref-en át — a React csak a listát kezeli, 10 Hz) */}
+              {hud.creatures.map((c) => {
+                const kind = BRAIN_ROT_KINDS[c.kind]!;
                 return (
-                  <button
-                    key={rot.id}
-                    type="button"
-                    data-brainrot={rot.id}
-                    data-warning={v.warning ? "true" : "false"}
-                    className="brainrot-creature absolute flex items-center justify-center select-none focus:outline-none"
-                    style={{
-                      left: rot.x - hit / 2,
-                      top: rot.y - hit / 2,
-                      width: hit,
-                      height: hit,
-                      // G-10: a fojtott (100 ms-os) lépések között a böngésző interpolál. Mozgáscsökkentésnél kikapcsol.
-                      transition: reducedMotion ? undefined : "left 100ms linear, top 100ms linear, transform 120ms ease-out",
-                      opacity: v.opacity,
+                  <div
+                    key={c.id}
+                    ref={(el) => {
+                      if (el) creatureEls.current.set(c.id, el);
+                      else creatureEls.current.delete(c.id);
                     }}
-                    onClick={() => handleCatchBrainRot(rot)}
-                    aria-label={`Kapd el: ${rot.name}`}
+                    data-brainrot={c.id}
+                    data-warning={c.warning ? "true" : "false"}
+                    data-carried={c.carried ? "true" : "false"}
+                    className={`brainrot-creature ${c.carried ? "br-carried" : ""} ${c.dazed ? "br-dazed" : ""}`}
+                    style={{ width: c.size, height: c.size, marginLeft: -c.size / 2, marginTop: -c.size / 2, opacity: c.opacity }}
+                    aria-hidden="true"
                   >
-                    <span className={`brainrot-body ${reducedMotion ? "" : "brainrot-pop"}`} style={{ width: rot.size, height: rot.size }}>
+                    <span className={`brainrot-body ${reducedMotion ? "" : "brainrot-pop"}`} style={{ width: c.size, height: c.size }}>
                       <span
-                        aria-hidden="true"
-                        className={`brainrot-aura ${reducedMotion ? "" : v.warning ? "brainrot-aura-warn" : "brainrot-aura-idle"}`}
-                        data-warning={v.warning ? "true" : "false"}
-                        style={{ animationDelay: `${(rot.pulsePhase % 1).toFixed(2)}s` }}
+                        className={`brainrot-aura ${reducedMotion ? "" : c.warning ? "brainrot-aura-warn" : "brainrot-aura-idle"}`}
+                        data-warning={c.warning ? "true" : "false"}
                       />
-                      <span className="brainrot-sprite" style={{ transform: `rotate(${rot.rotation}deg)` }}>
-                        <CollectibleAvatar name={rot.name} value={rot.xpValue} />
+                      <span className={`brainrot-sprite ${reducedMotion ? "" : c.carried ? "br-struggle" : ""}`}>
+                        <CollectibleAvatar name={kind.name} value={kind.xp} />
                       </span>
                     </span>
-                    <span className="brainrot-xp">{rot.xpValue} XP</span>
-                    {v.warning && (
-                      <span className="brainrot-alert" aria-hidden="true">
-                        <ShieldAlert className="h-5 w-5" />
-                      </span>
-                    )}
-                  </button>
+                    {!c.carried && <span className="brainrot-xp">{kind.xp} XP</span>}
+                    {c.dazed && <span className="br-dazed-mark">{"\u{1F4AB}"}</span>}
+                  </div>
                 );
               })}
 
-              {/* DOM-részecskék */}
-              {particles.map((p, i) => (
+              {/* A vadász (a helyét a rAF írja) */}
+              <div
+                ref={playerElRef}
+                className="br-player"
+                data-testid="br-player"
+                data-carrying={hud.carrying ? "true" : "false"}
+                style={{ width: playerSize, height: playerSize, marginLeft: -playerSize / 2, marginTop: -playerSize / 2 }}
+                aria-hidden="true"
+              >
+                <span className="br-player-ring" />
+                <span className="br-player-net">{"\u{1F945}"}</span>
+              </div>
+
+              {/* Lebegő feliratok (+XP, Elszökött!) — sávokra osztva, a tábla szélén belül (kanban #64) */}
+              {floats.map((ft) => (
                 <div
-                  key={`p-${i}`}
-                  className="absolute pointer-events-none"
-                  style={{
-                    left: p.x,
-                    top: p.y,
-                    opacity: p.life / p.maxLife,
-                    transform: `scale(${p.life / p.maxLife})`,
-                  }}
+                  key={ft.id}
+                  className={`br-float ${reducedMotion ? "br-float-still" : ""}`}
+                  data-kind={ft.kind}
+                  style={{ left: ft.x, top: ft.y, color: ft.color }}
                 >
-                  {p.emoji ? (
-                    <span style={{ fontSize: Math.max(14, p.size * 2) }}>{p.emoji}</span>
-                  ) : (
-                    <div
-                      className="rounded-full"
-                      style={{ width: p.size, height: p.size, backgroundColor: p.color, boxShadow: `0 0 8px ${p.color}` }}
-                    />
-                  )}
+                  {ft.text}
                 </div>
               ))}
 
-              {/* Lebegő feliratok (+XP, Elszökött!) */}
-              {floatingTexts.map((ft) => (
-                <motion.div
-                  key={ft.id}
-                  className="absolute pointer-events-none font-black text-lg whitespace-nowrap -translate-x-1/2"
-                  style={{
-                    left: ft.x,
-                    top: ft.y,
-                    color: ft.color,
-                    opacity: ft.life / 1.5,
-                    textShadow: "0 2px 8px rgba(0,0,0,0.85)",
-                  }}
-                  initial={reducedMotion ? false : { scale: 0.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                >
-                  {ft.text}
-                </motion.div>
-              ))}
-
-              {/* Üres pálya: rövid útmutató */}
-              {liveRots.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center px-6 pointer-events-none">
-                  <p className={`text-base font-semibold text-white/75 text-center ${reducedMotion ? "" : "animate-pulse"}`}>
-                    Koppints a lényekre, mielőtt eltűnnek! {"\u{1F9E0}"}
-                  </p>
+              {/* Egeres / billentyűs módban a súgó és a kérdés tárgya a tábla bal felső sarkában (érintősön a vezérlősávban) —
+                  így nem takar ketrecet. A tanító súgó (első 30 mp) elsőbbséget kap. */}
+              {!touchCapable && (hintEl ?? statusPill ?? comboBadge) && (
+                <div className="br-notes">
+                  {hintEl ?? statusPill}
+                  {comboBadge}
                 </div>
               )}
             </div>
+
+            {/* Érintővezérlő CSAK érintős eszközön (M5): joystick bal hüvelykujjra; kérdés alatt saját szünetgomb. */}
+            {touchCapable && (
+              <div className="br-controls" data-testid="br-touch-controls" data-game-controls>
+                <VirtualJoystick
+                  label="Vadász irányítása"
+                  radius="auto"
+                  resetSignal={joyReset}
+                  onChange={(v) => {
+                    // Joystick-reakció (#49): analóg, folytonos görbe; a tárcsa „előre” iránya fölfelé — a táblán y lefelé nő.
+                    const s = shapeJoystick(v);
+                    driverRef.current?.core.setInput(s.x, -s.y);
+                  }}
+                />
+                <div className="br-controls-side">
+                  {hintEl ?? statusPill}
+                  <div className="br-controls-row">
+                    {comboBadge}
+                    {questionOpen && (
+                      <button type="button" data-testid="br-quiz-pause" aria-label="Szünet" onClick={pause} className="br-quiz-pause">
+                        <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </main>
         </>
       )}
 
-      {/* --- KVÍZ --- */}
-      <AnimatePresence>
-        {phase === "quiz" && quiz && caughtRot && (
-          <motion.div
-            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm"
-            style={{
-              padding:
-                "max(8px, var(--game-safe-top)) max(8px, var(--game-safe-right)) max(8px, var(--game-safe-bottom)) max(8px, var(--game-safe-left))",
-            }}
-            initial={reducedMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              data-testid="br-quiz"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="br-quiz-prompt"
-              initial={reducedMotion ? false : { y: 40, opacity: 0, scale: 0.96 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              transition={{ type: "spring", stiffness: 420, damping: 30 }}
-              className={`brainrot-quiz w-full max-w-lg max-h-full overflow-y-auto rounded-3xl ${CATEGORY_BORDERS[quiz.category]} border-2 p-3 sm:p-4 shadow-2xl ${wrongShake ? "animate-brshake" : ""}`}
-            >
-              <div className="flex items-center gap-3 mb-2">
-                <span className="brainrot-quiz-avatar" aria-hidden="true">
-                  <CollectibleAvatar name={caughtRot.name} value={caughtRot.xpValue} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className={`text-sm font-extrabold uppercase tracking-wide ${CATEGORY_LABELS[quiz.category].color}`}>
-                    {CATEGORY_LABELS[quiz.category].icon} {quizTopicLabelHu(quiz.topic, CATEGORY_LABELS[quiz.category].label)} kvíz
-                  </p>
-                  <p className="text-sm text-white/75">
-                    {caughtRot.name} · <span className="text-amber-300 font-bold">{Math.round(caughtRot.xpValue * comboMultiplier)} XP</span>
-                    {comboMultiplier > 1 && <span className="text-yellow-300 font-bold"> · ×{comboMultiplier.toFixed(1)}</span>}
-                  </p>
-                </div>
-                {/* S13 / C10: a z-60-as kvízréteg eltakarja a HUD szünetgombját — saját szünetgomb (a Szökőár mintája). */}
-                <button
-                  type="button"
-                  data-testid="br-quiz-pause"
-                  aria-label="Szünet"
-                  onClick={pause}
-                  className="ml-auto inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-white hover:bg-white/20"
-                >
-                  <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} aria-hidden="true" />
-                </button>
-              </div>
+      {inRun && (
+        <InlineQuestion
+          {...q.bind}
+          onPick={onAnswer}
+          mode="bar"
+          skin="arena"
+          disabled={paused}
+          onWhy={openWhy}
+          testId="br-quiz"
+          promptTestId="br-prompt"
+          optionTestId={(i) => `br-option-${i}`}
+          onExpand={() => setExpanded(true)}
+          onCollapse={() => setExpanded(false)}
+        />
+      )}
 
-              <p id="br-quiz-prompt" className="text-lg sm:text-xl font-bold leading-snug mb-3">
-                {quiz.prompt}
-              </p>
-
-              <div className="brainrot-answers grid gap-2">
-                {quiz.options.map((o, i) => {
-                  const isCorrect = revealCorrectIdx === i;
-                  const isWrong = wrongIdx === i;
-                  const dim = revealCorrectIdx !== null && !isCorrect && !isWrong;
-                  return (
-                    <button
-                      key={`${o}-${i}`}
-                      type="button"
-                      className="game-answer-btn brainrot-answer"
-                      data-state={isCorrect ? "correct" : isWrong ? "wrong" : dim ? "dim" : "idle"}
-                      data-category={quiz.category}
-                      disabled={revealCorrectIdx !== null}
-                      onClick={() => onAnswer(i)}
-                      {...correctDataAttrs(i === quiz.correctIndex)}
-                    >
-                      <span className="brainrot-answer-key" aria-hidden="true">{String.fromCharCode(65 + i)}</span>
-                      <span className="min-w-0 flex-1 text-left">{o}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {streakProtector.warning && (
-                <p className="mt-2 text-sm text-amber-300 font-semibold">⚠ {streakProtector.warning}</p>
-              )}
-              {revealCorrectIdx !== null && wrongIdx !== null && (
-                <p className="mt-2 text-sm text-emerald-300">
-                  A helyes válasz: <strong>{quiz.options[revealCorrectIdx]}</strong>
-                </p>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {feedback && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
+      {feedback && <QuizFeedbackCard card={feedback} onDismiss={closeWhy} />}
 
       <PauseMenu
         open={paused && inRun}
@@ -1391,11 +1410,12 @@ export default function BrainRotSteal() {
         testId="br-over"
         title={won ? "Szuper vadászat!" : "Vadászat vége!"}
         won={won}
-        score={sessionXp}
+        score={result?.score ?? 0}
         best={best.best}
         isNewBest={isNewBest}
-        correct={correctAnswers}
-        total={correctAnswers + wrongAnswers}
+        correct={result?.correct ?? 0}
+        total={result?.total ?? 0}
+        // „Újra!” = új menet (nem a magyarázókártya tiltott újrapróbája).
         onRetry={startGame}
         retryLabel="Újra!"
         onBack={() => navigate("/games")}
@@ -1407,71 +1427,111 @@ export default function BrainRotSteal() {
                 <p className="text-sm text-white/70">elkapva</p>
               </div>
               <div className="rounded-xl bg-white/5 border border-white/10 px-1 py-1.5">
-                <p className="text-xl font-black text-rose-300 leading-tight">{totalMissed}</p>
+                <p className="text-xl font-black text-rose-300 leading-tight">{(result?.missed ?? 0) + (result?.lost ?? 0)}</p>
                 <p className="text-sm text-white/70">elszökött</p>
               </div>
               <div className="rounded-xl bg-white/5 border border-white/10 px-1 py-1.5">
-                <p className="text-xl font-black text-pink-300 leading-tight">{bestStreak}</p>
+                <p className="text-xl font-black text-pink-300 leading-tight">{result?.bestStreak ?? 0}</p>
                 <p className="text-sm text-white/70">sorozat</p>
               </div>
             </div>
-            {!won && (
-              <p className="text-sm text-white/75">
-                {BRAIN_ROT_CLEAR_CATCHES} elkapás nyitja a következő pályát — még {Math.max(0, BRAIN_ROT_CLEAR_CATCHES - totalCaught)}!
-              </p>
-            )}
+            <p className="px-1 text-sm font-bold text-amber-100" data-testid="br-next-goal">
+              {won
+                ? `Következő cél: tarts meg ${totalCaught + 2} lényt egy vadászat alatt!`
+                : `${BRAIN_ROT_CLEAR_CATCHES} megtartott lény nyitja a következő pályát — még ${Math.max(0, BRAIN_ROT_CLEAR_CATCHES - totalCaught)}!`}
+            </p>
+            <ResultReview items={q.director?.wrongList() ?? []} />
             <p className="text-sm text-white/70">{syncEligibility?.eligible ? "Eredmény elküldve!" : syncBanner}</p>
           </div>
         }
       />
 
-      <style>{`
-        @keyframes brshake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-6px); }
-          75% { transform: translateX(6px); }
-        }
-        .animate-brshake { animation: brshake 0.16s ease-in-out 2; }
-        .brainrot-start-icon { display: inline-block; filter: drop-shadow(0 4px 10px #0008); }
-        [data-game="BrainRotSteal"] .game-start-icon { background: radial-gradient(circle at 30% 25%, #ffffff40, transparent 55%), linear-gradient(160deg, #c026d3, #7c3aed 55%, #f59e0b); box-shadow: 0 14px 34px #c026d34d, inset 0 1px 0 #ffffff66; }
-        /* A jelvény-értesítő az eredménykártya FÖLÖTT jelenjen meg (a betűméretet a közös komponens adja, #429). */
-        [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] { z-index: 85; }
-        .brainrot-topics { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-        .brainrot-topics li { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9999px; font-size: 14px; font-weight: 800; color: #f5d0fe; background: #a21caf26; border: 1px solid #e879f940; }
-        [data-collectible-world][data-testid="br-board"] { background: radial-gradient(ellipse at 50% 15%, #8d60cc55, transparent 65%), linear-gradient(160deg, #191944, #241046) !important; }
-        .brainrot-creature { -webkit-tap-highlight-color: transparent; touch-action: manipulation; cursor: pointer; z-index: 2; }
-        .brainrot-creature:active { transform: scale(.86); }
-        .brainrot-creature:focus-visible { outline: 3px solid #fef08a; outline-offset: 2px; border-radius: 9999px; }
-        .brainrot-body { position: relative; display: block; }
-        .brainrot-pop { animation: brpop 240ms cubic-bezier(.2,.9,.3,1.3) both; }
-        @keyframes brpop { 0% { transform: scale(0); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
-        .brainrot-aura { position: absolute; inset: -14%; border-radius: 9999px; background: radial-gradient(circle, rgba(168,85,247,.55) 0%, rgba(236,72,153,.18) 45%, transparent 70%); }
-        .brainrot-aura[data-warning="true"] { background: radial-gradient(circle, rgba(244,63,94,.75) 0%, rgba(244,63,94,.25) 45%, transparent 72%); }
-        .brainrot-aura-idle { animation: brglow 2.2s ease-in-out infinite; }
-        .brainrot-aura-warn { animation: brwarn .42s ease-in-out infinite; }
-        @keyframes brglow { 0%, 100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.1); opacity: 1; } }
-        @keyframes brwarn { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.32); opacity: .45; } }
-        .brainrot-sprite { position: absolute; inset: 0; display: block; filter: drop-shadow(0 6px 10px #0009); }
-        .brainrot-xp { position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); padding: 0 6px; border-radius: 6px; font-size: 12px; line-height: 16px; font-weight: 900; white-space: nowrap; color: #fcd34d; background: #000000b3; pointer-events: none; }
-        .brainrot-alert { position: absolute; top: 0; right: 0; color: #fb7185; filter: drop-shadow(0 0 6px #f43f5e); pointer-events: none; }
-        .brainrot-combo { position: absolute; top: 8px; left: 8px; z-index: 3; display: inline-flex; align-items: center; gap: 2px; padding: 4px 10px; border-radius: 9999px; font-size: 16px; font-weight: 900; color: #422006; background: linear-gradient(180deg, #fde047, #f59e0b); box-shadow: 0 4px 14px #f59e0b66; pointer-events: none; }
-        [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] { top: max(8px, var(--game-safe-top)); }
-        .brainrot-level { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 9999px; font-size: 14px; font-weight: 800; color: #fde68a; background: #f59e0b1f; border: 1px solid #f59e0b40; }
-        .brainrot-quiz { background: linear-gradient(160deg, #1c1238 0%, #0f0a24 60%, #0b172d 100%); }
-        .brainrot-quiz-avatar { display: block; width: 48px; height: 48px; flex: 0 0 auto; }
-        @media (min-width: 560px) { .brainrot-answers { grid-template-columns: 1fr 1fr; } }
-        .brainrot-answer { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; border-radius: 16px; font-weight: 700; color: #fff; background: #ffffff14; border: 1.5px solid #ffffff2e; box-shadow: inset 0 -3px 0 #0006; -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: background-color .15s ease, transform .1s ease, border-color .15s ease; }
-        .brainrot-answer:not(:disabled):active { transform: translateY(1px) scale(.98); }
-        .brainrot-answer[data-category="english"] { border-color: #22d3ee59; }
-        .brainrot-answer[data-category="math"] { border-color: #f59e0b59; }
-        .brainrot-answer[data-category="hungarian"] { border-color: #10b98159; }
-        .brainrot-answer:not(:disabled):hover { background: #7c3aed40; }
-        .brainrot-answer[data-state="correct"] { background: #047857; border-color: #6ee7b7; }
-        .brainrot-answer[data-state="wrong"] { background: #9f1239; border-color: #fda4af; }
-        .brainrot-answer[data-state="dim"] { opacity: .45; }
-        .brainrot-answer-key { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: 0 0 auto; border-radius: 10px; font-size: 14px; font-weight: 900; color: #e9d5ff; background: #ffffff1a; }
-        @media (max-height: 500px) { .brainrot-quiz-avatar { width: 36px; height: 36px; } }
-      `}</style>
+      <style>{BRAIN_ROT_CSS}</style>
     </GameShell>
   );
 }
+
+/**
+ * A lap stílusa (a közös `index.css` a J0c / J8 szeleté). A ketrec ≥ 48 px, a visszajelzés szín + jel + szöveg (nem csak
+ * szín); a hiba narancs, nem telített piros (K.4/20); csökkentett mozgásnál nincs pattanás, küszködés, emelkedő felirat.
+ */
+const BRAIN_ROT_CSS = `
+  .brainrot-start-icon { display: inline-block; filter: drop-shadow(0 4px 10px #0008); }
+  [data-game="BrainRotSteal"] .game-start-icon { background: radial-gradient(circle at 30% 25%, #ffffff40, transparent 55%), linear-gradient(160deg, #c026d3, #7c3aed 55%, #f59e0b); box-shadow: 0 14px 34px #c026d34d, inset 0 1px 0 #ffffff66; }
+  /* A jelvény-értesítő az eredménykártya FÖLÖTT jelenjen meg (a betűméretet a közös komponens adja, #429). */
+  [data-game="BrainRotSteal"] [data-testid^="achievement-toast-"] { z-index: 85; top: max(8px, var(--game-safe-top)); }
+  .brainrot-topics { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .brainrot-topics li { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9999px; font-size: 14px; font-weight: 800; color: #f5d0fe; background: #a21caf26; border: 1px solid #e879f940; }
+  .brainrot-level { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 9999px; font-size: 14px; font-weight: 800; color: #fde68a; background: #f59e0b1f; border: 1px solid #f59e0b40; }
+
+  .br-main { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+  .br-board { flex: 1 1 auto; min-height: 0; width: 100%; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  [data-collectible-world][data-testid="br-board"] { background: radial-gradient(ellipse at 50% 15%, #8d60cc55, transparent 65%), linear-gradient(160deg, #191944, #241046) !important; }
+  .br-controls { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 4px; }
+  .br-controls-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; flex: 1 1 auto; }
+  @media (orientation: landscape) and (max-height: 520px) {
+    /* A közös .game-shell-fixed[data-playing] > main (0,2,1) oszlopot ad — a játék gyökerével erősebb (C-53). */
+    [data-game="BrainRotSteal"] .br-main[data-touch-controls="true"] { flex-direction: row-reverse; }
+    [data-game="BrainRotSteal"] .br-main[data-touch-controls="true"] .br-board { width: auto; flex: 1 1 auto; }
+    .br-controls { flex-direction: column-reverse; justify-content: space-between; padding: 4px 0; width: auto; max-width: 30vw; }
+    .br-controls-side { align-items: center; flex: 0 1 auto; }
+  }
+
+  .brainrot-creature { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; will-change: transform; display: flex; align-items: center; justify-content: center; }
+  .brainrot-body { position: relative; display: block; }
+  .brainrot-pop { animation: brpop 240ms cubic-bezier(.2,.9,.3,1.3) both; }
+  @keyframes brpop { 0% { transform: scale(0); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+  .brainrot-aura { position: absolute; inset: -14%; border-radius: 9999px; background: radial-gradient(circle, rgba(168,85,247,.55) 0%, rgba(236,72,153,.18) 45%, transparent 70%); }
+  .brainrot-aura[data-warning="true"] { background: radial-gradient(circle, rgba(251,146,60,.75) 0%, rgba(251,146,60,.25) 45%, transparent 72%); }
+  .brainrot-aura-idle { animation: brglow 2.2s ease-in-out infinite; }
+  .brainrot-aura-warn { animation: brwarn .42s ease-in-out infinite; }
+  @keyframes brglow { 0%, 100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.1); opacity: 1; } }
+  @keyframes brwarn { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.32); opacity: .45; } }
+  .brainrot-sprite { position: absolute; inset: 0; display: block; filter: drop-shadow(0 6px 10px #0009); }
+  .brainrot-xp { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); padding: 0 6px; border-radius: 6px; font-size: 12px; line-height: 16px; font-weight: 900; white-space: nowrap; color: #fcd34d; background: #000000b3; }
+  .br-carried { z-index: 5; }
+  .br-carried .brainrot-body { transform: scale(.78); }
+  .br-struggle { animation: brstruggle .32s ease-in-out infinite; }
+  @keyframes brstruggle { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg) translateY(-3px); } }
+  .br-dazed-mark { position: absolute; top: -10px; right: -6px; font-size: 22px; filter: drop-shadow(0 0 6px #67e8f9); }
+  .br-dazed .brainrot-aura { background: radial-gradient(circle, rgba(103,232,249,.6) 0%, rgba(103,232,249,.18) 45%, transparent 70%); }
+
+  .br-player { position: absolute; left: 0; top: 0; z-index: 4; pointer-events: none; will-change: transform; display: flex; align-items: center; justify-content: center; border-radius: 9999px; background: radial-gradient(circle at 35% 30%, #a5f3fc, #0891b2 60%, #164e63); box-shadow: 0 0 0 3px #ecfeff, 0 0 18px #22d3eecc, 0 6px 12px #0009; }
+  .br-player-ring { position: absolute; inset: -9px; border-radius: 9999px; border: 2px dashed #a5f3fc99; }
+  .br-player[data-carrying="true"] .br-player-ring { border-color: #fde047; border-style: solid; }
+  .br-player-net { font-size: 22px; line-height: 1; filter: drop-shadow(0 1px 2px #0009); }
+
+  /* A ketrec-felirat olvasható marad: a ketrecek a lények FÖLÖTT, a vadász alatt. */
+  .br-cages { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+  .br-cage { position: absolute; pointer-events: auto; display: flex; align-items: center; gap: 6px; min-width: 48px; min-height: 48px; padding: 6px 8px; border-radius: 16px; color: #fff; text-align: left; cursor: pointer; overflow: hidden;
+    background: repeating-linear-gradient(90deg, #ffffff1f 0 3px, transparent 3px 16px), linear-gradient(180deg, #4c1d95e6, #2e1065e6);
+    border: 2.5px solid #c4b5fd; box-shadow: 0 0 0 2px #0b0720, 0 0 18px #a78bfa66, inset 0 -4px 0 #00000059; -webkit-tap-highlight-color: transparent; touch-action: none; }
+  .br-cage:focus-visible { outline: 3px solid #fef08a; outline-offset: 2px; }
+  .br-cage-dwell { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(90deg, #fde04759 calc(var(--dwell, 0) * 100%), transparent calc(var(--dwell, 0) * 100%)); }
+  .br-cage-key { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 9999px; font-size: 15px; font-weight: 900; color: #1e1b4b; background: #e9d5ff; }
+  .br-cage-label { position: relative; min-width: 0; flex: 1 1 auto; font-size: clamp(14px, 4vmin, 18px); font-weight: 800; line-height: 1.18; overflow-wrap: break-word; hyphens: auto; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; text-shadow: 0 1px 2px #0009; }
+  .br-cage-label[data-long="true"] { font-size: 14px; }
+  .br-cage[data-state="correct"] { background: linear-gradient(180deg, #15803d, #166534); border-color: #86efac; box-shadow: 0 0 0 2px #0b0720, 0 0 26px #22c55ecc; animation: brcage 0.9s ease-in-out infinite; }
+  .br-cage[data-state="correct"] .br-cage-key { background: #22c55e; color: #fff; }
+  .br-cage[data-state="wrong"] { background: linear-gradient(180deg, #9a3412, #7c2d12); border-color: #fdba74; }
+  .br-cage[data-state="wrong"] .br-cage-key { background: #f97316; color: #fff; }
+  .br-cage[data-state="dim"] { opacity: .45; }
+  @keyframes brcage { 0%, 100% { box-shadow: 0 0 0 2px #0b0720, 0 0 16px #22c55e99; } 50% { box-shadow: 0 0 0 2px #0b0720, 0 0 32px #22c55eff; } }
+
+  .br-float { position: absolute; z-index: 5; pointer-events: none; transform: translateX(-50%); white-space: nowrap; font-size: 18px; font-weight: 900; text-shadow: 0 2px 8px #000000d9; animation: brfloat ${FLOAT_MS}ms ease-out both; }
+  .br-float-still { animation: brfade ${FLOAT_MS}ms linear both; }
+  @keyframes brfloat { 0% { opacity: 0; transform: translate(-50%, 8px) scale(.7); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -34px) scale(1); } }
+  @keyframes brfade { 0% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+  .br-controls-row { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+  .br-notes { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .brainrot-combo { display: inline-flex; align-items: center; gap: 2px; padding: 4px 10px; border-radius: 9999px; font-size: 16px; font-weight: 900; color: #422006; background: linear-gradient(180deg, #fde047, #f59e0b); box-shadow: 0 4px 14px #f59e0b66; pointer-events: none; }
+  .br-hint { margin: 0; max-width: 100%; padding: 6px 12px; border-radius: 12px; font-size: 14px; font-weight: 800; line-height: 1.25; text-align: center; color: #f5f3ff; background: #1e1038e6; border: 1px solid #c4b5fd59; pointer-events: none; }
+  .br-status { margin: 0; max-width: 100%; padding: 6px 10px; border-radius: 12px; font-size: 14px; font-weight: 800; line-height: 1.25; color: #f5f3ff; background: #1e1038e6; border: 1px solid #a3e63566; overflow-wrap: anywhere; }
+  .br-notes { position: absolute; top: 8px; left: 8px; z-index: 4; max-width: min(46%, 340px); pointer-events: none; }
+  .br-notes .br-hint { text-align: left; }
+  .br-controls-side .br-hint, .br-controls-side .br-status { text-align: right; }
+  .br-quiz-pause { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 16px; color: #fff; background: #ffffff1a; border: 1px solid #ffffff40; }
+  @media (prefers-reduced-motion: reduce) {
+    .br-cage[data-state="correct"] { animation: none; }
+  }
+`;

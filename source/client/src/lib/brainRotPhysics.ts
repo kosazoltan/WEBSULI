@@ -41,8 +41,19 @@ const REFERENCE_FRAME_MS = 1000 / 60;
 const MAX_STEP_MS = 120;
 
 export function stepBrainRot(rot: MovingRot, elapsedMs: number, bounds: Bounds): MovingRot {
+  if (Math.max(0, Math.min(MAX_STEP_MS, elapsedMs)) / REFERENCE_FRAME_MS === 0) return rot;
+  const out = { ...rot };
+  stepBrainRotInPlace(out, elapsedMs, bounds);
+  return out;
+}
+
+/**
+ * J5a: ugyanaz a lépés, de a kapott objektumot írja (allokáció nélkül — a „Lény-aréna” magja minden 1/60 s-os lépésben
+ * minden lényre hívja, KSZ-5). A `stepBrainRot` ennek a másolatos változata; a viselkedés bitre azonos.
+ */
+export function stepBrainRotInPlace(rot: MovingRot, elapsedMs: number, bounds: Bounds): void {
   const dt = Math.max(0, Math.min(MAX_STEP_MS, elapsedMs)) / REFERENCE_FRAME_MS;
-  if (dt === 0) return rot;
+  if (dt === 0) return;
 
   const half = rot.size / 2;
   // Elfajult pályaméret (még nem mért DOM) esetén a határok összeérnek; a
@@ -65,5 +76,9 @@ export function stepBrainRot(rot: MovingRot, elapsedMs: number, bounds: Bounds):
   x = Math.max(minX, Math.min(maxX, x));
   y = Math.max(minY, Math.min(maxY, y));
 
-  return { ...rot, x, y, vx, vy, rotation: rot.rotation + rot.rotSpeed * dt };
+  rot.x = x;
+  rot.y = y;
+  rot.vx = vx;
+  rot.vy = vy;
+  rot.rotation = rot.rotation + rot.rotSpeed * dt;
 }
