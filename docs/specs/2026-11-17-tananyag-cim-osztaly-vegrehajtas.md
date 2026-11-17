@@ -114,3 +114,6 @@ regresszió: `npx.cmd playwright test -c playwright.classroom-badge.config.ts --
 - Az admin kártyán a kijelölő + fogantyú réteg (`AdminFileDashboard.tsx:99-113`, `absolute top-2 left-2`) eddig is rátakart a cím első
   betűjére keskeny nézetben („előtte” kép); az előtaggal ez az osztály SZÁMÁT takarná. Javítás: a `FileCard.tsx` címoszlopa `ml-3`
   bal margót kap; a spec ellenőrzi, hogy a `<h3>` nem kerül a fogantyú alá (360×640, 390×844, asztali).
+- A közös modul regex-visszatekintést (lookbehind) nem használhat: a kliens is betölti, és a Safari < 16.4 szintaktikai hibának
+  veszi (`source/tests/no-lookbehind-client.test.ts` — a push előtti kapu teljes egységtesztje fogta meg). A szóhatárt a minta
+  elején álló határoló karakter adja; a keresőkifejezés elemzésénél elfogott csoportként visszakerül a szövegbe.

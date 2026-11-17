@@ -23,7 +23,10 @@ const ORDINAL_GRADE = new Map<string, number>(ORDINALS);
 const ORDINAL_ALT = ORDINALS.map(([word]) => word).join("|");
 const GRADE_NUMBER = "(?:1[0-2]|[1-9])";
 const GRADE_WORD = "(?:osztaly|evfolyam)";
-const WORD_START = "(?<![\\p{L}\\p{N}])";
+// Szóhatár a minta előtt, visszatekintés nélkül (a Safari < 16.4 a regex-visszatekintést szintaktikai hibának veszi —
+// tests/no-lookbehind-client.test.ts): a határoló karakter a minta része; a keresőkifejezésnél elfogott csoport, amely visszakerül.
+const WORD_START = "(?:^|[^\\p{L}\\p{N}])";
+const CAPTURED_WORD_START = "(^|[^\\p{L}\\p{N}])";
 const WORD_END = "(?![\\p{L}\\p{N}])";
 /** „ötödikes”, „harmadikosok”, „elsősöknek” — de az „elsősegély”, „elsősorban” nem osztály. */
 const ORDINAL_SUFFIX = "(?:s|es|os)(?:ok|ek)?(?:nak|nek)?";
@@ -69,7 +72,7 @@ export function materialDisplayTitle(title: string, classroom: unknown): string 
 /** Tört, tizedes, tartomány vagy művelet része nem osztály: „3/4”, „3,5”, „1-2”. */
 const NUMBER_GLUE = ".,/:+*=\\-";
 const QUERY_NUMBER = new RegExp(
-  `(?<![\\p{L}\\p{N}${NUMBER_GLUE}])(\\d{1,2})(?:\\s*\\.)?`
+  `(^|[^\\p{L}\\p{N}${NUMBER_GLUE}])(\\d{1,2})(?:\\s*\\.)?`
   // A képző közvetlenül vagy kötőjellel kapcsolódik („5-ös”, „5.-es”); szóközzel nem („5. és 6.” — az „és” nem képző).
   + `(?:(?:\\s?-\\s?)?(?:edik|odik|adik|dik|ik|es|os|as))?`
   + `(?:\\s*(?:osztaly\\p{L}*|evfolyam\\p{L}*|oszt\\.?|evf\\.?|o\\.?))?`
@@ -77,11 +80,11 @@ const QUERY_NUMBER = new RegExp(
   "gu",
 );
 const QUERY_ORDINAL = new RegExp(
-  `${WORD_START}(${ORDINAL_ALT})(?:${ORDINAL_SUFFIX})?(?:\\s+(?:osztaly|evfolyam)\\p{L}*)?${WORD_END}`,
+  `${CAPTURED_WORD_START}(${ORDINAL_ALT})(?:${ORDINAL_SUFFIX})?(?:\\s+(?:osztaly|evfolyam)\\p{L}*)?${WORD_END}`,
   "gu",
 );
 const QUERY_PROGRAMMING = new RegExp(
-  `${WORD_START}prog(?:ramoz\\p{L}*)?\\.?(?:\\s+(?:alapismeret\\p{L}*|alapok))?${WORD_END}`,
+  `${CAPTURED_WORD_START}prog(?:ramoz\\p{L}*)?\\.?(?:\\s+(?:alapismeret\\p{L}*|alapok))?${WORD_END}`,
   "gu",
 );
 
@@ -99,20 +102,20 @@ export type GradeQuery = {
 export function parseGradeQuery(query: string): GradeQuery {
   const grades = new Set<number>();
   let text = foldText(query);
-  text = text.replace(QUERY_PROGRAMMING, () => {
+  text = text.replace(QUERY_PROGRAMMING, (_match, before: string) => {
     grades.add(0);
-    return " ";
+    return `${before} `;
   });
-  text = text.replace(QUERY_ORDINAL, (_match, word: string) => {
+  text = text.replace(QUERY_ORDINAL, (_match, before: string, word: string) => {
     const grade = ORDINAL_GRADE.get(word);
     if (grade !== undefined) grades.add(grade);
-    return " ";
+    return `${before} `;
   });
-  text = text.replace(QUERY_NUMBER, (match, digits: string) => {
+  text = text.replace(QUERY_NUMBER, (match, before: string, digits: string) => {
     const grade = normalizeClassroom(Number(digits));
     if (grade === null) return match;
     grades.add(grade);
-    return " ";
+    return `${before} `;
   });
   const rest = text.split(/[^\p{L}\p{N}]+/u).filter((word) => word && !/^(?:osztaly|evfolyam)/.test(word) && !FILLER_WORDS.has(word));
   return { grades: [...grades].sort((a, b) => a - b), rest };
