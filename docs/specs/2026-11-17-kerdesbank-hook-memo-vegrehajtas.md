@@ -11,8 +11,8 @@ Fájl: `source/client/src/hooks/useMaterialQuizzes.ts`.
 2. Modul-szintű állandók: `const EMPTY_ITEMS: MaterialQuizItem[] = Object.freeze([]) as unknown as MaterialQuizItem[];` és
    `const EMPTY_MATERIALS: MaterialQuizResponse["materials"] = Object.freeze([]) as unknown as MaterialQuizResponse["materials"];`.
 3. Exportált tiszta függvény:
-   `export function selectPlayableMaterialItems(items, topicFilter?, isPlayable = isPlayableQuestion): MaterialQuizItem[]` — a törzs a régi IIFE
-   tartalma: `uniqueQuizContent(items.filter(isPlayable))`, majd ha van `topicFilter`, `filter((i) => (i.topic ?? "").toLowerCase() === topicFilter)`.
+   `export function selectPlayableMaterialItems(items, topicFilter?): MaterialQuizItem[]` — a törzs a régi IIFE
+   tartalma: `uniqueQuizContent(items.filter(isPlayableQuestion))`, majd ha van `topicFilter`, `filter((i) => (i.topic ?? "").toLowerCase() === topicFilter)`.
 4. A hookban: `const data = q.data;` `const rawItems = data?.items ?? EMPTY_ITEMS;` `const materials = data?.materials ?? EMPTY_MATERIALS;`
    `const items = useMemo(() => (data ? selectPlayableMaterialItems(data.items ?? EMPTY_ITEMS, topicFilter) : EMPTY_ITEMS), [data, topicFilter]);`
 5. A visszatérési objektum mezői változatlanok (`grade`, `materials`, `items`, `rawItems`, `isLoading`, `isError`).
