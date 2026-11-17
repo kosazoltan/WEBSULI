@@ -1078,6 +1078,22 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
 - **D-J1a-15 (K4) Fekvő nézet.** A táblák alsó széle nem lóghat a futó vetített feje alá; a megoldás-kijelzés alatt a nem
   helyes táblák halványak és nem érinthetők.
 
+#### J1a döntései — az újra-review (#483, fej 7fc753e4) feltételei, a kód előtt (2026-11-17)
+
+- **D-J1a-16 (ÚK1, közös director, kupon ág) Az ismétlés az eredeti tétel.** Kupon módban a menetközi ismétlés és a
+  kimerülés utáni visszatérés is a menetben ELŐSZÖR kiadott `PlayQuestion`-t adja vissza (`source: "coupon"`,
+  `couponItemId` megőrizve), nem a közös ismétlési sor `restore()`-ával visszaállított (forrást `material`-ra normalizáló)
+  példányt; a `couponAsked` nyilvántartás csak a feltevés sorszámát frissíti, a tételt nem írja felül. Kupon NÉLKÜL a
+  viselkedés bitre változatlan (az ág csak `couponOnly` mellett fut).
+- **D-J1a-17 (ÚK2) Tétlen átfutás a jó kapun — semleges, igaz felirat.** Ha a gyerek szándékos bemenet nélkül a JÓ kapun
+  fut át (turbót kap), a kérdés-sáv állapotsora nem „Lejárt az idő”, hanem: „Jó kapu! Most nem választottál — ezt még
+  megkérdezzük.” A nyilvántartás változatlanul „nem válaszolt” (D-J1a-13); rossz kapun tétlenül átfutva marad a
+  „Lejárt az idő. A jó válasz: …”. A közös `InlineQuestion` nem változik: a lap a saját feliratát a kártya állapotsorába
+  teszi, a közös állapotsor ilyenkor rejtett (egy élő régió marad). A döntés a mag tiszta függvénye
+  (`idleCrossingWasGood`), az outcome alkalmazása előtt.
+- Lista módú képernyőkép 390×844-ről és 844×390-ről is (mérési mappa). ÚK3 (lista mód takarása 360×640-en) és az
+  alacsonyak: J1b.
+
 ### J1b — Mentőöv, Örvény-miniboss, Nagy Hullám főellenfél, szakaszok
 
 1. Állapot-sor commit.
