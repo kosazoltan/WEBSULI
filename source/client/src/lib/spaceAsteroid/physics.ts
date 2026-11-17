@@ -168,14 +168,18 @@ export function waveEnemyCount(wave: number): number {
   return 4 + Math.min(Math.max(1, Math.floor(wave)) * 2, 18);
 }
 
+/** A névleges érkezési időköz szorzója (a hullám-képlet előtti hangolás). */
+export const SPAWN_BASE_SCALE = 1.2;
+/** A lemaradás-könnyítés plafonja: az intenzitás legfeljebb ennyivel (10%, KSZ-16) ritkítja az érkezést. */
+export const SPAWN_RELIEF_MAX = 0.1;
 /**
  * Két ellenfél érkezése között eltelő játékidő (mp): a hullámmal sűrűsödik; a JÁTÉK-intenzitás (`pace.intensity()`, 0..1: sérülés
- * és közeli veszély hajtja) csak enyhíti — sérülés után ritkább az érkezés (levegő), nyugodt menetben a névleges. A KÉRDÉS-sáv
+ * és közeli veszély hajtja) csak enyhíti — legfeljebb +`SPAWN_RELIEF_MAX` (10%, KSZ-16 plafon): sérülés után ritkább az érkezés. A KÉRDÉS-sáv
  * (jó / rossz válasz) a pálya sűrűségét NEM hajtja (review #486 Ú1, terv 4.1/6): a kérdés nem büntetés, a jó válasz mindig előny.
  */
 export function waveSpawnInterval(wave: number, intensity: number): number {
   const i = Math.min(1, Math.max(0, Number.isFinite(intensity) ? intensity : 0));
-  return clamp(1.4 - wave * 0.06, 0.4, 1.4) * (1.15 + i * 0.3);
+  return clamp(1.4 - wave * 0.06, 0.4, 1.4) * SPAWN_BASE_SCALE * (1 + i * SPAWN_RELIEF_MAX);
 }
 
 /** A hullám-felirat („HULLÁM n”) látszási ideje (mp) — a hullámok közt nincs kapu, csak ez a felirat. */

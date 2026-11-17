@@ -225,9 +225,9 @@ const range = (u: number, lo: number, hi: number): number => lo + u * (hi - lo);
  * a hulló elemeket (élet / pajzs / erő / bomba) is felveszi — ugyanazzal a drop-táblával, mint a lap (`physics.ts`).
  * Kalibráció (20 seed, 2026-11-17, review #486 M3): lásd `T/space-asteroid-sim.test.ts` fejkommentje.
  */
-export const DODGE_IMPACT = 0.38;
-export const DODGE_FIGHTER = 0.9;
-export const DODGE_BOSS = 0.75;
+export const DODGE_IMPACT = 0.40;
+export const DODGE_FIGHTER = 0.95;
+export const DODGE_BOSS = 0.8;
 
 export const BOSS_TOTAL_HP = 90;
 const BOSS_PHASE_HP = [50, 25, 15] as const;
@@ -237,7 +237,7 @@ export const START_LIVES = 3;
 export { MAX_LIVES };
 
 /** A bot a felvehető elemet ilyen könnyítéssel éri el (ügyességi dobás; a hajó a hulló elem alá áll). */
-export const PICKUP_CATCH_EASE = 0.95;
+export const PICKUP_CATCH_EASE = 0.85;
 /** Az ütközéshez a hajónak és az ellenfélnek oldalirányban is át kell fednie (a lapon a hajó mozog; ennyi eséllyel ér a függőleges pályára). */
 export const LATERAL_OVERLAP = 0.6;
 

@@ -1564,10 +1564,24 @@ fizika-esetek (pattogás, határok) változatlanok.
   (`lifeLossOutcome`, a lap és a szimuláció közös szabálya), az eredmény nem írható felül (`endRun(false)` a győzelmet megtartja);
   e2e: `forceState({ bossFinale: true })` — egy élet, elesett főellenfél, a hajón repülő ellenséges lövedék → „Legyőzted a főellenfelet!”.
 - **Interpolált rajz (K.4/9, KSZ-4):** a fix lépés előző és mostani helyzete között a rajz az `alpha`-val interpolál (`interpolate`).
-- **A pálya sűrűségét a JÁTÉK-intenzitás hajtja (review #486 Ú1, terv 4.1/6):** `waveSpawnInterval(wave, intensity)` — a `pace.intensity()`
-  (sérülés / közeli veszély) csak enyhíti (≤ +30%); a KÉRDÉS-sáv a pálya sűrűségét nem hajtja, csak a kérdések nehézségét / ablakát.
-  Így a jó válasz mindig előny, a rossz válasz nem könnyít. Sim-teszt: 3 évfolyamsáv × 20 / 45 / 75 / 95%: a győzelem a pontossággal nem
-  csökken (−1/20 tűréssel), és kérdéssel nem kevesebb, mint kérdés nélkül.
+- **A pálya sűrűségét a JÁTÉK-intenzitás hajtja (review #486 Ú1 / V1, terv 4.1/6, KSZ-16):** `waveSpawnInterval(wave, intensity)` =
+  hullám-képlet × `SPAWN_BASE_SCALE` (1,2) × (1 + `intensity` × `SPAWN_RELIEF_MAX`); a `pace.intensity()` (sérülés +0,25, közeli
+  veszély +0,05/s, rossz válasz +0,1) a lemaradás-könnyítést legfeljebb **+10%-ra** korlátozza (KSZ-16: legfeljebb ±10%). A KÉRDÉS-sáv
+  (a jó / rossz válasz sávja) a pálya sűrűségét NEM hajtja, csak a kérdések nehézségét / ablakát. Pontosan: a rossz válasz is ad
+  +0,1 intenzitást, ez legfeljebb **+1%** átmeneti ritkítás az érkezésben (a 3 apró szikla jóval nagyobb, ellenkező hatású); a jó
+  válasz nem ritkít. Így a jó válasz mindig előny. A kicsiknek (3–4. évfolyam) a könnyítés az évfolyam-szabályból jön (`gradeEase`: 1,3×
+  ritkább érkezés, 0,85× sebesség), nem a plafon emeléséből. Sim-teszt: 2 évfolyamsáv (3–4., „5. évfolyamtól” — a világ az 5. évfolyamtól
+  nem függ az évfolyamtól, csak a kérdésbank, ezért ez EGY számítás) × 20 / 45 / 75 / 95%: a győzelem a pontossággal nem csökken
+  (−1/20 tűréssel), és kérdéssel nem kevesebb, mint kérdés nélkül.
+- **A szimuláció bot-kalibrációja (UNVERIFIED a valós gyerek-ügyességre; a győzelmi számok a korábbi PR-táblákkal NEM összehasonlíthatók,
+  mert a modell azóta változott: közös szabálymag, felvehető elemek, oldalirányú átfedés, intenzitás-hajtotta sűrűség):**
+  `DODGE_IMPACT` = 0,40 (a hajó oszlopába érő ellenfél kikerülésének küszöbe: ügyességi dobás < küszöb → kitérés; a lap
+  ütközés-vizsgálatát helyettesíti), `DODGE_FIGHTER` = 0,95 és `DODGE_BOSS` = 0,8 (a vadászgép / főellenfél lövésének kikerülése; a
+  lövés előjelzett, de a bot reakciója véges), `LATERAL_OVERLAP` = 0,6 (ekkora eséllyel ér az ellenfél a hajó oszlopába; kis szikla:
+  `0,55 + 0,15 × méret` szorzóval kisebb eséllyel, a hitbox kisebb), `PICKUP_CATCH_EASE` = 0,85 (a hulló elemet ekkora ügyességi
+  küszöbbel éri el). Az értékeket úgy választottuk, hogy a tervezett viselkedés-tulajdonságok teljesüljenek: az erős modell végigviszi,
+  a gyenge kérdés nélkül nem, a kérdés segít (az `Ú1` teszt), a menet ~3 perc — nem a valós ügyességből mérve. Javasolt horgony (jegyre
+  kerül): a lapon szkriptelt játékos ütközés / perc mérése, amelyhez a `DODGE_*` és a `LATERAL_OVERLAP` illeszthető.
 - **Tartott tűz jelzése:** ha a lövedék átmegy a kristályon (nem élesített / régi nyomás), „Engedd el a tűzgombot, és lőj újra a válaszhoz!”
   jelenik meg 3,5 mp-re, amíg a gyerek lövéssel egyszer még nem válaszolt (`sa-hold-hint`).
 - **Átméretezés nyitott kérdésnél:** a mag új aréna-méretből újraszámolja a kristályok helyét (`rezoneCrystals`), az élesítés újraindul.

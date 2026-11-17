@@ -15,7 +15,7 @@ import {
   createSimGame,
   questionTotals,
 } from "../client/src/lib/spaceAsteroid/sim";
-import { BOSS_WAVE, HIT_INVULN_SEC, TUTORIAL_SEC, WAVE_COUNT, waveEnemyCount, waveSpawnInterval } from "../client/src/lib/spaceAsteroid/physics";
+import { BOSS_WAVE, HIT_INVULN_SEC, TUTORIAL_SEC, WAVE_COUNT, SPAWN_RELIEF_MAX, waveEnemyCount, waveSpawnInterval } from "../client/src/lib/spaceAsteroid/physics";
 
 /**
  * J6a — Galaktikus Aszteroida szimulációs elfogadás a közös harness-szel (végrehajtás K.6, J6a 5.; terv 6.2: J2, J3, J4, J6,
@@ -33,8 +33,8 @@ import { BOSS_WAVE, HIT_INVULN_SEC, TUTORIAL_SEC, WAVE_COUNT, waveEnemyCount, wa
  * érő ellenfél csak `LATERAL_OVERLAP` eséllyel ütközik (a hajó oszlopába ér), a bot a hulló elemeket felveszi. Nem minden
  * ellenfél ütközik, ami nincs lelőve.
  *
- * Mért értékek (2026-11-17, ezen a gépen, 20 seed, 900 mp): győzelem kérdéssel / kérdés nélkül — SIM_YOUNG (3. évf.) 15 / 5,
- * SIM_AVERAGE 18 / 13, SIM_STRONG 20 / 19, SIM_WEAK 4 / 0 (a pálya sűrűségét a játék-intenzitás hajtja, nem a kérdés-sáv — Ú1); a pontos számokat a `console.log` sorok adják (`node --test`).
+ * Mért értékek (2026-11-17, ezen a gépen, 20 seed, 900 mp): győzelem kérdéssel / kérdés nélkül — SIM_YOUNG (3. évf.) 14 / 5,
+ * SIM_AVERAGE 18 / 13, SIM_STRONG 20 / 19, SIM_WEAK 3 / 0 (a pálya sűrűségét a játék-intenzitás hajtja, nem a kérdés-sáv — Ú1); a pontos számokat a `console.log` sorok adják (`node --test`).
  */
 
 const factory = createSimGame as unknown as SimGameFactory;
@@ -309,12 +309,12 @@ test("J7 — a menet első kérdése a tananyag (material) tétele, utána a ban
   assert.ok(keys.length > 3 && keys.slice(3).every((k) => !k.startsWith("mat:")), "a tananyag elfogyása után a bank folytatja");
 });
 
-test("review #486 Ú1 — a pálya sűrűségét a JÁTÉK-intenzitás hajtja, nem a kérdés-sáv: a győzelem a pontossággal nem csökken, és a kérdés sosem rosszabb, mint a kérdés nélküli menet (3 évfolyamsáv × 20 / 45 / 75 / 95%)", () => {
+test("review #486 Ú1 — a pálya sűrűségét a JÁTÉK-intenzitás hajtja, nem a kérdés-sáv: a győzelem a pontossággal nem csökken, és a kérdés sosem rosszabb, mint a kérdés nélküli menet (2 évfolyamsáv (3–4. és 5-től) × 20 / 45 / 75 / 95%)", () => {
   const rows: string[] = [];
   for (const [name, base, grade] of [
     ["3–4. évf.", SIM_YOUNG, 3],
-    ["5–8. évf.", SIM_AVERAGE, 6],
-    ["9–12. évf.", SIM_AVERAGE, 10],
+    // az 5. évfolyamtól a világ nem függ az évfolyamtól (`gradeEase` = 1), csak a kérdésbank: EGY számítás, nem két független bizonyíték
+    ["5. évfolyamtól", SIM_AVERAGE, 6],
   ] as const) {
     const q: number[] = [];
     const n: number[] = [];
@@ -339,7 +339,11 @@ test("review #486 Ú1 — a pálya sűrűségét a JÁTÉK-intenzitás hajtja, n
 test("review #486 Ú1 — a kérdés-sáv a pálya érkezési sűrűségét nem változtatja (csak az intenzitás enyhít)", () => {
   assert.equal(waveSpawnInterval(3, 0), waveSpawnInterval(3, 0), "determinisztikus");
   assert.ok(waveSpawnInterval(3, 1) > waveSpawnInterval(3, 0), "sérülés után ritkább az érkezés (levegő)");
-  assert.ok(waveSpawnInterval(3, 1) / waveSpawnInterval(3, 0) <= 1.3, "az intenzitás hatása plafonozott (KSZ-16)");
+  // KSZ-16: a lemaradás-könnyítés (az adaptív enyhítés) legfeljebb ±10%-ot változtat az érkezésen
+  assert.ok(waveSpawnInterval(3, 1) / waveSpawnInterval(3, 0) <= 1.1 + 1e-9, "az intenzitás hatása legfeljebb +10% (KSZ-16)");
+  assert.equal(SPAWN_RELIEF_MAX, 0.1);
+  // a rossz válasz is +0,1 intenzitást ad (WRONG_GAIN): ez legfeljebb +1% átmeneti ritkítás — a pontos, leírt hatás
+  assert.ok(waveSpawnInterval(3, 0.1) / waveSpawnInterval(3, 0) <= 1.01 + 1e-9, "a rossz válasz hatása ≤ +1%");
   const sig = (w: number) => waveSpawnInterval(w, 0);
   assert.ok(sig(8) < sig(1), "a hullámmal sűrűsödik");
 });
