@@ -38,6 +38,7 @@ const PATH = `(?:[\\w.@-]+/)*[\\w.@-]+\\.(?:${FILE_EXT})`;
 // [1] fej-előtag, [2] út, [3] sor, [4] záró sor
 const FILE_LINE = new RegExp(`(?<![\\w/.\\\\@-])(?:([0-9a-f]{7,40}):)?(${PATH}):(\\d+)(?:\\s*[-–]\\s*(\\d+))?(?![\\w])`, 'g');
 const FILE_LINE_ONE = new RegExp(FILE_LINE.source);
+const FILE_NAME = new RegExp(`^${PATH}$`);
 const FILE_LINE_HASH =new RegExp(`(?<![\\w/.\\\\@-])(${PATH})#L(\\d+)(?:-L?(\\d+))?(?![\\w])`, 'g');
 const FILE_NTH_LINE = new RegExp(`(?<![\\w/.\\\\@-])(${PATH})\`?\\s+(\\d+)\\.\\s*sor(?:ában|ában|án|a|ától|áig)?\\b`, 'g');
 const QUOTE_AFTER = /^`?\s*(?:→|->|idézet\s*:)\s*`([^`\n]+)`/;
@@ -108,7 +109,8 @@ export function extractRefs(md) {
       const abbrev = path.startsWith('-') || /…|\.\.\.$/.test(before) || PLACEHOLDER.test(path);
       const q = QUOTE_AFTER.exec(text.slice(m.index + m[0].length));
       // a nyíl utáni MÁSIK hivatkozás (`a.ts:1` → `b.ts:2`, `:2503`) nem kódidézet
-      const quote = q && !FILE_LINE_ONE.test(q[1]) && !/^:\d/.test(q[1]) ? q[1] : undefined;
+      // … és a nyíl utáni puszta fájlnév (`a.ts:84` → `promptFit.ts`; korpusz: review-szoletra 53. sor) sem
+      const quote = q && !FILE_LINE_ONE.test(q[1]) && !/^:\d/.test(q[1]) && !FILE_NAME.test(q[1].trim()) ? q[1] : undefined;
       add({ kind: 'file-line', ref: m[0], line, path, from: Number(m[3]), to: Number(m[4] ?? m[3]), snippet: quote, head: m[1] ?? sectionHead, abbrev });
     }
     for (const re of [FILE_LINE_HASH, FILE_NTH_LINE]) {

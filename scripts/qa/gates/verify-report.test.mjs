@@ -57,6 +57,7 @@ test('B1/a: kódidézet CSAK explicit jelöléssel (→ vagy „idézet:”); he
   assert.deepEqual(st(checkReferences('`scripts/qa/gates/verify-report.mjs:4` → `return`', env)), [['scripts/qa/gates/verify-report.mjs:4', UNKNOWN]]);
   // a nyíl utáni MÁSIK hivatkozás nem idézet
   assert.deepEqual(st(checkReferences('`scripts/qa/gates/verify-report.mjs:2` → `sim.ts:1`, `:3`', env)).map((x) => x[1]), [TRUE, TRUE]);
+  assert.deepEqual(st(checkReferences('`scripts/qa/gates/verify-report.mjs:2` → `promptFit.ts`', env)), [['scripts/qa/gates/verify-report.mjs:2', TRUE]], 'nyíl utáni puszta fájlnév nem idézet');
 });
 
 test('B1/b: rövidítés-előtag (WT/, L/), …-os rövidítés, munkafa / scratchpad út, más ág, ágnév, helyőrző', () => {
