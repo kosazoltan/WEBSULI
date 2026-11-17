@@ -237,6 +237,38 @@ test.describe("J1 / J5: a játék a kérdés alatt fut (lassítva, ≥ 0,35×), 
     expect((await rate(800)).r, "az újrakezdett menet teljes sebességgel fut").toBeGreaterThan(0.5);
   });
 
+  test("átmeneti kapu 3f: a megállítási okok nem oldják fel egymást („Miért?” + háttérbe tett lap → folytatás után is áll, amíg a kártya nyitva)", async ({ page }) => {
+    await page.goto("/games/tsunami-english?seed=31");
+    await page.getByTestId("button-tsunami-start").click();
+    await expect(page.getByTestId("tsunami-key-hint")).toBeVisible();
+    await openQuestion(page);
+    await expect(gates(page)).toHaveCount(3, { timeout: 10_000 });
+    const wrong = page.locator('[data-testid="ts-quiz"] .ts-gate[data-correct="false"]').first();
+    await expect(wrong).toBeVisible();
+    await wrong.click();
+    await page.getByTestId("play-why").first().click();
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+    const sim = async () => (await probe(page)).simTime;
+    const s0 = await sim();
+    // A lap háttérbe kerül → szünet menü; folytatás: a kártya még nyitva → a játék tovább áll.
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    await page.getByTestId("game-resume").click();
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+    await page.waitForTimeout(800);
+    expect(await sim(), "a szünet feloldása nem oldja fel a „Miért?” megállítását").toBe(s0);
+    await page.getByTestId("quiz-feedback-dismiss").click();
+    await expect.poll(sim, { message: "a kártya bezárása után fut tovább" }).toBeGreaterThan(s0);
+  });
+
   test("billentyűzet: ←/→ sávot vált, ↑ ugrik (egy sáv / lenyomás)", async ({ page }) => {
     await page.goto("/games/tsunami-english?seed=3");
     await page.getByTestId("button-tsunami-start").click();

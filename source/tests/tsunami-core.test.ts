@@ -342,6 +342,10 @@ test("egy válasz / kérdés (terv 8.4): a kapu-tábla két egyidejű érintés�
     q = sim.question();
   }
   assert.ok(q, "20 mp-en belül nyílik kérdés");
+  // Élesítés (átmeneti kapu 3a): a megjelenés utáni 400 ms-ban az érintés nem válasz.
+  assert.equal(sim.driver.tapOption(q.correctOption), null, "a megjelenés pillanatában eső érintés nem válasz");
+  for (let t = 0; t < 420; t += STEP) sim.step(STEP, { skillRoll: 0 });
+  assert.equal(sim.stats().answered, 0);
   const wrong = (q.correctOption + 1) % q.optionCount;
   sim.driver.tapOption(wrong);
   sim.driver.tapOption(q.correctOption); // a második ujj — eldobódik
@@ -422,4 +426,37 @@ test("M3 (D-J1a-11): a kapu-tábla beférés-becslése a tábla valódi széless
   const c = tsunamiDirectorConfig(5);
   assert.equal(c.promptFits!({ id: "x", prompt: "Miért fontos az erdő?", options: ["rövid", "más", "Mert a növények fotoszintézissel oxigént termelnek", "x"], correctIndex: 0 }), false);
   assert.equal(c.promptFits!({ id: "y", prompt: "Mi a fa?", options: ["növény", "állat", "kő", "víz"], correctIndex: 0 }), true);
+});
+
+test("átmeneti kapu 3a: a kérdés ELŐTTI bemenet nem számít szándékos válasznak (tétlen átfutás marad)", () => {
+  const core = freshCore(6);
+  stepFor(core, 31_000);
+  core.input.laneDelta = 1;
+  core.input.jump = true;
+  core.step(STEP, 0.4);
+  core.markInput();
+  core.placeGate({ id: 1, windowMs: 4500, slowMo: 0.6, optionCount: 3 });
+  assert.equal(core.hadInputSinceGate(), false, "a kapu lerakása előtti bemenet nem számít");
+});
+
+test("átmeneti kapu 3e: győzelem és vereség ugyanabban a lépésben — a győzelem nyer, és a vég után semmi nem fordít", () => {
+  const core = freshCore(7);
+  stepFor(core, 31_000);
+  const st = core.state() as Mutable<TsunamiState>;
+  st.distance = core.tuning().levelDistance - 0.01;
+  st.waveGap = 0.001;
+  core.step(STEP, 1);
+  assert.equal(core.state().phase, "won");
+  core.placeGate({ id: 9, windowMs: 4500, slowMo: 0.6, optionCount: 3 });
+  core.applyOutcome({ id: 9, result: "wrong", pickedOption: 0, correctOption: 1 });
+  stepFor(core, 2000);
+  assert.equal(core.state().phase, "won", "a vég után (a kijelzés alatt) sem fordul vereségre");
+  const c2 = freshCore(8);
+  stepFor(c2, 31_000);
+  (c2.state() as Mutable<TsunamiState>).waveGap = 0.001;
+  c2.step(STEP, 1);
+  assert.equal(c2.state().phase, "lost");
+  (c2.state() as Mutable<TsunamiState>).distance = c2.tuning().levelDistance + 5;
+  stepFor(c2, 500);
+  assert.equal(c2.state().phase, "lost", "a vereség után sem fordul győzelemre");
 });

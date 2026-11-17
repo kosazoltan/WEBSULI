@@ -93,6 +93,8 @@ export const STEER_INPUT_MIN = 0.2;
 /** Kegyelmi rés (D-J1a-14): rossz / lejárt kapu után ennyi ideig a rés nem eshet `GRACE_GAP_M` alá. */
 export const GRACE_MS = 1500;
 export const GRACE_GAP_M = 2;
+/** A kérdés megjelenése után ennyi ideig (kérdés-óra ms) az érintés / billentyű nem válasz (élesítés). */
+export const ANSWER_ARM_MS = 400;
 
 /**
  * Sáv ↔ opció leképezés (a mag és a lap közös szabálya, review #483 A1): 3 opció bal–közép–jobb; 2 opció a két szélső sáv
@@ -763,6 +765,9 @@ export function createTsunamiDriver(opts: {
       const act = q.active();
       const g = core.state().gates;
       if (!act || !g || g.presentationId !== act.id || g.resolved) return null;
+      // Élesítés (átmeneti kapu 3a): a kérdés megjelenése utáni első 400 ms érintése / billentyűje nem válasz (olvasás nélkül
+      // vagy a megjelenés pillanatában a tábla helyére eső ujj).
+      if (clock - act.startedAtSimMs < ANSWER_ARM_MS) return null;
       core.markInput();
       core.steerToOption(optionIndex);
       return q.pick(optionIndex, clock);

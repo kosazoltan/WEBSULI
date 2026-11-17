@@ -1440,6 +1440,16 @@ export default function TsunamiEscapeEnglish() {
   const [gateBox, setGateBox] = useState<{ top: number; centers: [number, number, number]; width: number }>({ top: 220, centers: [60, 180, 300], width: 106 });
   const gatesRef = useRef<HTMLDivElement>(null);
   const presId = q.state.presentation?.id ?? null;
+  /**
+   * Élesítés (átmeneti kapu 3a): a válaszcélok (táblák, lista módban a gombok) a kérdés megjelenése után 450 ms-mal jelennek
+   * meg; a meghajtó a 400 ms előtti érintést / billentyűt amúgy sem fogadja el (`ANSWER_ARM_MS`).
+   */
+  const [armedId, setArmedId] = useState<number | null>(null);
+  useEffect(() => {
+    if (presId === null) return;
+    const t = window.setTimeout(() => setArmedId(presId), 450);
+    return () => window.clearTimeout(t);
+  }, [presId]);
   useLayoutEffect(() => {
     if (presId === null) return;
     const measure = () => {
@@ -1879,6 +1889,7 @@ export default function TsunamiEscapeEnglish() {
               className="ts-gates"
               data-state={reveal ? "reveal" : "open"}
               data-long={longMode ? "true" : "false"}
+              data-armed={armedId === pres.id || reveal ? "true" : "false"}
               style={{ top: gateBox.top, "--ts-gate-w": `${gateBox.width}px` } as CSSProperties}
               role="group"
               aria-label="Kapuk: fuss át a jó válasz kapuján"
@@ -2079,6 +2090,8 @@ const TSUNAMI_CSS = `
 .ts-gates { position: absolute; left: 0; right: 0; z-index: 35; height: 0; pointer-events: none; }
 /* Mért (Pixel 7, 2,625-ös képpontarány): a pontosan 48 px-es ikongomb 47,9 px-nek mérődik — a kérdés-sáv szünetgombja itt 52 px. */
 .ts-gates .play-question-icon-btn { width: 52px; height: 52px; }
+/* Élesítés: a megjelenés utáni első 450 ms-ban a válaszcélok még nem látszanak és nem érinthetők. */
+.ts-gates[data-armed="false"] .ts-gate, .ts-gates[data-armed="false"] .play-question-options { visibility: hidden; pointer-events: none; }
 /* A táblás módban a kérdés-sáv rejtett (billentyűzetre fókuszálható) gombsora a kép fölé kerül, hogy a hosszabb feliratú
    rejtett gombok doboza se essen a látható kapu-táblákra (fókuszra a közös szabály szerint megjelenik). */
 .ts-gates[data-long="false"] .play-question[data-mode="bar"] .play-question-options:not(:focus-within) { top: auto; bottom: 100%; }
