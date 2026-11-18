@@ -1,4 +1,5 @@
 import { speechStartTimeoutMs, SPEECH_START_TIMEOUT_MS } from "./speech-fallback";
+import { UNKNOWN_ENGINE, voiceKey, type EngineKnowledge } from "./speech-preload";
 import { rankVoices, type RankableVoice } from "./voice-rank";
 
 /**
@@ -25,14 +26,22 @@ export type SpeechStep =
 export const PREPARED_AUDIO_START_TIMEOUT_MS = 1500;
 /** Legfeljebb ennyi böngészőhangot próbál a lánc, hogy a hibás motor ne nyújtsa a csendet a végtelenbe. */
 export const MAX_BROWSER_VOICE_ATTEMPTS = 3;
+/** A szerveres tartalék betöltési őre: lógó válasznál (lassú háló, lassú külső szolgáltatás) ennyi után hibaüzenet jön, nem csend. */
+export const FALLBACK_AUDIO_START_TIMEOUT_MS = 8000;
 
 export type SpeechPlanInput = {
   language: string;
   voices: ReadonlyArray<RankableVoice>;
   /** Van-e használható beszédmotor (`speechSynthesis` + `SpeechSynthesisUtterance`). */
   synthAvailable: boolean;
-  /** Az előre gyártott hang kulcsa, ha kérhető (lásd `preparedAudioCandidate`). */
-  preparedId?: string | null;
+  /**
+   * Az előre gyártott hang, ha a jegyzék szerint megvan (lásd `preparedAudioCandidate`). `ready`: az előtöltés lejátszásra készre
+   * pufferelte — koppintásra azonnal szól. Nem kész (még töltődik / a plafon fölött van): ha van böngészőhang, az szól azonnal, és az
+   * előre gyártott lépés KIMARAD (a letöltés a háttérben előre ugrik); ha nincs, a hang kérésre töltődik.
+   */
+  prepared?: { id: string; ready: boolean } | null;
+  /** A hangmotor munkamenet-szintű ismerete (S8d): igazolt hang előre, elbukott hang kimarad, néma motornál nincs böngészőhang-lépés. */
+  engine?: EngineKnowledge;
   /** `navigator.onLine === false`: a telepített helyi hang a hálózati elé kerül (az nem tud megszólalni). */
   offline?: boolean;
   /** Van-e a szöveghez szerveres tartalék (támogatott nyelv, nem túl hosszú szöveg). */
@@ -46,8 +55,11 @@ const isLocal = (voice: RankableVoice | undefined) => voice?.localService !== fa
  * legjobb hálózati) — így tiltott hangszolgáltatásnál a helyi brit hang sorra kerül a nem brit szerverhang előtt —, utána a rangsor
  * szerinti többi. Hálózat nélkül (`offline`) a helyi hangok kerülnek előre, a rangsoruk megtartásával.
  */
-export function chainVoiceOrder(voices: ReadonlyArray<RankableVoice>, language: string, offline = false): number[] {
-  const ranked = rankVoices(voices, language);
+export function chainVoiceOrder(voices: ReadonlyArray<RankableVoice>, language: string, offline = false, engine: EngineKnowledge = UNKNOWN_ENGINE): number[] {
+  // A munkamenetben elbukott hang kimarad; az igazoltan megszólaló hang az első (az már nem próba, azonnal szól).
+  const usable = rankVoices(voices, language).filter((i) => !engine.bad.includes(voiceKey(voices[i])));
+  const verified = usable.find((i) => voiceKey(voices[i]) === engine.verified);
+  const ranked = verified === undefined ? usable : [verified, ...usable.filter((i) => i !== verified)];
   const order = offline ? [...ranked.filter((i) => isLocal(voices[i])), ...ranked.filter((i) => !isLocal(voices[i]))] : ranked;
   const bestLocal = order.find((i) => isLocal(voices[i]));
   const picked = bestLocal === undefined || bestLocal === order[0] ? order : [order[0], bestLocal, ...order.filter((i, at) => at > 0 && i !== bestLocal)];
@@ -96,12 +108,17 @@ export function silenceBeforeFallbackMs(plan: ReadonlyArray<SpeechStep>, voices:
 }
 
 export function speechPlan(input: SpeechPlanInput): SpeechStep[] {
-  const steps: SpeechStep[] = [];
-  if (input.preparedId) steps.push({ kind: "prepared", id: input.preparedId });
-  if (input.synthAvailable) {
-    if (input.voices.length === 0) steps.push({ kind: "voice", voiceIndex: null });
-    else for (const voiceIndex of chainVoiceOrder(input.voices, input.language, input.offline)) steps.push({ kind: "voice", voiceIndex });
+  const engine = input.engine ?? UNKNOWN_ENGINE;
+  const voiceSteps: SpeechStep[] = [];
+  if (input.synthAvailable && !engine.silent) {
+    if (input.voices.length === 0) { if (!engine.bad.includes(voiceKey(null))) voiceSteps.push({ kind: "voice", voiceIndex: null }); }
+    else for (const voiceIndex of chainVoiceOrder(input.voices, input.language, input.offline, engine)) voiceSteps.push({ kind: "voice", voiceIndex });
   }
+  const steps: SpeechStep[] = [];
+  // Kész (pufferelt) hang: elöl. Nem kész hang: csak akkor kerül a tervbe (kérésre töltve), ha böngészőhang nincs — különben a gyerek
+  // ne várjon a letöltésre: a böngészőhang szól azonnal, a kattintás gesztusában.
+  if (input.prepared && (input.prepared.ready || voiceSteps.length === 0)) steps.push({ kind: "prepared", id: input.prepared.id });
+  steps.push(...voiceSteps);
   if (input.fallbackAvailable) steps.push({ kind: "fallback" });
   return steps;
 }
@@ -129,8 +146,16 @@ export function rememberPreparedFailure(reason: PreparedFailure): boolean {
  * Kérhető-e az előre gyártott hang: csak a hangtár nyelvein, kiszámolt kulccsal, ha az elérhetőségi jegyzék szerint MEGVAN, és ebben a
  * munkamenetben még nem hibázott. Jegyzék híján (még nem jött meg, hibázott, üres a tár) a válasz nem — hangfájl-kérés ilyenkor nem megy.
  */
-export function preparedAudioCandidate(input: { languageSupported: boolean; id: string | undefined; available: boolean; knownMissing: boolean }): string | null {
-  return input.languageSupported && input.id && input.available && !input.knownMissing ? input.id : null;
+export function preparedAudioCandidate(input: { languageSupported: boolean; id: string | undefined; available: boolean; knownMissing: boolean; ready?: boolean }): { id: string; ready: boolean } | null {
+  return input.languageSupported && input.id && input.available && !input.knownMissing ? { id: input.id, ready: input.ready === true } : null;
+}
+
+/** A jegyzék méretei (bájt) a kért kulcsokra — az előtöltés adatforgalmi plafonjához; méret nélküli (régi alakú) válasznál becsült érték. */
+export const ASSUMED_AUDIO_BYTES = 40_000;
+export function sizesFromManifest(body: unknown, asked: readonly string[]): Record<string, number> {
+  const sizes = body && typeof body === "object" ? (body as { sizes?: unknown }).sizes : undefined;
+  const known = sizes && typeof sizes === "object" ? sizes as Record<string, unknown> : {};
+  return Object.fromEntries(availableFromManifest(body, asked).map((id) => { const size = known[id]; return [id, typeof size === "number" && size > 0 ? size : ASSUMED_AUDIO_BYTES]; }));
 }
 
 /** A jegyzék-válasz értelmezése: csak a KÉRT, érvényes alakú kulcsok számítanak elérhetőnek; hibás alakú válaszra üres lista. */
