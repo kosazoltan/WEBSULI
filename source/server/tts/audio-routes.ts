@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { TtsAudioCache, parseAudioRange } from "../../shared/speech-fallback";
 import { parseTtsAvailabilityQuery, TTS_AUDIO_AVAILABLE_ROUTE, TTS_AUDIO_ID, TTS_AUDIO_ROUTE } from "../../shared/tts-audio-key";
 import { asyncRoute } from "../lib/async-route";
-import type { TtsAudio, TtsAudioStore } from "./audio-store";
+import type { TtsAudio, TtsAudioEntry, TtsAudioStore } from "./audio-store";
 
 /**
  * Spec 2026-11-18-tananyag-gyartas-minoseg, S8b: az előre gyártott felolvasó hang kiszolgálása — `GET /api/tts/lesson-audio/:id`,
@@ -18,15 +18,17 @@ const NO_STORE = "no-store";
  */
 export const TTS_AUDIO_AVAILABILITY_CACHE_CONTROL = "public, max-age=60";
 
-export type TtsAvailabilityReply = { status: 200 | 400; headers: Record<string, string>; body: { available: string[] } | { message: string } };
+export type TtsAvailabilityReply = { status: 200 | 400; headers: Record<string, string>; body: { available: string[]; sizes: Record<string, number> } | { message: string } };
 /** A jegyzék válaszának tiszta függvénye: hibás bemenet 400 `no-store` (a tárolóhoz nem fordul); különben a meglévő kulcsok részhalmaza. */
-export async function ttsAvailabilityReply(query: Record<string, unknown>, existing: (keys: string[]) => Promise<string[]>): Promise<TtsAvailabilityReply> {
+export async function ttsAvailabilityReply(query: Record<string, unknown>, existing: (keys: string[]) => Promise<TtsAudioEntry[]>): Promise<TtsAvailabilityReply> {
   const parsed = parseTtsAvailabilityQuery(query);
   if ("error" in parsed) return { status: 400, headers: { "Cache-Control": NO_STORE }, body: { message: parsed.error } };
   const asked = new Set(parsed.keys);
-  // A válaszba csak a KÉRT kulcsok kerülhetnek (a tároló hibája se szivárogtasson mást), rendezve.
-  const available = (await existing(parsed.keys)).filter((id) => asked.has(id)).sort();
-  return { status: 200, headers: { "Cache-Control": TTS_AUDIO_AVAILABILITY_CACHE_CONTROL, "CDN-Cache-Control": TTS_AUDIO_AVAILABILITY_CACHE_CONTROL }, body: { available } };
+  // A válaszba csak a KÉRT kulcsok kerülhetnek (a tároló hibája se szivárogtasson mást), rendezve. A méret (bájt) az előtöltés
+  // adatforgalmi plafonjához kell (S8d); érvénytelen méretű sor kimarad.
+  const entries = (await existing(parsed.keys)).filter((entry) => asked.has(entry.id) && Number.isSafeInteger(entry.size) && entry.size > 0).sort((a, b) => a.id < b.id ? -1 : 1);
+  const body = { available: entries.map((entry) => entry.id), sizes: Object.fromEntries(entries.map((entry) => [entry.id, entry.size])) };
+  return { status: 200, headers: { "Cache-Control": TTS_AUDIO_AVAILABILITY_CACHE_CONTROL, "CDN-Cache-Control": TTS_AUDIO_AVAILABILITY_CACHE_CONTROL }, body };
 }
 
 export type TtsAudioReply = { status: 200 | 206 | 304 | 400 | 404 | 416; headers: Record<string, string>; body?: Buffer };
@@ -58,7 +60,7 @@ export function ttsAudioReply(id: string, audio: Pick<TtsAudio, "mime" | "bytes"
 
 /**
  * A végpont bekötése. Hibás alakú kulcsra a tárolóhoz nem fordul (400); a találatot a szerver a memóriában őrzi (16 MB-os tár), így az
- * ismételt és a tartománykérés nem megy újra az adatbázishoz; a hiány nem tárolódik (lásd lent). A sebességkorlát az index.ts-ben van (`ttsAudioLimiter`).
+ * ismételt és a tartománykérés nem megy újra az adatbázishoz; a hiány nem tárolódik (lásd lent). A sebességkorlát: `server/tts/rate-limits.ts` (a hangtár saját kerete).
  */
 export function registerLessonTtsAudio(app: Express, store: TtsAudioStore): void {
   const cache = new TtsAudioCache<Buffer>();

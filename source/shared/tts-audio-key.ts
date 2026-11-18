@@ -16,11 +16,12 @@ export const TTS_AUDIO_AVAILABLE_ROUTE = `${TTS_AUDIO_ROUTE}/available`;
 /** Egy jegyzék-kérés legfeljebb ennyi kulcsot kérdezhet: a szószedet legfeljebb 100 tétel × 2 szöveg (szó + példamondat). */
 export const TTS_AUDIO_AVAILABILITY_MAX_KEYS = 200;
 /**
- * A hangtár (hangfájl + jegyzék) SAJÁT sebességkorlátja, egy közös IP-ről netező osztályra méretezve: 30 tanuló × ~40 szöveg
- * (20 tételes szószedet: szó + példamondat) = 1 200 hangfájl-kérés a böngésző / CDN tartós gyorsítótára előtt, + 30 jegyzék-kérés
- * = 1 230; másfélszeres tartalékkal kerekítve 2 000 kérés / 15 perc / IP. A szerveres tartalék (`/api/tts/audio`) kerete ettől független.
+ * A hangtár (hangfájl + jegyzék) SAJÁT sebességkorlátja, egy közös IP-ről netező osztályra méretezve. Az előtöltés (S8d) miatt egy
+ * osztály a lecke megnyitásakor EGYSZERRE kér: 30 tanuló × ~40 szöveg (20 tételes szószedet: szó + példamondat) × 2 kérés (iOS Safari
+ * a hangot tartománykérésekkel tölti, és a 206-os válasz nem kerül a CDN gyorsítótárába) = 2 400 hangfájl-kérés + 30 jegyzék-kérés
+ * = 2 430; tartalékkal kerekítve 3 000 kérés / 15 perc / IP. A szerveres tartalék (`/api/tts/audio`) kerete ettől független.
  */
-export const LESSON_AUDIO_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 2000, classSize: 30, textsPerLesson: 40 } as const;
+export const LESSON_AUDIO_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 3000, classSize: 30, textsPerLesson: 40, requestsPerAudio: 2 } as const;
 const LANGUAGE_CODE = /^[a-z]{2,3}(-[A-Z0-9]{2,4})?$/;
 const VOICE_VERSION = /^[a-z0-9][a-z0-9.-]{0,15}$/;
 

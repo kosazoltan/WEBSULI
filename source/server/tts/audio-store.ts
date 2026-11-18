@@ -9,13 +9,15 @@ import { logger } from "../lib/logger";
  */
 export type TtsAudio = { mime: string; bytes: Buffer; size: number };
 export type TtsAudioRow = TtsAudio & { id: string; voiceVersion: string; language: string };
+/** A jegyzék egy sora: a kulcs és a hangfájl mérete (az előtöltés adatforgalmi plafonjához). */
+export type TtsAudioEntry = { id: string; size: number };
 export interface TtsAudioStore {
   get(id: string): Promise<TtsAudio | null>;
   /**
    * Elérhetőségi jegyzék: a megadott kulcsok közül a tárban meglévők, EGYETLEN lekérdezéssel (a hívó darabszám-plafont tart:
    * legfeljebb `TTS_AUDIO_AVAILABILITY_MAX_KEYS`; érvénytelen alakú kulcs és a plafon fölötti rész kimarad). Csak olvas.
    */
-  existing(keys: readonly string[]): Promise<string[]>;
+  existing(keys: readonly string[]): Promise<TtsAudioEntry[]>;
   /** A megadott kulcsok közül a tárban meglévők (tetszőleges darabszám, szeletekben — a gyártónak). */
   has(ids: readonly string[]): Promise<Set<string>>;
   /**
@@ -109,12 +111,12 @@ export class DbTtsAudioStore implements TtsAudioStore {
     return row && typeof row.mime === "string" && Buffer.isBuffer(row.bytes) ? { mime: row.mime, bytes: row.bytes, size: Number(row.size) } : null;
   }
 
-  async existing(keys: readonly string[]): Promise<string[]> {
+  async existing(keys: readonly string[]): Promise<TtsAudioEntry[]> {
     const valid = Array.from(new Set(keys.filter((id) => TTS_AUDIO_ID.test(id)))).slice(0, TTS_AUDIO_AVAILABILITY_MAX_KEYS);
     if (!valid.length) return [];
     const db = await this.database();
-    const { rows } = await db.execute(sql`SELECT id FROM lesson_tts_audio WHERE id IN (${sql.join(valid.map((id) => sql`${id}`), sql`, `)}) ORDER BY id`);
-    return (rows as Array<{ id?: unknown }>).flatMap((row) => typeof row.id === "string" ? [row.id] : []);
+    const { rows } = await db.execute(sql`SELECT id, size FROM lesson_tts_audio WHERE id IN (${sql.join(valid.map((id) => sql`${id}`), sql`, `)}) ORDER BY id`);
+    return (rows as Array<{ id?: unknown; size?: unknown }>).flatMap((row) => typeof row.id === "string" ? [{ id: row.id, size: Number(row.size) }] : []);
   }
 
   async has(ids: readonly string[]): Promise<Set<string>> {

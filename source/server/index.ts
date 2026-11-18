@@ -3,8 +3,7 @@ import "./lib/load-env";
 import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
-import { isTtsAudioSubPath } from "../shared/speech-fallback";
-import { isTtsLessonAudioSubPath, LESSON_AUDIO_RATE_LIMIT, TTS_AUDIO_ROUTE } from "../shared/tts-audio-key";
+import { mountTtsRateLimits } from "./tts/rate-limits";
 import { clientIpKeyGenerator } from "./lib/client-ip";
 import compression from "compression";
 import helmet from "helmet";
@@ -384,42 +383,6 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true, // Only count failed attempts
 });
 
-// Rate limiter for the public text-to-speech proxy.
-// Without it anyone can use the server as a free, unthrottled Google TTS relay.
-const ttsLimiter = rateLimit({
-  keyGenerator: clientIpKeyGenerator,
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 60,
-  message: "Túl sok felolvasási kérés. Próbáld újra később!",
-  standardHeaders: true,
-  legacyHeaders: false,
-  // A „Meghallgatás” hangtartalékának saját korlátja van (ttsAudioLimiter).
-  skip: (req) => isTtsAudioSubPath(req.path) || isTtsLessonAudioSubPath(req.path),
-});
-
-// Spec 2026-11-09-felolvasas-tartalek (módosítás): a hangtartalék (≤ 300 karakter, CDN-ből gyorsítótárazva) bővebb keretet kap.
-// Spec 2026-11-10-korlat-kliens-ip: minden IP-alapú korlát kulcsa a valódi kliens címe (lib/client-ip.ts), nem a proxyé.
-const ttsAudioLimiter = rateLimit({
-  keyGenerator: clientIpKeyGenerator,
-  windowMs: 15 * 60 * 1000,
-  max: 600,
-  message: "Túl sok felolvasási kérés. Próbáld újra később!",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Terv 2026-11-18-tananyag-gyartas-minoseg (S8b, review J2): a hangtár (előre gyártott hangfájl + elérhetőségi jegyzék) SAJÁT korlátja,
-// egy közös IP-ről netező osztályra méretezve (a számolás: shared/tts-audio-key.ts, LESSON_AUDIO_RATE_LIMIT). Külön példány: a hangtár
-// forgalma nem fogyasztja a szerveres hangtartalék (`ttsAudioLimiter`) keretét, és fordítva.
-const lessonAudioLimiter = rateLimit({
-  keyGenerator: clientIpKeyGenerator,
-  windowMs: LESSON_AUDIO_RATE_LIMIT.windowMs,
-  max: LESSON_AUDIO_RATE_LIMIT.max,
-  message: "Túl sok felolvasási kérés. Próbáld újra később!",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // Tételgyár T7.1 (tulajdonosi döntés 2026-10-15): a döntőbíró IP-nként 60 kérés / 15 perc (a napi 2000-es fizetett plafon a szolgáltatásban).
 const arbiterLimiter = rateLimit({
   keyGenerator: clientIpKeyGenerator,
@@ -456,9 +419,7 @@ const gameScoreIpLimiter = rateLimit({
 app.use("/api/games/score", gameScoreIpLimiter); // JM0
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
-app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
-app.use("/api/tts/audio", ttsAudioLimiter);
-app.use(TTS_AUDIO_ROUTE, lessonAudioLimiter); // S8b: a hangtár (hangfájl + jegyzék) saját kerete — nem fogyasztja a hangtartalékét
+mountTtsRateLimits(app); // A felolvasás három független korlátja: általános proxy, szerveres tartalék, hangtár (server/tts/rate-limits.ts)
 app.use("/api/push/subscribe", publicWriteLimiter);
 app.use("/api/push/unsubscribe", publicWriteLimiter);
 
