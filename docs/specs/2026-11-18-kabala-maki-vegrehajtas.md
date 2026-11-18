@@ -82,6 +82,24 @@ Hatókör: ugyanaz, mint fent (a szkriptek, a GLB + manifest, az őr-teszt, a k�
 Megállási feltétel: ha az összefüggő háló vagy a textúra szkriptből nem hozható vállalható minőségre, egyenes jelentés arról,
 mi nem megy, és mi kellene hozzá (kézi szobrászat / retopológia) — nem a mérce csendes lejjebb vitele.
 
+## Csiszoló kör (terv: `docs/specs/2026-11-18-kabala-maki.md`, 8. szakasz)
+
+Kötött felület (a `feat/kabala-fooldal` ág erre épít): belépési pontok, klip-, csont-, háló- és alakkulcs-nevek, a manifest
+kulcsai — változatlanok. Az arc festése, a szem, a fül és az arány-állandók (`HC`, `HR`, `EYE_*`, `SNOUT_*`) nem módosulnak.
+
+1. **Docs-commit** (a terv 8. szakasza + ez a szakasz), kód csak utána.
+2. **Farok (`maki_model.py`):** új, hosszabb pálya a figura oldalán; ívhossz szerinti paraméterezés (egyenlő gyűrűk, egyenlő
+   csontok); kisebb sugár, a tincses körvonal marad.
+3. **Kéz, láb:** a puha alapformákból kikerül a kéz- és lábfej; helyettük pontos rész: tenyér + négy ujj + hüvelyk, talp + öt
+   lábujj (rövid, lekerekített csövek), sötét; súly: `forearm.*`, illetve `foot.*`.
+4. **Felszín:** a decimált hálón Taubin-simítás (zsugorodás nélkül) csúcsonkénti súllyal — test: teljes, a fej hátulja:
+   fokozatos, arc és fül: nulla. A száj vetítése a simított hálóra történik.
+5. **Súlyok:** az átvitt csontsúlyok néhány körös simítása a háló szomszédsága mentén a testen (lágyabb csípő / térd / váll).
+6. **Szín:** sötétebb szürke; keskenyebb fehér has; a végtagok belső világosítása kisebb.
+7. **`maki_anim.py`:** a `sad` farka földközeli ívben; a `sunbathe` és az `idle` az új farokhoz hangolva. Klipnevek változatlanok.
+8. **Képek, előnézet, zárás:** render nézetenként (2–3 kör), kétszeri gyártás, őr-teszt, `gate:stage`; az előnézetben az `idle`
+   és a `cheer` valós idejű lejátszása egymást követő képernyőképekkel.
+
 ## Futtatás
 
 ```

@@ -138,3 +138,24 @@ Mérce: „ez egy gyűrűsfarkú maki, és nagyon aranyos”. Nem lehet ijesztő
 - [x] M-9 Hét kép (a „napozó” pózzal), összesen ≤ 1,5 MB; legalább 3–4 javító kör a saját képek alapján, őszinte értékeléssel.
 - [x] M-10 Az ÚJ GLB betöltve a böngészős előnézetben, mind a hat klip lejátszva, konzolhiba nélkül, képernyőképpel.
 - [x] M-11 `gate:stage` zöld.
+
+## 8. Csiszoló kör (tulajdonosi döntés 2026-11-18: „Igen, de még csiszold” — ez a figura marad)
+
+A figura a főoldali tananyag-ajánló kabalája lesz (azt másik ág építi erre az ágra). Ezért **nem változhat**: a szkriptek
+belépési pontja (`build.py`, `render.py`), a klipnevek, a csontnevek, a hálónevek (`Maki`, `MakiArc`), az alakkulcsok neve és
+a manifest szerkezete. **Az arc, a szem, a fül és az arányok maradnak** — a tulajdonosnak tetszenek.
+
+- [ ] C-1 **Farok:** a testnél láthatóan hosszabb, karcsúbb, elegáns kérdőjel-ív a figura oldalán; egy nézetben legalább 8–10
+      gyűrű látszik a 14-ből; a gyűrűk egyenlő hosszúak (ívhossz szerinti felosztás); bozontos marad; az `idle` végig ringatja.
+- [ ] C-2 **Felszín:** a törzs elején, a tarkón és a fej hátulján nincs „gyurmás” dudor — célzott simítás a remesh után (csak a
+      testen és a fej hátulján; az arc és a fül érintetlen); a hátulnézet rendben.
+- [ ] C-3 **Kéz és láb:** jól olvasható, stilizált ujjak (négy ujj + hüvelyk, öt lábujj), sötét tenyér / talp — pontos
+      paraméteres rész a csuklónál / bokánál, ahol a színváltás a csatlakozást elfedi.
+- [ ] C-4 **Szín:** a hát és a végtagok külseje határozottan szürke; a has és a mellkas fehér / krém marad.
+- [ ] C-5 **Hajlások:** a napozó ülésben a csípő és a térd nem törik meg (a súlyok simítása a hálón; segédcsont csak ha kell —
+      a keret ≤ 30 csont marad).
+- [ ] C-6 **Szomorú póz:** a farok lekonyuló, földközeli ívben (nem oldalra mutat).
+- [ ] C-7 Keret (≤ 600 KB, ≤ 30 000 háromszög, ≤ 30 csont), kétszeri gyártás azonos hash, őr-teszt, `gate:stage`.
+- [ ] C-8 Böngészős előnézet a végleges GLB-vel; az `idle` és a `cheer` VALÓS IDEJŰ lejátszása több egymást követő
+      képernyőképpel megfigyelve; konzolhiba nincs.
+- [ ] C-9 Képek ≤ 1,5 MB; nézetenkénti átnézés, 2–3 javító kör, őszinte értékelés.
