@@ -163,6 +163,36 @@ viszi bukásra.
 Őszintén: a játéklogikai hibák (1, 4, 5, 6) jellemzően szándék- és állapottér-hibák; ezeket determinisztikus kapu általánosan nem
 ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy az ellenőr ne az olcsó hibákra költsön.
 
+## Láncolt bizonyíték (szkriptkapuk P2, 2026-11-18)
+
+Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` 6.1, 6.3a. `scripts/qa/gates/evidence-chain.mjs`: a bizonyíték-tár
+(`<git-common-dir>/websuli-qa-evidence/`) rekordjai mellé `chain.jsonl` (rekord-hash + az előző lánc-sor hash-e). A hozzáfűzés kizáró
+zárfájllal (`chain.lock`, `wx`, benne az író PID-je) atomi: 8 párhuzamos író × 200 rekord → 0 törés (teszt). Most a szakasz-kapu
+(`stage-<fej>`), a push-kapu (`pre-push-<fej>`) és az `evidence-run` (`run-<id>`) ír láncolt rekordot; a többi kapu a későbbi
+szeletekben kapcsolódik.
+
+- **Zár:** foglaltnál korlátos újrapróba 45 s-ig. A 30 s-nál régebbi zár elárvultnak számít, és törlődik (napló: `chain-repair.log`),
+  ha a benne álló PID már nem él; a 40 s-nál öregebb zár akkor is elvehető, ha a PID él (a zár alatti művelet ezredmásodperces —
+  ilyen zár csak PID-újrahasznosításból vagy beragadt idegen folyamatból maradhat). A korlát a várakozásnál kisebb: a várakozó mindig
+  bejut, kézi zártörlés nem kell.
+- **Mit lát az ügynök, mit tegyen:** „a lánc zárja 45000 ms után sem szabadult fel” → egy épp dolgozó másik munkafa kapuja fogta a
+  zárat; futtasd újra a kaput. Ismétlődésnél nézd meg a `chain-repair.log`-ot és a `chain.lock` korát.
+- **Nem csendes hiba:** ha a rekord vagy a lánc-sor nem írható, a szakasz-kapu és a push-kapu hibát ír és nem nulla kóddal lép ki;
+  a push-kapu a már kiírt bizonyítékát `ok: false`-ra írja át (a hook így nem engedi a kibocsátást). A kaput újra kell futtatni.
+- **Garantálja** a véletlen vagy hanyag hamisítás és az utólagos átírás ÉSZLELÉSÉT: kézzel írt, láncon kívüli rekord; átírt rekord;
+  kivágott lánc-sor; törölt lánc (`no-chain`, ha van rekord); útvonal-bejárás az azonosítóban (csak `[a-z0-9-]`).
+- **NEM véd** egy, a tárat írni tudó, szándékosan csaló ügynök ellen: a teljes lánc újraszámolható. A megkerülhetetlen pont a CI.
+- **Ellenőrzés / javítás:** `node scripts/qa/gates/evidence-chain.mjs --verify [--json]` (0 ép / 1 törött / 2 nem futott);
+  `node scripts/qa/gates/evidence-chain.mjs --repair` — a törött láncot `chain.broken-<időbélyeg>.jsonl` néven archiválja (nem törli),
+  új láncot indít a meglévő rekordokból `repair: true` jelöléssel, és naplóz. **A javítás után a régi rekordok NEM igazolt
+  bizonyítékok:** az érintett kapukat újra kell futtatni a friss, láncolt rekordokért. Ha a javítás nem fut le, érthető hibát ír
+  (2-es kód), nem kezeletlen kivételt.
+- **Bevezetési lépcső:** a lánc-hiba ellenőrzése (az állítás-ellenőrzőben, P4) eleinte csak figyelmeztet; tiltás: 2 hét `--verify`
+  törés nélkül (terv 6.3a).
+- `node scripts/qa/gates/evidence-run.mjs -- <parancs> [arg…]`: futtat és rögzít (`run-<id>`: fej, szűrt parancssor, kilépési kód, a
+  kimenet hash-e, `node:test`-darabszám). A parancssor és a kimenet a `lib.redact`-on megy át: token-alakok, kapcsolati szöveg,
+  e-mail-cím, jelszó-kapcsoló, `NÉV=érték` titok, JWT, szolgáltatói kulcs-előtagok.
+
 ## Ismert korlátok (maradó kockázat)
 
 - **Az ítélet önbevallásos** (review J5): a `Független ellenőr ítélete: IGEN (fej: …)` sort bárki beírhatja a PR-leírásba; a kapu

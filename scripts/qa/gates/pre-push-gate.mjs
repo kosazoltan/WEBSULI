@@ -13,6 +13,7 @@ import {
 } from './lib.mjs';
 import { runLintSteps } from './lint-gate.mjs';
 import { listFiles } from './stage-gate.mjs';
+import { linkRecord } from './evidence-chain.mjs';
 
 export const NATIVE_ARCH_TEST = 'native-arch.test.ts';
 
@@ -250,6 +251,21 @@ export async function runPrePushSteps({ gate, ctx, slice = false }) {
   return { changed };
 }
 
+/**
+ * A bizonyíték kiírása ÉS láncba kötése. A lánc-sor hiánya nem csendes (független review R2), és a már kiírt zöld bizonyíték sem
+ * maradhat zöld (K-f): kötési hibánál a rekord `ok: false`-ra íródik (a hook így nem engedi a kibocsátást), a kód nem nulla.
+ * @returns {{ path: string, code: number, error?: string }}
+ */
+export function finalizeEvidence({ evDir, name, rec, code, write = writeEvidence, link = linkRecord }) {
+  const path = write(evDir, name, rec);
+  try { link(evDir, name); } catch (e) {
+    const error = String(e?.message ?? e).split('\n')[0];
+    write(evDir, name, { ...rec, ok: false, chainError: error });
+    return { path, code: code || 2, error };
+  }
+  return { path, code };
+}
+
 export function evidenceRecord(kind, head, gate, extra = {}) {
   return {
     kind, head, ok: !gate.failed(), at: new Date().toISOString(),
@@ -264,8 +280,12 @@ async function main() {
   const head = ctx.git.head();
   await runPrePushSteps({ gate, ctx, slice: args.includes('--slice') });
   const code = gate.finish();
-  const p = writeEvidence(ctx.evDir, `pre-push-${head}`, evidenceRecord('pre-push', head, gate));
-  gate.log(`[pre-push-gate] bizonyíték: ${p.replace(/\\/g, '/')} (ok=${code === 0})`);
+  const fin = finalizeEvidence({ evDir: ctx.evDir, name: `pre-push-${head}`, rec: evidenceRecord('pre-push', head, gate), code });
+  if (fin.error) {
+    process.stderr.write(`[pre-push-gate] HIBA: a bizonyíték láncba kötése nem sikerült (${fin.error}) — a bizonyíték érvénytelenítve, futtasd újra a kaput\n`);
+    process.exit(fin.code);
+  }
+  gate.log(`[pre-push-gate] bizonyíték: ${fin.path.replace(/\\/g, '/')} (ok=${code === 0})`);
   process.exit(code);
 }
 

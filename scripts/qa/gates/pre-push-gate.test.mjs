@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { auditStatus, decideNativeArch, parseTapFailures, rollupState, runPrePushSteps, sharedTouched, NATIVE_ARCH_TEST } from './pre-push-gate.mjs';
+import { auditStatus, decideNativeArch, finalizeEvidence, parseTapFailures, rollupState, runPrePushSteps, sharedTouched, NATIVE_ARCH_TEST } from './pre-push-gate.mjs';
 import { fakeCtx, statusOf } from './_fake.mjs';
 
 const TAP = [
@@ -107,4 +107,17 @@ test('runPrePushSteps: native-arch az egyetlen bukás + bukó doctor:arch → KI
   await runPrePushSteps({ gate, ctx });
   assert.equal(statusOf(gate, 'teljes egységteszt'), STATUS.EXCEPTION);
   assert.equal(gate.finish(), 0);
+});
+
+test('finalizeEvidence (szkriptkapuk P2, K-f): sikertelen láncba kötésnél a zöld bizonyíték ok: false-ra íródik, a kód nem nulla', () => {
+  const store = new Map();
+  const write = (dir, name, rec) => { store.set(name, rec); return `${dir}/${name}.json`; };
+  const ok = finalizeEvidence({ evDir: 'ev', name: 'x-1', rec: { ok: true }, code: 0, write, link: () => {} });
+  assert.deepEqual([ok.code, ok.error, store.get('x-1').ok], [0, undefined, true]);
+  const bad = finalizeEvidence({ evDir: 'ev', name: 'x-2', rec: { ok: true }, code: 0, write, link: () => { throw new Error('zár foglalt\nrészlet'); } });
+  assert.equal(bad.code, 2);
+  assert.equal(bad.error, 'zár foglalt');
+  assert.equal(store.get('x-2').ok, false, 'a hook a bizonyítékot nem fogadhatja el zöldnek');
+  assert.equal(store.get('x-2').chainError, 'zár foglalt');
+  assert.equal(finalizeEvidence({ evDir: 'ev', name: 'x-3', rec: { ok: false }, code: 1, write, link: () => { throw new Error('x'); } }).code, 1, 'bukott kapu kódja marad');
 });

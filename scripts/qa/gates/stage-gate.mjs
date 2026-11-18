@@ -8,6 +8,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { STATUS, argValue, cmdResult, createGate, isMain, makeContext, writeLog } from './lib.mjs';
 import { runLintSteps } from './lint-gate.mjs';
+import { appendRecord } from './evidence-chain.mjs';
 
 const kebab = (s) => s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[_\s]+/g, '-').toLowerCase();
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -104,7 +105,20 @@ async function main() {
   const gate = createGate('stage-gate');
   const { changed } = await runLintSteps({ gate, ctx, mode: 'fast' });
   await runStageSteps({ gate, ctx, changed });
-  process.exit(gate.finish());
+  const code = gate.finish();
+  // S2 (terv 6.1): láncolt bizonyíték a fejre — a commitolatlan változással futott szakasz-kaput a `dirty` jelzi.
+  try {
+    const head = ctx.git.head();
+    appendRecord(ctx.evDir, `stage-${head}`, {
+      kind: 'stage', head, ok: code === 0, dirty: ctx.git.trackedDirty().length > 0 || ctx.git.untracked().length > 0,
+      at: new Date().toISOString(), steps: gate.results.map((r) => ({ name: r.name, status: r.status })),
+    });
+  } catch (e) {
+    // R2 (független review): a hiányzó rekord nem lehet csendes — hangos hiba és nem nulla kód (2 = a kapu nem futott le teljesen).
+    process.stderr.write(`[stage-gate] HIBA: a szakasz-bizonyíték nem írható (${String(e?.message ?? e).split('\n')[0]}) — futtasd újra a kaput\n`);
+    process.exit(code || 2);
+  }
+  process.exit(code);
 }
 
 if (isMain(import.meta.url)) main();

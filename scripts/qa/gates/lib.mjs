@@ -20,6 +20,11 @@ const REDACTIONS = [
   [/\bAKIA[0-9A-Z]{16}\b/g, '<aws-key>'],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/g, 'Bearer <token>'],
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, '<email>'],
+  // Szkriptkapuk P2 (független review K5): jelszó-kapcsoló, NÉV=érték titok, JWT, szolgáltatói kulcs-előtagok.
+  [/(--?(?:password|passwd|pass|token|secret|api-?key|auth)(?:=|\s+))\S+/gi, '$1<titok>'],
+  [/\b([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|CREDENTIALS?))=\S+/g, '$1=<titok>'],
+  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '<jwt>'],
+  [/\b(?:sk-proj-|sk_live_|sk_test_|rk_live_|AIza|xox[abposr]-|rnd_|glpat-|npm_)[A-Za-z0-9_-]{10,}\b/g, '<token>'],
 ];
 
 /** Titok, kapcsolati szöveg és e-mail-cím helyőrzőre cserélve — minden kiírás és napló ezen megy át. */
