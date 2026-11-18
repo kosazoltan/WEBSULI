@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kabala-maki — előnézet</title>
+<!--
+  Önálló előnézet (kísérlet; a programba nincs bekötve). CDN nincs: a three a source/node_modules-ból jön.
+  Indítás a repó gyökeréből:  node source/scripts/blender/kabala-maki/preview-server.mjs   →   http://localhost:4599/
+-->
+<style>
+  :root { color-scheme: light; }
+  html, body { margin: 0; height: 100%; background: #fff4dc; font-family: system-ui, "Segoe UI", sans-serif; color: #2b3140; }
+  #stage { position: fixed; inset: 0; }
+  #panel { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: flex; flex-wrap: wrap;
+           gap: 8px; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.82); backdrop-filter: blur(6px); }
+  button { font: inherit; font-weight: 600; padding: 10px 16px; border-radius: 999px; border: 2px solid #7f8896; background: #fff; color: inherit; cursor: pointer; }
+  button[aria-pressed="true"] { background: #2b3140; color: #fff; border-color: #2b3140; }
+  label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+  #info { position: fixed; top: 10px; left: 16px; right: 16px; font-size: 13px; opacity: 0.8; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "/source/node_modules/three/build/three.module.js", "three/addons/": "/source/node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="info">Betöltés…</div>
+<div id="panel">
+  <button data-clip="idle" aria-pressed="true">Alap</button>
+  <button data-clip="wave">Integetés</button>
+  <button data-clip="cheer">Ugrás (jó válasz)</button>
+  <button data-clip="sad">Szomorú (rossz válasz)</button>
+  <button data-clip="blink">Pislogás</button>
+  <label>Mosoly <input id="smile" type="range" min="-1" max="1" step="0.01" value="0"></label>
+  <label><input id="autoblink" type="checkbox" checked> magától pislog</label>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const MODELS = '/source/client/public/models/kabala/';
+const info = document.getElementById('info');
+const stage = document.getElementById('stage');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+stage.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#fff4dc');
+const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+camera.position.set(-1.3, 0.95, 4.9);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0.08, 0.38, 0);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight('#ffffff', '#c9ecd2', 1.6));
+const sun = new THREE.DirectionalLight('#fff6e8', 2.2);
+sun.position.set(-2, 3.5, 3);
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(0.95, 64), new THREE.MeshBasicMaterial({ color: '#c9ecd2' }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.set(0.1, 0, -0.1);
+scene.add(ground);
+
+function resize() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+const manifest = await (await fetch(MODELS + 'kabala-maki.manifest.json')).json();
+const loader = new GLTFLoader();
+loader.setDRACOLoader(new DRACOLoader().setDecoderPath('/source/node_modules/three/examples/jsm/libs/draco/gltf/'));
+const gltf = await loader.loadAsync(MODELS + manifest.file);
+scene.add(gltf.scene);
+
+const mixer = new THREE.AnimationMixer(gltf.scene);
+const actions = Object.fromEntries(gltf.animations.map((clip) => [clip.name, mixer.clipAction(clip)]));
+const faces = [];   // az alakkulcsos háló anyagonként külön darab: mindet állítani kell
+gltf.scene.traverse((o) => { if (o.morphTargetDictionary) faces.push(o); });
+let current = 'idle';
+actions.idle.play();
+
+function play(name) {
+  for (const b of document.querySelectorAll('button[data-clip]')) b.setAttribute('aria-pressed', String(b.dataset.clip === name));
+  if (name === 'blink') { actions.blink.reset().setLoop(THREE.LoopOnce, 1).play(); return; }
+  const next = actions[name];
+  if (name === current && name === 'idle') return;
+  next.reset();
+  next.setLoop(name === 'idle' ? THREE.LoopRepeat : THREE.LoopOnce, name === 'idle' ? Infinity : 1);
+  next.clampWhenFinished = false;
+  actions[current].crossFadeTo(next.play(), 0.2, false);
+  current = name;
+}
+mixer.addEventListener('finished', (e) => {
+  const name = e.action.getClip().name;
+  if (name !== 'blink' && name === current) play('idle');
+});
+for (const b of document.querySelectorAll('button[data-clip]')) b.addEventListener('click', () => play(b.dataset.clip));
+
+const smile = document.getElementById('smile');
+let nextBlink = 2.5;
+const clock = new THREE.Clock();
+window.__kabala = { manifest, clips: gltf.animations.map((c) => c.name), renderer, play, faces, actions, current: () => current };
+info.textContent = `${manifest.file} · ${(manifest.bytes / 1024).toFixed(0)} KB · ${manifest.triangles} háromszög · ${manifest.bones} csont · klipek: ${gltf.animations.map((c) => c.name).join(', ')}`;
+
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  nextBlink -= dt;
+  if (nextBlink <= 0 && document.getElementById('autoblink').checked && current === 'idle') {
+    actions.blink.reset().setLoop(THREE.LoopOnce, 1).play();
+    nextBlink = 3 + Math.random() * 2.5;
+  }
+  mixer.update(dt);
+  // a csúszka az „idle” alatt kézzel állítja a mosolyt (a többi klip maga animálja)
+  if (current === 'idle') for (const f of faces) f.morphTargetInfluences[f.morphTargetDictionary.smile] = Number(smile.value);
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+{
+  "file": "kabala-maki.92974cd1.glb",
+  "sha256": "92974cd10d0a3c622096c14096a40161c012505fcfac0bdd6f7e59fbf0e415a8",
+  "bytes": 96904,
+  "triangles": 16904,
+  "bones": 22,
+  "materials": 3,
+  "meshes": [
+    "Maki",
+    "MakiArc"
+  ],
+  "morphTargets": [
+    "blink",
+    "smile"
+  ],
+  "clips": [
+    {
+      "name": "blink",
+      "duration": 1,
+      "channels": 1,
+      "loop": false
+    },
+    {
+      "name": "cheer",
+      "duration": 1.5,
+      "channels": 18,
+      "loop": false
+    },
+    {
+      "name": "idle",
+      "duration": 2,
+      "channels": 11,
+      "loop": true
+    },
+    {
+      "name": "sad",
+      "duration": 2.5,
+      "channels": 13,
+      "loop": false
+    },
+    {
+      "name": "wave",
+      "duration": 2,
+      "channels": 6,
+      "loop": false
+    }
+  ],
+  "compression": "KHR_draco_mesh_compression",
+  "fps": 24,
+  "generator": "source/scripts/blender/kabala-maki/build.py"
+}
