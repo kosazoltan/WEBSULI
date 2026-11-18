@@ -67,3 +67,9 @@ source/.catalog/
 
 # Repo-saját kanban-tábla (SQLite, hermes-kanban-workflow CLI) — lokális állapot, nem verziózott
 .hermes/
+
+# Minőségkapuk (docs/minosegkapuk.md, 2026-11-17): a kapu-bizonyíték alapból a közös git-könyvtárban van
+# (<git-common-dir>/websuli-qa-evidence/); ha valaki WEBSULI_QA_EVIDENCE_DIR-rel a munkafába tenné, ne kerüljön commitba.
+# A pre-pr-gate csomagoló Playwright-konfigját (source/playwright.gate.local.mts) a fenti *.local.mts minta fedi.
+qa-evidence/
+.qa-evidence/

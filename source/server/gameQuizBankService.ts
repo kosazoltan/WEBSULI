@@ -11,13 +11,17 @@ import { isPlayableQuestion, uniqueQuizContent } from "../shared/game-quiz-contr
  * Speciális: a Space Asteroid Quiz a játékos osztály-szintje alapján kéri le
  * a LEGUTÓBBI N tananyagához kapcsolt kvízeket (`listLatestMaterialQuizzes`).
  */
+import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import { and, desc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, notInArray, or, sql } from "drizzle-orm";
 import { db } from "./db";
-import { gameQuizItems, htmlFiles, lessons } from "@shared/schema";
-import { canonicalLessonQuiz, type CanonicalQuizRow } from "./studio/canonical-quiz-bank";
+import { gameQuizItems, htmlFiles, knowledgeMaps, lessons } from "@shared/schema";
+import { canonicalLessonQuiz, quizTopic, type CanonicalQuizRow } from "./studio/canonical-quiz-bank";
 import { COUPON_GAME_IDS } from "./studio/quiz-export";
 import { logger } from "./lib/logger";
+import { MAX_CLASSROOM, MIN_CLASSROOM, pickClassroomSet } from "./lib/quiz-bank-classroom";
+
+export { MIN_CLASSROOM_ITEMS, pickClassroomSet } from "./lib/quiz-bank-classroom";
 
 const ALLOWED_GAME_IDS = new Set([
   "tsunami-english",
@@ -44,6 +48,13 @@ export type GameQuizBankRow = {
   questionVersion?: string;
   coversConceptIds?: string[];
   feedbackPerOption?: string[];
+  /**
+   * Kanban #84 (J7b): a forrás-lecke VALÓDI tantárgya `quizTopic`-alakban („english” / „math” / „nature” / „hungarian” /
+   * a lecke tantárgy-felirata). Csak a `material-quizzes` válasz hordozza; ha nem állapítható meg, a mező HIÁNYZIK
+   * (a régi kliensek és a többi játék változatlanul működik). A `topic` régi Stúdió-exportnál a lecke címe, ezért abból
+   * nem lehet tantárgyat kitalálni.
+   */
+  subject?: string;
 };
 
 /**
@@ -130,12 +141,20 @@ function sanitizeRow(r: typeof gameQuizItems.$inferSelect): GameQuizBankRow | nu
 
 const isCouponGame = (gameId: string) => (COUPON_GAME_IDS as readonly string[]).includes(gameId);
 
-/** A régi (nem kanonikus) exportok egy játékra — a kanonikus bankkal fedett lecke / anyag elavult másolatai nélkül. */
-async function legacyRows(gameId: string, canonical: CanonicalBank): Promise<GameQuizBankRow[]> {
+/**
+ * A régi (nem kanonikus) exportok egy játékra — a kanonikus bankkal fedett lecke / anyag elavult másolatai nélkül.
+ * Kanban #101: `materialIds` megadásával csak ezeknek az anyagoknak a sorai (az évfolyam-változathoz; a szűrés az adatbázisban fut).
+ */
+async function legacyRows(gameId: string, canonical: CanonicalBank, materialIds?: readonly string[]): Promise<GameQuizBankRow[]> {
+  if (materialIds && materialIds.length === 0) return [];
   const rows = await db
     .select()
     .from(gameQuizItems)
-    .where(and(eq(gameQuizItems.gameId, gameId), eq(gameQuizItems.isActive, true)));
+    .where(and(
+      eq(gameQuizItems.gameId, gameId),
+      eq(gameQuizItems.isActive, true),
+      materialIds ? inArray(gameQuizItems.sourceMaterialId, [...materialIds]) : undefined,
+    ));
   const out: GameQuizBankRow[] = [];
   for (const r of rows) {
     if ((r.lessonId && canonical.lessonIds.has(r.lessonId)) || (r.sourceMaterialId && canonical.materialIds.has(r.sourceMaterialId))) continue;
@@ -168,7 +187,14 @@ export async function listGameQuizBank(gameId: string): Promise<GameQuizBankRow[
 export const QUIZ_BANK_CACHE_TTL_MS = 15 * 60 * 1000;
 const CACHE_WARN_BYTES = 32 * 1024 * 1024;
 
-export type GameQuizBankResponse = { gzip: Buffer; bytes: number; items: number };
+/**
+ * `etag` (kanban #101): gyenge validátor a KIBONTOTT test SHA-1-éből — azonos tartalom → azonos ETag (a 15 perces újraépítés és a
+ * `?classroom=` változat után is), a gzip és a kibontott alak ugyanazt a tartalmat jelenti.
+ */
+export type GameQuizBankResponse = { gzip: Buffer; bytes: number; items: number; etag: string };
+
+/** Egy kanonikus darab: egy lecke (anyag) egymást követő tételei, a válasz-alakban vesszővel összefűzve. */
+type CanonicalPart = { materialId: string | null; count: number; json: Buffer };
 
 /** Pontosan a route eddigi leképezése (mezősorrendre is) — a kliens-szerződés nem változik. */
 export function quizBankApiItem(r: GameQuizBankRow) {
@@ -190,11 +216,18 @@ type Snapshot = {
   /** A lenyomat-lekérdezés indításának sorszáma (monoton): a nagyobb a frissebb. */
   fpAt: number;
   builtAt: number;
-  /** A kanonikus tételek a válasz-alakban, vesszővel elválasztva, szögletes zárójel nélkül. */
-  canonicalJson: Buffer;
+  /**
+   * A kanonikus tételek a válasz-alakban, anyagonkénti darabokban (a sorrend a teljes válaszé). Kanban #101: a darabolás az
+   * évfolyam-változat miatt kell; a teljes válasz a darabokból bájtra azonosan áll össze.
+   */
+  canonicalParts: CanonicalPart[];
   canonicalCount: number;
   canonical: Pick<CanonicalBank, "materialIds" | "lessonIds">;
   games: Map<string, Promise<GameQuizBankResponse>>;
+  /** Kanban #101: `gameId#c<N>` → az évfolyam-változat (legfeljebb 13 × 6 kulcs pillanatképenként). */
+  variants: Map<string, Promise<GameQuizBankResponse>>;
+  /** A kész (nem teljes-bank) változatok gzip-mérete összesen — a memória-figyelmeztetéshez (review #101 A2). */
+  variantBytes: number;
 };
 
 let current: Snapshot | null = null;
@@ -204,7 +237,7 @@ let building: Flight | null = null;
 let next: Flight | null = null;
 let fpSeq = 0;
 let activeBuilds = 0;
-const stats = { builds: 0, gameBuilds: 0, hits: 0, maxConcurrentBuilds: 0 };
+const stats = { builds: 0, gameBuilds: 0, variantBuilds: 0, hits: 0, maxConcurrentBuilds: 0 };
 
 export function quizBankCacheStats() {
   return { ...stats, fingerprint: current?.fingerprint ?? null };
@@ -212,7 +245,7 @@ export function quizBankCacheStats() {
 
 export function resetQuizBankCacheForTests(): void {
   current = null; building = null; next = null; legacyOnly.clear();
-  stats.builds = 0; stats.gameBuilds = 0; stats.hits = 0; stats.maxConcurrentBuilds = 0;
+  stats.builds = 0; stats.gameBuilds = 0; stats.variantBuilds = 0; stats.hits = 0; stats.maxConcurrentBuilds = 0;
 }
 
 /** A kupon-játékok lenyomata: közzétett leckék + a kupon-játékok régi exportjai. */
@@ -224,6 +257,10 @@ async function quizBankFingerprint(): Promise<{ fingerprint: string; fpAt: numbe
       coalesce((SELECT string_agg(id || ':' || xmin::text, ',' ORDER BY id) FROM ${lessons} WHERE ${lessons.publishedAt} IS NOT NULL), '')
       || '|' ||
       coalesce((SELECT string_agg(id || ':' || xmin::text, ',' ORDER BY id) FROM ${gameQuizItems} WHERE ${inArray(gameQuizItems.gameId, games)}), '')
+      || '|' ||
+      -- Review #101 K2: az évfolyam-változat az anyag évfolyamából számol; egy régi (lecke nélküli) anyag áthelyezése csak a
+      -- html_files sort írja. Csak az id:classroom pár számít (nem az xmin), így más oszlop írása nem érvényteleníti a bankot.
+      coalesce((SELECT string_agg(${htmlFiles.id} || ':' || ${htmlFiles.classroom}::text, ',' ORDER BY ${htmlFiles.id}) FROM ${htmlFiles}), '')
     ) AS fp`);
   return { fingerprint: rows[0].fp, fpAt };
 }
@@ -239,17 +276,24 @@ async function buildSnapshotInner(fingerprint: string, fpAt: number): Promise<Sn
   // Kötegenként szerializálunk: egyszerre csak egy köteg tétel-objektuma él. A deduplikáció a `uniqueQuizContent`
   // kanonikus kulcsa (`canonical:<id>`) szerint, a kötegeken át.
   const ids = new Set<string>();
-  const chunks: Buffer[] = [];
+  const canonicalParts: CanonicalPart[] = [];
   const seen = await scanPublishedCanonical(undefined, undefined, (batch) => {
-    const parts: string[] = [];
+    // Egymást követő, azonos anyagú tételek egy darabba (egy lecke tételei egymás után jönnek).
+    let materialId: string | null | undefined;
+    let pending: string[] = [];
+    const flush = () => {
+      if (pending.length) canonicalParts.push({ materialId: materialId ?? null, count: pending.length, json: Buffer.from(pending.join(","), "utf8") });
+      pending = [];
+    };
     for (const item of uniqueQuizContent(batch)) {
       if (ids.has(item.id)) continue;
       ids.add(item.id);
-      parts.push(JSON.stringify(quizBankApiItem(item)));
+      if (item.sourceMaterialId !== materialId) { flush(); materialId = item.sourceMaterialId; }
+      pending.push(JSON.stringify(quizBankApiItem(item)));
     }
-    if (parts.length) chunks.push(Buffer.from((chunks.length ? "," : "") + parts.join(","), "utf8"));
+    flush();
   });
-  return { fingerprint, fpAt, builtAt: Date.now(), canonicalJson: Buffer.concat(chunks), canonicalCount: ids.size, canonical: seen, games: new Map() };
+  return { fingerprint, fpAt, builtAt: Date.now(), canonicalParts, canonicalCount: ids.size, canonical: seen, games: new Map(), variants: new Map(), variantBytes: 0 };
 }
 
 /** Az egyetlen építés indítása; a `current` csak frissebb (nagyobb `fpAt`-ű) pillanatképre cserélődik. */
@@ -295,24 +339,64 @@ async function snapshotFor(fingerprint: string, fpAt: number): Promise<Snapshot>
 }
 
 /** A válasz: `{"gameId":…,"items":[<kanonikus rész>,<régi exportok>]}`, gzip-pel tömörítve. */
-function serializeResponse(gameId: string, canonical: { json: Buffer; count: number } | null, legacy: GameQuizBankRow[]): GameQuizBankResponse {
+function serializeResponse(gameId: string, canonical: readonly CanonicalPart[], legacy: GameQuizBankRow[]): GameQuizBankResponse {
+  const COMMA = Buffer.from(",", "utf8");
   const parts: Buffer[] = [Buffer.from(`{"gameId":${JSON.stringify(gameId)},"items":[`, "utf8")];
-  if (canonical?.count) parts.push(canonical.json);
+  let count = 0;
+  for (const part of canonical) {
+    if (count) parts.push(COMMA);
+    parts.push(part.json);
+    count += part.count;
+  }
   if (legacy.length) {
-    if (canonical?.count) parts.push(Buffer.from(",", "utf8"));
+    if (count) parts.push(COMMA);
     parts.push(Buffer.from(legacy.map(r => JSON.stringify(quizBankApiItem(r))).join(","), "utf8"));
   }
   parts.push(Buffer.from("]}", "utf8"));
   const body = Buffer.concat(parts);
-  return { gzip: gzipSync(body, { level: 6 }), bytes: body.length, items: (canonical?.count ?? 0) + legacy.length };
+  const etag = `W/"qb-${createHash("sha1").update(body).digest("base64url")}"`;
+  return { gzip: gzipSync(body, { level: 6 }), bytes: body.length, items: count + legacy.length, etag };
 }
+
+const partsBytes = (parts: readonly CanonicalPart[]) => parts.reduce((s, p) => s + p.json.length, 0);
 
 async function buildGame(snap: Snapshot, gameId: string): Promise<GameQuizBankResponse> {
   stats.gameBuilds++;
   const legacy = uniqueQuizContent(await legacyRows(gameId, { ...snap.canonical, items: [] }));
-  const response = serializeResponse(gameId, { json: snap.canonicalJson, count: snap.canonicalCount }, legacy);
-  const cached = snap.canonicalJson.length + snap.games.size * response.gzip.length;
+  const response = serializeResponse(gameId, snap.canonicalParts, legacy);
+  const cached = partsBytes(snap.canonicalParts) + snap.games.size * response.gzip.length + snap.variantBytes;
   if (cached > CACHE_WARN_BYTES) logger.warn(`[GAMES] quiz-bank gyorsítótár nagy: ~${Math.round(cached / 1048576)} MB`);
+  return response;
+}
+
+/**
+ * Kanban #101: az évfolyam-változat. Az anyag → évfolyam térkép két oszlopos lekérdezés; a régi exportok csak a szomszédos évfolyamok
+ * anyagaira (adatbázis-oldali szűrés). A változat a teljes válasz részhalmaza: a kanonikus darabok sorrendje megmarad, a régi exportok
+ * egyedisítő kulcsa az anyagot is tartalmazza, ezért az anyag szerinti szűrés és az egyedisítés felcserélhető. Ha a szabály a teljes
+ * bankot adja (`null`), a teljes válasz objektuma megy (nincs külön tárolt példány). Anyag nélküli lecke tétele csak a teljes bankban van.
+ */
+async function buildVariant(snap: Snapshot, gameId: string, classroom: number, full: () => Promise<GameQuizBankResponse>): Promise<GameQuizBankResponse> {
+  stats.variantBuilds++;
+  const files = await db.select({ id: htmlFiles.id, classroom: htmlFiles.classroom }).from(htmlFiles);
+  const classroomOf = new Map(files.map((f) => [f.id, f.classroom]));
+  const near = new Set([classroom - 1, classroom, classroom + 1]);
+  const nearMaterials = files.filter((f) => near.has(f.classroom)).map((f) => f.id);
+  const legacy = uniqueQuizContent(await legacyRows(gameId, { ...snap.canonical, items: [] }, nearMaterials));
+  const inSet = (materialId: string | null, set: ReadonlySet<number>) => materialId !== null && set.has(classroomOf.get(materialId) ?? -1);
+  const count = (classrooms: readonly number[]) => {
+    const set = new Set(classrooms);
+    let n = 0;
+    for (const p of snap.canonicalParts) if (inSet(p.materialId, set)) n += p.count;
+    for (const r of legacy) if (inSet(r.sourceMaterialId, set)) n++;
+    return n;
+  };
+  const chosen = pickClassroomSet(classroom, count);
+  if (!chosen) return full();
+  const set = new Set(chosen);
+  const response = serializeResponse(gameId, snap.canonicalParts.filter((p) => inSet(p.materialId, set)), legacy.filter((r) => inSet(r.sourceMaterialId, set)));
+  snap.variantBytes += response.gzip.length;
+  const cached = partsBytes(snap.canonicalParts) + snap.variantBytes;
+  if (cached > CACHE_WARN_BYTES) logger.warn(`[GAMES] quiz-bank gyorsítótár nagy (változatokkal): ~${Math.round(cached / 1048576)} MB`);
   return response;
 }
 
@@ -329,7 +413,7 @@ async function legacyOnlyResponse(gameId: string): Promise<GameQuizBankResponse>
   const hit = legacyOnly.get(gameId);
   if (hit && hit.fingerprint === fingerprint && Date.now() - hit.builtAt < QUIZ_BANK_CACHE_TTL_MS) { stats.hits++; return hit.promise; }
   stats.gameBuilds++;
-  const promise = legacyRows(gameId, emptyBank()).then(legacy => serializeResponse(gameId, null, uniqueQuizContent(legacy)));
+  const promise = legacyRows(gameId, emptyBank()).then(legacy => serializeResponse(gameId, [], uniqueQuizContent(legacy)));
   const entry = { fingerprint, builtAt: Date.now(), promise };
   legacyOnly.set(gameId, entry);
   promise.catch(() => { if (legacyOnly.get(gameId) === entry) legacyOnly.delete(gameId); });
@@ -340,18 +424,84 @@ async function legacyOnlyResponse(gameId: string): Promise<GameQuizBankResponse>
  * A `GET /api/games/quiz-bank/:gameId` kész, gzip-pel tömörített válasza; `null` = ismeretlen játék.
  * A kibontott tartalom bájtra azonos a `listGameQuizBank` + `quizBankApiItem` leképezéssel.
  */
-export async function gameQuizBankResponse(gameId: string): Promise<GameQuizBankResponse | null> {
+export async function gameQuizBankResponse(gameId: string, classroom?: number): Promise<GameQuizBankResponse | null> {
   if (!ALLOWED_GAME_IDS.has(gameId)) return null;
+  // A nem kupon-játék (Szólétra) bankja a saját régi exportjaiból áll (néhány tétel): az évfolyam-paraméter rá nem vonatkozik.
   if (!isCouponGame(gameId)) return legacyOnlyResponse(gameId);
   const { fingerprint, fpAt } = await quizBankFingerprint();
   const snap = await snapshotFor(fingerprint, fpAt);
-  let game = snap.games.get(gameId);
-  if (!game) {
-    game = buildGame(snap, gameId);
-    snap.games.set(gameId, game);
-    game.catch(() => { if (snap.games.get(gameId) === game) snap.games.delete(gameId); });
+  const full = (): Promise<GameQuizBankResponse> => {
+    let game = snap.games.get(gameId);
+    if (!game) {
+      game = buildGame(snap, gameId);
+      snap.games.set(gameId, game);
+      game.catch(() => { if (snap.games.get(gameId) === game) snap.games.delete(gameId); });
+    }
+    return game;
+  };
+  if (classroom === undefined) return full();
+  if (!Number.isInteger(classroom) || classroom < MIN_CLASSROOM || classroom > MAX_CLASSROOM) {
+    throw new RangeError(`quiz-bank: érvénytelen évfolyam: ${classroom}`);
   }
-  return game;
+  const key = `${gameId}#c${classroom}`;
+  let variant = snap.variants.get(key);
+  if (!variant) {
+    variant = buildVariant(snap, gameId, classroom, full);
+    snap.variants.set(key, variant);
+    variant.catch(() => { if (snap.variants.get(key) === variant) snap.variants.delete(key); });
+  }
+  return variant;
+}
+
+/* ------------------------------------------------------------------------------------------------------------------ *
+ * Kanban #84 — a `material-quizzes` tétel tantárgya (végrehajtás J7b, „J7b döntések” 9.)
+ * ------------------------------------------------------------------------------------------------------------------ */
+
+/** A kérdés-generátor (`gameQuizGeneratorService`) témái: a régi, generált soroknál ezek tantárgyak, nem címek. */
+const GENERATOR_SUBJECT_TOPICS = new Set(["english", "math", "nature", "hungarian"]);
+
+function withSubject<T extends GameQuizBankRow>(row: T, subject: string | null | undefined): T {
+  const s = typeof subject === "string" ? subject.trim() : "";
+  return s ? { ...row, subject: s } : row;
+}
+
+/** A kanonikus tétel `topic`-ja maga a lecke tantárgya (`quizTopic(lesson.subject)`, `canonical-quiz-bank.ts`). */
+const canonicalWithSubject = (item: CanonicalQuizRow): CanonicalQuizRow & { subject?: string } => withSubject(item, item.topic);
+
+type LegacySource = { lessonId: string | null; sourceMaterialId: string | null; topic: string | null };
+
+/**
+ * A régi exportok tantárgya: a lecke (közvetlenül a `lessonId`-n, vagy az anyagán át — a legfrissebb verzió) tudástérképének
+ * tantárgya `quizTopic`-pal; a generált sornál a téma; különben nincs (a mező hiányzik). Egyetlen, `json` nélküli lekérdezés.
+ */
+async function legacySubjects(rows: readonly LegacySource[]): Promise<(row: LegacySource) => string | undefined> {
+  const lessonIds = [...new Set(rows.map((r) => r.lessonId).filter((v): v is string => !!v))];
+  const materialIds = [...new Set(rows.map((r) => r.sourceMaterialId).filter((v): v is string => !!v))];
+  const byLesson = new Map<string, string>();
+  const byMaterial = new Map<string, string>();
+  if (lessonIds.length || materialIds.length) {
+    const found = await db
+      .select({ id: lessons.id, htmlFileId: lessons.htmlFileId, subject: knowledgeMaps.subject })
+      .from(lessons)
+      .innerJoin(knowledgeMaps, eq(knowledgeMaps.id, lessons.mapId))
+      .where(or(
+        lessonIds.length ? inArray(lessons.id, lessonIds) : undefined,
+        materialIds.length ? inArray(lessons.htmlFileId, materialIds) : undefined,
+      ))
+      .orderBy(desc(lessons.version));
+    for (const f of found) {
+      const subject = quizTopic(f.subject);
+      if (!subject) continue;
+      byLesson.set(f.id, subject);
+      if (f.htmlFileId && !byMaterial.has(f.htmlFileId)) byMaterial.set(f.htmlFileId, subject);
+    }
+  }
+  return (row) => {
+    if (row.lessonId && byLesson.has(row.lessonId)) return byLesson.get(row.lessonId);
+    if (row.sourceMaterialId && byMaterial.has(row.sourceMaterialId)) return byMaterial.get(row.sourceMaterialId);
+    const topic = (row.topic ?? "").trim().toLowerCase();
+    return GENERATOR_SUBJECT_TOPICS.has(topic) ? topic : undefined;
+  };
 }
 
 export type LatestMaterialQuizzes = {
@@ -383,9 +533,15 @@ export async function listLatestMaterialQuizzes(
     const [material] = lesson.htmlFileId ? await db.select().from(htmlFiles).where(eq(htmlFiles.id, lesson.htmlFileId)).limit(1) : [];
     const canonical = canonicalLessonQuiz(lesson);
     const legacy = canonical === null ? await db.select().from(gameQuizItems).where(and(eq(gameQuizItems.lessonId, lessonId), eq(gameQuizItems.isActive, true))) : [];
+    const subjectOf = await legacySubjects(legacy);
+    const legacyItems: GameQuizBankRow[] = [];
+    for (const r of legacy) {
+      const s = sanitizeRow(r);
+      if (s) legacyItems.push(withSubject(s, subjectOf(r)));
+    }
     return { classroom: material?.classroom ?? cls,
       materials: material ? [{ id: material.id, title: material.title, createdAt: material.createdAt.toISOString() }] : [],
-      items: uniqueQuizContent(canonical ?? legacy.map(sanitizeRow).filter((q): q is GameQuizBankRow => q !== null)) };
+      items: uniqueQuizContent(canonical ? canonical.map(canonicalWithSubject) : legacyItems) };
   }
 
   const latestMaterials = await db
@@ -420,11 +576,12 @@ export async function listLatestMaterialQuizzes(
     .orderBy(gameQuizItems.sourceMaterialId, gameQuizItems.prompt, gameQuizItems.options, gameQuizItems.correctIndex, gameQuizItems.explanation, desc(gameQuizItems.createdAt))
     .limit(200);
 
-  const items: GameQuizBankRow[] = [...canonical.items];
-  for (const r of rows) {
-    if ((r.lessonId && canonical.lessonIds.has(r.lessonId)) || (r.sourceMaterialId && canonical.materialIds.has(r.sourceMaterialId))) continue;
+  const items: GameQuizBankRow[] = canonical.items.map(canonicalWithSubject);
+  const kept = rows.filter((r) => !((r.lessonId && canonical.lessonIds.has(r.lessonId)) || (r.sourceMaterialId && canonical.materialIds.has(r.sourceMaterialId))));
+  const subjectOf = await legacySubjects(kept);
+  for (const r of kept) {
     const s = sanitizeRow(r);
-    if (s) items.push(s);
+    if (s) items.push(withSubject(s, subjectOf(r)));
   }
 
   return {

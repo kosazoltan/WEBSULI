@@ -25,6 +25,7 @@ import { isAuthenticated, isAuthenticatedAdmin } from "./auth";
 import { isAdminUser, prepareAdminAccess } from "./lib/admin-access";
 import * as gameScoreService from "./gameScoreService";
 import * as gameQuizBankService from "./gameQuizBankService";
+import { etagMatches, QUIZ_BANK_CLASSROOM_RE } from "./lib/conditional-get";
 import { generateMaterialQuiz, QuizMaterialNotFound } from "./gameQuizGeneratorService";
 // checkIsAdmin import removed
 
@@ -1214,11 +1215,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/games/quiz-bank/:gameId", async (req, res) => {
     try {
       const gameId = typeof req.params.gameId === "string" ? req.params.gameId : "";
+      // Kanban #101: opcionális évfolyam-változat. Hiányzó paraméter → a teljes bank (bájtra a régi válasz); bármi más, mint egy
+      // 0–12 egész → 400, a szolgáltatás hívása nélkül (nincs gyorsítótár-bejegyzés érvénytelen kulccsal).
+      const rawClassroom = req.query.classroom;
+      let classroom: number | undefined;
+      if (rawClassroom !== undefined) {
+        if (typeof rawClassroom !== "string" || !QUIZ_BANK_CLASSROOM_RE.test(rawClassroom)) {
+          // A hibaválasz nem újraérvényesíthető tartalom: no-store (review #101 A4; a Vercel a quiz-bank útvonalra no-cache-t tesz).
+          res.setHeader("Cache-Control", "no-store");
+          return res.status(400).json({ message: "Érvénytelen évfolyam (0–12)." });
+        }
+        classroom = Number(rawClassroom);
+      }
       // #67: a kész válasz gyorsítótárból, előre tömörítve (a régi út kérésenként minden lecke teljes JSON-ját olvasta → OOM).
-      const cached = await gameQuizBankService.gameQuizBankResponse(gameId);
-      if (!cached) return res.json({ gameId, items: [] });
-      res.type("json");
+      const cached = await gameQuizBankService.gameQuizBankResponse(gameId, classroom);
+      if (!cached) { res.setHeader("Cache-Control", "no-store"); return res.json({ gameId, items: [] }); }
+      // Kanban #101: feltételes kérés. A válasz nyilvános és felhasználótól független (nem olvas munkamenetet); `no-cache`:
+      // minden használat előtt újraérvényesít (a bank naponta többször frissül), a változatlanra 304 megy test nélkül.
       res.vary("Accept-Encoding");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("ETag", cached.etag);
+      if (etagMatches(req.headers["if-none-match"], cached.etag)) return res.status(304).end();
+      res.type("json");
       if (req.acceptsEncodings("gzip")) {
         // A compression réteg a már kódolt választ nem tömöríti újra.
         res.setHeader("Content-Encoding", "gzip");
@@ -1227,6 +1245,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       return res.send(gunzipSync(cached.gzip));
     } catch (e) {
+      if (!res.headersSent) res.setHeader("Cache-Control", "no-store");
       // AUDIT 2026-09-01: csak a hiányzó tábla esetén fallback; más DB-hiba ne legyen néma 200
       if (isMissingGamesTableError(e)) {
         return res.json({ gameId: typeof req.params.gameId === "string" ? req.params.gameId : "", items: [] });
@@ -1305,6 +1324,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           questionVersion: r.questionVersion,
           feedbackPerOption: r.feedbackPerOption,
           coversConceptIds: r.coversConceptIds,
+          // Kanban #84: a forrás-lecke valódi tantárgya (opcionális; ismeretlennél a mező hiányzik).
+          subject: r.subject,
         })),
       });
     } catch (e) {

@@ -279,3 +279,47 @@ test("real DB: finishing a round adds per-item outcomes once; incremental table 
     assert.ok(finished.result && finished.finishedAt, "the round closes although the outcome table is missing");
   } finally { await dbPool.query("ALTER TABLE catalog_item_outcomes_hidden RENAME TO catalog_item_outcomes"); }
 });
+
+// A fájl VÉGÉN áll: a „practice” leckén lezárt kört ad hozzá, a korábbi tesztek a lezárt körök számát mérik (practiceReport).
+test("spec 2026-11-17-eredmeny-email-foglalas: a szerveres kvíz az UTOLSÓ válasznál lezárás nélkül küld; az ismételt válasz és a lezárás nem küld újra", async () => {
+  const { users } = await import("../shared/schema");
+  const { setResultSender } = await import("../server/lesson-result-email");
+  await db.insert(users).values({ id: "learner-mail", firstName: "Próba", lastName: "Postás" }).onConflictDoNothing();
+  // Csak ennek a tanulónak a levelei számítanak: a korábbi tesztek köreinek háttérküldése még úton lehet, amikor a címzettlista beáll.
+  const sent: Array<{ subject: string; to: string }> = [];
+  const previous = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "admin-a@example.test, admin-b@example.test";
+  // Lassú küldő: a lezárás hívásai a levél kiküldése KÖZBEN érkeznek (a régi, küldés utáni visszaírással ez dupla levelet adott).
+  setResultSender(async (subject, html, to) => { await new Promise(resolve => setTimeout(resolve, 150)); if (html.includes("Postás Próba")) sent.push({ subject, to }); });
+  const settle = async (count: number) => { for (let i = 0; i < 60 && sent.length < count; i++) await new Promise(resolve => setTimeout(resolve, 50)); await new Promise(resolve => setTimeout(resolve, 400)); };
+  try {
+    const round = await beginPractice("learner-mail", "practice");
+    const last = round.questions[round.questions.length - 1];
+    for (const q of round.questions.slice(0, -1)) await answerPractice("learner-mail", round.id, q.id, 0, false);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    assert.equal(sent.length, 0, "hiányos, le nem zárt kör nem megy el");
+    const answered = await answerPractice("learner-mail", round.id, last.id, 0, false);
+    assert.equal(answered.finishedAt, null, "az utolsó válasz nem zárja le a kört");
+    // Ugyanaz a válasz újra (idempotens): nem küld másodszor. A levél LEZÁRÁS NÉLKÜL megérkezik.
+    await answerPractice("learner-mail", round.id, last.id, 0, false);
+    await settle(2);
+    assert.deepEqual(sent.map(mail => mail.to).sort(), ["admin-a@example.test", "admin-b@example.test"], "a levél lezárás nélkül megjött, címzettenként egy");
+    assert.equal((await readPractice("learner-mail", round.id)).finishedAt, null, "a kör közben nincs lezárva");
+    assert.ok(sent.every(mail => /— Kvíz —/.test(mail.subject)));
+    // A későbbi lezárás (hat egyidejű hívással) nem küld újra.
+    const finished = await Promise.all(Array.from({ length: 6 }, () => finishPractice("learner-mail", round.id)));
+    assert.ok(finished.every(view => view.finishedAt));
+    await settle(3);
+    assert.equal(sent.length, 2, "a lezárás nem küld második levelet");
+    // Új kör: utolsó válasz, majd AZONNAL hat egyidejű lezárás — a levél még úton van (foglalás a küldés előtt): címzettenként egy.
+    const next = await beginPractice("learner-mail", "practice");
+    assert.notEqual(next.id, round.id);
+    for (const q of next.questions) await answerPractice("learner-mail", next.id, q.id, 0, false);
+    await Promise.all(Array.from({ length: 6 }, () => finishPractice("learner-mail", next.id)));
+    await settle(5);
+    assert.equal(sent.length, 4, "a második kör is címzettenként pontosan egy levél");
+  } finally {
+    setResultSender(null);
+    if (previous === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = previous;
+  }
+});
