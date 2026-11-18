@@ -727,3 +727,107 @@ Szükséges: `OPENROUTER_API_KEY` a futtató gépen. Ügynök a 3. lépést nem 
   számát, a becsült költséget és a promptokat.
 - [ ] A43 WHEN egy ablak megoldott THEN the system SHALL meleg ablakfényt mutatni, a 24. megoldásakor a csillagot felgyújtani;
   WHEN csökkentett mozgás van beállítva THEN the system SHALL ezt animáció nélkül tenni.
+
+## 14. Elhelyezés — főoldali kártya a Hero és a tananyagok között (tulajdonosi követelmény, 2026-11-18)
+
+A tulajdonos szó szerint: „ezt nem játékok között helyezd el, hanem a Hero és a tananyagok közé, egy teljes szélességű, de nem túl
+magas kártyán, hogy azonnal lássák a tanulók, és azonnal tudjanak vele játszani.”
+
+Ez FELÜLÍRJA az R10-et, a 3.2 lista `Games.tsx` / `HomePracticeGames.tsx` / `AdventPromoCard.tsx` tételeit és az S4 kártya-részét:
+a naptár NEM kerül a játékok közé — sem a `/games` listába, sem a főoldali játék-rácsba. A `Games.tsx` és a `HomePracticeGames.tsx`
+érintetlen marad.
+
+### 14.1 Döntések
+
+- **Útvonal: `/adventi-naptar`** (a `/games/adventi-naptar` helyett). Indok: a „nem a játékok között” elvhez ez illik; rövid és
+  kimondható az e-mailben; a kapuk és őrök `games` mintái (`gates.config.json`, `/games/<id>` esetfájlok) így biztosan nem
+  tekintik játéknak. Az API-útvonal (`/api/advent`) és a teszt-azonosítók változatlanok.
+- **Egy koppintás a kérdésig (javaslat, a terv ezzel készül):** a kártya „Kinyitom” gombja a `/adventi-naptar?nyit=ma` címre visz;
+  a naptár megjelenik, és azonnal megnyitja a soron következő ablak kérdését — sorrend: a mai, még meg nem válaszolt ablak; ha az
+  megvan, a legkorábbi pótolható (nyitható, megválaszolatlan) ablak; ha nincs ilyen, az első javítható ablak; ha az sincs, csak a
+  naptár látszik. Indok: „azonnal tudjanak vele játszani”; a gyerek közben a háttérben látja a falut, és a válasz után ott marad a
+  naptárnál. A paraméter nélküli `/adventi-naptar` csak a naptárat mutatja.
+
+### 14.2 A kártya helye (felmérés: fájl:sor)
+
+- `source/client/src/pages/Home.tsx:56` a `UserFileList`-et rendereli; a főoldal törzse a
+  `source/client/src/components/UserFileList.tsx`-ben van: `HeroSection` (314–318. sor) → `SponsorBar` (321.) → `WelcomeCard`
+  (324.) → évfolyamszűrő (326. sortól) → kereső → nézetváltó (404.) → tananyaglista; a játék-rács (`HomePracticeGames`) a lista
+  alatt (498. és 533. sor).
+- **Az új `AdventHomeCard` helye: közvetlenül a `HeroSection` után, a `SponsorBar` elé** (a 318. és a 321. sor közé) — így a Hero
+  alatt az első elem, a szűrő, a kereső és a tananyagok fölött. Az üres listás ágban (266. sortól) a tartalom tetejére is bekerül,
+  hogy a naptár akkor is elérhető legyen, ha nincs tananyag.
+- Szélesség: a `container` teljes szélessége álló telefonon (360–430 px) és széles nézeten is; lekerekített, a fejléc üvegnyelvéhez
+  illő keret.
+- **Magasság-keret:** telefonon legfeljebb 132 px, 768 px-től legfeljebb 160 px; alsó térköz 12 px. Fix `min-height` = `max-height`
+  (a tartalom nem nyújthatja meg; a hosszabb állapotszöveg egy sorban, három ponttal vágva).
+- Mérés (az S4 része, böngészőtesztben rögzítve): az első tananyagkártya felső élének helye a kártya nélkül és a kártyával
+  390×844-en és 1366×768-on; az elvárás: a különbség ≤ 144 px (telefon), illetve ≤ 172 px (asztal). A mostani abszolút helyet nem
+  mértem (UNVERIFIED) — a teszt mindkét értéket kiírja a PR-leíráshoz.
+
+### 14.3 A kártya tartalma
+
+Elrendezés: háttérként a széles ünnepi banner (új képtétel, 14.5), rajta balra a szöveg, jobbra a gomb; telefonon a szöveg két
+sorban, alatta / mellette a gomb.
+- Cím: „Adventi naptár”.
+- Állapot egy pillantásra (`advent-home-status`, a szerver `GET /api/advent/state` válaszából):
+  - `teaser`: „Hamarosan: december 1.” (+ „még N nap”); gomb nincs, a kártya nem link;
+  - `open`, a mai ablak megválaszolatlan: „Ma a(z) N. ablak nyílik”; ha korábbi is vár: „Ma a(z) N. ablak nyílik — és még K vár rád”;
+  - `open` / `catchup`, a mai megvan, de van pótolható vagy javítható: „K ablak vár rád”;
+  - minden nyitható megvan, de még nincs vége: „Mára kész! Holnap nyílik a(z) N+1. ablak” (gomb: „Megnézem”);
+  - végigért: „Végigértél: M / 24 ablak világít” (gomb: „Megnézem”);
+  - az állapot még tölt vagy hibázott: „Nyisd ki a mai ablakot!” (a gomb ilyenkor is működik).
+- Gomb (`advent-home-cta`): „Kinyitom”, legalább 48 × 48 képpont, jól látható (arany alapon sötét szöveg), `/adventi-naptar?nyit=ma`.
+  A kártya egésze nem link (a gomb az), hogy a képernyőolvasó és a billentyűzet egyértelmű célt kapjon.
+- A feliratok kódból jönnek (nem a képen vannak); a banner díszítő, `alt=""`.
+
+### 14.4 Szezonalitás, betöltés, regresszió
+
+- Látszik: november 24–30. „Hamarosan”; december 1. – január 6. aktív; január 7-től és november 24. előtt nem látszik. Az
+  `ADVENT_CALENDAR` flag kikapcsolt állapotában nem látszik.
+- **Elrendezés-ugrás (CLS) nélkül:** a kártya dobozát a kliens AZONNAL lefoglalja, ha a böngésző órája szerint (`adventNow(new Date())`,
+  a közös tiszta függvény) a fázis `teaser`, `open` vagy `catchup` — a tartalom a `GET /api/advent/status` és `/state` megérkezésekor
+  töltődik bele ugyanabba a fix magasságú dobozba. A szerver marad a tekintély: ha a `status` szerint a naptár nem él (kikapcsolt
+  flag, vagy a kliens órája téved), a doboz összecsukódik — ez az egyetlen eset, amikor a lista elmozdul (visszakapcsolás /
+  rossz óra), a rendes szezonban nincs ugrás. Szezonon kívül a komponens semmit sem renderel és semmit sem kér le.
+- Kép: a banner a hajtás fölött van, ezért NEM lusta: `fetchpriority="high"`, `decoding="async"`, rögzített `width` / `height`;
+  alatta CSS-színátmenet a helyőrző (a kép megérkezése nem mozdít el semmit). Bájtcél ≤ 60 kB.
+- Regresszió: a szűrő, a kereső, a nézetváltó és a lista DOM-sorrendje és teszt-azonosítói változatlanok; a meglévő főoldali tesztek
+  változtatás nélkül zöldek maradnak: `home-views.spec.ts`, `material-title.spec.ts`, `classroom-badge.spec.ts`,
+  `home-list-visibility.test.ts`, `home-cards-modern.test.ts`, `home-practice-games-catalog.test.ts`, `games-lobby-mobile.spec.ts`.
+  Az e2e-szerver alapból szezonon KÍVÜL fut (a tesztóra fejléc nélkül a valódi dátum számít) — a meglévő tesztek determinizmusa
+  érdekében a kártya e2e-módban csak akkor jelenik meg, ha a teszt kifejezetten tesztidőt ad (a kliens ilyenkor a `status` válasz
+  fázisát használja a doboz lefoglalásához); ezt a naptár saját tesztjei használják.
+- Az értesítő e-mail (R14) gombja a `/adventi-naptar` címre mutat (közvetlenül a naptárra); a levél szövege megemlíti, hogy a
+  főoldal tetején is ott a kártya.
+- Az M8 mérce a naptárra: a FŐOLDALRÓL egy koppintás a kérdésig.
+
+### 14.5 Képlista-kiegészítés és a költség frissítése (a 13.3 és a 13.6 kiegészítése)
+
+| Azonosító | Tartalom | Képarány → végső méret | Jelölt | Felbontás | Bájtcél |
+|---|---|---|---|---|---|
+| `advent-home-banner` | Széles, alacsony ünnepi sáv: havas falu háztetői és fenyők alulról, fölötte csillagos mélykék ég, jobbra szánkó rénszarvassal; a bal kétharmad nyugodt, sötétebb (ide kerül a szöveg) | 16:9 generálva → 1600 × 400-ra vágva (4:1) | 4 | 2K | ≤ 60 kB |
+
+Prompt-tervezet: „A very wide, low festive banner: snowy rooftops and fir trees along the bottom edge, a deep blue starry night sky
+above, a small sleigh with a reindeer on the right; the left two thirds stay calm and dark for overlaid text.”
+Költség: + 4 kép × 0,09 + 4 × 0,003 = + 0,37 USD → **első kör: 94 kép ≈ 5,22 USD; becsült felső keret pótkörrel ≈ 7 USD**
+(a 13.6 feltételeivel: a kódban rögzített 2026-10-17-i ár, a mai ár UNVERIFIED). A készlet 30 tételes.
+
+### 14.6 Új elfogadási kritériumok
+
+<!-- acceptance-checklist -->
+
+- [ ] A44 WHEN a főoldal a szezonban (november 24. – január 6.), bekapcsolt flaggel jelenik meg THEN the system SHALL közvetlenül
+  a Hero alatt, a szűrő és a tananyaglista fölött teljes szélességű kártyát mutatni „Adventi naptár” címmel, az aktuális
+  állapottal és (december 1-től) egy legalább 48 × 48 képpontos „Kinyitom” gombbal; a kártya magassága telefonon ≤ 132 px,
+  768 px-től ≤ 160 px.
+- [ ] A45 WHEN a tanuló a főoldali kártya gombjára koppint THEN the system SHALL egyetlen koppintással a naptárra vinni és a
+  soron következő ablak kérdését megnyitni (14.1 sorrend).
+- [ ] A46 WHEN a szezonon kívül vagy kikapcsolt flaggel jelenik meg a főoldal THEN the system SHALL a kártyát nem mutatni, és a
+  `/games` lista, valamint a főoldali játék-rács SOHA nem tartalmazhatja a naptárat.
+- [ ] A47 WHEN a főoldal a szezonban betölt THEN the system SHALL a kártya helyét a tartalom megérkezése előtt lefoglalni
+  (a tananyaglista nem ugrik el a kártya és a banner betöltésekor), és a bannert elsőbbséggel, nem lustán tölteni.
+- [ ] A48 WHEN a kártya megjelenik THEN the system SHALL a főoldal meglévő tesztjeit (nézetek, címek, osztályjelvény, kereső,
+  szűrő) változtatás nélkül teljesíteni.
+
+Az A15 és az A28 a kártyára a fentiek szerint értendő (főoldali kártya; M8: a főoldalról egy koppintás).

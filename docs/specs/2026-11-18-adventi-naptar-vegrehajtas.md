@@ -499,3 +499,43 @@ Elfogadás: A40, A41, A43.
 
 S1 → S1b és S3c-0 (egymástól függetlenek; az S3c-0 korán kell, hogy a tulajdonos időben jóváhagyhassa a költséget és válogathasson)
 → S2a → S2b → S3a → S3b → S4 → S3c (amint a válogatás megvan; a naptár helyőrzőkkel is élesíthető) → S5 → S6 → S8.
+
+## Kiegészítés 3 — főoldali kártya és új útvonal (tulajdonosi követelmény, 2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 14. szakasz)
+
+Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/Games.tsx`, a `client/src/components/HomePracticeGames.tsx`
+és az `AdventPromoCard.tsx` NEM része a munkának (a naptár nem kerül a játékok közé).
+
+- **S3a:** az útvonal `<Route path="/adventi-naptar" component={AdventCalendar} />` (az `App.tsx`-ben a `/games` sor elé). Az
+  `AdventCalendar.tsx` a `?nyit=ma` paraméterre az állapot megérkezése után egyszer megnyitja a soron következő ablak kérdését
+  (sorrend: mai megválaszolatlan → legkorábbi nyitható megválaszolatlan → első javítható → semmi), majd a paramétert
+  `history.replaceState`-tel eltávolítja (újratöltéskor nem nyit újra). A böngészőtesztek a `/adventi-naptar` címet használják.
+- **S4 (átírva) — főoldali kártya.** Fájlok: `client/src/components/AdventHomeCard.tsx`, `client/src/components/UserFileList.tsx`,
+  `client/src/advent/advent.css`, `shared/advent/art.ts` (új tétel: `advent-home-banner`, 1600 × 400), `tests/advent-home-card.spec.ts`,
+  `tests/advent-calendar-mobile.spec.ts`, `tests/advent-source-guard.test.ts`.
+  1. `AdventHomeCard.tsx` (`advent-home-card`): a doboz lefoglalása a terv 14.4 szerint (`adventNow(new Date())` fázisa; e2e-buildben
+     — `import.meta.env.VITE_ENABLE_GAME_TEST_HOOKS === "1"` — a `status` válasz fázisa); `min-height` = `max-height`: 132 px, `md:`
+     160 px; `mb-3`. Tartalom: `AdventArt id="advent-home-banner"` háttérként (`fetchpriority="high"`, nem lusta, `alt=""`), cím,
+     `advent-home-status` (a terv 14.3 szövegei, egy tiszta `homeCardStatus(state)` függvényből a `shared/advent/rules.ts`-ben,
+     egységteszttel), `advent-home-cta` (`<Link href="/adventi-naptar?nyit=ma">`, „Kinyitom” / „Megnézem”, ≥ 48 px magas).
+  2. `UserFileList.tsx`: `<AdventHomeCard />` a `HeroSection` záró sora (318.) és a `SponsorBar` (321.) közé, valamint az üres listás
+     ág (266. sortól) `container` elemének első gyerekeként. Más sor nem változik.
+  3. `tests/advent-home-card.spec.ts` (390×844 érintős és 1366×768): a kártya a Hero alatt és a `button-filter-all` fölött van
+     (`boundingBox` sorrend); magasság ≤ 132 / ≤ 160; a gomb ≥ 48 × 48; az első tananyagkártya felső éle a kártya nélkül (szezonon
+     kívüli tesztidő) és a kártyával — a különbség ≤ 144 / ≤ 172, mindkét érték `console.log`-gal a PR-leíráshoz; CLS: a
+     `PerformanceObserver` `layout-shift` összege a betöltés alatt < 0,02 lassított `/api/advent/state` válasszal (`page.route`
+     800 ms késleltetés); állapotszövegek december 3-i, november 29-i tesztidővel; egy `tap()` a gombra → `advent-question` látható
+     (A45); november 23. és január 7. → nincs `advent-home-card`; a `/games` oldalon nincs `advent` szöveg / link (A46).
+  4. `tests/advent-source-guard.test.ts` bővítése: a `Games.tsx` és a `HomePracticeGames.tsx` forrásában nincs `advent` (A46).
+  5. A mobil mérés M8 pontja: a főoldalról egy `tap()` után `advent-question` látható.
+
+| Parancs | Várt kimenet |
+|---|---|
+| `node --import tsx scripts/run-e2e-tests.ts tests/advent-home-card.spec.ts tests/advent-calendar-mobile.spec.ts --workers=1` | minden teszt `passed` |
+| `node --import tsx scripts/run-e2e-tests.ts tests/home-views.spec.ts tests/material-title.spec.ts tests/classroom-badge.spec.ts tests/games-lobby-mobile.spec.ts --workers=1` | változatlanul `passed` |
+| `node --import tsx --test tests/home-list-visibility.test.ts tests/home-cards-modern.test.ts tests/home-practice-games-catalog.test.ts tests/advent-source-guard.test.ts` | `fail 0` |
+| (gyökérből) `npm.cmd run gate:stage`, majd `npm.cmd run gate:push` | zöld |
+
+  Elfogadás: A44–A48, A12–A15, A26–A30, A32.
+- **S3c-0:** a készlet 30 tételes (`advent-home-banner`, 4 jelölt, 2K); a száraz futás várt kimenete „94 kép · becsült költség ≈ 5.22 USD”,
+  az `estimateSetUsd` teszt várt értéke 5,22 (± 0,01).
+- **S8:** a levél gombja a `/adventi-naptar` címre mutat.
