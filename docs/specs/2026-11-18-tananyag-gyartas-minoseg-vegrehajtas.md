@@ -368,17 +368,32 @@ minden más és a hiány = KI). Minden szeletre érvényes szabályok:
 >   kicsinyített nézetet kapnak), a hibás paraméterű blokk indexe nem kínálható fel. UNVERIFIED böngészőben — előbb reprodukáld.
 > - **vak J7 — fölösleges görgetés 3 oszlopnál:** `min-width: calc(var(--sv-cols) * 6.5em)` miatt egy „1 | 2 | 3” tartalmú tábla is
 >   görög 360 px-en. Teendő: a legkisebb szélesség a tartalomból (nem oszlopszám × állandó); állítás a böngészős próbában.
-> - **vak J8 — a felsorolás-felismerés hézagai:** bekezdés marad a szószedet („- dog – kutya”), a felszólító lista, a kérdőszavak,
->   a számmal kezdődő pontok; tévesen lista a kijelentő párbeszéd, és a szóközzel írt előjel („- x = 5”) jele eltűnik. Teendő:
->   esetlista egységtesztként, döntés esetenként (a kétes eset bekezdés marad, jel nem tűnhet el); a már kiadott leckék
->   megjelenésének változása mérve (hány kiadott lecke magyarázata érintett — csak olvasva).
-> - **vak J10 — a böngészős próba a CI-ban:** a `playwright.source-visuals.config.ts` nincs a `.github/workflows/ci.yml` Playwright
->   listájában, és npm-szkript sem hivatkozza. A munkafolyamat-fájl módosítása tulajdonosi / orkesztrátori teendő (ügynök a
->   workflow-hoz nem nyúl) — kanban-jegy kell rá; addig a próba futtatása a szelet kézi, kötelező lépése.
+> - **vak J8 — a „-” kezdetű felsorolás felismerése (külön, későbbi szelet):** a teljes tartalmú vak ellenőr J3 lelete után
+>   (2026-11-18) listává CSAK az egyértelmű „•” kezdetű sorok alakulnak; a „-” / „–” / „*” kezdetű sorok a főágéval azonosan,
+>   bekezdésként jelennek meg (`explain-paragraphs.ts`; őr: `tests/explain-paragraphs.test.ts`, a főág kimenetéhez rögzítve) — a már
+>   kiadott leckékben a kötőjel előjel („- a = -3”), egyenletsor („- x + 5 = 2”, U+2212 is) vagy párbeszédjel is lehet. Teendő, ha
+>   a „-” listák mégis kellenek: ELŐBB mérés a kiadott állományon (csak olvasva: hány magyarázat tartalmaz „-” kezdetű sorfutást, és
+>   ezek közül mennyi lista / egyenlet / párbeszéd — kézi minta), esetlista egységtesztként (szószedet, felszólító lista,
+>   kérdőszavak, számmal kezdődő pont, kijelentő párbeszéd, előjel, `=` / műveleti jel a sorban), és csak olyan szabály vezethető
+>   be, amely a mért állományban egyetlen jelet sem tüntet el. Addig a gyártó promptja a felsorolást „•” jellel kérje (S3a).
+> - **vak J10 — a böngészős próba a CI-ban:** tisztázva (2026-11-18): a CI alap Playwright-lépése (`npx playwright test`, a
+>   `playwright.config.ts` `testMatch: '**/*.spec.ts'` mintájával, a `VITE_ENABLE_RUNTIME_PROBE=1` builddel) a
+>   `tests/source-visuals.spec.ts`-t is futtatja — a saját `playwright.source-visuals.config.ts` a gyors helyi körre való (vite,
+>   `--workers=1`), a workflow-ban nem kell megnevezni. Teendő: az első PR CI-futásán ellenőrizd, hogy a spec az alap
+>   konfigurációval (30 mp-es alapidő, éles build) is zöld; ha ott ingadozik, a spec saját időkorlátot kapjon (a workflow-hoz
+>   ügynök nem nyúl).
 > - **vak J11 — nyomtatás:** nincs `@media print`; a görgő tábla nyomtatásban levágódik. UNVERIFIED — előbb reprodukáld; ha áll:
 >   nyomtatásban a tábla tördelhető, görgetés nélküli.
 > - **vak J12 — kódhigiénia:** a `SOURCE_VISUAL_TEXT.branchYes / branchNo` (ebben a szeletben a döntési fa használja — ha nem,
 >   törlendő); a három fajta felirata egy helyen éljen (`ANIM_LABELS` ↔ `SOURCE_VISUAL_HEAD_LABELS`).
+>
+> **A teljes tartalmú vak ellenőr (2026-11-18, a lánc teteje) leletei — a kapcsoló BEKAPCSOLÁSA előtt kötelező („tt J…”):**
+> - **tt J6 — döntési fa és képes kártya:** a leltár gyűjti, a prompt fejezethez rendelteti, a fedettségi kapu „must” / „should”
+>   hiánynak méri (`gates/source-coverage-gate.ts`), de megjelenítő és sémafajta ebben a szeletben készül. Amíg nincs kész: BE
+>   állapotban minden ilyen forrás „HIÁNYOS”, és a modell `animKind: "decisionTree"` blokkja fizetős javítókört indít — a kapu
+>   `enforce` módra csak e szelet UTÁN kapcsolható; a szelet tesztje rögzítse, hogy a két fajta a kapun „megjelent”.
+> - **tt J9 — `useHeaderFit`:** a mérés nem fut újra, ha a tábla paraméterei csere nélkül változnak (szerkesztő / előnézet);
+>   közzétett leckénél nem jelentkezik. UNVERIFIED — reprodukáld az előnézetben; ha áll, a hatás függjön a fejlécek szövegétől.
 
 Ág: `feat/lecke-megjelenitok-s2b`. Fájlok: mint az S2a (a `source-visuals.tsx`, a séma, a címkék, a lektor-nézet, a spec bővül).
 
@@ -435,6 +450,27 @@ minden más és a hiány = KI). Minden szeletre érvényes szabályok:
 >   említése a séma-javító üzenetben és a lektor-szabályban; S13 / S14 / S18 / S19 a `compareCards` külső `.strict()`-je, a
 >   táblacím (160), a kártyacím / példa (80 / 160), a dobozcím (80) korlátja; E4 / E5 / E7 az `explain-paragraphs.ts` „bounded”,
 >   „opened” feltétele és a „– soha nem lista” szabálya (mindegyikre olyan eset, amelyet más védelem nem fog meg).
+>
+> **A teljes tartalmú vak ellenőr (2026-11-18, a lánc teteje) leletei — a kapcsoló BEKAPCSOLÁSA előtt kötelező („tt J…”):**
+> - **A modellkimenet határa (lezárva, szabályként él tovább):** a modell kimenetét (szerzői lecke, ábrafolt, fogalomjavítás,
+>   leckejavítás) a `modelLessonSchema(kapcsoló)` / `modelBlockSchema(kapcsoló)` méri — KI állapotban a bővítés előtti séma. Új
+>   modellkimenet-határ csak ezzel köthető be; a `lessonSchema` a TÁROLT lecke olvasására való. Új séma-mező vagy ábrafajta
+>   felvételekor a `legacy…` változatból ki kell hagyni, és a `tests/source-visuals-flag.test.ts` séma-próbája (`modelSchemaProbe`)
+>   bővítendő.
+> - **tt J5 — leltár ↔ megjelenítő szerződés:** (a) az üres sarokfejlécű tábla (`headers: ["", "jelen", "múlt"]`) a leltárból
+>   kiesik (`shared/source-visuals.ts`, `filled`); (b) szám típusú cella miatt az egész tábla kiesik; (c) a leltár 40 sort enged, a
+>   blokk 20-at — a bontást a prompt mondja ki, az egy blokkba másolt tábla ne essen ki némán; (d) a leltár elfogad csonka sort (2
+>   cella 3 oszlophoz), a megjelenítő soha — ilyen tétel a kapu szerint örökre hiányzik. Teendő: a leltár-érvényesítő és a
+>   blokk-séma ugyanazt a normalizálást futtassa (a „vak J4” ponttal együtt), esetenként egységteszt a teljes láncon (leltár →
+>   blokk → kapu „megjelent”).
+> - **tt J7 — a köztes BE állapot alulbecsül:** BE állapotban a szerző / ábrakészítő promptja a leltár `table` / `ruleBox`
+>   tételeit mutatja, de a hirdetett ábrafajta-lista ezeket ebben a szeletben kapja meg — az S10/1 mérés CSAK e szelet után
+>   értelmezhető (előtte a fedettség mért értéke a hirdetés hiányát méri, nem a gyártó képességét).
+> - **tt J8 — visszakapcsolás (BE → KI):** a BE alatt jóváhagyott / mentett terv `sourceVisualIds` / `skippedVisuals` mezője a
+>   jóváhagyott terv útján megmarad (`approvedOutlineOf`, nincs `autofixOutlineVisuals`), és leltár nélkül a szerző promptjába
+>   kerül; a BE alatt mentett, folytatott job leckéje (`resumePointOf`) a teljes sémával olvasódik. Teendő: KI állapotban a
+>   jóváhagyott / folytatott terv és lecke forrástétel-mezői kerüljenek le (teszt: BE alatt mentett terv + KI futás kérései a
+>   főágéval azonosak). A leckejavítás `coverage.visuals` írása már kapcsolófüggő (`structured-improvement.ts`).
 
 Ág: `feat/abrakeszito-forrasra-kotve-s3a`. Fájlok: `server/studio/step-io.ts`, `server/studio/role-skills.ts`,
 `shared/lesson-visual-params.ts`, `server/studio/visual-patch.ts`, `server/studio/section-visuals.ts`,
@@ -650,6 +686,11 @@ futásonkénti összesített javítókör-plafon; a borító-újrapróba, az e-m
 5. 0.3 szerinti kapuk.
 
 ### S10/1 — Első mérés (az SK3 merge után; fizetős)
+
+> **Előfeltételek a teljes tartalmú vak ellenőr (2026-11-18) leleteiből — a mérés és az éles bekapcsolás előtt:** az S3a „tt J5”
+> (leltár ↔ megjelenítő szerződés), „tt J7” (a hirdetett ábrafajta-lista bővítése — nélküle a mérés alulbecsül) és „tt J8”
+> (visszakapcsolás BE → KI) pontja, valamint az S2b „tt J6” pontja (döntési fa, képes kártya megjelenítője) LEZÁRVA. A mérés
+> jelentése mondja ki tételesen, melyik lezárt, és a kapu `enforce` módra kapcsolása csak a „tt J6” után javasolható.
 
 Futásterv: **2 fizetős futás** (HM „utána”, PT „utána”) + legfeljebb **2 tartalék**. „Előtte” futás NINCS: a HM alapvonala a
 meglévő éles lecke (6 / 38), a PT alapvonala a forrásleltár (0 / 39), a változatosságé a kiadott állomány.
