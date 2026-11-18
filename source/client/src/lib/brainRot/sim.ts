@@ -39,6 +39,7 @@ import {
   type BrainRotState,
   type BrainRotTuning,
 } from "./core";
+import { baseWindowMs, paceBrainRotDirector } from "./pacing";
 
 /** A sim táblája (CSS px): tipikus álló telefon a HUD alatt. */
 export const SIM_BOARD = { w: 360, h: 560 } as const;
@@ -102,7 +103,8 @@ export type BrainRotSim = {
   /** A menet kérdés-kulcsai sorban (változatosság / forrásrend teszt). */
   askedKeys(): readonly string[];
   /** A menet kimenetei sorban: tétel-kulcs és eredmény (kupon-ismétlés teszt — J5a 23.). */
-  outcomes(): readonly { key: string; result: string }[];
+  /** `isReview`: a director menetközi ismétlésként adta (csak ez számít a `MAX_RETURNS_PER_RUN` plafonba). */
+  outcomes(): readonly { key: string; result: string; isReview: boolean }[];
   /** A bot döntése ELŐTT regisztrált ketrec-válaszok száma (véletlen válasz — review #485 B1; 0 kell). */
   prematureAnswers(): number;
   director: QuestionDirector;
@@ -146,8 +148,9 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     startBand: 0.4,
     now: () => T0,
   });
+  const paced = paceBrainRotDirector(director, { grade: () => grade });
   const asked: string[] = [];
-  const results: { key: string; result: string }[] = [];
+  const results: { key: string; result: string; isReview: boolean }[] = [];
   /** A bot választott ketrece (a nyitott kérdéshez), vagy null. */
   let chosen: { id: number; option: number } | null = null;
   /** A nyitott kérdés megjelenése (kérdés-óra ms) és a bot késleltetett elengedése (ms). */
@@ -155,7 +158,8 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
   let holdFor = 0;
   let driver: BrainRotDriver | null = null;
   const ui = createQuestionUi({
-    director: () => (questions ? director : null),
+    // Válaszidő (terv 2026-11-17-brainrot-valaszido): ugyanaz a burkoló, mint a lapon (olvasásalapú ablak, előjelzés utáni óra).
+    director: () => (questions ? paced : null),
     onView: () => {},
     onShow: (p) => {
       asked.push(p.question.key);
@@ -166,7 +170,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
       if (opts.startInCageZone) placeOnCageEdge();
     },
     onOutcome: (o, p) => {
-      results.push({ key: p.question.key, result: o.result });
+      results.push({ key: p.question.key, result: o.result, isReview: p.isReview });
       chosen = null;
       const picked = o.pickedOriginalIndex === null ? null : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
       driver!.core.applyOutcome(o.result, picked === -1 ? null : picked);
@@ -180,6 +184,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     tuning: brainRotTuningFor(grade, SIM_BOARD.w, SIM_BOARD.h),
     arenaW: SIM_BOARD.w / unitPx,
     arenaH: SIM_BOARD.h / unitPx,
+    questionRoundMs: baseWindowMs, // D5-módosítás, mint a lapon
   });
   const d = driver;
   const core = d.core;

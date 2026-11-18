@@ -73,3 +73,24 @@
 6. Runbook és skill: a hook saját időtúllépése / indítási hibája a Claude Code-nál alapból nem tiltás — ezért projektgyökérhez kötött
    parancs, és (jóváhagyás esetén) `onFailure: "block"`; kiút elromlott hooknál.
 7. Utolsó, KÜLÖN commit: `"onFailure": "block"` a kapu-hook két bejegyzésén + a hozzá tartozó teszt-állítás és runbook-sor.
+
+
+## Héj szerinti tokenizálás (kanban #100, 3. kör) — végrehajtás
+
+1. Ez a doksi-commit (terv 11.2 + ez az alfejezet).
+2. `check-quality-gates.mjs`: `tokenizeSimple(raw, { tool })` Bash / PowerShell szabályokkal; a szöveg-alapú tiltás helyett; a
+   kapu-kötelesség az idézés feloldása utáni szavakon is.
+3. Tesztek: H5 héjanként, V2 (szabályos PR-folyamat), folyamat-szintű eszköznév-teszt, `fixtures/quoting-forms.json` (198 alak × 2 héj);
+   `settings-hooks.test.mjs`: a kapu-hook mindkét eszközön, időkorlát a keret fölött.
+4. Runbook: héj szerinti szabály és PowerShell-tanács; a merge utáni élő próba és visszaállítás; követő jegy: `args`-os hook-alak.
+5. `gate:stage`, mutációs ellenpróba, valódi héjas különbségi próba (scratchpad).
+
+
+## Megjegyzés, here-string, kapcsolók, ismeretlen eszköz (kanban #100, 4. kör) — végrehajtás
+
+1. Ez a doksi-commit (terv 11.3 + ez az alfejezet).
+2. `check-quality-gates.mjs`: megjegyzés a sor végéig (mindkét héj), `comment` mező, „#<szám>” tiltás; PowerShell here-string és nem
+   ASCII szóköz tilt; `--auto` / `--disable-auto` a `parseFlags` után; ismeretlen eszköz → mindkét héj; a `main()` minden héj-eszközt vizsgál.
+3. Tesztek: a 4. kör alakjai (B1, B2, M1, M2, K1, K4), a spec-változás dokumentálva; `fixtures/quoting-forms.json` bővítve a 152 támadó
+   alakkal és a valódi héjas eredménnyel; a fixture-teszt a héjas eredményt is állítja (kapu-köteles hívás → nem „nem kapu-köteles”).
+4. Valódi héjas ellenpróba (scratchpad, csonk git / gh): Git Bash, PowerShell 7, Windows PowerShell 5.1; mutációs ellenpróba; `gate:stage`.
