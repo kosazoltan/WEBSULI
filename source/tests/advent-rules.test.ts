@@ -173,3 +173,21 @@ test("összesítés egy javítással is számol (maxRepairs = 1): a második hib
   const doors: Record<number, DoorRecord> = { 1: { attempts: [attempt(false)] }, 2: { attempts: [attempt(false), attempt(false)] }, 3: { attempts: [attempt(false), attempt(true)] } };
   assert.deepEqual(adventSummary(doors, 1), { total: 24, answered: 3, solved: 1, firstTry: 0, repairable: 1, failed: 1, passed: false, percent: 4 });
 });
+
+test("szezon előtt és üres naptárnál is helyes a szöveg (review N1, N2)", () => {
+  for (const phase of ["before", "teaser"] as const) {
+    const soon = closing(doorsOf(0), { phase });
+    assert.equal(soon.kind, "soon");
+    assert.match(soon.text, /december 1-jén nyílik/);
+    assert.doesNotMatch(soon.text, /bezárt|jövőre|világított/);
+  }
+  const empty = closing(doorsOf(0), { phase: "closed" });
+  assert.equal(empty.kind, "closed");
+  assert.equal(empty.text, "Az idei naptár bezárt — jövőre újra találkozunk!");
+  assert.doesNotMatch(empty.text, /\d/);
+  // Megválaszolt, de egy megoldott ablak nélküli naptár: szintén számolás nélkül.
+  assert.doesNotMatch(closing(doorsOf(0, 0, 3), { phase: "closed" }).text, /\d/);
+  assert.match(closing(doorsOf(7), { phase: "closed" }).text, /Nálad 7 ablak világított a 24-ből/);
+  // Az üzenet a szezon előtt sem jelenhet meg másnak, csak aki megfelelt.
+  assert.notEqual(closing(doorsOf(22, 2), { phase: "teaser" }).text, ADVENT_GIFT_MESSAGE);
+});
