@@ -32,15 +32,17 @@ időkeretet, `retries`-t módosítani, tesztet kihagyni tilos; a `fix/szokoar-te
    - kör (≤ 4): kártya látszik → bezárás, majd várakozás a kártya eltűnésére (állapot, korláttal); `correct` nem látszik →
      kilépés; `answerable` nem látszik (megoldás-kijelzés) → várakozás az állapotváltásra (`answerable` látható VAGY `correct`
      rejtett; korláttal), új kör; különben `answerable.click({ timeout: 2_000 })` — ha nem megy végbe (a kérdés közben eldőlt),
-     új kör; ha végbement: `acted = true`, várakozás a megválaszolt kérdés eltűnésére (`correct` rejtett vagy új `answerable`
-     nélkül; korláttal).
+     új kör; ha végbement: `acted = true`, várakozás a megválaszolt kérdés lezárulására (`correct` rejtett vagy kártya; korláttal),
+     majd `settle`: a kattintás óta eltelt idő kiegészítése a korábbi 1500 ms-ra (kártyánál 500 ms-ra) — alsó korlát, hogy a mérés
+     feltételei ne változzanak.
 3. Render-ablak:
    - `rendersOpen` / `rendersClose`: a képkockánkénti figyelő a kérdés-jel mellett a tárcsa eltűnését is jelzi (`gone`); a záró
      olvasás `{ counts, quiz, gone }`.
    - `hold(jiggle, events, extraMs)` — egy darab: `events` mozgás-esemény (vagy `events` × 16 ms állva + `extraMs`).
-   - `cleanChunk(jiggle, events, extraMs)` — legfeljebb `MAX_TRIES` (5) próba; `quiz` vagy `gone` → nem eredmény; kérdésnél az
-     ismétlés előtt `alignToQuizGap` (következő megválaszolható kérdés megvárása ≤ 16 mp, `clearQuiz`, a kérdés-jel eltűnésének
-     megvárása); a hibaüzenet marad („… próbából sincs kérdés nélküli … ablak — a render-szám nem mérhető”).
+   - `cleanChunk(jiggle, events, extraMs)` — legfeljebb `MAX_TRIES` (5) próba; `quiz` vagy `gone` → nem eredmény; darabolt
+     játéknál (`renderChunks > 1`) MINDEN próba előtt `alignToQuizGap` (következő megválaszolható kérdés megvárása ≤ 16 mp,
+     `clearQuiz`, a kérdés-jel eltűnésének megvárása), a nem darabolt játéknál nincs igazítás; a hibaüzenet eleje marad („…
+     próbából sincs kérdés nélküli … ablak — a render-szám nem mérhető”).
    - `cleanHold(jiggle, extraMsPerEvent)` — `renderChunks` darab, a számlálók és a hossz összegezve; az eredmény alakja a régi
      (`{ counts, ms }`), a `renderDelta` / `renderDrag` / `renderStill` / `stillMs` / `dragMs` számítása változatlan.
 4. Lépcső: `readRec` a kérdés-jel mellett a tárcsa meglétét is visszaadja (`stickGone`); `stepOnce` a hiányzó tárcsánál
