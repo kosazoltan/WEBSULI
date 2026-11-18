@@ -74,14 +74,15 @@ export type AdventState = {
 
 export type AdventOpenResult = {
   day: number;
-  question: AdventQuestion;
+  /** `null`: a már megválaszolt kérdés közben kikerült a bankból — ilyenkor csak a tárolt eredmény látszik. */
+  question: AdventQuestion | null;
   /** Megoldott / végleg hibás ablaknál az utolsó próba eredménye (csak olvasásra). */
   answered: AdventAnswerResult | null;
 };
 
 export type AdventAnswerResult = {
   correct: boolean;
-  /** A helyes válasz indexe a kliensnek adott (kevert) sorrendben. */
+  /** A helyes válasz indexe a kliensnek adott (kevert) sorrendben; -1, ha a kérdés már nem érhető el. */
   correctIndex: number;
   explanation: string;
   door: AdventDoorView;

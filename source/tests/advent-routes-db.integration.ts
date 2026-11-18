@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
-import { dbPool, startApp } from "./support/authz-db-harness";
+import { dbPool, injectSession, startApp } from "./support/authz-db-harness";
 
 const { GRADE_QUIZ_ITEMS } = await import("../client/src/data/gradeQuizBank/index");
 const { CHRISTMAS_ITEMS } = await import("../shared/advent/christmasBank/index");
@@ -39,7 +39,7 @@ class Kid {
     if (this.now) headers["x-advent-test-now"] = this.now;
     if (this.cookie) headers.cookie = this.cookie;
     if (method === "GET") {
-      headers["x-advent-device"] = this.device;
+      if (this.device) headers["x-advent-device"] = this.device;
       if (this.learner) headers["x-learner-token"] = this.learner;
     } else {
       headers["content-type"] = "application/json";
@@ -59,7 +59,7 @@ class Kid {
     this.csrf = r.json.csrfToken as string;
     return this;
   }
-  ident(): Json { return { device: this.device, ...(this.learner ? { learner: this.learner } : {}) }; }
+  ident(): Json { return { ...(this.device ? { device: this.device } : {}), ...(this.learner ? { learner: this.learner } : {}) }; }
   state() { return this.raw("GET", "/api/advent/state"); }
   post(path: string, body: Json = {}, opts?: { csrf?: boolean }) { return this.raw("POST", `/api/advent${path}`, { ...this.ident(), ...body }, opts); }
   async open(day: number): Promise<Question> {
@@ -283,20 +283,6 @@ describe("adventi naptár — végpontok", () => {
     assert.equal((await k.post("/round")).status, 409, "új kör csak végigjátszás után");
   });
 
-  it("új névtelen sorok: egy hálózatról óránként legfeljebb 30; a meglévő sor nem számít (A49)", async () => {
-    const ip = "10.99.0.1";
-    const make = async () => { const k = await kid(); k.ip = ip; return k; };
-    const first = await make();
-    for (let i = 0; i < 5; i++) assert.equal((await first.post("/grade", { grade: 4 })).status, 200, "ugyanaz a sor: csak az első létrehozás számít");
-    for (let i = 0; i < 29; i++) assert.equal((await (await make()).post("/grade", { grade: 4 })).status, 200, `${i + 2}. új sor`);
-    const blocked = await make();
-    assert.equal((await blocked.post("/grade", { grade: 4 })).status, 429);
-    assert.deepEqual(await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [blocked.device]), []);
-    assert.equal((await first.post("/doors/1/open")).status, 200, "a meglévő sor tovább játszhat");
-    // Másik hálózatról a létrehozás megy.
-    assert.equal((await (await kid()).post("/grade", { grade: 4 })).status, 200);
-  });
-
   it("szezon előtt és után: olvasható, de nem írható (E6, E7); a játékos adatletöltése tartalmazza a naptárat (E19)", async () => {
     const k = await kid();
     k.now = "2026-11-29T10:00:00Z";
@@ -319,5 +305,107 @@ describe("adventi naptár — végpontok", () => {
     const exported = await createPlayerAccountStore(dbPool).exportAccount(player!.id, () => []);
     assert.deepEqual((exported?.adventCalendar as Json[]).map((r) => ({ season: r.season, grade: r.grade, round: r.round })), [{ season: 2026, grade: 6, round: 1 }]);
     await dbPool.query(`DELETE FROM player_accounts WHERE id = $1`, [player!.id]);
+  });
+  it("játékos-fiók valódi munkamenettel: sima játékos, tanulóhoz kötött fiók, tiltott fiók (review K1); a kötött fiók adatletöltése a tanuló sorát adja (C2)", async () => {
+    process.env.PLAYER_ACCOUNTS = "on";
+    try {
+      const mk = async (banned = false) => (await q<{ id: string }>(`INSERT INTO player_accounts (email, banned_at) VALUES ($1, $2) RETURNING id`, [`advent-${randomUUID()}@websuli.example`, banned ? new Date() : null]))[0]!.id;
+      const signIn = async (playerId: string) => { const k = new Kid(); k.cookie = await injectSession({ player: { id: playerId, at: Date.now() } }); k.device = ""; return k.start(); };
+
+      // (a) sima játékos: saját sor, az évfolyamot egyszer megadja.
+      const plainId = await mk();
+      const plain = await signIn(plainId);
+      const first = (await plain.state()).json;
+      assert.deepEqual({ identity: first.identity, needsGrade: first.needsGrade }, { identity: "player", needsGrade: true });
+      assert.equal((await plain.post("/grade", { grade: 6 })).status, 200);
+      await plain.answer(1, await plain.open(1), true);
+      assert.deepEqual(await q(`SELECT subject_kind, player_id, learner_id, grade FROM advent_progress WHERE subject_id = $1`, [plainId]),
+        [{ subject_kind: "player", player_id: plainId, learner_id: null, grade: 6 }]);
+
+      // (b) tanulóhoz kötött fiók: a TANULÓ sora — ugyanaz, mint a párosított eszközé.
+      const learner = await newLearner(4);
+      const linkedId = await mk();
+      await dbPool.query(`UPDATE player_accounts SET linked_learner_id = $2 WHERE id = $1`, [linkedId, learner.id]);
+      const linked = await signIn(linkedId);
+      const linkedState = (await linked.state()).json;
+      assert.deepEqual({ identity: linkedState.identity, grade: linkedState.grade, needsGrade: linkedState.needsGrade }, { identity: "learner", grade: 4, needsGrade: false });
+      assert.equal((await linked.post("/grade", { grade: 9 })).status, 409, "a kötött fiók évfolyama a tanulóé");
+      await linked.answer(2, await linked.open(2), true);
+      const paired = await kid();
+      paired.learner = learner.token;
+      assert.equal((await paired.state()).json.doors[1].state, "solved", "a párosított eszköz ugyanazt a naptárat látja");
+      assert.deepEqual(await q(`SELECT subject_kind FROM advent_progress WHERE subject_id = $1`, [linkedId]), [], "a fióknak nincs külön sora");
+      const exported = await createPlayerAccountStore(dbPool).exportAccount(linkedId, () => []);
+      assert.deepEqual((exported?.adventCalendar as Json[]).map((r) => ({ season: r.season, grade: r.grade, solvedDoors: r.solvedDoors })), [{ season: 2026, grade: 4, solvedDoors: 1 }]);
+
+      // (c) tiltott fiók: nem játékos — a naptár azonosító nélkül látszik, írni nem lehet a fiók nevében.
+      const bannedId = await mk(true);
+      const banned = await signIn(bannedId);
+      assert.equal((await banned.state()).json.identity, null);
+      assert.equal((await banned.post("/grade", { grade: 5 })).status, 400);
+      assert.deepEqual(await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [bannedId]), []);
+
+      // Kikapcsolt játékos-fiókoknál a munkamenet nem számít alanynak.
+      process.env.PLAYER_ACCOUNTS = "off";
+      assert.equal((await plain.state()).json.identity, null);
+      await dbPool.query(`DELETE FROM player_accounts WHERE id = ANY($1)`, [[plainId, linkedId, bannedId]]);
+      await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+    } finally { delete process.env.PLAYER_ACCOUNTS; }
+  });
+
+  it("érvénytelen tanulói token íráskor: 409 és pairing: invalid — nem ír csendben az eszköz sorába (review C3)", async () => {
+    const learner = await newLearner(5);
+    const k = await kid();
+    k.learner = `${learner.id}.99.${"x".repeat(22)}`;
+    for (const [path, body] of [["/grade", { grade: 5 }], ["/doors/1/open", {}], ["/doors/1/answer", { questionId: "xmas-001", pick: 0 }], ["/round", {}]] as const) {
+      const r = await k.post(path, body);
+      assert.deepEqual({ status: r.status, pairing: r.json.pairing }, { status: 409, pairing: "invalid" }, path);
+    }
+    assert.deepEqual(await q(`SELECT 1 FROM advent_progress WHERE subject_id IN ($1, $2)`, [k.device, learner.id]), []);
+    // „Folytatom vendégként”: token nélkül ugyanaz az eszköz játszhat.
+    k.learner = null;
+    assert.equal((await k.post("/grade", { grade: 5 })).status, 200);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("új névtelen sorok: óránként 90 / hálózat, és csak a LÉTREJÖTT sor számít — a visszagördült kísérlet nem (A49, review K2)", async () => {
+    const ip = "10.98.0.1";
+    // 40 eszköz évfolyam nélkül próbál ablakot nyitni: mind 409, sor nem jön létre, a keret érintetlen.
+    for (let i = 0; i < 40; i++) {
+      const k = await kid(); k.ip = ip;
+      assert.equal((await k.post("/doors/1/open")).status, 409, `${i + 1}. kísérlet`);
+    }
+    assert.deepEqual(await q(`SELECT count(*)::int AS n FROM advent_progress WHERE created_at > now() - interval '1 minute' AND subject_kind = 'device' AND grade IS NULL`), [{ n: 0 }]);
+    // Meglévő sor ismételt írása sem fogyaszt keretet: csak az első létrehozás számít.
+    const first = await kid(); first.ip = ip;
+    for (let i = 0; i < 5; i++) assert.equal((await first.post("/grade", { grade: 4 })).status, 200);
+    // Ezután még 89 valódi létrehozás belefér (összesen 90 / óra / hálózat — iskolai méret), a 91. nem.
+    for (let i = 0; i < 89; i++) { const k = await kid(); k.ip = ip; assert.equal((await k.post("/grade", { grade: 4 })).status, 200, `${i + 2}. létrehozás`); }
+    const blocked = await kid(); blocked.ip = ip;
+    const r = await blocked.post("/grade", { grade: 4 });
+    assert.deepEqual({ status: r.status, limit: r.json.limit }, { status: 429, limit: "new-row" });
+    assert.deepEqual(await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [blocked.device]), []);
+    assert.equal((await first.post("/doors/1/open")).status, 200, "a meglévő sor tovább játszhat");
+    // Másik hálózatról a létrehozás megy.
+    assert.equal((await (await kid()).post("/grade", { grade: 4 })).status, 200);
+  });
+
+  it("bankból eltűnt, már megválaszolt kérdés: a megoldott ablak újranyitása a tárolt eredményt adja, nem hibát (review C5)", async () => {
+    const k = await kid();
+    assert.equal((await k.post("/grade", { grade: 7 })).status, 200);
+    const question = await k.open(2);
+    await k.answer(2, question, true);
+    // A tervben és a próbában a kérdés azonosítóját olyanra írjuk át, amely a bankban nincs (mintha a tétel kikerült volna).
+    await dbPool.query(`UPDATE advent_progress SET plan = replace(plan::text, $2, 'g07-torolt-001')::jsonb, doors = replace(doors::text, $2, 'g07-torolt-001')::jsonb WHERE subject_id = $1`, [k.device, question.id]);
+    const reopened = await k.post("/doors/2/open");
+    assert.equal(reopened.status, 200);
+    assert.equal(reopened.json.question, null);
+    assert.deepEqual({ correct: reopened.json.answered.correct, correctIndex: reopened.json.answered.correctIndex, state: reopened.json.answered.door.state }, { correct: true, correctIndex: -1, state: "solved" });
+    // A duplán küldött válasz is a tárolt eredményt adja.
+    const again = await k.post("/doors/2/answer", { questionId: "g07-torolt-001", pick: 0 });
+    assert.deepEqual({ status: again.status, correct: again.json.correct }, { status: 200, correct: true });
+    // A naptár többi része működik.
+    assert.equal((await k.state()).json.doors[1].state, "solved");
+    await k.answer(1, await k.open(1), true);
   });
 });
