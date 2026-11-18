@@ -87,6 +87,12 @@ a másik három játék mérési menete (náluk a render-ablak egy darab marad).
    az ablak alatt bármikor eltűnt (a kör véget ért); az ilyen darab nem mérési eredmény: ismétlés (az `ensurePlaying` új kört
    indít). A lépcsőnél a záró olvasás ugyanabban a lap-hívásban jelzi, hogy a tárcsa még él-e; ha nem, a lépcső ismétlődik (a
    meglévő, legfeljebb háromszori ismétlési úton). Ez szigorítás: a mérő eddig elfogadott álló játékon mért ablakot is.
+6. **Review #514 (Codex P2) és vak ellenőr KICSI-4.** A nyugvás időbélyege a SIKERES kattintás befejezésekor rögzül (a kattintás
+   előtti időbélyeggel lassú futtatón a kattintásra várás is beleszámított volna, és éppen a CI-n rövidült volna a nyugvás); a
+   kártyabezárás kattintása is nem végzetes (2 s, sikertelenségnél újraolvasás), ugyanúgy, mint a megválaszolható gombé. Közös,
+   tiszta segéd: `source/tests/support/click-settle.ts` (`clickThenSettle`), szimulált órás egységteszt:
+   `source/tests/joystick-click-settle.test.ts` (a régi viselkedésen 2 bukás, a javítotton 4/4). Küszöb, eseményszám nem változik.
+
 ## 5. Kockázatok
 
 | Kockázat | Kezelés |

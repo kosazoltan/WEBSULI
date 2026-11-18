@@ -4,6 +4,7 @@ import { CASE as blockCraft } from "./game-mobile-cases/block-craft-quiz";
 import { CASE as spaceAsteroid } from "./game-mobile-cases/space-asteroid-quiz";
 import { CASE as tornado } from "./game-mobile-cases/tornado-hunter-200";
 import { CASE as tsunami } from "./game-mobile-cases/tsunami-english";
+import { clickThenSettle, type Clock } from "./support/click-settle";
 import type { GameMobileCase } from "./support/game-mobile-quality";
 
 /**
@@ -427,11 +428,15 @@ async function clearQuiz(page: Page, g: GameSpec): Promise<boolean> {
   let acted = false;
   for (let round = 0; round < 4; round++) {
     if (await card.isVisible().catch(() => false)) {
-      const t = Date.now();
-      await card.click({ timeout: 5_000 });
-      acted = true;
-      await card.waitFor({ state: "hidden", timeout: 3_000 }).catch(() => undefined);
-      await settle(page, t, 500);
+      // Vak ellenőr KICSI-4: a kártya a láthatóság-ellenőrzés és a kattintás között magától is bezárulhat — a sikertelen kattintás
+      // nem hiba (újraolvasás), nem 5 s-os időtúllépés.
+      const closed = await clickThenSettle(
+        () => card.click({ timeout: 2_000 }),
+        () => card.waitFor({ state: "hidden", timeout: 3_000 }).catch(() => undefined),
+        500,
+        pageClock(page),
+      );
+      if (closed) acted = true;
       continue;
     }
     if (!(await correct.isVisible().catch(() => false))) break;
@@ -441,26 +446,26 @@ async function clearQuiz(page: Page, g: GameSpec): Promise<boolean> {
       continue;
     }
     // A kérdés a kattintás előtt eldőlhet (lejárat, tétlen átfutás): ilyenkor a gomb már nem megválaszolható — újraolvasunk.
-    const t = Date.now();
-    const clicked = await answerable.click({ timeout: 2_000 }).then(() => true, () => false);
+    // A megválaszolt kérdés lezárulására várunk (eltűnik, vagy hibás koppintásnál a magyarázókártya jön), majd a nyugvás a SIKERES
+    // kattintás végétől 1500 ms (review #514, P2: a kattintás előtti időbélyeggel a lassú CI-n rövidült volna).
+    const clicked = await clickThenSettle(
+      () => answerable.click({ timeout: 2_000 }),
+      () => waitQuiz(page, g, ["closed", "card"], 3_000),
+      1500,
+      pageClock(page),
+    );
     if (!clicked) continue;
     acted = true;
-    // A megválaszolt kérdés lezárulására várunk (eltűnik, vagy hibás koppintásnál a magyarázókártya jön).
-    await waitQuiz(page, g, ["closed", "card"], 3_000);
-    await settle(page, t, 1500);
   }
   return acted;
 }
 
 /**
  * A mérés feltételei ne változzanak: a kérdés lezárulása után a játék (turbó, feliratok) ugyanannyit nyugszik, mint a korábbi
- * rögzített várakozásnál — az állapotra várás UTÁN a `since` óta eltelt időt `minMs`-ig kiegészítjük (soha nem indulunk
- * korábban, mint eddig; az állapot miatt legfeljebb később).
+ * rögzített várakozásnál (`click()` → `waitForTimeout(minMs)`): `clickThenSettle` (`support/click-settle.ts`) az állapotra várás
+ * UTÁN a sikeres kattintás vége óta eltelt időt `minMs`-ig kiegészíti (soha nem indulunk korábban, mint eddig).
  */
-async function settle(page: Page, since: number, minMs: number): Promise<void> {
-  const rest = minMs - (Date.now() - since);
-  if (rest > 0) await page.waitForTimeout(rest);
-}
+const pageClock = (page: Page): Clock => ({ now: () => Date.now(), sleep: (ms) => page.waitForTimeout(ms) });
 
 /** A következő ütemezett kérdésre legfeljebb ennyit várunk (a Szökőár ütemezőjének legnagyobb köze 15 mp, + 1 mp). */
 const QUIZ_WAIT_MS = 16_000;
