@@ -342,6 +342,10 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
   **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** a méretőr KÉT kemény, írást megtagadó plafon együtt — hangverziónként 40 MB és a teljes
   táblára abszolút 80 MB (2 × 40 MB: egy hangcsere átmeneti kettős készlete fér bele, több nem). Írni csak a kódban rögzített aktuális
   hangverzióra (`TTS_VOICE_VERSION`) lehet; a régi verziók sorainak takarítása kifejezett, őrzött művelet a tároló felületén.
+  **Spec-pontosítás 2026-11-18 (független review J1–J2):** elérhetőségi jegyzék — `GET /api/tts/lesson-audio/available?keys=…` (csak olvas; csak a 32 hexa jegyes
+  kulcsformátum, legfeljebb 200 kulcs; a válasz a meglévő kulcsok részhalmaza, 60 mp-ig gyorsítótárazható). A lecke a betöltésekor EGY
+  kéréssel lekéri, így a kliens nem kattintásonkénti 404-ből tudja meg a hiányt: elérhető kulcsra az előre gyártott hang szól, különben
+  azonnal, a kattintás gesztusában a rangsorolt böngészőhang. A hangtár (hangfájl + jegyzék) saját, osztályra méretezett sebességkorlátot kap.
 - **S8c — hanggyártás ellenőrzéssel:** közös gyártómodul (egyedi szövegek kigyűjtése, ElevenLabs-hívás a szerver kulcsával, gépi
   hangkapu: hossz, csend, levágás, érvényes MP3; legfeljebb 2 újragenerálás; a kész kulcs kihagyva). Két hívó: (1) helyi szkript
   eldobható adatbázisra, alapértelmezetten száraz módban (darab-, karakter- és költségbecslés fizetős hívás nélkül); (2) **élesben

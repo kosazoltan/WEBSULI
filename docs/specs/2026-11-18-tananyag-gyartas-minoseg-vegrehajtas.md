@@ -813,6 +813,12 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    `preservesPitch = true`, `playbackRate = rate`, lejátszás a kattintás gesztusában; `error` esemény, elutasított `play()` vagy
    3 mp-en belül el nem induló lejátszás → a mai lánc (rangsorolt böngészőhang → tartalék). Egy szóra a sikertelen útvonal a
    munkamenetben megjegyződik. A gesztus-szabály és a hibajelző (`onError`) változatlan.
+   **Spec-pontosítás 2026-11-18 (független review J1–J2):** a kliens a hiányt nem a hangfájl 404-éből tudja meg, hanem elérhetőségi jegyzékből: `GET
+   /api/tts/lesson-audio/available?keys=<vesszővel elválasztott kulcsok>` (`server/tts/audio-routes.ts`; bemenet: csak a kulcsformátum,
+   legfeljebb 200 kulcs, hibás bemenet 400 `no-store`; válasz `{ available: string[] }`, `Cache-Control: public, max-age=60`; a
+   tároló felületén `existing(keys)`, egyetlen lekérdezés). A lecke a betöltésekor egy kéréssel kéri le; elérhető kulcsra az előre
+   gyártott hang szól, különben azonnal a böngészőhang (hangfájl-kérés nélkül). A hangtár útvonala saját korlátot kap
+   (`LESSON_AUDIO_RATE_LIMIT`: 30 tanuló × 40 szöveg + 30 jegyzék-kérés = 1 230, tartalékkal 2 000 kérés / 15 perc / IP).
 8. Tesztek: `tts-audio-key` — rögzített bemenetre rögzített hash; szóköz-normalizálás; más verzió → más hash. `tts-audio-store`
    (eldobható helyi adatbázison vagy a repó meglévő adatbázis-teszt mintáján; ha a teszt adatbázist kér, a `test:learning-db`
    futtatóba kerül) — `put` → `get` → azonos bájtok; ismételt `put` → `"exists"`; mutációk: plafon feletti írás →
