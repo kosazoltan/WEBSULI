@@ -214,3 +214,45 @@ test("S1b valódi HTTP + DB: két pillanatkép → EGY „félbehagyva” levél
     assert.ok(sent.every(mail => /— Kvíz — 100% /.test(mail.subject) && !/helyébe lép/.test(mail.html)));
   } finally { clearPendingPartials(); setPartialDelay(previous); }
 });
+
+test("review B1 (valódi HTTP + DB): vendégnél az UJJLENYOMAT NÉLKÜLI pillanatkép és az ujjlenyomatos végleges beküldés — a végleges törli a várakozót, nincs ellentmondó levél", async () => {
+  const { setPartialDelay, clearPendingPartials, pendingPartialCount } = await import("../server/lesson-result-email");
+  const previous = setPartialDelay(500);
+  const q = lesson.experience!.quiz.slice(0, 5);
+  const picks = (answered: number) => Object.fromEntries(q.map((item, i) => [item.id, i < answered ? item.correctIndex : -1]));
+  const post = (body: object) => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  try {
+    sent.length = 0;
+    // A valódi kliens törzse: a lap elhagyásakor az ujjlenyomat még hiányozhat (nincs `fingerprint` mező) …
+    const snapshot = await post({ kind: "quiz", roundId: "round-b1", picks: picks(3), partial: true, startedAt: Date.now() - 60_000 });
+    assert.deepEqual(await snapshot.json(), { queued: true, partial: true });
+    const before = pendingPartialCount();
+    // … a végleges beküldés viszont ujjlenyomattal megy (resultReport.ts: getFingerprint).
+    assert.equal((await post({ kind: "quiz", roundId: "round-b1", picks: picks(5), fingerprint: "fp-b1", startedAt: Date.now() - 60_000 })).status, 202);
+    await waitFor(() => sent.length === 2);
+    assert.equal(pendingPartialCount(), before - 1, "a végleges beküldés törölte a várakozó pillanatképet");
+    await new Promise(r => setTimeout(r, 1200));
+    assert.equal(sent.length, 2, "nincs késői „félbehagyva” levél a befejezett kör mellé");
+    assert.ok(sent.every(mail => /— Kvíz — 100% /.test(mail.subject) && !/félbehagyva/.test(mail.subject)));
+  } finally { clearPendingPartials(); setPartialDelay(previous); }
+});
+
+test("review K1: tanulónként legfeljebb 3 várakozó kör — a negyedik a legrégebbit szorítja ki (nem a jogos újat dobja el)", async () => {
+  const { setPartialDelay, clearPendingPartials, pendingPartialCount, MAX_PENDING_PER_LEARNER } = await import("../server/lesson-result-email");
+  const previous = setPartialDelay(60_000);
+  clearPendingPartials();
+  const q = lesson.experience!.quiz.slice(0, 5);
+  const picks = Object.fromEntries(q.map((item, i) => [item.id, i < 2 ? item.correctIndex : -1]));
+  const post = (roundId: string, fingerprint: string) => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind: "quiz", roundId, picks, partial: true, fingerprint }) });
+  try {
+    assert.equal(MAX_PENDING_PER_LEARNER, 3);
+    for (const round of ["round-k1-a", "round-k1-b", "round-k1-c", "round-k1-d"]) {
+      const res = await post(round, "fp-k1");
+      assert.deepEqual(await res.json(), { queued: true, partial: true }, `${round}: a jogos pillanatkép nem vész el`);
+    }
+    assert.equal(pendingPartialCount(), 3, "tanulónként 3 várakozó");
+    assert.deepEqual(await (await post("round-k1-other", "fp-k1-masik")).json(), { queued: true, partial: true });
+    assert.equal(pendingPartialCount(), 4, "a másik tanuló saját kerete független");
+  } finally { clearPendingPartials(); setPartialDelay(previous); }
+});

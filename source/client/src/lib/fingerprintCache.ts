@@ -5,6 +5,11 @@ import { logger } from "./logger";
 let fingerprintCache: string | null = null;
 let fingerprintPromise: Promise<string> | null = null;
 
+/** Spec 2026-11-17-eredmeny-email-kviz (review B1): a már lekért ujjlenyomat szinkron (a lap elhagyásakor nincs idő hálózati körre). */
+export function peekFingerprint(): string | null {
+  return fingerprintCache;
+}
+
 export async function getFingerprint(): Promise<string> {
   // Return cached fingerprint if available
   if (fingerprintCache) {

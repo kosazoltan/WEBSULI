@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiRequest, sendKeepalive, warmCsrfToken } from "@/lib/queryClient";
-import { getFingerprint } from "@/lib/fingerprintCache";
+import { getFingerprint, peekFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
 import { answeredCount, quizRoundComplete, roundTooOld } from "@shared/quiz-round";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
@@ -60,7 +60,9 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
   latest.current = round;
   const lastSnapshot = useRef(0);
   const answered = kind === "quiz" ? answeredCount(round) : 0;
-  useEffect(() => { if (kind === "quiz" && answered > 0) warmCsrfToken(); }, [kind, answered > 0]);
+  // Review B1: a CSRF-token MELLETT az ujjlenyomat is előre töltődik — a pillanatkép ugyanazzal az azonosítóval megy, mint a végleges
+  // beküldés, különben a szerver más kulcson tartaná, és a végleges nem törölné a várakozót.
+  useEffect(() => { if (kind === "quiz" && answered > 0) { warmCsrfToken(); void getFingerprint().catch(() => undefined); } }, [kind, answered > 0]);
   useEffect(() => {
     if (kind !== "quiz" || !lessonId) return;
     const snapshot = () => {
@@ -73,7 +75,8 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
       try { if (localStorage.getItem(`${storageKey}:${kind}:sent:${roundId}`)) return; sentCount = Math.max(sentCount, Number(localStorage.getItem(key)) || 0); } catch { /* privát mód: a munkamenet számlálója marad */ }
       if (count <= sentCount) return;
       const learner = getLearnerToken();
-      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}) };
+      const fingerprint = peekFingerprint();
+      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}) };
       if (!sendKeepalive(`/api/lessons/${lessonId}/results`, body)) return;
       lastSnapshot.current = count;
       try { localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet számlálója */ }

@@ -124,6 +124,18 @@ válaszolt; a pont a megválaszolt kérdésekre vonatkozik.”
 pillanatképként). Indok: a tároló leckénként egy kört őriz; egy hétnél régebbi, félbehagyott kör levele már nem a mostani tanulást
 mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kifejezett döntése) korlát nélkül megy, mint eddig.
 
+**Független review (2026-11-17, `959f286c`: NEM) — javítva ebben a szeletben:**
+- **B1 (blokkoló):** vendégnél a pillanatkép ujjlenyomat nélkül, a végleges ujjlenyomattal ment → más kulcs, a végleges nem törölte a
+  várakozót, és ellentmondó „félbehagyva” levél ment ki. Javítás mindkét oldalon: a kliens az ujjlenyomatot az első válasznál előre
+  lekéri, és a pillanatkép ugyanazzal megy (`peekFingerprint`); a szerver a végleges beküldésnél MINDKÉT vendég-kulcsot (ujjlenyomat és
+  IP) törli és nézi. Teszt a valódi kliens törzsével (ujjlenyomat nélküli pillanatkép + ujjlenyomatos végleges).
+- **K1:** a pillanatkép-keret 40 → 10 / 15 perc / IP; tanulónként legfeljebb 3 várakozó kör, telítéskor a LEGRÉGEBBI szorul ki
+  (naplózva), a jogos új pillanatkép nem vész el csendben.
+- **K4:** a várakozó-küldés naplója csak a hiba osztályát írja (a közös `errorClass` az S2-vel jön; összefésüléskor arra cserélendő).
+- **K2 — példányszám:** a `render.yaml` a `websuli-api-eu` szolgáltatásnál `numInstances`-t nem ad meg (`plan: starter`); a Render
+  alapértelmezése egy példány. A dashboardon beállított skálázás nem ellenőrzött (UNVERIFIED). Több példánynál a várakozó levél és a
+  végleges beküldés más példányra eshet — jegy: kanban #135.
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.

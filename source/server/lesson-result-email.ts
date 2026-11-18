@@ -86,7 +86,8 @@ const isPartialRequest = (req: Request) => (req.body as { partial?: unknown } | 
 export const resultLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." },
   // S1b: a pillanatképek saját keretet kapnak — a végleges beküldés kerete nem fogyhat el miattuk.
   skip: isPartialRequest });
-export const partialLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." },
+// Review K1: kisebb keret a pillanatképekre (egy tanuló jogos forgalma ennél jóval kevesebb: háttérbe kerülésenként egy, csak új válasszal).
+export const partialLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." },
   skip: req => !isPartialRequest(req) });
 
 /**
@@ -98,23 +99,35 @@ export const partialLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, wi
 let partialDelayMs = 15 * 60 * 1000;
 /** Teszthez: a késleltetés rövidítése; a korábbi értéket adja vissza. */
 export function setPartialDelay(ms: number): number { const previous = partialDelayMs; partialDelayMs = ms; return previous; }
-const pendingPartials = new Map<string, ReturnType<typeof setTimeout>>();
+/** Várakozó pillanatképek: kulcs → időzítő és a tanuló (a tanulónkénti korláthoz). A Map beszúrási sorrendje = életkor. */
+const pendingPartials = new Map<string, { timer: ReturnType<typeof setTimeout>; owner: string }>();
 const MAX_PENDING_PARTIALS = 5000;
+/** Review K1: tanulónként (fiók / párosítás / vendég) legfeljebb ennyi várakozó kör; a legrégebbi adja át a helyét. */
+export const MAX_PENDING_PER_LEARNER = 3;
 function cancelPartial(key: string): void {
-  const timer = pendingPartials.get(key);
-  if (timer) { clearTimeout(timer); pendingPartials.delete(key); }
+  const entry = pendingPartials.get(key);
+  if (entry) { clearTimeout(entry.timer); pendingPartials.delete(key); }
 }
-function schedulePartial(key: string, send: () => Promise<unknown>): boolean {
+/**
+ * Review K1: telítéskor a jogos pillanatkép NEM vész el csendben — a legrégebbi várakozó (először a tanulóé, aztán az összesé) adja át a
+ * helyét, és ez naplózódik (azonosító nélkül).
+ */
+function schedulePartial(key: string, owner: string, send: () => Promise<unknown>): boolean {
   cancelPartial(key);
-  if (pendingPartials.size >= MAX_PENDING_PARTIALS) return false;
+  const own = [...pendingPartials.entries()].filter(([, entry]) => entry.owner === owner).map(([k]) => k);
+  if (own.length >= MAX_PENDING_PER_LEARNER) { cancelPartial(own[0]); logger.warn("[LESSON-RESULT] a tanuló legrégebbi várakozó félbehagyott köre kiszorult (tanulónkénti korlát)."); }
+  if (pendingPartials.size >= MAX_PENDING_PARTIALS) { cancelPartial(pendingPartials.keys().next().value!); logger.warn("[LESSON-RESULT] a legrégebbi várakozó félbehagyott kör kiszorult (teljes korlát)."); }
   const timer = setTimeout(() => {
     pendingPartials.delete(key);
-    void send().catch(error => logger.error("[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült:", error));
+    // Review K4: csak a hiba osztálya (a lekérdezés hibaüzenete felhasználói azonosítót tartalmazhatna).
+    void send().catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${error instanceof Error && /^[A-Za-z0-9_]{1,60}$/.test(error.name) ? error.name : "Error"}`));
   }, partialDelayMs);
   timer.unref?.();
-  pendingPartials.set(key, timer);
+  pendingPartials.set(key, { timer, owner });
   return true;
 }
+/** Teszthez: a várakozó pillanatképek száma. */
+export function pendingPartialCount(): number { return pendingPartials.size; }
 /** Leállításhoz / teszthez: a várakozó pillanatképek eldobása. */
 export function clearPendingPartials(): void { for (const key of [...pendingPartials.keys()]) cancelPartial(key); }
 
@@ -139,12 +152,16 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   const nameOf = () => (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId));
   const attribution = { ...(paired && !userId ? { learnerFirst: paired.firstName } : {}), guest: !userId && !paired };
   const partialKey = `${lessonId}|${roundKeyOf(who, "quiz-partial", body.roundId)}`;
+  // Review B1: vendégnél a pillanatkép és a végleges beküldés azonosítója eltérhet (az ujjlenyomat a lap elhagyásakor még hiányozhat →
+  // IP-alapú kulcs). A végleges beküldés MINDKÉT vendég-kulcsot nézi (ujjlenyomat és IP), így a várakozót biztosan törli.
+  const guestIp = `guest:${clientIpKey(req) || "?"}`;
+  const partialWhos = [...new Set(userId || paired ? [who] : [who, guestIp])];
   // S1b: a le nem zárt kvíz pillanatképe — nem küld azonnal, csak várakozik (a legutolsó állapot marad).
   if (body.kind === "quiz" && body.partial) {
     const snapshot = gradePartialQuiz(experience.quiz, body.picks);
     if (!snapshot) return res.status(202).json({ queued: false });
     const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(body.startedAt ? { startedAt: body.startedAt } : {}) } };
-    const queued = schedulePartial(partialKey, async () => sendLessonResult({ lessonId, roundKey: roundKeyOf(who, "quiz-partial", body.roundId), learner: await nameOf(), ...attribution, graded: partialGraded }));
+    const queued = schedulePartial(partialKey, `${lessonId}|${who}`, async () => sendLessonResult({ lessonId, roundKey: roundKeyOf(who, "quiz-partial", body.roundId), learner: await nameOf(), ...attribution, graded: partialGraded }));
     return res.status(202).json({ queued, partial: true });
   }
   let graded: GradedTasks | GradedQuiz;
@@ -162,10 +179,11 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     if (!Object.keys(body.picks).length) return res.status(202).json({ queued: false });
     graded = gradeQuiz(experience.quiz, body.picks);
     // S1b: a végleges eredmény törli a várakozó pillanatképet; ha a „félbehagyva” levél már kiment, a végleges levél ezt jelzi.
-    cancelPartial(partialKey);
-    const [partialRow] = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
-      .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), eq(lessonResultEmails.roundKey, roundKeyOf(who, "quiz-partial", body.roundId))));
-    if (partialRow?.delivered.length) graded = { ...graded, meta: { ...graded.meta, supersedesPartial: true } };
+    const partialRoundKeys = partialWhos.map(w => roundKeyOf(w, "quiz-partial", body.roundId));
+    for (const roundKey of partialRoundKeys) cancelPartial(`${lessonId}|${roundKey}`);
+    const partialRows = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
+      .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), inArray(lessonResultEmails.roundKey, partialRoundKeys)));
+    if (partialRows.some(row => row.delivered.length)) graded = { ...graded, meta: { ...graded.meta, supersedesPartial: true } };
   }
   if (body.startedAt) graded = { ...graded, meta: { ...graded.meta, startedAt: body.startedAt } };
   const roundKey = roundKeyOf(who, body.kind, body.roundId);

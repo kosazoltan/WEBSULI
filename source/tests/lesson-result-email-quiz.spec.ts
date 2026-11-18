@@ -106,6 +106,8 @@ test("S1b: félbehagyott kvíz — háttérbe kerüléskor pillanatkép megy; v�
   expect(Object.keys(partials()[0].picks as object)).toHaveLength(25);
   expect(partials()[0].roundId).toMatch(/^round-[a-z0-9]+$/);
   expect(typeof partials()[0].startedAt).toBe("number");
+  // Review B1: a pillanatkép ugyanazzal az ujjlenyomattal megy, mint (később) a végleges beküldés.
+  expect(typeof partials()[0].fingerprint, "a pillanatkép ujjlenyomattal megy").toBe("string");
   expect(partials()[0]).not.toHaveProperty("score");
 
   await hide(page);
@@ -120,6 +122,7 @@ test("S1b: félbehagyott kvíz — háttérbe kerüléskor pillanatkép megy; v�
   // A kör befejezése: a végleges beküldés `partial` nélkül megy; utána a háttérbe kerülés már nem küld pillanatképet.
   for (let i = 5; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
   await expect.poll(() => quizPosts(posts).filter(p => p.partial !== true).length).toBe(1);
+  expect(quizPosts(posts).find(p => p.partial !== true)!.fingerprint, "azonos azonosító a két úton").toBe(partials()[0].fingerprint);
   await hide(page);
   await page.waitForTimeout(800);
   expect(partials()).toHaveLength(2);
