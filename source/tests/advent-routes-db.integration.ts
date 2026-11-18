@@ -49,9 +49,8 @@ class Kid {
     const setCookie = res.headers.getSetCookie().find((c) => c.startsWith("connect.sid="));
     if (setCookie) this.cookie = setCookie.split(";")[0]!;
     const text = await res.text();
-    let json: Json = {};
-    try { json = JSON.parse(text) as Json; } catch { json = { text }; }
-    return { status: res.status, json };
+    const parse = (): Json => { try { return JSON.parse(text) as Json; } catch { return { text }; } };
+    return { status: res.status, json: parse() };
   }
   async start(): Promise<this> {
     const r = await this.raw("GET", "/api/csrf-token");
@@ -370,17 +369,21 @@ describe("adventi naptár — végpontok", () => {
 
   it("új névtelen sorok: óránként 90 / hálózat, és csak a LÉTREJÖTT sor számít — a visszagördült kísérlet nem (A49, review K2)", async () => {
     const ip = "10.98.0.1";
-    // 40 eszköz évfolyam nélkül próbál ablakot nyitni: mind 409, sor nem jön létre, a keret érintetlen.
-    for (let i = 0; i < 40; i++) {
-      const k = await kid(); k.ip = ip;
-      assert.equal((await k.post("/doors/1/open")).status, 409, `${i + 1}. kísérlet`);
-    }
+    const kidsAt = (count: number) => Promise.all(Array.from({ length: count }, async () => { const k = await kid(); k.ip = ip; return k; }));
+    // 12 eszköz évfolyam nélkül próbál ablakot nyitni: mind 409, sor nem jön létre, a keret érintetlen (ha a kísérlet számítana,
+    // alább a 90 létrehozás nem férne bele).
+    for (const k of await kidsAt(12)) assert.equal((await k.post("/doors/1/open")).status, 409);
     assert.deepEqual(await q(`SELECT count(*)::int AS n FROM advent_progress WHERE created_at > now() - interval '1 minute' AND subject_kind = 'device' AND grade IS NULL`), [{ n: 0 }]);
     // Meglévő sor ismételt írása sem fogyaszt keretet: csak az első létrehozás számít.
     const first = await kid(); first.ip = ip;
     for (let i = 0; i < 5; i++) assert.equal((await first.post("/grade", { grade: 4 })).status, 200);
-    // Ezután még 89 valódi létrehozás belefér (összesen 90 / óra / hálózat — iskolai méret), a 91. nem.
-    for (let i = 0; i < 89; i++) { const k = await kid(); k.ip = ip; assert.equal((await k.post("/grade", { grade: 4 })).status, 200, `${i + 2}. létrehozás`); }
+    // Ezután 119 eszköz EGYSZERRE kér új sort (valódi adatbázissal): pontosan 89 fér még be (összesen 90 / óra / hálózat —
+    // iskolai méret), a többi 429; a keret párhuzamos kérésekkel sem léphető túl (review U1).
+    const crowd = await kidsAt(119);
+    const outcomes = await Promise.all(crowd.map((k) => k.post("/grade", { grade: 4 })));
+    assert.equal(outcomes.filter((o) => o.status === 200).length, 89);
+    assert.equal(outcomes.filter((o) => o.status === 429 && o.json.limit === "new-row").length, 30);
+    assert.deepEqual(await q(`SELECT count(*)::int AS n FROM advent_progress WHERE subject_id = ANY($1)`, [[first.device, ...crowd.map((k) => k.device)]]), [{ n: 90 }]);
     const blocked = await kid(); blocked.ip = ip;
     const r = await blocked.post("/grade", { grade: 4 });
     assert.deepEqual({ status: r.status, limit: r.json.limit }, { status: 429, limit: "new-row" });

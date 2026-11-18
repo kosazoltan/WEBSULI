@@ -111,7 +111,9 @@ try {
     });
     // JM7a: az admin-jogosultsági mátrix (~110 végpont × 7 szerep × 2 menet, valódi HTTP) miatt 120 s → 300 s.
     // Adventi naptár S2b: a kör az S2a után 286 s volt (mérve, 2026-11-18); a végpont-tesztek (valódi HTTP, a 144 írásos
-    // legrosszabb esettel) ~50 s-ot adnak hozzá → 300 s → 480 s.
+    // legrosszabb esettel) ~50 s-ot adnak hozzá → 300 s → 480 s. Mérve 2026-11-18 (S2b 2. visszanézés után, terheletlen gépen):
+    // 226 teszt 300 s (a teljes parancs 306 s) → 37% tartalék. Ha a tartalék 15% alá megy, a teszteket kell gyorsítani
+    // (kevesebb kliens azonos fedéssel, párhuzamos kérések), NEM a korlátot emelni.
     const timeout = setTimeout(() => { child.kill(); reject(new Error("Database integration tests timed out")); }, 480_000);
     child.once("error", error => { clearTimeout(timeout); reject(error); });
     child.once("exit", status => { clearTimeout(timeout); resolve(status ?? 1); });
