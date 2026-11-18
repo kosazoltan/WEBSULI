@@ -124,7 +124,7 @@ Mit mutat a mérés (szépítés nélkül):
 - **Ítélet:** a referencia az (a) fejre NEM-et adott; a futtató mindkét modellel IGEN, FELTÉTELLEL-t. Az olcsó ellenőr tehát
   önmagában átengedett volna egy fejet, amelyet az alapos ellenőr megállított.
 - **Gyorsítótár:** a 2. hívástól a bemeneti tokenek 96–97%-a gyorsítótárból jött (cél: ≥ 80%); a futásonkénti költség így
-  0,59–0,65 USD (gyorsítótár nélkül a konfig áraival ~3,7–5,2 USD lett volna).
+  0,59–0,65 USD (gyorsítótár nélkül a konfig áraival ~3,6–5,2 USD lett volna).
 - **Költségplafon:** az alap 2 USD a mért 0,6 USD körüli futás ~3-szorosa; a 6 USD-os kemény határ a nagy diffekre való.
 - Az alapvonal-mérés teljes költsége (négy futás + a gyorsítótár-próba): ~1,41 USD.
 

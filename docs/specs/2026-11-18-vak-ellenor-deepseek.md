@@ -317,7 +317,7 @@ kellenek.
 
 A mért token-számok (2026-11-18, `docs/minosegkapuk.md` „Mért alapvonal”): egy ~840 soros diff 37 hívás, 2,41 M bemeneti token (ebből
 2,31 M gyorsítótárból) és 38 ezer kimeneti token → 0,59 USD; egy ~2 200 soros diff 36 hívás, 3,58 M bemeneti (3,43 M gyorsítótárból),
-34 ezer kimeneti → 0,65 USD. Gyorsítótár nélkül ugyanez ~3,7 és ~5,2 USD lenne — ezért kötelező a gyorsítótár (3. kiegészítés), és
+34 ezer kimeneti → 0,65 USD. Gyorsítótár nélkül ugyanez ~3,6 és ~5,2 USD lenne — ezért kötelező a gyorsítótár (3. kiegészítés), és
 ezért 2 USD az alap (a mért futás ~3-szorosa: lejárt gyorsítótárra, újrapróbára, hosszabb vizsgálatra is elég), 6 USD a felső határ.
 
 Megjegyzés a sablon forrásáról: a `chore/vak-hibakereso-ellenor` ág a megbízás szövegét egyetlen fájlba tette
