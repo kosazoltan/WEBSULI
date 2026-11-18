@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { isTtsAudioSubPath } from "../shared/speech-fallback";
+import { isTtsLessonAudioSubPath, TTS_AUDIO_ROUTE } from "../shared/tts-audio-key";
 import { clientIpKeyGenerator } from "./lib/client-ip";
 import compression from "compression";
 import helmet from "helmet";
@@ -393,7 +394,7 @@ const ttsLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   // A „Meghallgatás” hangtartalékának saját korlátja van (ttsAudioLimiter).
-  skip: (req) => isTtsAudioSubPath(req.path),
+  skip: (req) => isTtsAudioSubPath(req.path) || isTtsLessonAudioSubPath(req.path),
 });
 
 // Spec 2026-11-09-felolvasas-tartalek (módosítás): a hangtartalék (≤ 300 karakter, CDN-ből gyorsítótárazva) bővebb keretet kap.
@@ -445,6 +446,7 @@ app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
 app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
 app.use("/api/tts/audio", ttsAudioLimiter);
+app.use(TTS_AUDIO_ROUTE, ttsAudioLimiter); // S8b: az előre gyártott leckehang (CDN-ből gyorsítótárazva) a hangtartalék keretét kapja
 app.use("/api/push/subscribe", publicWriteLimiter);
 app.use("/api/push/unsubscribe", publicWriteLimiter);
 

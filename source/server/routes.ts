@@ -56,6 +56,8 @@ import { applyTrackedImprovement } from "./workflows/apply";
 import { lessonPublicRouter } from "./studio/lesson-routes";
 import { registerLessonClipMedia } from "./lesson-clip-media";
 import { loadClipMedia } from "./lesson-clips-db";
+import { registerLessonTtsAudio } from "./tts/audio-routes";
+import { ttsAudioStore } from "./tts/audio-store";
 import { createArbiterRouter } from "./arbiter/routes";
 import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
@@ -882,6 +884,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/lessons", lessonPublicRouter);
   // Spec 2026-11-10-fejezet-kisfilmek-v2 (6.): a kisfilmek tartalomcímzett médiája (kép, hang, mozgókép) — azonos eredet, korlátlanul gyorsítótárazható.
   registerLessonClipMedia(app, loadClipMedia);
+  // Terv 2026-11-18-tananyag-gyartas-minoseg (S8b): a nyelvleckék előre gyártott felolvasó hangja — csak olvasás, tartalomcímzett, cserélhető tároló.
+  registerLessonTtsAudio(app, ttsAudioStore());
 
   // Spec 2026-10-05-s3-katalogus-bank: a tantárgyi katalógus-bankok csak olvasó admin-nézete.
   app.use("/api/admin/catalog", catalogAdminRouter);
