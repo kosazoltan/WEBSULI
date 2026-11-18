@@ -67,18 +67,18 @@ Tengelyek: Blenderben a figura a −Y irányba néz, Z a „fel”; a glTF-expor
 
 <!-- acceptance-checklist -->
 
-- [ ] K-1 A terv és a végrehajtási utasítás az első commit; kód csak utána.
-- [ ] K-2 A figura megfelel a 3. pontnak: nagy csillogó szem, szürke bunda világos pofával és hassal, kis fül, apró orr, mosoly,
+- [x] K-1 A terv és a végrehajtási utasítás az első commit; kód csak utána.
+- [x] K-2 A figura megfelel a 3. pontnak: nagy csillogó szem, szürke bunda világos pofával és hassal, kis fül, apró orr, mosoly,
       gyűrűs-csíkos bozontos farok; a saját képek megnézése alapján „cuki”, nem ijesztő.
-- [ ] K-3 A szkript fej nélkül, gépfüggő útvonal nélkül újraépíti a hálót, az anyagokat, a csontvázat (súlyozva) és a `blink` +
+- [x] K-3 A szkript fej nélkül, gépfüggő útvonal nélkül újraépíti a hálót, az anyagokat, a csontvázat (súlyozva) és a `blink` +
       `smile` alakkulcsot.
-- [ ] K-4 A GLB-ben öt, név szerint elkülönülő klip van: `idle`, `wave`, `cheer`, `sad`, `blink`; mind 1–3 mp; az `idle` első és
+- [x] K-4 A GLB-ben öt, név szerint elkülönülő klip van: `idle`, `wave`, `cheer`, `sad`, `blink`; mind 1–3 mp; az `idle` első és
       utolsó képkockája azonos.
-- [ ] K-5 Egy tömörített GLB a `source/client/public/models/kabala/` alatt, tartalom-hash a névben, mellette manifest a klipnevekkel.
-- [ ] K-6 Keret: ≤ 400 KB, ≤ 20 000 háromszög, ≤ 6 anyag — őr-teszt védi, és a teszt zöld.
-- [ ] K-7 Legalább 6 PNG (~1024 px): elöl, háromnegyed, oldal, hátul, arc-közeli, tabló az animációk kulcspózaival.
-- [ ] K-8 Legalább 2–3 javító kör a saját képek alapján; őszinte minőségértékelés a jelentésben.
-- [ ] K-9 Kétszeri futtatás: a GLB hash-e azonos (vagy az eltérés oka leírva).
-- [ ] K-10 `docs/kabala-maki.md`: hogyan mozgatjuk (klip ↔ játékhelyzet, alakkulcsok, új mozdulat, beszéd, teljesítmény-becslés).
-- [ ] K-11 (ha belefér) Önálló előnézeti HTML CDN nélkül; ha nem készül el: NOT DONE, okkal.
-- [ ] K-12 `npm run gate:stage` eredménye a munkafából (vagy pontosan megnevezve, mi hiányzik).
+- [x] K-5 Egy tömörített GLB a `source/client/public/models/kabala/` alatt, tartalom-hash a névben, mellette manifest a klipnevekkel.
+- [x] K-6 Keret: ≤ 400 KB, ≤ 20 000 háromszög, ≤ 6 anyag — őr-teszt védi, és a teszt zöld.
+- [x] K-7 Legalább 6 PNG (~1024 px): elöl, háromnegyed, oldal, hátul, arc-közeli, tabló az animációk kulcspózaival.
+- [x] K-8 Legalább 2–3 javító kör a saját képek alapján; őszinte minőségértékelés a jelentésben.
+- [x] K-9 Kétszeri futtatás: a GLB hash-e azonos (vagy az eltérés oka leírva).
+- [x] K-10 `docs/kabala-maki.md`: hogyan mozgatjuk (klip ↔ játékhelyzet, alakkulcsok, új mozdulat, beszéd, teljesítmény-becslés).
+- [x] K-11 (ha belefér) Önálló előnézeti HTML CDN nélkül; ha nem készül el: NOT DONE, okkal.
+- [x] K-12 `npm run gate:stage` eredménye a munkafából (vagy pontosan megnevezve, mi hiányzik).
