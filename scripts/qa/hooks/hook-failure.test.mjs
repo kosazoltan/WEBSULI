@@ -106,3 +106,20 @@ test('hibás hook-bemenet: kapu-köteles szöveggel mindkét hook tilt; enélkü
     assert.equal(runRaw(hook, '{"tool_name":"Bash","tool_input":{"command":"git status"'), null);
   }
 });
+
+test('F5 szöveg-őr: a runbook „A kapu-hook hibája” szakasza nem ad ügynöknek eltávolítási utasítást, és kimondja a helyes utat', () => {
+  const md = readFileSync(join(repoRoot, 'docs', 'minosegkapuk.md'), 'utf8').replace(/\r\n/g, '\n');
+  const start = md.indexOf('## A kapu-hook hibája');
+  assert.ok(start >= 0, 'hiányzik a runbook „A kapu-hook hibája” szakasza');
+  const end = md.indexOf('\n## ', start + 3);
+  const sec = md.slice(start, end < 0 ? undefined : end);
+  // Codex P1 (#506): ügynöknek szóló felszólítás a védelem eltávolítására / kikapcsolására nem lehet benne, futtatható
+  // kikapcsoló parancs sem.
+  for (const re of [/\btöröld\b/i, /\btávolítsd el\b/i, /\bkapcsold ki\b/i, /\bvedd ki\b/i, /claude\s+--settings/i]) {
+    assert.doesNotMatch(sec, re, `tiltott minta a szakaszban: ${re}`);
+  }
+  assert.match(sec, /kizárólag a hookot javíthatja/);
+  assert.match(sec, /nem távolíthatja el, nem gyengítheti, és kerülőútként sem\s+javasolhatja/);
+  assert.match(sec, /\*\*megáll\*\*, és a tulajdonostól kér segítséget/);
+  assert.match(sec, /kizárólag a tulajdonos saját kezű lépése/);
+});

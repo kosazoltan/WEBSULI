@@ -16,8 +16,10 @@
 3. A7: a `check-audit-ok` hook a git időtúllépésekor / indítási hibájakor és belső hibájakor a push-parancsra **tilt** (eddig
    átengedett); a gyors, nem nulla kilépés (nem git-repó) továbbra sem az ő dolga. Ezzel a `settings-hooks.test.mjs` terhelt gépen sem
    ingadozik (a várt döntés tiltás).
-4. Runbook: a kiút elromlott hook-szkriptnél (Edit / Write eszköz nem Bash; a settings-fájl kézi módosítását a Claude Code
-   fájlfigyelője rendszerint felveszi; tulajdonosi vészkijárat: `disableAllHooks`, ügynöknek tilos).
+4. Runbook: elromlott hook-szkriptnél az ügynök KIZÁRÓLAG a hookot javíthatja (Edit / Write eszközzel, azon nincs `onFailure`,
+   teszttel); a védelmet nem távolíthatja el, nem gyengítheti és kerülőútként sem javasolhatja. Ha a javításhoz nincs
+   futtatókörnyezet, vagy az csak a tiltott úton menne: megáll, és a tulajdonostól kér segítséget. A védelem ideiglenes
+   kikapcsolása (pl. `disableAllHooks`) kizárólag a tulajdonos saját kezű lépése (Codex P1, #506).
 
 ## Nem cél
 
@@ -36,7 +38,7 @@
 - Nem push parancs → az audit-hook semmit nem vizsgál (változatlan).
 - Nem git-repó (gyors, nem nulla kilépés) → enged (változatlan).
 - Elromlott kapu-hook szkript (`onFailure: block`) → minden Bash / PowerShell parancs tiltott; az Edit / Write eszközön nincs
-  `onFailure`, azzal javítható.
+  `onFailure`, azzal a HOOK javítható (a védelem eltávolítása nem út — lásd 4. pont).
 
 ## Elfogadás (EARS)
 
@@ -47,7 +49,9 @@
   megmondani a teendőt (újrapróbálás; tartós hibánál a runbook szakasza).
 - [ ] F3 WHEN a `check-audit-ok` push-parancsnál a git-et nem tudja elindítani / időtúllép THEN SHALL tiltani, teendővel.
 - [ ] F4 WHEN a `check-audit-ok` nem push parancsot kap, vagy nem git-repóban fut THEN SHALL engedni (változatlan).
-- [ ] F5 WHEN a runbookot olvassuk THEN SHALL tartalmazni a kiutat elromlott kapu-hooknál és a tulajdonosi vészkijáratot.
+- [ ] F5 WHEN a runbookot olvassuk THEN SHALL kimondani: elromlott kapu-hooknál az ügynök csak a hookot javíthatja; a védelem
+  eltávolítását nem végezheti és nem javasolhatja; ha nem tudja javítani, megáll és a tulajdonostól kér segítséget; a kikapcsolás
+  kizárólag a tulajdonos lépése. A runbook szakasza nem tartalmazhat ügynöknek szóló eltávolítási utasítást (szöveg-őr teszt).
 - [ ] F6 (visszaellenőrzés, 2026-11-18) WHEN a hook-bemenet nem értelmezhető JSON, de a nyers szövegben kapu-köteles művelet van THEN
   mindkét hook SHALL tiltani (enélkül, és üres bemenetnél enged).
 - [ ] F7 WHEN az audit-hook git-hívása fut THEN a korlátja SHALL 10 s lenni (csak `node --test` alatt felülírható, felülről

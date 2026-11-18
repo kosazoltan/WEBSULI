@@ -194,11 +194,15 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
   időtúllépésekor / indítási hibájakor és belső hibájakor push-parancsra tilt (kanban #126); nem push parancsnál és nem git-repóban
   enged.
 - **Ha tartósan fennáll** (pl. minden Bash / PowerShell parancs tiltott, mert a hook-szkript elromlott — félbemaradt összefésülés,
-  szintaxishiba, hiányzó `node`): az Edit / Write eszköz nem Bash, azon nincs `onFailure` — azzal javítsd a
-  `scripts/qa/hooks/check-quality-gates.mjs`-t, vagy töröld a két `"onFailure": "block"` sort a `.claude/settings.json`-ból. A
-  settings-fájl kézi módosítását a Claude Code fájlfigyelője rendszerint felveszi; ha nem, új munkamenet.
-- **Tulajdonosi vészkijárat** (csak a tulajdonos; ügynöknek tilos): egy futásra `claude --settings '{"disableAllHooks": true}'`,
-  vagy `"disableAllHooks": true` a helyi settings-ben — utána vissza.
+  szintaxishiba, hiányzó `node`): az ügynök **kizárólag a hookot javíthatja** — az Edit / Write eszközzel (azon nincs
+  `onFailure`) a `scripts/qa/hooks/check-quality-gates.mjs`-ben, a hibát lefedő teszttel együtt. A védelmet (a `"onFailure"`
+  beállítást, a hook-bejegyzést vagy bármely hookot) az ügynök **nem távolíthatja el, nem gyengítheti, és kerülőútként sem
+  javasolhatja** — ez a kapu megkerülése, ami tilos (AGENTS.md: „ha a kapu hibás, a kaput kell javítani”).
+- **Ha a javításhoz nincs futtatókörnyezet**, vagy a javítás maga is csak a tiltott úton (a védelem kikapcsolásával) volna
+  elvégezhető: az ügynök **megáll**, és a tulajdonostól kér segítséget — leírja a hibát, a kipróbált lépéseket és a javasolt
+  hook-javítást.
+- **A védelem ideiglenes kikapcsolása kizárólag a tulajdonos saját kezű lépése** (pl. egy futásra a `disableAllHooks`
+  beállítással, utána vissza). Az ügynök ezt nem végezheti el, és nem is javasolhatja kerülőútként.
 
 ## Ellenpróbák (2026-11-17, a bevezető PR-ban)
 

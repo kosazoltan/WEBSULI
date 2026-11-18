@@ -12,8 +12,9 @@ Terv: `docs/specs/2026-11-18-hook-onfailure.md`. Ág: `chore/hook-onfailure-tilt
 5. `scripts/qa/hooks/hook-failure.test.mjs` (új): F1 a valódi settings-ből; F2 folyamat-szinten (git nélküli PATH, illetve kimerített
    keret a tesztes felülírással) — tiltás + teendő; F3 / F4 az audit-hookra folyamat-szinten (git nélküli PATH push-ra → tilt;
    nem push → enged; nem repó → enged).
-6. `docs/minosegkapuk.md`: „A kapu-hook hibája” szakasz — mit jelent az `onFailure: block`, a kiút (Edit / Write, fájlfigyelő),
-   tulajdonosi vészkijárat (`disableAllHooks`, ügynöknek tilos); az audit-hook időtúllépéskor tilt.
+6. `docs/minosegkapuk.md`: „A kapu-hook hibája” szakasz — mit jelent az `onFailure: block`; elromlott hooknál az ügynök csak a
+   hookot javíthatja (Edit / Write, teszttel), különben megáll és a tulajdonostól kér segítséget; a védelem kikapcsolása kizárólag a
+   tulajdonos lépése; az audit-hook időtúllépéskor tilt. Szöveg-őr teszt: a szakaszban nincs ügynöknek szóló eltávolítási utasítás.
 7. `npm run gate:stage`; mutációs ellenpróba commit után (az `onFailure` sor törlése, az audit fail-open visszaírása, az üzenet
    teendő-része → a teszt bukik); független ellenőr; `gate:push` / `gate:pr` a jelre.
 
