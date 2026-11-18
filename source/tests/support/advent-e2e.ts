@@ -107,9 +107,18 @@ export async function chooseGrade(page: Page, grade: number): Promise<void> {
   await page.getByTestId("advent-grade-yes").tap();
 }
 
+/**
+ * Koppintás egy ablakra, ahogy egy gyerek teszi: a kérdés bezárása utáni rövid védőidő (data-guard) letelte után — a védőidő
+ * szándékos (a „Tovább” dupla koppintása ne érje a mögöttes ablakot), külön teszt méri.
+ */
+export async function tapDoor(page: Page, day: number, opts: { force?: boolean } = {}): Promise<void> {
+  await expect(page.locator('[data-testid="advent-grid"][data-guard="false"]')).toBeVisible();
+  await page.getByTestId("advent-door-" + day).tap(opts);
+}
+
 /** Egy ablak megnyitása és megválaszolása a felületen, majd „Tovább”. */
 export async function playDoor(page: Page, day: number, right: boolean): Promise<void> {
-  await page.getByTestId(`advent-door-${day}`).tap();
+  await tapDoor(page, day);
   await expect(page.getByTestId("advent-question")).toBeVisible();
   await pickOption(page, right);
   await page.getByTestId("advent-next").tap();
