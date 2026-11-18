@@ -122,8 +122,10 @@ test("perf=1: a panel megjelenik a mért sorokkal, és a négy kapcsoló hat a j
   await expect(fog).toHaveText("Köd: ki");
   expect((await snapshot(page)).toggles.fog).toBe(false);
   await expectFramesAfterToggle(page);
+  // A jelenet a kapcsolók után is fut. A `running` jelző („az utolsó képkocka < 1 s-e”) a CI szoftveres WebGL-jén időzítésfüggő
+  // (egy képkocka 1 s-nál hosszabb is lehet, lásd F1) — ezért a fut-ás bizonyítéka a kirajzolt képkockák számának növekedése.
+  await expectFramesAfterToggle(page);
   const last = await snapshot(page);
-  expect(last.running).toBe(true);
   expect(last.calls).toBeGreaterThan(0);
 
   // Összecsukás: a szöveg eltűnik, a panel gombja marad.
