@@ -206,6 +206,18 @@ async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "
 
 const keyOf = (id: string) => (id.startsWith("vocab:") ? `vocab:${id.split(":")[1]!.slice(0, 2)}:${id.split(":")[1]}` : `bank:word-ladder-hu-en:${id}`);
 
+/**
+ * Review #500 (Copilot): a `runItems` hiányzó kártyánál vagy sikertelen kattintásnál csendben kihagy méréseket. A geometriai
+ * ellenőrzések ELŐTT minden kötelező tételre a kérdés- ÉS a megoldás-állapot mérési sora is meglegyen — mérés nélkül nincs zöld.
+ */
+function expectMeasured(rows: Row[], ids: string[], label: string) {
+  for (const id of ids) {
+    for (const state of ["kérdés", "megoldás"] as const) {
+      expect(rows.some((r) => r.key === keyOf(id) && r.state === state), `${label}: mérve ${id} (${state})`).toBe(true);
+    }
+  }
+}
+
 /** Az elvárások: a szabályból (C-15). Szó: ≥ 1,6× a keretsor; mondat: ≥ 1,25× (helyhiánynál a kártya kicsinyedik, review K2);
  *  egy 360 px-en ki nem férő hosszú szó (review Ú3, `fit=width`): ≥ 1,25×, de szó közben nem törik. */
 function check(rows: Row[], label: string) {
@@ -251,6 +263,8 @@ for (const vp of VIEWS) {
     for (const id of ids) {
       if (!id.startsWith("vocab:") || id.startsWith("vocab:en4-")) expect(keys.has(keyOf(id)), `mérve: ${id}`).toBe(true);
     }
+    // Review #500: a kötelező tételeknél a megoldás-állapot is (nem elég, hogy valamelyik állapot mérve van).
+    expectMeasured(rows, ids.filter((id) => !id.startsWith("vocab:") || id.startsWith("vocab:en4-")), `en ${vp.width}x${vp.height}`);
     expect(keys.size, `mért célkártyák: ${[...keys].join(" | ")}`).toBeGreaterThanOrEqual(ids.length - 2);
     expect(rows.some((m) => m.blank), "hiányos mondatos típus is mérve").toBe(true);
     expect(rows.some((m) => m.state === "megoldás"), "megoldás-állapot is mérve").toBe(true);
@@ -267,6 +281,8 @@ for (const vp of VIEWS) {
     report(deRows, `de ${vp.width}x${vp.height}`);
     const deKeys = new Set(deRows.map((r) => r.key));
     for (const id of named) expect(deKeys.has(keyOf(id)), `mérve: ${id}`).toBe(true);
+    // Review #500: a megnevezett tételeknél a kérdés- és a megoldás-állapot is.
+    expectMeasured(deRows, named, `de ${vp.width}x${vp.height}`);
     // Review Ú4: darabszám-állítás — üres futás nem lehet zöld.
     expect(deKeys.size, `német célkártyák mérve: ${[...deKeys].join(" | ")}`).toBeGreaterThanOrEqual(de.length - 2);
     check(deRows, "de");
@@ -373,6 +389,7 @@ test("R2 @ 360x640 alsó biztonsági sávval: hosszú válaszoknál is hat a tö
     },
   });
   report(rows, "R2 en 360x640 alsó sáv");
+  expectMeasured(rows, ids, "R2");
   for (const m of rows.filter((r) => ids.map(keyOf).includes(r.key))) {
     expect(m.overHolds, `${m.state} ${m.key}: a kártya fedi a fogásokat (alja ${m.cardBottom}, fogások ${m.holdsTop})`).toBe(false);
     expect(m.clipped, `${m.state} ${m.key}: levágás`).toBe(false);
