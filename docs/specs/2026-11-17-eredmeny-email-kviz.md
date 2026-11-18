@@ -269,5 +269,5 @@ Elfogadás (S1b):
 - [x] E21 – igaz válasz a már kiment „félbehagyva” levél utáni pillanatképre (valódi DB)
 - [x] E22 – a legtöbb választ tartalmazó pillanatkép marad (valódi DB)
 - [x] E23 – a kvíz végleges beküldése `keepalive` (böngésző)
-- [ ] E24 – keret 60 / 15 perc / IP mindkét fajtára, a kulcs ellenőrzésével + mutációs ellenpróba (egységteszt + valódi DB)
-- [ ] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
+- [x] E24 – keret 60 / 15 perc / IP mindkét fajtára, a kulcs ellenőrzésével + mutációs ellenpróba (egységteszt + valódi DB)
+- [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
