@@ -6,7 +6,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { clearLearnerToken, getLearnerToken } from "@/lib/learnerProfile";
+import { LEARNER_TOKEN_REJECTED_KEY, clearLearnerToken, getLearnerToken } from "@/lib/learnerProfile";
 import type { AdventAnswerResult, AdventOpenResult, AdventState } from "@shared/advent/contract";
 
 export const ADVENT_DEVICE_KEY = "websuli.advent.device";
@@ -59,7 +59,8 @@ export async function fetchAdventState(): Promise<AdventState | null> {
   if (id.learner) headers["X-Learner-Token"] = id.learner;
   const res = await fetch("/api/advent/state", { credentials: "same-origin", headers });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  // A státuszkód a hibán marad (429: betelt olvasási keret) — a felület megtartott állapot mellett csak sávot mutat.
+  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
   return (await res.json()) as AdventState;
 }
 
@@ -81,7 +82,8 @@ export function useAdventState(enabled = true) {
     enabled,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
-    retry: 1,
+    // Betelt olvasási keretnél (429) nincs azonnali újrapróba — az csak tovább fogyasztaná a keretet.
+    retry: (failures, error) => failures < 1 && (error as { status?: unknown } | null)?.status !== 429,
   });
   const nextOpensAt = query.data?.nextOpensAt ?? null;
   useEffect(() => {
@@ -92,6 +94,22 @@ export function useAdventState(enabled = true) {
     return () => window.clearTimeout(timer);
   }, [nextOpensAt, queryClient]);
   return query;
+}
+
+// Ugyanaz a jelző, amelyet az alkalmazás profil-lekérdezése állít be, ha a szerver elutasítja a tokent (és törli azt).
+const PAIRING_LOST_KEY = LEARNER_TOKEN_REJECTED_KEY;
+/**
+ * „A személyes link lejárt” jelző a lap munkamenetére (A53): a naptár megjegyzi, hogy érvénytelen párosítással indult, és amíg a
+ * gyerek nem választ, nem ír — akkor sem, ha a tokent időközben az alkalmazás profil-lekérdezése már törölte.
+ */
+export function isPairingLost(): boolean {
+  try { return window.sessionStorage.getItem(PAIRING_LOST_KEY) === "1"; } catch { return false; }
+}
+export function markPairingLost(): void {
+  try { window.sessionStorage.setItem(PAIRING_LOST_KEY, "1"); } catch { /* tárhely nélkül a komponens állapota őrzi */ }
+}
+export function clearPairingLost(): void {
+  try { window.sessionStorage.removeItem(PAIRING_LOST_KEY); } catch { /* nincs mit törölni */ }
 }
 
 /** Érvénytelen tanulói link elfelejtése („Folytatom vendégként”): a naptár az eszköz azonosítójával megy tovább. */

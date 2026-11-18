@@ -72,14 +72,17 @@ export async function shot(page: Page, name: string): Promise<void> {
 const ALL = [...CHRISTMAS_ITEMS, ...GRADE_QUIZ_ITEMS];
 
 /** A megnyitott kérdés helyes (vagy egy hibás) válaszának gombja — a teszt a bankból tudja, a kliens nem. */
-export async function pickOption(page: Page, right: boolean): Promise<void> {
+export async function pickOption(page: Page, right: boolean, how: "tap" | "click" = "tap"): Promise<void> {
+  // A válaszgombok a kérdés megjelenése után rövid ideig nem fogadnak bemenetet (élesítés) — a teszt megvárja, mint egy gyerek.
+  await expect(page.locator('.advent-options[data-armed="true"]')).toBeVisible();
   const prompt = (await page.getByTestId("advent-question").innerText()).trim();
   const texts = await page.locator('[data-testid^="advent-option-"]').allInnerTexts();
   const options = texts.map((t) => t.trim());
   const item = ALL.find((q) => q.prompt === prompt && options.includes(q.options[q.correctIndex]!));
   if (!item) throw new Error(`a kérdés nincs a bankban: ${prompt}`);
   const correct = options.indexOf(item.options[item.correctIndex]!);
-  await page.getByTestId(`advent-option-${right ? correct : (correct + 1) % 4}`).tap();
+  const option = page.getByTestId(`advent-option-${right ? correct : (correct + 1) % 4}`);
+  if (how === "tap") await option.tap(); else await option.click();
   await expect(page.getByTestId("advent-next")).toBeVisible();
 }
 
@@ -125,4 +128,46 @@ export async function seedProgress(page: Page, iso: string, opts: { grade: numbe
       await post(`/doors/${day}/answer`, { questionId: opened.question.id, pick: isWrong ? (correct + 1) % 4 : correct });
     }
   }
+}
+
+/**
+ * Szöveg–háttér kontraszt a SZÁMÍTOTT színekből (WCAG 2 relatív fénysűrűség): az elem szövegszíne a tényleges háttér fölött.
+ * A háttér az elemtől felfelé az első átlátszatlan színig összegződik (az áttetsző rétegek rákeverve). Így a teszt azt méri,
+ * amit a gyerek lát — nem azt, hogy a CSS-ben szerepel-e egy szabály (review S3 B1).
+ */
+export async function contrastOf(page: Page, selector: string, what: "text" | "outline" = "text"): Promise<{ ratio: number; fg: string; bg: string; outlineStyle: string; outlineWidth: number }> {
+  return page.locator(selector).first().evaluate((el, what) => {
+    type Rgba = [number, number, number, number];
+    const parse = (value: string): Rgba => {
+      const m = /rgba?\(([^)]+)\)/.exec(value);
+      if (!m) return [0, 0, 0, 0];
+      const p = m[1]!.split(/[ ,/]+/).filter(Boolean).map(Number);
+      return [p[0] ?? 0, p[1] ?? 0, p[2] ?? 0, p[3] ?? 1];
+    };
+    const over = (top: Rgba, under: Rgba): Rgba => {
+      const a = top[3] + under[3] * (1 - top[3]);
+      if (a === 0) return [0, 0, 0, 0];
+      const mix = (i: 0 | 1 | 2) => (top[i] * top[3] + under[i] * under[3] * (1 - top[3])) / a;
+      return [mix(0), mix(1), mix(2), a];
+    };
+    const backgroundFrom = (start: Element | null): Rgba => {
+      const layers: Rgba[] = [];
+      for (let node = start; node; node = node.parentElement) {
+        const c = parse(getComputedStyle(node).backgroundColor);
+        if (c[3] > 0) layers.push(c);
+        if (c[3] >= 1) break;
+      }
+      let bg: Rgba = [255, 255, 255, 1];
+      for (const layer of layers.reverse()) bg = over(layer, bg);
+      return bg;
+    };
+    // Az outline az elem KÖRÜL van: a háttere a szülő háttere.
+    const bg = backgroundFrom(what === "outline" ? el.parentElement : el);
+    const style = getComputedStyle(el);
+    const fg = over(parse(what === "outline" ? style.outlineColor : style.color), bg);
+    const lum = (c: Rgba) => { const f = (v: number) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+    const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a) as [number, number];
+    const show = (c: Rgba) => "rgb(" + Math.round(c[0]) + ", " + Math.round(c[1]) + ", " + Math.round(c[2]) + ")";
+    return { ratio: Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100, fg: show(fg), bg: show(bg), outlineStyle: style.outlineStyle, outlineWidth: parseFloat(style.outlineWidth) || 0 };
+  }, what);
 }

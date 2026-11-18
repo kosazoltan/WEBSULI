@@ -3,7 +3,11 @@
  * 2D, CSS-alapú: mélykék éj, meleg arany ablakfény, hófehér, fenyőzöld, piros. Animáció csak transform / opacity;
  * csökkentett mozgásnál nincs hóesés, lélegző fény és felfénylés. Minden koppintási cél legalább 48 × 48 px, a betű ≥ 12 px.
  */
-.advent-page {
+/*
+ * A színkészlet a naptár MINDEN gyökerén él: az oldalon és a párbeszédablakokon is. A párbeszédablak Radix-portálban, a <body>
+ * alatt jelenik meg — nem a .advent-page leszármazottja —, ezért a változókat ott is definiálni kell (review S3 B1).
+ */
+.advent-page, .advent-overlay, .advent-dialog {
   --advent-night: #0b1d3a;
   --advent-night-2: #14315c;
   --advent-gold: #f6c453;
@@ -11,6 +15,8 @@
   --advent-snow: #f7fbff;
   --advent-green: #1f6b4a;
   --advent-red: #c8323c;
+}
+.advent-page {
   position: relative;
   height: 100dvh;
   min-height: 100vh;
@@ -20,11 +26,6 @@
   font-size: 16px;
 }
 .advent-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; aspect-ratio: auto !important; z-index: 0; }
-.advent-bg--landscape { display: none; }
-@media (orientation: landscape) {
-  .advent-bg--portrait { display: none; }
-  .advent-bg--landscape { display: block; }
-}
 /* Helyőrző háttér: csillagos éj, hódomb és a falu sziluettje (a végleges kép ugyanide kerül). */
 .advent-bg.advent-art--placeholder {
   background:
@@ -39,12 +40,23 @@
 .advent-content {
   position: relative; z-index: 2; height: 100%;
   display: flex; flex-direction: column; gap: 8px;
-  padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  padding: max(8px, env(safe-area-inset-top), var(--game-safe-top, 0px)) max(10px, env(safe-area-inset-right), var(--game-safe-right, 0px)) max(8px, env(safe-area-inset-bottom), var(--game-safe-bottom, 0px)) max(10px, env(safe-area-inset-left), var(--game-safe-left, 0px));
   max-width: 980px; margin: 0 auto;
 }
 .advent-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-.advent-hud { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+/* Fejléc-dísz (girland): a fejléc mögött, a lap tetején; a végleges kép ugyanebbe a dobozba kerül. */
+.advent-garland { position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 64px; object-fit: cover; object-position: center top; aspect-ratio: auto !important; z-index: 0; pointer-events: none; opacity: 0.9; }
+.advent-garland.advent-art--placeholder {
+  background:
+    radial-gradient(circle at 8% 60%, var(--advent-red) 0 4px, transparent 5px),
+    radial-gradient(circle at 30% 80%, var(--advent-gold) 0 4px, transparent 5px),
+    radial-gradient(circle at 52% 60%, var(--advent-red) 0 4px, transparent 5px),
+    radial-gradient(circle at 74% 80%, var(--advent-gold) 0 4px, transparent 5px),
+    radial-gradient(circle at 94% 60%, var(--advent-red) 0 4px, transparent 5px),
+    linear-gradient(180deg, rgba(31, 107, 74, 0.85) 0 10px, transparent 26px);
+}
+.advent-hud { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .advent-hud__title { flex: 1 1 auto; min-width: 0; }
 .advent-hud__title h1 { margin: 0; font-size: 18px; line-height: 1.2; font-weight: 800; color: var(--advent-gold-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .advent-hud__title p { margin: 0; font-size: 13px; line-height: 1.3; color: var(--advent-snow); }
@@ -68,8 +80,17 @@
   display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
 }
 .advent-banner--error { border-color: #ffb4b4; }
+.advent-banner--notice { border-color: var(--advent-gold-2); font-weight: 700; }
+/* Megfelelt naptár: az üzenet a rács fölött állandóan látszik (a visszatérő gyereknek nem kell keresnie). */
+.advent-gift-banner {
+  flex: 0 0 auto; min-height: 48px; padding: 8px 12px; border-radius: 12px; cursor: pointer;
+  border: 2px solid var(--advent-gold-2); background: rgba(11, 29, 58, 0.9); color: var(--advent-gold-2);
+  font: inherit; font-size: 16px; line-height: 1.3; font-weight: 800; text-align: center;
+}
+.advent-gift-banner:focus-visible { outline: 3px solid var(--advent-gold-2); outline-offset: 2px; }
 .advent-message { margin: auto; max-width: 30rem; text-align: center; font-size: 17px; line-height: 1.5; padding: 20px; border-radius: 16px; background: rgba(11, 29, 58, 0.82); }
 .advent-message h2 { margin: 0 0 8px; font-size: 22px; color: var(--advent-gold-2); }
+.advent-message .advent-btn { margin: 8px 4px 0; }
 
 /* A 24 ablak: álló nézetben 4 × 6, fekvőben 8 × 3 — a teljes naptár egy képernyőn, oldalgörgetés nélkül. */
 .advent-grid {
@@ -117,14 +138,19 @@
 .advent-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(4, 12, 28, 0.72); }
 .advent-dialog {
   position: fixed; z-index: 61; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: min(34rem, calc(100vw - 20px)); max-height: calc(100dvh - 20px); overflow-y: auto;
+  width: min(34rem, calc(100vw - 20px)); max-height: calc(100vh - 20px); max-height: calc(100dvh - 20px); overflow-y: auto;
   padding: 16px; border-radius: 18px; background: #10264a; color: var(--advent-snow);
   border: 2px solid var(--advent-gold); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   display: flex; flex-direction: column; gap: 10px; font-size: 16px;
   animation: advent-open 300ms ease-out;
 }
 @keyframes advent-open { from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
-.advent-dialog__title { margin: 0; font-size: 15px; font-weight: 700; color: var(--advent-gold-2); }
+.advent-dialog__title { margin: 0; padding-right: 44px; font-size: 15px; font-weight: 700; color: var(--advent-gold-2); }
+/* Sarokdísz: a párbeszédablak jobb felső sarkában; a végleges kép ugyanebbe a dobozba kerül. */
+.advent-dialog__frame { position: absolute; right: 6px; top: 6px; width: 40px; height: 40px; object-fit: contain; pointer-events: none; }
+.advent-dialog__frame.advent-art--placeholder { border-top: 3px solid var(--advent-gold); border-right: 3px solid var(--advent-gold); border-radius: 0 12px 0 0; opacity: 0.8; }
+.advent-question:focus { outline: none; }
+.advent-question:focus-visible { outline: 2px dashed var(--advent-gold-2); outline-offset: 4px; }
 .advent-question { margin: 0; font-size: 19px; line-height: 1.4; font-weight: 700; }
 .advent-options { display: grid; gap: 8px; }
 .advent-option {
@@ -133,7 +159,9 @@
   font: inherit; font-size: 17px; line-height: 1.3; cursor: pointer; display: flex; align-items: center; gap: 8px;
 }
 .advent-option:disabled { cursor: default; opacity: 0.85; }
+.advent-options[data-armed="false"] .advent-option { cursor: default; }
 .advent-option[data-mark="correct"] { border-color: #8ee0b4; background: rgba(31, 107, 74, 0.6); opacity: 1; }
+.advent-option[data-mark="wrong"] { border-color: #ffb4b4; border-style: dashed; background: rgba(200, 50, 60, 0.28); opacity: 1; }
 .advent-option svg { width: 20px; height: 20px; flex: 0 0 20px; }
 .advent-feedback { font-size: 15px; line-height: 1.45; }
 .advent-feedback:empty { display: none; }
@@ -142,7 +170,8 @@
 .advent-feedback__verdict[data-correct="true"] { color: #a7efc6; }
 .advent-feedback__verdict[data-correct="false"] { color: #ffd0a8; }
 
-.advent-summary__art { width: 100%; max-height: 30dvh; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #fff3c4 0%, var(--advent-gold) 40%, var(--advent-night-2) 100%); }
+/* A záró kép a doboz magasságához igazodik és megtartja az arányát (nem nyomódik össze alacsony nézetben sem). */
+.advent-summary__art { align-self: center; width: auto; max-width: 100%; height: clamp(84px, 30vh, 240px); object-fit: contain; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #fff3c4 0%, var(--advent-gold) 40%, var(--advent-night-2) 100%); }
 .advent-gift { margin: 0; font-size: 22px; line-height: 1.35; font-weight: 800; color: var(--advent-gold-2); text-align: center; animation: advent-star 1.2s ease-out 1; }
 @keyframes advent-star { 0% { opacity: 0.2; transform: scale(0.96); } 60% { opacity: 1; transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }
 .advent-encourage { margin: 0; font-size: 18px; line-height: 1.45; font-weight: 700; }
@@ -155,7 +184,7 @@
   animation-name: advent-fall; animation-timing-function: linear; animation-iteration-count: infinite;
 }
 .advent-snow[data-paused="true"] .advent-snow__flake { animation-play-state: paused; }
-@keyframes advent-fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(var(--advent-drift, 0px), 105dvh, 0); } }
+@keyframes advent-fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(var(--advent-drift, 0px), 105vh, 0); } }
 
 @media (prefers-reduced-motion: reduce) {
   .advent-door[data-state="solved"], .advent-gift, .advent-dialog, .advent-snow__flake { animation: none; }
@@ -169,7 +198,8 @@
   display: flex; align-items: center; gap: 12px; padding: 12px 14px;
 }
 @media (min-width: 768px) { .advent-home-card { height: 160px; padding: 16px 24px; } }
-.advent-home-card__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; aspect-ratio: auto !important; z-index: 0; }
+/* A sáv fontos része (a háztetők és a fenyők) a kép ALJÁN fut: a széles asztali kártyában is ez marad látható. */
+.advent-home-card__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; aspect-ratio: auto !important; z-index: 0; }
 .advent-home-card__art.advent-art--placeholder {
   background:
     radial-gradient(circle at 12% 22%, rgba(255, 255, 255, 0.9) 0 1px, transparent 2px),

@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 import { ADVENT_GIFT_MESSAGE } from "../shared/advent/rules";
-import { clearAdventTime, pickOption, playDoor, proxyHeaders, seedProgress, setAdventTime, settle, shot } from "./support/advent-e2e";
-import { MOBILE_VIEWPORTS, hideAndShowPage, measureOverflow, overlappingTargets, safeAreaViolations, smallFonts, smallTargets } from "./support/game-mobile-quality";
+import { clearAdventTime, contrastOf, pickOption, playDoor, proxyHeaders, seedProgress, setAdventTime, settle, shot } from "./support/advent-e2e";
+import { MOBILE_VIEWPORTS, emulateSafeArea, hideAndShowPage, measureOverflow, overlappingTargets, safeAreaViolations, smallFonts, smallTargets } from "./support/game-mobile-quality";
 
 /**
  * Adventi naptár — a naptár oldala valódi böngészőben, érintéssel (docs/specs/2026-11-18-adventi-naptar.md 6., 7., 16.5):
@@ -41,7 +41,9 @@ test("évfolyamválasztás, 24 ablak, zárt és nyitható ablak, kérdés, jó v
   // Zárt ablak: nem nyílik kérdés, a felület megmondja, mikor nyílik.
   // (aria-disabled gomb: a Playwright „engedélyezett” várakozása helyett valódi koppintás megy rá.)
   await page.getByTestId("advent-door-6").tap({ force: true });
-  await expect(page.getByText("A 6. ablak december 6-án nyílik.")).toBeAttached();
+  await expect(page.getByTestId("advent-notice")).toBeVisible();
+  await expect(page.getByTestId("advent-notice")).toHaveText("A 6. ablak december 6-án nyílik.");
+  await shot(page, "02b-zart-ablak-uzenet");
   await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
   // A mai ablak: kérdés négy válasszal.
   await page.getByTestId("advent-door-5").tap();
@@ -68,6 +70,9 @@ test("hibás válasz → javítható → ÚJ kérdés → megoldva (A7)", async 
   const first = await page.getByTestId("advent-question").innerText();
   await pickOption(page, false);
   await expect(page.getByTestId("advent-feedback")).toContainText("új kérdéssel kijavíthatod");
+  await expect(page.locator('.advent-option[data-mark="wrong"]')).toHaveCount(1);
+  await expect(page.locator('.advent-option[data-mark="correct"]')).toHaveCount(1);
+  await shot(page, "05b-hibas-valasz-jelolve");
   await page.getByTestId("advent-next").tap();
   await expect(page.getByTestId("advent-door-3")).toHaveAttribute("data-state", "repairable");
   await expect(page.getByTestId("advent-repair")).toBeVisible();
@@ -135,6 +140,132 @@ test("betelt új-sor keret (429, limit: new-row): barátságos várakozó üzene
   await playDoor(page, 1, true);
 });
 
+test("párbeszédablakok színei SZÁMÍTOTT értékből: a fő gombok és az ajándék-üzenet kontrasztja ≥ 4,5:1, arany keret, látható fókuszkeret (S3 B1)", async ({ page }) => {
+  await openCalendar(page, DEC24);
+  await seedProgress(page, DEC24, { grade: 5, days: range(1, 23), wrong: [7, 12] });
+  await page.reload();
+  // 1) Kérdés → visszajelzés: a „Tovább” gomb.
+  await page.getByTestId("advent-door-24").tap();
+  await pickOption(page, true);
+  await settle(page);
+  const next = await contrastOf(page, '[data-testid="advent-next"]');
+  expect(next.ratio, "„Tovább”: " + next.fg + " / " + next.bg).toBeGreaterThanOrEqual(4.5);
+  expect(next.bg, "a fő gomb háttere arany, nem a sötét lap").toBe("rgb(246, 196, 83)");
+  const border = await page.getByTestId("advent-dialog").evaluate((el) => getComputedStyle(el).borderTopColor);
+  expect(border, "a párbeszédablak arany kerete").toBe("rgb(246, 196, 83)");
+  const title = await contrastOf(page, ".advent-dialog__title");
+  expect(title.fg, "arany cím").toBe("rgb(255, 233, 168)");
+  expect(title.ratio).toBeGreaterThanOrEqual(4.5);
+  // Fókuszkeret a párbeszédablakban, billentyűzettel: látható stílus, legalább 2 px, a lap fölött ≥ 3:1.
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  const ring = await contrastOf(page, ".advent-dialog :focus-visible", "outline");
+  expect(ring.outlineStyle, "fókuszkeret stílusa").toBe("solid");
+  expect(ring.outlineWidth).toBeGreaterThanOrEqual(2);
+  expect(ring.ratio, "fókuszkeret: " + ring.fg + " / " + ring.bg).toBeGreaterThanOrEqual(3);
+  await shot(page, "04-visszajelzes");
+  await page.getByTestId("advent-next").tap();
+  // 2) Minden ablak megválaszolva → az összesítés magától megnyílik; javítható ablakkal a „Javítom” gomb.
+  await expect(page.getByTestId("advent-summary")).toBeVisible();
+  await settle(page);
+  const repair = await contrastOf(page, '[data-testid="advent-repair-from-summary"]');
+  expect(repair.ratio, "„Javítom”: " + repair.fg + " / " + repair.bg).toBeGreaterThanOrEqual(4.5);
+  await shot(page, "08-batoritas");
+  // 3) Javítás után megfelelt: az ajándék-üzenet arany a sötét lapon.
+  await page.getByTestId("advent-repair-from-summary").tap();
+  await pickOption(page, true);
+  await page.getByTestId("advent-next").tap();
+  await expect(page.getByTestId("advent-gift-message")).toBeVisible();
+  await settle(page);
+  const gift = await contrastOf(page, '[data-testid="advent-gift-message"]');
+  expect(gift.fg, "az üzenet arany").toBe("rgb(255, 233, 168)");
+  expect(gift.ratio, "ajándék-üzenet: " + gift.fg + " / " + gift.bg).toBeGreaterThanOrEqual(4.5);
+  await shot(page, "07-ajandek-uzenet");
+});
+
+test("élesítés: a kérdés megjelenése utáni ~400 ms-ban a koppintás és az Enter NEM rögzít választ; a fókusz a kérdésen áll (S3 K1)", async ({ page }) => {
+  let answers = 0;
+  await openCalendar(page, DEC5, 5);
+  page.on("request", (r) => { if (r.method() === "POST" && /\/doors\/\d+\/answer$/.test(r.url())) answers++; });
+  // Billentyűzet: Enter az ablakon, majd azonnal még egy Enter — a második nem válaszol (a fókusz a kérdésen van, nem egy válaszon).
+  await page.getByTestId("advent-door-1").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("advent-question")).toBeVisible();
+  await expect(page.getByTestId("advent-question")).toBeFocused();
+  await expect(page.getByTestId("advent-dialog")).toHaveAttribute("aria-describedby", "advent-question-text");
+  await page.keyboard.press("Enter");
+  // Érintés: koppintás egy válaszra még az élesítés előtt (a gomb látszik, de nem fogad bemenetet).
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
+  await page.getByTestId("advent-door-1").tap();
+  await expect(page.locator('.advent-options[data-armed="false"]')).toBeVisible();
+  await page.getByTestId("advent-option-0").tap({ force: true });
+  await page.waitForTimeout(700);
+  expect(answers, "az élesítés előtti bemenet nem rögzített választ").toBe(0);
+  await expect(page.getByTestId("advent-next")).toHaveCount(0);
+  // Élesítés után a válasz rendesen megy.
+  await pickOption(page, true);
+  expect(answers).toBe(1);
+});
+
+test("lejárt tanulói link: a gyerek látja a választást, addig a naptár nem ír; „Folytatom vendégként” után játszható (A53, S3 K2)", async ({ page }) => {
+  let writes = 0;
+  await setAdventTime(page, DEC5);
+  // Érvénytelen token a böngészőben — csak az első betöltéskor tesszük be (az alkalmazás utána törölheti).
+  await page.addInitScript(() => {
+    if (window.sessionStorage.getItem("advent-test-token-set")) return;
+    // Tokenszerű, de a szerver számára érvénytelen érték (kitalált tesztadat).
+    window.localStorage.setItem("websuli.learnerToken", "00000000-0000-4000-8000-000000000000.1.AAAAAAAAAAAAAAAAAAAAAA");
+    window.sessionStorage.setItem("advent-test-token-set", "1");
+  });
+  page.on("request", (r) => { if (r.method() === "POST" && r.url().includes("/api/advent/")) writes++; });
+  await page.goto("/adventi-naptar");
+  await expect(page.getByTestId("advent-pairing-invalid")).toBeVisible();
+  await expect(page.getByTestId("advent-pairing-invalid")).toContainText("A személyes linked lejárt");
+  await shot(page, "10-lejart-link");
+  // Az alkalmazás profil-lekérdezése közben törölheti a tokent — a választás ettől még a gyereké marad (újratöltés után is).
+  await page.reload();
+  await expect(page.getByTestId("advent-pairing-invalid")).toBeVisible();
+  await page.getByTestId("advent-grade-5").or(page.getByTestId("advent-door-1")).first().tap({ force: true });
+  await expect(page.getByTestId("advent-notice")).toContainText("Előbb válassz");
+  await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
+  expect(writes, "választás előtt nincs írás").toBe(0);
+  await page.getByTestId("advent-continue-guest").tap();
+  await expect(page.getByTestId("advent-pairing-invalid")).toHaveCount(0);
+  await page.getByTestId("advent-grade-5").tap();
+  await expect(page.getByTestId("advent-grid")).toBeVisible();
+  await playDoor(page, 1, true);
+  await expect(page.getByTestId("advent-door-1")).toHaveAttribute("data-state", "solved");
+});
+
+test("átmeneti hiba és 429 az állapot-lekérdezésnél: a naptár megmarad, a hiba sávként jelenik meg; a válasz után nincs külön olvasás; 409 a szerver üzenetével (S3 K4)", async ({ page }) => {
+  let reads = 0;
+  await openCalendar(page, DEC5, 5);
+  page.on("request", (r) => { if (r.method() === "GET" && r.url().endsWith("/api/advent/state")) reads++; });
+  // 1) Egy teljes ablak megnyitása és megválaszolása nem indít állapot-olvasást (az eredmény helyben frissíti az állapotot).
+  await playDoor(page, 1, true);
+  await expect(page.getByTestId("advent-progress")).toContainText("1 / 24 világít");
+  await expect(page.getByTestId("advent-door-1")).toHaveAttribute("data-state", "solved");
+  expect(reads, "válasz utáni olvasások száma").toBe(0);
+  // 2) 409 a megnyitásnál: a szerver magyar üzenete jelenik meg; az utána induló állapot-olvasás 429 → a rács a helyén marad.
+  await page.route("**/api/advent/state", (route) => route.fulfill({ status: 429, json: { message: "Túl sok kérés.", limit: "ip" } }));
+  await page.route("**/api/advent/doors/2/open", (route) => route.fulfill({ status: 409, json: { message: "Ez az ablak most nem nyitható." } }));
+  await page.getByTestId("advent-door-2").tap();
+  await expect(page.getByTestId("advent-error")).toContainText("Ez az ablak most nem nyitható.");
+  await expect(page.getByTestId("advent-stale")).toBeVisible();
+  await expect(page.getByTestId("advent-load-error")).toHaveCount(0);
+  await expect(page.getByTestId("advent-grid")).toBeVisible();
+  await expect(page.getByTestId("advent-door-1")).toHaveAttribute("data-state", "solved");
+  await shot(page, "11-megtartott-allapot");
+  // 3) A hiba elmúltával az „Újra” visszahozza a friss állapotot, a sáv eltűnik, a naptár játszható.
+  await page.unroute("**/api/advent/state");
+  await page.unroute("**/api/advent/doors/2/open");
+  await page.getByTestId("advent-stale-retry").tap();
+  await expect(page.getByTestId("advent-stale")).toHaveCount(0);
+  await page.getByTestId("advent-error-retry").tap();
+  await playDoor(page, 2, true);
+});
+
 test("éjféli határ: 23:59:59-kor a holnapi ablak zárt, 00:00:00-kor nyitható (A13)", async ({ page }) => {
   await openCalendar(page, "2026-12-04T22:59:59Z", 5);
   await expect(page.getByTestId("advent-door-5")).toHaveAttribute("data-state", "locked");
@@ -156,7 +287,14 @@ test("végigjátszás: 24 / 24 → a szó szerinti üzenet az összesítésben (
   await expect(page.getByTestId("advent-gift-message")).toHaveText(ADVENT_GIFT_MESSAGE);
   await expect(page.getByTestId("advent-summary")).toContainText("24 / 24");
   await expect(page.getByTestId("advent-summary")).toContainText("Elsőre jó: 24 / 24");
-  await shot(page, "07-ajandek-uzenet");
+  await expect(page.getByTestId("advent-summary-date")).toContainText("2026. december 24.");
+  // Visszatérő gyerek (újratöltés): az ajándék-üzenet a rács fölött azonnal látszik, keresés nélkül (S3 K3).
+  await page.reload();
+  await expect(page.getByTestId("advent-gift-banner")).toBeVisible();
+  await expect(page.getByTestId("advent-gift-banner")).toHaveText(ADVENT_GIFT_MESSAGE);
+  await shot(page, "07b-visszatero-uzenet");
+  await page.getByTestId("advent-gift-banner").tap();
+  await expect(page.getByTestId("advent-gift-message")).toHaveText(ADVENT_GIFT_MESSAGE);
 });
 
 test("22 / 24 → nincs ajándék-üzenet, bátorítás és javítás; javítás után 23 megoldott → megvan (A9, E1)", async ({ page }) => {
@@ -189,6 +327,7 @@ test("végleg sikertelen kör → „Új naptárat kérek” → új kör nyitha
 test("szezon: november 29. „Hamarosan”; január 7. lezárt; tesztidő nélkül a naptár nem érhető el (A14, A15, A51)", async ({ page }) => {
   await openCalendar(page, "2026-11-29T10:00:00Z");
   await expect(page.getByTestId("advent-teaser")).toContainText("Hamarosan");
+  await expect(page.getByTestId("advent-back-home")).toBeVisible();
   await expect(page.locator(".advent-door")).toHaveCount(0);
   await setAdventTime(page, DEC5);
   await page.goto("/adventi-naptar");
@@ -256,18 +395,40 @@ for (const viewport of MOBILE_VIEWPORTS) {
       // A teljes naptár a képernyőn belül van: mind a 24 ablak látszik, görgetés nélkül.
       const boxes = await page.locator(".advent-door").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; }));
       for (const b of boxes) expect(b.top >= 0 && b.left >= 0 && b.bottom <= viewport.height && b.right <= viewport.width, `ablak a nézeten belül: ${JSON.stringify(b)}`).toBe(true);
-      expect(await safeAreaViolations(page, { top: 0, right: 0, bottom: 0, left: 0 }), "M4").toEqual([]);
+      // M4 valódi peremmel (a végrehajtási utasítás 47 / 34 px-e; fekvőben a perem oldalt van).
+      const insets = viewport.width > viewport.height ? { top: 0, right: 47, bottom: 21, left: 47 } : { top: 47, right: 0, bottom: 34, left: 0 };
+      await emulateSafeArea(page, insets);
+      await page.waitForTimeout(100);
+      expect(await safeAreaViolations(page, insets), "M4").toEqual([]);
+      expect(await measureOverflow(page), "M1 peremmel").toEqual({ x: 0, y: 0 });
       await page.getByTestId("advent-door-23").tap();
       await expect(page.getByTestId("advent-question")).toBeVisible();
       expect(await overlappingTargets(page, '[data-testid^="advent-option-"]'), "egymást fedő válaszok").toEqual([]);
       await measure("kerdes");
       await pickOption(page, true);
+      await expect(page.getByTestId("advent-next"), "a „Tovább” a nézeten belül van (fekvő telefonon is)").toBeInViewport({ ratio: 1 });
       await measure("visszajelzes");
       await page.getByTestId("advent-next").tap();
       await page.getByTestId("advent-summary-open").tap();
       await expect(page.getByTestId("advent-summary")).toBeVisible();
       await measure("osszesites");
       expect(errors, "konzolhiba (A32)").toEqual([]);
+    });
+
+    test("az ajándék-összesítés ezen a méreten: a szó szerinti üzenet teljes egészében látszik, nincs oldalgörgetés, a záró kép aránya megmarad (A26, S3 K5)", async ({ page }) => {
+      await openCalendar(page, DEC24);
+      await seedProgress(page, DEC24, { grade: 5, days: range(1, 24) });
+      await page.reload();
+      await page.getByTestId("advent-summary-open").tap();
+      await expect(page.getByTestId("advent-gift-message")).toHaveText(ADVENT_GIFT_MESSAGE);
+      await settle(page);
+      expect(await measureOverflow(page), "M1").toEqual({ x: 0, y: 0 });
+      expect(await smallTargets(page), "M2").toEqual([]);
+      expect(await smallFonts(page), "M3").toEqual([]);
+      await expect(page.getByTestId("advent-gift-message")).toBeInViewport({ ratio: 1 });
+      const art = (await page.locator(".advent-summary__art").boundingBox())!;
+      expect(Math.abs(art.width / art.height - 4 / 3), "a záró kép aránya: " + art.width + " × " + art.height).toBeLessThan(0.05);
+      await shot(page, "m-ajandek");
     });
   });
 }
@@ -289,11 +450,21 @@ test.describe("asztali nézet 1366×768", () => {
     await page.getByTestId("advent-door-23").click();
     await expect(page.getByTestId("advent-question")).toBeVisible();
     await shot(page, "d-kerdes");
-    await pickOption(page, true);
+    await pickOption(page, true, "click");
     await shot(page, "d-visszajelzes");
     await page.getByTestId("advent-next").click();
     await page.getByTestId("advent-summary-open").click();
     await expect(page.getByTestId("advent-summary")).toBeVisible();
     await shot(page, "d-osszesites");
+    // Egérrel végig (M5): javítás az összesítésből, az utolsó ablak, majd az ajándék-üzenet — koppintás nélkül.
+    await page.getByTestId("advent-repair-from-summary").click();
+    await pickOption(page, true, "click");
+    await page.getByTestId("advent-next").click();
+    await page.getByTestId("advent-door-24").click();
+    await pickOption(page, true, "click");
+    await page.getByTestId("advent-next").click();
+    await expect(page.getByTestId("advent-gift-message")).toHaveText(ADVENT_GIFT_MESSAGE);
+    await settle(page);
+    await shot(page, "d-ajandek-uzenet");
   });
 });

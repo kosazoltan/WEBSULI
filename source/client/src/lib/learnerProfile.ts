@@ -6,6 +6,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
  * tanulóhoz párosítja. A token csak a böngészőben él (localStorage); a címsorból azonnal eltűnik. A token nevet nem tartalmaz.
  */
 export const LEARNER_TOKEN_KEY = "websuli.learnerToken";
+/**
+ * Jelző a lap munkamenetére: a szerver ELUTASÍTOTTA az eszköz tanulói tokenjét (lejárt / visszavont link). A token ilyenkor
+ * törlődik; a jelzőből az a felület, amelyiknek ez számít (adventi naptár, A53), meg tudja mondani a gyereknek, mi történt,
+ * ahelyett hogy csendben névtelenként folytatná. Új, érvényes link eltárolása törli.
+ */
+export const LEARNER_TOKEN_REJECTED_KEY = "websuli.learnerTokenRejected";
 const TOKEN_SHAPE = /^[A-Za-z0-9-]{8,64}\.[1-9][0-9]{0,8}\.[A-Za-z0-9_-]{22}$/;
 
 /** Tiszta: a `t` paraméter (ha tokenszerű) és a nélküle maradó URL (a többi paraméter és a hash változatlan). */
@@ -44,7 +50,10 @@ export function captureLearnerTokenFromUrl(): void {
   }
   if (taken.cleanUrl === null) return;
   try {
-    if (taken.token) window.localStorage.setItem(LEARNER_TOKEN_KEY, taken.token);
+    if (taken.token) {
+      window.localStorage.setItem(LEARNER_TOKEN_KEY, taken.token);
+      window.sessionStorage.removeItem(LEARNER_TOKEN_REJECTED_KEY);
+    }
   } catch {
     // privát mód / tele tárhely: a párosítás nem marad meg — a tanuló névtelen
   }
@@ -87,7 +96,11 @@ export function useLearnerProfile(): LearnerProfile | null {
     retry: false,
     queryFn: async (): Promise<LearnerProfile | null> => {
       const res = await fetch("/api/learner/me", { headers: { "X-Learner-Token": token! }, credentials: "same-origin" });
-      if (res.status === 401) { clearLearnerToken(); return null; }
+      if (res.status === 401) {
+        try { window.sessionStorage.setItem(LEARNER_TOKEN_REJECTED_KEY, "1"); } catch { /* tárhely nélkül csak a token törlődik */ }
+        clearLearnerToken();
+        return null;
+      }
       if (!res.ok) return null;
       return (await res.json()) as LearnerProfile;
     },
