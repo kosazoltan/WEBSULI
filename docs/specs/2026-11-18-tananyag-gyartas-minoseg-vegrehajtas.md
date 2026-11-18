@@ -353,6 +353,33 @@ minden más és a hiány = KI). Minden szeletre érvényes szabályok:
 
 ## S2b — Megjelenítők: elágazó döntési fa, képes kártyák
 
+> **Teendők a VAK ellenőr S2a-leleteiből (2026-11-18; a vak ellenőr saját sorszámaival — „vak J…”, nem azonos a fenti független
+> review J-számaival) — ennek a szeletnek a kötelező részei.** Az S2a-ban lezárva: vak B1 (funkciókapcsoló + a kiesés oka a javító
+> üzenetben), vak J1 (a „•” elem eleji műveleti jel megmarad), vak J3 (a kétoszlopos tábla fejléce nem törik szó közepén).
+> - **vak J2 — görgetésjelző és táblacím:** a „görgethető” jelző a tábla FÖLÖTT is (vagy ragadósan / szélső árnyékkal) látsszon — a
+>   8 oszlopos táblánál 360 px-en ma ~11 képernyővel lejjebb van; a táblázat címe kerüljön a görgő kereten KÍVÜLRE (ma vízszintesen
+>   levágódik). Böngészős állítás: a jelző a tábla első képernyőjén látszik, a cím teljes szövege görgetés nélkül olvasható.
+> - **vak J5 — kontraszt:** a „Példa” címke (`lesson-design.css`, kártya) az `adventure` sávban 3,88:1, a `future` sávban 3,13:1; a
+>   `future` „a” tónusjele 2,69:1; csendes nézetben a `future` `--ws-accent-2/3` 1,76–2,09:1. Cél: szöveg ≥ 4,5:1, jel ≥ 3:1 minden
+>   sávban és a csendes nézetben; számolt őr-teszt a tokenekből (a vak ellenőr `contrast.mjs` mérésének megfelelője a repóban).
+> - **vak J6 — fejezet-kisfilm:** a `clips/clip2-overlays.tsx` ráúszó ábrája szűrő nélkül és levágva (`lesson-clips2.css`,
+>   `max-height` + `overflow: hidden`) rajzolná a HTML-táblát / kártyát / dobozt; a `server/lesson-clips.ts` a hibás paraméterű
+>   blokk indexét is felkínálja. Teendő: az új fajták a kisfilm ráúszó ábrájából kimaradnak (vagy saját, görgetés nélküli
+>   kicsinyített nézetet kapnak), a hibás paraméterű blokk indexe nem kínálható fel. UNVERIFIED böngészőben — előbb reprodukáld.
+> - **vak J7 — fölösleges görgetés 3 oszlopnál:** `min-width: calc(var(--sv-cols) * 6.5em)` miatt egy „1 | 2 | 3” tartalmú tábla is
+>   görög 360 px-en. Teendő: a legkisebb szélesség a tartalomból (nem oszlopszám × állandó); állítás a böngészős próbában.
+> - **vak J8 — a felsorolás-felismerés hézagai:** bekezdés marad a szószedet („- dog – kutya”), a felszólító lista, a kérdőszavak,
+>   a számmal kezdődő pontok; tévesen lista a kijelentő párbeszéd, és a szóközzel írt előjel („- x = 5”) jele eltűnik. Teendő:
+>   esetlista egységtesztként, döntés esetenként (a kétes eset bekezdés marad, jel nem tűnhet el); a már kiadott leckék
+>   megjelenésének változása mérve (hány kiadott lecke magyarázata érintett — csak olvasva).
+> - **vak J10 — a böngészős próba a CI-ban:** a `playwright.source-visuals.config.ts` nincs a `.github/workflows/ci.yml` Playwright
+>   listájában, és npm-szkript sem hivatkozza. A munkafolyamat-fájl módosítása tulajdonosi / orkesztrátori teendő (ügynök a
+>   workflow-hoz nem nyúl) — kanban-jegy kell rá; addig a próba futtatása a szelet kézi, kötelező lépése.
+> - **vak J11 — nyomtatás:** nincs `@media print`; a görgő tábla nyomtatásban levágódik. UNVERIFIED — előbb reprodukáld; ha áll:
+>   nyomtatásban a tábla tördelhető, görgetés nélküli.
+> - **vak J12 — kódhigiénia:** a `SOURCE_VISUAL_TEXT.branchYes / branchNo` (ebben a szeletben a döntési fa használja — ha nem,
+>   törlendő); a három fajta felirata egy helyen éljen (`ANIM_LABELS` ↔ `SOURCE_VISUAL_HEAD_LABELS`).
+
 Ág: `feat/lecke-megjelenitok-s2b`. Fájlok: mint az S2a (a `source-visuals.tsx`, a séma, a címkék, a lektor-nézet, a spec bővül).
 
 1. `ANIM_KINDS` bővül: `"decisionTree"`, `"pictureCards"`. Sémák: `decisionTree` `{ root: Node }`, `Node = { text (≤ 120),
@@ -388,6 +415,26 @@ minden más és a hiány = KI). Minden szeletre érvényes szabályok:
 >   megengedett legnagyobb tábla — 8 oszlop × 20 sor × 100+ karakter — ép, de telefonon ~15 000 px magas).
 > - A hosszabb forrástáblát több, azonos `sourceVisualId`-jú blokkra kell bontani (`SOURCE_TABLE_BLOCK_ROWS`), a rövidebb sort a
 >   fejléc hosszára kitölteni.
+>
+> **Teendők a VAK ellenőr S2a-leleteiből (2026-11-18; „vak J…” = a vak ellenőr sorszáma) — ennek a szeletnek a kötelező részei:**
+> - **vak B1 — a kapcsoló és a hirdetés együtt:** a modell kimenetének határa (szerzői lecke: `validateLesson`; ábrafolt:
+>   `applyVisualPatch`) az új fajtákat csak a `STUDIO_SOURCE_VISUALS` kapcsoló BE állapotában fogadja el (0.7); a hirdetés
+>   (`PROMPT_ANIM_KINDS`, `VISUAL_PARAMS_CONTRACT`) bővítése is CSAK BE állapotban juthat a promptokba — KI állapotban a
+>   `tests/source-visuals-flag.test.ts` főág-lenyomatai változatlanul zöldek kell legyenek (a hirdetett lista és a szerződés
+>   kapcsolófüggő építése, teszttel).
+> - **vak J4 — a szigorú séma apróságért a TELJES blokkot kiveszi:** mért kiesések: üres `caption` / `heading` / `example`, üres
+>   `headerTones`, számcella (`rows: [[2, 3, 6]]`), egy cellával rövidebb sor, 21–40 soros tábla, 121 karakteres cella, 9 pontos
+>   doboz, 4 kártya, extra kulcs. Teendő: determinisztikus normalizálás a séma ELŐTT (üres opcionális → hiányzó, szám → szöveg,
+>   rövid sor kitöltése, hosszú tábla bontása `SOURCE_TABLE_BLOCK_ROWS` szerint, ismeretlen kulcs elhagyása), és csak a
+>   normalizálhatatlan essen ki; a normalizálás számlálva (`telemetry.gates`), esetenként egységteszt + mutációs ellenpróba. A
+>   kiesés oka a javító üzenetben már megjelenik (`undrawableDropNotes`, `undrawableVisualsExplained`) — a normalizálás után a
+>   megmaradó kiesésekre is.
+> - **vak J9 — a tesztek ereje (47 mutációból 13 túlélte):** az S2a-ban lezárva F5 / F6 (a kiesés bekötése a szerzői állomáson és a
+>   végkapun — motorteszt) és F7 (a lejátszó szűrője — szerkezeti őr; a kirajzolt eredményt a böngészős próba méri). NYITOTT, ebben
+>   a szeletben pótlandó teszt: F8 a telemetria-nézet sora (`run-telemetry.ts`, `undrawableVisualsDropped`); P4 / P5 az új fajta
+>   említése a séma-javító üzenetben és a lektor-szabályban; S13 / S14 / S18 / S19 a `compareCards` külső `.strict()`-je, a
+>   táblacím (160), a kártyacím / példa (80 / 160), a dobozcím (80) korlátja; E4 / E5 / E7 az `explain-paragraphs.ts` „bounded”,
+>   „opened” feltétele és a „– soha nem lista” szabálya (mindegyikre olyan eset, amelyet más védelem nem fog meg).
 
 Ág: `feat/abrakeszito-forrasra-kotve-s3a`. Fájlok: `server/studio/step-io.ts`, `server/studio/role-skills.ts`,
 `shared/lesson-visual-params.ts`, `server/studio/visual-patch.ts`, `server/studio/section-visuals.ts`,
