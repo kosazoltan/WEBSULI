@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 
 import { adventClock } from "../server/advent/clock";
-import { ADVENT_LIMITS, createWindowCounter, type AdventLimits } from "../server/advent/limits";
+import { ADVENT_LIMITS, ADVENT_ROUND_WORST, ADVENT_SCHOOL_KIDS, ADVENT_WRITES_PER_KID, createWindowCounter, type AdventLimits } from "../server/advent/limits";
 import { createAdventRouter } from "../server/advent/routes";
 import type { AdventRow, AdventStore } from "../server/advent/store";
 
@@ -43,6 +43,11 @@ async function serve(opts: { limits?: AdventLimits; clock?: Parameters<typeof cr
   const app = express();
   app.set("trust proxy", 1);
   app.use(express.json());
+  app.use((req, _res, next) => {
+    const id = req.get("x-test-session");
+    if (id) Object.assign(req, { session: {}, sessionID: id });
+    next();
+  });
   app.use("/api/advent", createAdventRouter({
     store: opts.store ?? emptyStore, bank: [], christmas: [],
     enabled: () => true,
@@ -57,30 +62,38 @@ async function serve(opts: { limits?: AdventLimits; clock?: Parameters<typeof cr
     return { status: res.status, body: (await res.json()) as { limit?: string } };
   };
   const status = async (headers: Record<string, string> = {}) => (await (await fetch(`${base}/api/advent/status`, { headers })).json()) as { enabled: boolean; phase?: string; openDay?: number };
-  const post = async (path: string, device: string, ip: string, data: Record<string, unknown> = {}) => {
-    const res = await fetch(`${base}/api/advent${path}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify({ device, ...data }) });
-    return { status: res.status, body: (await res.json()) as { limit?: string } };
+  const post = async (path: string, device: string, ip: string, data: Record<string, unknown> = {}, session?: string) => {
+    const res = await fetch(`${base}/api/advent${path}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": ip, ...(session ? { "x-test-session": session } : {}) }, body: JSON.stringify({ device, ...data }) });
+    return { status: res.status, body: (await res.json()) as { limit?: string }, retryAfter: res.headers.get("retry-after") };
   };
+  /** Nyers (akár érvénytelen) törzs. */
+  const raw = async (path: string, ip: string, body: string) => (await fetch(`${base}/api/advent${path}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": ip }, body })).status;
   const state = async (ip: string) => (await fetch(`${base}/api/advent/state`, { headers: { "x-forwarded-for": ip, "x-advent-device": A } })).status;
-  return { round, status, post, state, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
+  return { round, status, post, raw, state, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
 }
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
 
-test("a korlátok egy helyen állnak, és a szabályos legrosszabb eset (144 írás) belefér az alanyonkénti keretbe", () => {
+test("a korlátok egy helyen állnak, és iskolai legrosszabb esetre méretezettek: 4 osztály teljes december 24-i pótlása, két teljes kör egy alanynál (vak ellenőr K2, k2)", () => {
   assert.deepEqual(ADVENT_LIMITS, {
-    subjectWrites: { limit: 200, windowMs: 900_000 },
-    ipWrites: { limit: 1500, windowMs: 900_000 },
-    ipReads: { limit: 400, windowMs: 60_000 },
-    newDeviceRows: { limit: 90, windowMs: 3_600_000 },
+    subjectWrites: { limit: 290, windowMs: 900_000 },
+    ipWrites: { limit: 14_160, windowMs: 900_000 },
+    ipReads: { limit: 1200, windowMs: 60_000 },
+    newDeviceRows: { limit: 240, windowMs: 3_600_000 },
+    sessionNewRows: { limit: 3, windowMs: 3_600_000 },
+    ipInvalid: { limit: 120, windowMs: 60_000 },
   });
-  assert.ok(ADVENT_LIMITS.subjectWrites.limit >= 24 * 3 * 2);
-  assert.ok(ADVENT_LIMITS.ipWrites.limit > ADVENT_LIMITS.subjectWrites.limit);
-  // Iskolai méret (tulajdonosi döntés 2026-11-18): három 30 fős osztály egy órán belül, egy osztály 15 nyitható ablakkal pótolva.
-  assert.ok(ADVENT_LIMITS.newDeviceRows.limit >= 3 * 30);
-  assert.ok(ADVENT_LIMITS.ipWrites.limit >= 30 * (1 + 2 * 15));
-  // Olvasás: négy 30 fős osztály egy percen belül, fejenként három állapot-olvasással (kártya, naptároldal, egy frissítés).
-  assert.ok(ADVENT_LIMITS.ipReads.limit >= 4 * 30 * 3);
+  // A képlet: 120 gyerek × (évfolyam + 24 × (megnyitás + válasz) + 5 javítás × 2) × 2 tartalék.
+  assert.equal(ADVENT_SCHOOL_KIDS, 120);
+  assert.equal(ADVENT_WRITES_PER_KID, 59);
+  assert.equal(ADVENT_LIMITS.ipWrites.limit, ADVENT_SCHOOL_KIDS * ADVENT_WRITES_PER_KID * 2);
+  // Egy alany két teljes kört végigjátszhat (2 × 144 + évfolyam + új kör) — a 2. kör 10. ablakánál sem fogy el.
+  assert.equal(ADVENT_ROUND_WORST, 144);
+  assert.ok(ADVENT_LIMITS.subjectWrites.limit >= 2 * ADVENT_ROUND_WORST + 2);
+  // Az ellenőr pótlási esete: 90 gyerek december 14-én, hibátlanul (1 + 14 × 2 = 29 írás) — 2610 írás bőven belefér.
+  assert.ok(ADVENT_LIMITS.ipWrites.limit >= 90 * 29 * 2);
+  assert.ok(ADVENT_LIMITS.newDeviceRows.limit >= 8 * 30);
+  assert.ok(ADVENT_LIMITS.sessionNewRows.limit < ADVENT_LIMITS.newDeviceRows.limit / 10, "egy kliens a hálózat új-sor keretének töredékét fogyaszthatja");
 });
 
 test("csúszóablakos számláló: a keret betelik, az ablak után felszabadul; a kulcsok függetlenek (review K2)", () => {
@@ -125,14 +138,14 @@ test("foglalás: ellenőrzés és rögzítés egy lépésben, a visszaadott hely
   assert.equal(counter.size(), 2);
 });
 
-test("új névtelen sor kerete PÁRHUZAMOS kérésekkel sem léphető túl: 120 egyidejű létrehozás egy címről → pontosan 90 sor (review U1)", async () => {
+test("új névtelen sor kerete PÁRHUZAMOS kérésekkel sem léphető túl: 120 egyidejű létrehozás egy címről, 90-es kerettel → pontosan 90 sor (review U1)", async () => {
   // Mutációs ellenpróba a számlálón: a régi rend (előbb kérdez, a várakozás UTÁN számol) mind a 120-at átengedi.
   const naive = createWindowCounter(ADVENT_LIMITS.newDeviceRows);
   const passed = await Promise.all(Array.from({ length: 120 }, async () => { if (naive.full("ip")) return false; await tick(); naive.hit("ip"); return true; }));
   assert.equal(passed.filter(Boolean).length, 120, "a régi rend túllépi a keretet — ezt zárja ki a foglalás");
 
   const memory = memoryStore();
-  const app = await serve({ store: memory.store });
+  const app = await serve({ store: memory.store, limits: { ...ADVENT_LIMITS, newDeviceRows: { limit: 90, windowMs: 3_600_000 } } });
   try {
     const device = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
     const results = await Promise.all(Array.from({ length: 120 }, (_, i) => app.post("/grade", device(i), "10.9.0.1", { grade: 5 })));
@@ -169,7 +182,7 @@ test("a foglalás visszajár, ha a sor nem jött létre: sikertelen módosítás
   } finally { await app.close(); }
 });
 
-test("olvasási keret: a hálózat kerete utáni állapot-olvasás 429, másik hálózat nem érintett; az alapérték 400 / perc (S3 K4, tulajdonosi döntés)", async () => {
+test("olvasási keret: a hálózat kerete utáni állapot-olvasás 429, másik hálózat nem érintett; az alapérték 1200 / perc (vak ellenőr K2)", async () => {
   const limits: AdventLimits = { ...ADVENT_LIMITS, ipReads: { limit: 3, windowMs: 60_000 } };
   const app = await serve({ limits });
   try {
@@ -179,14 +192,14 @@ test("olvasási keret: a hálózat kerete utáni állapot-olvasás 429, másik h
     // Az olvasás nem fogyasztja az írási keretet.
     assert.equal((await app.round(A, "10.7.0.1")).status, 409);
   } finally { await app.close(); }
-  // Alapértékkel: 400 olvasás egy címről mind átmegy, a 401. nem.
+  // Alapértékkel: 1200 olvasás egy címről mind átmegy, az 1201. nem.
   const real = await serve({});
   try {
     const statuses: number[] = [];
-    // 8 × 50-es hullám: a helyi szerver fogadósorát egyetlen 400-as löket túltöltené.
-    for (let wave = 0; wave < 8; wave++) statuses.push(...(await Promise.all(Array.from({ length: 50 }, () => real.state("10.7.1.1")))));
-    assert.equal(statuses.length, 400);
-    assert.ok(statuses.every((code) => code === 200), "az első 400 a keretben");
+    // 24 × 50-es hullám: a helyi szerver fogadósorát egyetlen nagy löket túltöltené.
+    for (let wave = 0; wave < 24; wave++) statuses.push(...(await Promise.all(Array.from({ length: 50 }, () => real.state("10.7.1.1")))));
+    assert.equal(statuses.length, 1200);
+    assert.ok(statuses.every((code) => code === 200), "az első 1200 a keretben");
     assert.equal(await real.state("10.7.1.1"), 429);
   } finally { await real.close(); }
 });
@@ -205,25 +218,73 @@ test("alanyonkénti korlát: a keret utáni kérés 429 (limit: subject); másik
   } finally { await app.close(); }
 });
 
-test("IP-korlát: a hálózat kerete utáni kérés 429 (limit: ip), más hálózatról ugyanaz az alany még mehet (review C1)", async () => {
+test("IP-korlát: csak a SIKERES írás számít; a keret utáni kérés 429 (limit: ip) Retry-After-rel, más hálózatról ugyanaz az alany mehet (review C1, vak ellenőr K1)", async () => {
   const limits: AdventLimits = { ...ADVENT_LIMITS, subjectWrites: { limit: 100, windowMs: 60_000 }, ipWrites: { limit: 4, windowMs: 60_000 } };
-  const app = await serve({ limits });
+  const memory = memoryStore();
+  const app = await serve({ limits, store: memory.store });
   try {
-    for (const device of [A, B, A, B]) assert.equal((await app.round(device, "10.2.0.1")).status, 409);
-    const blocked = await app.round(A, "10.2.0.1");
+    // Elutasított írások (409: nincs mit új körre váltani) — ezek NEM fogyasztják a hálózat keretét.
+    for (let i = 0; i < 10; i++) assert.equal((await app.round(A, "10.2.0.1")).status, 409);
+    for (const device of [A, B, A, B]) assert.equal((await app.post("/grade", device, "10.2.0.1", { grade: 5 })).status, 200);
+    const blocked = await app.post("/grade", A, "10.2.0.1", { grade: 5 });
     assert.deepEqual({ status: blocked.status, limit: blocked.body.limit }, { status: 429, limit: "ip" });
-    assert.equal((await app.round(B, "10.2.0.1")).status, 429, "a hálózat minden alanya áll");
-    assert.equal((await app.round(A, "10.2.0.9")).status, 409, "másik hálózatról megy");
+    assert.ok(Number(blocked.retryAfter) > 0, "Retry-After a 429-en");
+    assert.equal((await app.post("/grade", B, "10.2.0.1", { grade: 5 })).status, 429, "a hálózat minden alanya áll");
+    assert.equal((await app.post("/grade", A, "10.2.0.9", { grade: 5 })).status, 200, "másik hálózatról megy");
   } finally { await app.close(); }
 });
 
-test("az alapértelmezett korlátokkal a 201. írás 429 (alany), előtte egy sem (A49 felső határa)", async () => {
+test("az alapértelmezett korlátokkal a 291. írás 429 (alany), előtte egy sem — két teljes kör belefér (A49 felső határa, vak ellenőr k2)", async () => {
   const app = await serve({});
   try {
     const statuses: number[] = [];
-    for (let i = 0; i < 201; i++) statuses.push((await app.round(A, "10.3.0.1")).status);
-    assert.ok(statuses.slice(0, 200).every((s) => s === 409), "az első 200 a keretben");
-    assert.equal(statuses[200], 429);
+    for (let i = 0; i < 291; i++) statuses.push((await app.round(A, "10.3.0.1")).status);
+    assert.ok(statuses.slice(0, 290).every((code) => code === 409), "az első 290 a keretben");
+    assert.equal(statuses[290], 429);
+  } finally { await app.close(); }
+});
+
+test("a vak ellenőr három támadása után ugyanarról a címről egy másik, szabályos gyerek új naptárat kezdhet és írhat (vak ellenőr K1)", async () => {
+  const memory = memoryStore();
+  const app = await serve({ store: memory.store });
+  const school = "10.20.0.1";
+  const kid = (i: number) => "aaaaaaaa-0000-4000-8000-" + String(i).padStart(12, "0");
+  try {
+    // 1) 1500 érvénytelen törzsű írás (50-es hullámokban): egyik sem fogyasztja a hálózat írási keretét. 120 után az ÉRVÉNYTELEN
+    //    kérés 429 (limit: invalid) — de csak az.
+    const statuses: number[] = [];
+    for (let wave = 0; wave < 30; wave++) statuses.push(...(await Promise.all(Array.from({ length: 50 }, () => app.raw("/grade", school, "[]")))));
+    assert.equal(statuses.filter((code) => code === 400).length, 120);
+    assert.equal(statuses.filter((code) => code === 429).length, 1380);
+    // 2) 405 állapot-olvasás.
+    for (let wave = 0; wave < 9; wave++) await Promise.all(Array.from({ length: 45 }, () => app.state(school)));
+    // 3) Egy munkamenetből 95 új eszköz: a 4.-től a munkamenet kerete fog (Retry-After-rel), a hálózaté nem fogy el.
+    const attacker: Array<{ status: number; limit?: string; retryAfter: string | null }> = [];
+    for (let i = 0; i < 95; i++) { const r = await app.post("/grade", kid(i), school, { grade: 5 }, "tamado-munkamenet"); attacker.push({ status: r.status, limit: r.body.limit, retryAfter: r.retryAfter }); }
+    assert.equal(attacker.filter((r) => r.status === 200).length, 3, "egy munkamenet 3 új naptárat kezdhet");
+    assert.ok(attacker.slice(3).every((r) => r.status === 429 && r.limit === "new-row-session" && Number(r.retryAfter) > 0), JSON.stringify(attacker[3]));
+    // Az osztálytárs (másik munkamenet, ugyanaz a cím): állapotot olvas, új naptárat kezd, és ír.
+    assert.equal(await app.state(school), 200);
+    const victim = await app.post("/grade", kid(1000), school, { grade: 3 }, "osztalytars");
+    assert.equal(victim.status, 200, JSON.stringify(victim.body));
+    assert.equal((await app.post("/grade", kid(1000), school, { grade: 4 }, "osztalytars")).status, 200, "a meglévő naptárába is ír");
+    // Szabályos kérés az érvénytelen-keret betelte után sem kap 429-et.
+    assert.equal((await app.post("/grade", kid(1001), school, { grade: 2 }, "masik-osztalytars")).status, 200);
+  } finally { await app.close(); }
+});
+
+test("a hálózat új-sor keretének 429-e is Retry-After-t küld (vak ellenőr K1)", async () => {
+  const memory = memoryStore();
+  const app = await serve({ store: memory.store, limits: { ...ADVENT_LIMITS, newDeviceRows: { limit: 2, windowMs: 3_600_000 } } });
+  try {
+    assert.equal((await app.post("/grade", "bbbbbbbb-0000-4000-8000-000000000001", "10.21.0.1", { grade: 5 }, "s1")).status, 200);
+    assert.equal((await app.post("/grade", "bbbbbbbb-0000-4000-8000-000000000002", "10.21.0.1", { grade: 5 }, "s2")).status, 200);
+    const third = await app.post("/grade", "bbbbbbbb-0000-4000-8000-000000000003", "10.21.0.1", { grade: 5 }, "s3");
+    assert.deepEqual({ status: third.status, limit: third.body.limit }, { status: 429, limit: "new-row" });
+    const wait = Number(third.retryAfter);
+    assert.ok(wait > 3500 && wait <= 3600, "Retry-After: " + third.retryAfter);
+    // A munkamenet foglalása visszajár, ha a hálózat kerete fogott: ugyanez a munkamenet később (más hálózatról) kezdhet.
+    assert.equal((await app.post("/grade", "bbbbbbbb-0000-4000-8000-000000000004", "10.21.0.9", { grade: 5 }, "s3")).status, 200);
   } finally { await app.close(); }
 });
 

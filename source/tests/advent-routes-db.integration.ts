@@ -367,31 +367,37 @@ describe("adventi naptár — végpontok", () => {
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
-  it("új névtelen sorok: óránként 90 / hálózat, és csak a LÉTREJÖTT sor számít — a visszagördült kísérlet nem (A49, review K2)", async () => {
+  it("új névtelen sorok: óránként 240 / hálózat és 3 / munkamenet; csak a LÉTREJÖTT sor számít — a visszagördült kísérlet nem (A49, review K2, vak ellenőr K1 / K2)", async () => {
     const ip = "10.98.0.1";
     const kidsAt = (count: number) => Promise.all(Array.from({ length: count }, async () => { const k = await kid(); k.ip = ip; return k; }));
-    // 12 eszköz évfolyam nélkül próbál ablakot nyitni: mind 409, sor nem jön létre, a keret érintetlen (ha a kísérlet számítana,
-    // alább a 90 létrehozás nem férne bele).
+    // 12 eszköz évfolyam nélkül próbál ablakot nyitni: mind 409, sor nem jön létre, a keret érintetlen.
     for (const k of await kidsAt(12)) assert.equal((await k.post("/doors/1/open")).status, 409);
     assert.deepEqual(await q(`SELECT count(*)::int AS n FROM advent_progress WHERE created_at > now() - interval '1 minute' AND subject_kind = 'device' AND grade IS NULL`), [{ n: 0 }]);
     // Meglévő sor ismételt írása sem fogyaszt keretet: csak az első létrehozás számít.
     const first = await kid(); first.ip = ip;
     for (let i = 0; i < 5; i++) assert.equal((await first.post("/grade", { grade: 4 })).status, 200);
-    // Ezután 119 eszköz kér új sort (valódi adatbázissal), HÁROM egyidejű hullámban (40 + 40 + 39) — a 10-es kapcsolatkészletet
-    // terhelt gépen sem árasztja el egyetlen 119-es löket (S2b 3. kör, M2). Pontosan 89 fér még be (összesen 90 / óra / hálózat —
-    // iskolai méret): az első két hullám mind bejut, a harmadik 39 EGYIDEJŰ kéréséből pontosan 9, a többi 30 → 429. A keret
-    // határa így továbbra is párhuzamos kérésekkel van megtámadva (review U1).
+    // Egy munkamenet (süti) legfeljebb 3 új naptárat kezdhet: a 4. eszköz 429 (limit: new-row-session), sor nem jön létre.
+    const hoarder = await kid(); hoarder.ip = ip;
+    const hoarded: string[] = [];
+    for (let i = 0; i < 4; i++) { hoarder.device = randomUUID(); hoarded.push(hoarder.device); }
+    const hoardResults: Array<{ status: number; json: Json }> = [];
+    for (const device of hoarded) { hoarder.device = device; hoardResults.push(await hoarder.post("/grade", { grade: 4 })); }
+    assert.deepEqual(hoardResults.map((r) => r.status), [200, 200, 200, 429]);
+    assert.equal(hoardResults[3]!.json.limit, "new-row-session");
+    assert.deepEqual(await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [hoarded[3]]), []);
+    // Eddig 4 sor (first + 3). Ezután 266 eszköz kér új sort (valódi adatbázissal), hullámokban: 40 × 5 + 30 mind bejut (236),
+    // a 7. hullám 36 EGYIDEJŰ kéréséből pontosan 6 jut be, 30 kap 429-et — a keret (240) határa egyidejű kérésekkel van megtámadva (review U1, M2).
     const crowd: Kid[] = [];
     const outcomes: Array<{ status: number; json: Json }> = [];
-    for (const [size, admitted] of [[40, 40], [40, 40], [39, 9]] as const) {
+    for (const [size, admitted] of [[40, 40], [40, 40], [40, 40], [40, 40], [40, 40], [30, 30], [36, 6]] as const) {
       const wave = await kidsAt(size);
       const results = await Promise.all(wave.map((k) => k.post("/grade", { grade: 4 })));
-      assert.equal(results.filter((o) => o.status === 200).length, admitted, `${size} fős hullám`);
+      assert.equal(results.filter((o) => o.status === 200).length, admitted, size + " fős hullám");
       crowd.push(...wave); outcomes.push(...results);
     }
-    assert.equal(outcomes.filter((o) => o.status === 200).length, 89);
+    assert.equal(outcomes.filter((o) => o.status === 200).length, 236);
     assert.equal(outcomes.filter((o) => o.status === 429 && o.json.limit === "new-row").length, 30);
-    assert.deepEqual(await q(`SELECT count(*)::int AS n FROM advent_progress WHERE subject_id = ANY($1)`, [[first.device, ...crowd.map((k) => k.device)]]), [{ n: 90 }]);
+    assert.deepEqual(await q(`SELECT count(*)::int AS n FROM advent_progress WHERE subject_id = ANY($1)`, [[first.device, ...hoarded, ...crowd.map((k) => k.device)]]), [{ n: 240 }]);
     const blocked = await kid(); blocked.ip = ip;
     const r = await blocked.post("/grade", { grade: 4 });
     assert.deepEqual({ status: r.status, limit: r.json.limit }, { status: 429, limit: "new-row" });
@@ -399,6 +405,50 @@ describe("adventi naptár — végpontok", () => {
     assert.equal((await first.post("/doors/1/open")).status, 200, "a meglévő sor tovább játszhat");
     // Másik hálózatról a létrehozás megy.
     assert.equal((await (await kid()).post("/grade", { grade: 4 })).status, 200);
+  });
+
+  it("sérült terv / próbák a tárolt sorban: 500 helyett érthető 409 (corrupt) minden végponton; a többi alany nem érintett (vak ellenőr k3)", async () => {
+    const k = await kid();
+    assert.equal((await k.post("/grade", { grade: 5 })).status, 200);
+    await k.open(1);
+    const check = async (label: string) => {
+      const reads = await k.state();
+      assert.deepEqual({ status: reads.status, corrupt: reads.json.corrupt }, { status: 409, corrupt: true }, label + ": állapot");
+      assert.match(String(reads.json.message), /mentésében hibát találtunk/);
+      for (const [path, body] of [["/doors/1/open", {}], ["/doors/1/answer", { questionId: "x", pick: 0 }], ["/round", {}], ["/grade", { grade: 6 }]] as const) {
+        const r = await k.post(path, body);
+        assert.deepEqual({ status: r.status, corrupt: r.json.corrupt }, { status: 409, corrupt: true }, label + ": " + path);
+      }
+    };
+    await dbPool.query(`UPDATE advent_progress SET plan = '{"1": 5}'::jsonb WHERE subject_id = $1`, [k.device]);
+    await check("sérült terv");
+    await dbPool.query(`UPDATE advent_progress SET plan = '{}'::jsonb, doors = '{"1": {"1": {"attempts": 5}}}'::jsonb WHERE subject_id = $1`, [k.device]);
+    await check("sérült próbák");
+    // Más alany zavartalanul játszik.
+    const other = await kid();
+    assert.equal((await other.post("/grade", { grade: 5 })).status, 200);
+    await other.open(1);
+  });
+
+  it("párosított tanuló: az évfolyam az első VÁLASZNÁL rögzül, nem a megnyitáskor — a válasz előtti profilváltás új kérdést ad (vak ellenőr k6, terv R6 / E10)", async () => {
+    const learner = await newLearner(7);
+    const k = await kid();
+    k.learner = learner.token;
+    const seventh = await k.open(1);
+    assert.match(seventh.id, /^g07-/);
+    assert.deepEqual(await q(`SELECT grade FROM advent_progress WHERE subject_id = $1`, [learner.id]), [{ grade: null }], "megnyitáskor nem rögzül");
+    // A profil a válasz előtt 5. évfolyamra változik: az állapot és az újranyitott ablak már az 5. évfolyamé.
+    await dbPool.query(`UPDATE learners SET grade = 5 WHERE id = $1`, [learner.id]);
+    assert.equal((await k.state()).json.grade, 5);
+    const fifth = await k.open(1);
+    assert.match(fifth.id, /^g05-/);
+    await k.answer(1, fifth, true);
+    assert.deepEqual(await q(`SELECT grade FROM advent_progress WHERE subject_id = $1`, [learner.id]), [{ grade: 5 }], "az első válasz rögzíti");
+    // Ezután a profil változása már nem írja át.
+    await dbPool.query(`UPDATE learners SET grade = 9 WHERE id = $1`, [learner.id]);
+    assert.equal((await k.state()).json.grade, 5);
+    assert.match((await k.open(2)).id, /^(g05-|xmas-)/);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
   it("bankból eltűnt, már megválaszolt kérdés: a megoldott ablak újranyitása a tárolt eredményt adja, nem hibát (review C5)", async () => {
