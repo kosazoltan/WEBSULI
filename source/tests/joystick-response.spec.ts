@@ -176,8 +176,42 @@ async function readRec(page: Page, quizScope?: string): Promise<Rec & { quizOpen
   }, quizScope ?? null);
 }
 
-async function renders(page: Page): Promise<Record<string, number>> {
-  return page.evaluate(() => ({ ...((window as unknown as InputWindow).__websuliInput?.renders ?? {}) }));
+/**
+ * Látható kérdés-jel (a játék saját kérdés-rétege, a közös kérdés-sáv időzítője, a magyarázókártya). Kérdés alatt a játékok
+ * hurka megáll / másképp renderel (Szökőár: a 24 Hz-es hurok helyett csak az 1 mp-es visszaszámláló), ezért az ilyen ablak
+ * render-száma nem vethető össze a kérdés nélkülivel.
+ */
+const quizSelector = (g: GameSpec) =>
+  [g.case.quizScope, '[data-testid="play-question-timer"]', '[data-testid="quiz-feedback"]'].filter(Boolean).join(", ");
+
+/**
+ * Render-ablak (E2E-ingadozók 3. kör, kanban #106): a kezdő olvasás képkockánkénti figyelőt indít, amely jelzi, ha az ablak alatt
+ * BÁRMIKOR látszott kérdés-jel; a záró olvasás ugyanabban a lap-hívásban adja a számlálókat és ezt a jelzőt (C-64).
+ */
+async function rendersOpen(page: Page, quizSel: string): Promise<Record<string, number>> {
+  return page.evaluate((sel) => {
+    const w = window as unknown as InputWindow & { __joyWin?: { quiz: boolean; on: boolean } };
+    const win = { quiz: false, on: true };
+    w.__joyWin = win;
+    const vis = () => Array.from(document.querySelectorAll(sel)).some((el) => el.getClientRects().length > 0);
+    const tick = () => {
+      if (!win.on) return;
+      if (vis()) win.quiz = true;
+      requestAnimationFrame(tick);
+    };
+    tick();
+    return { ...(w.__websuliInput?.renders ?? {}) };
+  }, quizSel);
+}
+
+async function rendersClose(page: Page, quizSel: string): Promise<{ counts: Record<string, number>; quiz: boolean }> {
+  return page.evaluate((sel) => {
+    const w = window as unknown as InputWindow & { __joyWin?: { quiz: boolean; on: boolean } };
+    const win = w.__joyWin ?? { quiz: true, on: false };
+    win.on = false;
+    const now = Array.from(document.querySelectorAll(sel)).some((el) => el.getClientRects().length > 0);
+    return { counts: { ...(w.__websuliInput?.renders ?? {}) }, quiz: win.quiz || now };
+  }, quizSel);
 }
 
 type Stick = { cx: number; cy: number; r: number };
@@ -197,11 +231,29 @@ async function stickGeometry(page: Page): Promise<Stick> {
   return s;
 }
 
+/** E2E-ingadozók 3. kör: a `touchMove` CDP-hívások mért ideje (darab, összes ms) — az álló render-szakasz hosszához. */
+const touchMoveCost = new WeakMap<CDPSession, { n: number; ms: number }>();
+
+/**
+ * CI-reprodukció: a CI-n egy Playwright / CDP-hívás 0,5–1,3 s, a lap órája közben a falióra szerint halad. `JOY_CI_LAG_MS=<ms>`
+ * ezt a késést teszi minden érintés után helyben; `JOY_CPU=<n>` CPU-lassítás a mérés alatt (mindkettő alapból kikapcsolva).
+ */
+const CI_LAG_MS = Number(process.env.JOY_CI_LAG_MS ?? 0);
+const JOY_CPU = Number(process.env.JOY_CPU ?? 1);
+
 async function touch(cdp: CDPSession, type: "touchStart" | "touchMove" | "touchEnd", x?: number, y?: number) {
+  const t0 = Date.now();
   await cdp.send("Input.dispatchTouchEvent", {
     type,
     touchPoints: type === "touchEnd" ? [] : [{ x: x!, y: y!, id: 1, radiusX: 4, radiusY: 4, force: 1 }],
   });
+  if (CI_LAG_MS > 0) await new Promise<void>((r) => setTimeout(r, CI_LAG_MS));
+  if (type === "touchMove") {
+    const c = touchMoveCost.get(cdp) ?? { n: 0, ms: 0 };
+    c.n += 1;
+    c.ms += Date.now() - t0;
+    touchMoveCost.set(cdp, c);
+  }
 }
 
 /**
@@ -367,13 +419,18 @@ async function ensurePlaying(page: Page, g: GameSpec): Promise<void> {
   await clearQuiz(page, g);
   const stick = page.getByTestId("virtual-joystick");
   if (await stick.isVisible().catch(() => false)) return;
-  const again = page.getByRole("button", { name: "Új kör" });
+  // E2E-ingadozók 3. kör: a kör győzelemmel is véget érhet (a kérdéseket a `clearQuiz` helyesen válaszolja meg — Szökőár
+  // lassítva: „Sikerült elmenekülni!”, „Következő kör”), a #483 Szökőárában a vereség gombja „Újra”; ez sem mérési eredmény.
+  const again = page.getByRole("button", { name: /^(Új kör|Következő kör|Újra)$/ });
   if (await again.isVisible().catch(() => false)) {
     await again.click({ timeout: 5_000 });
     await g.case.playReady(page);
   }
   await expect(stick, `${g.case.id}: a tárcsa nem látszik (se játék, se kör vége)`).toBeVisible({ timeout: 15_000 });
 }
+
+/** A lépcső mérési ablakában látható kérdés volt: a lépcsőt meg kell ismételni (nem mérési eredmény). */
+class StepQuizError extends Error {}
 
 /** Egy lépcső: ujj le a tárcsa közepén, (gáz), majd egy mozdulattal `fx`-nyi vízszintes kitérés, tartás, fel. */
 async function stepRun(page: Page, cdp: CDPSession, g: GameSpec, fx: number): Promise<{ rec: Rec; t0: number; d0: number }> {
@@ -388,7 +445,10 @@ async function stepRun(page: Page, cdp: CDPSession, g: GameSpec, fx: number): Pr
       if (attempt >= 3) throw err;
       const quizCleared = await clearQuiz(page, g);
       const stickGone = !(await page.getByTestId("virtual-joystick").isVisible().catch(() => false));
-      if (!quizCleared && !stickGone) throw err;
+      // E2E-ingadozók 3. kör (#483 CI 44124385498: „nincs mérhető lépcső … képkockák 22”): a lépcső ablakába kérdés lógott, de
+      // mire a `clearQuiz` ránézett, a kérdés magától (lejárattal) bezárult — ez is kérdéssel érintett ablak, ismételni kell.
+      const quizTouched = err instanceof StepQuizError;
+      if (!quizCleared && !stickGone && !quizTouched) throw err;
       await ensurePlaying(page, g);
     }
   }
@@ -422,6 +482,7 @@ async function stepOnce(page: Page, cdp: CDPSession, g: GameSpec, fx: number): P
   const d0 = moves[moves.length - 1]?.d ?? NaN;
   if (!Number.isFinite(t0) || rec.frames.length < 5 || rec.quizOpen) {
     // A rögzítő a lépcső ELŐTT ürül (a lenyomás és a gáz eldobva), ezért itt csak a lépcső `pointermove`-ja várható.
+    if (rec.quizOpen) throw new StepQuizError(`${g.case.id}: a lépcső ablakában kérdés nyílt (képkockák ${rec.frames.length})`);
     throw new Error(`${g.case.id}: nincs mérhető lépcső (a lépcső óta: események ${JSON.stringify(rec.events.map((e) => e.type))}, képkockák ${rec.frames.length})`);
   }
   return { rec, t0, d0 };
@@ -431,7 +492,7 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
   const cdp = await page.context().newCDPSession(page);
   await installRecorder(page, g.probe);
   if (cpu === 1) await assertStickReachesGame(page, cdp, g);
-  await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu });
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu === 1 ? JOY_CPU : cpu });
   const steps: Step[] = [];
   for (let i = 0; i < 2; i++) {
     const sign = i % 2 === 0 ? 1 : -1;
@@ -447,22 +508,35 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
       fine.push({ pct, input: a.steadyInput, motion: a.steadyMotion });
     }
   }
-  // Render-szám: ugyanolyan hosszú, ugyanolyan kitérésű tartás kétszer — egyszer álló ujjal (2 esemény), egyszer
-  // 30, kis amplitúdóval rezgő mozgással. A játék mozgása (és vele a HUD / állapot-renderek) mindkettőben azonos, így a
+  // Render-szám: ugyanolyan hosszú, ugyanolyan kitérésű tartás kétszer — egyszer 30, kis amplitúdóval rezgő mozgással,
+  // egyszer álló ujjal (2 esemény). A játék mozgása (és vele a HUD / állapot-renderek) mindkettőben azonos, így a
   // különbség az eseményenkénti render.
+  // E2E-ingadozók 3. kör (kanban #76): a két szakasznak a valós időben is közel azonos hosszúnak kell lennie. A rezgő szakaszban
+  // minden CDP-érintés megvárja, hogy a lap feldolgozza (szoftveres WebGL-en képkockányi idő), az álló szakasz csak 30 × 16 ms-ot
+  // várt — a régi álló szakasz így jóval rövidebb volt (helyben, CI-azonos úton mérve 1,2 s a rezgő 11 s mellett), és a kis
+  // álló darabszám (0–2) egy ~9–30-szoros szorzóval arányosítódott. Egy render többé-kevésbé az álló ablakban a „többletet”
+  // ±9…30-cal tolta el (main CI 44049286407: tárcsa 23 > 6, a korábbi futásokban ugyanott −12 és −6). Most az álló szakasz a 30
+  // várakozás után még 30 × (a lépcsőkben MÉRT átlagos érintés-idő)-t tart, így a hossza a rezgőével összemérhető. A sorrend
+  // marad (álló, majd rezgő): fordított sorrendben a Szökőárnál az utána következő álló szakasz lap-renderje a felére esett
+  // (16–30 a rezgő 48–59-ével szemben, azonos hosszon) — a „mindkét szakaszban azonos mozgás” feltétel sérült.
+  // A küszöb (≤ 6) változatlan; a nyers álló számok a JOY_RESULT-ban.
   const s = await stickGeometry(page);
-  const hold = async (jiggle: boolean): Promise<{ counts: Record<string, number>; ms: number }> => {
+  const cost = touchMoveCost.get(cdp);
+  const perTouchMs = cost && cost.n > 0 ? cost.ms / cost.n : 0;
+  const quizSel = quizSelector(g);
+  const hold = async (jiggle: boolean, extraMs = 0): Promise<{ counts: Record<string, number>; ms: number; quiz: boolean }> => {
     await ensurePlaying(page, g);
     const y = s.cy + g.dy * s.r;
     await touch(cdp, "touchStart", s.cx, s.cy);
     await touch(cdp, "touchMove", s.cx + 0.8 * s.r, y);
-    const a = await renders(page);
+    const a = await rendersOpen(page, quizSel);
     const t0 = Date.now();
     for (let i = 1; i <= 30; i++) {
       if (jiggle) await touch(cdp, "touchMove", s.cx + (i % 2 === 0 ? 0.75 : 0.85) * s.r, y);
       await page.waitForTimeout(16);
     }
-    const b = await renders(page);
+    if (extraMs > 0) await page.waitForTimeout(extraMs);
+    const { counts: b, quiz } = await rendersClose(page, quizSel);
     const ms = Date.now() - t0;
     // Képernyőkép húzás közben (a gomb az ujj alatt), ha kérik: JOY_SHOT_DIR=<mappa>.
     if (jiggle && process.env.JOY_SHOT_DIR) {
@@ -478,10 +552,26 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
     await page.waitForTimeout(300);
     const counts: Record<string, number> = {};
     for (const k of Object.keys(b)) counts[k] = (b[k] ?? 0) - (a[k] ?? 0);
-    return { counts, ms };
+    return { counts, ms, quiz };
   };
-  const still = await hold(false);
-  const moving = await hold(true);
+  // E2E-ingadozók 3. kör (kanban #106): ha az álló VAGY a rezgő ablakba kérdés lógott (a Szökőárnál kérdés alatt a 24 Hz-es
+  // hurok áll, csak az 1 mp-es visszaszámláló renderel — #483 CI 44124385498: többlet 11 és 34), az ablakpár nem összevethető:
+  // megismételjük (ablakonként legfeljebb 5×), nem arányosítjuk. Ha 5 próbából sincs tiszta ablak, a teszt érthető üzenettel bukik.
+  // Ablakonként ismétlünk (nem páronként): a Szökőár ~9,5 mp-enként kérdez, egy teljes pár ennél hosszabb is lehet.
+  const MAX_TRIES = 5;
+  let pairs = 0;
+  const cleanHold = async (jiggle: boolean, extraMs = 0) => {
+    for (let i = 1; ; i++) {
+      pairs += 1;
+      const w = await hold(jiggle, extraMs);
+      if (!w.quiz) return w;
+      if (i >= MAX_TRIES) {
+        throw new Error(`${g.case.id}: ${MAX_TRIES} próbából sincs kérdés nélküli ${jiggle ? "rezgő" : "álló"} ablak — a render-szám nem mérhető`);
+      }
+    }
+  };
+  const still = await cleanHold(false, 30 * perTouchMs);
+  const moving = await cleanHold(true);
   const renderDelta: Record<string, number> = {};
   const renderDrag = moving.counts;
   for (const k of Object.keys(moving.counts)) {
@@ -490,7 +580,8 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
   }
   const dragMs = moving.ms;
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
-  return { steps, fine, renderDelta, renderDrag, dragMs, radius: s.r };
+  // A JOY_RESULT-sorban az álló szakasz nyers száma és hossza is látszik (ingadozás-elemzéshez).
+  return { steps, fine, renderDelta, renderDrag, dragMs, renderStill: still.counts, stillMs: still.ms, renderWindows: pairs, radius: s.r };
 }
 
 const PAGE_RENDER_KEY: Record<string, string> = {
@@ -536,7 +627,11 @@ function assertAccepted(g: GameSpec, m: Awaited<ReturnType<typeof measureGame>>)
 
 for (const g of GAMES) {
   test(`joystick-reakció: ${g.case.id}`, async ({ page }) => {
-    test.setTimeout(MEASURE ? 240_000 : 180_000);
+    // E2E-ingadozók 3. kör: a javított render-mérés álló szakasza a rezgővel összemérhető hosszú (a CI-n a rezgő 17,6–22,6 s volt;
+    // helyben, CI-azonos úton az új álló szakasz a rezgő 1,0–1,7-szerese). Mérve (main CI 44049286407, a Kockavadász nyomkövetés
+    // nélküli kísérletei): 134 s és 145 s a javítás ELŐTT; + legfeljebb 1,7 × 22,6 ≈ 38 s → ~183 s, a 180 s-os kereten túl. A keret
+    // ezért 240 s (a lépések nem lassabbak, csak a mérés egy szükséges szakasza hosszabb).
+    test.setTimeout(MEASURE ? 300_000 : 240_000);
     await startGame(page, g);
     const cpus = MEASURE ? [1, 4, 6] : [1];
     for (const cpu of cpus) {
