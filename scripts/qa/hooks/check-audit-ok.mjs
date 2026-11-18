@@ -29,11 +29,19 @@ const RETRY = 'próbáld újra néhány másodperc múlva ugyanazt az egyszerű 
 const noAnswer = (e) => Boolean(e) && (e.code === 'ETIMEDOUT' || e.code === 'ENOENT' || e.code === 'EPERM' || e.code === 'EACCES'
   || e.killed === true || Boolean(e.signal) || e.status === null || e.status === undefined);
 
+// A git-korlát 10 s (kanban #126); csak `node --test` alatt (NODE_TEST_CONTEXT) felülírható, felülről korlátozva.
+const GIT_TIMEOUT_MS = process.env.NODE_TEST_CONTEXT && Number(process.env.WEBSULI_AUDIT_GIT_TIMEOUT_MS) > 0
+  ? Math.min(Number(process.env.WEBSULI_AUDIT_GIT_TIMEOUT_MS), 10_000) : 10_000;
+
+let text = '';
+try { text = readFileSync(0, 'utf8'); } catch { /* nincs olvasható bemenet → üres szöveg */ }
 let payload;
 try {
-  payload = JSON.parse(readFileSync(0, 'utf8') || '{}');
+  payload = JSON.parse(text || '{}');
 } catch {
-  process.exit(0); // olvashatatlan hook-bemenet: nincs parancs, amit vizsgálni lehetne
+  // Olvashatatlan hook-bemenet: ha a nyers szövegben push van → TILT (kanban #100), különben enged.
+  if (/\bgit\b[^|;&]*\bpush\b/.test(text)) deny(`A hook-bemenet nem értelmezhető, de push-parancsot tartalmaz — ${RETRY}.`);
+  process.exit(0);
 }
 const tool = payload.tool_name || '';
 if (tool !== 'Bash' && tool !== 'PowerShell') process.exit(0);
@@ -46,7 +54,7 @@ try {
     root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
       cwd: payload.cwd || process.cwd(),
       encoding: 'utf8',
-      timeout: 5000,
+      timeout: GIT_TIMEOUT_MS,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();

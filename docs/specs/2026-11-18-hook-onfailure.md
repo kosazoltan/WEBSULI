@@ -48,3 +48,7 @@
 - [ ] F3 WHEN a `check-audit-ok` push-parancsnál a git-et nem tudja elindítani / időtúllép THEN SHALL tiltani, teendővel.
 - [ ] F4 WHEN a `check-audit-ok` nem push parancsot kap, vagy nem git-repóban fut THEN SHALL engedni (változatlan).
 - [ ] F5 WHEN a runbookot olvassuk THEN SHALL tartalmazni a kiutat elromlott kapu-hooknál és a tulajdonosi vészkijáratot.
+- [ ] F6 (visszaellenőrzés, 2026-11-18) WHEN a hook-bemenet nem értelmezhető JSON, de a nyers szövegben kapu-köteles művelet van THEN
+  mindkét hook SHALL tiltani (enélkül, és üres bemenetnél enged).
+- [ ] F7 WHEN az audit-hook git-hívása fut THEN a korlátja SHALL 10 s lenni (csak `node --test` alatt felülírható, felülről
+  korlátozva); a belső hiba ága, a valódi időtúllépés és a kapu-hook keret-üzenetének teendője teszttel fedett.

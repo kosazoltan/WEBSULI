@@ -3,10 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeRunner, NoAnswerError, RETRY_HINT } from './check-quality-gates.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const gateHook = fileURLToPath(new URL('./check-quality-gates.mjs', import.meta.url));
@@ -61,4 +62,47 @@ test('F4: az audit-hook nem push parancsnál és nem git-repóban enged; git-rep
   const repo = mkdtempSync(join(tmpdir(), 'hf-audit-repo-'));
   execFileSync('git', ['init', '-q'], { cwd: repo });
   assert.match(reason(run(auditHook, { tool_name: 'Bash', tool_input: { command: 'git push' }, cwd: repo })) ?? '', /audit nem futott le/);
+});
+
+// ---- Javító kör (a visszaellenőrzés túlélő mutációi, hibás bemenet) ------------------------------------------------------
+
+function runRaw(hook, input, envPatch = {}) {
+  const env = { ...process.env, ...envPatch };
+  delete env.WEBSULI_QA_EVIDENCE_DIR;
+  const out = execFileSync(process.execPath, [hook], { input, encoding: 'utf8', env });
+  return out.trim() ? JSON.parse(out) : null;
+}
+
+test('az audit-hook belső hibája (hibás típusú konfig) push-parancsnál tilt — teendővel', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'hf-audit-konfig-'));
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  writeFileSync(join(repo, '.agentic-qa-kit.json'), JSON.stringify({ audit: { sentinel: { nem: 'szöveg' } } }));
+  const r = reason(run(auditHook, { tool_name: 'Bash', tool_input: { command: 'git push' }, cwd: repo })) ?? '';
+  assert.match(r, /hibára futott/);
+  assert.match(r, TEENDO);
+});
+
+test('az audit-hook valódi git-időtúllépésnél tilt (tesztes 1 ms-os korlát) — teendővel', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'hf-audit-ido-'));
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  const r = reason(run(auditHook, { tool_name: 'Bash', tool_input: { command: 'git push' }, cwd: repo }, { WEBSULI_AUDIT_GIT_TIMEOUT_MS: '1' })) ?? '';
+  assert.match(r, /nem válaszolt/);
+  assert.match(r, TEENDO);
+});
+
+test('a kapu-hook KERETÉNEK kimerülése tilt, és az üzenet megmondja a teendőt', () => {
+  let t = 0;
+  const run2 = makeRunner({ exec: () => { t += 50_000; return '/r'; }, now: () => t, cfg: { gitMs: 10_000, ghMs: 15_000, budgetMs: 45_000 } });
+  run2('git', ['rev-parse'], '.');
+  assert.throws(() => run2('git', ['rev-parse'], '.'), (e) => e instanceof NoAnswerError && /ideje elfogyott/.test(e.message) && e.message.includes(RETRY_HINT));
+});
+
+test('hibás hook-bemenet: kapu-köteles szöveggel mindkét hook tilt; enélkül (és üres bemenetnél) enged', () => {
+  const csonka = '{"tool_name":"Bash","tool_input":{"command":"git push origin proba"';
+  assert.match(reason(runRaw(gateHook, csonka)) ?? '', TEENDO);
+  assert.match(reason(runRaw(auditHook, csonka)) ?? '', TEENDO);
+  for (const hook of [gateHook, auditHook]) {
+    assert.equal(runRaw(hook, ''), null);
+    assert.equal(runRaw(hook, '{"tool_name":"Bash","tool_input":{"command":"git status"'), null);
+  }
 });

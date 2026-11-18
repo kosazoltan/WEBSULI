@@ -363,15 +363,18 @@ function main() {
   let raw = '';
   let tool = 'Bash';
   let cwd = process.cwd();
+  let text = '';
+  try { text = readFileSync(0, 'utf8'); } catch { /* nincs olvasható bemenet → üres szöveg, lent enged */ }
   try {
-    const payload = JSON.parse(readFileSync(0, 'utf8') || '{}');
+    const payload = JSON.parse(text || '{}');
     if (payload.tool_name !== 'Bash' && payload.tool_name !== 'PowerShell') process.exit(0);
     tool = payload.tool_name;
     raw = String(payload.tool_input?.command ?? '');
     cwd = payload.cwd || cwd;
   } catch {
-    // Értelmezhetetlen hook-bemenet: a Claude Code mindig JSON-t ad; ha mégsem, a parancs nem olvasható — itt a tiltás MINDEN
-    // eszközhívást megállítana, ezért enged (dokumentált kivétel). A merge-kaput az orkesztrátor ettől függetlenül lefuttatja.
+    // Értelmezhetetlen hook-bemenet (a Claude Code mindig JSON-t ad). Ha a nyers szövegben kapu-köteles művelet van → TILT
+    // (kanban #100); különben enged — itt a tiltás MINDEN eszközhívást megállítana.
+    if (detectGated(text)) deny(`A hook-bemenet nem értelmezhető, de kapu-köteles műveletet tartalmaz — ${RETRY_HINT}.`);
     process.exit(0);
   }
   let reason;
