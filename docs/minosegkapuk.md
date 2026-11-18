@@ -195,8 +195,9 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
   enged.
 - **Ha tartósan fennáll** (pl. minden Bash / PowerShell parancs tiltott, mert a hook-szkript elromlott — félbemaradt összefésülés,
   szintaxishiba, hiányzó `node`): az Edit / Write eszköz nem Bash, azon nincs `onFailure` — azzal javítsd a
-  `scripts/qa/hooks/check-quality-gates.mjs`-t, vagy töröld a két `"onFailure": "block"` sort a `.claude/settings.json`-ból. A
-  settings-fájl kézi módosítását a Claude Code fájlfigyelője rendszerint felveszi; ha nem, új munkamenet.
+  `scripts/qa/hooks/check-quality-gates.mjs`-t (teszttel). A két `"onFailure": "block"` sor törlése a kapu megkerülése, ezért
+  ügynöknek tilos (AGENTS.md: „ha a kapu hibás, a kaput kell javítani”; review #506). Ha a javításhoz hiányzik a
+  futtatókörnyezet (pl. nincs `node`), az ügynök álljon meg, és kérje a tulajdonost (lásd a vészkijáratot).
 - **Tulajdonosi vészkijárat** (csak a tulajdonos; ügynöknek tilos): egy futásra `claude --settings '{"disableAllHooks": true}'`,
   vagy `"disableAllHooks": true` a helyi settings-ben — utána vissza.
 
