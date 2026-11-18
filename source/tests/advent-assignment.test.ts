@@ -18,6 +18,8 @@ import {
 } from "../shared/advent/assignment";
 import { ADVENT_CHRISTMAS_DAYS, limitsForGrade } from "../shared/advent/rules";
 
+const SUBJECT_KEYS = Array.from({ length: 40 }, (_, i) => `learner:${(i * 7919 + 13).toString(36)}`);
+
 /**
  * Adventi naptár — kérdéskiosztás (docs/specs/2026-11-18-adventi-naptar.md R4, 12.3; A3–A5, A34–A36, E14).
  * A közös bank a VALÓDI; a karácsonyi készlet itt szintetikus (a valódi az S1b szelet, saját teszttel).
@@ -25,9 +27,9 @@ import { ADVENT_CHRISTMAS_DAYS, limitsForGrade } from "../shared/advent/rules";
 
 const BANK: readonly AdventBankItem[] = GRADE_QUIZ_ITEMS;
 
-/** Szintetikus karácsonyi készlet: 110 tétel az 1–4., 90 a 3–12. évfolyamra (1–2.: 110 ≥ 96; 3–4.: 200; 5–12.: 90 ≥ 72). */
+/** Szintetikus karácsonyi készlet: 150 tétel az 1–4., 90 a 3–12. évfolyamra (1–2.: 150 ≥ 144; 3–4.: 240; 5–12.: 90 ≥ 72). */
 const CHRISTMAS: readonly ChristmasItem[] = [
-  ...Array.from({ length: 110 }, (_, i) => ({ id: `xmas-l${String(i + 1).padStart(3, "0")}`, minGrade: 1, maxGrade: 4, prompt: `Könnyű karácsonyi kérdés ${i + 1}?`, options: ["a", "b", "c", "d"], correctIndex: i % 4, explanation: "Szintetikus tétel a kiosztás tesztjéhez." })),
+  ...Array.from({ length: 150 }, (_, i) => ({ id: `xmas-l${String(i + 1).padStart(3, "0")}`, minGrade: 1, maxGrade: 4, prompt: `Könnyű karácsonyi kérdés ${i + 1}?`, options: ["a", "b", "c", "d"], correctIndex: i % 4, explanation: "Szintetikus tétel a kiosztás tesztjéhez." })),
   ...Array.from({ length: 90 }, (_, i) => ({ id: `xmas-h${String(i + 1).padStart(3, "0")}`, minGrade: 3, maxGrade: 12, prompt: `Karácsonyi kérdés ${i + 1}?`, options: ["a", "b", "c", "d"], correctIndex: i % 4, explanation: "Szintetikus tétel a kiosztás tesztjéhez." })),
 ];
 
@@ -65,7 +67,7 @@ test("3–12. évfolyam: pontosan a 3., 6., …, 24. ablak karácsonyi, a többi
   for (let grade = 3; grade <= 12; grade++) {
     const p = plan(grade);
     for (let day = 1; day <= 24; day++) {
-      const christmasDay = (ADVENT_CHRISTMAS_DAYS as readonly number[]).includes(day);
+      const christmasDay = ADVENT_CHRISTMAS_DAYS.includes(day);
       for (const id of p.doors[day]!) {
         const q = item(id);
         assert.equal(subjectOf(q) === "christmas", christmasDay, `${grade}. évfolyam, ${day}. ablak: ${id}`);
@@ -171,4 +173,57 @@ test("E14: a bankból eltűnt kérdés helyére determinisztikusan új, még nem
   const xmasFixed = repairPlanDoor(p, 3, { ...input, bank: BANK, christmas: CHRISTMAS.filter((c) => c.id !== xmasGone) });
   assert.equal(xmasFixed.changed, true);
   assert.match(xmasFixed.plan.doors[3]![0]!, /^xmas-/);
+});
+
+test("sok alanyra is: egyetlen terv sem fogy ki és nem ismétel, a terv a tárgyat is rögzíti (review A4)", () => {
+  for (const subjectKey of SUBJECT_KEYS) {
+    for (let grade = 1; grade <= 12; grade++) {
+      const used = { ids: new Set<string>(), prompts: new Set<string>() };
+      for (let round = 1; round <= limitsForGrade(grade).maxRounds; round++) {
+        const p = plan(grade, subjectKey, round, used);
+        for (let day = 1; day <= 24; day++) {
+          const subjects = new Set(p.doors[day]!.map((id) => subjectOf(item(id))));
+          assert.deepEqual([...subjects], [p.subjects[day]], `${subjectKey}, ${grade}. évfolyam, ${day}. ablak`);
+          for (const id of p.doors[day]!) {
+            assert.ok(!used.ids.has(id), `ismétlés: ${subjectKey}, ${grade}. évfolyam, ${round}. kör, ${id}`);
+            used.ids.add(id);
+            used.prompts.add(normalizePrompt(item(id).prompt));
+          }
+        }
+      }
+    }
+  }
+});
+
+test("a válaszkeverés egyenletes: a helyes válasz mind a négy helyre nagyjából egyformán kerül (review A4)", () => {
+  const counts = [0, 0, 0, 0];
+  const seventh = BANK.filter((q) => q.grade === 7);
+  for (const subjectKey of SUBJECT_KEYS) {
+    for (const q of seventh) counts[optionOrder(q.id, subjectKey, 2026).indexOf(q.correctIndex)]!++;
+  }
+  const total = counts.reduce((a, b) => a + b, 0);
+  assert.equal(total, SUBJECT_KEYS.length * seventh.length);
+  for (const [place, count] of counts.entries()) {
+    const share = count / total;
+    assert.ok(share > 0.22 && share < 0.28, `${place}. hely aránya ${share.toFixed(3)}`);
+  }
+});
+
+test("E14: a már megválaszolt kérdés helye nem cserélődik, és a tárgyat a terv adja, nem az azonosító (review A1)", () => {
+  const p = plan(7);
+  const [answered, second] = p.doors[1]!;
+  const shrunk = BANK.filter((q) => q.id !== answered && q.id !== second);
+  const input = { bank: shrunk, christmas: CHRISTMAS, grade: 7, usedIds: new Set<string>(), usedPrompts: new Set<string>() };
+  const fixed = repairPlanDoor(p, 1, { ...input, protectedIds: new Set([answered!]) });
+  assert.equal(fixed.plan.doors[1]![0], answered, "a megválaszolt próba kérdése a helyén marad");
+  assert.notEqual(fixed.plan.doors[1]![1], second);
+  assert.equal((findAdventItem(fixed.plan.doors[1]![1]!, shrunk, CHRISTMAS) as AdventBankItem).subject, p.subjects[1]);
+  // Az azonosító szövege nem számít: idegen alakú azonosítónál is a terv tárgyából pótol.
+  const renamed: AdventPlan = { ...p, doors: { ...p.doors, 1: ["torolt-kerdes-1", p.doors[1]![1]!, p.doors[1]![2]!] } };
+  const viaPlan = repairPlanDoor(renamed, 1, { ...input, bank: BANK });
+  assert.equal(viaPlan.changed, true);
+  assert.equal((findAdventItem(viaPlan.plan.doors[1]![0]!, BANK, CHRISTMAS) as AdventBankItem).subject, p.subjects[1]);
+  // A pótlás promptja sem egyezhet a tervben már szereplő kérdésével.
+  const planPrompts = new Set(Object.values(p.doors).flat().map((id) => normalizePrompt(item(id).prompt)));
+  assert.ok(!planPrompts.has(normalizePrompt(item(viaPlan.plan.doors[1]![0]!).prompt)));
 });

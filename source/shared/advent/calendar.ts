@@ -16,7 +16,13 @@ const PARTS = new Intl.DateTimeFormat("en-GB", {
 
 export type BudapestParts = { year: number; month: number; day: number; hour: number; minute: number };
 
+/** Érvényes-e az időpont (a szerver ezzel szűri a teszt- és előnézeti dátumot, mielőtt a naptárnak adja). */
+export function isValidDate(value: unknown): value is Date {
+  return value instanceof Date && !Number.isNaN(value.getTime());
+}
+
 export function budapestParts(now: Date): BudapestParts {
+  if (!isValidDate(now)) throw new RangeError("advent: érvénytelen időpont");
   const out: Record<string, number> = {};
   for (const part of PARTS.formatToParts(now)) {
     if (part.type !== "literal") out[part.type] = Number(part.value);

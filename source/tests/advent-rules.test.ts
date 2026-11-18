@@ -8,6 +8,7 @@ import {
   adventPassed,
   adventPercent,
   adventSummary,
+  adventStillReachable,
   clampAdventGrade,
   doorState,
   isChristmasDoor,
@@ -18,6 +19,9 @@ import {
 /** Adventi naptár — szabályok (docs/specs/2026-11-18-adventi-naptar.md R1–R3, 12.3; A8–A11, A34, A35). */
 
 const attempt = (correct: boolean) => ({ questionId: "q", pick: 0, correct, at: "2026-12-01T10:00:00.000Z" });
+const closing = (doors: Record<number, DoorRecord>, ctx: Partial<Parameters<typeof adventClosing>[1]> = {}) =>
+  adventClosing(adventSummary(doors, 2), { round: 1, maxRounds: 3, phase: "open", waiting: 0, ...ctx });
+
 /** `solved` megoldott, `repairable` egyszer elrontott, `failed` háromszor elrontott ablak; a többi megválaszolatlan. */
 function doorsOf(solved: number, repairable = 0, failed = 0, firstTryWrong = 0): Record<number, DoorRecord> {
   const doors: Record<number, DoorRecord> = {};
@@ -68,35 +72,38 @@ test("összesítés: megoldott, elsőre jó, javítható, hibás (A11)", () => {
 
 test("határesetek (terv R1, E1–E3): mikor jár az ajándék-üzenet", () => {
   // 24 / 24 és 23 megoldott + 1 végleg hibás → megfelel.
-  assert.equal(adventClosing(adventSummary(doorsOf(24), 2), 1, 3).kind, "gift");
-  const edge = adventClosing(adventSummary(doorsOf(23, 0, 1), 2), 1, 3);
+  assert.equal(closing(doorsOf(24)).kind, "gift");
+  const edge = closing(doorsOf(23, 0, 1));
   assert.equal(edge.kind, "gift");
   assert.equal(edge.text, ADVENT_GIFT_MESSAGE);
   // 23 megoldott + 1 javítható → már megfelel (mind megválaszolva, 23 megoldott).
-  assert.equal(adventClosing(adventSummary(doorsOf(23, 1), 2), 1, 3).kind, "gift");
+  assert.equal(closing(doorsOf(23, 1)).kind, "gift");
   // 23 megoldott + 1 ki nem nyitott → még nem ért végig.
-  const notFinished = adventClosing(adventSummary(doorsOf(23), 2), 1, 3);
+  const notFinished = closing(doorsOf(23));
   assert.equal(notFinished.kind, "progress");
   assert.notEqual(notFinished.text, ADVENT_GIFT_MESSAGE);
   // 22 megoldott + 2 javítható → javítás.
-  const repair = adventClosing(adventSummary(doorsOf(22, 2), 2), 1, 3);
+  const repair = closing(doorsOf(22, 2));
   assert.equal(repair.kind, "repair");
   assert.match(repair.text, /22 ablak már világít a 24-ből/);
   assert.match(repair.text, /2 ablak javításra vár/);
   // 20 megoldott + 4 végleg hibás → új kör; az utolsó kör után nincs több.
-  assert.equal(adventClosing(adventSummary(doorsOf(20, 0, 4), 2), 1, 3).kind, "new-round");
-  assert.equal(adventClosing(adventSummary(doorsOf(20, 0, 4), 2), 2, 3).kind, "new-round");
-  const done = adventClosing(adventSummary(doorsOf(20, 0, 4), 2), 3, 3);
+  assert.equal(closing(doorsOf(20, 0, 4)).kind, "new-round");
+  assert.equal(closing(doorsOf(20, 0, 4), { round: 2 }).kind, "new-round");
+  const done = closing(doorsOf(20, 0, 4), { round: 3 });
   assert.equal(done.kind, "done");
   assert.notEqual(done.text, ADVENT_GIFT_MESSAGE);
 });
 
 test("a bátorító szövegek nem hibáztatnak és nem ígérnek ajándékot", () => {
   const texts = [
-    adventClosing(adventSummary(doorsOf(22, 2), 2), 1, 3).text,
-    adventClosing(adventSummary(doorsOf(20, 0, 4), 2), 1, 3).text,
-    adventClosing(adventSummary(doorsOf(20, 0, 4), 2), 3, 3).text,
-    adventClosing(adventSummary(doorsOf(3), 2), 1, 3).text,
+    closing(doorsOf(22, 2)).text,
+    closing(doorsOf(18, 3, 3)).text,
+    closing(doorsOf(20, 0, 4)).text,
+    closing(doorsOf(20, 0, 4), { round: 3 }).text,
+    closing(doorsOf(3)).text,
+    closing(doorsOf(3), { waiting: 2 }).text,
+    closing(doorsOf(20), { phase: "closed" }).text,
   ];
   for (const text of texts) {
     assert.doesNotMatch(text, /ajándék/i);
@@ -106,6 +113,8 @@ test("a bátorító szövegek nem hibáztatnak és nem ígérnek ajándékot", (
 
 test("vegyes kiosztás: a 3–12. évfolyamon a 3-mal osztható napok karácsonyiak, az 1–2. évfolyamon mind (A34, A35)", () => {
   assert.deepEqual([...ADVENT_CHRISTMAS_DAYS], [3, 6, 9, 12, 15, 18, 21, 24]);
+  // Egy igazságforrás (review A5): a lista és a függvény nem térhet el.
+  for (let day = 1; day <= 24; day++) assert.equal(isChristmasDoor(day, 7), ADVENT_CHRISTMAS_DAYS.includes(day));
   for (let grade = 3; grade <= 12; grade++) {
     const days = Array.from({ length: 24 }, (_, i) => i + 1).filter((day) => isChristmasDoor(day, grade));
     assert.deepEqual(days, [...ADVENT_CHRISTMAS_DAYS], `${grade}. évfolyam`);
@@ -113,7 +122,8 @@ test("vegyes kiosztás: a 3–12. évfolyamon a 3-mal osztható napok karácsony
   }
   for (const grade of [1, 2]) {
     for (let day = 1; day <= 24; day++) assert.equal(isChristmasDoor(day, grade), true);
-    assert.deepEqual(limitsForGrade(grade), { maxRepairs: 1, maxRounds: 2 });
+    // A (b) döntés kivétel nélküli: az 1–2. évfolyamon is 2 javítás (review K3); a készlet mérete miatt 2 kör.
+    assert.deepEqual(limitsForGrade(grade), { maxRepairs: 2, maxRounds: 2 });
   }
 });
 
@@ -123,4 +133,43 @@ test("évfolyam-határok: 1 alatt 1, 12 felett 12", () => {
   assert.equal(clampAdventGrade(13), 12);
   assert.equal(clampAdventGrade(7.4), 7);
   assert.equal(clampAdventGrade(Number.NaN), 1);
+});
+
+test("a záró szöveg a fázishoz igazodik (review K5): lezárva nincs „holnap” és nincs új kör", () => {
+  // Nyitott fázis, minden mai ablak megvan → holnap; van még váró ablak → azt mondja.
+  assert.match(closing(doorsOf(5)).text, /Gyere vissza holnap is!/);
+  assert.match(closing(doorsOf(5), { waiting: 3 }).text, /Még 3 ablak vár rád!/);
+  // Pótlási időszak: nincs „holnap”.
+  const catchup = closing(doorsOf(20), { phase: "catchup", waiting: 4 });
+  assert.equal(catchup.kind, "progress");
+  assert.doesNotMatch(catchup.text, /holnap/);
+  assert.doesNotMatch(closing(doorsOf(23), { phase: "catchup", waiting: 0 }).text, /holnap/);
+  // Lezárt naptár: sem „holnap”, sem új kör, sem javítás — de aki megfelelt, annak az üzenete megmarad.
+  for (const doors of [doorsOf(20), doorsOf(20, 0, 4), doorsOf(22, 2)]) {
+    const closed = closing(doors, { phase: "closed" });
+    assert.equal(closed.kind, "closed");
+    assert.doesNotMatch(closed.text, /holnap|új naptár|javítsd/);
+    assert.match(closed.text, /jövőre újra találkozunk/);
+  }
+  assert.equal(closing(doorsOf(24), { phase: "closed" }).kind, "gift");
+});
+
+test("a javító szöveg csak akkor ígér meglepetést, ha a 95% még elérhető (review A6)", () => {
+  // 22 megoldott + 2 javítható → 24 elérhető.
+  assert.equal(adventStillReachable(adventSummary(doorsOf(22, 2), 2)), true);
+  assert.match(closing(doorsOf(22, 2)).text, /meglepetés vár/);
+  // 18 megoldott + 3 javítható + 3 végleg hibás → legfeljebb 21: nincs ígéret.
+  assert.equal(adventStillReachable(adventSummary(doorsOf(18, 3, 3), 2)), false);
+  const text = closing(doorsOf(18, 3, 3)).text;
+  assert.doesNotMatch(text, /meglepetés/);
+  assert.match(text, /3 ablak javításra vár/);
+  // 10 megoldott + 1 javítható, 13 még megválaszolatlan → elérhető.
+  assert.equal(adventStillReachable(adventSummary(doorsOf(10, 1), 2)), true);
+  // 2 végleg hibás → 22 a legtöbb: nem elérhető.
+  assert.equal(adventStillReachable(adventSummary(doorsOf(5, 0, 2), 2)), false);
+});
+
+test("összesítés egy javítással is számol (maxRepairs = 1): a második hiba végleges", () => {
+  const doors: Record<number, DoorRecord> = { 1: { attempts: [attempt(false)] }, 2: { attempts: [attempt(false), attempt(false)] }, 3: { attempts: [attempt(false), attempt(true)] } };
+  assert.deepEqual(adventSummary(doors, 1), { total: 24, answered: 3, solved: 1, firstTry: 0, repairable: 1, failed: 1, passed: false, percent: 4 });
 });

@@ -38,6 +38,8 @@ export type AdventPlan = {
   layout: number[];
   /** Nap → kérdésazonosítók (fő kérdés, majd a javító kérdések). */
   doors: Record<number, string[]>;
+  /** Nap → az ablak tárgya (`christmas` vagy a bank tárgya) — a pótlás (E14) innen tudja, nem az azonosító szövegéből. */
+  subjects: Record<number, string>;
 };
 
 /** Kérdés-azonosság az ismétlés-szabályhoz (mint a `game-engine/gradeQuiz.ts`): NFC, kisbetű, egyszeres szóköz. */
@@ -114,15 +116,18 @@ export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
   };
 
   const doors: Record<number, string[]> = {};
+  const doorSubjects: Record<number, string> = {};
   let bankDoor = 0;
   for (const day of days) {
     let ids: string[];
     if (isChristmasDoor(day, grade)) {
       ids = take(christmasQueue, perDoor);
+      doorSubjects[day] = CHRISTMAS_SUBJECT;
     } else {
       if (subjects.length === 0) throw new RangeError(`advent: nincs kérdés a(z) ${grade}. évfolyam bankjában`);
       const subject = subjects[bankDoor % subjects.length]!;
       bankDoor++;
+      doorSubjects[day] = subject;
       ids = [];
       for (const tier of tierOrder(tierForDay(day))) {
         if (ids.length === perDoor) break;
@@ -132,7 +137,7 @@ export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
     if (ids.length < perDoor) throw new RangeError(`advent: elfogyott a kérdés (${grade}. évfolyam, ${day}. ablak, ${input.round}. kör)`);
     doors[day] = ids;
   }
-  return { round: input.round, layout, doors };
+  return { round: input.round, layout, doors, subjects: doorSubjects };
 }
 
 /** A válaszlehetőségek seedelt sorrendje: a visszaadott tömb i. eleme az eredeti opció indexe. */
@@ -160,32 +165,50 @@ export function findAdventItem(id: string, bank: readonly AdventBankItem[], chri
 /**
  * E14 — a mentett terv egy ablakának javítása, ha egy kiosztott kérdés közben eltűnt a bankból: a hiányzó azonosító helyére a
  * megfelelő készlet azonosító szerinti első, az évadban még nem használt tétele lép (determinisztikus). A meglévő azonosítók
- * helye nem változik. Ha nincs pótlás, a hiányzó azonosító a helyén marad (a hívó hibát jelez).
+ * helye nem változik, és a `protectedIds` (a már megválaszolt próbák kérdései) SOHA nem cserélődnek — a tárolt próba a régi
+ * azonosítóra mutat (review A1). A tárgyat a terv mondja meg (`plan.subjects`), nem az azonosító szövege. Ha nincs pótlás, a
+ * hiányzó azonosító a helyén marad (a hívó hibát jelez).
  */
 export function repairPlanDoor(
   plan: AdventPlan,
   day: number,
-  input: { bank: readonly AdventBankItem[]; christmas: readonly ChristmasItem[]; grade: number; usedIds: ReadonlySet<string>; usedPrompts: ReadonlySet<string> },
+  input: {
+    bank: readonly AdventBankItem[];
+    christmas: readonly ChristmasItem[];
+    grade: number;
+    usedIds: ReadonlySet<string>;
+    usedPrompts: ReadonlySet<string>;
+    protectedIds?: ReadonlySet<string>;
+  },
 ): { plan: AdventPlan; changed: boolean } {
   const grade = clampAdventGrade(input.grade);
   const current = plan.doors[day] ?? [];
   const usedIds = new Set(input.usedIds);
   const usedPrompts = new Set(input.usedPrompts);
-  for (const ids of Object.values(plan.doors)) for (const id of ids) usedIds.add(id);
+  for (const ids of Object.values(plan.doors)) {
+    for (const id of ids) {
+      usedIds.add(id);
+      const known = findAdventItem(id, input.bank, input.christmas);
+      if (known) usedPrompts.add(normalizePrompt(known.prompt));
+    }
+  }
   const byId = (a: AdventItem, b: AdventItem) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   const free = (item: AdventItem) => !usedIds.has(item.id) && !usedPrompts.has(normalizePrompt(item.prompt));
+  const existing = current.map((id) => findAdventItem(id, input.bank, input.christmas));
+  const christmasDoor = isChristmasDoor(day, grade);
+  const subject = plan.subjects?.[day] ?? existing.map((q) => (q ? subjectOf(q) : null)).find((s) => s && s !== CHRISTMAS_SUBJECT) ?? null;
   let changed = false;
-  const next = current.map((id) => {
-    if (findAdventItem(id, input.bank, input.christmas)) return id;
+  const next = current.map((id, index) => {
+    if (existing[index] || input.protectedIds?.has(id)) return id;
     let candidates: AdventItem[];
-    if (isChristmasDoor(day, grade)) {
-      candidates = input.christmas.filter((c) => c.minGrade <= grade && grade <= c.maxGrade);
+    if (christmasDoor) {
+      candidates = input.christmas.filter((c) => c.minGrade <= grade && grade <= c.maxGrade).sort(byId);
     } else {
-      const subject = /^g\d+-([a-z]+)-/.exec(id)?.[1];
-      const inGrade = input.bank.filter((q) => q.grade === grade && (!subject || q.subject === subject));
+      if (!subject) return id;
+      const inGrade = input.bank.filter((q) => q.grade === grade && q.subject === subject);
       candidates = tierOrder(tierForDay(day)).flatMap((tier) => inGrade.filter((q) => q.tier === tier).sort(byId));
     }
-    const replacement = (isChristmasDoor(day, grade) ? [...candidates].sort(byId) : candidates).find(free);
+    const replacement = candidates.find(free);
     if (!replacement) return id;
     usedIds.add(replacement.id);
     usedPrompts.add(normalizePrompt(replacement.prompt));
