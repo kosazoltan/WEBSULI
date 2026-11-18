@@ -1,20 +1,31 @@
 {
-  "props": "szokoar-props.1def8526f4.glb",
-  "bytes": 133992,
-  "triangles": 4744,
+  "props": "szokoar-props.246c9d19ef.glb",
+  "kid": "szokoar-kid.a473c2abc8.glb",
+  "files": {
+    "szokoar-props.246c9d19ef.glb": 186136,
+    "szokoar-kid.a473c2abc8.glb": 52040
+  },
+  "bytes": 238176,
+  "triangles": 9774,
   "models": [
     "bush",
+    "cliff",
     "debris_barrel",
     "debris_crate",
+    "debris_log",
     "debris_plank",
+    "hill",
     "hut_a",
     "hut_b",
+    "kid_arm",
+    "kid_board",
+    "kid_head",
+    "kid_leg",
+    "kid_torso",
     "lighthouse",
     "palm_a",
     "palm_b",
-    "pier_post",
     "rock_a",
-    "rock_b",
-    "rock_c"
+    "rock_b"
   ]
 }
