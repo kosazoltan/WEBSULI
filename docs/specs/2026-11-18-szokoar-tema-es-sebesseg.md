@@ -1,6 +1,51 @@
 # Szökőár szökés — a téma visszaadása (a hullám a kép és a tét közepén) és a sebesség
 
-Állapot: TERV (1. fázis), döntési pontokkal. A végrehajtási utasítás (`*-vegrehajtas.md`) a tulajdonosi döntések után készül.
+Állapot: TERV (1. fázis) — a tulajdonosi döntések rögzítve (lent, 0. fejezet). Végrehajtási utasítás:
+`docs/specs/2026-11-18-szokoar-tema-es-sebesseg-vegrehajtas.md`.
+
+## 0. Tulajdonosi döntések (2026-11-18, kérdőíven, a választott opciók szó szerint)
+
+- **D1:** „Vissza a régi, emelkedő vízhez” — a #483 ELŐTTI játékmenet jön vissza: függőleges menekülés felfelé, alulról emelkedő
+  tengerrel; a jó válasz lejjebb viszi a vizet, a rossz feljebb hozza; a háromsávos futópálya megszűnik.
+- **D2:** „Sodródó törmelék helyettük” — autó nincs; ha a régi játékmenetben van kerülendő akadály, az szökőárhoz illő sodródó
+  törmelék (uszadékfa, hordó, láda, csónakroncs), ami nem borul fel; ha a régiben nem volt akadály, nem találunk ki újat a döntésen
+  túl, hanem javaslattal kérdezünk.
+- **D4:** „Igen, látványosan” — a válasz hatása a vízre a képen is látszik (jó válasz: a víz láthatóan visszahúzódik, permet; rossz
+  válasz / ütközés: egy ugrással feljebb jön, rázás, morajlás); a cél (menedék fent) mindig látszik, győzelemkor a víz megtörik alatta.
+- (A korábbi D1-A „megfordított kamera” és D3 javaslatok ezzel tárgytalanok.)
+
+### 0.1 Tény a D2-höz: a régi játékmenetben NINCS kerülendő akadály
+A `b4b84db6` lapja (`TsunamiEscapeEnglish.tsx:1128-1220`): egy tengelyen (balra–jobbra) mozgás, a zöld biztonsági zóna 5–8 mp-enként
+máshová ugrik (benne lassabban emelkedik a víz), a sodrás oldalra tol, Sprint gomb; a deszkák a jelenetben díszletek. Ütközés nincs.
+Ezért a döntés szerint NEM találunk ki akadályt — **kérdés a tulajdonosnak (D2-b):**
+- **A) Javasolt: nincs akadály** (a régi játékmenet szerint) — a „rossz válasz / ütközés” hatásból csak a rossz / lejárt válasz marad.
+- B) Sodródó törmelék a vízfelszínen (uszadékfa, hordó, láda), amely a figura felé sodródik; ha eltalálja, a víz egy ugrással feljebb
+  jön (ez a D4 „ütközés” ága) — új mechanika, külön döntés kell.
+
+### 0.2 Mi jön vissza, mi marad, mi szűnik meg
+
+| Elem | Sors | Megjegyzés |
+|---|---|---|
+| Függőleges jelenet, alulról emelkedő tenger, deszkák, szörfös figura, zóna, sodrás, Sprint, villám (régi `TsunamiScene3D` + lap) | **vissza** a `b4b84db6`-ból | a friss main közös rétegeihez igazítva |
+| Teljes képernyős, a világot MEGÁLLÍTÓ kvíz-fázis (a J1 fő kifogása) | **nem jön vissza** | helyette a közös, nem blokkoló kérdés-sáv (`InlineQuestion`, „buttons” mód, 4 gomb, ≥ 48 px) — a víz a kérdés alatt lassítva emelkedik (`slowMo`), nem áll meg |
+| Győzelem = N jó válasz | **marad**, de látható úttal | a menedék fent mindig látszik; minden jó válasz egy deszkányival közelebb viszi (mérő a menedékig); győzelemkor a víz alatta megtörik |
+| D4 visszajelzés a vízen | **új** | jó: a víz látványosan visszahúzódik + permet; rossz / lejárt: ugrás felfelé + rázás + morajlás (csökkentett mozgásnál rázás nélkül) |
+| Közös kérdés-director + a mostani API, közös kupon-szabály, kérdésbank-sorrend, ismétlési sor | **marad** a #483-ból / közös rétegből | a kiesett tétel visszatér (J1 kifogás pótolva) |
+| 48 px-es gombok, mobil mérő M1–M9, levágás-háló, élesítés (a kérdés-óra szerint), determinizmus-őr hatóköre | **marad** | a lista mód / gombok a közös mérő küszöbén |
+| Háromsávos futópálya, kapuk, kapu-táblák, akadályok (autó, kerítés, fa), kagylók, `lib/tsunami/{core,obstacles,sim}.ts` | **megszűnik** | D1 |
+| Joystick | **marad** (a régiben is volt: oldalirányú mozgás) | a joystick-mérő Szökőár-esete a régi „x” tengelyt méri |
+
+### 0.3 Tesztek (dokumentált SPEC-VÁLTOZÁS, a mérce nem lazul)
+
+| Teszt | Változás |
+|---|---|
+| `tsunami-core.test.ts`, `tsunami-sim.test.ts` (a futó-mag) | a mag megszűnik → helyettük új mag- és sim-teszt a víz-modellre (`lib/tsunami/water.ts`, tiszta TS): víz-emelkedés, zóna, jó / rossz hatás, győzelem / vereség, determinizmus; a J-mérőszámok (kérdés/perc ≥ 5, leghosszabb kérdés nélküli szakasz ≤ 15 s) a director + víz-sim-mel mérve |
+| `tsunami-play.spec.ts` (kapuk, sávok, táblák, ÚK2 „Jó kapu!”, D-J1a-18, ÚK3) | a kapu- / sáv-esetek megszűnnek (D1); maradnak / átírva: a kérdés nem blokkol, a lista (4 gomb) nem takarja a figurát és a tárcsát, gomb ≥ 48 px, nincs levágás, élesítés = elfogadás (léptetett órával), a 12 kockázatos válasz, Újrakezdés, két ujj, billentyűzet, szünet / „Miért?” megállítási okok; új: D4 (a víz képi szintje jó válasznál csökken, rossznál nő), a menedék mindig a képen, győzelemkor a víz-törés |
+| `tsunami-mobile.test.ts` (forrás-őrök) | a régi kvíz-fázis őrei a nem blokkoló kérdés őreire; a J1a-őrök (táblák, `runKey`) a régi szerkezethez igazítva |
+| `game-mobile-cases/tsunami-english.ts` | `quizScope` / `answerWrong` a kérdés-sávra (4 gomb), mérce változatlan |
+| `joystick-response.spec.ts` Szökőár-eset | a mérő a figura vízszintes helyzetét (régi `x`) méri — a #492 stabilizálása (kérdés nélküli ablakok) marad |
+| `remaining-learning.spec.ts`, `coupon-expired-all-games`, `game-win-paths`, `vocab-cross-game-log` | a Szökőár-esetek a kérdés-sávra igazítva |
+| `game-sim-determinism-guard.test.ts` | a `lib/tsunami/` új mag-fájlja a hatókörben; a lap engedélylistája (a villám `Math.random`-ja; a zóna helye a menet seedjéből) |
 Ág: `fix/szokoar-tema-es-sebesseg`, munkafa: `.claude/worktrees/szokoar-tema` (a `origin/main` `a7b3b787`-ről).
 
 ## Tulajdonosi panasz (2026-11-18, szó szerint)
