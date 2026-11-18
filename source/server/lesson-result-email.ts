@@ -54,6 +54,33 @@ let retryDelayMs = 60_000;
 /** Teszthez: a késleltetés rövidítése; a korábbi értéket adja vissza. */
 export function setRetryDelay(ms: number): number { const previous = retryDelayMs; retryDelayMs = ms; return previous; }
 
+/**
+ * PR #495 (Codex P2): a foglalás felszabadítása korlátozott újrapróbával — ha a küldés bukik ÉS az első `array_remove` is átmeneti
+ * adatbázishibát kap, a címzett különben végleg a `delivered` listában ragadna, és minden későbbi hívás ismétlődésnek venné. A végleg
+ * sikertelen felszabadítás csak a hiba osztályával naplózódik; ezt a (nem helyreállítható) esetet a kanban #128 fedi.
+ */
+const RELEASE_ATTEMPTS = 3;
+let releaseBackoffMs = 200;
+let releaseFault: (() => void) | null = null;
+/** Teszthez: hibainjektálás a felszabadítás kísérletei elé (dobhat), és a kísérletek közti várakozás. */
+export function setReleaseFault(fault: (() => void) | null, backoffMs = 200): void { releaseFault = fault; releaseBackoffMs = backoffMs; }
+async function releaseClaim(id: string, to: string): Promise<boolean> {
+  for (let attempt = 1; attempt <= RELEASE_ATTEMPTS; attempt++) {
+    try {
+      releaseFault?.();
+      await db.update(lessonResultEmails).set({ delivered: sql`array_remove(${lessonResultEmails.delivered}, ${to})` }).where(eq(lessonResultEmails.id, id));
+      return true;
+    } catch (error) {
+      if (attempt === RELEASE_ATTEMPTS) {
+        logger.error(`[LESSON-RESULT] a foglalás felszabadítása ${RELEASE_ATTEMPTS} kísérlet után sem sikerült (kanban #128): ${errorClass(error)}`);
+        return false;
+      }
+      await new Promise(resolve => setTimeout(resolve, releaseBackoffMs * attempt));
+    }
+  }
+  return false;
+}
+
 /** Review K2: a levélküldés időkorlátja (a szolgáltató hívása nem tarthatja korlátlanul a kézbesítés-foglalást). */
 let sendTimeoutMs = 30_000;
 /** Teszthez: az időkorlát rövidítése; a korábbi értéket adja vissza. */
@@ -112,10 +139,7 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
     } finally {
       // Review K1: a felszabadítás `finally` ágban — bármilyen kivétel (adatbázis, küldő) után a nem kézbesített címzett foglalása
       // felszabadul: a következő azonos hívás vagy az újrapróba pótolja (review #280), levél nem ragad be.
-      for (const to of claimed.filter(to => !ok.includes(to))) {
-        await db.update(lessonResultEmails).set({ delivered: sql`array_remove(${lessonResultEmails.delivered}, ${to})` }).where(eq(lessonResultEmails.id, claim.id))
-          .catch(error => logger.error(`[LESSON-RESULT] a foglalás felszabadítása nem sikerült: ${errorClass(error)}`));
-      }
+      for (const to of claimed.filter(to => !ok.includes(to))) await releaseClaim(claim.id, to);
     }
     if (ok.length < claimed.length) {
       logger.warn(`[LESSON-RESULT] ${claimed.length - ok.length} címzettnek nem ment el${retry ? " — 60 s múlva újrapróbálja" : ""}.`);

@@ -93,3 +93,7 @@ A lezárás hívása ezután a foglalás miatt nem küld újra. A válasz menté
   címzett lenyomata; a `sendAdminNotification` opcióként adja át, a többi hívó változatlan) — az időkorlát utáni újrapróba így nem
   kézbesít másodszor, ha az első küldés mégis célba ért; (2) az egyszeri újrapróba a külső `catch` ágban is ütemeződik. Valódi DB:
   202 / 202. Jegyre: kanban #127 (az `errorClass` a három régi naplósorban), #128 (véglegesült, de a válasz elveszett foglalás).
+- **PR #495 (Codex P2, 2026-11-18):** ha a küldés bukik ÉS az `array_remove` is átmeneti adatbázishibát kap, a címzett a `delivered`
+  listában ragadt volna. Javítás: `releaseClaim` — 3 kísérlet növekvő várakozással; végleges kudarcnál egy naplósor `errorClass`-szal.
+  A végleg nem helyreállítható esetet a kanban #128 fedi. Teszt hibainjektálással (az első felszabadítás dob, a második sikerül → a
+  következő hívás ténylegesen küld; tartós hiba → 3 kísérlet, cím nélküli naplósor). Valódi DB: 204 / 204; mutáció (1 kísérlet): 2 teszt bukik.

@@ -269,6 +269,48 @@ test("review: váratlan kivétel (az allSettled-en kívül) után is ütemeződi
   } finally { setRetryDelay(previous); logger.error = original; }
 });
 
+test("PR #495 (Codex P2): bukott küldés + átmenetileg sikertelen felszabadítás → az újrapróbált felszabadítás után a következő hívás ténylegesen küld", async () => {
+  const { setReleaseFault } = await import("../server/lesson-result-email");
+  sent.length = 0;
+  let failB = true;
+  let faults = 1;
+  setResultSender(async (subject, html, to) => { if (to === "admin-b@example.test" && failB) throw new Error("átmeneti hiba"); sent.push({ subject, html, to }); });
+  setReleaseFault(() => { if (faults > 0) { faults--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } }, 20);
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    const roundKey = roundKeyOf("t", "quiz", "round-release-retry");
+    const call = () => sendLessonResult({ lessonId: "result-published", roundKey, learner: "Vendég tanuló", graded }, false);
+    assert.deepEqual(await call(), { sent: 1, duplicate: false });
+    assert.equal(faults, 0, "az első felszabadítási kísérlet hibát kapott");
+    const stored = async () => (await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, "result-published"), eq(lessonResultEmails.roundKey, roundKey))))[0].delivered;
+    assert.deepEqual(await stored(), ["admin-a@example.test"], "a második kísérlet felszabadította a bukott címzett foglalását");
+    failB = false;
+    assert.deepEqual(await call(), { sent: 1, duplicate: false }, "a helyreállás után a következő hívás ténylegesen küld");
+    assert.deepEqual(sent.map(s => s.to), ["admin-a@example.test", "admin-b@example.test"]);
+  } finally { setReleaseFault(null); setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); }); }
+});
+
+test("PR #495: tartósan sikertelen felszabadítás — 3 kísérlet, utána egy naplósor a hiba osztályával (cím nélkül); az eset a kanban #128", async () => {
+  const { setReleaseFault } = await import("../server/lesson-result-email");
+  const { logger } = await import("../server/lib/logger");
+  const lines: string[] = [];
+  const original = logger.error;
+  logger.error = ((...args: unknown[]) => { lines.push(args.map(String).join(" ")); }) as typeof logger.error;
+  let attempts = 0;
+  setResultSender(async (_subject, _html, to) => { if (to === "admin-b@example.test") throw new Error(`hiba: ${to}`); });
+  setReleaseFault(() => { attempts++; throw Object.assign(new Error("admin-b@example.test: connection terminated"), { code: "57P01" }); }, 5);
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    await sendLessonResult({ lessonId: "result-published", roundKey: roundKeyOf("t", "quiz", "round-release-stuck"), learner: "Vendég tanuló", graded }, false);
+    assert.equal(attempts, 3);
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /3 kísérlet után sem sikerült \(kanban #128\): Error \(57P01\)$/);
+    assert.ok(!lines[0].includes("@"));
+  } finally { logger.error = original; setReleaseFault(null); setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); }); }
+});
+
 /* Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény + a szigorítás automatikus lazítása, valódi DB-n és HTTP-n. */
 test("S4b: a feladatkör beküldése feladatonként egy névtelen sort ír; ugyanaz a kör újra nem duplikál; tanulói szöveg nincs", async () => {
   const task = lesson.experience!.tasks[0];
