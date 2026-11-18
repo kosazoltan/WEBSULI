@@ -15,6 +15,7 @@ import { ADVENT_MAX_GRADE, ADVENT_MIN_GRADE } from "@shared/advent/rules";
 import { isMuted, sfxClick, sfxSuccess, toggleMuted } from "@/lib/audioEngine";
 import AdventArt from "@/advent/AdventArt";
 import Snowfall from "@/advent/Snowfall";
+import { ADVENT_BUSY_WAITING_TEXT, adventErrorText, retryWhenBusy } from "@/advent/busy";
 import { ADVENT_STATE_KEY, adventApi, adventDevice, forgetLearnerPairing, useAdventState } from "@/advent/useAdvent";
 import "@/advent/advent.css";
 
@@ -41,6 +42,9 @@ export default function AdventCalendar() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string>("");
+  // 429 („most sokan vagyunk”): rövid várakozás alatt barátságos üzenet, utána egy automatikus újrapróba.
+  const [waiting, setWaiting] = useState(false);
+  const patient = useCallback(<T,>(run: () => Promise<T>) => retryWhenBusy(run, { onWait: setWaiting }), []);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [muted, setMuted] = useState(() => isMuted());
   const [hidden, setHidden] = useState(false);
@@ -61,17 +65,17 @@ export default function AdventCalendar() {
     setError(null);
     setBusy(true);
     try {
-      const res = await adventApi.open(day);
+      const res = await patient(() => adventApi.open(day));
       if (!res.question) { setNotice("Ez a kérdés már nem érhető el, de az eredményed megmaradt."); return; }
       if (!muted) sfxClick();
       setOpen({ day, question: res.question, result: res.answered, readOnly: res.answered !== null });
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : "Nem sikerült elérni a naptárat.");
+      setError(adventErrorText(e, "Nem sikerült elérni a naptárat."));
       void refresh();
     } finally {
       setBusy(false);
     }
-  }, [muted, refresh]);
+  }, [muted, patient, refresh]);
 
   const onDoor = (door: AdventDoorView, el: HTMLButtonElement) => {
     lastDoor.current = el;
@@ -85,12 +89,12 @@ export default function AdventCalendar() {
     setBusy(true);
     setError(null);
     try {
-      const result = await adventApi.answer(open.day, open.question.id, pick);
+      const result = await patient(() => adventApi.answer(open.day, open.question.id, pick));
       setOpen({ ...open, result });
       if (result.correct && !muted) sfxSuccess();
       await refresh();
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : "Nem sikerült elküldeni a választ.");
+      setError(adventErrorText(e, "Nem sikerült elküldeni a választ."));
       await refresh();
     } finally {
       setBusy(false);
@@ -107,16 +111,16 @@ export default function AdventCalendar() {
   const chooseGrade = async (grade: number) => {
     setBusy(true);
     setError(null);
-    try { setState(await adventApi.grade(grade)); }
-    catch (e) { setError(e instanceof Error && e.message ? e.message : "Nem sikerült menteni az évfolyamot."); }
+    try { setState(await patient(() => adventApi.grade(grade))); }
+    catch (e) { setError(adventErrorText(e, "Nem sikerült menteni az évfolyamot.")); }
     finally { setBusy(false); }
   };
 
   const newRound = async () => {
     setBusy(true);
     setError(null);
-    try { setState(await adventApi.round()); setSummaryOpen(false); }
-    catch (e) { setError(e instanceof Error && e.message ? e.message : "Nem sikerült új kört indítani."); }
+    try { setState(await patient(() => adventApi.round())); setSummaryOpen(false); }
+    catch (e) { setError(adventErrorText(e, "Nem sikerült új kört indítani.")); }
     finally { setBusy(false); }
   };
 
@@ -191,8 +195,9 @@ export default function AdventCalendar() {
       ) : null}
       {volatileDevice ? <p className="advent-banner" role="status">Ezen az eszközön nem tudjuk megjegyezni a naptáradat.</p> : null}
       {closed ? <p className="advent-banner" role="status" data-testid="advent-closed">{state.closing.text}</p> : null}
+      {waiting ? <p className="advent-banner" role="status" data-testid="advent-busy">{ADVENT_BUSY_WAITING_TEXT}</p> : null}
       {error ? (
-        <div className="advent-banner advent-banner--error" role="alert">
+        <div className="advent-banner advent-banner--error" role="alert" data-testid="advent-error">
           <span>{error}</span>
           <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-error-retry" onClick={() => { setError(null); void refresh(); }}>Újra</button>
         </div>
