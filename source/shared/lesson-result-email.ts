@@ -26,7 +26,7 @@ export type ArbiterLookup = (task: OpenTask, answer: string) => { state: AnswerS
  * `arbiterRaised` (a döntőbíró emelte), `tightenedOnlyMiss` (a pontozó csak a gépileg szigorított csoport(ok) hiánya miatt nem adott teljes
  * pontot). A levél (`buildResultEmail`) ezeket nem használja.
  */
-export type GradedTaskRow = { taskId: string; q: string; answer: string; state: AnswerScore["state"]; score: number; detState: AnswerScore["state"]; arbiterRaised: boolean; tightenedOnlyMiss: boolean; rubricHash: string };
+export type GradedTaskRow = { taskId: string; q: string; answer: string; sample: string; state: AnswerScore["state"]; score: number; detState: AnswerScore["state"]; arbiterRaised: boolean; tightenedOnlyMiss: boolean; rubricHash: string };
 
 /** Review #340: a feladat pontozási lenyomata — a statisztika csak az AKTUÁLIS rubrikára adott eredményeket számolja. */
 export function rubricHash(task: OpenTask): string {
@@ -37,7 +37,9 @@ export function rubricHash(task: OpenTask): string {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 export type GradedTasks = { kind: "tasks"; rows: GradedTaskRow[]; summary: ReturnType<typeof scoreSummary> };
-export type GradedQuiz = { kind: "quiz"; wrong: Array<{ question: string; picked: string | null; correct: string }>; summary: ReturnType<typeof scoreSummary> };
+/** Spec 2026-11-17-eredmeny-email-kviz: `rows` a kör MINDEN kérdése (a levél kérdésenkénti listája); a `wrong` a hibás / kihagyott részhalmaz. */
+export type GradedQuizRow = { question: string; picked: string | null; correct: string; ok: boolean };
+export type GradedQuiz = { kind: "quiz"; rows: GradedQuizRow[]; wrong: Array<{ question: string; picked: string | null; correct: string }>; summary: ReturnType<typeof scoreSummary> };
 
 /** S4b: a pontozó csak a gépi szigorítással (S3c) felvett csoport(ok) hiánya miatt nem adott teljes pontot (JSON-egyezés a `tightened`-del). */
 export function tightenedOnlyMiss(task: OpenTask, answer: string, detState: AnswerScore["state"]): boolean {
@@ -73,7 +75,7 @@ export function gradeTasks(tasks: readonly OpenTask[], answers: Record<string, s
     const arb = answer ? arbiter?.(task, answer) : null;
     const raised = Boolean(arb && arb.score > det.score);
     const best = raised ? { state: arb!.state, score: arb!.score } : { state: det.state, score: det.score };
-    rows.push({ taskId, q: task.q, answer, ...best, detState: det.state, arbiterRaised: raised, tightenedOnlyMiss: tightenedOnlyMiss(task, answer, det.state), rubricHash: rubricHash(task) });
+    rows.push({ taskId, q: task.q, answer, sample: task.sample, ...best, detState: det.state, arbiterRaised: raised, tightenedOnlyMiss: tightenedOnlyMiss(task, answer, det.state), rubricHash: rubricHash(task) });
   }
   return { kind: "tasks", rows, summary: scoreSummary(rows.reduce((s, r) => s + r.score, 0), rows.length) };
 }
@@ -84,12 +86,19 @@ export function gradeTasks(tasks: readonly OpenTask[], answers: Record<string, s
  */
 export function gradeQuiz(quiz: readonly QuizItem[], picks: Record<string, number>): GradedQuiz {
   const asked = Object.entries(picks).map(([qid, pick]) => ({ item: quiz.find(q => q.id === qid), pick })).filter((x): x is { item: QuizItem; pick: number } => !!x.item);
-  const wrong = asked.filter(x => x.pick !== x.item.correctIndex).map(x => ({ question: x.item.question, picked: x.pick >= 0 ? x.item.options[x.pick] ?? null : null, correct: x.item.options[x.item.correctIndex] }));
-  return { kind: "quiz", wrong, summary: scoreSummary(asked.length - wrong.length, asked.length) };
+  const rows = asked.map(x => ({ question: x.item.question, picked: x.pick >= 0 ? x.item.options[x.pick] ?? null : null, correct: x.item.options[x.item.correctIndex], ok: x.pick === x.item.correctIndex }));
+  const wrong = rows.filter(r => !r.ok).map(({ question, picked, correct }) => ({ question, picked, correct }));
+  return { kind: "quiz", rows, wrong, summary: scoreSummary(asked.length - wrong.length, asked.length) };
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const MARK = { ok: "✅", partial: "🟡", fail: "❌" } as const;
+
+/** A kvíz egy kérdése a levélben: jelölés, a gyerek válasza (vagy „nem válaszolt”), hibásnál / kihagyottnál a helyes válasz. */
+function quizRowHtml(r: GradedQuizRow): string {
+  const picked = r.picked !== null ? esc(r.picked) : "<em>(nem válaszolt)</em>";
+  return `<li><p><strong>${esc(r.question)}</strong></p><p>${r.ok ? MARK.ok : MARK.fail} ${picked}${r.ok ? "" : ` — helyes: ${esc(r.correct)}`}</p></li>`;
+}
 
 /** A párosítatlan, be nem jelentkezett tanuló neve az eredménylevélben. */
 export const GUEST_LEARNER = "Vendég tanuló";
@@ -103,10 +112,9 @@ export function buildResultEmail(input: { lessonTitle: string; classroom: number
 <p><strong>Tanuló:</strong> ${esc(input.learner)}<br><strong>Évfolyam:</strong> ${input.classroom}. osztály<br>
 <strong>Eredmény:</strong> ${s.points} / ${s.total} pont — ${s.percent}% — ${s.grade} (${esc(s.label)})</p>`;
   const body = graded.kind === "tasks"
-    ? `<ol>${graded.rows.map(r => `<li><p><strong>${esc(r.q)}</strong></p><p>${MARK[r.state]} ${r.answer ? esc(r.answer) : "<em>(nem válaszolt)</em>"}</p></li>`).join("")}</ol>`
-    : graded.wrong.length
-      ? `<p><strong>Hibás válaszok:</strong></p><ol>${graded.wrong.map(w => `<li><p>${esc(w.question)}</p><p>❌ ${w.picked ? esc(w.picked) : "<em>(nincs válasz)</em>"} — helyes: ${esc(w.correct)}</p></li>`).join("")}</ol>`
-      : "<p>Minden kérdésre helyes választ adott.</p>";
+    // Spec 2026-11-17-eredmeny-email-kviz: a feladat alatt a mintaválasz; a kvíz MINDEN kérdése a gyerek válaszával és a helyessel.
+    ? `<ol>${graded.rows.map(r => `<li><p><strong>${esc(r.q)}</strong></p><p>${MARK[r.state]} ${r.answer ? esc(r.answer) : "<em>(nem válaszolt)</em>"}</p>${r.sample ? `<p><em>Mintaválasz:</em> ${esc(r.sample)}</p>` : ""}</li>`).join("")}</ol>`
+    : `${graded.wrong.length ? "" : "<p>Minden kérdésre helyes választ adott.</p>"}${graded.rows.length ? `<ol>${graded.rows.map(quizRowHtml).join("")}</ol>` : ""}`;
   // Spec 2026-10-21-tanulo-parositas: vendég eredményénél útmutató — így látszik, melyik gyermek eszköze nincs párosítva. Review #362: a
   // hívó attribúciójából (nincs fiók, nincs párosítás), nem a megjelenített névből (egy fiók neve is lehetne „Vendég tanuló”).
   const guestHint = input.guest ? GUEST_PAIRING_HINT_HTML : "";

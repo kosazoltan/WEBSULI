@@ -89,6 +89,27 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 | SK4 / SK5 | `tests/release-gate.test.ts`, `tests/gate-mutations.test.ts`, `scripts/measure/gate-baseline.mts` | kiadás előtti kapu, mutációk, alapvonal |
 | S9 | `node scripts/qa/gates/skills-sync-check.mjs` (csak futtatva) | skill forrás ↔ tükör |
 | S10 | `scripts/measure/source-gap-table.mts`, a futáskeret főkönyve | hiánytábla gépi része, keret |
+| minden szelet (S1–S3) | `tests/source-visuals-flag.test.ts` | KI állapotban a gyártás minden kérése a főágéval azonos (0.7) |
+
+### 0.7 Funkciókapcsoló — önálló beolvaszthatóság (*Spec-pontosítás 2026-11-18 — vak ellenőr: önálló beolvaszthatóság*)
+
+A terv 5. szakaszának 14. pontja szerint a forrás vizuális leltára a `STUDIO_SOURCE_VISUALS` kapcsoló mögött áll (`on` = BE;
+minden más és a hiány = KI). Minden szeletre érvényes szabályok:
+
+1. A környezetet egyetlen függvény olvassa: `sourceVisualsEnabled()` (`server/studio/source-visuals-flag.ts`). Más helyen
+   `process.env.STUDIO_SOURCE_VISUALS` olvasása tilos. A motor a futás elején egyszer dönt:
+   `deps.sourceVisuals ?? sourceVisualsEnabled()`; teszt és mérőharness a `SingleRunDeps.sourceVisuals` mezővel fecskendez be.
+2. KI állapotban a futás a leltárt sehonnan nem kapja meg: az 1. állomás nem kéri és nem dolgozza fel (a kéretlen `visuals` mező
+   is eldobva, számláló és naplósor nélkül), a térképről betöltött (korábban mentett) leltár üres listára cserélődik, mielőtt
+   bármelyik prompt-építő, kapu vagy számláló látná. Új, leltártól függő kódút csak ebből a szűrt listából dolgozhat.
+3. Ami a modell kimenetének határán új ábrafajtát fogad el (S2 / S3), KI állapotban ugyanúgy utasítja el, mint a kapcsoló előtt.
+4. A `tests/source-visuals-flag.test.ts` rögzített főág-lenyomatai a lánc MINDEN ágán zöldek: KI állapotban a mintafutás összes
+   modellnek küldött kérése bájtra azonos a főágéval. A lenyomat előállítása (csak akkor frissítendő, ha a főág promptjai
+   szándékosan változtak): a `source/` mappából `mkdir .main-ref`, `git archive origin/main:source server shared | tar -x -C .main-ref`,
+   `node --import tsx tests/helpers/production-prompt-fingerprint.ts .main-ref`, majd a `.main-ref` törlése.
+5. Az S1a–S3 meglévő tesztjei BE állapotban futnak (`sourceVisuals: true` a függőségekben); az alapértéket (KI) külön teszt rögzíti.
+6. Az éles bekapcsolás NEM része egyik szeletnek sem: tulajdonosi döntés az S10/1 mérés után (Render: `STUDIO_SOURCE_VISUALS=on`;
+   kikapcsolás: a változó törlése). Ügynök az éles környezet változóit nem állítja.
 
 ---
 
@@ -534,6 +555,10 @@ meglévő éles lecke (6 / 38), a PT alapvonala a forrásleltár (0 / 39), a vá
    kell ehhez a méréshez.
 3. Száraz futás előbb: `MEASURE_DRY=1` mindkét PDF-fel → a promptok felépülnek, modellhívás nincs. Ellenőrizd a kimenetben, hogy
    az 1. állomás kérése tartalmazza a leltár szerződését, és a futáskeret 7,5 USD.
+   *Spec-pontosítás 2026-11-18 (vak ellenőr: önálló beolvaszthatóság):* a harness a leltárt bekapcsolva futtatja (0.7) — a
+   kimenet `flags.sourceVisuals` mezője legyen `true`; `false` esetén a futás a mai éles viselkedést méri (csak A/B alapvonalnak,
+   `STUDIO_SOURCE_VISUALS=off` a futtató környezetében), a fizetős „utána” futás így NEM indítható. A mérés jelentése a végén
+   külön döntési kérdést tesz fel a tulajdonosnak az éles bekapcsolásról (opciók + javaslat).
 4. Minden fizetős futás ELŐTT: `trial-ledger.mts check --next 7.5` → nulla kilépési kód. Nem nulla esetén NEM indítasz futást:
    megállsz, és az orkesztrátoron át a tulajdonost kérdezed (a keret emelése tulajdonosi döntés).
 5. Éles próbafutás: HM-PDF, majd PT-PDF, egymás után (nem párhuzamosan), `MEASURE_SAVE_LESSON=1`, `MEASURE_BUDGET_USD=7.5`. A

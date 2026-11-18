@@ -231,6 +231,22 @@ Az okok a szerződésben vannak, nem a modellben (TÉNY, kódhelyek):
     nincs — ahol később külső esemény vezérel folyamatot, ugyanez az elv érvényes.
 13. **Hangfájlok az adatbázisban (D4):** külön tábla, tartalom-lenyomat szerinti kulcs, cserélhető tároló réteg, méretőr; a
     migráció a repó rendje szerint (`migrations/` + Drizzle-séma, a telepítés `db:migrate` lépése futtatja); `db:push` tilos.
+14. **Önálló beolvaszthatóság — a forrás vizuális leltára funkciókapcsoló mögött áll**
+    (*Spec-pontosítás 2026-11-18 — vak ellenőr: önálló beolvaszthatóság*). A szeletek PR-jai egyenként olvadnak a főágra, és minden
+    beolvadás élesre telepít; a köztes állapotok órákig élhetnek. Ezért **minden PR önállóan beolvadva is változatlanul hagyja a
+    mai éles gyártást**. Eszköze egyetlen szerveroldali kapcsoló a lánc alján: `STUDIO_SOURCE_VISUALS` (`on` = BE; bármi más és a
+    hiány = **KI**, ez az alapérték), egy helyen olvasva (`server/studio/source-visuals-flag.ts`), a motorba függőségként is
+    befecskendezhető (`SingleRunDeps.sourceVisuals`).
+    - **KI:** az 1. állomás nem kéri és nem dolgozza fel a leltárt (a modell kéretlen `visuals` mezője sem jut a térképbe), a
+      `source_files` sorába nem kerül `visuals`, a leltár számlálói nem jelennek meg a telemetriában, a térképen korábban mentett
+      leltárt a futás nem használja, a különálló kinyerés tartalmi lenyomata változatlan. Következmény: a lejjebb lévő promptok
+      bájtra azonosak a kapcsoló előttivel, az új ábrafajták neve nem jut a modellhez, a fedettségi kapu nem mér.
+    - **BE:** az S1–S3 szeletek leírt viselkedése.
+    - **Ki kapcsolja be:** a tesztek és a mérőharness (`scripts/measure/single-run-measure.mts`, S10). Az **éles bekapcsolás
+      tulajdonosi döntés az első mérés (S10/1) után** — addig az éles környezetben a változó nincs beállítva.
+    - **Bizonyíték:** `tests/source-visuals-flag.test.ts` — egy rögzített, modell nélküli mintafutáson a gyártás MINDEN modellnek
+      küldött kérésének lenyomata KI állapotban egyezik a főág kódján lefuttatott ugyanazon mintafutáséval (az előállítás módja a
+      `tests/helpers/production-prompt-fingerprint.ts` fejlécében). Ez a teszt a lánc minden ágán zöld kell legyen.
 
 ## 6. Szeletek
 
@@ -250,6 +266,9 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
   a fedettségmérő a vizuális tételeket is számolja (`coverage.visuals: { total, shown, missingIds }`) — a hiány **bukás**: a kaput az SK1 adja
   (ugyanabban a körben; `report` módban érkezik, az S3b élesíti — lásd SK1).
 - **Visszamérés:** egységtesztek; az S10 első mérése (a leltár tételszáma a két mintán a 02-es jelentés leltárához mérve).
+- **Funkciókapcsoló** (*Spec-pontosítás 2026-11-18 — vak ellenőr: önálló beolvaszthatóság*): az S1 teljes viselkedése a
+  `STUDIO_SOURCE_VISUALS=on` kapcsoló mögött áll, alapból KI (5. szakasz 14. pont) — KI állapotban az 1. állomás kérése,
+  feldolgozása és mentése a kapcsoló előttivel azonos.
 
 ### S2 — Új megjelenítők a leckében
 
@@ -290,6 +309,10 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
 - **Keret (D2):** 30 USD, eldobható adatbázison; futásonkénti kemény plafon 7,5 USD az SK3 próbakeret-paraméterével
   (4 × 7,5 = 30) — a plafont a program tartja, nem az ügynök. Túllépés előtt megállás és kérdés a tulajdonosnak. (A kemény plafon
   csak a próbafutásra érvényes; éles gyártásban a költségkeret túllépése jelzés — D7.)
+- **Funkciókapcsoló** (*Spec-pontosítás 2026-11-18 — vak ellenőr: önálló beolvaszthatóság*): a mérőharness a forrás vizuális
+  leltárát **bekapcsolva** futtatja (`sourceVisuals: true`; a kimenet `flags.sourceVisuals` mezője rögzíti), mert az éles
+  alapérték KI (5. szakasz 14. pont). Az **éles bekapcsolásról a tulajdonos dönt az első mérés eredménye alapján** — a mérés
+  jelentése ezt a döntést opciókkal és javaslattal külön kéri.
 - **Fizetős futások:** a két minta-PDF egy-egy „utána” futása (HM, PT), **fájlból indítva** (a `MEASURE_SAME_MAP` mód a kész
   térképről indul, az 1. állomást nem méri — a fájlból indítás módja UNVERIFIED, a szelet első lépése ellenőrzi) + legfeljebb 2
   tartalék futás (megszakadt futás megismétlésére vagy a záró mérésre, ha a keret engedi).

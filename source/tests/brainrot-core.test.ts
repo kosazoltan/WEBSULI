@@ -474,19 +474,33 @@ function fakeUi(opts: { give: boolean }) {
   return ui;
 }
 
-test("meghajtó: a 90 mp-es óra a lassítatlan kérdés-óra — nyitott kérdés alatt is jár, szünetben áll; a végén a menet lezárul", () => {
+// SPEC-VÁLTOZÁS 2026-11-17 (terv 2026-11-17-brainrot-valaszido D5, tulajdonosi döntés „Álljon meg”): a menet 90 mp-es órája
+// a nyitott kérdés alatt ÁLL (a régi elvárás: a kérdés alatt is jár); a kérdés-óra (határidő) továbbra is jár.
+test("meghajtó: a kérdés-óra a kérdés alatt is jár, a menet-óra áll (D5); szünetben mindkettő áll; a végén a menet lezárul", () => {
   const ui = fakeUi({ give: true });
   const d = createBrainRotDriver({ seed: 10, questions: ui, band: () => 0.4, arenaW: 1, arenaH: 1.5 });
   d.core.forceCatch();
   d.resolve();
   assert.ok(ui.openNow(), "nyitott kérdés");
+  const roundBefore = d.remainingMs();
   for (let i = 0; i < 60; i++) d.frame(DT, false);
-  assert.ok(Math.abs(d.clockMs() - 1000) < 1, `óra ${d.clockMs()}`);
+  assert.ok(Math.abs(d.clockMs() - 1000) < 1, `kérdés-óra ${d.clockMs()}`);
+  assert.equal(d.remainingMs(), roundBefore, "(a) nyitott kérdés alatt a menet-óra nem fogy");
   assert.ok(d.loop.simTimeMs() < 700 && d.loop.simTimeMs() > 500, `a világ 0,6×: ${d.loop.simTimeMs()}`);
+  // Kérdés nélkül (üres forrás) a menet-óra a kérdés-órával együtt jár.
+  const noQ = createBrainRotDriver({ seed: 10, questions: fakeUi({ give: false }), band: () => 0.4, arenaW: 1, arenaH: 1.5 });
+  for (let i = 0; i < 60; i++) noQ.frame(DT, false);
+  assert.ok(Math.abs(ROUND_MS - noQ.remainingMs() - 1000) < 1, `kérdés nélkül a menet-óra jár: ${noQ.remainingMs()}`);
   const before = d.remainingMs();
   for (let i = 0; i < 60; i++) d.frame(DT, true);
   assert.equal(d.remainingMs(), before, "szünetben áll");
-  for (let i = 0; i < (ROUND_MS / DT) + 5; i++) d.frame(DT, false);
+  for (let i = 0; i < (2 * ROUND_MS) / DT && d.core.running(); i++) {
+    if (ui.openNow()) {
+      ui.pick(0);
+      d.core.applyOutcome("correct", 0);
+    }
+    d.frame(DT, false);
+  }
   assert.equal(d.core.running(), false);
   assert.equal(ui.finished(), true, "a kérdés-sáv lezárva");
 });
@@ -606,24 +620,40 @@ test("review #485 B1: a nyitás után böködött ketrec az élesítéskor rögt
   assert.ok(steps * DT >= CAGE_ARM_MS, `nem az előjelzés alatt: ${(steps * DT).toFixed(0)} ms`);
 });
 
-test("önellenőrzés (e): az óra lejártakor nyitott kérdés megszakad — nem lesz belőle utólag sem megtartás, sem szökés", () => {
+// SPEC-VÁLTOZÁS 2026-11-17 (D5): a régi „az óra lejártakor nyitott kérdés megszakad” helyett — a menet vége nem eshet
+// nyitott kérdésre; a késői kimenet-őr (a lezárt menetben nem ír a magba) változatlanul mérve.
+test("D5 (b): a menet vége nem esik nyitott kérdésre — az utolsó fél másodpercben nyílt kérdés alatt a menet nem ér véget", () => {
   const ui = fakeUi({ give: true });
   const d = createBrainRotDriver({ seed: 28, questions: ui, band: () => 0.4, arenaW: 1, arenaH: 1.5 });
-  for (let i = 0; i < Math.round((ROUND_MS - 500) / DT); i++) d.frame(DT, false);
+  // A menet-óra 500 ms-ig fut le (a közben nyíló kérdéseket a gyerek azonnal megválaszolja).
+  for (let i = 0; i < (3 * ROUND_MS) / DT && d.remainingMs() > 500; i++) {
+    if (ui.openNow()) {
+      ui.pick(0);
+      d.core.applyOutcome("correct", 0);
+    }
+    d.frame(DT, false);
+  }
+  if (ui.openNow()) {
+    ui.pick(0);
+    d.core.applyOutcome("correct", 0);
+  }
   d.core.forceCatch();
   d.resolve();
   assert.ok(ui.openNow(), "nyitott kérdés az utolsó fél másodpercben");
-  const before = { caught: d.core.state().caught, lost: d.core.state().lost };
+  // A kérdés 20 s-ig nyitva (hosszú ablak): a menet nem ér véget, a kérdés nem szakad meg.
+  for (let i = 0; i < Math.round(20_000 / DT); i++) d.frame(DT, false);
+  assert.equal(d.core.running(), true, "nyitott kérdés alatt a menet nem ér véget");
+  assert.ok(ui.openNow(), "a kérdés nem szakadt meg");
+  assert.ok(d.remainingMs() > 0 && d.remainingMs() <= 500, `a menet-óra a kérdés alatt állt: ${d.remainingMs()}`);
+  ui.pick(0);
+  d.core.applyOutcome("correct", 0);
+  const caught = d.core.state().caught;
   for (let i = 0; i < 120; i++) d.frame(DT, false);
-  assert.equal(d.core.running(), false);
-  assert.equal(ui.finished(), true);
-  assert.equal(d.core.state().caught, before.caught);
-  assert.equal(d.core.state().lost, before.lost);
+  assert.equal(d.core.running(), false, "a kérdés után a maradék menet-idő lefut");
   // A lezárt menetben egy késői válasz-kísérlet sem ír a magba.
   d.core.applyOutcome("correct", 0);
   d.core.applyOutcome("wrong", 0);
-  assert.equal(d.core.state().caught, before.caught, "késői jó válasz nem ad megtartást");
-  assert.equal(d.core.state().lost, before.lost, "késői rossz válasz nem ad szökést");
+  assert.equal(d.core.state().caught, caught, "késői jó válasz nem ad megtartást");
 });
 
 test("önellenőrzés (e): 6 megtartásnál a menet vége után érkező jó válasz nem fordítja győzelemre a vereséget", () => {
@@ -865,3 +895,23 @@ for (const frameMs of [DT, 250]) {
     assert.equal(hit, 2, "a friss bökés válaszol (a kérdés-ablakon belül)");
   });
 }
+
+test("D5-módosítás (a): nyitott kérdés alatt a menet-óra pontosan a régi ablaknyit fogy, utána (a hosszabbítás alatt) áll; az előjelzés alatt áll", () => {
+  const ui = fakeUi({ give: true });
+  const OLD_WINDOW = 3000;
+  const LEAD = 600;
+  // A burkolt presentation mintája: az óra az előjelzés után indul (startedAtSimMs + LEAD).
+  const paced = { ...ui, request: (r: "trigger", c: number) => { const p = ui.request(r, c); return p ? { ...p, startedAtSimMs: p.startedAtSimMs + LEAD } : null; } };
+  let openP: QuestionPresentation | null = null;
+  const wrapped: BrainRotQuestionUi = { ...paced, request: (r, c) => (openP = paced.request(r, c)), active: () => (ui.openNow() ? openP : null) };
+  const d = createBrainRotDriver({ seed: 10, questions: wrapped, band: () => 0.4, arenaW: 1, arenaH: 1.5, questionRoundMs: () => OLD_WINDOW });
+  d.core.forceCatch();
+  d.resolve();
+  assert.ok(ui.openNow(), "nyitott kérdés");
+  const r0 = d.remainingMs();
+  for (let i = 0; i < 36; i++) d.frame(DT, false); // 600 ms előjelzés
+  assert.ok(Math.abs(d.remainingMs() - r0) < 1, `az előjelzés alatt áll: ${r0 - d.remainingMs()}`);
+  for (let i = 0; i < Math.round(8000 / DT); i++) d.frame(DT, false); // a hosszú (új) ablakon belül
+  assert.ok(Math.abs(r0 - d.remainingMs() - OLD_WINDOW) < 20, `pontosan a régi ablaknyit fogyott: ${r0 - d.remainingMs()}`);
+  assert.ok(ui.openNow(), "a kérdés még nyitva (a hosszabbításban)");
+});
