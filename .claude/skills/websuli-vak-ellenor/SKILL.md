@@ -35,7 +35,7 @@ npm run gate:blind-review -- \
   --spec docs/specs/<terv>.md[,docs/specs/<másik>.md] \
   --goal <SCRATCHPAD>/review-<x>/cel.md \
   --out  <SCRATCHPAD>/review-<x>/jelentes.md
-# opcionális: --max-usd 2 (alap; legfeljebb 6) --max-rounds 60 --max-minutes 25 --dry-run
+# opcionális: --max-usd 2 (alap; legfeljebb 6) --max-rounds 60 --max-minutes 40 --dry-run
 ```
 
 - A futtató EGY eldobható munkafát készít a fejről (a te munkafádhoz nem nyúl), abban az ellenőr olvas, keres, a fej követett

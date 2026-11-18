@@ -77,7 +77,7 @@ node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --re
 - **Kulcs:** `OPENROUTER_API_KEY` környezeti változó; vagy a `WEBSULI_SECRETS_ENV` változó / a `<git-common-dir>/websuli-qa-local.json`
   (`{"secretsEnv": "<.env útvonala>"}`, nem követhető) mutat egy .env fájlra, amelyből a folyamat csak ezt az egy sort olvassa.
 - **Futáskorlátok:** USD-plafon (alap 2, legfeljebb 6; minden hívás ELŐTT az eddigi tényleges költség + a következő hívás becslése),
-  körszám (60), falióra (25 perc), kimenet-plafon, megszakító fájl (`<bizonyíték-tár>/blind-review.stop`) / SIGINT. Plafonnál a
+  körszám (60), falióra (40 perc), kimenet-plafon, megszakító fájl (`<bizonyíték-tár>/blind-review.stop`) / SIGINT. Plafonnál a
   jelentés „NEM TELJES” (nem ítélet), a kilépési kód 3.
 - **Prompt-gyorsítótár:** az Alibaba / Qwen végpont explicit töréspontot kér (`cache_control: {"type": "ephemeral"}`, 5 perces
   élettartam, írás 1,25×, olvasás a végpont árlistája szerint 0,05× — forrás:

@@ -354,3 +354,71 @@ DeepSeek-modellel történt — annak eredménye összehasonlításként a tábl
 - [ ] B22 WHEN az ítélet IGEN / IGEN, FELTÉTELLEL, de van blokkoló lelet (vagy NEM blokkoló lelet nélkül) THEN SHALL elutasítani.
 - [ ] B23 WHEN a jelentés elfogadott THEN a futtató SHALL gépi összegzést fűzni a végére, és a bizonyítékba írni a leletek számát
   súlyosság és igazoltság szerint.
+
+## 3. kiegészítés — a prompt-gyorsítótár maximális kihasználása (2026-11-18)
+
+Tulajdonosi kérés (2026-11-18, szó szerint): „figyelj oda, hogy a [KV-]cache használat maximálisan ki legyen használva.”
+
+Megjegyzés a sorrendről: ez a kérés a futtató megírása KÖZBEN érkezett; a megvalósítás és ez a tervfejezet ugyanabban a munkaszakaszban
+készült (a kód a `93e85136` commitban, ez a fejezet közvetlenül utána) — a háromfázisú rend szigorú sorrendje itt nem teljesült.
+
+### C1 — Tények (forrás és mérés)
+
+Forrás: `https://openrouter.ai/docs/guides/best-practices/prompt-caching.md` (lekérve 2026-11-18), és a modell végpont-leírója:
+`https://openrouter.ai/api/v1/models/qwen/qwen4-max/endpoints`.
+
+- **Alibaba / Qwen:** a gyorsítótár NEM automatikus — explicit töréspont kell: `cache_control: { "type": "ephemeral" }` a tartalom-
+  blokkon, „az Anthropic explicit gyorsítótárával azonos szintaxissal”; az írás élettartama 5 perc; az írás ára az alapár 1,25-szöröse,
+  az olvasásé a doksi szerint 0,1-szerese. A végpont-leíró szerint a `qwen/qwen4-max`-nál: `supports_implicit_caching: false`,
+  `input_cache_write` 1,78125 USD / M (1,25×), `input_cache_read` 0,07125 USD / M (0,05×).
+- A doksi modell-listája a `qwen/qwen4-max`-ot NEM sorolja fel (csak korábbi Qwen-modelleket) — ezért MÉRTEM (három hívás, 2026-11-18):
+  1. hívás: `cached_tokens` 0, `cache_write_tokens` 14 889; 2. hívás (töréspont a tool-üzeneten): `cached_tokens` 14 889,
+  `cache_write_tokens` 665; 3. hívás (a töréspont továbbmozdítva, a régi jelölő eltávolítva): `cached_tokens` 15 554 a 15 597-ből.
+  Tehát az explicit gyorsítótár ezen a végponton működik, a `tool` szerepű üzenet tartalom-blokkján is, és a MOZGÓ töréspont a korábbi
+  töréspontig érő előtagot találatként olvassa.
+- **Válaszmezők:** `usage.prompt_tokens_details.cached_tokens` (olvasás) és `cache_write_tokens` (írás); a `usage.cost` a kedvezményt
+  már tartalmazza.
+- **Minimális előtag-hossz, a töréspontok száma:** az OpenRouter-doksi az Alibabára nem ad számot (az Anthropicra: legfeljebb 4
+  explicit töréspont) — UNVERIFIED; a futtató 2 töréspontot használ, a rögzített blokk pedig mindig több ezer token.
+- **Szolgáltató-útválasztás:** a `qwen/qwen4-max`-nak egyetlen szolgáltatója van (Alibaba), tehát szolgáltató-váltás miatt a
+  gyorsítótár nem veszhet el; a doksi szerint az OpenRouter „provider sticky routing”-ot használ, és a `provider.order` megadása ezt
+  KIKAPCSOLJA — ezért NEM rögzítünk szolgáltatót, hanem a futásonként állandó `session_id`-t küldjük (a doksi szerint ez a ragadós
+  útválasztás kulcsa). Ha a modellnek később több szolgáltatója lesz, ez a döntés újranézendő.
+- **DeepSeek (összehasonlítás):** automatikus, beállítás nélkül (ugyanez a doksi, „DeepSeek”) — a bejáratás futásán mért arány 95,8%.
+
+### C2 — Előtag-stabilitás
+
+A kérés sorrendje: rögzített rendszerüzenet (a skill sablonja + a futtató kiegészítése) → az eszközdefiníciók változatlan sorrendben →
+a feladatblokk (terv, tulajdonosi cél, hibakereső pontok, base / head, diff-összesítő) → utána CSAK hozzáfűzés. A tárolt üzenetlista
+soha nem íródik át, nem rendeződik újra, nem csonkolódik utólag: az eszköz-eredmény csonkolása a beérkezéskor, egyszer történik. Az
+előtagban nincs időbélyeg, véletlen azonosító, számláló; a munkafa abszolút útvonalát a futtató rögzített jelölőre (`<munkafa>`) cseréli
+(ez adatvédelmi okból is kell: az útvonal a felhasználónevet hordozza). A listázás rendezett.
+
+### C3 — Töréspontok
+
+Kettő: (1) a feladatblokk (az első user-üzenet) végén; (2) a beszélgetés mindenkori utolsó üzenetén (mozgó). A jelölő a kérés
+összeállításakor, MÁSOLATON kerül az üzenetre — a tárolt lista jelölő nélküli, így a „korábbi üzenet soha nem változik” szabály a
+jelölő mozgatásával sem sérül. `promptCache.mode: "none"` (automatikus gyorsítótárú szolgáltató) mellett jelölő nincs.
+
+### C4 — Mérés és bizonyíték
+
+A bizonyíték `callsDetail` tömbje hívásonként: `prompt`, `cached`, `cacheWrite`, `completion`, `usd`; a `cache` mező: találati arány a
+2. hívástól, a gyorsítótárból olvasott / oda írt tokenek, becsült megtakarítás USD-ben (a konfig áraival). Ugyanez a jelentés Gépi
+összegzésében. Elfogadás: a 2. hívástól a bemeneti tokenek ≥ 80%-a gyorsítótárból (a mért érték az alapvonal-táblában).
+
+Az 5 perces élettartam miatt az ellenőr parancsainak időkorlátja 240 mp (őr-teszt: kisebb a gyorsítótár élettartamánál).
+
+### C5 — Költségplafon
+
+A tényleges költség a `usage.cost` (a kedvezménnyel). A hívás ELŐTTI becslés: a már elküldött előtag olvasási (`cacheRead`), az új rész
+írási (`cacheWrite`) áron; ha az utolsó hívás óta a gyorsítótár élettartama lejárhatott, az egész bemenet írási áron; második
+védvonal: a becslés legalább az előző hívás tényleges költségének 1,25-szöröse.
+
+### Elfogadás — 3. kiegészítés
+
+- [ ] B24 WHEN a futtató egymást követő kéréseket küld THEN a korábbi üzenetek SHALL bájtra azonosak maradni (a jelölők nélkül
+  összevetve), és az eszközdefiníciók SHALL változatlanok lenni; időbélyeg az előtagban → a teszt bukik (mutáció).
+- [ ] B25 WHEN `promptCache.mode` = `explicit` THEN pontosan két töréspont: a feladatblokk végén és az utolsó üzeneten.
+- [ ] B26 WHEN a futás véget ér THEN a bizonyíték SHALL tartalmazni a hívásonkénti `cached` / `prompt` tokeneket, a találati arányt
+  és a megtakarítást; a Gépi összegzés is.
+- [ ] B27 Mért érték: a 2. hívástól a bemeneti tokenek ≥ 80%-a gyorsítótárból (alapvonal-tábla).

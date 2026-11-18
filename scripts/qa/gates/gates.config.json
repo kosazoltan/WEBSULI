@@ -79,7 +79,7 @@
     "maxUsdHardCap": 6,
     "maxRounds": 60,
     "maxRoundsHardCap": 150,
-    "maxWallMinutes": 25,
+    "maxWallMinutes": 40,
     "maxWallMinutesHardCap": 60,
     "maxTokensPerCall": 16000,
     "maxCompletionTokensTotal": 200000,

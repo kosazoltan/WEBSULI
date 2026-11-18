@@ -34,7 +34,7 @@ TILOS; a kulcs semmilyen kimenetbe nem kerülhet (terv D2).
 13. A `chore/vak-hibakereso-ellenor` legfrissebb állapotának beolvasztása (merge, nem rebase); `npm run gate:stage`, `npm run
     gate:push`; fej-hash az orkesztrátornak.
 
-- [x] 1 · [ ] 2 · [ ] 3 · [ ] 4 · [ ] 5 · [ ] 6 · [ ] 7 · [ ] 8 · [ ] 9 · [ ] 10 · [ ] 11 · [ ] 12 · [ ] 13
+- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [x] 6 · [x] 7 · [x] 8 (felmentő kapcsoló nélkül) · [x] 9 · [x] 10 · [x] 11 · [x] 12 · [x] 13
 
 ## Kiegészítés — kizárólagosság, skill, szabályrendszer (2026-11-18) — végrehajtás
 
@@ -48,4 +48,22 @@ Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`, „Kiegészítés” feje
 17. Vezérlőfájlok (K4) + új `CLAUDE.md`; őr-teszt (`scripts/qa/gates/blind-review/rules-guard.test.mjs`).
 18. Amint az első valódi futás sikeres: jelentés az orkesztrátornak parancs-mintával (K2).
 
-- [ ] 14 · [ ] 15 · [ ] 16 · [ ] 17 · [ ] 18
+- [x] 14 · [x] 15 · [x] 16 · [x] 17 · [x] 18
+
+## 2. kiegészítés — modellcsere, géppel ellenőrzött leletek, prompt-gyorsítótár (2026-11-18) — végrehajtás
+
+Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`, „2. kiegészítés” (M1–M4) és „3. kiegészítés” (C1–C5).
+
+19. `gates.config.json`: `blindReview.model` = `qwen/qwen4-max`; `maxUsdDefault` 2, `maxUsdHardCap` 6; `promptCache`; a tartalék-árak a
+    gyorsítótár olvasási / írási árával; `commandTimeoutSec` a gyorsítótár élettartama alatt.
+20. `scripts/qa/gates/blind-review/findings.mjs`: `verifyFindings` (hivatkozás- és futtatás-ellenőrzés, ítélet-összhang),
+    `summaryMarkdown` (gépi összegzés); a `submit_report` eszköz `findings` tömbje; a futtató parancsnaplója (`runLog`).
+21. `blind-review.mjs`: `withCacheMarkers` (töréspontok a kérés MÁSOLATÁN), csak bővülő üzenetlista, `session_id`, hívásonkénti
+    `cached_tokens` / `prompt_tokens` a bizonyítékban, `cacheStats`, gyorsítótár-tudatos plafon-becslés; a munkafa abszolút útvonala
+    nem megy ki a modellnek.
+22. Tesztek: `findings.test.mjs`; az előtag bájtazonossága körről körre és a töréspontok helye (`blind-review.test.mjs`); mutációs
+    ellenpróba (időbélyeg az előtagban → bukik).
+23. A szövegek modellneve mindenhol a konfigurált modell; az alapvonal-mérés a Qwen4 Max modellel, a bejáratás DeepSeek-eredménye
+    összehasonlításként.
+
+- [x] 19 · [x] 20 · [x] 21 · [x] 22 · [x] 23
