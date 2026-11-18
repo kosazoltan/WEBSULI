@@ -119,6 +119,8 @@ for (const viewport of VIEWPORTS) {
     const expected = viewport.width >= 640 ? 336 : 324;
     expect((await section.boundingBox())!.height).toBe(expected);
     const firstCardTop = async () => (await page.getByTestId("list-files").evaluate((el) => el.getBoundingClientRect().top + window.scrollY));
+    // a lista saját belépő animációja (`.list-enter`: translateY 12 px → 0, 320 ms) előbb fusson le — különben azt mérnénk
+    await page.getByTestId("list-files").evaluate((el) => Promise.all(el.getAnimations().map((x) => x.finished)));
     const cardTopBefore = await firstCardTop();
 
     await waitMoving(page);
