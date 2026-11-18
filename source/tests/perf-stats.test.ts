@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { FrameWindow, fmt, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
+import { FrameWindow, fmt, isLoopRunning, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
 
 /** `?perf=1` diagnosztika — a tiszta számolás (terv: docs/specs/2026-11-17-kockavadasz-telefon.md, 6. szakasz). */
 
@@ -112,5 +112,27 @@ describe("megapixels, fmt, median", () => {
     assert.equal(median([]), null);
     assert.equal(median([5, 1, 9]), 5);
     assert.equal(median([4, 1, 3, 2]), 2);
+  });
+});
+
+describe("isLoopRunning", () => {
+  it("gyors huroknál 1 s a küszöb", () => {
+    assert.equal(isLoopRunning(16, 16.7), true);
+    assert.equal(isLoopRunning(999, 16.7), true);
+    assert.equal(isLoopRunning(1000, 16.7), false, "szünet: 1 s óta nincs képkocka");
+  });
+
+  it("lassú, de futó hurok (> 1 s / képkocka — szoftveres megjelenítő) nem „áll” (PR #504 CI)", () => {
+    assert.equal(isLoopRunning(1400, 1500), true);
+    assert.equal(isLoopRunning(2900, 1500), true);
+    assert.equal(isLoopRunning(4500, 1500), false, "három képkockányi csend után áll");
+  });
+
+  it("képkocka nélkül vagy értelmetlen bemenetre az 1 s-os küszöb él, és nem dob", () => {
+    assert.equal(isLoopRunning(500, 0), true);
+    assert.equal(isLoopRunning(16_000, 600_000), false, "szünet utáni óriási rés legfeljebb 15 s-ig számít");
+    assert.equal(isLoopRunning(14_000, 600_000), true);
+    assert.equal(isLoopRunning(1500, Number.NaN), false);
+    assert.equal(isLoopRunning(Number.NaN, 16), false);
   });
 });

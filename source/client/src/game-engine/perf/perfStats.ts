@@ -150,3 +150,15 @@ export function median(values: readonly number[]): number | null {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor((sorted.length - 1) / 2)]!;
 }
+
+/**
+ * Él-e a képkocka-hurok: az utolsó képkocka óta eltelt idő belefér-e a hurok saját ütemébe. Rögzített 1 s-os küszöbbel a
+ * lassú (szoftveres megjelenítő, gyenge eszköz: > 1 s / képkocka), de FUTÓ hurok „áll”-nak látszott (PR #504 CI). A küszöb
+ * ezért legalább 1 s, lassú huroknál pedig a legutóbbi képkockaidő háromszorosa.
+ */
+export function isLoopRunning(sinceLastFrameMs: number, lastFrameDtMs: number): boolean {
+  if (!(sinceLastFrameMs >= 0)) return false;
+  const dt = Number.isFinite(lastFrameDtMs) && lastFrameDtMs > 0 ? lastFrameDtMs : 0;
+  // Felső korlát: egy szünet utáni első „képkockaidő” (akár percek) ne tartsa „fut”-on a jelzőt 15 s-nál tovább.
+  return sinceLastFrameMs < Math.max(1000, 3 * Math.min(dt, 5000));
+}

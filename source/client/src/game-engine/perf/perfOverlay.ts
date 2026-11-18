@@ -10,7 +10,7 @@
 import type * as THREE from "three";
 
 import { createGpuTimer } from "./gpuTimer";
-import { FrameWindow, fmt, median, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
+import { FrameWindow, fmt, isLoopRunning, median, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
 
 export type PerfResolution = 1 | 0.75 | 0.5;
 
@@ -175,6 +175,8 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   let tBefore = 0;
   let lastRefresh = 0;
   let renderedFrames = 0;
+  /** A legutóbbi két képkocka közti idő (ms) — a szünet utáni első képkockán 0. */
+  let lastDt = 0;
   let lastJs = 0;
   let lastRender = 0;
   let calls = 0;
@@ -240,7 +242,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     const longMs = longTasks.reduce((sum, t) => sum + t.ms, 0);
     const gpuAvg = gpuTimer.average();
     return {
-      running: lastFrameAt > 0 && nowMs - lastFrameAt < 1000,
+      running: lastFrameAt > 0 && isLoopRunning(nowMs - lastFrameAt, lastDt),
       renderedFrames,
       tier: opts.tier,
       frame: frames.summary(),
@@ -352,7 +354,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   renderText();
   // Ha a hurok áll (szünet, kérdés), a fejléc „áll”-ra vált — a képkocka-hurok nélkül is.
   const idleTimer = window.setInterval(() => {
-    if (performance.now() - lastFrameAt >= 1000) renderText();
+    if (!isLoopRunning(performance.now() - lastFrameAt, lastDt)) renderText();
   }, 1000);
 
   const api: PerfWindowApi = { snapshot, controls: { set: applyToggles }, runGpuProbe };
@@ -364,6 +366,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       gpuTimer.poll();
       if (lastNow !== null) {
         const dt = now - lastNow;
+        lastDt = dt > 0 ? dt : 0;
         // Az első képkocka és a szünet utáni hosszú rés nem képkockaidő.
         if (dt > 0 && dt < 1000) frames.push({ dt, js: lastJs, render: lastRender });
       }
