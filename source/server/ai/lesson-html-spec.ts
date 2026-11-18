@@ -477,9 +477,14 @@ function speak(text, lang){
   var u = new SpeechSynthesisUtterance(text);
   u.lang = lang || 'en-GB';
   u.rate = ttsRate;
-  u.pitch = 1.1;
-  var voices = window.speechSynthesis.getVoices(); var k;
-  for(k=0;k<voices.length;k++){ if(voices[k].lang === u.lang){ u.voice = voices[k]; break; } }
+  var voices = window.speechSynthesis.getVoices(); var want = u.lang.toLowerCase(); var base = want.split('-')[0]; var best = null; var bestScore = 0; var k;
+  for(k=0;k<voices.length;k++){
+    var vl = String(voices[k].lang || '').replace('_','-').toLowerCase();
+    var s = vl === want ? 4 : (vl === base || vl.indexOf(base + '-') === 0 ? 1 : 0);
+    if(s && /natural|online/i.test(voices[k].name || '')){ s += 2; }
+    if(s > bestScore){ best = voices[k]; bestScore = s; }
+  }
+  if(best){ u.voice = best; }
   window.speechSynthesis.speak(u);
 }
 /* minden [data-tts] elemre addEventListener('click', ...) -> speak(el.getAttribute('data-tts')) */

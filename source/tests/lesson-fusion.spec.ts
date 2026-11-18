@@ -102,6 +102,48 @@ test("foreign-language glossary starts speech only on request, with the correct 
   expect((await calls())[1]).toEqual({ text: "This is a triangle.", lang: "en-GB", rate: Math.fround(.65) });
 });
 
+// Spec 2026-11-18-tananyag-gyartas-minoseg, S8a (E31): a böngésző a gépies brit hangot adja elsőnek — a felolvasás mégis a természetes
+// brit hangot kapja; a később betöltődő hanglista (`voiceschanged`, Android) után a következő kimondás már rangsorolt hanggal szól.
+test("glossary speech picks the ranked British voice, also after the voice list loads late", async ({ page }) => {
+  await page.addInitScript(() => {
+    const calls: Array<{ text: string; lang: string; voice: string | null; pitch: number }> = [];
+    const played: string[] = [];
+    const voices = [
+      { name: "Microsoft Zira Desktop - English (United States)", lang: "en-US", localService: true },
+      { name: "Microsoft Hazel Desktop - English (Great Britain)", lang: "en-GB", localService: true },
+      { name: "Microsoft Aria Online (Natural) - English (United States)", lang: "en-US", localService: false },
+      { name: "Microsoft Sonia Online (Natural) - English (United Kingdom)", lang: "en-GB", localService: false },
+    ];
+    let loaded = false;
+    // A valódi SpeechSynthesisUtterance csak a motor saját hangobjektumát fogadja el — a próbához egyszerű helyettes kell.
+    class FakeUtterance { lang = ""; rate = 1; pitch = 1; voice: { name: string } | null = null; onstart: (() => void) | null = null; onend: (() => void) | null = null; constructor(public text: string) {} }
+    Object.defineProperty(window, "SpeechSynthesisUtterance", { value: FakeUtterance, configurable: true });
+    Object.defineProperty(window, "speechSynthesis", { value: {
+      speaking: false, pending: false, cancel() {}, getVoices: () => loaded ? voices : [],
+      speak(u: FakeUtterance) { calls.push({ text: u.text, lang: u.lang, voice: u.voice?.name ?? null, pitch: u.pitch }); setTimeout(() => { u.onstart?.(); u.onend?.(); }, 10); },
+    } });
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) { played.push(this.src); return Promise.resolve(); };
+    Object.defineProperty(window, "__speechCalls", { value: calls });
+    Object.defineProperty(window, "__played", { value: played });
+    Object.defineProperty(window, "__loadVoices", { value: () => { loaded = true; } });
+  });
+  const lesson = fusionFixture(); lesson.subject = "angol";
+  lesson.experience!.language = "en-GB";
+  lesson.experience!.glossary = [{ word: "triangle", translation: "háromszög", partOfSpeech: "főnév", example: "This is a triangle.", exampleTranslation: "Ez egy háromszög." }];
+  await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: lesson }));
+  await page.goto("/__lesson-runtime-probe?candidate=1");
+  await page.getByTestId("pronounce-entry").click();
+  const calls = () => page.evaluate(() => (window as unknown as { __speechCalls: unknown[] }).__speechCalls);
+  await page.getByRole("button", { name: "triangle meghallgatása", exact: true }).click();
+  expect(await calls()).toEqual([{ text: "triangle", lang: "en-GB", voice: null, pitch: 1 }]);
+  await page.evaluate(() => (window as unknown as { __loadVoices(): void }).__loadVoices());
+  await page.getByRole("button", { name: "This is a triangle. meghallgatása", exact: true }).click();
+  expect((await calls())[1]).toEqual({ text: "This is a triangle.", lang: "en-GB", voice: "Microsoft Sonia Online (Natural) - English (United Kingdom)", pitch: 1 });
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => (window as unknown as { __played: string[] }).__played)).toEqual([]);
+  await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
+});
+
 // Spec 2026-11-09-felolvasas-tartalek: a tartalék végpont helyett 0,1 mp csendes WAV (a Vite-próbaszerveren nincs /api/tts).
 const silentWav = () => {
   const samples = 800, b = Buffer.alloc(44 + samples * 2);

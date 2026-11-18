@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, Square, Volume2 } from "lucide-react";
 import { pronunciationVerdict, type PronunciationVerdict } from "@shared/pronunciation";
 import { hasVoiceFor, isSoftSpeechError, speechStartTimeoutMs, ttsAudioUrl } from "@shared/speech-fallback";
+import { rankVoices } from "@shared/voice-rank";
 
 type Alternative = { transcript: string };
 type Recognition = {
@@ -72,15 +73,16 @@ export function DictationButton({ onText, active = true, language = "hu-HU" }: {
 }
 
 /**
- * Spec 2026-10-21-nyelvlecke-kiejtes: a nyelvhez illő hang — pontos egyezés (en-GB), különben a nyelvi előtag (en-*). Androidon a hangok
- * később töltődnek be (`voiceschanged`); hang nélkül a `lang` beállítás dönt.
+ * Spec 2026-10-21-nyelvlecke-kiejtes + 2026-11-18-tananyag-gyartas-minoseg (S8a): a nyelvhez illő hang rangsor szerint (`rankVoices`:
+ * pontos régió, természetes / ismert brit hang előre, gépies helyi hang hátra). A hanglistát minden kimondás frissen kéri le, így a
+ * később betöltődő hangok (`voiceschanged`, Android) után a következő felolvasás már rangsorolt hangot kap; hang nélkül a `lang` dönt.
  */
 function pickVoice(language: string): SpeechSynthesisVoice | undefined {
   // Egyes (régi / gyártói) böngészőkben a hanglista-felület hiányos — ilyenkor a `lang` beállítás dönt.
   if (typeof window.speechSynthesis.getVoices !== "function") return undefined;
   const voices = window.speechSynthesis.getVoices() ?? [];
-  const norm = (l: string) => l.replace("_", "-").toLowerCase();
-  return voices.find(v => norm(v.lang) === norm(language)) ?? voices.find(v => norm(v.lang).startsWith(`${norm(language).split("-")[0]}-`));
+  const best = rankVoices(voices, language)[0];
+  return best === undefined ? undefined : voices[best];
 }
 if (typeof window !== "undefined" && "speechSynthesis" in window && typeof window.speechSynthesis?.getVoices === "function") {
   // A hanglista „bemelegítése” (Android Chrome: az első lekérés üres lehet). Hiba esetén sem állhat le a lecke.
