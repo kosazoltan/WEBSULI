@@ -159,7 +159,7 @@
 
 ### Előkészítés a gépi vak ellenőr-futtatóhoz (orkesztrátori kérés, 2026-11-18)
 
-A vak ellenőrt később egy konfigurált független modellt indító futtató végzi (másik ág: `chore/vak-ellenor-deepseek`). Ehhez:
+A vak ellenőrt később egy konfigurált független modellt indító futtató végzi (másik, külön PR-ban érkező ág). Ehhez:
 - a „Ki az ellenőr” rész EGY helyen, jól elkülönítve áll (az AGENTS.md szakaszában, a skillben és a runbookban egy-egy „Ki az
   ellenőr” alszakasz), egyelőre környezet-semlegesen;
 - a megbízás szövege EGYETLEN, gépileg olvasható fájlban van: `scripts/qa/gates/vak-ellenor-megbizas.md` (a futtató ebből veszi az

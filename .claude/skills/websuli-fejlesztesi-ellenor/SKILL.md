@@ -41,7 +41,7 @@ kell mérnie.
 
 ### Ki az ellenőr
 
-<!-- vak-ellenor:ki-az-ellenor:begin — EGYETLEN hely: ezt a bekezdést a gépi futtató ága (chore/vak-ellenor-deepseek) cseréli -->
+<!-- vak-ellenor:ki-az-ellenor:begin — EGYETLEN hely: ezt a bekezdést a gépi futtató ága (külön PR) cseréli -->
 Friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök — soha nem az, amelyik a kódot írta, és nem a fejlesztő folytatása.
 Ahol a környezet tud alügynököt indítani, alügynök; ahol nem, lent („Ha nincs alügynök-eszköz”) szerint új, tiszta munkamenet vagy másik eszköz.
 
