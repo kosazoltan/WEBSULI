@@ -109,6 +109,9 @@ export function serveStatic(app: Express) {
   // Spec 2026-11-03-fooldal-sebesseg: a build által készített, tartalom-hash-es bélyegképek — immutable, egyéves gyorsítótár
   // (új kép = új fájlnév); a hiányzó fájl 404, nem a SPA index.html-je.
   app.use("/design-thumbs", express.static(path.resolve(distPath, "design-thumbs"), { immutable: true, maxAge: "1y", fallthrough: false }));
+  // Adventi naptár (terv 13.3, A41): a képek tartalom-hashes néven állnak (új kép = új fájlnév) — immutable, egyéves gyorsítótár;
+  // a hiányzó fájl 404, nem a SPA index.html-je.
+  app.use("/advent", express.static(path.resolve(distPath, "advent"), { immutable: true, maxAge: "1y", fallthrough: false }));
   app.use(express.static(distPath));
 
   // CRITICAL: SPA catch-all route - serve index.html for all non-API routes
