@@ -163,7 +163,17 @@ const GLSL_SHARED = /* glsl */ `
 // Small builders
 // ---------------------------------------------------------------------------
 
-function std(color: THREE.ColorRepresentation, opts: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {
+/**
+ * Telefonos (nem „high”) szinten a díszlet Lambert-anyagot kap (koordinátori kötelező gyorsítás 2026-11-18): a PBR-árnyalás
+ * képkockánkénti ára a lassú CPU-n / GPU-n a menetindítás és a játék akadását növelte. A víz saját shadere változatlan.
+ */
+let lambertDecor = false;
+
+function std(color: THREE.ColorRepresentation, opts: THREE.MeshStandardMaterialParameters = {}): THREE.Material {
+  if (lambertDecor) {
+    const { roughness: _r, metalness: _m, envMap: _e, envMapIntensity: _ei, ...rest } = opts;
+    return new THREE.MeshLambertMaterial({ color, ...(rest as THREE.MeshLambertMaterialParameters) });
+  }
   return new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0, ...opts });
 }
 
@@ -622,6 +632,7 @@ function setupTsunami(
   const budget = LOOK_BUDGET[tier];
   const particleScale = budget.particleScale * (light ? 0.5 : 1);
   const lean = light || tier === "low";
+  lambertDecor = tier !== "high";
 
   const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 900);
   camera.position.set(0, EYE, CAM_DIST);
@@ -1076,11 +1087,17 @@ function setupTsunami(
     floats.scale.setScalar(1);
   };
 
+  let lastW = -1;
+  let lastH = -1;
   const controller: ThreeSceneController = {
     camera,
     // The sky near the sun is ~1.5 (disc ~3): only the disc, buoy lights and lightning should glow.
     bloom: { strength: 0.6, radius: 0.35, threshold: 1.6 },
     resize(w, h) {
+      // Azonos méretre nincs újraépítés (a menü alatti előkészítés után az indítás ne építse újra a terepet és a deszkákat).
+      if (w === lastW && h === lastH) return;
+      lastW = w;
+      lastH = h;
       heightPx = h;
       hw = (HALF_H * w) / h;
       worldPerPx = (2 * HALF_H) / h;

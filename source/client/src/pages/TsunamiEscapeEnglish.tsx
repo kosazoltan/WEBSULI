@@ -681,6 +681,16 @@ export default function TsunamiEscapeEnglish() {
   /** 3D scene layer: null until probed; false → the 2D canvas below is drawn instead (spec E7). */
   const [scene3d, setScene3d] = useState<boolean | null>(null);
   const domScene = scene3d === false;
+  /*
+   * Menetindítás (koordinátori kötelező javítás 2026-11-18): a 3D-jelenet (geometria, környezet-térkép, shader-fordítás) a menü
+   * alatt, rejtve épül fel — az „Indítás” így nem akad meg. A kezdőképernyő előbb kirajzolódik, a felépítés utána indul.
+   */
+  const [scenePrewarm, setScenePrewarm] = useState(false);
+  useEffect(() => {
+    if (scenePrewarm) return;
+    const id = window.setTimeout(() => setScenePrewarm(true), 600);
+    return () => window.clearTimeout(id);
+  }, [scenePrewarm]);
   /** S9 / terv 4.5: szünet (kézi vagy automatikus, ha a lap háttérbe kerül). */
   const [paused, setPaused] = useState(false);
   const pausedNowRef = useRef(false);
@@ -761,8 +771,37 @@ export default function TsunamiEscapeEnglish() {
     if (fromGrade) setDifficulty(fromGrade);
   }, [userGrade]);
 
+  /*
+   * A kézi bank (~10 MB, több tízezer tétel) ellenőrzése és sávokra bontása szeletekben, képkockák között (koordinátori kötelező
+   * gyorsítás 2026-11-18; mérve 4× lassított CPU-n: egyben 11 s-os fő-szál blokk, amely menet közben érkezve másodperces
+   * megakadást okozott). A kész eredmény egyszerre kerül be; addig a beépített bankok szolgálnak.
+   */
+  const [bankTiers, setBankTiers] = useState<ReturnType<typeof splitBankItemsByTier>>({ easy: [], medium: [], hard: [] });
+  useEffect(() => {
+    const items = quizBankResponse?.items ?? [];
+    let cancelled = false;
+    const acc: ReturnType<typeof splitBankItemsByTier> = { easy: [], medium: [], hard: [] };
+    let i = 0;
+    const SLICE = 60;
+    const step = () => {
+      if (cancelled) return;
+      const part = splitBankItemsByTier(items.slice(i, i + SLICE));
+      acc.easy.push(...part.easy);
+      acc.medium.push(...part.medium);
+      acc.hard.push(...part.hard);
+      i += SLICE;
+      if (i < items.length) timer = window.setTimeout(step, 0);
+      else setBankTiers(acc);
+    };
+    let timer = window.setTimeout(step, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [quizBankResponse]);
+
   const mergedPools = useMemo<ActiveQuizPools>(() => {
-    const { easy, medium, hard } = splitBankItemsByTier(quizBankResponse?.items);
+    const { easy, medium, hard } = bankTiers;
     const matMed = materialItems
       .filter(isPlayableQuestion)
       .map((q, idx) => ({
@@ -782,7 +821,7 @@ export default function TsunamiEscapeEnglish() {
       english,
       ...TSUNAMI_SUBJECT_QUIZ_BANKS,
     };
-  }, [quizBankResponse, materialItems]);
+  }, [bankTiers, materialItems]);
 
   const rewardQuestionsRef = useRef<Quiz[]>([]);
   rewardQuestionsRef.current = coupon.active ? materialItems.map((q, i) => ({ ...q, id: q.id ?? `mat-${i}`, explanation: q.explanation ?? undefined, subject: "english" })) : [];
@@ -1805,13 +1844,13 @@ export default function TsunamiEscapeEnglish() {
         </>
       )}
 
-      {phase !== "menu" && (
+      {(phase !== "menu" || scenePrewarm) && (
         <main
           ref={stageRef}
-          className="relative flex-1 min-h-0 overflow-hidden"
-          style={{ padding: 0 }}
-          data-testid="tsunami-stage"
-          aria-hidden={resultOpen ? true : undefined}
+          className={phase === "menu" ? "absolute inset-0 overflow-hidden" : "relative flex-1 min-h-0 overflow-hidden"}
+          style={phase === "menu" ? { padding: 0, visibility: "hidden", pointerEvents: "none", zIndex: 0 } : { padding: 0 }}
+          data-testid={phase === "menu" ? "tsunami-stage-prewarm" : "tsunami-stage"}
+          aria-hidden={resultOpen || phase === "menu" ? true : undefined}
         >
           {/* A játéktér a teljes képernyőt kitölti; a HUD, a kérdés és a vezérlők fölötte lebegnek. */}
           <div ref={shakeRef} className="absolute inset-0 z-0 overflow-hidden">
@@ -1847,6 +1886,8 @@ export default function TsunamiEscapeEnglish() {
               data-active={danger ? "true" : "false"}
             />
           </div>
+          {phase !== "menu" && (
+          <>
 
           <GameHud
             onPause={pauseGame}
@@ -1923,6 +1964,8 @@ export default function TsunamiEscapeEnglish() {
               <kbd className="px-1.5 rounded bg-white/15">A</kbd> <kbd className="px-1.5 rounded bg-white/15">D</kbd> · sprint:{" "}
               <kbd className="px-1.5 rounded bg-white/15">Shift</kbd> · válasz: <kbd className="px-1.5 rounded bg-white/15">1–4</kbd>
             </p>
+          )}
+          </>
           )}
         </main>
       )}
@@ -2036,6 +2079,31 @@ const TSUNAMI_CSS = `
 .ts-quiz .play-question { --play-question-top: calc(max(4px, var(--game-safe-top)) + 92px); --play-question-bottom: var(--ts-quiz-bottom, calc(max(8px, var(--game-safe-bottom)) + var(--game-action-size) + 16px)); }
 .ts-quiz[data-place="top"] .play-question { justify-content: flex-start; }
 .ts-quiz[data-place="bottom"] .play-question { justify-content: flex-end; }
+/*
+ * Kompakt kérdés (koordinátori döntés 2026-11-18, „A”): kis képernyőn magas víznél csak a kérdés + a gombok, fejléc (címke,
+ * idősáv, szünetgomb) nélkül — a szünet a felső sáv gombján marad. A kérdés-szöveg nem vágódik (nincs sorkorlát).
+ */
+@media (orientation: portrait) and (max-height: 720px), (orientation: landscape) and (max-height: 520px) {
+  .ts-quiz[data-high="true"] .play-question-head { display: none; }
+  .ts-quiz[data-high="true"] .play-question-card { padding: 6px 10px; }
+  .ts-quiz[data-high="true"] .play-question-prompt { font-size: 14px; line-height: 1.25; display: block; -webkit-line-clamp: unset; line-clamp: none; max-height: none; overflow: visible; }
+  .ts-quiz[data-high="true"] .play-question-more { display: none; }
+  .ts-quiz[data-high="true"] .play-question-option { min-height: 48px; padding: 4px 8px; gap: 6px; font-size: 14px; }
+  .ts-quiz[data-high="true"] .play-question-key { width: 24px; height: 24px; flex: 0 0 24px; }
+  .ts-quiz[data-high="true"] .play-question-label { line-height: 1.2; }
+}
+/* Fekvő, kompakt, lent: a kártya és a négy gomb (2×2) középen, a tárcsa és a Sprint gomb közötti sávban. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .ts-quiz[data-high="true"][data-place="bottom"] .play-question {
+    display: flex; flex-direction: column; justify-content: flex-end; gap: 6px;
+    padding: 0 calc(max(8px, var(--game-safe-right)) + 150px) max(8px, var(--game-safe-bottom)) calc(max(8px, var(--game-safe-left)) + 150px);
+  }
+  .ts-quiz[data-high="true"][data-place="bottom"] .play-question > .play-question-card { position: static; width: 100%; }
+  .ts-quiz[data-high="true"][data-place="bottom"] .play-question .play-question-options {
+    position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; width: 100%; pointer-events: auto;
+  }
+  .ts-quiz[data-high="true"][data-place="bottom"] .play-question .play-question-col { display: contents; }
+}
 /* Magas víznél (a figura a kép közepén / felső felében) álló nézetben a négy válasz két oszlopban — alacsonyabb sáv. */
 @media (orientation: portrait) { .ts-quiz[data-high="true"] .play-question .play-question-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* Fekvő nézetben lent: a kártya a vezérlők fölé kerül (a válasz-oszlopok a két szélen maradnak). */

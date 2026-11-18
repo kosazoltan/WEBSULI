@@ -344,10 +344,9 @@ for (const viewport of [
   test.describe(`${viewport.width}x${viewport.height}: a kérdés-sáv — leghosszabb válaszok levágás nélkül, ≥ 48 px, a vezérlőt és a figurát nem takarja`, () => {
     test.use({ viewport, hasTouch: true, isMobile: true });
 
-    // Magas víz (70 %) a leghosszabb kérdéssel: 390x844-en mérve szabad a figura. 360x640-en és 844x390-en a leghosszabb kérdés +
-    // négy leghosszabb válasz egyik helyen sem fér el a figura mellett — NYITOTT tétel (a terv 0.3 / koordinátori jelentés), nem
-    // lazított mérce: ott ez az eset még nincs megoldva.
-    for (const water of (viewport.width === 390 ? [null, 70] : [null]) as Array<number | null>) {
+    // A legrosszabb eset mindhárom nézetben: 70 %-os víz, leghosszabb kérdés + négy leghosszabb válasz (kis képernyőn a kompakt
+    // kérdés — koordinátori döntés 2026-11-18, „A”).
+    for (const water of [null, 70] as const) {
       test(`elrendezés ${water === null ? "a menet elején (alacsony víz)" : "magas víznél (70 %)"}`, async ({ page }) => {
         await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
         await page.getByTestId("button-tsunami-start").tap();
@@ -368,6 +367,8 @@ for (const viewport of [
             clipped: el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1,
             inView: el.getBoundingClientRect().bottom <= innerHeight + 1 && el.getBoundingClientRect().top >= 0,
           }));
+          const promptEl = document.querySelector('[data-testid="ts-question"] .play-question-prompt') as HTMLElement | null;
+          const prompt = promptEl ? { clipped: promptEl.scrollHeight > promptEl.clientHeight + 1, box: r(promptEl) } : null;
           const controls = Array.from(document.querySelectorAll('[data-testid="tsunami-touch-controls"] > *')).map(r);
           const api = (window as unknown as { __websuliGame: { probe: () => { figureX: number; figureY: number; quizPlace: string } } }).__websuliGame;
           const pr = api.probe();
@@ -376,7 +377,7 @@ for (const viewport of [
           const fy = stage.top + pr.figureY * stage.height;
           // A figura a vízfelszínen ül: a felszín és fölötte a test / fej pontja.
           const covered = [fy - 8, fy - 36].map((y) => document.elementsFromPoint(fx, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]')));
-          return { opts, labels, controls, covered, place: pr.quizPlace, overflowX: document.documentElement.scrollWidth - innerWidth, vw: innerWidth, state: document.querySelector('[data-testid="ts-quiz"]')?.getAttribute("data-state") };
+          return { opts, labels, prompt, controls, covered, place: pr.quizPlace, overflowX: document.documentElement.scrollWidth - innerWidth, vw: innerWidth, state: document.querySelector('[data-testid="ts-quiz"]')?.getAttribute("data-state") };
         });
         expect(m.state, "a mérés nyitott kérdésnél").toBe("open");
         // A hely (fent / lent) a figura szerint, méréssel dől el; a mérce az, hogy a figurát ne takarja (alább).
@@ -398,6 +399,12 @@ for (const viewport of [
           expect(l.inView, `a képen kívül: ${l.text}`).toBe(true);
         }
         expect(m.covered, "a kérdés-felület nem takarja a figurát").toEqual([false, false]);
+        expect(m.prompt, "a kérdés-szöveg látszik").not.toBeNull();
+        expect(m.prompt!.clipped, "a kérdés-szöveg nincs levágva").toBe(false);
+        for (const o of m.opts) {
+          const hit = Math.min(o.r, m.prompt!.box.r) - Math.max(o.l, m.prompt!.box.l) > 0 && Math.min(o.b, m.prompt!.box.b) - Math.max(o.t, m.prompt!.box.t) > 0;
+          expect(hit, "a gomb nem fedi a kérdést").toBe(false);
+        }
         expect(m.overflowX, "nincs vízszintes görgetés").toBeLessThanOrEqual(1);
         await expect(page.getByTestId("ts-shelter"), "a menedék a képen (D4)").toBeInViewport();
         await shot(page, `tsunami-${viewport.width}x${viewport.height}-${water === null ? "long" : "long-high"}.jpg`);
