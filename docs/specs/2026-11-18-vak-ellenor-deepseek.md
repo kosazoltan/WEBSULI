@@ -222,3 +222,69 @@ eredmény szépítés nélkül kerül a záró jelentésbe és a runbookba.
 - [ ] B13 WHEN a takarítás fut THEN a csatolt `node_modules` célja SHALL megmaradni.
 - [ ] B14 WHEN a mutációs ellenpróba a B3–B9, B11 bármely védő feltételét kiveszi THEN a megfelelő teszt SHALL bukni.
 - [ ] B15 A mért alapvonal (két fej) táblázata számokkal a záró jelentésben és a runbookban.
+
+## Kiegészítés — kizárólagosság, saját skill, a teljes szabályrendszer (2026-11-18)
+
+Kiegészítő tulajdonosi utasítás (2026-11-18, szó szerint):
+
+> „Vezesd be a teljes repó szabályrendszerében, készíts rá skillt és valós, használt skillt. Ezeket minden futtató… Claude MD,
+> Agent MD, memóriák, mindenhol helyezd el úgy, hogy valóban kizárólag a DeepSeek ellenőr modell fusson minden esetben.”
+
+Ez a kiegészítés FELÜLÍRJA a fenti D5 / D6 és a „Nem cél” ellentétes részeit (a tulajdonosi felmentés kapcsolója NEM készül el; a
+kapuk és a hook IS változnak).
+
+### K1 — Kizárólagosság, gépileg
+
+- A `record-review.mjs` (`blindReview.mode: "required"`) CSAK a futtató bizonyítékával rögzít: `blind-review-<fej>.json`,
+  `complete: true`, egyező jelentés-hash, `modelReported` = a konfigurált modell, elég eszközhívás, egyező ítélet. A rögzített
+  `review-<fej>.json` `reviewer: "blind-review"` és `blind.model` mezőt kap. Felmentő kapcsoló NINCS.
+- A kapuk (`pre-pr-gate`, `pre-merge-gate` — a `lib.mjs` `resolveVerdict` függvényén át) az ítéletet csak akkor fogadják el, ha a
+  `review-<fej>.json` `reviewer: "blind-review"`, és a `blind.model` a konfigurált modell. A PR-szövegből olvasott ítélet-sor
+  (`Független ellenőr ítélete: …`) `required` módban önmagában NEM elég (a sor a PR-leírásban tájékoztatás marad).
+- **Átállás:** `blindReview.requiredFrom` (`2026-11-19T00:00:00+01:00`). Az ennél KORÁBBAN rögzített `review-<fej>.json` (a rekord
+  `at` mezője szerint) érvényes marad; az átállás napjától más forrásból (Anthropic-alügynök, kézzel írt jelentés, más modell)
+  származó ítélet érvénytelen. Folyamatban lévő PR új feje már csak a futtatóval kaphat ítéletet.
+- **Ha a futtató nem tud lefutni** (nincs kulcs, OpenRouter-hiba, betelt költségplafon, megszűnt modell): nem nulla kilépés,
+  érthető üzenet („a vak ellenőr nem futott; a tulajdonos dönt”), nincs bizonyíték → a kapu ÁLL. Csendes tartalék nincs. A
+  tulajdonos döntési lehetősége egy KÖVETETT, a diffben látható konfigváltozás (`blindReview.mode` / `model` /
+  `requiredFrom`) — parancssori megkerülés nincs.
+- A modell-azonosító EGY helyen áll (`gates.config.json` `blindReview.model`); a futtatónak nincs `--model` kapcsolója. Őr-teszt:
+  a modell `deepseek/…` az OpenRouter végponton, nem Anthropic; a futtató kódjában nincs modell-literál és nincs modell-kapcsoló.
+
+### K2 — Használható az ágról, a repó bármely fejére
+
+A futtató kódja abban a checkoutban van, ahonnan indítják; a vizsgált fej eldobható munkafája külön készül (ugyanabból a
+git-tárból), tehát a futtató bármely ág bármely fejére futtatható a főágra kerülés előtt is. A sablont (skill) és a konfigot a
+FUTTATÓ checkoutjából olvassa, nem a vizsgált fejből (a vizsgált fej nem írhatja át a saját ellenőrének a szabályait).
+
+### K3 — Saját, használt skill
+
+Új skill: `websuli-vak-ellenor` (forrás `.agents/skills/`, tükör `.claude/skills/`, a `mirroredSkills` listában): mikor kötelező,
+a pontos parancs, a `--goal` fájl sablonja, teendő NEM / FELTÉTELLEL ítéletnél, teendő, ha a futtató megáll, és hogy a fejlesztő /
+orkesztrátor a saját jelentését nem adhatja át. A `websuli-fejlesztesi-ellenor` skill a megbízás-sablon EGYETLEN forrása marad (a
+futtató onnan olvassa), és az indításra az új skillre mutat.
+
+### K4 — Szabályrendszer
+
+Minden létező ügynök-vezérlő fájl kimondja: a vak ellenőr KIZÁRÓLAG a DeepSeek-futtató (`npm run gate:blind-review`): `AGENTS.md`
+(a „Vak hibakereső ellenőr — kötelező” szakasz új „Ki az ellenőr” bekezdése), új repó-szintű `CLAUDE.md` (rövid, az AGENTS.md-re
+mutat), `.cursor/rules/vak-ellenor.mdc`, `.cursor/rules/minosegkapuk.mdc`, `.cursorrules`, `.github/copilot-instructions.md`,
+`docs/minosegkapuk.md`, `docs/agent-haromfazisu-munka.md`, `docs/codex-felhokornyezet.md`, a három kibocsátási kapu skilljei.
+Őr-teszt: mindegyikben megvan a `gate:blind-review` hivatkozás (kitörlésnél bukik). A felhasználói memória (a repón kívül) is kap
+bejegyzést.
+
+### K5 — Hook
+
+A `check-quality-gates` hook és a `verdictResult` üzenete ítélet hiányában a `npm run gate:blind-review` parancsra mutat.
+
+### Elfogadás — kiegészítés
+
+- [ ] B11 (módosítva) WHEN a `record-review.mjs` `required` módban fut érvényes futtató-bizonyíték nélkül THEN SHALL hibával kilépni;
+  felmentő kapcsoló nincs.
+- [ ] B16 WHEN a kapu `required` módban olyan ítéletet lát, amely nem `reviewer: "blind-review"` a konfigurált modellel, és a rekord
+  nem az átállás előtti THEN SHALL az ítélet-lépés bukni; a PR-szöveg ítélet-sora önmagában nem elég.
+- [ ] B17 WHEN a konfig modellje nem `deepseek/…`, vagy a futtató kódjában modell-literál / `--model` kapcsoló jelenik meg THEN az
+  őr-teszt SHALL bukni.
+- [ ] B18 WHEN bármely felsorolt vezérlőfájlból vagy kapu-skillből hiányzik a `gate:blind-review` hivatkozás THEN az őr-teszt SHALL
+  bukni; a `websuli-vak-ellenor` skill tükre bájtra azonos.
+- [ ] B19 WHEN ítélet hiányzik THEN a hook és a kapu üzenete SHALL a `npm run gate:blind-review` parancsot megnevezni.

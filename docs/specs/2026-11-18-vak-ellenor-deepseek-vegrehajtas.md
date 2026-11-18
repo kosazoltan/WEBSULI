@@ -35,3 +35,17 @@ TILOS; a kulcs semmilyen kimenetbe nem kerülhet (terv D2).
     gate:push`; fej-hash az orkesztrátornak.
 
 - [x] 1 · [ ] 2 · [ ] 3 · [ ] 4 · [ ] 5 · [ ] 6 · [ ] 7 · [ ] 8 · [ ] 9 · [ ] 10 · [ ] 11 · [ ] 12 · [ ] 13
+
+## Kiegészítés — kizárólagosság, skill, szabályrendszer (2026-11-18) — végrehajtás
+
+Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`, „Kiegészítés” fejezet (K1–K5). A fenti 8. lépésből a
+`--tulajdonosi-felmentes` kapcsoló ELMARAD.
+
+14. `gates.config.json`: `blindReview.requiredFrom`; `mirroredSkills` + `websuli-vak-ellenor`.
+15. `scripts/qa/gates/lib.mjs`: a `resolveVerdict` opcionális `blind` paramétere (K1), a `verdictResult` üzenete (K5);
+    `pre-pr-gate.mjs`, `pre-merge-gate.mjs`: a `blind` átadása; `scripts/qa/hooks/check-quality-gates.mjs`: az üzenet (K5).
+16. Skill: `.agents/skills/websuli-vak-ellenor/SKILL.md` + tükör; a `websuli-fejlesztesi-ellenor` és a három kapu-skill hivatkozása.
+17. Vezérlőfájlok (K4) + új `CLAUDE.md`; őr-teszt (`scripts/qa/gates/blind-review/rules-guard.test.mjs`).
+18. Amint az első valódi futás sikeres: jelentés az orkesztrátornak parancs-mintával (K2).
+
+- [ ] 14 · [ ] 15 · [ ] 16 · [ ] 17 · [ ] 18
