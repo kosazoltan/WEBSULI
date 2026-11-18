@@ -8,12 +8,16 @@ import { fusionFixture } from "../shared/fixtures/lesson-fusion";
  */
 test.use({ serviceWorkers: "block" });
 
-async function mock(page: Page) {
+async function mock(page: Page, partialStatus: () => number = () => 202) {
   const posts: Array<Record<string, unknown>> = [];
   await page.route("**/api/**", async route => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
-    if (path === "/api/lessons/lesson-q/results" && req.method() === "POST") { posts.push(req.postDataJSON()); return route.fulfill({ status: 202, json: { queued: true } }); }
+    if (path === "/api/lessons/lesson-q/results" && req.method() === "POST") {
+      const body = req.postDataJSON();
+      posts.push(body);
+      return route.fulfill({ status: body?.partial === true ? partialStatus() : 202, json: { queued: true } });
+    }
     if (path === "/api/auth/user") return route.fulfill({ json: null });
     if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test" } });
     if (path === "/api/html-files/quiz-fixture") return route.fulfill({ json: { id: "quiz-fixture", title: "Lecke", contentType: "lesson", classroom: 7 } });
@@ -127,4 +131,68 @@ test("S1b: félbehagyott kvíz — háttérbe kerüléskor pillanatkép megy; v�
   await page.waitForTimeout(800);
   expect(partials()).toHaveLength(2);
   expect(quizPosts(posts)).toHaveLength(3);
+});
+
+test("review #510: a SIKERTELEN pillanatkép (503) nem számít elküldöttnek — a következő háttérbe kerüléskor ugyanaz az állapot újra megy", async ({ page }) => {
+  let status = 503;
+  const posts = await mock(page, () => status);
+  const partials = () => quizPosts(posts).filter(p => p.partial === true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview/quiz-fixture");
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  const quiz = page.locator("[data-quiz-id]");
+  await expect(quiz).toHaveCount(25);
+  for (let i = 0; i < 3; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800); // a CSRF-token előzetes lekérése
+  await hide(page);
+  await expect.poll(() => partials().length).toBe(1);
+  await page.waitForTimeout(500); // a sikertelen válasz feldolgozása
+  status = 202;
+  await hide(page);
+  await expect.poll(() => partials().length, { message: "a sikertelen küldés újrapróbálható" }).toBe(2);
+  expect(partials()[1].picks).toEqual(partials()[0].picks);
+  await page.waitForTimeout(500);
+  await hide(page);
+  await page.waitForTimeout(800);
+  expect(partials(), "az elfogadott állapot nem megy újra").toHaveLength(2);
+});
+
+test("review #510: a leckéből való belső navigációkor (Vissza gomb, nincs pagehide) is megy a pillanatkép", async ({ page }) => {
+  const posts = await mock(page);
+  const partials = () => quizPosts(posts).filter(p => p.partial === true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview/quiz-fixture");
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  const quiz = page.locator("[data-quiz-id]");
+  await expect(quiz).toHaveCount(25);
+  for (let i = 0; i < 2; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800); // a CSRF-token előzetes lekérése
+  await page.getByTestId("button-back").click();
+  await expect.poll(() => partials().length).toBe(1);
+  expect(Object.values(partials()[0].picks as Record<string, number>).filter(pick => pick >= 0)).toHaveLength(2);
+});
+
+test("review #510: „Új kvíz” után az új kör pillanatképe akkor is megy, ha kevesebb válasza van, mint az előző kör elküldött pillanatképének", async ({ page }) => {
+  const posts = await mock(page);
+  const partials = () => quizPosts(posts).filter(p => p.partial === true);
+  const answered = (p: Record<string, unknown>) => Object.values(p.picks as Record<string, number>).filter(pick => pick >= 0).length;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview/quiz-fixture");
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  const quiz = page.locator("[data-quiz-id]");
+  await expect(quiz).toHaveCount(25);
+  for (let i = 0; i < 4; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800); // a CSRF-token előzetes lekérése
+  await hide(page);
+  await expect.poll(() => partials().length).toBe(1);
+  expect(answered(partials()[0])).toBe(4);
+  // Új kör: az új kör más azonosítóval indul; 2 válasz (< 4) után is mennie kell a pillanatképnek.
+  await page.getByRole("button", { name: "Új kvíz" }).click();
+  await page.getByRole("button", { name: "Új kör indítása" }).click();
+  await expect(quiz.first()).toBeVisible();
+  for (let i = 0; i < 2; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await hide(page);
+  await expect.poll(() => partials().length).toBe(2);
+  expect(partials()[1].roundId).not.toBe(partials()[0].roundId);
+  expect(answered(partials()[1])).toBe(2);
 });

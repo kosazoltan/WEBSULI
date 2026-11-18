@@ -58,7 +58,8 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
   // beküldés nem érkezik. Csak akkor megy, ha van válasz, és több, mint a legutóbb elküldött pillanatképben.
   const latest = useRef(round);
   latest.current = round;
-  const lastSnapshot = useRef(0);
+  // Review #510: a memóriabeli számláló a KÖRHÖZ kötött — „Új kör” után az új kör első válaszai is mehetnek.
+  const lastSnapshot = useRef<{ roundId: string; count: number }>({ roundId: "", count: 0 });
   const answered = kind === "quiz" ? answeredCount(round) : 0;
   // Review B1: a CSRF-token MELLETT az ujjlenyomat is előre töltődik — a pillanatkép ugyanazzal az azonosítóval megy, mint a végleges
   // beküldés, különben a szerver más kulcson tartaná, és a végleges nem törölné a várakozót.
@@ -71,19 +72,32 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
       if (current.finishedAt || quizRoundComplete(current) || count === 0 || roundTooOld(current.startedAt, Date.now())) return;
       const roundId = `round-${experienceFingerprint({ ids: current.ids, startedAt: current.startedAt })}`;
       const key = `${storageKey}:${kind}:partial:${roundId}`;
-      let sentCount = lastSnapshot.current;
+      let sentCount = lastSnapshot.current.roundId === roundId ? lastSnapshot.current.count : 0;
       try { if (localStorage.getItem(`${storageKey}:${kind}:sent:${roundId}`)) return; sentCount = Math.max(sentCount, Number(localStorage.getItem(key)) || 0); } catch { /* privát mód: a munkamenet számlálója marad */ }
       if (count <= sentCount) return;
       const learner = getLearnerToken();
       const fingerprint = peekFingerprint();
       const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}) };
-      if (!sendKeepalive(`/api/lessons/${lessonId}/results`, body)) return;
-      lastSnapshot.current = count;
-      try { localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet számlálója */ }
+      const sending = sendKeepalive(`/api/lessons/${lessonId}/results`, body);
+      if (!sending) return;
+      // A memóriabeli számláló azonnal nő (a `visibilitychange` és a `pagehide` ne küldje kétszer ugyanazt), de a tartós jelző csak
+      // ELFOGADOTT (2xx) válasz után íródik; sikertelen küldésnél a számláló visszaáll, a következő alkalom újrapróbál (review #510).
+      const previous = lastSnapshot.current;
+      lastSnapshot.current = { roundId, count };
+      void sending.then(ok => {
+        if (ok) { try { localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet számlálója */ } return; }
+        if (lastSnapshot.current.roundId === roundId && lastSnapshot.current.count === count) lastSnapshot.current = previous;
+      });
     };
     const onVisibility = () => { if (document.visibilityState === "hidden") snapshot(); };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", snapshot);
-    return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", snapshot); };
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", snapshot);
+      // Review #510: a leckéből való belső (SPA) navigációkor — „Vissza”, „Következő tananyag” — nincs `pagehide`; a komponens
+      // lebontásakor is megy a pillanatkép.
+      snapshot();
+    };
   }, [lessonId, kind, storageKey]);
 }

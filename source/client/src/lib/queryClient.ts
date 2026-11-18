@@ -89,16 +89,19 @@ export function warmCsrfToken(): void {
  * S1b: írás a lap háttérbe kerülésekor / elhagyásakor — `fetch` + `keepalive` (a `sendBeacon` nem tud CSRF-fejlécet küldeni). Csak a már
  * gyorsítótárazott tokennel küld; a választ nem várja meg, hibát nem dob. Igaz, ha a kérés elindult.
  */
-export function sendKeepalive(url: string, data: unknown): boolean {
+/**
+ * Lap-elhagyáskor is célba érő POST (`keepalive`). Review #510: `null`, ha el sem indulhatott (nincs CSRF-token); különben egy ígéret,
+ * amely csak 2xx szerverválasznál `true` — hálózati hiba, 429 / 5xx esetén `false`, így a hívó a sikertelen küldést újrapróbálhatja.
+ */
+export function sendKeepalive(url: string, data: unknown): Promise<boolean> | null {
   const token = csrfTokenManager.peek();
-  if (!token) return false;
+  if (!token) return null;
   try {
-    void fetch(url, {
+    return fetch(url, {
       method: "POST", keepalive: true, credentials: "include", body: JSON.stringify(data),
       headers: { "Content-Type": "application/json", "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), "X-CSRF-Token": token },
-    }).catch(() => { /* Csendes: a végleges beküldés ettől független. */ });
-    return true;
-  } catch { return false; }
+    }).then(res => res.ok, () => false); // Csendes: a végleges beküldés ettől független.
+  } catch { return null; }
 }
 
 // Dev-only request logger — production buildben néma, hogy ne szemetelje

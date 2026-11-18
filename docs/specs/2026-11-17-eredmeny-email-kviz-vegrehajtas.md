@@ -91,6 +91,16 @@ Szakaszonként `npm run gate:stage`; a végén `npm run gate:push`. Push / PR ni
 - `tests/lesson-result-email-quiz.spec.ts` új esete: 3 válasz → rejtetté válás → 1 pillanatkép (`partial: true`, 3 megválaszolt);
   változatlanul újra rejtett → nincs újabb; még 2 válasz + rejtett → 2. pillanatkép (5); válasz nélkül rejtett → nincs kérés.
 
+## T9 — Review #510 javításai (R1–R4)
+
+- `source/client/src/lib/queryClient.ts`: `sendKeepalive` → `Promise<boolean> | null` (csak 2xx-nél `true`).
+- `source/client/src/lesson-runtime/resultReport.ts`: körhöz kötött számláló; a tartós jelző csak elfogadott válasz után; a hook
+  lebontásakor is pillanatkép.
+- `source/server/lesson-result-email.ts`: `finalizedPartials` (korlátos, lejáró) — a végleges ág jelöl, a pillanatkép-ág és az
+  ütemezett küldés ellenőriz.
+- Ellenőrzés: `npm run test:e2e -- tests/lesson-result-email-quiz.spec.ts` → `6 passed`; `npm run test:learning-db` → `# fail 0`;
+  ellenpróba a javítás nélküli kóddal: a 3 új böngészős és az új DB-eset bukik.
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

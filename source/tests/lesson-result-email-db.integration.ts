@@ -456,3 +456,28 @@ test("review K1: tanulónként legfeljebb 3 várakozó kör — a negyedik a leg
     assert.equal(pendingPartialCount(), 4, "a másik tanuló saját kerete független");
   } finally { clearPendingPartials(); setPartialDelay(previous); }
 });
+
+test("review #510 (valódi HTTP + DB): a VÉGLEGES beküldés UTÁN érkező késői pillanatkép nem ütemez „félbehagyva” levelet", async () => {
+  const { setPartialDelay, clearPendingPartials, clearFinalizedPartials, pendingPartialCount, partialLimiter, resultLimiter } = await import("../server/lesson-result-email");
+  const { ipKeyGenerator } = await import("express-rate-limit");
+  // A fájl korábbi tesztjei a loopback-cím IP-korlátját (pillanatkép: 10 / 15 perc) már kimerítik — ez a teszt tiszta kerettel indul.
+  for (const ip of ["127.0.0.1", "::1"]) { await partialLimiter.resetKey(ipKeyGenerator(ip)); await resultLimiter.resetKey(ipKeyGenerator(ip)); }
+  const previous = setPartialDelay(300);
+  const q = lesson.experience!.quiz.slice(0, 5);
+  const picks = (answered: number) => Object.fromEntries(q.map((item, i) => [item.id, i < answered ? item.correctIndex : -1]));
+  const post = (body: object) => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  try {
+    sent.length = 0;
+    // A végleges beküldés ér be előbb …
+    assert.equal((await post({ kind: "quiz", roundId: "round-late", picks: picks(5), fingerprint: "fp-late" })).status, 202);
+    await waitFor(() => sent.length === 2);
+    const before = pendingPartialCount();
+    // … a háttérbe kerüléskor indított keepalive-pillanatkép késve (fordított sorrendben) érkezik.
+    const late = await post({ kind: "quiz", roundId: "round-late", picks: picks(3), partial: true, fingerprint: "fp-late" });
+    assert.deepEqual([late.status, await late.json()], [202, { queued: false }]);
+    assert.equal(pendingPartialCount(), before, "nem lett várakozó pillanatkép");
+    await new Promise(r => setTimeout(r, 700));
+    assert.equal(sent.length, 2, "nincs ellentmondó „félbehagyva” levél a befejezett kör után");
+    assert.ok(sent.every(mail => !/félbehagyva/.test(mail.subject)));
+  } finally { clearPendingPartials(); clearFinalizedPartials(); setPartialDelay(previous); }
+});

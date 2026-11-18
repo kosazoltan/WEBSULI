@@ -153,6 +153,14 @@ Elfogadás (S1b):
    adatvédelmi terv kell).
 4. Egy közös levél a feladatokról és a kvízről: (A — javasolt) marad a két külön levél; (B) napi összesítő.
 
+## Review #510 (Codex P2, Vercel Agent) — javítások
+
+- R1. A pillanatkép a lecke belső (SPA) elhagyásakor is megy — „Vissza”, „Következő tananyag” (a hook lebontásakor).
+- R2. A memóriabeli pillanatkép-számláló a kör azonosítójához kötött: „Új kvíz” után az új kör kevesebb válasza is megy.
+- R3. A pillanatkép csak ELFOGADOTT (2xx) szerverválasz után számít elküldöttnek; hálózati hiba / 429 / 5xx után újrapróbálható.
+- R4. A szerver a már véglegesített kör késve érkező pillanatképét nem ütemezi (fordított kérési sorrend is), és az ütemezett küldés
+  előtt is ellenőrzi; a véglegesített-jelző korlátos (20 000) és 24 óra után lejár.
+
 <!-- acceptance-checklist -->
 - [x] E1 – minden kérdés megválaszolva → egy beküldés gomb nélkül (böngésző)
 - [x] E2 – gombnyomás / újratöltés után nincs újabb
@@ -166,3 +174,7 @@ Elfogadás (S1b):
 - [x] E10 – a végleges levél jelzi a felülírást
 - [x] E11 – dátum a levélben (Europe/Budapest)
 - [x] E12 – 7 napos korkorlát a le nem zárt körre
+- [x] R1 – belső navigációkor pillanatkép (böngésző; a javítás nélkül bukik)
+- [x] R2 – „Új kvíz” után az új kör pillanatképe (böngésző; a javítás nélkül bukik)
+- [x] R3 – sikertelen (503) pillanatkép újrapróbálható, az elfogadott nem megy újra (böngésző; a javítás nélkül bukik)
+- [x] R4 – a végleges utáni késői pillanatkép nem ütemez levelet (valódi HTTP + DB; a javítás nélkül bukik)

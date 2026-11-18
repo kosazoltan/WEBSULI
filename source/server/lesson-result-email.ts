@@ -206,6 +206,27 @@ function schedulePartial(key: string, owner: string, send: () => Promise<unknown
   pendingPartials.set(key, { timer, owner });
   return true;
 }
+/**
+ * Review #510: a már VÉGLEGESÍTETT körök pillanatkép-kulcsai (kulcs → lejárat). A késve érkező keepalive-pillanatkép (a végleges
+ * beküldés UTÁN) nem ütemez „félbehagyva” levelet; az ütemezett küldés előtt is ellenőrizzük. Korlátos, lejáró.
+ */
+const finalizedPartials = new Map<string, number>();
+const FINALIZED_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_FINALIZED = 20_000;
+function markFinalized(key: string, now = Date.now()): void {
+  finalizedPartials.delete(key);
+  finalizedPartials.set(key, now + FINALIZED_TTL_MS);
+  while (finalizedPartials.size > MAX_FINALIZED) finalizedPartials.delete(finalizedPartials.keys().next().value!);
+}
+function isFinalized(key: string, now = Date.now()): boolean {
+  const expires = finalizedPartials.get(key);
+  if (expires === undefined) return false;
+  if (expires > now) return true;
+  finalizedPartials.delete(key);
+  return false;
+}
+/** Teszthez: a véglegesített-jelzők törlése. */
+export function clearFinalizedPartials(): void { finalizedPartials.clear(); }
 /** Teszthez: a várakozó pillanatképek száma. */
 export function pendingPartialCount(): number { return pendingPartials.size; }
 /** Leállításhoz / teszthez: a várakozó pillanatképek eldobása. */
@@ -238,10 +259,13 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   const partialWhos = [...new Set(userId || paired ? [who] : [who, guestIp])];
   // S1b: a le nem zárt kvíz pillanatképe — nem küld azonnal, csak várakozik (a legutolsó állapot marad).
   if (body.kind === "quiz" && body.partial) {
+    // Review #510: a már véglegesített kör késői pillanatképe nem ütemez ellentmondó „félbehagyva” levelet.
+    const finalizedKeys = partialWhos.map(w => `${lessonId}|${roundKeyOf(w, "quiz-partial", body.roundId)}`);
+    if (finalizedKeys.some(key => isFinalized(key))) return res.status(202).json({ queued: false });
     const snapshot = gradePartialQuiz(experience.quiz, body.picks);
     if (!snapshot) return res.status(202).json({ queued: false });
     const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(body.startedAt ? { startedAt: body.startedAt } : {}) } };
-    const queued = schedulePartial(partialKey, `${lessonId}|${who}`, async () => sendLessonResult({ lessonId, roundKey: roundKeyOf(who, "quiz-partial", body.roundId), learner: await nameOf(), ...attribution, graded: partialGraded }));
+    const queued = schedulePartial(partialKey, `${lessonId}|${who}`, async () => finalizedKeys.some(key => isFinalized(key)) ? undefined : sendLessonResult({ lessonId, roundKey: roundKeyOf(who, "quiz-partial", body.roundId), learner: await nameOf(), ...attribution, graded: partialGraded }));
     return res.status(202).json({ queued, partial: true });
   }
   let graded: GradedTasks | GradedQuiz;
@@ -260,7 +284,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     graded = gradeQuiz(experience.quiz, body.picks);
     // S1b: a végleges eredmény törli a várakozó pillanatképet; ha a „félbehagyva” levél már kiment, a végleges levél ezt jelzi.
     const partialRoundKeys = partialWhos.map(w => roundKeyOf(w, "quiz-partial", body.roundId));
-    for (const roundKey of partialRoundKeys) cancelPartial(`${lessonId}|${roundKey}`);
+    for (const roundKey of partialRoundKeys) { cancelPartial(`${lessonId}|${roundKey}`); markFinalized(`${lessonId}|${roundKey}`); }
     const partialRows = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
       .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), inArray(lessonResultEmails.roundKey, partialRoundKeys)));
     if (partialRows.some(row => row.delivered.length)) graded = { ...graded, meta: { ...graded.meta, supersedesPartial: true } };
