@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiRequest, sendKeepalive, warmCsrfToken } from "@/lib/queryClient";
 import { getFingerprint, peekFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
-import { answeredCount, quizRoundComplete, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
+import { answeredCount, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -28,8 +28,9 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     // teljesen megválaszolt kör lezárás nélkül is megy (körönként egyszer: a jelző és a szerver egyedi kulcsa változatlan).
     const done = !!round.finishedAt || (kind === "quiz" && quizRoundComplete(round));
     if (!lessonId || !done || sending.current || !(ready || timedOut)) return;
-    // S1b (review K1): a 7 napnál régebben kezdett, LE NEM ZÁRT kör utólag nem megy el (a lezárt kör a tanuló döntése: az megy).
-    if (!round.finishedAt && roundTooOld(round.startedAt, Date.now())) return;
+    // S1b (review K1) + R2: az a LE NEM ZÁRT kör, amelynek az UTOLSÓ VÁLASZA 7 napnál régebbi, utólag nem megy el (a lezárt kör a tanuló
+    // döntése: az megy). A régen megnyitott, de ma megválaszolt kör megy — a korhatár nem a kvíz-fül első megnyitásához mér.
+    if (!round.finishedAt && roundTooOld(roundActivityAt(round), Date.now())) return;
     const roundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
     const flag = `${storageKey}:${kind}:sent:${roundId}`;
     try { if (localStorage.getItem(flag)) return; } catch { /* privát módban a szerver egyedi kulcsa véd */ }
@@ -43,11 +44,18 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         const body = kind === "tasks"
           ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...started }
           // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
-          : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...started };
+          : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...started, ...(round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
         // J5 (spec 2026-11-10-gyartas-meres): ingadozó mobilhálózaton az eredmény ne vesszen el — hálózati hibánál, időtúllépésnél
         // és 5xx-nél legfeljebb 3 újrapróbálás (növekvő várakozással). Biztonságos: a szerver a kört egyedi kulccsal egyszer rögzíti.
-        await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES });
-        try { localStorage.setItem(flag, "1"); } catch { /* elég a szerver egyedi kulcsa */ }
+        // R8: a kvíz végleges kérése `keepalive` — az utolsó válasz utáni azonnali lapbezárás ne szakítsa meg. A feladatoké nem: a
+        // törzsük (60 válasz × 4000 karakter) meghaladhatja a `keepalive` 64 KB-os keretét, és akkor a böngésző el sem indítaná.
+        if (kind === "quiz") await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES, keepalive: true });
+        else await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES });
+        try {
+          localStorage.setItem(flag, "1");
+          // A véglegesített körnek nincs több pillanatképe: a „részleges” jelzője nem marad a tárolóban.
+          localStorage.removeItem(`${storageKey}:${kind}:partial:${roundId}`);
+        } catch { /* elég a szerver egyedi kulcsa */ }
       } catch { /* csendes: a tanuló felülete nem függ a levéltől */ }
       finally { sending.current = false; }
     })();
@@ -59,7 +67,10 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
   // PR #510: (1) a pillanatkép a komponens LEBONTÁSAKOR és leckeváltáskor is megy (az alkalmazáson belüli navigáció nem vált ki
   // `pagehide`-ot); (2) az állapot a KÖR azonosítójához kötött (új kör tiszta lappal indul); (3) „elküldve” csak a szerver sikeres
   // válasza után rögzül — a sikertelen küldés újrapróbálható marad.
+  // Vak ellenőrzés K3 (terv R3): a pillanatkép akkor is megy, ha a kör a nézeten BELÜL cserélődik le („Új kvíz” a kör közepén) — az
+  // elhagyott körről, mielőtt az állapota törlődik.
   const committed = useRef(round);
+  const snapshotRef = useRef<() => void>(() => {});
   const snapshotState = useRef<SnapshotState>({ sent: null, pending: null });
   const answered = kind === "quiz" ? answeredCount(round) : 0;
   // Review B1: a CSRF-token MELLETT az ujjlenyomat is előre töltődik — a pillanatkép ugyanazzal az azonosítóval megy, mint a végleges
@@ -70,7 +81,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const snapshot = () => {
       const current = committed.current;
       const count = answeredCount(current);
-      if (current.finishedAt || quizRoundComplete(current) || count === 0 || roundTooOld(current.startedAt, Date.now())) return;
+      if (current.finishedAt || quizRoundComplete(current) || count === 0 || roundTooOld(roundActivityAt(current), Date.now())) return;
       const roundId = `round-${experienceFingerprint({ ids: current.ids, startedAt: current.startedAt })}`;
       const key = `${storageKey}:${kind}:partial:${roundId}`;
       const state = snapshotState.current;
@@ -82,7 +93,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
       if (!snapshotDue(state, roundId, count)) return;
       const learner = getLearnerToken();
       const fingerprint = peekFingerprint();
-      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}) };
+      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}) };
       const mark = { roundId, count };
       state.pending = mark;
       void sendKeepalive(`/api/lessons/${lessonId}/results`, body).then(accepted => {
@@ -92,13 +103,20 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         try { localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet állapota */ }
       });
     };
+    snapshotRef.current = snapshot;
     const onVisibility = () => { if (document.visibilityState === "hidden") snapshot(); };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", snapshot);
     // A lebontó ág a lecke ELHAGYÁSAKOR fut (útvonalváltás, „Következő tananyag”, a nézet lebontása): a `committed` ekkor még az
     // elhagyott lecke utolsó megjelenített körét tartja (a lebontó ágak az új állapotot rögzítő effekt előtt futnak).
-    return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", snapshot); snapshot(); };
+    return () => { snapshotRef.current = () => {}; document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", snapshot); snapshot(); };
   }, [lessonId, kind, storageKey]);
+  // R3: a kör AZONOSSÁGÁNAK (kezdés + kérdések) változásakor a lebontó ág az ELHAGYOTT körről küld pillanatképet — a `committed` ekkor
+  // még a lecserélt kört tartja (a lebontó ágak az új állapotot rögzítő effekt előtt futnak). A feltételek ugyanazok, mint háttérbe
+  // kerüléskor: lezárt / teljes / üres / régi körről nem megy, és ugyanaz az állapot nem megy kétszer (a lecke elhagyásakor a fenti
+  // lebontó ág már elküldte, és a hivatkozást ki is ürítette).
+  const roundIdentity = `${round.startedAt}|${round.ids.join(",")}`;
+  useEffect(() => () => { snapshotRef.current(); }, [roundIdentity]);
   // Szándékosan a pillanatkép-effekt UTÁN és függőség nélkül: minden megjelenítés után frissül, de a fenti lebontó ág még az előző
   // (elhagyott) állapotot látja.
   useEffect(() => { committed.current = round; });

@@ -13,9 +13,11 @@ const id = z.string().min(1).max(80);
 const learner = z.string().max(120).optional();
 // Spec 2026-11-17-eredmeny-email-kviz (S1b): a kör kezdete (ezredmásodperc) a levél dátumsorához; `partial`: a le nem zárt kvíz pillanatképe.
 const startedAt = z.number().int().positive().optional();
+// R2 (vak ellenőrzés K2): az utolsó kvízválasz ideje — a 7 napos korhatár ehhez mér (nem a kvíz-fül első megnyitásához).
+const lastAnsweredAt = z.number().int().positive().optional();
 export const resultRequestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional(), learner, startedAt }).strict(),
-  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner, startedAt, partial: z.boolean().optional() }).strict(),
+  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner, startedAt, lastAnsweredAt, partial: z.boolean().optional() }).strict(),
 ]);
 export type ResultRequest = z.infer<typeof resultRequestSchema>;
 
@@ -100,13 +102,16 @@ export function gradeQuiz(quiz: readonly QuizItem[], picks: Record<string, numbe
 
 /**
  * S1b: a le nem zárt kvíz pillanatképe — csak a MEGVÁLASZOLT kérdések számítanak (a pont és a százalék rájuk vonatkozik); a kör teljes
- * kérdésszáma a `meta.partial`-ban. Megválaszolt kérdés nélkül `null` (nincs miről levelet küldeni).
+ * kérdésszáma (`roundSize`; megadása nélkül a beküldött ismert azonosítók száma) a `meta.partial`-ban. Megválaszolt kérdés nélkül `null`
+ * (nincs miről levelet küldeni).
  */
-export function gradePartialQuiz(quiz: readonly QuizItem[], picks: Record<string, number>): GradedQuiz | null {
+export function gradePartialQuiz(quiz: readonly QuizItem[], picks: Record<string, number>, roundSize?: number): GradedQuiz | null {
   const known = Object.entries(picks).filter(([qid]) => quiz.some(q => q.id === qid));
   const answered = known.filter(([, pick]) => pick >= 0);
   if (!answered.length) return null;
-  return { ...gradeQuiz(quiz, Object.fromEntries(answered)), meta: { partial: { answered: answered.length, total: known.length } } };
+  // R5: az „összes” a hívó által megadott (szerveroldali) körméret, ha van — a kliens rövidebb azonosítólistája nem csökkentheti; a
+  // megválaszoltak számánál kisebb nem lehet.
+  return { ...gradeQuiz(quiz, Object.fromEntries(answered)), meta: { partial: { answered: answered.length, total: Math.max(roundSize ?? known.length, answered.length) } } };
 }
 
 /** Dátum és idő magyar idő szerint (Europe/Budapest, a nyári időszámítással): „2026. 11. 17. 20:41”. */

@@ -9,12 +9,20 @@ export function answeredCount(round: { ids: readonly string[]; picks: Readonly<R
 }
 
 /**
- * S1b (review K1): a 7 napnál régebben kezdett, LE NEM ZÁRT kör utólag nem megy el — a levele már nem a mostani tanulást mutatná, és a
- * mostani párosítás nevére menne. Kezdés nélküli (0) körre nem vonatkozik: az még el sem indult.
+ * S1b (review K1): a 7 napnál régebbi, LE NEM ZÁRT kör utólag nem megy el — a levele már nem a mostani tanulást mutatná, és a mostani
+ * párosítás nevére menne. A hívó a kör utolsó tevékenységét adja át (`roundActivityAt`). Kezdés nélküli (0) körre nem vonatkozik.
  */
 export const STALE_ROUND_DAYS = 7;
 export function roundTooOld(startedAt: number, now: number): boolean {
   return startedAt > 0 && now - startedAt > STALE_ROUND_DAYS * 86_400_000;
+}
+
+/**
+ * R2 (vak ellenőrzés K2): a kör utolsó tevékenysége — az utolsó kvízválasz ideje; ennek hiányában (régebbi tárolt kör) a kezdés. A
+ * 7 napos korhatár EHHEZ mér: a régen megnyitott, de ma megválaszolt kör eredménye megy.
+ */
+export function roundActivityAt(round: { startedAt: number; lastAnsweredAt?: number }): number {
+  return round.lastAnsweredAt ?? round.startedAt;
 }
 
 /**

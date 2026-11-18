@@ -6,6 +6,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { knowledgeMaps, lessonResultEmails, lessons, taskResults, users } from "../shared/schema";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 import { gradeQuiz } from "../shared/lesson-result-email";
+import { experienceRoundSizes } from "../shared/lesson-experience";
 
 // Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — eldobható Postgresben.
 // Guard BEFORE importing modules with a database connection. No production fallback.
@@ -394,8 +395,11 @@ test("S1b valódi HTTP + DB: két pillanatkép → EGY „félbehagyva” levél
     await waitFor(() => sent.length === 2);
     await new Promise(r => setTimeout(r, 600));
     assert.equal(sent.length, 2, "körönként egy „félbehagyva” levél (címzettenként)");
-    assert.match(sent[0].subject, /— Kvíz \(félbehagyva: 4 \/ 5\) — 100% /);
-    assert.match(sent[0].html, /félbehagyva — 4 \/ 5 kérdésre válaszolt/);
+    // Terv R5 (vak ellenőrzés S3): az „összes” a SZERVER körmérete (a fixture köre 25 kérdés), nem a beküldött 5 azonosító száma.
+    const roundSize = experienceRoundSizes(lesson.experience!).quizRound;
+    assert.equal(roundSize, 25);
+    assert.match(sent[0].subject, new RegExp(`— Kvíz \\(félbehagyva: 4 / ${roundSize}\\) — 100% `));
+    assert.match(sent[0].html, new RegExp(`félbehagyva — 4 / ${roundSize} kérdésre válaszolt`));
     assert.match(sent[0].html, /A kör kezdete:/);
     // A „félbehagyva” levél UTÁN befejezett kör: a végleges levél jelzi a felülírást.
     const final = await post({ kind: "quiz", roundId: "round-partial-a", picks: picks(5), fingerprint: "fp-pa" });

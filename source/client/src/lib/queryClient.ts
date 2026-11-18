@@ -86,19 +86,33 @@ export function warmCsrfToken(): void {
 }
 
 /**
- * S1b: írás a lap háttérbe kerülésekor / elhagyásakor — `fetch` + `keepalive` (a `sendBeacon` nem tud CSRF-fejlécet küldeni). Csak a már
- * gyorsítótárazott tokennel küld; hibát nem dob. PR #510: IGAZ csak akkor, ha a szerver ELFOGADTA (2xx) — token nélkül, hálózati
- * hibánál, 429-nél és 5xx-nél hamis, hogy a hívó ne jelölje elküldöttnek azt, ami nem ment át. Ha a lap közben bezárul, az ígéret nem
- * teljesül (a kérés a `keepalive` miatt ettől még célba érhet) — a hívó ilyenkor semmit nem rögzít.
+ * S1b: írás a lap háttérbe kerülésekor / elhagyásakor — `fetch` + `keepalive` (a `sendBeacon` nem tud CSRF-fejlécet küldeni). Hibát nem
+ * dob. PR #510: IGAZ csak akkor, ha a szerver ELFOGADTA (2xx) — token nélkül, hálózati hibánál, 429-nél és 5xx-nél hamis, hogy a hívó ne
+ * jelölje elküldöttnek azt, ami nem ment át. Ha a lap közben bezárul, az ígéret nem teljesül (a kérés a `keepalive` miatt ettől még
+ * célba érhet) — a hívó ilyenkor semmit nem rögzít.
+ * Vak ellenőrzés K4 (terv R4): a gyorsítótárazott tokennel AZONNAL küld (a lap elhagyásakor nincs idő előzetes hálózati körre); ha
+ * nincs token (a korábbi előtöltés elbukott), most kér egyet. 403 után (lejárt / kicserélt munkamenet: a token érvénytelen) a
+ * gyorsítótár ürül, új token jön, és a kérés EGYSZER megismétlődik — különben a lap életében minden további pillanatkép 403 lenne. Ha az
+ * ismétlésre nincs mód (a lap bezárult, a tokenkérés bukik), hamis: a következő betöltéskor a tárolt kör friss tokennel megy.
  */
 export async function sendKeepalive(url: string, data: unknown): Promise<boolean> {
-  const token = csrfTokenManager.peek();
-  if (!token) return false;
+  const post = (csrfToken: string) => fetch(url, {
+    method: "POST", keepalive: true, credentials: "include", body: JSON.stringify(data),
+    headers: { "Content-Type": "application/json", "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), "X-CSRF-Token": csrfToken },
+  });
+  const freshToken = () => csrfTokenManager.getToken().catch(() => null);
   try {
-    const res = await fetch(url, {
-      method: "POST", keepalive: true, credentials: "include", body: JSON.stringify(data),
-      headers: { "Content-Type": "application/json", "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), "X-CSRF-Token": token },
-    });
+    let token = csrfTokenManager.peek() ?? await freshToken();
+    if (!token) return false;
+    let res = await post(token);
+    if (res.status === 403) {
+      csrfTokenManager.invalidate();
+      token = await freshToken();
+      if (!token) return false;
+      res = await post(token);
+      // Ha az új token is 403-at kap, az sem marad a gyorsítótárban (a következő alkalom megint frisset kér).
+      if (res.status === 403) csrfTokenManager.invalidate();
+    }
     return res.ok;
   } catch { return false; }
 }
@@ -153,10 +167,12 @@ export async function apiRequest<T = unknown>(
   method: string,
   url: string,
   data?: unknown | undefined,
-  options?: { retries?: number; timeout?: number }
+  options?: { retries?: number; timeout?: number; keepalive?: boolean }
 ): Promise<T> {
   const retries = options?.retries ?? 0; // No automatic retries for write operations (causes duplicates)
   const timeout = options?.timeout ?? 60000; // 60 second default timeout
+  // Spec 2026-11-17-eredmeny-email-kviz (R8): `keepalive` — a kérés a lap bezárása után is célba ér (csak kis törzsű írásnál: 64 KB a keret).
+  const keepalive = options?.keepalive ? { keepalive: true } : {};
   
   return retryWithBackoff(
     async () => {
@@ -187,6 +203,7 @@ export async function apiRequest<T = unknown>(
           body: data ? JSON.stringify(data) : undefined,
           credentials: "include",
           signal: controller.signal,
+          ...keepalive,
         });
 
         clearTimeout(timeoutId);
@@ -217,6 +234,7 @@ export async function apiRequest<T = unknown>(
                 body: data ? JSON.stringify(data) : undefined,
                 credentials: "include",
                 signal: retryController.signal,
+                ...keepalive,
               });
               
               debugLog(`[API REQUEST RETRY] ${method} ${url} → ${retryRes.status} ${retryRes.statusText}`);

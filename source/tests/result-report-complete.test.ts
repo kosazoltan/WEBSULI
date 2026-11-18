@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { answeredCount, quizRoundComplete, roundTooOld, snapshotDue, STALE_ROUND_DAYS } from "../shared/quiz-round";
+import { answeredCount, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, STALE_ROUND_DAYS } from "../shared/quiz-round";
 
 /**
  * Spec 2026-11-17-eredmeny-email-kviz: a helyi kvíz akkor is beküldendő, ha a tanuló minden kérdésre válaszolt, de a „Kvíz kiértékelése”
@@ -41,8 +41,10 @@ test("S1b: answeredCount csak a kör saját kérdéseit számolja; roundTooOld a
 
 test("S1b: a beküldő a le nem zárt, régi kört nem küldi; a pillanatkép feltételei és az eseményfigyelők a forrásban", () => {
   const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8");
-  assert.match(source, /if \(!round\.finishedAt && roundTooOld\(round\.startedAt, Date\.now\(\)\)\) return;/);
-  assert.match(source, /if \(current\.finishedAt \|\| quizRoundComplete\(current\) \|\| count === 0 \|\| roundTooOld\(current\.startedAt, Date\.now\(\)\)\) return;/);
+  // Terv R2 (vak ellenőrzés K2): a korhatár az UTOLSÓ VÁLASZHOZ mér (`roundActivityAt`), nem a kvíz-fül első megnyitásához — a két
+  // minta a szabályváltozást követi. A viselkedést a „R2 / K2” egységteszt és a böngészős próbák mérik.
+  assert.match(source, /if \(!round\.finishedAt && roundTooOld\(roundActivityAt\(round\), Date\.now\(\)\)\) return;/);
+  assert.match(source, /if \(current\.finishedAt \|\| quizRoundComplete\(current\) \|\| count === 0 \|\| roundTooOld\(roundActivityAt\(current\), Date\.now\(\)\)\) return;/);
   // PR #510: a döntés körhöz kötött (snapshotDue), és a lebontó ág is küld (alkalmazáson belüli elhagyás).
   assert.match(source, /if \(!snapshotDue\(state, roundId, count\)\) return;/);
   assert.match(source, /window\.removeEventListener\("pagehide", snapshot\); snapshot\(\); \};/);
@@ -74,4 +76,20 @@ test("PR #510: snapshotDue — körhöz kötött; az úton lévő azonos állapo
   // Sikertelen küldés után a `pending` törlődik, a `sent` nem változik → ugyanaz az állapot újra küldendő.
   assert.equal(snapshotDue({ sent: null, pending: null }, "round-a", 2), true);
   assert.equal(snapshotDue({ sent: { roundId: "round-a", count: 1 }, pending: null }, "round-a", 2), true);
+});
+
+test("R2 / K2: a 7 napos korhatár az UTOLSÓ VÁLASZHOZ mér — a régen megnyitott, ma megválaszolt kör nem „régi”", () => {
+  const DAY = 86_400_000, now = Date.parse("2026-11-18T12:00:00Z");
+  // Régebbi tárolt kör (nincs `lastAnsweredAt`): a kezdés számít, mint eddig.
+  assert.equal(roundActivityAt({ startedAt: now - 8 * DAY }), now - 8 * DAY);
+  assert.equal(roundTooOld(roundActivityAt({ startedAt: now - 8 * DAY }), now), true);
+  // A vak ellenőrzés K2 forgatókönyve: hétfőn megnyitva, 8 nappal később megválaszolva → megy.
+  const answeredToday = { startedAt: now - 8 * DAY, lastAnsweredAt: now - 60_000 };
+  assert.equal(roundActivityAt(answeredToday), now - 60_000);
+  assert.equal(roundTooOld(roundActivityAt(answeredToday), now), false);
+  // Az utolsó válasz is régi → nem megy; a határ pontosan 7 nap.
+  assert.equal(roundTooOld(roundActivityAt({ startedAt: now - 30 * DAY, lastAnsweredAt: now - 7 * DAY - 1 }), now), true);
+  assert.equal(roundTooOld(roundActivityAt({ startedAt: now - 30 * DAY, lastAnsweredAt: now - 7 * DAY }), now), false);
+  // El nem indított kör (0) továbbra sem „régi”.
+  assert.equal(roundTooOld(roundActivityAt({ startedAt: 0 }), now), false);
 });

@@ -144,3 +144,24 @@ test("S1b: a beküldés sémája — `partial` csak kvíznél, `startedAt` pozit
   for (const startedAt of [0, -5, 1.5, "tegnap"]) assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, startedAt }), false, String(startedAt));
   assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, score: 100 }), false);
 });
+
+test("R5 / S3: a félbehagyott kvíz összes-száma a megadott (szerveroldali) körméret — a kliens rövidebb azonosítólistája nem csökkenti", () => {
+  // Csak 2 azonosító érkezik egy 25 kérdéses körből: a levél nem állíthat „2 / 2”-t.
+  const g = gradePartialQuiz(QUIZ3, { q1: 0, q2: 1 }, 25)!;
+  assert.deepEqual(g.meta, { partial: { answered: 2, total: 25 } });
+  assert.deepEqual([g.summary.points, g.summary.total], [2, 2], "a pont továbbra is a megválaszolt kérdésekre vonatkozik");
+  const mail = buildResultEmail({ lessonTitle: "Lecke", classroom: 5, learner: "Vendég tanuló", url: "", graded: g, sentAt: AT });
+  assert.match(mail.subject, /— Kvíz \(félbehagyva: 2 \/ 25\) — 100% \(/);
+  // Ha a megválaszoltak száma meghaladná a körméretet (a lecke közben rövidebb kört kapott), az összes nem lehet kisebb náluk.
+  assert.deepEqual(gradePartialQuiz(QUIZ3, { q1: 0, q2: 1, q3: 2 }, 2)!.meta, { partial: { answered: 3, total: 3 } });
+  // Körméret nélkül (régi hívók) a viselkedés változatlan.
+  assert.deepEqual(gradePartialQuiz(QUIZ3, { q1: 0, q2: -1 })!.meta, { partial: { answered: 1, total: 2 } });
+});
+
+test("R2: a kvíz beküldésének új, opcionális `lastAnsweredAt` mezője — pozitív egész, csak kvíznél", () => {
+  const ok = (body: object) => resultRequestSchema.safeParse(body).success;
+  assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, partial: true, startedAt: 1_763_408_460_000, lastAnsweredAt: 1_763_408_470_000 }), true);
+  assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, lastAnsweredAt: 1_763_408_470_000 }), true);
+  for (const lastAnsweredAt of [0, -5, 1.5, "tegnap"]) assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, lastAnsweredAt }), false, String(lastAnsweredAt));
+  assert.equal(ok({ kind: "tasks", roundId: "round-abcd", answers: { t1: "x" }, lastAnsweredAt: 1_763_408_470_000 }), false);
+});
