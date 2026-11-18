@@ -287,19 +287,22 @@ export const BLIND_REVIEWER = 'blind-review';
 export const BLIND_REVIEW_CMD = 'npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>';
 export const BLIND_NOT_RUN = 'a vak ellenőr nem futott; a tulajdonos dönt';
 
-/** A vak ellenőr futtatója kötelező-e (gates.config.json `blindReview.mode`)? */
+/**
+ * A vak ellenőr futtatója KIZÁRÓLAGOS-e (gates.config.json `blindReview.exclusive`)? Alapból KI: a mai szabály (vak, hibakereső
+ * alügynök) él, a futtató eredménye kiegészítő bizonyíték. Átállítása tulajdonosi jóváhagyással (terv, 4. kiegészítés, E1).
+ */
 export function blindRequired(cfg) {
-  return Boolean(cfg) && cfg.mode === 'required';
+  return Boolean(cfg) && cfg.exclusive === true;
 }
 
 /**
  * Egy rögzített ítélet (`review-<fej>.json`) elfogadható-e? `required` módban csak a futtató által igazolt, a konfigurált
- * modelltől származó ítélet, vagy az átállás (`requiredFrom`) ELŐTT rögzített rekord. Más forrás érvénytelen — nincs tartalék.
+ * modelltől származó ítélet, vagy az átállás (`exclusiveSince`) ELŐTT rögzített rekord. Más forrás érvénytelen — nincs tartalék.
  */
 export function acceptRecordedReview(record, cfg) {
   if (!blindRequired(cfg)) return { ok: true };
   if (record?.reviewer === BLIND_REVIEWER && record.blind?.model === cfg.model) return { ok: true };
-  const from = Date.parse(cfg.requiredFrom ?? '');
+  const from = Date.parse(cfg.exclusiveSince ?? '');
   const at = Date.parse(record?.at ?? '');
   if (Number.isFinite(from) && Number.isFinite(at) && at < from) return { ok: true, legacy: true };
   return { ok: false, why: `a rögzített ítéletet nem a vak ellenőr futtatója (${cfg.model}) készítette` };
@@ -307,7 +310,7 @@ export function acceptRecordedReview(record, cfg) {
 
 /** Az ítélet lépés-eredménye. */
 export function verdictResult(v, head) {
-  const how = `futtasd a vak ellenőrt (websuli-vak-ellenor skill): ${BLIND_REVIEW_CMD.replace('<teljes fej-hash>', head)} — majd: node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict <ítélet> --report <jelentés.md>`;
+  const how = `futtasd a vak, hibakereső ellenőrt (websuli-fejlesztesi-ellenor skill; mellé a futtató, websuli-vak-ellenor skill: ${BLIND_REVIEW_CMD.replace('<teljes fej-hash>', head)}) — majd: node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict <ítélet> --report <jelentés.md>`;
   if (!v) return { status: STATUS.FAIL, note: `nincs független ellenőr-ítélet a ${head.slice(0, 12)} fejre — ${how}` };
   if (v.invalid) return { status: STATUS.FAIL, note: `érvénytelen ítélet a ${head.slice(0, 12)} fejre: ${v.invalid} — ${how}. Ha a futtató nem tud lefutni: ${BLIND_NOT_RUN}.` };
   if (v.verdict === 'NEM') return { status: STATUS.FAIL, note: `a független ellenőr ítélete NEM (${v.source}) — javítsd a blokkoló leleteket, és futtasd újra a vak ellenőrt az új fejre` };

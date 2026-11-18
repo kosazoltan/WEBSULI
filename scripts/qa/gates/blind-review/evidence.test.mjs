@@ -65,10 +65,35 @@ test('B11: a kézzel szerkesztett jelentés (más hash) nem rögzíthető; felme
   assert.deepEqual([...src.matchAll(/argValue\(args, '(--[a-z-]+)'\)/g)].map((m) => m[1]).sort(), ['--head', '--report', '--verdict'], 'a szkript pontosan ezt a három kapcsolót olvassa');
 });
 
-test('mode ≠ required (tulajdonosi konfigdöntés): a régi viselkedés — a bizonyíték nem feltétel', () => {
-  const r = record(null, { cfg: { ...CFG, mode: 'off' } });
-  assert.equal(r.ok, true, r.error);
-  assert.equal(r.record.reviewer, undefined);
+test('B28: exclusive KI (alap) — a vak alügynök teljes jelentése rögzül; a futtató bizonyítéka kiegészítő', () => {
+  const OFF = { ...CFG, exclusive: false };
+  // 1) futtató-bizonyíték nélkül: a mai szabály — az alügynök jelentése elég
+  const plain = record(null, { cfg: OFF });
+  assert.equal(plain.ok, true, plain.error);
+  assert.equal(plain.record.reviewer, 'subagent');
+  assert.equal(plain.record.blindSupplement, undefined);
+  // 2) a fejre van teljes futtató-bizonyíték, de a rögzített jelentés MÁS (az alügynöké) → kiegészítőként csatolva
+  const other = { ...EV, reportSha256: 'e'.repeat(64), verdict: 'NEM', findings: { counts: { blokkoló: { total: 1 }, közepes: { total: 2 }, kicsi: { total: 0 } } } };
+  const sup = record(other, { cfg: OFF });
+  assert.equal(sup.ok, true, sup.error);
+  assert.equal(sup.record.reviewer, 'subagent');
+  assert.deepEqual(sup.record.blindSupplement.findings, { blokkoló: 1, közepes: 2, kicsi: 0 });
+  assert.equal(sup.record.blindSupplement.verdict, 'NEM', 'a futtató eltérő ítélete is látszik');
+  // 3) NEM TELJES futás nem kiegészítő
+  assert.equal(record({ ...other, complete: false }, { cfg: OFF }).record.blindSupplement, undefined);
+  // 4) maga a rögzített jelentés a futtatóé (egyező hash) → reviewer: blind-review
+  const own = record({ ...EV }, { cfg: OFF });
+  assert.equal(own.record.reviewer, 'blind-review');
+  // 5) a kapuk KI állásban az alügynök-ítéletet elfogadják (a PR-szöveg sorát is, mint eddig)
+  assert.equal(resolveVerdict({ head: HEAD, evidence: { ...plain.record }, blind: OFF }).verdict, 'IGEN');
+  assert.equal(resolveVerdict({ head: HEAD, evidence: { head: HEAD, verdict: 'IGEN', at: '2027-01-01T00:00:00Z' }, blind: OFF }).verdict, 'IGEN');
+});
+
+test('B29: exclusive BE — az exclusiveSince előtti alügynök-rekord érvényes, utána csak a futtatóé', () => {
+  const ON = { ...CFG, exclusive: true, exclusiveSince: '2026-12-01T00:00:00+01:00' };
+  assert.equal(acceptRecordedReview({ verdict: 'IGEN', at: '2026-11-30T10:00:00Z' }, ON).ok, true);
+  assert.equal(acceptRecordedReview({ verdict: 'IGEN', at: '2026-12-02T10:00:00Z' }, ON).ok, false);
+  assert.equal(acceptRecordedReview({ verdict: 'IGEN', at: '2026-11-30T10:00:00Z' }, { ...ON, exclusiveSince: null }).ok, false, 'időpont nélkül minden nem-futtató rekord érvénytelen');
 });
 
 test('B16: a kapu csak a futtató által igazolt ítéletet fogadja el; az átállás előtti rekord érvényes marad', () => {
@@ -99,7 +124,7 @@ test('B16: a PR-szöveg ítélet-sora required módban önmagában nem elég (a 
   assert.match(strict.invalid, /önmagában nem bizonyíték/);
   assert.equal(verdictResult(strict, HEAD).status, STATUS.FAIL);
   assert.equal(resolveVerdict({ head: HEAD, evidence: null, texts }).verdict, 'IGEN');
-  assert.equal(resolveVerdict({ head: HEAD, evidence: null, texts, blind: { ...CFG, mode: 'off' } }).verdict, 'IGEN');
+  assert.equal(resolveVerdict({ head: HEAD, evidence: null, texts, blind: { ...CFG, exclusive: false } }).verdict, 'IGEN');
   assert.equal(resolveVerdict({ head: HEAD, evidence: null, texts: [], blind: CFG }), null);
 });
 

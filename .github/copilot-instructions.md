@@ -17,4 +17,4 @@ Magyarul válaszolj. A részletes szabály az `AGENTS.md` „Review guidelines�
 - **Evidencia:** csak fájl:sor hivatkozással és konkrét hibaforgatókönyvvel jelezz hibát.
 - **Vak hibakereső ellenőr** (AGENTS.md „Vak hibakereső ellenőr — kötelező”): a PR-leírásban a `Független ellenőr ítélete: … (fej: <hash>)` sor a JELENLEGI fejre
   szóljon; ha hiányzik vagy régi fejre szól, jelezd.
-  A vak ellenőr KIZÁRÓLAG a futtató: `npm run gate:blind-review` (a `gates.config.json` `blindReview.model` modelljével — független, nem Anthropic). Alügynökkel vagy kézzel írt jelentés NEM érvényes ítélet; ha a futtató nem tud lefutni: a vak ellenőr nem futott, a tulajdonos dönt (skill: `websuli-vak-ellenor`).
+  Ki az ellenőr: ma a vak, hibakereső ellenőr az AGENTS.md „Ki az ellenőr” bekezdés szerint; a gépi futtató (`npm run gate:blind-review`, skill: `websuli-vak-ellenor`) mellette kiegészítő bizonyíték. KIZÁRÓLAGOS csak a `blindReview.exclusive` kapcsoló tulajdonosi átállítása után (ha az újramérés eléri a küszöböt).

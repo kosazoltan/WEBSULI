@@ -42,19 +42,26 @@ kell mérnie.
 ### Ki az ellenőr
 
 <!-- vak-ellenor:ki-az-ellenor:begin — EGYETLEN hely: ezt a bekezdést a gépi futtató ága (külön PR) cseréli -->
-**Ki az ellenőr — KIZÁRÓLAG a futtató** (tulajdonosi utasítások 2026-11-18: „a független vak ellenőr […] valóban teljesen független és
-olcsó modell [legyen]”; „valóban kizárólag [ez az] ellenőr modell fusson minden esetben”; cél: „autonóm módon is megbízhatóan működő
-ellenőr”). Ez FELÜLÍRJA a fenti idézet „Lehet Anthropic modell” részét: a vak ellenőrt minden ügynök-környezetben ugyanaz a parancs
-futtatja — `npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>` —,
-a `scripts/qa/gates/gates.config.json` `blindReview.model` modelljével (független, NEM Anthropic-modell; modell-kapcsoló nincs, a csere
-követett konfigváltozás és tulajdonosi döntés). A futtató eldobható munkafában dolgozik, a leleteket (fájl:sor, idézet, futtatás) géppel
-visszaellenőrzi, és bizonyítékot ír; a `record-review.mjs` és a kapuk CSAK ezt fogadják el. Anthropic-alügynök, új munkamenet, kézzel írt
-vagy utólag szerkesztett jelentés, más modell ítélete ÉRVÉNYTELEN — csendes tartalék nincs. Ha a futtató nem tud lefutni (kulcs,
-OpenRouter, költségplafon): **a vak ellenőr nem futott; a tulajdonos dönt** — a kapu áll. A fejlesztő / orkesztrátor a saját
-jelentését, állításait nem adhatja át (a futtatónak erre nincs kapcsolója; a `--goal` fájlba sem). A fejlesztő saját magát soha nem
-ellenőrizheti. A futtatás leírása (parancs, a `--goal` fájl sablonja, teendők az ítélet szerint és ha a futtató megáll): `websuli-vak-ellenor` skill.
+Friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök — soha nem az, amelyik a kódot írta, és nem a fejlesztő folytatása.
+Ahol a környezet tud alügynököt indítani, alügynök; ahol nem, lent („Ha nincs alügynök-eszköz”) szerint új, tiszta munkamenet vagy másik eszköz.
 
-A futtató a megbízás-sablont (lent, egyetlen forrás) olvassa be rendszerüzenetnek; alügynök-eszközre egyetlen környezetben sincs szükség.
+#### Ha nincs alügynök-eszköz (pl. egyes Codex / Cursor / Gemini futások)
+
+1. Nyiss új, tiszta munkamenetet / feladatot (vagy másik eszközt) — NE a fejlesztés beszélgetését folytasd.
+2. Add át CSAK: a megbízás-sablont (lent, egyetlen forrás) kitöltve, a terv útvonalát (vagy a tulajdonosi cél idézetét), az ágat és a teljes fej-hash-t. A
+   fejlesztés összefoglalóját, a „zöld” állításokat és a saját véleményedet NE.
+3. Az ellenőr a saját ideiglenes munkafájában / klónjában futtat; a jelentését a sablon formájában adja.
+4. Az ítéletet a fejlesztő-oldal rögzíti: `node scripts/qa/gates/record-review.mjs --head <fej> --verdict … --report <jelentés.md>`
+   (a szkript a hiányos jelentést elutasítja). Ha egyik út sem érhető el, a munka nem nyitható PR-ra — kérj segítséget a
+   tulajdonostól.
+
+**A gépi futtató — kiegészítő, amíg a `blindReview.exclusive` kapcsoló KI** (tulajdonosi döntés 2026-11-18: „Kapjon böngészőt és
+DB-t, addig marad a mai.”): `npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>`
+— független (nem Anthropic) modellel, eldobható munkafában, géppel visszaellenőrzött leletekkel (`websuli-vak-ellenor` skill).
+Futtasd a fenti ellenőr MELLÉ: az eredménye kiegészítő bizonyíték (a `record-review` csatolja), az ítéletet nem helyettesíti.
+KIZÁRÓLAGOS ellenőrré csak akkor válik, ha az újramérés eléri a küszöböt (a referencia közepes leleteinek legalább 7/9-e, és a hibás
+fejre NEM vagy IGEN, FELTÉTELLEL) ÉS a tulajdonos jóváhagyja a `blindReview.exclusive` átkapcsolását
+(`docs/specs/2026-11-18-vak-ellenor-deepseek.md`, 4. kiegészítés).
 <!-- vak-ellenor:ki-az-ellenor:end -->
 
 ### A megbízás-sablon (egyetlen forrás)
@@ -119,8 +126,9 @@ node scripts/qa/gates/record-review.mjs --head <fej-hash> --verdict IGEN --repor
 # --verdict: IGEN | "IGEN, FELTÉTELLEL" | NEM
 ```
 
-- A szkript csak a futtató (`npm run gate:blind-review`) bizonyítékával igazolt jelentést rögzít (a konfigurált modell készítette, a
-  jelentés nem változott, az ellenőr valóban vizsgált) — kézzel írt vagy alügynöktől származó jelentést nem.
+- Amíg a `blindReview.exclusive` KI: a teljes vak alügynök-jelentés rögzül, és ha a fejre van teljes futtató-bizonyíték
+  (`npm run gate:blind-review`), az kiegészítőként csatolódik (`blindSupplement`). BE állásban csak a futtató bizonyítékával
+  igazolt jelentés rögzíthető.
 - A szkript csak teljes jelentést fogad el: `Fej:` sor a rögzítendő fejre, `Ítélet:` sor, és a „Mit próbáltam megtörni, és nem
   sikerült” és a „Mit NEM vizsgáltam” fejléc — különben hibával kilép, bizonyíték nélkül.
 - A bizonyíték: `<git-common-dir>/websuli-qa-evidence/review-<fej>.json` (helyi, nem commitolható; munkafából is látszik).

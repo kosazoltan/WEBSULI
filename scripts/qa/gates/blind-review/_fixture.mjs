@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 export const CFG = Object.freeze({
-  model: 'teszt/modell', endpoint: 'https://openrouter.invalid/api/v1/chat/completions', mode: 'required', requiredFrom: '2026-11-19T00:00:00+01:00',
+  model: 'teszt/modell', endpoint: 'https://openrouter.invalid/api/v1/chat/completions', exclusive: true, exclusiveSince: '2026-11-19T00:00:00+01:00',
   minToolCalls: 5, maxUsdDefault: 2, maxUsdHardCap: 6, maxRounds: 60, maxRoundsHardCap: 150, maxWallMinutes: 25, maxWallMinutesHardCap: 60,
   maxTokensPerCall: 16000, maxCompletionTokensTotal: 200000, maxRetries: 2, toolOutputMaxChars: 12000, reportMaxChars: 40000, commandTimeoutSec: 60,
   promptCache: { mode: 'explicit', ttlSec: 300 }, fallbackPriceUsdPerMTok: { input: 1, output: 4, cacheRead: 0.1, cacheWrite: 1.25 },

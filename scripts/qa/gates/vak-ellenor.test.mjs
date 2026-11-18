@@ -82,8 +82,7 @@ test('V7: az AGENTS.md önálló szakasza a kezelt blokkon kívül, idézettel, 
   for (const must of [
     'tulajdonosi utasítás 2026-11-18', 'mindig egy vak alügynök ellenőrizze az elvégzett munkádat',
     'bármilyen mesterséges intelligencia-ügynök', 'A fejlesztő saját magát soha nem ellenőrizheti',
-    // 2026-11-18 (docs/specs/2026-11-18-vak-ellenor-deepseek.md, K1 / K4): „Ki az ellenőr” = KIZÁRÓLAG a futtató (nem alügynök / új munkamenet).
-    'a feladatod hibát találni, nem megerősíteni', 'Ki az ellenőr — KIZÁRÓLAG a futtató', 'npm run gate:blind-review', 'ÉRVÉNYTELEN', 'CSAK a követelményt',
+    'a feladatod hibát találni, nem megerősíteni', 'új, tiszta munkamenet', 'CSAK a tervet és a diffet kapja',
     'Mit próbáltam megtörni, és nem sikerült', 'Mit NEM vizsgáltam', 'Visszanézésnél is hibakeresés', 'bármi más',
   ]) assert.ok(sec.includes(must), `az AGENTS.md szakaszából hiányzik: ${must}`);
   assert.match(section(md, 'Minőségkapuk'), new RegExp(`„${RULE}” szakasz szerint`));
@@ -104,9 +103,7 @@ test('V9: a skill leírása minden elkészült fejlesztésnél betöltést ír e
   assert.match(desc, /VAK/);
   assert.match(desc, /HIBÁT TALÁLNI/);
   assert.ok(desc.includes(RULE), 'a leírás hivatkozzon az AGENTS.md szakaszra');
-  // 2026-11-18 (docs/specs/2026-11-18-vak-ellenor-deepseek.md, K1): az ellenőr minden környezetben a futtató — alügynök-eszköz nem kell.
-  assert.match(skill, /alügynök-eszközre egyetlen környezetben sincs szükség/);
-  assert.match(skill, /npm run gate:blind-review/);
+  assert.match(skill, /^#### Ha nincs alügynök-eszköz/m);
 });
 
 test('a „Ki az ellenőr” szöveg egyetlen jelölt bekezdés (AGENTS.md, skill); a többi vezérlőfájl csak hivatkozik rá', () => {

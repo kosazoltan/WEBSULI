@@ -52,11 +52,15 @@ A szabály forrása: `AGENTS.md` „Vak hibakereső ellenőr — kötelező” (
 - **Kötelező jelentés-elemek** (a `record-review.mjs` gépileg ellenőrzi): `Fej:` sor a rögzítendő fejre, `Ítélet:` sor, a
   „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc. Indítás: `websuli-fejlesztesi-ellenor` skill.
 
-### A vak ellenőr futtatója — KIZÁRÓLAG ez az ellenőr (tulajdonosi utasítások 2026-11-18)
+### A vak ellenőr gépi futtatója — kiegészítő, kizárólagossá kapcsolható (tulajdonosi utasítások 2026-11-18)
 
-Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`. Skill: `websuli-vak-ellenor`. Ez a szakasz felülírja a fenti „Anthropic modell is
-lehet” fordulatot: a vak ellenőr minden ügynök-környezetben a futtató, a `scripts/qa/gates/gates.config.json` `blindReview.model`
-modelljével (most `qwen/qwen4-max`, OpenRouter — független, nem Anthropic). Modell-kapcsoló nincs; a csere követett konfigváltozás.
+Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md` (4. kiegészítés: kapcsoló, böngésző, DB). Skill: `websuli-vak-ellenor`. A futtató a
+`scripts/qa/gates/gates.config.json` `blindReview.model` modelljével dolgozik (most `qwen/qwen4-max`, OpenRouter — független, nem Anthropic;
+modell-kapcsoló nincs). **Amíg a `blindReview.exclusive` KI (alap, tulajdonosi döntés 2026-11-18: „Kapjon böngészőt és DB-t, addig
+marad a mai.”):** az ítélet a vak, hibakereső alügynöké (fent; AGENTS.md „Ki az ellenőr” bekezdés), a futtató MELLETTE fut, és a
+`record-review` az eredményét kiegészítő bizonyítékként csatolja. **Átállás (BE):** csak ha az újramérés eléri a küszöböt (a referencia
+közepes leleteinek legalább 7/9-e, és a hibás fejre NEM / IGEN, FELTÉTELLEL), a tulajdonos jóváhagyásával, követett konfigváltozással
+(`exclusive: true`, `exclusiveSince`) és a `rules-guard` őr-teszt módosításával egy PR-ban.
 
 ```bash
 npm run gate:blind-review -- --base origin/main --head <teljes fej-hash> --spec docs/specs/<terv>.md \
@@ -87,12 +91,17 @@ node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --re
   megtakarítás a bizonyítékban és a Gépi összegzésben áll.
 - **Bizonyíték:** `<git-common-dir>/websuli-qa-evidence/blind-review-<fej>.json` — a VÁLASZBÓL visszaolvasott modell, az OpenRouter
   válasz-azonosítói, a jelentés sha256-a, hívásonkénti tokenek (gyorsítótárral), költség, eszközhívások fajtánként, a leletek
-  igazoltsága. A `record-review.mjs` csak ezzel egyező jelentést rögzít (`reviewer: "blind-review"`); a kapuk csak ilyen ítéletet
-  fogadnak el. A PR-leírás ítélet-sora önmagában nem bizonyíték.
-- **Átállás:** `blindReview.requiredFrom` (2026-11-19 00:00, Europe/Budapest). Az ez előtt rögzített ítéletek érvényesek maradnak;
-  utána más forrású ítélet érvénytelen.
-- **Ha a futtató nem tud lefutni** (kulcs, OpenRouter, plafon): megáll, nem nulla kóddal — „a vak ellenőr nem futott; a tulajdonos
-  dönt”. Csendes tartalék nincs; a tulajdonos döntése követett konfigváltozás (`blindReview.mode` / `model` / `requiredFrom`).
+  igazoltsága. KI állásban a `record-review.mjs` kiegészítőként csatolja (`blindSupplement`), a futtató saját jelentésénél
+  `reviewer: "blind-review"`; BE állásban csak ezzel egyező jelentést rögzít, és a kapuk csak ilyen ítéletet fogadnak el (a PR-leírás
+  ítélet-sora önmagában nem bizonyíték).
+- **Böngésző és adatbázis (nehéz futás):** `run_db_tests`, `run_e2e` (követett spec, `--workers=1`), `run_browser_scenario` (saját,
+  deklaratív forgatókönyv; képernyőkép a modellnek). Gépileg kikényszerítve: a gyerek-környezetben nincs e-mail-küldő kulcs és
+  adatbázis-URL; `source/.env` a munkafában → tilos; a `postgres:17` képnek helyben kell lennie (nincs letöltés); Node-kimenő forgalom
+  halott proxyn át; a forgatókönyvben a nem helyi böngésző-kérés megszakítva; sorompó (≥ 2 friss idegen `websuli-*` konténer →
+  várakozás, legfeljebb 10 perc); saját konténer leállítása; `maxHeavyRuns` 4, egyenként legfeljebb 15 perc.
+- **Ha a futtató nem tud lefutni** (kulcs, OpenRouter, plafon): megáll, nem nulla kóddal — „a vak ellenőr nem futott”. KI állásban a
+  kapu nem áll meg (az ítélet a vak alügynöké); BE állásban a kapu áll, csendes tartalék nincs — a tulajdonos dönt (követett
+  konfigváltozás: `blindReview.exclusive` / `model`).
 - **Nincs CI-bekötés** (külön szelet): kell hozzá az `OPENROUTER_API_KEY` GitHub-titok és költési keret a kulcson (tulajdonosi
   teendő), egy workflow-job a PR fejére (fork-PR-ra nem), és a `pr-verdict-check.mjs` összekötése a bizonyítékkal.
 

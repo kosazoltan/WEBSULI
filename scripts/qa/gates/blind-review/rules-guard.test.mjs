@@ -22,8 +22,12 @@ test('B12 / B17: a vak ellenőr modellje a konfig EGYETLEN sorában áll, nem An
   assert.ok(isIndependentModel(cfg.model));
   for (const bad of ['anthropic/claude-opus-5', 'openrouter/claude-sonnet', 'x/Fable-5', 'claude', '', null, 'qwen4-max']) assert.equal(isIndependentModel(bad), false, String(bad));
   assert.equal(new URL(cfg.endpoint).hostname, 'openrouter.ai');
-  assert.equal(cfg.mode, 'required');
-  assert.ok(Number.isFinite(Date.parse(cfg.requiredFrom)), 'az átállás időpontja érvényes dátum');
+  // E1 (terv, 4. kiegészítés): a kizárólagosság kapcsolója ezen az ágon és a főágon KI. Átállítása KIZÁRÓLAG tulajdonosi
+  // jóváhagyással, az alapvonal-küszöb (E3) teljesülése után — ugyanabban a PR-ban ennek a sornak a módosításával.
+  assert.equal(cfg.exclusive, false, 'blindReview.exclusive: KI (tulajdonosi jóváhagyás nélkül nem kapcsolható be)');
+  assert.equal(cfg.exclusiveSince, null);
+  assert.equal(cfg.mode, undefined, 'a régi mode mező megszűnt');
+  assert.equal(cfg.requiredFrom, undefined, 'a dátumhoz kötött átállás megszűnt');
   assert.ok(cfg.minToolCalls >= 5);
   const raw = read('scripts', 'qa', 'gates', 'gates.config.json');
   assert.equal(raw.split(`"${cfg.model}"`).length - 1, 1, 'a modell-azonosító a konfigban pontosan egyszer szerepel');
@@ -59,15 +63,15 @@ const RULE_FILES = ['AGENTS.md', 'CLAUDE.md', '.cursor/rules/vak-ellenor.mdc', '
   '.agents/skills/websuli-pr-elotti-kapu/SKILL.md', '.agents/skills/websuli-merge-elotti-kapu/SKILL.md'];
 const OPTIONAL_RULE_FILES = ['CODEX.md', 'GEMINI.md', '.windsurfrules', '.clinerules'];
 
-test('B18: minden ügynök-vezérlő fájl és kapu-skill a futtató parancsára mutat (kitörlésnél bukik); a kizárólagosságot kimondják', () => {
+test('B18: minden ügynök-vezérlő fájl és kapu-skill a futtató parancsára mutat (kitörlésnél bukik); a kapcsoló szabályát kimondják', () => {
   for (const f of RULE_FILES) assert.ok(read(...f.split('/')).includes('gate:blind-review'), `nincs futtató-hivatkozás: ${f}`);
   for (const f of OPTIONAL_RULE_FILES) if (existsSync(join(root, f))) assert.ok(read(f).includes('gate:blind-review'), `létező vezérlőfájl futtató-hivatkozás nélkül: ${f}`);
   for (const f of ['AGENTS.md', 'CLAUDE.md', '.cursor/rules/vak-ellenor.mdc', '.cursorrules', '.github/copilot-instructions.md', 'docs/minosegkapuk.md', '.agents/skills/websuli-vak-ellenor/SKILL.md']) {
-    assert.match(read(...f.split('/')), /KIZÁRÓLAG/, `a kizárólagosság nincs kimondva: ${f}`);
+    assert.ok(read(...f.split('/')).includes('blindReview.exclusive'), `a kizárólagosság kapcsolója nincs megnevezve: ${f}`);
   }
   const agents = read('AGENTS.md');
   const sec = agents.slice(agents.indexOf('## Vak hibakereső ellenőr — kötelező'), agents.indexOf('## Minőségkapuk'));
-  for (const must of ['Ki az ellenőr — KIZÁRÓLAG a futtató', 'npm run gate:blind-review', 'NEM Anthropic-modell', 'ÉRVÉNYTELEN', 'a vak ellenőr nem futott; a tulajdonos dönt', 'websuli-vak-ellenor']) {
+  for (const must of ['npm run gate:blind-review', '`blindReview.exclusive` kapcsoló KI', 'kiegészítő bizonyíték', 'legalább 7/9-e', 'a tulajdonos jóváhagyja', 'websuli-vak-ellenor', 'nem Anthropic']) {
     assert.ok(sec.includes(must), `az AGENTS.md szakaszából hiányzik: ${must}`);
   }
   assert.match(read('CLAUDE.md'), /AGENTS\.md/);
@@ -78,8 +82,8 @@ test('B18 / K3: a websuli-vak-ellenor skill tükrözött, automatikus betöltés
   const skill = read('.agents', 'skills', 'websuli-vak-ellenor', 'SKILL.md');
   assert.equal(read('.claude', 'skills', 'websuli-vak-ellenor', 'SKILL.md'), skill, 'a tükör bájtra azonos');
   const desc = /^description: (.*)$/m.exec(skill)?.[1] ?? '';
-  for (const re of [/MINDEN elkészült fejlesztés \/ javítás után/, /a PR megnyitása ELŐTT/, /minden javító feltöltés előtt/, /KIZÁRÓLAG/, /npm run gate:blind-review/, /nem adhatja át/]) assert.match(desc, re);
-  for (const must of ['## 1. Mikor kötelező', '## 3. A parancs', '## 4. A `--goal` fájl', '## 6. Mit tegyél az ítélet szerint', '## 7. Ha a futtató megáll', 'TILOS a `--goal` fájlba', 'Gépi összegzés', 'NE indíts helyette Anthropic-alügynököt']) {
+  for (const re of [/MINDEN elkészült fejlesztés \/ javítás után/, /a PR megnyitása ELŐTT/, /minden javító feltöltés előtt/, /blindReview\.exclusive/, /KIZÁRÓLAGOS ellenőr csak a tulajdonos átkapcsolása után/, /npm run gate:blind-review/, /nem adhatja át/]) assert.match(desc, re);
+  for (const must of ['## 1. Mikor kötelező', '## 3. A parancs', '## 4. A `--goal` fájl', '## 6. Mit tegyél az ítélet szerint', '## 7. Ha a futtató megáll', 'TILOS a `--goal` fájlba', 'Gépi összegzés', 'Átállás (BE)', 'run_browser_scenario', 'részben igazolt']) {
     assert.ok(skill.includes(must), `a skillből hiányzik: ${must}`);
   }
   assert.ok(skill.includes(cfg.model), 'a skill a konfigurált modellt nevezi meg');

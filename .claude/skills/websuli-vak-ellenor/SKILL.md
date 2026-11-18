@@ -1,13 +1,13 @@
 ---
 name: websuli-vak-ellenor
-description: WEBSULI vak hibakereső ellenőr FUTTATÓJA (AGENTS.md „Vak hibakereső ellenőr — kötelező”). Töltsd be automatikusan MINDEN elkészült fejlesztés / javítás után (zöld helyi kapuk után), a PR megnyitása ELŐTT és minden javító feltöltés előtt, minden ügynök-környezetben. A vak ellenőr KIZÁRÓLAG ez a futtató - npm run gate:blind-review - a gates.config.json blindReview.model modelljével (független, nem Anthropic); alügynökkel vagy kézzel írt jelentés NEM érvényes ítélet. A fejlesztő / orkesztrátor a saját jelentését nem adhatja át.
+description: WEBSULI vak hibakereső ellenőr gépi FUTTATÓJA (AGENTS.md „Vak hibakereső ellenőr — kötelező”). Töltsd be automatikusan MINDEN elkészült fejlesztés / javítás után (zöld helyi kapuk után), a PR megnyitása ELŐTT és minden javító feltöltés előtt, minden ügynök-környezetben - npm run gate:blind-review, a gates.config.json blindReview.model modelljével (független, nem Anthropic), böngészővel és eldobható adatbázissal. Amíg a blindReview.exclusive kapcsoló KI, a vak alügynök MELLÉ fut, kiegészítő bizonyítékként; KIZÁRÓLAGOS ellenőr csak a tulajdonos átkapcsolása után. A fejlesztő / orkesztrátor a saját jelentését nem adhatja át.
 ---
 
 # Vak ellenőr — a futtató (`npm run gate:blind-review`)
 
-Tulajdonosi utasítások (2026-11-18): a független vak ellenőr „valóban teljesen független és olcsó modell” legyen; „valóban kizárólag
-[ez az] ellenőr modell fusson minden esetben”; a cél egy „autonóm módon is megbízhatóan működő ellenőr”, amelynek a jelentését nem
-kell sorról sorra visszaellenőrizni. Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`. Runbook: `docs/minosegkapuk.md`.
+Tulajdonosi utasítások (2026-11-18): a független vak ellenőr „valóban teljesen független és olcsó modell” legyen; a cél egy „autonóm
+módon is megbízhatóan működő ellenőr”, amelynek a jelentését nem kell sorról sorra visszaellenőrizni. A mért alapvonal után (a futtató a
+referencia közepes leleteinek kis részét találta meg): „Kapjon böngészőt és DB-t, addig marad a mai.” Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`. Runbook: `docs/minosegkapuk.md`.
 
 ## 1. Mikor kötelező
 
@@ -16,13 +16,20 @@ kell sorról sorra visszaellenőrizni. Terv: `docs/specs/2026-11-18-vak-ellenor-
 - A merge előtt az ítéletnek a PR JELENLEGI fejére kell szólnia (`pre-merge-gate`).
 - Előfeltétel (API-költség elve): előbb zöld `npm run gate:stage` és `npm run gate:push` — az ellenőr ne olcsó hibára költsön.
 
-## 2. Ki az ellenőr — kizárólag a futtató
+## 2. Ki az ellenőr — ma a vak alügynök, a futtató kiegészítő (`blindReview.exclusive`)
+
+- **Amíg a `blindReview.exclusive` KI (alap):** az ítélet a vak, hibakereső alügynöké (AGENTS.md „Ki az ellenőr” bekezdés,
+  `websuli-fejlesztesi-ellenor` skill). A futtatót futtasd MELLÉ: a `record-review` a teljes futtató-bizonyítékot kiegészítőként
+  csatolja (`blindSupplement`), ha pedig a futtató jelentését rögzíted, a `reviewer` értéke `blind-review`.
+- **Átállás (BE):** csak ha az újramérés eléri a küszöböt (a referencia közepes leleteinek legalább 7/9-e, és a hibás fejre NEM vagy
+  IGEN, FELTÉTELLEL), ÉS a tulajdonos jóváhagyja — követett konfigváltozás (`exclusive: true`, `exclusiveSince`) a `rules-guard`
+  őr-teszt módosításával egy PR-ban. BE állásban az alábbi szabályok kizárólagosak.
 
 - A modell egyetlen helyen áll: `scripts/qa/gates/gates.config.json` → `blindReview.model` (most: `qwen/qwen4-max`, OpenRouter).
   A futtatónak NINCS modell-kapcsolója; a modell cseréje követett konfigváltozás, tulajdonosi döntés.
-- Az ítélet csak a futtató gép által írt bizonyítékával érvényes (`<git-common-dir>/websuli-qa-evidence/blind-review-<fej>.json`):
-  a válaszból visszaolvasott modell, a jelentés sha256-a, az eszközhívások, a géppel ellenőrzött leletek. A `record-review.mjs`
-  és a kapuk mást NEM fogadnak el: Anthropic-alügynök, kézzel írt vagy utólag szerkesztett jelentés, más modell → érvénytelen.
+- A futtató gép által írt bizonyítéka: `<git-common-dir>/websuli-qa-evidence/blind-review-<fej>.json` (a válaszból visszaolvasott
+  modell, a jelentés sha256-a, az eszközhívások, a géppel ellenőrzött leletek). BE állásban a `record-review.mjs` és a kapuk mást
+  NEM fogadnak el (alügynök, kézzel írt vagy utólag szerkesztett jelentés, más modell → érvénytelen).
 - A megbízás-sablon (a hibakereső keret) egy forrásból jön: `scripts/qa/gates/vak-ellenor-megbizas.md` — a futtató ezt olvassa be
   rendszerüzenetnek (a saját eszköz-leírásával kiegészítve). Aki a sablont módosítja, a futtató rendszerüzenetét módosítja.
 
@@ -103,14 +110,22 @@ A PR-leírásba CSAK a `record-review` által kiírt sor kerül (`Független ell
 | `MEGÁLLT: nincs OpenRouter-kulcs` | A kulcs beállítása a 3. szakasz szerint (a kulcsot ne írd ki). |
 | `OpenRouter-hiba` (hálózat, 401 / 402 / 429 / 5xx, megszűnt modell) | Várj és ismételd egyszer. Ha marad: **a vak ellenőr nem futott; a tulajdonos dönt.** |
 
-Semmilyen esetben nincs csendes tartalék: NE indíts helyette Anthropic-alügynököt, NE írj kézzel jelentést, NE rögzíts ítéletet más
-úton. A kapu áll, amíg a futtató teljes jelentést nem ad, vagy a tulajdonos a konfigot (követett változással) át nem állítja.
+Amíg a `blindReview.exclusive` KI, a futtató megállása nem állítja meg a kaput (az ítélet a vak alügynöké) — de jelezd a
+PR-leírásban. BE állásban nincs csendes tartalék: NE indíts helyette alügynököt, NE írj kézzel jelentést; a kapu áll, amíg a futtató
+teljes jelentést nem ad, vagy a tulajdonos a konfigot (követett változással) át nem állítja.
 Megszakítás futás közben: `<git-common-dir>/websuli-qa-evidence/blind-review.stop` fájl létrehozása (utána töröld).
 
 ## 8. Korlátok (ismerd, és jelezd, ha érintik a munkát)
 
-- Böngészős (Playwright) és adatbázisos tesztet az ellenőr nem futtat (`blindReview.allowPlaywright: false`); a felületi változás
-  képernyő-ellenőrzését a `pre-pr-gate` CI-azonos böngészős útja adja, nem a vak ellenőr.
+- Böngésző és adatbázis (nehéz futás, legfeljebb `maxHeavyRuns` = 4 futásonként, egyenként legfeljebb 15 perc): `run_db_tests` (a repó
+  eldobható adatbázisos futtatója), `run_e2e` (a fej követett Playwright-specjei, `--workers=1`), `run_browser_scenario` (az ellenőr saját,
+  deklaratív forgatókönyve: oldal, kattintás, kitöltés, API-mock, offline, mérés, képernyőkép — a képeket a modell meg is nézi). Valódi
+  e-mail nem mehet ki: a gyerek-környezetben nincs küldő kulcs és adatbázis-URL (gépi ellenőrzés); saját konténer, a végén leállítva;
+  a Node-folyamatok kifelé halott proxyn át; a saját forgatókönyvben a böngésző nem helyi kérése megszakítva. Gépi sorompó: legalább
+  2 friss idegen `websuli-*` konténernél várakozás (legfeljebb 10 perc), utána elutasítás.
+- A futtatással igazolt lelet „részben igazolt”, ha a próba elszigetelt volt (saját homokozós fájl, egységteszt, típusellenőrzés —
+  a valódi hívási lánc helyett); „teljes úton igazolt” csak böngészős vagy adatbázisos futás lehet.
 - Az eldobható munkafa `source/node_modules`-a a futtató checkoutjának telepítésére csatol; eltérő `package-lock.json` esetén az
   ellenőr figyelmeztetést kap.
-- A prompt-gyorsítótár élettartama 5 perc: az ellenőr parancsai ezért legfeljebb 4 percig futhatnak.
+- A prompt-gyorsítótár élettartama 5 perc: a könnyű parancsok legfeljebb 4 percig futhatnak; a nehéz futás után a gyorsítótár
+  újraíródik (drágább hívás — a plafon-becslés számol vele).

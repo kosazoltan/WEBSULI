@@ -62,6 +62,16 @@ export function checkReport(text, full) {
   return null;
 }
 
+/** A futtató teljes bizonyítéka a fejre, kiegészítőként (nem kizárólagos módban): modell, ítélet, leletszám, költség, jelentés-hash. */
+export function blindSupplement(evidence, full) {
+  if (!evidence || evidence.kind !== 'blind-review' || evidence.head !== full || evidence.complete !== true) return null;
+  const counts = evidence.findings?.counts ?? null;
+  return {
+    model: evidence.modelReported, verdict: evidence.verdict, reportSha256: evidence.reportSha256, costUsd: evidence.costUsd, endedAt: evidence.endedAt,
+    findings: counts ? Object.fromEntries(Object.entries(counts).map(([k, c]) => [k, c.total])) : null,
+  };
+}
+
 /**
  * @returns {{ ok: true, record: object, line: string } | { ok: false, error: string }}
  */
@@ -83,13 +93,24 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, no
   const bad = checkReport(text, full);
   if (bad) return { ok: false, error: bad };
   const record = { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() };
-  // K1 (docs/specs/2026-11-18-vak-ellenor-deepseek.md): `required` módban az ítélet CSAK a vak ellenőr futtatójának bizonyítékával
-  // rögzíthető (a konfigurált modell készítette, a jelentés nem változott, az ellenőr valóban vizsgált). Felmentő kapcsoló nincs.
-  if (blind && blindRequired(blind.cfg)) {
-    const b = checkBlindEvidence({ evidence: blind.readEvidence(full), head: full, reportSha256: record.reportSha256, verdict: v, cfg: blind.cfg });
-    if (!b.ok) return { ok: false, error: b.error };
-    record.reviewer = BLIND_REVIEWER;
-    record.blind = b.summary;
+  // docs/specs/2026-11-18-vak-ellenor-deepseek.md — K1 / E1. Kizárólagos módban (`blindReview.exclusive`) az ítélet CSAK a vak ellenőr
+  // futtatójának bizonyítékával rögzíthető. Alapból (KI) a mai szabály: a vak, hibakereső alügynök teljes jelentése rögzül, és ha a
+  // fejre van teljes futtató-bizonyíték, az kiegészítő bizonyítékként csatolódik. Felmentő kapcsoló nincs.
+  if (blind?.cfg) {
+    const evidence = blind.readEvidence(full);
+    const b = checkBlindEvidence({ evidence, head: full, reportSha256: record.reportSha256, verdict: v, cfg: blind.cfg });
+    if (blindRequired(blind.cfg)) {
+      if (!b.ok) return { ok: false, error: b.error };
+      record.reviewer = BLIND_REVIEWER;
+      record.blind = b.summary;
+    } else if (b.ok) {
+      record.reviewer = BLIND_REVIEWER;
+      record.blind = b.summary;
+    } else {
+      record.reviewer = 'subagent';
+      const supplement = blindSupplement(evidence, full);
+      if (supplement) record.blindSupplement = supplement;
+    }
   }
   return { ok: true, record, line: verdictLine(v, full) };
 }

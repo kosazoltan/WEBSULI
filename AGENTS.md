@@ -175,17 +175,17 @@ Ez a szabály MINDEN ügynök-környezetre érvényes (Claude Code, Codex — he
 ### Ki az ellenőr
 
 <!-- vak-ellenor:ki-az-ellenor:begin — EGYETLEN hely: ezt a bekezdést a gépi futtató ága (külön PR) cseréli -->
-**Ki az ellenőr — KIZÁRÓLAG a futtató** (tulajdonosi utasítások 2026-11-18: „a független vak ellenőr […] valóban teljesen független és
-olcsó modell [legyen]”; „valóban kizárólag [ez az] ellenőr modell fusson minden esetben”; cél: „autonóm módon is megbízhatóan működő
-ellenőr”). Ez FELÜLÍRJA a fenti idézet „Lehet Anthropic modell” részét: a vak ellenőrt minden ügynök-környezetben ugyanaz a parancs
-futtatja — `npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>` —,
-a `scripts/qa/gates/gates.config.json` `blindReview.model` modelljével (független, NEM Anthropic-modell; modell-kapcsoló nincs, a csere
-követett konfigváltozás és tulajdonosi döntés). A futtató eldobható munkafában dolgozik, a leleteket (fájl:sor, idézet, futtatás) géppel
-visszaellenőrzi, és bizonyítékot ír; a `record-review.mjs` és a kapuk CSAK ezt fogadják el. Anthropic-alügynök, új munkamenet, kézzel írt
-vagy utólag szerkesztett jelentés, más modell ítélete ÉRVÉNYTELEN — csendes tartalék nincs. Ha a futtató nem tud lefutni (kulcs,
-OpenRouter, költségplafon): **a vak ellenőr nem futott; a tulajdonos dönt** — a kapu áll. A fejlesztő / orkesztrátor a saját
-jelentését, állításait nem adhatja át (a futtatónak erre nincs kapcsolója; a `--goal` fájlba sem). A fejlesztő saját magát soha nem
-ellenőrizheti. A futtatás leírása: `.agents/skills/websuli-vak-ellenor/SKILL.md`.
+Friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök. Ahol a környezet tud alügynököt indítani, alügynök; ahol nem (egyes
+Codex / Cursor / Gemini futások), új, tiszta munkamenet vagy másik eszköz, amely CSAK a tervet és a diffet kapja. A fejlesztő saját
+magát soha nem ellenőrizheti.
+
+**A gépi futtató — kiegészítő, amíg a `blindReview.exclusive` kapcsoló KI** (tulajdonosi döntés 2026-11-18: „Kapjon böngészőt és
+DB-t, addig marad a mai.”): `npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>`
+— független (nem Anthropic) modellel, eldobható munkafában, géppel visszaellenőrzött leletekkel (`websuli-vak-ellenor` skill).
+Futtasd a fenti ellenőr MELLÉ: az eredménye kiegészítő bizonyíték (a `record-review` csatolja), az ítéletet nem helyettesíti.
+KIZÁRÓLAGOS ellenőrré csak akkor válik, ha az újramérés eléri a küszöböt (a referencia közepes leleteinek legalább 7/9-e, és a hibás
+fejre NEM vagy IGEN, FELTÉTELLEL) ÉS a tulajdonos jóváhagyja a `blindReview.exclusive` átkapcsolását
+(`docs/specs/2026-11-18-vak-ellenor-deepseek.md`, 4. kiegészítés).
 <!-- vak-ellenor:ki-az-ellenor:end -->
 
 A megbízás szövege egyetlen fájlban: `scripts/qa/gates/vak-ellenor-megbizas.md`. Indítási leírás (alügynökkel és alügynök-eszköz nélkül):
@@ -202,8 +202,8 @@ felül.
 2. **Szakasz-kapu minden fejlesztési szakasz után:** `npm run gate:stage` (lint gyors mód + a változott fájlok egységtesztjei + minden
    őr-teszt). Csak zöld után lehet továbblépni; előbb a helyi hibát kell javítani.
 3. **Független ellenőr — VAK és HIBAKERESŐ:** a „Vak hibakereső ellenőr — kötelező” szakasz szerint (fent), a PR megnyitása ELŐTT
-   és minden érdemi javító push előtt — KIZÁRÓLAG a futtatóval (`npm run gate:blind-review`); az ítéletet a `record-review.mjs` rögzíti
-   (hiányos jelentést és a futtató bizonyítéka nélküli ítéletet elutasít).
+   és minden érdemi javító push előtt (mellé a gépi futtató kiegészítőként: `npm run gate:blind-review`); az ítéletet a
+   `record-review.mjs` rögzíti (a hiányos jelentést elutasítja; `blindReview.exclusive` BE állásban csak a futtató bizonyítékával).
 4. **A kapuk sorrendje:** `gate:stage` (szakaszonként) → `gate:push` → független ellenőr + `record-review` →
    `gate:pr -- --body-file <leírás.md>` → push + PR → zöld CI → közvetlenül a merge előtt `gate:merge -- <PR>`. A `git push`,
    `gh pr create` és `gh pr merge` előtt a `check-quality-gates` hook a zöld bizonyítékot ellenőrzi.
