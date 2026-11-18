@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 
 import { JOYSTICK_DEAD_ZONE, createJoystickDrag, retireJoystickDrag, type JoystickVector } from "./joystick";
 import { controlRadiusFor } from "./mobile/controlSize";
+import { joystickMounted } from "./mobile/joystickSide";
 import { useReducedMotion } from "./useReducedMotion";
 import { countRender } from "./inputProbe";
 
@@ -23,6 +24,11 @@ import { countRender } from "./inputProbe";
  *    vezérlést;
  *  - `touch-action: none` és kijelölés-tiltás: hosszú nyomásra a böngésző
  *    egyébként kijelöl, felugró menüt nyit és görget.
+ *
+ * Melyik oldalon áll (docs/specs/2026-11-18-joystick-jobb-kez.md D2): alapból a JOBB hüvelykujjnál. A gyökér
+ * `game-joystick` osztályú; a közös keret (`GameShell`) `data-joystick-side` attribútumára épülő `index.css`-szabály
+ * jobb oldali beállításnál a flex vezérlősáv végére (`order: 1`) teszi. A komponens maga nem tud az oldalról — a
+ * húzás, a görbe és a render-szám ezért az oldaltól független.
  */
 
 export type VirtualJoystickProps = {
@@ -85,6 +91,9 @@ export default function VirtualJoystick({
   onChangeRef.current = onChange;
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
+
+  // A közös szünet menü ebből tudja, hogy a lapon van joystick (csak akkor mutatja az oldal-kapcsolót).
+  useEffect(() => joystickMounted(), []);
 
   /**
    * Joystick-reakció (#49): a gomb a DOM-on át, ugyanabban az eseményben követi az ujjat — React-render nélkül.
@@ -189,7 +198,7 @@ export default function VirtualJoystick({
       // KSZ-14: ha a rendszer elveszi a capture-t (pl. értesítés, gesztus), az is elengedés.
       onLostPointerCapture={handleUp}
       onContextMenu={(e) => e.preventDefault()}
-      className={`relative flex items-center justify-center rounded-full border-2 border-white/25 bg-slate-900/50 ${className}`}
+      className={`game-joystick relative flex items-center justify-center rounded-full border-2 border-white/25 bg-slate-900/50 ${className}`}
       style={{
         width: radius * 2,
         height: radius * 2,

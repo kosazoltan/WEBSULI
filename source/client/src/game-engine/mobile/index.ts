@@ -19,4 +19,14 @@ export { attachAutoPause, useAutoPause, type AutoPauseTarget } from "./autoPause
 export { cancelGameFrame, requestGameFrame } from "./modalLayer";
 export { computeStars } from "./stars";
 export { controlRadiusFor } from "./controlSize";
+export { default as JoystickSideToggle } from "./JoystickSideToggle";
+export {
+  JOYSTICK_SIDE_TEXT,
+  isOppositeZone,
+  joystickSideHint,
+  oppositeSide,
+  useJoystickPresent,
+  type JoystickSide,
+  type JoystickSideHintKey,
+} from "./joystickSide";
 export { GAME_BEST_KEY, readBest, writeBest, useBestScore } from "./bestScore";

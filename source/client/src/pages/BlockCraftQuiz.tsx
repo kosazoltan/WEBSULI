@@ -8,6 +8,7 @@ import { applyRendererLook, createGradientSky, detectLookTier, disposeObjectTree
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Pause, Blocks } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { useJoystickSide } from "@/game-engine/play/gameSettings";
 import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
 import { shapeJoystick } from "@/game-engine/joystick";
@@ -61,10 +62,13 @@ import {
   PauseMenu,
   ResultScreen,
   StartScreen,
+  isOppositeZone,
+  joystickSideHint,
   useBestScore,
   useHaptics,
   useTouchCapable,
   type GameHudStat,
+  type JoystickSide,
   type GameScreenState,
 } from "@/game-engine/mobile";
 import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
@@ -1120,18 +1124,23 @@ function MenuBlock({ t }: { t: number }) {
 type Phase = "menu" | "play" | "quiz" | "levelComplete" | "over";
 
 /**
- * S11 kétujjas vezérlés: érintéssel a körbenézés csak a vászon JOBB 60%-án indulhat (a bal 40% a joystick
- * hüvelykujjáé). `x` a vászonhoz relatív érintési pont, `width` a vászon szélessége.
+ * S11 kétujjas vezérlés: érintéssel a körbenézés csak a vászon joystickkal ELLENTÉTES 60%-án indulhat (a joystick
+ * felőli 40% a joystick hüvelykujjáé). A joystick oldala közös beállítás (alap: jobb → a körbenézés a BAL 60%-on;
+ * docs/specs/2026-11-18-joystick-jobb-kez.md D3). `x` a vászonhoz relatív érintési pont, `width` a vászon szélessége.
  */
-const LOOK_ZONE_START = 0.4;
-function isLookZone(x: number, width: number): boolean {
-  return width <= 0 || x >= width * LOOK_ZONE_START;
+const LOOK_ZONE_SHARE = 0.6;
+function isLookZone(x: number, width: number, joystickSide: JoystickSide): boolean {
+  return isOppositeZone(x, width, joystickSide, LOOK_ZONE_SHARE);
 }
 
 export default function BlockCraftQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // S11: a közös érintés-észlelés (any-pointer: coarse + maxTouchPoints) — érintős laptop is kap vezérlőt.
   const touchCapable = useTouchCapable();
+  /** A joystick oldala (közös beállítás, alap: jobb): a körbenéző zóna és a súgók ezt követik. */
+  const joystickSide = useJoystickSide();
+  const joystickSideRef = useRef(joystickSide);
+  joystickSideRef.current = joystickSide;
   const haptics = useHaptics();
   const bestScore = useBestScore("block-craft-quiz");
   const [, navigate] = useLocation();
@@ -2749,9 +2758,9 @@ export default function BlockCraftQuiz() {
   };
 
   /*
-   * Mobil look-drag (a `touchLookRef` fent): egy ujjas húzás a vászon JOBB 60%-án = körbenézés. S11 kétujjas
-   * vezérlés: a bal hüvelykujj a joystické (saját elem, saját pointerId + capture), a jobb a vászoné — a két
-   * érintés külön pointerId-t követ, így egyszerre működnek. A vászon bal 40%-án induló érintés nem forgat
+   * Mobil look-drag (a `touchLookRef` fent): egy ujjas húzás a vászon joystickkal ellentétes 60%-án = körbenézés. S11 kétujjas
+   * vezérlés: az egyik hüvelykujj a joystické (saját elem, saját pointerId + capture), a másik a vászoné — a két
+   * érintés külön pointerId-t követ, így egyszerre működnek. A vászon joystick felőli 40%-án induló érintés nem forgat
    * (ott a joystick-zóna van), de a rövid koppintás ott is bányászik.
    */
   const onCanvasPointerDown = useCallback(
@@ -2773,7 +2782,7 @@ export default function BlockCraftQuiz() {
       if (touchLookRef.current) return;
       canvas.setPointerCapture?.(e.pointerId);
       const rect = canvas.getBoundingClientRect();
-      const look = isLookZone(e.clientX - rect.left, rect.width);
+      const look = isLookZone(e.clientX - rect.left, rect.width, joystickSideRef.current);
       touchLookRef.current = { id: e.pointerId, lastX: e.clientX, lastY: e.clientY, moved: 0, look };
     },
     [phase, paused, tryMineLook, tryPlaceLook],
@@ -2948,7 +2957,7 @@ export default function BlockCraftQuiz() {
                 </div>
                 <p className="text-sm text-white/80">
                   {touchCapable
-                    ? "Bal hüvelykujj: mozgás (tárcsa) · jobb hüvelykujj: körbenézés húzással · koppintás a blokkra vagy Bányász gomb: kvíz."
+                    ? joystickSideHint("blockcraft-start", joystickSide)
                     : "WASD mozgás, Space ugrás, E bányász-kvíz, F lerakás, 1–9 blokkválasztás, P szünet."}
                 </p>
                 <div className="flex items-center justify-between gap-2">
@@ -3039,7 +3048,7 @@ export default function BlockCraftQuiz() {
                   )}
                   {showHint && phase === "play" && (
                     <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-sm">
-                      {touchCapable ? "Bal: mozgás · jobb: nézelődés · koppintás: bányászás" : "Kattints a vászonra · bal klikk: bányász · jobb: lerak"}
+                      {touchCapable ? joystickSideHint("blockcraft-play", joystickSide) : "Kattints a vászonra · bal klikk: bányász · jobb: lerak"}
                     </span>
                   )}
                 </div>
@@ -3057,7 +3066,8 @@ export default function BlockCraftQuiz() {
                 {/*
                  * Egységes köralakú vezérlés (spec 2026-09-20): a négy irány-gomb helyett ugyanaz a
                  * tárcsa, mint az Aszteroidában. S11: a sugár a képernyőhöz igazodik (radius="auto"), és
-                 * a joystick a bal hüvelykujjé — a jobb hüvelykujj közben a vászon jobb részén néz körbe.
+                 * a joystick az egyik hüvelykujjé (alapból a jobbé — közös joystick-oldal beállítás), a másik közben a vászon
+                 * ellentétes részén néz körbe.
                  */}
                 <VirtualJoystick
                   label="Mozgás"
@@ -3072,7 +3082,7 @@ export default function BlockCraftQuiz() {
                     stickRef.current.y = s.y;
                   }}
                 />
-                {/* Akciógombok ívben a jobb alsó sarokban: Ugrás a legnagyobb, mellette Bányász, fölötte Lerak. */}
+                {/* Akciógombok ívben a joystickkal ellentétes alsó sarokban: Ugrás a legnagyobb (a külső sarokban), mellette Bányász, fölötte Lerak. */}
                 <div className="bc-actions" style={{ pointerEvents: "none" }}>
                   <button
                     type="button"
@@ -3345,6 +3355,10 @@ export default function BlockCraftQuiz() {
         .bc-act-place { grid-column: 2; grid-row: 1; background: radial-gradient(circle at 35% 30%, #fbbf24, #b45309 70%); }
         .bc-act-mine { grid-column: 1; grid-row: 2; margin-bottom: 18px; background: radial-gradient(circle at 35% 30%, #4ade80, #047857 70%); }
         .bc-act-jump.game-action-btn { grid-column: 2; grid-row: 2; width: calc(var(--game-action-size) * 1.15); height: calc(var(--game-action-size) * 1.15); background: radial-gradient(circle at 35% 30%, #a78bfa, #5b21b6 70%); }
+        /* Jobb oldali joysticknál (alap) a gombok a BAL alsó sarokba kerülnek; a rács tükröződik, hogy az Ugrás a külső sarokban maradjon. */
+        [data-joystick-side="right"] .bc-act-place { grid-column: 1; }
+        [data-joystick-side="right"] .bc-act-mine { grid-column: 2; }
+        [data-joystick-side="right"] .bc-act-jump.game-action-btn { grid-column: 1; }
         .bc-act-label { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); white-space: nowrap; font-size: 14px; line-height: 1; font-weight: 800; padding: 3px 8px; border-radius: 9999px; background: rgba(2,6,23,.82); border: 1px solid rgba(255,255,255,.22); color: #fff; pointer-events: none; }
         @media (prefers-reduced-motion: reduce) { .bc-act { transition: none; } .bc-act:active { transform: none; } }
         /* Alacsony fekvő nézet: a kvíz válaszai két oszlopban, a súgó-sor elrejtve, hogy minden kiférjen.

@@ -90,7 +90,7 @@ nincs benne; csak az eszköz `localStorage`-ában él (a meglévő `tts` mintáj
 
 | Játék | Változás |
 |---|---|
-| Szökőár | Álló: a közös szabály elég (joystick jobb, Ugrás bal). Fekvő (≥ 650 px széles, ≤ 500 px magas): a vezérlők ma a jobb oldali 240 px-es hasábban állnak egymás mellett — jobb oldali joysticknál az Ugrás a jelenet BAL alsó sarkába kerül (bal hüvelykujj), a joystick a jobb hasábban marad. Bal oldali joysticknál tükrözve: a joystick a jelenet bal alsó sarkában, az Ugrás a jobb hasábban. |
+| Szökőár | A közös szabály elég álló és fekvő nézetben is (joystick jobb, Ugrás bal): a `.tsunami-controls.game-touch-layer` sáv mindkét nézetben a jelenet teljes szélességét fogja (böngészőben mérve 360×640, 390×844, 844×390 méreten). A lap kódja nem változik, csak a megjegyzése. Megjegyzés: az `index.css` régi fekvő `.tsunami-layout` rács-szabálya (jobb oldali 240 px-es hasáb) a mai lapra nem hat — a mért elrendezésben a sáv teljes szélességű. |
 | Tornádóvadász | A tárcsa burkoló `div`-je megszűnik (a `.game-touch-layer > *` már ad `pointer-events: auto`-t), így a közös szabály hat. A gombsor belső rendje tükröződik (a ⚓ mindig a külső szélen). A saját „Jobbkezes / Balkezes” gombok helyére a közös kapcsoló kerül (kezdő beállítások); a szünet menüben a közös kapcsoló jelenik meg. |
 | Aszteroida | `.sa-controls`: közös szabály; `.sa-actions` belső rendje tükröződik (a „Tűz” mindig a külső szélen, a bomba belül). |
 | Kockavadász | Közös szabály; a `.bc-actions` rács tükröződik (az Ugrás mindig a külső alsó sarokban). A körbenézés zónája a joystickkal ELLENTÉTES 60%: `isLookZone(x, width, side)` — jobb oldali joysticknál a vászon BAL 60%-a. |
@@ -110,6 +110,7 @@ Közös komponens: `game-engine/mobile/JoystickSideToggle.tsx` (két gomb: „Jo
 
 - a közös `PauseMenu`-ben, HA a lapon van felcsatolt `VirtualJoystick` (a joystick fel-/lecsatoláskor jelzi a jelenlétét egy
   modul-szintű számlálóban) — így a joystick nélküli játékok és az asztali (érintés nélküli) nézet szünet menüje nem változik;
+  alacsony fekvő nézetben a kapcsoló egy sorba tömörül (felirat + két gomb), hogy a játék saját beállítása is kiférjen;
 - a Brain Rot és a Tornádó kezdő beállításai között (a megszűnő saját gombok helyén).
 
 A szövegek egy helyen, kódszótárban: `game-engine/mobile/joystickSide.ts` (`JOYSTICK_SIDE_TEXT`, `joystickSideHint`).
@@ -119,7 +120,7 @@ A szövegek egy helyen, kódszótárban: `game-engine/mobile/joystickSide.ts` (`
 | Eset | Elvárt viselkedés |
 |---|---|
 | Álló telefon (360×640, 390×844) | joystick közepe a képernyő jobb felén, minden akciógomb közepe a bal felén (alapérték) |
-| Fekvő telefon (844×390) | ugyanez; a Brain Rotban a teljes vezérlő-oszlop jobbra kerül (akciógombja nincs); a Szökőárban az Ugrás a jelenet bal alsó sarkában |
+| Fekvő telefon (844×390) | ugyanez; a Brain Rotban a teljes vezérlő-oszlop a tábla jobb oldalára kerül (akciógombja nincs, a súgó a joystick fölött áll) |
 | Kihajtható telefon / táblagép (széles kijelző) | a sáv a képernyő teljes szélességét fogja (`left` / `right` a biztonsági sávval), a joystick és a gombok a két SZÉLEN maradnak — a hüvelykujj eléri; a tárcsa sugara a meglévő `controlRadiusFor` (52–76 px) |
 | Asztali gép billentyűzettel / egérrel | nincs érintővezérlő → nincs változás; a szünet menüben a kapcsoló nem jelenik meg |
 | Több érintés (joystick + tűz / ugrás / körbenézés egyszerre) | változatlanul működik: a tárcsa és a gombok saját `pointerId`-t és capture-t tartanak; a Kockavadász körbenéző zónája a joystickkal ellentétes oldalon van, így a két hüvelykujj nem ütközik |
@@ -158,11 +159,18 @@ A mérés szigora (reakcióidő, kitérés, renderszám, érintési méret) seho
   joystick + második ujj egyszerre (Szökőár: ugrás, Aszteroida: tűz, Kockavadász: körbenézés). Képernyőkép minden állapotról.
 - Mutációs ellenpróba: (a) az alapérték `"left"`-re írva, (b) a közös `order` szabály törölve — mindkettőnél buknia kell.
 
+## Ismert, a változástól független megfigyelés
+
+A Szökőár álló nézetében az érintős kezdő súgó („Húzd az ujjad: ← → sáv, ↑ ugrás”, `.ts-hint`) széle a joystick tárcsája alá
+lóg. Ez a változás előtt is így volt (a súgó középen áll, a tárcsa a bal szélét fedte; most a jobb szélét fedi — a
+„bal oldalt” képernyőképen a régi állapot látszik). A súgó rövid ideig látszik, a tárcsát nem takarja. A játékot a
+`fix/szokoar-tema-es-sebesseg` ág átépíti, ezért itt nem nyúlunk hozzá (külön jegy).
+
 ## Várható ütközések a nyitott ágakkal
 
 | Ág | Hol | Mi |
 |---|---|---|
-| `fix/szokoar-tema-es-sebesseg` | `TsunamiEscapeEnglish.tsx` (`TsunamiTouchControls` megjegyzése, `TSUNAMI_CSS`), `index.css` fekvő `.tsunami-layout` blokk | az ág ugyanazt a `.tsunami-controls.game-touch-layer` szerkezetet tartja (tárcsa + „Sprint” `HoldButton`), így a közös szabály ott is hat; a fekvő elrendezés CSS-ét össze kell fésülni |
+| `fix/szokoar-tema-es-sebesseg` | `TsunamiEscapeEnglish.tsx` (`TsunamiTouchControls` megjegyzése — egyetlen megjegyzés-blokk) | az ág ugyanazt a `.tsunami-controls.game-touch-layer` szerkezetet tartja (tárcsa + „Sprint” `HoldButton`), így a közös szabály ott is hat, kódütközés nélkül; összefésülés után az ág új elrendezésén a `joystick-side.spec.ts` Szökőár-eseteit újra kell futtatni (a két-ujjas eset az „Ugrás” gombot név szerint keresi) |
 | `feat/jatek-j3a-kockavadasz-runabanya`, `perf/kockavadasz-telefon-gyors` | `BlockCraftQuiz.tsx` (`isLookZone`, a vászon `pointerdown`, a súgószövegek, a `<style>` blokk), `blockcraft-mobile.test.ts` | szöveg- és aláírás-szintű ütközés |
 | `fix/brainrot-valaszido` | `BrainRotSteal.tsx`, `brainrot-play.spec.ts` | a `leftHanded` állapot és a „K.4/16” teszt környéke |
 | `feat/jatek-j6a-aszteroida-kristaly` | `SpaceAsteroidQuiz.tsx` (súgószöveg, `<style>` blokk, bemenet-mérő) | szövegszintű |

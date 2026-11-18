@@ -6,10 +6,14 @@ import { createPortal } from "react-dom";
 import AudioToggleButton from "@/components/AudioToggleButton";
 
 import { useReducedMotion } from "../useReducedMotion";
+import { useJoystickPresent } from "./joystickSide";
+import JoystickSideToggle from "./JoystickSideToggle";
 import { setPauseMenuOpen, useCouponExpired, useModalLayer } from "./modalLayer";
 
 /**
  * S2 / terv 4.5 „Folyamat” — szünet menü: folytatás, újrakezdés, hang, kilépés.
+ * Ha a lapon van képernyő-joystick, a joystick oldalának közös kapcsolója is itt áll
+ * (docs/specs/2026-11-18-joystick-jobb-kez.md D5); joystick nélküli játékban és asztali nézetben nem jelenik meg.
  *
  * Portálon a `body`-ba kerül, mint a `QuizFeedbackCard`: a játékok transzformált / `overflow: hidden`
  * tárolói különben levágnák vagy a vászon alá tolnák. Megnyitáskor a „Folytatás” kapja a fókuszt,
@@ -31,6 +35,7 @@ export default function PauseMenu({ open: requested, onResume, onRestart, onExit
   const reduced = useReducedMotion();
   // #58: a lejárt kupon a játékot a szünet-úton állítja meg, de a menü nem rajzol — a lejárati párbeszéd az egyetlen réteg.
   const couponExpired = useCouponExpired();
+  const joystickPresent = useJoystickPresent();
   const open = requested && !couponExpired;
   const resumeRef = useRef<HTMLButtonElement>(null);
   const onResumeRef = useRef(onResume);
@@ -116,6 +121,7 @@ export default function PauseMenu({ open: requested, onResume, onRestart, onExit
                 {exitLabel}
               </button>
             </div>
+            {joystickPresent && <JoystickSideToggle className="game-pause-joystick-side" />}
             {children && <div className="game-pause-extra">{children}</div>}
           </motion.div>
         </motion.div>

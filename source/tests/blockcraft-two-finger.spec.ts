@@ -11,6 +11,10 @@ test.use({ serviceWorkers: "block" });
  * S11 — Kockavadász: kétujjas érintéses vezérlés valódi (CDP `Input.dispatchTouchEvent`) érintéssel, valamint a kvíz
  * és a szünet mobilos viselkedése (végrehajtás S11 / 4., 6. lépés és „Megírandó tesztek”).
  *
+ * SPEC-VÁLTOZÁS 2026-11-18 (docs/specs/2026-11-18-joystick-jobb-kez.md D3): a joystick alapból a JOBB oldalon áll, ezért a
+ * körbenéző zóna a vászon joystickkal ellentétes, BAL 60%-a lett. A körbenéző ujj a vászon 75%-áról a 25%-ára, a „nem forgat”
+ * ujj a 20%-áról a 80%-ára került (tükrözés); a húzás hossza, iránya és a forgás küszöbei (> 0,2 rad, < 0,01 rad) változatlanok.
+ *
  * A teszt-API (`window.__websuliGame`) csak `VITE_ENABLE_GAME_TEST_HOOKS=1` buildben él (build:e2e).
  * A `probe()` értékei számok / szövegek (a teszt-API típusa): `moveFwd` 1 / 0, `yaw` radián.
  */
@@ -65,7 +69,7 @@ async function shot(page: Page, state: string): Promise<void> {
 test.describe("390x844", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("két ujj egyszerre: bal hüvelykujj a joystickon előre, jobb a vásznon körbenéz", async ({ page }) => {
+  test("két ujj egyszerre: jobb hüvelykujj a joystickon előre, bal a vásznon körbenéz", async ({ page }) => {
     await startGame(page);
     const joy = await page.getByTestId("virtual-joystick").boundingBox();
     const canvas = await page.locator("canvas").first().boundingBox();
@@ -75,11 +79,12 @@ test.describe("390x844", () => {
     const before = await probe(page);
     expect(before.moveFwd).toBe(0);
 
-    // 1. ujj: a joystick közepe; 2. ujj: a vászon jobb részén (75% szélesség, 45% magasság — HUD és gombok között).
+    // 1. ujj: a joystick közepe (alapból a jobb oldalon); 2. ujj: a vászon bal részén (25% szélesség, 45% magasság — HUD és gombok között).
     const j = { x: Math.round(joy!.x + joy!.width / 2), y: Math.round(joy!.y + joy!.height / 2) };
-    const c = { x: Math.round(canvas!.x + canvas!.width * 0.75), y: Math.round(canvas!.y + canvas!.height * 0.45) };
-    // A körbenézés csak a vászon jobb 60%-án indulhat — a választott pont ott van.
-    expect(c.x - canvas!.x).toBeGreaterThanOrEqual(canvas!.width * 0.4);
+    expect(j.x, "a joystick alapból a képernyő jobb felén").toBeGreaterThan(390 / 2);
+    const c = { x: Math.round(canvas!.x + canvas!.width * 0.25), y: Math.round(canvas!.y + canvas!.height * 0.45) };
+    // A körbenézés csak a vászon joystickkal ellentétes (bal) 60%-án indulhat — a választott pont ott van.
+    expect(c.x - canvas!.x).toBeLessThanOrEqual(canvas!.width * 0.6);
 
     const cdp = await page.context().newCDPSession(page);
     const touch = (type: "touchStart" | "touchMove" | "touchEnd", points: Array<{ x: number; y: number; id: number }>) =>
@@ -111,12 +116,12 @@ test.describe("390x844", () => {
     expect(after.moveFwd, "felengedés után a mozgás leáll (nem ragad be)").toBe(0);
   });
 
-  test("a vászon bal 40%-án induló húzás nem forgat (az a joystick hüvelykujjáé)", async ({ page }) => {
+  test("a vászon joystick felőli (jobb) 40%-án induló húzás nem forgat (az a joystick hüvelykujjáé)", async ({ page }) => {
     await startGame(page);
     const canvas = await page.locator("canvas").first().boundingBox();
     const before = await probe(page);
     const cdp = await page.context().newCDPSession(page);
-    const p = { x: Math.round(canvas!.x + canvas!.width * 0.2), y: Math.round(canvas!.y + canvas!.height * 0.4) };
+    const p = { x: Math.round(canvas!.x + canvas!.width * 0.8), y: Math.round(canvas!.y + canvas!.height * 0.4) };
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...p, id: 7 }] });
     for (let i = 1; i <= 6; i++) {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: p.x + i * 12, y: p.y, id: 7 }] });

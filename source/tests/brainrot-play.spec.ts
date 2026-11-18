@@ -274,19 +274,45 @@ test.describe("kampóval mért szabályok", () => {
       .toBeLessThan(2);
   });
 
-  test("K.4/16: balkezes tükrözés — a beállítás a joystickot a jobb oldalra teszi (és megmarad)", async ({ page }) => {
+  // SPEC-VÁLTOZÁS 2026-11-18 (docs/specs/2026-11-18-joystick-jobb-kez.md D3–D5): a joystick alapból a JOBB oldalon áll; a
+  // játék saját „Jobbkezes / Balkezes” gombjai (`br-hand-*`) és a `websuli.brainrot.hand` kulcs megszűntek, a helyükön a közös
+  // kapcsoló (`joystick-side-*`) és a közös `websuli.gameSettings.v1` beállítás áll. A mérés ugyanaz maradt: a joystick
+  // tényleges doboza melyik félen van, és megmarad-e a választás.
+  test("K.4/16: a joystick alapból a jobb oldalon; a közös kapcsoló a bal oldalra teszi (és megmarad)", async ({ page }) => {
+    const stickCenter = async () => {
+      const stick = page.getByTestId("virtual-joystick");
+      await expect(stick).toBeVisible();
+      const box = (await stick.boundingBox())!;
+      return box.x + box.width / 2;
+    };
+    const storedSide = () =>
+      page.evaluate(() => {
+        const raw = localStorage.getItem("websuli.gameSettings.v1");
+        return raw ? ((JSON.parse(raw) as { joystickSide?: string }).joystickSide ?? null) : null;
+      });
+
     await page.goto("/games/brain-rot-steal");
-    const left = page.getByTestId("br-hand-left");
+    const right = page.getByTestId("joystick-side-right");
+    const left = page.getByTestId("joystick-side-left");
     // A beállítás a kezdőképernyő (összecsukható) beállításai között van.
+    if (!(await left.isVisible())) await page.locator("[data-game-start] summary").first().tap();
+    await expect(right, "alapérték: jobb oldal").toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: /vadászat indítása/i }).tap();
+    expect(await stickCenter(), "alapból a joystick a jobb hüvelykujjnál").toBeGreaterThan(390 / 2);
+
+    await page.goto("/games/brain-rot-steal");
     if (!(await left.isVisible())) await page.locator("[data-game-start] summary").first().tap();
     await left.tap();
     await expect(left).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: /vadászat indítása/i }).tap();
-    const stick = page.getByTestId("virtual-joystick");
-    await expect(stick).toBeVisible();
-    const box = (await stick.boundingBox())!;
-    expect(box.x + box.width / 2, "a joystick a jobb hüvelykujjnál").toBeGreaterThan(390 / 2);
-    expect(await page.evaluate(() => localStorage.getItem("websuli.brainrot.hand"))).toBe("left");
+    expect(await stickCenter(), "átkapcsolva a joystick a bal hüvelykujjnál").toBeLessThan(390 / 2);
+    expect(await storedSide()).toBe("left");
+
+    // Újratöltés után is megmarad.
+    await page.goto("/games/brain-rot-steal");
+    await page.getByRole("button", { name: /vadászat indítása/i }).tap();
+    expect(await stickCenter(), "újratöltés után is a bal oldalon").toBeLessThan(390 / 2);
+    expect(await page.evaluate(() => localStorage.getItem("websuli.brainrot.hand")), "a régi, saját kulcsot a játék már nem írja").toBeNull();
   });
 
   test("K.4/14–15: a joystick valódi érintéssel (CDP) mozgatja a vadászt; a táblára bökve oda fut", async ({ page }) => {

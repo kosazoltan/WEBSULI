@@ -636,7 +636,9 @@ const TsunamiTouchControls = memo(function TsunamiTouchControls({
   return (
     /* G-8: touch-action:none — hosszú nyomásra a böngésző eddig kijelölt és görgetett, a futás megállt.
        S9: csak érintős eszközön; a sáv a biztonsági sávon belül, a hüvelykujjak alatt. D-J1a-1: a tárcsa
-       analóg oldalirányú kormányzás a húzás mellett; az Ugrás akciógomb a jobb hüvelykujjnak. */
+       analóg oldalirányú kormányzás a húzás mellett; az Ugrás akciógomb a MÁSIK hüvelykujjnak. Az oldal közös beállítás
+       (alap: tárcsa jobbra, Ugrás balra — docs/specs/2026-11-18-joystick-jobb-kez.md): a sorrendet a közös CSS adja
+       (`.game-joystick` order), a DOM-sorrend és a `memo` változatlan. */
     <div
       className="tsunami-controls game-touch-layer"
       data-game-controls

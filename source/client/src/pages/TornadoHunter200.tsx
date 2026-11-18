@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { useJoystickSide } from "@/game-engine/play/gameSettings";
 import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import { Card, CardContent } from "@/components/ui/card";
 import { correctDataAttrs, installGameTestApi, GAME_TEST_HOOKS_ENABLED } from "@/game-engine/game-test-hooks";
@@ -55,6 +56,7 @@ import {
   cancelGameFrame,
   GameHud,
   GameShell,
+  JoystickSideToggle,
   PauseMenu,
   ResultScreen,
   StartScreen,
@@ -1131,15 +1133,8 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
         </div>
 
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-white/60 mb-1.5">Irányítás</p>
-          <div className="flex gap-1.5">
-            <ToggleChip active={!s.leftHanded} onClick={() => set({ leftHanded: false })}>
-              Jobbkezes
-            </ToggleChip>
-            <ToggleChip active={s.leftHanded} onClick={() => set({ leftHanded: true })}>
-              Balkezes
-            </ToggleChip>
-          </div>
+          {/* A joystick oldala közös, minden játékra érvényes beállítás (docs/specs/2026-11-18-joystick-jobb-kez.md D4, D5). */}
+          <JoystickSideToggle />
         </div>
 
         <div>
@@ -2599,7 +2594,6 @@ function PlayScreen(props: {
 
       {touch && (
         <TouchControls
-          leftHanded={props.progress.settings.leftHanded}
           touchRef={touchRef}
           resetSignal={touchReset}
           anchorReady={hud.anchorReady && !playerRef.current.anchored}
@@ -2620,18 +2614,8 @@ function PlayScreen(props: {
         onExit={props.onExit}
         exitLabel="Szintek"
       >
-        <div className="grid gap-3 [@media(max-height:500px)_and_(min-width:560px)]:grid-cols-[2fr_3fr]">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-wide text-white/70 mb-1.5">Irányítás</p>
-            <div className="grid grid-cols-2 gap-2">
-              <ToggleChip active={!props.progress.settings.leftHanded} onClick={() => props.onProgress((latest) => updateSettings(latest, { leftHanded: false }))}>
-                Jobbkezes
-              </ToggleChip>
-              <ToggleChip active={props.progress.settings.leftHanded} onClick={() => props.onProgress((latest) => updateSettings(latest, { leftHanded: true }))}>
-                Balkezes
-              </ToggleChip>
-            </div>
-          </div>
+        {/* A joystick oldalát a közös szünet menü adja (JoystickSideToggle) — itt csak a játék saját beállítása áll. */}
+        <div className="grid gap-3">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-white/70 mb-1.5">Grafika</p>
             <div className="grid grid-cols-3 gap-2">
@@ -2874,7 +2858,6 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
 
 /* ------- touch controls ------- */
 function TouchControls(props: {
-  leftHanded: boolean;
   touchRef: React.MutableRefObject<TouchDrive>;
   resetSignal: number;
   /** Jó horgonyzási pozíció: a ⚓ gomb világít és pulzál (csökkentett mozgásnál csak világít). */
@@ -2887,6 +2870,9 @@ function TouchControls(props: {
   // Egységes köralakú vezérlés (spec 2026-09-20): a `◀`/`▶` kormánygombok és a Gáz/Fék pedál
   // helyett ugyanaz a tárcsa, mint az Aszteroidában — a kormányzás és a gyorsítás is IRÁNY, ezért
   // mindkettő a tárcsára kerül. A nem irányjellegű gombok (horgony, kamera) maradnak.
+  // A joystick oldala közös beállítás (docs/specs/2026-11-18-joystick-jobb-kez.md): alapból a tárcsa jobbra kerül
+  // (a közös `.game-joystick` szabály, `order`), a gombok balra — a ⚓ mindig a külső szélen áll.
+  const joystickSide = useJoystickSide();
   const steer = (
     <VirtualJoystick
       label="Vezetés"
@@ -2902,7 +2888,7 @@ function TouchControls(props: {
     />
   );
   const pedals = (
-    <div className={`flex gap-3 items-end ${props.leftHanded ? "flex-row-reverse" : ""}`}>
+    <div className={`flex gap-3 items-end ${joystickSide === "right" ? "flex-row-reverse" : ""}`} data-testid="tornado-touch-actions">
       <TouchBtn onDown={() => props.onCamera()} onUp={() => {}} label="Kamera" small />
       <TouchBtn onDown={() => props.onAnchor()} onUp={() => {}} label="⚓" accent glow={props.anchorReady} disabled={!props.anchorEnabled} />
     </div>
@@ -2914,17 +2900,9 @@ function TouchControls(props: {
       data-game-controls
       className="game-touch-layer absolute z-30 flex items-end justify-between gap-2 pointer-events-none"
     >
-      {props.leftHanded ? (
-        <>
-          <div className="pointer-events-auto">{pedals}</div>
-          <div className="pointer-events-auto">{steer}</div>
-        </>
-      ) : (
-        <>
-          <div className="pointer-events-auto">{steer}</div>
-          <div className="pointer-events-auto">{pedals}</div>
-        </>
-      )}
+      {/* A sáv közvetlen gyerekei (`.game-touch-layer > *` → pointer-events: auto); a tárcsa helyét a közös CSS adja. */}
+      {steer}
+      {pedals}
     </div>
   );
 }

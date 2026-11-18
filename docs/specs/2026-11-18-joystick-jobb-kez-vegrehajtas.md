@@ -49,9 +49,9 @@ Parancs: `cd source && node --import tsx --test tests/game-settings.test.ts` →
    `<JoystickSideToggle />`.
 4. `source/client/src/index.css` a `.game-touch-layer > *` szabály után:
    - `.game-shell-fixed[data-joystick-side="right"] .game-joystick { order: 1; }`
-   - a kapcsoló stílusa (`.game-joystick-side…`, gomb ≥ 48 px).
-   - a Szökőár fekvő blokkja (`@media (min-width: 650px) and (max-height: 500px)`): az akciógomb / a joystick a jelenet
-     alsó sarkába (terv D3, Szökőár sor).
+   - a kapcsoló stílusa (`.game-joystick-side…`, gomb ≥ 48 px); az alacsony fekvő szünet menüben
+     (`@media (max-height: 500px) and (min-width: 560px)`) a kapcsoló egy sorban.
+   - A Szökőárhoz külön CSS nem kell: a sáv álló és fekvő nézetben is teljes szélességű (böngészőben mérve; terv D3).
 
 ## 4. feladat — játékok (D3, D4)
 

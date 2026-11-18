@@ -24,6 +24,7 @@ import {
   PauseMenu,
   ResultScreen,
   StartScreen,
+  joystickSideHint,
   requestGameFrame,
   useBestScore,
   useHaptics,
@@ -67,6 +68,7 @@ import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
 import { shapeJoystick } from "@/game-engine/joystick";
+import { useJoystickSide } from "@/game-engine/play/gameSettings";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import { correctDataAttrs, installGameTestApi } from "@/game-engine/game-test-hooks";
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
@@ -765,6 +767,8 @@ export default function SpaceAsteroidQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // S10 / terv 4.5: közös érintés-észlelés (any-pointer: coarse + valódi érintés) — érintős laptop is kap vezérlőt.
   const touchCapable = useTouchCapable();
+  /** A joystick oldala (közös beállítás, alap: jobb) — az érintős súgó szövege ezt követi. */
+  const joystickSide = useJoystickSide();
   const touchCapableRef = useRef(touchCapable);
   touchCapableRef.current = touchCapable;
   const haptics = useHaptics();
@@ -909,7 +913,8 @@ export default function SpaceAsteroidQuiz() {
     () =>
       registerInputProbe("space", () => {
         const p = playerRef.current;
-        return { x: p.x, y: p.y, vx: p.vx, vy: p.vy, inX: stickRef.current.x, inY: stickRef.current.y };
+        // `fire`: az érintős tűzgomb állapota (1 / 0) — a „joystick + tűz egyszerre” méréshez (joystick-side.spec.ts).
+        return { x: p.x, y: p.y, vx: p.vx, vy: p.vy, inX: stickRef.current.x, inY: stickRef.current.y, fire: touchRef.current.fire ? 1 : 0 };
       }),
     [],
   );
@@ -2857,7 +2862,7 @@ export default function SpaceAsteroidQuiz() {
                 </div>
                 <p className="text-sm text-white/75">
                   {touchCapable
-                    ? "Bal hüvelykujj: joystick · jobb: tűz (célzássegéddel) · középen a bomba."
+                    ? joystickSideHint("asteroid-start", joystickSide)
                     : "Nyilak / WASD: mozgás · Space: tűz · B: bomba · P: szünet."}
                 </p>
               </div>
@@ -2970,7 +2975,8 @@ export default function SpaceAsteroidQuiz() {
                       stickRef.current.y = s.y;
                     }}
                   />
-                  {/* A jobb hüvelykujj klasztere: bomba + tűz (álló és fekvő nézetben is a jobb szélen). */}
+                  {/* Az akciógombok klasztere: bomba + tűz. A joystickkal ELLENTÉTES szélen áll (alapból balra, a közös
+                      joystick-oldal beállítás szerint — docs/specs/2026-11-18-joystick-jobb-kez.md); a Tűz mindig kívül. */}
                   <div className="sa-actions">
                   <button
                     type="button"
@@ -3181,6 +3187,8 @@ export default function SpaceAsteroidQuiz() {
         }
         .sa-controls > * { flex: 0 0 auto; }
         .sa-actions { display: flex; align-items: flex-end; gap: 14px; }
+        /* Jobb oldali joysticknál a klaszter balra kerül (közös .game-joystick szabály); tükrözve, hogy a Tűz a külső szélen maradjon. */
+        [data-joystick-side="right"] .sa-actions { flex-direction: row-reverse; }
         .sa-actions .sa-bomb { margin-bottom: calc(var(--game-action-size) * 0.55); flex-direction: column; }
         .sa-fire-wrap { --game-action-size: clamp(64px, 21vmin, 104px); }
         .sa-fire-wrap .sa-fire { display: inline-flex; }

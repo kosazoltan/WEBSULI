@@ -1,5 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
+import { useJoystickSide } from "@/game-engine/play/gameSettings";
+
 import { useAutoPause } from "./autoPause";
 import { useOrientation } from "./orientation";
 import RotateHint from "./RotateHint";
@@ -41,6 +43,9 @@ export default function GameShell({
   children,
 }: GameShellProps) {
   const touch = useTouchCapable();
+  // A képernyő-joystick oldala (alap: jobb). A joystick és a játékok CSS-e ezt az attribútumot olvassa
+  // (docs/specs/2026-11-18-joystick-jobb-kez.md D2).
+  const joystickSide = useJoystickSide();
   const current = useOrientation();
   const [rotateDismissed, setRotateDismissed] = useState(false);
   const playing = state === "playing";
@@ -63,6 +68,7 @@ export default function GameShell({
       data-fixed-screen={fixed ? "true" : "false"}
       data-game-state={state}
       data-touch={touch ? "true" : "false"}
+      data-joystick-side={joystickSide}
       className={`game-shell-fixed min-h-screen relative overflow-hidden text-white ${className}`}
       style={{ background: "var(--game-surface)", ...style }}
     >

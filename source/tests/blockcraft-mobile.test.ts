@@ -78,11 +78,16 @@ test("késleltetett írás: az elismerő felirat időzítője feliratonként él
   has(code, /if \(!achievement\) return;\s*const id = window\.setTimeout\(\(\) => setAchievement\(null\), 2500\);\s*return \(\) => window\.clearTimeout\(id\);/, "nincs feliratonkénti, takarított időzítő");
 });
 
-test("kétujjas vezérlés: a körbenézés csak a vászon jobb 60%-án indul", () => {
+// SPEC-VÁLTOZÁS 2026-11-18 (docs/specs/2026-11-18-joystick-jobb-kez.md D3): a joystick oldala közös beállítás (alap: jobb), ezért
+// a körbenéző zóna nem rögzítetten a jobb 60%, hanem a joystickkal ELLENTÉTES 60% (alapértéknél a bal 60%). A zóna mérete
+// (60%) és a „zónán kívül nem forgat” szabály változatlan; a tükrözés számszerű tesztje: joystick-side.test.ts.
+test("kétujjas vezérlés: a körbenézés csak a vászon joystickkal ellentétes 60%-án indul", () => {
   const code = pageCode();
-  has(code, /const LOOK_ZONE_START = 0\.4;/, "a körbenézés-zóna nem a jobb 60%");
-  has(code, /isLookZone\(e\.clientX - rect\.left, rect\.width\)/, "a vászon-érintés nem nézi a zónát");
-  has(code, /if \(!tl\.look \|\| pausedRef\.current/, "a bal oldali érintés is forgat");
+  has(code, /const LOOK_ZONE_SHARE = 0\.6;/, "a körbenézés-zóna nem 60%");
+  has(code, /return isOppositeZone\(x, width, joystickSide, LOOK_ZONE_SHARE\);/, "a zóna nem a joystickkal ellentétes oldal");
+  has(code, /isLookZone\(e\.clientX - rect\.left, rect\.width, joystickSideRef\.current\)/, "a vászon-érintés nem nézi a zónát a beállított oldallal");
+  has(code, /joystickSideRef\.current = joystickSide;/, "a zóna nem a pillanatnyi beállítást olvassa");
+  has(code, /if \(!tl\.look \|\| pausedRef\.current/, "a joystick felőli érintés is forgat");
 });
 
 test("visszajelzés: rezgés bányászásra, jó és rossz válaszra; rázás csak csökkentett mozgás nélkül", () => {

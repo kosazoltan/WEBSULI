@@ -53,6 +53,7 @@ import {
   GameShell,
   PauseMenu,
   ResultScreen,
+  JoystickSideToggle,
   StartScreen,
   cancelGameFrame,
   requestGameFrame,
@@ -156,8 +157,6 @@ const FLOAT_MS = 1300;
 /** Ennyin belüli szökések egy összesítő feliratot kapnak (kanban #64). */
 const ESCAPE_MERGE_MS = 450;
 const FLOAT_LANE_PX = 26;
-/** A joystick oldala (K.4/16 balkezes tükrözés). */
-const HAND_KEY = "websuli.brainrot.hand";
 const EMPTY_HUD: HudSnap = { score: 0, caught: 0, combo: 0, multiplier: 1, timeLeft: ROUND_LIMIT, creatures: [], arena: [], carrying: false, hint: 1 };
 
 /* --- Quiz bank --- */
@@ -594,22 +593,9 @@ export default function BrainRotSteal() {
   const [cageZoneVersion, setCageZoneVersion] = useState(0);
   const [legendTop, setLegendTop] = useState<{ top: number; left: number; width: number } | null>(null);
   const legendRef = useRef<HTMLDivElement>(null);
-  /** K.4/16: balkezes tükrözés — a joystick a jobb hüvelykujjhoz kerül (helyben tárolva, tárolóhiba esetén alapérték). */
-  const [leftHanded, setLeftHanded] = useState<boolean>(() => {
-    try {
-      return window.localStorage.getItem(HAND_KEY) === "left";
-    } catch {
-      return false;
-    }
-  });
-  const chooseHand = useCallback((left: boolean) => {
-    setLeftHanded(left);
-    try {
-      window.localStorage.setItem(HAND_KEY, left ? "left" : "right");
-    } catch {
-      /* privát mód / megtelt tároló: a választás a menetre érvényes marad */
-    }
-  }, []);
+  // A joystick oldala közös, minden játékra érvényes beállítás (alap: jobb; docs/specs/2026-11-18-joystick-jobb-kez.md
+  // D3, D4): a keret (`GameShell`) `data-joystick-side` attribútumát a lap CSS-e olvassa, a kapcsoló a közös
+  // `JoystickSideToggle`. A régi, saját `websuli.brainrot.hand` kulcsot a lap már nem olvassa és nem írja.
 
   // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
   useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);
@@ -1317,17 +1303,7 @@ export default function BrainRotSteal() {
                     label={`Pálya — ${userGrade}. osztály`}
                   />
                 ) : null}
-                <div>
-                  <p className="mb-2 text-sm font-bold uppercase tracking-wide text-fuchsia-100/85">Joystick</p>
-                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="Melyik kézzel irányítasz?">
-                    <button type="button" className="br-hand-btn" aria-pressed={!leftHanded} data-testid="br-hand-right" onClick={() => chooseHand(false)}>
-                      Jobbkezes (bal oldalt)
-                    </button>
-                    <button type="button" className="br-hand-btn" aria-pressed={leftHanded} data-testid="br-hand-left" onClick={() => chooseHand(true)}>
-                      Balkezes (jobb oldalt)
-                    </button>
-                  </div>
-                </div>
+                <JoystickSideToggle />
                 <GamePedagogyPanel
                   accent="fuchsia"
                   kidMission="Fuss a joystickkal, és kapd el a menekülő lényeket! Elkapáskor négy ketrec nyílik a válaszokkal: vidd a lényt a jó ketrecbe. Jó válasz = a lény a tiéd + kombó! A 90 másodperc közben is megy."
@@ -1386,7 +1362,7 @@ export default function BrainRotSteal() {
             ]}
             progress={{ value: hud.timeLeft, max: ROUND_LIMIT, label: `${hud.timeLeft} mp`, tone: timeTone }}
           />
-          <main className="br-main relative z-10 w-full mx-auto" data-touch-controls={touchCapable ? "true" : "false"} data-hand={leftHanded ? "left" : "right"}>
+          <main className="br-main relative z-10 w-full mx-auto" data-touch-controls={touchCapable ? "true" : "false"}>
             <div
               ref={boardRef}
               data-collectible-world
@@ -1455,9 +1431,10 @@ export default function BrainRotSteal() {
               )}
             </div>
 
-            {/* Érintővezérlő CSAK érintős eszközön (M5): joystick bal hüvelykujjra; kérdés alatt saját szünetgomb. */}
+            {/* Érintővezérlő CSAK érintős eszközön (M5): a joystick alapból a JOBB hüvelykujjnál (közös joystick-oldal beállítás),
+                a súgó / állapot a másik oldalon; kérdés alatt saját szünetgomb. */}
             {touchCapable && (
-              <div className="br-controls" data-testid="br-touch-controls" data-game-controls data-hand={leftHanded ? "left" : "right"}>
+              <div className="br-controls" data-testid="br-touch-controls" data-game-controls>
                 <VirtualJoystick
                   label="Vadász irányítása"
                   radius="auto"
@@ -1707,15 +1684,18 @@ const BRAIN_ROT_CSS = `
   [data-collectible-world][data-testid="br-board"] { background: radial-gradient(ellipse at 50% 15%, #8d60cc55, transparent 65%), linear-gradient(160deg, #191944, #241046) !important; }
   .br-controls { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 4px; }
   .br-controls-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 0; flex: 1 1 auto; }
-  .br-controls[data-hand="left"] { flex-direction: row-reverse; }
-  .br-controls[data-hand="left"] .br-controls-side { align-items: flex-start; }
-  .br-hand-btn { min-height: 52px; padding: 6px 10px; border-radius: 12px; font-size: 15px; font-weight: 800; line-height: 1.2; color: #fff; background: #0f172acc; border: 1px solid #ffffff33; }
-  .br-hand-btn[aria-pressed="true"] { background: linear-gradient(180deg, #c026d3, #7c3aed); border-color: #f5d0fe99; }
+  /* A joystick oldala (közös beállítás a keret data-joystick-side attribútumán; alap: right). Álló nézetben a közös
+     .game-joystick szabály (order) teszi a tárcsát a sor végére (jobbra); a súgó / állapot a másik oldalhoz igazodik. */
+  [data-joystick-side="right"] .br-controls-side { align-items: flex-start; }
+  [data-joystick-side="right"] .br-controls-row { justify-content: flex-start; }
+  [data-joystick-side="right"] .br-controls-side .br-hint, [data-joystick-side="right"] .br-controls-side .br-status { text-align: left; }
   @media (orientation: landscape) and (max-height: 520px) {
     /* A közös .game-shell-fixed[data-playing] > main (0,2,1) oszlopot ad — a játék gyökerével erősebb (C-53). */
-    [data-game="BrainRotSteal"] .br-main[data-touch-controls="true"] { flex-direction: row-reverse; }
-    [data-game="BrainRotSteal"] .br-main[data-touch-controls="true"][data-hand="left"] { flex-direction: row; }
-    [data-game="BrainRotSteal"] .br-controls[data-hand="left"] { flex-direction: column-reverse; }
+    /* Fekvő nézet: a vezérlő-oszlop a tábla mellett áll — jobb oldali joysticknál (alap) a tábla JOBB oldalán, bal oldalinál
+       a balon. Az oszlopon belül a tárcsa mindig alul marad, ezért itt a közös order-szabály nem érvényes. */
+    [data-game="BrainRotSteal"] .br-main[data-touch-controls="true"] { flex-direction: row; }
+    [data-game="BrainRotSteal"][data-joystick-side="left"] .br-main[data-touch-controls="true"] { flex-direction: row-reverse; }
+    [data-game="BrainRotSteal"][data-joystick-side] .br-controls .game-joystick { order: 0; }
     [data-game="BrainRotSteal"] .br-main[data-touch-controls="true"] .br-board { width: auto; flex: 1 1 auto; }
     .br-controls { flex-direction: column-reverse; justify-content: space-between; padding: 4px 0; width: auto; max-width: 30vw; }
     .br-controls-side { align-items: center; flex: 0 1 auto; }

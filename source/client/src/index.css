@@ -437,6 +437,21 @@
   pointer-events: none;
 }
 .game-touch-layer > * { pointer-events: auto; }
+/* A joystick oldala (docs/specs/2026-11-18-joystick-jobb-kez.md D2). A közös keret (GameShell) hirdeti a beállítást
+   (data-joystick-side, alap: right); a közös joystick (.game-joystick) jobb oldali beállításnál a flex vezérlősáv
+   VÉGÉRE kerül, így a jobb hüvelykujj alá esik, a többi elem (tűz, ugrás, bányász …) pedig balra. A DOM-sorrend nem
+   változik. A játékok saját tükrözése (gombcsoport belső rendje) ugyanerre az attribútumra épül, a saját stíluslapjukban. */
+.game-shell-fixed[data-joystick-side="right"] .game-joystick { order: 1; }
+/* A joystick oldalának közös kapcsolója (szünet menü, kezdő beállítások). */
+.game-joystick-side { display: grid; gap: 6px; }
+.game-joystick-side-label { margin: 0; font-size: 14px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #ffffffb3; }
+.game-joystick-side-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.game-joystick-side-btn {
+  min-height: 52px; padding: 6px 10px; border-radius: 14px; font-size: 16px; font-weight: 800; line-height: 1.2;
+  color: #fff; background: #ffffff14; border: 1px solid #ffffff33;
+}
+.game-joystick-side-btn[aria-pressed="true"] { color: #0b172d; background: linear-gradient(180deg, #67e8f9, #22d3ee); border-color: #a5f3fc; }
+.game-pause-joystick-side { margin-top: 10px; }
 /* S13 / B7: a components rétegben áll, így a Tailwind text-* / leading-* / min-h-* segédosztálya (utilities
    réteg) felülírja — a játékoknak nem kell !text-… kerülőút. Rétegen kívül a később álló szabály nyerne. */
 @layer components {
@@ -797,6 +812,8 @@
   .game-dialog.game-pause { width: min(100%, 520px); padding: 16px 18px; }
   .game-pause .game-dialog-head { margin-bottom: 12px; }
   .game-pause-actions { grid-template-columns: 1fr 1fr; }
+  /* Alacsony fekvő nézet: a joystick-oldal kapcsolója egy sorban (felirat + két gomb), hogy a játék saját beállítása is kiférjen. */
+  .game-pause-joystick-side { grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 12px; }
 }
 
 /* Eredményképernyő. */
