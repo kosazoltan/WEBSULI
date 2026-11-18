@@ -38,6 +38,21 @@ terhelésétől függően ±50%.
 | PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet; a push-kapu minden lépése; `npm run build`; játék / UI: CI-azonos böngészős út; DB: `test:learning-db` | 214 s böngészős út nélkül (build 20 s); böngészős futásonként + ~160 s (füstpróba: 1 spec, 11 eset, 164 s) |
 | Merge előtt | `npm run gate:merge -- <PR>` | CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
 
+### Külső (Gemini) ellenőr — második vélemény
+
+`scripts/qa/gates/external-review.mjs` (terv: `docs/specs/2026-11-17-kulso-ellenor.md`; menet: `websuli-fejlesztesi-ellenor` skill
+4/b). A Claude-alügynökös ellenőr MELLETT, ugyanarra a fejre; kulcs csak `GEMINI_API_KEY` / `--env-file`; titok-szűrés a küldés előtt;
+`--record` → `external-<fej>.json`. A `pre-pr-gate` és a `pre-merge-gate` „külső (Gemini) ellenőr” lépése csak `WARN` / `PASS` —
+soha nem bukás. Ellenőrzőlisták: `scripts/qa/gates/external-review/checklist-{game,general}.md`.
+
+- **Költségkorlát:** `--dry-run` (csak `countTokens`, ingyenes) előbb; hívásonként a kimenet + gondolkodás felső korlátja
+  131 072 token (Interactions háttér-mód); a stdout utolsó sora és a jelentés vége a token-felhasználást (bemenet / gondolkodás /
+  kimenet) rögzíti. Időtúllépést / megszakadt kapcsolatot nem ismétel (már számlázott), csak 429 / 5xx-et.
+- **Siker csak kész jelentéssel:** nem üres válasz + `finishReason` STOP + ítélet-fejezet; különben `.hianyos.md`, nem nulla
+  kilépés, `incomplete` / `blocked` bizonyíték → a kapu: „a második vélemény HIÁNYZIK”.
+- **A külső modell állításai nem tények:** nem lát a repóba; minden kritikus / magas leletét az orkesztrátor a kódból visszaellenőrzi
+  (MEGERŐSÍTVE / CÁFOLVA / NEM ELDÖNTHETŐ).
+
 ### Tiltott minták (a diff hozzáadott soraiban, `FAIL`, érték kiírása nélkül)
 
 `.only(` / `.skip(` / `fixme(` / `xit(` / `{ only: true }` tesztfájlban; `git … --no-verify` szkriptben (`scripts/`, `*.sh`,
@@ -86,6 +101,29 @@ viszi bukásra.
 - **A hook NEM biztonsági határ** a szándékos megkerülés ellen (pl. a hook kikapcsolása, szkriptfájlból indított push, idézés- /
   escape-trükk a parancsnévben, `git send-pack`, `gh api graphql` merge-mutáció): a figyelmetlen
   hibát fogja meg. A megkerülés tilos, és az orkesztrátornál a `pre-merge-gate` mindenképp lefut.
+- **Időtúllépéskor is tilt (kanban #100):** ha a `git` / `gh` nem válaszol a konfigurált korláton belül (`gates.config.json`:
+  `hookGitTimeoutMs` 10 s, `hookGhTimeoutMs` 15 s, a teljes keret `hookBudgetMs` 45 s, a Claude Code 60 s-os hook-időkorlátja
+  alatt), a hook DENY-t ad („a repó állapota nem állapítható meg — próbáld újra”). Az ügynök teendője: néhány másodperc múlva
+  ugyanazt az egyszerű parancsot újra kiadni; a kaput megkerülni tilos. „Más repó”-nak csak a gyors, nem nulla kilépés számít, és
+  az sem, ha a mappa vagy a parancs a WEBSULI-ra utal. Értelmező + szkriptfájl (pl. `node kanban.mjs note 5 "…"`) idézett
+  argumentumában a „push” szó nem kapu-köteles; `-e` / `-c` kiértékelésnél, láncolásnál továbbra is tilt. A hook a nem egyértelműen
+  értelmezhető idézésű parancsot tiltja (a szöveget fájlból add át).
+- **A hook a projektgyökérhez kötött (kanban #100, 2. kör):** minden hook-parancs `node "${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/…"`,
+  így alkönyvtárból (`source/`, munkafa) is lefut; a `scripts/qa/hooks/settings-hooks.test.mjs` a valódi settings-et méri. Ha maga a
+  hook-folyamat nem indul el, összeomlik vagy túllépi a 60 s-os külső korlátot, azt a Claude Code alapbeállítással NEM tiltásként
+  kezeli — ezért a hook a döntést a saját 45 s-os keretén belül hozza meg.
+- **Feltöltés munkafából alügynökként:** az alügynök parancsai a fő checkoutból indulnak (a `cd` nem marad meg, láncolni tilos),
+  ezért a munkafa ágát a fő checkoutból kell felküldeni egyszerű parancsként: `git push origin <ág>`. A hook ilyenkor a megnevezett
+  helyi ág fejére szóló bizonyítékot nézi.
+- **C-61 (main elmozdult a PR CI-ja óta, kanban #92):** a `pre-merge-gate` a main elmozdulásának fájllistáját a GitHub compare
+  végpontjából olvassa, és a `gates.config.json` `repoWideScopes` táblázata szerint dönt. **FAIL**, ha a PR egy repó-szintű
+  ellenőrzést érint (`*-guard.test.ts`, `scripts/qa/**`, `.github/workflows/**`), és a main olyan fájlt változtatott, amelyet az
+  ellenőrzés olvas: az őröknél és a workflow-nál bármit (`.*`), a `scripts/qa/`-nál a `scripts/qa/`, `.claude/settings.json`,
+  `docs/specs/`, `render.yaml`, `.agents/skills/`, `.claude/skills/`, `.github/workflows/` alatt (indoklás fájl:sorral a konfigban;
+  átnevezett fájlnál a régi név is számít). FAIL akkor
+  is, ha a fájllista nem olvasható, csonka (≥ 300) vagy üres eltérő SHA mellett, illetve ha a hatókör-táblázat hiányzik vagy hibás.
+  **WARN**, ha a main elmozdult, de nincs metszet (pl. csak játékkód változott egy `scripts/qa`-s PR mellett). **PASS**, ha a CI a
+  jelenlegi mainnel futott.
 - A hook csak a WEBSULI-ból indított Claude Code munkamenetekre hat (a `.claude/settings.json`-t a munkamenet induláskor olvassa —
   a merge után induló munkamenetektől érvényes). Más ügynököt (Codex, Cursor) az `AGENTS.md`, a skillek és a `.cursor/rules` köt.
 
