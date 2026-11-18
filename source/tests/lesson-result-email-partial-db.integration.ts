@@ -202,15 +202,15 @@ test("R6 / S4: a már kiment „félbehagyva” levél utáni pillanatképre a v
 
 test("R7 / S5: körönként a LEGTÖBB választ tartalmazó pillanatkép marad — a később érkező, kevesebb válaszú nem írja felül", async () => {
   reset();
-  const previousDelay = setPartialDelay(300);
+  const previousDelay = setPartialDelay(700);
   try {
     clearPendingPartials();
     const body = { kind: "quiz", roundId: "round-s5-most", partial: true, fingerprint: "fp-s5-most" };
     assert.deepEqual(await (await post({ ...body, picks: picks(4) })).json(), { queued: true, partial: true });
-    await sleep(100);
+    await sleep(400);
     assert.deepEqual(await (await post({ ...body, picks: picks(2) })).json(), { queued: true, partial: true }); // sorrendcsere / másik fül régebbi állapota
     assert.equal(pendingPartialCount(), 1, "körönként egy várakozó");
-    await sleep(250);
+    await sleep(450); // az első időzítő (700 ms) eddigre lejárt volna (400 + 450 ms), az újraindított (400 + 700 ms) még nem
     assert.equal(sent.length, 0, "a később érkező pillanatkép az időzítőt újraindította");
     assert.ok(await waitFor(() => sent.length === 2));
     await sleep(400);
