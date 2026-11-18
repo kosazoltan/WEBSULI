@@ -1,0 +1,58 @@
+{
+  "name": "A Websuli makija",
+  "file": "kabala-maki.af0e95d7.glb",
+  "sha256": "af0e95d70c27f4556f718b2f0b6db136e2bb3febfbbc400837941f824b4843c8",
+  "bytes": 244684,
+  "triangles": 26380,
+  "bones": 25,
+  "materials": 4,
+  "meshes": [
+    "Maki",
+    "MakiArc"
+  ],
+  "morphTargets": [
+    "blink",
+    "smile"
+  ],
+  "clips": [
+    {
+      "name": "blink",
+      "duration": 1,
+      "channels": 1,
+      "loop": false
+    },
+    {
+      "name": "cheer",
+      "duration": 1.5,
+      "channels": 23,
+      "loop": false
+    },
+    {
+      "name": "idle",
+      "duration": 2,
+      "channels": 12,
+      "loop": true
+    },
+    {
+      "name": "sad",
+      "duration": 2.5,
+      "channels": 14,
+      "loop": false
+    },
+    {
+      "name": "sunbathe",
+      "duration": 3,
+      "channels": 24,
+      "loop": false
+    },
+    {
+      "name": "wave",
+      "duration": 2,
+      "channels": 6,
+      "loop": false
+    }
+  ],
+  "compression": "KHR_draco_mesh_compression",
+  "fps": 24,
+  "generator": "source/scripts/blender/kabala-maki/build.py"
+}
