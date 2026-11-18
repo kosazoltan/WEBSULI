@@ -70,6 +70,11 @@ export type BlockCraftSimOptions = {
   material?: readonly FourChoiceQuiz[];
   /** A szintetikus bank mérete (alap 600). 0 → üres forrás (terv 8.1: a játék kérdés nélkül fut). */
   bankSize?: number;
+  /**
+   * Lecke-kupon mód (terv 8.6; review #484 M5, a közös #483-szabállyal): CSAK a `material` tételei jönnek (`coupon`
+   * forrással); a kimerülést és az ismétlést a közös director kezeli.
+   */
+  couponOnly?: boolean;
   style?: BotStyle;
 };
 
@@ -99,6 +104,8 @@ export type BlockCraftSim = {
   miningShare(): number;
   /** A kibányászott blokkok és a felfedezett rúnaércek száma. */
   blocksMined(): number;
+  /** A kérdés nélkül tört Rúna-zárak száma (`runeBreak` „free”) — kérdéssel futó menetben (kupon módban is) 0 kell legyen. */
+  freeLocks(): number;
   revealed(): number;
   director: QuestionDirector;
 };
@@ -123,8 +130,9 @@ export function createSimGame(opts: BlockCraftSimOptions): BlockCraftSim {
   const director = createQuestionDirector({
     config: blockCraftDirectorConfig(grade),
     provider: {
-      couponOnly: false,
-      material: () => (materialCursor < material.length ? materialPlayQuestion(material[materialCursor++]!) : null),
+      couponOnly: opts.couponOnly ?? false,
+      material: () =>
+        materialCursor < material.length ? materialPlayQuestion(material[materialCursor++]!, opts.couponOnly ? { coupon: true } : {}) : null,
       fresh: () => {
         if (freshCursor >= bankSize) return null;
         const q = syntheticQuiz(freshCursor);
@@ -158,6 +166,12 @@ export function createSimGame(opts: BlockCraftSimOptions): BlockCraftSim {
   let lockSeen = -1;
   let revealedCount = 0;
   let blocks = 0;
+  let freeLocks = 0;
+  /** Az események ürítése (a lap is ezt teszi): a kérdés nélküli zárak számlálása. */
+  const drainEvents = () =>
+    mine?.drain((e) => {
+      if (e.type === "runeBreak" && e.result === "free") freeLocks += 1;
+    });
 
   const ui: QuestionUi = createQuestionUi({
     director: () => (questions ? director : null),
@@ -301,6 +315,7 @@ export function createSimGame(opts: BlockCraftSimOptions): BlockCraftSim {
         }
       }
       const before = m.state().blocks;
+      drainEvents();
       m.frame(dtMs, false);
       blocks += m.state().blocks - before;
       const st = m.state();
@@ -365,6 +380,10 @@ export function createSimGame(opts: BlockCraftSimOptions): BlockCraftSim {
     keepTaps: () => keepTaps,
     miningShare: () => (m.clockMs() > 0 ? miningMs / m.loop.simTimeMs() : 0),
     blocksMined: () => blocks,
+    freeLocks: () => {
+      drainEvents();
+      return freeLocks;
+    },
     revealed: () => revealedCount,
   };
 }

@@ -192,3 +192,30 @@ test("közös meghajtó (C-52): lépés-indexhez kötött bemenettel eltérő k�
 
 // SPEC-VÁLTOZÁS (review #484 H1): a bot terepen jár és bányászik, a zár élesítéssel nyílik — új lenyomat.
 const GOLDEN_42 = "won|4|7|37|3|1042|4|1|4a002bdc";
+
+test("M5 (review #484, a közös #483-szabállyal): kupon módban 3 / 5 / 8 tételes leckével sem fogy el a kérdés — nincs kérdés nélküli zár, nincs közvetlen ismétlés, csak a lecke tételei", () => {
+  for (const size of [3, 5, 8]) {
+    const material = Array.from({ length: size }, (_, i) => ({ id: `lecke-${i}`, prompt: `Lecke kérdés ${i}?`, options: ["a", "b", "c", "d"], correctIndex: i % 4 }));
+    const games: ReturnType<typeof createSimGame>[] = [];
+    const f: SimGameFactory = (o) => {
+      const g = createSimGame({ ...o, material, couponOnly: true });
+      games.push(g);
+      return g;
+    };
+    const runs = runSimSeeds(f, SIM_AVERAGE, { gameId: GAME, seconds: 180 });
+    const perMin = medianOf(runs.map((r) => r.stats.perMinute));
+    assert.ok(perMin >= 7, `${size} tétel: kérdés/perc (medián) ${perMin.toFixed(2)}`);
+    for (const r of runs) {
+      assert.ok(r.stats.maxGapSec <= 15, `${size} tétel: kérdés nélküli szakasz ${r.stats.maxGapSec}`);
+      assert.ok(r.stats.minGapSec >= 1.5);
+    }
+    for (const g of games) {
+      assert.equal(g.freeLocks(), 0, `${size} tétel: kérdés nélkül tört zár`);
+      const keys = g.askedKeys();
+      assert.ok(keys.length >= size, `${size} tétel: ${keys.length} kérdés`);
+      assert.ok(keys.every((k) => k.startsWith("mat:lecke-")), `${size} tétel: csak a lecke tételei`);
+      for (let i = 1; i < keys.length; i++) assert.notEqual(keys[i], keys[i - 1], `${size} tétel: közvetlen ismétlés (${keys.slice(Math.max(0, i - 3), i + 1).join(" | ")})`);
+      assert.equal(new Set(keys).size, size, `${size} tétel: minden tétel sorra kerül`);
+    }
+  }
+});

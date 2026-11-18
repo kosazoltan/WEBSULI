@@ -1401,6 +1401,12 @@ válaszok mellett mind a négy kő 0%, és a kérdéskártya rátakar az A/B rú
   ellenpróba. Az álló és fekvő képernyőképek újrakészülnek.
 - **Nem ebben a PR-ban:** N3, L4 maradéka, L6 (tulajdonosi döntés), a közös `pointerTap.ts`.
 
+**M5 (a #483 beolvasztása után, 2026-11-18):** a közös kupon-ismétlés (#483) a Kockavadász magján és lapján változtatás
+nélkül érvényes. A sim kapott `couponOnly` opciót és kérdés nélküli zár-számlálót; teszt: 3 / 5 / 8 tételes leckével 20 seed ×
+180 s — ≥ 7 kérdés/perc, ≤ 15 s rés, 0 kérdés nélküli zár, nincs közvetlen ismétlés, csak a lecke tételei, mind sorra kerül
+(ellenpróba: a közös kupon-ismétlés nélkül a teszt bukik). A lapon e2e: ugyanez 3 / 5 / 8 tétellel, méret + 3 rúnazárral
+(`questionKey`, `questionSource`, `freeLocks` probe-mezők).
+
 **Meglévő tesztelvárások változásai ebben a PR-ban (tételes, a gépi teszt-integritás ellenpróba nyomán):**
 - `T/blockcraft-play.spec.ts` M3-teszt, a felengedés utáni render-lépés várakozás: a d296f39b-ben „a felengedés UTÁN > 3
   képkocka” volt (egy beragadt tartás ezalatt bányászna / választana). A 40e12749 ezt „a zár nyitása óta > 2”-re

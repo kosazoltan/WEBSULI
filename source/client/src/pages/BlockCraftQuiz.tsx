@@ -1158,6 +1158,8 @@ export default function BlockCraftQuiz() {
   const rendererMemRef = useRef<{ geometries: number; textures: number } | null>(null);
   /** A 3D-rúnakövek (teszt-kampó: a vetített képernyő-téglalapjuk a takarás méréséhez, review #484 N1). */
   const stoneMeshesRef = useRef<THREE.Mesh[]>([]);
+  /** A kérdés nélkül tört Rúna-zárak száma a menetben (teszt-kampó, review #484 M5: kupon módban 0). */
+  const freeLocksRef = useRef(0);
   /**
    * Review #484 N1: a kövek képernyő-sávja (CSS px, a nézetablakhoz) — a kérdéskártya alja és a rúnagombok (álló) / az alsó
    * vezérlők (fekvő) teteje között, fekvőben a két rúnaoszlop között. A zár alatt ~5 Hz-cel frissül (DOM-mérés), a képkocka-
@@ -2882,7 +2884,10 @@ export default function BlockCraftQuiz() {
       dirtyCellsRef.current.push(vIdx(e.ore.x, e.ore.y, e.ore.z));
       worldVersionRef.current++;
       setXpFloat({ amount: e.xp, key: ++xpKeyRef.current, rune: true });
-      if (e.result === "free") sfxPickup();
+      if (e.result === "free") {
+        freeLocksRef.current += 1;
+        sfxPickup();
+      }
       if (e.result === "correct" && e.combo === 3) setAchievement("Kombó ×2 — dupla rúnaerő!");
       else if (e.result === "correct" && e.combo === 6) setAchievement("Kombó ×3 — rúnamester!");
     } else if (e.type === "runeSpawn" || e.type === "runeGone") {
@@ -3117,6 +3122,9 @@ export default function BlockCraftQuiz() {
           timeLeft: timeLeftRef.current,
           pressing: st?.mining.pressing ? 1 : 0,
           stoneRects: stoneScreenRects(),
+          questionKey: view?.presentation?.question.key ?? null,
+          questionSource: view?.presentation?.question.source ?? null,
+          freeLocks: freeLocksRef.current,
           stoneBand: JSON.stringify(stoneBandRef.current),
           geometries: rendererMemRef.current?.geometries ?? 0,
           textures: rendererMemRef.current?.textures ?? 0,

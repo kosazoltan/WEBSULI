@@ -509,3 +509,58 @@ for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { wi
     });
   });
 }
+
+/* ------------------------- review #484 M5: lecke-kupon mód a lapon (a közös #483-szabállyal) ------------------------- */
+
+for (const size of [3, 5, 8]) {
+  test(`M5: kupon mód, ${size} tételes lecke — ${size + 3} rúnazár egymás után: mindegyik kérdéssel, csak a lecke tételei, nincs közvetlen ismétlés`, async ({ page }) => {
+    test.setTimeout(Math.max(test.info().timeout, 240_000));
+    const lesson = Array.from({ length: size }, (_, i) => ({
+      id: `e2e-lecke-${i}`,
+      prompt: `Melyik a ${i + 1}. lecke-kérdés helyes válasza?`,
+      options: [`jó ${i}`, `rossz ${i}a`, `rossz ${i}b`, `rossz ${i}c`],
+      correctIndex: 0,
+      topic: "math",
+    }));
+    // A lecke-kupon (a beforeEach útvonal-kezelője után regisztrálva, ezért ez fut elsőként).
+    await page.route("**/api/**", async (route) => {
+      const p = new URL(route.request().url()).pathname;
+      let data: unknown = [];
+      if (p === "/api/auth/user") data = null;
+      if (p.includes("sync-eligibility")) data = { eligible: false };
+      if (p.endsWith("/coupons/active")) {
+        data = { coupon: { id: "coupon-e2e", lessonId: "lecke-e2e", sectionIdx: -1, minutes: 10, remainingSeconds: 600, started: true } };
+      }
+      if (p.includes("material-quizzes")) data = { classroom: 5, materials: [{ id: "lecke-e2e", title: "Lecke", createdAt: "2026-11-17T08:00:00.000Z" }], items: lesson };
+      await route.fulfill({ json: data });
+    });
+    await startGame(page);
+    await expect(page.getByTestId("coupon-hud")).toBeVisible({ timeout: 10_000 });
+    const keys: string[] = [];
+    const sources: string[] = [];
+    let lastId: number | null = null;
+    for (let i = 0; i < size + 3; i++) {
+      await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true }));
+      await expect
+        .poll(async () => {
+          const pr = await probe(page);
+          return pr.lockOpen === 1 && pr.questionId !== null && pr.questionId !== lastId ? pr.questionKey : null;
+        }, { timeout: 20_000, message: `${i + 1}. rúnazár` })
+        .not.toBeNull();
+      const pr = await probe(page);
+      lastId = Number(pr.questionId);
+      keys.push(String(pr.questionKey));
+      sources.push(String(pr.questionSource));
+      await expect(page.locator('[data-testid="bc-quiz"] [data-armed="true"]').first()).toBeVisible({ timeout: 10_000 });
+      await page.keyboard.press(i % 2 === 0 ? "2" : "1"); // felváltva rossz és (a keveréstől függően) bármely válasz
+      await expect.poll(async () => (await probe(page)).lockOpen, { timeout: 15_000 }).toBe(0);
+      await expect.poll(async () => (await probe(page)).questionOpen, { timeout: 15_000 }).toBe(0);
+    }
+    const allowed = new Set(lesson.map((q) => `mat:${q.id}`));
+    expect(keys.every((k) => allowed.has(k)), `csak a lecke tételei: ${keys.join(" | ")}`).toBe(true);
+    expect(sources.every((s) => s === "coupon"), `kupon-forrás: ${sources.join(" | ")}`).toBe(true);
+    for (let i = 1; i < keys.length; i++) expect(keys[i], `közvetlen ismétlés: ${keys.join(" | ")}`).not.toBe(keys[i - 1]);
+    expect(new Set(keys).size, "minden tétel sorra került").toBe(size);
+    expect((await probe(page)).freeLocks, "nincs kérdés nélkül tört rúnazár").toBe(0);
+  });
+}
