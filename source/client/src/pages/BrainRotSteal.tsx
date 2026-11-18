@@ -49,7 +49,6 @@ import {
   type Cage,
 } from "@/lib/brainRot/core";
 import { paceBrainRotDirector } from "@/lib/brainRot/pacing";
-import { createCouponRepeat } from "@/lib/brainRot/couponRepeat"; // #483 után törölhető
 import {
   GameHud,
   GameShell,
@@ -354,8 +353,6 @@ export default function BrainRotSteal() {
 
   /** Spec 2026-09-29: a futásban már feltett kérdések (azonosító + prompt). */
   const gradeSeenRef = useRef(createGradeQuizSeen());
-  /** Kupon mód: a lecke tananyagának ismétlése kimerüléskor (review #485 K1; `lib/brainRot/couponRepeat.ts`). #483 után törölhető. */
-  const couponRepeatRef = useRef(createCouponRepeat());
 
   /**
    * S8 / terv A8: az angol kérdés-hely a központi szóbankból (közös napló mind a hét játékra). `null`, amíg
@@ -387,16 +384,9 @@ export default function BrainRotSteal() {
         const sharedGrade = gradeForGame(gradeRef.current);
         const couponMaterialOnly = couponRef.current.active && poolRef.current.some((q) => q.fromMaterial);
         if (sharedGrade == null && !couponMaterialOnly) return null;
-        const lesson = poolRef.current.filter((q) => q.fromMaterial);
-        const material = pickUnseenMaterial(lesson, gradeSeenRef.current);
-        if (!material && couponMaterialOnly) {
-          // #483 után törölhető — kupon módban a lecke anyaga kimerüléskor ismétlődik (hibázott → legrégebben látott; review
-          // #485 K1, végrehajtás J5a 17.). Közvetlen (kérdés nélküli) megtartás csak 0 tételnél marad.
-          const toQuestion = (q: Quiz) =>
-            materialPlayQuestion(asFour(q), { subject: q.topic ?? q.category, coupon: true, ...(sharedGrade != null ? { grade: sharedGrade } : {}) });
-          const again = couponRepeatRef.current.next(lesson, (q) => toQuestion(q).key);
-          return again ? { ...toQuestion(again.item), key: again.key, noReview: true } : null;
-        }
+        // Kupon módban a kimerülést és az ismétlést a közös director kupon-ága kezeli (D-J1a-10 / D-J1a-16; J5a 23.):
+        // itt csak a még fel nem tett lecke-tétel jön, utána null.
+        const material = pickUnseenMaterial(poolRef.current.filter((q) => q.fromMaterial), gradeSeenRef.current);
         if (!material) return null;
         markGradeQuizSeen(gradeSeenRef.current, material);
         return materialPlayQuestion(asFour(material), {
@@ -534,7 +524,6 @@ export default function BrainRotSteal() {
     haptics: false,
     onShow: (p) => {
       firstCageSeenRef.current = true;
-      if (couponRef.current.active) couponRepeatRef.current.asked(p.question.key); // #483 után törölhető
       const core = driverRef.current?.core;
       if (!core) return;
       // B2: a ketrec valódi feliratszélességével ellenőrzünk; ha egy válasz nem fér, jelölt mód (szám + szín + jelmagyarázat).
@@ -552,7 +541,6 @@ export default function BrainRotSteal() {
       const picked = o.pickedOriginalIndex === null ? -1 : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
       // ≤ 2 s játékbeli következmény (K.4/23): jó → a lény a ketrecben marad; rossz / lejárat → elszökik.
       driverRef.current?.core.applyOutcome(o.result, picked < 0 ? null : picked);
-      if (couponRef.current.active) couponRepeatRef.current.outcome(p.question.key, o.result); // #483 után törölhető
       if (o.result === "aborted") return;
       const good = o.result === "correct";
       if (o.pickedOriginalIndex !== null) maybeClaimCouponBonus(couponRef.current, p.question.quiz.id, o.pickedOriginalIndex);
@@ -721,7 +709,6 @@ export default function BrainRotSteal() {
     bestSubmittedRef.current = false;
     difficultyRef.current = levelStartBand(runLevelRef.current, startingDifficulty(userGrade ?? 4));
     gradeSeenRef.current = createGradeQuizSeen();
-    couponRepeatRef.current.reset(); // #483 után törölhető
     answerHistoryRef.current = [];
     maxMultiplierRef.current = 1;
     firstCageSeenRef.current = false;
@@ -843,6 +830,10 @@ export default function BrainRotSteal() {
           creatures: st.creatures.filter((c) => c.active && c.state === "free").length,
           reveal: ctl.view().reveal ? 1 : 0,
           questionId: p?.id ?? null,
+          // J5a 23.: a kupon-mód mérőjéhez — a tétel kulcsa és forrása, és a kérdés nélküli (közvetlen) megtartások száma.
+          questionKey: p?.question.key ?? null,
+          questionSource: p?.question.source ?? null,
+          direct: st.direct,
           questionSeconds: p ? p.windowMs / 1000 : null,
           // A mag választerületei px-ben a táblához képest (review #485: a kirajzolt ketrecekkel össze kell esniük).
           cageRects: JSON.stringify(

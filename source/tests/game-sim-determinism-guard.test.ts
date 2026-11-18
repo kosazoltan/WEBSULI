@@ -120,6 +120,13 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
   ],
   // J2a: a Szólétra lapján nincs kivétel (a kapaszkodó-tétel sorsolása a menet seedelt RNG-jéből: `pickRngRef`).
   "WordLadderHuEn.tsx": [],
+  // J1a: a Szökőár kérdés-választása a menet seedelt RNG-jéből (`pickRngRef`), a pálya a mag seedjéből.
+  "TsunamiEscapeEnglish.tsx": [
+    {
+      re: /if \(!reducedMotion && Math\.random\(\) < 0\.3 \+ prog \* 0\.3\) \{/,
+      why: "a villám-felvillanás tisztán kozmetikai díszlet (a játék kimenetelét nem érinti); csökkentett mozgásnál nincs (M9, s13-őr)",
+    },
+  ],
   // J5a: a Brain Rot lapján nincs kivétel (a tétel-sorsolás a menet seedelt RNG-jéből: `pickRngRef`; a világ a magban).
   "BrainRotSteal.tsx": [],
 };
