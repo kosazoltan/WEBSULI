@@ -110,6 +110,11 @@ const measure = (page: Page) =>
     const cardBg = getComputedStyle(card).backgroundColor;
     const out = {
       key: "",
+      holdsFit: document.querySelector<HTMLElement>('[data-testid="wl-quiz"]')?.dataset.fit ?? "",
+      holdFont: (() => {
+        const b = document.querySelector<HTMLElement>('[data-testid^="wl-option-"]');
+        return b ? parseFloat(getComputedStyle(b).fontSize) : 0;
+      })(),
       tight: document.querySelector<HTMLElement>('[data-testid="wl-question"]')?.dataset.wlTight === "true",
       statusAfter: (() => {
         const st = card.querySelector<HTMLElement>('[data-testid="play-question-status"]');
@@ -333,6 +338,34 @@ test("Ú1 @ 360x640: hiba utáni kérdésnél a célkártya betűje ugyanakkora,
   expect(normal.size, "mind a négy tétel mérve (rendes)").toBe(items.length);
   expect(afterError.size, "mind a négy tétel mérve (hiba után)").toBe(items.length);
   for (const [key, fs] of normal) expect(afterError.get(key), `${key}: hiba után ${afterError.get(key)} px, rendesen ${fs} px`).toBe(fs);
+});
+
+/**
+ * Review #498 R2 (Vercel): hosszú válaszoknál (`.wl-answers[data-long="true"]`) a tömör fogás-panel (`data-fit="2"`) stílusa is
+ * érvényes legyen, és a kártya alsó biztonsági sávos, keskeny nézetben se fedje a fogásokat. 360×640, `--game-safe-bottom: 34px`
+ * (iPhone-szerű alsó sáv), hosszú (mondatnyi) válaszos tételek, kérdés- és megoldás-állapot; képernyőkép a mérési mappába.
+ */
+test("R2 @ 360x640 alsó biztonsági sávval: hosszú válaszoknál is hat a tömör fogás-panel, a kártya nem fedi a fogásokat", async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.setViewportSize({ width: 360, height: 640 });
+  await stub(page);
+  await page.addInitScript(() => {
+    const s = document.createElement("style");
+    s.textContent = ":root { --game-safe-bottom: 34px !important; }";
+    document.addEventListener("DOMContentLoaded", () => document.head.appendChild(s));
+  });
+  const ids = ["vocab:en4-family-006:phrase-meaning", "vocab:en4-health-016:phrase-meaning", "vocab:en4-health-023:phrase-meaning", "en4-052"];
+  const rows = await runItems(page, ids, { lang: "en", grade: "11" });
+  report(rows, "R2 en 360x640 alsó sáv");
+  for (const m of rows.filter((r) => ids.map(keyOf).includes(r.key))) {
+    expect(m.overHolds, `${m.state} ${m.key}: a kártya fedi a fogásokat (alja ${m.cardBottom}, fogások ${m.holdsTop})`).toBe(false);
+    expect(m.clipped, `${m.state} ${m.key}: levágás`).toBe(false);
+  }
+  // A tömör panel stílusa hosszú válaszoknál is érvényes (a `data-long` szabály nem írja felül).
+  const holdsFit = rows.filter((r) => r.holdsFit === "2");
+  expect(holdsFit.length, "a tömör panel legalább egy mért állapotban életbe lépett").toBeGreaterThan(0);
+  for (const m of holdsFit) expect(m.holdFont, `${m.state} ${m.key}: tömör panelen a fogás-felirat 16 px`).toBe(16);
+  await page.screenshot({ path: "../docs/measurements/jatekok-jatekelmeny/J2-olvashatosag/r2-360x640-also-sav.jpg", type: "jpeg", quality: 70 });
 });
 
 test("SZ-2 / kapu 3(a): az óra csak ≥ 400 ms előjelzés után indul, a fogások addig nem élesek, az előjelzés alatti billentyű nem válasz", async ({ page }) => {
