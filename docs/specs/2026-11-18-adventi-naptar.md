@@ -1005,3 +1005,20 @@ nyílik az első ablak!”. Lezárt naptárnál, ha a tanuló egy ablakot sem ol
   korlátja 20 (elütés ellen); külön készletnél nincs félrevezető „Csak az első N tétel fut” üzenet.
 - A teljes kör parancsa a próbakör és a válogatás UTÁN (a koordinátor indítja):
   `npx.cmd tsx scripts/design-assets/generate.ts --set advent --max 94 --max-usd 7 --ref advent-bg-portrait=advent-bg-portrait/<a kiválasztott fájl>`
+
+## 19. Az S2b ellenőri ítéletének átvezetése és tulajdonosi döntés a korlátokról (2026-11-18; S2b `03bbb129`: IGEN, FELTÉTELLEL)
+
+- **Tulajdonosi döntés (kérdőíven): „Emeljük iskolai méretre”** — 90 új névtelen sor / óra / IP és 1500 írás / 15 perc / IP; az
+  alanyonkénti 200 írás / 15 perc marad. Ez FELÜLÍRJA a 16.1 „600 írás / 15 perc / IP” és „30 új `device` sor / óra / IP” értékét
+  és az A49 „30-nál több” számát (helyesen: 90-nél több). A korlátok egy helyen állnak: `server/advent/limits.ts` `ADVENT_LIMITS`.
+- **K2:** a létrehozási keret a LÉTREJÖTT sort számolja (a zárolt módosítás után, ha a sor most jött létre és megmaradt); a
+  visszagördült kísérlet nem fogyaszt keretet.
+- **K1:** a játékos-fiókos azonosítás valódi munkamenettel tesztelt (sima játékos, tanulóhoz kötött fiók, tiltott fiók).
+- **C1:** a 201. alanyi írás 429-e és az IP-korlát elutasító ága tesztelt (injektált kisebb korláttal, a kulcs ellenpróbájával).
+- **C2 (E19 pontosítva):** a tanulóhoz kötött fiók adatletöltése a tanuló naptár-sorát is tartalmazza.
+- **C3 (16.5 pontosítva):** érvénytelen tanulói tokennel az ÍRÓ végpontok 409-et adnak `pairing: "invalid"` jelzéssel, és nem
+  írnak az eszköz sorába; a `GET /state` továbbra is jelez, és vendégként (token nélkül) folytatható.
+- **C4:** HTTP-szintű eset nem e2e-módban (a tesztidő-fejléc hatástalan), és őr a `server/routes.ts` bekötésére.
+- **C5:** ha egy már megválaszolt kérdés kikerül a bankból, az ablak újranyitása a tárolt eredményt adja kérdés nélkül
+  (`question: null`, `correctIndex: -1`), nem hibát.
+- **C6 (jegy):** a helyi DB-kör a korlát közelében fut — a következő DB-teszt előtt érdemes két folyamatra bontani.
