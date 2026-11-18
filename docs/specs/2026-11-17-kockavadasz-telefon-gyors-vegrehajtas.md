@@ -103,7 +103,10 @@ szelet ott ütközni fog. A feloldásnál a #484 kódját kell megtartani, és e
 3. **Anyagok:** `makeBlockMaterials(lite)` (Lambert / Phong / átlátszatlan lomb), a #484 új `RUNE_ORE` anyagával együtt
    (`emissiveMap` Lamberten is működik); **anizotrópia** `Math.min(lite ? 2 : 8, …)`.
 4. **`ResizeObserver` + `sizeDirty`** a `syncSize()` képkockánkénti hívása helyett; a könnyű grafika képpont-plafonja a `syncSize`-ban.
-5. **Panel:** a `perf/kockavadasz-telefon` ág `ee5b52a8` commitja már tartalmazza a #484-re illesztett bekötést (ott a „Anyag”
+5. **Panel (a vak review #504 L1/L3 után):** a `createPerfOverlay` hívásban `isRunning: () => runningRef.current` (a „fut / áll”
+   jelző a játék valódi állapota, nem becslés) és `getTopInset` (a panel a pályajelző alá, vízszintesen középre kerül); a
+   `perfEnabledFrom` importja a `@/game-engine/perf/perfFlag` modulból jön.
+   Korábbi pont: **Panel:** a `perf/kockavadasz-telefon` ág `ee5b52a8` commitja már tartalmazza a #484-re illesztett bekötést (ott a „Anyag”
    kapcsoló saját Lambert-készletet épít — a `makeBlockMaterials(!lite)`-re cserélendő); a `game-engine/perf/*` modulok azonosak.
 
 ## Mért eredmények
@@ -161,3 +164,14 @@ a kezdő pályán nincs: NOT RUN. Időjárásos pályák (eső, hó, homokvihar)
 - `node --import tsx --test tests/perf-stats.test.ts tests/pixel-budget.test.ts tests/voxel-sun-shade.test.ts` → 26 / 26.
 - `npm run test:e2e -- tests/blockcraft-perf-panel.spec.ts tests/blockcraft-two-finger.spec.ts --workers=1` → `9 passed (1.0m)`.
 - `npx playwright test -c playwright.game-mobile.config.ts -g "block-craft" --workers=1` (közös mobil mérő, meta-mérő, joystick-reakció block-craft esetei) → `40 passed (4.3m)`.
+
+### Vak review #504 (8e72fe90) — javítások
+
+| Lelet | Javítás | Teszt (előbb bukó) |
+|---|---|---|
+| L1 (közepes) „fut / áll” falióra-becslés | `LoopClock` (`perfStats.ts`): elsődleges a játék jelzője (`isRunning` → `runningRef.current`); a tartalék becslésnél a ≥ 1 s-os rés után `lastDt = 0` | `perf-stats.test.ts` „LoopClock” — 150/150/1600 ms, 19 gyors + 2500 ms, szünet → 1 képkocka → szünet, tartalék-rés: a régi viselkedéssel 4 / 4 bukott |
+| L2 `perfStats` a játék darabjában | `perfEnabledFrom` külön modulban (`perfFlag.ts`); a `perfStats`-ot csak a panel tölti be | a játék nem importálja a `perfStats`-ot (kódellenőrzés) |
+| L3 panel a vezérlők / HUD fölött | a panel a pályajelző alatt, vízszintesen középen, kompaktabb (7 sor), áttetszőbb; fekvő, alacsony nézetben a két oldalsó 170 px-es vezérlősáv szabad — a joystick bármelyik oldalra kerülhet | böngészős: fekvő 800×360 és álló 360×800 — a panel nem fed vezérlőt, a pályajelző alatt kezdődik |
+| L4 nincs viselkedés-teszt | böngészős: szünet → „áll” azonnal, folytatás → „fut”, rövid folytatás → szünet → „áll”; méretkövetés három nézetméreten | lásd ott |
+| L5 `render()`-kivétel után beragadt mérés | a `begin` lezárja és eldobja a félbemaradt lekérdezést (torz, két képkockás minta nem kerül az átlagba) | `gpu-timer.test.ts` „kivétel a render() alatt” — a régi kóddal bukott (a torz minta bekerült) |
+| L6 sötét lombbelső | nem változott (a terv vállalja; tulajdonosi ízlés) | — |

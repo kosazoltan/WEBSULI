@@ -5,14 +5,8 @@
  * nem tárol; a `shortUserAgent` szándékosan eldobja az eszközmodellt és a build-azonosítót.
  */
 
-/** Igaz, ha az URL keresőrészében `perf=1` áll (pl. `?perf=1`, `?look=low&perf=1`). */
-export function perfEnabledFrom(search: string): boolean {
-  try {
-    return new URLSearchParams(search).get("perf") === "1";
-  } catch {
-    return false;
-  }
-}
+/** A `?perf=1` kapcsoló a `perfFlag` modulban él (a játék darabja csak azt tölti be); itt a meglévő hívók miatt újraexportálva. */
+export { perfEnabledFrom } from "./perfFlag";
 
 /** Egy képkocka mért idői ms-ban: `dt` az előző képkockától, `js` a frissítés, `render` a `renderer.render` hívás. */
 export type FrameSample = { dt: number; js: number; render: number };
@@ -161,4 +155,34 @@ export function isLoopRunning(sinceLastFrameMs: number, lastFrameDtMs: number): 
   const dt = Number.isFinite(lastFrameDtMs) && lastFrameDtMs > 0 ? lastFrameDtMs : 0;
   // Felső korlát: egy szünet utáni első „képkockaidő” (akár percek) ne tartsa „fut”-on a jelzőt 15 s-nál tovább.
   return sinceLastFrameMs < Math.max(1000, 3 * Math.min(dt, 5000));
+}
+
+/**
+ * A képkocka-hurok állapota a panelnek (review #504 L1). Elsődleges forrás a JÁTÉK saját jelzője (`gameRunning`: fut-e a hurok
+ * — a Kockavadászban a `runningRef`); a falióra-becslés (`isLoopRunning`) csak akkor dönt, ha a játék nem ad jelzőt.
+ * A szünet utáni rés (≥ 1 s) nem képkockaidő: ott a `lastDt` 0, hogy a tartalék becslés ne nyújtsa meg a „fut” időt.
+ */
+export class LoopClock {
+  private lastNow: number | null = null;
+  private lastFrameAt = 0;
+  private lastDt = 0;
+
+  /** Képkocka eleje: `now` a rAF-időbélyeg, `wallMs` a `performance.now()`. Visszaadja a statisztikába számító dt-t (vagy null-t). */
+  frame(now: number, wallMs: number): number | null {
+    let counted: number | null = null;
+    if (this.lastNow !== null) {
+      const dt = now - this.lastNow;
+      const isFrame = dt > 0 && dt < 1000;
+      this.lastDt = isFrame ? dt : 0;
+      if (isFrame) counted = dt;
+    }
+    this.lastNow = now;
+    this.lastFrameAt = wallMs;
+    return counted;
+  }
+
+  running(wallMs: number, gameRunning?: boolean): boolean {
+    if (gameRunning !== undefined) return gameRunning;
+    return this.lastFrameAt > 0 && isLoopRunning(wallMs - this.lastFrameAt, this.lastDt);
+  }
 }

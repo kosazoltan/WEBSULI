@@ -13,6 +13,8 @@ type Toggles = { shadows: boolean; resolution: number; simpleMaterials: boolean;
 type Snapshot = {
   running: boolean;
   renderedFrames: number;
+  cssHeight: number;
+  bufferHeight: number;
   tier: string;
   frame: { frames: number } | null;
   calls: number;
@@ -172,3 +174,90 @@ test("perf paraméter nélkül nincs panel és nincs mérő-API", async ({ page 
   // E-2: a panel külön darabja (chunk) nem töltődött le.
   expect(scripts.filter((u) => /perfOverlay/i.test(u))).toEqual([]);
 });
+
+/** Két téglalap átfedése (CSS px). */
+function overlaps(a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+test("szünetben a panel „áll”-t mutat azonnal, folytatás után „fut”-ot (a játék jelzője — review #504 L1, L4)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  expect((await snapshot(page)).running).toBe(true);
+  const text = page.getByTestId("bc-perf-text");
+
+  await page.getByTestId("game-pause").click();
+  await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+  // Azonnal (nem 1 s / 15 s múlva): a játék maga mondja meg, hogy a hurok áll.
+  expect((await snapshot(page)).running).toBe(false);
+  const frozen = (await snapshot(page)).renderedFrames;
+  await expect(text).toContainText("· áll", { timeout: 3_000 });
+  await page.waitForTimeout(1200);
+  expect((await snapshot(page)).renderedFrames, "szünetben nincs kirajzolt képkocka").toBe(frozen);
+
+  await page.getByTestId("game-resume").click();
+  await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+  await expectFramesAfterToggle(page);
+  expect((await snapshot(page)).running).toBe(true);
+  await expect(text).toContainText("· fut", { timeout: 3_000 });
+
+  // Rövid folytatás után újra szünet: nem marad „fut”-on (review #504 L1/b).
+  await page.getByTestId("game-pause").click();
+  await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+  expect((await snapshot(page)).running).toBe(false);
+});
+
+test("a vászon a szülő méretváltozását követi (G-7, review #504 L4)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => (await snapshot(page)).bufferWidth, { timeout: 30_000 }).toBe(1240);
+  const ratio = (await snapshot(page)).pixelRatio;
+  for (const size of [{ width: 896, height: 827 }, { width: 600, height: 900 }, { width: 827, height: 896 }]) {
+    await page.setViewportSize(size);
+    // Tájolásváltáskor a játék magától szünetel (a main viselkedése); szünetben nincs képkocka, ami átméretezne — a G-7 a
+    // következő KIRAJZOLT képkockára írja elő a követést, ezért a mérés a folytatás után történik.
+    const resume = page.getByTestId("game-resume");
+    if (await resume.isVisible({ timeout: 1500 }).catch(() => false)) await resume.click();
+    await expect
+      .poll(async () => {
+        const s = await snapshot(page);
+        return Math.abs(s.bufferWidth - Math.round(s.cssWidth * ratio)) <= 1 && Math.abs(s.bufferHeight - Math.round(s.cssHeight * ratio)) <= 1 && s.cssWidth === size.width;
+      }, { timeout: 15_000 })
+      .toBe(true);
+  }
+});
+
+for (const view of [
+  { name: "fekvő 800×360", width: 800, height: 360 },
+  { name: "álló 360×800", width: 360, height: 800 },
+]) {
+  test(`a nyitott panel nem takarja a vezérlőket és a felső HUD-ot (${view.name}, review #504 L3)`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: view.width, height: view.height });
+    await startGame(page, "&perf=1&look=medium");
+    const panel = page.getByTestId("bc-perf-panel");
+    await expect(panel).toBeVisible({ timeout: 20_000 });
+    await expectFramesAfterToggle(page);
+    const panelBox = (await panel.boundingBox())!;
+    expect(panelBox.y + panelBox.height, "a panel a nézeten belül").toBeLessThanOrEqual(view.height);
+    expect(panelBox.x).toBeGreaterThanOrEqual(0);
+    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(view.width);
+    // A HUD (pályajelző és fölötte minden) a panel fölött marad.
+    const chip = (await page.getByTestId("bc-level-chip").boundingBox())!;
+    expect(panelBox.y, "a panel a pályajelző alatt kezdődik").toBeGreaterThanOrEqual(chip.y + chip.height);
+    // A játék érintővezérlői (joystick, Bányász, Ugrás, Lerak) — bármelyik oldalon vannak — nem kerülnek a panel alá.
+    const controls = page.locator('[data-testid="bc-touch-controls"] button, [data-testid="bc-touch-controls"] [role="slider"], [data-testid="virtual-joystick"]');
+    const n = await controls.count();
+    let checked = 0;
+    for (let i = 0; i < n; i++) {
+      const box = await controls.nth(i).boundingBox();
+      if (!box || box.width === 0) continue;
+      checked++;
+      expect(overlaps(panelBox, box), `a panel takarja a(z) ${i}. vezérlőt`).toBe(false);
+    }
+    expect(checked, "van mért vezérlő").toBeGreaterThan(0);
+  });
+}

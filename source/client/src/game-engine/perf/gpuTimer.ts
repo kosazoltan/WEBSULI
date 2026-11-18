@@ -90,7 +90,14 @@ export function createGpuTimer(gl: GpuTimerGl | null): GpuTimer {
       }
     },
     begin(skip) {
-      if (!ext || !gl || skip || active || pending.length >= MAX_PENDING) return;
+      if (active && ext && gl) {
+        // Review #504 L5: az előző képkocka `render()`-je kivételt dobott, az `end()` elmaradt. A nyitott mérés két képkockát
+        // fogna át (torz minta), ezért lezárjuk és eldobjuk; ezután rendesen indul az új mérés.
+        gl.endQuery(ext.TIME_ELAPSED_EXT);
+        gl.deleteQuery(active);
+        active = null;
+      }
+      if (!ext || !gl || skip || pending.length >= MAX_PENDING) return;
       const q = gl.createQuery();
       if (!q) return;
       gl.beginQuery(ext.TIME_ELAPSED_EXT, q);

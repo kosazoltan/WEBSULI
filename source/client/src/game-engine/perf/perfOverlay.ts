@@ -10,7 +10,7 @@
 import type * as THREE from "three";
 
 import { createGpuTimer } from "./gpuTimer";
-import { FrameWindow, fmt, isLoopRunning, median, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
+import { FrameWindow, LoopClock, fmt, median, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
 
 export type PerfResolution = 1 | 0.75 | 0.5;
 
@@ -36,6 +36,10 @@ export type PerfOverlayOptions = {
   controls: PerfControls;
   /** A lap React-renderjeinek futó számlálója. */
   getReactRenders(): number;
+  /** A játék saját jelzője: fut-e a képkocka-hurok (review #504 L1). Ha nincs, a panel a képkockák idejéből becsül. */
+  isRunning?(): boolean;
+  /** A felső HUD alja a `host` tetejétől (CSS px) — a panel ez alá kerül (review #504 L3). Alap: 4 px. */
+  getTopInset?(): number;
 };
 
 export type PerfSnapshot = {
@@ -99,8 +103,8 @@ function button(testId: string): HTMLButtonElement {
   b.type = "button";
   b.dataset.testid = testId;
   b.style.cssText =
-    "pointer-events:auto;min-height:40px;min-width:40px;padding:4px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.45);" +
-    "background:rgba(15,23,42,.92);color:#fff;font:600 12px/1.2 ui-monospace,Consolas,monospace;touch-action:manipulation;";
+    "pointer-events:auto;min-height:40px;min-width:40px;padding:2px 7px;border-radius:8px;border:1px solid rgba(255,255,255,.4);" +
+    "background:rgba(15,23,42,.72);color:#fff;font:600 11px/1.2 ui-monospace,Consolas,monospace;touch-action:manipulation;";
   return b;
 }
 
@@ -132,16 +136,31 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   // --- DOM ---
   const root = document.createElement("div");
   root.dataset.testid = "bc-perf-panel";
-  root.style.cssText =
-    "position:absolute;top:4px;left:4px;z-index:60;max-width:min(300px,calc(100% - 8px));pointer-events:none;display:flex;" +
-    "flex-direction:column;gap:4px;";
+  // Review #504 L3: a panel a felső HUD alatt, VÍZSZINTESEN KÖZÉPEN lebeg — így se a bal, se a jobb alsó vezérlőt (a joystick
+  // bármelyik oldalon lehet) nem takarja. Fekvő, alacsony nézetben a két oldalsó vezérlősáv szabadon marad (a szélesség ezért
+  // a nézet szélessége − 2 × 170 px); álló nézetben a vezérlők alul vannak, a panel a HUD és a célkereszt közti sávban.
+  root.className = "bc-perf-panel";
+  if (!document.getElementById("bc-perf-panel-style")) {
+    const style = document.createElement("style");
+    style.id = "bc-perf-panel-style";
+    style.textContent =
+      ".bc-perf-panel{position:absolute;left:50%;transform:translateX(-50%);z-index:60;width:max-content;" +
+      "max-width:min(360px,calc(100% - 8px));pointer-events:none;display:flex;flex-direction:column;gap:3px}" +
+      "@media (orientation:landscape) and (max-height:600px){.bc-perf-panel{max-width:calc(100% - 340px)}}";
+    document.head.append(style);
+  }
+  const placeTop = () => {
+    const inset = opts.getTopInset?.() ?? 4;
+    root.style.top = `${Math.max(4, Math.round(Number.isFinite(inset) ? inset : 4))}px`;
+  };
+  placeTop();
   const text = document.createElement("pre");
   text.dataset.testid = "bc-perf-text";
   text.style.cssText =
-    "margin:0;padding:6px 8px;border-radius:8px;background:rgba(2,6,23,.82);color:#e2e8f0;font:11px/1.35 ui-monospace,Consolas,monospace;" +
+    "margin:0;padding:4px 7px;border-radius:8px;background:rgba(2,6,23,.62);color:#e2e8f0;font:10px/1.3 ui-monospace,Consolas,monospace;" +
     "white-space:pre-wrap;overflow-wrap:anywhere;";
   const row = document.createElement("div");
-  row.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;";
+  row.style.cssText = "display:flex;flex-wrap:wrap;justify-content:center;gap:3px;";
   const bShadow = button("bc-perf-shadow");
   const bRes = button("bc-perf-res");
   const bMat = button("bc-perf-mat");
@@ -169,14 +188,11 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
 
   // --- Mérés ---
   const frames = new FrameWindow();
-  let lastNow: number | null = null;
-  let lastFrameAt = 0;
+  const loopClock = new LoopClock();
   let tStart = 0;
   let tBefore = 0;
   let lastRefresh = 0;
   let renderedFrames = 0;
-  /** A legutóbbi két képkocka közti idő (ms) — a szünet utáni első képkockán 0. */
-  let lastDt = 0;
   let lastJs = 0;
   let lastRender = 0;
   let calls = 0;
@@ -242,7 +258,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     const longMs = longTasks.reduce((sum, t) => sum + t.ms, 0);
     const gpuAvg = gpuTimer.average();
     return {
-      running: lastFrameAt > 0 && isLoopRunning(nowMs - lastFrameAt, lastDt),
+      running: loopClock.running(nowMs, opts.isRunning?.()),
       renderedFrames,
       tier: opts.tier,
       frame: frames.summary(),
@@ -276,17 +292,12 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     const tri = s.triangles >= 1000 ? `${(s.triangles / 1000).toFixed(1)} e` : String(s.triangles);
     const lines = [
       `${opts.title} · perf · szint: ${s.tier} · ${s.running ? "fut" : "áll"}`,
-      `FPS ${fmt(f?.fpsAvg)} · 1% low ${fmt(f?.fpsLow1)}`,
-      `képkocka p50 ${fmt(f?.dtP50)} · p95 ${fmt(f?.dtP95)} · min ${fmt(f?.dtMin)} ms`,
-      `JS ${fmt(f?.jsAvg, 2)} · render() ${fmt(f?.renderAvg, 2)} · GPU ${s.gpuTimerAvailable ? fmt(s.gpuMs, 2) : "n. a."} ms`,
-      `GPU-próba (szinkron): ${s.gpuProbeMs === null ? "– (nyomd meg a gombot)" : `${fmt(s.gpuProbeMs, 2)} ms`}`,
+      `FPS ${fmt(f?.fpsAvg)} · 1% low ${fmt(f?.fpsLow1)} · p50 ${fmt(f?.dtP50)} · p95 ${fmt(f?.dtP95)} · min ${fmt(f?.dtMin)} ms`,
+      `JS ${fmt(f?.jsAvg, 2)} · render() ${fmt(f?.renderAvg, 2)} · GPU ${s.gpuTimerAvailable ? fmt(s.gpuMs, 2) : "n. a."} · próba ${s.gpuProbeMs === null ? "–" : fmt(s.gpuProbeMs, 2)} ms`,
       `hívás ${s.calls} · háromszög ${tri} · textúra ${s.textures} · geom. ${s.geometries} · program ${s.programs}`,
-      `vászon ${s.bufferWidth}×${s.bufferHeight} (${s.megapixels.toFixed(2)} Mpx) · CSS ${s.cssWidth}×${s.cssHeight}`,
-      `dpr ${s.devicePixelRatio.toFixed(2)} → ${s.pixelRatio.toFixed(2)}`,
-      `hosszú feladat ${fmt(s.longTasksPerSec)}/s · ${fmt(s.longTaskMsPerSec, 0)} ms/s`,
-      `React-render ${fmt(s.reactRendersPerSec)}/s`,
-      s.rendererName || "WebGL renderer: n. a.",
-      s.userAgent,
+      `vászon ${s.bufferWidth}×${s.bufferHeight} (${s.megapixels.toFixed(2)} Mpx) · CSS ${s.cssWidth}×${s.cssHeight} · dpr ${s.devicePixelRatio.toFixed(2)} → ${s.pixelRatio.toFixed(2)}`,
+      `hosszú feladat ${fmt(s.longTasksPerSec)}/s · ${fmt(s.longTaskMsPerSec, 0)} ms/s · React-render ${fmt(s.reactRendersPerSec)}/s`,
+      `${(s.rendererName || "WebGL: n. a.").slice(0, 44)} · ${s.userAgent}`,
     ];
     text.textContent = lines.join("\n");
   };
@@ -300,6 +311,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       reactLastCount = count;
       reactLastAt = nowMs;
     }
+    placeTop();
     renderText();
   };
 
@@ -354,7 +366,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   renderText();
   // Ha a hurok áll (szünet, kérdés), a fejléc „áll”-ra vált — a képkocka-hurok nélkül is.
   const idleTimer = window.setInterval(() => {
-    if (!isLoopRunning(performance.now() - lastFrameAt, lastDt)) renderText();
+    if (!loopClock.running(performance.now(), opts.isRunning?.())) renderText();
   }, 1000);
 
   const api: PerfWindowApi = { snapshot, controls: { set: applyToggles }, runGpuProbe };
@@ -364,14 +376,8 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     frameStart(now) {
       tStart = performance.now();
       gpuTimer.poll();
-      if (lastNow !== null) {
-        const dt = now - lastNow;
-        lastDt = dt > 0 ? dt : 0;
-        // Az első képkocka és a szünet utáni hosszú rés nem képkockaidő.
-        if (dt > 0 && dt < 1000) frames.push({ dt, js: lastJs, render: lastRender });
-      }
-      lastNow = now;
-      lastFrameAt = tStart;
+      const counted = loopClock.frame(now, tStart);
+      if (counted !== null) frames.push({ dt: counted, js: lastJs, render: lastRender });
     },
     beforeRender() {
       tBefore = performance.now();

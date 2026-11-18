@@ -6,7 +6,7 @@ import { Link, useLocation } from "wouter";
 import * as THREE from "three";
 import { applyRendererLook, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
 import type { PerfControls, PerfOverlay } from "@/game-engine/perf/perfOverlay";
-import { perfEnabledFrom } from "@/game-engine/perf/perfStats";
+import { perfEnabledFrom } from "@/game-engine/perf/perfFlag";
 import { isLightGraphicsFrom, isTouchDeviceFrom, LIGHT_GRAPHICS_MAX_PIXELS, pixelRatioForBudget } from "@/game-engine/perf/pixelBudget";
 import { SUN_SHADE_TINT, sunShadeAt, type SunOccluder } from "@/lib/voxelSunShade";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
@@ -2127,7 +2127,14 @@ export default function BlockCraftQuiz() {
       import("@/game-engine/perf/perfOverlay").then(
         (mod) => {
           if (perfDisposed) return;
-          perf = mod.createPerfOverlay({ renderer, host, tier, title: "Kockavadász", controls: perfControls, getReactRenders: () => renderCountRef.current });
+          perf = mod.createPerfOverlay({ renderer, host, tier, title: "Kockavadász", controls: perfControls, getReactRenders: () => renderCountRef.current,
+            isRunning: () => runningRef.current,
+            // A panel a pályajelző (a felső HUD utolsó sora) alá kerül.
+            getTopInset: () => {
+              const chip = host.parentElement?.querySelector('[data-testid="bc-level-chip"]') ?? document.querySelector('[data-testid="bc-level-chip"]');
+              return chip ? chip.getBoundingClientRect().bottom - host.getBoundingClientRect().top + 6 : 4;
+            },
+          });
         },
         () => {
           // A mérőpanel nélkül a játék változatlanul fut.

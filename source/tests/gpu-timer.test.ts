@@ -156,3 +156,21 @@ describe("createGpuTimer", () => {
     assert.equal(timer.pendingCount, 0);
   });
 });
+
+describe("createGpuTimer — kivétel a render() alatt (review #504 L5)", () => {
+  it("ha a render() dob (az end() elmarad), a következő képkockán a mérés újraindul, és új minta érkezik", () => {
+    const f = fakeGl();
+    const timer = createGpuTimer(f.gl);
+    timer.poll();
+    f.state.nextNs = 50_000_000; // a félbemaradt mérés két képkockát fogna át — nem lehet minta
+    timer.begin(false); // a render() kivételt dob: az end() nem fut le
+    f.state.nextNs = 2_000_000;
+    // A következő képkockák rendben futnak.
+    for (let i = 0; i < 6; i++) {
+      frame(timer);
+      f.finishAll();
+    }
+    assert.equal(timer.average(), 2, "a GPU-sor nem fagy be, és a félbemaradt (torz) mérés nem kerül a mintába");
+    assert.ok(timer.pendingCount <= 1);
+  });
+});

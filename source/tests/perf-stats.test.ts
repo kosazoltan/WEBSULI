@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { FrameWindow, fmt, isLoopRunning, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
+import { FrameWindow, LoopClock, fmt, isLoopRunning, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
 
 /** `?perf=1` diagnosztika — a tiszta számolás (terv: docs/specs/2026-11-17-kockavadasz-telefon.md, 6. szakasz). */
 
@@ -134,5 +134,64 @@ describe("isLoopRunning", () => {
     assert.equal(isLoopRunning(14_000, 600_000), true);
     assert.equal(isLoopRunning(1500, Number.NaN), false);
     assert.equal(isLoopRunning(Number.NaN, 16), false);
+  });
+});
+
+/**
+ * Review #504 L1 — idősorok a vak ellenőr próbáiból (`ci-repro-*.json`, `t2-stale-fut.json`): a jelzőt minden képkocka-hossz
+ * közepén (a főszál a képkocka munkáját végzi) és a képkockák között is kiolvassuk.
+ */
+function simulate(clock: LoopClock, frameMs: readonly number[], gameRunning: boolean | undefined) {
+  let t = 1000;
+  const reads: boolean[] = [];
+  for (const ms of frameMs) {
+    clock.frame(t, t);
+    // A képkocka munkája alatt / után, a következő képkocka előtt olvasunk (ahogy a panel tétlen időzítője és a teszt).
+    reads.push(clock.running(t + ms * 0.5, gameRunning));
+    reads.push(clock.running(t + ms - 1, gameRunning));
+    t += ms;
+  }
+  return reads;
+}
+
+describe("LoopClock — a játék jelzője az igazság (review #504 L1)", () => {
+  it("150 / 150 / 1600 ms váltakozva: futó hurok soha nem „áll”", () => {
+    const series = Array.from({ length: 30 }, (_, i) => (i % 3 === 2 ? 1600 : 150));
+    const reads = simulate(new LoopClock(), series, true);
+    assert.equal(reads.filter((r) => !r).length, 0);
+  });
+
+  it("19 gyors képkocka, majd egy 2500 ms-os: futó hurok soha nem „áll”", () => {
+    const series = [...Array.from({ length: 19 }, () => 16.7), 2500, 16.7, 16.7];
+    const reads = simulate(new LoopClock(), series, true);
+    assert.equal(reads.filter((r) => !r).length, 0);
+  });
+
+  it("szünet → folytatás egy képkockára → szünet: az álló hurok azonnal „áll” (nem 14 s-ig „fut”)", () => {
+    const clock = new LoopClock();
+    let t = 1000;
+    for (let i = 0; i < 60; i++, t += 16.7) clock.frame(t, t);
+    assert.equal(clock.running(t + 10, false), false, "első szünet");
+    t += 8500;
+    clock.frame(t, t); // folytatás: egyetlen képkocka
+    assert.equal(clock.running(t + 5, true), true, "fut a folytatás képkockáján");
+    assert.equal(clock.running(t + 200, false), false, "újra szünet — azonnal áll");
+    assert.equal(clock.running(t + 13_000, false), false);
+  });
+
+  it("játék-jelző nélkül (tartalék becslés) a szünet utáni rés nem nyújtja meg a „fut” időt", () => {
+    const clock = new LoopClock();
+    let t = 1000;
+    for (let i = 0; i < 60; i++, t += 16.7) clock.frame(t, t);
+    t += 8500;
+    clock.frame(t, t);
+    assert.equal(clock.running(t + 2000), false, "2 s-mal az utolsó képkocka után a hurok áll (régen: 15 s-ig „fut”)");
+  });
+
+  it("a szünet utáni rés nem kerül a képkocka-statisztikába", () => {
+    const clock = new LoopClock();
+    assert.equal(clock.frame(1000, 1000), null, "első képkocka");
+    assert.equal(clock.frame(1016, 1016), 16);
+    assert.equal(clock.frame(9516, 9516), null, "8,5 s-os rés");
   });
 });
