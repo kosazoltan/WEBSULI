@@ -181,7 +181,9 @@ test("F16: a tárolt fedettség minden írója megőrzi a vizuális fedettséget
   assert.deepEqual(coverage, { core: { total: 1, covered: 1, ratio: 1 }, supporting: { total: 0, covered: 0, ratio: 1 }, extraCovered: 0, unknownIds: [] }, "a bemenet nem módosul");
   // A két író (gyártás, leckejavítás) ezt a függvényt használja — a javítás a térkép leltárából mér, nem a puszta fogalomfedettséget írja.
   const improvement = readFileSync("server/studio/structured-improvement.ts", "utf8");
-  assert.match(improvement, /const storedCoverage = withVisualCoverage\(coverage, candidate, visualsOfSourceFiles\(inventory\?\.sourceFiles\)\);/);
+  // Vak ellenőr J2 (2026-11-18): a javítás a leltárból csak a funkciókapcsoló BE állapotában mér; KI állapotban a tárolt fedettség a
+  // kapcsoló előtti alakú, többlet lekérdezés nélkül (a BE ág változatlanul ugyanez a hívás).
+  assert.match(improvement, /const storedCoverage = visualsOn \? withVisualCoverage\(coverage, candidate, visualsOfSourceFiles\(inventory\?\.sourceFiles\)\) : coverage;/);
   assert.match(improvement, /set\(\{ json: candidate, coverage: storedCoverage,/);
   assert.match(readFileSync("server/studio/single-run/engine.ts", "utf8"), /coverage: withVisualCoverage\(coverage\.coverage, publishable, visuals\),/);
 });
