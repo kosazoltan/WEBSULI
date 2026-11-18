@@ -1467,6 +1467,10 @@ függvényeket (feladatgenerátor, időzítés) nézők változatlanok.
 **Állapot (J5a):** folyamatban – 2026-11-17, ág feat/jatek-j5a-brainrot-lenyarena, munkafa .claude/worktrees/jatek-j5a, kanban #80 · **Állapot (J5b):** nem kezdődött
 **Függ:** J0c merge (3. hullám). **Elfogadás:** J-BR, J1–J10, J16, M1–M12. Terv: 5.5.
 
+**Spec-változás (2026-11-17 / 18):** a Brain Rot válaszablaka a J10 közös értékei (6 / 7,5 / ≤ 9 s) helyett az olvasásalapú
+`brainRotWindowMs` (≥ 9 s, ≤ 30 s, az óra az előjelzés után indul); a 90 mp-es menet-óra a kérdés alatt csak a régi ablaknyit
+fogy — `docs/specs/2026-11-17-brainrot-valaszido.md` (D1–D6).
+
 ### Fájlok
 
 `P/BrainRotSteal.tsx`, `L/brainRotPhysics.ts`, `L/brainRotTuning.ts`, `GE/scenes/BrainRotArena3D.tsx`, új

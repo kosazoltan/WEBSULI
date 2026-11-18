@@ -65,7 +65,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   const taskState = useExperienceRound(e.tasks, taskRound, `${storageKey}:tasks`, () => sampleTaskIds(e.tasks, taskRound));
   const quizState = useExperienceRound(e.quiz, quizRound, `${storageKey}:quiz`);
   // Tanulói eredmény e-mailben (2026-10-17-eredmeny-email): a kiértékelés után a háttérben, egyszer. A szerveres (bejelentkezett)
-  // kvízt a szerver maga küldi; a helyi kvíz csak vendégnél él, ezért annak lezárása küld.
+  // kvízt a szerver maga küldi; a helyi kvíz csak vendégnél él: a lezárása vagy az utolsó kérdés megválaszolása küld.
   useEffect(() => {
     if (tab === "tasks") taskState.setRound(old => old.startedAt ? old : { ...old, startedAt: Date.now() });
     if (tab === "quiz") quizState.setRound(old => old.startedAt ? old : { ...old, startedAt: Date.now() });
@@ -82,7 +82,8 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   const taskPoints = tasks.reduce((sum, t) => sum + finalVerdict(t.id).score, 0);
   // Tanulói eredmény e-mailben (2026-10-17-eredmeny-email): a kiértékelés után a háttérben, egyszer. Review #280: a feladatok csak akkor,
   // ha minden döntőbíróra jogosult válasz ítéletet kapott (a szerver addigra a gyorsítótárában tartja). A szerveres (bejelentkezett)
-  // kvízt a szerver maga küldi; a helyi kvíz csak vendégnél él, ezért annak lezárása küld.
+  // kvízt a szerver maga küldi; a helyi kvíz csak vendégnél él: a lezárása VAGY az utolsó kérdés megválaszolása küld (spec
+  // 2026-11-17-eredmeny-email-kviz — a kvíz azonnal visszajelez, a lezáró gombot sokan meg sem nyomják).
   const arbiterSettled = !arbiterSource || taskChecks.every(c => c.det.state === "ok" || !c.answer.trim() || !!arbiter.verdicts[c.id]);
   useResultReport(lessonId, "tasks", taskState.round, storageKey, arbiterSettled);
   useResultReport(lessonId, "quiz", quizState.round, storageKey);

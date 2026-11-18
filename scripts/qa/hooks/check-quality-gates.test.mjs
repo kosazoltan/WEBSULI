@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -110,7 +110,10 @@ test('git push whitelist: engedett alakok, minden más DENY; a törlés csak --d
 test('gh pr merge / create: ismert értékes kapcsolók; a cél egyértelmű szám / URL / ág, különben DENY', () => {
   assert.deepEqual(planCommand('gh pr merge 482 --squash'), { kind: 'pr-merge', target: '482', repoFlag: null });
   assert.deepEqual(planCommand('gh pr merge --squash --subject "7" 8'), { kind: 'pr-merge', target: '8', repoFlag: null });
-  assert.deepEqual(planCommand('gh pr merge --squash --body-file b.md -R kosazoltan/WEBSULI #9'), { kind: 'pr-merge', target: '9', repoFlag: 'kosazoltan/WEBSULI' });
+  // SPEC-VÁLTOZÁS (docs/specs/2026-11-17-kulso-ellenor.md 11.3, kanban #100, 4. kör): a szó eleji `#9` a héjban megjegyzés — a
+  // korábbi elvárás (cél = 9) a héjjal ellentétes volt (a héj cél nélkül, az aktuális ág PR-ját vonná össze); most érthető tiltás.
+  assert.equal(planCommand('gh pr merge --squash --body-file b.md -R kosazoltan/WEBSULI #9').kind, 'deny');
+  assert.deepEqual(planCommand('gh pr merge --squash --body-file b.md -R kosazoltan/WEBSULI 9'), { kind: 'pr-merge', target: '9', repoFlag: 'kosazoltan/WEBSULI' });
   assert.deepEqual(planCommand('gh pr merge --squash'), { kind: 'pr-merge', target: null, repoFlag: null });
   assert.equal(planCommand('gh pr merge https://github.com/kosazoltan/WEBSULI/pull/7 --squash').target, 'https://github.com/kosazoltan/WEBSULI/pull/7');
   assert.equal(kind('gh pr merge --disable-auto 5'), 'none');
@@ -276,28 +279,41 @@ test('kanban #100: a kiértékelő kapcsoló „=”-vel és az útvonalas érte
     'C:/x/node.exe x.mjs "git push"']) assert.equal(kind(c), 'deny', c);
 });
 
-test('H5: nem egyértelműen értelmezhető idézés + kapu-köteles kulcsszó → DENY; a szándék szerinti értelmező-alakok nem kapu-kötelesek', () => {
-  const ambiguous = [
+test('H5: a tokenizáló a héj szerint bont — amit a héj máshogy zárna le, az tilt; a szabályos idézés nem tilt', () => {
+  const bashDeny = [
     "node x.mjs $'a\\'' ; git push #'",
-    'node x.mjs "a\\" ; git push #"',
-    'node x.mjs "a\u201D ; git push #"',
     "echo $'a\\'' ; git push #'",
-    'echo "a\\" ; git push #"',
-    'echo "a\u201D ; git push #"',
-    "Write-Output 'a\u2019 ; git push #'",
-    'git commit -m "x\\" ; git push #"',
     "git commit -m $'a\\'' ; git push #'",
+    'node x.mjs $"git push"',
+    "echo a\\' ; git push #'",
+    "node x.mjs a\\' ; git push #'",
+    'echo a\\" ; git push #"',
+    'echo "a\\\\" ; git push #"',
+    "echo 'a\\' ; git push #'",
+  ];
+  for (const c of bashDeny) assert.equal(planCommand(c, { tool: 'Bash' }).kind, 'deny', `Bash: ${c}`);
+  const psDeny = [
+    'node x.mjs "a\\" ; git push #"',
+    'node x.mjs "a” ; git push #"',
+    'echo "a\\" ; git push #"',
+    'echo "a„ ; git push #"',
+    "Write-Output 'a’ ; git push #'",
+    'git commit -m "x\\" ; git push #"',
     'git log --grep="a\\" ; git push #"',
     'gh pr view 5 --json title -q "a\\" ; gh pr merge 5 #"',
-    'node x.mjs $"git push"',
+    'git push origin x --% y',
   ];
-  for (const c of ambiguous) assert.equal(kind(c), 'deny', c);
-  // PowerShell-ben a `#` megjegyzést kezd: kapu-köteles kulcsszóval együtt tilt; Bash-eszköznél a régi viselkedés marad.
-  assert.equal(planCommand('node x.mjs "a" # git push', { tool: 'PowerShell' }).kind, 'deny');
-  assert.equal(planCommand('gh pr merge 9 --squash # megjegyzés', { tool: 'PowerShell' }).kind, 'deny');
-  // PowerShell-ben a #9 megjegyzés: a héj cél nélkül (az aktuális ág PR-ját) vonná össze, a terv viszont a 9-et nézné → DENY.
-  assert.equal(planCommand('gh pr merge #9 --squash', { tool: 'PowerShell' }).kind, 'deny');
-  assert.equal(planCommand('gh pr merge 9 --squash', { tool: 'PowerShell' }).kind, 'pr-merge');
+  for (const c of psDeny) assert.equal(planCommand(c, { tool: 'PowerShell' }).kind, 'deny', `PowerShell: ${c}`);
+  // PowerShell: a `--%` után a héj a sort szó szerint adja tovább — a hook nem követi, ezért tilt (nem kapu-köteles fejjel is).
+  assert.equal(planCommand('grep --% "git push" docs', { tool: 'PowerShell' }).kind, 'deny');
+  assert.equal(planCommand('grep --% "git push" docs', { tool: 'Bash' }).kind, 'none');
+  // PowerShell: a duplázott idézőjel szó szerinti idézőjel — a refspecben így nem egyszerű ágnév.
+  assert.equal(planCommand("git push origin 'a''b'", { tool: 'PowerShell' }).kind, 'deny');
+  assert.equal(planCommand('git push origin "a""b"', { tool: 'PowerShell' }).kind, 'deny');
+  // A parancsnévbe szúrt idézőjel nem rejti el a kapu-köteles műveletet.
+  for (const tool of ['Bash', 'PowerShell']) {
+    for (const c of ['g"i"t push', "g'i't push", 'git pu""sh']) assert.equal(planCommand(c, { tool }).kind, 'push', `${tool}: ${c}`);
+  }
   const intended = [
     'node kanban.mjs note 5 "a kiadást a git push után ellenőrizd"',
     'node scripts/kanban.mjs note 5 "gh pr merge 9 után"',
@@ -315,4 +331,127 @@ test('H5: nem egyértelműen értelmezhető idézés + kapu-köteles kulcsszó �
     assert.equal(kind(c), 'none', c);
     assert.equal(planCommand(c, { tool: 'PowerShell' }).kind, 'none', `PowerShell: ${c}`);
   }
+});
+
+test('V2: a szabályos PR-folyamat címtől függetlenül a normál bizonyíték-ellenőrzésre fut; a commit / grep / jegyzet szövege nem kapu-köteles', () => {
+  for (const tool of ['Bash', 'PowerShell']) {
+    const p = (c) => planCommand(c, { tool });
+    assert.equal(p('gh pr create --title "chore(qa): külső ellenőr (kanban #92)" --body-file leiras.md').kind, 'pr-create', tool);
+    assert.equal(p('gh pr merge 490 --squash --subject "chore(qa): külső ellenőr (#490)"').kind, 'pr-merge', tool);
+    for (const c of ['git commit -m "fix: a „más repó” döntés a push kapuban"', 'git commit -m "docs: push kapu (kanban #100)"',
+      'node scripts/kanban.mjs note 5 "a git push után (#92)"']) {
+      assert.equal(p(c).kind, 'none', `${tool}: ${c}`);
+    }
+  }
+  // Bash-ben a tipográfiai idézőjel és a kettős idézőjelen belüli \" szabályos a címben → normál bizonyíték-ellenőrzés.
+  assert.equal(planCommand('gh pr create --title "feat(jatekok): J5a – Brain Rot „Lény-aréna”" --body-file leiras.md', { tool: 'Bash' }).kind, 'pr-create');
+  assert.deepEqual(planCommand('gh pr merge 485 --squash --subject "feat: „Lény-aréna” (#485)"', { tool: 'Bash' }), { kind: 'pr-merge', target: '485', repoFlag: null });
+  assert.equal(planCommand('gh pr create --title "fix: \\"x\\" javítása" --body-file leiras.md', { tool: 'Bash' }).kind, 'pr-create');
+  // PowerShellben ugyanezek a héjban több argumentumra esnek szét (mérve: PowerShell 7 és 5.1) — a parancs a héjban is hibás, a
+  // hook ezt követi: tilt (a runbook kerülőútja: egyenes idézőjel, vagy a Bash-eszköz).
+  for (const c of ['gh pr create --title "feat: „Lény”" --body-file f.md', 'gh pr create --title "fix: \\"x\\" javítása" --body-file leiras.md']) {
+    assert.equal(planCommand(c, { tool: 'PowerShell' }).kind, 'deny', c);
+  }
+  assert.deepEqual(tokenizeSimple('gh pr merge 5 --subject "„x” (#5)"', { tool: 'PowerShell' }).words, ['gh', 'pr', 'merge', '5', '--subject', '', 'x (#5)']);
+  // A tipográfiai idézőjel Bash-ben közönséges karakter. PowerShellben lezárja a szöveget — ott a terv a héj tényleges szavait
+  // követi (a próbatábla rögzíti), és ha a „push” szó idézetlenné válik, tilt.
+  for (const c of ['grep -n "„git push”" docs/minosegkapuk.md', 'node scripts/kanban.mjs note 5 "a „git push” után ellenőrizd"', 'echo "a „git push” után"']) {
+    assert.equal(planCommand(c, { tool: 'Bash' }).kind, 'none', `Bash: ${c}`);
+  }
+  assert.equal(planCommand('grep -n "„git push”" docs/minosegkapuk.md', { tool: 'PowerShell' }).kind, 'deny');
+  // Bash-ben a kettős idézőjelen belüli \" szabályos escape.
+  assert.equal(planCommand('git commit -m "fix: \\"idézet\\" a push kapuban"', { tool: 'Bash' }).kind, 'none');
+  // A szó elején álló # mindkét héjban megjegyzés a sor végéig (a terv is így látja); a „#9” érthető tiltás.
+  for (const tool of ['Bash', 'PowerShell']) {
+    assert.equal(planCommand('git log --oneline -5 # push előtt', { tool }).kind, 'none', tool);
+    assert.match(planCommand('gh pr merge #9 --squash', { tool }).reason ?? '', /# nélkül/, tool);
+    assert.deepEqual(planCommand('gh pr merge 9 --squash # megjegyzés', { tool }), { kind: 'pr-merge', target: '9', repoFlag: null }, tool);
+  }
+});
+
+test('4. kör: megjegyzés a sor végéig, here-string, kapcsolók értelmezés után, nem ASCII szóköz, ismeretlen eszköz', () => {
+  // B1: a megjegyzés után új sorban álló parancs → láncolás → tilt (mindkét héjban).
+  for (const tool of ['Bash', 'PowerShell']) {
+    for (const c of ['git status # megjegyzés\ngit push origin proba', 'gh pr view 5 # megjegyzés\ngh pr merge 5 --squash', 'echo x # y\ngit push',
+      'node x.mjs a # b\ngit push', 'git log -1 #\ngit push origin proba', 'git log -1 #\r\ngit push origin proba']) {
+      assert.equal(planCommand(c, { tool }).kind, 'deny', `${tool}: ${JSON.stringify(c)}`);
+    }
+    assert.deepEqual(planCommand('git push origin proba # megjegyzés', { tool }), { kind: 'push', remote: 'origin', ref: 'proba', upstream: false }, tool);
+    // M1: a megjegyzésbe írt kapcsoló nem számít (a héj sem adja át).
+    assert.equal(planCommand('gh pr merge 5 --squash # --disable-auto', { tool }).kind, 'pr-merge', tool);
+    assert.deepEqual(planCommand('gh pr create --title x --body-file f.md # -R masik/repo', { tool }), { kind: 'pr-create', ref: null, repoFlag: null }, tool);
+    // M2: az érték-kapcsoló utáni szó érték, nem kapcsoló.
+    assert.equal(planCommand('gh pr merge 5 --squash --body --disable-auto', { tool }).kind, 'pr-merge', tool);
+    assert.equal(planCommand('gh pr merge 5 --squash --subject --auto', { tool }).kind, 'pr-merge', tool);
+    assert.equal(planCommand('gh pr merge 5 --squash --auto', { tool }).kind, 'deny', tool);
+    assert.equal(planCommand('gh pr merge 5 --disable-auto', { tool }).kind, 'none', tool);
+  }
+  // B2: PowerShell here-string → tilt.
+  for (const c of ['echo @"\na " ; git push ; echo "\n"@', "echo @'\na ' ; git push ; echo '\n'@", 'git push origin @"\nx\n"@']) {
+    assert.equal(planCommand(c, { tool: 'PowerShell' }).kind, 'deny', JSON.stringify(c));
+  }
+  // K1: PowerShellben a nem törő szóköz idézőjelen kívül → tilt; idézőjelen belül szöveg.
+  assert.equal(planCommand('gh pr merge 5 --body x --auto', { tool: 'PowerShell' }).kind, 'deny');
+  assert.equal(planCommand('gh pr merge 5 --squash --body "x y"', { tool: 'PowerShell' }).kind, 'pr-merge');
+  // K4: ismeretlen eszköznév → a szigorúbb: bármelyik héj tilt → tilt; egyező terv → az.
+  assert.equal(planCommand('git commit -m "a\\" ; git push #"', { tool: 'Terminal' }).kind, 'deny');
+  assert.equal(planCommand("echo a\\' ; git push #'", { tool: '' }).kind, 'deny');
+  assert.deepEqual(planCommand('git push origin proba', { tool: 'Terminal' }), { kind: 'push', remote: 'origin', ref: 'proba', upstream: false });
+  assert.equal(planCommand('git status', { tool: 'Terminal' }).kind, 'none');
+  // Bash kapcsos kifejtés git / gh parancsban → tilt; más eszköznél és PowerShellben nem kapu-köteles.
+  assert.equal(planCommand('git pus{h..h} origin proba', { tool: 'Bash' }).kind, 'deny');
+  assert.equal(planCommand('git log --format={a,b}', { tool: 'Bash' }).kind, 'deny');
+  assert.equal(planCommand('echo {a,b}', { tool: 'Bash' }).kind, 'none');
+});
+
+test('a hook folyamata átadja az eszköz nevét: ugyanaz a parancs PowerShellben tilt, Bash-ben nem kapu-köteles', () => {
+  const { wt } = makeRepo();
+  const c = 'git commit -m "a\\" ; git push #"';
+  assert.equal(runHook(c, wt, 'Bash'), null);
+  assert.ok(denied(runHook(c, wt, 'PowerShell')));
+  // K4: ismeretlen héj-eszköz parancsát is vizsgálja (a szigorúbb szabály szerint), nem lép ki döntés nélkül.
+  assert.ok(denied(runHook(c, wt, 'Terminal')));
+});
+
+test('az ellenőr próbatáblája (fixtures/quoting-forms.json): minden alak terve Bash- és PowerShell-eszközzel a rögzített', () => {
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/quoting-forms.json', import.meta.url), 'utf8'));
+  assert.ok(fx.forms.length >= 198);
+  const diff = [];
+  fx.forms.forEach((f, i) => {
+    for (const tool of ['Bash', 'PowerShell']) {
+      const got = planCommand(f, { tool }).kind;
+      if (got !== fx.expected[tool][i]) diff.push(`${i + 1} ${tool}: várt ${fx.expected[tool][i]}, kapott ${got} | ${JSON.stringify(f)}`);
+    }
+  });
+  assert.deepEqual(diff, []);
+});
+
+/** Valódi kibocsátás-e a héj hívása (git push alparancs; gh pr create / merge, a csak --disable-auto merge kivételével; gh api merge). */
+function emits(call) {
+  const [prog, ...a] = call;
+  if (prog === 'git') {
+    for (let i = 0; i < a.length; i += 1) {
+      if (['-C', '-c', '--git-dir', '--work-tree', '--namespace'].includes(a[i])) { i += 1; continue; }
+      if (a[i].startsWith('-')) continue;
+      return a[i] === 'push';
+    }
+    return false;
+  }
+  if (prog === 'gh' && a[0] === 'pr' && a[1] === 'create') return true;
+  if (prog === 'gh' && a[0] === 'pr' && a[1] === 'merge') return !a.includes('--disable-auto');
+  return prog === 'gh' && a[0] === 'api' && a.some((x) => /\/pulls\/\d+\/merge\b/.test(x));
+}
+
+test('H11: amit a valódi héj kibocsátásként futtat (a próbatábla héjas eredménye), azt a hook soha nem látja „nem kapu-kötelesnek”', () => {
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/quoting-forms.json', import.meta.url), 'utf8'));
+  assert.ok(fx.forms.length >= 340 && fx.shell, 'a 4. kör héjas eredménye hiányzik');
+  const slips = [];
+  fx.forms.forEach((f, i) => {
+    for (const [sh, tool] of [['Bash', 'Bash'], ['PowerShell', 'PowerShell'], ['PowerShell51', 'PowerShell']]) {
+      if (!(fx.shell[sh][i] ?? []).some(emits)) continue;
+      const plan = planCommand(f, { tool }).kind;
+      if (plan === 'none') slips.push(`${i + 1} ${sh}: a héj kibocsát, a terv „nem kapu-köteles” | ${JSON.stringify(f)}`);
+    }
+  });
+  assert.deepEqual(slips, []);
 });
