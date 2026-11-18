@@ -4,7 +4,7 @@
 > Munkafa: `.claude/worktrees/szkriptkapuk`. A kidolgozó lánc (`chore/kapu-ingadozo`, fej `f98dfc42`; benne `docs/szkriptkapuk-terv`,
 > `chore/kapu-teszt-integritas`, `chore/kapu-allitas-ellenor`) PR nélkül áll — a főágra a lenti P1–P5 szeletekben kerül, friss ágakon.
 > **Állapot (2026-11-18):** S0, S1, S2, S8 a kidolgozó láncban kész; a független ellenőr harmadik köre (`0a4548b3`): IGEN, FELTÉTELLEL
-> (F1, F2 javítva: `f98dfc42`). P1 (ez a terv) folyamatban · P2–P5 a lenti sorrendben · S3, S5, S6, S7 kiadható megbízás (lent) ·
+> (F1, F2 javítva: `f98dfc42`). P1 (a terv) kész, PR-ra vár · P2 folyamatban · P3–P5 a lenti sorrendben · S3, S5, S6, S7 kiadható megbízás (lent) ·
 > S4 az összevonások után.
 
 ## Szeletelés a főágra (orkesztrátori döntés 2026-11-18, „A” opció)
@@ -26,6 +26,25 @@ a háromfázisú ellenőr minden PR-ban látja a végrehajtási utasítást.
 
 Szeletenként: `npm run gate:stage` → `npm run gate:push` → független (vak, hibakereső) ellenőr + `record-review` → `gate:pr` → push +
 PR → zöld CI → `gate:merge`. A kidolgozó lánc ágai a P5 összevonásáig megmaradnak (utána törlésre jelölve).
+
+### P2 — láncolt bizonyíték (végrehajtás)
+
+Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` (6.1 láncolt bizonyíték, 6.3a bevezetési lépcső). Ág:
+`chore/szkriptkapuk-p2-bizonyitek-lanc` (a P1 commitjára épül; a P1 összevonása után a főág beolvasztása).
+
+1. Új fájlok a kidolgozó láncból (`chore/kapu-ingadozo`, `f98dfc42`): `scripts/qa/gates/evidence-chain.mjs`,
+   `scripts/qa/gates/evidence-chain.test.mjs`, `scripts/qa/gates/evidence-run.mjs`; új `scripts/qa/gates/evidence-run.test.mjs` (a
+   kidolgozó láncban a `verify-report.test.mjs` része volt).
+2. A K5 titok-minták (jelszó-kapcsoló, `NÉV=érték` titok, JWT, kulcs-előtagok) a `scripts/qa/gates/lib.mjs` `REDACTIONS` listájába
+   költöznek (a #490 óta a `lib.mjs` módosítható); az `evidence-run` a `lib.redact`-ot használja, a külön `redactMore` megszűnik.
+3. `scripts/qa/gates/stage-gate.mjs`: `stage-<fej>` láncolt rekord; írási hibánál hiba + nem nulla kód.
+   `scripts/qa/gates/pre-push-gate.mjs`: a `pre-push-<fej>` rekord láncba kötése; hibánál a rekord `ok: false`-ra íródik (a független
+   review K-f tétele: a zöld bizonyíték nem maradhat zöld), hiba + nem nulla kód.
+4. `docs/minosegkapuk.md`: „Láncolt bizonyíték” szakasz (zár, teendő, nem csendes hiba, mit garantál / mit nem, `--verify` /
+   `--repair`, `evidence-run`).
+5. Nem része: a `test-integrity` / `verify-report` / `record-review` rekordjai (P3, P4), a `modes.evidence-chain` kapcsoló (P4).
+6. Ellenőrzés: `node --test scripts/qa/gates/evidence-chain.test.mjs scripts/qa/gates/evidence-run.test.mjs scripts/qa/gates/lib.test.mjs`;
+   `npm run gate:stage`; mutációs ellenpróba a zár-ágakra és a K-f ágra (másolaton); 22:15 UTC után `npm run gate:push`.
 
 ## R — Javítókör a független review után (2026-11-17; jelentés: a scratchpad `review-szkriptkapuk/jelentes.md`)
 
