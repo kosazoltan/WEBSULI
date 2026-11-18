@@ -1,9 +1,10 @@
 # Kabala-maki — végrehajtási utasítás (AI-ügynöknek)
 
 **Terv:** [`docs/specs/2026-11-18-kabala-maki.md`](2026-11-18-kabala-maki.md) (cél, nem-cél, stílus, technikai keret, K-1…K-12).
-**Állapot (2026-11-18):** helyben kész — a finomító kör után GLB `kabala-maki.908e4868.glb` (108 880 bájt, 18 968 háromszög, 22 csont, 3 anyag, 5 klip), kétszeri
-gyártás azonos SHA-256, őr-teszt 3/3, `gate:stage` ZÖLD (1 WARN: az előnézeti kiszolgálónak nincs célzott tesztje). Nincs push / PR;
-független ellenőr NOT RUN (PR előtt kötelező). Telefonon nincs mérve.
+**Állapot (2026-11-18, második változat):** helyben kész — GLB `kabala-maki.af0e95d7.glb` (244 684 bájt, 26 380 háromszög,
+25 csont, 4 anyag, 1 beágyazott kép, 6 klip), kétszeri gyártás azonos SHA-256, őr-teszt 3/3 az új kerettel, a végleges GLB
+betöltve az előnézetben (hat klip, konzolhiba nélkül). Nincs push / PR; független ellenőr NOT RUN (PR előtt kötelező).
+Telefonon nincs mérve.
 **Ág / munkafa:** `kiserlet/kabala-maki`, `.claude/worktrees/kabala-maki`. **Kísérlet:** push, PR, rebase, `--no-verify`, letöltés TILOS.
 
 ## Hatókör

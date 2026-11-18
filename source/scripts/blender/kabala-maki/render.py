@@ -1,4 +1,4 @@
-# Kabala-maki — bemutató képek fej nélkül (terv K-7): öt nézet + egy hatpózos tabló.
+# A Websuli makija — bemutató képek fej nélkül: nézetek, „napozó” póz és egy hatklipes tabló.
 # Futtatás: "$BLENDER_BIN" -b --factory-startup -P source/scripts/blender/kabala-maki/render.py [-- --only 01,05] [--size 768]
 # Kimenet: docs/measurements/kabala-maki/*.jpg (a szkript helyéből számolva).
 
@@ -173,19 +173,20 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     print("KABALA-RENDER motor=%s haromszog=%d" % (scene.render.engine, built["tris"]))
 
-    center = (0.10, 0.10, 0.56)
+    center = (0.10, 0.12, 0.64)
     views = [
-        ("01-elol", 0.0, 6.0, 4.6, center),
-        ("02-haromnegyed", -35.0, 10.0, 4.6, center),
-        ("03-oldal", -90.0, 5.0, 4.6, (0.0, 0.10, 0.56)),
-        ("04-hatul", 180.0, 10.0, 4.6, (-0.10, 0.10, 0.56)),
-        ("05-arc-kozeli", -12.0, 3.0, 2.3, (0.0, 0.0, 0.70)),
-        ("07-haromnegyed-farok", 40.0, 12.0, 4.6, center),
+        ("01-elol", 0.0, 6.0, 5.0, center, "idle", 0),
+        ("02-haromnegyed", -35.0, 10.0, 5.0, center, "idle", 0),
+        ("03-oldal", -90.0, 5.0, 5.0, (0.0, 0.12, 0.64), "idle", 0),
+        ("04-hatul", 180.0, 10.0, 5.0, (-0.10, 0.12, 0.64), "idle", 0),
+        ("05-arc-kozeli", -12.0, 3.0, 1.9, (0.0, 0.0, 0.870), "idle", 0),
+        ("07-haromnegyed-farok", 40.0, 12.0, 5.0, center, "idle", 0),
+        ("08-napozo", -22.0, 12.0, 4.6, (0.08, 0.0, 0.50), "sunbathe", 36),
     ]
-    maki_anim.show(arm, face, "idle", 0)
-    for name, az, el, dist, target in views:
+    for name, az, el, dist, target, clip, frame in views:
         if only and name[:2] not in only:
             continue
+        maki_anim.show(arm, face, clip, frame)
         place(cam, rig, az, el, dist, target)
         render(scene, os.path.join(OUT_DIR, name + ".jpg"), size, size)
 
@@ -193,21 +194,17 @@ def main():
         return
     tiles = [
         ("alap (idle)", "idle", 0), ("integetés (wave)", "wave", 12), ("ugrás (cheer)", "cheer", 18),
-        ("szomorú (sad)", "sad", 24), ("pislogás (blink)", "blink", 2), ("mosoly (smile)", None, 0),
+        ("szomorú (sad)", "sad", 24), ("pislogás (blink)", "blink", 2), ("napozás (sunbathe)", "sunbathe", 36),
     ]
     tile = size // 2
     text = label(scene, "", cam)
     rows = []
     paths = []
     for i, (caption, clip, frame) in enumerate(tiles):
-        if clip:
-            maki_anim.show(arm, face, clip, frame)
-        else:
-            pose = maki_anim.Pose(arm).key("smile", 1.0).r("head", "Y", 6.0)
-            maki_anim.apply_pose(arm, face, pose)
-        place(cam, rig, -18.0, 7.0, 5.6, (0.08, 0.10, 0.62))
+        maki_anim.show(arm, face, clip, frame)
+        place(cam, rig, -18.0, 7.0, 5.3, (0.10, 0.12, 0.66))
         text.data.body = caption
-        text.location = Vector((0.08, -0.35, 1.36))
+        text.location = Vector((0.10, -0.35, 1.47))
         text.rotation_euler = cam.rotation_euler
         path = os.path.join(OUT_DIR, "_tile%d.jpg" % i)
         render(scene, path, tile, tile)

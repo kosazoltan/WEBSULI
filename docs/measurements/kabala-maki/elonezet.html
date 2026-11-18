@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kabala-maki — előnézet</title>
+<title>A Websuli makija — előnézet</title>
 <!--
   Önálló előnézet (kísérlet; a programba nincs bekötve). CDN nincs: a three a source/node_modules-ból jön.
   Indítás a repó gyökeréből:  node source/scripts/blender/kabala-maki/preview-server.mjs   →   http://localhost:4599/
@@ -31,6 +31,7 @@
   <button data-clip="wave">Integetés</button>
   <button data-clip="cheer">Ugrás (jó válasz)</button>
   <button data-clip="sad">Szomorú (rossz válasz)</button>
+  <button data-clip="sunbathe">Napozás</button>
   <button data-clip="blink">Pislogás</button>
   <label>Mosoly <input id="smile" type="range" min="-1" max="1" step="0.01" value="0"></label>
   <label><input id="autoblink" type="checkbox" checked> magától pislog</label>
@@ -51,9 +52,9 @@ stage.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#fff4dc');
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
-camera.position.set(-1.3, 0.95, 4.9);
+camera.position.set(-1.5, 1.05, 5.6);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0.08, 0.38, 0);
+controls.target.set(0.10, 0.48, 0);
 controls.enableDamping = true;
 scene.add(new THREE.HemisphereLight('#ffffff', '#c9ecd2', 1.6));
 const sun = new THREE.DirectionalLight('#fff6e8', 2.2);
@@ -104,12 +105,14 @@ for (const b of document.querySelectorAll('button[data-clip]')) b.addEventListen
 
 const smile = document.getElementById('smile');
 let nextBlink = 2.5;
-const clock = new THREE.Clock();
+let last = performance.now();
 window.__kabala = { manifest, clips: gltf.animations.map((c) => c.name), renderer, play, faces, actions, current: () => current };
 info.textContent = `${manifest.file} · ${(manifest.bytes / 1024).toFixed(0)} KB · ${manifest.triangles} háromszög · ${manifest.bones} csont · klipek: ${gltf.animations.map((c) => c.name).join(', ')}`;
 
 renderer.setAnimationLoop(() => {
-  const dt = clock.getDelta();
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
   nextBlink -= dt;
   if (nextBlink <= 0 && document.getElementById('autoblink').checked && current === 'idle') {
     actions.blink.reset().setLoop(THREE.LoopOnce, 1).play();

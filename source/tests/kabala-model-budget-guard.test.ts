@@ -6,16 +6,20 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Kabala-maki (kísérlet) — a modell méretkerete (terv: docs/specs/2026-11-18-kabala-maki.md, K-4…K-6).
+ * A Websuli makija (kísérlet) — a modell méretkerete (terv: docs/specs/2026-11-18-kabala-maki.md, 7.3 és M-6…M-7).
+ * SPEC-VÁLTOZÁS 2026-11-18 (tulajdonosi kérés: élethűbb gyűrűsfarkú maki, összefüggő háló): a keret 400 KB / 20 000 háromszög
+ * helyett 600 KB / 30 000 háromszög, legfeljebb 30 csont, legfeljebb 1 beágyazott kép (az arc festett textúrája), hat klip.
  * A GLB JSON-részéből olvas (Draco-dekódolás nélkül): az index-accessorok darabszáma tömörítve is ott van.
  * Újragyártás: blender -b --factory-startup -P source/scripts/blender/kabala-maki/build.py
  */
 
 const DIR = join(fileURLToPath(new URL(".", import.meta.url)), "..", "client", "public", "models", "kabala");
-const MAX_BYTES = 400 * 1024;
-const MAX_TRIANGLES = 20_000;
+const MAX_BYTES = 600 * 1024;
+const MAX_TRIANGLES = 30_000;
 const MAX_MATERIALS = 6;
-const CLIPS = ["blink", "cheer", "idle", "sad", "wave"];
+const MAX_BONES = 30;
+const MAX_IMAGES = 1;
+const CLIPS = ["blink", "cheer", "idle", "sad", "sunbathe", "wave"];
 const MORPHS = ["blink", "smile"];
 
 interface Manifest {
@@ -35,7 +39,7 @@ interface Gltf {
   materials: unknown[];
   skins: { joints: number[] }[];
   animations: { name: string; samplers: { input: number }[] }[];
-  images?: unknown[];
+  images?: { uri?: string; bufferView?: number }[];
   buffers: { uri?: string }[];
 }
 
@@ -61,7 +65,7 @@ test("kabala-maki: pontosan egy GLB van, a neve a tartalom hash-ét hordozza", (
   assert.equal(manifest.bytes, glbBytes.length);
 });
 
-test("kabala-maki: méretkeret — ≤ 400 KB, ≤ 20 000 háromszög, ≤ 6 anyag, önálló fájl", () => {
+test("kabala-maki: méretkeret — ≤ 600 KB, ≤ 30 000 háromszög, ≤ 6 anyag, ≤ 1 beágyazott kép, önálló fájl", () => {
   assert.ok(glbBytes.length <= MAX_BYTES, `${glbBytes.length} bájt > ${MAX_BYTES}`);
   let triangles = 0;
   for (const mesh of gltf.meshes) {
@@ -73,14 +77,16 @@ test("kabala-maki: méretkeret — ≤ 400 KB, ≤ 20 000 háromszög, ≤ 6 any
   assert.ok(triangles > 0 && triangles <= MAX_TRIANGLES, `${triangles} háromszög > ${MAX_TRIANGLES}`);
   assert.equal(triangles, manifest.triangles);
   assert.ok(gltf.materials.length <= MAX_MATERIALS, `${gltf.materials.length} anyag > ${MAX_MATERIALS}`);
-  assert.equal(gltf.images?.length ?? 0, 0, "nincs textúrafájl (csúcsszín)");
+  const images = gltf.images ?? [];
+  assert.ok(images.length <= MAX_IMAGES, `${images.length} kép > ${MAX_IMAGES}`);
+  assert.ok(images.every((img) => img.uri === undefined && img.bufferView !== undefined), "a kép a GLB-be ágyazott (nincs külső fájl)");
   assert.ok(gltf.buffers.every((b) => b.uri === undefined), "nincs külső puffer");
 });
 
-test("kabala-maki: egy csontváz, öt klip (1–3 mp), két alakkulcs", () => {
+test("kabala-maki: egy csontváz (≤ 30 csont), hat klip (1–3 mp), két alakkulcs", () => {
   assert.equal(gltf.skins.length, 1);
   assert.equal(gltf.skins[0].joints.length, manifest.bones);
-  assert.ok(manifest.bones >= 15 && manifest.bones <= 40, `${manifest.bones} csont`);
+  assert.ok(manifest.bones >= 15 && manifest.bones <= MAX_BONES, `${manifest.bones} csont > ${MAX_BONES}`);
   assert.deepEqual(gltf.animations.map((a) => a.name).sort(), CLIPS);
   assert.deepEqual(manifest.clips.map((c) => c.name), CLIPS);
   for (const anim of gltf.animations) {

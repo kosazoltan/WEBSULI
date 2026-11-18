@@ -126,15 +126,15 @@ Mérce: „ez egy gyűrűsfarkú maki, és nagyon aranyos”. Nem lehet ijesztő
 
 ### 7.4 Elfogadási pontok (második változat)
 
-- [ ] M-1 A terv és a végrehajtási utasítás frissítése külön commit, a kód ELŐTT.
-- [ ] M-2 Felismerhető gyűrűsfarkú maki: fehér arc, sötét szemfolt, megnyúlt pofa fekete orral, homlokcsúcsos sapka, hegyesedő
+- [x] M-1 A terv és a végrehajtási utasítás frissítése külön commit, a kód ELŐTT.
+- [x] M-2 Felismerhető gyűrűsfarkú maki: fehér arc, sötét szemfolt, megnyúlt pofa fekete orral, homlokcsúcsos sapka, hegyesedő
       fehér szegélyű fül, 14 gyűrűs, fekete végű, magasra tartott farok; fej : test kb. 1 : 1,6–1,8.
-- [ ] M-3 Aranyos marad: nagy, kerek, nyitott, csillogó szem; mosoly; nem ijesztő.
-- [ ] M-4 Összefüggő háló: a kar–váll és a láb–törzs csatlakozásnál nincs varrat.
-- [ ] M-5 Éles, tiszta foltszélek az arcon és a farok gyűrűin; „tépett”, tincses sziluett a pofa két oldalán (nem golyósor).
-- [ ] M-6 Hat klip (mind 1–3 mp), köztük a `sunbathe`; `blink` + `smile` alakkulcs.
-- [ ] M-7 Keret: ≤ 600 KB, ≤ 30 000 háromszög, ≤ 6 anyag, ≤ 30 csont — az őr-teszt az új keretre igazítva, zöld.
-- [ ] M-8 Kétszeri gyártás azonos hash-t ad (vagy az eltérés oka leírva).
-- [ ] M-9 Hét kép (a „napozó” pózzal), összesen ≤ 1,5 MB; legalább 3–4 javító kör a saját képek alapján, őszinte értékeléssel.
-- [ ] M-10 Az ÚJ GLB betöltve a böngészős előnézetben, mind a hat klip lejátszva, konzolhiba nélkül, képernyőképpel.
-- [ ] M-11 `gate:stage` zöld.
+- [x] M-3 Aranyos marad: nagy, kerek, nyitott, csillogó szem; mosoly; nem ijesztő.
+- [x] M-4 Összefüggő háló: a kar–váll és a láb–törzs csatlakozásnál nincs varrat.
+- [x] M-5 Éles, tiszta foltszélek az arcon és a farok gyűrűin; „tépett”, tincses sziluett a pofa két oldalán (nem golyósor).
+- [x] M-6 Hat klip (mind 1–3 mp), köztük a `sunbathe`; `blink` + `smile` alakkulcs.
+- [x] M-7 Keret: ≤ 600 KB, ≤ 30 000 háromszög, ≤ 6 anyag, ≤ 30 csont — az őr-teszt az új keretre igazítva, zöld.
+- [x] M-8 Kétszeri gyártás azonos hash-t ad (vagy az eltérés oka leírva).
+- [x] M-9 Hét kép (a „napozó” pózzal), összesen ≤ 1,5 MB; legalább 3–4 javító kör a saját képek alapján, őszinte értékeléssel.
+- [x] M-10 Az ÚJ GLB betöltve a böngészős előnézetben, mind a hat klip lejátszva, konzolhiba nélkül, képernyőképpel.
+- [x] M-11 `gate:stage` zöld.

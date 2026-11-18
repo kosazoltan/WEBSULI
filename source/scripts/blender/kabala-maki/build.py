@@ -66,7 +66,8 @@ def main():
         export_cameras=False,
         export_lights=False,
         export_extras=False,
-        export_texcoords=False,
+        export_texcoords=True,      # az arc festett textúrájához
+        export_image_format="AUTO",
         export_normals=True,
         export_tangents=False,
         export_vertex_color="MATERIAL",

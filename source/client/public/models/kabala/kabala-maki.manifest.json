@@ -1,11 +1,11 @@
 {
   "name": "A Websuli makija",
-  "file": "kabala-maki.908e4868.glb",
-  "sha256": "908e4868f65d91bc05fa4e14f9ecee06c23f39e56fd44195f72d404c7058c30f",
-  "bytes": 108880,
-  "triangles": 18968,
-  "bones": 22,
-  "materials": 3,
+  "file": "kabala-maki.af0e95d7.glb",
+  "sha256": "af0e95d70c27f4556f718b2f0b6db136e2bb3febfbbc400837941f824b4843c8",
+  "bytes": 244684,
+  "triangles": 26380,
+  "bones": 25,
+  "materials": 4,
   "meshes": [
     "Maki",
     "MakiArc"
@@ -24,19 +24,25 @@
     {
       "name": "cheer",
       "duration": 1.5,
-      "channels": 18,
+      "channels": 23,
       "loop": false
     },
     {
       "name": "idle",
       "duration": 2,
-      "channels": 11,
+      "channels": 12,
       "loop": true
     },
     {
       "name": "sad",
       "duration": 2.5,
-      "channels": 13,
+      "channels": 14,
+      "loop": false
+    },
+    {
+      "name": "sunbathe",
+      "duration": 3,
+      "channels": 24,
       "loop": false
     },
     {
