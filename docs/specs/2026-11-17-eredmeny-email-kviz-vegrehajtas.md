@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 (a vak ellenőrzés leletei, 2026-11-18) folyamatban – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 (a vak ellenőrzés leletei, 2026-11-18) kész, a következő vak ellenőrzés előtt – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -138,7 +138,7 @@ itt feloldva (az S2 foglalás-szelet már a főágon van).
 - **R3 (K3)** `resultReport.ts`: a pillanatkép-függvény `ref`-ben; külön effekt a kör azonosságára (`startedAt` + azonosítók), amelynek
   lebontó ága meghívja (a `committed` ekkor még az elhagyott kört tartja). Böngészőteszt: 4 válasz → „Új kvíz” → „Új kör indítása”
   rejtés NÉLKÜL → 1 pillanatkép 4 válasszal, a régi kör azonosítójával.
-- **R4 (K4)** `client/src/lib/queryClient.ts` `sendKeepalive`: elöl `warmCsrfToken()`; 403 → `invalidate()` → `getToken()` → egy ismétlés.
+- **R4 (K4)** `client/src/lib/queryClient.ts` `sendKeepalive`: token = `peek()`, ennek hiányában `getToken()`; 403 → `invalidate()` → `getToken()` → egy ismétlés.
   Böngészőteszt: a token a kérés előtt „lejár” (a szerver-utánzat a régit 403-mal utasítja el) → a pillanatkép az új tokennel megy át;
   ha a tokenkérés is bukik → nincs rögzítés, újratöltés után a tárolt kör pillanatképe elmegy.
 - **R5 (S3)** `gradePartialQuiz(quiz, picks, roundSize?)`: `total = max(roundSize ?? ismert azonosítók száma, megválaszoltak)`; az

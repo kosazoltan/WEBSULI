@@ -167,8 +167,8 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
 - **R3 — kör-csere a kör közepén (K3).** Ha a kör a nézeten belül lecserélődik („Új kvíz” → „Új kör indítása”), az ELHAGYOTT körről
   a csere pillanatában pillanatkép megy, ugyanazokkal a feltételekkel, mint háttérbe kerüléskor (rejtés nélkül is).
 - **R4 — lejárt / érvénytelen CSRF-token (K4).** A `keepalive`-os küldés 403 válasz után érvényteleníti a gyorsítótárazott tokent, újat
-  kér, és EGYSZER megismétli a kérést. Minden küldési kísérlet előtölti a tokent a következő alkalomra (a korábban sikertelen
-  előtöltés így pótlódik). Ha a lap közben bezárul (az ismétlésre nincs mód), semmi nem rögzül: a következő betöltéskor a tárolt kör
+  kér, és EGYSZER megismétli a kérést. Ha nincs gyorsítótárazott token (a korábbi előtöltés elbukott), a küldés előbb kér egyet;
+  gyorsítótárazott tokennel azonnal, előzetes hálózati kör nélkül küld. Ha a lap közben bezárul (az ismétlésre nincs mód), semmi nem rögzül: a következő betöltéskor a tárolt kör
   friss tokennel újra megy.
 - **R5 — a pillanatkép „összes” száma és a korhatár a szerveren (S3).** A „félbehagyva” levél összes-száma a szerver által ismert
   körméret (`experienceRoundSizes(...).quizRound`), nem a kliens által küldött azonosítók száma (ha a megválaszoltak száma ennél
@@ -236,10 +236,10 @@ Elfogadás (S1b):
 - [x] E14 – új kör első válaszai is mennek (körhöz kötött számláló)
 - [x] E15 – sikertelen pillanatkép (hálózati hiba / 429 / 5xx) újrapróbálható marad
 - [x] E16 – véglegesített kör késői pillanatképe nem küld „félbehagyva” levelet (mindkét sorrend, valódi DB)
-- [ ] E17 – véglegesített körre nincs „félbehagyva” levél: újrapróba (bukó küldő) + 60 ismételt versenyhelyzet (valódi DB)
-- [ ] E18 – kör-csere a kör közepén → pillanatkép az elhagyott körről, rejtés nélkül (böngésző)
-- [ ] E19 – 403 → új token + egyszeri ismétlés; sikertelen tokenkérés után a következő betöltés pótol (böngésző)
-- [ ] E20 – összes-szám a szerver körméretéből; szerveroldali 7 napos határ a pillanatképre (valódi DB)
-- [ ] E21 – igaz válasz a már kiment „félbehagyva” levél utáni pillanatképre (valódi DB)
-- [ ] E22 – a legtöbb választ tartalmazó pillanatkép marad (valódi DB)
-- [ ] E23 – a kvíz végleges beküldése `keepalive` (böngésző)
+- [x] E17 – véglegesített körre nincs „félbehagyva” levél: újrapróba (bukó küldő) + 60 ismételt versenyhelyzet (valódi DB)
+- [x] E18 – kör-csere a kör közepén → pillanatkép az elhagyott körről, rejtés nélkül (böngésző)
+- [x] E19 – 403 → új token + egyszeri ismétlés; sikertelen tokenkérés után a következő betöltés pótol (böngésző)
+- [x] E20 – összes-szám a szerver körméretéből; szerveroldali 7 napos határ a pillanatképre (valódi DB)
+- [x] E21 – igaz válasz a már kiment „félbehagyva” levél utáni pillanatképre (valódi DB)
+- [x] E22 – a legtöbb választ tartalmazó pillanatkép marad (valódi DB)
+- [x] E23 – a kvíz végleges beküldése `keepalive` (böngésző)
