@@ -795,6 +795,9 @@ sorban, alatta / mellette a gomb.
 
 - Látszik: november 24–30. „Hamarosan”; december 1. – január 6. aktív; január 7-től és november 24. előtt nem látszik. Az
   `ADVENT_CALENDAR` flag kikapcsolt állapotában nem látszik.
+- **PONTOSÍTVA 2026-11-18 (20. szakasz, orkesztrátori döntés a vak ellenőr K2 lelete után):** a „látszik-e a kártya” döntés az első
+  rajzolás ELŐTT a kliens-buildbe égetett `VITE_ADVENT_CALENDAR` kapcsolóból és a böngésző órájából (Europe/Budapest) születik; a
+  `GET /api/advent/status` csak felülbírál. Cél: CLS ≤ 0,02 MINDEN betöltésnél, első látogatáskor is.
 - **Elrendezés-ugrás (CLS) nélkül:** a kártya dobozát a kliens AZONNAL lefoglalja, ha a böngésző órája szerint (`adventNow(new Date())`,
   a közös tiszta függvény) a fázis `teaser`, `open` vagy `catchup` — a tartalom a `GET /api/advent/status` és `/state` megérkezésekor
   töltődik bele ugyanabba a fix magasságú dobozba. A szerver marad a tekintély: ha a `status` szerint a naptár nem él (kikapcsolt
@@ -837,6 +840,8 @@ Költség: + 4 kép × 0,09 + 4 × 0,003 = + 0,37 USD → **első kör: 94 kép 
   `/games` lista, valamint a főoldali játék-rács SOHA nem tartalmazhatja a naptárat.
 - [ ] A47 WHEN a főoldal a szezonban betölt THEN the system SHALL a kártya helyét a tartalom megérkezése előtt lefoglalni
   (a tananyaglista nem ugrik el a kártya és a banner betöltésekor), és a bannert elsőbbséggel, nem lustán tölteni.
+  PONTOSÍTVA 2026-11-18 (20. szakasz): mérce a `layout-shift` megfigyelővel mért CLS ≤ 0,02 a kártya miatt, első látogatáskor is,
+  360×640, 390×844 és 1366×768 méreten; kikapcsolt kapcsolónál és szezonon kívül a kártya semmit nem rajzol és semmit nem kér le.
 - [ ] A48 WHEN a kártya megjelenik THEN the system SHALL a főoldal meglévő tesztjeit (nézetek, címek, osztályjelvény, kereső,
   szűrő) változtatás nélkül teljesíteni.
 
@@ -1037,6 +1042,36 @@ nyílik az első ablak!”. Lezárt naptárnál, ha a tanuló egy ablakot sem ol
   iskolai hálózatról. Helye: `server/advent/limits.ts` `ADVENT_LIMITS.ipReads`; teszt: `tests/advent-limits.test.ts`. A kliens a
   válasz után nem olvas külön állapotot (az eredményből frissít), 429-nél pedig megtartja a látható naptárat.
 - **C6 lezárva (2026-11-18):** a DB-kör terheletlen gépen 300 s a 480 s-os korlátból (37% tartalék), párhuzamos kliensekkel.
+
+## 20. A főoldali kártya megjelenésének döntése (2026-11-18, orkesztrátori technikai döntés; a vak ellenőr K2 lelete)
+
+**Tény (ellenőrizve 2026-11-18):** élesben az `index.html`-t a Vercel adja a SAJÁT statikus buildjéből (`source/vercel.json`:
+`buildCommand: npm run build:client`, `outputDirectory: dist/public`, utolsó átírás `/:path*` → `/index.html`; az éles
+válasz fejlécei: `Server: Vercel`, `X-Vercel-Cache: HIT`, `Cache-Control: public, max-age=0, must-revalidate`). A Renderhez
+csak az `/api`, `/auth`, `/dev` és néhány további útvonal megy. A szerver tehát NEM tud kérésenként állapotot írni a HTML-be.
+
+**Döntés:**
+
+- A kliens-buildbe égetett `VITE_ADVENT_CALENDAR=on` + a böngésző órája (Europe/Budapest, a közös `adventNow`) dönt arról, hogy a
+  kártya megjelenik-e — az első rajzolás előtt, hálózati kör nélkül. Bekapcsolt kapcsolónál a szezonban (november 24. – január 6.)
+  a kártya AZONNAL a végleges méretén jelenik meg (a „Hamarosan” időszakban gomb nélkül, utána a „Kinyitom” gombbal).
+- A `GET /api/advent/status` felülbíráló marad: ha a szerver szerint a naptár nem él, a kártya összecsukódik. Rendes üzemben ez
+  nem fordul elő — csak hibás bekapcsolási sorrendnél (lásd a végrehajtási utasítás 7. kiegészítését) vagy elállított eszközóránál.
+- Kikapcsolt kapcsolónál és szezonon kívül a komponens semmit nem rajzol és semmit nem kér le.
+- Elállított eszközóra: a kártya legrosszabb esetben megjelenik, majd összecsukódik, vagy nem jelenik meg — a naptároldalon
+  mindig a szerver dönt.
+- **A kapcsoló két helyen él:** Render futásidő (`ADVENT_CALENDAR`) és Vercel build (`VITE_ADVENT_CALENDAR`). Bekapcsolás: előbb
+  Render, utána Vercel-újraépítés; kikapcsolás fordítva.
+- **Tesztelés (ez FELÜLÍRJA a 16.5 „a kliensben nincs e2e-ág” mondatát):** az e2e-buildben a kapcsoló BE van égetve, de a kliens
+  szezon-számítása teszt-kampós buildben (`VITE_ENABLE_GAME_TEST_HOOKS=1`) CSAK akkor ad időt, ha a teszt a lap betöltése előtt
+  beadja (`window.__websuliAdventTestNow`) — ugyanaz az elv, mint a szerveren („érvényes tesztidő nélkül a naptár kikapcsolt”).
+  Így a többi főoldali teszt november 24. után is változatlan lapot lát, az adventi teszt pedig az éles utat méri. Az éles
+  buildben a kampó nem létezik (őr-teszt).
+- A korábbi megoldás (a hely csak a visszatérő látogatónál foglalt, helyi jelzővel) megszűnik.
+
+**S3c-hez (jogos felvetés, 2026-11-18):** a naptár képei (`client/public/advent/2026/`) élesben szintén a Vercel statikus
+buildjéből mennek ki, ezért az `immutable`, egyéves gyorsítótárhoz (A41) a `source/vercel.json`-ba `/advent/(.*)`
+fejléc-szabály kell — minden látogatót érintő fájl, őr-teszttel (a `tests/vercel-lesson-csp.test.ts` mintájára).
 
 ## 21. A kéréskorlátok második méretezése és a kizárás elleni védelem (2026-11-18, orkesztrátori döntés; a vak ellenőr K1 / K2 lelete)
 
