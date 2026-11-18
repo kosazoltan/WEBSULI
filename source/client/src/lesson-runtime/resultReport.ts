@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiRequest, sendKeepalive, warmCsrfToken } from "@/lib/queryClient";
 import { getFingerprint, peekFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
-import { answeredCount, quizRoundComplete, roundTooOld } from "@shared/quiz-round";
+import { answeredCount, quizRoundComplete, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -56,9 +56,11 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
   // Spec 2026-11-17-eredmeny-email-kviz (S1b): a FÉLBEHAGYOTT helyi kvíz — a lap háttérbe kerülésekor / elhagyásakor a kör pillanatképe
   // megy a szerverhez (`partial: true`); a szerver csak akkor küld „félbehagyva” levelet, ha utána sem újabb pillanatkép, sem végleges
   // beküldés nem érkezik. Csak akkor megy, ha van válasz, és több, mint a legutóbb elküldött pillanatképben.
-  const latest = useRef(round);
-  latest.current = round;
-  const lastSnapshot = useRef(0);
+  // PR #510: (1) a pillanatkép a komponens LEBONTÁSAKOR és leckeváltáskor is megy (az alkalmazáson belüli navigáció nem vált ki
+  // `pagehide`-ot); (2) az állapot a KÖR azonosítójához kötött (új kör tiszta lappal indul); (3) „elküldve” csak a szerver sikeres
+  // válasza után rögzül — a sikertelen küldés újrapróbálható marad.
+  const committed = useRef(round);
+  const snapshotState = useRef<SnapshotState>({ sent: null, pending: null });
   const answered = kind === "quiz" ? answeredCount(round) : 0;
   // Review B1: a CSRF-token MELLETT az ujjlenyomat is előre töltődik — a pillanatkép ugyanazzal az azonosítóval megy, mint a végleges
   // beküldés, különben a szerver más kulcson tartaná, és a végleges nem törölné a várakozót.
@@ -66,24 +68,38 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
   useEffect(() => {
     if (kind !== "quiz" || !lessonId) return;
     const snapshot = () => {
-      const current = latest.current;
+      const current = committed.current;
       const count = answeredCount(current);
       if (current.finishedAt || quizRoundComplete(current) || count === 0 || roundTooOld(current.startedAt, Date.now())) return;
       const roundId = `round-${experienceFingerprint({ ids: current.ids, startedAt: current.startedAt })}`;
       const key = `${storageKey}:${kind}:partial:${roundId}`;
-      let sentCount = lastSnapshot.current;
-      try { if (localStorage.getItem(`${storageKey}:${kind}:sent:${roundId}`)) return; sentCount = Math.max(sentCount, Number(localStorage.getItem(key)) || 0); } catch { /* privát mód: a munkamenet számlálója marad */ }
-      if (count <= sentCount) return;
+      const state = snapshotState.current;
+      try {
+        if (localStorage.getItem(`${storageKey}:${kind}:sent:${roundId}`)) return;
+        const stored = Number(localStorage.getItem(key)) || 0;
+        if (stored > 0 && (state.sent?.roundId !== roundId || state.sent.count < stored)) state.sent = { roundId, count: stored };
+      } catch { /* privát mód: a munkamenet állapota marad */ }
+      if (!snapshotDue(state, roundId, count)) return;
       const learner = getLearnerToken();
       const fingerprint = peekFingerprint();
       const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}) };
-      if (!sendKeepalive(`/api/lessons/${lessonId}/results`, body)) return;
-      lastSnapshot.current = count;
-      try { localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet számlálója */ }
+      const mark = { roundId, count };
+      state.pending = mark;
+      void sendKeepalive(`/api/lessons/${lessonId}/results`, body).then(accepted => {
+        if (state.pending === mark) state.pending = null;
+        if (!accepted) return; // hálózati hiba / 429 / 5xx: nem rögzül, a következő alkalommal újra megy
+        if (state.sent?.roundId !== roundId || state.sent.count < count) state.sent = mark;
+        try { localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet állapota */ }
+      });
     };
     const onVisibility = () => { if (document.visibilityState === "hidden") snapshot(); };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", snapshot);
-    return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", snapshot); };
+    // A lebontó ág a lecke ELHAGYÁSAKOR fut (útvonalváltás, „Következő tananyag”, a nézet lebontása): a `committed` ekkor még az
+    // elhagyott lecke utolsó megjelenített körét tartja (a lebontó ágak az új állapotot rögzítő effekt előtt futnak).
+    return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", snapshot); snapshot(); };
   }, [lessonId, kind, storageKey]);
+  // Szándékosan a pillanatkép-effekt UTÁN és függőség nélkül: minden megjelenítés után frissül, de a fenti lebontó ág még az előző
+  // (elhagyott) állapotot látja.
+  useEffect(() => { committed.current = round; });
 }

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { MemoryStore } from "express-rate-limit";
 import { clientIpKey, clientIpKeyGenerator } from "./lib/client-ip";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -167,7 +167,10 @@ export const resultLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, win
   // S1b: a pillanatképek saját keretet kapnak — a végleges beküldés kerete nem fogyhat el miattuk.
   skip: isPartialRequest });
 // Review K1: kisebb keret a pillanatképekre (egy tanuló jogos forgalma ennél jóval kevesebb: háttérbe kerülésenként egy, csak új válasszal).
-export const partialLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." },
+const partialLimiterStore = new MemoryStore();
+/** Teszthez: a pillanatkép-keret számlálóinak nullázása (az integrációs tesztek egy címről sok pillanatképet küldenek). */
+export function resetPartialLimiter(): void { void partialLimiterStore.resetAll(); }
+export const partialLimiter = rateLimit({ store: partialLimiterStore, keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." },
   skip: req => !isPartialRequest(req) });
 
 /**
@@ -208,6 +211,32 @@ function schedulePartial(key: string, owner: string, send: () => Promise<unknown
 }
 /** Teszthez: a várakozó pillanatképek száma. */
 export function pendingPartialCount(): number { return pendingPartials.size; }
+/**
+ * PR #510 (Codex P2): a VÉGLEGESÍTETT kör késve érkező pillanatképe nem küldhet „félbehagyva” levelet (a kliens kérései sorrendet
+ * cserélhetnek, két fül is küldhet). Két forrás: (1) memóriában a véglegesített körök (lecke + körazonosító — a vendég eltérő kulcsát
+ * is fedi; a körazonosító a kör kérdéseinek és kezdetének lenyomata), 24 óráig, korlátos mérettel; (2) a kézbesítés-nyilvántartás
+ * végleges sora (újraindítás után is, ha a kulcs egyezik).
+ */
+const FINALIZED_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_FINALIZED_ROUNDS = 20_000;
+const finalizedRounds = new Map<string, number>();
+function markFinalized(lessonId: string, roundId: string, now = Date.now()): void {
+  const key = `${lessonId}|${roundId}`;
+  finalizedRounds.delete(key);
+  if (finalizedRounds.size >= MAX_FINALIZED_ROUNDS) finalizedRounds.delete(finalizedRounds.keys().next().value!);
+  finalizedRounds.set(key, now + FINALIZED_TTL_MS);
+}
+async function roundFinalized(lessonId: string, whos: readonly string[], roundId: string, now = Date.now()): Promise<boolean> {
+  const key = `${lessonId}|${roundId}`;
+  const until = finalizedRounds.get(key);
+  if (until !== undefined) { if (until > now) return true; finalizedRounds.delete(key); }
+  const rows = await db.select({ id: lessonResultEmails.id }).from(lessonResultEmails)
+    .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), inArray(lessonResultEmails.roundKey, whos.map(w => roundKeyOf(w, "quiz", roundId))))).limit(1);
+  return rows.length > 0;
+}
+/** Teszthez: a véglegesített körök memóriájának ürítése (az újraindítás utáni állapot utánzása). */
+export function clearFinalizedRounds(): void { finalizedRounds.clear(); }
+
 /** Leállításhoz / teszthez: a várakozó pillanatképek eldobása. */
 export function clearPendingPartials(): void { for (const key of [...pendingPartials.keys()]) cancelPartial(key); }
 
@@ -240,8 +269,10 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   if (body.kind === "quiz" && body.partial) {
     const snapshot = gradePartialQuiz(experience.quiz, body.picks);
     if (!snapshot) return res.status(202).json({ queued: false });
+    // PR #510: a már véglegesített kör késői pillanatképe nem ütemeződik — a befejezett kör mellé nem mehet „félbehagyva” levél.
+    if (await roundFinalized(lessonId, partialWhos, body.roundId)) return res.status(202).json({ queued: false, finalized: true });
     const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(body.startedAt ? { startedAt: body.startedAt } : {}) } };
-    const queued = schedulePartial(partialKey, `${lessonId}|${who}`, async () => sendLessonResult({ lessonId, roundKey: roundKeyOf(who, "quiz-partial", body.roundId), learner: await nameOf(), ...attribution, graded: partialGraded }));
+    const queued = schedulePartial(partialKey, `${lessonId}|${who}`, async () => (await roundFinalized(lessonId, partialWhos, body.roundId)) ? { sent: 0, duplicate: true } : sendLessonResult({ lessonId, roundKey: roundKeyOf(who, "quiz-partial", body.roundId), learner: await nameOf(), ...attribution, graded: partialGraded }));
     return res.status(202).json({ queued, partial: true });
   }
   let graded: GradedTasks | GradedQuiz;
@@ -258,6 +289,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   } else {
     if (!Object.keys(body.picks).length) return res.status(202).json({ queued: false });
     graded = gradeQuiz(experience.quiz, body.picks);
+    markFinalized(lessonId, body.roundId);
     // S1b: a végleges eredmény törli a várakozó pillanatképet; ha a „félbehagyva” levél már kiment, a végleges levél ezt jelzi.
     const partialRoundKeys = partialWhos.map(w => roundKeyOf(w, "quiz-partial", body.roundId));
     for (const roundKey of partialRoundKeys) cancelPartial(`${lessonId}|${roundKey}`);

@@ -17,6 +17,19 @@ export function roundTooOld(startedAt: number, now: number): boolean {
   return startedAt > 0 && now - startedAt > STALE_ROUND_DAYS * 86_400_000;
 }
 
+/**
+ * PR #510: a pillanatkép küldésének állapota — KÖRHÖZ kötve (új kör tiszta lappal indul). `sent`: a szerver által elfogadott legutóbbi
+ * állapot; `pending`: az éppen úton lévő kérés. Küldendő, ha van válasz, és ugyanarra a körre sem az elfogadott, sem az úton lévő
+ * állapot nem fedi (a sikertelen küldés után a `pending` törlődik, így az állapot újrapróbálható).
+ */
+export type SnapshotMark = { roundId: string; count: number };
+export type SnapshotState = { sent: SnapshotMark | null; pending: SnapshotMark | null };
+export function snapshotDue(state: SnapshotState, roundId: string, count: number): boolean {
+  if (count <= 0) return false;
+  const covered = (mark: SnapshotMark | null) => mark !== null && mark.roundId === roundId && mark.count >= count;
+  return !covered(state.sent) && !covered(state.pending);
+}
+
 export function quizRoundComplete(round: { ids: readonly string[]; picks: Readonly<Record<string, number>> }): boolean {
   return round.ids.length > 0 && round.ids.every(id => round.picks[id] !== undefined);
 }

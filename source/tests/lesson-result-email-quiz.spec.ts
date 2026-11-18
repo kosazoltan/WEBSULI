@@ -128,3 +128,105 @@ test("S1b: félbehagyott kvíz — háttérbe kerüléskor pillanatkép megy; v�
   expect(partials()).toHaveLength(2);
   expect(quizPosts(posts)).toHaveLength(3);
 });
+
+/* PR #510 (Codex + Vercel): alkalmazáson belüli elhagyás, új kör, sikertelen pillanatkép. */
+async function mockWith(page: Page, options: { failPartials?: number } = {}) {
+  const posts: Array<{ lesson: string; body: Record<string, unknown> }> = [];
+  let failures = options.failPartials ?? 0;
+  const file = (id: string, title: string) => ({ id, title, contentType: "lesson", classroom: 7 });
+  await page.route("**/api/**", async route => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    const result = path.match(/^\/api\/lessons\/(lesson-q2?)\/results$/);
+    if (result && req.method() === "POST") {
+      const body = req.postDataJSON() as Record<string, unknown>;
+      if (body.partial === true && failures > 0) { failures--; return route.fulfill({ status: 503, json: { message: "átmeneti hiba" } }); }
+      posts.push({ lesson: result[1], body });
+      return route.fulfill({ status: 202, json: { queued: true } });
+    }
+    if (path === "/api/auth/user") return route.fulfill({ json: null });
+    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test" } });
+    if (path === "/api/html-files") return route.fulfill({ json: [file("quiz-fixture", "Első lecke"), file("quiz-fixture-2", "Második lecke")] });
+    if (path === "/api/html-files/quiz-fixture") return route.fulfill({ json: file("quiz-fixture", "Első lecke") });
+    if (path === "/api/html-files/quiz-fixture-2") return route.fulfill({ json: file("quiz-fixture-2", "Második lecke") });
+    if (path === "/api/lessons/by-file/quiz-fixture") return route.fulfill({ json: { lessonId: "lesson-q", version: 1, lesson: fusionFixture() } });
+    if (path === "/api/lessons/by-file/quiz-fixture-2") return route.fulfill({ json: { lessonId: "lesson-q2", version: 1, lesson: fusionFixture() } });
+    if (path.startsWith("/api/design-assets/")) return route.fulfill({ status: 404, json: {} });
+    return route.fulfill({ json: [] });
+  });
+  return posts;
+}
+const partialsOf = (posts: Array<{ lesson: string; body: Record<string, unknown> }>) => posts.filter(p => p.body.kind === "quiz" && p.body.partial === true);
+const answeredIn = (body: Record<string, unknown>) => Object.values(body.picks as Record<string, number>).filter(pick => pick >= 0).length;
+async function openQuiz(page: Page, id = "quiz-fixture") {
+  await page.goto(`/preview/${id}`);
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  const quiz = page.locator("[data-quiz-id]");
+  await expect(quiz).toHaveCount(25);
+  return quiz;
+}
+
+test("PR #510: a leckéből a „Vissza” gombbal kilépve (útvonalváltás, nincs pagehide) is megy pillanatkép", async ({ page }) => {
+  const posts = await mockWith(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 2; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800); // a CSRF-token előzetes lekérése
+  expect(partialsOf(posts)).toHaveLength(0);
+  await page.getByTestId("button-back").click();
+  await expect.poll(() => partialsOf(posts).length).toBe(1);
+  expect(partialsOf(posts)[0].lesson).toBe("lesson-q");
+  expect(answeredIn(partialsOf(posts)[0].body)).toBe(2);
+});
+
+test("PR #510: a „Következő” tananyagra váltva az ELHAGYOTT lecke köréről megy pillanatkép (nem az újéról)", async ({ page }) => {
+  const posts = await mockWith(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 3; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await page.getByTestId("lesson-switcher").getByRole("button").nth(1).click();
+  await expect(page).toHaveURL(/\/preview\/quiz-fixture-2$/);
+  await expect.poll(() => partialsOf(posts).length).toBe(1);
+  expect(partialsOf(posts)[0].lesson, "az elhagyott lecke azonosítójával").toBe("lesson-q");
+  expect(answeredIn(partialsOf(posts)[0].body)).toBe(3);
+  await page.waitForTimeout(800);
+  expect(partialsOf(posts), "az új lecke üres köréről nem megy pillanatkép").toHaveLength(1);
+});
+
+test("PR #510: új kör ugyanabban a nézetben — az új kör ELSŐ válasza is megy (a régi kör számlálója nem nyomja el)", async ({ page }) => {
+  const posts = await mockWith(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 5; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await hide(page);
+  await expect.poll(() => partialsOf(posts).length).toBe(1);
+  expect(answeredIn(partialsOf(posts)[0].body)).toBe(5);
+  await page.getByRole("button", { name: "Új kvíz" }).click();
+  await page.getByRole("button", { name: "Új kör indítása", exact: true }).click();
+  await expect(page.locator('[data-quiz-id] button.lesson-option[aria-pressed="true"]')).toHaveCount(0);
+  await page.locator("[data-quiz-id]").first().locator("button.lesson-option").first().click();
+  await hide(page);
+  await expect.poll(() => partialsOf(posts).length).toBe(2);
+  expect(answeredIn(partialsOf(posts)[1].body), "az új kör egyetlen válasza").toBe(1);
+  expect(partialsOf(posts)[1].body.roundId).not.toBe(partialsOf(posts)[0].body.roundId);
+});
+
+test("PR #510: a sikertelen pillanatkép (503) nem rögzül elküldöttként — a következő háttérbe kerülés újraküldi; siker után nem megy újra", async ({ page }) => {
+  const posts = await mockWith(page, { failPartials: 1 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 2; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await hide(page); // az első kérés 503-at kap
+  await page.waitForTimeout(800);
+  expect(partialsOf(posts), "az elutasított kérés nem számít").toHaveLength(0);
+  await hide(page); // változatlan állapot — de az előző nem ment át, ezért újra megy
+  await expect.poll(() => partialsOf(posts).length).toBe(1);
+  expect(answeredIn(partialsOf(posts)[0].body)).toBe(2);
+  await page.waitForTimeout(500);
+  await hide(page);
+  await page.waitForTimeout(800);
+  expect(partialsOf(posts), "az elfogadott állapot nem megy újra").toHaveLength(1);
+});

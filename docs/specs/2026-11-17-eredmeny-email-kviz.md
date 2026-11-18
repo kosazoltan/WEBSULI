@@ -180,7 +180,7 @@ Elfogadás (S1b):
 - [x] E10 – a végleges levél jelzi a felülírást
 - [x] E11 – dátum a levélben (Europe/Budapest)
 - [x] E12 – 7 napos korkorlát a le nem zárt körre
-- [ ] E13 – pillanatkép a komponens lebontásakor (alkalmazáson belüli elhagyás) (böngésző)
-- [ ] E14 – új kör első válaszai is mennek (körhöz kötött számláló)
-- [ ] E15 – sikertelen pillanatkép (hálózati hiba / 429 / 5xx) újrapróbálható marad
-- [ ] E16 – véglegesített kör késői pillanatképe nem küld „félbehagyva” levelet (mindkét sorrend, valódi DB)
+- [x] E13 – pillanatkép a komponens lebontásakor (alkalmazáson belüli elhagyás) (böngésző)
+- [x] E14 – új kör első válaszai is mennek (körhöz kötött számláló)
+- [x] E15 – sikertelen pillanatkép (hálózati hiba / 429 / 5xx) újrapróbálható marad
+- [x] E16 – véglegesített kör késői pillanatképe nem küld „félbehagyva” levelet (mindkét sorrend, valódi DB)
