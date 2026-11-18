@@ -67,3 +67,20 @@ Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`, „2. kiegészítés” (
     összehasonlításként.
 
 - [x] 19 · [x] 20 · [x] 21 · [x] 22 · [x] 23
+
+## 4. kiegészítés — kapcsolható kizárólagosság, böngésző és adatbázis, részben igazolt próba (2026-11-18) — végrehajtás
+
+Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`, „4. kiegészítés” (E1–E4).
+
+24. `gates.config.json`: `exclusive: false`, `exclusiveSince: null` (a `mode` / `requiredFrom` helyett); `maxHeavyRuns`,
+    `heavyTimeoutSec`, `heavyWaitMaxSec`. `lib.mjs` (`blindRequired`, `acceptRecordedReview`), `record-review.mjs` (`blindSupplement`),
+    a hook és a kapu-üzenetek.
+25. Szövegek: a „Ki az ellenőr” jelölt bekezdés (AGENTS.md, skill) = a mai szabály + a futtató mint kiegészítő + az átállás feltétele;
+    `CLAUDE.md`, Cursor / Copilot / Codex, runbook, a `websuli-vak-ellenor` és a kapu-skillek; memória.
+26. `scripts/qa/gates/blind-review/heavy.mjs`: `assertSafeHeavyEnv`, sorompó, saját konténer takarítása, a forgatókönyv érvényesítése;
+    `scenario-runner.spec.ts.txt` (a futtató rögzített spec-je, a munkafába másolva); eszközök: `run_db_tests`, `run_e2e`,
+    `run_browser_scenario`; képek visszaadása a modellnek.
+27. `findings.mjs`: `run.input`, `run.scope`, a parancs fajtája → „részben igazolt”; összegzés-oszlop.
+28. Tesztek + mutációs ellenpróba; `gate:stage`; újramérés (nehéz kör csak 22:15 UTC után, sorompóval); `gate:push`.
+
+- [ ] 24 · [ ] 25 · [ ] 26 · [ ] 27 · [ ] 28

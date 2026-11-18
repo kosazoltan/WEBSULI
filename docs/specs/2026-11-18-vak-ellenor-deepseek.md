@@ -432,3 +432,88 @@ védvonal: a becslés legalább az előző hívás tényleges költségének 1,2
 - [ ] B26 WHEN a futás véget ér THEN a bizonyíték SHALL tartalmazni a hívásonkénti `cached` / `prompt` tokeneket, a találati arányt
   és a megtakarítást; a Gépi összegzés is.
 - [ ] B27 Mért érték: a 2. hívástól a bemeneti tokenek ≥ 80%-a gyorsítótárból (alapvonal-tábla).
+
+## 4. kiegészítés — kapcsolható kizárólagosság, böngésző és adatbázis az ellenőrnek, részben igazolt próba (2026-11-18)
+
+Tulajdonosi döntés (2026-11-18, kérdőíven, szó szerint): „Kapjon böngészőt és DB-t, addig marad a mai.”
+
+A mért alapvonal (fent, és `docs/minosegkapuk.md` „Mért alapvonal”) szerint a futtató a referencia közepes leleteinek kis részét
+találta meg. Ez a kiegészítés FELÜLÍRJA a K1 (kizárólagosság) átállási dátumát és a D3 / D4 „böngésző és adatbázis nem cél” részét.
+
+### E1 — Kapcsolható kizárólagosság (dátum helyett)
+
+- `gates.config.json` `blindReview.exclusive` (alapból `false`) és `blindReview.exclusiveSince` (alapból `null`). A `requiredFrom`
+  és a `mode` megszűnik.
+- **Amíg KI:** a `record-review` és a kapuk a mai szabály szerint fogadnak el ítéletet: a vak, hibakereső alügynök (friss kontextus,
+  csak terv + diff) teljes jelentése (a `Fej:` / `Ítélet:` sor és a két kötelező szakasz). Ha ugyanarra a fejre van teljes
+  futtató-bizonyíték (`blind-review-<fej>.json`), a rögzített ítélet `blindSupplement` mezőbe kapja kiegészítő bizonyítékként
+  (modell, a futtató ítélete, leletszám, költség, jelentés-hash); ha maga a rögzített jelentés a futtatóé (egyező hash), a
+  `reviewer` értéke `blind-review`. A futtató futtatása mellé ajánlott (adatgyűjtés a küszöbhöz); a kapu nem követeli meg.
+- **Átállás (BE):** CSAK ha az újramérés eléri a küszöböt (E3), és CSAK a tulajdonos kifejezett jóváhagyásával: egy követett
+  konfigváltozás (`exclusive: true`, `exclusiveSince: <ISO időpont>`) ÉS a `rules-guard` őr-teszt „a kapcsoló KI” sorának ugyanabban
+  a PR-ban történő módosítása, a PR-leírásban a jóváhagyás idézetével. BE állásban a K1-szabályok élnek; az `exclusiveSince` előtt
+  rögzített ítéletek érvényesek maradnak.
+- Őr-teszt: a kapcsoló értéke ezen az ágon (és így a főágon) `false`.
+
+### E2 — Böngésző és adatbázis az ellenőrnek, biztonságosan
+
+Új eszközök (mind „nehéz” futás: darabszám-plafon futásonként, saját időkorlát, a falióra-keretbe számít):
+
+- **`run_db_tests`** — a repó saját eldobható adatbázisos futtatója (`npm run test:learning-db`,
+  `source/scripts/run-learning-db-tests.ts`): saját, véletlen nevű `postgres:17` konténer csak loopbacken, a futás végén leállítva (a
+  repó futtatójának saját 300 s-os korlátja a mienknél rövidebb, így a saját takarítása lefut).
+- **`run_e2e`** — a fej követett Playwright-specjei (legfeljebb 3) a repó e2e-futtatójával (`npm run test:e2e -- <spec…> --workers=1`,
+  `source/scripts/run-e2e-tests.ts`: eldobható adatbázis, `WEBSULI_E2E=1`, saját szerver).
+- **`run_browser_scenario`** — az ellenőr SAJÁT böngészős próbája. A modell nem ír végrehajtható Playwright-kódot (az Node-jogokkal
+  futna); helyette deklaratív forgatókönyv-fájlt ír a kijelölt mappába (`.blind-review-tmp/*.json`: esetek, nézetméret, lépések:
+  `goto`, `click`, `fill`, `press`, `wait`, `waitFor`, `mockApi` (csak `/api/…` útvonal, állapotkód, törzs, késleltetés), `offline`,
+  `evaluate` (oldalon belüli JS — a böngésző homokozójában), `measure` (befoglaló doboz, túlcsordulás, számított stílus, szöveg),
+  `screenshot`). A forgatókönyvet a futtató SAJÁT, rögzített spec-fájlja hajtja végre a repó e2e-futtatójával; a böngésző minden nem
+  helyi kérését megszakítja (`page.route`). A képernyőképeket (JPEG, futásonként legfeljebb 6) a futtató képként visszaadja a
+  modellnek — a `qwen/qwen4-max` képbemenetet fogad (végpont-leíró: `input_modalities: text, image, video`).
+- **Biztonság, gépileg kikényszerítve (teszttel):**
+  - a nehéz futás gyerek-környezete a tiszta környezet (`cleanEnv`) + külön ellenőrzés (`assertSafeHeavyEnv`): nincs benne
+    e-mail-küldő kulcs (`RESEND`, `SMTP`, `SENDGRID`, `MAILGUN`, `POSTMARK`, `*_API_KEY`, `*_TOKEN`, `*_SECRET`), sem adatbázis-URL —
+    ha van, a futás el sem indul. Kulcs nélkül a szerver levélküldője nem küld (`source/server/resend.ts`); az adatbázis-URL-t a repó
+    futtatója maga állítja a loopbackes konténerre;
+  - `source/.env` a vizsgált munkafában → a nehéz futás tilos;
+  - a `postgres:17` képnek helyben meg kell lennie (`docker image inspect`) — letöltés (kimenő hálózat) nincs;
+  - kimenő hálózat: a Node-folyamatok halott helyi proxyn át (`NODE_USE_ENV_PROXY=1`, `HTTP(S)_PROXY=http://127.0.0.1:9`,
+    `NO_PROXY=localhost,127.0.0.1,::1` — Node 26-on mérve: külső cím ECONNREFUSED, helyi cím elérhető); a saját forgatókönyvben a
+    böngésző nem helyi kérése megszakítva. Maradék: a fej KÖVETETT e2e-specjeiben a böngésző forgalmát nem szűrjük (a fejlesztő / CI
+    bizalmi szintje);
+  - gépi sorompó: indulás előtt `docker ps` — ha legalább 2 friss (60 percen belül indult) idegen `websuli-*` konténer fut, várakozás
+    15 s-onként, legfeljebb `heavyWaitMaxSec` (alap 600 s), utána elutasítás („a gép foglalt”); a várakozás a falióra-keretbe számít;
+  - saját konténer takarítása: a futás előtti és utáni `docker ps` összevetése; a futás alatt megjelent, utána is futó konténert,
+    amelynek a neve a futás kimenetében szerepel, a futtató leállítja (`docker stop`);
+  - plafonok: `maxHeavyRuns` (alap 4), `heavyTimeoutSec` (alap 900), kimenet-csonkolás.
+- A nehéz futás hosszabb a gyorsítótár élettartamánál (5 perc) — a következő hívás újraírja a gyorsítótárat; a plafon-becslés a hideg
+  gyorsítótárat már kezeli.
+
+### E3 — Újramérés és elfogadási küszöb
+
+Ugyanaz a két fej, ugyanazok a `--goal` fájlok, a referencia átadása nélkül, `qwen/qwen4-max`, az új eszközökkel; keret 8 USD. A
+táblázatban a régi sor mellé. **Küszöb (az átállás feltétele):** a referencia 9 közepes leletéből legalább 7-et megtalál (teljesen vagy
+részben, kódból igazoltan), ÉS az (a) fejre NEM vagy IGEN, FELTÉTELLEL ítéletet ad, a blokkoló / közepes leletekkel.
+
+### E4 — Részben igazolt próba (a „gépi igazolás határa” tanulsága)
+
+A futtatással igazolt lelet `run` mezője kötelezően tartalmazza: `argv` (a teljes parancs, vagy az eszköz neve és argumentuma),
+`output_excerpt`, `input` (a próba bemenete szó szerint — a futtatott fájlban / forgatókönyvben vagy a kimenetben ellenőrizve) és
+`scope` (`teljes_ut` | `elszigetelt`). A futtató a parancs fajtájából is dönt: a saját homokozós fájl, a követett egységteszt és a
+típusellenőrzés MINDIG `elszigetelt`; `teljes_ut` csak böngészős (`run_e2e`, `run_browser_scenario`) vagy adatbázisos (`run_db_tests`)
+futásnál lehet. Elszigetelt próba → a lelet legfeljebb „részben igazolt”. A Gépi összegzés külön oszlopban mutatja.
+
+### Elfogadás — 4. kiegészítés
+
+- [ ] B28 WHEN `exclusive` = false THEN a `record-review` SHALL a teljes alügynök-jelentést rögzíteni, és a meglévő futtató-bizonyítékot
+  `blindSupplement`-ként csatolni; a kapuk SHALL elfogadni. Őr: a kapcsoló értéke `false`.
+- [ ] B29 WHEN `exclusive` = true THEN a K1 szabályai (csak futtató-bizonyíték; az `exclusiveSince` előtti rekord érvényes).
+- [ ] B30 WHEN a nehéz futás gyerek-környezetében e-mail-küldő kulcs vagy adatbázis-URL van, vagy a munkafában `source/.env` van, vagy a
+  `postgres:17` kép nincs helyben THEN a futás SHALL NOT elindulni.
+- [ ] B31 WHEN legalább 2 friss idegen `websuli-*` konténer fut THEN SHALL várni (legfeljebb a plafonig), utána elutasítani.
+- [ ] B32 WHEN a forgatókönyv nem helyi címet kér, `/api/`-n kívüli útvonalat mockol, vagy érvénytelen lépést tartalmaz THEN SHALL
+  elutasítani (érvényesítés a futtatás előtt); a böngésző nem helyi kérése megszakítva.
+- [ ] B33 WHEN a lelet próbája elszigetelt THEN a lelet SHALL legfeljebb „részben igazolt”; nem ellenőrizhető `input` → a `run`
+  bizonyíték érvénytelen.
+- [ ] B34 Az újramérés táblázata a régi sor mellett, a küszöbhöz mérve, szépítés nélkül.
