@@ -8,6 +8,7 @@ import tornadoHunter200 from "./game-win-cases/tornado-hunter-200";
 import tsunamiEnglish from "./game-win-cases/tsunami-english";
 import type { GameWinCase } from "./game-win-cases/types";
 import wordLadderHuEn from "./game-win-cases/word-ladder-hu-en";
+import { waitForStable } from "./support/game-mobile-quality";
 
 /**
  * D1 — determinisztikus győzelmi / szintlezárási utak a test hookokkal.
@@ -79,6 +80,10 @@ for (const g of GAMES) {
     await forceWin(page, g.path, g.force);
     const result = page.getByTestId(g.resultTestId);
     await expect(result).toBeVisible({ timeout: 10_000 });
+    // E2E-ingadozók 3. kör (kanban #76): a közös eredményképernyő párbeszéde rugós belépővel nő (`ResultScreen`: scale 0,9 → 1);
+    // animáció közben mérve a 48 px-es gomb 43,96 px volt (0,916-os skála). A mérés a gombok BEÁLLT dobozára vár (4 egymást
+    // követő, animációmentes, azonos dobozú képkocka — C-33: végállapotú elem); a 44 px-es mérce változatlan.
+    await waitForStable(page, `[data-testid="${g.resultTestId}"] button`);
     expect(await pageOverflowY(page)).toBeLessThanOrEqual(2);
 
     const buttons = result.getByRole("button");
