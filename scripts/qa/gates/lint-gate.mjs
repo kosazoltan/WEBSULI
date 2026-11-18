@@ -56,7 +56,8 @@ export function scanAddedLines(lines) {
 export function classifyHookOutput(stdout) {
   if (!stdout || !stdout.trim()) return null;
   let j;
-  try { j = JSON.parse(stdout); } catch { return null; }
+  // Kanban #100: értelmezhetetlen, nem üres hook-kimenet nem nyelhető el csendben → WARN (emberi átnézés).
+  try { j = JSON.parse(stdout); } catch { return { level: STATUS.WARN, msg: `értelmezhetetlen hook-kimenet: ${String(stdout).slice(0, 120)}` }; }
   const deny = j?.hookSpecificOutput?.permissionDecision === 'deny';
   const msg = String(j?.hookSpecificOutput?.permissionDecisionReason ?? j?.systemMessage ?? '').replace(/^\[agentic-qa-kit\]\s*/, '');
   return { level: deny ? STATUS.FAIL : STATUS.WARN, msg };
