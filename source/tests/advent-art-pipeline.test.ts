@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { acquireRunLock } from "../scripts/design-assets/run-lock";
+
 import {
-  attemptWithinBudget, canSpend, composePrompt, estimateUsd, loadStyle, missingReferences, parseMaxUsd, parseRefs, parseSetName, planJobs, requestImage, spentFromLog,
+  attemptWithinBudget, canSpend, composePrompt, estimateUsd, ledgerProblem, loadStyle, missingReferences, parseMaxUsd, parseRefs, parseSetName, planJobs, readLedger, requestImage, runJobs, spentFromLog,
   type AssetManifest, type Budget,
 } from "../scripts/design-assets/lib";
 
@@ -242,4 +246,112 @@ test("a generátor külön készletet csak plafonnal és referenciával futtat �
   // A félrevezető „Csak az első N tétel fut” üzenet külön készletnél nem jelenik meg (review L2): a készlet-ág előbb tér vissza.
   const main = src.slice(src.indexOf("async function main()"));
   assert.ok(main.indexOf("if (SET)") < main.indexOf("Csak az első"));
+});
+
+test("költségkönyv (review G2, L5): a „started” sor számít, a lezáró sor nem duplázza; a sérült sor sorszáma megvan", () => {
+  const log = [
+    JSON.stringify({ id: "advent-bg-portrait", status: "ok", estUsd: 0.09 }), // régi alak (próbakör)
+    JSON.stringify({ id: "advent-door-08", status: "error", attempt: 1, estUsd: 0.048 }), // régi alak
+    JSON.stringify({ id: "advent-door-08", status: "started", attempt: 2, estUsd: 0.048 }), // új alak
+    JSON.stringify({ id: "advent-door-08", status: "ok", imageUsd: 0.048, file: "advent-door-08/x.jpg" }),
+    JSON.stringify({ id: "advent-door-24", status: "started", attempt: 1, estUsd: 0.048 }), // megszakadt hívás: nincs lezáró sor
+    "",
+  ].join("\n");
+  const clean = readLedger(log);
+  assert.deepEqual(clean.corruptLines, []);
+  assert.ok(Math.abs(clean.spentUsd - (0.09 + 0.048 + 0.048 + 0.048)) < 1e-9, `összeg: ${clean.spentUsd}`);
+  const broken = readLedger(`${log}{ "id": "félbeszakadt\nnull\n${JSON.stringify({ status: "started", estUsd: 0.09 })}\n`);
+  assert.deepEqual(broken.corruptLines, [6, 7]);
+  assert.ok(broken.spentUsd > clean.spentUsd, "az ép sorok a sérült után is számítanak");
+});
+
+test("naplóhiba (review G1, G2): hiányzó napló meglévő jelöltekkel, vagy sérült sor → az éles futás megáll", () => {
+  assert.equal(ledgerProblem({ logExists: false, candidateFiles: 0, corruptLines: [] }), null, "első futás: nincs napló, nincs jelölt");
+  assert.equal(ledgerProblem({ logExists: true, candidateFiles: 10, corruptLines: [] }), null);
+  assert.match(ledgerProblem({ logExists: false, candidateFiles: 10, corruptLines: [] }) ?? "", /hiányzik, de 10 jelölt már van/);
+  assert.match(ledgerProblem({ logExists: true, candidateFiles: 10, corruptLines: [3, 9] }) ?? "", /sérült sort tartalmaz \(sor: 3, 9\)/);
+  // A generátor a naplóhibánál a kulcs beolvasása és a zár előtt áll meg.
+  const run = read("scripts/design-assets/generate.ts");
+  const body = run.slice(run.indexOf("async function runSet("), run.indexOf("async function main()"));
+  assert.ok(body.indexOf("if (problem) throw new Error(problem);") > 0);
+  assert.ok(body.indexOf("if (problem) throw new Error(problem);") < body.indexOf("readKey()"));
+  assert.ok(body.indexOf("readKey()") < body.indexOf("acquireRunLock(CANDIDATES)"));
+});
+
+test("„indult” sor a hívás ELŐTT (review L5): a megszakadt és a sikertelen hívás is a könyvben marad", async () => {
+  const rows: string[] = [];
+  const budget: Budget = { spent: 0, maxUsd: 7 };
+  const net = fakeFetch([emptyOk, okImage]);
+  await attemptWithinBudget({
+    budget, estUsd: 0.048, maxAttempts: 2,
+    onStart: (n) => { rows.push(JSON.stringify({ status: "started", attempt: n, estUsd: 0.048, callsBefore: net.calls.length })); },
+    attempt: async () => { await requestImage(net.impl, { endpoint: "https://example.invalid/images", key: "k", body: {} }); rows.push(JSON.stringify({ status: "ok", imageUsd: 0.048 })); },
+    onError: (n) => { rows.push(JSON.stringify({ status: "error", attempt: n })); },
+  });
+  assert.deepEqual(rows.map((r) => (JSON.parse(r) as { status: string }).status), ["started", "error", "started", "ok"]);
+  // Az „indult” sor a hálózati hívás előtt íródik (az elsőnél még 0, a másodiknál 1 hívás ment ki).
+  assert.deepEqual(rows.filter((r) => r.includes("started")).map((r) => (JSON.parse(r) as { callsBefore: number }).callsBefore), [0, 1]);
+  assert.ok(Math.abs(readLedger(rows.join("\n")).spentUsd - budget.spent) < 1e-9, "a könyv és a keret ugyanazt mutatja");
+  // Megszakítás a hívás közben (a folyamat leáll): a lezáró sor hiányzik, de az „indult” sor megvan.
+  const killed: string[] = [];
+  await assert.rejects(attemptWithinBudget({
+    budget: { spent: 0, maxUsd: 7 }, estUsd: 0.09, maxAttempts: 2,
+    onStart: () => { killed.push(JSON.stringify({ status: "started", estUsd: 0.09 })); },
+    attempt: async () => { throw new Error("megszakítva"); },
+    onError: () => { throw new Error("a folyamat leállt"); },
+  }), /leállt/);
+  assert.ok(Math.abs(readLedger(killed.join("\n")).spentUsd - 0.09) < 1e-9);
+});
+
+test("referencia nélkül nincs fizetős kép (review L6): ha a futásban készülő háttér mind elbukik, az ablakképek nem indulnak", async () => {
+  const jobs = planJobs([byId("advent-bg-portrait"), byId("advent-door-08"), byId("advent-door-24")], { resolution: "2K", max: 10, maxUsd: 7 }).jobs;
+  assert.equal(jobs.length, 10);
+  const runWith = async (responses: Array<() => Response>, chosen: string[] = []) => {
+    const net = fakeFetch(responses);
+    const budget: Budget = { spent: 0, maxUsd: 7 };
+    const outcome = await runJobs({
+      jobs, chosenRefs: new Set(chosen),
+      generate: async (job) => attemptWithinBudget({
+        budget, estUsd: job.estUsd, maxAttempts: 2,
+        attempt: async () => { await requestImage(net.impl, { endpoint: "https://example.invalid/images", key: "k", body: {} }); },
+        onError: () => undefined,
+      }),
+    });
+    return { outcome, calls: net.calls.length, budget };
+  };
+  // Minden háttér-hívás használhatatlan választ ad: 4 jelölt × 2 hívás megy ki, utána megáll — ablakkép-hívás nincs.
+  const failed = await runWith([emptyOk]);
+  assert.deepEqual(failed.outcome, { made: 0, stopped: "reference", missingRef: "advent-bg-portrait" });
+  assert.equal(failed.calls, 8);
+  assert.ok(Math.abs(failed.budget.spent - 8 * 0.09) < 1e-9, "a sikertelen hívások elszámolva");
+  // Ha a háttér elkészül, az ablakképek is készülnek.
+  const fine = await runWith([okImage]);
+  assert.deepEqual(fine.outcome, { made: 10, stopped: null, missingRef: null });
+  assert.equal(fine.calls, 10);
+  // Kiválasztott referenciával a háttér hibája nem állítja meg az ablakképeket (a referencia a kiválasztott kép).
+  const chosen = await runWith([emptyOk, emptyOk, emptyOk, emptyOk, emptyOk, emptyOk, emptyOk, emptyOk, okImage], ["advent-bg-portrait"]);
+  assert.deepEqual(chosen.outcome, { made: 6, stopped: null, missingRef: null });
+  // A keret itt is megállít.
+  const tight = fakeFetch([okImage]);
+  const small: Budget = { spent: 6.9, maxUsd: 7 };
+  const stopped = await runJobs({ jobs, chosenRefs: new Set(), generate: async (job) => attemptWithinBudget({ budget: small, estUsd: job.estUsd, maxAttempts: 2, attempt: async () => { await requestImage(tight.impl, { endpoint: "https://example.invalid/images", key: "k", body: {} }); }, onError: () => undefined }) });
+  assert.deepEqual(stopped, { made: 1, stopped: "budget", missingRef: null });
+  assert.equal(tight.calls.length, 1);
+});
+
+test("futás-zár (review L7): ugyanarra a készletre második futás nem indul, felszabadítás után igen", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "advent-lock-"));
+  try {
+    const release = acquireRunLock(dir, new Date("2026-11-18T12:00:00.000Z"));
+    assert.throws(() => acquireRunLock(dir), /Már fut egy generálás erre a készletre \(pid \d+, indult: 2026-11-18T12:00:00\.000Z\)/);
+    release();
+    release(); // kétszeri felszabadítás ártalmatlan
+    const again = acquireRunLock(dir);
+    again();
+    // A zár nem létező mappát is létrehoz (első futás).
+    const fresh = path.join(dir, "uj", "keszlet");
+    acquireRunLock(fresh)();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
