@@ -174,6 +174,10 @@ test('F9: a hook tartalmi javítása és a settings más részének szerkesztés
     { tool_name: 'Edit', tool_input: { file_path: join(repoRoot, 'docs', 'x.md'), old_string: '"onFailure": "block"', new_string: '' } },
   ];
   for (const p of allowed) assert.equal(reason(run(rulesHook, p)), null, JSON.stringify(p.tool_input).slice(0, 140));
+  // a lint-kapu diff-szkennelése (csak a hozzáadott sorok) nem ítélheti meg az eltávolítást
+  assert.equal(reason(run(rulesHook, { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: '"timeout": 20,', diff_scan: true } })), null);
+  // ugyanez diff_scan nélkül (valódi Write a teljes fájl helyére) tiltás
+  assert.match(reason(run(rulesHook, { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: '"timeout": 20,' } })) ?? '', /REPO-SZABÁLY/);
 });
 
 // ---- L5 / L8 / L7 (vak ellenőr, 2026-11-18) ---------------------------------------------------------------------------------
