@@ -1,6 +1,6 @@
 # Terv: a CI böngészős körének (Playwright E2E) szeletelése
 
-> Állapot: megvalósítás alatt (2026-11-18) · Ág: `chore/ci-e2e-szeleteles` · Végrehajtás:
+> Állapot: megvalósítva helyben (2026-11-18); a CI-futás a push után (E7 NOT RUN) · Ág: `chore/ci-e2e-szeleteles` · Végrehajtás:
 > `docs/specs/2026-11-18-ci-e2e-szeleteles-vegrehajtas.md` · Testvér-munka (külön ág, külön PR, más kockázat):
 > `docs/specs/2026-11-18-joystick-tsunami-stabil.md` (az ingadozó Szökőár-mérő).
 
@@ -149,7 +149,7 @@ az `E2E_SHARDS`-nak az egyezését a `scripts/qa/e2e-shards.test.mjs` őr-esete 
 |---|---|
 | **Szeletek közti terheléskülönbség** (a súlyok két futásból becsültek; a teszteket nem egyenként mértük) | A záró job kiírja a szeletenkénti mért tesztpercet (lépés-összefoglaló), és `e2e-shard-weights-measured` artefaktumként a mért súlyfájlt; a frissítés egy fájl cseréje. A job időkorlátja 60 perc (ma nincs korlát: 6 óra). |
 | **Rejtett sorrendfüggés** (egy teszt egy korábbi teszt által hagyott adatra / állapotra épít) | A fájl nem bomlik szét (kivéve a két `splittable` fájlt), a fájlon belüli sorrend marad. Fájlok KÖZÖTTI függés a szeletelésnél determinisztikusan bukik (minden rész friss adatbázison indul, mindig ugyanazzal a tesztlistával) → az első CI-futásban a részenkénti jelentésből / nyomkövetésből azonosítható; a mainen zöld, a részben mindhárom kísérletben bukó teszt = sorrendfüggés. Helyben: a részek CI-azonos úton, eldobható adatbázison futtathatók (`npm run test:e2e -- --test-list …`), a végrehajtási utasítás 6. lépése szerint. |
-| **A kiegészítő konfigok friss adatbázison futnak** (eddig a fő kör utáni, „használt” adatbázison futottak) | Helyi próba friss adatbázison (végrehajtás 6. lépés); az első CI-futásban a „kiegeszito” rész mutatja. |
+| **A kiegészítő konfigok külön jobban futnak** (eddig a fő kör után, ugyanabban a jobban) | Kódból igazolva: mind az öt konfig saját Vite- / statikus szervert indít (`vite preview` 5187 / 5188, `vite` 5182 / 5188, `service-worker-static-server.mjs`), az alkalmazásszervert és az adatbázist nem használja — a fő kör állapotától nem függhet. Az első CI-futásban a „kiegeszito” rész mutatja. |
 | **Hibajelentés / nyomkövetés szeletenként** | Minden rész saját artefaktumot ad: bukáskor `playwright-report-<rész>` (HTML-jelentés + `test-results` a nyomkövetéssel és a videóval), a számozott részek mindig `e2e-json-<rész>`. `fail-fast: false`: egy rész bukása nem állítja le a többit, így egy körben minden bukás látszik. |
 | **A GitHub-futók párhuzamossági korlátja** | Futásonként 7 új job a régi 1 helyett (összesen 13 + a záró). A fiók párhuzamossági korlátja UNVERIFIED (ingyenes csomagban 20 Linux-job); több egyszerre futó PR-nál a jobok sorba állnak, de az összes munka (≈ 85 perc teszt + 7 × 2–10 perc előkészítés) rövidebb sorral fogy el, mint a mai 90 perces jobok. Újrafuttatásnál a „Re-run failed jobs” csak a bukott részt és a záró jobot futtatja (~20 perc a teljes kör helyett). |
 | **Artefaktum újrafuttatáskor** (azonos nevű feltöltés a második kísérletben) | `overwrite: true` a feltöltésnél; UNVERIFIED, az első újrafuttatásnál ellenőrizendő (végrehajtás 8. pont). |
@@ -159,23 +159,23 @@ az `E2E_SHARDS`-nak az egyezését a `scripts/qa/e2e-shards.test.mjs` őr-esete 
 
 <!-- acceptance-checklist -->
 
-- [ ] E1 — A workflow a fő kört `E2E_SHARDS` = 6 részre osztva futtatja, mindegyik saját Postgres-konténerrel, migrációval,
+- [x] E1 — A workflow a fő kört `E2E_SHARDS` = 6 részre osztva futtatja, mindegyik saját Postgres-konténerrel, migrációval,
       seeddel és szerverrel; a kiegészítő öt konfig külön részben fut. (kód: `ci.yml`; CI: NOT RUN a push előtt)
-- [ ] E2 — Egyetlen job neve „Playwright E2E”; csak akkor zöld, ha minden rész zöld ÉS a számláló-ellenőr egyezést ad; kihagyott
+- [x] E2 — Egyetlen job neve „Playwright E2E”; csak akkor zöld, ha minden rész zöld ÉS a számláló-ellenőr egyezést ad; kihagyott
       / megszakított rész mellett piros. (őr-teszt a valódi `ci.yml`-en)
-- [ ] E3 — Helyben, szkripttel igazolva: a 6 szelet `--test-list` fájljával a Playwright által kiválasztott tesztek uniója =
-      a teljes lista (819), átfedés nélkül.
-- [ ] E4 — A számláló-ellenőr eltérésnél (hiányzó jelentés, hiányzó / kétszer futó / listán kívüli / meg nem futott teszt)
+- [x] E3 — Helyben, szkripttel igazolva: a 6 szelet `--test-list` fájljával a Playwright által kiválasztott tesztek uniója =
+      a teljes lista (819), átfedés nélkül. (mért: 90 + 80 + 171 + 180 + 166 + 132 = 819; hiányzó 0, listán kívüli 0, átfedés 0)
+- [x] E4 — A számláló-ellenőr eltérésnél (hiányzó jelentés, hiányzó / kétszer futó / listán kívüli / meg nem futott teszt)
       1-es kilépési kóddal bukik (egységteszt + valódi jelentéseken futtatott próba).
-- [ ] E5 — A Playwright-konfig, a tesztek, a `retries` és a `workers` nem változik (`git diff --stat`: nincs `source/` változás).
-- [ ] E6 — Részenkénti artefaktum: JSON-jelentés mindig, HTML-jelentés + nyomkövetés bukáskor.
+- [x] E5 — A Playwright-konfig, a tesztek, a `retries` és a `workers` nem változik (`git diff --stat`: nincs `source/` változás).
+- [x] E6 — Részenkénti artefaktum: JSON-jelentés mindig, HTML-jelentés + nyomkövetés bukáskor.
 - [ ] E7 — Mérőszám az első CI-futásra (NOT RUN a push előtt): a CI-futás indulásától a „Playwright E2E” zöldjéig ≤ 30 perc; a
       záró job kimenetében „a szeletekben lefutott tesztek összege: 819; a lista teljes száma: 819 → EGYEZIK”.
-- [ ] E8 — `npm run gate:stage` és `npm run gate:push` zöld a munkafa gyökeréből.
+- [x] E8 — `npm run gate:stage` és `npm run gate:push` zöld a munkafa gyökeréből.
 
 ## 8. Követő javaslatok (nem ennek a PR-nak a része)
 
-- A böngésző-telepítés 22 s ↔ 442–532 s szórása: mind a 25 Playwright-konfig a futtató telepített Chrome-ját használja
-  (`channel: 'chrome'`), ezért a `--with-deps chromium` valószínűleg kiváltható (`playwright install ffmpeg` a videóhoz) —
+- A böngésző-telepítés 22 s ↔ 442–532 s szórása: a CI-ben futó hat Playwright-konfig mind a futtató telepített Chrome-ját
+  használja (`channel: 'chrome'`), ezért a `--with-deps chromium` valószínűleg kiváltható (`playwright install ffmpeg` a videóhoz) —
   UNVERIFIED, külön mérendő; 7 párhuzamos jobnál a lassú `apt` gyakrabban határozza meg a faliórát.
 - A súlyfájl első frissítése a mért értékekre; a `docs/minosegkapuk.md` „~1 órás E2E” szövegeinek frissítése a mért idővel.

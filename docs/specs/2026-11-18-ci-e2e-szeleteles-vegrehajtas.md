@@ -83,11 +83,16 @@ alakban hívd — C-72):
 3. Unió / átfedés: a `<e2e-report-k.json>` fájlok a `--list` miatt eredmény nélküliek, ezért a `check` „nem futott le” sorokat ad
    (ez itt elvárt); az unió hiánytalanságát és az átfedésmentességet külön, az azonosítók halmazán kell kimutatni (a PR-leírásban
    a kimenet).
-4. Valódi futás (ami helyben futtatható): legalább egy rész CI-azonos úton, eldobható adatbázison:
-   `node --import tsx scripts/run-e2e-tests.ts --test-list <szelet-k.txt> --reporter=dot,json` (`CI=true`,
-   `PLAYWRIGHT_JSON_OUTPUT_NAME`), és a kiegészítő öt konfig friss adatbázison (`… run-e2e-tests.ts --config <konfig>`). Előtte:
-   `docker ps --filter name=websuli-e2e- --format "{{.Names}} {{.RunningFor}}"` (≥ 2 friss konténernél várj).
-5. A valódi jelentésen a `check` „lefutott” oszlopa = a rész tesztszáma.
+4. Valódi futás a számláló-ellenőr igazolására (kis lista, eldobható adatbázison, a CI kapcsolóival): egy néhány tesztes
+   `--test-list` (köztük adatbázist író, `serial` fájl) → `CI=true PLAYWRIGHT_JSON_OUTPUT_NAME=<mappa>/e2e-report-1.json node
+   --import tsx scripts/run-e2e-tests.ts --test-list <kis.txt> --reporter=dot,html,json`; a listája
+   `… test --list --test-list <kis.txt> --reporter=json > <kis-lista.json>`; majd `node ../scripts/qa/e2e-shards.mjs check --list
+   <kis-lista.json> --reports <mappa> --total 1` → `EGYEZIK`, a „lefutott” oszlop = a tesztszám; ellenpróba a TELJES listával →
+   `ELTÉR`, kilépési kód 1. Előtte: `docker ps --filter name=websuli-e2e- --format "{{.Names}} {{.RunningFor}}"` (≥ 2 friss
+   konténernél várj).
+5. Egy TELJES szelet helyi futtatása nem része ennek a körnek (NOT RUN: szeletenként ~15–40 perc gépidő a közös gépen, más
+   ügynökök böngészős futásai mellett); a fájlok közötti sorrendfüggést az első CI-futás mutatja ki (6. lépés 5. pont). A
+   kiegészítő öt konfig az adatbázist és az alkalmazásszervert nem használja (saját Vite- / statikus szerver — a terv 6. pontja).
 
 ## 5. lépés — Csapda-javaslat és kapuk
 
