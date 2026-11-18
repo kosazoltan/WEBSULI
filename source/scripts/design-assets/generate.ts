@@ -5,17 +5,31 @@
  *   npx tsx scripts/design-assets/generate.ts --trial              # a próbakör (legfeljebb --max kép)
  *   npx tsx scripts/design-assets/generate.ts --only hero-studio,cover-sejt
  *   npx tsx scripts/design-assets/generate.ts --only cover-l-… --resolution 1K   # leckeborító (docs/specs/2026-11-03-leckeborito.md)
- * Külön készlet (docs/specs/2026-11-18-adventi-naptar.md 13.; design-assets/<név>/prompts.json + style.md, a jelöltek a nem követett
- * design-assets/candidates/<név>/ alá), tételenként több jelölttel, képszám- és KEMÉNY költségplafonnal:
+ *
+ * Külön készlet (docs/specs/2026-11-18-adventi-naptar.md 13., 15., 18.; design-assets/<név>/prompts.json + style.md; a jelöltek a
+ * nem követett design-assets/candidates/<név>/ alá), tételenként több jelölttel:
  *   npx tsx scripts/design-assets/generate.ts --set advent --dry-run --max 94 --max-usd 7
  *   npx tsx scripts/design-assets/generate.ts --set advent --only advent-bg-portrait,advent-door-08,advent-door-24 --max 10 --max-usd 7
+ *   npx tsx scripts/design-assets/generate.ts --set advent --max 94 --max-usd 7 --ref advent-bg-portrait=advent-bg-portrait/<fájl>.jpg
+ * KÖLTSÉGKERET külön készletnél:
+ *   - `--max-usd` nélkül éles futás nincs. A keret ÖSSZESÍTETT: a készlet naplójának (log.jsonl) eddigi becsült összege a kezdőérték,
+ *     tehát a próbakör és a teljes kör ugyanabból a keretből megy; a már meglévő jelölteket a futás nem gyártja újra.
+ *   - Minden HÁLÓZATI HÍVÁS előtt keret-ellenőrzés, a hívás indításakor elszámolás — a sikertelen hívás is számít.
+ *   - A keret a kódban rögzített BECSÜLT árral számol (lib.ts `estimateUsd`), nem a számlával. A valódi kemény plafon a
+ *     szolgáltatónál a kulcsra állított költségkeret (tulajdonosi teendő); a próbakör után a számlázott összeget össze kell vetni
+ *     a becsléssel, mielőtt a teljes kör indul.
+ *   - `--ref <azonosító>=<fájl a candidates/<név>/ alatt>`: a stílus-referencia a tulajdonos által KIVÁLASZTOTT kép. Enélkül csak
+ *     az ugyanabban a futásban készült referencia használható (próbakör); különben a futás hívás előtt megáll.
  * A kulcs (OPENROUTER_API_KEY) csak a memóriában él; sem a konzolra, sem a naplóba nem kerül.
  */
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildImageRequest, composePrompt, estimateUsd, loadStyle, parseMax, parseMaxUsd, parseResolution, parseSetName, planJobs, redact, type AssetItem, type AssetManifest, type Resolution, type Style } from "./lib";
+import {
+  attemptWithinBudget, buildImageRequest, composePrompt, estimateUsd, loadStyle, missingReferences, parseMax, parseMaxUsd, parseRefs, parseResolution, parseSetName,
+  planJobs, redact, requestImage, spentFromLog, type AssetItem, type AssetManifest, type Budget, type Resolution, type Style,
+} from "./lib";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const SET = parseSetName(process.argv.includes("--set") ? (process.argv[process.argv.indexOf("--set") + 1] ?? "") : undefined);
@@ -23,6 +37,7 @@ const ASSETS = SET ? path.join(ROOT, "design-assets", SET) : path.join(ROOT, "de
 const CANDIDATES = SET ? path.join(ROOT, "design-assets", "candidates", SET) : path.join(ROOT, "design-assets", "candidates");
 const PUBLIC_DESIGN = path.join(ROOT, "client", "public", "design");
 const ENDPOINT = "https://openrouter.ai/api/v1/images";
+const IMAGE_FILE = /\.(png|jpe?g|webp)$/;
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -41,6 +56,11 @@ function readKey(): string {
   throw new Error("Hiányzik az OPENROUTER_API_KEY (környezeti változó vagy %LOCALAPPDATA%\\hermes\\.env).");
 }
 
+const dataUrl = (file: string) => {
+  const mime = file.endsWith(".png") ? "image/png" : file.endsWith(".webp") ? "image/webp" : "image/jpeg";
+  return `data:${mime};base64,${readFileSync(file).toString("base64")}`;
+};
+
 /** Referenciakép: előbb a jóváhagyott WebP, különben a legfrissebb jelölt (próbakörben). */
 function referenceDataUrl(item: AssetItem, manifest: AssetManifest): string | null {
   const ref = manifest.items.find(i => i.id === item.id);
@@ -50,85 +70,103 @@ function referenceDataUrl(item: AssetItem, manifest: AssetManifest): string | nu
   const dir = path.join(CANDIDATES, ref.id);
   if (!existsSync(dir)) return null;
   // A modell JPG-t ad vissza (mérve, 2026-10-17); minden képtípust elfogadunk.
-  const latest = readdirSync(dir).filter(f => /\.(png|jpe?g|webp)$/.test(f)).sort().at(-1);
+  const latest = readdirSync(dir).filter(f => IMAGE_FILE.test(f)).sort().at(-1);
   if (!latest) return null;
-  const mime = latest.endsWith(".png") ? "image/png" : latest.endsWith(".webp") ? "image/webp" : "image/jpeg";
-  return `data:${mime};base64,${readFileSync(path.join(dir, latest)).toString("base64")}`;
+  return dataUrl(path.join(dir, latest));
 }
 
-/** Egy kép generálása (legfeljebb 2 próba); a becsült költséget adja vissza, sikertelenségnél 0-t. */
-async function generateOne(item: AssetItem, resolution: Resolution, ctx: { manifest: AssetManifest; style: Style; key: string; log: string }): Promise<number> {
+type Ctx = {
+  manifest: AssetManifest; style: Style; key: string; log: string;
+  /** Külön készletnél: a hívásonkénti keret (null: a régi készlet útja, keret nélkül). */
+  budget: Budget | null;
+  /** Külön készletnél: a referencia feloldása (kiválasztott fájl vagy az ebben a futásban készült jelölt). */
+  reference?: (id: string) => string | null;
+};
+
+/**
+ * Egy kép generálása (legfeljebb 2 hívás). A visszaadott `estUsd` a sikeres kép becsült ára (sikertelenségnél 0); külön készletnél
+ * a keretet hívásonként a `ctx.budget` vezeti, és `stoppedByBudget` jelzi, ha a keret miatt nem indult (újabb) hívás.
+ */
+async function generateOne(item: AssetItem, resolution: Resolution, ctx: Ctx): Promise<{ estUsd: number; saved: boolean; stoppedByBudget: boolean }> {
   const { manifest, style, key, log } = ctx;
-  let spent = 0;
-  const refs = (item.references ?? []).map(id => referenceDataUrl({ ...item, id }, manifest)).filter((u): u is string => !!u);
+  const refs = (item.references ?? []).map(id => (ctx.reference ? ctx.reference(id) : referenceDataUrl({ ...item, id }, manifest))).filter((u): u is string => !!u);
   if ((item.references?.length ?? 0) > refs.length) console.log(`  ! ${item.id}: hiányzó referencia, nélküle generálok.`);
   const body = buildImageRequest(manifest.model, item, style, refs, resolution);
-  let saved = false;
-  for (let attempt = 1; attempt <= 2 && !saved; attempt++) {
-    try {
-      const res = await fetch(ENDPOINT, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": "https://websuli.vip", "X-Title": "WebSuli design assets" },
-        body: JSON.stringify(body),
-      });
-      const text = await res.text();
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${redact(text, key).slice(0, 300)}`);
-      const json = JSON.parse(text) as { data?: Array<{ b64_json?: string; media_type?: string }>; usage?: unknown };
-      const img = json.data?.[0];
-      if (!img?.b64_json || !/^image\//.test(img.media_type ?? "image/png")) throw new Error("Üres vagy nem képtípusú válasz.");
+  const cost = estimateUsd(1, refs.length, resolution);
+  const outcome = await attemptWithinBudget({
+    budget: ctx.budget,
+    estUsd: cost,
+    maxAttempts: 2,
+    attempt: async () => {
+      const img = await requestImage(fetch, { endpoint: ENDPOINT, key, body });
       const dir = path.join(CANDIDATES, item.id);
       mkdirSync(dir, { recursive: true });
-      const ext = img.media_type === "image/jpeg" ? "jpg" : img.media_type === "image/webp" ? "webp" : "png";
-      const file = path.join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`);
-      writeFileSync(file, Buffer.from(img.b64_json, "base64"));
-      const cost = estimateUsd(1, refs.length, resolution);
-      spent = cost;
-      appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), id: item.id, model: manifest.model, promptHash: createHash("sha256").update(body.prompt).digest("hex").slice(0, 16), refs: refs.length, estUsd: cost, usage: json.usage ?? null, file: path.relative(CANDIDATES, file), status: "ok" }) + "\n");
+      const file = path.join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}.${img.ext}`);
+      writeFileSync(file, img.bytes);
+      appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), id: item.id, model: manifest.model, promptHash: createHash("sha256").update(body.prompt).digest("hex").slice(0, 16), refs: refs.length, estUsd: cost, usage: img.usage ?? null, file: path.relative(CANDIDATES, file), status: "ok" }) + "\n");
       console.log(`  ✓ ${item.id} → ${path.relative(ROOT, file)}`);
-      saved = true;
-    } catch (error) {
+    },
+    onError: (attempt, error) => {
       const message = redact(error instanceof Error ? error.message : String(error), key);
-      appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), id: item.id, attempt, status: "error", message }) + "\n");
+      // Külön készletnél a sikertelen hívás becsült ára is a naplóba kerül: a következő futás kerete ebből is számol.
+      appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), id: item.id, attempt, status: "error", message, ...(ctx.budget ? { estUsd: cost } : {}) }) + "\n");
       console.log(`  ✗ ${item.id} (${attempt}. próba): ${message}`);
-    }
-  }
-  return spent;
+    },
+  });
+  return { estUsd: outcome.saved ? cost : 0, saved: outcome.saved, stoppedByBudget: outcome.stoppedByBudget };
 }
 
-/** Külön készlet futása: tételenként több jelölt, képszám- és költségplafon; a plafon elérésekor megáll. */
+/** Külön készlet futása: tételenként több jelölt, képszám- és összesített költségplafon; a plafon elérésekor megáll. */
 async function runSet(manifest: AssetManifest, style: Style, items: AssetItem[], resolution: Resolution, max: number) {
   const maxUsd = parseMaxUsd(process.argv.includes("--max-usd") ? (arg("max-usd") ?? "") : undefined);
-  const plan = planJobs(items, { resolution, max, maxUsd });
+  const refFiles = parseRefs(process.argv, CANDIDATES);
+  const log = path.join(CANDIDATES, "log.jsonl");
+  const alreadySpent = existsSync(log) ? spentFromLog(readFileSync(log, "utf8")) : 0;
+  const existing: Record<string, number> = {};
+  for (const item of items) {
+    const dir = path.join(CANDIDATES, item.id);
+    existing[item.id] = existsSync(dir) ? readdirSync(dir).filter(f => IMAGE_FILE.test(f)).length : 0;
+  }
+  const plan = planJobs(items, { resolution, max, maxUsd, existing, alreadySpent });
   console.log(`${plan.jobs.length} kép · becsült költség ≈ ${plan.totalUsd.toFixed(2)} USD (${manifest.model}, készlet: ${SET})`);
+  if (alreadySpent > 0 || plan.skippedExisting > 0) console.log(`Eddig elszámolva (napló): ≈ ${alreadySpent.toFixed(2)} USD · már meglévő jelölt, nem készül újra: ${plan.skippedExisting}`);
+  if (maxUsd !== null) console.log(`Keret: ${maxUsd} USD összesen · a futás után várhatóan elszámolva: ≈ ${(alreadySpent + plan.totalUsd).toFixed(2)} USD`);
   if (plan.cutBy === "max") console.log(`KORLÁT: a kért ${plan.requested} képből csak ${plan.jobs.length} fut (--max ${max}).`);
   if (plan.cutBy === "max-usd") console.log(`KÖLTSÉGPLAFON: a kért ${plan.requested} képből csak ${plan.jobs.length} fér a keretbe (--max-usd ${maxUsd}).`);
   if (maxUsd === null) console.log("FIGYELEM: nincs költségplafon (--max-usd) — éles futás csak plafonnal indul.");
+  const missing = missingReferences(plan.jobs, new Set(Object.keys(refFiles)));
+  if (missing.length) console.log(`HIÁNYZÓ REFERENCIA: ${missing.join(", ")} — add meg a kiválasztott képet: --ref <azonosító>=<fájl a candidates/${SET}/ alatt>`);
   if (flag("dry-run")) {
     const seen = new Set<string>();
     for (const job of plan.jobs) {
       if (seen.has(job.item.id)) continue;
       seen.add(job.item.id);
       const count = plan.jobs.filter(j => j.item.id === job.item.id).length;
-      console.log(`- ${job.item.id} [${job.item.kind} ${job.item.aspect_ratio} · ${job.resolution} · ${count} jelölt · ≈ ${(count * job.estUsd).toFixed(3)} USD]
-  ${composePrompt(job.item, style)}`);
+      console.log(`- ${job.item.id} [${job.item.kind} ${job.item.aspect_ratio} · ${job.resolution} · ${count} jelölt · ≈ ${(count * job.estUsd).toFixed(3)} USD]\n  ${composePrompt(job.item, style)}`);
     }
     return;
   }
   if (maxUsd === null) throw new Error("Külön készlet éles futása csak --max-usd költségplafonnal indul.");
+  if (missing.length) throw new Error("Külön készlet éles futása csak kiválasztott (--ref) vagy ugyanebben a futásban készülő stílus-referenciával indul.");
   const key = readKey();
   mkdirSync(CANDIDATES, { recursive: true });
-  const ctx = { manifest, style, key, log: path.join(CANDIDATES, "log.jsonl") };
-  let spent = 0;
+  const budget: Budget = { spent: alreadySpent, maxUsd };
+  const madeThisRun = new Set<string>();
+  const reference = (id: string): string | null => {
+    if (refFiles[id]) return dataUrl(refFiles[id]!);
+    if (!madeThisRun.has(id)) return null;
+    const dir = path.join(CANDIDATES, id);
+    const latest = existsSync(dir) ? readdirSync(dir).filter(f => IMAGE_FILE.test(f)).sort().at(-1) : undefined;
+    return latest ? dataUrl(path.join(dir, latest)) : null;
+  };
+  const ctx: Ctx = { manifest, style, key, log, budget, reference };
   let made = 0;
   for (const job of plan.jobs) {
-    // Kemény plafon futás közben is: a következő kép becsült árával sem léphető túl.
-    if (spent + job.estUsd > maxUsd + 1e-9) { console.log(`KÖLTSÉGPLAFON elérve (${spent.toFixed(2)} / ${maxUsd} USD) — megállok.`); break; }
-    const cost = await generateOne(job.item, job.resolution, ctx);
-    if (cost > 0) made++;
-    // Óvatos elszámolás: a sikertelen kísérlet is a keretbe számít (a szolgáltató számlázása hibánál nem ismert).
-    spent += Math.max(cost, job.estUsd);
+    const one = await generateOne(job.item, job.resolution, ctx);
+    if (one.saved) { made++; madeThisRun.add(job.item.id); }
+    if (one.stoppedByBudget) { console.log(`KÖLTSÉGPLAFON elérve (${budget.spent.toFixed(2)} / ${maxUsd} USD) — megállok.`); break; }
   }
-  console.log(`Kész: ${made} kép. Becsült költés: ≈ ${spent.toFixed(2)} USD. Válogatóoldal: npx tsx scripts/design-assets/review-page.ts --set ${SET}`);
+  console.log(`Kész: ${made} kép. Elszámolva összesen (becsült ár, a sikertelen hívásokkal együtt): ≈ ${budget.spent.toFixed(2)} / ${maxUsd} USD. Válogatóoldal: npx tsx scripts/design-assets/review-page.ts --set ${SET}`);
 }
 
 async function main() {
@@ -136,10 +174,10 @@ async function main() {
   const style = loadStyle(readFileSync(path.join(ASSETS, "style.md"), "utf8"));
   const only = arg("only")?.split(",").map(s => s.trim()).filter(Boolean);
   const max = parseMax(process.argv.includes("--max") ? (arg("max") ?? "") : undefined);
-  let items = manifest.items.filter(i => (only ? only.includes(i.id) : flag("trial") ? i.trial : true));
-  if (items.length > max) { console.log(`Csak az első ${max} tétel fut (--max).`); items = items.slice(0, max); }
   const resolution = parseResolution(process.argv.includes("--resolution") ? (arg("resolution") ?? "") : undefined);
   if (SET) { await runSet(manifest, style, manifest.items.filter(i => (only ? only.includes(i.id) : true)), resolution, max); return; }
+  let items = manifest.items.filter(i => (only ? only.includes(i.id) : flag("trial") ? i.trial : true));
+  if (items.length > max) { console.log(`Csak az első ${max} tétel fut (--max).`); items = items.slice(0, max); }
   const refsCount = items.reduce((n, i) => n + (i.references?.length ?? 0), 0);
   console.log(`${items.length} kép · becsült költség ≈ ${estimateUsd(items.length, refsCount, resolution).toFixed(2)} USD (${manifest.model}, ${resolution})`);
   if (flag("dry-run")) {
@@ -150,8 +188,8 @@ async function main() {
   mkdirSync(CANDIDATES, { recursive: true });
   const log = path.join(CANDIDATES, "log.jsonl");
   let spent = 0;
-  const ctx = { manifest, style, key, log };
-  for (const item of items) spent += await generateOne(item, resolution, ctx);
+  const ctx: Ctx = { manifest, style, key, log, budget: null };
+  for (const item of items) spent += (await generateOne(item, resolution, ctx)).estUsd;
   console.log(`Kész. Becsült költés: ≈ ${spent.toFixed(2)} USD. Válogatóoldal: npx tsx scripts/design-assets/review-page.ts`);
 }
 

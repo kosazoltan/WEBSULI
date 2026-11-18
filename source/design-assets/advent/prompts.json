@@ -325,7 +325,7 @@
     },
     {
       "id": "advent-door-19",
-      "kind": "door",
+      "kind": "scene",
       "band": "advent",
       "subjects": [],
       "keywords": [
@@ -342,7 +342,7 @@
     },
     {
       "id": "advent-door-20",
-      "kind": "door",
+      "kind": "scene",
       "band": "advent",
       "subjects": [],
       "keywords": [
@@ -410,7 +410,7 @@
     },
     {
       "id": "advent-door-24",
-      "kind": "door",
+      "kind": "scene",
       "band": "advent",
       "subjects": [],
       "keywords": [
