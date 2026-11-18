@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, CheckCircle2, RotateCcw, XCircle } from "lucide-rea
 
 import type { TryKind } from "@shared/lesson-schema";
 import { matchRightOrder } from "@shared/match-order";
+import { textAnswerMatches } from "@shared/text-answer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TrySnapshot } from "../useLessonProgress";
@@ -136,7 +137,8 @@ function FillBlank({ spec, persisted, onPersist }: TryProps) {
   const isCorrect =
     checked &&
     answers.length > 0 &&
-    answers.every((a, i) => values[i]?.trim().toLowerCase() === a.trim().toLowerCase());
+    // Spec 2026-11-17-szoveges-valasz-irasjel: a mondatvégi írásjel, a szóköz és a tipográfiai változat nem hiba; az ékezet számít.
+    answers.every((a, i) => textAnswerMatches(values[i] ?? "", a));
 
   return (
     <div className="border rounded-lg bg-card p-4 space-y-3" data-try="fillBlank">
