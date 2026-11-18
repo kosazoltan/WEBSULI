@@ -61,7 +61,8 @@ async function serve(opts: { limits?: AdventLimits; clock?: Parameters<typeof cr
     const res = await fetch(`${base}/api/advent${path}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify({ device, ...data }) });
     return { status: res.status, body: (await res.json()) as { limit?: string } };
   };
-  return { round, status, post, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
+  const state = async (ip: string) => (await fetch(`${base}/api/advent/state`, { headers: { "x-forwarded-for": ip, "x-advent-device": A } })).status;
+  return { round, status, post, state, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
 }
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
@@ -70,7 +71,7 @@ test("a korlátok egy helyen állnak, és a szabályos legrosszabb eset (144 ír
   assert.deepEqual(ADVENT_LIMITS, {
     subjectWrites: { limit: 200, windowMs: 900_000 },
     ipWrites: { limit: 1500, windowMs: 900_000 },
-    ipReads: { limit: 120, windowMs: 60_000 },
+    ipReads: { limit: 400, windowMs: 60_000 },
     newDeviceRows: { limit: 90, windowMs: 3_600_000 },
   });
   assert.ok(ADVENT_LIMITS.subjectWrites.limit >= 24 * 3 * 2);
@@ -78,6 +79,8 @@ test("a korlátok egy helyen állnak, és a szabályos legrosszabb eset (144 ír
   // Iskolai méret (tulajdonosi döntés 2026-11-18): három 30 fős osztály egy órán belül, egy osztály 15 nyitható ablakkal pótolva.
   assert.ok(ADVENT_LIMITS.newDeviceRows.limit >= 3 * 30);
   assert.ok(ADVENT_LIMITS.ipWrites.limit >= 30 * (1 + 2 * 15));
+  // Olvasás: négy 30 fős osztály egy percen belül, fejenként három állapot-olvasással (kártya, naptároldal, egy frissítés).
+  assert.ok(ADVENT_LIMITS.ipReads.limit >= 4 * 30 * 3);
 });
 
 test("csúszóablakos számláló: a keret betelik, az ablak után felszabadul; a kulcsok függetlenek (review K2)", () => {
@@ -164,6 +167,28 @@ test("a foglalás visszajár, ha a sor nem jött létre: sikertelen módosítás
     assert.deepEqual({ status: blocked.status, limit: blocked.body.limit }, { status: 429, limit: "new-row" });
     assert.equal(memory.rows.size, 3);
   } finally { await app.close(); }
+});
+
+test("olvasási keret: a hálózat kerete utáni állapot-olvasás 429, másik hálózat nem érintett; az alapérték 400 / perc (S3 K4, tulajdonosi döntés)", async () => {
+  const limits: AdventLimits = { ...ADVENT_LIMITS, ipReads: { limit: 3, windowMs: 60_000 } };
+  const app = await serve({ limits });
+  try {
+    for (let i = 1; i <= 3; i++) assert.equal(await app.state("10.7.0.1"), 200, i + ". olvasás a keretben");
+    assert.equal(await app.state("10.7.0.1"), 429);
+    assert.equal(await app.state("10.7.0.2"), 200, "másik hálózat kerete független");
+    // Az olvasás nem fogyasztja az írási keretet.
+    assert.equal((await app.round(A, "10.7.0.1")).status, 409);
+  } finally { await app.close(); }
+  // Alapértékkel: 400 olvasás egy címről mind átmegy, a 401. nem.
+  const real = await serve({});
+  try {
+    const statuses: number[] = [];
+    // 8 × 50-es hullám: a helyi szerver fogadósorát egyetlen 400-as löket túltöltené.
+    for (let wave = 0; wave < 8; wave++) statuses.push(...(await Promise.all(Array.from({ length: 50 }, () => real.state("10.7.1.1")))));
+    assert.equal(statuses.length, 400);
+    assert.ok(statuses.every((code) => code === 200), "az első 400 a keretben");
+    assert.equal(await real.state("10.7.1.1"), 429);
+  } finally { await real.close(); }
 });
 
 test("alanyonkénti korlát: a keret utáni kérés 429 (limit: subject); másik alany ugyanarról a hálózatról nem érintett (review C1)", async () => {

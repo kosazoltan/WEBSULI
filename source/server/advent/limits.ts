@@ -1,7 +1,8 @@
 /**
  * Adventi naptár — a kéréskorlátok EGY helyen (docs/specs/2026-11-18-adventi-naptar.md 16.1, 18.2, 19.). Tulajdonosi döntés
  * (2026-11-18): „Emeljük iskolai méretre” — 90 új névtelen sor / óra / IP és 1500 írás / 15 perc / IP; az alanyonkénti
- * 200 / 15 perc marad. A router ezt a táblát kapja (tesztben kisebb értékkel injektálható).
+ * 200 / 15 perc marad; az állapot-olvasás 400 / perc / IP (ugyanebből a döntésből, a felület ellenőri köre után: 120 volt).
+ * A router ezt a táblát kapja (tesztben kisebb értékkel injektálható).
  */
 export type AdventLimit = { limit: number; windowMs: number };
 export type AdventLimits = {
@@ -9,7 +10,7 @@ export type AdventLimits = {
   subjectWrites: AdventLimit;
   /** Írás IP-nként (visszaélés ellen; egy hálózaton több alany is játszik). */
   ipWrites: AdventLimit;
-  /** Állapot-olvasás IP-nként. */
+  /** Állapot-olvasás IP-nként: három-négy osztály egyszerre (betöltés + főoldali kártya + fókuszra frissítés). */
   ipReads: AdventLimit;
   /** LÉTREJÖTT új névtelen (eszköz-) sor IP-nként — ez védi az adatbázis-keretet. A kísérlet nem számít, csak a létrejött sor. */
   newDeviceRows: AdventLimit;
@@ -18,7 +19,7 @@ export type AdventLimits = {
 export const ADVENT_LIMITS: AdventLimits = {
   subjectWrites: { limit: 200, windowMs: 15 * 60_000 },
   ipWrites: { limit: 1500, windowMs: 15 * 60_000 },
-  ipReads: { limit: 120, windowMs: 60_000 },
+  ipReads: { limit: 400, windowMs: 60_000 },
   newDeviceRows: { limit: 90, windowMs: 60 * 60_000 },
 };
 

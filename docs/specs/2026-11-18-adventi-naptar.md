@@ -1027,3 +1027,8 @@ nyílik az első ablak!”. Lezárt naptárnál, ha a tanuló egy ablakot sem ol
 - **C5:** ha egy már megválaszolt kérdés kikerül a bankból, az ablak újranyitása a tárolt eredményt adja kérdés nélkül
   (`question: null`, `correctIndex: -1`), nem hibát.
 - **C6 (jegy):** a helyi DB-kör a korlát közelében fut — a következő DB-teszt előtt érdemes két folyamatra bontani.
+- **Olvasási keret (2026-11-18, tulajdonosi döntés — az „iskolai méret” következménye, a felület ellenőri köre, S3 K4 után):** az
+  állapot-olvasás (`GET /api/advent/state`) korlátja **400 / perc / IP** (eredetileg 120) — három-négy osztály egyszerre, egy
+  iskolai hálózatról. Helye: `server/advent/limits.ts` `ADVENT_LIMITS.ipReads`; teszt: `tests/advent-limits.test.ts`. A kliens a
+  válasz után nem olvas külön állapotot (az eredményből frissít), 429-nél pedig megtartja a látható naptárat.
+- **C6 lezárva (2026-11-18):** a DB-kör terheletlen gépen 300 s a 480 s-os korlátból (37% tartalék), párhuzamos kliensekkel.
