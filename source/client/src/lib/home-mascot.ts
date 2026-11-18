@@ -95,9 +95,9 @@ export function saveMascotPrefs(prefs: MascotPrefs): void {
  * és a `client/src/mascot/home-mascot.css` változóiban; a böngészőteszt méri, hogy a tartalom pontosan belefér.
  */
 export const MASCOT_BOX_CLASS: Record<1 | 2 | 3, string> = {
-  1: "h-[248px] sm:h-[286px]",
-  2: "h-[250px] sm:h-[286px]",
-  3: "h-[324px] sm:h-[336px]",
+  1: "h-[172px] sm:h-[286px]",
+  2: "h-[172px] sm:h-[286px]",
+  3: "h-[200px] sm:h-[336px]",
 };
 /** Bezárt állapot: egyetlen 44 px-es visszahívó gomb. */
 export const MASCOT_HIDDEN_CLASS = "h-11";

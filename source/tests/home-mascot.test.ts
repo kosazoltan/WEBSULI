@@ -193,11 +193,16 @@ test("K2: a kliens a kapcsolót a szerver meta-sorából olvassa — csak a pont
   assert.ok(HOME_MASCOT_META.includes(`name="${HOME_MASCOT_META_NAME}"`) && HOME_MASCOT_META.includes('content="on"'));
 });
 
-test("K8: a lefoglalt magasság a CSS méreteiből számolva (telefon / ≥ 640 px), tananyagszám szerint", () => {
-  // home-mascot.css: a panel szegélye 2 × 1 px, belső térköz 12 / 16, buborék 72, hézag 10, a sorok területe max(figura, n·68 + (n−1)·hézag)
-  const box = (n: number, pad: number, maki: number, gap: number) => 2 + pad + 72 + 10 + Math.max(maki, n * 68 + (n - 1) * gap) + pad;
+test("K8, K16: a lefoglalt magasság a CSS méreteiből számolva (telefon / ≥ 640 px), tananyagszám szerint", () => {
+  // home-mascot.css: a panel szegélye 2 × 1 px + belső térköz + buborék + hézag + a sorok területe max(figura, n·sor + (n−1)·hézag) + belső térköz
+  const box = (n: number, d: { pad: number; top: number; gap: number; maki: number; row: number; rowGap: number }) =>
+    2 + d.pad + d.top + d.gap + Math.max(d.maki, n * d.row + (n - 1) * d.rowGap) + d.pad;
+  const phone = { pad: 6, top: 44, gap: 4, maki: 110, row: 44, rowGap: 3 };
+  const wide = { pad: 16, top: 72, gap: 10, maki: 170, row: 68, rowGap: 8 };
   for (const n of [1, 2, 3] as const) {
-    assert.equal(MASCOT_BOX_CLASS[n], `h-[${box(n, 12, 140, 6)}px] sm:h-[${box(n, 16, 170, 8)}px]`, `n=${n}`);
+    assert.equal(MASCOT_BOX_CLASS[n], `h-[${box(n, phone)}px] sm:h-[${box(n, wide)}px]`, `n=${n}`);
+    // orkesztrátori döntés 2026-11-18: telefonon a sáv legfeljebb ~200 px
+    assert.ok(box(n, phone) <= 200, `telefon n=${n}: ${box(n, phone)} px`);
   }
 });
 

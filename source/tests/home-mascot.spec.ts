@@ -116,7 +116,7 @@ for (const viewport of VIEWPORTS) {
     await expect(section).toBeVisible();
     await expect(page.getByTestId("link-file-m5-a")).toBeVisible();
     // K8: a hely a tartalom ELŐTT le van foglalva — a magasság a megjelenéstől a mozgásig ugyanaz
-    const expected = viewport.width >= 640 ? 336 : 324;
+    const expected = viewport.width >= 640 ? 336 : 200;
     expect((await section.boundingBox())!.height).toBe(expected);
     const firstCardTop = async () => (await page.getByTestId("list-files").evaluate((el) => el.getBoundingClientRect().top + window.scrollY));
     // a lista saját belépő animációja (`.list-enter`: translateY 12 px → 0, 320 ms) előbb fusson le — különben azt mérnénk
@@ -128,7 +128,7 @@ for (const viewport of VIEWPORTS) {
     // (a görgetési helyzet tört képpontja miatt ezredképpontos eltérés lehet — fél képpontnál kisebb eltérés nem elmozdulás)
     expect(Math.abs((await firstCardTop()) - cardTopBefore), "a lista helye nem mozdult").toBeLessThan(0.5);
     // a tartalom PONTOSAN kitölti a lefoglalt dobozt: a sorok területe a CSS szerinti (3 × 68 + 2 × hézag), se több, se kevesebb
-    expect(await page.getByTestId("home-mascot-picks").evaluate((el) => el.getBoundingClientRect().height)).toBe(viewport.width >= 640 ? 220 : 216);
+    expect(await page.getByTestId("home-mascot-picks").evaluate((el) => el.getBoundingClientRect().height)).toBe(viewport.width >= 640 ? 220 : 138);
     expect(await body(page).evaluate((el) => (el.parentElement as HTMLElement).clientHeight === (el as HTMLElement).offsetHeight && el.scrollHeight <= el.clientHeight + 10), "a tartalom belefér a lefoglalt dobozba").toBe(true);
 
     // 1. belépés: integet és köszön (első látogatás)
@@ -148,6 +148,10 @@ for (const viewport of VIEWPORTS) {
       await expect(body(page)).toHaveAttribute("data-step", "present");
       await expect(body(page)).toHaveAttribute("data-index", String(i));
       expect(await activePick(page)).toBe(`home-mascot-pick-${ALL_PICKS[i]}`);
+      // a mutatott sort (és csak azt) borostyán nyíl jelöli a maki felől
+      expect(await page.locator('[data-testid^="home-mascot-pick-"]').evaluateAll((els) => els.map((el) => getComputedStyle(el, "::before").borderLeftColor))).toEqual(
+        ALL_PICKS.map((_, k) => (k === i ? "rgb(253, 230, 138)" : "rgba(0, 0, 0, 0)")),
+      );
       expect(await bubbleText(page)).toContain(titles[i]);
       await page.waitForTimeout(1100);
       tops.push((await page.getByTestId("home-mascot-maki").boundingBox())!.y);
@@ -475,7 +479,7 @@ test("K3, K14: évfolyam, admin, 2 / 1 / 0 tananyag", async ({ browser }) => {
     await expect(body(page)).toHaveAttribute("data-step", "present");
     await page.clock.fastForward(5000);
     await expect(body(page)).toHaveAttribute("data-index", "1");
-    expect((await page.getByTestId("home-mascot").boundingBox())!.height).toBe(324);
+    expect((await page.getByTestId("home-mascot").boundingBox())!.height).toBe(200);
     // (a buborék csücske szándékosan kilóg alul, ezért a SZÖVEG dobozát mérjük a buborék belsejéhez)
     expect(await page.getByTestId("home-mascot-bubble").evaluate((el) => {
       const box = el.getBoundingClientRect();
@@ -501,7 +505,7 @@ test("K3, K14: évfolyam, admin, 2 / 1 / 0 tananyag", async ({ browser }) => {
   await run({ files: FILES.slice(0, 2) }, async (page) => {
     await waitMoving(page);
     expect(await pickIds(page)).toEqual(["m5-a", "m5-regi"]);
-    expect((await page.getByTestId("home-mascot").boundingBox())!.height).toBe(250);
+    expect((await page.getByTestId("home-mascot").boundingBox())!.height).toBe(172);
     await page.clock.fastForward(1900);
     await expect(body(page)).toHaveAttribute("data-step", "present");
     await page.clock.fastForward(5000);
@@ -514,7 +518,7 @@ test("K3, K14: évfolyam, admin, 2 / 1 / 0 tananyag", async ({ browser }) => {
   await run({ files: FILES.slice(1, 2) }, async (page) => {
     await waitMoving(page);
     expect(await pickIds(page)).toEqual(["m5-a"]);
-    expect((await page.getByTestId("home-mascot").boundingBox())!.height).toBe(248);
+    expect((await page.getByTestId("home-mascot").boundingBox())!.height).toBe(172);
     await page.clock.fastForward(1900);
     await expect(body(page)).toHaveAttribute("data-step", "present");
     await page.clock.fastForward(5000);
@@ -633,45 +637,54 @@ test("K9: 4× lassított CPU-n az animáció alatt ≥ 50 képkocka/mp, és ninc
   await expect(body(page)).toHaveAttribute("data-step", "present", { timeout: 10_000 });
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
-  // A mérés és a koppintás is a LAPON BELÜL történik (C-65): a tesztvezérlő saját, lapon futó ellenőrzései így nem kerülnek a
-  // mért képkockákba. 3 mp: mutatás (ismétlődő klip) → koppintás 0,7 mp-nél → szökkenés, helyváltoztatás, mutatás.
-  const measure = () => page.evaluate(() => new Promise<{ fps: number; worst: number; frames: number; over: number; slow: string[] }>((resolve) => {
-    const deltas: number[] = [];
-    const slow: string[] = [];
-    let last = performance.now();
-    const start = last;
-    window.setTimeout(() => (document.querySelector('[data-testid="home-mascot-maki"]') as HTMLElement).click(), 700);
-    const tick = (now: number) => {
-      const delta = now - last;
-      deltas.push(delta);
-      if (delta > 30) slow.push(`${Math.round(last - start)} ms-nél ${delta.toFixed(1)} ms`);
-      last = now;
-      if (now - start < 3000) requestAnimationFrame(tick);
-      else resolve({ fps: (deltas.length * 1000) / (now - start), worst: Math.max(...deltas), frames: deltas.length, over: deltas.filter((d) => d > 50.5).length, slow });
-    };
-    requestAnimationFrame(tick);
-  }));
   try {
     await page.waitForTimeout(500);
-    // Három mérés, a LEGJOBB számít: a gépen futó más folyamatok (párhuzamos buildek, tesztek) csak hozzáadni tudnak a
-    // képkockaidőhöz, elvenni nem — a legjobb futás a lap saját költségének felső becslése (C-30: a terhelt gép nem a lap hibája).
-    // A küszöb 50,5 ms: a 60 Hz-es kijelzőn a képkockaidő 16,67 ms többszöröse, a „3 képkocka” 50,0 ± 0,1 ms-nek mérődik.
-    const runs: Awaited<ReturnType<typeof measure>>[] = [];
-    for (let i = 0; i < 3; i++) {
-      const index = (await state(page)).index;
-      const result = await measure();
-      runs.push(result);
-      console.log(`[kabala K9] ${JSON.stringify(result)}`);
-      // a koppintás tényleg szökkenést indított (a figura a következő sornál mutat), és az animáció fut
-      expect(await state(page)).toMatchObject({ step: "present", index: (index + 1) % 3, running: "true" });
-    }
-    const best = runs.reduce((a, b) => (b.worst < a.worst ? b : a));
-    test.info().annotations.push({ type: "képkockák (4× CPU)", description: runs.map((r) => `${r.fps.toFixed(1)} képkocka/mp, leghosszabb ${r.worst.toFixed(1)} ms`).join(" | ") });
-    expect(best.fps).toBeGreaterThanOrEqual(50);
-    expect(best.worst).toBeLessThanOrEqual(50.5);
-    // egyik futásban sem eshet az átlag 50 alá
-    for (const r of runs) expect(r.fps).toBeGreaterThanOrEqual(50);
+    // A mérés és a koppintás a lapon belül történik (C-65), hogy a tesztvezérlő saját lapon futó ellenőrzései ne kerüljenek a mért
+    // képkockákba. 3 mp: mutatás (ismétlődő klip) → koppintás 0,7 mp-nél → szökkenés, helyváltoztatás, mutatás.
+    const result = await page.evaluate(() => new Promise<{ fps: number; worst: number; frames: number; over: number; slow: string[] }>((resolve) => {
+      const deltas: number[] = [];
+      const slow: string[] = [];
+      let last = performance.now();
+      const start = last;
+      window.setTimeout(() => (document.querySelector('[data-testid="home-mascot-maki"]') as HTMLElement).click(), 700);
+      const tick = (now: number) => {
+        const delta = now - last;
+        deltas.push(delta);
+        if (delta > 30) slow.push(`${Math.round(last - start)} ms-nél ${delta.toFixed(1)} ms`);
+        last = now;
+        if (now - start < 3000) requestAnimationFrame(tick);
+        else resolve({ fps: (deltas.length * 1000) / (now - start), worst: Math.max(...deltas), frames: deltas.length, over: deltas.filter((d) => d > 50).length, slow });
+      };
+      requestAnimationFrame(tick);
+    }));
+    test.info().annotations.push({ type: "képkockák (4× CPU)", description: `${result.fps.toFixed(1)} képkocka/mp, leghosszabb ${result.worst.toFixed(1)} ms, ${result.frames} képkocka, 50 ms fölött: ${result.over}` });
+    console.log(`[kabala K9] ${JSON.stringify(result)}`);
+    expect(await state(page)).toMatchObject({ step: "present", index: 1, running: "true" });
+    expect(result.fps).toBeGreaterThanOrEqual(50);
+    expect(result.worst).toBeLessThanOrEqual(50);
   } finally {
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   }
+});
+
+test("K16: kis telefonon (360×640) a sáv ≤ 200 px, és a lista legfeljebb a sáv magasságával kerül lejjebb", async ({ browser }) => {
+  const firstCard = async (flag: boolean) => {
+    const context = await browser.newContext({ viewport: { width: 360, height: 640 }, serviceWorkers: "block" });
+    const page = await context.newPage();
+    // ismert név: látható makinál az üdvözlő kártya hármasa elmarad (a valós visszatérő tanuló esete)
+    await open(page, { flag, clock: false, user: { id: "u1", firstName: "Anna", lastName: "Kiss", isAdmin: false } });
+    await expect(page.getByTestId("link-file-m5-a")).toBeVisible();
+    if (flag) await expect(body(page)).toBeVisible();
+    await page.getByTestId("list-files").evaluate((el) => Promise.all(el.getAnimations().map((x) => x.finished)));
+    const top = await page.getByTestId("list-files").evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
+    const band = flag ? (await page.getByTestId("home-mascot").boundingBox())!.height : 0;
+    await context.close();
+    return { top, band };
+  };
+  const off = await firstCard(false);
+  const on = await firstCard(true);
+  console.log(`[kabala K16] 360×640: sáv ${on.band} px; a lista eleje KI ${Math.round(off.top)} px, BE ${Math.round(on.top)} px (különbség ${Math.round(on.top - off.top)} px)`);
+  expect(on.band).toBeLessThanOrEqual(200);
+  // a sáv + alsó margója (mb-3 = 12 px), mínusz az elmaradó hármas lista — a lista legfeljebb ennyivel kerül lejjebb
+  expect(on.top - off.top).toBeLessThanOrEqual(on.band + 12);
 });

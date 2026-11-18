@@ -16,7 +16,10 @@ const read = (name: string) => readFileSync(new URL(name, dir));
 const IMAGE_BUDGET = 300 * 1024;
 /** A kibontott lap kerete (szélesség × magasság × 4 bájt). */
 const DECODED_BUDGET = 8 * 1024 * 1024;
-/** A telefonos megjelenítés magassága (home-mascot.css: --hm-h) — a cella legalább 1,5-szöröse. */
+/**
+ * A cella legalább ennek 1,5-szöröse. A telefonos megjelenítés (home-mascot.css: --hm-h) 2026-11-18 óta 110 px; a mérce szándékosan a
+ * korábbi, nagyobb 140 px-hez kötve marad (szigorúbb), hogy a kép a ≥ 640 px-es 170 px-es megjelenítésnél se legyen elmosódott.
+ */
 const PHONE_HEIGHT = 140;
 const CLIPS = ["idle", "blink", "wave", "cheer", "point-in", "point", "hop"];
 

@@ -102,18 +102,18 @@ Az adat-kérések (API) száma bekapcsolva sem nő: a kabala a meglévő `/api/h
 
 ### Mozgás és elrendezés
 
-- **Képkockák 4× lassított CPU-n** (3 mp-es mérés a lapon belül; mutatás → koppintás → szökkenés → mutatás):
+- **Képkockák 4× lassított CPU-n** (a mérce a tervé: egyetlen 3 mp-es mérés, ≥ 50 képkocka/mp és nincs 50 ms-nál hosszabb képkocka;
+  a korábbi „három mérésből a legjobb” változatot az orkesztrátor 2026-11-18-án mérce-gyengítésként elutasította, a teszt visszaállt;
+  a mérés nyugodt gépen futott — legfeljebb 1 idegen e2e-konténer mellett) (3 mp-es mérés a lapon belül; mutatás → koppintás → szökkenés → mutatás):
   - végleges változat, nyugodt gépen, három egymást követő mérés: 60,2 / 60,2 / 60,2 képkocka/mp, a leghosszabb képkocka
     17,3 / 16,9 / 17,0 ms; ugyanez erősen terhelt gépen (más ügynökök párhuzamos buildjei mellett): 59,9 / 52,2 / 59,9
     képkocka/mp, a leghosszabb képkocka 61,0 / 344,8 / 33,2 ms (a 344,8 ms-os a koppintás ELŐTT, 114 ms-nál volt — külső terhelés);
   - az optimalizálás ELŐTT (8 mérés): 57,7–62,0 képkocka/mp, a koppintás képkockája 36–54 ms (4 mérésben 50 ms fölött) — ezért a
     koppintás frissítése szeletelt (`startTransition`), a mozdulat a következő képkockában indul, és nincs kényszerített elrendezés;
   - köztes változat, erősen terhelt gépen (8 mérés): 55,9–64,3 képkocka/mp, a leghosszabb képkocka 16,9–50,1 ms.
-  A mérés gépfüggő: a teszt három mérésből a legjobbat veti össze a kerettel (a háttérterhelés csak hozzáadni tud), az átlagnak
-  mindháromban ≥ 50-nek kell lennie.
 - **Elrendezés-ugrás (CLS):** kikapcsolva 0,0091, bekapcsolva 0,0004 (egy-egy mérés; a különbség mérési zaj — a keret: bekapcsolva ≤ kikapcsolva + 0,005). A sáv magassága a megjelenéstől végig rögzített (324 / 336 px három tananyagnál).
 - **Kontraszt a buborékban:** 14,63:1 (`#1e293b` fehér alapon; a teszt a számított színekből méri).
-- **Érintőcélok:** sorok ≥ 68 px magasak, gombok 44 × 44 px, a maki 84 × 140 px.
+- **Érintőcélok:** telefonon a sorok 44 px, ≥ 640 px-en 68 px magasak; gombok 44 × 44 px; a maki telefonon 66 × 110 px.
 
 ### Mutációs ellenpróbák (mindegyiknél a megnevezett teszt elbukott, visszaállítás után zöld)
 

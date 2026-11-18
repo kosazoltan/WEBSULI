@@ -43,7 +43,7 @@ A főoldal ma NEM tölt be 3D-motort: a `three.module-*.js` külön darab, csak 
 | Szempont | (A) előre renderelt képkocka-lap (WebP) | (B) lusta WebGL-nézet a GLB-vel | (C) vegyes |
 | --- | --- | --- | --- |
 | Átvitt méret | **mért prototípus:** 59 képkocka, 128×200 px-es cella, WebP q72: **260,3 KB**; 102×160: 201,5 KB; 152×240: 312,3 KB. **a végleges lap** (az új, magasabb modellből, 44 képkocka, 130×216 px-es cella, q70): **240,2 KB** + álló kép 8,2 KB = 248,4 KB (őr: ≤ 300 KB a képekre); 146×240 px-es cellával 282,3 KB volt | `three.module` 189,3 KB gzip (732,8 KB nyersen) + GLB 244,7 KB (gzip-pel is 189,3 KB) + `GLTFLoader` ≈ 25,2 KB gzip + `DRACOLoader` 5,6 KB + Draco-dekóder (`draco_decoder.wasm` 63,5 KB gzip + burkoló 11,7 KB) = **≈ 485–540 KB** | (A) + (B) összege az interakció után |
-| A 350 KB-os keret | belefér | **nem fér bele** (a motor egymaga a keret 54%-a) | az alap belefér, az interakció után nem |
+| A 350 KB-os keret | belefér (mért: 262 836 B átvitt, lásd a 4.3 végét) | **nem fér bele** (a motor egymaga a keret 54%-a) | az alap belefér, az interakció után nem |
 | Dekódolás / memória | egy kép dekódolása; a kibontott lap 1040×1296 px ≈ 5,1 MiB (szélesség × magasság × 4) | 733 KB JS értelmezése + WASM-dekóder + WebGL-környezet + a figura 26 380 háromszöge, csontozás képkockánként | mindkettő |
 | Futás közbeni teher | `transform`-animáció a kompozitoron (nincs képkockánkénti JS, nincs újrafestés) | folyamatos WebGL-rajzolás (`requestAnimationFrame`), GPU-terhelés → telefonon melegedés / akkumulátor (NEM MÉRT készüléken) | mint (B), amíg a 3D él |
 | Képminőség | a Blender saját renderje (lágy fények, élsimítás) — szebb, mint amit a three.js alapfényei adnak (`docs/kabala-maki.md`: „a three.js-ben a kép nem azonos a Blender-renderrel”) | élő, bármilyen szögből; a fényeket külön hangolni kell | — |
@@ -102,6 +102,10 @@ tulajdonosi döntéssel bővíthető (több képkocka = több KB).
   kisebb cella, sima ív.
 - A lap keretei (őr-teszt): képek összesen ≤ 300 KB, a lap kibontva ≤ 8 MiB, cella ≥ 1,5 × a telefonos megjelenítési magasság
   (140 px → a mostani 216 px-es cella 1,54×; a 2×-es, 280 px-es cella ≈ 340 KB lenne — a 10. szakasz 1. kérdése).
+- **A 250 KB-os cél túllépése — indoklás (orkesztrátori döntés, 2026-11-18):** a mért átvitt méret 262 836 B (≈ 256,7 KiB), a
+  250 KB-os cél fölött ≈ 6,7 KiB-tal, a 350 KB-os kemény keret alatt ≈ 93 KiB-tal. A túllépés oka az új, magasabb modell (hosszú
+  farok → nagyobb kivágás) és a 216 px-es cella (a 1,5× élességi alsó határ). Kisebb cellánál (≈ 200 px) a cél tartható, de a kép
+  ≥ 640 px-en elmosódik; a döntés: a cella marad, a kemény keret (350 KB) a mérce, és az őr-teszt ennek a képekre eső részét (≤ 300 KB) védi.
 - A gyártó hibával megáll, ha a figura a renderelt kép szélét éri (pl. hosszabb farok az új modellen) vagy a képek túllépik a keretet.
 
 ### 4.4 Megjelenítés
@@ -156,12 +160,16 @@ beszúrási ponton van — a két ág összefésülése két független sor a `U
 └─────────────────────────────────────────────────────┘
 ```
 
-- A maki a bal oszlopban áll (telefon: 84 × 140 px, oszlop 88 px; ≥ 640 px: 102 × 170 px, oszlop 112 px), a sorok tőle jobbra; az
-  ajánlott sor magasságába szökken, és jobbra, a sorra mutat. A sorok a hüvelykujjnak teljes szélességű, 68 px magas célok
-  (a cím két sorban olvasható).
-- Rögzített magasság (a hely előre foglalt, tananyagszám szerint): telefon 324 / 250 / 248 px (3 / 2 / 1 tananyag), ≥ 640 px:
+- A maki a bal oszlopban áll (telefon, < 640 px: 66 × 110 px, oszlop 72 px; ≥ 640 px: 102 × 170 px, oszlop 112 px), a sorok tőle
+  jobbra; az ajánlott sor magasságába szökken, és jobbra, a sorra mutat. A mutatott sort a kiemelés MELLETT a sor bal szélén, a maki
+  felől egy borostyán nyíl jelöli (mozgás mellett finoman „bök”) — a figura mutató karja telefonon kicsi, a nyíl teszi egyértelművé.
+- Telefonon a sor kompakt: 44 px magas teljes szélességű cél, 34 px-es bélyegkép, az évfolyam és a cím egy-egy sorban (a cím
+  levágva; a teljes cím a tananyag oldalán). ≥ 640 px-en 68 px-es sor, a cím két sorban.
+- Rögzített magasság (a hely előre foglalt, tananyagszám szerint): telefon 200 / 172 / 172 px (3 / 2 / 1 tananyag), ≥ 640 px:
   336 / 286 / 286 px; bezárva 44 px. Levezetés: `client/src/mascot/home-mascot.css` fejléce; egységteszt köti a kettőt össze.
-- 360 × 640-en a sáv a képernyő felét foglalja (324 px); ismert névnél az üdvözlő kártya hármas listája (≈ 240 px) kiesik, így
+- **Orkesztrátori döntés (2026-11-18):** kis telefonon a sáv legfeljebb ~200 px, hogy a tananyaglista eleje a hajtás közelében
+  maradjon (a korábbi változat 324 px volt, a 360 × 640-es képernyő fele).
+- 360 × 640-en a sáv 200 px (a képernyő 31%-a); ismert névnél az üdvözlő kártya hármas listája (≈ 240 px) kiesik, így
   a lista nagyjából ugyanott kezdődik, mint ma.
 
 ### 4.7 Akadálymentesség
@@ -198,6 +206,7 @@ beszúrási ponton van — a két ág összefésülése két független sor a `U
 | K5 | Visszatérő látogató: nincs körbevezetés; Csendesítés és Bezárás megmarad újratöltés után | `localStorage` + DOM | e2e + egység |
 | K6 | A kabala főoldali eszközei összesen | ≤ 350 KB átvitt (cél ≤ 250 KB): lap + álló kép + lusta JS + lusta CSS | e2e (válaszméretek) + egység (fájlméret ≤ 300 KB) |
 | K7 | Lusta betöltés a fő tartalom után | a lap kérése a lista megjelenése UTÁN indul; a `main-*.js` növekedése ≤ 3 KB gzip; az LCP-elem nem a sáv része | e2e + build-mérés |
+| K16 | Kis telefonon kompakt sáv (orkesztrátori döntés 2026-11-18) | 360×640-en a sáv ≤ 200 px; a lista eleje legfeljebb a sáv magassága + 12 px-szel kerül lejjebb, mint kikapcsolva | e2e + egység |
 | K8 | Elrendezés-ugrás | a sáv magassága a megjelenéstől az animációig változatlan; a lista első kártyájának helye nem mozdul; CLS bekapcsolva ≤ CLS kikapcsolva + 0,005 | e2e |
 | K9 | Teljesítmény 4× lassított CPU-n | animáció alatt ≥ 50 képkocka/mp átlag, nincs 50 ms-nál hosszabb képkocka (3 mp-es mérés a lapon belül) | e2e (CDP) |
 | K10 | Csökkentett mozgás / adatkímélő mód | nincs futó animáció, a lap nem töltődik le, az álló kép, a buborék és a 3 link látszik | e2e |
