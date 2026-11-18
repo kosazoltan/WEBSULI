@@ -175,6 +175,22 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
    bemenettel újrafuttatni tilos.
 3. Ha a kapu hibás (hamis riasztás): a kaput javítsd (`scripts/qa/gates/` + teszt), ne kerüld meg. Vészkijárat nincs.
 
+## A kapu-hook hibája (`onFailure: "block"`, tulajdonosi döntés 2026-11-18)
+
+- A `.claude/settings.json` kapu-hook bejegyzésein (Bash, PowerShell) `"onFailure": "block"`: ha a hook-folyamat nem indul,
+  összeomlik, túllépi a 60 s-os külső korlátot vagy érvénytelen kimenetet ad, a Claude Code a parancsot **tiltja** (alapból
+  átengedné). A többi hookon (`check-destructive`, `enforce-repo-rules`, `warn-test-edit`) nincs ilyen beállítás.
+- A hook saját „nem válaszolt” tiltása (a git / gh nem válaszolt, a keret elfogyott) és az audit-hook (`check-audit-ok`) ugyanilyen
+  tiltása a teendőt is megmondja: **néhány másodperc múlva ugyanazt az egyszerű parancsot újra.** Az audit-hook a git
+  időtúllépésekor / indítási hibájakor és belső hibájakor push-parancsra tilt (kanban #126); nem push parancsnál és nem git-repóban
+  enged.
+- **Ha tartósan fennáll** (pl. minden Bash / PowerShell parancs tiltott, mert a hook-szkript elromlott — félbemaradt összefésülés,
+  szintaxishiba, hiányzó `node`): az Edit / Write eszköz nem Bash, azon nincs `onFailure` — azzal javítsd a
+  `scripts/qa/hooks/check-quality-gates.mjs`-t, vagy töröld a két `"onFailure": "block"` sort a `.claude/settings.json`-ból. A
+  settings-fájl kézi módosítását a Claude Code fájlfigyelője rendszerint felveszi; ha nem, új munkamenet.
+- **Tulajdonosi vészkijárat** (csak a tulajdonos; ügynöknek tilos): egy futásra `claude --settings '{"disableAllHooks": true}'`,
+  vagy `"disableAllHooks": true` a helyi settings-ben — utána vissza.
+
 ## Ellenpróbák (2026-11-17, a bevezető PR-ban)
 
 A bevezető PR leírása tartalmazza a parancsokat és a kimenet lényegét: lint-hiba → `lint-gate --fast` FAIL; bukó egységteszt →

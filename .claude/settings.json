@@ -60,6 +60,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/check-quality-gates.mjs\"",
             "timeout": 60,
+            "onFailure": "block",
             "statusMessage": "Minőségkapu-bizonyíték ellenőrzése..."
           }
         ]
@@ -71,6 +72,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/check-quality-gates.mjs\"",
             "timeout": 60,
+            "onFailure": "block",
             "statusMessage": "Minőségkapu-bizonyíték ellenőrzése..."
           }
         ]

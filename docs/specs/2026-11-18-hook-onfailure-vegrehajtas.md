@@ -17,4 +17,4 @@ Terv: `docs/specs/2026-11-18-hook-onfailure.md`. Ág: `chore/hook-onfailure-tilt
 7. `npm run gate:stage`; mutációs ellenpróba commit után (az `onFailure` sor törlése, az audit fail-open visszaírása, az üzenet
    teendő-része → a teszt bukik); független ellenőr; `gate:push` / `gate:pr` a jelre.
 
-- [ ] 1 · [ ] 2 · [ ] 3 · [ ] 4 · [ ] 5 · [ ] 6 · [ ] 7
+- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [x] 6 · [ ] 7 (mutáció, ellenőr, kapuk — folyamatban)

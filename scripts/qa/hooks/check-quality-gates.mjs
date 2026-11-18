@@ -228,6 +228,9 @@ export function noAnswer(e) {
 
 export class NoAnswerError extends Error {}
 
+/** A „nem válaszolt” tiltás teendője (kanban #100: a tiltás megmondja, mit tegyen az ügynök). */
+export const RETRY_HINT = 'próbáld újra néhány másodperc múlva ugyanazt az egyszerű parancsot; ha tartósan fennáll: docs/minosegkapuk.md — „A kapu-hook hibája”';
+
 /**
  * Futtató-környezet: `exec` befecskendezhető (tesztek), a határidő a hook teljes keretéből fogy. A „nem válaszolt” hibát
  * `NoAnswerError`-ra fordítja (→ DENY a main catch-ében); a gyors, nem nulla kilépést eredeti hibaként adja tovább.
@@ -236,12 +239,12 @@ export function makeRunner({ exec = execFileSync, now = Date.now, cfg = hookConf
   const deadline = now() + cfg.budgetMs;
   return function run(file, args, cwd, kind = 'git') {
     const left = deadline - now() - 500;
-    if (left <= 0) throw new NoAnswerError(`a minőségkapu-hook ideje elfogyott (${Math.round(cfg.budgetMs / 1000)} s) — próbáld újra`);
+    if (left <= 0) throw new NoAnswerError(`a minőségkapu-hook ideje elfogyott (${Math.round(cfg.budgetMs / 1000)} s) — ${RETRY_HINT}`);
     const timeout = Math.min(kind === 'gh' ? cfg.ghMs : cfg.gitMs, left);
     try {
       return String(exec(file, args, { cwd, encoding: 'utf8', timeout, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })).trim();
     } catch (e) {
-      if (noAnswer(e)) throw new NoAnswerError(`a repó állapota nem állapítható meg (a(z) ${file} nem válaszolt ${Math.round(timeout / 1000)} s alatt) — próbáld újra`);
+      if (noAnswer(e)) throw new NoAnswerError(`a repó állapota nem állapítható meg (a(z) ${file} nem válaszolt ${Math.round(timeout / 1000)} s alatt) — ${RETRY_HINT}`);
       throw e;
     }
   };
