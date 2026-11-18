@@ -22,12 +22,16 @@ export type HomeMascotState = {
   returning: boolean;
   setMode: (mode: MascotMode) => void;
   markSeen: () => void;
+  /** A lusta darab nem töltődött be / hibázott: a sáv erre a megnyitásra eltűnik, az üdvözlő kártya hármasa visszatér. */
+  fail: () => void;
 };
 
 export function useHomeMascot(): HomeMascotState {
   const [enabled] = useState(() => homeMascotEnabled());
   const [prefs, setPrefs] = useState<MascotPrefs>(() => (enabled ? loadMascotPrefs() : DEFAULT_MASCOT_PREFS));
   const returning = useRef(prefs.seen > 0).current;
+  const [failed, setFailed] = useState(false);
+  const fail = useCallback(() => setFailed(true), []);
   const update = useCallback((change: (current: MascotPrefs) => MascotPrefs) => {
     setPrefs((current) => {
       const next = change(current);
@@ -37,7 +41,8 @@ export function useHomeMascot(): HomeMascotState {
   }, []);
   const setMode = useCallback((mode: MascotMode) => update((current) => ({ ...current, mode })), [update]);
   const markSeen = useCallback(() => update((current) => ({ ...current, seen: current.seen + 1 })), [update]);
-  return { enabled, open: enabled && prefs.mode !== "hidden", prefs, returning, setMode, markSeen };
+  const usable = enabled && !failed;
+  return { enabled: usable, open: usable && prefs.mode !== "hidden", prefs, returning, setMode, markSeen, fail };
 }
 
 type LazyProps = {
@@ -51,11 +56,14 @@ type LazyProps = {
 };
 const LazyMascot = lazy(() => import("@/mascot/HomeMascot")) as unknown as ComponentType<LazyProps>;
 
-/** Ha a lusta darab nem tölthető be vagy hibázik, a lefoglalt doboz üres marad — a lista használható. */
-class MascotBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+/** Ha a lusta darab nem tölthető be vagy hibázik, a sáv eltűnik (`onFail`) — a lista és az üdvözlő kártya használható marad. */
+class MascotBoundary extends Component<{ children: ReactNode; onFail: () => void }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+  componentDidCatch() {
+    this.props.onFail();
   }
   render() {
     return this.state.failed ? null : this.props.children;
@@ -110,7 +118,7 @@ export default function HomeMascotSlot<T extends MascotFile>({ files, mascot, on
     >
       <h2 id="home-mascot-title" className="sr-only">A maki ajánlja</h2>
       {ready && (
-        <MascotBoundary>
+        <MascotBoundary onFail={mascot.fail}>
           <Suspense fallback={null}>
             <LazyMascot
               picks={picks.files}

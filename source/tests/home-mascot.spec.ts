@@ -527,6 +527,17 @@ test("K3, K14: évfolyam, admin, 2 / 1 / 0 tananyag", async ({ browser }) => {
   });
 });
 
+test("hibaág: ha a lusta darab nem töltődik be, a sáv eltűnik, az üdvözlő kártya hármasa visszatér, a lista használható", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route(/\/assets\/HomeMascot[^/]*\.js$/, (route) => route.abort());
+  await open(page, { clock: false, user: { id: "u1", firstName: "Anna", lastName: "Kiss", isAdmin: false } });
+  await expect(page.getByTestId("link-file-m5-a")).toBeVisible();
+  await expect(page.getByTestId("home-mascot")).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator('[data-testid^="welcome-pick-"]')).not.toHaveCount(0);
+  await page.getByTestId("link-file-m5-a").click();
+  await expect(page).toHaveURL(/\/preview\/m5-a$/);
+});
+
 test("K6, K7: a kabala eszközei ≤ 350 KB átvitt; lustán, a lista megjelenése után; az LCP-elem nem a sáv része", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const responses: Response[] = [];

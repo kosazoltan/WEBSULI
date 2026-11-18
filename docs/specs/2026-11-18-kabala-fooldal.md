@@ -179,7 +179,8 @@ beszúrási ponton van — a két ág összefésülése két független sor a `U
 - Az évfolyamon nincs anyag → minden évfolyamból; admin → minden évfolyamból.
 - A lista percenként frissül: ha a három ajánlat változik, a sáv a helyén frissül (a kiemelt sor az új lista első eleme lesz), ugrás nélkül.
 - A lap letöltése nem sikerül / lassú: az álló kép marad, a buborék és a linkek működnek, a koppintás mozgás nélkül vált.
-- A lusta darab letöltése nem sikerül: a lefoglalt doboz üres marad, a lista használható (hibahatár a sáv körül).
+- A lusta darab letöltése nem sikerül / hibázik: a sáv erre a megnyitásra eltűnik, az üdvözlő kártya hármas listája visszatér, a
+  lista használható (hibahatár a sáv körül; ez az egyetlen eset, amikor a lefoglalt hely utólag felszabadul).
 - `localStorage` tiltva: az alapállapot érvényes, a választás csak erre a megnyitásra szól.
 - Régi böngésző Web Animations nélkül: álló kép (mint csökkentett mozgásnál).
 - Háttérbe tett lap / kigördített sáv: minden áll (4.4).
