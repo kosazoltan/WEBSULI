@@ -9,7 +9,9 @@
 
 ## T2 · `server/lesson-clips.ts`
 - `ClipDeps.video` visszatérése `Buffer | null` (már átkódolva); a `shrink` mező törlődik.
-- `CLIP_PARALLEL = 1`; `CLIP_RSS_LIMIT_BYTES = 360 MB`; `runClipRound` a `opts.rss?.()` értékével dönt a kör kihagyásáról (naplózva); a `startLessonClipWorker` a `process.memoryUsage().rss`-t adja át.
+- `CLIP_PARALLEL = 1`; `CLIP_RSS_LIMIT_BYTES = 320 MB` (review M2; eredetileg 360), az őr minden fejezet előtt is mér, a
+  kihagyás-figyelmeztetés óránként legfeljebb egyszer; ffmpeg `killSignal: "SIGKILL"`; a letöltési hiba külön üzenet, a hibás
+  törzs `cancel()`; a `clip-trial.ts` a `null` mozgóképet nem alakítja üres Bufferré (review M1); `runClipRound` a `opts.rss?.()` értékével dönt a kör kihagyásáról (naplózva); a `startLessonClipWorker` a `process.memoryUsage().rss`-t adja át.
 
 ## T3 · tesztek, próba
 - `tests/lesson-clip.test.ts`: `FFMPEG_ARGS`. `tests/lesson-clip-worker.test.ts`: az új `video` felület, egy fejezet egyszerre, memóriaőr.

@@ -20,7 +20,7 @@ Fejezetenként: forgatókönyv (szövegmodell, a korosztály szabályaival; kapu
 → jelenetenként kezdőkép (képmodell + minőségkapu: szöveg / nem gyerekbarát / nem a jelenet → újrapróba) → hang (ElevenLabs; hangkapu:
 minden mondatot egy független beszédfelismerő visszaír, betűre összeveti, eltérésnél újragyártja) →
 mozgókép a kezdőképből (Seedance 1.5) → átkódolás kicsire (`ffmpeg`) → tárolás. Mért idő: kb. 2–2,5 perc fejezetenként; egyszerre
-egy fejezet és egy átkódolás készül, és 360 MB szervermemória fölött a kör kimarad (az 512 MB-os példány védelme). A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a média a `lesson_clip_media` táblában él.
+egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a kör (vagy a következő fejezet) kimarad (az 512 MB-os példány védelme). A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a média a `lesson_clip_media` táblában él.
 
 ## Kapcsolók (Render → `websuli-api-eu` → Environment)
 

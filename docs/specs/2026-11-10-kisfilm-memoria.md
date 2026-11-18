@@ -30,7 +30,11 @@ A gyártósor tartalmi lépései, a lejátszó, a séma, a plafonok (napi lecke,
 - **Egy átkódolás egyszerre, egy szálon, előretekintés nélkül** (közös sor): mérve 75 MB (alapbeállítással 171 MB), a kimenet mérete azonos.
 - **A nyers mozgókép lemezre töltődik** (adatfolyamként), soha nem kerül a folyamat memóriájába; a szolgáltató a már átkódolt, kicsi klipet adja vissza.
 - **Egyszerre egy fejezet** készül (a jelenetek kép- és hanglépései párhuzamosak maradnak, a mozgóképek gyártása a szolgáltatónál is).
-- **Memóriaőr:** ha a folyamat saját memóriája 360 MB fölött van, a kör kimarad (naplózva).
+- **Memóriaőr:** ha a folyamat saját memóriája 320 MB fölött van, a kör kimarad, és a körön belül minden fejezet ELŐTT újra
+  mér (a független review M2-je, 2026-11-18: 360 MB induláskor + ~50 MB gyártás + 75 MB ffmpeg ≈ 485 / 512 MB, és a Node RSS-e az
+  ffmpeg-gyereket nem tartalmazza). A kihagyásról óránként legfeljebb egy figyelmeztetés kerül a naplóba (M3).
+- **Beakadó átkódolás:** a 90 mp-es időkorlát SIGKILL-lel öli az ffmpeg-et (SIGTERM-et figyelmen kívül hagyó gyerek nem tarthatja
+  fel örökre az egyetlen átkódolási sort; review L1). A letöltési hiba külön üzenetet kap, és a hibás válasz törzse lezárul (L3).
 - Mérés a javított gyártósorral (valódi szolgáltatók, egy fejezet): a próbafolyamat csúcsmemóriája 144 MB, a fejezet 132 mp alatt kész.
 
 ## 5. Edge case-ek
