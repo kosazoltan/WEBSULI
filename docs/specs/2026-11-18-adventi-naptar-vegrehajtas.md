@@ -579,8 +579,10 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
   keverés egyenletessége, 40 alany × 12 évfolyam, fázisfüggő szövegek).
 - **S1b:** az 1–2. évfolyamra érvényes tételek minimuma 144 (nem 96); a validátor és a teszt ezt kényszeríti.
 - **S2a:** a terv 16.8 `CHECK` kényszerei; a `mailed_to` elemei `final:<lenyomat>` (JAVÍTVA: terv 18.1); az `advent_announcements.recipient_hash` HMAC.
-- **S2b:** korlátok a terv 16.1 / 18.2 szerint — `subjectLimiter` (a feloldott alany kulcsára, 200 / 15 perc; a teszt a 144 írásos legrosszabb esetet méri), `ipLimiter` (600 / 15 perc),
-  `createLimiter` (új `device` sor: 30 / óra / IP; a `store.mutate` jelzi, ha a sor most jött létre); a régi „60 / 15 perc / IP”
+- **S2b:** korlátok a terv 16.1 / 18.2 szerint — `subjectLimiter` (a feloldott alany kulcsára, 200 / 15 perc; a teszt a 144 írásos legrosszabb esetet méri), `ipLimiter` (**1500** / 15 perc),
+  `createLimiter` (új `device` sor: **90** / óra / IP; a `store.mutate` jelzi, ha a sor most jött létre) — JAVÍTVA 2026-11-18: tulajdonosi
+  döntés, terv 19. (eredetileg 600 és 30); az értékek helye `server/advent/limits.ts` `ADVENT_LIMITS`, az új-sor keret foglalással
+  (`reserve` / `release`) működik; a régi „60 / 15 perc / IP”
   NEM készül. `adventClock(req)`: e2e-módban érvényes `X-Advent-Test-Now` nélkül a router „kikapcsolt”-ként viselkedik (`status`:
   `{ enabled: false }`, a többi 404); a fejléc értékét `isValidDate` szűri. Érvénytelen tanulói token → a `state` válaszban
   `pairing: "invalid"`. A `closing` a `phase` és a `waiting` (nyitható, megválaszolatlan ablakok száma) átadásával készül.
@@ -617,7 +619,7 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
   (`adventProgress`, `adventAnnouncements`, CHECK kényszerekkel), `server/advent/store.ts`, `tests/advent-db.integration.ts`, a
   DB-futtató bővítése. Az S8 lábléce: terv 17. szakasz (egyszeri levél, új leiratkozó link nincs).
 - 2026-11-18 — S2b KÉSZ: `server/advent/clock.ts` (flag, óra), `identity.ts` (alany), `routes.ts` (hat végpont a `/api/advent` alatt, alanyonkénti
-  200 / 15 perc, IP 600 / 15 perc, új névtelen sor 30 / óra), bekötés a `server/routes.ts`-be, játékos-adatletöltés (`adventCalendar`),
+  200 / 15 perc, IP 1500 / 15 perc, új névtelen sor 90 / óra — JAVÍTVA 2026-11-18, tulajdonosi döntés, terv 19.; eredetileg 600 és 30), bekötés a `server/routes.ts`-be, játékos-adatletöltés (`adventCalendar`),
   végpont-leltár, `tests/advent-routes-db.integration.ts`, `tests/advent-source-guard.test.ts`; a DB-kör időkorlátja 300 s → 480 s.
 - 2026-11-18 — S3 KÉSZ (az S3a és az S3b EGY szeletben, mert a kérdés-párbeszédablak és az összesítés ugyanazt az oldalt és
   állapotot használja): `client/src/pages/AdventCalendar.tsx`, `client/src/advent/` (`useAdvent.ts`, `AdventArt.tsx` helyőrzővel,

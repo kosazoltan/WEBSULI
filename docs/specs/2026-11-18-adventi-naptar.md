@@ -862,11 +862,15 @@ Az A15 és az A28 a kártyára a fentiek szerint értendő (főoldali kártya; M
 
 - Írási korlát ALANYONKÉNT (a feloldott `subject_kind:subject_id` kulcsra): 200 kérés / 15 perc. A szabályos legrosszabb eset
   24 ablak × 3 kérdés × 2 kérés (megnyitás + válasz) = 144 írás — ennek korlát nélkül át kell mennie.
-- IP-korlát csak lazán, visszaélés ellen: 600 írás / 15 perc / IP (egy osztály egy iskolai NAT mögött belefér).
-- Sor-LÉTREHOZÁSRA külön, szűk korlát (ez védi a Neon-keretet): 30 új `device` sor / óra / IP.
+- IP-korlát csak lazán, visszaélés ellen: **1500** írás / 15 perc / IP (több osztály egy iskolai NAT mögött belefér).
+  (FELÜLÍRVA 2026-11-18, tulajdonosi döntés — „Emeljük iskolai méretre”, 19. szakasz; az eredeti érték 600 volt.)
+- Sor-LÉTREHOZÁSRA külön, szűk korlát (ez védi a Neon-keretet): **90** új `device` sor / óra / IP.
+  (FELÜLÍRVA 2026-11-18, tulajdonosi döntés, 19. szakasz; az eredeti érték 30 volt.) A keretből a létrehozás ELŐTT hely foglalódik,
+  és visszajár, ha a sor nem jött létre — párhuzamos kérésekkel sem léphető túl (S2b 2. visszanézés, U1).
 - Integrációs teszt: egy alany a legrosszabb esetet játssza végig — 24 ablak, mindegyiken 3 kérdés, megnyitás + válasz = 144 írás
   15 percen belül, egy IP-ről → nincs 429;
-  25 alany egy IP-ről napi 2–2 írással → nincs 429; a 31. új névtelen sor egy órán belül ugyanarról az IP-ről → 429.
+  25 alany egy IP-ről napi 2–2 írással → nincs 429; a **91.** új névtelen sor egy órán belül ugyanarról az IP-ről → 429
+  (FELÜLÍRVA 2026-11-18: eredetileg a 31.); 120 EGYIDEJŰ létrehozás egy címről → pontosan 90 sor.
 
 ### 16.2 K5, A6 — záró szöveg (megvalósítva az S1 javító commitjában)
 
@@ -941,8 +945,9 @@ leírásban indokolva); (3) S3c-0; (4) S1b. Mindegyik külön ág a közös ágr
 <!-- acceptance-checklist -->
 
 - [ ] A49 WHEN egy alany 15 percen belül mind a 24 ablak mindhárom kérdését megnyitja és megválaszolja (144 írás) THEN the system SHALL
-  egyetlen kérést sem elutasítani korlát miatt; WHEN egy IP-ről egy órán belül 30-nál több új névtelen sor jönne létre THEN the
-  system SHALL a továbbiakat 429-cel elutasítani.
+  egyetlen kérést sem elutasítani korlát miatt; WHEN egy IP-ről egy órán belül **90-nél** több új névtelen sor jönne létre THEN the
+  system SHALL a továbbiakat 429-cel elutasítani — párhuzamos kéréseknél is. (FELÜLÍRVA 2026-11-18, tulajdonosi döntés, 19. szakasz:
+  eredetileg „30-nál több”.)
 - [ ] A50 WHEN a tanuló eredménye még nem végleges (van javítható ablaka vagy további köre, és nem felelt meg) THEN the system
   SHALL szülői levelet nem küldeni; WHEN az eredmény végleges (18.1) THEN the system SHALL évadonként és címzettenként pontosan
   egy levelet küldeni, és utána többet nem.
