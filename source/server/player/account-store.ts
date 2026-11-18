@@ -263,7 +263,20 @@ export function createPlayerAccountStore(pool: Db) {
       const r = rows[0];
       if (!r) return null;
       const codes = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [emailHashesOf(r.email)]);
+      // Adventi naptár (migrations/0042): a fiók saját előrehaladása — belső azonosító nélkül; a megoldott ablakok a legutóbbi körből.
+      const advent = await pool.query<{ season: number; grade: number | null; round: number; finished_at: Date | null; passed_at: Date | null; doors: Record<string, Record<string, { attempts?: Array<{ correct?: boolean }> }>> | null }>(
+        `SELECT season, grade, round, finished_at, passed_at, doors FROM advent_progress WHERE player_id = $1 ORDER BY season`,
+        [id],
+      );
       return {
+        adventCalendar: advent.rows.map((a) => {
+          const current = Object.values(a.doors?.[String(a.round)] ?? {});
+          return {
+            season: a.season, grade: a.grade, round: a.round, finishedAt: a.finished_at, passedAt: a.passed_at,
+            answeredDoors: current.filter((d) => (d.attempts?.length ?? 0) > 0).length,
+            solvedDoors: current.filter((d) => d.attempts?.some((t) => t.correct === true)).length,
+          };
+        }),
         account: {
           email: r.email, emailVerifiedAt: r.email_verified_at, nickname: r.nickname, avatar: r.avatar_key,
           googleLinked: r.google, learnerProfileLinked: r.learner, bannedAt: r.banned_at, createdAt: r.created_at, lastSeenAt: r.last_seen_at,

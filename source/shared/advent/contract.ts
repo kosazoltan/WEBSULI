@@ -59,6 +59,8 @@ export type AdventState = {
   nextOpensAt: string | null;
   daysUntilStart: number;
   identity: "learner" | "player" | "device" | "preview" | null;
+  /** `invalid`: a kérés tanulói tokent hozott, de az érvénytelen — a felület újrapárosítást kér (terv 16.5). */
+  pairing: "ok" | "invalid" | "none";
   firstName: string | null;
   grade: number | null;
   needsGrade: boolean;
