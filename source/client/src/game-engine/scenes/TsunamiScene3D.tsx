@@ -71,9 +71,9 @@ const PLANK_Z = -0.7;
 const FOG_NEAR = 80;
 const FOG_FAR = 460;
 
-const SKY_TOP = "#1c86dc";
-const SKY_HORIZON = "#a8e0fa";
-const SKY_BOTTOM = "#8fd0ee";
+const SKY_TOP = "#2a74d6";
+const SKY_HORIZON = "#ffe0b5";
+const SKY_BOTTOM = "#ffd0a0";
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 /** Same polynomial as GLSL `smoothstep`, so CPU and GPU agree on the terrain and waves. */
@@ -501,10 +501,11 @@ function buildBuoy(): Buoy {
 
 type PlankKind = "ice" | "steel" | "wood";
 const PLANKS: { top: number; type: PlankKind }[] = [
-  { top: 18, type: "ice" },
-  { top: 38, type: "steel" },
+  // Látvány-előnézet (2026-11-18): egységes, meleg fa deszkák (a sárga-fekete fémcsík és a jég „építkezési” hatást keltett).
+  { top: 18, type: "wood" },
+  { top: 38, type: "wood" },
   { top: 58, type: "wood" },
-  { top: 78, type: "ice" },
+  { top: 78, type: "wood" },
 ];
 
 function buildPlatforms(
@@ -671,9 +672,9 @@ function setupTsunami(
   if (budget.bloom) (skyU.sunColor.value as THREE.Color).multiplyScalar(0.5);
 
   // Lights: a warm key from the front so faces read, a sky/ground fill.
-  const hemi = new THREE.HemisphereLight("#d7f1ff", "#6f9c62", 1.1);
+  const hemi = new THREE.HemisphereLight("#ffe9cc", "#4c8a5a", 1.05);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight("#fff3dc", 1.9);
+  const key = new THREE.DirectionalLight("#ffd9a3", 2.2);
   key.position.set(6, 10, 14);
   scene.add(key);
   const rim = new THREE.DirectionalLight("#bfe8ff", 0.8);
@@ -765,15 +766,15 @@ function setupTsunami(
     uHw: { value: hw },
     uLevel: { value: -5 },
     uFlash: { value: 0 },
-    uShallow: { value: new THREE.Color("#37cfe9") },
-    uDeep: { value: new THREE.Color("#177fc6") },
-    uSkyTint: { value: new THREE.Color("#a5e6fa") },
+    uShallow: { value: new THREE.Color("#1ccfd6") },
+    uDeep: { value: new THREE.Color("#0a62a8") },
+    uSkyTint: { value: new THREE.Color("#ffd8b0") },
     uFogColor: { value: new THREE.Color(SKY_HORIZON) },
     uSunDir: { value: new THREE.Vector3(0.5, 0.3, -1).normalize() },
     uSunColor: { value: new THREE.Color("#fff3c4") },
     uFoamW: { value: 0.16 },
-    uFrontTop: { value: new THREE.Color("#3fd0ee") },
-    uFrontDeep: { value: new THREE.Color("#0b3f78") },
+    uFrontTop: { value: new THREE.Color("#22c3d8") },
+    uFrontDeep: { value: new THREE.Color("#073763") },
   };
   const surfaceMat = new THREE.ShaderMaterial({
     uniforms: waterUniforms,
@@ -815,7 +816,7 @@ function setupTsunami(
         vec3 V = normalize(cameraPosition - vWorld);
         float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
         vec3 col = mix(uShallow, uDeep, smoothstep(6.0, 90.0, dist));
-        col = mix(col, uSkyTint, 0.06 + 0.42 * fres);
+        col = mix(col, uSkyTint, 0.03 + 0.22 * fres);
         vec3 H = normalize(uSunDir + V);
         float spec = pow(max(dot(n, H), 0.0), 220.0);
         col += uSunColor * spec * 2.2;
@@ -954,7 +955,7 @@ function setupTsunami(
   scene.add(shelter.group);
 
   // Rain
-  const rainCount = reducedMotion ? 0 : Math.round((light ? 36 : 110) * Math.max(0.5, budget.particleScale));
+  const rainCount = reducedMotion || light ? 0 : Math.round(30 * Math.max(0.5, budget.particleScale));
   const rainPos = new Float32Array(rainCount * 6);
   const rainSpeed = new Float32Array(rainCount);
   const rainGeo = new THREE.BufferGeometry();
