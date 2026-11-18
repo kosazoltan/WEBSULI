@@ -1063,3 +1063,19 @@ Forrás: #475 (K1b). Rokon: C-59.
 - A drizzle a hibát `Failed query: …`-be csomagolja; az eredeti a `cause`-ban van.
 - Git Bashben az `npx.cmd` szóközös felhasználói útvonalon elhasalhat: Playwrightot PowerShellből futtasd.
 - e2e-ben a „szabad port keresése, lezárás, újranyitás” versenyhelyzet (`EADDRINUSE`): a szerver válasszon portot.
+
+## C-73 — Őrt / kaput érintő PR-ok: soros merge-ablak; a hook bekötését a valódi settings-szel mérd (2026-11-18)
+
+- **Tünet:** két őr-érintő PR nem lehet egyszerre zöld — a C-61 hatókör (a main elmozdulása a repó-szintű ellenőrzés fájlkörében)
+  és a ~2 órás böngészős kör együtt minden mainre kerülő PR után új beolvasztást + új CI-t kényszerít (a #499-nél két extra kör).
+- **Szabály:** az őrt / kaput érintő PR-okat elsőként, egyenként kell beolvasztani; a merge-ablakot az orkesztrátor jelzi, a
+  beolvasztást a fejlesztő a jelre végzi (előtte próbabeolvasztás: `git merge-tree --write-tree HEAD origin/main`).
+- **Tünet 2:** a hook-szkript tesztje zöld volt, a hook mégsem futott alkönyvtárból (relatív útvonal a settings-ben, #490 M1).
+- **Szabály 2:** hookot a VALÓDI `.claude/settings.json` parancsával, több munkakönyvtárból kell tesztelni
+  (`scripts/qa/hooks/settings-hooks.test.mjs`); héj-értelmezést valódi héjjal (Git Bash, PowerShell 7 és 5.1) végzett különbségi
+  próbával (`scripts/qa/hooks/fixtures/quoting-forms.json`).
+- **Tünet 3 (eszközhasználat):** Git Bashben a kettős idézőjeles `node -e "…"` szövegben álló backtick parancshelyettesítésként
+  lefutott (fájlnevek „futtatva”, a beírt szöveg kiürült). **Szabály 3:** backticket tartalmazó szöveget fájlba írj (Write eszköz),
+  és a szkriptet fájlból futtasd — ne kettős idézőjeles parancssorban.
+
+Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
