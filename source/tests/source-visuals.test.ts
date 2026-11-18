@@ -277,3 +277,20 @@ test("review U4: a többsoros forrásszöveg sortörése megmarad, ahol a tartal
   // Mutáció: a csak sortörésből álló szöveg üres marad (alakhiba), nem lesz belőle tartalom.
   assert.equal(sanitizeSourceVisuals([{ ...base, id: "v1", kind: "ruleBox", data: { tone: "rule", items: ["\n\n"] } }], ctx).visuals.length, 0);
 });
+
+test("review F15: a sorelválasztó (U+2028 / U+2029) sortörésként, a kétirányú vezérlőkarakterek eltávolítva", () => {
+  const LS = String.fromCharCode(0x2028), PS = String.fromCharCode(0x2029);
+  const bidi = [0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069].map((c) => String.fromCharCode(c));
+  // Egysoros szöveg (napló, cím, szerep, táblázatcella): a sorelválasztó szóköz — a JSON-sorba nem kerül nyers sorvég.
+  assert.equal(cleanModelText(`első${LS}második${PS}harmadik`), "első második harmadik");
+  assert.equal(cleanModelText(`ár: ${bidi.join("")}100 Ft`), "ár: 100 Ft");
+  // Többsoros tartalom: a sorelválasztó valódi sortörés.
+  assert.equal(cleanModelMultilineText(`első${LS}második${PS}${PS}${PS}harmadik${bidi[6]}`), "első\nmásodik\n\nharmadik");
+  const item = sanitizeSourceVisuals([{ ...base, id: "v1", kind: "ruleBox", title: `Cím${LS}alcím`, role: `szerep${bidi[6]}`, data: { tone: "rule", items: [`sor 1${LS}sor 2${bidi[4]}`] } },
+    { ...base, id: "v2", kind: "table", data: { headers: [`fej${PS}léc`], rows: [[`cel${LS}la${bidi[0]}`]] } }], ctx).visuals;
+  assert.deepEqual([item[0].title, item[0].role, sourceVisualTexts(item[0]), sourceVisualTexts(item[1])], ["Cím alcím", "szerep", ["Cím alcím", "sor 1\nsor 2"], ["fej léc", "cel la"]]);
+  const stored = JSON.stringify(item);
+  for (const ch of [LS, PS, ...bidi]) assert.ok(!stored.includes(ch), `U+${ch.charCodeAt(0).toString(16)} nem maradhat a tárolt tételben`);
+  // Ellenpróba: a nem vezérlő, ritka karakterek (ékezet, emoji, nulla szélességű kötő az emojiban) érintetlenek.
+  assert.equal(cleanModelText("árvíztűrő 🙂 – „idézet”"), "árvíztűrő 🙂 – „idézet”");
+});

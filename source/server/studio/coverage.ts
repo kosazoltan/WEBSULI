@@ -52,6 +52,15 @@ export type Coverage = {
 export type VisualCoverage = { total: number; shown: number; missingIds: string[] };
 
 /**
+ * A tárolt fedettség (`lessons.coverage`) a vizuális tételekkel együtt — MINDEN író ezt használja (gyártás, leckejavítás), hogy a
+ * `visuals` kulcs egy újraírásnál ne tűnjön el (független review F16). Leltár nélkül a kulcs elmarad (a régi alak).
+ */
+export function withVisualCoverage(coverage: Coverage, lesson: { sections: ReadonlyArray<{ blocks: ReadonlyArray<object> }> }, visuals: ReadonlyArray<SourceVisual> = []): Coverage {
+  const { visuals: _stale, ...rest } = coverage;
+  return visuals.length ? { ...rest, visuals: visualCoverage(lesson, visuals) } : rest;
+}
+
+/**
  * Spec 2026-11-18-tananyag-gyartas-minoseg (S1b): a forrás vizuális tételeinek fedettsége. A számlálóban a `colorCode` kivételével
  * minden fajta szerepel (a színkód a tónusokban él tovább); „megjelent”, ha van rá `sourceVisualId`-val hivatkozó blokk. Ami a
  * forrásban megvan és a leckében nincs, az hiány (`missingIds`) — a fogalomfedettség 100%-a ezt nem takarja el. A hűséget és a

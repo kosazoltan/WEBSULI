@@ -4,7 +4,8 @@
 //   <lecke.json>:  a lecke JSON-ja ({ sections: [...] }) vagy egy job kimenete ({ lesson, outline? });
 //   <térkép.json>: { visuals: [...] } | { sourceFiles: [{ visuals }] } | { source_files: [...] } | { meta: { visuals } } | [...tételek];
 //   <kihagyások.json>: [{ id, reason, duplicateOf? }] — hiányában a job kimenetének outline.skippedVisuals mezője.
-// Kimenet: JSON a szabványos kimeneten. Kilépési kód: 0 = minden kapu átment; 1 = legalább egy kapu bukott; 2 = hibás hívás / bemenet.
+// Kimenet: JSON a szabványos kimeneten. Kilépési kód: 0 = minden kapu átment; 1 = legalább egy kapu bukott; 2 = hibás hívás / bemenet
+// (ismeretlen térképalak vagy akár egyetlen érvénytelen leltártétel is — független review F10: olvashatatlan bemenetre nincs „zöld”).
 import { readFileSync } from "node:fs";
 import { runRegisteredGates } from "../../server/studio/gates/types";
 import "../../server/studio/gates/source-coverage-gate";
@@ -28,14 +29,18 @@ const lesson = isObject(lessonFile) && isObject(lessonFile.lesson) ? lessonFile.
 if (!isObject(lesson) || !Array.isArray(lesson.sections)) fail("A lecke JSON-jában nincs `sections` tömb.");
 
 const mapFile = readJson(mapPath);
-const rawVisuals: unknown[] = Array.isArray(mapFile) ? mapFile
+const sourceFiles = isObject(mapFile) ? mapFile.sourceFiles ?? mapFile.source_files : undefined;
+// A felismert térképalakok; minden más (pl. { "foo": 1 }) hibás bemenet — nem „leltár nélküli forrás”.
+const rawVisuals: unknown[] | null = Array.isArray(mapFile) ? mapFile
   : isObject(mapFile) && Array.isArray(mapFile.visuals) ? mapFile.visuals
   : isObject(mapFile) && isObject(mapFile.meta) && Array.isArray(mapFile.meta.visuals) ? mapFile.meta.visuals
-  : [];
-const visuals: SourceVisual[] = rawVisuals.length
-  ? rawVisuals.flatMap((v) => { const p = sourceVisualSchema.safeParse(v); return p.success ? [p.data] : []; })
-  : visualsOfSourceFiles(isObject(mapFile) ? mapFile.sourceFiles ?? mapFile.source_files : null);
-const invalidVisuals = rawVisuals.length - (rawVisuals.length ? visuals.length : 0);
+  : Array.isArray(sourceFiles) ? sourceFiles.flatMap((file) => (isObject(file) && Array.isArray(file.visuals) ? file.visuals : []))
+  : null;
+if (rawVisuals === null) fail("A térkép JSON-ja ismeretlen térképalak: { visuals } | { sourceFiles } | { source_files } | { meta: { visuals } } | [tételek] kell.");
+const visuals: SourceVisual[] = Array.isArray(sourceFiles) && !rawVisuals.length ? visualsOfSourceFiles(sourceFiles)
+  : rawVisuals.flatMap((v) => { const p = sourceVisualSchema.safeParse(v); return p.success ? [p.data] : []; });
+const invalidVisuals = rawVisuals.length - visuals.length;
+if (invalidVisuals > 0) fail(`A térkép leltárában ${invalidVisuals} érvénytelen tétel van (a ${rawVisuals.length}-ból) — a kapuk hibás leltáron nem ítélnek.`);
 
 const skippedPath = arg("skipped");
 const skippedRaw = skippedPath ? readJson(skippedPath) : isObject(lessonFile) && isObject(lessonFile.outline) ? lessonFile.outline.skippedVisuals : [];

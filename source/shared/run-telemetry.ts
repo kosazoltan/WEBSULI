@@ -26,6 +26,8 @@ export type RunGates = {
   visualsCellsTruncated?: number;
   /** 1, ha az 1. állomás válaszában nem volt `visuals` tömb (a futás üres leltárral megy tovább). */
   visualsMissing?: number;
+  /** Egy determinisztikus gyártási kapu kivételt dobott (a futás ment tovább) — független review F12. Régi telemetriában hiányzik. */
+  gateErrors?: number;
   /** A Tananyag lap a szókeret fölött maradt (a rövidítő forduló után is). */
   lengthOverBudget: boolean;
   /** A szókeret-túllépés rövidítő fordulója elfogadott, rövidebb leckét adott (J5). */
@@ -95,6 +97,7 @@ export function telemetryView(t: RunTelemetry): TelemetryView {
       ...(g.visualsCellsTruncated ? [`A vizuális leltár csonkolt (túl hosszú) cellái: ${g.visualsCellsTruncated}`] : []),
       ...(g.visualsMissing ? ["A forrás-állomás válaszából hiányzott a vizuális leltár"] : []),
       ...(sourceCoverage && sourceCoverage.metrics.total ? [`Forrás-fedettség (${sourceCoverage.mode === "enforce" ? "éles kapu" : "csak mérés"}): ${sourceCoverage.metrics.shown}/${sourceCoverage.metrics.total - sourceCoverage.metrics.skipped} vizuális tétel jelent meg${sourceCoverage.ok ? "" : " — a kapu szerint hiányos"}`] : []),
+      ...(g.gateErrors ? [`Gyártási kapu hibája (a futás ment tovább): ${g.gateErrors}`] : []),
       ...(g.lengthShortened ? ["A szókeret-túllépés rövidítő fordulóval javítva"] : []),
       ...(g.lengthOverBudget ? ["A Tananyag lap a szókeret fölött maradt"] : []),
     ],

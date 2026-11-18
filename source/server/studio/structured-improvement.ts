@@ -7,7 +7,8 @@ import { checkLessonArc } from "../../shared/lesson-arc";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { gameQuizItems, htmlFiles, improvedHtmlFiles, kmConcepts, knowledgeMaps, lessons, materialImprovementBackups, studioJobs } from "../../shared/schema";
 import type { MapConcept } from "./coverage";
-import { checkCoverageGate } from "./coverage";
+import { checkCoverageGate, withVisualCoverage } from "./coverage";
+import { visualsOfSourceFiles } from "../../shared/source-visuals";
 import { buildAuthorPrompt, buildLektorPrompt, lektorReportSchema } from "./step-io";
 import { classifyNotes } from "./lektor";
 import { removeLektorBlockers } from "./choice-gate";
@@ -291,7 +292,11 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
       await tx.update(kmConcepts).set({ ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}), verbatimReason: correctionReasonCode(fix), updatedAt: new Date() }).where(eq(kmConcepts.id, row.id));
     }
     if (repair.classroom !== undefined) await tx.update(knowledgeMaps).set({ classroom: repair.classroom, updatedAt: new Date() }).where(eq(knowledgeMaps.id, current.mapId));
-    const [written] = await tx.update(lessons).set({ json: candidate, coverage, version: current.version + 1, updatedAt: new Date() }).where(eq(lessons.id, current.id)).returning();
+    // Független review F16: a javított lecke tárolt fedettsége a vizuális tételeket is számolja (a térkép leltárából újramérve) —
+    // a `coverage.visuals` kulcs a javításnál nem tűnik el. A leltár külön olvasva: a `source` (és a lenyomata) nem változik.
+    const [inventory] = await tx.select({ sourceFiles: knowledgeMaps.sourceFiles }).from(knowledgeMaps).where(eq(knowledgeMaps.id, current.mapId));
+    const storedCoverage = withVisualCoverage(coverage, candidate, visualsOfSourceFiles(inventory?.sourceFiles));
+    const [written] = await tx.update(lessons).set({ json: candidate, coverage: storedCoverage, version: current.version + 1, updatedAt: new Date() }).where(eq(lessons.id, current.id)).returning();
     if (repairHash(written.json) !== repairHash(candidate)) throw new Error("A lecke visszaolvasása eltérést mutat.");
     await tx.delete(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
     const exports = exportQuizItemsForPublish(candidate, current.id, conceptIdResolver(source.concepts));

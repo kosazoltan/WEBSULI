@@ -133,12 +133,18 @@ export type SourceVisualsResult = { visuals: SourceVisual[]; dropped: DroppedSou
   truncatedCells: Array<{ id: string; cells: number }> };
 
 /** Review J7: a modell szövege naplózás és tárolás előtt — vezérlőkarakter (sortörés, NUL) és magányos helyettesítő helyett szóköz. */
-export const cleanModelText = (s: string) => s.replace(/[\p{Cc}\p{Cs}]+/gu, " ");
+/**
+ * Független review F15: a kétirányú (bidi) vezérlőkarakterek — a szöveg megjelenő sorrendjét hamisíthatják — eltávolítva; a Unicode
+ * sor- és bekezdéselválasztó (U+2028 / U+2029) sortörésként kezelve (egysoros szövegben szóköz, többsorosban `\n`).
+ */
+const BIDI_CONTROLS = /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+const LINE_SEPARATORS = /[\u2028\u2029]/g;
+export const cleanModelText = (s: string) => s.replace(BIDI_CONTROLS, "").replace(LINE_SEPARATORS, " ").replace(/[\p{Cc}\p{Cs}]+/gu, " ");
 /**
  * Review U4: többsoros tartalomnál (vers, párbeszéd, példamondat-lista) a sortörés a tartalom része — megmarad (`\r\n` / `\r` → `\n`,
  * legfeljebb egy üres sor egymás után); minden más vezérlőkarakter és a magányos helyettesítő helyett szóköz. Naplóba NEM való.
  */
-export const cleanModelMultilineText = (s: string) => s.replace(/\r\n?/g, "\n").replace(/[^\P{Cc}\n]+|\p{Cs}+/gu, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n");
+export const cleanModelMultilineText = (s: string) => s.replace(BIDI_CONTROLS, "").replace(LINE_SEPARATORS, "\n").replace(/\r\n?/g, "\n").replace(/[^\P{Cc}\n]+|\p{Cs}+/gu, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n");
 
 /** A nyers érték beágyazási mélysége ITERATÍVAN, `limit` fölött megállva (review J3: a mély fa nem dobhat veremhibát). */
 function nestingExceeds(value: unknown, limit: number): boolean {

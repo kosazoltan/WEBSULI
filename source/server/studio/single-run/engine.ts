@@ -14,11 +14,12 @@ import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
 import { OPEN_ANSWER_RULES_HU } from "../../../shared/lesson-experience-score";
 import { checkVerbatim } from "../verbatim";
-import { checkCoverageGate, visualCoverage, type MapConcept } from "../coverage";
+import { checkCoverageGate, visualCoverage, withVisualCoverage, type MapConcept } from "../coverage";
 import { buildAuthorPrompt, buildAnimatorPrompt, buildLektorPrompt, buildPedagoguePrompt, checkAnimatorResult, lessonIdsSubsetOfMap, outlineCoversMap, outlineSchema, parseLektorResponse, type OwnerContext } from "../step-io";
 import { autofixOutline, autofixOutlineVisuals } from "../tools/outline-autofix";
 import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
+import type { SourceCoverageResult } from "../gates/source-coverage-gate";
 import { ensureSectionVisuals } from "../section-visuals";
 import { scoringRulesOf } from "../../../shared/scoring-rules";
 import { bankStaticPrefix, buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceBuildDeps, type ExperienceCheckpoint } from "../experience-builder";
@@ -114,7 +115,21 @@ export type SingleRunDeps = {
   fresh(system: string, opts?: { effort?: SingleRunEffort }): LessonConversation;
   /** A gyártási kapuk üzemmódjának futásonkénti felülírása (teszt, mérőharness); alapból a `gates/config.ts` értékei érvényesek. */
   gateModes?: Partial<Record<GateName, GateMode>>;
+  /** A forrás-fedettségi kapu függvénye — csak a teszt cseréli (a kapu hibaága így mérhető); alapból a `sourceCoverageGate`. */
+  coverageGate?: typeof sourceCoverageGate;
 };
+
+/**
+ * A forráspótló forduló foltja a leckébe illesztve (SK1, `enforce`): ábrafolt → címke-tisztítás (ugyanaz, mint a 4. állomás után —
+ * független review F8: az alá nem támasztott fogalom-címke lekerül, nem a teljes foltot buktatja) → séma → az ábrakészítő
+ * szerződése (csak `animate` blokk változhat). `lesson: null`, ha a válasz nem illeszthető folt.
+ */
+export function coveragePatchedLesson(base: Lesson, json: unknown, concepts: MapConcept[]): { lesson: Lesson | null; rejected: string[] } {
+  const patched = applyVisualPatch(base, json, concepts);
+  if (!patched) return { lesson: null, rejected: [] };
+  const checked = lessonSchema.safeParse(stripUngroundedAnimateLabels(patched.lesson, concepts).lesson);
+  return { lesson: checked.success && checkAnimatorResult(base, checked.data).ok ? checked.data : null, rejected: patched.rejected };
+}
 
 /**
  * Spec 2026-11-02-ellenorzes-effort-ab: az ellenőrzés-állomás (válaszkulcs-teszt, kvíz vak előszűrő) efforja a
@@ -658,6 +673,33 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     return covers.ok ? { ok: true, value: parsed.data } : { ok: false, problems: [`A vázlat nem fedi le a kötelező fogalmakat: ${JSON.stringify(covers).slice(0, 600)}`] };
   });
   output = { ...output, outline, approvedOutline: outline };
+
+  // SK1 — a forrás-fedettségi kapu mérése (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. Független review F12: a
+  // kapu hibája (kivétel) egyik módban sem állítja meg a kifizetett futást — megszámolva, naplózva, `null` ítélettel (nincs következmény).
+  const coverageMode = gateMode("sourceCoverage", deps.gateModes);
+  const skippedVisuals = outline.skippedVisuals ?? [];
+  const judgeCoverage = (l: Lesson): SourceCoverageResult | null => {
+    try {
+      const verdict = (deps.coverageGate ?? sourceCoverageGate)(l, visuals, skippedVisuals);
+      telemetry.recordGate({ gate: verdict.gate, mode: coverageMode, ok: verdict.ok, problems: verdict.problems, metrics: verdict.metrics, missingIds: verdict.missingIds });
+      if (verdict.metrics.total) log(`[EGYFUTÁS] Forrás-fedettségi kapu (${coverageMode}): ${verdict.metrics.shown}/${verdict.metrics.total - verdict.metrics.skipped} tétel jelent meg, ${verdict.ok ? "rendben" : `HIÁNYOS — ${verdict.missingIds.join(", ").slice(0, 300)}`}`);
+      return verdict;
+    } catch (error) {
+      telemetry.gates.gateErrors = (telemetry.gates.gateErrors ?? 0) + 1;
+      log(`[EGYFUTÁS] Forrás-fedettségi kapu: a kapu hibázott, a futás megy tovább — ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 200)}`);
+      return null;
+    }
+  };
+  // Független review F7: a kapunál megállt job folytatása (mentett `gateStop`) `enforce` módban ELŐBB a mentett leckén méri a kaput —
+  // ha ismét bukik, a futás modellhívás (fizetős lektorkör) NÉLKÜL áll meg; pótló forduló sem jár újra.
+  const stoppedAtCoverage = (input.resume?.output as { gateStop?: { gate?: unknown } } | undefined)?.gateStop?.gate === "sourceCoverage";
+  if (stoppedAtCoverage && coverageMode === "enforce" && resumed?.lesson) {
+    const verdict = judgeCoverage(resumed.lesson);
+    if (verdict && !verdict.ok) {
+      output = { ...output, gateStop: { gate: "sourceCoverage", missingIds: verdict.missingIds } };
+      throw new SingleRunError("forrás-fedettség", verdict.problems);
+    }
+  }
   if (!resumed?.lesson) await save("author", output);
 
   // 3. Tananyag (tanítás).
@@ -932,23 +974,16 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const problems = first.problems;
   if (problems.length) throw new SingleRunError("végellenőrzés", problems);
 
-  // SK1 — forrás-fedettségi kapu (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. `report`: mér és ment (telemetria,
-  // napló), NEM állít meg. `enforce`: bukásnál PONTOSAN EGY pótló forduló a fő beszélgetésben; ha utána is bukik, a futás megáll a
-  // meglévő megállási úton (SingleRunError → a job „error” állapota), `gateStop` a kimenetben, közzététel nincs. Harmadik próba nincs.
-  const coverageMode = gateMode("sourceCoverage", deps.gateModes);
-  if (coverageMode !== "off") {
-    const skippedVisuals = outline.skippedVisuals ?? [];
-    const judge = (l: Lesson) => {
-      const verdict = sourceCoverageGate(l, visuals, skippedVisuals);
-      telemetry.recordGate({ gate: verdict.gate, mode: coverageMode, ok: verdict.ok, problems: verdict.problems, metrics: verdict.metrics, missingIds: verdict.missingIds });
-      if (verdict.metrics.total) log(`[EGYFUTÁS] Forrás-fedettségi kapu (${coverageMode}): ${verdict.metrics.shown}/${verdict.metrics.total - verdict.metrics.skipped} tétel jelent meg, ${verdict.ok ? "rendben" : `HIÁNYOS — ${verdict.missingIds.join(", ").slice(0, 300)}`}`);
-      return verdict;
-    };
-    let verdict = judge(publishable);
+  // SK1 — forrás-fedettségi kapu (a `judgeCoverage` a terv után definiált): `report`: mér és ment, NEM állít meg. `enforce`: bukásnál
+  // PONTOSAN EGY pótló forduló a fő beszélgetésben; ha utána is bukik, a futás megáll a meglévő megállási úton (SingleRunError → a job
+  // „error” állapota), `gateStop` a kimenetben, közzététel nincs. Harmadik próba nincs. A kapu hibája egyik módban sem állít meg.
+  const firstVerdict = coverageMode === "off" ? null : judgeCoverage(publishable);
+  if (firstVerdict) {
+    const judge = (l: Lesson) => judgeCoverage(l) ?? { ...firstVerdict, ok: true, problems: [], missingIds: [] };
+    let verdict = firstVerdict;
     // A pótló forduló futásonként EGY: a kapunál már megállt job folytatása (mentett `gateStop`) nem kap újabbat — ha a kapu a
     // folytatáskor is bukik, a futás azonnal megáll.
-    const patchedBefore = (input.resume?.output as { gateStop?: { gate?: unknown } } | undefined)?.gateStop?.gate === "sourceCoverage";
-    if (!verdict.ok && coverageMode === "enforce" && patchedBefore) {
+    if (!verdict.ok && coverageMode === "enforce" && stoppedAtCoverage) {
       output = { ...output, gateStop: { gate: "sourceCoverage", missingIds: verdict.missingIds } };
       throw new SingleRunError("forrás-fedettség", verdict.problems);
     }
@@ -969,11 +1004,10 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       ].join("\n"))], "animator");
       try {
         const reply = await timed(telemetry, "forráspótlás", () => conversation.send(request), { fix: true });
-        const patched = reply.truncated ? null : applyVisualPatch(base, parseModelJson(reply.text).json, concepts);
-        const checked = patched ? lessonSchema.safeParse(patched.lesson) : null;
-        const recheck = checked?.success && checkAnimatorResult(base, checked.data).ok ? finalProblems(checked.data) : null;
-        if (checked?.success && recheck && !recheck.problems.length) { publishable = checked.data; coverage = recheck.coverage; }
-        else log(`[EGYFUTÁS] A forráspótlás foltja nem illeszthető — a lecke változatlan${patched?.rejected.length ? `: ${patched.rejected.join(" | ").slice(0, 300)}` : "."}`);
+        const patched = reply.truncated ? { lesson: null, rejected: [] } : coveragePatchedLesson(base, parseModelJson(reply.text).json, concepts);
+        const recheck = patched.lesson ? finalProblems(patched.lesson) : null;
+        if (patched.lesson && recheck && !recheck.problems.length) { publishable = patched.lesson; coverage = recheck.coverage; }
+        else log(`[EGYFUTÁS] A forráspótlás foltja nem illeszthető — a lecke változatlan${patched.rejected.length ? `: ${patched.rejected.join(" | ").slice(0, 300)}` : "."}`);
       } catch (error) {
         if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error;
         log(`[EGYFUTÁS] A forráspótló forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
@@ -985,9 +1019,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       }
       output = { ...output, lesson: publishable };
     }
-    // A kapu átment (vagy csak mér): a korábbi megállás jelzője nem marad a közzétett job kimenetében.
-    if ("gateStop" in output) { const { gateStop: _stopped, ...rest } = output; output = rest; }
   }
+  // A kapu átment (vagy csak mér): a korábbi megállás jelzője nem marad a közzétett job kimenetében.
+  if ("gateStop" in output) { const { gateStop: _stopped, ...rest } = output; output = rest; }
   // Review #331: a folytatott futásban a memóriabeli figyelmeztetés elveszne — a mentett kivétel-lista is bekerül.
   const savedRemoved = (output as { lektorRemoved?: unknown }).lektorRemoved;
   if (Array.isArray(savedRemoved) && savedRemoved.length && !warnings.some((w) => w.startsWith("Az utolsó lektorkör hibás tételeit kivettük")))
@@ -1002,7 +1036,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const published = await store.publishLesson({
     lessonId, mapId, title: publishable.title, classroom: publishable.classroom,
     // S1b: a fedettség-kimenet (`lessons.coverage`) a vizuális tételeket is számolja — leltár nélkül a kulcs elmarad.
-    coverage: { ...coverage.coverage, ...(visuals.length ? { visuals: visualCoverage(publishable, visuals) } : {}) },
+    coverage: withVisualCoverage(coverage.coverage, publishable, visuals),
     quizItems: exportQuizItemsForPublish(publishable, lessonId, conceptIdResolver(concepts)),
     ...(typeof output.targetHtmlFileId === "string" ? { targetHtmlFileId: output.targetHtmlFileId, ...(typeof output.targetBaseline === "string" ? { targetBaseline: output.targetBaseline } : {}) } : {}),
   });
