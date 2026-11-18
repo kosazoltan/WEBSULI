@@ -46,6 +46,12 @@ import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
 import { SPEECH_BRIDGE_SCRIPT } from "./lib/speech-bridge";
 import { lessonResultsRouter } from "./lesson-result-email";
+import { createAdventRouter } from "./advent/routes";
+import { createAdventStore } from "./advent/store";
+import { adventClock, adventEnabled } from "./advent/clock";
+import { defaultAdventIdentityDeps, resolveAdventSubject } from "./advent/identity";
+import { SERVER_GRADE_BANK } from "./realtime/question-provider";
+import { CHRISTMAS_ITEMS } from "../shared/advent/christmasBank/index";
 
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { studioRouter } from "./studio/routes";
@@ -879,6 +885,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/lessons", createArbiterRouter());
   // Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — CSRF-fel, mint a Próba (vendég is).
   app.use("/api/lessons", lessonResultsRouter);
+  // Adventi naptár (docs/specs/2026-11-18-adventi-naptar.md R8): az ADVENT_CALENDAR flag mögött (alapból KI → a végpontok 404-et
+  // adnak, a /status `{ enabled: false }`). Az író utak CSRF-tokenesek — a fenti kivétellistába szándékosan nem kerültek be.
+  const adventIdentity = defaultAdventIdentityDeps(dbPool);
+  app.use("/api/advent", createAdventRouter({
+    store: createAdventStore(dbPool),
+    bank: SERVER_GRADE_BANK,
+    christmas: CHRISTMAS_ITEMS,
+    enabled: () => adventEnabled(),
+    clock: (req) => adventClock(req),
+    resolve: (req, input) => resolveAdventSubject(req, input, adventIdentity),
+  }));
   app.use("/api/lessons", lessonPublicRouter);
   // Spec 2026-11-10-fejezet-kisfilmek-v2 (6.): a kisfilmek tartalomcímzett médiája (kép, hang, mozgókép) — azonos eredet, korlátlanul gyorsítótárazható.
   registerLessonClipMedia(app, loadClipMedia);
