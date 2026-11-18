@@ -52,6 +52,17 @@ export const ANIM_KINDS = [
   "compareCards",
 ] as const;
 
+/**
+ * A gyártó promptjaiban HIRDETETT ábrafajták (szerzői blokk-katalógus, ábrakészítő, fejezetenkénti ábratervező) — kifejezett lista,
+ * nem az `ANIM_KINDS` tükre. Egy fajta akkor kerül ide, amikor a paraméter-alakja is a promptban van (`VISUAL_PARAMS_CONTRACT`):
+ * alak nélkül hirdetve a modell kitalált paramétert adna, amelyet a rajzoló nem rajzol ki (független review B1, S2a). A `table`,
+ * `ruleBox`, `compareCards` ezért az S3a-ig NINCS itt (ott a szerződés bővítésével EGYÜTT kerül be); őr: studio-author-catalog.test.ts.
+ */
+export const PROMPT_ANIM_KINDS = [
+  "numberLine", "fraction", "timeline", "geometry", "process", "map", "wordBuilder", "sentenceParts", "triangleArea", "decisionStory",
+  "cycle", "labeledShape", "barChart", "venn", "illustration", "scene3d",
+] as const satisfies ReadonlyArray<(typeof ANIM_KINDS)[number]>;
+
 /** Hands-on interactions (LS-4 implements them). */
 export const TRY_KINDS = ["dragSort", "fillBlank", "match"] as const;
 

@@ -18,7 +18,7 @@ import { CompareCardsAnim, RuleBoxAnim, TableAnim } from "./source-visuals";
  * just without movement.
  */
 
-type AnimProps = { params: Record<string, unknown>; caption: string };
+type AnimProps = { params: Record<string, unknown>; caption: string; label?: string };
 
 function str(v: unknown, fallback: string): string {
   return typeof v === "string" && v.length > 0 ? v : fallback;

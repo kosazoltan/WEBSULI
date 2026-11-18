@@ -5,7 +5,7 @@ import { DECISION_STORY_CONTRACT } from "../../shared/decision-story";
 
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
-import { ANIM_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT_LIMITS } from "../../shared/lesson-schema";
+import { PROMPT_ANIM_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT_LIMITS } from "../../shared/lesson-schema";
 import { VISUAL_PARAMS_CONTRACT } from "../../shared/lesson-visual-params";
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { lessonLengthBudget } from "../../shared/lesson-length";
@@ -449,7 +449,7 @@ export const AUTHOR_BLOCK_CATALOG = [
   "Minden nem-recap blokk coversConceptIds tömbje LEGALÁBB EGY valódi fogalomazonosítót tartalmazzon, amelyet a látható szövege ténylegesen tanít. Üres tömb tilos.",
   '- { "kind": "explain", "text": string, "depth": "core"|"deeper"|"why", "readAloud": boolean, "coversConceptIds": string[] }',
   '- { "kind": "example", "problem": string, "steps": string[], "answer": string, "coversConceptIds": string[] }',
-  `- { "kind": "animate", "animKind": ${ANIM_KINDS.map((k) => JSON.stringify(k)).join("|")}, "params": object, "caption": string, "coversConceptIds": string[] }`,
+  `- { "kind": "animate", "animKind": ${PROMPT_ANIM_KINDS.map((k) => JSON.stringify(k)).join("|")}, "params": object, "caption": string, "coversConceptIds": string[] }`,
   VISUAL_PARAMS_CONTRACT,
   'Geometriai körvonalhoz animKind="geometry". Ne találj ki új animKind értéket (például triangleHeightCases).',
   '- { "kind": "check", "question": string, "options": string[2..5], "correctIndex": number, "feedbackPerOption": string[ugyanannyi mint options], "hint"?: string, "coversConceptIds": string[] }',
@@ -743,7 +743,7 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     "- The caption (or the figure's visible labels) must contain, word for word, the map term of every concept in coversConceptIds — the program checks it; a figure naming none of its concepts is rejected, one naming only some loses the others.",
     "- A figure goes right after the explain/example it illustrates (\"after\" = that block's i). Replace an existing weak figure (e.g. a process that repeats the example's steps) with \"replace\" = its i.",
     "- If a section has nothing drawable (pure definition list), give it no figure rather than a misleading one.",
-    `- animKind is one of: ${ANIM_KINDS.join(", ")}.`,
+    `- animKind is one of: ${PROMPT_ANIM_KINDS.join(", ")}.`,
     VISUAL_PARAMS_CONTRACT,
     'Geometry params: {"shape":"triangle"|"circle"|"square", "label":"short label"} draws a bare outline only — prefer labeledShape.',
     'triangleArea params: {"base":6,"height":4,"unit":"cm"}; numeric dimensions 0.1–1000, unit cm or m. Use ONLY for triangle area already taught in that section, with base/height from its source example.',
@@ -786,7 +786,7 @@ export function buildSectionDesignerPrompt(lesson: Lesson, sectionIndex: number,
     "- coversConceptIds: only the localIds listed below, and only what the figure shows. The caption or the visible labels contain the term of at least one of them word for word.",
     "- Choose the kind that SHOWS the idea best: spatial form or layout (building, landscape with rivers, positions) → scene3d or a rich illustration with isometric depth; phases → cycle; quantities → barChart; sets → venn; numbers → numberLine; dates → timeline; a genuine procedure → process (never the example's steps copied). Prefer scene3d when rotating the object helps understanding; prefer illustration when many labelled parts, arrows or a cross-section are the point.",
     "- If the section has nothing drawable (pure summary or self-check), answer {\"visuals\":[]} rather than a filler figure.",
-    `- animKind is one of: ${ANIM_KINDS.join(", ")}.`,
+    `- animKind is one of: ${PROMPT_ANIM_KINDS.join(", ")}.`,
     VISUAL_PARAMS_CONTRACT,
     "",
     "Answer with JSON ONLY, in this exact shape:",

@@ -198,7 +198,8 @@ function probeLesson(search: string): Lesson {
   // Spec 2026-11-18 (S2a): `?source-visuals=1|max&classroom=N` — a forrás-ábrák megjelenítői (táblázat, szabálydoboz, összehasonlító kártyák).
   if (q.has("source-visuals")) {
     const grade = Number(q.get("classroom"));
-    return sourceVisualsFixture(q.get("source-visuals") === "max" ? "max" : "typical", q.has("classroom") && Number.isInteger(grade) && grade >= 0 && grade <= 12 ? grade : 6);
+    const variant = q.get("source-visuals");
+    return sourceVisualsFixture(variant === "max" || variant === "broken" ? variant : "typical", q.has("classroom") && Number.isInteger(grade) && grade >= 0 && grade <= 12 ? grade : 6);
   }
   if (q.has("scene3d")) return SCENE3D_LESSON;
   if (q.has("visuals")) return VISUALS_LESSON;

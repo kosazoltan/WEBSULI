@@ -19,6 +19,7 @@ import { buildAuthorPrompt, buildAnimatorPrompt, buildLektorPrompt, buildPedagog
 import { autofixOutline, autofixOutlineVisuals } from "../tools/outline-autofix";
 import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
+import { dropUndrawableSourceVisuals } from "../../../shared/lesson-visual-params";
 import type { SourceCoverageResult } from "../gates/source-coverage-gate";
 import { ensureSectionVisuals } from "../section-visuals";
 import { scoringRulesOf } from "../../../shared/scoring-rules";
@@ -118,6 +119,18 @@ export type SingleRunDeps = {
   /** A forrás-fedettségi kapu függvénye — csak a teszt cseréli (a kapu hibaága így mérhető); alapból a `sourceCoverageGate`. */
   coverageGate?: typeof sourceCoverageGate;
 };
+
+/**
+ * S2a (független review B1): a kirajzolhatatlan (hibás paraméterű) `table` / `ruleBox` / `compareCards` blokkok kivétele a szerző
+ * kimenetéből — determinisztikus, javítókör nélkül; tételenként naplózva, a darabszám a telemetriában. Változatlan leckénél ugyanazt
+ * az objektumot adja vissza.
+ */
+export function withoutUndrawableVisuals(lesson: Lesson, log?: (line: string) => void, telemetry?: { gates: { undrawableVisualsDropped?: number } }): Lesson {
+  const { lesson: kept, dropped } = dropUndrawableSourceVisuals(lesson);
+  for (const d of dropped) log?.(`[EGYFUTÁS] Kirajzolhatatlan ábrablokk kivéve: ${d.path} (${d.animKind}) — ${d.problems.join("; ").slice(0, 300)}`);
+  if (dropped.length && telemetry) telemetry.gates.undrawableVisualsDropped = (telemetry.gates.undrawableVisualsDropped ?? 0) + dropped.length;
+  return kept;
+}
 
 /**
  * A forráspótló forduló foltja a leckébe illesztve (SK1, `enforce`): ábrafolt → címke-tisztítás (ugyanaz, mint a 4. állomás után —
@@ -709,8 +722,11 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const authorRequest = (notes: Parameters<typeof buildAuthorPrompt>[2]) =>
     withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner), authorKnowledge)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
   const validateLesson = (json: unknown): { ok: true; value: Lesson } | { ok: false; problems: string[] } => {
-    const parsed = lessonSchema.safeParse({ ...(json as object), mapId, sourceOnly: true });
-    if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
+    const strict = lessonSchema.safeParse({ ...(json as object), mapId, sourceOnly: true });
+    if (!strict.success) return { ok: false, problems: strict.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
+    // S2a (független review B1): a hibás paraméterű táblázat / szabálydoboz / kártya blokk kiesik (a rajzoló semmit nem rajzolna belőle) —
+    // megszámolva és naplózva, javító forduló nélkül; a kapuk a megmaradt leckét mérik.
+    const parsed = { data: withoutUndrawableVisuals(strict.data, deps.log, telemetry) };
     const unknown = lessonIdsSubsetOfMap(parsed.data, concepts);
     if (unknown.length) return { ok: false, problems: [`A tudásbankban nem szereplő fogalomazonosítók: ${unknown.join(", ")}`] };
     // Review #260: a tanításon mérhető végkapuk már itt (javító forduló jár rájuk, nem a bank és a lektor után derülnek ki).
@@ -959,6 +975,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const choice = resolveChoiceGate(lesson, openBankFindingFlags(lesson, openFindings));
   if ("error" in choice) throw new SingleRunError("végellenőrzés", [choice.error]);
   if (choice.removed.length) { lesson = choice.lesson; warnings.push(`A végkapu kivette: ${choice.removed.join(", ")}`); }
+  // S2a (review B1): utolsó védvonal — kirajzolhatatlan forrás-ábra blokk nem megy közzétételre (a végkapuk a megmaradt leckét mérik).
+  const drawable = withoutUndrawableVisuals(lesson, deps.log, telemetry);
+  if (drawable !== lesson) { lesson = drawable; warnings.push("A végkapu kivett hibás paraméterű (kirajzolhatatlan) ábrablokkot."); }
   const final = lessonSchema.safeParse(lesson);
   if (!final.success) throw new SingleRunError("végellenőrzés", final.error.issues.slice(0, 20).map((i) => `${i.path.join(".")}: ${i.message}`));
   /** A végkapu determinisztikus leletei egy (sémán már átment) leckére — a forráspótlás foltja után is ugyanez a mérce. */

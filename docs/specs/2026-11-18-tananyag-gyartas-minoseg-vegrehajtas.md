@@ -289,7 +289,10 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 > `compareCards` — 2..3 kártya, cím ≤ 80, 1..8 sor, sor ≤ 200, a `tone` elhagyható (a szerződés szerint). Minden séma `.strict()`:
 > ismeretlen / rejtő kulcs elutasítva. A sorfejléc (`th scope="row"`, rögzített első oszlop) csak 3+ oszlopnál; a kétoszlopos tábla két
 > egyenrangú oszlop. Az ág neve `feat/tgm-s2a-megjelenitok` (az SK1b ágára épül). A lektor-nézet (5. lépés) már vesztésmentesen adja a
-> strukturált `params`-ot — kódváltozás nem kellett, teszt rögzíti. Mérőlecke: `/__lesson-runtime-probe?source-visuals=1|max`.
+> strukturált `params`-ot — kódváltozás nem kellett, teszt rögzíti. A szabálydoboz ikonja a lejátszóban bevett lucide-készletből
+> való (nem a blokkjelző-képekből); a doboznak nincs külön blokkfejléce — a tónus kódszótári felirata a doboz saját fejléce, a blokk
+> felirata a kereten belül áll. A görgő tábla kerete csak görgetéskor fókuszmegálló. Az új fajták az S3a-ig NINCSENEK a gyártó
+> promptjaiban (`PROMPT_ANIM_KINDS`), a hibás paraméterű blokk a szerző kimenetéből és a lejátszóból is kimarad (review B1). Mérőlecke: `/__lesson-runtime-probe?source-visuals=1|max`.
 
 Ág: `feat/lecke-megjelenitok-s2a`. Fájlok: `shared/source-visual-render.ts` (a szerződés — meglévő), `shared/lesson-schema.ts`, `shared/lesson-visual-params.ts`,
 `shared/lesson-block-label.ts`, `client/src/lesson-runtime/blocks/source-visuals.tsx` (új),
@@ -351,6 +354,20 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 
 ## S3a — Az ábrák állomás a forrásra kötve; az eldobás oka a kimenetben
 
+> **Teendők az S2a független review-jából (2026-11-18) — ennek a szeletnek a kötelező részei:**
+> - **B1 — a hirdetés bekapcsolása:** a gyártó promptjai (szerzői blokk-katalógus, ábrakészítő, fejezetenkénti ábratervező) a
+>   `shared/lesson-schema.ts` `PROMPT_ANIM_KINDS` listájából sorolják fel az ábrafajtákat; az S2a óta ebben a `table` / `ruleBox` /
+>   `compareCards` NINCS benne. EBBEN a szeletben kerül a hirdetett listába a három (az S2b után az öt) új fajta, a
+>   `VISUAL_PARAMS_CONTRACT` bővítésével EGYÜTT, egy commitban; a `tests/studio-author-catalog.test.ts` két rögzített listája
+>   (`ADVERTISED`, `NOT_YET_ADVERTISED`) ugyanakkor változik. Alak nélkül hirdetni tilos. A szerző kimenetén a hibás paraméterű új
+>   fajtájú blokk ma kiesik (`withoutUndrawableVisuals`, telemetria: `undrawableVisualsDropped`) — a szám a próbafutások jelentésébe kerül.
+> - **J8:** a prompt tiltsa a `**kiemelés**` jelölést a táblázat celláiban, a szabálydoboz pontjaiban és a kártyák soraiban (a
+>   megjelenítő ezeket nyers szövegként rajzolja — a csillagok betűre megjelennének).
+> - **J11:** a prompt terelje a gyártót a nagy tábla bontására: sok oszlop + hosszú cella helyett több kisebb tábla vagy kártya (a
+>   megengedett legnagyobb tábla — 8 oszlop × 20 sor × 100+ karakter — ép, de telefonon ~15 000 px magas).
+> - A hosszabb forrástáblát több, azonos `sourceVisualId`-jú blokkra kell bontani (`SOURCE_TABLE_BLOCK_ROWS`), a rövidebb sort a
+>   fejléc hosszára kitölteni.
+
 Ág: `feat/abrakeszito-forrasra-kotve-s3a`. Fájlok: `server/studio/step-io.ts`, `server/studio/role-skills.ts`,
 `shared/lesson-visual-params.ts`, `server/studio/visual-patch.ts`, `server/studio/section-visuals.ts`,
 `server/studio/single-run/engine.ts`, `shared/run-telemetry.ts`, `tests/visual-patch.test.ts`, `tests/section-visuals.test.ts`,
@@ -385,6 +402,11 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 8. 0.3 szerinti kapuk. Elvárt: E9, E10 teljesül.
 
 ## S3b — Szókeret, szerző, lektor, bank a forrástételekkel
+
+> **Teendő az S2a független review-jából (J9, „SK1c”) — a fedettségi kapu `enforce` élesítése ELŐTT kötelező:** a forrás-fedettségi
+> kapu (`server/studio/gates/source-coverage-gate.ts`, `substantive` / `whyNotShown`) a `table` / `ruleBox` / `compareCards` (és az
+> S2b két fajtája) hivatkozó blokkjainál a SÉMA érvényességét is mérje (`visualParamProblems(...)` üres) — ma az engedékeny olvasóval
+> dönt, így egy 21 soros vagy extra kulcsos tábla „megjelent”, miközben a kliens nem rajzolja ki. Mutációs ellenpróbával.
 
 Ág: `feat/abrakeszito-forrasra-kotve-s3b`. Fájlok: `server/studio/lesson-metrics.ts`, `server/studio/single-run/engine.ts`,
 `server/studio/step-io.ts`, `server/studio/experience-builder.ts`, tesztek.

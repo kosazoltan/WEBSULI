@@ -9,11 +9,18 @@ export const explainParagraphs = (text: string): string[] => {
 export const explainIsLong = (text: string): boolean => text.length > EXPLAIN_LONG_CHARS && explainParagraphs(text).length >= 2;
 
 /**
- * Spec 2026-11-18 (tananyaggyártás minősége, S2a / E8): a „•” / „-” / „*” kezdetű, sortöréssel tagolt sorok eddig egyetlen bekezdésbe
- * folytak (a `<p>` a sortörést szóközzé vonja össze). Legalább KÉT egymást követő ilyen sor valódi lista; az egyetlen jelölt sor és
- * a gondolatjeles („–”) párbeszédsor bekezdés marad. A `**kiemelés**` nem listajel (a jel után szóköz kell).
+ * Spec 2026-11-18 (tananyaggyártás minősége, S2a / E8): a jelölt, sortöréssel tagolt sorok eddig egyetlen bekezdésbe folytak (a `<p>`
+ * a sortörést szóközzé vonja össze). Legalább KÉT egymást követő jelölt sor valódi lista. A „•” egyértelmű listajel. A „-” / „*”
+ * csak akkor az, ha a kötőjel biztosan nem a tartalom része (független review J1) — kétség esetén a sorok bekezdés maradnak:
+ *  - a jel után betű (vagy kiemelt / idézett szó) áll, nem szám és nem műveleti jel („- 5 + 3 = -2” egyenlet, „- 5 fok” előjel);
+ *  - a sorban nincs további közbevetett kötőjel / gondolatjel („- Haza - felelte.” párbeszéd);
+ *  - a sor nem kérdés / felkiáltás („- Hová mész?” párbeszéd).
+ * A gondolatjeles („–”) sor soha nem lista; a `**kiemelés**` nem listajel (a jel után szóköz kell).
  */
-const BULLET = /^[•\-*]\s+(?=\S)/;
+const DOT = /^•\s+(?=\S)/;
+const DASH = /^[-*]\s+(?=(?:\*\*|__|["„»'])?\p{L})/u;
+const dashItem = (line: string) => DASH.test(line) && !/\s[-–—]\s/.test(line.replace(DASH, "")) && !/[?!]["”»]?$/.test(line);
+const isItem = (line: string) => DOT.test(line) || dashItem(line);
 export type ExplainPart = { kind: "p"; text: string } | { kind: "ul"; items: string[] };
 export function explainParts(text: string): ExplainPart[] {
   return explainParagraphs(text).flatMap((paragraph): ExplainPart[] => {
@@ -23,8 +30,11 @@ export function explainParts(text: string): ExplainPart[] {
     const flush = () => { if (prose.length) parts.push({ kind: "p", text: prose.join("\n") }); prose = []; };
     for (let i = 0; i < lines.length;) {
       let end = i;
-      while (end < lines.length && BULLET.test(lines[end])) end++;
-      if (end - i >= 2) { flush(); parts.push({ kind: "ul", items: lines.slice(i, end).map((l) => l.replace(BULLET, "")) }); i = end; }
+      while (end < lines.length && isItem(lines[end])) end++;
+      // A jelölt sorok csak akkor lista, ha a futás a bekezdés MINDEN jelölt sorát lefedi — egy kétes sor az egész futást bekezdésben hagyja.
+      const bounded = end === lines.length || !/^[•\-*]\s/.test(lines[end]);
+      const opened = i === 0 || !/^[•\-*]\s/.test(lines[i - 1]);
+      if (end - i >= 2 && bounded && opened) { flush(); parts.push({ kind: "ul", items: lines.slice(i, end).map((l) => l.replace(DOT, "").replace(DASH, "")) }); i = end; }
       else { prose.push(...lines.slice(i, Math.max(end, i + 1))); i = Math.max(end, i + 1); }
     }
     flush();

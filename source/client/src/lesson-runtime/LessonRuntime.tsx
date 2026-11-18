@@ -13,6 +13,7 @@ import {
 } from "@shared/lesson-schema";
 import { BAND_THEME, learningAgeGroup } from "@shared/lesson-band";
 import { blockLabel } from "@shared/lesson-block-label";
+import { sourceVisualProblems } from "@shared/lesson-visual-params";
 import { LESSON_FONT_FALLBACK, lessonFontPair, nfcDeep } from "@shared/lesson-typography";
 
 import { SectionProba } from "./SectionProba";
@@ -315,6 +316,10 @@ export function LessonBlock({
       return <RecapBlock block={block} band={band} label={label} />;
     case "animate": {
       const Anim = ANIMATE_REGISTRY[block.animKind];
+      // S2a (review B1): hibás paraméterű forrás-ábrából a rajzoló semmit nem rajzol — fejléc üres törzzsel nem jelenhet meg, a blokk kimarad.
+      if (sourceVisualProblems(block)) return null;
+      // S2a (review J3): a szabálydoboz tónusfelirata a doboz SAJÁT fejléce — külön blokkfejléc nélkül (nem hangzik el és nem látszik kétszer).
+      if (block.animKind === "ruleBox") return <div className="space-y-2" data-block="animate"><Anim params={block.params} caption={block.caption} label={label} /></div>;
       // Review #279: a mozgókép és a próba blokk is blokkfejlécet kap (a sáv jelzőjével), mint a többi négy típus.
       return <div className="space-y-2" data-block="animate"><BlockHead icon={PlayCircle} label={label ?? "Mozgókép"} kind="animate" /><Anim params={block.params} caption={block.caption} /></div>;
     }

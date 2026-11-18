@@ -15,7 +15,8 @@ import { normalizeVisualText, type VisualTone } from "@shared/source-visual-rend
  * (`lesson-design.css`), és a szín soha nem az egyetlen jelentéshordozó (tónusjel / ikon / felirat is áll mellette).
  */
 
-type AnimProps = { params: Record<string, unknown>; caption: string };
+/** `label`: a blokk kódszótári, korosztály szerinti felirata — a szabálydoboz a SAJÁT fejlécében mutatja (külön blokkfejléc nélkül). */
+type AnimProps = { params: Record<string, unknown>; caption: string; label?: string };
 
 const FRAME = "motion-safe:animate-draw border rounded-lg bg-card p-4 motion-reduce:animate-none sv-figure";
 /** A tónus alakjele: a színkód mellett alak is megkülönbözteti az oszlopot / kártyát (a semleges tónus jel nélküli). */
@@ -62,8 +63,10 @@ export function TableAnim({ params, caption }: AnimProps) {
   const name = p.caption ?? (caption || SOURCE_VISUAL_TEXT.tableFallbackName);
   return (
     <figure className={FRAME} data-anim="table">
-      <div ref={scrollRef} className="sv-table-scroll" tabIndex={0} role="region" aria-label={name} data-overflowing={overflowing ? "true" : undefined}>
-        <table className="sv-table" data-row-headers={rowHeaders ? "true" : undefined} style={{ "--sv-cols": columns } as CSSProperties}>
+      {/* Fókuszmegálló és nevesített régió csak akkor, ha a tábla tényleg görög (különben fölös Tab-megálló lenne). */}
+      <div ref={scrollRef} className="sv-table-scroll" data-overflowing={overflowing ? "true" : undefined}
+        {...(overflowing ? { tabIndex: 0, role: "region", "aria-label": name } : {})}>
+        <table className="sv-table" data-cols={columns} data-row-headers={rowHeaders ? "true" : undefined} style={{ "--sv-cols": columns } as CSSProperties}>
           {p.caption && <caption>{p.caption}</caption>}
           <thead>
             <tr>
@@ -84,29 +87,35 @@ export function TableAnim({ params, caption }: AnimProps) {
           </tbody>
         </table>
       </div>
-      {overflowing && <p className="sv-scroll-hint" data-testid="sv-scroll-hint"><MoveHorizontal className="w-4 h-4" aria-hidden="true" />{SOURCE_VISUAL_TEXT.scrollHint}</p>}
+      {overflowing && <p className="sv-scroll-hint" data-testid="sv-scroll-hint"><MoveHorizontal className="w-4 h-4" aria-hidden="true" />
+        <span className="sv-hint-touch">{SOURCE_VISUAL_TEXT.scrollHintTouch}</span><span className="sv-hint-pointer">{SOURCE_VISUAL_TEXT.scrollHint}</span></p>}
       <Caption caption={caption} shown={[p.caption]} />
     </figure>
   );
 }
 
-export function RuleBoxAnim({ params, caption }: AnimProps) {
+export function RuleBoxAnim({ params, caption, label }: AnimProps) {
   const p = parseVisualParams("ruleBox", params);
   if (!p) return null;
   const Icon = RULE_ICON[p.tone];
-  const toneLabel = SOURCE_VISUAL_TEXT.ruleBoxTone[p.tone];
+  // Egyetlen felirat mondja ki a tónust: a doboz saját jelzője (a kódszótárból; a lejátszó a korosztály szerintit adja át).
+  const toneLabel = label || SOURCE_VISUAL_TEXT.ruleBoxTone[p.tone];
+  const own = normalizeVisualText(caption);
+  const note = own && ![p.heading, toneLabel, ...Object.values(SOURCE_VISUAL_TEXT.ruleBoxTone)].some((s) => s && normalizeVisualText(s) === own) ? caption : null;
   return (
     <figure className={FRAME} data-anim="ruleBox" data-tone={p.tone}>
       <div className="sv-rule">
         <p className="sv-rule-head">
           <span className="sv-rule-icon" aria-hidden="true"><Icon className="w-5 h-5" /></span>
-          {p.heading ? <><span className="sr-only">{toneLabel}: </span><strong>{p.heading}</strong></> : <strong>{toneLabel}</strong>}
+          <span className="sv-rule-tone">{toneLabel}</span>
         </p>
+        {p.heading && <p className="sv-rule-title"><strong>{p.heading}</strong></p>}
         <ul className="sv-rule-items">
           {p.items.map((item, i) => <li key={i}>{item}</li>)}
         </ul>
+        {/* A blokk felirata a kereten BELÜL áll (kívül a következő blokk alcímének látszana). */}
+        {note && <figcaption className="sv-rule-note">{note}</figcaption>}
       </div>
-      <Caption caption={caption} shown={[p.heading, toneLabel, ...Object.values(SOURCE_VISUAL_TEXT.ruleBoxTone)]} />
     </figure>
   );
 }

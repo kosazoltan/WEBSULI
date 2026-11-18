@@ -54,7 +54,9 @@ export const SOURCE_VISUAL_TEXT = {
   ruleBoxTone: { rule: "Szabály", warning: "Figyelj!", tip: "Tipp" } as Readonly<Record<RuleBoxTone, string>>,
   example: "Példa",
   tableFallbackName: "Táblázat",
-  scrollHint: "Húzd oldalra a táblázatot",
+  /** Görgő táblánál: érintőképernyőn húzni kell, egérrel / billentyűvel görgetni (a megjelenítő a mutatóeszköz szerint választ). */
+  scrollHintTouch: "Húzd oldalra a táblázatot",
+  scrollHint: "A táblázat oldalra görgethető",
   /** Elágazás-alapértelmezés a döntési fához (S2b használja). */
   branchYes: "Igen", branchNo: "Nem",
 } as const;

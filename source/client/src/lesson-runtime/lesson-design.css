@@ -312,6 +312,17 @@
 [data-ws-theme] .sv-table-scroll[data-overflowing] .sv-table[data-row-headers] :is(tbody th[scope="row"], td[data-first], thead th:first-child) {
   position: sticky; left: 0; z-index: 1; box-shadow: 1px 0 0 var(--lesson-line);
 }
+/* Kétoszlopos tábla: telefonon se kényszerüljön görgetésre egy törhetetlen szó miatt — a szó a cellán belül törik (review J5). */
+[data-ws-theme] .sv-table[data-cols="1"] :is(th, td), [data-ws-theme] .sv-table[data-cols="2"] :is(th, td) { overflow-wrap: anywhere; min-width: 4.5em; }
+[data-ws-theme] .sv-table[data-cols="1"], [data-ws-theme] .sv-table[data-cols="2"] { min-width: 0; table-layout: fixed; }
+/* Asztali nézet (review J2): a tábla, a kártyák és a szabálydoboz ugyanahhoz a tartalomszélességhez igazodik — a régi ábrafajták
+   920 px-es korlátja (lesson-experience.css) rájuk nem érvényes, a többi fajtán változatlan. */
+[data-band][data-experience][data-ws-theme] figure.sv-figure > :is(.sv-table-scroll, .sv-cards, .sv-rule, .sv-scroll-hint) { max-width: 100%; }
+[data-ws-theme] .sv-hint-touch { display: none; }
+@media (pointer: coarse) {
+  [data-ws-theme] .sv-hint-touch { display: inline; }
+  [data-ws-theme] .sv-hint-pointer { display: none; }
+}
 [data-ws-theme] .sv-scroll-hint { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 14px; font-weight: 600; color: var(--ws-muted); }
 
 [data-ws-theme] .sv-figure[data-anim="ruleBox"] { padding: 0; border: 0; background: transparent; box-shadow: none; }
@@ -321,12 +332,14 @@
 }
 [data-ws-theme] .sv-figure[data-tone="warning"] .sv-rule { --sv-rule: var(--lesson-warn-ink); --sv-rule-bg: var(--lesson-warn-bg); --sv-rule-ink: var(--lesson-warn-ink); }
 [data-ws-theme] .sv-figure[data-tone="tip"] .sv-rule { --sv-rule: var(--lesson-ok); --sv-rule-bg: var(--lesson-ok-bg); --sv-rule-ink: var(--lesson-ok-bg-ink); }
-[data-ws-theme] .sv-rule-head { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 1.05em; font-weight: 800; overflow-wrap: anywhere; }
+[data-ws-theme] .sv-rule-head { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 0.95em; font-weight: 800; letter-spacing: 0.01em; overflow-wrap: anywhere; }
+[data-ws-theme] .sv-rule-title { margin: 0 0 8px; font-size: 1.08em; overflow-wrap: anywhere; }
+/* A blokk felirata a kereten belül, a doboz lábjegyzeteként (kívül a következő blokk alcímének látszana). */
+[data-band] figure.sv-figure[data-anim="ruleBox"] .sv-rule-note { margin: 10px 0 0; padding: 8px 0 0; border-top: 1px solid color-mix(in srgb, var(--sv-rule) 35%, transparent); font-size: 0.9em; color: inherit; }
 [data-ws-theme] .sv-rule-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--sv-rule); color: var(--sv-rule-bg); }
 [data-ws-theme] .sv-rule-items { margin: 0; padding-left: 1.3em; list-style: disc; display: grid; gap: 6px; }
 [data-ws-theme] .sv-rule-items li { white-space: pre-line; overflow-wrap: anywhere; }
 [data-ws-theme] .sv-rule-items:has(> li:only-child) { list-style: none; padding-left: 0; }
-[data-ws-theme] .sv-figure[data-anim="ruleBox"] > figcaption { padding-inline: 4px; }
 
 [data-ws-theme] .sv-cards { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 640px) {

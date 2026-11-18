@@ -54,6 +54,19 @@ const max: Lesson["sections"] = [
   ] },
 ];
 
-export function sourceVisualsFixture(variant: "typical" | "max" = "typical", classroom = 6): Lesson {
-  return { title: "Forrás-ábrák próbája", subject: "angol", classroom, mapId: "probe-map", sourceOnly: true, misconceptions: [], sections: variant === "max" ? max : typical };
+/**
+ * `broken` (független review B1): a lecke sémáján átmenő, de kirajzolhatatlan („gyártó-tipp” alakú) táblázat és szabálydoboz egy
+ * érvényes doboz mellett — a lejátszó a hibás blokkot teljes egészében kihagyja (fejléc üres törzzsel nem jelenhet meg).
+ */
+const broken: Lesson["sections"] = [
+  { heading: "Hibás paraméterű blokkok", probaEnabled: false, blocks: [
+    { kind: "explain", depth: "core", readAloud: false, ...covers, text: "A hibás ábrablokk nem jelenik meg." },
+    animate("table", { title: "Kitalált alak", columns: ["a", "b"], rows: [{ a: "1", b: "2" }] }, "Kitalált alakú táblázat."),
+    animate("ruleBox", { title: "Tónus nélkül", text: "Egyetlen szöveg." }, "Kitalált alakú doboz."),
+    animate("ruleBox", { tone: "tip", items: ["Ez az egyetlen érvényes doboz."] }, "Érvényes doboz."),
+  ] },
+];
+
+export function sourceVisualsFixture(variant: "typical" | "max" | "broken" = "typical", classroom = 6): Lesson {
+  return { title: "Forrás-ábrák próbája", subject: "angol", classroom, mapId: "probe-map", sourceOnly: true, misconceptions: [], sections: variant === "max" ? max : variant === "broken" ? broken : typical };
 }

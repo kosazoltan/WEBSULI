@@ -116,7 +116,7 @@ export const scene3dParamsSchema = z.object({
  * Spec 2026-11-18 (tananyaggyártás minősége, S2a): a forrás ábráit újrarajzoló megjelenítők paraméterei. Az ALAK a megosztott
  * szerződésé (`shared/source-visual-render.ts` — a forrás-fedettségi kapu ugyanebből olvas); itt a SZIGORÚ érvényesség áll:
  *  - ismeretlen kulcs (`hidden`, `maxRows`, `collapsed` …) elutasítva (`.strict()`): amit a séma elfogad, az mind megjelenik;
- *  - a korlátok NEM szűkebbek a forrásleltárénál (`shared/source-visuals.ts`): 8 oszlop, 80 karakteres fejléc, 100 karakteres cella,
+ *  - a korlátok NEM szűkebbek a forrásleltárénál (`shared/source-visuals.ts`): 8 oszlop, 80 karakteres fejléc, a leltár 100 karakteres cellájánál bővebb (120) cella,
  *    8 pontos / 240 karakteres szabálydoboz. Egyetlen kivétel a sorszám: egy blokk legfeljebb `SOURCE_TABLE_BLOCK_ROWS` sor — a
  *    hosszabb forrástáblát a gyártó több, ugyanarra a tételre hivatkozó blokkra bontja (a kapu a hivatkozó blokkokat összeadja).
  */
@@ -150,6 +150,33 @@ export const compareCardsParamsSchema = z.object({
 type Assignable<A extends B, B> = A;
 export type SourceVisualSchemaContract = [Assignable<z.infer<typeof tableParamsSchema>, TableVisualParams>,
   Assignable<z.infer<typeof ruleBoxParamsSchema>, RuleBoxVisualParams>, Assignable<z.infer<typeof compareCardsParamsSchema>, CompareCardsVisualParams>];
+
+/**
+ * Független review B1 (S2a): a forrás-ábrák fajtáinál a hibás paraméterű blokkból a rajzoló SEMMIT nem rajzol — az ilyen blokk
+ * (fejléc üres törzzsel) nem kerülhet a tanuló elé. `sourceVisualProblems`: a hibák listája, vagy `null`, ha a blokk nem ilyen fajtájú
+ * vagy érvényes. `dropUndrawableSourceVisuals`: a szerző kimenetéből determinisztikusan kiveszi ezeket (javítókör nélkül; a hívó számol
+ * és naplóz); a többi blokk és a régi 16 fajta érintetlen.
+ */
+export const SOURCE_VISUAL_SCHEMA_KINDS = ["table", "ruleBox", "compareCards"] as const;
+export function sourceVisualProblems(block: unknown): string[] | null {
+  const b = block as { kind?: unknown; animKind?: unknown; params?: unknown } | null;
+  if (!b || b.kind !== "animate" || !(SOURCE_VISUAL_SCHEMA_KINDS as readonly unknown[]).includes(b.animKind)) return null;
+  const problems = visualParamProblems(b.animKind as string, b.params);
+  return problems.length ? problems : null;
+}
+export type DroppedSourceVisual = { path: string; animKind: string; problems: string[] };
+export function dropUndrawableSourceVisuals<L extends { sections: ReadonlyArray<{ blocks: ReadonlyArray<unknown> }> }>(lesson: L): { lesson: L; dropped: DroppedSourceVisual[] } {
+  const dropped: DroppedSourceVisual[] = [];
+  const sections = lesson.sections.map((section, i) => {
+    const blocks = section.blocks.filter((block, j) => {
+      const problems = sourceVisualProblems(block);
+      if (problems) dropped.push({ path: `sections[${i}].blocks[${j}]`, animKind: String((block as { animKind?: unknown }).animKind), problems: problems.slice(0, 5) });
+      return !problems;
+    });
+    return blocks.length === section.blocks.length ? section : { ...section, blocks };
+  });
+  return dropped.length ? { lesson: { ...lesson, sections }, dropped } : { lesson, dropped };
+}
 
 export const VISUAL_PARAM_SCHEMAS = {
   cycle: cycleParamsSchema,

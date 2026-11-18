@@ -131,7 +131,10 @@ const render = (kind: Kind, params: unknown, caption = "Felirat") => renderToSta
 
 test("a táblázat valódi <table>: felirat, oszlopfejléc (scope), sorfejléc 3+ oszlopnál, görgethető saját keret", () => {
   const two = render("table", TABLE, "Kérdőszavak");
-  assert.match(two, /<div[^>]*class="sv-table-scroll"[^>]*tabindex="0"[^>]*role="region"[^>]*aria-label="Kérdőszavak"/);
+  // Review J7: a keret csak GÖRGŐ táblánál fókuszmegálló / nevesített régió (méréshez böngésző kell — ott a spec igazolja); alapból nem az.
+  assert.match(two, /<div class="sv-table-scroll">/);
+  assert.ok(!/tabindex|role="region"/.test(two), "nem görgő tábla kerete nem fókuszmegálló");
+  assert.match(two, /<table class="sv-table" data-cols="2"/);
   assert.match(two, /<caption>Kérdőszavak<\/caption>/);
   assert.equal((two.match(/<th scope="col"/g) ?? []).length, 2);
   assert.ok(!two.includes('scope="row"'), "kétoszlopos táblában nincs sorfejléc");
@@ -146,11 +149,21 @@ test("a táblázat valódi <table>: felirat, oszlopfejléc (scope), sorfejléc 3
 test("a szabálydoboz tónusa ikon + felirat (nem csak szín); a kártyák példája kódszótári címkével", () => {
   const withHeading = render("ruleBox", RULE);
   assert.match(withHeading, /data-anim="ruleBox" data-tone="warning"/);
-  assert.match(withHeading, /<span class="sr-only">Figyelj!: <\/span><strong>Figyelj a többes számra<\/strong>/);
+  // Review J3: a tónus felirata EGYSZER áll (a doboz saját jelzője), a modell címe alatta cím; képernyőolvasónak szóló ismétlés nincs.
+  assert.match(withHeading, /<span class="sv-rule-tone">Figyelj!<\/span><\/p><p class="sv-rule-title"><strong>Figyelj a többes számra<\/strong>/);
+  assert.equal(withHeading.split("Figyelj!").length - 1, 1, "a tónusfelirat egyszer szerepel");
+  assert.ok(!withHeading.includes("sr-only"));
+  // Review J4: a blokk felirata a kereten BELÜL áll (a doboz lábjegyzete), nem a keret után.
+  assert.match(withHeading, /<\/ul><figcaption class="sv-rule-note">Felirat<\/figcaption><\/div><\/figure>$/);
+  // A lejátszó a korosztály szerinti kódszótári feliratot adja át — a doboz azt mutatja (a `kid` sávban sincs eltérő dupla felirat).
+  const kid = renderToStaticMarkup(React.createElement(ANIMATE_REGISTRY.ruleBox, { params: { tone: "rule", items: ["x"] }, caption: "Szabály", label: "Jegyezd meg!" }));
+  assert.match(kid, /<span class="sv-rule-tone">Jegyezd meg!<\/span>/);
+  assert.ok(!kid.includes("Szabály"), "a sávfüggetlen felirat nem jelenik meg mellette");
   assert.match(withHeading, /<span class="sv-rule-icon" aria-hidden="true"><svg/, "az ikon díszítő — a tónust a felirat mondja ki");
   assert.equal((withHeading.match(/<li>/g) ?? []).length, 2);
   const bare = render("ruleBox", { tone: "tip", items: ["Egy tipp."] }, "Tipp");
-  assert.match(bare, new RegExp(`<strong>${SOURCE_VISUAL_TEXT.ruleBoxTone.tip}</strong>`));
+  assert.match(bare, new RegExp(`<span class="sv-rule-tone">${SOURCE_VISUAL_TEXT.ruleBoxTone.tip}</span>`));
+  assert.ok(!bare.includes("sv-rule-title"), "cím nélküli doboznak nincs külön címsora");
   assert.ok(!bare.includes("<figcaption"), "a kódszótári felirattal azonos blokkfelirat nem ismétlődik");
   const cards = render("compareCards", CARDS);
   assert.match(cards, /class="sv-cards" data-count="2"/);
@@ -250,4 +263,43 @@ test("mutáció — a kapu és a séma együtt: elhagyott sor, átírt pont, rej
   const hiding = rendererBlocks(table);
   (hiding[0].params as Record<string, unknown>).hidden = true;
   assert.match(allValid(hiding).join(" "), /hidden/, "a rejtő kulcsot a séma megfogja (a rajzoló ilyen blokkot nem rajzol)");
+});
+
+/* ---------- független review B1: kirajzolhatatlan blokk nem kerülhet a tanuló elé ---------- */
+
+test("B1 — a hibás paraméterű új fajtájú blokk determinisztikusan kiesik; az érvényes és a régi fajták érintetlenek", async () => {
+  const { dropUndrawableSourceVisuals, sourceVisualProblems } = await import("../shared/lesson-visual-params");
+  const { withoutUndrawableVisuals } = await import("../server/studio/single-run/engine");
+  const animate = (animKind: string, params: unknown) => ({ kind: "animate", animKind, params, caption: "Felirat", coversConceptIds: ["c1"] });
+  const explain = { kind: "explain", text: "Szöveg.", depth: "core", readAloud: false, coversConceptIds: ["c1"] };
+  // A „gyártó-tipp” alakok: a lecke sémája elfogadja (`params: z.record`), a rajzoló viszont semmit nem rajzolna belőlük.
+  const guessed = [animate("table", { title: "T", headers: ["a"], rows: [["1"]] }), animate("table", { columns: ["a", "b"], rows: [{ a: 1 }] }),
+    animate("ruleBox", { heading: "Cím", items: ["pont"] }), animate("ruleBox", { title: "Cím", text: "pont" }), animate("compareCards", { left: {}, right: {} })];
+  const kept = [explain, animate("table", TABLE), animate("ruleBox", RULE), animate("compareCards", CARDS), animate("process", {}), animate("geometry", {}), animate("cycle", { phases: [] })];
+  const lesson = lessonSchema.parse({ title: "t", subject: "s", classroom: 6, mapId: "m", sourceOnly: true, misconceptions: [],
+    sections: [{ heading: "Első", probaEnabled: false, blocks: [kept[0], guessed[0], kept[1], guessed[1], kept[2]] }, { heading: "Második", probaEnabled: false, blocks: [guessed[2], kept[3], guessed[3], kept[4], guessed[4], kept[5], kept[6]] }] });
+  for (const block of guessed) assert.ok(sourceVisualProblems(block)?.length, "a kitalált alak hibás");
+  for (const block of kept) assert.equal(sourceVisualProblems(block), null, "érvényes új fajta és bármely régi fajta nem érintett (a hibás paraméterű régi sem)");
+  for (const block of guessed) assert.equal(render((block as { animKind: Kind }).animKind, block.params), "", "a rajzoló az ilyen blokkból semmit nem rajzol");
+
+  const result = dropUndrawableSourceVisuals(lesson);
+  assert.deepEqual(result.dropped.map((d) => `${d.path} ${d.animKind}`), ["sections[0].blocks[1] table", "sections[0].blocks[3] table", "sections[1].blocks[0] ruleBox", "sections[1].blocks[2] ruleBox", "sections[1].blocks[4] compareCards"]);
+  assert.deepEqual(result.lesson.sections.map((s) => s.blocks.map((b) => (b.kind === "animate" ? b.animKind : b.kind))), [["explain", "table", "ruleBox"], ["compareCards", "process", "geometry", "cycle"]]);
+  assert.ok(lessonSchema.safeParse(result.lesson).success, "a megmaradt lecke érvényes");
+  assert.equal(dropUndrawableSourceVisuals(result.lesson).lesson, result.lesson, "ismételve nincs több változás (ugyanaz az objektum)");
+
+  // A gyártásban: számlálva és naplózva, javítókör indítása nélkül (a függvény nem ad vissza hibát, csak a megtisztított leckét).
+  const log: string[] = [];
+  const telemetry = { gates: {} as { undrawableVisualsDropped?: number } };
+  const cleaned = withoutUndrawableVisuals(lesson, (line) => log.push(line), telemetry);
+  assert.equal(telemetry.gates.undrawableVisualsDropped, 5);
+  assert.equal(log.length, 5);
+  assert.match(log[0], /Kirajzolhatatlan ábrablokk kivéve: sections\[0\]\.blocks\[1\] \(table\) — table\./);
+  assert.deepEqual(cleaned, result.lesson);
+  assert.equal(withoutUndrawableVisuals(cleaned, (line) => log.push(line), telemetry), cleaned);
+  assert.equal(telemetry.gates.undrawableVisualsDropped, 5, "hibátlan leckén a számláló nem nő");
+  // Mutációs ellenpróba: egyetlen rejtő kulcs az érvényes táblán → pontosan az az egy blokk esik ki.
+  const mutated = structuredClone(cleaned);
+  (mutated.sections[0].blocks[1] as { params: Record<string, unknown> }).params.hidden = true;
+  assert.deepEqual(dropUndrawableSourceVisuals(mutated).dropped.map((d) => d.path), ["sections[0].blocks[1]"]);
 });

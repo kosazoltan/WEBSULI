@@ -103,9 +103,16 @@ for (const viewport of VIEWPORTS) {
         const state = await scroller.evaluate((el) => ({ wide: el.scrollWidth > el.clientWidth + 1, overflowX: getComputedStyle(el).overflowX, flagged: el.hasAttribute("data-overflowing"), sticky: !!el.querySelector("table[data-row-headers]") }));
         expect(state.overflowX).toBe("auto");
         expect(state.flagged, "a görgethetőség jelzése a méréssel egyezik").toBe(state.wide);
+        // Review J7: fókuszmegálló és nevesített régió csak a ténylegesen görgő táblán.
+        expect(await scroller.getAttribute("tabindex"), "fókuszmegálló csak görgő táblán").toBe(state.wide ? "0" : null);
+        expect(await scroller.getAttribute("role")).toBe(state.wide ? "region" : null);
         const hint = scroller.locator("xpath=following-sibling::p[@data-testid='sv-scroll-hint']");
         await expect(hint).toHaveCount(state.wide ? 1 : 0);
         if (!state.wide) continue;
+        // Review J6: egérrel a semleges felirat látszik (a „Húzd oldalra” csak érintőképernyőn).
+        await expect(hint.locator(".sv-hint-pointer")).toBeVisible();
+        await expect(hint.locator(".sv-hint-pointer")).toHaveText("A táblázat oldalra görgethető");
+        await expect(hint.locator(".sv-hint-touch")).toBeHidden();
         await scroller.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
         const after = await scroller.evaluate((el) => {
           const first = el.querySelector<HTMLElement>("tbody tr > :first-child")!.getBoundingClientRect();
@@ -118,6 +125,23 @@ for (const viewport of VIEWPORTS) {
         await scroller.evaluate((el) => { el.scrollLeft = 0; });
       }
       if (variant === "max" && viewport.width <= 844) expect(await scrollers.first().evaluate((el) => el.scrollWidth > el.clientWidth + 1), "a 8 oszlopos tábla szélesebb a keretnél").toBe(true);
+
+      // Review J5: a KÉTOSZLOPOS tábla telefonon sem görög — törhetetlen szóval (a jelölőnek látszó cellák) és szóköz nélküli hosszú szöveggel sem.
+      const twoColumn = page.locator('.sv-table-scroll:has(table[data-cols="2"])');
+      expect(await twoColumn.count()).toBe(1);
+      const fit = await twoColumn.first().evaluate((el) => ({ overflow: el.scrollWidth - el.clientWidth, cells: [...el.querySelectorAll("tbody tr:first-child > *")].map((c) => { const r = c.getBoundingClientRect(), f = el.getBoundingClientRect(); return r.left >= f.left - 1 && r.right <= f.right + 1 && r.width >= 60; }) }));
+      expect(fit.overflow, "a kétoszlopos tábla görgetés nélkül elfér").toBeLessThanOrEqual(1);
+      expect(fit.cells, "mindkét oszlop látszik a kereten belül").toEqual([true, true]);
+      await expect(twoColumn.first()).not.toHaveAttribute("tabindex", /.*/);
+
+      // Review J2: a tábla, a kártyák és a szabálydoboz ugyanahhoz a tartalomszélességhez igazodik (nincs féloldalas üres sáv).
+      const edges = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("figure.sv-figure")].map((fig) => {
+        const body = fig.querySelector<HTMLElement>(".sv-table-scroll, .sv-cards, .sv-rule")!.getBoundingClientRect();
+        const block = fig.closest<HTMLElement>('[data-block="animate"]')!.getBoundingClientRect();
+        return { kind: fig.dataset.anim, left: Math.round(body.left - block.left), right: Math.round(block.right - body.right) };
+      }));
+      for (const e of edges) expect(Math.abs(e.left - e.right), `${e.kind}: a tartalom a blokk teljes szélességét tölti ki (bal ${e.left}, jobb ${e.right})`).toBeLessThanOrEqual(6);
+      expect(new Set(edges.filter((e) => e.kind !== "ruleBox").map((e) => e.right)).size, "a tábla és a kártyák jobb széle egy vonalban").toBe(1);
 
       // Kártyák: 640 px alatt egymás alatt, fölötte egymás mellett.
       const tops = await page.locator(".sv-cards").first().evaluate((el) => [...el.children].map((c) => Math.round(c.getBoundingClientRect().top)));
@@ -139,7 +163,7 @@ test("szemantika és szöveg: valódi táblázat fejléccel, kódszótári felir
   const first = page.locator('figure[data-anim="table"]').first();
   await expect(first.locator("table caption")).toHaveText("Megszámlálható vagy megszámlálhatatlan?");
   await expect(first.locator('thead th[scope="col"]')).toHaveCount(2);
-  await expect(first.getByRole("region", { name: "Megszámlálható vagy megszámlálhatatlan?" })).toHaveAttribute("tabindex", "0");
+  await expect(first.getByRole("region")).toHaveCount(0);
   await expect(first.locator("tbody tr")).toHaveCount(12);
   await expect(first.locator("figcaption")).toHaveCount(0);
   const second = page.locator('figure[data-anim="table"]').nth(1);
@@ -150,22 +174,57 @@ test("szemantika és szöveg: valódi táblázat fejléccel, kódszótári felir
   await expect(first.locator("tbody tr").nth(10).locator("td").nth(1)).toHaveText('<img src=x onerror="window.__svPwned = 1">');
   await expect(first.locator("tbody tr").nth(11).locator("td").first()).toHaveText('<a href="javascript:window.__svPwned = 1">kattints</a>');
   expect(await page.evaluate(() => (window as unknown as { __svPwned?: number }).__svPwned ?? null)).toBeNull();
-  // Blokkfejlécek a kódszótárból (6. évfolyam: teen sáv), a tónus a dobozban felirattal és ikonnal is.
+  // Blokkfejléc a kódszótárból (6. évfolyam: teen sáv). Review J3: a szabálydoboznak NINCS külön blokkfejléce — a tónus felirata
+  // egyszer áll, a doboz saját fejlécében (ikonnal); a modell címe alatta cím; a blokk felirata a kereten BELÜL (J4).
   const heads = await page.locator('[data-block="animate"] .lesson-block-head').allTextContents();
-  expect(heads.map((h) => h.trim())).toEqual(["Táblázat", "Táblázat", "Szabály", "Figyelj!", "Tipp", "Hasonlítsd össze!", "Hasonlítsd össze!"]);
+  expect(heads.map((h) => h.trim())).toEqual(["Táblázat", "Táblázat", "Hasonlítsd össze!", "Hasonlítsd össze!"]);
   const boxes = page.locator('figure[data-anim="ruleBox"]');
-  await expect(boxes.nth(1).locator(".sv-rule-head strong")).toHaveText("Figyelj!");
+  await expect(boxes.locator(".sv-rule-tone")).toHaveText(["Szabály", "Figyelj!", "Tipp"]);
+  await expect(boxes.locator(".sv-rule-title")).toHaveText(["A fő szabály", "Így jegyzed meg"]);
   await expect(boxes.nth(1).locator(".sv-rule-icon svg")).toHaveCount(1);
   await expect(boxes.nth(0).locator("li")).toHaveCount(6);
   await expect(boxes.nth(0).locator("figcaption")).toHaveCount(0);
+  // A tónus szava a blokkban egyszer áll (a „Tipp” doboz saját blokkfelirata — „Tipp a tanuláshoz” — a második előfordulás).
+  for (const [index, word, times] of [[0, "Szabály", 1], [1, "Figyelj!", 1], [2, "Tipp", 2]] as const) {
+    const said = await boxes.nth(index).locator("xpath=ancestor::*[@data-block='animate'][1]").evaluate((el) => el.textContent ?? "");
+    expect(said.split(word).length - 1, `„${word}” előfordulása a blokkban`).toBe(times);
+  }
+  await expect(boxes.nth(1).locator(".sv-rule > figcaption.sv-rule-note")).toHaveText("Gyakori hibák");
+  expect(await boxes.nth(1).evaluate((fig) => { const note = fig.querySelector(".sv-rule-note")!.getBoundingClientRect(), box = fig.querySelector(".sv-rule")!.getBoundingClientRect(); return note.top >= box.top && note.bottom <= box.bottom; }), "a felirat a kereten belül áll").toBe(true);
   const tones = await boxes.evaluateAll((list) => list.map((fig) => getComputedStyle(fig.querySelector(".sv-rule")!).backgroundColor));
   expect(new Set(tones).size, "a három tónus három különböző háttér").toBe(3);
   await expect(page.locator(".sv-example-label").first()).toHaveText("Példa");
   // Felsorolás (E8): a magyarázat jelölt sorai valódi lista.
   await expect(page.locator('[data-block="explain"] ul.lesson-explain-list li')).toHaveText(["az alma megszámlálható", "a víz megszámlálhatatlan", "a kérdőszó ettől függ"]);
   // Billentyűzet: a görgethető tábla kerete fókuszálható.
+  await expect(second.getByRole("region", { name: "A két kérdőszó használata." })).toHaveAttribute("tabindex", "0");
   await second.locator(".sv-table-scroll").focus();
   await expect(second.locator(".sv-table-scroll")).toBeFocused();
+});
+
+test("B1 — a hibás paraméterű ábrablokk teljes egészében kimarad: nincs fejléc üres törzzsel", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/__lesson-runtime-probe?source-visuals=broken");
+  await expect(page.locator('figure[data-anim="ruleBox"]')).toHaveCount(1);
+  await expect(page.locator(".sv-rule-items li")).toHaveText(["Ez az egyetlen érvényes doboz."]);
+  await expect(page.locator('[data-block="animate"]')).toHaveCount(1);
+  await expect(page.locator('[data-block="animate"] .lesson-block-head')).toHaveCount(0);
+  await expect(page.getByText("Táblázat", { exact: true })).toHaveCount(0);
+  const empty = await page.locator('[data-block="animate"]').evaluateAll((list) => list.filter((el) => !el.querySelector("figure")).length);
+  expect(empty, "üres törzsű ábrablokk nincs").toBe(0);
+  await expect(page.locator('[data-block="explain"]')).toHaveCount(1);
+});
+
+test("érintőképernyőn a görgő tábla jelzése húzásra biztat", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: "block" });
+  const page = await context.newPage();
+  await page.route("**/api/design-assets/**", (route) => route.fulfill({ status: 404, json: { message: "teszt" } }));
+  await page.goto("/__lesson-runtime-probe?source-visuals=1");
+  const hint = page.getByTestId("sv-scroll-hint").first();
+  await expect(hint.locator(".sv-hint-touch")).toBeVisible();
+  await expect(hint.locator(".sv-hint-touch")).toHaveText("Húzd oldalra a táblázatot");
+  await expect(hint.locator(".sv-hint-pointer")).toBeHidden();
+  await context.close();
 });
 
 for (const band of [{ classroom: 2, id: "explorer" }, { classroom: 4, id: "adventure" }, { classroom: 8, id: "studio" }, { classroom: 11, id: "future" }] as const) {
