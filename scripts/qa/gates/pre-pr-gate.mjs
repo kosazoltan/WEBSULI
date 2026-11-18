@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import {
-  STATUS, argValue, cmdResult, createGate, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog,
+  STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog,
 } from './lib.mjs';
 import { evidenceRecord, runPrePushSteps } from './pre-push-gate.mjs';
 import { stemOf } from './stage-gate.mjs';
@@ -132,6 +132,8 @@ async function main() {
   await gate.step('független ellenőr ítélete a fejre', () => verdictResult(
     resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head));
 
+  await gate.step('külső (Gemini) ellenőr — második vélemény', () => externalResult(readEvidence(ctx.evDir, `external-${head}`), head));
+
   // 2) A push előtti kapu minden lépése.
   const { changed } = await runPrePushSteps({ gate, ctx, slice: args.includes('--slice') });
 
@@ -144,7 +146,7 @@ async function main() {
   const cls = classifyChanges(changed, cfg);
   const dockerOk = () => exec('docker', ['version', '--format', '{{.Server.Version}}'], { cwd: root, timeoutMs: 30_000 }).code === 0;
   const specFiles = readdirSync(join(src, 'tests')).filter((f) => f.endsWith('.spec.ts')).sort();
-  const { runs, warning } = pickE2eSpecs({ classification: cls, specFiles, readSpec: (s) => { try { return readFileSync(join(src, 'tests', s), 'utf8'); } catch { return ''; } }, cfg, changed });
+  const { runs, warning } = pickE2eSpecs({ classification: cls, specFiles, readSpec: (s) => { /* olvashatatlan spec → '' → legfeljebb kevesebb UI-spec + WARN (ártalmatlan) */ try { return readFileSync(join(src, 'tests', s), 'utf8'); } catch { return ''; } }, cfg, changed });
 
   if (warning) gate.add('böngészős út (UI)', STATUS.WARN, warning);
   if (!runs.length && !warning) gate.add('böngészős út (CI-azonos)', STATUS.SKIP, 'nincs játék- / UI-változás');
