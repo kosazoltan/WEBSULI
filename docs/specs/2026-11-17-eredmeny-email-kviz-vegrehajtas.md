@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 (a vak ellenőrzés leletei, 2026-11-18) kész, a következő vak ellenőrzés előtt – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 (keretek, telepítési sorrend, 2026-11-18) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -155,6 +155,21 @@ itt feloldva (az S2 foglalás-szelet már a főágon van).
 Parancsok: `node --import tsx --test tests/result-report-complete.test.ts tests/lesson-result-email-quiz.test.ts`;
 `npm run test:learning-db`; `npm run test:e2e -- tests/lesson-result-email-quiz.spec.ts tests/lesson-result-email.spec.ts --workers=1`;
 a gyökérből `npm run gate:stage`, `npm run gate:push`.
+
+## T11 — tulajdonosi döntés (keretek) és telepítési sorrend (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R9–R10)
+
+- **R9** ÚJ fájl `server/lesson-result-limits.ts` (adatbázis-import nélkül, hogy egységtesztből hívható legyen): `RESULT_RATE_LIMIT =
+  { windowMs: 15 perc, final: 60, partial: 60 }`, `isPartialRequest`, `resultLimiter`, `partialLimiter`, `resetPartialLimiter`; a
+  `server/lesson-result-email.ts` innen importál (és a tesztek kedvéért továbbexportál). Teszt: ÚJ `tests/lesson-result-limits.test.ts`
+  (express + a két korlátozó + üres kezelő; a cím a megosztott titokfejléces `X-Forwarded-For`): 60 → 202, 61. → 429, másik cím → 202,
+  mindkét fajtára, és a két keret függetlensége. Mutációs ellenpróba: a konstans 59 / 61 értékével a teszt bukik (kézi, naplózva).
+  A `tests/lesson-result-email-db.integration.ts` „10 / 15 perc” tesztje az új konstanst követi (60 / 61).
+- **R10** ÚJ import nélküli `shared/result-compat.ts`: `legacyResultBody(body)` — végleges törzsből a `startedAt` / `lastAnsweredAt`
+  elhagyva; pillanatképre (`partial: true`) és új mező nélküli törzsre `null`. `client/src/lesson-runtime/resultReport.ts`: a végleges
+  `apiRequest` 400 hibájára, ha van régi alak, egy ismétlés azzal. Teszt: egység (`legacyResultBody`), böngésző („régi szerver” csonk:
+  az új mezős törzset 400-zal utasítja el → a végleges kvíz és a feladatok kérése az új mezők nélkül elfogadva; a pillanatkép nem megy
+  át végleges alakban).
+- Utána: `git merge origin/main`, `gate:stage`, e2e-sorompó KÜLÖN lépésben, böngészős kör, DB-kör, `gate:push`.
 
 ## Kész-feltétel
 

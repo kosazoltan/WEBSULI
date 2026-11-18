@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8 – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18) – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -191,7 +191,24 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
   ugyanazon lecke két köre kell 24 órán belül azonos lenyomattal (a lenyomat a kezdés ezredmásodpercét is tartalmazza); a következmény
   egy elmaradó „félbehagyva” levél — elfogadott. (3) A `…:sent:<kör>` jelzők körönként halmozódnak (néhány bájt / kör, a főágon is így
   van) — nem takarítjuk.
-- **S2 — a pillanatkép-keret (10 / 15 perc / IP) NYITOTT tulajdonosi döntés** (osztályterem közös IP mögött); a kód addig változatlan.
+- **S2 — a pillanatkép-keret: ELDÖNTVE (tulajdonos, kérdőív, 2026-11-18: „Egy osztályra méretezve”) → R9.**
+
+**Tulajdonosi döntés és telepítési sorrend (2026-11-18) — dokumentált spec-változás:**
+- **R9 — a keretek egy osztályra méretezve (S2; a K1 korábbi 10-es kerete és a végleges 20-as kerete módosul).** Egy osztály közös IP
+  mögött (iskolai wifi) ül: kicsengetéskor ~30 pillanatkép és ~30 végleges beküldés érkezik egy címről percek alatt. A pillanatkép-
+  keret 60 / 15 perc / IP, a végleges beküldés kerete is 60 / 15 perc / IP — a két keret független (a pillanatképek nem fogyasztják a
+  véglegesét). Egy helyen áll: `server/lesson-result-limits.ts` (`RESULT_RATE_LIMIT`); a kulcs változatlanul a valódi kliens-IP
+  (`clientIpKeyGenerator`). Ár: a visszaélési plafon IP-nként 60 „félbehagyva” + 60 végleges levél / 15 perc (címzettenként).
+- **R10 — a kliens visszafelé kompatibilis a régi szerverrel.** A kliens (Vercel) és a szerver (Render) egymástól függetlenül települ, a
+  Vercel jellemzően hamarabb kész: a telepítés perceiben az új kliens a régi szervert hívja, amelynek sémája szigorú (`.strict()`), és
+  az új mezőket (`startedAt`, `lastAnsweredAt`, `partial`) 400-zal utasítja el. Szabály: ha a VÉGLEGES beküldés 400-at kap, és a törzs
+  új mezőt tartalmazott, a kliens EGYSZER megismétli a kérést az új mezők nélkül (a régi kliens alakjával; a szerver így is pontoz,
+  csak a dátumsor marad ki). A PILLANATKÉP nem lép vissza: a régi szerver a `partial` nélküli pillanatképet végleges beküldésnek
+  venné (a kihagyott kérdések hibásként, a végleges levél foglalná a kör kulcsát) — a pillanatkép 400 után nem rögzül elküldöttként,
+  és a szerver telepítése után a következő háttérbe kerüléskor / betöltéskor megy.
+  Választás indoka (a „szerver jelzi, hogy ismeri” megoldással szemben): csak kliensoldali, a régi szerverhez nem kell semmi; a jelzéses
+  megoldáshoz új szerverjelzés és a lap elhagyásakor nem megvárható előzetes kör kellene, és a régi szerver úgysem jelezne.
+
 
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
@@ -210,6 +227,9 @@ Elfogadás (S1b):
 - E21. Már kiment „félbehagyva” levél utáni pillanatképre a válasz `queued: false, alreadySent: true` (R6).
 - E22. Körönként a legtöbb választ tartalmazó pillanatkép marad (R7).
 - E23. A kvíz végleges beküldése `keepalive` kérés (R8).
+- E24. Ugyanarról a címről a 60. pillanatkép és a 60. végleges beküldés átmegy, a 61. 429; más cím kerete független (R9).
+- E25. AMIKOR a régi szerver az új mezők miatt 400-at ad, A RENDSZER a végleges beküldést egyszer az új mezők nélkül megismétli (az
+  eredménylevél kérése sikerül); a pillanatképet nem alakítja végleges beküldéssé (R10).
 
 ## Tulajdonosi döntést igénylő pontok
 
@@ -243,3 +263,5 @@ Elfogadás (S1b):
 - [x] E21 – igaz válasz a már kiment „félbehagyva” levél utáni pillanatképre (valódi DB)
 - [x] E22 – a legtöbb választ tartalmazó pillanatkép marad (valódi DB)
 - [x] E23 – a kvíz végleges beküldése `keepalive` (böngésző)
+- [ ] E24 – keret 60 / 15 perc / IP mindkét fajtára, a kulcs ellenőrzésével + mutációs ellenpróba (egységteszt + valódi DB)
+- [ ] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
