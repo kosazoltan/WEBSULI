@@ -22,8 +22,10 @@ A `gh pr merge --auto` tilos (a hook megtagadja): az összevonás később, fut�
 2. Minden KÖTELEZŐ ellenőrzés (a főág védelméből: `gh api repos/{owner}/{repo}/branches/main/protection`) sikeres a PR JELENLEGI
    fejének check-runjai között (nem egy korábbi fejen).
 3. Lezáratlan review-szál = 0 (GraphQL `reviewThreads`). Csak a megválaszolt szálat zárd le.
-4. A main elmozdult-e a PR CI-ja óta (a CI-futás `base.sha` vs. a main csúcsa); ha igen, és a PR repó-szintű őrt / ellenőrzést érint
-   (`*-guard.test.ts`, `scripts/qa/**`, `.github/workflows/**`) → bukás „előbb olvaszd be a maint” (C-61); egyébként figyelmeztetés.
+4. A main elmozdult-e a PR CI-ja óta (a CI-futás `base.sha` vs. a main csúcsa). Ha igen, és a PR repó-szintű őrt / ellenőrzést érint
+   (`*-guard.test.ts`, `scripts/qa/**`, `.github/workflows/**`), a kapu a main elmozdulásának fájllistáját (GitHub compare) a
+   `gates.config.json` `repoWideScopes` táblázatával veti össze: bukás „előbb olvaszd be a maint” (C-61), ha a main az ellenőrzés által
+   olvasott fájlt változtatott, vagy a lista nem olvasható / csonka / üres; egyébként figyelmeztetés. Részletek: `docs/minosegkapuk.md`.
 5. A független ellenőr ítélete a JELENLEGI fejre IGEN / IGEN, FELTÉTELLEL (helyi `review-<fej>.json`, vagy a PR-leírás / komment
    `Független ellenőr ítélete: … (fej: <hash>)` sora).
 6. Futásőr: `bash scripts/qa/active-runs-guard.sh` kilépési kódja 0 (1 = aktív gyártás → ne vonj össze; 2 = hiba → vakon tilos).

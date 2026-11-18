@@ -65,6 +65,7 @@ export async function runStageSteps({ gate, ctx, changed }) {
   const testFiles = listFiles(testDir, /\.test\.ts$/).map((f) => `tests/${f}`);
   const cache = new Map();
   const readTest = (t) => {
+    // Olvashatatlan tesztfájl → üres szöveg: legfeljebb kevesebb célzott teszt + „nincs célzott teszt” WARN; az őr-tesztek mindig futnak (ártalmatlan).
     if (!cache.has(t)) { try { cache.set(t, readFileSync(join(src, t), 'utf8')); } catch { cache.set(t, ''); } }
     return cache.get(t);
   };

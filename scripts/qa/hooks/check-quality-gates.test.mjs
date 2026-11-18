@@ -9,6 +9,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkAction, detectGated, planCommand, tokenizeSimple } from './check-quality-gates.mjs';
 
+// A8: a közvetlen checkAction-hívások is a közös bizonyíték-könyvtárat olvassák — a futtató környezetének változója ne számítson.
+delete process.env.WEBSULI_QA_EVIDENCE_DIR;
+
 const hook = fileURLToPath(new URL('./check-quality-gates.mjs', import.meta.url));
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=Teszt', '-c', `user.email=teszt${'@'}pelda.hu`, ...args], { cwd, encoding: 'utf8' }).trim();
 
@@ -35,6 +38,8 @@ function writeEv(ev, name, obj) {
 const runHook = (command, cwd, tool = 'Bash') => {
   const env = { ...process.env };
   delete env.WEBSULI_QA_EVIDENCE_DIR;
+  // Kanban #100: a valódi gites eseteknél hosszabb, a géptől független korlát (csak node --test alatt érvényes, lásd testOverride).
+  Object.assign(env, { WEBSULI_HOOK_GIT_TIMEOUT_MS: '120000', WEBSULI_HOOK_GH_TIMEOUT_MS: '120000', WEBSULI_HOOK_BUDGET_MS: '600000' });
   const out = execFileSync(process.execPath, [hook], { input: JSON.stringify({ tool_name: tool, tool_input: { command }, cwd }), encoding: 'utf8', env });
   return out ? JSON.parse(out) : null;
 };
@@ -173,4 +178,141 @@ test('más repó: nincs kimenet (láncolva sem) — kivéve, ha a parancs a WEBS
   assert.ok(denied(runHook('gh pr merge 5 -R kosazoltan/WEBSULI --squash', other)));
   assert.ok(denied(runHook('cd /d/repo/WEBSULI && git push', other)));
   assert.equal(runHook('git push', other, 'Edit'), null, 'csak Bash / PowerShell');
+});
+
+// ---- Kanban #100: fail-closed időtúllépéskor (befecskendezett futtatóval, a gép sebességétől függetlenül) ------------------------
+import { makeRunner, noAnswer, NoAnswerError } from './check-quality-gates.mjs';
+const errOf = (props) => Object.assign(new Error('x'), props);
+const cfgFast = { gitMs: 10_000, ghMs: 15_000, budgetMs: 45_000 };
+
+test('noAnswer: időtúllépés / jelzés / indítási hiba igen; gyors, nem nulla kilépés nem', () => {
+  for (const e of [errOf({ code: 'ETIMEDOUT', status: null, signal: 'SIGTERM' }), errOf({ killed: true, status: null }), errOf({ signal: 'SIGKILL', status: null }),
+    errOf({ code: 'ENOENT' }), errOf({ code: 'EPERM' })]) assert.equal(noAnswer(e), true, JSON.stringify(e));
+  assert.equal(noAnswer(errOf({ status: 128, signal: null })), false);
+});
+
+test('időtúllépő / indítási hibás git → DENY (NoAnswerError), nem „más repó”', () => {
+  const plan = { kind: 'push', remote: 'origin', ref: null, upstream: false };
+  for (const e of [errOf({ code: 'ETIMEDOUT', status: null, signal: 'SIGTERM' }), errOf({ code: 'ENOENT' })]) {
+    const run = makeRunner({ exec: () => { throw e; }, cfg: cfgFast });
+    assert.throws(() => checkAction(plan, '/x/mas-mappa', { run, raw: 'git push' }), NoAnswerError);
+  }
+});
+
+test('valódi „nem git-repó” (gyors, nem nulla kilépés) → más repó, nincs tiltás; WEBSULI-utalású mappában → DENY', () => {
+  const plan = { kind: 'push', remote: 'origin', ref: null, upstream: false };
+  const run = makeRunner({ exec: () => { throw errOf({ status: 128, signal: null }); }, cfg: cfgFast });
+  assert.equal(checkAction(plan, '/x/mas-mappa', { run, raw: 'git push' }), null);
+  assert.throws(() => checkAction(plan, 'D:/repo/WEBSULI/.claude/worktrees/x', { run, raw: 'git push' }), NoAnswerError);
+});
+
+test('a keret kimerülése → DENY, mielőtt a Claude Code hook-időkorlátja lejárna', () => {
+  let t = 0;
+  const run = makeRunner({ exec: () => { t += 50_000; return '/r'; }, now: () => t, cfg: cfgFast });
+  assert.equal(run('git', ['rev-parse'], '.'), '/r');
+  assert.throws(() => run('git', ['rev-parse'], '.'), NoAnswerError);
+});
+
+test('a futtató a konfigurált korláttal hív (git 10 s, gh 15 s), a maradék kerettel felülről korlátozva', () => {
+  const seen = [];
+  const run = makeRunner({ exec: (f, a, o) => { seen.push([f, o.timeout]); return ''; }, now: () => 0, cfg: cfgFast });
+  run('git', [], '.');
+  run('gh', [], '.', 'gh');
+  assert.deepEqual(seen, [['git', 10_000], ['gh', 15_000]]);
+});
+
+test('kanban #100: értelmező + szkriptfájl idézett „push” szöveggel nem kapu-köteles; a lánc és a kiértékelés tilt', () => {
+  assert.equal(kind('node kanban.mjs note 5 "a kiadást a git push után ellenőrizd"'), 'none');
+  assert.equal(kind('node D:/x/scripts/kanban.mjs note 5 "gh pr merge 9 után"'), 'none');
+  assert.equal(kind('echo x && git push'), 'deny');
+  assert.equal(kind('node -e "require(\'child_process\').execSync(\'git push\')"'), 'deny');
+  assert.equal(kind('node kanban.mjs note 5 "x" && git push'), 'deny');
+  assert.equal(kind('python3 -c "import os; os.system(\'git push\')"'), 'deny');
+  assert.equal(kind('node kanban.mjs git push'), 'deny', 'nem idézett git push szavak → tilt');
+});
+
+test('a tesztes korlát-felülírás csak node --test alatt él; éles futásban a konfig (≤ 45 s keret) számít', () => {
+  const hookUrl = new URL('./check-quality-gates.mjs', import.meta.url).href;
+  const env = { ...process.env, WEBSULI_HOOK_BUDGET_MS: '600000' };
+  delete env.NODE_TEST_CONTEXT;
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', `import(${JSON.stringify(hookUrl)}).then((m) => console.log(m.hookConfig().budgetMs))`], { env, encoding: 'utf8' });
+  assert.equal(Number(out.trim()), 45000);
+  assert.ok(process.env.NODE_TEST_CONTEXT, 'a teszt-futtató beállítja a NODE_TEST_CONTEXT-et');
+});
+
+// ---- Kanban #100, 2. kör (docs/specs/2026-11-17-kulso-ellenor.md 11.1, H3–H5) --------------------------------------------
+
+test('H3: git nélküli PATH (indítási hiba) → a hook FOLYAMATA tilt (a main() catch-e a NoAnswerError-t tiltássá alakítja)', () => {
+  const { wt } = makeRepo();
+  const empty = mkdtempSync(join(tmpdir(), 'qg-ures-path-'));
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (/^path$/i.test(k)) delete env[k];
+  env.PATH = empty; // a node abszolút útvonalon indul, a hook a git-et a PATH-on keresné → ENOENT
+  const out = execFileSync(process.execPath, [hook], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git push' }, cwd: wt }), encoding: 'utf8', env });
+  const r = JSON.parse(out);
+  assert.ok(denied(r), out);
+  assert.match(r.hookSpecificOutput.permissionDecisionReason, /nem válaszolt|nem állapítható meg/);
+});
+
+test('H4: a tesztes felülírás felső korlátja 55 s (git, gh és a teljes keret is)', () => {
+  const hookUrl = new URL('./check-quality-gates.mjs', import.meta.url).href;
+  const env = { ...process.env, NODE_TEST_CONTEXT: process.env.NODE_TEST_CONTEXT || 'child-v8', WEBSULI_HOOK_GIT_TIMEOUT_MS: '600000', WEBSULI_HOOK_GH_TIMEOUT_MS: '600000', WEBSULI_HOOK_BUDGET_MS: '600000' };
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', `import(${JSON.stringify(hookUrl)}).then((m) => console.log(JSON.stringify(m.hookConfig())))`], { env, encoding: 'utf8' });
+  assert.deepEqual(JSON.parse(out.trim()), { gitMs: 55_000, ghMs: 55_000, budgetMs: 55_000 });
+});
+
+test('a hívás korlátja a maradék kerettel felülről korlátozott (40 s után 4,5 s marad)', () => {
+  let t = 0;
+  const seen = [];
+  const run = makeRunner({ exec: (f, a, o) => { seen.push(o.timeout); return ''; }, now: () => t, cfg: cfgFast });
+  t = 40_000;
+  run('git', [], '.');
+  run('gh', [], '.', 'gh');
+  assert.deepEqual(seen, [4_500, 4_500]);
+});
+
+test('kanban #100: a kiértékelő kapcsoló „=”-vel és az útvonalas értelmező tilt (a szkriptfájl-feltétel nélkül átmenne)', () => {
+  for (const c of ['node --eval="require(\'child_process\').execSync(\'git push\')"', 'node --print="git push"', './node x.mjs "git push"',
+    'C:/x/node.exe x.mjs "git push"']) assert.equal(kind(c), 'deny', c);
+});
+
+test('H5: nem egyértelműen értelmezhető idézés + kapu-köteles kulcsszó → DENY; a szándék szerinti értelmező-alakok nem kapu-kötelesek', () => {
+  const ambiguous = [
+    "node x.mjs $'a\\'' ; git push #'",
+    'node x.mjs "a\\" ; git push #"',
+    'node x.mjs "a\u201D ; git push #"',
+    "echo $'a\\'' ; git push #'",
+    'echo "a\\" ; git push #"',
+    'echo "a\u201D ; git push #"',
+    "Write-Output 'a\u2019 ; git push #'",
+    'git commit -m "x\\" ; git push #"',
+    "git commit -m $'a\\'' ; git push #'",
+    'git log --grep="a\\" ; git push #"',
+    'gh pr view 5 --json title -q "a\\" ; gh pr merge 5 #"',
+    'node x.mjs $"git push"',
+  ];
+  for (const c of ambiguous) assert.equal(kind(c), 'deny', c);
+  // PowerShell-ben a `#` megjegyzést kezd: kapu-köteles kulcsszóval együtt tilt; Bash-eszköznél a régi viselkedés marad.
+  assert.equal(planCommand('node x.mjs "a" # git push', { tool: 'PowerShell' }).kind, 'deny');
+  assert.equal(planCommand('gh pr merge 9 --squash # megjegyzés', { tool: 'PowerShell' }).kind, 'deny');
+  // PowerShell-ben a #9 megjegyzés: a héj cél nélkül (az aktuális ág PR-ját) vonná össze, a terv viszont a 9-et nézné → DENY.
+  assert.equal(planCommand('gh pr merge #9 --squash', { tool: 'PowerShell' }).kind, 'deny');
+  assert.equal(planCommand('gh pr merge 9 --squash', { tool: 'PowerShell' }).kind, 'pr-merge');
+  const intended = [
+    'node kanban.mjs note 5 "a kiadást a git push után ellenőrizd"',
+    'node scripts/kanban.mjs note 5 "gh pr merge 9 után"',
+    'node.exe x.js "git push"',
+    'python x.py "git push"',
+    'py x.py "git push"',
+    'deno x.ts "git push"',
+    'bun x.ts "git push"',
+    'perl x.pl "git push"',
+    'ruby x.rb "git push"',
+    "node x.mjs '$(git push)'",
+    'node x.sh.mjs "git push"',
+  ];
+  for (const c of intended) {
+    assert.equal(kind(c), 'none', c);
+    assert.equal(planCommand(c, { tool: 'PowerShell' }).kind, 'none', `PowerShell: ${c}`);
+  }
 });
