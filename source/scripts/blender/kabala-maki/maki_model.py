@@ -35,7 +35,8 @@ GREY = srgb("#9ba3b0")        # bunda
 GREY_DARK = srgb("#7f8896")   # fejtető, hát
 CREAM = srgb("#fbf5ea")       # pofa, has
 PATCH = srgb("#565c69")       # szem körüli folt
-LID = srgb("#8d95a3")         # szemhéj
+LID = srgb("#8d95a3")
+LASH = srgb("#2a2630")     # pillaív         # szemhéj
 PAW = srgb("#5d6370")         # kéz, láb
 RING_DARK = srgb("#3a3d47")   # farokgyűrű
 NOSE = srgb("#3b3340")
@@ -47,6 +48,7 @@ IRIS_RIM = srgb("#8a4a14")
 MOUTH = srgb("#6b2a3a")
 TONGUE = srgb("#f58fa0")
 WHITE = (1.0, 1.0, 1.0)
+BACK = mix(GREY, GREY_DARK, 0.6)   # a hát színe (a farok töve ehhez igazodik)
 
 MAT_FUR, MAT_EYE, MAT_SHINE = 0, 1, 2
 
@@ -63,16 +65,16 @@ EYE_DIR_X = 0.43
 EYE_UP = 0.10
 
 TAIL_PTS = [
-    Vector((0.00, 0.12, 0.17)), Vector((0.10, 0.30, 0.10)), Vector((0.30, 0.37, 0.19)),
+    Vector((0.00, 0.10, 0.21)), Vector((0.07, 0.27, 0.165)), Vector((0.28, 0.37, 0.21)),
     Vector((0.46, 0.31, 0.43)), Vector((0.53, 0.23, 0.70)), Vector((0.48, 0.17, 0.93)),
     Vector((0.36, 0.14, 1.03)), Vector((0.27, 0.14, 0.95)),
 ]
 TAIL_BONES = 7
 TAIL_BANDS = 13
 
-SHOULDER = Vector((0.165, 0.0, 0.435))
-ELBOW = Vector((0.268, -0.025, 0.322))
-HAND = Vector((0.322, -0.07, 0.200))
+SHOULDER = Vector((0.170, 0.0, 0.440))
+ELBOW = Vector((0.262, -0.02, 0.312))
+HAND = Vector((0.312, -0.06, 0.182))
 HIP = Vector((0.10, 0.0, 0.17))
 ANKLE = Vector((0.115, -0.01, 0.05))
 TOE = Vector((0.12, -0.15, 0.03))
@@ -100,12 +102,12 @@ class Geo:
         return range(off, off + len(verts))
 
 
-def sphere(center, radii, nu, nv, rot=None, deform=None):
-    """UV-gömb; a pólus a helyi Z. Vissza: (világ-pontok, lapok, helyi egységvektorok)."""
+def sphere(center, radii, nu, nv, rot=None, deform=None, ring_pow=1.0):
+    """UV-gömb; a pólus a helyi Z; ring_pow > 1 a +Z pólus felé sűríti a gyűrűket. Vissza: (világ-pontok, lapok, helyi egységvektorok)."""
     rot = rot or Matrix.Identity(3)
     units = [Vector((0.0, 0.0, 1.0))]
     for k in range(1, nv):
-        th = math.pi * k / nv
+        th = math.pi * (k / nv) ** ring_pow
         for j in range(nu):
             ph = 2.0 * math.pi * j / nu
             units.append(Vector((math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th))))
@@ -191,6 +193,15 @@ def face_front_y(x, z):
     return min(ys) if ys else HC.y
 
 
+def frame(axis):
+    """Forgatás, amely a helyi Z-t az adott irányba viszi (a helyi X vízszintes marad)."""
+    ez = Vector(axis).normalized()
+    ref = Vector((0.0, 0.0, 1.0)) if abs(ez.z) < 0.95 else Vector((0.0, 1.0, 0.0))
+    ex = ref.cross(ez).normalized()
+    ey = ez.cross(ex).normalized()
+    return Matrix((ex, ey, ez)).transposed()
+
+
 # ---------------------------------------------------------------- a szem kerete
 
 
@@ -241,11 +252,13 @@ def build_body(g):
     hd = {"head": 1.0}
 
     # fej
-    v, f, units = sphere(HC, HR, 72, 40)
-    g.add(v, f, [head_color(u) for u in units], [hd] * len(v), MAT_FUR)
+    # a gömb pólusa ELŐRE néz, a gyűrűk az arc felé sűrűsödnek: a színfoltok széle így nem szemcsés
+    head_rot = Matrix(((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)))
+    v, f, units = sphere(HC, Vector((HR.x, HR.z, HR.y)), 72, 40, head_rot, ring_pow=1.5)
+    g.add(v, f, [head_color(head_rot @ u) for u in units], [hd] * len(v), MAT_FUR)
 
     # pofa + orr
-    v, f, units = sphere(MZ_C, MZ_R, 24, 14)
+    v, f, units = sphere(MZ_C, MZ_R, 20, 12)
     g.add(v, f, [CREAM] * len(v), [hd] * len(v), MAT_FUR)
     v, f, units = sphere(MZ_C + Vector((0.0, -0.079, 0.035)), Vector((0.034, 0.020, 0.024)), 14, 8)
     g.add(v, f, [NOSE] * len(v), [hd] * len(v), MAT_EYE)
@@ -253,7 +266,7 @@ def build_body(g):
     # szemek + fénypontok
     for side in (-1.0, 1.0):
         c, rot = eye_frame(side)
-        v, f, units = sphere(c, EYE_R, 28, 20, rot)
+        v, f, units = sphere(c, EYE_R, 24, 16, rot)
         g.add(v, f, [eye_color(u) for u in units], [hd] * len(v), MAT_EYE)
 
     # fülek
@@ -270,15 +283,20 @@ def build_body(g):
             ws.append({bone: w, "head": 1.0 - w})
         g.add(v, f, cols, ws, MAT_FUR)
 
-    # pofaszőr-pamacsok
+    # pofaszőr: egymásba olvadó, kerekded, csepp alakú pamacsok (felhőszerű, puha körvonal)
+    def drop(local, u):
+        s = 1.0 - 0.14 * max(0.0, u.z) ** 1.5
+        return Vector((local.x * s, local.y * s, local.z))
+
     for side in (-1.0, 1.0):
-        for k, (dz, ln) in enumerate(((0.02, 0.10), (-0.05, 0.115), (-0.12, 0.095))):
-            start = HC + Vector((0.27 * side, -0.07, -0.085 + dz * 0.6))
-            direction = Vector((0.95 * side, -0.12, -0.32 + dz * 5.0)).normalized()
-            path = [start + direction * (ln * s / 5.0) for s in range(6)]
-            radii = [0.060 * (1.0 - (s / 5.0) ** 1.4) + 0.003 for s in range(6)]
-            v, f, ring_of = tube(path, radii, 14)
-            g.add(v, f, [mix(GREY, CREAM, 0.12 * k)] * len(v), [hd] * len(v), MAT_FUR)
+        for el, ln, wd, tone in ((12.0, 0.040, 0.058, 0.10), (-6.0, 0.050, 0.068, 0.22), (-25.0, 0.056, 0.072, 0.34), (-44.0, 0.052, 0.068, 0.44), (-61.0, 0.040, 0.058, 0.52)):
+            a = math.radians(el)
+            d = Vector((math.cos(a) * 0.95 * side, -0.30, math.sin(a))).normalized()
+            base = HC + Vector((HR.x * d.x, HR.y * d.y, HR.z * d.z)) * 0.93
+            axis = (d + Vector((0.0, -0.05, -0.30))).normalized()
+            v, f, units = sphere(base + axis * ln * 0.18, Vector((wd, wd * 0.80, ln)), 12, 8, frame(axis), deform=drop)
+            cols = [mix(GREY, CREAM, tone * (0.55 + 0.45 * sstep(-0.6, 0.9, u.z))) for u in units]
+            g.add(v, f, cols, [hd] * len(v), MAT_FUR)
 
     # test
     def pear(local, u):
@@ -296,47 +314,70 @@ def build_body(g):
         ws.append({"hips": hips, "chest": chest, "spine": max(0.0, 1.0 - hips - chest)})
     g.add(v, f, cols, ws, MAT_FUR)
 
-    # karok + kezek
+    # karok + kezek: a tőnél kiszélesedő cső + vállgömb (puhább csatlakozás), kézfej három ujj-jelzéssel és hüvelykkel
     for side, sfx in ((1.0, "L"), (-1.0, "R")):
         pts = [mirror(SHOULDER, side), mirror(ELBOW, side), mirror(HAND, side)]
-        path, ts = catmull(pts, 12)
-        radii = [0.052 - 0.006 * t for t in ts]
-        v, f, ring_of = tube(path, radii, 12)
+        v, f, units = sphere(pts[0] + Vector((-0.012 * side, 0.0, -0.004)), Vector((0.074, 0.070, 0.070)), 14, 8)
+        g.add(v, f, [GREY] * len(v), [{"arm." + sfx: 0.5, "chest": 0.5}] * len(v), MAT_FUR)
+        path, ts = catmull(pts, 14)
+        radii = [0.047 + 0.020 * (1.0 - sstep(0.0, 0.32, t)) for t in ts]
+        v, f, ring_of = tube(path, radii, 14)
         ws = []
         for r in ring_of:
             w = sstep(0.38, 0.62, ts[r])
             ws.append({"arm." + sfx: 1.0 - w, "forearm." + sfx: w})
-        g.add(v, f, [mix(GREY, PAW, sstep(0.62, 0.92, ts[r])) for r in ring_of], ws, MAT_FUR)
-        v, f, units = sphere(pts[2] + Vector((0.004 * side, -0.006, -0.012)), Vector((0.056, 0.056, 0.060)), 14, 10)
-        g.add(v, f, [PAW] * len(v), [{"forearm." + sfx: 1.0}] * len(v), MAT_FUR)
+        g.add(v, f, [mix(GREY, PAW, sstep(0.66, 0.94, ts[r])) for r in ring_of], ws, MAT_FUR)
+        fw = {"forearm." + sfx: 1.0}
+        d = (pts[2] - pts[1]).normalized()
+        across = d.cross(Vector((0.0, -1.0, 0.0))).normalized()
+        palm = pts[2] + d * 0.012
+        v, f, units = sphere(palm, Vector((0.058, 0.050, 0.058)), 14, 10, frame(d))
+        g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR)
+        for k in (-1.0, 0.0, 1.0):
+            tip = palm + d * (0.040 - 0.006 * abs(k)) + across * (0.030 * k)
+            v, f, units = sphere(tip, Vector((0.022, 0.022, 0.024)), 8, 6, frame(d + across * 0.2 * k))
+            g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR)
+        v, f, units = sphere(palm + Vector((0.0, -0.040, 0.0)) + d * 0.010, Vector((0.021, 0.021, 0.022)), 8, 6, frame(d + Vector((0.0, -0.8, 0.0))))
+        g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR)
 
-    # lábak + lábfejek
+    # lábak + lábfejek: gömbölyded comb (a törzsbe olvad), kerek talp három lábujj-dudorral
     for side, sfx in ((1.0, "L"), (-1.0, "R")):
-        pts = [mirror(HIP, side), mirror(ANKLE, side)]
-        path = [pts[0].lerp(pts[1], s / 5.0) for s in range(6)]
-        v, f, ring_of = tube(path, [0.072 - 0.010 * s / 5.0 for s in range(6)], 12)
-        g.add(v, f, [GREY] * len(v), [{"leg." + sfx: 1.0}] * len(v), MAT_FUR)
-        c = Vector((0.118 * side, -0.065, 0.040))
-        v, f, units = sphere(c, Vector((0.072, 0.108, 0.040)), 16, 10)
-        g.add(v, f, [PAW] * len(v), [{"foot." + sfx: 1.0}] * len(v), MAT_FUR)
+        c = Vector((0.105 * side, -0.004, 0.128))
+        v, f, units = sphere(c, Vector((0.090, 0.098, 0.108)), 16, 12)
+        cols, ws = [], []
+        for u in units:
+            cols.append(mix(GREY, PAW, sstep(0.45, 0.95, -u.z)))
+            w = 1.0 - 0.7 * sstep(-0.1, 0.8, u.z)
+            ws.append({"leg." + sfx: w, "hips": 1.0 - w})
+        g.add(v, f, cols, ws, MAT_FUR)
+        fw = {"foot." + sfx: 1.0}
+        c = Vector((0.118 * side, -0.072, 0.046))
+        v, f, units = sphere(c, Vector((0.076, 0.112, 0.048)), 18, 12)
+        g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR)
+        for k in (-1.0, 0.0, 1.0):
+            toe = Vector((0.118 * side + 0.040 * k, -0.166 + 0.012 * abs(k), 0.036))
+            v, f, units = sphere(toe, Vector((0.026, 0.030, 0.026)), 8, 6)
+            g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR)
+
+    # a farok töve: a hát színével megegyező, puha dudor, amelyből a farok kinő
+    v, f, units = sphere(Vector((0.012, 0.125, 0.205)), Vector((0.092, 0.078, 0.088)), 14, 8)
+    g.add(v, f, [BACK] * len(v), [{"hips": 1.0}] * len(v), MAT_FUR)
 
     # farok: gyűrűs, gyűrűnként kicsit kidomborodó (bozontos) cső
-    path, ts = catmull(TAIL_PTS, 78)
+    path, ts = catmull(TAIL_PTS, 64)
     radii, ring_cols = [], []
     for t in ts:
-        r = 0.050 + 0.042 * sstep(0.0, 0.30, t) - 0.012 * sstep(0.75, 1.0, t)
+        r = 0.064 + 0.028 * sstep(0.06, 0.30, t) + 0.012 * (1.0 - sstep(0.0, 0.07, t)) - 0.012 * sstep(0.75, 1.0, t)
         band = t * TAIL_BANDS
         r *= 1.0 + 0.10 * abs(math.sin(math.pi * band))
         r *= math.sqrt(max(0.0, 1.0 - sstep(0.955, 1.0, t) ** 2)) * 0.98 + 0.02
         radii.append(r)
         edge = abs((band % 1.0) - 0.5) * 2.0     # 0 a sáv közepén, 1 a határán
         dark = int(band) % 2 == 0 or t > 0.925
-        if t < 0.045:
-            ring_cols.append(GREY)
-        else:
-            a, b = (RING_DARK, CREAM) if dark else (CREAM, RING_DARK)
-            ring_cols.append(mix(a, mix(a, b, 0.5), sstep(0.80, 1.0, edge)) if t <= 0.925 else RING_DARK)
-    v, f, ring_of = tube(path, radii, 14)
+        a, b = (RING_DARK, CREAM) if dark else (CREAM, RING_DARK)
+        col = mix(a, mix(a, b, 0.5), sstep(0.80, 1.0, edge)) if t <= 0.925 else RING_DARK
+        ring_cols.append(mix(BACK, col, sstep(0.05, 0.085, t)))   # a tő a hát színéből megy át az első gyűrűbe
+    v, f, ring_of = tube(path, radii, 12)
     ws = []
     for r in ring_of:
         s = ts[r] * TAIL_BONES - 0.5
@@ -369,8 +410,22 @@ def lid_grid(side, low_deg, nu=14, nv=7):
             a = iu * (nv + 1) + iv
             b = (iu + 1) * (nv + 1) + iv
             faces.append((a, a + 1, b + 1, b))
-    cols = [mix(LID, PUPIL, sstep(0.84, 0.95, iv / nv)) for iu in range(nu + 1) for iv in range(nv + 1)]
+    cols = [LID] * len(pts)
     return pts, faces, cols
+
+
+def lash_tube(side, deg, n=14):
+    """Pillaív: vékony, sötét cső a szemhéj alsó éle mentén (nyitva szemkontúr, csukva lefelé hajló ív)."""
+    c, rot = eye_frame(side)
+    ph = math.radians(deg)
+    path, radii = [], []
+    for i in range(n + 1):
+        al = math.radians(-80.0 + 160.0 * i / n)
+        path.append(c + rot @ Vector((EYE_R.x * 1.07 * math.sin(al),
+                                      EYE_R.y * 1.07 * math.cos(al) * math.sin(ph),
+                                      EYE_R.z * 1.22 * math.cos(al) * math.cos(ph))))
+        radii.append(0.0085 * math.sqrt(max(0.0, 1.0 - (2.0 * i / n - 1.0) ** 2)) + 0.0015)
+    return tube(path, radii, 6)
 
 
 MOUTH_Z = MZ_C.z - 0.022
@@ -414,6 +469,11 @@ def build_face(g):
         idx = g.add(pts, faces, cols, [hd] * len(pts), MAT_FUR)
         for i, p in zip(idx, closed):
             keys["blink"][i] = p
+        v, f, _ = lash_tube(side, LID_OPEN_DEG)
+        closed_v, _, _ = lash_tube(side, LID_BOTTOM_DEG + 4.0)
+        idx = g.add(v, f, [LASH] * len(v), [hd] * len(v), MAT_FUR)
+        for i, q in zip(idx, closed_v):
+            keys["blink"][i] = q
         # a fénypontok itt vannak (nem a testhálóban), hogy pislogáskor a szembe húzódva eltűnjenek
         c, rot = eye_frame(side)
         for (ox, oy, r) in ((-0.36, 0.40, 0.030), (0.34, -0.36, 0.014)):

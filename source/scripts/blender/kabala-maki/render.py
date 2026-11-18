@@ -1,6 +1,6 @@
 # Kabala-maki — bemutató képek fej nélkül (terv K-7): öt nézet + egy hatpózos tabló.
-# Futtatás: "$BLENDER_BIN" -b --factory-startup -P source/scripts/blender/kabala-maki/render.py [-- --only 01,05] [--size 1024]
-# Kimenet: docs/measurements/kabala-maki/*.png (a szkript helyéből számolva).
+# Futtatás: "$BLENDER_BIN" -b --factory-startup -P source/scripts/blender/kabala-maki/render.py [-- --only 01,05] [--size 768]
+# Kimenet: docs/measurements/kabala-maki/*.jpg (a szkript helyéből számolva).
 
 import math
 import os
@@ -24,7 +24,7 @@ GROUND = maki_model.srgb("#c9ecd2")
 
 def args():
     extra = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    only, size = None, 1024
+    only, size = None, 768
     for i, a in enumerate(extra):
         if a == "--only":
             only = set(extra[i + 1].split(","))
@@ -49,9 +49,9 @@ def setup(scene):
                 setattr(scene.eevee, attr, value)
     scene.view_settings.view_transform = "Standard"
     scene.view_settings.look = "None"
-    scene.render.image_settings.file_format = "PNG"
+    scene.render.image_settings.file_format = "JPEG"   # a repóba kis méretű képek kerülnek (összesen ≤ 1,5 MB)
     scene.render.image_settings.color_mode = "RGB"
-    scene.render.image_settings.compression = 100
+    scene.render.image_settings.quality = 90
     scene.render.film_transparent = False
 
     world = bpy.data.worlds.new("Hatter")
@@ -143,8 +143,8 @@ def save_pixels(path, arr):
     img = bpy.data.images.new("tablo", w, h, alpha=False)
     img.pixels.foreach_set(arr.reshape(-1))
     img.filepath_raw = path
-    img.file_format = "PNG"
-    img.save()
+    img.file_format = "JPEG"
+    img.save(quality=90)
     bpy.data.images.remove(img)
 
 
@@ -187,7 +187,7 @@ def main():
         if only and name[:2] not in only:
             continue
         place(cam, rig, az, el, dist, target)
-        render(scene, os.path.join(OUT_DIR, name + ".png"), size, size)
+        render(scene, os.path.join(OUT_DIR, name + ".jpg"), size, size)
 
     if only and "06" not in only:
         return
@@ -209,12 +209,12 @@ def main():
         text.data.body = caption
         text.location = Vector((0.08, -0.35, 1.36))
         text.rotation_euler = cam.rotation_euler
-        path = os.path.join(OUT_DIR, "_tile%d.png" % i)
+        path = os.path.join(OUT_DIR, "_tile%d.jpg" % i)
         render(scene, path, tile, tile)
         paths.append(path)
     px = [load_pixels(p) for p in paths]
     rows = [np.concatenate(px[3:6], axis=1), np.concatenate(px[0:3], axis=1)]  # a pixelsor alulról indul
-    save_pixels(os.path.join(OUT_DIR, "06-tablo.png"), np.concatenate(rows, axis=0))
+    save_pixels(os.path.join(OUT_DIR, "06-tablo.jpg"), np.concatenate(rows, axis=0))
     for p in paths:
         os.remove(p)
 

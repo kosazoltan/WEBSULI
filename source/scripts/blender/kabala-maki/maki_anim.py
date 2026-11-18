@@ -63,9 +63,9 @@ def idle_pose(arm, f):
 def wave_pose(arm, f):
     p = Pose(arm)
     up = sstep(0, 8, f) * (1.0 - sstep(40, 48, f))
-    p.aim("arm.R", (-0.95, -0.30, 0.12), up)
+    p.aim("arm.R", (-0.62, -0.50, 0.60), up)
     swing = math.sin(2.0 * math.pi * (f - 8) / 12.0) if 8 <= f <= 40 else 0.0
-    p.aim("forearm.R", (-0.42, -0.30, 0.86), up).r("forearm.R", "Y", 24.0 * swing * up)
+    p.aim("forearm.R", (-0.30, -0.25, 0.92), up).r("forearm.R", "Y", 24.0 * swing * up)
     p.r("head", "Y", 8.0 * up).r("chest", "Y", 3.0 * up)
     p.r("ear.R", "Y", 6.0 * swing * up)
     p.key("smile", up)
@@ -79,8 +79,8 @@ def cheer_pose(arm, f):
     p.move("hips", (0.0, 0.0, z))
     up = sstep(2, 12, f) * (1.0 - sstep(26, 36, f))
     for side, sfx in ((1.0, "L"), (-1.0, "R")):
-        p.aim("arm." + sfx, (0.88 * side, -0.38, 0.30), up)
-        p.aim("forearm." + sfx, (0.55 * side, -0.30, 0.78), up)
+        p.aim("arm." + sfx, (0.64 * side, -0.48, 0.60), up)
+        p.aim("forearm." + sfx, (0.36 * side, -0.25, 0.90), up)
         p.r("ear." + sfx, "Y", -10.0 * side * up)
         p.r("leg." + sfx, "X", -18.0 * sstep(4, 16, f) * (1.0 - sstep(20, 28, f)))
     squash = 1.0 if f in (4, 28) else 0.0

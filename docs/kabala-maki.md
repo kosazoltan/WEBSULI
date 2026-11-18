@@ -1,7 +1,9 @@
-# Kabala-maki — a Websuli 3D kabalája (kísérlet)
+# A Websuli makija — a Websuli 3D kabalája (kísérlet)
 
 **Állapot:** kísérlet a `kiserlet/kabala-maki` ágon; a játékokba és a honlapba NINCS bekötve. Terv:
 [`docs/specs/2026-11-18-kabala-maki.md`](specs/2026-11-18-kabala-maki.md).
+
+**Név (tulajdonosi döntés, 2026-11-18): „A Websuli makija”.** A külső a gyűrűsfarkú makié; a „borneói” jelzőt nem használjuk.
 
 ## Mi készült el
 
@@ -9,7 +11,7 @@
   kis kerek fülek, apró orr, mosoly, hosszú gyűrűs-csíkos farok.
 - A figura **teljes egészében szkriptből** jön létre (Blender, fej nélkül) — nincs kézzel rajzolt vagy letöltött elem.
   Ha változtatni akarunk rajta (szín, arány, új mozdulat), a szkriptet írjuk át, és újragyártjuk.
-- Képek: `docs/measurements/kabala-maki/01-elol.png` … `07-haromnegyed-farok.png`, a mozdulatok a `06-tablo.png`-n.
+- Képek: `docs/measurements/kabala-maki/01-elol.jpg` … `07-haromnegyed-farok.jpg`, a mozdulatok a `06-tablo.jpg`-n.
 - A böngészőnek szánt fájl: `source/client/public/models/kabala/kabala-maki.<hash>.glb` (a pontos név és a számok a mellette lévő
   `kabala-maki.manifest.json`-ban).
 
@@ -55,9 +57,9 @@ Most a száj egyetlen csúszkával nyílik. Beszédhez:
 
 A számok a manifestből valók; a következtetés becslés.
 
-- **Letöltés:** a GLB kb. 97 KB (Draco-tömörítve). A kibontáshoz a three.js Draco-dekódolója kell (a `three` csomag része,
+- **Letöltés:** a GLB kb. 100 KB (Draco-tömörítve; a pontos szám a manifestben). A kibontáshoz a three.js Draco-dekódolója kell (a `three` csomag része,
   külön letöltés nélkül kiszolgálható); ez egyszeri, néhány száz KB.
-- **Rajzolás:** kb. 16 900 háromszög, 4 rajzolási hívás, textúra nélkül. Egy mai középkategóriás telefon ennél nagyságrenddel
+- **Rajzolás:** kb. 19 000 háromszög, 4 rajzolási hívás, textúra nélkül. Egy mai középkategóriás telefon ennél nagyságrenddel
   többet rajzol 60 képkocka/mp mellett; a figura önmagában nem lehet szűk keresztmetszet.
 - **Mozgatás:** 22 csont és 2 alakkulcs — elhanyagolható terhelés.
 - **Memória:** néhány MB (nincs textúra).
@@ -107,14 +109,19 @@ Gombok a klipekhez, csúszka a mosolyhoz, egérrel / ujjal körbeforgatható.
 3. Pislogáskor a fénypont átütött a szemhéjon → a fénypontok az alakkulcsos hálóba kerültek, és csukáskor a szembe süllyednek.
 4. A szomorú póznál eltűnt a csillogás (üres tekintet) → kevesebb szemhéj-zárás, a fénypont megmarad; halvány pillasor.
 
+5. **Finomító kör a tulajdonos kérésére:** gömbölyded comb és lábujjas talp (a szögletességet az egyenes henger + éles árnyék
+   okozta, nem hálóhiba); kerekded, egymásba olvadó pofaszőr-pamacsok; hosszabb kar vállgömbbel és ujj-jelzéses kézfejjel;
+   külön pillaív, amely csukott szemnél is jól látszik; az arc felé sűrített fejháló (sima folt-szélek); a farok a hát
+   színéből, puha dudorból nő ki. Közben két zsákutca: a túl hosszú, széttárt kar „karmos” kézzel, és a hegyes, tüskeszerű
+   pamacs — mindkettő a képek alapján visszavonva.
+
 ## Ismert hiányok (őszintén)
 
-- A test részei egymásba tolt alapformák (gömbök, csövek), nem egyetlen összefüggő háló: közelről látszik a varrat a kar–váll
-  és a láb–törzs találkozásánál, és erős hajlításnál a részek elcsúszhatnak egymáson.
-- A pofaszőr-pamacsok merevek, „papírszerűek”; a bolyhosságot csak a forma és a szín jelzi (szőr nincs).
-- A lábak rövid, egyenes hengerek; térd és könyökhajlítás nincs kidolgozva, a figura nem tud járni (ilyen klip nincs).
-- Az integetésnél a kéz az arc mellé ér, nem a fej fölé — a chibi arány (nagy fej, rövid kar) miatt.
-- A színek csúcsszínek: a fej foltjainak széle nagyon közelről kissé szemcsés.
+- A test részei továbbra is egymásba tolt alapformák, nem egyetlen összefüggő háló: a vállgömb és a gömbölyded comb puhítja
+  a csatlakozást, de közelről a varrat látszik, és erős hajlításnál a részek elcsúszhatnak egymáson.
+- A pofaszőr most puha, de oldalnézetből „gyöngysor”-szerű; valódi szőrhatás nincs (csak forma és szín).
+- Térd- és könyökhajlítás nincs kidolgozva, a figura nem tud járni (ilyen klip nincs).
+- Az integetésnél a kéz az arc mellé, szemmagasságba ér — a fej FÖLÉ nem: ahhoz a chibi arányt (nagy fej) kellene feladni.
 - A three.js-ben a kép nem azonos a Blender-renderrel (más fények); az élő megjelenéshez a játék fényeit hangolni kell.
 - Készüléken (telefonon) nincs mérve; a teljesítmény-rész becslés.
 - A névkérdés nyitott: a külső a gyűrűsfarkú makié (Madagaszkár), nem borneói állaté — a tulajdonos dönt a névről.

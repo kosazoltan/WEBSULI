@@ -105,6 +105,7 @@ def main():
     for clip in clips:
         clip["loop"] = bool(loops.get(clip["name"], False))
     manifest = {
+        "name": "A Websuli makija",
         "file": name,
         "sha256": digest,
         "bytes": len(data),

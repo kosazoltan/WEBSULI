@@ -9,7 +9,9 @@ nincs PR, a játékok kódjába nincs bekötve.
 > „egy kis kabala figurát a websuli számára. Legyen az egy nagyszemű, szürke, csíkos farkú, nagyon aranyos, cuki, Borneo-i Maki,
 > amitől elolvadnak a tanulók, ezt nézd meg, hogy tudod előállítani 3D-ben, és ezt majd hogyan tudjuk mozgatni.”
 
-**Névkérdés a tulajdonosnak (egy mondat):** a leírt külső (szürke bunda, gyűrűs-csíkos farok) a madagaszkári gyűrűsfarkú makira
+**Név — tulajdonosi döntés (2026-11-18, kérdőíven): „A Websuli makija”** (nem borneói); az irányról: „Ez az irány jó, finomítsd”.
+
+**Az eredeti névkérdés (egy mondat):** a leírt külső (szürke bunda, gyűrűs-csíkos farok) a madagaszkári gyűrűsfarkú makira
 illik, Borneón makik nem élnek (ott a nagy szemű lajhármaki és koboldmaki él) — a kért KÜLSŐT valósítjuk meg, a „borneói” jelzőt
 a figura meséjéhez / nevéhez a tulajdonos dönti el (javaslat: maradjon egyszerűen „a Websuli makija”).
 
@@ -51,7 +53,7 @@ a figura meséjéhez / nevéhez a tulajdonos dönti el (javaslat: maradjon egysz
 | Alakkulcs | legalább `blink` (pislogás) és `smile` (mosoly) |
 | Klipek | `idle` (hurkolható), `wave`, `cheer`, `sad`, `blink`; egyenként 1–3 mp |
 | Export | egy Draco-tömörített GLB: `source/client/public/models/kabala/kabala-maki.<hash8>.glb` + `kabala-maki.manifest.json`; ≤ 400 KB |
-| Képek | `docs/measurements/kabala-maki/*.png`, ~1024 px, világos háttér, puha fény |
+| Képek | `docs/measurements/kabala-maki/*.jpg`, 768 px (a repóba összesen ≤ 1,5 MB), világos háttér, puha fény |
 | Őr-teszt | `source/tests/kabala-model-budget-guard.test.ts` (`node:test`, a GLB JSON-részéből olvas) |
 
 Tengelyek: Blenderben a figura a −Y irányba néz, Z a „fel”; a glTF-export után +Z-be néz, Y a „fel” (a three.js alapértelmezése).
@@ -76,9 +78,11 @@ Tengelyek: Blenderben a figura a −Y irányba néz, Z a „fel”; a glTF-expor
       utolsó képkockája azonos.
 - [x] K-5 Egy tömörített GLB a `source/client/public/models/kabala/` alatt, tartalom-hash a névben, mellette manifest a klipnevekkel.
 - [x] K-6 Keret: ≤ 400 KB, ≤ 20 000 háromszög, ≤ 6 anyag — őr-teszt védi, és a teszt zöld.
-- [x] K-7 Legalább 6 PNG (~1024 px): elöl, háromnegyed, oldal, hátul, arc-közeli, tabló az animációk kulcspózaival.
+- [x] K-7 Legalább 6 kép (eredetileg PNG ~1024 px; a finomító kör óta JPG 768 px): elöl, háromnegyed, oldal, hátul, arc-közeli, tabló az animációk kulcspózaival.
 - [x] K-8 Legalább 2–3 javító kör a saját képek alapján; őszinte minőségértékelés a jelentésben.
 - [x] K-9 Kétszeri futtatás: a GLB hash-e azonos (vagy az eltérés oka leírva).
 - [x] K-10 `docs/kabala-maki.md`: hogyan mozgatjuk (klip ↔ játékhelyzet, alakkulcsok, új mozdulat, beszéd, teljesítmény-becslés).
 - [x] K-11 (ha belefér) Önálló előnézeti HTML CDN nélkül; ha nem készül el: NOT DONE, okkal.
+- [x] K-13 Finomító kör (tulajdonosi kérés, 2026-11-18): kerekded láb; puha, bolyhos pofaszőr; hosszabb kar ujj-jelzéses kézfejjel;
+      vállgömb és a törzsbe olvadó comb; jól látható pillaív; sima színfolt-szélek; a farok töve a hátból nő ki; képek ≤ 1,5 MB.
 - [x] K-12 `npm run gate:stage` eredménye a munkafából (vagy pontosan megnevezve, mi hiányzik).

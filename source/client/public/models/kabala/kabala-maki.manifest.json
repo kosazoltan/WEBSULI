@@ -1,8 +1,9 @@
 {
-  "file": "kabala-maki.92974cd1.glb",
-  "sha256": "92974cd10d0a3c622096c14096a40161c012505fcfac0bdd6f7e59fbf0e415a8",
-  "bytes": 96904,
-  "triangles": 16904,
+  "name": "A Websuli makija",
+  "file": "kabala-maki.908e4868.glb",
+  "sha256": "908e4868f65d91bc05fa4e14f9ecee06c23f39e56fd44195f72d404c7058c30f",
+  "bytes": 108880,
+  "triangles": 18968,
   "bones": 22,
   "materials": 3,
   "meshes": [

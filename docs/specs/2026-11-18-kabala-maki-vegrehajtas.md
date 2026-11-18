@@ -1,7 +1,7 @@
 # Kabala-maki — végrehajtási utasítás (AI-ügynöknek)
 
 **Terv:** [`docs/specs/2026-11-18-kabala-maki.md`](2026-11-18-kabala-maki.md) (cél, nem-cél, stílus, technikai keret, K-1…K-12).
-**Állapot (2026-11-18):** helyben kész — GLB `kabala-maki.92974cd1.glb` (96 904 bájt, 16 904 háromszög, 22 csont, 3 anyag, 5 klip), kétszeri
+**Állapot (2026-11-18):** helyben kész — a finomító kör után GLB `kabala-maki.908e4868.glb` (108 880 bájt, 18 968 háromszög, 22 csont, 3 anyag, 5 klip), kétszeri
 gyártás azonos SHA-256, őr-teszt 3/3, `gate:stage` ZÖLD (1 WARN: az előnézeti kiszolgálónak nincs célzott tesztje). Nincs push / PR;
 független ellenőr NOT RUN (PR előtt kötelező). Telefonon nincs mérve.
 **Ág / munkafa:** `kiserlet/kabala-maki`, `.claude/worktrees/kabala-maki`. **Kísérlet:** push, PR, rebase, `--no-verify`, letöltés TILOS.
@@ -40,6 +40,19 @@ bármely játék kódja, más munkafa / ág.
    elonezet.html` + kis helyi kiszolgáló; a `three` a `source/node_modules`-ból jön (CDN nélkül).
 10. **Kapuk:** az őr-teszt célzottan; `npm run gate:stage` a munkafa gyökeréből (függőség: `npm.cmd ci` a `source/` alatt megengedett).
 11. **Zárás:** a terv K-pontjainak tételes újraellenőrzése futtatott parancs kimenetéből; atomi commitok, üzenet fájlból.
+
+## Finomító kör (tulajdonosi döntés 2026-11-18: „Ez az irány jó, finomítsd”; név: „A Websuli makija”)
+
+1. Láb: az egyenes henger helyett gömbölyded comb + kerek talp három lábujj-dudorral (a „szögletesség” oka az egyenes palástú
+   henger és a rá eső éles árnyék volt, nem hálóhiba — a gömbre cserélt forma ugyanazzal a fénnyel kerek).
+2. Pofaszőr: öt, egymásba olvadó kerekded pamacs oldalanként (felhőszerű perem) a hegyes kúpok helyett.
+3. Kar: hosszabb (felkar ~0,16, alkar ~0,15), vállgömb, a tőnél kiszélesedő cső; kézfej három ujj-dudorral és hüvelykkel;
+   az integetés / ugrás pózai a kezet az arc elé-mellé, szemmagasságba emelik.
+4. Pillaív: külön sötét cső a szemhéj alsó élén, a `blink` kulccsal együtt mozog.
+5. Fej: a gömb pólusa előre néz, a gyűrűk az arc felé sűrűsödnek → sima folt-szélek.
+6. Farok: a tő a hát színéből megy át az első gyűrűbe, a tőnél puha dudor; a pálya nem ér a földhöz.
+7. Képek: JPG, 768 px; a régi PNG-k törölve. Manifest: `"name": "A Websuli makija"`.
+8. Újra: kétszeri gyártás (azonos hash), őr-teszt, `gate:stage`. Retro: `docs/measurements/kabala-maki/retro-2026-11-18.md`.
 
 ## Futtatás
 
