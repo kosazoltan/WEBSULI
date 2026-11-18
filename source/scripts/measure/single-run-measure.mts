@@ -70,7 +70,10 @@ if (process.env.MEASURE_SAME_MAP === "1" && !sameMap) throw new Error("MEASURE_S
 if (sameMap) out.sameMap = { id: sameMap.map.id, concepts: sameMap.concepts.length };
 const knowledge = process.env.MEASURE_KNOWLEDGE === "1" && mapSubject ? await readKnowledge(mapSubject) : null;
 if (knowledge) out.knowledgeCopy = { catalog: knowledge.catalog.length, cards: knowledge.cards.length, events: knowledge.events.length };
-out.flags = { STUDIO_CATALOG_S6: process.env.STUDIO_CATALOG_S6 ?? null, STUDIO_SUBJECT_MEMORY: process.env.STUDIO_SUBJECT_MEMORY ?? null };
+// Spec 2026-11-18-tananyag-gyartas-minoseg (0. elv): a forrás vizuális leltára az éles gyártásban alapból KI; a mérőharness
+// BEKAPCSOLJA (ezt méri az S10). A/B alapvonalhoz: STUDIO_SOURCE_VISUALS=off a futtató környezetében → a mai éles viselkedés.
+const measureSourceVisuals = (process.env.STUDIO_SOURCE_VISUALS ?? "on").trim().toLowerCase() === "on";
+out.flags = { STUDIO_CATALOG_S6: process.env.STUDIO_CATALOG_S6 ?? null, STUDIO_SUBJECT_MEMORY: process.env.STUDIO_SUBJECT_MEMORY ?? null, sourceVisuals: measureSourceVisuals };
 
 // 2) Eldobható Postgres; a séma a drizzle-kit exportból. Az éles kapcsolat innentől nem használható (biztonsági őr lent).
 const name = `websuli-measure-${randomBytes(6).toString("hex")}`;
@@ -135,6 +138,7 @@ try {
       store: await createDrizzlePipelineStore(),
       saveMap: (map, f) => saveSingleRunMap(map, f, "measure-owner", conversation.model),
       log: (m) => logs.push(m),
+      sourceVisuals: measureSourceVisuals,
     });
   } catch (e) { error = e instanceof Error ? e.message : String(e); }
 

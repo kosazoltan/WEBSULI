@@ -1,0 +1,91 @@
+/**
+ * Adventi naptár — a kliens és a szerver közös adatszerződése (docs/specs/2026-11-18-adventi-naptar.md R8).
+ * A tanulói token és az eszközazonosító a kérés TÖRZSÉBEN megy (URL-be egyik sem kerül).
+ */
+import { z } from "zod";
+import type { AdventPhase } from "./calendar";
+import { ADVENT_DOORS, ADVENT_MAX_GRADE, ADVENT_MIN_GRADE, type AdventClosing, type AdventSummary, type DoorState } from "./rules";
+
+/** Az eszköz véletlen azonosítója: UUID (a böngésző `crypto.randomUUID()` értéke). */
+export const adventDeviceId = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+
+export const adventIdentityBody = z.object({
+  learner: z.string().max(120).optional(),
+  device: adventDeviceId.optional(),
+});
+
+export const adventGradeBody = adventIdentityBody.extend({
+  grade: z.number().int().min(ADVENT_MIN_GRADE).max(ADVENT_MAX_GRADE),
+});
+
+export const adventAnswerBody = adventIdentityBody.extend({
+  questionId: z.string().min(1).max(32),
+  pick: z.number().int().min(0).max(3),
+});
+
+/** A `:day` útvonal-paraméter: 1–24 egész, vezető nulla és egyéb karakter nélkül. */
+export const adventDayParam = z
+  .string()
+  .regex(/^[1-9][0-9]?$/)
+  .transform(Number)
+  .refine((day) => day >= 1 && day <= ADVENT_DOORS);
+
+export type AdventDoorView = {
+  day: number;
+  state: DoorState;
+  /** A karácsonyi ablak tárgya `christmas`; bank-ablaknál a tárgy csak a megnyitás után ismert (addig null). */
+  subject: string | null;
+  /** Hány javítás maradt (csak `repairable` állapotban > 0). */
+  repairsLeft: number;
+};
+
+/** A kliensnek adott kérdés: SOHA nincs benne a helyes válasz indexe és a magyarázat. */
+export const adventQuestionSchema = z
+  .object({
+    id: z.string(),
+    subject: z.string(),
+    prompt: z.string(),
+    options: z.array(z.string()).length(4),
+  })
+  .strict();
+export type AdventQuestion = z.infer<typeof adventQuestionSchema>;
+
+export type AdventState = {
+  enabled: true;
+  season: number;
+  phase: AdventPhase;
+  today: string;
+  openDay: number;
+  nextOpensAt: string | null;
+  daysUntilStart: number;
+  identity: "learner" | "player" | "device" | "preview" | null;
+  /** `invalid`: a kérés tanulói tokent hozott, de az érvénytelen — a felület újrapárosítást kér (terv 16.5). */
+  pairing: "ok" | "invalid" | "none";
+  firstName: string | null;
+  grade: number | null;
+  needsGrade: boolean;
+  round: number;
+  maxRounds: number;
+  layout: number[];
+  doors: AdventDoorView[];
+  summary: AdventSummary;
+  closing: AdventClosing;
+};
+
+export type AdventOpenResult = {
+  day: number;
+  /** `null`: a már megválaszolt kérdés közben kikerült a bankból — ilyenkor csak a tárolt eredmény látszik. */
+  question: AdventQuestion | null;
+  /** Megoldott / végleg hibás ablaknál az utolsó próba eredménye (csak olvasásra). */
+  answered: AdventAnswerResult | null;
+};
+
+export type AdventAnswerResult = {
+  correct: boolean;
+  /** A helyes válasz indexe a kliensnek adott (kevert) sorrendben; -1, ha a kérdés már nem érhető el. */
+  correctIndex: number;
+  explanation: string;
+  door: AdventDoorView;
+  summary: AdventSummary;
+  closing: AdventClosing;
+};

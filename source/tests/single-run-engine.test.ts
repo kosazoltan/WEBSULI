@@ -591,13 +591,16 @@ const VISUAL_STEPS = { id: "v2", kind: "process", sourceFile: "forras.txt", page
 const sourceReply = (visuals?: unknown) => JSON.stringify({ title: "Terület", subject: fixture.subject, classroom: fixture.classroom, transcript: TRANSCRIPT, ...(visuals === undefined ? {} : { visuals }),
   concepts: [{ id: "area", term: "terület", definition: "A síkidom által lefedett rész nagysága.", quote: "A téglalap területe az oldalak szorzata.", type: "concept", examWeight: "core", relatedIds: [] }] });
 const gatesOf = (mem: ReturnType<typeof memoryStore>) => (mem.steps.at(-1)!.output as { telemetry: RunTelemetry }).telemetry.gates;
+/** Az S1a tesztjei BE kapcsolt leltárral futnak (a kapcsoló alapértéke KI — `tests/source-visuals-flag.test.ts`). */
+const visualDeps = (...args: Parameters<typeof deps>): SingleRunDeps => ({ ...deps(...args), sourceVisuals: true });
+const visualResumeDeps = (...args: Parameters<typeof resumeDeps>): SingleRunDeps => ({ ...resumeDeps(...args), sourceVisuals: true });
 
 test("S1a: a modell leltára a térképre kerül (fájlonként a source_files elemébe), a fogalom-hivatkozás megtisztítva", async () => {
   const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([VISUAL_TABLE, VISUAL_STEPS]) : null));
   const mem = memoryStore();
   const maps: SingleRunMap[] = [];
   const files = [{ name: "forras.txt", kind: "text" as const, content: TRANSCRIPT }];
-  const result = await runSingleLesson({ files, ownerId: "u1" }, deps(client, mem, maps));
+  const result = await runSingleLesson({ files, ownerId: "u1" }, visualDeps(client, mem, maps));
   assert.equal(result.htmlFileId, "html1");
   assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.kind, v.sourceFile, v.conceptIds, v.verified]), [["v1", "table", "forras.txt", ["area"], "visual-only"], ["v2", "process", "forras.txt", [], "visual-only"]]);
   const { sourceFileRow } = await import("../server/studio/single-run/live");
@@ -616,7 +619,7 @@ test("S1a: a hibás vizuális tétel kimarad és megszámolódik — javító fo
   const mem = memoryStore();
   const maps: SingleRunMap[] = [];
   const logs: string[] = [];
-  const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...deps(client, mem, maps), log: (m) => logs.push(m) });
+  const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...visualDeps(client, mem, maps), log: (m) => logs.push(m) });
   assert.equal(result.htmlFileId, "html1");
   assert.deepEqual(maps[0].visuals.map((v) => v.id), ["v1"]);
   assert.equal(client.calls.filter((c) => c === "1").length, 1, "az 1. állomás egyetlen forduló");
@@ -633,7 +636,7 @@ test("S1a: visuals nélküli (vagy nem tömb) válasz → a futás üres leltár
     const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply(visuals) : null));
     const mem = memoryStore();
     const maps: SingleRunMap[] = [];
-    const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, mem, maps));
+    const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, visualDeps(client, mem, maps));
     assert.equal(result.htmlFileId, "html1");
     assert.deepEqual(maps[0].visuals, []);
     assert.equal(client.calls.filter((c) => c === "1" || c === "forrás és tudásbank").length, 1, "nincs javító forduló");
@@ -645,14 +648,14 @@ test("S1a: visuals nélküli (vagy nem tömb) válasz → a futás üres leltár
 test("S1a: az 1. állomás kérése a leltárt is kéri; térképről indított futás (files: []) a térkép leltárát kapja", async () => {
   let request = "";
   const spy = withOverride(scriptedClient(), (station, turns) => { if (station === "1") request = lastUserText(turns); return null; });
-  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(spy, memoryStore()));
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, visualDeps(spy, memoryStore()));
   assert.match(request, /"visuals": \[\.\.\.\]/);
   assert.match(request, /- decisionTree: /);
 
   const client = scriptedClient();
   const mem = memoryStore();
   mem.saveVisuals([{ ...VISUAL_STEPS, verified: "visual-only" } as SourceVisual]);
-  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(client, mem));
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(client, mem));
   assert.equal(result.htmlFileId, "html1");
   assert.ok(!client.calls.includes("1"), "nincs forrás-állomás");
   const gates = gatesOf(mem);
@@ -667,7 +670,7 @@ test("S1a (review J1): natív PDF-nél a modell átiratának hiányos oldaljelö
   const mem = memoryStore();
   const maps: SingleRunMap[] = [];
   // Szövegréteg nélküli PDF: nincs `extractedText`, a fájl natívan megy a modellhez — a tényleges oldalszám nem ismert.
-  const result = await runSingleLesson({ files: [{ name: "fuzet.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=" }], ownerId: "u1" }, deps(client, mem, maps));
+  const result = await runSingleLesson({ files: [{ name: "fuzet.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=" }], ownerId: "u1" }, visualDeps(client, mem, maps));
   assert.equal(result.htmlFileId, "html1");
   assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.page, v.verified]), [["v2", 3, "visual-only"]], "megmarad; a modell saját átirata nem igazol");
   assert.equal(gatesOf(mem).visualsDropped, 0);
@@ -678,7 +681,7 @@ test("S1a (review J1): a program által kinyert PDF-szöveg jelölősora a tény
   const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([{ ...VISUAL_STEPS, sourceFile: "lap.pdf", page: 2 }, { ...VISUAL_STEPS, id: "v3", sourceFile: "lap.pdf", page: 3 }]) : null));
   const mem = memoryStore();
   const maps: SingleRunMap[] = [];
-  const result = await runSingleLesson({ files: [{ name: "lap.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=", extractedText }], ownerId: "u1" }, deps(client, mem, maps));
+  const result = await runSingleLesson({ files: [{ name: "lap.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=", extractedText }], ownerId: "u1" }, visualDeps(client, mem, maps));
   assert.equal(result.htmlFileId, "html1");
   assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.page, v.verified]), [["v2", 2, "text"]]);
   assert.equal(gatesOf(mem).visualsDropped, 1);
@@ -707,7 +710,7 @@ test("review U3: hézagos jelölősornál a motor NEM dob el tételt oldalszám 
     const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([{ ...VISUAL_STEPS, sourceFile: "lap.pdf", page: 9 }]) : null));
     const mem = memoryStore();
     const maps: SingleRunMap[] = [];
-    await runSingleLesson({ files: [{ name: "lap.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=", extractedText }], ownerId: "u1" }, deps(client, mem, maps));
+    await runSingleLesson({ files: [{ name: "lap.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=", extractedText }], ownerId: "u1" }, visualDeps(client, mem, maps));
     return { pages: maps[0].visuals.map((v) => v.page), dropped: gatesOf(mem).visualsDropped };
   };
   assert.deepEqual(await run(`[1. oldal]\n${TRANSCRIPT}\n\n[3. oldal]\nGyakorlás.`), { pages: [9], dropped: 0 }, "hézagos sor: nincs felső határ");
@@ -735,7 +738,7 @@ test("review U1: a túl hosszú cellájú táblázat a térképre kerül, a cson
   const mem = memoryStore();
   const maps: SingleRunMap[] = [];
   const logs: string[] = [];
-  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...deps(client, mem, maps), log: (m) => logs.push(m) });
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...visualDeps(client, mem, maps), log: (m) => logs.push(m) });
   assert.deepEqual(maps[0].visuals.map((v) => v.id), ["v1"], "a táblázat megmaradt");
   const gates = gatesOf(mem);
   assert.deepEqual([gates.visualsFound, gates.visualsDropped, gates.visualsCellsTruncated], [1, 0, 1]);
@@ -762,7 +765,7 @@ test("S1b: térképről indított gyártásnál a leltár a 2., 3., 4. és 6. á
   const mem = memoryStore();
   const published = capturePublish(mem);
   mem.saveVisuals([{ ...VISUAL_STEPS, verified: "visual-only" } as SourceVisual]);
-  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(client, mem));
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(client, mem));
   assert.equal(result.htmlFileId, "html1");
   assert.ok(!client.calls.includes("1"), "nincs forrás-állomás — a leltár a térképről jön");
   for (const station of ["2", "3", "4", "6"]) {
@@ -783,13 +786,13 @@ test("S1b: új forrásból a most mentett leltár megy a promptokba; leltár né
   const withInventory = captureRequests();
   const source = withOverride(withInventory.client, (station) => (station === "1" ? sourceReply([VISUAL_STEPS]) : null));
   const mem = memoryStore();
-  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(source, mem));
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, visualDeps(source, mem));
   for (const station of ["2", "3", "4", "6"]) assert.ok(withInventory.requests[station].includes(VISUALS_HEAD), `${station}. állomás`);
 
   const plain = captureRequests();
   const mem2 = memoryStore();
   const published = capturePublish(mem2);
-  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(plain.client, mem2));
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, visualDeps(plain.client, mem2));
   for (const station of ["2", "3", "4", "6"]) assert.ok(!/VIZUÁLIS LELTÁR|sourceVisualId|skippedVisuals/.test(plain.requests[station]), `${station}. állomás: leltár nélkül változatlan`);
   assert.equal("visuals" in published[0].coverage, false, "leltár nélkül a fedettség alakja a régi");
 });
@@ -803,12 +806,12 @@ test("review J4: a különálló kinyerés lenyomata a leltár sémaverzióját 
   const rows = [["a.txt", "text", "első"]];
   // Rögzített alak (nem a kódból számolva): a verziócímke a lenyomat része.
   assert.equal(SOURCE_VISUALS_SCHEMA_VERSION, 1);
-  assert.equal(singleRunMapHash(files, " Cím "), sha(["single-run-map-2", "source-visuals-1", "Cím", rows]));
+  assert.equal(singleRunMapHash(files, " Cím ", true), sha(["single-run-map-2", "source-visuals-1", "Cím", rows]));
   // A leltár előtti (S1a előtti) lenyomat ugyanarra a fájlra MÁS: a régi, leltár nélküli térkép nem találat.
-  assert.notEqual(singleRunMapHash(files, "Cím"), sha(["single-run-map-2", "Cím", rows]));
+  assert.notEqual(singleRunMapHash(files, "Cím", true), sha(["single-run-map-2", "Cím", rows]));
   // Mutáció: más sémaverzió más lenyomatot adna.
-  assert.notEqual(singleRunMapHash(files, "Cím"), sha(["single-run-map-2", "source-visuals-2", "Cím", rows]));
-  assert.equal(singleRunMapHash(files, "Cím"), singleRunMapHash(files, "Cím"), "determinisztikus");
+  assert.notEqual(singleRunMapHash(files, "Cím", true), sha(["single-run-map-2", "source-visuals-2", "Cím", rows]));
+  assert.equal(singleRunMapHash(files, "Cím", true), singleRunMapHash(files, "Cím", true), "determinisztikus");
 });
 
 /* Spec 2026-11-18-tananyag-gyartas-minoseg, SK1: forrás-fedettségi kapu a végellenőrzésnél — `report` módban mér és ment, NEM állít meg;
@@ -828,7 +831,7 @@ function fromMapWithVisuals(patchReply: string, visuals: SourceVisual[] = [STORE
 test("SK1 (report — az alapérték): a bukó kapu NEM állít meg; az eredmény a telemetriában, pótló forduló nincs", async () => {
   const { client, mem, published } = fromMapWithVisuals(coveragePatch());
   const logs: string[] = [];
-  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...deps(client, mem), log: (m) => logs.push(m) });
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(client, mem), log: (m) => logs.push(m) });
   assert.equal(result.htmlFileId, "html1", "a lecke közzétéve");
   assert.equal(mem.published(), 1);
   assert.ok(!client.calls.includes("forráspótlás"), "report módban nincs pótló modellhívás");
@@ -846,19 +849,19 @@ test("SK1 (report — az alapérték): a bukó kapu NEM állít meg; az eredmén
 
 test("SK1: leltár nélküli forrásnál a kapu átmegy (0 / 0); `off` módban nem fut", async () => {
   const mem = memoryStore();
-  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(scriptedClient(), mem));
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(scriptedClient(), mem));
   assert.deepEqual(gateResultsOf(mem).map((r) => [r.ok, r.metrics.total, r.problems.length]), [[true, 0, 0]]);
   const off = fromMapWithVisuals("{}");
-  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...deps(off.client, off.mem), gateModes: { sourceCoverage: "off" } });
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(off.client, off.mem), gateModes: { sourceCoverage: "off" } });
   assert.deepEqual(gateResultsOf(off.mem), []);
   assert.equal(off.mem.published(), 1);
 });
 
 test("SK1 (enforce): bukás → PONTOSAN EGY pótló forduló → a kapu átmegy → közzététel a pótolt ábrával", async () => {
   const report = fromMapWithVisuals(coveragePatch());
-  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(report.client, report.mem));
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(report.client, report.mem));
   const { client, mem, published } = fromMapWithVisuals(coveragePatch());
-  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...deps(client, mem), gateModes: { sourceCoverage: "enforce" } });
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(client, mem), gateModes: { sourceCoverage: "enforce" } });
   assert.equal(result.htmlFileId, "html1");
   assert.equal(client.calls.filter((c) => c === "forráspótlás").length, 1);
   assert.equal(client.calls.length, report.client.calls.length + 1, "a modellhívások száma pontosan eggyel nőtt a report futáshoz képest");
@@ -877,9 +880,9 @@ test("SK1 (enforce): ismételt bukás → megállás, gateStop kitöltve, közz�
   const lost = JSON.stringify({ sections: [{ index: 0, visuals: [{ after: 0, animKind: "process", params: { steps: VISUAL_STEPS.data.steps }, caption: "A terület kiszámításának lépései", coversConceptIds: ["area"] }] }] });
   for (const [reply, why] of [[JSON.stringify({ nem: "folt" }), /nincs rá hivatkozó blokk/], [coveragePatch(["Mérd meg az oldalakat.", "Valami más lépés."]), /a tartalom hűsége 50%/], [lost, /nincs rá hivatkozó blokk/]] as const) {
     const report = fromMapWithVisuals(reply);
-    await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(report.client, report.mem));
+    await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(report.client, report.mem));
     const { client, mem } = fromMapWithVisuals(reply);
-    await assert.rejects(() => runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...deps(client, mem), gateModes: { sourceCoverage: "enforce" } }), (error: unknown) => {
+    await assert.rejects(() => runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(client, mem), gateModes: { sourceCoverage: "enforce" } }), (error: unknown) => {
       assert.ok(error instanceof SingleRunError);
       assert.equal(error.station, "forrás-fedettség");
       assert.match(error.problems[0], why);
@@ -901,34 +904,34 @@ test("SK1: a terv skippedVisuals mezője eljut a kapuhoz — az érvénytelen ki
   // Spec-pontosítás 2026-11-18 (független review F4): az ok fajtánként megengedett — szabálydobozra `decorative` nem adható.
   const wrongReason = { ...outline, skippedVisuals: [{ id: "v7", reason: "decorative" }] };
   const { client, mem } = fromMapWithVisuals("{}", [ADMIN_BOX], scriptedClient({ outline: [wrongReason] }));
-  await assert.rejects(() => runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...deps(client, mem), gateModes: { sourceCoverage: "enforce" } }), (error: unknown) => {
+  await assert.rejects(() => runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(client, mem), gateModes: { sourceCoverage: "enforce" } }), (error: unknown) => {
     assert.match((error as SingleRunError).problems[0], /^v7 \(ruleBox\): érvénytelen kihagyás \(decorative\): decorative ok ruleBox tételnél nem adható/);
     return true;
   });
   assert.equal(gateResultsOf(mem)[0].metrics.invalidSkips, 1);
   // F4: a keret kis leltárnál is legalább 1 — az egyetlen adminisztratív tétel jogos kihagyása mellett a kapu `enforce` módban is átmegy.
   const single = fromMapWithVisuals("{}", [ADMIN_BOX], scriptedClient({ outline: [planned] }));
-  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...deps(single.client, single.mem), gateModes: { sourceCoverage: "enforce" } });
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(single.client, single.mem), gateModes: { sourceCoverage: "enforce" } });
   assert.deepEqual(gateResultsOf(single.mem).map((r) => [r.ok, r.metrics.skipped, r.metrics.invalidSkips]), [[true, 1, 0]]);
   assert.ok(!single.client.calls.includes("forráspótlás"));
   // Ellenpróba: négy tételből egy adminisztratív doboz érvényesen kihagyható — a másik három megjelenítése nélkül a kapu azokat hiányolja, a kihagyottat nem.
   const others = ["v2", "v3", "v4"].map((id) => ({ ...STORED_STEPS, id }) as SourceVisual);
   const second = fromMapWithVisuals("{}", [ADMIN_BOX, ...others], scriptedClient({ outline: [planned] }));
-  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(second.client, second.mem));
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(second.client, second.mem));
   const row = gateResultsOf(second.mem)[0];
   assert.deepEqual([row.metrics.skipped, row.metrics.invalidSkips, row.missingIds], [1, 0, ["v2", "v3", "v4"]]);
 });
 
 test("SK1 (enforce): a kapunál megállt job folytatása NEM kap újabb pótló fordulót — ismét megáll; report módban közzétesz, a jelző törlődik", async () => {
   const first = fromMapWithVisuals("{}");
-  await assert.rejects(runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...deps(first.client, first.mem), gateModes: { sourceCoverage: "enforce" } }));
+  await assert.rejects(runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(first.client, first.mem), gateModes: { sourceCoverage: "enforce" } }));
   const saved = first.mem.steps.at(-1)!.output as SavedOutput;
   assert.deepEqual(saved.gateStop, { gate: "sourceCoverage", missingIds: ["v2"] });
   assert.equal(singleRunResumable(saved), true);
 
   // Folytatás enforce módban, jó folttal válaszoló modellel: a pótló forduló már elfogyott, a modell meg sem kapja a kérést.
   const again = fromMapWithVisuals(coveragePatch());
-  await assert.rejects(() => runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, { ...resumeDeps(again.client, again.mem, saved), gateModes: { sourceCoverage: "enforce" } }),
+  await assert.rejects(() => runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, { ...visualResumeDeps(again.client, again.mem, saved), gateModes: { sourceCoverage: "enforce" } }),
     (error: unknown) => error instanceof SingleRunError && error.station === "forrás-fedettség");
   assert.ok(!again.client.calls.includes("forráspótlás"), "harmadik próbálkozás nincs: " + JSON.stringify(again.client.calls));
   assert.ok(!again.client.calls.includes("6"), "F7: a megállás a lektorkör ELŐTT derül ki");
@@ -937,7 +940,7 @@ test("SK1 (enforce): a kapunál megállt job folytatása NEM kap újabb pótló 
 
   // Folytatás report módban (az alapérték): a kapu csak mér, a lecke megjelenik, a megállás jelzője nem marad a kimenetben.
   const report = fromMapWithVisuals(coveragePatch());
-  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, resumeDeps(report.client, report.mem, saved));
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, visualResumeDeps(report.client, report.mem, saved));
   assert.equal(result.htmlFileId, "html1");
   assert.equal("gateStop" in (report.mem.steps.at(-1)!.output as SavedOutput), false);
 });
@@ -946,12 +949,12 @@ test("SK1 (enforce): a kapunál megállt job folytatása NEM kap újabb pótló 
    folton), F12 (a kapu hibája nem állít meg). */
 test("F7 (enforce): a kapunál megállt job folytatása modellhívás NÉLKÜL áll meg újra — nincs fizetős lektorkör, nincs pótló forduló", async () => {
   const first = fromMapWithVisuals("{}");
-  await assert.rejects(runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...deps(first.client, first.mem), gateModes: { sourceCoverage: "enforce" } }));
+  await assert.rejects(runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(first.client, first.mem), gateModes: { sourceCoverage: "enforce" } }));
   const saved = first.mem.steps.at(-1)!.output as SavedOutput;
   assert.equal(resumePointOf(saved).stage, "lektor", "a mentett állapot szerint a lektorálás következne");
 
   const again = fromMapWithVisuals(coveragePatch());
-  await assert.rejects(() => runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, { ...resumeDeps(again.client, again.mem, saved), gateModes: { sourceCoverage: "enforce" } }),
+  await assert.rejects(() => runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, { ...visualResumeDeps(again.client, again.mem, saved), gateModes: { sourceCoverage: "enforce" } }),
     (error: unknown) => error instanceof SingleRunError && error.station === "forrás-fedettség" && /nincs rá hivatkozó blokk/.test(error.problems[0]));
   assert.deepEqual(again.client.calls, [], "egyetlen modellhívás sem indult (a lektorkör sem)");
   assert.equal(again.mem.published(), 0);
@@ -964,7 +967,7 @@ test("F7 (enforce): a kapunál megállt job folytatása modellhívás NÉLKÜL �
   const ADMIN_BOX = { id: "v7", kind: "ruleBox", sourceFile: "forras.txt", page: 1, role: "Iskolai fejléc.", conceptIds: [], verified: "visual-only", data: { tone: "tip", items: ["Név, osztály"] } } as SourceVisual;
   const stopped = { ...saved, gateStop: { gate: "sourceCoverage", missingIds: ["v7"] }, outline: { ...(saved.outline as object), skippedVisuals: [{ id: "v7", reason: "admin_meta" }] } } as SavedOutput;
   const ok = fromMapWithVisuals("{}", [ADMIN_BOX]);
-  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: stopped } }, { ...resumeDeps(ok.client, ok.mem, stopped), gateModes: { sourceCoverage: "enforce" } });
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: stopped } }, { ...visualResumeDeps(ok.client, ok.mem, stopped), gateModes: { sourceCoverage: "enforce" } });
   assert.equal(result.htmlFileId, "html1");
   assert.deepEqual(ok.client.calls.filter((c) => c !== "?"), ["6"], "a lektorálás lefutott, pótló forduló nem");
   assert.equal("gateStop" in (ok.mem.steps.at(-1)!.output as SavedOutput), false);
@@ -975,7 +978,7 @@ test("F12: a kapu hibája (kivétel) sem report, sem enforce módban nem állít
   for (const mode of ["report", "enforce"] as const) {
     const { client, mem, published } = fromMapWithVisuals(coveragePatch());
     const logs: string[] = [];
-    const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...deps(client, mem), gateModes: { sourceCoverage: mode }, coverageGate: boom, log: (m) => logs.push(m) });
+    const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(client, mem), gateModes: { sourceCoverage: mode }, coverageGate: boom, log: (m) => logs.push(m) });
     assert.equal(result.htmlFileId, "html1", mode);
     assert.equal(mem.published(), 1, mode);
     assert.ok(!client.calls.includes("forráspótlás"), `${mode}: hibás kapu után nincs pótló forduló`);
@@ -987,7 +990,7 @@ test("F12: a kapu hibája (kivétel) sem report, sem enforce módban nem állít
   }
   // Ellenpróba: hibátlan kapunál nincs hibaszámláló.
   const fine = fromMapWithVisuals(coveragePatch());
-  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(fine.client, fine.mem));
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(fine.client, fine.mem));
   assert.equal(gatesOf(fine.mem).gateErrors ?? 0, 0);
 });
 

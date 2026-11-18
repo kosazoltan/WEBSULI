@@ -203,8 +203,8 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
   /**
    * Menetvégkor nyitva maradt (megszakított) kérdés kezdete. A közös menet-statisztika a megszakított kérdést 0 ms-os
    * válaszidővel zárja, így a menet végi „kérdés nélküli szakasz” a kérdés KEZDETÉTŐL számítana, holott végig nyitva volt
-   * (a Nyugodt tempó ≥ 12 s-os ablakánál ez 8 s fölé mehet). A statisztikát ezért a megszakítás pillanatában vesszük, a
-   * kérdés kezdetekor (ORKESZTRÁTOR-KÉRÉS: a közös `abort` / `runStats` ezt maga kezelhetné).
+   * (a Nyugodt tempó ≥ 12 s-os ablakánál ez 8 s fölé mehet). Ezért a `maxGapSec`-et a megszakított kérdés kezdetekor vesszük,
+   * a többi értéket a menet végén (ORKESZTRÁTOR-KÉRÉS: a közös `abort` / `runStats` ezt maga kezelhetné).
    */
   let abortedAt: number | null = null;
   const abortOpen = () => {
@@ -289,7 +289,9 @@ export function createSimGame(opts: WordLadderSimOptions): WordLadderSim {
     },
     done: () => state.phase !== "play",
     won: () => state.phase === "won",
-    stats: () => director.stats(abortedAt ?? t),
+    // Review #498 R1: a pillanatkép a menet VALÓDI végén (menetidő, kérdés / perc); csak a „kérdés nélküli szakasz” igazodik
+    // a megszakított kérdés kezdetéhez (annak nyitott ideje nem rés).
+    stats: () => (abortedAt === null ? director.stats(t) : { ...director.stats(t), maxGapSec: director.stats(abortedAt).maxGapSec }),
     simTimeMs: () => t,
     band: () => director.band(),
     intensity: () => director.intensity(),
