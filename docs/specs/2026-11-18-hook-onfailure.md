@@ -81,7 +81,7 @@ A push ELŐTT javítandók (mindegyik előbb bukó teszttel):
   mintája ezért soha nem illeszkedő kifejezés (a régi hook így nem tilt mindent), és a teszt jelzi a visszaírást.
 - **L5 (kicsi, a PR hozta):** az audit-hook `null` / nem objektum bemenetre összeomlott. **Döntés:** a mezők olvasása biztonságos
   (nem objektum → üres); a külső hook-korlát 15 → 20 s, hogy a 10 s-os belső git-korlát mindig előbb járjon le érthető tiltással
-  (teszt: a settings-korlát ≥ a belső korlát + 5 s); a runbook kimondja, hogy az audit-hookon nincs `onFailure` (minden Bash /
+  (teszt: a settings-korlát több, mint a belső korlát + 5 s); a runbook kimondja, hogy az audit-hookon nincs `onFailure` (minden Bash /
   PowerShell parancsra fut; a pusht a kapu-hook fedi).
 - **L8:** teszt arra, hogy a git-korlát felülírása `NODE_TEST_CONTEXT` nélkül hatástalan.
 - **L9:** az elfogadási lista és a végrehajtási fájl pipálása a tényleges állapot szerint.
@@ -99,5 +99,5 @@ PowerShell eszközt figyeli; MCP-eszközök), L6 (szokatlan JSON-bemenetek), és
 - [x] F9 WHEN az Edit / Write a `.claude/settings*.json`-ba hook-kikapcsolást ír, onnan az `onFailure`-t vagy a kapu-hook bejegyzést
   eltávolítja, vagy a kapu-hook belépési pontját kiüríti THEN az `enforce-repo-rules` SHALL tiltani; a hook tartalmi javítása SHALL
   engedett maradni.
-- [x] F10 WHEN az audit-hook `null` / nem objektum bemenetet kap THEN SHALL nem összeomlani; a külső korlát SHALL a belső git-korlát
-  + 5 s fölött lenni.
+- [x] F10 WHEN az audit-hook `null` / nem objektum bemenetet kap THEN SHALL nem összeomlani; a külső korlát SHALL TÖBB lenni, mint a belső git-korlát
+  + 5 s.

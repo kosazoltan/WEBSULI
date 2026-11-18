@@ -195,7 +195,7 @@ test('F10: az audit-hook külső korlátja a belső git-korlát + 5 s fölött',
   assert.ok(inner > 0, 'a belső git-korlát nem olvasható ki');
   const audit = settings.hooks.PreToolUse.flatMap((g) => g.hooks).filter((h) => /check-audit-ok\.mjs/.test(h.command));
   assert.equal(audit.length, 2);
-  for (const h of audit) assert.ok(h.timeout * 1000 >= inner + 5000, `audit-hook: timeout ${h.timeout} s, belső ${inner} ms`);
+  for (const h of audit) assert.ok(h.timeout * 1000 > inner + 5000,`audit-hook: timeout ${h.timeout} s, belső ${inner} ms`);
 });
 
 test('L8: a git-korlát tesztes felülírása NODE_TEST_CONTEXT nélkül hatástalan', () => {
@@ -215,7 +215,7 @@ test('L7: a kikapcsoló mechanizmus neve és a védelem eltávolítására felsz
   const files = ['docs/minosegkapuk.md', 'docs/agent-csapdak.md', 'docs/handoffs/2026-11-18-kapu-hook-retro.md',
     'docs/specs/2026-11-18-hook-onfailure.md', 'docs/specs/2026-11-18-hook-onfailure-vegrehajtas.md',
     ...SKILLS.flatMap((s) => [`.agents/skills/${s}/SKILL.md`, `.claude/skills/${s}/SKILL.md`])];
-  const MECHANISM = [/disable\s*All\s*Hooks/i, /settings\.local\.json/i, /"onFailure"\s*:\s*"continue"/i, /claude\s+--settings/i];
+  const MECHANISM = [/onFailure[^.\n]{0,40}continue/i, /disable\s*All\s*Hooks/i, /settings\.local\.json/i, /"onFailure"\s*:\s*"continue"/i, /claude\s+--settings/i];
   for (const f of files) {
     const p = join(repoRoot, ...f.split('/'));
     if (!existsSync(p)) continue;
@@ -226,7 +226,8 @@ test('L7: a kikapcsoló mechanizmus neve és a védelem eltávolítására felsz
   const md = readFileSync(join(repoRoot, 'docs', 'minosegkapuk.md'), 'utf8').replace(/\r\n/g, '\n');
   const start = md.indexOf('## A kapu-hook hibája');
   const sec = md.slice(start, md.indexOf('\n## ', start + 3));
-  for (const re of [/\btöröld\b/i, /\btávolítsd el\b/i, /\bkapcsold ki\b/i, /\bvedd ki\b/i, /\bállítsd\b[^.\n]*continue/i, /\bírd át\b/i, /\bkommenteld ki\b/i, /\bhagyd ki\b/i]) {
+  // (a JS \b ASCII-alapú — ékezetes betűvel kezdődő / végződő szónál nem használható, ezért ott nincs \b)
+  for (const re of [/\btöröld/i, /\btávolítsd el\b/i, /\bkapcsold ki\b/i, /\bvedd ki\b/i, /állítsd[^.\n]*continue/i, /írd át/i, /\bkommenteld ki\b/i, /\bhagyd ki\b/i]) {
     assert.doesNotMatch(sec, re, `tiltott felszólítás: ${re}`);
   }
 });
