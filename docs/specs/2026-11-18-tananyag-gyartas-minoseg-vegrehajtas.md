@@ -7,7 +7,8 @@ a munkafa gyökeréből futnak, ha a lépés mást nem mond.
 Sorrend (tulajdonosi döntések 2026-11-18 után): **S1a → S1b → SK1 → S2a → S2b → S3a → S3b → S4a → S4b → SK3 → S10/0 → S10/1 (első
 mérés) → S5a → S5b → S6a → S6b → S6c → SK2 → S7a → S7b → S8a → S8b → S8c → SK4 → SK5 → S9 → S10/2 (záró mérés).** Egy alszelet =
 egy ág = egy PR. Döntések: D1 újrarajzolás · D2 30 USD próbakeret · D3 ElevenLabs előre gyártva · D4 hangfájlok az adatbázisban,
-csak a leckék · D5 fél pontos plafon igen · D6 egyeztetés alatt (az S7a nem indul, amíg nincs döntés).
+csak a leckék · D5 fél pontos plafon igen · D6 egyeztetés alatt (az S7a nem indul, amíg nincs döntés) · D7 éles gyártásban a
+költségkeret túllépése csak jelez (e-mail), nem állít meg; gyártás-stop kapcsoló nem épül; a 30 USD próbakeret kemény plafon marad.
 
 ## 0. Közös szabályok (minden szeletre)
 
@@ -79,7 +80,7 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 | S2a / S2b | `tests/lesson-source-visual-kinds.test.ts`, `playwright.source-visuals.config.ts` | paraméter-séma, SVG-tisztító; átfedés / levágás / görgetés |
 | S3a / S3b | `tests/visual-patch.test.ts`, `tests/section-visuals.test.ts`, `tests/single-run-engine.test.ts` | megalapozás a forrástételhez, eldobási ok, szókeret, bankkulcs |
 | S4a / S4b | `tests/arithmetic-false-alarms.test.ts`, `tests/single-run-engine.test.ts` | hamis riasztás nélkül; áthelyezés, világ-lista, okok |
-| SK3 | `tests/run-budget.test.ts` | körszám-, költség-, időplafon |
+| SK3 | `tests/run-budget.test.ts`, `tests/run-budget-alert.test.ts` | a körszám-plafon változatlansága, költségküszöb-jelzés (futásonkénti, napi), a próbakeret kemény plafonja |
 | S5a / S5b | `tests/lesson-feedback-openers.test.ts`, `tests/lesson-opener.test.ts`, `tests/seeded.test.ts` | szótár, levágás, determinizmus, verzió |
 | S6a–c | `tests/lesson-section-shapes.test.ts`, `tests/lesson-arc.test.ts`, `tests/visual-kind-plan.test.ts`, `scripts/measure/shape-simulation.mts` | kiosztás, ívkapu, arányok, szimuláció |
 | SK2 | `tests/variety-metrics.test.ts`, `scripts/measure/variety-measure.mjs` | változatosság-mutatók és küszöbök |
@@ -142,6 +143,14 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 
 ## S1b — A leltár átadása a promptoknak és a vizuális fedettség
 
+> **Megvalósítva (2026-11-18, ág `feat/tgm-s1b-sk1-forras-fedettseg`) — eltérések, amelyeket a következő szeletnek tudnia kell:**
+> (1) a terv forrás-vizuális hivatkozásait külön függvény tisztítja (`autofixOutlineVisuals`, `server/studio/tools/outline-autofix.ts`)
+> az `autofixOutline` UTÁN — az utóbbi hívási alakját őr-teszt rögzíti; (2) a terv és a blokk új mezői engedékeny sémájúak (a
+> többlet vágva, a hibás `sourceVisualId` elmarad) — formai hiba nem indít fizetős javítókört; (3) a lektor a mért hiányzó
+> azonosítókat a leltár blokkjában, TÁJÉKOZTATÁSKÉNT kapja (nem a `previousBlockers` listában), mert `report` módban a hiány nem
+> állíthat meg gyártást; (4) a szerző és az ábrakészítő szabálymondata a `sourceVisualId` kitöltését is kéri; (5) az S1a review
+> U1–U4 feltétele és a J4 ugyanebben az ágban teljesült (a leltár-sémaverzió: `SOURCE_VISUALS_SCHEMA_VERSION`).
+
 > **Teendő az S1a független review-jából (J4):** a különálló kinyerés tartalmi lenyomata (`server/studio/single-run/live.ts`,
 > `singleRunMapHash`, ma `single-run-map-2`) kapjon leltár-sémaverziót, hogy ugyanarra a fájlra a régi, leltár nélküli térképet ne
 > adja vissza jelzés nélkül; teszt rögzítse.
@@ -172,6 +181,15 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 8. 0.3 szerinti kapuk. Elvárt: E4 teljesül (az E5 az SK1-gyel zárul).
 
 ## SK1 — Forrás-fedettségi kapu (az S1b-vel egy körben; külön PR, ha az S1b-vel együtt 400 sor fölé menne)
+
+> **Megvalósítva (2026-11-18, ugyanazon az ágon, `report` módban) — eltérések:** (1) a kapu a leckét szerkezetileg olvassa (a
+> hűséget a hivatkozó blokk összes megjelenő szövegén méri, a tétel címe nélkül), így az S2 új ábrafajtáit a sémabővítés előtt is
+> helyesen ítéli meg; (2) a `problems` a bukást okozó tételeket sorolja, a megengedett („legalább 80%”) hiány csak a `missingIds`
+> listában és a mérőszámokban látszik; (3) a `sourceVisualId` mezőt az ábrafolt sémája már most átengedi
+> (`server/studio/visual-patch.ts`) — enélkül a pótló forduló foltja nem hivatkozhatna; a nem létező azonosító törlése és a
+> megalapozási kivétel az S3a-ban marad; (4) az üzemmód futásonként felülírható (`SingleRunDeps.gateModes`) — a teszt és a
+> mérőharness ezzel kapcsol `enforce`-ra; (5) az alapvonal-fixtúra (`tests/fixtures/source-coverage-hm.ts`) a HM-minta számait
+> hordozza (38 tétel; ma 6 teljes, 23 részben, 9 sehogy) — a 7 felsorolt csoport 35 tétele mellé 3 lépéssor került a 38-as összeghez.
 
 Ág: `feat/forras-fedettsegi-kapu-sk1` (az S1b ágáról vagy — ha az S1b már bent van — az `origin/main`-ről). Fájlok:
 `server/studio/gates/types.ts`, `server/studio/gates/config.ts`, `server/studio/gates/source-coverage-gate.ts`,
@@ -416,35 +434,67 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
    source` → hibátlan.
 6. 0.3 szerinti kapuk. Elvárt: E23–E26 teljesül.
 
-## SK3 — Költség- és körszám-plafon
+## SK3 — Körszám-plafon, költségjelzés, próbakeret
+
+> **Tulajdonosi döntés (D7, kérdőív, 2026-11-18) — ez a fejezet ehhez igazodik:** éles gyártásban a token- / költségkeret
+> túllépése „Csak jelezzen” (a futás megy tovább, e-mail megy; NEM állít meg); vészleállító / egységes gyártás-stop kapcsoló „Nem
+> kell” (ne épüljön); a meglévő körszám-plafon marad, ahogy van; a 30 USD-os próbakeret kemény plafon marad.
 
 Ág: `feat/futaskeret-sk3`. Fájlok: `shared/run-budget.ts` (új), `server/studio/single-run/telemetry.ts`,
-`server/studio/single-run/engine.ts`, `server/studio/experience-builder.ts` (csak az állandók forrása),
-`scripts/measure/run-budget-baseline.mts` (új), `scripts/measure/single-run-measure.mts` (a keret átadása),
-`tests/run-budget.test.ts` (új), `tests/single-run-engine.test.ts`.
+`server/studio/single-run/engine.ts`, `server/studio/single-run/budget-alert.ts` (új), `server/studio/experience-builder.ts` (csak
+az állandók forrása), `scripts/measure/run-budget-baseline.mts` (új), `scripts/measure/single-run-measure.mts` (a próbakeret
+átadása), `tests/run-budget.test.ts`, `tests/run-budget-alert.test.ts` (újak), `tests/single-run-engine.test.ts`.
+
+**Nem cél ebben a szeletben:** vészleállító / gyártás-stop kapcsoló; éles futás megállítása költség vagy futásidő miatt; új,
+futásonkénti összesített javítókör-plafon; a borító-újrapróba, az e-mail-visszapattanás webhookja, az éles adatbázis-írás hookja, az
+éjszakai invariáns-söprés és a telepítés utáni füstpróba (ezekhez a szelet nem nyúl); új adatbázis-tábla vagy migráció.
 
 1. Alapvonal ELŐBB (csak olvasva, fizetős hívás nélkül): `run-budget-baseline.mts` a meglévő futások telemetriájából (írásvédett
-   tranzakció; azonosító a kimenetbe nem kerül) kiszámolja futásonként a számolt költséget, az összes javító fordulót, a futásidőt,
-   és ezek átlagát, 95. percentilisét, legnagyobb értékét. A jelentés mért értékei: átlag 6,64 USD és 18,3 perc, legnagyobb
-   11,34 USD és 31 perc. A kimenet a PR-leírásba kerül.
+   tranzakció; azonosító a kimenetbe nem kerül) kiszámolja futásonként a számolt költséget és a futásidőt, valamint naptári
+   naponként (Europe/Budapest) a futások összegét; ezek átlagát, 95. percentilisét, legnagyobb értékét. A jelentés mért értékei:
+   futásonként átlag 6,64 USD és 18,3 perc, legnagyobb 11,34 USD és 31 perc. A kimenet a PR-leírásba kerül.
 2. `shared/run-budget.ts` (tiszta): `PRICE_PER_MTOK = { input: 4, cached: 0.2, output: 20 }`; `runCostUsd(telemetry)`;
-   `RUN_BUDGET_DEFAULT = { stationFixRounds: 3, reviewRounds: 2, packetAttempts: 3, packetRescue: 1, totalFixTurns: 12, warnUsd: 9,
-   stopUsd: 12, stopMinutes: 45 }` — a végső számokat az 1. lépés alapvonalából állítod be ezzel a szabállyal: a megállási érték
-   a 95. percentilis 1,25-szöröse, de legalább a mért legnagyobb érték; az eltérést a PR-leírás indokolja.
-   `budgetVerdict(telemetry, startedAt, now, budget): { state: "ok" | "warn" | "stop"; reason?: string }`.
-   A keret felülírható: környezeti változó (`RUN_BUDGET_USD`) és a futás indítási paramétere — csak lefelé szabadon; felfelé
-   kizárólag kifejezett paraméterrel (a mérőharness és a folytatás adja át).
-3. A mai körkorlát-állandók (`engine.ts:50`, `:71`; a bankkísérletek állandói az `experience-builder.ts`-ben) a
-   `RUN_BUDGET_DEFAULT`-ból olvasnak — egy helyen állíthatók; az értékük nem változik.
-4. `engine.ts`: a `timed(…)` burkoló (minden modellhívás előtt) meghívja a `budgetVerdict`-et: `warn` → napló és
-   `telemetry.gateResults` bejegyzés (egyszer); `stop` → a hívás NEM indul el, az állapot mentődik (a meglévő mentési úton), a job
-   kimenetébe `gateStop: { gate: "runBudget", reason }` kerül, a futás megáll. A javító fordulók indítása előtt a `totalFixTurns`
-   is ellenőrződik: elérve nincs újabb javító forduló — az állomás a „javítókörök kimerültek” úton zárul.
-5. `single-run-measure.mts`: a próbafutás kerete paraméter (`MEASURE_BUDGET_USD`, alapérték 7,5), amelyet a motor megkap.
-6. `tests/run-budget.test.ts`: költségszámítás rögzített telemetriára; `ok` / `warn` / `stop` határok; időplafon hamis órával;
-   mutációk: 12,01 USD → `stop`; 13. javító forduló → megtagadva; felfelé állító környezeti változó kifejezett paraméter nélkül →
-   figyelmen kívül marad. `tests/single-run-engine.test.ts`: a keret elérése után a hamis modell hívásszáma nem nő, a `gateStop`
-   kitöltve, az állapot folytatható.
+   `RUN_ROUND_LIMITS = { stationFixRounds: 3, reviewRounds: 2, packetAttempts: 3, packetRescue: 1 }` (a mai értékek, változatlanul);
+   `RUN_BUDGET_ALERT = { runUsd: 9, dayUsd: <az alapvonalból> }` — a végső számokat az 1. lépés alapvonalából állítod be ezzel a
+   szabállyal: a futásonkénti küszöb a futásköltségek 95. percentilise (két tizedesre kerekítve), a napi küszöb a napi összegek
+   95. percentilise; az eltérést a PR-leírás indokolja. Környezeti felülírás: `RUN_BUDGET_ALERT_USD`, `RUN_BUDGET_ALERT_DAY_USD`
+   (érvénytelen érték → az alapérték).
+   `budgetAlerts(input: { runUsd: number; dayUsdBefore: number; alreadySent: { run: boolean; day: boolean } }, thresholds):
+   Array<"run" | "day">` — mely küszöbök lépődtek át MOST (küszöbönként egyszer; a napi akkor, ha `dayUsdBefore + runUsd` átlépi
+   a napi küszöböt, és aznap még nem ment levél).
+   `trialBudgetVerdict(telemetry, hardStopUsd): { state: "ok" | "stop"; reason?: string }` — KIZÁRÓLAG a próbafutáshoz.
+3. A mai körkorlát-állandók (`engine.ts` — `SINGLE_RUN_FIX_ROUNDS`, `SINGLE_RUN_REVIEW_ROUNDS`; a bankkísérletek állandói az
+   `experience-builder.ts`-ben) a `RUN_ROUND_LIMITS`-ból olvasnak — egy helyen állíthatók; az értékük és a megállás mai módja NEM
+   változik (ezt teszt rögzíti: az állandók értéke 3 / 2 / 3 / 1, és a meglévő „3 javító forduló után megáll” teszt változatlanul
+   zöld).
+4. Éles jelzés (`budget-alert.ts` + `engine.ts`): a `timed(…)` burkoló minden modellhívás UTÁN (a `TelemetryRecorder` rögzítése
+   után — az őr erre a rögzítésre épül) kiszámolja a futás költségét, és meghívja a `budgetAlerts`-et. Átlépett küszöbnél:
+   (a) `telemetry.gateResults` bejegyzés (`gate: "runBudget"`, `mode: "report"`, a küszöb és a költség a `metrics`-ben) és napló;
+   (b) e-mail a tulajdonosnak a meglévő szerveroldali adminlevél-úton (`resolveAdminRecipients` — `server/lib/material-result.ts`
+   — és a meglévő levélküldő, a `sendResultEmail` mögötti út mintájára; `mailto:` tilos): tárgy „WEBSULI gyártás — költségküszöb
+   átlépve”, tartalom: melyik küszöb (futásonkénti / napi), a számolt költség, a küszöb, a futás állomása és eddigi ideje;
+   azonosítóként csak a job azonosítója (cím, tanulói adat, forrásszöveg nem megy levélbe). A futás NEM áll meg, a hívás
+   eredménye változatlanul megy tovább. A levél hibája (nincs címzett, a küldő hibázik) naplózva, a gyártás megy tovább.
+   Egyszeriség: a futásonkénti jelzés a job kimenetében (`budgetAlert.run`), folytatott futásnál sem megy újra; a napi jelzés
+   egyszerisége és az aznapi összeg a meglévő jobok telemetriájából olvasva (az aznap indult / zárult egyfutásos jobok
+   `output.telemetry`-je és `output.budgetAlert.day` jelzője — új tábla nélkül). A napi összeg lekérdezésének hibája → csak a
+   futásonkénti jelzés megy (fail-open, naplózva). E2E-módban (a repó meglévő e2e-kapcsolója) levél nem megy.
+5. Próbakeret (kemény plafon, csak a mérőharness): `single-run-measure.mts` a próbafutás keretét paraméterként adja át a motornak
+   (`MEASURE_BUDGET_USD`, alapérték 7,5 → `SingleRunInput.trialBudgetUsd`). Csak ha ez a paraméter meg van adva: a `timed(…)`
+   minden modellhívás ELŐTT meghívja a `trialBudgetVerdict`-et; `stop` → a hívás NEM indul el, az állapot mentődik (a meglévő
+   megállási úton: `SingleRunError` → a job `error` állapota, a kimenet megmarad), a job kimenetébe `gateStop: { gate:
+   "trialBudget", reason }` kerül. Éles indítási út (`runSingleUpload`, `runSingleFromMap`, `runSingleResume`) ezt a paramétert
+   nem adja át — ezt teszt rögzíti.
+6. `tests/run-budget.test.ts`: költségszámítás rögzített telemetriára; a körkorlát-állandók rögzített értékei; a
+   `trialBudgetVerdict` határa (7,49 → `ok`, 7,50 → `stop`); a `budgetAlerts` küszöbei. Mutációk (mind a megnevezett eredménnyel):
+   9,01 USD → `["run"]`, de `alreadySent.run` mellett `[]`; a napi küszöb átlépése másodszor → `[]`; érvénytelen környezeti
+   felülírás → az alapérték; 8,99 USD → `[]`.
+   `tests/run-budget-alert.test.ts` (hamis levélküldővel és hamis napi összeggel): küszöb felett pontosan egy levél megy, a
+   címzettek az `ADMIN_EMAILS` listája, a levélben nincs `mailto:`; a levélküldő hibája nem dob; címzett nélkül nincs küldés és
+   nincs hiba.
+   `tests/single-run-engine.test.ts`: éles (paraméter nélküli) futásban a küszöb feletti költség mellett a hamis modell hívásszáma
+   UGYANANNYI, mint küszöb nélkül, a lecke közzétéve, a `gateResults` tartalmazza a `runBudget` jelzést, a levélküldő egyszer
+   hívódott; próbakerettel indítva a keret elérése után a hívásszám nem nő, a `gateStop` kitöltve, az állapot folytatható.
 7. 0.3 szerinti kapuk. Elvárt: E41, E42.
 
 ## S10 — Mérés (D2: 30 USD keret, eldobható adatbázison)
@@ -488,7 +538,7 @@ meglévő éles lecke (6 / 38), a PT alapvonala a forrásleltár (0 / 39), a vá
    megállsz, és az orkesztrátoron át a tulajdonost kérdezed (a keret emelése tulajdonosi döntés).
 5. Éles próbafutás: HM-PDF, majd PT-PDF, egymás után (nem párhuzamosan), `MEASURE_SAVE_LESSON=1`, `MEASURE_BUDGET_USD=7.5`. A
    PDF-ek a tulajdonostól / a munkamenet jegyzeteiből jönnek, a repóba nem kerülnek. Futás közben aktív követés (napló,
-   telemetria). Minden futás után `trial-ledger.mts add`. Ha egy futást a futáskeret (SK3) vagy egy kapu megállít: az eredmény
+   telemetria). Minden futás után `trial-ledger.mts add`. Ha egy futást a próbakeret (SK3) vagy egy kapu megállít: az eredmény
    így is mérési adat — tartalék futást csak akkor használsz, ha a megállás oka a mérőkörnyezet hibája (nem a gyártásé), vagy az
    orkesztrátor kéri.
 6. Kiértékelés: `source-gap-table.mts` mindkét leckére (a jelöléseket tételenként, a lecke JSON-ja és a megjelenített oldal
@@ -664,7 +714,7 @@ meglévő éles lecke (6 / 38), a PT alapvonala a forrásleltár (0 / 39), a vá
    kiosztott mintával (S6a; a forráshoz kötött ábrák és a kiosztott `try` hozzáadása megengedett eltérés); a visszajelzésekben
    nincs a régi bátorító előtag — ha van, a program a mentés előtt levágja (`stripLegacyOpener`), modellkör nélkül, és megszámolja;
    (b) **jelzés** (nem állít meg): `tryShare < minTryShare`, egy fajta aránya `> maxKindShare`. A kapu (a) részének bukása:
-   egyetlen célzott javító forduló a szerzőnél az eltérő fejezetekre (az SK3 keretén belül), utána megállás és jelzés.
+   egyetlen célzott javító forduló a szerzőnél az eltérő fejezetekre (a meglévő körszám-plafonon belül), utána megállás és jelzés.
    Üzemmód a `GATE_MODES`-ban: kezdőérték `report`; `enforce`-ra az S10 záró mérése után, orkesztrátori döntéssel vált (a váltás
    egysoros, teszttel).
 6. `tests/variety-metrics.test.ts`: kézzel számolt elvárás 4 szintetikus leckére; mutációk: minden fejezet azonos mintájú →
@@ -851,7 +901,7 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    szolgáltatóhívás; `maxChars` elérésekor megáll; tárplafonnál megáll és jelez; 2 újragenerálás után „kézi átnézés”; az admin
    végpont hitelesítés nélkül 401 / 403, párhuzamos indításra 409.
 6. **Új leckék hangja (kapcsolóval, alapból KI):** a leckegyártás végén, a szószedet véglegesítése után ugyanez a modul futhat a
-   lecke saját szövegeire (`TTS_AUTO_GENERATE` környezeti kapcsoló; lecke-szintű `maxChars` 5 000; az SK3 futáskerete és a
+   lecke saját szövegeire (`TTS_AUTO_GENERATE` környezeti kapcsoló; lecke-szintű `maxChars` 5 000; az SK3 költségjelzése és a
    méretőr érvényes; hibája a közzétételt nem akasztja meg, amíg az SK4 `ttsPresence` kapuja `report` módban van). A kapcsolót a
    tulajdonos állítja be a szerver környezetében; a kód alapértéke kikapcsolt. A beillesztési pontot a szelet elején térképezd fel
    (hol véglegesül a szószedet az egyfutásos motorban), és a tervbe visszaírod fájl:sorral.

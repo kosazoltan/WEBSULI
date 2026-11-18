@@ -1063,3 +1063,15 @@ Forrás: #475 (K1b). Rokon: C-59.
 - A drizzle a hibát `Failed query: …`-be csomagolja; az eredeti a `cause`-ban van.
 - Git Bashben az `npx.cmd` szóközös felhasználói útvonalon elhasalhat: Playwrightot PowerShellből futtasd.
 - e2e-ben a „szabad port keresése, lezárás, újranyitás” versenyhelyzet (`EADDRINUSE`): a szerver válasszon portot.
+
+## C-73 — Mutációs teszt megosztott fixtúra-objektumon: a mutáció a mércét is elrontja (2026-11-18)
+
+Forrás: SK1 (forrás-fedettségi kapu), `tests/fixtures/source-coverage-hm.ts`.
+
+- **Tünet:** a „döntési fa egy levéllel kevesebb” mutációt a kapu nem fogta meg. A fixtúra fája modulszinten EGYSZER jött létre,
+  a lecke blokkja és a forrásleltár ugyanarra az objektumra mutatott — a blokk elrontása a forrást is elrontotta, a kettő így
+  egyezett.
+- **Szabály:** a fixtúra-gyár hívásonként friss példányt adjon (`structuredClone`), és a belőle képzett blokk se osszon
+  hivatkozást a mércével. Ha egy mutációt a kapu „nem fog meg”, előbb azt ellenőrizd, hogy a mutáció nem szivárgott-e át a mércébe.
+- Rokon apróság: a Bash eszköz heredocja aposztrófot / hármas idézőjelet tartalmazó tartalomnál elhasalhat — a tartalmat fájlba
+  írd (Write), és azt futtasd vagy fűzd hozzá.
