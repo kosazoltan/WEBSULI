@@ -4,7 +4,10 @@ Terv: `docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md` (tulajdonosi döntése
 tesztek: 0.3). Ág: `fix/szokoar-tema-es-sebesseg`, munkafa: `.claude/worktrees/szokoar-tema`. A régi változat: `b4b84db6`
 (`.claude/worktrees/szokoar-regi`).
 
-Állapot: folyamatban — 2026-11-18.
+Állapot: mérföldkő (játszható helyi változat) — 2026-11-18. Nyitott: (1) 360×640 és 844×390 magas víznél a leghosszabb
+kérdés a figurára esik; (2) nyitott kérdés alatt a menedék részben takarva lehet; (3) menetindítási hosszú feladat 4× CPU-n
+3,1 s (telefon) / 12,5 s (fold) — #491 nélkül mérve, a kérdésbank-hook (#491) és a jelenet-építés elkülönítése hátravan;
+(4) D2-b döntés (akadály: A — nincs, ajánlott).
 
 ## Lépések
 
