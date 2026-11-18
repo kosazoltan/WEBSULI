@@ -26,4 +26,3 @@
   megoldás −3 px; `en4-health-016` kérdés −2 px. Javítás után (a tömör szabály a `data-long` esetet is fedi): rés
   `en4-family-006` 15 / 21 px, `en4-health-016` 21 / 29 px, `en4-health-023` 39 / 37 px; a tömör panelen a felirat 16 px; e2e
   `R2 @ 360x640 alsó biztonsági sávval` zöld; képernyőkép: `docs/measurements/jatekok-jatekelmeny/J2-olvashatosag/r2-360x640-also-sav.jpg`.
-
