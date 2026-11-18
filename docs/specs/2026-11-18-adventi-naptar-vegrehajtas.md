@@ -587,3 +587,7 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
 - **S5:** küldés a terv 16.3 szerint (`final` / `passed` fajta); teszt: A50.
 - **S6:** az `/api/admin/advent/preview` bekötése a flag-ellenőrzés NÉLKÜL (a router-gyár `requireFlag: false` beállítással).
 - **S8:** HMAC-lenyomat; a lábléc szövege a terv 16.6 szerint; valódi leiratkozó link csak külön tulajdonosi döntéssel.
+
+## Állapotnapló
+
+- 2026-11-18 — S1 KÉSZ: `source/shared/advent/` (`calendar.ts`, `rules.ts`, `assignment.ts`, `contract.ts`) + 4 tesztfájl, 39 teszt; a független ellenőr ítélete a `bb248dd1` fejre: IGEN, FELTÉTELLEL; a K5, A1, A4–A7, K3 javítása külön commitban.
