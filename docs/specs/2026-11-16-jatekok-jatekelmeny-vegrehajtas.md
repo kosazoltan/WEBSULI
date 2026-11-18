@@ -945,7 +945,7 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
 
 ## J1 — Szökőár szökés: „Hegyre fel!” (J1a, J1b, J1c)
 
-**Állapot (J1a):** nem kezdődött · **Állapot (J1b):** nem kezdődött · **Állapot (J1c):** nem kezdődött
+**Állapot (J1a):** folyamatban – 2026-11-17, ág feat/jatek-j1a-szokoar-hegyre-fel, munkafa .claude/worktrees/jatek-j1a, kanban #78 · **Állapot (J1b):** nem kezdődött · **Állapot (J1c):** nem kezdődött
 **Függ:** J0c merge. **Cél-mondatok:** G1–G6. **Elfogadás:** J-TS, J1–J11, J14, J16, M1–M12. Terv: 5.1.
 
 ### Fájlok
@@ -1020,6 +1020,98 @@ Képernyőkép: a próbaoldalról `question`, `wrong`, `result` 390×844-en.
    (a `correctCount` elhagyható, ha a lap már nem használja — a `resultTestId: "ts-won"` marad).
 10. `T/tsunami-play.spec.ts`: J1 (simTime kérdés alatt), J5 (hibás kapu után nincs dialógus), kapu-válasz a `play-option`
     gombsoron át, 3 nézet, képernyőképek.
+
+#### J1a döntései (a kód előtt rögzítve, 2026-11-17; a fenti lépések pontosítása, a terv döntéseit nem írják felül)
+
+- **D-J1a-1 Tárcsa a húzás MELLETT (nem helyette)** — tulajdonos jóváhagyta, 2026-11-17 („Maradjon meg a joystick is.”). A 5. lépés „a meglévő joystick helyett” szövege ütközik három közös, a
+  szeletből nem módosítható őrrel (`T/game-touch-controls.test.ts` `<VirtualJoystick` + `shapeJoystick(`, `T/joystick-curve.test.ts`,
+  `T/joystick-response.spec.ts` Szökőár-esete: folytonos kitérés → mozgás görbe), amelyeknek a brief szerint zöldnek kell maradniuk.
+  Biztonságos alapértelmezés: az elsődleges vezérlés a terv szerinti húzás (≥ 30 px vízszintesen = sávváltás, felfelé = ugrás) és a
+  billentyű (←/→/↑, A/D/W); MELLETTE a tárcsa analóg oldalirányú kormányzás „sávsegéddel” (elengedve a legközelebbi sáv közepére
+  áll), a Sprint helyén „Ugrás” akciógomb. A mag bemenete ezért ADDITÍV mezőt kap: `step(state, { laneDelta, jump, steer? })`, az
+  állapot `lane` mezője a folytonos `x` (−1…1) legközelebbi sávja. A `lane: 0|1|2` szerződés megmarad.
+- **D-J1a-2 Mikor dől el a válasz.** A kapu átlépésekor a játékos sávja választ (`director.answer(id, laneOptions[lane], …)`); a
+  kapu-tábla megérintése / az 1–3 billentyű (a kérdés-sáv `onPick`-je) azonnal választ ÉS a sávba futtat — egyujjas, akadálymentes
+  út (K.4/17, terv 8.11). A kapu ilyenkor kinyílik (eltűnik a pályáról).
+- **D-J1a-3 Kapu-távolság az ablakból.** A kapu úgy kerül a pályára, hogy a (lassított) futás a válaszablak vége előtt 300 ms-mal
+  érjen oda: `távolság = sebesség × slowMo × (windowMs − 300) / 1000`. A 4,5 mp-es alapablaknál ez ~4,2 mp valós idő (a terv „3–4
+  mp-nyi távolság” a gyerek által megélt időként értve); hosszú promptnál az ablakkal együtt nő (≤ 9 mp). A „kapu-pillanat”: a kapu
+  előtti 4 mp-nyi szakaszon (és a kapu után 6 m-en) nincs akadály és kagyló (a kagyló sor nem árulhatja el a jó sávot).
+- **D-J1a-4 A hullám-rés dinamikája.** `waveGap` lépésenként `+= (v_futó − v_alap) · dt − tempó · dt`, ahol tempó = alap ×
+  (0,8 + 0,4 × intensity) × pálya-tempó (`tsunamiWaterPace`). A terv egyszeri értékei megmaradnak (ütközés −6 m, jó kapu +12 m); a
+  botlás (0,8 mp, a futó lelassul) és a turbó (1,5 mp, gyorsul) a sebesség-tagon át hat a résre.
+- **D-J1a-5 Kagyló.** Pont (×5); egy teljes kagylósor felszedése 0,8 mp-es mini-turbót ad — így a kérdés nélküli mód is
+  végigjátszható (K.6), és az ügyesség jutalma látható.
+- **D-J1a-6 Tanító szakasz (K.4/25).** Az első 30 mp-ben ritkább akadály, az első 15 mp-ben csak sávváltós (nem ugorható)
+  akadály; ütközés ekkor nem csökkenti a rést (nincs vereség), csak botlás.
+- **D-J1a-7 `ts-quiz` testid.** A kapu-táblák csoportja (látható, ≥ 48 px-es, `data-correct`-es gombok) viseli a `ts-quiz`-t, és
+  ugyanebben a gyökérben a kérdés-sáv (`InlineQuestion mode="bar"`, `portal={false}`): a közös `vocab-cross-game-log.spec.ts` és a
+  mobil mérő M10-e kattintható helyes célt vár a `ts-quiz` alatt, a bar módú gombsor viszont vizuálisan rejtett (nem kattintható).
+  A `ts-prompt`, a `ts-option-<i>` és a `ts-quiz-pause` a kérdés-sávon marad.
+- **D-J1a-8 Spec-változásos tesztek (terv 9.).** `T/remaining-learning.spec.ts:123-133` (időtúllépés-kártya) → hibás kapu után
+  „Miért?” + `data-outcome="wrong"` + álló `simTime`, „Miért?” nélkül nincs dialógus, a helyes kapu ≥ 1,8 mp-ig zöld. A
+  `T/tsunami-mobile.test.ts` régi szerkezet-őrei (kvíz-fázis, `onAnswer`-időzítő, joystick + Sprint, `pickQuiz` hívás-alakja) az új
+  szerkezet ugyanilyen szigorú őreire cserélődnek, `SPEC-VÁLTOZÁS 2026-11-17` jelöléssel.
+
+#### J1a döntései — a független review (#483) után, a javító kód előtt (2026-11-17)
+
+- **D-J1a-9 (M1) Húzás a kapu-táblán.** A táblán indított mozdulat a mozdulatlansági küszöb (`TAP_STILL_PX` = 12 px) fölött
+  NEM koppintás: a lap saját mutató-kezelője a mozdulatot a húzás-kezelőnek adja (≥ 30 px vízszintesen sávváltás, felfelé
+  ugrás), válasz nem rögzül. Csak a rövid, mozdulatlan koppintás (és a billentyűs aktiválás) választ. A közös `pointerTap.ts`
+  nem változik.
+- **D-J1a-10 (M2) Kupon mód a közös directorban** (orkesztrátori kijelölés: a Szökőár szelete a gazdája). `couponOnly`
+  mellett a választás sorrendje: (1) a menetben hibázott, esedékes lecke-tétel (a meglévő ≤ 30%-os arány-korláttal), (2) új
+  lecke-tétel, (3) kimerüléskor a menetben LEGRÉGEBBEN feltett lecke-tétel (≥ 2 tételnél nem a közvetlenül előző). A
+  menetek közötti ismétlés kupon módban nincs (csak az aktuális lecke tananyaga). Kupon nélkül a viselkedés változatlan.
+- **D-J1a-11 (M3) Hosszú válasz.** A beférést a tábla VALÓDI belső szélességével becsüljük (`gateLabelFits`, 13–16 px, ≤ 3 sor;
+  a legkeskenyebb, 360 px-es táblára). A director `promptFits`-e ezt is kéri (a beférő tétel előbb), a tananyag-ág is
+  átadja az `accept`-et. Ha mégis nem fér: „lista mód” — a kérdés-sáv `mode="buttons"` teljes szöveggel mutatja a válaszokat
+  (a gomb kulcs-köre a kapu színe + szimbóluma), a táblák nem jelennek meg; a gomb érintése a táblával azonos (azonnali válasz).
+- **D-J1a-12 (K1) Kapu-érkezés.** A kapu távolsága a hátralévő botlással (0,6×) számol, és a kapu-pillanat a futótól a kapuig
+  tart (hosszú ablaknál sem marad akadály a kapu előtt).
+- **D-J1a-13 (K2, orkesztrátori döntés) Tétlen átfutás.** Ha a kérdés megjelenése óta nem volt szándékos bemenet
+  (sávváltás, ugrás, koppintás, billentyű, tárcsa > 0,2), a kapu átfutása a játékban hat (jó kapu: turbó + 12 m; rossz:
+  botlás; a kombó megszakad, pont nem jár), de a nyilvántartásba LEJÁRT válaszként kerül (ismétlési sor, statisztika,
+  `recordRun`, áramlat).
+- **D-J1a-14 (A2) Kegyelmi rés.** Rossz / lejárt kapu után 1,5 mp-ig a rés nem eshet 2 m alá (a botlás olvasás nélkül nem
+  zárja le a menetet).
+- **D-J1a-15 (K4) Fekvő nézet.** A táblák alsó széle nem lóghat a futó vetített feje alá; a megoldás-kijelzés alatt a nem
+  helyes táblák halványak és nem érinthetők.
+
+#### J1a döntései — az újra-review (#483, fej 7fc753e4) feltételei, a kód előtt (2026-11-17)
+
+- **D-J1a-16 (ÚK1, közös director, kupon ág) Az ismétlés az eredeti tétel.** Kupon módban a menetközi ismétlés és a
+  kimerülés utáni visszatérés is a menetben ELŐSZÖR kiadott `PlayQuestion`-t adja vissza (`source: "coupon"`,
+  `couponItemId` megőrizve), nem a közös ismétlési sor `restore()`-ával visszaállított (forrást `material`-ra normalizáló)
+  példányt; a `couponAsked` nyilvántartás csak a feltevés sorszámát frissíti, a tételt nem írja felül. Kupon NÉLKÜL a
+  viselkedés bitre változatlan (az ág csak `couponOnly` mellett fut).
+- **D-J1a-17 (ÚK2) Tétlen átfutás a jó kapun — semleges, igaz felirat.** Ha a gyerek szándékos bemenet nélkül a JÓ kapun
+  fut át (turbót kap), a kérdés-sáv állapotsora nem „Lejárt az idő”, hanem: „Jó kapu! Most nem választottál — ezt még
+  megkérdezzük.” A nyilvántartás változatlanul „nem válaszolt” (D-J1a-13); rossz kapun tétlenül átfutva marad a
+  „Lejárt az idő. A jó válasz: …”. A közös `InlineQuestion` nem változik: a lap a saját feliratát a kártya állapotsorába
+  teszi, a közös állapotsor ilyenkor rejtett (egy élő régió marad). A döntés a mag tiszta függvénye
+  (`idleCrossingWasGood`), az outcome alkalmazása előtt.
+- Lista módú képernyőkép 390×844-ről és 844×390-ről is (mérési mappa). ÚK3 (lista mód takarása 360×640-en) és az
+  alacsonyak: J1b.
+- **D-J1a-18 (orkesztrátori döntés, a D-J1a-11 kiterjesztése) A „befér” magasságban is.** A kapu-táblák akkor
+  „férnek”, ha (a) minden felirat szélességben befér (`gateLabelFits`, eddig is), ÉS (b) a leghosszabb felirat
+  táblájának VALÓDI magassága az adott nézetben elfér a kérdés-kártya alja és a futó vetített feje között (a felirat
+  sorszámából és a tábla CSS-méreteiből számolva, nem a kirajzolt tábla méréséből — így nincs oda-vissza váltás). Ha (b)
+  nem teljesül, ugyanaz történik, mint a szélességnél: LISTA MÓD (a D-J1a-11 szerint: a teljes válaszok a kérdés-sávban,
+  a kulcs-kör a kapu színe + szimbóluma, a 3D kapuív ugyanezt mutatja; táblák nélkül). Nincs új elrendezési számítás a
+  táblák helyére. A döntés a kérdés megjelenésekor ÉS átméretezéskor / elforgatáskor újraszámolódik. Tesztek
+  kényszerített tétellel (teszt-kampó: `forceState({ question: true, answers: [...] })`): 844×390 egysoros válaszokkal
+  táblák, „a tábla a futó feje fölött” ≤ 1 px; 844×390 kétsoros válaszokkal lista mód, a futó feje szabad, a teljes
+  válaszok olvashatók; a leghosszabb válaszok mindhárom nézetben (meglévő e2e).
+- **D-J1a-19 (orkesztrátori feltétel, újra-review #483, fej cd18f2c0) Levágás elleni kettős védelem és élesítés-teszt.**
+  (1) Futásidejű háló: kirajzolás után mért levágás (a felirat `scrollHeight − clientHeight` > fél sor) → a kérdés lista
+  módra vált (a becslő betűmetrika-függő: más telefon / betűkészlet / nagyítás; a háló a tényleges kirajzolást méri). Mért
+  rés: nem levágott 1–2 px, levágott ≥ 15–16 px. (2) Ha a 12 kockázatos valódi banki válasz (a reviewer szigorú modellje
+  szerint) bármelyik nézetben levágódik, a becslő is szigorodik (vastag / nagybetűs szélesség), hogy az ítélet „nem fér”
+  legyen. (3) A tábla-feliraton 2 px függőleges belső ráhagyás (ékezet / alsó szár csonkolása ellen). (4) Az élesítés
+  („a tábla éles” = „a meghajtó elfogadja”) lap-szintű teszttel, léptetett órával (Playwright-óra, 2 fps-es képkocka a
+  250 ms-os plafonnal): a látható-éles, de el nem fogadott állapot ideje 0; a valós idős időzítővel bukik. ÚA1: csak ha
+  olcsó, különben J1b (#94).
 
 ### J1b — Mentőöv, Örvény-miniboss, Nagy Hullám főellenfél, szakaszok
 
@@ -1518,6 +1610,34 @@ fizika-esetek (pattogás, határok) változatlanok.
     választott ketrecre!”. Mérce: a reviewer `edge.ts` mindkét esete válaszol, `edgefreq.ts` „ezt választotta és lejárt” 0,
     `measure.ts` (≤ 500 ms), `tap.ts`, `drag.ts` 0; core-teszt mind a 4 ketrecre, álló és fekvő, bökéssel és joystickkal;
     sim: a peremről induló bot lejárata nem nő. Fekvőben a jelmagyarázat a HUD idősávja alá kerül.
+23. **Kupon mód: átállás a közös szabályra (kanban #95, 2026-11-17, a #483-mal együtt).** A lapi kupon-tartalék
+    (`lib/brainRot/couponRepeat.ts`, 17. pont) kikerül; a kimerülést és az ismétlést a közös director kupon-ága kezeli
+    (D-J1a-10, D-J1a-16). Ok: a kettő együtt közvetlen ismétlést adott (a tartalék `X#ism1`-e után a közös ág menetközi
+    ismétlésként az eredeti `X`-et — 20 seedből 4–11 menetben). Viselkedés-különbségek a régi tartalékhoz képest:
+    - **időzítés:** a hibázott lecke-tétel már a lecke kimerülése ELŐTT, menet közben visszajön (3.–6. kérdésként, a közös
+      ≤ 30%-os ismétlési arány-korláttal); a tartalék csak kimerülés után hozta vissza. Kimerülés után a menetben
+      LEGRÉGEBBEN feltett tétel jön (≥ 2 tételnél nem a közvetlenül előző) — a tartalék a hibázottat előzte, a közös ág a
+      hibázottat a menetközi ismétlési slotból adja;
+    - **kulcs és nyilvántartás:** az ismétlés az EREDETI tétel (`mat:<id>` kulcs, `source: "coupon"`, `couponItemId`
+      megőrizve), és minden feltevés rögzül az ismétlési sorban és a menet-statisztikában — a tartalék `<kulcs>#ism<n>`
+      változat-kulcsot és `noReview`-t adott (az ismételt válasz nem került az ismétlési sorba, a `distinctKeys` a
+      változatokat külön számolta). Most a tanulási nyilvántartás pontosabb: egy tétel = egy kulcs, az ismételt jó / rossz
+      válasz a tétel saját előzményét frissíti;
+    - **szándék nélküli válasz:** a Brain Rotban ketrec-válasz csak szándékos belépéssel jön létre (11., 16., 22. pont); a
+      szándék nélküli kimenet LEJÁRAT (timeout) marad, az ismételt tételre is — a D-J1a-13 „nem válaszolt” szabályának
+      megfelelője változatlanul él, külön ág nem kell;
+    - **kérdés nélküli megtartás:** csak valódi forráshiánynál (0 tételes lecke) — a közös ág ≥ 1 feltett tétel után mindig
+      ad kérdést; 1 tételes leckénél ugyanaz ismétlődik (elkerülhetetlen, a tartaléknál is így volt).
+    - **körforgás — LAZÍTÁS (nem egyenértékű):** a régi tartalék ≥ 2n kérdéses menetben minden tételt kétszer adott; a
+      közös szabályban az ismétlési helyek (≤ 30%) a HIBÁZOTT tételekre mennek, így a jól megválaszolt tétel később kerül
+      újra sorra. Az új teszt-állítás: minden tétel sorra kerül, ≥ 3n kérdésnél kétszer, két feltevése között ≤ 2n kérdés.
+      8 tételnél egy menet 13–20 kérdés, a 3n = 24 sosem jön össze — ott a „kétszer” rész üres, csak a ≤ 2n-es rés mér;
+    - **a hibázott tétel visszatérése:** legfeljebb min(2n, 10) kérdés múlva; kimondott kivétel, ha utána a menetből
+      ennél kevesebb MEGVÁLASZOLT kérdés maradt (a menet végén megszakított kérdés nem számít).
+    Mérce (sim, 20 seed × 3 / 5 / 8 tétel × 7. és 4. évfolyam): közvetlen ismétlés 0, kérdés nélküli megtartás 0, a hibázott
+    tétel visszajön, a győzelmi arány nem rosszabb a kupon nélkülinél (tűrés 1/20); lap: e2e 3 tételes kuponos leckével.
+    Jegyre (a közös szabály kérdése, a tesztelt ≤ 8 tételes tartományon kívül): 10–12 tételes kupon-leckénél a hibázott
+    tétel 80 seedből 14–43 esetben nem jön vissza a menetben (a közös director `LATE_RETURN_MAX = 10` határa).
 21. **Mérőkép az élesítés után (Ú5).** A kérdés-képek a beúszás és a 600 ms-os előjelzés után készülnek.
     Jegyre: Ú3 (≥ 600 ms tartott joystick — a mechanika szándékolt alakja, a J5b-ben újramérve); a 7-es küszöb az átlagosnak
     könnyű (a J5b rivális-győzelme váltja ki).
