@@ -339,6 +339,9 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
   gyorsítótárazható; **cserélhető tároló réteg** (`TtsAudioStore` felület, adatbázisos megvalósítással) — későbbi átköltöztetésnél
   csak a megvalósítás cserélődik, a lecke és a kliens nem; **méretőr**: összméret-plafon (alapérték 40 MB a ~25 MB-os becsléshez),
   fájlonként 300 kB — túllépésnél az írás megtagadva, a gyártás megáll és jelez. Hiba / 404 esetén a kliens a böngészőhangra esik.
+  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** a méretőr KÉT kemény, írást megtagadó plafon együtt — hangverziónként 40 MB és a teljes
+  táblára abszolút 80 MB (2 × 40 MB: egy hangcsere átmeneti kettős készlete fér bele, több nem). Írni csak a kódban rögzített aktuális
+  hangverzióra (`TTS_VOICE_VERSION`) lehet; a régi verziók sorainak takarítása kifejezett, őrzött művelet a tároló felületén.
 - **S8c — hanggyártás ellenőrzéssel:** közös gyártómodul (egyedi szövegek kigyűjtése, ElevenLabs-hívás a szerver kulcsával, gépi
   hangkapu: hossz, csend, levágás, érvényes MP3; legfeljebb 2 újragenerálás; a kész kulcs kihagyva). Két hívó: (1) helyi szkript
   eldobható adatbázisra, alapértelmezetten száraz módban (darab-, karakter- és költségbecslés fizetős hívás nélkül); (2) **élesben
@@ -453,6 +456,8 @@ tud dönteni — a tartalmi forráshűség megítélése marad a lektornál):
   módban soha nem állít meg, csak mér.
 - **Hangtár:** a plafon elérésekor az írás megtagadva, a gyártás megáll; azonos kulcs ismételt írása nem hiba (`exists`); hangverzió
   cseréje új kulcsokat ad, a régi sorok maradnak (törlésük külön, tulajdonosi döntés).
+  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** hangcsere idejére a tár az abszolút 80 MB-os plafonig nőhet (verziónként 40 MB); a régi
+  verziók takarítása megtagadva, ha a megtartandó verzió nem az aktuális, vagy még egyetlen sora sincs.
 
 ## 8. Kockázatok, költség- és időhatás, visszavonás
 
@@ -532,6 +537,8 @@ egysoros változtatással visszavehető.
   lecke, 2 299 fájl), a játék-szóbank nem. Migráció + Drizzle-séma; `db:push` tilos; ügynök éles adatbázist nem ír — az éles
   tömeges hanggyártás admin-végpontról indított, szerveren futó feladat, tulajdonosi indítással. Megjegyzés (TÉNY + BECSLÉS): az
   adatbázis ma 350 MB, a leckék hangja ~25 MB; az adatbázis-csomag keretének pontos értéke UNVERIFIED — ezért kötelező a méretőr.
+  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** az összméret-plafon két kemény plafonra pontosodott — hangverziónként 40 MB + abszolút
+  80 MB a teljes táblára; mindkettő túllépése megtagadja az írást és jelez, a kiszolgálás megy tovább.
 
 **D5 — A döntőbíró fél pontos plafonja**
 - **A (javasolt): determinisztikus plafon** — a „tömör, de teljes” ágon adott 0,5-öt a döntőbíró nem emelheti 1-re.
@@ -646,6 +653,8 @@ Determinisztikus kapuk (SK1–SK5, tulajdonosi elv):
 - [ ] E47 The system SHALL a modell kimenetéről ott, ahol szkript el tudja dönteni, szkripttel (séma, szabály, mérőszám) ítélni,
   nem másik modellel.
 - [ ] E48 WHEN a hangfájlok összmérete elérné a plafont THEN the system SHALL az írást megtagadni, a gyártást megállítani és jelezni.
+  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** a plafon kettős — hangverziónként 40 MB (`total-exceeded`) és abszolút 80 MB a teljes
+  táblára (`absolute-exceeded`); bármelyik elérése megtagadja az írást, megállítja a gyártást és jelez.
 - [ ] E49 The system SHALL a hangfájlokat cserélhető tároló rétegen át elérni; a tároló cseréje a lecke JSON-ját és a klienst nem
   érinti.
 

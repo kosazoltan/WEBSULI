@@ -798,6 +798,10 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    környezeti változóval csak lefelé állítható; felfelé kódváltozás, tehát review kell); ha `totalBytes() + size >
    maxTotalBytes` vagy a fájl túl nagy → `TtsStorageLimitError`, írás nincs. A `put` ellenőrzi, hogy `mime === "audio/mpeg"`, a
    `size` egyezik a bájtok hosszával, és az `id` 32 hexa jegy.
+   **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** a megvalósított méretőr `TTS_AUDIO_LIMITS = { maxTotalBytes: 40 MB (hangverziónként),
+   maxAbsoluteBytes: 80 MB (a teljes tábla), maxFileBytes: 300 KB }` — mindkét összplafon kemény (`total-exceeded` /
+   `absolute-exceeded`), az abszolút plafon környezeti változóval nem állítható; a `put` csak az aktuális `TTS_VOICE_VERSION`-re ír;
+   a felületen `usage()` és őrzött `purgeOtherVersions()` is van (megtagad, ha a megtartandó verzió nem az aktuális vagy nincs sora).
 6. Végpont — `server/tts/audio-routes.ts`, bekötve a `server/routes.ts`-ben: `GET /api/tts/lesson-audio/:id` — érvénytelen `id`
    → 400; nincs sor → 404 `Cache-Control: no-store`; találat → 200 `Content-Type: audio/mpeg`, `Cache-Control: public,
    max-age=31536000, immutable`, `X-Content-Type-Options: nosniff`, `Accept-Ranges: bytes`, tartománykérésre 206 (a
@@ -835,6 +839,8 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    voiceId }`. Megállási szabályok (determinisztikus): `maxChars` elérése; `TtsStorageLimitError`; egymás után 5 elutasított
    fájl; szolgáltatói hiba háromszor egymás után — mindegyiknél megállás és jelzés, nem újrapróbálkozás. Összesítő: gyártott /
    kihagyott / elutasított darab, karakter, számolt költség (80 USD / 1 M karakter), a tár összmérete.
+   **Párhuzamosság (S8b review A4):** a gyártó legfeljebb 2–3 párhuzamos `store.put` írást indít — az írásokat tranzakciós
+   tanácsadó zár állítja sorba, a zárra váró írás adatbázis-kapcsolatot foglal (a kapcsolattár 10-es), a kiszolgálás nem várhat rá.
 3. `scripts/tts/generate-lesson-audio.mts` — helyi hívó, **csak eldobható / helyi adatbázisra**: a szkript megtagadja a futást,
    ha a kapcsolat nem helyi gép (a repó meglévő „éles adatbázis védelme” mintáját kövesd, ha van; különben a gépnév ellenőrzése
    `localhost` / `127.0.0.1`). Alapértelmezetten `--dry-run`: modell- és tárírás nélkül kiírja a darabszámot, a karakterszámot,
@@ -859,6 +865,10 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    az admin-végpontot (száraz → minták → hangválasztás → teljes). A hang kiválasztása után a `TTS_VOICE_VERSION` és a hang
    azonosítója külön, egysoros PR-ban rögzül. Ellenőrzés a teljes futás után (csak olvasva): 20 véletlen kulcs HTTP 200,
    `audio/mpeg`, `immutable`; a tár összmérete a plafon alatt.
+   **Runbook — hangcsere (S8b):** a `TTS_VOICE_VERSION` átírása után a kliens azonnal az új verzió kulcsait kéri, ezért a régi
+   hangok AZONNAL elérhetetlenek (a lecke a böngészőhangra esik), amíg az új verzió le nem gyártódik. Sorrend: a verzió átírása és
+   telepítése → teljes gyártás az új verzióra (a tár átmenetileg legfeljebb 80 MB) → ellenőrzés → `purgeOtherVersions` a régi sorokra
+   (tulajdonosi indítás; csak akkor fut, ha az új verziónak már van sora). A gyártás idejére a böngészőhang a tartalék.
 8. 0.3 szerinti kapuk. Elvárt: E34, E48.
 
 ## SK4 — Kiadás előtti kapu
