@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
+import { quizRoundComplete } from "@shared/quiz-round";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -23,7 +24,10 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     return () => clearTimeout(timer);
   }, [round.finishedAt, ready]);
   useEffect(() => {
-    if (!lessonId || !round.finishedAt || sending.current || !(ready || timedOut)) return;
+    // Spec 2026-11-17-eredmeny-email-kviz: a helyi kvíz kérdésenként azonnal visszajelez, a lezáró gombot sokan meg sem nyomják — a
+    // teljesen megválaszolt kör lezárás nélkül is megy (körönként egyszer: a jelző és a szerver egyedi kulcsa változatlan).
+    const done = !!round.finishedAt || (kind === "quiz" && quizRoundComplete(round));
+    if (!lessonId || !done || sending.current || !(ready || timedOut)) return;
     const roundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
     const flag = `${storageKey}:${kind}:sent:${roundId}`;
     try { if (localStorage.getItem(flag)) return; } catch { /* privát módban a szerver egyedi kulcsa véd */ }
