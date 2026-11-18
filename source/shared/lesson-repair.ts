@@ -32,9 +32,14 @@ export const lessonRepairSchema = z.object({
   })).optional(),
 });
 export type LessonRepair = z.infer<typeof lessonRepairSchema>;
-/** A frissen ÉPÍTETT javítás sémája: a jelölt a modell kimenete, ezért a funkciókapcsoló KI állapotában a bővítés előtti séma méri. */
+/**
+ * A frissen ÉPÍTETT javítás sémája. CSAK a `candidate` a modell kimenete: a funkciókapcsoló KI állapotában azt a bővítés előtti séma
+ * méri. A `previousLesson` a TÁROLT lecke pillanatképe (nem modellkimenet) — mindig a teljes olvasási séma (`lessonSchema`) olvassa:
+ * egy BE állapotban mentett, új fajtájú ábrát tartalmazó lecke javítása a kapcsoló KI-re állítása után sem bukhat el a pillanatképen
+ * (a fizetett javítás és lektorálás UTÁN). Régi leckére a teljes séma a bővítés előttivel azonos eredményt ad (őr: séma-próba).
+ */
 export function modelLessonRepairSchema(sourceVisuals: boolean): z.ZodType<LessonRepair, z.ZodTypeDef, unknown> {
-  return sourceVisuals ? lessonRepairSchema : lessonRepairSchema.extend({ previousLesson: modelLessonSchema(false), candidate: modelLessonSchema(false) });
+  return sourceVisuals ? lessonRepairSchema : lessonRepairSchema.extend({ candidate: modelLessonSchema(false) });
 }
 export function parseLessonRepair(content?: string): LessonRepair | null {
   if (!content?.trim().startsWith("{")) return null;

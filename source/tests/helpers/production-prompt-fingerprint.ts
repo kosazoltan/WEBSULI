@@ -151,6 +151,33 @@ export function modelSchemaProbe(schema: { safeParse(json: unknown): { success: 
   return { stray: result(stray), mixed: result(mixed) };
 }
 
+/**
+ * A TÁROLT lecke olvasási sémájának próbája régi leckealakokon (nincs új fajtájú blokk, nincs `sourceVisualId` — élesben ma csak ilyen
+ * van): a normalizált kimenet (mezősorrend, alapértékek) lenyomata alakonként. A főágon és a láncon ugyanaz a `lessonSchema` export.
+ */
+export function storedLessonProbe(schema: Parameters<typeof modelSchemaProbe>[0]): Record<string, string> {
+  const { experience: _bank, ...teaching } = fixture;
+  const blocks = teaching.sections[0].blocks;
+  const check = { kind: "check", question: "Mi a terület mértékegysége?", options: ["négyzetcentiméter", "centiméter"], correctIndex: 0, feedbackPerOption: ["Igen.", "Ez hosszúság."], hint: "Gondolj a négyzetre.", coversConceptIds: ["area"] };
+  const fill = { kind: "try", tryKind: "fillBlank", spec: { text: "A terület az oldalak ___.", answers: ["szorzata"] }, coversConceptIds: ["area"] };
+  const pairs = { kind: "try", tryKind: "match", spec: { pairs: [{ left: "terület", right: "cm²" }, { left: "hossz", right: "cm" }] }, coversConceptIds: ["area"] };
+  // Alapértékek nélkül tárolt (régi) alak: nincs `readAloud`, `probaEnabled`, `misconceptions`; a kulcsok sorrendje is eltér a sémáétól.
+  const bare = { sourceOnly: true, mapId: "m1", classroom: fixture.classroom, subject: fixture.subject, title: "Régi lecke",
+    sections: [{ blocks: [{ coversConceptIds: ["area"], depth: "core", text: "  A terület az oldalak szorzata.  ", kind: "explain" }, { bullets: ["Szorozd össze az oldalakat."], kind: "recap" }], heading: "Terület" }] };
+  const shapes: Record<string, unknown> = {
+    "teljes lecke bankkal": { ...fixture, mapId: "m1", sourceOnly: true },
+    "csak tanítás": { ...teaching, mapId: "m1", sourceOnly: true },
+    "minden régi blokkfajta": { ...teaching, mapId: "m1", sourceOnly: true, sections: [{ ...teaching.sections[0], emoji: "📐", blocks: [...blocks.slice(0, -1), check, fill, pairs, ...blocks.slice(-1)] }],
+      misconceptions: [{ conceptId: "area", text: "A terület nem a kerület." }], gaps: [{ id: "g1", point: "térfogat", reason: "a forrás nem tárgyalja" }], art: { subjectIcon: "matek-kid", topic: "geometria" } },
+    "alapértékek nélkül, kevert kulcssorrenddel": bare,
+    "ismeretlen kulcsokkal": { ...bare, legacyField: 1, sections: [{ ...bare.sections[0], extra: true, blocks: bare.sections[0].blocks.map((b) => ({ ...b, note: "régi mező" })) }] },
+  };
+  return Object.fromEntries(Object.entries(shapes).map(([name, json]) => {
+    const r = schema.safeParse(json);
+    return [name, sha(r.success ? { ok: true, data: r.data } : { ok: false, issues: r.error!.issues.map((i) => i.path.join(".") + ": " + i.message) })];
+  }));
+}
+
 // Parancssori mód: a megadott mappa (pl. a főág kicsomagolt `server` + `shared` fája) motorjának lenyomatai.
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   const root = resolve(process.argv[2] ?? ".");
@@ -167,6 +194,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   const schemaModule = await load("shared/lesson-schema.ts") as { lessonSchema: Parameters<typeof modelSchemaProbe>[0]; modelLessonSchema?: (on: boolean) => Parameters<typeof modelSchemaProbe>[0] };
   const probe = modelSchemaProbe(schemaModule.modelLessonSchema ? schemaModule.modelLessonSchema(false) : schemaModule.lessonSchema);
   console.log(`séma stray: ${probe.stray}` + String.fromCharCode(10) + `séma mixed: ${probe.mixed}`);
+  for (const [name, hash] of Object.entries(storedLessonProbe(schemaModule.lessonSchema))) console.log(`tárolt [${name}]: ${hash}`);
   console.log(`mapHash: ${singleRunMapHash(FINGERPRINT_FILES, "Terület")}`);
   process.exit(0);
 }

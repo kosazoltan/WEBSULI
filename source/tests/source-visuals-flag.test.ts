@@ -236,3 +236,41 @@ test("KI (J2): a modellkimenet sémája a főág sémájával azonos eredményt 
   assert.match(improvement, /const storedCoverage = visualsOn \? withVisualCoverage\(/, "KI állapotban a tárolt fedettség változatlan, többlet lekérdezés nélkül");
   assert.match(src("../server/studio/single-run/engine.ts"), /const strict = modelLessonSchema\(visualsOn\)\.safeParse\(/);
 });
+
+/* Automatikus kódáttekintő (P2, #515): a javítás `previousLesson` mezője a TÁROLT lecke pillanatképe, nem modellkimenet — a teljes
+   olvasási séma olvassa, kapcsolótól függetlenül; csak a `candidate` (a modell jelöltje) megy a kapcsolófüggő sémán. */
+test("leckejavítás: a BE állapotban mentett (új fajtájú ábrás) lecke pillanatképe KI állapotban sem buktatja el a javítást; a jelölt határa marad", async () => {
+  const { lessonSchema } = await import("../shared/lesson-schema");
+  const { modelLessonRepairSchema } = await import("../shared/lesson-repair");
+  const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+  const plain = lessonSchema.parse({ ...standardFusionFixture(), mapId: "m1", sourceOnly: true });
+  const table = { kind: "animate", animKind: "table", params: FINGERPRINT_TABLE, caption: "A terület mértékegysége a négyzetcentiméter.", coversConceptIds: ["area"], sourceVisualId: "v1" };
+  const stored = lessonSchema.parse({ ...plain, sections: plain.sections.map((s, i) => (i ? s : { ...s, blocks: [...s.blocks.slice(0, -1), table, ...s.blocks.slice(-1)] })) });
+  const hash = "a".repeat(64);
+  const repair = (previousLesson: unknown, candidate: unknown) => ({ kind: "lesson-repair-fusion-1", lessonId: "l1", baseVersion: 1, baselineHash: hash, baselineMaterialHash: hash, sourceHash: hash, previousLesson, candidate, reviewNotes: [] });
+  // A lelet: BE-kori tárolt lecke + KI állapot + érvényes (régi fajtákból álló) jelölt → a javítás sémája átmegy, a pillanatkép ÉP marad.
+  const ok = modelLessonRepairSchema(false).safeParse(repair(stored, plain));
+  assert.equal(ok.success, true, ok.success ? "" : JSON.stringify(ok.error.issues.slice(0, 3)));
+  const kept = (ok as { data: { previousLesson: { sections: Array<{ blocks: Array<Record<string, unknown>> }> } } }).data.previousLesson.sections[0].blocks.find((b) => b.animKind === "table");
+  assert.deepEqual([kept?.animKind, kept?.sourceVisualId], ["table", "v1"], "a tárolt lecke új fajtájú blokkja és hivatkozása változatlanul a pillanatképben");
+  // A jelölt (modellkimenet) határa KI állapotban változatlanul a bővítés előtti séma; BE állapotban elfogadott.
+  const bad = modelLessonRepairSchema(false).safeParse(repair(plain, stored));
+  assert.equal(bad.success, false);
+  assert.match(bad.success ? "" : bad.error.issues.map((i) => i.path.join(".")).join(" "), /^candidate\.sections\.0\.blocks\.\d+\.animKind$/, "csak a jelölt új fajtája a hiba");
+  assert.equal(modelLessonRepairSchema(true).safeParse(repair(stored, stored)).success, true);
+});
+
+test("KI = főág a tárolt leckére: régi leckealakokon a teljes olvasási séma kimenete (mezősorrend, alapértékek) a főág sémájáéval azonos", async () => {
+  const { lessonSchema, modelLessonSchema } = await import("../shared/lesson-schema");
+  const { storedLessonProbe } = await import("./helpers/production-prompt-fingerprint");
+  // A főág (origin/main dc76ba52) `lessonSchema`-jának eredménye ugyanezekre az alakokra — a helper parancssori módjából („tárolt […]” sorok).
+  const MAIN_STORED = {
+    "teljes lecke bankkal": "f6ce94dfd3f74ff36e2a775c5c00affd68e60e0385d57af27bc2fa132f019dc8",
+    "csak tanítás": "2be26b12f415790b6952192a4e475be707c9a43eb2bc4015f71b8ec4d32d22d3",
+    "minden régi blokkfajta": "bd8a38113e0aa90e08afca5ba68b140e96576b812d9b0a3d74959cbe980d96a5",
+    "alapértékek nélkül, kevert kulcssorrenddel": "793e96c623a33e6498da9d56283a836e3d8255a9c82ae9f74f9fce0b5718649f",
+    "ismeretlen kulcsokkal": "793e96c623a33e6498da9d56283a836e3d8255a9c82ae9f74f9fce0b5718649f",
+  };
+  assert.deepEqual(storedLessonProbe(lessonSchema), MAIN_STORED, "a pillanatkép olvasása (teljes séma) régi leckén = a főág");
+  assert.deepEqual(storedLessonProbe(modelLessonSchema(false)), MAIN_STORED, "régi leckén a két séma ugyanazt adja — a javítás eredménye KI állapotban a főágé");
+});
