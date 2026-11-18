@@ -1,24 +1,33 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import blockCraftQuiz from "./game-win-cases/block-craft-quiz";
+import brainRotSteal from "./game-win-cases/brain-rot-steal";
+import spaceAsteroidQuiz from "./game-win-cases/space-asteroid-quiz";
+import speedQuizMath from "./game-win-cases/speed-quiz-math";
+import tornadoHunter200 from "./game-win-cases/tornado-hunter-200";
+import tsunamiEnglish from "./game-win-cases/tsunami-english";
+import type { GameWinCase } from "./game-win-cases/types";
+import wordLadderHuEn from "./game-win-cases/word-ladder-hu-en";
+import { waitForStable } from "./support/game-mobile-quality";
+
 /**
  * D1 — determinisztikus győzelmi / szintlezárási utak a test hookokkal.
  * Csak build:e2e (VITE_ENABLE_GAME_TEST_HOOKS=1) alatt él.
+ *
+ * J0c (végrehajtás K.1/7): az esetek játékonként a `tests/game-win-cases/<id>.ts` fájlokban állnak (tiszta átrendezés,
+ * az értékek és az elvárások változatlanok); a játékszeletek csak a saját esetfájljukat módosítják.
  */
 
 test.use({ serviceWorkers: "block" });
 
-const GAMES: Array<{
-  path: string;
-  force: Record<string, unknown>;
-  resultTestId: string;
-}> = [
-  { path: "/games/speed-quiz-math", force: { phase: "won", correctCount: 18 }, resultTestId: "sq-won" },
-  { path: "/games/word-ladder-hu-en", force: { phase: "won" }, resultTestId: "wl-won" },
-  { path: "/games/tsunami-english", force: { phase: "won", correctCount: 8 }, resultTestId: "ts-won" },
-  { path: "/games/brain-rot-steal", force: { phase: "over", correctCount: 7 }, resultTestId: "br-over" },
-  { path: "/games/block-craft-quiz", force: { phase: "levelComplete" }, resultTestId: "bc-level-complete" },
-  { path: "/games/space-asteroid-quiz", force: { phase: "over", gameWon: true, correctCount: 12 }, resultTestId: "sa-over" },
-  { path: "/games/tornado-hunter-200", force: { screen: "play", phase: "result_win" }, resultTestId: "th-result" },
+const GAMES: GameWinCase[] = [
+  speedQuizMath,
+  wordLadderHuEn,
+  tsunamiEnglish,
+  brainRotSteal,
+  blockCraftQuiz,
+  spaceAsteroidQuiz,
+  tornadoHunter200,
 ];
 
 test.beforeEach(async ({ page }) => {
@@ -71,6 +80,10 @@ for (const g of GAMES) {
     await forceWin(page, g.path, g.force);
     const result = page.getByTestId(g.resultTestId);
     await expect(result).toBeVisible({ timeout: 10_000 });
+    // E2E-ingadozók 3. kör (kanban #76): a közös eredményképernyő párbeszéde rugós belépővel nő (`ResultScreen`: scale 0,9 → 1);
+    // animáció közben mérve a 48 px-es gomb 43,96 px volt (0,916-os skála). A mérés a gombok BEÁLLT dobozára vár (4 egymást
+    // követő, animációmentes, azonos dobozú képkocka — C-33: végállapotú elem); a 44 px-es mérce változatlan.
+    await waitForStable(page, `[data-testid="${g.resultTestId}"] button`);
     expect(await pageOverflowY(page)).toBeLessThanOrEqual(2);
 
     const buttons = result.getByRole("button");

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import type { FeedbackCard } from "./feedback";
+import { usePauseMenuOpen } from "./mobile/modalLayer";
 import { useReducedMotion } from "./useReducedMotion";
 
 /**
@@ -50,20 +51,28 @@ export default function QuizFeedbackCard({
   const reduced = useReducedMotion();
   const primaryRef = useRef<HTMLButtonElement | null>(null);
   const tone = TONE[card.outcome];
+  /**
+   * S13 / átfogó review K3: amíg a szünet menü nyitva van, a kártya nem látszik, nem fogad billentyűt, és a helyes
+   * válasz automatikus bezárása sem fut — különben a z 90-es kártya a z 80-as menü fölé kerülne (a Folytatás /
+   * Újrakezdés / Kilépés elérhetetlen, az Esc a láthatatlan menüt folytatná), a játék pedig szünetben lépne tovább.
+   * Folytatás után a kártya ugyanott áll, ahol volt (a Tornado lapszintű `feedback && !paused` közös változata).
+   */
+  const pausedByMenu = usePauseMenuOpen();
 
   useEffect(() => {
-    primaryRef.current?.focus();
-  }, []);
+    if (!pausedByMenu) primaryRef.current?.focus();
+  }, [pausedByMenu]);
 
   // Csak a helyes válasz zárul magától. Rossz válasznál a gyerek olvas — az
   // automatikus továbblépés pont a tanulás idejét venné el.
   useEffect(() => {
-    if (card.outcome !== "correct") return;
+    if (card.outcome !== "correct" || pausedByMenu) return;
     const id = window.setTimeout(onDismiss, autoDismissMs);
     return () => window.clearTimeout(id);
-  }, [card.outcome, autoDismissMs, onDismiss]);
+  }, [card.outcome, autoDismissMs, onDismiss, pausedByMenu]);
 
   useEffect(() => {
+    if (pausedByMenu) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Enter") {
         e.preventDefault();
@@ -72,7 +81,7 @@ export default function QuizFeedbackCard({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onDismiss]);
+  }, [onDismiss, pausedByMenu]);
 
   const showRetry = card.retryable && typeof onRetry === "function";
 
@@ -127,8 +136,8 @@ export default function QuizFeedbackCard({
             ref={primaryRef}
             type="button"
             onClick={onDismiss}
-            // 44 px érintési cél — ugyanaz a mérce, amit a lecke-futtató is tart (#198).
-            className="min-h-[44px] flex-1 rounded-xl bg-slate-100 px-4 text-base font-semibold text-slate-900 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-100"
+            // 48 px érintési cél (S2, terv 4.5 „Érintés”; korábban 44 px, #198).
+            className="min-h-12 flex-1 rounded-xl bg-slate-100 px-4 text-base font-semibold text-slate-900 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-100"
             data-testid="quiz-feedback-dismiss"
           >
             {card.outcome === "correct" ? "Tovább" : "Értem, megyek tovább"}
@@ -137,7 +146,7 @@ export default function QuizFeedbackCard({
             <button
               type="button"
               onClick={onRetry}
-              className="min-h-[44px] flex-1 rounded-xl border border-slate-500 px-4 text-base font-semibold text-slate-100 hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+              className="min-h-12 flex-1 rounded-xl border border-slate-500 px-4 text-base font-semibold text-slate-100 hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
               data-testid="quiz-feedback-retry"
             >
               Újrapróbálom
@@ -147,6 +156,7 @@ export default function QuizFeedbackCard({
       </div>
     </div>
   );
+  if (pausedByMenu) return null;
   // Escape transformed/isolated game containers: the explanation must remain
   // above the question overlay, and its continue button must receive the click.
   return typeof document === "undefined" ? content : createPortal(content, document.body);

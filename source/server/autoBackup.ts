@@ -4,6 +4,7 @@ import fs from 'fs/promises'; // Async file I/O
 import fsSync from 'fs'; // For synchronous operations where needed
 import path from 'path';
 import { logger } from "./lib/logger";
+import { isE2eMode } from "./lib/e2e-mode";
 import { isCompleteBackupTail, runStartupBackup, type BackupFileInfo } from "./lib/backup-startup";
 
 // Backup configuration
@@ -160,8 +161,14 @@ async function cleanOldBackups(): Promise<number> {
 /**
  * Debounced event-driven backup
  * Prevents backup spam during rapid CRUD operations
+ *
+ * E2E-mód (`WEBSULI_E2E=1`, docs/specs/2026-11-16-tananyag-programozas-felirat.md): nem ír mentésfájlt és nem hagy nyitott
+ * időzítőt — az eldobható adatbázis tartalma nem mentendő, és a nyitott időzítő a tesztfolyamatot életben tartaná.
+ * Élesben változatlan.
  */
-export function triggerEventBackup() {
+export function triggerEventBackup(opts: { env?: NodeJS.ProcessEnv; create?: () => Promise<unknown> } = {}): "skipped-e2e" | "started" | "scheduled" {
+  if (isE2eMode(opts.env)) return "skipped-e2e";
+  const create = opts.create ?? (() => createAutoBackup('event'));
   const now = Date.now();
   
   // If a backup was created recently, schedule a debounced backup
@@ -173,18 +180,27 @@ export function triggerEventBackup() {
     
     // Schedule new backup after debounce period
     pendingEventBackup = setTimeout(async () => {
-      await createAutoBackup('event');
+      await create();
       lastEventBackupTime = Date.now();
       pendingEventBackup = null;
     }, EVENT_BACKUP_DEBOUNCE_MS - (now - lastEventBackupTime));
     
     logger.info('[AUTO-BACKUP] 📅 Event backup scheduled (debounced)');
-  } else {
-    // Create backup immediately
-    createAutoBackup('event').then(() => {
-      lastEventBackupTime = Date.now();
-    });
+    return "scheduled";
   }
+  // Create backup immediately
+  void create().then(() => {
+    lastEventBackupTime = Date.now();
+  });
+  return "started";
+}
+
+/** A függőben lévő eseményalapú mentés törlése (leállításkor / tesztben); true, ha volt ilyen. */
+export function cancelPendingEventBackup(): boolean {
+  if (!pendingEventBackup) return false;
+  clearTimeout(pendingEventBackup);
+  pendingEventBackup = null;
+  return true;
 }
 
 /** A truncated (pre-atomic-write) backup does not end in `}` — it must not suppress the startup backup. */

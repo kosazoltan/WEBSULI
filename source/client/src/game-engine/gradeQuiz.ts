@@ -9,8 +9,14 @@
  *
  * Every game keeps its old picker as the fallback: when this returns `null` (grade 1–2,
  * no grade chosen, an empty or exhausted bank) the game behaves exactly as before.
+ *
+ * JBb: the bank is loaded lazily per grade (`data/gradeQuizBank/loader.ts`). Without injected `items` the picker reads
+ * the loaded-grades snapshot; while the player's own grade is still loading it returns `null` (→ the game's own bank)
+ * and starts the download. `gradeForGame` starts it too, and `useGradeLevel` preloads on mount. In Node (server, unit
+ * tests) the loader fills the whole bank synchronously, so nothing changes there.
  */
-import { GRADE_QUIZ_ITEMS, MAX_GRADE, MIN_GRADE, type GradeQuizItem, type GradeSubject } from "../data/gradeQuizBank";
+import { MAX_GRADE, MIN_GRADE, type GradeQuizItem, type GradeSubject } from "../data/gradeQuizBank/types";
+import { isGradeBankLoaded, loadedGradeItems, preloadGradeBanks } from "../data/gradeQuizBank/loader";
 
 export type GradeQuizSeen = { ids: Set<string>; prompts: Set<string> };
 
@@ -76,7 +82,12 @@ export function pickGradeQuiz(args: PickGradeQuizArgs): GradeQuizItem | null {
   const { grade, band, seen } = args;
   if (!isSharedGrade(grade)) return null;
   const rng = args.rng ?? Math.random;
-  const items = args.items ?? GRADE_QUIZ_ITEMS;
+  if (!args.items && !isGradeBankLoaded(grade)) {
+    // JBb: a saját évfolyam darabja még tölt → most a játék saját bankja, és indul a letöltés.
+    void preloadGradeBanks(grade);
+    return null;
+  }
+  const items = args.items ?? loadedGradeItems();
   const subjects = args.subjects && args.subjects.length > 0 ? new Set(args.subjects) : null;
 
   const unseen = items.filter((q) => (!subjects || subjects.has(q.subject)) && !isGradeQuizSeen(seen, q));
@@ -101,7 +112,9 @@ export function pickGradeQuiz(args: PickGradeQuizArgs): GradeQuizItem | null {
  * own (lower-primary) bank, also when the player has not chosen a grade yet.
  */
 export function gradeForGame(grade: number | null | undefined): number | null {
-  return isSharedGrade(grade) ? grade : null;
+  if (!isSharedGrade(grade)) return null;
+  void preloadGradeBanks(grade); // JBb: a darab letöltése (idempotens; a hiba nem dob)
+  return grade;
 }
 
 /** Lesson-material priority: the first material question not asked yet in this run. */
@@ -126,4 +139,44 @@ export function bandShiftForDifficulty(difficulty: GradeGameDifficulty): number 
 
 export function clampBand(band: number): number {
   return Number.isFinite(band) ? Math.min(1, Math.max(0, band)) : 0;
+}
+
+type GradeSlotArgs<V> = {
+  /** `pickGradeQuiz` hívása ugyanazzal a `seen`-nel. */
+  pick: () => GradeQuizItem | null;
+  seen: GradeQuizSeen;
+  /** A szóbank-forrás hívása; `null`, ha nincs szóbank / még tölt / nem ad kérdést — ilyenkor a kézi tétel megy. */
+  vocabNext: () => V | null;
+};
+
+/**
+ * S13 / E23 — az évfolyam-bank kérdés-helye szóbankos kiváltással, EGY közös helyen (a Brain Rot, az Aszteroida, a
+ * Kockavadász és a Tornado ezt hívja; korábban három külön változat élt: `lib/brainRotTuning.ts`,
+ * `lib/blockCraftSubjects.ts`, `lib/tornado/questions.ts`).
+ *
+ * A választott tétel MINDIG a `seen`-be kerül (fogy) — akkor is, ha angol, és a szóbank váltja ki (review #424):
+ * különben a választó az első nem üres sávban ragadna, és ugyanazt a tételt kínálná újra (egy szóbank-kiesés után is).
+ *
+ * Két változat:
+ *  - `subject` nélkül (Brain Rot, Aszteroida, Tornado): a tétel tárgya dönt; ha nincs tétel, nincs hely (`null`);
+ *  - `subject`-tel (Kockavadász tárgy-körforgása): az angol HELY akkor is a szóbankból kérdez, ha az évfolyam-bank
+ *    angol tételei elfogytak (`replaced: null`) — a körforgás minden körében egy angol hely marad, az arány nem torzul.
+ */
+export function pickGradeSlotWithVocab<V>(
+  args: GradeSlotArgs<V> & { subject: GradeSubject },
+): { kind: "vocab"; quiz: V; replaced: GradeQuizItem | null } | { kind: "grade"; item: GradeQuizItem } | null;
+export function pickGradeSlotWithVocab<V>(
+  args: GradeSlotArgs<V>,
+): { kind: "vocab"; quiz: V; replaced: GradeQuizItem } | { kind: "grade"; item: GradeQuizItem } | null;
+export function pickGradeSlotWithVocab<V>(
+  args: GradeSlotArgs<V> & { subject?: GradeSubject },
+): { kind: "vocab"; quiz: V; replaced: GradeQuizItem | null } | { kind: "grade"; item: GradeQuizItem } | null {
+  const item = args.pick();
+  if (item) markGradeQuizSeen(args.seen, item);
+  const englishSlot = args.subject !== undefined ? args.subject === "english" : item?.subject === "english";
+  if (englishSlot) {
+    const quiz = args.vocabNext();
+    if (quiz != null) return { kind: "vocab", quiz, replaced: item };
+  }
+  return item ? { kind: "grade", item } : null;
 }

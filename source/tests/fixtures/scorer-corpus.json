@@ -361,12 +361,33 @@
       "expected": 0.5
     },
     {
-      "name": "túl rövid válasz",
+      "name": "túl rövid, de minden kötelező fogalmat tartalmazó válasz — fél pont",
       "source": "minWords",
+      "specChange": "SPEC-VÁLTOZÁS 2026-11-17 (nyilt-feladat-rovid-valasz): régi elvárt pont 0, új 0.5 — a tartalmilag teljes rövid válasz részpont, teljes pont nem.",
       "task": {
         "required": [
           [
             "fotoszintézis"
+          ]
+        ],
+        "minWords": 4,
+        "needsSentence": false,
+        "sample": "A növény a fotoszintézis során cukrot készít."
+      },
+      "answer": "fotoszintézis",
+      "expected": 0.5
+    },
+    {
+      "name": "túl rövid ÉS hiányos válasz — nulla",
+      "source": "minWords (spec 2026-11-17-nyilt-feladat-rovid-valasz)",
+      "task": {
+        "required": [
+          [
+            "fotoszintézis"
+          ],
+          [
+            "cukrot",
+            "cukor"
           ]
         ],
         "minWords": 4,

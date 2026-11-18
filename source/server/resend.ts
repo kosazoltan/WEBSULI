@@ -3,6 +3,7 @@ import { storage } from './storage';
 import { sanitizeText } from './utils/sanitize';
 import { logger } from "./lib/logger";
 import { checkResendSender } from "./lib/resend-sender";
+import { maskEmail } from "./lib/mask-email";
 
 let resendClient: Resend | null = null;
 let fromEmail: string = '';
@@ -145,7 +146,7 @@ export async function sendNewMaterialNotification(
       </html>
     `;
 
-    logger.info(`[RESEND] Email küldése: ${recipientEmail} részére (${materialTitle})`);
+    logger.info(`[RESEND] Email küldése: ${maskEmail(recipientEmail)} részére (${materialTitle})`);
     
     const result = await client.emails.send({
       from: fromEmail,
@@ -156,7 +157,7 @@ export async function sendNewMaterialNotification(
 
     // Check if the result contains an error
     if (result && 'error' in result && result.error) {
-      logger.error('[RESEND] Email küldési hiba:', recipientEmail, 'error:', result.error);
+      logger.error('[RESEND] Email küldési hiba:', maskEmail(recipientEmail), 'error:', result.error);
       
       // Log failed email to database
       await storage.createEmailLog({
@@ -172,7 +173,7 @@ export async function sendNewMaterialNotification(
       throw err;
     }
 
-    logger.info('[RESEND] Email sikeresen elküldve:', recipientEmail, 'result:', result);
+    logger.info('[RESEND] Email sikeresen elküldve:', maskEmail(recipientEmail), 'result:', result);
     
     // Log successful email to database. Resend already accepted the mail, so a log-write
     // failure must not fall into the catch below and be recorded as a failed delivery.
@@ -218,7 +219,8 @@ export async function sendAdminNotification(
   htmlBody: string,
   adminEmail?: string,
   /** Review #292: a tanulói levél címzettje és tárgya (név) nem kerül az alkalmazásnaplóba — a részletek az adatbázisban. */
-  opts: { quiet?: boolean } = {},
+  /** Review (2026-11-17): `idempotencyKey` — a szolgáltató ugyanazzal a kulccsal érkező ismételt küldést nem kézbesíti másodszor. */
+  opts: { quiet?: boolean; idempotencyKey?: string } = {},
 ) {
   const recipientEmail = adminEmail || process.env.ADMIN_EMAIL || 'admin@websuli.org';
   // Admin mails (daily view summary, material results) are logged too, so the diagnostics
@@ -236,21 +238,22 @@ export async function sendAdminNotification(
     const { client, fromEmail } = getResendClient();
 
     if (opts.quiet) logger.info('[RESEND] Értesítés küldése (címzett és tárgy a naplóban elrejtve)');
-    else logger.info(`[RESEND] Admin értesítés küldése: ${recipientEmail} (${subject})`);
+    else logger.info(`[RESEND] Admin értesítés küldése: ${maskEmail(recipientEmail)} (${subject})`);
 
     result = await client.emails.send({
       from: fromEmail,
       to: [recipientEmail],
       subject: subject,
       html: htmlBody
-    });
+    }, opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : undefined);
 
     if (result && 'error' in result && result.error) {
       throw new Error(`Resend error: ${result.error.message || 'Unknown error'}`);
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error('[RESEND] Admin értesítés küldési hiba:', opts.quiet ? message.replaceAll(recipientEmail, '[címzett]') : error);
+    const safeMessage = message.replaceAll(recipientEmail, opts.quiet ? '[címzett]' : maskEmail(recipientEmail));
+    logger.error('[RESEND] Admin értesítés küldési hiba:', safeMessage);
     await logOutcome({ status: 'failed', error: `admin: ${message}` });
     throw error;
   }
@@ -259,4 +262,17 @@ export async function sendAdminNotification(
   else logger.info(`[RESEND] Admin értesítés sikeresen elküldve:`, result);
   await logOutcome({ status: 'sent', resendId: result.data?.id });
   return result;
+}
+
+/**
+ * JM7a: a játékos belépő levele (kód + link). A címzett és a tartalom (kód, link) SOHA nem kerül a naplóba, és az
+ * email_logs táblába sem (adattakarékosság: a cím csak a player_accounts / player_auth_codes sorban él).
+ */
+export async function sendPlayerLoginEmail(recipientEmail: string, mail: { subject: string; html: string; text: string }) {
+  const { client, fromEmail } = getResendClient();
+  const result = await client.emails.send({ from: fromEmail, to: [recipientEmail], subject: mail.subject, html: mail.html, text: mail.text });
+  if (result && 'error' in result && result.error) {
+    throw new Error(`Resend error: ${result.error.message || 'Unknown error'}`.replaceAll(recipientEmail, maskEmail(recipientEmail)));
+  }
+  logger.info('[RESEND] Játékos belépő levél elküldve');
 }

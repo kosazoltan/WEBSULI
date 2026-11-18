@@ -3,6 +3,7 @@ import { isAutomatedUserAgent } from "./lib/automated-agent";
 import { registerLessonFontAssets } from "./lesson-font-assets";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import { gunzipSync } from "node:zlib";
 import express from "express";
 import { csrfSync } from "csrf-sync";
 import { storage } from "./storage";
@@ -21,8 +22,10 @@ import { NEWSLETTER_LIMITS, normalizeInterests } from "@shared/newsletter";
 import { sanitizeText, sanitizeEmail } from "./utils/sanitize";
 // Admin authentication with hardcoded admin emails
 import { isAuthenticated, isAuthenticatedAdmin } from "./auth";
+import { isAdminUser, prepareAdminAccess } from "./lib/admin-access";
 import * as gameScoreService from "./gameScoreService";
 import * as gameQuizBankService from "./gameQuizBankService";
+import { etagMatches, QUIZ_BANK_CLASSROOM_RE } from "./lib/conditional-get";
 import { generateMaterialQuiz, QuizMaterialNotFound } from "./gameQuizGeneratorService";
 // checkIsAdmin import removed
 
@@ -30,6 +33,7 @@ import { db, dbPool } from "./db";
 import { getMaterialPreviewUrl, getBaseUrl } from "./utils/config";
 import { triggerEventBackup } from "./autoBackup";
 import { getHtmlFilesCache } from "./cache/HtmlFilesCache";
+import { MATERIAL_ID_PATTERN, MaterialClassroomError, setMaterialClassroom, setMaterialClassroomTx } from "./material-classroom";
 import { enforceOriginAllowlist } from "./lib/origin-guard";
 import { logger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
@@ -56,7 +60,20 @@ import { loadClipMedia } from "./lesson-clips-db";
 import { createArbiterRouter } from "./arbiter/routes";
 import { catalogAdminRouter } from "./catalog/admin-routes";
 import { subjectMemoryAdminRouter } from "./memory/admin-routes";
+import { createPlayerRouter, defaultPlayerMailer } from "./player/auth-routes";
+import { createPlayerStore } from "./player/store";
+import { createPlayerAccountStore } from "./player/account-store";
+import { createPlayerAccountRouter } from "./player/account-routes";
+import { createPlayerAdminRouter } from "./player/admin-routes";
+import { playerLinkBaseUrl } from "./player/email-template";
+import { playerAccountsEnabled } from "./player/require-player";
+import { getPlayerSessionId } from "./player/session";
+import { getRealtime } from "./realtime";
+import { createRtRouter } from "./routes/rt";
 import { ViewDedup } from "./lib/view-dedup";
+import { maskEmail } from "./lib/mask-email";
+import { createGameScoreUserLimiter } from "./lib/game-score-limits";
+import { ScoreRunDedup } from "./lib/score-run-dedup";
 import { getMaterialOrigin } from "./utils/config";
 import { prependWebLessonQualityNotice, qualityNoticeFor } from "./lib/web-lesson-quality-notice";
 
@@ -65,6 +82,7 @@ const materialViewDedup = new ViewDedup();
 // Tanulói profil (S2): tanuló + anyag megtekintése óránként egyszer, minden útvonalon (/dev/:id, Stúdió-lecke, PDF) közösen.
 const learnerViewDedup = new ViewDedup();
 import { validatePushEndpoint, validatePushKeys } from "./lib/push-endpoint";
+import { vapidSubject } from "./lib/vapid-subject";
 import { normalizeFingerprint, normalizeMaterialIdBatch } from "./lib/public-input";
 import { hasHtmlLessonData } from "../shared/lesson-html-data";
 import { extractClassroomFromTitle } from "@shared/classrooms";
@@ -125,7 +143,8 @@ const bulkEmailSchema = z.object({
 });
 
 const bulkMoveSchema = z.object({
-  materialIds: z.array(z.string().uuid()).min(1, "Legalább egy material ID kötelező"),
+  // A régi (nem UUID) anyag-azonosító is áthelyezhető (docs/specs/2026-11-16-tananyag-evfolyam-modositas.md).
+  materialIds: z.array(z.string().regex(MATERIAL_ID_PATTERN, "Érvénytelen tananyag-azonosító")).min(1, "Legalább egy material ID kötelező"),
   classroom: z.number().int().min(0).max(12, "Osztály 0 (Programozási alapismeretek) és 12 között kell legyen"),
 });
 
@@ -815,6 +834,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (path === '/api/lessons/arbiter') {
       return enforceOriginAllowlist(req, res, next);
     }
+    // JM7a: a játékos e-mailes belépése (kódkérés, beváltás, kijelentkezés) — munkamenet előtt nincs CSRF-token, ezért,
+    // mint a /api/login, Origin/Referer allowlist őrzi; a többi /api/player/* írás CSRF-tokenes.
+    if (path.startsWith('/api/player/auth/')) {
+      return enforceOriginAllowlist(req, res, next);
+    }
+    // JM2: a valós idejű réteg belépőjegye — vendégnek (munkamenet nélkül) nincs CSRF-tokenje, ezért, mint a játékos-belépés,
+    // Origin/Referer-engedélylista őrzi (+ IP-korlát a routerben). A jegy csak egy rövid életű, egyszeri belépést ad.
+    if (path === '/api/rt/ticket') {
+      return enforceOriginAllowlist(req, res, next);
+    }
 
     // Apply CSRF protection to all other mutating requests
     csrfSynchronisedProtection(req, res, next);
@@ -860,8 +889,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Spec 2026-10-06-s5-tantargyi-memoria: a tantárgyi memória-kártyák csak olvasó admin API-ja.
   app.use("/api/admin/subject-memory", subjectMemoryAdminRouter);
 
+  // JM7a (docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4): játékos-fiók — külön tábla, külön munkamenet-kulcs, admin-jog
+  // semmilyen úton; a PLAYER_ACCOUNTS flag (alapból KI) mellett a végpontok 404-et adnak (a /status kivételével).
+  const playerStore = createPlayerStore(dbPool);
+  const playerAccounts = createPlayerAccountStore(dbPool);
+  app.use("/api/player", createPlayerRouter({ store: playerStore, mailer: defaultPlayerMailer, baseUrl: () => playerLinkBaseUrl() }));
+  // JM7b: „kis fiók” (becenév, avatar, tanulói összekapcsolás, adatletöltés, törlés) — flag + requirePlayer mögött.
+  app.use("/api/player", createPlayerAccountRouter({
+    store: playerStore,
+    mailer: defaultPlayerMailer,
+    accounts: playerAccounts,
+    resolveLearnerId: async (token) => (await resolveLearner(token))?.id ?? null,
+  }));
+
+  // JM2 (terv 10.3, 10.8): a valós idejű réteg jegy- és státusz-végpontja; a Socket.IO-t az index.ts csatolja fel a
+  // HTTP-szerverre. MP_MODE=off (alap) → a jegy-végpont 404, a státusz { enabled: false }.
+  const rtPlayerStore = createPlayerStore(dbPool);
+  // Review #452 ALACSONY-8: a részletes valós idejű státusz (szobák, kapcsolatok, gyártási elsőbbség, kapacitás) csak adminnak.
+  app.get("/api/admin/rt/status", isAuthenticatedAdmin, (_req: Request, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(getRealtime().adminStatus());
+  });
+  app.use("/api/rt", createRtRouter(getRealtime(), {
+    resolveLearner: (token) => resolveLearner(token),
+    getPlayer: async (req) => {
+      if (!playerAccountsEnabled()) return null;
+      const id = getPlayerSessionId(req);
+      return id ? rtPlayerStore.getPlayer(id) : null;
+    },
+  }));
+
   // Create admin router with authentication middleware
   const adminRouter = express.Router();
+  // JM7b: admin „Játékosok” (lista maszkolt címmel, tiltás / feloldás) — az adminRouter isAuthenticatedAdmin-őre alatt.
+  adminRouter.use("/game-accounts", createPlayerAdminRouter(playerAccounts));
   // Spec 2026-10-18-admin-korszerusites: a Felhasználók fül végpontjai (a kliens régóta hívta, a szerveren hiányoztak).
   // Review #287: az ellenőrzés és az írás egy adatbázis-zár alatt fut (több példány esetén is sorosít).
   registerAdminUserRoutes(adminRouter, storage, async () => {
@@ -898,16 +959,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!user) {
-        logger.warn('[AUTH] User not found after OIDC login:', userEmail);
+        logger.warn('[AUTH] User not found after OIDC login:', maskEmail(userEmail));
         return res.json(null);
       }
 
       // Return user with admin status (convert undefined to null for type safety)
       // SECURITY: Strip password hash before sending to client
       const { password: _, ...safeUser } = user;
+      // JM7c-1: a számolt admin-jog (jelző ÉS engedélylista ÉS nem tiltott) — nem a nyers adatbázis-jelző.
+      await prepareAdminAccess(user);
       res.json({
         ...safeUser,
-        isAdmin: !!user.isAdmin,
+        isAdmin: isAdminUser(user),
       });
     } catch (error) {
       logger.error("[AUTH] Error fetching user:", error);
@@ -1152,22 +1215,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/games/quiz-bank/:gameId", async (req, res) => {
     try {
       const gameId = typeof req.params.gameId === "string" ? req.params.gameId : "";
-      const rows = await gameQuizBankService.listGameQuizBank(gameId);
-      res.json({
-        gameId,
-        items: rows.map((r) => ({
-          id: r.id,
-          tier: r.tier,
-          topic: r.topic,
-          prompt: r.prompt,
-          options: r.options,
-          correctIndex: r.correctIndex,
-          // T-1: a magyarázat is menjen ki, különben a játék némán büntet.
-          explanation: r.explanation,
-          sourceMaterialId: r.sourceMaterialId,
-        })),
-      });
+      // Kanban #101: opcionális évfolyam-változat. Hiányzó paraméter → a teljes bank (bájtra a régi válasz); bármi más, mint egy
+      // 0–12 egész → 400, a szolgáltatás hívása nélkül (nincs gyorsítótár-bejegyzés érvénytelen kulccsal).
+      const rawClassroom = req.query.classroom;
+      let classroom: number | undefined;
+      if (rawClassroom !== undefined) {
+        if (typeof rawClassroom !== "string" || !QUIZ_BANK_CLASSROOM_RE.test(rawClassroom)) {
+          // A hibaválasz nem újraérvényesíthető tartalom: no-store (review #101 A4; a Vercel a quiz-bank útvonalra no-cache-t tesz).
+          res.setHeader("Cache-Control", "no-store");
+          return res.status(400).json({ message: "Érvénytelen évfolyam (0–12)." });
+        }
+        classroom = Number(rawClassroom);
+      }
+      // #67: a kész válasz gyorsítótárból, előre tömörítve (a régi út kérésenként minden lecke teljes JSON-ját olvasta → OOM).
+      const cached = await gameQuizBankService.gameQuizBankResponse(gameId, classroom);
+      if (!cached) { res.setHeader("Cache-Control", "no-store"); return res.json({ gameId, items: [] }); }
+      // Kanban #101: feltételes kérés. A válasz nyilvános és felhasználótól független (nem olvas munkamenetet); `no-cache`:
+      // minden használat előtt újraérvényesít (a bank naponta többször frissül), a változatlanra 304 megy test nélkül.
+      res.vary("Accept-Encoding");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("ETag", cached.etag);
+      if (etagMatches(req.headers["if-none-match"], cached.etag)) return res.status(304).end();
+      res.type("json");
+      if (req.acceptsEncodings("gzip")) {
+        // A compression réteg a már kódolt választ nem tömöríti újra.
+        res.setHeader("Content-Encoding", "gzip");
+        res.setHeader("Content-Length", String(cached.gzip.length));
+        return res.end(cached.gzip);
+      }
+      return res.send(gunzipSync(cached.gzip));
     } catch (e) {
+      if (!res.headersSent) res.setHeader("Cache-Control", "no-store");
       // AUDIT 2026-09-01: csak a hiányzó tábla esetén fallback; más DB-hiba ne legyen néma 200
       if (isMissingGamesTableError(e)) {
         return res.json({ gameId: typeof req.params.gameId === "string" ? req.params.gameId : "", items: [] });
@@ -1246,6 +1324,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           questionVersion: r.questionVersion,
           feedbackPerOption: r.feedbackPerOption,
           coversConceptIds: r.coversConceptIds,
+          // Kanban #84: a forrás-lecke valódi tantárgya (opcionális; ismeretlennél a mező hiányzik).
+          subject: r.subject,
         })),
       });
     } catch (e) {
@@ -1301,9 +1381,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     runXp: z.number().int().min(0).max(200000),
     runStreak: z.number().int().min(0).max(10000),
     runSeconds: z.number().int().min(0).max(86400),
+    // JM0: opcionális újraküldés-azonosító (régi kliens nélküle is működik); NEM csalásvédelem.
+    runId: z.string().uuid().optional(),
   });
+  const gameScoreUserLimiter = createGameScoreUserLimiter();
+  const scoreRunDedup = new ScoreRunDedup<Awaited<ReturnType<typeof gameScoreService.submitGameScore>>>();
 
-  app.post("/api/games/score", isAuthenticated, async (req: Request, res) => {
+  app.post("/api/games/score", isAuthenticated, gameScoreUserLimiter, async (req: Request, res) => {
     try {
       const parsed = submitGameScoreSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1319,11 +1403,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           reason: el.reason,
         });
       }
-      const row = await gameScoreService.submitGameScore({
-        userId: user.id,
-        ...parsed.data,
-      });
-      res.json(row);
+      const { runId, ...scoreInput } = parsed.data;
+      const write = () => gameScoreService.submitGameScore({ userId: user.id, ...scoreInput });
+      if (!runId) {
+        return res.json(await write());
+      }
+      // JM0: azonos runId + azonos tartalom → ugyanaz a válasz írás nélkül; eltérő tartalom → 409.
+      const fingerprint = `${scoreInput.gameId}|${scoreInput.difficulty}|${scoreInput.runXp}|${scoreInput.runStreak}|${scoreInput.runSeconds}`;
+      const outcome = await scoreRunDedup.run(`${user.id}|${runId}`, fingerprint, write);
+      if (outcome.kind === "conflict") {
+        return res.status(409).json({ message: "Ez a futás-azonosító már más tartalommal szerepel." });
+      }
+      if (outcome.kind === "duplicate") {
+        return res.json({ ...outcome.value, ok: true, duplicate: true });
+      }
+      res.json(outcome.value);
     } catch (e: unknown) {
       if (e instanceof Error && e.message === "invalid_difficulty") {
         return res.status(400).json({ message: "Érvénytelen nehézség." });
@@ -1507,7 +1601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add email without authentication (no addedBy user)
       await storage.addExtraEmail(email.trim(), classrooms, null);
 
-      logger.info(`[EMAIL SUBSCRIBE] Public subscription: ${email.trim()}`);
+      logger.info(`[EMAIL SUBSCRIBE] Public subscription: ${maskEmail(email.trim())}`);
 
       res.json({
         success: true,
@@ -1752,11 +1846,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   file.id
                 );
                 successful++;
-                logger.info(`[EMAIL] ✓ Email sikeresen elküldve (${i + 1}/${uniqueRecipients.length}): ${recipient.email}`);
+                logger.info(`[EMAIL] ✓ Email sikeresen elküldve (${i + 1}/${uniqueRecipients.length}): ${maskEmail(recipient.email)}`);
               } catch (err: unknown) {
                 const errTyped = err instanceof Error ? err : new Error(String(err));
                 failed++;
-                logger.error('[EMAIL] ✗ Hiba email küldéskor:', recipient.email, 'error:', errTyped.message);
+                logger.error('[EMAIL] ✗ Hiba email küldéskor:', maskEmail(recipient.email), 'error:', errTyped.message);
               }
 
               // Add 500ms delay between emails to respect rate limits (2 req/sec = 500ms minimum)
@@ -1831,7 +1925,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Nincs módosítandó mező" });
       }
 
-      const updatedFile = await storage.updateHtmlFile(req.params.id, userId, updates);
+      // Az évfolyam Studio-leckénél a lecke adatában és a forrásjegyzékben is — egy tranzakcióban, a többi mezővel együtt
+      // (docs/specs/2026-11-16-tananyag-evfolyam-modositas.md).
+      const { classroom: newClassroom, ...rest } = updates;
+      const updatedFile = newClassroom === undefined
+        ? await storage.updateHtmlFile(req.params.id, userId, updates)
+        : await db.transaction(async (tx) => {
+          const [exists] = await tx.select({ id: htmlFiles.id }).from(htmlFiles).where(eq(htmlFiles.id, req.params.id));
+          if (!exists) return null;
+          await setMaterialClassroomTx(tx, [req.params.id], newClassroom);
+          const [row] = Object.keys(rest).length
+            ? await tx.update(htmlFiles).set(rest).where(eq(htmlFiles.id, req.params.id)).returning()
+            : await tx.select().from(htmlFiles).where(eq(htmlFiles.id, req.params.id));
+          return row ?? null;
+        });
       if (!updatedFile) {
         return res.status(404).json({ message: "Fájl nem található vagy nem engedélyezett" });
       }
@@ -1842,6 +1949,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Trigger event-driven backup (debounced, non-blocking)
       triggerEventBackup();
     } catch (error: unknown) {
+      if (error instanceof MaterialClassroomError) return res.status(error.status).json({ message: error.message });
       const err = error instanceof Error ? error : new Error(String(error));
       res.status(500).json({ message: err.message });
     }
@@ -1965,10 +2073,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add email to extra emails for future notifications (with file's classroom)
       try {
         await storage.addExtraEmail(email, [file.classroom], userId);
-        logger.info(`[EMAIL] Új email cím hozzáadva: ${email} (${file.classroom}. osztály)`);
+        logger.info(`[EMAIL] Új email cím hozzáadva: ${maskEmail(email)} (${file.classroom}. osztály)`);
       } catch (err: unknown) {
         const errTyped = err instanceof Error ? err : new Error(String(err));
-        logger.info('[EMAIL] Email cím már létezik vagy hiba:', email, 'message:', errTyped.message);
+        logger.info('[EMAIL] Email cím már létezik vagy hiba:', maskEmail(email), 'message:', errTyped.message);
       }
 
       // Send email notification
@@ -1981,7 +2089,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        logger.info(`[EMAIL] Email küldése ${email} címre a ${file.title} fájlhoz`);
+        logger.info(`[EMAIL] Email küldése ${maskEmail(email)} címre a ${file.title} fájlhoz`);
         await sendNewMaterialNotification(
           email,
           'Kedves Felhasználó',
@@ -1989,7 +2097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           file.description,
           file.id
         );
-        logger.info(`[EMAIL] Email sikeresen elküldve: ${email}`);
+        logger.info(`[EMAIL] Email sikeresen elküldve: ${maskEmail(email)}`);
         res.json({ success: true, message: "Email értesítés elküldve" });
       } catch (emailError: unknown) {
         const emailErrorTyped = emailError instanceof Error ? emailError : new Error(String(emailError));
@@ -2920,7 +3028,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       webPush.setVapidDetails(
-        'mailto:mszilva78@gmail.com',
+        vapidSubject(),
         vapidPublicKey,
         vapidPrivateKey
       );
@@ -3487,19 +3595,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { materialIds, classroom } = result.data;
 
-      // C3: atomic bulk update — single UPDATE ... WHERE id IN (...) instead of N round-trips
-      let movedCount = 0;
-      if (materialIds.length > 0) {
-        const moved = await db
-          .update(htmlFiles)
-          .set({ classroom })
-          .where(inArray(htmlFiles.id, materialIds))
-          .returning({ id: htmlFiles.id });
-        movedCount = moved.length;
-      }
-
-      res.json({ success: true, movedCount });
+      // Egy tranzakció: a Studio-leckék adata és forrásjegyzéke is; bármely hiba → semmi nem íródik
+      // (docs/specs/2026-11-16-tananyag-evfolyam-modositas.md).
+      const moved = await setMaterialClassroom(materialIds, classroom);
+      await invalidateHtmlFilesCache();
+      res.json({ success: true, movedCount: moved.files });
     } catch (error: unknown) {
+      if (error instanceof MaterialClassroomError) return res.status(error.status).json({ message: error.message });
       const err = error instanceof Error ? error : new Error(String(error));
       res.status(500).json({ message: err.message });
     }

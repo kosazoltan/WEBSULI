@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Gamepad2,
   Waves,
-  Sparkles,
   BookOpen,
   Zap,
   Trophy,
@@ -17,11 +16,12 @@ import {
   Calendar,
   Award,
   Flame,
+  Play,
+  Sparkles,
+  Swords,
 } from "lucide-react";
 import { useDailyChallenge } from "@/lib/dailyChallenge";
 import { useAchievements } from "@/lib/achievements";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -30,7 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import CosmicBackground from "@/components/CosmicBackground";
-import { useMemo, useState } from "react";
+import PlayerEntry from "@/components/PlayerEntry";
+import { useMemo, useState, type CSSProperties } from "react";
 
 type GameCatalogRow = {
   id: string;
@@ -81,35 +82,24 @@ function normalizeGameId(id: string): string {
   return k;
 }
 
-const GAME_ICONS: Record<string, typeof Waves> = {
-  "tsunami-english": Waves,
-  "word-ladder-hu-en": BookOpen,
-  "speed-quiz-math": Zap,
-  "block-craft-quiz": Box,
-  "brain-rot-steal": Brain,
-  "space-asteroid-quiz": Rocket,
-  "tornado-hunter-200": Tornado,
+/**
+ * Játszható játékonként a lobbi-kártya adatai (S13): kiemelőszín (`--gc`, a főoldali kártyákkal azonos), jelvény,
+ * a kártya lábléc-felirata. A kártya egésze a játék kezdőképernyőjére visz (M8: lista → kártya → Indítás = 2 koppintás).
+ */
+const GAME_META: Record<string, { icon: typeof Waves; color: string; badge: string; cta: string }> = {
+  "tsunami-english": { icon: Waves, color: "#22d3ee", badge: "MIX", cta: "Válassz nehézséget" },
+  "word-ladder-hu-en": { icon: BookOpen, color: "#e879f9", badge: "HU↔EN", cta: "Játék" },
+  "block-craft-quiz": { icon: Box, color: "#a3e635", badge: "KVÍZ", cta: "Blokkvilág" },
+  "speed-quiz-math": { icon: Zap, color: "#fbbf24", badge: "MATEK", cta: "Sprint" },
+  "brain-rot-steal": { icon: Brain, color: "#c084fc", badge: "MIX", cta: "Vadászat" },
+  "space-asteroid-quiz": { icon: Rocket, color: "#818cf8", badge: "3D", cta: "Indítás" },
+  "tornado-hunter-200": { icon: Tornado, color: "#38bdf8", badge: "3D", cta: "Vadászat" },
 };
 
-const GAME_ACCENTS: Record<string, string> = {
-  "tsunami-english": "from-cyan-500 to-blue-600",
-  "word-ladder-hu-en": "from-violet-500 to-fuchsia-600",
-  "speed-quiz-math": "from-amber-500 to-orange-600",
-  "block-craft-quiz": "from-lime-500 to-emerald-700",
-  "brain-rot-steal": "from-purple-500 to-pink-600",
-  "space-asteroid-quiz": "from-cyan-500 to-fuchsia-600",
-  "tornado-hunter-200": "from-sky-500 to-slate-600",
-};
+const PLAYABLE_IDS = new Set(Object.keys(GAME_META));
 
-const PLAYABLE_IDS = new Set([
-  "tsunami-english",
-  "word-ladder-hu-en",
-  "block-craft-quiz",
-  "speed-quiz-math",
-  "brain-rot-steal",
-  "space-asteroid-quiz",
-  "tornado-hunter-200",
-]);
+/** Játékonkénti kiemelőszín a közös `.game-card` szabályainak. */
+const accent = (color: string) => ({ "--gc": color }) as CSSProperties;
 
 /** API / régi migráció szövegét felülírja (pl. „Hamarosan” helyett játszható leírás) */
 const DISPLAY_OVERRIDES: Record<string, { title?: string; description?: string }> = {
@@ -134,12 +124,12 @@ const DISPLAY_OVERRIDES: Record<string, { title?: string; description?: string }
   "space-asteroid-quiz": {
     title: "Galaktikus Aszteroida Kvíz",
     description:
-      "3D űrharc minden hullám és minden ütközés kvízt hoz a SAJÁT osztályod legutóbbi 3 tananyagából. Lődd ki az aszteroidákat, kristályokat, alien UFO-kat és ellenséges vadászgépeket!",
+      "3D űrharc: minden hullám és ütközés kvízt hoz a saját osztályod legutóbbi tananyagaiból. Lődd ki az aszteroidákat, UFO-kat és vadászgépeket!",
   },
   "tornado-hunter-200": {
     title: "Tornado Hunter 200",
     description:
-      "3D viharvadászat: 200 szint, 160 jármű, Storm Coin gazdaság. Keresd meg a tornádót, közelítsd meg biztonságosan, és a pontosztáskor autonóm matek/angol kvíz dönti el, sikerül-e a horgonyzás!",
+      "3D viharvadászat: 200 szint, 160 jármű, Storm Coin. Közelítsd meg a tornádót, és a horgonyzáskor matek- vagy angolkvíz dönt!",
   },
 };
 
@@ -200,7 +190,7 @@ const FALLBACK_CATALOG: GameCatalogRow[] = [
     id: "space-asteroid-quiz",
     title: "Galaktikus Aszteroida Kvíz",
     description:
-      "3D űrharc minden hullám és minden ütközés kvízt hoz a SAJÁT osztályod legutóbbi 3 tananyagából. Lődd ki az aszteroidákat, kristályokat, alien UFO-kat és ellenséges vadászgépeket!",
+      "3D űrharc: minden hullám és ütközés kvízt hoz a saját osztályod legutóbbi tananyagaiból. Lődd ki az aszteroidákat, UFO-kat és vadászgépeket!",
     sortOrder: 6,
     createdAt: "",
   },
@@ -208,11 +198,28 @@ const FALLBACK_CATALOG: GameCatalogRow[] = [
     id: "tornado-hunter-200",
     title: "Tornado Hunter 200",
     description:
-      "3D viharvadászat: 200 szint, 160 jármű, Storm Coin gazdaság. Keresd meg a tornádót, közelítsd meg biztonságosan, és a pontosztáskor autonóm matek/angol kvíz dönti el, sikerül-e a horgonyzás!",
+      "3D viharvadászat: 200 szint, 160 jármű, Storm Coin. Közelítsd meg a tornádót, és a horgonyzáskor matek- vagy angolkvíz dönt!",
     sortOrder: 7,
     createdAt: "",
   },
 ];
+
+function LobbyCardBody({ game, icon: Icon, badge }: { game: GameCatalogRow; icon: typeof Waves; badge: string }) {
+  return (
+    <>
+      <div className="game-lobby-head">
+        <span className="game-icon game-icon--lobby" aria-hidden="true">
+          <Icon />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="game-badge">{badge}</span>
+          <h3 className="game-title game-title--lobby">{game.title}</h3>
+        </div>
+      </div>
+      <p className="game-desc">{game.description || "Gyakorló játék"}</p>
+    </>
+  );
+}
 
 export default function Games() {
   const [lbDifficulty, setLbDifficulty] = useState<"easy" | "normal" | "hard">("normal");
@@ -247,6 +254,18 @@ export default function Games() {
     return applyDisplayOverrides(FALLBACK_CATALOG);
   }, [catalogFromApi, catLoading, catError]);
 
+  // JM3a: a párbaj-belépő alcíme az online réteg állapotától függ (a gépi ellenfél mindig elérhető, flag nélkül).
+  const { data: rtStatus } = useQuery<{ enabled?: boolean; available?: string; games?: string[] } | null>({
+    queryKey: ["/api/rt/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/rt/status", { credentials: "same-origin", headers: { accept: "application/json" } });
+      return res.ok ? ((await res.json()) as { enabled?: boolean; available?: string; games?: string[] }) : null;
+    },
+    staleTime: 30_000,
+    retry: false,
+  });
+  const duelOnline = !!rtStatus && !Array.isArray(rtStatus) && rtStatus.enabled === true && rtStatus.available !== "off" && (rtStatus.games ?? []).includes("parbaj");
+
   const { data: leaderboard = [], isLoading: lbLoading } = useQuery<LeaderRow[]>({
     queryKey: ["/api/games/leaderboard/tsunami", lbDifficulty],
     queryFn: async () => {
@@ -262,338 +281,176 @@ export default function Games() {
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: "#0A0E27" }}>
       <CosmicBackground />
-      <main className="relative z-10 w-full max-w-3xl xl:max-w-5xl mx-auto py-6 px-4 sm:px-6 pb-24 sm:pb-14 min-h-dvh min-h-screen">
-        <div className="flex items-center gap-3 mb-6">
-          <Link href="/">
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-white/40 text-white hover:bg-white/10 gap-1"
-              data-testid="link-games-back-home"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Főoldal
-            </Button>
+      <main className="games-lobby relative z-10 w-full max-w-3xl xl:max-w-5xl mx-auto px-4 sm:px-6 pb-24 sm:pb-14 min-h-dvh min-h-screen">
+        <header className="games-lobby-top">
+          <Link href="/" className="games-top-btn" data-testid="link-games-back-home" aria-label="Vissza a főoldalra">
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+            <span className="hidden min-[400px]:inline">Főoldal</span>
           </Link>
-          <div className="flex items-center gap-2 text-white">
-            <Gamepad2 className="w-6 h-6 text-amber-400" />
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">Játékok</h1>
-          </div>
-          <Link href="/profile" className="ml-auto">
-            <Button variant="outline" size="sm" className="border-white/40 text-white hover:bg-white/10 gap-1">
-              <Award className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline">Profil</span>
-              <span className="text-amber-300 font-bold">
-                {unlockedCount}/{totalCount}
+          <h1 className="games-lobby-title">
+            <Gamepad2 className="w-7 h-7 text-amber-400" aria-hidden="true" />
+            Játékok
+          </h1>
+          <Link
+            href="/profile"
+            className="games-top-btn games-top-btn--trophy"
+            aria-label={`Profil: ${unlockedCount} / ${totalCount} jelvény`}
+          >
+            <Award className="w-5 h-5 text-amber-300" aria-hidden="true" />
+            <span className="hidden sm:inline">Profil</span>
+            <strong>
+              {unlockedCount}/{totalCount}
+            </strong>
+          </Link>
+        </header>
+
+        <PlayerEntry />
+
+        {/* Mai kihívás */}
+        <section className="games-daily" aria-label="Mai kihívás">
+          <span className="games-daily-icon" aria-hidden="true">
+            <Calendar className="w-6 h-6" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="games-daily-kicker">
+              Mai kihívás <span className="games-daily-xp">+{dailyPick.bonusXp} XP</span>
+            </p>
+            <p className="games-daily-title">
+              <span aria-hidden="true">{dailyPick.emoji}</span> {dailyPick.title}
+            </p>
+            <p className="games-daily-meta">
+              {dailyDone ? (
+                <span className="text-emerald-300 font-bold">✓ Mára teljesítve</span>
+              ) : (
+                <span>Egy sikeres futás napi sorozatot és +50 XP-t ad a profilodba.</span>
+              )}
+              <span className="games-daily-streak">
+                <Flame className="w-4 h-4" aria-hidden="true" />
+                {streakDays} nap
               </span>
-            </Button>
-          </Link>
-        </div>
-
-        {/* Daily Challenge banner */}
-        <Card className="glass-card border-amber-400/55 mb-4 bg-amber-900/15 shadow-[0_0_24px_rgba(251,191,36,0.18)]">
-          <CardContent className="p-3 sm:p-4 flex items-center gap-3">
-            <Calendar className="w-7 h-7 text-amber-300 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-widest font-bold text-amber-300 mb-0.5">Mai kihívás</p>
-              <p className="text-sm sm:text-base font-extrabold text-white leading-tight">
-                {dailyPick.emoji} {dailyPick.title}
-                <span className="ml-2 text-[11px] font-medium text-amber-200/85">+{dailyPick.bonusXp} bónusz XP</span>
-              </p>
-              <div className="flex items-center gap-3 mt-1 text-[11px]">
-                {dailyDone ? (
-                  <span className="text-emerald-300 font-semibold">✓ Mára teljesítve</span>
-                ) : (
-                  <span className="text-amber-200/85">Egy sikeres futás (a játék céljának teljesítése) napi streaket + 50 XP-t ad a profilodba.</span>
-                )}
-                <span className="flex items-center gap-1 text-orange-300 font-semibold">
-                  <Flame className="w-3.5 h-3.5" />
-                  {streakDays} nap
-                </span>
-              </div>
-            </div>
-            {!dailyDone && (
-              <Link href={`/games/${dailyPick.game}`}>
-                <Button className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex-shrink-0">
-                  Indítás
-                </Button>
-              </Link>
-            )}
-          </CardContent>
-        </Card>
-
-        <p className="text-white/80 text-sm mb-4 leading-relaxed">
-          A <Link href="/" className="text-cyan-200 underline-offset-2 hover:underline font-semibold">főoldalon</Link> a
-          tananyagok alatt ugyanilyen kártyákon eléred a játékokat is — itt a teljes lista, részletek és ranglista. A helyi
-          XP megmarad a böngészőben; a <strong className="text-amber-200/90">felhő ranglistához</strong> Google
-          bejelentkezés kell, és az e-mail címednek rajta kell lennie a WebSuli{" "}
-          <strong>értesítő listáján</strong> (feliratkozás vagy admin által felvett extra e-mail).
-        </p>
-
-        <Card className="glass-card border-amber-400/35 mb-4 shadow-[0_0_28px_rgba(251,191,36,0.12)]">
-          <CardContent className="p-3 sm:p-4">
-            <p className="text-xs font-extrabold text-amber-200 uppercase tracking-wide mb-2">Játszva tanulás — miért működik?</p>
-            <p className="text-xs sm:text-sm text-white/80 leading-relaxed">
-              Minden WebSuli-játékban <strong className="text-white">látható cél</strong>, <strong className="text-white">akadály</strong>{" "}
-              (pl. idő, víz, életek, létra) és <strong className="text-white">rövid teszt</strong> (kvíz vagy matekfeladat) van összekötve. A helyes
-              válaszra <strong className="text-amber-200">azonnal jutalom</strong> jár: XP, sorozat-láng, pályán előrelépés — ez a „cél → próba → visszajelzés”
-              ciklus tartja fenn a figyelmet, hasonlóan a népszerű gyakorló alkalmazásokhoz, tantárgyi tartalommal (angol, matek).
             </p>
-            <p className="text-[11px] text-white/60 mt-2 leading-snug">
-              Szülőknek: minden játék oldalán kinyitható szöveg írja le, <strong className="text-white/75">milyen oktatási értéket</strong> képvisel
-              (szókincs, számolás, olvasásértés stb.).
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+          {!dailyDone && (
+            <Link href={`/games/${dailyPick.game}`} className="game-btn game-btn-primary games-daily-go">
+              Indítás
+            </Link>
+          )}
+        </section>
 
-        <Card className="glass-card border-white/15 mb-6">
-          <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-            <CloudUpload className="w-8 h-8 text-cyan-400 shrink-0" />
-            <p className="text-xs sm:text-sm text-white/75 leading-snug">
-              Jelszavas belépés önmagában nem elég a szerver oldali pontokhoz — csak Google OAuth, hogy egyezzen
-              a listán tárolt cím. Így a gyerekek pontjai összekapcsolhatók a meghívott e-mailekkel.
-            </p>
-          </CardContent>
-        </Card>
+        {/* JM3a: Párbaj — gépi ellenfél (mindig) + online szoba (MP_MODE mögött). Saját osztályok: a lista .game-card számlálását nem érinti. */}
+        <Link
+          href="/games/parbaj"
+          data-testid="games-duel-entry"
+          className="mb-6 flex min-h-[64px] items-center gap-3 rounded-2xl border border-fuchsia-300/40 bg-gradient-to-r from-cyan-500/20 via-indigo-500/20 to-fuchsia-500/25 px-4 py-3 text-white shadow-[0_0_24px_rgba(232,121,249,0.18)] transition-colors hover:border-fuchsia-200/70"
+        >
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-fuchsia-500 text-slate-950" aria-hidden="true">
+            <Swords className="h-7 w-7" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-lg font-black leading-tight">Párbaj</span>
+            <span className="block text-sm text-white/80">
+              {duelOnline ? "Hívd ki a barátodat egy szobakóddal, vagy mérkőzz meg a géppel!" : "Mérkőzz meg a géppel: aki jól válaszol, csapást mér!"}
+            </span>
+          </span>
+          <span className="shrink-0 rounded-full bg-amber-400 px-3 py-1.5 text-sm font-black text-slate-950">{duelOnline ? "Online" : "Gép ellen"}</span>
+        </Link>
 
-        <h2 className="text-sm font-bold text-white/90 uppercase tracking-wider mb-3">Játéklista</h2>
+        <h2 className="games-section-title">Válassz játékot</h2>
         {catLoading ? (
-          <p className="text-white/50 text-sm mb-6">Betöltés…</p>
+          <p className="text-white/60 text-sm mb-6">Betöltés…</p>
         ) : (
-          <ul className="space-y-4 mb-10">
+          <ul className="games-lobby-grid" data-testid="games-lobby">
             {catalog.map((game) => {
-              const Icon = GAME_ICONS[game.id] ?? Gamepad2;
-              const accent = GAME_ACCENTS[game.id] ?? "from-slate-500 to-slate-700";
-              const playable = PLAYABLE_IDS.has(game.id);
-
-              if (playable && game.id === "tsunami-english") {
+              const meta = GAME_META[game.id];
+              if (!meta || !PLAYABLE_IDS.has(game.id)) {
                 return (
                   <li key={game.id}>
-                    <Card className="glass-card border-white/20 overflow-hidden">
-                      <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
-                        <div
-                          className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg`}
-                        >
-                          <Icon className="w-7 h-7 text-white" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <h2 className="text-lg font-bold text-white">{game.title}</h2>
-                            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                          </div>
-                          <p className="text-sm text-white/70 leading-snug mb-3">
-                            {game.description || "Gyakorló játék"}
-                          </p>
-                          <p className="text-[11px] text-white/50 mb-2">Nehézség — válassz indulás előtt:</p>
-                          <div className="flex flex-wrap gap-2">
-                            <Button asChild size="sm" variant="secondary" className="bg-emerald-600/40 hover:bg-emerald-600/60 text-white border-emerald-400/30">
-                              <Link href="/games/tsunami-english?difficulty=easy">Könnyű</Link>
-                            </Button>
-                            <Button asChild size="sm" variant="secondary" className="bg-cyan-600/40 hover:bg-cyan-600/60 text-white border-cyan-400/30">
-                              <Link href="/games/tsunami-english?difficulty=normal">Közepes</Link>
-                            </Button>
-                            <Button asChild size="sm" variant="secondary" className="bg-rose-600/40 hover:bg-rose-600/60 text-white border-rose-400/30">
-                              <Link href="/games/tsunami-english?difficulty=hard">Nehéz</Link>
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <div className="game-card game-card--lobby game-card--locked" style={accent("#94a3b8")} aria-disabled="true">
+                      <LobbyCardBody game={game} icon={Gamepad2} badge="HAMAROSAN" />
+                      <span className="game-card-play game-card-play--locked">
+                        <Lock className="w-4 h-4" aria-hidden="true" />
+                        Hamarosan
+                      </span>
+                    </div>
                   </li>
                 );
               }
 
-              if (playable && game.id === "word-ladder-hu-en") {
+              if (game.id === "tsunami-english") {
+                // A kártya nem link: a három nehézségi szint külön indul (a kártyáról 1 koppintás a kezdőképernyőig).
                 return (
                   <li key={game.id}>
-                    <Link href="/games/word-ladder-hu-en">
-                      <Card className="glass-card border-white/20 hover:border-fuchsia-400/50 transition-colors cursor-pointer group h-full">
-                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
-                          <div
-                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
-                          >
-                            <Icon className="w-7 h-7 text-white" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h2 className="text-lg font-bold text-white group-hover:text-fuchsia-200 transition-colors mb-1">
-                              {game.title}
-                            </h2>
-                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
-                            <p className="text-xs text-fuchsia-300/90 mt-2 font-medium">Indítás →</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  </li>
-                );
-              }
-
-              if (playable && game.id === "block-craft-quiz") {
-                return (
-                  <li key={game.id}>
-                    <Link href="/games/block-craft-quiz">
-                      <Card className="glass-card border-white/20 hover:border-lime-400/50 transition-colors cursor-pointer group h-full">
-                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
-                          <div
-                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
-                          >
-                            <Icon className="w-7 h-7 text-white" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h2 className="text-lg font-bold text-white group-hover:text-lime-200 transition-colors mb-1">
-                              {game.title}
-                            </h2>
-                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
-                            <p className="text-xs text-lime-300/90 mt-2 font-medium">Blokkvilág megnyitása →</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  </li>
-                );
-              }
-
-              if (playable && game.id === "speed-quiz-math") {
-                return (
-                  <li key={game.id}>
-                    <Link href="/games/speed-quiz-math">
-                      <Card className="glass-card border-white/20 hover:border-amber-400/50 transition-colors cursor-pointer group h-full">
-                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
-                          <div
-                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
-                          >
-                            <Icon className="w-7 h-7 text-white" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h2 className="text-lg font-bold text-white group-hover:text-amber-200 transition-colors mb-1">
-                              {game.title}
-                            </h2>
-                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
-                            <p className="text-xs text-amber-300/90 mt-2 font-medium">Matek sprint indítása →</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  </li>
-                );
-              }
-
-              if (playable && game.id === "brain-rot-steal") {
-                return (
-                  <li key={game.id}>
-                    <Link href="/games/brain-rot-steal">
-                      <Card className="glass-card border-white/20 hover:border-purple-400/50 transition-colors cursor-pointer group h-full">
-                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
-                          <div
-                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
-                          >
-                            <Icon className="w-7 h-7 text-white" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h2 className="text-lg font-bold text-white group-hover:text-purple-200 transition-colors mb-1">
-                              {game.title}
-                            </h2>
-                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
-                            <p className="text-xs text-purple-300/90 mt-2 font-medium">Brain Rot vadászat →</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  </li>
-                );
-              }
-
-              if (playable && game.id === "space-asteroid-quiz") {
-                return (
-                  <li key={game.id}>
-                    <Link href="/games/space-asteroid-quiz">
-                      <Card className="glass-card border-white/20 hover:border-cyan-400/50 transition-colors cursor-pointer group h-full">
-                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
-                          <div
-                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
-                          >
-                            <Icon className="w-7 h-7 text-white" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <h2 className="text-lg font-bold text-white group-hover:text-cyan-200 transition-colors">
-                                {game.title}
-                              </h2>
-                              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                            </div>
-                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
-                            <p className="text-xs text-cyan-300/90 mt-2 font-medium">Indítás (osztály-választással) →</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  </li>
-                );
-              }
-
-              if (playable && game.id === "tornado-hunter-200") {
-                return (
-                  <li key={game.id}>
-                    <Link href="/games/tornado-hunter-200">
-                      <Card className="glass-card border-white/20 hover:border-sky-400/50 transition-colors cursor-pointer group h-full">
-                        <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
-                          <div
-                            className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}
-                          >
-                            <Icon className="w-7 h-7 text-white" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <h2 className="text-lg font-bold text-white group-hover:text-sky-200 transition-colors">
-                                {game.title}
-                              </h2>
-                              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                            </div>
-                            <p className="text-sm text-white/70 leading-snug">{game.description}</p>
-                            <p className="text-xs text-sky-300/90 mt-2 font-medium">Viharvadászat indítása →</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
+                    <div className="game-card game-card--lobby" style={accent(meta.color)}>
+                      <LobbyCardBody game={game} icon={meta.icon} badge={meta.badge} />
+                      <p className="game-diffs-label">{meta.cta}:</p>
+                      <div className="game-diffs">
+                        <Link href="/games/tsunami-english?difficulty=easy" className="game-diff game-diff--easy">
+                          Könnyű
+                        </Link>
+                        <Link href="/games/tsunami-english?difficulty=normal" className="game-diff game-diff--normal">
+                          Közepes
+                        </Link>
+                        <Link href="/games/tsunami-english?difficulty=hard" className="game-diff game-diff--hard">
+                          Nehéz
+                        </Link>
+                      </div>
+                    </div>
                   </li>
                 );
               }
 
               return (
                 <li key={game.id}>
-                  <Card className="glass-card border-white/10 opacity-75">
-                    <CardContent className="p-4 sm:p-5 flex gap-4 items-start">
-                      <div
-                        className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-lg grayscale`}
-                      >
-                        <Icon className="w-7 h-7 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h2 className="text-lg font-bold text-white/80">{game.title}</h2>
-                          <Lock className="w-4 h-4 text-white/40 shrink-0" />
-                        </div>
-                        <p className="text-sm text-white/55 leading-snug">{game.description}</p>
-                        <p className="text-xs text-amber-200/70 mt-2 font-medium">Hamarosan</p>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <Link href={`/games/${game.id}`} className="game-card game-card--lobby" style={accent(meta.color)}>
+                    <LobbyCardBody game={game} icon={meta.icon} badge={meta.badge} />
+                    <span className="game-card-play">
+                      <Play className="w-4 h-4" aria-hidden="true" />
+                      {meta.cta}
+                    </span>
+                  </Link>
                 </li>
               );
             })}
           </ul>
         )}
 
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <Trophy className="w-5 h-5 text-amber-400" />
-          <h2 className="text-sm font-bold text-white/90 uppercase tracking-wider">
-            Ranglista — Szökőár angol
-          </h2>
+        <section className="games-info" aria-labelledby="games-info-title">
+          <p id="games-info-title" className="games-info-kicker">
+            <Sparkles className="w-4 h-4" aria-hidden="true" />
+            Játszva tanulás — miért működik?
+          </p>
+          <p>
+            Minden WebSuli-játékban <strong>látható cél</strong>, <strong>akadály</strong> (pl. idő, víz, életek, létra) és{" "}
+            <strong>rövid teszt</strong> (kvíz vagy matekfeladat) van összekötve. A helyes válaszra <strong>azonnal jutalom</strong> jár:
+            XP, sorozat-láng, pályán előrelépés — ez a „cél → próba → visszajelzés” ciklus tartja fenn a figyelmet, tantárgyi
+            tartalommal (angol, matek).
+          </p>
+          <p className="games-info-note">
+            Szülőknek: minden játék oldalán kinyitható szöveg írja le, milyen oktatási értéket képvisel (szókincs, számolás,
+            olvasásértés stb.). A főoldalon a tananyagok alatt ugyanezek a kártyák várnak.
+          </p>
+        </section>
+
+        <section className="games-info games-info--cloud" aria-label="Felhő ranglista">
+          <CloudUpload className="w-7 h-7 text-cyan-300 shrink-0" aria-hidden="true" />
+          <p>
+            A helyi XP megmarad a böngészőben. A <strong>felhő ranglistához</strong> Google-bejelentkezés kell, és az e-mail
+            címednek rajta kell lennie a WebSuli <strong>értesítő listáján</strong> (feliratkozás vagy admin által felvett extra
+            e-mail). Jelszavas belépés önmagában nem elég: csak Google-fiókkal egyezik a listán tárolt cím.
+          </p>
+        </section>
+
+        <div className="games-lb-head">
+          <Trophy className="w-5 h-5 text-amber-400" aria-hidden="true" />
+          <h2 className="games-section-title !m-0">Ranglista — Szökőár</h2>
           <Select
             value={lbDifficulty}
             onValueChange={(v) => setLbDifficulty(v as "easy" | "normal" | "hard")}
           >
-            <SelectTrigger className="w-[130px] h-8 text-xs bg-white/10 border-white/20 text-white ml-auto">
+            <SelectTrigger
+              className="w-[140px] h-12 text-sm bg-white/10 border-white/20 text-white ml-auto rounded-xl"
+              aria-label="Ranglista nehézsége"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -604,43 +461,39 @@ export default function Games() {
           </Select>
         </div>
 
-        <Card className="glass-card border-amber-500/20">
-          <CardContent className="p-0">
-            {lbLoading ? (
-              <p className="p-4 text-white/50 text-sm">Ranglista betöltése…</p>
-            ) : leaderboard.length === 0 ? (
-              <p className="p-4 text-white/55 text-sm">
-                Még nincs felhő pont ezen a nehézségen. Indíts egy kört Google fiókkal és listás e-maillel, és
-                a játék végén felkerülsz.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead>
-                    <tr className="border-b border-white/10 text-white/60 text-xs uppercase">
-                      <th className="p-3 pl-4 font-semibold">#</th>
-                      <th className="p-3 font-semibold">Játékos</th>
-                      <th className="p-3 font-semibold text-right">Legjobb kör XP</th>
-                      <th className="p-3 pr-4 font-semibold text-right hidden sm:table-cell">Sorozat</th>
+        <div className="games-info games-lb">
+          {lbLoading ? (
+            <p className="text-white/60 text-sm">Ranglista betöltése…</p>
+          ) : leaderboard.length === 0 ? (
+            <p className="text-white/70 text-sm">
+              Még nincs felhő pont ezen a nehézségen. Indíts egy kört Google-fiókkal és listás e-maillel, és a játék végén
+              felkerülsz.
+            </p>
+          ) : (
+            <div className="overflow-x-auto -mx-4">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/60 text-xs uppercase">
+                    <th className="p-3 pl-4 font-semibold">#</th>
+                    <th className="p-3 font-semibold">Játékos</th>
+                    <th className="p-3 font-semibold text-right">Legjobb kör XP</th>
+                    <th className="p-3 pr-4 font-semibold text-right hidden sm:table-cell">Sorozat</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaderboard.map((row) => (
+                    <tr key={row.rank + row.displayName} className="border-b border-white/5 text-white/90">
+                      <td className="p-3 pl-4 text-amber-300 font-mono">{row.rank}</td>
+                      <td className="p-3">{row.displayName}</td>
+                      <td className="p-3 text-right font-semibold text-amber-200">{row.bestRunXp}</td>
+                      <td className="p-3 pr-4 text-right hidden sm:table-cell text-white/70">{row.bestStreak}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {leaderboard.map((row) => (
-                      <tr key={row.rank + row.displayName} className="border-b border-white/5 text-white/90">
-                        <td className="p-3 pl-4 text-amber-300 font-mono">{row.rank}</td>
-                        <td className="p-3">{row.displayName}</td>
-                        <td className="p-3 text-right font-semibold text-amber-200">{row.bestRunXp}</td>
-                        <td className="p-3 pr-4 text-right hidden sm:table-cell text-white/70">
-                          {row.bestStreak}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

@@ -22,6 +22,12 @@ jobs:
           node-version: '24'
       - name: Unit test (az ellenőrző saját tesztje)
         run: node --test scripts/qa/three-phase-check.test.mjs scripts/qa/repo-rules.test.mjs scripts/qa/verify-render-revision.test.mjs scripts/qa/verify-render-settings.test.mjs scripts/qa/set-proxy-secret.test.mjs
+      # Minőségkapuk (docs/minosegkapuk.md, tulajdonosi utasítás 2026-11-17): a kapuk és a kapu-bizonyíték hook saját tesztjei,
+      # valamint a .agents ↔ .claude skill-tükör ellenőrzése (a tartalom nem csúszhat szét).
+      - name: Minőségkapuk saját tesztjei
+        run: node --test scripts/qa/gates/*.test.mjs scripts/qa/hooks/*.test.mjs
+      - name: Skill-tükör (.agents/skills ↔ .claude/skills)
+        run: node scripts/qa/gates/skills-sync-check.mjs
       - name: Háromfázisú rend ellenőrzése
         run: node scripts/qa/three-phase-check.mjs --base origin/${{ github.base_ref }}
 
@@ -146,7 +152,9 @@ jobs:
 
   e2e-tests:
     name: Playwright E2E
-    runs-on: ubuntu-latest
+    # Rögzített futtatókép: az ubuntu-latest már Ubuntu 26.04, amit a Playwright 1.57 nem támogat
+    # (`playwright install --with-deps` elbukik). A rögzítés a Playwright frissítéséig marad.
+    runs-on: ubuntu-24.04
     needs: lint-typecheck
     defaults:
       run:

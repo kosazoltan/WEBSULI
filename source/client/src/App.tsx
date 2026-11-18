@@ -23,6 +23,10 @@ const StudioPanelProbe = lazy(() => import("@/components/studio/StudioPanelProbe
 const AdminTabsProbe = lazy(() => import("@/pages/AdminTabsProbe"));
 const LearnersPanelProbe = lazy(() => import("@/pages/LearnersPanelProbe"));
 const RepairWorkbenchProbe = lazy(() => import("@/pages/RepairWorkbenchProbe"));
+// J0c: a kérdés-sáv próbaoldala CSAK teszt-kampós buildben (GAME_TEST_HOOKS_ENABLED ≡ VITE_ENABLE_GAME_TEST_HOOKS === "1").
+// A feltétel a lusta importot is őrzi: az éles buildben a kifejezés `null`-ra egyszerűsödik, így a PlayLab darabja el sem
+// készül (T/game-test-hooks-guard.test.ts prod-ága). A fő JS-darabba sosem kerül.
+const PlayLab = import.meta.env.VITE_ENABLE_GAME_TEST_HOOKS === "1" ? lazy(() => import("@/pages/PlayLab")) : null;
 
 // Lazy load heavy components for better code splitting
 const Preview = lazy(() => import("@/pages/Preview"));
@@ -39,7 +43,12 @@ const SpeedQuizMath = lazy(() => import("@/pages/SpeedQuizMath"));
 const BrainRotSteal = lazy(() => import("@/pages/BrainRotSteal"));
 const SpaceAsteroidQuiz = lazy(() => import("@/pages/SpaceAsteroidQuiz"));
 const TornadoHunter200 = lazy(() => import("@/pages/TornadoHunter200"));
-const Profile = lazy(() => import("@/pages/Profile"));
+// JM3a: Párbaj — online két főre (MP_MODE mögött) + gépi ellenfél (flag nélkül, hálózat nélkül).
+const DuelOnline = lazy(() => import("@/pages/DuelOnline"));
+// JM7b: a /profile bejelentkezett játékosnál a „kis fiók”, vendégnél (és kikapcsolt flagnél) a régi helyi Profil oldal.
+const PlayerAccount = lazy(() => import("@/pages/PlayerAccount"));
+// JM7a: játékos belépés (PLAYER_ACCOUNTS flag mögött; kikapcsolva a „nem található” oldal jelenik meg).
+const PlayerLogin = lazy(() => import("@/pages/PlayerLogin"));
 
 function LoadingSpinner() {
   // Review #275 (lecke megnyitása): a /preview/ oldal kódjának letöltése alatt is a közös lecke-töltő látszik — így a megnyitás
@@ -85,6 +94,7 @@ function Router() {
         {import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1" && (
           <Route path="/__repair-workbench-probe" component={RepairWorkbenchProbe} />
         )}
+        {import.meta.env.VITE_ENABLE_GAME_TEST_HOOKS === "1" && PlayLab && <Route path="/__play-lab" component={PlayLab} />}
         <Route path="/preview/:id" component={Preview} />
         <Route path="/lesson/:id" component={LessonRedirect} />
         <Route path="/materials/pdf/:id" component={PdfView} />
@@ -100,7 +110,12 @@ function Router() {
         <Route path="/games/brain-rot-steal" component={BrainRotSteal} />
         <Route path="/games/space-asteroid-quiz" component={SpaceAsteroidQuiz} />
         <Route path="/games/tornado-hunter-200" component={TornadoHunter200} />
-        <Route path="/profile" component={Profile} />
+        <Route path="/games/parbaj" component={DuelOnline} />
+        <Route path="/games/parbaj/:kod" component={DuelOnline} />
+        <Route path="/profile" component={PlayerAccount} />
+        <Route path="/fiok" component={PlayerAccount} />
+        <Route path="/belepes" component={PlayerLogin} />
+        <Route path="/belepes/link" component={PlayerLogin} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

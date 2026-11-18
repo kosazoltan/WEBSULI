@@ -110,7 +110,11 @@ for (const vp of VIEWPORTS) {
   }
 }
 
-test("Matek sprint: indítás, válaszok és nullaéletes újrapróba a viewporton", async ({ page }) => {
+// SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 9.) — J4a „Neon védőtorony”. A régi eset a
+// BLOKKOLÓ kártyát rögzítette (minden hibára kártya, 0 életnél „Újrapróbálom” nélkül). Az új, nem lazább követelmény:
+// hibás válasz után NINCS dialógus, a helyes számdrón ≥ 1,8 mp-ig `data-state="correct"`, a „Miért?” megnyitja a valódi
+// magyarázókártyát (`data-outcome="wrong"`) újrapróba-gomb nélkül, és amíg nyitva van, a szimuláció áll.
+test("Matek sprint: indítás, drón-célpont, hibánál megoldás a játéktérben, „Miért?” szünettel a viewporton", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.setViewportSize(VIEWPORTS[0]);
@@ -121,27 +125,32 @@ test("Matek sprint: indítás, válaszok és nullaéletes újrapróba a viewport
   await fullyVisible(page, "sq-answers");
   const overflow = await pageOverflow(page);
   expect(overflow.x, "vízszintes túlcsordulás").toBeLessThanOrEqual(1);
-  expect(overflow.panel, "belső panelgörgetés a válaszok alatt").toBeLessThanOrEqual(8);
+  expect(overflow.panel, "belső panelgörgetés a játéktérben").toBeLessThanOrEqual(8);
 
-  let sawZeroLifeCard = false;
-  for (let i = 0; i < 16; i += 1) {
-    const feedback = page.getByTestId("quiz-feedback");
-    if (await feedback.count()) {
-      if ((await page.getByTestId("quiz-feedback-retry").count()) === 0) {
-        sawZeroLifeCard = true;
-        await expect(page.getByTestId("quiz-feedback-why")).not.toHaveText(/^$/);
-        await page.getByTestId("quiz-feedback-dismiss").click();
-        break;
-      }
-      await page.getByTestId("quiz-feedback-dismiss").click();
-      await expect(feedback).toHaveCount(0);
-    }
-    const answers = page.getByTestId("sq-answers").getByRole("button");
-    if ((await answers.count()) === 0) break;
-    await answers.first().click();
-  }
-  expect(sawZeroLifeCard, "három élet elvesztése után a kártya ne adjon Újrapróbálom gombot").toBe(true);
+  // Az első feladat 1,5 mp-nél érkezik: négy számdrón a játéktérben.
+  const drones = page.locator('[data-testid="sq-answers"] [data-correct]');
+  await expect(drones).toHaveCount(4, { timeout: 15_000 });
+  await page.locator('[data-testid="sq-answers"] [data-correct="false"]').first().click();
+  const correctDrone = page.locator('[data-testid="sq-answers"] [data-correct="true"]');
+  await expect(correctDrone).toHaveAttribute("data-state", "correct");
+  expect(await page.locator('[role="dialog"]').count(), "hibás válasz után nincs blokkoló kártya").toBe(0);
+  await page.waitForTimeout(1_600);
+  await expect(correctDrone, "a megoldás ≥ 1,8 mp-ig látszik a játéktérben").toHaveAttribute("data-state", "correct");
 
+  await page.getByTestId("play-why").click();
+  const card = page.getByTestId("quiz-feedback");
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute("data-outcome", "wrong");
+  await expect(page.getByTestId("quiz-feedback-retry")).toHaveCount(0);
+  const simAt = () => page.evaluate(() => Number((window as unknown as { __websuliGame: { probe: () => { simTime: number } } }).__websuliGame.probe().simTime));
+  const s0 = await simAt();
+  await page.waitForTimeout(800);
+  expect(await simAt(), "a „Miért?” alatt áll a játék").toBe(s0);
+  await page.getByTestId("quiz-feedback-dismiss").click();
+  await expect(card).toHaveCount(0);
+  await expect.poll(simAt, { timeout: 5_000 }).toBeGreaterThan(s0);
+
+  await page.evaluate(() => (window as unknown as { __websuliGame: { forceState: (p: object) => void } }).__websuliGame.forceState({ phase: "over" }));
   await expect(page.getByRole("button", { name: "Új futam" })).toBeVisible();
   await page.getByRole("button", { name: "Új futam" }).click();
   await expect(page.getByTestId("sq-score")).toContainText("Pont: 0");

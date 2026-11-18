@@ -1,6 +1,13 @@
 import { isPlayableQuestion } from "../../../../shared/game-quiz-contract";
 import type { GradeQuizItem } from "../../data/gradeQuizBank/types";
-import { createGradeQuizSeen, gradeForGame, pickGradeQuiz, type GradeQuizSeen } from "../../game-engine/gradeQuiz";
+import {
+  createGradeQuizSeen,
+  gradeForGame,
+  isGradeQuizSeen,
+  pickGradeQuiz,
+  pickGradeSlotWithVocab,
+  type GradeQuizSeen,
+} from "../../game-engine/gradeQuiz";
 /**
  * Tornado Hunter 200 — the question engine.
  *
@@ -28,6 +35,8 @@ export const OWN_BANK_MAX_GRADE = 6;
 export type Question = {
   id: string;
   subject: Subject;
+  /** J7a: `false` → a tantárgy csak találgatás (tananyag-sor, ismeretlen téma): csak vegyes / kupon módban jön. */
+  certain?: boolean;
   topic?: string | null;
   /** School grade, 1..12 (the built-in bank covers 1..6). */
   grade: number;
@@ -151,7 +160,44 @@ export type MaterialRow = {
   correctIndex: number;
   explanation?: string | null;
   topic?: string | null;
+  /**
+   * Kanban #84 (J7b): a forrás-lecke VALÓDI tantárgya a szervertől (`quizTopic`-alak: „english” / „math” / „nature” /
+   * „hungarian” / felirat). Opcionális: régi szerver / ismeretlen tantárgy esetén hiányzik.
+   */
+  subject?: string | null;
 };
+
+/**
+ * A tananyag-sor tárgya. Elsődleges forrás a szerver `subject` mezője (kanban #84): ha van, az dönt — angol / matek
+ * biztos, minden más tantárgy (természet, magyar, történelem …) a „csak matek” / „csak angol” módban nem jön.
+ *
+ * Tantárgy NÉLKÜLI (régi) tételnél a `topic` maradt, amely régi Stúdió-leckéknél a lecke CÍME („Present Simple”,
+ * „A francia forradalom”) — a cím szövegéből kitalálni mindkét irányban téved, ezért KONZERVATÍV (J7a, review #482 K1):
+ * biztos csak az egész téma angol / matek szava, illetve matek-előtag, ha a téma más tantárgy szavát nem tartalmazza
+ * (review: „matek: angol számnevek”). Az „X magyarul:” kérdés-alak nem bizonyít angolt (review: „Hund magyarul:” német).
+ * Minden más bizonytalan: „csak matek” és „csak angol” módban nem jelenik meg, vegyes és kupon módban igen.
+ */
+const MATH_TOPIC = /^(math|matek|matematik\p{L}*)(?![\p{L}])/u;
+const ENGLISH_TOPIC = /^(english|angol|angol nyelv|angol szókincs)$/u;
+/** Matek-előtag mellett ezek bármelyike más (vagy vegyes) tantárgyat jelez → bizonytalan. */
+const OTHER_SUBJECT_WORD = /(?:^|[^\p{L}])(angol|english|német|deutsch|francia|spanyol|olasz|orosz|latin|magyar|nyelvtan|irodalom|történelem|földrajz|biológia|kémia|fizika|ének|rajz)/u;
+const SERVER_ENGLISH = /^(english|angol(?: nyelv)?)$/u;
+const SERVER_MATH = /^(math|matek|matematika)$/u;
+
+export type MaterialSubject = { subject: Subject; certain: boolean };
+
+export function materialSubject(topic: string, _prompt: string, serverSubject?: string | null): MaterialSubject {
+  const s = (serverSubject ?? "").trim().toLowerCase();
+  if (s) {
+    if (SERVER_ENGLISH.test(s)) return { subject: "english", certain: true };
+    if (SERVER_MATH.test(s)) return { subject: "math", certain: true };
+    return { subject: "math", certain: false };
+  }
+  const t = topic.trim().toLowerCase();
+  if (ENGLISH_TOPIC.test(t)) return { subject: "english", certain: true };
+  if (MATH_TOPIC.test(t) && !OTHER_SUBJECT_WORD.test(t)) return { subject: "math", certain: true };
+  return { subject: "math", certain: false };
+}
 
 /**
  * Convert `/api/games/material-quizzes` rows into questions.
@@ -168,7 +214,7 @@ export function materialToQuestions(rows: readonly MaterialRow[], grade: number)
     const topic = (row.topic ?? "").toLowerCase();
     out.push({
       id: row.id ?? `material-${idx}`,
-      subject: topic.includes("english") || topic.includes("angol") ? "english" : "math",
+      ...materialSubject(topic, row.prompt, row.subject),
       grade,
       prompt: row.prompt,
       options: options as string[],
@@ -388,7 +434,45 @@ export type PickArgs = {
   gradeBank?: readonly GradeQuizItem[];
   /** Questions asked in this run (ids + prompts) — the shared bank never repeats within a run. */
   gradeSeen?: GradeQuizSeen;
+  /**
+   * S12 / terv A8: the central vocabulary bank (`@/game-engine/vocab`). An English slot asks from it after the
+   * lesson material and before the built-in / shared banks; `null` from `next()` (bank still loading, failed,
+   * or nothing playable) falls through to the old order unchanged.
+   */
+  vocab?: TornadoVocab;
+  /**
+   * Coupon run (a game launched from a lesson): the lesson material is the point of the run, so once every
+   * material question has been asked the material is repeated before any bank — the pre-S13 order.
+   */
+  materialOnly?: boolean;
 };
+
+/** The page's adapter over the vocab source: one ready-made English `Question` per call, or `null`. */
+export type TornadoVocab = { next: () => Question | null };
+
+/** Prefix of every vocab-bank question id (`generateVocabQuestion` → `vocab:<entry>:<type>`). */
+export function isVocabQuestion(q: Pick<Question, "id">): boolean {
+  return q.id.startsWith("vocab:");
+}
+
+/** A vocab-bank quiz in the Tornado `Question` shape (difficulty 1..5 follows the bank level 0..4). */
+export function vocabToQuestion(
+  vq: { id: string; prompt: string; options: readonly string[]; correctIndex: number; explanation?: string; level: number },
+  grade: number,
+): Question {
+  return {
+    id: vq.id,
+    subject: "english",
+    topic: "Angol szókincs",
+    grade,
+    prompt: vq.prompt,
+    options: [...vq.options],
+    correctIndex: vq.correctIndex,
+    explanation: vq.explanation ?? null,
+    difficulty: Math.max(1, Math.min(5, vq.level + 1)),
+    source: "bank",
+  };
+}
 
 const TIER_DIFFICULTY: Record<1 | 2 | 3, number> = { 1: 2, 2: 3, 3: 4 };
 
@@ -415,8 +499,9 @@ function subjectFor(mode: QuizMode, rng: Rng): Subject {
 /**
  * Draw the next question.
  *
- * Order of preference: unseen material question → any material question →
- * (grades 7..12) the shared grade bank → unseen bank question → any bank question.
+ * Order of preference: unseen material question → (coupon run only) any material question →
+ * (English slot, S12) the central vocab bank → (grades 7..12) the shared grade bank →
+ * unseen bank question → any bank question.
  * Material rows carry no reliable grade of their own, so the grade filter only
  * applies to the banks. When the shared bank has nothing for the grade (empty or
  * exhausted), the built-in bank's top grade stands in.
@@ -428,29 +513,53 @@ export function pickQuestion(args: PickArgs): Question {
   const grades = new Set(resolved.map((g) => Math.min(g, OWN_BANK_MAX_GRADE)));
   const recent = new Set(args.recent ?? []);
 
-  const material = (args.material ?? []).filter((q) => args.mode === "mixed" || q.subject === subject);
+  const material = (args.material ?? []).filter(
+    (q) => args.mode === "mixed" || (q.subject === subject && q.certain !== false),
+  );
+  const materialOnly = args.materialOnly === true && material.length > 0;
+  // S13 / átfogó review H1: the priority goes to material NOT asked yet (recent window or this run's
+  // gradeSeen), as in the other games' `pickUnseenMaterial`. Gating on the whole list made the vocab bank
+  // unreachable next to any lesson material and repeated the ≤ 3 material questions for the whole run.
+  const gradeSeen = args.gradeSeen;
+  const unseenMaterial = material.filter((q) => !recent.has(q.id) && !(gradeSeen && isGradeQuizSeen(gradeSeen, q)));
+  // S12 / A8: an English slot with no unseen lesson material left asks from the central vocab bank.
+  const vocabSlot = !materialOnly && unseenMaterial.length === 0 && subject === "english" && args.vocab != null;
 
   // Spec 2026-09-29: 7..12 → the shared grade bank, after the lesson material.
   const sharedGrade = gradeForGame(Math.max(...resolved));
-  if (material.length === 0 && sharedGrade != null && sharedGrade > OWN_BANK_MAX_GRADE) {
+  if (!materialOnly && unseenMaterial.length === 0 && sharedGrade != null && sharedGrade > OWN_BANK_MAX_GRADE) {
     const seen = args.gradeSeen ?? createGradeQuizSeen();
     if (!args.gradeSeen) for (const id of recent) seen.ids.add(id);
-    const item = pickGradeQuiz({
-      grade: sharedGrade,
-      band: args.adaptiveBand ?? 0.5,
-      subjects: [subject],
+    // S13 / E23: the shared slot picker (game-engine/gradeQuiz.ts). It marks the bank item seen even when the vocab
+    // bank replaces it (measured trap, Brain Rot PR #424), so the same item is not offered again after a vocab outage.
+    const slot = pickGradeSlotWithVocab({
+      pick: () =>
+        pickGradeQuiz({
+          grade: sharedGrade,
+          band: args.adaptiveBand ?? 0.5,
+          subjects: [subject],
+          seen,
+          rng,
+          items: args.gradeBank,
+        }),
       seen,
-      rng,
-      items: args.gradeBank,
+      vocabNext: () => (vocabSlot ? args.vocab?.next() ?? null : null),
     });
-    if (item) return fromGradeItem(item, subject);
+    if (slot?.kind === "vocab") return slot.quiz;
+    if (slot?.kind === "grade") return fromGradeItem(slot.item, subject);
+  }
+
+  if (vocabSlot) {
+    const fromVocab = args.vocab?.next() ?? null;
+    if (fromVocab) return fromVocab;
   }
 
   const bankPool = QUESTION_BANK.filter((q) => q.subject === subject && grades.has(q.grade));
 
   const tiers = [
-    material.filter((q) => !recent.has(q.id)),
-    material,
+    unseenMaterial,
+    // Seen material is repeated before the banks only in a coupon run (see `materialOnly`).
+    materialOnly ? material : [],
     bankPool.filter((q) => !recent.has(q.id)),
     bankPool,
     // Last resort: the whole bank, ignoring grade — never leave the player
@@ -491,9 +600,9 @@ export const SUBJECT_LABEL: Record<Subject, string> = {
 };
 
 export const QUIZ_MODE_LABEL: Record<QuizMode, string> = {
-  math: "Math",
-  english: "English",
-  mixed: "Mixed",
+  math: "Matek",
+  english: "Angol",
+  mixed: "Vegyes",
 };
 
 export function schoolLevelLabel(school: SchoolLevel): string {

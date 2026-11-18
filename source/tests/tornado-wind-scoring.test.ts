@@ -73,12 +73,13 @@ test("a széllökés sosem kisebb a pillanatnyi szélnél", () => {
 
 test("az égtáj-leképezés a 8 fő irányt adja, nyíllal", () => {
   assert.equal(COMPASS_POINTS.length, 8);
-  assert.equal(compassFor(0).label, "N");
-  assert.equal(compassFor(45).label, "NE");
-  assert.equal(compassFor(90).label, "E");
-  assert.equal(compassFor(180).label, "S");
-  assert.equal(compassFor(270).label, "W");
-  assert.equal(compassFor(359).label, "N", "körbeér");
+  // SPEC-VÁLTOZÁS 2026-11-16 (tornado-spec 14. pont: a felület magyar): az égtájak magyar jelölése (É, ÉK, K, D, Ny).
+  assert.equal(compassFor(0).label, "É");
+  assert.equal(compassFor(45).label, "ÉK");
+  assert.equal(compassFor(90).label, "K");
+  assert.equal(compassFor(180).label, "D");
+  assert.equal(compassFor(270).label, "Ny");
+  assert.equal(compassFor(359).label, "É", "körbeér");
   assert.equal(compassFor(45).arrow, "↗");
   for (let d = 0; d < 360; d += 3) {
     const c = compassFor(d);

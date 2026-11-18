@@ -32,6 +32,8 @@ export type HoldButtonProps = {
   /** Képernyőolvasónak; a gomb tartalma gyakran csak ikon. */
   label: string;
   disabled?: boolean;
+  /** S2: "auto" → képernyőhöz igazodó akciógomb (`game-action-btn`: clamp(56px, 16vmin, 88px)). */
+  size?: "auto";
 };
 
 export default function HoldButton({
@@ -41,6 +43,7 @@ export default function HoldButton({
   className = "",
   label,
   disabled = false,
+  size,
 }: HoldButtonProps) {
   const heldRef = useRef(false);
 
@@ -83,7 +86,7 @@ export default function HoldButton({
       onPointerCancel={end}
       // Hosszú nyomásra Androidon a capture ellenére felugrana a menü.
       onContextMenu={(e) => e.preventDefault()}
-      className={`select-none touch-none ${className}`}
+      className={`select-none touch-none ${size === "auto" ? "game-action-btn " : ""}${className}`}
       style={{
         touchAction: "none",
         userSelect: "none",

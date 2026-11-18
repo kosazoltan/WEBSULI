@@ -8,7 +8,14 @@ import { clientIpKeyGenerator } from "./lib/client-ip";
 import compression from "compression";
 import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
-import { flushPendingMaterialResults, registerRoutes } from "./routes";
+import { flushPendingMaterialResults } from "./routes";
+import { mountAppRoutes } from "./app-routes";
+import { beginRealtimeShutdown, drainWindowMsFromEnv, getRealtime } from "./realtime";
+import { mpMode } from "./realtime/config";
+import { ticketSecret } from "./realtime/ticket";
+import { startPlayerCodeSweeper } from "./player/sweeper";
+import { createPlayerStore } from "./player/store";
+import { banMaintenanceEnabled } from "./player/account-store";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
@@ -20,14 +27,10 @@ import { setupLearnerReports } from "./learner-reports";
 // import { initializeDatabase } from "./initDb"; // Not needed for Neon PostgreSQL
 import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
-import { setupAuth } from "./auth";
+import { GAME_SCORE_IP_MAX, GAME_SCORE_LIMIT_MESSAGE, GAME_SCORE_WINDOW_MS } from "./lib/game-score-limits";
 import { runMigrations } from "./migrate";
-import { designAssetsRouter } from "./design-assets";
 import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
-import errorReportRouter from "./routes/error-report";
-import clientErrorRouter from "./routes/client-error";
-import staticAuditRouter from "./routes/static-audit";
 import { getAllowedOrigins, isOriginAllowed, isSameOriginRequest } from "./lib/allowed-origins";
 import { logger } from "./lib/logger";
 import { isLessonRoute, lessonCspDirectives } from "./lib/csp-profiles";
@@ -425,7 +428,19 @@ const publicWriteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// JM0: a pontbeküldés laza IP-plafonja az elárasztás ellen (valódi kliens-IP). Az elsődleges, felhasználónkénti korlát a
+// routes.ts-ben van (a munkamenet itt még nincs betöltve); közös IP mögött így mindenki külön keretet kap.
+const gameScoreIpLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
+  windowMs: GAME_SCORE_WINDOW_MS,
+  max: GAME_SCORE_IP_MAX,
+  message: GAME_SCORE_LIMIT_MESSAGE,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Apply rate limiting only to specific endpoints
+app.use("/api/games/score", gameScoreIpLimiter); // JM0
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
 app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
@@ -603,17 +618,27 @@ app.use((req, res, next) => {
       }),
     );
 
-    // Setup Authentication (Passport, Sessions)
-    setupAuth(app);
-
-    // Universal Error Logger routes
-    app.use("/api/error-report", errorReportRouter);
-    // Böngészős hibák: titok nélkül, eredet + korlátok őrzik (kanban #127)
-    app.use("/api/client-error", clientErrorRouter);
-    app.use("/api/static-audit", staticAuditRouter);
-    app.use("/api/design-assets", designAssetsRouter);
-
-    const server = await registerRoutes(app);
+    // Munkamenet (Passport) + minden útvonal — JM7a: egy helyen, a jogosultsági őr-tesztek ugyanezt járják be.
+    const server = await mountAppRoutes(app);
+    // JM2 (terv 10.3; review #452 ALACSONY-2, -7): a Socket.IO a /api/rt/io úton CSAK bekapcsolt módban csatolódik fel
+    // (MP_MODE=off — az alap — mellett a szerver a mostanival azonos: nincs figyelő, a kérdésbank nincs a memóriában), és
+    // SESSION_SECRET nélkül nem indul. Az inicializálás hibája nem akaszthatja meg a szerver indulását (napló, a réteg ki).
+    // Fejlesztésben a Vite HMR is ezen a szerveren upgrade-el: az idegen upgrade-et a Socket.IO ott nem bonthatja.
+    if (mpMode() !== "off") {
+      if (!ticketSecret()) {
+        logger.error("[RT] MP_MODE be van kapcsolva, de SESSION_SECRET nélkül a valós idejű réteg nem indul (kikapcsolva marad)");
+      } else {
+        try {
+          const realtime = getRealtime();
+          await realtime.attach(server, { destroyUpgrade: app.get("env") !== "development" });
+          // A gyártás alatti szoba-plafonhoz a workflow-motor élő számlálója.
+          void import("./workflows/engine").then(({ activeWorkflowRuns }) => realtime.setActiveRunCount(activeWorkflowRuns)).catch((err: unknown) => logger.warn("[RT] a gyártási számláló nem köthető be", err));
+          log(`[RT] valós idejű réteg: ${mpMode()}`);
+        } catch (err) {
+          logger.error("[RT] a valós idejű réteg nem indult el (kikapcsolva marad)", err);
+        }
+      }
+    }
     // E2E: no background jobs (they write, send e-mail or make backups).
     const stopSkillLearningAudit = e2e ? () => {} : startSkillLearningAudit();
 
@@ -637,6 +662,14 @@ app.use((req, res, next) => {
 
       // Phase 11: Start cleanup job for old applied improved files (daily at midnight)
       setupCleanupImprovedFiles();
+
+      // JM7a (review #445, A3): a játékos-belépőkódok takarítása (lejárt → cím törölve, 24 óra után a sor) — flagtől függetlenül.
+      // K1b: a tiltás-karbantartás (kulcsrotáció-egyeztetés, megőrzés) csak élesben / PLAYER_BAN_MAINTENANCE=on mellett.
+      const playerStore = createPlayerStore(dbPool);
+      startPlayerCodeSweeper(() => playerStore.purgeOldCodes(), globalThis, banMaintenanceEnabled() ? playerStore.banMaintenance : null);
+      if (banMaintenanceEnabled() && !process.env.PLAYER_BAN_KEY) {
+        logger.info("[PLAYER] PLAYER_BAN_KEY nincs beállítva — a törölt fiókok tiltás-ujjlenyomata a SESSION_SECRET-ből levezetett kulccsal készül (rotációja ezeket érvényteleníti)");
+      }
     }
 
     // Express error handler (4 params required for Express to identify it as error middleware)
@@ -699,8 +732,15 @@ app.use((req, res, next) => {
       } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
       // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
       try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
-      // Új kapcsolatot nem fogadunk; a nyitott kérések közben lefuthatnak.
-      server.close(() => log("HTTP server closed"));
+      // JM2 (terv 10.8; orkesztrátori döntés, review #452): a valós idejű réteg RÖVID, rendezett lezárása — új szoba /
+      // belépés azonnal tiltva, a futó meccsek azonnal lezárulnak a pillanatnyi állással (részeredmény, „a szerver frissül”);
+      // ha volt szoba, a server.close() a legfeljebb MP_DRAIN_WINDOW_MS (alap 2,5 s) üzenet-ablak után jön, különben
+      // (MP_MODE=off — az alap — / nincs szoba) azonnal, a mostani sorrendben. Új kapcsolatot nem fogadunk; a nyitott
+      // kérések közben lefuthatnak.
+      const { drained: realtimeDrained } = beginRealtimeShutdown(getRealtime(), server, {
+        windowMs: drainWindowMsFromEnv(),
+        onHttpClosed: () => log("HTTP server closed"),
+      });
       try {
         const { activeWorkflowRuns, waitForActiveRuns } = await import("./workflows/engine");
         if (activeWorkflowRuns() > 0) {
@@ -710,6 +750,7 @@ app.use((req, res, next) => {
           // A futás utáni hívói takarítás (hibaállapot mentése, claim felengedése) még a poolt használja.
           await new Promise((resolve) => setTimeout(resolve, 3_000));
         }
+        await realtimeDrained;
         // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
         await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
         // Review #365 (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők a pool lezárása előtt (max 15 s).

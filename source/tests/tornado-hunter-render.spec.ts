@@ -7,6 +7,15 @@ import { test, expect } from "@playwright/test";
  * there is no viewport overflow and the promised HUD elements are present.
  */
 
+/*
+ * SPEC-VÁLTOZÁS 2026-11-15 (docs/specs/2026-11-15-jatekok-mobil-szobank.md 4.5 „Érintés” és 4.6/7): „asztali gépen,
+ * érintés nélkül az érintővezérlők nem látszanak”. A lent ellenőrzött tárcsa, ⚓ és Kamera gomb ezért érintős
+ * kijelzőt kér — a mérce nem lazult: ugyanazok az elemek ugyanúgy láthatók kell legyenek, csak az eszköz érintős
+ * (érintős laptop: asztali nézet + érintés). Az egérrel vezérelt asztali eset rejtését a
+ * `game-mobile-quality.spec.ts` M5 mérése kéri.
+ */
+test.use({ hasTouch: true });
+
 test.describe("Tornado Hunter 200", () => {
   test("menü, szintválasztó, 3D játék és kvíz valós renderben", async ({ page }) => {
     const consoleErrors: string[] = [];
@@ -28,8 +37,9 @@ test.describe("Tornado Hunter 200", () => {
     );
     expect(overflow).toBeLessThanOrEqual(1);
 
-    // --- Storm Garage: 160 vehicles reachable ---
-    await page.getByText("Storm Garage").click();
+    // --- Vihargarázs: 160 vehicles reachable ---
+    // SPEC-VÁLTOZÁS 2026-11-16 (tornado-spec 14. pont: a felület magyar): „Storm Garage” → „Vihargarázs”.
+    await page.getByText("Vihargarázs").click();
     await expect(page.getByText(/Mind \(160\)/)).toBeVisible();
     await page.screenshot({ path: "tests/screenshots/tornado-garage.png", fullPage: true });
     await page.getByRole("button", { name: /Vissza/ }).click();
@@ -37,7 +47,8 @@ test.describe("Tornado Hunter 200", () => {
     // --- Level select ---
     await page.getByText("Vadászat indítása").click();
     await expect(page.getByText("Szintek (1–200)")).toBeVisible();
-    await expect(page.getByText("Light Storm")).toBeVisible();
+    // SPEC-VÁLTOZÁS 2026-11-16 (tornado-spec 14. pont: a felület magyar): „Light Storm” → „Enyhe”.
+    await expect(page.getByText("Enyhe", { exact: true })).toBeVisible();
     await page.screenshot({ path: "tests/screenshots/tornado-levels.png", fullPage: true });
 
     // Start level 1.
@@ -46,15 +57,17 @@ test.describe("Tornado Hunter 200", () => {
     // --- Play: canvas + HUD ---
     const canvas = page.locator("canvas");
     await expect(canvas).toBeVisible();
-    await expect(page.getByText("LEVEL 1/200")).toBeVisible();
-    await expect(page.getByText(/WIND SPEED:/)).toBeVisible();
-    await expect(page.getByText(/STORM:/)).toBeVisible();
+    // SPEC-VÁLTOZÁS 2026-11-16 (tornado-spec 14. pont: a felület magyar): HUD-feliratok.
+    await expect(page.getByText("SZINT 1/200")).toBeVisible();
+    await expect(page.getByText(/SZÉLSEBESSÉG:/)).toBeVisible();
+    await expect(page.getByText(/VIHAR:/)).toBeVisible();
     await expect(page.getByTestId("tornado-touch-controls")).toBeVisible();
     // Spec-változás 2026-09-20: a kormányzás ÉS a gyorsítás/fékezés a köralakú tárcsára került
     // (docs/specs/2026-09-20-joystick-minden-jatekban.md); gombon csak a horgony és a kamera maradt.
     await expect(page.getByTestId("virtual-joystick")).toBeVisible();
     await expect(page.getByRole("button", { name: "⚓", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Cam", exact: true })).toBeVisible();
+    // SPEC-VÁLTOZÁS 2026-11-16 (tornado-spec 14. pont: a felület magyar): „Cam” → „Kamera”.
+    await expect(page.getByRole("button", { name: "Kamera", exact: true })).toBeVisible();
 
     // The canvas actually has pixels (WebGL initialised).
     const box = await canvas.boundingBox();

@@ -6,8 +6,9 @@
  * játék a mai módon fut, pályaválasztó nélkül (`level = null`). A menü a legmagasabb feloldott pályát ajánlja, győzelem
  * után a következőt.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { preloadGradeBanks } from "../data/gradeQuizBank/loader";
 import { loadUnlockedLevel, unlockNextLevel } from "./gradeLevels";
 import { levelsActiveForGrade, nextSuggestedLevel } from "./levelTuning";
 
@@ -38,6 +39,11 @@ export function useGradeLevel(gameId: string, grade: number | null | undefined):
     return { key, level: unlocked, unlocked };
   };
   const [snap, setSnap] = useState<Snapshot>(read);
+  // JBb: a közös évfolyam-bank darabjainak előtöltése, amint az évfolyam ismert (az első kérdésig megérkezik);
+  // a hiba nem dob, a választó addig a játék saját bankjára esik vissza.
+  useEffect(() => {
+    void preloadGradeBanks(grade);
+  }, [grade]);
   let current = snap;
   if (snap.key !== key) {
     current = read();

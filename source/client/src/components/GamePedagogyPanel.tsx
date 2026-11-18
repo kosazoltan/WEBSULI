@@ -1,6 +1,7 @@
-import { memo, type ReactNode } from "react";
-import { Target } from "lucide-react";
+import { memo, useState, type ReactNode } from "react";
+import { ChevronDown, Target } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import { useScrollHint } from "@/components/useScrollHint";
 import { cn } from "@/lib/utils";
 
 type Accent = "cyan" | "amber" | "lime" | "fuchsia";
@@ -47,12 +48,18 @@ export type GamePedagogyPanelProps = {
 /** Duolingo-szerű: egyértelmű küldetés + összecsukható szülői oktatási réteg */
 function GamePedagogyPanel({ kidMission, parentBody, accent = "amber", className }: GamePedagogyPanelProps) {
   const a = accentStyles[accent];
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
+  // Kis kijelzőn (360×640) a szöveg túlcsordul: alul átúszás + nyíl jelzi, hogy görgethető (mérő X8).
+  const more = useScrollHint(scrollEl);
   return (
     <Dialog>
-      <DialogTrigger className={cn("game-help shrink-0 min-h-[44px] rounded-lg border border-white/25 bg-slate-900 px-3 py-2 text-xs font-bold text-white text-left", className)}>
+      <DialogTrigger className={cn("game-help shrink-0 min-h-[48px] rounded-lg border border-white/25 bg-slate-900 px-3 py-2 text-xs font-bold text-white text-left", className)}>
         <Target className="inline h-4 w-4 mr-2" aria-hidden /> Hogyan játsszak?
       </DialogTrigger>
-      <DialogContent className="border-slate-600 bg-slate-950 text-white">
+      {/* Spec 2026-11-16-jatek-telefonos-reszponzivitas R5: a közös ablak bezáró gombja 16 px helyett 44 px-es érintési
+          cél (mind a 7 játék), és az ablak a biztonsági sávokon (--game-safe-*) belül marad. A `ui/dialog.tsx` (az egész
+          oldal) nem változik. */}
+      <DialogContent ref={setScrollEl} data-scroll-hint={more ? "more" : "end"} className="border-slate-600 bg-slate-950 text-white top-[calc(50%_+_(var(--game-safe-top)_-_var(--game-safe-bottom))_/_2)] max-h-[calc(100dvh_-_2rem_-_var(--game-safe-top)_-_var(--game-safe-bottom))] [&>button:last-child]:right-2 [&>button:last-child]:top-2 [&>button:last-child]:flex [&>button:last-child]:h-11 [&>button:last-child]:w-11 [&>button:last-child]:items-center [&>button:last-child]:justify-center [&>button:last-child]:rounded-lg [&>button:last-child]:opacity-90">
         <DialogTitle>A küldetésed</DialogTitle>
         <DialogDescription className="sr-only">Játékszabályok és tanulási célok</DialogDescription>
       <div
@@ -64,7 +71,7 @@ function GamePedagogyPanel({ kidMission, parentBody, accent = "amber", className
         role="status"
         aria-live="polite"
       >
-        <p className={cn("flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider mb-1", a.label)}>
+        <p className={cn("flex items-center gap-1.5 text-xs font-black uppercase tracking-wider mb-1", a.label)}>
           <Target className="w-3.5 h-3.5 shrink-0" aria-hidden />
           A te küldetésed
         </p>
@@ -72,6 +79,15 @@ function GamePedagogyPanel({ kidMission, parentBody, accent = "amber", className
       </div>
 
         <div className="text-sm leading-relaxed text-slate-200">{parentBody}</div>
+        {more && (
+          <div
+            aria-hidden="true"
+            data-scroll-fade="true"
+            className="pointer-events-none sticky -bottom-6 -mt-11 -mb-6 h-7 flex items-end justify-center bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent"
+          >
+            <ChevronDown className="w-4 h-4 text-slate-200 animate-bounce motion-reduce:animate-none" />
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

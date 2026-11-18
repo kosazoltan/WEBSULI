@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, Eye, Trash2, Mail, FolderOpen, Upload, Download, Save, GripVertical } from "lucide-react";
@@ -8,7 +8,8 @@ import EmptyState from "@/components/EmptyState";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { CLASSROOM_VALUES, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM } from "@shared/classrooms";
+import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM, normalizeClassroom } from "@shared/classrooms";
+import { filterMaterialsBySearch, prepareMaterialSearch } from "@shared/material-title";
 import {
   DndContext,
   closestCenter,
@@ -118,6 +119,7 @@ function SortableItem({
         description={file.description || undefined}
         createdAt={new Date(file.createdAt)}
         contentType={file.contentType || 'html'}
+        classroom={file.classroom}
         currentUserId={currentUserId}
         isAdmin={true}
         onView={onViewFile}
@@ -156,13 +158,19 @@ export default function AdminFileDashboard({
     })
   );
 
-  const filteredFiles = files.filter(file => {
-    const matchesSearch = file.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (file.description || "").toLowerCase().includes(searchQuery.toLowerCase());
-    const classroom = file.classroom ?? 1; // Fallback for legacy/missing data
-    const matchesClassroom = classroomFilter === "all" || classroom === classroomFilter;
-    return matchesSearch && matchesClassroom;
-  });
+  // A közös illesztés az osztály-kifejezésekre is talál („5.o”, „ötödik”) — docs/specs/2026-11-17-tananyag-cim-osztaly.md. A kifejezés
+  // elemzése egyszer történik; ha kifejezett osztály-alakkal a szűrőtől eltérő osztályt nevez meg (vagy a szűrt találat üres), a
+  // keresés minden osztályban fut (K1, U2). Az érvényes osztályt a közös illesztés találja; a felirat-részszöveg csak a „Nincs
+  // osztály” jelvényre kell (érvénytelen érték) — különben az „1. osztály” a „11. osztály” feliratot is hozná (review K2).
+  // Hiányzó / érvénytelen évfolyam csak az „Összes” nézetben látszik („Nincs osztály” jelvénnyel), nem hamisan az 1.-ben.
+  const search = useMemo(() => prepareMaterialSearch(searchQuery), [searchQuery]);
+  const q = searchQuery.toLowerCase();
+  const { files: filteredFiles, allClassrooms: searchAllClassrooms } = filterMaterialsBySearch(
+    files,
+    search,
+    classroomFilter === "all" ? null : classroomFilter,
+    (file) => normalizeClassroom(file.classroom) === null && classroomDisplayLabel(file.classroom).toLowerCase().includes(q),
+  );
 
   // Initialize local order from filteredFiles.
   // Csak akkor írjuk felül a helyi (esetleg még nem mentett) sorrendet, ha nincs
@@ -473,7 +481,7 @@ export default function AdminFileDashboard({
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-orange-400" />
           <Input
-            placeholder="Keresés…"
+            placeholder="Keresés: cím, osztály…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-7 text-xs w-full border-orange-300 focus:border-orange-500 dark:border-orange-700"
@@ -513,6 +521,12 @@ export default function AdminFileDashboard({
           <span className="sm:hidden">ZIP</span>
         </Button>
       </div>
+
+      {searchAllClassrooms && (
+        <p className="mb-2 text-xs font-semibold text-orange-700 dark:text-orange-300" role="status" data-testid="search-all-classrooms">
+          Keresés minden osztályban — a keresett osztály nem a kiválasztott.
+        </p>
+      )}
 
       {/* Classroom filters */}
       <div className="mb-3">

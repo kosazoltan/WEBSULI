@@ -56,6 +56,10 @@ const SERVER_ORIGIN_GUARDED: { prefix: string; why: string }[] = [
     prefix: "/api/client-error",
     why: "kanban #127: a böngészős hibajelentés hibaállapotban is menjen (token-lekérés nélkül); a routes.ts CSRF-őre ELŐTT van bekötve (index.ts), a saját routere őrzi Origin-allowlisttel + IP-korláttal + napi plafonnal (tests/client-error-route.test.ts)",
   },
+  {
+    prefix: "/api/player/auth/",
+    why: "JM7a (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md „JM7a” 4.): a játékos kódkérése / beváltása / kijelentkezése munkamenet előtt fut, ezért, mint a /api/login, a routes.ts Origin-allowlisttel őrzi (+ IP-korlát); a többi /api/player/* CSRF-tokenes",
+  },
 ];
 
 function walk(dir: string): string[] {

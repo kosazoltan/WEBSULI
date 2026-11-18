@@ -18,7 +18,9 @@ test("felhasználók: a válasz jelszó-hash nélküli", () => {
   const out = publicUser(u) as Record<string, unknown>;
   assert.equal("password" in out, false);
   assert.equal("googleId" in out, false);
-  assert.deepEqual(Object.keys(out).sort(), ["createdAt", "email", "firstName", "id", "isAdmin", "isBanned", "lastName", "lastSeenAt", "profileImageUrl"]);
+  // SPEC-VÁLTOZÁS 2026-11-16 (terv 10.4a, JM7c-1 — review #462): a tárolt admin-jelző és az eltérés oka külön mezőben; a
+  // pontos kulcslista (engedélylista) megmarad, jelszó / googleId továbbra sem kerülhet ki.
+  assert.deepEqual(Object.keys(out).sort(), ["adminInactiveReason", "createdAt", "email", "firstName", "id", "isAdmin", "isBanned", "lastName", "lastSeenAt", "profileImageUrl", "storedIsAdmin"]);
 });
 
 test("felhasználók: a saját fiók és az utolsó admin védett, más műveletek engedettek", () => {
@@ -43,8 +45,10 @@ test("felhasználók: a végpontok az admin-routeren regisztráltak", () => {
 test("menü: 4 csoport, 16 fül (S4: Tanulók — docs/specs/2026-10-18-tanuloi-profil-s4-vegrehajtas.md), mindnek ikonja; a megszűnt fülek régi linkjei a tananyagkészítésre visznek", () => {
   // Spec 2026-10-19-admin-menu-nevek (dokumentált spec-változás): a csoportnév a funkciókat mondja.
   assert.deepEqual(ADMIN_TAB_GROUPS.map(g => g.label), ["Tananyagok", "Készítés és javítás", "Tanulók és levelek", "Rendszer és mentések"]);
-  assert.equal(ADMIN_TAB_VALUES.length, 16);
-  assert.equal(new Set(ADMIN_TAB_VALUES).size, 16);
+  // SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4 „Tiltás”: a Felhasználók mellett új „Játékosok” fül) — 16 → 17, a pontos szám és az egyediség ellenőrzése marad.
+  assert.equal(ADMIN_TAB_VALUES.length, 17);
+  assert.equal(new Set(ADMIN_TAB_VALUES).size, 17);
+  assert.ok(ADMIN_TAB_VALUES.includes("players"));
   assert.ok(!ADMIN_TAB_VALUES.includes("enhanced"));
   for (const t of ADMIN_TAB_GROUPS.flatMap(g => g.tabs)) {
     assert.ok(typeof t.icon === "function" || typeof t.icon === "object", t.value);

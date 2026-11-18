@@ -10,6 +10,10 @@ import {
   getClassroomLabel,
   isValidClassroom,
   extractClassroomFromTitle,
+  normalizeClassroom,
+  classroomDisplayLabel,
+  NO_CLASSROOM_LABEL,
+  lessonHeaderGradeLabel,
 } from "../shared/classrooms";
 
 /**
@@ -114,4 +118,31 @@ test("extractClassroomFromTitle never returns an out-of-range grade", () => {
 test("extractClassroomFromTitle only produces values the table knows", () => {
   const got = extractClassroomFromTitle("Dolgozat 8. osztály");
   assert.ok(got !== null && CLASSROOM_VALUES.includes(got));
+});
+
+// --------------------------------------- évfolyam-felirat (docs/specs/2026-11-16-tananyag-evfolyam-jeloles.md)
+
+test("classroomDisplayLabel: 1–12 → „N. osztály”, 0 → „Programozás”", () => {
+  for (let n = 1; n <= 12; n++) assert.equal(classroomDisplayLabel(n), `${n}. osztály`);
+  assert.equal(classroomDisplayLabel(0), "Programozás");
+});
+
+test("classroomDisplayLabel és normalizeClassroom: érvénytelen / hiányzó érték → „Nincs osztály” / null, nem kitalált évfolyam", () => {
+  for (const bad of [13, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY, null, undefined, "7", {}, true]) {
+    assert.equal(classroomDisplayLabel(bad), NO_CLASSROOM_LABEL, String(bad));
+    assert.equal(normalizeClassroom(bad), null, String(bad));
+  }
+  assert.equal(NO_CLASSROOM_LABEL, "Nincs osztály");
+  for (const ok of CLASSROOM_VALUES) assert.equal(normalizeClassroom(ok), ok);
+});
+
+// --------------------- a lecke oldalának felirata (docs/specs/2026-11-16-tananyag-programozas-felirat.md)
+
+test("lessonHeaderGradeLabel: programozási kategória → „Programozás”, egyébként a lecke pontos évfolyama", () => {
+  assert.equal(lessonHeaderGradeLabel(8, 0), "Programozás");
+  assert.equal(lessonHeaderGradeLabel(9, 0), "Programozás");
+  for (const cat of [4, undefined, null]) assert.equal(lessonHeaderGradeLabel(4, cat), "4. osztály");
+  // A felirat a lecke tartalmi évfolyama, ha a kategória nem programozás (a két érték független).
+  assert.equal(lessonHeaderGradeLabel(7, 5), "7. osztály");
+  for (let n = 1; n <= 12; n++) assert.equal(lessonHeaderGradeLabel(n), `${n}. osztály`, "pontos évfolyam, nem sávtartomány");
 });

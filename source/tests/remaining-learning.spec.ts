@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
 import ts from 'typescript';
+import {VOCAB_EN} from '../client/src/data/vocabBank/vocab-en';
 
 test.use({serviceWorkers:'block'});
 
@@ -36,6 +37,7 @@ test('source-only manufacturing on mobile and desktop sends no author grade',asy
 });
 
 test('asteroid wrong-answer explanation remains readable and dismisses to a new quiz',async({page})=>{
+ test.setTimeout(150000);
  await page.setViewportSize({width:390,height:844});
  await page.goto('/games/space-asteroid-quiz');
  await page.getByRole('button',{name:/Indulhat —/}).click();
@@ -60,16 +62,46 @@ test('asteroid wrong-answer explanation remains readable and dismisses to a new 
  walk(ast);
  }
  expect(bank.length).toBeGreaterThan(900);
- const text=await quiz.innerText();const entry=bank.find(q=>text.includes(q.prompt));expect(entry).toBeDefined();
- await quiz.getByRole('button',{name:entry!.wrong,exact:true}).click();
- await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
- await expect(page.getByTestId('quiz-feedback-why')).toContainText(entry!.explanation);
- await page.waitForTimeout(1800);
- await expect(page.getByTestId('quiz-feedback')).toBeVisible();
- await page.screenshot({path:test.info().outputPath('asteroid-explanation-mobile.png'),fullPage:true});
- await page.getByRole('button',{name:'Értem, megyek tovább'}).click();
- await expect(page.getByTestId('quiz-feedback')).toHaveCount(0);
- await expect(quiz).toBeVisible();
+ // SPEC-VÁLTOZÁS 2026-11-15 (docs/specs/2026-11-15-jatekok-mobil-szobank.md 4.3–4.4, A8): az angol kérdés-hely a
+ // központi szóbankból jön (generált prompt, `vocab:<bejegyzés>:<típus>` azonosító), ezért az első kérdés ~20%-os
+ // eséllyel nem a fenti forrásokból való (review #434). A mérce nem lazul: MINDKÉT esetet kötelezően ellenőrizzük —
+ // (1) kézi / évfolyam-banki kérdés: a magyarázat a bank szövege; (2) szóbankos kérdés: a magyarázat megnevezi a helyes
+ // választ és a bejegyzés term = hu párját (a generátor sablonja). A 7. évfolyam 1-es sávja 30 tétel, köztük 6 angol:
+ // rossz válaszokkal továbblépve legfeljebb 30 kérdésen belül biztosan jön szóbankos kérdés (minden kérdezett tétel fogy).
+ const vocabById=new Map(VOCAB_EN.map(e=>[e.id,e]));
+ let checkedBank=false,checkedVocab=false;
+ for(let i=0;i<40&&!(checkedBank&&checkedVocab);i++){
+  await expect(quiz).toBeVisible();
+  const id=(await quiz.getAttribute('data-quiz-id'))??'';
+  if(id.startsWith('vocab:')){
+   const entry=vocabById.get(id.split(':')[1]!);expect(entry,`ismeretlen szóbank-bejegyzés: ${id}`).toBeDefined();
+   const correct=(await quiz.locator('[data-correct="true"] > span').last().innerText()).trim();
+   await quiz.locator('[data-correct="false"]').first().click();
+   await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
+   const why=page.getByTestId('quiz-feedback-why');
+   await expect(why).toContainText(`A helyes válasz: „${correct}”`);
+   await expect(why).toContainText(`${entry!.term} = ${entry!.hu}`);
+   if(!checkedVocab)await page.screenshot({path:test.info().outputPath('asteroid-explanation-vocab-mobile.png'),fullPage:true});
+   checkedVocab=true;
+  }else if(!checkedBank){
+   const text=await quiz.innerText();const entry=bank.find(q=>text.includes(q.prompt));expect(entry,`a kérdés (${id}) nincs a forrásokban`).toBeDefined();
+   await quiz.getByRole('button',{name:entry!.wrong,exact:true}).click();
+   await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
+   await expect(page.getByTestId('quiz-feedback-why')).toContainText(entry!.explanation);
+   await page.waitForTimeout(1800);
+   await expect(page.getByTestId('quiz-feedback')).toBeVisible();
+   await page.screenshot({path:test.info().outputPath('asteroid-explanation-mobile.png'),fullPage:true});
+   checkedBank=true;
+  }else{
+   await quiz.locator('[data-correct="false"]').first().click();
+   await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
+  }
+  await page.getByRole('button',{name:'Értem, megyek tovább'}).click();
+  await expect(page.getByTestId('quiz-feedback')).toHaveCount(0);
+  await expect(quiz).toBeVisible();
+ }
+ expect(checkedBank,'kézi / évfolyam-banki kérdés magyarázata nem volt ellenőrizve').toBe(true);
+ expect(checkedVocab,'szóbankos kérdés magyarázata nem volt ellenőrizve').toBe(true);
 });
 
 test('separate map upload also sends sources without a manual scope',async({page})=>{
@@ -88,17 +120,50 @@ test('separate map upload also sends sources without a manual scope',async({page
  await page.screenshot({path:test.info().outputPath('map-source-only-mobile.png'),fullPage:true});
 });
 
-test('tsunami timeout shows an explanation once and pauses the question clock',async({page})=>{
- test.setTimeout(70000);
+/*
+ * SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 9.; végrehajtás J1a, D-J1a-8): a Szökőár kérdése
+ * nem blokkoló kapukérdés — időtúllépés-kártya nincs. A helyettesítő eset az új (nem lazább) követelményt méri: hibás kapu
+ * után nincs `[role="dialog"]`, a helyes kapu legalább 1,8 mp-ig zöld (a lapon belül, képkockánként mérve — C-65), a
+ * „Miért?” a magyarázókártyát nyitja (`data-outcome="wrong"`, olvasható magyarázat), alatta a szimuláció ÁLL (a magyarázat
+ * olvasása közben áll az óra), bezárás után fut tovább.
+ */
+test('tsunami wrong gate: no blocking card, the right gate stays green, "Miért?" explains and pauses the game',async({page})=>{
+ test.setTimeout(90000);
  await page.setViewportSize({width:390,height:844});
  await page.goto('/games/tsunami-english');
  await page.getByRole('button',{name:/Indítás:/}).click();
- await expect(page.getByText(/Idő: \d+s/)).toBeVisible({timeout:25000});
- await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','timeout',{timeout:35000});
+ const gate=(sel:string)=>page.locator(`[data-testid="ts-quiz"] .ts-gate${sel}`);
+ await expect(gate('')).toHaveCount(3,{timeout:30000});
+ await page.evaluate(()=>{
+  const w=window as unknown as {__tsReveal?:{start:number|null;end:number|null}};
+  w.__tsReveal={start:null,end:null};
+  const tick=()=>{
+   const on=document.querySelector('[data-testid="ts-quiz"] .ts-gate[data-correct="true"][data-state="correct"]')!==null;
+   const r=w.__tsReveal!;
+   if(r.start===null&&on)r.start=performance.now();
+   if(r.start!==null&&r.end===null&&!on)r.end=performance.now();
+   if(r.end===null)requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+ });
+ await gate('[data-correct="false"]').first().click();
+ await expect(gate('[data-state="wrong"]')).toHaveCount(1);
+ expect(await page.locator('[role="dialog"]').count(),'a hibás kapu nem nyit blokkoló kártyát').toBe(0);
+ // A terv 9. csereelve: a hibázott tétel az ismétlési sorba kerül (a közös `websuli.gameReview.v1`, menet közben esedékes).
+ const queued=await page.evaluate(()=>{const raw=localStorage.getItem('websuli.gameReview.v1');if(!raw)return 0;const items=Object.values((JSON.parse(raw) as {items?:Record<string,{wrong?:number;dueInRun?:number|null}>}).items??{});return items.filter(i=>(i.wrong??0)>=1&&i.dueInRun!==null).length;});
+ expect(queued,'a hibázott tétel az ismétlési sorban, menet közben esedékes').toBeGreaterThanOrEqual(1);
+ const reveal=()=>page.evaluate(()=>(window as unknown as {__tsReveal:{start:number|null;end:number|null}}).__tsReveal);
+ await expect.poll(async()=>(await reveal()).end!==null,{timeout:20000}).toBe(true);
+ const r=await reveal();expect(r.end!-r.start!,'a helyes kapu ≥ 1,8 mp-ig zöld').toBeGreaterThanOrEqual(1800);
+ await page.getByTestId('play-why').first().click();
+ await expect(page.getByTestId('quiz-feedback')).toHaveAttribute('data-outcome','wrong');
  const why=await page.getByTestId('quiz-feedback-why').innerText();expect(why.length).toBeGreaterThan(15);
- await page.waitForTimeout(2200);
+ const sim=()=>page.evaluate(()=>(window as unknown as {__websuliGame:{probe:()=>{simTime:number}}}).__websuliGame.probe().simTime);
+ const s0=await sim();await page.waitForTimeout(1500);
+ expect(await sim(),'a magyarázat alatt a játék áll').toBe(s0);
  await expect(page.getByTestId('quiz-feedback-why')).toHaveText(why);
- await page.screenshot({path:test.info().outputPath('tsunami-timeout-mobile.png'),fullPage:true});
+ await page.screenshot({path:test.info().outputPath('tsunami-why-mobile.png'),fullPage:true});
  await page.getByRole('button',{name:'Értem, megyek tovább'}).click();
  await expect(page.getByTestId('quiz-feedback')).toHaveCount(0);
+ await expect.poll(sim,{message:'bezárás után fut tovább'}).toBeGreaterThan(s0);
 });
