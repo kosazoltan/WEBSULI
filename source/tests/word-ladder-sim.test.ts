@@ -241,3 +241,14 @@ test("MEGFIGYELŐ (nem buktató, review K3): a közös botok a Nyugodt (alap) te
   console.log(`[megfigyelés] Nyugodt tempó, 6. pálya, 4. évf.: ${rows.join(" | ")}`);
   assert.equal(rows.length, 4);
 });
+
+test("review #498 R1: nyitott kérdés közbeni menetvégnél a statisztika a menet VALÓDI végén, a rés a nyitott kérdés nélkül", () => {
+  // Codex P2 (#498): seed 3, 4. évf., kérdéssel, Nyugodt, válasz nélkül — a rivális egy nyitott kérdés közben ér fel.
+  const g = createSimGame({ seed: 3, grade: 4, questions: true, tempo: "calm" });
+  for (let i = 0; i < 60 * 900 && !g.done(); i++) g.step(1000 / 60, { skillRoll: 0.5 });
+  assert.equal(g.state().phase, "lost");
+  const st = g.stats();
+  assert.ok(Math.abs(st.simSeconds - g.simTimeMs() / 1000) < 1e-6, `simSeconds ${st.simSeconds} ≠ menetidő ${g.simTimeMs() / 1000}`);
+  assert.ok(Math.abs(st.perMinute - st.asked / (g.simTimeMs() / 60_000)) < 1e-9, "kérdés / perc a teljes menetidőre vetítve");
+  assert.ok(st.maxGapSec <= 8, `a megszakított kérdés nyitott ideje nem rés: ${st.maxGapSec}`);
+});
