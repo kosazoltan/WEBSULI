@@ -615,3 +615,7 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
 
 - 2026-11-18 — S1 KÉSZ: `source/shared/advent/` (`calendar.ts`, `rules.ts`, `assignment.ts`, `contract.ts`) + 4 tesztfájl, 39 teszt; a független ellenőr ítélete a `bb248dd1` fejre: IGEN, FELTÉTELLEL; a K5, A1, A4–A7, K3 javítása külön commitban.
 - 2026-11-18 — S1b KÉSZ (ellenőrre vár): `source/shared/advent/christmasBank/` 288 kézzel írt tétel (1–4. évfolyam: 144, 5–8.: 72, 9–12.: 72), `christmas-validate.ts`, `tests/advent-christmas-bank.test.ts`; a tételek tényszerűségét a független ellenőr tételenként ellenőrzi.
+- 2026-11-18 — S3c-0 KÉSZ (képgyártó előkészítés és költségvédelmek, hívás nélkül): `scripts/design-assets/generate.ts` (`--set`, `--max`,
+  `--max-usd`, `--ref`, száraz futás), `lib.ts` (hívásonkénti és összesített keret, költségkönyv, naplóhiba-őr), `run-lock.ts` (futás-zár),
+  `review-page.ts --set`, `design-assets/advent/prompts.json` + `style.md`, `tests/advent-art-pipeline.test.ts`. A fizetős kör a
+  koordinátor indítására lefutott (84 kép, kb. 5,22 / 7 USD); a válogatás és a beépítés az S3c.
