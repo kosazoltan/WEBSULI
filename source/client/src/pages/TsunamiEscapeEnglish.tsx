@@ -24,7 +24,7 @@ import {
   pickUnseenMaterial,
 } from "@/game-engine/gradeQuiz";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
-import { sfxCombo, sfxHit, sfxLevelUp, sfxPickup } from "@/lib/audioEngine";
+import { prewarmAudio, sfxCombo, sfxHit, sfxLevelUp, sfxPickup } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { quizTopicLabelHu } from "@/lib/quizTopicLabel";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
@@ -700,6 +700,19 @@ export default function TsunamiEscapeEnglish() {
     const id = window.setTimeout(() => setScenePrewarm(true), 600);
     return () => window.clearTimeout(id);
   }, [scenePrewarm]);
+  /*
+   * A hangkontextus is a menü alatt jön létre (csiszoló kör 4. pont, CPU-profillal mérve): lustán az első kérdés suhogó hangja
+   * hozta létre, és a `new AudioContext()` a menet közepén ~2 s-ra megállította a főszálat. Tétlen időben, a menüben előre.
+   */
+  useEffect(() => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(() => prewarmAudio(), { timeout: 2500 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const id = window.setTimeout(prewarmAudio, 1200);
+    return () => window.clearTimeout(id);
+  }, []);
   /** S9 / terv 4.5: szünet (kézi vagy automatikus, ha a lap háttérbe kerül). */
   const [paused, setPaused] = useState(false);
   const pausedNowRef = useRef(false);
@@ -1583,7 +1596,8 @@ export default function TsunamiEscapeEnglish() {
           wrong: st.wrong,
           // A figura helye a játéktér arányában (a jelenet a z = 0 síkot lineárisan képezi: x % balról, víz % alulról).
           figureX: st.x / 100,
-          figureY: 1 - (st.water * WATER_VIEW_SCALE) / 100 + (liveRef.current.shiftPx ?? 0) / Math.max(1, stageRef.current?.clientHeight ?? 1),
+          // A ténylegesen kirajzolt kép-eltolással (a jelenet visszaírja; WebGL nélkül a cél-eltolás).
+          figureY: 1 - (st.water * WATER_VIEW_SCALE) / 100 + (liveRef.current.shownShiftPx ?? liveRef.current.shiftPx ?? 0) / Math.max(1, stageRef.current?.clientHeight ?? 1),
           quizPlace: quizPlaceRef.current,
           sprint: driver.core.input.sprint ? 1 : 0,
           layoutSettleMs: settleMsRef.current,
@@ -1613,6 +1627,14 @@ export default function TsunamiEscapeEnglish() {
         // Teszt: a mag győzelme a valódi úton (a jelenet → kártya sorrend méréséhez, B1).
         if ((patch as { coreWin?: boolean }).coreWin && driverRef.current) {
           driverRef.current.core.forceEnd(true);
+          return;
+        }
+        // Teszt: a figura vízszintes helye (% — a fekvő nézet szélső válasz-oszlopa alatti szabadság méréséhez).
+        const fxPatch = (patch as { x?: unknown }).x;
+        if (typeof fxPatch === "number" && Number.isFinite(fxPatch) && driverRef.current) {
+          const st = driverRef.current.core.state() as { x: number; prevX: number };
+          st.x = Math.max(8, Math.min(92, fxPatch));
+          st.prevX = st.x;
           return;
         }
         // Teszt: a vízszint beállítása (a „magas víz → lent a kérdés” elrendezés méréséhez).
@@ -1752,10 +1774,22 @@ export default function TsunamiEscapeEnglish() {
     window.innerHeight > window.innerWidth || (fx + FIGURE_HALF_WIDTH_PX >= b.left && fx - FIGURE_HALF_WIDTH_PX <= b.right);
   const figureCovered = (boxes: DOMRect[], fx: number, fy: number): boolean =>
     boxes.some((b) => overFigure(b, fx) && fy - FIGURE_HEIGHT_PX <= b.bottom && fy + 10 >= b.top - 12);
-  /** Fenti kérdésnél: ennyivel kell a képet lejjebb tolni, hogy a figura (feje fölött ráhagyással) a sáv alatt legyen. */
-  const shiftNeed = (boxes: DOMRect[], fx: number, fy: number): number => {
+  /*
+   * Kép-eltolás (px, pozitív = a világ lejjebb kerül), amelynél a figura szabad. Ha a jelenlegi eltolás mellett szabad, az
+   * marad (nem remeg); különben a jelöltek — 0, minden ütköző doboz alá, minden ütköző doboz fölé — közül a jelenlegihez
+   * legközelebbi, amelynél a figura egyik dobozzal sem ütközik és a képen marad (a HUD alatt, a kép alja fölött). Álló és
+   * fekvő nézetben, fenti és lenti kérdésnél egyaránt; a tárcsa oldalától független (csak a kérdés dobozait nézi).
+   */
+  const solveShift = (boxes: DOMRect[], fx: number, fy: number, current: number): number => {
+    if (!figureCovered(boxes, fx, fy + current)) return current;
+    const stage = stageRef.current?.getBoundingClientRect();
+    const minY = (stage?.top ?? 0) + FIGURE_HEIGHT_PX + 72;
+    const maxY = (stage?.bottom ?? window.innerHeight) - 10;
     const over = boxes.filter((b) => overFigure(b, fx));
-    return over.length ? Math.max(0, Math.max(...over.map((b) => b.bottom)) + FIGURE_HEIGHT_PX + 12 - fy) : 0;
+    const candidates = [0, ...over.map((b) => b.bottom + FIGURE_HEIGHT_PX + 12 - fy), ...over.map((b) => b.top - 24 - fy)];
+    const ok = candidates.filter((c) => fy + c >= minY && fy + c <= maxY && !figureCovered(boxes, fx, fy + c));
+    if (!ok.length) return current;
+    return ok.reduce((best, c) => (Math.abs(c - current) < Math.abs(best - current) ? c : best));
   };
   /*
    * A döntés EGY lépésben, a kirajzolás előtt születik (nincs köztes, félig eldőlt állapot): a jelölteket — ugyanott, ugyanott
@@ -1802,21 +1836,21 @@ export default function TsunamiEscapeEnglish() {
     }
     quizPlaceRef.current = chosen.place;
     quizHighRef.current = chosen.high;
-    const shift = chosen.place === "top" ? shiftNeed(boxes, fig.fx, fig.fy) : 0;
+    const shift = free ? 0 : solveShift(boxes, fig.fx, fig.fy, 0);
     liveRef.current.shiftPx = shift;
     // ≈ 400 ms-os lassuló eltolás (a jelenet `damp(…, 12)`-je); eltolás nélkül az elrendezés azonnal nyugalomban van.
     markSettled(presIdNow, shift > 1 && !reducedMotion ? 420 : 0);
   });
   /*
-   * „Végig szabad”: a víz a nyitott kérdés alatt is emelkedik (lassítva), a figura tehát a fenti sáv felé közeledik. Álló
-   * nézetben a kép-eltolás képkockánként követi (csak növekszik — nem remeg), a dobozokat 250 ms-onként újramérve.
+   * „Végig szabad”: a víz a nyitott kérdés alatt is emelkedik (lassítva), és a figura oldalra is mozog (fekvő nézetben a
+   * szélső válasz-oszlop alá kerülhetne). A kép-eltolás képkockánként követi — álló és fekvő nézetben is —, a dobozokat
+   * 250 ms-onként újramérve; szabad figuránál az eltolás nem változik (nem remeg).
    */
   const trackBoxesRef = useRef<{ at: number; boxes: DOMRect[] }>({ at: 0, boxes: [] });
   trackShiftRef.current = () => {
     const view = qRef.current.view();
     const id = view.presentation?.id ?? null;
-    if (id === null || view.reveal || decidedForRef.current !== id || quizPlaceRef.current !== "top") return;
-    if (window.innerHeight <= window.innerWidth) return;
+    if (id === null || view.reveal || decidedForRef.current !== id) return;
     const now = performance.now();
     const cache = trackBoxesRef.current;
     if (now - cache.at > 250) {
@@ -1825,8 +1859,7 @@ export default function TsunamiEscapeEnglish() {
     }
     const fig = figurePoint();
     if (!fig) return;
-    const need = shiftNeed(cache.boxes, fig.fx, fig.fy);
-    if (need > (liveRef.current.shiftPx ?? 0)) liveRef.current.shiftPx = need;
+    liveRef.current.shiftPx = solveShift(cache.boxes, fig.fx, fig.fy, liveRef.current.shiftPx ?? 0);
   };
 
   return (
@@ -2290,4 +2323,9 @@ const TSUNAMI_CSS = `
   background: #0b172dd9; border: 1.5px solid #fef08a99; color: #fef9c3; font-size: 15px; font-weight: 800; line-height: 1.25;
   text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 6px 18px #0008;
 }
+/*
+ * Csiszoló kör 1. pont: álló nézetben a súgó a kép felső harmadában a közeledő hullámfal tarajára esett. A súgó csak alacsony
+ * víznél látszik (a figura a kép alsó 40 %-ában), ezért a kép közepére kerül: a figura feje fölé, a hullámfal alá.
+ */
+@media (orientation: portrait) { .ts-hint { top: 46%; } }
 `;

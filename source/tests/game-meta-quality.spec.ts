@@ -169,6 +169,9 @@ test.describe("Viharvadász menü és a közös „Hogyan játsszak?” ablak", 
     for (const game of [
       { id: "tornado-hunter-200", path: TORNADO, start: "tornado-quick-start" },
       { id: "block-craft-quiz", path: "/games/block-craft-quiz", start: "bc-start" },
+      // Szökőár (csiszoló kör 7. pont, 2026-11-18): a meta-mérőben eddig nem volt Szökőár-eset — a közös súgó-ablak ugyanazzal a
+      // mércével (X1–X7, bezáró ≥ 44 px) a Szökőár menüjéből is.
+      { id: "tsunami-english", path: "/games/tsunami-english", start: "button-tsunami-start" },
     ]) {
       test(`${game.id} „Hogyan játsszak?” ${viewport.width}x${viewport.height}: X1–X7 (bezáró ≥ 44 px, a sávon belül)`, async ({ page }) => {
         await page.setViewportSize(viewport);

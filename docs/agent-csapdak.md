@@ -38,6 +38,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
 - **C-73** — `native-arch` önmagában ismert helyi kivétel (nem telepítési teendő); a push-kapu piros oka mindig a TÖBBI bukó teszt. Mérő-várakozás állapotra, ne időre.
 - **C-74** — Takarás-döntés: a figura test (téglalap), nem pont; a mérce (`elementsFromPoint`) és a döntés ugyanazt a felületet nézze. Elakadásnál előbb a döntés bemeneteit naplózd.
+- **C-75** — Menet közbeni lagg: profil előtt ne találgass; a `long-animation-frame` szkriptje és a CDP-minta megnevezi (itt: lusta `new AudioContext()` az első hangnál, 0,8–2 s). Tétlen főszál + hosszú képkocka = GPU-folyamat: Chrome-nyomkövetéssel nézd.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -1086,3 +1087,15 @@ Forrás: #475 (K1b). Rokon: C-59.
 - **Teendő:** takarást testre (téglalapra) számolj, a mérce felületével egyezően; a jelölt elrendezéseket egy lépésben, a
   kirajzolás előtt mérd végig (ne render → mérés → render láncban); mozgó figuránál a nyitott kérdés alatt kövesd. Elakadásnál
   az első lépés a döntés bemeneteinek naplója a teszt pontos lépéseivel, nem újabb időzítés-hangolás.
+
+## C-75 — A „lagg” oka egy lusta hangkontextus volt, nem a grafika (2026-11-18)
+- **Tünet:** a Szökőárban menet közben 200–950 ms-os megakadások; a tulajdonos fő panasza a lagg. Korábban a grafikát / a
+  kérdésbankot gyanítottuk.
+- **Tény (profil: `long-animation-frame` + CDP-mintavételezés, 1× CPU):** egyetlen 2038 ms-os képkocka közvetlenül az első kérdés
+  megjelenése előtt, 1823 ms a közös `audioEngine` `getOrCreateAudioContext`-jében. Lánc: kérdés-director `onShow` → `sfxWhoosh`
+  → `beep` → első `new AudioContext()`. A konstruktor közvetlenül mérve friss böngészőben 380–2018 ms (a hangeszköz megnyitása).
+- **Javítás:** `prewarmAudio()` a közös hangmotorban (hozzáadó), a játék a menü alatt, tétlen időben hívja. Minden, a közös
+  directort használó játékot érint — a többi játékban is be kell kötni (kanban).
+- **Második tanulság:** ha a hosszú képkocka alatt a főszál TÉTLEN, a késés a GPU-folyamatban van (shader-összefűzés, raszter);
+  a főszál-profil ilyenkor semmit nem mutat — Chrome-nyomkövetés kell (`Program::MainLinkLoadEvent::wait`, `WebGL`), és
+  ellenpróba egy üres WebGL-oldallal ugyanabban a környezetben (terhelt gépen az is megakad).

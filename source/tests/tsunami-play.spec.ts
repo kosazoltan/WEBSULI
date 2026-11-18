@@ -471,6 +471,68 @@ for (const viewport of [
 }
 
 /*
+ * Csiszoló kör 3. pont (koordinátori kérés 2026-11-18): a figura a nyitott kérdés alatt oldalra mozog — fekvő nézetben a
+ * szélső válasz-oszlop alá kerülhetne. A terv 7.3 mércéje itt is: a mozgás után ≤ 600 ms-on belül újra szabad, és szabad marad.
+ * A mérés a ténylegesen kirajzolt kép-eltolással számol (a próba `figureY`-ja), képkockánként; a tárcsa helyét nem feltételezi.
+ */
+for (const viewport of [
+  { width: 844, height: 390 },
+  { width: 390, height: 844 },
+]) {
+  test.describe(`${viewport.width}x${viewport.height}: a figura a nyitott kérdés alatt oldalra mozog — ≤ 600 ms-on belül újra szabad`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test("a két szélre mozgatott figurát a kérdés-sáv nem takarja (képkockánként mérve)", async ({ page }) => {
+      await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
+      await page.getByTestId("button-tsunami-start").tap();
+      await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+      await openQuestion(page, { water: 45 });
+      await openQuestion(page, { question: true, longAnswers: true, longPrompt: true });
+      const quiz = page.getByTestId("ts-quiz");
+      await expect(quiz).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
+      await expect(quiz).toHaveAttribute("data-layout", "settled", { timeout: 3_000 });
+      const covered = () =>
+        page.evaluate(() => {
+          const pr = (window as unknown as { __websuliGame: { probe: () => { figureX: number; figureY: number } } }).__websuliGame.probe();
+          const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+          const fx = stage.left + pr.figureX * stage.width;
+          const fy = stage.top + pr.figureY * stage.height;
+          return [fy - 8, fy - 36].map((y) => document.elementsFromPoint(fx, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]')));
+        });
+      for (const x of [10, 90]) {
+        // A mozgatás és a mérés egy lépésben, a lapon belül: a figura ettől a pillanattól képkockánként szabad-e.
+        const freeAfterMs = await page.evaluate(async (target) => {
+          const api = (window as unknown as { __websuliGame: { forceState: (p: Record<string, unknown>) => void; probe: () => { figureX: number; figureY: number } } }).__websuliGame;
+          const isCovered = () => {
+            const pr = api.probe();
+            const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+            const fx = stage.left + pr.figureX * stage.width;
+            const fy = stage.top + pr.figureY * stage.height;
+            return [fy - 8, fy - 36].some((y) => document.elementsFromPoint(fx, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]')));
+          };
+          api.forceState({ x: target });
+          const t0 = performance.now();
+          while (performance.now() - t0 < 3_000) {
+            await new Promise((r) => requestAnimationFrame(() => r(null)));
+            if (!isCovered()) return Math.round(performance.now() - t0);
+          }
+          return null;
+        }, x);
+        expect(freeAfterMs, `x = ${x} %: a figura újra szabad (mért: ${freeAfterMs} ms)`).not.toBeNull();
+        expect(freeAfterMs!, `x = ${x} %: ≤ 600 ms-on belül szabad (mért: ${freeAfterMs} ms)`).toBeLessThanOrEqual(600);
+        await page.waitForTimeout(450); // az eltolás lefut
+        for (let sample = 0; sample < 3; sample++) {
+          expect(await covered(), `x = ${x} %: a figura végig szabad (${sample + 1}. minta)`).toEqual([false, false]);
+          await page.waitForTimeout(250);
+        }
+        await shot(page, `tsunami-${viewport.width}x${viewport.height}-szelen-${x}.jpg`);
+      }
+      expect(await page.evaluate(() => document.querySelector('[data-testid="ts-quiz"]')?.getAttribute("data-state")), "a mérés végig nyitott kérdésnél").toBe("open");
+    });
+  });
+}
+
+/*
  * Élesítés lap-szinten, léptetett órával (Playwright-óra). Minden lépés EGY képkocka 500 ms-mal. Elvárás: a válaszgombok
  * látható élessége (`data-armed`) és a meghajtó elfogadása (`probe().armed`) minden lépésben egyezik.
  */

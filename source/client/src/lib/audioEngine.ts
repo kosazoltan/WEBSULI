@@ -80,6 +80,16 @@ function getOrCreateAudioContext(): AudioContext | null {
   return ctx;
 }
 
+/**
+ * A hangkontextus létrehozása ELŐRE, tétlen időben (pl. a játék menüjében). Mérve (2026-11-18, Windows, Chrome): az első
+ * `new AudioContext()` a főszálon 380–2000 ms (a hangeszköz megnyitása). Lusta létrehozásnál ez az első hangra esik — a
+ * kérdés-director `onShow` suhogására, azaz a menet közepére (2 s-os megakadás a kérdés megjelenésekor). Többszöri hívás
+ * ártalmatlan; a kontextus gesztus nélkül felfüggesztve jöhet létre, az első hang folytatja (`resume`, aszinkron).
+ */
+export function prewarmAudio(): void {
+  getOrCreateAudioContext();
+}
+
 export function isMuted(): boolean {
   loadSettings();
   return settings.muted;
