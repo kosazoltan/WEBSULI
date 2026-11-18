@@ -39,7 +39,6 @@ import {
   type BrainRotState,
   type BrainRotTuning,
 } from "./core";
-import { createCouponRepeat } from "./couponRepeat";
 
 /** A sim táblája (CSS px): tipikus álló telefon a HUD alatt. */
 export const SIM_BOARD = { w: 360, h: 560 } as const;
@@ -64,8 +63,8 @@ export type BrainRotSimOptions = {
   /** Tananyag-tételek (a forrásrend 1. helye, terv J7). */
   material?: readonly FourChoiceQuiz[];
   /**
-   * Kupon mód (review #485 K1): csak a `material` lecke-tételei, kimerüléskor a lap tartalékával ismételve
-   * (`couponRepeat.ts` — ugyanaz a kód, mint a lapon). #483 után törölhető (a közös director adja).
+   * Kupon mód (review #485 K1; J5a 23.): csak a `material` lecke-tételei (`couponOnly`, mint a lapon); a kimerülést és az
+   * ismétlést a közös director kupon-ága kezeli (D-J1a-10 / D-J1a-16).
    */
   coupon?: boolean;
   /** A szintetikus bank mérete (alap 600). 0 → üres forrás (terv 8.1: a játék kérdés nélkül fut). */
@@ -102,6 +101,8 @@ export type BrainRotSim = {
   hash(): string;
   /** A menet kérdés-kulcsai sorban (változatosság / forrásrend teszt). */
   askedKeys(): readonly string[];
+  /** A menet kimenetei sorban: tétel-kulcs és eredmény (kupon-ismétlés teszt — J5a 23.). */
+  outcomes(): readonly { key: string; result: string }[];
   /** A bot döntése ELŐTT regisztrált ketrec-válaszok száma (véletlen válasz — review #485 B1; 0 kell). */
   prematureAnswers(): number;
   director: QuestionDirector;
@@ -126,18 +127,12 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
   let freshCursor = 0;
   let materialCursor = 0;
   const coupon = opts.coupon === true;
-  const couponRepeat = createCouponRepeat(); // #483 után törölhető
   const director = createQuestionDirector({
     config: brainRotDirectorConfig(grade),
     provider: {
       couponOnly: coupon && material.length > 0,
-      material: () => {
-        if (materialCursor < material.length) return materialPlayQuestion(material[materialCursor++]!);
-        if (!coupon) return null;
-        // #483 után törölhető — a lap kupon-tartaléka (ugyanaz a szabály).
-        const again = couponRepeat.next(material, (q) => materialPlayQuestion(q).key);
-        return again ? { ...materialPlayQuestion(again.item), key: again.key, noReview: true } : null;
-      },
+      // A lap kupon-módja is `coupon: true` forrással adja a lecke-tételt; kimerülés után null (a director ismétel).
+      material: () => (materialCursor < material.length ? materialPlayQuestion(material[materialCursor++]!, { coupon }) : null),
       fresh: () => {
         if (freshCursor >= bankSize) return null;
         const q = syntheticQuiz(freshCursor);
@@ -152,6 +147,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     now: () => T0,
   });
   const asked: string[] = [];
+  const results: { key: string; result: string }[] = [];
   /** A bot választott ketrece (a nyitott kérdéshez), vagy null. */
   let chosen: { id: number; option: number } | null = null;
   /** A nyitott kérdés megjelenése (kérdés-óra ms) és a bot késleltetett elengedése (ms). */
@@ -163,7 +159,6 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     onView: () => {},
     onShow: (p) => {
       asked.push(p.question.key);
-      if (coupon) couponRepeat.asked(p.question.key);
       chosen = null;
       shownAt = driver ? driver.clockMs() : 0;
       holdFor = opts.releaseMs === undefined || opts.releaseMs === "human" ? 150 + botRng.next() * 350 : opts.releaseMs;
@@ -171,8 +166,8 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
       if (opts.startInCageZone) placeOnCageEdge();
     },
     onOutcome: (o, p) => {
+      results.push({ key: p.question.key, result: o.result });
       chosen = null;
-      if (coupon) couponRepeat.outcome(p.question.key, o.result);
       const picked = o.pickedOriginalIndex === null ? null : p.options.findIndex((opt) => opt.originalIndex === o.pickedOriginalIndex);
       driver!.core.applyOutcome(o.result, picked === -1 ? null : picked);
     },
@@ -322,6 +317,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     state: () => core.state(),
     hash: () => core.hash(),
     askedKeys: () => asked,
+    outcomes: () => results,
     prematureAnswers: () => premature,
     director,
     driver: d,

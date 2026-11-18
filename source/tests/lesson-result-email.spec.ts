@@ -47,6 +47,14 @@ test("a feladatok és a helyi kvíz kiértékelése után egy-egy beküldés meg
   await expect.poll(() => posts.filter(p => p.kind === "quiz").length).toBe(1);
   expect(Object.keys(posts.find(p => p.kind === "quiz")!.picks as object)).toHaveLength(25);
 
+  // Kanban #31 (e2e-ingadozók 3. kör): a „már elküldve” jelzőt a kliens a 202-es válasz FELDOLGOZÁSA után írja
+  // (`resultReport.ts`); a fenti poll a kérés elfogásakor teljesül. Ha az újratöltés a válasz feldolgozása elé esik, a kör
+  // jogosan újra beküldődik (élesben a szerver egyedi kulcsa véd) — ez nem a vizsgált eset. Ezért az újratöltés előtt
+  // megvárjuk a valódi állapotot: mindkét kör jelzője a tárolóban van (egy atomi lap-hívás, C-64).
+  await expect
+    .poll(() => page.evaluate(() => Object.keys(localStorage).filter(k => /:(tasks|quiz):sent:round-/.test(k)).length))
+    .toBe(2);
+
   await page.reload();
   await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
   await page.waitForTimeout(1500);
