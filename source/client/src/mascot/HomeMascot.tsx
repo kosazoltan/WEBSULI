@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { ArrowRight, Pause, Play, X } from "lucide-react";
 import { getClassroomLabel } from "@shared/classrooms";
 import { coverIdFor } from "@shared/home-card-theme";
@@ -158,12 +158,15 @@ export default function HomeMascot<T extends MascotFile>({ picks, isNew, returni
 
   // ── a figura helye: az ajánlott sor magasságában ──
   const [tops, setTops] = useState<number[]>([]);
+  /** A figura megjelenített magassága — itt mérve, hogy a lejátszás indításakor ne kelljen elrendezést kényszeríteni. */
+  const makiHeight = useRef(0);
   useLayoutEffect(() => {
     const stage = stageRef.current;
     const maki = makiRef.current;
     if (!stage || !maki) return;
     const measure = () => {
       const height = maki.offsetHeight;
+      makiHeight.current = height;
       const max = Math.max(0, stage.clientHeight - height + OVER_BOTTOM);
       setTops(rowRefs.current.slice(0, count).map((row) => {
         if (!row) return 0;
@@ -181,42 +184,57 @@ export default function HomeMascot<T extends MascotFile>({ picks, isNew, returni
   // ── lejátszás ──
   useEffect(() => {
     if (!moving || !sheetRef.current || !liftRef.current) return;
-    const player = createSpritePlayer(sheetRef.current, liftRef.current, manifest, () => makiRef.current?.offsetHeight ?? 0);
+    const player = createSpritePlayer(sheetRef.current, liftRef.current, manifest, () => makiHeight.current);
     playerRef.current = player;
     return () => { player.stop(); playerRef.current = null; };
   }, [moving]);
+  // Megállítás / folytatás: a sáv ÖSSZES animációja (képkocka, emelkedés, helyváltoztatás).
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const syncPlayState = useCallback(() => {
+    const root = rootRef.current;
+    if (!root || typeof root.getAnimations !== "function") return;
+    for (const animation of root.getAnimations({ subtree: true })) {
+      if (activeRef.current) {
+        if (animation.playState === "paused") animation.play();
+      } else if (animation.playState === "running") animation.pause();
+    }
+  }, []);
+  useEffect(() => {
+    if (moving) syncPlayState();
+  }, [active, moving, syncPlayState]);
+
   const shownTop = useRef<number | null>(null);
   useEffect(() => {
     const player = playerRef.current;
     if (!moving || !player) return;
     const moved = shownTop.current !== null && shownTop.current !== top;
     shownTop.current = top;
-    if (step.kind === "enter") player.play(["wave", "idle"]);
-    else if (step.kind === "present") player.play(moved ? ["hop", "point-in", "point"] : ["point-in", "point"]);
-    else if (step.kind === "cheer") player.play(["cheer", "idle"]);
-    else player.play(["idle", "idle", "idle", "blink"], { repeat: true });
+    // A mozdulat a KÖVETKEZŐ képkockában indul: a koppintás képkockájában csak a React frissít (kiemelés, buborék), az animációk
+    // létrehozása a következőbe kerül — mérve 4× lassított CPU-n, egyben 36–54 ms volt a koppintás képkockája (terv K9).
+    const frame = requestAnimationFrame(() => {
+      if (step.kind === "enter") player.play(["wave", "idle"]);
+      else if (step.kind === "present") player.play(moved ? ["hop", "point-in", "point"] : ["point-in", "point"]);
+      else if (step.kind === "cheer") player.play(["cheer", "idle"]);
+      else player.play(["idle", "idle", "idle", "blink"], { repeat: true });
+      // álló állapotban (háttérben, kigördítve) indított mozdulat azonnal megáll
+      if (!activeRef.current) syncPlayState();
+    });
+    return () => cancelAnimationFrame(frame);
     // a `view.turn` minden lépésváltáskor nő: ugyanarra a sorra újra koppintva is újraindul a mozdulat
-  }, [moving, step, top, view.turn]);
-
-  // Megállítás / folytatás: a sáv ÖSSZES animációja (képkocka, emelkedés, helyváltoztatás, lélegzés).
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root || !moving || typeof root.getAnimations !== "function") return;
-    for (const animation of root.getAnimations({ subtree: true })) {
-      if (active) {
-        if (animation.playState === "paused") animation.play();
-      } else if (animation.playState === "running") animation.pause();
-    }
-  }, [active, moving, view.turn]);
+  }, [moving, step, top, view.turn, syncPlayState]);
 
   // ── kezelők ──
   const [announce, setAnnounce] = useState("");
   const onTap = () => {
     const next = nextStep(step, { type: "tap" }, { count, returning });
     const target = picks[Math.min(stepIndex(next), count - 1)];
-    // Csak a látogató által kért váltást mondjuk be (az önműködő körbevezetés nem beszél).
-    if (target) setAnnounce(`Ajánlat: ${target.title}`);
-    dispatch({ type: "tap" });
+    // A váltás nem sürgős frissítés: a React szeletelve számolja ki, így a koppintás képkockája lassú telefonon sem nyúlik meg
+    // (terv K9: 4× lassított CPU-n mérve). Csak a látogató által kért váltást mondjuk be (a körbevezetés nem beszél).
+    startTransition(() => {
+      if (target) setAnnounce(`Ajánlat: ${target.title}`);
+      dispatch({ type: "tap" });
+    });
   };
   const open = (event: MouseEvent<HTMLAnchorElement>, file: T) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

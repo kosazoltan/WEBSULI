@@ -94,6 +94,8 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   z-index: 1;
+  /* saját kompozitor-réteg már nyugalomban: a szökkenés indulásakor nem kell réteget létrehozni */
+  will-change: transform;
 }
 /* a helyváltoztatás (szökkenés a következő sorhoz) — csak ha a figura mozoghat */
 .hm-root[data-motion="on"] .hm-maki { transition: transform 480ms cubic-bezier(0.45, 0, 0.55, 1); }
@@ -107,6 +109,7 @@
   background: radial-gradient(closest-side, rgba(2, 6, 23, 0.6), rgba(2, 6, 23, 0));
 }
 .hm-lift, .hm-cell { position: absolute; inset: 0; display: block; }
+.hm-lift { will-change: transform; }
 .hm-cell { overflow: hidden; }
 /* balra mutatás: ugyanaz a képsor tükrözve (a mostani elrendezés a jobbra mutatást használja) */
 .hm-maki[data-facing="left"] .hm-cell { transform: scaleX(-1); }
