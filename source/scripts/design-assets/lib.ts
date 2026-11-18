@@ -1,9 +1,11 @@
 /** Websuli képkészlet — tiszta, tesztelhető segédfüggvények (docs/specs/2026-10-17-websuli-kepkeszlet.md). */
-export type AssetKind = "mascot" | "hero" | "icon" | "cover";
-export type AssetBand = "explorer" | "adventure" | "studio" | "laboratory" | "future";
+export type AssetKind = "mascot" | "hero" | "icon" | "cover" | "background" | "door" | "ornament";
+export type AssetBand = "explorer" | "adventure" | "studio" | "laboratory" | "future" | "advent";
 export type AssetItem = {
   id: string; kind: AssetKind; band: AssetBand; subjects: string[]; keywords: string[]; alt: string;
   aspect_ratio: string; prompt: string; references?: string[]; trial?: boolean;
+  /** Külön készletnél (`--set`): hány jelölt készüljön a tételből (alap: 1), és milyen felbontásban (alap: a `--resolution`). */
+  candidates?: number; resolution?: "1K" | "2K";
 };
 export type AssetManifest = { model: string; items: AssetItem[] };
 export type Style = { common: string; band: Record<string, string>; kind: Record<string, string> };
@@ -40,6 +42,47 @@ export function buildImageRequest(model: string, item: AssetItem, style: Style, 
 /** Az OpenRouter-ár (2026-10-17, /endpoints): 2K kép 0,09 USD, 1K kép 0,045 USD, referenciakép 0,003 USD. */
 export function estimateUsd(images: number, references: number, resolution: Resolution = "2K"): number {
   return images * (resolution === "1K" ? 0.045 : 0.09) + references * 0.003;
+}
+
+/** Külön készlet neve (`--set advent` → design-assets/advent/): csak kisbetű, szám, kötőjel — útvonal nem lehet. */
+export function parseSetName(raw: string | undefined): string | null {
+  if (raw === undefined) return null;
+  if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(raw) || raw === "candidates") throw new Error(`Hibás --set érték: ${raw}.`);
+  return raw;
+}
+
+/** A `--max-usd` költségplafon: pozitív szám; hiányzó érték: nincs plafon. */
+export function parseMaxUsd(raw: string | undefined): number | null {
+  if (raw === undefined) return null;
+  if (!/^\d+(\.\d+)?$/.test(raw.trim()) || !(Number(raw) > 0)) throw new Error(`Hibás --max-usd érték: ${raw} (pozitív szám kell).`);
+  return Number(raw);
+}
+
+export type ImageJob = { item: AssetItem; resolution: Resolution; estUsd: number };
+export type JobPlan = { jobs: ImageJob[]; totalUsd: number; requested: number; cutBy: "max" | "max-usd" | null };
+
+/**
+ * A futás képenkénti terve (spec 2026-11-18-adventi-naptar 13.6): tételenként `candidates` kép, a tétel saját felbontásával;
+ * a `max` a KÉPEK számát korlátozza, a `maxUsd` kemény plafon — az a kép, amellyel a becsült összeg túllépné, már nem kerül a
+ * tervbe (és utána egy sem). Tiszta függvény: a száraz futás és az éles futás ugyanebből dolgozik.
+ */
+export function planJobs(items: readonly AssetItem[], opts: { resolution: Resolution; max: number; maxUsd: number | null }): JobPlan {
+  const all: ImageJob[] = items.flatMap(item => {
+    const resolution = item.resolution ?? opts.resolution;
+    const estUsd = estimateUsd(1, item.references?.length ?? 0, resolution);
+    const count = Number.isSafeInteger(item.candidates) && (item.candidates as number) > 0 ? (item.candidates as number) : 1;
+    return Array.from({ length: count }, () => ({ item, resolution, estUsd }));
+  });
+  const jobs: ImageJob[] = [];
+  let totalUsd = 0;
+  let cutBy: JobPlan["cutBy"] = null;
+  for (const job of all) {
+    if (jobs.length >= opts.max) { cutBy = "max"; break; }
+    if (opts.maxUsd !== null && totalUsd + job.estUsd > opts.maxUsd + 1e-9) { cutBy = "max-usd"; break; }
+    jobs.push(job);
+    totalUsd += job.estUsd;
+  }
+  return { jobs, totalUsd, requested: all.length, cutBy };
 }
 
 /** Spec 2026-11-03-leckeborito: a `--resolution` kapcsoló (1K a 1200 px-es borítóhoz elég); hiányzó érték: 2K. */
