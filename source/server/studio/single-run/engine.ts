@@ -44,6 +44,7 @@ import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock,
 import { catalogVerbatimPaths, type CatalogPool } from "../../catalog/retrieval";
 import { isMemorySnapshot, memorySnapshot, snapshotPromptBlock, subjectMemoryEnabled, type MemorySnapshot } from "../../memory/subject-memory";
 import { subjectKeyOf } from "../../../shared/subject-key";
+import { sourceVisualsEnabled } from "../source-visuals-flag";
 import { cleanModelText, sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual } from "../../../shared/source-visuals";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
@@ -110,6 +111,11 @@ export type SingleRunDeps = {
    * szerzői munka (terv, tananyag, ábra, lektori javítás) a fő beszélgetésben marad.
    */
   fresh(system: string, opts?: { effort?: SingleRunEffort }): LessonConversation;
+  /**
+   * A forrás vizuális leltárának funkciókapcsolója a futásra (teszt, mérőharness). Hiányában a környezet dönt
+   * (`sourceVisualsEnabled()`, alapból KI) — KI állapotban a gyártás a kapcsoló előtti állapottal azonos.
+   */
+  sourceVisuals?: boolean;
 };
 
 /**
@@ -121,7 +127,7 @@ export function checkEffort(env: NodeJS.ProcessEnv = process.env): SingleRunEffo
 }
 
 /** Az állomás-futtató függősége: a beszélgetés, a napló és (ha van) a telemetria gyűjtője. */
-export type StationDeps = Pick<SingleRunDeps, "conversation" | "log"> & { telemetry?: TelemetryRecorder;
+export type StationDeps = Pick<SingleRunDeps, "conversation" | "log" | "sourceVisuals"> & { telemetry?: TelemetryRecorder;
   /** Spec 2026-10-16-gyartas-haladas: a javító forduló a felületnek is jelzés (az állomás neve, a forduló sorszáma 1-től). */
   onFix?(name: string, round: number): void };
 
@@ -290,6 +296,9 @@ function ownerContextOf(instruction?: string, corrections: SourceCorrection[] = 
 
 /** 1. állomás — a forrás beolvasása, megértése, tudásbank (fogalmak szó szerinti idézettel; az idézetet a program az átiraton méri). */
 export async function readSourceStation(deps: StationDeps, files: ExtractorFile[], instruction?: string): Promise<SingleRunMap> {
+  // Funkciókapcsoló (alapból KI): KI állapotban a kérés a leltárt nem kéri, a válasz `visuals` mezője — ha a modell kéretlenül adná —
+  // feldolgozatlan marad, a térképre üres leltár megy, és a leltár számlálói, naplósorai nem keletkeznek.
+  const visualsOn = deps.sourceVisuals ?? sourceVisualsEnabled();
   const request: TurnBlock[] = [
     ...files.map((file): TurnBlock => ({ type: "source", file })),
     text([
@@ -305,7 +314,7 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
         `TÖBB FORRÁSFÁJL (${files.map((f) => f.name).join(", ")}): adj meg fájlonkénti átiratot is: "fileTranscripts": [{"name": fájlnév, "text": a fájl betűhű átirata}]`,
         '(minden fájlhoz egyet), és minden fogalomnál "sourceFile": a fájl neve, amelyből az idézet származik — a quote ennek a fájlnak az átiratából, szó szerint.',
       ].join("\n") : "",
-      SOURCE_VISUALS_CONTRACT,
+      visualsOn ? SOURCE_VISUALS_CONTRACT : "",
     ].filter(Boolean).join("\n")),
   ];
   const names = files.map((f) => f.name);
@@ -355,6 +364,8 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
       return fix ? { ...c, ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), correction: correctionReasonCode(fix) } : c;
     });
     for (const fix of corrections) deps.log?.(`[EGYFUTÁS] Forrás-helyesbítés ${fix.localId}: ${correctionAuditText(fix)}`);
+    const accepted = { title: (raw.title ?? "").trim() || "Névtelen tananyag", subject: raw.subject!.trim(), classroom: raw.classroom as number, transcript: names.length === 1 ? perFile[names[0]] : names.map((n) => perFile[n]).join("\n\n"), fileTranscripts: perFile, concepts: corrected, corrections };
+    if (!visualsOn) return { ok: true, value: { ...accepted, visuals: [] } };
     // Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a vizuális leltár megítélése az ELFOGADOTT fogalmak után. A hibás tétel kimarad
     // és megszámolódik — a `problems` listába nem kerül, ezért javító fordulót nem indít (az a teljes JSON-t az átirattal kérné újra).
     // Review J1: oldalszöveg és oldalszám-határ CSAK a program által kinyert PDF-szövegből (ott minden oldalnak van jelölője); a modell
@@ -378,7 +389,7 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
     for (const r of removedConceptRefs) deps.log?.(`[EGYFUTÁS] Vizuális leltár: ${r.id} — törölt, nem létező fogalom-hivatkozás: ${r.conceptIds.join(", ")}`);
     if (visualsMissing) deps.log?.("[EGYFUTÁS] Vizuális leltár: a válaszban nincs `visuals` tömb — a futás üres leltárral megy tovább.");
     for (const d of dropped) deps.log?.(`[EGYFUTÁS] Vizuális leltár: kihagyott tétel${d.id ? ` (${d.id})` : ""} — ${d.reason}`);
-    return { ok: true, value: { visuals, title: (raw.title ?? "").trim() || "Névtelen tananyag", subject: raw.subject!.trim(), classroom: raw.classroom as number, transcript: names.length === 1 ? perFile[names[0]] : names.map((n) => perFile[n]).join("\n\n"), fileTranscripts: perFile, concepts: corrected, corrections } };
+    return { ok: true, value: { ...accepted, visuals } };
   });
 }
 
@@ -501,7 +512,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const telemetry = new TelemetryRecorder(input.resume ? telemetryOf(input.resume.output) : null);
   const resumed = input.resume ? resumePointOf(input.resume.output) : null;
   if (input.resume && !input.mapId) throw new SingleRunError("folytatás", ["A folytatáshoz a job térképe szükséges."]);
-  const station: StationDeps = { conversation, log: deps.log, telemetry, onFix };
+  // A leltár funkciókapcsolója EGYSZER, a futás elején dől el (befecskendezett érték, különben a környezet; alapból KI).
+  const visualsOn = deps.sourceVisuals ?? sourceVisualsEnabled();
+  const station: StationDeps = { conversation, log: deps.log, telemetry, onFix, sourceVisuals: visualsOn };
 
   // 1. Forrás + tudásbank (review #262: meglévő térképnél a gondozott térkép, stabil fogalomazonosítókkal).
   await workflowPhase("source"); await workflowPhase("scope");
@@ -521,7 +534,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   if (!map || !map.concepts.length) throw new SingleRunError("tudásbank", ["A tudásbankban nincs tanítható fogalom."]);
   const sourceText = map.meta.sourceText?.trim() ?? "";
   // S1a: a leltár a térképről jön (új forrásnál a most mentett, térképről indításnál a korábban mentett); a promptoknak az S1b adja át.
-  telemetry.gates.visualsFound = map.meta.visuals?.length ?? 0;
+  // KI állapotban a futás a térkép KORÁBBAN mentett leltárát sem használja, és a számláló nem jelenik meg a telemetriában.
+  const sourceVisuals: SourceVisual[] = visualsOn ? map.meta.visuals ?? [] : [];
+  if (visualsOn) telemetry.gates.visualsFound = sourceVisuals.length;
   // A forrás hamis egyenlőségének helyesbítése a tanított fogalmakon (új térképnél már a mentés előtt megtörtént — ott ugyanaz az eredmény).
   const corrections: SourceCorrection[] = arithmeticSourceCorrections(map.concepts.map((c) => ({ localId: c.localId, term: c.term, definition: c.definition, quote: c.quote })));
   const concepts: MapConcept[] = applySourceCorrections(map.concepts, corrections);

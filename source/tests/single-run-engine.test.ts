@@ -591,13 +591,15 @@ const VISUAL_STEPS = { id: "v2", kind: "process", sourceFile: "forras.txt", page
 const sourceReply = (visuals?: unknown) => JSON.stringify({ title: "Terület", subject: fixture.subject, classroom: fixture.classroom, transcript: TRANSCRIPT, ...(visuals === undefined ? {} : { visuals }),
   concepts: [{ id: "area", term: "terület", definition: "A síkidom által lefedett rész nagysága.", quote: "A téglalap területe az oldalak szorzata.", type: "concept", examWeight: "core", relatedIds: [] }] });
 const gatesOf = (mem: ReturnType<typeof memoryStore>) => (mem.steps.at(-1)!.output as { telemetry: RunTelemetry }).telemetry.gates;
+/** Az S1a tesztjei BE kapcsolt leltárral futnak (a kapcsoló alapértéke KI — `tests/source-visuals-flag.test.ts`). */
+const visualDeps = (...args: Parameters<typeof deps>): SingleRunDeps => ({ ...deps(...args), sourceVisuals: true });
 
 test("S1a: a modell leltára a térképre kerül (fájlonként a source_files elemébe), a fogalom-hivatkozás megtisztítva", async () => {
   const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([VISUAL_TABLE, VISUAL_STEPS]) : null));
   const mem = memoryStore();
   const maps: SingleRunMap[] = [];
   const files = [{ name: "forras.txt", kind: "text" as const, content: TRANSCRIPT }];
-  const result = await runSingleLesson({ files, ownerId: "u1" }, deps(client, mem, maps));
+  const result = await runSingleLesson({ files, ownerId: "u1" }, visualDeps(client, mem, maps));
   assert.equal(result.htmlFileId, "html1");
   assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.kind, v.sourceFile, v.conceptIds, v.verified]), [["v1", "table", "forras.txt", ["area"], "visual-only"], ["v2", "process", "forras.txt", [], "visual-only"]]);
   const { sourceFileRow } = await import("../server/studio/single-run/live");
@@ -616,7 +618,7 @@ test("S1a: a hibás vizuális tétel kimarad és megszámolódik — javító fo
   const mem = memoryStore();
   const maps: SingleRunMap[] = [];
   const logs: string[] = [];
-  const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...deps(client, mem, maps), log: (m) => logs.push(m) });
+  const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...visualDeps(client, mem, maps), log: (m) => logs.push(m) });
   assert.equal(result.htmlFileId, "html1");
   assert.deepEqual(maps[0].visuals.map((v) => v.id), ["v1"]);
   assert.equal(client.calls.filter((c) => c === "1").length, 1, "az 1. állomás egyetlen forduló");
@@ -633,7 +635,7 @@ test("S1a: visuals nélküli (vagy nem tömb) válasz → a futás üres leltár
     const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply(visuals) : null));
     const mem = memoryStore();
     const maps: SingleRunMap[] = [];
-    const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, mem, maps));
+    const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, visualDeps(client, mem, maps));
     assert.equal(result.htmlFileId, "html1");
     assert.deepEqual(maps[0].visuals, []);
     assert.equal(client.calls.filter((c) => c === "1" || c === "forrás és tudásbank").length, 1, "nincs javító forduló");
@@ -645,14 +647,14 @@ test("S1a: visuals nélküli (vagy nem tömb) válasz → a futás üres leltár
 test("S1a: az 1. állomás kérése a leltárt is kéri; térképről indított futás (files: []) a térkép leltárát kapja", async () => {
   let request = "";
   const spy = withOverride(scriptedClient(), (station, turns) => { if (station === "1") request = lastUserText(turns); return null; });
-  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(spy, memoryStore()));
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, visualDeps(spy, memoryStore()));
   assert.match(request, /"visuals": \[\.\.\.\]/);
   assert.match(request, /- decisionTree: /);
 
   const client = scriptedClient();
   const mem = memoryStore();
   mem.saveVisuals([{ ...VISUAL_STEPS, verified: "visual-only" } as SourceVisual]);
-  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(client, mem));
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(client, mem));
   assert.equal(result.htmlFileId, "html1");
   assert.ok(!client.calls.includes("1"), "nincs forrás-állomás");
   const gates = gatesOf(mem);
@@ -667,7 +669,7 @@ test("S1a (review J1): natív PDF-nél a modell átiratának hiányos oldaljelö
   const mem = memoryStore();
   const maps: SingleRunMap[] = [];
   // Szövegréteg nélküli PDF: nincs `extractedText`, a fájl natívan megy a modellhez — a tényleges oldalszám nem ismert.
-  const result = await runSingleLesson({ files: [{ name: "fuzet.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=" }], ownerId: "u1" }, deps(client, mem, maps));
+  const result = await runSingleLesson({ files: [{ name: "fuzet.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=" }], ownerId: "u1" }, visualDeps(client, mem, maps));
   assert.equal(result.htmlFileId, "html1");
   assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.page, v.verified]), [["v2", 3, "visual-only"]], "megmarad; a modell saját átirata nem igazol");
   assert.equal(gatesOf(mem).visualsDropped, 0);
@@ -678,7 +680,7 @@ test("S1a (review J1): a program által kinyert PDF-szöveg jelölősora a tény
   const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([{ ...VISUAL_STEPS, sourceFile: "lap.pdf", page: 2 }, { ...VISUAL_STEPS, id: "v3", sourceFile: "lap.pdf", page: 3 }]) : null));
   const mem = memoryStore();
   const maps: SingleRunMap[] = [];
-  const result = await runSingleLesson({ files: [{ name: "lap.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=", extractedText }], ownerId: "u1" }, deps(client, mem, maps));
+  const result = await runSingleLesson({ files: [{ name: "lap.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=", extractedText }], ownerId: "u1" }, visualDeps(client, mem, maps));
   assert.equal(result.htmlFileId, "html1");
   assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.page, v.verified]), [["v2", 2, "text"]]);
   assert.equal(gatesOf(mem).visualsDropped, 1);

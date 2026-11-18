@@ -11,6 +11,7 @@ import type { ExtractorFile } from "../extractor";
 import { createDrizzlePipelineStore } from "../pipeline-store";
 import { createLessonConversation, type ConversationState, type SingleRunEffort } from "./conversation";
 import { readSourceStation, runSingleLesson, SingleRunError, singleRunResumable, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
+import { sourceVisualsEnabled } from "../source-visuals-flag";
 import { eq } from "drizzle-orm";
 
 
@@ -71,9 +72,11 @@ export async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFil
 }
 
 /** A különálló kinyerés tartalmi lenyomata: ugyanazok a fájlok ugyanazt a térképet adják vissza (nincs második modellhívás). */
-export function singleRunMapHash(files: ExtractorFile[], title?: string): string {
+export function singleRunMapHash(files: ExtractorFile[], title?: string, sourceVisuals: boolean = sourceVisualsEnabled()): string {
   // Review #261: egyértelmű (JSON) kódolás — a fájlhatár nem csúszhat el (egy fájl tartalma nem utánozhat két fájlt).
-  return createHash("sha256").update(JSON.stringify(["single-run-map-2", title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
+  // A leltár funkciókapcsolója: KI állapotban a lenyomat a kapcsoló előttivel azonos; BE állapotban külön jelölőt kap, hogy a leltár
+  // nélkül (KI állapotban) kinyert, azonos tartalmú térkép ne jöjjön vissza gyorsítótárból leltár helyett.
+  return createHash("sha256").update(JSON.stringify(["single-run-map-2", title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content]), ...(sourceVisuals ? ["visuals-1"] : [])])).digest("hex");
 }
 
 /**
