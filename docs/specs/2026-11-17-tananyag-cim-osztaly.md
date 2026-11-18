@@ -123,7 +123,10 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - Keresés osztálybetűvel, ragozva, római számmal: „5.b”, „5/a”, „5-ösöknek”, „ötödikben”, „V. osztály”, „IX.b osztály” → az osztály.
   Római szám csak osztály-szóval együtt osztály („IV. Béla”, „i.e.”, „V” önmagában nem az).
 - „5 osztályozás”, „osztályfőnöki 5”: az „osztályozás” keresőszó marad (csak az osztály-szó ragozott alakjai esnek ki).
-- Keresés több osztályra: „5. és 6. osztály” → mindkét osztály anyagai (a kötőszó és a névelő nem keresőszó).
+- Keresés több osztályra: „5. és 6. osztály” → mindkét osztály anyagai (a kötőszó és a névelő nem keresőszó). Felsorolásban
+  („5. és 6. osztály”, „5., 6. osztály”, „5–6. osztály”, „ötödik és hatodik osztály”) az osztály-szó minden tagra vonatkozik: mind
+  kifejezett osztály, így aktív szűrő mellett is mindkét osztály megjelenik (Vercel Agent lelet, PR #494). A puszta számok
+  felsorolása („5, 6”) nem kifejezett alak.
 - A cím más osztályt nevez meg, mint a mező → nincs előtag (lásd fent).
 - Érvénytelen érték (13, -1, 2.5, `null`, `undefined`, `"7"`) → nincs előtag.
 - Üres / csak szóköz cím → az előtag nélküli (üres) cím marad; a kártya nem áll csak előtagból.
@@ -144,6 +147,10 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
   nem kap előtagot); „Az ív osztályozása”, „Vi osztály”, „I. osztályú” cím osztálynak számít, a keresőben „ív osztály” → 4. osztály;
   az adminban az „osztály” szó önmagában már nem hoz minden érvényes osztályú anyagot (a K2 javítás következménye). Valós adaton
   egyik sem fordul elő.
+- **„10-es átlépés” — jegy (koordinátori döntés 2026-11-18):** a képzős alak („N-es/-as/-os/-ös”) kifejezett osztály-alakként
+  átlépi a szűrőt (a 3. osztály szűrője mellett +1 találat a 2. osztályból); javítási irány: kezelődjön úgy, mint a puszta szám.
+- **Kötőjeles tartomány — jegy:** az „5-6. osztály” a keresőben nem osztály (a tört / tartomány-védelem blokkolja); a felsorolás
+  javítása nem fedi. Római számos felsorolásnál („V. és VI. osztály”) csak az osztály-szóval álló tag osztály.
 - **A3 maradéka — jegy:** két angol című anyag dupla jelölést kap („6. osztály · 6. Class …”, „4. osztály · … 4th Grade”); az
   „5-6. osztály” kötőjeles tartomány a keresőben nem osztály (a nagykötőjeles igen).
 
@@ -183,4 +190,6 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
   system SHALL minden leütésnél legalább a kész alak találatait mutatni (a lista nem esik a végső alak alá).
 - [x] E17 WHEN osztályszűrő aktív és a kifejezés puszta szám vagy puszta sorszámnév („1”, „Első”) THEN the system SHALL a szűrőt
   érvényesíteni, kivéve ha a szűrt találat üres (ekkor minden osztályban keres, jelzéssel).
+- [x] E18 WHEN a kifejezés osztályok felsorolása osztály-szóval („5. és 6. osztály”) THEN the system SHALL a felsorolás minden tagját
+  kifejezett osztálynak venni (aktív szűrő mellett is minden felsorolt osztály anyagai megjelennek).
 - [x] E12 The system SHALL nem módosítani adatbázist, migrációt, tárolt címet, éles adatot, gyártási promptot, játékfájlt.

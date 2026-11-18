@@ -390,3 +390,44 @@ test("U2: a felület kiegészítő illesztése (admin „Nincs osztály”) a sz
   assert.equal(ids(null), "bad");
   assert.equal(ids(4), "", "aktív szűrő mellett az érvénytelen osztályú anyag nem jelenik meg");
 });
+
+// ---- Vercel Agent lelet (PR #494): felsorolásban az osztály-szó minden tagra vonatkozik ----
+
+test("felsorolás: „5. és 6. osztály” mindkét tagja kifejezett osztály — a 6. osztály szűrője mellett is megvan az 5. osztály", () => {
+  const list = [
+    { id: "a5", title: "Törtek összeadása", description: "", subject: "matematika", classroom: 5 },
+    { id: "b5", title: "A honfoglalás", description: "", subject: "tortenelem", classroom: 5 },
+    { id: "a6", title: "Törtek szorzása", description: "", subject: "matematika", classroom: 6 },
+    { id: "a7", title: "Egyenletek", description: "", subject: "matematika", classroom: 7 },
+  ];
+  const run = (query: string, selected: number | null) => {
+    const result = filterMaterialsBySearch(list, prepareMaterialSearch(query), selected);
+    return `${result.files.map((file) => file.id).join(",")}|${result.allClassrooms}`;
+  };
+  const lists = ["5. és 6. osztály", "5., 6. osztály", "5 és 6 osztály", "5. vagy 6. osztály", "5–6. osztály", "5; 6. osztály", "ötödik és hatodik osztály",
+    "5. osztály és 6. osztály", "5.o és 6.o", "5. és 6. osztályos", "V. osztály és VI. osztály", "5, 6 osztály", "6. és 5. osztály"];
+  for (const query of lists) {
+    assert.deepEqual(prepareMaterialSearch(query).explicitGrades, [5, 6], query);
+    assert.equal(run(query, null), "a5,b5,a6|false", query);
+    assert.equal(run(query, 6), "a5,b5,a6|true", query);
+    assert.equal(run(query, 7), "a5,b5,a6|true", query);
+  }
+  assert.equal(run("5. és 6. osztály törtek", 6), "a5,a6|true", "felsorolás + keresőszó");
+  assert.deepEqual(prepareMaterialSearch("5., 6. és 7. osztály").explicitGrades, [5, 6, 7]);
+});
+
+test("felsorolás: puszta számok felsorolása nem kifejezett; a felsoroláson kívüli puszta szám nem válik kifejezetté", () => {
+  assert.deepEqual(prepareMaterialSearch("5, 6").explicitGrades, []);
+  assert.deepEqual(prepareMaterialSearch("5 és 6").explicitGrades, []);
+  assert.deepEqual(prepareMaterialSearch("első és második").explicitGrades, []);
+  // A „2” nem a felsorolás része (szó választja el) — csak az 5. kifejezett.
+  assert.deepEqual(prepareMaterialSearch("2 kismalac 5. osztály").explicitGrades, [5]);
+  assert.deepEqual(prepareMaterialSearch("5. osztály törtek 3").explicitGrades, [5]);
+  assert.deepEqual(prepareMaterialSearch("5. osztály törtek 3").grades, [3, 5]);
+  // Római számos felsorolásnál csak az osztály-szóval álló tag osztály (a római szám önmagában szándékosan nem az: „IV. Béla”).
+  assert.deepEqual(prepareMaterialSearch("V. és VI. osztály").explicitGrades, [6]);
+  // A kötőjeles tartomány („5-6. osztály”) nincs ebben a javításban — továbbra sem osztály (jegy).
+  assert.deepEqual(parseGradeQuery("5-6. osztály").grades, []);
+  // Idegen jelölő karakter a kifejezésben nem zavarja az elemzést.
+  assert.deepEqual(parseGradeQuery(" 5. osztály "), { grades: [5], rest: [] });
+});

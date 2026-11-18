@@ -151,43 +151,58 @@ export function parseGradeQuery(query: string): GradeQuery {
   return { grades, rest };
 }
 
+/**
+ * Az elemzés közben minden felismert osztály-kifejezés helyére egy-egy jelölő karakter kerül (magánhasználatú Unicode-tartomány:
+ * se betű, se szám, így a későbbi minták szóhatárnak látják). A jelölő sorszáma a felismert kifejezés indexe.
+ */
+const MARK_BASE = 0xe000;
+const MAX_MARKS = 0x100;
+const MARK_CLASS = "\\ue000-\\ue0ff";
+/** Felsorolás: jelölők, köztük csak szóköz, vessző, pontosvessző, kötőjel / nagykötőjel, „és”, „vagy” („5. és 6. osztály”, „5., 6. osztály”). */
+const GRADE_LIST = new RegExp(`[${MARK_CLASS}](?:(?:\\s|[,;–-]|\\bes\\b|\\bvagy\\b)*[${MARK_CLASS}])*`, "gu");
+const ANY_MARK = new RegExp(`[${MARK_CLASS}]`, "gu");
+
 function analyzeGradeQuery(query: string): AnalyzedGradeQuery {
-  const grades = new Set<number>();
-  const explicit = new Set<number>();
-  let text = foldText(query);
-  text = text.replace(QUERY_PROGRAMMING, (_match, before: string) => {
-    grades.add(0);
-    explicit.add(0);
-    return `${before} `;
-  });
+  const found: Array<{ grade: number; explicit: boolean }> = [];
+  /** A felismert kifejezés rögzítése; a visszaadott szöveg kerül a helyére (túl sok kifejezésnél az eredeti marad). */
+  const mark = (match: string, before: string, grade: number, explicit: boolean): string => {
+    if (found.length >= MAX_MARKS) return match;
+    found.push({ grade, explicit });
+    return `${before}${String.fromCharCode(MARK_BASE + found.length - 1)}`;
+  };
+  let text = foldText(query).replace(ANY_MARK, " ");
+  text = text.replace(QUERY_PROGRAMMING, (match, before: string) => mark(match, before, 0, true));
   text = text.replace(QUERY_ORDINAL, (match, before: string, word: string) => {
     const grade = ORDINAL_GRADE.get(word);
-    if (grade !== undefined) {
-      grades.add(grade);
-      // Kifejezett alak: képzővel vagy osztály-szóval („ötödikes”, „ötödik osztály”); a puszta „ötödik” nem az.
-      if (match.slice(before.length) !== word) explicit.add(grade);
-    }
-    return `${before} `;
+    // Kifejezett alak: képzővel vagy osztály-szóval („ötödikes”, „ötödik osztály”); a puszta „ötödik” nem az.
+    return grade === undefined ? match : mark(match, before, grade, match.slice(before.length) !== word);
   });
-  text = text.replace(QUERY_ROMAN, (_match, before: string, numeral: string) => {
+  text = text.replace(QUERY_ROMAN, (match, before: string, numeral: string) => {
     const grade = ROMAN_GRADE.get(numeral);
-    if (grade !== undefined) {
-      grades.add(grade);
-      explicit.add(grade);
-    }
-    return `${before} `;
+    return grade === undefined ? match : mark(match, before, grade, true);
   });
   text = text.replace(QUERY_NUMBER, (match, before: string, digits: string) => {
     const grade = normalizeClassroom(Number(digits));
-    if (grade === null) return match;
-    grades.add(grade);
     // Kifejezett alak: osztály-szó, „.o”, képző vagy osztálybetű áll a szám után; a puszta „5” / „5.” nem az.
-    if (!BARE_NUMBER.test(match.slice(before.length))) explicit.add(grade);
-    return `${before} `;
+    return grade === null ? match : mark(match, before, grade, !BARE_NUMBER.test(match.slice(before.length)));
   });
-  const rest = text.split(/[^\p{L}\p{N}]+/u).filter((word) => word && !GRADE_WORD_ONLY.test(word) && !FILLER_WORDS.has(word));
-  const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
-  return { grades: sorted(grades), rest, explicitGrades: sorted(explicit) };
+  // Felsorolásban az osztály-szó az egész felsorolásra vonatkozik: „5. és 6. osztály” mindkét tagja kifejezett osztály
+  // (Vercel Agent lelet, PR #494) — különben a 6. osztály szűrője mellett az 5. osztály találatai kimaradnának.
+  for (const list of text.match(GRADE_LIST) ?? []) {
+    const members = [...list]
+      .map((char) => char.charCodeAt(0) - MARK_BASE)
+      .filter((index) => index >= 0 && index < found.length)
+      .map((index) => found[index]);
+    if (members.some((member) => member.explicit)) for (const member of members) member.explicit = true;
+  }
+  const rest = text.replace(ANY_MARK, " ").split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word && !GRADE_WORD_ONLY.test(word) && !FILLER_WORDS.has(word));
+  const sorted = (list: number[]) => [...new Set(list)].sort((x, y) => x - y);
+  return {
+    grades: sorted(found.map((item) => item.grade)),
+    rest,
+    explicitGrades: sorted(found.filter((item) => item.explicit).map((item) => item.grade)),
+  };
 }
 
 export type SearchableMaterial = {

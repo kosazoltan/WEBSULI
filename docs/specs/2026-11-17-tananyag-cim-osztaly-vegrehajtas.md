@@ -183,3 +183,16 @@ Jelentés: a session scratchpadjében (`review-tananyag-cim/jelentes.md`); íté
 5. Regressziós mérés valós adaton (243 anyag): a kereső-mérés (`a.mts`) és a szűrt mérés (minden osztály-szűrő × a korpusz szavai,
    szópárjai, címei és az osztály-alakok) — az eredmény a PR-leírásban.
 6. Kapuk: `gate:stage`; a három böngészős spec `--workers=1`; `gate:push`.
+
+## 12. Vercel Agent lelet a PR #494-en (`material-title.ts`, fej `6c71ce84`) — felsorolás
+
+- **Mérés előbb (243 anyag):** a 6. osztály szűrője mellett „5. és 6. osztály”, „5., 6. osztály”, „5 és 6 osztály”, „5–6. osztály”,
+  „ötödik és hatodik osztály” → csak a 6. osztály 21 anyaga (szűrő nélkül 74: 53 + 21); a felsorolásnak csak az osztály-szó melletti
+  tagja volt kifejezett. A mainen mind 0 találat (nem regresszió, de az új ígérethez képest hiány) — a lelet valódi.
+- **Javítás** (`source/shared/material-title.ts`, `analyzeGradeQuery`): a felismert osztály-kifejezések helyére jelölő kerül; az
+  egybefüggő felsorolás (a jelölők között csak szóköz, vessző, pontosvessző, kötőjel / nagykötőjel, „és”, „vagy”) minden tagja
+  kifejezett, ha bármelyik tagja az. A `parseGradeQuery` kimenete változatlan.
+- **Nem fedi:** a kötőjeles „5-6. osztály” (a szám-minta tartomány-védelme miatt nem osztály) és a római számos felsorolás — jegy.
+- **Tesztek:** `tests/material-title.test.ts` (13 felsorolás-alak szűrő nélkül, a 6. és a 7. osztály szűrőjével; ellenpéldák),
+  `tests/material-title.spec.ts` (mentett 4. osztály + „4. és 5. osztály”).
+- **Mérés utána:** mind az öt alak a 6. osztály szűrőjével 74 találat (53 + 21), jelzéssel; a regressziós mérések a PR-leírásban.

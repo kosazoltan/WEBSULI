@@ -210,6 +210,14 @@ for (const vp of VIEWPORTS) {
     await expect.poll(() => homeIds(page)).toEqual(["e1", "x1"]);
     await expect(notice).toBeVisible();
 
+    // Felsorolás (Vercel Agent lelet, PR #494): „4. és 5. osztály” — a szűrő osztálya MELLETT az 5. osztály is megjelenik.
+    await search.fill("4. és 5. osztály");
+    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4", "l5", "n4"]);
+    await expect(notice).toBeVisible();
+    await search.fill("5. és 4. osztály törtek");
+    await expect.poll(() => homeIds(page)).toEqual(["a4", "l5", "n4"]);
+    await expect(notice).toBeVisible();
+
     // A keresés törlésekor a szűrő újra él.
     await search.fill("");
     await expect.poll(() => homeIds(page)).toEqual(["a4", "k4", "n4"]);
