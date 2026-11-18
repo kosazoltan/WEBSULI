@@ -53,9 +53,60 @@ function useOverflowing<T extends HTMLElement>() {
   return [ref, overflowing] as const;
 }
 
+/** Igaz, ha a tábla fejlécének valamelyik SZAVA a celláján belül több sorba tört (a szó közepén vágva). */
+export function headerWordBroken(table: HTMLTableElement): boolean {
+  const range = document.createRange();
+  for (const th of Array.from(table.querySelectorAll("thead th"))) {
+    const walker = document.createTreeWalker(th, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (const word of (node.textContent ?? "").matchAll(/\S+/g)) {
+        range.setStart(node, word.index);
+        range.setEnd(node, word.index + word[0].length);
+        if (new Set(Array.from(range.getClientRects(), (r) => Math.round(r.top))).size > 1) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Vak ellenőr J3: a KÉTOSZLOPOS (fele-fele, nem görgő) tábla fejlécének szava ne törjön ketté, amíg kisebb térközzel kifér.
+ * Mérés után a tábla `data-head-fit` jelzője: nincs (a szavak épek) → `fit` (szűkebb térköz, a tónusjel külön sorban, az oszlopok a
+ * fejléc szavaihoz igazodnak) → `break` (végső eset: így sem fér ki görgetés nélkül — a szó elválasztással törik, a tábla nem görög).
+ */
+function useHeaderFit(scrollRef: { current: HTMLElement | null }, enabled: boolean) {
+  const [fit, setFit] = useState<"fit" | "break" | undefined>(undefined);
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    const table = scroller?.querySelector("table");
+    if (!enabled || !scroller || !table) return;
+    let alive = true;
+    const measure = () => {
+      if (!alive) return;
+      table.removeAttribute("data-head-fit");
+      let next: "fit" | "break" | undefined;
+      if (headerWordBroken(table)) {
+        table.setAttribute("data-head-fit", "fit");
+        next = headerWordBroken(table) || scroller.scrollWidth > scroller.clientWidth + 1 ? "break" : "fit";
+      }
+      if (next) table.setAttribute("data-head-fit", next); else table.removeAttribute("data-head-fit");
+      setFit(next);
+    };
+    measure();
+    // A betűk betöltése a szavak szélességét megváltoztathatja.
+    void document.fonts?.ready.then(measure);
+    if (typeof ResizeObserver === "undefined") return () => { alive = false; };
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    return () => { alive = false; observer.disconnect(); };
+  }, [scrollRef, enabled]);
+  return fit;
+}
+
 export function TableAnim({ params, caption }: AnimProps) {
   const p = parseVisualParams("table", params);
   const [scrollRef, overflowing] = useOverflowing<HTMLDivElement>();
+  const headFit = useHeaderFit(scrollRef, !!p && p.headers.length <= 2);
   if (!p) return null;
   const columns = p.headers.length;
   // Három vagy több oszlopnál az első oszlop sorfejléc (és görgetéskor a helyén marad); a kétoszlopos tábla két egyenrangú oszlop.
@@ -66,7 +117,7 @@ export function TableAnim({ params, caption }: AnimProps) {
       {/* Fókuszmegálló és nevesített régió csak akkor, ha a tábla tényleg görög (különben fölös Tab-megálló lenne). */}
       <div ref={scrollRef} className="sv-table-scroll" data-overflowing={overflowing ? "true" : undefined}
         {...(overflowing ? { tabIndex: 0, role: "region", "aria-label": name } : {})}>
-        <table className="sv-table" data-cols={columns} data-row-headers={rowHeaders ? "true" : undefined} style={{ "--sv-cols": columns } as CSSProperties}>
+        <table className="sv-table" data-cols={columns} data-row-headers={rowHeaders ? "true" : undefined} data-head-fit={headFit} style={{ "--sv-cols": columns } as CSSProperties}>
           {p.caption && <caption>{p.caption}</caption>}
           <thead>
             <tr>

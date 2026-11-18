@@ -84,6 +84,27 @@ async function measure(page: Page) {
   });
 }
 
+/** Vak ellenőr J3: a kétoszlopos tábla fejlécének kettétört (több sorba került) szavai és a megjelenítő `data-head-fit` jelzője. */
+async function headerWords(page: Page) {
+  return page.locator('table.sv-table[data-cols="2"]').first().evaluate((table) => {
+    const range = document.createRange();
+    const broken: string[] = [];
+    for (const th of Array.from(table.querySelectorAll("thead th"))) {
+      const walker = document.createTreeWalker(th, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const word of (node.textContent ?? "").matchAll(/\S+/g)) {
+          range.setStart(node, word.index!);
+          range.setEnd(node, word.index! + word[0].length);
+          if (new Set(Array.from(range.getClientRects(), (r) => Math.round(r.top))).size > 1) broken.push(word[0]);
+        }
+      }
+    }
+    const scroller = table.closest<HTMLElement>(".sv-table-scroll")!;
+    return { fit: table.getAttribute("data-head-fit"), broken, overflow: scroller.scrollWidth - scroller.clientWidth,
+      headFont: parseFloat(getComputedStyle(table.querySelector("thead th")!).fontSize) };
+  });
+}
+
 for (const viewport of VIEWPORTS) {
   for (const variant of ["1", "max"] as const) {
     test(`forrás-ábrák (${variant === "max" ? "legnagyobb tartalom" : "szokásos"}) — ${viewport.name}: nincs kilógás, levágás, átfedés, oldalgörgetés`, async ({ page }) => {
@@ -133,6 +154,14 @@ for (const viewport of VIEWPORTS) {
       expect(fit.overflow, "a kétoszlopos tábla görgetés nélkül elfér").toBeLessThanOrEqual(1);
       expect(fit.cells, "mindkét oszlop látszik a kereten belül").toEqual([true, true]);
       await expect(twoColumn.first()).not.toHaveAttribute("tabindex", /.*/);
+      // Vak ellenőr J3: a fejléc szava („megszámlálható”, „megszámlálhatatlan”) nem törik ketté — a szűkebb térköz elég hozzá.
+      const head = await headerWords(page);
+      // A legnagyobb tartalom fejléce szóköz nélküli, a keretnél hosszabb szöveg is lehet: ott (és csak ott) a végső eset, a szótörés él.
+      if (variant === "1") {
+        expect(head.broken, `a kétoszlopos tábla fejlécének szavai épek (jelző: ${head.fit}, betű: ${head.headFont}px)`).toEqual([]);
+        expect(head.fit, "a végső eset (szótörés) itt nem lép életbe").not.toBe("break");
+      } else if (head.broken.length) expect(head.fit, `szó csak a végső esetben törik: ${head.broken.join(", ").slice(0, 80)}`).toBe("break");
+      expect(head.overflow, "a szűkebb térközzel sem görög").toBeLessThanOrEqual(1);
 
       // Review J2: a tábla, a kártyák és a szabálydoboz ugyanahhoz a tartalomszélességhez igazodik (nincs féloldalas üres sáv).
       const edges = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("figure.sv-figure")].map((fig) => {
@@ -244,6 +273,10 @@ for (const band of [{ classroom: 2, id: "explorer" }, { classroom: 4, id: "adven
       return { border: getComputedStyle(el).borderBottomColor, accent };
     });
     expect(tone.border).toBe(tone.accent);
+    // Vak ellenőr J3: 360 px-en, a sáv betűméretével sem törik ketté a fejléc szava (a régi képeken „megszámlál / ható”).
+    const head = await headerWords(page);
+    expect(head.broken, `${band.id}: a fejléc szavai épek (jelző: ${head.fit}, betű: ${head.headFont}px)`).toEqual([]);
+    expect(head.overflow, `${band.id}: a kétoszlopos tábla nem görög`).toBeLessThanOrEqual(1);
     await page.screenshot({ path: `${SHOTS}/sav-${band.id}-360.png`, fullPage: true });
   });
 }

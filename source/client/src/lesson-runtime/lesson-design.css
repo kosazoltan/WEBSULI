@@ -315,6 +315,14 @@
 /* Kétoszlopos tábla: telefonon se kényszerüljön görgetésre egy törhetetlen szó miatt — a szó a cellán belül törik (review J5). */
 [data-ws-theme] .sv-table[data-cols="1"] :is(th, td), [data-ws-theme] .sv-table[data-cols="2"] :is(th, td) { overflow-wrap: anywhere; min-width: 4.5em; }
 [data-ws-theme] .sv-table[data-cols="1"], [data-ws-theme] .sv-table[data-cols="2"] { min-width: 0; table-layout: fixed; }
+/* Vak ellenőr J3: a fejléc szava ne törjön ketté, amíg kisebb térközzel kifér (a jelzőt a megjelenítő méri — `useHeaderFit`).
+   `fit`: szűkebb belső margó, a tónusjel külön sorban, a fejléc szava nem törhet, az oszlopok a fejléc szavaihoz igazodnak (a törzs
+   cellái továbbra is bárhol törhetnek, így a tábla nem görög). `break` (végső eset): fele-fele oszlopok, a szó elválasztással törik. */
+[data-ws-theme] .sv-table[data-head-fit="fit"] { table-layout: auto; }
+[data-ws-theme] .sv-table[data-head-fit="fit"] :is(th, td) { padding-left: 6px; padding-right: 6px; }
+[data-ws-theme] .sv-table[data-head-fit="fit"] thead th { overflow-wrap: normal; word-break: normal; hyphens: manual; font-size: 14px; letter-spacing: -0.01em; }
+[data-ws-theme] .sv-table[data-head-fit="fit"] thead th .sv-tone-mark { display: block; margin: 0 0 2px; }
+[data-ws-theme] .sv-table[data-head-fit="break"] thead th { hyphens: auto; }
 /* Asztali nézet (review J2): a tábla, a kártyák és a szabálydoboz ugyanahhoz a tartalomszélességhez igazodik — a régi ábrafajták
    920 px-es korlátja (lesson-experience.css) rájuk nem érvényes, a többi fajtán változatlan. */
 [data-band][data-experience][data-ws-theme] figure.sv-figure > :is(.sv-table-scroll, .sv-cards, .sv-rule, .sv-scroll-hint) { max-width: 100%; }
