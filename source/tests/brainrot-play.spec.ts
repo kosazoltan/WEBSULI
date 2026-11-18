@@ -134,7 +134,9 @@ test.describe("kampóval mért szabályok", () => {
     await expect(cages(page)).toHaveCount(4, { timeout: 10_000 });
   }
 
-  test("J1 + valós óra: nyitott kérdésnél a világ lassítva fut (≥ 0,35×, < 1×), és a 90 mp-es óra jár", async ({ page }) => {
+  // SPEC-VÁLTOZÁS 2026-11-17 (terv 2026-11-17-brainrot-valaszido D5, tulajdonosi döntés „Álljon meg”): a 90 mp-es menet-óra
+  // a nyitott kérdés alatt ÁLL (régi elvárás: jár).
+  test("J1 + menet-óra: nyitott kérdésnél a világ lassítva fut (≥ 0,35×, < 1×), és a 90 mp-es menet-óra áll (D5)", async ({ page }) => {
     await startWithQuestion(page);
     // A lapon belül mérve: két minta 1 s különbséggel (a valós időt is a lap méri).
     const m = await page.evaluate(async () => {
@@ -149,7 +151,7 @@ test.describe("kampóval mért szabályok", () => {
     expect(m.open, "a kérdés végig nyitva volt").toBe(2);
     expect(m.sim, "a világ a kérdés alatt fut (≥ 0,35×)").toBeGreaterThanOrEqual(0.35);
     expect(m.sim, "a világ a kérdés alatt lassul (0,6×)").toBeLessThan(0.8);
-    expect(m.clock, "a 90 mp-es óra a kérdés alatt is jár").toBeGreaterThan(0.8);
+    expect(m.clock, "a 90 mp-es menet-óra a kérdés alatt áll (D5)").toBe(0);
   });
 
   test("J4/J5: rossz ketrec → a helyes ketrec ≥ 1,8 mp-ig zöld (képkockánként), nincs dialógus; „Miért?” alatt a világ áll", async ({ page }) => {

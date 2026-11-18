@@ -1504,6 +1504,8 @@ export default function BrainRotSteal() {
       {inRun && (
         <InlineQuestion
           {...q.bind}
+          // D6 (review L2): az előjelzés alatt a hátralévő idő legfeljebb az ablak (a számláló ne mutasson egy mp-cel többet).
+          remainingMs={q.bind.presentation ? Math.min(q.bind.remainingMs, q.bind.presentation.windowMs) : q.bind.remainingMs}
           onPick={onAnswer}
           mode="bar"
           skin="arena"

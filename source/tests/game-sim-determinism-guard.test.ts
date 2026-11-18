@@ -59,7 +59,8 @@ function gameCores(): string[] {
   if (!existsSync(lib)) return [];
   return readdirSync(lib)
     .filter((entry) => statSync(join(lib, entry)).isDirectory())
-    .flatMap((entry) => ["sim.ts", "core.ts"].map((file) => join(lib, entry, file)))
+    // `pacing.ts` (Brain Rot válaszidő, review L7): a sim importálja, ezért ugyanaz a tilalom vonatkozik rá.
+    .flatMap((entry) => ["sim.ts", "core.ts", "pacing.ts"].map((file) => join(lib, entry, file)))
     .filter((file) => existsSync(file));
 }
 
