@@ -45,8 +45,8 @@ Teszt: `scripts/qa/e2e-shards.test.mjs` (`node --test`): címút (beágyazott / 
 valódi fájlokra**: a `ci.yml` mátrixának számozott részei = 1…`E2E_SHARDS`; pontosan egy job neve „Playwright E2E”, `always()`
 feltétellel, az `e2e-parts`-ra várva, a rész-eredményt ellenőrző lépéssel; a súlyfájl érvényes.
 
-- Parancs: `node --test scripts/qa/e2e-shards.test.mjs` → minden eset zöld.
-- Commit: `chore(ci): súlyozott E2E-felosztó és számláló-ellenőr (e2e-shards)`.
+- Parancs: `node --test scripts/qa/e2e-shards.test.mjs` → minden eset zöld (az őr-esetek a 3. lépés workflow-jával együtt).
+- Commit: a 3. lépéssel EGYÜTT (az őr-esetek a valódi `ci.yml`-t olvassák, külön commitban pirosak lennének).
 
 ## 3. lépés — Workflow: `.github/workflows/ci.yml`
 
@@ -89,10 +89,11 @@ alakban hívd — C-72):
    `docker ps --filter name=websuli-e2e- --format "{{.Names}} {{.RunningFor}}"` (≥ 2 friss konténernél várj).
 5. A valódi jelentésen a `check` „lefutott” oszlopa = a rész tesztszáma.
 
-## 5. lépés — Csapda-bejegyzés és kapuk
+## 5. lépés — Csapda-javaslat és kapuk
 
-- `docs/agent-csapdak.md`: új bejegyzés (a beépített `--shard` darabszám szerint vág; a futási sorrend nem a fájllista; `--list`
-  módban a JSON a szabványos kimenetre megy; a kötelező ellenőrzés nevét záró job viselje `always()`-szal).
+- C-48: szelet-PR nem ír a közös `docs/agent-csapdak.md` katalógusba; a csapda-javaslat a zárójelentésbe kerül, az orkesztrátor
+  veszi fel (a beépített `--shard` darabszám szerint vág; a futási sorrend nem a fájllista; `--list` módban a JSON a szabványos
+  kimenetre megy; a kötelező ellenőrzés nevét záró job viselje `always()`-szal, mert a kihagyott job sikeresnek számít).
 - `npm run gate:stage`, majd `npm run gate:push` a munkafa gyökeréből (a `native-arch.test.ts` helyi bukása ismert kivétel).
 
 ## 6. lépés — Az első CI-futásnál ellenőrizendő (NOT RUN a push előtt)
