@@ -202,15 +202,22 @@ test("R6 / S4: a már kiment „félbehagyva” levél utáni pillanatképre a v
 
 test("R7 / S5: körönként a LEGTÖBB választ tartalmazó pillanatkép marad — a később érkező, kevesebb válaszú nem írja felül", async () => {
   reset();
-  const previousDelay = setPartialDelay(700);
+  // Az időablakok a mért időpontokhoz igazodnak, nem fix várakozáshoz: terhelt gépen (lassú kérés) is egyértelmű a kimenet.
+  const DELAY = 3000, GAP = 1500;
+  const previousDelay = setPartialDelay(DELAY);
   try {
     clearPendingPartials();
     const body = { kind: "quiz", roundId: "round-s5-most", partial: true, fingerprint: "fp-s5-most" };
     assert.deepEqual(await (await post({ ...body, picks: picks(4) })).json(), { queued: true, partial: true });
-    await sleep(400);
+    const firstQueuedBy = Date.now(); // az első időzítő legkésőbb firstQueuedBy + DELAY-kor járna le
+    await sleep(GAP);
+    const secondSentAt = Date.now(); // a második időzítő legkorábban secondSentAt + DELAY-kor jár le
     assert.deepEqual(await (await post({ ...body, picks: picks(2) })).json(), { queued: true, partial: true }); // sorrendcsere / másik fül régebbi állapota
     assert.equal(pendingPartialCount(), 1, "körönként egy várakozó");
-    await sleep(450); // az első időzítő (700 ms) eddigre lejárt volna (400 + 450 ms), az újraindított (400 + 700 ms) még nem
+    // A mérési pont az első időzítő lejárta UTÁN, de a második előtt van (mindkét oldalon ≥ 700 ms tartalék).
+    const checkAt = firstQueuedBy + DELAY + 700;
+    assert.ok(checkAt < secondSentAt + DELAY - 700, "a mérési ablak egyértelmű");
+    await sleep(Math.max(0, checkAt - Date.now()));
     assert.equal(sent.length, 0, "a később érkező pillanatkép az időzítőt újraindította");
     assert.ok(await waitFor(() => sent.length === 2));
     await sleep(400);
