@@ -4,10 +4,24 @@ Terv: `docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md` (tulajdonosi döntése
 tesztek: 0.3). Ág: `fix/szokoar-tema-es-sebesseg`, munkafa: `.claude/worktrees/szokoar-tema`. A régi változat: `b4b84db6`
 (`.claude/worktrees/szokoar-regi`).
 
-Állapot: mérföldkő (játszható helyi változat) — 2026-11-18. Nyitott: (1) 360×640 és 844×390 magas víznél a leghosszabb
-kérdés a figurára esik; (2) nyitott kérdés alatt a menedék részben takarva lehet; (3) menetindítási hosszú feladat 4× CPU-n
-3,1 s (telefon) / 12,5 s (fold) — #491 nélkül mérve, a kérdésbank-hook (#491) és a jelenet-építés elkülönítése hátravan;
-(4) D2-b döntés (akadály: A — nincs, ajánlott).
+Állapot: a koordinátori döntések (2026-11-18) után — kompakt kérdés kis képernyőn (A), akadály nincs (D2-b: A), menetindítás
+javítva. Valódi telefon: UNVERIFIED.
+
+### Teljesítmény-mérés (4× lassított CPU, valódi GPU, `measure-game-frames.mjs`; a #491 csak a mérő-munkafában, ideiglenesen)
+
+| Változat | Telefon: indítás leghosszabb képkocka | Kihajtott: indítás | Leghosszabb megakadás menet közben |
+|---|---|---|---|
+| ág, #491 nélkül | 3133 ms | 12 533 ms | 5,3 s (kihajtott, séta) |
+| ág + #491 | 2600 ms | 2267 ms | nincs > 100 ms (p99) |
+| + jelenet a menü alatt előkészítve | 167 / 250 ms | 217 / 167 ms | menüben 4,4 s blokk (kézi bank) |
+| + azonos méretnél nincs újraépítés, Lambert-díszlet (nem „high” szint) | 100 ms | 83 / 100 ms | menüben / tétlenben 4–5 s (kézi bank) |
+| + a kézi bank szeletelt feldolgozása (végleges) | 250 / 117 ms | 83 / 150 ms | nincs 1 s feletti; p99 ≤ 250 ms |
+
+Ok-feltárás (CPU-profil): az 5,3 s-os és a menübeli 4–11 s-os blokk a `mergedPools` `useMemo` — a ~10 MB-os kézi bank minden
+tételének ellenőrzése egyben (`splitBankItemsByTier` → `isPlayableQuestion`); nem szemétgyűjtés, nem textúra, nem árnyék. Az
+indítás akadása a jelenet felépítése (geometria, környezet-térkép, shader-fordítás) volt. Az utolsó mérési kör (r11–12) a gépen
+közben futó idegen tesztkonténer miatt végig 12–30 fps volt (menüben is) — nem értékelhető, ezért nincs a táblában. A 200 ms-os
+indítási cél a telefonos nézetben egy mérésben (250 ms) még nem teljesült.
 
 ## Lépések
 
