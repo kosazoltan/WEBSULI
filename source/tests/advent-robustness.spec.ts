@@ -5,7 +5,7 @@ import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank/index";
 import { learnerLinkSecret, signLearnerToken } from "../server/lib/learner-token";
 import { ADVENT_ART_SPECS } from "../shared/advent/art";
 import { CHRISTMAS_ITEMS } from "../shared/advent/christmasBank/index";
-import { chooseGrade, pickOption, playDoor, proxyHeaders, seedProgress, setAdventTime, settle, shot } from "./support/advent-e2e";
+import { chooseGrade, pickOption, playDoor, proxyHeaders, seedProgress, setAdventTime, settle, shot, tapDoor } from "./support/advent-e2e";
 import { measureOverflow, overlappingTargets } from "./support/game-mobile-quality";
 
 /**
@@ -41,7 +41,7 @@ test("5xx, HTML-törzs, üres és nem a naptártól jövő válasz: a gyerek SOH
   await openCalendar(page, DEC5, 5);
   // 1) 502 a proxytól, HTML-oldallal, az ablak megnyitásakor.
   await page.route("**/api/advent/doors/1/open", (route) => route.fulfill({ status: 502, contentType: "text/html", body: "<html> <head><title>502 Bad Gateway</title></head> <body> <center><h1>502 Bad Gateway</h1></center> <hr><center>cloudflare</center> </body> </html>" }));
-  await page.getByTestId("advent-door-1").tap();
+  await tapDoor(page, 1);
   await expect(page.getByTestId("advent-error")).toContainText("Most nem sikerült kinyitni az ablakot");
   await expectNoRawError(page);
   await shot(page, "r-k1-502");
@@ -49,13 +49,13 @@ test("5xx, HTML-törzs, üres és nem a naptártól jövő válasz: a gyerek SOH
   // 2) 403 JSON `message` nélkül (pl. lejárt CSRF-token) a megnyitásnál: alapszöveg, nem a nyers JSON.
   await page.route("**/api/advent/doors/2/open", (route) => route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "Forbidden", code: "EBADTOKEN" }) }));
   await page.getByTestId("advent-error-retry").tap();
-  await page.getByTestId("advent-door-2").tap();
+  await tapDoor(page, 2);
   await expect(page.getByTestId("advent-error")).toContainText("Most nem sikerült kinyitni az ablakot");
   await expectNoRawError(page);
   await page.unroute("**/api/advent/doors/2/open");
   await page.getByTestId("advent-error-retry").tap();
   // 3) 500 angol szöveggel a VÁLASZNÁL (nyitott kérdés): a hiba a párbeszédablakban van, és csak EGYSZER.
-  await page.getByTestId("advent-door-1").tap();
+  await tapDoor(page, 1);
   await expect(page.locator('.advent-options[data-armed="true"]')).toBeVisible();
   await page.route("**/api/advent/doors/1/answer", (route) => route.fulfill({ status: 500, contentType: "text/plain", body: "Internal Server Error" }));
   await page.getByTestId("advent-option-0").tap();
@@ -131,14 +131,14 @@ test("lassú hálózat (3 mp): az ablak azonnal jelez, a többi láthatóan vár
   await openCalendar(page, DEC5, 5);
   const gridBefore = (await page.getByTestId("advent-grid").boundingBox())!;
   await page.route("**/api/advent/doors/3/open", async (route) => { await new Promise((r) => setTimeout(r, 3000)); await route.fallback(); });
-  await page.getByTestId("advent-door-3").tap();
+  await tapDoor(page, 3);
   // Azonnal (jóval a válasz előtt): töltésjelzés az ablakon és a rácson.
   await expect(page.getByTestId("advent-door-3")).toHaveAttribute("aria-busy", "true", { timeout: 500 });
   await expect(page.getByTestId("advent-door-3")).toHaveAttribute("data-opening", "true");
   await expect(page.getByTestId("advent-door-3")).toHaveAccessibleName("3. ablak — nyílik…");
   await expect(page.getByTestId("advent-grid")).toHaveAttribute("data-busy", "true");
   // Másik ablakra koppintva nem „halott”: megmondja, hogy várni kell.
-  await page.getByTestId("advent-door-2").tap({ force: true });
+  await tapDoor(page, 2, { force: true });
   await expect(page.getByTestId("advent-notice")).toContainText("még nyílik az előző ablak");
   await expect(page.getByTestId("advent-opening")).toContainText("Nyitjuk a 3. ablakot");
   await shot(page, "r-k5-lassu-nyitas");
@@ -155,7 +155,7 @@ test("időkorlát: ha a megnyitás ~15 mp-ig nem felel, barátságos üzenet és
   let held = 0;
   await page.route("**/api/advent/doors/1/open", async (route) => { held++; await new Promise((r) => setTimeout(r, 25_000)); await route.abort().catch(() => undefined); });
   const started = Date.now();
-  await page.getByTestId("advent-door-1").tap();
+  await tapDoor(page, 1);
   await expect(page.getByTestId("advent-error")).toContainText("Most nem sikerült kinyitni az ablakot", { timeout: 22_000 });
   const waited = Date.now() - started;
   expect(waited, `várakozás: ${waited} ms`).toBeGreaterThan(13_000);
@@ -220,10 +220,10 @@ test("két lap ugyanazon a kérdésen: a második lap a TÁROLT eredményt kapja
   await expect(other.getByTestId("advent-grid")).toBeVisible();
   // Egyszerre csak egy lap van előtérben (a háttérlapon a böngésző megállítja az animációkat): a gyerek is váltogat.
   await page.bringToFront();
-  await page.getByTestId("advent-door-2").tap();
+  await tapDoor(page, 2);
   await expect(page.getByTestId("advent-question")).toBeVisible();
   await other.bringToFront();
-  await other.getByTestId("advent-door-2").tap();
+  await tapDoor(other, 2);
   await expect(other.getByTestId("advent-question")).toHaveText(await page.getByTestId("advent-question").innerText());
   // Az első lap hibásan válaszol; a második a HELYES válaszra koppint.
   await page.bringToFront();
@@ -242,7 +242,7 @@ test("dupla koppintás a „Tovább” gombon: a második koppintás nem éri a 
   await openCalendar(page, DEC5, 5);
   let opens = 0;
   page.on("request", (r) => { if (r.method() === "POST" && /\/doors\/\d+\/open$/.test(r.url())) opens++; });
-  await page.getByTestId("advent-door-3").tap();
+  await tapDoor(page, 3);
   await pickOption(page, false);
   const next = (await page.getByTestId("advent-next").boundingBox())!;
   const x = next.x + next.width / 2; const y = next.y + next.height / 2;
@@ -282,7 +282,7 @@ test("magától megnyílt összesítés bezárása után a fókusz nem vész el 
 
 test("bezárt naptár (január): nincs „javítható” ablak és „december N-én nyílik” felirat; semmi nem koppintható (S6)", async ({ page }) => {
   await openCalendar(page, DEC5, 5);
-  await page.getByTestId("advent-door-1").tap();
+  await tapDoor(page, 1);
   await pickOption(page, false);
   await page.getByTestId("advent-next").tap();
   await expect(page.getByTestId("advent-door-1")).toHaveAttribute("data-state", "repairable");
@@ -337,7 +337,7 @@ for (const size of [{ width: 360, height: 640 }, { width: 844, height: 390 }]) {
       const body = (await response.json()) as Record<string, unknown>;
       await route.fulfill({ response, json: { ...body, explanation: LONG_EXPLANATION } });
     });
-    await page.getByTestId("advent-door-1").tap();
+    await tapDoor(page, 1);
     await expect(page.getByTestId("advent-question")).toHaveText(LONG_PROMPT);
     await expect(page.locator('.advent-options[data-armed="true"]')).toBeVisible();
     await settle(page);

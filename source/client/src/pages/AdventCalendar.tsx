@@ -99,6 +99,13 @@ export default function AdventCalendar() {
   const questionRef = useRef<HTMLParagraphElement | null>(null);
   const nextRef = useRef<HTMLButtonElement | null>(null);
   const gridGuardUntil = useRef(0);
+  // A védőidő a DOM-on is látszik (data-guard), hogy a gép (teszt) is megvárhassa, mint a gyerek a második koppintás előtt.
+  const [guarded, setGuarded] = useState(false);
+  useEffect(() => {
+    if (!guarded) return;
+    const timer = window.setTimeout(() => setGuarded(false), GRID_GUARD_MS);
+    return () => window.clearTimeout(timer);
+  }, [guarded]);
   const wantsAuto = useRef(false);
   const volatileDevice = useMemo(() => adventDevice().volatile, []);
 
@@ -203,6 +210,7 @@ export default function AdventCalendar() {
   const closeQuestion = () => {
     const finished = open?.result && (open.result.closing.kind === "gift" || open.result.summary.answered === open.result.summary.total);
     gridGuardUntil.current = performance.now() + GRID_GUARD_MS;
+    setGuarded(true);
     setOpen(null);
     setError(null);
     if (finished && !open?.readOnly) { summaryOpener.current = questionOpener.current; setSummaryOpen(true); }
@@ -366,7 +374,7 @@ export default function AdventCalendar() {
           )}
         </section>
       ) : (
-        <ol className="advent-grid" data-testid="advent-grid" aria-label="A naptár 24 ablaka" data-busy={busy ? "true" : "false"} aria-busy={busy}>
+        <ol className="advent-grid" data-testid="advent-grid" aria-label="A naptár 24 ablaka" data-busy={busy ? "true" : "false"} data-guard={guarded ? "true" : "false"} aria-busy={busy}>
           {state.layout.map((day) => {
             const door = doorsByDay.get(day)!;
             const shown = shownState(door, closed);
