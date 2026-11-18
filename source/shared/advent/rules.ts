@@ -15,8 +15,11 @@ export const ADVENT_RULES = {
   repair: "new-question",
   maxRepairs: 2,
   maxRounds: 3,
-  /** (h): az 1–2. évfolyam mind a 24 ablaka karácsonyi; ablakonként 1 javítás, legfeljebb 2 kör. */
-  lowGrade: { maxGrade: 2, maxRepairs: 1, maxRounds: 2 },
+  /**
+   * (h): az 1–2. évfolyam mind a 24 ablaka karácsonyi. A javítások száma itt is 2 — a (b) döntés kivétel nélküli (review K3);
+   * a karácsonyi készlet mérete miatt legfeljebb 2 kör (24 ablak × 3 kérdés × 2 kör = 144 tétel).
+   */
+  lowGrade: { maxGrade: 2, maxRepairs: 2, maxRounds: 2 },
   /** A „Hamarosan” kártya november ennyiedikétől látszik. */
   teaserFromDay: 24,
   /** A pótlási időszak január ennyiedikéig tart (bezárólag). */
@@ -24,7 +27,7 @@ export const ADVENT_RULES = {
 } as const;
 
 /** (h) „Vegyesen”: a 3–12. évfolyamon minden harmadik ablak karácsonyi — a 24. mindig. */
-export const ADVENT_CHRISTMAS_DAYS = [3, 6, 9, 12, 15, 18, 21, 24] as const;
+export const ADVENT_CHRISTMAS_DAYS: readonly number[] = Array.from({ length: ADVENT_DOORS }, (_, i) => i + 1).filter((day) => day % 3 === 0);
 
 /** (c) C1 — a tulajdonos szó szerinti záró üzenete. Őr-teszt karakterre ellenőrzi; máshol csak importálni szabad. */
 export const ADVENT_GIFT_MESSAGE = "Menj oda apukádhoz, mutasd meg neki, és kérj tőle ajándékot.";
@@ -39,7 +42,7 @@ export function isLowGrade(grade: number): boolean {
 }
 
 export function isChristmasDoor(day: number, grade: number): boolean {
-  return isLowGrade(grade) || day % 3 === 0;
+  return isLowGrade(grade) || ADVENT_CHRISTMAS_DAYS.includes(day);
 }
 
 export function limitsForGrade(grade: number): { maxRepairs: number; maxRounds: number } {
@@ -102,23 +105,45 @@ export function adventSummary(doors: Readonly<Record<number, DoorRecord | undefi
   return { total: ADVENT_DOORS, answered, solved, firstTry, repairable, failed, passed: adventPassed(solved, answered), percent: adventPercent(solved) };
 }
 
-export type AdventClosingKind = "gift" | "repair" | "new-round" | "done" | "progress";
+export type AdventClosingKind = "gift" | "repair" | "new-round" | "done" | "progress" | "closed";
 export type AdventClosing = { kind: AdventClosingKind; text: string };
 
-/** R2–R3 — a záró / bátorító szöveg. Hibáztatás, sürgetés nincs. */
-export function adventClosing(summary: AdventSummary, round: number, maxRounds: number): AdventClosing {
+export type AdventClosingContext = {
+  round: number;
+  maxRounds: number;
+  /** A naptár fázisa (`shared/advent/calendar.ts`); csak `open` és `catchup` fázisban lehet válaszolni és új kört kérni. */
+  phase: "before" | "teaser" | "open" | "catchup" | "closed";
+  /** Hány nyitható, még meg nem válaszolt ablak van MOST. */
+  waiting: number;
+};
+
+/** Elérhető-e még ebben a körben a 95%: a megoldott + a javítható + a még meg nem válaszolt ablakokkal. */
+export function adventStillReachable(summary: AdventSummary): boolean {
+  const best = summary.solved + summary.repairable + (summary.total - summary.answered);
+  return best * 100 >= ADVENT_PASS_PERCENT * summary.total;
+}
+
+/**
+ * R2–R3 — a záró / bátorító szöveg. Hibáztatás, sürgetés nincs; a szöveg nem ígér olyat, ami már nem érhető el (review A6), és a
+ * fázishoz igazodik (review K5): lezárt naptárnál nem hív vissza „holnap”, és nem ajánl új kört.
+ */
+export function adventClosing(summary: AdventSummary, ctx: AdventClosingContext): AdventClosing {
   if (summary.passed) return { kind: "gift", text: ADVENT_GIFT_MESSAGE };
+  const lit = `${summary.solved} ablak már világít a ${summary.total}-ből.`;
+  if (ctx.phase !== "open" && ctx.phase !== "catchup") {
+    return { kind: "closed", text: `Az idei naptár bezárt. Nálad ${summary.solved} ablak világított a ${summary.total}-ből — jövőre újra találkozunk!` };
+  }
   if (summary.repairable > 0) {
-    return {
-      kind: "repair",
-      text: `Szép munka! ${summary.solved} ablak már világít a ${summary.total}-ből. Még ${summary.repairable} ablak javításra vár — javítsd ki, és a végén meglepetés vár!`,
-    };
+    const tail = adventStillReachable(summary) ? "javítsd ki, és a végén meglepetés vár!" : "javítsd ki, hadd világítson minél több!";
+    return { kind: "repair", text: `Szép munka! ${lit} Még ${summary.repairable} ablak javításra vár — ${tail}` };
   }
   if (summary.answered === summary.total) {
-    if (round < maxRounds) {
+    if (ctx.round < ctx.maxRounds) {
       return { kind: "new-round", text: "Végigcsináltad — ez nagy dolog! Kérj egy új naptárat, és próbáld meg újra: most már többet tudsz." };
     }
     return { kind: "done", text: "Idén rengeteget gyakoroltál — büszke lehetsz magadra! Mutasd meg a szüleidnek, mennyit dolgoztál." };
   }
-  return { kind: "progress", text: `${summary.solved} ablak már világít a ${summary.total}-ből. Gyere vissza holnap is!` };
+  if (ctx.waiting > 0) return { kind: "progress", text: `${lit} Még ${ctx.waiting} ablak vár rád!` };
+  if (ctx.phase === "open") return { kind: "progress", text: `${lit} Gyere vissza holnap is!` };
+  return { kind: "progress", text: lit };
 }

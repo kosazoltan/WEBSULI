@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { adventNow, budapestMidnightUtc, budapestParts, isAdventWritable, isDoorUnlocked } from "../shared/advent/calendar";
+import { adventNow, budapestMidnightUtc, budapestParts, isAdventWritable, isDoorUnlocked, isValidDate } from "../shared/advent/calendar";
 
 /** Adventi naptár — idő és fázis (docs/specs/2026-11-18-adventi-naptar.md R5, E4, E6–E9; A12–A14). Az időpontok UTC-ben. */
 
@@ -94,4 +94,23 @@ test("az évszám nincs beégetve: 2026–2030 mindegyikében ugyanígy működi
 test("érvénytelen ablakszám soha nem nyitható", () => {
   const now = at("2026-12-25T08:00:00Z");
   for (const day of [0, 25, -1, 1.5, Number.NaN]) assert.equal(isDoorUnlocked(day, now), false);
+});
+
+test("december 24. → 25. éjféli határ: 23:59:59-kor még „open”, 00:00:00-kor „catchup” (review A4)", () => {
+  const last = at("2026-12-24T22:59:59Z");
+  assert.equal(last.phase, "open");
+  assert.equal(last.today, "2026-12-24");
+  assert.equal(last.openDay, 24);
+  assert.equal(last.nextOpensAt, null);
+  const first = at("2026-12-24T23:00:00Z");
+  assert.equal(first.phase, "catchup");
+  assert.equal(first.today, "2026-12-25");
+  assert.equal(first.openDay, 24);
+});
+
+test("érvénytelen időpont: érthető hiba, nem csendes rossz eredmény (review A7)", () => {
+  assert.equal(isValidDate(new Date("2026-12-01T00:00:00Z")), true);
+  for (const bad of [new Date(Number.NaN), new Date("nem dátum"), "2026-12-01", null, undefined, 0]) assert.equal(isValidDate(bad), false);
+  assert.throws(() => budapestParts(new Date(Number.NaN)), /érvénytelen időpont/);
+  assert.throws(() => adventNow(new Date("x")), RangeError);
 });
