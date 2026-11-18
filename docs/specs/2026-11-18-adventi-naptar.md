@@ -1069,7 +1069,10 @@ másik törlődik; válasz nélküli eszköz-sor egyszerűen törlődik. Utána 
 történik (egy tranzakcióban, mindkét sor zárolva; GET-en nincs mellékhatás) — az olvasás előnézetként már a megtartandó haladást
 mutatja. Az átvétellel egyidejű válasz nem vész el és nem ad 500-at (a zár sorba rendezi; a közben megszűnt sorra írás 409
 „frissítjük”). Adatvédelem: az eszköz haladása a tanuló személyes adatává válik — a tanuló sora a tanulóval együtt törlődik (idegen
-kulcs), a tanulóhoz kötött játékos-fiók adatletöltése tartalmazza. Megvalósítás: \`server/advent/store.ts\` \`adoptionChoice\`,
+kulcs), a tanulóhoz kötött játékos-fiók adatletöltése tartalmazza. **TULAJDONOSI DÖNTÉS 2026-11-18:** a játékos-fiók TÖRLÉSEKOR a tanuló
+adventi haladása NEM törlődik, a tanulónál marad (a tanuló sora a tanulóé; a fiók csak a saját, `player` sorát viszi); a szülői
+párosítási útmutató (`shared/pairing-guide.ts` `ADVENT_GUEST_PROGRESS_NOTE`) kimondja: „Ha a gyermek a személyes linkjével nyitja
+meg a naptárat azon az eszközön, amelyen addig vendégként játszott, a vendégként elért haladás a gyermek profiljához kerül.” Megvalósítás: \`server/advent/store.ts\` \`adoptionChoice\`,
 \`adopt\`; \`server/advent/routes.ts\` (az alany feloldása után). Jegy: #170 (lezárva).
 
 **Évfolyam (vak ellenőr k6):** az évfolyam az első VÁLASZNÁL rögzül, nem a megnyitáskor (R6, E10); az első válaszig a profil

@@ -633,6 +633,8 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
    `AdventRowGoneError` → 409 (`refresh: true`).
 3. Tesztek: nincs-sor → átkerül (az olvasás nem ír); van-sor → a jobb marad, egyenlőségnél a tanulóé; versenyhelyzet (egyidejű válasz
    és átvétel, háromszor) → nincs 500, egyetlen sor, a sikeres válasz megvan; `adoptionChoice` egységteszt.
+4. Tulajdonosi döntések (2026-11-18): a mondat a szülői párosítási útmutatóba (`shared/pairing-guide.ts` `ADVENT_GUEST_PROGRESS_NOTE`, teszt:
+   `tests/pairing-guide.test.ts`); fióktörléskor a tanuló sora megmarad (DB-teszt a kötött fiók törlésére).
 
 ## Állapotnapló
 
