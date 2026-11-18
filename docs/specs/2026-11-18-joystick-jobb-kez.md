@@ -168,13 +168,19 @@ lóg. Ez a változás előtt is így volt (a súgó középen áll, a tárcsa a 
 
 ## Várható ütközések a nyitott ágakkal
 
-| Ág | Hol | Mi |
+A próba-összefésülés (`git merge-tree --write-tree HEAD <ág>`, 2026-11-18, a `f511ea5a` fejről) eredménye:
+
+| Ág (mért fej) | Ütközik-e a JELEN változással | Hol, és a feloldás |
 |---|---|---|
-| `fix/szokoar-tema-es-sebesseg` | `TsunamiEscapeEnglish.tsx` (`TsunamiTouchControls` megjegyzése — egyetlen megjegyzés-blokk) | az ág ugyanazt a `.tsunami-controls.game-touch-layer` szerkezetet tartja (tárcsa + „Sprint” `HoldButton`), így a közös szabály ott is hat, kódütközés nélkül; összefésülés után az ág új elrendezésén a `joystick-side.spec.ts` Szökőár-eseteit újra kell futtatni (a két-ujjas eset az „Ugrás” gombot név szerint keresi) |
-| `feat/jatek-j3a-kockavadasz-runabanya`, `perf/kockavadasz-telefon-gyors` | `BlockCraftQuiz.tsx` (`isLookZone`, a vászon `pointerdown`, a súgószövegek, a `<style>` blokk), `blockcraft-mobile.test.ts` | szöveg- és aláírás-szintű ütközés |
-| `fix/brainrot-valaszido` | `BrainRotSteal.tsx`, `brainrot-play.spec.ts` | a `leftHanded` állapot és a „K.4/16” teszt környéke |
-| `feat/jatek-j6a-aszteroida-kristaly` | `SpaceAsteroidQuiz.tsx` (súgószöveg, `<style>` blokk, bemenet-mérő) | szövegszintű |
-| `feat/jatek-j7b-tornado-utelagazas` | `TornadoHunter200.tsx` (`TouchControls`, beállítások, szünet menü gyerekei) | szövegszintű |
+| `origin/main` (`dc76ba52`, benne a #497 Brain Rot válaszidő) | nem | automatikusan összefésülhető (`BrainRotSteal.tsx`, `brainrot-play.spec.ts` is) |
+| `fix/szokoar-tema-es-sebesseg` (`aea6f70b`) | igen, 1 fájl | `TsunamiEscapeEnglish.tsx`: a `TsunamiTouchControls` fölötti megjegyzés (mindkét ág átírta). Feloldás: az ág szerkezete marad (tárcsa + „Sprint” `HoldButton` ugyanabban a `.tsunami-controls.game-touch-layer` sávban), a megjegyzésbe a „közös beállítás szerinti oldal” mondat kerül. Kódütközés nincs; összefésülés után a `joystick-side.spec.ts` Szökőár-eseteit újra kell futtatni (a kétujjas eset az „Ugrás” gombot név szerint keresi — az ágon „Sprint”). |
+| `feat/jatek-j3a-kockavadasz-runabanya` (`9083a7c0`) | igen, 1 fájl | `BlockCraftQuiz.tsx` (`isLookZone`, a vászon `pointerdown`, a súgószövegek, a `<style>` blokk). Feloldás: az ág kódjára a jelen változás 5 pontja (terv D3 Kockavadász sor) kézzel átvezetendő; a `blockcraft-mobile.test.ts` forrásmintája követi. |
+| `perf/kockavadasz-telefon-gyors` (`9e918bdd`) | nem | automatikusan összefésülhető |
+| `feat/jatek-j6a-aszteroida-kristaly` (`9da0e8c2`) | nem | a `SpaceAsteroidQuiz.tsx` automatikusan összefésülhető; összefésülés után ellenőrizendő, hogy az ág megtartotta-e a `.sa-controls` / `.sa-actions` szerkezetet és a `space` bemenet-mérőt |
+| `feat/jatek-j7b-tornado-utelagazas` (`bc91a969`) | igen, 1 fájl | `TornadoHunter200.tsx` (`TouchControls`, a beállítások és a szünet menü „Irányítás” blokkja). Feloldás: a `leftHanded` prop és a két „Jobbkezes / Balkezes” blokk törlése az ág kódjában is. |
+
+A `game-sim-determinism-guard.test.ts` és a `quiz-bank-scale-db.integration.ts` ütközése a j3a / j6a / j7b ágakon a `main`-nel
+szemben áll fenn (a jelen változás ezeket a fájlokat nem érinti).
 
 ## Elfogadás (EARS)
 
