@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, Square, Volume2 } from "lucide-react";
 import { pronunciationVerdict, type PronunciationVerdict } from "@shared/pronunciation";
-import { isSoftSpeechError, speechStartTimeoutMs, ttsAudioUrl } from "@shared/speech-fallback";
-import { nextSpeechStep, preparedAudioCandidate, rememberPreparedFailure, speechPlan, PREPARED_AUDIO_START_TIMEOUT_MS, type PreparedFailure, type StepOutcome } from "@shared/speech-chain";
-import { hasPreparedAudio, ttsAudioHash, ttsAudioPath } from "@shared/tts-audio-key";
+import { isSoftSpeechError, ttsAudioUrl } from "@shared/speech-fallback";
+import {
+  availableFromManifest, hasLaterLocalVoice, nextSpeechStep, preparedAudioCandidate, rememberPreparedFailure, speechPlan, voicePhaseBudgetMs, voiceStepTimeoutMs,
+  PREPARED_AUDIO_START_TIMEOUT_MS, type PreparedFailure, type StepOutcome,
+} from "@shared/speech-chain";
+import { hasPreparedAudio, ttsAudioAvailabilityUrl, ttsAudioHash, ttsAudioPath, TTS_AUDIO_AVAILABILITY_MAX_KEYS } from "@shared/tts-audio-key";
 
 type Alternative = { transcript: string };
 type Recognition = {
@@ -96,19 +99,34 @@ export function stopSpeech(): void {
   if (synth && (synth.speaking || synth.pending)) synth.cancel();
 }
 
-// Terv 2026-11-18-tananyag-gyartas-minoseg, S8b-2: az előre gyártott hang kulcsát a gomb megjelenésekor számoljuk ki (a lenyomat aszinkron),
-// hogy a kattintás GESZTUSÁBAN azonnal indulhasson a lejátszás (iOS Safari csak így engedi). A hiányzónak bizonyult kulcsot a munkamenet
-// idejére megjegyezzük: ugyanarra a szóra nem megy újabb kérés (a szerveren / CDN-ben a hiány nem ragad be — S8b).
+// Terv 2026-11-18-tananyag-gyartas-minoseg, S8b-2 (review J1–J2): ELÉRHETŐSÉGI JEGYZÉK. A lecke betöltésekor a kliens kiszámolja a
+// szószedet szövegeinek kulcsát (a lenyomat aszinkron), és EGY kéréssel megkérdezi, melyikhez van hang a tárban. Kattintáskor így
+// szinkron tudja: ha a kulcs elérhető → előre gyártott hang; ha nem (vagy a jegyzék még nem jött meg / hibázott) → azonnal, a kattintás
+// GESZTUSÁBAN a rangsorolt böngészőhang. Üres tárnál hangfájl-kérés egyáltalán nem megy, és nincs 404-re váró kör.
 const preparedIds = new Map<string, string>();
-const missingPrepared = new Set<string>();
+const availablePrepared = new Set<string>();
+const failedPrepared = new Set<string>();
+const requestedManifests = new Set<string>();
 const preparedKey = (text: string, language: string) => `${language}\n${text}`;
-/** A kulcs előkészítése; biztonságos környezet (WebCrypto) híján vagy hibás bemenetre csendben kimarad — a lánc a böngészőhanggal indul. */
-export function prepareSpeech(text: string, language: string): void {
-  const key = preparedKey(text, language);
-  if (!hasPreparedAudio(language) || preparedIds.has(key)) return;
-  ttsAudioHash(text, language).then(id => { preparedIds.set(key, id); }).catch(() => { /* nincs kulcs: a böngészőhang szól */ });
+/** A lecke felolvasható szövegeinek előkészítése; WebCrypto híján, hibás válaszra vagy hálózati hibára csendben kimarad (a böngészőhang szól). */
+export function prepareLessonSpeech(texts: readonly string[], language: string): void {
+  if (!hasPreparedAudio(language)) return;
+  const unique = Array.from(new Set(texts.filter(text => text.trim()))).slice(0, TTS_AUDIO_AVAILABILITY_MAX_KEYS);
+  if (!unique.length) return;
+  Promise.all(unique.map(async text => { const id = await ttsAudioHash(text, language); preparedIds.set(preparedKey(text, language), id); return id; }))
+    .then(async ids => {
+      const url = ttsAudioAvailabilityUrl(ids);
+      if (!url || requestedManifests.has(url)) return;
+      requestedManifests.add(url);
+      try {
+        const response = await fetch(url, { credentials: "same-origin" });
+        // 429 / hiba: nincs jegyzék → a böngészőhang szól; a következő leckebetöltés újra megpróbálhatja.
+        if (!response.ok) { requestedManifests.delete(url); return; }
+        for (const id of availableFromManifest(await response.json(), ids)) availablePrepared.add(id);
+      } catch { requestedManifests.delete(url); }
+    })
+    .catch(() => { /* nincs kulcs: a böngészőhang szól */ });
 }
-
 type StepDone = (outcome: StepOutcome) => void;
 
 /** 1. lépés: az előre gyártott hang azonos eredetről. Hiba, lejátszási tiltás vagy el nem induló hang → a következő lépés. */
@@ -122,7 +140,7 @@ function playPrepared(id: string, rate: number, alive: () => boolean, done: Step
     if (settled) return;
     settled = true;
     clearTimeout(watchdog);
-    if (failure && rememberPreparedFailure(failure)) missingPrepared.add(id);
+    if (failure && rememberPreparedFailure(failure)) failedPrepared.add(id);
     if (outcome === "failed") { audio.pause(); if (activeAudio === audio) activeAudio = null; }
     if (alive()) done(outcome);
   };
@@ -138,7 +156,9 @@ function playPrepared(id: string, rate: number, alive: () => boolean, done: Step
 }
 
 /** 2. lépés: a böngésző egy hangja. Hiba vagy el nem induló kimondás → a következő lépés (a rangsor következő hangja, végül a tartalék). */
-function speakWithVoice(synth: SpeechSynthesis, text: string, language: string, rate: number, voice: SpeechSynthesisVoice | undefined, done: StepDone): () => void {
+function speakWithVoice(synth: SpeechSynthesis, text: string, language: string, rate: number, voice: SpeechSynthesisVoice | undefined, startTimeoutMs: number, done: StepDone): () => void {
+  // A szakasz csendkerete elfogyott: ez a hang már nem próbálkozik (a lánc a tartalékra lép).
+  if (startTimeoutMs <= 0) { done("failed"); return () => {}; }
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = language;
   utterance.rate = rate;
@@ -153,8 +173,9 @@ function speakWithVoice(synth: SpeechSynthesis, text: string, language: string, 
     if (outcome === "failed" && (synth.speaking || synth.pending)) synth.cancel();
     done(outcome);
   };
-  // Néma motor (pl. Google-szolgáltatás nélküli Android): ha a kimondás nem indul el, a következő lépés jön. Hálózati hangnak több idő jár.
-  const watchdog = setTimeout(() => { if (!started) finish("failed"); }, speechStartTimeoutMs(voice?.localService));
+  // Néma motor (pl. Google-szolgáltatás nélküli Android): ha a kimondás a kapott időn belül nem indul el, a következő lépés jön. Az időt a
+  // lánc adja a böngészőhang-szakasz ÖSSZESÍTETT csendkeretéből (`voiceStepTimeoutMs`), így több próbált hang sem nyújtja a csendet.
+  const watchdog = setTimeout(() => { if (!started) finish("failed"); }, startTimeoutMs);
   utterance.onstart = () => { started = true; };
   // Egyes motorok `onstart` nélkül szólnak: a szóhatár-esemény is indulás.
   utterance.onboundary = () => { started = true; };
@@ -186,8 +207,8 @@ function playFallback(text: string, language: string, rate: number, done: StepDo
 }
 
 /**
- * A felolvasás lánca (`shared/speech-chain.ts` — a sorrendet a tiszta `speechPlan` adja): előre gyártott hang → a böngésző rangsorolt
- * hangjai sorban → a szerver tartalék hangja. A lejátszó csak végrehajt: minden elbukott lépés után a terv következő lépése jön.
+ * A felolvasás lánca (`shared/speech-chain.ts` — a sorrendet a tiszta `speechPlan` adja): előre gyártott hang (ha a jegyzék szerint megvan)
+ * → a böngésző hangjai sorban, közös csendkerettel → a szerver tartalék hangja. A lejátszó csak végrehajt: minden elbukott lépés után a terv következő lépése jön.
  */
 export function speakText(text: string, language: string, rate: number, onError?: () => void): void {
   stopSpeech();
@@ -197,12 +218,14 @@ export function speakText(text: string, language: string, rate: number, onError?
   const id = preparedIds.get(preparedKey(text, language));
   const plan = speechPlan({
     language, voices, synthAvailable: !!synth && typeof SpeechSynthesisUtterance !== "undefined",
-    preparedId: preparedAudioCandidate({ languageSupported: hasPreparedAudio(language), id, knownMissing: !!id && missingPrepared.has(id) }),
+    preparedId: preparedAudioCandidate({ languageSupported: hasPreparedAudio(language), id, available: !!id && availablePrepared.has(id), knownMissing: !!id && failedPrepared.has(id) }),
     offline: typeof navigator !== "undefined" && navigator.onLine === false,
     fallbackAvailable: !!ttsAudioUrl(text, language),
   });
   let cancelled = false;
   let cancelStep: () => void = () => {};
+  // A böngészőhang-szakasz összesített csendkerete az első hanglépés indulásától számít.
+  let voicePhase: { startedAt: number; budgetMs: number } | null = null;
   const cancel = () => { cancelled = true; cancelStep(); };
   cancelActiveSpeech = cancel;
   const run = (index: number) => {
@@ -216,7 +239,12 @@ export function speakText(text: string, language: string, rate: number, onError?
       if (exhausted) onError?.();
     };
     if (step.kind === "prepared") cancelStep = playPrepared(step.id, rate, () => !cancelled, done);
-    else if (step.kind === "voice") cancelStep = speakWithVoice(synth!, text, language, rate, step.voiceIndex === null ? undefined : voices[step.voiceIndex], done);
+    else if (step.kind === "voice") {
+      const voice = step.voiceIndex === null ? undefined : voices[step.voiceIndex];
+      voicePhase ??= { startedAt: Date.now(), budgetMs: voicePhaseBudgetMs(voice) };
+      const startTimeoutMs = voiceStepTimeoutMs({ budgetMs: voicePhase.budgetMs, elapsedMs: Date.now() - voicePhase.startedAt, network: voice?.localService === false, laterLocalVoice: hasLaterLocalVoice(plan, index, voices) });
+      cancelStep = speakWithVoice(synth!, text, language, rate, voice, startTimeoutMs, done);
+    }
     else cancelStep = playFallback(text, language, rate, done);
   };
   run(0);
@@ -224,7 +252,6 @@ export function speakText(text: string, language: string, rate: number, onError?
 
 export function SpeakButton({ text, language, rate }: { text: string; language: string; rate: number }) {
   const [error, setError] = useState("");
-  useEffect(() => { prepareSpeech(text, language); }, [text, language]);
   return <><button className="lesson-outline-btn" data-tts={text} aria-label={`${text} meghallgatása`} onClick={() => {
     setError("");
     speakText(text, language, rate, () => setError("A hang most nem érhető el ezen az eszközön."));
