@@ -540,7 +540,8 @@ for (const size of [3, 5, 8]) {
     const sources: string[] = [];
     let lastId: number | null = null;
     for (let i = 0; i < size + 3; i++) {
-      await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true }));
+      // A pálya-cél (1. pálya: 3 rúnaérc) ne zárja le a menetet a sorozat közben: a kinyitott zárak számlálója nullázva.
+      await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, runesLeft: 99 }));
       await expect
         .poll(async () => {
           const pr = await probe(page);
