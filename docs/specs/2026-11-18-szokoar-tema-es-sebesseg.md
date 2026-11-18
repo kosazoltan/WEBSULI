@@ -228,3 +228,41 @@ marad. Eszközök sorrendben: kompakt (alacsonyabb) kérdés-sáv ugyanott → a
 csökkentett mozgásnál azonnali). A sáv `data-layout="settled"` állapotjelzőt kap, amikor az elrendezés nyugalomba ért; a teszt
 erre az állapotra vár, KÜLÖN méri a ≤ 600 ms-os beállást (`layoutSettleMs`), majd 3 mintával a folyamatos szabadságot. A mérce
 nem lazítható; ha 600 ms alatt nem megy, a mért értéket kell jelenteni.
+
+### 7.4 Látvány 4. lépés — a szökőár a főszereplő, szikla-hegy a menedékkel (átvevő fejlesztő, 2026-11-18)
+
+Előzmény: az átadó jegyzet (`docs/handoffs/2026-11-18-szokoar-latvany-atadas.md`) „Ismert hibák” listája. A 7.2 elem-táblája és
+kerete érvényes; ez a fejezet a megvalósítás módját pontosítja ott, ahol a 7.2 nyitva hagyta vagy a mérés mást mutatott.
+
+**Cél (a tulajdonos szava szerint: emelkedő víz, sodródó törmelék, látványos szökőár; „szép 3D-s grafika”):** a kép első
+pillantásra szökőárt mutasson — a háttérben teljes szélességű, tarajos-habos, közeledő hullámfal; elöl élő vízfelszín; jobbra a
+vízből kiemelkedő szikla-hegy, a tetején a menedék (világítótorony); telt, tiszta színek.
+
+**Nem-cél:** a játékmenet, a kérdés-sáv és a HUD módosítása; új akadály (D2-b: A marad); letöltött modell / textúra; a közös
+`three-look` réteg átírása (a jelenet a saját tónusleképezését állítja be a kapott rendereren).
+
+**Elemek és döntések**
+| Elem | Megvalósítás |
+|---|---|
+| Hullámfal | egy rajzolási hívás, saját shader: sötétkék tő → türkiz, áttetszőnek ható fal → világító perem → vastag, tépett fehér taraj; előrebukó ajak (vertex-hajlítás), a falon felfelé futó habcsíkok, a tövénél permet-köd. A vízszinttel (`fill`) nő és közelít: a taraj a kép ~58 %-ától (alacsony víz) ~84 %-áig ér, a távolság ~120 → ~34 egység; a part és a dombok FÖLÉ magasodik (a régi a dombok mögé bújt — ezért „alig látszott”). Győzelemkor visszahúzódik. |
+| Hangulat | a veszéllyel (`danger`) az ég teteje mélyül, a fény hűvösebb lesz — de a színek teltek maradnak (nincs szürke köd). |
+| Kifakulás | ok-feltárás méréssel (képpel): fényerő (a Lambert-anyag a 2,2-es fő fénnyel túlvezérel), ACES-tónusleképezés (a világos színeket fehér felé húzza), barack színű ég-alj és köd, lineárisnak vett paletta a Blender-szkriptben. Javítás: semleges tónusleképezés a jelenetben, visszafogott fények, azúr ég, sRGB-ben megadott és lineárisra váltott paletta. |
+| Szikla-hegy | Blender: `cliff` (magas, lapos tetejű, rétegzett sziklatömb fűsapkával — a menedék ezen áll, a víz az oldalán emelkedik, a tövénél habgyűrű) és `hill` (lekerekített, rétegzett domb a háttérbe, példányosítva). A régi kúp-hegyek (`ConeGeometry`) megszűnnek; az analitikus terep (part, öböl) sima árnyalást és szelídebb hullámzást kap. |
+| Figura | Blender: nagyfejű, kerekded gyerek mentőmellényben, szörfdeszkán; részek a meglévő mozgáshoz: `kid_board`, `kid_torso`, `kid_head`, `kid_arm`, `kid_leg` (a kar / láb tükrözve kétszer). A forgáspontok a jelenetben állandók. Betöltésig a kódból épített figura a tartalék. |
+| Törmelék | a meglévő `debris_*` modellek (deszka, hordó, láda) + `debris_log` (uszadékfa), példányosítva, a vízen sodródva és ringatózva, a hullámfal előtt is (távolabb, kisebbnek látszva). Díszlet, nem akadály. |
+| Deszkák | mólószerű pallók cölöpökkel (`pier_post` példányosítva), egy összevont geometria. |
+| Anyag | minden Blender-modell EGY anyagot használ, a szín csúcs-színből jön (finom függőleges átmenettel) → modellenként egy primitív; a jelenetben modellenként egy `InstancedMesh`. |
+
+**Keret (mérve):** rajzolási hívás ≤ 130 (cél ≤ 70); a modell-keret őre zöld (fájl ≤ 200 KB, ≤ 15 000 háromszög, ≤ 20 mesh);
+390×844 emulált méréssel ≥ 57,7 fps; a 4× lassított CPU-s indítási tüske ≤ 200 ms (a modellek shaderei a menü alatt fordulnak:
+`renderer.compile`).
+
+**Elfogadás (EARS)**
+- AMIKOR a menet fut, a hullámfal taraja a part és a dombok fölött látszik, és a vízszint emelkedésével nagyobb és közelebb van.
+- AMIKOR a víz alacsony, álló nézetben a kép nem fehéres: az ég kék, a növényzet zöld, a víz türkiz–kék (képpel igazolva).
+- A menedék a szikla-hegy tetején áll, MINDIG a képen (a `tsunami-play` menedék-mérése változatlan mércével zöld).
+- A figura és a díszlet Blender-szkriptből készül; hiány / hiba esetén a kódból épített tartalék marad.
+- Minden lépés után valódi böngészős kép (390×844 és asztali; alacsony / közepes / magas víz), a készítés módjával megjelölve.
+
+**Tesztek:** `tsunami-models-budget.test.ts` bővül az új modellnevekkel (`cliff`, `hill`, `kid_*`, `debris_log`) és azzal, hogy
+modellenként egy primitív van (a mérce szigorodik: primitív ≤ 20); a `tsunami-play.spec.ts` változatlan.

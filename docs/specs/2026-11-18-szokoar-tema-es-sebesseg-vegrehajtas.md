@@ -59,6 +59,21 @@ indítási cél a telefonos nézetben egy mérésben (250 ms) még nem teljesül
    e. Minden lépés után valódi böngészős kép (390×844 és asztali), teljes útvonallal; a #491-mérővel indítás ≤ 200 ms
       (4× CPU), ~60 fps.
 
+9. **Látvány 4. lépés (terv `docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md` 7.4):**
+   a. Előtte-képek és mérés (rajzolási hívás, fps, indítási tüske) valódi GPU-val; a kifakulás okának szétválasztása.
+   b. `source/scripts/blender/szokoar/build_all.py`: sRGB-paletta → lineáris csúcs-szín (függőleges átmenettel), egy közös anyag,
+      modellenként egy primitív; új modellek: `cliff`, `hill`, `debris_log`, `kid_board`, `kid_torso`, `kid_head`, `kid_arm`,
+      `kid_leg`. Futtatás: `"$BLENDER_BIN" -b -P source/scripts/blender/szokoar/build_all.py`.
+   c. `source/tests/tsunami-models-budget.test.ts`: az új nevek és a „modellenként egy primitív” őre.
+   d. `source/client/src/game-engine/scenes/TsunamiScene3D.tsx`: hullámfal-shader (taraj, ajak, köd; a vízszinttel nő és
+      közelít), ég / fény / tónus, vízfelszín-színek és habgyűrű a szikla-hegy körül, `InstancedMesh` a díszletre és a
+      törmelékre, összevont deszkák cölöpökkel, Blender-figura a meglévő forgáspontokra, `renderer.compile` a modellek
+      betöltése után (a menü alatt).
+   e. Minden lépés után kép (390×844 és asztali; alacsony / közepes / magas víz) a
+      `docs/measurements/szokoar-tema/latvany/` alá (`c4-*`), a készítés módjával; a képeket meg kell nézni.
+   f. Mérés a végén: rajzolási hívás ≤ 130, 390×844-en ≥ 57,7 fps, 4× CPU-s indítási tüske ≤ 200 ms.
+   g. Kapuk: `tsunami-play.spec` teljes, a közös mérők Szökőár-köre, `gate:stage`, `gate:push`.
+
 ## Elfogadás
 - A víz MINDIG látszik, a menedék MINDIG a képen van; jó válasznál a víz képi szintje 0,5 s-on belül csökken, rossznál nő.
 - A kérdés nem állítja meg a világot (a víz lassítva emelkedik); a válaszgombok ≥ 48 px, nem takarják a figurát és a tárcsát.
