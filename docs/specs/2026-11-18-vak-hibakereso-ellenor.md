@@ -108,3 +108,63 @@
   vizsgáltam” fejléc, vagy a `Fej:` sor (illetve az nem a rögzített fejre szól) THEN SHALL hibával kilépni, bizonyíték nélkül.
 - [ ] V5 WHEN a jelentés teljes THEN SHALL rögzíteni (a meglévő viselkedés szerint).
 - [ ] V6 WHEN a mutációs ellenpróba a V4 bármely feltételét kiveszi THEN a teszt SHALL bukni.
+
+## Kiegészítés — repó-szintű, környezet-semleges szabály (második tulajdonosi utasítás, 2026-11-18)
+
+> „A vak ellenőr szabály legyen repó szintű, szabály kerüljön bele az AGENTS.md-be, készüljön belőle valóban használt skill, és
+> bármilyen mesterséges intelligencia-ügynök környezetben futtatom a repó fejlesztését, javítását, az szerezzen róla tudomást és
+> aszerint fusson.”
+
+### Felmérés: a repó ügynök-vezérlő fájljai (`git ls-files`, 2026-11-18)
+
+| Fájl | Ki olvassa | Érintem? |
+|---|---|---|
+| `AGENTS.md` | Codex, Claude Code (közös szabálykönyv), több más ügynök | IGEN — új önálló szakasz „Vak hibakereső ellenőr — kötelező” a kezelt `agentic-qa-kit` blokkon KÍVÜL; a „Minőségkapuk” 3. pontja erre hivatkozik |
+| `.cursor/rules/minosegkapuk.mdc` (`alwaysApply: true`) | Cursor | IGEN — a 3. pont a vak ellenőrre hivatkozik |
+| `.cursor/rules/vak-ellenor.mdc` | Cursor | ÚJ, `alwaysApply: true` (a `haromfazisu-munka.mdc` mintájára) |
+| `.cursorrules` | Cursor (régi formátum) | IGEN — rövid, kötelező hivatkozás a fájl elején |
+| `.github/copilot-instructions.md` | GitHub Copilot (review) | IGEN — egy pont: a PR-ban a vak ellenőr ítélet-sora a jelenlegi fejre szóljon; hivatkozás a szakaszra |
+| `docs/agent-haromfazisu-munka.md` | minden ügynök (az AGENTS.md hivatkozza) | IGEN — a független ellenőrzés mondata a vak szabályra hivatkozik |
+| `docs/minosegkapuk.md` | runbook | IGEN (a fő rész fent) |
+| `docs/codex-felhokornyezet.md` | Codex felhőkörnyezet beállítása | IGEN — rövid pont: a felhőben futó Codex-feladat is a szakasz szerint jár el (ott nincs alügynök: új, tiszta feladat a tervvel és a diffel) |
+| `.cursor/rules/haromfazisu-munka.mdc`, `.cursor/rules/websuli-core.mdc` | Cursor | NEM — a vak ellenőr a `minosegkapuk.mdc` + az új `vak-ellenor.mdc` dolga |
+| A repó gyökerében álló `haromfazisu-munka.mdc`, `minosegkapuk.mdc`, `websuli-core.mdc` | senki (a Cursor a `.cursor/rules/` alól olvas; ezek eltérő, régi másolatok) | NEM — jegyre: archiválás (nem e PR hatóköre) |
+| `CLAUDE.md`, `CODEX.md`, `GEMINI.md`, `Codex-iranyitasi-terv.md`, `Codex-vegrehajtasi-terv.md`, `.windsurfrules`, `.clinerules` | — | NEM LÉTEZIK a repóban — nem hozom létre |
+
+### Döntések
+
+- **Az AGENTS.md szakasza a szabály forrása**, környezet-semleges megfogalmazással: az ellenőr friss kontextusú, a fejlesztő
+  következtetéseit nem ismerő ügynök — ahol a környezet tud alügynököt indítani, alügynök; ahol nem (egyes Codex / Cursor / Gemini
+  futások), új, tiszta munkamenet vagy másik eszköz, amely CSAK a tervet és a diffet kapja. A fejlesztő saját magát soha nem
+  ellenőrizheti. Kötelező: hibakereső keret, feladat-specifikus hibakereső pontok + „bármi más”, futtatás / ellenpróba saját ideiglenes
+  munkafában, a két kötelező jelentés-szakasz, visszanézésnél is hibakeresés.
+- **A skill** (`websuli-fejlesztesi-ellenor`) leírása úgy szól, hogy minden elkészült fejlesztésnél betöltődjön; benne a kész
+  megbízás-sablon és egy „hogyan indítsd, ha nincs alügynök-eszköz” rész.
+- **Gépi kikényszerítés — felmérés:** ma a rögzített ítéletet (a) a Claude Code `check-quality-gates` hookja kéri a PR-nyitás és a
+  merge előtt (csak Claude Code), (b) a `gate:pr` / `gate:merge` szkript kéri — ez minden környezetben fut, de csak ha az ügynök
+  lefuttatja; (c) a CI-ban SEMMI nem ellenőrzi. Más környezetben (Codex felhő, Cursor) tehát ma csak az előírás köt.
+- **Ezért új szkript** (`scripts/qa/gates/pr-verdict-check.mjs`, ebben a PR-ban, teszttel): a GitHub-esemény fájljából
+  (`GITHUB_EVENT_PATH`) kiolvassa a PR leírását és a fej SHA-ját, és csak akkor ad 0-s kilépést, ha a leírásban van
+  `Független ellenőr ítélete: IGEN | IGEN, FELTÉTELLEL (fej: <hash>)` sor, amelynek hash-e a jelenlegi fej előtagja (a meglévő
+  `lib.mjs` `resolveVerdict` / `verdictResult` logikájával). `NEM` vagy hiányzó / más fejre szóló sor → 1-es kilépés, érthető
+  üzenettel.
+- **A CI-lépés KÜLÖN szelet** (nem ebben a PR-ban; a `.github/workflows/` C-61 szerint „bármely main-változás” hatókörű, és a CI
+  szeletelésén a `chore/ci-e2e-szeleteles` ág dolgozik). Pontos leírás a következő szelethez:
+  - új job a `ci.yml`-ben (vagy a szeletelés utáni megfelelő workflow-ban): `independent-review`, `on: pull_request` (`opened`,
+    `edited`, `synchronize`, `reopened`), egyetlen lépés: `node scripts/qa/gates/pr-verdict-check.mjs --event "$GITHUB_EVENT_PATH"`;
+    `actions/checkout` + Node, függőség nélkül (a szkript csak a `lib.mjs`-t használja);
+  - a főág-védelem kötelező ellenőrzései közé felvenni (tulajdonosi beállítás a GitHubon);
+  - ismert korlát: a leírás-frissítés (`edited`) új futást indít; a pusht követő első futás a régi ítélet-sor miatt piros, amíg a
+    leírás nem frissül — ez szándékos (a fej változott, új ítélet kell).
+
+### Elfogadás (EARS) — kiegészítés
+
+- [ ] V7 WHEN az `AGENTS.md`-t olvassuk THEN SHALL tartalmazni a „Vak hibakereső ellenőr — kötelező” szakaszt a kezelt blokkon kívül,
+  a tulajdonosi idézettel, dátummal és a kötelező kulcsmondatokkal; a „Minőségkapuk” 3. pontja erre hivatkozik.
+- [ ] V8 WHEN bármely fent „IGEN”-nel jelölt vezérlőfájlt olvassuk THEN SHALL hivatkozni az AGENTS.md szakaszára (őr-teszt; ha valaki
+  kitörli, a teszt bukik).
+- [ ] V9 WHEN a `websuli-fejlesztesi-ellenor` skillt olvassuk THEN a leírása SHALL minden elkészült fejlesztésnél betöltést előírni, és
+  tartalmaznia a kész megbízás-sablont és az alügynök-eszköz nélküli indítás leírását.
+- [ ] V10 WHEN a `pr-verdict-check.mjs` olyan eseményt kap, amelyben a PR-leírás ítélet-sora hiányzik, más fejre szól vagy NEM THEN
+  SHALL 1-gyel kilépni; IGEN / IGEN, FELTÉTELLEL a jelenlegi fejre → 0.
+- [ ] V11 WHEN a mutációs ellenpróba a V7–V10 bármely védő feltételét kiveszi THEN a teszt SHALL bukni.

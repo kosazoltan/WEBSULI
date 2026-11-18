@@ -21,3 +21,21 @@ a #506 összevonása és friss főág-beolvasztás után.
    visszaírása a kapuba → a teszt bukik); `npm run gate:push`; fej-hash az orkesztrátornak.
 
 - [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [ ] 6 (kapuk, mutáció — folyamatban)
+
+## Kiegészítés — repó-szintű, környezet-semleges szabály (2026-11-18) — végrehajtás
+
+Terv: `docs/specs/2026-11-18-vak-hibakereso-ellenor.md`, „Kiegészítés” fejezet.
+
+7. Ez a doksi-commit (a terv kiegészítése + ez az alfejezet), a kód előtt.
+8. `AGENTS.md`: önálló „## Vak hibakereső ellenőr — kötelező” szakasz a „Minőségkapuk” elé, a kezelt blokkon kívül (tulajdonosi
+   idézetek, dátum, környezet-semleges előírás); a „Minőségkapuk” 3. pontja rövid hivatkozás.
+9. Vezérlőfájlok (a terv táblázata szerint): `.cursor/rules/vak-ellenor.mdc` (új, `alwaysApply: true`),
+   `.cursor/rules/minosegkapuk.mdc`, `.cursorrules`, `.github/copilot-instructions.md`, `docs/agent-haromfazisu-munka.md`,
+   `docs/codex-felhokornyezet.md` — rövid, kötelező hivatkozás az AGENTS.md szakaszára.
+10. Skill (`.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md` + `.claude/skills/…` tükör): leírás minden elkészült fejlesztésnél
+    betöltésre; „Ha nincs alügynök-eszköz” szakasz; a sablon marad.
+11. `scripts/qa/gates/pr-verdict-check.mjs` (+ `pr-verdict-check.test.mjs`): GitHub-eseményből a PR-leírás ítélet-sora a fejre.
+12. Őr-teszt (`scripts/qa/gates/vak-ellenor.test.mjs` bővítése): az AGENTS.md szakasz kulcsmondatai; minden érintett vezérlőfájl
+    hivatkozik rá; a skill leírása. `gate:stage`, mutációs ellenpróba, `gate:push`, fej-hash az orkesztrátornak.
+
+- [ ] 7 · [ ] 8 · [ ] 9 · [ ] 10 · [ ] 11 · [ ] 12
