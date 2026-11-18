@@ -209,6 +209,12 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
   Választás indoka (a „szerver jelzi, hogy ismeri” megoldással szemben): csak kliensoldali, a régi szerverhez nem kell semmi; a jelzéses
   megoldáshoz új szerverjelzés és a lap elhagyásakor nem megvárható előzetes kör kellene, és a régi szerver úgysem jelezne.
 
+- **Párhuzamos távoli commitok (2026-11-18 este):** a távoli ágra egy másik folyamat a régi `0eb6a4a1` fejre három commitot töltött
+  (`569178f4`, `189ddb10`, `ab7dfe88`) ugyanarra a négy Codex-leletre (P1–P4), amelyet a `fec8d8b9` már megold. A beolvasztásban ez az
+  ág (P1–P4 + R1–R10) az alap: a `189ddb10` új esetet nem kezel (a véglegesítési jelzője a pillanatkép-kulcshoz kötött, a mienk a
+  lecke + körhöz, és a nyilvántartást is nézi), a tesztjei a meglévő P1–P4 tesztek megfelelői. Az `ab7dfe88` forrásmintái
+  (`if (!token) return null;`, `void sending.then(…)`) a `189ddb10` szerződését rögzítik, amely nem került be — visszavonva; a mögöttes
+  viselkedést (csak 2xx rögzül, token nélkül nincs kérés) a böngészős „503” és „R4 + S6” tesztek mérik.
 
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
