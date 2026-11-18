@@ -22,7 +22,8 @@ type Block = { type: string; text?: string; file?: { name: string } };
 type Turn = { blocks: Block[] };
 type Engine = { runSingleLesson(input: never, deps: never): Promise<unknown>; singleRunSystemPrompt(): string };
 type ConversationCtor = new (system: string, client: never, state: null) => unknown;
-export type FingerprintScenario = "source" | "map";
+/** `newKinds`: új forrásból, de a modell a 3. állomás ELSŐ válaszában és a 4. állomás foltjában KÉRETLENÜL új fajtájú (`table`) ábrát ad. */
+export type FingerprintScenario = "source" | "map" | "newKinds";
 
 const fixture = standardFusionFixture();
 const TRANSCRIPT = "A téglalap területe az oldalak szorzata. A terület mértékegysége a négyzetcentiméter.";
@@ -34,7 +35,11 @@ export const FINGERPRINT_VISUALS = [
   { id: "v2", kind: "process", sourceFile: "forras.txt", page: 1, role: "A számolás lépései.", conceptIds: [], data: { steps: ["Mérd meg az oldalakat.", "Szorozd össze őket."] } },
 ];
 
-export type FingerprintRun = { fingerprint: string; prompts: string[]; stations: string[]; maps: Array<{ visuals?: unknown }>; gates: Record<string, unknown>; logs: string[];
+/** A forgatókönyv kéretlen, de ÉRVÉNYES paraméterű táblázata (a forrás szavaiból) — blokként a 3., foltként a 4. állomáson. */
+export const FINGERPRINT_TABLE = { headers: ["mennyiség", "mértékegység"], rows: [["terület", "négyzetcentiméter"]] };
+const sha = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+export type FingerprintRun = { fingerprint: string; /** A futás naplósorainak és a közzétett leckének a lenyomata (a kimenet határának méréséhez). */ logsHash: string; lessonHash: string; prompts: string[]; stations: string[]; maps: Array<{ visuals?: unknown }>; gates: Record<string, unknown>; logs: string[];
   /** A job utolsó mentett telemetriája, a közzététel kérése (`publishLesson` argumentuma) és a mentett lecke. */
   telemetry: Record<string, unknown>; published: Record<string, unknown> | null; lesson: unknown };
 /** `reply`: egy állomás forgatókönyves válaszának cseréje (a visszaadott érték megy a modell válaszaként; `undefined` → az alap). */
@@ -57,8 +62,15 @@ export async function productionPromptRun(engine: Engine, Conversation: Conversa
       if (station === "1") json = { title: "Terület", subject: fixture.subject, classroom: fixture.classroom, transcript: TRANSCRIPT, visuals: FINGERPRINT_VISUALS,
         concepts: [{ id: "area", term: "terület", definition: "A síkidom által lefedett rész nagysága.", quote: "A téglalap területe az oldalak szorzata.", type: "concept", examWeight: "core", relatedIds: [], sourceFile: "forras.txt" }] };
       else if (station === "2") json = outline;
-      else if (station === "3") json = teaching;
-      else if (station === "4") json = { patches: "nem érvényes ábrafolt" };
+      else if (station === "3" || station === "tananyag") {
+        json = teaching;
+        // newKinds: az ELSŐ szerzői válasz (a záró összefoglaló ELŐTT) egy új fajtájú ábrablokkot is tartalmaz; a javító fordulóra a szokásos tanítás jön.
+        if (scenario === "newKinds" && station === "3") json = { ...teaching, sections: teaching.sections.map((section, i) => (i ? section : { ...section,
+          blocks: [...section.blocks.slice(0, -1), { kind: "animate", animKind: "table", params: FINGERPRINT_TABLE, caption: "A terület mértékegysége a négyzetcentiméter.", coversConceptIds: ["area"] }, ...section.blocks.slice(-1)] })) };
+      }
+      else if (station === "4") json = scenario === "newKinds"
+        ? { sections: [{ index: 0, visuals: [{ after: 0, animKind: "table", params: FINGERPRINT_TABLE, caption: "A terület mértékegysége a négyzetcentiméter.", coversConceptIds: ["area"] }] }] }
+        : { patches: "nem érvényes ábrafolt" };
       else if (station === "5") json = structuredClone(fixture.experience);
       else if (station === "6") json = { solutions: [], notes: [], reviewedAll: true };
       const override = options.reply?.(station, json, t);
@@ -100,7 +112,7 @@ export async function productionPromptRun(engine: Engine, Conversation: Conversa
   const sorted = [...prompts].sort();
   const telemetry = ((steps.at(-1)?.output as { telemetry?: Record<string, unknown> } | undefined)?.telemetry) ?? {};
   const gates = (telemetry.gates as Record<string, unknown> | undefined) ?? {};
-  return { fingerprint: createHash("sha256").update(JSON.stringify(sorted)).digest("hex"), prompts: sorted, stations, maps, gates, logs, telemetry, published, lesson };
+  return { fingerprint: sha(sorted), logsHash: sha(logs), lessonHash: sha(lesson), prompts: sorted, stations, maps, gates, logs, telemetry, published, lesson };
 }
 
 // Parancssori mód: a megadott mappa (pl. a főág kicsomagolt `server` + `shared` fája) motorjának lenyomatai.
@@ -110,9 +122,11 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   const engine = await load("server/studio/single-run/engine.ts") as Engine;
   const { LessonConversation } = await load("server/studio/single-run/conversation.ts") as { LessonConversation: ConversationCtor };
   const { singleRunMapHash } = await load("server/studio/single-run/live.ts") as { singleRunMapHash(files: unknown, title?: string): string };
-  for (const scenario of ["source", "map"] as const) {
+  for (const scenario of ["source", "map", "newKinds"] as const) {
     const run = await productionPromptRun(engine, LessonConversation, scenario);
     console.log(`${scenario}: ${run.fingerprint} (${run.prompts.length} kérés; állomások: ${[...new Set(run.stations)].join(",")})`);
+    if (scenario === "newKinds") console.log(`newKinds napló: ${run.logsHash}
+newKinds lecke: ${run.lessonHash}`);
   }
   console.log(`mapHash: ${singleRunMapHash(FINGERPRINT_FILES, "Terület")}`);
   process.exit(0);

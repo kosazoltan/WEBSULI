@@ -5,7 +5,7 @@ import { LessonConversation } from "../server/studio/single-run/conversation";
 import { singleRunMapHash, sourceFileRow } from "../server/studio/single-run/live";
 import { sourceVisualsEnabled, SOURCE_VISUALS_ENV } from "../server/studio/source-visuals-flag";
 import type { SingleRunMap } from "../server/studio/single-run/engine";
-import { FINGERPRINT_FILES, productionPromptRun, type FingerprintScenario } from "./helpers/production-prompt-fingerprint";
+import { FINGERPRINT_FILES, FINGERPRINT_TABLE, productionPromptRun, type FingerprintOptions, type FingerprintScenario } from "./helpers/production-prompt-fingerprint";
 
 /* docs/specs/2026-11-18-tananyag-gyartas-minoseg.md, 0. elv (önálló beolvaszthatóság): a forrás vizuális leltára funkciókapcsoló
    mögött áll, alapból KI. KI állapotban a gyártás MINDEN modellnek küldött kérése azonos a kapcsoló előtti főágéval.
@@ -19,7 +19,7 @@ const MAIN = {
   mapHash: "c7d260ebb64bc71781e1243a6fef0870474499fe82ba20cc34fca4daf3d45789",
 } as const;
 
-const run = (scenario: FingerprintScenario, extra: Record<string, unknown> = {}) => productionPromptRun(engine as never, LessonConversation as never, scenario, extra);
+const run = (scenario: FingerprintScenario, extra: Record<string, unknown> = {}, options: FingerprintOptions = {}) => productionPromptRun(engine as never, LessonConversation as never, scenario, extra, options);
 
 /** A teszt idejére a környezeti kapcsoló a megadott értéken (undefined: nincs beállítva), utána visszaáll. */
 async function withEnv<T>(value: string | undefined, body: () => Promise<T> | T): Promise<T> {
@@ -100,4 +100,76 @@ test("BE: a tárolt leltár a promptokba és a kapuhoz jut (ellenpróba), a kapu
   assert.ok("visuals" in (on.published!.coverage as object));
   // A környezeti kapcsoló ugyanezt adja (nem csak a befecskendezés).
   assert.equal((await withEnv("on", () => run("map"))).fingerprint, on.fingerprint);
+});
+
+/* S2a (a lánc 4. ága) — vak ellenőr B1: a séma OLVASÁSRA ismeri a `table` / `ruleBox` / `compareCards` fajtát, de a GYÁRTÁS a modell
+   kimenetének határán (szerzői lecke, ábrafolt) csak BE állapotban fogadja el. A főág értékei ugyanabból a parancsból, mint fent. */
+const MAIN_NEW_KINDS = {
+  prompts: "29b6a6ec545374c7602b88c5cbefb9791c8c4815385923076cb419f21868f50f",
+  logs: "ebcebb5eb834d322c70cc929798301519d0383584d4f0107fa26e842fa7eccf8",
+  lesson: "e7f5627fc6cb6f8ec50452d662f07550919c3b28e0ee090297bf6a2cbbbe1e4b",
+} as const;
+const animKindsOf = (lesson: unknown) => (lesson as { sections: Array<{ blocks: Array<{ kind: string; animKind?: string }> }> }).sections.flatMap((s) => s.blocks.filter((b) => b.kind === "animate").map((b) => b.animKind));
+const fixRequests = (r: { prompts: string[] }) => r.prompts.filter((p) => p.includes("A PROGRAM ELLENŐRZÉSE (tananyag)"));
+
+test("KI: a modell kéretlen új fajtájú ábrája (szerzői blokk + ábrafolt) pontosan úgy bukik, mint a főágon — kérések, napló, kész lecke", async () => {
+  const off = await withEnv(undefined, () => run("newKinds"));
+  assert.ok(off.stations.includes("tananyag"), "a szerzői válasz javító fordulót kap (mint a főágon)");
+  assert.match(fixRequests(off)[0], /sections\.0\.blocks\.3\.animKind: Invalid enum value\. Expected 'numberLine' \| .* \| 'scene3d', received 'table'/, "a javító üzenet a régi felsorolással nevezi meg a hibát");
+  assert.deepEqual([off.fingerprint, off.logsHash, off.lessonHash], [MAIN_NEW_KINDS.prompts, MAIN_NEW_KINDS.logs, MAIN_NEW_KINDS.lesson]);
+  assert.ok(!animKindsOf(off.lesson).includes("table"), "sem a blokk, sem a folt táblázata nem jut a leckébe");
+  assert.deepEqual(Object.keys(off.gates).filter((k) => k.startsWith("undrawable")), []);
+});
+
+test("BE: az érvényes új fajtájú ábra elfogadott modellkimenet — a szerzői blokk és az ábrafolt is a leckébe kerül, javító forduló nélkül", async () => {
+  const on = await withEnv(undefined, () => run("newKinds", { sourceVisuals: true }));
+  assert.ok(!on.stations.includes("tananyag"), "nincs javító forduló: " + JSON.stringify(on.stations));
+  assert.equal(animKindsOf(on.lesson).filter((k) => k === "table").length, 2, JSON.stringify(animKindsOf(on.lesson)));
+  assert.notEqual(on.lessonHash, MAIN_NEW_KINDS.lesson);
+});
+
+/** A szerző egy bevezető fejezetet is ad, amelynek EGYETLEN blokkja hibás paraméterű (tónus nélküli) szabálydoboz; a javító fordulóra a jó tanítás jön. */
+const brokenOnlyVisual = (station: string, fallback: unknown) => {
+  if (station !== "3") return undefined;
+  const teaching = fallback as { sections: Array<{ heading: string; blocks: unknown[] }> };
+  return { ...teaching, sections: [{ ...teaching.sections[0], heading: "A terület szabálya", blocks: [
+    { kind: "animate", animKind: "ruleBox", params: { items: ["A terület az oldalak szorzata."] }, caption: "A terület szabálya.", coversConceptIds: ["area"] }] }, ...teaching.sections] };
+};
+
+test("BE: a hibás paraméterű új fajtájú blokk kiesik, és ha emiatt kapu bukik, a javító üzenet ELSŐ sora a kiesés oka — számlálva, naplózva", async () => {
+  const on = await withEnv(undefined, () => run("source", { sourceVisuals: true }, { reply: brokenOnlyVisual }));
+  const fix = fixRequests(on);
+  assert.equal(fix.length, 1, "pontosan egy javító forduló");
+  const body = JSON.parse(fix[0])[1][0] as string;
+  const lines = body.split("\n");
+  assert.match(lines[1], /^- A program KIVETTE a\(z\) sections\[0\]\.blocks\[0\] ábrablokkot \(animKind: ruleBox\), mert a paraméterei hibásak: .*tone/, body);
+  assert.ok(lines.length > 3 && !/KIVETTE/.test(lines[2]), "a kiesés oka mellett a kapu saját hibája is ott van: " + body);
+  assert.deepEqual([on.gates.undrawableVisualsDropped, on.gates.undrawableVisualsExplained], [1, 1]);
+  assert.equal(on.logs.filter((l) => l.includes("Kirajzolhatatlan ábrablokk kivéve: sections[0].blocks[0] (ruleBox)")).length, 1);
+  assert.equal(on.logs.filter((l) => l.includes("A javító üzenet megnevezi a kivett ábrablokkot")).length, 1);
+  assert.ok(on.published, "a javított leckével a futás közzétesz");
+  assert.ok(!animKindsOf(on.lesson).includes("ruleBox"));
+  // KI állapotban ugyanez a kimenet a régi sémahibával bukik — kiesés, számláló és „KIVETTE” sor nélkül.
+  const off = await withEnv(undefined, () => run("source", {}, { reply: brokenOnlyVisual }));
+  assert.match(fixRequests(off)[0], /sections\.0\.blocks\.0\.animKind: Invalid enum value/);
+  assert.ok(!fixRequests(off)[0].includes("KIVETTE"));
+  assert.deepEqual(Object.keys(off.gates).filter((k) => k.startsWith("undrawable")), []);
+});
+
+test("az ábrafolt határa a motoron KÍVÜLI hívóknál is a kapcsolót követi (alapérték: a környezet); a régi fajták útja változatlan", async () => {
+  const { applyVisualPatch } = await import("../server/studio/visual-patch");
+  const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+  const { experience: _bank, ...teaching } = standardFusionFixture();
+  const lesson = teaching as Parameters<typeof applyVisualPatch>[0];
+  const visual = (animKind: string, params: unknown) => ({ sections: [{ index: 0, visuals: [{ after: 0, animKind, params, caption: "A terület mértékegysége a négyzetcentiméter.", coversConceptIds: ["area"] }] }] });
+  const table = visual("table", FINGERPRINT_TABLE);
+  const off = await withEnv(undefined, () => applyVisualPatch(lesson, table)!);
+  assert.deepEqual([off.added, off.rejected.length], [0, 1]);
+  assert.match(off.rejected[0], /^1\. fejezet 1\. ábra: animKind Invalid enum value\. Expected 'numberLine' \| .* \| 'scene3d', received 'table'$/, "a bővítés előtti hibaüzenet, betűre");
+  assert.equal(off.lesson.sections[0].blocks.length, lesson.sections[0].blocks.length, "a lecke változatlan");
+  assert.equal((await withEnv("on", () => applyVisualPatch(lesson, table)!)).added, 1, "BE környezetben elfogadott");
+  assert.equal((await withEnv("on", () => applyVisualPatch(lesson, table, [], { sourceVisualKinds: false })!)).added, 0, "a befecskendezett érték a környezet előtt áll");
+  assert.equal((await withEnv(undefined, () => applyVisualPatch(lesson, table, [], { sourceVisualKinds: true })!)).added, 1);
+  // A régi fajta KI állapotban is ugyanúgy megy át.
+  assert.equal((await withEnv(undefined, () => applyVisualPatch(lesson, visual("process", { steps: ["Mérd meg az oldalakat.", "Szorozd össze őket."] }))!)).added, 1);
 });

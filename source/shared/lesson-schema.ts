@@ -76,6 +76,36 @@ export const AGE_BANDS = ["kid", "teen", "senior"] as const;
 export type AnimKind = (typeof ANIM_KINDS)[number];
 
 /**
+ * A forrás-ábrák S2a-ban bevezetett fajtái. OLVASÁSKOR és megjelenítéskor a séma (`ANIM_KINDS`) mindig ismeri őket; a GYÁRTÁS a modell
+ * kimenetében csak a forrás vizuális leltárának funkciókapcsolója mellett fogadja el (spec 2026-11-18-tananyag-gyartas-minoseg, 5. szakasz
+ * 14. pont) — KI állapotban a modell ilyen fajtát nem is hall, és a kimenet határa a bővítés előtti hibával utasítja el.
+ */
+export const SOURCE_VISUAL_ANIM_KINDS = ["table", "ruleBox", "compareCards"] as const satisfies ReadonlyArray<AnimKind>;
+const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VISUAL_ANIM_KINDS as readonly string[]).includes(k)) as [AnimKind, ...AnimKind[]]);
+/** A bővítés ELŐTTI séma hibaüzenete egy új fajtájú `animKind`-re (a régi felsorolással, betűre); más értékre `null`. */
+export function legacyAnimKindIssue(animKind: unknown): string | null {
+  if (!(SOURCE_VISUAL_ANIM_KINDS as readonly unknown[]).includes(animKind)) return null;
+  const parsed = legacyAnimKindSchema.safeParse(animKind);
+  return parsed.success ? null : parsed.error.issues[0].message;
+}
+/**
+ * A modell lecke-kimenetének új fajtájú ábrablokkjai a bővítés előtti séma hibájaként (`sections.i.blocks.j.animKind: …`) —
+ * a funkciókapcsoló KI állapotában a gyártás ezzel utasítja el a kimenetet (a javító forduló üzenete a kapcsoló előttivel azonos).
+ */
+export function legacyAnimKindIssues(lesson: unknown): string[] {
+  const sections = (lesson as { sections?: unknown } | null)?.sections;
+  if (!Array.isArray(sections)) return [];
+  return sections.flatMap((section, i) => {
+    const blocks = (section as { blocks?: unknown } | null)?.blocks;
+    return !Array.isArray(blocks) ? [] : blocks.flatMap((block, j) => {
+      const b = block as { kind?: unknown; animKind?: unknown } | null;
+      const issue = b && b.kind === "animate" ? legacyAnimKindIssue(b.animKind) : null;
+      return issue ? [`sections.${i}.blocks.${j}.animKind: ${issue}`] : [];
+    });
+  });
+}
+
+/**
  * Spec 2026-09-24 (magyarázó ábrák): olvasáskor az ismeretlen (újabb programverzióból származó)
  * ábrafajtájú animate blokk kimarad, a lecke többi része megjelenik — a régi kliens így nem mutatja
  * „sérültnek” az új ábrás leckét (lásd a 2026-09-24-es `princess`-téma esetet). Íráskor a séma szigorú.

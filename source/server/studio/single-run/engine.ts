@@ -8,7 +8,7 @@
  * J2 (átvilágítás 2026-10-16): a gyakorlóbank csomagjai, a lektorálás körei és a kulcsmentes ellenőrzések ugyanazzal a modellpárral, de
  * FRISS, célzott beszélgetésben futnak (önálló kérés; a lektor független a gyártás menetétől). J3: futásonkénti telemetria a jobon.
  */
-import { lessonSchema, type Lesson } from "../../../shared/lesson-schema";
+import { legacyAnimKindIssues, lessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
@@ -19,7 +19,7 @@ import { buildAuthorPrompt, buildAnimatorPrompt, buildLektorPrompt, buildPedagog
 import { autofixOutline, autofixOutlineVisuals } from "../tools/outline-autofix";
 import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
-import { dropUndrawableSourceVisuals } from "../../../shared/lesson-visual-params";
+import { dropUndrawableSourceVisuals, type DroppedSourceVisual } from "../../../shared/lesson-visual-params";
 import type { SourceCoverageResult } from "../gates/source-coverage-gate";
 import { ensureSectionVisuals } from "../section-visuals";
 import { scoringRulesOf } from "../../../shared/scoring-rules";
@@ -131,11 +131,17 @@ export type SingleRunDeps = {
  * kimenetéből — determinisztikus, javítókör nélkül; tételenként naplózva, a darabszám a telemetriában. Változatlan leckénél ugyanazt
  * az objektumot adja vissza.
  */
-export function withoutUndrawableVisuals(lesson: Lesson, log?: (line: string) => void, telemetry?: { gates: { undrawableVisualsDropped?: number } }): Lesson {
+export function withoutUndrawableVisuals(lesson: Lesson, log?: (line: string) => void, telemetry?: { gates: { undrawableVisualsDropped?: number } }, onDropped?: (dropped: DroppedSourceVisual[]) => void): Lesson {
   const { lesson: kept, dropped } = dropUndrawableSourceVisuals(lesson);
+  if (dropped.length) onDropped?.(dropped);
   for (const d of dropped) log?.(`[EGYFUTÁS] Kirajzolhatatlan ábrablokk kivéve: ${d.path} (${d.animKind}) — ${d.problems.join("; ").slice(0, 300)}`);
   if (dropped.length && telemetry) telemetry.gates.undrawableVisualsDropped = (telemetry.gates.undrawableVisualsDropped ?? 0) + dropped.length;
   return kept;
+}
+
+/** A kivett (kirajzolhatatlan) ábrablokkok oka a modellnek szóló javító üzenet soraként — a blokk helye, fajtája és a paraméterhiba. */
+export function undrawableDropNotes(dropped: ReadonlyArray<DroppedSourceVisual>): string[] {
+  return dropped.map((d) => `A program KIVETTE a(z) ${d.path} ábrablokkot (animKind: ${d.animKind}), mert a paraméterei hibásak: ${d.problems.join("; ").slice(0, 300)} — az alábbi hibák ennek a következményei lehetnek. Javítsd a blokk paramétereit, vagy tanítsd ugyanezt másik blokkal.`);
 }
 
 /**
@@ -143,8 +149,8 @@ export function withoutUndrawableVisuals(lesson: Lesson, log?: (line: string) =>
  * független review F8: az alá nem támasztott fogalom-címke lekerül, nem a teljes foltot buktatja) → séma → az ábrakészítő
  * szerződése (csak `animate` blokk változhat). `lesson: null`, ha a válasz nem illeszthető folt.
  */
-export function coveragePatchedLesson(base: Lesson, json: unknown, concepts: MapConcept[]): { lesson: Lesson | null; rejected: string[] } {
-  const patched = applyVisualPatch(base, json, concepts);
+export function coveragePatchedLesson(base: Lesson, json: unknown, concepts: MapConcept[], sourceVisualKinds?: boolean): { lesson: Lesson | null; rejected: string[] } {
+  const patched = applyVisualPatch(base, json, concepts, { sourceVisualKinds });
   if (!patched) return { lesson: null, rejected: [] };
   const checked = lessonSchema.safeParse(stripUngroundedAnimateLabels(patched.lesson, concepts).lesson);
   return { lesson: checked.success && checkAnimatorResult(base, checked.data).ok ? checked.data : null, rejected: patched.rejected };
@@ -740,17 +746,27 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner), authorKnowledge)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
   const validateLesson = (json: unknown): { ok: true; value: Lesson } | { ok: false; problems: string[] } => {
     const strict = lessonSchema.safeParse({ ...(json as object), mapId, sourceOnly: true });
-    if (!strict.success) return { ok: false, problems: strict.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
+    // Funkciókapcsoló (vak ellenőr B1): KI állapotban a forrás-ábrák új fajtája NEM elfogadott modellkimenet — ugyanazzal a megnevezett
+    // sémahibával megy javító fordulóra, mint a bővítés előtt (a modell ilyen fajtát KI állapotban nem is hall).
+    const legacyIssues = visualsOn ? [] : legacyAnimKindIssues(json);
+    if (!strict.success || legacyIssues.length) return { ok: false, problems: [...(strict.success ? [] : strict.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`)), ...legacyIssues].slice(0, 30) };
     // S2a (független review B1): a hibás paraméterű táblázat / szabálydoboz / kártya blokk kiesik (a rajzoló semmit nem rajzolna belőle) —
-    // megszámolva és naplózva, javító forduló nélkül; a kapuk a megmaradt leckét mérik.
-    const parsed = { data: withoutUndrawableVisuals(strict.data, deps.log, telemetry) };
+    // megszámolva és naplózva; a kapuk a megmaradt leckét mérik. Ha a kivétel UTÁN kapu bukik, a javító üzenet ELSŐ sora a kivétel
+    // oka (vak ellenőr B1) — különben a modell csak a félrevezető következményt látná („egyetlen blokk sem tanít”, „nincs animáció”).
+    let droppedNow: DroppedSourceVisual[] = [];
+    const parsed = { data: withoutUndrawableVisuals(strict.data, deps.log, telemetry, (dropped) => { droppedNow = dropped; }) };
+    const dropNotes = undrawableDropNotes(droppedNow);
     const unknown = lessonIdsSubsetOfMap(parsed.data, concepts);
-    if (unknown.length) return { ok: false, problems: [`A tudásbankban nem szereplő fogalomazonosítók: ${unknown.join(", ")}`] };
+    if (unknown.length) return { ok: false, problems: [...dropNotes, `A tudásbankban nem szereplő fogalomazonosítók: ${unknown.join(", ")}`] };
     // Review #260: a tanításon mérhető végkapuk már itt (javító forduló jár rájuk, nem a bank és a lektor után derülnek ki).
     const coverage = checkCoverageGate(parsed.data, concepts);
     const arc = checkLessonArc(parsed.data);
     const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons)];
-    return problems.length ? { ok: false, problems } : { ok: true, value: parsed.data };
+    if (problems.length && dropNotes.length) {
+      telemetry.gates.undrawableVisualsExplained = (telemetry.gates.undrawableVisualsExplained ?? 0) + dropNotes.length;
+      log(`[EGYFUTÁS] A javító üzenet megnevezi a kivett ábrablokkot (${dropNotes.length}) — a kivétel után kapu bukott.`);
+    }
+    return problems.length ? { ok: false, problems: [...dropNotes, ...problems] } : { ok: true, value: parsed.data };
   };
   /** J5: egyetlen rövidítő forduló — érvénytelen vagy nem rövidebb válasznál az eredeti lecke marad (nincs további javító kör). */
   async function shortenLesson(base: Lesson, baseWords: number, budget: ReturnType<typeof lessonLengthBudget>, validate: typeof validateLesson, count: (l: Lesson) => number): Promise<Lesson> {
@@ -804,7 +820,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   if (!pastAnimator) try {
     const request = withRoleRunbook([text(`4. ÁLLOMÁS — ÁBRÁK.\n${buildAnimatorPrompt(lesson, promptMap)}\nVálaszolj kizárólag az ábrafolt JSON-jával.`)], "animator");
     const reply = await timed(telemetry, "ábrák", () => conversation.send(request));
-    const patched = applyVisualPatch(lesson, parseModelJson(reply.text).json, concepts);
+    const patched = applyVisualPatch(lesson, parseModelJson(reply.text).json, concepts, { sourceVisualKinds: visualsOn });
     const checked = patched ? lessonSchema.safeParse(patched.lesson) : null;
     if (patched && checked?.success && checkAnimatorResult(lesson, checked.data).ok) lesson = checked.data;
     else log("[EGYFUTÁS] Az ábrafolt nem illeszthető — az eredeti tanítás megy tovább.");
@@ -1040,7 +1056,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       ].join("\n"))], "animator");
       try {
         const reply = await timed(telemetry, "forráspótlás", () => conversation.send(request), { fix: true });
-        const patched = reply.truncated ? { lesson: null, rejected: [] } : coveragePatchedLesson(base, parseModelJson(reply.text).json, concepts);
+        const patched = reply.truncated ? { lesson: null, rejected: [] } : coveragePatchedLesson(base, parseModelJson(reply.text).json, concepts, visualsOn);
         const recheck = patched.lesson ? finalProblems(patched.lesson) : null;
         if (patched.lesson && recheck && !recheck.problems.length) { publishable = patched.lesson; coverage = recheck.coverage; }
         else log(`[EGYFUTÁS] A forráspótlás foltja nem illeszthető — a lecke változatlan${patched.rejected.length ? `: ${patched.rejected.join(" | ").slice(0, 300)}` : "."}`);

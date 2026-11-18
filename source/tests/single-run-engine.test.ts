@@ -1012,3 +1012,31 @@ test("F8: a pótló forduló foltján is fut a címke-tisztítás — az alá ne
   assert.deepEqual(coveragePatchedLesson(base, { nem: "folt" }, two), { lesson: null, rejected: [] });
   assert.equal(coveragePatchedLesson(base, { sections: [{ index: 99, visuals: [patch.sections[0].visuals[0]] }] }, two).rejected.length, 1);
 });
+
+/* Vak ellenőr J9 (F6): a végkapu „utolsó védvonala” a motorban — a mentett (folytatott) leckében maradt kirajzolhatatlan ábrablokk nem
+   megy közzétételre. A szerzői állomás szűrője itt nem fut (a tanítás a mentett), ezért csak a végkapu bekötése foghatja meg. */
+test("S2a (végkapu): a folytatott futás mentett leckéjében maradt hibás paraméterű ábrablokk a közzététel előtt kiesik — figyelmeztetéssel, számlálva", async () => {
+  const note = { kind: "source_conflict", subkind: "contradicts_source", blockPath: "sections.0.blocks.0", message: "Tényhiba a tanításban." };
+  const failing = scriptedClient({ lektor: [{ solutions: [], notes: [note], reviewedAll: true }, { solutions: [], notes: [note], reviewedAll: true }] });
+  const mem = memoryStore();
+  await assert.rejects(runSingleLesson({ files: [{ name: "f.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, visualDeps(failing, mem)));
+  const saved = structuredClone(mem.steps.at(-1)!.output) as SavedOutput & { lesson: { sections: Array<{ blocks: Array<Record<string, unknown>> }> } };
+  assert.equal(resumePointOf(saved).stage, "lektor");
+  // A mentett lecke záró összefoglalója elé egy tónus nélküli (kirajzolhatatlan) szabálydoboz kerül; a fejezet saját ábrája megmarad.
+  const broken = { kind: "animate", animKind: "ruleBox", params: { items: ["A terület az oldalak szorzata."] }, caption: "A terület szabálya.", coversConceptIds: ["area"] };
+  saved.lesson.sections[0].blocks.splice(-1, 0, broken);
+  assert.equal(resumePointOf(saved).stage, "lektor", "a séma olvasásra elfogadja (a paramétert a rajzoló méri)");
+
+  const client = scriptedClient();
+  const mem2 = memoryStore();
+  const logs: string[] = [];
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, { ...visualResumeDeps(client, mem2, saved), log: (m) => logs.push(m) });
+  assert.equal(result.htmlFileId, "html1");
+  const published = mem2.lessons.get("lesson1") as { sections: Array<{ blocks: Array<{ kind: string; animKind?: string }> }> };
+  assert.deepEqual(published.sections[0].blocks.filter((b) => b.kind === "animate").map((b) => b.animKind), ["process"], "a hibás szabálydoboz nincs a közzétett leckében, a jó ábra megmaradt");
+  const done = mem2.steps.at(-1)!.output as SavedOutput & { quality: { warnings: string[] }; lesson: unknown };
+  assert.ok(done.quality.warnings.some((w) => w.includes("kirajzolhatatlan")), JSON.stringify(done.quality.warnings));
+  assert.ok(!JSON.stringify(done.lesson).includes("ruleBox"), "a job mentett leckéjében sincs");
+  assert.equal(done.telemetry.gates.undrawableVisualsDropped, 1);
+  assert.equal(logs.filter((l) => l.includes("Kirajzolhatatlan ábrablokk kivéve")).length, 1);
+});

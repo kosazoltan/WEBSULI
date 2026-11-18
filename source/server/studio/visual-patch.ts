@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { ANIM_KINDS, blockSchema, type Block, type Lesson } from "../../shared/lesson-schema";
+import { ANIM_KINDS, blockSchema, legacyAnimKindIssue, type Block, type Lesson } from "../../shared/lesson-schema";
 import { renderedVisualTexts, visualParamProblems } from "../../shared/lesson-visual-params";
 import { sanitizeIllustration, ungroundedLabels } from "../../shared/illustration-svg";
 import { blockText, checkGrounding } from "./grounding";
 import type { MapConcept } from "./coverage";
+import { sourceVisualsEnabled } from "./source-visuals-flag";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 3. szelet): az ábrakészítő CSAK az
@@ -33,8 +34,13 @@ export const visualPatchSchema = z.object({
 
 export type VisualPatchResult = { lesson: Lesson; added: number; replaced: number; rejected: string[]; notes: string[] };
 
-/** A folt a leckébe illesztve, vagy `null`, ha a válasz nem folt (pl. régi alakú teljes lecke). */
-export function applyVisualPatch(original: Lesson, json: unknown, concepts: ReadonlyArray<MapConcept> = []): VisualPatchResult | null {
+/**
+ * A folt a leckébe illesztve, vagy `null`, ha a válasz nem folt (pl. régi alakú teljes lecke).
+ * `opts.sourceVisualKinds`: elfogadható-e a modell foltjában a forrás-ábrák új fajtája (`table`, `ruleBox`, `compareCards`) — alapból a
+ * forrás vizuális leltárának funkciókapcsolója dönt (KI: az ilyen ábra a bővítés előtti hibával kimarad, mint a kapcsoló előtt).
+ */
+export function applyVisualPatch(original: Lesson, json: unknown, concepts: ReadonlyArray<MapConcept> = [], opts: { sourceVisualKinds?: boolean } = {}): VisualPatchResult | null {
+  const sourceVisualKinds = opts.sourceVisualKinds ?? sourceVisualsEnabled();
   const conceptById = new Map(concepts.map((c) => [c.localId, c] as const));
   const patch = visualPatchSchema.safeParse(json);
   if (!patch.success) return null;
@@ -56,6 +62,8 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
       const where = `${entry.index + 1}. fejezet ${n + 1}. ábra`;
       if (!parsed.success) { rejected.push(`${where}: ${parsed.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`); continue; }
       const v = parsed.data;
+      const legacyIssue = sourceVisualKinds ? null : legacyAnimKindIssue(v.animKind);
+      if (legacyIssue) { rejected.push(`${where}: animKind ${legacyIssue}`); continue; }
       const problems = visualParamProblems(v.animKind, v.params);
       let params = v.params;
       let contrastNote: string | null = null;

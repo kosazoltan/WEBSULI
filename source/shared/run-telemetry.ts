@@ -22,6 +22,8 @@ export type RunGates = {
   visualsDropped?: number;
   /** S2a (review B1): a szerző kimenetéből kivett, hibás paraméterű (kirajzolhatatlan) forrás-ábra blokkok száma. */
   undrawableVisualsDropped?: number;
+  /** Ebből ennyi kivétel OKA került a modellnek szóló javító üzenetbe (a kivétel után kapu bukott — vak ellenőr B1). */
+  undrawableVisualsExplained?: number;
   /** A megtartott tételekből törölt, nem létező fogalom-hivatkozások száma (review J2). */
   visualsConceptRefsRemoved?: number;
   /** A megtartott táblázatok csonkolt (túl hosszú) celláinak és fejléceinek száma (review U1). */

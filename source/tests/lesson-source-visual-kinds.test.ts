@@ -303,3 +303,19 @@ test("B1 — a hibás paraméterű új fajtájú blokk determinisztikusan kiesik
   (mutated.sections[0].blocks[1] as { params: Record<string, unknown> }).params.hidden = true;
   assert.deepEqual(dropUndrawableSourceVisuals(mutated).dropped.map((d) => d.path), ["sections[0].blocks[1]"]);
 });
+
+/* Vak ellenőr J9 (F7): a LEJÁTSZÓ szűrőjének bekötése (`LessonBlock`, `animate` ág). A modul stíluslapot és Vite-környezetet importál,
+   ezért itt nem rajzolható ki — a bekötést a forrás szerkezete őrzi (a kirajzolt eredményt a böngészős `source-visuals.spec.ts` B1 esete
+   méri): a szűrő az ág ELSŐ kilépése, a fejléc és a rajzoló kirajzolása ELŐTT áll. */
+test("B1 — a lejátszó `animate` ágában a hibás paraméterű forrás-ábra szűrője a fejléc és a rajzoló ELŐTT lép ki (a bekötés nem köthető ki)", () => {
+  const source = readFileSync(new URL("../client/src/lesson-runtime/LessonRuntime.tsx", import.meta.url), "utf8");
+  const start = source.indexOf('case "animate": {');
+  const end = source.indexOf('case "try": {', start);
+  assert.ok(start > 0 && end > start, "az animate ág megvan");
+  const branch = source.slice(start, end);
+  const guard = branch.indexOf("if (sourceVisualProblems(block)) return null;");
+  assert.ok(guard > 0, "a szűrő az animate ágban van");
+  assert.equal(branch.slice(0, guard).includes("return"), false, "a szűrő előtt nincs másik kilépés");
+  for (const rendered of ["<BlockHead", "<Anim "]) assert.ok(branch.indexOf(rendered) > guard, `${rendered} a szűrő után`);
+  assert.match(source, /import \{ sourceVisualProblems \} from "@shared\/lesson-visual-params";/, "ugyanaz a függvény, mint a szerveren");
+});
