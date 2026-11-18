@@ -113,10 +113,16 @@ test("lejárat nyitott kvíz-visszajelzés mellett: a billentyűk csak a párbes
   const state = await openGameWithCoupon(page);
   await page.getByRole("button", { name: /indít|indul|start|vadász|rajta/i }).first().click();
   await expect(page.getByTestId("game-pause")).toBeVisible({ timeout: 15_000 });
+  // SPEC-VÁLTOZÁS 2026-11-16 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 9.; J5a „Lény-aréna”): a rossz válasz nem nyit
+  // blokkoló kártyát — a rossz ketrecbe futás után a helyes ketrec zölden látszik, a kártyát a „Miért?” nyitja. A mért
+  // követelmény változatlan: nyitott `quiz-feedback` mellett lejár a kupon, és a lejárati réteg van felül.
   await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ phase: "quiz" }));
-  const wrong = page.locator('[data-testid="br-quiz"] [data-correct="false"]').first();
+  const wrong = page.locator('[data-testid="br-cages"] [data-correct="false"]').first();
   await expect(wrong).toBeVisible({ timeout: 10_000 });
   await wrong.click();
+  await expect(page.locator('[data-testid="br-cages"] [data-correct="true"]')).toHaveAttribute("data-state", "correct", { timeout: 10_000 });
+  await expect(page.locator('[role="dialog"]'), "„Miért?” nélkül nincs dialógus").toHaveCount(0);
+  await page.getByTestId("play-why").click();
   await expect(page.getByTestId("quiz-feedback")).toBeVisible();
   await expireNow(page, state);
   await assertExpiredOnTop(page, '[data-testid="quiz-feedback-dismiss"]');

@@ -149,6 +149,31 @@ A mandátum a háromfázisú rend mindhárom fázisára és a kanban-jegyekre is
 (`docs/agent-haromfazisu-munka.md`, `docs/kanban.md`). A kezelt `agentic-qa-kit`
 blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 
+## Minőségkapuk (kötelező, tulajdonosi utasítás 2026-11-17)
+
+> „Először is bármilyen kibocsátás előtt végig futtasd a saját lint kaput. Másrészt pedig minden fejlesztés után automatikusan egy
+> független alügynök ellenőrizze az elkészült fejlesztést, hogy ne utólag derüljenek ki a hibák.” — a tulajdonos, 2026-11-17
+
+1. **Lint kapu minden kibocsátás előtt** (commit-sorozat lezárása, push, PR, merge, telepítés): `npm run gate:lint`.
+2. **Szakasz-kapu minden fejlesztési szakasz után:** `npm run gate:stage` (lint gyors mód + a változott fájlok egységtesztjei + minden
+   őr-teszt). Csak zöld után lehet továbblépni; előbb a helyi hibát kell javítani.
+3. **Független ellenőr:** minden elkészült fejlesztést egy friss kontextusú, csak olvasó alügynök ellenőriz a PR megnyitása ELŐTT és
+   minden érdemi javító push előtt (a fejlesztő nem ellenőrizheti magát). Az ítéletet a `record-review.mjs` rögzíti.
+4. **A kapuk sorrendje:** `gate:stage` (szakaszonként) → `gate:push` → független ellenőr + `record-review` →
+   `gate:pr -- --body-file <leírás.md>` → push + PR → zöld CI → közvetlenül a merge előtt `gate:merge -- <PR>`. A `git push`,
+   `gh pr create` és `gh pr merge` előtt a `check-quality-gates` hook a zöld bizonyítékot ellenőrzi.
+5. **A kapu megkerülése tilos**, vészkijárat nincs; ha a kapu hibás, a kaput kell javítani (teszttel).
+6. **API-költség elve:** előbb az olcsó helyi ellenőrzés; a független ellenőr (és a CI) csak zöld helyi kapuk után indul — ne a
+   drága kör fogja meg az olcsó hibát.
+
+A független ellenőr mellett második, más rendszerű véleményként a külső (Gemini) ellenőr is futtatható
+(`scripts/qa/gates/external-review.mjs`, kulcs csak `GEMINI_API_KEY`-ből); a jelentését az orkesztrátor a kódból visszaellenőrzi, a
+hiánya nem bukás.
+
+Skillek (`.agents/skills/` forrás, `.claude/skills/` tükör): `websuli-lint-ellenor`, `websuli-fejlesztesi-ellenor`,
+`websuli-push-elotti-kapu`, `websuli-pr-elotti-kapu`, `websuli-merge-elotti-kapu`. Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md).
+A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
+
 ## Verifikáció
 
 A változáshoz illő legkisebb ellenőrzési kört futtasd: célzott teszt/lint/typecheck

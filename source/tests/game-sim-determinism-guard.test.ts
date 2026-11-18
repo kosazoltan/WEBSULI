@@ -69,6 +69,9 @@ function simFiles(): string[] {
     ...walk(join(root, "shared/duel")),
     ...PLAY_SIM_FILES.map((p) => join(root, p)).filter((p) => existsSync(p)),
     ...gameCores(),
+    // A Brain Rot `pacing.ts`-e (válaszidő, review L7): a Brain Rot sim importálja, ezért ugyanaz a tilalom vonatkozik rá.
+    // Csak ez: a Szólétra `pacing.ts`-e a tempó tárolásához (localStorage) jogosan használ `window`-t, és azt a sim nem hívja.
+    join(root, "client/src/lib/brainRot/pacing.ts"),
   ];
 }
 
@@ -119,6 +122,15 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
   ],
   // J2a: a Szólétra lapján nincs kivétel (a kapaszkodó-tétel sorsolása a menet seedelt RNG-jéből: `pickRngRef`).
   "WordLadderHuEn.tsx": [],
+  // J1a: a Szökőár kérdés-választása a menet seedelt RNG-jéből (`pickRngRef`), a pálya a mag seedjéből.
+  "TsunamiEscapeEnglish.tsx": [
+    {
+      re: /if \(!reducedMotion && Math\.random\(\) < 0\.3 \+ prog \* 0\.3\) \{/,
+      why: "a villám-felvillanás tisztán kozmetikai díszlet (a játék kimenetelét nem érinti); csökkentett mozgásnál nincs (M9, s13-őr)",
+    },
+  ],
+  // J5a: a Brain Rot lapján nincs kivétel (a tétel-sorsolás a menet seedelt RNG-jéből: `pickRngRef`; a világ a magban).
+  "BrainRotSteal.tsx": [],
   // J6a: az Aszteroida lapján nincs kivétel (hullám-érkezés, hasadás, pickup, vadászgép-lövés a menet `world` RNG-jéből; a kérdés-kristályok
   // és az évfolyam-bank választás a `crystal` / `pick` RNG-ből; a kozmetika a `fx` RNG-ből: `cosmeticRandom`).
   "SpaceAsteroidQuiz.tsx": [],

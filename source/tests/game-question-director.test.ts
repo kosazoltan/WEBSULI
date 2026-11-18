@@ -178,7 +178,13 @@ test("(2) a hibás tétel a 3.–6. következő kérdésként tér vissza (J4)",
   }
 });
 
-test("(3) kupon módban csak tananyag jön, ismétlés és új tétel nem", () => {
+/*
+ * SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md D-J1a-10; review #483 M2): kupon módban a
+ * lecke kimerülése után a kérdés NEM fogy el (a régi játékok „kimerülésnél a legrégebben látott” szabálya), és a hibázott
+ * lecke-tétel menet közben visszatér. A szigor megmarad: csak a lecke tananyaga jön (a director új tételt sem, menetek közötti
+ * ismétlést sem kér), és ≥ 2 tételnél nincs közvetlen ismétlés.
+ */
+test("(3) kupon módban csak a lecke tananyaga jön; kimerüléskor a legrégebbi lecke-tétel, új tétel soha", () => {
   const material = [quiz("c1"), quiz("c2")];
   const provider = bankProvider(300, { material, coupon: true });
   const review = createReviewQueue(null, { now: () => T0 });
@@ -187,15 +193,77 @@ test("(3) kupon módban csak tananyag jön, ismétlés és új tétel nem", () =
   for (let t = 10_000; t < 120_000; t += 100) {
     const a = director.active();
     if (a) {
-      director.answer(a.id, a.options.findIndex((o) => !o.correct), t); // mindig hibás: ismétlés sem jöhet
+      director.answer(a.id, a.options.findIndex((o) => !o.correct), t);
       continue;
     }
     const p = director.tick(t, { calm: true });
     if (p) got.push(p);
   }
-  assert.deepEqual(got.map((p) => p.question.key), ["mat:c1", "mat:c2"]);
-  assert.ok(got.every((p) => p.question.source === "coupon" && !p.isReview));
+  assert.deepEqual(got.slice(0, 2).map((p) => p.question.key), ["mat:c1", "mat:c2"], "előbb az új lecke-tételek");
+  assert.ok(got.length > 10, `a kérdés nem fogy el (${got.length})`);
+  assert.ok(got.every((p) => p.question.source === "coupon" && (p.question.key === "mat:c1" || p.question.key === "mat:c2")), "csak a lecke tananyaga");
+  for (let i = 1; i < got.length; i++) assert.notEqual(got[i]!.question.key, got[i - 1]!.question.key, "≥ 2 tételnél nincs közvetlen ismétlés");
   assert.equal(provider.freshCalls, 0, "kupon módban a director új tételt sem kér");
+});
+
+test("(3b) kupon mód, 8 tételes lecke, hosszú menet: soha nincs kérdés nélkül, a hibázott tétel a 3.–6. kérdésként visszatér", () => {
+  const material = Array.from({ length: 8 }, (_, k) => quiz(`L${k}`));
+  const provider = bankProvider(300, { material, coupon: true });
+  // Előző menet esedékes ismétlése (más leckéből): kupon módban nem jöhet.
+  const review = createReviewQueue(null, { now: () => T0 });
+  review.record(bankPlayQuestion("speed-quiz-math", quiz("idegen")), "wrong", 0);
+  review.startRun();
+  const { played, director } = play({ seed: 3, accuracy: 0.6, questions: 60, provider, review });
+  const keys = played.presentations.map((p) => p.question.key);
+  assert.equal(keys.length, 60, "60 kérdés jött (a lecke 8 tétele után sem fogyott el)");
+  assert.ok(keys.every((k) => k.startsWith("mat:L")), "csak a lecke tananyaga");
+  assert.ok(director.stats(1e9).maxGapSec <= 6, `kérdés nélküli szakasz ${director.stats(1e9).maxGapSec}`);
+  for (let i = 1; i < keys.length; i++) assert.notEqual(keys[i], keys[i - 1], "nincs közvetlen ismétlés");
+  // Az első 8 kérdésben hibázott tétel a hiba utáni 3.–6. kérdésként visszatér.
+  const firstMiss = played.presentations.findIndex((p, i) => i < 6 && played.results.get(p.id) === false);
+  assert.ok(firstMiss >= 0, "volt korai hiba");
+  const back = keys.indexOf(keys[firstMiss]!, firstMiss + 1) - firstMiss;
+  assert.ok(back >= 3 && back <= 6, `a hibázott tétel ${back}. kérdésként tért vissza (${keys.slice(0, 16).join(",")})`);
+  assert.ok(played.presentations.some((p) => p.isReview), "menet közbeni ismétlés kupon módban is");
+  assert.equal(provider.freshCalls, 0);
+});
+
+test("(3c) kupon mód, 3 és 8 tételes lecke, hosszú menet: minden kiadott tétel `source: coupon` a saját couponItemId-jével — az ismétlés és a kimerülés utáni visszatérés is (D-J1a-16, ÚK1)", () => {
+  for (const size of [3, 8]) {
+    for (const accuracy of [0, 0.5, 1]) {
+      const material = Array.from({ length: size }, (_, k) => quiz(`K${size}-${k}`));
+      const couponIdOf = new Map(material.map((m) => [`mat:${m.id}`, `kupon-${m.id}`]));
+      let next = 0;
+      let freshCalls = 0;
+      const provider: QuestionProvider = {
+        couponOnly: true,
+        material: () => {
+          const m = material[next];
+          if (!m) return null;
+          next += 1;
+          return materialPlayQuestion(m, { coupon: true, couponItemId: `kupon-${m.id}` });
+        },
+        fresh: () => {
+          freshCalls += 1;
+          return null;
+        },
+        // A közös sor visszaállítása a forrást `material`-ra normalizálja és a couponItemId-t elveszti — kupon módban nem ezt kell kiadni.
+        restore: (item) => restoreReviewQuestion(item, {}),
+      };
+      const label = `${size} tétel, pontosság ${accuracy}`;
+      const { played } = play({ seed: 7 + size, accuracy, questions: 120, provider });
+      const ps = played.presentations;
+      assert.equal(ps.length, 120, `${label}: 120 kérdés jött`);
+      for (const p of ps) {
+        assert.equal(p.question.source, "coupon", `${label}: ${p.question.key} (#${p.id}, ismétlés: ${p.isReview}) forrása`);
+        assert.equal(p.question.couponItemId, couponIdOf.get(p.question.key), `${label}: ${p.question.key} (#${p.id}) couponItemId-je`);
+      }
+      // A teszt tényleg végigmegy az ismétlésen és a kimerülés utáni visszatérésen (nem csak az első kiadásokon).
+      if (accuracy < 1) assert.ok(ps.some((p) => p.isReview), `${label}: volt menet közbeni ismétlés`);
+      assert.ok(ps.length > size * 3, `${label}: a lecke többször is körbeért`);
+      assert.equal(freshCalls, 0, `${label}: kupon módban nincs új tétel`);
+    }
+  }
 });
 
 test("(4) az answer idempotens: második hívás ugyanarra az id-re null; az első válasz számít", () => {

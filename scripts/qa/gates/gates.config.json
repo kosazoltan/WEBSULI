@@ -1,0 +1,78 @@
+{
+  "$comment": "Minőségkapuk konfigurációja (docs/minosegkapuk.md). A listák bővíthetők kód-módosítás nélkül.",
+  "base": "origin/main",
+  "sharedFiles": [
+    "docs/agent-csapdak.md",
+    "AGENTS.md",
+    ".claude/settings.json",
+    ".github/workflows/ci.yml",
+    "source/package.json",
+    "source/package-lock.json"
+  ],
+  "sliceSharedPatterns": [
+    "source/client/src/game-engine/",
+    "source/shared/",
+    "source/server/routes.ts",
+    "source/client/src/index.css",
+    "source/client/src/App.tsx"
+  ],
+  "games": {
+    "tsunami-english": "tsunami",
+    "block-craft-quiz": "block-?craft",
+    "brain-rot-steal": "brain-?rot",
+    "space-asteroid-quiz": "space-?asteroid",
+    "speed-quiz-math": "speed-?(?:quiz|math)",
+    "tornado-hunter-200": "tornado",
+    "word-ladder-hu-en": "word-?ladder"
+  },
+  "sharedGamePatterns": [
+    "source/client/src/game-engine/",
+    "source/client/src/pages/Games.tsx"
+  ],
+  "uiPatterns": [
+    "source/client/src/",
+    "source/client/index.html"
+  ],
+  "dbPatterns": [
+    "source/server/",
+    "source/shared/schema",
+    "source/migrations/"
+  ],
+  "alwaysGameSpecs": [
+    "game-meta-quality.spec.ts",
+    "coupon-expired-all-games.spec.ts"
+  ],
+  "mobileQualitySpec": "game-mobile-quality.spec.ts",
+  "repoWideScopes": [
+    {
+      "pattern": "-guard\\.test\\.ts$",
+      "mainScope": [".*"],
+      "why": "Az őr-tesztek a git ls-files minden követett fájlját olvassák (pl. source/tests/no-real-emails-guard.test.ts) — bármely main-változás érinti őket."
+    },
+    {
+      "pattern": "^scripts/qa/",
+      "mainScope": ["^scripts/qa/", "^\\.claude/settings\\.json$", "^docs/specs/", "^render\\.yaml$", "^\\.agents/skills/", "^\\.claude/skills/", "^\\.github/workflows/"],
+      "why": "three-phase-check.mjs:38/:71 a docs/specs tartalmát olvassa; verify-render-settings.test.mjs:22 a render.yaml-t; skills-sync-check.test.mjs:33-34 és a CI skills-sync-check lépése (ci.yml:30) a valódi skill-fájlokat; a workflow (ci.yml:24/:28/:32) határozza meg, mi fut; hooks/settings-hooks.test.mjs a valódi .claude/settings.json-t futtatja."
+    },
+    {
+      "pattern": "^\\.github/workflows/",
+      "mainScope": [".*"],
+      "why": "A workflow minden jobot újradefiniál — bármely main-változás más eredményt adhat."
+    }
+  ],
+  "mirroredSkills": [
+    "websuli-lint-ellenor",
+    "websuli-fejlesztesi-ellenor",
+    "websuli-push-elotti-kapu",
+    "websuli-pr-elotti-kapu",
+    "websuli-merge-elotti-kapu"
+  ],
+  "mergeEvidenceMaxMinutes": 15,
+  "$hookTimeouts": "A check-quality-gates hook korlátai (kanban #100): git- és gh-hívásonként, és a teljes keret. A keret a .claude/settings.json hook-időkorlátja (60 s) alatt marad; ha a git / gh nem válaszol, a hook TILT (fail-closed), nem enged.",
+  "hookGitTimeoutMs": 10000,
+  "hookGhTimeoutMs": 15000,
+  "hookBudgetMs": 45000,
+  "rtStatusUrl": "https://websuli.vip/api/rt/status",
+  "auditSentinel": ".audit-ok",
+  "auditMaxAgeMinutes": 10
+}
