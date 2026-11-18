@@ -97,3 +97,14 @@ rajzolási hívás 155 → 45 (asztali, bloommal: 166 → 59); háromszög 72,7 
   alacsonyabb lehet.
 - Fekvő nézetben a figura oldalra mozogva a szélső válasz-oszlop alá kerülhet (a követő eltolás csak álló nézetben él).
 - Valódi telefon: UNVERIFIED.
+
+## Kiegészítés — csiszoló kör (terv 7.5, végrehajtás 10.)
+
+- **Lagg gyökéroka:** C-75 (lusta `new AudioContext()` az első kérdés suhogásánál, 0,8–2 s). Javítva `prewarmAudio()`-val a
+  menü alatt. A közös director minden játékban így viselkedik — a többi játékban is be kell kötni (kanban-javaslat).
+- **Maradék:** megoldás-kijelzéskor 50–160 ms-os képkockák (a GPU a DOM raszterhez Skia-shadert fűz össze); ritkán 350–500 ms-os
+  GPU-megakadás tétlen főszállal, játékeseménytől függetlenül — terhelt gépen egy üres WebGL-oldal is 160 ms-ot mutatott, ezért
+  nyugodt gépen újra kell nyomkövetni.
+- **Mérés (1 idegen konténer mellett):** `c5-meres-1x.txt`, `c5-meres-4x.txt`.
+- **Képek:** `docs/measurements/szokoar-tema/latvany/c5-*` (valódi GPU; a `-swiftshader` végű a tesztkörből).
+- **Blender:** a fájlnév normalizált tartalmi lenyomat (`content_digest`); a bájtok futásonként eltérnek, a név nem.

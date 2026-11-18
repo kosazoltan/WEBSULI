@@ -1,0 +1,5 @@
+dist phone cpu1 indítás max 125 ms p99 35.2 | játék fps 59.3 p95 18.2 p99 18.7 max 19 | hívás med/max 45/45 háromszög 65214
+dist phone cpu1 indítás max 88 ms p99 18.7 | játék fps 56.8 p95 18.1 p99 19.8 max 353 | hívás med/max 45/45 háromszög 65214
+dist phone cpu1 indítás max 100 ms p99 16.8 | játék fps 60 p95 16.8 p99 16.8 max 17 | hívás med/max 45/45 háromszög 65214
+dist phone cpu1 indítás max 50 ms p99 16.9 | játék fps 59.9 p95 16.8 p99 16.9 max 33 | hívás med/max 45/45 háromszög 65214
+dist phone cpu1 indítás max 150 ms p99 17.1 | játék fps 59.6 p95 16.8 p99 16.9 max 50 | hívás med/max 45/45 háromszög 65214
