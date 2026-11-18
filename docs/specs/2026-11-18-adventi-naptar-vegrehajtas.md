@@ -625,6 +625,15 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
 | `node --import tsx --test tests/advent-limits.test.ts` | `fail 0` |
 | `npm.cmd run test:learning-db` | `fail 0` |
 
+## Kiegészítés 9 — névtelen → párosított átmenet (2026-11-18; tulajdonosi döntés; terv `docs/specs/2026-11-18-adventi-naptar.md` 21. szakasz)
+
+1. `store.ts`: tiszta `adoptionChoice(learnerRow, deviceRow)` és `solvedDoorsOf`; `adopt(season, deviceId, learnerId)` egy tranzakcióban,
+   mindkét sort `FOR UPDATE` zárolva, 23505-nél egy újrapróbával; a `mutate` a zár előtt megszűnt sorra `AdventRowGoneError`-t dob.
+2. `routes.ts`: az alany feloldása után, érvényes tanulói link + eszközazonosító esetén írásnál `adopt`, olvasásnál előnézet;
+   `AdventRowGoneError` → 409 (`refresh: true`).
+3. Tesztek: nincs-sor → átkerül (az olvasás nem ír); van-sor → a jobb marad, egyenlőségnél a tanulóé; versenyhelyzet (egyidejű válasz
+   és átvétel, háromszor) → nincs 500, egyetlen sor, a sikeres válasz megvan; `adoptionChoice` egységteszt.
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.

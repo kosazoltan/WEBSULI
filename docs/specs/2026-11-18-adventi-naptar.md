@@ -1062,10 +1062,15 @@ pótlási terhelés nem volt kiszámolva), és a hálózati keretet érvénytele
 azonosítás nélkül ez nem zárható ki; a következmény legfeljebb 15 perces írás-szünet egy címen, adatvesztés nélkül. A kliens-IP
 megállapításának megbízhatósága (a Render közvetlen elérhetősége) külön jegy.
 
-**Névtelen → párosított átmenet (vak ellenőr k1):** most a tanulói link mindig nyer, a névtelen eszköz-sor megmarad, de nem kerül át —
-a gyerek üres naptárat lát. Javasolt szabály (a koordinátor javaslata): párosításkor, ha a tanulónak még nincs sora, a névtelen sor
-átkerül hozzá; ha van, a jobb haladás marad. Ez személyes adatot kapcsol össze (az eszköz haladása a tanulóé lesz), ezért külön
-szeletben, tulajdonosi jóváhagyással — kanban-jegy. Addig a felület (3/3 PR) a párosított állapotot mutatja.
+**Névtelen → párosított átmenet (vak ellenőr k1; TULAJDONOSI DÖNTÉS 2026-11-18, kérdőíven: „Igen, vigyük át.”):** ha egy kérés
+érvényes tanulói linket ÉS eszközazonosítót is hoz, az eszköz névtelen sora a tanulóhoz kerül: ha a tanulónak még nincs sora, az
+eszköz sora átkerül (újrakulcsolva, ugyanaz a sor); ha van, a TÖBB megoldott ablakkal rendelkező marad (egyenlőségnél a tanulóé), a
+másik törlődik; válasz nélküli eszköz-sor egyszerűen törlődik. Utána a gyereknek egyetlen élő sora van. Az átvétel csak ÍRÁSNÁL
+történik (egy tranzakcióban, mindkét sor zárolva; GET-en nincs mellékhatás) — az olvasás előnézetként már a megtartandó haladást
+mutatja. Az átvétellel egyidejű válasz nem vész el és nem ad 500-at (a zár sorba rendezi; a közben megszűnt sorra írás 409
+„frissítjük”). Adatvédelem: az eszköz haladása a tanuló személyes adatává válik — a tanuló sora a tanulóval együtt törlődik (idegen
+kulcs), a tanulóhoz kötött játékos-fiók adatletöltése tartalmazza. Megvalósítás: \`server/advent/store.ts\` \`adoptionChoice\`,
+\`adopt\`; \`server/advent/routes.ts\` (az alany feloldása után). Jegy: #170 (lezárva).
 
 **Évfolyam (vak ellenőr k6):** az évfolyam az első VÁLASZNÁL rögzül, nem a megnyitáskor (R6, E10); az első válaszig a profil
 változása új tervet ad. **Sérült sor (k3):** 500 helyett érthető 409 (\`corrupt: true\`) minden végponton.

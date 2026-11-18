@@ -107,4 +107,5 @@ képcsere), #155 (S5, S6, S8), #156 (ágak rebase-e a friss mainre push előtt).
   el tudja-e fogyasztani a többiek elől?”; a méretezés képlete álljon a kódban, ne csak a számok.
 - **Maradó kockázat:** szkriptelt munkamenet- és eszközcserével a keret továbbra is elfogyasztható (terv 21.); a kliens-IP
   megbízhatósága külön KÖZEPES jegy (#169).
+- k1: a tulajdonos döntése (2026-11-18, „Igen, vigyük át”) után a névtelen → párosított átmenet ugyanebben a PR-ban elkészült (#170 lezárva).
 - Kanban: #169 (kliens-IP), #170 (névtelen → párosított átmenet), #171 (k4), #172 (k7: takarító az S6 előtt), #173 (k8: DB-kör bontása).
