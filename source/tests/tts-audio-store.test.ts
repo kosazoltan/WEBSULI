@@ -69,7 +69,7 @@ test("a válasz tiszta függvénye: 200 immutable + ETag, 304, 206, 416, 404 no-
   assert.equal(part.status, 206);
   assert.equal(part.headers["Content-Range"], "bytes 2-5/10");
   assert.equal(part.body?.toString(), "2345");
-  assert.equal(ttsAudioReply(ID, audio, { range: "bytes=50-" }).status, 416);
+  assert.deepEqual(ttsAudioReply(ID, audio, { range: "bytes=50-" }), { status: 416, headers: { "Content-Range": "bytes */10", "Cache-Control": "no-store" } }, "a 416 sem tárolható");
   assert.deepEqual(ttsAudioReply(ID, null), { status: 404, headers: { "Cache-Control": "no-store" } });
   for (const bad of ["", "abc", ID.toUpperCase(), `${ID}.mp3`, "../x"]) assert.deepEqual(ttsAudioReply(bad, audio), { status: 400, headers: { "Cache-Control": "no-store" } }, bad);
 });
@@ -82,6 +82,8 @@ test("végpont (valódi HTTP, ál-tároló): 200 + fejlécek, 304, 206, 404, 400
     async has() { calls.push("has"); return new Set(); },
     async put() { calls.push("put"); return "stored"; },
     async totalBytes() { calls.push("totalBytes"); return 0; },
+    async usage() { calls.push("usage"); return { totalBytes: 0, rows: 0, byVersion: {} }; },
+    async purgeOtherVersions() { calls.push("purge"); return { rows: 0, bytes: 0 }; },
   };
   const app = express();
   registerLessonTtsAudio(app, store);
@@ -126,6 +128,39 @@ test("végpont (valódi HTTP, ál-tároló): 200 + fejlécek, 304, 206, 404, 400
   }
 });
 
+// Review K2: a hiány (404) nem ragadhat be a szerver memóriájába — a később legyártott hang újraindítás nélkül kiszolgálható.
+test("végpont: ismeretlen kulcs 404, majd a tároló megkapja a hangot → ugyanarra a kulcsra 200 (a hiány nem tárolódik)", async () => {
+  const bytes = Buffer.from("ID3-kesobb-legyartott-hang");
+  const stored = new Map<string, Buffer>();
+  let gets = 0;
+  const store: TtsAudioStore = {
+    async get(id) { gets += 1; const found = stored.get(id); return found ? { mime: "audio/mpeg", bytes: found, size: found.length } : null; },
+    async has() { return new Set(); },
+    async put() { return "stored"; },
+    async totalBytes() { return 0; },
+    async usage() { return { totalBytes: 0, rows: 0, byVersion: {} }; },
+    async purgeOtherVersions() { return { rows: 0, bytes: 0 }; },
+  };
+  const app = express();
+  registerLessonTtsAudio(app, store);
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  const address = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/tts/lesson-audio/${ID}`;
+  try {
+    assert.equal((await fetch(address)).status, 404);
+    assert.equal((await fetch(address)).status, 404);
+    assert.equal(gets, 2, "minden hiány újra a tárolóhoz fordul");
+    stored.set(ID, bytes);
+    const ok = await fetch(address);
+    assert.equal(ok.status, 200);
+    assert.deepEqual(Buffer.from(await ok.arrayBuffer()), bytes);
+    assert.equal(gets, 3);
+    assert.equal((await fetch(address)).status, 200);
+    assert.equal(gets, 3, "a találat viszont a memóriából megy");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
 test("a Vercel a leckehangot gyorsítótárazhatja (nincs no-store, átírás-gyorsítótár bekapcsolva), a többi /api választ nem", () => {
   const cfg = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
   const noStore = cfg.headers.filter((h) => h.headers.some((x) => x.key === "Cache-Control" && x.value.includes("no-store")));

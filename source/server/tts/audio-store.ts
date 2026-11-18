@@ -13,10 +13,23 @@ export interface TtsAudioStore {
   get(id: string): Promise<TtsAudio | null>;
   /** A megadott kulcsok közül a tárban meglévők. */
   has(ids: readonly string[]): Promise<Set<string>>;
-  /** Tartalomcímzett írás: meglévő kulcsot nem ír felül. Méretőr: plafon felett `TtsStorageLimitError`, írás nélkül. */
+  /**
+   * Tartalomcímzett írás: meglévő kulcsot nem ír felül. Méretőr: ha a sor HANGVERZIÓJÁNAK összmérete az új fájllal átlépné a plafont,
+   * `TtsStorageLimitError`, írás nélkül. Más hangverziók sorai a plafonba nem számítanak (hangcserénél az új verzió legyártható, mielőtt
+   * a régi takarítása megtörténne) — a teljes tárolt méretet a `usage()` jelzi.
+   */
   put(row: TtsAudioRow): Promise<"stored" | "exists">;
-  totalBytes(): Promise<number>;
+  /** A tárolt bájtok összege: egy hangverzióé, vagy (paraméter nélkül) az egész táré. */
+  totalBytes(voiceVersion?: string): Promise<number>;
+  /** Jelző mérőszám (nem állít meg semmit): a teljes tárolt méret és hangverziónkénti bontása. */
+  usage(): Promise<TtsAudioUsage>;
+  /**
+   * Takarítás hangcsere után: a megadott verzión KÍVÜLI sorok törlése. Visszafordíthatatlan — csak tulajdonos által indított
+   * szkript / admin-feladat hívja (S8c); a végpont és a gyártás soha.
+   */
+  purgeOtherVersions(keepVoiceVersion: string): Promise<{ rows: number; bytes: number }>;
 }
+export type TtsAudioUsage = { totalBytes: number; rows: number; byVersion: Record<string, { rows: number; bytes: number }> };
 
 /** Méretőr (Neon-keret): az összplafon felfelé csak kódváltozással (review-val) állítható. */
 export const TTS_AUDIO_LIMITS = { maxTotalBytes: 40 * 1024 * 1024, maxFileBytes: 300 * 1024 } as const;
@@ -62,7 +75,7 @@ type Database = typeof import("../db").db;
 /** Az írások sorba állítása (tranzakciós tanácsadó zár): két egyidejű írás együtt sem lépheti át a plafont. */
 const TTS_AUDIO_LOCK_KEY = 7_320_311_18;
 
-/** Adatbázisos megvalósítás (`lesson_tts_audio`, migrations/0042). */
+/** Adatbázisos megvalósítás (`lesson_tts_audio`, migrations/0043). */
 export class DbTtsAudioStore implements TtsAudioStore {
   constructor(private readonly database: () => Promise<Database>, private readonly limits: () => TtsAudioLimits = ttsAudioLimits) {}
 
@@ -96,8 +109,12 @@ export class DbTtsAudioStore implements TtsAudioStore {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(${TTS_AUDIO_LOCK_KEY})`);
         const existing = await tx.execute(sql`SELECT 1 FROM lesson_tts_audio WHERE id = ${row.id}`);
         if (existing.rows.length) return "exists" as const;
-        const total = await tx.execute(sql`SELECT COALESCE(SUM(size), 0)::bigint AS total FROM lesson_tts_audio`);
-        assertTotalWithinLimit(Number((total.rows[0] as { total?: unknown } | undefined)?.total ?? 0), row.size, limits);
+        const total = await tx.execute(sql`SELECT COALESCE(SUM(size) FILTER (WHERE voice_version = ${row.voiceVersion}), 0)::bigint AS version_total,
+          COALESCE(SUM(size), 0)::bigint AS total FROM lesson_tts_audio`);
+        const sums = total.rows[0] as { version_total?: unknown; total?: unknown } | undefined;
+        assertTotalWithinLimit(Number(sums?.version_total ?? 0), row.size, limits);
+        // Jelzés, nem megállítás: régi hangverziók soraival együtt a tár a plafon fölé nőhet — ilyenkor takarítás kell (purgeOtherVersions).
+        if (Number(sums?.total ?? 0) + row.size > limits.maxTotalBytes) logger.warn(`[TTS-AUDIO] A teljes hangtár (${Number(sums?.total ?? 0) + row.size} bájt) meghaladja a ${limits.maxTotalBytes} bájtos plafont — régi hangverziók takarítása esedékes.`);
         await tx.execute(sql`INSERT INTO lesson_tts_audio (id, voice_version, language, mime, bytes, size)
           VALUES (${row.id}, ${row.voiceVersion}, ${row.language}, ${row.mime}, ${row.bytes}, ${row.size})`);
         return "stored" as const;
@@ -109,10 +126,39 @@ export class DbTtsAudioStore implements TtsAudioStore {
     }
   }
 
-  async totalBytes(): Promise<number> {
+  async totalBytes(voiceVersion?: string): Promise<number> {
     const db = await this.database();
-    const { rows } = await db.execute(sql`SELECT COALESCE(SUM(size), 0)::bigint AS total FROM lesson_tts_audio`);
+    const { rows } = voiceVersion === undefined
+      ? await db.execute(sql`SELECT COALESCE(SUM(size), 0)::bigint AS total FROM lesson_tts_audio`)
+      : await db.execute(sql`SELECT COALESCE(SUM(size), 0)::bigint AS total FROM lesson_tts_audio WHERE voice_version = ${voiceVersion}`);
     return Number((rows[0] as { total?: unknown } | undefined)?.total ?? 0);
+  }
+
+  async usage(): Promise<TtsAudioUsage> {
+    const db = await this.database();
+    const { rows } = await db.execute(sql`SELECT voice_version, count(*)::int AS rows, COALESCE(SUM(size), 0)::bigint AS bytes
+      FROM lesson_tts_audio GROUP BY voice_version ORDER BY voice_version`);
+    const usage: TtsAudioUsage = { totalBytes: 0, rows: 0, byVersion: {} };
+    for (const row of rows as Array<{ voice_version?: unknown; rows?: unknown; bytes?: unknown }>) {
+      const entry = { rows: Number(row.rows), bytes: Number(row.bytes) };
+      usage.byVersion[String(row.voice_version)] = entry;
+      usage.totalBytes += entry.bytes;
+      usage.rows += entry.rows;
+    }
+    return usage;
+  }
+
+  async purgeOtherVersions(keepVoiceVersion: string): Promise<{ rows: number; bytes: number }> {
+    // Üres vagy alakilag hibás „megtartandó” verzióval a hívás mindent törölne — ezt a bemenet ellenőrzése kizárja.
+    if (!/^[a-z0-9][a-z0-9.-]{0,15}$/.test(keepVoiceVersion)) throw new TtsAudioInputError("Érvénytelen hangverzió.");
+    const db = await this.database();
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${TTS_AUDIO_LOCK_KEY})`);
+      const { rows } = await tx.execute(sql`DELETE FROM lesson_tts_audio WHERE voice_version <> ${keepVoiceVersion} RETURNING size`);
+      const purged = { rows: rows.length, bytes: (rows as Array<{ size?: unknown }>).reduce((sum, row) => sum + Number(row.size), 0) };
+      logger.warn(`[TTS-AUDIO] Takarítás: ${purged.rows} régi hangverziójú sor törölve (${purged.bytes} bájt); megtartva: ${keepVoiceVersion}.`);
+      return purged;
+    });
   }
 }
 

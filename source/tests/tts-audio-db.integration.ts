@@ -5,7 +5,7 @@ import express from "express";
 import { sql } from "drizzle-orm";
 import { ttsAudioHash, TTS_VOICE_VERSION } from "../shared/tts-audio-key";
 
-// Terv 2026-11-18-tananyag-gyartas-minoseg, S8b (D4): a hangtár adatbázisos megvalósítása eldobható Postgresben (a tábla a 0042-es
+// Terv 2026-11-18-tananyag-gyartas-minoseg, S8b (D4): a hangtár adatbázisos megvalósítása eldobható Postgresben (a tábla a 0043-as
 // migrációs fájlból jön — scripts/run-learning-db-tests.ts). Guard BEFORE importing modules with a database connection.
 const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
 assert.equal(url.hostname, "127.0.0.1");
@@ -88,6 +88,34 @@ test("mutáció: túl nagy fájl, hibás mime, hibás kulcs → megtagadva, sor 
   const results = await Promise.allSettled(await Promise.all(Array.from({ length: 6 }, (_, i) => audioRow(`race ${i}`, Buffer.alloc(40, i + 1)))).then((rows) => rows.map((r) => racing.put(r))));
   assert.equal(results.filter((r) => r.status === "fulfilled").length, 2, "40 + 40 fér a 100 bájtos maradékba, a többi megtagadva");
   assert.ok(await racing.totalBytes() <= total + 100);
+});
+
+// Review K3: hangcserénél az új verzió gyártása nem akadhat meg a régi verzió sorain; a takarítás kifejezett, külön művelet.
+test("hangverzió-váltás: a plafon verziónként számol, a teljes méret csak jelző; a takarítás csak a régi verziók sorait törli", async () => {
+  const all = storeWith(10_000_000);
+  const oldBytes = await all.totalBytes("gb-1");
+  const oldRows = await count();
+  assert.ok(oldBytes > 0 && oldRows > 0);
+  assert.equal(await all.totalBytes(), oldBytes, "eddig csak gb-1 sorok vannak");
+  // A plafon kisebb, mint a régi verzió mérete: ha a régi sorok beleszámítanának, az új verzió egyetlen bájtot sem írhatna.
+  const next = storeWith(100);
+  const v2 = async (text: string, bytes: Buffer) => ({ id: await ttsAudioHash(text, "en-GB", "gb-2"), voiceVersion: "gb-2", language: "en-GB", mime: "audio/mpeg", bytes, size: bytes.length });
+  assert.ok(oldBytes > 100);
+  assert.equal(await next.put(await v2("triangle", Buffer.alloc(60, 2))), "stored");
+  assert.equal(await next.put(await v2("This is a triangle.", Buffer.alloc(40, 2))), "stored");
+  await assert.rejects(next.put(await v2("one more", Buffer.alloc(1, 2))), (e: unknown) => e instanceof TtsStorageLimitError && e.reason === "total-exceeded" && e.detail.totalBytes === 100, "az új verzió saját plafonja él");
+  assert.equal(await next.totalBytes("gb-2"), 100);
+  assert.deepEqual(await next.usage(), { totalBytes: oldBytes + 100, rows: oldRows + 2, byVersion: { "gb-1": { rows: oldRows, bytes: oldBytes }, "gb-2": { rows: 2, bytes: 100 } } });
+  assert.notEqual(await ttsAudioHash("triangle", "en-GB", "gb-2"), await ttsAudioHash("triangle", "en-GB"), "a két verzió kulcsa különbözik, a régi hang közben is kiszolgálható");
+  for (const bad of ["", "GB-2", "gb 2", "' OR 1=1 --", "x".repeat(17)]) await assert.rejects(next.purgeOtherVersions(bad), TtsAudioInputError, JSON.stringify(bad));
+  assert.equal(await count(), oldRows + 2, "hibás bemenetre semmi nem törlődik");
+  assert.deepEqual(await next.purgeOtherVersions("gb-2"), { rows: oldRows, bytes: oldBytes });
+  assert.deepEqual(await next.usage(), { totalBytes: 100, rows: 2, byVersion: { "gb-2": { rows: 2, bytes: 100 } } });
+  assert.equal(await next.get(await ttsAudioHash("triangle", "en-GB")), null, "a régi verzió hangja törölve");
+  assert.ok(await next.get(await ttsAudioHash("triangle", "en-GB", "gb-2")), "az új verzióé megmaradt");
+  assert.deepEqual(await next.purgeOtherVersions("gb-2"), { rows: 0, bytes: 0 }, "ismételve nincs mit törölni");
+  // A következő (végpont-) teszt a gb-1 „triangle” hangját kéri: visszaírjuk.
+  assert.equal(await all.put(await audioRow("triangle", Buffer.from([0x49, 0x44, 0x33, 0, 255, 1, 2, 3, 0, 0, 7]))), "stored");
 });
 
 test("végpont az adatbázisos tárolóval: 200 + fejlécek, 304, 206, 404, 400; a gyár ugyanazt a felületet adja", async () => {

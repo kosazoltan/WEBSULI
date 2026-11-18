@@ -94,9 +94,9 @@ try {
   const playerMigration = await readFile(new URL("../migrations/0040_player_accounts.sql", import.meta.url), "utf8");
   await pool.query(playerMigration);
   await pool.query(playerMigration);
-  // S8b: a leckehangok táblája (0042) a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
+  // S8b: a leckehangok táblája (0043) a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
   await pool.query("DROP TABLE lesson_tts_audio");
-  const ttsAudioMigration = await readFile(new URL("../migrations/0042_lesson_tts_audio.sql", import.meta.url), "utf8");
+  const ttsAudioMigration = await readFile(new URL("../migrations/0043_lesson_tts_audio.sql", import.meta.url), "utf8");
   await pool.query(ttsAudioMigration);
   await pool.query(ttsAudioMigration);
   await pool.end(); pool = undefined;

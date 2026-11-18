@@ -23,9 +23,9 @@ const VOICE_VERSION = /^[a-z0-9][a-z0-9.-]{0,15}$/;
 export function normalizeSpeechText(text: string): string {
   return text
     .normalize("NFC")
-    .replace(/[­​-‍⁠]/g, "")
-    .replace(/[‘’ʼ]/g, "'")
-    .replace(/[“”]/g, '"')
+    .replace(/[\u00AD\u200B-\u200D\u2060\uFEFF]/g, "")
+    .replace(/[\u2018\u2019\u02BC]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
     .replace(/\s+/g, " ")
     .trim();
 }

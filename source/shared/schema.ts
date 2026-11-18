@@ -1282,7 +1282,7 @@ export const lessonClipMedia = pgTable("lesson_clip_media", {
 });
 
 /**
- * A nyelvleckék előre gyártott felolvasó hangjai (migrations/0042; terv 2026-11-18-tananyag-gyartas-minoseg, S8b / D4). Az azonosító a
+ * A nyelvleckék előre gyártott felolvasó hangjai (migrations/0043; terv 2026-11-18-tananyag-gyartas-minoseg, S8b / D4). Az azonosító a
  * (hangverzió, nyelv, normalizált szöveg) lenyomata (shared/tts-audio-key.ts); a szöveg nem tárolódik, a sor soha nem módosul.
  */
 export const lessonTtsAudio = pgTable(

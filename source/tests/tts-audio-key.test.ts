@@ -19,18 +19,25 @@ test("rögzített bemenetre rögzített kulcs: sha256(verzió ⏎ nyelv ⏎ norm
 });
 
 test("normalizálás: a kiejtést nem érintő írásmód-különbség nem ad második fájlt", async () => {
-  assert.equal(normalizeSpeechText("  This is \t a\r\n triangle.  "), "This is a triangle.");
-  assert.equal(normalizeSpeechText("don’t"), "don't");
-  assert.equal(normalizeSpeechText("“Hello”"), '"Hello"');
-  assert.equal(normalizeSpeechText("tri­an​gle"), "triangle");
-  assert.equal(normalizeSpeechText("café"), "café", "NFC: bontott és összetett ékezet azonos");
+  assert.equal(normalizeSpeechText("  This\u00A0is \t a\r\n triangle.  "), "This is a triangle.");
+  assert.equal(normalizeSpeechText("don\u2019t"), "don't");
+  assert.equal(normalizeSpeechText("\u201CHello\u201D"), '"Hello"');
+  assert.equal(normalizeSpeechText("tri\u00ADan\u200Bgle"), "triangle");
+  assert.equal(normalizeSpeechText("tri\uFEFFangle"), "triangle", "a szó közepi BOM törlődik, nem bont két szóra");
+  assert.equal(normalizeSpeechText("cafe\u0301"), "caf\u00E9", "NFC: bontott és összetett ékezet azonos");
   const base = await ttsAudioHash("I don't know.", "en-GB");
-  for (const variant of ["  I don't   know. ", "I don’t know.", "I don't\nknow.", "I do​n't know."]) assert.equal(await ttsAudioHash(variant, "en-GB"), base, JSON.stringify(variant));
+  for (const variant of ["  I don't   know. ", "I don\u2019t know.", "I\u00A0don't\nknow.", "I do\u200Bn't know."]) assert.equal(await ttsAudioHash(variant, "en-GB"), base, JSON.stringify(variant));
   for (const language of ["en_GB", "en-gb", " EN-gb "]) assert.equal(await ttsAudioHash("I don't know.", language), base, language);
 });
 
 test("ami a kiejtést módosítja, az megmarad: kis- / nagybetű és írásjel külön kulcsot ad", async () => {
   assert.equal(normalizeSpeechText("Polish"), "Polish");
+  // Review A2: NFC, nem NFKC — a kompatibilitási alakok (felső index, ligatúra, teljes szélességű betű) nem olvadnak össze.
+  for (const [compat, plain] of [["x\u00B2", "x2"], ["\uFB01sh", "fish"], ["\uFF21", "A"], ["\u2460", "1"]]) {
+    assert.equal(normalizeSpeechText(compat), compat);
+    assert.notEqual(normalizeSpeechText(compat), plain);
+    assert.notEqual(await ttsAudioHash(compat, "en-GB"), await ttsAudioHash(plain, "en-GB"), plain);
+  }
   const keys = await Promise.all(["Polish", "polish", "Really?", "Really.", "Really", "read", "red"].map((text) => ttsAudioHash(text, "en-GB")));
   assert.equal(new Set(keys).size, keys.length);
 });
@@ -54,7 +61,7 @@ test("ütközésmentesség mintán: 3 000 különböző szöveg 3 000 különbö
 });
 
 test("hibás bemenet: üres szöveg, értelmezhetetlen nyelv vagy verzió → hiba; érvénytelen kulcsból nem lesz cím", async () => {
-  await assert.rejects(ttsAudioHash("    ", "en-GB"), /Üres/);
+  await assert.rejects(ttsAudioHash("  \u00A0 ", "en-GB"), /Üres/);
   for (const language of ["", "english", "en-GB-x", "en\nGB", "e"]) await assert.rejects(ttsAudioHash("triangle", language), /nyelvkód/, JSON.stringify(language));
   for (const version of ["", "gb\n1", "GB-1", "x".repeat(17)]) await assert.rejects(ttsAudioHash("triangle", "en-GB", version), /hangverzió/, JSON.stringify(version));
   for (const id of ["", "abc", "7E7F2BA7194D719AA506CEFD97009DA4", "../../etc/passwd", `${"a".repeat(32)}?t=1`, "g".repeat(32)]) assert.throws(() => ttsAudioPath(id), /Érvénytelen/, id);

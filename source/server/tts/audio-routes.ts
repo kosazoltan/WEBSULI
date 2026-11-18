@@ -41,7 +41,7 @@ export function ttsAudioReply(id: string, audio: Pick<TtsAudio, "mime" | "bytes"
 
 /**
  * A végpont bekötése. Hibás alakú kulcsra a tárolóhoz nem fordul (400); a találatot a szerver a memóriában őrzi (16 MB-os tár), így az
- * ismételt és a tartománykérés nem megy újra az adatbázishoz. A sebességkorlát az index.ts-ben van (`ttsAudioLimiter`).
+ * ismételt és a tartománykérés nem megy újra az adatbázishoz; a hiány nem tárolódik (lásd lent). A sebességkorlát az index.ts-ben van (`ttsAudioLimiter`).
  */
 export function registerLessonTtsAudio(app: Express, store: TtsAudioStore): void {
   const cache = new TtsAudioCache<Buffer>();
@@ -50,13 +50,19 @@ export function registerLessonTtsAudio(app: Express, store: TtsAudioStore): void
     const id = req.params.id;
     let audio: Pick<TtsAudio, "mime" | "bytes"> | null = null;
     if (TTS_AUDIO_ID.test(id)) {
-      const bytes = await cache.getOrLoad(id, async () => {
-        const found = await store.get(id);
-        if (found) mimes.set(id, found.mime);
-        return found?.bytes ?? Buffer.alloc(0);
-      });
+      const cached = cache.get(id);
       const mime = mimes.get(id);
-      if (bytes.length && mime) audio = { mime, bytes };
+      if (cached && mime) audio = { mime, bytes: cached };
+      else {
+        // CSAK a találat kerül a memóriába. A hiányt szándékosan nem jegyezzük meg: a ma még le nem gyártott szó hangja a gyártás
+        // (S8c) után azonnal, újraindítás nélkül kiszolgálható — a következő kérés újra a tárolóhoz fordul.
+        const found = await store.get(id);
+        if (found) {
+          cache.set(id, found.bytes);
+          mimes.set(id, found.mime);
+          audio = { mime: found.mime, bytes: found.bytes };
+        }
+      }
     }
     const ifNoneMatch = req.headers["if-none-match"];
     const reply = ttsAudioReply(id, audio, { range: req.headers.range, ifNoneMatch: Array.isArray(ifNoneMatch) ? ifNoneMatch.join(",") : ifNoneMatch });
