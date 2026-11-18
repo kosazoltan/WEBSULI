@@ -372,7 +372,7 @@ minden várakozásnak felső korlátja van.
 
 ### S1 módosítása
 
-- `rules.ts`: `ADVENT_RULES = { unlock: "daily", repair: "new-question", maxRepairs: 2, maxRounds: 3, lowGrade: { maxGrade: 2, maxRepairs: 1, maxRounds: 2 }, teaserFromDay: 24, catchupUntilJan: 6 }`;
+- `rules.ts` (JAVÍTVA 2026-11-18: `lowGrade.maxRepairs` 2, nem 1): `ADVENT_RULES = { unlock: "daily", repair: "new-question", maxRepairs: 2, maxRounds: 3, lowGrade: { maxGrade: 2, maxRepairs: 2, maxRounds: 2 }, teaserFromDay: 24, catchupUntilJan: 6 }`;
   `ADVENT_CHRISTMAS_DAYS = [3, 6, 9, 12, 15, 18, 21, 24]`; `isChristmasDoor(day, grade)` → `grade <= 2 || day % 3 === 0`;
   `limitsForGrade(grade)` → `{ maxRepairs, maxRounds }`; `ADVENT_MIN_GRADE = 1`, `ADVENT_MAX_GRADE = 12`.
 - `assignment.ts`: a `buildAdventPlan` új bemenete `christmas: readonly ChristmasItem[]`; a karácsonyi ablak kérdései az évfolyamra
@@ -393,7 +393,7 @@ Fájlok: `shared/advent/christmasBank/items-01-02.ts`, `items-03-04.ts`, `items-
    átfedhetnek (például `minGrade: 1, maxGrade: 4`), hogy minden évfolyam elérje a minimumot.
 2. `validateChristmasBank`: egyedi azonosító; egyedi normalizált prompt (a közös bank promptjaival sem egyezik); 4 különböző,
    nem üres válasz; `correctIndex` 0–3; magyarázat 30–300 karakter; `1 ≤ minGrade ≤ maxGrade ≤ 12`; az 1–2. évfolyamra érvényes tétel
-   promptja ≤ 80 karakter; évfolyamonkénti darabszám (1–2.: ≥ 96; 3–12.: ≥ 72); a helyes válasz indexe a készletben nagyjából
+   promptja ≤ 80 karakter; évfolyamonkénti darabszám (1–2.: ≥ 144 — JAVÍTVA 2026-11-18, korábban 96; 3–12.: ≥ 72); a helyes válasz indexe a készletben nagyjából
    egyenletes (egyik index aránya sem nagyobb 40%-nál).
 3. `tests/advent-christmas-bank.test.ts`: a validátor hibalistája üres; mind a 12 évfolyamra a teljes kör-sorozat felépíthető
    (`buildAdventPlan`, 1–2.: 2 kör, 3–12.: 3 kör) ismétlés nélkül a VALÓDI készlettel és a valódi közös bankkal.
@@ -421,7 +421,9 @@ Fájlok: `server/advent/announce.ts`, `server/routes.ts`, `shared/advent/announc
 
 1. Első lépés: `Select-String -Path server\resend.ts,server\daily-reminder.ts -Pattern "unsubscribe|leiratkoz"` — a talált leiratkozási
    módot a sablon szövege követi; ha nincs találat, a sablon ezt írja: „Ha nem kérsz több levelet, válaszolj erre az üzenetre.”
-2. `announce.ts`: `collectAnnounceRecipients(storage, { includePlayers })` — `storage.getActiveEmailSubscriptions()` +
+2. **FELÜLÍRVA (Kiegészítés 4 és 5):** `includePlayers` NINCS (a `player_accounts` címei soha), és a `recipient_hash` HMAC-SHA-256 a szerver
+   titkával, nem sózatlan SHA-256. Az alábbi szöveg ezekkel az eltérésekkel érvényes.
+   `announce.ts`: `collectAnnounceRecipients(storage, { includePlayers })` — `storage.getActiveEmailSubscriptions()` +
    `storage.getActiveExtraEmails()` (+ `includePlayers` esetén az ellenőrzött, nem tiltott `player_accounts` címek); kisbetűsítés,
    `trim`, ismétlődés-szűrés, a `users` tábla soha; visszaad `{ list, bySource }`.
    `announce({ dryRun, confirmCount, includePlayers })`: száraz futás → `{ recipients, bySource, subject, html }` (címek nélkül);
@@ -528,7 +530,9 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
 - **S4 (átírva) — főoldali kártya.** Fájlok: `client/src/components/AdventHomeCard.tsx`, `client/src/components/UserFileList.tsx`,
   `client/src/advent/advent.css`, `shared/advent/art.ts` (új tétel: `advent-home-banner`, 1600 × 400), `tests/advent-home-card.spec.ts`,
   `tests/advent-calendar-mobile.spec.ts`, `tests/advent-source-guard.test.ts`.
-  1. `AdventHomeCard.tsx` (`advent-home-card`): a doboz lefoglalása a terv 14.4 szerint (`adventNow(new Date())` fázisa; e2e-buildben
+  1. **FELÜLÍRVA (Kiegészítés 5):** a kliensben NINCS e2e-ág — a helyfoglalás mindig `homeCardReserve(new Date())`; a tesztek a
+     Playwright órájával és az `X-Advent-Test-Now` fejléccel állnak ugyanarra a napra.
+     `AdventHomeCard.tsx` (`advent-home-card`): a doboz lefoglalása a terv 14.4 szerint (`adventNow(new Date())` fázisa; e2e-buildben
      — `import.meta.env.VITE_ENABLE_GAME_TEST_HOOKS === "1"` — a `status` válasz fázisa); `min-height` = `max-height`: 132 px, `md:`
      160 px; `mb-3`. Tartalom: `AdventArt id="advent-home-banner"` háttérként (`fetchpriority="high"`, nem lusta, `alt=""`), cím,
      `advent-home-status` (a terv 14.3 szövegei, egy tiszta `homeCardStatus(state)` függvényből a `shared/advent/rules.ts`-ben,
@@ -574,8 +578,8 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
   időpontra; `AdventPlan.subjects`; `repairPlanDoor` `protectedIds`-szel, a tárgy a tervből; új tesztek (december 24 → 25 határ,
   keverés egyenletessége, 40 alany × 12 évfolyam, fázisfüggő szövegek).
 - **S1b:** az 1–2. évfolyamra érvényes tételek minimuma 144 (nem 96); a validátor és a teszt ezt kényszeríti.
-- **S2a:** a terv 16.8 `CHECK` kényszerei; a `mailed_to` elemei `<kör>:<fajta>:<lenyomat>`; az `advent_announcements.recipient_hash` HMAC.
-- **S2b:** korlátok a terv 16.1 szerint — `subjectLimiter` (a feloldott alany kulcsára, 120 / 15 perc), `ipLimiter` (600 / 15 perc),
+- **S2a:** a terv 16.8 `CHECK` kényszerei; a `mailed_to` elemei `final:<lenyomat>` (JAVÍTVA: terv 18.1); az `advent_announcements.recipient_hash` HMAC.
+- **S2b:** korlátok a terv 16.1 / 18.2 szerint — `subjectLimiter` (a feloldott alany kulcsára, 200 / 15 perc; a teszt a 144 írásos legrosszabb esetet méri), `ipLimiter` (600 / 15 perc),
   `createLimiter` (új `device` sor: 30 / óra / IP; a `store.mutate` jelzi, ha a sor most jött létre); a régi „60 / 15 perc / IP”
   NEM készül. `adventClock(req)`: e2e-módban érvényes `X-Advent-Test-Now` nélkül a router „kikapcsolt”-ként viselkedik (`status`:
   `{ enabled: false }`, a többi 404); a fejléc értékét `isValidDate` szűri. Érvénytelen tanulói token → a `state` válaszban
@@ -584,12 +588,31 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
 - **S3a / S4:** a kliensben nincs e2e-ág; a főoldali kártya helyfoglalása `homeCardReserve(new Date())` (tiszta függvény a
   `shared/advent/calendar.ts`-ben, egységteszttel); a böngészőtesztek `page.clock.setFixedTime(...)` + `X-Advent-Test-Now` párossal
   futnak. Érvénytelen párosításnál a felület újrapárosítást kér (`advent-pairing-invalid`, „Folytatom vendégként” gomb).
-- **S5:** küldés a terv 16.3 szerint (`final` / `passed` fajta); teszt: A50.
+- **S5 (JAVÍTVA 2026-11-18):** évadonként EGYETLEN levél a terv 18.1 szerint — megfeleléskor, vagy az utolsó kör végleges lezárásakor, vagy
+  évadzáráskor (a takarító `closed` fázisban egyszer elküldi a megkezdett, levél nélküli tanulói soroknak); kulcs: `final:<lenyomat>`;
+  körönkénti és külön „megfelelt” levél NINCS; teszt: A50 a 18.1 eseteivel.
 - **S6:** az `/api/admin/advent/preview` bekötése a flag-ellenőrzés NÉLKÜL (a router-gyár `requireFlag: false` beállítással).
 - **S8:** HMAC-lenyomat; a lábléc szövege a terv 16.6 szerint; valódi leiratkozó link csak külön tulajdonosi döntéssel.
 
+## Kiegészítés 6 — az ellenőri ítéletek 2. köre (2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 18. szakasz)
+
+- **S1 2. javító commit (KÉSZ):** `adventClosing` — `closed` csak `closed` fázisban; `before` / `teaser`: `soon` fajta; 0 megoldott
+  ablaknál számolás nélküli zárószöveg; tesztek.
+- **S3c-0 javító commit (KÉSZ):** `lib.ts` `attemptWithinBudget` (hívásonkénti keret), `spentFromLog` + `planJobs({ existing, alreadySpent })`
+  (összesített keret, a meglévő jelöltek kihagyása), `requestImage` (időkorlát), `parseRefs` + `missingReferences` (kiválasztott
+  referencia), `scene` típus; hamis `fetch`-es tesztek (a 6,95 USD-os eset: a második hívás nem megy ki).
+  Runbook: a keret BECSÜLT áron számol; a valódi kemény plafon a szolgáltatónál a kulcsra állított keret (tulajdonosi teendő); a
+  próbakör után a számlázott összeget össze kell vetni a becsléssel.
+  Próbakör: `npx.cmd tsx scripts/design-assets/generate.ts --set advent --only advent-bg-portrait,advent-door-08,advent-door-24 --max 10 --max-usd 7`
+  Teljes kör (válogatás után): `npx.cmd tsx scripts/design-assets/generate.ts --set advent --max 94 --max-usd 7 --ref advent-bg-portrait=advent-bg-portrait/<a kiválasztott fájl>`
+- **S5 / S6:** a levél szabálya a terv 18.1; az évadzáró küldés a takarító része (`closed` fázisban, egyszer).
+
 ## Állapotnapló
 
-- 2026-11-18 — S1 KÉSZ: `source/shared/advent/` (`calendar.ts`, `rules.ts`, `assignment.ts`, `contract.ts`) + 4 tesztfájl, 39 teszt; a független ellenőr ítélete a `bb248dd1` fejre: IGEN, FELTÉTELLEL; a K5, A1, A4–A7, K3 javítása külön commitban.
+A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.
 
+- 2026-11-18 — S1 KÉSZ: `source/shared/advent/` (`calendar.ts`, `rules.ts`, `assignment.ts`, `contract.ts`) + 4 tesztfájl, 39 teszt; a független ellenőr ítélete a `bb248dd1` fejre: IGEN, FELTÉTELLEL; a K5, A1, A4–A7, K3 javítása külön commitban.
 - 2026-11-18 — S1b KÉSZ (ellenőrre vár): `source/shared/advent/christmasBank/` 288 kézzel írt tétel (1–4. évfolyam: 144, 5–8.: 72, 9–12.: 72), `christmas-validate.ts`, `tests/advent-christmas-bank.test.ts`; a tételek tényszerűségét a független ellenőr tételenként ellenőrzi.
+- 2026-11-18 — S2a KÉSZ: `migrations/0042_advent_progress.sql` (a szám szabad volt: a `main` utolsó migrációja a 0041), Drizzle-séma
+  (`adventProgress`, `adventAnnouncements`, CHECK kényszerekkel), `server/advent/store.ts`, `tests/advent-db.integration.ts`, a
+  DB-futtató bővítése. Az S8 lábléce: terv 17. szakasz (egyszeri levél, új leiratkozó link nincs).
