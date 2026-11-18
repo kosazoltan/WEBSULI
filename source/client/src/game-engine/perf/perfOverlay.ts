@@ -180,7 +180,6 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   let calls = 0;
   let triangles = 0;
 
-
   let probeLeft = 0;
   let probeSamples: number[] = [];
   let probeDone: ((value: number | null) => void) | null = null;

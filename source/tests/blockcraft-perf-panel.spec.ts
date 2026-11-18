@@ -123,7 +123,9 @@ test("perf=1: a panel megjelenik a mért sorokkal, és a négy kapcsoló hat a j
   expect((await snapshot(page)).toggles.fog).toBe(false);
   await expectFramesAfterToggle(page);
   const last = await snapshot(page);
-  expect(last.running).toBe(true);
+  // A `running` jelző falióra-alapú (az utolsó képkocka < 1 s-nál fiatalabb): a CI szoftveres WebGL-jén egy képkocka ennél
+  // lassabb lehet (PR #504 első CI-futása), ezért a hurok életét a kirajzolt képkockák számának növekedése bizonyítja.
+  await expectFramesAfterToggle(page);
   expect(last.calls).toBeGreaterThan(0);
 
   // Összecsukás: a szöveg eltűnik, a panel gombja marad.
