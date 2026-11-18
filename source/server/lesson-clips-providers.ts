@@ -123,7 +123,7 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
   } catch (error) {
     const missing = stage === "átkódolás" && (error as NodeJS.ErrnoException)?.code === "ENOENT";
     const detail = error instanceof Error ? error.message.slice(0, 160) : String(error);
-    if (!missing || !warnedNoFfmpeg) logger.warn(`[lesson-clips] ${missing ? "nincs ffmpeg a szerveren (FFMPEG_PATH / PATH) — a kisfilmek mozgókép nélkül készülnek" : `a mozgókép ${stage}a nem sikerült: ${detail}`}`);
+    if (!missing || !warnedNoFfmpeg) logger.warn(`[lesson-clips] ${missing ? "nincs ffmpeg a szerveren (FFMPEG_PATH / PATH) — a kisfilmek mozgókép nélkül készülnek" : `a mozgókép ${stage === "letöltés" ? "letöltése" : "átkódolása"} nem sikerült: ${detail}`}`);
     if (missing) warnedNoFfmpeg = true;
     return null;
   } finally {

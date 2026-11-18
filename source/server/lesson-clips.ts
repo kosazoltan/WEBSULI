@@ -370,7 +370,7 @@ export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: 
     running = true;
     try {
       const r = await runClipRound(store, deps, mode, opts);
-      if (r && (r.made || r.failed || r.stoppedByBudget)) logger.info(`[lesson-clips] kör: ${r.made} kisfilm kész (${r.videos} mozgókép), ${r.failed} sikertelen, ${r.lessons} lecke`);
+      if (r && (r.made || r.failed || r.stoppedByBudget || r.stoppedByMemory)) logger.info(`[lesson-clips] kör: ${r.made} kisfilm kész (${r.videos} mozgókép), ${r.failed} sikertelen, ${r.lessons} lecke${r.stoppedByMemory ? " — memóriaőr miatt megállt" : ""}`);
     } catch (error) {
       logger.warn("[lesson-clips] a kör nem sikerült:", describe(error));
     } finally {
