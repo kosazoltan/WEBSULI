@@ -136,3 +136,26 @@ test("a színváltozók a párbeszédablak gyökerén is élnek — a portál a 
   // A párbeszédablakok valóban portálban vannak (ezért kell a fenti).
   assert.match(read("client/src/pages/AdventCalendar.tsx"), /<Dialog\.Portal>/);
 });
+
+test("hibaszöveg a gyereknek: nyers szerverválasz (HTML, JSON, angol hibanév, 5xx, időtúllépés) SOHA nem megy ki — csak a naptár saját magyar 4xx üzenete (vak ellenőr K1)", () => {
+  const err = (message: string, status?: number) => Object.assign(new Error(message), status === undefined ? {} : { status });
+  const fallback = "Most nem sikerült kinyitni az ablakot. Próbáld meg újra!";
+  // A naptár saját üzenetei megmaradnak.
+  assert.equal(adventErrorText(err("Ez az ablak még nem nyitható.", 403), fallback), "Ez az ablak még nem nyitható.");
+  assert.equal(adventErrorText(err("Előbb add meg, hányadikos vagy.", 409), fallback), "Előbb add meg, hányadikos vagy.");
+  // Minden más az alapszöveg.
+  for (const [message, status] of [
+    ["<html> <head><title>502 Bad Gateway</title></head> <body><center>cloudflare</center></body> </html>", 502],
+    ["Internal Server Error", 500],
+    ["relation \"advent_progress\" does not exist", 500],
+    ["{\"error\":\"Forbidden\",\"code\":\"EBADTOKEN\"}", 403],
+    ["Forbidden", 403],
+    ["", 500],
+    ["Service Unavailable", 503],
+    ["x".repeat(400), 409],
+    ["A kérés túllépte az időkorlátot (15s). Kérlek ellenőrizd az internetkapcsolatot!", undefined],
+    ["Failed to fetch", undefined],
+  ] as const) assert.equal(adventErrorText(err(message, status), fallback), fallback, String(status) + ": " + message.slice(0, 30));
+  assert.equal(adventErrorText(null, fallback), fallback);
+  assert.equal(adventErrorText({ status: 500 }, fallback), fallback);
+});

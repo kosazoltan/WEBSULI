@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { ADVENT_GIFT_MESSAGE } from "../shared/advent/rules";
-import { clearAdventTime, seedProgress, setAdventTime, shot } from "./support/advent-e2e";
+import { seedProgress, setAdventTime, setClientAdventTime, shot } from "./support/advent-e2e";
 import { measureOverflow, smallFonts, smallTargets } from "./support/game-mobile-quality";
 
 /**
@@ -32,6 +32,8 @@ for (const viewport of [{ name: "telefon", width: 390, height: 844, max: 132 }, 
       await shot(page, `h-${viewport.name}-szezonon-kivul`);
 
       await setAdventTime(page, DEC3);
+      await page.goto("/adventi-naptar");
+      await expect(page.getByTestId("advent-grade-picker")).toBeVisible();
       await page.goto("/");
       await expect(card(page)).toBeVisible();
       await expect(page.getByTestId("advent-home-status")).toHaveText("Ma a 3. ablak nyílik — és még 2 vár rád");
@@ -87,12 +89,6 @@ test.describe("szezon és regresszió", () => {
     await page.goto("/");
     await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
     await expect(card(page)).toHaveCount(0);
-    // Szezonban, de a szerver szerint a naptár nem él (nincs tesztidő-fejléc = kikapcsolt): a kártya eltűnik.
-    await page.clock.setFixedTime(new Date(DEC3));
-    await clearAdventTime(page);
-    await page.goto("/");
-    await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
-    await expect(card(page)).toHaveCount(0);
   });
 
   test("a naptár nincs a játékok között: a játéklista és a főoldali játék-rács nem hivatkozik rá (A46)", async ({ page }) => {
@@ -106,52 +102,57 @@ test.describe("szezon és regresszió", () => {
     await expect(page.locator('#gyakorlo-jatekok a[href*="adventi"]')).toHaveCount(0);
   });
 
-  test("kikapcsolt naptár a szezonban: a kártya SOHA nem jelenik meg és a lista nem mozdul — lassú válasznál sem (S4 F1)", async ({ page }) => {
-    // A böngésző órája decembert mutat, a szerver szerint a naptár nem él (nincs tesztidő-fejléc = kikapcsolt flag).
+  test("tesztidő nélkül (a többi főoldali teszt helyzete; kikapcsolt kapcsolóval egyenértékű): a kártya egy pillanatra sem kerül a lapra, és EGYETLEN /api/advent kérés sem megy (terv 20., S4 F1)", async ({ page }) => {
+    // A böngésző órája decembert mutat, de a teszt NEM ad tesztidőt: a kliens szezon-számítása ilyenkor „nincs naptár”.
     await page.clock.setFixedTime(new Date(DEC3));
+    const adventRequests: string[] = [];
+    page.on("request", (r) => { if (r.url().includes("/api/advent")) adventRequests.push(r.url()); });
     await page.addInitScript(() => {
       const w = window as unknown as { __adventCardSeen?: boolean };
       w.__adventCardSeen = false;
       new MutationObserver(() => { if (document.querySelector('[data-testid="advent-home-card"]')) w.__adventCardSeen = true; })
         .observe(document.documentElement, { childList: true, subtree: true });
     });
-    let answered = false;
-    await page.route("**/api/advent/status", async (route) => { await new Promise((r) => setTimeout(r, 900)); answered = true; await route.fallback(); });
     await page.goto("/");
     await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
-    const early = await filterTop(page);
-    expect(answered, "a mérés a státusz válasza ELŐTT készült").toBe(false);
-    await expect.poll(() => answered, { timeout: 10_000 }).toBe(true);
-    await page.waitForTimeout(300);
-    expect(await filterTop(page), "a lista nem mozdult").toBe(early);
+    await page.waitForTimeout(1200);
     await expect(card(page)).toHaveCount(0);
     expect(await page.evaluate(() => (window as unknown as { __adventCardSeen?: boolean }).__adventCardSeen), "a kártya egy pillanatra sem került a lapra").toBe(false);
+    expect(adventRequests, "naptár-kérés a főoldalról").toEqual([]);
+    // Szezonon kívüli tesztidővel ugyanez: semmi nem rajzolódik, semmi nem megy ki.
+    await setAdventTime(page, "2026-11-23T10:00:00Z");
+    await page.goto("/");
+    await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
+    await page.waitForTimeout(600);
+    await expect(card(page)).toHaveCount(0);
+    expect(adventRequests, "naptár-kérés szezonon kívül").toEqual([]);
   });
 
-  test("élő naptár: első látogatáskor a kártya az állapot UTÁN jelenik meg; visszatérőnél a helye előre foglalt, a lista nem ugrik (A47, S4 F1)", async ({ page }) => {
+  test("elállított eszközóra és hibás bekapcsolási sorrend: a kártya legfeljebb megjelenik és összecsukódik, vagy nem jelenik meg — a naptároldalon a szerver dönt (terv 20.)", async ({ page }) => {
+    // 1) Az eszköz órája októbert mutat, a szerveren december van: a kártya nem jelenik meg, a naptároldal mégis működik.
     await setAdventTime(page, DEC3);
-    let delay = 900;
-    await page.route("**/api/advent/status", async (route) => { await new Promise((r) => setTimeout(r, delay)); await route.fallback(); });
-    // 1) Első látogatás: amíg a státusz úton van, nincs kártya (gomb sem, amelyre hiába koppintana).
+    await setClientAdventTime(page, "2026-10-10T10:00:00Z");
     await page.goto("/");
     await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
     await expect(card(page)).toHaveCount(0);
-    await expect(card(page)).toHaveAttribute("data-state", "ready", { timeout: 10_000 });
-    await expect(page.getByTestId("advent-home-status")).toHaveText(/Ma a 3. ablak nyílik/, { timeout: 10_000 });
-    const ready = (await card(page).boundingBox())!;
-    const readyFilter = await filterTop(page);
-    // 2) Visszatérő látogató: a hely azonnal foglalt (üresen, gomb nélkül), és a tartalom megérkezése semmit nem mozdít.
-    delay = 1500;
+    await page.goto("/adventi-naptar");
+    await expect(page.getByTestId("advent-grade-picker")).toBeVisible();
+    // 2) Az eszköz órája decembert mutat, a szerveren január 7. van (bezárt): a kártya megjelenik, majd összecsukódik.
+    await setAdventTime(page, "2027-01-07T10:00:00Z");
+    await setClientAdventTime(page, DEC3);
+    await page.route("**/api/advent/status", async (route) => { await new Promise((r) => setTimeout(r, 700)); await route.fallback(); });
     await page.goto("/");
-    await expect(card(page)).toHaveAttribute("data-state", "reserved");
-    await expect(page.getByTestId("advent-home-cta")).toHaveCount(0);
-    await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
-    const reserved = (await card(page).boundingBox())!;
-    const reservedFilter = await filterTop(page);
-    await expect(card(page)).toHaveAttribute("data-state", "ready", { timeout: 10_000 });
-    expect(reserved.height, "a foglalt hely magassága = a kártya magassága").toBe(ready.height);
-    expect(reservedFilter, "a szűrő a foglalt hely alatt ugyanott van").toBe(readyFilter);
-    expect(await filterTop(page), "a szűrő a tartalom megérkezésekor nem mozdul el").toBe(reservedFilter);
+    await expect(card(page)).toBeVisible();
+    await expect(card(page)).toHaveCount(0, { timeout: 10_000 });
+    await page.goto("/adventi-naptar");
+    await expect(page.getByTestId("advent-closed")).toBeVisible();
+    // 3) Hibás bekapcsolási sorrend (a kliens-build bekapcsolva, a szerver még nem — itt: nincs tesztidő-fejléc): ugyanez.
+    await page.context().setExtraHTTPHeaders({});
+    await page.goto("/");
+    await expect(card(page)).toBeVisible();
+    await expect(card(page)).toHaveCount(0, { timeout: 10_000 });
+    await page.goto("/adventi-naptar");
+    await expect(page.getByText("A naptár most nem érhető el.")).toBeVisible();
   });
 
   test("végigjátszott naptár: a kártya „Megnézem” gombja az összesítést nyitja az ajándék-üzenettel (S3 K3, S4 F2)", async ({ page }) => {
@@ -169,3 +170,61 @@ test.describe("szezon és regresszió", () => {
     await shot(page, "h-megnezem-osszesites");
   });
 });
+
+/**
+ * CLS a böngésző saját layout-shift megfigyelőjével (felhasználói bemenet nélküli elmozdulások összege) — a kártya miatti
+ * többlet a szezonon kívüli betöltéshez mérve. A státusz 400 ms-ot késik (iskolai hálózat), a látogató ELŐSZÖR jár itt.
+ */
+async function clsOf(page: Page): Promise<{ cls: number; sources: string[] }> {
+  return page.evaluate(() => (window as unknown as { __cls: { cls: number; sources: string[] } }).__cls);
+}
+for (const size of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { width: 1366, height: 768 }]) {
+  test.describe("CLS első látogatáskor " + size.width + "×" + size.height, () => {
+    test.use({ viewport: size, hasTouch: size.width < 768, isMobile: size.width < 768 });
+
+    test("a kártya az első rajzoláskor a helyén van: a miatta mért elrendezés-ugrás ≤ 0,02, a státusz megérkezése semmit nem mozdít (A47, terv 20.)", async ({ page }) => {
+      await page.addInitScript(() => {
+        const w = window as unknown as { __cls: { cls: number; sources: string[] } };
+        w.__cls = { cls: 0, sources: [] };
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries() as Array<PerformanceEntry & { value: number; hadRecentInput: boolean; sources?: Array<{ node?: Node | null }> }>) {
+            if (entry.hadRecentInput) continue;
+            w.__cls.cls += entry.value;
+            for (const source of entry.sources ?? []) {
+              const el = source.node instanceof Element ? source.node : null;
+              if (el) w.__cls.sources.push(el.getAttribute("data-testid") ?? el.id ?? el.tagName);
+            }
+          }
+        }).observe({ type: "layout-shift", buffered: true });
+      });
+      let answered = false;
+      await page.route("**/api/advent/status", async (route) => { await new Promise((r) => setTimeout(r, 400)); answered = true; await route.fallback(); });
+      const settleHome = async () => {
+        await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
+        await page.waitForTimeout(1500);
+      };
+      // Alapvonal: szezonon kívül (nincs kártya) — a főoldal saját elmozdulásai.
+      await setAdventTime(page, "2026-11-23T10:00:00Z");
+      await page.goto("/");
+      await settleHome();
+      const base = await clsOf(page);
+      // Első látogatás a szezonban: üres tárhely, a kártya azonnal a helyén.
+      await setAdventTime(page, DEC3);
+      await page.evaluate(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
+      // (Szezonon kívül a kártya semmit nem kér le, így az `answered` itt még biztosan hamis — külön teszt méri.)
+      await page.goto("/");
+      await expect(card(page)).toBeVisible();
+      expect(answered, "a kártya a státusz válasza ELŐTT már látszik").toBe(false);
+      const early = (await card(page).boundingBox())!;
+      await expect(page.getByTestId("advent-home-cta"), "a gomb azonnal ott van").toBeVisible();
+      await settleHome();
+      expect(answered).toBe(true);
+      const season = await clsOf(page);
+      const late = (await card(page).boundingBox())!;
+      expect({ y: late.y, height: late.height }, "a kártya nem mozdul és nem változik a státusz megérkezésekor").toEqual({ y: early.y, height: early.height });
+      test.info().annotations.push({ type: "advent-cls", description: size.width + "×" + size.height + ": szezonon kívül " + base.cls.toFixed(4) + ", szezonban (első látogatás) " + season.cls.toFixed(4) });
+      expect(season.cls - base.cls, "a kártya miatti CLS-többlet (szezonon kívül " + base.cls.toFixed(4) + " → szezonban " + season.cls.toFixed(4) + "; források: " + [...new Set(season.sources)].join(", ") + ")").toBeLessThanOrEqual(0.02);
+      expect(season.sources, "a kártya maga nem mozdul el").not.toContain("advent-home-card");
+    });
+  });
+}

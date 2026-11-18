@@ -8,7 +8,7 @@
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import {
-  buildAdventPlan, findAdventItem, gradePick, normalizePrompt, optionOrder, repairPlanDoor, toClientQuestion,
+  adventLayout, buildAdventPlan, findAdventItem, gradePick, normalizePrompt, optionOrder, repairPlanDoor, toClientQuestion,
   type AdventBankItem, type AdventItem, type AdventPlan, type ChristmasItem,
 } from "../../shared/advent/assignment";
 import { adventNow, isAdventWritable, isDoorUnlocked, type AdventNow } from "../../shared/advent/calendar";
@@ -109,7 +109,8 @@ export function buildAdventState(at: AdventNow, resolution: AdventResolution, ro
     grade,
     needsGrade: subject != null && grade == null,
     round, maxRounds: limits.maxRounds,
-    layout: plan?.layout ?? ALL_DAYS,
+    // Terv nélkül is a végleges (kevert) elrendezés: a rács az első megnyitás után sem rendeződik át (vak ellenőr S1).
+    layout: plan?.layout ?? (subject && grade != null ? adventLayout(at.season, round, subjectKeyOf(subject), grade) : ALL_DAYS),
     doors, summary,
     closing: adventClosing(summary, { round, maxRounds: limits.maxRounds, phase: at.phase, waiting }),
   };
@@ -136,9 +137,9 @@ function usedInEarlierRounds(row: AdventRow, round: number, bank: readonly Adven
  * Egy (tárolt vagy friss) próba eredménye. Ha a kérdés közben eltűnt a bankból (`item` null), a tárolt próba alapján csak az
  * eredmény megy ki: helyes válasz és magyarázat nélkül (`correctIndex: -1`) — hiba helyett (review C5).
  */
-function answerResult(item: AdventItem | null, attempt: DoorAttempt, orderKey: string, season: number, door: AdventDoorView, state: AdventState): AdventAnswerResult {
+function answerResult(item: AdventItem | null, attempt: DoorAttempt, orderKey: string, season: number, door: AdventDoorView, state: AdventState, recorded = true): AdventAnswerResult {
   const correctIndex = item ? gradePick(item, optionOrder(item.id, orderKey, season), attempt.pick).correctIndex : -1;
-  return { correct: attempt.correct, correctIndex, explanation: item?.explanation ?? "", door, summary: state.summary, closing: state.closing };
+  return { correct: attempt.correct, correctIndex, explanation: item?.explanation ?? "", pick: attempt.pick, recorded, door, summary: state.summary, closing: state.closing };
 }
 
 type Locals = { at: AdventNow; now: Date; resolution: AdventResolution; body: Record<string, unknown>; pairedDevice?: string | null };
@@ -412,7 +413,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       if (stored) {
         const item = findAdventItem(stored.questionId, bank, christmas);
         const view = viewOf(current);
-        return { patch: null, result: { answer: answerResult(item, stored, orderKeyFor(plan, day, key), locals.at.season, view.doors[day - 1]!, view), recorded: false, maxRounds } };
+        return { patch: null, result: { answer: answerResult(item, stored, orderKeyFor(plan, day, key), locals.at.season, view.doors[day - 1]!, view, false), recorded: false, maxRounds } };
       }
       const state = doorState({ unlocked: true, attempts, maxRepairs });
       const expected = state === "open" || state === "repairable" ? plan.doors[day]![attempts.length] : undefined;

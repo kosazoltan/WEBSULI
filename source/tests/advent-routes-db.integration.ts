@@ -171,6 +171,10 @@ describe("adventi naptár — végpontok", () => {
     assert.equal(again.status, 200);
     assert.equal(again.json.correct, false);
     assert.deepEqual(again.json.summary, wrong.summary);
+    // A második beküldés jelzi, hogy a TÁROLT eredmény jött vissza, és a rögzített választást adja (vak ellenőr S3).
+    assert.equal(wrong.recorded, true);
+    assert.deepEqual({ recorded: again.json.recorded, pick: again.json.pick }, { recorded: false, pick: wrong.pick });
+    assert.notEqual(again.json.pick, wrong.correctIndex, "a mostani (helyes) választás nem írja felül a tároltat");
     // A javítás ÚJ kérdés ugyanabból a tárgyból.
     const repair = await k.open(3);
     assert.notEqual(repair.id, first.id);

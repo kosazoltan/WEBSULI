@@ -36,8 +36,20 @@ export async function retryWhenBusy<T>(
   }
 }
 
-/** Hibaszöveg a gyereknek: a 429 barátságos, a többi a szerver üzenete vagy a megadott alapszöveg. */
+/** A naptár saját, a gyereknek szóló magyar üzenetei ezekkel a státuszokkal jönnek (JSON `message` mezőben). */
+const OWN_MESSAGE_STATUSES: readonly number[] = [400, 403, 409];
+
+/**
+ * Hibaszöveg a gyereknek — SOHA nem nyers szerverválasz (vak ellenőr K1). A szerver üzenete csak akkor megy ki, ha a naptár
+ * saját 4xx válasza (400 / 403 / 409), és valóban mondat: nem HTML, nem JSON, nem túl hosszú. Minden másnál (5xx, proxy-hibaoldal,
+ * üres vagy nem JSON törzs, időtúllépés, hálózati hiba, ismeretlen hiba) a megadott barátságos alapszöveg; 429-nél a „sokan
+ * vagyunk” szöveg.
+ */
 export function adventErrorText(error: unknown, fallback: string): string {
   if (isAdventBusy(error)) return ADVENT_BUSY_FAILED_TEXT;
-  return error instanceof Error && error.message ? error.message : fallback;
+  const status = typeof error === "object" && error !== null ? (error as { status?: unknown }).status : undefined;
+  const message = error instanceof Error ? error.message.trim() : "";
+  const own = typeof status === "number" && OWN_MESSAGE_STATUSES.includes(status);
+  const sentence = message.length > 0 && message.length <= 200 && !/[<>{}[\]]/.test(message) && !/^(forbidden|bad request|conflict|not found|internal server error)$/i.test(message);
+  return own && sentence ? message : fallback;
 }

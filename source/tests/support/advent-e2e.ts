@@ -41,11 +41,22 @@ export async function setAdventTime(page: Page, iso: string): Promise<void> {
   await proxyApi(page.context());
   await page.context().setExtraHTTPHeaders({ "X-Advent-Test-Now": iso });
   await page.clock.setFixedTime(new Date(iso));
+  await setClientAdventTime(page, iso);
+}
+
+/**
+ * A KLIENS tesztideje (a főoldali kártya ebből számol szezont — terv 20.): teszt-kampós buildben a kártya csak akkor él, ha a
+ * teszt a lap betöltése előtt beadja az időt. A null törli (a következő betöltéstől a kártya „kikapcsolt”). A szervertől függetlenül
+ * állítható — így mérhető az elállított eszközóra.
+ */
+export async function setClientAdventTime(page: Page, iso: string | null): Promise<void> {
+  await page.addInitScript((value) => { (window as unknown as { __websuliAdventTestNow?: string }).__websuliAdventTestNow = value ?? undefined; }, iso);
 }
 
 /** Tesztidő nélkül (e2e-módban ez a „naptár kikapcsolva” állapot); a böngésző órája marad, ahol volt. */
 export async function clearAdventTime(page: Page): Promise<void> {
   await page.context().setExtraHTTPHeaders({});
+  await setClientAdventTime(page, null);
 }
 
 /**
@@ -84,6 +95,16 @@ export async function pickOption(page: Page, right: boolean, how: "tap" | "click
   const option = page.getByTestId(`advent-option-${right ? correct : (correct + 1) % 4}`);
   if (how === "tap") await option.tap(); else await option.click();
   await expect(page.getByTestId("advent-next")).toBeVisible();
+}
+
+/**
+ * Évfolyamválasztás a felületen: koppintás az évfolyamra, majd a megerősítés („Igen, N. osztály”). A megerősítő lépés meglétét
+ * külön teszt követeli meg; ez a segéd csak végigmegy rajta.
+ */
+export async function chooseGrade(page: Page, grade: number): Promise<void> {
+  await page.getByTestId("advent-grade-" + grade).tap();
+  await expect(page.getByTestId("advent-grade-confirm")).toBeVisible();
+  await page.getByTestId("advent-grade-yes").tap();
 }
 
 /** Egy ablak megnyitása és megválaszolása a felületen, majd „Tovább”. */
@@ -164,10 +185,21 @@ export async function contrastOf(page: Page, selector: string, what: "text" | "o
     // Az outline az elem KÖRÜL van: a háttere a szülő háttere.
     const bg = backgroundFrom(what === "outline" ? el.parentElement : el);
     const style = getComputedStyle(el);
-    const fg = over(parse(what === "outline" ? style.outlineColor : style.color), bg);
+    // Áttetszőség: az elem és ősei opacity-szorzata; a legfelső áttetsző ős MÖGÖTTI szín üt át a szövegen és a háttéren is.
+    let alpha = 1;
+    let topFaded: Element | null = null;
+    for (let node: Element | null = el; node; node = node.parentElement) {
+      const o = parseFloat(getComputedStyle(node).opacity);
+      if (Number.isFinite(o) && o < 1) { alpha *= o; topFaded = node; }
+    }
+    const behind = topFaded ? backgroundFrom(topFaded.parentElement) : bg;
+    const fade = (c: Rgba): Rgba => over([c[0], c[1], c[2], alpha], behind);
+    const fgSolid = over(parse(what === "outline" ? style.outlineColor : style.color), bg);
+    const fg = alpha < 1 ? fade(fgSolid) : fgSolid;
+    const bgSeen = alpha < 1 ? fade(bg) : bg;
     const lum = (c: Rgba) => { const f = (v: number) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
-    const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a) as [number, number];
+    const [hi, lo] = [lum(fg), lum(bgSeen)].sort((a, b) => b - a) as [number, number];
     const show = (c: Rgba) => "rgb(" + Math.round(c[0]) + ", " + Math.round(c[1]) + ", " + Math.round(c[2]) + ")";
-    return { ratio: Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100, fg: show(fg), bg: show(bg), outlineStyle: style.outlineStyle, outlineWidth: parseFloat(style.outlineWidth) || 0 };
+    return { ratio: Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100, fg: show(fg), bg: show(bgSeen), outlineStyle: style.outlineStyle, outlineWidth: parseFloat(style.outlineWidth) || 0 };
   }, what);
 }

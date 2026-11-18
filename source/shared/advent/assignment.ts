@@ -77,14 +77,26 @@ export type BuildPlanInput = {
   usedPrompts?: ReadonlySet<string>;
 };
 
+const planRng = (season: number, round: number, subjectKey: string, grade: number) => createRng(seedFrom("advent", season, round, subjectKey, clampAdventGrade(grade)));
+const ALL_DOOR_DAYS = (): number[] => Array.from({ length: ADVENT_DOORS }, (_, i) => i + 1);
+
+/**
+ * Az ablakok elrendezése TERV NÉLKÜL is (ugyanaz, amit a terv tárolni fog): az állapot már az első megnyitás előtt a végleges,
+ * kevert sorrendet mutatja, így a rács játék közben nem rendeződik át (vak ellenőr S1).
+ */
+export function adventLayout(season: number, round: number, subjectKey: string, grade: number): number[] {
+  return planRng(season, round, subjectKey, grade).shuffle(ALL_DOOR_DAYS());
+}
+
 export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
   const grade = clampAdventGrade(input.grade);
   const perDoor = 1 + limitsForGrade(grade).maxRepairs;
-  const rng = createRng(seedFrom("advent", input.season, input.round, input.subjectKey, grade));
+  const rng = planRng(input.season, input.round, input.subjectKey, grade);
   const usedIds = new Set(input.usedIds ?? []);
   const usedPrompts = new Set(input.usedPrompts ?? []);
 
-  const days = Array.from({ length: ADVENT_DOORS }, (_, i) => i + 1);
+  const days = ALL_DOOR_DAYS();
+  // Az ELSŐ húzás az elrendezés — az `adventLayout` ugyanezt adja terv nélkül.
   const layout = rng.shuffle(days);
 
   /** A sorból az első `count` még nem használt tétel; a kivetteket használtnak jelöli. */

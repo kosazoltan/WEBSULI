@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import type { AdventDoorView, AdventState } from "../shared/advent/contract";
-import { homeCardReserve, homeCardStatus } from "../shared/advent/home-card";
+import { homeCardClock, homeCardReserve, homeCardStatus } from "../shared/advent/home-card";
 import { adventSummary, type DoorState } from "../shared/advent/rules";
 
 /**
@@ -66,4 +66,37 @@ test("a naptár NEM kerül a játékok közé: a játéklista és a főoldali j�
   assert.ok(hero > 0 && card > hero, "a kártya a Hero után");
   assert.ok(card < list.indexOf("<SponsorBar />", hero), "a kártya a támogatói sáv előtt");
   assert.ok(card < list.indexOf("data-testid=\"button-filter-all\"", hero), "a kártya a szűrő előtt");
+});
+
+test("a kártya „mostja”: kikapcsolt kapcsolónál nincs; teszt-buildben csak beadott, érvényes tesztidővel; éles buildben a valódi idő (terv 20.)", () => {
+  const realNow = new Date("2026-12-03T10:00:00Z");
+  // Kikapcsolt kapcsoló: soha.
+  assert.equal(homeCardClock({ flag: false, testHooks: false, hookValue: undefined, realNow }), null);
+  assert.equal(homeCardClock({ flag: false, testHooks: true, hookValue: "2026-12-03T10:00:00Z", realNow }), null);
+  // Éles build: a valódi idő — a kampó értéke ott SEMMIT nem számít (mutációs ellenpróba a „tesztidő élesben” ellen).
+  assert.equal(homeCardClock({ flag: true, testHooks: false, hookValue: undefined, realNow }), realNow);
+  assert.equal(homeCardClock({ flag: true, testHooks: false, hookValue: "2030-01-01T00:00:00Z", realNow }), realNow);
+  // Teszt-build: csak érvényes, beadott idővel; nélküle a kártya „kikapcsolt” (a többi főoldali teszt helyzete a szezonban is).
+  assert.equal(homeCardClock({ flag: true, testHooks: true, hookValue: undefined, realNow }), null);
+  assert.equal(homeCardClock({ flag: true, testHooks: true, hookValue: "2026-12-05T10:00:00Z", realNow })?.toISOString(), "2026-12-05T10:00:00.000Z");
+  for (const bad of ["", "holnap", "2026-12-05", "2026-13-45T10:00:00Z", 1764928800000, null, {}]) assert.equal(homeCardClock({ flag: true, testHooks: true, hookValue: bad, realNow }), null, String(bad));
+});
+
+test("a tesztidő-kampót CSAK a teszt-kampós ág olvassa; a kártya a kapcsolóból és az órából dönt, helyi „már láttam” jelző nélkül (terv 20., őr)", () => {
+  const flag = read("client/src/advent/season-flag.ts");
+  assert.match(flag, /import\.meta\.env\.VITE_ADVENT_CALENDAR === "on"/);
+  assert.match(flag, /const TEST_HOOKS = import\.meta\.env\.VITE_ENABLE_GAME_TEST_HOOKS === "1";/);
+  // A kampó neve a kódban egyetlen helyen fordul elő, és az a sor a TEST_HOOKS feltétel mögött áll.
+  const uses = flag.split("\n").filter((line) => line.includes("__websuliAdventTestNow") && !line.trim().startsWith("*"));
+  assert.equal(uses.length, 1);
+  assert.match(uses[0]!, /^\s*if \(TEST_HOOKS\) hookValue = /);
+  const card = read("client/src/components/AdventHomeCard.tsx");
+  assert.match(card, /adventCardNow\(\)/);
+  assert.doesNotMatch(card, /new Date\(\)/, "a kártya nem olvas közvetlenül órát");
+  assert.doesNotMatch(card, /localStorage|cardSeen/, "nincs helyi „már láttam” jelző");
+  for (const file of ["client/src/pages/AdventCalendar.tsx", "client/src/advent/useAdvent.ts", "client/src/components/AdventHomeCard.tsx"]) {
+    assert.doesNotMatch(read(file), /__websuliAdventTestNow/, file);
+  }
+  assert.match(read("package.json"), /"build:e2e": "[^"]*VITE_ADVENT_CALENDAR=on[^"]*vite build/);
+  assert.doesNotMatch(read("package.json"), /"build(:client)?": "[^"]*VITE_ADVENT_CALENDAR/, "az éles build parancsa nem égeti be a kapcsolót — azt a Vercel környezete adja");
 });

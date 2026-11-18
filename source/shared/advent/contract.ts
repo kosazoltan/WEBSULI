@@ -85,6 +85,13 @@ export type AdventAnswerResult = {
   /** A helyes válasz indexe a kliensnek adott (kevert) sorrendben; -1, ha a kérdés már nem érhető el. */
   correctIndex: number;
   explanation: string;
+  /** A rögzített próba választása a kliensnek adott sorrendben (a saját válasz jelöléséhez). */
+  pick: number;
+  /**
+   * `false`: ez a kérdés már korábban meg volt válaszolva (másik lap / eszköz / újraküldés) — a TÁROLT eredmény jön vissza, a
+   * mostani választás nem számít. A felület ilyenkor ezt mondja ki, nem a mostani koppintást minősíti.
+   */
+  recorded: boolean;
   door: AdventDoorView;
   summary: AdventSummary;
   closing: AdventClosing;

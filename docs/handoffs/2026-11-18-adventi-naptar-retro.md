@@ -95,21 +95,6 @@ képcsere), #155 (S5, S6, S8), #156 (ágak rebase-e a friss mainre push előtt).
 - **Felülírt szám a terv eredeti helyén (U3):** a tulajdonosi döntés először csak új szakaszba került. **Tanulság:** felülírt
   értéket a HELYÉN kell jelölni (dátum + hivatkozás), nem csak a döntési szakaszban.
 
-## 11. Kiegészítés — a 2/3 PR vak, hibakereső ellenőrzése (IGEN, FELTÉTELLEL; 2026-11-18)
-
-- **Mi ment rosszul:** a hálózati (IP-) keretek a bemenet-ellenőrzés ELŐTT számoltak, ezért 1500 érvénytelen kérés 5,4 mp alatt 15
-  percre kizárta egy iskola címét (K1); a keretek a szabályos iskolai pótlásnál is elfogytak volna (K2), mert a méretezés csak egy
-  osztály napi játékát számolta, a pótlást nem. A korábbi körök a keretet csak „a szabályos legrosszabb eset átfér-e” oldalról
-  tesztelték, a támadó oldaláról nem. **Javítás ebben a futásban:** `source/server/advent/limits.ts` (képletből számolt keretek,
-  munkamenet- és érvénytelen-keret, `retryAfterSec`), `source/server/advent/routes.ts` (sorrend, `skipFailedRequests`,
-  `Retry-After`, sérült sor 409, évfolyam az első válasznál), `source/tests/advent-limits.test.ts` (az ellenőr három támadása után
-  egy osztálytárs ír), DB-tesztek. **Tanulság:** közös (hálózati) keretet mindig a támadó oldaláról is tesztelni kell: „egy kliens
-  el tudja-e fogyasztani a többiek elől?”; a méretezés képlete álljon a kódban, ne csak a számok.
-- **Maradó kockázat:** szkriptelt munkamenet- és eszközcserével a keret továbbra is elfogyasztható (terv 21.); a kliens-IP
-  megbízhatósága külön KÖZEPES jegy (#169).
-- k1: a tulajdonos döntése (2026-11-18, „Igen, vigyük át”) után a névtelen → párosított átmenet ugyanebben a PR-ban elkészült (#170 lezárva).
-- Kanban: #169 (kliens-IP), #170 (névtelen → párosított átmenet), #171 (k4), #172 (k7: takarító az S6 előtt), #173 (k8: DB-kör bontása).
-
 ## 8. Kiegészítés — felület (S3, S4) és a kibocsátás átszervezése (2026-11-18)
 
 - **Szelet tesztje a következő szelet fájlját olvasta.** Az S3 ág `gate:push` futása megfogta: a tiszta logika tesztje az S4
@@ -181,3 +166,18 @@ képcsere), #155 (S5, S6, S8), #156 (ágak rebase-e a friss mainre push előtt).
 - **DB-kör időtúllépése terhelt gépen:** a PR-B beolvasztás utáni fején a DB-kör 480 s után megállt (159 / 230 teszt kész,
   közben több idegen tesztkonténer futott). A korlátot NEM emeltem; az újrafutás nyugodt gépen történik.
 - Kanban: a bejelentkezett játékos böngészős tesztje NOT RUN (a `PLAYER_ACCOUNTS` az e2e-szerveren kikapcsolt).
+
+## 11. Kiegészítés — a 2/3 PR vak, hibakereső ellenőrzése (IGEN, FELTÉTELLEL; 2026-11-18)
+
+- **Mi ment rosszul:** a hálózati (IP-) keretek a bemenet-ellenőrzés ELŐTT számoltak, ezért 1500 érvénytelen kérés 5,4 mp alatt 15
+  percre kizárta egy iskola címét (K1); a keretek a szabályos iskolai pótlásnál is elfogytak volna (K2), mert a méretezés csak egy
+  osztály napi játékát számolta, a pótlást nem. A korábbi körök a keretet csak „a szabályos legrosszabb eset átfér-e” oldalról
+  tesztelték, a támadó oldaláról nem. **Javítás ebben a futásban:** `source/server/advent/limits.ts` (képletből számolt keretek,
+  munkamenet- és érvénytelen-keret, `retryAfterSec`), `source/server/advent/routes.ts` (sorrend, `skipFailedRequests`,
+  `Retry-After`, sérült sor 409, évfolyam az első válasznál), `source/tests/advent-limits.test.ts` (az ellenőr három támadása után
+  egy osztálytárs ír), DB-tesztek. **Tanulság:** közös (hálózati) keretet mindig a támadó oldaláról is tesztelni kell: „egy kliens
+  el tudja-e fogyasztani a többiek elől?”; a méretezés képlete álljon a kódban, ne csak a számok.
+- **Maradó kockázat:** szkriptelt munkamenet- és eszközcserével a keret továbbra is elfogyasztható (terv 21.); a kliens-IP
+  megbízhatósága külön KÖZEPES jegy (#169).
+- k1: a tulajdonos döntése (2026-11-18, „Igen, vigyük át”) után a névtelen → párosított átmenet ugyanebben a PR-ban elkészült (#170 lezárva).
+- Kanban: #169 (kliens-IP), #170 (névtelen → párosított átmenet), #171 (k4), #172 (k7: takarító az S6 előtt), #173 (k8: DB-kör bontása).

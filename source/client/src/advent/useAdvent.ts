@@ -39,6 +39,24 @@ export function adventDevice(): { id: string; volatile: boolean } {
   }
 }
 
+/** A MÁR LÉTEZŐ eszközazonosító — nem hoz létre újat (a főoldali kártya ezt használja: aki nem játszik, annak nincs azonosítója). */
+export function peekAdventDevice(): string | null {
+  try {
+    const stored = window.localStorage.getItem(ADVENT_DEVICE_KEY);
+    return stored && /^[0-9a-f-]{36}$/i.test(stored) ? stored : memoryDevice;
+  } catch {
+    return memoryDevice;
+  }
+}
+
+/** Van-e már bármi, amihez a szerver állapotot tudna adni (eszközazonosító vagy tanulói link) — azonosító létrehozása nélkül. */
+export function hasAdventIdentity(): boolean {
+  return peekAdventDevice() !== null || getLearnerToken() !== null;
+}
+
+/** Az írások időkorlátja: lassú hálózaton a gyerek ~15 mp után barátságos újrapróba-ajánlatot kap (nem 60 mp néma várakozást). */
+export const ADVENT_TIMEOUT_MS = 15_000;
+
 const identity = () => {
   const learner = getLearnerToken();
   return { device: adventDevice().id, ...(learner ? { learner } : {}) };
@@ -53,10 +71,13 @@ export async function fetchAdventStatus(): Promise<AdventStatus> {
 }
 
 /** Az állapot; `null`, ha a naptár nem érhető el (kikapcsolt flag → 404). Hálózati / szerverhiba esetén dob. */
-export async function fetchAdventState(): Promise<AdventState | null> {
-  const id = identity();
-  const headers: Record<string, string> = { accept: "application/json", "X-Advent-Device": id.device };
-  if (id.learner) headers["X-Learner-Token"] = id.learner;
+export async function fetchAdventState(createDevice = true): Promise<AdventState | null> {
+  // A naptároldal létrehozza az eszközazonosítót (ott a gyerek játszani jött); a főoldali kártya csak a meglévőt küldi.
+  const device = createDevice ? adventDevice().id : peekAdventDevice();
+  const learner = getLearnerToken();
+  const headers: Record<string, string> = { accept: "application/json" };
+  if (device) headers["X-Advent-Device"] = device;
+  if (learner) headers["X-Learner-Token"] = learner;
   const res = await fetch("/api/advent/state", { credentials: "same-origin", headers });
   if (res.status === 404) return null;
   // A státuszkód a hibán marad (429: betelt olvasási keret) — a felület megtartott állapot mellett csak sávot mutat.
@@ -65,20 +86,20 @@ export async function fetchAdventState(): Promise<AdventState | null> {
 }
 
 export const adventApi = {
-  grade: (grade: number) => apiRequest<AdventState>("POST", "/api/advent/grade", { ...identity(), grade }),
-  open: (day: number) => apiRequest<AdventOpenResult>("POST", `/api/advent/doors/${day}/open`, identity()),
+  grade: (grade: number) => apiRequest<AdventState>("POST", "/api/advent/grade", { ...identity(), grade }, { timeout: ADVENT_TIMEOUT_MS }),
+  open: (day: number) => apiRequest<AdventOpenResult>("POST", `/api/advent/doors/${day}/open`, identity(), { timeout: ADVENT_TIMEOUT_MS }),
   answer: (day: number, questionId: string, pick: number) =>
     // Az újraküldés biztonságos: ugyanarra a kérdésre a szerver a tárolt eredményt adja.
-    apiRequest<AdventAnswerResult>("POST", `/api/advent/doors/${day}/answer`, { ...identity(), questionId, pick }, { retries: 2 }),
-  round: () => apiRequest<AdventState>("POST", "/api/advent/round", identity()),
+    apiRequest<AdventAnswerResult>("POST", `/api/advent/doors/${day}/answer`, { ...identity(), questionId, pick }, { retries: 1, timeout: ADVENT_TIMEOUT_MS }),
+  round: () => apiRequest<AdventState>("POST", "/api/advent/round", identity(), { timeout: ADVENT_TIMEOUT_MS }),
 };
 
 /** Az állapot lekérdezése: frissül fókuszra, és magától a következő ablak nyitásának pillanatában. */
-export function useAdventState(enabled = true) {
+export function useAdventState(enabled = true, createDevice = true) {
   const queryClient = useQueryClient();
   const query = useQuery<AdventState | null>({
     queryKey: ADVENT_STATE_KEY,
-    queryFn: fetchAdventState,
+    queryFn: () => fetchAdventState(createDevice),
     enabled,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
