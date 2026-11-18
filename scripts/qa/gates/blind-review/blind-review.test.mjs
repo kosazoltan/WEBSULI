@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CFG, REPORT, fakeOpenRouter, makeRepo, reply, usage } from './_fixture.mjs';
 import {
-  BOOL_FLAGS, VALUE_FLAGS, buildEvidence, buildSystemPrompt, buildUserMessage, cacheStats, checkTemplate, cleanupWorktree, createBudget, estimateNextUsd,
+  BOOL_FLAGS, VALUE_FLAGS, buildEvidence, buildSystemPrompt, buildUserMessage, backoffMs, cacheStats, checkTemplate, cleanupWorktree, createBudget, estimateNextUsd,
   incompleteReport, parseArgs, prepareWorktree, runReview, unlinkJunction, validateReport, withCacheMarkers,
 } from './blind-review.mjs';
 import { makeTools } from './tools.mjs';
@@ -160,6 +160,17 @@ test('B7: az újrapróba is hívásnak számít és a keretet terheli; a végleg
   assert.ok(!d.stopReason.includes(KEY));
   assert.equal(dead.bodies.length, 1, '401 nem újrapróbálható');
 
+  // ENOTFOUND (a DNS átmenetileg nem old fel): újrapróba, és ha nem jön helyre, NEM TELJES — ítélet és jelentés nélkül
+  const dns = setup([{ throw: 'getaddrinfo ENOTFOUND openrouter.ai' }]);
+  const n = await dns.run();
+  assert.deepEqual({ complete: n.complete, fatal: n.fatal }, { complete: false, fatal: true });
+  assert.match(n.stopReason, /hálózati hiba: getaddrinfo ENOTFOUND/);
+  assert.equal(dns.bodies.length, 1 + CFG.maxRetries, 'korlátos számú újrapróba');
+  assert.equal(dns.budget.state.retries, CFG.maxRetries);
+  assert.equal(dns.box.report, null);
+  const healed = setup([{ throw: 'getaddrinfo ENOTFOUND openrouter.ai' }, { throw: 'getaddrinfo ENOTFOUND openrouter.ai' }, submit()]);
+  assert.equal((await healed.run()).complete, true, 'helyreálló hálózatnál a futás folytatódik');
+  assert.deepEqual([0, 1, 2, 3, 4, 10].map(backoffMs), [2000, 4000, 8000, 16000, 30000, 30000]);
   const down = setup([{ status: 500, body: {} }], { budget: { maxRounds: 2 } });
   assert.match((await down.run()).stopReason, /körszám-plafon/, 'az újrapróbák a körszám-plafont is fogyasztják');
 });

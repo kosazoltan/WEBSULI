@@ -178,7 +178,7 @@ bizonyítékkal (ez zárná a PR-szöveg rését).
 - A leadott jelentés hiányos (nincs `Ítélet:` / `Fej:` / kötelező szakasz, vagy a `Fej:` más fejre szól) → az eszköz hibát ad vissza,
   a modell javíthat; a körszám-plafon véd.
 - Hibás JSON az eszköz-argumentumban, ismeretlen eszköz → hiba-eredmény a modellnek, a futás megy tovább.
-- 429 / 5xx / hálózati hiba → legfeljebb 2 újrapróba, mind beleszámít a hívásszámba és a költségbecslésbe.
+- 429 / 5xx / hálózati hiba (ENOTFOUND, időtúllépés) → legfeljebb 4 újrapróba exponenciális várakozással (2, 4, 8, 16 s; legfeljebb 30 s), mind beleszámít a hívásszámba és a költségbecslésbe (minden próba előtt plafon-ellenőrzés); ha nem jön helyre: NEM TELJES, ítélet nélkül (kilépési kód 2).
 - A válasz `model` mezője más, mint a kért → a bizonyíték rögzíti; a `record-review.mjs` elutasítja.
 - Megszakadt futás → a `finally` takarít; a munkafa-maradványt a következő futás jelzi.
 

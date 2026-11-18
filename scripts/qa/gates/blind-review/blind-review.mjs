@@ -225,6 +225,9 @@ export function createBudget({ maxUsd, maxRounds, maxWallMs, maxCompletionTokens
 
 const chars = (m) => JSON.stringify(m).length;
 
+/** Az újrapróba előtti várakozás: 2 s · 2^próba, legfeljebb 30 s. */
+export const backoffMs = (attempt) => Math.min(30_000, 2000 * 2 ** attempt);
+
 /**
  * Az ügynök-ciklus. Az üzenetlista CSAK BŐVÜL: rögzített rendszerüzenet → rögzített feladatblokk → eszközhívások és eredmények.
  * Korábbi üzenet soha nem íródik át, nem rendeződik újra és nem csonkolódik utólag (az előtag körről körre bájtra azonos — ez a
@@ -266,7 +269,9 @@ export async function runReview({ cfg, key, system, user, tools, box, budget, se
         log({ type: 'error', attempt, message: msg });
         if (!retryable || attempt >= (cfg.maxRetries ?? 2)) return done(false, `OpenRouter-hiba: ${msg}`, true);
         budget.retry();
-        await sleep(2000 * (attempt + 1));
+        // Átmeneti hálózati hiba (ENOTFOUND, időtúllépés, 429 / 5xx): korlátos, exponenciális várakozás (2, 4, 8 … s, legfeljebb 30 s);
+        // minden újrapróba a körszám- és a USD-plafon ELŐTTI ellenőrzésen megy át. Ha nem jön helyre: NEM TELJES, ítélet nélkül.
+        await sleep(backoffMs(attempt));
       }
     }
     pending = 0;

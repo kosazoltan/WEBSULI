@@ -83,7 +83,7 @@
     "maxWallMinutesHardCap": 60,
     "maxTokensPerCall": 16000,
     "maxCompletionTokensTotal": 200000,
-    "maxRetries": 2,
+    "maxRetries": 4,
     "httpTimeoutSec": 180,
     "toolOutputMaxChars": 12000,
     "reportMaxChars": 40000,
