@@ -41,8 +41,20 @@ kell mérnie.
 
 ### Ki az ellenőr
 
+<!-- vak-ellenor:ki-az-ellenor:begin — EGYETLEN hely: ezt a bekezdést a gépi futtató ága (chore/vak-ellenor-deepseek) cseréli -->
 Friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök — soha nem az, amelyik a kódot írta, és nem a fejlesztő folytatása.
-Ahol a környezet tud alügynököt indítani, alügynök; ahol nem, a 3/b. szerint új, tiszta munkamenet vagy másik eszköz.
+Ahol a környezet tud alügynököt indítani, alügynök; ahol nem, lent („Ha nincs alügynök-eszköz”) szerint új, tiszta munkamenet vagy másik eszköz.
+
+#### Ha nincs alügynök-eszköz (pl. egyes Codex / Cursor / Gemini futások)
+
+1. Nyiss új, tiszta munkamenetet / feladatot (vagy másik eszközt) — NE a fejlesztés beszélgetését folytasd.
+2. Add át CSAK: a megbízás-sablont (lent, egyetlen forrás) kitöltve, a terv útvonalát (vagy a tulajdonosi cél idézetét), az ágat és a teljes fej-hash-t. A
+   fejlesztés összefoglalóját, a „zöld” állításokat és a saját véleményedet NE.
+3. Az ellenőr a saját ideiglenes munkafájában / klónjában futtat; a jelentését a sablon formájában adja.
+4. Az ítéletet a fejlesztő-oldal rögzíti: `node scripts/qa/gates/record-review.mjs --head <fej> --verdict … --report <jelentés.md>`
+   (a szkript a hiányos jelentést elutasítja). Ha egyik út sem érhető el, a munka nem nyitható PR-ra — kérj segítséget a
+   tulajdonostól.
+<!-- vak-ellenor:ki-az-ellenor:end -->
 
 ### A megbízás-sablon (egyetlen forrás)
 
@@ -50,16 +62,6 @@ A vak, hibakereső megbízás szövege EGY fájlban van: `scripts/qa/gates/vak-e
 gépi futtató is ebből veszi az üzenetet. A sablon kötelező elemei: hibakereső keret („a feladatod hibát találni, nem megerősíteni”),
 feladat-specifikus hibakereső pontok + „bármi más”, futtatás / ellenpróba saját munkafában, a mérce a tulajdonosi cél (felületnél a
 képernyőképek), a jelentés kötelező szakaszai (`Fej:`, `Ítélet:`, „Mit próbáltam megtörni, és nem sikerült”, „Mit NEM vizsgáltam”).
-
-### 3/b. Ha nincs alügynök-eszköz (pl. egyes Codex / Cursor / Gemini futások)
-
-1. Nyiss új, tiszta munkamenetet / feladatot (vagy másik eszközt) — NE a fejlesztés beszélgetését folytasd.
-2. Add át CSAK: a fenti sablont kitöltve, a terv útvonalát (vagy a tulajdonosi cél idézetét), az ágat és a teljes fej-hash-t. A
-   fejlesztés összefoglalóját, a „zöld” állításokat és a saját véleményedet NE.
-3. Az ellenőr a saját ideiglenes munkafájában / klónjában futtat; a jelentését a sablon formájában adja.
-4. Az ítéletet a fejlesztő-oldal rögzíti: `node scripts/qa/gates/record-review.mjs --head <fej> --verdict … --report <jelentés.md>`
-   (a szkript a hiányos jelentést elutasítja). Ha egyik út sem érhető el, a munka nem nyitható PR-ra — kérj segítséget a
-   tulajdonostól.
 
 ## 4. Kötelező ellenőrzőlista (a mért hibatípusokból)
 

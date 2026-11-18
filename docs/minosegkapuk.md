@@ -44,8 +44,7 @@ A szabály forrása: `AGENTS.md` „Vak hibakereső ellenőr — kötelező” (
 
 - **Vak:** CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja; a fejlesztő jelentését, önértékelését, „zöld”
   állításait és az orkesztrátor várakozását NEM.
-- **Ki az ellenőr:** friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök — alügynök, vagy ahol nincs, új, tiszta munkamenet
-  / másik eszköz. A megbízás szövege egyetlen fájlban: `scripts/qa/gates/vak-ellenor-megbizas.md`.
+- **Ki az ellenőr:** lásd AGENTS.md „Vak hibakereső ellenőr — kötelező” → „Ki az ellenőr” bekezdés (egyetlen forrás). A megbízás szövege egyetlen fájlban: `scripts/qa/gates/vak-ellenor-megbizas.md`.
 - **Hibakereső:** a megbízás kifejezetten hibakeresésre utasít („a feladatod hibát találni, nem megerősíteni”), feladat-specifikus
   hibakereső pontokkal és egy „bármi más” ponttal; a futtatás / ellenpróba saját ideiglenes munkafában; visszanézésnél is
   hibakeresés a keret; a mérce a tulajdonosi cél (felületnél a képernyőképek is). Anthropic modell is lehet — a sablon ezért

@@ -77,6 +77,6 @@ szerint.
 
 ## Vak hibakereső ellenőr a felhőben (kötelező, 2026-11-18)
 
-A felhőben futó Codex-feladat is a AGENTS.md „Vak hibakereső ellenőr — kötelező” szakasz szerint jár el: a fejlesztő feladat nem ellenőrizheti saját magát. Mivel ott nincs
-alügynök, az ellenőrzés új, tiszta Codex-feladat (vagy másik eszköz), amely CSAK a tervet (tulajdonosi célt) és a diffet / fejet
-kapja, a `websuli-fejlesztesi-ellenor` skill megbízás-sablonjával; a jelentést a `node scripts/qa/gates/record-review.mjs` rögzíti.
+A felhőben futó Codex-feladat is a AGENTS.md „Vak hibakereső ellenőr — kötelező” szakasz szerint jár el: a fejlesztő feladat nem
+ellenőrizheti saját magát; az ellenőrt a AGENTS.md „Vak hibakereső ellenőr — kötelező” → „Ki az ellenőr” bekezdés szerint kell indítani (a megbízás:
+`scripts/qa/gates/vak-ellenor-megbizas.md`); a jelentést a `node scripts/qa/gates/record-review.mjs` rögzíti.

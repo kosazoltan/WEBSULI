@@ -103,5 +103,22 @@ test('V9: a skill leírása minden elkészült fejlesztésnél betöltést ír e
   assert.match(desc, /VAK/);
   assert.match(desc, /HIBÁT TALÁLNI/);
   assert.ok(desc.includes(RULE), 'a leírás hivatkozzon az AGENTS.md szakaszra');
-  assert.match(skill, /### 3\/b\. Ha nincs alügynök-eszköz/);
+  assert.match(skill, /^#### Ha nincs alügynök-eszköz/m);
+});
+
+test('a „Ki az ellenőr” szöveg egyetlen jelölt bekezdés (AGENTS.md, skill); a többi vezérlőfájl csak hivatkozik rá', () => {
+  const BEGIN = '<!-- vak-ellenor:ki-az-ellenor:begin';
+  const END = '<!-- vak-ellenor:ki-az-ellenor:end -->';
+  for (const f of ['AGENTS.md', '.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md']) {
+    const s = read(...f.split('/'));
+    assert.equal(s.split(BEGIN).length - 1, 1, `${f}: pontosan egy kezdő jelölő`);
+    assert.equal(s.split(END).length - 1, 1, `${f}: pontosan egy záró jelölő`);
+    assert.ok(s.indexOf(BEGIN) < s.indexOf(END), `${f}: a jelölők sorrendje`);
+  }
+  // az „új, tiszta munkamenet” leírás csak a jelölt bekezdésben áll — a runbook, a Cursor-szabály és a Codex-doksi nem ismétli
+  for (const f of ['docs/minosegkapuk.md', '.cursor/rules/vak-ellenor.mdc', 'docs/codex-felhokornyezet.md']) {
+    const s = read(...f.split('/'));
+    assert.doesNotMatch(s, /új, tiszta (munkamenet|chat|Codex-feladat)/, `${f} ismétli a „Ki az ellenőr” szöveget`);
+    assert.ok(s.includes('„Ki az ellenőr” bekezdés'), `${f}: hivatkozzon a „Ki az ellenőr” bekezdésre`);
+  }
 });

@@ -174,8 +174,11 @@ Ez a szabály MINDEN ügynök-környezetre érvényes (Claude Code, Codex — he
 
 ### Ki az ellenőr
 
+<!-- vak-ellenor:ki-az-ellenor:begin — EGYETLEN hely: ezt a bekezdést a gépi futtató ága (chore/vak-ellenor-deepseek) cseréli -->
 Friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök. Ahol a környezet tud alügynököt indítani, alügynök; ahol nem (egyes
-Codex / Cursor / Gemini futások), új, tiszta munkamenet vagy másik eszköz, amely CSAK a tervet és a diffet kapja.
+Codex / Cursor / Gemini futások), új, tiszta munkamenet vagy másik eszköz, amely CSAK a tervet és a diffet kapja. A fejlesztő saját
+magát soha nem ellenőrizheti.
+<!-- vak-ellenor:ki-az-ellenor:end -->
 
 A megbízás szövege egyetlen fájlban: `scripts/qa/gates/vak-ellenor-megbizas.md`. Indítási leírás (alügynökkel és alügynök-eszköz nélkül):
 `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
