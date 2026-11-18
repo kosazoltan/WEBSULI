@@ -17,6 +17,13 @@ import { expect, test, type CDPSession, type Page } from "@playwright/test";
 test.use({ serviceWorkers: "block" });
 
 test.beforeEach(async ({ page }) => {
+  // CI-reprodukció (main CI 44095911311 utómunka; a Kockavadász mintája): `BR_CPU_THROTTLE=<n>` → n-szeres CPU-lassítás
+  // (a CI szoftveres WebGL-jének lassú képkockái helyben). Alapból nincs lassítás.
+  const throttle = Number(process.env.BR_CPU_THROTTLE ?? 0);
+  if (throttle > 1) {
+    test.setTimeout(300_000);
+    await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: throttle });
+  }
   // Évfolyam nélkül az osztály-választó (ClassroomGateModal) nyílna; az 5. évfolyam a tipikus Brain Rot-játékos.
   await page.addInitScript(() => localStorage.setItem("websuli.classroomGrade", "5"));
   await page.route("**/api/**", async (route) => {
@@ -27,6 +34,18 @@ test.beforeEach(async ({ page }) => {
     await route.fulfill({ json: data });
   });
 });
+
+/**
+ * CI-reprodukció: a CI-n egy Playwright-hívás 0,5–1,3 s, a lap órája közben a falióra szerint halad. `BR_CI_LAG_MS=<ms>`
+ * ezt a késést teszi minden érintés-küldés után helyben (alapból 0).
+ */
+const CI_LAG_MS = Number(process.env.BR_CI_LAG_MS ?? 0);
+const ciLag = () => (CI_LAG_MS > 0 ? new Promise<void>((r) => setTimeout(r, CI_LAG_MS)) : Promise.resolve());
+/** Valódi érintés (CDP) + a CI-késés helyben. */
+async function touch(cdp: CDPSession, params: { type: "touchStart" | "touchMove" | "touchEnd"; touchPoints: { x: number; y: number; id: number }[] }): Promise<void> {
+  await cdp.send("Input.dispatchTouchEvent", params);
+  await ciLag();
+}
 
 type Probe = Record<string, number | null>;
 type GameWindow = { __websuliGame?: { probe: () => Probe; forceState: (p: Record<string, unknown>) => void } };
@@ -365,62 +384,209 @@ test.describe("elforgatás nyitott kérdés alatt", () => {
 
 test.describe("véletlen válasz valódi érintéssel", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  /**
+   * Main CI 44095911311 utómunka: az időzített mozdulat a LAPON BELÜL, a meghajtó kérdés-órája szerint fut (egyetlen
+   * `evaluate`), mert a CI-n egy Playwright-hívás 0,5–1,3 s, és a hívások közti valós időre épülő „400 ms-os tolás”
+   * 750–1200 ms lett (helyi reprodukció: `BR_CPU_THROTTLE=20 BR_CI_LAG_MS=1300`; a lap-idővonal szerint a tolás az élesítés
+   * UTÁN is tartott — ez a Ú3 elfogadott tartománya, nem az, amit a teszt mér). A valódi érintés (CDP) adja a joystick
+   * lenyomását; a lenyomott ujj mozgását és felemelését a lap ugyanazzal a `pointerId`-vel kapja.
+   */
   test("review #485 B1: a kérdés után még 400 ms-ig tolt, majd elengedett joystick nem ad választ", async ({ page }) => {
     await page.goto("/games/brain-rot-steal?seed=7");
     await page.getByRole("button", { name: /vadászat indítása/i }).tap();
     const stick = page.getByTestId("virtual-joystick");
     await expect(stick).toBeVisible();
+    await page.evaluate(() => {
+      const w = window as unknown as { __brPid?: number };
+      window.addEventListener("pointerdown", (e) => (w.__brPid = e.pointerId), true);
+    });
     const sb = (await stick.boundingBox())!;
     const cx = sb.x + sb.width / 2;
     const cy = sb.y + sb.height / 2;
     const cdp: CDPSession = await page.context().newCDPSession(page);
-    // A gyerek lefelé fut (az alsó ketrecsor felé), és közben elkapja a lényt: a kérdés megnyílik, ő még tolja.
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: cy, id: 1 }] });
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx, y: cy + sb.height * 0.45, id: 1 }] });
-    await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ question: true }));
-    await expect(cages(page)).toHaveCount(4);
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx + 2, y: cy + sb.height * 0.46, id: 1 }] });
-    await page.waitForTimeout(400);
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await page.waitForTimeout(1500);
-    const pr = await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.probe());
-    expect(pr.questionsAnswered, "a döntés előtt nincs válasz").toBe(0);
-    expect(pr.questionOpen, "a kérdés még nyitva").toBe(1);
+    await touch(cdp, { type: "touchStart", touchPoints: [{ x: cx, y: cy, id: 1 }] }); // valódi lenyomás (mozgás nélkül)
+    const r = await page.evaluate(
+      async ({ cx, cy, h }) => {
+        const w = window as unknown as { __brPid?: number; __websuliGame: { probe: () => Record<string, number | string | null>; forceState: (p: Record<string, unknown>) => void } };
+        const g = w.__websuliGame;
+        const el = document.querySelector<HTMLElement>('[data-testid="virtual-joystick"]')!;
+        const pid = w.__brPid!;
+        const fire = (type: string, x: number, y: number) =>
+          el.dispatchEvent(new PointerEvent(type, { pointerId: pid, pointerType: "touch", isPrimary: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+        const frame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
+        const clock = () => Number(g.probe().clock);
+        if (g.probe().questionOpen !== 0) return { error: "nyitott kérdés a mérés előtt" };
+        // A gyerek lefelé tol (az alsó ketrecsor felé), és UGYANABBAN a feladatban elkapja a lényt: a kérdés megnyílik.
+        fire("pointermove", cx, cy + h * 0.45);
+        g.forceState({ question: true });
+        while (g.probe().cagesOpen !== 1) await frame();
+        const open = clock();
+        // A nyitás utáni mozdulat a LEGKÖZELEBBI ketrec felé (a mag választerületei szerint): így a 400 ms-os tolás a
+        // ketrecbe viszi a vadászt — az élesítés (600 ms) nélkül ez válasz lenne (mutációs ellenpróba), vele nem.
+        const pr0 = g.probe();
+        const boardEl = document.querySelector<HTMLElement>('[data-testid="br-board"]')!;
+        const unit = Math.min(boardEl.clientWidth, boardEl.clientHeight);
+        const px = Number(pr0.playerX) * unit;
+        const py = Number(pr0.playerY) * unit;
+        const rects = JSON.parse(String(pr0.cageRects)) as number[][];
+        const near = rects
+          .map(([x, y, rw, rh]) => ({ x: x! + rw! / 2, y: y! + rh! / 2 }))
+          .reduce((a, b) => (Math.hypot(b.x - px, b.y - py) < Math.hypot(a.x - px, a.y - py) ? b : a));
+        const len = Math.hypot(near.x - px, near.y - py) || 1;
+        const mx = cx + ((near.x - px) / len) * h * 0.45;
+        const my = cy + ((near.y - py) / len) * h * 0.45;
+        fire("pointermove", mx, my);
+        // 400 ms a mag játékidején (a ketrec-kor; az élesítés is ezen 600 ms) — egy képkocka legfeljebb ~140 ms-ot léptet
+        // (a hurok-plafon), így a felengedés lassú gépen is az élesítés előtt van.
+        while (Number(g.probe().cageAgeMs) < 400) await frame();
+        fire("pointerup", mx, my);
+        const released = clock();
+        const atRelease = g.probe();
+        const releaseAge = Number(atRelease.cageAgeMs);
+        const armedAtRelease = String(atRelease.cageArmed);
+        // Előfeltétel: a felengedéskor a vadász egy ketrec választerületén áll (a mag `playerInCage` pereme: a vadász
+        // sugarának fele) — enélkül egy elrendezés-változás újra üressé tenné a mérést (a régi változat így volt üres).
+        const margin = 0.075 * 0.5 * unit;
+        const qx = Number(atRelease.playerX) * unit;
+        const qy = Number(atRelease.playerY) * unit;
+        const inCageAtRelease = (JSON.parse(String(atRelease.cageRects)) as number[][]).some(
+          ([x, y, rw, rh]) => qx >= x! - margin && qx <= x! + rw! + margin && qy >= y! - margin && qy <= y! + rh! + margin,
+        );
+        while (clock() - released < 1500) await frame();
+        const p = g.probe();
+        return { pushMs: released - open, releaseAge, armedAtRelease, inCageAtRelease, answered: p.questionsAnswered, open: p.questionOpen };
+      },
+      { cx, cy, h: sb.height },
+    );
+    await touch(cdp, { type: "touchEnd", touchPoints: [] });
+    expect(r, JSON.stringify(r)).not.toHaveProperty("error");
+    expect(r.answered, `a döntés előtt nincs válasz (${JSON.stringify(r)})`).toBe(0);
+    expect(r.open, "a kérdés még nyitva").toBe(1);
+    // A mérés előfeltétele (különben nem azt mérte): a felengedés az élesítés előtt volt.
+    expect(Number(r.releaseAge), "a tolás a játékidőn < az élesítés (600 ms)").toBeLessThan(600);
+    expect(r.armedAtRelease, "a felengedéskor még egy ketrec sem éles").toMatch(/^0+$/);
+    expect(r.inCageAtRelease, `a felengedéskor a vadász egy ketrec területén áll (${JSON.stringify(r)})`).toBe(true);
   });
 
   test("review #485 Ú1: húzás közben nyíló ketrecek — a lent tartott ujj egy ketrecre csúszva sem válaszol; felemelés + új bökés igen", async ({ page }) => {
     await page.goto("/games/brain-rot-steal?seed=7");
     await page.getByRole("button", { name: /vadászat indítása/i }).tap();
     const board = (await page.getByTestId("br-board").boundingBox())!;
+    await page.evaluate(() => {
+      const w = window as unknown as { __brPid?: number };
+      window.addEventListener("pointerdown", (e) => (w.__brPid = e.pointerId), true);
+    });
     const cdp: CDPSession = await page.context().newCDPSession(page);
     const sx = board.x + board.width * 0.5;
     const sy = board.y + board.height * 0.3;
-    // A gyerek a táblán húzza az ujját (egyujjas mód) — közben elkap egy lényt, és kinyílnak a ketrecek.
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: sx, y: sy, id: 1 }] });
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: sx + 4, y: sy + 4, id: 1 }] });
-    await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ question: true }));
-    await expect(cages(page)).toHaveCount(4);
-    const target = (await page.getByTestId("br-cage-2").boundingBox())!;
-    const tx = target.x + target.width / 2;
-    const ty = target.y + target.height / 2;
-    // Az ujj lent marad, és a ketrec közepére csúszik, ott apró mozdulatokkal áll 2 mp-ig (az élesítésen túl).
-    for (let i = 0; i < 20; i++) {
-      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: tx + (i % 2), y: ty, id: 1 }] });
-      await page.waitForTimeout(100);
+    // A gyerek a táblára teszi az ujját (valódi érintés, egyujjas mód).
+    await touch(cdp, { type: "touchStart", touchPoints: [{ x: sx, y: sy, id: 1 }] });
+    const r = await page.evaluate(
+      async ({ sx, sy }) => {
+        const w = window as unknown as { __brPid?: number; __websuliGame: { probe: () => Record<string, number | string | null>; forceState: (p: Record<string, unknown>) => void } };
+        const g = w.__websuliGame;
+        const boardEl = document.querySelector<HTMLElement>('[data-testid="br-board"]')!;
+        const pid = w.__brPid!;
+        const fire = (type: string, x: number, y: number, id = pid) =>
+          boardEl.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: "touch", isPrimary: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+        const frame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
+        const clock = () => Number(g.probe().clock);
+        if (g.probe().questionOpen !== 0) return { error: "nyitott kérdés a mérés előtt" };
+        // Húzás közben (ugyanabban a feladatban) elkap egy lényt: a ketrecek kinyílnak.
+        fire("pointermove", sx + 4, sy + 4);
+        g.forceState({ question: true });
+        while (g.probe().cagesOpen !== 1) await frame();
+        const open = clock();
+        // A mag már nyitott; a ketrec-elem a következő React-rajzzal jelenik meg.
+        while (!document.querySelector('[data-testid="br-cage-2"]')) await frame();
+        const cage = document.querySelector<HTMLElement>('[data-testid="br-cage-2"]')!.getBoundingClientRect();
+        const tx = cage.x + cage.width / 2;
+        const ty = cage.y + cage.height / 2;
+        // Az ujj lent marad, a ketrec közepére csúszik, és 100 ms-onként apró mozdulattal ott áll 2 mp-ig (az élesítésen túl).
+        let lastMove = -Infinity;
+        let i = 0;
+        while (clock() - open < 2000) {
+          if (clock() - lastMove >= 100) {
+            fire("pointermove", tx + (i++ % 2), ty);
+            lastMove = clock();
+          }
+          await frame();
+        }
+        const mid = g.probe();
+        // Felemeli, és újra bök a ketrecre (friss lenyomás): a vadász odafut és megáll → válasz.
+        fire("pointerup", tx, ty);
+        const tapped = clock();
+        fire("pointerdown", tx, ty, pid + 100);
+        fire("pointerup", tx, ty, pid + 100);
+        while (Number(g.probe().questionsAnswered) < 1 && clock() - tapped < 4000) await frame();
+        const end = g.probe();
+        return { midAnswered: mid.questionsAnswered, midOpen: mid.questionOpen, answered: end.questionsAnswered, tapToAnswerMs: clock() - tapped };
+      },
+      { sx, sy },
+    );
+    await touch(cdp, { type: "touchEnd", touchPoints: [] });
+    expect(r, JSON.stringify(r)).not.toHaveProperty("error");
+    expect(r.midAnswered, "a lent tartott ujj húzása nem válasz").toBe(0);
+    expect(r.midOpen, "a kérdés nyitva").toBe(1);
+    expect(r.answered, `a friss bökés válaszol (${JSON.stringify(r)})`).toBe(1);
+  });
+});
+
+/**
+ * J5a 23. (kanban #95): a kupon mód a lapon — 3 tételes lecke-kupon, a kimerülést és az ismétlést a közös director kezeli.
+ * A menetben nincs közvetlen ismétlés, minden kérdés a lecke tétele (`coupon` forrás), és nincs kérdés nélküli ketrec.
+ */
+test.describe("kupon mód a lapon (3 tételes lecke)", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  test("8 kérdés egymás után: nincs közvetlen ismétlés, csak a lecke tételei, nincs kérdés nélküli megtartás", async ({ page }) => {
+    test.setTimeout(150_000);
+    const lesson = [0, 1, 2].map((i) => ({
+      id: `e2e-lecke-${i}`,
+      prompt: `Melyik a ${i + 1}. lecke-kérdés helyes válasza?`,
+      options: [`jó ${i}`, `rossz ${i}a`, `rossz ${i}b`, `rossz ${i}c`],
+      correctIndex: 0,
+      topic: "math",
+    }));
+    await page.route("**/api/**", async (route) => {
+      const p = new URL(route.request().url()).pathname;
+      let data: unknown = [];
+      if (p === "/api/auth/user") data = null;
+      if (p.includes("sync-eligibility")) data = { eligible: false };
+      if (p.endsWith("/coupons/active")) {
+        data = { coupon: { id: "coupon-e2e", lessonId: "lecke-e2e", sectionIdx: -1, minutes: 10, remainingSeconds: 600, started: true } };
+      }
+      if (p.includes("material-quizzes")) data = { classroom: 5, materials: [{ id: "lecke-e2e", title: "Lecke", createdAt: "2026-11-17T08:00:00.000Z" }], items: lesson };
+      await route.fulfill({ json: data });
+    });
+    await page.goto("/games/brain-rot-steal?seed=5");
+    await page.getByRole("button", { name: /vadászat indítása/i }).tap();
+    await expect(page.getByTestId("br-board")).toBeVisible();
+    await expect(page.getByTestId("coupon-hud")).toBeVisible({ timeout: 10_000 });
+    type P = { questionId: number | null; questionKey: string | null; questionSource: string | null; direct: number; questionOpen: number };
+    const probe = () => page.evaluate(() => (window as unknown as { __websuliGame: { probe: () => unknown } }).__websuliGame.probe() as P);
+    const keys: string[] = [];
+    const sources: string[] = [];
+    let lastId: number | null = null;
+    for (let i = 0; i < 8; i++) {
+      await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ question: true }));
+      await expect
+        .poll(async () => {
+          const pr = await probe();
+          return pr.questionOpen === 1 && pr.questionId !== null && pr.questionId !== lastId ? pr.questionKey : null;
+        }, { timeout: 15_000, message: `${i + 1}. kérdés` })
+        .not.toBeNull();
+      const pr = await probe();
+      lastId = pr.questionId;
+      keys.push(pr.questionKey!);
+      sources.push(pr.questionSource!);
+      await page.keyboard.press(i % 2 === 0 ? "2" : "1"); // felváltva rossz és (a keveréstől függően) bármely válasz
+      await expect.poll(async () => (await probe()).questionOpen, { timeout: 10_000 }).toBe(0);
     }
-    let pr = await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.probe());
-    expect(pr.questionsAnswered, "a lent tartott ujj húzása nem válasz").toBe(0);
-    expect(pr.questionOpen, "a kérdés nyitva").toBe(1);
-    // Felemeli, és újra bök a ketrecre: a vadász odafut és megáll → válasz.
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await page.touchscreen.tap(tx, ty);
-    await expect
-      .poll(async () => (await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.probe())).questionsAnswered, {
-        timeout: 8_000,
-        message: "a friss bökés válaszol",
-      })
-      .toBe(1);
-    pr = await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.probe());
-    expect(pr.questionsAnswered).toBe(1);
+    const allowed = new Set(lesson.map((q) => `mat:${q.id}`));
+    expect(keys.every((k) => allowed.has(k)), `csak a lecke tételei: ${keys.join(" | ")}`).toBe(true);
+    expect(sources.every((s) => s === "coupon"), `kupon-forrás: ${sources.join(" | ")}`).toBe(true);
+    for (let i = 1; i < keys.length; i++) expect(keys[i], `közvetlen ismétlés: ${keys.join(" | ")}`).not.toBe(keys[i - 1]);
+    expect(new Set(keys).size, "mindhárom tétel sorra került").toBe(3);
+    expect((await probe()).direct, "nincs kérdés nélküli megtartás").toBe(0);
   });
 });
