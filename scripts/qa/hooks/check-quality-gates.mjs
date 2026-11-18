@@ -47,43 +47,87 @@ const EVAL_FLAGS = new Set(['-e', '-p', '--eval', '--print', '-c', '-E', '-pe', 
 const NON_EXEC = new Set(['echo', 'printf', 'grep', 'egrep', 'fgrep', 'rg', 'cat', 'head', 'tail', 'wc', 'less', 'more', 'findstr',
   'write-output', 'write-host', 'select-string', 'get-content', 'type', 'sls', 'gc']);
 const GH_PR = new RegExp(`${W('gh(?:\\.exe)?')}[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
-// A tokenizáló által nem hűen követhető idézés-alakok (a valódi héj másképp zárhatja le a szöveget).
-const AMBIGUOUS_QUOTING = /\$['"]|\\"|[‘-‟]/;
 export function detectGated(raw) {
   const s = String(raw ?? '');
   return GIT_PUSH.test(s) || GIT_PATH_PUSH.test(s) || GH_PR.test(s) || GH_PATH_PR.test(s) || /\/pulls\/\d+\/merge\b/i.test(s);
 }
 
+// PowerShell idézőjel-karakterei (a tipográfiaiak is idézőjelek ott); Bash-ben ezek közönséges karakterek.
+const PS_SQ = new Set(["'", '\u2018', '\u2019', '\u201A', '\u201B']);
+const PS_DQ = new Set(['"', '\u201C', '\u201D', '\u201E']);
+// A PowerShell által szóköznek vett, nem ASCII karakterek (pl. nem törő szóköz).
+const NON_ASCII_SPACE = /[\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/;
+
 /**
- * Egyszerű parancs szavakra bontása. `{ ok: false, reason }`, ha a parancs nem egyetlen egyszerű parancs: idézőjelen kívül
- * láncoló / átirányító / csoportosító jel (`& | ; < > ( ) { }`, újsor), bárhol parancshelyettesítés (`$(`, backtick), vagy lezáratlan
- * idézőjel. Az egyszeres idézőjelen belüli szöveg szó szerinti.
+ * Egyszerű parancs szavakra bontása a héj (`tool`: Bash | PowerShell) szabályai szerint. `{ ok: false, reason }`, ha a parancs nem
+ * egyetlen egyszerű parancs: idézőjelen kívül láncoló / átirányító / csoportosító jel (`& | ; < > ( ) { }`, újsor), bárhol
+ * parancshelyettesítés (`$(`, backtick), lezáratlan idézőjel, vagy olyan idézés, amelyet a tokenizáló az adott héjjal egyezően
+ * nem tud feldolgozni (kanban #100, 2. kör).
+ * - Bash: az egyszeres idézőjelen belül minden szó szerinti; a kettősön belül a `\` csak a `"`, `\`, `$` előtt escape; idézőjelen
+ *   kívül a `\` a következő karaktert teszi szó szerintivé; a `$'…'` / `$"…"` nem egyértelmű → nem ok. A tipográfiai idézőjel
+ *   közönséges karakter.
+ * - PowerShell: a `\` mindig szó szerinti; a tipográfiai idézőjelek is idézőjelek; a duplázott idézőjel szó szerinti; a `--%`
+ *   (értelmezés leállítása), a here-string (`@"` / `@'`) és az idézőjelen kívüli nem ASCII szóköz nem ok.
+ * - Mindkét héj: a szó elején, idézőjelen kívül álló `#` megjegyzés a SOR VÉGÉIG; az utána álló újsor láncolás (nem ok). A megjegyzés
+ *   szövege a `comment` mezőben (kanban #100, 4. kör).
  */
-export function tokenizeSimple(raw) {
+export function tokenizeSimple(raw, { tool = 'Bash' } = {}) {
+  const ps = tool === 'PowerShell';
+  const isSq = (c) => (ps ? PS_SQ.has(c) : c === "'");
+  const isDq = (c) => (ps ? PS_DQ.has(c) : c === '"');
   const s = String(raw ?? '').trim();
   const words = [];
   let word = '';
   let has = false;
   let q = null;
+  let comment = null;
+  // PowerShell: az idézőjellel KEZDŐDŐ szó az idézőjel lezárásával véget ér (a következő karakter új argumentum) — mérve a héjban.
+  let quotedStart = false;
+  const closeQuote = () => { q = null; if (ps && quotedStart) { words.push(word); word = ''; has = false; quotedStart = false; } };
+  const push = () => { if (has) words.push(word); word = ''; has = false; };
   for (let i = 0; i < s.length; i += 1) {
     const c = s[i];
-    if (q === "'") { if (c === "'") q = null; else word += c; continue; }
-    if (c === '`' || (c === '$' && s[i + 1] === '(')) return { ok: false, reason: 'parancshelyettesítés (`$(…)` / backtick)' };
-    if (q === '"') {
-      if (c === '"') q = null;
-      else if (c === '\\' && (s[i + 1] === '"' || s[i + 1] === '\\')) { word += s[i + 1]; i += 1; }
+    const n = s[i + 1];
+    if (q === 'sq') {
+      if (!isSq(c)) word += c;
+      else if (ps && n !== undefined && isSq(n)) { word += n; i += 1; }
+      else closeQuote();
+      continue;
+    }
+    if (c === '`' || (c === '$' && n === '(')) return { ok: false, reason: 'parancshelyettesítés / escape (`$(…)` / backtick)' };
+    if (q === 'dq') {
+      if (isDq(c)) {
+        if (ps && n !== undefined && isDq(n)) { word += n; i += 1; } else closeQuote();
+      } else if (!ps && c === '\\' && (n === '"' || n === '\\' || n === '$')) { word += n; i += 1; }
       else word += c;
       continue;
     }
-    if (c === '"' || c === "'") { q = c; has = true; continue; }
+    if (!ps && c === '$' && (n === "'" || n === '"')) return { ok: false, reason: 'nem egyértelműen értelmezhető idézés' };
+    if (c === '#' && !has) { // megjegyzés a sor végéig; a következő sor (újsor) a szokott módon láncolás → nem ok
+      let j = i;
+      while (j + 1 < s.length && s[j + 1] !== '\n' && s[j + 1] !== '\r') j += 1;
+      comment = s.slice(i, j + 1);
+      i = j;
+      continue;
+    }
+    if (ps && c === '@' && n !== undefined && (isSq(n) || isDq(n))) return { ok: false, reason: 'nem egyértelműen értelmezhető idézés (here-string)' };
+    if (ps && NON_ASCII_SPACE.test(c)) return { ok: false, reason: 'nem egyértelműen értelmezhető idézés (nem ASCII szóköz)' };
+    if (isSq(c)) { quotedStart = !has; q = 'sq'; has = true; continue; }
+    if (isDq(c)) { quotedStart = !has; q = 'dq'; has = true; continue; }
+    if (!ps && c === '\\') {
+      if (n === undefined || n === '\n' || n === '\r') return { ok: false, reason: 'sorfolytatás / lezáratlan escape' };
+      word += n; has = true; i += 1;
+      continue;
+    }
     if ('&|;<>(){}\n\r'.includes(c)) return { ok: false, reason: `láncolás / átirányítás / alshell (\`${c === '\n' || c === '\r' ? 'újsor' : c}\`)` };
-    if (c === ' ' || c === '\t') { if (has) words.push(word); word = ''; has = false; continue; }
+    if (c === ' ' || c === '\t') { push(); continue; }
     word += c;
     has = true;
   }
   if (q) return { ok: false, reason: 'lezáratlan idézőjel' };
-  if (has) words.push(word);
-  return { ok: true, words };
+  push();
+  if (ps && words.includes('--%')) return { ok: false, reason: 'nem egyértelműen értelmezhető idézés (`--%`)' };
+  return { ok: true, words, comment };
 }
 
 const NAME = /^[A-Za-z0-9._-]+$/;
@@ -121,7 +165,7 @@ function planPush(args) {
 const CREATE_VALUE = new Set(['--title', '-t', '--body', '-b', '--body-file', '-F', '--base', '-B', '--head', '-H', '--label', '-l', '--assignee', '-a', '--reviewer', '-r', '--milestone', '-m', '--project', '-p', '--repo', '-R', '--template', '-T']);
 const CREATE_FLAG = new Set(['--draft', '-d', '--fill', '-f', '--fill-first', '--fill-verbose', '--web', '-w', '--no-maintainer-edit', '--dry-run']);
 const MERGE_VALUE = new Set(['--subject', '-t', '--body', '-b', '--body-file', '-F', '--match-head-commit', '--author-email', '-A', '--repo', '-R']);
-const MERGE_FLAG = new Set(['--squash', '-s', '--merge', '-m', '--rebase', '-r', '--delete-branch', '-d', '--admin']);
+const MERGE_FLAG = new Set(['--squash', '-s', '--merge', '-m', '--rebase', '-r', '--delete-branch', '-d', '--admin', '--auto', '--disable-auto']);
 
 function parseFlags(args, valueSet, flagSet) {
   const pos = [];
@@ -142,13 +186,29 @@ function parseFlags(args, valueSet, flagSet) {
  * Egy parancs terve: `{ kind: 'none' }` (nem kapu-köteles), `{ kind: 'deny', reason }`, `push`, `push-delete`, `pr-create`, `pr-merge`.
  */
 export function planCommand(raw, { tool = 'Bash' } = {}) {
-  if (!detectGated(raw)) return { kind: 'none' };
-  // Kanban #100, 2. kör: olyan idézés, amelyet a tokenizáló nem tud a valódi héjjal egyezően értelmezni → kétség esetén DENY.
-  if (AMBIGUOUS_QUOTING.test(raw) || (tool === 'PowerShell' && raw.includes('#'))) {
-    return { kind: 'deny', reason: `${SIMPLE_HINT} (A parancs nem egyértelműen értelmezhető idézést tartalmaz — egyszerű idézéssel, vagy a szöveget fájlból add át.)` };
+  // Kanban #100, 4. kör: ismeretlen / hiányzó eszköznév → mindkét héj szabálya szerint; amelyik szigorúbb, az dönt.
+  if (tool !== 'Bash' && tool !== 'PowerShell') {
+    const a = planCommand(raw, { tool: 'Bash' });
+    const b = planCommand(raw, { tool: 'PowerShell' });
+    if (a.kind === 'deny') return a;
+    if (b.kind === 'deny') return b;
+    if (a.kind === 'none') return b;
+    if (b.kind === 'none' || JSON.stringify(a) === JSON.stringify(b)) return a;
+    return { kind: 'deny', reason: `${SIMPLE_HINT} (Ismeretlen eszköz: a Bash és a PowerShell eltérően értelmezné a parancsot.)` };
   }
-  const t = tokenizeSimple(raw);
+  // Kanban #100, 2. kör: a tokenizáló a héj (Bash / PowerShell) szabályai szerint bont; amit nem tud hűen feldolgozni → DENY.
+  const t = tokenizeSimple(raw, { tool });
+  // A kapu-kötelesség a nyers szövegen ÉS az idézés feloldása utáni szavakon is (a parancsnévbe szúrt idézőjel nem rejti el).
+  if (!detectGated(raw) && !(t.ok && detectGated(t.words.join(' ')))) {
+    // Bash kapcsos kifejtés (`{a,b}` / `{a..b}`) git / gh mellett: a héj olyan szót állíthat elő, amelyet a nyers szöveg nem mutat.
+    if (!t.ok && tool === 'Bash' && /\{[^{}\s'"]*(?:,|\.\.)[^{}\s'"]*\}/.test(raw) && /(?:^|\s)(?:git|gh)(?:\.exe)?\s/i.test(raw)) {
+      return { kind: 'deny', reason: `${SIMPLE_HINT} (Kapcsos kifejtés git / gh parancsban.)` };
+    }
+    return { kind: 'none' };
+  }
   if (!t.ok) return { kind: 'deny', reason: `${SIMPLE_HINT} (Talált: ${t.reason}.)` };
+  // A „#9” a héjban megjegyzés: a PR-szám nem jutna el a parancshoz → érthető tiltás.
+  if (t.comment && /^#\s*\d/.test(t.comment)) return { kind: 'deny', reason: 'A PR számát # nélkül add meg (a héjban a szó eleji # megjegyzést kezd, a szám nem jutna el a parancshoz).' };
   const w = t.words;
   const head = (w[0] ?? '').toLowerCase();
   if (head === 'git' || head === 'git.exe') {
@@ -171,10 +231,11 @@ export function planCommand(raw, { tool = 'Bash' } = {}) {
     }
     if (w[2] === 'merge') {
       const rest = w.slice(3);
-      if (rest.includes('--auto')) return { kind: 'deny', reason: 'A `gh pr merge --auto` később, futásőr és `/api/rt/status` nélkül vonna össze — a merge-et közvetlenül a `npm run gate:merge -- <PR>` után, kézzel indítsd.' };
-      if (rest.includes('--disable-auto')) return { kind: 'none' };
+      // A kapcsolók ÉRTELMEZÉSE után (az érték-kapcsoló utáni szó érték, nem kapcsoló).
       const p = parseFlags(rest, MERGE_VALUE, MERGE_FLAG);
       if (p.error) return { kind: 'deny', reason: `\`gh pr merge\`: ${p.error}.` };
+      if (p.vals['--auto']) return { kind: 'deny', reason: 'A `gh pr merge --auto` később, futásőr és `/api/rt/status` nélkül vonna össze — a merge-et közvetlenül a `npm run gate:merge -- <PR>` után, kézzel indítsd.' };
+      if (p.vals['--disable-auto']) return { kind: 'none' };
       if (p.pos.length > 1) return { kind: 'deny', reason: `\`gh pr merge\`: nem egyértelmű cél (${p.pos.length} pozicionális argumentum).` };
       const target = p.pos[0] ?? null;
       if (target && !(/^#?\d+$/.test(target) || /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/.test(target) || BRANCH.test(target))) {
@@ -367,8 +428,9 @@ function main() {
   try { text = readFileSync(0, 'utf8'); } catch { /* nincs olvasható bemenet → üres szöveg, lent enged */ }
   try {
     const payload = JSON.parse(text || '{}');
-    if (payload.tool_name !== 'Bash' && payload.tool_name !== 'PowerShell') process.exit(0);
-    tool = payload.tool_name;
+    // Kanban #100, 4. kör: ismeretlen héj-eszköz parancsa is vizsgálva (mindkét héj szabálya szerint, a szigorúbb dönt).
+    if (typeof payload.tool_input?.command !== 'string') process.exit(0);
+    tool = payload.tool_name === 'Bash' || payload.tool_name === 'PowerShell' ? payload.tool_name : 'unknown';
     raw = String(payload.tool_input?.command ?? '');
     cwd = payload.cwd || cwd;
   } catch {
