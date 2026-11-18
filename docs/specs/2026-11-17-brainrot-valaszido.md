@@ -63,6 +63,16 @@ A maradékból még a mozgás (0,9–1,75 s) is lejön. A medián tételnél egy
   és a ketrecek addig is látszanak, de az ablakból nem fogy.
 - **D3 — gyorsítók:** a Brain Rotban ablakot rövidítő elem nincs; a burkoló az alsó korlátot minden esetre érvényesíti.
 - **D4 — pontozás:** változatlan (`xp × kombó-szorzó`, időtől független); döntés nem kell.
+- **D5 — a menet-óra áll, amíg a kérdés nyitva van (TULAJDONOSI DÖNTÉS, 2026-11-17, a választott opció szó szerint:
+  „Álljon meg”).** A 90 mp-es menet-óra (a HUD „mp” sávja, a menet vége) csak akkor halad, ha nincs nyitott kérdés (a
+  director aktív kérdése — az előjelzés alatt is az) és nincs szünet. A kérdés-óra (a kérdés határideje) külön, változatlanul
+  jár. Így a hosszabb ablak nem veszi el a játékidőt, és a menet vége nem szakíthat félbe kérdést. A meghajtó
+  `remainingMs()` a menet-órából számol; a `clockMs()` a kérdés-óra marad. Spec-változás: a „90 mp-es óra a kérdés alatt
+  is jár” (terv 5.5, J5a K.2) e tesztjei erre a döntésre hivatkozva igazodnak (a kérdés alatt a menet-óra nem fogy; a menet
+  vége nem esik nyitott kérdésre). A régi önellenőrző (e) eset („az óra lejártakor nyitott kérdés megszakad”) helyébe a
+  „menet vége nem eshet nyitott kérdésre” lép.
+- **D6 (review L2) — a számláló az előjelzés alatt:** a hátralévő idő az előjelzés alatt legfeljebb az ablak (nem
+  ablak + a hátralévő előjelzés).
 
 ## Spec-változás (dokumentált)
 
