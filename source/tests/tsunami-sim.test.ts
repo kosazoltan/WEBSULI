@@ -46,7 +46,7 @@ test("J2 / J3 / J4 / J6 — SIM_AVERAGE, 7. évfolyam, 180 mp × 20 seed", () =>
   assert.ok(medianOf(s.map((x) => x.reviewReturnWithin6)) >= 0.95, `3.–6. visszatérés medián ${medianOf(s.map((x) => x.reviewReturnWithin6))}`);
 });
 
-test("J9 — menethossz: SIM_AVERAGE medián 2–5 perc (a menet végéig, legfeljebb 600 mp); a győzelem a távolság", () => {
+test("J9 — menethossz: SIM_AVERAGE medián 2–5 perc (a menet végéig, legfeljebb 600 mp); a győzelem a menedék (N jó válasz)", () => {
   const runs = runSimSeeds(factory, SIM_AVERAGE, { gameId: GAME, seconds: 600, grade: 7 });
   summary("SIM_AVERAGE a menet végéig", runs);
   const median = medianOf(runs.map((r) => r.durationSec)) / 60;
@@ -64,13 +64,19 @@ test("a kérdés segít, nem büntet: kérdéssel minden játékosmodellnél leg
   }
 });
 
-test("kérdés nélküli mód (K.6): a menet végigjátszható (az ügyes játékos célba ér), és van vesztési feltétel", () => {
+/*
+ * SPEC-VÁLTOZÁS 2026-11-18 (docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md, tulajdonosi döntés D1: „Vissza a régi, emelkedő
+ * vízhez”): a régi játékban a menedéket a jó válaszok hozzák (N jó válasz = győzelem) — kérdés nélkül tehát nem lehet célba érni.
+ * A szigor megmarad: kérdés nélkül is véget ér minden menet (a víz utoléri a figurát), és az ügyes játékos (a zónában maradva)
+ * tovább bírja, mint a gyenge — a mozgásnak van tétje.
+ */
+test("kérdés nélküli mód (K.6): minden menet véget ér (a víz utolér), és a zónában maradó ügyes játékos tovább bírja", () => {
   const strong = runSimSeeds(factory, SIM_STRONG, { gameId: GAME, seconds: 600, questions: false });
   const weak = runSimSeeds(factory, SIM_WEAK, { gameId: GAME, seconds: 600, questions: false });
   summary("SIM_STRONG kérdés nélkül", strong);
   summary("SIM_WEAK kérdés nélkül", weak);
-  assert.ok(strong.some((r) => r.won), "kérdés nélkül is célba lehet érni");
-  assert.ok(weak.some((r) => !r.won && r.durationSec < 600), "a hullám utolérheti a futót");
+  assert.ok([...strong, ...weak].every((r) => !r.won && r.durationSec < 600), "kérdés nélkül a víz utoléri a figurát (van vesztési feltétel)");
+  assert.ok(medianOf(strong.map((r) => r.durationSec)) > medianOf(weak.map((r) => r.durationSec)), "a zónában maradás számít");
   for (const r of [...strong, ...weak]) assert.equal(r.stats.asked, 0);
 });
 
@@ -109,8 +115,8 @@ test("3–4. évfolyam (SIM_YOUNG) minden nehézségen ≥ 12/20 győzelem (a Ma
   }
 });
 
-test("tétlen átfutás (D-J1a-13, K2): a semmit nem csináló játékos kérdései a nyilvántartásban lejártak, nem válaszok", () => {
-  // Teljesen tétlen: nem reagál a kérdésre és nem tér ki (az ügyességi dobás sosem sikerül) — semmilyen szándékos bemenet.
+test("tétlen játékos: a semmit nem csináló játékos kérdései a nyilvántartásban lejártak, nem válaszok", () => {
+  // Teljesen tétlen: nem reagál a kérdésre és nem mozog (az ügyességi dobás sosem sikerül) — semmilyen szándékos bemenet.
   const idle = { accuracy: 1, reactionMedianMs: 1e9, skill: 1e-6 };
   const runs = runSimSeeds(factory, idle, { gameId: GAME, seconds: 120, grade: 7 });
   for (const r of runs) {
