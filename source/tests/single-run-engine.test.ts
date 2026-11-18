@@ -683,3 +683,61 @@ test("S1a (review J1): a program által kinyert PDF-szöveg jelölősora a tény
   assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.page, v.verified]), [["v2", 2, "text"]]);
   assert.equal(gatesOf(mem).visualsDropped, 1);
 });
+
+/* S1a független review (kanban #147), U3: a motor két ága — a hézagmentes oldaljelölő-sor és az érvényesítő hibája utáni üres leltár. */
+test("review U3: oldalszám-határ csak a program által kinyert PDF hézagmentes 1…N jelölősorából képződik", async () => {
+  const { sourcePageContext } = await import("../server/studio/single-run/engine");
+  const pdf = (name: string) => ({ name, kind: "pdf" as const });
+  const ctx = (text: string, file = pdf("lap.pdf")) => sourcePageContext([file], new Map([[file.name, text]]));
+  // Hézagmentes 1…3: a tényleges oldalszám 3.
+  assert.deepEqual(ctx("[1. oldal]\nelső\n[2. oldal]\nmásodik\n[3. oldal]\nharmadik").pageCounts, { "lap.pdf": 3 });
+  // Mutációk: hézagos sor (1, 3), nem 1-től induló sor (2, 3), jelölő nélküli szöveg → NINCS felső határ.
+  assert.deepEqual(ctx("[1. oldal]\nelső\n[3. oldal]\nharmadik").pageCounts, {});
+  assert.deepEqual(ctx("[2. oldal]\nmásodik\n[3. oldal]\nharmadik").pageCounts, {});
+  assert.deepEqual(ctx("jelölő nélküli szöveg"), { pageTexts: { "lap.pdf": {} }, pageCounts: {} });
+  // Az ismétlődő jelölő nem növeli az oldalszámot (1, 2, 1 → 2 oldal).
+  assert.deepEqual(ctx("[1. oldal]\na\n[2. oldal]\nb\n[1. oldal]\nc").pageCounts, { "lap.pdf": 2 });
+  // Nem PDF fájl és valódi szöveg nélküli (natív) PDF: sem oldalszöveg, sem határ.
+  assert.deepEqual(ctx("[1. oldal]\nelső", { name: "jegyzet.txt", kind: "text" as never }), { pageTexts: {}, pageCounts: {} });
+  assert.deepEqual(sourcePageContext([pdf("natív.pdf")], new Map()), { pageTexts: {}, pageCounts: {} });
+});
+
+test("review U3: hézagos jelölősornál a motor NEM dob el tételt oldalszám miatt; hézagmentesnél a határon túli kimarad", async () => {
+  const run = async (extractedText: string) => {
+    const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([{ ...VISUAL_STEPS, sourceFile: "lap.pdf", page: 9 }]) : null));
+    const mem = memoryStore();
+    const maps: SingleRunMap[] = [];
+    await runSingleLesson({ files: [{ name: "lap.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=", extractedText }], ownerId: "u1" }, deps(client, mem, maps));
+    return { pages: maps[0].visuals.map((v) => v.page), dropped: gatesOf(mem).visualsDropped };
+  };
+  assert.deepEqual(await run(`[1. oldal]\n${TRANSCRIPT}\n\n[3. oldal]\nGyakorlás.`), { pages: [9], dropped: 0 }, "hézagos sor: nincs felső határ");
+  assert.deepEqual(await run(`[1. oldal]\n${TRANSCRIPT}\n\n[2. oldal]\nGyakorlás.\n\n[3. oldal]\nVége.`), { pages: [], dropped: 1 }, "hézagmentes sor: a 9. oldal nem létezik");
+});
+
+test("review U3: az érvényesítő hibája után a leltár üres, a nyers tételek megszámolva, a futás megy tovább", async () => {
+  const { judgeSourceVisuals } = await import("../server/studio/single-run/engine");
+  const logs: string[] = [];
+  const ctx = { fileNames: ["forras.txt"], conceptIds: new Set(["area"]) };
+  const boom = () => { throw new Error("séma\nösszeomlott"); };
+  const judged = judgeSourceVisuals([VISUAL_TABLE, VISUAL_STEPS], ctx, (m) => logs.push(m), boom);
+  assert.deepEqual(judged, { visuals: [], dropped: [{ reason: "az érvényesítő hibája" }, { reason: "az érvényesítő hibája" }], removedConceptRefs: [], truncatedCells: [] });
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /az érvényesítő hibázott, a leltár üres — séma összeomlott$/);
+  // Nem tömb nyers értéknél nincs megszámolható tétel; a hibaág ekkor sem dob.
+  assert.deepEqual(judgeSourceVisuals("nem tömb", ctx, undefined, boom).dropped, []);
+  // Mutáció (ellenpróba): hibátlan érvényesítővel ugyanaz a bemenet NEM üres — a hibaág nem nyeli el a jó leltárt.
+  assert.deepEqual(judgeSourceVisuals([VISUAL_STEPS], ctx).visuals.map((v) => v.id), ["v2"]);
+});
+
+test("review U1: a túl hosszú cellájú táblázat a térképre kerül, a csonkolás a telemetriában és a naplóban", async () => {
+  const long = { ...VISUAL_TABLE, conceptIds: ["area"], data: { headers: ["mennyiség"], rows: [["x".repeat(140)], ["rövid"]] } };
+  const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([long]) : null));
+  const mem = memoryStore();
+  const maps: SingleRunMap[] = [];
+  const logs: string[] = [];
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...deps(client, mem, maps), log: (m) => logs.push(m) });
+  assert.deepEqual(maps[0].visuals.map((v) => v.id), ["v1"], "a táblázat megmaradt");
+  const gates = gatesOf(mem);
+  assert.deepEqual([gates.visualsFound, gates.visualsDropped, gates.visualsCellsTruncated], [1, 0, 1]);
+  assert.equal(logs.filter((l) => l.includes("túl hosszú cella / fejléc csonkolva")).length, 1);
+});

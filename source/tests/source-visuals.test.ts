@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cleanModelText, sanitizeSourceVisuals, SOURCE_VISUAL_KINDS, SOURCE_VISUAL_LIMITS, SOURCE_VISUAL_MAX_PAGE, SOURCE_VISUAL_TABLE, SOURCE_VISUALS_CONTRACT, sourceVisualSchema, sourceVisualTexts, splitPageTexts, visualsOfSourceFiles, type SourceDecisionNode, type SourceVisualKind } from "../shared/source-visuals";
+import { cleanModelMultilineText, cleanModelText, sanitizeSourceVisuals, SOURCE_VISUAL_KINDS, SOURCE_VISUAL_LIMITS, SOURCE_VISUAL_MAX_PAGE, SOURCE_VISUAL_TABLE, SOURCE_VISUALS_CONTRACT, sourceVisualSchema, sourceVisualTexts, splitPageTexts, visualsOfSourceFiles, type SourceDecisionNode, type SourceVisualKind } from "../shared/source-visuals";
 import { sourceFileSchema } from "../shared/knowledge-map-schema";
 
 /* docs/specs/2026-11-18-tananyag-gyartas-minoseg.md, S1a: a forrás vizuális leltárát séma és szabály ítéli meg; a hibás tétel kimarad. */
@@ -41,7 +41,7 @@ test("fajtánként az érvényes tétel megmarad, az érvénytelen okkal kimarad
     assert.equal(bad.dropped[0].id, `v${i}`);
     assert.match(bad.dropped[0].reason, /^hibás alak: data/, kind);
   }
-  assert.deepEqual(sanitizeSourceVisuals("nem tömb", ctx), { visuals: [], dropped: [], removedConceptRefs: [] });
+  assert.deepEqual(sanitizeSourceVisuals("nem tömb", ctx), { visuals: [], dropped: [], removedConceptRefs: [], truncatedCells: [] });
   assert.match(sanitizeSourceVisuals(["szöveg"], ctx).dropped[0].reason, /hibás alak/);
 });
 
@@ -55,8 +55,10 @@ test("mutáció: nem létező fájl, nem létező oldal, ismétlődő azonosít�
   // Review J1: jelölő csak az 1–2. oldalon, a tényleges oldalszám NEM ismert → a 3. oldali tétel megmarad (visual-only), nincs felső határ.
   const kept = sanitizeSourceVisuals([{ ...item, page: 3 }], { ...ctx, pageTexts });
   assert.deepEqual([kept.visuals.length, kept.visuals[0]?.verified, kept.dropped.length], [1, "visual-only", 0]);
-  assert.equal(sanitizeSourceVisuals([{ ...item, page: SOURCE_VISUAL_MAX_PAGE }], ctx).visuals.length, 1, "a józan plafonig érvényes");
-  assert.match(sanitizeSourceVisuals([{ ...item, page: SOURCE_VISUAL_MAX_PAGE + 1 }], ctx).dropped[0].reason, /hibás alak: page/);
+  // Review (S1a, túlélő mutáns): a határ RÖGZÍTETT szám a tesztben — az állandó elállítását a teszt megfogja.
+  assert.equal(sanitizeSourceVisuals([{ ...item, page: 2000 }], ctx).visuals.length, 1, "a józan plafonig (2000) érvényes");
+  assert.match(sanitizeSourceVisuals([{ ...item, page: 2001 }], ctx).dropped[0].reason, /hibás alak: page/);
+  assert.equal(SOURCE_VISUAL_MAX_PAGE, 2000);
   assert.match(sanitizeSourceVisuals([{ ...item, page: 0 }], ctx).dropped[0].reason, /hibás alak: page/);
   assert.match(sanitizeSourceVisuals([{ ...item, kind: "poster" }], ctx).dropped[0].reason, /hibás alak: kind/);
   assert.match(sanitizeSourceVisuals([{ ...item, id: "túl hosszú azonosító" }], ctx).dropped[0].reason, /hibás alak: id/);
@@ -85,8 +87,7 @@ test("korlátok: 61 tételből 60 marad; a karakterkeret feletti tétel kimarad"
   assert.equal(out.visuals.length, SOURCE_VISUAL_LIMITS.maxItems);
   assert.deepEqual(out.dropped, [{ id: "v61", reason: "a leltár legfeljebb 60 tétel" }]);
   // Review J5: a sémára érvényes LEGNAGYOBB táblázat (8 × 40 cella, 100 karakteres cellák, 80 karakteres fejlécek) egyedül belefér a keretbe.
-  const T = SOURCE_VISUAL_TABLE;
-  const maxTable = { headers: Array.from({ length: T.columns }, () => "h".repeat(T.headerChars)), rows: Array.from({ length: T.rows }, () => Array.from({ length: T.columns }, () => "x".repeat(T.cellChars))) };
+  const maxTable = { headers: Array.from({ length: 8 }, () => "h".repeat(80)), rows: Array.from({ length: 40 }, () => Array.from({ length: 8 }, () => "x".repeat(100))) };
   const full = { ...base, role: "r".repeat(200), title: "t".repeat(160), conceptIds: Array.from({ length: 12 }, () => "much"), kind: "table", data: maxTable };
   const big = sanitizeSourceVisuals([{ ...full, id: "t1" }, { ...full, id: "t2" }], ctx);
   assert.deepEqual(big.visuals.map((v) => v.id), ["t1"], "a legnagyobb érvényes táblázat megmarad");
@@ -162,14 +163,14 @@ test("a kérés szövege minden fajtát megnevez (az alak egy helyen él a sém�
 });
 
 test("review J6: a felső korlátok a határon érvényesek, eggyel fölötte a tétel kimarad", () => {
-  const T = SOURCE_VISUAL_TABLE;
+  // Review (S1a, túlélő mutánsok): a határok RÖGZÍTETT számok — nem abból az állandóból számolnak, amelyet ellenőriznek.
+  assert.deepEqual(SOURCE_VISUAL_TABLE, { columns: 8, rows: 40, cellChars: 100, headerChars: 80 });
   const one = (patch: Record<string, unknown>) => sanitizeSourceVisuals([{ ...base, id: "v1", kind: "table", data: VALID.table, ...patch }], ctx);
   const rows = (n: number) => ({ data: { headers: ["a"], rows: Array.from({ length: n }, () => ["x"]) } });
-  const cell = (n: number) => ({ data: { headers: ["a"], rows: [["x".repeat(n)]] } });
   const cols = (n: number) => ({ data: { headers: ["a"], rows: [Array.from({ length: n }, () => "x")] } });
   const refs = (n: number) => ({ conceptIds: Array.from({ length: n }, () => "much") });
   const cases: Array<[string, (n: number) => Record<string, unknown>, number, RegExp]> = [
-    ["sor", rows, T.rows, /data\.rows/], ["cella", cell, T.cellChars, /data\.rows\.0\.0/], ["oszlop", cols, T.columns, /data\.rows\.0/],
+    ["sor", rows, 40, /data\.rows/], ["oszlop", cols, 8, /data\.rows\.0/],
     ["role", (n) => ({ role: "r".repeat(n) }), 200, /role/], ["conceptIds", refs, 12, /conceptIds/], ["title", (n) => ({ title: "t".repeat(n) }), 160, /title/],
   ];
   for (const [name, make, limit, path] of cases) {
@@ -201,4 +202,78 @@ test("review J7: a modell szövege tisztítva kerül a naplóba és a tárolt t�
   assert.equal(stored.role, "szerep második sor");
   assert.deepEqual(sourceVisualTexts(stored), ["pont  vége", "<script>x</script>"], "a HTML-kódolás a megjelenítő dolga (S2) — a szöveg változatlan");
   assert.ok(!/[\p{Cc}\p{Cs}]/u.test(stored.role + sourceVisualTexts(stored).join("")));
+});
+
+test("review U1: a túl hosszú cella (és fejléc) csonkolódik „…” jelöléssel és megszámolódik — a táblázat megmarad", () => {
+  const table = (cell: string, header = "a") => sanitizeSourceVisuals([{ ...base, id: "v1", kind: "table", data: { headers: [header, "b"], rows: [[cell, "rövid"], ["másik", ""]] } }], ctx);
+  const cellOf = (out: ReturnType<typeof table>) => (out.visuals[0] as { data: { headers: string[]; rows: string[][] } }).data;
+  // A határon (100 karakter) a cella változatlan, csonkolás nincs.
+  const exact = table("x".repeat(100));
+  assert.deepEqual([exact.visuals.length, exact.truncatedCells.length, cellOf(exact).rows[0][0].length], [1, 0, 100]);
+  // Eggyel fölötte: a táblázat MARAD, a cella 100 karakter, a vége „…”, a többi cella érintetlen.
+  const over = table("x".repeat(101));
+  assert.deepEqual(over.dropped, []);
+  assert.equal(cellOf(over).rows[0][0], "x".repeat(99) + "…");
+  assert.deepEqual(cellOf(over).rows, [["x".repeat(99) + "…", "rövid"], ["másik", ""]]);
+  assert.deepEqual(over.truncatedCells, [{ id: "v1", cells: 1 }]);
+  // Nagyon hosszú cella és 81 karakteres fejléc együtt: két csonkolás, a fejléc 80 karakter.
+  const both = table("szó ".repeat(400), "h".repeat(81));
+  assert.equal(both.visuals.length, 1);
+  assert.deepEqual(both.truncatedCells, [{ id: "v1", cells: 2 }]);
+  assert.deepEqual([cellOf(both).headers[0].length, cellOf(both).rows[0][0].length <= 100, cellOf(both).rows[0][0].endsWith("…")], [80, true, true]);
+  // A csonkolás nem hagy fél helyettesítő-párt (az emoji a vágás helyén kimarad).
+  const emoji = table("x".repeat(98) + "🙂🙂");
+  assert.ok(!/[\p{Cs}]/u.test(cellOf(emoji).rows[0][0].replace(/\p{Extended_Pictographic}/gu, "")));
+  assert.equal(cellOf(emoji).rows[0][0], "x".repeat(98) + "…");
+  // Mutáció: más alakhibát a csonkolás nem takar el — a 41 soros táblázat ugyanúgy kimarad, és nem számolódik csonkoltnak.
+  const tooMany = sanitizeSourceVisuals([{ ...base, id: "v1", kind: "table", data: { headers: ["a"], rows: Array.from({ length: 41 }, () => ["x".repeat(101)]) } }], ctx);
+  assert.deepEqual([tooMany.visuals.length, tooMany.truncatedCells.length], [0, 0]);
+  // Más fajtánál nincs csonkolás: a 201 karakteres lépés alakhiba marad.
+  assert.equal(sanitizeSourceVisuals([{ ...base, id: "v1", kind: "process", data: { steps: ["a", "b".repeat(201)] } }], ctx).visuals.length, 0);
+});
+
+test("review U2: a védelmi határ az azonosító olvasását és a bejárást is fedi — dobó getter és Proxy sem ad kivételt", () => {
+  const good = { ...base, id: "v2", kind: "process", data: VALID.process };
+  // Dobó `id` getter: csak az a tétel marad ki (azonosító nélkül), a szomszéd megmarad.
+  const hostileId = Object.defineProperty({ ...base, kind: "process", data: VALID.process }, "id", { enumerable: true, get() { throw new Error("id-bumm"); } });
+  const a = sanitizeSourceVisuals([hostileId, good], ctx);
+  assert.deepEqual(a.visuals.map((v) => v.id), ["v2"]);
+  assert.deepEqual(a.dropped, [{ reason: "váratlan hiba: id-bumm" }]);
+  // Proxy-tétel, amelynek MINDEN olvasása dob.
+  const hostileItem = new Proxy({}, { get() { throw new Error("proxy-bumm"); }, ownKeys() { throw new Error("proxy-bumm"); } });
+  const b = sanitizeSourceVisuals([good, hostileItem], ctx);
+  assert.deepEqual([b.visuals.map((v) => v.id), b.dropped.length], [["v2"], 1]);
+  assert.match(b.dropped[0].reason, /^váratlan hiba: proxy-bumm/);
+  // Proxy-tömb, amelynek az 1. eleme olvasáskor dob: a bejárás folytatódik, a többi tétel megmarad.
+  const hostileList = new Proxy([good, good, { ...good, id: "v3" }], { get(target, key, receiver) { if (key === "1") throw new Error("elem-bumm"); return Reflect.get(target, key, receiver); } });
+  const c = sanitizeSourceVisuals(hostileList, ctx);
+  assert.deepEqual(c.visuals.map((v) => v.id), ["v2", "v3"]);
+  assert.deepEqual(c.dropped, [{ reason: "váratlan hiba: elem-bumm" }]);
+  // Proxy-tömb, amelynek a hossza sem olvasható: üres leltár, megnevezett okkal — kivétel nélkül.
+  const noLength = new Proxy([good], { get(target, key, receiver) { if (key === "length") throw new Error("hossz-bumm"); return Reflect.get(target, key, receiver); } });
+  const d = sanitizeSourceVisuals(noLength, ctx);
+  assert.deepEqual(d.visuals, []);
+  assert.deepEqual(d.dropped, [{ reason: "váratlan hiba a bejárásban: hossz-bumm" }]);
+  // A hiba üzenetének olvasása is dobhat: az ok ekkor is egysoros, rögzített szöveg.
+  const hostileError = Object.defineProperty({ ...base, id: "v9", kind: "process" }, "data", { enumerable: true, get() { throw Object.defineProperty(new Error("x"), "message", { get() { throw new Error("üzenet-bumm"); } }); } });
+  assert.deepEqual(sanitizeSourceVisuals([hostileError], ctx).dropped, [{ id: "v9", reason: "váratlan hiba: ismeretlen hiba" }]);
+});
+
+test("review U4: a többsoros forrásszöveg sortörése megmarad, ahol a tartalom része; táblázatcellában és a közös mezőkben szóköz", () => {
+  assert.equal(cleanModelMultilineText("első sor\r\nmásodik\rharmadik\u0000vége\n\n\n\núj szakasz \n\tbehúzva\ud83e"), "első sor\nmásodik\nharmadik vége\n\núj szakasz\nbehúzva ");
+  const verse = "Roses are red,\r\nViolets are blue,\nSugar is sweet.";
+  const kept = (kind: SourceVisualKind, data: unknown) => sourceVisualTexts(sanitizeSourceVisuals([{ ...base, id: "v1", kind, data }], ctx).visuals[0]);
+  // Vers a feladat utasításában, párbeszéd a feladat tételében, példamondat-lista a szabálydoboz pontjában és a kártya példájában.
+  assert.deepEqual(kept("exercise", { instruction: verse, items: ["– How much milk?\n– Two glasses."] }), ["Roses are red,\nViolets are blue,\nSugar is sweet.", "– How much milk?\n– Two glasses."]);
+  assert.deepEqual(kept("ruleBox", { tone: "tip", items: ["How many apples?\nHow many pears?"] }), ["How many apples?\nHow many pears?"]);
+  assert.deepEqual(kept("pictureCard", { cards: [{ label: "milk", depicts: "egy pohár\ntej", example: "How much milk?\nNot much." }] }), ["milk", "How much milk?\nNot much."]);
+  assert.deepEqual(kept("process", { steps: ["Olvasd el:\nA cat sat.", "Mondd ki."] }), ["Olvasd el:\nA cat sat.", "Mondd ki."]);
+  // Táblázatcellában és fejlécben a sortörés szóköz (a cella egysoros adat).
+  assert.deepEqual(kept("table", { headers: ["egy\nfejléc"], rows: [["két\nsor", "x\r\ny"]] }), ["egy fejléc", "két sor", "x y"]);
+  // A közös mezők (cím, szerep, azonosító) egysorosak maradnak; a többsoros szövegben sincs más vezérlőkarakter.
+  const item = sanitizeSourceVisuals([{ ...base, id: "v1", kind: "ruleBox", title: "Cím\nmásodik sor", role: "szerep\nfolytatás", data: { tone: "rule", items: ["a\u0000b\nc\u0007d"] } }], ctx).visuals[0];
+  assert.deepEqual([item.title, item.role, sourceVisualTexts(item)], ["Cím második sor", "szerep folytatás", ["Cím második sor", "a b\nc d"]]);
+  assert.ok(!/[^\P{Cc}\n]|\p{Cs}/u.test(JSON.parse(JSON.stringify(item.data)).items.join("")));
+  // Mutáció: a csak sortörésből álló szöveg üres marad (alakhiba), nem lesz belőle tartalom.
+  assert.equal(sanitizeSourceVisuals([{ ...base, id: "v1", kind: "ruleBox", data: { tone: "rule", items: ["\n\n"] } }], ctx).visuals.length, 0);
 });

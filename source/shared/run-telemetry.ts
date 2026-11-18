@@ -22,6 +22,8 @@ export type RunGates = {
   visualsDropped?: number;
   /** A megtartott tételekből törölt, nem létező fogalom-hivatkozások száma (review J2). */
   visualsConceptRefsRemoved?: number;
+  /** A megtartott táblázatok csonkolt (túl hosszú) celláinak és fejléceinek száma (review U1). */
+  visualsCellsTruncated?: number;
   /** 1, ha az 1. állomás válaszában nem volt `visuals` tömb (a futás üres leltárral megy tovább). */
   visualsMissing?: number;
   /** A Tananyag lap a szókeret fölött maradt (a rövidítő forduló után is). */
@@ -80,6 +82,7 @@ export function telemetryView(t: RunTelemetry): TelemetryView {
       ...(g.visualsFound ? [`A forrás vizuális leltára: ${g.visualsFound} tétel`] : []),
       ...(g.visualsDropped ? [`A vizuális leltárból kihagyott hibás tétel: ${g.visualsDropped}`] : []),
       ...(g.visualsConceptRefsRemoved ? [`A vizuális leltárból törölt, nem létező fogalom-hivatkozás: ${g.visualsConceptRefsRemoved}`] : []),
+      ...(g.visualsCellsTruncated ? [`A vizuális leltár csonkolt (túl hosszú) cellái: ${g.visualsCellsTruncated}`] : []),
       ...(g.visualsMissing ? ["A forrás-állomás válaszából hiányzott a vizuális leltár"] : []),
       ...(g.lengthShortened ? ["A szókeret-túllépés rövidítő fordulóval javítva"] : []),
       ...(g.lengthOverBudget ? ["A Tananyag lap a szókeret fölött maradt"] : []),
