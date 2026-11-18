@@ -198,11 +198,11 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
   `onFailure`) a `scripts/qa/hooks/check-quality-gates.mjs`-ben, a hibát lefedő teszttel együtt. A védelmet (a `"onFailure"`
   beállítást, a hook-bejegyzést vagy bármely hookot) az ügynök **nem távolíthatja el, nem gyengítheti, és kerülőútként sem
   javasolhatja** — ez a kapu megkerülése, ami tilos (AGENTS.md: „ha a kapu hibás, a kaput kell javítani”).
-- **Ha a javításhoz nincs futtatókörnyezet**, vagy a javítás maga is csak a tiltott úton (a védelem kikapcsolásával) volna
+- **Ha a javításhoz nincs futtatókörnyezet** (pl. nincs `node`), vagy a javítás maga is csak a tiltott úton (a védelem kikapcsolásával) volna
   elvégezhető: az ügynök **megáll**, és a tulajdonostól kér segítséget — leírja a hibát, a kipróbált lépéseket és a javasolt
   hook-javítást.
-- **A védelem ideiglenes kikapcsolása kizárólag a tulajdonos saját kezű lépése** (pl. egy futásra a `disableAllHooks`
-  beállítással, utána vissza). Az ügynök ezt nem végezheti el, és nem is javasolhatja kerülőútként.
+- **A védelem ideiglenes kikapcsolása kizárólag a tulajdonos saját kezű lépése** (kézzel, a saját gépén; utána vissza). Az ügynök
+  ezt nem végezheti el, és nem is javasolhatja kerülőútként.
 
 ## Ellenpróbák (2026-11-17, a bevezető PR-ban)
 
