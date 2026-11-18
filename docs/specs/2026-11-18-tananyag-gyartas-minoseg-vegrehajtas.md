@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — tananyaggyártás minősége (S1–S10)
 
-Terv: [`2026-11-18-tananyag-gyartas-minoseg.md`](2026-11-18-tananyag-gyartas-minoseg.md). Ez a fájl ügynöknek szól: szeletenként
+Terv: [`docs/specs/2026-11-18-tananyag-gyartas-minoseg.md`](2026-11-18-tananyag-gyartas-minoseg.md). Ez a fájl ügynöknek szól: szeletenként
 önállóan végrehajtható. A kódútvonalak a `source/` alatt értendők, ha nem `docs/`, `.agents/`, `.claude/` kezdetűek; a parancsok
 a munkafa gyökeréből futnak, ha a lépés mást nem mond.
 
