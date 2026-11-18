@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T8 kész, PR előtt – 2026-11-17, ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 (a vak ellenőrzés leletei, 2026-11-18) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -108,6 +108,53 @@ Szakaszonként `npm run gate:stage`; a végén `npm run gate:push`. Push / PR ni
   email-db.integration.ts` (végleges → pillanatkép: nincs levél, memóriából és — a memória ürítése után — a nyilvántartásból is;
   pillanatkép → végleges: csak a végleges); `tests/lesson-result-email-quiz.spec.ts` (útvonalváltás → pillanatkép; új kör első válasza
   → pillanatkép; 503 válasz után a következő háttérbe kerülés újraküld).
+
+## T10 — a vak ellenőrzés leletei (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R1–R8)
+
+Sorrend: leletenként előbb a BUKÓ teszt (a hiba reprodukciója), utána a javítás. A T6 „a `sendLessonResult` változatlan” megkötése
+itt feloldva (az S2 foglalás-szelet már a főágon van).
+
+- **R1 (K1, S1)** `server/lesson-result-email.ts`:
+  - `sendLessonResult(input, retry = true, gate?: SendGate)`; `SendGate = (attempt: () => Promise<SendOutcome>) => Promise<SendOutcome>`.
+    A kapu MINDEN kísérletet körbevesz (az első küldést és a `setTimeout`-os újrapróbát is, amely ugyanazzal a kapuval hívja újra).
+    Kapu nélkül a viselkedés változatlan.
+  - `withRoundLock(kulcs, run)`: példányon belüli, ígéretláncos kizárás, kulcs: `lecke|körazonosító`; a lánc végén a bejegyzés törlődik.
+  - Pillanatkép kapuja: `attempt => withRoundLock(kulcs, async () => (await roundFinalized(...)) ? { sent: 0, duplicate: true } : attempt())`.
+  - Végleges kvíz: `markFinalized` + a várakozók törlése SZINKRON, a válasz (`202`) azonnal; a háttérben
+    `withRoundLock(kulcs, …)` alatt a részleges sorok `delivered` listájának olvasása (→ `supersedesPartial`), majd a kizárás
+    elengedése után a végleges levél küldése.
+  - Teszt (ÚJ fájl `tests/lesson-result-email-partial-db.integration.ts`, felvéve a `scripts/run-learning-db-tests.ts` listájára; a
+    kérések címét a megosztott titokfejléces `X-Forwarded-For` adja, így a keretek próbánként külön kulcsra esnek): (a) a „félbehagyva”
+    első kísérlete mindkét címzettnél bukik, az újrapróba előtt megjön a végleges → a kimenet pontosan két végleges levél, felülíró
+    mondat nélkül; (b) 60 próba a végleges beküldéssel az időzítő körül eltolva (lassított küldővel) → minden próbában: vagy nincs
+    részleges levél és a véglegesben nincs felülíró mondat, vagy a részleges levelek a véglegesek ELŐTT mentek ki és minden végleges
+    tartalmazza a mondatot.
+- **R2 (K2)** `client/src/lesson-runtime/useExperienceRound.ts`: a kör sémája opcionális `lastAnsweredAt`; `LessonExperienceView.tsx`: a
+  kvízválasz rögzítésekor `lastAnsweredAt: Date.now()`. `shared/quiz-round.ts`: `roundActivityAt(round)` = `lastAnsweredAt ?? startedAt`.
+  `resultReport.ts`: mindkét korhatár-vizsgálat `roundTooOld(roundActivityAt(…), Date.now())`; a kvíz törzsében `lastAnsweredAt` megy.
+  `shared/lesson-result-email.ts`: a kvíz alak opcionális `lastAnsweredAt` mezője. A `result-report-complete.test.ts` két forrásminta-
+  állítása a szabályváltozást követi (nem törlődik). Teszt: egységteszt (`roundActivityAt` + határok), böngésző (8 napja megnyitott kör:
+  ma megválaszolva végleges megy; 3 új válasz + rejtés → pillanatkép; 8 napos utolsó válaszú kör új válasz nélkül → nincs kérés).
+- **R3 (K3)** `resultReport.ts`: a pillanatkép-függvény `ref`-ben; külön effekt a kör azonosságára (`startedAt` + azonosítók), amelynek
+  lebontó ága meghívja (a `committed` ekkor még az elhagyott kört tartja). Böngészőteszt: 4 válasz → „Új kvíz” → „Új kör indítása”
+  rejtés NÉLKÜL → 1 pillanatkép 4 válasszal, a régi kör azonosítójával.
+- **R4 (K4)** `client/src/lib/queryClient.ts` `sendKeepalive`: elöl `warmCsrfToken()`; 403 → `invalidate()` → `getToken()` → egy ismétlés.
+  Böngészőteszt: a token a kérés előtt „lejár” (a szerver-utánzat a régit 403-mal utasítja el) → a pillanatkép az új tokennel megy át;
+  ha a tokenkérés is bukik → nincs rögzítés, újratöltés után a tárolt kör pillanatképe elmegy.
+- **R5 (S3)** `gradePartialQuiz(quiz, picks, roundSize?)`: `total = max(roundSize ?? ismert azonosítók száma, megválaszoltak)`; az
+  útvonal-kezelő a szerver körméretét adja át; `roundTooOld(body.lastAnsweredAt ?? body.startedAt, most)` → `202 { queued: false, stale: true }`.
+  A meglévő integrációs teszt „4 / 5” várakozása a szabály szerint a körméretre változik (nem gyengítés: a szám szigorúbb forrásból jön).
+- **R6 (S4)** útvonal-kezelő: a pillanatkép fogadásakor a részleges sorok `delivered` listája; ha nem üres →
+  `202 { queued: false, partial: true, alreadySent: true }`.
+- **R7 (S5)** `pendingPartials` bejegyzése: `answered` + `send`; kevesebb válaszú új pillanatképnél a várakozó `send` marad.
+- **R8 (S5)** `apiRequest` opció: `keepalive`; a `resultReport.ts` a kvíz végleges kérésénél adja át; siker után a `partial` kulcs törlése.
+- **S6** viselkedést mérő tesztek a forrásminták mellé: böngészőben a `pagehide` esemény, a kérés módja (POST, CSRF-fejléc, nem
+  `sendBeacon`), token nélkül nincs küldés, a feladatoknál a teljes kitöltés gomb nélkül nem küld.
+- **S2** nincs kódváltozás (tulajdonosi döntés).
+
+Parancsok: `node --import tsx --test tests/result-report-complete.test.ts tests/lesson-result-email-quiz.test.ts`;
+`npm run test:learning-db`; `npm run test:e2e -- tests/lesson-result-email-quiz.spec.ts tests/lesson-result-email.spec.ts --workers=1`;
+a gyökérből `npm run gate:stage`, `npm run gate:push`.
 
 ## Kész-feltétel
 

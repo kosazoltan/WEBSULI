@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész, PR előtt – 2026-11-17, ág `fix/eredmeny-email-kviz`
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8 – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -150,6 +150,49 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
   véglegesített körök (lecke + körazonosító, 24 óráig, korlátos méret — a vendég eltérő kulcsát is fedi), és a kézbesítés-
   nyilvántartás végleges sora (újraindítás után is). Mindkét kérési sorrendre teszt.
 
+**Vak hibakereső ellenőrzés (2026-11-18, `fec8d8b9`: NEM; 4 közepes, 6 kicsi) — a szabályok így változnak / pontosulnak:**
+- **R1 — kizárás a „félbehagyva” levél és a véglegesítés között (K1, S1).** A „félbehagyva” levél MINDEN küldési kísérlete (az időzítő
+  első küldése és a 60 mp-es újrapróba is) és a végleges beküldés „kiment-e már részleges levél?” vizsgálata ugyanazon a körönkénti
+  (lecke + körazonosító) kizáráson megy át. A részleges kísérlet a kizárás ALATT ellenőrzi, hogy a kör véglegesült-e (memória és
+  nyilvántartás), és a küldés végéig tartja; a végleges beküldés a kört azonnal (szinkron) véglegesítettnek jelöli, a felülírás-
+  vizsgálatot és a végleges levél küldését a kizárás megszerzése után, a háttérben végzi (a tanuló válasza nem vár rá). Így csak két
+  kimenet lehet: (a) a részleges levél a végleges ELŐTT kiment → a végleges levél tartalmazza a felülíró mondatot; (b) nem ment ki →
+  a véglegesítés után már soha nem megy ki, a végleges levélben nincs felülíró mondat. Vállalt korlátok: a kizárás példányon belüli
+  (több példány: kanban #135, a nyilvántartás-ellenőrzés ott is fut); ha a részleges levél csak a címzettek egy részének ment ki, a
+  felülíró mondatot minden címzett megkapja; az időkorlát (30 mp) után bukottnak vett küldés sorsa a szolgáltatónál nem ismert.
+- **R2 — a 7 napos korhatár az UTOLSÓ VÁLASZHOZ mér (K2; az E12 módosul).** A kör tárolja az utolsó kvízválasz idejét
+  (`lastAnsweredAt`). A le nem zárt kör akkor „régi”, ha az utolsó válasza (ennek hiányában — régebbi tárolt körnél — a kezdete)
+  7 napnál régebbi. A régen megnyitott, de MA megválaszolt kör tehát megy (végleges és pillanatkép is); a levél „A kör kezdete”
+  sora a valódi, régi kezdést mutatja. A lezárt kör továbbra is korlát nélkül megy.
+- **R3 — kör-csere a kör közepén (K3).** Ha a kör a nézeten belül lecserélődik („Új kvíz” → „Új kör indítása”), az ELHAGYOTT körről
+  a csere pillanatában pillanatkép megy, ugyanazokkal a feltételekkel, mint háttérbe kerüléskor (rejtés nélkül is).
+- **R4 — lejárt / érvénytelen CSRF-token (K4).** A `keepalive`-os küldés 403 válasz után érvényteleníti a gyorsítótárazott tokent, újat
+  kér, és EGYSZER megismétli a kérést. Minden küldési kísérlet előtölti a tokent a következő alkalomra (a korábban sikertelen
+  előtöltés így pótlódik). Ha a lap közben bezárul (az ismétlésre nincs mód), semmi nem rögzül: a következő betöltéskor a tárolt kör
+  friss tokennel újra megy.
+- **R5 — a pillanatkép „összes” száma és a korhatár a szerveren (S3).** A „félbehagyva” levél összes-száma a szerver által ismert
+  körméret (`experienceRoundSizes(...).quizRound`), nem a kliens által küldött azonosítók száma (ha a megválaszoltak száma ennél
+  nagyobb, akkor az). A szerver a pillanatképet nem fogadja el, ha a kliens által küldött utolsó tevékenység (`lastAnsweredAt`,
+  ennek hiányában `startedAt`) 7 napnál régebbi (`202 { queued: false, stale: true }`). Korlát: mindkét időbélyeg a klienstől jön —
+  a szerver a becsületes (régi / hibás) klienst fogja meg, a szándékos hamisítást nem (azt a keret korlátozza). A VÉGLEGES beküldésnél
+  a szerver nem érvényesít korhatárt (a lezárt kör korlát nélkül megy, és a szerver nem tudja megkülönböztetni a lezárt kört a
+  „mind megválaszolva” körtől), és az összes-szám ott a beküldött kérdések száma marad (S1a, változatlan).
+- **R6 — igaz visszajelzés (S4).** Ha a körről már kiment „félbehagyva” levél, a későbbi pillanatkép nem ütemeződik, és a válasz ezt
+  mondja: `202 { queued: false, partial: true, alreadySent: true }` (a „körönként legfeljebb EGY” szabály marad; a kliens a 2xx választ
+  továbbra is elfogadottként rögzíti, mert újraküldeni nincs mit).
+- **R7 — a LEGTÖBB választ tartalmazó pillanatkép marad (S5).** Ha egy körre kevesebb választ tartalmazó pillanatkép érkezik, mint a
+  várakozó (sorrendcsere, két fül), a várakozó tartalma marad; az időzítő újraindul.
+- **R8 — a teljes kör végleges beküldése is `keepalive` (S5).** A kvíz végleges kérése `keepalive: true` jelzővel megy, hogy az utolsó
+  válasz utáni azonnali lapbezárás ne szakítsa meg (a feladatoké nem: a törzsük meghaladhatja a `keepalive` 64 KB-os keretét).
+  Sikeres végleges beküldés után a kör `…:partial:<kör>` kulcsa törlődik a `localStorage`-ból.
+- **Mérlegelve, NEM változik (indokkal):** (1) a tanulónkénti „3 várakozó kör” leckénként értendő (`lecke|tanuló`), és vendégnél
+  megkerülhető — a tényleges védelem az IP-keret és a teljes (5000) korlát; a szigorúbb kulcs a több leckét egymás után félbehagyó
+  tanuló jogos leveleit dobná el. (2) A véglegesített körök memóriája tanulótól független, a körazonosító 32 bites lenyomat: ütközéshez
+  ugyanazon lecke két köre kell 24 órán belül azonos lenyomattal (a lenyomat a kezdés ezredmásodpercét is tartalmazza); a következmény
+  egy elmaradó „félbehagyva” levél — elfogadott. (3) A `…:sent:<kör>` jelzők körönként halmozódnak (néhány bájt / kör, a főágon is így
+  van) — nem takarítjuk.
+- **S2 — a pillanatkép-keret (10 / 15 perc / IP) NYITOTT tulajdonosi döntés** (osztályterem közös IP mögött); a kód addig változatlan.
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -157,7 +200,16 @@ Elfogadás (S1b):
   küld a legutolsó pillanatképből; a végleges beküldés a várakozó pillanatképet törli.
 - E10. AMIKOR a „félbehagyva” levél után a kör végleges eredménye megjön, A RENDSZER a végleges levélben jelzi a felülírást.
 - E11. Minden eredménylevél tartalmazza a beküldés idejét magyar idő szerint.
-- E12. A 7 napnál régebbi, le nem zárt kör nem megy el.
+- E12. Az a le nem zárt kör, amelynek UTOLSÓ VÁLASZA 7 napnál régebbi, nem megy el (R2; a régen megnyitott, ma megválaszolt kör megy).
+- E17. Véglegesített körre „félbehagyva” levél SOHA nem megy ki — az újrapróbából sem; ha a részleges levél már kiment, a végleges
+  levél tartalmazza a felülíró mondatot (R1; bukó küldővel és legalább 50 ismételt versenyhelyzettel mérve).
+- E18. AMIKOR a kör a nézeten belül lecserélődik, A RENDSZER az elhagyott körről pillanatképet küld (R3).
+- E19. AMIKOR a pillanatkép 403-at kap, A RENDSZER új tokent kér és egyszer ismétel; ha nem tud, a következő betöltés pótol (R4).
+- E20. A „félbehagyva” levél összes-száma a szerver körmérete; a 7 napnál régebbi utolsó tevékenységű pillanatképet a szerver sem
+  fogadja el (R5).
+- E21. Már kiment „félbehagyva” levél utáni pillanatképre a válasz `queued: false, alreadySent: true` (R6).
+- E22. Körönként a legtöbb választ tartalmazó pillanatkép marad (R7).
+- E23. A kvíz végleges beküldése `keepalive` kérés (R8).
 
 ## Tulajdonosi döntést igénylő pontok
 
@@ -179,8 +231,15 @@ Elfogadás (S1b):
 - [x] E9 – késleltetett „félbehagyva” levél a legutolsó pillanatképből; a végleges törli (valódi DB)
 - [x] E10 – a végleges levél jelzi a felülírást
 - [x] E11 – dátum a levélben (Europe/Budapest)
-- [x] E12 – 7 napos korkorlát a le nem zárt körre
+- [x] E12 – 7 napos korkorlát a le nem zárt körre, az UTOLSÓ VÁLASZHOZ mérve (böngésző + egységteszt)
 - [x] E13 – pillanatkép a komponens lebontásakor (alkalmazáson belüli elhagyás) (böngésző)
 - [x] E14 – új kör első válaszai is mennek (körhöz kötött számláló)
 - [x] E15 – sikertelen pillanatkép (hálózati hiba / 429 / 5xx) újrapróbálható marad
 - [x] E16 – véglegesített kör késői pillanatképe nem küld „félbehagyva” levelet (mindkét sorrend, valódi DB)
+- [ ] E17 – véglegesített körre nincs „félbehagyva” levél: újrapróba (bukó küldő) + 60 ismételt versenyhelyzet (valódi DB)
+- [ ] E18 – kör-csere a kör közepén → pillanatkép az elhagyott körről, rejtés nélkül (böngésző)
+- [ ] E19 – 403 → új token + egyszeri ismétlés; sikertelen tokenkérés után a következő betöltés pótol (böngésző)
+- [ ] E20 – összes-szám a szerver körméretéből; szerveroldali 7 napos határ a pillanatképre (valódi DB)
+- [ ] E21 – igaz válasz a már kiment „félbehagyva” levél utáni pillanatképre (valódi DB)
+- [ ] E22 – a legtöbb választ tartalmazó pillanatkép marad (valódi DB)
+- [ ] E23 – a kvíz végleges beküldése `keepalive` (böngésző)
