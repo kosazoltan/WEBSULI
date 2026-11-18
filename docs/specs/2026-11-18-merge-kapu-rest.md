@@ -37,6 +37,11 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
   `gh api repos/R/pulls/N/ccr/review_threads` (`resolved` → `isResolved`, leképező: `threadsFromCcr`). Ha mindkettő bukik: a
   lépés hibát dob → `FAIL` (fail-closed, mint eddig).
 
+- Kötelező ellenőrzések: előbb a `branches/main/protection` végpont; ha az nem olvasható (felhős munkamenetben mérve:
+  `HTTP 403 Resource not accessible by integration` — admin-jogot kér), ugyanez a lista a `branches/main` válasz
+  `protection.required_status_checks.contexts` mezőjéből (ezt a hívást a `mainSha` miatt a kapu eddig is megtette). Üres lista →
+  a meglévő szabály szerint FAIL.
+
 ## Edge case-ek
 
 - `mergeable_state` `unknown` / `null` → `UNKNOWN` → a meglévő szabály szerint FAIL („várd meg az újraszámolást”).

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, requiredChecks } from './pre-merge-gate.mjs';
+import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, prFromRest, requiredChecks, threadsFromCcr } from './pre-merge-gate.mjs';
 
 const cfg = loadConfig();
 const HEAD = 'a'.repeat(40);
@@ -135,4 +135,34 @@ test('decideMerge: /api/rt/status — hálózati hiba FAIL, off PASS, aktív mec
   assert.equal(st(decideMerge(base({ rt: { error: 'fetch failed' } })), 'valós idejű'), STATUS.FAIL);
   assert.equal(st(decideMerge(base({ rt: { json: { mode: 'on', activeMatches: 0 } } })), 'valós idejű'), STATUS.PASS);
   assert.equal(st(decideMerge(base({ rt: { json: { mode: 'admin', activeMatches: 2 } } })), 'valós idejű'), STATUS.FAIL);
+});
+
+// docs/specs/2026-11-18-merge-kapu-rest.md: a REST-es adatgyűjtés leképezői (felhős munkamenetben a GraphQL tiltott).
+test('prFromRest: a REST-es PR a decideMerge alakjára képződik, és a zöld eset PASS marad', () => {
+  const pull = { number: 7, state: 'open', draft: false, mergeable_state: 'clean', head: { sha: HEAD }, base: { sha: MAIN }, body: 'leírás' };
+  const pr = prFromRest(pull, [{ filename: 'source/server/a.ts' }], [{ body: 'k1' }]);
+  assert.deepEqual(pr, {
+    number: 7, state: 'OPEN', isDraft: false, mergeStateStatus: 'CLEAN', headRefOid: HEAD, baseRefOid: MAIN,
+    files: [{ path: 'source/server/a.ts' }], body: 'leírás', comments: [{ body: 'k1' }],
+  });
+  const res = decideMerge(base({ pr }));
+  assert.equal(st(res, 'PR állapota'), STATUS.PASS);
+  assert.ok(!res.some((r) => r.status === STATUS.FAIL), JSON.stringify(res.filter((r) => r.status === STATUS.FAIL)));
+});
+
+test('prFromRest: piszkozat, zárt, ismeretlen / hiányzó mergeable_state → FAIL a PR-állapotban', () => {
+  const p = (over) => prFromRest({ state: 'open', draft: false, mergeable_state: 'clean', head: { sha: HEAD }, base: { sha: MAIN }, ...over });
+  assert.equal(st(decideMerge(base({ pr: p({ draft: true }) })), 'PR állapota'), STATUS.FAIL);
+  assert.equal(st(decideMerge(base({ pr: p({ state: 'closed' }) })), 'PR állapota'), STATUS.FAIL);
+  assert.equal(p({ mergeable_state: null }).mergeStateStatus, 'UNKNOWN');
+  assert.equal(p({ mergeable_state: undefined }).mergeStateStatus, 'UNKNOWN');
+  assert.equal(st(decideMerge(base({ pr: p({ mergeable_state: 'blocked' }) })), 'PR állapota'), STATUS.FAIL);
+  assert.equal(st(decideMerge(base({ pr: p({ mergeable_state: null }) })), 'PR állapota'), STATUS.FAIL);
+});
+
+test('threadsFromCcr: resolved=true lezárt; false vagy hiányzó mező nyitott (fail-closed)', () => {
+  assert.deepEqual(threadsFromCcr([{ resolved: true }, { resolved: false }, {}]), [{ isResolved: true }, { isResolved: false }, { isResolved: false }]);
+  assert.deepEqual(threadsFromCcr(null), []);
+  assert.equal(st(decideMerge(base({ threads: threadsFromCcr([{ resolved: true }, {}]) })), 'lezáratlan review-szálak'), STATUS.FAIL);
+  assert.equal(st(decideMerge(base({ threads: threadsFromCcr([{ resolved: true }]) })), 'lezáratlan review-szálak'), STATUS.PASS);
 });

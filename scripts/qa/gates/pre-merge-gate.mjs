@@ -121,6 +121,29 @@ export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSh
   return out;
 }
 
+/**
+ * A REST-es PR-válasz a `decideMerge` által várt (a korábbi `gh pr view --json` szerinti) alakra
+ * (docs/specs/2026-11-18-merge-kapu-rest.md): a felhős munkamenetben a GraphQL tiltott, a REST nem.
+ */
+export function prFromRest(pull, files = [], comments = []) {
+  return {
+    number: pull?.number,
+    state: String(pull?.state ?? '').toUpperCase(),
+    isDraft: Boolean(pull?.draft),
+    mergeStateStatus: String(pull?.mergeable_state ?? 'unknown').toUpperCase(),
+    headRefOid: pull?.head?.sha,
+    baseRefOid: pull?.base?.sha,
+    files: (files ?? []).map((f) => ({ path: f.filename })),
+    body: pull?.body ?? '',
+    comments: (comments ?? []).map((c) => ({ body: c.body })),
+  };
+}
+
+/** A felhős REST-út (`pulls/<n>/ccr/review_threads`) szálai; hiányzó `resolved` = nyitott (fail-closed). */
+export function threadsFromCcr(list) {
+  return (Array.isArray(list) ? list : []).map((t) => ({ isResolved: t?.resolved === true }));
+}
+
 function ghJson(exec, root, args) {
   const r = exec('gh', args, { cwd: root, timeoutMs: 60_000 });
   if (r.code !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')}: ${redact(r.stderr).split('\n')[0]}`);
@@ -148,18 +171,35 @@ async function main() {
   const gate = createGate('pre-merge-gate');
   let pr;
   try {
-    const repo = ghJson(exec, root, ['repo', 'view', '--json', 'nameWithOwner']).nameWithOwner;
+    // REST (docs/specs/2026-11-18-merge-kapu-rest.md): a `{owner}/{repo}` helyőrzőt a gh a helyi git-remote-ból oldja fel.
+    const repo = ghJson(exec, root, ['api', 'repos/{owner}/{repo}']).full_name;
     const [owner, name] = repo.split('/');
-    pr = ghJson(exec, root, ['pr', 'view', n, '--json', 'number,state,isDraft,mergeStateStatus,headRefOid,baseRefOid,files,body,comments']);
+    pr = prFromRest(
+      ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}`]),
+      ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}/files?per_page=100`]),
+      ghJson(exec, root, ['api', `repos/${repo}/issues/${n}/comments?per_page=100`]),
+    );
     const head = pr.headRefOid;
-    const protection = ghJson(exec, root, ['api', `repos/${repo}/branches/main/protection`]);
-    const required = protection?.required_status_checks?.contexts ?? [];
+    const mainBranch = ghJson(exec, root, ['api', `repos/${repo}/branches/main`]);
+    let required;
+    try {
+      required = ghJson(exec, root, ['api', `repos/${repo}/branches/main/protection`])?.required_status_checks?.contexts ?? [];
+    } catch {
+      // A védelmi végpont admin-jogot kér (felhős munkamenetben 403); ugyanez a lista az ág olvasható `protection` mezőjében.
+      required = mainBranch?.protection?.required_status_checks?.contexts ?? [];
+    }
     const checkRuns = ghJson(exec, root, ['api', `repos/${repo}/commits/${head}/check-runs?per_page=100`]).check_runs ?? [];
     const statuses = ghJson(exec, root, ['api', `repos/${repo}/commits/${head}/status`]).statuses ?? [];
     const q = 'query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}';
-    const threads = ghJson(exec, root, ['api', 'graphql', '-f', `query=${q}`, '-f', `o=${owner}`, '-f', `r=${name}`, '-F', `n=${n}`])
-      .data.repository.pullRequest.reviewThreads.nodes;
-    const mainSha = ghJson(exec, root, ['api', `repos/${repo}/branches/main`]).commit?.sha;
+    let threads;
+    try {
+      threads = ghJson(exec, root, ['api', 'graphql', '-f', `query=${q}`, '-f', `o=${owner}`, '-f', `r=${name}`, '-F', `n=${n}`])
+        .data.repository.pullRequest.reviewThreads.nodes;
+    } catch {
+      // Felhős munkamenet: a GraphQL tiltott, a szálak a CCR REST-útról jönnek; ha ez is bukik, a kivétel → „adatgyűjtés” FAIL.
+      threads = threadsFromCcr(ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}/ccr/review_threads`]));
+    }
+    const mainSha = mainBranch?.commit?.sha;
     const runs = ghJson(exec, root, ['api', `repos/${repo}/actions/runs?head_sha=${head}&event=pull_request&per_page=20`]).workflow_runs ?? [];
     const ci = runs.filter((r) => r.name === 'CI').sort((a, b) => b.id - a.id)[0];
     const ciBaseSha = ci?.pull_requests?.[0]?.base?.sha ?? null;
