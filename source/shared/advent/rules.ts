@@ -105,7 +105,7 @@ export function adventSummary(doors: Readonly<Record<number, DoorRecord | undefi
   return { total: ADVENT_DOORS, answered, solved, firstTry, repairable, failed, passed: adventPassed(solved, answered), percent: adventPercent(solved) };
 }
 
-export type AdventClosingKind = "gift" | "repair" | "new-round" | "done" | "progress" | "closed";
+export type AdventClosingKind = "gift" | "repair" | "new-round" | "done" | "progress" | "closed" | "soon";
 export type AdventClosing = { kind: AdventClosingKind; text: string };
 
 export type AdventClosingContext = {
@@ -130,7 +130,13 @@ export function adventStillReachable(summary: AdventSummary): boolean {
 export function adventClosing(summary: AdventSummary, ctx: AdventClosingContext): AdventClosing {
   if (summary.passed) return { kind: "gift", text: ADVENT_GIFT_MESSAGE };
   const lit = `${summary.solved} ablak már világít a ${summary.total}-ből.`;
-  if (ctx.phase !== "open" && ctx.phase !== "catchup") {
+  // Szezon előtt (review N1): még semmi nem „zárt be” — a naptár december 1-jén nyílik.
+  if (ctx.phase === "before" || ctx.phase === "teaser") {
+    return { kind: "soon", text: "Hamarosan: december 1-jén nyílik az első ablak!" };
+  }
+  if (ctx.phase === "closed") {
+    // Review N2: aki egy ablakot sem oldott meg, annak nem számolunk („Nálad 0 ablak világított”).
+    if (summary.solved === 0) return { kind: "closed", text: "Az idei naptár bezárt — jövőre újra találkozunk!" };
     return { kind: "closed", text: `Az idei naptár bezárt. Nálad ${summary.solved} ablak világított a ${summary.total}-ből — jövőre újra találkozunk!` };
   }
   if (summary.repairable > 0) {
