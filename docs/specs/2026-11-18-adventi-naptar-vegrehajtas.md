@@ -609,6 +609,22 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
   Teljes kör (válogatás után): `npx.cmd tsx scripts/design-assets/generate.ts --set advent --max 94 --max-usd 7 --ref advent-bg-portrait=advent-bg-portrait/<a kiválasztott fájl>`
 - **S5 / S6:** a levél szabálya a terv 18.1; az évadzáró küldés a takarító része (`closed` fázisban, egyszer).
 
+## Kiegészítés 8 — a 2/3 PR vak ellenőri leletei (2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 21. szakasz)
+
+Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `source/tests/advent-limits.test.ts`, `source/tests/advent-routes-db.integration.ts`.
+
+1. `limits.ts`: a 21. szakasz táblázata (képletből számolt konstansok), új `sessionNewRows`, `ipInvalid`; a számlálónak `retryAfterSec`.
+2. `routes.ts`: sorrend `gate → identify → ipWriteLimiter (skipFailedRequests) → subjectLimiter`; az olvasásnál is `identify` előbb; a 400-as
+   hibák az érvénytelen-keretbe; új sor: munkamenet- és hálózati foglalás, `Retry-After`; `adventRowIsSound` minden végponton
+   (409 `corrupt`); a megnyitás nem rögzíti az évfolyamot, az első válasz igen (a terv mellé eltárolt tervezési évfolyam).
+3. Tesztek (előbb bukók a régi routeren): az ellenőr három támadása után egy osztálytárs új naptárat kezd és ír; csak a sikeres írás
+   számít; `Retry-After` a `new-row` 429-en; DB: 240 / hálózat + 3 / munkamenet egyidejű hullámokkal, sérült sor, évfolyam az első válasznál.
+
+| Parancs | Várt kimenet |
+|---|---|
+| `node --import tsx --test tests/advent-limits.test.ts` | `fail 0` |
+| `npm.cmd run test:learning-db` | `fail 0` |
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.
