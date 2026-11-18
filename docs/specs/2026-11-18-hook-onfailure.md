@@ -19,7 +19,7 @@
 4. Runbook: elromlott hook-szkriptnél az ügynök KIZÁRÓLAG a hookot javíthatja (Edit / Write eszközzel, azon nincs `onFailure`,
    teszttel); a védelmet nem távolíthatja el, nem gyengítheti és kerülőútként sem javasolhatja. Ha a javításhoz nincs
    futtatókörnyezet, vagy az csak a tiltott úton menne: megáll, és a tulajdonostól kér segítséget. A védelem ideiglenes
-   kikapcsolása (pl. `disableAllHooks`) kizárólag a tulajdonos saját kezű lépése (Codex P1, #506).
+   kikapcsolása (kézzel, a tulajdonos gépén) kizárólag a tulajdonos saját kezű lépése (Codex P1, #506).
 
 ## Nem cél
 
@@ -43,18 +43,18 @@
 ## Elfogadás (EARS)
 
 <!-- acceptance-checklist -->
-- [ ] F1 WHEN a kapu-hook bejegyzését (Bash, PowerShell) a settings-ben vizsgáljuk THEN mindkettőn SHALL `"onFailure": "block"` lenni
+- [x] F1 WHEN a kapu-hook bejegyzését (Bash, PowerShell) a settings-ben vizsgáljuk THEN mindkettőn SHALL `"onFailure": "block"` lenni
   (a többi hook-bejegyzésen nem).
-- [ ] F2 WHEN a kapu-hook nem kap választ a git-től a keretén belül THEN the hook folyamata SHALL tiltani, és az üzenet SHALL
+- [x] F2 WHEN a kapu-hook nem kap választ a git-től a keretén belül THEN the hook folyamata SHALL tiltani, és az üzenet SHALL
   megmondani a teendőt (újrapróbálás; tartós hibánál a runbook szakasza).
-- [ ] F3 WHEN a `check-audit-ok` push-parancsnál a git-et nem tudja elindítani / időtúllép THEN SHALL tiltani, teendővel.
-- [ ] F4 WHEN a `check-audit-ok` nem push parancsot kap, vagy nem git-repóban fut THEN SHALL engedni (változatlan).
-- [ ] F5 WHEN a runbookot olvassuk THEN SHALL kimondani: elromlott kapu-hooknál az ügynök csak a hookot javíthatja; a védelem
+- [x] F3 WHEN a `check-audit-ok` push-parancsnál a git-et nem tudja elindítani / időtúllép THEN SHALL tiltani, teendővel.
+- [x] F4 WHEN a `check-audit-ok` nem push parancsot kap, vagy nem git-repóban fut THEN SHALL engedni (változatlan).
+- [x] F5 WHEN a runbookot olvassuk THEN SHALL kimondani: elromlott kapu-hooknál az ügynök csak a hookot javíthatja; a védelem
   eltávolítását nem végezheti és nem javasolhatja; ha nem tudja javítani, megáll és a tulajdonostól kér segítséget; a kikapcsolás
   kizárólag a tulajdonos lépése. A runbook szakasza nem tartalmazhat ügynöknek szóló eltávolítási utasítást (szöveg-őr teszt).
-- [ ] F6 (visszaellenőrzés, 2026-11-18) WHEN a hook-bemenet nem értelmezhető JSON, de a nyers szövegben kapu-köteles művelet van THEN
+- [x] F6 (visszaellenőrzés, 2026-11-18) WHEN a hook-bemenet nem értelmezhető JSON, de a nyers szövegben kapu-köteles művelet van THEN
   mindkét hook SHALL tiltani (enélkül, és üres bemenetnél enged).
-- [ ] F7 WHEN az audit-hook git-hívása fut THEN a korlátja SHALL 10 s lenni (csak `node --test` alatt felülírható, felülről
+- [x] F7 WHEN az audit-hook git-hívása fut THEN a korlátja SHALL 10 s lenni (csak `node --test` alatt felülírható, felülről
   korlátozva); a belső hiba ága, a valódi időtúllépés és a kapu-hook keret-üzenetének teendője teszttel fedett.
 
 ## Kiegészítés — a vak hibakereső ellenőr leletei (2026-11-18, fej `5786e83b`)
@@ -94,10 +94,10 @@ PowerShell eszközt figyeli; MCP-eszközök), L6 (szokatlan JSON-bemenetek), és
 
 ### Elfogadás (EARS) — kiegészítés
 
-- [ ] F8 WHEN egy ≥ 200 KB-os, ártalmatlan, „gh pr …” említésekkel teli parancs érkezik THEN a kapu-hook SHALL 1 s alatt ENGEDNI, és
+- [x] F8 WHEN egy ≥ 200 KB-os, ártalmatlan, „gh pr …” említésekkel teli parancs érkezik THEN a kapu-hook SHALL 1 s alatt ENGEDNI, és
   a kapu-köteles alakok változatlanul kapu-kötelesek / tiltottak.
-- [ ] F9 WHEN az Edit / Write a `.claude/settings*.json`-ba hook-kikapcsolást ír, onnan az `onFailure`-t vagy a kapu-hook bejegyzést
+- [x] F9 WHEN az Edit / Write a `.claude/settings*.json`-ba hook-kikapcsolást ír, onnan az `onFailure`-t vagy a kapu-hook bejegyzést
   eltávolítja, vagy a kapu-hook belépési pontját kiüríti THEN az `enforce-repo-rules` SHALL tiltani; a hook tartalmi javítása SHALL
   engedett maradni.
-- [ ] F10 WHEN az audit-hook `null` / nem objektum bemenetet kap THEN SHALL nem összeomlani; a külső korlát SHALL a belső git-korlát
+- [x] F10 WHEN az audit-hook `null` / nem objektum bemenetet kap THEN SHALL nem összeomlani; a külső korlát SHALL a belső git-korlát
   + 5 s fölött lenni.

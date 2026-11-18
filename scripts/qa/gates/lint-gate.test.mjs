@@ -84,3 +84,13 @@ test('runLintSteps: whitespace-hiba és tiltott minta a diffben → FAIL; nem k�
   assert.equal(statusOf(gate, 'tiltott minták'), STATUS.FAIL);
   assert.equal(statusOf(gate, 'nem követett'), STATUS.WARN);
 });
+
+test('applyRepoRules: a path-szabály csak az illeszkedő fájlra, a removes-szabály a diff-szkennelésben nem sül el', () => {
+  const rules = [
+    { tool: 'Edit|Write', path: '(^|/)\\.claude/settings[^/]*\\.json$', pattern: 'kikapcsol', level: 'deny', message: 'p' },
+    { tool: 'Edit|Write', pattern: '(?!)', removes: 'x', level: 'deny', message: 'r' },
+  ];
+  assert.deepEqual(applyRepoRules(rules, 'kikapcsol', '.claude/settings.local.json').map((h) => h.msg), ['p']);
+  assert.deepEqual(applyRepoRules(rules, 'kikapcsol', 'scripts/qa/repo-rules.json'), []);
+  assert.deepEqual(applyRepoRules(rules, 'x x x', '.claude/settings.json'), []);
+});

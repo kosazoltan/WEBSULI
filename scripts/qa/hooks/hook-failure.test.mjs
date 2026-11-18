@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -174,4 +174,55 @@ test('F9: a hook tartalmi javítása és a settings más részének szerkesztés
     { tool_name: 'Edit', tool_input: { file_path: join(repoRoot, 'docs', 'x.md'), old_string: '"onFailure": "block"', new_string: '' } },
   ];
   for (const p of allowed) assert.equal(reason(run(rulesHook, p)), null, JSON.stringify(p.tool_input).slice(0, 140));
+});
+
+// ---- L5 / L8 / L7 (vak ellenőr, 2026-11-18) ---------------------------------------------------------------------------------
+
+test('F10: az audit-hook nem objektum JSON-bemenetre nem omlik össze; push-szöveggel tilt, különben enged', () => {
+  for (const input of ['null', '[]', '5', '"x"']) assert.equal(runRaw(auditHook, input), null, input);
+  assert.match(reason(runRaw(auditHook, '"git push origin x"')) ?? '', TEENDO);
+  assert.match(reason(runRaw(auditHook, '["git push origin x"]')) ?? '', TEENDO);
+});
+
+test('F10: az audit-hook külső korlátja a belső git-korlát + 5 s fölött', () => {
+  const settings = JSON.parse(readFileSync(join(repoRoot, '.claude', 'settings.json'), 'utf8'));
+  const src = readFileSync(auditHook, 'utf8');
+  const inner = Number(/:\s*(\d+)_?(\d*)\s*;\s*$/m.exec(src.split('\n').find((l) => /^\s*\? Math\.min/.test(l)) ?? '')?.slice(1).join('') ?? NaN);
+  assert.ok(inner > 0, 'a belső git-korlát nem olvasható ki');
+  const audit = settings.hooks.PreToolUse.flatMap((g) => g.hooks).filter((h) => /check-audit-ok\.mjs/.test(h.command));
+  assert.equal(audit.length, 2);
+  for (const h of audit) assert.ok(h.timeout * 1000 >= inner + 5000, `audit-hook: timeout ${h.timeout} s, belső ${inner} ms`);
+});
+
+test('L8: a git-korlát tesztes felülírása NODE_TEST_CONTEXT nélkül hatástalan', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'hf-audit-l8-'));
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  const env = { ...process.env, WEBSULI_AUDIT_GIT_TIMEOUT_MS: '1' };
+  delete env.NODE_TEST_CONTEXT;
+  delete env.WEBSULI_QA_EVIDENCE_DIR;
+  const out = execFileSync(process.execPath, [auditHook], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git push' }, cwd: repo }), encoding: 'utf8', env });
+  const r = reason(JSON.parse(out)) ?? '';
+  assert.match(r, /audit nem futott le/, 'a valódi (10 s-os) korláttal a git válaszol, a hiányzó audit miatt tilt');
+  assert.doesNotMatch(r, /nem válaszolt/);
+});
+
+test('L7: a kikapcsoló mechanizmus neve és a védelem eltávolítására felszólító szinonimák sehol nem szerepelnek ügynöknek szóló szövegben', () => {
+  const SKILLS = ['websuli-lint-ellenor', 'websuli-fejlesztesi-ellenor', 'websuli-push-elotti-kapu', 'websuli-pr-elotti-kapu', 'websuli-merge-elotti-kapu'];
+  const files = ['docs/minosegkapuk.md', 'docs/agent-csapdak.md', 'docs/handoffs/2026-11-18-kapu-hook-retro.md',
+    'docs/specs/2026-11-18-hook-onfailure.md', 'docs/specs/2026-11-18-hook-onfailure-vegrehajtas.md',
+    ...SKILLS.flatMap((s) => [`.agents/skills/${s}/SKILL.md`, `.claude/skills/${s}/SKILL.md`])];
+  const MECHANISM = [/disable\s*All\s*Hooks/i, /settings\.local\.json/i, /"onFailure"\s*:\s*"continue"/i, /claude\s+--settings/i];
+  for (const f of files) {
+    const p = join(repoRoot, ...f.split('/'));
+    if (!existsSync(p)) continue;
+    const text = readFileSync(p, 'utf8');
+    for (const re of MECHANISM) assert.doesNotMatch(text, re, `${f}: ${re}`);
+  }
+  // a runbook szakaszában ügynöknek szóló felszólítás (szinonimák is) a védelem eltávolítására / kikapcsolására nincs
+  const md = readFileSync(join(repoRoot, 'docs', 'minosegkapuk.md'), 'utf8').replace(/\r\n/g, '\n');
+  const start = md.indexOf('## A kapu-hook hibája');
+  const sec = md.slice(start, md.indexOf('\n## ', start + 3));
+  for (const re of [/\btöröld\b/i, /\btávolítsd el\b/i, /\bkapcsold ki\b/i, /\bvedd ki\b/i, /\bállítsd\b[^.\n]*continue/i, /\bírd át\b/i, /\bkommenteld ki\b/i, /\bhagyd ki\b/i]) {
+    assert.doesNotMatch(sec, re, `tiltott felszólítás: ${re}`);
+  }
 });

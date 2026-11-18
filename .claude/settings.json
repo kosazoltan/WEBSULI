@@ -37,7 +37,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/check-audit-ok.mjs\"",
-            "timeout": 15,
+            "timeout": 20,
             "statusMessage": "Audit-sentinel ellenőrzés push előtt..."
           }
         ]
@@ -48,7 +48,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/check-audit-ok.mjs\"",
-            "timeout": 15,
+            "timeout": 20,
             "statusMessage": "Audit-sentinel ellenőrzés push előtt..."
           }
         ]

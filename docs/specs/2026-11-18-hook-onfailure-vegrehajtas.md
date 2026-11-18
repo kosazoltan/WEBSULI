@@ -18,7 +18,7 @@ Terv: `docs/specs/2026-11-18-hook-onfailure.md`. Ág: `chore/hook-onfailure-tilt
 7. `npm run gate:stage`; mutációs ellenpróba commit után (az `onFailure` sor törlése, az audit fail-open visszaírása, az üzenet
    teendő-része → a teszt bukik); független ellenőr; `gate:push` / `gate:pr` a jelre.
 
-- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [x] 6 · [ ] 7 (mutáció, ellenőr, kapuk — folyamatban)
+- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [x] 6 · [x] 7
 
 ## Kiegészítés — a vak ellenőr leletei (2026-11-18) — végrehajtás
 
@@ -31,4 +31,4 @@ Terv: `docs/specs/2026-11-18-hook-onfailure.md`, „Kiegészítés” fejezet.
 12. L7 / L9: szöveg-őr kiterjesztése; a runbook és a terv nem nevezi meg a kikapcsoló beállítást; pipálás.
 13. `gate:stage`, mutációs ellenpróba, sorompó, `gate:push`, fej-hash.
 
-- [ ] 8 · [ ] 9 · [ ] 10 · [ ] 11 · [ ] 12 · [ ] 13
+- [x] 8 · [x] 9 · [x] 10 · [x] 11 · [x] 12 · [ ] 13 (kapuk — folyamatban)

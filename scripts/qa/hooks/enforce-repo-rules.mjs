@@ -84,6 +84,8 @@ try {
       if (!applies) continue;
       if (r.path && !(isEdit && new RegExp(r.path, 'i').test(fp.replace(/\\/g, '/')))) continue;
       if (r.removes) {
+        // A lint-kapu diff-szkennelése csak a hozzáadott sorokat adja át — az eltávolítás abból nem ítélhető meg.
+        if (ti.diff_scan === true) continue;
         const re = new RegExp(r.removes, `${(r.flags || '').replace(/g/g, '')}g`);
         const count = (t) => (String(t ?? '').match(re) || []).length;
         let before = '';

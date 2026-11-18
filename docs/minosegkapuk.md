@@ -188,11 +188,13 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
 
 - A `.claude/settings.json` kapu-hook bejegyzésein (Bash, PowerShell) `"onFailure": "block"`: ha a hook-folyamat nem indul,
   összeomlik, túllépi a 60 s-os külső korlátot vagy érvénytelen kimenetet ad, a Claude Code a parancsot **tiltja** (alapból
-  átengedné). A többi hookon (`check-destructive`, `enforce-repo-rules`, `warn-test-edit`) nincs ilyen beállítás.
+  átengedné). A többi hookon (`check-audit-ok`, `check-destructive`, `enforce-repo-rules`, `warn-test-edit`) nincs ilyen beállítás: minden
+  Bash / PowerShell / Edit / Write hívásra futnak, a hibájuk minden munkát megállítana; a pusht a kapu-hook fedi.
 - A hook saját „nem válaszolt” tiltása (a git / gh nem válaszolt, a keret elfogyott) és az audit-hook (`check-audit-ok`) ugyanilyen
   tiltása a teendőt is megmondja: **néhány másodperc múlva ugyanazt az egyszerű parancsot újra.** Az audit-hook a git
-  időtúllépésekor / indítási hibájakor és belső hibájakor push-parancsra tilt (kanban #126); nem push parancsnál és nem git-repóban
-  enged.
+  időtúllépésekor / indítási hibájakor és belső hibájakor push-parancsra tilt (kanban #126; a belső git-korlát 10 s, a külső hook-korlát 20 s); nem push parancsnál és nem git-repóban
+  enged. A védelem eltávolítását / gyengítését (a settings-ből, a hook belépési pontjából) az `enforce-repo-rules` Edit / Write-ra
+  tiltja (`scripts/qa/repo-rules.json`).
 - **Ha tartósan fennáll** (pl. minden Bash / PowerShell parancs tiltott, mert a hook-szkript elromlott — félbemaradt összefésülés,
   szintaxishiba, hiányzó `node`): az ügynök **kizárólag a hookot javíthatja** — az Edit / Write eszközzel (azon nincs
   `onFailure`) a `scripts/qa/hooks/check-quality-gates.mjs`-ben, a hibát lefedő teszttel együtt. A védelmet (a `"onFailure"`
