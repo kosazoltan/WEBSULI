@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, MIN_CLASSROOM, MAX_CLASSROOM, normalizeClassroom } from "@shared/classrooms";
-import { matchesPreparedSearch, prepareMaterialSearch, searchSpansAllClassrooms } from "@shared/material-title";
+import { filterMaterialsBySearch, prepareMaterialSearch } from "@shared/material-title";
 import {
   DndContext,
   closestCenter,
@@ -158,20 +158,19 @@ export default function AdminFileDashboard({
     })
   );
 
-  // A kifejezés elemzése egyszer; ha a szűrőtől eltérő osztályt nevez meg, a keresés minden osztályban fut (spec 2026-11-17, K1).
+  // A közös illesztés az osztály-kifejezésekre is talál („5.o”, „ötödik”) — docs/specs/2026-11-17-tananyag-cim-osztaly.md. A kifejezés
+  // elemzése egyszer történik; ha kifejezett osztály-alakkal a szűrőtől eltérő osztályt nevez meg (vagy a szűrt találat üres), a
+  // keresés minden osztályban fut (K1, U2). Az érvényes osztályt a közös illesztés találja; a felirat-részszöveg csak a „Nincs
+  // osztály” jelvényre kell (érvénytelen érték) — különben az „1. osztály” a „11. osztály” feliratot is hozná (review K2).
+  // Hiányzó / érvénytelen évfolyam csak az „Összes” nézetben látszik („Nincs osztály” jelvénnyel), nem hamisan az 1.-ben.
   const search = useMemo(() => prepareMaterialSearch(searchQuery), [searchQuery]);
-  const searchAllClassrooms = searchSpansAllClassrooms(search, classroomFilter === "all" ? null : classroomFilter);
-  const filteredFiles = files.filter(file => {
-    const q = searchQuery.toLowerCase();
-    // Az érvényes osztályt a közös illesztés találja; a felirat-részszöveg csak a „Nincs osztály” jelvényre kell (érvénytelen érték) —
-    // különben az „1. osztály” a „11. osztály” feliratot is hozná (review K2).
-    // A közös illesztés az osztály-kifejezésekre is talál („5.o”, „ötödik”) — docs/specs/2026-11-17-tananyag-cim-osztaly.md.
-    const matchesSearch = matchesPreparedSearch(file, search) ||
-      (normalizeClassroom(file.classroom) === null && classroomDisplayLabel(file.classroom).toLowerCase().includes(q));
-    // Hiányzó / érvénytelen évfolyam csak az „Összes” nézetben látszik („Nincs osztály” jelvénnyel), nem hamisan az 1.-ben.
-    const matchesClassroom = searchAllClassrooms || classroomFilter === "all" || file.classroom === classroomFilter;
-    return matchesSearch && matchesClassroom;
-  });
+  const q = searchQuery.toLowerCase();
+  const { files: filteredFiles, allClassrooms: searchAllClassrooms } = filterMaterialsBySearch(
+    files,
+    search,
+    classroomFilter === "all" ? null : classroomFilter,
+    (file) => normalizeClassroom(file.classroom) === null && classroomDisplayLabel(file.classroom).toLowerCase().includes(q),
+  );
 
   // Initialize local order from filteredFiles.
   // Csak akkor írjuk felül a helyi (esetleg még nem mentett) sorrendet, ha nincs

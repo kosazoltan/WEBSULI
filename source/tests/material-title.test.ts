@@ -7,6 +7,7 @@ import {
   materialDisplayTitle,
   materialTitleGradePrefix,
   matchesMaterialSearch,
+  filterMaterialsBySearch,
   matchesPreparedSearch,
   parseGradeQuery,
   prepareMaterialSearch,
@@ -263,13 +264,16 @@ test("A4: a kifejezés egyszer elemezhető, és az előkészített keresés ugya
     const prepared = prepareMaterialSearch(query);
     for (const file of FILES) assert.equal(matchesPreparedSearch(file, prepared), matchesMaterialSearch(file, query), `${query} → ${file.id}`);
   }
-  assert.deepEqual(prepareMaterialSearch("   "), { phrase: "", grades: [], rest: [] });
+  assert.deepEqual(prepareMaterialSearch("   "), { phrase: "", grades: [], rest: [], explicitGrades: [] });
 });
 
 test("K1: az aktív szűrőtől ELTÉRŐ osztályt megnevező keresés minden osztályban fut; egyébként a szűrő érvényes", () => {
   const spans = (query: string, selected: number | null) => searchSpansAllClassrooms(prepareMaterialSearch(query), selected);
   assert.equal(spans("5. osztály", 4), true);
-  assert.equal(spans("ötödik törtek", 4), true);
+  // Tulajdonosi döntés 2026-11-18 (U2): a puszta sorszámnév / szám önmagában nem lépi át a szűrőt (csak üres szűrt találatnál — lásd lent).
+  assert.equal(spans("ötödik törtek", 4), false);
+  assert.equal(spans("ötödikes törtek", 4), true);
+  assert.equal(spans("ötödik osztály törtek", 4), true);
   assert.equal(spans("programozás", 4), true);
   assert.equal(spans("4. és 5. osztály", 4), true, "a kifejezés másik osztályt is megnevez");
   assert.equal(spans("4. osztály", 4), false, "ugyanaz az osztály: a szűrő marad");
@@ -332,4 +336,57 @@ test("U4: a „programozás” gépelése közben a programozási sáv végig me
     const hits = found(prefix);
     assert.ok(hits.includes("f"), `${prefix} → ${hits}`);
   }
+});
+
+// ---- Tulajdonosi döntés 2026-11-18 (U2): a szűrőt csak kifejezett osztály-alak lépi át, vagy ha a szűrt találat üres ----
+
+test("U2: kifejezett osztály-alak átlépi a szűrőt; puszta szám és puszta sorszámnév nem", () => {
+  const spans = (query: string, selected: number) => searchSpansAllClassrooms(prepareMaterialSearch(query), selected);
+  for (const query of ["5. osztály", "5.o", "5. o.", "5 osztaly", "5. évfolyam", "5.b", "5/a", "5-ös", "5-ösöknek", "ötödikes", "ötödikben",
+    "ötödik osztály", "V. osztály", "5. oszt", "5. osztá", "prog", "programozás", "5. osztály törtek"]) {
+    assert.equal(spans(query, 6), true, query);
+  }
+  for (const query of ["5", "5.", "1", "7", "10", "első", "Első", "második világháború", "ötödik", "10-es átlépés törtek 3", "Október 7.", "Unit 2",
+    "6. osztály", "hatodikos", "törtek", ""]) {
+    assert.equal(spans(query, 6), query === "10-es átlépés törtek 3" ? true : false, query);
+  }
+});
+
+test("U2: a 6. osztály szűrője mellett az „Első” nem hoz más osztályú anyagot; üres szűrt találatnál a szám is átléphet", () => {
+  const list = [
+    { id: "k6", title: "Első Károly magyar király", description: "", subject: "tortenelem", classroom: 6 },
+    { id: "h6", title: "Az első világháború előzményei", description: "", subject: "tortenelem", classroom: 6 },
+    { id: "t6", title: "Törtek szorzása", description: "", subject: "matematika", classroom: 6 },
+    { id: "e9", title: "Elsőfokú egyenletek", description: "", subject: "matematika", classroom: 9 },
+    { id: "l3", title: "Első lépések a szorzásban", description: "", subject: "matematika", classroom: 3 },
+    { id: "b1", title: "Betűk és hangok", description: "", subject: "magyar-nyelvtan", classroom: 1 },
+    { id: "t5", title: "Törtek összeadása", description: "Október 7. után", subject: "matematika", classroom: 5 },
+  ];
+  const run = (query: string, selected: number | null) => {
+    const result = filterMaterialsBySearch(list, prepareMaterialSearch(query), selected);
+    return `${result.files.map((file) => file.id).join(",")}|${result.allClassrooms}`;
+  };
+  assert.equal(run("Első", 6), "k6,h6|false", "csak a 6. osztály találatai — az 1. osztály és a más osztályú „első…” címek nem");
+  assert.equal(run("első", null), "k6,h6,e9,l3,b1|false", "szűrő nélkül a szöveges és az 1. osztályos találatok együtt (mint eddig)");
+  assert.equal(run("7", 5), "t5|false", "a szűrt találat nem üres: a puszta szám nem lép át");
+  assert.equal(run("5. osztály", 6), "t5|true", "kifejezett osztály-alak: átlép");
+  assert.equal(run("ötödikes", 6), "t5|true");
+  assert.equal(run("5", 6), "t5|true", "üres szűrt találat: a puszta szám is átléphet");
+  assert.equal(run("ötödik", 6), "t5|true", "üres szűrt találat: a puszta sorszámnév is átléphet");
+  assert.equal(run("9", 6), "e9|true");
+  assert.equal(run("törtek", 9), "|false", "osztály nélküli kifejezés üres találatnál sem lép át");
+  assert.equal(run("7", 6), "t5|true", "üres szűrt találat: a más osztályú szöveges találat („Október 7.”) megjelenhet, jelzéssel");
+  assert.equal(run("8", 6), "|false", "üres szűrt találat, és máshol sincs találat: a szűrő marad");
+  assert.equal(run("6. osztály", 6), "k6,h6,t6|false");
+});
+
+test("U2: a felület kiegészítő illesztése (admin „Nincs osztály”) a szűréssel együtt működik", () => {
+  const list = [
+    { id: "bad", title: "Hibás évfolyamú régi anyag", classroom: 13 },
+    { id: "a4", title: "Törtek", classroom: 4 },
+  ];
+  const also = (file: { classroom: unknown }) => file.classroom === 13;
+  const ids = (selected: number | null) => filterMaterialsBySearch(list, prepareMaterialSearch("nincs osztály"), selected, also).files.map((f) => f.id).join(",");
+  assert.equal(ids(null), "bad");
+  assert.equal(ids(4), "", "aktív szűrő mellett az érvénytelen osztályú anyag nem jelenik meg");
 });

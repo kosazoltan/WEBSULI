@@ -95,3 +95,21 @@ test("szűrés: a szűrőtől eltérő osztályt megnevező keresés minden oszt
   assert.equal(run("5. osztály", null), "a5,b5|false", "szűrő nélkül nincs mit átlépni");
   assert.equal(run("7. osztály", 4), "|true", "üres osztály: nincs találat, de a keresés minden osztályban futott");
 });
+
+// Tulajdonosi döntés 2026-11-18 (U2): a főoldali szűrőt csak kifejezett osztály-alak lépi át, vagy ha a szűrt találat üres.
+test("szűrés: puszta sorszámnév / szám nem lépi át a szűrőt, ha a szűrt találat nem üres", () => {
+  const list = [
+    { id: "k6", title: "Első Károly magyar király", description: "", subject: "tortenelem", classroom: 6 },
+    { id: "e9", title: "Elsőfokú egyenletek", description: "", subject: "matematika", classroom: 9 },
+    { id: "b1", title: "Betűk és hangok", description: "", subject: "magyar-nyelvtan", classroom: 1 },
+    { id: "t5", title: "Törtek összeadása", description: "", subject: "matematika", classroom: 5 },
+  ];
+  const run = (query: string, selected: number | null) => {
+    const result = filterHomeFiles(list, query, selected);
+    return `${result.files.map((file) => file.id).join(",")}|${result.allClassrooms}`;
+  };
+  assert.equal(run("Első", 6), "k6|false");
+  assert.equal(run("5. osztály", 6), "t5|true");
+  assert.equal(run("5", 6), "t5|true", "üres szűrt találatnál a puszta szám is átléphet");
+  assert.equal(run("1. osztály", 6), "b1|true");
+});

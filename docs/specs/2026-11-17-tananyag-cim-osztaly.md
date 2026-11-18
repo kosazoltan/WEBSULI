@@ -77,10 +77,19 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - A meglévő évfolyam-csip / jelvény eltávolítása vagy áthelyezése; az évfolyam-szűrő gombok.
 - A tananyagjavító saját keresője (`lesson-repair-search.ts`) — működik, a 2. szeletben kerülhet a közös modulra.
 
+## Tulajdonosi döntések (2026-11-18)
+
+1. **Formátum:** „5. osztály · Cím” marad (`TITLE_GRADE_STYLE = "long"`); a rövid „5. o. · Cím” alak elvetve.
+2. **Osztályszűrő (U2):** a szűrőt CSAK kifejezett osztály-alak lépi át („5. osztály”, „5.o”, „5.b”, „5-ös”, „ötödikes”,
+   „ötödik osztály”, „V. osztály”, „prog…”), vagy ha a szűrt találat üres. A puszta szám („1”, „5.”) és a puszta sorszámnév („Első”)
+   önmagában nem lépi át.
+3. **A tárolt címek NEM íródnak át**; az előtag csak megjelenítéskor kerül a cím elé. Gyártáskori előtag sincs (a „B” út elvetve).
+4. **A két ellentmondó tételt a tulajdonos javítja az adminban** (a pontos tételek a PR #494 leírásában).
+
 ## Rögzített döntések
 
 - **Formátum:** `"<osztály-felirat> · <tárolt cím>"`; a felirat 1–12: „N. osztály”, 0: „Programozás”. Az alak EGY állandóból
-  váltható (`TITLE_GRADE_STYLE`: `"long"` | `"short"`; a rövid alak „5. o. · Cím” / „Prog. · Cím”) — tulajdonosi döntésre vár.
+  váltható (`TITLE_GRADE_STYLE`: `"long"` | `"short"`; a rövid alak „5. o. · Cím” / „Prog. · Cím”). Döntés 2026-11-18: a hosszú marad.
 - **Nincs duplázás:** ha a tárolt cím már megnevez osztályt (bármelyiket), előtag nincs — a cím változatlan. Ha a cím MÁS osztályt
   nevez meg, mint a mező (2 éles tétel), akkor sincs előtag: a csip / jelvény a mezőt mutatja, az eltérés így látható marad, és nem
   jön létre „3. osztály · … 2. osztály” felirat. A kereső ilyenkor a mezőre ÉS a címre is talál.
@@ -89,7 +98,8 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - **A szöveges ág a TÁROLT címen keres** (review K2): a megjelenített előtagon az „1. osztály” a „11. osztály · …”-t is hozná. Az
   osztályt az osztály-ág a `classroom` mezőből illeszti; a maradék szavak szókezdetre illenek („tört” → „törtek”; az „ötödik elem” nem
   találja a „Történelem” tantárgy anyagait).
-- **Osztályszűrő + osztály-keresés** (review K1): ha a kifejezés az aktív szűrőtől ELTÉRŐ osztályt nevez meg, a keresés minden
+- **Osztályszűrő + osztály-keresés** (review K1; szűkítve 2026-11-18, U2): ha a kifejezés KIFEJEZETT osztály-alakkal az aktív szűrőtől
+  ELTÉRŐ osztályt nevez meg — vagy a szűrt találat üres, és a kifejezés (akár puszta számmal) más osztályt nevez meg —, a keresés minden
   osztályban fut, „Keresés minden osztályban” jelzéssel; a szűrő állapota nem íródik át, a keresés törlésekor újra érvényes. Ha a
   kifejezés nem nevez meg osztályt, vagy ugyanazt nevezi meg, a szűrő érvényes (a korábbi viselkedés). Főoldalon és adminban egyformán.
 - **Gépelés közben a lista nem esik össze** (2. review, U1, U4): az osztály-kifejezést követő, félig beírt osztály-szó („8. os”,
@@ -125,10 +135,8 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 
 ## Nyitott tételek (a 2. független review-ból — ebben a szeletben NEM javítva)
 
-- **U2 — tulajdonosi döntés:** a szűrő-átlépés puszta számra és sorszámnévre is megtörténik („Első”, „10-es átlépés”, „1”, „7”), és
-  ilyenkor más osztályú, a keresett szöveget tartalmazó anyagok is megjelennek a „Keresés minden osztályban” jelzéssel. Találat nem
-  vész el (mérve: 17 181 régi szűrt találatból 0). Lehetőségek: (a) marad így; (b) puszta szám / sorszámnév csak akkor lépje át a
-  szűrőt, ha a szűrt találat üres, vagy ha a kifejezés kifejezetten osztály-alak (osztály-szó, „.o”, képző, osztálybetű).
+- **U2 — LEZÁRVA (tulajdonosi döntés 2026-11-18, megvalósítva):** a szűrőt csak kifejezett osztály-alak lépi át, vagy ha a szűrt
+  találat üres (lásd „Tulajdonosi döntések”, 2. pont).
 - **U3 — jegy:** az osztály + szó keresésnél a szó szókezdetre illik, ezért az összetett szavak utótagját nem találja
   („9. osztály rács” nem találja a „kristályrácsok” szót; „5. osztály anyag” a „tananyag” szót). Az `origin/main` keresőjéhez képest
   nincs veszteség. Lehetséges finomítás: 4+ karakteres szóra részszöveg-illesztés.
@@ -144,7 +152,7 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - **S1 (ez a PR):** közös modul + egységtesztek; főoldali kártya (1. sor) és kereső; admin „Tananyagok” kártya és kereső (3. sor).
 - **S2:** a többi lista a közös modulra: 4. (kereső is), 8. (a „0. o.” hiba), 10., 11., 12. sor.
 - **S3:** szerveroldali szövegek: 14., 15., 16. sor (levéltárgy, PDF-lap címe) — a levél tárgya külső helyen jelenik meg.
-- **S4 (döntés után):** új tananyagok tárolt címe / a régi címek egységesítése (a „B” út); a 17. sor (lapcím a lecke oldalán).
+- **S4:** a 17. sor (lapcím a lecke oldalán). A tárolt címek átírása és a gyártáskori előtag a 2026-11-18-i döntés szerint NEM készül.
 
 ## EARS elfogadás
 
@@ -173,4 +181,6 @@ Végrehajtási utasítás: [`2026-11-17-tananyag-cim-osztaly-vegrehajtas.md`](20
 - [x] E15 The system SHALL a keresőkifejezést leütésenként egyszer elemezni (nem anyagonként).
 - [x] E16 WHEN a látogató osztály-kifejezést gépel („8. o” … „8. osztály”, „5. é” … „5. évfolyam”, „prog” … „programozás”) THEN the
   system SHALL minden leütésnél legalább a kész alak találatait mutatni (a lista nem esik a végső alak alá).
+- [x] E17 WHEN osztályszűrő aktív és a kifejezés puszta szám vagy puszta sorszámnév („1”, „Első”) THEN the system SHALL a szűrőt
+  érvényesíteni, kivéve ha a szűrt találat üres (ekkor minden osztályban keres, jelzéssel).
 - [x] E12 The system SHALL nem módosítani adatbázist, migrációt, tárolt címet, éles adatot, gyártási promptot, játékfájlt.

@@ -164,3 +164,22 @@ Jelentés: a session scratchpadjében (`review-tananyag-cim/jelentes.md`); íté
    - Regresszió: recall minden osztályra és alakra 100%, új hamis találat 0, 81 850 régi találatból 0 veszett el.
 4. Nem javítva, a terv „Nyitott tételek” szakaszában: U2 (tulajdonosi döntés), U3, U5, az A3 maradéka (jegy).
 5. Utána: `gate:stage`; a három böngészős spec `--workers=1` (sorompó külön lépésben); `gate:push`.
+
+## 11. Tulajdonosi döntések (2026-11-18) — U2-szűkítés a friss main beolvasztása után
+
+1. `git merge origin/main` (`54620024`, a #492 Brain Rot E2E-javításával) — ütközés nélkül; a diff a mainhez képest változatlan.
+2. `source/shared/material-title.ts`
+   - a kifejezett osztály-alakból kiolvasott osztályok külön (`explicitGrades` a `MaterialSearch`-ben; a `parseGradeQuery` alakja
+     változatlan): a puszta szám („5”, „5.”) és a puszta sorszámnév nem kifejezett alak;
+   - `searchSpansAllClassrooms`: csak kifejezett, a szűrőtől eltérő osztályra igaz;
+   - `filterMaterialsBySearch(files, search, selectedClassroom, alsoMatches?)`: a szűrő érvényes, kivéve kifejezett más osztálynál,
+     vagy ha a szűrt találat üres és a kifejezés más osztályt nevez meg, amelyre (minden osztályban keresve) van találat.
+3. `source/client/src/lib/home-views.ts` (`filterHomeFiles`) és `source/client/src/components/AdminFileDashboard.tsx`: mindkettő a
+   közös `filterMaterialsBySearch`-re épül (az admin a „Nincs osztály” kiegészítő illesztéssel).
+4. Tesztek: `tests/material-title.test.ts` (kifejezett / nem kifejezett alakok; a 6. osztály szűrője mellett az „Első”; üres szűrt
+   találat; a kiegészítő illesztés), `tests/home-views.test.ts`, `tests/material-title.spec.ts` (mentett 4. osztály: „Első” → csak a
+   4. osztály; „1” → az 1. osztály, jelzéssel; admin: „12” a 4. osztály szűrője mellett). A korábbi „ötödik törtek átlépi a szűrőt”
+   elvárás a döntés szerint változott (a puszta sorszámnév nem kifejezett alak).
+5. Regressziós mérés valós adaton (243 anyag): a kereső-mérés (`a.mts`) és a szűrt mérés (minden osztály-szűrő × a korpusz szavai,
+   szópárjai, címei és az osztály-alakok) — az eredmény a PR-leírásban.
+6. Kapuk: `gate:stage`; a három böngészős spec `--workers=1`; `gate:push`.

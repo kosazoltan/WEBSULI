@@ -1,4 +1,4 @@
-import { matchesMaterialSearch, matchesPreparedSearch, prepareMaterialSearch, searchSpansAllClassrooms, type SearchableMaterial } from "@shared/material-title";
+import { filterMaterialsBySearch, matchesMaterialSearch, prepareMaterialSearch, type SearchableMaterial } from "@shared/material-title";
 import { OTHER_SUBJECT, subjectLabel } from "@shared/subjects";
 
 /**
@@ -50,19 +50,16 @@ export function matchesHomeSearch(
 }
 
 /**
- * A főoldali lista szűrése: keresés ÉS osztályszűrő. Ha a kifejezés az aktív szűrőtől eltérő osztályt nevez meg („5. osztály” a
- * 4. osztály szűrője mellett), a keresés minden osztályban fut (`allClassrooms`) — docs/specs/2026-11-17-tananyag-cim-osztaly.md, K1.
- * A kifejezés elemzése egyszer történik, nem anyagonként.
+ * A főoldali lista szűrése: keresés ÉS osztályszűrő. Ha a kifejezés kifejezett osztály-alakkal az aktív szűrőtől eltérő osztályt
+ * nevez meg („5. osztály” a 4. osztály szűrője mellett), vagy a szűrt találat üres, a keresés minden osztályban fut
+ * (`allClassrooms`) — docs/specs/2026-11-17-tananyag-cim-osztaly.md, K1 + U2. A kifejezés elemzése egyszer történik, nem anyagonként.
  */
 export function filterHomeFiles<T extends SearchableMaterial>(
   files: readonly T[],
   query: string,
   selectedClassroom: number | null,
 ): { files: T[]; allClassrooms: boolean } {
-  const search = prepareMaterialSearch(query);
-  const allClassrooms = searchSpansAllClassrooms(search, selectedClassroom);
-  const inScope = (file: T) => allClassrooms || selectedClassroom === null || file.classroom === selectedClassroom;
-  return { files: files.filter((file) => inScope(file) && matchesPreparedSearch(file, search)), allClassrooms };
+  return filterMaterialsBySearch(files, prepareMaterialSearch(query), selectedClassroom);
 }
 
 export type SubjectGroup<T> = { label: string; files: T[] };

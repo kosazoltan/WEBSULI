@@ -30,13 +30,19 @@ const FILES = [
 const PREFIX: Record<string, string> = { a4: "4. osztály", k4: "4. osztály", b12: "12. osztály", p0: "Programozás", l5: "5. osztály", e1: "1. osztály", e11: "11. osztály" };
 const VIEWPORTS = [{ name: "360x640", width: 360, height: 640 }, { name: "390x844", width: 390, height: 844 }, { name: "asztali", width: 1280, height: 800 }];
 
-async function mock(page: Page, admin: boolean) {
+/** U2 (tulajdonosi döntés 2026-11-18): „első…” című anyag a 4. és az 1. osztályban — a puszta sorszámnév ne lépje át a szűrőt. */
+const U2_EXTRA = [
+  { ...base, id: "n4", title: "Első lépések a törtekkel", classroom: 4, subject: "matematika" },
+  { ...base, id: "x1", title: "Első lépések az olvasásban", classroom: 1, subject: "magyar-nyelvtan" },
+];
+
+async function mock(page: Page, admin: boolean, extra: typeof U2_EXTRA = []) {
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/auth/user") return route.fulfill({ json: admin ? { id: "admin-fixture", isAdmin: true, firstName: "Admin" } : null });
     if (path === "/api/config") return route.fulfill({ json: { baseUrl: "http://localhost", materialOrigin: "" } });
     if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "probe" } });
-    if (path === "/api/html-files") return route.fulfill({ json: FILES });
+    if (path === "/api/html-files") return route.fulfill({ json: [...FILES, ...extra] });
     if (path === "/api/studio/workflows") return route.fulfill({ json: { runs: [] } });
     return route.fulfill({ json: path.includes("likes") ? {} : [] });
   });
@@ -146,13 +152,13 @@ for (const vp of VIEWPORTS) {
   test(`főoldal ${vp.name}: mentett 4. osztály mellett az „5. osztály” keresés az 5. osztály anyagait mutatja`, async ({ page }) => {
     if (SHOTS_ONLY) return; // az „előtte” képekhez ez az eset nem kell
     await page.setViewportSize(vp);
-    await mock(page, false);
+    await mock(page, false, U2_EXTRA);
     await page.addInitScript(() => window.localStorage.setItem("websuli.classroomGrade", "4"));
     await page.goto("/");
     await expect(page.getByTestId("link-file-a4")).toBeVisible({ timeout: 60_000 });
     const filter4 = page.getByTestId("button-filter-classroom-4");
     await expect(filter4).toHaveAttribute("aria-pressed", "true");
-    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4"]);
+    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4", "n4"]);
     const search = page.getByTestId("input-search");
     const notice = page.getByTestId("search-all-classrooms");
     await expect(notice).toHaveCount(0);
@@ -179,15 +185,34 @@ for (const vp of VIEWPORTS) {
 
     // Ugyanaz az osztály vagy osztály nélküli kifejezés: a szűrő érvényes marad (a korábbi viselkedés).
     await search.fill("4. osztály");
-    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4"]);
+    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4", "n4"]);
     await expect(notice).toHaveCount(0);
     await search.fill("törtek");
-    await expect.poll(() => homeIds(page)).toEqual(["a4"]);
+    await expect.poll(() => homeIds(page)).toEqual(["a4", "n4"]);
     await expect(notice).toHaveCount(0);
+
+    // U2: a puszta sorszámnév nem lépi át a szűrőt, ha a szűrt találat nem üres — az 1. osztály „Első lépések…” anyaga nem jön be.
+    await search.fill("Első");
+    await expect.poll(() => homeIds(page)).toEqual(["n4"]);
+    await expect(notice).toHaveCount(0);
+    await search.fill("első lépések");
+    await expect.poll(() => homeIds(page)).toEqual(["n4"]);
+    await expect(notice).toHaveCount(0);
+    // U2: üres szűrt találatnál a puszta szám is átléphet (jelzéssel).
+    await search.fill("1");
+    await expect.poll(() => homeIds(page)).toEqual(["e1", "x1"]);
+    await expect(notice).toBeVisible();
+    // U2: a kifejezett osztály-alak továbbra is átlép.
+    await search.fill("1. osztály");
+    await expect.poll(() => homeIds(page)).toEqual(["e1", "x1"]);
+    await expect(notice).toBeVisible();
+    await search.fill("elsős");
+    await expect.poll(() => homeIds(page)).toEqual(["e1", "x1"]);
+    await expect(notice).toBeVisible();
 
     // A keresés törlésekor a szűrő újra él.
     await search.fill("");
-    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4"]);
+    await expect.poll(() => homeIds(page)).toEqual(["a4", "k4", "n4"]);
     await expect(filter4).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -243,6 +268,10 @@ for (const vp of VIEWPORTS) {
     await search.fill("törtek");
     await expect.poll(() => adminIds(page)).toEqual(["a4"]);
     await expect(page.getByTestId("search-all-classrooms")).toHaveCount(0);
+    // U2: a puszta szám csak üres szűrt találatnál lép át („12”: a 4. osztályban nincs találat → a 12. osztály anyaga, jelzéssel).
+    await search.fill("12");
+    await expect.poll(() => adminIds(page)).toEqual(["b12"]);
+    await expect(page.getByTestId("search-all-classrooms")).toBeVisible();
     await search.fill("");
     await expect.poll(() => adminIds(page)).toEqual(["a4", "k4"]);
     expect(await overflowX(page)).toBeLessThanOrEqual(1);

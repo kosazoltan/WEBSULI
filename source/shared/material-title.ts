@@ -124,6 +124,7 @@ const QUERY_PROGRAMMING = new RegExp(
   `${CAPTURED_WORD_START}prog(?:r(?:a(?:m(?:o(?:z\\p{L}*)?)?)?)?)?\\.?(?:\\s+(?:alapismeret\\p{L}*|alapok))?${WORD_END}`,
   "gu",
 );
+const BARE_NUMBER = /^\d{1,2}\s*\.?\s*$/u;
 const GRADE_WORD_ONLY = new RegExp(`^${QUERY_GRADE_WORD}$`, "u");
 
 /** Kötőszó, névelő az osztály-kifejezések között („5. és 6. osztály”, „a 4. osztály”) — nem keresőszó. */
@@ -136,32 +137,57 @@ export type GradeQuery = {
   rest: string[];
 };
 
+type AnalyzedGradeQuery = GradeQuery & {
+  /**
+   * A KIFEJEZETT osztály-alakból kiolvasott osztályok („5. osztály”, „5.o”, „5.b”, „5-ös”, „ötödikes”, „ötödik osztály”, „V. osztály”,
+   * „prog…”) — a puszta szám („5”, „5.”) és a puszta sorszámnév („első”) nincs köztük (tulajdonosi döntés 2026-11-18, U2).
+   */
+  explicitGrades: number[];
+};
+
 /** A keresőkifejezés osztály-kifejezései és a maradék szavak. */
 export function parseGradeQuery(query: string): GradeQuery {
+  const { grades, rest } = analyzeGradeQuery(query);
+  return { grades, rest };
+}
+
+function analyzeGradeQuery(query: string): AnalyzedGradeQuery {
   const grades = new Set<number>();
+  const explicit = new Set<number>();
   let text = foldText(query);
   text = text.replace(QUERY_PROGRAMMING, (_match, before: string) => {
     grades.add(0);
+    explicit.add(0);
     return `${before} `;
   });
-  text = text.replace(QUERY_ORDINAL, (_match, before: string, word: string) => {
+  text = text.replace(QUERY_ORDINAL, (match, before: string, word: string) => {
     const grade = ORDINAL_GRADE.get(word);
-    if (grade !== undefined) grades.add(grade);
+    if (grade !== undefined) {
+      grades.add(grade);
+      // Kifejezett alak: képzővel vagy osztály-szóval („ötödikes”, „ötödik osztály”); a puszta „ötödik” nem az.
+      if (match.slice(before.length) !== word) explicit.add(grade);
+    }
     return `${before} `;
   });
   text = text.replace(QUERY_ROMAN, (_match, before: string, numeral: string) => {
     const grade = ROMAN_GRADE.get(numeral);
-    if (grade !== undefined) grades.add(grade);
+    if (grade !== undefined) {
+      grades.add(grade);
+      explicit.add(grade);
+    }
     return `${before} `;
   });
   text = text.replace(QUERY_NUMBER, (match, before: string, digits: string) => {
     const grade = normalizeClassroom(Number(digits));
     if (grade === null) return match;
     grades.add(grade);
+    // Kifejezett alak: osztály-szó, „.o”, képző vagy osztálybetű áll a szám után; a puszta „5” / „5.” nem az.
+    if (!BARE_NUMBER.test(match.slice(before.length))) explicit.add(grade);
     return `${before} `;
   });
   const rest = text.split(/[^\p{L}\p{N}]+/u).filter((word) => word && !GRADE_WORD_ONLY.test(word) && !FILLER_WORDS.has(word));
-  return { grades: [...grades].sort((a, b) => a - b), rest };
+  const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
+  return { grades: sorted(grades), rest, explicitGrades: sorted(explicit) };
 }
 
 export type SearchableMaterial = {
@@ -172,14 +198,14 @@ export type SearchableMaterial = {
 };
 
 /** Az egyszer elemzett keresőkifejezés (leütésenként egyszer készül, nem anyagonként). */
-export type MaterialSearch = GradeQuery & {
+export type MaterialSearch = AnalyzedGradeQuery & {
   /** A teljes kifejezés hajtogatva, a szélső szóközök nélkül; üres = nincs keresés. */
   phrase: string;
 };
 
 export function prepareMaterialSearch(query: string): MaterialSearch {
   const phrase = foldText(query.trim());
-  return phrase ? { phrase, ...parseGradeQuery(query) } : { phrase, grades: [], rest: [] };
+  return phrase ? { phrase, ...analyzeGradeQuery(query) } : { phrase, grades: [], rest: [], explicitGrades: [] };
 }
 
 /**
@@ -204,9 +230,32 @@ export function matchesMaterialSearch(file: SearchableMaterial, query: string): 
 }
 
 /**
- * Ha a kifejezés az aktív osztályszűrőtől ELTÉRŐ osztályt nevez meg („5. osztály” a 4. osztály szűrője mellett), a keresés minden
- * osztályban fut — különben az osztály-keresés üres lenne. A szűrő állapota nem változik; a keresés törlésekor újra érvényes.
+ * Ha a kifejezés KIFEJEZETT osztály-alakkal az aktív osztályszűrőtől ELTÉRŐ osztályt nevez meg („5. osztály” a 4. osztály szűrője
+ * mellett), a keresés minden osztályban fut — különben az osztály-keresés üres lenne. A puszta szám és a puszta sorszámnév („1”,
+ * „Első”) önmagában nem lépi át a szűrőt (tulajdonosi döntés 2026-11-18, U2) — lásd `filterMaterialsBySearch`.
  */
 export function searchSpansAllClassrooms(search: MaterialSearch, selectedClassroom: number | null): boolean {
-  return selectedClassroom !== null && search.grades.some((grade) => grade !== selectedClassroom);
+  return selectedClassroom !== null && search.explicitGrades.some((grade) => grade !== selectedClassroom);
+}
+
+/**
+ * Keresés ÉS osztályszűrő. A szűrő érvényes, kivéve ha (a) a kifejezés kifejezett osztály-alakkal más osztályt nevez meg, vagy
+ * (b) a szűrt találat üres, és a kifejezés (akár puszta számmal / sorszámnévvel) más osztályt nevez meg, amelyben van találat.
+ * Ilyenkor a keresés minden osztályban fut (`allClassrooms`); a szűrő állapota nem változik. `alsoMatches`: a felület saját
+ * kiegészítő illesztése (admin: „Nincs osztály”).
+ */
+export function filterMaterialsBySearch<T extends SearchableMaterial>(
+  files: readonly T[],
+  search: MaterialSearch,
+  selectedClassroom: number | null,
+  alsoMatches?: (file: T) => boolean,
+): { files: T[]; allClassrooms: boolean } {
+  const matched = files.filter((file) => matchesPreparedSearch(file, search) || alsoMatches?.(file) === true);
+  if (selectedClassroom === null) return { files: matched, allClassrooms: false };
+  if (searchSpansAllClassrooms(search, selectedClassroom)) return { files: matched, allClassrooms: true };
+  const scoped = matched.filter((file) => file.classroom === selectedClassroom);
+  if (scoped.length === 0 && matched.length > 0 && search.grades.some((grade) => grade !== selectedClassroom)) {
+    return { files: matched, allClassrooms: true };
+  }
+  return { files: scoped, allClassrooms: false };
 }
