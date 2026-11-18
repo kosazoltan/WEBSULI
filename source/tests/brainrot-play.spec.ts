@@ -153,9 +153,10 @@ test.describe("kampóval mért szabályok", () => {
     await expect(cages(page)).toHaveCount(4, { timeout: 10_000 });
   }
 
-  // SPEC-VÁLTOZÁS 2026-11-17 (terv 2026-11-17-brainrot-valaszido D5, tulajdonosi döntés „Álljon meg”): a 90 mp-es menet-óra
-  // a nyitott kérdés alatt ÁLL (régi elvárás: jár).
-  test("J1 + menet-óra: nyitott kérdésnél a világ lassítva fut (≥ 0,35×, < 1×), és a 90 mp-es menet-óra áll (D5)", async ({ page }) => {
+  // SPEC-VÁLTOZÁS 2026-11-18 (terv 2026-11-17-brainrot-valaszido D5-módosítás, tulajdonosi döntés „Csak a többletidőre
+  // álljon”): a kérdés alatt a menet-óra a régi ablaknyit fogy — az első 1 mp-ben (benne a 600 ms-os előjelzés, amikor áll)
+  // lassabban fogy, mint a valós idő, de jár. A pontos mennyiséget (a régi ablak) a magteszt méri.
+  test("J1 + menet-óra: nyitott kérdésnél a világ lassítva fut (≥ 0,35×, < 1×), a menet-óra az előjelzés után jár (D5-módosítás)", async ({ page }) => {
     await startWithQuestion(page);
     // A lapon belül mérve: két minta 1 s különbséggel (a valós időt is a lap méri).
     const m = await page.evaluate(async () => {
@@ -170,7 +171,8 @@ test.describe("kampóval mért szabályok", () => {
     expect(m.open, "a kérdés végig nyitva volt").toBe(2);
     expect(m.sim, "a világ a kérdés alatt fut (≥ 0,35×)").toBeGreaterThanOrEqual(0.35);
     expect(m.sim, "a világ a kérdés alatt lassul (0,6×)").toBeLessThan(0.8);
-    expect(m.clock, "a 90 mp-es menet-óra a kérdés alatt áll (D5)").toBe(0);
+    expect(m.clock, "a menet-óra az előjelzés alatt áll, utána jár: lassabb a valós időnél").toBeLessThan(0.95);
+    expect(m.clock, "a menet-óra a régi ablakon belül jár").toBeGreaterThan(0.2);
   });
 
   test("J4/J5: rossz ketrec → a helyes ketrec ≥ 1,8 mp-ig zöld (képkockánként), nincs dialógus; „Miért?” alatt a világ áll", async ({ page }) => {
