@@ -113,13 +113,13 @@ def look_at(obj, target):
     obj.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
 
 
-def place(cam, rig, azimuth_deg, elevation_deg, distance, target):
+def place(cam, rig, azimuth_deg, elevation_deg, distance, target, light_turn_deg=0.0):
     """azimuth 0 = szemből (a kamera a −Y oldalon); pozitív = a figura bal oldala (+X) felé kerül."""
     az, el = math.radians(azimuth_deg), math.radians(elevation_deg)
     target = Vector(target)
     cam.location = target + Vector((math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el))) * distance
     look_at(cam, target)
-    rig.rotation_euler = (0.0, 0.0, az)
+    rig.rotation_euler = (0.0, 0.0, az + math.radians(light_turn_deg))
 
 
 def render(scene, path, w, h):
@@ -173,15 +173,15 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     print("KABALA-RENDER motor=%s haromszog=%d" % (scene.render.engine, built["tris"]))
 
-    center = (0.10, 0.12, 0.64)
+    center = (0.16, 0.12, 0.72)
     views = [
-        ("01-elol", 0.0, 6.0, 5.0, center, "idle", 0),
-        ("02-haromnegyed", -35.0, 10.0, 5.0, center, "idle", 0),
-        ("03-oldal", -90.0, 5.0, 5.0, (0.0, 0.12, 0.64), "idle", 0),
-        ("04-hatul", 180.0, 10.0, 5.0, (-0.10, 0.12, 0.64), "idle", 0),
+        ("01-elol", 0.0, 6.0, 5.7, center, "idle", 0),
+        ("02-haromnegyed", -35.0, 10.0, 5.7, center, "idle", 0),
+        ("03-oldal", -90.0, 5.0, 5.7, (0.0, 0.14, 0.72), "idle", 0),
+        ("04-hatul", 180.0, 10.0, 5.7, (0.16, 0.12, 0.72), "idle", 0),
         ("05-arc-kozeli", -12.0, 3.0, 1.9, (0.0, 0.0, 0.870), "idle", 0),
-        ("07-haromnegyed-farok", 40.0, 12.0, 5.0, center, "idle", 0),
-        ("08-napozo", -22.0, 12.0, 4.6, (0.08, 0.0, 0.50), "sunbathe", 36),
+        ("07-haromnegyed-farok", 40.0, 12.0, 5.7, center, "idle", 0),
+        ("08-napozo", -22.0, 12.0, 5.2, (0.16, 0.05, 0.58), "sunbathe", 36),
     ]
     for name, az, el, dist, target, clip, frame in views:
         if only and name[:2] not in only:
@@ -189,6 +189,23 @@ def main():
         maki_anim.show(arm, face, clip, frame)
         place(cam, rig, az, el, dist, target)
         render(scene, os.path.join(OUT_DIR, name + ".jpg"), size, size)
+
+    # orr-ellenőrző lap: négy irány (elöl, háromnegyed, oldal, alulról-szemből) × két megvilágítás
+    if not only or "12" in only:
+        maki_anim.show(arm, face, "idle", 0)
+        tile = size // 2
+        shots = ((0.0, 2.0), (-40.0, 6.0), (-90.0, 2.0), (0.0, -30.0))
+        paths = []
+        for row, turn in enumerate((0.0, 125.0)):
+            for col, (az, el) in enumerate(shots):
+                place(cam, rig, az, el, 0.95, (0.0, -0.20, 0.815), light_turn_deg=turn)
+                path = os.path.join(OUT_DIR, "_orr%d%d.jpg" % (row, col))
+                render(scene, path, tile, tile)
+                paths.append(path)
+        px = [load_pixels(q) for q in paths]
+        save_pixels(os.path.join(OUT_DIR, "12-orr-ellenorzes.jpg"), np.concatenate([np.concatenate(px[4:8], axis=1), np.concatenate(px[0:4], axis=1)], axis=0))
+        for q in paths:
+            os.remove(q)
 
     if only and "06" not in only:
         return
@@ -202,9 +219,9 @@ def main():
     paths = []
     for i, (caption, clip, frame) in enumerate(tiles):
         maki_anim.show(arm, face, clip, frame)
-        place(cam, rig, -18.0, 7.0, 5.3, (0.10, 0.12, 0.66))
+        place(cam, rig, -18.0, 7.0, 6.2, (0.16, 0.12, 0.72))
         text.data.body = caption
-        text.location = Vector((0.10, -0.35, 1.47))
+        text.location = Vector((0.16, -0.35, 1.66))
         text.rotation_euler = cam.rotation_euler
         path = os.path.join(OUT_DIR, "_tile%d.jpg" % i)
         render(scene, path, tile, tile)

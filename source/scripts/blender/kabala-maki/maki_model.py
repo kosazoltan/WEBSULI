@@ -41,7 +41,7 @@ def sstep(e0, e1, x):
     return t * t * (3.0 - 2.0 * t)
 
 
-GREY = srgb("#a3a2a6")        # hát, végtagok külseje (enyhén meleg szürke)
+GREY = srgb("#87868d")        # hát, végtagok külseje (határozott, enyhén meleg szürke)
 CAP = srgb("#77777f")         # fejtető-„sapka”, tarkó
 WHITE_FUR = srgb("#fbf8f1")   # arc, has, mellkas
 PATCH = srgb("#25242a")       # szem körüli folt
@@ -70,7 +70,7 @@ HC = Vector((0.0, 0.0, 0.875))          # a fej közepe
 HR = Vector((0.235, 0.215, 0.205))      # a fej sugarai  → fej : test magasság ≈ 1 : 1,63
 SNOUT_A = HC + Vector((0.0, -0.100, -0.034))
 SNOUT_B = HC + Vector((0.0, -0.326, -0.082))
-NOSE_C = HC + Vector((0.0, -0.342, -0.062))
+NOSE_C = HC + Vector((0.0, -0.320, -0.060))
 EYE_R = Vector((0.070, 0.074, 0.045))   # helyi: x jobbra, y fel, z előre (a pólus)
 EYE_DIR_X = 0.50
 EYE_UP = 0.13
@@ -87,13 +87,13 @@ ANKLE = Vector((0.116, 0.0, 0.062))
 TOE = Vector((0.120, -0.185, 0.032))
 
 TAIL_PTS = [
-    Vector((0.00, 0.100, 0.320)), Vector((0.04, 0.290, 0.330)), Vector((0.15, 0.390, 0.500)),
-    Vector((0.29, 0.350, 0.790)), Vector((0.365, 0.280, 1.050)), Vector((0.335, 0.170, 1.240)),
-    Vector((0.250, 0.070, 1.255)), Vector((0.200, 0.040, 1.150)),
+    Vector((0.00, 0.100, 0.320)), Vector((0.10, 0.300, 0.265)), Vector((0.30, 0.390, 0.340)),
+    Vector((0.45, 0.350, 0.620)), Vector((0.485, 0.290, 0.950)), Vector((0.43, 0.210, 1.250)),
+    Vector((0.305, 0.130, 1.410)), Vector((0.175, 0.085, 1.370)), Vector((0.150, 0.080, 1.245)),
 ]
 TAIL_BONES = 8
 TAIL_BANDS = 14              # váltakozó világos–sötét; az utolsó (a farokvég) sötét
-SOFT_TRIS = 21000            # az összefüggő háló cél-háromszögszáma
+SOFT_TRIS = 19000            # az összefüggő háló cél-háromszögszáma
 VOXEL = 0.0085
 
 
@@ -158,6 +158,31 @@ def catmull_at(points, t):
     u = g - i
     p0, p1, p2, p3 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
     return 0.5 * ((2 * p1) + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u)
+
+
+_TAIL_LUT = []
+
+
+def tail_at(t):
+    """A farok pályájának pontja ÍVHOSSZ szerint (t ∈ [0, 1]): egyenlő hosszú gyűrűk és csontok."""
+    if not _TAIL_LUT:
+        n = 800
+        pts = [catmull_at(TAIL_PTS, i / n) for i in range(n + 1)]
+        acc = [0.0]
+        for i in range(n):
+            acc.append(acc[-1] + (pts[i + 1] - pts[i]).length)
+        _TAIL_LUT.extend((pts, acc))
+    pts, acc = _TAIL_LUT
+    target = max(0.0, min(1.0, t)) * acc[-1]
+    lo, hi = 0, len(acc) - 1
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if acc[mid] <= target:
+            lo = mid
+        else:
+            hi = mid
+    span = acc[hi] - acc[lo]
+    return pts[lo].lerp(pts[hi], (target - acc[lo]) / span if span > 1e-12 else 0.0)
 
 
 def catmull(points, samples):
@@ -272,8 +297,10 @@ def face_paint(dirs):
         col = nmix(col, BLUSH, (1.0 - nstep(0.3, 1.0, b)) * 0.55)
 
     naz, nel = angles_of(NOSE_C)
-    m = np.sqrt((az / 7.0) ** 2 + ((el - nel - 1.5) / 5.0) ** 2)
-    col = nmix(col, MUZZLE, 1.0 - nstep(0.85, 1.1, m))
+    # az orr töve: az orr SAJÁT színe, pontosan az orr alá festve — az orr így a pofa végéből nő ki
+    # (korábban itt egy nagyobb, szürke folt volt az orr mögött: attól látszott úgy, mintha az orr a levegőben lógna)
+    m = np.sqrt((az / 5.6) ** 2 + ((el - nel - 0.4) / 4.6) ** 2)
+    col = nmix(col, NOSE, 1.0 - nstep(0.93, 1.05, m))
     return col
 
 
@@ -307,8 +334,8 @@ def make_face_texture():
 
 def limb_color(direction, side, t_dark):
     """Végtag: kívül szürke, a test felé eső belső oldalon világos; a vége (kéz / láb) sötét."""
-    inner = sstep(0.15, 0.75, direction.dot(Vector((-side, -0.35, 0.0)).normalized()))
-    return mix(mix(GREY, WHITE_FUR, inner * 0.75), PAW, t_dark)
+    inner = sstep(0.50, 0.95, direction.dot(Vector((-side, -0.35, 0.0)).normalized()))
+    return mix(mix(GREY, WHITE_FUR, inner * 0.45), PAW, t_dark)
 
 
 def build_soft(g):
@@ -375,7 +402,7 @@ def build_soft(g):
     v, f, units = sphere(BODY_C, BODY_R, 28, 20, deform=pear)
     cols, ws = [], []
     for p, u in zip(v, units):
-        belly = 1.0 - ((u.x / 0.74) ** 2 + ((u.z - 0.05) / 1.05) ** 2)
+        belly = 1.0 - ((u.x / 0.60) ** 2 + ((u.z - 0.05) / 1.05) ** 2)
         cols.append(mix(GREY, WHITE_FUR, sstep(-0.10, 0.10, belly) * sstep(0.0, 0.3, -u.y)))
         t = (p.z - 0.26) / 0.40
         chest = sstep(0.55, 0.85, t)
@@ -383,13 +410,13 @@ def build_soft(g):
         ws.append({"hips": hips, "chest": chest, "spine": max(0.0, 1.0 - hips - chest)})
     g.add(v, f, cols, ws, MAT_FUR)
     # bolyhos fehér mellkas
-    v, f, units = sphere(Vector((0.0, -0.066, 0.560)), Vector((0.105, 0.060, 0.115)), 16, 10)
+    v, f, units = sphere(Vector((0.0, -0.066, 0.560)), Vector((0.090, 0.060, 0.115)), 16, 10)
     g.add(v, f, [WHITE_FUR] * len(v), [{"chest": 1.0}] * len(v), MAT_FUR)
     # faroktő
     v, f, units = sphere(Vector((0.0, 0.100, 0.315)), Vector((0.100, 0.085, 0.090)), 14, 10)
     g.add(v, f, [GREY] * len(v), [{"hips": 1.0}] * len(v), MAT_FUR)
 
-    # karok: karcsú, a vállnál a törzsbe olvad; sötét kézfej ujj-dudorokkal
+    # karok: karcsú, a vállnál a törzsbe olvad (a kézfej külön, pontos rész: build_hard)
     for side, sfx in ((1.0, "L"), (-1.0, "R")):
         pts = [mirror(SHOULDER, side) + Vector((-0.045 * side, 0.0, -0.005)), mirror(ELBOW, side), mirror(HAND, side)]
         v, f, units = sphere(mirror(SHOULDER, side) + Vector((-0.012 * side, 0.0, -0.012)), Vector((0.062, 0.060, 0.062)), 14, 10)
@@ -405,18 +432,8 @@ def build_soft(g):
             direction = (p - path[r])
             cols.append(limb_color(direction.normalized() if direction.length > 1e-6 else Vector((side, 0, 0)), side, sstep(0.80, 0.95, ts[r])))
         g.add(v, f, cols, ws, MAT_FUR)
-        fw = {"forearm." + sfx: 1.0}
-        d = (pts[2] - pts[1]).normalized()
-        across = d.cross(Vector((0.0, -1.0, 0.0))).normalized()
-        palm = pts[2] + d * 0.012
-        v, f, units = sphere(palm, Vector((0.052, 0.044, 0.054)), 14, 10, frame(d))
-        g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR)
-        for k in (-1.0, 0.0, 1.0):
-            tip = palm + d * (0.046 - 0.007 * abs(k)) + across * (0.030 * k)
-            v, f, units = sphere(tip, Vector((0.021, 0.021, 0.028)), 8, 6, frame(d + across * 0.25 * k))
-            g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR)
 
-    # hátsó láb: erős comb, karcsúbb lábszár, hosszú sötét lábfej
+    # hátsó láb: erős comb, karcsúbb lábszár (a lábfej külön, pontos rész: build_hard)
     for side, sfx in ((1.0, "L"), (-1.0, "R")):
         c = Vector((0.098 * side, 0.0, 0.275))
         v, f, units = sphere(c, Vector((0.092, 0.104, 0.128)), 18, 14)
@@ -437,14 +454,6 @@ def build_soft(g):
             direction = (p - path[r])
             cols.append(limb_color(direction.normalized() if direction.length > 1e-6 else Vector((side, 0, 0)), side, sstep(0.72, 0.95, ts[r])))
         g.add(v, f, cols, ws, MAT_FUR)
-        fw = {"foot." + sfx: 1.0}
-        c = Vector((0.120 * side, -0.072, 0.040))
-        v, f, units = sphere(c, Vector((0.062, 0.124, 0.040)), 16, 10)
-        g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR)
-        for k in (-1.0, 0.0, 1.0):
-            toe = Vector((0.120 * side + 0.036 * k, -0.182 + 0.012 * abs(k), 0.034))
-            v, f, units = sphere(toe, Vector((0.025, 0.030, 0.026)), 8, 6)
-            g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR)
 
 
 # ---------------------------------------------------------------- 2–3. összeolvasztás és adatátvitel
@@ -517,12 +526,64 @@ def transfer(src, verts):
     return tags, cols, weights
 
 
+def relax(verts, faces, tags, weights):
+    """Célzott simítás a kész hálón: Taubin-simítás (zsugorodás nélkül) a testen és a fej hátulján — az arc és a fül
+    érintetlen —, valamint a csontsúlyok lágyítása a testen (puhább csípő, térd, váll)."""
+    n = len(verts)
+    sets = [set() for _ in range(n)]
+    for a, b, c in faces:
+        sets[a].update((b, c))
+        sets[b].update((a, c))
+        sets[c].update((a, b))
+    nbr = [sorted(x) for x in sets]
+    strength = []
+    for i, v in enumerate(verts):
+        if tags[i] == "body":
+            strength.append(1.0)
+        elif tags[i] == "head":
+            strength.append(sstep(0.10, 0.50, (v - HC).normalized().y))     # csak a fej hátulja
+        else:
+            strength.append(0.0)
+    pts = [v.copy() for v in verts]
+    for _ in range(26):
+        for lam in (0.60, -0.62):
+            nxt = []
+            for i in range(n):
+                k = strength[i]
+                if k <= 0.0 or not nbr[i]:
+                    nxt.append(pts[i])
+                    continue
+                avg = Vector((0.0, 0.0, 0.0))
+                for j in nbr[i]:
+                    avg += pts[j]
+                avg /= len(nbr[i])
+                nxt.append(pts[i] + (avg - pts[i]) * (lam * k))
+            pts = nxt
+    for _ in range(5):
+        nxt = []
+        for i in range(n):
+            if tags[i] != "body" or not nbr[i]:
+                nxt.append(weights[i])
+                continue
+            acc = {b: x * 0.5 for b, x in weights[i].items()}
+            share = 0.5 / len(nbr[i])
+            for j in nbr[i]:
+                for b, x in weights[j].items():
+                    acc[b] = acc.get(b, 0.0) + x * share
+            top = sorted(acc.items(), key=lambda kv: (-kv[1], kv[0]))[:4]
+            norm = sum(x for _b, x in top)
+            nxt.append({b: x / norm for b, x in top})
+        weights = nxt
+    return pts, weights
+
+
 def build_skin(g):
     """A puha részekből az összefüggő, színezett, súlyozott háló → g-be. Vissza: BVH-fa (a száj vetítéséhez)."""
     src = Geo()
     build_soft(src)
     verts, faces = remesh(src, SOFT_TRIS)
     tags, cols, weights = transfer(src, verts)
+    verts, weights = relax(verts, faces, tags, weights)
 
     head_idx = [i for i, t in enumerate(tags) if t == "head"]
     dirs = np.array([tuple((verts[i] - HC).normalized()) for i in head_idx], dtype=np.float64)
@@ -577,11 +638,54 @@ def tail_rings():
     return out
 
 
+def digit(base, direction, length, radius, bend):
+    """Egy ujj: rövid, lekerekített végű cső, enyhe hajlással."""
+    path, radii = [], []
+    for i in range(6):
+        k = i / 5.0
+        path.append(base + direction * (length * k) + bend * (k * k))
+        radii.append(radius * (1.0 - 0.18 * k))
+    path.append(base + direction * (length * 1.10) + bend * 1.15)
+    radii.append(radius * 0.42)
+    return tube(path, radii, 8)
+
+
+def build_paws(g):
+    """Kéz (tenyér + négy ujj + hüvelyk) és láb (talp + öt lábujj): sötét, jól olvasható ujjakkal."""
+    for side, sfx in ((1.0, "L"), (-1.0, "R")):
+        fw = {"forearm." + sfx: 1.0}
+        wrist = mirror(HAND, side)
+        d = (wrist - mirror(ELBOW, side)).normalized()
+        across = d.cross(Vector((0.0, -1.0, 0.0))).normalized()
+        fwd = across.cross(d).normalized()
+        rot = Matrix((across, d.cross(across).normalized(), d)).transposed()
+        palm = wrist + d * 0.020
+        v, f, units = sphere(palm, Vector((0.041, 0.023, 0.040)), 14, 10, rot)
+        g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR, "paw")
+        for off, ln in ((-0.028, 0.040), (-0.0095, 0.049), (0.0095, 0.050), (0.028, 0.043)):
+            v, f, _ = digit(palm + d * 0.028 + across * off, (d + across * (off * 7.0)).normalized(), ln, 0.0125, fwd * 0.010)
+            g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR, "paw")
+        inward = across * side                      # a test felé
+        v, f, _ = digit(palm + inward * 0.030 + d * 0.004, (inward * 0.85 + d * 0.50).normalized(), 0.036, 0.0135, fwd * 0.008)
+        g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR, "paw")
+
+        fw = {"foot." + sfx: 1.0}
+        c = Vector((0.118 * side, -0.066, 0.036))
+        v, f, units = sphere(c, Vector((0.058, 0.104, 0.036)), 16, 10)
+        g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR, "paw")
+        for k, off in enumerate((-0.040, -0.020, 0.0, 0.020, 0.040)):
+            big = 1.18 if off * side < -0.03 else 1.0       # a belső (nagy) lábujj vastagabb
+            base = Vector((0.118 * side + off, -0.150 + 0.010 * abs(off) / 0.04, 0.026))
+            v, f, _ = digit(base, Vector((off * 3.0, -1.0, -0.06)).normalized(), 0.046 - 0.006 * abs(off) / 0.04, 0.0145 * big, Vector((0.0, 0.0, -0.004)))
+            g.add(v, f, [PAW] * len(v), [fw] * len(v), MAT_FUR, "paw")
+
+
 def build_hard(g):
     hd = {"head": 1.0}
+    build_paws(g)
 
     # orr
-    v, f, units = sphere(NOSE_C, Vector((0.027, 0.019, 0.020)), 14, 8)
+    v, f, units = sphere(NOSE_C, Vector((0.031, 0.027, 0.023)), 16, 10)
     g.add(v, f, [NOSE] * len(v), [hd] * len(v), MAT_EYE)
 
     # szemek
@@ -590,18 +694,18 @@ def build_hard(g):
         v, f, units = sphere(c, EYE_R, 24, 16, rot)
         g.add(v, f, [eye_color(u) for u in units], [hd] * len(v), MAT_EYE)
 
-    # farok: vastag, bozontos, 14 gyűrű, fekete vég; a körvonalon gyűrűnként néhány puha tincs
+    # farok: hosszú, bozontos, 14 egyenlő gyűrű, fekete vég; a körvonalon gyűrűnként néhány puha tincs
     rings = tail_rings()
     sides = 14
     path, radii, ring_cols, ts = [], [], [], []
     for t, band, frac in rings:
-        path.append(catmull_at(TAIL_PTS, t))
+        path.append(tail_at(t))
         ts.append(t)
-        r = 0.060 + 0.022 * sstep(0.0, 0.22, t) - 0.010 * sstep(0.70, 1.0, t)
-        r *= 1.0 + 0.09 * math.sin(math.pi * frac)
+        r = 0.049 + 0.013 * sstep(0.0, 0.20, t) - 0.007 * sstep(0.70, 1.0, t)
+        r *= 1.0 + 0.15 * math.sin(math.pi * frac)
         if band == TAIL_BANDS - 1:
             r *= math.sqrt(max(0.0, 1.0 - sstep(0.35, 1.0, frac) ** 2)) * 0.97 + 0.03
-        row = [r * (1.0 + 0.085 * math.sin(math.pi * frac) ** 2 * math.cos(5.0 * 2.0 * math.pi * j / sides + band * 1.7)) for j in range(sides)]
+        row = [r * (1.0 + 0.12 * math.sin(math.pi * frac) ** 2 * math.cos(5.0 * 2.0 * math.pi * j / sides + band * 1.7)) for j in range(sides)]
         radii.append(row)
         col = RING_DARK if band % 2 == 1 else WHITE_FUR
         ring_cols.append(mix(GREY, col, sstep(0.0, 0.03, t)))
@@ -818,7 +922,7 @@ def bone_table():
         rows.append(("thigh." + sfx, tuple(mirror(HIP, side)), tuple(mirror(KNEE, side)), "hips"))
         rows.append(("shin." + sfx, tuple(mirror(KNEE, side)), tuple(mirror(ANKLE, side)), "thigh." + sfx))
         rows.append(("foot." + sfx, tuple(mirror(ANKLE, side)), tuple(mirror(TOE, side)), "shin." + sfx))
-    joints, _ = catmull(TAIL_PTS, TAIL_BONES)
+    joints = [tail_at(i / TAIL_BONES) for i in range(TAIL_BONES + 1)]
     for i in range(TAIL_BONES):
         rows.append(("tail%d" % (i + 1), tuple(joints[i]), tuple(joints[i + 1]), "hips" if i == 0 else "tail%d" % i))
     return rows

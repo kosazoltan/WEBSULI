@@ -106,9 +106,10 @@ def sad_pose(arm, f):
     p.r("chest", "X", 7.0 * down).r("head", "X", 14.0 * down).r("head", "Y", 5.0 * down + 2.0 * sway)
     p.r("ear.L", "Y", 48.0 * down).r("ear.R", "Y", -48.0 * down)
     p.r("arm.L", "Y", -8.0 * down).r("arm.R", "Y", 8.0 * down).r("arm.L", "X", 10.0 * down).r("arm.R", "X", 10.0 * down)
-    # a magasra tartott farok oldalra-lefelé konyul
-    for i, deg in zip(TAIL, (0.0, 4.0, 18.0, 34.0, 36.0, 26.0, 12.0)):
+    # a magasra tartott farok lekonyul: földközeli ívben fekszik a figura mellett
+    for i, deg in zip(TAIL, (26.0, 34.0, 30.0, 14.0, -8.0, -16.0, -12.0)):
         p.r("tail%d" % i, "Y", deg * down).r("tail%d" % i, "Z", 1.5 * sway)
+    p.r("tail1", "X", -10.0 * down)
     p.key("blink", 0.20 * down).key("smile", -0.8 * down)
     return p
 

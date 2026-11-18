@@ -9,13 +9,14 @@
 
 - Felismerhető gyűrűsfarkú maki, kabalának stilizálva: fehér arc, a szem körül sötét, kifelé-lefelé nyúló folt, megnyúlt pofa
   fekete orral, sötétszürke „sapka” homlokcsúccsal, felálló, hegyesedő fehér fül, fehér has és mellkas, sötét kéz- és lábfej,
-  a testnél hosszabb, 14 gyűrűs, fekete végű, kérdőjel-ívben magasra tartott farok. A szem a valóságosnál nagyobb, kerek,
+  a testnél jóval hosszabb, 14 egyenlő gyűrűs, fekete végű, a figura oldalán kérdőjel-ívben magasra tartott farok; sötét
+  kéz négy ujjal és hüvelykkel, láb öt lábujjal. A szem a valóságosnál nagyobb, kerek,
   nyitott, csillogó; mosolyog. Fej : test magasság kb. 1 : 1,6.
 - A test, a végtagok és a fej **egyetlen összefüggő háló** (nincs varrat a vállnál és a csípőnél); az arc mintája festett
   textúra (éles foltszélek), a farok gyűrűi élesek.
 - A figura **teljes egészében szkriptből** jön létre (Blender, fej nélkül) — nincs kézzel rajzolt vagy letöltött elem.
 - Képek: `docs/measurements/kabala-maki/01-elol.jpg` … `08-napozo.jpg` (a klipek a `06-tablo.jpg`-n), böngészős képernyőképek:
-  `09-…` – `11-…`.
+  `09-…` – `11-…`, orr-ellenőrző lap: `12-orr-ellenorzes.jpg`.
 - A böngészőnek szánt fájl: `source/client/public/models/kabala/kabala-maki.<hash>.glb` (a pontos név és a számok a mellette
   lévő `kabala-maki.manifest.json`-ban).
 
@@ -60,9 +61,9 @@ Most a száj egyetlen csúszkával nyílik. Beszédhez:
 
 A számok a manifestből valók; a következtetés becslés.
 
-- **Letöltés:** a GLB kb. 240 KB (Draco-tömörítve, benne az arc 512 px-es textúrája). A kibontáshoz a three.js Draco-dekódolója
+- **Letöltés:** a GLB kb. 243 KB (Draco-tömörítve, benne az arc 512 px-es textúrája). A kibontáshoz a three.js Draco-dekódolója
   kell (a `three` csomag része); ez egyszeri, néhány száz KB.
-- **Rajzolás:** kb. 26 400 háromszög, 5 rajzolási hívás, egy kis textúra. Egy mai középkategóriás telefonnak ez önmagában
+- **Rajzolás:** kb. 27 800 háromszög, 5 rajzolási hívás, egy kis textúra. Egy mai középkategóriás telefonnak ez önmagában
   nem teher; a szűk keresztmetszet akkor jöhet, ha a figura egy már nehéz 3D-s jelenetbe kerül, vagy sok példány látszik.
 - **Mozgatás:** 25 csont és 2 alakkulcs — elhanyagolható.
 - **Könnyített változat:** ugyanabból a szkriptből a `SOFT_TRIS` cél-háromszögszám csökkentésével (pl. 10 000) készíthető.
@@ -88,9 +89,10 @@ cd .. && node source/scripts/blender/kabala-maki/preview-server.mjs
 # → http://localhost:4599/
 ```
 
-Gombok a hat kliphez, csúszka a mosolyhoz, egérrel / ujjal körbeforgatható. Ellenőrizve a végleges GLB-vel: betölt, mind a
-hat klip lejátszható, konzolhiba nincs (képernyőképek: `09-bongeszo-napozas.jpg`, `10-bongeszo-integetes.jpg`,
-`11-bongeszo-alap.jpg`).
+Gombok a hat kliphez, csúszka a mosolyhoz, egérrel / ujjal körbeforgatható. Ellenőrizve a végleges GLB-vel: betölt, konzolhiba
+nincs; az `idle` és a `cheer` valós időben lejátszva (a csontértékek időben mintavételezve: az `idle` ~2 mp-es periódussal
+ringatja a farkat és a mellkast, a `cheer` alatt a csípő 0,30 → 0,53 → 0,30 m). Képernyőképek: `09-bongeszo-alap.jpg`,
+`10-bongeszo-ugras-1.jpg`, `11-bongeszo-ugras-2.jpg`.
 
 ## Hogyan készül (röviden)
 
@@ -98,9 +100,11 @@ hat klip lejátszható, konzolhiba nincs (képernyőképek: `09-bongeszo-napozas
    csontsúlya van.
 2. Ezekből voxel-remesh → simítás → decimálás: egy összefüggő háló, varrat nélkül.
 3. A szín és a súly a legközelebbi alapforma-pontokról kerül át az új hálóra (ezért determinisztikus, és nem kell a Blender
-   hő-alapú automata súlyozása, amely ilyen hálón megbízhatatlan).
+   hő-alapú automata súlyozása, amely ilyen hálón megbízhatatlan); utána célzott simítás a testen és a fej hátulján (az arc
+   és a fül érintetlen), és a csontsúlyok lágyítása a hajlásoknál.
 4. Az arc mintáját egy képlet festi 512 px-es textúrára (a fej közepéből vett irány szerint) — ettől élesek a foltszélek.
-5. Pontos paraméteres részek: szem, orr, gyűrűs farok; külön kis háló az alakkulcsokhoz (szemhéj, pillaív, fénypont, száj).
+5. Pontos paraméteres részek: szem, orr, ujjas kéz és láb, gyűrűs farok (ívhossz szerint egyenlő gyűrűk); külön kis háló az
+   alakkulcsokhoz (szemhéj, pillaív, fénypont, száj).
 
 ## Fájlok
 
@@ -129,15 +133,25 @@ csukott szem, merev szomorú farok; 3. átütő fénypont; 4. üres szomorú tek
    címkéjű forrásból), a sötét sapka csak a fejtetőn.
 4. A mellkas pamacsa „izmos mellkasnak” hatott → laposabb, szélesebb mellkas-pamacs.
 
+**Csiszoló kör (a tulajdonos „Igen, de még csiszold” döntése után):**
+
+1. Farok: hosszabb pálya a figura oldalán, ívhossz szerinti felosztás (egyenlő gyűrűk); szemből 10–11 gyűrű látszik. Az első
+   változat túl vékony, „sétabot”-szerű lett → vastagabb, gyűrűnként jobban domborodó, tincsesebb.
+2. Kéz és láb: külön, pontos rész ujjakkal; a csuklónál / bokánál a szürke–sötét színváltás elfedi a csatlakozást.
+3. Felszín és hajlások: célzott Taubin-simítás a testen és a fej hátulján; a csontsúlyok lágyítása; határozottabb szürke.
+4. Orr: a tulajdonos észrevétele („mintha a levegőbe lógna”) — az ok az orr mögé festett, az orrnál nagyobb szürke folt és a
+   pofa vége elé tett orrgömb volt; az orr most a pofa végébe ágyazva ül, alatta a saját színe van (`12-orr-ellenorzes.jpg`).
+
 ## Ismert hiányok (őszintén)
 
-- **Nem kézzel szobrászott minőség.** Az összefüggő háló organikus, de a felszíne helyenként enyhén egyenetlen (a törzs elején
-  és a tarkón látszanak az összeolvasztott formák lágy dudorai); egy 3D-művész kézi simítása / retopológiája szebb volna.
+- **Nem kézzel szobrászott minőség.** A felszín a célzott simítás után egyenletes, de a formák egyszerűek; egy 3D-művész kézi
+  szobrászata / retopológiája részletgazdagabb volna (izületek, ujjpercek, arcél).
 - **A bolyhosság forma, nem szőr.** A pofa két oldalán hullámos, tincses a körvonal, a farok gyűrűnként domborodik — valódi
-  szőrszálak nincsenek (a webes keret miatt nem is cél), közelről ez „gyurma” jellegű.
-- **Kéz és láb:** egyujjas kesztyű-szerű, az ujj-dudorok a simítás után alig látszanak.
-- **A hajlások egyszerűek:** könyök és térd van, de a súlyozás képletes — szélső pózban (pl. a napozó ülésnél a csípőnél) a háló
-  kissé megtörik.
-- **A szomorú póz farka** oldalra-lefelé hajlik; kifejező, de nem anatómiai pontosságú.
+  szőrszálak nincsenek (a webes keret miatt nem is cél). Hátulról a pofaszőr két oldalsó dudorként látszik.
+- **Kéz és láb:** az ujjak jól olvashatók, de merevek (nincs ujjcsont): a kéz nem tud fogni, markolni.
+- **A csukló és a boka** külön rész találkozása: a színváltás elfedi, de nagyon közelről látszik.
+- **A faroktő** egy világos gyűrűvel indul a szürke hátból; hátulról ez kissé hirtelen váltás.
+- **A hajlások egyszerűek:** a súlyok lágyítása után a napozó ülés rendben van, de szélsőségesebb pózokhoz (pl. guggolás,
+  járás) további hangolás kellene.
 - A three.js-ben a kép nem azonos a Blender-renderrel (más fények); az élő megjelenéshez a játék fényeit hangolni kell.
 - Készüléken (telefonon) nincs mérve; a teljesítmény-rész becslés.
