@@ -231,7 +231,10 @@ test("K1: kikapcsolt kapcsolónál a főoldal DOM-ja bájtra azonos, és semmi n
       main.querySelector('[data-testid="home-mascot"]')?.remove();
       return main.innerHTML;
     });
-    // beállt állapot: a fejléc belépő animációja (inline stílus) lefutott — két egymást követő olvasat azonos
+    // beállt állapot: a fejléc belépő animációja (framer-motion, inline stílus) VÉGIGFUTOTT — terhelt gépen a kezdete is késhet,
+    // ezért előbb a végállapotot várjuk meg, utána azt, hogy két egymást követő olvasat azonos
+    await expect(page.getByTestId("hero-stats")).toHaveCSS("opacity", "1", { timeout: 15_000 });
+    await expect.poll(() => page.evaluate(() => [...document.querySelectorAll<HTMLElement>("main [style*='opacity']")].every((el) => el.style.opacity === "1")), { timeout: 15_000 }).toBe(true);
     let html = await read();
     await expect.poll(async () => { const previous = html; html = await read(); return html === previous; }, { intervals: [700], timeout: 15_000 }).toBe(true);
     const head = await page.evaluate(() => document.head.querySelectorAll('meta[name="websuli-home-mascot"]').length);
