@@ -451,6 +451,84 @@ describe("adventi naptár — végpontok", () => {
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
+  it("névtelen → párosított (tulajdonosi döntés 2026-11-18): nincs tanulói sor → az eszköz sora ÁTKERÜL; olvasáskor csak előnézet; utána egyetlen élő sor (terv 21., #170)", async () => {
+    const learner = await newLearner(5);
+    const k = await kid();
+    assert.equal((await k.post("/grade", { grade: 5 })).status, 200);
+    await k.answer(1, await k.open(1), true);
+    await k.answer(2, await k.open(2), true);
+    // A gyerek megkapja a személyes linket ugyanazon az eszközön.
+    k.learner = learner.token;
+    const preview = (await k.state()).json;
+    assert.deepEqual({ identity: preview.identity, solved: preview.summary.solved }, { identity: "learner", solved: 2 }, "az olvasás már a megtartandó haladást mutatja");
+    assert.deepEqual(await q(`SELECT subject_kind FROM advent_progress WHERE subject_id = ANY($1) ORDER BY subject_kind`, [[k.device, learner.id]]), [{ subject_kind: "device" }], "az olvasás NEM ír");
+    // Az első írás elvégzi az átvételt.
+    await k.open(3);
+    assert.deepEqual(await q(`SELECT subject_kind, subject_id, learner_id FROM advent_progress WHERE subject_id = ANY($1)`, [[k.device, learner.id]]),
+      [{ subject_kind: "learner", subject_id: learner.id, learner_id: learner.id }], "egyetlen, a tanulóhoz kötött sor");
+    const after = (await k.state()).json;
+    assert.deepEqual({ solved: after.summary.solved, door1: after.doors[0].state, door2: after.doors[1].state }, { solved: 2, door1: "solved", door2: "solved" });
+    // Másik eszköz ugyanazzal a linkkel ugyanazt látja.
+    const other = await kid(); other.learner = learner.token;
+    assert.equal((await other.state()).json.summary.solved, 2);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("névtelen → párosított: van tanulói sor → a TÖBB megoldott ablakkal rendelkező marad, egyenlőségnél a tanulóé; a másik törlődik (terv 21., #170)", async () => {
+    // a) Az eszközön több a megoldott ablak → az eszköz haladása lép a tanulóé helyére.
+    const l1 = await newLearner(5);
+    const onTablet = await kid(); onTablet.learner = l1.token;
+    await onTablet.answer(1, await onTablet.open(1), true);
+    const phone = await kid();
+    assert.equal((await phone.post("/grade", { grade: 5 })).status, 200);
+    await phone.answer(1, await phone.open(1), true);
+    await phone.answer(2, await phone.open(2), true);
+    phone.learner = l1.token;
+    await phone.post("/doors/3/open");
+    assert.deepEqual(await q(`SELECT subject_kind FROM advent_progress WHERE subject_id = ANY($1)`, [[phone.device, l1.id]]), [{ subject_kind: "learner" }]);
+    assert.equal((await onTablet.state()).json.summary.solved, 2, "a tableten is az eszköz (jobb) haladása látszik");
+    // b) Egyenlőség (1 – 1) → a tanulóé marad, az eszköz sora törlődik.
+    const l2 = await newLearner(5);
+    const home = await kid(); home.learner = l2.token;
+    const homeQuestion = await home.open(1);
+    await home.answer(1, homeQuestion, true);
+    const guest = await kid();
+    assert.equal((await guest.post("/grade", { grade: 5 })).status, 200);
+    await guest.answer(2, await guest.open(2), true);
+    guest.learner = l2.token;
+    await guest.post("/doors/3/open");
+    assert.deepEqual(await q(`SELECT subject_kind FROM advent_progress WHERE subject_id = ANY($1)`, [[guest.device, l2.id]]), [{ subject_kind: "learner" }]);
+    const kept = (await home.state()).json;
+    assert.deepEqual({ door1: kept.doors[0].state, door2: kept.doors[1].state }, { door1: "solved", door2: "open" }, "a tanuló saját haladása maradt");
+    await dbPool.query(`DELETE FROM learners WHERE id = ANY($1)`, [[l1.id, l2.id]]);
+  });
+
+  it("névtelen → párosított, versenyhelyzet: az átvétellel egyidejű válasz sem ad 500-at, és nem vész el — végül egyetlen tanulói sor (terv 21., #170)", async () => {
+    for (let round = 0; round < 3; round++) {
+      const learner = await newLearner(5);
+      const k = await kid();
+      assert.equal((await k.post("/grade", { grade: 5 })).status, 200);
+      await k.answer(2, await k.open(2), true);
+      const question = await k.open(1);
+      const item = findAdventItem(question.id, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS)!;
+      const pick = question.options.indexOf(item.options[item.correctIndex]!);
+      // Ugyanaz a böngésző két lapon: az egyik még link nélkül válaszol, a másik már a linkkel ír (átvétel).
+      const paired = Object.assign(new Kid(), { cookie: k.cookie, csrf: k.csrf, device: k.device, ip: k.ip, learner: learner.token });
+      const [answer, adopt] = await Promise.all([
+        k.post("/doors/1/answer", { questionId: question.id, pick }),
+        paired.post("/doors/3/open"),
+      ]);
+      assert.ok([200, 409].includes(answer.status), "válasz: " + answer.status + " " + JSON.stringify(answer.json).slice(0, 120));
+      assert.equal(adopt.status, 200, JSON.stringify(adopt.json).slice(0, 160));
+      const rows = await q<{ subject_kind: string; doors: Json }>(`SELECT subject_kind, doors FROM advent_progress WHERE subject_id = ANY($1)`, [[k.device, learner.id]]);
+      assert.deepEqual(rows.map((r) => r.subject_kind), ["learner"], "egyetlen élő sor");
+      const door1 = rows[0]!.doors["1"]?.["1"]?.attempts ?? [];
+      if (answer.status === 200) assert.equal(door1.length, 1, "a sikeres válasz átkerült a tanulóhoz");
+      assert.equal((rows[0]!.doors["1"]?.["2"]?.attempts ?? []).length, 1, "a korábbi haladás megmaradt");
+      await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+    }
+  });
+
   it("bankból eltűnt, már megválaszolt kérdés: a megoldott ablak újranyitása a tárolt eredményt adja, nem hibát (review C5)", async () => {
     const k = await kid();
     assert.equal((await k.post("/grade", { grade: 7 })).status, 200);

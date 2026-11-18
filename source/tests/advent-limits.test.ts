@@ -6,7 +6,7 @@ import express from "express";
 import { adventClock } from "../server/advent/clock";
 import { ADVENT_LIMITS, ADVENT_ROUND_WORST, ADVENT_SCHOOL_KIDS, ADVENT_WRITES_PER_KID, createWindowCounter, type AdventLimits } from "../server/advent/limits";
 import { createAdventRouter } from "../server/advent/routes";
-import type { AdventRow, AdventStore } from "../server/advent/store";
+import { adoptionChoice, solvedDoorsOf, type AdventRow, type AdventStore } from "../server/advent/store";
 
 /**
  * Adventi naptár — kéréskorlátok és az óra HTTP-szinten, adatbázis nélkül (docs/specs/2026-11-18-adventi-naptar.md 16.1, 18.2,
@@ -303,4 +303,20 @@ test("óra NEM e2e-módban, valódi HTTP-n: a tesztidő-fejléc hatástalan, a s
     assert.deepEqual(await e2e.status(), { enabled: false });
     assert.equal((await e2e.status({ "x-advent-test-now": "2026-12-24T10:00:00Z" })).openDay, 24);
   } finally { await e2e.close(); }
+});
+
+test("névtelen → párosított: melyik sor marad (tulajdonosi döntés 2026-11-18; terv 21.)", () => {
+  const attempt = (correct: boolean) => ({ questionId: "q", pick: 0, correct, at: "" });
+  const row = (doors: Record<number, boolean[]>): AdventRow => ({
+    id: "x", season: 2026, subjectKind: "device", subjectId: "x", grade: 5, round: 1, plan: {},
+    doors: { 1: Object.fromEntries(Object.entries(doors).map(([day, list]) => [day, { attempts: list.map(attempt) }])) },
+    finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(), updatedAt: new Date(),
+  });
+  assert.equal(solvedDoorsOf(row({ 1: [true], 2: [false, true], 3: [false] })), 2);
+  assert.equal(adoptionChoice(row({ 1: [true] }), null), "none");
+  assert.equal(adoptionChoice(null, row({})), "drop-device", "válasz nélküli eszköz-sor: nincs mit átvinni");
+  assert.equal(adoptionChoice(null, row({ 1: [false] })), "move-device", "nincs tanulói sor: átkerül (hibás válasz is haladás)");
+  assert.equal(adoptionChoice(row({ 1: [true] }), row({ 1: [true], 2: [true] })), "replace-learner", "több megoldott az eszközön");
+  assert.equal(adoptionChoice(row({ 1: [true] }), row({ 2: [true] })), "drop-device", "egyenlőség: a tanulóé");
+  assert.equal(adoptionChoice(row({ 1: [true], 2: [true] }), row({ 3: [true] })), "drop-device");
 });

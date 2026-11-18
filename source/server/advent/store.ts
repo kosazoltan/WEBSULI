@@ -55,6 +55,30 @@ function toRow(r: DbRow): AdventRow {
 
 export type AdventStore = ReturnType<typeof createAdventStore>;
 
+/** A módosítandó sor a zár megszerzése előtt eltűnt (pl. közben átkerült a tanulóhoz) — a hívó 409-et ad. */
+export class AdventRowGoneError extends Error {
+  constructor() { super("advent: a sor közben megszűnt"); this.name = "AdventRowGoneError"; }
+}
+
+/** Megoldott ablakok száma a sor aktuális körében (a „jobb haladás” mércéje az átvételnél). */
+export function solvedDoorsOf(row: Pick<AdventRow, "round" | "doors">): number {
+  return Object.values(row.doors[row.round] ?? {}).filter((door) => door.attempts.some((attempt) => attempt.correct)).length;
+}
+const answeredAny = (row: Pick<AdventRow, "doors">): boolean => Object.values(row.doors).some((round) => Object.values(round).some((door) => door.attempts.length > 0));
+
+/**
+ * Névtelen → párosított átmenet (terv 21., tulajdonosi döntés 2026-11-18): melyik sor marad a tanulónál.
+ * - nincs eszköz-sor, vagy abban nincs válasz → a tanulóé marad (az üres eszköz-sor törlődik);
+ * - nincs tanulói sor → az eszköz sora átkerül;
+ * - mindkettő van → a több megoldott ablakkal rendelkező; egyenlőségnél a tanulóé.
+ */
+export function adoptionChoice(learner: AdventRow | null, device: AdventRow | null): "none" | "drop-device" | "move-device" | "replace-learner" {
+  if (!device) return "none";
+  if (!answeredAny(device)) return "drop-device";
+  if (!learner) return "move-device";
+  return solvedDoorsOf(device) > solvedDoorsOf(learner) ? "replace-learner" : "drop-device";
+}
+
 export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
   return {
     /** Olvasás írás nélkül: a sor, vagy null, ha az alany még nem kezdte el a naptárat. */
@@ -87,7 +111,8 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
           `SELECT ${COLUMNS} FROM advent_progress WHERE season = $1 AND subject_kind = $2 AND subject_id = $3 FOR UPDATE`,
           [season, subject.kind, subject.id],
         );
-        const current = toRow(locked.rows[0]!);
+        if (!locked.rows[0]) throw new AdventRowGoneError();
+        const current = toRow(locked.rows[0]);
         const { patch, result } = fn(current, created);
         let row = current;
         if (patch) {
@@ -108,6 +133,48 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
       } finally {
         client.release();
       }
+    },
+
+    /**
+     * Névtelen → párosított átmenet egy tranzakcióban, mindkét sort zárolva (terv 21.): az \`adoptionChoice\` szerint az eszköz
+     * sora átkerül a tanulóhoz, lecseréli a tanulóét, vagy törlődik — utána a gyereknek egyetlen élő sora van. Párhuzamos
+     * kérésnél (a tanulói sor közben jött létre) egyszer újrapróbál.
+     */
+    async adopt(season: number, deviceId: string, learnerId: string): Promise<ReturnType<typeof adoptionChoice>> {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const client: PoolClient = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          const locked = await client.query<DbRow>(
+            `SELECT ${COLUMNS} FROM advent_progress
+              WHERE season = $1 AND ((subject_kind = 'device' AND subject_id = $2) OR (subject_kind = 'learner' AND subject_id = $3))
+              ORDER BY id FOR UPDATE`,
+            [season, deviceId, learnerId],
+          );
+          const rows = locked.rows.map(toRow);
+          const device = rows.find((r) => r.subjectKind === "device") ?? null;
+          const learner = rows.find((r) => r.subjectKind === "learner") ?? null;
+          const choice = adoptionChoice(learner, device);
+          if (choice === "replace-learner") await client.query(`DELETE FROM advent_progress WHERE id = $1`, [learner!.id]);
+          if (choice === "move-device" || choice === "replace-learner") {
+            await client.query(
+              `UPDATE advent_progress SET subject_kind = 'learner', subject_id = $2, learner_id = $2, updated_at = now() WHERE id = $1`,
+              [device!.id, learnerId],
+            );
+          }
+          if (choice === "drop-device") await client.query(`DELETE FROM advent_progress WHERE id = $1`, [device!.id]);
+          await client.query("COMMIT");
+          return choice;
+        } catch (error) {
+          await client.query("ROLLBACK").catch(() => undefined);
+          // 23505: a tanulói sor a zárolás után, párhuzamosan jött létre — újra, most már az összehasonlító ágon.
+          if ((error as { code?: unknown } | null)?.code === "23505" && attempt === 0) continue;
+          throw error;
+        } finally {
+          client.release();
+        }
+      }
+      return "none";
     },
 
     /**

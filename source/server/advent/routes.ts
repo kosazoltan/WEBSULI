@@ -13,7 +13,7 @@ import {
 } from "../../shared/advent/assignment";
 import { adventNow, isAdventWritable, isDoorUnlocked, type AdventNow } from "../../shared/advent/calendar";
 import {
-  adventAnswerBody, adventDayParam, adventGradeBody, adventIdentityBody,
+  adventAnswerBody, adventDayParam, adventDeviceId, adventGradeBody, adventIdentityBody,
   type AdventAnswerResult, type AdventDoorView, type AdventOpenResult, type AdventState,
 } from "../../shared/advent/contract";
 import {
@@ -24,7 +24,7 @@ import { clientIpKeyGenerator } from "../lib/client-ip";
 import { logger } from "../lib/logger";
 import type { AdventResolution, AdventResolvedSubject } from "./identity";
 import { ADVENT_LIMITS, createWindowCounter, type AdventLimits } from "./limits";
-import type { AdventRow, AdventStore, AdventSubject } from "./store";
+import { adoptionChoice, type AdventRow, type AdventStore, type AdventSubject } from "./store";
 
 
 export type AdventRouterDeps = {
@@ -140,7 +140,7 @@ function answerResult(item: AdventItem | null, attempt: DoorAttempt, subjectKey:
   return { correct: attempt.correct, correctIndex, explanation: item?.explanation ?? "", door, summary: state.summary, closing: state.closing };
 }
 
-type Locals = { at: AdventNow; now: Date; resolution: AdventResolution; body: Record<string, unknown> };
+type Locals = { at: AdventNow; now: Date; resolution: AdventResolution; body: Record<string, unknown>; adoptPreview?: AdventRow | null };
 
 /** A terv mellé a tervezés évfolyama is eltárolódik (a JSON-ban), hogy az első válaszig a profil változása új tervet adhasson. */
 type GradedPlan = AdventPlan & { grade?: number };
@@ -195,6 +195,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       res.status(error.status).json({ message: error.message, ...error.extra });
       return;
     }
+    if ((error as { name?: unknown } | null)?.name === "AdventRowGoneError") { res.status(409).json({ message: "A naptárad közben frissült — betöltjük újra.", refresh: true }); return; }
     if (error instanceof RangeError) { logger.error(`[ADVENT] kiosztási hiba: ${errorClass(error)}`); res.status(503).json({ message: "A naptár most nem tud kérdést adni. Próbáld újra később!" }); return; }
     logger.error(`[ADVENT] hiba: ${errorClass(error)}`);
     next(error);
@@ -229,7 +230,24 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
     if (source === "body" && resolution.pairing === "invalid") {
       throw new AdventHttpError(409, "A személyes linked lejárt — nyisd meg újra a napi levélből, vagy folytasd vendégként.", { pairing: "invalid" });
     }
-    res.locals.advent = { at: adventNow(now), now, resolution, body } satisfies Locals;
+    const at = adventNow(now);
+    // Névtelen → párosított átmenet (terv 21.): ha érvényes tanulói link ÉS eszközazonosító is érkezett, az eszköz névtelen sora
+    // a tanulóhoz kerül (vagy a jobb haladás marad). Csak ÍRÁSNÁL történik meg; az olvasás előnézetet ad, nem ír.
+    const pairedDevice = resolution.pairing === "ok" && resolution.subject?.kind === "learner" ? adventDeviceId.safeParse(input.device) : null;
+    let adoptPreview: AdventRow | null = null;
+    if (pairedDevice?.success) {
+      const device = { kind: "device" as const, id: pairedDevice.data.toLowerCase() };
+      const deviceRow = await store.read(at.season, device);
+      if (deviceRow) {
+        if (source === "body") await store.adopt(at.season, device.id, resolution.subject!.id);
+        else {
+          const learnerRow = await store.read(at.season, resolution.subject!);
+          const choice = adoptionChoice(learnerRow, deviceRow);
+          adoptPreview = choice === "move-device" || choice === "replace-learner" ? { ...deviceRow, subjectKind: "learner", subjectId: resolution.subject!.id } : null;
+        }
+      }
+    }
+    res.locals.advent = { at, now, resolution, body, adoptPreview } satisfies Locals;
   });
   const subjectOr400 = (res: Response): { locals: Locals; subject: AdventResolvedSubject } => {
     const locals = res.locals.advent as Locals;
@@ -286,8 +304,9 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   });
 
   router.get("/state", gate, identify("headers"), ipReadLimiter, wrap(async (_req, res) => {
-    const { at, resolution } = res.locals.advent as Locals;
-    const row = resolution.subject ? await store.read(at.season, resolution.subject) : null;
+    const { at, resolution, adoptPreview } = res.locals.advent as Locals;
+    // Párosított eszközön az átvétel előnézete: azt mutatjuk, ami az első írásnál a tanulónál lesz.
+    const row = adoptPreview ?? (resolution.subject ? await store.read(at.season, resolution.subject) : null);
     if (!adventRowIsSound(row)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true });
     res.json(buildAdventState(at, resolution, row));
   }));
