@@ -110,6 +110,11 @@ const measure = (page: Page) =>
     const cardBg = getComputedStyle(card).backgroundColor;
     const out = {
       key: "",
+      holdsFit: document.querySelector<HTMLElement>('[data-testid="wl-quiz"]')?.dataset.fit ?? "",
+      holdFont: (() => {
+        const b = document.querySelector<HTMLElement>('[data-testid^="wl-option-"]');
+        return b ? parseFloat(getComputedStyle(b).fontSize) : 0;
+      })(),
       tight: document.querySelector<HTMLElement>('[data-testid="wl-question"]')?.dataset.wlTight === "true",
       statusAfter: (() => {
         const st = card.querySelector<HTMLElement>('[data-testid="play-question-status"]');
@@ -161,7 +166,7 @@ type Row = NonNullable<Awaited<ReturnType<typeof measure>>> & { state: "kérdés
  * A `?wlItems=` tételein végigmegy: minden kérdésnél az élesítés után mér (kérdés-állapot), majd ROSSZ fogással a
  * megoldás-kijelzést is méri (a kártya ekkor állapotsorral és „Miért?” gombbal nő). A kulcs a probe `questionKey`-e.
  */
-async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "fr"; grade: string }): Promise<Row[]> {
+async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "fr"; grade: string; onReveal?: (row: Row) => Promise<void> }): Promise<Row[]> {
   await page.addInitScript((o) => {
     localStorage.setItem("websuli.classroomGrade", o.grade);
     localStorage.setItem("websuli.wordladder.lang", o.lang);
@@ -188,7 +193,10 @@ async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "
         await expect(page.locator('[data-testid^="wl-option-"][data-state="correct"]').first()).toBeVisible({ timeout: 3_000 });
         await page.waitForTimeout(300);
         const r = await measure(page);
-        if (r) rows.push({ ...r, key, state: "megoldás" });
+        if (r) {
+          rows.push({ ...r, key, state: "megoldás" });
+          await opts.onReveal?.({ ...r, key, state: "megoldás" });
+        }
       }
     }
     await page.waitForTimeout(150);
@@ -197,6 +205,18 @@ async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "
 }
 
 const keyOf = (id: string) => (id.startsWith("vocab:") ? `vocab:${id.split(":")[1]!.slice(0, 2)}:${id.split(":")[1]}` : `bank:word-ladder-hu-en:${id}`);
+
+/**
+ * Review #500 (Copilot): a `runItems` hiányzó kártyánál vagy sikertelen kattintásnál csendben kihagy méréseket. A geometriai
+ * ellenőrzések ELŐTT minden kötelező tételre a kérdés- ÉS a megoldás-állapot mérési sora is meglegyen — mérés nélkül nincs zöld.
+ */
+function expectMeasured(rows: Row[], ids: string[], label: string) {
+  for (const id of ids) {
+    for (const state of ["kérdés", "megoldás"] as const) {
+      expect(rows.some((r) => r.key === keyOf(id) && r.state === state), `${label}: mérve ${id} (${state})`).toBe(true);
+    }
+  }
+}
 
 /** Az elvárások: a szabályból (C-15). Szó: ≥ 1,6× a keretsor; mondat: ≥ 1,25× (helyhiánynál a kártya kicsinyedik, review K2);
  *  egy 360 px-en ki nem férő hosszú szó (review Ú3, `fit=width`): ≥ 1,25×, de szó közben nem törik. */
@@ -243,6 +263,8 @@ for (const vp of VIEWS) {
     for (const id of ids) {
       if (!id.startsWith("vocab:") || id.startsWith("vocab:en4-")) expect(keys.has(keyOf(id)), `mérve: ${id}`).toBe(true);
     }
+    // Review #500: a kötelező tételeknél a megoldás-állapot is (nem elég, hogy valamelyik állapot mérve van).
+    expectMeasured(rows, ids.filter((id) => !id.startsWith("vocab:") || id.startsWith("vocab:en4-")), `en ${vp.width}x${vp.height}`);
     expect(keys.size, `mért célkártyák: ${[...keys].join(" | ")}`).toBeGreaterThanOrEqual(ids.length - 2);
     expect(rows.some((m) => m.blank), "hiányos mondatos típus is mérve").toBe(true);
     expect(rows.some((m) => m.state === "megoldás"), "megoldás-állapot is mérve").toBe(true);
@@ -259,6 +281,8 @@ for (const vp of VIEWS) {
     report(deRows, `de ${vp.width}x${vp.height}`);
     const deKeys = new Set(deRows.map((r) => r.key));
     for (const id of named) expect(deKeys.has(keyOf(id)), `mérve: ${id}`).toBe(true);
+    // Review #500: a megnevezett tételeknél a kérdés- és a megoldás-állapot is.
+    expectMeasured(deRows, named, `de ${vp.width}x${vp.height}`);
     // Review Ú4: darabszám-állítás — üres futás nem lehet zöld.
     expect(deKeys.size, `német célkártyák mérve: ${[...deKeys].join(" | ")}`).toBeGreaterThanOrEqual(de.length - 2);
     check(deRows, "de");
@@ -333,6 +357,49 @@ test("Ú1 @ 360x640: hiba utáni kérdésnél a célkártya betűje ugyanakkora,
   expect(normal.size, "mind a négy tétel mérve (rendes)").toBe(items.length);
   expect(afterError.size, "mind a négy tétel mérve (hiba után)").toBe(items.length);
   for (const [key, fs] of normal) expect(afterError.get(key), `${key}: hiba után ${afterError.get(key)} px, rendesen ${fs} px`).toBe(fs);
+});
+
+/**
+ * Review #498 R2 (Vercel): hosszú válaszoknál (`.wl-answers[data-long="true"]`) a tömör fogás-panel (`data-fit="2"`) stílusa is
+ * érvényes legyen, és a kártya alsó biztonsági sávos, keskeny nézetben se fedje a fogásokat. 360×640, `--game-safe-bottom: 34px`
+ * (iPhone-szerű alsó sáv), hosszú (mondatnyi) válaszos tételek, kérdés- és megoldás-állapot; képernyőkép a mérési mappába.
+ */
+test("R2 @ 360x640 alsó biztonsági sávval: hosszú válaszoknál is hat a tömör fogás-panel, a kártya nem fedi a fogásokat", async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  await page.setViewportSize({ width: 360, height: 640 });
+  await stub(page);
+  await page.addInitScript(() => {
+    const s = document.createElement("style");
+    s.textContent = ":root { --game-safe-bottom: 34px !important; }";
+    document.addEventListener("DOMContentLoaded", () => document.head.appendChild(s));
+  });
+  const ids = ["vocab:en4-family-006:phrase-meaning", "vocab:en4-health-016:phrase-meaning", "vocab:en4-health-023:phrase-meaning", "en4-052"];
+  // A képernyőkép a javított esetről (hosszú válaszos, tömör panel, `en4-family-006` megoldás-állapot) a teszt KIMENETI
+  // mappájába kerül (review #498-követés): követett repófájlt a teszt nem ír felül; a mérési mappába kézzel kerül.
+  const shot = testInfo.outputPath("r2-360x640-also-sav.jpg");
+  let shotTaken = false;
+  const rows = await runItems(page, ids, {
+    lang: "en",
+    grade: "11",
+    onReveal: async (row) => {
+      if (!shotTaken && row.key === keyOf("vocab:en4-family-006:phrase-meaning") && row.holdsFit === "2") {
+        await page.screenshot({ path: shot, type: "jpeg", quality: 70 });
+        shotTaken = true;
+      }
+    },
+  });
+  report(rows, "R2 en 360x640 alsó sáv");
+  expectMeasured(rows, ids, "R2");
+  for (const m of rows.filter((r) => ids.map(keyOf).includes(r.key))) {
+    expect(m.overHolds, `${m.state} ${m.key}: a kártya fedi a fogásokat (alja ${m.cardBottom}, fogások ${m.holdsTop})`).toBe(false);
+    expect(m.clipped, `${m.state} ${m.key}: levágás`).toBe(false);
+  }
+  // A tömör panel stílusa hosszú válaszoknál is érvényes (a `data-long` szabály nem írja felül).
+  const holdsFit = rows.filter((r) => r.holdsFit === "2");
+  expect(holdsFit.length, "a tömör panel legalább egy mért állapotban életbe lépett").toBeGreaterThan(0);
+  for (const m of holdsFit) expect(m.holdFont, `${m.state} ${m.key}: tömör panelen a fogás-felirat 16 px`).toBe(16);
+  expect(shotTaken, "képernyőkép a javított esetről (en4-family-006, tömör panel, megoldás)").toBe(true);
+  console.log(`R2|képernyőkép: ${shot}`);
 });
 
 test("SZ-2 / kapu 3(a): az óra csak ≥ 400 ms előjelzés után indul, a fogások addig nem élesek, az előjelzés alatti billentyű nem válasz", async ({ page }) => {

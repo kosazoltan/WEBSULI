@@ -186,3 +186,55 @@ test("élő mérés 35370b32: a nem-szöveg típusos érték (modell szám-ért�
   assert.equal(referenceValue(12 as unknown), null);
   assert.equal(isExpressionText(undefined), false);
 });
+
+test("spec 2026-11-17-szoveges-valasz-irasjel: a kért köztes lépés utáni mondatvégi írásjel nem hiba; a tizedes és a hosszabb szám igen", () => {
+  const step = [{ part: "menet", kind: "expression" as const, value: "35 + 64 − 12", form: "intermediate-step" as const }];
+  for (const answer of ["35 + 64 − 12", "35 + 64 − 12.", "35+64-12!", "35 + 64 − 12?", "35 + 64 − 12…", "35 + 64 − 12 .", "Először: 35 + 64 − 12. Aztán összeadom."]) {
+    assert.equal(gradeTypedAnswers(answer, step).correct, 1, JSON.stringify(answer));
+  }
+  for (const answer of ["35 + 64 − 12.5", "35 + 64 − 120", "35 + 64 − 120.", "135 + 64 − 12.", "35 + 8 · 8 − 12.", "35 + 64 − 12,5", "35 + 64 − 12/5."]) {
+    assert.equal(gradeTypedAnswers(answer, step).correct, 0, JSON.stringify(answer));
+  }
+  const two = [{ part: "szorzás", kind: "expression" as const, value: "3 · 7", form: "intermediate-step" as const }, { part: "eredmény", kind: "number" as const, value: "21" }];
+  assert.equal(gradeTypedAnswers("3 · 7. 21.", two).correct, 2);
+  assert.equal(gradeTypedAnswers("3 · 7.\n21.", two).correct, 2);
+  assert.equal(gradeTypedAnswers("3 · 7, 21", two).correct, 2, "a változás előtt is helyes alak marad");
+  const task = base({ sample: "Az első menet eredménye: 35 + 64 − 12.", typedAnswers: step });
+  assert.equal(evaluateOpenAnswer("Az eredmény 35 + 64 − 12.", task).score, 1);
+  assert.equal(evaluateOpenAnswer("Az eredmény 35 + 8 · 8 − 12.", task).score, 0);
+});
+
+test("review K1 (2026-11-17): a kért köztes lépés utáni szám írásjel NÉLKÜL, szóközzel vagy új sorban sem olvad össze a lépéssel", () => {
+  const two = [{ part: "szorzás", kind: "expression" as const, value: "3 · 7", form: "intermediate-step" as const }, { part: "eredmény", kind: "number" as const, value: "21" }];
+  for (const answer of ["3 · 7 21", "3 · 7\n21", "3 · 7\r\n21", "3·7  21", "(3 · 7) 21", "3 · 7 (21)", "3 · 7 = 21", "3 · 7, 21"]) {
+    assert.equal(gradeTypedAnswers(answer, two).correct, 2, JSON.stringify(answer));
+  }
+  const live = [{ part: "műveletsor", kind: "expression" as const, value: "34 – 12 + 9", form: "intermediate-step" as const }, { part: "eredmény", kind: "number" as const, value: "31" }];
+  assert.equal(gradeTypedAnswers("34 – 12 + 9\n31", live).correct, 2);
+  assert.equal(gradeTypedAnswers("3 + 3 + 3 + 3 + 3\n15", [{ part: "a", kind: "expression", value: "3 + 3 + 3 + 3 + 3", form: "intermediate-step" }, { part: "b", kind: "number", value: "15" }]).correct, 2);
+  // Hamis elfogadás nincs: a szóközös ezres tagolás és a vegyes tört a szám része marad; a más lépés továbbra sem egyezik.
+  const step = [{ part: "menet", kind: "expression" as const, value: "35 + 64 − 12", form: "intermediate-step" as const }];
+  for (const answer of ["35 + 64 − 12 000", "35 + 64 − 12\u00a0000", "35 + 64 − 120 5", "135 + 64 − 12 5", "35 + 8 · 8 − 12 87", "35 + 64 − 12/5 7"]) {
+    assert.equal(gradeTypedAnswers(answer, step).correct, 0, JSON.stringify(answer));
+  }
+  // PR #493 (Sourcery, mérve): minden ezres tagoló szóköz (szóköz, U+00A0, U+202F, U+2009, U+2007) a szám része — a fő ágon ezek 0-t adtak, itt is.
+  // Review K4: a ritka vízszintes szóközök is (U+1680, U+2000…U+200A, U+205F, U+3000) — a fő ággal azonosan 0.
+  const spaces = [" ", "\u00a0", "\u1680", "\u202f", "\u205f", "\u3000", ...Array.from({ length: 11 }, (_, i) => String.fromCharCode(0x2000 + i))];
+  assert.equal(spaces.length, 17);
+  for (const space of spaces) {
+    assert.equal(gradeTypedAnswers(`35 + 64 − 12${space}000`, step).correct, 0, `U+${space.charCodeAt(0).toString(16)}`);
+    assert.equal(gradeTypedAnswers(`35 + 64 − 12${space}000`, [{ part: "a", kind: "expression", value: "35 + 64 − 12 000", form: "intermediate-step" }]).correct, 1);
+  }
+  // Nem ezres tagolás (nem pontosan három jegy a szóköz után): a lépés és egy külön szám.
+  assert.equal(gradeTypedAnswers("35 + 64 − 12 34", step).correct, 1);
+  assert.equal(gradeTypedAnswers("35 + 64 − 12 3456", step).correct, 1);
+  // Az új sor és a tabulátor elválasztó marad (K1): a lépés után új sorban írt háromjegyű szám külön eredmény.
+  assert.equal(gradeTypedAnswers("35 + 64 − 12\n000", step).correct, 1);
+  assert.equal(gradeTypedAnswers("35 + 64 − 12\t000", step).correct, 1);
+  const half = [{ part: "a", kind: "expression" as const, value: "1/2 + 3", form: "intermediate-step" as const }];
+  assert.equal(gradeTypedAnswers("1 1/2 + 3", half).correct, 0, "a vegyes tört (1 1/2) nem az 1/2");
+  assert.equal(gradeTypedAnswers("1/2 + 3 7", half).correct, 1);
+  // A szóközös ezres tagolású és a vegyes törtes REFERENCIA a régi alakon továbbra is egyezik.
+  assert.equal(gradeTypedAnswers("12 000 : 4 3000", [{ part: "a", kind: "expression", value: "12 000 : 4", form: "intermediate-step" }]).correct, 1);
+  assert.equal(gradeTypedAnswers("1 1/2 + 3", [{ part: "a", kind: "expression", value: "1 1/2 + 3", form: "intermediate-step" }]).correct, 1);
+});
