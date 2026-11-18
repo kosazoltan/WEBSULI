@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { TTS_AUDIO_ID, TTS_VOICE_VERSION } from "../../shared/tts-audio-key";
+import { TTS_AUDIO_AVAILABILITY_MAX_KEYS, TTS_AUDIO_ID, TTS_VOICE_VERSION } from "../../shared/tts-audio-key";
 import { logger } from "../lib/logger";
 
 /**
@@ -11,7 +11,12 @@ export type TtsAudio = { mime: string; bytes: Buffer; size: number };
 export type TtsAudioRow = TtsAudio & { id: string; voiceVersion: string; language: string };
 export interface TtsAudioStore {
   get(id: string): Promise<TtsAudio | null>;
-  /** A megadott kulcsok közül a tárban meglévők. */
+  /**
+   * Elérhetőségi jegyzék: a megadott kulcsok közül a tárban meglévők, EGYETLEN lekérdezéssel (a hívó darabszám-plafont tart:
+   * legfeljebb `TTS_AUDIO_AVAILABILITY_MAX_KEYS`; érvénytelen alakú kulcs és a plafon fölötti rész kimarad). Csak olvas.
+   */
+  existing(keys: readonly string[]): Promise<string[]>;
+  /** A megadott kulcsok közül a tárban meglévők (tetszőleges darabszám, szeletekben — a gyártónak). */
   has(ids: readonly string[]): Promise<Set<string>>;
   /**
    * Tartalomcímzett írás: meglévő kulcsot nem ír felül. Csak az AKTUÁLIS hangverzióra (`TTS_VOICE_VERSION`) enged írni — más verziónév
@@ -102,6 +107,14 @@ export class DbTtsAudioStore implements TtsAudioStore {
     const { rows } = await db.execute(sql`SELECT mime, bytes, size FROM lesson_tts_audio WHERE id = ${id}`);
     const row = rows[0] as { mime?: unknown; bytes?: unknown; size?: unknown } | undefined;
     return row && typeof row.mime === "string" && Buffer.isBuffer(row.bytes) ? { mime: row.mime, bytes: row.bytes, size: Number(row.size) } : null;
+  }
+
+  async existing(keys: readonly string[]): Promise<string[]> {
+    const valid = Array.from(new Set(keys.filter((id) => TTS_AUDIO_ID.test(id)))).slice(0, TTS_AUDIO_AVAILABILITY_MAX_KEYS);
+    if (!valid.length) return [];
+    const db = await this.database();
+    const { rows } = await db.execute(sql`SELECT id FROM lesson_tts_audio WHERE id IN (${sql.join(valid.map((id) => sql`${id}`), sql`, `)}) ORDER BY id`);
+    return (rows as Array<{ id?: unknown }>).flatMap((row) => typeof row.id === "string" ? [row.id] : []);
   }
 
   async has(ids: readonly string[]): Promise<Set<string>> {

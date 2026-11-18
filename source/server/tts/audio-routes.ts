@@ -1,16 +1,33 @@
 import type { Express, Request, Response } from "express";
 import { TtsAudioCache, parseAudioRange } from "../../shared/speech-fallback";
-import { TTS_AUDIO_ID, TTS_AUDIO_ROUTE } from "../../shared/tts-audio-key";
+import { parseTtsAvailabilityQuery, TTS_AUDIO_AVAILABLE_ROUTE, TTS_AUDIO_ID, TTS_AUDIO_ROUTE } from "../../shared/tts-audio-key";
 import { asyncRoute } from "../lib/async-route";
 import type { TtsAudio, TtsAudioStore } from "./audio-store";
 
 /**
- * Spec 2026-11-18-tananyag-gyartas-minoseg, S8b: az előre gyártott felolvasó hang kiszolgálása — `GET /api/tts/lesson-audio/:id`.
+ * Spec 2026-11-18-tananyag-gyartas-minoseg, S8b: az előre gyártott felolvasó hang kiszolgálása — `GET /api/tts/lesson-audio/:id`,
+ * és az elérhetőségi jegyzék — `GET /api/tts/lesson-audio/available?keys=…` (review J1–J2: a kliens nem 404-ből tudja meg a hiányt).
  * Csak olvas (mellékhatás és írás nincs), hitelesítés nem kell (nyilvános tananyagszöveg hangja), a cím csak a lenyomatot tartalmazza.
  * A kulcs a tartalmat azonosítja és a sor soha nem módosul, ezért a találat korlátlanul gyorsítótárazható (böngésző, Vercel CDN).
  */
 export const TTS_AUDIO_CACHE_CONTROL_IMMUTABLE = "public, max-age=31536000, immutable";
 const NO_STORE = "no-store";
+/**
+ * Az elérhetőségi jegyzék rövid ideig tárolható (böngésző, CDN): a frissen legyártott hang legfeljebb 1 perc késéssel jelenik meg, a
+ * lecke tanulói közben ugyanazt a választ kapják (a kliens a kulcsokat rendezve küldi).
+ */
+export const TTS_AUDIO_AVAILABILITY_CACHE_CONTROL = "public, max-age=60";
+
+export type TtsAvailabilityReply = { status: 200 | 400; headers: Record<string, string>; body: { available: string[] } | { message: string } };
+/** A jegyzék válaszának tiszta függvénye: hibás bemenet 400 `no-store` (a tárolóhoz nem fordul); különben a meglévő kulcsok részhalmaza. */
+export async function ttsAvailabilityReply(query: Record<string, unknown>, existing: (keys: string[]) => Promise<string[]>): Promise<TtsAvailabilityReply> {
+  const parsed = parseTtsAvailabilityQuery(query);
+  if ("error" in parsed) return { status: 400, headers: { "Cache-Control": NO_STORE }, body: { message: parsed.error } };
+  const asked = new Set(parsed.keys);
+  // A válaszba csak a KÉRT kulcsok kerülhetnek (a tároló hibája se szivárogtasson mást), rendezve.
+  const available = (await existing(parsed.keys)).filter((id) => asked.has(id)).sort();
+  return { status: 200, headers: { "Cache-Control": TTS_AUDIO_AVAILABILITY_CACHE_CONTROL, "CDN-Cache-Control": TTS_AUDIO_AVAILABILITY_CACHE_CONTROL }, body: { available } };
+}
 
 export type TtsAudioReply = { status: 200 | 206 | 304 | 400 | 404 | 416; headers: Record<string, string>; body?: Buffer };
 
@@ -46,6 +63,11 @@ export function ttsAudioReply(id: string, audio: Pick<TtsAudio, "mime" | "bytes"
 export function registerLessonTtsAudio(app: Express, store: TtsAudioStore): void {
   const cache = new TtsAudioCache<Buffer>();
   const mimes = new Map<string, string>();
+  // A jegyzék útvonala a `/:id` ELŐTT áll (különben az „available” szó kulcsnak számítana, és 400-at kapna).
+  app.get(TTS_AUDIO_AVAILABLE_ROUTE, asyncRoute(async (req: Request, res: Response) => {
+    const reply = await ttsAvailabilityReply(req.query as Record<string, unknown>, (keys) => store.existing(keys));
+    res.status(reply.status).set(reply.headers).json(reply.body);
+  }));
   app.get(`${TTS_AUDIO_ROUTE}/:id`, asyncRoute(async (req: Request, res: Response) => {
     const id = req.params.id;
     let audio: Pick<TtsAudio, "mime" | "bytes"> | null = null;

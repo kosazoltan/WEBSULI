@@ -11,6 +11,16 @@ export const TTS_AUDIO_LANGUAGES = ["en-GB"] as const;
 /** A kulcs alakja: 32 kisbetűs hexa jegy — a végpont és a tároló minden más bemenetet lekérdezés előtt elutasít. */
 export const TTS_AUDIO_ID = /^[a-f0-9]{32}$/;
 export const TTS_AUDIO_ROUTE = "/api/tts/lesson-audio";
+/** Elérhetőségi jegyzék: a lecke EGY kéréssel megtudja, mely kulcsokhoz van hang a tárban (`?keys=` vesszővel elválasztott kulcsok). */
+export const TTS_AUDIO_AVAILABLE_ROUTE = `${TTS_AUDIO_ROUTE}/available`;
+/** Egy jegyzék-kérés legfeljebb ennyi kulcsot kérdezhet: a szószedet legfeljebb 100 tétel × 2 szöveg (szó + példamondat). */
+export const TTS_AUDIO_AVAILABILITY_MAX_KEYS = 200;
+/**
+ * A hangtár (hangfájl + jegyzék) SAJÁT sebességkorlátja, egy közös IP-ről netező osztályra méretezve: 30 tanuló × ~40 szöveg
+ * (20 tételes szószedet: szó + példamondat) = 1 200 hangfájl-kérés a böngésző / CDN tartós gyorsítótára előtt, + 30 jegyzék-kérés
+ * = 1 230; másfélszeres tartalékkal kerekítve 2 000 kérés / 15 perc / IP. A szerveres tartalék (`/api/tts/audio`) kerete ettől független.
+ */
+export const LESSON_AUDIO_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 2000, classSize: 30, textsPerLesson: 40 } as const;
 const LANGUAGE_CODE = /^[a-z]{2,3}(-[A-Z0-9]{2,4})?$/;
 const VOICE_VERSION = /^[a-z0-9][a-z0-9.-]{0,15}$/;
 
@@ -56,6 +66,27 @@ export async function ttsAudioHash(text: string, language: string, voiceVersion:
 export function ttsAudioPath(id: string): string {
   if (!TTS_AUDIO_ID.test(id)) throw new Error("Érvénytelen hangkulcs.");
   return `${TTS_AUDIO_ROUTE}/${id}`;
+}
+
+/**
+ * A jegyzék-kérés címe: a kulcsok rendezve és ismétlés nélkül (azonos lecke → azonos cím → a rövid gyorsítótár minden tanulónak talál).
+ * Érvénytelen kulcsra, üres listára vagy a plafon fölött null — a kliens ilyenkor jegyzék nélkül, a böngészőhanggal megy.
+ */
+export function ttsAudioAvailabilityUrl(ids: readonly string[]): string | null {
+  const keys = Array.from(new Set(ids)).sort();
+  if (keys.length === 0 || keys.length > TTS_AUDIO_AVAILABILITY_MAX_KEYS || keys.some((id) => !TTS_AUDIO_ID.test(id))) return null;
+  return `${TTS_AUDIO_AVAILABLE_ROUTE}?keys=${keys.join(",")}`;
+}
+
+/** A jegyzék-végpont bemenete: csak a `keys` paraméter, csak a kulcsformátum, darabszám-plafonnal. */
+export function parseTtsAvailabilityQuery(query: Record<string, unknown>): { keys: string[] } | { error: string } {
+  if (typeof query.keys !== "string" || !query.keys) return { error: "A 'keys' paraméter kötelező." };
+  // Hosszkorlát a darabolás ELŐTT: a legnagyobb érvényes bemenet 200 kulcs × 32 jegy + 199 vessző.
+  if (query.keys.length > TTS_AUDIO_AVAILABILITY_MAX_KEYS * 33) return { error: "Túl sok kulcs." };
+  const keys = Array.from(new Set(query.keys.split(",")));
+  if (keys.length > TTS_AUDIO_AVAILABILITY_MAX_KEYS) return { error: "Túl sok kulcs." };
+  if (keys.some((id) => !TTS_AUDIO_ID.test(id))) return { error: "Érvénytelen hangkulcs." };
+  return { keys };
 }
 
 /** Van-e a nyelvhez előre gyártott hang (a kliens csak ekkor kéri le). */

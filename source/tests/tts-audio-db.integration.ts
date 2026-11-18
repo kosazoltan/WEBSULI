@@ -56,6 +56,13 @@ test("put → get → azonos bájtok; ismételt put → exists (felülírás né
   assert.equal(await store.totalBytes(), bytes.length + 100);
   assert.deepEqual(await store.has([first.id, second.id, "0".repeat(32), "nem-kulcs", first.id]), new Set([first.id, second.id]));
   assert.deepEqual(await store.has([]), new Set());
+  // Review J1–J2: az elérhetőségi jegyzék művelete — a meglévő kulcsok részhalmaza, rendezve, ismétlés és érvénytelen kulcs nélkül.
+  assert.deepEqual(await store.existing([second.id, "0".repeat(32), first.id, "nem-kulcs", "'; DROP", first.id]), [first.id, second.id].sort());
+  assert.deepEqual(await store.existing([]), []);
+  assert.deepEqual(await store.existing(["0".repeat(32)]), [], "üres találat nem hiba");
+  const many = Array.from({ length: 260 }, (_, i) => i.toString(16).padStart(32, "f"));
+  assert.deepEqual(await store.existing([...many, first.id]), [], "a darabszám-plafon (200) fölötti kulcs kimarad — a hívó dolga a plafont betartani");
+  assert.deepEqual(await store.existing([first.id, ...many]), [first.id]);
   assert.equal(await store.get("0".repeat(32)), null);
   assert.equal(await store.get("'; DROP TABLE lesson_tts_audio; --"), null);
   const [saved] = await db.select().from(lessonTtsAudio).where(sql`id = ${first.id}`);

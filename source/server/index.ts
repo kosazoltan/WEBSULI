@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { isTtsAudioSubPath } from "../shared/speech-fallback";
-import { isTtsLessonAudioSubPath, TTS_AUDIO_ROUTE } from "../shared/tts-audio-key";
+import { isTtsLessonAudioSubPath, LESSON_AUDIO_RATE_LIMIT, TTS_AUDIO_ROUTE } from "../shared/tts-audio-key";
 import { clientIpKeyGenerator } from "./lib/client-ip";
 import compression from "compression";
 import helmet from "helmet";
@@ -408,6 +408,18 @@ const ttsAudioLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Terv 2026-11-18-tananyag-gyartas-minoseg (S8b, review J2): a hangtár (előre gyártott hangfájl + elérhetőségi jegyzék) SAJÁT korlátja,
+// egy közös IP-ről netező osztályra méretezve (a számolás: shared/tts-audio-key.ts, LESSON_AUDIO_RATE_LIMIT). Külön példány: a hangtár
+// forgalma nem fogyasztja a szerveres hangtartalék (`ttsAudioLimiter`) keretét, és fordítva.
+const lessonAudioLimiter = rateLimit({
+  keyGenerator: clientIpKeyGenerator,
+  windowMs: LESSON_AUDIO_RATE_LIMIT.windowMs,
+  max: LESSON_AUDIO_RATE_LIMIT.max,
+  message: "Túl sok felolvasási kérés. Próbáld újra később!",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Tételgyár T7.1 (tulajdonosi döntés 2026-10-15): a döntőbíró IP-nként 60 kérés / 15 perc (a napi 2000-es fizetett plafon a szolgáltatásban).
 const arbiterLimiter = rateLimit({
   keyGenerator: clientIpKeyGenerator,
@@ -446,7 +458,7 @@ app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
 app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
 app.use("/api/tts/audio", ttsAudioLimiter);
-app.use(TTS_AUDIO_ROUTE, ttsAudioLimiter); // S8b: az előre gyártott leckehang (CDN-ből gyorsítótárazva) a hangtartalék keretét kapja
+app.use(TTS_AUDIO_ROUTE, lessonAudioLimiter); // S8b: a hangtár (hangfájl + jegyzék) saját kerete — nem fogyasztja a hangtartalékét
 app.use("/api/push/subscribe", publicWriteLimiter);
 app.use("/api/push/unsubscribe", publicWriteLimiter);
 

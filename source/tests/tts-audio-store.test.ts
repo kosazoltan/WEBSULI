@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
 import express from "express";
-import { registerLessonTtsAudio, ttsAudioReply, TTS_AUDIO_CACHE_CONTROL_IMMUTABLE } from "../server/tts/audio-routes";
+import { registerLessonTtsAudio, ttsAudioReply, ttsAvailabilityReply, TTS_AUDIO_CACHE_CONTROL_IMMUTABLE } from "../server/tts/audio-routes";
+import { LESSON_AUDIO_RATE_LIMIT, TTS_AUDIO_AVAILABILITY_MAX_KEYS, parseTtsAvailabilityQuery, ttsAudioAvailabilityUrl } from "../shared/tts-audio-key";
 import {
   assertTotalWithinLimit, ttsAudioLimits, validateTtsAudioRow, TtsAudioInputError, TtsStorageLimitError, TTS_AUDIO_LIMITS,
   type TtsAudioRow, type TtsAudioStore,
@@ -105,6 +106,7 @@ test("végpont (valódi HTTP, ál-tároló): 200 + fejlécek, 304, 206, 404, 400
   const store: TtsAudioStore = {
     async get(id) { calls.push(`get ${id}`); return id === ID ? { mime: "audio/mpeg", bytes, size: bytes.length } : null; },
     async has() { calls.push("has"); return new Set(); },
+    async existing(keys) { calls.push(`existing ${keys.length}`); return keys.filter((key) => key === ID); },
     async put() { calls.push("put"); return "stored"; },
     async totalBytes() { calls.push("totalBytes"); return 0; },
     async usage() { calls.push("usage"); return { totalBytes: 0, rows: 0, byVersion: {} }; },
@@ -161,6 +163,7 @@ test("végpont: ismeretlen kulcs 404, majd a tároló megkapja a hangot → ugya
   const store: TtsAudioStore = {
     async get(id) { gets += 1; const found = stored.get(id); return found ? { mime: "audio/mpeg", bytes: found, size: found.length } : null; },
     async has() { return new Set(); },
+    async existing() { return []; },
     async put() { return "stored"; },
     async totalBytes() { return 0; },
     async usage() { return { totalBytes: 0, rows: 0, byVersion: {} }; },
@@ -186,12 +189,93 @@ test("végpont: ismeretlen kulcs 404, majd a tároló megkapja a hangot → ugya
     await new Promise((resolve) => server.close(resolve));
   }
 });
+// Review J1–J2: elérhetőségi jegyzék — a kliens egy kéréssel tudja meg, mely kulcsokhoz van hang (nem kattintásonkénti 404-ből).
+const key = (n: number) => n.toString(16).padStart(32, "0");
+test("jegyzék: a bemenet csak a kulcsformátum, darabszám-plafonnal; a cím rendezett és ismétlés nélküli", () => {
+  assert.equal(TTS_AUDIO_AVAILABILITY_MAX_KEYS, 200);
+  assert.deepEqual(parseTtsAvailabilityQuery({ keys: `${key(2)},${key(1)},${key(2)}` }), { keys: [key(2), key(1)] });
+  const full = Array.from({ length: 200 }, (_, i) => key(i));
+  assert.equal((parseTtsAvailabilityQuery({ keys: full.join(",") }) as { keys: string[] }).keys.length, 200, "pontosan a plafonig enged");
+  for (const bad of [{}, { keys: "" }, { keys: [key(1)] }, { keys: 5 }, { keys: "abc" }, { keys: `${key(1)},` }, { keys: `${key(1)},${ID.toUpperCase()}` },
+    { keys: `${key(1)} ` }, { keys: "' OR 1=1 --" }, { keys: [...full, key(999)].join(",") }, { keys: "a".repeat(7000) }]) {
+    assert.ok("error" in parseTtsAvailabilityQuery(bad as Record<string, unknown>), JSON.stringify(bad).slice(0, 60));
+  }
+  assert.equal(ttsAudioAvailabilityUrl([key(2), key(1), key(2)]), `/api/tts/lesson-audio/available?keys=${key(1)},${key(2)}`);
+  assert.equal(ttsAudioAvailabilityUrl([]), null);
+  assert.equal(ttsAudioAvailabilityUrl([key(1), "nem-kulcs"]), null);
+  assert.equal(ttsAudioAvailabilityUrl([...full, key(999)]), null, "a plafon fölött nincs kérés");
+  assert.ok(ttsAudioAvailabilityUrl(full)!.length < 8000, "a leghosszabb cím is belefér a szokásos URL-korlátba");
+});
+
+test("jegyzék válasza: a meglévő kulcsok részhalmaza, rövid gyorsítótárral; hibás bemenet 400 no-store, a tároló megkérdezése nélkül", async () => {
+  const asked: string[][] = [];
+  const existing = async (keys: string[]) => { asked.push(keys); return [key(3), key(1), key(77)]; };
+  const ok = await ttsAvailabilityReply({ keys: `${key(3)},${key(1)},${key(2)}` }, existing);
+  assert.deepEqual(ok, { status: 200, headers: { "Cache-Control": "public, max-age=60", "CDN-Cache-Control": "public, max-age=60" }, body: { available: [key(1), key(3)] } });
+  assert.deepEqual(asked, [[key(3), key(1), key(2)]], "egyetlen tárolóhívás; a nem kért kulcs (77) nem kerül a válaszba");
+  const bad = await ttsAvailabilityReply({ keys: "abc" }, existing);
+  assert.equal(bad.status, 400);
+  assert.deepEqual(bad.headers, { "Cache-Control": "no-store" });
+  assert.equal(asked.length, 1, "hibás bemenet nem jut el a tárolóig");
+  assert.deepEqual((await ttsAvailabilityReply({ keys: key(9) }, async () => [])).body, { available: [] }, "üres tár: üres jegyzék, nem hiba");
+});
+
+test("jegyzék végpont (valódi HTTP): az „available” nem kulcs — a jegyzék útvonala megelőzi a hangfájlét", async () => {
+  const calls: string[] = [];
+  const store: TtsAudioStore = {
+    async get(id) { calls.push(`get ${id}`); return null; },
+    async existing(keys) { calls.push(`existing ${keys.length}`); return keys.filter((k) => k === ID); },
+    async has() { return new Set(); },
+    async put() { return "stored"; },
+    async totalBytes() { return 0; },
+    async usage() { return { totalBytes: 0, rows: 0, byVersion: {} }; },
+    async purgeOtherVersions() { return { rows: 0, bytes: 0 }; },
+  };
+  const app = express();
+  registerLessonTtsAudio(app, store);
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    const ok = await fetch(`${base}${ttsAudioAvailabilityUrl([ID, key(5)])}`);
+    assert.equal(ok.status, 200);
+    assert.equal(ok.headers.get("cache-control"), "public, max-age=60");
+    assert.deepEqual(await ok.json(), { available: [ID] });
+    assert.deepEqual(calls, ["existing 2"], "egy tárolóhívás, hangfájl-lekérés nélkül");
+    for (const bad of ["", "?keys=", "?keys=abc", `?keys=${ID},x`, `?key=${ID}`]) {
+      const invalid = await fetch(`${base}/api/tts/lesson-audio/available${bad}`);
+      assert.equal(invalid.status, 400, bad);
+      assert.equal(invalid.headers.get("cache-control"), "no-store");
+    }
+    assert.deepEqual(calls, ["existing 2"]);
+    assert.equal((await fetch(`${base}/api/tts/lesson-audio/available`, { method: "POST" })).status, 404, "írás nincs");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+// Review J2: a hangtár korlátja külön példány, osztályra méretezve — nem közös a szerveres hangtartalékéval.
+test("sebességkorlát: a hangtár saját, osztályra méretezett korlátot kap; a hangtartalék kerete független", () => {
+  const { classSize, textsPerLesson, max, windowMs } = LESSON_AUDIO_RATE_LIMIT;
+  const classLoad = classSize * textsPerLesson + classSize;
+  assert.equal(classLoad, 1230, "30 tanuló × 40 szöveg + 30 jegyzék-kérés");
+  assert.ok(max >= classLoad * 1.5, "másfélszeres tartalék");
+  assert.equal(max, 2000);
+  assert.equal(windowMs, 15 * 60 * 1000);
+  const index = readFileSync(new URL("../server/index.ts", import.meta.url), "utf8");
+  assert.match(index, /const lessonAudioLimiter = rateLimit\(\{\s*keyGenerator: clientIpKeyGenerator,\s*windowMs: LESSON_AUDIO_RATE_LIMIT\.windowMs,\s*max: LESSON_AUDIO_RATE_LIMIT\.max,/);
+  assert.match(index, /app\.use\(TTS_AUDIO_ROUTE, lessonAudioLimiter\);/);
+  assert.match(index, /app\.use\("\/api\/tts\/audio", ttsAudioLimiter\);/);
+  assert.equal(index.match(/app\.use\([^)]*\bttsAudioLimiter\)/g)?.length, 1, "a hangtartalék korlátja csak a saját útvonalán él");
+  assert.equal(index.match(/app\.use\([^)]*lessonAudioLimiter\)/g)?.length, 1);
+});
 test("a Vercel a leckehangot gyorsítótárazhatja (nincs no-store, átírás-gyorsítótár bekapcsolva), a többi /api választ nem", () => {
   const cfg = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
   const noStore = cfg.headers.filter((h) => h.headers.some((x) => x.key === "Cache-Control" && x.value.includes("no-store")));
   const hits = (path: string) => noStore.some((h) => new RegExp(`^${h.source}$`).test(path));
   assert.equal(hits(`/api/tts/lesson-audio/${ID}`), false);
   assert.equal(hits("/api/tts/lesson-audio"), true);
+  assert.equal(hits("/api/tts/lesson-audio/available"), false, "a jegyzék rövid gyorsítótárát a szerver fejléce adja");
   assert.equal(hits("/api/tts"), true);
   assert.equal(hits("/api/tts/other"), true);
   const rule = cfg.headers.find((h) => h.source === "/api/tts/lesson-audio/(.*)");
