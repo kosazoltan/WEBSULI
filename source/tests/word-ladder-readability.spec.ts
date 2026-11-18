@@ -166,7 +166,7 @@ type Row = NonNullable<Awaited<ReturnType<typeof measure>>> & { state: "kérdés
  * A `?wlItems=` tételein végigmegy: minden kérdésnél az élesítés után mér (kérdés-állapot), majd ROSSZ fogással a
  * megoldás-kijelzést is méri (a kártya ekkor állapotsorral és „Miért?” gombbal nő). A kulcs a probe `questionKey`-e.
  */
-async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "fr"; grade: string }): Promise<Row[]> {
+async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "fr"; grade: string; onReveal?: (row: Row) => Promise<void> }): Promise<Row[]> {
   await page.addInitScript((o) => {
     localStorage.setItem("websuli.classroomGrade", o.grade);
     localStorage.setItem("websuli.wordladder.lang", o.lang);
@@ -193,7 +193,10 @@ async function runItems(page: Page, ids: string[], opts: { lang: "en" | "de" | "
         await expect(page.locator('[data-testid^="wl-option-"][data-state="correct"]').first()).toBeVisible({ timeout: 3_000 });
         await page.waitForTimeout(300);
         const r = await measure(page);
-        if (r) rows.push({ ...r, key, state: "megoldás" });
+        if (r) {
+          rows.push({ ...r, key, state: "megoldás" });
+          await opts.onReveal?.({ ...r, key, state: "megoldás" });
+        }
       }
     }
     await page.waitForTimeout(150);
@@ -345,7 +348,7 @@ test("Ú1 @ 360x640: hiba utáni kérdésnél a célkártya betűje ugyanakkora,
  * érvényes legyen, és a kártya alsó biztonsági sávos, keskeny nézetben se fedje a fogásokat. 360×640, `--game-safe-bottom: 34px`
  * (iPhone-szerű alsó sáv), hosszú (mondatnyi) válaszos tételek, kérdés- és megoldás-állapot; képernyőkép a mérési mappába.
  */
-test("R2 @ 360x640 alsó biztonsági sávval: hosszú válaszoknál is hat a tömör fogás-panel, a kártya nem fedi a fogásokat", async ({ page }) => {
+test("R2 @ 360x640 alsó biztonsági sávval: hosszú válaszoknál is hat a tömör fogás-panel, a kártya nem fedi a fogásokat", async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   await page.setViewportSize({ width: 360, height: 640 });
   await stub(page);
@@ -355,7 +358,20 @@ test("R2 @ 360x640 alsó biztonsági sávval: hosszú válaszoknál is hat a tö
     document.addEventListener("DOMContentLoaded", () => document.head.appendChild(s));
   });
   const ids = ["vocab:en4-family-006:phrase-meaning", "vocab:en4-health-016:phrase-meaning", "vocab:en4-health-023:phrase-meaning", "en4-052"];
-  const rows = await runItems(page, ids, { lang: "en", grade: "11" });
+  // A képernyőkép a javított esetről (hosszú válaszos, tömör panel, `en4-family-006` megoldás-állapot) a teszt KIMENETI
+  // mappájába kerül (review #498-követés): követett repófájlt a teszt nem ír felül; a mérési mappába kézzel kerül.
+  const shot = testInfo.outputPath("r2-360x640-also-sav.jpg");
+  let shotTaken = false;
+  const rows = await runItems(page, ids, {
+    lang: "en",
+    grade: "11",
+    onReveal: async (row) => {
+      if (!shotTaken && row.key === keyOf("vocab:en4-family-006:phrase-meaning") && row.holdsFit === "2") {
+        await page.screenshot({ path: shot, type: "jpeg", quality: 70 });
+        shotTaken = true;
+      }
+    },
+  });
   report(rows, "R2 en 360x640 alsó sáv");
   for (const m of rows.filter((r) => ids.map(keyOf).includes(r.key))) {
     expect(m.overHolds, `${m.state} ${m.key}: a kártya fedi a fogásokat (alja ${m.cardBottom}, fogások ${m.holdsTop})`).toBe(false);
@@ -365,7 +381,8 @@ test("R2 @ 360x640 alsó biztonsági sávval: hosszú válaszoknál is hat a tö
   const holdsFit = rows.filter((r) => r.holdsFit === "2");
   expect(holdsFit.length, "a tömör panel legalább egy mért állapotban életbe lépett").toBeGreaterThan(0);
   for (const m of holdsFit) expect(m.holdFont, `${m.state} ${m.key}: tömör panelen a fogás-felirat 16 px`).toBe(16);
-  await page.screenshot({ path: "../docs/measurements/jatekok-jatekelmeny/J2-olvashatosag/r2-360x640-also-sav.jpg", type: "jpeg", quality: 70 });
+  expect(shotTaken, "képernyőkép a javított esetről (en4-family-006, tömör panel, megoldás)").toBe(true);
+  console.log(`R2|képernyőkép: ${shot}`);
 });
 
 test("SZ-2 / kapu 3(a): az óra csak ≥ 400 ms előjelzés után indul, a fogások addig nem élesek, az előjelzés alatti billentyű nem válasz", async ({ page }) => {
