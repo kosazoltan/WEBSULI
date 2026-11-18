@@ -377,10 +377,18 @@ describe("adventi naptár — végpontok", () => {
     // Meglévő sor ismételt írása sem fogyaszt keretet: csak az első létrehozás számít.
     const first = await kid(); first.ip = ip;
     for (let i = 0; i < 5; i++) assert.equal((await first.post("/grade", { grade: 4 })).status, 200);
-    // Ezután 119 eszköz EGYSZERRE kér új sort (valódi adatbázissal): pontosan 89 fér még be (összesen 90 / óra / hálózat —
-    // iskolai méret), a többi 429; a keret párhuzamos kérésekkel sem léphető túl (review U1).
-    const crowd = await kidsAt(119);
-    const outcomes = await Promise.all(crowd.map((k) => k.post("/grade", { grade: 4 })));
+    // Ezután 119 eszköz kér új sort (valódi adatbázissal), HÁROM egyidejű hullámban (40 + 40 + 39) — a 10-es kapcsolatkészletet
+    // terhelt gépen sem árasztja el egyetlen 119-es löket (S2b 3. kör, M2). Pontosan 89 fér még be (összesen 90 / óra / hálózat —
+    // iskolai méret): az első két hullám mind bejut, a harmadik 39 EGYIDEJŰ kéréséből pontosan 9, a többi 30 → 429. A keret
+    // határa így továbbra is párhuzamos kérésekkel van megtámadva (review U1).
+    const crowd: Kid[] = [];
+    const outcomes: Array<{ status: number; json: Json }> = [];
+    for (const [size, admitted] of [[40, 40], [40, 40], [39, 9]] as const) {
+      const wave = await kidsAt(size);
+      const results = await Promise.all(wave.map((k) => k.post("/grade", { grade: 4 })));
+      assert.equal(results.filter((o) => o.status === 200).length, admitted, `${size} fős hullám`);
+      crowd.push(...wave); outcomes.push(...results);
+    }
     assert.equal(outcomes.filter((o) => o.status === 200).length, 89);
     assert.equal(outcomes.filter((o) => o.status === 429 && o.json.limit === "new-row").length, 30);
     assert.deepEqual(await q(`SELECT count(*)::int AS n FROM advent_progress WHERE subject_id = ANY($1)`, [[first.device, ...crowd.map((k) => k.device)]]), [{ n: 90 }]);

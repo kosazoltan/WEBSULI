@@ -78,3 +78,19 @@ képcsere), #155 (S5, S6, S8), #156 (ágak rebase-e a friss mainre push előtt).
   Minden adventi PR megnyitása előtt ellenőrizni kell a friss főágon (`git ls-tree origin/main source/migrations/`), hogy a 0042 szabad-e —
   ha nem, megállás és jelzés. Mérve 2026-11-18, `origin/main` = `2b873e3c`: az utolsó migráció a 0041, a 0042 szabad (a journal csak a 0000-t
   tartja nyilván, a futtató fájlnév szerint dolgozik).
+
+## 7. Kiegészítés — az S2b 2–3. ellenőri köre (2026-11-18)
+
+- **Mi ment rosszul:** az új-sor keret első javítása („csak a létrejött sor számít”) az ellenőrzést és a számolást két adatbázis-kör
+  közé tette, így párhuzamos kérésekkel a keret túlléphető lett (U1). A soros teszt ezt nem láthatta. Ár: egy teljes ellenőri kör.
+  **Javítás ebben a futásban:** `source/server/advent/limits.ts` (`reserve` / `release`, ablakonkénti söprés),
+  `source/server/advent/routes.ts` (`creatingDeviceRow`), `source/tests/advent-limits.test.ts` (120 egyidejű kérés, mutációs
+  ellenpróbával). **Tanulság:** keretet / kvótát érintő javításhoz mindig tartozzon egyidejű kéréses teszt.
+- **A DB-kör ideje:** terhelt gépen, soros kliensekkel 475 s volt a 480 s-os korlátból; párhuzamos kliensekkel, terheletlen gépen
+  300 s (37% tartalék). **Javítás:** `source/tests/advent-routes-db.integration.ts`; a szabály a futtatóban megjegyzésként áll
+  (`source/scripts/run-learning-db-tests.ts`): 15% alatti tartaléknál a tesztet kell gyorsítani, nem a korlátot emelni.
+- **Egyetlen nagy löket a kapcsolatkészleten (M2):** a 119 egyidejű kérés a 10-es kapcsolatkészleten terhelt CI-gépen ingadozhat.
+  **Javítás:** három hullám (40 + 40 + 39); a pontos állítás megmaradt (összesen 90 sor, a harmadik hullám 39 egyidejű kéréséből
+  pontosan 9 jut be, 30 kap 429-et) — a keret határát továbbra is párhuzamos kérések támadják.
+- **Felülírt szám a terv eredeti helyén (U3):** a tulajdonosi döntés először csak új szakaszba került. **Tanulság:** felülírt
+  értéket a HELYÉN kell jelölni (dátum + hivatkozás), nem csak a döntési szakaszban.
