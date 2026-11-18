@@ -1,8 +1,8 @@
 # Spec: Adventi naptár — „Fénylő ablakok” (új, szezonális játék)
 
-> Dátum: 2026-11-18 · Szerző: Claude (tervező alügynök) · Állapot: VÁZLAT — a 4.1 döntési pontok a tulajdonosra várnak
+> Dátum: 2026-11-18 · Szerző: Claude (tervező alügynök) · Állapot: JÓVÁHAGYVA — tulajdonosi döntések 2026-11-18 (12. szakasz; ahol a 12. szakasz eltér a korábbi szövegtől, a 12. szakasz érvényes)
 > Szabály: 3+ fájlt érintő feladat csak spec + AI-olvasható végrehajtási utasítás után indul (`docs/agent-haromfazisu-munka.md`).
-> Végrehajtás: `docs/specs/2026-11-18-adventi-naptar-vegrehajtas.md`. Ebben a körben csak az 1–2. fázis készül, kód nem.
+> Végrehajtás: `docs/specs/2026-11-18-adventi-naptar-vegrehajtas.md`. A 3. fázis a döntések után, 2026-11-18-án indult (S1).
 
 A tulajdonos kérése (2026-11-18, szó szerint): „készíts nekem egy vadonatúj játékot a karácsonyi ünnepekre, amelyben mindegyik
 tanulónak adventi naptárat kell kinyitnia. Mindegyik feldob egy kérdést a maga tudásszintjén, és amikor végigér, és mondjuk 95%-os
@@ -451,3 +451,279 @@ Minden szelet önállóan összevonható (a flag alapból KI), ~400 soros PR; a 
 ## 11. Végrehajtási utasítás
 
 - Végrehajtás: `docs/specs/2026-11-18-adventi-naptar-vegrehajtas.md`
+
+## 12. Tulajdonosi döntések és kiegészítés (2026-11-18)
+
+### 12.1 A döntések (kérdőíven, szó szerint a választott opciók)
+
+| Pont | Döntés |
+|---|---|
+| (a) | „Naponta egy, pótolható” = A1 |
+| (b) | „Új kérdéssel javíthat” = B1 |
+| (c) | nem kérdezett — a javaslat érvényes: C1, szó szerint „apukádhoz” |
+| (d) | nem kérdezett — a javaslat érvényes: D1, szerveren tárolt előrehaladás |
+| (e) | „Igen, egy levél a végén” = E1 |
+| (f) | nem kérdezett — a javaslat érvényes: F1, 2D |
+| (g) | nem kérdezett — a javaslat érvényes: G1, nincs XP / ranglista |
+| (h) | szabad szöveg: „Kis saját kérdéskészlet a karácsony ünnepével kapcsolatosan, a karácsony hagyományával kapcsolatos, nem nehéz kérdésekkel ez minden évfolyamra vonatkozzon. Mindegyik tanuló kapja meg az értesítést, hogy elkészült.” Pontosítás: „Vegyesen” — minden évfolyamon kb. minden harmadik ablak (8 a 24-ből) könnyű karácsonyi kérdés, a többi a tanuló saját szintjén a meglévő bankból; az 1–2. osztályosok mind a 24-et a karácsonyi készletből kapják. Értesítés: „Az oldalon és e-mailben”. |
+
+Következmény: a 4.1 (h) H1 javaslata és a 2. szakasz „új kérdésbank nem cél” pontja ÉRVÉNYÉT VESZTI; az S7b helyett az S1b
+(karácsonyi készlet) kötelező szelet; az S7a és S7c nem készül. Új szelet: S8 (értesítés).
+
+### 12.2 R13 — Karácsonyi kérdéskészlet (1–12. évfolyam)
+
+- Hely: `source/shared/advent/christmasBank/` — tiszta adat, a szerver és a tesztek importálják; a kliens-csomagba nem kerül
+  (a kérdést a szerver adja).
+- Alak: `ChristmasItem = { id: "xmas-NNN"; minGrade; maxGrade; prompt; options (4 különböző); correctIndex; explanation }`.
+  Egy tétel egy évfolyam-SÁVRA érvényes (`minGrade`–`maxGrade`), így a könnyű tételek több évfolyamot is kiszolgálnak.
+- Tartalom: KÉZZEL írt magyar kérdések a karácsonyról és a magyar karácsonyi hagyományokról (advent, adventi koszorú, Mikulás,
+  Luca-nap, betlehemezés, karácsonyfa, szaloncukor, bejgli, halászlé, mézeskalács, karácsonyi dalok, szenteste, vízkereszt, téli
+  ünnepkör). Fizetős AI-gyártás NEM indul. Nem nehéz; az 1–2. évfolyamon rövid (legfeljebb 80 karakteres) kérdés és rövid válaszok.
+- Minőségi szabályok: tényszerűen helyes; egyetlen egyértelmű jó válasz (családonként vagy vidékenként eltérő szokásra — például
+  ki hozza az ajándékot, mi a karácsonyi vacsora — NEM kérdezünk úgy, mintha egy válasz lenne helyes; ilyenkor a kérdés a hagyomány
+  nevére, dátumára, tárgyára vonatkozik); vallási szempontból tapintatos (a vallási eredetet „a keresztény hagyomány szerint”
+  megfogalmazással, tényként említi, hitbeli állítást nem kér számon, más vallást és a nem vallásos családot nem minősíti);
+  márkanév nincs; a magyarázat 30–300 karakter.
+- Mennyiség (validátor kényszeríti; évfolyamonként az ÉRVÉNYES tételek száma): 1–2. évfolyam ≥ 96 (24 ablak × 2 kérdés × 2 kör),
+  3–12. évfolyam ≥ 72 (8 ablak × 3 kérdés × 3 kör). Azonosító és normalizált prompt a teljes készletben egyedi, és a közös
+  évfolyam-bank egyetlen promptjával sem egyezik.
+- Ellenőrzés: gépi validátor (egységteszt) + a független ellenőr tételenkénti TÉNYELLENŐRZÉSE a PR előtt.
+
+### 12.3 R4 kiegészítése — vegyes kiosztás
+
+- 3–12. évfolyam: a karácsonyi ablakok a 3-mal osztható napok: **3, 6, 9, 12, 15, 18, 21, 24** (8 ablak; a 24. mindig karácsonyi).
+  A többi 16 ablak a tanuló évfolyamának közös bankjából jön: a tárgyak a 16 ablakon járnak körbe (seedelt sorrend), a szint a nap
+  szerint (1–8. könnyű, 9–16. közepes, 17–24. nehéz) — cellánként legfeljebb 2 ablak, az R4 kapacitás-számítása változatlanul áll.
+- 1–2. évfolyam: mind a 24 ablak karácsonyi; ablakonként 1 javítás (2 kérdés), legfeljebb 2 kör.
+- A karácsonyi ablak kérdései az évfolyamra érvényes tételekből, seedelten, visszatevés nélkül (körökön át sem ismétlődik).
+- A felületen a karácsonyi ablak tárgya „Karácsony”; a szülői levél tárgyankénti bontásában külön sor.
+- A 95% szabálya (R1) változatlan: a karácsonyi és a bank-ablak ugyanannyit ér.
+- R6 módosul: az évfolyam érvényes tartománya 1–12 (a névtelen évfolyamválasztó is 1–12.); az E11 „üzenet” ága és a
+  `unavailable: "low-grade"` válasz megszűnik (12 feletti érték 12, 1 alatti 1).
+
+### 12.4 R14 — Értesítés: „Az oldalon és e-mailben”
+
+**Az oldalon:** az R10 szezonális kártyája mindenkinek látszik a főoldalon és a játéklistán (S4) — ez az oldali értesítés.
+
+**E-mailben — címzett-források felmérése (kódból, 2026-11-18):**
+
+| Tábla | Cím | Hozzájárulás a kódban | Javaslat |
+|---|---|---|---|
+| `email_subscriptions` | `email` | a látogató maga iratkozott fel; `is_subscribed` kapcsoló | IGEN (`is_subscribed = true`) |
+| `extra_email_addresses` | `email` | az admin vette fel (`added_by`), `is_active`; a nevesített tanulói címek (`student_name`, `learner_id`) ma is kapnak napi emlékeztetőt és új-lecke értesítőt | IGEN (`is_active = true`) |
+| `player_accounts` | `email` | a játékos a belépéshez adta meg; hírlevél-hozzájárulás oszlop NINCS | csak ellenőrzött (`email_verified_at`), nem tiltott fiók — és CSAK a tulajdonos külön igenjével (12.6) |
+| `users` | `email` | admin / Google-belépés; hozzájárulás nincs | NEM |
+| `learners` | nincs cím | a tanuló címe az `extra_email_addresses` sorban él | — |
+
+Szabályok: a címek kisbetűsítve, ismétlődés nélkül; a levél szövege és a címzettek SZÁMA a tulajdonos elé kerül, és valódi levél
+CSAK az ő külön jóváhagyása után megy ki — ügynök valódi levelet nem küld. Megvalósítás: admin-végpont
+`POST /api/admin/advent/announce` (`isAuthenticatedAdmin`, CSRF) két móddal: `{ dryRun: true }` → `{ recipients, bySource, subject,
+html }` küldés nélkül (cím a válaszban nincs); `{ dryRun: false, confirmCount }` → csak akkor küld, ha a `confirmCount` egyezik az
+aktuális címzettszámmal; címzettenként egyszer (foglalás az új `advent_announcements` táblában: `season` + cím-lenyomat egyedi
+kulcs — a cím maga nem tárolódik), szolgáltatói idempotencia-kulccsal, kötegelve. Az admin-felületen „Adventi értesítő” panel:
+előnézet, címzettszám, „Küldés” gomb megerősítő párbeszéddel. A levél: rövid ünnepi szöveg, egy gomb a naptárra, leiratkozási
+tájékoztatás; személyes adat és token nincs benne. `NODE_ENV=test` és e2e-mód alatt valódi küldés nincs.
+
+### 12.5 Új elfogadási kritériumok
+
+<!-- acceptance-checklist -->
+
+- [ ] A33 WHEN a validátor a karácsonyi készleten fut THEN the system SHALL nulla hibát jelenteni: egyedi azonosító és
+  normalizált prompt, 4 különböző válasz, egy helyes, 30–300 karakteres magyarázat, érvényes évfolyamsáv, és évfolyamonként
+  az érvényes tételek száma 1–2. évfolyamon ≥ 96, 3–12. évfolyamon ≥ 72.
+- [ ] A34 WHEN egy 3–12. évfolyamos tanuló naptára elkészül THEN the system SHALL pontosan a 3., 6., 9., 12., 15., 18., 21. és
+  24. ablakba karácsonyi kérdést tenni, a többi 16-ba a tanuló évfolyamának közös bankjából.
+- [ ] A35 WHEN egy 1–2. évfolyamos tanuló naptára elkészül THEN the system SHALL mind a 24 ablakba az évfolyamára érvényes
+  karácsonyi kérdést tenni, ablakonként legfeljebb 1 javítással és legfeljebb 2 körrel.
+- [ ] A36 WHEN egy tanuló az évad minden körét és javítását végigjátssza THEN the system SHALL karácsonyi kérdést sem
+  ismételni.
+- [ ] A37 WHEN az admin száraz futást kér az értesítőre THEN the system SHALL a címzettek számát, forrásonkénti bontását és a
+  levél szövegét visszaadni, egyetlen levél elküldése és egyetlen cím kiadása nélkül.
+- [ ] A38 WHEN az admin a küldést nem egyező `confirmCount` értékkel, vagy valaki nem adminként kéri THEN the system SHALL nem
+  küldeni; WHEN egyezővel kéri THEN the system SHALL címzettenként legfeljebb egy levelet küldeni, ismételt kérésre sem többet.
+- [ ] A39 WHEN az értesítő címzettlistája összeáll THEN the system SHALL csak a 12.4 tábla IGEN forrásait használni
+  (a `users` táblát soha), kisbetűsítve és ismétlődés nélkül.
+
+### 12.6 Nyitott tulajdonosi kérdés (az S8 előtt; a határidős S1–S4-et nem akasztja meg)
+
+A regisztrált játékosok (`player_accounts`) címe belépéshez lett megadva, hírlevél-hozzájárulás nincs rögzítve. Opciók:
+★ (1) az értesítő csak a feliratkozóknak és az admin által felvett címeknek megy, a játékosok az oldali kártyát látják — adatvédelmi
+szempontból tiszta; (2) az ellenőrzött játékos-címeknek is megy egyszeri, szolgáltatási jellegű értesítésként, leiratkozási
+tájékoztatással. A száraz futás mindkét számot megmutatja; a küldés előtt a tulajdonos dönt.
+
+### 12.7 Szeletelés (felülírja a 9. szakasz tábláját)
+
+| Szelet | Tartalom | Határidő |
+|---|---|---|
+| S1 | Tiszta mag: idő, szabályok, vegyes kiosztás (a karácsonyi tételek paraméterként), szerződés, egységtesztek | dec. 1. |
+| S1b | Karácsonyi kérdéskészlet 1–12. évfolyam + validátor-teszt (tartalmi szeletek: S1b-1 az 1–4., S1b-2 az 5–12. évfolyam sávjai) | dec. 1. |
+| S2a | Migráció, séma, tároló (az `advent_announcements` tábla is ebben a migrációban) | dec. 1. |
+| S2b | Azonosítás, végpontok, flag | dec. 1. |
+| S3a | Kliens 1: naptár, ablak, kérdés, évfolyamválasztó (1–12.) | dec. 1. |
+| S3b | Kliens 2: összesítés, javítás, új kör, hó, hang | dec. 1. |
+| S4 | Szezonális kártya mindenkinek (oldali értesítés), mobil mérés, dátumhatárok | dec. 1. |
+| S5 | Szülői levél a végén (E1) | dec. 24. előtt |
+| S6 | Admin előnézet, takarító, a flag bekapcsolása, átfogó review, retro | a flag-rész az élesítéshez kell |
+| S8 | Értesítő e-mail: címzett-összeállítás, száraz futás, admin-panel, jóváhagyás utáni küldés | az élesítés után, tulajdonosi jóváhagyással |
+
+### 12.8 UNVERIFIED (kiegészítés)
+
+- UNKNOWN: a három címforrás éles sorainak száma (éles adatbázist nem néztem) — a száraz futás adja meg.
+- UNVERIFIED: van-e a jelenlegi levelekben leiratkozó link vagy `List-Unsubscribe` fejléc (a `server/resend.ts`-ben a keresés nem
+  talált ilyet) — az S8 első lépése tisztázza.
+- A karácsonyi tételek tényszerűsége a független ellenőr tényellenőrzéséig NEM igazolt.
+
+## 13. Látvány — képcsomag (tulajdonosi követelmény, 2026-11-18)
+
+A tulajdonos szó szerint: „Maga a kinézete legyen teljesen klasszikus, szép, karácsonyi motívumokkal bőven díszített, jól elkészített
+grafika, kép. Ne gagyi legyen, hanem az összes motívum: rénszarvas, szánkó, Jézuska, hó, havas fenyő, minden ilyesmi legyen benne.”
+A grafika forrásáról: „Generált illusztrációk”. Ez pontosítja az (f) F1 döntést: a játék továbbra is 2D és képkocka-hurok nélküli,
+de a falu, az ablakok mögötti képek és a záróképernyő GENERÁLT ILLUSZTRÁCIÓ; a hóesés, az ablakfény és a csillag felgyulladása
+kódból (CSS) megy, a csökkentett mozgás tiszteletben tartásával. **A generálás FIZETŐS: előbb költségbecslés, és csak a tulajdonos
+külön jóváhagyása után indul — ügynök nem indítja.**
+
+### 13.1 A meglévő képgyártó út (felmérés a kódból)
+
+| Kérdés | Tény |
+|---|---|
+| Szolgáltató / modell | OpenRouter képvégpont (`https://openrouter.ai/api/v1/images`), modell `bytedance-seed/seedream-5-0-pro` (`source/design-assets/prompts.json` `model`; `source/scripts/design-assets/generate.ts`). |
+| Darabár | A kódban rögzített, 2026-10-17-én mért ár (`scripts/design-assets/lib.ts` `estimateUsd`): 2K kép 0,09 USD, 1K kép 0,045 USD, referenciakép 0,003 USD / kép. A MAI ár UNVERIFIED (nem kérdeztem le); a `--dry-run` ugyanebből a táblából számol. |
+| Hogyan készül kép | `prompts.json` tételei (`id`, `kind`, `band`, `aspect_ratio`, `prompt`, `references`) + `style.md` (`COMMON`, `BAND_*`, `KIND_*` sorok) → `composePrompt` = tétel-prompt + típus + sáv + közös stílus. Futtatás: `npx tsx scripts/design-assets/generate.ts` (`--dry-run`: hívás nélkül kiírja a becsült árat és a promptokat; `--only`, `--max`, `--resolution 1K|2K`). A kulcs `OPENROUTER_API_KEY` (környezet vagy a helyi Hermes `.env`). |
+| Jelöltek | `source/design-assets/candidates/<id>/<időbélyeg>.jpg` + `log.jsonl` (modell, prompt-lenyomat, becsült ár) — a mappa `.gitignore`-ban van. |
+| Jóváhagyás | `scripts/design-assets/review-page.ts` válogatóoldalt készít; a kiválasztás JSON-ja → `scripts/design-assets/approve.ts` WebP-re méretez (Playwright-vásznon), a `client/public/design/<sáv>/<id>.webp` alá ír, és bejegyzi a `shared/design-asset-catalog.ts` katalógusba. |
+| Tárolás ma | Statikus WebP a kliens `public` mappájában; a főoldali bélyegképeket a build készíti (`scripts/build-design-thumbs.mjs`, tartalom-hash a fájlnévben), a szerver `immutable`, 1 éves gyorsítótárral adja ki (`server/vite.ts:111`). A leckék kiválasztott díszítőelemeinek bájtjai a `design_assets` táblában élnek. |
+| Korlát | A meglévő `style.md` közös stílusa a Websuli-arculat (nem karácsonyi), az `AssetBand` / `AssetKind` zárt unió, a `generate.ts` a `prompts.json`-t és a `style.md`-t beégetve olvassa, az `approve.ts` a lecke-katalógusba ír. A naptárhoz ezért SAJÁT készlet-leíró és kis, fizetős hívás nélküli bővítés kell (13.6). |
+
+**Tárolási döntés a naptárra:** a képek NEM kerülnek az adatbázisba és NEM a lecke-katalógusba. Statikus, verziózott WebP:
+`source/client/public/advent/2026/<id>.<8 jegyű tartalom-hash>.webp`, mellette egy generált `shared/advent/art-manifest.ts`
+(`id` → fájlnév, szélesség, magasság, `alt`), kiszolgálás `immutable`, 1 éves gyorsítótárral (a `design-thumbs` mintája). Indok: a
+készlet rögzített és mindenkinek ugyanaz (nincs mit lekérdezni); a statikus fájl CDN- és böngésző-gyorsítótárból jön, futásidőben
+nincs adatbázis-hívás; a Neon-keretet nem terheli (~1 MB bájt); a tartalom-hash miatt a csere nem ragad be a gyorsítótárba.
+
+### 13.2 Egységes stílus (a naptár saját `style.md`-je)
+
+- `COMMON` (minden kép): eredeti, klasszikus karácsonyi illusztráció, festett, régi karácsonyi képeslapok hangulatát idéző,
+  gouache / akvarell ecsetkezelés, finom papírtextúra, meleg és meghitt; gyerekbarát; NEM fotó, NEM 3D-render, NEM harsány
+  rajzfilm, NEM clip-art. Paletta: mélykék téli éj, meleg arany ablak- és gyertyafény, hófehér, fenyőzöld, karácsonyi piros.
+  A képen nincs szöveg, betű, szám, logó, vízjel, aláírás, márka; nincs létező mű, film- vagy mesefigura, védjegyes szereplő.
+- `KIND_BACKGROUND`: nagy, nyugodt kompozíció, a kép középső sávja sötétebb és részletszegényebb (ide kerül a 24 ablak rácsa).
+- `KIND_DOOR`: egyetlen, jól felismerhető motívum középen, sötétkék háttér előtt, lekerekített ablak-kivágásba illő, 96 képponton is
+  felismerhető, kevés apró részlet.
+- `KIND_ORNAMENT`: szimmetrikus díszítőelem átlátszó hatású, egyszínű sötétkék háttéren.
+- Vallási motívumok (jászol, Jézuska, pásztorok, háromkirályok, angyal, betlehemi csillag, templom): klasszikus, szelíd, tiszteletteljes
+  betlehemi ábrázolás; az arcok egyszerűek, nem karikírozottak. A Mikulás klasszikus püspöksüveges vagy piros köpenyes, márkás
+  megjelenés nélkül; krampusz nincs.
+
+### 13.3 Képlista (29 tétel)
+
+| Azonosító | Tartalom | Képarány → végső méret | Jelölt | Felbontás | Bájtcél |
+|---|---|---|---|---|---|
+| `advent-bg-portrait` | Havas magyar falu éjszaka: templomtorony, zsúpfedeles és cseréptetős házak, havas fenyők, csillagos ég | 9:16 → 1080 × 1920 | 4 | 2K | ≤ 150 kB |
+| `advent-bg-landscape` | Ugyanaz a falu széles nézetben | 16:9 → 1600 × 900 | 4 | 2K | ≤ 150 kB |
+| `advent-door-01` … `-24` | A 13.4 motívumai | 1:1 → 256 × 256 | 3–3 | 1K | ≤ 25 kB / kép |
+| `advent-closing` | Záróképernyő: kivilágított falu, felgyúlt csillag a karácsonyfán, ajándékok a fa alatt | 4:3 → 1200 × 900 | 4 | 2K | ≤ 120 kB |
+| `advent-garland` | Fenyőgirland piros bogyóval és arany szalaggal (fejléc-dísz) | 16:9 → 1200 széles sáv | 3 | 1K | ≤ 25 kB |
+| `advent-frame` | Sarokdísz: magyal, fenyőág, csengő | 1:1 → 256 × 256 | 3 | 1K | ≤ 15 kB |
+
+Bájtkeret: az első megjelenítéshez egy háttér (≤ 150 kB) + a girland; az ablakképek lustán töltődnek (csak a már megoldott ablaké,
+`loading="lazy"`, `decoding="async"`), a záró kép csak az összesítésnél. A teljes készlet ≤ 1,1 MB; egy átlagos napon ≤ 250 kB.
+
+### 13.4 A 24 ablak motívuma
+
+1 hópehely · 2 havas fenyő · 3 adventi koszorú négy gyertyával · 4 égő gyertya · 5 puttony · 6 Mikulás · 7 szánkó · 8 rénszarvas ·
+9 hóember · 10 korcsolya · 11 mézeskalács · 12 dió és piros alma · 13 harang és csengők · 14 fagyöngy · 15 szaloncukor ·
+16 bejgli · 17 havas templom · 18 angyal · 19 pásztorok · 20 háromkirályok · 21 betlehemi csillag · 22 ajándékdoboz ·
+23 feldíszített karácsonyfa · 24 betlehemi jászol a Jézuskával és a csillaggal.
+(A falu háttere a havat, a fenyőket és a templomot nagyban is hozza; a „csengő” a 13. ablakon a haranggal együtt szerepel.)
+
+### 13.5 Prompt-tervezetek (a tétel-prompt; a generátor mögé teszi a `KIND_*` és a `COMMON` stílust)
+
+A meglévő út promptjai angolok, az `alt` szöveg magyar — a naptár ugyanezt követi (magyar tartalom, magyar motívumok).
+
+| Azonosító | Prompt (tervezet) |
+|---|---|
+| `advent-bg-portrait` | A snow-covered Hungarian village at night seen from a gentle hill: a small whitewashed church with a tall tower, cottages with snowy roofs and dark windows, snow-laden fir trees framing both sides, a winding path with sleigh tracks, a deep blue sky full of stars, soft falling snow. Tall portrait composition. |
+| `advent-bg-landscape` | The same snow-covered Hungarian village at night in a wide panoramic view: church tower in the middle distance, rows of cottages with snowy roofs, fir forest on the horizon, starry deep blue sky. |
+| `advent-door-01` | A single large, delicate six-pointed snowflake. |
+| `advent-door-02` | A fir tree heavy with fresh snow in a quiet forest clearing. |
+| `advent-door-03` | An Advent wreath of fir branches with four candles, red ribbons and pine cones. |
+| `advent-door-04` | One burning candle in a brass holder with a sprig of fir. |
+| `advent-door-05` | A woven wicker back-basket (puttony) filled with wrapped gifts, apples and walnuts. |
+| `advent-door-06` | Saint Nicholas (Mikulás) as a kind old bishop with a white beard, red cloak and mitre, holding a staff, in falling snow. |
+| `advent-door-07` | A classic wooden sledge on a snowy slope. |
+| `advent-door-08` | A gentle reindeer standing in the snow with a small bell on a red collar. |
+| `advent-door-09` | A cheerful snowman with a carrot nose, a red scarf and an old pot for a hat. |
+| `advent-door-10` | A pair of old-fashioned ice skates hanging by their laces. |
+| `advent-door-11` | Hungarian gingerbread hearts and stars decorated with white icing. |
+| `advent-door-12` | Walnuts and shiny red apples in a small wooden bowl with a fir twig. |
+| `advent-door-13` | A bronze church bell with two small jingle bells and a red ribbon. |
+| `advent-door-14` | A bunch of mistletoe with white berries tied with a red bow. |
+| `advent-door-15` | Hungarian szaloncukor: fondant sweets wrapped in shiny fringed paper, hanging on a fir branch. |
+| `advent-door-16` | Slices of Hungarian bejgli, walnut and poppy seed roll, on a porcelain plate. |
+| `advent-door-17` | A small snowy village church with a warmly lit window and open door. |
+| `advent-door-18` | A gentle Christmas angel with soft wings holding a small bell. |
+| `advent-door-19` | Shepherds in sheepskin coats with a few sheep, looking up at a bright star. |
+| `advent-door-20` | The three wise men travelling at night with gifts, following a star. |
+| `advent-door-21` | The bright star of Bethlehem with a long tail of light over snowy roofs. |
+| `advent-door-22` | A gift box wrapped in red paper with a golden bow. |
+| `advent-door-23` | A decorated Christmas tree with candles, szaloncukor, glass baubles and a star on top. |
+| `advent-door-24` | A classic nativity scene: the infant Jesus in a manger with straw, Mary and Joseph beside him, an ox and a donkey, and the star shining above the stable. |
+| `advent-closing` | The village on Christmas Eve, every window glowing warm gold, a large decorated Christmas tree in the square with a shining star on top and gifts beneath it, gentle snowfall. |
+| `advent-garland` | A horizontal garland of fir branches with red berries, golden ribbon and small bells. |
+| `advent-frame` | A corner ornament of holly leaves, a fir twig and a small golden bell. |
+
+Egységesség: a `advent-bg-portrait` kiválasztott jelöltje stílus-referenciaként megy minden további tételhez (`references`).
+
+### 13.6 Költségbecslés és a generálás indítása
+
+| Tétel | Kép | Egységár (a kód 2026-10-17-i ára) | Összeg |
+|---|---|---|---|
+| 2 háttér + záró kép, 4–4 jelölt, 2K | 12 | 0,09 USD | 1,08 USD |
+| 24 ablakkép, 3–3 jelölt, 1K | 72 | 0,045 USD | 3,24 USD |
+| girland + sarokdísz, 3–3 jelölt, 1K | 6 | 0,045 USD | 0,27 USD |
+| stílus-referencia (a háttér után minden képhez 1) | 86 | 0,003 USD | 0,26 USD |
+| **Első kör összesen** | **90** | | **≈ 4,85 USD** |
+| Pótkör a nem tetsző tételekre (becsülten a képek 30%-a) | ~27 | | ≈ 1,5 USD |
+| **Becsült felső keret** | | | **≈ 6,5 USD** |
+
+Feltételek: az ár a kódban rögzített, 2026-10-17-i érték — a mai ár UNVERIFIED; a 9:16 és a 4:3 képarány támogatása ennél a
+modellnél UNVERIFIED (a meglévő készlet 1:1-et és 16:9-et használ) — a próbakör első képe dönti el, különben 16:9-ből vágunk.
+
+A generálás indításának rendje (a 13.7 szerinti előkészítő szelet után):
+1. Ingyenes száraz futás: `npx.cmd tsx scripts/design-assets/generate.ts --set advent --dry-run --max 90` — kiírja a képek számát,
+   a becsült költséget és minden promptot. Ezt a kimenetet kapja meg a tulajdonos.
+2. A tulajdonos KÜLÖN, kifejezett jóváhagyása a kiírt összegre.
+3. Csak ezután, a koordinátor / tulajdonos indításával: próbakör `… --set advent --only advent-bg-portrait,advent-door-08,advent-door-24`
+   (10 kép, ≈ 0,6 USD) → a tulajdonos megnézi a stílust → teljes kör `… --set advent --max 90`.
+4. Válogatás: `npx.cmd tsx scripts/design-assets/review-page.ts --set advent` → a tulajdonos választ → `kivalasztas.json` →
+   `npx.cmd tsx scripts/design-assets/approve-advent.ts kivalasztas.json` (WebP, méretre, bájtcél-ellenőrzéssel).
+Szükséges: `OPENROUTER_API_KEY` a futtató gépen. Ügynök a 3. lépést nem indítja.
+
+### 13.7 Köztes megoldás és új szeletek
+
+- **S3a helyőrzőkkel készül:** minden képhely a végleges azonosítóval és mérettel (`advent-bg-*`, `advent-door-NN`, `advent-closing`,
+  `advent-garland`, `advent-frame`) egy `AdventArt` komponensen át jelenik meg; amíg az `art-manifest.ts` nem tartalmazza a tételt,
+  ízléses SVG / CSS helyettesítő látszik (színátmenetes éji ég, sziluett-falu, motívumonként egyszerű vonalas ikon) UGYANABBAN a
+  dobozban — a csere nem mozdítja el az elrendezést, a mobil mérés mindkét állapotban érvényes.
+- **Kódból megy (CSS):** hóesés (R12 kerete), az ablakok meleg fénye (megoldott ablak: arany `box-shadow` + lassú, 4 s-os lélegző
+  fény), a csillag felgyulladása a 24. ablak megoldásakor (egyszeri 1,2 s-os felfénylés). Csökkentett mozgásnál: nincs hó, nincs
+  lélegzés, a csillag animáció nélkül világít.
+- **S3c-0 (előkészítés, fizetős hívás NÉLKÜL):** `design-assets/advent/prompts.json`, `design-assets/advent/style.md`, a `generate.ts`
+  és a `review-page.ts` `--set advent` kapcsolója, `approve-advent.ts`, egységteszt a száraz futás költségére és a promptokra.
+- **S3c (csere):** a tulajdonos válogatása után a WebP-k és az `art-manifest.ts` bekerülnek; bájtcél-őr (teszt), mobil mérés újra.
+- Szerzői jog: csak saját generált kép; létező mű, márka, szereplő másolása nélkül (a `COMMON` stílus tiltja); a jelöltek naplója
+  (`log.jsonl`: modell, prompt-lenyomat) a származás bizonyítéka.
+
+### 13.8 Új elfogadási kritériumok
+
+<!-- acceptance-checklist -->
+
+- [ ] A40 WHEN a naptár megjelenik THEN the system SHALL a háttéren, az ablakok mögött és a záróképernyőn a 13.3 képlista
+  tételeit mutatni, mindegyiket magyar `alt` szöveggel (a díszítőelemeket üres `alt`-tal), és a hiányzó képnél azonos méretű
+  helyettesítőt.
+- [ ] A41 WHEN a képcsomag bekerül THEN the system SHALL tartani a bájtcélokat (háttér ≤ 150 kB, ablakkép ≤ 25 kB, záró kép
+  ≤ 120 kB), az ablakképeket lustán tölteni, és a képeket tartalom-hashes néven, `immutable` gyorsítótárral kiszolgálni.
+- [ ] A42 WHEN a generátor `--set advent --dry-run` módban fut THEN the system SHALL hálózati hívás nélkül kiírni a képek
+  számát, a becsült költséget és a promptokat.
+- [ ] A43 WHEN egy ablak megoldott THEN the system SHALL meleg ablakfényt mutatni, a 24. megoldásakor a csillagot felgyújtani;
+  WHEN csökkentett mozgás van beállítva THEN the system SHALL ezt animáció nélkül tenni.
