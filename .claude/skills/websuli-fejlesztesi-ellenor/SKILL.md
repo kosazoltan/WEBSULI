@@ -104,6 +104,37 @@ A jelentés formája:
 16. **Hatókör**: a diff nem nyúl közös / más szelet fájljához indokolatlanul; nem írt a D:\ gyökerébe; mutációs ellenpróba nem
     `git checkout`-tal (C-70).
 
+## 4/b. Második, más rendszerű vélemény — külső (Gemini) ellenőr
+
+A Claude-alügynökös ellenőr MELLETT (nem helyette) fut, ugyanarra a fejre (tulajdonosi kiegészítés 2026-11-17). A döntő ítélet
+továbbra is a Claude-alügynökös ellenőré + az orkesztrátoré; a külső jelentés hiánya nem bukás.
+
+```bash
+# kulcs: KIZÁRÓLAG a GEMINI_API_KEY környezeti változó, vagy --env-file <helyi .env> (útvonalat a repóba írni tilos)
+node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head <fej> --cim "<PR / szelet>" \
+  --spec docs/specs/<terv>.md#<fejezet-regex> --lista scripts/qa/gates/external-review/checklist-game.md \
+  --ki <SCRATCHPAD>/review-<x>/kulso-jelentes.md --record          # általános szeletnél: checklist-general.md
+# előtte ingyenes próba: --dry-run (csak countTokens)
+```
+
+- Modell: `gemini-4-carbon`, gondolkodási szint `high` (tulajdonosi döntés; nem max / xhigh). Alapból az Interactions API háttér-módja
+  (`background: true`, `max_output_tokens` 131 072 — ez a hívásonkénti költségfék, ~1,3 USD kimenet); az interakció-azonosító azonnal
+  `<jelentés>.interaction-id`-be kerül, megszakadt kliens után `--resume-id`-vel lekérdezhető. `--api stream`: 65 536-os keret, a
+  gondolkodás is ebbe számít (~100 ezer token bemenet fölött MAX_TOKENS → hiányos). Időtúllépést / megszakadt kapcsolatot NEM
+  ismétel (már számlázott hívás), csak 429 / 5xx-et. A nyers szó- / évfolyam-bank adatfájlok alapból kimaradnak
+  (`--include-bank-data`).
+- Siker CSAK: nem üres válasz + `finishReason` STOP + ítélet-fejezet; különben `<jelentés>.hianyos.md`, 3-as kilépés, és a
+  bizonyíték `incomplete` / `blocked` — a második vélemény HIÁNYZIK (a kapu így jelzi, nem „megvan”).
+- A küldés ELŐTT titok-szűrés (találatnál 4-gyel megáll, érték nélkül; minden kapcsolati URL külön, fail-closed); a kulcs
+  soha nem kerül kimenetbe, jelentésbe, bizonyítékba. Kilépés: 0 lefutott / KIHAGYVA (nincs kulcs, kvóta), 2 nincs kulcs `--strict`
+  mellett, 3 API-hiba, 4 titok-szűrés, 5 túl nagy bemenet (bontsd `--paths`-szal), 1 egyéb hiba (pl. hiányzó argumentum). A `--save-input <fájl>` a pontosan
+  elküldött szöveget menti (a scratchpadba, ne a repóba). Költség ~0,4–1,5 USD / PR.
+- Az orkesztrátor beolvassa a jelentést második véleményként, és minden kritikus / magas lelet állítását a KÓDBÓL visszaellenőrzi
+  (MEGERŐSÍTVE / CÁFOLVA / NEM ELDÖNTHETŐ) — a külső modell nem lát a repóba, csak a kapott diffet / fájlokat, és hallucinálhat.
+  A megerősített leletet a Claude-ellenőr visszaellenőrző körébe is add be.
+- Nincs kulcs vagy elfogyott a keret: „KIHAGYVA” — nem bukás (kivéve `--strict`). A `pre-pr-gate` / `pre-merge-gate` a
+  `external-<fej>.json` (`--record`) hiányát csak `WARN`-ként jelzi.
+
 ## 5. Visszaellenőrzés
 
 - A javított fejet UGYANAZ az ellenőr kapja (SendMessage a meglévő alügynöknek), a `git diff <régi-fej> <új-fej>` kiindulással:
