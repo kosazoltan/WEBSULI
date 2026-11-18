@@ -50,6 +50,15 @@ indítási cél a telefonos nézetben egy mérésben (250 ms) még nem teljesül
 7. **Kapuk:** szakaszonként `gate:stage`; böngészős kör E2E-sorompóval, `--workers=1`; előtte / utána képek 390×844 és 827×896;
    push NEM — mérföldkő a koordinátornak.
 
+8. **Látvány C irány — Blender (terv 7.2):**
+   a. `source/scripts/blender/szokoar/` — `common.py` (paletta, lekerekítés, vertex-szín, export), elem-szkriptek,
+      `build_all.py`; futtatás: `"$BLENDER_BIN" -b -P source/scripts/blender/szokoar/build_all.py`.
+   b. Kimenet: `source/client/public/models/szokoar/*.glb` + `manifest.json`; csak a kész fájl kell a futáshoz.
+   c. Betöltés `GLTFLoader`-rel a menü alatt; hiány / hiba esetén a mostani primitív díszlet a tartalék.
+   d. Őr-teszt a keretre (`tests/tsunami-models-budget.test.ts`).
+   e. Minden lépés után valódi böngészős kép (390×844 és asztali), teljes útvonallal; a #491-mérővel indítás ≤ 200 ms
+      (4× CPU), ~60 fps.
+
 ## Elfogadás
 - A víz MINDIG látszik, a menedék MINDIG a képen van; jó válasznál a víz képi szintje 0,5 s-on belül csökken, rossznál nő.
 - A kérdés nem állítja meg a világot (a víz lassítva emelkedik); a válaszgombok ≥ 48 px, nem takarják a figurát és a tárcsát.

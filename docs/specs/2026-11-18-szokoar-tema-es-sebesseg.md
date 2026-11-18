@@ -1,6 +1,6 @@
 # Szökőár szökés — a téma visszaadása (a hullám a kép és a tét közepén) és a sebesség
 
-Állapot: TERV (1. fázis) — a tulajdonosi döntések rögzítve (lent, 0. fejezet). Végrehajtási utasítás:
+Állapot: TERV, a döntésekkel frissítve (2026-11-18) — a tulajdonosi döntések rögzítve (lent, 0. fejezet). Végrehajtási utasítás:
 `docs/specs/2026-11-18-szokoar-tema-es-sebesseg-vegrehajtas.md`.
 
 ## 0. Tulajdonosi döntések (2026-11-18, kérdőíven, a választott opciók szó szerint)
@@ -105,6 +105,10 @@ Képek: `docs/measurements/szokoar-tema/` (`elo-*`, `hook491-*`, `regi-*`).
   a terv része a mérése és csökkentése.
 - Valódi telefonon NEM mértünk (UNVERIFIED); a mérés asztali Chrome-ban, telefon-emulációval és CPU-lassítással készült.
 
+> **HATÁLYTALAN (2026-11-18):** a 2–6. fejezet a döntések ELŐTTI javaslat (pl. a „régi, függőleges játék visszaállítása”
+> nem-cél, hullámfal-EARS). Ami érvényes: a 0. fejezet (D1, D2, D4, D2-b: A), a 7. fejezet (válaszablak, látvány C irány) és
+> a végrehajtási utasítás. A régi szöveg csak a döntés előzményeként marad.
+
 ## 2. Cél és nem-cél
 
 **Cél:** a játék témája újra a szökőár: a hullám a kép és a tét közepe — látható, közeledő, képben és hangban fenyegető fal a futó
@@ -164,3 +168,56 @@ A sebesség a #491-gyel és a Szökőár saját, mért kisebb javításaival.
 - AMIKOR a gyerek rossz kapun fut át vagy ütközik, a hullám képi mérete 0,5 s-on belül láthatóan nő; jó kapunál csökken.
 - A pályán nincs felborítható autó (D2 szerint).
 - 390×844 és 827×896 nézetben, asztali emulációval, 4× CPU-n a játékmenet medián képkocka-ideje ≤ 33 ms (a #491 után).
+
+
+## 7. Kiegészítés (2026-11-18, koordinátori döntések)
+
+### 7.1 Válaszablak az olvasási idő szerint (K1)
+A tulajdonos Brain Rot-panasza („nagyon kevés időt adsz a válaszadásra”) nyomán: a kérdés ablaka = tájékozódás (1 s) + a
+teljes olvasnivaló (kérdés + 4 válasz) az évfolyam olvasási sebességének 0,65-szörösével + döntés (3 s; 3–4. évf. 3,8 s),
+legalább a közös ablak, legfeljebb 40 s (`client/src/lib/tsunami/pacing.ts`). A közös ablakon túli **többletidő alatt a víz
+áll**. A sim valódi hosszúságú (évfolyam-bank) kérdésekkel és a lap pálya-tempójával (0,85–1,15) is mér.
+**Későbbi közösítés:** a Szólétra `lib/wordLadder/pacing.ts` és a #497 (Brain Rot) burkolójával egy közös
+`game-engine/play` modulba emelendő a #497 összevonása után (kanban-jegy).
+
+### 7.2 Látvány — C irány: saját tervezésű pálya Blenderrel (tulajdonosi döntés: „Telepítem a Blendert”)
+Modellcsomagot nem töltünk le. A modellek a repóban lévő Blender-szkriptekből gyárthatók újra (fej nélkül:
+`"$BLENDER_BIN" -b -P source/scripts/blender/szokoar/<szkript>.py` (a Blender helye a `BLENDER_BIN` környezeti változóból vagy a PATH-ból; gépfüggő útvonal nincs)), glTF-exporttal.
+
+**Téma (koordinátor, 2026-11-18):** emelkedő víz elől menekülés a hegyre, sodródó törmelék (nem autó), látványos szökőár.
+A játékhoz és a CI-hoz Blender NEM kell: a kész, tömörített GLB követett fájl.
+
+**Jelenet-elemek** (oldalnézeti öböl, a játéktér változatlan: alulról emelkedő víz, deszkák, zóna-bóják):
+| Elem | Leírás | Háromszög-keret | GLB-keret |
+|---|---|---|---|
+| Sziget / part | két lekerekített, rétegzett sziklás-homokos domb az öböl két oldalán, fűtakaró, nedves part-sáv | 3 000 | 120 KB |
+| Sziklák (3 változat) | lekerekített, enyhén lapított kövek, példányosítva (instancing) | 3 × 300 | 30 KB |
+| Pálmák (2 változat) | ívelt törzs gyűrűkkel, 6–8 levél, szélben billegés a vertex shaderben | 2 × 500 | 40 KB |
+| Házak (3 változat) | stilizált halászkunyhók, pasztell falak, lekerekített tető, ablakfény (emissive) | 3 × 600 | 60 KB |
+| Világítótorony-menedék | a felső deszka fölötti sziklán: vastag, csíkos torony, üveges lámpaház forgó fénnyel, kis ház zászlóval | 2 500 | 100 KB |
+| Deszkák | mólószerű fa pallók cölöpökkel (a sárga-fekete fém és a jég helyett) | 4 × 400 | 40 KB |
+| Hajóroncs (díszlet) | félig homokba fúrt csónak az öböl alján | 800 | 40 KB |
+| Figura | kerekded, nagyfejű gyerek (nem kockás), szörfdeszkán; egyszerű csontváz: kar / láb / fej (3 mozdulat) | 2 500 | 120 KB |
+Összesen ≤ 15 000 háromszög, ≤ 600 KB GLB (Meshopt-tömörítve), textúra nélkül vagy 1 db 256×256 palettás webp
+(gradient-atlasz). Rajzolási hívás ≤ 40 (anyag-egyesítés + példányosítás) a mostani 125 helyett.
+
+**Stílus:** stilizált, lekerekített low-poly (simított élek, nem kocka), egységes meleg paletta (homok #f3d19c, fű #6cc070,
+szikla #8d7b6a, fa #b77a4a, víz #1ccfd6 → #0a62a8, pasztell házak), lapos árnyalás helyett finom gradient (vertex color).
+
+**Víz / ég / fény kódból:** hullámfal a front-shaderben (sötétebb, áttetsző fal, fehér taraj, permet-részecskék), hab a
+part mentén; színátmenetes naplementés ég (`createGradientSky`), mérsékelt köd; egy meleg fő fény + ég / talaj kitöltés;
+a közös `postfx` (telefonon bloom nélkül).
+
+**Fájlok és szerkezet:**
+- `source/scripts/blender/szokoar/common.py` — paletta, lekerekítő segédek (bevel + subdivision), vertex-color gradient, export
+  (glTF 2.0 bináris, `export_draco_mesh_compression_enable` vagy Meshopt utólag `gltfpack`-kel — UNVERIFIED, a telepítés
+  után ellenőrzendő, melyik érhető el).
+- `source/scripts/blender/szokoar/build_island.py`, `build_props.py`, `build_lighthouse.py`, `build_kid.py` — elemenként egy szkript.
+- `source/scripts/blender/szokoar/build_all.py` — mindet legyártja, determinisztikusan (rögzített seed), a kimenet:
+  `source/client/public/models/szokoar/<elem>.<tartalom-hash>.glb` + `manifest.json` (név → hashes fájl).
+- Betöltés: `GLTFLoader` (+ `MeshoptDecoder`) a MENÜ alatt (a mostani előkészítés helyén), a hiányzó modellnél a mostani
+  primitív díszlet a tartalék.
+- Mérés: a #491 mérőjével indítás ≤ 200 ms (4× CPU), ~60 fps; minden lépés után kép (390×844, 827×896).
+
+**Őr-teszt (keret):** `tests/tsunami-models-budget.test.ts` — a `manifest.json` minden GLB-je létezik, összméret ≤ 600 KB,
+egy fájl ≤ 200 KB, a glTF JSON-ban a háromszögszám összesen ≤ 15 000, a mesh-ek száma ≤ 40.
