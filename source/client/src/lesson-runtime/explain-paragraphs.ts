@@ -21,6 +21,8 @@ const DOT = /^•\s+(?=\S)/;
 const DASH = /^[-*]\s+(?=(?:\*\*|__|["„»'])?\p{L})/u;
 const dashItem = (line: string) => DASH.test(line) && !/\s[-–—]\s/.test(line.replace(DASH, "")) && !/[?!]["”»]?$/.test(line);
 const isItem = (line: string) => DOT.test(line) || dashItem(line);
+/** Csak a sor SAJÁT listajele kerül le (vak ellenőr J1): a „•” utáni „-” / „*” már tartalom („• - kivonás” → „- kivonás”). */
+const stripOwnMarker = (line: string) => (DOT.test(line) ? line.replace(DOT, "") : line.replace(DASH, ""));
 export type ExplainPart = { kind: "p"; text: string } | { kind: "ul"; items: string[] };
 export function explainParts(text: string): ExplainPart[] {
   return explainParagraphs(text).flatMap((paragraph): ExplainPart[] => {
@@ -34,7 +36,7 @@ export function explainParts(text: string): ExplainPart[] {
       // A jelölt sorok csak akkor lista, ha a futás a bekezdés MINDEN jelölt sorát lefedi — egy kétes sor az egész futást bekezdésben hagyja.
       const bounded = end === lines.length || !/^[•\-*]\s/.test(lines[end]);
       const opened = i === 0 || !/^[•\-*]\s/.test(lines[i - 1]);
-      if (end - i >= 2 && bounded && opened) { flush(); parts.push({ kind: "ul", items: lines.slice(i, end).map((l) => l.replace(DOT, "").replace(DASH, "")) }); i = end; }
+      if (end - i >= 2 && bounded && opened) { flush(); parts.push({ kind: "ul", items: lines.slice(i, end).map(stripOwnMarker) }); i = end; }
       else { prose.push(...lines.slice(i, Math.max(end, i + 1))); i = Math.max(end, i + 1); }
     }
     flush();

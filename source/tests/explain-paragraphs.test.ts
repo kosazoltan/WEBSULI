@@ -44,3 +44,18 @@ test("felsorolás (S2a / E8): a jelölt, sortöréssel tagolt sorok listává v�
   assert.deepEqual(explainParts("- **many**: megszámlálható\n- „much”: megszámlálhatatlan"), [{ kind: "ul", items: ["**many**: megszámlálható", "„much”: megszámlálhatatlan"] }], "valódi lista kiemelt / idézett szóval");
   assert.deepEqual(explainParts("• 5 alma\n• -3 fok\n• Hová mész?"), [{ kind: "ul", items: ["5 alma", "-3 fok", "Hová mész?"] }], "a „•” egyértelmű listajel, a tartalma változatlan");
 });
+
+// Vak ellenőr J1: a „•” listaelem tartalmának eleji „-” / „*” jel a TARTALOM része — a pont levétele után nem tűnhet el.
+test("felsorolás (vak ellenőr J1): a „•” elem tartalmának eleji műveleti jel megmarad", async () => {
+  const { explainParts } = await import("../client/src/lesson-runtime/explain-paragraphs");
+  const text = "A műveleti jelek:\n• - kivonás\n• + összeadás\n• * szorzás\n• : osztás";
+  const parts = explainParts(text);
+  assert.deepEqual(parts, [{ kind: "p", text: "A műveleti jelek:" }, { kind: "ul", items: ["- kivonás", "+ összeadás", "* szorzás", ": osztás"] }]);
+  // Csak a négy listajel (és a hozzájuk tartozó térköz) tűnik el: a nem-szóköz karakterek száma pontosan néggyel kevesebb.
+  const ink = (s: string) => s.replace(/\s/g, "").length;
+  const shown = parts.map((p) => (p.kind === "p" ? p.text : p.items.join(""))).join("");
+  assert.equal(ink(shown), ink(text) - 4);
+  assert.deepEqual(explainParts("• -3 fok\n• * csillag\n• - x = 5"), [{ kind: "ul", items: ["-3 fok", "* csillag", "- x = 5"] }]);
+  // A kötőjeles listánál a sor saját jele változatlanul lekerül (nincs regresszió).
+  assert.deepEqual(explainParts("- alma\n* körte"), [{ kind: "ul", items: ["alma", "körte"] }]);
+});
