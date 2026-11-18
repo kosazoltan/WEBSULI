@@ -48,7 +48,7 @@ import {
   type BrainRotTuning,
   type Cage,
 } from "@/lib/brainRot/core";
-import { paceBrainRotDirector } from "@/lib/brainRot/pacing";
+import { baseWindowMs, paceBrainRotDirector } from "@/lib/brainRot/pacing";
 import {
   GameHud,
   GameShell,
@@ -494,6 +494,8 @@ export default function BrainRotSteal() {
       arenaW: w / unit,
       arenaH: h / unit,
       reducedMotion,
+      // D5-módosítás: a kérdés alatt a régi ablaknyi menet-idő fogy (a hosszabbítás és az előjelzés alatt áll).
+      questionRoundMs: baseWindowMs,
     });
   };
   const driverRef = useRef<BrainRotDriver | null>(null);

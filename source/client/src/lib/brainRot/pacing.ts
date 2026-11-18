@@ -62,6 +62,12 @@ export function brainRotWindowMs(q: { prompt: string; options: readonly string[]
  * `brainRotWindowMs`. A director állapota és kimenete változatlan (a válasz / lejárat a valós kérdés-órával megy be).
  * Kérdésenként egy burkolt objektum (azonos identitás).
  */
+/** A burkolt presentation-höz a director nyers (régi) ablaka — a menet-óra ennyit fogyaszt a kérdés alatt (D5-módosítás). */
+const baseWindows = new WeakMap<QuestionPresentation, number>();
+export function baseWindowMs(p: QuestionPresentation): number {
+  return baseWindows.get(p) ?? p.windowMs;
+}
+
 export function paceBrainRotDirector(base: QuestionDirector, opts: { grade: () => number | null }): QuestionDirector {
   let last: { src: QuestionPresentation; paced: QuestionPresentation } | null = null;
   const pace = (p: QuestionPresentation | null): QuestionPresentation | null => {
@@ -69,6 +75,7 @@ export function paceBrainRotDirector(base: QuestionDirector, opts: { grade: () =
     if (last && last.src === p) return last.paced;
     const windowMs = brainRotWindowMs({ prompt: p.question.quiz.prompt, options: p.options.map((o) => o.label), grade: opts.grade() });
     const paced: QuestionPresentation = { ...p, startedAtSimMs: p.startedAtSimMs + BR_LEAD_IN_MS, windowMs };
+    baseWindows.set(paced, p.windowMs);
     last = { src: p, paced };
     return paced;
   };

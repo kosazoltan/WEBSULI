@@ -1078,6 +1078,12 @@ export function createBrainRotDriver(opts: {
   arenaW?: number;
   arenaH?: number;
   reducedMotion?: boolean;
+  /**
+   * D5-módosítás (tulajdonosi döntés 2026-11-18, „Csak a többletidőre álljon”): egy nyitott kérdés ennyi menet-időt fogyaszt
+   * az óra indulásától (`startedAtSimMs`, az előjelzés után) — a régi ablakot; az előjelzés alatt és a hosszabbítás idejére a
+   * menet-óra áll. Hiányában a kérdés egész ideje alatt áll.
+   */
+  questionRoundMs?: (p: QuestionPresentation) => number;
 }): BrainRotDriver {
   const core = createBrainRotCore({ seed: opts.seed, tuning: opts.tuning, arenaW: opts.arenaW, arenaH: opts.arenaH, directCatch: opts.questions === null });
   const pace = createIntensityDirector();
@@ -1144,11 +1150,18 @@ export function createBrainRotDriver(opts: {
       const q = opts.questions;
       if (!paused) {
         clock += dt;
-        // D5: a menet-óra áll, amíg a kérdés nyitva van (az előjelzés alatt is) — a menet vége nem esik nyitott kérdésre.
-        if (!(q && q.active())) roundClock += dt;
+        // D5 + módosítás: kérdés nélkül a menet-óra jár; nyitott kérdésnél csak az óra indulása (az előjelzés vége) és a régi
+        // ablak vége közti szakaszban — az előjelzés és a hosszabbítás alatt áll. A menet vége nem esik nyitott kérdésre.
+        const open = q ? q.active() : null;
+        if (!open) roundClock += dt;
+        else {
+          const from = open.startedAtSimMs;
+          const to = from + Math.max(0, opts.questionRoundMs ? opts.questionRoundMs(open) : 0);
+          roundClock += Math.max(0, Math.min(clock, to) - Math.max(clock - dt, from));
+        }
       }
       feel.update(paused ? 0 : dt);
-      if (core.running() && roundClock >= ROUND_MS) core.end();
+      if (core.running() && roundClock >= ROUND_MS && !(q && q.active())) core.end();
       if (q && !core.running() && !q.finished()) q.finish();
       if (q && !paused) q.frame(clock, { calm: true, tick: false });
       loop.setTimeScale(paused ? 0 : q ? q.timeScale() : 1);

@@ -39,7 +39,7 @@ import {
   type BrainRotState,
   type BrainRotTuning,
 } from "./core";
-import { paceBrainRotDirector } from "./pacing";
+import { baseWindowMs, paceBrainRotDirector } from "./pacing";
 
 /** A sim táblája (CSS px): tipikus álló telefon a HUD alatt. */
 export const SIM_BOARD = { w: 360, h: 560 } as const;
@@ -183,6 +183,7 @@ export function createSimGame(opts: BrainRotSimOptions): BrainRotSim {
     tuning: brainRotTuningFor(grade, SIM_BOARD.w, SIM_BOARD.h),
     arenaW: SIM_BOARD.w / unitPx,
     arenaH: SIM_BOARD.h / unitPx,
+    questionRoundMs: baseWindowMs, // D5-módosítás, mint a lapon
   });
   const d = driver;
   const core = d.core;
