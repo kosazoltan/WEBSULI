@@ -160,10 +160,8 @@ Ez a szabály MINDEN ügynök-környezetre érvényes (Claude Code, Codex — he
 
 1. **Minden elkészült fejlesztést / javítást egy VAK ellenőr néz át** a PR megnyitása ELŐTT és minden érdemi javító push előtt.
    **A fejlesztő saját magát soha nem ellenőrizheti.**
-2. **Vak:** az ellenőr friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök. CSAK a követelményt (terv / tulajdonosi cél)
-   és a diffet / fejet kapja — a fejlesztő jelentését, összefoglalóját, önértékelését, „zöld” állításait és az orkesztrátor várakozását
-   NEM. Ahol a környezet tud alügynököt indítani, alügynök; ahol nem (egyes Codex / Cursor / Gemini futások), új, tiszta munkamenet
-   vagy másik eszköz, amely CSAK a tervet és a diffet kapja.
+2. **Vak:** az ellenőr CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja — a fejlesztő jelentését, összefoglalóját,
+   önértékelését, „zöld” állításait és az orkesztrátor várakozását NEM. (Ki az ellenőr: lent.)
 3. **Hibakereső keret:** a megbízás kifejezetten hibakeresésre utasít — „a feladatod hibát találni, nem megerősíteni”.
 4. **Feladat-specifikus hibakereső pontok** (adatszerződés, biztonság / adatvédelem, regresszió, dátumhatár, migráció,
    versenyhelyzet, tesztminőség — a diffhez igazítva) és egy „bármi más, amit a lista nem fed” pont.
@@ -174,19 +172,24 @@ Ez a szabály MINDEN ügynök-környezetre érvényes (Claude Code, Codex — he
    ellenőrzi, és csak teljes jelentésből rögzít ítéletet.
 7. **Visszanézésnél is hibakeresés** a keret (vakon: csak az új fej és a diff), nem a korábbi leletek kipipálása.
 
-8. **Ki az ellenőr — KIZÁRÓLAG a futtató** (tulajdonosi utasítások 2026-11-18: „a független vak ellenőr […] valóban teljesen
-   független és olcsó modell [legyen]”; „valóban kizárólag [ez az] ellenőr modell fusson minden esetben”; cél: „autonóm módon is
-   megbízhatóan működő ellenőr”). Ez FELÜLÍRJA a 2. pont „alügynök / új munkamenet” fordulatát és az idézet „Lehet Anthropic modell”
-   részét: a vak ellenőrt minden ügynök-környezetben ugyanaz a parancs futtatja —
-   `npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>` —,
-   a `scripts/qa/gates/gates.config.json` `blindReview.model` modelljével (független, NEM Anthropic-modell; modell-kapcsoló nincs,
-   a csere követett konfigváltozás és tulajdonosi döntés). A futtató eldobható munkafában dolgozik, a leleteket (fájl:sor, idézet,
-   futtatás) géppel visszaellenőrzi, és bizonyítékot ír; a `record-review.mjs` és a kapuk CSAK ezt fogadják el. Anthropic-alügynök,
-   kézzel írt vagy utólag szerkesztett jelentés, más modell ítélete ÉRVÉNYTELEN — csendes tartalék nincs. Ha a futtató nem tud
-   lefutni (kulcs, OpenRouter, költségplafon): **a vak ellenőr nem futott; a tulajdonos dönt** — a kapu áll. A fejlesztő /
-   orkesztrátor a saját jelentését, állításait nem adhatja át (a futtatónak erre nincs kapcsolója; a `--goal` fájlba sem).
+### Ki az ellenőr
 
-A futtatás leírása: `.agents/skills/websuli-vak-ellenor/SKILL.md`. A megbízás-sablon (a futtató rendszerüzenetének forrása): `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
+<!-- vak-ellenor:ki-az-ellenor:begin — EGYETLEN hely: ezt a bekezdést a gépi futtató ága (külön PR) cseréli -->
+**Ki az ellenőr — KIZÁRÓLAG a futtató** (tulajdonosi utasítások 2026-11-18: „a független vak ellenőr […] valóban teljesen független és
+olcsó modell [legyen]”; „valóban kizárólag [ez az] ellenőr modell fusson minden esetben”; cél: „autonóm módon is megbízhatóan működő
+ellenőr”). Ez FELÜLÍRJA a fenti idézet „Lehet Anthropic modell” részét: a vak ellenőrt minden ügynök-környezetben ugyanaz a parancs
+futtatja — `npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>` —,
+a `scripts/qa/gates/gates.config.json` `blindReview.model` modelljével (független, NEM Anthropic-modell; modell-kapcsoló nincs, a csere
+követett konfigváltozás és tulajdonosi döntés). A futtató eldobható munkafában dolgozik, a leleteket (fájl:sor, idézet, futtatás) géppel
+visszaellenőrzi, és bizonyítékot ír; a `record-review.mjs` és a kapuk CSAK ezt fogadják el. Anthropic-alügynök, új munkamenet, kézzel írt
+vagy utólag szerkesztett jelentés, más modell ítélete ÉRVÉNYTELEN — csendes tartalék nincs. Ha a futtató nem tud lefutni (kulcs,
+OpenRouter, költségplafon): **a vak ellenőr nem futott; a tulajdonos dönt** — a kapu áll. A fejlesztő / orkesztrátor a saját
+jelentését, állításait nem adhatja át (a futtatónak erre nincs kapcsolója; a `--goal` fájlba sem). A fejlesztő saját magát soha nem
+ellenőrizheti. A futtatás leírása: `.agents/skills/websuli-vak-ellenor/SKILL.md`.
+<!-- vak-ellenor:ki-az-ellenor:end -->
+
+A megbízás szövege egyetlen fájlban: `scripts/qa/gates/vak-ellenor-megbizas.md`. Indítási leírás (alügynökkel és alügynök-eszköz nélkül):
+`.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
 Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md). A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja
 felül.
 

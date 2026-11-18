@@ -42,15 +42,15 @@ terhelésétől függően ±50%.
 
 A szabály forrása: `AGENTS.md` „Vak hibakereső ellenőr — kötelező” (minden ügynök-környezetre).
 
-- **Vak:** friss kontextusú alügynök, amely CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja; a fejlesztő
-  jelentését, önértékelését, „zöld” állításait és az orkesztrátor várakozását NEM.
+- **Vak:** CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja; a fejlesztő jelentését, önértékelését, „zöld”
+  állításait és az orkesztrátor várakozását NEM.
+- **Ki az ellenőr:** lásd AGENTS.md „Vak hibakereső ellenőr — kötelező” → „Ki az ellenőr” bekezdés (egyetlen forrás). A megbízás szövege egyetlen fájlban: `scripts/qa/gates/vak-ellenor-megbizas.md`.
 - **Hibakereső:** a megbízás kifejezetten hibakeresésre utasít („a feladatod hibát találni, nem megerősíteni”), feladat-specifikus
   hibakereső pontokkal és egy „bármi más” ponttal; a futtatás / ellenpróba saját ideiglenes munkafában; visszanézésnél is
   hibakeresés a keret; a mérce a tulajdonosi cél (felületnél a képernyőképek is). Anthropic modell is lehet — a sablon ezért
   kifejezetten hibakeresésre utasít.
 - **Kötelező jelentés-elemek** (a `record-review.mjs` gépileg ellenőrzi): `Fej:` sor a rögzítendő fejre, `Ítélet:` sor, a
-  „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc. A megbízás-sablon: `websuli-fejlesztesi-ellenor`
-  skill, 3. szakasz.
+  „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc. Indítás: `websuli-fejlesztesi-ellenor` skill.
 
 ### A vak ellenőr futtatója — KIZÁRÓLAG ez az ellenőr (tulajdonosi utasítások 2026-11-18)
 
@@ -66,7 +66,7 @@ node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --re
 
 - **Mit csinál:** eldobható munkafát készít a fejről; a modell eszközökkel olvas, keres, `git diff / log / show`-t néz, a fej
   követett tesztjeit futtatja, saját ellenpróbát ír és futtat; a végén strukturált leletekkel jelentést ad le. A rendszerüzenet a
-  `websuli-fejlesztesi-ellenor` skill 3. szakaszának sablonja (egy forrás). A fejlesztő jelentésének átadására nincs kapcsoló.
+  `scripts/qa/gates/vak-ellenor-megbizas.md` (egy forrás) + a futtató eszköz-leírása. A fejlesztő jelentésének átadására nincs kapcsoló.
 - **Géppel ellenőrzött leletek:** minden lelet fájl:sor hivatkozását és szó szerinti idézetét a futtató a munkafában ellenőrzi; a
   futtatással igazolt lelet parancsát és kimenet-részletét a saját parancsnaplójából. Nem ellenőrizhető blokkoló / közepes lelettel
   a jelentés nem adható le. A jelentés végén **Gépi összegzés** áll — az orkesztrátor ezt és a blokkoló / közepes leleteket olvassa.

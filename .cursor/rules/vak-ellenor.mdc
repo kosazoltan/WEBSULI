@@ -9,8 +9,8 @@ A szabály forrása: `AGENTS.md`, „Vak hibakereső ellenőr — kötelező” 
 
 1. Minden elkészült fejlesztést / javítást egy VAK ellenőr néz át a PR előtt és minden érdemi javító push előtt; a fejlesztő saját
    magát soha nem ellenőrizheti.
-2. Cursorban, ha nincs alügynök: új, tiszta chat / munkamenet, amely CSAK a tervet (tulajdonosi célt) és a diffet kapja — a
-   fejlesztés beszélgetését, összefoglalóját, „zöld” állításait nem.
+2. Ki az ellenőr: AGENTS.md „Vak hibakereső ellenőr — kötelező” → „Ki az ellenőr” bekezdés — az ott leírt módon (Cursorban is); a
+   fejlesztés beszélgetését, összefoglalóját, „zöld” állításait az ellenőr nem kapja.
 3. A megbízás kifejezetten hibakeresésre utasít („a feladatod hibát találni, nem megerősíteni”), feladat-specifikus hibakereső
    pontokkal és egy „bármi más” ponttal; az ellenőr saját munkafában futtat és ellenpróbáz.
 4. A jelentés kötelező szakaszai: leletek evidenciával, „Mit próbáltam megtörni, és nem sikerült”, „Mit NEM vizsgáltam”; `Fej:` és

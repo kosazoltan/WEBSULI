@@ -23,8 +23,8 @@ kell sorról sorra visszaellenőrizni. Terv: `docs/specs/2026-11-18-vak-ellenor-
 - Az ítélet csak a futtató gép által írt bizonyítékával érvényes (`<git-common-dir>/websuli-qa-evidence/blind-review-<fej>.json`):
   a válaszból visszaolvasott modell, a jelentés sha256-a, az eszközhívások, a géppel ellenőrzött leletek. A `record-review.mjs`
   és a kapuk mást NEM fogadnak el: Anthropic-alügynök, kézzel írt vagy utólag szerkesztett jelentés, más modell → érvénytelen.
-- A megbízás-sablon (a hibakereső keret) egy forrásból jön: a `websuli-fejlesztesi-ellenor` skill 3. szakasza — a futtató onnan
-  olvassa ki. Aki a sablont módosítja, a futtató rendszerüzenetét módosítja.
+- A megbízás-sablon (a hibakereső keret) egy forrásból jön: `scripts/qa/gates/vak-ellenor-megbizas.md` — a futtató ezt olvassa be
+  rendszerüzenetnek (a saját eszköz-leírásával kiegészítve). Aki a sablont módosítja, a futtató rendszerüzenetét módosítja.
 
 ## 3. A parancs (bármely ügynök-környezetből ugyanaz, a repó gyökeréből)
 

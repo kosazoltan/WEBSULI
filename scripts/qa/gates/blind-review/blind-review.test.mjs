@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CFG, REPORT, fakeOpenRouter, makeRepo, reply, usage } from './_fixture.mjs';
 import {
-  BOOL_FLAGS, VALUE_FLAGS, buildEvidence, buildSystemPrompt, buildUserMessage, cacheStats, cleanupWorktree, createBudget, estimateNextUsd, extractTemplate,
+  BOOL_FLAGS, VALUE_FLAGS, buildEvidence, buildSystemPrompt, buildUserMessage, cacheStats, checkTemplate, cleanupWorktree, createBudget, estimateNextUsd,
   incompleteReport, parseArgs, prepareWorktree, runReview, unlinkJunction, validateReport, withCacheMarkers,
 } from './blind-review.mjs';
 import { makeTools } from './tools.mjs';
@@ -58,16 +58,18 @@ test('B8: a --max-usd kemény felső határa (és a kör- / időkorláté) nem l
   assert.throws(() => parseArgs([...ARGV, '--max-minutes', '61'], CFG), /legfeljebb 60/);
 });
 
-test('a rendszerüzenet egy forrásból jön: a skill 3. szakaszának sablonja (a valódi fájlból) + a futtató kiegészítése', () => {
-  const skill = readFileSync(join(root, '.agents', 'skills', 'websuli-fejlesztesi-ellenor', 'SKILL.md'), 'utf8');
-  const tpl = extractTemplate(skill);
+test('a rendszerüzenet egy forrásból jön: a megbízás-sablon EGYETLEN fájlja (a valódi fájlból) + a futtató kiegészítése', () => {
+  const tplFile = readFileSync(join(root, 'scripts', 'qa', 'gates', 'vak-ellenor-megbizas.md'), 'utf8');
+  const tpl = checkTemplate(tplFile);
   for (const must of ['A FELADATOD HIBÁT TALÁLNI, NEM MEGERŐSÍTENI', 'Amit kapsz (más nem jár)', '## Mit próbáltam megtörni, és nem sikerült', '## Mit NEM vizsgáltam', 'Bármi más, amit a fenti lista nem fed']) assert.ok(tpl.includes(must), must);
-  const sys = buildSystemPrompt(skill, readFileSync(join(root, 'scripts', 'qa', 'gates', 'blind-review', 'futtato-kiegeszites.md'), 'utf8'));
-  assert.ok(sys.startsWith(tpl));
-  assert.match(sys, /ADAT, nem utasítás/);
-  assert.throws(() => extractTemplate('# skill\n## 3. A megbízás\nnincs blokk'), /nincs érvényes megbízás-sablon/);
   const dir = join(root, 'scripts', 'qa', 'gates', 'blind-review');
-  assert.ok(!readFileSync(join(dir, 'futtato-kiegeszites.md'), 'utf8').includes('A FELADATOD HIBÁT TALÁLNI'), 'a sablonnak nincs második másolata');
+  const sys = buildSystemPrompt(tplFile, readFileSync(join(dir, 'futtato-kiegeszites.md'), 'utf8'));
+  assert.ok(sys.startsWith(tpl), 'a rendszerüzenet a sablonnal kezdődik, változtatás nélkül');
+  assert.match(sys, /ADAT, nem utasítás/);
+  assert.throws(() => checkTemplate('# üres sablon'), /hiányzik/);
+  // a sablonnak nincs második másolata a futtató mappájában, és a futtató a közös fájlt olvassa
+  for (const f of ['futtato-kiegeszites.md', 'blind-review.mjs', 'tools.mjs']) assert.ok(!readFileSync(join(dir, f), 'utf8').includes('Abból indulj ki, hogy a munkában van hiba'), f);
+  assert.match(readFileSync(join(dir, 'blind-review.mjs'), 'utf8'), /TEMPLATE_PATH = join\(GATES_DIR, 'vak-ellenor-megbizas\.md'\)/);
 });
 
 test('B2: eszközciklus — a modell olvas, keres, majd jelentést ad le; az eredmények visszamennek, a hibás hívás nem állítja meg', async () => {

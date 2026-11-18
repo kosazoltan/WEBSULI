@@ -23,7 +23,7 @@ import { TMP_DIR, TOOL_SCHEMAS, cleanEnv, makeTools } from './tools.mjs';
 
 const HERE = join(GATES_DIR, 'blind-review');
 const RUNNER_ROOT = resolve(GATES_DIR, '..', '..', '..');
-const SKILL_PATH = join(RUNNER_ROOT, '.agents', 'skills', 'websuli-fejlesztesi-ellenor', 'SKILL.md');
+const TEMPLATE_PATH = join(GATES_DIR, 'vak-ellenor-megbizas.md');
 export const NOT_RUN = BLIND_NOT_RUN;
 
 // ---- Argumentumok (szigorú: ismeretlen kapcsoló = hiba) ----------------------------------------------------------------
@@ -69,20 +69,19 @@ export function parseArgs(argv, cfg) {
   };
 }
 
-// ---- A rendszerüzenet egy forrásból: a skill megbízás-sablonja ---------------------------------------------------------------
+// ---- A rendszerüzenet egy forrásból: scripts/qa/gates/vak-ellenor-megbizas.md ------------------------------------------------
 
-/** A `websuli-fejlesztesi-ellenor` skill 3. szakaszának ```text blokkja (a megbízás-sablon). */
-export function extractTemplate(skillText) {
-  const md = String(skillText).replace(/\r\n/g, '\n');
-  const at = md.indexOf('\n## 3. A megbízás');
-  if (at < 0) throw new Error('a skillben nincs „## 3. A megbízás” szakasz (websuli-fejlesztesi-ellenor)');
-  const m = /```text\n([\s\S]*?)\n```/.exec(md.slice(at));
-  if (!m || !m[1].includes('A FELADATOD HIBÁT TALÁLNI, NEM MEGERŐSÍTENI')) throw new Error('a skill 3. szakaszában nincs érvényes megbízás-sablon (```text blokk)');
-  return m[1];
+/** A megbízás-sablon ellenőrzése (az EGYETLEN forrásfájl szövege): megvan-e a hibakereső keret és a kötelező jelentés-forma. */
+export function checkTemplate(text) {
+  const tpl = String(text).replace(/\r\n/g, '\n').trim();
+  for (const must of ['A FELADATOD HIBÁT TALÁLNI, NEM MEGERŐSÍTENI', 'Amit kapsz (más nem jár)', '## Mit próbáltam megtörni, és nem sikerült', '## Mit NEM vizsgáltam']) {
+    if (!tpl.includes(must)) throw new Error(`a megbízás-sablonból (scripts/qa/gates/vak-ellenor-megbizas.md) hiányzik: „${must}”`);
+  }
+  return tpl;
 }
 
-export function buildSystemPrompt(skillText, addendum) {
-  return `${extractTemplate(skillText)}\n\n${String(addendum).replace(/\r\n/g, '\n').trim()}\n`;
+export function buildSystemPrompt(templateText, addendum) {
+  return `${checkTemplate(templateText)}\n\n${String(addendum).replace(/\r\n/g, '\n').trim()}\n`;
 }
 
 export function buildUserMessage({ head, base, specs, goal, stat, warnings = [] }) {
@@ -437,7 +436,7 @@ async function main() {
     else if (existsSync(p)) specs.push({ path: p, text: readFileSync(p, 'utf8') });
     else { process.stderr.write(`[blind-review] HIBA: a terv nincs meg sem a fejen, sem helyi fájlként: ${p}\n`); return 1; }
   }
-  const system = buildSystemPrompt(readFileSync(SKILL_PATH, 'utf8'), readFileSync(join(HERE, 'futtato-kiegeszites.md'), 'utf8'));
+  const system = buildSystemPrompt(readFileSync(TEMPLATE_PATH, 'utf8'), readFileSync(join(HERE, 'futtato-kiegeszites.md'), 'utf8'));
 
   const common = git(repo, ['rev-parse', '--git-common-dir']).stdout.trim();
   const commonDir = isAbsolute(common) ? common : resolve(repo, common);

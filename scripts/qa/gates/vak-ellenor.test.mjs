@@ -37,7 +37,14 @@ test('V2: a runbook, az AGENTS.md „Minőségkapuk” szakasza és az öt kapu-
 
 test('V3: a független ellenőr megbízás-sablonja vak és hibakereső (a)–(f), és nem adja át a fejlesztő állításait', () => {
   const skill = read('.agents', 'skills', 'websuli-fejlesztesi-ellenor', 'SKILL.md');
-  const tpl = section(skill, '3. A megbízás', '4. Kötelező');
+  // A megbízás szövege EGY, gépileg olvasható fájlban van; a skill, az AGENTS.md és a runbook erre hivatkozik (nem másolja).
+  const TPL = 'scripts/qa/gates/vak-ellenor-megbizas.md';
+  const tpl = read(...TPL.split('/'));
+  for (const doc of [skill, read('AGENTS.md'), read('docs', 'minosegkapuk.md')]) assert.ok(doc.includes(TPL), 'hiányzó hivatkozás a sablonfájlra');
+  assert.ok(!skill.includes('A FELADATOD HIBÁT TALÁLNI, NEM MEGERŐSÍTENI'), 'a skill ne másolja a sablont (egyetlen forrás)');
+  // „Ki az ellenőr” egy helyen, jól elkülönítve (a skillben és az AGENTS.md szakaszában)
+  assert.match(skill, /^### Ki az ellenőr$/m);
+  assert.match(section(read('AGENTS.md'), 'Vak hibakereső ellenőr — kötelező'), /^### Ki az ellenőr$/m);
   for (const must of [
     'A FELADATOD HIBÁT TALÁLNI, NEM MEGERŐSÍTENI', // (a)
     'Bármi más, amit a fenti lista nem fed', // (b)
@@ -75,7 +82,8 @@ test('V7: az AGENTS.md önálló szakasza a kezelt blokkon kívül, idézettel, 
   for (const must of [
     'tulajdonosi utasítás 2026-11-18', 'mindig egy vak alügynök ellenőrizze az elvégzett munkádat',
     'bármilyen mesterséges intelligencia-ügynök', 'A fejlesztő saját magát soha nem ellenőrizheti',
-    'a feladatod hibát találni, nem megerősíteni', 'új, tiszta munkamenet', 'CSAK a tervet és a diffet kapja',
+    // 2026-11-18 (docs/specs/2026-11-18-vak-ellenor-deepseek.md, K1 / K4): „Ki az ellenőr” = KIZÁRÓLAG a futtató (nem alügynök / új munkamenet).
+    'a feladatod hibát találni, nem megerősíteni', 'Ki az ellenőr — KIZÁRÓLAG a futtató', 'npm run gate:blind-review', 'ÉRVÉNYTELEN', 'CSAK a követelményt',
     'Mit próbáltam megtörni, és nem sikerült', 'Mit NEM vizsgáltam', 'Visszanézésnél is hibakeresés', 'bármi más',
   ]) assert.ok(sec.includes(must), `az AGENTS.md szakaszából hiányzik: ${must}`);
   assert.match(section(md, 'Minőségkapuk'), new RegExp(`„${RULE}” szakasz szerint`));
@@ -96,5 +104,24 @@ test('V9: a skill leírása minden elkészült fejlesztésnél betöltést ír e
   assert.match(desc, /VAK/);
   assert.match(desc, /HIBÁT TALÁLNI/);
   assert.ok(desc.includes(RULE), 'a leírás hivatkozzon az AGENTS.md szakaszra');
-  assert.match(skill, /### 3\/b\. Ha nincs alügynök-eszköz/);
+  // 2026-11-18 (docs/specs/2026-11-18-vak-ellenor-deepseek.md, K1): az ellenőr minden környezetben a futtató — alügynök-eszköz nem kell.
+  assert.match(skill, /alügynök-eszközre egyetlen környezetben sincs szükség/);
+  assert.match(skill, /npm run gate:blind-review/);
+});
+
+test('a „Ki az ellenőr” szöveg egyetlen jelölt bekezdés (AGENTS.md, skill); a többi vezérlőfájl csak hivatkozik rá', () => {
+  const BEGIN = '<!-- vak-ellenor:ki-az-ellenor:begin';
+  const END = '<!-- vak-ellenor:ki-az-ellenor:end -->';
+  for (const f of ['AGENTS.md', '.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md']) {
+    const s = read(...f.split('/'));
+    assert.equal(s.split(BEGIN).length - 1, 1, `${f}: pontosan egy kezdő jelölő`);
+    assert.equal(s.split(END).length - 1, 1, `${f}: pontosan egy záró jelölő`);
+    assert.ok(s.indexOf(BEGIN) < s.indexOf(END), `${f}: a jelölők sorrendje`);
+  }
+  // az „új, tiszta munkamenet” leírás csak a jelölt bekezdésben áll — a runbook, a Cursor-szabály és a Codex-doksi nem ismétli
+  for (const f of ['docs/minosegkapuk.md', '.cursor/rules/vak-ellenor.mdc', 'docs/codex-felhokornyezet.md']) {
+    const s = read(...f.split('/'));
+    assert.doesNotMatch(s, /új, tiszta (munkamenet|chat|Codex-feladat)/, `${f} ismétli a „Ki az ellenőr” szöveget`);
+    assert.ok(s.includes('„Ki az ellenőr” bekezdés'), `${f}: hivatkozzon a „Ki az ellenőr” bekezdésre`);
+  }
 });

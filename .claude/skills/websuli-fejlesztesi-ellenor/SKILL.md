@@ -10,13 +10,6 @@ munkát, hogy a hibák ne utólag derüljenek ki. Mért ok: a 2026-11-16/17-i j�
 UTÁN talált blokkoló hibát; minden ilyen kör 1–1,5 óra CI + egy újabb review-kör volt
 (`docs/handoffs/2026-11-17-jatekok-utomunka-retro.md`, `docs/agent-csapdak.md` C-61…C-72). Runbook: `docs/minosegkapuk.md`.
 
-## 0. Ki az ellenőr — KIZÁRÓLAG a futtató (tulajdonosi utasítás 2026-11-18)
-
-A vak ellenőrt nem alügynök és nem új munkamenet végzi, hanem a futtató: `npm run gate:blind-review` (skill: `websuli-vak-ellenor`
-— a parancs, a `--goal` fájl sablonja, teendők az ítélet szerint és ha a futtató megáll). A futtató a `gates.config.json`
-`blindReview.model` modelljével dolgozik (független, nem Anthropic), és ENNEK a skillnek a 3. szakaszában álló megbízás-sablont
-olvassa be rendszerüzenetnek — a sablon egyetlen forrása ez a fájl. Más úton készült jelentést a `record-review.mjs` nem rögzít.
-
 ## 1. Mikor kötelező
 
 - Minden fejlesztés / javítás elkészültekor, a PR megnyitása ELŐTT (a `pre-pr-gate` és a `gh pr create` hook ítélet nélkül nem enged).
@@ -44,69 +37,32 @@ Lehet Anthropic modell, de akkor azt nagyon úgy utasítsd, hogy mindenképpen h
 **VAK** = az ellenőr CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja. NEM kapja meg: a fejlesztő jelentését,
 összefoglalóját, önértékelését, „zöld” állításait (kapu-eredmény, tesztszám, CI), a fejlesztő által „ismert kockázatnak” mondott
 pontokat, sem az orkesztrátor várakozását („szerintem jó”, „csak gyorsan nézd meg”). Amit a fejlesztő állít, azt az ellenőrnek magának
-kell mérnie. Mindig friss kontextusú alügynök (nem az, amelyik a kódot írta, és nem a fejlesztő folytatása).
+kell mérnie.
 
-```text
-Független, VAK, HIBAKERESŐ ellenőr vagy a kosazoltan/WEBSULI repóban (NYILVÁNOS repó). Magyarul dolgozz és jelents.
+### Ki az ellenőr
 
-A FELADATOD HIBÁT TALÁLNI, NEM MEGERŐSÍTENI. Abból indulj ki, hogy a munkában van hiba, és a te dolgod megtalálni. A „rendben van”
-csak akkor elfogadható, ha felsorolod, mit próbáltál megtörni, és az miért nem sikerült. Udvariasság, a fejlesztő szándéka vagy a
-„biztos jó” nem szempont.
+<!-- vak-ellenor:ki-az-ellenor:begin — EGYETLEN hely: ezt a bekezdést a gépi futtató ága (külön PR) cseréli -->
+**Ki az ellenőr — KIZÁRÓLAG a futtató** (tulajdonosi utasítások 2026-11-18: „a független vak ellenőr […] valóban teljesen független és
+olcsó modell [legyen]”; „valóban kizárólag [ez az] ellenőr modell fusson minden esetben”; cél: „autonóm módon is megbízhatóan működő
+ellenőr”). Ez FELÜLÍRJA a fenti idézet „Lehet Anthropic modell” részét: a vak ellenőrt minden ügynök-környezetben ugyanaz a parancs
+futtatja — `npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>` —,
+a `scripts/qa/gates/gates.config.json` `blindReview.model` modelljével (független, NEM Anthropic-modell; modell-kapcsoló nincs, a csere
+követett konfigváltozás és tulajdonosi döntés). A futtató eldobható munkafában dolgozik, a leleteket (fájl:sor, idézet, futtatás) géppel
+visszaellenőrzi, és bizonyítékot ír; a `record-review.mjs` és a kapuk CSAK ezt fogadják el. Anthropic-alügynök, új munkamenet, kézzel írt
+vagy utólag szerkesztett jelentés, más modell ítélete ÉRVÉNYTELEN — csendes tartalék nincs. Ha a futtató nem tud lefutni (kulcs,
+OpenRouter, költségplafon): **a vak ellenőr nem futott; a tulajdonos dönt** — a kapu áll. A fejlesztő / orkesztrátor a saját
+jelentését, állításait nem adhatja át (a futtatónak erre nincs kapcsolója; a `--goal` fájlba sem). A fejlesztő saját magát soha nem
+ellenőrizheti. A futtatás leírása (parancs, a `--goal` fájl sablonja, teendők az ítélet szerint és ha a futtató megáll): `websuli-vak-ellenor` skill.
 
-CSAK OLVASÓ a fejlesztő munkafájára és a GitHubra: ott semmit nem módosítasz, nem commitolsz, nem pusholsz, nem kommentelsz.
-Futtatni és ellenpróbázni SAJÁT ideiglenes munkafában / klónban szabad és kell: <SCRATCHPAD>/review-<PR-vagy-ág>/ (a D:\ és a
-D:\repo gyökerébe semmit).
+A futtató a megbízás-sablont (lent, egyetlen forrás) olvassa be rendszerüzenetnek; alügynök-eszközre egyetlen környezetben sincs szükség.
+<!-- vak-ellenor:ki-az-ellenor:end -->
 
-Amit kapsz (más nem jár):
-- Követelmény: <docs/specs/…md> (+ végrehajtás: <…-vegrehajtas.md>), tulajdonosi cél szó szerint: „<idézet>”
-- Ág / fej: <ág> @ <teljes fej-hash>; a diff: git diff origin/main...<fej>
+### A megbízás-sablon (egyetlen forrás)
 
-Hibakereső pontok — mindegyikre írj ítéletet (talált hiba / próbáltam, nem sikerült megtörni / nem alkalmazható) bizonyítékkal:
-1. Adatszerződés a lépések között (mezőnevek, formátumok, típusok; kliens ↔ szerver ↔ DB, szkript ↔ konfig).
-2. Biztonság és adatvédelem (token / titok / személyes adat URL-ben, naplóban, linkben, nyilvános repóban; CSRF / origin; GET-mellékhatás).
-3. Regresszió a meglévő folyamatokban (névtelen / bejelentkezett felhasználó, régi anyag, Stúdió-lecke, a közös modul többi hívója).
-4. Időzóna és dátumhatár (Europe/Budapest).
-5. Migráció ↔ Drizzle-séma; indítás / cron / leállítás; e2e-mód.
-6. Versenyhelyzet, párhuzamosság, ismételt / megszakadt futás, időtúllépés.
-7. Tesztminőség: a teszt a viselkedést méri-e (mutációval próbáld: ha kiveszed a védő sort, bukik-e?); gyengítettek-e tesztet; a
-   spec-változás dokumentált-e.
-8. <a diffhez igazított, feladat-specifikus pontok — pl. játéknál a skill 4/A pontjai; hooknál a valódi héj; felületnél a képernyő>
-9. Bármi más, amit a fenti lista nem fed — keress aktívan olyan hibát is, amire a lista nem gondolt.
-
-Szabályok:
-- Minden lelet fájl:sor hivatkozással és konkrét hibaforgatókönyvvel (ki, milyen eszközön, mit csinál, mi történik).
-- Kritikus / magas leletnél előbb próbáld MEGCÁFOLNI (keresd a védelmet, futtass próbát); csak megerősítés után jelentsd.
-- Számszerű állítást mérj vagy számolj, és írd le, hogyan. A mérce a tulajdonosi cél / terv; felületi változásnál nézd meg a
-  képernyőképeket (álló és fekvő nézet), ne csak a tesztet.
-- Ne találj ki fájlt, függvényt, eredményt; a bizonytalant jelöld UNVERIFIED-nek.
-- A jelentést ide írd: <SCRATCHPAD>/review-<PR-vagy-ág>/jelentes.md
-
-A jelentés formája (a record-review.mjs a „Fej:” sort, az „Ítélet:” sort és a két „Mit …” fejlécet gépileg ellenőrzi):
-# Független review — <ág / PR>
-Fej: <teljes fej-hash>
-## Ítélet: IGEN | IGEN, FELTÉTELLEL | NEM
-(NEM, ha van blokkoló; FELTÉTELLEL, ha a nem blokkoló leletek jegyre mennek)
-## Leletek (blokkoló / jegyre menő; fájl:sor, forgatókönyv, evidencia, javítási javaslat)
-## A hibakereső pontok (ítélet + bizonyíték)
-## Mit próbáltam megtörni, és nem sikerült
-## Mit NEM vizsgáltam
-(ok + kockázat)
-## Megcáfolt gyanúk
-## Mit futtattam (parancs + eredmény)
-```
-
-### 3/b. Ha nincs alügynök-eszköz (pl. egyes Codex / Cursor / Gemini futások)
-
-**FELÜLÍRVA (2026-11-18):** alügynök-eszközre nincs szükség — minden környezetben a futtató az ellenőr (`npm run gate:blind-review`,
-0. szakasz). Az alábbi lépések csak a történeti leírás; ítéletet a futtató bizonyítéka nélkül a `record-review.mjs` nem rögzít.
-
-1. Nyiss új, tiszta munkamenetet / feladatot (vagy másik eszközt) — NE a fejlesztés beszélgetését folytasd.
-2. Add át CSAK: a fenti sablont kitöltve, a terv útvonalát (vagy a tulajdonosi cél idézetét), az ágat és a teljes fej-hash-t. A
-   fejlesztés összefoglalóját, a „zöld” állításokat és a saját véleményedet NE.
-3. Az ellenőr a saját ideiglenes munkafájában / klónjában futtat; a jelentését a sablon formájában adja.
-4. Az ítéletet a fejlesztő-oldal rögzíti: `node scripts/qa/gates/record-review.mjs --head <fej> --verdict … --report <jelentés.md>`
-   (a szkript a hiányos jelentést elutasítja). Ha egyik út sem érhető el, a munka nem nyitható PR-ra — kérj segítséget a
-   tulajdonostól.
+A vak, hibakereső megbízás szövege EGY fájlban van: `scripts/qa/gates/vak-ellenor-megbizas.md` — ezt töltsd ki (a `<…>` helyeken) és add át változtatás nélkül; a
+gépi futtató is ebből veszi az üzenetet. A sablon kötelező elemei: hibakereső keret („a feladatod hibát találni, nem megerősíteni”),
+feladat-specifikus hibakereső pontok + „bármi más”, futtatás / ellenpróba saját munkafában, a mérce a tulajdonosi cél (felületnél a
+képernyőképek), a jelentés kötelező szakaszai (`Fej:`, `Ítélet:`, „Mit próbáltam megtörni, és nem sikerült”, „Mit NEM vizsgáltam”).
 
 ## 4. Kötelező ellenőrzőlista (a mért hibatípusokból)
 
