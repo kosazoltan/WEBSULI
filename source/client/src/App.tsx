@@ -45,6 +45,8 @@ const SpaceAsteroidQuiz = lazy(() => import("@/pages/SpaceAsteroidQuiz"));
 const TornadoHunter200 = lazy(() => import("@/pages/TornadoHunter200"));
 // JM3a: Párbaj — online két főre (MP_MODE mögött) + gépi ellenfél (flag nélkül, hálózat nélkül).
 const DuelOnline = lazy(() => import("@/pages/DuelOnline"));
+// Adventi naptár (docs/specs/2026-11-18-adventi-naptar.md 14.1): szezonális oldal, NEM a játékok között.
+const AdventCalendar = lazy(() => import("@/pages/AdventCalendar"));
 // JM7b: a /profile bejelentkezett játékosnál a „kis fiók”, vendégnél (és kikapcsolt flagnél) a régi helyi Profil oldal.
 const PlayerAccount = lazy(() => import("@/pages/PlayerAccount"));
 // JM7a: játékos belépés (PLAYER_ACCOUNTS flag mögött; kikapcsolva a „nem található” oldal jelenik meg).
@@ -102,6 +104,7 @@ function Router() {
         <Route path="/admin/stats" component={AdminStats} />
         <Route path="/admin/help" component={AdminDocumentation} />
         <Route path="/login" component={Login} />
+        <Route path="/adventi-naptar" component={AdventCalendar} />
         <Route path="/games" component={Games} />
         <Route path="/games/tsunami-english" component={TsunamiEscapeEnglish} />
         <Route path="/games/word-ladder-hu-en" component={WordLadderHuEn} />
