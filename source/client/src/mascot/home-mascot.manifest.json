@@ -1,0 +1,192 @@
+{
+  "name": "A Websuli makija — főoldali képkocka-lap",
+  "generator": "source/scripts/blender/kabala-fooldal/build.mjs",
+  "sheet": {
+    "file": "kabala-fooldal.b1fd2cd8.webp",
+    "sha256": "b1fd2cd8b4a34ba820a68fee7c5051fffe38d76d358b93875be96778e4fa89f0",
+    "bytes": 240222,
+    "width": 1040,
+    "height": 1296
+  },
+  "poster": {
+    "file": "kabala-fooldal-allo.23544f4a.webp",
+    "sha256": "23544f4a5d7be97bcf20f55e742f5d41599288e16fc0ed55a747a569f3311ec1",
+    "bytes": 8220,
+    "width": 130,
+    "height": 216
+  },
+  "cell": {
+    "width": 130,
+    "height": 216
+  },
+  "cols": 8,
+  "frames": 44,
+  "clips": {
+    "idle": {
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "fps": 4,
+      "loop": true,
+      "lift": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "blink": {
+      "frames": [
+        8,
+        9,
+        10
+      ],
+      "fps": 12,
+      "loop": false,
+      "lift": [
+        0,
+        0,
+        0
+      ]
+    },
+    "wave": {
+      "frames": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ],
+      "fps": 8,
+      "loop": false,
+      "lift": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "cheer": {
+      "frames": [
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ],
+      "fps": 6,
+      "loop": false,
+      "lift": [
+        0,
+        0,
+        0.0199,
+        0.0981,
+        0.1419,
+        0.1289,
+        0.0368,
+        0,
+        0.0031
+      ]
+    },
+    "point-in": {
+      "frames": [
+        32,
+        33,
+        34
+      ],
+      "fps": 10,
+      "loop": false,
+      "lift": [
+        0,
+        0,
+        0
+      ]
+    },
+    "point": {
+      "frames": [
+        35,
+        36,
+        37,
+        38
+      ],
+      "fps": 5,
+      "loop": true,
+      "lift": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "hop": {
+      "frames": [
+        39,
+        40,
+        41,
+        42,
+        43
+      ],
+      "fps": 10,
+      "loop": false,
+      "lift": [
+        0,
+        0.0674,
+        0.092,
+        0.049,
+        0
+      ]
+    }
+  },
+  "source": {
+    "triangles": 27792,
+    "engine": "BLENDER_EEVEE",
+    "renderSize": 640,
+    "crop": {
+      "l": 212,
+      "t": 173,
+      "r": 414,
+      "b": 508
+    },
+    "camera": {
+      "azimuth": -14,
+      "elevation": 6,
+      "distance": 7.4,
+      "target": [
+        0.1,
+        0.1,
+        0.82
+      ],
+      "lens": 85
+    }
+  }
+}

@@ -26,7 +26,7 @@ const sessionDismissed = () => {
  * Spec 2026-11-03-udvozlo-jatekkartyak-szulo: az admin (szülő) a saját nevével, az összes évfolyam újdonságaival kap ajánlót — a
  * tanulóhoz párosított eszközön is; kinézet a fejléc üvegnyelvén.
  */
-export default function WelcomeCard<T extends Material>({ files, onViewFile }: { files: T[]; onViewFile: (file: T) => void }) {
+export default function WelcomeCard<T extends Material>({ files, onViewFile, hidePicks = false }: { files: T[]; onViewFile: (file: T) => void; /** A főoldali kabala látható (docs/specs/2026-11-18-kabala-fooldal.md 4.2): ő ajánlja a legújabbakat, itt nem ismételjük. */ hidePicks?: boolean }) {
   const { user, isAdmin } = useAuth();
   const { grade, setGrade, clearGrade } = useClassroomGrade();
   const [storedName, setStoredName] = useState<string | null>(() => loadLearnerName());
@@ -166,7 +166,7 @@ export default function WelcomeCard<T extends Material>({ files, onViewFile }: {
           )}
         </div>
       </div>
-      {picks.files.length > 0 && (
+      {!hidePicks && picks.files.length > 0 && (
         <>
           <h3 className="welcome-picks-title">
             {pickGrade && picks.fromGrade ? `A legújabb tananyagaid (${getClassroomLabel(pickGrade)})` : "A legújabb tananyagok"}

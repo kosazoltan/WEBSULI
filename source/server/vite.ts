@@ -8,6 +8,7 @@ import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
 import { logger } from "./lib/logger";
 import { DEV_CSP_NONCE_PLACEHOLDER } from "./lib/csp-profiles";
+import { homeMascotOn, withHomeMascotFlag } from "./lib/home-flags";
 
 const viteLogger = createLogger();
 
@@ -67,7 +68,9 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
-      const page = await vite.transformIndexHtml(url, template);
+      const transformed = await vite.transformIndexHtml(url, template);
+      // Főoldali kabala (docs/specs/2026-11-18-kabala-fooldal.md 4.1): bekapcsolva a kapcsoló meta-sora az index.html-ben utazik.
+      const page = homeMascotOn() ? withHomeMascotFlag(transformed) : transformed;
       const nonce = res.locals.lessonCspNonce ?? randomBytes(24).toString("base64");
       res.status(200).set({ "Content-Type": "text/html", "Cache-Control": "no-store" })
         .end(page.replaceAll(DEV_CSP_NONCE_PLACEHOLDER, nonce));
@@ -109,6 +112,13 @@ export function serveStatic(app: Express) {
   // Spec 2026-11-03-fooldal-sebesseg: a build által készített, tartalom-hash-es bélyegképek — immutable, egyéves gyorsítótár
   // (új kép = új fájlnév); a hiányzó fájl 404, nem a SPA index.html-je.
   app.use("/design-thumbs", express.static(path.resolve(distPath, "design-thumbs"), { immutable: true, maxAge: "1y", fallthrough: false }));
+  // Főoldali kabala (docs/specs/2026-11-18-kabala-fooldal.md): a képkocka-lap tartalom-hash nevű → immutable, egyéves gyorsítótár.
+  app.use("/mascot", express.static(path.resolve(distPath, "mascot"), { immutable: true, maxAge: "1y", fallthrough: false }));
+  // A `HOME_MASCOT` kapcsoló (alapból KI) bekapcsolva az index.html-be egy meta-sort tesz — a kliens így ÚJ kérés nélkül tudja.
+  // Kikapcsolva `flaggedIndex` null, és a kiszolgálás a régi úton megy (az index.html bájtra változatlan).
+  const flaggedIndex = homeMascotOn() ? withHomeMascotFlag(fs.readFileSync(path.resolve(distPath, "index.html"), "utf-8")) : null;
+  const sendFlaggedIndex = (res: express.Response) => res.status(200).set({ "Content-Type": "text/html; charset=UTF-8", "Cache-Control": "public, max-age=0" }).send(flaggedIndex);
+  if (flaggedIndex) app.get(["/", "/index.html"], (_req, res) => { sendFlaggedIndex(res); });
   app.use(express.static(distPath));
 
   // CRITICAL: SPA catch-all route - serve index.html for all non-API routes
@@ -128,6 +138,10 @@ export function serveStatic(app: Express) {
     }
 
     // Serve index.html for all SPA routes
+    if (flaggedIndex) {
+      sendFlaggedIndex(res);
+      return;
+    }
     const indexPath = path.resolve(distPath, "index.html");
     res.sendFile(indexPath);
   });

@@ -13,6 +13,7 @@ import HeroSection from "@/components/HeroSection";
 import SponsorBar from "@/components/SponsorBar";
 import HomePracticeGames from "@/components/HomePracticeGames";
 import WelcomeCard from "@/components/WelcomeCard";
+import HomeMascotSlot, { useHomeMascot } from "@/components/HomeMascotSlot";
 import { displayTopic } from "@shared/daily-reminder";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, normalizeClassroom } from "@shared/classrooms";
@@ -68,6 +69,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   // Spec 2026-11-03-udvozlo-jatekkartyak-szulo: az admin (szülő) mindig az összes tananyaggal nyit — a tanulóhoz párosított
   // eszközön is (az eszköz évfolyama a gyereké).
   const { isAdmin } = useAuth();
+  // Főoldali kabala (docs/specs/2026-11-18-kabala-fooldal.md): a HOME_MASCOT kapcsoló mögött; kikapcsolva semmi nem rajzolódik.
+  const mascot = useHomeMascot();
   const hasGrade = (g: number | null) => g != null && files.some((f) => (f.classroom ?? 1) === g);
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(() => (!isAdmin && hasGrade(learnerGrade) ? learnerGrade : null));
   // Csak az évfolyam változására (és az első betöltésre) vált — a lista frissítése nem írja felül a tanuló „Mind” választását.
@@ -321,7 +324,10 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
         <SponsorBar />
 
         {/* Személyes üdvözlő ajánló (docs/specs/2026-10-18-nyilvanos-oldal-udvozlo.md) */}
-        <WelcomeCard files={files} onViewFile={onViewFile} />
+        <WelcomeCard files={files} onViewFile={onViewFile} hidePicks={mascot.open} />
+
+        {/* A Websuli makija: a három legújabb tananyag animált ajánlója (docs/specs/2026-11-18-kabala-fooldal.md) */}
+        {mascot.enabled && <HomeMascotSlot files={files} mascot={mascot} onViewFile={onViewFile} />}
 
         {/* Classroom Filter */}
         <div className="mb-3">

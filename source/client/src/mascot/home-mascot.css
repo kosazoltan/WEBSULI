@@ -1,0 +1,125 @@
+/*
+ * A Websuli makija a főoldalon (terv: docs/specs/2026-11-18-kabala-fooldal.md, 4.6). A lusta darabbal együtt töltődik be; a sáv
+ * magasságát a fő darab foglalja le (MASCOT_BOX_CLASS, client/src/lib/home-mascot.ts) — az itteni méretek összege azzal egyezik:
+ *   telefon:   12 + 72 + 10 + max(140, n·68 + (n−1)·6) + 12  →  246 (n = 1) / 248 (n = 2) / 322 (n = 3)
+ *   ≥ 640 px:  16 + 72 + 10 + max(170, n·68 + (n−1)·8) + 16  →  284 (n ≤ 2) / 334 (n = 3)
+ */
+.hm-root {
+  --hm-h: 140px;
+  --hm-col: 88px;
+  --hm-row: 68px;
+  --hm-gap: 6px;
+  --hm-w: calc(var(--hm-h) * 130 / 216);
+  box-sizing: border-box;
+  height: 100%;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+@media (min-width: 640px) {
+  .hm-root { --hm-h: 170px; --hm-col: 112px; --hm-gap: 8px; padding: 16px; }
+}
+
+.hm-top { flex: none; height: 72px; display: flex; align-items: flex-start; gap: 6px; }
+.hm-bubble {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 72px;
+  margin: 0;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18.5px;
+  box-shadow: 0 6px 16px -8px rgba(2, 6, 23, 0.8);
+}
+/* a buborék csücske a maki felé mutat */
+.hm-bubble::after {
+  content: "";
+  position: absolute;
+  left: 30px;
+  bottom: -8px;
+  border: 9px solid transparent;
+  border-top-color: #ffffff;
+  border-bottom: 0;
+}
+.hm-bubble-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.hm-btn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  transition: background-color 160ms ease;
+}
+.hm-btn:hover { background: rgba(255, 255, 255, 0.16); }
+.hm-btn[aria-pressed="true"] { background: rgba(253, 230, 138, 0.22); border-color: rgba(253, 230, 138, 0.6); }
+.hm-btn:focus-visible, .hm-maki:focus-visible { outline: 3px solid #fde68a; outline-offset: 2px; }
+
+.hm-stage { position: relative; flex: 1; min-height: 0; display: flex; gap: 8px; }
+.hm-track { position: relative; flex: none; width: var(--hm-col); }
+.hm-maki {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--hm-w);
+  height: var(--hm-h);
+  margin-left: calc(var(--hm-w) / -2);
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  z-index: 1;
+}
+/* a helyváltoztatás (szökkenés a következő sorhoz) — csak ha a figura mozoghat */
+.hm-root[data-motion="on"] .hm-maki { transition: transform 480ms cubic-bezier(0.45, 0, 0.55, 1); }
+.hm-shadow {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  bottom: -4px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(2, 6, 23, 0.6), rgba(2, 6, 23, 0));
+}
+.hm-lift, .hm-cell { position: absolute; inset: 0; display: block; }
+.hm-cell { overflow: hidden; }
+/* lágy fényudvar: a figura sötét részei (farokgyűrűk, lábfej) a sötét panelen is kirajzolódnak */
+.hm-lift::before {
+  content: "";
+  position: absolute;
+  inset: 4% -14% 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(191, 219, 254, 0.3), rgba(191, 219, 254, 0));
+}
+.hm-poster { position: relative; display: block; width: 100%; height: 100%; }
+.hm-sheet { position: absolute; top: 0; left: 0; max-width: none; will-change: transform; user-select: none; }
+
+.hm-picks { flex: 1; min-width: 0; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--hm-gap); }
+.hm-picks > li { height: var(--hm-row); min-width: 0; }
+.hm-pick { padding: 6px 8px; color: inherit; text-decoration: none; }
+.hm-pick .welcome-pick-thumb { width: 48px; height: 48px; }
+.hm-pick[data-active="true"] {
+  border-color: #fde68a;
+  background: rgba(253, 230, 138, 0.16);
+  box-shadow: 0 0 0 2px rgba(253, 230, 138, 0.5);
+}
