@@ -71,6 +71,18 @@ A maradékból még a mozgás (0,9–1,75 s) is lejön. A medián tételnél egy
   is jár” (terv 5.5, J5a K.2) e tesztjei erre a döntésre hivatkozva igazodnak (a kérdés alatt a menet-óra nem fogy; a menet
   vége nem esik nyitott kérdésre). A régi önellenőrző (e) eset („az óra lejártakor nyitott kérdés megszakad”) helyébe a
   „menet vége nem eshet nyitott kérdésre” lép.
+- **D5-módosítás (TULAJDONOSI DÖNTÉS, 2026-11-18, a választott opció szó szerint: „Csak a többletidőre álljon”).** A teljes
+  D5 mellett egy menetbe 50–67 kérdés fért (a régi ~17 helyett), és a 7-es győzelmi küszöböt teljes meneten minden
+  pontosságú játékos elérte (20/20 a 20%-os modellnél is) — a győzelem elvesztette az értelmét. Ezért: a kérdés alatt a
+  menet-órából a RÉGI (közös, a director nyers) ablaknyi idő fogy; az előjelzés alatt és a hosszabbítás (új ablak − régi
+  ablak) idejére áll. Így a menetenkénti kérdésszám a régi marad, a győzelemhez a pontosság számít, a hosszabb olvasási idő
+  nem veszi el a játékidőt. A menet vége nyitott kérdésre továbbra sem eshet (a menet-óra a régi ablak végén eléri a 0-t, de a
+  menet csak a kérdés lezárulta után ér véget). Megvalósítás: a meghajtó `questionRoundMs(p)` beállítása (a lap és a sim a
+  burkoló által megőrzött régi ablakot adja, `baseWindowMs`).
+- **Spec-változás (kupon-teszt, 2026-11-18):** a „hibázott tétel ≤ min(2n, 10) kérdés múlva visszajön” állítás alól kimondott
+  kivétel, ha a tétel már elérte a közös `MAX_RETURNS_PER_RUN` (2) menetközi visszatérést (a közös szabály szerint utána a
+  „legrégebben feltett” körben jön). A plafon alatt maradt, 11 kérdés múlva visszatérő esetek (80 seed, 8 tétel, modellenként
+  2–3) jegyre kerülnek (a közös director kérdése).
 - **D6 (review L2) — a számláló az előjelzés alatt:** a hátralévő idő az előjelzés alatt legfeljebb az ablak (nem
   ablak + a hátralévő előjelzés).
 
