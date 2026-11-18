@@ -254,6 +254,7 @@ test("K1: kikapcsolt kapcsolónál a főoldal DOM-ja bájtra azonos, és semmi n
   const api = (list: string[]) => list.filter((p) => p.startsWith("/api/") && !p.startsWith("/api/design-assets/")).sort();
   expect(api(on.requests)).toEqual(api(off.requests));
   test.info().annotations.push({ type: "kérések", description: `KI: ${off.requests.length}, BE: ${on.requests.length} (kabala: ${on.requests.filter(mascotRequest).join(", ")})` });
+  console.log(`[kabala K1] kérések KI: ${off.requests.length}, BE: ${on.requests.length}; API KI: ${api(off.requests).length}, BE: ${api(on.requests).length}; kabala: ${on.requests.filter(mascotRequest).join(", ")}`);
 });
 
 test("K5: visszatérő látogató — nincs körbevezetés; a látogatást az eszköz megjegyzi", async ({ page }) => {
@@ -427,6 +428,7 @@ test("K12: akadálymentesség — linkek billentyűzetről, díszítő figura, �
   });
   expect(ratio).toBeGreaterThanOrEqual(4.5);
   test.info().annotations.push({ type: "kontraszt", description: ratio.toFixed(2) });
+  console.log(`[kabala K12] buborék-kontraszt ${ratio.toFixed(2)}:1; célméretek ${sizes.map((x) => `${x.w}×${x.h}`).join(", ")}`);
 
   // billentyűzet: a sáv vezérlői Tab-sorrendben; a link Enterrel nyit
   await page.getByTestId("home-mascot-quiet").focus();
@@ -558,6 +560,7 @@ test("K6, K7: a kabala eszközei ≤ 350 KB átvitt; lustán, a lista megjelené
   for (const s of sized) expect(s.status, s.path).toBe(200);
   const total = sized.reduce((sum, s) => sum + s.bytes, 0);
   test.info().annotations.push({ type: "átvitt méret", description: `${total} B — ${sized.map((s) => `${s.path.split("/").pop()}: ${s.bytes}`).join(", ")}` });
+  console.log(`[kabala K6] átvitt ${total} B — ${sized.map((x) => `${x.path.split("/").pop()}: ${x.bytes}`).join(", ")}`);
   expect(total).toBeLessThanOrEqual(350 * 1024);
 
   // a gyorsítótár-fejléc: a hash nevű képek egy évig változatlanok
@@ -599,6 +602,7 @@ test("K8: elrendezés-ugrás — a CLS bekapcsolva nem nagyobb, mint kikapcsolva
   const off = await measure(false);
   const on = await measure(true);
   test.info().annotations.push({ type: "CLS", description: `KI: ${off.toFixed(4)}, BE: ${on.toFixed(4)}` });
+  console.log(`[kabala K8] CLS KI: ${off.toFixed(4)}, BE: ${on.toFixed(4)}`);
   expect(on).toBeLessThanOrEqual(off + 0.005);
 });
 
