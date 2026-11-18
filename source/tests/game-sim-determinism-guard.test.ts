@@ -59,7 +59,8 @@ function gameCores(): string[] {
   if (!existsSync(lib)) return [];
   return readdirSync(lib)
     .filter((entry) => statSync(join(lib, entry)).isDirectory())
-    .flatMap((entry) => ["sim.ts", "core.ts"].map((file) => join(lib, entry, file)))
+    // A Szökőár magja 2026-11-18 óta `water.ts` (docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md) — az őr hatóköre nem szűkül.
+    .flatMap((entry) => ["sim.ts", "core.ts", "water.ts"].map((file) => join(lib, entry, file)))
     .filter((file) => existsSync(file));
 }
 

@@ -4,7 +4,7 @@ import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import { tsunamiWaterPace } from "@/game-engine/tsunamiTiming";
 import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
 import { useQuery } from "@tanstack/react-query";
@@ -31,8 +31,8 @@ import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge"
 import { useCouponSession } from "@/game-engine/useCouponSession";
 import { maybeClaimCouponBonus } from "@/game-engine/claimCouponBonus";
 import { CouponHud, CouponExpiredOverlay } from "@/game-engine/CouponHud";
-import { correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
-import { ArrowLeft, ArrowUp, Check, Flame, Mountain, Shell as ShellIcon, Waves, X } from "lucide-react";
+import { installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
+import { ArrowLeft, Flame, Mountain, Waves, Zap } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
@@ -60,7 +60,6 @@ import {
   bankPlayQuestion,
   gradePlayQuestion,
   materialPlayQuestion,
-  TAP_STILL_PX,
   restoreReviewQuestion,
   usePlayQuestion,
   vocabPlayQuestion,
@@ -68,7 +67,6 @@ import {
   type QuestionProvider,
 } from "@/game-engine/play";
 import { motion } from "framer-motion";
-import { createPortal } from "react-dom";
 import {
   tsunamiQuizEasyMore,
   tsunamiQuizHardMore,
@@ -86,24 +84,18 @@ import {
 import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
-import TsunamiScene3D, { TSUNAMI_LANE_COLORS, TSUNAMI_LANE_SYMBOLS, createRunnerView, type TsunamiFx } from "@/game-engine/scenes/TsunamiScene3D";
+import TsunamiScene3D, { SHELTER_X, type TsunamiLive } from "@/game-engine/scenes/TsunamiScene3D";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import {
-  IDLE_GOOD_GATE_STATUS,
   TSUNAMI_GAME_ID,
-  TSUNAMI_TUNING,
+  WATER_LOSE,
+  WATER_TUNING,
+  ZONE_HALF,
   createTsunamiDriver,
-  gateHeightPx,
-  gateLabelFits,
-  gatesFitVertically,
-  idleCrossingWasGood,
-  laneForOption,
   tsunamiDirectorConfig,
-  tuningFor,
   type TsunamiDriver,
-  type TsunamiEvent,
-} from "@/lib/tsunami/core";
-import { OBSTACLE_SPECS } from "@/lib/tsunami/obstacles";
+  type WaterEvent,
+} from "@/lib/tsunami/water";
 import { loadedGradeItems } from "@/data/gradeQuizBank/loader";
 
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
@@ -520,11 +512,11 @@ const QUIZ_MED: FourChoiceQuiz[] = [...HARD_QUIZ_EXTRA, ...QUIZ_ADDITIONAL_MED, 
 type GameDifficulty = "easy" | "normal" | "hard";
 
 /**
- * J1a — „Hegyre fel!”: a régi 6 / 8 / 10 jó válaszos győzelem helyett a pálya hossza a cél (végrehajtás J1a 2.; a meglévő
- * nehézségi preset új értelmezése: könnyű 1200 m, közepes 1600 m, nehéz 2000 m).
+ * D1 (2026-11-18, „Vissza a régi, emelkedő vízhez”): a menedéket N jó válasz hozza (docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md;
+ * a hangolás a `WATER_TUNING`-ban, a szimulációval mérve).
  */
-function levelDistanceFor(d: GameDifficulty): number {
-  return TSUNAMI_TUNING[d].levelDistance;
+function winTargetFor(d: GameDifficulty): number {
+  return WATER_TUNING[d].winCorrect;
 }
 
 /** A menet vége előtt (győzelem / a hullám) ennyi ideig látszik a pillanat, mielőtt az eredménykártya jön (ms). */
@@ -540,7 +532,7 @@ type SyncEligibility = { eligible: boolean; reason?: string };
 
 type ActiveQuizPools = Record<TsunamiCoreSubject, SubjectQuizPools>;
 
-type RunResult = { won: boolean; score: number; correct: number; total: number; bestStreak: number; distance: number; goal: number; shells: number; seconds: number };
+type RunResult = { won: boolean; score: number; correct: number; total: number; bestStreak: number; target: number; water: number; seconds: number };
 
 function difficultyLabel(d: GameDifficulty): string {
   if (d === "easy") return "Könnyű";
@@ -602,62 +594,40 @@ function tierForProgress(eff: number): number {
   return eff < 0.82 ? 1 : 2;
 }
 
-/** A kapu-tábla felirata kétsoros méretre (a hosszú tananyag-válasz kisebb betűt kap). */
-function gateLabelLong(label: string): boolean {
-  return label.length > 22;
-}
-
-/** A sáv-tábla elrendezése: a sávok vetített közepe köré, egymástól legalább a tábla szélessége + 12 px-re (K.4/16). */
-function gateLayout(stageW: number, laneX: readonly number[]): { centers: [number, number, number]; width: number } {
-  const margin = 8;
-  const width = Math.max(96, Math.min(160, Math.floor((stageW - 2 * margin - 24) / 3)));
-  const mid = Math.min(stageW - margin - width * 1.5 - 12, Math.max(margin + width * 1.5 + 12, (laneX[1] ?? 0.5) * stageW));
-  const proj = ((laneX[2] ?? 0.8) - (laneX[0] ?? 0.2)) * stageW * 0.5;
-  const spacing = Math.max(width + 12, Math.min(proj, (stageW - 2 * margin - width) / 2));
-  return { centers: [mid - spacing, mid, mid + spacing], width };
-}
-
 /**
- * Érintős vezérlősáv (tárcsa + Ugrás). `memo`: a lap a HUD (10 Hz) és a menet közben nyitott kérdés órája miatt is
- * újrarenderel; a tárcsának ezekhez semmi köze, csak a saját (stabil) propjai változásakor renderel (joystick-reakció
- * #49 render-mérője, PR #483 CI: a kérdés-renderek a tárcsán is megjelentek).
+ * Érintős vezérlősáv (tárcsa + Sprint). `memo`: a lap a HUD (10 Hz) és a nyitott kérdés órája miatt is újrarenderel; a
+ * tárcsának ezekhez semmi köze (joystick-reakció #49 render-mérője).
  */
 const TsunamiTouchControls = memo(function TsunamiTouchControls({
   joyReset,
   onJoystick,
-  jumpStart,
-  jumpEnd,
+  sprintStart,
+  sprintEnd,
 }: {
   joyReset: number;
   onJoystick: (v: JoystickVector) => void;
-  jumpStart: () => void;
-  jumpEnd: () => void;
+  sprintStart: () => void;
+  sprintEnd: () => void;
 }) {
   return (
-    /* G-8: touch-action:none — hosszú nyomásra a böngésző eddig kijelölt és görgetett, a futás megállt.
-       S9: csak érintős eszközön; a sáv a biztonsági sávon belül, a hüvelykujjak alatt. D-J1a-1: a tárcsa
-       analóg oldalirányú kormányzás a húzás mellett; az Ugrás akciógomb a jobb hüvelykujjnak. */
+    /* G-8: touch-action:none — hosszú nyomásra a böngésző ne jelöljön ki és ne görgessen. A tárcsa a figura vízszintes
+       mozgása (a régi játék), a Sprint akciógomb a jobb hüvelykujjnak. */
     <div
       className="tsunami-controls game-touch-layer"
       data-game-controls
       data-testid="tsunami-touch-controls"
-      style={{
-        touchAction: "none",
-        userSelect: "none",
-        WebkitTouchCallout: "none",
-        WebkitTapHighlightColor: "transparent",
-      }}
+      style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }}
     >
-      <VirtualJoystick label="Futás iránya" radius="auto" resetSignal={joyReset} onChange={onJoystick} />
+      <VirtualJoystick label="Mozgás iránya" radius="auto" resetSignal={joyReset} onChange={onJoystick} />
       <HoldButton
-        label="Ugrás"
+        label="Sprint"
         size="auto"
-        onHoldStart={jumpStart}
-        onHoldEnd={jumpEnd}
+        onHoldStart={sprintStart}
+        onHoldEnd={sprintEnd}
         className="flex-col gap-0.5 border-2 border-amber-100/70 bg-gradient-to-b from-amber-300 to-orange-500 text-slate-950 font-black shadow-[0_8px_24px_rgba(245,158,11,0.55)] active:scale-95 transition-transform"
       >
-        <ArrowUp className="h-7 w-7" aria-hidden="true" />
-        <span className="text-[13px] leading-none tracking-wide">UGRÁS</span>
+        <Zap className="h-7 w-7" aria-hidden="true" />
+        <span className="text-[13px] leading-none tracking-wide">SPRINT</span>
       </HoldButton>
     </div>
   );
@@ -729,11 +699,10 @@ export default function TsunamiEscapeEnglish() {
   const whyOpenRef = useRef(false);
   whyOpenRef.current = explainCard !== null || expanded;
   /** HUD-pillanatkép ≤ 10 Hz (KSZ-9): a képkocka-hurok nem ír React-állapotot. */
-  const [hud, setHud] = useState({ distance: 0, goal: 1600, gap: 30, shells: 0, score: 0, combo: 0, multiplier: 1, lane: 1, hint: 0, danger: 0 });
+  const [hud, setHud] = useState({ correct: 0, target: 10, water: 12, score: 0, combo: 0, inZone: true, hint: 0 });
   const [result, setResult] = useState<RunResult | null>(null);
   const [stormFlash, setStormFlash] = useState(false);
   /** D-J1a-17 (ÚK2): annak a kérdésnek az azonosítója, amelynek JÓ kapuján a gyerek bemenet nélkül futott át. */
-  const [idleGoodId, setIdleGoodId] = useState<number | null>(null);
   /**
    * Élesítés (átmeneti kapu 3a): a válaszcélok (táblák, lista módban a gombok) akkor jelennek meg, amikor a meghajtó már
    * elfogadja az érintést (`driver.armedPresentationId()`, a kérdés-órával: `ANSWER_ARM_MS`). Korábban 450 ms valós idő
@@ -746,10 +715,10 @@ export default function TsunamiEscapeEnglish() {
   const [runKey, setRunKey] = useState(0);
 
   /** A billentyűk (a bemenet-mérő `inX`-éhez) és a tárcsa analóg értéke. */
-  const keysRef = useRef({ left: false, right: false });
+  const keysRef = useRef({ left: false, right: false, sprint: false });
   /** Joystick-reakció (#49): az analóg tárcsa vízszintes értéke (−1…1, a görbével). */
   const stickXRef = useRef(0);
-  const stickJumpArmedRef = useRef(true);
+  const sprintHeldRef = useRef(false);
   // Joystick-reakció (#49): a bemenet → válasz mérő kampója (csak teszt-kampós buildben él).
   countRender("tsunami-page");
   const timeoutsRef = useRef<number[]>([]);
@@ -875,13 +844,17 @@ export default function TsunamiEscapeEnglish() {
   const runSeenRef = useRef<SeenItem[]>([]);
   /** A tananyag-kérdés témája a kulcsa szerint (a kérdés-címke a közös `quizTopicLabelHu`-val). */
   const topicByKeyRef = useRef(new Map<string, string>());
-  const viewRef = useRef(createRunnerView());
+  /** A jelenet képkockánként innen olvas (nincs 60 Hz-es React-render). */
+  const liveRef = useRef<TsunamiLive>({ water: 12, playerX: 50, safeZoneX: 50, sprinting: false });
+  /** Pont és kombó (a lap számolja a kérdés-kimenetekből). */
+  const scoreRef = useRef({ score: 0, combo: 0, best: 0 });
   const qRef = useRef<ReturnType<typeof usePlayQuestion>>(null as unknown as ReturnType<typeof usePlayQuestion>);
   const driverRef = useRef<TsunamiDriver | null>(null);
   const makeDriver = (seed: string | number, d: GameDifficulty, wavePace: number): TsunamiDriver =>
     createTsunamiDriver({
       seed,
-      tuning: tuningFor(d, wavePace),
+      difficulty: d,
+      pace: wavePace,
       questions: {
         frame: (c, ctx) => qRef.current?.frame(c, ctx),
         timeScale: () => qRef.current?.timeScale() ?? 1,
@@ -890,11 +863,9 @@ export default function TsunamiEscapeEnglish() {
         pick: (i, c) => qRef.current?.pick(i, c) ?? null,
         active: () => qRef.current?.active() ?? null,
       },
-      intensity: () => qRef.current?.director?.intensity() ?? 0.4,
       reducedMotion,
     });
   if (!driverRef.current) driverRef.current = makeDriver(runSeedRef.current, difficulty, 1);
-  viewRef.current.core = driverRef.current.core;
   const fpsRef = useRef(60);
 
   /** A menet előrehaladása 0..1 (a régi szintes kérdés-választóhoz). */
@@ -1082,12 +1053,17 @@ export default function TsunamiEscapeEnglish() {
   const q = usePlayQuestion({
     setup: { config: directorConfig, provider, startBand: adaptiveRef.current.band, seed: runSeedRef.current },
     onOutcome: (o, p) => {
-      // D-J1a-17 (ÚK2): a tétlen átfutás a JÓ kapun — a kimenet alkalmazása ELŐTT kérdezzük (utána a kapu jelzése törlődik).
-      const core = driverRef.current?.core;
-      const idleGood = !!core && o.result === "timeout" && idleCrossingWasGood(core.state(), p.options.findIndex((opt) => opt.correct));
-      setIdleGoodId(idleGood ? p.id : null);
+      // A kimenet → a víz (D4: jó válasz = visszahúzódik, rossz / lejárt = ugrik).
       driverRef.current?.onOutcome(o, p);
       if (o.result === "aborted") return;
+      const sc = scoreRef.current;
+      if (o.result === "correct") {
+        sc.combo += 1;
+        sc.best = Math.max(sc.best, sc.combo);
+        sc.score += 100 + 25 * Math.min(4, sc.combo - 1);
+      } else {
+        sc.combo = 0;
+      }
       adaptiveRef.current.answer(o.result === "correct");
       // A kupon-bónusz a VALÓS választással (az eredeti opció-index — terv 8.7).
       if (o.pickedOriginalIndex !== null) maybeClaimCouponBonus(coupon, p.question.couponItemId ?? p.question.quiz.id, o.pickedOriginalIndex);
@@ -1117,10 +1093,11 @@ export default function TsunamiEscapeEnglish() {
     // Pályán a sáv mérsékelten gyorsítja / lassítja a hullámot (E szelet, D8); pálya nélkül a régi tempó.
     const wavePace = runLevelRef.current == null ? 1 : tsunamiWaterPace(adaptiveRef.current.band);
     driverRef.current = makeDriver(seed, difficulty, wavePace);
-    viewRef.current.core = driverRef.current.core;
-    viewRef.current.fx.length = 0;
+    scoreRef.current = { score: 0, combo: 0, best: 0 };
     keysRef.current.left = false;
     keysRef.current.right = false;
+    keysRef.current.sprint = false;
+    sprintHeldRef.current = false;
     stickXRef.current = 0;
     scoreSubmittedRef.current = false;
     q.reset(seed, adaptiveRef.current.band);
@@ -1131,7 +1108,8 @@ export default function TsunamiEscapeEnglish() {
     setNewlyUnlocked([]);
     setResult(null);
     const st = driverRef.current.core.state();
-    setHud({ distance: 0, goal: levelDistanceFor(difficulty), gap: st.waveGap, shells: 0, score: 0, combo: 0, multiplier: 1, lane: 1, hint: 1, danger: 0 });
+    liveRef.current = { water: st.water, playerX: st.x, safeZoneX: st.zoneX, sprinting: false };
+    setHud({ correct: 0, target: st.target, water: Math.round(st.water), score: 0, combo: 0, inZone: true, hint: 1 });
     // Review #483: a szünetmenü „Újrakezdés”-e a „play” fázisban marad — a képkocka-hurok a menet kulcsára is újraindul.
     setRunKey((k) => k + 1);
     goPhase("play");
@@ -1150,13 +1128,12 @@ export default function TsunamiEscapeEnglish() {
     setExpanded(false);
     setResult({
       won,
-      score: st.score,
+      score: scoreRef.current.score,
       correct,
       total,
-      bestStreak: st.combo.best,
-      distance: Math.round(st.distance),
-      goal: driver.core.tuning().levelDistance,
-      shells: st.shellCount,
+      bestStreak: scoreRef.current.best,
+      target: st.target,
+      water: Math.round(st.water),
       seconds: Math.round(driver.clockMs() / 1000),
     });
     goPhase(won ? "won" : "over");
@@ -1167,6 +1144,8 @@ export default function TsunamiEscapeEnglish() {
     if (phase !== "play") return;
     keysRef.current.left = false;
     keysRef.current.right = false;
+    keysRef.current.sprint = false;
+    sprintHeldRef.current = false;
     stickXRef.current = 0;
     setJoyReset((n) => n + 1);
     goPaused(true);
@@ -1209,10 +1188,7 @@ export default function TsunamiEscapeEnglish() {
 
   /** A kérdés-sáv nyitott (nem kijelzés alatti) kérdése — erre lehet válaszolni. */
   const quiz = q.state.presentation && !q.state.reveal ? q.state.presentation : null;
-  /**
-   * Válasz a kapu-táblán (érintés) vagy az 1–3 billentyűvel: a futó a sávba fut, és a kérdés azonnal eldől (D-J1a-2).
-   * S13 / review K1: szünetben (és a „Miért?” alatt) nincs válasz.
-   */
+  /** Válasz a kérdés-sáv gombján (érintés) vagy billentyűvel. S13 / review K1: szünetben (és a „Miért?” alatt) nincs válasz. */
   const onAnswer = (index: number) => {
     if (!quiz || paused) return;
     if (whyOpenRef.current) return;
@@ -1258,33 +1234,31 @@ export default function TsunamiEscapeEnglish() {
     }
   }, [bestStreak]);
 
-  /* ---------------- bemenet: billentyű (←/→ A/D sáv, ↑ W szóköz ugrás), húzás, tárcsa, Ugrás gomb ---------------- */
+  /* ---------------- bemenet: billentyű (←/→ A/D mozgás, Shift sprint), tárcsa, Sprint gomb ---------------- */
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (phaseNowRef.current !== "play" || pausedNowRef.current || whyOpenRef.current || e.repeat) return;
+      if (phaseNowRef.current !== "play" || pausedNowRef.current || whyOpenRef.current) return;
       if (e.altKey || e.ctrlKey || e.metaKey) return;
-      const input = driverRef.current?.core.input;
-      if (!input) return;
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
         keysRef.current.left = true;
-        input.laneDelta -= 1;
         e.preventDefault();
       } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
         keysRef.current.right = true;
-        input.laneDelta += 1;
         e.preventDefault();
-      } else if (e.key === "ArrowUp" || e.key === "w" || e.key === "W" || e.key === " ") {
-        input.jump = true;
-        e.preventDefault();
+      } else if (e.key === "Shift") {
+        keysRef.current.sprint = true;
       }
     };
     const up = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keysRef.current.left = false;
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keysRef.current.right = false;
+      if (e.key === "Shift") keysRef.current.sprint = false;
     };
     const reset = () => {
       keysRef.current.left = false;
       keysRef.current.right = false;
+      keysRef.current.sprint = false;
+      sprintHeldRef.current = false;
       stickXRef.current = 0;
     };
     window.addEventListener("keydown", down);
@@ -1301,137 +1275,46 @@ export default function TsunamiEscapeEnglish() {
     if (phase === "play") return;
     keysRef.current.left = false;
     keysRef.current.right = false;
+    keysRef.current.sprint = false;
+    sprintHeldRef.current = false;
     stickXRef.current = 0;
   }, [phase]);
 
-  // Joystick-reakció (#49): a bemenet → válasz mérő kampója (csak teszt-kampós buildben él).
+  // Joystick-reakció (#49): a bemenet → válasz mérő kampója (csak teszt-kampós buildben él). A figura helye %-ban.
   useEffect(
     () =>
       registerInputProbe("tsunami", () => ({
-        x: 50 + (driverRef.current?.core.state().x ?? 0) * 35,
+        x: driverRef.current?.core.state().x ?? 50,
         inX: (keysRef.current.right ? 1 : 0) - (keysRef.current.left ? 1 : 0) + stickXRef.current,
       })),
     [],
   );
 
-  // Joystick-reakció (#49): analóg, folytonos görbe — az oldalirány a tárcsa vízszintes értéke; erős felfelé = ugrás.
+  // Joystick-reakció (#49): analóg, folytonos görbe — a vízszintes érték a figura mozgása.
   const onJoystick = useCallback((v: JoystickVector) => {
-    const shaped = shapeJoystick(v);
-    stickXRef.current = shaped.x;
-    if (shaped.y > 0.75 && stickJumpArmedRef.current) {
-      stickJumpArmedRef.current = false;
-      const input = driverRef.current?.core.input;
-      if (input && !pausedNowRef.current) input.jump = true;
-    } else if (shaped.y < 0.35) {
-      stickJumpArmedRef.current = true;
-    }
+    stickXRef.current = shapeJoystick(v).x;
   }, []);
-  const jumpStart = useCallback(() => {
-    const input = driverRef.current?.core.input;
-    if (input && !pausedNowRef.current && !whyOpenRef.current) input.jump = true;
+  const sprintStart = useCallback(() => {
+    if (!pausedNowRef.current && !whyOpenRef.current) sprintHeldRef.current = true;
   }, []);
-  const jumpEnd = useCallback(() => {}, []);
-
-  /** Húzás a játéktéren (terv 5.1): ≥ 30 px vízszintesen = sávváltás, felfelé = ugrás; egy gesztusban több is (mutatónként). */
-  const swipesRef = useRef(new Map<number, { x: number; y: number }>());
-  const onStagePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== undefined && e.button > 0) return;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* a szintetikus esemény nem foglalható le — a húzás így is működik */
-    }
-    swipesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const sprintEnd = useCallback(() => {
+    sprintHeldRef.current = false;
   }, []);
-  const onStagePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    const s = swipesRef.current.get(e.pointerId);
-    if (!s || pausedNowRef.current || whyOpenRef.current) return;
-    const input = driverRef.current?.core.input;
-    if (!input) return;
-    const dx = e.clientX - s.x;
-    const dy = e.clientY - s.y;
-    if (Math.abs(dx) >= 30 && Math.abs(dx) > Math.abs(dy)) {
-      input.laneDelta += dx > 0 ? 1 : -1;
-      s.x = e.clientX;
-      s.y = e.clientY;
-    } else if (dy <= -30 && Math.abs(dy) > Math.abs(dx)) {
-      input.jump = true;
-      s.x = e.clientX;
-      s.y = e.clientY;
-    }
-  }, []);
-  const onStagePointerEnd = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    swipesRef.current.delete(e.pointerId);
-    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-  }, []);
-
-  /**
-   * D-J1a-9 (review #483, M1): a kapu-táblán INDÍTOTT mozdulat. A mozdulatlansági küszöb (`TAP_STILL_PX`) fölött nem koppintás,
-   * hanem húzás: ugyanaz a sávváltás- / ugrás-kezelő kapja, mint a játéktér húzó rétege (válasz nem rögzül). Csak a rövid,
-   * mozdulatlan koppintás választ; billentyűvel (Enter / Szóköz: `click` `detail === 0`) is.
-   */
-  const gateDownRef = useRef(new Map<number, { x: number; y: number; moved: boolean; option: number }>());
-  const gateHandlers = (option: number) => ({
-    onPointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => {
-      e.stopPropagation();
-      if (e.button !== undefined && e.button > 0) return;
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      } catch {
-        /* a szintetikus esemény nem foglalható le */
-      }
-      gateDownRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY, moved: false, option });
-      swipesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    },
-    onPointerMove: (e: ReactPointerEvent<HTMLButtonElement>) => {
-      const d = gateDownRef.current.get(e.pointerId);
-      if (!d) return;
-      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > TAP_STILL_PX) d.moved = true;
-      onStagePointerMove(e as unknown as ReactPointerEvent<HTMLDivElement>);
-    },
-    onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
-      e.stopPropagation();
-      const d = gateDownRef.current.get(e.pointerId);
-      gateDownRef.current.delete(e.pointerId);
-      swipesRef.current.delete(e.pointerId);
-      if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-      if (d && !d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) <= TAP_STILL_PX) answerRef.current(d.option);
-    },
-    onPointerCancel: (e: ReactPointerEvent<HTMLButtonElement>) => {
-      gateDownRef.current.delete(e.pointerId);
-      swipesRef.current.delete(e.pointerId);
-    },
-    onLostPointerCapture: (e: ReactPointerEvent<HTMLButtonElement>) => {
-      gateDownRef.current.delete(e.pointerId);
-      swipesRef.current.delete(e.pointerId);
-    },
-    onClick: (e: { detail: number }) => {
-      // Billentyűzet (Enter / Szóköz): `detail === 0`. A mutatós választást a pointerup intézte.
-      if (e.detail === 0) answerRef.current(option);
-    },
-  });
 
   /* ---------------- képkocka-hurok (requestGameFrame): kérdés-óra, sim, rajz ---------------- */
   const stageRef = useRef<HTMLDivElement>(null);
   const shakeRef = useRef<HTMLDivElement>(null);
   const flatCanvasRef = useRef<HTMLCanvasElement>(null);
   const shakeOff = useRef({ x: 0, y: 0, rot: 0 });
-  const lastSfxRef = useRef(0);
-  const onEvent = useCallback((e: TsunamiEvent) => {
-    const fx = viewRef.current.fx;
-    if (fx.length < 24) fx.push({ type: e.type, lane: e.lane, at: e.at } as TsunamiFx);
-    const now = performance.now();
-    if (e.type === "collide") {
+  const onEvent = useCallback((e: WaterEvent) => {
+    if (e.type === "waterSurge") {
+      // D4: rossz / lejárt válasz → a víz ugrik: mély ütés + rezgés (a rázást a meghajtó adja, csökkentett mozgásnál nincs).
       sfxHit();
       haptics("hit");
-      driverRef.current?.feel.addTrauma(0.35);
-    } else if (e.type === "shell" && now - lastSfxRef.current > 60) {
-      lastSfxRef.current = now;
-      sfxPickup();
-    } else if (e.type === "shellRow") {
-      sfxCombo(2);
-    } else if (e.type === "gateCorrect" && e.n >= 2) {
-      sfxCombo(Math.min(5, e.n) as 1 | 2 | 3 | 4 | 5);
+    } else if (e.type === "waterDrop") {
+      const combo = scoreRef.current.combo;
+      if (combo >= 2) sfxCombo(Math.min(5, combo) as 1 | 2 | 3 | 4 | 5);
+      else sfxPickup();
     } else if (e.type === "won") {
       sfxLevelUp();
     }
@@ -1462,11 +1345,19 @@ export default function TsunamiEscapeEnglish() {
       const isPaused = pausedNowRef.current || whyOpenRef.current;
       const driver = driverRef.current!;
       const core = driver.core;
-      if (!isPaused) core.input.steer = stickXRef.current;
-      progressRef.current = Math.min(1, core.state().distance / core.tuning().levelDistance);
-      // A meghajtó képkockája (a sim ugyanezt hívja): kérdés-óra → menetvégnél a kérdés lezárása → kérdés-sáv → kapu →
-      // időskála (szünet 0, nyitott kérdés slowMo) → fix lépés → események (hitstop + nézet).
-      viewRef.current.alpha = driver.frame(dt, isPaused, onEvent);
+      const keys = keysRef.current;
+      core.input.move = isPaused ? 0 : Math.max(-1, Math.min(1, (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + stickXRef.current));
+      core.input.sprint = !isPaused && (keys.sprint || sprintHeldRef.current);
+      progressRef.current = Math.min(1, core.state().correct / Math.max(1, core.state().target));
+      // A meghajtó képkockája (a sim ugyanezt hívja): kérdés-óra → menetvégnél a kérdés lezárása → kérdés-sáv → időskála
+      // (szünet 0, nyitott kérdés slowMo — a világ lassul, nem áll) → fix lépés → események.
+      const alpha = driver.frame(dt, isPaused, onEvent);
+      const st = core.state();
+      const live = liveRef.current;
+      live.water = st.prevWater + (st.water - st.prevWater) * alpha;
+      live.playerX = st.prevX + (st.x - st.prevX) * alpha;
+      live.safeZoneX = st.zoneX;
+      live.sprinting = core.input.sprint;
       const armed = driver.armedPresentationId();
       if (armed !== null && armedNowRef.current !== armed) {
         armedNowRef.current = armed;
@@ -1502,20 +1393,10 @@ export default function TsunamiEscapeEnglish() {
       if (!driver) return;
       const st = driver.core.state();
       const hint = st.timeMs < HINT_MS ? 1 : 0;
-      const next = {
-        distance: Math.floor(st.distance),
-        goal: driver.core.tuning().levelDistance,
-        gap: Math.max(0, Math.round(st.waveGap)),
-        shells: st.shellCount,
-        score: st.score,
-        combo: st.combo.count,
-        multiplier: st.combo.multiplier,
-        lane: st.lane,
-        hint,
-        danger: Math.round(viewRef.current.danger * 10) / 10,
-      };
+      const sc = scoreRef.current;
+      const next = { correct: st.correct, target: st.target, water: Math.round(st.water), score: sc.score, combo: sc.combo, inZone: st.inZone, hint };
       setHud((prev) =>
-        prev.distance === next.distance && prev.gap === next.gap && prev.shells === next.shells && prev.score === next.score && prev.combo === next.combo && prev.lane === next.lane && prev.hint === next.hint && prev.danger === next.danger && prev.goal === next.goal
+        prev.correct === next.correct && prev.target === next.target && prev.water === next.water && prev.score === next.score && prev.combo === next.combo && prev.inZone === next.inZone && prev.hint === next.hint
           ? prev
           : next,
       );
@@ -1533,64 +1414,6 @@ export default function TsunamiEscapeEnglish() {
     return () => window.clearInterval(id);
   }, [phase, paused, explainCard, reducedMotion]);
 
-  /* ---------------- kapu-táblák: a sávok fölött, a kérdés-kártya alatt ---------------- */
-  const [gateBox, setGateBox] = useState<{ top: number; centers: [number, number, number]; width: number }>({ top: 220, centers: [60, 180, 300], width: 106 });
-  const gatesRef = useRef<HTMLDivElement>(null);
-  const presId = q.state.presentation?.id ?? null;
-  /** D-J1a-18: a nyitott kérdés válaszai (a magasság-döntéshez) és az, hogy a táblák függőlegesen elférnek-e. */
-  const presLabelsRef = useRef<string[]>([]);
-  presLabelsRef.current = q.state.presentation?.options.map((o) => o.label) ?? [];
-  const [gatesFitH, setGatesFitH] = useState(true);
-  // D-J1a-17 (ÚK2): a „Jó kapu!” felirat helye a kártya alján (a közös kérdés-sáv állapotsora mellett, annak helyén).
-  const revealNow = q.state.reveal;
-  const idleGoodNow = presId !== null && !!revealNow && revealNow.pickedOptionIndex === null && idleGoodId === presId;
-  const [idleGoodFoot, setIdleGoodFoot] = useState<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    setIdleGoodFoot(idleGoodNow ? gatesRef.current?.querySelector<HTMLElement>(".play-question-foot") ?? null : null);
-  }, [idleGoodNow]);
-  useLayoutEffect(() => {
-    if (presId === null) return;
-    // D-J1a-18: a tábla / lista mód döntése CSAK a kérdés megjelenésekor és átméretezéskor / elforgatáskor (`decide`); a kártya
-    // későbbi növekedése (a megoldás-kijelzés állapotsora, „Jó kapu!”) csak a táblák helyét igazítja — különben a kijelzés
-    // közben váltana lista módra, és a táblák eltűnnének.
-    const measure = (decide: boolean) => {
-      const stage = stageRef.current;
-      const card = gatesRef.current?.querySelector<HTMLElement>(".play-question-card");
-      if (!stage) return;
-      const sr = stage.getBoundingClientRect();
-      // D-J1a-18: a kártya alja a „sáv” (táblás) elrendezés szerint, a mód- és animációfüggetlen elrendezési dobozból — lista
-      // módban álló nézetben a kártya lecsúszik (flex-end), a belépő animáció pedig 10 px-et told rajta; ezekkel mérve a döntés
-      // beragadna a lista módba.
-      const bar = card?.parentElement;
-      const barTop = card && bar ? (getComputedStyle(bar).display === "block" ? card.offsetTop : parseFloat(getComputedStyle(bar).paddingTop) || 0) : 0;
-      const cardBottom = card && bar ? bar.getBoundingClientRect().top + barTop + card.offsetHeight - sr.top : 200;
-      const { centers, width } = gateLayout(sr.width, viewRef.current.laneScreenX);
-      // D-J1a-15 (review #483, K4): a táblák alsó széle ne lógjon a futó vetített feje alá (fekvő nézetben a kártya nő).
-      // D-J1a-18: a tábla várható magassága a feliratból; ha a táblák így nem férnek a kártya és a fej közé → lista mód.
-      const labels = presLabelsRef.current;
-      const inner = width - 22;
-      const head = viewRef.current.runnerTopY * sr.height;
-      const gateH = labels.length ? Math.max(...labels.map((l) => gateHeightPx(l, inner))) : 64;
-      const below = Math.max(cardBottom + 10, sr.height * 0.18);
-      const cap = head - gateH - 8;
-      const top = Math.round(Math.max(sr.height * 0.12, Math.min(below, cap)));
-      setGateBox((prev) =>
-        prev.top === top && prev.width === width && prev.centers[0] === centers[0] && prev.centers[1] === centers[1] && prev.centers[2] === centers[2] ? prev : { top, centers, width },
-      );
-      if (decide) setGatesFitH(gatesFitVertically({ labels, innerWidthPx: inner, cardBottomPx: cardBottom, runnerHeadPx: head, stageHeightPx: sr.height }));
-    };
-    measure(true);
-    const card = gatesRef.current?.querySelector<HTMLElement>(".play-question-card");
-    const ro = typeof ResizeObserver !== "undefined" && card ? new ResizeObserver(() => measure(false)) : null;
-    if (ro && card) ro.observe(card);
-    const onResize = () => measure(true);
-    window.addEventListener("resize", onResize);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener("resize", onResize);
-    };
-  }, [presId]);
-
   /* ---------------- pontszám, jelvények, legjobb ---------------- */
   const scoreSubmittedRef = useRef(false);
   useEffect(() => {
@@ -1602,7 +1425,7 @@ export default function TsunamiEscapeEnglish() {
     const payload = {
       gameId: "tsunami-english",
       difficulty: runDifficultyRef.current,
-      // A menet-pont (K.2 „Pontszám-szerződés”): kagyló × 5 + jó kapu × 30 × kombó + táv / 10.
+      // A menet-pont: jó válaszonként 100 + kombó-bónusz (25 × a sorozat, legfeljebb 100).
       runXp: result.score,
       // A menet LEGJOBB kombó-sorozata (J12).
       runStreak: result.bestStreak,
@@ -1676,19 +1499,24 @@ export default function TsunamiEscapeEnglish() {
           band: ctl.director?.band() ?? adaptiveRef.current.band,
           intensity: ctl.director?.intensity() ?? null,
           level: runLevelRef.current,
-          waveGap: st.waveGap,
-          distance: st.distance,
-          lane: st.lane,
+          water: st.water,
+          waterLose: WATER_LOSE,
           x: st.x,
-          jumps: st.jumps,
-          runnerTopY: viewRef.current.runnerTopY,
-          gateAt: st.gates ? st.gates.atDistance : null,
+          zoneX: st.zoneX,
+          inZone: st.inZone ? 1 : 0,
+          correct: st.correct,
+          target: st.target,
+          wrong: st.wrong,
+          // A figura helye a játéktér arányában (a jelenet a z = 0 síkot lineárisan képezi: x % balról, víz % alulról).
+          figureX: st.x / 100,
+          figureY: 1 - st.water / 100,
+          quizPlace: quizPlaceRef.current,
+          sprint: driver.core.input.sprint ? 1 : 0,
           questionId: p?.id ?? null,
           questionSeconds: p ? p.windowMs / 1000 : null,
           reveal: ctl.view().reveal ? 1 : 0,
           // D-J1a-19: a meghajtó elfogadná-e most az érintést (az élesítés-teszt a táblák látható élességével veti össze).
           armed: driver.armedPresentationId() !== null ? 1 : 0,
-          collisions: st.collisions,
           phase: st.phase,
           paused: pausedNowRef.current || whyOpenRef.current ? 1 : 0,
           clock: driver.clockMs(),
@@ -1706,6 +1534,14 @@ export default function TsunamiEscapeEnglish() {
           qRef.current.request("trigger", driverRef.current!.clockMs());
           return;
         }
+        // Teszt: a vízszint beállítása (a „magas víz → lent a kérdés” elrendezés méréséhez).
+        const water = (patch as { water?: unknown }).water;
+        if (typeof water === "number" && Number.isFinite(water) && driverRef.current) {
+          const st = driverRef.current.core.state() as { water: number; prevWater: number };
+          st.water = Math.max(5, Math.min(WATER_LOSE - 1, water));
+          st.prevWater = st.water;
+          return;
+        }
         if (patch.phase === "play") startGame();
         if (patch.phase === "menu") exitToMenu();
         if (patch.phase === "won" || patch.phase === "over") endRun(patch.phase === "won", typeof patch.correctCount === "number" ? patch.correctCount : undefined);
@@ -1719,45 +1555,29 @@ export default function TsunamiEscapeEnglish() {
   const playingPhase = phase === "play";
   const resultOpen = phase === "won" || phase === "over";
   const shellState: GameScreenState = phase === "menu" ? "start" : playingPhase ? (paused ? "paused" : "playing") : "result";
-  const danger = hud.gap <= 8;
-  const gapTone = danger ? "bad" : hud.gap <= 14 ? "warn" : "default";
+  // A víz a vesztési vonalhoz közel → narancs szél és tónus (villogás nélkül — K.4/20).
+  const danger = hud.water >= WATER_LOSE - 14;
+  const gapTone = danger ? "bad" : hud.water >= WATER_LOSE - 28 ? "warn" : "default";
   const pres = q.state.presentation;
   const reveal = q.state.reveal;
   const presTopic = pres ? topicByKeyRef.current.get(pres.question.key) ?? null : null;
   const questionChip = pres ? (pres.question.source === "material" || pres.question.source === "coupon" ? `LECKE · ${quizTopicLabelHu(presTopic, "Tananyag")}` : quizTopicLabelHu(null, TSUNAMI_SUBJECT_META[(pres.question.subject as TsunamiCoreSubject | undefined) ?? runSubjectRef.current]?.label ?? runSubjectMeta.label)) : null;
-  // A sáv ↔ opció leképezés a maggal közös (review #483 A1).
-  const laneOfOption = (i: number) => laneForOption(i, pres?.options.length ?? 3);
   const nextGoal = result
     ? result.won
-      ? "Következő cél: fuss célba egy nehezebb pályán, vagy szedj össze több kagylót!"
-      : `Következő cél: juss el ${Math.min(result.goal, Math.ceil((result.distance + 200) / 100) * 100)} méterig!`
+      ? "Következő cél: érd el a menedéket egy nehezebb pályán, vagy hosszabb jó-válasz sorozattal!"
+      : `Következő cél: ${Math.min(result.target, result.correct + 2)} jó válasz — maradj a zöld bóják között, ott lassabban emelkedik a víz!`
     : "";
 
-  // D-J1a-11 (review #483, M3): ha egy válasz sem fér a kapu-táblába levágás nélkül, „lista mód”: a kérdés-sáv teljes
-  // szöveggel mutatja a válaszokat (a kulcs-kör a kapu színe + szimbóluma), táblák nélkül.
-  // D-J1a-18: magasságban is — ha a táblák nem férnek a kártya alja és a futó feje közé, szintén lista mód.
-  const longMode = !!pres && (!pres.options.every((o) => gateLabelFits(o.label, gateBox.width - 22)) || !gatesFitH);
-  // D-J1a-19: futásidejű háló — a becslő betűmetrika-függő (más telefon / betűkészlet / nagyítás), a háló a tényleges
-  // kirajzolást méri: ha egy tábla felirata levágódna, a kérdés lista módra vált. Stabil: lista módban nincs tábla, ami
-  // visszaválthatna; a következő kérdés / átméretezés újra dönt. Küszöb: fél sor. Mérve (2026-11-17, SwiftShader, 360 / 390 /
-  // 844 px-es nézet, 106 / 116 / 160 px-es tábla): levágás nélkül a scrollHeight − clientHeight 1–2 px (a bank leghosszabb
-  // válaszai + előtagjaik, és a reviewer 12 kockázatos valódi válasza — egyik sem vágódott le), egy levágott sor 16 px; a fél
-  // sor (7,5 px 13 px-es, 9,2 px 16 px-es betűnél) egyértelműen a kettő között van.
-  useLayoutEffect(() => {
-    if (presId === null || longMode) return;
-    const clipped = Array.from(gatesRef.current?.querySelectorAll<HTMLElement>(".ts-gate-label") ?? []).some((el) => {
-      const lh = parseFloat(getComputedStyle(el).lineHeight) || 18;
-      return el.scrollHeight - el.clientHeight > lh * 0.5;
-    });
-    if (clipped) setGatesFitH(false);
-  }, [presId, longMode]);
-  // D-J1a-17 (ÚK2): „Jó kapu!” felirat a jó kapun bemenet nélkül átfutó gyereknek (a nyilvántartásban „nem válaszolt”).
-  const idleGoodShown = !!pres && !!reveal && reveal.pickedOptionIndex === null && idleGoodId === pres.id;
+  /*
+   * A kérdés a régi játék helyén, de a világot NEM állítja meg (D1 + a J1-fejezet gyengeségei): a közös kérdés-sáv „buttons”
+   * módban, a kép tetején (a figura és a víz alatta látszik), négy ≥ 48 px-es gombbal; a válaszgombok az élesítés (400 ms)
+   * után jelennek meg.
+   */
   const questionBar = (inside: boolean) => (
     <InlineQuestion
       {...q.bind}
       onPick={(i) => answerRef.current(i)}
-      mode={inside && longMode ? "buttons" : "bar"}
+      mode="buttons"
       skin="ocean"
       portal={!inside}
       disabled={paused}
@@ -1771,6 +1591,17 @@ export default function TsunamiEscapeEnglish() {
       onCollapse={() => setExpanded(false)}
     />
   );
+  const toShelter = Math.max(0, hud.target - hud.correct);
+  /*
+   * A kérdés helye a kérdés megjelenésekor dől el (utána nem ugrál): ha a víz (és rajta a figura) a kép alsó felében van, a
+   * kérdés fent áll; ha a felső felében, lent (a vezérlők fölött) — így a gombok sosem takarják a figurát.
+   */
+  const quizPlaceRef = useRef<"top" | "bottom">("top");
+  const placedForRef = useRef<number | null>(null);
+  if (pres && placedForRef.current !== pres.id) {
+    placedForRef.current = pres.id;
+    quizPlaceRef.current = (driverRef.current?.core.state().water ?? 0) > 50 ? "bottom" : "top";
+  }
 
   return (
     <GameShell
@@ -1811,7 +1642,7 @@ export default function TsunamiEscapeEnglish() {
             <CouponExpiredOverlay session={coupon} />
             <StartScreen
               title="Szökőár szökés"
-              subtitle={`Hegyre fel! Fuss a hullám elől ${levelDistanceFor(difficulty)} métert a hegytetői menedékig — a jó válasz kapuja turbót ad.`}
+              subtitle={`Emelkedik a víz! ${winTargetFor(difficulty)} jó válasz kell a menedékig — minden jó válasz visszanyomja a hullámot.`}
               icon={<Waves className="h-9 w-9" aria-hidden="true" />}
               startLabel={`Indítás: ${selectedSubjectMeta.label} · ${difficultyLabel(difficulty)}`}
               startTestId="button-tsunami-start"
@@ -1831,7 +1662,7 @@ export default function TsunamiEscapeEnglish() {
                   <GamePedagogyPanel
                     accent="cyan"
                     className="game-btn game-btn-secondary min-h-12 text-base text-center"
-                    kidMission={`Fuss fel a hegyre a hullám elől! Húzd az ujjad balra–jobbra a sávváltáshoz, felfelé az ugráshoz: ugord át a fát és a kerítést, kerüld ki a felborult kocsit, és szedd a kagylót. Ha kérdés jön, három kapu áll az úton — fuss át azon, amelyiken a jó válasz van: turbót kapsz, és a hullám lemarad. ${levelDistanceFor(difficulty)} méter a menedékig!`}
+                    kidMission={`Alulról emelkedik a tenger! Maradj a két zöld bója között — ott lassabban jön a víz —, a sodrás elvisz, a tárcsával (vagy a ← → nyilakkal) térj vissza, a Sprint gyorsít. Ha kérdés jön, a játék nem áll meg: a jó válasz visszanyomja a vizet, a rossz megemeli. ${winTargetFor(difficulty)} jó válasz, és fent vagy a menedékben!`}
                     parentBody={
                       <>
                         <strong className="text-cyan-100/90">Tananyag:</strong> 3–5. osztályos angol, matek, magyar nyelvtan és környezetismeret (3–12. évfolyamon a közös évfolyam-bankból); az angol kérdések a központi szóbankból is jönnek, ismétlés nélkül. A Vegyes kihívás körön belül váltogatja a tantárgyakat.
@@ -1839,7 +1670,7 @@ export default function TsunamiEscapeEnglish() {
                         <strong className="text-cyan-100/90">Fejleszt:</strong> gyors döntés, olvasásértés, fejszámolás, figyelemmegosztás és reakcióidő.
                         <br />
                         <span className="text-white/70">
-                          A kérdés a játék része: a jó válasz kapuja turbót ad, a rossz egy botlást — a játék nem áll meg. Az elrontott kérdés néhány kérdés múlva visszatér, a menet végén a „Gyakorold még” lista mutatja a megoldását.
+                          A kérdés a játék része: a jó válasz visszanyomja a vizet, a rossz megemeli — a játék nem áll meg. Az elrontott kérdés néhány kérdés múlva visszatér, a menet végén a „Gyakorold még” lista mutatja a megoldását.
                         </span>
                       </>
                     }
@@ -1916,9 +1747,9 @@ export default function TsunamiEscapeEnglish() {
               }
             >
               <ul className="flex flex-wrap justify-center gap-2 text-sm font-bold text-white/90" aria-label="Szabályok">
-                <li className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1">👉 Húzás: sávváltás</li>
-                <li className="rounded-full border border-amber-300/30 bg-amber-500/10 px-3 py-1">👆 Felfelé: ugrás</li>
-                <li className="rounded-full border border-emerald-300/30 bg-emerald-500/10 px-3 py-1">🚪 Jó kapu = turbó</li>
+                <li className="rounded-full border border-emerald-300/30 bg-emerald-500/10 px-3 py-1">🟢 Bóják között: lassabb víz</li>
+                <li className="rounded-full border border-amber-300/30 bg-amber-500/10 px-3 py-1">⚡ Sprint</li>
+                <li className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1">✅ Jó válasz = apad a víz</li>
               </ul>
               <p className="text-center text-sm font-semibold text-cyan-100/90">
                 Összes XP: <strong className="text-amber-300">{totalXp}</strong> · Legjobb sorozat:{" "}
@@ -1939,8 +1770,22 @@ export default function TsunamiEscapeEnglish() {
         >
           {/* A játéktér a teljes képernyőt kitölti; a HUD, a kérdés és a vezérlők fölötte lebegnek. */}
           <div ref={shakeRef} className="absolute inset-0 z-0 overflow-hidden">
-            <TsunamiScene3D viewRef={viewRef} phase={paused || explainCard ? "paused" : phase} light={lightGraphics} onSupportedChange={setScene3d} />
+            <TsunamiScene3D
+              live={liveRef}
+              water={hud.water}
+              playerX={50}
+              safeZoneX={50}
+              stormFlash={stormFlash}
+              sprinting={false}
+              phase={paused || explainCard ? "paused" : phase}
+              light={lightGraphics}
+              onSupportedChange={setScene3d}
+            />
             {domScene && <canvas ref={flatCanvasRef} className="absolute inset-0 h-full w-full" aria-hidden="true" data-testid="tsunami-flat" />}
+            {/* A menedék MINDIG látszik (D4) — a felirat a 3D házikó fölött (a DOM-tartaléknál a lapos rajzé). */}
+            <div className="ts-shelter-tag" data-testid="ts-shelter" style={{ left: `${SHELTER_X * 100}%` }} aria-hidden="true">
+              Menedék
+            </div>
             {stormFlash && <div className="absolute inset-0 z-[3] bg-white/25 pointer-events-none" aria-hidden="true" />}
             {/* A HUD olvashatóságáért sötétedő sáv a képernyő tetején. */}
             <div
@@ -1958,41 +1803,18 @@ export default function TsunamiEscapeEnglish() {
             />
           </div>
 
-          {/* Húzás-réteg (terv 5.1): a teljes játéktér, a böngésző saját gesztusai nélkül. */}
-          {phase === "play" && (
-            <div
-              className="absolute inset-0 z-[5]"
-              data-testid="tsunami-swipe"
-              style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none" } as CSSProperties}
-              onPointerDown={onStagePointerDown}
-              onPointerMove={onStagePointerMove}
-              onPointerUp={onStagePointerEnd}
-              onPointerCancel={onStagePointerEnd}
-              onLostPointerCapture={onStagePointerEnd}
-            />
-          )}
-
           <GameHud
             onPause={pauseGame}
             stats={[
-              { id: "dist", label: "Táv", value: <span data-testid="ts-distance">{hud.distance} m</span>, tone: "good" },
-              { id: "wave", label: "Víz", value: <span data-testid="ts-wave">{hud.gap} m</span>, tone: gapTone },
-              {
-                id: "shells",
-                label: "Kagyló",
-                value: (
-                  <span className="inline-flex items-center gap-1" data-testid="ts-shells">
-                    <ShellIcon className="h-4 w-4 text-rose-200" aria-hidden="true" />
-                    {hud.shells}
-                  </span>
-                ),
-              },
+              { id: "goal", label: "Cél", value: <span data-testid="ts-goal">{hud.correct}/{hud.target}</span>, tone: "good" },
+              { id: "wave", label: "Hullám", value: <span data-testid="ts-wave">{Math.round((hud.water / WATER_LOSE) * 100)}%</span>, tone: gapTone },
+              { id: "score", label: "Pont", value: <span data-testid="ts-score">{hud.score}</span> },
             ]}
             progress={{
-              value: hud.distance,
-              max: hud.goal,
-              label: `Menedék: ${Math.max(0, hud.goal - hud.distance)} m`,
-              tone: danger ? "bad" : hud.gap <= 14 ? "warn" : "default",
+              value: hud.correct,
+              max: hud.target,
+              label: toShelter > 0 ? `Még ${toShelter} jó válasz a menedékig` : "Menedék!",
+              tone: gapTone,
             }}
           >
             <CouponHud session={coupon} />
@@ -2000,71 +1822,36 @@ export default function TsunamiEscapeEnglish() {
               <span className="max-w-[60vw] truncate rounded-full border border-amber-200/60 bg-slate-950/70 px-2.5 py-1 text-[13px] font-black text-amber-200 backdrop-blur-sm" data-testid="ts-subject-chip">
                 {questionChip ?? `${runSubjectMeta.chip}: ${runSubjectMeta.label}`}
               </span>
-              <span className="rounded-full border border-white/25 bg-slate-950/70 px-2.5 py-1 text-[13px] font-black text-white backdrop-blur-sm">
-                Pont: <span data-testid="ts-score">{hud.score}</span>
+              <span
+                className="rounded-full border px-2.5 py-1 text-[13px] font-black backdrop-blur-sm"
+                data-testid="ts-zone"
+                data-in={hud.inZone ? "true" : "false"}
+                style={hud.inZone ? { borderColor: "#86efacaa", background: "#14532dcc", color: "#dcfce7" } : { borderColor: "#fdba74aa", background: "#7c2d12cc", color: "#ffedd5" }}
+              >
+                {hud.inZone ? "Bóják között" : "Vissza a bójákhoz!"}
               </span>
-              {hud.multiplier >= 2 && (
+              {hud.combo >= 2 && (
                 <span
                   data-testid="tsunami-streak"
                   className="inline-flex items-center gap-1 rounded-full border border-orange-200/70 bg-orange-500/85 px-2.5 py-1 text-[13px] font-black text-white"
                 >
-                  <Flame className="h-4 w-4" aria-hidden="true" />×{hud.multiplier} kombó
+                  <Flame className="h-4 w-4" aria-hidden="true" />×{hud.combo} sorozat
                 </span>
               )}
             </div>
           </GameHud>
           <CouponExpiredOverlay session={coupon} />
 
-          {/* A kérdés a pályán: a kártya (prompt + idő) és alatta a három sáv táblája; a jó sáv kapuján kell átfutni. */}
+          {/* A kérdés a kép tetején, a világ közben lassítva megy tovább (D1; a J1-fejezet: nem teljes képernyős, nem állít meg). */}
           {phase === "play" && pres && (
             <div
-              ref={gatesRef}
               data-testid="ts-quiz"
-              className="ts-gates"
+              className="ts-quiz"
+              data-place={quizPlaceRef.current}
               data-state={reveal ? "reveal" : "open"}
-              data-long={longMode ? "true" : "false"}
               data-armed={armedId === pres.id || reveal ? "true" : "false"}
-              data-idle-good={idleGoodShown ? "true" : undefined}
-              style={{ top: gateBox.top, "--ts-gate-w": `${gateBox.width}px` } as CSSProperties}
-              role="group"
-              aria-label="Kapuk: fuss át a jó válasz kapuján"
             >
-              {!longMode && pres.options.map((opt, i) => {
-                const lane = laneOfOption(i);
-                const st = reveal ? (i === reveal.correctOptionIndex ? "correct" : i === reveal.pickedOptionIndex ? "wrong" : "dim") : "idle";
-                return (
-                  <button
-                    key={`${pres.id}-${i}`}
-                    type="button"
-                    className="ts-gate game-answer-btn"
-                    data-testid={`ts-gate-${i}`}
-                    data-state={st}
-                    data-here={!reveal && hud.lane === lane ? "true" : "false"}
-                    data-long={gateLabelLong(opt.label) ? "true" : "false"}
-                    style={{ left: gateBox.centers[lane], "--ts-lane": TSUNAMI_LANE_COLORS[lane] } as CSSProperties}
-                    aria-label={`${["Bal", "Középső", "Jobb"][lane]} kapu: ${opt.label}`}
-                    aria-disabled={reveal || paused ? "true" : undefined}
-                    {...gateHandlers(i)}
-                    {...correctDataAttrs(opt.correct)}
-                  >
-                    <span className="ts-gate-sym" aria-hidden="true">
-                      {st === "correct" ? <Check strokeWidth={3} /> : st === "wrong" ? <X strokeWidth={3} /> : TSUNAMI_LANE_SYMBOLS[lane]}
-                    </span>
-                    <span className="ts-gate-label">{opt.label}</span>
-                  </button>
-                );
-              })}
               {questionBar(true)}
-              {/* D-J1a-17 (ÚK2): a jó kapun tétlenül átfutó gyerek igaz, semleges állapotsora a kártya aljában (a közös
-                  állapotsor ilyenkor rejtett — egy élő régió marad). */}
-              {idleGoodFoot &&
-                createPortal(
-                  <p className="play-question-status ts-idle-status" data-testid="ts-idle-status" role="status" aria-live="polite" data-tone="good">
-                    <Check aria-hidden="true" />
-                    <span>{IDLE_GOOD_GATE_STATUS}</span>
-                  </p>,
-                  idleGoodFoot,
-                )}
             </div>
           )}
           {/* A „Miért?” a megoldás-kijelzés után még 4 mp-ig (a következő kérdéstől függetlenül). */}
@@ -2072,12 +1859,12 @@ export default function TsunamiEscapeEnglish() {
 
           {phase === "play" && hud.hint > 0 && !pres && (
             <p className="ts-hint" data-testid="ts-hint" role="status">
-              {touch ? "Húzd az ujjad: ← → sáv, ↑ ugrás" : "← → sáv · ↑ ugrás · 1–3 kapu"}
+              {touch ? "Tárcsa: mozgás · maradj a zöld bóják között" : "← → mozgás · Shift sprint · maradj a bóják között"}
             </p>
           )}
 
           {phase === "play" && touch && (
-            <TsunamiTouchControls joyReset={joyReset} onJoystick={onJoystick} jumpStart={jumpStart} jumpEnd={jumpEnd} />
+            <TsunamiTouchControls joyReset={joyReset} onJoystick={onJoystick} sprintStart={sprintStart} sprintEnd={sprintEnd} />
           )}
           {phase === "play" && !touch && (
             <p
@@ -2085,9 +1872,9 @@ export default function TsunamiEscapeEnglish() {
               className="game-key-hint absolute left-1/2 z-30 -translate-x-1/2 rounded-full border border-white/20 bg-slate-950/75 px-4 py-2 text-sm font-semibold text-white/90 backdrop-blur-sm whitespace-nowrap"
               style={{ bottom: "max(12px, var(--game-safe-bottom))" }}
             >
-              Sáv: <kbd className="px-1.5 rounded bg-white/15">←</kbd> <kbd className="px-1.5 rounded bg-white/15">→</kbd> vagy{" "}
-              <kbd className="px-1.5 rounded bg-white/15">A</kbd> <kbd className="px-1.5 rounded bg-white/15">D</kbd> · ugrás:{" "}
-              <kbd className="px-1.5 rounded bg-white/15">↑</kbd> · kapu: <kbd className="px-1.5 rounded bg-white/15">1–3</kbd>
+              Mozgás: <kbd className="px-1.5 rounded bg-white/15">←</kbd> <kbd className="px-1.5 rounded bg-white/15">→</kbd> vagy{" "}
+              <kbd className="px-1.5 rounded bg-white/15">A</kbd> <kbd className="px-1.5 rounded bg-white/15">D</kbd> · sprint:{" "}
+              <kbd className="px-1.5 rounded bg-white/15">Shift</kbd> · válasz: <kbd className="px-1.5 rounded bg-white/15">1–4</kbd>
             </p>
           )}
         </main>
@@ -2114,13 +1901,13 @@ export default function TsunamiEscapeEnglish() {
             <p className="game-result-stat">
               <Mountain className="h-5 w-5 text-cyan-300" aria-hidden="true" />
               <span>
-                Táv: <strong>{result?.distance ?? 0}</strong>/{result?.goal ?? 0} m · kagyló: <strong>{result?.shells ?? 0}</strong>
+                Jó válasz: <strong>{result?.correct ?? 0}</strong>/{result?.target ?? 0} a menedékig · víz: <strong>{result?.water ?? 0}%</strong>
               </span>
             </p>
             <p className="game-result-stat">
               <Flame className="h-5 w-5 text-orange-300" aria-hidden="true" />
               <span>
-                Legjobb kombó: <strong>{result?.bestStreak ?? 0}</strong> · {difficultyLabel(runDifficultyRef.current)} · {result?.seconds ?? 0} mp
+                Legjobb sorozat: <strong>{result?.bestStreak ?? 0}</strong> · {difficultyLabel(runDifficultyRef.current)} · {result?.seconds ?? 0} mp
               </span>
             </p>
             <p className="px-1 text-sm font-bold text-amber-100" data-testid="ts-next-goal">{nextGoal}</p>
@@ -2133,7 +1920,7 @@ export default function TsunamiEscapeEnglish() {
 
       <PauseMenu open={paused && playingPhase} onResume={resumeGame} onRestart={startGame} onExit={exitToMenu} exitLabel="Kilépés a menübe">
         <p className="text-center text-base text-white/80">
-          {hud.distance} / {hud.goal} m · hullám: {hud.gap} m · {hud.shells} kagyló
+          {hud.correct} / {hud.target} jó válasz · víz: {Math.round((hud.water / WATER_LOSE) * 100)}%
         </p>
       </PauseMenu>
 
@@ -2143,7 +1930,7 @@ export default function TsunamiEscapeEnglish() {
   );
 }
 
-/** A DOM-tartalék (WebGL nélkül, spec E7): felülnézeti 2D rajz a mag állapotából — a játék így is végigjátszható. */
+/** A DOM-tartalék (WebGL nélkül, spec E7): oldalnézeti 2D rajz a mag állapotából — a játék így is végigjátszható. */
 function drawFlat(canvas: HTMLCanvasElement, driver: TsunamiDriver): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -2154,48 +1941,36 @@ function drawFlat(canvas: HTMLCanvasElement, driver: TsunamiDriver): void {
     canvas.height = h;
   }
   const st = driver.core.state();
-  const laneW = Math.min(w / 3.4, 140);
-  const x0 = w / 2 - laneW * 1.5;
-  const playerY = h * 0.78;
-  const pxPerM = h / 60;
-  ctx.fillStyle = "#86c76a";
+  const yOf = (pct: number) => h * (1 - pct / 100);
+  ctx.fillStyle = "#7dd3fc";
   ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = "#d2ad78";
-  ctx.fillRect(x0, 0, laneW * 3, h);
-  ctx.fillStyle = "#fff8e1";
-  for (let l = 1; l < 3; l++) ctx.fillRect(x0 + laneW * l - 2, 0, 4, h);
-  const yOf = (at: number) => playerY - (at - st.distance) * pxPerM;
-  for (const o of st.obstacles) {
-    if (!o.alive) continue;
-    const len = OBSTACLE_SPECS[o.kind].length * pxPerM;
-    ctx.fillStyle = o.kind === "car" ? "#e11d48" : o.kind === "log" ? "#8b5a2b" : "#f8fafc";
-    ctx.fillRect(x0 + laneW * o.lane + laneW * 0.12, yOf(o.at) - len / 2, laneW * 0.76, Math.max(8, len));
-  }
-  ctx.fillStyle = "#fb7185";
-  for (const s of st.shells) {
-    if (!s.alive) continue;
+  ctx.fillStyle = "#c4843f";
+  for (const top of [18, 38, 58, 78]) ctx.fillRect(w * 0.08, h * (top / 100) - 6, w * 0.84, 12);
+  // A menedék (mindig látszik).
+  const sx = w * SHELTER_X;
+  ctx.fillStyle = "#fef3c7";
+  ctx.fillRect(sx - 18, h * 0.18 - 34, 36, 28);
+  ctx.fillStyle = "#dc2626";
+  ctx.beginPath();
+  ctx.moveTo(sx - 24, h * 0.18 - 34);
+  ctx.lineTo(sx, h * 0.18 - 54);
+  ctx.lineTo(sx + 24, h * 0.18 - 34);
+  ctx.fill();
+  const wy = yOf(st.water);
+  ctx.fillStyle = "rgba(14,116,190,0.9)";
+  ctx.fillRect(0, wy, w, h - wy);
+  ctx.fillStyle = "#f0fbff";
+  ctx.fillRect(0, wy - 4, w, 6);
+  ctx.fillStyle = "#4ade80";
+  for (const dx of [-ZONE_HALF, ZONE_HALF]) {
     ctx.beginPath();
-    ctx.arc(x0 + laneW * (s.lane + 0.5), yOf(s.at), 7, 0, Math.PI * 2);
+    ctx.arc(w * ((st.zoneX + dx) / 100), wy, 8, 0, Math.PI * 2);
     ctx.fill();
   }
-  const g = st.gates;
-  if (g) {
-    for (let l = 0; l < 3; l++) {
-      if (g.laneOptions[l]! < 0) continue;
-      ctx.fillStyle = g.resolved ? (l === g.correctLane ? "#22c55e" : l === g.pickedLane ? "#fb923c" : "#94a3b8") : TSUNAMI_LANE_COLORS[l]!;
-      ctx.fillRect(x0 + laneW * l + 6, yOf(g.atDistance) - 6, laneW - 12, 12);
-    }
-  }
-  const px = x0 + laneW * (st.x + 1.5);
   ctx.fillStyle = "#fb7a1c";
   ctx.beginPath();
-  ctx.arc(px, playerY - st.y * pxPerM, laneW * 0.22, 0, Math.PI * 2);
+  ctx.arc(w * (st.x / 100), wy - 14, 12, 0, Math.PI * 2);
   ctx.fill();
-  const waveY = playerY + Math.max(0, st.waveGap) * pxPerM * 0.6;
-  ctx.fillStyle = "rgba(14,116,190,0.85)";
-  ctx.fillRect(0, waveY, w, h - waveY);
-  ctx.fillStyle = "#f0fbff";
-  ctx.fillRect(0, waveY - 4, w, 6);
 }
 
 /**
@@ -2207,79 +1982,24 @@ const TSUNAMI_CSS = `
 .game-start-settings > summary, .game-start-secondary > *, .tsunami-settings-btn,
 .tsunami-level-picker button { min-height: 52px; }
 .tsunami-level-picker p { font-size: 14px; }
-.ts-gates { position: absolute; left: 0; right: 0; z-index: 35; height: 0; pointer-events: none; }
-/* Mért (Pixel 7, 2,625-ös képpontarány): a pontosan 48 px-es ikongomb 47,9 px-nek mérődik — a kérdés-sáv szünetgombja itt 52 px. */
-.ts-gates .play-question-icon-btn { width: 52px; height: 52px; }
-/* Élesítés: a megjelenés utáni első 450 ms-ban a válaszcélok még nem látszanak és nem érinthetők. */
-.ts-gates[data-armed="false"] .ts-gate, .ts-gates[data-armed="false"] .play-question-options { visibility: hidden; pointer-events: none; }
-/* A táblás módban a kérdés-sáv rejtett (billentyűzetre fókuszálható) gombsora a kép fölé kerül, hogy a hosszabb feliratú
-   rejtett gombok doboza se essen a látható kapu-táblákra (fókuszra a közös szabály szerint megjelenik). */
-.ts-gates[data-long="false"] .play-question[data-mode="bar"] .play-question-options:not(:focus-within) { top: auto; bottom: 100%; }
-.ts-gate {
-  position: absolute; top: 0; transform: translateX(-50%); width: var(--ts-gate-w, 110px); min-height: 56px; padding: 6px 8px 7px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-align: center;
-  border-radius: 16px; border: 3px solid var(--ts-lane); color: #fff; cursor: pointer; pointer-events: auto;
-  background: linear-gradient(180deg, #0b2440f2 0%, #06182cf2 100%); box-shadow: 0 8px 20px #0008, 0 0 16px color-mix(in srgb, var(--ts-lane) 45%, transparent);
-  -webkit-tap-highlight-color: transparent; touch-action: none; user-select: none;
-  transition: background-color .12s ease, border-color .12s ease, opacity .15s ease, box-shadow .12s ease;
+/* A kérdés-sáv a kép tetején (a HUD alatt); a figura és a víz alatta látszik. */
+.ts-quiz { position: absolute; left: 0; right: 0; top: calc(var(--game-safe-top, 0px) + 96px); z-index: 35; pointer-events: none; padding: 0 12px; }
+.ts-quiz[data-place="bottom"] { top: auto; bottom: calc(max(8px, var(--game-safe-bottom)) + var(--game-action-size, 88px) + 24px); }
+.ts-quiz .play-question { pointer-events: auto; max-width: 560px; margin: 0 auto; }
+/* Mért (Pixel 7, 2,625-ös képpontarány): a pontosan 48 px-es ikongomb 47,9 px-nek mérődik — a szünetgomb itt 52 px. */
+.ts-quiz .play-question-icon-btn { width: 52px; height: 52px; }
+.ts-quiz .play-question-option { min-height: 48px; }
+/* Élesítés: a megjelenés utáni első 400 ms-ban a válaszgombok még nem látszanak és nem érinthetők. */
+.ts-quiz[data-armed="false"] .play-question-options { visibility: hidden; pointer-events: none; }
+.ts-shelter-tag {
+  position: absolute; top: calc(18% - 92px); transform: translateX(-50%); z-index: 4; pointer-events: none;
+  padding: 2px 8px; border-radius: 9999px; background: #14532dd9; border: 1.5px solid #86efac; color: #dcfce7;
+  font-size: 12px; font-weight: 900; white-space: nowrap;
 }
-.ts-gate[data-here="true"] { box-shadow: 0 8px 20px #0008, 0 0 0 3px #ffffffcc, 0 0 22px var(--ts-lane); }
-.ts-gate:focus-visible { outline: 3px solid #fef08a; outline-offset: 3px; }
-.ts-gate-sym {
-  display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 9999px;
-  background: var(--ts-lane); color: #0f172a; font-size: 15px; font-weight: 900; line-height: 1;
-}
-.ts-gate-sym svg { width: 17px; height: 17px; }
-.ts-gate-label { font-size: 16px; font-weight: 900; line-height: 1.15; overflow-wrap: break-word; word-break: normal; hyphens: manual; text-shadow: 0 1px 2px #000a;
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
-  /* D-J1a-19: 2 px függőleges ráhagyás — a nagybetű ékezete (Á, Ő, Ű) és az alsó szár (g, j, p, y) ne csonkolódjon. */
-  padding-block: 2px; }
-.ts-gate[data-long="true"] .ts-gate-label { font-size: 13px; }
-.ts-gate[data-state="correct"] { background: #15803d; border-color: #bbf7d0; box-shadow: 0 0 0 2px #052e16, 0 0 28px #4ade80; animation: ts-gate-pop .3s ease-out; }
-.ts-gate[data-state="correct"] .ts-gate-sym { background: #22c55e; color: #fff; }
-.ts-gate[data-state="wrong"] { background: #9a3412; border-color: #fdba74; }
-.ts-gate[data-state="wrong"] .ts-gate-sym { background: #f97316; color: #fff; }
-.ts-gate[data-state="dim"] { opacity: .3; pointer-events: none; }
-/* D-J1a-15: a megoldás-kijelzés alatt a táblák nem érinthetők (a válasz eldőlt), a futó és az út jobban látszik. */
-.ts-gates[data-state="reveal"] .ts-gate { pointer-events: none; }
-.ts-gates[data-idle-good="true"] .play-question-status:not(.ts-idle-status) { display: none; }
-.ts-idle-status { order: -1; }
-.ts-gates[data-state="reveal"] .ts-gate[data-state="wrong"] { opacity: .75; }
-/* D-J1a-11: „lista mód” — a kérdés-sáv gombjainak kulcs-köre a kapu színe és szimbóluma (a 3D kapuval párban). */
-/* Újra-review #483 ÚK3: álló nézetben a lista a kártyával együtt FENT áll (nem alul, flex-end) — nem takarja a futót, és nem
-   lóg a tárcsa találati területére (a tárcsa marad). Fekvőben a közös elrendezés (display: block, oldalsó oszlopok) érvényes. */
-.ts-gates[data-long="true"] .play-question[data-mode="buttons"] { justify-content: flex-start; }
-/* Alacsony álló képernyőn (mérve: 360x640, a leghosszabb kérdés + válaszok) a lista tömörebb, hogy a futó feje fölött érjen
-   véget; a gomb érintési magassága ≥ 48 px marad (a közös mobil mérő M2 küszöbe, game-mobile-quality.ts). */
-@media (orientation: portrait) and (max-height: 720px) {
-  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] { gap: 6px; }
-  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-options { gap: 6px; }
-  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-option { min-height: 48px; padding: 3px 10px; gap: 8px; font-size: 15px; }
-  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-label { line-height: 1.15; }
-  .ts-gates[data-long="true"] .play-question[data-mode="buttons"] .play-question-key { width: 26px; height: 26px; }
-}
-.ts-gates[data-long="true"] .play-question-key { font-size: 0; color: #0f172a; box-shadow: none; }
-.ts-gates[data-long="true"] .play-question-key::before { font-size: 15px; font-weight: 900; }
-.ts-gates[data-long="true"] .play-question-option[data-option-index="0"] .play-question-key { background: ${TSUNAMI_LANE_COLORS[0]}; }
-.ts-gates[data-long="true"] .play-question-option[data-option-index="0"] .play-question-key::before { content: "${TSUNAMI_LANE_SYMBOLS[0]}"; }
-.ts-gates[data-long="true"] .play-question[data-count="3"] .play-question-option[data-option-index="1"] .play-question-key { background: ${TSUNAMI_LANE_COLORS[1]}; }
-.ts-gates[data-long="true"] .play-question[data-count="3"] .play-question-option[data-option-index="1"] .play-question-key::before { content: "${TSUNAMI_LANE_SYMBOLS[1]}"; }
-.ts-gates[data-long="true"] .play-question[data-count="3"] .play-question-option[data-option-index="2"] .play-question-key,
-.ts-gates[data-long="true"] .play-question[data-count="2"] .play-question-option[data-option-index="1"] .play-question-key { background: ${TSUNAMI_LANE_COLORS[2]}; }
-.ts-gates[data-long="true"] .play-question[data-count="3"] .play-question-option[data-option-index="2"] .play-question-key::before,
-.ts-gates[data-long="true"] .play-question[data-count="2"] .play-question-option[data-option-index="1"] .play-question-key::before { content: "${TSUNAMI_LANE_SYMBOLS[2]}"; }
-.ts-gates[data-long="true"] .play-question-option[data-state="correct"] .play-question-key,
-.ts-gates[data-long="true"] .play-question-option[data-state="wrong"] .play-question-key { font-size: 15px; color: #fff; }
-.ts-gates[data-long="true"] .play-question-option[data-state="correct"] .play-question-key::before,
-.ts-gates[data-long="true"] .play-question-option[data-state="wrong"] .play-question-key::before { content: none; }
 .ts-hint {
   position: absolute; left: 50%; bottom: calc(max(8px, var(--game-safe-bottom)) + var(--game-action-size) + 20px); transform: translateX(-50%); z-index: 25;
   max-width: calc(100% - 24px); margin: 0; padding: 8px 14px; border-radius: 9999px; pointer-events: none;
   background: #0b172dd9; border: 1.5px solid #fef08a99; color: #fef9c3; font-size: 15px; font-weight: 800; line-height: 1.25;
   text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 6px 18px #0008;
-}
-@keyframes ts-gate-pop { 0% { scale: 1; } 45% { scale: 1.08; } 100% { scale: 1; } }
-@media (prefers-reduced-motion: reduce) {
-  .ts-gate, .ts-gate[data-state="correct"] { animation: none; transition: none; }
 }
 `;

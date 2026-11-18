@@ -100,10 +100,14 @@ test("szóbank (A8): tananyag → szóbank → évfolyam-bank sorrend, kézi ang
  * `feel` (trauma²), amely csökkentett mozgásnál 0 — a meghajtó a `reducedMotion`-t kapja. A jó / rossz válasz rezgését a közös
  * kérdés-horog adja (nem kapcsolható ki), az ütközését a lap.
  */
-test("rázás csak csökkentett mozgás nélkül; rezgés jó és rossz válaszra és ütközésre", () => {
+test("rázás csak csökkentett mozgás nélkül; rezgés jó és rossz válaszra és a víz ugrására", () => {
   const make = functionBody(page, /const makeDriver = \(seed: string \| number, d: GameDifficulty, wavePace: number\): TsunamiDriver =>/);
   assert.match(make, /reducedMotion,/, "a rázás nincs a csökkentett mozgáshoz kötve");
-  assert.match(page, /driverRef\.current\?\.feel\.addTrauma\(/, "a rázás a közös feel-en át megy");
+  // SPEC-VÁLTOZÁS 2026-11-18 (docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md, D4): ütközés nincs; a rázás a víz ugrásakor
+  // (rossz / lejárt válasz) a meghajtóban, ugyanazon a közös `feel`-en át — a mérce (közös feel, csökkentett mozgásnál 0) marad.
+  const water = readFileSync(new URL("../client/src/lib/tsunami/water.ts", import.meta.url), "utf8");
+  assert.match(water, /if \(e\.type === "waterSurge"\) \{\s*feel\.addTrauma\(/, "a rázás a közös feel-en át megy");
+  assert.match(water, /createFeel\(\{ reducedMotion: opts\.reducedMotion/, "a rázás a csökkentett mozgáshoz kötött");
   assert.doesNotMatch(page, /animate-shake/);
   assert.match(page, /haptics\("hit"\)/);
   const hook = functionBody(page, /const q = usePlayQuestion\(/);

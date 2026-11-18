@@ -126,19 +126,23 @@ test('separate map upload also sends sources without a manual scope',async({page
  * után nincs `[role="dialog"]`, a helyes kapu legalább 1,8 mp-ig zöld (a lapon belül, képkockánként mérve — C-65), a
  * „Miért?” a magyarázókártyát nyitja (`data-outcome="wrong"`, olvasható magyarázat), alatta a szimuláció ÁLL (a magyarázat
  * olvasása közben áll az óra), bezárás után fut tovább.
+ * SPEC-VÁLTOZÁS 2026-11-18 (docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md, D1): a kapu-táblák megszűntek (vissza az emelkedő
+ * vízhez); a válasz a kérdés-sáv négy gombja. A mérce változatlan: nincs blokkoló kártya, a helyes válasz ≥ 1,8 mp zöld, a
+ * „Miért?” magyaráz és megállítja a játékot.
  */
 test('tsunami wrong gate: no blocking card, the right gate stays green, "Miért?" explains and pauses the game',async({page})=>{
  test.setTimeout(90000);
  await page.setViewportSize({width:390,height:844});
  await page.goto('/games/tsunami-english');
  await page.getByRole('button',{name:/Indítás:/}).click();
- const gate=(sel:string)=>page.locator(`[data-testid="ts-quiz"] .ts-gate${sel}`);
- await expect(gate('')).toHaveCount(3,{timeout:30000});
+ const gate=(sel:string)=>page.locator(`[data-testid="ts-quiz"] .play-question-option${sel}`);
+ await expect(gate('')).toHaveCount(4,{timeout:30000});
+ await expect(gate('').first()).toBeVisible({timeout:5000});
  await page.evaluate(()=>{
   const w=window as unknown as {__tsReveal?:{start:number|null;end:number|null}};
   w.__tsReveal={start:null,end:null};
   const tick=()=>{
-   const on=document.querySelector('[data-testid="ts-quiz"] .ts-gate[data-correct="true"][data-state="correct"]')!==null;
+   const on=document.querySelector('[data-testid="ts-quiz"] .play-question-option[data-correct="true"][data-state="correct"]')!==null;
    const r=w.__tsReveal!;
    if(r.start===null&&on)r.start=performance.now();
    if(r.start!==null&&r.end===null&&!on)r.end=performance.now();
