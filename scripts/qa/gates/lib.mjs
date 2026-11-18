@@ -128,7 +128,7 @@ export function makeGit(exec, cwd) {
           const buf = readFileSync(join(dir, f));
           if (buf.length > 2 * 1024 * 1024 || buf.includes(0)) continue;
           buf.toString('utf8').replace(/\r\n/g, '\n').split('\n').forEach((text, i) => res.push({ file: f.replace(/\\/g, '/'), line: i + 1, text }));
-        } catch { /* eltűnt közben */ }
+        } catch { /* eltűnt közben: a fájl már nincs a munkafában, nincs mit szkennelni (ártalmatlan) */ }
       }
       return res;
     },
@@ -184,7 +184,7 @@ export function writeLog(dir, gate, step, text) {
     const p = join(d, `${gate}-${step.replace(/[^A-Za-z0-9_-]+/g, '_')}.log`);
     writeFileSync(p, redact(text));
     return p;
-  } catch { return null; }
+  } catch { return null; } // a napló csak diagnosztika; a hiánya a lépés eredményét nem változtatja (ártalmatlan)
 }
 
 // ---- Lépésenkénti futtató (D2) --------------------------------------------------------------------------------------
@@ -279,6 +279,18 @@ export function verdictResult(v, head) {
   if (v.verdict === 'NEM') return { status: STATUS.FAIL, note: `a független ellenőr ítélete NEM (${v.source}) — javítsd a blokkoló leleteket, és kérj visszaellenőrzést ugyanattól az ellenőrtől` };
   if (v.verdict === 'IGEN, FELTÉTELLEL') return { status: STATUS.WARN, note: `IGEN, FELTÉTELLEL (${v.source}) — a feltételek jegyre / a PR-leírásba kerüljenek` };
   return { status: STATUS.PASS, note: `IGEN (${v.source})` };
+}
+
+/**
+ * A külső (Gemini) ellenőr bizonyítéka (`external-<fej>.json`, external-review.mjs --record) — CSAK figyelmeztetés, soha nem bukás
+ * (docs/specs/2026-11-17-kulso-ellenor.md K4): a döntő a Claude-alügynökös ellenőr ítélete + az orkesztrátor.
+ */
+export function externalResult(ev, head) {
+  const how = `node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head ${head.slice(0, 12)} --spec <terv.md>#<fejezet> --lista scripts/qa/gates/external-review/checklist-general.md --ki <jelentés.md> --record`;
+  if (!ev || ev.head !== head) return { status: STATUS.WARN, note: `nincs külső (Gemini) második vélemény erre a fejre — ajánlott: ${how}` };
+  if (ev.status === 'ok') return { status: STATUS.PASS, note: `lefutott (${ev.model ?? '?'}) — a leleteit az orkesztrátor a kódból visszaellenőrzi` };
+  const why = { skipped: 'KIHAGYVA (nincs GEMINI_API_KEY)', quota: 'KIHAGYVA (kvóta / keret)', blocked: 'BLOKKOLT válasz', incomplete: 'HIÁNYOS válasz (nincs kész jelentés)' }[ev.status] ?? `SIKERTELEN (${ev.status})`;
+  return { status: STATUS.WARN, note: `a második vélemény HIÁNYZIK — külső ellenőr: ${why}${ev.reason ? `, ${ev.reason}` : ''} — nem bukás` };
 }
 
 /**
