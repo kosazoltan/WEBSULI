@@ -8,6 +8,7 @@ import LikeButton from "./LikeButton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import ClassroomBadge from "./ClassroomBadge";
+import { materialDisplayTitle } from "@shared/material-title";
 
 interface FileCardProps {
   id: string;
@@ -101,8 +102,9 @@ export default function FileCard({
             <div className="w-8 h-8 sm:w-9 sm:h-9 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
               <FileIcon className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600 dark:text-orange-400" />
             </div>
-            <div className="flex flex-col items-start gap-1 min-w-0">
-              <h3 className="font-semibold text-xs sm:text-sm text-foreground break-words leading-tight">{title}</h3>
+            {/* ml-3: a cím eleje (az osztály száma) ne kerüljön a lista kijelölő / fogantyú rétege alá — spec 2026-11-17-tananyag-cim-osztaly. */}
+            <div className="flex flex-col items-start gap-1 min-w-0 ml-3">
+              <h3 className="font-semibold text-xs sm:text-sm text-foreground break-words leading-tight">{materialDisplayTitle(title, classroom)}</h3>
               <ClassroomBadge classroom={classroom} warnMissing={isAdmin} />
             </div>
           </div>

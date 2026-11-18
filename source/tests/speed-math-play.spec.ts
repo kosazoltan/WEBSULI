@@ -115,12 +115,22 @@ test.describe("valódi érintés", () => {
     expect(r.end! - r.start!, "a megoldás ≥ 1,8 mp-ig látszik").toBeGreaterThanOrEqual(1_800);
 
     // Innen minden feladatra rossz válasz, fosztogató-lövés nincs: a tanító szakasz után a torony elesik.
+    // E2E-ingadozók 3. kör (kanban #76): a hurok állapotát EGY atomi lap-hívás olvassa (C-64). A régi `count()` → `boundingBox()`
+    // pár között a drón eltűnhetett, és a `boundingBox()` (időkorlát nélkül) a KÖVETKEZŐ drónra várt — menetvégen újabb nem
+    // jön, így a lépés a 180 s-os tesztkeretig lógott.
     const over = page.getByTestId("sq-over");
-    for (let i = 0; i < 40 && !(await over.isVisible()); i++) {
-      const wrong = page.locator('[data-testid="sq-answers"] [data-correct="false"]').first();
-      if ((await wrong.count()) > 0 && (await page.locator('[data-testid="sq-answers"] [data-state="correct"]').count()) === 0) {
-        const box = await wrong.boundingBox().catch(() => null);
-        if (box) await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    for (let i = 0; i < 40; i++) {
+      const s = await page.evaluate(() => {
+        if ((document.querySelector('[data-testid="sq-over"]')?.getClientRects().length ?? 0) > 0) return { over: true, tap: null };
+        const revealing = document.querySelector('[data-testid="sq-answers"] [data-state="correct"]') !== null;
+        const wrong = document.querySelector('[data-testid="sq-answers"] [data-correct="false"]');
+        if (revealing || !wrong) return { over: false, tap: null };
+        const r = wrong.getBoundingClientRect();
+        return { over: false, tap: r.width > 0 && r.height > 0 ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null };
+      });
+      if (s.over) break;
+      if (s.tap) {
+        await page.touchscreen.tap(s.tap.x, s.tap.y);
         await expect(page.getByTestId("play-question-more")).toHaveCount(0);
       }
       await page.waitForTimeout(2_000);

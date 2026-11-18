@@ -16,11 +16,12 @@ import WelcomeCard from "@/components/WelcomeCard";
 import { displayTopic } from "@shared/daily-reminder";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, normalizeClassroom } from "@shared/classrooms";
+import { materialTitleGradePrefix, TITLE_GRADE_SEPARATOR } from "@shared/material-title";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { useAuth } from "@/hooks/useAuth";
-import { groupBySubject, HOME_VIEW_STORAGE_KEY, matchesHomeSearch, newestFirst, NEWEST_STRIP, parseHomeView, type HomeView } from "@/lib/home-views";
+import { filterHomeFiles, groupBySubject, HOME_VIEW_STORAGE_KEY, newestFirst, NEWEST_STRIP, parseHomeView, type HomeView } from "@/lib/home-views";
 
 /** A /api/materials/likes/batch szerveroldali korlátja (server/lib/public-input.ts MAX_MATERIAL_ID_BATCH). */
 export const LIKES_BATCH_LIMIT = 100;
@@ -110,18 +111,16 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   // Filter by search query AND selected classroom
   // Review #282: renderenként számolva — a nyitva hagyott lista a percenkénti frissítéssel a napváltást is követi.
   const today = todayPosition();
+  // Cím, leírás, tantárgynév és osztály, ékezettől függetlenül (spec 2026-11-03-fooldal-nezetek, 2026-11-17-tananyag-cim-osztaly).
+  // Ha a kifejezés a szűrőtől eltérő osztályt nevez meg, a keresés minden osztályban fut (a szűrő állapota nem változik).
+  const searched = useMemo(() => filterHomeFiles(files, searchQuery, selectedClassroom), [files, searchQuery, selectedClassroom]);
+  const searchAllClassrooms = searched.allClassrooms;
   const filteredFiles = useMemo(() => {
-    const filtered = files
-      .filter((file) => {
-        // Cím, leírás és tantárgynév, ékezettől függetlenül (spec 2026-11-03-fooldal-nezetek).
-        const matchesSearch = matchesHomeSearch(file, searchQuery);
-        const matchesClassroom = selectedClassroom === null || file.classroom === selectedClassroom;
-        return matchesSearch && matchesClassroom;
-      });
+    const filtered = searched.files;
     // Csak „Legfrissebb” nézetben a legújabb elkészült elöl (spec 2026-11-03-fooldal-nezetek); egyébként a mai tananyag elöl
     // (NAT 2020 mintatanmenet), a tanmenethez nem illeszthető anyag hátul, legújabb elöl.
     return view.newest && !view.bySubject ? newestFirst(filtered) : curriculumSort(filtered, today);
-  }, [files, searchQuery, selectedClassroom, today, view.newest, view.bySubject]);
+  }, [searched, today, view.newest, view.bySubject]);
 
   const newestFiles = useMemo(() => newestFirst(filteredFiles), [filteredFiles]);
   const subjectGroups = useMemo(
@@ -158,6 +157,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   const renderCard = (file: HtmlFileApi) => {
     const classroom = file.classroom ?? 1;
     const gradeValue = normalizeClassroom(file.classroom);
+    // Spec 2026-11-17-tananyag-cim-osztaly: az osztály a cím előtt is áll, ha a tárolt cím nem nevezi meg (nincs duplázás).
+    const titleGrade = materialTitleGradePrefix(file.title, file.classroom);
     // Spec 2026-11-03-fooldal-boritokartyak: az évfolyamsáv színe, formája és ikonja; a kezdőkép bélyegképe és a cím.
     const theme = homeCardTheme(classroom);
     const BandIcon = BAND_ICON[theme.band];
@@ -209,7 +210,12 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
                 Most tanuljuk
               </span>
             )}
-            <h3 className="home-card-title line-clamp-2">{file.title}</h3>
+            <h3 className="home-card-heading line-clamp-3">
+              {titleGrade !== null && (
+                <span className="home-card-title-grade" data-testid={`title-grade-${file.id}`}>{`${titleGrade}${TITLE_GRADE_SEPARATOR}`}</span>
+              )}
+              <span className="home-card-title">{file.title}</span>
+            </h3>
             <p className="home-card-desc line-clamp-2">{file.description || "Kattints a megtekintéshez"}</p>
             <div className="home-card-footer">
               <LikeButton
@@ -366,7 +372,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/70 z-10" />
             <Input
-              placeholder="Keresés…"
+              placeholder="Keresés: cím, tantárgy, osztály…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 h-8 text-xs bg-white/20 border-white/40 text-white placeholder:text-white/60 focus:bg-white/30 focus:border-white/60 focus-visible:ring-white/50"
@@ -388,6 +394,11 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
             </Button>
           )}
         </div>
+        {searchAllClassrooms && (
+          <p className="-mt-2 mb-4 text-center text-xs font-semibold text-white/90" role="status" data-testid="search-all-classrooms">
+            Keresés minden osztályban — a keresett osztály nem a kiválasztott.
+          </p>
+        )}
 
         {/* Nézetválasztó (spec 2026-11-03-fooldal-nezetek): két független kapcsoló — külön és együtt is. */}
         <div className="mb-3 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Nézet" data-testid="home-view-switch">
@@ -492,7 +503,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               <CardContent className="pt-12 pb-12">
                 <Search className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground mb-4">
-                  {selectedClassroom !== null ? (
+                  {selectedClassroom !== null && !searchAllClassrooms ? (
                     <>
                       Nincs találat a(z) <strong>{selectedClassroom}. osztályban</strong>
                       {searchQuery && (

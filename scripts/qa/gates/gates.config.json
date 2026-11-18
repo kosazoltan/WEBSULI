@@ -43,10 +43,22 @@
     "coupon-expired-all-games.spec.ts"
   ],
   "mobileQualitySpec": "game-mobile-quality.spec.ts",
-  "repoWidePatterns": [
-    "-guard\\.test\\.ts$",
-    "^scripts/qa/",
-    "^\\.github/workflows/"
+  "repoWideScopes": [
+    {
+      "pattern": "-guard\\.test\\.ts$",
+      "mainScope": [".*"],
+      "why": "Az őr-tesztek a git ls-files minden követett fájlját olvassák (pl. source/tests/no-real-emails-guard.test.ts) — bármely main-változás érinti őket."
+    },
+    {
+      "pattern": "^scripts/qa/",
+      "mainScope": ["^scripts/qa/", "^\\.claude/settings\\.json$", "^docs/specs/", "^render\\.yaml$", "^\\.agents/skills/", "^\\.claude/skills/", "^\\.github/workflows/"],
+      "why": "three-phase-check.mjs:38/:71 a docs/specs tartalmát olvassa; verify-render-settings.test.mjs:22 a render.yaml-t; skills-sync-check.test.mjs:33-34 és a CI skills-sync-check lépése (ci.yml:30) a valódi skill-fájlokat; a workflow (ci.yml:24/:28/:32) határozza meg, mi fut; hooks/settings-hooks.test.mjs a valódi .claude/settings.json-t futtatja."
+    },
+    {
+      "pattern": "^\\.github/workflows/",
+      "mainScope": [".*"],
+      "why": "A workflow minden jobot újradefiniál — bármely main-változás más eredményt adhat."
+    }
   ],
   "mirroredSkills": [
     "websuli-lint-ellenor",
@@ -56,6 +68,10 @@
     "websuli-merge-elotti-kapu"
   ],
   "mergeEvidenceMaxMinutes": 15,
+  "$hookTimeouts": "A check-quality-gates hook korlátai (kanban #100): git- és gh-hívásonként, és a teljes keret. A keret a .claude/settings.json hook-időkorlátja (60 s) alatt marad; ha a git / gh nem válaszol, a hook TILT (fail-closed), nem enged.",
+  "hookGitTimeoutMs": 10000,
+  "hookGhTimeoutMs": 15000,
+  "hookBudgetMs": 45000,
   "rtStatusUrl": "https://websuli.vip/api/rt/status",
   "auditSentinel": ".audit-ok",
   "auditMaxAgeMinutes": 10

@@ -166,6 +166,10 @@ blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 6. **API-költség elve:** előbb az olcsó helyi ellenőrzés; a független ellenőr (és a CI) csak zöld helyi kapuk után indul — ne a
    drága kör fogja meg az olcsó hibát.
 
+A független ellenőr mellett második, más rendszerű véleményként a külső (Gemini) ellenőr is futtatható
+(`scripts/qa/gates/external-review.mjs`, kulcs csak `GEMINI_API_KEY`-ből); a jelentését az orkesztrátor a kódból visszaellenőrzi, a
+hiánya nem bukás.
+
 Skillek (`.agents/skills/` forrás, `.claude/skills/` tükör): `websuli-lint-ellenor`, `websuli-fejlesztesi-ellenor`,
 `websuli-push-elotti-kapu`, `websuli-pr-elotti-kapu`, `websuli-merge-elotti-kapu`. Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md).
 A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
