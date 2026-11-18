@@ -10,19 +10,17 @@ export const explainIsLong = (text: string): boolean => text.length > EXPLAIN_LO
 
 /**
  * Spec 2026-11-18 (tananyaggyártás minősége, S2a / E8): a jelölt, sortöréssel tagolt sorok eddig egyetlen bekezdésbe folytak (a `<p>`
- * a sortörést szóközzé vonja össze). Legalább KÉT egymást követő jelölt sor valódi lista. A „•” egyértelmű listajel. A „-” / „*”
- * csak akkor az, ha a kötőjel biztosan nem a tartalom része (független review J1) — kétség esetén a sorok bekezdés maradnak:
- *  - a jel után betű (vagy kiemelt / idézett szó) áll, nem szám és nem műveleti jel („- 5 + 3 = -2” egyenlet, „- 5 fok” előjel);
- *  - a sorban nincs további közbevetett kötőjel / gondolatjel („- Haza - felelte.” párbeszéd);
- *  - a sor nem kérdés / felkiáltás („- Hová mész?” párbeszéd).
- * A gondolatjeles („–”) sor soha nem lista; a `**kiemelés**` nem listajel (a jel után szóköz kell).
+ * a sortörést szóközzé vonja össze). Legalább KÉT egymást követő „•” kezdetű sor valódi lista.
+ *
+ * Vak ellenőr J3 (a főágra olvasztás előtt): listajel MOST csak az egyértelmű „•”. A „-” / „–” / „*” kezdetű sorok PONTOSAN úgy
+ * jelennek meg, mint eddig (bekezdésként, a jel megtartásával) — a kötőjel a már kiadott leckékben előjel („- a = -3”), egyenletsor
+ * („- x + 5 = 2”) vagy párbeszédjel („- Jó napot kívánok.”) is lehet, és ezek megjelenése nem változhat. A „-” listák felismerése
+ * külön, későbbi szelet (a végrehajtási utasítás S2b fejezete). Ha egy „•” futás mellett „-” / „*” kezdetű sor áll, az egész
+ * bekezdés változatlan marad. A „•” elem tartalma érintetlen: a „• - kivonás” eleme „- kivonás” (vak ellenőr J1).
  */
 const DOT = /^•\s+(?=\S)/;
-const DASH = /^[-*]\s+(?=(?:\*\*|__|["„»'])?\p{L})/u;
-const dashItem = (line: string) => DASH.test(line) && !/\s[-–—]\s/.test(line.replace(DASH, "")) && !/[?!]["”»]?$/.test(line);
-const isItem = (line: string) => DOT.test(line) || dashItem(line);
-/** Csak a sor SAJÁT listajele kerül le (vak ellenőr J1): a „•” utáni „-” / „*” már tartalom („• - kivonás” → „- kivonás”). */
-const stripOwnMarker = (line: string) => (DOT.test(line) ? line.replace(DOT, "") : line.replace(DASH, ""));
+const isItem = (line: string) => DOT.test(line);
+const stripOwnMarker = (line: string) => line.replace(DOT, "");
 export type ExplainPart = { kind: "p"; text: string } | { kind: "ul"; items: string[] };
 export function explainParts(text: string): ExplainPart[] {
   return explainParagraphs(text).flatMap((paragraph): ExplainPart[] => {

@@ -23,7 +23,7 @@ export const SOURCE_VISUAL_HOSTILE = {
 
 const typical: Lesson["sections"] = [
   { heading: "Mennyit? Hányat?", probaEnabled: false, blocks: [
-    { kind: "explain", depth: "core", readAloud: false, ...covers, text: "A megszámlálható dolgokat darabra kérdezzük, a megszámlálhatatlanokat mennyiségre.\n\nJegyezd meg:\n- az alma megszámlálható\n- a víz megszámlálhatatlan\n- a kérdőszó ettől függ" },
+    { kind: "explain", depth: "core", readAloud: false, ...covers, text: "A megszámlálható dolgokat darabra kérdezzük, a megszámlálhatatlanokat mennyiségre.\n\nJegyezd meg:\n• az alma megszámlálható\n• a víz megszámlálhatatlan\n• a kérdőszó ettől függ" },
     animate("table", { caption: "Megszámlálható vagy megszámlálhatatlan?", headers: ["megszámlálható", "megszámlálhatatlan"], headerTones: ["a", "b"],
       rows: [...range(10).map((i) => [`alma ${i} (apple)`, `víz ${i} (water)`]), [SOURCE_VISUAL_HOSTILE.script, SOURCE_VISUAL_HOSTILE.handler], [SOURCE_VISUAL_HOSTILE.link, ""]] }, "Megszámlálható vagy megszámlálhatatlan?"),
     animate("table", { headers: ["kérdőszó", "mikor használjuk", "példa", "válasz"], headerTones: ["neutral", "a", "b", "c"],
