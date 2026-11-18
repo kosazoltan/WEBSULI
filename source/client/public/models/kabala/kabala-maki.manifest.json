@@ -1,9 +1,9 @@
 {
   "name": "A Websuli makija",
-  "file": "kabala-maki.af0e95d7.glb",
-  "sha256": "af0e95d70c27f4556f718b2f0b6db136e2bb3febfbbc400837941f824b4843c8",
-  "bytes": 244684,
-  "triangles": 26380,
+  "file": "kabala-maki.754dfbe0.glb",
+  "sha256": "754dfbe0f218926bd2f02a528d78f5cedd79a9899bda0439abbfac4c7d936127",
+  "bytes": 242912,
+  "triangles": 27792,
   "bones": 25,
   "materials": 4,
   "meshes": [
@@ -36,7 +36,7 @@
     {
       "name": "sad",
       "duration": 2.5,
-      "channels": 14,
+      "channels": 15,
       "loop": false
     },
     {

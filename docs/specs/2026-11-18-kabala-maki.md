@@ -145,17 +145,22 @@ A figura a főoldali tananyag-ajánló kabalája lesz (azt másik ág építi er
 belépési pontja (`build.py`, `render.py`), a klipnevek, a csontnevek, a hálónevek (`Maki`, `MakiArc`), az alakkulcsok neve és
 a manifest szerkezete. **Az arc, a szem, a fül és az arányok maradnak** — a tulajdonosnak tetszenek.
 
-- [ ] C-1 **Farok:** a testnél láthatóan hosszabb, karcsúbb, elegáns kérdőjel-ív a figura oldalán; egy nézetben legalább 8–10
+- [x] C-1 **Farok:** a testnél láthatóan hosszabb, karcsúbb, elegáns kérdőjel-ív a figura oldalán; egy nézetben legalább 8–10
       gyűrű látszik a 14-ből; a gyűrűk egyenlő hosszúak (ívhossz szerinti felosztás); bozontos marad; az `idle` végig ringatja.
-- [ ] C-2 **Felszín:** a törzs elején, a tarkón és a fej hátulján nincs „gyurmás” dudor — célzott simítás a remesh után (csak a
+- [x] C-2 **Felszín:** a törzs elején, a tarkón és a fej hátulján nincs „gyurmás” dudor — célzott simítás a remesh után (csak a
       testen és a fej hátulján; az arc és a fül érintetlen); a hátulnézet rendben.
-- [ ] C-3 **Kéz és láb:** jól olvasható, stilizált ujjak (négy ujj + hüvelyk, öt lábujj), sötét tenyér / talp — pontos
+- [x] C-3 **Kéz és láb:** jól olvasható, stilizált ujjak (négy ujj + hüvelyk, öt lábujj), sötét tenyér / talp — pontos
       paraméteres rész a csuklónál / bokánál, ahol a színváltás a csatlakozást elfedi.
-- [ ] C-4 **Szín:** a hát és a végtagok külseje határozottan szürke; a has és a mellkas fehér / krém marad.
-- [ ] C-5 **Hajlások:** a napozó ülésben a csípő és a térd nem törik meg (a súlyok simítása a hálón; segédcsont csak ha kell —
+- [x] C-4 **Szín:** a hát és a végtagok külseje határozottan szürke; a has és a mellkas fehér / krém marad.
+- [x] C-5 **Hajlások:** a napozó ülésben a csípő és a térd nem törik meg (a súlyok simítása a hálón; segédcsont csak ha kell —
       a keret ≤ 30 csont marad).
-- [ ] C-6 **Szomorú póz:** a farok lekonyuló, földközeli ívben (nem oldalra mutat).
-- [ ] C-7 Keret (≤ 600 KB, ≤ 30 000 háromszög, ≤ 30 csont), kétszeri gyártás azonos hash, őr-teszt, `gate:stage`.
-- [ ] C-8 Böngészős előnézet a végleges GLB-vel; az `idle` és a `cheer` VALÓS IDEJŰ lejátszása több egymást követő
+- [x] C-6 **Szomorú póz:** a farok lekonyuló, földközeli ívben (nem oldalra mutat).
+- [x] C-7 Keret (≤ 600 KB, ≤ 30 000 háromszög, ≤ 30 csont), kétszeri gyártás azonos hash, őr-teszt, `gate:stage`.
+- [x] C-8 Böngészős előnézet a végleges GLB-vel; az `idle` és a `cheer` VALÓS IDEJŰ lejátszása több egymást követő
       képernyőképpel megfigyelve; konzolhiba nincs.
-- [ ] C-9 Képek ≤ 1,5 MB; nézetenkénti átnézés, 2–3 javító kör, őszinte értékelés.
+- [x] C-9 Képek ≤ 1,5 MB; nézetenkénti átnézés, 2–3 javító kör, őszinte értékelés.
+- [x] C-10 **Orr (tulajdonosi kiegészítés: „mintha a levegőbe lógna az orra”) — kivétel az „archoz ne nyúlj” alól.** Ok: (a) az orr
+      mögé festett, az orrnál nagyobb SZÜRKE textúrafolt (a korábbi „orrtájék”), amely az orr árnyékának / udvarának hatott;
+      (b) az orr gömbje a pofa lekerekített vége ELÉ volt téve (a közepe 1,6 cm-rel a pofa vége előtt), így alig ért hozzá.
+      Javítás: az orr a pofa végébe ágyazva (a közepe a pofán belül), a festésben pedig az orr alatt pontosan az orr saját
+      színe van — nincs szürke folt. Ellenőrizve: `12-orr-ellenorzes.jpg` (elöl, háromnegyed, oldal, alulról-szemből × két megvilágítás).
