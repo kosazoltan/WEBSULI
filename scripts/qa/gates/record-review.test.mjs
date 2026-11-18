@@ -56,7 +56,7 @@ test('V4: a jelentésnek a rögzített fejre kell szólnia, és tartalmaznia kel
   // a Fej: sor hiányzik / más fejre szól
   const noHead = rec(report().split('\n').filter((l) => !l.startsWith('Fej:')).join('\n'));
   assert.equal(noHead.ok, false);
-  assert.match(noHead.error, /Fej:/);
+  assert.match(noHead.error, /nincs „Fej: <hash>” sor/);
   const other = rec(report('IGEN', 'ffffffff'));
   assert.equal(other.ok, false);
   assert.match(other.error, /nem a rögzítendő fejre/);

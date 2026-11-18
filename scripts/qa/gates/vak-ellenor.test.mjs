@@ -2,7 +2,7 @@
 // ellenőr megbízás-sablonja VAK és HIBAKERESŐ.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as lib from './lib.mjs';
@@ -10,7 +10,8 @@ import * as lib from './lib.mjs';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const read = (...p) => readFileSync(join(root, ...p), 'utf8').replace(/\r\n/g, '\n');
 const SKILLS = ['websuli-lint-ellenor', 'websuli-fejlesztesi-ellenor', 'websuli-push-elotti-kapu', 'websuli-pr-elotti-kapu', 'websuli-merge-elotti-kapu'];
-const EXTERNAL = /Gemini|external-review|második vélemény|external-\$\{|externalResult/i;
+// A külső ellenőr hivatkozásai (a „Gemini” mint ügynök-környezet neve — pl. „Codex / Cursor / Gemini futások” — megengedett).
+const EXTERNAL = /külső \(Gemini\)|Gemini[- ]ellenőr|GEMINI_API_KEY|external-review|második vélemény|external-\$\{|externalResult/i;
 
 /** Egy `## Cím` szakasz szövege a következő `## ` fejlécig. */
 // A sablon kódblokkja is tartalmaz `## ` sort, ezért a végét a következő szakasz címével is meg lehet adni.
@@ -54,4 +55,46 @@ test('V3: a független ellenőr megbízás-sablonja vak és hibakereső (a)–(f
   assert.match(re, /HIBAKERESÉS/);
   // a tükör bájtra azonos
   assert.equal(read('.claude', 'skills', 'websuli-fejlesztesi-ellenor', 'SKILL.md'), skill);
+});
+
+// ---- Kiegészítés (V7–V9): repó-szintű, környezet-semleges szabály ------------------------------------------------------
+
+const RULE = 'Vak hibakereső ellenőr — kötelező';
+// A repó minden ügynök-vezérlő fájlja (a terv „Felmérés” táblája), és a jövőben esetleg létrejövők: ha léteznek, hivatkozniuk kell.
+const CONTROL_FILES = ['.cursor/rules/vak-ellenor.mdc', '.cursor/rules/minosegkapuk.mdc', '.cursorrules', '.github/copilot-instructions.md',
+  'docs/agent-haromfazisu-munka.md', 'docs/codex-felhokornyezet.md', 'docs/minosegkapuk.md'];
+const OPTIONAL_CONTROL_FILES = ['CLAUDE.md', 'CODEX.md', 'GEMINI.md', '.windsurfrules', '.clinerules', 'Codex-iranyitasi-terv.md', 'Codex-vegrehajtasi-terv.md'];
+
+test('V7: az AGENTS.md önálló szakasza a kezelt blokkon kívül, idézettel, dátummal, kulcsmondatokkal; a Minőségkapuk 3. pontja hivatkozik rá', () => {
+  const md = read('AGENTS.md');
+  const sec = section(md, RULE);
+  const kitEnd = md.indexOf('<!-- agentic-qa-kit:end -->');
+  const kitBegin = md.indexOf('<!-- agentic-qa-kit:begin');
+  const at = md.indexOf(`## ${RULE}`);
+  assert.ok(kitBegin >= 0 && kitEnd > kitBegin && (at < kitBegin || at > kitEnd), 'a szakasz a kezelt blokkon kívül legyen');
+  for (const must of [
+    'tulajdonosi utasítás 2026-11-18', 'mindig egy vak alügynök ellenőrizze az elvégzett munkádat',
+    'bármilyen mesterséges intelligencia-ügynök', 'A fejlesztő saját magát soha nem ellenőrizheti',
+    'a feladatod hibát találni, nem megerősíteni', 'új, tiszta munkamenet', 'CSAK a tervet és a diffet kapja',
+    'Mit próbáltam megtörni, és nem sikerült', 'Mit NEM vizsgáltam', 'Visszanézésnél is hibakeresés', 'bármi más',
+  ]) assert.ok(sec.includes(must), `az AGENTS.md szakaszából hiányzik: ${must}`);
+  assert.match(section(md, 'Minőségkapuk'), new RegExp(`„${RULE}” szakasz szerint`));
+});
+
+test('V8: minden létező ügynök-vezérlő fájl hivatkozik az AGENTS.md szakaszára; a Cursor-szabály mindig érvényes', () => {
+  for (const f of CONTROL_FILES) assert.ok(read(...f.split('/')).includes(RULE), `nincs hivatkozás: ${f}`);
+  for (const f of OPTIONAL_CONTROL_FILES) {
+    if (existsSync(join(root, f))) assert.ok(read(f).includes(RULE), `létező vezérlőfájl hivatkozás nélkül: ${f}`);
+  }
+  assert.match(read('.cursor', 'rules', 'vak-ellenor.mdc'), /^---\n[\s\S]*alwaysApply: true[\s\S]*?\n---\n/);
+});
+
+test('V9: a skill leírása minden elkészült fejlesztésnél betöltést ír elő; van alügynök-eszköz nélküli indítás', () => {
+  const skill = read('.agents', 'skills', 'websuli-fejlesztesi-ellenor', 'SKILL.md');
+  const desc = /^description: (.*)$/m.exec(skill)?.[1] ?? '';
+  assert.match(desc, /MINDEN elkészült fejlesztésnél/);
+  assert.match(desc, /VAK/);
+  assert.match(desc, /HIBÁT TALÁLNI/);
+  assert.ok(desc.includes(RULE), 'a leírás hivatkozzon az AGENTS.md szakaszra');
+  assert.match(skill, /### 3\/b\. Ha nincs alügynök-eszköz/);
 });

@@ -74,3 +74,9 @@ szerint.
 - **PR-review:** a GitHubról indított Codex-review (`@codex review`, automatikus review) a Codex Cloud (Legacy) Code
   Review-ja szerint fut, nem ebben a környezetben. A review eredményét ezért ne tekintsd az itt felsorolt ellenőrzések
   lefuttatásának.
+
+## Vak hibakereső ellenőr a felhőben (kötelező, 2026-11-18)
+
+A felhőben futó Codex-feladat is a AGENTS.md „Vak hibakereső ellenőr — kötelező” szakasz szerint jár el: a fejlesztő feladat nem ellenőrizheti saját magát. Mivel ott nincs
+alügynök, az ellenőrzés új, tiszta Codex-feladat (vagy másik eszköz), amely CSAK a tervet (tulajdonosi célt) és a diffet / fejet
+kapja, a `websuli-fejlesztesi-ellenor` skill megbízás-sablonjával; a jelentést a `node scripts/qa/gates/record-review.mjs` rögzíti.

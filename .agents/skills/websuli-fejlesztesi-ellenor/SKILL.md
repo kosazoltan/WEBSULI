@@ -1,6 +1,6 @@
 ---
 name: websuli-fejlesztesi-ellenor
-description: WEBSULI független fejlesztési ellenőr - VAK (csak a követelményt és a diffet kapja), friss kontextusú alügynök, amelynek a feladata HIBÁT TALÁLNI az elkészült fejlesztésben a PR megnyitása ELŐTT. Töltsd be automatikusan minden fejlesztés / javítás elkészültekor (zöld helyi kapuk után), a PR megnyitása előtt, és minden érdemi javító push előtt (visszaellenőrzés). A fejlesztő maga nem ellenőrizheti magát.
+description: WEBSULI vak hibakereső független ellenőr (AGENTS.md „Vak hibakereső ellenőr — kötelező”, minden ügynök-környezetben). Töltsd be automatikusan MINDEN elkészült fejlesztésnél / javításnál (zöld helyi kapuk után), a PR megnyitása előtt és minden érdemi javító push előtt — kész, kitölthető megbízás-sablonnal egy friss, VAK (csak a követelményt és a diffet kapó) ellenőrnek, akinek a feladata HIBÁT TALÁLNI. A fejlesztő maga nem ellenőrizheti magát.
 ---
 
 # Fejlesztési ellenőr — független alügynökös ellenőrzés a PR előtt
@@ -87,6 +87,16 @@ Fej: <teljes fej-hash>
 ## Megcáfolt gyanúk
 ## Mit futtattam (parancs + eredmény)
 ```
+
+### 3/b. Ha nincs alügynök-eszköz (pl. egyes Codex / Cursor / Gemini futások)
+
+1. Nyiss új, tiszta munkamenetet / feladatot (vagy másik eszközt) — NE a fejlesztés beszélgetését folytasd.
+2. Add át CSAK: a fenti sablont kitöltve, a terv útvonalát (vagy a tulajdonosi cél idézetét), az ágat és a teljes fej-hash-t. A
+   fejlesztés összefoglalóját, a „zöld” állításokat és a saját véleményedet NE.
+3. Az ellenőr a saját ideiglenes munkafájában / klónjában futtat; a jelentését a sablon formájában adja.
+4. Az ítéletet a fejlesztő-oldal rögzíti: `node scripts/qa/gates/record-review.mjs --head <fej> --verdict … --report <jelentés.md>`
+   (a szkript a hiányos jelentést elutasítja). Ha egyik út sem érhető el, a munka nem nyitható PR-ra — kérj segítséget a
+   tulajdonostól.
 
 ## 4. Kötelező ellenőrzőlista (a mért hibatípusokból)
 

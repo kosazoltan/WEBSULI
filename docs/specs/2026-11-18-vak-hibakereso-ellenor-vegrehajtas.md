@@ -20,7 +20,7 @@ a #506 összevonása és friss főág-beolvasztás után.
 6. `npm run gate:stage`; mutációs ellenpróba commit után (a három `record-review` feltétel egyenkénti kivétele; a „külső” lépés
    visszaírása a kapuba → a teszt bukik); `npm run gate:push`; fej-hash az orkesztrátornak.
 
-- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [ ] 6 (kapuk, mutáció — folyamatban)
+- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [x] 6
 
 ## Kiegészítés — repó-szintű, környezet-semleges szabály (2026-11-18) — végrehajtás
 
@@ -38,4 +38,4 @@ Terv: `docs/specs/2026-11-18-vak-hibakereso-ellenor.md`, „Kiegészítés” fe
 12. Őr-teszt (`scripts/qa/gates/vak-ellenor.test.mjs` bővítése): az AGENTS.md szakasz kulcsmondatai; minden érintett vezérlőfájl
     hivatkozik rá; a skill leírása. `gate:stage`, mutációs ellenpróba, `gate:push`, fej-hash az orkesztrátornak.
 
-- [ ] 7 · [ ] 8 · [ ] 9 · [ ] 10 · [ ] 11 · [ ] 12
+- [x] 7 · [x] 8 · [x] 9 · [x] 10 · [x] 11 · [ ] 12 (kapuk, mutáció — folyamatban)

@@ -37,7 +37,7 @@ blokkolónál: NOT DONE + ok + kockázat.
 ## Minőségkapuk a 3. fázisban (tulajdonosi utasítás 2026-11-17)
 
 A 3. fázis minden szakasza után `npm run gate:stage`, kibocsátás előtt a lint kapu és a push / PR / merge előtti kapu, a PR előtt
-független alügynökös ellenőrzés — részletek: [`docs/minosegkapuk.md`](minosegkapuk.md). A `three-phase-check` a push előtti kapu része.
+VAK, hibakereső független ellenőrzés (AGENTS.md „Vak hibakereső ellenőr — kötelező”, minden ügynök-környezetben) — részletek: [`docs/minosegkapuk.md`](minosegkapuk.md). A `three-phase-check` a push előtti kapu része.
 
 ## Fájlnevek
 

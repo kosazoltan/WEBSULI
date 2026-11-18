@@ -149,6 +149,35 @@ A mandátum a háromfázisú rend mindhárom fázisára és a kanban-jegyekre is
 (`docs/agent-haromfazisu-munka.md`, `docs/kanban.md`). A kezelt `agentic-qa-kit`
 blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 
+## Vak hibakereső ellenőr — kötelező (tulajdonosi utasítás 2026-11-18)
+
+> „A lényeg az, hogy mindig egy vak alügynök ellenőrizze az elvégzett munkádat, hogy biztosan megtalálja a hibákat. Olyan típusú
+> pontot is írj neki, amiben kifejezetten hibakeresésre utasítod. Lehet Anthropic modell, de akkor azt nagyon úgy utasítsd, hogy
+> mindenképpen hibát keressen.” — „A vak ellenőr szabály legyen repó szintű, […] és bármilyen mesterséges intelligencia-ügynök
+> környezetben futtatom a repó fejlesztését, javítását, az szerezzen róla tudomást és aszerint fusson.” — a tulajdonos, 2026-11-18
+
+Ez a szabály MINDEN ügynök-környezetre érvényes (Claude Code, Codex — helyi és felhő —, Cursor, Gemini, Copilot és bármely más).
+
+1. **Minden elkészült fejlesztést / javítást egy VAK ellenőr néz át** a PR megnyitása ELŐTT és minden érdemi javító push előtt.
+   **A fejlesztő saját magát soha nem ellenőrizheti.**
+2. **Vak:** az ellenőr friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök. CSAK a követelményt (terv / tulajdonosi cél)
+   és a diffet / fejet kapja — a fejlesztő jelentését, összefoglalóját, önértékelését, „zöld” állításait és az orkesztrátor várakozását
+   NEM. Ahol a környezet tud alügynököt indítani, alügynök; ahol nem (egyes Codex / Cursor / Gemini futások), új, tiszta munkamenet
+   vagy másik eszköz, amely CSAK a tervet és a diffet kapja.
+3. **Hibakereső keret:** a megbízás kifejezetten hibakeresésre utasít — „a feladatod hibát találni, nem megerősíteni”.
+4. **Feladat-specifikus hibakereső pontok** (adatszerződés, biztonság / adatvédelem, regresszió, dátumhatár, migráció,
+   versenyhelyzet, tesztminőség — a diffhez igazítva) és egy „bármi más, amit a lista nem fed” pont.
+5. **Futtatás / ellenpróba** az ellenőr saját ideiglenes munkafájában vagy klónjában; a mérce a tulajdonosi cél (felületi változásnál
+   a képernyőképek megnézése is).
+6. **Kötelező jelentés-szakaszok:** leletek evidenciával (fájl:sor + forgatókönyv), „Mit próbáltam megtörni, és nem sikerült”,
+   „Mit NEM vizsgáltam”; a jelentés `Fej:` és `Ítélet:` sort tartalmaz. A `scripts/qa/gates/record-review.mjs` ezt gépileg
+   ellenőrzi, és csak teljes jelentésből rögzít ítéletet.
+7. **Visszanézésnél is hibakeresés** a keret (vakon: csak az új fej és a diff), nem a korábbi leletek kipipálása.
+
+Kész megbízás-sablon és indítási leírás (alügynökkel és alügynök-eszköz nélkül): `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
+Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md). A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja
+felül.
+
 ## Minőségkapuk (kötelező, tulajdonosi utasítás 2026-11-17)
 
 > „Először is bármilyen kibocsátás előtt végig futtasd a saját lint kaput. Másrészt pedig minden fejlesztés után automatikusan egy
@@ -157,12 +186,8 @@ blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 1. **Lint kapu minden kibocsátás előtt** (commit-sorozat lezárása, push, PR, merge, telepítés): `npm run gate:lint`.
 2. **Szakasz-kapu minden fejlesztési szakasz után:** `npm run gate:stage` (lint gyors mód + a változott fájlok egységtesztjei + minden
    őr-teszt). Csak zöld után lehet továbblépni; előbb a helyi hibát kell javítani.
-3. **Független ellenőr — VAK és HIBAKERESŐ** (tulajdonosi utasítás 2026-11-18): minden elkészült fejlesztést egy friss kontextusú
-   alügynök ellenőriz a PR megnyitása ELŐTT és minden érdemi javító push előtt (a fejlesztő nem ellenőrizheti magát). Vak: csak a
-   követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja — a fejlesztő jelentését, „zöld” állításait és az orkesztrátor
-   várakozását nem. A megbízás kifejezetten hibakeresésre utasít („a feladatod hibát találni, nem megerősíteni”), és a jelentésben
-   kötelező a „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” szakasz. Az ítéletet a `record-review.mjs`
-   rögzíti (a kötelező elemeket gépileg ellenőrzi). Sablon: `websuli-fejlesztesi-ellenor` skill.
+3. **Független ellenőr — VAK és HIBAKERESŐ:** a „Vak hibakereső ellenőr — kötelező” szakasz szerint (fent), a PR megnyitása ELŐTT
+   és minden érdemi javító push előtt; az ítéletet a `record-review.mjs` rögzíti (a hiányos jelentést elutasítja).
 4. **A kapuk sorrendje:** `gate:stage` (szakaszonként) → `gate:push` → független ellenőr + `record-review` →
    `gate:pr -- --body-file <leírás.md>` → push + PR → zöld CI → közvetlenül a merge előtt `gate:merge -- <PR>`. A `git push`,
    `gh pr create` és `gh pr merge` előtt a `check-quality-gates` hook a zöld bizonyítékot ellenőrzi.

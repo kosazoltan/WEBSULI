@@ -1,0 +1,17 @@
+---
+description: Kötelező vak hibakereső ellenőr — minden elkészült fejlesztést egy friss, a fejlesztő következtetéseit nem ismerő ügynök néz át, hibakereső kerettel.
+alwaysApply: true
+---
+
+# Vak hibakereső ellenőr — kötelező (tulajdonosi utasítás 2026-11-18)
+
+A szabály forrása: `AGENTS.md`, „Vak hibakereső ellenőr — kötelező” szakasz. Megbízás-sablon: `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
+
+1. Minden elkészült fejlesztést / javítást egy VAK ellenőr néz át a PR előtt és minden érdemi javító push előtt; a fejlesztő saját
+   magát soha nem ellenőrizheti.
+2. Cursorban, ha nincs alügynök: új, tiszta chat / munkamenet, amely CSAK a tervet (tulajdonosi célt) és a diffet kapja — a
+   fejlesztés beszélgetését, összefoglalóját, „zöld” állításait nem.
+3. A megbízás kifejezetten hibakeresésre utasít („a feladatod hibát találni, nem megerősíteni”), feladat-specifikus hibakereső
+   pontokkal és egy „bármi más” ponttal; az ellenőr saját munkafában futtat és ellenpróbáz.
+4. A jelentés kötelező szakaszai: leletek evidenciával, „Mit próbáltam megtörni, és nem sikerült”, „Mit NEM vizsgáltam”; `Fej:` és
+   `Ítélet:` sor. Az ítéletet a `node scripts/qa/gates/record-review.mjs` rögzíti (a hiányos jelentést elutasítja).

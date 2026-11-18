@@ -15,3 +15,5 @@ Magyarul válaszolj. A részletes szabály az `AGENTS.md` „Review guidelines�
   - félkész munka: a PR-hoz tartozó spec és `-vegrehajtas.md` minden pontja teljesült-e (befejezési mandátum);
   - ARM64 + x64: architektúra-függő útvonal, bináris vagy csak egy CPU-n települő függőség.
 - **Evidencia:** csak fájl:sor hivatkozással és konkrét hibaforgatókönyvvel jelezz hibát.
+- **Vak hibakereső ellenőr** (AGENTS.md „Vak hibakereső ellenőr — kötelező”): a PR-leírásban a `Független ellenőr ítélete: … (fej: <hash>)` sor a JELENLEGI fejre
+  szóljon; ha hiányzik vagy régi fejre szól, jelezd.

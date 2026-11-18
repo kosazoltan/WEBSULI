@@ -40,6 +40,8 @@ terhelésétől függően ±50%.
 
 ### Független ellenőr — VAK és HIBAKERESŐ (tulajdonosi utasítás 2026-11-18)
 
+A szabály forrása: `AGENTS.md` „Vak hibakereső ellenőr — kötelező” (minden ügynök-környezetre).
+
 - **Vak:** friss kontextusú alügynök, amely CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja; a fejlesztő
   jelentését, önértékelését, „zöld” állításait és az orkesztrátor várakozását NEM.
 - **Hibakereső:** a megbízás kifejezetten hibakeresésre utasít („a feladatod hibát találni, nem megerősíteni”), feladat-specifikus
