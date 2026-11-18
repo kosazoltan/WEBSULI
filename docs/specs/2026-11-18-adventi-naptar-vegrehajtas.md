@@ -9,6 +9,8 @@ Ez a fájl AI-ügynöknek szól. Minden szelet külön ág és külön PR az akt
 
 ## 0. Előfeltételek és közös szabályok
 
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** az 1. pont (döntések) lezárult; a munkarend a „Kiegészítés” szakaszok szerint (szeletenként fej-hash a koordinátornak, az ügynök nem pushol).
+
 1. **Döntések.** A terv 4.1 (a)–(h) pontjaira a tulajdonos válasza kell. A válaszokat az S1 első commitja ELŐTT írd be a terv 4.1
    szakaszába („Döntés: …, 2026-…”) és a `shared/advent/rules.ts` konstansaiba. Ha egy válasz eltér a ★ javaslattól:
    - (a) A2 → `ADVENT_RULES.unlock = "free"`; A3 → `"daily-strict"`.
@@ -31,6 +33,8 @@ Ez a fájl AI-ügynöknek szól. Minden szelet külön ág és külön PR az akt
    `advent-grade-<n>`, `advent-promo`, `advent-preview-banner`, `advent-sound-toggle`, `advent-error-retry`.
 
 ## S1 — Tiszta mag (`source/shared/advent/`)
+
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** a `rules.ts` / `assignment.ts` / `contract.ts` leírásának ütköző részei helyett a „Kiegészítés” S1-pontja és a „Kiegészítés 5” érvényes (évfolyam 1–12, karácsonyi kiosztás, `adventClosing(summary, ctx)`, `plan.subjects`, `protectedIds`). AZ S1 KÉSZ.
 
 Fájlok: `shared/advent/calendar.ts`, `shared/advent/rules.ts`, `shared/advent/assignment.ts`, `shared/advent/contract.ts`,
 `tests/advent-calendar.test.ts`, `tests/advent-rules.test.ts`, `tests/advent-assignment.test.ts`, `tests/advent-contract.test.ts`.
@@ -124,6 +128,8 @@ Elfogadás: A24.
 
 ## S2b — Szerver-végpontok
 
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** korlátok: „Kiegészítés 5” (alanyonként); e2e-szezon és érvénytelen token: „Kiegészítés 5”.
+
 Fájlok: `server/advent/identity.ts`, `server/advent/routes.ts`, `server/routes.ts`, `server/player/account-store.ts`,
 `tests/admin-route-guard.test.ts`, `tests/advent-db.integration.ts` (bővítés), `tests/advent-source-guard.test.ts`.
 
@@ -175,6 +181,8 @@ Fájlok: `server/advent/identity.ts`, `server/advent/routes.ts`, `server/routes.
 Elfogadás: A2, A3, A7, A17–A23 integrációs teszttel.
 
 ## S3a — Kliens 1: naptár, ablak, kérdés
+
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** útvonal `/adventi-naptar`, `?nyit=ma`, képhelyőrzők, évfolyamválasztó 1–12: „Kiegészítés”, „Kiegészítés 2”, „Kiegészítés 3”.
 
 Fájlok: `client/src/pages/AdventCalendar.tsx`, `client/src/advent/useAdvent.ts`, `AdventVillage.tsx`, `AdventDoor.tsx`,
 `AdventQuestionDialog.tsx`, `AdventGradePicker.tsx`, `advent.css`, `client/src/App.tsx`, `tests/advent-calendar.spec.ts`.
@@ -247,6 +255,8 @@ Elfogadás: A7–A11, A29, A31.
 
 ## S4 — Szezonális kártya és mobil mérés
 
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** a teljes szakasz helyett a „Kiegészítés 3” S4-e érvényes (főoldali kártya; a `Games.tsx` és a `HomePracticeGames.tsx` érintetlen), a „Kiegészítés 5” e2e-pontjaival.
+
 Fájlok: `client/src/components/AdventPromoCard.tsx`, `client/src/pages/Games.tsx`, `client/src/components/HomePracticeGames.tsx`,
 `client/src/pages/AdventCalendar.tsx`, `tests/advent-calendar-mobile.spec.ts`, `tests/advent-calendar.spec.ts`.
 
@@ -279,6 +289,8 @@ Elfogadás: A12–A15, A26–A30, A32. Kézi próba a tulajdonos telefonján (el
 
 ## S5 — Szülői levél (csak E1 döntésnél)
 
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** a küldés pillanata: „Kiegészítés 5” (végleges eredmény / megfelelés).
+
 Fájlok: `server/advent/result-email.ts`, `server/routes.ts` (a `mail` függőség átadása), `tests/advent-db.integration.ts`.
 
 1. `result-email.ts`: `export async function sendAdventResult(input: { rowId; season; round; firstName; grade; summary; bySubject }, deps?)`
@@ -299,6 +311,8 @@ Fájlok: `server/advent/result-email.ts`, `server/routes.ts` (a `mail` függős�
 Elfogadás: A25.
 
 ## S6 — Admin előnézet, takarító, bekapcsolás, zárás
+
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** az előnézet nem függ a flagtől, címe `/adventi-naptar?elonezet=…`: „Kiegészítés 5”.
 
 Fájlok: `server/routes.ts`, `server/advent/routes.ts`, `server/advent/sweeper.ts`, `client/src/advent/useAdvent.ts`,
 `client/src/pages/AdventCalendar.tsx`, `render.yaml`, `tests/admin-route-guard.test.ts`, `tests/advent-calendar.spec.ts`,
@@ -327,6 +341,8 @@ Fájlok: `server/routes.ts`, `server/advent/routes.ts`, `server/advent/sweeper.t
 Elfogadás: A16, A23 (éles flag), E23.
 
 ## S7 — Döntéstől függő kiegészítők
+
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** az S7a, S7b, S7c NEM készül (terv 12.1).
 
 - **S7a (G2):** `client/src/lib/achievements.ts` — a `recordRun` `game` uniójába `"adventi-naptar"`, új jelvény `advent_2026`
   („Adventi naptár”); a naptár a megoldott ablakonként 10 XP-t jelent a helyi statisztikába. Teszt: a meglévő achievements-teszt bővítése.
@@ -550,3 +566,24 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
   Várt száraz futás: `94 kép · becsült költség ≈ 5.22 USD`; próbakör: `10 kép · becsült költség ≈ 0.65 USD`.
 - **S8 (szűkítve):** a címzettek csak az `email_subscriptions` (`is_subscribed`) és az `extra_email_addresses` (`is_active`) címei; a
   `player_accounts` és a `users` tábla soha. Az `includePlayers` kapcsoló és a panel jelölőnégyzete nem készül.
+
+## Kiegészítés 5 — az S1-review átvezetése (2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 16. szakasz)
+
+- **S1 javító commit (KÉSZ):** `adventClosing(summary, { round, maxRounds, phase, waiting })` + `adventStillReachable`; `closed`
+  fajta; `ADVENT_CHRISTMAS_DAYS` az egyetlen igazságforrás; `lowGrade` 2 javítás / 2 kör; `isValidDate` és érthető hiba érvénytelen
+  időpontra; `AdventPlan.subjects`; `repairPlanDoor` `protectedIds`-szel, a tárgy a tervből; új tesztek (december 24 → 25 határ,
+  keverés egyenletessége, 40 alany × 12 évfolyam, fázisfüggő szövegek).
+- **S1b:** az 1–2. évfolyamra érvényes tételek minimuma 144 (nem 96); a validátor és a teszt ezt kényszeríti.
+- **S2a:** a terv 16.8 `CHECK` kényszerei; a `mailed_to` elemei `<kör>:<fajta>:<lenyomat>`; az `advent_announcements.recipient_hash` HMAC.
+- **S2b:** korlátok a terv 16.1 szerint — `subjectLimiter` (a feloldott alany kulcsára, 120 / 15 perc), `ipLimiter` (600 / 15 perc),
+  `createLimiter` (új `device` sor: 30 / óra / IP; a `store.mutate` jelzi, ha a sor most jött létre); a régi „60 / 15 perc / IP”
+  NEM készül. `adventClock(req)`: e2e-módban érvényes `X-Advent-Test-Now` nélkül a router „kikapcsolt”-ként viselkedik (`status`:
+  `{ enabled: false }`, a többi 404); a fejléc értékét `isValidDate` szűri. Érvénytelen tanulói token → a `state` válaszban
+  `pairing: "invalid"`. A `closing` a `phase` és a `waiting` (nyitható, megválaszolatlan ablakok száma) átadásával készül.
+  Tesztek: A49, A51, A53.
+- **S3a / S4:** a kliensben nincs e2e-ág; a főoldali kártya helyfoglalása `homeCardReserve(new Date())` (tiszta függvény a
+  `shared/advent/calendar.ts`-ben, egységteszttel); a böngészőtesztek `page.clock.setFixedTime(...)` + `X-Advent-Test-Now` párossal
+  futnak. Érvénytelen párosításnál a felület újrapárosítást kér (`advent-pairing-invalid`, „Folytatom vendégként” gomb).
+- **S5:** küldés a terv 16.3 szerint (`final` / `passed` fajta); teszt: A50.
+- **S6:** az `/api/admin/advent/preview` bekötése a flag-ellenőrzés NÉLKÜL (a router-gyár `requireFlag: false` beállítással).
+- **S8:** HMAC-lenyomat; a lábléc szövege a terv 16.6 szerint; valódi leiratkozó link csak külön tulajdonosi döntéssel.

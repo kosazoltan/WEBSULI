@@ -20,6 +20,8 @@ kérdez — új kérdést nem kell gyártani hozzá.
 
 ## 2. NEM cél (out of scope)
 
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** az „új kérdésbank nem cél” pont érvényét vesztette (12.2); a `Games.tsx` / `HomePracticeGames.tsx` érintetlen marad (14.).
+
 - Új kérdésbank vagy kérdésgyártás (kivétel: a 4.1 (h) döntés C opciója, külön szeletben).
 - 3D jelenet, three.js, játékhurok (`requestAnimationFrame`-alapú szimuláció).
 - A felhő-ranglista (`game_scores`) és a `games_catalog` tábla bővítése; a hét meglévő játék kódjának módosítása.
@@ -56,6 +58,8 @@ kérdez — új kérdést nem kell gyártani hozzá.
 
 ### 3.2 Új és módosuló fájlok (a 3. fázisban)
 
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** a fájllista a 12–16. szakasz szerint változott (útvonal `/adventi-naptar`, főoldali kártya, karácsonyi készlet, képcsomag).
+
 Új — közös mag: `source/shared/advent/calendar.ts`, `rules.ts`, `assignment.ts`, `contract.ts`.
 Új — szerver: `source/server/advent/store.ts`, `identity.ts`, `routes.ts`, `result-email.ts`, `sweeper.ts`;
 `source/migrations/0042_advent_progress.sql`.
@@ -71,6 +75,8 @@ Módosul: `source/shared/schema.ts` (új tábla), `source/server/routes.ts` (rou
 ## 4. Rögzített döntések és kényszerek
 
 ### 4.1 DÖNTÉSI PONTOK a tulajdonosnak (a javaslat elöl, ★ jelöléssel)
+
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** a döntések megszülettek — lásd 12.1, 13., 14., 15., 16.; az alábbi opciólista történeti.
 
 A terv a ★ javaslatokkal van végigírva; minden döntés egy-egy konstansban él (`shared/advent/rules.ts`), így a tulajdonos eltérő
 válasza konstans-cserét vagy egy megjelölt szelet elhagyását jelenti, nem áttervezést.
@@ -135,6 +141,8 @@ válasza konstans-cserét vagy egy megjelölt szelet elhagyását jelenti, nem �
 - H3 — Saját, kis 1–2. évfolyamos kérdéskészlet (évfolyamonként legalább 72 tétel): tartalomgyártás, külön szelet (S7b).
 
 ### 4.2 Rögzített szabályok (a ★ javaslatokkal)
+
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** R3 szövegei: 16.2; R4: 12.3; R6 évfolyam 1–12: 12.3; R8 korlátok: 16.1; R9 útvonal és előnézet: 14.1, 16.5; R10: 14.
 
 **R1 — A 95% pontos szabálya.** `adventPassed = (megválaszolt ablakok === 24) && (megoldott ablakok × 100 ≥ 95 × 24)`. Egész
 számokkal, kerekítés nélkül. 24 ablaknál a pontosan 95% nem állhat elő: 23 / 24 = 95,83% (megfelel), 22 / 24 = 91,67% (nem). Tehát:
@@ -419,6 +427,8 @@ Visszavonás: `ADVENT_CALENDAR=off` (azonnali, telepítés nélkül a Render kö
 404-et adnak, a tábla érintetlen marad. Végleges elvetésnél a szeletek revertje és a `DROP TABLE IF EXISTS advent_progress;`.
 
 ## 9. Szeletelés
+
+> **FELÜLÍRVA / KIEGÉSZÍTVE:** az érvényes szelet-tábla a 12.7, kiegészítve: S3c-0 / S3c (13.7), S4 (14.).
 
 Minden szelet önállóan összevonható (a flag alapból KI), ~400 soros PR; a `[D:x]` a döntési ponttól függő részt jelöli.
 
@@ -845,3 +855,96 @@ Az A15 és az A28 a kártyára a fentiek szerint értendő (főoldali kártya; M
   `npx.cmd tsx scripts/design-assets/generate.ts --set advent --only advent-bg-portrait,advent-door-08,advent-door-24 --max 10 --max-usd 7`
   A jelöltek a nem követett `source/design-assets/candidates/advent/` mappába kerülnek; a válogató lap:
   `npx.cmd tsx scripts/design-assets/review-page.ts --set advent` → `source/design-assets/candidates/advent/index.html`.
+
+## 16. A független ellenőr S1-ítéletének átvezetése (2026-11-18; ítélet: IGEN, FELTÉTELLEL a `bb248dd1` fejre)
+
+### 16.1 K1 — korlátok alanyonként (S2b; felülírja az R8 „60 kérés / 15 perc / IP” szabályát)
+
+- Írási korlát ALANYONKÉNT (a feloldott `subject_kind:subject_id` kulcsra): 120 kérés / 15 perc. A tulajdonos a levél-keretnél is így
+  döntött: gyerekenként.
+- IP-korlát csak lazán, visszaélés ellen: 600 írás / 15 perc / IP (egy osztály egy iskolai NAT mögött belefér).
+- Sor-LÉTREHOZÁSRA külön, szűk korlát (ez védi a Neon-keretet): 30 új `device` sor / óra / IP.
+- Integrációs teszt: egy alany 24 megnyitás + 24 válasz + 12 javítás (megnyitás + válasz) 15 percen belül, egy IP-ről → nincs 429;
+  25 alany egy IP-ről napi 2–2 írással → nincs 429; a 31. új névtelen sor egy órán belül ugyanarról az IP-ről → 429.
+
+### 16.2 K5, A6 — záró szöveg (megvalósítva az S1 javító commitjában)
+
+Az `adventClosing(summary, { round, maxRounds, phase, waiting })` ismeri a fázist: lezárt naptárnál külön szöveg (`closed`), pótlási
+időszakban nincs „holnap”, és a „meglepetés vár” csak akkor szerepel, ha a 95% az adott körben még elérhető
+(`adventStillReachable`). Az R3 szövegei ennek megfelelően értendők.
+
+### 16.3 K2 — a szülői levél pillanata (S5; felülírja az E1 „amikor végigért” megfogalmazását — továbbra is EGY levél körönként)
+
+A levél akkor megy, amikor a kör eredménye VÉGLEGES: (a) a tanuló megfelelt (`passed_at` első beállítása), vagy (b) mind a 24 ablak
+megválaszolt, és nincs javítható ablak (megfelelés nélkül). Amíg van javítható ablak, levél nem megy. Ha egy későbbi körben éri el a
+95%-ot, arról külön, egyszeri „megfelelt” levél megy. Foglalás: a `mailed_to` elemei `<kör>:<fajta>:<cím-lenyomat>` alakúak
+(fajta: `final` / `passed`). Teszt: 22 megoldott + 2 javítható → nincs levél; javítás után 24 / 24 → egy „megfelelt” levél; 20 + 4
+végleg hibás → egy „végleges” levél; 2. körben megfelel → még egy „megfelelt” levél; ismétlésre egyik sem megy újra.
+
+### 16.4 K3 — az 1–2. évfolyam javításai
+
+A (b) döntés kivétel nélküli: az 1–2. évfolyamon is ablakonként 2 javítás; a körök száma 2 (megvalósítva: `ADVENT_RULES.lowGrade`).
+A karácsonyi készlet minimuma az 1–2. évfolyamra ezért **144** érvényes tétel (24 ablak × 3 kérdés × 2 kör) — a 12.2 és az A33 / A35
+„96” és „1 javítás” értéke helyett ez érvényes. A teljes készlet így legalább 288 tétel (144 + 72 + 72).
+
+### 16.5 K4, A8 — e2e-szezon és előnézet (S2b, S4, S6)
+
+- **E2E-módban (`isE2eMode()`) érvényes `X-Advent-Test-Now` fejléc NÉLKÜL a naptár szezonon kívülinek számít:** a `status` válasza
+  `{ enabled: false }`, minden más végpont 404 — a valódi dátumtól függetlenül. A meglévő főoldali e2e-tesztek így decemberben is
+  változatlanok. A naptár saját tesztjei a fejléccel kapcsolják be. Őr-teszt: e2e-módban fejléc nélkül, decemberi rendszeridővel is
+  `enabled: false`. (A 14.4 „a valódi dátum számít” félmondata helyett ez érvényes.)
+- **A CLS az ÉLES kódutat méri:** a főoldali kártya helyfoglalása mindig a kliens órájából megy (`adventNow(new Date())`), e2e-ben is;
+  a böngészőteszt a Playwright órájával (`page.clock.setFixedTime`) és a fejléccel ugyanarra a napra áll. Külön e2e-ág a kliensben
+  NINCS. Egységteszt a helyfoglalás döntésére (`homeCardReserve(now)`), szezonon belül / kívül.
+- **Előnézet a flag ELŐTT:** az `/api/admin/advent/preview` útvonal NEM függ az `ADVENT_CALENDAR` flagtől (csak
+  `isAuthenticatedAdmin`) — a bekapcsolás előtti kipróbálásra való. Az előnézet címe `/adventi-naptar?elonezet=ÉÉÉÉ-HH-NN`.
+- **Visszavont / érvénytelen tanulói token (E12):** ha a kérés tokent hoz, de az érvénytelen, a szerver a válaszban jelzi
+  (`pairing: "invalid"`), a kliens NEM kezd csendben névtelen naptárat: „A személyes linked lejárt — nyisd meg újra a napi levélből”
+  üzenetet mutat, „Folytatom vendégként” gombbal.
+
+### 16.6 A2 — értesítő: lenyomat és leiratkozás (S8)
+
+- Az `advent_announcements.recipient_hash` HMAC-SHA-256 a szerver titkával (`LEARNER_LINK_SECRET` / `SESSION_SECRET`, mint a tanulói
+  tokennél), nem sózatlan SHA-256; titok nélkül élesben a küldés megtagadva. A takarító a sorokat az évad lezárása (január 7.) után
+  törli.
+- Leiratkozás — felmérés: e-mailes leiratkozó végpont a kódban NINCS; a `server/resend.ts:142` levélszövege „leiratkozhatsz a
+  platformon belül”, a `server/daily-reminder.ts:18` szerint a napi levélnél tulajdonosi döntés, hogy leiratkozás nincs (az admin
+  inaktiválja a címet). Az adventi értesítő EGYSZERI levél. Javaslat (a terv ezzel készül): a lábléc kimondja, hogy ez egyszeri
+  értesítés, és megadja a WebSuli-levelek leállításának meglévő módját (a platformon belüli leiratkozás). **Nyitott tulajdonosi
+  kérdés az S8 előtt:** kell-e valódi, egy kattintásos leiratkozó link (aláírt token + új végpont, amely a címet inaktiválja — ez a
+  napi emlékeztetőt is leállítaná a nevesített tanulói címeknél)? ★ Javaslat: most nem; az egyszeri levélhez a lábléc elég.
+- Megjegyzés a jogalaphoz: az `extra_email_addresses` címeit az admin vette fel (köztük nevesített tanulói címek) — ezek ma is kapnak
+  napi levelet; a jogalap a tulajdonosé.
+
+### 16.7 A3 — a „baráti” védelem őszintén
+
+A szerveroldali pontozás a naptár ÁLLAPOTÁT védi (nem írható át a böngészőben), de a bank-ablakok helyes válaszát NEM rejti el: a
+kliens megkapja a kérdés azonosítóját, a közös évfolyam-bank pedig a helyes válasszal együtt a nyilvános kliens-csomag része. Egy
+ügyes gyerek kikeresheti. A karácsonyi készlet csak a szerveren van. A szülői levél tehát azt igazolja, hogy a naptár ezen a
+szerveren végig lett játszva — azt nem, hogy segítség nélkül. Ez a (d) D1 „baráti” szint; erre erősebb állítást nem építünk.
+
+### 16.8 Séma-kiegészítés (S2a)
+
+`CHECK` kényszer az `advent_progress` táblán: `subject_kind = 'learner'` ⇔ `learner_id IS NOT NULL`; `subject_kind = 'player'` ⇔
+`player_id IS NOT NULL`. A `plan` JSON körönként a `subjects` (nap → tárgy) mezőt is tartalmazza.
+
+### 16.9 PR-bontás
+
+(1) terv + végrehajtási utasítás; (2) S1 kód egyben, a javító committal (tiszta függvények, felület és adatbázis nélkül — a méret a
+leírásban indokolva); (3) S3c-0; (4) S1b. Mindegyik külön ág a közös ágról.
+
+### 16.10 Új elfogadási kritériumok
+
+<!-- acceptance-checklist -->
+
+- [ ] A49 WHEN egy alany 15 percen belül mind a 24 ablakot megnyitja és megválaszolja, javításokkal együtt THEN the system SHALL
+  egyetlen kérést sem elutasítani korlát miatt; WHEN egy IP-ről egy órán belül 30-nál több új névtelen sor jönne létre THEN the
+  system SHALL a továbbiakat 429-cel elutasítani.
+- [ ] A50 WHEN a tanulónak van javítható ablaka THEN the system SHALL szülői levelet nem küldeni; WHEN a kör eredménye végleges
+  vagy a tanuló megfelelt THEN the system SHALL címzettenként pontosan egy, a végleges eredményt tartalmazó levelet küldeni.
+- [ ] A51 WHEN a szerver e2e-módban fut és a kérés nem hoz érvényes tesztidő-fejlécet THEN the system SHALL a naptárat
+  kikapcsoltnak mutatni a valódi dátumtól függetlenül.
+- [ ] A52 WHEN a naptár lezárt vagy pótlási időszakban van THEN the system SHALL nem mutatni „gyere vissza holnap” szöveget, és
+  lezárva új kört vagy javítást nem ajánlani; WHEN a 95% a körben már nem érhető el THEN the system SHALL meglepetést nem ígérni.
+- [ ] A53 WHEN a kérés érvénytelen tanulói tokent hoz THEN the system SHALL ezt jelezni, és a felület a tanulót újrapárosításra
+  kérni ahelyett, hogy csendben névtelen naptárat kezdene.
