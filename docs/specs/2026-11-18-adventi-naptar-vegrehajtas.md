@@ -613,8 +613,8 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.
 
-- 2026-11-18 — S1 KÉSZ: `source/shared/advent/` (`calendar.ts`, `rules.ts`, `assignment.ts`, `contract.ts`) + 4 tesztfájl, 39 teszt; a független ellenőr ítélete a `bb248dd1` fejre: IGEN, FELTÉTELLEL; a K5, A1, A4–A7, K3 javítása külön commitban.
-- 2026-11-18 — S1b KÉSZ (ellenőrre vár): `source/shared/advent/christmasBank/` 288 kézzel írt tétel (1–4. évfolyam: 144, 5–8.: 72, 9–12.: 72), `christmas-validate.ts`, `tests/advent-christmas-bank.test.ts`; a tételek tényszerűségét a független ellenőr tételenként ellenőrzi.
+- 2026-11-18 — S1 KÉSZ: `source/shared/advent/` (`calendar.ts`, `rules.ts`, `assignment.ts`, `contract.ts`) + 4 tesztfájl; a független ellenőr ítélete a `bb248dd1` fejre: IGEN, FELTÉTELLEL; a K5, A1, A4–A7, K3, majd az N1, N2 javítva. (FRISSÍTVE 2026-11-18: a kibocsátott állapotban az S1 és az S1b öt tesztfájlja együtt 47 teszt; a sor eredetileg 39-et írt.)
+- 2026-11-18 — S1b KÉSZ: `source/shared/advent/christmasBank/` 300 kézzel írt tétel (évfolyamsávonként érvényes: 1–4.: 150, 5–8.: 78, 9–12.: 103), `christmas-validate.ts`, `tests/advent-christmas-bank.test.ts`; a tételek tényszerűségét a független tényellenőr három körben ellenőrizte, a végső készletre az ítélet: IGEN. (FRISSÍTVE 2026-11-18: a sor eredetileg 288 tételt és „ellenőrre vár” állapotot írt.)
 - 2026-11-18 — S2a KÉSZ: `migrations/0042_advent_progress.sql` (a szám szabad volt: a `main` utolsó migrációja a 0041), Drizzle-séma
   (`adventProgress`, `adventAnnouncements`, CHECK kényszerekkel), `server/advent/store.ts`, `tests/advent-db.integration.ts`, a
   DB-futtató bővítése. Az S8 lábléce: terv 17. szakasz (egyszeri levél, új leiratkozó link nincs).
