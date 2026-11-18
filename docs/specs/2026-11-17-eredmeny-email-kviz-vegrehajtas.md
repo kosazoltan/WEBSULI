@@ -91,6 +91,24 @@ Szakaszonként `npm run gate:stage`; a végén `npm run gate:push`. Push / PR ni
 - `tests/lesson-result-email-quiz.spec.ts` új esete: 3 válasz → rejtetté válás → 1 pillanatkép (`partial: true`, 3 megválaszolt);
   változatlanul újra rejtett → nincs újabb; még 2 válasz + rejtett → 2. pillanatkép (5); válasz nélkül rejtett → nincs kérés.
 
+## T9 — PR #510 Codex-leletek
+
+- `client/src/lib/queryClient.ts`: `sendKeepalive(url, data): Promise<boolean>` — igaz csak 2xx válasznál; token nélkül, hálózati hibánál,
+  nem 2xx-nél hamis; nem dob.
+- `shared/quiz-round.ts`: `snapshotDue(state, roundId, count)` tiszta döntés — `state = { sent: { roundId, count } | null; pending:
+  { roundId, count } | null }`; küldendő, ha `count > 0`, és sem az elküldött, sem az úton lévő állapot nem fedi ugyanarra a körre.
+- `client/src/lesson-runtime/resultReport.ts`: a számláló `{ roundId, count }` ref (P2); a küldés után `pending`, siker után `sent` +
+  `localStorage`, kudarc után `pending` törlése (P3); a pillanatkép-függvény ref-ben, és egy üres függőségű effekt lebontó ága
+  meghívja (P1).
+- `server/lesson-result-email.ts` (útvonal-kezelő): `finalizedRounds` (lecke|körazonosító → lejárat, 24 óra, legfeljebb 20 000 bejegyzés);
+  a végleges kvíz beküldésekor beíródik; `roundFinalized(lessonId, whos, roundId)` = memória VAGY a nyilvántartás végleges sora
+  (`kind = "quiz"`, a kör végleges körkulcsaival); a pillanatkép fogadásakor → `202 { queued: false, finalized: true }`; a várakozó
+  levél küldése előtt újra.
+- Tesztek: `tests/result-report-complete.test.ts` (`snapshotDue`: új kör, úton lévő, kudarc utáni újrapróba); `tests/lesson-result-
+  email-db.integration.ts` (végleges → pillanatkép: nincs levél, memóriából és — a memória ürítése után — a nyilvántartásból is;
+  pillanatkép → végleges: csak a végleges); `tests/lesson-result-email-quiz.spec.ts` (útvonalváltás → pillanatkép; új kör első válasza
+  → pillanatkép; 503 válasz után a következő háttérbe kerülés újraküld).
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

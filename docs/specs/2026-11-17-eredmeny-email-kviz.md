@@ -136,6 +136,20 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
   alapértelmezése egy példány. A dashboardon beállított skálázás nem ellenőrzött (UNVERIFIED). Több példánynál a várakozó levél és a
   végleges beküldés más példányra eshet — jegy: kanban #135.
 
+**PR #510 — Codex-leletek (2026-11-18), mind a négy valós, a pillanatkép-küldés szabályai így pontosulnak:**
+- **P1 — elhagyás az alkalmazáson belül:** a leckéből a főoldalra navigálás (útvonalváltás) nem vált ki `pagehide`-ot és nem teszi
+  rejtetté a lapot. Új szabály: a pillanatkép a beküldő komponens LEBONTÁSAKOR is megy (ugyanazokkal a feltételekkel).
+- **P2 — új kör ugyanabban a nézetben:** a „legutóbb elküldött” számláló a KÖR azonosítójához kötött; új kör tiszta lappal indul.
+- **P3 — csak az elfogadott küldés rögzül:** a pillanatkép „elküldve” állapota csak a szerver sikeres (2xx) válasza után íródik be.
+  Hálózati hiba, 429 és 5xx után az állapot újrapróbálható marad. Ha a válasz a lap bezárása miatt nem várható meg, semmi nem
+  rögzül: a következő betöltéskor a böngészőben tárolt kör a következő háttérbe kerüléskor / lebontáskor újra megy. Az ismételt
+  küldés ártalmatlan: a szerver körönként a legutolsó pillanatképet tartja, a már kiment „félbehagyva” levelet a kézbesítés-
+  nyilvántartás nem küldi újra. Egyidejűleg egy pillanatkép-kérés van úton (az azonos állapot nem megy kétszer párhuzamosan).
+- **P4 — késve érkező pillanatkép a végleges után:** a szerver a pillanatkép fogadásakor ÉS a várakozó levél küldése előtt ellenőrzi,
+  hogy a kör végleges eredménye megérkezett-e; ha igen, a pillanatkép nem ütemeződik / a levél nem megy ki. Két forrás: memóriában a
+  véglegesített körök (lecke + körazonosító, 24 óráig, korlátos méret — a vendég eltérő kulcsát is fedi), és a kézbesítés-
+  nyilvántartás végleges sora (újraindítás után is). Mindkét kérési sorrendre teszt.
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -166,3 +180,7 @@ Elfogadás (S1b):
 - [x] E10 – a végleges levél jelzi a felülírást
 - [x] E11 – dátum a levélben (Europe/Budapest)
 - [x] E12 – 7 napos korkorlát a le nem zárt körre
+- [ ] E13 – pillanatkép a komponens lebontásakor (alkalmazáson belüli elhagyás) (böngésző)
+- [ ] E14 – új kör első válaszai is mennek (körhöz kötött számláló)
+- [ ] E15 – sikertelen pillanatkép (hálózati hiba / 429 / 5xx) újrapróbálható marad
+- [ ] E16 – véglegesített kör késői pillanatképe nem küld „félbehagyva” levelet (mindkét sorrend, valódi DB)
