@@ -37,6 +37,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-50** — Visszaperjeles szöveg csak Edit/Write-tal; bájtszintű visszaolvasás; szkriptes cserénél `git diff --stat` ellenőrzés.
 - **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
 - **C-73** — `native-arch` önmagában ismert helyi kivétel (nem telepítési teendő); a push-kapu piros oka mindig a TÖBBI bukó teszt. Mérő-várakozás állapotra, ne időre.
+- **C-74** — Takarás-döntés: a figura test (téglalap), nem pont; a mérce (`elementsFromPoint`) és a döntés ugyanazt a felületet nézze. Elakadásnál előbb a döntés bemeneteit naplózd.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -1073,3 +1074,15 @@ Forrás: #475 (K1b). Rokon: C-59.
 - **Teendő:** a push-kapu FAIL-sorában a native-arch MELLETTI fájlokat javítsd; Build Tools / `npm ci` nem kell.
 - **Rokon:** a közös mérők (joystick, mobil mérő) kérdés-elhárítása a megoldás-kijelzés alatt lecserélődő gombra kattintott
   (#500 ingadozó) — a hatókör a nyitott, élesített kérdés (`[data-state="open"][data-armed="true"]`), így a segéd állapotra vár.
+
+## C-74 — Takarás-döntés pontból: a rács hézagában „szabad”, közben takarva (2026-11-18)
+- **Tünet:** Szökőár, 360×640: a kérdés-sáv a figurára ült, az elrendezés mégis „nyugalomban” volt; ha a kérdés ~0,8 mp-cel később
+  nyílt, minden jó. Az előző kör órákig az időzítést, a React-felülírást és a 3D-vetítést gyanította — egyik sem volt.
+- **Tény (a döntés bemeneteinek naplójából):** a menet elején a figura x = 50 % (180 px), a kétoszlopos válaszrács oszlopai
+  8–176 és 184–352 px: a döntés a figurát EGY PONTNAK vette, a pont a 8 px-es hézagba esett → „nem takar”. A teszt
+  `elementsFromPoint`-ja a rács-tárolót is látja → takarva. 0,8 mp múlva a sodrás kivitte a pontot a hézagból.
+- **Második ok ugyanott:** a közös `.game-hud > * { pointer-events: auto }` a jelzősor ÜRES, tördelt második sorát láthatatlan
+  kattintható réteggé tette a menedék-ház fölött (a Tailwind `pointer-events-none` osztály a rétegezetlen szabályt nem írja felül).
+- **Teendő:** takarást testre (téglalapra) számolj, a mérce felületével egyezően; a jelölt elrendezéseket egy lépésben, a
+  kirajzolás előtt mérd végig (ne render → mérés → render láncban); mozgó figuránál a nyitott kérdés alatt kövesd. Elakadásnál
+  az első lépés a döntés bemeneteinek naplója a teszt pontos lépéseivel, nem újabb időzítés-hangolás.
