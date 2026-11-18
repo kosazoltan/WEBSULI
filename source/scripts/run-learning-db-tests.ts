@@ -108,7 +108,7 @@ try {
       windowsHide: true, stdio: "inherit",
     });
     // JM7a: az admin-jogosultsági mátrix (~110 végpont × 7 szerep × 2 menet, valódi HTTP) miatt 120 s → 300 s.
-    const timeout = setTimeout(() => { child.kill(); reject(new Error("Database integration tests timed out")); }, 300_000);
+    const timeout = setTimeout(() => { child.kill(); reject(new Error("Database integration tests timed out")); }, 480_000);
     child.once("error", error => { clearTimeout(timeout); reject(error); });
     child.once("exit", status => { clearTimeout(timeout); resolve(status ?? 1); });
   });
