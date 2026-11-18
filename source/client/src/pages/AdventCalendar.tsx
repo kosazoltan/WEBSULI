@@ -10,19 +10,26 @@ import { Link } from "wouter";
 import { ArrowLeft, Check, Lock, Volume2, VolumeX, Wrench, X } from "lucide-react";
 import type { AdventAnswerResult, AdventDoorView, AdventQuestion, AdventState } from "@shared/advent/contract";
 import { doorArtId } from "@shared/advent/art";
-import { articleFor, daySuffix, nextDoorToOpen } from "@shared/advent/home-card";
+import { adventDateLabel, articleFor, daySuffix, nextDoorToOpen, roundIsOver } from "@shared/advent/home-card";
 import { ADVENT_MAX_GRADE, ADVENT_MIN_GRADE } from "@shared/advent/rules";
 import { isMuted, sfxClick, sfxSuccess, toggleMuted } from "@/lib/audioEngine";
 import AdventArt from "@/advent/AdventArt";
 import Snowfall from "@/advent/Snowfall";
 import { ADVENT_BUSY_WAITING_TEXT, adventErrorText, retryWhenBusy } from "@/advent/busy";
-import { ADVENT_STATE_KEY, adventApi, adventDevice, forgetLearnerPairing, useAdventState } from "@/advent/useAdvent";
+import {
+  ADVENT_STATE_KEY, adventApi, adventDevice, clearPairingLost, forgetLearnerPairing, isPairingLost, markPairingLost, useAdventState,
+} from "@/advent/useAdvent";
 import "@/advent/advent.css";
 
 const SUBJECT_LABEL: Record<string, string> = {
   christmas: "Karácsony", math: "Matematika", english: "Angol", hungarian: "Magyar nyelv", science: "Természetismeret", history: "Történelem",
 };
 const GRADES = Array.from({ length: ADVENT_MAX_GRADE - ADVENT_MIN_GRADE + 1 }, (_, i) => ADVENT_MIN_GRADE + i);
+/** Élesítési idő: a kérdés megjelenése után ennyi ideig a válaszgombok nem fogadnak bemenetet (dupla koppintás, második Enter). */
+export const ADVENT_ARM_MS = 400;
+/** A látható üzenetsáv (zárt ablak, eltűnt kérdés) ennyi ideig marad kint. */
+const NOTICE_MS = 5000;
+const PAIRING_TEXT = "A személyes linked lejárt — nyisd meg újra a napi levélből, vagy folytasd vendégként.";
 
 function doorLabel(door: AdventDoorView): string {
   const base = `${door.day}. ablak`;
@@ -33,7 +40,19 @@ function doorLabel(door: AdventDoorView): string {
   return `${base} — ebben a körben már nem javítható`;
 }
 
-type Open = { day: number; question: AdventQuestion; result: AdventAnswerResult | null; readOnly: boolean };
+type Open = { day: number; question: AdventQuestion; result: AdventAnswerResult | null; readOnly: boolean; repair: boolean; picked: number | null };
+
+function useLandscape(): boolean {
+  const query = "(orientation: landscape)";
+  const [landscape, setLandscape] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setLandscape(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+  return landscape;
+}
 
 export default function AdventCalendar() {
   const queryClient = useQueryClient();
@@ -41,14 +60,20 @@ export default function AdventCalendar() {
   const [open, setOpen] = useState<Open | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string>("");
+  // Látható (és felolvasott) rövid üzenet: zárt ablak, eltűnt kérdés. Az `n` miatt ugyanaz a szöveg másodszor is megjelenik.
+  const [notice, setNotice] = useState<{ text: string; n: number } | null>(null);
   // 429 („most sokan vagyunk”): rövid várakozás alatt barátságos üzenet, utána egy automatikus újrapróba.
   const [waiting, setWaiting] = useState(false);
   const patient = useCallback(<T,>(run: () => Promise<T>) => retryWhenBusy(run, { onWait: setWaiting }), []);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [muted, setMuted] = useState(() => isMuted());
   const [hidden, setHidden] = useState(false);
+  const [armed, setArmed] = useState(false);
+  // Lejárt tanulói link: amíg a gyerek nem választ, a naptár nem ír (A53) — akkor sem, ha a tokent közben más már törölte.
+  const [mustChoose, setMustChoose] = useState(() => isPairingLost());
   const lastDoor = useRef<HTMLButtonElement | null>(null);
+  const questionRef = useRef<HTMLParagraphElement | null>(null);
+  const nextRef = useRef<HTMLButtonElement | null>(null);
   const wantsAuto = useRef(false);
   const volatileDevice = useMemo(() => adventDevice().volatile, []);
 
@@ -58,43 +83,81 @@ export default function AdventCalendar() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
+  useEffect(() => {
+    if (state?.pairing === "invalid") { markPairingLost(); setMustChoose(true); }
+  }, [state?.pairing]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+  const say = useCallback((text: string) => setNotice((prev) => ({ text, n: (prev?.n ?? 0) + 1 })), []);
+
+  // Élesítés: új (még meg nem válaszolt) kérdésnél a válaszok csak rövid idő után fogadnak bemenetet.
+  const pendingQuestion = open && !open.result ? open.question.id : null;
+  useEffect(() => {
+    setArmed(false);
+    if (!pendingQuestion) return;
+    const timer = window.setTimeout(() => setArmed(true), ADVENT_ARM_MS);
+    return () => window.clearTimeout(timer);
+  }, [pendingQuestion]);
+
+  // A visszajelzés után a „Tovább” kapja a fókuszt — így fekvő telefonon is a nézetbe gördül.
+  const answeredNow = open?.result && !open.readOnly ? open.question.id : null;
+  useEffect(() => { if (answeredNow) nextRef.current?.focus(); }, [answeredNow]);
+
   const setState = useCallback((next: AdventState) => queryClient.setQueryData(ADVENT_STATE_KEY, next), [queryClient]);
   const refresh = useCallback(() => queryClient.invalidateQueries({ queryKey: ADVENT_STATE_KEY }), [queryClient]);
 
-  const openDoor = useCallback(async (day: number) => {
+  const openDoor = useCallback(async (day: number, repair = false) => {
     setError(null);
     setBusy(true);
     try {
       const res = await patient(() => adventApi.open(day));
-      if (!res.question) { setNotice("Ez a kérdés már nem érhető el, de az eredményed megmaradt."); return; }
+      if (!res.question) { say("Ez a kérdés már nem érhető el, de az eredményed megmaradt."); return; }
       if (!muted) sfxClick();
-      setOpen({ day, question: res.question, result: res.answered, readOnly: res.answered !== null });
+      setOpen({ day, question: res.question, result: res.answered, readOnly: res.answered !== null, repair, picked: null });
     } catch (e) {
       setError(adventErrorText(e, "Nem sikerült elérni a naptárat."));
       void refresh();
     } finally {
       setBusy(false);
     }
-  }, [muted, patient, refresh]);
+  }, [muted, patient, refresh, say]);
+
+  const pairingBlocks = (): boolean => {
+    if (mustChoose) return true;
+    if (!isPairingLost()) return false;
+    setMustChoose(true);
+    return true;
+  };
 
   const onDoor = (door: AdventDoorView, el: HTMLButtonElement) => {
     lastDoor.current = el;
-    if (door.state === "locked") { setNotice(`${articleFor(door.day) === "az" ? "Az" : "A"} ${door.day}. ablak december ${door.day}${daySuffix(door.day)} nyílik.`); return; }
+    if (pairingBlocks()) { say("Előbb válassz fent: nyisd meg újra a leveledből, vagy folytasd vendégként."); return; }
+    if (door.state === "locked") { say(`${articleFor(door.day) === "az" ? "Az" : "A"} ${door.day}. ablak december ${door.day}${daySuffix(door.day)} nyílik.`); return; }
     if (busy) return;
-    void openDoor(door.day);
+    void openDoor(door.day, door.state === "repairable");
   };
 
   const answer = async (pick: number) => {
-    if (!open || open.result || busy) return;
+    if (!open || open.result || busy || !armed) return;
+    const { day, question } = open;
     setBusy(true);
     setError(null);
     try {
-      const result = await patient(() => adventApi.answer(open.day, open.question.id, pick));
-      setOpen({ ...open, result });
+      const result = await patient(() => adventApi.answer(day, question.id, pick));
+      // Ha a gyerek közben bezárta a kérdést, az eredmény megérkezése nem nyitja újra.
+      setOpen((current) => (current && current.day === day && current.question.id === question.id ? { ...current, result, picked: pick } : current));
       if (result.correct && !muted) sfxSuccess();
-      await refresh();
+      // Az állapot a válasz eredményéből helyben frissül — nem megy utána külön olvasás (osztálynyi terhelésnél ez számít).
+      const current = queryClient.getQueryData<AdventState | null>(ADVENT_STATE_KEY);
+      if (current) setState({ ...current, doors: current.doors.map((d) => (d.day === day ? result.door : d)), summary: result.summary, closing: result.closing });
     } catch (e) {
       setError(adventErrorText(e, "Nem sikerült elküldeni a választ."));
+      // 409: a kérdés már nem aktuális (pl. másik eszközön megválaszolták) — a régi kérdés bezárul, az állapot frissül.
+      if ((e as { status?: unknown } | null)?.status === 409) setOpen(null);
       await refresh();
     } finally {
       setBusy(false);
@@ -109,6 +172,7 @@ export default function AdventCalendar() {
   };
 
   const chooseGrade = async (grade: number) => {
+    if (pairingBlocks()) { say("Előbb válassz fent: nyisd meg újra a leveledből, vagy folytasd vendégként."); return; }
     setBusy(true);
     setError(null);
     try { setState(await patient(() => adventApi.grade(grade))); }
@@ -124,8 +188,16 @@ export default function AdventCalendar() {
     finally { setBusy(false); }
   };
 
+  const continueAsGuest = () => {
+    forgetLearnerPairing();
+    clearPairingLost();
+    setMustChoose(false);
+    setError(null);
+    void refresh();
+  };
+
   // `?nyit=ma`: a főoldali kártyáról érkezve egyszer megnyitja a soron következő ablakot (ha előbb évfolyamot kell
-  // választani, akkor közvetlenül utána), a paramétert pedig azonnal eltávolítja — újratöltéskor nem nyit újra.
+  // választani, akkor közvetlenül utána) — végigjátszott körnél az összesítést —, a paramétert pedig azonnal eltávolítja.
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get("nyit") !== "ma") return;
@@ -134,25 +206,28 @@ export default function AdventCalendar() {
     window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
   }, []);
   useEffect(() => {
-    if (!state || !wantsAuto.current || state.needsGrade) return;
+    if (!state || !wantsAuto.current || state.needsGrade || mustChoose) return;
     wantsAuto.current = false;
     const day = nextDoorToOpen(state);
-    if (day !== null) void openDoor(day);
-  }, [state, openDoor]);
+    if (day !== null) void openDoor(day, state.doors[day - 1]?.state === "repairable");
+    else if (roundIsOver(state)) setSummaryOpen(true);
+  }, [state, openDoor, mustChoose]);
 
   if (isLoading) return <Shell><p className="advent-message" role="status">Betöltjük a naptárat…</p></Shell>;
-  if (isError) {
+  // Hibaoldal CSAK akkor, ha nincs mit mutatni: megtartott állapot mellett a hiba sávként jelenik meg (lent).
+  if (isError && !state) {
     return (
       <Shell>
-        <div className="advent-message" role="alert">
-          <p>Nem sikerült elérni a naptárat.</p>
-          <button type="button" className="advent-btn" data-testid="advent-error-retry" onClick={() => void refetch()}>Újra</button>
+        <div className="advent-message" role="alert" data-testid="advent-load-error">
+          <p>Most nem sikerült elérni a naptárat. Lehet, hogy sokan nyitják egyszerre — próbáld meg újra!</p>
+          <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-error-retry" onClick={() => void refetch()}>Újra</button>
+          <BackHome />
         </div>
       </Shell>
     );
   }
-  if (!state) return <Shell><p className="advent-message">A naptár most nem érhető el.</p></Shell>;
-  if (state.phase === "before") return <Shell><p className="advent-message">Még nincs itt az advent — gyere vissza december 1-jén!</p></Shell>;
+  if (!state) return <Shell><div className="advent-message"><p>A naptár most nem érhető el.</p><BackHome /></div></Shell>;
+  if (state.phase === "before") return <Shell><div className="advent-message"><p>Még nincs itt az advent — gyere vissza december 1-jén!</p><BackHome /></div></Shell>;
   if (state.phase === "teaser") {
     return (
       <Shell>
@@ -160,6 +235,7 @@ export default function AdventCalendar() {
           <h2>Hamarosan!</h2>
           <p>{state.closing.text}</p>
           <p>Még {state.daysUntilStart} nap.</p>
+          <BackHome />
         </div>
       </Shell>
     );
@@ -172,6 +248,7 @@ export default function AdventCalendar() {
 
   return (
     <Shell paused={paused} snow>
+      <AdventArt id="advent-garland" className="advent-garland" decorative />
       <header className="advent-hud" data-game-hud>
         <Link href="/" className="advent-icon-btn" aria-label="Vissza a főoldalra"><ArrowLeft aria-hidden="true" /></Link>
         <div className="advent-hud__title">
@@ -187,22 +264,31 @@ export default function AdventCalendar() {
         </button>
       </header>
 
-      {state.pairing === "invalid" ? (
+      {mustChoose ? (
         <div className="advent-banner" role="alert" data-testid="advent-pairing-invalid">
-          <span>A személyes linked lejárt — nyisd meg újra a napi levélből.</span>
-          <button type="button" className="advent-btn advent-btn--ghost" onClick={() => { forgetLearnerPairing(); void refresh(); }}>Folytatom vendégként</button>
+          <span>{PAIRING_TEXT}</span>
+          <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-continue-guest" onClick={continueAsGuest}>Folytatom vendégként</button>
         </div>
       ) : null}
       {volatileDevice ? <p className="advent-banner" role="status">Ezen az eszközön nem tudjuk megjegyezni a naptáradat.</p> : null}
       {closed ? <p className="advent-banner" role="status" data-testid="advent-closed">{state.closing.text}</p> : null}
+      {state.closing.kind === "gift" ? (
+        <button type="button" className="advent-gift-banner" data-testid="advent-gift-banner" onClick={() => setSummaryOpen(true)}>{state.closing.text}</button>
+      ) : null}
+      {isError ? (
+        <div className="advent-banner" role="status" data-testid="advent-stale">
+          <span>Most nem érjük el a naptárat — amit látsz, az a legutóbbi állapot.</span>
+          <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-stale-retry" onClick={() => void refetch()}>Újra</button>
+        </div>
+      ) : null}
       {waiting ? <p className="advent-banner" role="status" data-testid="advent-busy">{ADVENT_BUSY_WAITING_TEXT}</p> : null}
-      {error ? (
+      {error && !mustChoose ? (
         <div className="advent-banner advent-banner--error" role="alert" data-testid="advent-error">
           <span>{error}</span>
           <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-error-retry" onClick={() => { setError(null); void refresh(); }}>Újra</button>
         </div>
       ) : null}
-      <p className="advent-sr" role="status" aria-live="polite">{notice}</p>
+      {notice ? <p key={notice.n} className="advent-banner advent-banner--notice" role="status" data-testid="advent-notice">{notice.text}</p> : null}
 
       {state.needsGrade && !closed ? (
         <section className="advent-grade" data-testid="advent-grade-picker" aria-labelledby="advent-grade-title">
@@ -238,8 +324,8 @@ export default function AdventCalendar() {
         </ol>
       )}
 
-      {repairTarget && !closed && !state.needsGrade ? (
-        <button type="button" className="advent-btn advent-repair" data-testid="advent-repair" disabled={busy} onClick={() => void openDoor(repairTarget.day)}>
+      {repairTarget && !closed && !state.needsGrade && !mustChoose ? (
+        <button type="button" className="advent-btn advent-repair" data-testid="advent-repair" disabled={busy} onClick={() => void openDoor(repairTarget.day, true)}>
           Javítom {articleFor(repairTarget.day)} {repairTarget.day}. ablakot
         </button>
       ) : null}
@@ -247,23 +333,30 @@ export default function AdventCalendar() {
       <Dialog.Root open={open !== null} onOpenChange={(next) => { if (!next) closeQuestion(); }}>
         <Dialog.Portal>
           <Dialog.Overlay className="advent-overlay" />
-          <Dialog.Content className="advent-dialog" data-testid="advent-dialog" aria-describedby={undefined}>
+          <Dialog.Content
+            className="advent-dialog" data-testid="advent-dialog" aria-describedby="advent-question-text"
+            // A fókusz a KÉRDÉSRE kerül (nem az első válaszra): a képernyőolvasó felolvassa, és egy második Enter nem válaszol.
+            onOpenAutoFocus={(event) => { event.preventDefault(); questionRef.current?.focus(); }}
+          >
             {open ? (
               <>
+                <AdventArt id="advent-frame" className="advent-dialog__frame" decorative />
                 <Dialog.Title className="advent-dialog__title">
-                  {open.day}. ablak · {SUBJECT_LABEL[open.question.subject] ?? "Kérdés"}
+                  {open.repair ? "Javítás — " : ""}{open.day}. ablak · {SUBJECT_LABEL[open.question.subject] ?? "Kérdés"}
                 </Dialog.Title>
-                <p className="advent-question" data-testid="advent-question">{open.question.prompt}</p>
-                <div className="advent-options" role="group" aria-label="Válaszlehetőségek">
+                <p id="advent-question-text" ref={questionRef} tabIndex={-1} className="advent-question" data-testid="advent-question">{open.question.prompt}</p>
+                <div className="advent-options" role="group" aria-label="Válaszlehetőségek" data-armed={armed || open.result !== null ? "true" : "false"}>
                   {open.question.options.map((option, index) => {
-                    const mark = open.result ? (index === open.result.correctIndex ? "correct" : undefined) : undefined;
+                    const mark = !open.result ? undefined : index === open.result.correctIndex ? "correct" : index === open.picked && !open.result.correct ? "wrong" : undefined;
                     return (
                       <button
                         key={index} type="button" className="advent-option" data-testid={`advent-option-${index}`} data-mark={mark}
-                        disabled={busy || open.result !== null} aria-busy={busy} onClick={() => void answer(index)}
+                        disabled={busy || open.result !== null} aria-busy={busy} aria-disabled={!armed && open.result === null ? "true" : undefined}
+                        onClick={() => void answer(index)}
                       >
-                        {mark === "correct" ? <Check aria-hidden="true" /> : null}
+                        {mark === "correct" ? <Check aria-hidden="true" /> : mark === "wrong" ? <X aria-hidden="true" /> : null}
                         <span>{option}</span>
+                        {mark === "wrong" ? <span className="advent-sr"> — ezt választottad</span> : null}
                       </button>
                     );
                   })}
@@ -281,9 +374,10 @@ export default function AdventCalendar() {
                     </>
                   ) : null}
                 </div>
+                {waiting ? <p className="advent-banner" role="status">{ADVENT_BUSY_WAITING_TEXT}</p> : null}
                 {error ? <p className="advent-banner advent-banner--error" role="alert">{error}</p> : null}
                 {open.result ? (
-                  <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-next" onClick={closeQuestion}>Tovább</button>
+                  <button ref={nextRef} type="button" className="advent-btn advent-btn--primary" data-testid="advent-next" onClick={closeQuestion}>Tovább</button>
                 ) : (
                   <Dialog.Close asChild><button type="button" className="advent-btn advent-btn--ghost">Bezárás</button></Dialog.Close>
                 )}
@@ -297,6 +391,7 @@ export default function AdventCalendar() {
         <Dialog.Portal>
           <Dialog.Overlay className="advent-overlay" />
           <Dialog.Content className="advent-dialog advent-summary" data-testid="advent-summary" data-kind={state.closing.kind} aria-describedby={undefined}>
+            <AdventArt id="advent-frame" className="advent-dialog__frame" decorative />
             <Dialog.Title className="advent-dialog__title">Összesítés</Dialog.Title>
             {state.closing.kind === "gift" ? (
               <>
@@ -309,10 +404,10 @@ export default function AdventCalendar() {
             <ul className="advent-summary__stats">
               <li><strong>{state.summary.solved} / {state.summary.total}</strong> ablak világít ({state.summary.percent}%)</li>
               <li>Elsőre jó: <strong>{state.summary.firstTry} / {state.summary.total}</strong></li>
-              <li>{state.today}{state.firstName ? ` · ${state.firstName}` : ""}{state.grade ? ` · ${state.grade}. osztály` : ""}</li>
+              <li data-testid="advent-summary-date">{adventDateLabel(state.today)}{state.firstName ? ` · ${state.firstName}` : ""}{state.grade ? ` · ${state.grade}. osztály` : ""}</li>
             </ul>
             {state.closing.kind === "repair" && repairTarget ? (
-              <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-repair-from-summary" disabled={busy} onClick={() => { setSummaryOpen(false); void openDoor(repairTarget.day); }}>Javítom</button>
+              <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-repair-from-summary" disabled={busy} onClick={() => { setSummaryOpen(false); void openDoor(repairTarget.day, true); }}>Javítom</button>
             ) : null}
             {state.closing.kind === "new-round" ? (
               <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-new-round" disabled={busy} onClick={() => void newRound()}>Új naptárat kérek</button>
@@ -325,11 +420,16 @@ export default function AdventCalendar() {
   );
 }
 
+function BackHome() {
+  return <Link href="/" className="advent-btn advent-btn--ghost" data-testid="advent-back-home">Vissza a főoldalra</Link>;
+}
+
 function Shell({ children, paused = false, snow = false }: { children: ReactNode; paused?: boolean; snow?: boolean }) {
+  // Csak az éppen látható tájolás háttere kerül a lapra (a rejtett képet a böngésző különben is letöltené — terv 13.3).
+  const landscape = useLandscape();
   return (
     <main className="advent-page" data-testid="advent-page" data-paused={paused ? "true" : "false"}>
-      <AdventArt id="advent-bg-portrait" className="advent-bg advent-bg--portrait" eager decorative />
-      <AdventArt id="advent-bg-landscape" className="advent-bg advent-bg--landscape" eager decorative />
+      <AdventArt id={landscape ? "advent-bg-landscape" : "advent-bg-portrait"} className="advent-bg" eager decorative />
       {snow ? <Snowfall paused={paused} /> : null}
       <div className="advent-content">{children}</div>
     </main>

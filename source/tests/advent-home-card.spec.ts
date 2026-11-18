@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { ADVENT_GIFT_MESSAGE } from "../shared/advent/rules";
 import { clearAdventTime, seedProgress, setAdventTime, shot } from "./support/advent-e2e";
 import { measureOverflow, smallFonts, smallTargets } from "./support/game-mobile-quality";
 
@@ -105,20 +106,66 @@ test.describe("szezon és regresszió", () => {
     await expect(page.locator('#gyakorlo-jatekok a[href*="adventi"]')).toHaveCount(0);
   });
 
-  test("a lista nem ugrik el: a kártya helye a tartalom megérkezése előtt foglalt (A47)", async ({ page }) => {
-    await setAdventTime(page, DEC3);
-    // Lassú szerver: az állapot és a státusz 800 ms-ot késik — a kártya doboza addig is a végleges méretén áll.
-    await page.route("**/api/advent/**", async (route) => { await new Promise((r) => setTimeout(r, 800)); await route.fallback(); });
+  test("kikapcsolt naptár a szezonban: a kártya SOHA nem jelenik meg és a lista nem mozdul — lassú válasznál sem (S4 F1)", async ({ page }) => {
+    // A böngésző órája decembert mutat, a szerver szerint a naptár nem él (nincs tesztidő-fejléc = kikapcsolt flag).
+    await page.clock.setFixedTime(new Date(DEC3));
+    await page.addInitScript(() => {
+      const w = window as unknown as { __adventCardSeen?: boolean };
+      w.__adventCardSeen = false;
+      new MutationObserver(() => { if (document.querySelector('[data-testid="advent-home-card"]')) w.__adventCardSeen = true; })
+        .observe(document.documentElement, { childList: true, subtree: true });
+    });
+    let answered = false;
+    await page.route("**/api/advent/status", async (route) => { await new Promise((r) => setTimeout(r, 900)); answered = true; await route.fallback(); });
     await page.goto("/");
-    await expect(card(page)).toBeVisible();
-    // A szerver még nem válaszolt: a doboz már a helyén van, benne az azonnali felhívás és a gomb.
-    await expect(page.getByTestId("advent-home-status")).toHaveText("Nyisd ki a mai ablakot!");
-    await expect(page.getByTestId("advent-home-cta")).toBeVisible();
-    const early = (await card(page).boundingBox())!;
-    const earlyFilter = await filterTop(page);
-    await expect(page.getByTestId("advent-home-status")).toHaveText(/Ma a 3\. ablak nyílik/, { timeout: 10_000 });
-    const late = (await card(page).boundingBox())!;
-    expect(late.height, "a kártya magassága nem változik a tartalom megérkezésekor").toBe(early.height);
-    expect(await filterTop(page), "a szűrő nem mozdul el").toBe(earlyFilter);
+    await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
+    const early = await filterTop(page);
+    expect(answered, "a mérés a státusz válasza ELŐTT készült").toBe(false);
+    await expect.poll(() => answered, { timeout: 10_000 }).toBe(true);
+    await page.waitForTimeout(300);
+    expect(await filterTop(page), "a lista nem mozdult").toBe(early);
+    await expect(card(page)).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { __adventCardSeen?: boolean }).__adventCardSeen), "a kártya egy pillanatra sem került a lapra").toBe(false);
+  });
+
+  test("élő naptár: első látogatáskor a kártya az állapot UTÁN jelenik meg; visszatérőnél a helye előre foglalt, a lista nem ugrik (A47, S4 F1)", async ({ page }) => {
+    await setAdventTime(page, DEC3);
+    let delay = 900;
+    await page.route("**/api/advent/status", async (route) => { await new Promise((r) => setTimeout(r, delay)); await route.fallback(); });
+    // 1) Első látogatás: amíg a státusz úton van, nincs kártya (gomb sem, amelyre hiába koppintana).
+    await page.goto("/");
+    await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
+    await expect(card(page)).toHaveCount(0);
+    await expect(card(page)).toHaveAttribute("data-state", "ready", { timeout: 10_000 });
+    await expect(page.getByTestId("advent-home-status")).toHaveText(/Ma a 3. ablak nyílik/, { timeout: 10_000 });
+    const ready = (await card(page).boundingBox())!;
+    const readyFilter = await filterTop(page);
+    // 2) Visszatérő látogató: a hely azonnal foglalt (üresen, gomb nélkül), és a tartalom megérkezése semmit nem mozdít.
+    delay = 1500;
+    await page.goto("/");
+    await expect(card(page)).toHaveAttribute("data-state", "reserved");
+    await expect(page.getByTestId("advent-home-cta")).toHaveCount(0);
+    await expect(page.getByTestId("button-filter-all").or(page.getByTestId("home-view-switch")).first()).toBeVisible();
+    const reserved = (await card(page).boundingBox())!;
+    const reservedFilter = await filterTop(page);
+    await expect(card(page)).toHaveAttribute("data-state", "ready", { timeout: 10_000 });
+    expect(reserved.height, "a foglalt hely magassága = a kártya magassága").toBe(ready.height);
+    expect(reservedFilter, "a szűrő a foglalt hely alatt ugyanott van").toBe(readyFilter);
+    expect(await filterTop(page), "a szűrő a tartalom megérkezésekor nem mozdul el").toBe(reservedFilter);
+  });
+
+  test("végigjátszott naptár: a kártya „Megnézem” gombja az összesítést nyitja az ajándék-üzenettel (S3 K3, S4 F2)", async ({ page }) => {
+    const DEC24 = "2026-12-24T10:00:00Z";
+    await setAdventTime(page, DEC24);
+    await page.goto("/adventi-naptar");
+    await expect(page.getByTestId("advent-grade-picker")).toBeVisible();
+    await seedProgress(page, DEC24, { grade: 5, days: Array.from({ length: 24 }, (_, i) => i + 1) });
+    await page.goto("/");
+    await expect(page.getByTestId("advent-home-status")).toHaveText("Végigértél: 24 / 24 ablak világít");
+    await expect(page.getByTestId("advent-home-cta")).toHaveText("Megnézem");
+    await page.getByTestId("advent-home-cta").tap();
+    await expect(page.getByTestId("advent-summary")).toBeVisible();
+    await expect(page.getByTestId("advent-gift-message")).toHaveText(ADVENT_GIFT_MESSAGE);
+    await shot(page, "h-megnezem-osszesites");
   });
 });

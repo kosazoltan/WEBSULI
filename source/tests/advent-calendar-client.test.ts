@@ -7,7 +7,7 @@ import { ADVENT_BUSY_FAILED_TEXT, ADVENT_BUSY_WAIT_MS, adventErrorText, isAdvent
 import { ADVENT_ART } from "../shared/advent/art-manifest";
 import { ADVENT_ART_SPECS, ADVENT_DOOR_MOTIFS, doorArtId } from "../shared/advent/art";
 import type { AdventDoorView, AdventState } from "../shared/advent/contract";
-import { articleFor, daySuffix, nextDoorToOpen } from "../shared/advent/home-card";
+import { adventDateLabel, articleFor, daySuffix, nextDoorToOpen, roundIsOver } from "../shared/advent/home-card";
 import { adventSummary, type DoorState } from "../shared/advent/rules";
 
 /**
@@ -113,4 +113,26 @@ test("429 („most sokan vagyunk”, pl. limit: new-row): egy újrapróba rövid
   assert.deepEqual(log, []);
   assert.equal(adventErrorText(other, "alap"), other.message);
   assert.equal(adventErrorText("valami", "alap"), "alap");
+});
+
+test("a kör vége és az emberi dátum (S3 K3, kicsi leletek)", () => {
+  const closing = (kind: string) => ({ closing: { kind, text: "" } }) as Parameters<typeof roundIsOver>[0];
+  assert.deepEqual(["gift", "new-round", "done"].map((k) => roundIsOver(closing(k))), [true, true, true]);
+  assert.deepEqual(["repair", "progress", "closed", "soon"].map((k) => roundIsOver(closing(k))), [false, false, false, false]);
+  assert.equal(adventDateLabel("2026-12-24"), "2026. december 24.");
+  assert.equal(adventDateLabel("2027-01-06"), "2027. január 6.");
+  assert.equal(adventDateLabel("nem dátum"), "nem dátum");
+});
+
+test("a színváltozók a párbeszédablak gyökerén is élnek — a portál a .advent-page elemen KÍVÜL van (S3 B1)", () => {
+  const css = read("client/src/advent/advent.css");
+  const block = /([^{}]+)\{[^{}]*--advent-gold:/.exec(css);
+  assert.ok(block, "van --advent-gold definíció");
+  const selectors = block![1]!.split(",").map((x) => x.trim().split("\n").pop()!.trim());
+  for (const root of [".advent-page", ".advent-dialog", ".advent-overlay"]) assert.ok(selectors.includes(root), root + " hiányzik a változók gyökerei közül: " + selectors.join(" | "));
+  // Minden használt változónak van definíciója.
+  const used = new Set([...css.matchAll(/var\((--advent-[a-z0-9-]+)/g)].map((m) => m[1]!).filter((name) => name !== "--advent-drift"));
+  for (const name of used) assert.match(css, new RegExp(name + ":"), name + " nincs definiálva");
+  // A párbeszédablakok valóban portálban vannak (ezért kell a fenti).
+  assert.match(read("client/src/pages/AdventCalendar.tsx"), /<Dialog\.Portal>/);
 });

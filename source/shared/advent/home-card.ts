@@ -36,6 +36,19 @@ export function nextDoorToOpen(state: Pick<AdventState, "phase" | "openDay" | "d
   return state.doors.find((d) => d.state === "repairable")?.day ?? null;
 }
 
+/** Véget ért-e a kör (megfelelt, új kör kérhető, vagy nincs több lehetőség): ilyenkor nincs nyitható ablak, az összesítés a cél. */
+export function roundIsOver(state: Pick<AdventState, "closing">): boolean {
+  return state.closing.kind === "gift" || state.closing.kind === "new-round" || state.closing.kind === "done";
+}
+
+const MONTHS = ["január", "február", "március", "április", "május", "június", "július", "augusztus", "szeptember", "október", "november", "december"];
+/** A szerver `YYYY-MM-DD` napja emberi alakban: „2026. december 24.”; ismeretlen alaknál a bemenet marad. */
+export function adventDateLabel(isoDay: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDay);
+  const month = match ? MONTHS[Number(match[2]) - 1] : undefined;
+  return match && month ? `${match[1]}. ${month} ${Number(match[3])}.` : isoDay;
+}
+
 export type HomeCardStatus = { text: string; cta: "Kinyitom" | "Megnézem" | null };
 
 /** A kártya egysoros állapota és gombja; `null` állapotnál (még tölt / hiba) általános felhívás. */
