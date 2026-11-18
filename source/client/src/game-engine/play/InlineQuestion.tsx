@@ -6,6 +6,7 @@ import { correctDataAttrs } from "@/game-engine/game-test-hooks";
 
 import { useGameSettings } from "./gameSettings";
 import { LONG_PROMPT_CHARS, OPTION_MAX_LINES, optionColumns } from "./promptFit";
+import { focusSegments, splitPromptFocus } from "./promptFocus";
 import type { QuestionPresentation } from "./types";
 import WhyButton from "./WhyButton";
 
@@ -72,7 +73,25 @@ export type InlineQuestionProps = {
   keyboard?: boolean;
   /** Alap: portál a `body`-ba. */
   portal?: boolean;
+  /**
+   * Additív, opcionális (Szólétra olvashatóság, docs/specs/2026-11-17-szoletra-olvashatosag.md D): a prompt célrésze
+   * (a kérdés ADATÁBÓL — pl. `VocabQuiz.focus`, `LadderItem.focus`). Ha a prompt tartalmazza, a prompt két sorra bomlik:
+   * kicsi, halvány keretsor (a célrész helyén „…”) + kiemelt célkártya (`<promptTestId>-focus`), a hiány (`___`) kerettel.
+   * Hiányában (minden más játék) a megjelenés változatlan.
+   */
+  promptFocus?: string | null;
 };
+
+/** A célrész, a hiány (`___`) kiemelt helyével. */
+function renderFocus(focus: string) {
+  return focusSegments(focus).map((seg, i) =>
+    seg.blank ? (
+      <span key={i} className="play-question-blank" data-testid="play-question-blank" aria-hidden="true" />
+    ) : (
+      <span key={i}>{seg.text}</span>
+    ),
+  );
+}
 
 const SKIN_ICON: Record<InlineQuestionSkin, LucideIcon> = {
   ocean: Waves,
@@ -125,6 +144,7 @@ export default function InlineQuestion({
   onCollapse,
   keyboard = true,
   portal = true,
+  promptFocus,
 }: InlineQuestionProps) {
   const promptRef = useRef<HTMLParagraphElement>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
@@ -248,6 +268,7 @@ export default function InlineQuestion({
   const secs = Math.ceil(Math.max(0, remainingMs) / 1000);
   const low = !reveal && ratio <= 0.35;
   const longPrompt = quiz.prompt.length > LONG_PROMPT_CHARS;
+  const focusParts = splitPromptFocus(quiz.prompt, promptFocus);
   const showMore = (clamped || expanded) && !reveal;
   // Az előző hiba „Miért?”-je az új kérdés mellett is elérhető marad (a kijelzés vége + 4 mp), külön felirattal.
   const previousWhy = showWhy && (whyFor === "previous" || (whyFor === undefined && !reveal));
@@ -365,15 +386,42 @@ export default function InlineQuestion({
             </button>
           )}
         </div>
-        <p
-          ref={promptRef}
-          className="play-question-prompt"
-          data-testid={promptTestId}
-          data-long={longPrompt ? "true" : "false"}
-          aria-live="polite"
-        >
-          {quiz.prompt}
-        </p>
+        {focusParts ? (
+          <p
+            ref={promptRef}
+            className="play-question-prompt"
+            data-testid={promptTestId}
+            data-long="false"
+            data-focus="true"
+            aria-live="polite"
+          >
+            <span className="sr-only">{quiz.prompt}</span>
+            {focusParts.frame && (
+              <span className="play-question-frame" data-testid={`${promptTestId}-frame`} aria-hidden="true">
+                {focusParts.frame}
+              </span>
+            )}
+            <span
+              className="play-question-focus"
+              data-testid={`${promptTestId}-focus`}
+              data-kind={focusParts.sentence ? "sentence" : "word"}
+              style={{ "--pq-focus-longest": String(Math.max(6, focusParts.longest)) } as CSSProperties}
+              aria-hidden="true"
+            >
+              {renderFocus(focusParts.focus)}
+            </span>
+          </p>
+        ) : (
+          <p
+            ref={promptRef}
+            className="play-question-prompt"
+            data-testid={promptTestId}
+            data-long={longPrompt ? "true" : "false"}
+            aria-live="polite"
+          >
+            {quiz.prompt}
+          </p>
+        )}
         <div className="play-question-foot">
           <p className="play-question-status" data-testid="play-question-status" role="status" aria-live="polite" data-tone={tone || undefined}>
             {status && (tone === "good" ? <Check aria-hidden="true" /> : <span className="play-question-status-dot" aria-hidden="true">!</span>)}

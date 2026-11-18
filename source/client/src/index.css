@@ -530,6 +530,26 @@
   /* Fekvő nézetben a 2 sornál hosszabb gombfelirat kisebb betűt kap (álló nézetben egy oszlopra vált: data-cols). */
   .play-question[data-option-fit="1"] .play-question-option { font-size: 15px; }
   .play-question[data-expanded="true"] .play-question-prompt { display: block; -webkit-line-clamp: unset; line-clamp: none; max-height: 30vh; overflow: auto; }
+  /* Szólétra olvashatóság (docs/specs/2026-11-17-szoletra-olvashatosag.md D) — CSAK `promptFocus` mellett (data-focus):
+     keretsor (≥ 16 px, a törzsszöveggel azonos erős szín — a feladat típusa / zárójeles adata a megoldáshoz kell) + világos
+     célkártya sötét, ≥ 1,6× betűvel; a betű a kártya szélességéhez és a leghosszabb szóhoz igazodik (container query), szó
+     közepén csak akkor tör, ha egy szó a legkisebb betűvel sem fér ki. A játék a rendelkezésre álló magassághoz kicsinyíthet. */
+  .play-question-prompt[data-focus="true"] {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px; container-type: inline-size;
+    -webkit-line-clamp: unset; line-clamp: none; overflow: visible; text-shadow: none;
+  }
+  .play-question-frame { font-size: 16px; font-weight: 800; line-height: 1.3; color: #f8fafc; overflow-wrap: anywhere; }
+  .play-question-focus {
+    display: block; max-width: 100%; box-sizing: border-box; padding: 6px 12px; border-radius: 12px;
+    background: #fff7e6; color: #1c1206; border: 2px solid var(--pq-accent);
+    font-size: clamp(26px, calc((100cqi - 28px) / (var(--pq-focus-longest, 8) * 0.62)), 32px); font-weight: 900; line-height: 1.2;
+    overflow-wrap: break-word; word-break: normal; hyphens: manual; box-shadow: 0 4px 14px #0006;
+  }
+  .play-question-focus[data-kind="sentence"] { font-size: clamp(26px, calc((100cqi - 28px) / (var(--pq-focus-longest, 8) * 0.62)), 28px); }
+  .play-question-blank {
+    display: inline-block; width: 2.4em; height: 1em; margin: 0 .12em; vertical-align: -0.12em; border-radius: 6px;
+    background: #fed7aa; border: 3px solid #ea580c; box-sizing: border-box;
+  }
   .play-question-more {
     flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
     min-height: var(--game-touch-min); min-width: var(--game-touch-min); padding: 0 10px;
