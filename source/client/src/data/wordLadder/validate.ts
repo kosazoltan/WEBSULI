@@ -7,6 +7,11 @@ import {
   type WordLadderLanguage,
 } from "./types";
 
+/** Magyar feladat-utasítás (nem célszó): „Melyik …”, „Mit mondasz …”, „Egészítsd ki …”, „… helyes mondat”. */
+const FOCUS_INSTRUCTION = /(^|[\s„])(Melyik|Mit mondasz|Mit kérdezel|Mit válaszolsz|Hogyan mondod|Egészítsd ki|helyes mondat)/u;
+/** Célnyelvi kérdő mondat kezdete (angol / német / francia): az ilyen célrész a záró „?”-lel együtt teljes. */
+const FOCUS_QUESTION_START = /^(What|What's|Where|Where's|When|Who|Whose|Why|How|Could|Can|Would|Will|Shall|Should|May|Do|Does|Did|Is|Are|Was|Were|Have|Has|Wie|Was|Wo|Wann|Warum|Wer|Kannst|Können|Haben|Hast|Bist|Ist|Sind|Gibt|Möchten|Qu'est-ce|Quel|Quelle|Comment|Où|Quand|Pourquoi|Qui|Est-ce|As-tu|Peux-tu|Pouvez-vous|Combien)(?![\p{L}'])/u;
+
 /**
  * Egy nyelv Szólétra-bankjának minden szerkezeti hibája (spec 2026-09-29-palyak-szoletra-nyelvek, 5. döntés).
  * `[]` = megfelel. A tartalmi helyességet (pontosan egy igaz opció) ezen felül a vak megoldó ellenőrzi.
@@ -42,6 +47,22 @@ export function ladderBankProblems(items: readonly LadderItem[], lang: WordLadde
     if (!keyWords.some((w) => whyLower.includes(w))) problems.push(`${at}: a magyarázat nem említi a helyes választ („${item.options[item.correctIndex]}”)`);
     if (/(?:^|[^\p{L}])(első|második|harmadik|negyedik)\s+(válasz|opció|lehetőség)|(?:^|[^\p{L}])[ABCD]\)/u.test(why)) {
       problems.push(`${at}: a magyarázat sorrendre hivatkozik`);
+    }
+    // Célrész (docs/specs/2026-11-17-szoletra-olvashatosag.md D): a kérdés-sáv ezt emeli ki — a prompt rész-szövege.
+    const blank = /_{3,}/u.test(item.prompt);
+    // A kettőspont utáni rész: ha az maga a feladat-utasítás (helyzetleírás + „Melyik a helyes …?”), nincs célszó.
+    const afterColon = item.prompt.includes(": ") ? item.prompt.slice(item.prompt.indexOf(": ") + 2) : "";
+    if (item.focus !== undefined) {
+      if (item.focus.trim().length === 0) problems.push(`${at}: üres célrész (focus)`);
+      else if (!item.prompt.includes(item.focus)) problems.push(`${at}: a célrész (focus) nem rész-szövege a promptnak`);
+      else if (blank && !/_{3,}/u.test(item.focus)) problems.push(`${at}: hiányos mondatnál a célrész tartalmazza a hiányt`);
+      else if (FOCUS_INSTRUCTION.test(item.focus) && !item.prompt.includes(`„${item.focus}”`)) {
+        problems.push(`${at}: a célrész feladat-utasítást tartalmaz (a célrész a kérdezett szó / mondat, nem az utasítás)`);
+      } else if (item.prompt.endsWith(`${item.focus}?`) && (/_{3,}/u.test(item.focus) || FOCUS_QUESTION_START.test(item.focus))) {
+        problems.push(`${at}: a kérdő mondat záró „?”-e a célrésszel marad (nem a keretsorba)`);
+      }
+    } else if (item.prompt.includes("„") || (/: \S/u.test(item.prompt) && !FOCUS_INSTRUCTION.test(afterColon))) {
+      problems.push(`${at}: hiányzik a célrész (focus) — idézőjeles / kettőspontos kérdés`);
     }
   }
   if (checkMinimums) {

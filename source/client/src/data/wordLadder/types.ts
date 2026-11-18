@@ -26,7 +26,12 @@ export const LADDER_CATEGORIES: readonly LadderCategory[] = ["word", "topic", "p
 /** 0 = A1 könnyű … 4 = B2 (a `LADDER_TIER_LABELS` sorrendje). */
 export type LadderTier = 0 | 1 | 2 | 3 | 4;
 
-export type LadderItem = FourChoiceQuiz & { tier: LadderTier; category: LadderCategory };
+/**
+ * `focus` (opcionális): a prompt célrésze — a kérdezett szó / kifejezés / hiányos mondat, a prompt rész-szövege (a
+ * kérdés-sáv ezt emeli ki: docs/specs/2026-11-17-szoletra-olvashatosag.md D). Helyzetleírós kérdésnél nincs.
+ * Őr: `T/word-ladder-validate.test.ts`.
+ */
+export type LadderItem = FourChoiceQuiz & { tier: LadderTier; category: LadderCategory; focus?: string };
 
 /** Nyelvenként kötelező minimumok (5. döntés). */
 export const LADDER_TIER_MINIMUMS: Record<LadderTier, number> = { 0: 124, 1: 122, 2: 94, 3: 64, 4: 64 };

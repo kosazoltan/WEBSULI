@@ -1,5 +1,6 @@
 import { isPlayableQuestion, uniqueQuizContent } from "@shared/game-quiz-contract";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 /**
  * Tananyag-alapú kvíz-tételek lekérése a játékos osztályának legutóbbi N
@@ -35,6 +36,20 @@ export type MaterialQuizResponse = {
   items: MaterialQuizItem[];
 };
 
+/** Stabil üres értékek: betöltés alatt se kapjon a hívó renderenként új `[]`-t (a `useMemo`-függőségei ettől stabilak). */
+const EMPTY_ITEMS = Object.freeze([]) as unknown as MaterialQuizItem[];
+const EMPTY_MATERIALS = Object.freeze([]) as unknown as MaterialQuizResponse["materials"];
+
+/**
+ * A játszható, tartalomra egyedi tételek (opcionálisan egy topicra szűrve). Tiszta függvény: a hook csak
+ * memoizálja, a teszt a régi képlettel veti össze (`tests/material-quizzes-hook-memo.test.ts`).
+ */
+export function selectPlayableMaterialItems(items: MaterialQuizItem[], topicFilter?: MaterialQuizTopic): MaterialQuizItem[] {
+  const playable = uniqueQuizContent(items.filter(isPlayableQuestion));
+  if (!topicFilter) return playable;
+  return playable.filter((i) => (i.topic ?? "").toLowerCase() === topicFilter);
+}
+
 export function useMaterialQuizzes(grade: number | null, topicFilter?: MaterialQuizTopic, lessonId?: string | null) {
   const q = useQuery<MaterialQuizResponse>({
     queryKey: ["/api/games/material-quizzes", grade ?? "none", lessonId ?? "recent"],
@@ -49,17 +64,20 @@ export function useMaterialQuizzes(grade: number | null, topicFilter?: MaterialQ
     },
   });
 
-  const filteredItems: MaterialQuizItem[] = (() => {
-    const items = uniqueQuizContent((q.data?.items ?? []).filter(isPlayableQuestion));
-    if (!topicFilter) return items;
-    return items.filter((i) => (i.topic ?? "").toLowerCase() === topicFilter);
-  })();
+  // Kanban #90 (Kockavadász-akadás gyökéroka): a szűrt tömb csak adat- vagy topicFilter-váltáskor új. Korábban minden
+  // renderben új tömb jött, ezért a lapok erre épülő memói (a Kockavadász 25 144 tételes kérdésbank-szűrése) minden
+  // renderben újrafutottak (a CPU 87%-a, spec: docs/specs/2026-11-17-kerdesbank-hook-memo.md).
+  const data = q.data;
+  const items = useMemo(
+    () => (data ? selectPlayableMaterialItems(data.items ?? EMPTY_ITEMS, topicFilter) : EMPTY_ITEMS),
+    [data, topicFilter],
+  );
 
   return {
-    grade: q.data?.classroom ?? grade ?? 0,
-    materials: q.data?.materials ?? [],
-    items: filteredItems,
-    rawItems: q.data?.items ?? [],
+    grade: data?.classroom ?? grade ?? 0,
+    materials: data?.materials ?? EMPTY_MATERIALS,
+    items,
+    rawItems: data?.items ?? EMPTY_ITEMS,
     isLoading: q.isLoading,
     isError: q.isError,
   };
