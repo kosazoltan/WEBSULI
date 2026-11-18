@@ -502,11 +502,11 @@ export function createAsteroidWorld(opts: { seed: number | string; grade?: numbe
 type SimQuestion = { id: number; correctOption: number; windowMs: number; optionCount: number };
 
 /** Seedelt, évfolyamtól független bank a sim-hez (≥ 300 különböző tétel): az ütemezést és az ismétlést méri. */
-function simProvider(seed: number, material: readonly FourChoiceQuiz[] = []): QuestionProvider {
+function simProvider(seed: number, material: readonly FourChoiceQuiz[] = [], coupon = false): QuestionProvider {
   let cursor = 0;
   const rng = createRng(seedFrom(ASTEROID_GAME_ID, seed, "simbank"));
   return {
-    couponOnly: false,
+    couponOnly: coupon,
     material: () => (cursor < material.length ? materialPlayQuestion(material[cursor++]!) : null),
     fresh: () => {
       const a = 3 + rng.int(12);
@@ -549,10 +549,10 @@ export type AsteroidSim = {
   world: AsteroidWorld;
 };
 
-export function createSimGame(opts: { seed: number; grade: number; questions: boolean; material?: readonly FourChoiceQuiz[] }): AsteroidSim {
+export function createSimGame(opts: { seed: number; grade: number; questions: boolean; material?: readonly FourChoiceQuiz[]; /** kupon (lecke-jutalom) mód: csak a lecke tételei jöhetnek */ coupon?: boolean }): AsteroidSim {
   const director = createQuestionDirector({
     config: asteroidDirectorConfig(opts.grade),
-    provider: simProvider(opts.seed, opts.material),
+    provider: simProvider(opts.seed, opts.material, opts.coupon === true),
     review: createReviewQueue(null),
     rng: createRng(seedFrom(ASTEROID_GAME_ID, opts.seed, "q")),
     startBand: 0.4,

@@ -347,3 +347,17 @@ test("review #486 Ú1 — a kérdés-sáv a pálya érkezési sűrűségét nem 
   const sig = (w: number) => waveSpawnInterval(w, 0);
   assert.ok(sig(8) < sig(1), "a hullámmal sűrűsödik");
 });
+
+test("önellenőrző (b) — kupon (lecke-jutalom) módban 3 tételes leckével sem fogy el a kérdés: a lecke kimerülése után a legrégebben feltett tétel jön újra", () => {
+  const lesson = [1, 2, 3].map((n) => ({ id: `lesson-${n}`, prompt: `Lecke ${n}?`, options: ["a", "b", "c", "d"], correctIndex: 0 }));
+  for (const seed of simSeeds(GAME, 8)) {
+    const sim = createSimGame({ seed, grade: 7, questions: true, material: lesson, coupon: true });
+    runSim(() => sim as never, SIM_AVERAGE, { seed, seconds: 240, grade: 7 });
+    const keys = sim.askedKeys();
+    const st = sim.stats();
+    assert.ok(keys.length > lesson.length, `seed ${seed}: csak ${keys.length} kérdés (a lecke elfogyott)`);
+    assert.ok(keys.every((k) => k.startsWith("mat:lesson-")), `seed ${seed}: kupon módban csak lecke-tétel jöhet`);
+    assert.ok(st.maxGapSec <= 25, `seed ${seed}: ${st.maxGapSec} s kérdés nélküli szakasz`);
+    assert.ok(st.perMinute >= 3, `seed ${seed}: ${st.perMinute} kérdés/perc`);
+  }
+});
