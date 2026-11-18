@@ -17,7 +17,7 @@ export type LightGraphicsEnv = {
   memoryGb: number | null;
 };
 
-/** Az ESZKÖZ képessége dönt, egyszer, betöltéskor — nem az ablak mérete és nem a mutató fajtája. */
+/** Egyszer, betöltéskor dől el: csak érintős, telefon-méretű eszközön (`touchDevice`), és ott az eszköz képessége dönt — nem az ablak mérete. */
 export function isLightGraphicsFrom(env: LightGraphicsEnv): boolean {
   // Review F2: a „low” szint egy ≤ 4 magos asztali gépet is jelent — ott a nagy monitoron a plafon látható felbontásvesztés
   // lenne. A plafon ezért csak érintős, telefon-méretű eszközön hat.
