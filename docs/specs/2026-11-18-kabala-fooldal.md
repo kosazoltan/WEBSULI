@@ -42,9 +42,9 @@ A főoldal ma NEM tölt be 3D-motort: a `three.module-*.js` külön darab, csak 
 
 | Szempont | (A) előre renderelt képkocka-lap (WebP) | (B) lusta WebGL-nézet a GLB-vel | (C) vegyes |
 | --- | --- | --- | --- |
-| Átvitt méret | **mért prototípus:** 59 képkocka, 128×200 px-es cella, WebP q72: **260,3 KB**; 102×160: 201,5 KB; 152×240: 312,3 KB. A végleges, 44 képkockás lap a 4.3 szerint ≈ 200 KB (őr: ≤ 300 KB a képekre) | `three.module` 189,3 KB gzip (732,8 KB nyersen) + GLB 244,7 KB (gzip-pel is 189,3 KB) + `GLTFLoader` ≈ 25,2 KB gzip + `DRACOLoader` 5,6 KB + Draco-dekóder (`draco_decoder.wasm` 63,5 KB gzip + burkoló 11,7 KB) = **≈ 485–540 KB** | (A) + (B) összege az interakció után |
+| Átvitt méret | **mért prototípus:** 59 képkocka, 128×200 px-es cella, WebP q72: **260,3 KB**; 102×160: 201,5 KB; 152×240: 312,3 KB. **a végleges lap** (az új, magasabb modellből, 44 képkocka, 130×216 px-es cella, q70): **240,2 KB** + álló kép 8,2 KB = 248,4 KB (őr: ≤ 300 KB a képekre); 146×240 px-es cellával 282,3 KB volt | `three.module` 189,3 KB gzip (732,8 KB nyersen) + GLB 244,7 KB (gzip-pel is 189,3 KB) + `GLTFLoader` ≈ 25,2 KB gzip + `DRACOLoader` 5,6 KB + Draco-dekóder (`draco_decoder.wasm` 63,5 KB gzip + burkoló 11,7 KB) = **≈ 485–540 KB** | (A) + (B) összege az interakció után |
 | A 350 KB-os keret | belefér | **nem fér bele** (a motor egymaga a keret 54%-a) | az alap belefér, az interakció után nem |
-| Dekódolás / memória | egy kép dekódolása; a kibontott lap 1024×1280 px ≈ 5,0 MiB (szélesség × magasság × 4) | 733 KB JS értelmezése + WASM-dekóder + WebGL-környezet + a figura 26 380 háromszöge, csontozás képkockánként | mindkettő |
+| Dekódolás / memória | egy kép dekódolása; a kibontott lap 1040×1296 px ≈ 5,1 MiB (szélesség × magasság × 4) | 733 KB JS értelmezése + WASM-dekóder + WebGL-környezet + a figura 26 380 háromszöge, csontozás képkockánként | mindkettő |
 | Futás közbeni teher | `transform`-animáció a kompozitoron (nincs képkockánkénti JS, nincs újrafestés) | folyamatos WebGL-rajzolás (`requestAnimationFrame`), GPU-terhelés → telefonon melegedés / akkumulátor (NEM MÉRT készüléken) | mint (B), amíg a 3D él |
 | Képminőség | a Blender saját renderje (lágy fények, élsimítás) — szebb, mint amit a three.js alapfényei adnak (`docs/kabala-maki.md`: „a three.js-ben a kép nem azonos a Blender-renderrel”) | élő, bármilyen szögből; a fényeket külön hangolni kell | — |
 | Rugalmasság | rögzített nézőpont; mozdulatonként 3–12 képkocka; új mozdulat = új sor a gyártó szkriptben + újrafuttatás; tükrözés CSS-ből (két irány egy képsorból) | bármennyi mozdulat és irány, keverés, forgatás | mint (B) |
@@ -100,7 +100,9 @@ tulajdonosi döntéssel bővíthető (több képkocka = több KB).
   használja.
 - A `cheer` függőleges elmozdulását és a szökkenés ívét NEM a képkockák, hanem a lap animációja adja (a manifest `lift` értékeiből):
   kisebb cella, sima ív.
-- A lap keretei (őr-teszt): képek összesen ≤ 300 KB, a lap kibontva ≤ 8 MiB, cella ≥ 2 × a telefonos megjelenítési méret magassága.
+- A lap keretei (őr-teszt): képek összesen ≤ 300 KB, a lap kibontva ≤ 8 MiB, cella ≥ 1,5 × a telefonos megjelenítési magasság
+  (140 px → a mostani 216 px-es cella 1,54×; a 2×-es, 280 px-es cella ≈ 340 KB lenne — a 10. szakasz 1. kérdése).
+- A gyártó hibával megáll, ha a figura a renderelt kép szélét éri (pl. hosszabb farok az új modellen) vagy a képek túllépik a keretet.
 
 ### 4.4 Megjelenítés
 
@@ -113,7 +115,7 @@ tulajdonosi döntéssel bővíthető (több képkocka = több KB).
 
 ### 4.5 Viselkedés
 
-Állapotok (a `HomeMascot` állapotgépe; a tiszta átmenetek a `client/src/lib/home-mascot.ts`-ben, egységteszttel):
+Állapotok (a `HomeMascot` állapotgépe; a tiszta átmenetek a `client/src/mascot/mascot-script.ts`-ben, egységteszttel):
 
 1. **Belépés:** a maki integet (`wave`), buborék: köszönés (első látogatás és visszatérő látogató külön mondatkészlet).
 2. **Ajánlás (i):** ha más sorhoz kell mennie, odaszökken (`hop` + ív, ≈ 0,5 mp), rámutat (`point-in`, majd `point` ismétlődve), a sor
@@ -130,7 +132,7 @@ Nem idegesítő: a sáv a dokumentumfolyamban áll (semmit nem takar, nem úszik
 zsugorodik; az üdvözlő kártya hármas listája visszatér). A választást és azt, hogy a látogató járt-e már itt, az eszköz jegyzi meg
 (`localStorage`, kulcs: `websuli:home-mascot`, alak: `{"v":1,"mode":"on"|"quiet"|"hidden","seen":<szám>}`; sérült érték = alapállapot).
 
-Feliratok: `MASCOT_PHRASES` kódszótár (`client/src/lib/home-mascot.ts`), magyarul, csoportonként több változat (köszönés,
+Feliratok: `MASCOT_PHRASES` kódszótár (`client/src/mascot/mascot-script.ts` — a lusta darab része, a fő JS-darabot nem növeli), magyarul, csoportonként több változat (köszönés,
 visszatérő köszönés, ajánlás `{title}` helyőrzővel, záró, pihenő, egyetlen tananyag); a választás determinisztikus (nap + sorszám),
 egymás után kétszer ugyanaz a mondat nem jön. A buborékban a cím legfeljebb 60 karakter (utána „…”); a teljes cím a sorban olvasható.
 
@@ -148,17 +150,18 @@ beszúrási ponton van — a két ág összefésülése két független sor a `U
 ┌ A maki ajánlja ─────────────────────────────────────┐
 │ ╭ buborék (3 sor helye) ───────────╮ [Csend] [✕]    │   72 px
 │ ╰──╮───────────────────────────────╯                │
-│  maki   ┌ 1. tananyag: kép · évfolyam · cím · → ┐   │   sor: 60 px (telefon) / 64 px (≥ 640 px)
+│  maki   ┌ 1. tananyag: kép · évfolyam · cím · → ┐   │   sor: 68 px
 │ (a sorok┌ 2. tananyag ─────────────────────────┐    │
 │  mellett┌ 3. tananyag ─────────────────────────┐    │
 └─────────────────────────────────────────────────────┘
 ```
 
-- A maki a bal oszlopban áll (telefon: 76 × 120 px, oszlop 84 px; ≥ 640 px: 96 × 150 px, oszlop 108 px), a sorok tőle jobbra; az
-  ajánlott sor magasságába szökken, és jobbra, a sorra mutat. A sorok a hüvelykujjnak teljes szélességű, ≥ 60 px magas célok.
-- Rögzített magasság (a hely előre foglalt, tananyagszám szerint): telefon 298 / 232 / 226 px (3 / 2 / 1 tananyag), ≥ 640 px:
-  322 / 250 / 248 px; bezárva 44 px.
-- 360 × 640-en a sáv a képernyő kevesebb mint felét foglalja; ismert névnél az üdvözlő kártya hármas listája (≈ 240 px) kiesik, így
+- A maki a bal oszlopban áll (telefon: 84 × 140 px, oszlop 88 px; ≥ 640 px: 102 × 170 px, oszlop 112 px), a sorok tőle jobbra; az
+  ajánlott sor magasságába szökken, és jobbra, a sorra mutat. A sorok a hüvelykujjnak teljes szélességű, 68 px magas célok
+  (a cím két sorban olvasható).
+- Rögzített magasság (a hely előre foglalt, tananyagszám szerint): telefon 324 / 250 / 248 px (3 / 2 / 1 tananyag), ≥ 640 px:
+  336 / 286 / 286 px; bezárva 44 px. Levezetés: `client/src/mascot/home-mascot.css` fejléce; egységteszt köti a kettőt össze.
+- 360 × 640-en a sáv a képernyő felét foglalja (324 px); ismert névnél az üdvözlő kártya hármas listája (≈ 240 px) kiesik, így
   a lista nagyjából ugyanott kezdődik, mint ma.
 
 ### 4.7 Akadálymentesség

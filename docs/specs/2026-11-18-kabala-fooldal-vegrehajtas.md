@@ -24,8 +24,8 @@ Fájlok:
   `point-in` (3), `point` (4, ismétlődik), `hop` (5). Kimenet: `<out>/<klip>-<nn>.png`, `<out>/frames.json`
   (`size`, `pxPerMeter`, `clips[{name, frames[], fps, loop, lift[]}]`).
 - `source/scripts/blender/kabala-fooldal/build.mjs` — Node-szkript: Blender indítása (`BLENDER_BIN` vagy `blender`), ideiglenes
-  mappa (`os.tmpdir()`), közös kivágás (alfa > 8, 3 px ráhagyás), cella = `CELL_H` (200) magas, páros szélesség, 8 oszlop;
-  `sharp` WebP (`quality 72`, `alphaQuality 90`, `effort 6`); álló kép = az `idle` első képkockája 2× telefonos méretben;
+  mappa (`os.tmpdir()`), közös kivágás (alfa > 8, 3 px ráhagyás), cella = `CELL_H` (216) magas, páros szélesség, 8 oszlop;
+  `sharp` WebP (`quality 70`, `alphaQuality 88`, `effort 6`); álló kép = az `idle` első képkockája cellaméretben;
   fájlnév = `kabala-fooldal.<sha256 első 8>.webp`, `kabala-fooldal-allo.<…>.webp` a `source/client/public/mascot/` alatt (a régi
   hash-ű fájlok törlése); manifest: `source/client/src/mascot/home-mascot.manifest.json` (időbélyeg nélkül, sorvég `\n`).
   Kapcsolók: `--keep-frames <mappa>` (a PNG-k megtartása ellenőrzéshez), `--frames <mappa>` (meglévő képkockákból, Blender nélkül).
@@ -41,9 +41,11 @@ Ellenőrzés: egy sötét hátterű áttekintő kép a képkockákról (`--conta
 - `source/server/vite.ts`: éles ág — bekapcsolva az `index.html` szövege egyszer beolvasva és megjelölve; `GET /` és `/index.html` az
   `express.static` ELŐTT, valamint az SPA-ág ezt adja; kikapcsolva a kód útja változatlan. Fejlesztői ág: a `transformIndexHtml`
   eredményére ugyanez. `/mascot` statikus kiszolgálás `immutable`, 1 év (mint a `/design-thumbs`).
-- `source/client/src/lib/home-mascot.ts`: `homeMascotEnabled(doc)`, `mascotPicks(files, grade, now)`, `mascotHref(file)`,
-  `MASCOT_PHRASES`, `pickPhrase(group, seed, previous)`, `fillPhrase(text, title)`, `parseMascotPrefs`, `serializeMascotPrefs`,
-  `MASCOT_PREFS_KEY`, `nextStep(state, event)` (állapotgép: `enter → present(i) → … → rest`), `MASCOT_BOX_CLASS`.
+- `source/client/src/lib/home-mascot.ts` (a fő JS-darabban — kicsi): `homeMascotEnabled(doc)`, `mascotPicks(files, grade, now)`,
+  `parseMascotPrefs`, `serializeMascotPrefs`, `MASCOT_PREFS_KEY`, `MASCOT_BOX_CLASS`.
+- `source/client/src/mascot/mascot-script.ts` (a lusta darabban): `mascotHref(file)`, `MASCOT_PHRASES`,
+  `pickPhrase(group, seed, previous)`, `fillPhrase(text, title)`, `nextStep(state, event, ctx)` (állapotgép:
+  `enter → present(i) → … → cheer → rest`), `phraseGroupFor`.
 - Tesztek: `source/tests/home-mascot.test.ts`, `source/tests/home-mascot-flag.test.ts`.
 
 Parancs: `node --import tsx --test tests/home-mascot.test.ts tests/home-mascot-flag.test.ts` (a `source` mappában) → minden zöld.

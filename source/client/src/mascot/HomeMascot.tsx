@@ -2,10 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { ArrowRight, Pause, Play, X } from "lucide-react";
 import { getClassroomLabel } from "@shared/classrooms";
 import { coverIdFor } from "@shared/home-card-theme";
+import type { MascotMode } from "@/lib/home-mascot";
 import {
   MASCOT_DWELL_MS, daySeed, fillPhrase, mascotHref, nextStep, phraseGroupFor, pickPhrase, stepIndex,
-  type MascotEvent, type MascotMode, type MascotStep,
-} from "@/lib/home-mascot";
+  type MascotEvent, type MascotStep,
+} from "./mascot-script";
 import { createSpritePlayer, sheetRows, type SpritePlayer } from "./sprite-player";
 import manifest from "./home-mascot.manifest.json";
 import "./home-mascot.css";
@@ -251,6 +252,8 @@ export default function HomeMascot<T extends MascotFile>({ picks, isNew, returni
             ref={makiRef}
             type="button"
             className="hm-maki"
+            // a sorok a figurától jobbra állnak; "left" értéknél a CSS tükrözi a képsort (balra mutat)
+            data-facing="right"
             style={{ transform: `translateY(${top}px)` }}
             aria-label="Következő ajánlat"
             onClick={onTap}

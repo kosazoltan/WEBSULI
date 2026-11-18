@@ -113,11 +113,20 @@ export function serveStatic(app: Express) {
   // (új kép = új fájlnév); a hiányzó fájl 404, nem a SPA index.html-je.
   app.use("/design-thumbs", express.static(path.resolve(distPath, "design-thumbs"), { immutable: true, maxAge: "1y", fallthrough: false }));
   // Főoldali kabala (docs/specs/2026-11-18-kabala-fooldal.md): a képkocka-lap tartalom-hash nevű → immutable, egyéves gyorsítótár.
-  app.use("/mascot", express.static(path.resolve(distPath, "mascot"), { immutable: true, maxAge: "1y", fallthrough: false }));
+  // A fejlécet itt kell kimondani: a globális gyorsítótár-szabály (server/index.ts) a .webp-re „no-store”-t tesz, és az
+  // express.static a már beállított Cache-Control-t nem írja felül.
+  app.use("/mascot", express.static(path.resolve(distPath, "mascot"), {
+    fallthrough: false,
+    setHeaders: (res) => {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      res.removeHeader("Pragma");
+      res.removeHeader("Expires");
+    },
+  }));
   // A `HOME_MASCOT` kapcsoló (alapból KI) bekapcsolva az index.html-be egy meta-sort tesz — a kliens így ÚJ kérés nélkül tudja.
   // Kikapcsolva `flaggedIndex` null, és a kiszolgálás a régi úton megy (az index.html bájtra változatlan).
   const flaggedIndex = homeMascotOn() ? withHomeMascotFlag(fs.readFileSync(path.resolve(distPath, "index.html"), "utf-8")) : null;
-  const sendFlaggedIndex = (res: express.Response) => res.status(200).set({ "Content-Type": "text/html; charset=UTF-8", "Cache-Control": "public, max-age=0" }).send(flaggedIndex);
+  const sendFlaggedIndex = (res: express.Response) => res.status(200).type("html").send(flaggedIndex); // a gyorsítótár-fejléc a globális szabályé (server/index.ts), mint a fájlból kiszolgált index.html-nél
   if (flaggedIndex) app.get(["/", "/index.html"], (_req, res) => { sendFlaggedIndex(res); });
   app.use(express.static(distPath));
 

@@ -1,8 +1,8 @@
 /*
  * A Websuli makija a főoldalon (terv: docs/specs/2026-11-18-kabala-fooldal.md, 4.6). A lusta darabbal együtt töltődik be; a sáv
  * magasságát a fő darab foglalja le (MASCOT_BOX_CLASS, client/src/lib/home-mascot.ts) — az itteni méretek összege azzal egyezik:
- *   telefon:   12 + 72 + 10 + max(140, n·68 + (n−1)·6) + 12  →  246 (n = 1) / 248 (n = 2) / 322 (n = 3)
- *   ≥ 640 px:  16 + 72 + 10 + max(170, n·68 + (n−1)·8) + 16  →  284 (n ≤ 2) / 334 (n = 3)
+ *   telefon:   2 (a panel szegélye) + 12 + 72 + 10 + max(140, n·68 + (n−1)·6) + 12  →  248 (n = 1) / 250 (n = 2) / 324 (n = 3)
+ *   ≥ 640 px:  2 (a panel szegélye) + 16 + 72 + 10 + max(170, n·68 + (n−1)·8) + 16  →  286 (n ≤ 2) / 336 (n = 3)
  */
 .hm-root {
   --hm-h: 140px;
@@ -68,6 +68,11 @@
   color: #ffffff;
   transition: background-color 160ms ease;
 }
+/* széles képernyőn a buborék nem nyúlik végig: a szöveg a maki fölött marad, a gombok a jobb szélen */
+@media (min-width: 640px) {
+  .hm-bubble { flex: 0 1 460px; }
+  .hm-bubble + .hm-btn { margin-left: auto; }
+}
 .hm-btn:hover { background: rgba(255, 255, 255, 0.16); }
 .hm-btn[aria-pressed="true"] { background: rgba(253, 230, 138, 0.22); border-color: rgba(253, 230, 138, 0.6); }
 .hm-btn:focus-visible, .hm-maki:focus-visible { outline: 3px solid #fde68a; outline-offset: 2px; }
@@ -103,6 +108,8 @@
 }
 .hm-lift, .hm-cell { position: absolute; inset: 0; display: block; }
 .hm-cell { overflow: hidden; }
+/* balra mutatás: ugyanaz a képsor tükrözve (a mostani elrendezés a jobbra mutatást használja) */
+.hm-maki[data-facing="left"] .hm-cell { transform: scaleX(-1); }
 /* lágy fényudvar: a figura sötét részei (farokgyűrűk, lábfej) a sötét panelen is kirajzolódnak */
 .hm-lift::before {
   content: "";
@@ -122,4 +129,10 @@
   border-color: #fde68a;
   background: rgba(253, 230, 138, 0.16);
   box-shadow: 0 0 0 2px rgba(253, 230, 138, 0.5);
+}
+/* keskeny telefonon a cím kapja a helyet: kisebb bélyegkép, a nyíl elmarad (a teljes sor a koppintási cél) */
+@media (max-width: 419px) {
+  .hm-pick { gap: 8px; }
+  .hm-pick .welcome-pick-thumb { width: 40px; height: 40px; }
+  .hm-pick > svg { display: none; }
 }
