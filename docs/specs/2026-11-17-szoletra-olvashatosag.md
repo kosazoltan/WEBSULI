@@ -125,6 +125,12 @@ Mérőszkript: a scratchpad `measure.mts` (a valódi angol kézi bank + a közpo
   van, ezért a menet-XP-t a fal-szorzóval normáljuk (helyes válaszonként `xpForCorrect × 1 / wallFactor`, a győzelmi
   jutalom változatlan) — így a nyugodt mód nem „büntetés” a ranglistán. **DÖNTÉS (tulajdonos):** (1, ajánlott) így marad;
   (2) a ranglista tempónként külön; (3) nincs normálás (a gyors tempó menetenként több XP-t ad).
+- **TULAJDONOSI DÖNTÉS (2026-11-18):** a lassabb („Nyugodt”) tempón is UGYANANNYI XP jár. A kód ezt a MENET szintjén
+  teljesíti: a teljes falnyi helyes fogás XP-je tempótól függetlenül ~ ugyanannyi (a helyes válasz XP-je × 1 / fal-szorzó:
+  Nyugodt ×1,82, Normál ×1,33, Gyors ×1; teszt: `T/word-ladder-pacing.test.ts` „B/C”; a független ellenőr mérése szerint
+  őszinte játéknál a menet-XP Nyugodton −10…−15% a Gyorshoz képest, szándékos nyújtással +32–36%). Nyitott értelmezési
+  kérdés: ha a döntés KÉRDÉSENKÉNT azonos XP-t jelent (nem menetenként), akkor a szorzót el kell hagyni — ekkor viszont a
+  rövidebb nyugodt falon a menet-XP ~45%-kal kevesebb (a terv C (3) változata).
 
 ### D — Kiemelt célszó (adatból)
 
