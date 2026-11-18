@@ -94,3 +94,25 @@ képcsere), #155 (S5, S6, S8), #156 (ágak rebase-e a friss mainre push előtt).
   pontosan 9 jut be, 30 kap 429-et) — a keret határát továbbra is párhuzamos kérések támadják.
 - **Felülírt szám a terv eredeti helyén (U3):** a tulajdonosi döntés először csak új szakaszba került. **Tanulság:** felülírt
   értéket a HELYÉN kell jelölni (dátum + hivatkozás), nem csak a döntési szakaszban.
+
+## 8. Kiegészítés — felület (S3, S4) és a kibocsátás átszervezése (2026-11-18)
+
+- **Szelet tesztje a következő szelet fájlját olvasta.** Az S3 ág `gate:push` futása megfogta: a tiszta logika tesztje az S4
+  kártyafájlját és a képgyártó ág `prompts.json` fájlját is olvasta. Ár: egy kapufutás (~7 perc) és a két ág újraépítése.
+  **Javítás:** a teszt kettévált (`source/tests/advent-calendar-client.test.ts`, `source/tests/advent-home-card.test.ts`); a
+  készlet-leíró egyezésének tesztje az S3c-be kerül (kanban #161). **Tanulság:** szelet-ágon a kaput a SZELET fáján kell futtatni,
+  nem az integrációs ágon — ott minden fájl megvan, és a hiány nem látszik.
+- **Félig áttűnt képernyőkép és mérés.** A 300 ms-os megnyíló animáció közben készült kép alig látszott, a méret-mérés pedig a
+  kicsinyített gombot mérte (46 px a 48 helyett). **Javítás:** `source/tests/support/advent-e2e.ts` `settle()` — a véges animációk
+  végét megvárja mérés és kép előtt.
+- **`aria-disabled` gomb és a Playwright.** A zárt ablak koppintása a „engedélyezett” várakozáson akadt el. **Javítás:** a tesztben
+  `tap({ force: true })` — a gyerek valóban rákoppinthat, a felület ilyenkor megmondja, mikor nyílik.
+- **E2E, Secure süti és az Origin.** Az `X-Forwarded-Proto: https` minden kérésre téve a lapot is elrontotta; csak az API-kérésekre
+  téve az Origin-ellenőrzés bukott. **Javítás:** `proxyHeaders()` — csak a teszt API-kérésein, https-re igazított Originnel (a bevett
+  minta szerint). Ár: három teljes böngészős futás (~8 perc).
+- **429 a gyereknek (M1).** A betelt keret nyers üzenete helyett rövid várakozás, egy automatikus újrapróba és barátságos szöveg:
+  `source/client/src/advent/busy.ts`, egység- és böngészőteszttel.
+- **Hét egymásra épülő ág helyett három PR.** A CI böngészős köre ~90 perc, a squash-merge minden ráépülő ágon ütközést okoz.
+  **Javítás:** a három ág a friss főágról épült fel fájlkészletek szerint, a tartalmi egyezést `git diff` igazolja. **Tanulság:**
+  hosszú CI mellett a szeleteket eleve 2–3 PR-ra érdemes tervezni, a kis szelet a commit, nem a PR.
+- Kanban: #161 (készlet-leíró egyezésének tesztje az S3c-ben), #162 (az eltűnt kérdés és a zárt ablak üzenete látható is legyen).
