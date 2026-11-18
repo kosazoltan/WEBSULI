@@ -4,7 +4,7 @@ import test from "node:test";
 import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank/index";
 import { buildAdventPlan, findAdventItem, normalizePrompt, subjectOf, type ChristmasItem } from "../shared/advent/assignment";
 import { CHRISTMAS_ITEMS } from "../shared/advent/christmasBank/index";
-import { christmasItemsNeeded, validateChristmasBank } from "../shared/advent/christmas-validate";
+import { christmasBankWarnings, christmasItemsNeeded, longestCorrectItems, validateChristmasBank } from "../shared/advent/christmas-validate";
 import { ADVENT_CHRISTMAS_DAYS, limitsForGrade } from "../shared/advent/rules";
 
 /**
@@ -26,7 +26,7 @@ test("a szükséges tételszám: 1–2. évfolyam 144 (24 ablak × 3 × 2 kör),
 
 test("a valódi készlet átmegy a validátoron (A33)", () => {
   assert.deepEqual(validateChristmasBank(CHRISTMAS_ITEMS, GRADE_QUIZ_ITEMS.map((q) => q.prompt)), []);
-  assert.ok(CHRISTMAS_ITEMS.length >= 288, `tételek: ${CHRISTMAS_ITEMS.length}`);
+  assert.ok(CHRISTMAS_ITEMS.length >= 300, `tételek: ${CHRISTMAS_ITEMS.length}`);
   for (let grade = 1; grade <= 12; grade++) {
     const have = CHRISTMAS_ITEMS.filter((c) => c.minGrade <= grade && grade <= c.maxGrade).length;
     assert.ok(have >= christmasItemsNeeded(grade), `${grade}. évfolyam: ${have}`);
@@ -85,4 +85,19 @@ test("tapintat és forma: nincs márkanév, a kérdés kérdőjelre vagy idézet
     assert.doesNotMatch(text, /coca|disney|lego|milka|kinder|nestl|amazon|netflix/i, `${item.id}: márkanév`);
     assert.match(item.prompt.trim(), /[?”…"]$/, `${item.id}: a kérdés vége`);
   }
+});
+
+test("tartalék: minden évfolyamon legalább 6 tétellel a minimum fölött (egy törölt tétel ne buktassa a készletet)", () => {
+  for (let grade = 1; grade <= 12; grade++) {
+    const have = CHRISTMAS_ITEMS.filter((c) => c.minGrade <= grade && grade <= c.maxGrade).length;
+    assert.ok(have >= christmasItemsNeeded(grade) + 6, `${grade}. évfolyam: ${have} tétel, kell ${christmasItemsNeeded(grade) + 6}`);
+  }
+});
+
+test("válaszhossz: a figyelmeztetés működik, és a valódi készletre nem szól (a helyes válasz nem feltűnően a leghosszabb)", () => {
+  const skewed = Array.from({ length: 20 }, (_, i) => good({ id: `xmas-${String(i + 1).padStart(3, "0")}`, prompt: `Kérdés ${i + 1}?`, options: ["Ez itt a nagyon hosszú helyes válasz", "rövid", "kurta", "pici"], correctIndex: 0 }));
+  assert.equal(longestCorrectItems(skewed).length, 20);
+  assert.match(christmasBankWarnings(skewed)[0] ?? "", /1–4\. évfolyam: a helyes válasz 20 \/ 20 tételben a leghosszabb/);
+  assert.deepEqual(christmasBankWarnings([good({ options: ["Decemberben", "Szeptemberben", "Júliusban", "Októberben"] })]), []);
+  assert.deepEqual(christmasBankWarnings(CHRISTMAS_ITEMS), []);
 });

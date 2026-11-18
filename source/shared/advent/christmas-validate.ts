@@ -65,3 +65,36 @@ export function validateChristmasBank(items: readonly ChristmasItem[], gradeBank
   }
   return errors;
 }
+
+/** E fölött figyelmeztetünk: a helyes válasz ilyen arányban a (szigorúan) leghosszabb a négy közül (véletlenül 25% lenne). */
+export const LONGEST_CORRECT_WARN_SHARE = 0.3;
+
+/** Azok a tételek, amelyekben a helyes válasz szigorúan hosszabb mind a három rossznál. */
+export function longestCorrectItems(items: readonly ChristmasItem[]): ChristmasItem[] {
+  return items.filter((item) => {
+    const correct = item.options[item.correctIndex]?.length ?? 0;
+    return item.options.every((option, index) => index === item.correctIndex || option.length < correct);
+  });
+}
+
+/**
+ * Figyelmeztetések (nem hibák): ha a helyes válasz feltűnően gyakran a leghosszabb, a gyerek a hosszból is kitalálhatja.
+ * Sávonként (a tétel alsó évfolyama szerint: 1–4., 5–8., 9–12.) számol.
+ */
+export function christmasBankWarnings(items: readonly ChristmasItem[]): string[] {
+  const bands: Array<[string, (item: ChristmasItem) => boolean]> = [
+    ["1–4. évfolyam", (item) => item.minGrade <= 4],
+    ["5–8. évfolyam", (item) => item.minGrade >= 5 && item.minGrade <= 8],
+    ["9–12. évfolyam", (item) => item.minGrade >= 9],
+  ];
+  const warnings: string[] = [];
+  for (const [name, inBand] of bands) {
+    const band = items.filter(inBand);
+    if (band.length === 0) continue;
+    const longest = longestCorrectItems(band).length;
+    if (longest / band.length > LONGEST_CORRECT_WARN_SHARE) {
+      warnings.push(`${name}: a helyes válasz ${longest} / ${band.length} tételben a leghosszabb (${Math.round((100 * longest) / band.length)}%, a küszöb ${Math.round(100 * LONGEST_CORRECT_WARN_SHARE)}%)`);
+    }
+  }
+  return warnings;
+}
