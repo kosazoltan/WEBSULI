@@ -93,3 +93,17 @@ test("R2 / K2: a 7 napos korhatár az UTOLSÓ VÁLASZHOZ mér — a régen megny
   // El nem indított kör (0) továbbra sem „régi”.
   assert.equal(roundTooOld(roundActivityAt({ startedAt: 0 }), now), false);
 });
+
+test("R10: legacyResultBody — a végleges beküldés régi alakja az új mezők nélkül; pillanatképre és új mező nélküli törzsre nincs", async () => {
+  const { legacyResultBody } = await import("../shared/result-compat");
+  const quiz = { kind: "quiz", roundId: "round-a", picks: { q1: 0, q2: -1 }, fingerprint: "fp", learner: "tok", startedAt: 1, lastAnsweredAt: 2 };
+  assert.deepEqual(legacyResultBody(quiz), { kind: "quiz", roundId: "round-a", picks: { q1: 0, q2: -1 }, fingerprint: "fp", learner: "tok" });
+  const tasks = { kind: "tasks", roundId: "round-b", answers: { t1: "x" }, startedAt: 1 };
+  assert.deepEqual(legacyResultBody(tasks), { kind: "tasks", roundId: "round-b", answers: { t1: "x" } });
+  // A pillanatkép nem lép vissza: a régi szerver a `partial` nélküli törzset VÉGLEGES beküldésnek venné.
+  assert.equal(legacyResultBody({ ...quiz, partial: true }), null);
+  // Új mező nélkül nincs mit elhagyni: a 400 valódi hiba, nincs ismétlés.
+  assert.equal(legacyResultBody({ kind: "quiz", roundId: "round-a", picks: { q1: 0 } }), null);
+  // A bemenet nem módosul.
+  assert.equal(quiz.startedAt, 1);
+});

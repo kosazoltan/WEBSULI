@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
-import rateLimit, { MemoryStore } from "express-rate-limit";
-import { clientIpKey, clientIpKeyGenerator } from "./lib/client-ip";
+import { clientIpKey } from "./lib/client-ip";
+import { partialLimiter, resultLimiter } from "./lesson-result-limits";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
@@ -181,16 +181,8 @@ async function learnerName(userId: string | undefined): Promise<string> {
   return name || "Bejelentkezett tanuló";
 }
 
-const isPartialRequest = (req: Request) => (req.body as { partial?: unknown } | undefined)?.partial === true;
-export const resultLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." },
-  // S1b: a pillanatképek saját keretet kapnak — a végleges beküldés kerete nem fogyhat el miattuk.
-  skip: isPartialRequest });
-// Review K1: kisebb keret a pillanatképekre (egy tanuló jogos forgalma ennél jóval kevesebb: háttérbe kerülésenként egy, csak új válasszal).
-const partialLimiterStore = new MemoryStore();
-/** Teszthez: a pillanatkép-keret számlálóinak nullázása (az integrációs tesztek egy címről sok pillanatképet küldenek). */
-export function resetPartialLimiter(): void { void partialLimiterStore.resetAll(); }
-export const partialLimiter = rateLimit({ store: partialLimiterStore, keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." },
-  skip: req => !isPartialRequest(req) });
+// R9 (tulajdonosi döntés, 2026-11-18): a keretek egy helyen, `server/lesson-result-limits.ts` (egy osztályra méretezve, 60 / 15 perc / IP).
+export { RESULT_RATE_LIMIT, partialLimiter, resetPartialLimiter, resultLimiter } from "./lesson-result-limits";
 
 /**
  * Spec 2026-11-17-eredmeny-email-kviz (S1b): a FÉLBEHAGYOTT helyi kvíz. A kliens a lap háttérbe kerülésekor a kör pillanatképét küldi; itt

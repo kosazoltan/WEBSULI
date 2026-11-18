@@ -488,3 +488,61 @@ test("S6: a feladatoknál a teljes kitöltés a „Feladatok kiértékelése” 
   const { results } = await seen();
   expect(results.filter(r => r.kind === "tasks").map(r => r.keepalive), "a feladatok törzse meghaladhatja a keepalive keretét").toEqual([false]);
 });
+
+/**
+ * Terv R10 — telepítési sorrend: a kliens (Vercel) a szerver (Render) előtt települhet. A „régi szerver” csonk a főág szigorú sémáját
+ * utánozza: az új mezőket (`startedAt`, `lastAnsweredAt`, `partial`) tartalmazó törzset 400-zal utasítja el, a régi alakot elfogadja.
+ */
+async function mockOldServer(page: Page) {
+  const state = { rejected: [] as Array<Record<string, unknown>>, accepted: [] as Array<Record<string, unknown>> };
+  await mockWith(page);
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (["startedAt", "lastAnsweredAt", "partial"].some(field => field in body)) { state.rejected.push(body); return route.fulfill({ status: 400, json: { message: "Érvénytelen beküldés." } }); }
+    state.accepted.push(body);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  return state;
+}
+
+test("R10: „régi szerver” mellett a kvíz végleges kérése sikerül (400 után egy ismétlés az új mezők nélkül); a pillanatkép NEM alakul végleges beküldéssé", async ({ page }) => {
+  const old = await mockOldServer(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 3; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await hide(page);
+  await expect.poll(() => old.rejected.length, { message: "a pillanatkép a régi szerverhez ért (és elutasította)" }).toBe(1);
+  await page.waitForTimeout(800);
+  expect(old.accepted, "a pillanatkép nem ment át végleges (partial nélküli) alakban").toHaveLength(0);
+  for (let i = 3; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => old.accepted.length, { message: "a végleges kvíz az új mezők nélkül elfogadva" }).toBe(1);
+  const accepted = old.accepted[0];
+  expect(accepted.kind).toBe("quiz");
+  expect(accepted).not.toHaveProperty("startedAt");
+  expect(accepted).not.toHaveProperty("lastAnsweredAt");
+  expect(accepted).not.toHaveProperty("partial");
+  expect(Object.values(accepted.picks as Record<string, number>).filter(pick => pick >= 0)).toHaveLength(25);
+  expect(old.rejected.filter(body => body.partial !== true), "a végleges kérés első (új mezős) kísérlete").toHaveLength(1);
+  await page.waitForTimeout(1000);
+  expect(old.accepted, "pontosan egy végleges kérés ment át").toHaveLength(1);
+  await page.reload();
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  await page.waitForTimeout(1200);
+  expect(old.accepted, "a sikeres visszalépés után a kör elküldöttként rögzült").toHaveLength(1);
+});
+
+test("R10: „régi szerver” mellett a feladatok végleges kérése is sikerül az új mezők nélkül", async ({ page }) => {
+  const old = await mockOldServer(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/preview/quiz-fixture");
+  await page.getByRole("tab", { name: "Feladatok", exact: true }).click();
+  const answers = page.locator("[data-task-id] textarea");
+  await expect(answers).toHaveCount(15);
+  for (let i = 0; i < 15; i++) await answers.nth(i).fill(`válasz ${i + 1}`);
+  await page.getByRole("button", { name: "Feladatok kiértékelése" }).click();
+  await expect.poll(() => old.accepted.filter(body => body.kind === "tasks").length).toBe(1);
+  expect(old.accepted[0]).not.toHaveProperty("startedAt");
+  expect(Object.keys(old.accepted[0].answers as object)).toHaveLength(15);
+  expect(old.rejected.filter(body => body.kind === "tasks"), "az első kísérlet új mezővel ment").toHaveLength(1);
+});

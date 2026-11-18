@@ -521,15 +521,17 @@ test("PR #510: a várakozó pillanatkép a KÜLDÉS ELŐTT is ellenőrzi, hogy a
   } finally { clearPendingPartials(); setPartialDelay(previous); }
 });
 
-test("review K1: a pillanatkép-keret 10 / 15 perc / cím — a 11. pillanatkép 429, a végleges beküldés kerete ettől független", async () => {
-  const { setPartialDelay, clearPendingPartials, resetPartialLimiter } = await import("../server/lesson-result-email");
+// Terv R9 (tulajdonosi döntés, 2026-11-18: „Egy osztályra méretezve”): a korábbi 10-es keret 60-ra módosult — a teszt a konstanst követi.
+test("review K1 + R9: a pillanatkép-keret 60 / 15 perc / cím — a 61. pillanatkép 429, a végleges beküldés kerete ettől független", async () => {
+  const { setPartialDelay, clearPendingPartials, resetPartialLimiter, RESULT_RATE_LIMIT } = await import("../server/lesson-result-email");
   const previous = setPartialDelay(60_000);
   resetPartialLimiter();
   const q = lesson.experience!.quiz.slice(0, 5);
   const picks = (answered: number) => Object.fromEntries(q.map((item, i) => [item.id, i < answered ? item.correctIndex : -1]));
   const post = (body: object) => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   try {
-    for (let i = 1; i <= 10; i++) assert.equal((await post({ kind: "quiz", roundId: "round-limit", picks: picks(2), partial: true, fingerprint: "fp-limit" })).status, 202, `${i}. pillanatkép`);
+    assert.equal(RESULT_RATE_LIMIT.partial, 60);
+    for (let i = 1; i <= 60; i++) assert.equal((await post({ kind: "quiz", roundId: "round-limit", picks: picks(2), partial: true, fingerprint: "fp-limit" })).status, 202, `${i}. pillanatkép`);
     assert.equal((await post({ kind: "quiz", roundId: "round-limit", picks: picks(3), partial: true, fingerprint: "fp-limit" })).status, 429);
     const before = sent.length;
     assert.equal((await post({ kind: "quiz", roundId: "round-limit", picks: picks(5), fingerprint: "fp-limit" })).status, 202, "a végleges beküldés átmegy");

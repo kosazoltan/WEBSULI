@@ -3,6 +3,7 @@ import { apiRequest, sendKeepalive, warmCsrfToken } from "@/lib/queryClient";
 import { getFingerprint, peekFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
 import { answeredCount, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
+import { legacyResultBody } from "@shared/result-compat";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -49,8 +50,17 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         // és 5xx-nél legfeljebb 3 újrapróbálás (növekvő várakozással). Biztonságos: a szerver a kört egyedi kulccsal egyszer rögzíti.
         // R8: a kvíz végleges kérése `keepalive` — az utolsó válasz utáni azonnali lapbezárás ne szakítsa meg. A feladatoké nem: a
         // törzsük (60 válasz × 4000 karakter) meghaladhatja a `keepalive` 64 KB-os keretét, és akkor a böngésző el sem indítaná.
-        if (kind === "quiz") await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES, keepalive: true });
-        else await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES });
+        try {
+          if (kind === "quiz") await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES, keepalive: true });
+          else await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES });
+        } catch (error) {
+          // R10 — telepítési sorrend: a kliens (Vercel) a szerver (Render) előtt települhet, és a régi szerver szigorú sémája az új mezőket
+          // (`startedAt`, `lastAnsweredAt`) 400-zal utasítja el. Ilyenkor EGY ismétlés a régi kliens alakjával (a levél dátumsor nélkül
+          // megy, de megy). Más hiba, illetve új mező nélküli törzs: nincs ismétlés.
+          const legacy = legacyResultBody(body);
+          if ((error as { status?: unknown } | null)?.status !== 400 || !legacy) throw error;
+          await apiRequest("POST", `/api/lessons/${lessonId}/results`, legacy, { retries: RESULT_REPORT_RETRIES, ...(kind === "quiz" ? { keepalive: true } : {}) });
+        }
         try {
           localStorage.setItem(flag, "1");
           // A véglegesített körnek nincs több pillanatképe: a „részleges” jelzője nem marad a tárolóban.
