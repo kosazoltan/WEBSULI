@@ -11,8 +11,9 @@
  * w ≥ 1), x jobbra, y LEFELÉ nő. A pixelre váltás (`× unitPx`) a nézet dolga.
  *
  * IDŐ: a `step(dtMs)` a VILÁG ideje — a meghajtó fix lépésű hurka (`createFixedLoop`) lépteti; a kérdés alatti lassítás
- * (`slowMo` 0,6) a hurok szorzója (KSZ-4). A menet 90 mp-es órája a meghajtó LASSÍTATLAN kérdés-órája: a kérdés alatt is jár
- * (terv 5.5 — a régi „álló óra” megszűnt), szünetben és a „Miért?” alatt áll.
+ * (`slowMo` 0,6) a hurok szorzója (KSZ-4). A kérdés-óra a meghajtó LASSÍTATLAN órája (a kérdés határideje ezen fut); a menet
+ * 90 mp-es órája külön: csak akkor halad, ha nincs nyitott kérdés és nincs szünet (tulajdonosi döntés 2026-11-17, „Álljon
+ * meg” — terv 2026-11-17-brainrot-valaszido D5), így a menet vége nem szakít félbe kérdést.
  *
  * JÁTÉK (terv 5.5, J5a):
  *  - A vadász joystickkal (vagy a táblára bökve / húzva) fut; a lények pattogva sodródnak (`stepBrainRot`), és ha a vadász
@@ -1087,6 +1088,8 @@ export function createBrainRotDriver(opts: {
   // A rázás-zaj kozmetikai (KSZ-2: külön fxRng); a hitstop determinisztikus (a hurok tartása).
   const feel = createFeel({ reducedMotion: opts.reducedMotion ?? false, loop, fxRng: createRng(seedFrom(BRAIN_ROT_GAME_ID, opts.seed, "fx")).next });
   let clock = 0;
+  /** A menet órája (D5): nyitott kérdés és szünet alatt áll. */
+  let roundClock = 0;
   let real = 0;
 
   // KSZ-5: az ürítő függvény egyszer jön létre; a képkockánkénti visszahívás egy változóba kerül (nincs új closure).
@@ -1138,10 +1141,14 @@ export function createBrainRotDriver(opts: {
     frame(realDtMs, paused, onEvent) {
       const dt = Number.isFinite(realDtMs) && realDtMs > 0 ? realDtMs : 0;
       real += dt;
-      if (!paused) clock += dt;
-      feel.update(paused ? 0 : dt);
       const q = opts.questions;
-      if (core.running() && clock >= ROUND_MS) core.end();
+      if (!paused) {
+        clock += dt;
+        // D5: a menet-óra áll, amíg a kérdés nyitva van (az előjelzés alatt is) — a menet vége nem esik nyitott kérdésre.
+        if (!(q && q.active())) roundClock += dt;
+      }
+      feel.update(paused ? 0 : dt);
+      if (core.running() && roundClock >= ROUND_MS) core.end();
       if (q && !core.running() && !q.finished()) q.finish();
       if (q && !paused) q.frame(clock, { calm: true, tick: false });
       loop.setTimeScale(paused ? 0 : q ? q.timeScale() : 1);
@@ -1153,6 +1160,6 @@ export function createBrainRotDriver(opts: {
     resolve,
     drain,
     clockMs: () => clock,
-    remainingMs: () => Math.max(0, ROUND_MS - clock),
+    remainingMs: () => Math.max(0, ROUND_MS - roundClock),
   };
 }

@@ -19,8 +19,17 @@ const factory = (extra: Record<string, unknown> = {}): SimGameFactory => (o) => 
 
 const avg = runSimSeeds(factory(), SIM_AVERAGE, { gameId: GAME, seconds: 180 });
 
-test("a menet a 90 mp-es valós órával ér véget (a kérdés alatt is jár)", () => {
-  for (const r of avg) assert.ok(Math.abs(r.durationSec - ROUND_MS / 1000) < 0.05, `${r.durationSec} mp`);
+// SPEC-VÁLTOZÁS 2026-11-17 (terv 2026-11-17-brainrot-valaszido D5): a menet-óra a nyitott kérdés alatt áll, így a menet
+// kérdés-óra szerinti hossza = 90 mp + a nyitott kérdések ideje (régi elvárás: pontosan 90 mp).
+test("a menet a 90 mp-es menet-órával ér véget; a kérdések ideje ezen felül (D5)", () => {
+  for (const r of avg) {
+    assert.ok(r.durationSec >= ROUND_MS / 1000 - 0.05, `${r.durationSec} mp`);
+    assert.ok(r.durationSec > ROUND_MS / 1000 + 5, `a kérdések ideje hozzáadódik: ${r.durationSec} mp`);
+  }
+  const g = createSimGame({ seed: 4, grade: 7, questions: true });
+  runSim(() => g, SIM_AVERAGE, { seed: 4, seconds: 400 });
+  assert.equal(g.done(), true);
+  assert.equal(g.driver.remainingMs(), 0, "a menet-óra lefutott");
 });
 
 test("J2: kérdés/perc (SIM_AVERAGE, 20 seed medián) ≥ 8 — minden elkapás egy ketrec-kérdés", () => {
