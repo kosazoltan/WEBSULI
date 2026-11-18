@@ -23,6 +23,7 @@ import { correctionPromptLines, type SourceCorrection } from "./source-correctio
 import { blindSolutionsPromptBlock, type BlindSolutions } from "./blind-solver";
 import { canonicalJson } from "../lib/canonical-hash";
 import { SECTION_ROLE_HEADING } from "../../shared/lesson-ui-text";
+import { SOURCE_VISUAL_SKIP_REASONS, type SourceVisual } from "../../shared/source-visuals";
 
 /**
  * LS-2c — schemas, validators and prompt builders for the model-driven steps.
@@ -67,6 +68,9 @@ export function dropClampedKeyPhrases<O extends { sections: Array<{ keyPhrases?:
   }) };
 }
 
+/** Fejezetenként legfeljebb ennyi forrás-vizuális tétel rendelhető (S1b). */
+export const OUTLINE_SOURCE_VISUAL_IDS = 12;
+
 export const outlineSectionSchema = z.object({
   heading: z.string().trim().min(1).max(255),
   /** Every core + ≥90% supporting concept id must appear across sections. */
@@ -89,6 +93,11 @@ export const outlineSectionSchema = z.object({
     .optional(),
   /** U3 (C14): a tanári pontjegyzék ide rendelt, igazolt pontjai (azonosítók); a szerző ezeket mondja ki. */
   instructionPointIds: z.array(z.string().trim().min(1).max(64)).max(40).optional(),
+  /**
+   * Spec 2026-11-18-tananyag-gyartas-minoseg (S1b): a fejezethez rendelt forrás-vizuális tételek azonosítói. Engedékeny alak (a nem
+   * létező azonosítót az `outline-autofix` törli, a többletet a séma vágja) — formai hiba nem indít fizetős javítókört.
+   */
+  sourceVisualIds: z.array(z.string()).transform((a) => a.slice(0, OUTLINE_SOURCE_VISUAL_IDS)).optional(),
 });
 
 export type OutlineSection = z.infer<typeof outlineSectionSchema>;
@@ -110,6 +119,11 @@ export const outlineSchema = z.object({
     .default([]),
   /** Spec 2026-09-20: a tervező által elfogadott vizuális világ (a runner javasolja, a modell megerősíti/cseréli). */
   visual: z.object({ world: z.enum(VISUAL_WORLD_IDS) }).optional(),
+  /**
+   * Spec 2026-11-18 (SK1): a tervező által kifejezetten kihagyott forrás-vizuális tételek. Az okot és a szabályt a forrás-fedettségi
+   * kapu ítéli meg (`gates/source-coverage-gate.ts`) — itt csak az alak él; a nem létező azonosítójút az `outline-autofix` törli.
+   */
+  skippedVisuals: z.array(z.object({ id: z.string(), reason: z.string(), duplicateOf: z.string().optional() })).transform((a) => a.slice(0, 60)).optional(),
 });
 
 export type LessonOutline = z.infer<typeof outlineSchema>;
@@ -274,14 +288,53 @@ export type PromptMap = {
   subject: string;
   classroom: number;
   concepts: MapConcept[];
+  /** Spec 2026-11-18 (S1b): a forrás vizuális leltára a térképről — külön blokkban megy a promptba (`sourceVisualsBlock`). */
+  visuals?: SourceVisual[];
 };
+
+export type SourceVisualsRole = "pedagogue" | "author" | "animator" | "lektor";
+const SOURCE_VISUALS_RULES: Record<SourceVisualsRole, string[]> = {
+  pedagogue: [
+    "Minden megjelenítendő tételt rendelj fejezethez a fejezet `sourceVisualIds` mezőjében (a tétel `id`-jével); a `colorCode` tételt a hozzá tartozó táblák / kártyák tónusaként vidd tovább (önállóan nem kell fejezethez rendelni).",
+    `Kihagyni csak ezekkel az okokkal lehet; minden más tételt rendelj fejezethez: a terv \`skippedVisuals\` mezőjében { "id", "reason", "duplicateOf"? }, ahol a reason: ${SOURCE_VISUAL_SKIP_REASONS.join(" | ")} (admin_meta = iskolai adminisztráció, forrásjegyzék; answer_key = megoldókulcs; duplicate = a \`duplicateOf\` mezőben megnevezett, megjelenő tétel ismétlése; decorative = csak díszítő kép, fogalom-hivatkozás nélkül). Fogalomra hivatkozó tétel csak duplicate okkal hagyható ki; a kihagyás a tételek legfeljebb 30%-a. A szabályt a program ellenőrzi.`,
+  ],
+  author: [
+    "A leltár tétele tanítható tartalom: amit egy tétel táblázatként, lépésként vagy dobozként hordoz, azt ne old fel hosszú bekezdésben.",
+    "Ha egy example / try / check blokk a leltár egy tételét (pl. a forrás feladatát) jeleníti meg, töltsd ki a blokk `sourceVisualId` mezőjét a tétel `id`-jével; a vázlat `sourceVisualIds` mezője mutatja, melyik tétel melyik fejezethez tartozik.",
+  ],
+  animator: [
+    "Ha egy ábra a leltár egy tételét jeleníti meg, a tétel adataiból dolgozz, és töltsd ki az ábra `sourceVisualId` mezőjét a tétel `id`-jével.",
+  ],
+  lektor: [
+    "Jelezd, ha a lecke a leltár egy tételének ellentmond.",
+  ],
+};
+
+/**
+ * Spec 2026-11-18-tananyag-gyartas-minoseg (S1b): a forrás vizuális leltára a promptban — tömör JSON, a program belső `verified` mezője
+ * nélkül, a szerep szabálymondataival. Leltár nélkül ÜRES (a prompt bájtra változatlan). `missingIds` (lektor): a leckében a program
+ * mérése szerint nem megjelenő tételek — tájékoztatás, a hiányt a program kapuja kezeli (SK1).
+ */
+export function sourceVisualsBlock(map: Pick<PromptMap, "visuals">, role: SourceVisualsRole, missingIds: ReadonlyArray<string> = []): string[] {
+  const visuals = map.visuals ?? [];
+  if (!visuals.length) return [];
+  return [
+    "",
+    "A FORRÁS VIZUÁLIS LELTÁRA (adat; oldalszámmal igazolt, tanítható tartalom):",
+    JSON.stringify(visuals.map(({ verified: _verified, ...item }) => item)),
+    ...SOURCE_VISUALS_RULES[role],
+    ...(role === "lektor" && missingIds.length ? [`A program mérése szerint a leckében NEM jelenik meg (tájékoztatás — a hiányt a program kapuja kezeli, önmagában nem blokkoló jegyzet): ${missingIds.join(", ")}.`] : []),
+  ];
+}
 
 function mapJson(map: PromptMap): string {
   // #179: the model must only ever see localId — MapConcept.id is the km_concepts UUID
   // (added for the quiz-export FK, #178); serialising it made the model use UUIDs as
   // conceptIds and coverage collapsed to 0% in production.
+  // S1b: a leltár NEM része a térkép-JSON-nak (a fogalmak alakja marad) — külön blokk viszi (`sourceVisualsBlock`).
+  const { visuals: _visuals, ...rest } = map;
   return JSON.stringify(
-    { ...map, concepts: map.concepts.map((c) => ({ localId: c.localId, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.examWeight })) },
+    { ...rest, concepts: map.concepts.map((c) => ({ localId: c.localId, term: c.term, definition: c.definition, quote: c.quote, examWeight: c.examWeight })) },
     null,
     2,
   );
@@ -299,12 +352,12 @@ export function visualPlanningLines(world: VisualWorld): string[] {
 
 /** Pedagógus: vázlat a kurált térképből. A teljes térkép bemegy — szó szerint. */
 /** A tervező kimeneti alakja; a pontjegyzékes futás fejezetenként `instructionPointIds`-t is kér (U3). */
-function outlineShape(visual: boolean, inventory: boolean): string {
+function outlineShape(visual: boolean, inventory: boolean, sourceVisuals = false): string {
   const section = visual
     ? '"heading": string, "emoji": string, "keyPhrases": string[], "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[]'
     : '"heading": string, "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[]';
-  const withPoints = inventory ? `${section}, "instructionPointIds": string[]` : section;
-  return `{ "sections": [{ ${withPoints} }], "misconceptions": [{ "conceptId": string, "text": string }]${visual ? ', "visual": { "world": string }' : ""} }`;
+  const withPoints = `${inventory ? `${section}, "instructionPointIds": string[]` : section}${sourceVisuals ? ', "sourceVisualIds": string[]' : ""}`;
+  return `{ "sections": [{ ${withPoints} }], "misconceptions": [{ "conceptId": string, "text": string }]${visual ? ', "visual": { "world": string }' : ""}${sourceVisuals ? ', "skippedVisuals": [{ "id": string, "reason": string, "duplicateOf"?: string }]' : ""} }`;
 }
 export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner?: OwnerContext): string {
   return [
@@ -358,10 +411,11 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     // U3 (C14): az igazolt pontokat a tervező rendeli fejezethez — a szerző csak ezeket mondja ki, a kapu azonosítónként méri.
     ...(owner?.inventory ? ["PONTJEGYZÉK → FEJEZET: minden IGAZOLT pontot pontosan egy fejezet `instructionPointIds` mezőjébe tegyél (azonosítóval); a nem igazolt pontot ne tervezd be. Igazolt pont fejezet nélkül = hiányos terv.", ""] : []),
     "A válasz CSAK JSON legyen, a következő alakban:",
-    outlineShape(Boolean(visual), Boolean(owner?.inventory)),
+    outlineShape(Boolean(visual), Boolean(owner?.inventory), Boolean(map.visuals?.length)),
     "",
     "Fogalomtérkép:",
     mapJson(map),
+    ...sourceVisualsBlock(map, "pedagogue"),
   ].join("\n");
 }
 
@@ -555,6 +609,7 @@ export function buildAuthorPrompt(
     "",
     "Fogalomtérkép:",
     mapJson(map),
+    ...sourceVisualsBlock(map, "author"),
   );
 
   return parts.join("\n");
@@ -593,7 +648,7 @@ export function buildLektorGradingEvidence(lesson: Lesson): string {
     "A program pontozási mérése (adat):\n" + JSON.stringify(evidence);
 }
 
-export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = [], owner?: OwnerContext, blind?: BlindSolutions, verifiedPaths?: ReadonlySet<string>, catalogPaths?: ReadonlySet<string>): string {
+export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlockers: Array<{ kind: string; subkind?: string; message: string; blockPath?: string }> = [], owner?: OwnerContext, blind?: BlindSolutions, verifiedPaths?: ReadonlySet<string>, catalogPaths?: ReadonlySet<string>, missingVisualIds: ReadonlyArray<string> = []): string {
   return [
     // U5 (C5/H8): a szerző mérhető szerződése EGYSZER (a minőségi szerződést a runbook adja; a közös módszer-szerződés itt nem ismétlődik).
     TEACHING_CONTRACT,
@@ -652,6 +707,7 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     "",
     "Concept map:",
     mapJson(map),
+    ...sourceVisualsBlock(map, "lektor", missingVisualIds),
     buildLektorGradingEvidence(lesson),
   ].join("\n");
 }
@@ -702,6 +758,7 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     "",
     "Concept map:",
     mapJson(map),
+    ...sourceVisualsBlock(map, "animator"),
   ].join("\n");
 }
 

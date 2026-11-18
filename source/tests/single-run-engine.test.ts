@@ -741,3 +741,72 @@ test("review U1: a túl hosszú cellájú táblázat a térképre kerül, a cson
   assert.deepEqual([gates.visualsFound, gates.visualsDropped, gates.visualsCellsTruncated], [1, 0, 1]);
   assert.equal(logs.filter((l) => l.includes("túl hosszú cella / fejléc csonkolva")).length, 1);
 });
+
+/* Spec 2026-11-18-tananyag-gyartas-minoseg, S1b: a leltár a tervező, a szerző, az ábrakészítő és a lektor promptjában — térképről indított gyártásnál is. */
+const VISUALS_HEAD = "A FORRÁS VIZUÁLIS LELTÁRA (adat; oldalszámmal igazolt, tanítható tartalom):";
+function captureRequests(overrides: Parameters<typeof scriptedClient>[0] = {}) {
+  const requests: Record<string, string> = {};
+  const client = withOverride(scriptedClient(overrides), (station, turns) => { requests[station] ??= lastUserText(turns); return null; });
+  return { client, requests };
+}
+function capturePublish(mem: ReturnType<typeof memoryStore>) {
+  const published: Array<{ coverage: Record<string, unknown> }> = [];
+  const original = mem.store.publishLesson.bind(mem.store);
+  mem.store.publishLesson = async (input) => { published.push(structuredClone(input) as never); return original(input); };
+  return published;
+}
+
+test("S1b: térképről indított gyártásnál a leltár a 2., 3., 4. és 6. állomás kérésében; a terv hivatkozásai tisztítva; a fedettség számolja", async () => {
+  const planned = { ...outline, sections: [{ ...outline.sections[0], sourceVisualIds: ["v2", "nincs-ilyen", "v2"] }], skippedVisuals: [{ id: "nincs-ilyen", reason: "admin_meta" }] };
+  const { client, requests } = captureRequests({ outline: [planned] });
+  const mem = memoryStore();
+  const published = capturePublish(mem);
+  mem.saveVisuals([{ ...VISUAL_STEPS, verified: "visual-only" } as SourceVisual]);
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(client, mem));
+  assert.equal(result.htmlFileId, "html1");
+  assert.ok(!client.calls.includes("1"), "nincs forrás-állomás — a leltár a térképről jön");
+  for (const station of ["2", "3", "4", "6"]) {
+    assert.equal(requests[station].split(VISUALS_HEAD).length, 2, `${station}. állomás: a leltár blokkja pontosan egyszer`);
+    assert.ok(requests[station].includes('"steps":["Mérd meg az oldalakat.","Szorozd össze őket."]'), `${station}. állomás: a tétel adata`);
+    assert.ok(!requests[station].includes('"verified"'), `${station}. állomás: a verified mező nem megy a modellnek`);
+  }
+  assert.match(requests["6"], /NEM jelenik meg \(tájékoztatás[^)]*\): v2\./, "a lektor a mért hiányt tájékoztatásként kapja");
+  const saved = (mem.steps.at(-1)!.output as { outline: { sections: Array<{ sourceVisualIds?: string[] }>; skippedVisuals?: unknown } }).outline;
+  assert.deepEqual(saved.sections[0].sourceVisualIds, ["v2"], "a nem létező és az ismétlődő azonosító törölve");
+  assert.equal("skippedVisuals" in saved, false, "a nem létező azonosítójú kihagyás törölve");
+  assert.ok(!client.calls.includes("tananyagterv"), "a tisztítás nem kért javító fordulót");
+  // A fedettség NEM 100%: a forrás tétele a leckében nem jelent meg.
+  assert.deepEqual(published[0].coverage.visuals, { total: 1, shown: 0, missingIds: ["v2"] });
+});
+
+test("S1b: új forrásból a most mentett leltár megy a promptokba; leltár nélkül a kérésekben és a fedettségben nincs nyoma", async () => {
+  const withInventory = captureRequests();
+  const source = withOverride(withInventory.client, (station) => (station === "1" ? sourceReply([VISUAL_STEPS]) : null));
+  const mem = memoryStore();
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(source, mem));
+  for (const station of ["2", "3", "4", "6"]) assert.ok(withInventory.requests[station].includes(VISUALS_HEAD), `${station}. állomás`);
+
+  const plain = captureRequests();
+  const mem2 = memoryStore();
+  const published = capturePublish(mem2);
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(plain.client, mem2));
+  for (const station of ["2", "3", "4", "6"]) assert.ok(!/VIZUÁLIS LELTÁR|sourceVisualId|skippedVisuals/.test(plain.requests[station]), `${station}. állomás: leltár nélkül változatlan`);
+  assert.equal("visuals" in published[0].coverage, false, "leltár nélkül a fedettség alakja a régi");
+});
+
+test("review J4: a különálló kinyerés lenyomata a leltár sémaverzióját is tartalmazza — a leltár előtti térkép nem jön vissza jelzés nélkül", async () => {
+  const { createHash } = await import("node:crypto");
+  const { singleRunMapHash } = await import("../server/studio/single-run/live");
+  const { SOURCE_VISUALS_SCHEMA_VERSION } = await import("../shared/source-visuals");
+  const files = [{ name: "a.txt", kind: "text" as const, content: "első" }];
+  const sha = (parts: unknown[]) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+  const rows = [["a.txt", "text", "első"]];
+  // Rögzített alak (nem a kódból számolva): a verziócímke a lenyomat része.
+  assert.equal(SOURCE_VISUALS_SCHEMA_VERSION, 1);
+  assert.equal(singleRunMapHash(files, " Cím "), sha(["single-run-map-2", "source-visuals-1", "Cím", rows]));
+  // A leltár előtti (S1a előtti) lenyomat ugyanarra a fájlra MÁS: a régi, leltár nélküli térkép nem találat.
+  assert.notEqual(singleRunMapHash(files, "Cím"), sha(["single-run-map-2", "Cím", rows]));
+  // Mutáció: más sémaverzió más lenyomatot adna.
+  assert.notEqual(singleRunMapHash(files, "Cím"), sha(["single-run-map-2", "source-visuals-2", "Cím", rows]));
+  assert.equal(singleRunMapHash(files, "Cím"), singleRunMapHash(files, "Cím"), "determinisztikus");
+});

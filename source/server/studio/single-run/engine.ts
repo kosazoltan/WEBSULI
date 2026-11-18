@@ -14,9 +14,9 @@ import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
 import { OPEN_ANSWER_RULES_HU } from "../../../shared/lesson-experience-score";
 import { checkVerbatim } from "../verbatim";
-import { checkCoverageGate, type MapConcept } from "../coverage";
+import { checkCoverageGate, visualCoverage, type MapConcept } from "../coverage";
 import { buildAuthorPrompt, buildAnimatorPrompt, buildLektorPrompt, buildPedagoguePrompt, checkAnimatorResult, lessonIdsSubsetOfMap, outlineCoversMap, outlineSchema, parseLektorResponse, type OwnerContext } from "../step-io";
-import { autofixOutline } from "../tools/outline-autofix";
+import { autofixOutline, autofixOutlineVisuals } from "../tools/outline-autofix";
 import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
 import { ensureSectionVisuals } from "../section-visuals";
@@ -535,13 +535,16 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const map = await store.loadMap(mapId);
   if (!map || !map.concepts.length) throw new SingleRunError("tudásbank", ["A tudásbankban nincs tanítható fogalom."]);
   const sourceText = map.meta.sourceText?.trim() ?? "";
-  // S1a: a leltár a térképről jön (új forrásnál a most mentett, térképről indításnál a korábban mentett); a promptoknak az S1b adja át.
-  telemetry.gates.visualsFound = map.meta.visuals?.length ?? 0;
+  // S1a: a leltár a térképről jön (új forrásnál a most mentett, térképről indításnál a korábban mentett) — S1b: a tervező, a szerző,
+  // az ábrakészítő és a lektor promptja is megkapja (`promptMap.visuals` → `sourceVisualsBlock`).
+  const visuals: SourceVisual[] = map.meta.visuals ?? [];
+  const visualIds = new Set(visuals.map((v) => v.id));
+  telemetry.gates.visualsFound = visuals.length;
   // A forrás hamis egyenlőségének helyesbítése a tanított fogalmakon (új térképnél már a mentés előtt megtörtént — ott ugyanaz az eredmény).
   const corrections: SourceCorrection[] = arithmeticSourceCorrections(map.concepts.map((c) => ({ localId: c.localId, term: c.term, definition: c.definition, quote: c.quote })));
   const concepts: MapConcept[] = applySourceCorrections(map.concepts, corrections);
   const owner = ownerContextOf(input.instruction, corrections);
-  const promptMap = { title: map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom, concepts };
+  const promptMap = { title: map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom, concepts, ...(visuals.length ? { visuals } : {}) };
   const jobId = input.resume ? input.resume.jobId
     : await store.createJob({ mapId, step: "pedagogue", status: "running", model: conversation.model, promptVersion: SINGLE_RUN_VERSION, inputHash: `${SINGLE_RUN_VERSION}:${mapId}` });
   await workflowResource(jobId); // review #260: a job a futás gazdájához kötött (piszkozatkezelés, lízing)
@@ -643,7 +646,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   phase("pedagogue", resumed?.outline ? "A mentett tananyagterv ellenőrzése…" : input.approvedOutline ? "A jóváhagyott tanulási terv ellenőrzése…" : "A tananyagterv készül…");
   const planned = resumed?.outline ?? input.approvedOutline;
   const outline = planned !== undefined ? approvedOutlineOf(planned, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${withKnowledge(buildPedagoguePrompt(promptMap, undefined, owner), await knowledgeBlock("pedagogue"))}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
-    const fixed = autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline;
+    // S1b: a forrás-vizuális hivatkozások tisztítása a fejezet-összevonás UTÁN (az összevont fejezet tételei megmaradnak).
+    const fixed = autofixOutlineVisuals(autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline, visualIds).outline;
     const parsed = outlineSchema.safeParse(fixed);
     if (!parsed.success) return { ok: false, problems: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
     const covers = outlineCoversMap(parsed.data.sections, concepts);
@@ -849,7 +853,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     // Review #311 (S6, kapcsolós): a szó szerint átvett, szülő által ellenőrzött katalógus-kvízek útvonala a lektornak (igazolt forrás) —
     // különben a feltöltött forráshoz mérve hamis source_conflictot kaphatnának. Üres halmaz → a kérés változatlan.
     const catalogPaths = catalogVerbatimPaths(lesson, await ensureCatalogPool("lektor"));
-    const report = await runStation(reviewer, "lektorálás", withRoleRunbook([...sourceBlock, text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, previousBlockers, owner, undefined, undefined, catalogPaths.size ? catalogPaths : undefined)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)], "lektor"),
+    const report = await runStation(reviewer, "lektorálás", withRoleRunbook([...sourceBlock, text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, previousBlockers, owner, undefined, undefined, catalogPaths.size ? catalogPaths : undefined, visualCoverage(lesson, visuals).missingIds)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)], "lektor"),
       (json) => {
         const r = parseLektorResponse(json);
         if (!r.ok) return { ok: false, problems: [r.reason] };
@@ -927,7 +931,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   }
   const lessonId = await store.upsertLesson(null, mapId, final.data);
   const published = await store.publishLesson({
-    lessonId, mapId, title: final.data.title, classroom: final.data.classroom, coverage: coverage.coverage,
+    lessonId, mapId, title: final.data.title, classroom: final.data.classroom,
+    // S1b: a fedettség-kimenet (`lessons.coverage`) a vizuális tételeket is számolja — leltár nélkül a kulcs elmarad.
+    coverage: { ...coverage.coverage, ...(visuals.length ? { visuals: visualCoverage(final.data, visuals) } : {}) },
     quizItems: exportQuizItemsForPublish(final.data, lessonId, conceptIdResolver(concepts)),
     ...(typeof output.targetHtmlFileId === "string" ? { targetHtmlFileId: output.targetHtmlFileId, ...(typeof output.targetBaseline === "string" ? { targetBaseline: output.targetBaseline } : {}) } : {}),
   });

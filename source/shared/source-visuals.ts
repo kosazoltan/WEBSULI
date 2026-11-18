@@ -27,6 +27,14 @@ export const SOURCE_VISUAL_MAX_NESTING = 24;
  */
 export const SOURCE_VISUAL_TABLE = { columns: 8, rows: 40, cellChars: 100, headerChars: 80 } as const;
 
+/**
+ * A tervező által megjelölhető kihagyás zárt oklistája (spec 2026-11-18-tananyag-gyartas-minoseg, SK1): iskolai adminisztráció /
+ * forrásjegyzék, megoldókulcs, egy megnevezett megjelenő tétel ismétlése, csak díszítő kép. A szabályt a forrás-fedettségi kapu ítéli meg.
+ */
+export const SOURCE_VISUAL_SKIP_REASONS = ["admin_meta", "answer_key", "duplicate", "decorative"] as const;
+export type SourceVisualSkipReason = (typeof SOURCE_VISUAL_SKIP_REASONS)[number];
+export type SkippedSourceVisual = { id: string; reason: string; duplicateOf?: string };
+
 const filled = (max: number) => z.string().trim().min(1).max(max);
 const tone = z.enum(["a", "b", "c", "neutral"]);
 

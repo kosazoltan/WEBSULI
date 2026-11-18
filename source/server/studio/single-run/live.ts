@@ -12,6 +12,7 @@ import { createDrizzlePipelineStore } from "../pipeline-store";
 import { createLessonConversation, type ConversationState, type SingleRunEffort } from "./conversation";
 import { readSourceStation, runSingleLesson, SingleRunError, singleRunResumable, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
 import { eq } from "drizzle-orm";
+import { SOURCE_VISUALS_SCHEMA_VERSION } from "../../../shared/source-visuals";
 
 
 /**
@@ -73,7 +74,9 @@ export async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFil
 /** A különálló kinyerés tartalmi lenyomata: ugyanazok a fájlok ugyanazt a térképet adják vissza (nincs második modellhívás). */
 export function singleRunMapHash(files: ExtractorFile[], title?: string): string {
   // Review #261: egyértelmű (JSON) kódolás — a fájlhatár nem csúszhat el (egy fájl tartalma nem utánozhat két fájlt).
-  return createHash("sha256").update(JSON.stringify(["single-run-map-2", title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
+  // Review J4 (S1a): a lenyomat része a vizuális leltár sémaverziója — a leltár előtti (vagy régi sémájú) térképet ugyanarra a fájlra
+  // nem adja vissza jelzés nélkül; a séma változásakor új kinyerés készül.
+  return createHash("sha256").update(JSON.stringify(["single-run-map-2", `source-visuals-${SOURCE_VISUALS_SCHEMA_VERSION}`, title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
 }
 
 /**

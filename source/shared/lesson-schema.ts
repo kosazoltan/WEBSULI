@@ -98,6 +98,13 @@ const filled = (max: number) => z.string().trim().min(1).max(max);
 /** Concepts this block teaches — the link back to the curated map. */
 const coversConceptIds = z.array(filled(64)).min(1);
 
+/**
+ * Spec 2026-11-18-tananyag-gyartas-minoseg (S1b): a blokk által megjelenített forrás-vizuális tétel azonosítója (a térkép leltárából).
+ * Engedékeny: a hibás alakú érték (nem szöveg, üres, 12 karakternél hosszabb) elmarad — formai hiba nem indít fizetős javítókört; a
+ * hivatkozás érvényességét a fedettségmérő ítéli meg (csak a leltárban létező azonosító számít).
+ */
+const sourceVisualId = z.string().trim().min(1).max(12).optional().catch(undefined);
+
 const explainBlock = z.object({
   kind: z.literal("explain"),
   text: filled(LESSON_TEXT_LIMITS.explain),
@@ -112,6 +119,7 @@ const exampleBlock = z.object({
   steps: z.array(filled(LESSON_TEXT_LIMITS.step)).min(1),
   answer: filled(LESSON_TEXT_LIMITS.answer),
   coversConceptIds,
+  sourceVisualId,
 });
 
 const animateBlock = z.object({
@@ -120,6 +128,7 @@ const animateBlock = z.object({
   params: z.record(z.unknown()),
   caption: filled(LESSON_TEXT_LIMITS.caption),
   coversConceptIds,
+  sourceVisualId,
 });
 
 /**
@@ -136,6 +145,7 @@ const checkBlock = z.object({
   feedbackPerOption: z.array(filled(LESSON_TEXT_LIMITS.feedback)),
   hint: filled(LESSON_TEXT_LIMITS.hint).optional(),
   coversConceptIds,
+  sourceVisualId,
 });
 
 const tryBlock = z.object({
@@ -143,6 +153,7 @@ const tryBlock = z.object({
   tryKind: z.enum(TRY_KINDS),
   spec: z.record(z.unknown()),
   coversConceptIds,
+  sourceVisualId,
 });
 
 /**

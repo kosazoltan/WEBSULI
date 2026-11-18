@@ -1,6 +1,7 @@
 import { conceptIdsOf, type Lesson } from "../../shared/lesson-schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import { groundingReport, type UngroundedClaim } from "./grounding";
+import type { SourceVisual } from "../../shared/source-visuals";
 
 /**
  * The publishing gate: does this lesson actually teach what the exam will ask?
@@ -44,7 +45,27 @@ export type Coverage = {
   extraCovered: number;
   /** Ids the lesson references that the map does not contain. */
   unknownIds: string[];
+  /** Spec 2026-11-18 (S1b): a forrás vizuális tételeinek megjelenése; régi leckénél és leltár nélküli mérésnél hiányzik. */
+  visuals?: VisualCoverage;
 };
+
+export type VisualCoverage = { total: number; shown: number; missingIds: string[] };
+
+/**
+ * Spec 2026-11-18-tananyag-gyartas-minoseg (S1b): a forrás vizuális tételeinek fedettsége. A számlálóban a `colorCode` kivételével
+ * minden fajta szerepel (a színkód a tónusokban él tovább); „megjelent”, ha van rá `sourceVisualId`-val hivatkozó blokk. Ami a
+ * forrásban megvan és a leckében nincs, az hiány (`missingIds`) — a fogalomfedettség 100%-a ezt nem takarja el. A hűséget és a
+ * fajta-megfeleltetést is mérő kapu: `gates/source-coverage-gate.ts` (SK1). Tiszta függvény.
+ */
+export function visualCoverage(lesson: { sections: ReadonlyArray<{ blocks: ReadonlyArray<object> }> }, visuals: ReadonlyArray<SourceVisual> = []): VisualCoverage {
+  const referenced = new Set(lesson.sections.flatMap((s) => s.blocks.flatMap((b) => {
+    const id = (b as { sourceVisualId?: unknown }).sourceVisualId;
+    return typeof id === "string" ? [id] : [];
+  })));
+  const counted = visuals.filter((v) => v.kind !== "colorCode");
+  const missingIds = counted.filter((v) => !referenced.has(v.id)).map((v) => v.id);
+  return { total: counted.length, shown: counted.length - missingIds.length, missingIds };
+}
 
 function count(ids: Set<string>, concepts: MapConcept[], weight: ExamWeight): CoverageCount {
   const of = concepts.filter((c) => c.examWeight === weight);
