@@ -6,16 +6,22 @@
 export type RankableVoice = { name: string; lang: string; localService?: boolean; default?: boolean };
 
 /** A gyártók név szerinti minőségjelzői (Edge: „Online (Natural)”, Apple: „(Enhanced)” / „(Premium)”, Android: „Neural”). */
-const QUALITY_MARKER = /natural|online|neural|premium|enhanced/i;
-/** Régi, gépies helyi motorok jelzői (Windows SAPI „Desktop”, eSpeak, Apple „Compact”). */
-const ROBOT_MARKER = /desktop|espeak|compact/i;
+const QUALITY_MARKER = /\b(natural|online|neural|premium|enhanced)\b/i;
+/** Régi, gépies helyi motorok jelzői (Windows SAPI „Desktop”, eSpeak). Az Apple „compact” hangjai a névben nem jelöltek — arra nincs szabály. */
+const ROBOT_MARKER = /\bdesktop\b|espeak/i;
 /**
  * Ismert, jó minőségű brit hangok a böngészők dokumentált hangneveiből (Chrome: „Google UK English …”; Edge: Sonia, Ryan, Libby,
  * Maisie, Thomas; Apple: Daniel, Kate, Serena, Oliver, Stephanie, Martha, Arthur). Csak `en-GB` leckénél számít.
  */
 export const KNOWN_BRITISH_VOICES = ["google uk english", "sonia", "ryan", "libby", "maisie", "thomas", "daniel", "kate", "serena", "oliver", "stephanie", "martha", "arthur"] as const;
 
-const norm = (lang: string) => lang.trim().replace("_", "-").toLowerCase();
+const KNOWN_BRITISH = new RegExp(`\\b(${KNOWN_BRITISH_VOICES.join("|")})\\b`);
+/** A nyelvkód összevetéshez: kisbetűs `nyelv-régió`; a további altagok (`en-GB-x-rp`, `en-GB-scotland`) a régiót nem módosítják. */
+export function voiceLanguageKey(lang: string): string {
+  const [base = "", second = ""] = lang.trim().replace(/_/g, "-").toLowerCase().split("-");
+  return /^([a-z]{2}|\d{3})$/.test(second) ? `${base}-${second}` : base;
+}
+const norm = voiceLanguageKey;
 
 /**
  * A nyelvhez használható hangok indexe a legjobbtól a leggyengébbig; más nyelvű hang nem kerül a listába (üres lista: a `lang` dönt).
@@ -35,7 +41,7 @@ export function rankVoices(voices: ReadonlyArray<RankableVoice>, language: strin
     const name = (voice.name ?? "").toLowerCase();
     let score = exact ? 100 : 0;
     if (QUALITY_MARKER.test(name)) score += 16;
-    if (british && exact && KNOWN_BRITISH_VOICES.some(known => name.includes(known))) score += 8;
+    if (british && exact && KNOWN_BRITISH.test(name)) score += 8;
     if (voice.localService === false) score += 4;
     if (!ROBOT_MARKER.test(name)) score += 2;
     scored.push({ index, score });

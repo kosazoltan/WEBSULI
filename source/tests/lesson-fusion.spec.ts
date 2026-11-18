@@ -1,6 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 import { balancedLayouts, choiceSeed } from "../shared/option-order";
+import { ttsAudioHash, ttsAudioPath } from "../shared/tts-audio-key";
+
+// Terv 2026-11-18-tananyag-gyartas-minoseg, S8b-2: a felolvasás lánca előre gyártott hanggal indul (lásd a „prepared audio:” teszteket).
+// A korábbi felolvasás-tesztek a lánc további lépéseit (böngészőhang, szerveres tartalék) mérik változatlan elvárásokkal: nekik olyan
+// környezet kell, ahol előre gyártott hang nem kérhető — a valóságban ilyen a nem biztonságos (WebCrypto nélküli) környezet, itt ezt utánozzuk.
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.title.startsWith("prepared audio:")) return;
+  await page.addInitScript(() => { Object.defineProperty(Crypto.prototype, "subtle", { get: () => undefined, configurable: true }); });
+});
 
 // Keep the candidate JSON interception identical in the focused and general CI runs.
 test.use({ serviceWorkers: "block" });
@@ -144,6 +153,128 @@ test("glossary speech picks the ranked British voice, also after the voice list 
   await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
 });
 
+// Terv 2026-11-18-tananyag-gyartas-minoseg, S8b-2 (E33): a lánc valódi böngészőben — a hangtár válaszát hálózati elfogás adja (a tár üres).
+const SONIA = "Microsoft Sonia Online (Natural) - English (United Kingdom)";
+const HAZEL = "Microsoft Hazel Desktop - English (Great Britain)";
+type ChainLog = { speech: Array<{ text: string; lang: string; voice: string | null }>; played: Array<{ path: string; rate: number; preservesPitch: boolean }> };
+async function preparedAudioPage(page: import("@playwright/test").Page, options: { failingVoice?: string; playRejects?: string } = {}) {
+  await page.addInitScript((options) => {
+    const log: ChainLog = { speech: [], played: [] };
+    Object.defineProperty(window, "__chain", { value: log });
+    const voices = [
+      { name: "Microsoft Zira Desktop - English (United States)", lang: "en-US", localService: true },
+      { name: "Microsoft Hazel Desktop - English (Great Britain)", lang: "en-GB", localService: true },
+      { name: "Microsoft Sonia Online (Natural) - English (United Kingdom)", lang: "en-GB", localService: false },
+    ];
+    type Fake = { text: string; lang: string; voice: { name: string } | null; onstart: (() => void) | null; onend: (() => void) | null; onerror: ((e: { error: string }) => void) | null };
+    class FakeUtterance { lang = ""; rate = 1; voice: { name: string } | null = null; onstart = null; onend = null; onerror = null; constructor(public text: string) {} }
+    Object.defineProperty(window, "SpeechSynthesisUtterance", { value: FakeUtterance, configurable: true });
+    Object.defineProperty(window, "speechSynthesis", { value: {
+      speaking: false, pending: false, cancel() {}, getVoices: () => voices,
+      speak(u: Fake) {
+        log.speech.push({ text: u.text, lang: u.lang, voice: u.voice?.name ?? null });
+        setTimeout(() => { if (options.failingVoice && u.voice?.name === options.failingVoice) u.onerror?.({ error: "synthesis-failed" }); else { u.onstart?.(); u.onend?.(); } }, 10);
+      },
+    } });
+    const realPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      const path = new URL(this.src).pathname;
+      log.played.push({ path, rate: this.playbackRate, preservesPitch: this.preservesPitch });
+      if (options.playRejects && path.startsWith("/api/tts/lesson-audio/")) return Promise.reject(new DOMException("a böngésző tiltja", options.playRejects));
+      return realPlay.call(this);
+    };
+  }, options);
+  const lesson = fusionFixture(); lesson.subject = "angol";
+  lesson.experience!.language = "en-GB";
+  lesson.experience!.glossary = [{ word: "triangle", translation: "háromszög", partOfSpeech: "főnév", example: "This is a triangle.", exampleTranslation: "Ez egy háromszög." }];
+  await page.route("**/tmp/lesson-fusion.json", route => route.fulfill({ json: lesson }));
+  const fallbackRequests: string[] = [];
+  await page.route("**/api/tts/audio**", route => { fallbackRequests.push(route.request().url()); return route.fulfill({ contentType: "audio/wav", body: silentWav() }); });
+  const open = async () => { await page.goto("/__lesson-runtime-probe?candidate=1"); await page.getByTestId("pronounce-entry").click(); };
+  const log = () => page.evaluate(() => (window as unknown as { __chain: ChainLog }).__chain);
+  const say = (text: string) => page.getByRole("button", { name: `${text} meghallgatása`, exact: true }).click();
+  return { open, log, say, fallbackRequests };
+}
+
+test("prepared audio: a hangtárban megvan → azt játssza a kiszámolt kulccsal és a csúszka sebességével, böngészőhang nem szól", async ({ page }) => {
+  const requests: string[] = [];
+  await page.route("**/api/tts/lesson-audio/**", route => { requests.push(new URL(route.request().url()).pathname); return route.fulfill({ contentType: "audio/wav", body: silentWav() }); });
+  const { open, log, say, fallbackRequests } = await preparedAudioPage(page);
+  await open();
+  expect(requests).toEqual([]);
+  await say("triangle");
+  const wordPath = ttsAudioPath(await ttsAudioHash("triangle", "en-GB"));
+  await expect.poll(async () => (await log()).played).toEqual([{ path: wordPath, rate: .85, preservesPitch: true }]);
+  await page.locator('.fusion-glossary input[type="range"]').fill("0.5");
+  await say("This is a triangle.");
+  await expect.poll(async () => (await log()).played[1]).toEqual({ path: ttsAudioPath(await ttsAudioHash("This is a triangle.", "en-GB")), rate: .5, preservesPitch: true });
+  // Az előre gyártott hang indulási őre (1,5 mp) után sem szólalhat meg sem böngészőhang, sem a szerveres tartalék.
+  await page.waitForTimeout(2000);
+  expect((await log()).speech).toEqual([]);
+  expect(fallbackRequests).toEqual([]);
+  expect(new Set(requests)).toEqual(new Set([wordPath, ttsAudioPath(await ttsAudioHash("This is a triangle.", "en-GB"))]));
+  await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
+});
+
+for (const [name, status] of [["nincs a hangtárban (404)", 404], ["a sebességkorlát megfogja (429)", 429]] as const) {
+  test(`prepared audio: ${name} → a rangsorolt brit böngészőhang szól, és a hiány a munkamenetre megjegyződik`, async ({ page }) => {
+    const requests: string[] = [];
+    await page.route("**/api/tts/lesson-audio/**", route => { requests.push(new URL(route.request().url()).pathname); return route.fulfill({ status, json: { message: "nincs" } }); });
+    const { open, log, say, fallbackRequests } = await preparedAudioPage(page);
+    await open();
+    await say("triangle");
+    await expect.poll(async () => (await log()).speech).toEqual([{ text: "triangle", lang: "en-GB", voice: SONIA }]);
+    const wordPath = ttsAudioPath(await ttsAudioHash("triangle", "en-GB"));
+    expect(requests).toEqual([wordPath]);
+    await say("triangle");
+    await expect.poll(async () => (await log()).speech.length).toBe(2);
+    expect((await log()).speech[1]).toEqual({ text: "triangle", lang: "en-GB", voice: SONIA });
+    expect(requests, "ugyanarra a szóra nem megy újabb kérés").toEqual([wordPath]);
+    expect((await log()).played.map(p => p.path)).toEqual([wordPath]);
+    // Más szó kulcsa független: arra még megy kérés.
+    await say("This is a triangle.");
+    await expect.poll(() => requests.length).toBe(2);
+    expect(fallbackRequests).toEqual([]);
+    await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
+  });
+}
+
+test("prepared audio: a hangtár nem válaszol időben → legfeljebb 1,5 mp után a böngészőhang szól", async ({ page }) => {
+  await page.route("**/api/tts/lesson-audio/**", async route => { await new Promise(resolve => setTimeout(resolve, 8000)); await route.abort().catch(() => {}); });
+  const { open, log, say, fallbackRequests } = await preparedAudioPage(page);
+  await open();
+  const started = Date.now();
+  await say("triangle");
+  await page.waitForTimeout(900);
+  expect((await log()).speech, "az őr előtt még vár az előre gyártott hangra").toEqual([]);
+  await expect.poll(async () => (await log()).speech, { timeout: 3000 }).toEqual([{ text: "triangle", lang: "en-GB", voice: SONIA }]);
+  expect(Date.now() - started).toBeLessThan(3500);
+  expect(fallbackRequests).toEqual([]);
+});
+
+test("prepared audio: az első böngészőhang hibája → a rangsor következő hangja szól, a szerveres tartalék nem", async ({ page }) => {
+  await page.route("**/api/tts/lesson-audio/**", route => route.fulfill({ status: 404, json: { message: "nincs" } }));
+  const { open, log, say, fallbackRequests } = await preparedAudioPage(page, { failingVoice: SONIA });
+  await open();
+  await say("triangle");
+  await expect.poll(async () => (await log()).speech).toEqual([{ text: "triangle", lang: "en-GB", voice: SONIA }, { text: "triangle", lang: "en-GB", voice: HAZEL }]);
+  await page.waitForTimeout(500);
+  expect((await log()).speech.length).toBe(2);
+  expect(fallbackRequests, "a nem brit szerverhang csak a legvégén jönne").toEqual([]);
+  await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
+});
+
+test("prepared audio: a böngésző lejátszási tiltása (NotAllowedError) → a böngészőhang szól, és ez nem számít hiánynak", async ({ page }) => {
+  await page.route("**/api/tts/lesson-audio/**", route => route.fulfill({ contentType: "audio/wav", body: silentWav() }));
+  const { open, log, say } = await preparedAudioPage(page, { playRejects: "NotAllowedError" });
+  await open();
+  await say("triangle");
+  await expect.poll(async () => (await log()).speech).toEqual([{ text: "triangle", lang: "en-GB", voice: SONIA }]);
+  await say("triangle");
+  await expect.poll(async () => (await log()).speech.length).toBe(2);
+  const wordPath = ttsAudioPath(await ttsAudioHash("triangle", "en-GB"));
+  expect((await log()).played.map(p => p.path), "a következő kattintás újra megpróbálja az előre gyártott hangot").toEqual([wordPath, wordPath]);
+});
 // Spec 2026-11-09-felolvasas-tartalek: a tartalék végpont helyett 0,1 mp csendes WAV (a Vite-próbaszerveren nincs /api/tts).
 const silentWav = () => {
   const samples = 800, b = Buffer.alloc(44 + samples * 2);
