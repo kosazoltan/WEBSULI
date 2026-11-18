@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { ADVENT_GIFT_MESSAGE } from "../shared/advent/rules";
-import { clearAdventTime, contrastOf, pickOption, playDoor, proxyHeaders, seedProgress, setAdventTime, settle, shot } from "./support/advent-e2e";
+import { chooseGrade, clearAdventTime, contrastOf, pickOption, playDoor, proxyHeaders, seedProgress, setAdventTime, settle, shot } from "./support/advent-e2e";
 import { MOBILE_VIEWPORTS, emulateSafeArea, hideAndShowPage, measureOverflow, overlappingTargets, safeAreaViolations, smallFonts, smallTargets } from "./support/game-mobile-quality";
 
 /**
@@ -19,7 +19,7 @@ async function openCalendar(page: import("@playwright/test").Page, iso: string, 
   await page.goto("/adventi-naptar");
   await expect(page.getByTestId("advent-page")).toBeVisible();
   if (grade !== undefined) {
-    await page.getByTestId(`advent-grade-${grade}`).tap();
+    await chooseGrade(page, grade);
     await expect(page.getByTestId("advent-grid")).toBeVisible();
   }
 }
@@ -31,12 +31,14 @@ test("évfolyamválasztás, 24 ablak, zárt és nyitható ablak, kérdés, jó v
   await expect(page.getByTestId("advent-grade-picker")).toBeVisible();
   await expect(page.locator('[data-testid^="advent-grade-"]:not([data-testid="advent-grade-picker"])')).toHaveCount(12);
   await shot(page, "01-evfolyam");
-  await page.getByTestId("advent-grade-5").tap();
+  await chooseGrade(page, 5);
   await expect(page.locator(".advent-door")).toHaveCount(24);
   for (const day of range(1, 5)) await expect(page.getByTestId(`advent-door-${day}`)).toHaveAttribute("data-state", "open");
   for (const day of range(6, 24)) await expect(page.getByTestId(`advent-door-${day}`)).toHaveAttribute("data-state", "locked");
   await expect(page.getByTestId("advent-door-12")).toHaveAccessibleName("12. ablak — december 12-én nyílik");
   await expect(page.getByTestId("advent-door-5")).toHaveAccessibleName("5. ablak — nyitható");
+  const lockedNumber = await contrastOf(page, '[data-testid="advent-door-24"] .advent-door__num');
+  expect(lockedNumber.ratio, "zárt ablak száma: " + lockedNumber.fg + " / " + lockedNumber.bg).toBeGreaterThanOrEqual(4.5);
   await shot(page, "02-naptar");
   // Zárt ablak: nem nyílik kérdés, a felület megmondja, mikor nyílik.
   // (aria-disabled gomb: a Playwright „engedélyezett” várakozása helyett valódi koppintás megy rá.)
@@ -120,7 +122,7 @@ test("betelt új-sor keret (429, limit: new-row): barátságos várakozó üzene
   // 1) Az első évfolyam-kérés 429, a második már a valódi szerverhez megy.
   let calls = 0;
   await page.route("**/api/advent/grade", (route) => (++calls === 1 ? route.fulfill(busy) : route.fallback()));
-  await page.getByTestId("advent-grade-5").tap();
+  await chooseGrade(page, 5);
   await expect(page.getByTestId("advent-busy")).toContainText("mindjárt újra megpróbáljuk");
   await shot(page, "09-sokan-vagyunk");
   await expect(page.getByTestId("advent-grid")).toBeVisible({ timeout: 15_000 });
@@ -226,13 +228,13 @@ test("lejárt tanulói link: a gyerek látja a választást, addig a naptár nem
   // Az alkalmazás profil-lekérdezése közben törölheti a tokent — a választás ettől még a gyereké marad (újratöltés után is).
   await page.reload();
   await expect(page.getByTestId("advent-pairing-invalid")).toBeVisible();
-  await page.getByTestId("advent-grade-5").or(page.getByTestId("advent-door-1")).first().tap({ force: true });
+  await chooseGrade(page, 5);
   await expect(page.getByTestId("advent-notice")).toContainText("Előbb válassz");
   await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
   expect(writes, "választás előtt nincs írás").toBe(0);
   await page.getByTestId("advent-continue-guest").tap();
   await expect(page.getByTestId("advent-pairing-invalid")).toHaveCount(0);
-  await page.getByTestId("advent-grade-5").tap();
+  await page.getByTestId("advent-grade-yes").tap();
   await expect(page.getByTestId("advent-grid")).toBeVisible();
   await playDoor(page, 1, true);
   await expect(page.getByTestId("advent-door-1")).toHaveAttribute("data-state", "solved");
@@ -331,7 +333,7 @@ test("szezon: november 29. „Hamarosan”; január 7. lezárt; tesztidő nélk�
   await expect(page.locator(".advent-door")).toHaveCount(0);
   await setAdventTime(page, DEC5);
   await page.goto("/adventi-naptar");
-  await page.getByTestId("advent-grade-5").tap();
+  await chooseGrade(page, 5);
   await playDoor(page, 1, true);
   await setAdventTime(page, "2027-01-07T10:00:00Z");
   await page.reload();

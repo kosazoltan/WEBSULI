@@ -40,7 +40,7 @@ export const ADVENT_ART_SPECS: Readonly<Record<string, AdventArtSpec>> = {
   "advent-bg-landscape": { width: 1600, height: 900, alt: "", placeholder: "" },
   "advent-closing": { width: 1200, height: 900, alt: "A kivilágított falu szenteste, a téren karácsonyfa ragyogó csillaggal.", placeholder: "🎄" },
   "advent-home-banner": { width: 1600, height: 400, alt: "", placeholder: "" },
-  "advent-garland": { width: 1200, height: 675, alt: "", placeholder: "" },
+  "advent-garland": { width: 1200, height: 150, alt: "", placeholder: "" },
   "advent-frame": { width: 256, height: 256, alt: "", placeholder: "" },
   ...Object.fromEntries(ADVENT_DOOR_MOTIFS.map((motif, index) => [doorArtId(index + 1), { width: 256, height: 256, alt: motif.alt, placeholder: motif.placeholder }])),
 };

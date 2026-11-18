@@ -24,6 +24,19 @@ export function homeCardReserve(now: Date): boolean {
 }
 
 /**
+ * A kártya „mostja” (terv 20.): null, ha a kártya biztosan nem látszik. Kikapcsolt build-kapcsolónál mindig null.
+ * Teszt-kampós buildben (e2e) CSAK a teszt által beadott, érvényes időpont számít — nélküle null, mint a szerveren
+ * („érvényes tesztidő nélkül a naptár kikapcsolt”). Éles buildben a valódi idő.
+ */
+export function homeCardClock(input: { flag: boolean; testHooks: boolean; hookValue: unknown; realNow: Date }): Date | null {
+  if (!input.flag) return null;
+  if (!input.testHooks) return input.realNow;
+  if (typeof input.hookValue !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(input.hookValue)) return null;
+  const parsed = new Date(input.hookValue);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
  * A soron következő ablak (terv 14.1): a mai, még meg nem válaszolt ablak → a legkorábbi nyitható, megválaszolatlan ablak →
  * az első javítható ablak → nincs (null).
  */
