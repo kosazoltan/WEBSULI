@@ -86,3 +86,55 @@ Tengelyek: Blenderben a figura a −Y irányba néz, Z a „fel”; a glTF-expor
 - [x] K-13 Finomító kör (tulajdonosi kérés, 2026-11-18): kerekded láb; puha, bolyhos pofaszőr; hosszabb kar ujj-jelzéses kézfejjel;
       vállgömb és a törzsbe olvadó comb; jól látható pillaív; sima színfolt-szélek; a farok töve a hátból nő ki; képek ≤ 1,5 MB.
 - [x] K-12 `npm run gate:stage` eredménye a munkafából (vagy pontosan megnevezve, mi hiányzik).
+
+## 7. Második változat — „élethűbb gyűrűsfarkú maki” (tulajdonosi kérés, 2026-11-18)
+
+> „Jelentősen javíts rajta és egy picit legyen élethűbb, közelítsd a valós modellhez, mondjuk egy gyűrűsfarkú makihoz, aki
+> Madagaszkáron él.” — a tulajdonos, 2026-11-18
+
+Ez a szakasz a 3. (stílus), a 4. (technikai keret) és a 6. pont kereteit FELÜLÍRJA; a korábbi „szépítő kör” két pontja (puha
+pofaszőr, nyitott tekintet) ebbe olvad. Az integető kéz az arc mellett marad (tulajdonosi döntés). Referenciakép nem töltődik le.
+
+### 7.1 Cél
+
+A figura legyen ránézésre felismerhetően **gyűrűsfarkú maki (Lemur catta)**, és maradjon nagyon aranyos, nagy szemű kabala.
+Mérce: „ez egy gyűrűsfarkú maki, és nagyon aranyos”. Nem lehet ijesztő vagy „uncanny”.
+
+### 7.2 A valódi állat átvitt jegyei (stilizálva)
+
+- **Arc:** fehér arc; a szem körül sötét, kifelé-lefelé nyúló csepp alakú folt; fekete orr, sötét orrtájék; enyhén megnyúlt,
+  rókaszerű pofa; sötétszürke „sapka”, amely a homlok közepén csúcsban lenyúlik; borostyán–narancs szem.
+- **Fül:** felálló, enyhén hegyesedő, fehér szőrrel szegett (nem kerek, nem rózsaszín belsejű).
+- **Test:** szürke hát, fehér / krém has és mellkas, a végtagok belseje világos; sötét kéz- és lábfej; a hátsó láb hosszabb és
+  erősebb; karcsúbb törzs és végtagok.
+- **Farok:** a testnél hosszabb, vastag, bozontos, 14 váltakozó sötét–világos gyűrű, a vége FEKETE; magasra tartva,
+  kérdőjel-ívben.
+- **Arány:** fej : test magasság kb. 1 : 1,6–1,8 (a korábbi ~1 : 1 helyett); a szem nagyobb a valóságosnál, kerek, nyitott,
+  fényponttal; a mosoly marad.
+- **Tartás:** két lábon áll (kabala-póz) + új klip: `sunbathe` — felegyenesedve ül, karjai széttárva a nap felé.
+
+### 7.3 Technikai keret (felülírja a 4. pont megfelelő sorait — dokumentált spec-változás)
+
+| Tétel | Új keret |
+| --- | --- |
+| Háló | a test, a végtagok és a fej EGY összefüggő háló: alapformák → voxel-remesh → simítás → decimálás (szkriptből); a farok, a szem, az orr és az alakkulcsos arc-rész külön, pontos paraméteres háló marad |
+| Súlyok | a kiinduló alapformák képletes súlyai a legközelebbi pontok szerint átvíve az összefüggő hálóra (determinisztikus; nem a Blender hő-alapú automatája, amely ilyen hálón megbízhatatlan) |
+| Szín | az arc kis, szkriptből festett textúra (512 px, a GLB-be ágyazva) — éles foltszélek; a többi csúcsszín; a farok gyűrűi élhurokra illesztve |
+| Keret | ≤ 600 KB, ≤ 30 000 háromszög, ≤ 6 anyag, ≤ 30 csont, legfeljebb 1 beágyazott kép |
+| Klipek | `idle`, `wave`, `cheer`, `sad`, `blink`, `sunbathe`; alakkulcsok: `blink`, `smile` |
+| Képek | elöl, háromnegyed, oldal, hátul, arc-közeli, tabló a klipekkel, „napozó” póz — JPG, a repóban összesen ≤ 1,5 MB |
+
+### 7.4 Elfogadási pontok (második változat)
+
+- [ ] M-1 A terv és a végrehajtási utasítás frissítése külön commit, a kód ELŐTT.
+- [ ] M-2 Felismerhető gyűrűsfarkú maki: fehér arc, sötét szemfolt, megnyúlt pofa fekete orral, homlokcsúcsos sapka, hegyesedő
+      fehér szegélyű fül, 14 gyűrűs, fekete végű, magasra tartott farok; fej : test kb. 1 : 1,6–1,8.
+- [ ] M-3 Aranyos marad: nagy, kerek, nyitott, csillogó szem; mosoly; nem ijesztő.
+- [ ] M-4 Összefüggő háló: a kar–váll és a láb–törzs csatlakozásnál nincs varrat.
+- [ ] M-5 Éles, tiszta foltszélek az arcon és a farok gyűrűin; „tépett”, tincses sziluett a pofa két oldalán (nem golyósor).
+- [ ] M-6 Hat klip (mind 1–3 mp), köztük a `sunbathe`; `blink` + `smile` alakkulcs.
+- [ ] M-7 Keret: ≤ 600 KB, ≤ 30 000 háromszög, ≤ 6 anyag, ≤ 30 csont — az őr-teszt az új keretre igazítva, zöld.
+- [ ] M-8 Kétszeri gyártás azonos hash-t ad (vagy az eltérés oka leírva).
+- [ ] M-9 Hét kép (a „napozó” pózzal), összesen ≤ 1,5 MB; legalább 3–4 javító kör a saját képek alapján, őszinte értékeléssel.
+- [ ] M-10 Az ÚJ GLB betöltve a böngészős előnézetben, mind a hat klip lejátszva, konzolhiba nélkül, képernyőképpel.
+- [ ] M-11 `gate:stage` zöld.

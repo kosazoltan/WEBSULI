@@ -54,6 +54,33 @@ bármely játék kódja, más munkafa / ág.
 7. Képek: JPG, 768 px; a régi PNG-k törölve. Manifest: `"name": "A Websuli makija"`.
 8. Újra: kétszeri gyártás (azonos hash), őr-teszt, `gate:stage`. Retro: `docs/measurements/kabala-maki/retro-2026-11-18.md`.
 
+## Második változat — élethűbb gyűrűsfarkú maki (terv: `docs/specs/2026-11-18-kabala-maki.md`, 7. szakasz)
+
+Hatókör: ugyanaz, mint fent (a szkriptek, a GLB + manifest, az őr-teszt, a képek, az előnézet, a leírás). Sorrend:
+
+1. **Docs-commit:** a terv 7. szakasza + ez a szakasz. Kód csak ezután.
+2. **`maki_model.py` újraírása:**
+   a. arányok a 7.2 szerint (fej : test ~1 : 1,7; karcsú törzs; hosszabb, erősebb hátsó láb; megnyúlt pofa; hegyesedő fül);
+   b. „puha” alapformák (fej, pofa, fül, pofaszőr-tincsek, nyak, törzs, végtagok, faroktő) címkével, képletes színnel és súllyal;
+   c. ezekből ideiglenes háló → Remesh (VOXEL) → Smooth → Decimate módosító, a kiértékelt háló kiolvasása;
+   d. az új csúcsokra címke, szín és súly átvitele a legközelebbi alapforma-csúcsokról (KD-fa, távolsággal súlyozva, legfeljebb 4 csont);
+   e. az arc: 512 px-es festett textúra (irány szerinti vetítés a fej közepéből, a szinguláris pont a tarkón); a fej elülső
+      lapjai a `Fej` anyagot kapják, a többi a csúcsszínes `Bunda`-t; a két anyag határán a szín azonos;
+   f. „kemény” részek változatlan elven: szem (fényes), orr, gyűrűs farok (14 sáv, fekete vég, kérdőjel-ív, tincses körvonal);
+   g. csontváz ≤ 30 csont: gyökér, csípő, gerinc, mellkas, fej, 2 fül, 2×(felkar, alkar), 2×(comb, lábszár, lábfej), 8 farok;
+   h. `MakiArc`: szemhéj, vékony pillaív (nyitva a szem felső ívén; csukva jól látható ív), fénypontok, száj — a száj a kész
+      hálóra vetítve (sugárvetés).
+3. **`maki_anim.py`:** a klipek az új csontnevekre; új `sunbathe` (3 mp: leül, karját széttárja, szemét behunyja, mosolyog, majd feláll).
+4. **`build.py`:** UV-export a textúrához; manifest `sunbathe`-pel. **Őr-teszt:** az új keret (600 KB / 30 000 / 6 anyag / ≤ 30 csont /
+   ≤ 1 kép / 6 klip) — dokumentált spec-változás.
+5. **`render.py`:** hét kép (új: `08-napozo`), a tabló hat klippel; JPG 768 px.
+6. **Javító körök:** legalább 3–4, nézetenként (elöl, háromnegyed, oldal, hátul, arc); a mérce a 7.1.
+7. **Előnézet:** `sunbathe` gomb; az ÚJ GLB betöltése `localhost:4599`-en, mind a hat klip, konzolhiba nélkül, képernyőkép.
+8. **Zárás:** kétszeri gyártás (hash), őr-teszt, `gate:stage`, a leírás és a retro frissítése, M-pontok tételes ellenőrzése.
+
+Megállási feltétel: ha az összefüggő háló vagy a textúra szkriptből nem hozható vállalható minőségre, egyenes jelentés arról,
+mi nem megy, és mi kellene hozzá (kézi szobrászat / retopológia) — nem a mérce csendes lejjebb vitele.
+
 ## Futtatás
 
 ```
