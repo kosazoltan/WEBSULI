@@ -17,8 +17,10 @@ const row = (over: Partial<TtsAudioRow> = {}): TtsAudioRow => {
   return { id: ID, voiceVersion: "gb-1", language: "en-GB", mime: "audio/mpeg", bytes, size: bytes.length, ...over };
 };
 
-test("méretőr: a plafon 40 MB / fájlonként 300 KB; a környezeti változó csak lefelé állít", () => {
-  assert.deepEqual(TTS_AUDIO_LIMITS, { maxTotalBytes: 40 * 1024 * 1024, maxFileBytes: 300 * 1024 });
+test("méretőr: hangverziónként 40 MB, abszolút 80 MB, fájlonként 300 KB; a környezeti változó csak a verziókeretet és csak lefelé állítja", () => {
+  // Dokumentált spec-pontosítás (review U1, orkesztrátori döntés 2026-11-18): a verziónkénti plafon mellé kemény abszolút összplafon került.
+  assert.deepEqual(TTS_AUDIO_LIMITS, { maxTotalBytes: 40 * 1024 * 1024, maxAbsoluteBytes: 80 * 1024 * 1024, maxFileBytes: 300 * 1024 });
+  for (const value of [undefined, "1", "0", "99999999999"]) assert.equal(ttsAudioLimits(value).maxAbsoluteBytes, 80 * 1024 * 1024, `az abszolút plafon nem állítható: ${value}`);
   assert.equal(ttsAudioLimits(undefined).maxTotalBytes, 40 * 1024 * 1024);
   assert.equal(ttsAudioLimits("1048576").maxTotalBytes, 1048576, "lefelé állítható");
   assert.equal(ttsAudioLimits("0").maxTotalBytes, 0, "0: minden írás megtagadva");
@@ -27,15 +29,38 @@ test("méretőr: a plafon 40 MB / fájlonként 300 KB; a környezeti változó c
 });
 
 test("mutáció: az összplafon pontosan a határon enged, egy bájttal fölötte megtagad", () => {
-  const limits = { maxTotalBytes: 1000, maxFileBytes: 300 };
-  assert.doesNotThrow(() => assertTotalWithinLimit(900, 100, limits));
-  assert.throws(() => assertTotalWithinLimit(900, 101, limits), (e: unknown) => e instanceof TtsStorageLimitError && e.reason === "total-exceeded" && e.detail.totalBytes === 900);
-  assert.throws(() => assertTotalWithinLimit(1000, 1, limits), TtsStorageLimitError);
-  assert.doesNotThrow(() => assertTotalWithinLimit(0, 1000, limits));
+  const limits = { maxTotalBytes: 1000, maxAbsoluteBytes: 2000, maxFileBytes: 300 };
+  const only = (versionBytes: number) => ({ versionBytes, totalBytes: versionBytes });
+  assert.doesNotThrow(() => assertTotalWithinLimit(only(900), 100, limits));
+  assert.throws(() => assertTotalWithinLimit(only(900), 101, limits), (e: unknown) => e instanceof TtsStorageLimitError && e.reason === "total-exceeded" && e.detail.totalBytes === 900);
+  assert.throws(() => assertTotalWithinLimit(only(1000), 1, limits), TtsStorageLimitError);
+  assert.doesNotThrow(() => assertTotalWithinLimit(only(0), 1000, limits));
+});
+
+// Review U1: a verziókeret mellett a TELJES tábla abszolút plafonja is megtagad — megkülönböztethető okkal.
+test("mutáció: az abszolút összplafon a régi verziók soraival együtt számol; a határon enged, egy bájttal fölötte megtagad", () => {
+  const limits = { maxTotalBytes: 1000, maxAbsoluteBytes: 2000, maxFileBytes: 300 };
+  // Az új verzió kerete még szinte üres (100 / 1000), de a tábla a régi verzióval együtt a plafonnál jár.
+  assert.doesNotThrow(() => assertTotalWithinLimit({ versionBytes: 100, totalBytes: 1900 }, 100, limits));
+  assert.throws(() => assertTotalWithinLimit({ versionBytes: 100, totalBytes: 1900 }, 101, limits),
+    (e: unknown) => e instanceof TtsStorageLimitError && e.reason === "absolute-exceeded" && e.detail.totalBytes === 1900 && e.detail.limit === 2000);
+  assert.throws(() => assertTotalWithinLimit({ versionBytes: 0, totalBytes: 2000 }, 1, limits), (e: unknown) => e instanceof TtsStorageLimitError && e.reason === "absolute-exceeded");
+  assert.match(new TtsStorageLimitError("absolute-exceeded", { size: 1, totalBytes: 2000, limit: 2000 }).message, /abszolút plafon 2000/);
+  assert.notEqual(new TtsStorageLimitError("absolute-exceeded", { size: 1, totalBytes: 1, limit: 1 }).message, new TtsStorageLimitError("total-exceeded", { size: 1, totalBytes: 1, limit: 1 }).message);
+  // Ha mindkettő sérül, a verziókeret oka jön (az a szűkebb, a gyártó azt tudja kezelni).
+  assert.throws(() => assertTotalWithinLimit({ versionBytes: 1000, totalBytes: 2000 }, 1, limits), (e: unknown) => e instanceof TtsStorageLimitError && e.reason === "total-exceeded");
+});
+
+// Review U1: a hangverzió neve nem nyithat új keretet — írni csak a kódban rögzített aktuális verzióra lehet.
+test("mutáció: nem az aktuális hangverzióra szóló sor → megtagadva (elgépelt, régi és jövőbeli verziónév is)", () => {
+  assert.doesNotThrow(() => validateTtsAudioRow(row()));
+  for (const voiceVersion of ["gb-2", "gb-11", "gb-0", "GB-1", "us-1"]) assert.throws(() => validateTtsAudioRow(row({ voiceVersion })), (e: unknown) => e instanceof TtsAudioInputError && /aktuális hangverzió/.test(e.message), voiceVersion);
+  assert.doesNotThrow(() => validateTtsAudioRow(row({ voiceVersion: "gb-2" }), undefined, "gb-2"), "hangcsere után az új verzió az aktuális");
+  assert.throws(() => validateTtsAudioRow(row(), undefined, "gb-2"), /aktuális hangverzió/, "…és a régire már nem lehet írni");
 });
 
 test("mutáció: túl nagy fájl, hibás mime, hibás kulcs, eltérő méret, üres hang → megtagadva a várt okkal", () => {
-  const limits = { maxTotalBytes: 1000, maxFileBytes: 20 };
+  const limits = { maxTotalBytes: 1000, maxAbsoluteBytes: 2000, maxFileBytes: 20 };
   assert.doesNotThrow(() => validateTtsAudioRow(row({ bytes: Buffer.alloc(20, 1) }), limits));
   assert.throws(() => validateTtsAudioRow(row({ bytes: Buffer.alloc(21, 1) }), limits), (e: unknown) => e instanceof TtsStorageLimitError && e.reason === "file-too-large");
   assert.throws(() => validateTtsAudioRow(row({ bytes: Buffer.alloc(300 * 1024 + 1, 1) })), TtsStorageLimitError, "az alapértelmezett fájlplafon is él");
