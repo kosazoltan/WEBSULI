@@ -89,7 +89,10 @@ export async function readPractice(userId: string, id: string, now = new Date())
   return withAttempt(userId, id, async (tx, row) => { await checkCurrent(tx, row, now); return viewOf(row); });
 }
 export async function answerPractice(userId: string, id: string, questionId: string, pickedIndex: number, usedHint: boolean, now = new Date()) {
-  return withAttempt(userId, id, async (tx, row) => {
+  // Spec 2026-11-17-eredmeny-email-foglalas: a kvíz kérdésenként azonnal visszajelez, a lezáró gombot sokan meg sem nyomják — ha ezzel a
+  // válasszal a kör minden kérdése megvan, az eredmény-e-mail lezárás nélkül is elindul (a későbbi lezárás a foglalás miatt nem küld újra).
+  let complete: typeof lessonAttempts.$inferSelect | null = null;
+  const view = await withAttempt(userId, id, async (tx, row) => {
     await checkCurrent(tx, row, now);
     const q = row.questions.find(q => q.id === questionId);
     if (!q || !Number.isInteger(pickedIndex) || pickedIndex < 0 || pickedIndex >= q.options.length) throw new PracticeError(400, "Hibás kérdés vagy válasz.");
@@ -102,8 +105,13 @@ export async function answerPractice(userId: string, id: string, questionId: str
     if (row.status !== "active") throw new PracticeError(409, "Ez a kör már lezárult.");
     const answers = { ...row.answers, [q.id]: { pickedIndex, usedHint, correct: pickedIndex === q.correctIndex, answeredAt: now.toISOString() } };
     const [saved] = await tx.update(lessonAttempts).set({ answers }).where(eq(lessonAttempts.id, row.id)).returning();
+    if (saved.status === "active" && saved.questions.every(question => saved.answers[question.id])) complete = saved;
     return viewOf(saved);
   });
+  const done = complete as typeof lessonAttempts.$inferSelect | null;
+  if (done) void import("../lesson-result-email").then(m => m.sendPracticeResult({ userId, attemptId: done.id, lessonId: done.lessonId, questions: done.questions, answers: done.answers }))
+    .catch(error => logger.warn(`[PRACTICE] Az eredmény-e-mail nem indult: ${error instanceof Error ? error.message : String(error)}`));
+  return view;
 }
 export async function markPracticeHint(userId: string, id: string, questionId: string, now = new Date()) {
   return withAttempt(userId, id, async (tx, row) => {
