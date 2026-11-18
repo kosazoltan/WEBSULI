@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, prFromRest, requiredChecks, threadsFromCcr } from './pre-merge-gate.mjs';
+import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, flattenPages, prFromRest, requiredChecks, threadsFromCcr } from './pre-merge-gate.mjs';
 
 const cfg = loadConfig();
 const HEAD = 'a'.repeat(40);
@@ -160,9 +160,21 @@ test('prFromRest: piszkozat, zárt, ismeretlen / hiányzó mergeable_state → F
   assert.equal(st(decideMerge(base({ pr: p({ mergeable_state: null }) })), 'PR állapota'), STATUS.FAIL);
 });
 
-test('threadsFromCcr: resolved=true lezárt; false vagy hiányzó mező nyitott (fail-closed)', () => {
+test('threadsFromCcr: resolved=true lezárt; false vagy hiányzó mező nyitott; nem lista → kivétel (fail-closed)', () => {
   assert.deepEqual(threadsFromCcr([{ resolved: true }, { resolved: false }, {}]), [{ isResolved: true }, { isResolved: false }, { isResolved: false }]);
-  assert.deepEqual(threadsFromCcr(null), []);
+  assert.throws(() => threadsFromCcr(null), /nem lista/);
+  assert.throws(() => threadsFromCcr({ threads: [{ resolved: false }] }), /nem lista/);
+  assert.throws(() => threadsFromCcr(''), /nem lista/);
   assert.equal(st(decideMerge(base({ threads: threadsFromCcr([{ resolved: true }, {}]) })), 'lezáratlan review-szálak'), STATUS.FAIL);
   assert.equal(st(decideMerge(base({ threads: threadsFromCcr([{ resolved: true }]) })), 'lezáratlan review-szálak'), STATUS.PASS);
+});
+
+test('flattenPages: az oldalak egy listává; nem lista vagy csonka fájllista → kivétel (fail-closed)', () => {
+  assert.deepEqual(flattenPages([[1, 2], [3]], 3), [1, 2, 3]);
+  assert.deepEqual(flattenPages([[]]), []);
+  assert.throws(() => flattenPages([[1, 2]], 150, 'fájllista'), /csonka \(2 \/ 150\)/);
+  assert.throws(() => flattenPages({ items: [] }), /nem lista/);
+  assert.throws(() => flattenPages([{ a: 1 }]), /nem lista/);
+  const comments = flattenPages([Array.from({ length: 100 }, () => ({ body: 'x' })), [{ body: 'késői' }]]);
+  assert.equal(comments.length, 101, 'a 100. utáni komment (pl. a késői ítéletsor) is megjön');
 });

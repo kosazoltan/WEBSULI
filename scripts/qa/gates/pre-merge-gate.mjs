@@ -141,7 +141,21 @@ export function prFromRest(pull, files = [], comments = []) {
 
 /** A felhős REST-út (`pulls/<n>/ccr/review_threads`) szálai; hiányzó `resolved` = nyitott (fail-closed). */
 export function threadsFromCcr(list) {
-  return (Array.isArray(list) ? list : []).map((t) => ({ isResolved: t?.resolved === true }));
+  // Nem tömb (üres törzs, burkolt objektum) → kivétel → „adatgyűjtés” FAIL, mint a GraphQL-úton bármely alakeltérés.
+  if (!Array.isArray(list)) throw new Error('a ccr/review_threads válasza nem lista — a szálak állapota nem állapítható meg');
+  return list.map((t) => ({ isResolved: t?.resolved === true }));
+}
+
+/**
+ * `gh api --paginate --slurp` kimenete (oldalak tömbje) egy listává; a régi `gh pr view --json files,comments` is minden oldalt
+ * hozott. Ha a PR szerint több fájl változott, mint amennyi megjött, kivétel (fail-closed): a telepítés-jelzés és a C-61 a teljes
+ * fájllistán dolgozik.
+ */
+export function flattenPages(pages, expected = null, what = 'lista') {
+  if (!Array.isArray(pages) || pages.some((p) => !Array.isArray(p))) throw new Error(`a(z) ${what} lapozott válasza nem lista`);
+  const all = pages.flat();
+  if (expected != null && all.length < expected) throw new Error(`a(z) ${what} csonka (${all.length} / ${expected})`);
+  return all;
 }
 
 function ghJson(exec, root, args) {
@@ -174,17 +188,19 @@ async function main() {
     // REST (docs/specs/2026-11-18-merge-kapu-rest.md): a `{owner}/{repo}` helyőrzőt a gh a helyi git-remote-ból oldja fel.
     const repo = ghJson(exec, root, ['api', 'repos/{owner}/{repo}']).full_name;
     const [owner, name] = repo.split('/');
+    const pull = ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}`]);
     pr = prFromRest(
-      ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}`]),
-      ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}/files?per_page=100`]),
-      ghJson(exec, root, ['api', `repos/${repo}/issues/${n}/comments?per_page=100`]),
+      pull,
+      flattenPages(ghJson(exec, root, ['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/files?per_page=100`]), pull?.changed_files ?? null, 'fájllista'),
+      flattenPages(ghJson(exec, root, ['api', '--paginate', '--slurp', `repos/${repo}/issues/${n}/comments?per_page=100`]), null, 'kommentlista'),
     );
     const head = pr.headRefOid;
     const mainBranch = ghJson(exec, root, ['api', `repos/${repo}/branches/main`]);
     let required;
     try {
       required = ghJson(exec, root, ['api', `repos/${repo}/branches/main/protection`])?.required_status_checks?.contexts ?? [];
-    } catch {
+    } catch (e) {
+      gate.log(`[pre-merge-gate] a védelmi végpont nem olvasható (${String(e?.message ?? e).split('\n')[0]}) — a branches/main protection mezőjéből`);
       // A védelmi végpont admin-jogot kér (felhős munkamenetben 403); ugyanez a lista az ág olvasható `protection` mezőjében.
       required = mainBranch?.protection?.required_status_checks?.contexts ?? [];
     }
@@ -195,7 +211,8 @@ async function main() {
     try {
       threads = ghJson(exec, root, ['api', 'graphql', '-f', `query=${q}`, '-f', `o=${owner}`, '-f', `r=${name}`, '-F', `n=${n}`])
         .data.repository.pullRequest.reviewThreads.nodes;
-    } catch {
+    } catch (e) {
+      gate.log(`[pre-merge-gate] a GraphQL-szál-lekérdezés nem sikerült (${String(e?.message ?? e).split('\n')[0]}) — a ccr/review_threads útról`);
       // Felhős munkamenet: a GraphQL tiltott, a szálak a CCR REST-útról jönnek; ha ez is bukik, a kivétel → „adatgyűjtés” FAIL.
       threads = threadsFromCcr(ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}/ccr/review_threads`]));
     }

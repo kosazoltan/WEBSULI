@@ -36,7 +36,7 @@ terhelésétől függően ±50%.
 | Szakasz | `npm run gate:stage` | lint gyors + a változott fájlokhoz leképezett egységtesztek + minden `*-guard.test.ts` (23 db) + a `scripts/qa` tesztjei, ha érintett | 47 s (tsc nélkül); tsc-vel ~115 s |
 | Push előtt | `npm run gate:push` | tiszta fa; `git fetch`; lint teljes; teljes egységteszt; háromfázisú rend; PR-méret; friss main (ha nincs beolvasztva: őr-tesztek az összefésült állapoton); közös fájlok; `.audit-ok`; „zöld CI utáni push” | 251 s (ebből a teljes egységteszt 132 s) |
 | PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet; a push-kapu minden lépése; `npm run build`; játék / UI: CI-azonos böngészős út; DB: `test:learning-db` | 214 s böngészős út nélkül (build 20 s); böngészős futásonként + ~160 s (füstpróba: 1 spec, 11 eset, 164 s) |
-| Merge előtt | `npm run gate:merge -- <PR>` | (REST-ről gyűjt, így felhős munkamenetben is fut; a szálak GraphQL-ről, ha az tiltott, a `pulls/<n>/ccr/review_threads` útról) CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
+| Merge előtt | `npm run gate:merge -- <PR>` | (REST-ről gyűjt, így felhős munkamenetben is fut: fájl- és kommentlista lapozva; a szálak GraphQL-ről, ha az tiltott, a `pulls/<n>/ccr/review_threads` útról; a kötelező lista a védelmi végpont 403-ánál a `branches/main` `protection` mezőjéből) CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
 
 ### Külső (Gemini) ellenőr — második vélemény
 

@@ -45,10 +45,12 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
 ## Edge case-ek
 
 - `mergeable_state` `unknown` / `null` → `UNKNOWN` → a meglévő szabály szerint FAIL („várd meg az újraszámolást”).
-- 100-nál több változott fájl vagy komment: a GraphQL-változat is csak az első oldalt nézte a gyakorlatban; a fájllista a
-  `telepítés` jelzéshez és a C-61-hez kell — 100 fölött a C-61 a compare-végpontból dolgozik tovább. Ítélet-komment a 100.
-  után: a PR-leírásban vagy a helyi bizonyítékban is lehet. (Nem lazít: a hiányzó ítélet FAIL.)
-- A CCR-útvonal válaszának hiányzó `resolved` mezője → nem lezárt szálnak számít (fail-closed).
+- 100-nál több változott fájl vagy komment: a régi `gh pr view --json files,comments` a kommenteket lapozva hozta (a fájlokat
+  `files(first: 100)`-zal). Az új út mindkettőt `gh api --paginate --slurp`-pal kéri (`flattenPages`), így a késői ítélet-komment
+  sem vész el; ha a fájllista rövidebb a PR `changed_files` értékénél, kivétel → „adatgyűjtés” FAIL (a telepítés-jelzés és a
+  C-61 a teljes listán dolgozik). (Független review K2, A1.)
+- A CCR-útvonal válaszának hiányzó `resolved` mezője → nem lezárt szálnak számít; ha a válasz nem lista (üres törzs, burkolt
+  objektum), kivétel → FAIL (fail-closed; független review K1).
 
 ## Elfogadás (EARS)
 
