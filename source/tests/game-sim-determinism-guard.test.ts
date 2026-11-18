@@ -59,8 +59,7 @@ function gameCores(): string[] {
   if (!existsSync(lib)) return [];
   return readdirSync(lib)
     .filter((entry) => statSync(join(lib, entry)).isDirectory())
-    // `pacing.ts` (Brain Rot válaszidő, review L7): a sim importálja, ezért ugyanaz a tilalom vonatkozik rá.
-    .flatMap((entry) => ["sim.ts", "core.ts", "pacing.ts"].map((file) => join(lib, entry, file)))
+    .flatMap((entry) => ["sim.ts", "core.ts"].map((file) => join(lib, entry, file)))
     .filter((file) => existsSync(file));
 }
 
@@ -70,6 +69,9 @@ function simFiles(): string[] {
     ...walk(join(root, "shared/duel")),
     ...PLAY_SIM_FILES.map((p) => join(root, p)).filter((p) => existsSync(p)),
     ...gameCores(),
+    // A Brain Rot `pacing.ts`-e (válaszidő, review L7): a Brain Rot sim importálja, ezért ugyanaz a tilalom vonatkozik rá.
+    // Csak ez: a Szólétra `pacing.ts`-e a tempó tárolásához (localStorage) jogosan használ `window`-t, és azt a sim nem hívja.
+    join(root, "client/src/lib/brainRot/pacing.ts"),
   ];
 }
 
