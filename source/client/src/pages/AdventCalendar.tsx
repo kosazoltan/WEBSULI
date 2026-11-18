@@ -269,7 +269,8 @@ export default function AdventCalendar() {
                       <p className="advent-feedback__verdict" data-correct={open.result.correct ? "true" : "false"}>
                         {open.result.correct ? "Ügyes vagy — ez az ablak már világít!" : "Most nem sikerült — nézd meg a helyes választ."}
                       </p>
-                      <p>A helyes válasz: <strong>{open.question.options[open.result.correctIndex]}</strong></p>
+                      {/* correctIndex -1: a kérdés időközben kikerült a bankból — az eredmény megvan, a helyes válasz szövege nincs. */}
+                      {open.result.correctIndex >= 0 ? <p data-testid="advent-correct-answer">A helyes válasz: <strong>{open.question.options[open.result.correctIndex]}</strong></p> : null}
                       {open.result.explanation ? <p>{open.result.explanation}</p> : null}
                       {!open.result.correct && open.result.door.state === "repairable" ? <p>Ezt az ablakot egy új kérdéssel kijavíthatod.</p> : null}
                     </>

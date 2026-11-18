@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { ADVENT_GIFT_MESSAGE } from "../shared/advent/rules";
-import { clearAdventTime, pickOption, playDoor, seedProgress, setAdventTime, settle, shot } from "./support/advent-e2e";
+import { clearAdventTime, pickOption, playDoor, proxyHeaders, seedProgress, setAdventTime, settle, shot } from "./support/advent-e2e";
 import { MOBILE_VIEWPORTS, hideAndShowPage, measureOverflow, overlappingTargets, safeAreaViolations, smallFonts, smallTargets } from "./support/game-mobile-quality";
 
 /**
@@ -78,6 +78,35 @@ test("hibás válasz → javítható → ÚJ kérdés → megoldva (A7)", async 
   await pickOption(page, true);
   await page.getByTestId("advent-next").tap();
   await expect(page.getByTestId("advent-door-3")).toHaveAttribute("data-state", "solved");
+});
+
+test("a bankból eltűnt kérdés (S2b C5 szerződés): újranyitáskor `question: null` → nincs párbeszédablak, az eredmény marad; válasznál `correctIndex: -1` → nincs üres „helyes válasz” sor", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await openCalendar(page, DEC5, 5);
+  // 1) A válasz valódi, de a szerver azt jelzi, hogy a kérdés szövege már nincs meg: correctIndex -1.
+  await page.route("**/api/advent/doors/2/answer", async (route) => {
+    const response = await route.fetch({ headers: proxyHeaders(route.request().headers()) });
+    const body = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({ response, json: { ...body, correctIndex: -1, explanation: "" } });
+  });
+  await page.getByTestId("advent-door-2").tap();
+  await pickOption(page, true);
+  await expect(page.getByTestId("advent-feedback")).toContainText("ez az ablak már világít");
+  await expect(page.getByTestId("advent-correct-answer")).toHaveCount(0);
+  await expect(page.getByTestId("advent-feedback")).not.toContainText("A helyes válasz");
+  await page.getByTestId("advent-next").tap();
+  await expect(page.getByTestId("advent-door-2")).toHaveAttribute("data-state", "solved");
+  // 2) A megoldott ablak újranyitása kérdés nélkül: a naptár áll tovább, a felület megmondja, mi történt.
+  await page.route("**/api/advent/doors/2/open", (route) => route.fulfill({ json: { day: 2, question: null, answered: null } }));
+  await page.getByTestId("advent-door-2").tap();
+  await expect(page.getByText("Ez a kérdés már nem érhető el, de az eredményed megmaradt.")).toBeAttached();
+  await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
+  await expect(page.getByTestId("advent-door-2")).toHaveAttribute("data-state", "solved");
+  // Más ablak tovább játszható.
+  await playDoor(page, 3, true);
+  expect(errors, "konzol- vagy laphiba").toEqual([]);
 });
 
 test("éjféli határ: 23:59:59-kor a holnapi ablak zárt, 00:00:00-kor nyitható (A13)", async ({ page }) => {

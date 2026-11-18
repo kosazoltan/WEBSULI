@@ -22,12 +22,18 @@ const proxied = new WeakSet<BrowserContext>();
 async function proxyApi(context: BrowserContext): Promise<void> {
   if (proxied.has(context)) return;
   proxied.add(context);
-  await context.route("**/api/**", (route) => {
-    const headers: Record<string, string> = { ...route.request().headers(), "x-forwarded-proto": "https" };
-    // A szerver az Origin fejlécet a (proxy szerinti) https-hez méri — mint a jm0- és az admin-tesztben, az origin is https.
-    if (headers.origin?.startsWith("http://")) headers.origin = `https://${headers.origin.slice("http://".length)}`;
-    return route.fallback({ headers });
-  });
+  await context.route("**/api/**", (route) => route.fallback({ headers: proxyHeaders(route.request().headers()) }));
+}
+
+/**
+ * A tesztkérés fejlécei „https-proxy mögött”: a szerver az Origin fejlécet a (proxy szerinti) https-hez méri — mint a
+ * `jm0-game-score-privacy.spec.ts` és az `admin-allowlist.spec.ts`, az origin is https. Csak a TESZT kérésein él; a szerver és a
+ * kliens kódja nem ismeri.
+ */
+export function proxyHeaders(original: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...original, "x-forwarded-proto": "https" };
+  if (headers.origin?.startsWith("http://")) headers.origin = `https://${headers.origin.slice("http://".length)}`;
+  return headers;
 }
 
 /** A szerver és a böngésző órája ugyanarra az időpontra (ISO, UTC). */
