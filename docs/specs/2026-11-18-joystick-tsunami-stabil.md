@@ -1,6 +1,6 @@
 # Terv: az ingadozó „joystick-reakció: tsunami-english” mérő stabilizálása az okánál
 
-> Állapot: megvalósítás alatt (2026-11-18) · Ág: `test/joystick-tsunami-stabil` · Végrehajtás:
+> Állapot: megvalósítva helyben (2026-11-18); a CI-futás a push után · Ág: `test/joystick-tsunami-stabil` · Végrehajtás:
 > `docs/specs/2026-11-18-joystick-tsunami-stabil-vegrehajtas.md` · Testvér-munka (külön ág, külön PR):
 > `docs/specs/2026-11-18-ci-e2e-szeleteles.md`.
 
@@ -101,10 +101,12 @@ a másik három játék mérési menete (náluk a render-ablak egy darab marad).
 
 <!-- acceptance-checklist -->
 
-- [ ] J1 — Reprodukció a javítás ELŐTT: CI-szerű késéssel a teszt helyben bukik (parancs + kimenet a PR-leírásban).
-- [ ] J2 — A javítás UTÁN `--repeat-each=10 --workers=1`, CI-azonos úton: 10 / 10 zöld (késés nélkül).
-- [ ] J3 — A javítás UTÁN CI-szerű késéssel is zöld (ugyanazzal a paranccsal, amely előtte bukott).
-- [ ] J4 — Mind a négy játék joystick-mérője zöld helyben (a `clearQuiz` közös).
-- [ ] J5 — A küszöbök, az események száma, a teszt időkerete és a `retries` változatlan (`git diff` a spec-fájlra: nincs módosított
+- [x] J1 — Reprodukció a javítás ELŐTT: CI-szerű késéssel a teszt helyben bukik (parancs + kimenet a PR-leírásban).
+      (mért: `JOY_CI_LAG_MS=200 JOY_CPU=2`, 6 futásból 5 bukott)
+- [x] J2 — A javítás UTÁN `--repeat-each=10 --workers=1`, CI-azonos úton: 10 / 10 zöld (késés nélkül).
+      (mért: 10 passed, 14,9 perc; futásonként pontosan 6 darab, ismétlés nélkül; többlet-render −3…+2)
+- [x] J3 — A javítás UTÁN CI-szerű késéssel is zöld (ugyanazzal a paranccsal, amely előtte bukott). (mért: 4 / 4, 10,8 perc)
+- [x] J4 — Mind a négy játék joystick-mérője zöld helyben (a `clearQuiz` közös). (mért: 2 × 4 játék, 8 / 8, 12,0 perc)
+- [x] J5 — A küszöbök, az események száma, a teszt időkerete és a `retries` változatlan (`git diff` a spec-fájlra: nincs módosított
       `expect`, `setTimeout`, küszöbszám).
 - [ ] J6 — `npm run gate:stage` és `npm run gate:push` zöld a munkafa gyökeréből.
