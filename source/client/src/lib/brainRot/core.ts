@@ -12,8 +12,9 @@
  *
  * IDŐ: a `step(dtMs)` a VILÁG ideje — a meghajtó fix lépésű hurka (`createFixedLoop`) lépteti; a kérdés alatti lassítás
  * (`slowMo` 0,6) a hurok szorzója (KSZ-4). A kérdés-óra a meghajtó LASSÍTATLAN órája (a kérdés határideje ezen fut); a menet
- * 90 mp-es órája külön: csak akkor halad, ha nincs nyitott kérdés és nincs szünet (tulajdonosi döntés 2026-11-17, „Álljon
- * meg” — terv 2026-11-17-brainrot-valaszido D5), így a menet vége nem szakít félbe kérdést.
+ * 90 mp-es órája külön (terv 2026-11-17-brainrot-valaszido D5 és a 2026-11-18-i módosítás, tulajdonosi döntés „Csak a
+ * többletidőre álljon”): kérdés nélkül jár; nyitott kérdésnél csak a régi (közös) ablaknyit fogy az óra indulásától, az
+ * előjelzés és a hosszabbítás alatt áll; szünetben áll. A menet vége nem eshet nyitott kérdésre.
  *
  * JÁTÉK (terv 5.5, J5a):
  *  - A vadász joystickkal (vagy a táblára bökve / húzva) fut; a lények pattogva sodródnak (`stepBrainRot`), és ha a vadász

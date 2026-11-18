@@ -178,6 +178,28 @@ test("review #485 Ú4: a győzelem a pontossággal monoton nem csökken (20 / 45
  * (D-J1a-10 / D-J1a-16). A kivett lapi tartalék (`couponRepeat.ts`) és a `brainrot-coupon-repeat.test.ts` elvárásai
  * ide kerültek (a megfeleltetés a végrehajtási fájl J5a 23. pontjában és a jelentésben).
  */
+/** A hibázott tétel elérte-e a közös menetközi visszatérési plafont (csak a VALÓDI ismétlések — `isReview` — számítanak). */
+function returnCapReached(out: readonly { key: string; isReview: boolean }[], i: number): boolean {
+  const key = out[i]!.key;
+  return out.slice(0, i + 1).filter((x) => x.key === key && x.isReview).length >= MAX_RETURNS_PER_RUN;
+}
+
+test("J5a 23. kivétel: csak a valódi ismétlés számít a plafonba — a kupon-körbeforgás 3. előfordulása még ellenőrzött hiba", () => {
+  // 3 tételes körbeforgás: a „b” harmadszor jön elő ismétlés NÉLKÜL (a „legrégebben feltett” körben), és hibás.
+  const rotation = [
+    { key: "mat:a", isReview: false }, { key: "mat:b", isReview: false }, { key: "mat:c", isReview: false },
+    { key: "mat:a", isReview: false }, { key: "mat:b", isReview: false }, { key: "mat:c", isReview: false },
+    { key: "mat:a", isReview: false }, { key: "mat:b", isReview: false },
+  ];
+  assert.equal(returnCapReached(rotation, 7), false, "a 3. előfordulás ismétlés nélkül: a hiba ellenőrzött (nem kivétel)");
+  // Két valódi menetközi ismétlés után a plafon elérve.
+  const capped = [
+    { key: "mat:x", isReview: false }, { key: "mat:y", isReview: false }, { key: "mat:x", isReview: true },
+    { key: "mat:y", isReview: false }, { key: "mat:x", isReview: true },
+  ];
+  assert.equal(returnCapReached(capped, 4), true, "két valódi ismétlés után kivétel");
+});
+
 const couponLesson = (n: number) =>
   Array.from({ length: n }, (_, i) => ({ id: `lecke-${i}`, prompt: `Lecke-kérdés ${i}?`, options: [`jó${i}`, `b${i}`, `c${i}`, `d${i}`], correctIndex: i % 4 }));
 
@@ -228,7 +250,9 @@ test("J5a 23. (a kivett `couponRepeat` elvárásai a közös szabállyal): a hib
           // tér vissza ismétlésként (questionDirector.ts) — ha a hiba előtt már ennyiszer visszajött, a garancia nem él (a
           // tétel a „legrégebben feltett” körben jön újra). Mérve: a válaszidő-javítás + #483 után seed 2111097167, 8 tétel:
           // a 3. hiba után 12 kérdés múlva. A plafon alatt a ≤ min(2n, 10) mérce változatlan.
-          if (out.slice(0, i + 1).filter((x) => x.key === o.key).length >= 1 + MAX_RETURNS_PER_RUN) return;
+          // Csak a VALÓDI menetközi ismétlések számítanak (a director `returns`-e, questionDirector.ts) — a kupon-körbeforgás
+          // („legrégebben feltett”) előfordulása nem (review: a tág, összes-előfordulásos feltétel gyengítés volt).
+          if (returnCapReached(out, i)) return;
           missed += 1;
           const back = out.slice(i + 1).findIndex((x) => x.key === o.key);
           assert.ok(back >= 0 && back + 1 <= within, `${n} tétel, seed ${seed}: a hibázott ${o.key} (${i + 1}.) ${back < 0 ? "nem jött vissza" : `${back + 1} kérdés múlva jött`}`);
