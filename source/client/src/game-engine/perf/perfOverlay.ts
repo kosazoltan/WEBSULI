@@ -9,6 +9,7 @@
  */
 import type * as THREE from "three";
 
+import { createGpuTimer } from "./gpuTimer";
 import { FrameWindow, fmt, median, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
 
 export type PerfResolution = 1 | 0.75 | 0.5;
@@ -89,8 +90,6 @@ export type PerfWindowApi = {
 
 type PerfWindow = { __websuliPerf?: PerfWindowApi };
 
-type TimerExt = { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number };
-
 const WINDOW_MS = 4000;
 const REFRESH_MS = 500;
 const RESOLUTIONS: readonly PerfResolution[] = [1, 0.75, 0.5];
@@ -110,7 +109,13 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   const canvas = renderer.domElement;
   const gl = renderer.getContext();
   const gl2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext ? gl : null;
-  const timerExt = (gl2?.getExtension("EXT_disjoint_timer_query_webgl2") ?? null) as TimerExt | null;
+  // PR #504 (Codex P2): kontextusvesztéskor a függő lekérdezések érvénytelenek — az időzítő eldobja őket, visszaálláskor a
+  // kiterjesztést újra lekéri, így a GPU-sor a visszaállás után is frissül.
+  const gpuTimer = createGpuTimer(gl2);
+  const onContextLost = () => gpuTimer.contextLost();
+  const onContextRestored = () => gpuTimer.contextRestored();
+  canvas.addEventListener("webglcontextlost", onContextLost);
+  canvas.addEventListener("webglcontextrestored", onContextRestored);
 
   let rendererName = "";
   try {
@@ -175,9 +180,6 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   let calls = 0;
   let triangles = 0;
 
-  const gpuSamples: number[] = [];
-  const pending: WebGLQuery[] = [];
-  let active: WebGLQuery | null = null;
 
   let probeLeft = 0;
   let probeSamples: number[] = [];
@@ -220,7 +222,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     }
     // A kapcsoló utáni képkockák más költségűek: a régi minták ne keveredjenek az újakkal.
     frames.clear();
-    gpuSamples.length = 0;
+    gpuTimer.clearSamples();
     gpuProbeMs = null;
     syncLabels();
   };
@@ -237,14 +239,14 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     readBufferSize();
     const info = renderer.info;
     const longMs = longTasks.reduce((sum, t) => sum + t.ms, 0);
-    const gpuAvg = gpuSamples.length ? gpuSamples.reduce((a, b) => a + b, 0) / gpuSamples.length : null;
+    const gpuAvg = gpuTimer.average();
     return {
       running: lastFrameAt > 0 && nowMs - lastFrameAt < 1000,
       renderedFrames,
       tier: opts.tier,
       frame: frames.summary(),
       gpuMs: gpuAvg,
-      gpuTimerAvailable: timerExt !== null,
+      gpuTimerAvailable: gpuTimer.available,
       gpuProbeMs,
       calls,
       triangles,
@@ -360,19 +362,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   return {
     frameStart(now) {
       tStart = performance.now();
-      if (timerExt && gl2) {
-        while (pending.length) {
-          const q = pending[0]!;
-          if (!gl2.getQueryParameter(q, gl2.QUERY_RESULT_AVAILABLE)) break;
-          const disjoint = gl2.getParameter(timerExt.GPU_DISJOINT_EXT) as boolean;
-          if (!disjoint) {
-            gpuSamples.push((gl2.getQueryParameter(q, gl2.QUERY_RESULT) as number) / 1e6);
-            if (gpuSamples.length > 30) gpuSamples.shift();
-          }
-          gl2.deleteQuery(q);
-          pending.shift();
-        }
-      }
+      gpuTimer.poll();
       if (lastNow !== null) {
         const dt = now - lastNow;
         // Az első képkocka és a szünet utáni hosszú rés nem képkockaidő.
@@ -384,23 +374,13 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     beforeRender() {
       tBefore = performance.now();
       lastJs = tBefore - tStart;
-      if (timerExt && gl2 && probeLeft === 0 && !active && pending.length < 4) {
-        const q = gl2.createQuery();
-        if (q) {
-          gl2.beginQuery(timerExt.TIME_ELAPSED_EXT, q);
-          active = q;
-        }
-      }
+      gpuTimer.begin(probeLeft > 0);
     },
     afterRender() {
       const tAfter = performance.now();
       lastRender = tAfter - tBefore;
       renderedFrames += 1;
-      if (active && timerExt && gl2) {
-        gl2.endQuery(timerExt.TIME_ELAPSED_EXT);
-        pending.push(active);
-        active = null;
-      }
+      gpuTimer.end();
       calls = renderer.info.render.calls;
       triangles = renderer.info.render.triangles;
       if (probeLeft > 0) {
@@ -420,13 +400,9 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       probeDone?.(null);
       probeDone = null;
       longTaskObserver?.disconnect();
-      if (gl2) {
-        if (active && timerExt) gl2.endQuery(timerExt.TIME_ELAPSED_EXT);
-        if (active) gl2.deleteQuery(active);
-        for (const q of pending) gl2.deleteQuery(q);
-      }
-      active = null;
-      pending.length = 0;
+      canvas.removeEventListener("webglcontextlost", onContextLost);
+      canvas.removeEventListener("webglcontextrestored", onContextRestored);
+      gpuTimer.dispose();
       root.remove();
       const w = window as unknown as PerfWindow;
       if (w.__websuliPerf === api) delete w.__websuliPerf;
