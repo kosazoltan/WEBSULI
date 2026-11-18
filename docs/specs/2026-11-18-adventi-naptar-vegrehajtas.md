@@ -619,3 +619,8 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
 - 2026-11-18 — S2b KÉSZ: `server/advent/clock.ts` (flag, óra), `identity.ts` (alany), `routes.ts` (hat végpont a `/api/advent` alatt, alanyonkénti
   200 / 15 perc, IP 600 / 15 perc, új névtelen sor 30 / óra), bekötés a `server/routes.ts`-be, játékos-adatletöltés (`adventCalendar`),
   végpont-leltár, `tests/advent-routes-db.integration.ts`, `tests/advent-source-guard.test.ts`; a DB-kör időkorlátja 300 s → 480 s.
+- 2026-11-18 — S3 KÉSZ (az S3a és az S3b EGY szeletben, mert a kérdés-párbeszédablak és az összesítés ugyanazt az oldalt és
+  állapotot használja): `client/src/pages/AdventCalendar.tsx`, `client/src/advent/` (`useAdvent.ts`, `AdventArt.tsx` helyőrzővel,
+  `Snowfall.tsx`, `advent.css`), `shared/advent/art.ts`, `art-manifest.ts` (üres: a képek az S3c-ben jönnek), `home-card.ts`, útvonal
+  `/adventi-naptar` az `App.tsx`-ben, `ADVENT_CALENDAR` az e2e-szerver környezetében; `tests/advent-calendar.spec.ts` (12 böngészős
+  eset, köztük három méretű mobil mérés), `tests/advent-home-card.test.ts` (8), `tests/support/advent-e2e.ts`.
