@@ -91,7 +91,10 @@ test("elavult időzítők: a fázisváltás játékórán fut, az újrakezdés �
 
 test("review #433: a lap minden haladás-mentése funkcionális frissítés (nincs elavult pillanatképből írás)", () => {
   const calls = [...page.matchAll(/onProgress(?:Ref\.current)?\((.{0,30})/g)].map((m) => m[1]!.trim());
-  assert.ok(calls.length >= 6, `kevés onProgress-hívás: ${calls.length}`);
+  // SPEC-VÁLTOZÁS 2026-11-18 (docs/specs/2026-11-18-joystick-jobb-kez.md D4, D5): a szünet menü két „Jobbkezes / Balkezes”
+  // gombja (2 onProgress-hívás) megszűnt — a joystick oldalát a közös kapcsoló a közös játékbeállításba írja, nem a haladásba.
+  // A küszöb a megmaradt hívások száma (a minta-illesztés őre); a „mind funkcionális” állítás változatlanul mindegyikre fut.
+  assert.ok(calls.length >= 4, `kevés onProgress-hívás: ${calls.length}`);
   for (const arg of calls) assert.match(arg, /^\(latest\)\s*=>/, `nem funkcionális mentés: onProgress(${arg}…`);
 });
 

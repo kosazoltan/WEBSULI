@@ -148,6 +148,10 @@ A mérés szigora (reakcióidő, kitérés, renderszám, érintési méret) seho
 4. `source/tests/blockcraft-mobile.test.ts` — a forrásminta az új aláírásra (`isLookZone(e.clientX - rect.left, rect.width,
    …)`) változik, a cím „a joystickkal ellentétes 60%”-ra; új állítás: a zóna a beállítást olvassa.
 
+5. `source/tests/tornado-mobile-shell.test.ts` „review #433” — a minta-illesztés őrküszöbe (`calls.length >= 6`) `>= 4`-re
+   változik: a szünet menü két „Jobbkezes / Balkezes” gombja két `onProgress`-hívással együtt megszűnt (D4, D5). A „minden
+   haladás-mentés funkcionális frissítés” állítás változatlanul minden megmaradt hívásra fut.
+
 ## Új tesztek
 
 - `source/tests/joystick-side.test.ts` (node): alapérték, mentés / betöltés, a szövegszótár oldalhelyessége, a
