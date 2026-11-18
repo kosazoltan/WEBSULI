@@ -789,3 +789,79 @@ test("review #485 (Vercel): a peremen álló vadász bemenet nélkül, és a nyi
   for (let k = 0; k < 60; k++) core2.step(DT, 0.4, 0.6);
   assert.equal(st2.hitCage, -1, "a nyitáskor már tolt joystick (tehetetlenség) nem szándék");
 });
+
+/**
+ * Main CI 44095911311 utómunka — a termék lassú képkockánál (a lassú CI-gép / lassú telefon), 60 fps-en és 250 ms-os
+ * képkockákkal. KÉT óra van (a review szerint pontosítva):
+ * - a KÉRDÉS-ÓRA a valós képkocka-időből halad, képkockánként legfeljebb 250 ms-mal (`BrainRotSteal.tsx:977`, a meghajtó
+ *   `clock += dt`); ezen fut a kérdés határideje (`questionUi.ts:125`, `:206`), a 90 mp-es menetóra és a visszaszámláló;
+ * - a JÁTÉKIDŐ (a mag fix lépései) képkockánként legfeljebb 5 lépést fut (`loop.ts:57`); ezen fut az élesítés
+ *   (`CAGE_ARM_MS`), a látható előjelzés (`data-armed`), a megállás, a joystick-szándék és a mozgás.
+ * ~7 fps alatt a kettő szétcsúszik: a játékidő lassabb, így az élesítés valós időben később jön, a döntésre jutó idő a
+ * határidőig rövidebb (4 fps-en ~25–33%; jegy — a közös hurok kérdése).
+ * Amit ez a teszt garantál: lassú képkockánál sem születik véletlen válasz (az élesítés előtti tolásból, a lent tartott
+ * ujj húzásából), és a friss bökés nem nyelődik el (az előjelzés és az elfogadás ugyanazt a játékidőt használja). Amit NEM
+ * garantál: hogy a gyerek döntési ideje lassú eszközön ugyanakkora — az a fenti két óra eltérése miatt rövidebb.
+ */
+for (const frameMs of [DT, 250]) {
+  test(`lassú képkocka (${Math.round(frameMs)} ms): a kérdés után 400 ms-ig tolt, majd elengedett joystick nem válaszol`, () => {
+    const ui = fakeUi({ give: true });
+    const d = createBrainRotDriver({ seed: 21, questions: ui, band: () => 0.4, arenaW: 1, arenaH: 1.5 });
+    const core = d.core;
+    core.setInput(0, 1); // a gyerek lefelé tol, és közben elkap egy lényt
+    core.forceCatch();
+    d.resolve();
+    assert.ok(ui.openNow(), "nyitott kérdés");
+    core.openCages(4, ui.openNow()!.id); // a lap / a sim `onShow`-ja
+    const st = core.state();
+    assert.ok(st.cagesOpen);
+    const c = st.cages[0]!;
+    // A vadász közvetlenül a ketrec fölött: a tolás a ketrecbe viszi (a mérés így nem üres).
+    st.player.x = c.x;
+    st.player.y = c.y - c.h / 2 - 0.12;
+    let hit = -1;
+    const onEvent = (e: BrainRotEvent) => {
+      if (e.type === "cageHit") hit = e.n;
+    };
+    const open = d.clockMs();
+    core.setInput(0, 1); // a nyitás utáni apró mozdulat újraküldi a régi irányt
+    while (d.clockMs() - open < 400) d.frame(frameMs, false, onEvent);
+    core.setInput(0, 0);
+    const released = d.clockMs();
+    while (d.clockMs() - released < 1500) d.frame(frameMs, false, onEvent);
+    assert.equal(hit, -1, "a döntés előtt nincs válasz");
+    assert.ok(ui.openNow(), "a kérdés még nyitva");
+  });
+
+  test(`lassú képkocka (${Math.round(frameMs)} ms): a lent tartott ujj húzása 2 mp-ig sem válaszol; friss bökés a ketrecre igen`, () => {
+    const ui = fakeUi({ give: true });
+    const d = createBrainRotDriver({ seed: 22, questions: ui, band: () => 0.4, arenaW: 1, arenaH: 1.5 });
+    const core = d.core;
+    const st = core.state();
+    core.setTarget(st.player.x, st.player.y + 0.05, "down"); // húzás a lény felé
+    core.forceCatch();
+    d.resolve();
+    core.openCages(4, ui.openNow()!.id); // a lap / a sim `onShow`-ja
+    assert.ok(st.cagesOpen);
+    const c = st.cages[2]!;
+    let hit = -1;
+    const onEvent = (e: BrainRotEvent) => {
+      if (e.type === "cageHit") hit = e.n;
+    };
+    const open = d.clockMs();
+    let lastMove = -Infinity;
+    while (d.clockMs() - open < 2000) {
+      if (d.clockMs() - lastMove >= 100) {
+        core.setTarget(c.x, c.y, "move");
+        lastMove = d.clockMs();
+      }
+      d.frame(frameMs, false, onEvent);
+    }
+    assert.equal(hit, -1, "a lent tartott ujj húzása nem válasz");
+    assert.ok(ui.openNow(), "a kérdés nyitva");
+    core.setTarget(c.x, c.y, "down");
+    const tapped = d.clockMs();
+    while (hit < 0 && d.clockMs() - tapped < 3000) d.frame(frameMs, false, onEvent);
+    assert.equal(hit, 2, "a friss bökés válaszol (a kérdés-ablakon belül)");
+  });
+}

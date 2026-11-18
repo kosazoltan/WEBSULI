@@ -26,6 +26,12 @@ export type VocabQuiz = FourChoiceQuiz & {
   speakText?: string;
   /** A KIMENETEL UTÁN felolvasandó helyes szó (magyar→cél és hiányos mondat: a term); a többi típusnál nincs. */
   speakAfter?: string;
+  /**
+   * A prompt célrésze — amit le kell fordítani / ki kell egészíteni (a prompt rész-szövege; Szólétra olvashatóság,
+   * docs/specs/2026-11-17-szoletra-olvashatosag.md D). magyar→cél: a magyar szó; cél→magyar: a célnyelvi szó;
+   * mondat-jelentés: a mondat; hiányos mondat: a mondat a hiánnyal. Additív, opcionális: a kérdés-sáv ezt emeli ki.
+   */
+  focus?: string;
 };
 
 const LANG_SUFFIX: Record<VocabLang, string> = { en: "angolul", de: "németül", fr: "franciául" };
@@ -445,6 +451,22 @@ function promptFor(entry: VocabEntry, type: VocabQuestionType, lang: VocabLang, 
   }
 }
 
+/** A prompt célrésze a kérdéstípusból (`VocabQuiz.focus`); `null`, ha a prompt nem tartalmazza (biztonsági háló). */
+function focusFor(entry: VocabEntry, type: VocabQuestionType, prompt: string): string | null {
+  let focus: string | null = null;
+  if (type === "hu-to-target") focus = entry.hu;
+  else if (type === "target-to-hu") focus = entry.term;
+  else if (type === "phrase-meaning") focus = entry.example;
+  else {
+    const hit = findTermInExample(entry);
+    if (hit) {
+      const text = entry.example.normalize("NFC");
+      focus = `${text.slice(0, hit.start)}${BLANK}${text.slice(hit.end)}`;
+    }
+  }
+  return focus && focus.trim().length > 0 && prompt.includes(focus) ? focus : null;
+}
+
 /** A válasz előtt felolvasható szöveg (`VocabQuiz.speakText`); `null`, ha minden felolvasás elárulná a választ. */
 function speakTextFor(entry: VocabEntry, type: VocabQuestionType): string | null {
   switch (type) {
@@ -508,5 +530,7 @@ export function generateVocabQuestion(
   const speak = speakTextFor(entry, type);
   if (speak) quiz.speakText = speak;
   if (type === "hu-to-target" || type === "cloze") quiz.speakAfter = entry.term;
+  const focus = focusFor(entry, type, prompt);
+  if (focus) quiz.focus = focus;
   return isPlayableQuestion(quiz) ? quiz : null;
 }

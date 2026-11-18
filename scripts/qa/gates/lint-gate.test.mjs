@@ -43,6 +43,7 @@ test('scanAddedLines: titok-minták bárhol bukás; loopback / sablon adatbázis
 
 test('classifyHookOutput / applyRepoRules: a hook figyelmeztetése WARN, a deny FAIL; csak az Edit|Write szabályok', () => {
   assert.equal(classifyHookOutput(''), null);
+  assert.equal(classifyHookOutput('nem json kimenet').level, STATUS.WARN, 'kanban #100: értelmezhetetlen kimenet nem nyelhető el');
   assert.equal(classifyHookOutput(JSON.stringify({ systemMessage: '[agentic-qa-kit] REPO-SZABÁLY figyelmeztetés: kódinjekció-kockázat' })).level, STATUS.WARN);
   assert.equal(classifyHookOutput(JSON.stringify({ hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'x' } })).level, STATUS.FAIL);
   const rules = [{ tool: 'Bash|PowerShell', pattern: 'x', level: 'deny' }, { tool: 'Edit|Write', pattern: 'tilos', level: 'deny', message: 'm' }, { tool: 'Edit|Write', pattern: 'gyanus', level: 'warn' }];

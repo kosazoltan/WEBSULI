@@ -46,6 +46,8 @@ tiszta munkafa → `git fetch` → teljes lint kapu (`--full`) → teljes egysé
   `git push <remote>`, `git push [-u] <remote> <helyi ág>`, `git push <remote> HEAD`, `git push <remote> HEAD:<aktuális ág>`.
   Láncolás (`&&`, `;`, `|`), `cd` / `env` / `git -C`, átirányítás, `--force*`, `--all`, `--tags`, `:` / `+` refspec → DENY.
   Távoli ág törlése: `git push <remote> --delete <ág>` (kapu nélkül; a `:<ág>` alak DENY).
+- A hook akkor is tilt, ha a git / gh nem válaszol időben („a repó állapota nem állapítható meg — próbáld újra”): néhány
+  másodperc múlva add ki újra ugyanazt az egyszerű parancsot. Alügynökként a munkafa ágát a fő checkoutból, az ág nevével küldd fel.
 - `háromfázisú rend FAIL`: hiányzik / későn jött a végrehajtási fájl (C-37) — pusholt ágon a sorrend nem javítható; ezért a legelső
   push ELŐTT kell zöldnek lennie.
 - `friss main … FAIL`: `git merge origin/main`, oldd fel, javítsd a repó-szintű őrt, futtasd újra.
