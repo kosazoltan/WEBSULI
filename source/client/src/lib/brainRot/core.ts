@@ -11,8 +11,10 @@
  * w ≥ 1), x jobbra, y LEFELÉ nő. A pixelre váltás (`× unitPx`) a nézet dolga.
  *
  * IDŐ: a `step(dtMs)` a VILÁG ideje — a meghajtó fix lépésű hurka (`createFixedLoop`) lépteti; a kérdés alatti lassítás
- * (`slowMo` 0,6) a hurok szorzója (KSZ-4). A menet 90 mp-es órája a meghajtó LASSÍTATLAN kérdés-órája: a kérdés alatt is jár
- * (terv 5.5 — a régi „álló óra” megszűnt), szünetben és a „Miért?” alatt áll.
+ * (`slowMo` 0,6) a hurok szorzója (KSZ-4). A kérdés-óra a meghajtó LASSÍTATLAN órája (a kérdés határideje ezen fut); a menet
+ * 90 mp-es órája külön (terv 2026-11-17-brainrot-valaszido D5 és a 2026-11-18-i módosítás, tulajdonosi döntés „Csak a
+ * többletidőre álljon”): kérdés nélkül jár; nyitott kérdésnél csak a régi (közös) ablaknyit fogy az óra indulásától, az
+ * előjelzés és a hosszabbítás alatt áll; szünetben áll. A menet vége nem eshet nyitott kérdésre.
  *
  * JÁTÉK (terv 5.5, J5a):
  *  - A vadász joystickkal (vagy a táblára bökve / húzva) fut; a lények pattogva sodródnak (`stepBrainRot`), és ha a vadász
@@ -1077,6 +1079,12 @@ export function createBrainRotDriver(opts: {
   arenaW?: number;
   arenaH?: number;
   reducedMotion?: boolean;
+  /**
+   * D5-módosítás (tulajdonosi döntés 2026-11-18, „Csak a többletidőre álljon”): egy nyitott kérdés ennyi menet-időt fogyaszt
+   * az óra indulásától (`startedAtSimMs`, az előjelzés után) — a régi ablakot; az előjelzés alatt és a hosszabbítás idejére a
+   * menet-óra áll. Hiányában a kérdés egész ideje alatt áll.
+   */
+  questionRoundMs?: (p: QuestionPresentation) => number;
 }): BrainRotDriver {
   const core = createBrainRotCore({ seed: opts.seed, tuning: opts.tuning, arenaW: opts.arenaW, arenaH: opts.arenaH, directCatch: opts.questions === null });
   const pace = createIntensityDirector();
@@ -1087,6 +1095,8 @@ export function createBrainRotDriver(opts: {
   // A rázás-zaj kozmetikai (KSZ-2: külön fxRng); a hitstop determinisztikus (a hurok tartása).
   const feel = createFeel({ reducedMotion: opts.reducedMotion ?? false, loop, fxRng: createRng(seedFrom(BRAIN_ROT_GAME_ID, opts.seed, "fx")).next });
   let clock = 0;
+  /** A menet órája (D5): nyitott kérdés és szünet alatt áll. */
+  let roundClock = 0;
   let real = 0;
 
   // KSZ-5: az ürítő függvény egyszer jön létre; a képkockánkénti visszahívás egy változóba kerül (nincs új closure).
@@ -1138,10 +1148,21 @@ export function createBrainRotDriver(opts: {
     frame(realDtMs, paused, onEvent) {
       const dt = Number.isFinite(realDtMs) && realDtMs > 0 ? realDtMs : 0;
       real += dt;
-      if (!paused) clock += dt;
-      feel.update(paused ? 0 : dt);
       const q = opts.questions;
-      if (core.running() && clock >= ROUND_MS) core.end();
+      if (!paused) {
+        clock += dt;
+        // D5 + módosítás: kérdés nélkül a menet-óra jár; nyitott kérdésnél csak az óra indulása (az előjelzés vége) és a régi
+        // ablak vége közti szakaszban — az előjelzés és a hosszabbítás alatt áll. A menet vége nem esik nyitott kérdésre.
+        const open = q ? q.active() : null;
+        if (!open) roundClock += dt;
+        else {
+          const from = open.startedAtSimMs;
+          const to = from + Math.max(0, opts.questionRoundMs ? opts.questionRoundMs(open) : 0);
+          roundClock += Math.max(0, Math.min(clock, to) - Math.max(clock - dt, from));
+        }
+      }
+      feel.update(paused ? 0 : dt);
+      if (core.running() && roundClock >= ROUND_MS && !(q && q.active())) core.end();
       if (q && !core.running() && !q.finished()) q.finish();
       if (q && !paused) q.frame(clock, { calm: true, tick: false });
       loop.setTimeScale(paused ? 0 : q ? q.timeScale() : 1);
@@ -1153,6 +1174,6 @@ export function createBrainRotDriver(opts: {
     resolve,
     drain,
     clockMs: () => clock,
-    remainingMs: () => Math.max(0, ROUND_MS - clock),
+    remainingMs: () => Math.max(0, ROUND_MS - roundClock),
   };
 }

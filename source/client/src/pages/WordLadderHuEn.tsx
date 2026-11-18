@@ -1714,7 +1714,9 @@ export default function WordLadderHuEn() {
         .game-shell-fixed[data-game="WordLadderHuEn"] .wl-holds:is([data-fit="1"], [data-fit="2"]) .wl-teach { display: none; }
         .game-shell-fixed[data-game="WordLadderHuEn"] .wl-holds[data-fit="2"] { padding: 6px; }
         ${HOLD_SCOPE}[data-fit="2"] .wl-answers { gap: 6px; }
-        ${HOLD_SCOPE}[data-fit="2"] .wl-hold { min-height: 48px; padding: 3px 8px; font-size: 16px; line-height: 1.12; }
+        /* Review #498 R2: a hosszú válaszos (\`data-long\`) szabálynál is erősebb, különben a tömörítés ott hatástalan. */
+        ${HOLD_SCOPE}[data-fit="2"] .wl-hold,
+        ${HOLD_SCOPE}[data-fit="2"] .wl-answers[data-long="true"] .wl-hold { min-height: 48px; padding: 3px 8px; font-size: 16px; line-height: 1.12; }
         .play-question[data-testid="wl-question"][data-wl-tight="true"] .play-question-status > span {
           position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
         }
