@@ -49,6 +49,9 @@ test("S1b: a beküldő a le nem zárt, régi kört nem küldi; a pillanatkép fe
   // A pillanatkép nem GET és nem sendBeacon (CSRF-fejléc kell): keepalive-os POST a gyorsítótárazott tokennel.
   const client = readFileSync(new URL("../client/src/lib/queryClient.ts", import.meta.url), "utf8");
   assert.match(client, /method: "POST", keepalive: true, credentials: "include"/);
-  assert.match(client, /if \(!token\) return false;/);
+  // Review #510 (SPEC-VÁLTOZÁS): token nélkül el sem indul (`null`); a siker csak 2xx válasz (`res.ok`), így a sikertelen újrapróbálható.
+  assert.match(client, /if \(!token\) return null;/);
+  assert.match(client, /\.then\(res => res\.ok, \(\) => false\)/);
+  assert.match(source, /void sending\.then\(ok => \{/);
   assert.doesNotMatch(source + client, /sendBeacon\(/);
 });
