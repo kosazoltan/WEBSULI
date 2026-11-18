@@ -462,8 +462,13 @@ function buildKid(): Kid {
   };
   const legL = makeLeg(-1);
   const legR = makeLeg(1);
-  rider.add(mesh(new RoundedBoxGeometry(0.38, 0.34, 0.25, 2, 0.05), std("#fb7a1c", { roughness: 0.6 }), 0, 0.44, 0));
-  rider.add(mesh(new RoundedBoxGeometry(0.39, 0.07, 0.26, 2, 0.02), std("#fde68a", { roughness: 0.6 }), 0, 0.47, 0));
+  // Látvány 3. lépés (3): kerekded, kedves figura — lekerekített törzs (kapszula) csíkkal.
+  const torso = new THREE.CapsuleGeometry(0.17, 0.16, 6, 14);
+  torso.scale(1.1, 1, 0.85);
+  rider.add(mesh(torso, std("#fb7a1c", { roughness: 0.6 }), 0, 0.45, 0));
+  const stripe = new THREE.CylinderGeometry(0.19, 0.19, 0.06, 18);
+  stripe.scale(1.1, 1, 0.85);
+  rider.add(mesh(stripe, std("#fde68a", { roughness: 0.6 }), 0, 0.47, 0));
 
   const armGeo = new RoundedBoxGeometry(0.1, 0.28, 0.11, 2, 0.03);
   const armMat = std("#fb7a1c", { roughness: 0.6 });
@@ -481,25 +486,31 @@ function buildKid(): Kid {
   const head = new THREE.Group();
   head.position.set(0, 0.61, 0);
   rider.add(head);
-  head.add(mesh(new RoundedBoxGeometry(0.4, 0.35, 0.33, 3, 0.08), skin, 0, 0.18, 0));
+  const headGeo = new THREE.SphereGeometry(0.23, 22, 16);
+  headGeo.scale(1.05, 0.95, 0.92);
+  head.add(mesh(headGeo, skin, 0, 0.19, 0));
   const hairMat = std("#6b3f1d", { roughness: 0.8 });
-  head.add(mesh(new RoundedBoxGeometry(0.42, 0.12, 0.35, 2, 0.05), hairMat, 0, 0.36, -0.005));
-  head.add(mesh(new RoundedBoxGeometry(0.42, 0.07, 0.08, 2, 0.03), hairMat, 0.02, 0.3, 0.14));
+  const hairGeo = new THREE.SphereGeometry(0.245, 22, 12, 0, Math.PI * 2, 0, Math.PI * 0.42);
+  hairGeo.scale(1.05, 0.95, 0.95);
+  head.add(mesh(hairGeo, hairMat, 0, 0.2, -0.01));
+  const fringe = new THREE.SphereGeometry(0.09, 12, 8);
+  fringe.scale(1.6, 0.6, 0.8);
+  head.add(mesh(fringe, hairMat, 0.05, 0.36, 0.15));
   const eyeGeo = new THREE.SphereGeometry(0.036, 10, 8);
   const eyeMat = std("#111827", { roughness: 0.3 });
   const shineGeo = new THREE.SphereGeometry(0.012, 6, 4);
   const shineMat = new THREE.MeshBasicMaterial({ color: "#ffffff" });
   for (const side of [-1, 1]) {
-    head.add(mesh(eyeGeo, eyeMat, side * 0.085, 0.2, 0.162));
-    head.add(mesh(shineGeo, shineMat, side * 0.085 + 0.012, 0.214, 0.192));
+    head.add(mesh(eyeGeo, eyeMat, side * 0.085, 0.21, 0.2));
+    head.add(mesh(shineGeo, shineMat, side * 0.085 + 0.012, 0.224, 0.225));
   }
   const cheekGeo = new THREE.SphereGeometry(0.036, 10, 6);
   cheekGeo.scale(1.2, 0.8, 0.4);
   const cheekMat = std("#ff94a6", { roughness: 0.8 });
-  head.add(mesh(cheekGeo, cheekMat, -0.135, 0.13, 0.165), mesh(cheekGeo, cheekMat, 0.135, 0.13, 0.165));
+  head.add(mesh(cheekGeo, cheekMat, -0.13, 0.13, 0.18), mesh(cheekGeo, cheekMat, 0.13, 0.13, 0.18));
   const smile = new THREE.TorusGeometry(0.05, 0.012, 6, 14, Math.PI);
   smile.rotateZ(Math.PI);
-  head.add(mesh(smile, std("#9f1239"), 0, 0.125, 0.166));
+  head.add(mesh(smile, std("#9f1239"), 0, 0.125, 0.205));
   return { group, rider, armL, armR, legL, legR, head };
 }
 
@@ -854,7 +865,8 @@ function setupTsunami(
         holder.add(m);
         const box = new THREE.Box3().setFromObject(m);
         m.position.y = -box.min.y;
-        addDecor(holder, u, zz, sc, -0.15, u * 3, n.startsWith("rock") ? "rock" : "bush");
+        // A sziklák a talajba ülnek (a lekerekített aljuk ne lebegjen).
+        addDecor(holder, u, zz, sc, n.startsWith("rock") ? -0.45 * sc : -0.2, u * 3, n.startsWith("rock") ? "rock" : "bush");
       }
       const debrisNames = ["debris_plank", "debris_barrel", "debris_crate", "debris_plank", "debris_barrel"];
       debrisNames.slice(0, lean ? 3 : 5).forEach((n, i) => {
@@ -1024,6 +1036,58 @@ function setupTsunami(
   front.frustumCulled = false;
   front.renderOrder = 1;
   scene.add(front);
+
+  /*
+   * Látvány 3. lépés (1): a SZÖKŐÁR mint főszereplő — a öböl mögött közeledő, átbukó hullámfal. Minél magasabb a víz, annál
+   * közelebb és magasabb; a tetején fehér, tépett taraj, a falán sötét mélység és fénylő sávok. Egy rajzolási hívás.
+   */
+  const waveUniforms = { uTime: { value: 0 }, uDanger: { value: 0 } };
+  const waveMat = new THREE.ShaderMaterial({
+    uniforms: waveUniforms,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uDanger;
+      varying vec2 vUv;
+      varying float vCurl;
+      void main() {
+        vUv = uv;
+        vec3 p = position;
+        float x = p.x;
+        // A taraj előrebukik (z felé), a fal teteje hullámzik.
+        float crestWave = sin(x * 0.18 + uTime * 0.9) * 0.6 + sin(x * 0.07 - uTime * 0.5) * 1.1;
+        float top = smoothstep(0.55, 1.0, uv.y);
+        // A mesh y-ban a fal magasságára skálázódik: a taraj hullámzása ennek néhány százaléka.
+        p.y += uv.y * crestWave * 0.025 * (0.6 + uDanger);
+        p.z += top * top * (3.0 + 6.0 * uDanger);
+        vCurl = top;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      varying vec2 vUv;
+      varying float vCurl;
+      void main() {
+        vec3 deep = vec3(0.02, 0.22, 0.38);
+        vec3 face = vec3(0.07, 0.55, 0.66);
+        vec3 col = mix(deep, face, smoothstep(0.0, 0.8, vUv.y));
+        float streak = smoothstep(0.75, 1.0, sin(vUv.x * 60.0 + vUv.y * 9.0 + uTime * 1.6) * 0.5 + 0.5) * smoothstep(0.2, 0.8, vUv.y);
+        col += vec3(0.35, 0.8, 0.85) * streak * 0.18;
+        float foamEdge = 0.86 + 0.05 * sin(vUv.x * 40.0 + uTime * 3.0) + 0.03 * sin(vUv.x * 97.0 - uTime * 4.0);
+        float foam = smoothstep(foamEdge - 0.05, foamEdge, vUv.y);
+        col = mix(col, vec3(0.97, 0.99, 1.0), foam);
+        float alpha = smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.985, 1.0, vUv.y));
+        gl_FragColor = vec4(col, alpha);
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const waveWall = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, lean ? 48 : 96, 12), waveMat);
+  waveWall.frustumCulled = false;
+  waveWall.renderOrder = 0;
+  scene.add(waveWall);
 
   // Platforms (rebuilt on resize: their length follows the screen width)
   let platforms: THREE.Group | null = null;
@@ -1245,7 +1309,9 @@ function setupTsunami(
 
       // K2: kép-eltolás nyitott kérdés alatt (a kamera felfelé mozdul → a világ lejjebb kerül a képen).
       const live = p.live?.current;
-      shiftY = damp(shiftY, (live?.shiftPx ?? 0) * worldPerPx, 6, dt);
+      // ≈ 400 ms-os lassuló beállás (koordinátori pontosítás 2026-11-18); csökkentett mozgásnál azonnali.
+      const shiftTarget = (live?.shiftPx ?? 0) * worldPerPx;
+      shiftY = reducedMotion ? shiftTarget : damp(shiftY, shiftTarget, 12, dt);
       camera.position.y = EYE + shiftY;
       sky.position.y = camera.position.y;
       // Victory (D4): the wave breaks below the shelter — the level sinks and the crest collapses in spray once.
@@ -1267,6 +1333,19 @@ function setupTsunami(
       px = damp(px, target.px, 12, dt);
       sx = damp(sx, target.sx, 4, dt);
       const fill = clamp01((level + HALF_H) / (2 * HALF_H));
+      // A közeledő szökőár: a víz magasságával (és győzelemkor visszahúzódva) közelebb és magasabb.
+      const danger = won ? 0 : clamp01((fill - 0.15) / 0.6);
+      waveUniforms.uTime.value = t;
+      waveUniforms.uDanger.value = damp(waveUniforms.uDanger.value, danger, 2, dt);
+      const dg = waveUniforms.uDanger.value;
+      const dz = THREE.MathUtils.lerp(160, 60, dg);
+      // A taraj a kép 52 %-ától (távol) a 74 %-áig (közel) ér fel — a teteje és a habja mindig látszik, az ég nem tűnik el.
+      const wallTop = worldY(THREE.MathUtils.lerp(0.52, 0.74, dg), -dz);
+      const wallBottom = worldY(0.05, -dz);
+      const wallH = Math.max(1, wallTop - wallBottom);
+      const span = hw * 2.6 * ((CAM_DIST + dz) / CAM_DIST);
+      waveWall.scale.set(span, wallH, 1);
+      waveWall.position.set(0, wallBottom + wallH / 2, -dz);
       const amp = 0.14 + 0.16 * fill + flash * 0.08;
       waterUniforms.uAmp.value = amp;
       waterUniforms.uLevel.value = level;

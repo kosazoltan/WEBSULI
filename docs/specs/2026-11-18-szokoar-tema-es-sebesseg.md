@@ -221,3 +221,10 @@ a közös `postfx` (telefonon bloom nélkül).
 
 **Őr-teszt (keret):** `tests/tsunami-models-budget.test.ts` — a `manifest.json` minden GLB-je létezik, összméret ≤ 600 KB,
 egy fájl ≤ 200 KB, a glTF JSON-ban a háromszögszám összesen ≤ 15 000, a mesh-ek száma ≤ 40.
+
+### 7.3 Spec-pontosítás: a figura szabadsága nyitott kérdés alatt (orkesztrátori döntés, 2026-11-18)
+A figura a kérdés megjelenése után **legfeljebb 600 ms-on belül** szabaddá válik, és a kérdés nyitva tartása alatt **végig szabad**
+marad. Eszközök sorrendben: kompakt (alacsonyabb) kérdés-sáv ugyanott → a másik hely → kép-eltolás (≈ 400 ms, lassuló görbe;
+csökkentett mozgásnál azonnali). A sáv `data-layout="settled"` állapotjelzőt kap, amikor az elrendezés nyugalomba ért; a teszt
+erre az állapotra vár, KÜLÖN méri a ≤ 600 ms-os beállást (`layoutSettleMs`), majd 3 mintával a folyamatos szabadságot. A mérce
+nem lazítható; ha 600 ms alatt nem megy, a mért értéket kell jelenteni.

@@ -383,7 +383,25 @@ for (const viewport of [
         await openQuestion(page, { question: true, longAnswers: true, longPrompt: true });
         const quiz = page.getByTestId("ts-quiz");
         await expect(quiz).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
-        await page.waitForTimeout(250);
+        // Koordinátori spec-pontosítás (2026-11-18): állapotra várunk (`data-layout="settled"`), és KÜLÖN mérjük, hogy a
+        // nyugalom a kérdés megjelenésétől ≤ 600 ms alatt beáll; utána a nyitott kérdés alatt végig szabad a figura (3 minta).
+        await expect(quiz).toHaveAttribute("data-layout", "settled", { timeout: 3_000 });
+        const settleMs = (await probe(page) as unknown as { layoutSettleMs: number | null }).layoutSettleMs;
+        expect(settleMs, "az elrendezés a megjelenéstől mért beállási ideje (ms)").not.toBeNull();
+        expect(settleMs!, `az elrendezés ≤ 600 ms alatt nyugalomba ér (mért: ${settleMs} ms)`).toBeLessThanOrEqual(600);
+        const figureFree = () =>
+          page.evaluate(() => {
+            const api = (window as unknown as { __websuliGame: { probe: () => { figureX: number; figureY: number } } }).__websuliGame;
+            const pr = api.probe();
+            const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+            const fx = stage.left + pr.figureX * stage.width;
+            const fy = stage.top + pr.figureY * stage.height;
+            return [fy - 8, fy - 36].map((y) => document.elementsFromPoint(fx, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]')));
+          });
+        for (let sample = 0; sample < 3; sample++) {
+          expect(await figureFree(), `a figura a nyitott kérdés alatt végig szabad (${sample + 1}. minta)`).toEqual([false, false]);
+          await page.waitForTimeout(300);
+        }
         const m = await page.evaluate(() => {
           const r = (el: Element) => {
             const b = el.getBoundingClientRect();

@@ -1578,6 +1578,7 @@ export default function TsunamiEscapeEnglish() {
           figureY: 1 - (st.water * WATER_VIEW_SCALE) / 100 + (liveRef.current.shiftPx ?? 0) / Math.max(1, stageRef.current?.clientHeight ?? 1),
           quizPlace: quizPlaceRef.current,
           sprint: driver.core.input.sprint ? 1 : 0,
+          layoutSettleMs: settleMsRef.current,
           scenePhase: coreWonRef.current ? "won" : phaseNowRef.current,
           questionId: p?.id ?? null,
           questionSeconds: p ? p.windowMs / 1000 : null,
@@ -1686,6 +1687,7 @@ export default function TsunamiEscapeEnglish() {
    * A kérdés helye a kérdés megjelenésekor dől el (utána nem ugrál): ha a víz (és rajta a figura) a kép alsó felében van, a
    * kérdés fent áll; ha a felső felében, lent (a vezérlők fölött) — így a gombok sosem takarják a figurát.
    */
+  const shownAtRef = useRef(0);
   const quizPlaceRef = useRef<"top" | "bottom">("top");
   const placedForRef = useRef<number | null>(null);
   const [placeTick, setPlaceTick] = useState(0);
@@ -1693,6 +1695,7 @@ export default function TsunamiEscapeEnglish() {
   const quizHighRef = useRef(false);
   if (pres && placedForRef.current !== pres.id) {
     placedForRef.current = pres.id;
+    shownAtRef.current = performance.now();
     const viewWater = (driverRef.current?.core.state().water ?? 0) * WATER_VIEW_SCALE;
     quizPlaceRef.current = viewWater > 40 ? "bottom" : "top";
     // K2: a kompakt mód már a kép alsó negyede fölött (a 32–50 %-os sávban is) él.
@@ -1700,6 +1703,23 @@ export default function TsunamiEscapeEnglish() {
   }
   // A becslés után mérés: ha a kirajzolt sáv mégis a figurára esne (magas kérdés, kicsi képernyő), egyszer átkerül a másik helyre.
   const flippedForRef = useRef<number | null>(null);
+  /*
+   * Elrendezés-nyugalom (koordinátori spec-pontosítás 2026-11-18): a figura a kérdés megjelenése után ≤ 600 ms-on belül szabad,
+   * és a nyitott kérdés alatt végig az. A sáv `data-layout="settled"`-et kap, amikor a hely / kompakt mód / kép-eltolás
+   * eldőlt és az eltolás (≈ 400 ms) lefutott; a beállás ideje a teszt-kampóban (`layoutSettleMs`).
+   */
+  const settledForRef = useRef<number | null>(null);
+  const settleMsRef = useRef<number | null>(null);
+  const markSettled = (id: number, delayMs: number) => {
+    const done = () => {
+      if (placedForRef.current !== id) return;
+      settledForRef.current = id;
+      settleMsRef.current = Math.round(performance.now() - shownAtRef.current);
+      setPlaceTick((n) => n + 1);
+    };
+    if (delayMs <= 0) done();
+    else window.setTimeout(done, delayMs);
+  };
   /*
    * K2: ha a figura a kérdés-sáv mindkét helyén takarásban lenne (kis képernyő, köztes vízszint), a kép lejjebb tolódik, hogy a
    * figura a (fenti) kérdés-sáv alá kerüljön; a kérdés lezárultával visszaáll.
@@ -1718,16 +1738,20 @@ export default function TsunamiEscapeEnglish() {
     const sr = stage.getBoundingClientRect();
     const fx = sr.left + (st.x / 100) * sr.width;
     const fy = sr.top + (1 - (st.water * WATER_VIEW_SCALE) / 100) * sr.height;
-    const boxes = Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-card, [data-testid="ts-question"] .play-question-option')).map((el) => el.getBoundingClientRect());
+    const boxes = Array.from(document.querySelectorAll('[data-testid="ts-question"] > *:not(.play-question-options), [data-testid="ts-question"] .play-question-option')).map((el) => el.getBoundingClientRect()).filter((b) => b.height > 0 && b.height < window.innerHeight * 0.9);
     const covered = boxes.some((b) => fx >= b.left && fx <= b.right && fy - 40 <= b.bottom && fy + 6 >= b.top);
-    if (!covered) return;
+    if (!covered) {
+      markSettled(presIdNow, 0);
+      return;
+    }
     // Vissza a fenti helyre, és a figura (feje 50 px-re) a sáv alá.
     quizPlaceRef.current = "top";
     setPlaceTick((n) => n + 1);
     requestAnimationFrame(() => {
-      const topBoxes = Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-card, [data-testid="ts-question"] .play-question-option')).map((el) => el.getBoundingClientRect());
+      const topBoxes = Array.from(document.querySelectorAll('[data-testid="ts-question"] > *:not(.play-question-options), [data-testid="ts-question"] .play-question-option')).map((el) => el.getBoundingClientRect()).filter((b) => b.height > 0 && b.height < window.innerHeight * 0.9);
       const bottom = Math.max(...topBoxes.map((b) => b.bottom));
       liveRef.current.shiftPx = Math.max(0, bottom + 56 - fy);
+      markSettled(presIdNow, reducedMotion ? 0 : 420);
     });
   }, [presIdNow, placeTick]);
   useLayoutEffect(() => {
@@ -1739,8 +1763,11 @@ export default function TsunamiEscapeEnglish() {
     const fx = sr.left + (st.x / 100) * sr.width;
     const fy = sr.top + (1 - (st.water * WATER_VIEW_SCALE) / 100) * sr.height;
     // Elrendezési dobozok (az élesítés előtt rejtett, de már elrendezett gombokkal együtt).
-    const boxes = Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-card, [data-testid="ts-question"] .play-question-option')).map((el) => el.getBoundingClientRect());
+    const boxes = Array.from(document.querySelectorAll('[data-testid="ts-question"] > *:not(.play-question-options), [data-testid="ts-question"] .play-question-option')).map((el) => el.getBoundingClientRect()).filter((b) => b.height > 0 && b.height < window.innerHeight * 0.9);
     const hits = (y: number) => boxes.some((b) => fx >= b.left && fx <= b.right && y >= b.top && y <= b.bottom);
+    // Csak a teljes elrendezésre döntünk: ha a válaszgombok még nincsenek a DOM-ban (az első képkocka), a következő rendernél.
+    const optionCount = document.querySelectorAll('[data-testid="ts-question"] .play-question-option').length;
+    if (optionCount < (pres?.options.length ?? 4)) return;
     // K3: az átfordítás csak az első elrendezéskor — utána ugyanerre a kérdésre nem mérünk újra.
     flippedForRef.current = presIdNow;
     // +14 px ráhagyás: a kártya belépő animációja (10 px) alatt mérünk, a végleges hely ennyivel feljebb van.
@@ -1751,6 +1778,8 @@ export default function TsunamiEscapeEnglish() {
       else quizPlaceRef.current = quizPlaceRef.current === "top" ? "bottom" : "top";
       pendingShiftCheckRef.current = presIdNow;
       setPlaceTick((n) => n + 1);
+    } else {
+      markSettled(presIdNow, 0);
     }
   });
 
@@ -2006,6 +2035,7 @@ export default function TsunamiEscapeEnglish() {
               data-testid="ts-quiz"
               className="ts-quiz"
               data-place={quizPlaceRef.current}
+              data-layout={settledForRef.current === pres.id ? "settled" : "settling"}
               data-high={quizHighRef.current ? "true" : "false"}
               style={quizBottom !== null ? ({ "--ts-quiz-bottom": `${quizBottom}px` } as CSSProperties) : undefined}
               data-state={reveal ? "reveal" : "open"}
@@ -2017,7 +2047,7 @@ export default function TsunamiEscapeEnglish() {
           {/* A „Miért?” a megoldás-kijelzés után még 4 mp-ig (a következő kérdéstől függetlenül). */}
           {phase === "play" && !pres && questionBar(false)}
 
-          {phase === "play" && hud.hint > 0 && !pres && (
+          {phase === "play" && hud.hint > 0 && !pres && hud.water * WATER_VIEW_SCALE < 40 && (
             <p className="ts-hint" data-testid="ts-hint" role="status">
               {touch ? "Tárcsa: mozgás · maradj a zöld bóják között" : "← → mozgás · Shift sprint · maradj a bóják között"}
             </p>
