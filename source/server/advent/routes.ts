@@ -23,12 +23,9 @@ import {
 import { clientIpKeyGenerator } from "../lib/client-ip";
 import { logger } from "../lib/logger";
 import type { AdventResolution, AdventResolvedSubject } from "./identity";
+import { ADVENT_LIMITS, createWindowCounter, type AdventLimits } from "./limits";
 import type { AdventRow, AdventStore, AdventSubject } from "./store";
 
-export const ADVENT_SUBJECT_WRITES_PER_15_MIN = 200;
-export const ADVENT_IP_WRITES_PER_15_MIN = 600;
-export const ADVENT_IP_READS_PER_MIN = 120;
-export const ADVENT_NEW_DEVICE_ROWS_PER_HOUR = 30;
 
 export type AdventRouterDeps = {
   store: AdventStore;
@@ -39,6 +36,8 @@ export type AdventRouterDeps = {
   /** A naptár órája; `null` = a naptár kikapcsoltként viselkedik (e2e-mód tesztidő nélkül). */
   clock: (req: Request) => Date | null;
   resolve: (req: Request, input: { learnerToken?: unknown; device?: unknown }) => Promise<AdventResolution>;
+  /** A kéréskorlátok (alap: `ADVENT_LIMITS`); tesztben kisebb értékkel adható meg. */
+  limits?: AdventLimits;
   /** Minden rögzített válasz után (nem várjuk meg): az S5 innen dönt a szülői levélről. */
   onAnswer?: (event: { row: AdventRow; subject: AdventResolvedSubject; summary: AdventSummary; maxRounds: number }) => void;
 };
@@ -112,9 +111,13 @@ function usedInEarlierRounds(row: AdventRow, round: number, bank: readonly Adven
   return { usedIds, usedPrompts };
 }
 
-function answerResult(item: AdventItem, attempt: DoorAttempt, subjectKey: string, season: number, door: AdventDoorView, state: AdventState): AdventAnswerResult {
-  const graded = gradePick(item, optionOrder(item.id, subjectKey, season), attempt.pick);
-  return { correct: attempt.correct, correctIndex: graded.correctIndex, explanation: item.explanation ?? "", door, summary: state.summary, closing: state.closing };
+/**
+ * Egy (tárolt vagy friss) próba eredménye. Ha a kérdés közben eltűnt a bankból (`item` null), a tárolt próba alapján csak az
+ * eredmény megy ki: helyes válasz és magyarázat nélkül (`correctIndex: -1`) — hiba helyett (review C5).
+ */
+function answerResult(item: AdventItem | null, attempt: DoorAttempt, subjectKey: string, season: number, door: AdventDoorView, state: AdventState): AdventAnswerResult {
+  const correctIndex = item ? gradePick(item, optionOrder(item.id, subjectKey, season), attempt.pick).correctIndex : -1;
+  return { correct: attempt.correct, correctIndex, explanation: item?.explanation ?? "", door, summary: state.summary, closing: state.closing };
 }
 
 type Locals = { at: AdventNow; now: Date; resolution: AdventResolution; body: Record<string, unknown> };
@@ -127,16 +130,16 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
     const subject = (res.locals.advent as Locals | undefined)?.resolution.subject;
     return subject ? `advent:${subjectKeyOf(subject)}` : `advent-ip:${clientIpKeyGenerator(req)}`;
   };
-  const limiterOptions = { standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok kérés — próbáld újra egy kicsit később." } } as const;
-  const ipWriteLimiter = rateLimit({ ...limiterOptions, keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60_000, limit: ADVENT_IP_WRITES_PER_15_MIN });
-  const ipReadLimiter = rateLimit({ ...limiterOptions, keyGenerator: clientIpKeyGenerator, windowMs: 60_000, limit: ADVENT_IP_READS_PER_MIN });
-  const subjectLimiter = rateLimit({ ...limiterOptions, keyGenerator: subjectKeyFromLocals, windowMs: 15 * 60_000, limit: ADVENT_SUBJECT_WRITES_PER_15_MIN });
-  /** Új névtelen sor létrehozása: külön, szűk IP-korlát (ez védi az adatbázis-keretet). Csak akkor számol, ha a sor még nincs meg. */
-  const newDeviceLimiter = rateLimit({
-    ...limiterOptions, keyGenerator: clientIpKeyGenerator, windowMs: 60 * 60_000, limit: ADVENT_NEW_DEVICE_ROWS_PER_HOUR,
-    skip: (_req, res) => (res.locals.adventNewDeviceRow as boolean | undefined) !== true,
+  const limits = deps.limits ?? ADVENT_LIMITS;
+  const limiter = (which: "ip" | "subject", rule: { limit: number; windowMs: number }, keyGenerator: (req: Request, res: Response) => string) => rateLimit({
+    standardHeaders: true, legacyHeaders: false, keyGenerator, windowMs: rule.windowMs, limit: rule.limit,
+    message: { message: "Túl sok kérés — próbáld újra egy kicsit később.", limit: which },
   });
-
+  const ipWriteLimiter = limiter("ip", limits.ipWrites, clientIpKeyGenerator);
+  const ipReadLimiter = limiter("ip", limits.ipReads, clientIpKeyGenerator);
+  const subjectLimiter = limiter("subject", limits.subjectWrites, subjectKeyFromLocals);
+  /** Létrejött új névtelen sorok IP-nként: csak a tényleges létrehozás számít (a visszagördült kísérlet nem). */
+  const newDeviceRows = createWindowCounter(limits.newDeviceRows);
   const fail = (res: Response, next: NextFunction, error: unknown): void => {
     if (res.headersSent) return;
     if (error instanceof AdventHttpError) { res.status(error.status).json({ message: error.message, ...error.extra }); return; }
@@ -171,6 +174,9 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       ? { learnerToken: req.get("x-learner-token"), device: req.get("x-advent-device") }
       : { learnerToken: body.learner, device: body.device };
     const resolution = await deps.resolve(req, input);
+    if (source === "body" && resolution.pairing === "invalid") {
+      throw new AdventHttpError(409, "A személyes linked lejárt — nyisd meg újra a napi levélből, vagy folytasd vendégként.", { pairing: "invalid" });
+    }
     res.locals.advent = { at: adventNow(now), now, resolution, body } satisfies Locals;
   });
   const subjectOr400 = (res: Response): { locals: Locals; subject: AdventResolvedSubject } => {
@@ -186,15 +192,14 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   const requireWritable = (at: AdventNow) => {
     if (!isAdventWritable(at.phase)) throw new AdventHttpError(409, at.phase === "closed" ? "Az idei naptár már bezárt." : "A naptár még nem nyílt meg.", { phase: at.phase });
   };
-  /** Új névtelen sor előtt a szűk létrehozási korlát; meglévő sornál nem számol. */
-  const guardNewDeviceRow = async (req: Request, res: Response, season: number, subject: AdventResolvedSubject): Promise<void> => {
+  /** Új névtelen sor ELŐTT: ha erről a hálózatról a keret betelt, a sor nem jön létre (429). Meglévő sornál nem számít. */
+  const guardNewDeviceRow = async (req: Request, season: number, subject: AdventResolvedSubject): Promise<void> => {
     if (subject.kind !== "device" || (await store.read(season, subject))) return;
-    res.locals.adventNewDeviceRow = true;
-    await new Promise<void>((resolve, reject) => {
-      void newDeviceLimiter(req, res, (error?: unknown) => (error ? reject(error) : resolve()));
-      res.once("finish", () => resolve());
-    });
-    if (res.headersSent) throw new AdventHttpError(429, "Túl sok új naptár erről a hálózatról.");
+    if (newDeviceRows.full(clientIpKeyGenerator(req))) throw new AdventHttpError(429, "Túl sok új naptár erről a hálózatról — próbáld újra később.", { limit: "new-row" });
+  };
+  /** A zárolt módosítás UTÁN: ha a sor most jött létre (és megmaradt), az számít a keretbe. */
+  const countNewDeviceRow = (req: Request, subject: AdventResolvedSubject, created: boolean): void => {
+    if (created && subject.kind === "device") newDeviceRows.hit(clientIpKeyGenerator(req));
   };
 
   router.get("/status", (req, res) => {
@@ -219,13 +224,14 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
     const parsed = adventGradeBody.safeParse(locals.body);
     if (!parsed.success) throw new AdventHttpError(400, "Az évfolyam 1 és 12 közötti egész szám.");
     if (subject.kind === "learner") throw new AdventHttpError(409, "A tanuló évfolyama a profiljából jön.");
-    await guardNewDeviceRow(req, res, locals.at.season, subject);
-    const { row } = await store.mutate(locals.at.season, subject, (current) => {
+    await guardNewDeviceRow(req, locals.at.season, subject);
+    const { row, created } = await store.mutate(locals.at.season, subject, (current) => {
       const answered = Object.values(current.doors).some((round) => Object.values(round).some((door) => door.attempts.length > 0));
       if (answered) throw new AdventHttpError(409, "Az évfolyam az első válasz után már nem módosítható.");
       // Válasz nélküli sorban az évfolyam váltása az addigi (még meg nem válaszolt) tervet eldobja.
       return { patch: { grade: parsed.data.grade, plan: {}, doors: {} }, result: null };
     });
+    countNewDeviceRow(req, subject, created);
     res.json(buildAdventState(locals.at, locals.resolution, row));
   }));
 
@@ -234,9 +240,9 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
     const day = dayOf(req);
     requireWritable(locals.at);
     if (!isDoorUnlocked(day, locals.at)) throw new AdventHttpError(403, "Ez az ablak még nem nyitható.", { opensDay: day });
-    await guardNewDeviceRow(req, res, locals.at.season, subject);
+    await guardNewDeviceRow(req, locals.at.season, subject);
     const key = subjectKeyOf(subject);
-    const { result } = await store.mutate<AdventOpenResult>(locals.at.season, subject, (row) => {
+    const { result, created } = await store.mutate<AdventOpenResult>(locals.at.season, subject, (row) => {
       const grade = effectiveGrade(subject, row);
       if (grade == null) throw new AdventHttpError(409, "Előbb add meg, hányadikos vagy.", { needsGrade: true });
       const { maxRepairs } = limitsForGrade(grade);
@@ -255,16 +261,17 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       const readOnly = state === "solved" || state === "failed";
       const questionId = readOnly ? attempts[attempts.length - 1]!.questionId : plan.doors[day]![attempts.length];
       const item = questionId ? findAdventItem(questionId, bank, christmas) : null;
-      if (!item) throw new RangeError("advent: a kiosztott kérdés nem található");
+      // Megválaszolt ablaknál a kérdés hiánya nem hiba: a tárolt eredmény megy ki kérdés nélkül (review C5).
+      if (!item && !readOnly) throw new RangeError("advent: a kiosztott kérdés nem található");
       const nextRow: AdventRow = { ...row, grade, plan: { ...row.plan, [round]: plan } };
       const view = buildAdventState(locals.at, locals.resolution, nextRow);
-      const order = optionOrder(item.id, key, locals.at.season);
       const answered = readOnly ? answerResult(item, attempts[attempts.length - 1]!, key, locals.at.season, view.doors[day - 1]!, view) : null;
       return {
         patch: changed ? { grade, plan: nextRow.plan } : null,
-        result: { day, question: toClientQuestion(item, order), answered },
+        result: { day, question: item ? toClientQuestion(item, optionOrder(item.id, key, locals.at.season)) : null, answered },
       };
     });
+    countNewDeviceRow(req, subject, created);
     res.json(result);
   }));
 
@@ -289,7 +296,6 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       const stored = attempts.find((a) => a.questionId === parsed.data.questionId);
       if (stored) {
         const item = findAdventItem(stored.questionId, bank, christmas);
-        if (!item) throw new RangeError("advent: a megválaszolt kérdés nem található");
         const view = viewOf(current);
         return { patch: null, result: { answer: answerResult(item, stored, key, locals.at.season, view.doors[day - 1]!, view), recorded: false, maxRounds } };
       }

@@ -64,3 +64,15 @@ test("az azonosítók nem kerülnek URL-be: a végpontok a tokent és az eszköz
   assert.match(routes, /req\.get\("x-advent-device"\)/);
   assert.match(routes, /learnerToken: body\.learner, device: body\.device/);
 });
+
+test("a szerver bekötése a valódi flaget és órát adja a routernek (review C4)", () => {
+  const wiring = readFileSync(fileURLToPath(new URL("../server/routes.ts", import.meta.url)), "utf8").replace(/\r\n/g, "\n");
+  const mount = wiring.slice(wiring.indexOf('app.use("/api/advent", createAdventRouter({'));
+  const block = mount.slice(0, mount.indexOf("}));"));
+  assert.ok(block.includes("enabled: () => adventEnabled(),"), "a flag a valódi környezetből jön");
+  assert.ok(block.includes("clock: (req) => adventClock(req),"), "az óra az adventClock (élesben a szerver órája)");
+  assert.doesNotMatch(block, /limits:/, "élesben az alapértelmezett korlátok érvényesek");
+  // A CSRF-kivétellistában nincs adventi útvonal: az író végpontok tokenesek.
+  const csrf = wiring.slice(wiring.indexOf("csrfSync({"), wiring.indexOf("csrfSynchronisedProtection(req, res, next);"));
+  assert.doesNotMatch(csrf, /advent/);
+});

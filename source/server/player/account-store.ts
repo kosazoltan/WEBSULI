@@ -265,7 +265,10 @@ export function createPlayerAccountStore(pool: Db) {
       const codes = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [emailHashesOf(r.email)]);
       // Adventi naptár (migrations/0042): a fiók saját előrehaladása — belső azonosító nélkül; a megoldott ablakok a legutóbbi körből.
       const advent = await pool.query<{ season: number; grade: number | null; round: number; finished_at: Date | null; passed_at: Date | null; doors: Record<string, Record<string, { attempts?: Array<{ correct?: boolean }> }>> | null }>(
-        `SELECT season, grade, round, finished_at, passed_at, doors FROM advent_progress WHERE player_id = $1 ORDER BY season`,
+        // A tanulóhoz kötött fiók a tanuló naptárát játssza (a sor a tanulóhoz tartozik) — az adatletöltés azt is tartalmazza (E19).
+        `SELECT season, grade, round, finished_at, passed_at, doors FROM advent_progress
+          WHERE player_id = $1 OR learner_id = (SELECT linked_learner_id FROM player_accounts WHERE id = $1)
+          ORDER BY season`,
         [id],
       );
       return {
