@@ -85,6 +85,7 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 | SK2 | `tests/variety-metrics.test.ts`, `scripts/measure/variety-measure.mjs` | változatosság-mutatók és küszöbök |
 | S7a / S7b | `tests/open-answer-rules-version.test.ts`, `tests/scoring-v2.test.ts`, az arbiter tesztjei | lenyomat-őr, hosszkorlát, plafon |
 | S8a–c | `tests/voice-rank.test.ts`, `tests/tts-audio-key.test.ts`, `tests/tts-audio-store.test.ts`, `tests/tts-audio-gate.test.ts` | rangsor, kulcs, méretőr, hangkapu |
+| S8d | `tests/speech-preload.test.ts`, `tests/speech-player.test.ts`, `tests/tts-rate-limits.test.ts`, `playwright.lesson-fusion.config.ts` (felolvasás-szűrő) | előtöltési rend és plafonok, hangmotor-állapot, a lejátszó bekötése ál-órával, a korlát bekötése valódi HTTP-n, koppintás → hang idő |
 | SK4 / SK5 | `tests/release-gate.test.ts`, `tests/gate-mutations.test.ts`, `scripts/measure/gate-baseline.mts` | kiadás előtti kapu, mutációk, alapvonal |
 | S9 | `node scripts/qa/gates/skills-sync-check.mjs` (csak futtatva) | skill forrás ↔ tükör |
 | S10 | `scripts/measure/source-gap-table.mts`, a futáskeret főkönyve | hiánytábla gépi része, keret |
@@ -811,8 +812,8 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    fejléc-szabálya kell, azt add hozzá; a lecke CSP-je nem változik.
 7. `ExperienceSpeech.tsx:119` (`speakText`): ha a nyelv a `TTS_AUDIO_LANGUAGES`-ben van — `new Audio(ttsAudioPath(id))`,
    `preservesPitch = true`, `playbackRate = rate`, lejátszás a kattintás gesztusában; `error` esemény, elutasított `play()` vagy
-   3 mp-en belül el nem induló lejátszás → a mai lánc (rangsorolt böngészőhang → tartalék). Egy szóra a sikertelen útvonal a
-   munkamenetben megjegyződik. A gesztus-szabály és a hibajelző (`onError`) változatlan.
+   1,5 mp-en belül (`PREPARED_AUDIO_START_TIMEOUT_MS`) el nem induló lejátszás → a mai lánc (rangsorolt böngészőhang → tartalék). A
+   munkamenetben csak a HIBAESEMÉNY jegyződik meg (az időtúllépés és a lejátszási tiltás nem; S8d óta lejárattal). A gesztus-szabály és a hibajelző (`onError`) változatlan. (Spec-pontosítás 2026-11-18, vak review K1: a korábbi „3 mp” és „megjegyzett sikertelen útvonal” a kódhoz igazítva; a böngészős esetek a `tests/lesson-fusion.spec.ts`-ben vannak.)
    **Spec-pontosítás 2026-11-18 (független review J1–J2):** a kliens a hiányt nem a hangfájl 404-éből tudja meg, hanem elérhetőségi jegyzékből: `GET
    /api/tts/lesson-audio/available?keys=<vesszővel elválasztott kulcsok>` (`server/tts/audio-routes.ts`; bemenet: csak a kulcsformátum,
    legfeljebb 200 kulcs, hibás bemenet 400 `no-store`; válasz `{ available: string[] }`, `Cache-Control: public, max-age=60`; a
@@ -876,6 +877,53 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    telepítése → teljes gyártás az új verzióra (a tár átmenetileg legfeljebb 80 MB) → ellenőrzés → `purgeOtherVersions` a régi sorokra
    (tulajdonosi indítás; csak akkor fut, ha az új verziónak már van sora). A gyártás idejére a böngészőhang a tartalék.
 8. 0.3 szerinti kapuk. Elvárt: E34, E48.
+
+## S8d — Hang-előtöltés a lecke megnyitásakor (tulajdonosi kérés 2026-11-18)
+
+Ág: `feat/tgm-s8d-hang-eloetoltes` (halmozva az S8b-2 ágára). Fájlok: `shared/speech-preload.ts` (új, tiszta),
+`shared/speech-chain.ts`, `shared/tts-audio-key.ts`, `client/src/lesson-runtime/speech-player.ts` (új — a lejátszó logikája
+befecskendezett környezettel, React nélkül), `client/src/lesson-runtime/ExperienceSpeech.tsx` (csak bekötés),
+`client/src/lesson-runtime/LessonExperienceView.tsx` (életciklus), `server/tts/audio-routes.ts`, `server/tts/audio-store.ts`,
+`server/tts/rate-limits.ts` (új), `server/index.ts` (csak a bekötés), tesztek. NEM változik: `client/src/lib/tts.ts`, a játékok, a
+kiejtésgyakorló és a diktálás útja, a CSP (`vercel.json` fejlécei).
+
+A tulajdonos kérése szó szerint: „Én azt gondolom, hogy a hat meg három másodperces laggolás is eléggé gáz, úgyhogy automatikusan
+szerintem amikor megnyitja az adott tananyagot, pufferelje a hangokat a diáknak a tananyagban.”
+
+1. **Technika — mérés előbb:** fejetlen Chrome, helyi szerver, 800 ms-mal késleltetett hangfájl, 5 futás mediánja a koppintástól a
+   hang tényleges indulásáig: hideg `new Audio(url)` 884 ms; `fetch`-csel előmelegített HTTP-gyorsítótár + új hangelem 61 ms;
+   előre létrehozott `preload="auto"` hangelem 13 ms; Web Audio (`decodeAudioData` → `AudioBufferSourceNode`) 14 ms. **Döntés:
+   előtöltött hangelemek** — a Web Audióval azonosan azonnali, de megtartja a hangmagasságot a csúszka sebességénél
+   (`preservesPitch`; a Web Audio `playbackRate`-je a hangmagasságot is eltolja), tömörített bájtokat tart a memóriában, és a CSP-t
+   nem érinti (azonos eredetű cím, `blob:` / `data:` nélkül).
+2. `shared/speech-preload.ts` (tiszta): `SPEECH_PRELOAD = { concurrency: 3, maxBytes: 3,5 MB, maxElements: 60, firstSectionTexts: 12,
+   retryDelaysMs: [4 000, 15 000], failureTtlMs: 60 000, manifestRefreshMs: 60 000 }`; `preloadPlan({ ids (szószedet-sorrend),
+   sizes, saveData, effectiveType })` → az előtöltendő kulcsok sorrendben (plafonok, adatkímélő / 2g: csak az első szakasz);
+   `nextPreloads(állapot)` → a következő indítható letöltések (párhuzamosság, előre vett kulcs); `retryDelayMs(próbálkozás)`;
+   a hangmotor munkamenet-állapota: `engineAfter(állapot, esemény)` (`unknown` → `working(hang)` / `silent`), és
+   `probeTimeoutMs(hang)` (helyi 3 mp, hálózati 6 mp — a próba a háttérben fut).
+3. `shared/speech-chain.ts`: a `speechPlan` bemenete bővül — `prepared: "ready" | "loadable" | "none"` és `engine`: kész hang → az
+   előre gyártott lépés elöl; tölthető, de nem kész → ha van böngészőhang-lépés, az előre gyártott lépés KIMARAD (azonnal a
+   böngészőhang, a letöltés előre ugrik), ha nincs, kérésre töltődik; `engine.silent` → nincs böngészőhang-lépés;
+   `engine.working(hang)` → az igazolt hang az első, a munkamenetben elbukott hangok kimaradnak. Az indulási őrök védőhálóként
+   maradnak (1,5 mp; 3 / 6 mp összesített csendkeret; a szerveres tartalékra új, 8 mp-es betöltési őr — lógó válasznál hibaüzenet).
+4. Jegyzék: a válasz a méreteket is adja — `{ available: string[], sizes: Record<kulcs, bájt> }`; a tároló `existing(keys)` művelete
+   `{ id, size }` párokat ad. A kliens az utoljára ismert jegyzéket helyben megőrzi (`localStorage`, csak lenyomatok és méretek),
+   hálózat nélkül ebből dolgozik. A lap újra láthatóvá válásakor, legfeljebb percenként frissít.
+5. `client/src/lesson-runtime/speech-player.ts`: `createSpeechPlayer(env)` — a környezet (óra, időzítő, hangelem-gyár, beszédmotor,
+   jegyzék-lekérés, kapcsolat, tár) befecskendezett, így a lánc bekötése ál-órával tesztelhető. Műveletek: `prepareLesson`,
+   `release` (megszakítás, felszabadítás), `noteUserGesture` (motorpróba; még el nem indult letöltések feloldása iOS-en),
+   `speak`, `stop`, `refresh`. A szinkron `done("failed")` utáni megszakító-felülírás (vak review A5) megszűnik.
+6. `server/tts/rate-limits.ts`: a három felolvasás-korlát (általános `/api/tts`, szerveres tartalék, hangtár) egy helyen, a bekötéssel
+   együtt (`mountTtsRateLimits(app)`), hogy valódi HTTP-teszt mérje (vak review K4). A hangtár kerete: 30 tanuló × 40 hang × 2 kérés
+   (tartománykérés) + 30 jegyzék = 2 430 → tartalékkal 3 000 kérés / 15 perc / IP.
+7. Tesztek (0.6): `speech-preload` (rend, plafonok, adatkímélő, újrapróba, motorállapot — mutációs ellenpróbával); `speech-player`
+   ál-órával és ál-környezettel: előtöltött hang azonnal; koppintás előtöltés közben (böngészőhang most, a letöltés előre ugrik, nincs
+   kettős megszólalás); félbeszakadt / hibás letöltés és újrapróba; leckeváltás futó előtöltés közben; 100 tételes lecke; a lap
+   háttérbe kerülése és a jegyzék frissítése; két gyors koppintás két szóra; más nyelvű lecke; üres tár; néma motor előre ismert;
+   `tts-rate-limits` valódi HTTP-n. Böngészős (0.4, `lesson-fusion`, `--workers=1`): koppintás → `playing` ≤ 300 ms előtöltött
+   hangnál késleltetett hangtár mellett; böngészőhang ≤ 1 s; kikapcsolt előtöltéssel a mérés bukik (mutációs ellenpróba).
+8. 0.3 szerinti kapuk. Elvárt: E50–E55.
 
 ## SK4 — Kiadás előtti kapu
 

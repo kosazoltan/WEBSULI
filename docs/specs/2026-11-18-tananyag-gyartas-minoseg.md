@@ -354,6 +354,37 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
 - **Migráció:** a repó rendje szerint `migrations/00NN_*.sql` + a Drizzle-séma (`shared/schema.ts`); élesben a telepítés
   `npm run db:migrate` lépése futtatja (`render.yaml:7`, `server/migrate.ts`). A `db:push` tilos.
 - Kör: csak a leckék (37 angol lecke, 2 299 fájl, ~43 ezer karakter); a játék-szóbank nem.
+- **S8d — hang-előtöltés a lecke megnyitásakor (tulajdonosi kérés 2026-11-18):** „Én azt gondolom, hogy a hat meg három másodperces
+  laggolás is eléggé gáz, úgyhogy automatikusan szerintem amikor megnyitja az adott tananyagot, pufferelje a hangokat a diáknak a
+  tananyagban.” Cél: a gyerek koppintására a hang AZONNAL szóljon; a várakozás a lecke megnyitásakor, a háttérben történjen.
+  - **Előtöltés:** az elérhetőségi jegyzék alapján a lecke előre gyártott hangjai a megnyitáskor, üresjáratban, legfeljebb 3
+    párhuzamos letöltéssel lejátszásra kész állapotba kerülnek, a szószedet sorrendjében (az első szakasz előre). Koppintáskor a
+    pufferelt hang szól, hálózati kör nélkül. **Technika (mérés alapján):** előre létrehozott, `preload="auto"` hangelemek — fejetlen
+    Chrome-ban, 800 ms-mal késleltetett szerverrel mérve a koppintástól a `playing` eseményig: hideg hangelem 884 ms, csak a HTTP-
+    gyorsítótár előmelegítve 61 ms, előtöltött hangelem 13 ms, Web Audio (dekódolt puffer) 14 ms. Az előtöltött hangelem a Web
+    Audióval azonosan azonnali, de megtartja a hangmagasságot a csúszka sebességénél (a Web Audio lejátszási sebessége a hangmagasságot
+    is eltolja — éppen a torzítás volt az eredeti panasz), tömörített bájtokat tart a memóriában dekódolt minták helyett, és a lecke
+    CSP-jéhez (`default-src 'self'`, `blob:` / `data:` nélkül) nem kell hozzányúlni.
+  - **A tartalék-út se várasson:** a böngészőhang kiválasztása és a „néma motor” felismerése EGYSZER dől el a munkamenetre: az első
+    felhasználói mozdulatnál egy nulla hangerejű próba-megszólalás fut a háttérben a rangsor szerint (itt a hálózati hang megkapja a
+    6 mp-es türelmét — a gyerek erre nem vár), az eredmény tárolódik. Igazolt hang → koppintásra azonnal az szól; igazoltan néma motor
+    → a felület előre tudja, és a böngészőhang-lépés kimarad. A korábbi indulási őrök (3 / 6 mp összesített csendkeret, 1,5 mp az
+    előre gyártott hangra) végső védőhálóként maradnak arra az esetre, ha a próba még nem futott le, vagy az igazolt hang később
+    mégsem indul.
+  - **Koppintás az előtöltés közben / a plafon fölötti szóra:** a még nem pufferelt szóra azonnal, a kattintás gesztusában a
+    böngészőhang szól, a szó letöltése előre ugrik (a következő koppintásra már a pufferelt hang szól); ha böngészőhang nincs
+    (néma motor), a hang kérésre töltődik. Egy koppintásra egy hang szól — a később megérkező letöltés nem szólal meg.
+  - **Korlátok és őrök:** előtöltési összméret-plafon leckénként 3,5 MB (a jegyzék a fájlméreteket is adja), legfeljebb 60 hangelem;
+    adatkímélő módban és 2g / slow-2g kapcsolaton csak az első szakasz (12 szöveg); a lecke elhagyásakor a letöltések megszakadnak és
+    a hangelemek felszabadulnak; a hiba (429, hálókiesés) visszatartásos újrapróbát kap (legfeljebb 2), és a szót nem zárja ki a
+    munkamenet végéig (60 mp után újra próbálható); a „nincs” jegyzék a lap újra láthatóvá válásakor (legfeljebb percenként) frissül;
+    az utoljára ismert jegyzék helyben megmarad, így ismételt megnyitáskor hálózat nélkül is a tartós gyorsítótárból szól a hang;
+    hiba esetén csendes visszaesés a láncra. A hangtár sebességkorlátja az előtöltéshez igazodik (egy osztály egyszerre nyit:
+    30 × 40 hang × 2 kérés a tartománykérések miatt + 30 jegyzék = 2 430, tartalékkal 3 000 kérés / 15 perc / IP).
+  - **Mérhető elfogadás (böngészőteszt, a hang tényleges indulási eseményéből):** koppintástól a hangig előtöltött hangnál ≤ 300 ms
+    (cél ≤ 150 ms), böngészőhangnál ≤ 1 s, késleltetett hangtár-válasz mellett is; kikapcsolt előtöltéssel a teszt bukik. Kockázat: a
+    fejetlen böngésző időmérése nem azonos a valós eszközével (iOS Safari a `preload`-ot gesztus nélkül figyelmen kívül hagyhatja —
+    ott az első koppintás oldja fel a letöltést); valódi iPad- és Android-próba az éles hanggyártás előtt kell.
 
 ### S9 — Dokumentáció és tudás
 
@@ -423,6 +454,7 @@ tud dönteni — a tartalmi forráshűség megítélése marad a lektornál):
 | S6a–c + SK2 | a kiosztott minta betartása, ívkapu, `try`- és fajtaarány, a szimuláció küszöbe |
 | S7a / S7b | lenyomat-őr, hosszkorlát, a döntőbíró plafonja (kódból, nem promptból) |
 | S8a–c + SK4 | hangrangsor (tiszta függvény), hangkapu, méretőr, a hangfájlok megléte, kiadás előtti kapu |
+| S8d | az előtöltés rendje és plafonjai, a munkamenet-szintű hangmotor-állapot, a lejátszó bekötése (ál-órával), a koppintás → hang idő (böngészőben mérve) |
 | S9 | skill forrás ↔ tükör bájtazonosság (`skills-sync-check`) |
 | S10 | hiánytábla gépi része, a futáskeret főkönyve |
 
@@ -661,6 +693,20 @@ Determinisztikus kapuk (SK1–SK5, tulajdonosi elv):
   táblára (`absolute-exceeded`); bármelyik elérése megtagadja az írást, megállítja a gyártást és jelez.
 - [ ] E49 The system SHALL a hangfájlokat cserélhető tároló rétegen át elérni; a tároló cseréje a lecke JSON-ját és a klienst nem
   érinti.
+- [ ] E50 WHEN a tanuló megnyit egy `en-GB` leckét, és a jegyzék szerint van előre gyártott hang THEN the system SHALL a hangokat a
+  háttérben, a megjelenítés blokkolása nélkül, legfeljebb 3 párhuzamos letöltéssel lejátszásra kész állapotba hozni, a leckénkénti
+  összméret-plafonig (3,5 MB), adatkímélő / lassú kapcsolaton csak az első szakaszt.
+- [ ] E51 WHEN a tanuló előtöltött hangú szóra koppint THEN the system SHALL a hangot hálózati kör nélkül, a koppintástól számított
+  300 ms-on belül elindítani (böngészőtesztben a `playing` eseményből mérve; kikapcsolt előtöltéssel a teszt bukik).
+- [ ] E52 The system SHALL a böngészőhang kiválasztását és a néma motor felismerését munkamenetenként egyszer elvégezni (próba-
+  megszólalás az első felhasználói mozdulatnál), és koppintáskor az igazolt hangot 1 s-on belül indítani, igazoltan néma motornál a
+  böngészőhang-lépést kihagyni.
+- [ ] E53 WHEN a tanuló még nem pufferelt szóra koppint THEN the system SHALL azonnal, a gesztusban megszólaltatni a böngészőhangot
+  (ha van), a szó letöltését előre venni, és egy koppintásra legfeljebb egy hangot megszólaltatni.
+- [ ] E54 WHEN a tanuló elhagyja a leckét vagy leckét vált THEN the system SHALL a futó letöltéseket megszakítani és a hangelemeket
+  felszabadítani; a régi lecke hangja nem szólalhat meg.
+- [ ] E55 WHEN a hangfájl letöltése hibázik (429, hálókiesés) THEN the system SHALL visszatartással újrapróbálni (legfeljebb 2), és a
+  szót legfeljebb 60 mp-re tekinteni nem elérhetőnek — a lecke közben a böngészőhanggal használható marad.
 
 Általános:
 
@@ -675,7 +721,7 @@ Determinisztikus kapuk (SK1–SK5, tulajdonosi elv):
   `lesson-feedback-openers`, `lesson-section-shapes`, `visual-kind-plan`, `open-answer-rules-version`, `voice-rank`, `tts-audio-key`;
   bővülők: `single-run-engine`, `lesson-visual-params`, `visual-patch`, `section-visuals`, `lesson-arc`, `lesson-opener`,
   `scoring-v2`, `studio-role-skills`, `speech-fallback`, `coverage-gate`.
-- **Böngészős próbák (Playwright, `--workers=1`, E2E-sorompó után):** `source-visuals` (S2), `lesson-speech-audio` (S8b); regresszió:
+- **Böngészős próbák (Playwright, `--workers=1`, E2E-sorompó után):** `source-visuals` (S2), `lesson-fusion` a felolvasás-szűrővel (S8b-2, S8d); regresszió:
   `lesson-interactions`, `lesson-typography`, `band-colors`, `lesson-practice`.
 - **Mérés (S10):** hiánytábla és változatosság-mutatók; a kiosztás szimulációja modellhívás nélkül.
 - **Gyártási kapuk (SK):** `source-coverage-gate`, `run-budget`, `variety-metrics`, `release-gate`, `gate-mutations` (mutációs
