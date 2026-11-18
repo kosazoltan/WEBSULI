@@ -151,7 +151,13 @@ test("szünetben a kérdés-óra és a világ áll", () => {
 
 /* ---- K1 (független ellenőr, koordinátori döntés 2026-11-18): olvasási idő szerinti ablak, a többletidő alatt a víz áll ---- */
 import { extraTimeFrom, paceTsunamiDirector, tsunamiWindowMs } from "../client/src/lib/tsunami/pacing";
-import { createSimGame } from "../client/src/lib/tsunami/sim";
+import { createSimGame, setSimQuestionSource } from "../client/src/lib/tsunami/sim";
+import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank";
+setSimQuestionSource((grade) => {
+  const four = GRADE_QUIZ_ITEMS.filter((g) => g.options.length === 4);
+  const own = grade === null ? [] : four.filter((g) => g.grade === grade);
+  return own.length >= 40 ? own : four;
+});
 import { SIM_AVERAGE, SIM_YOUNG, runSim, runSimSeeds, simSeeds, type SimGameFactory } from "./support/game-sim";
 
 test("K1: hosszú kérdésnél az ablak az olvasási idő (9 mp fölött), rövidnél legalább a közös ablak, legfeljebb 40 s", () => {

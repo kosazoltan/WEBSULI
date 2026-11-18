@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { SIM_AVERAGE, SIM_STRONG, SIM_WEAK, SIM_YOUNG, medianOf, runSim, runSimSeeds, simSeeds, type SimGameFactory } from "./support/game-sim";
-import { createSimGame } from "../client/src/lib/tsunami/sim";
+import { createSimGame, setSimQuestionSource } from "../client/src/lib/tsunami/sim";
+import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank";
+
+// A sim valódi hosszúságú (évfolyam-bank) kérdésekkel mér (független ellenőr K1): az évfolyamé, ha van elég, különben mind.
+setSimQuestionSource((grade) => {
+  const four = GRADE_QUIZ_ITEMS.filter((g) => g.options.length === 4);
+  const own = grade === null ? [] : four.filter((g) => g.grade === grade);
+  return own.length >= 40 ? own : four;
+});
 
 /**
  * Szökőár (emelkedő víz, terv 2026-11-18) szimulációs elfogadás a közös harness-szel (végrehajtás K.6, J1a 7.; terv 6.2, J2, J3, J4, J6, J7, J9;

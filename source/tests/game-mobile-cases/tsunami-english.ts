@@ -32,7 +32,11 @@ export const CASE: GameMobileCase = {
    * gombja (a régi emelkedő víz). A `ts-quiz` a kérdés-sáv; a kvíz-állapotú mérés (M2 / M3 / M10) továbbra is a leghosszabb
    * válaszokkal (a nehezebb eset). A `phase: "quiz"` a `question: true` álneve (terv 9.).
    */
-  quizScope: '[data-testid="ts-quiz"]',
+  // Állapotra várunk (a #500 CI-jának ingadozója, 2026-11-18): a hatókör csak a NYITOTT, élesített kérdés — a megoldás-
+  // kijelzés (`data-state="reveal"`) alatt nincs kattintható „jó válasz”, így a közös `clearQuiz` a kijelzés végét várja meg,
+  // nem kattint egy épp lecserélődő gombra. A kártya és a gombok az új elrendezésben nem fedik egymást (a játékos sem
+  // kattint takart gombra — a `tsunami-play.spec.ts` elrendezés-esetei ezt mérik).
+  quizScope: '[data-testid="ts-quiz"][data-state="open"][data-armed="true"]',
   quizForce: { phase: "quiz", longAnswers: true },
   answerWrong: async (page: Page) => {
     await page.waitForFunction(

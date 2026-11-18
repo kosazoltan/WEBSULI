@@ -13,7 +13,6 @@ import { createReviewQueue } from "@/game-engine/play/reviewQueue";
 import { createQuestionUi } from "@/game-engine/play/questionUi";
 import type { RunStatsSnapshot } from "@/game-engine/play/runStats";
 import type { FourChoiceQuiz } from "@/types/gameQuiz";
-import { GRADE_QUIZ_ITEMS } from "@/data/gradeQuizBank";
 
 import { TSUNAMI_GAME_ID, ZONE_HALF, createTsunamiDriver, tsunamiDirectorConfig, type TsunamiDifficulty, type TsunamiDriver, type WaterCore } from "./water";
 import { paceTsunamiDirector } from "./pacing";
@@ -23,20 +22,27 @@ export const SIM_BANK_SIZE = 200;
 
 type SimQuestion = { id: number; correctOption: number; windowMs: number; optionCount: number };
 
+/** Valódi kérdés-forrás a szimulációhoz (a teszt adja meg — a kliensmodul nem olvassa az egész évfolyam-bankot). */
+export type SimQuestionSource = (grade: number | null) => readonly { prompt: string; options: readonly string[]; correctIndex: number }[];
+let realSource: SimQuestionSource | null = null;
+/** A szimuláció valódi hosszúságú kérdéseket kap (a független ellenőr K1 lelete); `null` → a rövid szintetikus bank. */
+export function setSimQuestionSource(src: SimQuestionSource | null): void {
+  realSource = src;
+}
+
 /**
- * A szimuláció bankja VALÓDI hosszúságú kérdésekből (a független ellenőr K1 lelete): az évfolyam-bank négy opciós tételei
- * (az adott évfolyamé, ha van elég; különben az összes), kulcsonként egyedi azonosítóval — így az olvasási ablak a valódi
- * szöveghosszal számol.
+ * A szimuláció bankja: ha van valódi forrás (`setSimQuestionSource`), annak tételei — így az olvasási ablak a valódi
+ * szöveghosszal számol —, különben rövid szintetikus tételek. Kulcsonként egyedi azonosító.
  */
 export function simBank(seed: number, size = SIM_BANK_SIZE, grade: number | null = null): FourChoiceQuiz[] {
-  const four = GRADE_QUIZ_ITEMS.filter((g) => g.options.length === 4);
-  const own = grade === null ? [] : four.filter((g) => g.grade === grade);
-  const pool = own.length >= 40 ? own : four;
+  const real = realSource?.(grade) ?? [];
+  const pool = real.length ? real : [{ prompt: "Szimulált kérdés?", options: ["alma", "körte", "szilva", "barack"], correctIndex: 0 }];
   const rng = createRng(seedFrom(TSUNAMI_GAME_ID, seed, "simbank"));
   const out: FourChoiceQuiz[] = [];
   for (let i = 0; i < size; i++) {
     const g = pool[rng.int(pool.length)]!;
-    out.push({ id: `sim-${i}`, prompt: g.prompt, options: [...g.options], correctIndex: g.correctIndex });
+    const correctIndex = real.length ? g.correctIndex : rng.int(4);
+    out.push({ id: `sim-${i}`, prompt: real.length ? g.prompt : `Szimulált kérdés ${i}?`, options: [...g.options], correctIndex });
   }
   return out;
 }
