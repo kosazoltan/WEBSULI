@@ -16,6 +16,12 @@ export type RunGates = {
   rubricTightened?: number;
   /** Spec 2026-10-20-bank-kimeneti-keret: a kimeneti keretnél levágott modellválaszok (a válasz elveszett, újragenerálás kellett). */
   outputTruncated?: number;
+  /** Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a térkép vizuális leltárának tételszáma. Régi telemetriában hiányzik. */
+  visualsFound?: number;
+  /** Az 1. állomás leltárából a program által kihagyott hibás tételek (javító forduló nélkül). */
+  visualsDropped?: number;
+  /** 1, ha az 1. állomás válaszában nem volt `visuals` tömb (a futás üres leltárral megy tovább). */
+  visualsMissing?: number;
   /** A Tananyag lap a szókeret fölött maradt (a rövidítő forduló után is). */
   lengthOverBudget: boolean;
   /** A szókeret-túllépés rövidítő fordulója elfogadott, rövidebb leckét adott (J5). */
@@ -69,6 +75,9 @@ export function telemetryView(t: RunTelemetry): TelemetryView {
       ...(g.lektorRemoved ? [`Lektor szerint hibás, kivett banktétel: ${g.lektorRemoved}`] : []),
       ...(g.rubricTightened ? [`Gépi rubrika-szigorítás (feladat): ${g.rubricTightened}`] : []),
       ...(g.outputTruncated ? [`Levágott modellválasz (kimeneti keret): ${g.outputTruncated}`] : []),
+      ...(g.visualsFound ? [`A forrás vizuális leltára: ${g.visualsFound} tétel`] : []),
+      ...(g.visualsDropped ? [`A vizuális leltárból kihagyott hibás tétel: ${g.visualsDropped}`] : []),
+      ...(g.visualsMissing ? ["A forrás-állomás válaszából hiányzott a vizuális leltár"] : []),
       ...(g.lengthShortened ? ["A szókeret-túllépés rövidítő fordulóval javítva"] : []),
       ...(g.lengthOverBudget ? ["A Tananyag lap a szókeret fölött maradt"] : []),
     ],

@@ -44,6 +44,7 @@ import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock,
 import { catalogVerbatimPaths, type CatalogPool } from "../../catalog/retrieval";
 import { isMemorySnapshot, memorySnapshot, snapshotPromptBlock, subjectMemoryEnabled, type MemorySnapshot } from "../../memory/subject-memory";
 import { subjectKeyOf } from "../../../shared/subject-key";
+import { sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual } from "../../../shared/source-visuals";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
 /** Állomásonként ennyi javító forduló jár a determinisztikus visszajelzés után. */
@@ -90,7 +91,8 @@ export type SourceConcept = { id: string; term: string; definition: string; quot
   correction?: string };
 /** `fileTranscripts`: fájlnév → a fájl betűhű átirata (review #260: a fogalom eredete és idézete a saját fájlján mérve). */
 /** `corrections`: a forrás hamis egyenlőségeinek determinisztikus helyesbítései (spec 2026-10-03-forras-aritmetika-helyesbites). */
-export type SingleRunMap = { title: string; subject: string; classroom: number; transcript: string; fileTranscripts: Record<string, string>; concepts: SourceConcept[]; corrections: SourceCorrection[] };
+/** `visuals`: a forrás vizuális leltára, a program által megítélve (spec 2026-11-18-tananyag-gyartas-minoseg, S1a). */
+export type SingleRunMap = { title: string; subject: string; classroom: number; transcript: string; fileTranscripts: Record<string, string>; concepts: SourceConcept[]; corrections: SourceCorrection[]; visuals: SourceVisual[] };
 
 export type SingleRunDeps = {
   conversation: LessonConversation;
@@ -303,12 +305,13 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
         `TÖBB FORRÁSFÁJL (${files.map((f) => f.name).join(", ")}): adj meg fájlonkénti átiratot is: "fileTranscripts": [{"name": fájlnév, "text": a fájl betűhű átirata}]`,
         '(minden fájlhoz egyet), és minden fogalomnál "sourceFile": a fájl neve, amelyből az idézet származik — a quote ennek a fájlnak az átiratából, szó szerint.',
       ].join("\n") : "",
+      SOURCE_VISUALS_CONTRACT,
     ].filter(Boolean).join("\n")),
   ];
   const names = files.map((f) => f.name);
   const real = new Map(files.flatMap((f) => { const t = realSourceText(f); return t ? [[f.name, t] as const] : []; }));
   return runStation(deps, "forrás és tudásbank", withRoleRunbook(request, "extract"), (json) => {
-    const raw = json as Partial<Omit<SingleRunMap, "fileTranscripts">> & { concepts?: Array<Partial<SourceConcept>>; fileTranscripts?: unknown };
+    const raw = json as Partial<Omit<SingleRunMap, "fileTranscripts" | "visuals">> & { concepts?: Array<Partial<SourceConcept>>; fileTranscripts?: unknown; visuals?: unknown };
     const problems: string[] = [];
     if (!raw || typeof raw !== "object") return { ok: false, problems: ["A válasz nem objektum."] };
     if (real.size < names.length && (typeof raw.transcript !== "string" || raw.transcript.trim().length < 20)) problems.push("Hiányzik a forrás átirata (transcript).");
@@ -352,7 +355,15 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
       return fix ? { ...c, ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), correction: correctionReasonCode(fix) } : c;
     });
     for (const fix of corrections) deps.log?.(`[EGYFUTÁS] Forrás-helyesbítés ${fix.localId}: ${correctionAuditText(fix)}`);
-    return { ok: true, value: { title: (raw.title ?? "").trim() || "Névtelen tananyag", subject: raw.subject!.trim(), classroom: raw.classroom as number, transcript: names.length === 1 ? perFile[names[0]] : names.map((n) => perFile[n]).join("\n\n"), fileTranscripts: perFile, concepts: corrected, corrections } };
+    // Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a vizuális leltár megítélése az ELFOGADOTT fogalmak után. A hibás tétel kimarad
+    // és megszámolódik — a `problems` listába nem kerül, ezért javító fordulót nem indít (az a teljes JSON-t az átirattal kérné újra).
+    const { visuals, dropped } = sanitizeSourceVisuals(raw.visuals, { fileNames: names, conceptIds: ids,
+      pageTexts: Object.fromEntries(names.flatMap((n) => (perFile[n] ? [[n, splitPageTexts(perFile[n])] as const] : []))) });
+    const visualsMissing = Array.isArray(raw.visuals) ? 0 : 1;
+    if (deps.telemetry) Object.assign(deps.telemetry.gates, { visualsDropped: dropped.length, visualsMissing });
+    if (visualsMissing) deps.log?.("[EGYFUTÁS] Vizuális leltár: a válaszban nincs `visuals` tömb — a futás üres leltárral megy tovább.");
+    for (const d of dropped) deps.log?.(`[EGYFUTÁS] Vizuális leltár: kihagyott tétel${d.id ? ` (${d.id})` : ""} — ${d.reason}`);
+    return { ok: true, value: { visuals, title: (raw.title ?? "").trim() || "Névtelen tananyag", subject: raw.subject!.trim(), classroom: raw.classroom as number, transcript: names.length === 1 ? perFile[names[0]] : names.map((n) => perFile[n]).join("\n\n"), fileTranscripts: perFile, concepts: corrected, corrections } };
   });
 }
 
@@ -494,6 +505,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const map = await store.loadMap(mapId);
   if (!map || !map.concepts.length) throw new SingleRunError("tudásbank", ["A tudásbankban nincs tanítható fogalom."]);
   const sourceText = map.meta.sourceText?.trim() ?? "";
+  // S1a: a leltár a térképről jön (új forrásnál a most mentett, térképről indításnál a korábban mentett); a promptoknak az S1b adja át.
+  telemetry.gates.visualsFound = map.meta.visuals?.length ?? 0;
   // A forrás hamis egyenlőségének helyesbítése a tanított fogalmakon (új térképnél már a mentés előtt megtörtént — ott ugyanaz az eredmény).
   const corrections: SourceCorrection[] = arithmeticSourceCorrections(map.concepts.map((c) => ({ localId: c.localId, term: c.term, definition: c.definition, quote: c.quote })));
   const concepts: MapConcept[] = applySourceCorrections(map.concepts, corrections);

@@ -24,6 +24,13 @@ import { eq } from "drizzle-orm";
  */
 export const kmConceptColumns = (c: { type: string; correction?: string | null }) => ({ type: c.type.slice(0, 24), verbatimReason: c.correction ? c.correction.slice(0, 32) : null });
 
+/** A térkép `source_files` eleme: név, fajta, a fájl átirata és — ha van — a fájlhoz tartozó vizuális tételek. */
+export function sourceFileRow(f: Pick<ExtractorFile, "name" | "kind" | "extractedText">, map: Pick<SingleRunMap, "fileTranscripts" | "visuals">) {
+  const text = map.fileTranscripts[f.name] ?? f.extractedText;
+  const visuals = map.visuals.filter((v) => v.sourceFile === f.name);
+  return { name: f.name, kind: f.kind, ...(text ? { extractedText: text } : {}), ...(visuals.length ? { visuals } : {}) };
+}
+
 export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[], ownerId: string, model: string, opts: { draft?: boolean; inputHash?: string } = {}): Promise<string> {
   // Gyártásnál egyedi bemeneti lenyomat (a tábla `input_hash` egyedi): az egyfutásos térkép gyártásonként új.
   const inputHash = opts.inputHash ?? createHash("sha256").update(`single-run:${randomUUID()}`).digest("hex");
@@ -32,7 +39,8 @@ export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[]
     const [row] = await tx.insert(knowledgeMaps).values({
       title: map.title, subject: map.subject, classroom: map.classroom, status: opts.draft ? "draft" : "approved",
       // Review #260: fájlonként a modell betűhű átirata (kép / szkennelt PDF is) — a későbbi idézetellenőrzés a saját fájlján mér.
-      sourceFiles: files.map((f) => { const text = map.fileTranscripts[f.name] ?? f.extractedText; return { name: f.name, kind: f.kind, ...(text ? { extractedText: text } : {}) }; }),
+      // Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a fájl vizuális leltára ugyanebben a jsonb-elemben (migráció nélkül).
+      sourceFiles: files.map((f) => sourceFileRow(f, map)),
       sourceText: map.transcript, inputHash, model, createdBy: ownerId, ...(opts.draft ? {} : { approvedBy: ownerId, approvedAt: new Date() }),
     }).returning({ id: knowledgeMaps.id });
     await tx.insert(kmConcepts).values(map.concepts.map((c, index) => ({

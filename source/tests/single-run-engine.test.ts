@@ -6,6 +6,7 @@ import { freshSystemPrompt, resumePointOf, runSingleLesson, SingleRunError, sing
 import type { RunTelemetry } from "../server/studio/single-run/telemetry";
 import type { PipelineStore, JobPatch } from "../server/studio/pipeline-store";
 import type { MapConcept } from "../server/studio/coverage";
+import type { SourceVisual } from "../shared/source-visuals";
 
 /* docs/specs/2026-10-16-egy-futas.md (B, S3): egy modell, egy beszélgetés — forrás → tudásbank → terv → tananyag → ábra → bank → lektor →
    végellenőrzés → közzététel; a determinisztikus ellenőrzés a beszélgetésben megy vissza; más modell nem hívódik. */
@@ -51,15 +52,16 @@ function memoryStore() {
   const lessons = new Map<string, unknown>();
   // Mint az éles adattár: a mentett térkép fogalmai töltődnek vissza (mentés nélkül a statikus fixtúra-fogalmak).
   let saved: MapConcept[] | null = null;
+  let visuals: SourceVisual[] = [];
   const store = {
-    async loadMap(id: string) { return id === "m1" ? { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom, sourceText: TRANSCRIPT }, concepts: saved ?? concepts } : null; },
+    async loadMap(id: string) { return id === "m1" ? { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom, sourceText: TRANSCRIPT, visuals }, concepts: saved ?? concepts } : null; },
     async createJob() { return "job1"; },
     async saveStep(_id: string, patch: JobPatch) { steps.push(structuredClone(patch)); },
     async upsertLesson(_lessonId: string | null, _mapId: string, json: unknown) { lessons.set("lesson1", json); return "lesson1"; },
     async publishLesson() { published++; return { htmlFileId: "html1", exportedQuizItems: 3 }; },
     async loadJob() { return null; }, async loadBlockerNotes() { return []; }, async saveNotes() {},
   } as unknown as PipelineStore;
-  return { store, steps, lessons, published: () => published, saveConcepts: (c: MapConcept[]) => { saved = c; } };
+  return { store, steps, lessons, published: () => published, saveConcepts: (c: MapConcept[]) => { saved = c; }, saveVisuals: (v: SourceVisual[]) => { visuals = v; } };
 }
 
 function deps(client: ModelClient, mem: ReturnType<typeof memoryStore>, maps: SingleRunMap[] = []): SingleRunDeps {
@@ -70,6 +72,7 @@ function deps(client: ModelClient, mem: ReturnType<typeof memoryStore>, maps: Si
     store: mem.store,
     async saveMap(map) {
       maps.push(map);
+      mem.saveVisuals(map.visuals);
       mem.saveConcepts(map.concepts.map((c) => ({ localId: c.id, examWeight: c.examWeight, term: c.term, definition: c.definition, quote: c.quote })));
       return "m1";
     },
@@ -580,4 +583,77 @@ test("párhuzamos bank: kétfejezetes leckénél a két bankcsomag egyszerre ké
   };
   assert.equal(await measure(undefined), 2, "alapból a két bankcsomag egyszerre");
   assert.equal(await measure("1"), 1, "a kapcsolóval sorosan");
+});
+
+/* Spec 2026-11-18-tananyag-gyartas-minoseg, S1a: a forrás vizuális leltára az 1. állomás kimenetében — a hibás tétel kimarad, javító forduló nélkül. */
+const VISUAL_TABLE = { id: "v1", kind: "table", page: 1, role: "A terület mértékegységei.", conceptIds: ["area", "nincs-ilyen"], data: { headers: ["mennyiség", "mértékegység"], rows: [["terület", "négyzetcentiméter"]] } };
+const VISUAL_STEPS = { id: "v2", kind: "process", sourceFile: "forras.txt", page: 1, role: "A számolás lépései.", conceptIds: [], data: { steps: ["Mérd meg az oldalakat.", "Szorozd össze őket."] } };
+const sourceReply = (visuals?: unknown) => JSON.stringify({ title: "Terület", subject: fixture.subject, classroom: fixture.classroom, transcript: TRANSCRIPT, ...(visuals === undefined ? {} : { visuals }),
+  concepts: [{ id: "area", term: "terület", definition: "A síkidom által lefedett rész nagysága.", quote: "A téglalap területe az oldalak szorzata.", type: "concept", examWeight: "core", relatedIds: [] }] });
+const gatesOf = (mem: ReturnType<typeof memoryStore>) => (mem.steps.at(-1)!.output as { telemetry: RunTelemetry }).telemetry.gates;
+
+test("S1a: a modell leltára a térképre kerül (fájlonként a source_files elemébe), a fogalom-hivatkozás megtisztítva", async () => {
+  const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([VISUAL_TABLE, VISUAL_STEPS]) : null));
+  const mem = memoryStore();
+  const maps: SingleRunMap[] = [];
+  const files = [{ name: "forras.txt", kind: "text" as const, content: TRANSCRIPT }];
+  const result = await runSingleLesson({ files, ownerId: "u1" }, deps(client, mem, maps));
+  assert.equal(result.htmlFileId, "html1");
+  assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.kind, v.sourceFile, v.conceptIds, v.verified]), [["v1", "table", "forras.txt", ["area"], "visual-only"], ["v2", "process", "forras.txt", [], "visual-only"]]);
+  const { sourceFileRow } = await import("../server/studio/single-run/live");
+  assert.deepEqual(sourceFileRow(files[0], maps[0]).visuals, maps[0].visuals, "a mentett térkép sourceFiles[0].visuals mezője");
+  assert.equal("visuals" in sourceFileRow({ name: "masik.txt", kind: "text" }, maps[0]), false, "tétel nélküli fájlnál nincs kulcs");
+  assert.match(client.calls.join(","), /^1,2,/, "a leltár nem kér külön modellhívást");
+  const gates = gatesOf(mem);
+  assert.deepEqual([gates.visualsFound, gates.visualsDropped, gates.visualsMissing], [2, 0, 0]);
+});
+
+test("S1a: a hibás vizuális tétel kimarad és megszámolódik — javító forduló NINCS", async () => {
+  const broken = [VISUAL_TABLE, { ...VISUAL_STEPS, data: { steps: ["egyetlen lépés"] } }, { ...VISUAL_STEPS, id: "v3", sourceFile: "nincs-ilyen.pdf" }];
+  const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply(broken) : null));
+  const mem = memoryStore();
+  const maps: SingleRunMap[] = [];
+  const logs: string[] = [];
+  const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, { ...deps(client, mem, maps), log: (m) => logs.push(m) });
+  assert.equal(result.htmlFileId, "html1");
+  assert.deepEqual(maps[0].visuals.map((v) => v.id), ["v1"]);
+  assert.equal(client.calls.filter((c) => c === "1").length, 1, "az 1. állomás egyetlen forduló");
+  assert.ok(!client.calls.includes("forrás és tudásbank"), "nincs javító forduló: " + JSON.stringify(client.calls));
+  const gates = gatesOf(mem);
+  assert.deepEqual([gates.visualsFound, gates.visualsDropped, gates.visualsMissing], [1, 2, 0]);
+  const turns = (mem.steps.at(-1)!.output as { telemetry: RunTelemetry }).telemetry.stations["forrás és tudásbank"];
+  assert.deepEqual([turns.turns, turns.fixTurns], [1, 0], "a fordulószám 1");
+  assert.equal(logs.filter((l) => l.includes("Vizuális leltár: kihagyott tétel")).length, 2, "a kihagyás oka a naplóban");
+});
+
+test("S1a: visuals nélküli (vagy nem tömb) válasz → a futás üres leltárral megy tovább, a hiány megszámolva", async () => {
+  for (const visuals of [undefined, "nincs ábra"]) {
+    const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply(visuals) : null));
+    const mem = memoryStore();
+    const maps: SingleRunMap[] = [];
+    const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(client, mem, maps));
+    assert.equal(result.htmlFileId, "html1");
+    assert.deepEqual(maps[0].visuals, []);
+    assert.equal(client.calls.filter((c) => c === "1" || c === "forrás és tudásbank").length, 1, "nincs javító forduló");
+    const gates = gatesOf(mem);
+    assert.deepEqual([gates.visualsFound, gates.visualsDropped, gates.visualsMissing], [0, 0, 1]);
+  }
+});
+
+test("S1a: az 1. állomás kérése a leltárt is kéri; térképről indított futás (files: []) a térkép leltárát kapja", async () => {
+  let request = "";
+  const spy = withOverride(scriptedClient(), (station, turns) => { if (station === "1") request = lastUserText(turns); return null; });
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(spy, memoryStore()));
+  assert.match(request, /"visuals": \[\.\.\.\]/);
+  assert.match(request, /- decisionTree: /);
+
+  const client = scriptedClient();
+  const mem = memoryStore();
+  mem.saveVisuals([{ ...VISUAL_STEPS, verified: "visual-only" } as SourceVisual]);
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, deps(client, mem));
+  assert.equal(result.htmlFileId, "html1");
+  assert.ok(!client.calls.includes("1"), "nincs forrás-állomás");
+  const gates = gatesOf(mem);
+  assert.equal(gates.visualsFound, 1, "a meta.visuals a futásban elérhető");
+  assert.equal(gates.visualsMissing ?? 0, 0);
 });
