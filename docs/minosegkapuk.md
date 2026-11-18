@@ -98,7 +98,35 @@ node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --re
 
 #### Mért alapvonal (2026-11-18) — két fej, amelyen egy Anthropic vak ellenőr valódi hibákat talált
 
-ALAPVONAL_TABLA
+A futtató két olyan fejet kapott, amelyen aznap egy Anthropic vak ellenőr (alügynök, böngészős és adatbázisos futtatással) valódi
+hibákat talált. A referencia-jelentést a futtató nem kapta meg; a `--goal` fájl a tulajdonosi célból és a tervből készült, a
+referencia megnyitása előtt. (a) = eredmény-e-mail, ~840 soros diff; (b) = adventi felület, ~2 200 soros diff, 98 kB-os terv.
+A nyilvános repóba csak a számok kerülnek (leletlista nem).
+
+| Futás | Kész? | Referencia KÖZEPES leletei: megtalálta / részben / nem | Saját közepes leletek (a kódból visszaellenőrizve) | Hívás | Idő | Bemeneti token (ebből gyorsítótárból) | Kimeneti token | Gyorsítótár-találat a 2. hívástól | Költség |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `qwen/qwen4-max` — (a) | igen | 0 / 0 / 4 | 1 valós | 37 | 16,3 perc | 2 414 238 (2 309 047) | 38 042 | 96,1% | 0,59 USD |
+| `qwen/qwen4-max` — (b) | igen | 1 / 1 / 3 | 0 (a „részben” lelet forgatókönyve téves) | 36 | 12,7 perc | 3 579 417 (3 432 564) | 33 579 | 97,0% | 0,65 USD |
+| `deepseek/deepseek-v4.1-flash-1017` — (a) (bejáratás) | igen | 0 / 0 / 4 | 2 valós | 42 | 7,3 perc | 3 544 455 (3 383 296) | 57 605 | 95,8% | 0,04 USD |
+| `deepseek/deepseek-v4.1-flash-1017` — (b) (összehasonlítás) | NEM TELJES | — (nem adott le jelentést) | — | 45 | 5,6 perc | 4 786 292 (4 650 112) | 70 859 | 98,0% | 0,09 USD |
+
+Mit mutat a mérés (szépítés nélkül):
+
+- **Találati arány a referenciához:** a konfigurált modell a két fej 9 közepes referencia-leletéből 1-et talált meg teljesen és 1-et
+  részben (11%, a részlegessel 22%); az olcsó modell a 4-ből 0-t, a második fejen jelentést sem adott le.
+- **A futtató más hibákat talál, mint a referencia:** a referencia leleteinek nagy része böngészős méréssel (elrendezés-ugrás,
+  képernyőkép, lassú hálózat) és eldobható adatbázison futtatott versenyhelyzet-próbával készült — ezek az utak a futtató
+  engedélylistáján nincsenek. A futtató leletei kódolvasásból és tiszta függvények ellenpróbájából származnak; a közepes leletei
+  közül a kódból visszaellenőrizve 1 (Qwen), illetve 2 (DeepSeek) valós és a referenciában nem szerepel.
+- **A gépi igazolás határa:** a (b) futás egyik „futtatással igazolt” közepes lelete TÉVES következtetés: a hivatkozott sor és az
+  ellenpróba kimenete valódi, de a próba a függvényt elszigetelve hívta, a valódi hívási láncot (amely a hibát átalakítja) nem. A
+  gép azt igazolja, hogy a lelet létező kódra mutat és a futás megtörtént — azt nem, hogy a következtetés helyes.
+- **Ítélet:** a referencia az (a) fejre NEM-et adott; a futtató mindkét modellel IGEN, FELTÉTELLEL-t. Az olcsó ellenőr tehát
+  önmagában átengedett volna egy fejet, amelyet az alapos ellenőr megállított.
+- **Gyorsítótár:** a 2. hívástól a bemeneti tokenek 96–97%-a gyorsítótárból jött (cél: ≥ 80%); a futásonkénti költség így
+  0,59–0,65 USD (gyorsítótár nélkül a konfig áraival ~3,7–5,2 USD lett volna).
+- **Költségplafon:** az alap 2 USD a mért 0,6 USD körüli futás ~3-szorosa; a 6 USD-os kemény határ a nagy diffekre való.
+- Az alapvonal-mérés teljes költsége (négy futás + a gyorsítótár-próba): ~1,41 USD.
 
 ### Tiltott minták (a diff hozzáadott soraiban, `FAIL`, érték kiírása nélkül)
 

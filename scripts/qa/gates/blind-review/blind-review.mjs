@@ -286,7 +286,11 @@ export async function runReview({ cfg, key, system, user, tools, box, budget, se
     if (!calls.length) {
       nudges += 1;
       if (nudges > 2) return done(false, 'a modell nem adott le jelentést (eszközhívás nélkül válaszolt)');
-      const nudge = { role: 'user', content: 'Nem hívtál eszközt. Folytasd a vizsgálatot az eszközökkel, és a KÉSZ jelentést a submit_report eszközzel add le (szöveges válasz nem számít jelentésnek).' };
+      // Mért eset (2026-11-18): a modell a teljes kimeneti keretet gondolkodásra költötte, és üres válasszal állt meg (finish_reason: length).
+      const truncated = json.choices?.[0]?.finish_reason === 'length';
+      const nudge = { role: 'user', content: truncated
+        ? 'A válaszod elérte a kimeneti korlátot, mielőtt eszközt hívtál volna. Gondolkodj RÖVIDEBBEN, és azonnal hívj eszközt; a jelentést tömören, a submit_report eszközzel add le (a leleteket a findings tömbben).'
+        : 'Nem hívtál eszközt. Folytasd a vizsgálatot az eszközökkel, és a KÉSZ jelentést a submit_report eszközzel add le (szöveges válasz nem számít jelentésnek).' };
       messages.push(nudge);
       pending += chars(nudge);
       continue;

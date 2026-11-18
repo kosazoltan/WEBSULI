@@ -315,6 +315,16 @@ néhány százezer–millió bemeneti token (a teljes előzmény minden körben 
 6 USD-os felső határig emelhető. A költség a válasz `usage` mezőjéből számolódik; a konfig árai csak a hívás ELŐTTI becsléshez
 kellenek.
 
+A mért token-számok (2026-11-18, `docs/minosegkapuk.md` „Mért alapvonal”): egy ~840 soros diff 37 hívás, 2,41 M bemeneti token (ebből
+2,31 M gyorsítótárból) és 38 ezer kimeneti token → 0,59 USD; egy ~2 200 soros diff 36 hívás, 3,58 M bemeneti (3,43 M gyorsítótárból),
+34 ezer kimeneti → 0,65 USD. Gyorsítótár nélkül ugyanez ~3,7 és ~5,2 USD lenne — ezért kötelező a gyorsítótár (3. kiegészítés), és
+ezért 2 USD az alap (a mért futás ~3-szorosa: lejárt gyorsítótárra, újrapróbára, hosszabb vizsgálatra is elég), 6 USD a felső határ.
+
+Megjegyzés a sablon forrásáról: a `chore/vak-hibakereso-ellenor` ág a megbízás szövegét egyetlen fájlba tette
+(`scripts/qa/gates/vak-ellenor-megbizas.md`), és a „Ki az ellenőr” szöveget egy jelölt bekezdésbe (AGENTS.md, skill). A beolvasztás
+után a futtató ezt a fájlt olvassa (nem a skill 3. szakaszát), és a jelölt bekezdés tartalma a futtató. A falióra-alapérték 40 perc
+(a mért 13–16 perces futásokhoz), a parancs-időkorlát 240 mp, a hívásonkénti kimenet 16 000 token, a jelentés ≤ 40 000 karakter.
+
 ### M3 — Autonóm, géppel ellenőrzött leletek
 
 Cél: az orkesztrátornak NE kelljen a jelentést sorról sorra ellenőriznie. Ezért a `submit_report` eszköz a jelentés mellett

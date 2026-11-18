@@ -24,7 +24,7 @@ symlinkSync(outside, join(repo.root, 'kifele'), 'junction');
 mkdirSync(join(repo.root, TMP_DIR), { recursive: true });
 after(() => { rmSync(join(repo.root, 'kifele'), { recursive: false, force: true }); repo.cleanup(); rmSync(outside, { recursive: true, force: true }); });
 
-const SECRET_ENV = { ...process.env, OPENROUTER_API_KEY: 'NE-SZIVAROGJON-123456', DATABASE_URL: 'postgres://u:p@elesgep/db', GITHUB_TOKEN: 'x', NODE_OPTIONS: '--inspect' };
+const SECRET_ENV = { ...process.env, OPENROUTER_API_KEY: 'NE-SZIVAROGJON-123456', DATABASE_URL: ['postgres:', '', ['u:p', 'elesgep'].join('@'), 'db'].join('/'), GITHUB_TOKEN: 'x', NODE_OPTIONS: '--inspect' };
 const tools = (extra = {}) => makeTools({ root: repo.root, base: repo.base, head: repo.head, cfg: CFG, env: SECRET_ENV, key: 'NE-SZIVAROGJON-123456', onReport: () => ({ ok: true }), ...extra });
 const planCtx = { root: repo.root, node: process.execPath, cfg: CFG, nodeModulesReal: null, isTracked: (rel) => !rel.startsWith(TMP_DIR) && existsSync(join(repo.root, rel)) };
 

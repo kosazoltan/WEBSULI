@@ -173,6 +173,12 @@ test('a modell eszközhívás nélkül válaszol → két emlékeztető után NE
   const text = incompleteReport({ head: repo.head, stopReason: r.stopReason, notes: r.notes });
   assert.match(text, /^NEM TELJES — /m);
   assert.equal(reportVerdict(text), null, 'a NEM TELJES jelentésből nem olvasható ki ítélet (a modell szövegéből sem)');
+  // a kimeneti korláton megállt (üres) válasz külön, célzott emlékeztetőt kap
+  const cut = reply({ content: '' });
+  cut.body.choices[0].finish_reason = 'length';
+  const t = setup([cut, submit()]);
+  assert.equal((await t.run()).complete, true);
+  assert.match(strip(t.bodies[1].messages).at(-1).content, /elérte a kimeneti korlátot/);
 });
 
 test('C: az előtag körről körre BÁJTRA AZONOS — a korábbi üzenetek soha nem változnak; a jelölők a rögzített blokk végén és a mozgó végen', async () => {
