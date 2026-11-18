@@ -215,6 +215,9 @@ export function createQuestionDirector(opts: {
   const lastMissPos = new Map<string, number>();
   const wrongs = new Map<string, { quiz: FourChoiceQuiz; pickedOriginalIndex: number | null }>();
   let lastWrong: { quiz: FourChoiceQuiz; pickedOriginalIndex: number | null } | null = null;
+  /** Kupon mód (review #483, M2): a menetben feltett lecke-tételek, a legutóbbi feltevés sorszámával. */
+  const couponAsked = new Map<string, { q: PlayQuestion; at: number }>();
+  let lastAskedKey: string | null = null;
 
   /** Ismétlés akkor jöhet, ha vele együtt a menet BÁRMELY pontján az ismétlések aránya ≤ 30% marad. */
   function reviewSlotOpen(): boolean {
@@ -271,8 +274,25 @@ export function createQuestionDirector(opts: {
 
   function choose(): Pick | null {
     if (provider.couponOnly) {
+      // J1a / review #483 (M2): kupon módban is jár a menet közbeni ismétlés (a hibázott lecke-tétel), és a lecke kimerülése
+      // után a menetben legrégebben feltett lecke-tétel jön újra — a kérdés nem fogy el. Csak az aktuális lecke tananyaga:
+      // menetek közötti ismétlés itt nincs.
+      // D-J1a-16 (újra-review #483, ÚK1): az ismétlés a menetben először kiadott EREDETI tétel — a közös sor `restore()`-a a
+      // `coupon` forrást `material`-ra normalizálná, és a `couponItemId` elveszne.
+      if (reviewSlotOpen()) {
+        for (const item of inRunCandidates()) {
+          const asked = couponAsked.get(item.key);
+          if (asked) return { q: asked.q, isReview: true, inRun: true };
+        }
+      }
       const m = provider.material(acceptCtx);
-      return usable(m) && !askedKeys.has(m.key) ? { q: m, isReview: false, inRun: false } : null;
+      if (usable(m) && !askedKeys.has(m.key)) return { q: m, isReview: false, inRun: false };
+      let oldest: { q: PlayQuestion; at: number } | null = null;
+      for (const [key, entry] of couponAsked) {
+        if (couponAsked.size >= 2 && key === lastAskedKey) continue;
+        if (!oldest || entry.at < oldest.at) oldest = entry;
+      }
+      return oldest ? { q: oldest.q, isReview: false, inRun: false } : null;
     }
     const slot = reviewSlotOpen();
     if (slot) {
@@ -337,6 +357,9 @@ export function createQuestionDirector(opts: {
     active = { p, position };
     runStats.onAsk(p, simNowMs);
     askedKeys.add(q.key);
+    lastAskedKey = q.key;
+    // D-J1a-16: csak a feltevés sorszáma frissül, a tétel az eredeti marad.
+    if (provider.couponOnly) couponAsked.set(q.key, { q: couponAsked.get(q.key)?.q ?? q, at: position });
     if (isReview) {
       reviewsAsked += 1;
       if (pick.inRun) returns.set(q.key, (returns.get(q.key) ?? 0) + 1);
