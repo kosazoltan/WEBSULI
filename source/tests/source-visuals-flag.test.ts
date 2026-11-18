@@ -231,7 +231,7 @@ test("KI (J2): a modellkimenet sémája a főág sémájával azonos eredményt 
   const src = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
   assert.match(src("../server/studio/single-run/concept-fix.ts"), /const parsed = modelLessonSchema\(input\.sourceVisuals \?\? sourceVisualsEnabled\(\)\)\.safeParse\(json\);/);
   const improvement = src("../server/studio/structured-improvement.ts");
-  assert.match(improvement, /const parsed = modelLessonSchema\(sourceVisualsEnabled\(\)\)\.parse\(previous\);/);
+  assert.match(improvement, /const drawn = drawableCandidate\(modelLessonSchema\(sourceVisualsEnabled\(\)\)\.parse\(previous\), /, "a jelölt a kapcsolós sémán, majd a kirajzolhatóság szűrőjén megy át");
   assert.match(improvement, /return modelLessonRepairSchema\(sourceVisualsEnabled\(\)\)\.parse\(\{/);
   assert.match(improvement, /const storedCoverage = visualsOn \? withVisualCoverage\(/, "KI állapotban a tárolt fedettség változatlan, többlet lekérdezés nélkül");
   assert.match(src("../server/studio/single-run/engine.ts"), /const strict = modelLessonSchema\(visualsOn\)\.safeParse\(/);

@@ -7,6 +7,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { htmlFiles, kmConcepts, knowledgeMaps, lessons } from "../../../shared/schema";
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
+import { drawableCandidate, withDropReason } from "../undrawable-visuals";
 import type { ExamWeight } from "../../../shared/knowledge-map-schema";
 import { getHtmlFilesCache } from "../../cache/HtmlFilesCache";
 import { workflowPhase } from "../../workflows/engine";
@@ -46,12 +47,18 @@ export async function fixConceptInConversation(input: {
     const candidate = await runStation(deps, "fogalomjavítás", withRoleRunbook([{ type: "text", text: `FOGALOMJAVÍTÁS (${conceptId}).\n${prompt}\nVálaszolj kizárólag a teljes lecke JSON-jával.` }], "author"), (json) => {
       const parsed = modelLessonSchema(input.sourceVisuals ?? sourceVisualsEnabled()).safeParse(json);
       if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
-      const check = checkConceptFixResult(teaching, { ...parsed.data, experience: undefined }, conceptId);
-      if (!check.ok) return { ok: false, problems: check.reasons.map((r) => `A javítás túllépett a célfogalmon: ${r}`) };
-      // Review #261: a tanítás kapui (fedettség, megalapozottság, ív) már itt — javító forduló jár rájuk, nem a bank után derülnek ki.
-      try { assertRepairTeaching(original, { ...parsed.data, experience: undefined }, source); }
+      // #515 review: a hibás paraméterű (kirajzolhatatlan) új fajtájú ábrablokk a jelölt elfogadása ELŐTT kimarad — a lejátszó
+      // elrejtené, a javítás mégis „sikeres” lenne. Ha a kiesés után a jelölt bukik, a hiba a kiesés okát is megnevezi (a meglévő
+      // javító fordulón; új kör ezen túl nem indul). KI állapotban nincs mit kivenni (a séma az új fajtát el sem fogadja).
+      let drawn: ReturnType<typeof drawableCandidate>;
+      try { drawn = drawableCandidate(parsed.data, input.log, "Fogalomjavítás"); }
       catch (error) { return { ok: false, problems: [error instanceof Error ? error.message : String(error)] }; }
-      return { ok: true, value: parsed.data };
+      const check = checkConceptFixResult(teaching, { ...drawn.lesson, experience: undefined }, conceptId);
+      if (!check.ok) return { ok: false, problems: check.reasons.map((r) => withDropReason(drawn.notes, `A javítás túllépett a célfogalmon: ${r}`)) };
+      // Review #261: a tanítás kapui (fedettség, megalapozottság, ív) már itt — javító forduló jár rájuk, nem a bank után derülnek ki.
+      try { assertRepairTeaching(original, { ...drawn.lesson, experience: undefined }, source); }
+      catch (error) { return { ok: false, problems: [withDropReason(drawn.notes, error instanceof Error ? error.message : String(error))] }; }
+      return { ok: true, value: drawn.lesson };
     });
     await workflowPhase("banks");
     candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: freshBankCall(input.fresh), concurrency: 1 });

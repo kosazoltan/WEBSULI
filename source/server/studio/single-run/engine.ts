@@ -49,6 +49,7 @@ import { subjectKeyOf } from "../../../shared/subject-key";
 import { gateMode, type GateMode, type GateName } from "../gates/config";
 import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
+import { undrawableDropNotes } from "../undrawable-visuals";
 import { cleanModelText, sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual, type SourceVisualsResult } from "../../../shared/source-visuals";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
@@ -139,10 +140,7 @@ export function withoutUndrawableVisuals(lesson: Lesson, log?: (line: string) =>
   return kept;
 }
 
-/** A kivett (kirajzolhatatlan) ábrablokkok oka a modellnek szóló javító üzenet soraként — a blokk helye, fajtája és a paraméterhiba. */
-export function undrawableDropNotes(dropped: ReadonlyArray<DroppedSourceVisual>): string[] {
-  return dropped.map((d) => `A program KIVETTE a(z) ${d.path} ábrablokkot (animKind: ${d.animKind}), mert a paraméterei hibásak: ${d.problems.join("; ").slice(0, 300)} — az alábbi hibák ennek a következményei lehetnek. Javítsd a blokk paramétereit, vagy tanítsd ugyanezt másik blokkal.`);
-}
+export { undrawableDropNotes };
 
 /**
  * A forráspótló forduló foltja a leckébe illesztve (SK1, `enforce`): ábrafolt → címke-tisztítás (ugyanaz, mint a 4. állomás után —
