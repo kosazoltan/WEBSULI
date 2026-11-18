@@ -126,7 +126,7 @@ for (const viewport of VIEWPORTS) {
     expect(Math.abs((await firstCardTop()) - cardTopBefore), "a lista helye nem mozdult").toBeLessThan(0.5);
     // a tartalom PONTOSAN kitölti a lefoglalt dobozt: a sorok területe a CSS szerinti (3 × 68 + 2 × hézag), se több, se kevesebb
     expect(await page.getByTestId("home-mascot-picks").evaluate((el) => el.getBoundingClientRect().height)).toBe(viewport.width >= 640 ? 220 : 216);
-    expect(await body(page).evaluate((el) => (el.parentElement as HTMLElement).clientHeight === el.offsetHeight && el.scrollHeight <= el.clientHeight + 10), "a tartalom belefér a lefoglalt dobozba").toBe(true);
+    expect(await body(page).evaluate((el) => (el.parentElement as HTMLElement).clientHeight === (el as HTMLElement).offsetHeight && el.scrollHeight <= el.clientHeight + 10), "a tartalom belefér a lefoglalt dobozba").toBe(true);
 
     // 1. belépés: integet és köszön (első látogatás)
     expect((await state(page)).step).toBe("enter");
