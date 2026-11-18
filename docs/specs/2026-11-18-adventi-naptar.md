@@ -494,7 +494,7 @@ Következmény: a 4.1 (h) H1 javaslata és a 2. szakasz „új kérdésbank nem 
   nevére, dátumára, tárgyára vonatkozik); vallási szempontból tapintatos (a vallási eredetet „a keresztény hagyomány szerint”
   megfogalmazással, tényként említi, hitbeli állítást nem kér számon, más vallást és a nem vallásos családot nem minősíti);
   márkanév nincs; a magyarázat 30–300 karakter.
-- Mennyiség (validátor kényszeríti; évfolyamonként az ÉRVÉNYES tételek száma): 1–2. évfolyam ≥ 96 (24 ablak × 2 kérdés × 2 kör),
+- Mennyiség (validátor kényszeríti; évfolyamonként az ÉRVÉNYES tételek száma): 1–2. évfolyam ≥ 144 (24 ablak × 3 kérdés × 2 kör; FELÜLÍRVA 2026-11-18: korábban 96 — lásd 16.4),
   3–12. évfolyam ≥ 72 (8 ablak × 3 kérdés × 3 kör). Azonosító és normalizált prompt a teljes készletben egyedi, és a közös
   évfolyam-bank egyetlen promptjával sem egyezik.
 - Ellenőrzés: gépi validátor (egységteszt) + a független ellenőr tételenkénti TÉNYELLENŐRZÉSE a PR előtt.
@@ -504,7 +504,7 @@ Következmény: a 4.1 (h) H1 javaslata és a 2. szakasz „új kérdésbank nem 
 - 3–12. évfolyam: a karácsonyi ablakok a 3-mal osztható napok: **3, 6, 9, 12, 15, 18, 21, 24** (8 ablak; a 24. mindig karácsonyi).
   A többi 16 ablak a tanuló évfolyamának közös bankjából jön: a tárgyak a 16 ablakon járnak körbe (seedelt sorrend), a szint a nap
   szerint (1–8. könnyű, 9–16. közepes, 17–24. nehéz) — cellánként legfeljebb 2 ablak, az R4 kapacitás-számítása változatlanul áll.
-- 1–2. évfolyam: mind a 24 ablak karácsonyi; ablakonként 1 javítás (2 kérdés), legfeljebb 2 kör.
+- 1–2. évfolyam: mind a 24 ablak karácsonyi; ablakonként 2 javítás (3 kérdés), legfeljebb 2 kör (FELÜLÍRVA 2026-11-18: korábban 1 javítás — lásd 16.4).
 - A karácsonyi ablak kérdései az évfolyamra érvényes tételekből, seedelten, visszatevés nélkül (körökön át sem ismétlődik).
 - A felületen a karácsonyi ablak tárgya „Karácsony”; a szülői levél tárgyankénti bontásában külön sor.
 - A 95% szabálya (R1) változatlan: a karácsonyi és a bank-ablak ugyanannyit ér.
@@ -540,11 +540,11 @@ tájékoztatás; személyes adat és token nincs benne. `NODE_ENV=test` és e2e-
 
 - [ ] A33 WHEN a validátor a karácsonyi készleten fut THEN the system SHALL nulla hibát jelenteni: egyedi azonosító és
   normalizált prompt, 4 különböző válasz, egy helyes, 30–300 karakteres magyarázat, érvényes évfolyamsáv, és évfolyamonként
-  az érvényes tételek száma 1–2. évfolyamon ≥ 96, 3–12. évfolyamon ≥ 72.
+  az érvényes tételek száma 1–2. évfolyamon ≥ 144 (javítva: 16.4), 3–12. évfolyamon ≥ 72.
 - [ ] A34 WHEN egy 3–12. évfolyamos tanuló naptára elkészül THEN the system SHALL pontosan a 3., 6., 9., 12., 15., 18., 21. és
   24. ablakba karácsonyi kérdést tenni, a többi 16-ba a tanuló évfolyamának közös bankjából.
 - [ ] A35 WHEN egy 1–2. évfolyamos tanuló naptára elkészül THEN the system SHALL mind a 24 ablakba az évfolyamára érvényes
-  karácsonyi kérdést tenni, ablakonként legfeljebb 1 javítással és legfeljebb 2 körrel.
+  karácsonyi kérdést tenni, ablakonként legfeljebb 2 javítással (javítva: 16.4) és legfeljebb 2 körrel.
 - [ ] A36 WHEN egy tanuló az évad minden körét és javítását végigjátssza THEN the system SHALL karácsonyi kérdést sem
   ismételni.
 - [ ] A37 WHEN az admin száraz futást kér az értesítőre THEN the system SHALL a címzettek számát, forrásonkénti bontását és a
@@ -805,7 +805,7 @@ sorban, alatta / mellette a gomb.
 - Regresszió: a szűrő, a kereső, a nézetváltó és a lista DOM-sorrendje és teszt-azonosítói változatlanok; a meglévő főoldali tesztek
   változtatás nélkül zöldek maradnak: `home-views.spec.ts`, `material-title.spec.ts`, `classroom-badge.spec.ts`,
   `home-list-visibility.test.ts`, `home-cards-modern.test.ts`, `home-practice-games-catalog.test.ts`, `games-lobby-mobile.spec.ts`.
-  Az e2e-szerver alapból szezonon KÍVÜL fut (a tesztóra fejléc nélkül a valódi dátum számít) — a meglévő tesztek determinizmusa
+  **FELÜLÍRVA (16.5):** e2e-módban fejléc nélkül a naptár KIKAPCSOLT, a kliensben nincs e2e-ág. Az eredeti szöveg: Az e2e-szerver alapból szezonon KÍVÜL fut (a tesztóra fejléc nélkül a valódi dátum számít) — a meglévő tesztek determinizmusa
   érdekében a kártya e2e-módban csak akkor jelenik meg, ha a teszt kifejezetten tesztidőt ad (a kliens ilyenkor a `status` válasz
   fázisát használja a doboz lefoglalásához); ezt a naptár saját tesztjei használják.
 - Az értesítő e-mail (R14) gombja a `/adventi-naptar` címre mutat (közvetlenül a naptárra); a levél szövege megemlíti, hogy a
@@ -860,11 +860,12 @@ Az A15 és az A28 a kártyára a fentiek szerint értendő (főoldali kártya; M
 
 ### 16.1 K1 — korlátok alanyonként (S2b; felülírja az R8 „60 kérés / 15 perc / IP” szabályát)
 
-- Írási korlát ALANYONKÉNT (a feloldott `subject_kind:subject_id` kulcsra): 120 kérés / 15 perc. A tulajdonos a levél-keretnél is így
-  döntött: gyerekenként.
+- Írási korlát ALANYONKÉNT (a feloldott `subject_kind:subject_id` kulcsra): 200 kérés / 15 perc. A szabályos legrosszabb eset
+  24 ablak × 3 kérdés × 2 kérés (megnyitás + válasz) = 144 írás — ennek korlát nélkül át kell mennie.
 - IP-korlát csak lazán, visszaélés ellen: 600 írás / 15 perc / IP (egy osztály egy iskolai NAT mögött belefér).
 - Sor-LÉTREHOZÁSRA külön, szűk korlát (ez védi a Neon-keretet): 30 új `device` sor / óra / IP.
-- Integrációs teszt: egy alany 24 megnyitás + 24 válasz + 12 javítás (megnyitás + válasz) 15 percen belül, egy IP-ről → nincs 429;
+- Integrációs teszt: egy alany a legrosszabb esetet játssza végig — 24 ablak, mindegyiken 3 kérdés, megnyitás + válasz = 144 írás
+  15 percen belül, egy IP-ről → nincs 429;
   25 alany egy IP-ről napi 2–2 írással → nincs 429; a 31. új névtelen sor egy órán belül ugyanarról az IP-ről → 429.
 
 ### 16.2 K5, A6 — záró szöveg (megvalósítva az S1 javító commitjában)
@@ -873,7 +874,7 @@ Az `adventClosing(summary, { round, maxRounds, phase, waiting })` ismeri a fázi
 időszakban nincs „holnap”, és a „meglepetés vár” csak akkor szerepel, ha a 95% az adott körben még elérhető
 (`adventStillReachable`). Az R3 szövegei ennek megfelelően értendők.
 
-### 16.3 K2 — a szülői levél pillanata (S5; felülírja az E1 „amikor végigért” megfogalmazását — továbbra is EGY levél körönként)
+### 16.3 K2 — a szülői levél pillanata (S5) — FELÜLÍRVA: az érvényes szabály a 18.1 (évadonként EGYETLEN levél)
 
 A levél akkor megy, amikor a kör eredménye VÉGLEGES: (a) a tanuló megfelelt (`passed_at` első beállítása), vagy (b) mind a 24 ablak
 megválaszolt, és nincs javítható ablak (megfelelés nélkül). Amíg van javítható ablak, levél nem megy. Ha egy későbbi körben éri el a
@@ -883,7 +884,9 @@ végleg hibás → egy „végleges” levél; 2. körben megfelel → még egy 
 
 ### 16.4 K3 — az 1–2. évfolyam javításai
 
-A (b) döntés kivétel nélküli: az 1–2. évfolyamon is ablakonként 2 javítás; a körök száma 2 (megvalósítva: `ADVENT_RULES.lowGrade`).
+Az orkesztrátor ÉRTELMEZÉSE (nem a tulajdonos szó szerinti válasza): a tulajdonos kivétel nélküli „ablakonként legfeljebb 2” (b) döntéséből
+következően az 1–2. évfolyamon is ablakonként 2 javítás; a körök száma itt 2 (a 3–12. évfolyam 3 köre helyett — a készlet mérete
+miatt, szintén orkesztrátori döntés). Megvalósítva: `ADVENT_RULES.lowGrade`.
 A karácsonyi készlet minimuma az 1–2. évfolyamra ezért **144** érvényes tétel (24 ablak × 3 kérdés × 2 kör) — a 12.2 és az A33 / A35
 „96” és „1 javítás” értéke helyett ez érvényes. A teljes készlet így legalább 288 tétel (144 + 72 + 72).
 
@@ -937,14 +940,68 @@ leírásban indokolva); (3) S3c-0; (4) S1b. Mindegyik külön ág a közös ágr
 
 <!-- acceptance-checklist -->
 
-- [ ] A49 WHEN egy alany 15 percen belül mind a 24 ablakot megnyitja és megválaszolja, javításokkal együtt THEN the system SHALL
+- [ ] A49 WHEN egy alany 15 percen belül mind a 24 ablak mindhárom kérdését megnyitja és megválaszolja (144 írás) THEN the system SHALL
   egyetlen kérést sem elutasítani korlát miatt; WHEN egy IP-ről egy órán belül 30-nál több új névtelen sor jönne létre THEN the
   system SHALL a továbbiakat 429-cel elutasítani.
-- [ ] A50 WHEN a tanulónak van javítható ablaka THEN the system SHALL szülői levelet nem küldeni; WHEN a kör eredménye végleges
-  vagy a tanuló megfelelt THEN the system SHALL címzettenként pontosan egy, a végleges eredményt tartalmazó levelet küldeni.
+- [ ] A50 WHEN a tanuló eredménye még nem végleges (van javítható ablaka vagy további köre, és nem felelt meg) THEN the system
+  SHALL szülői levelet nem küldeni; WHEN az eredmény végleges (18.1) THEN the system SHALL évadonként és címzettenként pontosan
+  egy levelet küldeni, és utána többet nem.
 - [ ] A51 WHEN a szerver e2e-módban fut és a kérés nem hoz érvényes tesztidő-fejlécet THEN the system SHALL a naptárat
   kikapcsoltnak mutatni a valódi dátumtól függetlenül.
 - [ ] A52 WHEN a naptár lezárt vagy pótlási időszakban van THEN the system SHALL nem mutatni „gyere vissza holnap” szöveget, és
   lezárva új kört vagy javítást nem ajánlani; WHEN a 95% a körben már nem érhető el THEN the system SHALL meglepetést nem ígérni.
 - [ ] A53 WHEN a kérés érvénytelen tanulói tokent hoz THEN the system SHALL ezt jelezni, és a felület a tanulót újrapárosításra
   kérni ahelyett, hogy csendben névtelen naptárat kezdene.
+
+## 17. Döntés a leiratkozásról (2026-11-18)
+
+A koordinátoron át érkezett döntés: a 16.6 javaslata ELFOGADVA. Az adventi értesítő EGYSZERI levél; a lábléc kimondja, hogy
+egyszeri, és megadja a WebSuli-levelek leállításának meglévő módját. Új, egy kattintásos leiratkozó link most NEM épül. A levél
+továbbra is csak a tulajdonos külön jóváhagyása után megy ki (szöveg + címzettszám előzetes bemutatásával).
+
+## 18. Az ellenőri ítéletek átvezetése, 2. kör (2026-11-18: docs `396f3bb9`, S1 `fefbf9cf`, S3c-0 `ebb552e1`)
+
+### 18.1 D3 — a szülői levél: évadonként EGYETLEN levél (felülírja a 16.3-at és az R7 `mailed_to` leírását)
+
+A tulajdonos válasza: „Igen, egy levél a végén”. Ezért egy tanulóról évadonként, címzettenként pontosan EGY levél megy, a végleges
+eredménykor — a három feltétel közül annál, amelyik előbb teljesül:
+1. a tanuló megfelelt (mind a 24 ablak megválaszolva, legalább 23 megoldott) — bármelyik körben;
+2. már nincs több lehetősége: az utolsó megengedett körben mind a 24 ablak megválaszolt, és nincs javítható ablak;
+3. az évad lezárult (január 7-től): a takarító egyszer végigmegy az évad tanulói sorain, és annak, aki legalább egy ablakra
+   válaszolt és még nem kapott levelet, elküldi az akkori állást.
+Amíg egyik sem teljesül (van javítható ablak, vagy kérhet új kört), levél NEM megy. A levél az összes kör eredményét összefoglalja
+(legjobb kör, megoldott / 24, elsőre jó / 24, megfelelt-e). A foglalás kulcsa a `mailed_to`-ban: `final:<cím-lenyomat>` (HMAC);
+körönkénti vagy külön „megfelelt” levél NINCS. Teszt: 22 megoldott + 2 javítható → nincs levél; javítás után megfelel → egy levél;
+1. kör sikertelen, de van 2. kör → nincs levél; az utolsó kör sikertelen lezárása → egy levél; a levél után újabb válasz vagy
+évadzárás → nincs második; évadzáráskor a levél nélküli, megkezdett tanulói sor → egy levél; névtelen és előnézeti sor soha.
+
+### 18.2 D2 — alanyonkénti korlát
+
+A 16.1 értéke 200 írás / 15 perc / alany (a szabályos legrosszabb eset 144). A teszt a 144-es esetet méri.
+
+### 18.3 D1 — helyben javított / megjelölt helyek
+
+12.2 és A33 (144), 12.3 és A35 (2 javítás), 14.4 (e2e-szezon), 16.3 (felülírva: 18.1); a végrehajtási utasításban az „S1 módosítása”,
+az „S1b”, az „S8”, a „Kiegészítés 3” S4-pontja és a „Kiegészítés 5” érintett sorai.
+
+### 18.4 N1, N2 — záró szöveg a szezon előtt és üres naptárnál (megvalósítva az S1 2. javító commitjában)
+
+A `closed` szöveg csak `closed` fázisban jelenik meg; `before` / `teaser` fázisban külön `soon` fajta: „Hamarosan: december 1-jén
+nyílik az első ablak!”. Lezárt naptárnál, ha a tanuló egy ablakot sem oldott meg, a szöveg nem számol („Nálad 0 ablak…” helyett):
+„Az idei naptár bezárt — jövőre újra találkozunk!”.
+
+### 18.5 Képgyártó — költségkeret (S3c-0 javítás; felülírja a 13.6 / 15. „futásonkénti plafon” értelmezését)
+
+- **Hívásonkénti keret (B1):** minden hálózati hívás előtt ellenőrzés, a hívás indításakor elszámolás; a sikertelen hívás is
+  számít; ha a következő hívás nem fér a keretbe, nem indul el (az újrapróba sem).
+- **Összesített keret (M1):** a `--max-usd 7` a készlet TELJES kerete: a `candidates/advent/log.jsonl` eddigi becsült összege a
+  kezdőérték (próbakör + teljes kör + pótkör együtt ≤ 7 USD), és a már meglévő jelöltek nem készülnek újra.
+- **A keret becsült áron számol (M2):** a kódban rögzített 2026-10-17-i árral, nem a számlával. A valódi kemény plafon a
+  szolgáltatónál a kulcsra állított költségkeret — **tulajdonosi teendő** (a koordinátor jelzi). A próbakör után a számlázott
+  összeget össze kell vetni a kiírt becsléssel, mielőtt a teljes kör indul.
+- **Stílus-referencia (L1):** a teljes körhöz a tulajdonos által KIVÁLASZTOTT háttér kell:
+  `--ref advent-bg-portrait=advent-bg-portrait/<fájl>`; enélkül (ha a háttér nem ugyanabban a futásban készül) a futás hívás előtt megáll.
+- **Egyéb:** 180 s-os időkorlát a hívásokon; a többalakos ablakok (19., 20., 24.) `scene` stílust kapnak; `--max-usd` felső
+  korlátja 20 (elütés ellen); külön készletnél nincs félrevezető „Csak az első N tétel fut” üzenet.
+- A teljes kör parancsa a próbakör és a válogatás UTÁN (a koordinátor indítja):
+  `npx.cmd tsx scripts/design-assets/generate.ts --set advent --max 94 --max-usd 7 --ref advent-bg-portrait=advent-bg-portrait/<a kiválasztott fájl>`
