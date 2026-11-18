@@ -46,6 +46,22 @@ export function missingSections(text) {
 }
 
 /**
+ * A jelentés tartalmi ellenőrzése (V4): a rögzítendő fejre szóló `Fej:` sor és a kötelező szakaszok. Hibaüzenetet ad, vagy null-t.
+ * Önálló, kicsi függvény — bővíthető (pl. bizonyíték-műtermék ellenőrzése) a `buildRecord` érintése nélkül.
+ * @param {string} text a jelentés szövege
+ * @param {string} full a rögzítendő teljes fej-hash
+ * @returns {string|null}
+ */
+export function checkReport(text, full) {
+  const rh = reportHead(text);
+  if (!rh) return 'a jelentésben nincs „Fej: <hash>” sor (a websuli-fejlesztesi-ellenor skill sablonjának kötelező része)';
+  if (!full.toLowerCase().startsWith(rh)) return `a jelentés utolsó „Fej:” sora (${rh}) nem a rögzítendő fejre (${full.slice(0, 12)}) szól`;
+  const miss = missingSections(text);
+  if (miss.length) return `a jelentésből hiányzik a kötelező szakasz: ${miss.map((m) => `„${m}”`).join(', ')} (vak, hibakereső ellenőr — websuli-fejlesztesi-ellenor skill)`;
+  return null;
+}
+
+/**
  * @returns {{ ok: true, record: object, line: string } | { ok: false, error: string }}
  */
 export function buildRecord({ head, verdict, report, resolveHead, readReport, now = () => new Date() }) {
@@ -62,12 +78,9 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, no
   const inReport = reportVerdict(text);
   if (!inReport) return { ok: false, error: 'a jelentésben nincs „Ítélet: IGEN | IGEN, FELTÉTELLEL | NEM” sor (a megbízás-sablon kötelező része)' };
   if (inReport !== v) return { ok: false, error: `a --verdict (${v}) eltér a jelentés utolsó ítéletétől (${inReport})` };
-  // V4: vak, hibakereső ellenőr — a jelentés a rögzített fejre szól, és tartalmazza a kötelező szakaszokat.
-  const rh = reportHead(text);
-  if (!rh) return { ok: false, error: 'a jelentésben nincs „Fej: <hash>” sor (a websuli-fejlesztesi-ellenor skill sablonjának kötelező része)' };
-  if (!full.toLowerCase().startsWith(rh)) return { ok: false, error: `a jelentés utolsó „Fej:” sora (${rh}) nem a rögzítendő fejre (${full.slice(0, 12)}) szól` };
-  const miss = missingSections(text);
-  if (miss.length) return { ok: false, error: `a jelentésből hiányzik a kötelező szakasz: ${miss.map((m) => `„${m}”`).join(', ')} (vak, hibakereső ellenőr — websuli-fejlesztesi-ellenor skill)` };
+  // V4: vak, hibakereső ellenőr — a jelentés tartalmi ellenőrzése.
+  const bad = checkReport(text, full);
+  if (bad) return { ok: false, error: bad };
   return {
     ok: true,
     record: { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() },

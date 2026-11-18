@@ -42,15 +42,16 @@ terhelésétől függően ±50%.
 
 A szabály forrása: `AGENTS.md` „Vak hibakereső ellenőr — kötelező” (minden ügynök-környezetre).
 
-- **Vak:** friss kontextusú alügynök, amely CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja; a fejlesztő
-  jelentését, önértékelését, „zöld” állításait és az orkesztrátor várakozását NEM.
+- **Vak:** CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja; a fejlesztő jelentését, önértékelését, „zöld”
+  állításait és az orkesztrátor várakozását NEM.
+- **Ki az ellenőr:** friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök — alügynök, vagy ahol nincs, új, tiszta munkamenet
+  / másik eszköz. A megbízás szövege egyetlen fájlban: `scripts/qa/gates/vak-ellenor-megbizas.md`.
 - **Hibakereső:** a megbízás kifejezetten hibakeresésre utasít („a feladatod hibát találni, nem megerősíteni”), feladat-specifikus
   hibakereső pontokkal és egy „bármi más” ponttal; a futtatás / ellenpróba saját ideiglenes munkafában; visszanézésnél is
   hibakeresés a keret; a mérce a tulajdonosi cél (felületnél a képernyőképek is). Anthropic modell is lehet — a sablon ezért
   kifejezetten hibakeresésre utasít.
 - **Kötelező jelentés-elemek** (a `record-review.mjs` gépileg ellenőrzi): `Fej:` sor a rögzítendő fejre, `Ítélet:` sor, a
-  „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc. A megbízás-sablon: `websuli-fejlesztesi-ellenor`
-  skill, 3. szakasz.
+  „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc. Indítás: `websuli-fejlesztesi-ellenor` skill.
 
 ### Tiltott minták (a diff hozzáadott soraiban, `FAIL`, érték kiírása nélkül)
 

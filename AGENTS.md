@@ -160,10 +160,8 @@ Ez a szabály MINDEN ügynök-környezetre érvényes (Claude Code, Codex — he
 
 1. **Minden elkészült fejlesztést / javítást egy VAK ellenőr néz át** a PR megnyitása ELŐTT és minden érdemi javító push előtt.
    **A fejlesztő saját magát soha nem ellenőrizheti.**
-2. **Vak:** az ellenőr friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök. CSAK a követelményt (terv / tulajdonosi cél)
-   és a diffet / fejet kapja — a fejlesztő jelentését, összefoglalóját, önértékelését, „zöld” állításait és az orkesztrátor várakozását
-   NEM. Ahol a környezet tud alügynököt indítani, alügynök; ahol nem (egyes Codex / Cursor / Gemini futások), új, tiszta munkamenet
-   vagy másik eszköz, amely CSAK a tervet és a diffet kapja.
+2. **Vak:** az ellenőr CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja — a fejlesztő jelentését, összefoglalóját,
+   önértékelését, „zöld” állításait és az orkesztrátor várakozását NEM. (Ki az ellenőr: lent.)
 3. **Hibakereső keret:** a megbízás kifejezetten hibakeresésre utasít — „a feladatod hibát találni, nem megerősíteni”.
 4. **Feladat-specifikus hibakereső pontok** (adatszerződés, biztonság / adatvédelem, regresszió, dátumhatár, migráció,
    versenyhelyzet, tesztminőség — a diffhez igazítva) és egy „bármi más, amit a lista nem fed” pont.
@@ -174,7 +172,13 @@ Ez a szabály MINDEN ügynök-környezetre érvényes (Claude Code, Codex — he
    ellenőrzi, és csak teljes jelentésből rögzít ítéletet.
 7. **Visszanézésnél is hibakeresés** a keret (vakon: csak az új fej és a diff), nem a korábbi leletek kipipálása.
 
-Kész megbízás-sablon és indítási leírás (alügynökkel és alügynök-eszköz nélkül): `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
+### Ki az ellenőr
+
+Friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök. Ahol a környezet tud alügynököt indítani, alügynök; ahol nem (egyes
+Codex / Cursor / Gemini futások), új, tiszta munkamenet vagy másik eszköz, amely CSAK a tervet és a diffet kapja.
+
+A megbízás szövege egyetlen fájlban: `scripts/qa/gates/vak-ellenor-megbizas.md`. Indítási leírás (alügynökkel és alügynök-eszköz nélkül):
+`.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
 Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md). A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja
 felül.
 

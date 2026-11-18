@@ -157,6 +157,16 @@
   - ismert korlát: a leírás-frissítés (`edited`) új futást indít; a pusht követő első futás a régi ítélet-sor miatt piros, amíg a
     leírás nem frissül — ez szándékos (a fej változott, új ítélet kell).
 
+### Előkészítés a gépi vak ellenőr-futtatóhoz (orkesztrátori kérés, 2026-11-18)
+
+A vak ellenőrt később egy konfigurált független modellt indító futtató végzi (másik ág: `chore/vak-ellenor-deepseek`). Ehhez:
+- a „Ki az ellenőr” rész EGY helyen, jól elkülönítve áll (az AGENTS.md szakaszában, a skillben és a runbookban egy-egy „Ki az
+  ellenőr” alszakasz), egyelőre környezet-semlegesen;
+- a megbízás szövege EGYETLEN, gépileg olvasható fájlban van: `scripts/qa/gates/vak-ellenor-megbizas.md` (a futtató ebből veszi az
+  üzenetet; a skill, az AGENTS.md és a runbook csak hivatkozik rá, nem másolja);
+- a `record-review.mjs` jelentés-ellenőrzése egy kicsi, önálló függvényben van (`checkReport(text, full)`), amelyet a másik ág
+  bővíthet a `buildRecord` érintése nélkül.
+
 ### Elfogadás (EARS) — kiegészítés
 
 - [ ] V7 WHEN az `AGENTS.md`-t olvassuk THEN SHALL tartalmazni a „Vak hibakereső ellenőr — kötelező” szakaszt a kezelt blokkon kívül,

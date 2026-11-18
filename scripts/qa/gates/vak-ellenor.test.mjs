@@ -37,7 +37,14 @@ test('V2: a runbook, az AGENTS.md „Minőségkapuk” szakasza és az öt kapu-
 
 test('V3: a független ellenőr megbízás-sablonja vak és hibakereső (a)–(f), és nem adja át a fejlesztő állításait', () => {
   const skill = read('.agents', 'skills', 'websuli-fejlesztesi-ellenor', 'SKILL.md');
-  const tpl = section(skill, '3. A megbízás', '4. Kötelező');
+  // A megbízás szövege EGY, gépileg olvasható fájlban van; a skill, az AGENTS.md és a runbook erre hivatkozik (nem másolja).
+  const TPL = 'scripts/qa/gates/vak-ellenor-megbizas.md';
+  const tpl = read(...TPL.split('/'));
+  for (const doc of [skill, read('AGENTS.md'), read('docs', 'minosegkapuk.md')]) assert.ok(doc.includes(TPL), 'hiányzó hivatkozás a sablonfájlra');
+  assert.ok(!skill.includes('A FELADATOD HIBÁT TALÁLNI, NEM MEGERŐSÍTENI'), 'a skill ne másolja a sablont (egyetlen forrás)');
+  // „Ki az ellenőr” egy helyen, jól elkülönítve (a skillben és az AGENTS.md szakaszában)
+  assert.match(skill, /^### Ki az ellenőr$/m);
+  assert.match(section(read('AGENTS.md'), 'Vak hibakereső ellenőr — kötelező'), /^### Ki az ellenőr$/m);
   for (const must of [
     'A FELADATOD HIBÁT TALÁLNI, NEM MEGERŐSÍTENI', // (a)
     'Bármi más, amit a fenti lista nem fed', // (b)
