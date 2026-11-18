@@ -9,8 +9,6 @@ import {
   SparkleField,
   createGlowSprite,
   createGradientSky,
-  createRoomEnvironment,
-  disposeObjectTree,
   glowTexture,
   useThreeScene,
   type ThreeSceneContext,
@@ -89,12 +87,27 @@ const PLAYER_Z = 0.5;
 const ZONE_Z = 0.3;
 /** Planks sit behind the rider and the buoys, like the old DOM stacking. */
 const PLANK_Z = -0.7;
+/** A vágott vízfal mögötti mélyvíz-háttér síkja (a szikla-hegy mögött, az öböl elején). */
+const BACK_FACE_Z = -7.6;
 const FOG_NEAR = 140;
 const FOG_FAR = 620;
 
-const SKY_TOP = "#2a74d6";
-const SKY_HORIZON = "#ffe0b5";
-const SKY_BOTTOM = "#ffd0a0";
+/*
+ * Telt, tiszta színek (terv 7.4, „kifakulás”): azúr ég a barack helyett — a régi, világos barack ég-alj és köd az ACES
+ * tónusleképezéssel együtt az egész képet fehéres-pasztellre húzta. A veszéllyel (magas víz) az ég mélyül, nem szürkül.
+ */
+const SKY_TOP = "#1560d8";
+const SKY_HORIZON = "#8fd9ff";
+const SKY_BOTTOM = "#c4ecff";
+const STORM_TOP = "#1b2f86";
+const STORM_HORIZON = "#5f9fd6";
+/** A szikla-hegy (a menedék alatt) tengelyének mélysége és a Blender-modell arányai (build_all.py `cliff`). */
+const CLIFF_Z = -3.4;
+const CLIFF_HEIGHT = 15;
+/** A hegy kiszélesedése a tetőtől a tövéig (a Blender-szkript `CLIFF_FLARE` értékével egyezik). */
+const CLIFF_FLARE = 1.3;
+/** A hegy sugara (modell-egységben, x irányban) a tető alatt `below` egységgel. */
+const cliffRadius = (below: number) => (1.6 + CLIFF_FLARE * Math.pow(clamp01(below / CLIFF_HEIGHT), 0.85)) * 1.12;
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 /** Same polynomial as GLSL `smoothstep`, so CPU and GPU agree on the terrain and waves. */
@@ -141,7 +154,8 @@ function terrainHeight(x: number, z: number, hw: number): number {
   const rise = smooth(4, 26, zz);
   const sides = smooth(0.2, 0.9, au);
   const bumps = 0.8 * Math.sin(u * 5.1 + zz * 0.13) + 0.5 * Math.sin(u * 9.7 - zz * 0.23 + 1.3) + 0.35 * Math.sin(zz * 0.41 + u * 2.3);
-  const hills = 0.6 + 3.2 * sides + bumps * (0.5 + 0.5 * sides);
+  // Szelíd part (a régi 3,2-es oldal-emelés és a nagy hullámzás kúp-szerű dombokat adott; a dombok most Blender-modellek).
+  const hills = 0.4 + 1.9 * sides + bumps * (0.22 + 0.2 * sides);
   const land = -7.5 + (hills + 7.5) * rise;
   const bay = (1 - smooth(0.12, 0.45, au)) * smooth(9, 22, zz);
   return land + (-10 - land) * bay;
@@ -173,7 +187,7 @@ const GLSL_SHARED = /* glsl */ `
     float rise = smoothstep(4.0, 26.0, zz);
     float sides = smoothstep(0.2, 0.9, au);
     float bumps = 0.8 * sin(u * 5.1 + zz * 0.13) + 0.5 * sin(u * 9.7 - zz * 0.23 + 1.3) + 0.35 * sin(zz * 0.41 + u * 2.3);
-    float hills = 0.6 + 3.2 * sides + bumps * (0.5 + 0.5 * sides);
+    float hills = 0.4 + 1.9 * sides + bumps * (0.22 + 0.2 * sides);
     float land = -7.5 + (hills + 7.5) * rise;
     float bay = (1.0 - smoothstep(0.12, 0.45, au)) * smoothstep(9.0, 22.0, zz);
     return land + (-10.0 - land) * bay;
@@ -282,12 +296,12 @@ function buildTerrain(hw: number, light: boolean): THREE.BufferGeometry {
   const nx = uSegs + 1;
   const positions = new Float32Array(nx * (zSegs + 1) * 3);
   const colors = new Float32Array(nx * (zSegs + 1) * 3);
-  const sand = new THREE.Color("#f5dca4");
-  const wetSand = new THREE.Color("#dcbf86");
-  const grassA = new THREE.Color("#8ada6a");
-  const grassB = new THREE.Color("#58bd58");
-  const forest = new THREE.Color("#3d9a55");
-  const rock = new THREE.Color("#a9b7ae");
+  const sand = new THREE.Color("#f6d48a");
+  const wetSand = new THREE.Color("#d9aa62");
+  const grassA = new THREE.Color("#7fdc55");
+  const grassB = new THREE.Color("#4fc04d");
+  const forest = new THREE.Color("#2f9a4c");
+  const rock = new THREE.Color("#9a8f84");
   const c = new THREE.Color();
   const g2 = new THREE.Color();
   let k = 0;
@@ -305,9 +319,9 @@ function buildTerrain(hw: number, light: boolean): THREE.BufferGeometry {
       if (y < -5.6) c.copy(wetSand);
       else if (y < -4.4) c.copy(wetSand).lerp(sand, smooth(-5.6, -4.8, y));
       else if (y < -3.5) c.copy(sand).lerp(g2, smooth(-4.4, -3.6, y));
-      else if (y < 2.4) c.copy(g2);
-      else if (y < 3.8) c.copy(g2).lerp(forest, smooth(2.4, 3.2, y));
-      else c.copy(forest).lerp(rock, smooth(3.8, 4.6, y));
+      else if (y < 1.2) c.copy(g2);
+      else if (y < 2.6) c.copy(g2).lerp(forest, smooth(1.2, 2.2, y));
+      else c.copy(forest).lerp(rock, smooth(2.8, 3.6, y));
       colors[k] = c.r;
       colors[k + 1] = c.g;
       colors[k + 2] = c.b;
@@ -344,7 +358,7 @@ function buildCloudGeometry(seed: number): THREE.BufferGeometry {
     [-3.5, -0.7, 0, 1.0],
   ];
   puffs.forEach(([x, y, z, r], i) => {
-    const s = new THREE.SphereGeometry(r * (0.9 + 0.2 * Math.sin(seed * 3.1 + i)), 14, 10);
+    const s = new THREE.SphereGeometry(r * (0.9 + 0.2 * Math.sin(seed * 3.1 + i)), 10, 7);
     s.translate(x, y, z);
     parts.push(s);
   });
@@ -404,24 +418,6 @@ function buildHouse(wall: THREE.ColorRepresentation, roof: THREE.ColorRepresenta
   group.add(mesh(new THREE.BoxGeometry(0.3, 0.5, 0.05), std("#7c4a25"), -0.35, 0.27, 0.61));
   group.add(mesh(new THREE.BoxGeometry(0.34, 0.3, 0.05), windowMat, 0.32, 0.6, 0.61));
   return group;
-}
-
-function buildLighthouse(): { group: THREE.Group; lamp: THREE.Sprite } {
-  const group = new THREE.Group();
-  const red = std("#ef4444", { roughness: 0.45 });
-  const white = std("#fbfbf6", { roughness: 0.45 });
-  for (let i = 0; i < 4; i++) {
-    const r0 = 0.62 - i * 0.07;
-    const r1 = r0 - 0.07;
-    group.add(mesh(new THREE.CylinderGeometry(r1, r0, 0.9, 16), i % 2 === 0 ? white : red, 0, 0.45 + i * 0.9, 0));
-  }
-  group.add(mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.1, 16), std("#334155"), 0, 3.66, 0));
-  group.add(mesh(new THREE.SphereGeometry(0.28, 14, 10), new THREE.MeshStandardMaterial({ color: "#fff7c2", emissive: "#ffd54a", emissiveIntensity: 2.4 }), 0, 3.95, 0));
-  group.add(mesh(new THREE.ConeGeometry(0.42, 0.5, 16), red, 0, 4.42, 0));
-  const lamp = createGlowSprite("#ffd76a", 3.2, 0.75);
-  lamp.position.set(0, 3.95, 0.2);
-  group.add(lamp);
-  return { group, lamp };
 }
 
 type Kid = {
@@ -531,114 +527,84 @@ function buildBuoy(): Buoy {
   return { group, light, glow };
 }
 
-type PlankKind = "ice" | "steel" | "wood";
-const PLANKS: { top: number; type: PlankKind }[] = [
-  // Látvány-előnézet (2026-11-18): egységes, meleg fa deszkák (a sárga-fekete fémcsík és a jég „építkezési” hatást keltett).
-  { top: 18, type: "wood" },
-  { top: 38, type: "wood" },
-  { top: 58, type: "wood" },
-  { top: 78, type: "wood" },
-];
+/** Egyszínű (csúcs-színes) geometria a közös díszlet-anyaghoz; `lo`–`hi`: függőleges fényesség-átmenet alulról felfelé. */
+function tinted(src: THREE.BufferGeometry, color: THREE.ColorRepresentation, lo = 1, hi = 1): THREE.BufferGeometry {
+  const g = src.index ? src.toNonIndexed() : src;
+  if (g !== src) src.dispose();
+  g.deleteAttribute("uv");
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  const c = new THREE.Color(color);
+  g.computeBoundingBox();
+  const y0 = g.boundingBox!.min.y;
+  const span = Math.max(1e-6, g.boundingBox!.max.y - y0);
+  const arr = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const f = lo + (hi - lo) * ((pos.getY(i) - y0) / span);
+    arr[i * 3] = c.r * f;
+    arr[i * 3 + 1] = c.g * f;
+    arr[i * 3 + 2] = c.b * f;
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+  return g;
+}
 
+/**
+ * A deszkák: mólószerű fa pallók cölöpökkel (terv 7.2) — a négy szint és a hat cölöp EGY összevont, csúcs-színes geometria
+ * (egy rajzolási hívás). A cölöpök a felső pallótól a víz alá nyúlnak, így a víz emelkedése rajtuk is látszik.
+ */
 function buildPlatforms(
   xLeft: number,
-  xRight: number,
+  xRightAt: (y: number) => number,
   yAtTopPct: (top: number) => number,
   thick: number,
-  envMap: THREE.Texture | null,
   tops: readonly number[],
-): THREE.Group {
-  const root = new THREE.Group();
-  const len = xRight - xLeft;
-  const cx = (xLeft + xRight) / 2;
+  material: THREE.Material,
+): THREE.Mesh {
   const depth = 1.5;
-  const dummy = new THREE.Object3D();
-  for (const [i, { type }] of PLANKS.entries()) {
-    const top = tops[i]!;
-    const yTop = yAtTopPct(top);
-    const cy = yTop - thick / 2;
-    const plank = new THREE.Group();
-    plank.position.set(cx, cy, PLANK_Z);
-    root.add(plank);
-    if (type === "wood") {
-      const colors = ["#d99a5b", "#c4843f", "#e0a86a"];
-      for (let i = 0; i < 3; i++) {
-        const g = new RoundedBoxGeometry(len, thick, depth / 3 - 0.06, 2, Math.min(0.06, thick * 0.3));
-        plank.add(mesh(g, std(colors[i], { roughness: 0.85 }), 0, 0, -depth / 2 + (depth / 3) * (i + 0.5)));
-      }
-      const beamGeo = new RoundedBoxGeometry(0.22, thick * 0.7, depth + 0.1, 2, 0.04);
-      const beamMat = std("#8b5a2b", { roughness: 0.9 });
-      for (const f of [0.04, 0.5, 0.96]) plank.add(mesh(beamGeo, beamMat, -len / 2 + len * f, -thick * 0.55, 0));
-      const nailGeo = new THREE.SphereGeometry(Math.min(0.05, thick * 0.18), 6, 4);
-      const nails = new THREE.InstancedMesh(nailGeo, std("#6b7280", { metalness: 0.6, roughness: 0.4 }), 3 * 3);
-      let n = 0;
-      for (const f of [0.04, 0.5, 0.96]) {
-        for (let i = 0; i < 3; i++) {
-          dummy.position.set(-len / 2 + len * f, thick / 2, -depth / 2 + (depth / 3) * (i + 0.5));
-          dummy.updateMatrix();
-          nails.setMatrixAt(n++, dummy.matrix);
-        }
-      }
-      plank.add(nails);
-    } else if (type === "steel") {
-      plank.add(mesh(new RoundedBoxGeometry(len, thick, depth, 2, Math.min(0.08, thick * 0.3)), std("#9fb4c9", { metalness: 0.8, roughness: 0.34, envMap, envMapIntensity: 0.8 })));
-      const stripe = canvasTexture(64, 16, (ctx) => {
-        ctx.fillStyle = "#facc15";
-        ctx.fillRect(0, 0, 64, 16);
-        ctx.fillStyle = "#1f2937";
-        for (let x = -16; x < 80; x += 16) {
-          ctx.beginPath();
-          ctx.moveTo(x, 16);
-          ctx.lineTo(x + 8, 16);
-          ctx.lineTo(x + 16, 0);
-          ctx.lineTo(x + 8, 0);
-          ctx.closePath();
-          ctx.fill();
-        }
-      });
-      stripe.wrapS = THREE.RepeatWrapping;
-      stripe.repeat.set(Math.max(1, len / 0.9), 1);
-      plank.add(mesh(new THREE.PlaneGeometry(len * 0.985, thick * 0.42), std("#ffffff", { map: stripe, roughness: 0.5 }), 0, 0, depth / 2 + 0.005));
-      const count = Math.max(2, Math.floor(len / 1.4));
-      const rivets = new THREE.InstancedMesh(
-        new THREE.SphereGeometry(Math.min(0.07, thick * 0.2), 8, 6),
-        std("#e2e8f0", { metalness: 0.9, roughness: 0.3, envMap }),
-        count,
-      );
-      for (let i = 0; i < count; i++) {
-        dummy.position.set(-len / 2 + (len * (i + 0.5)) / count, thick / 2, depth / 2 - 0.12);
-        dummy.updateMatrix();
-        rivets.setMatrixAt(i, dummy.matrix);
-      }
-      plank.add(rivets);
-    } else {
-      plank.add(
-        mesh(
-          new RoundedBoxGeometry(len, thick, depth, 2, Math.min(0.08, thick * 0.3)),
-          std("#8fe3f8", { roughness: 0.3, emissive: "#38bdf8", emissiveIntensity: 0.22, transparent: true, opacity: 0.92, envMap, envMapIntensity: 0.6 }),
-        ),
-      );
-      plank.add(mesh(new RoundedBoxGeometry(len + 0.04, thick * 0.38, depth + 0.04, 2, Math.min(0.06, thick * 0.18)), std("#f4fbff", { roughness: 0.9 }), 0, thick * 0.42, 0));
-      const count = Math.max(4, Math.floor(len / 0.7));
-      const icicleGeo = new THREE.ConeGeometry(0.07, 1, 6);
-      icicleGeo.rotateX(Math.PI);
-      icicleGeo.translate(0, -0.5, 0);
-      const icicles = new THREE.InstancedMesh(
-        icicleGeo,
-        std("#cffafe", { roughness: 0.3, emissive: "#67e8f9", emissiveIntensity: 0.3, transparent: true, opacity: 0.9 }),
-        count,
-      );
-      for (let i = 0; i < count; i++) {
-        const l = thick * (0.8 + 1.4 * Math.abs(Math.sin(i * 12.9898 + top) * 0.5 + Math.sin(i * 3.1) * 0.5));
-        dummy.position.set(-len / 2 + (len * (i + 0.3 + 0.4 * Math.abs(Math.sin(i * 7.7)))) / count, -thick / 2 + 0.01, depth / 2 - 0.15);
-        dummy.scale.set(1, l, 1);
-        dummy.updateMatrix();
-        icicles.setMatrixAt(i, dummy.matrix);
-      }
-      plank.add(icicles);
+  const parts: THREE.BufferGeometry[] = [];
+  const boards = ["#dba05e", "#c78743", "#e6b274"];
+  const yTop = yAtTopPct(tops[0]!) + 0.3;
+  const yBottom = -HALF_FULL * 1.6;
+  // Cölöp-helyek: a szabad (bal) végen, és hosszú stégnél ~8 egységenként — minden szinten UGYANOTT (a cölöpök függőlegesen
+  // egy vonalban állnak); a jobb vég a hegyre támaszkodik.
+  const longest = Math.max(1, xRightAt(yAtTopPct(tops[0]!)) - xLeft);
+  const postCount = Math.max(1, Math.round(longest / 8));
+  const postXs = Array.from({ length: postCount }, (_, k) => xLeft + 0.35 + (k * (longest - 0.7)) / postCount);
+  const posts = new Map<number, number>();
+  for (const top of tops) {
+    const cy = yAtTopPct(top) - thick / 2;
+    const xRight = xRightAt(cy);
+    const len = Math.max(1, xRight - xLeft);
+    const cx = xLeft + len / 2;
+    for (let i = 0; i < 3; i++) {
+      const g = new RoundedBoxGeometry(len, thick, depth / 3 - 0.06, 1, Math.min(0.06, thick * 0.3));
+      g.translate(cx, cy, PLANK_Z - depth / 2 + (depth / 3) * (i + 0.5));
+      parts.push(tinted(g, boards[i]!, 0.82, 1.08));
+    }
+    for (const px of postXs) {
+      if (px > xRight - 0.4) continue;
+      posts.set(px, Math.max(posts.get(px) ?? -Infinity, cy + thick / 2 + 0.3));
+      const beam = new THREE.BoxGeometry(0.2, thick * 0.7, depth + 0.16);
+      beam.translate(px, cy - thick * 0.6, PLANK_Z);
+      parts.push(tinted(beam, "#8a5730"));
     }
   }
-  return root;
+  for (const [px, top] of Array.from(posts)) {
+    const postTop = Math.min(top, yTop);
+    for (const side of [-1, 1]) {
+      const post = new THREE.CylinderGeometry(0.085, 0.11, postTop - yBottom, 8, 1);
+      post.translate(px, (postTop + yBottom) / 2, PLANK_Z + side * (depth / 2 + 0.02));
+      parts.push(tinted(post, "#8a5730", 0.6, 1.15));
+      const cap = new THREE.CylinderGeometry(0.115, 0.115, 0.07, 8, 1);
+      cap.translate(px, postTop + 0.035, PLANK_Z + side * (depth / 2 + 0.02));
+      parts.push(tinted(cap, "#e3b077"));
+    }
+  }
+  const merged = mergeGeometries(parts) ?? new THREE.BoxGeometry(4, thick, depth);
+  parts.forEach((g) => g.dispose());
+  const m = new THREE.Mesh(merged, material);
+  m.frustumCulled = false;
+  return m;
 }
 
 // ---------------------------------------------------------------------------
@@ -681,13 +647,15 @@ function setupTsunami(
     return EYE - HALF_FULL * s + fy * 2 * HALF_H * s;
   };
 
-  scene.fog = new THREE.Fog(SKY_HORIZON, FOG_NEAR, FOG_FAR);
+  // Semleges tónusleképezés (terv 7.4): az ACES a világos, telt játékszíneket fehér felé húzta — ez volt a „kifakulás” egyik oka.
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1;
 
-  let env: { texture: THREE.Texture; dispose(): void } | null = null;
-  if (budget.environment) {
-    // Only the glossy props (steel, ice) reflect it; on the whole scene it turns the toy colours milky.
-    env = createRoomEnvironment(renderer);
-  }
+  const fogColor = new THREE.Color(SKY_HORIZON);
+  const fog = new THREE.Fog(fogColor, FOG_NEAR, FOG_FAR);
+  // A köd, az ég alja és a víz távoli színe UGYANAZ a színobjektum (a hangulattal együtt változik).
+  fog.color = fogColor;
+  scene.fog = fog;
 
   // Sky + sun
   const sky = createGradientSky({
@@ -695,106 +663,143 @@ function setupTsunami(
     horizon: SKY_HORIZON,
     bottom: SKY_BOTTOM,
     sunDirection: new THREE.Vector3(-0.6, 0.35, -1),
-    sunColor: "#fff0b0",
-    sunSize: 0.035,
+    sunColor: "#fff3c8",
+    sunSize: 0.03,
     radius: 600,
   });
   sky.position.copy(camera.position);
   scene.add(sky);
   const skyU = sky.material.uniforms;
-  // With bloom the HDR sun disc would haze half the hills; the glow itself supplies the brightness.
-  if (budget.bloom) (skyU.sunColor.value as THREE.Color).multiplyScalar(0.5);
+  (skyU.sunColor.value as THREE.Color).multiplyScalar(budget.bloom ? 0.4 : 0.7);
+  const calmTop = new THREE.Color(SKY_TOP);
+  const calmHorizon = new THREE.Color(SKY_HORIZON);
+  const stormTop = new THREE.Color(STORM_TOP);
+  const stormHorizon = new THREE.Color(STORM_HORIZON);
 
-  // Lights: a warm key from the front so faces read, a sky/ground fill.
-  const hemi = new THREE.HemisphereLight("#ffe9cc", "#4c8a5a", 1.05);
+  // Lights: a warm key from the front-left so the rock facets read, a sky/ground fill.
+  const hemi = new THREE.HemisphereLight("#d8efff", "#6f9a58", 1.5);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight("#ffd9a3", 2.2);
-  key.position.set(6, 10, 14);
+  const key = new THREE.DirectionalLight("#fff0d2", 2.5);
+  key.position.set(-7, 11, 13);
   scene.add(key);
-  const rim = new THREE.DirectionalLight("#bfe8ff", 0.8);
-  rim.position.set(-8, 6, -10);
+  const rim = new THREE.DirectionalLight("#bfe8ff", 0.6);
+  rim.position.set(8, 6, -10);
   scene.add(rim);
 
-  // Distant mountains (screen-anchored, recoloured by the fog)
-  const mountainMat = std("#86acd6", { flatShading: true, roughness: 1 });
-  const snowMat = std("#ffffff", { flatShading: true, roughness: 0.9 });
-  const mountains = [
-    { u: -1.05, fy: 0.76, r: 30 },
-    { u: -0.62, fy: 0.7, r: 24 },
-    { u: 0.58, fy: 0.72, r: 26 },
-    { u: 0.98, fy: 0.79, r: 32 },
-  ].map(({ u, fy, r }) => {
-    const zz = 200;
-    const base = -24;
-    const h = worldY(fy, -zz) - base;
-    const g = new THREE.Group();
-    g.add(mesh(new THREE.ConeGeometry(r, h, 7), mountainMat, 0, h / 2, 0));
-    g.add(mesh(new THREE.ConeGeometry(r * 0.28, h * 0.28, 7), snowMat, 0, h - h * 0.14 + 0.2, 0));
-    g.position.set(0, base, -zz);
-    scene.add(g);
-    return { g, u, zz };
-  });
+  /*
+   * A díszlet EGY közös anyagot használ, a szín csúcs-színből jön (a Blender-szkript festi) — modellenként egy rajzolási
+   * hívás, példányosítva. Telefonos (nem „high”) szinten Lambert.
+   */
+  const propMat: THREE.Material = lambertDecor
+    ? new THREE.MeshLambertMaterial({ vertexColors: true })
+    : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
 
-  // Clouds
-  const cloudMat = new THREE.MeshStandardMaterial({ color: "#ffffff", emissive: "#e3f1ff", emissiveIntensity: 0.55, roughness: 1, fog: false });
-  const clouds = Array.from({ length: lean ? 3 : 6 }, (_, i) => {
-    const m = new THREE.Mesh(buildCloudGeometry(i), cloudMat);
-    const zz = 130 + (i % 3) * 25;
-    const s = 2.2 + ((i * 37) % 10) / 10;
-    m.scale.setScalar(s);
-    scene.add(m);
-    return { m, zz, fx: (i + 0.35) / (lean ? 3 : 6), fy: 0.78 + ((i * 53) % 17) / 100, speed: 0.6 + (i % 3) * 0.35 };
-  });
+  // Clouds: one instanced mesh
+  const cloudMat = lambertDecor
+    ? new THREE.MeshLambertMaterial({ color: "#ffffff", emissive: "#a9cdfa", emissiveIntensity: 0.5, fog: false })
+    : new THREE.MeshStandardMaterial({ color: "#ffffff", emissive: "#a9cdfa", emissiveIntensity: 0.5, roughness: 1, fog: false });
+  const cloudCount = lean ? 4 : 7;
+  const cloudMesh = new THREE.InstancedMesh(buildCloudGeometry(1), cloudMat, cloudCount);
+  cloudMesh.frustumCulled = false;
+  scene.add(cloudMesh);
+  const clouds = Array.from({ length: cloudCount }, (_, i) => ({
+    zz: 130 + (i % 3) * 25,
+    s: 2.0 + ((i * 37) % 10) / 9,
+    fx: (i + 0.35) / cloudCount,
+    fy: 0.8 + ((i * 53) % 13) / 100,
+    speed: 0.6 + (i % 3) * 0.35,
+  }));
 
   // Terrain (rebuilt on resize: its shape is anchored to the screen width)
-  const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.92 });
+  const terrainMat = lambertDecor
+    ? new THREE.MeshLambertMaterial({ vertexColors: true })
+    : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 });
   const terrain = new THREE.Mesh(new THREE.BufferGeometry(), terrainMat);
   scene.add(terrain);
 
-  // Land decorations: houses, palms, trees, lighthouse, a little island in the bay
+  /*
+   * Látvány C irány (terv 7.2, 7.4): a Blender-szkriptből gyártott, Meshopt-tömörített díszlet és figura (`/models/szokoar/`).
+   * A menü alatt töltődik; hiba / hiány esetén a kódból épített (primitív) díszlet és figura a tartalék.
+   */
+  type Spot = { model: string; u: number; zz: number; s: number; rotY?: number; lift?: number; tint?: string; cliff?: [number, number] };
+  const SPOTS: Spot[] = [
+    // Dombok (hátul a távoliak kékes árnyalattal — levegő-távlat).
+    { model: "hill", u: -1.08, zz: 15, s: 3.4, rotY: 0.4 },
+    { model: "hill", u: -0.86, zz: 31, s: 4.6, rotY: 1.3 },
+    { model: "hill", u: 1.0, zz: 34, s: 5.0, rotY: 2.2 },
+    { model: "hill", u: -0.7, zz: 62, s: 7, rotY: 3.6, tint: "#d5e6f7" },
+    { model: "hill", u: 0.66, zz: 58, s: 6.5, rotY: 5.1, tint: "#d5e6f7" },
+    { model: "hill", u: -1.3, zz: 92, s: 11, rotY: 0.9, tint: "#b9d4f2" },
+    { model: "hill", u: 1.32, zz: 98, s: 12, rotY: 4.2, tint: "#b9d4f2" },
+    // Cölöpházak a parton (magas víznél elönti őket a víz).
+    { model: "hut_a", u: -0.62, zz: 12.5, s: 1.3, rotY: 0.3 },
+    { model: "hut_b", u: -0.88, zz: 18, s: 1.35, rotY: -0.2 },
+    { model: "hut_b", u: -0.42, zz: 25, s: 1.25, rotY: 0.15 },
+    { model: "hut_a", u: 0.62, zz: 23, s: 1.35, rotY: -0.3 },
+    { model: "palm_a", u: -0.4, zz: 9.5, s: 1.5, rotY: 0.2 },
+    { model: "palm_b", u: -0.78, zz: 10.5, s: 1.45, rotY: 1.9 },
+    { model: "palm_a", u: -0.98, zz: 13, s: 1.65, rotY: 2.4 },
+    { model: "palm_b", u: 0.48, zz: 14, s: 1.4, rotY: 0.8 },
+    { model: "palm_a", u: 0.72, zz: 19, s: 1.55, rotY: 4.1 },
+    { model: "rock_a", u: -0.55, zz: 8, s: 1.1, rotY: 0.7, lift: -0.35 },
+    { model: "rock_b", u: -0.28, zz: 8.6, s: 0.9, rotY: 2.1, lift: -0.25 },
+    { model: "rock_a", u: -0.92, zz: 9, s: 1.35, rotY: 4.0, lift: -0.4 },
+    { model: "rock_b", u: 0.4, zz: 10, s: 1.0, rotY: 1.2, lift: -0.25 },
+    { model: "bush", u: -0.7, zz: 14.5, s: 1.3 },
+    { model: "bush", u: -0.5, zz: 20, s: 1.2, rotY: 1.5 },
+    { model: "bush", u: 0.55, zz: 17, s: 1.2, rotY: 0.6 },
+    // A szikla-hegy tetején, a menedék mellett.
+    { model: "palm_b", u: 0, zz: 0, s: 0.62, rotY: 2.6, cliff: [1.05, -0.55] },
+    { model: "bush", u: 0, zz: 0, s: 0.5, rotY: 0.4, cliff: [0.75, 0.75] },
+    { model: "rock_b", u: 0, zz: 0, s: 0.45, rotY: 1.1, lift: -0.08, cliff: [-1.25, 0.7] },
+  ];
+  // Gyenge gépen kevesebb díszlet (a legtávolabbi dombok és minden harmadik apró elem nélkül).
+  const spots = lean ? SPOTS.filter((s, i) => (s.model === "hill" ? s.zz < 90 : !!s.cliff || i % 3 !== 2)) : SPOTS;
+  type Batch = { mesh: THREE.InstancedMesh; items: Spot[] };
+  const batches: Batch[] = [];
+  const palmBatches: Batch[] = [];
+  let cliff: THREE.Mesh | null = null;
+  let cliffScale = 1;
+  const cliffTop = new THREE.Vector3(0, 0, CLIFF_Z);
+  let lampGlow: THREE.Sprite | null = null;
+  // Sodródó törmelék (díszlet, nem akadály — D2-b): elöl, az öbölben és távolabb, a hullámfal előtt.
+  type Drift = { model: string; z: number; fx: number; speed: number; phase: number; s: number };
+  const DRIFT: Drift[] = [
+    { model: "debris_plank", z: FRONT_Z - 1.2, fx: 0.12, speed: 0.008, phase: 0, s: 0.55 },
+    { model: "debris_barrel", z: FRONT_Z - 1.3, fx: 0.72, speed: -0.007, phase: 1.7, s: 0.55 },
+    { model: "debris_log", z: -5, fx: 0.3, speed: 0.011, phase: 3.4, s: 0.9 },
+    { model: "debris_crate", z: -7, fx: 0.55, speed: -0.009, phase: 5.1, s: 0.95 },
+    { model: "debris_plank", z: -13, fx: 0.42, speed: 0.012, phase: 2.2, s: 1.3 },
+    { model: "debris_log", z: -22, fx: 0.2, speed: -0.01, phase: 4.3, s: 1.8 },
+    { model: "debris_barrel", z: -30, fx: 0.5, speed: 0.013, phase: 0.9, s: 2.1 },
+    { model: "debris_crate", z: FRONT_Z - 1.1, fx: 0.4, speed: 0.006, phase: 2.9, s: 0.5 },
+  ];
+  const drifts: { mesh: THREE.InstancedMesh; items: Drift[] }[] = [];
+
+  // A kódból épített tartalék-díszlet (csak ha a modellek nem töltődnek be).
   const windowMat = new THREE.MeshStandardMaterial({ color: "#ffe9a8", emissive: "#ffc94a", emissiveIntensity: 1.6 });
-  type Decor = { obj: THREE.Object3D; u: number; zz: number; lift: number; kind?: "palm" | "house" | "lighthouse" | "tree" | "rock" | "bush" };
+  type Decor = { obj: THREE.Object3D; u: number; zz: number; lift: number };
   const decor: Decor[] = [];
-  const addDecor = (obj: THREE.Object3D, u: number, zz: number, scale: number, lift = -0.05, rotY = 0, kind?: Decor["kind"]) => {
+  const addDecor = (obj: THREE.Object3D, u: number, zz: number, scale: number, lift = -0.05, rotY = 0) => {
     obj.scale.setScalar(scale);
     obj.rotation.y = rotY;
     scene.add(obj);
-    decor.push({ obj, u, zz, lift, kind });
+    decor.push({ obj, u, zz, lift });
   };
-  const lighthouse = buildLighthouse();
-  addDecor(lighthouse.group, 0.74, 34, 1.3, -0.2, 0, "lighthouse");
-  addDecor(buildHouse("#ffd6a5", "#e5484d", windowMat), -0.74, 24, 1.15, -0.1, 0.25, "house");
-  addDecor(buildHouse("#bde0fe", "#2563eb", windowMat), -0.46, 30, 1.1, -0.1, -0.2, "house");
-  addDecor(buildHouse("#ffc8dd", "#7c3aed", windowMat), 0.5, 24, 1.1, -0.1, 0.15, "house");
-  addDecor(buildPalm(), -0.3, 15, 1.25, -0.05, 0, "palm");
-  addDecor(buildPalm(), 0.34, 14, 1.2, -0.05, 1.2, "palm");
-  if (!lean) {
-    addDecor(buildHouse("#caffbf", "#f97316", windowMat), 0.9, 40, 1.2, -0.1, -0.3, "house");
-    addDecor(buildPalm(), -0.95, 18, 1.35, -0.05, 2.2, "palm");
-    addDecor(buildTree("#4cbf5f"), -0.6, 38, 1.4);
-    addDecor(buildTree("#3fa65a"), -0.88, 46, 1.6);
-    addDecor(buildTree("#5ccc62"), 0.62, 44, 1.5);
-    addDecor(buildTree("#46b25a"), 1.05, 30, 1.4);
-    addDecor(buildTree("#4cbf5f"), -1.1, 30, 1.5);
-  }
-  const islandGeo = new THREE.SphereGeometry(3.2, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
-  islandGeo.scale(1.3, 0.34, 1);
-  const island = new THREE.Group();
-  island.add(mesh(islandGeo, std("#f3d9a0", { roughness: 0.95 })));
-  const islandPalm = buildPalm();
-  islandPalm.scale.setScalar(1.3);
-  islandPalm.position.set(0.4, 0.9, 0);
-  island.add(islandPalm);
-  scene.add(island);
-  const islandSpot = { u: 0.16, zz: 78, y: -5.9 };
+  const buildFallbackDecor = () => {
+    addDecor(buildHouse("#ffd6a5", "#e5484d", windowMat), -0.74, 24, 1.15, -0.1, 0.25);
+    addDecor(buildHouse("#bde0fe", "#2563eb", windowMat), -0.46, 30, 1.1, -0.1, -0.2);
+    addDecor(buildHouse("#ffc8dd", "#7c3aed", windowMat), 0.5, 24, 1.1, -0.1, 0.15);
+    addDecor(buildPalm(), -0.3, 15, 1.25, -0.05, 0);
+    addDecor(buildPalm(), 0.34, 14, 1.2, -0.05, 1.2);
+    if (!lean) {
+      addDecor(buildTree("#4cbf5f"), -0.6, 38, 1.4);
+      addDecor(buildTree("#5ccc62"), 0.62, 44, 1.5);
+    }
+    layout();
+  };
 
-  /*
-   * Látvány C irány (terv 7.2): a Blender-szkriptből gyártott, Meshopt-tömörített díszlet (`/models/szokoar/`). Lustán, a
-   * menü alatt töltődik; amíg nincs meg (vagy hiba esetén), a primitív díszlet marad. A modell a régi tárgy befoglaló
-   * magasságára igazodik, a talppontja a régi talppontra.
-   */
   let disposed = false;
-  const debris: { obj: THREE.Object3D; fx: number; speed: number; phase: number }[] = [];
   const fitInto = (holder: THREE.Object3D, model: THREE.Object3D, heightMul = 1) => {
     holder.updateMatrixWorld(true);
     const oldBox = new THREE.Box3().setFromObject(holder);
@@ -807,78 +812,115 @@ function setupTsunami(
     model.position.set(-((box.min.x + box.max.x) / 2) * k, -box.min.y * k, -((box.min.z + box.max.z) / 2) * k);
     holder.add(model);
   };
-  const lambertize = (root: THREE.Object3D) => {
-    root.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
-      const src = m.material as THREE.MeshStandardMaterial;
-      const params = { color: src.color, emissive: src.emissive, emissiveIntensity: src.emissiveIntensity };
-      m.material = lambertDecor ? new THREE.MeshLambertMaterial(params) : new THREE.MeshStandardMaterial({ ...params, roughness: 0.8, metalness: 0 });
-      src.dispose();
-    });
-  };
   const loadModels = async () => {
     try {
       const res = await fetch("/models/szokoar/manifest.json");
-      if (!res.ok) return;
-      const manifest = (await res.json()) as { props?: string };
-      if (!manifest.props || disposed) return;
+      if (!res.ok) throw new Error("manifest");
+      const manifest = (await res.json()) as { props?: string; kid?: string };
+      if (!manifest.props) throw new Error("manifest");
+      if (disposed) return;
       const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
         import("three/examples/jsm/loaders/GLTFLoader.js"),
         import("three/examples/jsm/libs/meshopt_decoder.module.js"),
       ]);
       const loader = new GLTFLoader();
       loader.setMeshoptDecoder(MeshoptDecoder);
-      const gltf: GLTF = await loader.loadAsync(`/models/szokoar/${manifest.props}`);
+      const files = [manifest.props, manifest.kid].filter((f): f is string => typeof f === "string");
+      const gltfs: GLTF[] = await Promise.all(files.map((f) => loader.loadAsync(`/models/szokoar/${f}`)));
       if (disposed) return;
-      lambertize(gltf.scene);
-      const clone = (n: string) => {
-        const src = gltf.scene.getObjectByName(n);
-        if (!src) return null;
-        const c = src.clone(true);
-        c.position.set(0, 0, 0);
-        return c;
+      // Modell → geometria (a gyökér forgatása / méretezése és a háló saját transzformációja beégetve; a GLB anyaga nem kell).
+      const geoCache = new Map<string, THREE.BufferGeometry | null>();
+      const geo = (name: string): THREE.BufferGeometry | null => {
+        if (geoCache.has(name)) return geoCache.get(name)!;
+        let out: THREE.BufferGeometry | null = null;
+        for (const g of gltfs) {
+          const root = g.scene.getObjectByName(name);
+          let src: THREE.Mesh | null = null;
+          root?.traverse((o) => {
+            if (!src && (o as THREE.Mesh).isMesh) src = o as THREE.Mesh;
+          });
+          if (!root || !src) continue;
+          const m = src as THREE.Mesh;
+          m.updateMatrix();
+          const mat = new THREE.Matrix4().compose(new THREE.Vector3(), root.quaternion, root.scale);
+          if (m !== root) mat.multiply(m.matrix);
+          out = m.geometry.clone().applyMatrix4(mat);
+          out.deleteAttribute("uv");
+          break;
+        }
+        geoCache.set(name, out);
+        return out;
       };
-      let palmI = 0;
-      let houseI = 0;
-      for (const d of decor) {
-        if (d.kind === "palm") {
-          const m = clone(palmI++ % 2 ? "palm_b" : "palm_a");
-          if (m) fitInto(d.obj, m);
-        } else if (d.kind === "house") {
-          const m = clone(houseI++ % 2 ? "hut_b" : "hut_a");
-          if (m) fitInto(d.obj, m);
-        } else if (d.kind === "lighthouse") {
-          d.obj.visible = false; // a világítótorony lett a menedék (a felső deszkán)
+      for (const g of gltfs) g.scene.traverse((o) => ((o as THREE.Mesh).material as THREE.Material | undefined)?.dispose?.());
+
+      // Díszlet: modellenként egy példányosított háló.
+      const byModel = new Map<string, Spot[]>();
+      for (const s of spots) byModel.set(s.model, [...(byModel.get(s.model) ?? []), s]);
+      const tint = new THREE.Color();
+      for (const [model, items] of Array.from(byModel)) {
+        const g = geo(model);
+        if (!g) continue;
+        const mesh = new THREE.InstancedMesh(g, propMat, items.length);
+        mesh.frustumCulled = false;
+        items.forEach((s, i) => mesh.setColorAt(i, tint.set(s.tint ?? "#ffffff")));
+        scene.add(mesh);
+        const batch = { mesh, items };
+        batches.push(batch);
+        if (model.startsWith("palm")) palmBatches.push(batch);
+      }
+      // A szikla-hegy és rajta a menedék (világítótorony).
+      const cliffGeo = geo("cliff");
+      if (cliffGeo) {
+        cliff = new THREE.Mesh(cliffGeo, propMat);
+        cliff.frustumCulled = false;
+        scene.add(cliff);
+      }
+      const lhGeo = geo("lighthouse");
+      if (lhGeo) {
+        const lh = new THREE.Mesh(lhGeo, propMat);
+        fitInto(shelter.group, lh, 1.5);
+        lampGlow = createGlowSprite("#ffd76a", 2.6, 0.8);
+        lampGlow.position.set(0, 3.77, 0.35);
+        lh.add(lampGlow);
+      }
+      // Törmelék: modellenként egy példányosított háló, képkockánként ringatva.
+      const driftBy = new Map<string, Drift[]>();
+      for (const d of lean ? DRIFT.filter((_, i) => i % 2 === 0) : DRIFT) driftBy.set(d.model, [...(driftBy.get(d.model) ?? []), d]);
+      for (const [model, items] of Array.from(driftBy)) {
+        const g = geo(model);
+        if (!g) continue;
+        const mesh = new THREE.InstancedMesh(g, propMat, items.length);
+        mesh.frustumCulled = false;
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        scene.add(mesh);
+        drifts.push({ mesh, items });
+      }
+      // A figura: a kódból épített részek helyére a Blender-modell kerül, ugyanazokra a forgáspontokra.
+      const kidParts: [THREE.Object3D, string][] = [
+        [kid.group, "kid_board"], [kid.rider, "kid_torso"], [kid.head, "kid_head"],
+        [kid.armL, "kid_arm"], [kid.armR, "kid_arm"], [kid.legL, "kid_leg"], [kid.legR, "kid_leg"],
+      ];
+      if (kidParts.every(([, n]) => geo(n))) {
+        for (const [holder, n] of kidParts) {
+          for (const c of [...holder.children]) {
+            const old = c as THREE.Mesh;
+            if (!old.isMesh) continue;
+            holder.remove(old);
+            old.geometry.dispose();
+          }
+          holder.add(new THREE.Mesh(geo(n)!, propMat));
         }
       }
-      const lh = clone("lighthouse");
-      if (lh) fitInto(shelter.group, lh, 1.5);
-      const spots: [string, number, number, number][] = [
-        ["rock_c", -0.62, 11, 1.4], ["rock_a", -0.4, 9, 1.0], ["rock_b", 0.42, 9, 1.0], ["rock_c", 0.66, 12, 1.5],
-        ["bush", -0.5, 17, 1.2], ["bush", 0.55, 16, 1.1], ["rock_a", -0.85, 14, 1.3], ["rock_b", 0.85, 13, 1.2],
-      ];
-      for (const [n, u, zz, sc] of spots) {
-        const m = clone(n);
-        if (!m) continue;
-        const holder = new THREE.Group();
-        holder.add(m);
-        const box = new THREE.Box3().setFromObject(m);
-        m.position.y = -box.min.y;
-        // A sziklák a talajba ülnek (a lekerekített aljuk ne lebegjen).
-        addDecor(holder, u, zz, sc, n.startsWith("rock") ? -0.45 * sc : -0.2, u * 3, n.startsWith("rock") ? "rock" : "bush");
-      }
-      const debrisNames = ["debris_plank", "debris_barrel", "debris_crate", "debris_plank", "debris_barrel"];
-      debrisNames.slice(0, lean ? 3 : 5).forEach((n, i) => {
-        const m = clone(n);
-        if (!m) return;
-        m.scale.setScalar(0.55);
-        scene.add(m);
-        debris.push({ obj: m, fx: 0.1 + i * 0.19, speed: (i % 2 ? -1 : 1) * (0.006 + 0.003 * i), phase: i * 1.7 });
-      });
       layout();
+      // A modellek shaderei a menü alatt forduljanak le, és a pufferek is töltődjenek fel (ne a menet első képkockáján — az
+      // indítási tüske oka volt): fordítás most, és a menü alatt még három bemelegítő képkocka a modellekkel.
+      const wasVisible = scene.visible;
+      scene.visible = true;
+      renderer.compile(scene, camera);
+      scene.visible = wasVisible;
+      warmFrames = 0;
     } catch {
-      /* a primitív díszlet marad */
+      if (!disposed) buildFallbackDecor();
     }
   };
 
@@ -894,15 +936,19 @@ function setupTsunami(
     uHw: { value: hw },
     uLevel: { value: -5 },
     uFlash: { value: 0 },
-    uShallow: { value: new THREE.Color("#1ccfd6") },
-    uDeep: { value: new THREE.Color("#0a62a8") },
-    uSkyTint: { value: new THREE.Color("#ffd8b0") },
-    uFogColor: { value: new THREE.Color(SKY_HORIZON) },
+    uShallow: { value: new THREE.Color("#16d2de") },
+    uDeep: { value: new THREE.Color("#0a55c2") },
+    uSkyTint: { value: new THREE.Color("#c9efff") },
+    uFogColor: { value: fogColor },
     uSunDir: { value: new THREE.Vector3(-0.6, 0.35, -1).normalize() },
-    uSunColor: { value: new THREE.Color("#fff3c4") },
+    uSunColor: { value: new THREE.Color("#fff6d6") },
     uFoamW: { value: 0.16 },
-    uFrontTop: { value: new THREE.Color("#22c3d8") },
-    uFrontDeep: { value: new THREE.Color("#073763") },
+    uFrontTop: { value: new THREE.Color("#22c9e8") },
+    uFrontDeep: { value: new THREE.Color("#062f78") },
+    /** A szikla-hegy tengelye (x, z), a tető magassága és a méretezése — a habgyűrűhöz. */
+    uCliff: { value: new THREE.Vector4(0, CLIFF_Z, 0, 0) },
+    /** A vágott vízfal síkja (elöl) / a mögötte álló mélyvíz-háttér síkja. */
+    uFaceZ: { value: FRONT_Z },
   };
   const surfaceMat = new THREE.ShaderMaterial({
     uniforms: waterUniforms,
@@ -932,6 +978,7 @@ function setupTsunami(
       uniform vec3 uFogColor;
       uniform vec3 uSunDir;
       uniform vec3 uSunColor;
+      uniform vec4 uCliff;
       varying vec3 vWorld;
       varying vec2 vSlope;
       varying float vWave;
@@ -943,12 +990,15 @@ function setupTsunami(
         n = normalize(n + near * vec3(0.07 * sin(rp.x * 4.3 + uTime * 2.1 + rp.y * 3.1), 0.0, 0.07 * cos(rp.y * 5.1 - uTime * 1.8 + rp.x * 2.3)));
         vec3 V = normalize(cameraPosition - vWorld);
         float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
-        vec3 col = mix(uShallow, uDeep, smoothstep(6.0, 90.0, dist));
-        col = mix(col, uSkyTint, 0.03 + 0.22 * fres);
+        vec3 col = mix(uShallow, uDeep, smoothstep(4.0, 70.0, dist));
+        // Élő felszín: lassan vándorló, világosabb és sötétebb sávok (a hullámhátak színe), nem egyszínű lap.
+        float bands = sin(rp.x * 0.55 + rp.y * 0.9 + uTime * 0.7) * sin(rp.y * 0.37 - uTime * 0.45 + rp.x * 0.21);
+        col *= 1.0 + 0.14 * bands;
+        col = mix(col, uSkyTint, 0.02 + 0.2 * fres);
         vec3 H = normalize(uSunDir + V);
         float spec = pow(max(dot(n, H), 0.0), 220.0);
-        col += uSunColor * spec * 2.2;
-        float sparkle = pow(max(dot(n, H), 0.0), 40.0) * 0.18;
+        col += uSunColor * spec * 2.0;
+        float sparkle = pow(max(dot(n, H), 0.0), 40.0) * 0.16;
         col += uSunColor * sparkle;
         // Foam: wave crests, the front edge and every shoreline.
         float grain = 0.5 + 0.5 * sin(rp.x * 7.3 + uTime * 1.3) * sin(rp.y * 6.1 - uTime * 0.9);
@@ -961,8 +1011,13 @@ function setupTsunami(
         float shore = (1.0 - smoothstep(0.0, 0.9 + 0.35 * grain, gap)) * onLand;
         // S9: whitecaps where the wave face is steep (foam follows the waveH slope).
         float steep = smoothstep(0.16, 0.42, length(vSlope) + 0.06 * grain) * near;
-        float foam = clamp(max(max(max(crest * 0.75, edge), shore * 0.9), steep * 0.6), 0.0, 1.0);
-        col = mix(col, vec3(0.96, 0.99, 1.0), foam);
+        // Habgyűrű a szikla-hegy körül: a hegy sugara a vízszint magasságában (a Blender-modell profilja), lüktető szélességgel.
+        float ct = clamp((uCliff.z - uLevel) / (${CLIFF_HEIGHT.toFixed(1)} * max(uCliff.w, 0.001)), 0.0, 1.0);
+        float cr = uCliff.w * (1.6 + ${CLIFF_FLARE.toFixed(2)} * pow(ct, 0.85));
+        float cd = length((rp - uCliff.xy) / vec2(1.12, 0.88)) - cr;
+        float ring = (1.0 - smoothstep(0.0, 0.55 + 0.35 * grain + 0.15 * sin(uTime * 1.7), cd)) * step(0.001, uCliff.w);
+        float foam = clamp(max(max(max(max(crest * 0.75, edge), shore * 0.9), steep * 0.6), ring * 0.92), 0.0, 1.0);
+        col = mix(col, vec3(0.97, 0.995, 1.0), foam);
         col = mix(col, uFogColor, smoothstep(${FOG_NEAR.toFixed(1)}, ${FOG_FAR.toFixed(1)}, dist));
         col = mix(col, vec3(0.92, 0.95, 1.0), uFlash * 0.45);
         gl_FragColor = vec4(col, 1.0);
@@ -990,58 +1045,87 @@ function setupTsunami(
   surface.frustumCulled = false;
   scene.add(surface);
 
-  const frontMat = new THREE.ShaderMaterial({
-    uniforms: waterUniforms,
-    vertexShader: /* glsl */ `
-      ${GLSL_SHARED}
-      uniform float uLevel;
-      attribute float aTop;
-      varying vec3 vWorld;
-      varying float vSurf;
-      void main() {
-        vec3 p = position;
-        vSurf = uLevel + waveH(p.x, p.z);
-        p.y = aTop > 0.5 ? vSurf : -40.0;
-        vWorld = p;
-        gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform float uTime;
-      uniform float uFlash;
-      uniform float uFoamW;
-      uniform vec3 uFrontTop;
-      uniform vec3 uFrontDeep;
-      varying vec3 vWorld;
-      varying float vSurf;
-      void main() {
-        float d = vSurf - vWorld.y;
-        vec3 col = mix(uFrontTop, uFrontDeep, smoothstep(0.0, 3.5, d) * 0.7 + smoothstep(3.5, 12.0, d) * 0.3);
-        float c = sin(vWorld.x * 1.3 + uTime * 0.9 + sin(vWorld.y * 1.7 + uTime * 0.6) * 1.2)
-                * sin(vWorld.x * 0.7 - uTime * 0.5 + vWorld.y * 0.9 + sin(vWorld.x * 0.4) * 1.5);
-        col += vec3(0.3, 0.7, 0.8) * smoothstep(0.6, 0.95, c) * (1.0 - smoothstep(0.0, 4.0, d)) * 0.1;
-        col += vec3(0.4, 0.85, 0.95) * exp(-d * 1.6) * 0.3;
-        float edge = uFoamW * (1.0 + 0.45 * sin(vWorld.x * 5.3 + uTime * 2.2) + 0.3 * sin(vWorld.x * 11.0 - uTime * 3.1));
-        float foam = 1.0 - smoothstep(edge * 0.55, edge, d);
-        float bubbles = smoothstep(0.975, 0.995, sin(vWorld.x * 23.0 + uTime * 0.7) * sin(vWorld.y * 21.0 + uTime * 1.9 + sin(vWorld.x * 3.0))) * (1.0 - smoothstep(0.0, 1.2, d));
-        col = mix(col, vec3(0.96, 0.99, 1.0), max(foam, bubbles * 0.35));
-        col = mix(col, vec3(0.85, 0.92, 1.0), uFlash * 0.3);
-        gl_FragColor = vec4(col, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-    `,
-  });
-  const front = new THREE.Mesh(buildWaterFront(xs), frontMat);
+  /*
+   * A vágott vízfal (a tenger keresztmetszete a néző felé) ÁTTETSZŐ: a víz alá került szikla-hegy, cölöpök és a figura lába
+   * kéken átdereng rajta („akvárium”) — a víz emelkedése így a hegyen és a mólón is látszik. Mögötte, az öböl elején egy
+   * átlátszatlan mélyvíz-háttér áll (ugyanaz a geometria, hátrébb tolva), hogy a víz alatt ne az ég látsszon.
+   */
+  const faceShader = (opaque: boolean) =>
+    new THREE.ShaderMaterial({
+      uniforms: opaque ? { ...waterUniforms, uFaceZ: { value: BACK_FACE_Z } } : waterUniforms,
+      transparent: !opaque,
+      depthWrite: opaque,
+      vertexShader: /* glsl */ `
+        ${GLSL_SHARED}
+        uniform float uLevel;
+        uniform float uFaceZ;
+        attribute float aTop;
+        varying vec3 vWorld;
+        varying float vSurf;
+        void main() {
+          vec3 p = position;
+          float k = (${CAM_DIST.toFixed(1)} - uFaceZ) / (${CAM_DIST.toFixed(1)} - ${FRONT_Z.toFixed(2)});
+          p.x *= k;
+          p.z = uFaceZ;
+          vSurf = uLevel + waveH(p.x, p.z);
+          p.y = aTop > 0.5 ? vSurf : -40.0;
+          vWorld = p;
+          gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform float uTime;
+        uniform float uFlash;
+        uniform float uFoamW;
+        uniform vec3 uFrontTop;
+        uniform vec3 uFrontDeep;
+        varying vec3 vWorld;
+        varying float vSurf;
+        void main() {
+          float d = vSurf - vWorld.y;
+          vec3 col = mix(uFrontTop, uFrontDeep, smoothstep(0.0, 3.5, d) * 0.6 + smoothstep(3.5, 13.0, d) * 0.4);
+          ${
+            opaque
+              ? "gl_FragColor = vec4(col * 0.82, 1.0);"
+              : /* glsl */ `
+          // Fénysávok a víz alatt (ferde, lassan vándorló) és fénytörés-háló a felszín közelében.
+          float ray = sin((vWorld.x + vWorld.y * 0.55) * 0.9 + uTime * 0.35) * 0.5 + 0.5;
+          ray *= sin((vWorld.x + vWorld.y * 0.55) * 2.3 - uTime * 0.22 + 1.7) * 0.5 + 0.5;
+          col += vec3(0.25, 0.6, 0.7) * ray * exp(-d * 0.22) * 0.22;
+          float c = sin(vWorld.x * 1.3 + uTime * 0.9 + sin(vWorld.y * 1.7 + uTime * 0.6) * 1.2)
+                  * sin(vWorld.x * 0.7 - uTime * 0.5 + vWorld.y * 0.9 + sin(vWorld.x * 0.4) * 1.5);
+          col += vec3(0.3, 0.7, 0.8) * smoothstep(0.6, 0.95, c) * (1.0 - smoothstep(0.0, 4.0, d)) * 0.14;
+          col += vec3(0.2, 0.6, 0.7) * exp(-d * 1.6) * 0.18;
+          float edge = uFoamW * (1.0 + 0.45 * sin(vWorld.x * 5.3 + uTime * 2.2) + 0.3 * sin(vWorld.x * 11.0 - uTime * 3.1));
+          float foam = 1.0 - smoothstep(edge * 0.55, edge, d);
+          float bubbles = smoothstep(0.975, 0.995, sin(vWorld.x * 23.0 + uTime * 0.7) * sin(vWorld.y * 21.0 + uTime * 1.9 + sin(vWorld.x * 3.0))) * (1.0 - smoothstep(0.0, 2.2, d));
+          float white = max(foam, bubbles * 0.4);
+          col = mix(col, vec3(0.97, 0.995, 1.0), white);
+          col = mix(col, vec3(0.85, 0.92, 1.0), uFlash * 0.3);
+          // A felszín alatt áttetsző, lefelé gyorsan sűrűsödik.
+          float alpha = max(white, 0.58 + 0.36 * smoothstep(0.0, 6.0, d));
+          gl_FragColor = vec4(col, alpha);`
+          }
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
+    });
+  const frontGeo = buildWaterFront(xs);
+  const front = new THREE.Mesh(frontGeo, faceShader(false));
   front.frustumCulled = false;
-  front.renderOrder = 1;
+  front.renderOrder = 3;
   scene.add(front);
+  const backFace = new THREE.Mesh(frontGeo, faceShader(true));
+  backFace.frustumCulled = false;
+  scene.add(backFace);
 
   /*
-   * Látvány 3. lépés (1): a SZÖKŐÁR mint főszereplő — a öböl mögött közeledő, átbukó hullámfal. Minél magasabb a víz, annál
-   * közelebb és magasabb; a tetején fehér, tépett taraj, a falán sötét mélység és fénylő sávok. Egy rajzolási hívás.
+   * A SZÖKŐÁR mint főszereplő (terv 7.4): az öböl mögött közeledő hullámfal. A part és a dombok FÖLÉ magasodik; a vízszinttel
+   * nő és közelít. Sötétkék tő → türkiz fal → világító perem → vastag, tépett fehér taraj, lecsorgó habnyelvekkel; a falon
+   * felfelé futó habcsíkok; a tövénél permet-köd. Egy rajzolási hívás.
    */
-  const waveUniforms = { uTime: { value: 0 }, uDanger: { value: 0 } };
+  const waveUniforms = { uTime: { value: 0 }, uDanger: { value: 0 }, uSize: { value: new THREE.Vector2(1, 1) }, uFlash: waterUniforms.uFlash };
   const waveMat = new THREE.ShaderMaterial({
     uniforms: waveUniforms,
     transparent: true,
@@ -1049,48 +1133,81 @@ function setupTsunami(
     vertexShader: /* glsl */ `
       uniform float uTime;
       uniform float uDanger;
+      uniform vec2 uSize;
       varying vec2 vUv;
-      varying float vCurl;
+      varying float vX;
       void main() {
         vUv = uv;
         vec3 p = position;
-        float x = p.x;
-        // A taraj előrebukik (z felé), a fal teteje hullámzik.
-        float crestWave = sin(x * 0.18 + uTime * 0.9) * 0.6 + sin(x * 0.07 - uTime * 0.5) * 1.1;
-        float top = smoothstep(0.55, 1.0, uv.y);
-        // A mesh y-ban a fal magasságára skálázódik: a taraj hullámzása ennek néhány százaléka.
-        p.y += uv.y * crestWave * 0.025 * (0.6 + uDanger);
-        p.z += top * top * (3.0 + 6.0 * uDanger);
-        vCurl = top;
+        vX = p.x * uSize.x;
+        // A taraj magassága a fal mentén hullámzik (nagy, lassú hátak), a fal a néző felé dől.
+        float crest = 0.55 * sin(vX * 0.045 + uTime * 0.5) + 0.3 * sin(vX * 0.11 - uTime * 0.8 + 1.3) + 0.15 * sin(vX * 0.23 + uTime * 1.3);
+        p.y += uv.y * crest * 0.07;
+        p.z += uv.y * uv.y * uSize.y * (0.22 + 0.2 * uDanger);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
       }
     `,
     fragmentShader: /* glsl */ `
       uniform float uTime;
+      uniform float uDanger;
+      uniform float uFlash;
+      uniform vec2 uSize;
       varying vec2 vUv;
-      varying float vCurl;
+      varying float vX;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
       void main() {
-        vec3 deep = vec3(0.02, 0.22, 0.38);
-        vec3 face = vec3(0.07, 0.55, 0.66);
-        vec3 col = mix(deep, face, smoothstep(0.0, 0.8, vUv.y));
-        float streak = smoothstep(0.75, 1.0, sin(vUv.x * 60.0 + vUv.y * 9.0 + uTime * 1.6) * 0.5 + 0.5) * smoothstep(0.2, 0.8, vUv.y);
-        col += vec3(0.35, 0.8, 0.85) * streak * 0.18;
-        float foamEdge = 0.86 + 0.05 * sin(vUv.x * 40.0 + uTime * 3.0) + 0.03 * sin(vUv.x * 97.0 - uTime * 4.0);
-        float foam = smoothstep(foamEdge - 0.05, foamEdge, vUv.y);
-        col = mix(col, vec3(0.97, 0.99, 1.0), foam);
-        float alpha = smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.985, 1.0, vUv.y));
+        float t = vUv.y;
+        float h = t * uSize.y;
+        // A léptéket a fal magassága adja: közelről is, távolról is ugyanolyan rajzolatú.
+        float sx = vX / max(uSize.y, 1.0);
+        vec3 deep = vec3(0.006, 0.05, 0.22);
+        vec3 body = vec3(0.01, 0.19, 0.5);
+        vec3 lit = vec3(0.04, 0.5, 0.74);
+        vec3 col = mix(deep, body, smoothstep(0.0, 0.7, t));
+        // Felfelé rohanó habcsíkok a falon.
+        float streak = noise(vec2(sx * 9.0, t * 5.0 - uTime * 0.55));
+        streak = smoothstep(0.55, 0.85, streak) * smoothstep(0.08, 0.5, t);
+        col = mix(col, vec3(0.75, 0.95, 0.98), streak * 0.3);
+        // Nagy, sötétebb redők (a víztömeg súlya).
+        float fold = noise(vec2(sx * 2.2 + uTime * 0.05, t * 1.6 - uTime * 0.12));
+        col *= 0.82 + 0.3 * fold;
+        // Tépett taraj: zajjal mozgó perem + lecsorgó habnyelvek + árnyék a taraj alatt.
+        float edge = 0.8 + 0.07 * noise(vec2(sx * 5.0, uTime * 0.5)) + 0.035 * noise(vec2(sx * 17.0, -uTime * 0.9));
+        float tongues = smoothstep(0.5, 0.95, noise(vec2(sx * 13.0, t * 7.0 + uTime * 0.7))) * smoothstep(edge - 0.17, edge, t);
+        float foam = max(smoothstep(edge - 0.035, edge + 0.015, t), tongues * 0.55);
+        // A taraj alatt a fal elvékonyodik: a fény átüt rajta (türkiz sáv), lejjebb mélykék a víztömeg.
+        float lip = smoothstep(edge - 0.3, edge - 0.03, t) * (1.0 - foam);
+        col = mix(col, lit, lip * 0.75);
+        col = mix(col, vec3(0.25, 0.88, 0.92), smoothstep(edge - 0.1, edge - 0.03, t) * (1.0 - foam) * 0.45);
+        col *= 1.0 - 0.28 * smoothstep(edge - 0.08, edge - 0.035, t) * (1.0 - foam);
+        vec3 foamCol = mix(vec3(0.82, 0.93, 1.0), vec3(1.0), smoothstep(edge, edge + 0.12, t) * 0.5 + 0.5 * noise(vec2(sx * 23.0, t * 30.0 + uTime)));
+        col = mix(col, foamCol, foam);
+        // Permet-köd a fal tövénél.
+        float mist = (1.0 - smoothstep(0.0, 0.13 + 0.07 * noise(vec2(sx * 4.0 + uTime * 0.2, 1.0)), t)) * (0.55 + 0.45 * noise(vec2(sx * 6.0 - uTime * 0.3, t * 9.0)));
+        col = mix(col, vec3(0.85, 0.95, 1.0), mist * 0.6);
+        col = mix(col, vec3(0.92, 0.95, 1.0), uFlash * 0.35);
+        // A taraj fölötti perem tépett (áttetszőbe fut), az alja a tengerbe olvad.
+        float topFade = 1.0 - smoothstep(0.955 + 0.03 * noise(vec2(sx * 13.0, uTime * 1.2)), 0.995, t);
+        float alpha = smoothstep(0.0, 0.03, t) * topFade;
         gl_FragColor = vec4(col, alpha);
+        #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
     `,
   });
-  const waveWall = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, lean ? 48 : 96, 12), waveMat);
+  const waveWall = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, lean ? 40 : 80, 10), waveMat);
   waveWall.frustumCulled = false;
   waveWall.renderOrder = 0;
   scene.add(waveWall);
 
   // Platforms (rebuilt on resize: their length follows the screen width)
-  let platforms: THREE.Group | null = null;
+  let platforms: THREE.Mesh | null = null;
 
   // Safe zone: two glowing buoys, a float line and a green glow on the water
   const zone = new THREE.Group();
@@ -1229,11 +1346,28 @@ function setupTsunami(
   let ridePhase = 0;
   let prevPumpSign = 1;
   let frontSprayAcc = 0;
+  let crestAcc = 0;
   /** S9: reduced motion keeps 30 % of the rider's swing (and no spray / dust). */
   const motionK = reducedMotion ? 0.3 : 1;
 
+  const shelterNear = new THREE.Vector2();
+  let hillK = 1;
+  let propK = 1;
+  const spotMatrix = (s: Spot, sway = 0): THREE.Matrix4 => {
+    if (s.cliff) {
+      dummy.position.set(cliffTop.x + s.cliff[0] * cliffScale, cliffTop.y + (s.lift ?? -0.03) * s.s, cliffTop.z + s.cliff[1] * cliffScale);
+    } else {
+      const x = (s.u * hw * (CAM_DIST + s.zz)) / CAM_DIST;
+      dummy.position.set(x, terrainHeight(x, -s.zz, hw) + (s.lift ?? (s.model === "hill" ? -0.2 * hillK : -0.04)) * s.s, -s.zz);
+    }
+    dummy.rotation.set(0, s.rotY ?? 0, sway);
+    dummy.scale.setScalar(s.s * (s.cliff ? cliffScale : s.model === "hill" ? hillK : propK));
+    dummy.updateMatrix();
+    return dummy.matrix;
+  };
   const layout = () => {
     // Screen-anchored pieces
+    const aspect = hw / HALF_H;
     waterUniforms.uHw.value = hw;
     // S9: a thicker white crest band on top of the wave face.
     waterUniforms.uFoamW.value = Math.max(0.14, 8.5 * worldPerPx);
@@ -1243,8 +1377,21 @@ function setupTsunami(
       const x = (d.u * hw * (CAM_DIST + d.zz)) / CAM_DIST;
       d.obj.position.set(x, terrainHeight(x, -d.zz, hw) + d.lift, -d.zz);
     }
-    island.position.set((islandSpot.u * hw * (CAM_DIST + islandSpot.zz)) / CAM_DIST, islandSpot.y, -islandSpot.zz);
-    for (const m of mountains) m.g.position.x = (m.u * hw * (CAM_DIST + m.zz)) / CAM_DIST;
+    // A szikla-hegy teteje pontosan a menedék talppontja (a kép SHELTER_X / felső deszka pontja), a hegy mélységében.
+    cliffScale = THREE.MathUtils.clamp(hw / 4.2, 0.8, 1.5);
+    // Keskeny (álló) képen a dombok és a díszlet arányosan kisebbek, hogy az öböl és a hullámfal látsszon.
+    hillK = THREE.MathUtils.clamp(hw / 7.5, 0.5, 1.15);
+    propK = THREE.MathUtils.clamp(hw / 6, 0.72, 1.1);
+    cliffTop.set(worldX(SHELTER_X, CLIFF_Z), worldY(1 - shelterTopFor(aspect) / 100, CLIFF_Z), CLIFF_Z);
+    if (cliff) {
+      cliff.position.copy(cliffTop);
+      cliff.scale.setScalar(cliffScale);
+    }
+    waterUniforms.uCliff.value.set(cliffTop.x, CLIFF_Z, cliffTop.y, cliff ? cliffScale : 0);
+    for (const b of batches) {
+      b.items.forEach((s, i) => b.mesh.setMatrixAt(i, spotMatrix(s)));
+      b.mesh.instanceMatrix.needsUpdate = true;
+    }
     const sunPoint = new THREE.Vector3(worldX(0.12, -400), worldY(0.95, -400), -400);
     const sunDir = sunPoint.sub(camera.position).normalize();
     skyU.sunDirection.value.copy(sunDir);
@@ -1252,16 +1399,25 @@ function setupTsunami(
 
     if (platforms) {
       scene.remove(platforms);
-      disposeObjectTree(platforms);
+      platforms.geometry.dispose();
     }
     const thick = Math.max(0.24, 15 * worldPerPx);
-    platforms = buildPlatforms(worldX(0.08), worldX(0.92), (top) => worldY(1 - top / 100), thick, env?.texture ?? null, plankTops(hw / HALF_H));
+    // A pallók a hegyhez futó stégek: a jobb végük a szikla sziluettjébe ér (hegy nélkül a kép 92 %-áig tartanak).
+    const xRightAt = (y: number) => (cliff ? Math.min(worldX(0.92), cliffTop.x - cliffScale * cliffRadius((cliffTop.y - y) / cliffScale) + 0.55) : worldX(0.92));
+    platforms = buildPlatforms(worldX(0.08), xRightAt, (top) => worldY(1 - top / 100), thick, plankTops(aspect), propMat);
     scene.add(platforms);
 
     kidScale = Math.min(74, Math.max(46, heightPx * 0.14)) * worldPerPx;
     kid.group.scale.setScalar(kidScale);
-    shelter.group.scale.setScalar(kidScale * 0.62);
-    shelter.group.position.set(worldX(SHELTER_X), worldY(1 - shelterTopFor(hw / HALF_H) / 100), PLANK_Z + 0.2);
+    shelterNear.set(worldX(SHELTER_X, PLAYER_Z), worldY(1 - shelterTopFor(aspect) / 100, PLAYER_Z));
+    if (cliff) {
+      // A menedék a hegy tetején áll; a mélység miatt ugyanakkorának látszik, mint a régi helyén.
+      shelter.group.scale.setScalar(kidScale * 0.62 * ((CAM_DIST - CLIFF_Z) / CAM_DIST));
+      shelter.group.position.copy(cliffTop);
+    } else {
+      shelter.group.scale.setScalar(kidScale * 0.62);
+      shelter.group.position.set(worldX(SHELTER_X), worldY(1 - shelterTopFor(aspect) / 100), PLANK_Z + 0.2);
+    }
     const zoneUnit = kidScale * 0.95;
     buoyL.group.scale.setScalar(zoneUnit);
     buoyR.group.scale.setScalar(zoneUnit);
@@ -1334,18 +1490,35 @@ function setupTsunami(
       sx = damp(sx, target.sx, 4, dt);
       const fill = clamp01((level + HALF_H) / (2 * HALF_H));
       // A közeledő szökőár: a víz magasságával (és győzelemkor visszahúzódva) közelebb és magasabb.
-      const danger = won ? 0 : clamp01((fill - 0.15) / 0.6);
+      const danger = won ? 0 : clamp01((fill - 0.07) / 0.55);
       waveUniforms.uTime.value = t;
       waveUniforms.uDanger.value = damp(waveUniforms.uDanger.value, danger, 2, dt);
       const dg = waveUniforms.uDanger.value;
-      const dz = THREE.MathUtils.lerp(160, 60, dg);
-      // A taraj a kép 52 %-ától (távol) a 74 %-áig (közel) ér fel — a teteje és a habja mindig látszik, az ég nem tűnik el.
-      const wallTop = worldY(THREE.MathUtils.lerp(0.52, 0.74, dg), -dz);
-      const wallBottom = worldY(0.05, -dz);
+      const dz = THREE.MathUtils.lerp(120, 34, dg);
+      // A taraj a kép 71 %-ától (távol) a 86 %-áig (közel) ér fel: a horizont (60 %), a part és a dombok FÖLÖTT van, de a
+      // felső sáv (HUD) alatt marad — a habos taraj álló nézetben is látszik.
+      const wallTop = worldY(THREE.MathUtils.lerp(0.71, 0.86, dg), -dz);
+      const wallBottom = level - 1.5;
       const wallH = Math.max(1, wallTop - wallBottom);
-      const span = hw * 2.6 * ((CAM_DIST + dz) / CAM_DIST);
+      const span = hw * 3 * ((CAM_DIST + dz) / CAM_DIST) + wallH;
       waveWall.scale.set(span, wallH, 1);
       waveWall.position.set(0, wallBottom + wallH / 2, -dz);
+      waveUniforms.uSize.value.set(span, wallH);
+      // Hangulat: a veszéllyel az ég mélyül és a fény hűvösebb — a színek teltek maradnak.
+      (skyU.topColor.value as THREE.Color).copy(calmTop).lerp(stormTop, dg * 0.85);
+      fogColor.copy(calmHorizon).lerp(stormHorizon, dg * 0.8);
+      (skyU.horizonColor.value as THREE.Color).copy(fogColor);
+      key.intensity = 2.5 - 0.5 * dg;
+      // Permet a tarajról (a fal méretéhez illő, nagy cseppek).
+      if (!reducedMotion && playing) {
+        crestAcc += dt * (10 + 40 * dg) * particleScale;
+        while (crestAcc >= 1) {
+          crestAcc -= 1;
+          const fxr = Math.random();
+          tmp.set(worldX(fxr, -dz) * 1.05, wallTop - 0.04 * wallH, -dz + 0.3 * wallH);
+          sparkles.emit(tmp, { count: 1, color: "#ffffff", speed: 0.06 * wallH + 1, life: 1.3, gravity: 0.12 * wallH, size: 0.016 * wallH + 0.005 * dz, direction: sprayDir.set(0, 1, 0.6), directionality: 0.6, spread: 0.03 * wallH });
+        }
+      }
       const amp = 0.14 + 0.16 * fill + flash * 0.08;
       waterUniforms.uAmp.value = amp;
       waterUniforms.uLevel.value = level;
@@ -1384,7 +1557,7 @@ function setupTsunami(
       flash = Math.max(0, flash - dt * 3.2);
       skyU.flash.value = flash * 0.55;
       waterUniforms.uFlash.value = flash;
-      hemi.intensity = 1.1 + flash * 2.2;
+      hemi.intensity = 1.5 - 0.25 * waveUniforms.uDanger.value + flash * 2.2;
       boltMat.opacity = Math.min(1, flash * 1.6);
       if (flash <= 0) bolt.visible = false;
 
@@ -1392,15 +1565,22 @@ function setupTsunami(
       const kx = worldX(px);
       const surfaceAt = (x: number, z: number) => level + waveHeight(x, z, t, amp);
       // Sodródó törmelék: a hullámon ringatózva, lassan sodródva (díszlet, nem akadály — D2-b).
-      for (const d of debris) {
-        if (!reducedMotion) d.fx += d.speed * dt;
-        if (d.fx > 1.05) d.fx = -0.05;
-        if (d.fx < -0.05) d.fx = 1.05;
-        const dx = worldX(d.fx, -1.2);
-        d.obj.position.set(dx, surfaceAt(dx, FRONT_Z - 1.2) + 0.05, FRONT_Z - 1.2);
-        d.obj.rotation.z = Math.atan(waveSlopeX(dx, FRONT_Z - 1.2, t, amp)) + (reducedMotion ? 0 : Math.sin(elapsed * 1.3 + d.phase) * 0.12);
-        d.obj.rotation.y = d.phase;
+      for (const batch of drifts) {
+        batch.items.forEach((d, i) => {
+          if (!reducedMotion) d.fx += d.speed * dt;
+          if (d.fx > 1.08) d.fx = -0.08;
+          if (d.fx < -0.08) d.fx = 1.08;
+          const dx = worldX(d.fx, d.z);
+          dummy.position.set(dx, surfaceAt(dx, d.z) + 0.04 * d.s, d.z);
+          dummy.rotation.set(reducedMotion ? 0 : Math.sin(elapsed * 0.9 + d.phase) * 0.1, d.phase, Math.atan(waveSlopeX(dx, d.z, t, amp)) + (reducedMotion ? 0 : Math.sin(elapsed * 1.3 + d.phase) * 0.12));
+          dummy.scale.setScalar(d.s);
+          dummy.updateMatrix();
+          batch.mesh.setMatrixAt(i, dummy.matrix);
+        });
+        batch.mesh.instanceMatrix.needsUpdate = true;
       }
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(1);
       const ky = surfaceAt(kx, PLAYER_Z);
       if (dt > 0) vx = damp(vx, (kx - prevKidX) / dt, 10, dt);
       prevKidX = kx;
@@ -1417,8 +1597,8 @@ function setupTsunami(
       if (winT > 0) {
         // Victory: the rider climbs into the shelter (eased), above the breaking wave.
         const e = winT * winT * (3 - 2 * winT);
-        kid.group.position.x = THREE.MathUtils.lerp(kx, shelter.group.position.x - 0.9 * kidScale, e);
-        kid.group.position.y = THREE.MathUtils.lerp(ky, shelter.group.position.y, e);
+        kid.group.position.x = THREE.MathUtils.lerp(kx, shelterNear.x - 0.9 * kidScale, e);
+        kid.group.position.y = THREE.MathUtils.lerp(ky, shelterNear.y, e);
       }
       kid.group.rotation.set(0, turnY, Math.atan(slope) * 0.8);
       kid.rider.rotation.z = leanZ;
@@ -1514,10 +1694,22 @@ function setupTsunami(
           c.fx += (c.speed * dt) / (hw * 12);
           if (c.fx > 1.25) c.fx = -0.25;
         }
-        const lampPulse = 0.6 + 0.25 * Math.sin(elapsed * 2.2);
-        (lighthouse.lamp.material as THREE.SpriteMaterial).opacity = lampPulse;
+        if (lampGlow) (lampGlow.material as THREE.SpriteMaterial).opacity = 0.6 + 0.25 * Math.sin(elapsed * 2.2);
+        // A pálmák a szélben billegnek (a veszéllyel erősebben).
+        for (const b of palmBatches) {
+          b.items.forEach((s, i) => b.mesh.setMatrixAt(i, spotMatrix(s, Math.sin(elapsed * (1.1 + 0.9 * dg) + s.zz) * (0.03 + 0.05 * dg))));
+          b.mesh.instanceMatrix.needsUpdate = true;
+        }
       }
-      for (const c of clouds) c.m.position.set(worldX(c.fx, -c.zz), worldY(c.fy, -c.zz), -c.zz);
+      clouds.forEach((c, i) => {
+        dummy.position.set(worldX(c.fx, -c.zz), worldY(c.fy, -c.zz), -c.zz);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(c.s);
+        dummy.updateMatrix();
+        cloudMesh.setMatrixAt(i, dummy.matrix);
+      });
+      cloudMesh.instanceMatrix.needsUpdate = true;
+      dummy.scale.setScalar(1);
 
       if (rainCount > 0) {
         const slant = 0.18;
@@ -1537,7 +1729,8 @@ function setupTsunami(
           rainPos[i * 6 + 5] = z;
         }
         rainGeo.attributes.position.needsUpdate = true;
-        rainMat.opacity = 0.3 + flash * 0.3;
+        // Az eső a viharral érkezik: alacsony víznél alig, magasnál sűrűn látszik.
+        rainMat.opacity = 0.04 + 0.4 * dg + flash * 0.3;
       }
 
       sparkles.update(dt);
@@ -1545,7 +1738,6 @@ function setupTsunami(
     dispose() {
       disposed = true;
       sparkles.dispose();
-      env?.dispose();
     },
   };
   void loadModels();
@@ -1557,7 +1749,7 @@ export default function TsunamiScene3D(props: TsunamiScene3DProps) {
   const propsRef = useRef(props);
   propsRef.current = props;
   const { supported } = useThreeScene(canvasRef, (ctx) => setupTsunami(ctx, propsRef, props.light), [props.light], {
-    exposure: 1.05,
+    exposure: 1,
     shadows: false,
   });
   const { onSupportedChange } = props;
