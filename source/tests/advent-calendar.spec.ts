@@ -109,6 +109,32 @@ test("a bankból eltűnt kérdés (S2b C5 szerződés): újranyitáskor `questio
   expect(errors, "konzol- vagy laphiba").toEqual([]);
 });
 
+test("betelt új-sor keret (429, limit: new-row): barátságos várakozó üzenet, majd automatikus újrapróba; tartós 429-nél barátságos hiba és „Újra” (S2b M1)", async ({ page }) => {
+  await openCalendar(page, DEC5);
+  const busy = { status: 429, json: { message: "Túl sok új naptár erről a hálózatról — próbáld újra később.", limit: "new-row" } };
+  // 1) Az első évfolyam-kérés 429, a második már a valódi szerverhez megy.
+  let calls = 0;
+  await page.route("**/api/advent/grade", (route) => (++calls === 1 ? route.fulfill(busy) : route.fallback()));
+  await page.getByTestId("advent-grade-5").tap();
+  await expect(page.getByTestId("advent-busy")).toContainText("mindjárt újra megpróbáljuk");
+  await shot(page, "09-sokan-vagyunk");
+  await expect(page.getByTestId("advent-grid")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("advent-busy")).toHaveCount(0);
+  await expect(page.getByTestId("advent-error")).toHaveCount(0);
+  expect(calls).toBe(2);
+  // 2) Tartós 429 a megnyitásnál: egy újrapróba után barátságos hiba (nem a nyers üzenet), a naptár használható marad.
+  let opens = 0;
+  await page.route("**/api/advent/doors/1/open", (route) => { opens++; return route.fulfill(busy); });
+  await page.getByTestId("advent-door-1").tap();
+  await expect(page.getByTestId("advent-error")).toContainText("a naptárad megvár", { timeout: 15_000 });
+  await expect(page.getByTestId("advent-error")).not.toContainText("hálózatról");
+  await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
+  expect(opens).toBe(2);
+  await page.unroute("**/api/advent/doors/1/open");
+  await page.getByTestId("advent-error-retry").tap();
+  await playDoor(page, 1, true);
+});
+
 test("éjféli határ: 23:59:59-kor a holnapi ablak zárt, 00:00:00-kor nyitható (A13)", async ({ page }) => {
   await openCalendar(page, "2026-12-04T22:59:59Z", 5);
   await expect(page.getByTestId("advent-door-5")).toHaveAttribute("data-state", "locked");
@@ -245,3 +271,29 @@ for (const viewport of MOBILE_VIEWPORTS) {
     });
   });
 }
+
+test.describe("asztali nézet 1366×768", () => {
+  test.use({ viewport: { width: 1366, height: 768 }, isMobile: false });
+
+  test("a naptár, a kérdés és az összesítés asztali méretben: mind a 24 ablak a nézeten belül, nincs oldalgörgetés (A26)", async ({ page }) => {
+    await openCalendar(page, DEC24);
+    await seedProgress(page, DEC24, { grade: 5, days: range(1, 22), wrong: [4] });
+    await page.reload();
+    await expect(page.getByTestId("advent-grid")).toBeVisible();
+    await settle(page);
+    expect(await measureOverflow(page)).toEqual({ x: 0, y: 0 });
+    const boxes = await page.locator(".advent-door").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; }));
+    expect(boxes).toHaveLength(24);
+    for (const b of boxes) expect(b.top >= 0 && b.left >= 0 && b.bottom <= 768 && b.right <= 1366, `ablak a nézeten belül: ${JSON.stringify(b)}`).toBe(true);
+    await shot(page, "d-naptar");
+    await page.getByTestId("advent-door-23").click();
+    await expect(page.getByTestId("advent-question")).toBeVisible();
+    await shot(page, "d-kerdes");
+    await pickOption(page, true);
+    await shot(page, "d-visszajelzes");
+    await page.getByTestId("advent-next").click();
+    await page.getByTestId("advent-summary-open").click();
+    await expect(page.getByTestId("advent-summary")).toBeVisible();
+    await shot(page, "d-osszesites");
+  });
+});

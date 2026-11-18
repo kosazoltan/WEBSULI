@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { ADVENT_BUSY_FAILED_TEXT, ADVENT_BUSY_WAIT_MS, adventErrorText, isAdventBusy, retryWhenBusy } from "../client/src/advent/busy";
 import { ADVENT_ART } from "../shared/advent/art-manifest";
 import { ADVENT_ART_SPECS, ADVENT_DOOR_MOTIFS, doorArtId } from "../shared/advent/art";
 import type { AdventDoorView, AdventState } from "../shared/advent/contract";
@@ -78,4 +79,38 @@ test("a naptár 2D és könnyű: nincs three.js, jelenet-import és képkocka-hu
 
 test("a szó szerinti üzenet a kliensben csak a szerver állapotából jelenik meg — nincs újragépelve (A8)", () => {
   assert.doesNotMatch(read("client/src/pages/AdventCalendar.tsx"), /apukádhoz/);
+});
+
+test("429 („most sokan vagyunk”, pl. limit: new-row): egy újrapróba rövid várakozás után; más hiba azonnal megy tovább (S2b M1)", async () => {
+  const busy = Object.assign(new Error("Túl sok új naptár erről a hálózatról — próbáld újra később."), { status: 429 });
+  const other = Object.assign(new Error("Az évfolyam az első válasz után már nem módosítható."), { status: 409 });
+  assert.equal(isAdventBusy(busy), true);
+  assert.equal(isAdventBusy(other), false);
+  assert.equal(isAdventBusy(new Error("hálózat")), false);
+  assert.ok(ADVENT_BUSY_WAIT_MS >= 2000 && ADVENT_BUSY_WAIT_MS <= 8000, "rövid, de nem azonnali várakozás");
+
+  // 1) Első hívás 429, a második sikerül: pontosan egy várakozás, a jelzés be-, majd kikapcsol.
+  const log: string[] = [];
+  let calls = 0;
+  const ok = await retryWhenBusy(async () => { calls++; if (calls === 1) throw busy; return "kész"; },
+    { onWait: (w) => log.push(w ? "vár" : "vége"), sleep: async (ms) => { log.push(`alszik ${ms}`); } });
+  assert.equal(ok, "kész");
+  assert.equal(calls, 2);
+  assert.deepEqual(log, ["vár", `alszik ${ADVENT_BUSY_WAIT_MS}`, "vége"]);
+
+  // 2) Kétszer 429: nincs harmadik próba, a hiba kimegy, a jelzés kikapcsol; a gyerek barátságos szöveget kap, nem a nyers üzenetet.
+  calls = 0; log.length = 0;
+  await assert.rejects(retryWhenBusy(async () => { calls++; throw busy; }, { onWait: (w) => log.push(w ? "vár" : "vége"), sleep: async () => {} }), (e) => e === busy);
+  assert.equal(calls, 2);
+  assert.deepEqual(log, ["vár", "vége"]);
+  assert.equal(adventErrorText(busy, "alap"), ADVENT_BUSY_FAILED_TEXT);
+  assert.doesNotMatch(ADVENT_BUSY_FAILED_TEXT, /hálózat|429|hiba/i);
+
+  // 3) Más hiba: nincs várakozás, nincs újrapróba; a szerver üzenete marad.
+  calls = 0; log.length = 0;
+  await assert.rejects(retryWhenBusy(async () => { calls++; throw other; }, { onWait: (w) => log.push(w ? "vár" : "vége"), sleep: async () => { log.push("alszik"); } }), (e) => e === other);
+  assert.equal(calls, 1);
+  assert.deepEqual(log, []);
+  assert.equal(adventErrorText(other, "alap"), other.message);
+  assert.equal(adventErrorText("valami", "alap"), "alap");
 });
