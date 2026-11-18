@@ -190,6 +190,13 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 > megalapozási kivétel az S3a-ban marad; (4) az üzemmód futásonként felülírható (`SingleRunDeps.gateModes`) — a teszt és a
 > mérőharness ezzel kapcsol `enforce`-ra; (5) az alapvonal-fixtúra (`tests/fixtures/source-coverage-hm.ts`) a HM-minta számait
 > hordozza (38 tétel; ma 6 teljes, 23 részben, 9 sehogy) — a 7 felsorolt csoport 35 tétele mellé 3 lépéssor került a 38-as összeghez.
+>
+> **SK1b (2026-11-18, ág `fix/tgm-sk1b-fedettsegi-kapu-kemenyites`, kanban #157) — a független review leletei az `enforce` ELŐTT:**
+> szerkezeti hűségmérés és normalizálás (F1–F3), kihagyási keret és ok fajtánként (F4), megosztott paraméter-szerződés (F5–F6),
+> a megállt job folytatása modellhívás nélkül áll meg (F7), címke-tisztítás a pótló folton (F8), a kapu hibája nem állít meg
+> (F12), a parancssori futtató hibás térképre 2-es kóddal áll meg (F10). Az alapvonal-teszt a mai leckealakra **0/38** (a kapu
+> szerkezeti mércéje); a „6/38” a tényfeltárás EMBERI tartalmi megítélése — a fixtúra megjegyzése elkülöníti (F9). A fenti (1)–(2)
+> pontot ez a kör felülírja: a hűség már nem „a blokk összes szövegén” mér. A kapu `report` módban marad.
 
 Ág: `feat/forras-fedettsegi-kapu-sk1` (az S1b ágáról vagy — ha az S1b már bent van — az `origin/main`-ről). Fájlok:
 `server/studio/gates/types.ts`, `server/studio/gates/config.ts`, `server/studio/gates/source-coverage-gate.ts`,
@@ -204,7 +211,16 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
    `sourceCoverageGate(lesson, visuals, skipped): GateResult & { missingIds: string[] }`.
    - `SOURCE_COVERAGE_THRESHOLDS = { must: ["table","process","decisionTree","ruleBox"], mustShare: 1, should:
      ["pictureCard","exercise","diagram"], shouldShare: 0.8, fidelity: 0.8, maxSkipShare: 0.3 }`; a `colorCode` nem számít.
-   - Megfeleltetés: `table` → `table`; `process` → `process`; `decisionTree` → `decisionTree`; `ruleBox` → `ruleBox`;
+   - **Spec-pontosítás 2026-11-18 (független review F1–F6; megvalósítva az SK1b-ben, kanban #157):** a hűség SZERKEZET szerint
+     mér, a megjelenítők megosztott paraméter-szerződéséből (`shared/source-visual-render.ts`: `TableVisualParams`,
+     `RuleBoxVisualParams`, `CompareCardsVisualParams`, `DecisionTreeVisualParams`, `PictureCardsVisualParams` + engedékeny olvasók
+     + `normalizeVisualText`) — nem a blokk bármely szövegén. Táblázat: cella a cellában, oszlop szerint (a `compareCards` kártyája
+     egy oszlop); folyamat: lépés a lépésben, sorrendben; döntési fa: csomópont és ágfelirat útvonal szerint; szabálydoboz: cím a
+     címben (vagy a feliratban), pont a pontban; képes kártya: felirat + nem üres `svg`; képes feladat: a képek száma is egység;
+     rész nélküli ábra: az üres `animate` blokk nem megjelenés. Normalizálás: idézőjel, gondolatjel, hárompont, mondatvégi
+     írásjel, szóköz, kis- / nagybetű, NFC — az ékezet NEM. Több hivatkozó blokk összeadódik. Az alábbi két bekezdés ezzel együtt
+     érvényes.
+   - Megfeleltetés: `table` → `table` vagy `compareCards`; `process` → `process`; `decisionTree` → `decisionTree`; `ruleBox` → `ruleBox`;
      `pictureCard` → `pictureCards`; `diagram` → bármely `animate` fajta; `exercise` → `example` / `try` / `check` /
      `pictureCards` blokk. A megfeleltetés állandó tábla ugyanebben a fájlban.
    - „Megjelent”: van `sourceVisualId`-val hivatkozó, a megfeleltetésnek megfelelő blokk, ÉS a tétel `sourceVisualTexts`
@@ -216,6 +232,10 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
      `diagram` / `pictureCard` fajtánál és üres `conceptIds` mellett; tanított fogalomra hivatkozó tétel csak `duplicate` okkal;
      az érvényes kihagyások száma ≤ `maxSkipShare` × a számlálóban lévő tételek száma (a többlet a lista végéről érvénytelen).
      Érvénytelen kihagyás → a tétel hiányzónak számít, a `problems` megnevezi az okot.
+     **Spec-pontosítás 2026-11-18 (független review F4):** a keret `max(1, floor(maxSkipShare × n))` (`minSkips: 1`); az ok
+     fajtánként megengedett (`SOURCE_SKIP_REASONS_BY_KIND`): `table` / `process` / `decisionTree` / `ruleBox` → `admin_meta`,
+     `duplicate`; `exercise` → + `answer_key`; `pictureCard` / `diagram` → + `decorative`. A `duplicate` csak megnevezett, megjelent
+     párral érvényes. Érvénytelen ok = hiány.
    - Ítélet: `ok`, ha a `must` fajták nem kihagyott tételei mind megjelentek, és a `should` fajtáké legalább `shouldShare`
      arányban (a megengedett hiány: `floor((1 − shouldShare) × n)`). Leltár nélkül: `ok: true`, `metrics.total = 0`.
 3. A terv sémája (`step-io.ts:97-115`) opcionális `skippedVisuals` mezőt kap a fenti alakban; a tervező promptja a zárt oklistát
@@ -253,7 +273,16 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 > nélkül tárolódnak — a megjelenítő kizárólag szövegként rajzolja ki őket (React szövegcsomópont; `dangerouslySetInnerHTML` tilos);
 > a böngészős próba egy `<script>` / `<img onerror>` szövegű cellával igazolja, hogy jelölőként nem értelmeződik.
 
-Ág: `feat/lecke-megjelenitok-s2a`. Fájlok: `shared/lesson-schema.ts`, `shared/lesson-visual-params.ts`,
+> **Paraméter-szerződés (SK1b, független review F5–F6) — az S2b-re is:** a megjelenítők paramétereinek alakja a
+> `shared/source-visual-render.ts` típusaiban RÖGZÍTETT, és a forrás-fedettségi kapu ezekből olvas. Az S2 paraméter-sémái
+> (`lesson-visual-params.ts`) és megjelenítői ehhez igazodjanak: `table` `{ caption?, headers, rows, headerTones? }`; `ruleBox`
+> `{ tone, heading?, items }`; `compareCards` `{ cards: [{ title, tone?, lines, example? }] }` (a kártya egy oszlop); `decisionTree`
+> `{ root: { text, branches?: [{ label, node }] } }` — NEM `children`; `pictureCards` `{ cards: [{ label, svg, caption?, example? }] }`
+> (a kép a nem üres `svg`). Ha az alakon változtatni kell, a típusfájlban és a kapu tesztjeivel együtt változzon; a
+> `renderedVisualTexts` ugyanezeket a mezőket adja vissza. Teszt rögzítse, hogy a séma által elfogadott paramétert a szerződés
+> olvasója (`readTableParams`, `readDecisionTreeParams`, …) veszteség nélkül olvassa.
+
+Ág: `feat/lecke-megjelenitok-s2a`. Fájlok: `shared/source-visual-render.ts` (a szerződés — meglévő), `shared/lesson-schema.ts`, `shared/lesson-visual-params.ts`,
 `shared/lesson-block-label.ts`, `client/src/lesson-runtime/blocks/source-visuals.tsx` (új),
 `client/src/lesson-runtime/blocks/animate-blocks.tsx`, `client/src/lesson-runtime/lesson-design.css`,
 `client/src/lesson-runtime/explain-paragraphs.ts`, `server/studio/lektor-view.ts`, `tests/lesson-source-visual-kinds.test.ts` (új),
@@ -544,6 +573,11 @@ meglévő éles lecke (6 / 38), a PT alapvonala a forrásleltár (0 / 39), a vá
 6. Kiértékelés: `source-gap-table.mts` mindkét leckére (a jelöléseket tételenként, a lecke JSON-ja és a megjelenített oldal
    képernyőképei alapján töltöd ki); a futás telemetriájából: állomásonkénti token / idő / `fixTurns`, `gates.visualsFound /
    visualsDropped`, `telemetry.visuals`, `fixReasons`, `gateResults` (SK1, SK3), `coverage.visuals`; a futás számolt ára.
+   **Mérési pontok a független review-ból (SK1b):** (F11) a lektor a hiányzó tételek listáját tájékoztatásként kapja — mérd a
+   lektorkörök számát és a lektor `coverage_gap` blokkolóit az alapvonalhoz képest (ad-e blokkolót a hiánylistára, nő-e miatta a
+   körszám vagy a megállás); ha igen, a hiánylista az S3-ig kerüljön ki a lektor kéréséből. (F13) A leltár háromszor kerül a fő
+   beszélgetésbe (terv, tananyag, ábrák) és körönként a lektorhoz — mérd állomásonként a bemeneti és a gyorsítótárból jövő
+   tokent a leltár méretéhez viszonyítva (a legnagyobb leltárnál promptonként ≈ +39 ezer karakter), és számold ki a költséghatást.
 7. Eredmény: `docs/handoffs/2026-11-18-tananyag-minoseg-meres-1.md` (hiánytábla, költség a főkönyvből, eltérés a terv becsléseitől,
    a kapuk ítélete, a következő szeleteket érintő leletek).
 

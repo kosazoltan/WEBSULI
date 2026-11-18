@@ -1075,3 +1075,14 @@ Forrás: SK1 (forrás-fedettségi kapu), `tests/fixtures/source-coverage-hm.ts`.
   hivatkozást a mércével. Ha egy mutációt a kapu „nem fog meg”, előbb azt ellenőrizd, hogy a mutáció nem szivárgott-e át a mércébe.
 - Rokon apróság: a Bash eszköz heredocja aposztrófot / hármas idézőjelet tartalmazó tartalomnál elhasalhat — a tartalmat fájlba
   írd (Write), és azt futtasd vagy fűzd hozzá.
+
+## C-74 — Unicode-escape a forrásban: az ügynök fájlíró eszköze literál karakterré alakíthatja (2026-11-18)
+
+Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló reguláris kifejezései).
+
+- **Tünet:** a `\uXXXX` alakban megírt karakterosztály (nem törő szóköz, tipográfiai idézőjel, kétirányú vezérlő) a fájlba
+  LITERÁL karakterként került: a kód működött, de a forrásban láthatatlan / összetéveszthető karakterek álltak, amelyeket sem a
+  review, sem a diff nem mutat meg.
+- **Szabály:** láthatatlan vagy tipográfiai karaktert a forrásban mindig escape-pel írj, és írás után ellenőrizd a fájl nyers
+  tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
+  állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.

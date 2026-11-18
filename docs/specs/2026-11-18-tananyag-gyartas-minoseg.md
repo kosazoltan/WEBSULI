@@ -371,15 +371,28 @@ ez a munka nem nyúl). Minden kapu kimenete gépi: `{ gate, ok, problems[], metr
 - **SK1 — forrás-fedettségi kapu (az S1b-vel együtt):** a strukturált forrásleírás tételeire. Ami a forrásban megvan és a leckében
   nincs, az **bukás**, nem 100%.
   - *Megjelent* egy tétel, ha van rá hivatkozó blokk (`sourceVisualId`), a blokk fajtája a tétel fajtájához illik (táblázat →
-    `table`; folyamat → `process`; döntési fa → `decisionTree`; szabálydoboz → `ruleBox`; képes kártya → `pictureCards`), ÉS a
-    tartalma hű: a forrás celláinak / lépéseinek / pontjainak / kártyáinak legalább 80%-a szerepel a megjelenített szövegben, a
+    `table` vagy `compareCards`; folyamat → `process`; döntési fa → `decisionTree`; szabálydoboz → `ruleBox`; képes kártya →
+    `pictureCards`), ÉS a tartalma hű: a forrás celláinak / lépéseinek / pontjainak / kártyáinak legalább 80%-a megjelenik, a
     döntési fa leveleinek száma nem kevesebb a forrásénál.
+  - *Spec-pontosítás 2026-11-18 (független review F1–F3, F5–F6) — a hűség SZERKEZET szerint mér*, a megjelenítők megosztott
+    paraméter-szerződéséből (`shared/source-visual-render.ts`), nem a blokk bármely szövegén: a táblázat cellái a megjelenítő
+    celláiban (oszlop szerint igazítva), a folyamat lépései a lépésekben és SORRENDBEN, a döntési fa csomópontjai és ágfeliratai
+    útvonal szerint, a szabálydoboz címe a címben és pontjai a pontokban, a képes kártya feliratával ÉS képével, a képes feladat a
+    képeivel együtt; rész nélküli ábránál az üres blokk nem megjelenés. A felirat, a rejtett paraméter vagy a folyó szöveg nem pótol.
+    Egész cella / egész lépés egyezik (szabad szövegű megjelenítőnél 3+ karakteres szöveg szóhatáron). Az összevetés normalizált
+    (idézőjel, gondolatjel, hárompont, mondatvégi írásjel, szóköz, kis- / nagybetű, NFC); az ékezet nem hajtogatható. Több hivatkozó
+    blokk tartalma összeadódik, egy forrásrész egyszer számít. A leltárban csonkolt (túl hosszú) cella a megjelenített cella
+    elejével egyezik.
   - *Küszöb (kezdőérték, tesztekkel behangolva):* táblázat, folyamat, döntési fa, szabálydoboz: a nem kihagyott tételek **100%-a**;
     képes kártya, feladat, egyéb ábra: **legalább 80%-a**. A színkód nem önálló tétel (a tónusokban él tovább).
   - *Megengedett, indokolt kihagyás:* csak a tervező kifejezett jelölésével (`skippedVisuals: [{ id, reason }]`), zárt oklistából:
     `admin_meta` (iskolai adminisztráció, forrásjegyzék), `answer_key` (megoldókulcs), `duplicate` (a megnevezett, megjelenő tétel
     ismétlése), `decorative` (csak díszítő kép, fogalom-hivatkozás nélkül). A szabályt a program ellenőrzi: tanított fogalomra
     hivatkozó tétel csak `duplicate` okkal hagyható ki; a kihagyások a tételek legfeljebb 30%-a; érvénytelen kihagyás = hiány.
+  - *Spec-pontosítás 2026-11-18 (független review F4):* a kihagyási keret `max(1, ⌊30%⌋)` — kis leltárnál (3 vagy kevesebb tétel)
+    is legalább egy kihagyás megengedett. Az ok FAJTÁNKÉNT megengedett, zárt megfeleltetéssel: táblázat / folyamat / döntési fa /
+    szabálydoboz nem lehet `decorative`; `answer_key` csak feladatnál; `admin_meta` és `duplicate` bármelyiknél, de a `duplicate`
+    csak akkor érvényes, ha megnevezi a másik tételt, és az megjelent. Érvénytelen ok = hiány.
   - *A bukás következménye determinisztikus:* **egyetlen** célzott pótló forduló a hiányzó tételekre; ha a kapu utána is bukik, a
     futás megáll, a lecke nem jelenik meg, a hiányzó azonosítók a job kimenetébe és a tulajdonosnak szóló jelzésbe kerülnek.
     Újabb kör nincs.
@@ -470,8 +483,10 @@ tud dönteni — a tartalmi forráshűség megítélése marad a lektornál):
 - **Adatvédelem:** a hanggyártóhoz csak a tananyag szövege megy; a mérőszkript kimenete (leckecímek, szövegminták) nem kerül a
   repóba; a `telemetry.fixReasons` a lecke tartalmából idéz, tanulói adatot nem.
 - **Kapuk:** leltár nélküli forrás → a fedettségi kapu átmegy (0 / 0); a pótló forduló után is hiányzó tétel → megállás, nem
-  harmadik kör; a futáskeret a modellhívás ELŐTT állít meg (félbehagyott hívás nincs), az állapot folytatható; kapu `report`
-  módban soha nem állít meg, csak mér.
+  harmadik kör; a kapunál megállt job folytatása modellhívás nélkül áll meg újra, ha a kapu a mentett leckén ismét bukik; a
+  PRÓBAKERET (csak a mérőharness próbafutása — D7) a modellhívás ELŐTT állít meg (félbehagyott hívás nincs), az állapot
+  folytatható — éles gyártásban költség miatt nincs megállás; kapu `report` módban soha nem állít meg, csak mér, és a kapu hibája
+  (kivétel) sem állítja meg a gyártást.
 - **Hangtár:** a plafon elérésekor az írás megtagadva, a gyártás megáll; azonos kulcs ismételt írása nem hiba (`exists`); hangverzió
   cseréje új kulcsokat ad, a régi sorok maradnak (törlésük külön, tulajdonosi döntés).
 
