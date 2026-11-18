@@ -52,6 +52,54 @@ A szabály forrása: `AGENTS.md` „Vak hibakereső ellenőr — kötelező” (
   „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc. A megbízás-sablon: `websuli-fejlesztesi-ellenor`
   skill, 3. szakasz.
 
+### A vak ellenőr futtatója — KIZÁRÓLAG ez az ellenőr (tulajdonosi utasítások 2026-11-18)
+
+Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`. Skill: `websuli-vak-ellenor`. Ez a szakasz felülírja a fenti „Anthropic modell is
+lehet” fordulatot: a vak ellenőr minden ügynök-környezetben a futtató, a `scripts/qa/gates/gates.config.json` `blindReview.model`
+modelljével (most `qwen/qwen4-max`, OpenRouter — független, nem Anthropic). Modell-kapcsoló nincs; a csere követett konfigváltozás.
+
+```bash
+npm run gate:blind-review -- --base origin/main --head <teljes fej-hash> --spec docs/specs/<terv>.md \
+  --goal <SCRATCHPAD>/review-<x>/cel.md --out <SCRATCHPAD>/review-<x>/jelentes.md      # --max-usd 2 (alap, legfeljebb 6)
+node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --report <SCRATCHPAD>/review-<x>/jelentes.md
+```
+
+- **Mit csinál:** eldobható munkafát készít a fejről; a modell eszközökkel olvas, keres, `git diff / log / show`-t néz, a fej
+  követett tesztjeit futtatja, saját ellenpróbát ír és futtat; a végén strukturált leletekkel jelentést ad le. A rendszerüzenet a
+  `websuli-fejlesztesi-ellenor` skill 3. szakaszának sablonja (egy forrás). A fejlesztő jelentésének átadására nincs kapcsoló.
+- **Géppel ellenőrzött leletek:** minden lelet fájl:sor hivatkozását és szó szerinti idézetét a futtató a munkafában ellenőrzi; a
+  futtatással igazolt lelet parancsát és kimenet-részletét a saját parancsnaplójából. Nem ellenőrizhető blokkoló / közepes lelettel
+  a jelentés nem adható le. A jelentés végén **Gépi összegzés** áll — az orkesztrátor ezt és a blokkoló / közepes leleteket olvassa.
+- **Biztonság:** nincs héj és nincs szabad parancs (engedélylista); minden útvonal a munkafán belül (útvonal-őr: `..`, abszolút,
+  junction, `.git`, `.env`); a gyerekfolyamatok környezete engedélylistás (kulcs, token, adatbázis-URL nem öröklődik); a modell
+  saját fájljai a Node jogosultsági modelljében futnak (nincs hálózat, gyerekfolyamat, munkafán kívüli fájl); a kulcs és a munkafa
+  abszolút útvonala semmilyen kimenetbe nem kerül. Böngészős és adatbázisos teszt nincs az engedélylistán.
+- **Kulcs:** `OPENROUTER_API_KEY` környezeti változó; vagy a `WEBSULI_SECRETS_ENV` változó / a `<git-common-dir>/websuli-qa-local.json`
+  (`{"secretsEnv": "<.env útvonala>"}`, nem követhető) mutat egy .env fájlra, amelyből a folyamat csak ezt az egy sort olvassa.
+- **Futáskorlátok:** USD-plafon (alap 2, legfeljebb 6; minden hívás ELŐTT az eddigi tényleges költség + a következő hívás becslése),
+  körszám (60), falióra (25 perc), kimenet-plafon, megszakító fájl (`<bizonyíték-tár>/blind-review.stop`) / SIGINT. Plafonnál a
+  jelentés „NEM TELJES” (nem ítélet), a kilépési kód 3.
+- **Prompt-gyorsítótár:** az Alibaba / Qwen végpont explicit töréspontot kér (`cache_control: {"type": "ephemeral"}`, 5 perces
+  élettartam, írás 1,25×, olvasás a végpont árlistája szerint 0,05× — forrás:
+  `https://openrouter.ai/docs/guides/best-practices/prompt-caching.md`, „Alibaba Qwen”; a `qwen/qwen4-max` végpontján mérve működik).
+  A futtató üzenetlistája csak bővül (rögzített rendszerüzenet → rögzített feladatblokk → eszközhívások); töréspont a rögzített
+  blokk végén és a beszélgetés mozgó végén; a költség a válasz `usage` mezőjéből jön (a kedvezménnyel együtt). A találati arány és a
+  megtakarítás a bizonyítékban és a Gépi összegzésben áll.
+- **Bizonyíték:** `<git-common-dir>/websuli-qa-evidence/blind-review-<fej>.json` — a VÁLASZBÓL visszaolvasott modell, az OpenRouter
+  válasz-azonosítói, a jelentés sha256-a, hívásonkénti tokenek (gyorsítótárral), költség, eszközhívások fajtánként, a leletek
+  igazoltsága. A `record-review.mjs` csak ezzel egyező jelentést rögzít (`reviewer: "blind-review"`); a kapuk csak ilyen ítéletet
+  fogadnak el. A PR-leírás ítélet-sora önmagában nem bizonyíték.
+- **Átállás:** `blindReview.requiredFrom` (2026-11-19 00:00, Europe/Budapest). Az ez előtt rögzített ítéletek érvényesek maradnak;
+  utána más forrású ítélet érvénytelen.
+- **Ha a futtató nem tud lefutni** (kulcs, OpenRouter, plafon): megáll, nem nulla kóddal — „a vak ellenőr nem futott; a tulajdonos
+  dönt”. Csendes tartalék nincs; a tulajdonos döntése követett konfigváltozás (`blindReview.mode` / `model` / `requiredFrom`).
+- **Nincs CI-bekötés** (külön szelet): kell hozzá az `OPENROUTER_API_KEY` GitHub-titok és költési keret a kulcson (tulajdonosi
+  teendő), egy workflow-job a PR fejére (fork-PR-ra nem), és a `pr-verdict-check.mjs` összekötése a bizonyítékkal.
+
+#### Mért alapvonal (2026-11-18) — két fej, amelyen egy Anthropic vak ellenőr valódi hibákat talált
+
+ALAPVONAL_TABLA
+
 ### Tiltott minták (a diff hozzáadott soraiban, `FAIL`, érték kiírása nélkül)
 
 `.only(` / `.skip(` / `fixme(` / `xit(` / `{ only: true }` tesztfájlban; `git … --no-verify` szkriptben (`scripts/`, `*.sh`,

@@ -8,7 +8,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { VERDICTS, argValue, isMain, makeContext, verdictLine, writeEvidence } from './lib.mjs';
+import { BLIND_REVIEWER, VERDICTS, argValue, blindRequired, isMain, makeContext, readEvidence, verdictLine, writeEvidence } from './lib.mjs';
+import { checkBlindEvidence, evidenceName } from './blind-review/evidence.mjs';
 
 /** Az ítélet normalizálása (ASCII-alak is elfogadott: IGEN-FELTETELLEL). */
 export function normalizeVerdict(v) {
@@ -48,7 +49,7 @@ export function missingSections(text) {
 /**
  * @returns {{ ok: true, record: object, line: string } | { ok: false, error: string }}
  */
-export function buildRecord({ head, verdict, report, resolveHead, readReport, now = () => new Date() }) {
+export function buildRecord({ head, verdict, report, resolveHead, readReport, now = () => new Date(), blind = null }) {
   const v = normalizeVerdict(verdict);
   if (!v) return { ok: false, error: `ismeretlen ítélet: „${verdict}” — elfogadott: ${VERDICTS.join(' | ')}` };
   if (!head || !/^[0-9a-f]{7,40}$/i.test(head)) return { ok: false, error: 'a --head 7–40 jegyű commit-hash legyen' };
@@ -68,11 +69,16 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, no
   if (!full.toLowerCase().startsWith(rh)) return { ok: false, error: `a jelentés utolsó „Fej:” sora (${rh}) nem a rögzítendő fejre (${full.slice(0, 12)}) szól` };
   const miss = missingSections(text);
   if (miss.length) return { ok: false, error: `a jelentésből hiányzik a kötelező szakasz: ${miss.map((m) => `„${m}”`).join(', ')} (vak, hibakereső ellenőr — websuli-fejlesztesi-ellenor skill)` };
-  return {
-    ok: true,
-    record: { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() },
-    line: verdictLine(v, full),
-  };
+  const record = { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() };
+  // K1 (docs/specs/2026-11-18-vak-ellenor-deepseek.md): `required` módban az ítélet CSAK a vak ellenőr futtatójának bizonyítékával
+  // rögzíthető (a konfigurált modell készítette, a jelentés nem változott, az ellenőr valóban vizsgált). Felmentő kapcsoló nincs.
+  if (blind && blindRequired(blind.cfg)) {
+    const b = checkBlindEvidence({ evidence: blind.readEvidence(full), head: full, reportSha256: record.reportSha256, verdict: v, cfg: blind.cfg });
+    if (!b.ok) return { ok: false, error: b.error };
+    record.reviewer = BLIND_REVIEWER;
+    record.blind = b.summary;
+  }
+  return { ok: true, record, line: verdictLine(v, full) };
 }
 
 function main() {
@@ -87,6 +93,7 @@ function main() {
       return r.code === 0 ? r.stdout.trim() : null;
     },
     readReport: (p) => (existsSync(p) ? readFileSync(p, 'utf8') : null),
+    blind: { cfg: ctx.cfg.blindReview, readEvidence: (full) => readEvidence(ctx.evDir, evidenceName(full)) },
   });
   if (!res.ok) { process.stderr.write(`[record-review] HIBA: ${res.error}\n`); process.exit(1); }
   writeEvidence(ctx.evDir, `review-${res.record.head}`, res.record);

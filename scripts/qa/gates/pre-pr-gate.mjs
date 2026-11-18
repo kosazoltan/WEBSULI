@@ -130,7 +130,7 @@ async function main() {
   });
 
   await gate.step('független ellenőr ítélete a fejre', () => verdictResult(
-    resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head));
+    resolveVerdict({ head, blind: ctx.cfg.blindReview, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head));
 
   // 2) A push előtti kapu minden lépése.
   const { changed } = await runPrePushSteps({ gate, ctx, slice: args.includes('--slice') });

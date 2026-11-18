@@ -80,3 +80,5 @@ szerint.
 A felhőben futó Codex-feladat is a AGENTS.md „Vak hibakereső ellenőr — kötelező” szakasz szerint jár el: a fejlesztő feladat nem ellenőrizheti saját magát. Mivel ott nincs
 alügynök, az ellenőrzés új, tiszta Codex-feladat (vagy másik eszköz), amely CSAK a tervet (tulajdonosi célt) és a diffet / fejet
 kapja, a `websuli-fejlesztesi-ellenor` skill megbízás-sablonjával; a jelentést a `node scripts/qa/gates/record-review.mjs` rögzíti.
+
+A vak ellenőr KIZÁRÓLAG a futtató: `npm run gate:blind-review` (a `gates.config.json` `blindReview.model` modelljével — független, nem Anthropic). Alügynökkel vagy kézzel írt jelentés NEM érvényes ítélet; ha a futtató nem tud lefutni: a vak ellenőr nem futott, a tulajdonos dönt (skill: `websuli-vak-ellenor`). A felhőben a futtatóhoz az `OPENROUTER_API_KEY` titok kell (a környezet titkai közé — tulajdonosi teendő); nélküle a futtató megáll, és a kapu nem enged át.

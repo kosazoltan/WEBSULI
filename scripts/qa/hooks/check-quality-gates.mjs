@@ -393,7 +393,7 @@ export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '', run
       const ev = readEv(info.evDir, `pre-pr-${sha}`);
       if (ev?.ok === true) return null;
       const why = ev ? `az utolsó futás BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték';
-      return `A PR előtti kapu nem zöld a ${sha.slice(0, 12)} fejre (${why}). Előbb a független ellenőr (websuli-fejlesztesi-ellenor skill), aztán: npm run gate:pr -- --body-file <PR-leírás.md>.`;
+      return `A PR előtti kapu nem zöld a ${sha.slice(0, 12)} fejre (${why}). Előbb a vak ellenőr futtatója (websuli-vak-ellenor skill: npm run gate:blind-review -- --base <ref> --head <fej> --spec <terv.md> --goal <cél.md> --out <jelentés.md>, majd record-review), aztán: npm run gate:pr -- --body-file <PR-leírás.md>.`;
     }
   } catch (e) {
     if (e instanceof NoAnswerError) throw e;

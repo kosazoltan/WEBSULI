@@ -288,3 +288,69 @@ A `check-quality-gates` hook és a `verdictResult` üzenete ítélet hiányában
 - [ ] B18 WHEN bármely felsorolt vezérlőfájlból vagy kapu-skillből hiányzik a `gate:blind-review` hivatkozás THEN az őr-teszt SHALL
   bukni; a `websuli-vak-ellenor` skill tükre bájtra azonos.
 - [ ] B19 WHEN ítélet hiányzik THEN a hook és a kapu üzenete SHALL a `npm run gate:blind-review` parancsot megnevezni.
+
+## 2. kiegészítés — modellcsere (Qwen4 Max) és géppel ellenőrzött leletek (2026-11-18)
+
+Tulajdonosi utasítás (2026-11-18, szó szerint):
+
+> „Qwen 4 Max modellekre állítsd át a DeepSeek Flash modelljét, mert az megint kontextus-pazarló, ha az ő összes jelentését neked
+> ellenőrizned kell. Olcsóbban jövünk ki egy autonóm módon is megbízhatóan működő ellenőrrel.”
+
+Ez a kiegészítés FELÜLÍRJA a fenti szöveg modellre és költségplafonra vonatkozó részeit. A terv fájlneve (`…-deepseek`) és az ág
+neve történeti okból marad; ahol a fenti szöveg „DeepSeek”-et ír, ott a konfigurált modell értendő.
+
+### M1 — Modell
+
+`gates.config.json` `blindReview.model`: `qwen/qwen4-max` (OpenRouter; a nyilvános lista szerint 1 000 000 token kontextus,
+eszközhívás, 1,425 USD / millió bemeneti és 4,275 USD / millió kimeneti token). Az elv változatlan: független (nem Anthropic),
+kizárólagos, egyetlen helyen konfigurált modell; modell-kapcsoló nincs; a bizonyíték a VÁLASZBÓL visszaolvasott modellt ellenőrzi.
+Az őr-teszt: a modell nem Anthropic-modell, a végpont az OpenRouter, a futtató kódjában nincs modell-literál és modell-kapcsoló.
+
+### M2 — Költségplafon
+
+Alapérték futásonként 2 USD, kemény felső határ 6 USD (`maxUsdDefault`, `maxUsdHardCap`). Indoklás (mért token-számból): a
+futtató bejáratása az olcsó modellel egy ~840 soros diffen — lásd a runbook „Mért alapvonal” táblázatát; a jellemző futás
+néhány százezer–millió bemeneti token (a teljes előzmény minden körben újra elmegy) és néhány tízezer kimeneti token. A Qwen
+árán 1 000 000 bemeneti + 30 000 kimeneti token ≈ 1,43 + 0,13 = 1,56 USD — ezért 2 USD az alap; a nagy (2 000+ soros) diffre a
+6 USD-os felső határig emelhető. A költség a válasz `usage` mezőjéből számolódik; a konfig árai csak a hívás ELŐTTI becsléshez
+kellenek.
+
+### M3 — Autonóm, géppel ellenőrzött leletek
+
+Cél: az orkesztrátornak NE kelljen a jelentést sorról sorra ellenőriznie. Ezért a `submit_report` eszköz a jelentés mellett
+strukturált lelet-listát kér, és a futtató minden leletet gépileg visszaellenőriz:
+
+- **Lelet:** `id` (pl. `L1`), `severity` (`blokkoló` | `közepes` | `kicsi`), `title`, `file`, `line`, `quote` (a hivatkozott
+  kódrészlet szó szerint), és opcionálisan `run` (`argv` + `output_excerpt`) a futtatással igazolt leletnél.
+- **Hivatkozás-ellenőrzés:** a fájl létezik a munkafában, a sor létezik, és az idézet (szóköz-normalizálva, legalább 8 karakter)
+  a megadott sor ±3 soros környezetében valóban ott van → „igazolt hivatkozás”.
+- **Futtatás-ellenőrzés:** a `run.argv` egyezik a futtató SAJÁT naplójában egy ténylegesen végrehajtott `run_command` hívással, és
+  az `output_excerpt` (szóköz-normalizálva, legalább 8 karakter) szerepel annak a hívásnak a kimenetében → „futtatással igazolt”.
+  Az ellenőr nem hivatkozhat olyan futásra, amit nem végzett el.
+- **Érvényesség:** a jelentés csak akkor fogadható el, ha minden BLOKKOLÓ és KÖZEPES lelet hivatkozása visszaellenőrizhető, a
+  megadott `run` bizonyíték (ha van) igazolt, a jelentés szövege minden lelet-azonosítót tartalmaz, és az ítélet összhangban van a
+  leletekkel (blokkoló lelet mellett csak NEM; NEM ítélethez kell legalább egy blokkoló lelet). Különben az eszköz elutasítja a
+  leadást a hibák felsorolásával (a modell javíthat); ha a keret így fogy el: NEM TELJES.
+- **Gépi összegzés:** a futtató a jelentés VÉGÉRE táblázatot fűz: leletek súlyosság szerint, ebből igazolt hivatkozású /
+  futtatással igazolt, és külön az érvénytelen (nem visszaellenőrizhető — csak „kicsi” lehet) leletek. A bizonyíték-JSON
+  ugyanezt számokkal tartalmazza (`findings`). Az orkesztrátor csak az összegzést és a blokkoló / közepes leleteket olvassa.
+- Maradék kockázat: a géppel ellenőrzött hivatkozás azt igazolja, hogy a lelet VALÓDI kódra mutat és a futás megtörtént — azt nem,
+  hogy a következtetés helyes. A mért alapvonal mutatja, mekkora a téves leletek aránya.
+
+### M4 — Mérés
+
+Az alapvonal-mérés (két ismert hibás fej) a Qwen4 Max modellel fut; teljes keret 8 USD. A futtató bejáratása az olcsó
+DeepSeek-modellel történt — annak eredménye összehasonlításként a táblázatban marad.
+
+### Elfogadás — 2. kiegészítés
+
+- [ ] B12 / B17 (módosítva) WHEN a konfig modellje Anthropic-modell, a végpont nem az OpenRouter, vagy a futtató kódjában
+  modell-literál / modell-kapcsoló jelenik meg THEN az őr-teszt SHALL bukni; a konfigurált modell `qwen/qwen4-max`.
+- [ ] B8 (módosítva) a `--max-usd` alapértéke 2, kemény felső határa 6.
+- [ ] B20 WHEN egy blokkoló / közepes lelet fájlja vagy sora nem létezik, vagy az idézet nincs a megadott helyen THEN a
+  `submit_report` SHALL elutasítani a leadást.
+- [ ] B21 WHEN egy lelet `run` bizonyítéka olyan parancsra hivatkozik, amelyet az ellenőr nem futtatott, vagy a kimenet-részlet
+  nincs a naplózott kimenetben THEN SHALL elutasítani.
+- [ ] B22 WHEN az ítélet IGEN / IGEN, FELTÉTELLEL, de van blokkoló lelet (vagy NEM blokkoló lelet nélkül) THEN SHALL elutasítani.
+- [ ] B23 WHEN a jelentés elfogadott THEN a futtató SHALL gépi összegzést fűzni a végére, és a bizonyítékba írni a leletek számát
+  súlyosság és igazoltság szerint.

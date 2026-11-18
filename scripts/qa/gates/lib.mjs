@@ -259,24 +259,58 @@ export function verdictLine(verdict, head) {
 /**
  * Az aktuális fejre szóló ítélet: előbb a helyi bizonyíték (`review-<fej>.json`), aztán a PR-szövegek (leírás, kommentek)
  * `Független ellenőr ítélete: … (fej: <hash>)` sora — a hash (≥ 7 jegy) a fej előtagja kell legyen; több találatnál az utolsó.
- * @returns {{ verdict: string, source: string } | null}
+ * `blind` (a konfig `blindReview` szakasza) `required` módban: CSAK a futtató által igazolt helyi bizonyíték érvényes; a PR-szöveg
+ * sora önmagában nem elég (`{ verdict: null, invalid }`) — docs/specs/2026-11-18-vak-ellenor-deepseek.md, K1.
+ * @returns {{ verdict: string|null, source: string, invalid?: string } | null}
  */
-export function resolveVerdict({ head, evidence, texts = [] }) {
-  if (evidence && evidence.head === head && VERDICTS.includes(evidence.verdict)) return { verdict: evidence.verdict, source: 'helyi bizonyíték (record-review)' };
+export function resolveVerdict({ head, evidence, texts = [], blind = null }) {
+  if (evidence && evidence.head === head && VERDICTS.includes(evidence.verdict)) {
+    const acc = acceptRecordedReview(evidence, blind);
+    if (!acc.ok) return { verdict: null, source: 'helyi bizonyíték (record-review)', invalid: acc.why };
+    return { verdict: evidence.verdict, source: acc.legacy ? 'helyi bizonyíték (az átállás előtt rögzítve)' : 'helyi bizonyíték (record-review)' };
+  }
   let found = null;
   for (const [i, t] of texts.entries()) {
     for (const m of String(t ?? '').matchAll(VERDICT_LINE)) {
       if (head.toLowerCase().startsWith(m[2].toLowerCase())) found = { verdict: m[1].toUpperCase(), source: i === 0 ? 'PR-leírás' : 'PR-komment' };
     }
   }
+  if (found && blindRequired(blind)) {
+    return { verdict: null, source: found.source, invalid: `a ${found.source} ítélet-sora önmagában nem bizonyíték — a vak ellenőr futtatójának helyi bizonyítéka kell` };
+  }
   return found;
+}
+
+// ---- A vak ellenőr kizárólagossága (docs/specs/2026-11-18-vak-ellenor-deepseek.md, K1) -------------------------------------------
+
+export const BLIND_REVIEWER = 'blind-review';
+export const BLIND_REVIEW_CMD = 'npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>';
+export const BLIND_NOT_RUN = 'a vak ellenőr nem futott; a tulajdonos dönt';
+
+/** A vak ellenőr futtatója kötelező-e (gates.config.json `blindReview.mode`)? */
+export function blindRequired(cfg) {
+  return Boolean(cfg) && cfg.mode === 'required';
+}
+
+/**
+ * Egy rögzített ítélet (`review-<fej>.json`) elfogadható-e? `required` módban csak a futtató által igazolt, a konfigurált
+ * modelltől származó ítélet, vagy az átállás (`requiredFrom`) ELŐTT rögzített rekord. Más forrás érvénytelen — nincs tartalék.
+ */
+export function acceptRecordedReview(record, cfg) {
+  if (!blindRequired(cfg)) return { ok: true };
+  if (record?.reviewer === BLIND_REVIEWER && record.blind?.model === cfg.model) return { ok: true };
+  const from = Date.parse(cfg.requiredFrom ?? '');
+  const at = Date.parse(record?.at ?? '');
+  if (Number.isFinite(from) && Number.isFinite(at) && at < from) return { ok: true, legacy: true };
+  return { ok: false, why: `a rögzített ítéletet nem a vak ellenőr futtatója (${cfg.model}) készítette` };
 }
 
 /** Az ítélet lépés-eredménye. */
 export function verdictResult(v, head) {
-  const how = `node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict IGEN --report <jelentés.md>`;
-  if (!v) return { status: STATUS.FAIL, note: `nincs független ellenőr-ítélet a ${head.slice(0, 12)} fejre — futtasd a websuli-fejlesztesi-ellenor skill szerint, majd: ${how}` };
-  if (v.verdict === 'NEM') return { status: STATUS.FAIL, note: `a független ellenőr ítélete NEM (${v.source}) — javítsd a blokkoló leleteket, és kérj visszaellenőrzést ugyanattól az ellenőrtől` };
+  const how = `futtasd a vak ellenőrt (websuli-vak-ellenor skill): ${BLIND_REVIEW_CMD.replace('<teljes fej-hash>', head)} — majd: node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict <ítélet> --report <jelentés.md>`;
+  if (!v) return { status: STATUS.FAIL, note: `nincs független ellenőr-ítélet a ${head.slice(0, 12)} fejre — ${how}` };
+  if (v.invalid) return { status: STATUS.FAIL, note: `érvénytelen ítélet a ${head.slice(0, 12)} fejre: ${v.invalid} — ${how}. Ha a futtató nem tud lefutni: ${BLIND_NOT_RUN}.` };
+  if (v.verdict === 'NEM') return { status: STATUS.FAIL, note: `a független ellenőr ítélete NEM (${v.source}) — javítsd a blokkoló leleteket, és futtasd újra a vak ellenőrt az új fejre` };
   if (v.verdict === 'IGEN, FELTÉTELLEL') return { status: STATUS.WARN, note: `IGEN, FELTÉTELLEL (${v.source}) — a feltételek jegyre / a PR-leírásba kerüljenek` };
   return { status: STATUS.PASS, note: `IGEN (${v.source})` };
 }

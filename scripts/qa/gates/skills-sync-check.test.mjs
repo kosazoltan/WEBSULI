@@ -30,9 +30,11 @@ test('checkSkills: frontmatter nélküli forrás → hiba', () => {
   assert.match(checkSkills({ root, names: ['x'] })[0].problem, /frontmatter/);
 });
 
-test('a repó öt minőségkapu-skillje mindkét helyen azonos (a valódi fájlokon)', () => {
+test('a repó hat minőségkapu-skillje mindkét helyen azonos (a valódi fájlokon)', () => {
   const root = resolve(GATES_DIR, '..', '..', '..');
   const names = loadConfig().mirroredSkills;
-  assert.equal(names.length, 5);
+  // K3 (docs/specs/2026-11-18-vak-ellenor-deepseek.md): a hatodik a websuli-vak-ellenor.
+  assert.equal(names.length, 6);
+  assert.ok(names.includes('websuli-vak-ellenor'));
   assert.deepEqual(checkSkills({ root, names }).filter((r) => r.problem), []);
 });

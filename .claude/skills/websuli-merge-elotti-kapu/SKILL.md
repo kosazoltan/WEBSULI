@@ -26,8 +26,9 @@ A `gh pr merge --auto` tilos (a hook megtagadja): az összevonás később, fut�
    (`*-guard.test.ts`, `scripts/qa/**`, `.github/workflows/**`), a kapu a main elmozdulásának fájllistáját (GitHub compare) a
    `gates.config.json` `repoWideScopes` táblázatával veti össze: bukás „előbb olvaszd be a maint” (C-61), ha a main az ellenőrzés által
    olvasott fájlt változtatott, vagy a lista nem olvasható / csonka / üres; egyébként figyelmeztetés. Részletek: `docs/minosegkapuk.md`.
-5. A független ellenőr ítélete a JELENLEGI fejre IGEN / IGEN, FELTÉTELLEL (helyi `review-<fej>.json`, vagy a PR-leírás / komment
-   `Független ellenőr ítélete: … (fej: <hash>)` sora).
+5. A vak ellenőr ítélete a JELENLEGI fejre IGEN / IGEN, FELTÉTELLEL: a helyi `review-<fej>.json`, amelyet a futtató
+   (`npm run gate:blind-review`, `websuli-vak-ellenor` skill) bizonyítéka igazol. A PR-leírás / komment ítélet-sora önmagában nem elég;
+   az átállás (`blindReview.requiredFrom`) előtt rögzített ítélet érvényes marad.
 6. Futásőr: `bash scripts/qa/active-runs-guard.sh` kilépési kódja 0 (1 = aktív gyártás → ne vonj össze; 2 = hiba → vakon tilos).
 7. `source/` változás → „TELEPÍTÉST INDÍT” jelzés.
 8. `GET https://websuli.vip/api/rt/status`: `mode = off`, vagy `activeMatches = 0`; hálózati hiba = bukás.

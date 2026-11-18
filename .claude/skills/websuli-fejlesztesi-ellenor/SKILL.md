@@ -10,6 +10,13 @@ munkát, hogy a hibák ne utólag derüljenek ki. Mért ok: a 2026-11-16/17-i j�
 UTÁN talált blokkoló hibát; minden ilyen kör 1–1,5 óra CI + egy újabb review-kör volt
 (`docs/handoffs/2026-11-17-jatekok-utomunka-retro.md`, `docs/agent-csapdak.md` C-61…C-72). Runbook: `docs/minosegkapuk.md`.
 
+## 0. Ki az ellenőr — KIZÁRÓLAG a futtató (tulajdonosi utasítás 2026-11-18)
+
+A vak ellenőrt nem alügynök és nem új munkamenet végzi, hanem a futtató: `npm run gate:blind-review` (skill: `websuli-vak-ellenor`
+— a parancs, a `--goal` fájl sablonja, teendők az ítélet szerint és ha a futtató megáll). A futtató a `gates.config.json`
+`blindReview.model` modelljével dolgozik (független, nem Anthropic), és ENNEK a skillnek a 3. szakaszában álló megbízás-sablont
+olvassa be rendszerüzenetnek — a sablon egyetlen forrása ez a fájl. Más úton készült jelentést a `record-review.mjs` nem rögzít.
+
 ## 1. Mikor kötelező
 
 - Minden fejlesztés / javítás elkészültekor, a PR megnyitása ELŐTT (a `pre-pr-gate` és a `gh pr create` hook ítélet nélkül nem enged).
@@ -90,6 +97,9 @@ Fej: <teljes fej-hash>
 
 ### 3/b. Ha nincs alügynök-eszköz (pl. egyes Codex / Cursor / Gemini futások)
 
+**FELÜLÍRVA (2026-11-18):** alügynök-eszközre nincs szükség — minden környezetben a futtató az ellenőr (`npm run gate:blind-review`,
+0. szakasz). Az alábbi lépések csak a történeti leírás; ítéletet a futtató bizonyítéka nélkül a `record-review.mjs` nem rögzít.
+
 1. Nyiss új, tiszta munkamenetet / feladatot (vagy másik eszközt) — NE a fejlesztés beszélgetését folytasd.
 2. Add át CSAK: a fenti sablont kitöltve, a terv útvonalát (vagy a tulajdonosi cél idézetét), az ágat és a teljes fej-hash-t. A
    fejlesztés összefoglalóját, a „zöld” állításokat és a saját véleményedet NE.
@@ -153,6 +163,8 @@ node scripts/qa/gates/record-review.mjs --head <fej-hash> --verdict IGEN --repor
 # --verdict: IGEN | "IGEN, FELTÉTELLEL" | NEM
 ```
 
+- A szkript csak a futtató (`npm run gate:blind-review`) bizonyítékával igazolt jelentést rögzít (a konfigurált modell készítette, a
+  jelentés nem változott, az ellenőr valóban vizsgált) — kézzel írt vagy alügynöktől származó jelentést nem.
 - A szkript csak teljes jelentést fogad el: `Fej:` sor a rögzítendő fejre, `Ítélet:` sor, és a „Mit próbáltam megtörni, és nem
   sikerült” és a „Mit NEM vizsgáltam” fejléc — különben hibával kilép, bizonyíték nélkül.
 - A bizonyíték: `<git-common-dir>/websuli-qa-evidence/review-<fej>.json` (helyi, nem commitolható; munkafából is látszik).

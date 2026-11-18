@@ -174,7 +174,19 @@ Ez a szabály MINDEN ügynök-környezetre érvényes (Claude Code, Codex — he
    ellenőrzi, és csak teljes jelentésből rögzít ítéletet.
 7. **Visszanézésnél is hibakeresés** a keret (vakon: csak az új fej és a diff), nem a korábbi leletek kipipálása.
 
-Kész megbízás-sablon és indítási leírás (alügynökkel és alügynök-eszköz nélkül): `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
+8. **Ki az ellenőr — KIZÁRÓLAG a futtató** (tulajdonosi utasítások 2026-11-18: „a független vak ellenőr […] valóban teljesen
+   független és olcsó modell [legyen]”; „valóban kizárólag [ez az] ellenőr modell fusson minden esetben”; cél: „autonóm módon is
+   megbízhatóan működő ellenőr”). Ez FELÜLÍRJA a 2. pont „alügynök / új munkamenet” fordulatát és az idézet „Lehet Anthropic modell”
+   részét: a vak ellenőrt minden ügynök-környezetben ugyanaz a parancs futtatja —
+   `npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>` —,
+   a `scripts/qa/gates/gates.config.json` `blindReview.model` modelljével (független, NEM Anthropic-modell; modell-kapcsoló nincs,
+   a csere követett konfigváltozás és tulajdonosi döntés). A futtató eldobható munkafában dolgozik, a leleteket (fájl:sor, idézet,
+   futtatás) géppel visszaellenőrzi, és bizonyítékot ír; a `record-review.mjs` és a kapuk CSAK ezt fogadják el. Anthropic-alügynök,
+   kézzel írt vagy utólag szerkesztett jelentés, más modell ítélete ÉRVÉNYTELEN — csendes tartalék nincs. Ha a futtató nem tud
+   lefutni (kulcs, OpenRouter, költségplafon): **a vak ellenőr nem futott; a tulajdonos dönt** — a kapu áll. A fejlesztő /
+   orkesztrátor a saját jelentését, állításait nem adhatja át (a futtatónak erre nincs kapcsolója; a `--goal` fájlba sem).
+
+A futtatás leírása: `.agents/skills/websuli-vak-ellenor/SKILL.md`. A megbízás-sablon (a futtató rendszerüzenetének forrása): `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
 Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md). A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja
 felül.
 
@@ -187,7 +199,8 @@ felül.
 2. **Szakasz-kapu minden fejlesztési szakasz után:** `npm run gate:stage` (lint gyors mód + a változott fájlok egységtesztjei + minden
    őr-teszt). Csak zöld után lehet továbblépni; előbb a helyi hibát kell javítani.
 3. **Független ellenőr — VAK és HIBAKERESŐ:** a „Vak hibakereső ellenőr — kötelező” szakasz szerint (fent), a PR megnyitása ELŐTT
-   és minden érdemi javító push előtt; az ítéletet a `record-review.mjs` rögzíti (a hiányos jelentést elutasítja).
+   és minden érdemi javító push előtt — KIZÁRÓLAG a futtatóval (`npm run gate:blind-review`); az ítéletet a `record-review.mjs` rögzíti
+   (hiányos jelentést és a futtató bizonyítéka nélküli ítéletet elutasít).
 4. **A kapuk sorrendje:** `gate:stage` (szakaszonként) → `gate:push` → független ellenőr + `record-review` →
    `gate:pr -- --body-file <leírás.md>` → push + PR → zöld CI → közvetlenül a merge előtt `gate:merge -- <PR>`. A `git push`,
    `gh pr create` és `gh pr merge` előtt a `check-quality-gates` hook a zöld bizonyítékot ellenőrzi.
@@ -195,7 +208,7 @@ felül.
 6. **API-költség elve:** előbb az olcsó helyi ellenőrzés; a független ellenőr (és a CI) csak zöld helyi kapuk után indul — ne a
    drága kör fogja meg az olcsó hibát.
 
-Skillek (`.agents/skills/` forrás, `.claude/skills/` tükör): `websuli-lint-ellenor`, `websuli-fejlesztesi-ellenor`,
+Skillek (`.agents/skills/` forrás, `.claude/skills/` tükör): `websuli-lint-ellenor`, `websuli-fejlesztesi-ellenor`, `websuli-vak-ellenor`,
 `websuli-push-elotti-kapu`, `websuli-pr-elotti-kapu`, `websuli-merge-elotti-kapu`. Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md).
 A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 
