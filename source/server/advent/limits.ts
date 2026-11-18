@@ -28,15 +28,38 @@ export const ADVENT_LIMITS: AdventLimits = {
  */
 export function createWindowCounter(rule: AdventLimit, now: () => number = Date.now) {
   const events = new Map<string, number[]>();
+  let sweptAt = now();
   const live = (key: string): number[] => {
     const cutoff = now() - rule.windowMs;
     const kept = (events.get(key) ?? []).filter((t) => t > cutoff);
     if (kept.length) events.set(key, kept); else events.delete(key);
     return kept;
   };
+  /** Ablakonként egyszer MINDEN kulcs lejárt eseménye kikerül — a többé nem kérdezett kulcs sem marad meg (review U2). */
+  const sweep = (): void => {
+    if (now() - sweptAt < rule.windowMs) return;
+    sweptAt = now();
+    for (const key of [...events.keys()]) live(key);
+  };
+  const hit = (key: string): number => { sweep(); const at = now(); events.set(key, [...live(key), at]); return at; };
   return {
     full: (key: string): boolean => live(key).length >= rule.limit,
-    hit: (key: string): void => { events.set(key, [...live(key), now()]); },
+    hit: (key: string): void => { hit(key); },
     count: (key: string): number => live(key).length,
+    /**
+     * Hely FOGLALÁSA egy lépésben (ellenőrzés + rögzítés, közte nincs várakozás): `null`, ha a keret betelt, különben a foglalás
+     * jegye. Párhuzamos kéréseknél így a keret nem léphető túl (review U1).
+     */
+    reserve: (key: string): number | null => (live(key).length >= rule.limit ? null : hit(key)),
+    /** A foglalás visszaadása, ha végül nem jött létre, amit védett. */
+    release: (key: string, ticket: number): void => {
+      const list = events.get(key);
+      const index = list ? list.indexOf(ticket) : -1;
+      if (!list || index < 0) return;
+      list.splice(index, 1);
+      if (!list.length) events.delete(key);
+    },
+    /** A nyilvántartott kulcsok száma (teszthez és megfigyeléshez). */
+    size: (): number => events.size,
   };
 }
