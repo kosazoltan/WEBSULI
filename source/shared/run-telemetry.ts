@@ -31,6 +31,13 @@ export type RunGates = {
   /** A szókeret-túllépés rövidítő fordulója elfogadott, rövidebb leckét adott (J5). */
   lengthShortened: boolean;
 };
+/**
+ * Spec 2026-11-18-tananyag-gyartas-minoseg (SK szelet): egy determinisztikus gyártási kapu mentett eredménye. `mode`: a kapu üzemmódja
+ * a futásban (`report` — csak mér; `enforce` — bukásnál megállít). A szövegek és a listák vágva kerülnek a telemetriába.
+ */
+export type RunGateResult = { gate: string; mode: string; ok: boolean; problems: string[]; metrics: Record<string, number>; missingIds?: string[] };
+export const RUN_GATE_RESULT_LIMITS = { results: 20, problems: 20, problemChars: 200, missingIds: 60 } as const;
+
 export type RunTelemetry = {
   version: 1;
   model: string;
@@ -41,6 +48,8 @@ export type RunTelemetry = {
   stations: Record<string, StationTelemetry>;
   fresh: { calls: number; input: number; cached: number; output: number };
   gates: RunGates;
+  /** A determinisztikus gyártási kapuk eredményei futási sorrendben (SK1: forrás-fedettség). Régi telemetriában hiányzik. */
+  gateResults?: RunGateResult[];
 };
 
 /** A mentett telemetria biztonságos kiolvasása (régi jobnál nincs). */
@@ -67,6 +76,7 @@ export function telemetryView(t: RunTelemetry): TelemetryView {
   const turns = all.reduce((s, x) => s + x.turns, 0);
   const pct = (c: number, i: number) => (i > 0 ? `${Math.round((100 * c) / i)}%` : "—");
   const g = t.gates;
+  const sourceCoverage = (t.gateResults ?? []).filter((r) => r.gate === "sourceCoverage").at(-1);
   return {
     summary: `${t.model}${t.fallback ? " (tartalékváltással)" : ""} · ${seconds(t.totalMs)} · ${turns} forduló (${t.fresh.calls} friss) · bemenet ${tokens(input)} (${pct(cached, input)} gyorsítótárból) · kimenet ${tokens(output)}`,
     rows: Object.entries(t.stations).map(([station, s]) => ({
@@ -84,6 +94,7 @@ export function telemetryView(t: RunTelemetry): TelemetryView {
       ...(g.visualsConceptRefsRemoved ? [`A vizuális leltárból törölt, nem létező fogalom-hivatkozás: ${g.visualsConceptRefsRemoved}`] : []),
       ...(g.visualsCellsTruncated ? [`A vizuális leltár csonkolt (túl hosszú) cellái: ${g.visualsCellsTruncated}`] : []),
       ...(g.visualsMissing ? ["A forrás-állomás válaszából hiányzott a vizuális leltár"] : []),
+      ...(sourceCoverage && sourceCoverage.metrics.total ? [`Forrás-fedettség (${sourceCoverage.mode === "enforce" ? "éles kapu" : "csak mérés"}): ${sourceCoverage.metrics.shown}/${sourceCoverage.metrics.total - sourceCoverage.metrics.skipped} vizuális tétel jelent meg${sourceCoverage.ok ? "" : " — a kapu szerint hiányos"}`] : []),
       ...(g.lengthShortened ? ["A szókeret-túllépés rövidítő fordulóval javítva"] : []),
       ...(g.lengthOverBudget ? ["A Tananyag lap a szókeret fölött maradt"] : []),
     ],

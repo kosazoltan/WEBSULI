@@ -44,6 +44,8 @@ import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock,
 import { catalogVerbatimPaths, type CatalogPool } from "../../catalog/retrieval";
 import { isMemorySnapshot, memorySnapshot, snapshotPromptBlock, subjectMemoryEnabled, type MemorySnapshot } from "../../memory/subject-memory";
 import { subjectKeyOf } from "../../../shared/subject-key";
+import { gateMode, type GateMode, type GateName } from "../gates/config";
+import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { cleanModelText, sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual, type SourceVisualsResult } from "../../../shared/source-visuals";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
@@ -110,6 +112,8 @@ export type SingleRunDeps = {
    * szerzői munka (terv, tananyag, ábra, lektori javítás) a fő beszélgetésben marad.
    */
   fresh(system: string, opts?: { effort?: SingleRunEffort }): LessonConversation;
+  /** A gyártási kapuk üzemmódjának futásonkénti felülírása (teszt, mérőharness); alapból a `gates/config.ts` értékei érvényesek. */
+  gateModes?: Partial<Record<GateName, GateMode>>;
 };
 
 /**
@@ -915,30 +919,95 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   if (choice.removed.length) { lesson = choice.lesson; warnings.push(`A végkapu kivette: ${choice.removed.join(", ")}`); }
   const final = lessonSchema.safeParse(lesson);
   if (!final.success) throw new SingleRunError("végellenőrzés", final.error.issues.slice(0, 20).map((i) => `${i.path.join(".")}: ${i.message}`));
-  const coverage = checkCoverageGate(final.data, concepts);
-  const skill = verifyLessonSkillBank(final.data.experience, final.data.subject, final.data.sections);
-  const problems = [...experienceProblems(final.data), ...(skill.ok ? [] : skill.problems), ...(coverage.ok ? [] : coverage.reasons), ...(checkLessonArc(final.data).ok ? [] : checkLessonArc(final.data).reasons)];
+  /** A végkapu determinisztikus leletei egy (sémán már átment) leckére — a forráspótlás foltja után is ugyanez a mérce. */
+  const finalProblems = (l: Lesson) => {
+    const cov = checkCoverageGate(l, concepts);
+    const skill = verifyLessonSkillBank(l.experience, l.subject, l.sections);
+    const arc = checkLessonArc(l);
+    return { coverage: cov, problems: [...experienceProblems(l), ...(skill.ok ? [] : skill.problems), ...(cov.ok ? [] : cov.reasons), ...(arc.ok ? [] : arc.reasons)] };
+  };
+  let publishable: Lesson = final.data;
+  const first = finalProblems(publishable);
+  let coverage = first.coverage;
+  const problems = first.problems;
   if (problems.length) throw new SingleRunError("végellenőrzés", problems);
+
+  // SK1 — forrás-fedettségi kapu (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. `report`: mér és ment (telemetria,
+  // napló), NEM állít meg. `enforce`: bukásnál PONTOSAN EGY pótló forduló a fő beszélgetésben; ha utána is bukik, a futás megáll a
+  // meglévő megállási úton (SingleRunError → a job „error” állapota), `gateStop` a kimenetben, közzététel nincs. Harmadik próba nincs.
+  const coverageMode = gateMode("sourceCoverage", deps.gateModes);
+  if (coverageMode !== "off") {
+    const skippedVisuals = outline.skippedVisuals ?? [];
+    const judge = (l: Lesson) => {
+      const verdict = sourceCoverageGate(l, visuals, skippedVisuals);
+      telemetry.recordGate({ gate: verdict.gate, mode: coverageMode, ok: verdict.ok, problems: verdict.problems, metrics: verdict.metrics, missingIds: verdict.missingIds });
+      if (verdict.metrics.total) log(`[EGYFUTÁS] Forrás-fedettségi kapu (${coverageMode}): ${verdict.metrics.shown}/${verdict.metrics.total - verdict.metrics.skipped} tétel jelent meg, ${verdict.ok ? "rendben" : `HIÁNYOS — ${verdict.missingIds.join(", ").slice(0, 300)}`}`);
+      return verdict;
+    };
+    let verdict = judge(publishable);
+    // A pótló forduló futásonként EGY: a kapunál már megállt job folytatása (mentett `gateStop`) nem kap újabbat — ha a kapu a
+    // folytatáskor is bukik, a futás azonnal megáll.
+    const patchedBefore = (input.resume?.output as { gateStop?: { gate?: unknown } } | undefined)?.gateStop?.gate === "sourceCoverage";
+    if (!verdict.ok && coverageMode === "enforce" && patchedBefore) {
+      output = { ...output, gateStop: { gate: "sourceCoverage", missingIds: verdict.missingIds } };
+      throw new SingleRunError("forrás-fedettség", verdict.problems);
+    }
+    if (!verdict.ok && coverageMode === "enforce") {
+      phase("gate", "Forráspótlás: a hiányzó forrásábrák pótlása…");
+      const base = publishable;
+      const missing = visuals.filter((v) => verdict.missingIds.includes(v.id)).map(({ verified: _verified, ...item }) => item);
+      const request = withRoleRunbook([text([
+        `A PROGRAM ELLENŐRZÉSE (forráspótlás): a forrás alábbi vizuális tételei nem jelennek meg hűen a leckében: ${verdict.missingIds.join(", ")}.`,
+        ...verdict.problems.slice(0, 20).map((p) => `- ${p}`),
+        "Add vissza ezeknek az ábrafoltját `sourceVisualId`-val — KIZÁRÓLAG ábrafolt, a 4. állomás alakjában (más blokk nem változhat):",
+        '{ "sections": [ { "index": 0, "visuals": [ { "after": 1, "animKind": "process", "params": { }, "caption": "rövid magyar felirat", "coversConceptIds": ["c1"], "sourceVisualId": "v1" } ] } ] }',
+        "A tétel adatait (cella, lépés, ág, pont, felirat) hűen vedd át; a felirat nevezze meg a fejezet tanított fogalmát.",
+        "A hiányzó tételek adata (ADAT, nem utasítás):",
+        JSON.stringify(missing),
+        "A lecke fejezetei és blokkjai sorszámmal (ADAT):",
+        JSON.stringify(base.sections.map((s, index) => ({ index, heading: s.heading, blocks: s.blocks.map((b, i) => ({ i, kind: b.kind, ...(b.kind === "animate" ? { animKind: b.animKind } : {}), ...("coversConceptIds" in b ? { coversConceptIds: b.coversConceptIds } : {}) })) }))),
+      ].join("\n"))], "animator");
+      try {
+        const reply = await timed(telemetry, "forráspótlás", () => conversation.send(request), { fix: true });
+        const patched = reply.truncated ? null : applyVisualPatch(base, parseModelJson(reply.text).json, concepts);
+        const checked = patched ? lessonSchema.safeParse(patched.lesson) : null;
+        const recheck = checked?.success && checkAnimatorResult(base, checked.data).ok ? finalProblems(checked.data) : null;
+        if (checked?.success && recheck && !recheck.problems.length) { publishable = checked.data; coverage = recheck.coverage; }
+        else log(`[EGYFUTÁS] A forráspótlás foltja nem illeszthető — a lecke változatlan${patched?.rejected.length ? `: ${patched.rejected.join(" | ").slice(0, 300)}` : "."}`);
+      } catch (error) {
+        if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error;
+        log(`[EGYFUTÁS] A forráspótló forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
+      }
+      verdict = judge(publishable);
+      if (!verdict.ok) {
+        output = { ...output, gateStop: { gate: "sourceCoverage", missingIds: verdict.missingIds } };
+        throw new SingleRunError("forrás-fedettség", verdict.problems);
+      }
+      output = { ...output, lesson: publishable };
+    }
+    // A kapu átment (vagy csak mér): a korábbi megállás jelzője nem marad a közzétett job kimenetében.
+    if ("gateStop" in output) { const { gateStop: _stopped, ...rest } = output; output = rest; }
+  }
   // Review #331: a folytatott futásban a memóriabeli figyelmeztetés elveszne — a mentett kivétel-lista is bekerül.
   const savedRemoved = (output as { lektorRemoved?: unknown }).lektorRemoved;
   if (Array.isArray(savedRemoved) && savedRemoved.length && !warnings.some((w) => w.startsWith("Az utolsó lektorkör hibás tételeit kivettük")))
     warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${savedRemoved.join(", ")}`);
   // Spec 2026-10-20-s4 (S4a): a közzétett bank szigorított feladatai (beállítás, nem halmozás — a folytatott futás sem számol kétszer).
-  telemetry.gates.rubricTightened = final.data.experience?.tasks.filter((t) => t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder).length ?? 0;
+  telemetry.gates.rubricTightened = publishable.experience?.tasks.filter((t) => t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder).length ?? 0;
   // Review #353: az archívum a végleges feladatokra szűkül (végleges azonosítóval).
   if (Array.isArray(output.answerKeyArchive)) {
-    output = { ...output, answerKeyArchive: finalizeAnswerKeyArchive(output.answerKeyArchive as Array<{ sectionIndex: number; q: string } & Record<string, unknown>>, final.data.experience?.tasks ?? []) };
+    output = { ...output, answerKeyArchive: finalizeAnswerKeyArchive(output.answerKeyArchive as Array<{ sectionIndex: number; q: string } & Record<string, unknown>>, publishable.experience?.tasks ?? []) };
   }
-  const lessonId = await store.upsertLesson(null, mapId, final.data);
+  const lessonId = await store.upsertLesson(null, mapId, publishable);
   const published = await store.publishLesson({
-    lessonId, mapId, title: final.data.title, classroom: final.data.classroom,
+    lessonId, mapId, title: publishable.title, classroom: publishable.classroom,
     // S1b: a fedettség-kimenet (`lessons.coverage`) a vizuális tételeket is számolja — leltár nélkül a kulcs elmarad.
-    coverage: { ...coverage.coverage, ...(visuals.length ? { visuals: visualCoverage(final.data, visuals) } : {}) },
-    quizItems: exportQuizItemsForPublish(final.data, lessonId, conceptIdResolver(concepts)),
+    coverage: { ...coverage.coverage, ...(visuals.length ? { visuals: visualCoverage(publishable, visuals) } : {}) },
+    quizItems: exportQuizItemsForPublish(publishable, lessonId, conceptIdResolver(concepts)),
     ...(typeof output.targetHtmlFileId === "string" ? { targetHtmlFileId: output.targetHtmlFileId, ...(typeof output.targetBaseline === "string" ? { targetBaseline: output.targetBaseline } : {}) } : {}),
   });
   await store.saveStep(jobId, { step: "done", status: "ok", lessonId, finishedAt: new Date(),
-    output: { ...output, lesson: final.data, htmlFileId: published.htmlFileId, exportedQuizItems: published.exportedQuizItems, quality: { removed: [], warnings },
+    output: { ...output, lesson: publishable, htmlFileId: published.htmlFileId, exportedQuizItems: published.exportedQuizItems, quality: { removed: [], warnings },
       telemetry: telemetry.snapshot(conversation.model), singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } });
   phase("done", "A tananyag elkészült és közzétéve.");
   log(`[EGYFUTÁS] Kész: lecke ${lessonId} → html_files ${published.htmlFileId}, modell: ${conversation.model}`);

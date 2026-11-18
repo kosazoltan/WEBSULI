@@ -24,6 +24,8 @@ const visualSchema = z.object({
   params: z.record(z.unknown()),
   caption: z.string().trim().min(1).max(500),
   coversConceptIds: z.array(z.string().trim().min(1).max(64)).min(1),
+  /** Spec 2026-11-18 (S1b / SK1): az ábra által megjelenített forrás-vizuális tétel azonosítója; a hibás alak elmarad. */
+  sourceVisualId: z.string().trim().min(1).max(12).optional().catch(undefined),
 });
 export const visualPatchSchema = z.object({
   sections: z.array(z.object({ index: z.number().int().min(0), visuals: z.array(z.unknown()).max(4) })).min(1),
@@ -72,7 +74,7 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
         const ungrounded = ungroundedLabels(renderedVisualTexts("scene3d", v.params), corpus);
         if (ungrounded.length) problems.push(`a leckében nem szereplő felirat: ${ungrounded.join(", ").slice(0, 160)}`);
       }
-      const block = blockSchema.safeParse({ kind: "animate", animKind: v.animKind, params, caption: v.caption, coversConceptIds: v.coversConceptIds });
+      const block = blockSchema.safeParse({ kind: "animate", animKind: v.animKind, params, caption: v.caption, coversConceptIds: v.coversConceptIds, ...(v.sourceVisualId ? { sourceVisualId: v.sourceVisualId } : {}) });
       if (!block.success) problems.push(...block.error.issues.map((i) => `${i.path.join(".")} ${i.message}`));
       const foreign = v.coversConceptIds.filter((id) => !taught.has(id));
       if (foreign.length) problems.push(`a fejezetben nem tanított fogalom: ${foreign.join(", ")}`);
