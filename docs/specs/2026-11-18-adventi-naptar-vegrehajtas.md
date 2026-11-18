@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — Adventi naptár („Fénylő ablakok”)
 
-**Állapot:** 2. fázis kész — 2026-11-18, ág `feat/jatek-adventi-naptar`; a 3. fázis (kód) a tulajdonos döntései (terv 4.1) után indul.
+**Állapot:** a tulajdonos 2026-11-18-án döntött (terv 12. szakasz) — a 3. fázis fut, szeletenként; ahol a „Kiegészítés” szakasz eltér a korábbi szövegtől, a Kiegészítés érvényes.
 **Terv:** `docs/specs/2026-11-18-adventi-naptar.md` (a hivatkozott R1–R12, E1–E24, A1–A32 jelölések ott vannak).
 
 Ez a fájl AI-ügynöknek szól. Minden szelet külön ág és külön PR az aktuális `origin/main`-ről (ágnév: `feat/advent-<szelet>`, pl.
@@ -342,3 +342,160 @@ Elfogadás: A16, A23 (éles flag), E23.
 2. A terv 5. szakaszának E1–E24 esetei: melyik teszt fedi.
 3. `git diff --stat origin/main...HEAD` — csak a szelet fájljai; a hét játék és a `game-engine/play/*` érintetlen.
 4. A 10. szakasz UNVERIFIED pontjai: ami a szeletben mérhetővé vált, a mért értékkel átírva.
+
+## Kiegészítés a tulajdonosi döntések után (2026-11-18) — felülírja a fentiek ütköző részeit
+
+Döntések: (a) A1, (b) B1, (c) C1, (d) D1, (e) E1, (f) F1, (g) G1, (h) karácsonyi készlet 1–12. évfolyamra, vegyes kiosztás
+(terv `docs/specs/2026-11-18-adventi-naptar.md` 12.1–12.3), értesítés az oldalon és e-mailben (terv 12.4). Az S7a, S7b, S7c NEM
+készül. A 0. szakasz 1. pontjának eltérés-ágai tárgytalanok.
+
+**Munkarend (koordinátori utasítás):** minden szelet a `feat/jatek-adventi-naptar` ágon (vagy a koordinátor által megadott ágon)
+készül; szeletenként `gate:stage` → `gate:push` → a fej-hash átadása a koordinátornak, és MEGÁLLÁS. Az ügynök nem pushol és nem nyit
+PR-t. E2E: előbb külön lépésben ellenőrizd, hogy nem fut más e2e / aktív futás, csak utána, külön lépésben indíts, `--workers=1`-gyel;
+minden várakozásnak felső korlátja van.
+
+### S1 módosítása
+
+- `rules.ts`: `ADVENT_RULES = { unlock: "daily", repair: "new-question", maxRepairs: 2, maxRounds: 3, lowGrade: { maxGrade: 2, maxRepairs: 1, maxRounds: 2 }, teaserFromDay: 24, catchupUntilJan: 6 }`;
+  `ADVENT_CHRISTMAS_DAYS = [3, 6, 9, 12, 15, 18, 21, 24]`; `isChristmasDoor(day, grade)` → `grade <= 2 || day % 3 === 0`;
+  `limitsForGrade(grade)` → `{ maxRepairs, maxRounds }`; `ADVENT_MIN_GRADE = 1`, `ADVENT_MAX_GRADE = 12`.
+- `assignment.ts`: a `buildAdventPlan` új bemenete `christmas: readonly ChristmasItem[]`; a karácsonyi ablak kérdései az évfolyamra
+  érvényes (`minGrade ≤ évfolyam ≤ maxGrade`) tételek seedelt keveréséből, visszatevés nélkül, ablakonként `1 + maxRepairs` darab; a
+  bank-ablakok tárgyai a NEM karácsonyi ablakokon járnak körbe. A `ChristmasItem` típus az `assignment.ts`-ben él. Közös kereső:
+  `findAdventItem(id, bank, christmas)`; a kliensnek adott `subject` karácsonyi tételnél `"christmas"`.
+- `contract.ts`: `grade` 1–12.
+- Tesztek: az `advent-assignment.test.ts` a karácsonyi tételeket SZINTETIKUS készletből kapja (az S1b valódi készlete előtt): A34,
+  A35, A36, és kevés tételnél `RangeError` jön (nem ismétlés).
+
+### S1b — Karácsonyi kérdéskészlet
+
+Fájlok: `shared/advent/christmasBank/items-01-02.ts`, `items-03-04.ts`, `items-05-06.ts`, `items-07-08.ts`, `items-09-12.ts`,
+`index.ts` (`CHRISTMAS_ITEMS` összefűzve), `shared/advent/christmas-validate.ts` (`validateChristmasBank(items, gradeBankPrompts)`
+→ hibalista), `tests/advent-christmas-bank.test.ts`.
+
+1. Írd meg kézzel a tételeket a terv 12.2 szabályai szerint; soronként egy tétel; azonosító `xmas-001`-től folyamatosan. A sávok
+   átfedhetnek (például `minGrade: 1, maxGrade: 4`), hogy minden évfolyam elérje a minimumot.
+2. `validateChristmasBank`: egyedi azonosító; egyedi normalizált prompt (a közös bank promptjaival sem egyezik); 4 különböző,
+   nem üres válasz; `correctIndex` 0–3; magyarázat 30–300 karakter; `1 ≤ minGrade ≤ maxGrade ≤ 12`; az 1–2. évfolyamra érvényes tétel
+   promptja ≤ 80 karakter; évfolyamonkénti darabszám (1–2.: ≥ 96; 3–12.: ≥ 72); a helyes válasz indexe a készletben nagyjából
+   egyenletes (egyik index aránya sem nagyobb 40%-nál).
+3. `tests/advent-christmas-bank.test.ts`: a validátor hibalistája üres; mind a 12 évfolyamra a teljes kör-sorozat felépíthető
+   (`buildAdventPlan`, 1–2.: 2 kör, 3–12.: 3 kör) ismétlés nélkül a VALÓDI készlettel és a valódi közös bankkal.
+4. Az átadáskor a független ellenőrnek szóló kérés: tételenkénti tényellenőrzés (a vitás tétel törlendő vagy javítandó).
+
+| Parancs | Várt kimenet |
+|---|---|
+| `node --import tsx --test tests/advent-christmas-bank.test.ts tests/advent-assignment.test.ts` | `fail 0` |
+| (gyökérből) `npm.cmd run gate:stage`, majd `npm.cmd run gate:push` | zöld |
+
+Elfogadás: A33–A36 a valódi készlettel.
+
+### S2a, S2b, S3a módosítása
+
+- S2a: ugyanabba a migrációba az `advent_announcements` tábla is (`id`, `season integer`, `recipient_hash char(64)`, `source varchar(16)`,
+  `status varchar(8)` `pending|sent|failed`, `created_at`, `updated_at`; egyedi `(season, recipient_hash)`), Drizzle-sémával.
+- S2b: a `GET /state` `low-grade` ága nincs; a routernek a `CHRISTMAS_ITEMS` is függősége; `POST /grade` 1–12.
+- S3a: az évfolyamválasztó 1–12. (`advent-grade-1` … `advent-grade-12`, 4 × 3 rács); a karácsonyi ablak kérdésénél „Karácsony” címke.
+
+### S8 — Értesítő e-mail (tulajdonosi jóváhagyással)
+
+Fájlok: `server/advent/announce.ts`, `server/routes.ts`, `shared/advent/announce-email.ts` (tárgy + HTML-sablon, tiszta függvény),
+`client/src/components/AdventAnnouncePanel.tsx`, `client/src/pages/admin.tsx` (a panel bekötése), `tests/advent-announce.test.ts`,
+`tests/advent-db.integration.ts`, `tests/admin-route-guard.test.ts`.
+
+1. Első lépés: `Select-String -Path server\resend.ts,server\daily-reminder.ts -Pattern "unsubscribe|leiratkoz"` — a talált leiratkozási
+   módot a sablon szövege követi; ha nincs találat, a sablon ezt írja: „Ha nem kérsz több levelet, válaszolj erre az üzenetre.”
+2. `announce.ts`: `collectAnnounceRecipients(storage, { includePlayers })` — `storage.getActiveEmailSubscriptions()` +
+   `storage.getActiveExtraEmails()` (+ `includePlayers` esetén az ellenőrzött, nem tiltott `player_accounts` címek); kisbetűsítés,
+   `trim`, ismétlődés-szűrés, a `users` tábla soha; visszaad `{ list, bySource }`.
+   `announce({ dryRun, confirmCount, includePlayers })`: száraz futás → `{ recipients, bySource, subject, html }` (címek nélkül);
+   éles → `confirmCount !== list.length` esetén 409; különben címzettenként foglalás az `advent_announcements`-ben
+   (`recipient_hash` = a cím SHA-256 lenyomata), küldés a meglévő Resend-küldővel idempotencia-kulccsal
+   (`advent-announce/<évad>/<lenyomat>`), 10-es kötegekben, `status` frissítéssel; `NODE_ENV === "test"` vagy `isE2eMode()` alatt csak
+   beállított hamis küldővel.
+3. `POST /api/admin/advent/announce` — `isAuthenticatedAdmin`, CSRF; a naplóba csak darabszám.
+4. Admin-panel: „Előnézet és címzettszám” gomb (száraz futás), a levél előnézete, a szám forrásonként, jelölőnégyzet „regisztrált
+   játékosoknak is” (alapból KI — terv 12.6), „Küldés N címzettnek” gomb megerősítő párbeszéddel.
+5. Tesztek: egység (sablon, ismétlődés-szűrés, forrásszabály A39), integrációs (A37, A38: a száraz futás nem ír és nem küld; rossz
+   `confirmCount` 409; kétszeri küldés nem dupláz; nem admin 401 / 403).
+6. ÉLES KÜLDÉST AZ ÜGYNÖK NEM INDÍT: a szelet átadásakor a koordinátor megkapja a levél szövegét; a címzettek számát a tulajdonos a
+   panel száraz futásával látja, és ő nyomja meg a küldést.
+
+| Parancs | Várt kimenet |
+|---|---|
+| `node --import tsx --test tests/advent-announce.test.ts tests/admin-route-guard.test.ts tests/no-real-emails-guard.test.ts` | `fail 0` |
+| `npm.cmd run test:learning-db` | `fail 0` |
+| (gyökérből) `npm.cmd run gate:stage`, majd `npm.cmd run gate:push` | zöld |
+
+Elfogadás: A37–A39.
+
+## Kiegészítés 2 — képcsomag (tulajdonosi követelmény, 2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 13. szakasz)
+
+FIZETŐS képgenerálást ügynök NEM indít: a `generate.ts` csak `--dry-run` kapcsolóval futtatható ügynök által.
+
+### S3a módosítása — képhelyek helyőrzőkkel
+
+- Új `client/src/advent/AdventArt.tsx`: `<AdventArt id="advent-door-08" className=… />` — a `shared/advent/art-manifest.ts`
+  (`ADVENT_ART: Record<string, { file: string; width: number; height: number }>`; az S3a-ban üres objektum) alapján `<img>`
+  (`loading="lazy"`, `decoding="async"`, `width` / `height` attribútummal, `src="/advent/2026/<file>"`), hiányzó tételnél a
+  `client/src/advent/placeholders.tsx` SVG-je ugyanabban a dobozban (`aspect-ratio` CSS-sel rögzítve).
+- `shared/advent/art.ts`: a 29 azonosító, a magyar `alt` szövegek (a terv 13.4 motívumnevei; díszítőelemnél üres), a végső méretek —
+  a feliratok kódszótárban, nem a képen.
+- `advent.css`: megoldott ablak fénye (`box-shadow` arany, `@keyframes advent-glow` 4 s), a csillag felfénylése a 24. ablaknál
+  (`@keyframes advent-star` 1,2 s, egyszer); `@media (prefers-reduced-motion: reduce)` alatt mindkettő `animation: none`.
+- Teszt: `tests/advent-art.test.ts` — mind a 29 azonosítónak van mérete és (ahol kell) `alt` szövege; a manifest minden kulcsa
+  ismert azonosító.
+
+### S3c-0 — gyártó-előkészítés (hívás nélkül)
+
+Fájlok: `design-assets/advent/prompts.json`, `design-assets/advent/style.md`, `scripts/design-assets/generate.ts`,
+`scripts/design-assets/lib.ts`, `scripts/design-assets/review-page.ts`, `scripts/design-assets/approve-advent.ts`,
+`tests/advent-art-pipeline.test.ts`.
+
+1. `design-assets/advent/style.md`: `COMMON:`, `BAND_ADVENT:`, `KIND_BACKGROUND:`, `KIND_DOOR:`, `KIND_ORNAMENT:` sorok a terv 13.2
+   szövegével (angolul, a meglévő `style.md` formájában).
+2. `design-assets/advent/prompts.json`: `model` a meglévő `prompts.json` értéke; a 29 tétel a terv 13.3 / 13.5 táblájából (`band: "advent"`,
+   `kind`: `background` / `door` / `ornament`, `aspect_ratio`, `alt` magyarul, `references: ["advent-bg-portrait"]` a háttér kivételével,
+   `candidates`: 4 vagy 3, `resolution`: `2K` vagy `1K`).
+3. `lib.ts`: az `AssetKind` / `AssetBand` unió bővítése (`background`, `door`, `ornament`; `advent`); `estimateSetUsd(items)` a tételenkénti
+   `candidates` és `resolution` mezőkből.
+4. `generate.ts`: `--set <név>` → a `design-assets/<név>/prompts.json` és `style.md` olvasása, a jelöltek a
+   `design-assets/candidates/<név>/<id>/` alá; tételenként `candidates` darab kép; a `--set` nélküli viselkedés VÁLTOZATLAN.
+5. `review-page.ts`: `--set <név>` → a készlet jelöltjeiből készít válogatóoldalt.
+6. `approve-advent.ts`: a kiválasztás JSON-jából WebP a terv 13.3 méreteire (a meglévő `approve.ts` Playwright-vászon módszerével),
+   a `client/public/advent/2026/<id>.<hash8>.webp` alá; a minőséget lépcsőzetesen csökkenti (0,82 → 0,5), amíg a bájtcél teljesül,
+   különben hibával megáll; megírja a `shared/advent/art-manifest.ts`-t.
+7. `tests/advent-art-pipeline.test.ts`: a készlet 29 tétele érvényes (egyedi azonosító, ismert `kind`, van stílussor, a prompt nem
+   üres, nincs benne márkanév-lista szava); `estimateSetUsd` = 4,85 (± 0,01) a terv 13.6 táblája szerint; a `composePrompt` minden
+   tételre összeáll.
+
+| Parancs | Várt kimenet |
+|---|---|
+| `npx.cmd tsx scripts/design-assets/generate.ts --set advent --dry-run --max 90` | „90 kép · becsült költség ≈ 4.85 USD”, alatta a 29 tétel promptja; hálózati hívás nincs |
+| `npx.cmd tsx scripts/design-assets/generate.ts --trial --dry-run` | a régi készlet kimenete változatlan |
+| `node --import tsx --test tests/advent-art-pipeline.test.ts` | `fail 0` |
+| (gyökérből) `npm.cmd run gate:stage`, majd `npm.cmd run gate:push` | zöld |
+
+Átadás a koordinátornak: a száraz futás teljes kimenete (a tulajdonos ebből hagyja jóvá a költséget). Elfogadás: A42.
+
+### S3c — a végleges képek cseréje (a tulajdonos válogatása után)
+
+Fájlok: `client/public/advent/2026/*.webp`, `shared/advent/art-manifest.ts`, `server/vite.ts`, `tests/advent-art.test.ts`,
+`tests/advent-calendar-mobile.spec.ts`.
+
+1. Bemenet: a tulajdonos `kivalasztas.json` fájlja; futtatás: `npx.cmd tsx scripts/design-assets/approve-advent.ts kivalasztas.json`.
+2. `server/vite.ts`: az `/advent` statikus mappa `immutable`, 1 éves gyorsítótárral (a `design-thumbs` sorának mintájára).
+3. `tests/advent-art.test.ts` bővítése: bájtcél-őr a fájlokra (A41); a manifest minden fájlja létezik.
+4. Mobil mérés újra mindhárom nézeten (a helyőrzős és a képes állapot doboza azonos); képernyőkép a tulajdonosnak.
+
+| Parancs | Várt kimenet |
+|---|---|
+| `node --import tsx --test tests/advent-art.test.ts` | `fail 0` |
+| `node --import tsx scripts/run-e2e-tests.ts tests/advent-calendar-mobile.spec.ts --workers=1` | minden teszt `passed` |
+
+Elfogadás: A40, A41, A43.
+
+### Sorrend a határidőhöz
+
+S1 → S1b és S3c-0 (egymástól függetlenek; az S3c-0 korán kell, hogy a tulajdonos időben jóváhagyhassa a költséget és válogathasson)
+→ S2a → S2b → S3a → S3b → S4 → S3c (amint a válogatás megvan; a naptár helyőrzőkkel is élesíthető) → S5 → S6 → S8.
