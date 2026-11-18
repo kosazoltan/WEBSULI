@@ -616,3 +616,6 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
 - 2026-11-18 — S2a KÉSZ: `migrations/0042_advent_progress.sql` (a szám szabad volt: a `main` utolsó migrációja a 0041), Drizzle-séma
   (`adventProgress`, `adventAnnouncements`, CHECK kényszerekkel), `server/advent/store.ts`, `tests/advent-db.integration.ts`, a
   DB-futtató bővítése. Az S8 lábléce: terv 17. szakasz (egyszeri levél, új leiratkozó link nincs).
+- 2026-11-18 — S2b KÉSZ: `server/advent/clock.ts` (flag, óra), `identity.ts` (alany), `routes.ts` (hat végpont a `/api/advent` alatt, alanyonkénti
+  200 / 15 perc, IP 600 / 15 perc, új névtelen sor 30 / óra), bekötés a `server/routes.ts`-be, játékos-adatletöltés (`adventCalendar`),
+  végpont-leltár, `tests/advent-routes-db.integration.ts`, `tests/advent-source-guard.test.ts`; a DB-kör időkorlátja 300 s → 480 s.
