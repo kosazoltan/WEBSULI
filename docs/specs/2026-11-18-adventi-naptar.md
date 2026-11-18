@@ -831,3 +831,17 @@ Költség: + 4 kép × 0,09 + 4 × 0,003 = + 0,37 USD → **első kör: 94 kép 
   szűrő) változtatás nélkül teljesíteni.
 
 Az A15 és az A28 a kártyára a fentiek szerint értendő (főoldali kártya; M8: a főoldalról egy koppintás).
+
+## 15. További tulajdonosi döntések (2026-11-18, kérdőíven, szó szerint a választott opciók)
+
+- **Képköltség: „Igen, max. 7 USD”.** Előbb 10 képes próbakör (≈ 0,65 USD), a képeket a tulajdonos megnézi; ha a stílus jó, mehet a
+  teljes kör. A 7 USD-os keret kérdezés nélkül nem léphető túl: a generátor külön készletet élesben csak `--max-usd` plafonnal
+  futtat, és a plafon elérésekor megáll (a sikertelen kísérlet is a keretbe számít). A fizetős futást nem ügynök indítja.
+- **Értesítő e-mail címzettjei: „Csak a feliratkozóknak”.** A hírlevélre feliratkozottak (`email_subscriptions`, `is_subscribed`) és az
+  admin által felvett címek (`extra_email_addresses`, `is_active`); a regisztrált játékosok (`player_accounts`) a főoldali kártyát
+  látják, levelet NEM kapnak. Ezzel a 12.6 nyitott kérdése lezárult (1. opció); az S8 `includePlayers` kapcsolója és az admin-panel
+  „regisztrált játékosoknak is” jelölőnégyzete NEM készül el.
+- A próbakör parancsa (a `source/` mappából; a koordinátor indítja):
+  `npx.cmd tsx scripts/design-assets/generate.ts --set advent --only advent-bg-portrait,advent-door-08,advent-door-24 --max 10 --max-usd 7`
+  A jelöltek a nem követett `source/design-assets/candidates/advent/` mappába kerülnek; a válogató lap:
+  `npx.cmd tsx scripts/design-assets/review-page.ts --set advent` → `source/design-assets/candidates/advent/index.html`.

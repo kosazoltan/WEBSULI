@@ -539,3 +539,14 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
 - **S3c-0:** a készlet 30 tételes (`advent-home-banner`, 4 jelölt, 2K); a száraz futás várt kimenete „94 kép · becsült költség ≈ 5.22 USD”,
   az `estimateSetUsd` teszt várt értéke 5,22 (± 0,01).
 - **S8:** a levél gombja a `/adventi-naptar` címre mutat.
+
+## Kiegészítés 4 — döntések a képköltségről és a címzettekről (2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 15. szakasz)
+
+- **S3c-0 (pontosítva):** a `generate.ts` `--set <név>` módja tételenként `candidates` képet készít a tétel saját `resolution`
+  értékével; `--max` a KÉPEK számát korlátozza; `--max-usd <összeg>` kemény plafon (a terv és a futás közbeni ellenőrzés is ezt
+  használja; plafon nélkül az éles futás hibával megáll; a sikertelen kísérlet is a keretbe számít). A tiszta tervező a `lib.ts`
+  `planJobs` függvénye. A jelöltek és a válogató lap a nem követett `design-assets/candidates/<név>/` alatt. A `--set` nélküli
+  viselkedés változatlan. Az `approve-advent.ts` NEM ebben a szeletben, hanem az S3c-ben készül (csak a válogatás után kell).
+  Várt száraz futás: `94 kép · becsült költség ≈ 5.22 USD`; próbakör: `10 kép · becsült költség ≈ 0.65 USD`.
+- **S8 (szűkítve):** a címzettek csak az `email_subscriptions` (`is_subscribed`) és az `extra_email_addresses` (`is_active`) címei; a
+  `player_accounts` és a `users` tábla soha. Az `includePlayers` kapcsoló és a panel jelölőnégyzete nem készül.
