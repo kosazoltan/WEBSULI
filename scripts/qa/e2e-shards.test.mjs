@@ -13,10 +13,18 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
 
-/** Egy JSON-riporter alakú spec (egy projekt). `results`: az eredmények ideje ms-ban (üres = nem futott). */
-const spec = (file, title, id, results = []) => ({
+/**
+ * Egy JSON-riporter alakú spec (egy projekt). `results`: az eredmények ideje ms-ban (üres = nem futott). Az alakot a Playwright
+ * 1.57 valódi kimenete adja (mérve, 2026-11-18): `--list` → `status: "skipped"`, `results: []`, `expectedStatus` a deklaráció
+ * szerint (`test.skip` / `test.fixme` → `"skipped"`, különben `"passed"`); futás → `status` = `expected` / `unexpected` /
+ * `flaky` / `skipped`, eredményenként `status` = `passed` / `failed` / `skipped` / `interrupted`.
+ */
+const spec = (file, title, id, results = [], over = {}) => ({
   title, id, file, line: 1, column: 1,
-  tests: [{ projectName: 'chromium', status: results.length ? 'expected' : 'skipped', results: results.map((duration) => ({ duration, status: 'passed' })) }],
+  tests: [{
+    projectName: 'chromium', expectedStatus: 'passed', status: results.length ? 'expected' : 'skipped',
+    results: results.map((duration) => ({ duration, status: 'passed' })), ...over,
+  }],
 });
 
 /** Lista `files` szerint: `{ fájl: tesztszám }` → egy fájl-szvit fájlonként, a tesztek közvetlenül benne. */
@@ -54,7 +62,9 @@ test('flattenTests: beágyazott describe a címút része, a névtelen describe 
   assert.equal(t[0].results, 0);
 });
 
-test('partition: minden teszt pontosan egy szeletben, determinisztikusan, a szeleten belül a lista sorrendjében', () => {
+// SPEC-VÁLTOZÁS (vak ellenőr L2, 2026-11-18): a szeleten belüli sorrend a stabil `key` szerinti (korábban a bemeneti lista sorrendje),
+// hogy a felosztás a lista sorrendjétől független legyen; a Playwright a `--test-list` sorrendjétől függetlenül a saját sorrendjében fut.
+test('partition: minden teszt pontosan egy szeletben, determinisztikusan, a szeleten belül key szerinti sorrendben', () => {
   const tests = flattenTests(listOf({ 'a.spec.ts': 7, 'b.spec.ts': 3, 'c.spec.ts': 11, 'd.spec.ts': 1, 'e.spec.ts': 5 }));
   for (const total of [1, 2, 3, 4]) {
     const buckets = partition(tests, W, total);
@@ -64,8 +74,8 @@ test('partition: minden teszt pontosan egy szeletben, determinisztikusan, a szel
     assert.deepEqual([...ids].sort(), tests.map((t) => t.id).sort());
     assert.deepEqual(partition(tests, W, total).map((b) => b.tests.map((t) => t.id)), buckets.map((b) => b.tests.map((t) => t.id)));
     for (const b of buckets) {
-      const pos = b.tests.map((t) => tests.indexOf(t));
-      assert.deepEqual(pos, [...pos].sort((x, y) => x - y));
+      const keys = b.tests.map((t) => t.key);
+      assert.deepEqual(keys, [...keys].sort());
     }
   }
 });
@@ -93,6 +103,16 @@ test('partition: a súlyfájl fájlonkénti súlya számít (a nehéz fájl egye
   const slow = buckets.find((b) => b.tests.some((t) => t.file === 'lassu.spec.ts'));
   assert.deepEqual([...new Set(slow.tests.map((t) => t.file))], ['lassu.spec.ts']);
   assert.deepEqual(buckets.map((b) => b.weight).sort((a, b) => a - b), [20, 20]);
+});
+
+test('partition: független a bemeneti lista sorrendjétől (fordított lista → azonos felosztás, bontható fájllal is)', () => {
+  const tests = flattenTests(listOf({ 'nagy.spec.ts': 40, 'a.spec.ts': 3, 'b.spec.ts': 5, 'c.spec.ts': 2, 'd.spec.ts': 7 }));
+  const weights = { defaultSecPerTest: 1, splittable: ['nagy.spec.ts'], files: { 'd.spec.ts': 2 } };
+  const ids = (list) => partition(list, weights, 4).map((b) => b.tests.map((t) => t.id));
+  assert.deepEqual(ids([...tests].reverse()), ids(tests));
+  // Keverés is (determinisztikus permutáció).
+  const shuffled = tests.map((t, i) => [((i * 7919) % 101), t]).sort((x, y) => x[0] - y[0]).map(([, t]) => t);
+  assert.deepEqual(ids(shuffled), ids(tests));
 });
 
 test('partition: hibás szeletszám kivétel', () => {
@@ -145,6 +165,42 @@ test('checkCoverage: hiányzó jelentés, hiányzó teszt, kétszer futó, list�
   const text = problemsOf([[1, ran.slice(0, 3)], [2, notRun]]);
   assert.match(text, /nem futott le \(nincs eredménye\)/);
   assert.match(text, /összege 4, a lista teljes száma 5/);
+});
+
+test('checkCoverage: bukott, megszakadt, futás közben kihagyott teszt NEM lefutott (második védvonal a bukásra)', () => {
+  const { listed, ran } = coverageFixture();
+  const withStatus = (t, status, resultStatus) => ({ ...t, status, resultStatuses: [resultStatus] });
+  for (const [status, resultStatus, label] of [
+    ['unexpected', 'failed', /nem ment át \(unexpected; eredmények: failed\)/],
+    ['skipped', 'interrupted', /nem ment át \(skipped; eredmények: interrupted\)/],
+    ['skipped', 'skipped', /nem ment át \(skipped; eredmények: skipped\)/],
+  ]) {
+    const shard2 = [ran[3], withStatus(ran[4], status, resultStatus)];
+    const res = checkCoverage(listed, new Map([[1, ran.slice(0, 3)], [2, shard2]]));
+    assert.equal(res.ok, false, `${status}/${resultStatus} nem lehet EGYEZIK`);
+    assert.match(res.problems.join('\n'), label);
+    assert.equal(res.sum, 4);
+  }
+  // A flaky (újrapróbával átment) teszt átment — a Playwright is így ítéli (`ok()`).
+  const flaky = checkCoverage(listed, new Map([[1, ran.slice(0, 3)], [2, [ran[3], withStatus(ran[4], 'flaky', 'passed')]]]));
+  assert.equal(flaky.ok, true, flaky.problems.join('\n'));
+});
+
+test('checkCoverage: a listában is kihagyottként deklarált teszt (test.skip / test.fixme) külön számolva elfogadott', () => {
+  const declared = { expectedStatus: 'skipped' };
+  const listed = flattenTests({ suites: [{ title: 'a.spec.ts', file: 'a.spec.ts', specs: [spec('a.spec.ts', 'fut', '1'), spec('a.spec.ts', 'skip', '2', [], declared)] }] });
+  const report = flattenTests({ suites: [{ title: 'a.spec.ts', file: 'a.spec.ts', specs: [
+    spec('a.spec.ts', 'fut', '1', [700]),
+    spec('a.spec.ts', 'skip', '2', [], { ...declared, status: 'skipped', results: [{ duration: 0, status: 'skipped' }] }),
+  ] }] });
+  const res = checkCoverage(listed, new Map([[1, report]]));
+  assert.equal(res.ok, true, res.problems.join('\n'));
+  assert.deepEqual([res.sum, res.skipped, res.expected], [1, 1, 2]);
+  // Ha a lista szerint NEM kihagyott (futás közbeni test.skip), a kihagyás bukás.
+  const listedRun = flattenTests({ suites: [{ title: 'a.spec.ts', file: 'a.spec.ts', specs: [spec('a.spec.ts', 'fut', '1'), spec('a.spec.ts', 'skip', '2')] }] });
+  const bad = checkCoverage(listedRun, new Map([[1, report]]));
+  assert.equal(bad.ok, false);
+  assert.match(bad.problems.join('\n'), /nem ment át \(skipped; eredmények: skipped\): .*› skip$/m);
 });
 
 test('measuredWeights: fájlonkénti mp / teszt a jelentésből; a splittable megmarad', () => {
@@ -232,6 +288,10 @@ test('ci.yml: a részek a szeletet a felosztóval jelölik ki, és ennek a teszt
   const parts = jobBlock('e2e-parts');
   assert.match(parts, /e2e-shards\.mjs plan .*--total "\$E2E_SHARDS" --part "\$E2E_PART"/);
   assert.match(parts, /npx playwright test --test-list "\$RUNNER_TEMP\/e2e-shard\.txt" --reporter=dot,html,json/);
+  // Újrafuttatásnál elavult (korábbi kísérletből maradt) jelentés ne kerülhessen az ellenőrbe: hiányzó jelentés → a rész bukik.
+  const upload = /- name: Upload the part's JSON report[\s\S]*?retention-days/.exec(parts)?.[0] ?? '';
+  assert.match(upload, /if-no-files-found: error/);
+  assert.match(upload, /overwrite: true/);
   assert.match(jobBlock('three-phase'), /node --test .*scripts\/qa\/e2e-shards\.test\.mjs/);
 });
 

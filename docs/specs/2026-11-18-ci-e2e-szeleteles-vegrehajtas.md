@@ -26,11 +26,13 @@ Exportok (tiszta függvények, a tesztek közvetlenül hívják):
   kísérlet ideje.
 - `inexpressible(tests)` — a `--test-list`-ben ki nem fejezhető címek (`›`, üres, szélső szóköz): a `plan` ezeknél megáll.
 - `validateWeights(w)` — `defaultSecPerTest > 0`, `files[*] > 0`, `splittable` fájlnevek tömbje.
-- `partition(tests, weights, total)` → `total` darab `{ tests, weight }`: egység = fájl; a `splittable` fájl a szelet-cél
+- `partition(tests, weights, total)` → `total` darab `{ tests, weight }`; a bemenet előbb a stabil `key` szerint rendeződik (a
+  lista sorrendjétől független; a szeleten belül is `key` szerinti sorrend); egység = fájl; a `splittable` fájl a szelet-cél
   felénél nehezebb esetben egymást követő, közel azonos darabszámú részekre bomlik; rendezés súly szerint csökkenően (holtverseny:
   név), kiosztás a legkönnyebb szeletbe (holtverseny: kisebb sorszám); a szeleten belül a lista sorrendje.
 - `testListText(tests)`, `reportName(part)` (`e2e-report-<k>.json`).
-- `checkCoverage(listed, shards)` → `{ ok, problems, rows, sum, expected }` a terv 5. pontja szerint (hiányzó jelentés, listán
+- `checkCoverage(listed, shards)` → `{ ok, problems, rows, sum, skipped, expected }` a terv 5. pontja szerint (átment =
+  `expected` / `flaky`; deklarált kihagyás külön) (hiányzó jelentés, listán
   kívüli, kétszer futó, eredmény nélküli, egyik szeletben sem futó teszt; összeg ≠ lista).
 - `measuredWeights(tests, previous)` — a jelentésekből mért mp / teszt fájlonként (a `splittable` és a megjegyzés megmarad).
 - `main(argv, log)` — `plan --list --weights --total --part --out`, `check --list --reports --total [--weights --weights-out]`;

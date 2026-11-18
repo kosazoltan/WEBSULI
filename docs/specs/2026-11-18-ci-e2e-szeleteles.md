@@ -96,7 +96,7 @@ A C változat részletei:
   fájl ÖSSZES tesztje (a fájlon belüli sorrend és a `serial` csoportok egy szeletben maradnak); csak a súlyfájl `splittable`
   listáján szereplő két nehéz, megosztott állapot nélküli fájl (`support/game-mobile-quality.ts` 220 teszt,
   `word-ladder-readability.spec.ts` 10 teszt — egyikben sincs `beforeAll` / `serial`) bontható egymást követő darabokra. Kiosztás:
-  a legnehezebb egység a legkönnyebb szeletbe. Tiszta függvény: ugyanarra a commitra minden szelet-job ugyanazt számolja.
+  a legnehezebb egység a legkönnyebb szeletbe. Tiszta, a lista sorrendjétől független függvény (a felosztás előtt stabil kulcs szerinti rendezés — vak ellenőr L2): ugyanarra a commitra minden szelet-job ugyanazt számolja.
 - **Futtatás:** `npx playwright test --test-list <szelet.txt> --reporter=dot,html,json` — a konfig (`retries: 2`, `workers: 1`,
   `forbidOnly`, nyomkövetés) változatlan; a `dot` + `html` a mostani kimenet (a `html` mellé a Playwright eddig is `dot`-ot
   tett a CI-ben), a `json` a számláló-ellenőr bemenete.
@@ -136,8 +136,14 @@ check-runt (`scripts/qa/gates/pre-merge-gate.mjs:14-31`, `:156`).
 1. mind az N jelentés megvan;
 2. a lista minden tesztje pontosan egy szeletben szerepel (azonosító: a Playwright teszt-azonosítója + projekt);
 3. egyetlen szeletben sem futott a listán kívüli teszt, és semmi sem futott kétszer;
-4. minden tesztnek van eredménye (a meg nem futott teszt a jelentésben eredmény nélkül áll);
-5. a szeletekben lefutott tesztek összege = a lista teljes száma.
+4. minden teszt lefutott ÉS átment: végeredménye `expected` vagy `flaky` (vak ellenőr L1: második védvonal a bukásra, nem csak
+   „van eredménye”); a bukott, megszakadt, futás közben kihagyott vagy eredmény nélküli teszt bukás. Kivétel: a listában is
+   kihagyottként deklarált teszt (`test.skip` / `test.fixme` → a `--list` JSON-ban `expectedStatus: "skipped"`; a Playwright 1.57
+   kimenetén mérve), amely a jelentésben `skipped` — ezt külön számolja (ma 0 ilyen teszt van);
+5. az átment tesztek + a deklarált kihagyások összege = a lista teljes száma.
+
+A rész JSON-jelentésének feltöltése `if-no-files-found: error`: újrafuttatásnál egy korábbi kísérletből maradt, elavult jelentés
+nem kerülhet az ellenőrbe (vak ellenőr L3).
 
 Eltérésnél kilépési kód 1 → a „Playwright E2E” piros. Az N egy helyen van (`env.E2E_SHARDS`); a mátrix számozott részeinek és
 az `E2E_SHARDS`-nak az egyezését a `scripts/qa/e2e-shards.test.mjs` őr-esete méri a valódi `ci.yml`-en, futás közben pedig a

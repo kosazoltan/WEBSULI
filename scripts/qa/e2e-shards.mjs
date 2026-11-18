@@ -5,7 +5,8 @@
 //           tesztjeit a Playwright `--test-list` formátumában írja ki. Tiszta függvény: ugyanarra a listára, súlyfájlra és N-re
 //           minden gépen ugyanazt adja — a szelet-jobok egymástól függetlenül számolják ki.
 //   check : számláló-ellenőr. A szeletek JSON-jelentéseiből (`--reporter=json`) igazolja, hogy a lista MINDEN tesztje pontosan egy
-//           szeletben, ténylegesen lefutott (van eredménye), és a szeletek összege = a lista teljes száma. Eltérésnél kilépési kód 1.
+//           szeletben lefutott ÉS átment (`expected` / `flaky`; a listában is deklarált `test.skip` / `fixme` külön számolva), és
+//           az átment + deklaráltan kihagyott tesztek összege = a lista teljes száma. Eltérésnél kilépési kód 1.
 //
 // Függőség nélküli Node ESM. Használat:
 //   node scripts/qa/e2e-shards.mjs plan  --list <lista.json> --weights <sulyok.json> --total <N> --part <k> --out <szelet.txt>
@@ -38,6 +39,9 @@ export function flattenTests(json) {
           titles: full,
           key: [`[${project}]`, spec.file, ...full].join(SEP),
           status: t.status,
+          // A deklarált elvárás: `test.skip` / `test.fixme` → "skipped" (a `--list` is így adja), különben "passed".
+          expectedStatus: t.expectedStatus ?? 'passed',
+          resultStatuses: (t.results ?? []).map((r) => r.status),
           results: (t.results ?? []).length,
           durationMs: (t.results ?? []).reduce((n, r) => n + (r.duration ?? 0), 0),
         });
@@ -69,10 +73,14 @@ const weightOf = (test, w) => w.files?.[test.file] ?? w.defaultSecPerTest;
  * Súlyozott felosztás. Egység = egy fájl összes tesztje (a fájlon belüli sorrend és a `serial` csoportok együtt maradnak);
  * CSAK a súlyfájl `splittable` listáján szereplő fájl bontható egymást követő tesztek darabjaira, ha nehezebb a szelet-cél
  * felénél. Kiosztás: a legnehezebb egység a pillanatnyilag legkönnyebb szeletbe (holtversenyben név, illetve sorszám szerint).
- * @returns {{ tests: object[], weight: number }[]} `total` szelet; a szeleten belül a lista eredeti sorrendje.
+ * A bemeneti lista sorrendjétől független (vak ellenőr L2): a felosztás előtt a tesztek a stabil `key` (projekt › fájl › címút)
+ * szerint rendeződnek; a Playwright a `--test-list` sorrendjétől függetlenül a saját sorrendjében futtat.
+ * @returns {{ tests: object[], weight: number }[]} `total` szelet; a szeleten belül `key` szerinti sorrend.
  */
-export function partition(tests, weights, total) {
+export function partition(input, weights, total) {
   if (!(Number.isInteger(total) && total >= 1)) throw new Error(`A szeletek száma pozitív egész legyen (kaptam: ${total}).`);
+  const byKey = (a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const tests = [...input].sort(byKey);
   const order = new Map(tests.map((t, i) => [t, i]));
   const byFile = new Map();
   for (const t of tests) byFile.set(t.file, [...(byFile.get(t.file) ?? []), t]);
@@ -104,7 +112,12 @@ export const testListText = (tests) => `${tests.map((t) => t.key).join('\n')}\n`
 
 /**
  * Számláló-ellenőr (tiszta): `listed` a teljes lista, `shards` a szeletenkénti jelentés tesztjei (`null` = hiányzó jelentés).
- * @returns {{ ok: boolean, problems: string[], rows: { part: string, count: number, ran: number, minutes: number }[], sum: number, expected: number }}
+ *
+ * „Lefutott és átment” (vak ellenőr L1, második védvonal a bukásra): a teszt végeredménye `expected` vagy `flaky` (a Playwright
+ * `ok()` szabálya; `flaky` = újrapróbával átment). Szándékos kihagyás: a jelentésben `skipped`, ÉS a listában is kihagyottként
+ * deklarált (`expectedStatus: "skipped"` — `test.skip` / `test.fixme`; a Playwright 1.57 `--list` kimenete ezt így adja, mérve) —
+ * ezt külön számoljuk. Minden más (bukott `unexpected`, megszakadt, a futás közben kihagyott `test.skip()`, eredmény nélküli) bukás.
+ * @returns {{ ok: boolean, problems: string[], rows: { part: string, count: number, ran: number, skipped: number, minutes: number }[], sum: number, skipped: number, expected: number }}
  */
 export function checkCoverage(listed, shards) {
   const problems = [];
@@ -115,19 +128,26 @@ export function checkCoverage(listed, shards) {
   for (const [part, tests] of shards) {
     if (!tests) { problems.push(`A(z) ${part}. szelet jelentése hiányzik.`); continue; }
     let ran = 0;
+    let skipped = 0;
     for (const t of tests) {
-      if (!want.has(t.id)) problems.push(`A(z) ${part}. szeletben a listán nem szereplő teszt futott: ${t.key}`);
+      const decl = want.get(t.id);
+      if (!decl) problems.push(`A(z) ${part}. szeletben a listán nem szereplő teszt futott: ${t.key}`);
       if (seen.has(t.id)) problems.push(`Kétszer futott (a ${seen.get(t.id)}. és a ${part}. szeletben): ${t.key}`);
       else seen.set(t.id, part);
-      if (t.results > 0) ran += 1;
-      else problems.push(`A(z) ${part}. szeletben nem futott le (nincs eredménye): ${t.key}`);
+      if (t.results === 0) problems.push(`A(z) ${part}. szeletben nem futott le (nincs eredménye): ${t.key}`);
+      else if (t.status === 'expected' || t.status === 'flaky') ran += 1;
+      else if (t.status === 'skipped' && decl?.expectedStatus === 'skipped' && t.resultStatuses.every((s) => s === 'skipped')) skipped += 1;
+      else problems.push(`A(z) ${part}. szeletben nem ment át (${t.status}; eredmények: ${t.resultStatuses.join(', ')}): ${t.key}`);
     }
-    rows.push({ part: String(part), count: tests.length, ran, minutes: tests.reduce((n, t) => n + t.durationMs, 0) / 60_000 });
+    rows.push({ part: String(part), count: tests.length, ran, skipped, minutes: tests.reduce((n, t) => n + t.durationMs, 0) / 60_000 });
   }
   for (const t of listed) if (!seen.has(t.id)) problems.push(`Egyik szeletben sem futott: ${t.key}`);
   const sum = rows.reduce((n, r) => n + r.ran, 0);
-  if (sum !== listed.length) problems.push(`A szeletekben lefutott tesztek összege ${sum}, a lista teljes száma ${listed.length}.`);
-  return { ok: problems.length === 0, problems, rows, sum, expected: listed.length };
+  const skipped = rows.reduce((n, r) => n + r.skipped, 0);
+  if (sum + skipped !== listed.length) {
+    problems.push(`A szeletekben átment tesztek (${sum}) és a deklarált kihagyások (${skipped}) összege ${sum + skipped}, a lista teljes száma ${listed.length}.`);
+  }
+  return { ok: problems.length === 0, problems, rows, sum, skipped, expected: listed.length };
 }
 
 /** A jelentésekből mért súlyok (mp / teszt, fájlonként) — a súlyfájl frissítéséhez; a `splittable` lista megmarad. */
@@ -193,8 +213,8 @@ function check(opts, log) {
   }
   const res = checkCoverage(listed, shards);
   const text = [
-    table(['szelet', 'teszt', 'lefutott', 'tesztperc'], res.rows.map((r) => [r.part, r.count, r.ran, r.minutes.toFixed(1)])),
-    `[e2e-shards] a szeletekben lefutott tesztek összege: ${res.sum}; a lista teljes száma: ${res.expected} → ${res.ok ? 'EGYEZIK' : 'ELTÉR'}`,
+    table(['szelet', 'teszt', 'átment', 'kihagyott', 'tesztperc'], res.rows.map((r) => [r.part, r.count, r.ran, r.skipped, r.minutes.toFixed(1)])),
+    `[e2e-shards] a szeletekben lefutott (átment) tesztek összege: ${res.sum}; a lista teljes száma: ${res.expected} → ${res.ok ? 'EGYEZIK' : 'ELTÉR'} (deklarált kihagyás: ${res.skipped})`,
   ].join('\n');
   log(text);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### E2E számláló-ellenőr\n\n\`\`\`text\n${text}\n\`\`\`\n`);

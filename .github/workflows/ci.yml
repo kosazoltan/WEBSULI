@@ -270,7 +270,8 @@ jobs:
         with:
           name: e2e-json-${{ matrix.part }}
           path: source/e2e-report-${{ matrix.part }}.json
-          if-no-files-found: warn
+          # Hiányzó jelentés → a rész bukik: újrafuttatásnál egy korábbi kísérlet elavult jelentése nem kerülhet az ellenőrbe.
+          if-no-files-found: error
           overwrite: true
           retention-days: 7
 
@@ -287,7 +288,7 @@ jobs:
 
   # A főág védelmében és a pre-merge-gate listájában szereplő kötelező ellenőrzés: EGY, változatlan nevű job. Csak akkor zöld,
   # ha minden rész zöld (a kihagyott / megszakított rész is bukás — ezért always()), és a számláló-ellenőr szerint a részekben
-  # lefutott tesztek összege = a teljes tesztlista.
+  # lefutott és átment tesztek (+ a listában is deklarált kihagyások) összege = a teljes tesztlista.
   e2e-tests:
     name: Playwright E2E
     runs-on: ubuntu-24.04
