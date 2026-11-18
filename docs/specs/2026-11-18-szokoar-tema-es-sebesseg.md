@@ -266,3 +266,19 @@ vízből kiemelkedő szikla-hegy, a tetején a menedék (világítótorony); tel
 
 **Tesztek:** `tsunami-models-budget.test.ts` bővül az új modellnevekkel (`cliff`, `hill`, `kid_*`, `debris_log`) és azzal, hogy
 modellenként egy primitív van (a mérce szigorodik: primitív ≤ 20); a `tsunami-play.spec.ts` változatlan.
+
+### 7.5 Csiszoló kör (tulajdonosi döntés a c4 képekre: „Igen, de még csiszold”, 2026-11-18)
+
+Sorrend (a lagg a tulajdonos fő panasza, ezért az előre kerül):
+1. **Menet közbeni hosszú képkockák** — CPU-profillal, tényből megnevezett ok, javítás. Cél: menet közben nincs 50 ms-nál hosszabb
+   képkocka a kérdés megjelenésén kívül; ott ≤ 100 ms.
+2. **Álló kezdőkép:** a hullámfal tarajának jól olvasható része már alacsony víznél is látszik (a súgó-buborék, a felső stég és a
+   hegy nem takarja).
+3. **Stégek:** nem állványzat — kevesebb szint, lépcsőzetes hossz, szabálytalan deszkák és cölöpök, kötélkorlát.
+4. **Fekvő nézet:** a figura szabadsága a nyitott kérdés alatt oldalra mozgáskor is (≤ 600 ms), teszttel; a próba a ténylegesen
+   kirajzolt kép-eltolással mér. A megoldás a tárcsa oldalától független (a `feat/joystick-jobb-kez` ággal összefésülhető).
+5. **Teljesítmény nyugodt gépen** (≤ 1 idegen e2e-konténer): ≥ 57,7 fps 390×844-en, ≤ 200 ms indítási tüske 4× CPU-n, 5–5 mérés,
+   szórással.
+6. **Blender-kimenet:** bájtazonosság, vagy ha az exportáló miatt nem megy, normalizált tartalmi lenyomat a fájlnévben —
+   igazolva több futással.
+7. Meta-mérő a Szökőárra; a friss főág beolvasztása, a Brain Rot `pacing` és a determinizmus-őr összhangja.

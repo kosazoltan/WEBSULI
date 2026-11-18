@@ -74,6 +74,15 @@ indítási cél a telefonos nézetben egy mérésben (250 ms) még nem teljesül
    f. Mérés a végén: rajzolási hívás ≤ 130, 390×844-en ≥ 57,7 fps, 4× CPU-s indítási tüske ≤ 200 ms.
    g. Kapuk: `tsunami-play.spec` teljes, a közös mérők Szökőár-köre, `gate:stage`, `gate:push`.
 
+10. **Csiszoló kör (terv `docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md` 7.5):**
+   a. Profil (`long-animation-frame` + CDP-mintavételezés) a menet első 30 másodpercére, 1× és 4× CPU; az ok tényből.
+   b. Javítás a forrásnál (ha közös modul érintett: csak hozzáadó változtatás, a meglévő viselkedés marad).
+   c. `TsunamiEscapeEnglish.tsx`: általános eltolás-megoldó (álló és fekvő nézet), a teszt-kampó `x` mezője, a súgó helye.
+   d. `TsunamiScene3D.tsx`: lépcsőzetes stégek kötélkorláttal, álló nézetben magasabb taraj, a kirajzolt eltolás visszaírása.
+   e. `tsunami-play.spec.ts`: új eset — a figura a két szélre mozog nyitott kérdés alatt, ≤ 600 ms-on belül szabad.
+   f. `build_all.py`: normalizált tartalmi lenyomat a fájlnévben, 3 futással igazolva.
+   g. Mérés nyugodt gépen 5–5-ször; képek (`c5-*`); kapuk.
+
 ## Elfogadás
 - A víz MINDIG látszik, a menedék MINDIG a képen van; jó válasznál a víz képi szintje 0,5 s-on belül csökken, rossznál nő.
 - A kérdés nem állítja meg a világot (a víz lassítva emelkedik); a válaszgombok ≥ 48 px, nem takarják a figurát és a tárcsát.
