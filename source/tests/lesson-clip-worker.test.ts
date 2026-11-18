@@ -9,7 +9,10 @@ import {
   CLIP_SPEECH_ATTEMPTS, eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, speakChecked, speechDistance, type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
-import { clipKeys } from "../server/lesson-clips-providers";
+import { clipKeys, downloadAndShrink } from "../server/lesson-clips-providers";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 // docs/specs/2026-11-10-fejezet-kisfilmek-v2.md — gyártósor, kiszolgálás, plafonok (hálózat és adatbázis nélkül, hamis szolgáltatókkal).
 
@@ -213,13 +216,13 @@ test("háttérkör: a friss lecke minden fejezete kisfilmet kap; a végpont kiad
   assert.deepEqual(await lessonClipsResponse(store, "old", "auto", NOW), { clips: [], pending: false });
   const deps = fakeDeps();
   const report = await runClipRound(store, deps, "auto", OPTS);
-  assert.deepEqual(report, { made: 2, failed: 0, lessons: 1, videos: 2 * STYLE.narration.scenes[0], stoppedByBudget: false });
+  assert.deepEqual(report, { made: 2, failed: 0, lessons: 1, videos: 2 * STYLE.narration.scenes[0], stoppedByBudget: false, stoppedByMemory: false });
   assert.deepEqual(rows.map((r) => [r.lessonId, r.sectionIndex, r.status, r.attempts]), [["pub", 0, "ready", 1], ["pub", 1, "ready", 1]]);
   const served = await lessonClipsResponse(store, "pub", "auto", NOW);
   assert.deepEqual(served!.clips.map((c) => [c.sectionIndex, (c.clip as Clip2).v]), [[0, 2], [1, 2]]);
   assert.equal(served!.pending, false);
   const chats = deps.calls.chat.length;
-  assert.deepEqual(await runClipRound(store, deps, "auto", OPTS), { made: 0, failed: 0, lessons: 0, videos: 0, stoppedByBudget: false });
+  assert.deepEqual(await runClipRound(store, deps, "auto", OPTS), { made: 0, failed: 0, lessons: 0, videos: 0, stoppedByBudget: false, stoppedByMemory: false });
   assert.equal(deps.calls.chat.length, chats);
   assert.equal(await runClipRound(store, deps, "idle", OPTS), null);
   assert.equal(await runClipRound(store, deps, "off", OPTS), null);
@@ -228,7 +231,7 @@ test("háttérkör: a friss lecke minden fejezete kisfilmet kap; a végpont kiad
 test("sikertelen fejezet legfeljebb két körben próbálkozik; a megváltozott fejezet újragyártandó", async () => {
   const { store, rows } = memoryStore([makeLesson("pub")]);
   const bad = fakeDeps({ answers: ["{}"] });
-  assert.deepEqual(await runClipRound(store, bad, "auto", OPTS), { made: 0, failed: 2, lessons: 1, videos: 0, stoppedByBudget: false });
+  assert.deepEqual(await runClipRound(store, bad, "auto", OPTS), { made: 0, failed: 2, lessons: 1, videos: 0, stoppedByBudget: false, stoppedByMemory: false });
   assert.equal((await lessonClipsResponse(store, "pub", "auto", NOW))!.pending, true, "van még próbálkozás");
   await runClipRound(store, bad, "auto", OPTS);
   assert.deepEqual(rows.map((r) => [r.status, r.attempts]), [["failed", CLIP_MAX_ATTEMPTS], ["failed", CLIP_MAX_ATTEMPTS]]);
@@ -253,6 +256,32 @@ test("memóriaőr és terhelés: egyszerre egy fejezet készül; túl nagy memó
   const slow = fakeDeps({ chat: async () => { peak = Math.max(peak, ++active); await new Promise((r) => setTimeout(r, 5)); active--; return draft(); } });
   assert.equal((await runClipRound(store, slow, "auto", { ...OPTS, rss: () => CLIP_RSS_LIMIT_BYTES - 1 }))!.made, 2);
   assert.equal(peak, 1, "a fejezetek egymás után készülnek");
+});
+
+test("memóriaőr fejezetenként: ha a kör közben nő a memória, a következő fejezet már nem indul (review M2)", async () => {
+  const { store, rows } = memoryStore([makeLesson("pub")]);
+  const deps = fakeDeps();
+  let measured = 0;
+  const report = await runClipRound(store, deps, "auto", { ...OPTS, rss: () => (++measured <= 2 ? CLIP_RSS_LIMIT_BYTES - 1 : CLIP_RSS_LIMIT_BYTES + 1) });
+  assert.equal(report!.made, 1, "az első fejezet elkészül, a második előtt az őr megállítja a kört");
+  assert.equal(report!.stoppedByMemory, true);
+  assert.equal(rows.length, 1, "a kimaradt fejezet nem kap hibás sort (a következő kör újra próbálja)");
+});
+
+test("átkódolás: hibás letöltésnél null (a törzs lezárva), a SIGTERM-et figyelmen kívül hagyó ffmpeg-et az időkorlát megöli (review L1, L3)", async () => {
+  let cancelled = false;
+  const body = new ReadableStream({ cancel() { cancelled = true; } });
+  assert.equal(await downloadAndShrink(async () => new Response(body, { status: 500 })), null);
+  assert.equal(cancelled, true, "a hibás válasz törzse lezárul");
+  if (process.platform === "win32") return; // az ál-ffmpeg POSIX-héjszkript
+  const dir = mkdtempSync(path.join(tmpdir(), "fake-ffmpeg-"));
+  const stubborn = path.join(dir, "ffmpeg");
+  writeFileSync(stubborn, "#!/bin/sh\ntrap '' TERM\nexec sleep 30\n");
+  chmodSync(stubborn, 0o755);
+  const started = Date.now();
+  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array([1, 2, 3])), stubborn, 300), null);
+  assert.ok(Date.now() - started < 5000, `a beakadt átkódolás nem tartja fel a sort (${Date.now() - started} ms)`);
+  rmSync(dir, { recursive: true, force: true });
 });
 
 test("napi plafon és tárkeret: a plafon fölötti lecke kimarad, betelt tárnál a gyártás megáll", async () => {

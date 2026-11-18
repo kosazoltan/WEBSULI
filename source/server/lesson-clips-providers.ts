@@ -103,20 +103,27 @@ export const FFMPEG_ARGS = (input: string, output: string): string[] => ["-y", "
  * A nyers mozgókép letöltése LEMEZRE (nem a memóriába), majd átkódolás 960 px széles, kb. 700 kbit/s-os, hang nélküli H.264-re.
  * `ffmpeg` hiányában vagy hibánál null.
  */
-export async function downloadAndShrink(download: () => Promise<Response>, ffmpeg = "ffmpeg"): Promise<Buffer | null> {
+export async function downloadAndShrink(download: () => Promise<Response>, ffmpeg = "ffmpeg", timeoutMs = 90_000): Promise<Buffer | null> {
   const dir = await mkdtemp(path.join(tmpdir(), "clip-"));
+  let stage: "letöltés" | "átkódolás" = "letöltés";
   try {
     const input = path.join(dir, "in.mp4"), output = path.join(dir, "out.mp4");
     const res = await download();
-    if (!res.ok || !res.body) throw new Error(`mozgókép letöltése: HTTP ${res.status}`);
+    if (!res.ok || !res.body) {
+      await res.body?.cancel().catch(() => undefined);
+      throw new Error(`HTTP ${res.status}`);
+    }
     await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(input));
+    stage = "átkódolás";
+    // SIGKILL: a SIGTERM-et figyelmen kívül hagyó ffmpeg se tarthassa fel örökre az egyetlen átkódolási sort (review L1).
     await ffmpegQueue(() => new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, FFMPEG_ARGS(input, output), { timeout: 90_000 }, (error) => (error ? reject(error) : resolve()));
+      execFile(ffmpeg, FFMPEG_ARGS(input, output), { timeout: timeoutMs, killSignal: "SIGKILL" }, (error) => (error ? reject(error) : resolve()));
     }));
     return await readFile(output);
   } catch (error) {
-    const missing = (error as NodeJS.ErrnoException)?.code === "ENOENT";
-    if (!missing || !warnedNoFfmpeg) logger.warn(`[lesson-clips] ${missing ? "nincs ffmpeg a szerveren (FFMPEG_PATH / PATH) — a kisfilmek mozgókép nélkül készülnek" : `az átkódolás nem sikerült: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`}`);
+    const missing = stage === "átkódolás" && (error as NodeJS.ErrnoException)?.code === "ENOENT";
+    const detail = error instanceof Error ? error.message.slice(0, 160) : String(error);
+    if (!missing || !warnedNoFfmpeg) logger.warn(`[lesson-clips] ${missing ? "nincs ffmpeg a szerveren (FFMPEG_PATH / PATH) — a kisfilmek mozgókép nélkül készülnek" : `a mozgókép ${stage}a nem sikerült: ${detail}`}`);
     if (missing) warnedNoFfmpeg = true;
     return null;
   } finally {

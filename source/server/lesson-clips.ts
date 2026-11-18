@@ -21,8 +21,23 @@ export const CLIP_MAX_ATTEMPTS = 2;
  * mozgóképeivel a 512 MB-os példány memóriája betelt, és a szerver újraindult — ezért egy.
  */
 export const CLIP_PARALLEL = 1;
-/** Ennyi saját memória fölött a kör kimarad (a példány korlátja 512 MB; az átkódolás további ~110 MB-ot kér). */
-export const CLIP_RSS_LIMIT_BYTES = 360 * 1024 * 1024;
+/**
+ * Ennyi saját memória fölött a kör (és a körön belül a következő fejezet) kimarad. A példány korlátja 512 MB; egy fejezet gyártása
+ * ~50 MB, az átkódolás (külön folyamat, a Node RSS-ében nem látszik) mérve 75 MB — 320 + 50 + 75 ≈ 445 MB (független review M2).
+ */
+export const CLIP_RSS_LIMIT_BYTES = 320 * 1024 * 1024;
+/** A memóriaőr kihagyás-figyelmeztetése legfeljebb ennyi időnként (a kör 3 percenként fut; review M3). */
+const RSS_WARN_EVERY_MS = 60 * 60_000;
+let lastRssWarn = 0;
+/** Igaz, ha a memória a határ fölött van (naplózva, óránként legfeljebb egyszer). */
+function overMemory(rss: number, where: string, now = Date.now()): boolean {
+  if (rss <= CLIP_RSS_LIMIT_BYTES) return false;
+  if (now - lastRssWarn >= RSS_WARN_EVERY_MS) {
+    lastRssWarn = now;
+    logger.warn(`[lesson-clips] ${where} kimarad: a folyamat memóriája ${Math.round(rss / 1048576)} MB (határ: ${Math.round(CLIP_RSS_LIMIT_BYTES / 1048576)} MB)`);
+  }
+  return true;
+}
 /** Egy tárolt mozgókép legfeljebb ekkora lehet (átkódolás után) — fölötte a jelenet állóképes marad. */
 export const CLIP_VIDEO_MAX_BYTES = 2_500_000;
 
@@ -295,15 +310,15 @@ async function inBatches<T>(items: readonly T[], size: number, work: (item: T) =
   for (let i = 0; i < items.length; i += size) await Promise.all(items.slice(i, i + size).map(work));
 }
 
-export type ClipRoundReport = { made: number; failed: number; lessons: number; videos: number; stoppedByBudget: boolean };
+export type ClipRoundReport = { made: number; failed: number; lessons: number; videos: number; stoppedByBudget: boolean; stoppedByMemory: boolean };
 /** A háttérfolyamat egy köre, zár alatt: a friss leckék hiányzó kisfilmjei a napi plafonig és a tárkeretig. */
 export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipMode, opts: { dailyLimit: number; mediaBudgetBytes: number; model: string; rss?: () => number }): Promise<ClipRoundReport | null> {
   if (mode !== "auto") return null;
   // Memóriaőr: ha a folyamat már sokat foglal, a kör kimarad — a gyártás soha nem dönthetik be a szervert.
-  const rss = opts.rss?.() ?? 0;
-  if (rss > CLIP_RSS_LIMIT_BYTES) { logger.warn(`[lesson-clips] a kör kimarad: a folyamat memóriája ${Math.round(rss / 1048576)} MB (határ: ${Math.round(CLIP_RSS_LIMIT_BYTES / 1048576)} MB)`); return null; }
+  const rss = () => opts.rss?.() ?? 0;
+  if (overMemory(rss(), "a kör")) return null;
   return store.exclusive(async () => {
-    const report: ClipRoundReport = { made: 0, failed: 0, lessons: 0, videos: 0, stoppedByBudget: false };
+    const report: ClipRoundReport = { made: 0, failed: 0, lessons: 0, videos: 0, stoppedByBudget: false, stoppedByMemory: false };
     const today = new Set(await store.lessonsToday());
     for (const lesson of await store.freshLessons(CLIP_FRESH_DAYS)) {
       const parsed = parseLesson(lesson.json);
@@ -319,6 +334,8 @@ export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipM
       await inBatches(todo, CLIP_PARALLEL, async (section) => {
         // Tárkeret: a tábla ne nőhessen korlát nélkül (mérve: egy fejezet néhány MB).
         if (report.stoppedByBudget || (await store.mediaBytes()) >= opts.mediaBudgetBytes) { report.stoppedByBudget = true; return; }
+        // Memóriaőr fejezetenként is: egy kör sok fejezetet visz végig (review M2).
+        if (report.stoppedByMemory || overMemory(rss(), "a következő fejezet")) { report.stoppedByMemory = true; return; }
         const base = { lessonId: lesson.id, sectionIndex: section.sectionIndex, heading: section.heading, sourceHash: section.hash, attempts: section.attempts + 1, model: opts.model };
         const result = await makeChapterClip({ title: parsed.title, subject: parsed.subject, classroom: parsed.classroom, heading: section.heading, source: section.source, animateIndexes: animateBlockIndexes(parsed, section.sectionIndex) }, band, deps, store.putMedia);
         if ("clip" in result) {
@@ -332,6 +349,7 @@ export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipM
         logger.warn(`[lesson-clips] nem készült el (${lesson.id} / ${section.sectionIndex + 1}. fejezet, ${base.attempts}. kör): ${result.problems.join(" | ").slice(0, 300)}`);
       });
       if (report.stoppedByBudget) { logger.warn("[lesson-clips] a tárkeret betelt (LESSON_CLIP_MEDIA_MAX_MB) — a gyártás megáll"); break; }
+      if (report.stoppedByMemory) break;
     }
     return report;
   });
