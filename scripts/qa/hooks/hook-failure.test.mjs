@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { makeRunner, NoAnswerError, RETRY_HINT } from './check-quality-gates.mjs';
+import { detectGated, makeRunner, NoAnswerError, planCommand, RETRY_HINT } from './check-quality-gates.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const gateHook = fileURLToPath(new URL('./check-quality-gates.mjs', import.meta.url));
@@ -122,4 +122,56 @@ test('F5 szöveg-őr: a runbook „A kapu-hook hibája” szakasza nem ad ügyn�
   assert.match(sec, /nem távolíthatja el, nem gyengítheti, és kerülőútként sem\s+javasolhatja/);
   assert.match(sec, /\*\*megáll\*\*, és a tulajdonostól kér segítséget/);
   assert.match(sec, /kizárólag a tulajdonos saját kezű lépése/);
+});
+
+// ---- L1 (vak ellenőr, 2026-11-18): a felismerés lineáris — nagy, ártalmatlan szövegen nincs hamis tiltás -------------------
+
+test('F8: ≥ 200 KB-os, „gh pr …” említésekkel teli ártalmatlan parancs 1 s alatt ENGEDETT; a kapu-köteles alakok változatlanok', () => {
+  const dense = 'gh pr view es gh pr checks; '.repeat(Math.ceil(200_000 / 28));
+  const gitty = 'git log es git status; '.repeat(Math.ceil(200_000 / 23));
+  for (const body of [dense, gitty]) {
+    const cmd = `echo "${body}"`;
+    const t0 = Date.now();
+    assert.equal(detectGated(cmd), false);
+    assert.equal(planCommand(cmd).kind, 'none');
+    assert.ok(Date.now() - t0 < 1000, `lassú felismerés: ${Date.now() - t0} ms`);
+  }
+  // folyamat-szinten is (a hook a teljes bemenetet olvassa)
+  const t1 = Date.now();
+  assert.equal(run(gateHook, { tool_name: 'Bash', tool_input: { command: `echo "${dense}"` }, cwd: process.cwd() }), null);
+  assert.ok(Date.now() - t1 < 5000, `lassú hook: ${Date.now() - t1} ms`);
+  // a kapu-köteles alakok a hosszú szöveg végén is felismertek
+  for (const tail of ['git push origin x', 'gh pr merge 5 --squash', 'gh pr create --title x', '/usr/bin/git push', '"C:/Program Files/GitHub CLI/gh.exe" pr merge 5']) {
+    assert.equal(detectGated(`${dense} && ${tail}`), true, tail);
+  }
+});
+
+// ---- L2 (vak ellenőr, 2026-11-18): a védelem eltávolítása / gyengítése Edit / Write-tal tiltott; a hook javítása engedett ---------
+
+const rulesHook = fileURLToPath(new URL('./enforce-repo-rules.mjs', import.meta.url));
+const SETTINGS = join(repoRoot, '.claude', 'settings.json');
+const GATE = join(repoRoot, 'scripts', 'qa', 'hooks', 'check-quality-gates.mjs');
+const OFF = `"${'disable'}${'AllHooks'}": true`; // a kikapcsoló beállítás neve szándékosan darabolva (szöveg-őr)
+
+test('F9: a három próba (helyi settings-be hook-kikapcsolás, az onFailure törlése, a hook belépési pontjának kiürítése) TILTOTT', () => {
+  const settingsText = readFileSync(SETTINGS, 'utf8');
+  const probes = [
+    { tool_name: 'Write', tool_input: { file_path: join(repoRoot, '.claude', 'settings.local.json'), content: `{ ${OFF} }` } },
+    { tool_name: 'Edit', tool_input: { file_path: SETTINGS, old_string: '"timeout": 60,\n            "onFailure": "block",', new_string: '"timeout": 60,' } },
+    { tool_name: 'Edit', tool_input: { file_path: SETTINGS, old_string: '"onFailure": "block"', new_string: '"onFailure": "continue"' } },
+    { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: settingsText.replace(/\s*"onFailure": "block",/g, '') } },
+    { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: settingsText.replace(/check-quality-gates\.mjs/g, 'enforce-repo-rules.mjs') } },
+    { tool_name: 'Edit', tool_input: { file_path: GATE, old_string: 'function main() {\n  let raw', new_string: 'function main() {\n  process.exit(0);\n  let raw' } },
+    { tool_name: 'Edit', tool_input: { file_path: GATE, old_string: ".endsWith('scripts/qa/hooks/check-quality-gates.mjs')) main();", new_string: ".endsWith('scripts/qa/hooks/check-quality-gates.mjs')) void 0;" } },
+  ];
+  for (const p of probes) assert.match(reason(run(rulesHook, p)) ?? '', /REPO-SZABÁLY/, JSON.stringify(p.tool_input).slice(0, 140));
+});
+
+test('F9: a hook tartalmi javítása és a settings más részének szerkesztése ENGEDETT', () => {
+  const allowed = [
+    { tool_name: 'Edit', tool_input: { file_path: GATE, old_string: "export const RETRY_HINT = 'próbáld újra", new_string: "export const RETRY_HINT = 'Próbáld újra" } },
+    { tool_name: 'Edit', tool_input: { file_path: SETTINGS, old_string: '"timeout": 60,\n            "onFailure": "block",', new_string: '"timeout": 60,\n            "onFailure": "block",\n            "statusMessage": "x",' } },
+    { tool_name: 'Edit', tool_input: { file_path: join(repoRoot, 'docs', 'x.md'), old_string: '"onFailure": "block"', new_string: '' } },
+  ];
+  for (const p of allowed) assert.equal(reason(run(rulesHook, p)), null, JSON.stringify(p.tool_input).slice(0, 140));
 });

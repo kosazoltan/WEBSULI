@@ -13,6 +13,12 @@
 // Repo-specifikus bővítés (opcionális): scripts/qa/repo-rules.json a repo-ban:
 //   { "rules": [ { "tool": "Bash|PowerShell|Edit|Write", "pattern": "<regex>",
 //                  "flags": "i", "level": "deny|warn", "message": "..." } ] }
+// WEBSULI-bővítés (docs/specs/2026-11-18-hook-onfailure.md L2), két opcionális mező:
+//   "path":    <regex> — a szabály csak az ilyen (perjelesített) fájlútvonalú Edit / Write hívásra vonatkozik;
+//   "removes": <regex> — a szabály akkor sül el, ha a minta előfordulásainak száma a régi tartalomban (Edit: old_string,
+//              MultiEdit: edits[].old_string, Write: a lemezen lévő fájl) NAGYOBB, mint az újban (eltávolítás / gyengítés).
+//   A "removes"-szabály "pattern"-je soha nem illeszkedő kifejezés legyen ("(?!)"), hogy a bővítést nem ismerő régi hook ne
+//   tiltson mindent.
 // Így minden repo a saját AGENTS.md-tiltásait kódolhatja, a hook-kód módosítása nélkül.
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -76,6 +82,21 @@ try {
         || (r.tool === 'Edit|Write' && isEdit)
         || r.tool === tool;
       if (!applies) continue;
+      if (r.path && !(isEdit && new RegExp(r.path, 'i').test(fp.replace(/\\/g, '/')))) continue;
+      if (r.removes) {
+        const re = new RegExp(r.removes, `${(r.flags || '').replace(/g/g, '')}g`);
+        const count = (t) => (String(t ?? '').match(re) || []).length;
+        let before = '';
+        let after = '';
+        if (tool === 'Write') { before = existsSync(fp) ? readFileSync(fp, 'utf8') : ''; after = ti.content; }
+        else if (Array.isArray(ti.edits)) { before = ti.edits.map((e) => e?.old_string).join('\n'); after = ti.edits.map((e) => e?.new_string).join('\n'); }
+        else { before = ti.old_string; after = ti.new_string; }
+        if (count(before) > count(after)) {
+          if (r.level === 'deny') deny(r.message || `egyedi repo-szabály (eltávolítás): ${r.removes}`);
+          else warn(r.message || `egyedi repo-szabály (eltávolítás): ${r.removes}`);
+        }
+        continue;
+      }
       const subject = isCmd ? cmd : content;
       if (!subject) continue;
       const re = new RegExp(r.pattern, r.flags || '');

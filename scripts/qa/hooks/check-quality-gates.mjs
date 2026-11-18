@@ -31,14 +31,37 @@ function deny(reason) {
   process.exit(0);
 }
 
-/** Van-e a parancs szövegében BÁRHOL kapu-köteles művelet (szándékosan tág: kétség esetén a szigorú ág fut). */
-// Önálló szó: nem része útvonalnak / névnek (`.git/`, `pre-push-gate`, `gate:push` nem számít).
-const W = (x) => `(?<![\\w./:-])${x}(?![\\w./:-])`;
-const GIT_PUSH = new RegExp(`${W('git(?:\\.exe)?')}[\\s\\S]*${W('push')}`, 'i');
-// Útvonallal megadott git (`C:/…/git.exe' push`, `/usr/bin/git push`): a név után idézőjel és / vagy szóköz jön.
-const GIT_PATH_PUSH = new RegExp(`git(?:\\.exe)?['"]?\\s[\\s\\S]*${W('push')}`, 'i');
-// Útvonallal megadott gh (`/usr/bin/gh pr merge`, `"…/GitHub CLI/gh.exe" pr merge`) — visszaellenőrzés Z1.
-const GH_PATH_PR = new RegExp(`gh(?:\\.exe)?['"]?\\s[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
+/**
+ * Van-e a parancs szövegében BÁRHOL kapu-köteles művelet (szándékosan tág: kétség esetén a szigorú ág fut).
+ * Önálló szó: a `[\w./:-]` karakterek egy teljes futama (nem része útvonalnak / névnek: `.git/`, `pre-push-gate`, `gate:push`
+ * nem számít). L1 (vak ellenőr, 2026-11-18): a felismerés LINEÁRIS — a futamokat egyszer bejárva sorrend-állapotgép
+ * (`git` → `push`; `gh` → `pr` → `create|merge`); a korábbi `[\s\S]*…[\s\S]*` minták nagy szövegen szuperlineárisak voltak.
+ */
+const WORD_RUN = /[\w./:-]+/g;
+const isGit = (w) => w === 'git' || w === 'git.exe';
+const isGh = (w) => w === 'gh' || w === 'gh.exe';
+const isPush = (w) => w === 'push';
+const isPr = (w) => w === 'pr';
+const isCreateOrMerge = (w) => w === 'create' || w === 'merge';
+// Útvonallal megadott git / gh (`C:/…/git.exe' push`, `"…/GitHub CLI/gh.exe" pr merge`): a név után idézőjel és / vagy szóköz jön.
+const GIT_PATH = /git(?:\.exe)?['"]?\s/i;
+const GH_PATH = /gh(?:\.exe)?['"]?\s/i;
+/** A futamok (kisbetűvel) és a kezdő pozíciójuk — egyetlen, lineáris bejárás. */
+function wordRuns(s) {
+  const out = [];
+  for (const m of s.matchAll(WORD_RUN)) out.push({ w: m[0].toLowerCase(), at: m.index });
+  return out;
+}
+/** A `from` pozíciótól a lépések egymás utáni teljesülése (lineáris). */
+function inOrder(runs, from, steps) {
+  let k = 0;
+  for (const r of runs) {
+    if (r.at < from || !steps[k](r.w)) continue;
+    k += 1;
+    if (k === steps.length) return true;
+  }
+  return false;
+}
 // ENGEDŐ lista (visszaellenőrzés AA1): csak ezek a NEM futtató eszközök kaphatnak „git push” / „gh pr merge” szöveget idézett
 // argumentumban; minden más fej (értelmező, burkoló, ismeretlen eszköz) + kapu-köteles szöveg → fail-closed DENY.
 const INTERPRETERS = new Set(['node', 'python', 'python3', 'py', 'deno', 'bun', 'perl', 'ruby']);
@@ -46,10 +69,15 @@ const SCRIPT_FILE = /^[^-][^\s]*\.(?:mjs|cjs|js|ts|mts|py|pl|rb)$/i;
 const EVAL_FLAGS = new Set(['-e', '-p', '--eval', '--print', '-c', '-E', '-pe', '-ne', 'eval', 'run', '-r', '--require', '--import', '--loader']);
 const NON_EXEC = new Set(['echo', 'printf', 'grep', 'egrep', 'fgrep', 'rg', 'cat', 'head', 'tail', 'wc', 'less', 'more', 'findstr',
   'write-output', 'write-host', 'select-string', 'get-content', 'type', 'sls', 'gc']);
-const GH_PR = new RegExp(`${W('gh(?:\\.exe)?')}[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
 export function detectGated(raw) {
   const s = String(raw ?? '');
-  return GIT_PUSH.test(s) || GIT_PATH_PUSH.test(s) || GH_PR.test(s) || GH_PATH_PR.test(s) || /\/pulls\/\d+\/merge\b/i.test(s);
+  const runs = wordRuns(s);
+  if (inOrder(runs, 0, [isGit, isPush]) || inOrder(runs, 0, [isGh, isPr, isCreateOrMerge])) return true;
+  const gp = GIT_PATH.exec(s);
+  if (gp && inOrder(runs, gp.index + gp[0].length, [isPush])) return true;
+  const hp = GH_PATH.exec(s);
+  if (hp && inOrder(runs, hp.index + hp[0].length, [isPr, isCreateOrMerge])) return true;
+  return /\/pulls\/\d+\/merge\b/i.test(s);
 }
 
 // PowerShell idézőjel-karakterei (a tipográfiaiak is idézőjelek ott); Bash-ben ezek közönséges karakterek.
