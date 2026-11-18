@@ -56,3 +56,48 @@
   mindkét hook SHALL tiltani (enélkül, és üres bemenetnél enged).
 - [ ] F7 WHEN az audit-hook git-hívása fut THEN a korlátja SHALL 10 s lenni (csak `node --test` alatt felülírható, felülről
   korlátozva); a belső hiba ága, a valódi időtúllépés és a kapu-hook keret-üzenetének teendője teszttel fedett.
+
+## Kiegészítés — a vak hibakereső ellenőr leletei (2026-11-18, fej `5786e83b`)
+
+A push ELŐTT javítandók (mindegyik előbb bukó teszttel):
+
+- **L1 (közepes, a PR hozta):** a kapu-köteles művelet felismerése (`detectGated`) két egymás utáni `[\s\S]*`-t tartalmazó mintával
+  nagy, „gh … pr …” említésekkel teli szövegen szuperlineáris (20 KB → 24 s, 30 KB → 65 s+); az `onFailure: "block"` miatt ez hamis
+  tiltás ártalmatlan parancsra. **Döntés:** egyszeri, visszalépés nélküli szkennelés — a parancs önálló szavait (`[\w./:-]` futamok)
+  egyszer bejárva sorrend-állapotgép (`git` → `push`; `gh` → `pr` → `create|merge`), az útvonalas `git` / `gh` alaknál a minta első
+  előfordulása után ugyanez; a `/pulls/<n>/merge` minta változatlan (lineáris). A régi és az új felismerő eredménye a próbatáblán és
+  véletlen szövegeken azonos (ellenpróba).
+- **L2 (közepes):** a „védelmet az ügynök nem távolíthatja el” szabály csak szövegben élt. **Döntés:** a repó meglévő
+  mechanizmusa (`scripts/qa/repo-rules.json` + `enforce-repo-rules` hook) két opcionális mezővel bővül: `path` (a szabály csak az
+  ilyen fájlútvonalú Edit / Write hívásra vonatkozik) és `removes` (tiltás, ha a minta előfordulásainak száma a régi tartalomban —
+  Edit: `old_string`, Write: a lemezen lévő fájl — nagyobb, mint az újban). Szabályok: (1) `.claude/settings*.json`-ba a hookokat
+  kikapcsoló beállítás írása → tilt; (2) a `.claude/settings*.json`-ból az `"onFailure": "block"` vagy a kapu-hook parancs-bejegyzés
+  eltávolítása → tilt; (3) a `scripts/qa/hooks/check-quality-gates.mjs` belépési pontjának (a `main()` hívás) eltávolítása → tilt;
+  (4) a hook-szkriptek `main()`-jének első utasításaként feltétel nélküli kilépés → tilt. **A hook javítása** (tartalmi szerkesztés,
+  amely ezeket nem érinti) **továbbra is lehetséges.** Határ: tetszőleges szemantikai rongálást (pl. a tiltó ág „javítása”
+  engedésre) szöveg-szabály nem ismer fel biztonságosan — ezt PR-szinten a CI-ben futó hook-tesztek fogják meg; a jogosultsági
+  szintű védelem (`permissions.deny` az Edit / Write-ra a `.claude/settings*.json`-on) tulajdonosi javaslat, nem e PR része.
+  Ismert korlát: az `enforce-repo-rules.mjs` a kit kezelt fájlja; egy kitfrissítés az új mezőket nem ismerné — a `removes`-szabályok
+  mintája ezért soha nem illeszkedő kifejezés (a régi hook így nem tilt mindent), és a teszt jelzi a visszaírást.
+- **L5 (kicsi, a PR hozta):** az audit-hook `null` / nem objektum bemenetre összeomlott. **Döntés:** a mezők olvasása biztonságos
+  (nem objektum → üres); a külső hook-korlát 15 → 20 s, hogy a 10 s-os belső git-korlát mindig előbb járjon le érthető tiltással
+  (teszt: a settings-korlát ≥ a belső korlát + 5 s); a runbook kimondja, hogy az audit-hookon nincs `onFailure` (minden Bash /
+  PowerShell parancsra fut; a pusht a kapu-hook fedi).
+- **L8:** teszt arra, hogy a git-korlát felülírása `NODE_TEST_CONTEXT` nélkül hatástalan.
+- **L9:** az elfogadási lista és a végrehajtási fájl pipálása a tényleges állapot szerint.
+- **L7:** a szöveg-őr a teljes runbookra, a kapu-skillekre (forrás + tükör), a csapdakatalógusra és a retróra kiterjed, a
+  szinonimákra és a kikapcsoló mechanizmus nevére is; a runbook és ez a terv nem nevezi meg szó szerint a hookokat kikapcsoló beállítást.
+
+Jegyre (külön szelet a #506 után): L3 (munkafán kívüli könyvtár + könyvtárváltás / `-C` → átengedés), L4 (a hook csak a Bash /
+PowerShell eszközt figyeli; MCP-eszközök), L6 (szokatlan JSON-bemenetek), és a meglévő hamis tiltások (`git stash push`,
+`git log --grep push`, commit-üzenet „push” szóval).
+
+### Elfogadás (EARS) — kiegészítés
+
+- [ ] F8 WHEN egy ≥ 200 KB-os, ártalmatlan, „gh pr …” említésekkel teli parancs érkezik THEN a kapu-hook SHALL 1 s alatt ENGEDNI, és
+  a kapu-köteles alakok változatlanul kapu-kötelesek / tiltottak.
+- [ ] F9 WHEN az Edit / Write a `.claude/settings*.json`-ba hook-kikapcsolást ír, onnan az `onFailure`-t vagy a kapu-hook bejegyzést
+  eltávolítja, vagy a kapu-hook belépési pontját kiüríti THEN az `enforce-repo-rules` SHALL tiltani; a hook tartalmi javítása SHALL
+  engedett maradni.
+- [ ] F10 WHEN az audit-hook `null` / nem objektum bemenetet kap THEN SHALL nem összeomlani; a külső korlát SHALL a belső git-korlát
+  + 5 s fölött lenni.

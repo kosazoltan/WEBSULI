@@ -19,3 +19,16 @@ Terv: `docs/specs/2026-11-18-hook-onfailure.md`. Ág: `chore/hook-onfailure-tilt
    teendő-része → a teszt bukik); független ellenőr; `gate:push` / `gate:pr` a jelre.
 
 - [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [x] 6 · [ ] 7 (mutáció, ellenőr, kapuk — folyamatban)
+
+## Kiegészítés — a vak ellenőr leletei (2026-11-18) — végrehajtás
+
+Terv: `docs/specs/2026-11-18-hook-onfailure.md`, „Kiegészítés” fejezet.
+
+8. Ez a doksi-commit, a kód előtt.
+9. L1: `check-quality-gates.mjs` `detectGated` lineáris szkenneléssel; teszt (≥ 200 KB, < 1 s, ENGED) + ellenpróba a régi felismerővel.
+10. L2: `enforce-repo-rules.mjs` `path` / `removes` mező; `scripts/qa/repo-rules.json` négy szabály; teszt a három próbára és a hook-javításra.
+11. L5 / L8: `check-audit-ok.mjs` biztonságos mezőolvasás; `.claude/settings.json` az audit-hook korlátja 20 s; tesztek.
+12. L7 / L9: szöveg-őr kiterjesztése; a runbook és a terv nem nevezi meg a kikapcsoló beállítást; pipálás.
+13. `gate:stage`, mutációs ellenpróba, sorompó, `gate:push`, fej-hash.
+
+- [ ] 8 · [ ] 9 · [ ] 10 · [ ] 11 · [ ] 12 · [ ] 13
