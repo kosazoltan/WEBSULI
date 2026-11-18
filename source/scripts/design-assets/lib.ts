@@ -112,6 +112,8 @@ export async function attemptWithinBudget(opts: {
   budget: Budget | null;
   estUsd: number;
   maxAttempts: number;
+  /** A hívás INDÍTÁSA előtt fut (a keret már terhelve): ide kerül az „indult” naplósor, hogy megszakítás se vesszen el (L5). */
+  onStart?: (n: number) => void;
   attempt: (n: number) => Promise<void>;
   onError: (n: number, error: unknown) => void;
 }): Promise<{ saved: boolean; attempts: number; stoppedByBudget: boolean }> {
@@ -120,6 +122,7 @@ export async function attemptWithinBudget(opts: {
       if (!canSpend(opts.budget, opts.estUsd)) return { saved: false, attempts: n - 1, stoppedByBudget: true };
       opts.budget.spent += opts.estUsd;
     }
+    opts.onStart?.(n);
     try {
       await opts.attempt(n);
       return { saved: true, attempts: n, stoppedByBudget: false };
@@ -130,17 +133,64 @@ export async function attemptWithinBudget(opts: {
   return { saved: false, attempts: opts.maxAttempts, stoppedByBudget: false };
 }
 
-/** A készlet naplójának eddigi becsült összege: a sikeres ÉS a sikertelen hívások `estUsd` mezői (sérült sor kimarad). */
-export function spentFromLog(logText: string): number {
-  let sum = 0;
-  for (const line of logText.split(/\r?\n/)) {
-    if (!line.trim()) continue;
+/**
+ * A készlet naplója mint költségkönyv: minden `estUsd` mező összege. Új alak: a hívás ELŐTT „started” sor viszi az `estUsd`-t
+ * (a lezáró „ok” / „error” sor már nem — azok `imageUsd`-t írnak), a régi alakban az „ok” / „error” sor viszi; a kettő keverhető.
+ * A sérült sorok sorszámát visszaadja: éles futás sérült naplóval NEM indul (review G2) — a keret nem maradhat alulbecsülve.
+ */
+export function readLedger(logText: string): { spentUsd: number; corruptLines: number[] } {
+  let spentUsd = 0;
+  const corruptLines: number[] = [];
+  logText.split(/\r?\n/).forEach((line, index) => {
+    if (!line.trim()) return;
     try {
-      const row = JSON.parse(line) as { estUsd?: unknown };
-      if (typeof row.estUsd === "number" && Number.isFinite(row.estUsd) && row.estUsd > 0) sum += row.estUsd;
-    } catch { continue; } // sérült sor: kihagyjuk
+      const row = JSON.parse(line) as { estUsd?: unknown } | null;
+      if (!row || typeof row !== "object") { corruptLines.push(index + 1); return; }
+      if (typeof row.estUsd === "number" && Number.isFinite(row.estUsd) && row.estUsd > 0) spentUsd += row.estUsd;
+    } catch { corruptLines.push(index + 1); }
+  });
+  return { spentUsd, corruptLines };
+}
+
+/** A napló eddigi becsült összege (a sérült sorok nélkül — az éles futás előtt a `ledgerProblem` dönt). */
+export function spentFromLog(logText: string): number {
+  return readLedger(logText).spentUsd;
+}
+
+/**
+ * Indulhat-e éles futás ezzel a naplóval (review G1, G2)? Hiba: a napló hiányzik, de már vannak jelöltek (a keret 0-ról nyílna
+ * újra), vagy a naplóban sérült sor van. `null` = rendben.
+ */
+export function ledgerProblem(input: { logExists: boolean; candidateFiles: number; corruptLines: readonly number[] }): string | null {
+  if (!input.logExists && input.candidateFiles > 0) {
+    return `A költségnapló (log.jsonl) hiányzik, de ${input.candidateFiles} jelölt már van a mappában — a keret nem nyitható újra 0-ról. Állítsd vissza a naplót, vagy egyeztesd a tulajdonossal a már elköltött összeget.`;
   }
-  return sum;
+  if (input.corruptLines.length > 0) {
+    return `A költségnapló (log.jsonl) sérült sort tartalmaz (sor: ${input.corruptLines.join(", ")}) — az elköltött összeg nem állapítható meg biztosan. Javítsd a naplót az éles futás előtt.`;
+  }
+  return null;
+}
+
+/**
+ * A terv képeinek sorra vétele (review L6): egy kép csak akkor készül, ha minden referenciája megvan — kiválasztva (`--ref`) vagy
+ * ebben a futásban SIKERESEN elkészülve. Ha a futásban készülő referencia mind elbukott, a rá épülő képek NEM készülnek el
+ * referencia nélkül (fizetősen, eltérő stílusban): a futás megáll.
+ */
+export async function runJobs(opts: {
+  jobs: readonly ImageJob[];
+  chosenRefs: ReadonlySet<string>;
+  generate: (job: ImageJob) => Promise<{ saved: boolean; stoppedByBudget: boolean }>;
+}): Promise<{ made: number; stopped: "budget" | "reference" | null; missingRef: string | null }> {
+  const madeIds = new Set<string>();
+  let made = 0;
+  for (const job of opts.jobs) {
+    const missingRef = (job.item.references ?? []).find(ref => !opts.chosenRefs.has(ref) && !madeIds.has(ref));
+    if (missingRef) return { made, stopped: "reference", missingRef };
+    const one = await opts.generate(job);
+    if (one.saved) { made++; madeIds.add(job.item.id); }
+    if (one.stoppedByBudget) return { made, stopped: "budget", missingRef: null };
+  }
+  return { made, stopped: null, missingRef: null };
 }
 
 export const IMAGE_TIMEOUT_MS = 180_000;
