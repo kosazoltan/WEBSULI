@@ -97,4 +97,3 @@ rajzolási hívás 155 → 45 (asztali, bloommal: 166 → 59); háromszög 72,7 
   alacsonyabb lehet.
 - Fekvő nézetben a figura oldalra mozogva a szélső válasz-oszlop alá kerülhet (a követő eltolás csak álló nézetben él).
 - Valódi telefon: UNVERIFIED.
-
