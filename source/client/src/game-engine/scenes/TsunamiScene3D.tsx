@@ -89,8 +89,8 @@ const PLAYER_Z = 0.5;
 const ZONE_Z = 0.3;
 /** Planks sit behind the rider and the buoys, like the old DOM stacking. */
 const PLANK_Z = -0.7;
-const FOG_NEAR = 80;
-const FOG_FAR = 460;
+const FOG_NEAR = 140;
+const FOG_FAR = 620;
 
 const SKY_TOP = "#2a74d6";
 const SKY_HORIZON = "#ffe0b5";
@@ -683,9 +683,9 @@ function setupTsunami(
     top: SKY_TOP,
     horizon: SKY_HORIZON,
     bottom: SKY_BOTTOM,
-    sunDirection: new THREE.Vector3(0.5, 0.3, -1),
+    sunDirection: new THREE.Vector3(-0.6, 0.35, -1),
     sunColor: "#fff0b0",
-    sunSize: 0.05,
+    sunSize: 0.035,
     radius: 600,
   });
   sky.position.copy(camera.position);
@@ -842,7 +842,7 @@ function setupTsunami(
         }
       }
       const lh = clone("lighthouse");
-      if (lh) fitInto(shelter.group, lh, 2.1);
+      if (lh) fitInto(shelter.group, lh, 1.5);
       const spots: [string, number, number, number][] = [
         ["rock_c", -0.62, 11, 1.4], ["rock_a", -0.4, 9, 1.0], ["rock_b", 0.42, 9, 1.0], ["rock_c", 0.66, 12, 1.5],
         ["bush", -0.5, 17, 1.2], ["bush", 0.55, 16, 1.1], ["rock_a", -0.85, 14, 1.3], ["rock_b", 0.85, 13, 1.2],
@@ -886,7 +886,7 @@ function setupTsunami(
     uDeep: { value: new THREE.Color("#0a62a8") },
     uSkyTint: { value: new THREE.Color("#ffd8b0") },
     uFogColor: { value: new THREE.Color(SKY_HORIZON) },
-    uSunDir: { value: new THREE.Vector3(0.5, 0.3, -1).normalize() },
+    uSunDir: { value: new THREE.Vector3(-0.6, 0.35, -1).normalize() },
     uSunColor: { value: new THREE.Color("#fff3c4") },
     uFoamW: { value: 0.16 },
     uFrontTop: { value: new THREE.Color("#22c3d8") },
@@ -1181,7 +1181,7 @@ function setupTsunami(
     }
     island.position.set((islandSpot.u * hw * (CAM_DIST + islandSpot.zz)) / CAM_DIST, islandSpot.y, -islandSpot.zz);
     for (const m of mountains) m.g.position.x = (m.u * hw * (CAM_DIST + m.zz)) / CAM_DIST;
-    const sunPoint = new THREE.Vector3(worldX(0.87, -400), worldY(0.95, -400), -400);
+    const sunPoint = new THREE.Vector3(worldX(0.12, -400), worldY(0.95, -400), -400);
     const sunDir = sunPoint.sub(camera.position).normalize();
     skyU.sunDirection.value.copy(sunDir);
     waterUniforms.uSunDir.value.copy(sunDir);

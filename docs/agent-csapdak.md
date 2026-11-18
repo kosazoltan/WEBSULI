@@ -36,6 +36,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-46** — Unicode-tartomány forrásban `\p{…}` kategóriával, ne `\uXXXX`-szel (az eszközparaméter dekódolja); `cat -A` ellenőrzés.
 - **C-50** — Visszaperjeles szöveg csak Edit/Write-tal; bájtszintű visszaolvasás; szkriptes cserénél `git diff --stat` ellenőrzés.
 - **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
+- **C-73** — `native-arch` önmagában ismert helyi kivétel (nem telepítési teendő); a push-kapu piros oka mindig a TÖBBI bukó teszt. Mérő-várakozás állapotra, ne időre.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -1063,3 +1064,12 @@ Forrás: #475 (K1b). Rokon: C-59.
 - A drizzle a hibát `Failed query: …`-be csomagolja; az eredeti a `cause`-ban van.
 - Git Bashben az `npx.cmd` szóközös felhasználói útvonalon elhasalhat: Playwrightot PowerShellből futtasd.
 - e2e-ben a „szabad port keresése, lezárás, újranyitás” versenyhelyzet (`EADDRINUSE`): a szerver válasszon portot.
+
+## C-73 — A push-kapu `native-arch` bukása önmagában kivétel; állapotra várj, ne időre (2026-11-18)
+- **Tünet:** a `gate:push` piros, a jelentésben a `native-arch.test.ts` (a `better-sqlite3` nincs lefordítva) és még egy teszt.
+  Tévesen gépi akadálynak (Visual Studio Build Tools) jelentettem.
+- **Tény:** a `pre-push-gate.mjs` (D10 / C-38) a `native-arch.test.ts`-t ismert helyi kivételként kezeli, ha CSAK az bukik és a
+  `doctor:arch` is bukik. A piros oka a másik bukó teszt volt (`grade-quiz-bank-lazy`: kliensmodul olvasta a teljes évfolyam-bankot).
+- **Teendő:** a push-kapu FAIL-sorában a native-arch MELLETTI fájlokat javítsd; Build Tools / `npm ci` nem kell.
+- **Rokon:** a közös mérők (joystick, mobil mérő) kérdés-elhárítása a megoldás-kijelzés alatt lecserélődő gombra kattintott
+  (#500 ingadozó) — a hatókör a nyitott, élesített kérdés (`[data-state="open"][data-armed="true"]`), így a segéd állapotra vár.

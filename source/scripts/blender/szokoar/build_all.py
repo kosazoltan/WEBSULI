@@ -117,6 +117,42 @@ def group(name, parts):
 # Modellek (Blender: Z felfelé; a glTF-export Y-felfelére fordít)
 # --------------------------------------------------------------------------------------------------------------------
 
+def palm_leaf(base, angle, length, seed):
+    """Ívelt, középen gerinces, a vége felé keskenyedő és lehajló pálmalevél (szalag), nem keresztlap."""
+    rnd = random.Random(100 + seed)
+    me = bpy.data.meshes.new("leaf")
+    bm = bmesh.new()
+    segs = 7
+    rows = []
+    for i in range(segs + 1):
+        t = i / segs
+        d = length * t
+        droop = -0.9 * t * t * length + 0.35 * t
+        w = 0.28 * math.sin(math.pi * min(1.0, t * 1.08 + 0.05)) * (1.0 - 0.15 * t)
+        cx, cy = math.cos(angle) * d, math.sin(angle) * d
+        nx, ny = -math.sin(angle), math.cos(angle)
+        mid = bm.verts.new((base.x + cx, base.y + cy, base.z + droop + 0.06 * t))
+        left = bm.verts.new((base.x + cx + nx * w, base.y + cy + ny * w, base.z + droop - 0.05 * w))
+        right = bm.verts.new((base.x + cx - nx * w, base.y + cy - ny * w, base.z + droop - 0.05 * w))
+        rows.append((left, mid, right))
+    for i in range(segs):
+        l0, m0, r0 = rows[i]
+        l1, m1, r1 = rows[i + 1]
+        bm.faces.new((l0, m0, m1, l1))
+        bm.faces.new((m0, r0, r1, m1))
+    bm.to_mesh(me)
+    bm.free()
+    obj = bpy.data.objects.new("leaf", me)
+    bpy.context.scene.collection.objects.link(obj)
+    sol = obj.modifiers.new("solid", "SOLIDIFY")
+    sol.thickness = 0.025
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.modifier_apply(modifier=sol.name)
+    obj.select_set(False)
+    return obj
+
+
 def palm(name, lean, height, x):
     parts = []
     segs = 7
@@ -128,14 +164,9 @@ def palm(name, lean, height, x):
         seg.rotation_euler = (0, math.atan(lean * 1.4 * math.cos(t * 1.4) / height * segs / 6), 0)
         parts.append(finish(seg, "trunk" if i % 2 == 0 else "wood_dark", smooth=False))
     top = Vector((x + math.sin(1.4) * lean, 0, height))
-    for k in range(7):
-        a = k / 7 * math.tau
-        leaf = add("cone", vertices=4, radius1=0.26, radius2=0.0, depth=1.5, location=top)
-        leaf.scale = (1.0, 0.28, 1.0)
-        leaf.rotation_euler = (math.radians(68 + 8 * (k % 2)), 0, a)
-        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-        leaf.location = top + Vector((math.cos(a) * 0.55, math.sin(a) * 0.55, -0.15))
-        parts.append(finish(leaf, "leaf" if k % 2 else "leaf_dark", smooth=False))
+    for k in range(8):
+        a = k / 8 * math.tau + (0.2 if k % 2 else 0.0)
+        parts.append(finish(palm_leaf(top, a, 1.35 + 0.15 * (k % 3), k), "leaf" if k % 2 else "leaf_dark"))
     coco = add("ico_sphere", subdivisions=1, radius=0.12, location=top + Vector((0.1, 0.05, -0.2)))
     parts.append(finish(coco, "wood_dark"))
     return group(name, parts)

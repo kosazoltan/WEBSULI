@@ -1745,7 +1745,10 @@ export default function TsunamiEscapeEnglish() {
     flippedForRef.current = presIdNow;
     // +14 px ráhagyás: a kártya belépő animációja (10 px) alatt mérünk, a végleges hely ennyivel feljebb van.
     if (hits(fy + 6) || hits(fy - 40)) {
-      quizPlaceRef.current = quizPlaceRef.current === "top" ? "bottom" : "top";
+      // Előbb a kompakt (alacsonyabb) sáv ugyanott — így a menedék sem kerül takarásba; ha az sem elég, a másik hely, végül a
+      // kép-eltolás (a lenti effekt).
+      if (!quizHighRef.current) quizHighRef.current = true;
+      else quizPlaceRef.current = quizPlaceRef.current === "top" ? "bottom" : "top";
       pendingShiftCheckRef.current = presIdNow;
       setPlaceTick((n) => n + 1);
     }
@@ -2139,6 +2142,8 @@ function drawFlat(canvas: HTMLCanvasElement, driver: TsunamiDriver): void {
  * válaszgomb ≥ 48 px (K.4/16).
  */
 const TSUNAMI_CSS = `
+/* Asztali nézet: a közös 1200 px-es szélességkorlát a játéktérre nem vonatkozik (a jelenet a teljes képet tölti ki). */
+.game-shell-fixed > main[data-testid="tsunami-stage"], .game-shell-fixed > main[data-testid="tsunami-stage-prewarm"] { max-width: none; width: 100%; }
 /* B2: a menedék-deszka magassága (a jelenet SHELTER_TOP_PORTRAIT / _LANDSCAPE értékével egyezik) — a közös felső sáv alatt. */
 :root { --ts-shelter-top: ${SHELTER_TOP_PORTRAIT}vh; }
 @media (orientation: landscape) { :root { --ts-shelter-top: ${SHELTER_TOP_LANDSCAPE}vh; } }
