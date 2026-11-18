@@ -624,3 +624,6 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
   `Snowfall.tsx`, `advent.css`), `shared/advent/art.ts`, `art-manifest.ts` (üres: a képek az S3c-ben jönnek), `home-card.ts`, útvonal
   `/adventi-naptar` az `App.tsx`-ben, `ADVENT_CALENDAR` az e2e-szerver környezetében; `tests/advent-calendar.spec.ts` (12 böngészős
   eset, köztük három méretű mobil mérés), `tests/advent-home-card.test.ts` (8), `tests/support/advent-e2e.ts`.
+- 2026-11-18 — S4 KÉSZ: `client/src/components/AdventHomeCard.tsx` a `UserFileList.tsx`-ben a Hero és a támogatói sáv / tananyagok
+  között (üres listánál is); `tests/advent-home-card.spec.ts` (7 böngészős eset). Mért: telefonon 132 px magas kártya, a lista 144 px-lel
+  lejjebb; asztalon 160 px, a lista 172 px-lel lejjebb (terv 14.2 határa: 144 / 172).
