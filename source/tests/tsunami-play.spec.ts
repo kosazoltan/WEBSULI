@@ -88,6 +88,33 @@ async function openQuestion(page: Page, patch: Record<string, unknown> = { quest
 
 const SHORT_ANSWERS = ["cat", "dog", "sun", "map"];
 
+/**
+ * B2 (független ellenőr): a menedék VALÓDI láthatósága — takarás-mérés `elementsFromPoint`-tal. Álló nézetben a 3D-ház pontja
+ * (a felső deszka fölött, `SHELTER_X`; a deszka álló nézetben 24 %, fekvőben 30 %) és a címke; fekvőben a ház a közös felső sáv mögé esik, ott a címke (dokumentált
+ * tartalék: a felső sáv „Még N jó válasz a menedékig” felirata).
+ */
+async function shelterCovered(page: Page): Promise<{ house: string | null; tag: string | null; portrait: boolean }> {
+  return page.evaluate(() => {
+    const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+    const portrait = innerHeight > innerWidth;
+    const coverOf = (x: number, y: number, own?: Element | null) => {
+      const top = document.elementsFromPoint(x, y)[0];
+      if (!top || top.tagName === "CANVAS" || (own && own.contains(top))) return null;
+      const q = top.closest('[data-testid="ts-quiz"], [data-testid="ts-question"], [data-game-hud], .game-hud, header');
+      return q ? (q.getAttribute("data-testid") ?? q.className.toString().slice(0, 40)) : null;
+    };
+    const tag = document.querySelector('[data-testid="ts-shelter"]')!;
+    const tr = tag.getBoundingClientRect();
+    return {
+      // A felső deszka (álló nézetben a kép 24 %-a) fölött 3 %-kal.
+      house: portrait ? coverOf(stage.left + 0.84 * stage.width, stage.top + 0.21 * stage.height) : null,
+      tag: coverOf(tr.left + tr.width / 2, tr.top + tr.height / 2, tag),
+      portrait,
+    };
+  });
+}
+
+
 test.describe("valódi érintés", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -101,7 +128,7 @@ test.describe("valódi érintés", () => {
     await expect(page.getByTestId("ts-hint")).toBeVisible(); // tanító súgó (egy sor)
     // D2 / D1: autó, kapu, sáv, húzó-réteg nincs; a menedék a képen.
     expect(await page.locator('.ts-gate, [data-testid="tsunami-swipe"]').count(), "nincs kapu-tábla / húzó-réteg").toBe(0);
-    await expect(page.getByTestId("ts-shelter")).toBeInViewport();
+    expect(await shelterCovered(page), "a menedék nincs takarva").toMatchObject({ house: null, tag: null });
     await shot(page, "tsunami-390x844-play.jpg");
 
     // 1. kérdés: négy gomb, koppintás nélkül olvasható; a JÓ válasz → zöld, a pont nő, a víz apad (D4).
@@ -346,8 +373,9 @@ for (const viewport of [
 
     // A legrosszabb eset mindhárom nézetben: 70 %-os víz, leghosszabb kérdés + négy leghosszabb válasz (kis képernyőn a kompakt
     // kérdés — koordinátori döntés 2026-11-18, „A”).
-    for (const water of [null, 70] as const) {
-      test(`elrendezés ${water === null ? "a menet elején (alacsony víz)" : "magas víznél (70 %)"}`, async ({ page }) => {
+    // K2: a köztes sáv (35 / 45 / 50 %) is — ott vált a fenti / lenti hely és a kompakt mód.
+    for (const water of [null, 35, 45, 50, 70] as const) {
+      test(`elrendezés ${water === null ? "a menet elején (alacsony víz)" : `${water} %-os víznél`}`, async ({ page }) => {
         await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
         await page.getByTestId("button-tsunami-start").tap();
         await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
@@ -406,8 +434,16 @@ for (const viewport of [
           expect(hit, "a gomb nem fedi a kérdést").toBe(false);
         }
         expect(m.overflowX, "nincs vízszintes görgetés").toBeLessThanOrEqual(1);
-        await expect(page.getByTestId("ts-shelter"), "a menedék a képen (D4)").toBeInViewport();
-        await shot(page, `tsunami-${viewport.width}x${viewport.height}-${water === null ? "long" : "long-high"}.jpg`);
+        const sh = await shelterCovered(page);
+        if (viewport.width === 390) expect(sh.tag, "a menedék-címke nyitott kérdésnél sincs takarva").toBeNull();
+        else if (sh.tag !== null) {
+          // Koordinátori döntés (2026-11-18, B2): ahol a kérdés-sáv kis képernyőn a címkére esik, a tartalék a közös felső sáv
+          // „Még N jó válasz a menedékig” felirata — az ilyenkor is látható (képpel dokumentálva).
+          await expect(page.getByRole("progressbar", { name: /menedék/i }), "a felső sáv menedék-felirata").toBeVisible();
+          await shot(page, `tsunami-${viewport.width}x${viewport.height}-menedek-tartalek-${water ?? "eleje"}.jpg`);
+        }
+        if (sh.portrait && water === null) expect(sh.house, "álló nézetben a menedék-ház nyitott (fenti) kérdésnél sincs takarva").toBeNull();
+        await shot(page, `tsunami-${viewport.width}x${viewport.height}-${water === null ? "long" : `long-${water}`}.jpg`);
         // A gomb érintése azonnali válasz.
         await page.locator('[data-testid="ts-question"] [data-correct="true"]').first().tap();
         await expect.poll(async () => (await probe(page)).questionsAnswered).toBe(1);
@@ -475,3 +511,71 @@ test.describe("390x844: D4 — a víz látványosan reagál", () => {
     expect((await probe(page)).water - w2, "a rossz válasz a vizet megemeli").toBeGreaterThanOrEqual(4);
   });
 });
+
+/* B1 (független ellenőr): a győzelmi jelenet LÁTHATÓAN lefut (a figura beér, a víz megtörik), és csak utána nyílik a kártya. */
+test.describe("390x844: győzelem — előbb a jelenet, utána az eredménykártya", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("a mag győzelme után a jelenet győzelmi állapotban van, a kártya még nincs; ≥ 1,2 mp múlva nyílik", async ({ page }) => {
+    await page.goto("/games/tsunami-english?seed=5&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").click();
+    await expect(page.getByTestId("tsunami-key-hint")).toBeVisible();
+    await openQuestion(page, { coreWin: true });
+    const t0 = Date.now();
+    await expect.poll(async () => (await probe(page) as unknown as { scenePhase: string }).scenePhase, { timeout: 2_000 }).toBe("won");
+    await expect(page.getByTestId("ts-won"), "a kártya a jelenet alatt még nem nyílt meg").toHaveCount(0);
+    await page.waitForTimeout(700);
+    await shot(page, "tsunami-390x844-gyozelem-jelenet.jpg");
+    expect(await page.getByTestId("ts-won").count(), "0,7 mp-nél még a jelenet látszik").toBe(0);
+    await expect(page.getByTestId("ts-won")).toBeVisible({ timeout: 5_000 });
+    expect(Date.now() - t0, "a kártya a jelenet után nyílt").toBeGreaterThanOrEqual(1_200);
+  });
+});
+
+/* K5: „a 12 kockázatos valódi banki válasz” (a régi kapu-táblás eset helyett a kérdés-sáv gombjain): levágás soha. */
+const RISKY_BANK_ANSWERS = [
+  "A laptopom folyton túlmelegszik.",
+  "Jedlik Ányos és Puskás Tivadar",
+  "más állatokat zsákmányolnak",
+  "az oldalfelező merőlegesek",
+  "Lengyelország megtámadása",
+  "Egy gondolat bánt engemet",
+  "folyékonyból légneművé",
+  "a nagynénje szidta meg",
+  "a Jelenések könyvéből",
+  "Most megyek Londonba.",
+  "Nem néznek egymásra.",
+  "egy mérés eredménye",
+];
+for (const viewport of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+]) {
+  test.describe(`${viewport.width}x${viewport.height}: a 12 kockázatos valódi banki válasz — levágott gomb soha`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test("a kérdés-sáv gombjain egyik válasz sincs levágva", async ({ page }) => {
+      test.setTimeout(150_000);
+      await page.goto("/games/tsunami-english?seed=11&difficulty=easy");
+      await page.getByTestId("button-tsunami-start").tap();
+      await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+      const quiz = page.getByTestId("ts-quiz");
+      for (let i = 0; i < RISKY_BANK_ANSWERS.length; i += 4) {
+        const group = RISKY_BANK_ANSWERS.slice(i, i + 4);
+        await expect(quiz).toHaveCount(0, { timeout: 30_000 });
+        await openQuestion(page, { question: true, answers: group });
+        await expect(quiz).toHaveAttribute("data-armed", "true", { timeout: 15_000 });
+        const m = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-label')).map((el) => ({
+            text: el.textContent ?? "",
+            clipped: el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1,
+          })),
+        );
+        expect(m.map((x) => x.text).sort()).toEqual([...group].sort());
+        for (const x of m) expect(x.clipped, `levágott: „${x.text}”`).toBe(false);
+        await page.locator('[data-testid="ts-question"] [data-correct="true"]').first().tap();
+      }
+    });
+  });
+}

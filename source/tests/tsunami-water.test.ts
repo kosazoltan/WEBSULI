@@ -148,3 +148,85 @@ test("szünetben a kérdés-óra és a világ áll", () => {
   assert.equal(driver.clockMs(), c);
   assert.equal(driver.core.state().water, w);
 });
+
+/* ---- K1 (független ellenőr, koordinátori döntés 2026-11-18): olvasási idő szerinti ablak, a többletidő alatt a víz áll ---- */
+import { extraTimeFrom, paceTsunamiDirector, tsunamiWindowMs } from "../client/src/lib/tsunami/pacing";
+import { createSimGame } from "../client/src/lib/tsunami/sim";
+import { SIM_AVERAGE, SIM_YOUNG, runSim, runSimSeeds, simSeeds, type SimGameFactory } from "./support/game-sim";
+
+test("K1: hosszú kérdésnél az ablak az olvasási idő (9 mp fölött), rövidnél legalább a közös ablak, legfeljebb 40 s", () => {
+  const longPrompt = "Melyik gerinces csoportra igaz: változó testhőmérsékletűek, bőrüket szarupikkelyek fedik, szárazföldön raknak tojást?";
+  const longOpts = ["élőlények táplálkozási kapcsolatát", "Kell megcsinálnom a házi feladatom.", "távolságát a kezdő hosszúsági körtől", "kulacs használata eldobható palack helyett"];
+  const w4 = tsunamiWindowMs(longPrompt, longOpts, 4, 9000);
+  assert.ok(w4 > 20_000, `3–4. évfolyamon a hosszú kérdés ablaka ${w4} ms`);
+  assert.ok(tsunamiWindowMs(longPrompt, longOpts, 9, 9000) < w4, "idősebbnél rövidebb");
+  assert.equal(tsunamiWindowMs("Mennyi 2 + 2?", ["3", "4", "5", "6"], 7, 6000), Math.max(6000, tsunamiWindowMs("Mennyi 2 + 2?", ["3", "4", "5", "6"], 7, 0)));
+  assert.ok(tsunamiWindowMs(longPrompt.repeat(20), longOpts, 3, 9000) <= 40_000);
+});
+
+test("K1: a többletidő alatt a víz NEM emelkedik, a közös ablakon belül lassítva emelkedik", () => {
+  const pres = { id: 1, startedAtSimMs: 0, windowMs: 9000, options: [{ label: "a", correct: true }], question: { quiz: { prompt: "x " .repeat(60), options: ["a", "b", "c", "d"] } } };
+  const base = { tick: () => pres, request: () => pres, active: () => pres } as unknown as Parameters<typeof paceTsunamiDirector>[0];
+  const paced = paceTsunamiDirector(base, { grade: () => 4 });
+  const p = paced.active()!;
+  assert.ok(p.windowMs > 9000);
+  assert.equal(extraTimeFrom(p), 9000);
+  const driver = createTsunamiDriver({
+    seed: 1,
+    difficulty: "normal",
+    questions: { frame: () => {}, timeScale: () => 0.6, finished: () => false, finish: () => null, pick: () => null, active: () => p },
+  });
+  for (let t = 0; t < 8000; t += 50) driver.frame(50, false);
+  const w8 = driver.core.state().water;
+  assert.ok(w8 > WATER_START, "a közös ablakon belül emelkedik");
+  for (let t = 0; t < 2000; t += 50) driver.frame(50, false);
+  const w10 = driver.core.state().water;
+  for (let t = 0; t < 5000; t += 50) driver.frame(50, false);
+  assert.equal(driver.core.state().water, w10, "a többletidőben áll");
+});
+
+/* ---- K5: a kiesett, játékmenettől független állítások pótlása ---- */
+test("K5: meghajtó-determinizmus egyenetlen képkockákkal — 16,67 és 33,3 ms-os képkockákkal bitre azonos állapot", () => {
+  const a = createTsunamiDriver({ seed: "d", difficulty: "normal", questions: null });
+  const b = createTsunamiDriver({ seed: "d", difficulty: "normal", questions: null });
+  a.core.input.move = 1;
+  b.core.input.move = 1;
+  // Pillanatkép lépés-indexenként (a fix lépések száma: időMs / lépés); a 33 ms-os képkocka két lépést tesz.
+  const snap = (d: typeof a, frameMs: number, frames: number) => {
+    const out = new Map<number, string>();
+    for (let i = 0; i < frames; i++) {
+      d.frame(frameMs, false);
+      out.set(Math.round(d.core.state().timeMs / (1000 / 60)), JSON.stringify(d.core.state()));
+    }
+    return out;
+  };
+  const sa = snap(a, 1000 / 60, 1800);
+  const sb = snap(b, 2000 / 60, 900);
+  let compared = 0;
+  for (const [step, st] of sb) {
+    if (step < 100 || !sa.has(step)) continue;
+    assert.equal(sa.get(step), st, `lépés ${step}`);
+    compared += 1;
+  }
+  assert.ok(compared > 500, `összevetett lépések: ${compared}`);
+});
+
+test("K5: arany visszajátszás — teljes sim-menet azonos seedre azonos, másik seedre más", () => {
+  const f = createSimGame as unknown as SimGameFactory;
+  const [s1, s2] = simSeeds("tsunami-english", 2);
+  const r1 = runSim(f, SIM_AVERAGE, { seed: s1!, seconds: 240 });
+  const r1b = runSim(f, SIM_AVERAGE, { seed: s1!, seconds: 240 });
+  const r2 = runSim(f, SIM_AVERAGE, { seed: s2!, seconds: 240 });
+  assert.deepEqual(r1, r1b);
+  assert.notDeepEqual(r1, r2);
+});
+
+/* ---- K6: a sim a lap pálya-tempójával (`tsunamiWaterPace` 0,85–1,15) is ---- */
+test("K6: a 10. pálya tempójával (1,15) is ≥ 12/20 győzelem 3–4. évfolyamon közepesen, és lassabb tempón sem rosszabb", () => {
+  const at = (pace: number) =>
+    runSimSeeds(((o: { seed: number; grade: number; questions: boolean }) => createSimGame({ ...o, pace })) as unknown as SimGameFactory, SIM_YOUNG, { gameId: "tsunami-english", seconds: 600, grade: 3 }).filter((r) => r.won).length;
+  const fast = at(1.15);
+  const slow = at(0.85);
+  assert.ok(fast >= 12, `1,15: ${fast}/20`);
+  assert.ok(slow >= fast, `0,85: ${slow}/20 ≥ 1,15: ${fast}/20`);
+});

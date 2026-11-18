@@ -8,6 +8,7 @@
  *
  * Nincs benne React, DOM, three.js, hang, `Math.random`, `Date.now` (a determinizmus-őr hatóköre): a zóna új helye a menet RNG-jéből.
  */
+import { extraTimeFrom } from "./pacing";
 import { createRng, seedFrom, type Rng } from "@shared/game-rng";
 import { createIntensityDirector, type IntensityDirector } from "@/game-engine/play/director";
 import { createFeel, type Feel } from "@/game-engine/play/feel";
@@ -268,7 +269,11 @@ export function createTsunamiDriver(opts: {
       feel.update(paused ? 0 : dt);
       if (q && !core.running() && !q.finished()) q.finish();
       if (q && !paused && core.running()) q.frame(clock, { calm: pace.calm() });
-      loop.setTimeScale(paused ? 0 : q ? q.timeScale() : 1);
+      // Olvasási többletidő (pacing.ts): a közös ablakon túl a víz áll, amíg a kérdés nyitva.
+      const act = q && core.running() ? q.active() : null;
+      const extraFrom = extraTimeFrom(act);
+      const inExtra = extraFrom !== null && clock >= extraFrom;
+      loop.setTimeScale(paused || inExtra ? 0 : q ? q.timeScale() : 1);
       const alpha = loop.frame(real);
       drain(onEvent);
       return alpha;

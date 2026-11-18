@@ -62,6 +62,7 @@ import {
   materialPlayQuestion,
   restoreReviewQuestion,
   usePlayQuestion,
+  useQuestionDirector,
   vocabPlayQuestion,
   type PlayQuestion,
   type QuestionProvider,
@@ -84,7 +85,8 @@ import {
 import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
-import TsunamiScene3D, { SHELTER_X, type TsunamiLive } from "@/game-engine/scenes/TsunamiScene3D";
+import TsunamiScene3D, { SHELTER_TOP_LANDSCAPE, SHELTER_TOP_PORTRAIT, SHELTER_X, type TsunamiLive } from "@/game-engine/scenes/TsunamiScene3D";
+import { paceTsunamiDirector } from "@/lib/tsunami/pacing";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import {
   TSUNAMI_GAME_ID,
@@ -527,6 +529,8 @@ const WATER_VIEW_SCALE = 0.8;
 
 /** A menet vége előtt (győzelem / a hullám) ennyi ideig látszik a pillanat, mielőtt az eredménykártya jön (ms). */
 const END_PAUSE_MS = 900;
+/** Győzelemkor (B1): a figura beér a menedékbe, a víz alatta megtörik — ez LÁTHATÓAN lefut, csak utána nyílik a kártya. */
+const WIN_SCENE_MS = 1600;
 /** A tanító súgó ennyi ideig látszik a menet elején (világ-ms). */
 const HINT_MS = 30_000;
 /** Ennyi ms-onként jöhet villám (díszlet; csökkentett mozgásnál nincs — M9). */
@@ -715,12 +719,11 @@ export default function TsunamiEscapeEnglish() {
   const whyOpenRef = useRef(false);
   whyOpenRef.current = explainCard !== null || expanded;
   /** HUD-pillanatkép ≤ 10 Hz (KSZ-9): a képkocka-hurok nem ír React-állapotot. */
-  const [hud, setHud] = useState({ correct: 0, target: 10, water: 12, score: 0, combo: 0, inZone: true, hint: 0 });
+  const [hud, setHud] = useState({ correct: 0, target: 10, water: 12, score: 0, combo: 0, inZone: true, hint: 0, drift: 0 });
   const [result, setResult] = useState<RunResult | null>(null);
   const [stormFlash, setStormFlash] = useState(false);
-  /** D-J1a-17 (ÚK2): annak a kérdésnek az azonosítója, amelynek JÓ kapuján a gyerek bemenet nélkül futott át. */
   /**
-   * Élesítés (átmeneti kapu 3a): a válaszcélok (táblák, lista módban a gombok) akkor jelennek meg, amikor a meghajtó már
+   * Élesítés (átmeneti kapu 3a): a válaszgombok akkor jelennek meg, amikor a meghajtó már
    * elfogadja az érintést (`driver.armedPresentationId()`, a kérdés-órával: `ANSWER_ARM_MS`). Korábban 450 ms valós idő
    * után — lassú képkockánál (a kérdés-óra képkockánként legfeljebb 250 ms-ot lép) a tábla már látszott, de az érintést a
    * meghajtó még elnyelte. A képkocka-hurok állítja, kérdésenként egyszer.
@@ -890,6 +893,10 @@ export default function TsunamiEscapeEnglish() {
   /** A tananyag-kérdés témája a kulcsa szerint (a kérdés-címke a közös `quizTopicLabelHu`-val). */
   const topicByKeyRef = useRef(new Map<string, string>());
   /** A jelenet képkockánként innen olvas (nincs 60 Hz-es React-render). */
+  /** A mag győzelme (a jelenet győzelmi animációja ettől indul, nem a React-fázistól — B1). */
+  const [coreWon, setCoreWon] = useState(false);
+  const coreWonRef = useRef(false);
+  coreWonRef.current = coreWon;
   const liveRef = useRef<TsunamiLive>({ water: 12, playerX: 50, safeZoneX: 50, sprinting: false });
   /** Pont és kombó (a lap számolja a kérdés-kimenetekből). */
   const scoreRef = useRef({ score: 0, combo: 0, best: 0 });
@@ -1072,7 +1079,7 @@ export default function TsunamiEscapeEnglish() {
         }
         const subj = runSubjectRef.current;
         if (subj !== "english" && subj !== "mixed") return null;
-        // D-J1a-11 (review #483, M3): a director `accept`-je (befér a sávba és a kapu-táblába) — az elfogadott tananyag előbb.
+        // D-J1a-11 (review #483, M3): a director `accept`-je (befér a kérdés-sávba) — az elfogadott tananyag előbb.
         const unseen = materialQuizzesRef.current.filter((m) => !isGradeQuizSeen(gradeSeenRef.current, m));
         const material = (ctx?.accept ? unseen.find((m) => ctx.accept!(m)) : undefined) ?? unseen[0] ?? null;
         if (!material) return null;
@@ -1096,8 +1103,16 @@ export default function TsunamiEscapeEnglish() {
   );
   const directorConfig = useMemo(() => tsunamiDirectorConfig(userGrade ?? null), [userGrade]);
 
+  /*
+   * K1 (koordinátori döntés 2026-11-18): olvasási idő szerinti válaszablak — a közös director presentation-je a
+   * `paceTsunamiDirector`-ral burkolva (a director maga nem változik); a többletidő alatt a víz áll (water.ts).
+   */
+  const ownDirector = useQuestionDirector({ config: directorConfig, provider, startBand: adaptiveRef.current.band, seed: runSeedRef.current });
+  const resetDirectorRef = useRef(ownDirector.reset);
+  resetDirectorRef.current = ownDirector.reset;
+  const pacedDirector = useMemo(() => paceTsunamiDirector(ownDirector.director, { grade: () => userGradeRef.current ?? null }), [ownDirector.director]);
   const q = usePlayQuestion({
-    setup: { config: directorConfig, provider, startBand: adaptiveRef.current.band, seed: runSeedRef.current },
+    director: pacedDirector,
     onOutcome: (o, p) => {
       // A kimenet → a víz (D4: jó válasz = visszahúzódik, rossz / lejárt = ugrik).
       driverRef.current?.onOutcome(o, p);
@@ -1140,12 +1155,14 @@ export default function TsunamiEscapeEnglish() {
     const wavePace = runLevelRef.current == null ? 1 : tsunamiWaterPace(adaptiveRef.current.band);
     driverRef.current = makeDriver(seed, difficulty, wavePace);
     scoreRef.current = { score: 0, combo: 0, best: 0 };
+    setCoreWon(false);
     keysRef.current.left = false;
     keysRef.current.right = false;
     keysRef.current.sprint = false;
     sprintHeldRef.current = false;
     stickXRef.current = 0;
     scoreSubmittedRef.current = false;
+    resetDirectorRef.current(seed, adaptiveRef.current.band);
     q.reset(seed, adaptiveRef.current.band);
     goPaused(false);
     setExplainCard(null);
@@ -1155,7 +1172,7 @@ export default function TsunamiEscapeEnglish() {
     setResult(null);
     const st = driverRef.current.core.state();
     liveRef.current = { water: st.water * WATER_VIEW_SCALE, playerX: st.x, safeZoneX: st.zoneX, sprinting: false };
-    setHud({ correct: 0, target: st.target, water: Math.round(st.water), score: 0, combo: 0, inZone: true, hint: 1 });
+    setHud({ correct: 0, target: st.target, water: Math.round(st.water), score: 0, combo: 0, inZone: true, hint: 1, drift: 0 });
     // Review #483: a szünetmenü „Újrakezdés”-e a „play” fázisban marad — a képkocka-hurok a menet kulcsára is újraindul.
     setRunKey((k) => k + 1);
     goPhase("play");
@@ -1362,6 +1379,7 @@ export default function TsunamiEscapeEnglish() {
       if (combo >= 2) sfxCombo(Math.min(5, combo) as 1 | 2 | 3 | 4 | 5);
       else sfxPickup();
     } else if (e.type === "won") {
+      setCoreWon(true);
       sfxLevelUp();
     }
   }, [haptics]);
@@ -1417,7 +1435,7 @@ export default function TsunamiEscapeEnglish() {
       }
       if (flatCanvasRef.current) drawFlat(flatCanvasRef.current, driver);
       if (!core.running() && qRef.current.settled()) {
-        if (endAt === null) endAt = now + END_PAUSE_MS;
+        if (endAt === null) endAt = now + (core.state().phase === "won" ? WIN_SCENE_MS : END_PAUSE_MS);
         if (now >= endAt) {
           endRunRef.current(core.state().phase === "won");
           return;
@@ -1440,9 +1458,11 @@ export default function TsunamiEscapeEnglish() {
       const st = driver.core.state();
       const hint = st.timeMs < HINT_MS ? 1 : 0;
       const sc = scoreRef.current;
-      const next = { correct: st.correct, target: st.target, water: Math.round(st.water), score: sc.score, combo: sc.combo, inZone: st.inZone, hint };
+      // A3: a sodrás iránya (a régi „Sodrás: jobbra” jelzés) — 3 %/s fölött.
+      const drift = st.drift > 3 ? 1 : st.drift < -3 ? -1 : 0;
+      const next = { correct: st.correct, target: st.target, water: Math.round(st.water), score: sc.score, combo: sc.combo, inZone: st.inZone, hint, drift };
       setHud((prev) =>
-        prev.correct === next.correct && prev.target === next.target && prev.water === next.water && prev.score === next.score && prev.combo === next.combo && prev.inZone === next.inZone && prev.hint === next.hint
+        prev.correct === next.correct && prev.target === next.target && prev.water === next.water && prev.score === next.score && prev.combo === next.combo && prev.inZone === next.inZone && prev.hint === next.hint && prev.drift === next.drift
           ? prev
           : next,
       );
@@ -1555,9 +1575,10 @@ export default function TsunamiEscapeEnglish() {
           wrong: st.wrong,
           // A figura helye a játéktér arányában (a jelenet a z = 0 síkot lineárisan képezi: x % balról, víz % alulról).
           figureX: st.x / 100,
-          figureY: 1 - (st.water * WATER_VIEW_SCALE) / 100,
+          figureY: 1 - (st.water * WATER_VIEW_SCALE) / 100 + (liveRef.current.shiftPx ?? 0) / Math.max(1, stageRef.current?.clientHeight ?? 1),
           quizPlace: quizPlaceRef.current,
           sprint: driver.core.input.sprint ? 1 : 0,
+          scenePhase: coreWonRef.current ? "won" : phaseNowRef.current,
           questionId: p?.id ?? null,
           questionSeconds: p ? p.windowMs / 1000 : null,
           reveal: ctl.view().reveal ? 1 : 0,
@@ -1578,6 +1599,11 @@ export default function TsunamiEscapeEnglish() {
           const answers = (patch as { answers?: unknown }).answers;
           if (Array.isArray(answers) && answers.length >= 2 && answers.every((a) => typeof a === "string")) forceAnswersRef.current = answers as string[];
           qRef.current.request("trigger", driverRef.current!.clockMs());
+          return;
+        }
+        // Teszt: a mag győzelme a valódi úton (a jelenet → kártya sorrend méréséhez, B1).
+        if ((patch as { coreWin?: boolean }).coreWin && driverRef.current) {
+          driverRef.current.core.forceEnd(true);
           return;
         }
         // Teszt: a vízszint beállítása (a „magas víz → lent a kérdés” elrendezés méréséhez).
@@ -1662,13 +1688,48 @@ export default function TsunamiEscapeEnglish() {
    */
   const quizPlaceRef = useRef<"top" | "bottom">("top");
   const placedForRef = useRef<number | null>(null);
-  const [, setPlaceTick] = useState(0);
+  const [placeTick, setPlaceTick] = useState(0);
+  /** K3: a kompakt („magas víz”) mód is a megjelenéskor rögzül — nyitott kérdés alatt nem ugrál az elrendezés. */
+  const quizHighRef = useRef(false);
   if (pres && placedForRef.current !== pres.id) {
     placedForRef.current = pres.id;
-    quizPlaceRef.current = (driverRef.current?.core.state().water ?? 0) * WATER_VIEW_SCALE > 40 ? "bottom" : "top";
+    const viewWater = (driverRef.current?.core.state().water ?? 0) * WATER_VIEW_SCALE;
+    quizPlaceRef.current = viewWater > 40 ? "bottom" : "top";
+    // K2: a kompakt mód már a kép alsó negyede fölött (a 32–50 %-os sávban is) él.
+    quizHighRef.current = viewWater > 25;
   }
   // A becslés után mérés: ha a kirajzolt sáv mégis a figurára esne (magas kérdés, kicsi képernyő), egyszer átkerül a másik helyre.
   const flippedForRef = useRef<number | null>(null);
+  /*
+   * K2: ha a figura a kérdés-sáv mindkét helyén takarásban lenne (kis képernyő, köztes vízszint), a kép lejjebb tolódik, hogy a
+   * figura a (fenti) kérdés-sáv alá kerüljön; a kérdés lezárultával visszaáll.
+   */
+  const pendingShiftCheckRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (presIdNow === null) {
+      liveRef.current.shiftPx = 0;
+      return;
+    }
+    if (pendingShiftCheckRef.current !== presIdNow) return;
+    pendingShiftCheckRef.current = null;
+    const stage = stageRef.current;
+    const st = driverRef.current?.core.state();
+    if (!stage || !st) return;
+    const sr = stage.getBoundingClientRect();
+    const fx = sr.left + (st.x / 100) * sr.width;
+    const fy = sr.top + (1 - (st.water * WATER_VIEW_SCALE) / 100) * sr.height;
+    const boxes = Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-card, [data-testid="ts-question"] .play-question-option')).map((el) => el.getBoundingClientRect());
+    const covered = boxes.some((b) => fx >= b.left && fx <= b.right && fy - 40 <= b.bottom && fy + 6 >= b.top);
+    if (!covered) return;
+    // Vissza a fenti helyre, és a figura (feje 50 px-re) a sáv alá.
+    quizPlaceRef.current = "top";
+    setPlaceTick((n) => n + 1);
+    requestAnimationFrame(() => {
+      const topBoxes = Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-card, [data-testid="ts-question"] .play-question-option')).map((el) => el.getBoundingClientRect());
+      const bottom = Math.max(...topBoxes.map((b) => b.bottom));
+      liveRef.current.shiftPx = Math.max(0, bottom + 56 - fy);
+    });
+  }, [presIdNow, placeTick]);
   useLayoutEffect(() => {
     if (presIdNow === null || flippedForRef.current === presIdNow) return;
     const stage = stageRef.current;
@@ -1680,9 +1741,12 @@ export default function TsunamiEscapeEnglish() {
     // Elrendezési dobozok (az élesítés előtt rejtett, de már elrendezett gombokkal együtt).
     const boxes = Array.from(document.querySelectorAll('[data-testid="ts-question"] .play-question-card, [data-testid="ts-question"] .play-question-option')).map((el) => el.getBoundingClientRect());
     const hits = (y: number) => boxes.some((b) => fx >= b.left && fx <= b.right && y >= b.top && y <= b.bottom);
-    if (hits(fy - 8) || hits(fy - 40)) {
-      flippedForRef.current = presIdNow;
+    // K3: az átfordítás csak az első elrendezéskor — utána ugyanerre a kérdésre nem mérünk újra.
+    flippedForRef.current = presIdNow;
+    // +14 px ráhagyás: a kártya belépő animációja (10 px) alatt mérünk, a végleges hely ennyivel feljebb van.
+    if (hits(fy + 6) || hits(fy - 40)) {
       quizPlaceRef.current = quizPlaceRef.current === "top" ? "bottom" : "top";
+      pendingShiftCheckRef.current = presIdNow;
       setPlaceTick((n) => n + 1);
     }
   });
@@ -1861,7 +1925,7 @@ export default function TsunamiEscapeEnglish() {
               safeZoneX={50}
               stormFlash={stormFlash}
               sprinting={false}
-              phase={paused || explainCard ? "paused" : phase}
+              phase={coreWon ? "won" : paused || explainCard ? "paused" : phase}
               light={lightGraphics}
               onSupportedChange={setScene3d}
             />
@@ -1916,6 +1980,11 @@ export default function TsunamiEscapeEnglish() {
               >
                 {hud.inZone ? "Bóják között" : "Vissza a bójákhoz!"}
               </span>
+              {hud.drift !== 0 && (
+                <span className="rounded-full border border-sky-200/60 bg-slate-950/70 px-2.5 py-1 text-[13px] font-black text-sky-100 backdrop-blur-sm" data-testid="ts-drift">
+                  Sodrás: {hud.drift > 0 ? "jobbra →" : "← balra"}
+                </span>
+              )}
               {hud.combo >= 2 && (
                 <span
                   data-testid="tsunami-streak"
@@ -1934,7 +2003,7 @@ export default function TsunamiEscapeEnglish() {
               data-testid="ts-quiz"
               className="ts-quiz"
               data-place={quizPlaceRef.current}
-              data-high={(driverRef.current?.core.state().water ?? 0) * WATER_VIEW_SCALE > 40 ? "true" : "false"}
+              data-high={quizHighRef.current ? "true" : "false"}
               style={quizBottom !== null ? ({ "--ts-quiz-bottom": `${quizBottom}px` } as CSSProperties) : undefined}
               data-state={reveal ? "reveal" : "open"}
               data-armed={armedId === pres.id || reveal ? "true" : "false"}
@@ -2035,16 +2104,18 @@ function drawFlat(canvas: HTMLCanvasElement, driver: TsunamiDriver): void {
   ctx.fillStyle = "#7dd3fc";
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = "#c4843f";
-  for (const top of [18, 38, 58, 78]) ctx.fillRect(w * 0.08, h * (top / 100) - 6, w * 0.84, 12);
+  const first = w > h ? SHELTER_TOP_LANDSCAPE : SHELTER_TOP_PORTRAIT;
+  for (const top of [0, 1, 2, 3].map((i) => first + ((78 - first) * i) / 3)) ctx.fillRect(w * 0.08, h * (top / 100) - 6, w * 0.84, 12);
   // A menedék (mindig látszik).
   const sx = w * SHELTER_X;
   ctx.fillStyle = "#fef3c7";
-  ctx.fillRect(sx - 18, h * 0.18 - 34, 36, 28);
+  const sy = h * (first / 100);
+  ctx.fillRect(sx - 18, sy - 34, 36, 28);
   ctx.fillStyle = "#dc2626";
   ctx.beginPath();
-  ctx.moveTo(sx - 24, h * 0.18 - 34);
-  ctx.lineTo(sx, h * 0.18 - 54);
-  ctx.lineTo(sx + 24, h * 0.18 - 34);
+  ctx.moveTo(sx - 24, sy - 34);
+  ctx.lineTo(sx, sy - 54);
+  ctx.lineTo(sx + 24, sy - 34);
   ctx.fill();
   const wy = yOf(st.water);
   ctx.fillStyle = "rgba(14,116,190,0.9)";
@@ -2064,11 +2135,13 @@ function drawFlat(canvas: HTMLCanvasElement, driver: TsunamiDriver): void {
 }
 
 /**
- * A kapu-táblák és a súgó stílusa (a játéklapé — a közös `index.css` a J0c / J8 szeleté). A tábla ≥ 56 px magas,
- * egymástól ≥ 12 px (K.4/16); a visszajelzés szín + ikon + szöveg (nem csak szín); a hiba narancs, nem telített piros
- * (K.4/20); csökkentett mozgásnál nincs pattanás.
+ * A kérdés-sáv elhelyezése, a menedék-címke és a súgó stílusa (a játéklapé — a közös `index.css` a J0c / J8 szeleté); a
+ * válaszgomb ≥ 48 px (K.4/16).
  */
 const TSUNAMI_CSS = `
+/* B2: a menedék-deszka magassága (a jelenet SHELTER_TOP_PORTRAIT / _LANDSCAPE értékével egyezik) — a közös felső sáv alatt. */
+:root { --ts-shelter-top: ${SHELTER_TOP_PORTRAIT}vh; }
+@media (orientation: landscape) { :root { --ts-shelter-top: ${SHELTER_TOP_LANDSCAPE}vh; } }
 .game-start-settings > summary, .game-start-secondary > *, .tsunami-settings-btn,
 .tsunami-level-picker button { min-height: 52px; }
 .tsunami-level-picker p { font-size: 14px; }
@@ -2078,12 +2151,16 @@ const TSUNAMI_CSS = `
 /* A közös kérdés-sáv rögzített (fixed, inset 0) réteg: álló nézetben a helyét a figura szerint választjuk (fent / lent). */
 .ts-quiz .play-question { --play-question-top: calc(max(4px, var(--game-safe-top)) + 92px); --play-question-bottom: var(--ts-quiz-bottom, calc(max(8px, var(--game-safe-bottom)) + var(--game-action-size) + 16px)); }
 .ts-quiz[data-place="top"] .play-question { justify-content: flex-start; }
+/* B2: álló nézetben a fenti kérdés a felső deszka (a menedék) ALATT kezdődik — a menedék nyitott kérdésnél is látszik. */
+@media (orientation: portrait) {
+  .ts-quiz[data-place="top"] .play-question { --play-question-top: max(calc(max(4px, var(--game-safe-top)) + 92px), calc(var(--ts-shelter-top) + 44px)); }
+}
 .ts-quiz[data-place="bottom"] .play-question { justify-content: flex-end; }
 /*
  * Kompakt kérdés (koordinátori döntés 2026-11-18, „A”): kis képernyőn magas víznél csak a kérdés + a gombok, fejléc (címke,
  * idősáv, szünetgomb) nélkül — a szünet a felső sáv gombján marad. A kérdés-szöveg nem vágódik (nincs sorkorlát).
  */
-@media (orientation: portrait) and (max-height: 720px), (orientation: landscape) and (max-height: 520px) {
+@media (orientation: portrait), (orientation: landscape) and (max-height: 520px) {
   .ts-quiz[data-high="true"] .play-question-head { display: none; }
   .ts-quiz[data-high="true"] .play-question-card { padding: 6px 10px; }
   .ts-quiz[data-high="true"] .play-question-prompt { font-size: 14px; line-height: 1.25; display: block; -webkit-line-clamp: unset; line-clamp: none; max-height: none; overflow: visible; }
@@ -2116,12 +2193,13 @@ const TSUNAMI_CSS = `
 /* Élesítés: a megjelenés utáni első 400 ms-ban a válaszgombok még nem látszanak és nem érinthetők. */
 .ts-quiz[data-armed="false"] .play-question-options { visibility: hidden; pointer-events: none; }
 .ts-shelter-tag {
-  position: absolute; top: calc(18% + 8px); transform: translateX(-50%); z-index: 4; pointer-events: none;
+  position: absolute; top: calc(var(--ts-shelter-top) + 8px); transform: translateX(-50%); z-index: 4; pointer-events: none;
   padding: 2px 8px; border-radius: 9999px; background: #14532dd9; border: 1.5px solid #86efac; color: #dcfce7;
   font-size: 12px; font-weight: 900; white-space: nowrap;
 }
 .ts-hint {
-  position: absolute; left: 50%; bottom: calc(max(8px, var(--game-safe-bottom)) + var(--game-action-size) + 20px); transform: translateX(-50%); z-index: 25;
+  /* A1: a kezdő súgó a menedék-deszka alatt, a kép felső harmadában — nem takarja a figurát és a bójákat. */
+  position: absolute; left: 50%; top: calc(var(--ts-shelter-top) + 44px); transform: translateX(-50%); z-index: 25;
   max-width: calc(100% - 24px); margin: 0; padding: 8px 14px; border-radius: 9999px; pointer-events: none;
   background: #0b172dd9; border: 1.5px solid #fef08a99; color: #fef9c3; font-size: 15px; font-weight: 800; line-height: 1.25;
   text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 6px 18px #0008;

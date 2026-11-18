@@ -106,7 +106,7 @@ const DISPLAY_OVERRIDES: Record<string, { title?: string; description?: string }
   "tsunami-english": {
     title: "Szökőár szökés — Tudáspróba",
     description:
-      "3–5. osztályos kaland: angol, matek, nyelvtan, környezetismeret vagy vegyes kihívás. Fuss, válaszolj, és nyomd vissza a hullámot!",
+      "3–5. osztályos kaland: angol, matek, nyelvtan, környezetismeret vagy vegyes kihívás. Válaszolj, és nyomd vissza az emelkedő vizet a menedékig!",
   },
   "word-ladder-hu-en": {
     description:
@@ -153,7 +153,7 @@ const FALLBACK_CATALOG: GameCatalogRow[] = [
     id: "tsunami-english",
     title: "Szökőár szökés — Tudáspróba",
     description:
-      "3–5. osztályos kaland: angol, matek, nyelvtan, környezetismeret vagy vegyes kihívás. Fuss, válaszolj, és nyomd vissza a hullámot!",
+      "3–5. osztályos kaland: angol, matek, nyelvtan, környezetismeret vagy vegyes kihívás. Válaszolj, és nyomd vissza az emelkedő vizet a menedékig!",
     sortOrder: 1,
     createdAt: "",
   },

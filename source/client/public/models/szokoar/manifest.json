@@ -1,0 +1,20 @@
+{
+  "props": "szokoar-props.f1744670f2.glb",
+  "bytes": 128636,
+  "triangles": 3356,
+  "models": [
+    "bush",
+    "debris_barrel",
+    "debris_crate",
+    "debris_plank",
+    "hut_a",
+    "hut_b",
+    "lighthouse",
+    "palm_a",
+    "palm_b",
+    "pier_post",
+    "rock_a",
+    "rock_b",
+    "rock_c"
+  ]
+}

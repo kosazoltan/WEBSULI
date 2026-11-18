@@ -2,6 +2,7 @@ import { useEffect, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import {
   LOOK_BUDGET,
@@ -51,12 +52,32 @@ export type TsunamiScene3DProps = {
 };
 
 /** The game state the scene draws each frame (all in %, like the props). */
-export type TsunamiLive = { water: number; playerX: number; safeZoneX: number; sprinting: boolean };
+export type TsunamiLive = {
+  water: number;
+  playerX: number;
+  safeZoneX: number;
+  sprinting: boolean;
+  /**
+   * K2 (kis képernyő, köztes vízszint): a kép függőleges eltolása képpontban (pozitív = a világ lejjebb kerül), amíg egy nyitott
+   * kérdés a figurát takarná — így a figura a kérdés-sáv alá kerül. Simán áll be.
+   */
+  shiftPx?: number;
+};
 
 /** The shelter (goal) on the top plank: % from the left. Always on screen (D4). */
 export const SHELTER_X = 0.84;
-/** The top plank's surface, % from the bottom (PLANKS[0].top = 18 % from the top). */
-const SHELTER_PLANK_FY = 0.82;
+/**
+ * B2 (független ellenőr): a felső deszka (a menedék) a közös felső sáv ALATT legyen — álló nézetben a kép 24 %-ánál, fekvőben
+ * 30 %-ánál (fentről). A lap ugyanezt a két értéket használja a címkéhez és a kérdés-sáv tetejéhez (`--ts-shelter-top`).
+ */
+export const SHELTER_TOP_PORTRAIT = 24;
+export const SHELTER_TOP_LANDSCAPE = 30;
+const shelterTopFor = (aspect: number) => (aspect > 1 ? SHELTER_TOP_LANDSCAPE : SHELTER_TOP_PORTRAIT);
+/** A deszkák teteje (% fentről): a legfelső a menedék, alattuk egyenletesen a kép 78 %-áig. */
+const plankTops = (aspect: number): number[] => {
+  const first = shelterTopFor(aspect);
+  return [0, 1, 2, 3].map((i) => first + ((78 - first) * i) / 3);
+};
 
 const CAM_DIST = 22;
 const HALF_H = 7;
@@ -514,13 +535,15 @@ function buildPlatforms(
   yAtTopPct: (top: number) => number,
   thick: number,
   envMap: THREE.Texture | null,
+  tops: readonly number[],
 ): THREE.Group {
   const root = new THREE.Group();
   const len = xRight - xLeft;
   const cx = (xLeft + xRight) / 2;
   const depth = 1.5;
   const dummy = new THREE.Object3D();
-  for (const { top, type } of PLANKS) {
+  for (const [i, { type }] of PLANKS.entries()) {
+    const top = tops[i]!;
     const yTop = yAtTopPct(top);
     const cy = yTop - thick / 2;
     const plank = new THREE.Group();
@@ -719,24 +742,24 @@ function setupTsunami(
 
   // Land decorations: houses, palms, trees, lighthouse, a little island in the bay
   const windowMat = new THREE.MeshStandardMaterial({ color: "#ffe9a8", emissive: "#ffc94a", emissiveIntensity: 1.6 });
-  type Decor = { obj: THREE.Object3D; u: number; zz: number; lift: number };
+  type Decor = { obj: THREE.Object3D; u: number; zz: number; lift: number; kind?: "palm" | "house" | "lighthouse" | "tree" | "rock" | "bush" };
   const decor: Decor[] = [];
-  const addDecor = (obj: THREE.Object3D, u: number, zz: number, scale: number, lift = -0.05, rotY = 0) => {
+  const addDecor = (obj: THREE.Object3D, u: number, zz: number, scale: number, lift = -0.05, rotY = 0, kind?: Decor["kind"]) => {
     obj.scale.setScalar(scale);
     obj.rotation.y = rotY;
     scene.add(obj);
-    decor.push({ obj, u, zz, lift });
+    decor.push({ obj, u, zz, lift, kind });
   };
   const lighthouse = buildLighthouse();
-  addDecor(lighthouse.group, 0.74, 34, 1.3, -0.2);
-  addDecor(buildHouse("#ffd6a5", "#e5484d", windowMat), -0.74, 24, 1.15, -0.1, 0.25);
-  addDecor(buildHouse("#bde0fe", "#2563eb", windowMat), -0.46, 30, 1.1, -0.1, -0.2);
-  addDecor(buildHouse("#ffc8dd", "#7c3aed", windowMat), 0.5, 24, 1.1, -0.1, 0.15);
-  addDecor(buildPalm(), -0.3, 15, 1.25);
-  addDecor(buildPalm(), 0.34, 14, 1.2, -0.05, 1.2);
+  addDecor(lighthouse.group, 0.74, 34, 1.3, -0.2, 0, "lighthouse");
+  addDecor(buildHouse("#ffd6a5", "#e5484d", windowMat), -0.74, 24, 1.15, -0.1, 0.25, "house");
+  addDecor(buildHouse("#bde0fe", "#2563eb", windowMat), -0.46, 30, 1.1, -0.1, -0.2, "house");
+  addDecor(buildHouse("#ffc8dd", "#7c3aed", windowMat), 0.5, 24, 1.1, -0.1, 0.15, "house");
+  addDecor(buildPalm(), -0.3, 15, 1.25, -0.05, 0, "palm");
+  addDecor(buildPalm(), 0.34, 14, 1.2, -0.05, 1.2, "palm");
   if (!lean) {
-    addDecor(buildHouse("#caffbf", "#f97316", windowMat), 0.9, 40, 1.2, -0.1, -0.3);
-    addDecor(buildPalm(), -0.95, 18, 1.35, -0.05, 2.2);
+    addDecor(buildHouse("#caffbf", "#f97316", windowMat), 0.9, 40, 1.2, -0.1, -0.3, "house");
+    addDecor(buildPalm(), -0.95, 18, 1.35, -0.05, 2.2, "palm");
     addDecor(buildTree("#4cbf5f"), -0.6, 38, 1.4);
     addDecor(buildTree("#3fa65a"), -0.88, 46, 1.6);
     addDecor(buildTree("#5ccc62"), 0.62, 44, 1.5);
@@ -753,6 +776,99 @@ function setupTsunami(
   island.add(islandPalm);
   scene.add(island);
   const islandSpot = { u: 0.16, zz: 78, y: -5.9 };
+
+  /*
+   * Látvány C irány (terv 7.2): a Blender-szkriptből gyártott, Meshopt-tömörített díszlet (`/models/szokoar/`). Lustán, a
+   * menü alatt töltődik; amíg nincs meg (vagy hiba esetén), a primitív díszlet marad. A modell a régi tárgy befoglaló
+   * magasságára igazodik, a talppontja a régi talppontra.
+   */
+  let disposed = false;
+  const debris: { obj: THREE.Object3D; fx: number; speed: number; phase: number }[] = [];
+  const fitInto = (holder: THREE.Object3D, model: THREE.Object3D, heightMul = 1) => {
+    holder.updateMatrixWorld(true);
+    const oldBox = new THREE.Box3().setFromObject(holder);
+    const oldH = Math.max(0.01, oldBox.max.y - oldBox.min.y) * heightMul;
+    for (const c of holder.children) c.visible = false;
+    const box = new THREE.Box3().setFromObject(model);
+    const h = Math.max(0.01, box.max.y - box.min.y);
+    const k = oldH / h / Math.max(1e-6, holder.getWorldScale(new THREE.Vector3()).y);
+    model.scale.setScalar(k);
+    model.position.set(-((box.min.x + box.max.x) / 2) * k, -box.min.y * k, -((box.min.z + box.max.z) / 2) * k);
+    holder.add(model);
+  };
+  const lambertize = (root: THREE.Object3D) => {
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const src = m.material as THREE.MeshStandardMaterial;
+      const params = { color: src.color, emissive: src.emissive, emissiveIntensity: src.emissiveIntensity };
+      m.material = lambertDecor ? new THREE.MeshLambertMaterial(params) : new THREE.MeshStandardMaterial({ ...params, roughness: 0.8, metalness: 0 });
+      src.dispose();
+    });
+  };
+  const loadModels = async () => {
+    try {
+      const res = await fetch("/models/szokoar/manifest.json");
+      if (!res.ok) return;
+      const manifest = (await res.json()) as { props?: string };
+      if (!manifest.props || disposed) return;
+      const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
+        import("three/examples/jsm/loaders/GLTFLoader.js"),
+        import("three/examples/jsm/libs/meshopt_decoder.module.js"),
+      ]);
+      const loader = new GLTFLoader();
+      loader.setMeshoptDecoder(MeshoptDecoder);
+      const gltf: GLTF = await loader.loadAsync(`/models/szokoar/${manifest.props}`);
+      if (disposed) return;
+      lambertize(gltf.scene);
+      const clone = (n: string) => {
+        const src = gltf.scene.getObjectByName(n);
+        if (!src) return null;
+        const c = src.clone(true);
+        c.position.set(0, 0, 0);
+        return c;
+      };
+      let palmI = 0;
+      let houseI = 0;
+      for (const d of decor) {
+        if (d.kind === "palm") {
+          const m = clone(palmI++ % 2 ? "palm_b" : "palm_a");
+          if (m) fitInto(d.obj, m);
+        } else if (d.kind === "house") {
+          const m = clone(houseI++ % 2 ? "hut_b" : "hut_a");
+          if (m) fitInto(d.obj, m);
+        } else if (d.kind === "lighthouse") {
+          d.obj.visible = false; // a világítótorony lett a menedék (a felső deszkán)
+        }
+      }
+      const lh = clone("lighthouse");
+      if (lh) fitInto(shelter.group, lh, 2.1);
+      const spots: [string, number, number, number][] = [
+        ["rock_c", -0.62, 11, 1.4], ["rock_a", -0.4, 9, 1.0], ["rock_b", 0.42, 9, 1.0], ["rock_c", 0.66, 12, 1.5],
+        ["bush", -0.5, 17, 1.2], ["bush", 0.55, 16, 1.1], ["rock_a", -0.85, 14, 1.3], ["rock_b", 0.85, 13, 1.2],
+      ];
+      for (const [n, u, zz, sc] of spots) {
+        const m = clone(n);
+        if (!m) continue;
+        const holder = new THREE.Group();
+        holder.add(m);
+        const box = new THREE.Box3().setFromObject(m);
+        m.position.y = -box.min.y;
+        addDecor(holder, u, zz, sc, -0.15, u * 3, n.startsWith("rock") ? "rock" : "bush");
+      }
+      const debrisNames = ["debris_plank", "debris_barrel", "debris_crate", "debris_plank", "debris_barrel"];
+      debrisNames.slice(0, lean ? 3 : 5).forEach((n, i) => {
+        const m = clone(n);
+        if (!m) return;
+        m.scale.setScalar(0.55);
+        scene.add(m);
+        debris.push({ obj: m, fx: 0.1 + i * 0.19, speed: (i % 2 ? -1 : 1) * (0.006 + 0.003 * i), phase: i * 1.7 });
+      });
+      layout();
+    } catch {
+      /* a primitív díszlet marad */
+    }
+  };
 
   // Water: a wave surface receding into the bay + the sea's cut face towards the camera
   const step = lean ? 0.7 : 0.4;
@@ -1075,19 +1191,21 @@ function setupTsunami(
       disposeObjectTree(platforms);
     }
     const thick = Math.max(0.24, 15 * worldPerPx);
-    platforms = buildPlatforms(worldX(0.08), worldX(0.92), (top) => worldY(1 - top / 100), thick, env?.texture ?? null);
+    platforms = buildPlatforms(worldX(0.08), worldX(0.92), (top) => worldY(1 - top / 100), thick, env?.texture ?? null, plankTops(hw / HALF_H));
     scene.add(platforms);
 
     kidScale = Math.min(74, Math.max(46, heightPx * 0.14)) * worldPerPx;
     kid.group.scale.setScalar(kidScale);
     shelter.group.scale.setScalar(kidScale * 0.62);
-    shelter.group.position.set(worldX(SHELTER_X), worldY(SHELTER_PLANK_FY), PLANK_Z + 0.2);
+    shelter.group.position.set(worldX(SHELTER_X), worldY(1 - shelterTopFor(hw / HALF_H) / 100), PLANK_Z + 0.2);
     const zoneUnit = kidScale * 0.95;
     buoyL.group.scale.setScalar(zoneUnit);
     buoyR.group.scale.setScalar(zoneUnit);
     floats.scale.setScalar(1);
   };
 
+  let warmFrames = 0;
+  let shiftY = 0;
   let lastW = -1;
   let lastH = -1;
   const controller: ThreeSceneController = {
@@ -1111,11 +1229,25 @@ function setupTsunami(
     },
     update(dt, elapsed) {
       const p = propsRef.current;
+      // Menü alatti előkészítés (K4): néhány bemelegítő képkocka (shader-fordítás, feltöltés) után a jelenet láthatatlan és
+      // nem számol — a közös hurok csak egy üres törlést rajzol, amíg a gyerek a menüben van.
+      if (p.phase === "menu") {
+        warmFrames += 1;
+        scene.visible = warmFrames <= 3;
+        if (warmFrames > 3) return;
+      } else {
+        scene.visible = true;
+      }
       const target = readTarget();
       const playing = p.phase === "play";
       if (!reducedMotion) waveTime += dt;
       const t = waveTime;
 
+      // K2: kép-eltolás nyitott kérdés alatt (a kamera felfelé mozdul → a világ lejjebb kerül a képen).
+      const live = p.live?.current;
+      shiftY = damp(shiftY, (live?.shiftPx ?? 0) * worldPerPx, 6, dt);
+      camera.position.y = EYE + shiftY;
+      sky.position.y = camera.position.y;
       // Victory (D4): the wave breaks below the shelter — the level sinks and the crest collapses in spray once.
       const won = p.phase === "won";
       winT = won ? Math.min(1, winT + dt / 1.2) : 0;
@@ -1180,6 +1312,16 @@ function setupTsunami(
       // Player on the surfboard
       const kx = worldX(px);
       const surfaceAt = (x: number, z: number) => level + waveHeight(x, z, t, amp);
+      // Sodródó törmelék: a hullámon ringatózva, lassan sodródva (díszlet, nem akadály — D2-b).
+      for (const d of debris) {
+        if (!reducedMotion) d.fx += d.speed * dt;
+        if (d.fx > 1.05) d.fx = -0.05;
+        if (d.fx < -0.05) d.fx = 1.05;
+        const dx = worldX(d.fx, -1.2);
+        d.obj.position.set(dx, surfaceAt(dx, FRONT_Z - 1.2) + 0.05, FRONT_Z - 1.2);
+        d.obj.rotation.z = Math.atan(waveSlopeX(dx, FRONT_Z - 1.2, t, amp)) + (reducedMotion ? 0 : Math.sin(elapsed * 1.3 + d.phase) * 0.12);
+        d.obj.rotation.y = d.phase;
+      }
       const ky = surfaceAt(kx, PLAYER_Z);
       if (dt > 0) vx = damp(vx, (kx - prevKidX) / dt, 10, dt);
       prevKidX = kx;
@@ -1322,10 +1464,12 @@ function setupTsunami(
       sparkles.update(dt);
     },
     dispose() {
+      disposed = true;
       sparkles.dispose();
       env?.dispose();
     },
   };
+  void loadModels();
   return controller;
 }
 

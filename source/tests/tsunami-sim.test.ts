@@ -5,7 +5,7 @@ import { SIM_AVERAGE, SIM_STRONG, SIM_WEAK, SIM_YOUNG, medianOf, runSim, runSimS
 import { createSimGame } from "../client/src/lib/tsunami/sim";
 
 /**
- * J1a — „Hegyre fel!” szimulációs elfogadás a közös harness-szel (végrehajtás K.6, J1a 7.; terv 6.2, J2, J3, J4, J6, J7, J9;
+ * Szökőár (emelkedő víz, terv 2026-11-18) szimulációs elfogadás a közös harness-szel (végrehajtás K.6, J1a 7.; terv 6.2, J2, J3, J4, J6, J7, J9;
  * K.4/26). 20 seed (`seedFrom("sim", "tsunami-english", i)`), a terv játékosmodelljeivel. A „legfeljebb / legalább” küszöbök
  * mind a 20 futásra, a mediános küszöbök a mediánra. A mért értékek a `console.log` sorokban (PR-leírás, záró jelentés).
  */

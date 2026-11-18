@@ -13,27 +13,36 @@ import { createReviewQueue } from "@/game-engine/play/reviewQueue";
 import { createQuestionUi } from "@/game-engine/play/questionUi";
 import type { RunStatsSnapshot } from "@/game-engine/play/runStats";
 import type { FourChoiceQuiz } from "@/types/gameQuiz";
+import { GRADE_QUIZ_ITEMS } from "@/data/gradeQuizBank";
 
 import { TSUNAMI_GAME_ID, ZONE_HALF, createTsunamiDriver, tsunamiDirectorConfig, type TsunamiDifficulty, type TsunamiDriver, type WaterCore } from "./water";
+import { paceTsunamiDirector } from "./pacing";
 
 /** A szintetikus kézi bank mérete. */
 export const SIM_BANK_SIZE = 200;
 
 type SimQuestion = { id: number; correctOption: number; windowMs: number; optionCount: number };
 
-/** Szintetikus kézi bank: kulcsonként egyedi, négy opciós tételek. */
-export function simBank(seed: number, size = SIM_BANK_SIZE): FourChoiceQuiz[] {
+/**
+ * A szimuláció bankja VALÓDI hosszúságú kérdésekből (a független ellenőr K1 lelete): az évfolyam-bank négy opciós tételei
+ * (az adott évfolyamé, ha van elég; különben az összes), kulcsonként egyedi azonosítóval — így az olvasási ablak a valódi
+ * szöveghosszal számol.
+ */
+export function simBank(seed: number, size = SIM_BANK_SIZE, grade: number | null = null): FourChoiceQuiz[] {
+  const four = GRADE_QUIZ_ITEMS.filter((g) => g.options.length === 4);
+  const own = grade === null ? [] : four.filter((g) => g.grade === grade);
+  const pool = own.length >= 40 ? own : four;
   const rng = createRng(seedFrom(TSUNAMI_GAME_ID, seed, "simbank"));
   const out: FourChoiceQuiz[] = [];
   for (let i = 0; i < size; i++) {
-    const correctIndex = rng.int(4);
-    out.push({ id: `sim-${i}`, prompt: `Szimulált kérdés ${i}?`, options: ["alma", "körte", "szilva", "barack"], correctIndex });
+    const g = pool[rng.int(pool.length)]!;
+    out.push({ id: `sim-${i}`, prompt: g.prompt, options: [...g.options], correctIndex: g.correctIndex });
   }
   return out;
 }
 
-function simProvider(seed: number, material: readonly FourChoiceQuiz[], coupon = false): QuestionProvider {
-  const bank = simBank(seed);
+function simProvider(seed: number, material: readonly FourChoiceQuiz[], coupon = false, grade: number | null = null): QuestionProvider {
+  const bank = simBank(seed, SIM_BANK_SIZE, grade);
   const rng = createRng(seedFrom(TSUNAMI_GAME_ID, seed, "simpick"));
   const asked = new Set<string>();
   let matIdx = 0;
@@ -82,22 +91,26 @@ export function createSimGame(opts: {
   difficulty?: TsunamiDifficulty;
   material?: readonly FourChoiceQuiz[];
   coupon?: boolean;
+  /** A lap pálya-tempója (`tsunamiWaterPace`, 0,85–1,15; a független ellenőr K6 lelete). */
+  pace?: number;
 }): TsunamiSim {
-  const director = createQuestionDirector({
+  const base = createQuestionDirector({
     config: tsunamiDirectorConfig(opts.grade),
-    provider: simProvider(opts.seed, opts.material ?? [], opts.coupon ?? false),
+    provider: simProvider(opts.seed, opts.material ?? [], opts.coupon ?? false, opts.grade),
     review: createReviewQueue(null),
     rng: createRng(seedFrom(TSUNAMI_GAME_ID, opts.seed, "q")),
     startBand: 0.4,
     now: () => 0,
   });
+  // Ugyanaz az olvasási-ablak burkoló, mint a lapon (pacing.ts).
+  const director = paceTsunamiDirector(base, { grade: () => opts.grade });
   let driver: TsunamiDriver | null = null;
   const ui = createQuestionUi({
     director: () => (opts.questions ? director : null),
     onView: () => {},
     onOutcome: (o, p) => driver!.onOutcome(o, p),
   });
-  driver = createTsunamiDriver({ seed: opts.seed, difficulty: opts.difficulty ?? "normal", questions: opts.questions ? ui : null });
+  driver = createTsunamiDriver({ seed: opts.seed, difficulty: opts.difficulty ?? "normal", pace: opts.pace, questions: opts.questions ? ui : null });
   const d = driver;
   const core = d.core;
   const over = () => !core.running();
