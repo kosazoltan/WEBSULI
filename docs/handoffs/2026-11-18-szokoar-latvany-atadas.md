@@ -62,3 +62,39 @@ Végrehajtás: `docs/specs/2026-11-18-szokoar-tema-es-sebesseg-vegrehajtas.md` (
 ## Ne felejtsd
 - Háromfázisú rend, `gate:stage` szakaszonként, `gate:push` a végén (a `native-arch` önmagában ismert kivétel — C-73).
 - Tesztet gyengíteni tilos; a `tsunami-play.spec.ts` elrendezés-esetei (≤ 600 ms-os nyugalom, figura / menedék szabadsága) maradnak.
+
+## Kiegészítés — látvány 4. lépés (átvevő fejlesztő, 2026-11-18; terv 7.4, végrehajtás 9.)
+
+**Elrendezés (360×640) — gyökérok és javítás:** `docs/agent-csapdak.md` C-74. A takarás-döntés a figura testére szól, a jelöltek
+egy lépésben mérve; a nyitott kérdés alatt a kép-eltolás követi a figurát. A döntés NEM függ a tárcsa oldalától: a kérdés-sáv
+alsó határa a vezérlők (`tsunami-touch-controls` gyerekei) mért tetejéből jön, a takarás a figura és a kérdés dobozaiból.
+
+**Mi változott a látványban**
+- Blender (`build_all.py`): sRGB-paletta → lineáris csúcs-szín, egy közös anyag, modellenként egy primitív; új: `cliff`, `hill`,
+  `debris_log`, `kid_board / kid_torso / kid_head / kid_arm / kid_leg`. Két fájl: `szokoar-props.<hash>.glb` + `szokoar-kid.<hash>.glb`.
+  A kimenet nem bájtazonos futásról futásra (a hash változik) — a manifestet és a GLB-ket együtt kell commitolni.
+- Jelenet (`TsunamiScene3D.tsx`): hullámfal-shader (a horizont és a dombok fölé ér, a vízszinttel nő és közelít: `dz` 120 → 34,
+  taraj a kép 71 → 86 %-áig), azúr ég + semleges tónusleképezés (`NeutralToneMapping`), viharos hangulat a veszéllyel, áttetsző
+  vágott vízfal mélyvíz-háttérrel (a víz alatti hegy / cölöpök átderengenek), habgyűrű a hegy körül (`uCliff`), példányosított
+  díszlet (`SPOTS`) és törmelék (`DRIFT`), összevont stégek cölöpökkel (`buildPlatforms`), a menedék a hegy tetején.
+- A kódból épített díszlet már csak tartalék (`buildFallbackDecor`), ha a modellek nem töltődnek be.
+
+**Hangolási pontok:** hullámfal — `waveMat` (színek: `deep / body / lit`, taraj: `edge`, habnyelvek: `tongues`), elhelyezés az
+`update()`-ben (`dz`, `wallTop`); hegy — `CLIFF_Z`, `CLIFF_FLARE` (a Blender-szkriptben is!), `cliffScale` a `layout()`-ban;
+díszlet-sűrűség — `SPOTS`, `hillK` / `propK` (keskeny képen kisebb).
+
+**Képek (valódi GPU: AMD Radeon 890M, fejes Chrome, helyi build, csonk /api):** `docs/measurements/szokoar-tema/latvany/c4-*`
+(`c4-elotte-*` = a lépés előtti állapot).
+
+**Mérés (saját mérő, csonk /api, 390×844, dpr 3; a gépen közben 1–3 idegen e2e-konténer futott — zajos):**
+rajzolási hívás 155 → 45 (asztali, bloommal: 166 → 59); háromszög 72,7 e → 65,5 e; 1× CPU: 57,8–58,7 fps (előtte 56,3–58,2);
+4× CPU indítási leghosszabb képkocka 183–350 ms (előtte 283 ms) — a ≤ 200 ms NEM igazolt, nyugodt gépen újra kell mérni.
+
+**Nyitva maradt**
+- A 4× CPU-s indítási tüske nyugodt gépen mérve; menet közben egy 200–900 ms-os hosszú képkocka az első kérdés körül (a lépés
+  előtt is megvolt: 183–583 ms) — ok-feltárás kell (CPU-profil).
+- Álló nézetben alacsony víznél a hullámfal csak a bal domb és a hegy közti résben látszik (távol van) — ha kell, a bal domb
+  alacsonyabb lehet.
+- Fekvő nézetben a figura oldalra mozogva a szélső válasz-oszlop alá kerülhet (a követő eltolás csak álló nézetben él).
+- Valódi telefon: UNVERIFIED.
+
