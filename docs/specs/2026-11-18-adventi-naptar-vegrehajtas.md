@@ -609,6 +609,56 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
   Teljes kör (válogatás után): `npx.cmd tsx scripts/design-assets/generate.ts --set advent --max 94 --max-usd 7 --ref advent-bg-portrait=advent-bg-portrait/<a kiválasztott fájl>`
 - **S5 / S6:** a levél szabálya a terv 18.1; az évadzáró küldés a takarító része (`closed` fázisban, egyszer).
 
+## Kiegészítés 7 — a kártya megjelenésének döntése, a bekapcsolás lépései, vercel.json (2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 20. szakasz)
+
+### K2 — a kártya az első rajzolás előtt dönt
+
+Fájlok: `source/client/src/advent/season-flag.ts` (új), `source/shared/advent/home-card.ts`, `source/client/src/components/AdventHomeCard.tsx`,
+`source/package.json` (`build:e2e`), `source/tests/support/advent-e2e.ts`, `source/tests/advent-home-card.spec.ts`,
+`source/tests/advent-home-card.test.ts`.
+
+1. `shared/advent/home-card.ts`: tiszta `homeCardClock({ flag, testHooks, hookValue, realNow })` → `Date | null`: kikapcsolt
+   kapcsolónál `null`; teszt-kampós buildben csak érvényes kampó-értéknél ad időt; különben a valódi idő.
+2. `client/src/advent/season-flag.ts`: a két build-idejű kapcsoló (`VITE_ADVENT_CALENDAR === "on"`,
+   `VITE_ENABLE_GAME_TEST_HOOKS === "1"`) és `window.__websuliAdventTestNow` olvasása — a kampót CSAK a teszt-kampós ág olvassa.
+3. `AdventHomeCard.tsx`: `null` idő vagy szezonon kívül → semmi (lekérdezés sem indul). Különben a kártya azonnal a végleges
+   méretén: „Hamarosan” gomb nélkül, egyébként általános szöveg + „Kinyitom”; a `status` csak felülbírál (nem élő → összecsukódik);
+   a helyi „már láttam” jelző megszűnik.
+4. `package.json` `build:e2e`: `VITE_ADVENT_CALENDAR=on`. `tests/support/advent-e2e.ts` `setAdventTime`: a lap betöltése előtt
+   beállítja a kampót is (`addInitScript`); `clearAdventTime` törli.
+5. Tesztek: CLS `layout-shift` megfigyelővel első látogatásra, 360×640 / 390×844 / 1366×768 — a kártya miatti többlet ≤ 0,02
+   (alapvonal: szezonon kívüli betöltés), késleltetett `status` mellett; mutációs ellenpróba (ha a kártya csak a `status` után
+   jelenik meg, a teszt bukik). Tesztidő nélkül (a többi főoldali teszt helyzete): nincs kártya és nincs `/api/advent` kérés.
+   Elállított óra mindkét irányban. Őr-teszt: a kampó olvasása csak a teszt-kampós ágban van.
+
+| Parancs | Várt kimenet |
+|---|---|
+| `node --import tsx --test tests/advent-home-card.test.ts` | `fail 0` |
+| `node --import tsx scripts/run-e2e-tests.ts tests/advent-home-card.spec.ts --workers=1` | minden teszt `passed` |
+| `npm.cmd run build`, majd keresés a `dist/public` alatt a `__websuliAdventTestNow` szóra | 0 találat |
+
+### Bekapcsolás és kikapcsolás lépésről lépésre (az S6 része; TULAJDONOSI teendő az élesítéskor)
+
+A kapcsoló KÉT helyen él. A sorrend számít: ha a Vercel-build előbb kapcsol be, mint a Render, a kártya megjelenik, majd
+összecsukódik, és a gombja „A naptár most nem érhető el” oldalra visz.
+
+Bekapcsolás:
+1. **Render** (a webszolgáltatás — `websuli-api-eu` — „Environment” lapja, vagy a `render.yaml` `envVars` listája az S6 PR-ban):
+   `ADVENT_CALENDAR` = `on` → mentés → a szolgáltatás újraindul. Ellenőrzés: `https://websuli.vip/api/advent/status` → `"enabled": true`.
+2. **Vercel** (a projekt „Settings → Environment Variables” lapja, Production környezet): `VITE_ADVENT_CALENDAR` = `on` → mentés →
+   „Deployments” → a legutóbbi éles telepítés „Redeploy” (a kapcsoló a BUILDBE ég, új build nélkül nem hat).
+   Ellenőrzés: a főoldalon (november 24-től) megjelenik a kártya; `/adventi-naptar` betölt.
+
+Kikapcsolás (fordított sorrend):
+1. **Vercel:** a `VITE_ADVENT_CALENDAR` törlése (vagy `off`) → Redeploy. Ellenőrzés: a főoldalon nincs kártya.
+2. **Render:** `ADVENT_CALENDAR` törlése (vagy `off`). Ellenőrzés: `/api/advent/status` → `"enabled": false`.
+
+### S3c kiegészítése — `source/vercel.json`
+
+A `headers` listába: `{ "source": "/advent/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] }`
+(a képek tartalom-hashes néven állnak); őr-teszt a `tests/vercel-lesson-csp.test.ts` mintájára: a szabály megvan, és a többi
+szabály változatlan. A `server/vite.ts` `/advent` statikus mappája csak a helyi és az e2e-kiszolgálást szolgálja.
+
 ## Kiegészítés 8 — a 2/3 PR vak ellenőri leletei (2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 21. szakasz)
 
 Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `source/tests/advent-limits.test.ts`, `source/tests/advent-routes-db.integration.ts`.

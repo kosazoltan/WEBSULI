@@ -160,3 +160,24 @@ képcsere), #155 (S5, S6, S8), #156 (ágak rebase-e a friss mainre push előtt).
   a kontrasztteszt első változata emiatt bukott. A 95%-os határ a tesztadatnál is számít.
 - **Heredoc-csapda harmadszor:** a visszaperjel a sablonszövegben elveszett (`\d` → `d`), az egységteszt fogta meg. **Szabály:** a
   generáló szkript fájlba íródik (nem heredocba), reguláris kifejezést tartalmazó szöveg `String.raw`-val.
+
+## 10. Kiegészítés — a vak, hibakereső ellenőr 1. köre a felületen (IGEN, FELTÉTELLEL; 2026-11-18)
+
+- **Mi ment rosszul:** a hibaszöveg-szűrés csak a 429-et kezelte, minden más hiba nyers szerverszövege (proxy-HTML, angol
+  „Internal Server Error”, JSON) a gyerek elé került (K1). A saját tesztjeim csak a naptár saját magyar 4xx üzeneteivel futottak,
+  a „hibás” válaszokat soha nem hamisítottam meg. **Javítás:** `source/client/src/advent/busy.ts` (`adventErrorText`: csak a naptár
+  saját 400 / 403 / 409 mondata megy ki), `source/tests/advent-robustness.spec.ts` (502 HTML, 403 JSON, 500 angol, üres törzs).
+  **Tanulság:** gyerekeknek szóló felületnél a hibautakat elfogott 5xx / nem JSON válaszokkal is ki kell próbálni.
+- **Feltételezett kiszolgálási út (K2):** a főoldali kártya helyfoglalására először szerveroldali HTML-sablonozást javasoltam,
+  és csak a koordinátor kérésére néztem meg, hogy élesben a HTML-t a Vercel statikus buildje adja (`source/vercel.json`,
+  `curl -sI https://websuli.vip/`: `Server: Vercel`, `X-Vercel-Cache: HIT`). Ár: egy fölösleges terv-kör. **Javítás:** a döntés a
+  buildbe égetett `VITE_ADVENT_CALENDAR` kapcsolóból és a böngésző órájából születik
+  (`source/client/src/advent/season-flag.ts`, `source/shared/advent/home-card.ts` `homeCardClock`); e2e-ben csak beadott tesztidővel.
+  **Tanulság:** kiszolgálási útra (ki adja a HTML-t, mi a gyorsítótár) építő javaslat ELŐTT a telepítési beállítást és az éles
+  fejléceket kell megnézni.
+- **Az évfolyam egy koppintásra rögzült (K3), az ablakképek helye nem illett a képhez (K4), lassú hálózaton nem volt jelzés (K5).**
+  Mindegyiket előbb bukó böngészőteszt reprodukálta a régi kódon (14 bukásból 12 a lelet miatt; 2 saját teszthiba volt: a kétlapos
+  eset a háttérlap animáció-szüneteltetése miatt akadt el, a tanulói esetnél rossz nevet vártam).
+- **DB-kör időtúllépése terhelt gépen:** a PR-B beolvasztás utáni fején a DB-kör 480 s után megállt (159 / 230 teszt kész,
+  közben több idegen tesztkonténer futott). A korlátot NEM emeltem; az újrafutás nyugodt gépen történik.
+- Kanban: a bejelentkezett játékos böngészős tesztje NOT RUN (a `PLAYER_ACCOUNTS` az e2e-szerveren kikapcsolt).
