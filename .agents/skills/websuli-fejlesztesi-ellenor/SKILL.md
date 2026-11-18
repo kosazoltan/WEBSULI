@@ -1,6 +1,6 @@
 ---
 name: websuli-fejlesztesi-ellenor
-description: WEBSULI független fejlesztési ellenőr - friss kontextusú, csak olvasó alügynök hibát keres az elkészült fejlesztésben a PR megnyitása ELŐTT. Töltsd be automatikusan minden fejlesztés / javítás elkészültekor (zöld helyi kapuk után), a PR megnyitása előtt, és minden érdemi javító push előtt (visszaellenőrzés). A fejlesztő maga nem ellenőrizheti magát.
+description: WEBSULI független fejlesztési ellenőr - VAK (csak a követelményt és a diffet kapja), friss kontextusú alügynök, amelynek a feladata HIBÁT TALÁLNI az elkészült fejlesztésben a PR megnyitása ELŐTT. Töltsd be automatikusan minden fejlesztés / javítás elkészültekor (zöld helyi kapuk után), a PR megnyitása előtt, és minden érdemi javító push előtt (visszaellenőrzés). A fejlesztő maga nem ellenőrizheti magát.
 ---
 
 # Fejlesztési ellenőr — független alügynökös ellenőrzés a PR előtt
@@ -26,43 +26,66 @@ npm run gate:stage          # szakasz-kapu (gyors)
 npm run gate:push           # teljes helyi kapu: lint, tsc, teljes unit, háromfázisú rend, friss main
 ```
 
-Játék- / UI-szeletnél a CI-azonos böngészős utat is futtasd le előbb (a `pre-pr-gate` futtatja; a pontos parancsot kiírja), hogy az
-ellenőr a futott e2e-eredményre hivatkozhasson.
+Játék- / UI-szeletnél a CI-azonos böngészős utat is futtasd le előbb (a `pre-pr-gate` futtatja; a pontos parancsot kiírja). Ezek az
+eredmények a FEJLESZTŐ előfeltételei — az ellenőrnek NEM adod át (vak ellenőr, 3. szakasz): amit állítani akar, azt maga futtatja.
 
-## 3. A megbízás (másold, töltsd ki, add egy FRISS kontextusú alügynöknek)
+## 3. A megbízás — VAK, HIBAKERESŐ ellenőr (másold, töltsd ki, add egy FRISS kontextusú alügynöknek)
+
+Tulajdonosi utasítás (2026-11-18): „mindig egy vak alügynök ellenőrizze az elvégzett munkádat, hogy biztosan megtalálja a hibákat …
+Lehet Anthropic modell, de akkor azt nagyon úgy utasítsd, hogy mindenképpen hibát keressen.”
+
+**VAK** = az ellenőr CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja. NEM kapja meg: a fejlesztő jelentését,
+összefoglalóját, önértékelését, „zöld” állításait (kapu-eredmény, tesztszám, CI), a fejlesztő által „ismert kockázatnak” mondott
+pontokat, sem az orkesztrátor várakozását („szerintem jó”, „csak gyorsan nézd meg”). Amit a fejlesztő állít, azt az ellenőrnek magának
+kell mérnie. Mindig friss kontextusú alügynök (nem az, amelyik a kódot írta, és nem a fejlesztő folytatása).
 
 ```text
-Független fejlesztési ellenőr vagy a kosazoltan/WEBSULI repóban (NYILVÁNOS repó). Magyarul dolgozz és jelents.
-CSAK OLVASÓ: a repóban semmit nem módosítasz, nem commitolsz, nem pusholsz, GitHubra (PR, komment, review) semmit nem írsz.
-Saját mérőszkriptet csak a scratchpadodba írhatsz: <SCRATCHPAD>/review-<PR-vagy-ág>/ — a D:\ és a D:\repo gyökerébe semmit.
+Független, VAK, HIBAKERESŐ ellenőr vagy a kosazoltan/WEBSULI repóban (NYILVÁNOS repó). Magyarul dolgozz és jelents.
 
-Cél: HIBÁT keress, ne összefoglalót írj. A munkát a SPECIFIKÁCIÓHOZ mérd, ne a tesztek szűk bemenetéhez.
-- Ág / fej: <ág> @ <fej-hash>; munkafa: <út> (csak olvasd; ha futtatsz, ott futtass, de ne módosíts)
-- Terv: <docs/specs/…md>; végrehajtási utasítás: <docs/specs/…-vegrehajtas.md>, a szelet fejezete: <sorok>
-- Diff: git diff origin/main...<fej>
-- A helyi kapuk eredménye (zöld): <a gate:push / gate:pr összesítő táblája>
-- Kifejezetten nézd meg: <a fejlesztő által ismert kockázatok, ha vannak>
+A FELADATOD HIBÁT TALÁLNI, NEM MEGERŐSÍTENI. Abból indulj ki, hogy a munkában van hiba, és a te dolgod megtalálni. A „rendben van”
+csak akkor elfogadható, ha felsorolod, mit próbáltál megtörni, és az miért nem sikerült. Udvariasság, a fejlesztő szándéka vagy a
+„biztos jó” nem szempont.
 
-Kötelező ellenőrzőlista: a websuli-fejlesztesi-ellenor skill 4. szakasza (.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md) —
-minden pontra írj ítéletet (teljesül / részben / nem / nem alkalmazható) bizonyítékkal.
+CSAK OLVASÓ a fejlesztő munkafájára és a GitHubra: ott semmit nem módosítasz, nem commitolsz, nem pusholsz, nem kommentelsz.
+Futtatni és ellenpróbázni SAJÁT ideiglenes munkafában / klónban szabad és kell: <SCRATCHPAD>/review-<PR-vagy-ág>/ (a D:\ és a
+D:\repo gyökerébe semmit).
+
+Amit kapsz (más nem jár):
+- Követelmény: <docs/specs/…md> (+ végrehajtás: <…-vegrehajtas.md>), tulajdonosi cél szó szerint: „<idézet>”
+- Ág / fej: <ág> @ <teljes fej-hash>; a diff: git diff origin/main...<fej>
+
+Hibakereső pontok — mindegyikre írj ítéletet (talált hiba / próbáltam, nem sikerült megtörni / nem alkalmazható) bizonyítékkal:
+1. Adatszerződés a lépések között (mezőnevek, formátumok, típusok; kliens ↔ szerver ↔ DB, szkript ↔ konfig).
+2. Biztonság és adatvédelem (token / titok / személyes adat URL-ben, naplóban, linkben, nyilvános repóban; CSRF / origin; GET-mellékhatás).
+3. Regresszió a meglévő folyamatokban (névtelen / bejelentkezett felhasználó, régi anyag, Stúdió-lecke, a közös modul többi hívója).
+4. Időzóna és dátumhatár (Europe/Budapest).
+5. Migráció ↔ Drizzle-séma; indítás / cron / leállítás; e2e-mód.
+6. Versenyhelyzet, párhuzamosság, ismételt / megszakadt futás, időtúllépés.
+7. Tesztminőség: a teszt a viselkedést méri-e (mutációval próbáld: ha kiveszed a védő sort, bukik-e?); gyengítettek-e tesztet; a
+   spec-változás dokumentált-e.
+8. <a diffhez igazított, feladat-specifikus pontok — pl. játéknál a skill 4/A pontjai; hooknál a valódi héj; felületnél a képernyő>
+9. Bármi más, amit a fenti lista nem fed — keress aktívan olyan hibát is, amire a lista nem gondolt.
 
 Szabályok:
 - Minden lelet fájl:sor hivatkozással és konkrét hibaforgatókönyvvel (ki, milyen eszközön, mit csinál, mi történik).
-- Kritikus / magas leletnél előbb próbáld MEGCÁFOLNI (keresd a védelmet a kódban, futtass próbát); csak megerősítés után jelentsd.
-  A megcáfolt gyanúkat külön szakaszban sorold fel.
-- Számszerű állítást (fér-e a szöveg, hány kérdés jön, mennyi idő) mérj vagy számolj, és írd le, hogyan.
+- Kritikus / magas leletnél előbb próbáld MEGCÁFOLNI (keresd a védelmet, futtass próbát); csak megerősítés után jelentsd.
+- Számszerű állítást mérj vagy számolj, és írd le, hogyan. A mérce a tulajdonosi cél / terv; felületi változásnál nézd meg a
+  képernyőképeket (álló és fekvő nézet), ne csak a tesztet.
 - Ne találj ki fájlt, függvényt, eredményt; a bizonytalant jelöld UNVERIFIED-nek.
 - A jelentést ide írd: <SCRATCHPAD>/review-<PR-vagy-ág>/jelentes.md
 
-A jelentés formája:
-# Független review — <ág / PR>, fej `<hash>`
+A jelentés formája (a record-review.mjs a „Fej:” sort, az „Ítélet:” sort és a két „Mit …” fejlécet gépileg ellenőrzi):
+# Független review — <ág / PR>
+Fej: <teljes fej-hash>
 ## Ítélet: IGEN | IGEN, FELTÉTELLEL | NEM
 (NEM, ha van blokkoló; FELTÉTELLEL, ha a nem blokkoló leletek jegyre mennek)
-## Blokkoló leletek (fájl:sor, forgatókönyv, javítási javaslat)
-## Jegyre menő leletek (közepes / alacsony)
-## Az ellenőrzőlista pontjai (ítélet + bizonyíték)
+## Leletek (blokkoló / jegyre menő; fájl:sor, forgatókönyv, evidencia, javítási javaslat)
+## A hibakereső pontok (ítélet + bizonyíték)
+## Mit próbáltam megtörni, és nem sikerült
+## Mit NEM vizsgáltam
+(ok + kockázat)
 ## Megcáfolt gyanúk
-## Mit futtattam (parancs + eredmény) / Mit NEM futtattam (ok + kockázat)
+## Mit futtattam (parancs + eredmény)
 ```
 
 ## 4. Kötelező ellenőrzőlista (a mért hibatípusokból)
@@ -104,42 +127,14 @@ A jelentés formája:
 16. **Hatókör**: a diff nem nyúl közös / más szelet fájljához indokolatlanul; nem írt a D:\ gyökerébe; mutációs ellenpróba nem
     `git checkout`-tal (C-70).
 
-## 4/b. Második, más rendszerű vélemény — külső (Gemini) ellenőr
-
-A Claude-alügynökös ellenőr MELLETT (nem helyette) fut, ugyanarra a fejre (tulajdonosi kiegészítés 2026-11-17). A döntő ítélet
-továbbra is a Claude-alügynökös ellenőré + az orkesztrátoré; a külső jelentés hiánya nem bukás.
-
-```bash
-# kulcs: KIZÁRÓLAG a GEMINI_API_KEY környezeti változó, vagy --env-file <helyi .env> (útvonalat a repóba írni tilos)
-node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head <fej> --cim "<PR / szelet>" \
-  --spec docs/specs/<terv>.md#<fejezet-regex> --lista scripts/qa/gates/external-review/checklist-game.md \
-  --ki <SCRATCHPAD>/review-<x>/kulso-jelentes.md --record          # általános szeletnél: checklist-general.md
-# előtte ingyenes próba: --dry-run (csak countTokens)
-```
-
-- Modell: `gemini-4-carbon`, gondolkodási szint `high` (tulajdonosi döntés; nem max / xhigh). Alapból az Interactions API háttér-módja
-  (`background: true`, `max_output_tokens` 131 072 — ez a hívásonkénti költségfék, ~1,3 USD kimenet); az interakció-azonosító azonnal
-  `<jelentés>.interaction-id`-be kerül, megszakadt kliens után `--resume-id`-vel lekérdezhető. `--api stream`: 65 536-os keret, a
-  gondolkodás is ebbe számít (~100 ezer token bemenet fölött MAX_TOKENS → hiányos). Időtúllépést / megszakadt kapcsolatot NEM
-  ismétel (már számlázott hívás), csak 429 / 5xx-et. A nyers szó- / évfolyam-bank adatfájlok alapból kimaradnak
-  (`--include-bank-data`).
-- Siker CSAK: nem üres válasz + `finishReason` STOP + ítélet-fejezet; különben `<jelentés>.hianyos.md`, 3-as kilépés, és a
-  bizonyíték `incomplete` / `blocked` — a második vélemény HIÁNYZIK (a kapu így jelzi, nem „megvan”).
-- A küldés ELŐTT titok-szűrés (találatnál 4-gyel megáll, érték nélkül; minden kapcsolati URL külön, fail-closed); a kulcs
-  soha nem kerül kimenetbe, jelentésbe, bizonyítékba. Kilépés: 0 lefutott / KIHAGYVA (nincs kulcs, kvóta), 2 nincs kulcs `--strict`
-  mellett, 3 API-hiba, 4 titok-szűrés, 5 túl nagy bemenet (bontsd `--paths`-szal), 1 egyéb hiba (pl. hiányzó argumentum). A `--save-input <fájl>` a pontosan
-  elküldött szöveget menti (a scratchpadba, ne a repóba). Költség ~0,4–1,5 USD / PR.
-- Az orkesztrátor beolvassa a jelentést második véleményként, és minden kritikus / magas lelet állítását a KÓDBÓL visszaellenőrzi
-  (MEGERŐSÍTVE / CÁFOLVA / NEM ELDÖNTHETŐ) — a külső modell nem lát a repóba, csak a kapott diffet / fájlokat, és hallucinálhat.
-  A megerősített leletet a Claude-ellenőr visszaellenőrző körébe is add be.
-- Nincs kulcs vagy elfogyott a keret: „KIHAGYVA” — nem bukás (kivéve `--strict`). A `pre-pr-gate` / `pre-merge-gate` a
-  `external-<fej>.json` (`--record`) hiányát csak `WARN`-ként jelzi.
-
 ## 5. Visszaellenőrzés
 
-- A javított fejet UGYANAZ az ellenőr kapja (SendMessage a meglévő alügynöknek), a `git diff <régi-fej> <új-fej>` kiindulással:
-  minden korábbi lelet lezárása / állapota, és új hiba a javításban (a javítás gyakran új hibát hoz: C-68).
-- A jelentés végére új szakasz: `# Visszaellenőrzés — új fej <hash>` saját ítélettel.
+- A javított fejet UGYANAZ az ellenőr kapja (SendMessage a meglévő alügynöknek), a `git diff <régi-fej> <új-fej>` kiindulással —
+  továbbra is VAKON: a fejlesztő javítási összefoglalóját / „javítva” állításait nem kapja, csak az új fejet és a diffet.
+- A keret visszanézésnél is HIBAKERESÉS: nem a korábbi leletek kipipálása, hanem új hiba keresése a javításban és körülötte (a javítás
+  gyakran új hibát hoz: C-68), és minden korábbi lelet lezárásának saját mérése.
+- A jelentés végére új szakasz: `# Visszaellenőrzés — új fej <hash>`, benne új `Fej: <hash>` sor, saját ítélet, és újra a
+  „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc (a `record-review.mjs` az utolsó `Fej:` sort nézi).
 
 ## 6. Az ítélet rögzítése (ezt olvassa a pre-pr-gate és a pre-merge-gate)
 
@@ -148,6 +143,8 @@ node scripts/qa/gates/record-review.mjs --head <fej-hash> --verdict IGEN --repor
 # --verdict: IGEN | "IGEN, FELTÉTELLEL" | NEM
 ```
 
+- A szkript csak teljes jelentést fogad el: `Fej:` sor a rögzítendő fejre, `Ítélet:` sor, és a „Mit próbáltam megtörni, és nem
+  sikerült” és a „Mit NEM vizsgáltam” fejléc — különben hibával kilép, bizonyíték nélkül.
 - A bizonyíték: `<git-common-dir>/websuli-qa-evidence/review-<fej>.json` (helyi, nem commitolható; munkafából is látszik).
 - A szkript kiír egy sort: `Független ellenőr ítélete: IGEN (fej: <hash>)`. Ezt — és CSAK ezt — tedd a PR-leírásba (vagy kommentbe).
   A nyilvános repóra biztonsági részlet, leletlista, jelentés-útvonal nem kerül.

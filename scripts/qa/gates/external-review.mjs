@@ -13,7 +13,8 @@
  *   --rendszer <helyi fájl> (a rendszer-utasítás felülírása, pl. szintézishez),
  *   --api interactions|stream (alap: interactions, háttér-mód + lekérdezés), --max-output-tokens N, --resume-id <azonosító>,
  *   --save-input <fájl> (a pontosan elküldött szöveg), --include-bank-data (a nyers szó- / évfolyam-bank adatfájlok is),
- *   --record (external-<fej>.json a kapuk bizonyíték-tárába; a pre-pr / pre-merge kapu figyelmeztetésként olvassa).
+ *   --record (external-<fej>.json a bizonyíték-tárba; 2026-11-18 óta a kapuk NEM olvassák — kézi, nem kötelező eszköz,
+ *   docs/specs/2026-11-18-vak-hibakereso-ellenor.md).
  * Siker CSAK: nem üres válasz + finishReason STOP + ítélet-fejezet a jelentésben; minden más hiányos / blokkolt, nem nulla kilépés.
  *
  * A kulcs: GEMINI_API_KEY környezeti változó, vagy --env-file. Soha nem kerül kimenetbe: minden szöveg, amely a
@@ -500,7 +501,7 @@ export function readLocal(p) { return fs.readFileSync(p, "utf8"); }
 
 // ---------------------------------------------------------------- bizonyíték (--record)
 /**
- * `external-<fej>.json` a kapuk bizonyíték-tárába (docs/specs/2026-11-17-kulso-ellenor.md K4): állapot (ok / incomplete / blocked /
+ * `external-<fej>.json` a bizonyíték-tárba (docs/specs/2026-11-17-kulso-ellenor.md K4; 2026-11-18 óta a kapuk nem olvassák): állapot (ok / incomplete / blocked /
  * error / quota / skipped), modell, token-összegek, a jelentés útja és SHA-256-ja. Kulcs és jelentés-szöveg NINCS benne.
  */
 export function externalRecord({ head, status, model, thinking, usage, report, reason = "", now = () => new Date() }) {

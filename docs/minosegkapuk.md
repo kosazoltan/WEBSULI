@@ -38,20 +38,17 @@ terhelésétől függően ±50%.
 | PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet; a push-kapu minden lépése; `npm run build`; játék / UI: CI-azonos böngészős út; DB: `test:learning-db` | 214 s böngészős út nélkül (build 20 s); böngészős futásonként + ~160 s (füstpróba: 1 spec, 11 eset, 164 s) |
 | Merge előtt | `npm run gate:merge -- <PR>` | CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
 
-### Külső (Gemini) ellenőr — második vélemény
+### Független ellenőr — VAK és HIBAKERESŐ (tulajdonosi utasítás 2026-11-18)
 
-`scripts/qa/gates/external-review.mjs` (terv: `docs/specs/2026-11-17-kulso-ellenor.md`; menet: `websuli-fejlesztesi-ellenor` skill
-4/b). A Claude-alügynökös ellenőr MELLETT, ugyanarra a fejre; kulcs csak `GEMINI_API_KEY` / `--env-file`; titok-szűrés a küldés előtt;
-`--record` → `external-<fej>.json`. A `pre-pr-gate` és a `pre-merge-gate` „külső (Gemini) ellenőr” lépése csak `WARN` / `PASS` —
-soha nem bukás. Ellenőrzőlisták: `scripts/qa/gates/external-review/checklist-{game,general}.md`.
-
-- **Költségkorlát:** `--dry-run` (csak `countTokens`, ingyenes) előbb; hívásonként a kimenet + gondolkodás felső korlátja
-  131 072 token (Interactions háttér-mód); a stdout utolsó sora és a jelentés vége a token-felhasználást (bemenet / gondolkodás /
-  kimenet) rögzíti. Időtúllépést / megszakadt kapcsolatot nem ismétel (már számlázott), csak 429 / 5xx-et.
-- **Siker csak kész jelentéssel:** nem üres válasz + `finishReason` STOP + ítélet-fejezet; különben `.hianyos.md`, nem nulla
-  kilépés, `incomplete` / `blocked` bizonyíték → a kapu: „a második vélemény HIÁNYZIK”.
-- **A külső modell állításai nem tények:** nem lát a repóba; minden kritikus / magas leletét az orkesztrátor a kódból visszaellenőrzi
-  (MEGERŐSÍTVE / CÁFOLVA / NEM ELDÖNTHETŐ).
+- **Vak:** friss kontextusú alügynök, amely CSAK a követelményt (terv / tulajdonosi cél) és a diffet / fejet kapja; a fejlesztő
+  jelentését, önértékelését, „zöld” állításait és az orkesztrátor várakozását NEM.
+- **Hibakereső:** a megbízás kifejezetten hibakeresésre utasít („a feladatod hibát találni, nem megerősíteni”), feladat-specifikus
+  hibakereső pontokkal és egy „bármi más” ponttal; a futtatás / ellenpróba saját ideiglenes munkafában; visszanézésnél is
+  hibakeresés a keret; a mérce a tulajdonosi cél (felületnél a képernyőképek is). Anthropic modell is lehet — a sablon ezért
+  kifejezetten hibakeresésre utasít.
+- **Kötelező jelentés-elemek** (a `record-review.mjs` gépileg ellenőrzi): `Fej:` sor a rögzítendő fejre, `Ítélet:` sor, a
+  „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc. A megbízás-sablon: `websuli-fejlesztesi-ellenor`
+  skill, 3. szakasz.
 
 ### Tiltott minták (a diff hozzáadott soraiban, `FAIL`, érték kiírása nélkül)
 

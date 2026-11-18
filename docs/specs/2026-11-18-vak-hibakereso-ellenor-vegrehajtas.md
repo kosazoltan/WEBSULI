@@ -20,4 +20,4 @@ a #506 összevonása és friss főág-beolvasztás után.
 6. `npm run gate:stage`; mutációs ellenpróba commit után (a három `record-review` feltétel egyenkénti kivétele; a „külső” lépés
    visszaírása a kapuba → a teszt bukik); `npm run gate:push`; fej-hash az orkesztrátornak.
 
-- [ ] 1 · [ ] 2 · [ ] 3 · [ ] 4 · [ ] 5 · [ ] 6
+- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [ ] 6 (kapuk, mutáció — folyamatban)

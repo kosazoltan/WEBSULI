@@ -282,18 +282,6 @@ export function verdictResult(v, head) {
 }
 
 /**
- * A külső (Gemini) ellenőr bizonyítéka (`external-<fej>.json`, external-review.mjs --record) — CSAK figyelmeztetés, soha nem bukás
- * (docs/specs/2026-11-17-kulso-ellenor.md K4): a döntő a Claude-alügynökös ellenőr ítélete + az orkesztrátor.
- */
-export function externalResult(ev, head) {
-  const how = `node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head ${head.slice(0, 12)} --spec <terv.md>#<fejezet> --lista scripts/qa/gates/external-review/checklist-general.md --ki <jelentés.md> --record`;
-  if (!ev || ev.head !== head) return { status: STATUS.WARN, note: `nincs külső (Gemini) második vélemény erre a fejre — ajánlott: ${how}` };
-  if (ev.status === 'ok') return { status: STATUS.PASS, note: `lefutott (${ev.model ?? '?'}) — a leleteit az orkesztrátor a kódból visszaellenőrzi` };
-  const why = { skipped: 'KIHAGYVA (nincs GEMINI_API_KEY)', quota: 'KIHAGYVA (kvóta / keret)', blocked: 'BLOKKOLT válasz', incomplete: 'HIÁNYOS válasz (nincs kész jelentés)' }[ev.status] ?? `SIKERTELEN (${ev.status})`;
-  return { status: STATUS.WARN, note: `a második vélemény HIÁNYZIK — külső ellenőr: ${why}${ev.reason ? `, ${ev.reason}` : ''} — nem bukás` };
-}
-
-/**
  * Futási környezet egy kapuhoz: git-gyökér, `source/`, konfig, bizonyíték-tár. A tesztek `exec`-et és `root`-ot injektálnak.
  */
 export function makeContext({ exec = realExec, cwd = process.cwd(), base, cfg } = {}) {

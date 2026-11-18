@@ -125,8 +125,8 @@ describe("helyi teszt-adatbázis URL", () => {
 });
 
 import { externalRecord } from "./external-review.mjs";
-import { externalResult, STATUS } from "./lib.mjs";
-describe("bizonyíték (--record) és a kapuk figyelmeztetése (K4)", () => {
+// Terv 2026-11-18-vak-hibakereso-ellenor V1 (spec-változás): a kapuk nem olvassák a --record bizonyítékot; a lib.mjs kapu-figyelmeztető függvénye megszűnt.
+describe("bizonyíték (--record)", () => {
   it("kulcs nélküli futás --record-dal: external-<fej>.json „skipped” állapottal, kulcs és jelentés-szöveg nélkül", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ke-rec-"));
     const g = (...a) => execFileSync("git", ["-C", dir, ...a], { encoding: "utf8" }).trim();
@@ -152,15 +152,6 @@ describe("bizonyíték (--record) és a kapuk figyelmeztetése (K4)", () => {
     const r = externalRecord({ head: "a".repeat(40), status: "ok", model: "m", thinking: "high", usage: { promptTokenCount: 5, totalTokenCount: 9 }, report: "nincs.md" });
     assert.deepEqual(r.usage, { prompt: 5, thoughts: null, output: null, total: 9 });
     assert.equal(r.reportSha256, null);
-  });
-  it("externalResult: hiány / KIHAGYVA / kvóta → WARN, lefutott → PASS, soha nem FAIL", () => {
-    const h = "b".repeat(40);
-    assert.equal(externalResult(null, h).status, STATUS.WARN);
-    assert.equal(externalResult({ head: "c".repeat(40), status: "ok" }, h).status, STATUS.WARN, "más fejre szóló jelentés nem számít");
-    assert.equal(externalResult({ head: h, status: "skipped" }, h).status, STATUS.WARN);
-    assert.equal(externalResult({ head: h, status: "quota" }, h).status, STATUS.WARN);
-    assert.equal(externalResult({ head: h, status: "error" }, h).status, STATUS.WARN);
-    assert.equal(externalResult({ head: h, status: "ok", model: "m" }, h).status, STATUS.PASS);
   });
 });
 
@@ -308,11 +299,6 @@ describe("#490 (2): siker csak kész, ítéletes jelentéssel — helyettesítet
     const r = await generate({ model: "m", key: "k", systemText: "s", userText: "u", thinking: "high", transport: t2, sleep: async () => {} });
     assert.equal(n, 2);
     assert.equal(evaluateResponse(r).status, "ok");
-  });
-  it("a kapu a hiányos / blokkolt bizonyítékot „HIÁNYZIK” figyelmeztetésként mutatja", () => {
-    const h = "d".repeat(40);
-    assert.match(externalResult({ head: h, status: "incomplete", reason: "MAX_TOKENS" }, h).note, /HIÁNYZIK/);
-    assert.match(externalResult({ head: h, status: "blocked" }, h).note, /HIÁNYZIK/);
   });
 });
 

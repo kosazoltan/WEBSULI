@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import {
-  STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog,
+  STATUS, argValue, cmdResult, createGate, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog,
 } from './lib.mjs';
 import { evidenceRecord, runPrePushSteps } from './pre-push-gate.mjs';
 import { stemOf } from './stage-gate.mjs';
@@ -131,8 +131,6 @@ async function main() {
 
   await gate.step('független ellenőr ítélete a fejre', () => verdictResult(
     resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head));
-
-  await gate.step('külső (Gemini) ellenőr — második vélemény', () => externalResult(readEvidence(ctx.evDir, `external-${head}`), head));
 
   // 2) A push előtti kapu minden lépése.
   const { changed } = await runPrePushSteps({ gate, ctx, slice: args.includes('--slice') });
