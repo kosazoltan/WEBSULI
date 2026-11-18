@@ -9,7 +9,8 @@ import { composePrompt, loadStyle, parseMaxUsd, parseSetName, planJobs, type Ass
  * Adventi naptár — képgyártó-előkészítés (docs/specs/2026-11-18-adventi-naptar.md 13., 14.5; A42). Hálózati hívás nincs:
  * a készlet-leírót, a stílust, a költségtervet és a plafonokat ellenőrzi.
  */
-const read = (rel: string) => readFileSync(fileURLToPath(new URL(`../${rel}`, import.meta.url)), "utf8");
+// A munkafában a sorvég CRLF is lehet (Windows, autocrlf) — a forrás-állítások LF-re normalizált szövegen futnak.
+const read = (rel: string) => readFileSync(fileURLToPath(new URL(`../${rel}`, import.meta.url)), "utf8").replace(/\r\n/g, "\n");
 const manifest = JSON.parse(read("design-assets/advent/prompts.json")) as AssetManifest;
 const style = loadStyle(read("design-assets/advent/style.md"));
 const base = JSON.parse(read("design-assets/prompts.json")) as AssetManifest;
