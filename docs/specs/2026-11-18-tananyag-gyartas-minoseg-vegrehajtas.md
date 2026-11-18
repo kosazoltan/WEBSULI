@@ -101,7 +101,7 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
    - `SOURCE_VISUAL_KINDS = ["table","process","decisionTree","ruleBox","pictureCard","colorCode","exercise","diagram"]`.
    - Közös mezők: `id` (`v1`…, ≤ 12 karakter), `kind`, `sourceFile` (≤ 255), `page` (egész ≥ 1), `role` (≤ 200), `title?` (≤ 160),
      `conceptIds: string[]` (≤ 12), `verified?: "text" | "visual-only"` (a program tölti).
-   - `data` fajtánként: `table` `{ headers: string[1..8] (≤ 80), rows: string[][] (1..40 sor, cella ≤ 200), headerTones?:
+   - `data` fajtánként: `table` `{ headers: string[1..8] (≤ 80), rows: string[][] (1..40 sor, cella ≤ 100 — review J5: a legnagyobb tábla beférjen a karakterkeretbe), headerTones?:
      Array<"a"|"b"|"c"|"neutral"> }` · `process` `{ steps: string[2..12] (≤ 200) }` · `decisionTree` `{ root: Node }`, ahol
      `Node = { text (≤ 160), branches?: Array<{ label (≤ 60), node: Node }> (≤ 4) }`, mélység ≤ 4 · `ruleBox` `{ tone:
      "rule"|"warning"|"tip", heading? (≤ 80), items: string[1..8] (≤ 240) }` · `pictureCard` `{ cards: Array<{ label (≤ 60),
@@ -141,6 +141,10 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 9. 0.3 szerinti kapuk. Elvárt: E1–E3 teljesül.
 
 ## S1b — A leltár átadása a promptoknak és a vizuális fedettség
+
+> **Teendő az S1a független review-jából (J4):** a különálló kinyerés tartalmi lenyomata (`server/studio/single-run/live.ts`,
+> `singleRunMapHash`, ma `single-run-map-2`) kapjon leltár-sémaverziót, hogy ugyanarra a fájlra a régi, leltár nélküli térképet ne
+> adja vissza jelzés nélkül; teszt rögzítse.
 
 Ág: `feat/forras-vizualleltar-s1b`. Fájlok: `server/studio/step-io.ts`, `server/studio/single-run/engine.ts`,
 `shared/lesson-schema.ts`, `server/studio/coverage.ts`, `tests/source-visual-coverage.test.ts` (új), a promptépítők meglévő tesztjei.
@@ -226,6 +230,10 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 9. 0.3 szerinti kapuk. Elvárt: E5, E37–E39 (a megállítás `enforce` módban; az élesítés az S3b utolsó lépése), E47.
 
 ## S2a — Megjelenítők: táblázat, szabálydoboz, összehasonlító kártya
+
+> **Ellenőrzési pont az S1a független review-jából (J7), az S2b-re is:** a leltár szövegei a modelltől jönnek, és HTML-kódolás
+> nélkül tárolódnak — a megjelenítő kizárólag szövegként rajzolja ki őket (React szövegcsomópont; `dangerouslySetInnerHTML` tilos);
+> a böngészős próba egy `<script>` / `<img onerror>` szövegű cellával igazolja, hogy jelölőként nem értelmeződik.
 
 Ág: `feat/lecke-megjelenitok-s2a`. Fájlok: `shared/lesson-schema.ts`, `shared/lesson-visual-params.ts`,
 `shared/lesson-block-label.ts`, `client/src/lesson-runtime/blocks/source-visuals.tsx` (új),

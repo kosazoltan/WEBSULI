@@ -12,6 +12,15 @@ export const SOURCE_VISUAL_LIMITS = { maxItems: 60, maxChars: 40000 } as const;
 export const SOURCE_VISUAL_TREE_DEPTH = 4;
 /** `verified: "text"`, ha a tétel 3+ betűs szavainak legalább ekkora hányada szerepel az oldal kinyert szövegében. */
 export const SOURCE_VISUAL_TEXT_SHARE = 0.6;
+/** Józan abszolút oldalszám-plafon, ha a fájl tényleges oldalszáma nem ismert. */
+export const SOURCE_VISUAL_MAX_PAGE = 2000;
+/** A nyers tétel legnagyobb beágyazási mélysége — a 4 szintes döntési fa 12 szint; a mélyebb tétel a séma (és a rekurzió) ELŐTT kimarad. */
+export const SOURCE_VISUAL_MAX_NESTING = 24;
+/**
+ * A táblázat korlátai egymással összhangban (review J5): a legnagyobb érvényes táblázat (8 oszlop × 40 sor × 100 karakteres cella,
+ * ~34 000 karakter JSON-ként) belefér a `maxChars` keretbe.
+ */
+export const SOURCE_VISUAL_TABLE = { columns: 8, rows: 40, cellChars: 100, headerChars: 80 } as const;
 
 const filled = (max: number) => z.string().trim().min(1).max(max);
 const tone = z.enum(["a", "b", "c", "neutral"]);
@@ -24,7 +33,7 @@ const depthOf = (node: SourceDecisionNode): number => 1 + Math.max(0, ...(node.b
 const common = {
   id: z.string().regex(/^[A-Za-z0-9_-]{1,12}$/),
   sourceFile: filled(255),
-  page: z.number().int().min(1),
+  page: z.number().int().min(1).max(SOURCE_VISUAL_MAX_PAGE),
   role: filled(200),
   title: filled(160).optional(),
   conceptIds: z.array(z.string()).max(12).default([]),
@@ -35,7 +44,8 @@ const item = <K extends SourceVisualKind, D extends z.ZodTypeAny>(kind: K, data:
 
 export const sourceVisualSchema = z.discriminatedUnion("kind", [
   // A cella lehet üres (a forrás táblázatának üres mezője is adat).
-  item("table", z.object({ headers: z.array(filled(80)).min(1).max(8), rows: z.array(z.array(z.string().trim().max(200)).min(1).max(8)).min(1).max(40), headerTones: z.array(tone).max(8).optional() })),
+  item("table", z.object({ headers: z.array(filled(SOURCE_VISUAL_TABLE.headerChars)).min(1).max(SOURCE_VISUAL_TABLE.columns),
+    rows: z.array(z.array(z.string().trim().max(SOURCE_VISUAL_TABLE.cellChars)).min(1).max(SOURCE_VISUAL_TABLE.columns)).min(1).max(SOURCE_VISUAL_TABLE.rows), headerTones: z.array(tone).max(SOURCE_VISUAL_TABLE.columns).optional() })),
   item("process", z.object({ steps: z.array(filled(200)).min(2).max(12) })),
   item("decisionTree", z.object({ root: nodeSchema.refine((root) => depthOf(root) <= SOURCE_VISUAL_TREE_DEPTH, { message: `A döntési fa legfeljebb ${SOURCE_VISUAL_TREE_DEPTH} szint mély lehet.` }) })),
   item("ruleBox", z.object({ tone: z.enum(["rule", "warning", "tip"]), heading: filled(80).optional(), items: z.array(filled(240)).min(1).max(8) })),
@@ -54,7 +64,7 @@ export const SOURCE_VISUALS_CONTRACT = [
   ' "sourceFile": a forrásfájl neve, "page": oldalszám (1-től; képnél 1), "role": mit tanít a tétel (legfeljebb 200 karakter), "title"?: a tétel címe a forrásban,',
   ' "conceptIds": a hozzá tartozó fogalmak "id"-i a concepts listából, "data": a fajta szerinti adat}',
   "A data alakja fajtánként:",
-  '- table: {"headers": string[1–8], "rows": string[][] (1–40 sor, soronként a fejléc sorrendjében), "headerTones"?: ("a" | "b" | "c" | "neutral")[]}',
+  `- table: {"headers": string[1–8], "rows": string[][] (1–40 sor, soronként a fejléc sorrendjében; egy cella legfeljebb ${SOURCE_VISUAL_TABLE.cellChars} karakter), "headerTones"?: ("a" | "b" | "c" | "neutral")[]}`,
   '- process: {"steps": string[2–12]}',
   `- decisionTree: {"root": Node}, ahol Node = {"text": string, "branches"?: [{"label": az ág felirata, "node": Node}] (legfeljebb 4 ág)}; legfeljebb ${SOURCE_VISUAL_TREE_DEPTH} szint`,
   '- ruleBox: {"tone": "rule" | "warning" | "tip", "heading"?: string, "items": string[1–8]}',
@@ -97,45 +107,81 @@ export function splitPageTexts(extractedText: string): Record<number, string> {
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const wordsOf = (s: string) => fold(s).match(/\p{L}{3,}/gu) ?? [];
 
-export type SourceVisualContext = { fileNames: string[]; conceptIds: Set<string>; pageTexts?: Record<string, Record<number, string>> };
+/**
+ * `pageTexts`: a PROGRAM által kinyert, oldaljelölős szöveg (csak a `verified` méréséhez). `pageCounts`: a fájl TÉNYLEGES oldalszáma, ha
+ * ismert — felső határ csak ebből képződik (review J1: a modell átiratának hiányos jelölői miatt érvényes tétel nem eshet ki).
+ */
+export type SourceVisualContext = { fileNames: string[]; conceptIds: Set<string>; pageTexts?: Record<string, Record<number, string>>; pageCounts?: Record<string, number> };
 export type DroppedSourceVisual = { id?: string; reason: string };
+export type SourceVisualsResult = { visuals: SourceVisual[]; dropped: DroppedSourceVisual[];
+  /** A törölt, nem létező fogalom-hivatkozások (a tétel marad): tételazonosító + a törölt azonosítók (review J2). */
+  removedConceptRefs: Array<{ id: string; conceptIds: string[] }> };
+
+/** Review J7: a modell szövege naplózás és tárolás előtt — vezérlőkarakter (sortörés, NUL) és magányos helyettesítő helyett szóköz. */
+export const cleanModelText = (s: string) => s.replace(/[\p{Cc}\p{Cs}]+/gu, " ");
+
+/** A nyers érték beágyazási mélysége ITERATÍVAN, `limit` fölött megállva (review J3: a mély fa nem dobhat veremhibát). */
+function nestingExceeds(value: unknown, limit: number): boolean {
+  const stack: Array<[unknown, number]> = [[value, 0]];
+  while (stack.length) {
+    const [v, depth] = stack.pop()!;
+    if (v === null || typeof v !== "object") continue;
+    if (depth >= limit) return true;
+    for (const child of Array.isArray(v) ? v : Object.values(v)) stack.push([child, depth + 1]);
+  }
+  return false;
+}
+
+/** A (már korlátos mélységű) nyers tétel szövegeinek tisztítása; a kulcsok is tisztulnak. */
+function cleanDeep(value: unknown): unknown {
+  if (typeof value === "string") return cleanModelText(value);
+  if (Array.isArray(value)) return value.map(cleanDeep);
+  if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [cleanModelText(k), cleanDeep(v)]));
+  return value;
+}
 
 /**
  * A modell leltárának determinisztikus megítélése, tételenként: séma, létező forrásfájl és oldal, egyedi azonosító, korlátok. A nem
  * létező fogalom-hivatkozás törlődik (a tétel marad). `verified`: a tétel szövegének szóegyezése az oldal kinyert szövegével.
  */
-export function sanitizeSourceVisuals(raw: unknown, ctx: SourceVisualContext): { visuals: SourceVisual[]; dropped: DroppedSourceVisual[] } {
+export function sanitizeSourceVisuals(raw: unknown, ctx: SourceVisualContext): SourceVisualsResult {
   const visuals: SourceVisual[] = [];
   const dropped: DroppedSourceVisual[] = [];
+  const removedConceptRefs: SourceVisualsResult["removedConceptRefs"] = [];
   const seen = new Set<string>();
   let chars = 0;
   for (const entry of Array.isArray(raw) ? raw : []) {
     const rawId = (entry as { id?: unknown } | null)?.id;
-    const id = typeof rawId === "string" ? rawId.slice(0, 40) : undefined;
+    const id = typeof rawId === "string" ? cleanModelText(rawId).slice(0, 40) : undefined;
     const drop = (reason: string) => { dropped.push({ ...(id ? { id } : {}), reason }); };
+    // A függvény SOHA nem dob (review J3): a váratlan hiba is csak az adott tételt hagyja ki.
+    try {
+    if (nestingExceeds(entry, SOURCE_VISUAL_MAX_NESTING)) { drop("hibás alak: túl mély beágyazás"); continue; }
     // Egyetlen forrásfájlnál a fájlnév egyértelmű (mint a fogalmaknál): a hiányzó `sourceFile` azt jelenti.
     // A `verified` mezőt a program tölti: a modell értéke eldobódik.
-    const { verified: _model, ...fields } = (entry && typeof entry === "object" && !Array.isArray(entry) ? entry : {}) as Record<string, unknown>;
+    const { verified: _model, ...fields } = (entry && typeof entry === "object" && !Array.isArray(entry) ? cleanDeep(entry) : {}) as Record<string, unknown>;
     const candidate = ctx.fileNames.length === 1 && fields.sourceFile === undefined ? { ...fields, sourceFile: ctx.fileNames[0] } : fields;
     const parsed = sourceVisualSchema.safeParse(candidate);
     if (!parsed.success) { drop(`hibás alak: ${parsed.error.issues.slice(0, 2).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ").slice(0, 200)}`); continue; }
     const v = parsed.data;
     if (!ctx.fileNames.includes(v.sourceFile)) { drop(`nem létező forrásfájl: ${v.sourceFile.slice(0, 80)}`); continue; }
     if (seen.has(v.id)) { drop("ismétlődő azonosító"); continue; }
-    const pages = ctx.pageTexts?.[v.sourceFile];
-    const lastPage = pages ? Math.max(0, ...Object.keys(pages).map(Number)) : 0;
+    const lastPage = ctx.pageCounts?.[v.sourceFile] ?? 0;
     if (lastPage > 0 && v.page > lastPage) { drop(`nem létező oldal: ${v.page} (a fájl ${lastPage} oldalas)`); continue; }
     if (visuals.length >= SOURCE_VISUAL_LIMITS.maxItems) { drop(`a leltár legfeljebb ${SOURCE_VISUAL_LIMITS.maxItems} tétel`); continue; }
     const size = JSON.stringify(v).length;
     if (chars + size > SOURCE_VISUAL_LIMITS.maxChars) { drop(`a leltár legfeljebb ${SOURCE_VISUAL_LIMITS.maxChars} karakter`); continue; }
-    const pageText = pages?.[v.page];
+    const pageText = ctx.pageTexts?.[v.sourceFile]?.[v.page];
     const words = sourceVisualTexts(v).flatMap(wordsOf);
     const onPage = pageText ? new Set(wordsOf(pageText)) : null;
     const share = onPage && words.length ? words.filter((w) => onPage.has(w)).length / words.length : 0;
     seen.add(v.id); chars += size;
+    const unknownRefs = v.conceptIds.filter((c) => !ctx.conceptIds.has(c));
+    if (unknownRefs.length) removedConceptRefs.push({ id: v.id, conceptIds: unknownRefs.map((c) => c.slice(0, 40)) });
     visuals.push({ ...v, conceptIds: v.conceptIds.filter((c) => ctx.conceptIds.has(c)), verified: share >= SOURCE_VISUAL_TEXT_SHARE ? "text" : "visual-only" });
+    } catch (error) { drop(`váratlan hiba: ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 120)}`); }
   }
-  return { visuals, dropped };
+  return { visuals, dropped, removedConceptRefs };
 }
 
 /** A térkép `source_files` jsonb elemeiből a leltár egy listában (betöltés; hiányzó vagy hibás kulcs → nincs tétel). */

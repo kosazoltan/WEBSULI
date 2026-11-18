@@ -44,7 +44,7 @@ import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock,
 import { catalogVerbatimPaths, type CatalogPool } from "../../catalog/retrieval";
 import { isMemorySnapshot, memorySnapshot, snapshotPromptBlock, subjectMemoryEnabled, type MemorySnapshot } from "../../memory/subject-memory";
 import { subjectKeyOf } from "../../../shared/subject-key";
-import { sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual } from "../../../shared/source-visuals";
+import { cleanModelText, sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual } from "../../../shared/source-visuals";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
 /** Állomásonként ennyi javító forduló jár a determinisztikus visszajelzés után. */
@@ -357,10 +357,25 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
     for (const fix of corrections) deps.log?.(`[EGYFUTÁS] Forrás-helyesbítés ${fix.localId}: ${correctionAuditText(fix)}`);
     // Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a vizuális leltár megítélése az ELFOGADOTT fogalmak után. A hibás tétel kimarad
     // és megszámolódik — a `problems` listába nem kerül, ezért javító fordulót nem indít (az a teljes JSON-t az átirattal kérné újra).
-    const { visuals, dropped } = sanitizeSourceVisuals(raw.visuals, { fileNames: names, conceptIds: ids,
-      pageTexts: Object.fromEntries(names.flatMap((n) => (perFile[n] ? [[n, splitPageTexts(perFile[n])] as const] : []))) });
+    // Review J1: oldalszöveg és oldalszám-határ CSAK a program által kinyert PDF-szövegből (ott minden oldalnak van jelölője); a modell
+    // átirata (kép, natív PDF) sem felső határt, sem `verified: "text"` igazolást nem ad.
+    const pageTexts = Object.fromEntries(files.flatMap((f) => (f.kind === "pdf" && real.has(f.name) ? [[f.name, splitPageTexts(real.get(f.name)!)] as const] : [])));
+    const pageCounts = Object.fromEntries(Object.entries(pageTexts).flatMap(([n, pages]) => {
+      const nums = Object.keys(pages).map(Number);
+      return nums.length && Math.max(...nums) === nums.length ? [[n, nums.length] as const] : []; // csak hézagmentes 1…N jelölősorból
+    }));
+    // Review J3: a fizetett állomás után az érvényesítő váratlan hibája sem állíthatja meg a futást — a leltár üresre esik vissza.
+    let judged: ReturnType<typeof sanitizeSourceVisuals>;
+    try { judged = sanitizeSourceVisuals(raw.visuals, { fileNames: names, conceptIds: ids, pageTexts, pageCounts }); }
+    catch (error) {
+      deps.log?.(`[EGYFUTÁS] Vizuális leltár: az érvényesítő hibázott, a leltár üres — ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 200)}`);
+      judged = { visuals: [], dropped: (Array.isArray(raw.visuals) ? raw.visuals : []).map(() => ({ reason: "az érvényesítő hibája" })), removedConceptRefs: [] };
+    }
+    const { visuals, dropped, removedConceptRefs } = judged;
     const visualsMissing = Array.isArray(raw.visuals) ? 0 : 1;
-    if (deps.telemetry) Object.assign(deps.telemetry.gates, { visualsDropped: dropped.length, visualsMissing });
+    const visualsConceptRefsRemoved = removedConceptRefs.reduce((sum, r) => sum + r.conceptIds.length, 0);
+    if (deps.telemetry) Object.assign(deps.telemetry.gates, { visualsDropped: dropped.length, visualsMissing, visualsConceptRefsRemoved });
+    for (const r of removedConceptRefs) deps.log?.(`[EGYFUTÁS] Vizuális leltár: ${r.id} — törölt, nem létező fogalom-hivatkozás: ${r.conceptIds.join(", ")}`);
     if (visualsMissing) deps.log?.("[EGYFUTÁS] Vizuális leltár: a válaszban nincs `visuals` tömb — a futás üres leltárral megy tovább.");
     for (const d of dropped) deps.log?.(`[EGYFUTÁS] Vizuális leltár: kihagyott tétel${d.id ? ` (${d.id})` : ""} — ${d.reason}`);
     return { ok: true, value: { visuals, title: (raw.title ?? "").trim() || "Névtelen tananyag", subject: raw.subject!.trim(), classroom: raw.classroom as number, transcript: names.length === 1 ? perFile[names[0]] : names.map((n) => perFile[n]).join("\n\n"), fileTranscripts: perFile, concepts: corrected, corrections } };

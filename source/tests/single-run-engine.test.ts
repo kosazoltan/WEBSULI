@@ -606,6 +606,8 @@ test("S1a: a modell leltára a térképre kerül (fájlonként a source_files el
   assert.match(client.calls.join(","), /^1,2,/, "a leltár nem kér külön modellhívást");
   const gates = gatesOf(mem);
   assert.deepEqual([gates.visualsFound, gates.visualsDropped, gates.visualsMissing], [2, 0, 0]);
+  // Review J2: a tétel marad, a törölt nem létező fogalom-hivatkozás megszámolva.
+  assert.equal(gates.visualsConceptRefsRemoved, 1);
 });
 
 test("S1a: a hibás vizuális tétel kimarad és megszámolódik — javító forduló NINCS", async () => {
@@ -656,4 +658,28 @@ test("S1a: az 1. állomás kérése a leltárt is kéri; térképről indított 
   const gates = gatesOf(mem);
   assert.equal(gates.visualsFound, 1, "a meta.visuals a futásban elérhető");
   assert.equal(gates.visualsMissing ?? 0, 0);
+});
+
+test("S1a (review J1): natív PDF-nél a modell átiratának hiányos oldaljelölői miatt érvényes tétel NEM esik ki", async () => {
+  const transcript = `[1. oldal]\n${TRANSCRIPT}\n[2. oldal]\nGyakorlás.`;
+  const reply = JSON.stringify({ ...JSON.parse(sourceReply([{ ...VISUAL_STEPS, sourceFile: "fuzet.pdf", page: 3 }])), transcript });
+  const client = withOverride(scriptedClient(), (station) => (station === "1" ? reply : null));
+  const mem = memoryStore();
+  const maps: SingleRunMap[] = [];
+  // Szövegréteg nélküli PDF: nincs `extractedText`, a fájl natívan megy a modellhez — a tényleges oldalszám nem ismert.
+  const result = await runSingleLesson({ files: [{ name: "fuzet.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=" }], ownerId: "u1" }, deps(client, mem, maps));
+  assert.equal(result.htmlFileId, "html1");
+  assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.page, v.verified]), [["v2", 3, "visual-only"]], "megmarad; a modell saját átirata nem igazol");
+  assert.equal(gatesOf(mem).visualsDropped, 0);
+});
+
+test("S1a (review J1): a program által kinyert PDF-szöveg jelölősora a tényleges oldalszám — azon túli tétel kimarad, az oldal szövege igazol", async () => {
+  const extractedText = `[1. oldal]\n${TRANSCRIPT}\n\n[2. oldal]\nMérd meg az oldalakat. Szorozd össze őket.`;
+  const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([{ ...VISUAL_STEPS, sourceFile: "lap.pdf", page: 2 }, { ...VISUAL_STEPS, id: "v3", sourceFile: "lap.pdf", page: 3 }]) : null));
+  const mem = memoryStore();
+  const maps: SingleRunMap[] = [];
+  const result = await runSingleLesson({ files: [{ name: "lap.pdf", kind: "pdf", content: "data:application/pdf;base64,JVBERi0=", extractedText }], ownerId: "u1" }, deps(client, mem, maps));
+  assert.equal(result.htmlFileId, "html1");
+  assert.deepEqual(maps[0].visuals.map((v) => [v.id, v.page, v.verified]), [["v2", 2, "text"]]);
+  assert.equal(gatesOf(mem).visualsDropped, 1);
 });

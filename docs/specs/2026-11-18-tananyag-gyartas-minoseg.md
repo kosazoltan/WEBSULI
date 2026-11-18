@@ -424,7 +424,10 @@ tud dönteni — a tartalmi forráshűség megítélése marad a lektornál):
 - **Kép nélküli forrás** (TXT, DOCX, MHT) vagy térképről indított gyártás régi térképpel: `visuals` üres / hiányzik → a gyártás a
   mai úton fut, a vizuális fedettség „0 / 0” (nem 0%).
 - **Képes PDF kinyert szöveg nélkül:** a tételek `verified: "visual-only"`; kiesés nincs.
-- **A modell kitalált tételt ad** (nem létező oldal, nem létező fogalom-azonosító, üres táblázat): a tétel kimarad, számláló nő.
+- **A modell kitalált tételt ad** (nem létező oldal, üres táblázat): a tétel kimarad, számláló nő. **Nem létező fogalom-azonosító:**
+  a tétel MEGMARAD (a forrás vizuális tartalmát egy rossz hivatkozás miatt nem dobjuk el), a rossz hivatkozás törlődik, külön
+  számláló nő (`visualsConceptRefsRemoved`) és naplósor készül. *Spec-pontosítás 2026-11-18 (független review J2).* Az oldalszám
+  felső határa csak a fájl tényleges (a program által kinyert szövegből ismert) oldalszáma lehet (review J1).
 - **Túl nagy táblázat** (12 hónap, 30 szavas szólista): a leltár megtartja (≤ 40 sor), a megjelenítő legfeljebb 14 sort mutat
   táblánként; a szerző több táblára bonthatja. 6-nál több oszlop: a leltár megtartja, megjelenítéskor bontás.
 - **Színkód három vagy több színnel:** legfeljebb három tónus (`a` / `b` / `c`); több szín esetén a többlet semleges, a lektor jelzi.
@@ -554,8 +557,9 @@ A tulajdonos 1. kérése — értelmezett forrás, megjelenő ábrák (S1, S2, S
 
 - [ ] E1 WHEN a forrás PDF vagy kép THEN the system SHALL az 1. állomáson, új modellhívás nélkül, `visuals[]` leltárt kérni és
   ellenőrizni (fajta, oldalszám, szerep, strukturált adat).
-- [ ] E2 WHEN egy vizuális tétel alakja hibás, oldala vagy fogalom-hivatkozása nem létezik THEN the system SHALL a tételt kihagyni,
-  megszámolni, és javító fordulót emiatt nem indítani.
+- [ ] E2 WHEN egy vizuális tétel alakja hibás vagy oldala nem létezik THEN the system SHALL a tételt kihagyni, megszámolni, és
+  javító fordulót emiatt nem indítani; WHEN a tétel fogalom-hivatkozása nem létezik THEN the system SHALL a tételt megtartani, a
+  hivatkozást törölni, megszámolni és naplózni. *Spec-pontosítás 2026-11-18 (független review J2).*
 - [ ] E3 WHEN a térkép mentődik THEN the system SHALL a leltárt a `source_files` jsonb-be írni migráció nélkül, és térképről
   indított gyártásnál onnan betölteni.
 - [ ] E4 WHEN a terv, a tananyag, az ábrák vagy a lektorálás állomás fut THEN the system SHALL a leltárt a promptban átadni.
