@@ -925,6 +925,27 @@ szerintem amikor megnyitja az adott tananyagot, pufferelje a hangokat a diáknak
    hangnál késleltetett hangtár mellett; böngészőhang ≤ 1 s; kikapcsolt előtöltéssel a mérés bukik (mutációs ellenpróba).
 8. 0.3 szerinti kapuk. Elvárt: E50–E55.
 
+**Mért eredmény (2026-11-18, fejetlen Chrome, `tests/lesson-fusion.spec.ts` „prepared audio” esetei; a koppintás `click` eseményétől a hang
+tényleges indulási eseményéig).** A tulajdonosnak szánt táblázat — mennyit vár a gyerek:
+
+| Eset | Koppintástól a hangig | A mérés módja |
+|---|---|---|
+| Előtöltött hang (tipikus, ha a tárban van hang) | 13 ms (határ: ≤ 300 ms) | böngészőteszt, `playing` esemény; a hangtár 800 ms-mal lassítva — a késleltetést a megnyitás fizeti ki |
+| Böngészőhang működő, igazolt motorral (tipikus, amíg a tár üres) | 164 ms, ebből 150 ms a motor utánzott indulási ideje (határ: ≤ 1 s) | böngészőteszt, a beszéd `start` eseménye; a valódi motor indulási ideje eszközfüggő |
+| Koppintás az előtöltés közben / a plafon fölötti szóra | 162 ms (böngészőhang azonnal); a következő koppintás már pufferelt | böngészőteszt, 3 mp-es hangtár |
+| Néma motor, a próba már lefutott | 81 ms + a szerveres tartalék valós válaszideje (nem mért) | böngészőteszt helyi ál-végponttal |
+| Néma motor, a koppintás megelőzi a próbát (munkamenetenként egyszer) | 3 mp (helyi első hang), 6 mp (hálózati első hang) | böngészőteszt és ál-órás egységteszt; utána a felület tudja |
+| Adatkímélő mód / 2g | az első 12 szöveg: mint az előtöltött; a többi: első koppintásra böngészőhang, utána pufferelt | ál-órás egységteszt |
+| Hálózat nélkül, ismételt megnyitás | a helyben megőrzött jegyzék + a böngésző tartós gyorsítótára: mint az előtöltött | ál-órás egységteszt; böngészőben NEM mért (a teszt hálózati elfogása kikapcsolja a HTTP-gyorsítótárat) |
+| Hálózat nélkül, első megnyitás | böngészőhang, a telepített helyi hang előre | ál-órás egységteszt |
+
+Mutációs ellenpróba: kikapcsolt előtöltéssel a böngészős időmérő eset bukik; a lejátszó és az előtöltés-logika 38 mutációjából 37
+megölve (1 egyenértékű védőkód). **Kockázat:** a fejetlen asztali Chrome időmérése nem azonos a valós eszközével; iOS Safari a
+`preload`-ot felhasználói mozdulat nélkül figyelmen kívül hagyhatja (a kód a mozdulatnál „megérinti” a futó letöltéseket — valódi
+eszközön NEM igazolt); valódi iPad- és Android-próba kell az éles hanggyártás előtt. **Döntést kér (tulajdonos):** a hangmotor
+próbája egy hallhatatlan (nulla hangerejű) kimondás az első felhasználói mozdulat után — a „felolvasás csak kérésre indul” elv
+betűje szerint ez kérés nélküli kimondás, hang nélkül.
+
 ## SK4 — Kiadás előtti kapu
 
 Ág: `feat/kiadas-elotti-kapu-sk4`. Fájlok: `server/studio/gates/release-gate.ts` (új), `server/studio/gates/config.ts`,
