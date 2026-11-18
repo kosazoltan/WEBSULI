@@ -1,0 +1,107 @@
+// A vak ellenőr futtatójának RÖGZÍTETT Playwright-specje (docs/specs/2026-11-18-vak-ellenor-deepseek.md, 4. kiegészítés, E2).
+// A futtató másolja a vizsgált fej eldobható munkafájába (source/tests/zz-blind-review-scenario.spec.ts), és a repó e2e-futtatójával
+// indítja. A modell NEM ír kódot: csak a deklaratív forgatókönyvet (BLIND_SCENARIO_FILE), amelyet a futtató előzőleg érvényesített.
+// A böngésző minden nem helyi kérése megszakítva; az `evaluate` az oldalon belül (a böngésző homokozójában) fut.
+import { test } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const file = process.env.BLIND_SCENARIO_FILE;
+const out = process.env.BLIND_SCENARIO_OUT;
+const scenario: any = file && out ? JSON.parse(fs.readFileSync(file, 'utf8')) : { cases: [] };
+const LOCAL = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+const STYLE_KEYS = ['display', 'visibility', 'position', 'overflow', 'overflowX', 'overflowY', 'whiteSpace', 'textOverflow', 'fontSize', 'lineHeight', 'color', 'backgroundColor', 'opacity', 'zIndex', 'pointerEvents', 'cursor', 'objectFit', 'aspectRatio'];
+
+test.describe.configure({ mode: 'serial' });
+
+for (const [i, c] of (scenario.cases as any[]).entries()) {
+  test(`blind-scenario ${i + 1}: ${c.name}`, async ({ page, context, baseURL }) => {
+    test.setTimeout(150_000);
+    const base = new URL(baseURL ?? 'http://localhost:5000');
+    const log: any[] = [];
+    const mocks: any[] = [];
+    const delays: any[] = [];
+    await page.setViewportSize(c.viewport);
+    if (c.observeLayoutShift) {
+      await context.addInitScript(() => {
+        (window as any).__blindCls = 0;
+        (window as any).__blindShifts = [];
+        try {
+          new PerformanceObserver((list) => {
+            for (const e of list.getEntries() as any[]) {
+              if (e.hadRecentInput) continue;
+              (window as any).__blindCls += e.value;
+              (window as any).__blindShifts.push({ value: Number(e.value.toFixed(4)), sources: (e.sources || []).map((s: any) => (s.node && s.node.id) || (s.node && s.node.className) || (s.node && s.node.nodeName) || '?').slice(0, 5) });
+            }
+          }).observe({ type: 'layout-shift', buffered: true });
+        } catch { /* a böngésző nem támogatja */ }
+      });
+    }
+    await context.route('**/*', async (route) => {
+      const u = new URL(route.request().url());
+      const isLocal = u.protocol === 'data:' || u.protocol === 'blob:' || (LOCAL.has(u.hostname) && (u.port || '80') === (base.port || '80'));
+      if (!isLocal) { log.push({ blocked: `${u.protocol}//${u.hostname}` }); return route.abort('blockedbyclient'); }
+      const method = route.request().method();
+      const m = mocks.find((x) => u.pathname.startsWith(x.path) && (!x.method || x.method === method));
+      const d = delays.find((x) => u.pathname.startsWith(x.path));
+      if (m) {
+        if (m.delayMs) await new Promise((r) => setTimeout(r, m.delayMs));
+        const isText = typeof m.body === 'string';
+        return route.fulfill({ status: m.status, body: m.body == null ? '' : isText ? m.body : JSON.stringify(m.body), contentType: isText ? 'text/html' : 'application/json' });
+      }
+      if (d) await new Promise((r) => setTimeout(r, d.delayMs));
+      return route.continue();
+    });
+    page.on('console', (msg) => { if (msg.type() === 'error') log.push({ consoleError: msg.text().slice(0, 300) }); });
+    page.on('pageerror', (e) => log.push({ pageError: String(e.message).slice(0, 300) }));
+    for (const [n, s] of (c.steps as any[]).entries()) {
+      const action = Object.keys(s).find((k) => !['value', 'state', 'timeoutMs', 'status', 'body', 'delayMs', 'method', 'fullPage'].includes(k)) as string;
+      const r: any = { step: n + 1, action };
+      try {
+        if (action === 'goto') { const resp = await page.goto(s.goto, { waitUntil: 'domcontentloaded', timeout: 60_000 }); r.status = resp?.status(); r.url = new URL(page.url()).pathname; }
+        else if (action === 'click') await page.locator(s.click).first().click({ timeout: 10_000 });
+        else if (action === 'fill') await page.locator(s.fill).first().fill(s.value, { timeout: 10_000 });
+        else if (action === 'press') await page.keyboard.press(s.press);
+        else if (action === 'wait') await page.waitForTimeout(s.wait);
+        else if (action === 'waitFor') await page.locator(s.waitFor).first().waitFor({ state: s.state ?? 'visible', timeout: s.timeoutMs ?? 10_000 });
+        else if (action === 'mockApi') mocks.unshift({ path: s.mockApi, status: s.status, body: s.body, delayMs: s.delayMs, method: s.method });
+        else if (action === 'delayApi') delays.unshift({ path: s.delayApi, delayMs: s.delayMs });
+        else if (action === 'offline') await context.setOffline(s.offline);
+        else if (action === 'evaluate') { const v = await page.evaluate(s.evaluate); r.result = JSON.stringify(v ?? null).slice(0, 3000); }
+        else if (action === 'readLayoutShift') r.result = await page.evaluate(() => ({ cls: Number(((window as any).__blindCls ?? 0).toFixed(4)), shifts: ((window as any).__blindShifts ?? []).slice(0, 10) }));
+        else if (action === 'measure') {
+          const loc = page.locator(s.measure);
+          r.count = await loc.count();
+          if (r.count) {
+            r.result = await loc.first().evaluate((el: any, keys: string[]) => {
+              const b = el.getBoundingClientRect();
+              const cs: any = getComputedStyle(el);
+              const style: any = {};
+              for (const k of keys) style[k] = cs[k];
+              const doc = document.documentElement;
+              return {
+                rect: { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) },
+                overflow: { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight },
+                inViewport: b.bottom > 0 && b.right > 0 && b.top < innerHeight && b.left < innerWidth,
+                pageHorizontalOverflow: doc.scrollWidth > doc.clientWidth,
+                text: String(el.innerText ?? '').slice(0, 300),
+                aria: { role: el.getAttribute('role'), label: el.getAttribute('aria-label'), busy: el.getAttribute('aria-busy'), disabled: el.disabled ?? null },
+                style,
+              };
+            }, STYLE_KEYS);
+          }
+        } else if (action === 'screenshot') {
+          const p = path.join(out as string, `${i + 1}-${s.screenshot}.jpg`);
+          await page.screenshot({ path: p, type: 'jpeg', quality: 60, fullPage: Boolean(s.fullPage) });
+          r.file = path.basename(p);
+        }
+        r.ok = true;
+      } catch (e: any) {
+        r.ok = false;
+        r.error = String(e?.message ?? e).split('\n')[0].slice(0, 300);
+      }
+      log.push(r);
+    }
+    fs.writeFileSync(path.join(out as string, `case-${i + 1}.json`), JSON.stringify({ name: c.name, viewport: c.viewport, log }, null, 1));
+  });
+}

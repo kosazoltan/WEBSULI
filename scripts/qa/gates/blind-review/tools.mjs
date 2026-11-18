@@ -6,9 +6,14 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { dirname, isAbsolute, join, relative, resolve, sep, win32, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { maskSecrets } from './openrouter.mjs';
+import { assertSafeHeavyEnv, heavyEnv, heavyPreconditions, ownLeftovers, parseDockerPs, validateScenario, waitForMachine } from './heavy.mjs';
 
 export const TMP_DIR = '.blind-review-tmp';
 export const LOADER_PATH = join(dirname(fileURLToPath(import.meta.url)), 'ts-sandbox-loader.mjs');
+export const SCENARIO_RUNNER = join(dirname(fileURLToPath(import.meta.url)), 'scenario-runner.spec.ts.txt');
+export const SCENARIO_SPEC_REL = 'tests/zz-blind-review-scenario.spec.ts';
+/** A parancs-fajták, amelyek a valódi hívási láncot futtatják (E4): csak ezekkel lehet egy lelet „teljes úton igazolt”. */
+export const FULL_PATH_KINDS = new Set(['db', 'e2e', 'scenario']);
 const IS_WIN = process.platform === 'win32';
 
 // ---- Útvonal-őr ------------------------------------------------------------------------------------------------------
@@ -246,6 +251,9 @@ export const TOOL_SCHEMAS = [
   fn('git_show', 'Egy commit (ref: "head", "base" vagy a fej egy ősének hash-e) megmutatása; path megadásával a fájl akkori tartalma.', { ref: str, path: str }, ['ref']),
   fn('run_command', `Parancs futtatása a munkafában, argv tömbként, héj nélkül. ${HELP} Saját ellenpróbát előbb a write_temp_file eszközzel írj.`, { argv: { type: 'array', items: str }, timeout_sec: { type: 'integer' } }, ['argv']),
   fn('write_temp_file', `Saját eldobható teszt- / segédfájl írása a ${TMP_DIR}/ mappába (csak fájlnév, mappa nélkül). Futtatás: run_command ["node","${TMP_DIR}/<név>"].`, { name: str, content: str }, ['name', 'content']),
+  fn('run_db_tests', 'NEHÉZ futás: a repó eldobható adatbázisos integrációs tesztjei (npm run test:learning-db — saját postgres:17 konténer loopbacken, a végén leállítva; valódi e-mail nem megy ki). Lassú (több perc), futásonként korlátozott számban. Lelet-bizonyítéknál: run.argv = ["run_db_tests"].', {}),
+  fn('run_e2e', 'NEHÉZ futás: a fej KÖVETETT Playwright-specjei (legfeljebb 3, source/tests/*.spec.ts) a repó e2e-futtatójával (eldobható adatbázis, saját szerver, --workers=1). Lelet-bizonyítéknál: run.argv = ["run_e2e", <a megadott specek>].', { specs: { type: 'array', items: str } }, ['specs']),
+  fn('run_browser_scenario', `NEHÉZ futás: SAJÁT böngészős próba deklaratív forgatókönyvből (előbb write_temp_file-lal írd: ${TMP_DIR}/<név>.json). Alak: {"cases":[{"name":"…","viewport":{"width":390,"height":844},"observeLayoutShift":false,"steps":[…]}]} (1–6 eset, esetenként 1–40 lépés). Lépések (egy művelet / lépés): {"goto":"/útvonal"}, {"click":"<css>"}, {"fill":"<css>","value":"…"}, {"press":"Enter"}, {"wait":ms}, {"waitFor":"<css>","state":"visible|hidden"}, {"mockApi":"/api/…","status":502,"body":"<html>…","delayMs":0}, {"delayApi":"/api/…","delayMs":3000}, {"offline":true}, {"evaluate":"<oldalon belüli JS-kifejezés>"}, {"measure":"<css>"} (doboz, túlcsordulás, számított stílus, szöveg, aria), {"readLayoutShift":true} (observeLayoutShift: true mellett), {"screenshot":"név"} (a képet megkapod). Nem helyi kérés tiltva. Lelet-bizonyítéknál: run.argv = ["run_browser_scenario","${TMP_DIR}/<név>.json"].`, { scenario_file: str }, ['scenario_file']),
   fn('submit_report', 'A KÉSZ jelentés leadása: report = a teljes markdown jelentés (a megbízás-sablon formájában); findings = MINDEN lelet strukturáltan, '
     + 'amelyet a futtató GÉPILEG visszaellenőriz (a fájl:sor létezik-e, az idézet ott van-e; a run a saját parancsnaplóddal egyezik-e). '
     + 'Nem ellenőrizhető blokkoló / közepes lelettel a leadás elutasításra kerül. Ha nincs lelet: findings = [].', {
@@ -263,9 +271,9 @@ export const TOOL_SCHEMAS = [
           quote: { type: 'string', description: 'a hivatkozott sor(ok) kódja SZÓ SZERINT (legalább 8 karakter)' },
           run: {
             type: 'object',
-            description: 'csak ha a leletet futtatással igazoltad: a ténylegesen futtatott run_command argv-je és a kimenetének egy szó szerinti részlete',
-            properties: { argv: { type: 'array', items: str }, output_excerpt: str },
-            required: ['argv', 'output_excerpt'],
+            description: 'csak ha a leletet futtatással igazoltad: argv = a ténylegesen futtatott run_command argv-je (vagy ["run_db_tests"] / ["run_e2e", …] / ["run_browser_scenario", fájl]); output_excerpt = a kimenet szó szerinti részlete; input = a próba bemenete szó szerint (a futtatott fájlból / forgatókönyvből vagy a kimenetből); scope = teljes_ut (a valódi hívási lánc: böngésző / adatbázis) vagy elszigetelt (függvény közvetlen hívása, egységteszt)',
+            properties: { argv: { type: 'array', items: str }, output_excerpt: str, input: str, scope: { type: 'string', enum: ['teljes_ut', 'elszigetelt'] } },
+            required: ['argv', 'output_excerpt', 'input', 'scope'],
           },
         },
         required: ['id', 'severity', 'title', 'file', 'line', 'quote'],
@@ -274,7 +282,7 @@ export const TOOL_SCHEMAS = [
   }, ['report', 'findings']),
 ];
 
-export const INVESTIGATIVE = ['read_file', 'list_dir', 'search', 'git_diff', 'git_log', 'git_show', 'run_command', 'write_temp_file'];
+export const INVESTIGATIVE = ['read_file', 'list_dir', 'search', 'git_diff', 'git_log', 'git_show', 'run_command', 'write_temp_file', 'run_db_tests', 'run_e2e', 'run_browser_scenario'];
 export const READING = ['read_file', 'search', 'git_diff', 'git_show'];
 
 /**
@@ -286,7 +294,8 @@ export function makeTools(ctx) {
   const { root, base, head, cfg } = ctx;
   const node = ctx.node ?? process.execPath;
   const run = ctx.run ?? realRun;
-  const env = cleanEnv(ctx.env ?? process.env);
+  // A környezet-szűrő injektálható (teszt: a szűrő hibáját a nehéz futás második védvonalának, az assertSafeHeavyEnv-nek kell megfognia).
+  const env = (ctx.envFilter ?? cleanEnv)(ctx.env ?? process.env);
   const maxOut = cfg.toolOutputMaxChars ?? 12_000;
   const counts = {};
   let tempFiles = 0;
@@ -312,6 +321,52 @@ export function makeTools(ctx) {
     return trackedCache.get(rel);
   };
   const planCtx = { root, node, cfg, nodeModulesReal: ctx.nodeModulesReal ?? null, isTracked: ctx.isTracked ?? isTracked };
+  /** A parancs fájl-argumentumainak tartalma a futás PILLANATÁBAN (E4: a lelet „input” mezője ebben vagy a kimenetben ellenőrizhető). */
+  const sourcesOf = (argv) => {
+    let text = '';
+    for (const a of argv) {
+      if (typeof a !== 'string' || a.startsWith('-')) continue;
+      for (const cand of [a, `source/${a}`]) {
+        const r = resolveInside(root, cand);
+        if (r.ok && existsSync(r.abs) && statSync(r.abs).isFile() && statSync(r.abs).size <= 200_000) { text += `\n${readFileSync(r.abs, 'utf8')}`; break; }
+      }
+    }
+    return text;
+  };
+  let heavyRuns = 0;
+  let scenarioRuns = 0;
+  const dockerPs = ctx.dockerPs ?? (async () => (await run('docker', ['ps', '--format', '{{.Names}}\t{{.CreatedAt}}'], { cwd: root, env, timeoutMs: 30_000 })).stdout);
+  /**
+   * Egy nehéz futás: darabplafon → előfeltételek → gépi sorompó → biztonságos környezet (ellenőrizve) → futás → saját konténer takarítása.
+   * @returns {Promise<{ text: string, ok: boolean }>}
+   */
+  const heavyRun = async ({ label, kind, argvRepr, args, extraEnv = {}, sources = '' }) => {
+    const max = cfg.maxHeavyRuns ?? 4;
+    if (heavyRuns >= max) return { ok: false, text: `ELUTASÍTVA: a nehéz futások száma elérte a plafont (${max} / futás) — a „Mit NEM vizsgáltam” szakaszban jelezd` };
+    const src = join(root, 'source');
+    const pre = await heavyPreconditions({ root, run, env });
+    if (pre) return { ok: false, text: `ELUTASÍTVA: ${pre}` };
+    const gate = await waitForMachine({ ps: dockerPs, maxWaitMs: (cfg.heavyWaitMaxSec ?? 600) * 1000, sleep: ctx.sleep, now: ctx.now, shouldStop: ctx.shouldStop ?? (() => null) });
+    if (!gate.ok) return { ok: false, text: `ELUTASÍTVA: ${gate.reason}` };
+    const remaining = ctx.remainingMs ? ctx.remainingMs() : Infinity;
+    if (remaining < 90_000) return { ok: false, text: 'ELUTASÍTVA: a falióra-keretből kevesebb mint 90 s maradt — nehéz futás már nem fér bele' };
+    const timeoutMs = Math.min((cfg.heavyTimeoutSec ?? 900) * 1000, remaining - 60_000);
+    const childEnv = { ...heavyEnv(env), ...extraEnv };
+    assertSafeHeavyEnv(childEnv);
+    heavyRuns += 1;
+    const before = parseDockerPs(await dockerPs());
+    const x = await run(node, args, { cwd: src, env: childEnv, timeoutMs, maxBuffer: 4_000_000 });
+    const after = parseDockerPs(await dockerPs());
+    const stopped = [];
+    for (const name of ownLeftovers(before, after, `${x.stdout}\n${x.stderr}`)) {
+      await run('docker', ['stop', '--time', '2', name], { cwd: root, env, timeoutMs: 60_000 });
+      stopped.push(name);
+    }
+    const head = `$ ${label}\nkilépési kód: ${x.code}${x.timedOut ? ' (IDŐTÚLLÉPÉS — a folyamat leállítva)' : ''}; idő: ${(x.ms / 1000).toFixed(1)} s${gate.waitedMs > 1000 ? `; sorompó-várakozás: ${Math.round(gate.waitedMs / 1000)} s` : ''}${stopped.length ? `; a futtató leállította a maradék saját konténert: ${stopped.length} db` : ''}`;
+    const text = out(`${head}\n--- stdout ---\n${x.stdout}\n--- stderr ---\n${x.stderr}`);
+    runLog.push({ argv: argvRepr, output: text, kind, sources });
+    return { ok: x.code === 0, text };
+  };
   const paths = (list) => {
     const res = [];
     for (const p of Array.isArray(list) ? list : []) {
@@ -413,7 +468,8 @@ export function makeTools(ctx) {
       const x = await run(plan.file, plan.args, { cwd: plan.cwd, env: { ...env, ...(plan.env ?? {}) }, timeoutMs });
       const headLine = `$ ${plan.label}\nkilépési kód: ${x.code}${x.timedOut ? ' (IDŐTÚLLÉPÉS — a folyamat leállítva)' : ''}; idő: ${(x.ms / 1000).toFixed(1)} s`;
       const shown = out(`${headLine}\n--- stdout ---\n${x.stdout}\n--- stderr ---\n${x.stderr}`);
-      runLog.push({ argv: [...argv], output: shown });
+      const kind = plan.sandboxed ? 'sandbox' : /^(node --test|tsx --test)/.test(plan.label) ? 'unit' : /^tsc/.test(plan.label) ? 'typecheck' : /^playwright/.test(plan.label) ? 'e2e' : 'npm';
+      runLog.push({ argv: [...argv], output: shown, kind, sources: sourcesOf(argv) });
       return shown;
     },
     async write_temp_file({ name, content }) {
@@ -428,6 +484,51 @@ export function makeTools(ctx) {
       writeFileSync(r.abs, content);
       tempFiles += 1;
       return `megírva: ${r.rel} (${content.length} karakter)`;
+    },
+    async run_db_tests() {
+      const r = await heavyRun({ label: 'npm run test:learning-db (eldobható postgres:17)', kind: 'db', argvRepr: ['run_db_tests'], args: ['--import', 'tsx', 'scripts/run-learning-db-tests.ts'] });
+      return r.text;
+    },
+    async run_e2e({ specs }) {
+      if (!Array.isArray(specs) || !specs.length || specs.length > 3 || specs.some((s) => typeof s !== 'string')) return 'ELUTASÍTVA: specs = 1–3 követett source/tests/*.spec.ts';
+      const rels = [];
+      for (const s of specs) {
+        let r = resolveInside(root, s);
+        if (r.ok && !existsSync(r.abs)) r = resolveInside(root, `source/${s}`);
+        if (!r.ok) return `ELUTASÍTVA: ${r.error}`;
+        if (!/^source\/tests\/[^/]+\.spec\.ts$/.test(r.rel) || !existsSync(r.abs) || !planCtx.isTracked(r.rel)) return `ELUTASÍTVA: csak a fej követett source/tests/*.spec.ts fájlja futtatható: ${s}`;
+        rels.push(r.rel);
+      }
+      const r = await heavyRun({ label: `npm run test:e2e -- ${rels.join(' ')} --workers=1`, kind: 'e2e', argvRepr: ['run_e2e', ...specs], sources: sourcesOf(rels),
+        args: ['--import', 'tsx', 'scripts/run-e2e-tests.ts', ...rels.map((x) => x.replace(/^source\//, '')), '--workers=1', '--retries=0', '--reporter=line'] });
+      return r.text;
+    },
+    async run_browser_scenario({ scenario_file: f }) {
+      const r = resolveInside(root, typeof f === 'string' ? f : '');
+      if (!r.ok) return `ELUTASÍTVA: ${r.error}`;
+      if (!r.rel.startsWith(`${TMP_DIR}/`) || !r.rel.endsWith('.json') || !existsSync(r.abs)) return `ELUTASÍTVA: a forgatókönyv a ${TMP_DIR}/ mappában lévő, előbb megírt .json fájl legyen`;
+      const raw = readFileSync(r.abs, 'utf8');
+      const v = validateScenario(raw, { maxScreenshots: cfg.maxScreenshots ?? 6 });
+      if (!v.ok) return `ELUTASÍTVA (a forgatókönyv érvénytelen, nem futott): ${v.error}`;
+      scenarioRuns += 1;
+      const outDir = join(root, TMP_DIR, `scenario-${scenarioRuns}`);
+      mkdirSync(outDir, { recursive: true });
+      const frozen = join(outDir, 'scenario.json');
+      writeFileSync(frozen, JSON.stringify(v.scenario));
+      writeFileSync(join(root, 'source', SCENARIO_SPEC_REL), readFileSync(SCENARIO_RUNNER, 'utf8'));
+      const h = await heavyRun({ label: `saját böngészős forgatókönyv: ${r.rel} (${v.scenario.cases.length} eset)`, kind: 'scenario', argvRepr: ['run_browser_scenario', f], sources: raw,
+        args: ['--import', 'tsx', 'scripts/run-e2e-tests.ts', SCENARIO_SPEC_REL, '--workers=1', '--retries=0', '--reporter=line'],
+        extraEnv: { BLIND_SCENARIO_FILE: frozen, BLIND_SCENARIO_OUT: outDir } });
+      const files = existsSync(outDir) ? readdirSync(outDir).sort() : [];
+      const cases = files.filter((x) => /^case-\d+\.json$/.test(x)).map((x) => readFileSync(join(outDir, x), 'utf8'));
+      const images = [];
+      for (const x of files.filter((y) => y.endsWith('.jpg')).slice(0, cfg.maxScreenshots ?? 6)) {
+        const buf = readFileSync(join(outDir, x));
+        if (buf.length <= 600_000) images.push({ name: x, mime: 'image/jpeg', base64: buf.toString('base64') });
+      }
+      const text = out(`${h.text.split('\n--- stdout ---')[0]}\n--- a forgatókönyv eredménye (esetenként) ---\n${cases.join('\n') || '(nincs eredmény — lásd a futás kimenetét lent)'}\n--- képek: ${images.map((i) => i.name).join(', ') || 'nincs'} ---\n${cases.length ? '' : h.text}`);
+      if (runLog.length && runLog[runLog.length - 1].kind === 'scenario') runLog[runLog.length - 1].output = `${runLog[runLog.length - 1].output}\n${text}`;
+      return images.length ? { text, images } : text;
     },
     async submit_report({ report, findings }) {
       if (typeof report !== 'string' || !report.trim()) return 'HIBA: üres jelentés';

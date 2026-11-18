@@ -286,3 +286,25 @@ test('B13: a takarítás ELŐSZÖR a node_modules csatolást bontja — a cél t
     rmSync(target, { recursive: true, force: true });
   }
 });
+
+test('E2: a képernyőkép a kör eszköz-eredményei UTÁN, egy user-üzenetben megy a modellnek (csak hozzáfűzés); töréspont a képes üzeneten is', async () => {
+  const or = fakeOpenRouter([reply({ calls: [['run_browser_scenario', { scenario_file: 'x' }]] }), reply({ calls: [['submit_report', {}]] })]);
+  const box = { report: null };
+  const tools = { counts: {}, call: async (name) => {
+    if (name === 'run_browser_scenario') return { text: 'eredmény', images: [{ name: '1-kep.jpg', mime: 'image/jpeg', base64: 'AAAA' }] };
+    box.report = 'kész';
+    return 'ELFOGADVA';
+  } };
+  const b = createBudget({ maxUsd: 2, maxRounds: 9, maxWallMs: 1e9, maxCompletionTokens: 1e9, cfg: CFG });
+  const r = await runReview({ cfg: CFG, key: KEY, system: 'RENDSZER', user: 'FELADAT', tools, box, budget: b, fetchImpl: or.fetchImpl, sleep: async () => {} });
+  assert.equal(r.complete, true);
+  const msgs = or.bodies[1].messages;
+  const toolIdx = msgs.findIndex((m) => m.role === 'tool');
+  assert.equal(msgs[toolIdx].content, 'eredmény');
+  const img = msgs[toolIdx + 1];
+  assert.equal(img.role, 'user');
+  assert.equal(img.content[1].type, 'image_url');
+  assert.equal(img.content[1].image_url.url, 'data:image/jpeg;base64,AAAA');
+  assert.deepEqual(img.content.at(-1).cache_control, { type: 'ephemeral' }, 'mozgó töréspont a képes utolsó üzeneten');
+  assert.equal(img.content[0].cache_control, undefined);
+});

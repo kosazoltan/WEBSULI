@@ -29,6 +29,13 @@ beolvasztáskor kell kiosztani (`docs/agent-csapdak.md` — az ágon nem nyúltu
    költötte, eszközhívás nélkül. **Javítás ebben a futásban:** a futtató a kimeneti korláton megállt válaszra célzott emlékeztetőt
    küld („gondolkodj rövidebben, azonnal hívj eszközt”) — teszttel.
 
+8. **A héj-idézés csapdája megismétlődött** (egy repón kívüli memória-fájl szerkesztésekor, `node -e "…"` backtick-kel). Költség:
+   ~2 perc. A javítás (szöveg-szerkesztés csak fájlból / a szerkesztő eszközzel) tehát nem volt elég erős szabály — a csapda-
+   katalógusba „mindig, kivétel nélkül” megfogalmazással kell kerülnie.
+9. **Hamis óra a tesztben → végtelen várakozás.** A sorompó-teszt hamis órája nem lépett előre a hamis alvással, a teszt lefagyott
+   (~2 perc, kézi leállítás). Javítás: a hamis óra az alvással együtt lép; tanulság: minden várakozó ciklus tesztje időkorláttal
+   (`timeout`) fusson.
+
 ## Mit mértünk (a legfontosabb tanulság)
 
 - A „kapun átment” ≠ „a cél teljesült”: a futtató minden kapuja zöld, a mért alapvonal mégis azt mutatja, hogy a konfigurált modell

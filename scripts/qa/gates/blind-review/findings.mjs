@@ -4,7 +4,7 @@
 // és kimenet-részletét a futtató a SAJÁT eszközhívás-naplójából ellenőrzi (az ellenőr nem hivatkozhat el nem végzett futásra).
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { resolveInside } from './tools.mjs';
+import { FULL_PATH_KINDS, resolveInside } from './tools.mjs';
 
 export const SEVERITIES = ['blokkoló', 'közepes', 'kicsi'];
 const MUST_VERIFY = new Set(['blokkoló', 'közepes']);
@@ -36,15 +36,28 @@ function checkRef(root, f) {
   return null;
 }
 
+/**
+ * A futtatási bizonyíték ellenőrzése a futtató SAJÁT parancsnaplójából (E4): a parancs lefutott, a kimenet-részlet és a bemenet
+ * szó szerint ott van; a próba fajtája dönti el, lehet-e „teljes úton igazolt” (csak böngészős / adatbázisos futás), egyébként
+ * legfeljebb „részben igazolt” (elszigetelt próba).
+ * @returns {{ error: string } | { full: boolean, kind: string }}
+ */
 function checkRun(runLog, run) {
-  if (!run || !Array.isArray(run.argv)) return 'a run.argv a ténylegesen futtatott parancs argv tömbje legyen';
+  if (!run || !Array.isArray(run.argv)) return { error: 'a run.argv a ténylegesen futtatott parancs argv tömbje legyen' };
   const key = JSON.stringify(run.argv);
   const hits = runLog.filter((e) => JSON.stringify(e.argv) === key);
-  if (!hits.length) return `ilyen parancsot nem futtattál ebben a munkamenetben: ${key.slice(0, 160)}`;
+  if (!hits.length) return { error: `ilyen parancsot nem futtattál ebben a munkamenetben: ${key.slice(0, 160)}` };
   const ex = norm(run.output_excerpt);
-  if (ex.length < MIN_QUOTE) return `a run.output_excerpt legalább ${MIN_QUOTE} karakter legyen, szó szerint a parancs kimenetéből`;
-  if (!hits.some((e) => norm(e.output).includes(ex))) return 'a run.output_excerpt nem szerepel a parancs naplózott kimenetében (szó szerint idézz)';
-  return null;
+  if (ex.length < MIN_QUOTE) return { error: `a run.output_excerpt legalább ${MIN_QUOTE} karakter legyen, szó szerint a parancs kimenetéből` };
+  const withOut = hits.filter((e) => norm(e.output).includes(ex));
+  if (!withOut.length) return { error: 'a run.output_excerpt nem szerepel a parancs naplózott kimenetében (szó szerint idézz)' };
+  const input = norm(run.input);
+  if (input.length < MIN_QUOTE) return { error: `a run.input (a próba bemenete) legalább ${MIN_QUOTE} karakter legyen, szó szerint a futtatott fájlból / forgatókönyvből vagy a kimenetből` };
+  const withIn = withOut.filter((e) => norm(e.sources).includes(input) || norm(e.output).includes(input));
+  if (!withIn.length) return { error: 'a run.input nem szerepel a futtatott fájlban / forgatókönyvben (a futás pillanatában) és a kimenetben sem' };
+  if (run.scope !== 'teljes_ut' && run.scope !== 'elszigetelt') return { error: 'a run.scope: teljes_ut | elszigetelt' };
+  const kind = withIn[withIn.length - 1].kind ?? 'unknown';
+  return { full: run.scope === 'teljes_ut' && FULL_PATH_KINDS.has(kind), kind };
 }
 
 /**
@@ -68,8 +81,11 @@ export function verifyFindings({ findings, root, runLog, reportText, verdict }) 
     if (!norm(f.title)) errors.push(`${id}: hiányzó title`);
     const refWhy = checkRef(root, f);
     const runGiven = f.run != null;
-    const runWhy = runGiven ? checkRun(runLog, f.run) : null;
-    items.push({ id, severity, title: norm(f.title).slice(0, 200), file: String(f.file ?? ''), line: Number(f.line) || null, refOk: !refWhy, refWhy, runGiven, runOk: runGiven && !runWhy, runWhy });
+    const rc = runGiven ? checkRun(runLog, f.run) : null;
+    const runWhy = rc?.error ?? null;
+    const runOk = runGiven && !runWhy;
+    items.push({ id, severity, title: norm(f.title).slice(0, 200), file: String(f.file ?? ''), line: Number(f.line) || null, refOk: !refWhy, refWhy, runGiven, runOk,
+      runFull: runOk && rc.full, runPartial: runOk && !rc.full, runKind: runOk ? rc.kind : null, runWhy });
     if (refWhy && MUST_VERIFY.has(severity)) errors.push(`${id} (${severity}): a hivatkozás nem ellenőrizhető — ${refWhy}`);
     if (runWhy) errors.push(`${id}: a futtatási bizonyíték nem ellenőrizhető — ${runWhy}`);
     if (!new RegExp(`(^|[^A-Za-z0-9-])${id}([^A-Za-z0-9-]|$)`).test(reportText)) errors.push(`${id}: a jelentés szövege nem tartalmazza ezt a lelet-azonosítót (a „Leletek” szakaszban minden leletet az azonosítójával írj le)`);
@@ -87,15 +103,17 @@ export function countFindings(items) {
   const c = {};
   for (const s of SEVERITIES) {
     const of = items.filter((i) => i.severity === s);
-    c[s] = { total: of.length, refVerified: of.filter((i) => i.refOk).length, runVerified: of.filter((i) => i.runOk).length, invalid: of.filter((i) => !i.refOk).length };
+    c[s] = { total: of.length, refVerified: of.filter((i) => i.refOk).length, runVerified: of.filter((i) => i.runOk).length, runFull: of.filter((i) => i.runFull).length,
+      runPartial: of.filter((i) => i.runPartial).length, invalid: of.filter((i) => !i.refOk).length };
   }
   return c;
 }
 
 /** A jelentés végére fűzött gépi összegzés (a futtató írja, nem az ellenőr). Nem tartalmaz ítélet- / fej-sort. */
 export function summaryMarkdown({ items, counts, cache, state, model }) {
-  const rows = SEVERITIES.map((s) => `| ${s} | ${counts[s].total} | ${counts[s].refVerified} | ${counts[s].runVerified} | ${counts[s].invalid} |`);
-  const list = items.filter((i) => i.severity !== 'kicsi').map((i) => `- **${i.id}** (${i.severity}) ${i.title} — \`${i.file}:${i.line}\` — hivatkozás igazolt${i.runOk ? '; futtatással igazolt' : ''}`);
+  const rows = SEVERITIES.map((s) => `| ${s} | ${counts[s].total} | ${counts[s].refVerified} | ${counts[s].runFull} | ${counts[s].runPartial} | ${counts[s].invalid} |`);
+  const how = (i) => (i.runFull ? '; futtatással igazolt (teljes út)' : i.runPartial ? `; RÉSZBEN igazolt (elszigetelt próba: ${i.runKind})` : '');
+  const list = items.filter((i) => i.severity !== 'kicsi').map((i) => `- **${i.id}** (${i.severity}) ${i.title} — \`${i.file}:${i.line}\` — hivatkozás igazolt${how(i)}`);
   const invalid = items.filter((i) => !i.refOk).map((i) => `- **${i.id}** (${i.severity}) ${i.title} — NEM visszaellenőrizhető: ${i.refWhy}`);
   return [
     '',
@@ -103,11 +121,12 @@ export function summaryMarkdown({ items, counts, cache, state, model }) {
     '## Gépi összegzés (a futtató írta, nem az ellenőr)',
     '',
     'A leletek fájl:sor hivatkozását és idézetét a futtató a vizsgált fej munkafájában ellenőrizte; a „futtatással igazolt” oszlop a',
-    'futtató saját parancsnaplójával egyezik. Ez azt igazolja, hogy a lelet valódi kódra mutat és a futás megtörtént — a következtetés',
-    'helyességét nem.',
+    'futtató saját parancsnaplójával egyezik (a parancs, a kimenet-részlet és a próba bemenete); „teljes út” csak böngészős vagy',
+    'adatbázisos futás lehet, a saját homokozós / egységteszt-próba legfeljebb „részben igazolt”. Ez azt igazolja, hogy a lelet valódi',
+    'kódra mutat és a futás megtörtént — a következtetés helyességét nem.',
     '',
-    '| Súlyosság | Leletek | Igazolt hivatkozás | Futtatással igazolt | Érvénytelen (nem visszaellenőrizhető) |',
-    '| --- | --- | --- | --- | --- |',
+    '| Súlyosság | Leletek | Igazolt hivatkozás | Futtatással igazolt (teljes út) | Részben igazolt (elszigetelt próba) | Érvénytelen (nem visszaellenőrizhető) |',
+    '| --- | --- | --- | --- | --- | --- |',
     ...rows,
     '',
     '### Blokkoló és közepes leletek (mind igazolt hivatkozással)',
