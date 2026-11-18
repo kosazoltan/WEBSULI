@@ -21,3 +21,15 @@ test("a CSS a hasábos magyarázatban nem engedi a bekezdés kettétörését", 
   assert.doesNotMatch(css, /\[data-long\] > p \{ break-inside: auto/);
   assert.match(css, /\[data-block="explain"\]\[data-long\] > \* \{ break-inside: avoid; \}/);
 });
+
+test("felsorolás (S2a / E8): a jelölt, sortöréssel tagolt sorok listává válnak; a próza és a párbeszéd bekezdés marad", async () => {
+  const { explainParts } = await import("../client/src/lesson-runtime/explain-paragraphs");
+  assert.deepEqual(explainParts("Jegyezd meg:\n- az alma megszámlálható\n- a víz nem\n\nZáró mondat."), [
+    { kind: "p", text: "Jegyezd meg:" }, { kind: "ul", items: ["az alma megszámlálható", "a víz nem"] }, { kind: "p", text: "Záró mondat." }]);
+  assert.deepEqual(explainParts("• egy\n• kettő\n* három"), [{ kind: "ul", items: ["egy", "kettő", "három"] }]);
+  assert.deepEqual(explainParts("Egy sor.\nUgyanaz a bekezdés."), [{ kind: "p", text: "Egy sor.\nUgyanaz a bekezdés." }], "sima szöveg változatlan");
+  assert.deepEqual(explainParts("- egyetlen jelölt sor\nfolytatás"), [{ kind: "p", text: "- egyetlen jelölt sor\nfolytatás" }], "egyetlen jelölt sor nem lista");
+  assert.deepEqual(explainParts("– Szia! – mondta.\n– Szia! – felelte."), [{ kind: "p", text: "– Szia! – mondta.\n– Szia! – felelte." }], "a gondolatjeles párbeszéd nem lista");
+  assert.deepEqual(explainParts("**Cél:** tanulás\n**Buktató:** keverés"), [{ kind: "p", text: "**Cél:** tanulás\n**Buktató:** keverés" }], "a kiemelés nem listajel");
+  assert.deepEqual(explainParts("-5 fok volt\n-3 fok lett"), [{ kind: "p", text: "-5 fok volt\n-3 fok lett" }], "a negatív szám nem listajel");
+});

@@ -282,6 +282,15 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 > `renderedVisualTexts` ugyanezeket a mezőket adja vissza. Teszt rögzítse, hogy a séma által elfogadott paramétert a szerződés
 > olvasója (`readTableParams`, `readDecisionTreeParams`, …) veszteség nélkül olvassa.
 
+> **Megvalósítási pontosítás (S2a, 2026-11-18; az S1a review J1 lelete nyomán):** a megjelenítők korlátja nem lehet szűkebb a
+> forrásleltárénál (`shared/source-visuals.ts`), ezért a 2. lépés számai helyett: `table` — 1..8 oszlop, fejléc ≤ 80, cella ≤ 120
+> (lehet üres), felirat ≤ 160, blokkonként 1..20 sor (`SOURCE_TABLE_BLOCK_ROWS`; a hosszabb forrástáblát a gyártó több, ugyanarra a
+> tételre hivatkozó blokkra bontja — a kapu összeadja), `headerTones` hossza = az oszlopoké; `ruleBox` — 1..8 pont, pont ≤ 240;
+> `compareCards` — 2..3 kártya, cím ≤ 80, 1..8 sor, sor ≤ 200, a `tone` elhagyható (a szerződés szerint). Minden séma `.strict()`:
+> ismeretlen / rejtő kulcs elutasítva. A sorfejléc (`th scope="row"`, rögzített első oszlop) csak 3+ oszlopnál; a kétoszlopos tábla két
+> egyenrangú oszlop. Az ág neve `feat/tgm-s2a-megjelenitok` (az SK1b ágára épül). A lektor-nézet (5. lépés) már vesztésmentesen adja a
+> strukturált `params`-ot — kódváltozás nem kellett, teszt rögzíti. Mérőlecke: `/__lesson-runtime-probe?source-visuals=1|max`.
+
 Ág: `feat/lecke-megjelenitok-s2a`. Fájlok: `shared/source-visual-render.ts` (a szerződés — meglévő), `shared/lesson-schema.ts`, `shared/lesson-visual-params.ts`,
 `shared/lesson-block-label.ts`, `client/src/lesson-runtime/blocks/source-visuals.tsx` (új),
 `client/src/lesson-runtime/blocks/animate-blocks.tsx`, `client/src/lesson-runtime/lesson-design.css`,

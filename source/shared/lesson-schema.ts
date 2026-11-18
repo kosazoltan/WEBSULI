@@ -46,6 +46,10 @@ export const ANIM_KINDS = [
   "illustration",
   // Spec 2026-09-30 (ábratervező + 3D): forgatható 3D-jelenet leíró adatból (three.js a kliensben; a modell kódot nem ír).
   "scene3d",
+  // Spec 2026-11-18 (tananyaggyártás minősége, S2a): a forrás ábráinak újrarajzolása — paraméter-szerződés: shared/source-visual-render.ts.
+  "table",
+  "ruleBox",
+  "compareCards",
 ] as const;
 
 /** Hands-on interactions (LS-4 implements them). */

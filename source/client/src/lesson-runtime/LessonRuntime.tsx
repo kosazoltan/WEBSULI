@@ -42,7 +42,7 @@ import "./lesson-design.css";
 import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom } from "@shared/lesson-design";
 import { BAND_ICON } from "@/lib/band-icons";
 import { VerdictFeedback } from "./VerdictFeedback";
-import { explainIsLong, explainParagraphs } from "./explain-paragraphs";
+import { explainIsLong, explainParts } from "./explain-paragraphs";
 import { displayHeading } from "@shared/lesson-ui-text";
 
 /** A koncepciókép sávjelvényei: levél · iránytű · agy · lombik · emelkedő grafikon (szabályterv 1.2). */
@@ -116,7 +116,9 @@ function ExplainBlock({ block, band, label }: { block: Extract<Block, { kind: "e
           {block.depth === "why" ? "Miért?" : "Mélyebben"}
         </span>
       )}
-      {explainParagraphs(block.text).map((para, i) => <p key={i}><RichText text={para} /></p>)}
+      {explainParts(block.text).map((part, i) => (part.kind === "ul"
+        ? <ul key={i} className="lesson-explain-list">{part.items.map((item, k) => <li key={k}><RichText text={item} /></li>)}</ul>
+        : <p key={i}><RichText text={part.text} /></p>))}
       {canSpeak && (
         <Button
           variant="ghost"

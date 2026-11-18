@@ -277,3 +277,72 @@
 [data-band][data-experience][data-ws-theme] .learning-quiet[data-on="true"] {
   background: var(--ws-strong); color: var(--ws-strong-ink); border-color: var(--ws-strong);
 }
+
+/* ---------- Spec 2026-11-18 (tananyaggyártás minősége, S2a): a forrás ábráinak újrarajzolása — táblázat, szabálydoboz,
+   összehasonlító kártyák (blocks/source-visuals.tsx). Szín KIZÁRÓLAG a sáv tokenjeiből (rögzített színkód nincs); a tónus mellett
+   mindig áll alakjel / ikon / felirat is. A széles táblázat a SAJÁT keretén belül görög vízszintesen — az oldal soha. ---------- */
+[data-ws-theme] .sv-figure {
+  --sv-tone: var(--ws-muted);
+  background: var(--lesson-surface); color: var(--lesson-ink); min-width: 0; max-width: 100%;
+  font-size: max(15px, calc(var(--grade-size, 16px) * 0.92)); line-height: 1.45;
+}
+[data-ws-theme] .sv-tone-a { --sv-tone: var(--ws-accent); }
+[data-ws-theme] .sv-tone-b { --sv-tone: var(--ws-accent-2); }
+[data-ws-theme] .sv-tone-c { --sv-tone: var(--ws-accent-3); }
+[data-ws-theme] .sv-tone-neutral { --sv-tone: var(--ws-muted); }
+[data-ws-theme] .sv-tone-mark { color: var(--sv-tone); margin-right: 0.4em; font-size: 0.8em; }
+
+[data-ws-theme] .sv-table-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--lesson-line); border-radius: 12px; overscroll-behavior-x: contain; }
+[data-ws-theme] .sv-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: calc(var(--sv-cols, 2) * 6.5em); }
+[data-ws-theme] .sv-table caption { caption-side: top; text-align: left; padding: 10px 12px; font-weight: 800; color: var(--ws-title); background: var(--ws-soft); overflow-wrap: anywhere; }
+[data-ws-theme] .sv-table :is(th, td) {
+  padding: 9px 12px; text-align: left; vertical-align: top; overflow-wrap: break-word; min-width: 5.5em;
+  border-bottom: 1px solid var(--lesson-line); border-right: 1px solid var(--lesson-line);
+}
+[data-ws-theme] .sv-table :is(th, td):last-child { border-right: 0; }
+[data-ws-theme] .sv-table tbody tr:last-child > * { border-bottom: 0; }
+[data-ws-theme] .sv-table thead th {
+  font-weight: 800; color: var(--ws-title); border-bottom: 3px solid var(--sv-tone);
+  background: color-mix(in srgb, var(--sv-tone) 14%, var(--lesson-surface));
+}
+[data-ws-theme] .sv-table tbody tr:nth-child(even) > * { background: color-mix(in srgb, var(--ws-soft) 55%, var(--lesson-surface)); }
+[data-ws-theme] .sv-table tbody tr:nth-child(odd) > * { background: var(--lesson-surface); }
+[data-ws-theme] .sv-table tbody th[scope="row"] { font-weight: 700; color: var(--ws-title); }
+/* Görgetéskor az első oszlop (a sorfejléc) a helyén marad — tömör háttérrel, hogy a mögé csúszó cella ne üssön át. */
+[data-ws-theme] .sv-table-scroll[data-overflowing] .sv-table[data-row-headers] :is(tbody th[scope="row"], td[data-first], thead th:first-child) {
+  position: sticky; left: 0; z-index: 1; box-shadow: 1px 0 0 var(--lesson-line);
+}
+[data-ws-theme] .sv-scroll-hint { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 14px; font-weight: 600; color: var(--ws-muted); }
+
+[data-ws-theme] .sv-figure[data-anim="ruleBox"] { padding: 0; border: 0; background: transparent; box-shadow: none; }
+[data-ws-theme] .sv-rule {
+  --sv-rule: var(--ws-accent); --sv-rule-bg: var(--ws-soft); --sv-rule-ink: var(--lesson-ink);
+  border: 2px solid var(--sv-rule); border-left-width: 8px; border-radius: 14px; padding: 14px 16px; background: var(--sv-rule-bg); color: var(--sv-rule-ink);
+}
+[data-ws-theme] .sv-figure[data-tone="warning"] .sv-rule { --sv-rule: var(--lesson-warn-ink); --sv-rule-bg: var(--lesson-warn-bg); --sv-rule-ink: var(--lesson-warn-ink); }
+[data-ws-theme] .sv-figure[data-tone="tip"] .sv-rule { --sv-rule: var(--lesson-ok); --sv-rule-bg: var(--lesson-ok-bg); --sv-rule-ink: var(--lesson-ok-bg-ink); }
+[data-ws-theme] .sv-rule-head { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 1.05em; font-weight: 800; overflow-wrap: anywhere; }
+[data-ws-theme] .sv-rule-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--sv-rule); color: var(--sv-rule-bg); }
+[data-ws-theme] .sv-rule-items { margin: 0; padding-left: 1.3em; list-style: disc; display: grid; gap: 6px; }
+[data-ws-theme] .sv-rule-items li { white-space: pre-line; overflow-wrap: anywhere; }
+[data-ws-theme] .sv-rule-items:has(> li:only-child) { list-style: none; padding-left: 0; }
+[data-ws-theme] .sv-figure[data-anim="ruleBox"] > figcaption { padding-inline: 4px; }
+
+[data-ws-theme] .sv-cards { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 640px) {
+  [data-ws-theme] .sv-cards[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-ws-theme] .sv-cards[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+[data-ws-theme] .sv-card {
+  min-width: 0; border: 1px solid var(--lesson-line); border-top: 6px solid var(--sv-tone); border-radius: 14px; padding: 12px 14px;
+  background: color-mix(in srgb, var(--sv-tone) 8%, var(--lesson-surface));
+}
+[data-ws-theme] .sv-card-title { margin: 0 0 8px; font-weight: 800; font-size: 1.05em; color: var(--ws-title); overflow-wrap: anywhere; }
+[data-ws-theme] .sv-card-lines { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+[data-ws-theme] .sv-card-lines li { padding-top: 6px; border-top: 1px dashed var(--lesson-line); white-space: pre-line; overflow-wrap: anywhere; }
+[data-ws-theme] .sv-card-lines li:first-child { padding-top: 0; border-top: 0; }
+[data-ws-theme] .sv-card-example { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--lesson-surface); border: 1px solid var(--lesson-line); overflow-wrap: anywhere; }
+[data-ws-theme] .sv-example-label { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.8em; font-weight: 800; background: var(--sv-tone); color: var(--lesson-surface); }
+
+/* Felsorolás a magyarázatban (E8): a „•” / „-” kezdetű sorok valódi lista. */
+[data-ws-theme] .lesson-explain-list { margin: 4px 0; padding-left: 1.3em; list-style: disc; display: grid; gap: 4px; }
