@@ -7,9 +7,9 @@ Futtatás (a repó gyökeréből vagy a source mappából; a Blender helye a BLE
 
 Kimenet: source/client/public/models/szokoar/szokoar-props.<hash>.glb (díszlet) + szokoar-kid.<hash>.glb (figura) +
 manifest.json (Meshopt-tömörítve).
-A forma determinisztikus (rögzített seed), de a kimenet NEM bájtazonos futásról futásra (mérve 2026-11-18: a tömörített
-pufferek néhány bájttal eltérnek, a fájlnév hash-e ezért buildenként változik) — újragyártás után a manifestet és a GLB-ket
-együtt kell commitolni. A játékhoz és a CI-hoz Blender nem kell: a kész GLB követett fájl.
+A forma determinisztikus (rögzített seed), a GLB bájtjai viszont NEM azonosak futásról futásra (az exportáló a háromszögek
+sorrendjét változtatja, a Meshopt-kódolás erre épül). Ezért a fájlnév a normalizált tartalmi lenyomatból készül
+(`content_digest`): ugyanaz a modell ugyanazt a nevet kapja; újragyártás után a GLB-t (új bájtok, régi név) commitolni nem kell. A játékhoz és a CI-hoz Blender nem kell: a kész GLB követett fájl.
 
 Stílus: stilizált, lekerekített low-poly; a sziklák lapolt (facettás), rétegzett felületűek. Textúra nincs: minden modell EGY
 közös anyagot használ, a szín csúcs-színből jön (sRGB-ben megadott paletta → lineáris, finom függőleges átmenettel), így
@@ -613,6 +613,36 @@ def build():
             os.remove(os.path.join(OUT_DIR, old))
     known = set(bpy.ops.export_scene.gltf.get_rna_type().properties.keys())
 
+    def content_digest(pick):
+        """
+        A kiválasztott modellek normalizált tartalmi lenyomata (a fájlnévhez). A GLB bájtjai futásról futásra eltérnek (mérve
+        2026-11-18: az exportáló a háromszögek sorrendjét változtatja, a normálisok ~1e-4-en belül ingadoznak, és a Meshopt-kódolás
+        erre épül), ezért a fájlnév nem a bájtokból, hanem a kerekített, sorrend-független geometriából készül: modellenként a
+        háromszögek (sarkonként hely 1e-4, normális 1e-2, szín 1e-3 pontossággal), a háromszög a legkisebb sarkával kezdve
+        (a körüljárás megmarad), a háromszöglista rendezve.
+        """
+        h = hashlib.sha256()
+        for root in sorted((r for r in roots if pick(r.name)), key=lambda r: r.name):
+            for o in sorted((c for c in root.children_recursive if c.type == "MESH"), key=lambda c: c.name):
+                me = o.data
+                me.calc_loop_triangles()
+                col = me.color_attributes.get("Col")
+                normals = me.corner_normals
+                tris = []
+                for lt in me.loop_triangles:
+                    corners = []
+                    for li in lt.loops:
+                        v = me.vertices[me.loops[li].vertex_index].co
+                        n = normals[li].vector
+                        c = col.data[li].color if col else (1, 1, 1, 1)
+                        corners.append((tuple(round(x, 4) + 0.0 for x in v), tuple(round(x, 2) + 0.0 for x in n), tuple(round(x, 3) + 0.0 for x in c[:3])))
+                    k = corners.index(min(corners))
+                    tris.append(tuple(corners[k:] + corners[:k]))
+                tris.sort()
+                h.update(("%s|%d|" % (root.name, len(tris))).encode())
+                h.update(repr(tris).encode())
+        return h.hexdigest()[:10]
+
     def export(prefix, pick):
         """A kiválasztott gyökerek (és hálóik) egy GLB-be; a fájlnév a tartalom hash-ével."""
         bpy.ops.object.select_all(action="DESELECT")
@@ -640,7 +670,7 @@ def build():
         bpy.ops.export_scene.gltf(**{k: v for k, v in options.items() if k in known})
         with open(tmp, "rb") as f:
             data = f.read()
-        final = "szokoar-%s.%s.glb" % (prefix, hashlib.sha256(data).hexdigest()[:10])
+        final = "szokoar-%s.%s.glb" % (prefix, content_digest(pick))
         os.replace(tmp, os.path.join(OUT_DIR, final))
         return final, len(data)
 

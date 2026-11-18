@@ -60,6 +60,8 @@ export type TsunamiLive = {
    * kérdés a figurát takarná — így a figura a kérdés-sáv alá kerül. Simán áll be.
    */
   shiftPx?: number;
+  /** A jelenet írja vissza képkockánként: a ténylegesen alkalmazott (simított) eltolás képpontban — a mérésekhez. */
+  shownShiftPx?: number;
 };
 
 /** The shelter (goal) on the top plank: % from the left. Always on screen (D4). */
@@ -548,58 +550,101 @@ function tinted(src: THREE.BufferGeometry, color: THREE.ColorRepresentation, lo 
   return g;
 }
 
+/** Determinisztikus „véletlen” [0, 1) a stégek szabálytalanságához (nem `Math.random`: minden építés ugyanazt adja). */
+const jag = (i: number, k: number) => {
+  const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453;
+  return v - Math.floor(v);
+};
+
+/** Egy stég-szint: a teteje (% fentről) és a bal (szabad) vége (világ-x). A jobb vége a hegyre támaszkodik. */
+type PierLevel = { top: number; left: number; /** false: nincs vízig érő cölöp — a móló ferde támasszal a sziklába kapaszkodik. */ stilts?: boolean };
+
 /**
- * A deszkák: mólószerű fa pallók cölöpökkel (terv 7.2) — a négy szint és a hat cölöp EGY összevont, csúcs-színes geometria
- * (egy rajzolási hívás). A cölöpök a felső pallótól a víz alá nyúlnak, így a víz emelkedése rajtuk is látszik.
+ * A stégek (csiszoló kör 2. pont: ne hassanak állványzatnak): lépcsőzetes, a hegy felé egyre rövidebb mólók, kissé
+ * szabálytalan deszkákkal (eltérő hossz, enyhe dőlés, színárnyalat), ferde, eltérő vastagságú cölöpökkel és a cölöpök közt
+ * belógó kötélkorláttal. Minden szint és cölöp EGY összevont, csúcs-színes geometria (egy rajzolási hívás); a cölöpök a víz alá
+ * nyúlnak (az áttetsző vízfal mögött átderengenek).
  */
 function buildPlatforms(
-  xLeft: number,
+  levels: readonly PierLevel[],
   xRightAt: (y: number) => number,
   yAtTopPct: (top: number) => number,
   thick: number,
-  tops: readonly number[],
   material: THREE.Material,
 ): THREE.Mesh {
   const depth = 1.5;
   const parts: THREE.BufferGeometry[] = [];
-  const boards = ["#dba05e", "#c78743", "#e6b274"];
-  const yTop = yAtTopPct(tops[0]!) + 0.3;
+  const boards = ["#dba05e", "#c78743", "#e6b274", "#cf9452"];
   const yBottom = -HALF_FULL * 1.6;
-  // Cölöp-helyek: a szabad (bal) végen, és hosszú stégnél ~8 egységenként — minden szinten UGYANOTT (a cölöpök függőlegesen
-  // egy vonalban állnak); a jobb vég a hegyre támaszkodik.
-  const longest = Math.max(1, xRightAt(yAtTopPct(tops[0]!)) - xLeft);
-  const postCount = Math.max(1, Math.round(longest / 8));
-  const postXs = Array.from({ length: postCount }, (_, k) => xLeft + 0.35 + (k * (longest - 0.7)) / postCount);
-  const posts = new Map<number, number>();
-  for (const top of tops) {
+  levels.forEach(({ top, left, stilts = true }, li) => {
     const cy = yAtTopPct(top) - thick / 2;
     const xRight = xRightAt(cy);
-    const len = Math.max(1, xRight - xLeft);
-    const cx = xLeft + len / 2;
+    const len = Math.max(1, xRight - left);
+    // Deszkák: három sor, a bal végük szabálytalan (eltérő hossz), enyhe dőlés és színárnyalat.
     for (let i = 0; i < 3; i++) {
-      const g = new RoundedBoxGeometry(len, thick, depth / 3 - 0.06, 1, Math.min(0.06, thick * 0.3));
-      g.translate(cx, cy, PLANK_Z - depth / 2 + (depth / 3) * (i + 0.5));
-      parts.push(tinted(g, boards[i]!, 0.82, 1.08));
+      const ragged = (jag(li, i) - 0.3) * 0.7;
+      const l = Math.max(0.8, len - ragged);
+      const g = new RoundedBoxGeometry(l, thick, depth / 3 - 0.07, 1, Math.min(0.06, thick * 0.3));
+      g.rotateZ((jag(li, i + 7) - 0.5) * 0.03);
+      g.rotateY((jag(li, i + 13) - 0.5) * 0.04);
+      g.translate(xRight - l / 2, cy + (jag(li, i + 3) - 0.5) * 0.05, PLANK_Z - depth / 2 + (depth / 3) * (i + 0.5));
+      parts.push(tinted(g, boards[(li + i) % boards.length]!, 0.8, 1.1));
     }
-    for (const px of postXs) {
-      if (px > xRight - 0.4) continue;
-      posts.set(px, Math.max(posts.get(px) ?? -Infinity, cy + thick / 2 + 0.3));
-      const beam = new THREE.BoxGeometry(0.2, thick * 0.7, depth + 0.16);
-      beam.translate(px, cy - thick * 0.6, PLANK_Z);
-      parts.push(tinted(beam, "#8a5730"));
+    // Cölöpök: a szabad végen és ~6 egységenként, szabálytalan helyen, vastagságban és dőléssel; elöl korlátoszlopként a deszka
+    // fölé nyúlnak, és köztük kötél lóg.
+    const count = Math.max(1, Math.round(len / 6));
+    const railY = cy + thick / 2 + 0.55;
+    const railTops: THREE.Vector3[] = [];
+    for (let k = 0; k <= count; k++) {
+      const f = k / count;
+      if (f > 0.97 && count > 0) break; // a hegy felőli vég a sziklára támaszkodik
+      const px = left + 0.3 + f * (len - 0.6) + (jag(li, k + 21) - 0.5) * 0.5;
+      const r = 0.075 + jag(li, k + 31) * 0.045;
+      const lean = (jag(li, k + 41) - 0.5) * 0.08;
+      for (const side of [-1, 1]) {
+        const z = PLANK_Z + side * (depth / 2 + 0.03);
+        const postTop = side > 0 ? railY : cy + thick / 2 + 0.12;
+        if (!stilts && side < 0) continue;
+        const bottom = stilts ? yBottom : cy - thick * 0.4;
+        const h = postTop - bottom;
+        const post = new THREE.CylinderGeometry(r * 0.85, r * 1.1, h, 7, 1);
+        post.rotateZ(stilts ? lean : 0);
+        post.translate(px, (postTop + bottom) / 2, z);
+        parts.push(tinted(post, side > 0 ? "#8a5730" : "#7a4a26", 0.55, 1.15));
+        if (side > 0) railTops.push(new THREE.Vector3(stilts ? px - Math.sin(lean) * h * 0.5 : px, postTop, z));
+      }
     }
-  }
-  for (const [px, top] of Array.from(posts)) {
-    const postTop = Math.min(top, yTop);
-    for (const side of [-1, 1]) {
-      const post = new THREE.CylinderGeometry(0.085, 0.11, postTop - yBottom, 8, 1);
-      post.translate(px, (postTop + yBottom) / 2, PLANK_Z + side * (depth / 2 + 0.02));
-      parts.push(tinted(post, "#8a5730", 0.6, 1.15));
-      const cap = new THREE.CylinderGeometry(0.115, 0.115, 0.07, 8, 1);
-      cap.translate(px, postTop + 0.035, PLANK_Z + side * (depth / 2 + 0.02));
-      parts.push(tinted(cap, "#e3b077"));
+    // Cölöp nélküli móló: a szabad végétől ferde támasz fut le a sziklába (a hegy felé).
+    if (!stilts) {
+      const a = new THREE.Vector3(left + 0.35, cy - thick * 0.45, PLANK_Z);
+      // A támasz alsó vége a szikla oldalába ér (a móló jobb vége a szikla széle; onnan kissé beljebb és lejjebb).
+      const b = new THREE.Vector3(xRight + 0.35, cy - Math.min(2.6, Math.max(1.2, (xRight - left) * 0.45)), PLANK_Z);
+      const d = b.clone().sub(a);
+      const strut = new THREE.CylinderGeometry(0.08, 0.1, d.length(), 7, 1);
+      strut.rotateZ(-Math.atan2(d.x, d.y));
+      strut.translate((a.x + b.x) / 2, (a.y + b.y) / 2, a.z);
+      parts.push(tinted(strut, "#7a4a26", 0.7, 1.1));
     }
-  }
+    // Kötélkorlát: belógó ív (5 szakasz) a szomszédos elülső korlátoszlopok között.
+    for (let k = 0; k + 1 < railTops.length; k++) {
+      const a = railTops[k]!;
+      const b = railTops[k + 1]!;
+      const seg = 5;
+      for (let j = 0; j < seg; j++) {
+        const t0 = j / seg;
+        const t1 = (j + 1) / seg;
+        const p0 = new THREE.Vector3().lerpVectors(a, b, t0);
+        const p1 = new THREE.Vector3().lerpVectors(a, b, t1);
+        p0.y -= Math.sin(Math.PI * t0) * 0.22;
+        p1.y -= Math.sin(Math.PI * t1) * 0.22;
+        const d = p1.clone().sub(p0);
+        const rope = new THREE.CylinderGeometry(0.028, 0.028, d.length(), 5, 1);
+        rope.rotateZ(-Math.atan2(d.x, d.y));
+        rope.translate((p0.x + p1.x) / 2, (p0.y + p1.y) / 2, (p0.z + p1.z) / 2);
+        parts.push(tinted(rope, "#e9d3a4"));
+      }
+    }
+  });
   const merged = mergeGeometries(parts) ?? new THREE.BoxGeometry(4, thick, depth);
   parts.forEach((g) => g.dispose());
   const m = new THREE.Mesh(merged, material);
@@ -800,6 +845,23 @@ function setupTsunami(
   };
 
   let disposed = false;
+  /*
+   * Minden shader-program a menü alatt forduljon le, és a pufferek is töltődjenek fel (ne menet közben). Csiszoló kör 4. pont,
+   * profillal mérve: a `renderer.compile` csak a LÁTHATÓ objektumokat fordítja; a villám (`bolt`) láthatatlanul indul, így a
+   * programja az első villámláskor, menet közben fordult — a GPU-folyamatban 350–500 ms-os megakadás, a főszál közben tétlen.
+   * Ezért a fordítás idejére a villám is látható (érvényes geometriával, átlátszóan), utána a menü alatt még három bemelegítő
+   * képkocka fut.
+   */
+  const prewarmPrograms = () => {
+    const wasVisible = scene.visible;
+    scene.visible = true;
+    makeBolt();
+    bolt.visible = true;
+    renderer.compile(scene, camera);
+    bolt.visible = false;
+    scene.visible = wasVisible;
+    warmFrames = 0;
+  };
   const fitInto = (holder: THREE.Object3D, model: THREE.Object3D, heightMul = 1) => {
     holder.updateMatrixWorld(true);
     const oldBox = new THREE.Box3().setFromObject(holder);
@@ -912,15 +974,12 @@ function setupTsunami(
         }
       }
       layout();
-      // A modellek shaderei a menü alatt forduljanak le, és a pufferek is töltődjenek fel (ne a menet első képkockáján — az
-      // indítási tüske oka volt): fordítás most, és a menü alatt még három bemelegítő képkocka a modellekkel.
-      const wasVisible = scene.visible;
-      scene.visible = true;
-      renderer.compile(scene, camera);
-      scene.visible = wasVisible;
-      warmFrames = 0;
+      prewarmPrograms();
     } catch {
-      if (!disposed) buildFallbackDecor();
+      if (!disposed) {
+        buildFallbackDecor();
+        prewarmPrograms();
+      }
     }
   };
 
@@ -1404,7 +1463,15 @@ function setupTsunami(
     const thick = Math.max(0.24, 15 * worldPerPx);
     // A pallók a hegyhez futó stégek: a jobb végük a szikla sziluettjébe ér (hegy nélkül a kép 92 %-áig tartanak).
     const xRightAt = (y: number) => (cliff ? Math.min(worldX(0.92), cliffTop.x - cliffScale * cliffRadius((cliffTop.y - y) / cliffScale) + 0.55) : worldX(0.92));
-    platforms = buildPlatforms(worldX(0.08), xRightAt, (top) => worldY(1 - top / 100), thick, plankTops(aspect), propMat);
+    // Három lépcsőzetes stég (a negyedik szint elmaradt): fent a menedék rövid mólója, lejjebb egyre hosszabbak — a bal felső
+    // rész szabad, ott látszik a közeledő hullámfal.
+    const tops = plankTops(aspect);
+    const levels: PierLevel[] = [
+      { top: tops[0]!, left: worldX(aspect < 1 ? 0.5 : 0.56), stilts: false },
+      { top: tops[2]!, left: worldX(aspect < 1 ? 0.2 : 0.3) },
+      { top: tops[3]!, left: worldX(0.06) },
+    ];
+    platforms = buildPlatforms(levels, xRightAt, (top) => worldY(1 - top / 100), thick, propMat);
     scene.add(platforms);
 
     kidScale = Math.min(74, Math.max(46, heightPx * 0.14)) * worldPerPx;
@@ -1468,6 +1535,7 @@ function setupTsunami(
       // ≈ 400 ms-os lassuló beállás (koordinátori pontosítás 2026-11-18); csökkentett mozgásnál azonnali.
       const shiftTarget = (live?.shiftPx ?? 0) * worldPerPx;
       shiftY = reducedMotion ? shiftTarget : damp(shiftY, shiftTarget, 12, dt);
+      if (live) live.shownShiftPx = shiftY / worldPerPx;
       camera.position.y = EYE + shiftY;
       sky.position.y = camera.position.y;
       // Victory (D4): the wave breaks below the shelter — the level sinks and the crest collapses in spray once.
@@ -1497,7 +1565,8 @@ function setupTsunami(
       const dz = THREE.MathUtils.lerp(120, 34, dg);
       // A taraj a kép 71 %-ától (távol) a 86 %-áig (közel) ér fel: a horizont (60 %), a part és a dombok FÖLÖTT van, de a
       // felső sáv (HUD) alatt marad — a habos taraj álló nézetben is látszik.
-      const wallTop = worldY(THREE.MathUtils.lerp(0.71, 0.86, dg), -dz);
+      // Álló nézetben (keskeny kép) a taraj már alacsony víznél is a felső stég és a menedék FÖLÖTT van (csiszoló kör 1. pont).
+      const wallTop = worldY(THREE.MathUtils.lerp(hw < HALF_H ? 0.815 : 0.71, hw < HALF_H ? 0.85 : 0.86, dg), -dz);
       const wallBottom = level - 1.5;
       const wallH = Math.max(1, wallTop - wallBottom);
       const span = hw * 3 * ((CAM_DIST + dz) / CAM_DIST) + wallH;

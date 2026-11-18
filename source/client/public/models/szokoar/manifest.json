@@ -1,11 +1,11 @@
 {
-  "props": "szokoar-props.246c9d19ef.glb",
-  "kid": "szokoar-kid.a473c2abc8.glb",
+  "props": "szokoar-props.81eff3f8ad.glb",
+  "kid": "szokoar-kid.cb41381046.glb",
   "files": {
-    "szokoar-props.246c9d19ef.glb": 186136,
-    "szokoar-kid.a473c2abc8.glb": 52040
+    "szokoar-props.81eff3f8ad.glb": 186136,
+    "szokoar-kid.cb41381046.glb": 51996
   },
-  "bytes": 238176,
+  "bytes": 238132,
   "triangles": 9774,
   "models": [
     "bush",
