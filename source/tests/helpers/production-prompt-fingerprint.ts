@@ -23,7 +23,14 @@ type Turn = { blocks: Block[] };
 type Engine = { runSingleLesson(input: never, deps: never): Promise<unknown>; singleRunSystemPrompt(): string };
 type ConversationCtor = new (system: string, client: never, state: null) => unknown;
 /** `newKinds`: új forrásból, de a modell a 3. állomás ELSŐ válaszában és a 4. állomás foltjában KÉRETLENÜL új fajtájú (`table`) ábrát ad. */
-export type FingerprintScenario = "source" | "map" | "newKinds";
+/**
+ * `strayId` / `strayIdMap` (vak ellenőr B1): a modell a szerzői leckében (példa- és ábrablokkon) és a 4. állomás RÉGI fajtájú ábrafoltján
+ * KÉRETLENÜL `sourceVisualId` mezőt ad — új forrásból, illetve tárolt leltáras térképről indítva.
+ * `mixed` (vak ellenőr J1): az ELSŐ szerzői válaszban új fajtájú ábrablokk ÉS egy másik sémahiba (üres példamegoldás) is van.
+ */
+export type FingerprintScenario = "source" | "map" | "newKinds" | "strayId" | "strayIdMap" | "mixed";
+const FROM_MAP: ReadonlyArray<FingerprintScenario> = ["map", "strayIdMap"];
+const STRAY: ReadonlyArray<FingerprintScenario> = ["strayId", "strayIdMap"];
 
 const fixture = standardFusionFixture();
 const TRANSCRIPT = "A téglalap területe az oldalak szorzata. A terület mértékegysége a négyzetcentiméter.";
@@ -65,12 +72,20 @@ export async function productionPromptRun(engine: Engine, Conversation: Conversa
       else if (station === "3" || station === "tananyag") {
         json = teaching;
         // newKinds: az ELSŐ szerzői válasz (a záró összefoglaló ELŐTT) egy új fajtájú ábrablokkot is tartalmaz; a javító fordulóra a szokásos tanítás jön.
+        if (STRAY.includes(scenario)) json = { ...teaching, sections: teaching.sections.map((section) => ({ ...section,
+          blocks: section.blocks.map((b) => (b.kind === "example" || b.kind === "animate" ? { ...b, sourceVisualId: "v1" } : b)) })) };
+        // mixed: az új fajtájú blokk a fejezet ELEJÉN áll, a másik sémahiba (üres megoldás) utána — a hibák sorrendje a séma sorrendje.
+        if (scenario === "mixed" && station === "3") json = { ...teaching, sections: teaching.sections.map((section, i) => (i ? section : { ...section,
+          blocks: [{ kind: "animate", animKind: "table", params: FINGERPRINT_TABLE, caption: "A terület mértékegysége a négyzetcentiméter.", coversConceptIds: ["area"] },
+            ...section.blocks.map((b) => (b.kind === "example" ? { ...b, answer: "" } : b))] })) };
         if (scenario === "newKinds" && station === "3") json = { ...teaching, sections: teaching.sections.map((section, i) => (i ? section : { ...section,
           blocks: [...section.blocks.slice(0, -1), { kind: "animate", animKind: "table", params: FINGERPRINT_TABLE, caption: "A terület mértékegysége a négyzetcentiméter.", coversConceptIds: ["area"] }, ...section.blocks.slice(-1)] })) };
       }
       else if (station === "4") json = scenario === "newKinds"
         ? { sections: [{ index: 0, visuals: [{ after: 0, animKind: "table", params: FINGERPRINT_TABLE, caption: "A terület mértékegysége a négyzetcentiméter.", coversConceptIds: ["area"] }] }] }
-        : { patches: "nem érvényes ábrafolt" };
+        : STRAY.includes(scenario)
+          ? { sections: [{ index: 0, visuals: [{ after: 0, animKind: "process", params: { steps: ["Mérd meg az oldalakat.", "Szorozd össze őket."] }, caption: "A terület kiszámításának lépései.", coversConceptIds: ["area"], sourceVisualId: "v2" }] }] }
+          : { patches: "nem érvényes ábrafolt" };
       else if (station === "5") json = structuredClone(fixture.experience);
       else if (station === "6") json = { solutions: [], notes: [], reviewedAll: true };
       const override = options.reply?.(station, json, t);
@@ -89,7 +104,7 @@ export async function productionPromptRun(engine: Engine, Conversation: Conversa
     async loadMap(id: string) {
       if (id !== "m1") return null;
       const saved = maps.at(-1);
-      return { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom, sourceText: `${TRANSCRIPT}\n\n${SECOND}`, visuals: scenario === "map" ? storedVisuals : saved?.visuals ?? [] },
+      return { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom, sourceText: `${TRANSCRIPT}\n\n${SECOND}`, visuals: FROM_MAP.includes(scenario) ? storedVisuals : saved?.visuals ?? [] },
         concepts: saved ? saved.concepts.map((c) => ({ localId: c.id, examWeight: c.examWeight, term: c.term, definition: c.definition, quote: c.quote })) : baseConcepts };
     },
     async createJob() { return "job1"; },
@@ -106,13 +121,34 @@ export async function productionPromptRun(engine: Engine, Conversation: Conversa
     log: (m: string) => logs.push(m),
     ...extraDeps,
   };
-  const input = scenario === "map" ? { files: [], mapId: "m1", ownerId: "u1" } : { files: FINGERPRINT_FILES, ownerId: "u1", instruction: "Rövid, áttekinthető tananyag legyen." };
+  const input = FROM_MAP.includes(scenario) ? { files: [], mapId: "m1", ownerId: "u1" } : { files: FINGERPRINT_FILES, ownerId: "u1", instruction: "Rövid, áttekinthető tananyag legyen." };
   await engine.runSingleLesson(input as never, deps as never);
   // A párhuzamos (friss) hívások sorrendje nem rögzített: a lenyomat a kérések RENDEZETT sokasága.
   const sorted = [...prompts].sort();
   const telemetry = ((steps.at(-1)?.output as { telemetry?: Record<string, unknown> } | undefined)?.telemetry) ?? {};
   const gates = (telemetry.gates as Record<string, unknown> | undefined) ?? {};
   return { fingerprint: sha(sorted), logsHash: sha(logs), lessonHash: sha(lesson), prompts: sorted, stations, maps, gates, logs, telemetry, published, lesson };
+}
+
+/**
+ * A modellkimenet SÉMÁJÁNAK próbája (motor nélkül): két ellenséges lecke a megadott sémán átengedve, az eredmény lenyomatával.
+ * `stray`: érvényes lecke, a négy érintett blokkfajtán kéretlen `sourceVisualId` mezővel (a bővítés előtti séma levágja).
+ * `mixed`: új fajtájú ábrablokk + több más sémahiba — a hibák TARTALMA és SORRENDJE a lenyomat része.
+ * Ezt a sémát használja a szerzői állomás, a fogalomjavítás és a leckejavítás (`modelLessonSchema`), így a próba mindháromra áll.
+ */
+export function modelSchemaProbe(schema: { safeParse(json: unknown): { success: boolean; data?: unknown; error?: { issues: Array<{ path: Array<string | number>; message: string }> } } }): { stray: string; mixed: string } {
+  const { experience: _bank, ...teaching } = fixture;
+  const id = { sourceVisualId: "v1" };
+  const check = { kind: "check", question: "Mi a terület mértékegysége?", options: ["négyzetcentiméter", "centiméter"], correctIndex: 0, feedbackPerOption: ["Igen.", "Ez hosszúság."], coversConceptIds: ["area"], ...id };
+  const sort = { kind: "try", tryKind: "dragSort", spec: { items: ["mérés", "szorzás"], correctOrder: ["mérés", "szorzás"] }, coversConceptIds: ["area"], ...id };
+  const blocks = teaching.sections[0].blocks;
+  const base = { ...teaching, mapId: "m1", sourceOnly: true };
+  const stray = { ...base, sections: [{ ...teaching.sections[0], blocks: [...blocks.slice(0, -1).map((b) => (b.kind === "explain" ? b : { ...b, ...id })), check, sort, ...blocks.slice(-1)] }] };
+  const mixed = { ...base, title: "", sections: [{ ...teaching.sections[0], blocks: [
+    { kind: "animate", animKind: "ruleBox", params: { tone: "rule", items: ["A terület az oldalak szorzata."] }, caption: "Szabály.", coversConceptIds: ["area"], ...id },
+    ...blocks.map((b) => (b.kind === "example" ? { ...b, answer: "", steps: [] } : b)), { ...check, correctIndex: 7 }, { kind: "animate", animKind: "compareCards", params: {}, caption: "", coversConceptIds: [] }] }] };
+  const result = (json: unknown) => { const r = schema.safeParse(json); return sha(r.success ? { ok: true, data: r.data } : { ok: false, issues: r.error!.issues.map((i) => i.path.join(".") + ": " + i.message) }); };
+  return { stray: result(stray), mixed: result(mixed) };
 }
 
 // Parancssori mód: a megadott mappa (pl. a főág kicsomagolt `server` + `shared` fája) motorjának lenyomatai.
@@ -122,12 +158,15 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   const engine = await load("server/studio/single-run/engine.ts") as Engine;
   const { LessonConversation } = await load("server/studio/single-run/conversation.ts") as { LessonConversation: ConversationCtor };
   const { singleRunMapHash } = await load("server/studio/single-run/live.ts") as { singleRunMapHash(files: unknown, title?: string): string };
-  for (const scenario of ["source", "map", "newKinds"] as const) {
+  for (const scenario of ["source", "map", "newKinds", "strayId", "strayIdMap", "mixed"] as const) {
     const run = await productionPromptRun(engine, LessonConversation, scenario);
     console.log(`${scenario}: ${run.fingerprint} (${run.prompts.length} kérés; állomások: ${[...new Set(run.stations)].join(",")})`);
-    if (scenario === "newKinds") console.log(`newKinds napló: ${run.logsHash}
-newKinds lecke: ${run.lessonHash}`);
+    if (scenario !== "source" && scenario !== "map") console.log(`${scenario} napló: ${run.logsHash}` + String.fromCharCode(10) + `${scenario} lecke: ${run.lessonHash}`);
   }
+  // A modellkimenet sémája: a főágon a `lessonSchema`, a láncon a kapcsoló KI állapotú sémája.
+  const schemaModule = await load("shared/lesson-schema.ts") as { lessonSchema: Parameters<typeof modelSchemaProbe>[0]; modelLessonSchema?: (on: boolean) => Parameters<typeof modelSchemaProbe>[0] };
+  const probe = modelSchemaProbe(schemaModule.modelLessonSchema ? schemaModule.modelLessonSchema(false) : schemaModule.lessonSchema);
+  console.log(`séma stray: ${probe.stray}` + String.fromCharCode(10) + `séma mixed: ${probe.mixed}`);
   console.log(`mapHash: ${singleRunMapHash(FINGERPRINT_FILES, "Terület")}`);
   process.exit(0);
 }

@@ -8,7 +8,7 @@
  * J2 (átvilágítás 2026-10-16): a gyakorlóbank csomagjai, a lektorálás körei és a kulcsmentes ellenőrzések ugyanazzal a modellpárral, de
  * FRISS, célzott beszélgetésben futnak (önálló kérés; a lektor független a gyártás menetétől). J3: futásonkénti telemetria a jobon.
  */
-import { legacyAnimKindIssues, lessonSchema, type Lesson } from "../../../shared/lesson-schema";
+import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
@@ -152,7 +152,7 @@ export function undrawableDropNotes(dropped: ReadonlyArray<DroppedSourceVisual>)
 export function coveragePatchedLesson(base: Lesson, json: unknown, concepts: MapConcept[], sourceVisualKinds?: boolean): { lesson: Lesson | null; rejected: string[] } {
   const patched = applyVisualPatch(base, json, concepts, { sourceVisualKinds });
   if (!patched) return { lesson: null, rejected: [] };
-  const checked = lessonSchema.safeParse(stripUngroundedAnimateLabels(patched.lesson, concepts).lesson);
+  const checked = modelLessonSchema(sourceVisualKinds ?? sourceVisualsEnabled()).safeParse(stripUngroundedAnimateLabels(patched.lesson, concepts).lesson);
   return { lesson: checked.success && checkAnimatorResult(base, checked.data).ok ? checked.data : null, rejected: patched.rejected };
 }
 
@@ -745,11 +745,11 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const authorRequest = (notes: Parameters<typeof buildAuthorPrompt>[2]) =>
     withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner), authorKnowledge)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
   const validateLesson = (json: unknown): { ok: true; value: Lesson } | { ok: false; problems: string[] } => {
-    const strict = lessonSchema.safeParse({ ...(json as object), mapId, sourceOnly: true });
-    // Funkciókapcsoló (vak ellenőr B1): KI állapotban a forrás-ábrák új fajtája NEM elfogadott modellkimenet — ugyanazzal a megnevezett
-    // sémahibával megy javító fordulóra, mint a bővítés előtt (a modell ilyen fajtát KI állapotban nem is hall).
-    const legacyIssues = visualsOn ? [] : legacyAnimKindIssues(json);
-    if (!strict.success || legacyIssues.length) return { ok: false, problems: [...(strict.success ? [] : strict.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`)), ...legacyIssues].slice(0, 30) };
+    // Funkciókapcsoló (vak ellenőr B1): KI állapotban a modell kimenetét a bővítés ELŐTTI séma méri (`modelLessonSchema(false)`) — az új
+    // ábrafajta ugyanazzal a sémahibával, ugyanabban a sorrendben megy javító fordulóra, a kéretlen `sourceVisualId` mező pedig
+    // ugyanúgy levágódik, mint a kapcsoló előtt (a modell KI állapotban egyiket sem hallja).
+    const strict = modelLessonSchema(visualsOn).safeParse({ ...(json as object), mapId, sourceOnly: true });
+    if (!strict.success) return { ok: false, problems: strict.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
     // S2a (független review B1): a hibás paraméterű táblázat / szabálydoboz / kártya blokk kiesik (a rajzoló semmit nem rajzolna belőle) —
     // megszámolva és naplózva; a kapuk a megmaradt leckét mérik. Ha a kivétel UTÁN kapu bukik, a javító üzenet ELSŐ sora a kivétel
     // oka (vak ellenőr B1) — különben a modell csak a félrevezető következményt látná („egyetlen blokk sem tanít”, „nincs animáció”).

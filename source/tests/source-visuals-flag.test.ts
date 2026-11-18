@@ -173,3 +173,66 @@ test("az ábrafolt határa a motoron KÍVÜLI hívóknál is a kapcsolót követ
   // A régi fajta KI állapotban is ugyanúgy megy át.
   assert.equal((await withEnv(undefined, () => applyVisualPatch(lesson, visual("process", { steps: ["Mérd meg az oldalakat.", "Szorozd össze őket."] }))!)).added, 1);
 });
+
+/* Teljes tartalmú vak ellenőr (2026-11-18) — B1, J1, J2: KI állapotban a MODELL KIMENETÉT a bővítés előtti séma méri (`modelLessonSchema(false)`):
+   a kéretlen `sourceVisualId` mező levágódik, az új ábrafajta és a többi sémahiba a főág sorrendjében és szövegével megy javító fordulóra.
+   A főág értékei ugyanabból a parancsból (origin/main dc76ba52), mint fent. A lecke lenyomata a közzétételre mentett TELJES lecke-JSON-é:
+   benne a tanítás, a fejezet-lenyomatból képzett gyakorlóbank és annak minden feladat- / módszer-azonosítója. */
+const MAIN_STRAY = {
+  strayId: { prompts: "5b4465963997ef53131dd657d182aa65450265d7d004f49e40f75ba8bbc98e64", logs: "8255249f175e6fb3a69e98ff5577900c55c4f4c00158ed7822b596373569ffc2", lesson: "165b66ef44cb0f8d3c237870b8f62637b298afb3376e12c54048e36dc3acf9f0" },
+  strayIdMap: { prompts: "430cf1274226c5cbab5557d605ad5b52ad3255cfa9ef3a3653bb2f02ea5867b6", logs: "8255249f175e6fb3a69e98ff5577900c55c4f4c00158ed7822b596373569ffc2", lesson: "28f1df554e27f5a7bcef51287b5f7d3acba5a3ed32877418cd47088141bb8eb4" },
+  mixed: { prompts: "8a777f526d5ff5769ba852a7773c644a00f28325e44bbc5be9c09cd90e3e8acf", logs: "7156009ab60960a0a4b4f1025d6986f94410cc3d60428e9ff74a288aba063123", lesson: "e7f5627fc6cb6f8ec50452d662f07550919c3b28e0ee090297bf6a2cbbbe1e4b" },
+  schema: { stray: "9d6a4544e9f399b5aa82a85744ef3402cd8e99f57520723d0f5340660780e22f", mixed: "323283f910e7e7c81c7f0ba29a3d8f6111efde5d622ac73cf42a6e1c03efd78e" },
+} as const;
+
+test("KI (B1): a modell kéretlen `sourceVisualId` mezője (szerzői blokkon ÉS ábrafolton) levágódik — kérések, napló, bank-azonosítók, kész lecke a főágéval azonos", async () => {
+  for (const scenario of ["strayId", "strayIdMap"] as const) {
+    const off = await withEnv(undefined, () => run(scenario));
+    assert.deepEqual({ prompts: off.fingerprint, logs: off.logsHash, lesson: off.lessonHash }, MAIN_STRAY[scenario], `${scenario}: a főág értékei`);
+    assert.ok(!JSON.stringify(off.lesson).includes("sourceVisualId"), `${scenario}: a mentett leckében nincs forrástétel-hivatkozás`);
+    assert.ok(!off.prompts.some((p) => p.includes("sourceVisualId")), `${scenario}: egyetlen kérésben sincs (a 4. és a 6. állomás a levágott leckét kapja)`);
+    assert.ok(animKindsOf(off.lesson).filter((k) => k === "process").length >= 2, `${scenario}: a régi fajtájú folt ábrája bekerült (csak a mezője maradt le)`);
+    assert.ok(Array.isArray((off.lesson as { experience?: { tasks?: unknown[] } }).experience?.tasks), "a lenyomat a gyakorlóbankot is tartalmazza");
+    // Ellenpróba: BE állapotban a mező megmarad — a KI-egyezés tehát a levágáson múlik.
+    const on = await withEnv(undefined, () => run(scenario, { sourceVisuals: true }));
+    assert.ok(JSON.stringify(on.lesson).includes('"sourceVisualId":"v1"') && JSON.stringify(on.lesson).includes('"sourceVisualId":"v2"'), `${scenario}: BE állapotban a blokk és a folt mezője megmarad`);
+    assert.notEqual(on.lessonHash, MAIN_STRAY[scenario].lesson);
+  }
+});
+
+test("KI (J1): új fajtájú blokk ÉS más sémahiba együtt — a javító üzenet tartalma és sorrendje bájtra a főágé", async () => {
+  const off = await withEnv(undefined, () => run("mixed"));
+  assert.deepEqual({ prompts: off.fingerprint, logs: off.logsHash, lesson: off.lessonHash }, MAIN_STRAY.mixed);
+  const body = JSON.parse(fixRequests(off)[0])[1][0] as string;
+  const lines = body.split("\n").filter((l) => l.startsWith("- "));
+  assert.match(lines[0], /^- sections\.0\.blocks\.0\.animKind: Invalid enum value/, "az új fajta hibája a blokk HELYÉN áll (elöl), nem a lista végén");
+  assert.match(lines[1], /^- sections\.0\.blocks\.2\.answer: /, body);
+  assert.equal(lines.length, 2);
+});
+
+test("KI (J2): a modellkimenet sémája a főág sémájával azonos eredményt ad — levágott mezők, hibák tartalma és sorrendje (szerző, fogalomjavítás, leckejavítás)", async () => {
+  const { lessonSchema, modelLessonSchema, modelBlockSchema } = await import("../shared/lesson-schema");
+  const { modelLessonRepairSchema, lessonRepairSchema } = await import("../shared/lesson-repair");
+  const { modelSchemaProbe } = await import("./helpers/production-prompt-fingerprint");
+  assert.deepEqual(modelSchemaProbe(modelLessonSchema(false)), MAIN_STRAY.schema, "KI: a főág `lessonSchema`-jának eredménye ugyanerre a két ellenséges leckére");
+  const full = modelSchemaProbe(modelLessonSchema(true));
+  assert.notEqual(full.stray, MAIN_STRAY.schema.stray, "BE: a mező megmarad");
+  assert.notEqual(full.mixed, MAIN_STRAY.schema.mixed, "BE: az új fajta nem sémahiba");
+  assert.equal(modelLessonSchema(true), lessonSchema, "BE állapotban a teljes séma");
+  assert.equal(modelLessonRepairSchema(true), lessonRepairSchema);
+  // Blokk-szint (az ábrafolt blokkja): KI állapotban a mező levágva, az új fajta elutasítva; a régi fajta mindkét állapotban érvényes.
+  const animate = (animKind: string, extra: object = {}) => ({ kind: "animate", animKind, params: { steps: ["egy", "kettő"] }, caption: "Felirat.", coversConceptIds: ["area"], ...extra });
+  assert.equal("sourceVisualId" in (modelBlockSchema(false).parse(animate("process", { sourceVisualId: "v1" })) as object), false);
+  assert.equal((modelBlockSchema(true).parse(animate("process", { sourceVisualId: "v1" })) as { sourceVisualId?: string }).sourceVisualId, "v1");
+  assert.equal(modelBlockSchema(false).safeParse(animate("table")).success, false);
+  assert.equal(modelBlockSchema(true).safeParse(animate("table")).success, true);
+  // A bekötés: a fogalomjavítás és a leckejavítás modellkimenet-határa a kapcsolós sémát használja (nem a teljeset).
+  const { readFileSync } = await import("node:fs");
+  const src = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
+  assert.match(src("../server/studio/single-run/concept-fix.ts"), /const parsed = modelLessonSchema\(input\.sourceVisuals \?\? sourceVisualsEnabled\(\)\)\.safeParse\(json\);/);
+  const improvement = src("../server/studio/structured-improvement.ts");
+  assert.match(improvement, /const parsed = modelLessonSchema\(sourceVisualsEnabled\(\)\)\.parse\(previous\);/);
+  assert.match(improvement, /return modelLessonRepairSchema\(sourceVisualsEnabled\(\)\)\.parse\(\{/);
+  assert.match(improvement, /const storedCoverage = visualsOn \? withVisualCoverage\(/, "KI állapotban a tárolt fedettség változatlan, többlet lekérdezés nélkül");
+  assert.match(src("../server/studio/single-run/engine.ts"), /const strict = modelLessonSchema\(visualsOn\)\.safeParse\(/);
+});

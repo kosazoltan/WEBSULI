@@ -1,8 +1,9 @@
 import { publicationBankProblems } from "../../shared/lesson-experience";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { and, eq, ne, inArray } from "drizzle-orm";
-import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
-import { lessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
+import { lessonSchema, modelLessonSchema, type Lesson } from "../../shared/lesson-schema";
+import { lessonRepairSchema, modelLessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
+import { sourceVisualsEnabled } from "./source-visuals-flag";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { gameQuizItems, htmlFiles, improvedHtmlFiles, kmConcepts, knowledgeMaps, lessons, materialImprovementBackups, studioJobs } from "../../shared/schema";
@@ -96,7 +97,7 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   // Review #379: a lecke utolsó írása óta módosult térképfogalmak egysége nem vehető át (minden fogalomíró út frissíti az updatedAt-et).
   const staleConceptIds = conceptsChangedSince(await db.select({ localId: kmConcepts.localId, updatedAt: kmConcepts.updatedAt }).from(kmConcepts).where(eq(kmConcepts.mapId, row.mapId)), row.updatedAt);
   const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript, gates, staleConceptIds });
-  return lessonRepairSchema.parse({
+  return modelLessonRepairSchema(sourceVisualsEnabled()).parse({
     kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
     ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
     // Review #164: az eldöntetlen régi-alak jelöltek a javítás-artefaktumban maradnak (admin-nézet), nem csak a naplóban.
@@ -187,7 +188,7 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
     // Spec 2026-09-23: the repair skill at the start of the system prompt, its checklist at the end of the user message.
     previous = await call("author", withRepairSkill(prompt), (correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request) + repairChecklistTail(owner.corrections), "repair");
     try {
-      const parsed = lessonSchema.parse(previous);
+      const parsed = modelLessonSchema(sourceVisualsEnabled()).parse(previous);
       assertRepairTeaching(original, parsed, corrected, classroom);
       const stale = staleFormProblems(parsed, owner.corrections, sourceWords);
       if (stale.length) throw new Error(stale.join("; "));
@@ -294,8 +295,10 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     if (repair.classroom !== undefined) await tx.update(knowledgeMaps).set({ classroom: repair.classroom, updatedAt: new Date() }).where(eq(knowledgeMaps.id, current.mapId));
     // Független review F16: a javított lecke tárolt fedettsége a vizuális tételeket is számolja (a térkép leltárából újramérve) —
     // a `coverage.visuals` kulcs a javításnál nem tűnik el. A leltár külön olvasva: a `source` (és a lenyomata) nem változik.
-    const [inventory] = await tx.select({ sourceFiles: knowledgeMaps.sourceFiles }).from(knowledgeMaps).where(eq(knowledgeMaps.id, current.mapId));
-    const storedCoverage = withVisualCoverage(coverage, candidate, visualsOfSourceFiles(inventory?.sourceFiles));
+    // Funkciókapcsoló: KI állapotban nincs többlet lekérdezés, és a tárolt fedettség a kapcsoló előtti alakú (nincs `visuals` kulcs írva).
+    const visualsOn = sourceVisualsEnabled();
+    const [inventory] = visualsOn ? await tx.select({ sourceFiles: knowledgeMaps.sourceFiles }).from(knowledgeMaps).where(eq(knowledgeMaps.id, current.mapId)) : [];
+    const storedCoverage = visualsOn ? withVisualCoverage(coverage, candidate, visualsOfSourceFiles(inventory?.sourceFiles)) : coverage;
     const [written] = await tx.update(lessons).set({ json: candidate, coverage: storedCoverage, version: current.version + 1, updatedAt: new Date() }).where(eq(lessons.id, current.id)).returning();
     if (repairHash(written.json) !== repairHash(candidate)) throw new Error("A lecke visszaolvasása eltérést mutat.");
     await tx.delete(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));

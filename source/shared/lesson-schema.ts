@@ -81,29 +81,8 @@ export type AnimKind = (typeof ANIM_KINDS)[number];
  * 14. pont) — KI állapotban a modell ilyen fajtát nem is hall, és a kimenet határa a bővítés előtti hibával utasítja el.
  */
 export const SOURCE_VISUAL_ANIM_KINDS = ["table", "ruleBox", "compareCards"] as const satisfies ReadonlyArray<AnimKind>;
-const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VISUAL_ANIM_KINDS as readonly string[]).includes(k)) as [AnimKind, ...AnimKind[]]);
-/** A bővítés ELŐTTI séma hibaüzenete egy új fajtájú `animKind`-re (a régi felsorolással, betűre); más értékre `null`. */
-export function legacyAnimKindIssue(animKind: unknown): string | null {
-  if (!(SOURCE_VISUAL_ANIM_KINDS as readonly unknown[]).includes(animKind)) return null;
-  const parsed = legacyAnimKindSchema.safeParse(animKind);
-  return parsed.success ? null : parsed.error.issues[0].message;
-}
-/**
- * A modell lecke-kimenetének új fajtájú ábrablokkjai a bővítés előtti séma hibájaként (`sections.i.blocks.j.animKind: …`) —
- * a funkciókapcsoló KI állapotában a gyártás ezzel utasítja el a kimenetet (a javító forduló üzenete a kapcsoló előttivel azonos).
- */
-export function legacyAnimKindIssues(lesson: unknown): string[] {
-  const sections = (lesson as { sections?: unknown } | null)?.sections;
-  if (!Array.isArray(sections)) return [];
-  return sections.flatMap((section, i) => {
-    const blocks = (section as { blocks?: unknown } | null)?.blocks;
-    return !Array.isArray(blocks) ? [] : blocks.flatMap((block, j) => {
-      const b = block as { kind?: unknown; animKind?: unknown } | null;
-      const issue = b && b.kind === "animate" ? legacyAnimKindIssue(b.animKind) : null;
-      return issue ? [`sections.${i}.blocks.${j}.animKind: ${issue}`] : [];
-    });
-  });
-}
+/** A bővítés ELŐTTI ábrafajta-felsorolás (a főág `ANIM_KINDS` listája, ugyanabban a sorrendben). */
+export const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VISUAL_ANIM_KINDS as readonly string[]).includes(k)) as [AnimKind, ...AnimKind[]]);
 
 /**
  * Spec 2026-09-24 (magyarázó ábrák): olvasáskor az ismeretlen (újabb programverzióból származó)
@@ -216,16 +195,16 @@ const recapBlock = z.object({
  * `z.discriminatedUnion` only accepts plain object schemas as members — a refined
  * member arrives as ZodEffects and the discriminator lookup fails at runtime.
  */
-export const blockSchema = z
-  .discriminatedUnion("kind", [
-    explainBlock,
-    exampleBlock,
-    animateBlock,
-    checkBlock,
-    tryBlock,
-    recapBlock,
-  ])
-  .superRefine((block, ctx) => {
+const blockUnion = z.discriminatedUnion("kind", [
+  explainBlock,
+  exampleBlock,
+  animateBlock,
+  checkBlock,
+  tryBlock,
+  recapBlock,
+]);
+function refineBlock(block: z.infer<typeof blockUnion>, ctx: z.RefinementCtx): void {
+  {
     if (block.kind === "animate" && (block.animKind === "triangleArea" || block.animKind === "decisionStory")) {
       const parsed = (block.animKind === "triangleArea" ? triangleAreaLabParamsSchema : decisionStoryParamsSchema).safeParse(block.params);
       if (!parsed.success) for (const issue of parsed.error.issues) {
@@ -333,7 +312,22 @@ export const blockSchema = z
         });
       }
     }
-  });
+  }
+}
+export const blockSchema = blockUnion.superRefine(refineBlock);
+/**
+ * A blokk BŐVÍTÉS ELŐTTI sémája (a főágéval azonos): nincs `sourceVisualId` mező (a kéretlen mezőt a séma némán levágja), és az
+ * ábrafajta a régi felsorolásból való. A mezők sorrendje — így a hibák sorrendje is — változatlan. Csak a `modelBlockSchema` /
+ * `modelLessonSchema` adja ki: a forrás vizuális leltárának funkciókapcsolója KI állapotában a MODELL KIMENETÉT ez méri.
+ */
+const legacyBlockSchema = z.discriminatedUnion("kind", [
+  explainBlock,
+  exampleBlock.omit({ sourceVisualId: true }),
+  animateBlock.omit({ sourceVisualId: true }).extend({ animKind: legacyAnimKindSchema }),
+  checkBlock.omit({ sourceVisualId: true }),
+  tryBlock.omit({ sourceVisualId: true }),
+  recapBlock,
+]).superRefine(refineBlock);
 
 export const sectionSchema = z.object({
   heading: filled(LESSON_TEXT_LIMITS.heading),
@@ -376,6 +370,20 @@ export const lessonSchema = z.object({
     topic: z.string().regex(/^[a-z0-9-]{2,64}$/).optional(),
   }).strict().optional(),
 });
+
+const legacyLessonSchema = lessonSchema.extend({ sections: z.array(sectionSchema.extend({ blocks: z.array(legacyBlockSchema).min(1) })).min(1) });
+/**
+ * A MODELL KIMENETÉNEK sémája (szerzői lecke, ábrafolt blokkja, fogalomjavítás, leckejavítás). `sourceVisuals`: a forrás vizuális
+ * leltárának funkciókapcsolója (spec 2026-11-18-tananyag-gyartas-minoseg, 5. szakasz 14. pont) — BE: a teljes séma; KI: a bővítés
+ * előtti séma, vagyis a kimenet elfogadása, a levágott mezők és a hibaüzenetek (tartalom ÉS sorrend) a kapcsoló előttivel azonosak.
+ * A tárolt leckét OLVASNI mindig a teljes `lessonSchema`-val kell.
+ */
+export function modelLessonSchema(sourceVisuals: boolean): z.ZodType<z.infer<typeof lessonSchema>, z.ZodTypeDef, unknown> {
+  return sourceVisuals ? lessonSchema : legacyLessonSchema;
+}
+export function modelBlockSchema(sourceVisuals: boolean): z.ZodType<z.infer<typeof blockSchema>, z.ZodTypeDef, unknown> {
+  return sourceVisuals ? blockSchema : legacyBlockSchema;
+}
 
 export type Block = z.infer<typeof blockSchema>;
 export type Section = z.infer<typeof sectionSchema>;

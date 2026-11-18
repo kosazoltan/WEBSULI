@@ -1004,13 +1004,13 @@ test("F8: a pótló forduló foltján is fut a címke-tisztítás — az alá ne
   firstTeaching.coversConceptIds = [...new Set([...firstTeaching.coversConceptIds, "unit"])];
   const patch = { sections: [{ index: 0, visuals: [{ after: 0, animKind: "process", params: { steps: VISUAL_STEPS.data.steps }, caption: "A terület kiszámításának lépései", coversConceptIds: ["area", "unit"], sourceVisualId: "v2" }] }] };
   const added = (lesson: { sections: Array<{ blocks: object[] }> } | null) => lesson?.sections[0].blocks.find((b) => (b as { sourceVisualId?: string }).sourceVisualId === "v2") as { coversConceptIds: string[] } | undefined;
-  const result = coveragePatchedLesson(base, patch, two);
+  const result = coveragePatchedLesson(base, patch, two, true);
   assert.deepEqual(added(result.lesson)?.coversConceptIds, ["area"], "a meg nem nevezett fogalom címkéje lekerült");
   // Mutáció (ellenpróba): a tisztítás NÉLKÜLI folton mindkét címke ott marad — a különbséget a tisztítás adja.
-  assert.deepEqual(added(applyVisualPatch(base, patch, two)!.lesson)?.coversConceptIds, ["area", "unit"]);
+  assert.deepEqual(added(applyVisualPatch(base, patch, two, { sourceVisualKinds: true })!.lesson)?.coversConceptIds, ["area", "unit"]);
   // Nem folt alakú válasz és a tanítást módosító „folt” nem illeszthető.
-  assert.deepEqual(coveragePatchedLesson(base, { nem: "folt" }, two), { lesson: null, rejected: [] });
-  assert.equal(coveragePatchedLesson(base, { sections: [{ index: 99, visuals: [patch.sections[0].visuals[0]] }] }, two).rejected.length, 1);
+  assert.deepEqual(coveragePatchedLesson(base, { nem: "folt" }, two, true), { lesson: null, rejected: [] });
+  assert.equal(coveragePatchedLesson(base, { sections: [{ index: 99, visuals: [patch.sections[0].visuals[0]] }] }, two, true).rejected.length, 1);
 });
 
 /* Vak ellenőr J9 (F6): a végkapu „utolsó védvonala” a motorban — a mentett (folytatott) leckében maradt kirajzolhatatlan ábrablokk nem

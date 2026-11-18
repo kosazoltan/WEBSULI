@@ -5,7 +5,8 @@
  */
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { htmlFiles, kmConcepts, knowledgeMaps, lessons } from "../../../shared/schema";
-import { lessonSchema, type Lesson } from "../../../shared/lesson-schema";
+import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
+import { sourceVisualsEnabled } from "../source-visuals-flag";
 import type { ExamWeight } from "../../../shared/knowledge-map-schema";
 import { getHtmlFilesCache } from "../../cache/HtmlFilesCache";
 import { workflowPhase } from "../../workflows/engine";
@@ -31,6 +32,8 @@ export async function fixConceptInConversation(input: {
   fresh: (system: string, opts?: { effort?: import("./conversation").SingleRunEffort }) => LessonConversation;
   /** Review #263: a forrás átirata (a térkép `sourceText`-je) — a friss lektor ehhez is mér, mint a gyártásban. */
   sourceText?: string | null;
+  /** A forrás vizuális leltárának funkciókapcsolója (teszt); hiányában a környezet dönt — KI: a modell leckéjét a bővítés előtti séma méri. */
+  sourceVisuals?: boolean;
 }): Promise<{ ok: true; candidate: Lesson; report: LektorReport } | { ok: false; error: string }> {
   const { original, source, conceptId, conversation } = input;
   const deps = { conversation, log: input.log };
@@ -41,7 +44,7 @@ export async function fixConceptInConversation(input: {
     await workflowPhase("author");
     const prompt = buildConceptFixPrompt(teaching, source, conceptId);
     const candidate = await runStation(deps, "fogalomjavítás", withRoleRunbook([{ type: "text", text: `FOGALOMJAVÍTÁS (${conceptId}).\n${prompt}\nVálaszolj kizárólag a teljes lecke JSON-jával.` }], "author"), (json) => {
-      const parsed = lessonSchema.safeParse(json);
+      const parsed = modelLessonSchema(input.sourceVisuals ?? sourceVisualsEnabled()).safeParse(json);
       if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
       const check = checkConceptFixResult(teaching, { ...parsed.data, experience: undefined }, conceptId);
       if (!check.ok) return { ok: false, problems: check.reasons.map((r) => `A javítás túllépett a célfogalmon: ${r}`) };
