@@ -67,4 +67,77 @@ elrendezés csak a jobbra mutatást használja.
 | `source/client/src/components/UserFileList.tsx`, `WelcomeCard.tsx` | a beszúrási pont; látható makinál az üdvözlő kártya hármasa elmarad |
 | `source/tests/home-mascot*.test.ts`, `home-mascot.spec.ts` | egység-, őr- és böngészőtesztek |
 
-MÉRÉSEK_HELYE
+## Mérések (2026-11-18, ez a munkafa; asztali Chrome a Playwright alatt — valódi telefonon NEM mértük)
+
+### Eszközök
+
+| Eszköz | Méret | Megjegyzés |
+| --- | --- | --- |
+| képkocka-lap (`kabala-fooldal.b1fd2cd8.webp`) | 240 222 B | 44 képkocka, 130×216 px-es cella, 1040×1296 px; kibontva ≈ 5,1 MiB |
+| álló kép (`kabala-fooldal-allo.23544f4a.webp`) | 8 220 B | 130×216 px |
+| lusta JS-darab (`HomeMascot-*.js`) | 11 302 B (gzip 4 678 B) | megjelenítő + forgatókönyv + lejátszó + manifest |
+| lusta CSS (`HomeMascot-*.css`) | 3 067 B (gzip 1 191 B) | |
+| **átvitt összesen (böngészőben mérve)** | **262 836 B (≈ 256,7 KiB)** | keret: ≤ 350 KB — teljesül; a 250 KB-os CÉL fölött van ≈ 6,7 KiB-tal (lásd a terv 10. szakaszának 1. kérdését) |
+
+A gyártás megismételhető: háromszori futtatás ugyanazt a hash-t adta (Blender 5.3.0, Windows x64).
+
+### A főoldal csomagja előtte / utána (`npx vite build`)
+
+| Darab | Előtte | Utána | Különbség |
+| --- | --- | --- | --- |
+| `main-*.js` | 340 106 B (gzip 116 556) | 343 586 B (gzip 117 714) | +3 480 B (gzip +1 158 B) |
+| `main-*.css` | 210 673 B (gzip 36 812) | 210 811 B (gzip 36 848) | +138 B (gzip +36 B) |
+
+A three.js (`three.module-*.js`, 732 828 B, gzip 189 321 B) a főoldalra továbbra sem töltődik be.
+
+### Hálózati kérések a főoldalon (390×844, névtelen látogató, a teszt adataival)
+
+| | Kikapcsolva | Bekapcsolva |
+| --- | --- | --- |
+| összes kérés | 25 | 31 (+4 kabala-eszköz: lusta JS, lusta CSS, álló kép, lap; +2 további kérés — UNVERIFIED: vélhetően az ajánlott sorok bélyegképei, tételesen nem ellenőrizve) |
+| adat-kérés (`/api/…`, bélyegképek nélkül) | 11 | 11 |
+
+Az adat-kérések (API) száma bekapcsolva sem nő: a kabala a meglévő `/api/html-files` listából dolgozik. Kikapcsolt kapcsolónál a
+`main` DOM-ja bájtra azonos a bekapcsolt állapot DOM-jával a sáv eltávolítása után (böngészőteszt, K1).
+
+### Mozgás és elrendezés
+
+- **Képkockák 4× lassított CPU-n** (3 mp-es mérés a lapon belül; mutatás → koppintás → szökkenés → mutatás):
+  - végleges változat, nyugodt gépen, három egymást követő mérés: 60,2 / 60,2 / 60,2 képkocka/mp, a leghosszabb képkocka
+    17,3 / 16,9 / 17,0 ms; ugyanez erősen terhelt gépen (más ügynökök párhuzamos buildjei mellett): 59,9 / 52,2 / 59,9
+    képkocka/mp, a leghosszabb képkocka 61,0 / 344,8 / 33,2 ms (a 344,8 ms-os a koppintás ELŐTT, 114 ms-nál volt — külső terhelés);
+  - az optimalizálás ELŐTT (8 mérés): 57,7–62,0 képkocka/mp, a koppintás képkockája 36–54 ms (4 mérésben 50 ms fölött) — ezért a
+    koppintás frissítése szeletelt (`startTransition`), a mozdulat a következő képkockában indul, és nincs kényszerített elrendezés;
+  - köztes változat, erősen terhelt gépen (8 mérés): 55,9–64,3 képkocka/mp, a leghosszabb képkocka 16,9–50,1 ms.
+  A mérés gépfüggő: a teszt három mérésből a legjobbat veti össze a kerettel (a háttérterhelés csak hozzáadni tud), az átlagnak
+  mindháromban ≥ 50-nek kell lennie.
+- **Elrendezés-ugrás (CLS):** kikapcsolva 0,0091, bekapcsolva 0,0004 (egy-egy mérés; a különbség mérési zaj — a keret: bekapcsolva ≤ kikapcsolva + 0,005). A sáv magassága a megjelenéstől végig rögzített (324 / 336 px három tananyagnál).
+- **Kontraszt a buborékban:** 14,63:1 (`#1e293b` fehér alapon; a teszt a számított színekből méri).
+- **Érintőcélok:** sorok ≥ 68 px magasak, gombok 44 × 44 px, a maki 84 × 140 px.
+
+### Mutációs ellenpróbák (mindegyiknél a megnevezett teszt elbukott, visszaállítás után zöld)
+
+| Mutáció | Elbukó teszt |
+| --- | --- |
+| a kapcsoló mindig bekapcsolva (`homeMascotEnabled` → `true`) | K1 (a kikapcsolt lapon megjelent a sáv) |
+| a csökkentett mozgás / adatkímélő mód figyelmen kívül hagyva | K10 mindkét esete |
+| a rögzített magasság osztálya eltávolítva | K4/K8 mindhárom képernyőméreten, K3/K14, K8 (CLS) |
+| a `visibilitychange` figyelmen kívül hagyva | K11 |
+| a lap 70 KB-tal megnövelve (manifesttel együtt) | őr-teszt K6: „320122 B > 307200 B” |
+| a cella 320 px-re növelve a gyártóban | a gyártó megáll: „A képek túllépik a keretet: 383110 B > 307200 B” |
+
+## Őszinte értékelés a képernyőképek alapján
+
+Képek: `docs/measurements/kabala-fooldal/` (360×640, 390×844, 1366×768: integet, mutat az 1–3. sorra, ugrik, pihen; csendesítve,
+bezárva, csökkentett mozgás, adatkímélő mód, hosszú cím, egy tananyag; `kepsor-1…7`: a szökkenés egymást követő pillanatai).
+
+- **Cuki:** igen — a nagy szemű, gyűrűs farkú figura az új modellel jól felismerhető; az integetés és az örömugrás (két kar a
+  magasban) a legjobb mozdulat.
+- **Látványos:** mérsékelten. A szökkenés sorról sorra és az ugrás íve sima; a testmozgás 4–12 képkocka/mp-es, „rajzfilmes”. A
+  mutatás visszafogott: a mutató kar a farok előtt van, telefonon kicsi — ez a leggyengébb pont. A pislogás csukott szeme a
+  modellen sötét foltként jelenik meg (a figura gyári alakkulcsa), 1/12 mp-ig látszik.
+- **Nem zavaró, nem takar:** a sáv a dokumentumfolyamban áll, semmi fölé nem úszik; a teszt minden sor és gomb közepén ellenőrzi,
+  hogy a saját eleme van felül. 360×640-en a sáv 324 px magas (a képernyő fele) — névtelen látogatónál ennyivel lejjebb kezdődik a
+  lista; ismert névnél az üdvözlő kártya hármasa kiesik, így a különbség kicsi.
+- **Ismert hiányok:** valódi telefonon nincs mérve; a balra mutatás (tükrözés) megvan, de a mostani elrendezés nem használja; a
+  figura a sötét háttéren lágy fényudvart kap, hogy a fekete farokgyűrűk látsszanak — ez ízlés kérdése.

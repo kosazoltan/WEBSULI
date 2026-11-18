@@ -1,7 +1,7 @@
 # Végrehajtási utasítás: A Websuli makija a főoldalon
 
 **Terv:** `docs/specs/2026-11-18-kabala-fooldal.md` (minden döntés és keret ott van; ez a fájl a lépéseket adja).
-**Állapot:** megkezdve 2026-11-18 — ág: `feat/kabala-fooldal`, munkafa: `.claude/worktrees/kabala-fooldal`.
+**Állapot:** T0–T5 elkészült 2026-11-18 (mérések és mutációs ellenpróbák: `docs/kabala-fooldal.md`); push / PR nincs (a megbízás szerint) — ág: `feat/kabala-fooldal`, munkafa: `.claude/worktrees/kabala-fooldal`.
 
 Szabályok: push / PR nincs; `--no-verify`, rebase tilos; tesztet gyengíteni tilos; új npm-függőség, külső fájl tilos; a
 `source/scripts/blender/kabala-maki/*` fájlokhoz és a `kiserlet/kabala-maki` ághoz nem nyúlunk (csak `git merge kiserlet/kabala-maki`).

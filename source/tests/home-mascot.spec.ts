@@ -78,7 +78,8 @@ const figureAnimations = (page: Page) => page.getByTestId("home-mascot-maki").ev
 /** A sáv a képernyőre görgetve, a figura mozog (a képkocka-lap betöltve). */
 async function waitMoving(page: Page) {
   await page.getByTestId("home-mascot").scrollIntoViewIfNeeded();
-  await expect(body(page)).toHaveAttribute("data-motion", "on");
+  // (a lusta darab és a képkocka-lap betöltése terhelt gépen másodpercekig tarthat — ez betöltési várakozás, nem mérés)
+  await expect(body(page)).toHaveAttribute("data-motion", "on", { timeout: 20_000 });
   await expect(body(page)).toHaveAttribute("data-running", "true");
 }
 
@@ -352,8 +353,9 @@ for (const mode of ["csökkentett mozgás", "adatkímélő mód"] as const) {
     await page.getByTestId("home-mascot-maki").click();
     await expect(body(page)).toHaveAttribute("data-index", "1");
     expect(await bubbleText(page)).toContain("Törtek összeadása gyakorló");
-    // a figura azonnal a helyén van (nincs átmenet), és nincs animáció
-    expect(await offset()).toBeGreaterThan(y0 + 20);
+    // a figura egy képkockán belül a helyén van (a lap közös szabálya csökkentett mozgásnál minden átmenetet 0,01 ms-ra vesz),
+    // és nincs animáció
+    await expect.poll(offset, { timeout: 1000 }).toBeGreaterThan(y0 + 20);
     expect(await figureAnimations(page)).toBe(0);
     await shot(page, mode === "csökkentett mozgás" ? "360-7-csokkentett-mozgas" : "360-8-adatkimelo");
     await expectNothingCovered(page);
