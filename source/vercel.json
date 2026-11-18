@@ -72,9 +72,15 @@
       ]
     },
     {
-      "source": "/api/((?!tts/audio$|lesson-clips/media/).*)",
+      "source": "/api/((?!tts/audio$|lesson-clips/media/|games/quiz-bank/).*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/api/games/quiz-bank/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" }
       ]
     },
     {
