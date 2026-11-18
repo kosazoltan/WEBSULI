@@ -67,17 +67,25 @@ test("érintővezérlés csak érintős eszközön", () => {
   assert.doesNotMatch(page, /hidden md:block/, "a billentyű-súgó ne a szélességtől függjön");
 });
 
+/**
+ * SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md J1a 5., K.6, D-J1a-8): a `pickQuiz` a
+ * director `fresh({ band })` ága (a sávot a közös áramlat-vezérlő adja), és a választó a menet seedelt RNG-jét kapja (a lap
+ * játékmenet-kódja sem húz `Math.random`-ot). A forrásrend és az ismétlés-szűrés elvárásai változatlanok.
+ */
+const PICK_QUIZ = /const pickQuiz = useCallback\(\(band: number = adaptiveRef\.current\.band\): Quiz =>/;
+
 test("ismétlés-szűrés a teljes futásra: nincs slice(-4), van pickUnseen a futás listájával", () => {
-  const pick = functionBody(page, /const pickQuiz = useCallback\(\(\): Quiz =>/);
+  const pick = functionBody(page, PICK_QUIZ);
   assert.doesNotMatch(pick, /slice\(-4\)/, "a régi „utolsó ötöt kerüli” szűrő maradt");
   assert.doesNotMatch(page, /recentQuizIdsRef/, "a régi recent-lista maradt");
-  assert.match(pick, /pickUnseen\(\[poolE, poolM, poolH\], tierForProgress\(eff\), runSeenRef\.current\)/);
+  assert.match(pick, /pickUnseen\(\[poolE, poolM, poolH\], tierForProgress\(eff\), runSeenRef\.current, rng\)/);
+  assert.match(pick, /const rng = pickRngRef\.current\.next;/, "a választó véletlenje a menet seedelt RNG-je");
   assert.match(pick, /runSeenRef\.current\.push\(/, "a kiadott kérdés nem kerül a futás listájába");
   assert.match(page, /runSeenRef\.current = \[\];/, "a futás listája a startGame-ben nullázódik");
 });
 
 test("szóbank (A8): tananyag → szóbank → évfolyam-bank sorrend, kézi angol válasz a naplóba", () => {
-  const pick = functionBody(page, /const pickQuiz = useCallback\(\(\): Quiz =>/);
+  const pick = functionBody(page, PICK_QUIZ);
   const material = pick.indexOf("pickUnseenMaterial(");
   const bank = pick.search(/vocabRef\.current\.next\(/);
   const grade = pick.indexOf("pickGradeQuiz(");
@@ -87,46 +95,67 @@ test("szóbank (A8): tananyag → szóbank → évfolyam-bank sorrend, kézi ang
   assert.match(page, /useVocabQuizSource\("en", subject === "english" \|\| subject === "mixed"\)/);
 });
 
-test("rázás csak csökkentett mozgás nélkül; rezgés jó és rossz válaszra", () => {
-  assert.match(page, /wrongShake && !reducedMotion \? "animate-shake"/, "az animate-shake nincs a reduced motion feltételhez kötve");
-  assert.match(page, /haptics\("error"\)/);
-  assert.match(page, /haptics\("success"\)/);
+/*
+ * SPEC-VÁLTOZÁS 2026-11-17 (D-J1a-8; terv 9.): a kvíz-kártya „animate-shake”-je megszűnt (nincs kvíz-kártya); a rázás a közös
+ * `feel` (trauma²), amely csökkentett mozgásnál 0 — a meghajtó a `reducedMotion`-t kapja. A jó / rossz válasz rezgését a közös
+ * kérdés-horog adja (nem kapcsolható ki), az ütközését a lap.
+ */
+test("rázás csak csökkentett mozgás nélkül; rezgés jó és rossz válaszra és ütközésre", () => {
+  const make = functionBody(page, /const makeDriver = \(seed: string \| number, d: GameDifficulty, wavePace: number\): TsunamiDriver =>/);
+  assert.match(make, /reducedMotion,/, "a rázás nincs a csökkentett mozgáshoz kötve");
+  assert.match(page, /driverRef\.current\?\.feel\.addTrauma\(/, "a rázás a közös feel-en át megy");
+  assert.doesNotMatch(page, /animate-shake/);
+  assert.match(page, /haptics\("hit"\)/);
+  const hook = functionBody(page, /const q = usePlayQuestion\(/);
+  assert.doesNotMatch(hook, /haptics:\s*false/, "a jó / rossz válasz rezgése nem kapcsolható ki");
 });
 
 test("keret: GameShell, szünet, eredményképernyő a meglévő testid-kkel", () => {
   assert.match(page, /<GameShell\s+gameId="TsunamiEscapeEnglish"/);
   assert.match(page, /onAutoPause=\{pauseGame\}/);
   assert.match(page, /<PauseMenu\b/);
-  assert.match(page, /if \(phase !== "play" \|\| paused\) return;/, "szünetben a játékciklusnak állnia kell");
-  assert.match(page, /if \(phase !== "quiz" \|\| explainCard \|\| paused\) return;/, "szünetben a kvízórának állnia kell");
+  // SPEC-VÁLTOZÁS 2026-11-17 (D-J1a-8): a kvíz-fázis megszűnt; szünetben (és a „Miért?” alatt) a meghajtó a szünet-úton
+  // fut: a kérdés-óra és a szimuláció áll (a hurok időskálája 0), a HUD-óra sem jár.
+  assert.match(page, /const isPaused = pausedNowRef\.current \|\| whyOpenRef\.current;/, "szünetben a játékciklusnak állnia kell");
+  assert.match(page, /driver\.frame\(dt, isPaused, onEvent\)/, "a meghajtó megkapja a szünetet (a kérdés-óra is áll)");
+  assert.match(page, /if \(phase !== "play" \|\| paused \|\| explainCard\) return;/, "szünetben a HUD-óra áll");
   assert.match(page, /testId=\{phase === "won" \? "ts-won" : "ts-over"\}/);
   assert.match(page, /retryTestId=\{phase === "won" \? "button-tsunami-retry-won" : "button-tsunami-retry"\}/);
   assert.match(page, /startTestId="button-tsunami-start"/);
   assert.match(page, /startLabel=\{`Indítás: /, "a felirat az e2e-regexekhez „Indítás:”-sal kezdődik");
 });
 
-test("review #426: a kvízrétegen is van szünetgomb (a HUD-ét eltakarja)", () => {
-  assert.match(page, /data-testid="ts-quiz-pause"[\s\S]{0,80}onClick=\{pauseGame\}/);
-  assert.match(page, /const pauseGame = useCallback\(\(\) => \{\s*if \(phase !== "play" && phase !== "quiz"\) return;/, "kvíz közben is szüneteltethető");
+// SPEC-VÁLTOZÁS 2026-11-17 (D-J1a-8): a kérdés-sáv saját szünetgombja (`pauseTestId`) a régi testid-del; a kvíz-fázis
+// megszűnt, a szünet a játék („play”) alatt bármikor kérhető — kérdés közben is.
+test("review #426: a kérdés-sávon is van szünetgomb", () => {
+  assert.match(page, /pauseTestId="ts-quiz-pause"\s+onPause=\{pauseGame\}/);
+  assert.match(page, /const pauseGame = useCallback\(\(\) => \{\s*if \(phase !== "play"\) return;/, "játék közben (kérdés alatt is) szüneteltethető");
 });
 
-test("review #426: a helyes válasz utáni késleltetett folytatás kilépéskor és újrakezdéskor törlődik", () => {
-  assert.match(page, /continueTimerRef\.current = window\.setTimeout\(/, "a folytatás időzítője nincs eltárolva");
+// SPEC-VÁLTOZÁS 2026-11-17 (D-J1a-8): a helyes válasz utáni késleltetett folytatás (setTimeout) megszűnt — a kérdés nem
+// állítja meg a játékot. A követelmény (kilépés / újrakezdés után az elhagyott kör semmit nem indíthat) a képkocka-hurokra
+// vonatkozik: minden indítás / kilépés új futás-azonosító, és a hurok a saját futásához kötött.
+test("review #426: kilépés és újrakezdés után az elhagyott kör képkockája semmit nem indít", () => {
+  assert.doesNotMatch(page, /continueTimerRef/, "a régi késleltetett folytatás maradt");
   for (const fn of [/const exitToMenu = useCallback\(\(\) =>/, /const startGame = useCallback\(\(\) =>/]) {
     const body = functionBody(page, fn);
-    assert.match(body, /clearTimeout\(continueTimerRef\.current\)/, `${fn}: nem törli a függő folytatást`);
     assert.match(body, /runIdRef\.current \+= 1;/, `${fn}: nem lép új futás-azonosítóra`);
   }
-  // A callback a saját futásához és a kvíz-fázishoz kötött.
-  assert.match(page, /if \(runIdRef\.current !== runId \|\| phaseNowRef\.current !== "quiz"\) return;/);
+  assert.match(functionBody(page, /const exitToMenu = useCallback\(\(\) =>/), /qRef\.current\.finish\(\);/, "kilépéskor a nyitott kérdés lezárul");
+  assert.match(page, /if \(phaseNowRef\.current !== "play" \|\| runIdRef\.current !== runId\) return;/);
+  // Review #483: a szünetmenü „Újrakezdés”-e a „play” fázisban marad — a hurok effektje a menet kulcsán is újraindul.
+  assert.match(functionBody(page, /const startGame = useCallback\(\(\) =>/), /setRunKey\(\(k\) => k \+ 1\);/);
+  assert.match(page, /\}, \[phase, onEvent, runKey\]\);/, "a képkocka-hurok effektje a menet kulcsától is függ");
 });
 
 test("review #426: elavult képkocka / hívás nem válthat fázist (szinkron fázis-tükör)", () => {
   // Minden fázis- és szünetváltás a szinkron tükröt is írja: a nyers setter csak a goPhase / goPaused törzsében áll.
   assert.equal((page.match(/\bsetPhase\(/g) ?? []).length, 1, "nyers setPhase( a goPhase-en kívül");
   assert.equal((page.match(/\bsetPaused\(/g) ?? []).length, 1, "nyers setPaused( a goPaused-on kívül");
-  const loop = functionBody(page, /const gameLoop = useCallback\(\s*\(t: number\) =>/);
-  assert.match(loop, /if \(phaseNowRef\.current !== "play" \|\| pausedNowRef\.current\) return;/, "a képkocka a régi zárlattal futhatna tovább");
+  // SPEC-VÁLTOZÁS 2026-11-17 (D-J1a-8): a hurok neve `tick` (`requestGameFrame`-mel, #477); a szinkron tükröt olvassa.
+  const loop = functionBody(page, /const tick = \(now: number\) =>/);
+  assert.match(loop, /if \(phaseNowRef\.current !== "play" \|\| runIdRef\.current !== runId\) return;/, "a képkocka a régi zárlattal futhatna tovább");
+  assert.match(loop, /const isPaused = pausedNowRef\.current/, "a szünetet a szinkron tükörből olvassa");
 });
 
 test("játék közben nincs 12 px alatti fix betűméret a lapon", () => {
@@ -167,7 +196,7 @@ test("szimuláció: a valós tárgy-bankokon egy futásban nincs ismétlés, am�
  * szimuláció pedig a lap ciklusának tükrével méri, hogy a tantárgyak aránya és a sávok bejárása nem torzul.
  */
 test("szóbank-kiváltás: a ciklusban nincs eldobott pickGradeQuiz-választás", () => {
-  const pick = functionBody(page, /const pickQuiz = useCallback\(\(\): Quiz =>/);
+  const pick = functionBody(page, PICK_QUIZ);
   const loop = functionBody(pick, /for \(let i = 0; i < subjects\.length; i\+\+\)\s*\{/);
   const bank = loop.search(/vocabRef\.current\.next\(/);
   const grade = loop.indexOf("pickGradeQuiz(");
