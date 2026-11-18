@@ -336,6 +336,12 @@ describe("adventi naptár — végpontok", () => {
       assert.deepEqual(await q(`SELECT subject_kind FROM advent_progress WHERE subject_id = $1`, [linkedId]), [], "a fióknak nincs külön sora");
       const exported = await createPlayerAccountStore(dbPool).exportAccount(linkedId, () => []);
       assert.deepEqual((exported?.adventCalendar as Json[]).map((r) => ({ season: r.season, grade: r.grade, solvedDoors: r.solvedDoors })), [{ season: 2026, grade: 4, solvedDoors: 1 }]);
+      // Tulajdonosi döntés (2026-11-18): a kötött játékos-fiók TÖRLÉSEKOR a tanuló adventi haladása megmarad (a tanulóé).
+      const deleted = await createPlayerAccountStore(dbPool).deleteAccount(linkedId, () => []);
+      assert.ok(deleted, "a fióktörlés lefutott");
+      assert.deepEqual(await q(`SELECT 1 FROM player_accounts WHERE id = $1`, [linkedId]), [], "a fiók törlődött");
+      assert.deepEqual(await q(`SELECT subject_kind, learner_id FROM advent_progress WHERE learner_id = $1`, [learner.id]), [{ subject_kind: "learner", learner_id: learner.id }], "a tanuló sora megmaradt");
+      assert.equal((await paired.state()).json.doors[1].state, "solved", "a párosított eszközön ugyanaz a haladás");
 
       // (c) tiltott fiók: nem játékos — a naptár azonosító nélkül látszik, írni nem lehet a fiók nevében.
       const bannedId = await mk(true);
