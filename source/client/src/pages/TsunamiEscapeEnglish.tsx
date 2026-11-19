@@ -531,6 +531,8 @@ const FIGURE_HALF_WIDTH_PX = 26;
 /** A figura magassága a képen (px, a talpától a feje fölé) — ennyi helyet kap a kérdés-sáv alatt / fölött. */
 const FIGURE_HEIGHT_PX = 44;
 const QUESTION_BOX_SELECTOR = '[data-testid="ts-question"] > *:not(.play-question-options), [data-testid="ts-question"] .play-question-option';
+/** A keret akadályai: a vezérlők (tárcsa, Sprint) és a felső sáv kattintható sorai (a jelzősor nem kattintható, átlátszik). */
+const FRAME_OBSTACLE_SELECTOR = '[data-testid="tsunami-touch-controls"] > *, [data-game-hud] .game-hud-row, [data-game-hud] .game-hud-progress';
 
 /** A menet vége előtt (győzelem / a hullám) ennyi ideig látszik a pillanat, mielőtt az eredménykártya jön (ms). */
 const END_PAUSE_MS = 900;
@@ -1599,7 +1601,10 @@ export default function TsunamiEscapeEnglish() {
           // A ténylegesen kirajzolt kép-eltolással (a jelenet visszaírja; WebGL nélkül a cél-eltolás).
           figureY: 1 - (st.water * WATER_VIEW_SCALE) / 100 + (liveRef.current.shownShiftPx ?? liveRef.current.shiftPx ?? 0) / Math.max(1, stageRef.current?.clientHeight ?? 1),
           // A figura ténylegesen kirajzolt doboza a játéktér bal felső sarkától (px; a jelenet vetíti), vagy null (WebGL nélkül).
-          figureBox: liveRef.current.figureBoxPx ?? null,
+          figureBoxLeft: liveRef.current.figureBoxPx?.left ?? null,
+          figureBoxTop: liveRef.current.figureBoxPx?.top ?? null,
+          figureBoxRight: liveRef.current.figureBoxPx?.right ?? null,
+          figureBoxBottom: liveRef.current.figureBoxPx?.bottom ?? null,
           quizPlace: quizPlaceRef.current,
           sprint: driver.core.input.sprint ? 1 : 0,
           layoutSettleMs: settleMsRef.current,
@@ -1752,61 +1757,72 @@ export default function TsunamiEscapeEnglish() {
   };
   const quizElRef = useRef<HTMLDivElement | null>(null);
   const decidedForRef = useRef<number | null>(null);
-  /** A kérdés-felület dobozai (kártya-részek + válaszgombok; az élesítés előtt rejtett, de már elrendezett gombokkal együtt). */
-  const questionBoxes = (): DOMRect[] =>
-    Array.from(document.querySelectorAll(QUESTION_BOX_SELECTOR))
+  /** Egy akadály: a doboza, és hogy álló nézetben a teljes szélességet foglalja-e (a kérdés-felület: a figura alatta mozog). */
+  type Obstacle = { box: DOMRect; wide: boolean };
+  const boxesOf = (selector: string): DOMRect[] =>
+    Array.from(document.querySelectorAll(selector))
       .map((el) => el.getBoundingClientRect())
-      .filter((b) => b.height > 0 && b.height < window.innerHeight * 0.9);
-  /** A figura talppontja a képen (px), kép-eltolás NÉLKÜL — a mag állapotából, a jelenet lineáris leképezésével. */
-  const figurePoint = (): { fx: number; fy: number } | null => {
+      .filter((b) => b.height > 0 && b.width > 0 && b.height < window.innerHeight * 0.9);
+  /** A kérdés-felület dobozai (kártya-részek + válaszgombok; az élesítés előtt rejtett, de már elrendezett gombokkal együtt). */
+  const questionBoxes = (): DOMRect[] => boxesOf(QUESTION_BOX_SELECTOR);
+  /**
+   * Vak ellenőr K4 és KICSI 5: a vezérlők (tárcsa, Sprint — a tényleges dobozuk, bármelyik oldalon) és a felső sáv kattintható
+   * sorai is akadályok — kérdés nélkül is, ha a figura alájuk kerülne.
+   */
+  const frameObstacles = (): Obstacle[] => boxesOf(FRAME_OBSTACLE_SELECTOR).map((box) => ({ box, wide: false }));
+  const portrait = () => window.innerHeight > window.innerWidth;
+  const withQuestion = (boxes: DOMRect[]): Obstacle[] => [...boxes.map((box) => ({ box, wide: portrait() })), ...frameObstacles()];
+  /**
+   * A figura TESTE a képen (px), kép-eltolás NÉLKÜL: a talppont a mag állapotából (víz, x — a jelenet lineáris leképezése), a
+   * kiterjedés a jelenetből (a ténylegesen kirajzolt figura vetített doboza a talpponthoz képest; vak ellenőr B1: a régi 44 px-es
+   * állandó a 75–95 px-es figura fejét kihagyta). WebGL nélkül (lapos tartalék) a rajz méretével számol.
+   */
+  type FigureRect = { l: number; r: number; t: number; b: number };
+  const figureRect = (): FigureRect | null => {
     const stage = stageRef.current;
     const st = driverRef.current?.core.state();
     if (!stage || !st) return null;
     const sr = stage.getBoundingClientRect();
-    return { fx: sr.left + (st.x / 100) * sr.width, fy: sr.top + (1 - (st.water * WATER_VIEW_SCALE) / 100) * sr.height };
+    const fx = sr.left + (st.x / 100) * sr.width;
+    const fy = sr.top + (1 - (st.water * WATER_VIEW_SCALE) / 100) * sr.height;
+    const ext = liveRef.current.figureExtentPx ?? { up: FIGURE_HEIGHT_PX, down: 10, left: FIGURE_HALF_WIDTH_PX, right: FIGURE_HALF_WIDTH_PX };
+    return { l: fx - ext.left, r: fx + ext.right, t: fy - ext.up, b: fy + ext.down };
   };
   /*
-   * A takarás-döntés a figura TESTÉRE szól, nem egy pontjára. Gyökérok (mérve, 360×640, 2026-11-18): a menet elején a figura
-   * középen áll (x = 50 %, 180 px), ez a kétoszlopos válaszrács 8 px-es hézagába (176–184 px) esik — a pont-vizsgálat „szabad”-ot
-   * mondott, miközben a test a két gomb mögött volt. Álló nézetben a kérdés-felület a teljes szélességet elfoglalja, és a figura
-   * a kérdés alatt oldalra mozog, ezért ott csak a magasság dönt; fekvőben (a válaszok a két szélen) a test szélessége számít.
-   * A dobozok teteje 12 px ráhagyást kap: a kártya belépő animációja (10 px) alatt mérünk, a végleges hely ennyivel feljebb van.
+   * A takarás-döntés a figura TESTÉRE szól (C-76): a figura téglalapja és az akadály metszi-e egymást. A kérdés-felület álló
+   * nézetben a teljes szélességet foglalja (a figura alatta oldalra mozog), ezért ott csak a magasság dönt. A dobozok teteje
+   * 12 px ráhagyást kap: a kártya belépő animációja (10 px) alatt mérünk, a végleges hely ennyivel feljebb van.
    */
-  const overFigure = (b: DOMRect, fx: number): boolean =>
-    window.innerHeight > window.innerWidth || (fx + FIGURE_HALF_WIDTH_PX >= b.left && fx - FIGURE_HALF_WIDTH_PX <= b.right);
-  const figureCovered = (boxes: DOMRect[], fx: number, fy: number): boolean =>
-    boxes.some((b) => overFigure(b, fx) && fy - FIGURE_HEIGHT_PX <= b.bottom && fy + 10 >= b.top - 12);
+  const hitsAt = (obs: Obstacle[], f: FigureRect, shift: number): boolean =>
+    obs.some(({ box, wide }) => (wide || (f.r >= box.left && f.l <= box.right)) && f.t + shift <= box.bottom + 4 && f.b + shift >= box.top - 12);
   /*
-   * Kép-eltolás (px, pozitív = a világ lejjebb kerül), amelynél a figura szabad. Ha a jelenlegi eltolás mellett szabad, az
-   * marad (nem remeg); különben a jelöltek — 0, minden ütköző doboz alá, minden ütköző doboz fölé — közül a jelenlegihez
-   * legközelebbi, amelynél a figura egyik dobozzal sem ütközik és a képen marad (a HUD alatt, a kép alja fölött). Álló és
-   * fekvő nézetben, fenti és lenti kérdésnél egyaránt; a tárcsa oldalától független (csak a kérdés dobozait nézi).
+   * Kép-eltolás (px, pozitív = a világ lejjebb kerül), amelynél a figura szabad. Ha a nulla eltolás is szabad, az a cél (a kép
+   * visszaáll); ha a jelenlegi szabad, az marad (nem remeg); különben a jelöltek — minden ütköző doboz alá, minden ütköző doboz
+   * fölé — közül a jelenlegihez legközelebbi, amelynél a figura egyik akadállyal sem ütközik és a képen marad.
    */
-  const solveShift = (boxes: DOMRect[], fx: number, fy: number, current: number): number => {
-    if (!figureCovered(boxes, fx, fy + current)) return current;
+  const solveShift = (obs: Obstacle[], f: FigureRect, current: number): number => {
+    if (!hitsAt(obs, f, 0)) return 0;
+    if (!hitsAt(obs, f, current)) return current;
     const stage = stageRef.current?.getBoundingClientRect();
-    const minY = (stage?.top ?? 0) + FIGURE_HEIGHT_PX + 72;
-    const maxY = (stage?.bottom ?? window.innerHeight) - 10;
-    const over = boxes.filter((b) => overFigure(b, fx));
-    const candidates = [0, ...over.map((b) => b.bottom + FIGURE_HEIGHT_PX + 12 - fy), ...over.map((b) => b.top - 24 - fy)];
-    const ok = candidates.filter((c) => fy + c >= minY && fy + c <= maxY && !figureCovered(boxes, fx, fy + c));
+    const minTop = (stage?.top ?? 0) + 4;
+    const maxBottom = (stage?.bottom ?? window.innerHeight) - 4;
+    const over = obs.filter(({ box, wide }) => wide || (f.r >= box.left && f.l <= box.right)).map((o) => o.box);
+    const candidates = [...over.map((b) => b.bottom + 16 - f.t), ...over.map((b) => b.top - 16 - f.b)];
+    const ok = candidates.filter((c) => f.t + c >= minTop && f.b + c <= maxBottom && !hitsAt(obs, f, c));
     if (!ok.length) return current;
     return ok.reduce((best, c) => (Math.abs(c - current) < Math.abs(best - current) ? c : best));
   };
   /*
    * A döntés EGY lépésben, a kirajzolás előtt születik (nincs köztes, félig eldőlt állapot): a jelölteket — ugyanott, ugyanott
    * kompaktan, a másik helyen kompaktan — közvetlenül a sávra írjuk, megmérjük, és az első olyan marad, amelyik a figurát nem
-   * takarja. Ha egyik sem jó (kis képernyő, köztes vízszint — K2), a fenti kompakt sáv marad, és a kép annyival lejjebb tolódik,
-   * hogy a figura a sáv alá kerüljön. A választást a ref-ek is megkapják, így a React ugyanazt írja vissza.
+   * takarja. Ha egyik sem jó (kis képernyő, köztes vízszint — K2), a fenti kompakt sáv marad, és a kép annyival eltolódik,
+   * hogy a figura szabad legyen. A választást a ref-ek is megkapják, így a React ugyanazt írja vissza.
    */
   useLayoutEffect(() => {
-    if (presIdNow === null) {
-      liveRef.current.shiftPx = 0;
-      return;
-    }
+    if (presIdNow === null) return;
     if (decidedForRef.current === presIdNow) return;
     const el = quizElRef.current;
-    const fig = figurePoint();
+    const fig = figureRect();
     if (!el || !fig) return;
     // Csak a teljes elrendezésre döntünk: ha a válaszgombok még nincsenek a DOM-ban (az első képkocka), a következő rendernél.
     if (document.querySelectorAll('[data-testid="ts-question"] .play-question-option').length < (pres?.options.length ?? 4)) return;
@@ -1819,14 +1835,14 @@ export default function TsunamiEscapeEnglish() {
     const measure = (c: { place: "top" | "bottom"; high: boolean }) => {
       el.setAttribute("data-place", c.place);
       el.setAttribute("data-high", c.high ? "true" : "false");
-      return questionBoxes();
+      return withQuestion(questionBoxes());
     };
     let chosen = candidates[candidates.length - 1]!;
-    let boxes: DOMRect[] = [];
+    let obs: Obstacle[] = [];
     let free = false;
     for (const c of candidates) {
-      boxes = measure(c);
-      if (!figureCovered(boxes, fig.fx, fig.fy)) {
+      obs = measure(c);
+      if (!hitsAt(obs, fig, 0)) {
         chosen = c;
         free = true;
         break;
@@ -1834,34 +1850,39 @@ export default function TsunamiEscapeEnglish() {
     }
     if (!free) {
       chosen = { place: "top", high: true };
-      boxes = measure(chosen);
+      obs = measure(chosen);
     }
     quizPlaceRef.current = chosen.place;
     quizHighRef.current = chosen.high;
-    const shift = free ? 0 : solveShift(boxes, fig.fx, fig.fy, 0);
+    const before = liveRef.current.shiftPx ?? 0;
+    const shift = solveShift(obs, fig, before);
     liveRef.current.shiftPx = shift;
-    // ≈ 400 ms-os lassuló eltolás (a jelenet `damp(…, 12)`-je); eltolás nélkül az elrendezés azonnal nyugalomban van.
-    markSettled(presIdNow, shift > 1 && !reducedMotion ? 420 : 0);
+    trackRef.current = { at: performance.now(), obs, id: presIdNow };
+    // ≈ 400 ms-os lassuló eltolás (a jelenet `damp(…, 12)`-je); változatlan eltolásnál az elrendezés azonnal nyugalomban van.
+    markSettled(presIdNow, Math.abs(shift - before) > 1 && !reducedMotion ? 420 : 0);
   });
   /*
-   * „Végig szabad”: a víz a nyitott kérdés alatt is emelkedik (lassítva), és a figura oldalra is mozog (fekvő nézetben a
-   * szélső válasz-oszlop alá kerülhetne). A kép-eltolás képkockánként követi — álló és fekvő nézetben is —, a dobozokat
-   * 250 ms-onként újramérve; szabad figuránál az eltolás nem változik (nem remeg).
+   * „Végig szabad”: a víz a nyitott kérdés alatt is emelkedik (lassítva), a figura oldalra is mozog (fekvő nézetben a szélső
+   * válasz-oszlop alá kerülhetne), és kérdés nélkül is a vezérlők / a felső sáv alá mehetne (vak ellenőr K4, KICSI 5). A
+   * kép-eltolás képkockánként követi, az akadályokat 250 ms-onként újramérve; szabad figuránál nem változik (nem remeg), és ha a
+   * nulla eltolás is szabad, visszaáll.
    */
-  const trackBoxesRef = useRef<{ at: number; boxes: DOMRect[] }>({ at: 0, boxes: [] });
+  const trackRef = useRef<{ at: number; obs: Obstacle[]; id: number | null }>({ at: 0, obs: [], id: null });
   trackShiftRef.current = () => {
     const view = qRef.current.view();
     const id = view.presentation?.id ?? null;
-    if (id === null || view.reveal || decidedForRef.current !== id) return;
+    // Nyitott kérdésnél csak a döntés után követünk (a döntés előtt a jelöltek mérése zajlik).
+    if (id !== null && decidedForRef.current !== id) return;
     const now = performance.now();
-    const cache = trackBoxesRef.current;
-    if (now - cache.at > 250) {
+    const cache = trackRef.current;
+    if (now - cache.at > 250 || cache.id !== id) {
       cache.at = now;
-      cache.boxes = questionBoxes();
+      cache.id = id;
+      cache.obs = id !== null && !view.reveal ? withQuestion(questionBoxes()) : frameObstacles();
     }
-    const fig = figurePoint();
+    const fig = figureRect();
     if (!fig) return;
-    liveRef.current.shiftPx = solveShift(cache.boxes, fig.fx, fig.fy, liveRef.current.shiftPx ?? 0);
+    liveRef.current.shiftPx = solveShift(cache.obs, fig, liveRef.current.shiftPx ?? 0);
   };
 
   return (

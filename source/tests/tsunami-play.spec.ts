@@ -99,8 +99,8 @@ const HUD_SEL = "[data-game-hud]";
  */
 async function bodyCover(page: Page, selector: string): Promise<{ box: { left: number; top: number; right: number; bottom: number } | null; hits: string[] }> {
   return page.evaluate((sel) => {
-    const pr = (window as unknown as { __websuliGame: { probe: () => { figureBox: { left: number; top: number; right: number; bottom: number } | null } } }).__websuliGame.probe();
-    const box = pr.figureBox;
+    const pr = (window as unknown as { __websuliGame: { probe: () => Record<string, number | null> } }).__websuliGame.probe();
+    const box = pr.figureBoxLeft === null || pr.figureBoxLeft === undefined ? null : { left: pr.figureBoxLeft, top: pr.figureBoxTop!, right: pr.figureBoxRight!, bottom: pr.figureBoxBottom! };
     if (!box) return { box: null, hits: [] };
     const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
     const hits: string[] = [];
@@ -537,8 +537,9 @@ for (const viewport of [
           const api = (window as unknown as { __websuliGame: { forceState: (p: Record<string, unknown>) => void; probe: () => { figureX: number; figureY: number } } }).__websuliGame;
           // A teljes test (a jelenet által kirajzolt doboz, 5 × 7 rács) — nem csak a középvonal.
           const isCovered = () => {
-            const box = (api.probe() as unknown as { figureBox: { left: number; top: number; right: number; bottom: number } | null }).figureBox;
-            if (!box) return true;
+            const pr = api.probe() as unknown as Record<string, number | null>;
+            if (pr.figureBoxLeft === null || pr.figureBoxLeft === undefined) return true;
+            const box = { left: pr.figureBoxLeft, top: pr.figureBoxTop!, right: pr.figureBoxRight!, bottom: pr.figureBoxBottom! };
             const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
             for (let r = 0; r < 7; r++) {
               for (let c = 0; c < 5; c++) {

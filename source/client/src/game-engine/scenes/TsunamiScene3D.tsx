@@ -67,6 +67,11 @@ export type TsunamiLive = {
    * képpontban (a vetített befoglaló doboz — fej teteje, deszka alja, karok). A kép-eltolás benne van.
    */
   figureBoxPx?: { left: number; top: number; right: number; bottom: number };
+  /**
+   * A figura kiterjedése a talppontjához (a vízvonal-pont vetületéhez) képest, képpontban: fölötte (fej teteje), alatta, balra,
+   * jobbra. A lap ezzel számolja a takarást a mag állapotából (nem késik a vízszint-váltásnál).
+   */
+  figureExtentPx?: { up: number; down: number; left: number; right: number };
 };
 
 /** The shelter (goal) on the top plank: % from the left. Always on screen (D4). */
@@ -1522,7 +1527,12 @@ function setupTsunami(
       t = Math.min(t, y);
       b = Math.max(b, y);
     }
-    if (Number.isFinite(l + r + t + b)) live.figureBoxPx = { left: l, top: t, right: r, bottom: b };
+    if (!Number.isFinite(l + r + t + b)) return;
+    live.figureBoxPx = { left: l, top: t, right: r, bottom: b };
+    figCorner.copy(kid.group.position).project(camera);
+    const ax = ((figCorner.x + 1) / 2) * lastW;
+    const ay = ((1 - figCorner.y) / 2) * lastH;
+    live.figureExtentPx = { up: ay - t, down: b - ay, left: ax - l, right: r - ax };
   };
   const controller: ThreeSceneController = {
     camera,
