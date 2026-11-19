@@ -434,6 +434,8 @@ export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '', run
     if (!ev || ev.ok !== true) {
       return `A merge előtti kapu nem zöld a #${view.number} jelenlegi fejére (${view.headRefOid.slice(0, 12)})${ev ? ' — az utolsó futás BUKOTT' : ''}. Futtasd közvetlenül a merge előtt: npm run gate:merge -- ${view.number}.`;
     }
+    // 5. vak kör L1: átvitt (carriedFrom / carry) merge-bizonyíték nem engedélyez (a bizonyíték-átvitel külön PR — fail-closed)
+    if (!green(ev)) return `A #${view.number} merge-bizonyítéka átvitt (carriedFrom / carry) rekord — átvitt bizonyíték nem fogadható el. Futtasd közvetlenül a merge előtt: npm run gate:merge -- ${view.number}.`;
     // 3. vak kör L4: az engedély a main csúcsához is kötött — eltérés / hiány → DENY
     if (!/^[0-9a-f]{40}$/.test(String(view.mainSha ?? ''))) return `A GitHub szerinti main csúcsa nem olvasható — a #${view.number} merge-bizonyítéka nem egyeztethető. Próbáld újra, vagy futtasd: npm run gate:merge -- ${view.number}.`;
     if (ev.mainSha !== view.mainSha) return `A #${view.number} merge-bizonyítéka ${ev.mainSha ? `más main mellett készült (${String(ev.mainSha).slice(0, 12)}; a main azóta elmozdult: ${view.mainSha.slice(0, 12)})` : 'nem rögzíti a main csúcsát (régi formátum)'}. Futtasd újra közvetlenül a merge előtt: npm run gate:merge -- ${view.number}.`;

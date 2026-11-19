@@ -471,3 +471,19 @@ test('bizonyíték-átvitel kivétele (tulajdonosi döntés, külön PR): átvit
   assert.ok(denied(runHook('gh pr create --title t --body-file b.md', r.wt)), 'átvitt pre-pr nem engedélyez PR-t');
   assert.ok(denied(runHook('git push', r.wt)), 'átvitt pre-pr pusht sem engedélyez');
 });
+
+test('5. vak kör L1: átvitt (carriedFrom / carry) merge-bizonyíték → DENY (fail-closed, a merge-hook is)', () => {
+  const r = makeRepo();
+  const head = 'd'.repeat(40);
+  const main = 'f'.repeat(40);
+  const view = () => ({ number: 7, headRefOid: head, mainSha: main });
+  const plan = { kind: 'pr-merge', target: '7', repoFlag: null };
+  const now = Date.parse('2026-11-17T10:00:00Z');
+  const good = { ok: true, at: '2026-11-17T09:55:00Z', mainSha: main };
+  writeEv(r.ev, `merge-7-${head}`, good);
+  assert.equal(checkAction(plan, r.wt, { now, ghView: view }), null, 'a nem átvitt, friss, main-hez kötött bizonyíték engedélyez');
+  for (const extra of [{ carriedFrom: 'a'.repeat(40) }, { carry: `carry-${head}` }]) {
+    writeEv(r.ev, `merge-7-${head}`, { ...good, ...extra });
+    assert.match(checkAction(plan, r.wt, { now, ghView: view }) ?? '', /átvitt/, `átvitt merge-bizonyíték (${Object.keys(extra)[0]}) → DENY`);
+  }
+});
