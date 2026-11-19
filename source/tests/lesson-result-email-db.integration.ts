@@ -481,3 +481,26 @@ test("review #510 (valódi HTTP + DB): a VÉGLEGES beküldés UTÁN érkező ké
     assert.ok(sent.every(mail => !/félbehagyva/.test(mail.subject)));
   } finally { clearPendingPartials(); clearFinalizedPartials(); setPartialDelay(previous); }
 });
+
+test("független review K-1 (#510, valódi HTTP + DB): vendégnél ujjlenyomat NÉLKÜLI, majd ujjlenyomatos pillanatkép ugyanarra a körre → EGY „félbehagyva” levél (a legutolsóból)", async () => {
+  const { setPartialDelay, clearPendingPartials, clearFinalizedPartials, pendingPartialCount, partialLimiter, resultLimiter } = await import("../server/lesson-result-email");
+  const { ipKeyGenerator } = await import("express-rate-limit");
+  for (const ip of ["127.0.0.1", "::1"]) { await partialLimiter.resetKey(ipKeyGenerator(ip)); await resultLimiter.resetKey(ipKeyGenerator(ip)); }
+  const previous = setPartialDelay(400);
+  const q = lesson.experience!.quiz.slice(0, 5);
+  const picks = (answered: number) => Object.fromEntries(q.map((item, i) => [item.id, i < answered ? item.correctIndex : -1]));
+  const post = (body: object) => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  try {
+    clearPendingPartials();
+    sent.length = 0;
+    // 1. pillanatkép: az ujjlenyomat még nem töltődött be (IP-kulcs) …
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-k1-dual", picks: picks(1), partial: true })).json(), { queued: true, partial: true });
+    // … 2. pillanatkép ugyanarra a körre, már ujjlenyomattal.
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-k1-dual", picks: picks(4), partial: true, fingerprint: "fp-k1-dual" })).json(), { queued: true, partial: true });
+    assert.equal(pendingPartialCount(), 1, "ugyanarra a körre egy várakozó marad");
+    await waitFor(() => sent.length === 2);
+    await new Promise(r => setTimeout(r, 700));
+    assert.equal(sent.length, 2, "egy „félbehagyva” levél címzettenként, nem kettő");
+    assert.ok(sent.every(mail => /félbehagyva: 4 \/ 5/.test(mail.subject)), "a legutolsó (4 válaszos) állapotból");
+  } finally { clearPendingPartials(); clearFinalizedPartials(); setPartialDelay(previous); }
+});

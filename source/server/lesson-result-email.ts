@@ -265,6 +265,9 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     const snapshot = gradePartialQuiz(experience.quiz, body.picks);
     if (!snapshot) return res.status(202).json({ queued: false });
     const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(body.startedAt ? { startedAt: body.startedAt } : {}) } };
+    // Független review K-1 (#510): vendégnél az ujjlenyomat NÉLKÜLI (IP-kulcsos) korábbi pillanatkép is törlődik — ugyanarra a körre egy
+    // várakozó marad, így nem megy ki két „félbehagyva” levél (1 / N és 4 / N).
+    for (const w of partialWhos) { const key = `${lessonId}|${roundKeyOf(w, "quiz-partial", body.roundId)}`; if (key !== partialKey) cancelPartial(key); }
     const queued = schedulePartial(partialKey, `${lessonId}|${who}`, async () => finalizedKeys.some(key => isFinalized(key)) ? undefined : sendLessonResult({ lessonId, roundKey: roundKeyOf(who, "quiz-partial", body.roundId), learner: await nameOf(), ...attribution, graded: partialGraded }));
     return res.status(202).json({ queued, partial: true });
   }

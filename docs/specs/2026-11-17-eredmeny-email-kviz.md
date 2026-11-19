@@ -160,6 +160,9 @@ Elfogadás (S1b):
 - R3. A pillanatkép csak ELFOGADOTT (2xx) szerverválasz után számít elküldöttnek; hálózati hiba / 429 / 5xx után újrapróbálható.
 - R4. A szerver a már véglegesített kör késve érkező pillanatképét nem ütemezi (fordított kérési sorrend is), és az ütemezett küldés
   előtt is ellenőrzi; a véglegesített-jelző korlátos (20 000) és 24 óra után lejár.
+- R5 (független review K-1). Vendégnél az ujjlenyomat nélküli (IP-kulcsos), majd ujjlenyomatos pillanatkép ugyanarra a körre egy
+  várakozót hagy (a vendég mindkét kulcsát törli ütemezés előtt) — nem megy ki két „félbehagyva” levél. A fordított sorrend (előbb
+  ujjlenyomatos, utána ujjlenyomat nélküli) a kliensen nem fordul elő: a betöltött ujjlenyomat gyorsítótárban marad.
 
 <!-- acceptance-checklist -->
 - [x] E1 – minden kérdés megválaszolva → egy beküldés gomb nélkül (böngésző)
@@ -178,3 +181,4 @@ Elfogadás (S1b):
 - [x] R2 – „Új kvíz” után az új kör pillanatképe (böngésző; a javítás nélkül bukik)
 - [x] R3 – sikertelen (503) pillanatkép újrapróbálható, az elfogadott nem megy újra (böngésző; a javítás nélkül bukik)
 - [x] R4 – a végleges utáni késői pillanatkép nem ütemez levelet (valódi HTTP + DB; a javítás nélkül bukik)
+- [x] R5 – vendég két kulcsa → egy „félbehagyva” levél (valódi HTTP + DB; a javítás nélkül bukik)

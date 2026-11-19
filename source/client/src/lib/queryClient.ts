@@ -87,9 +87,7 @@ export function warmCsrfToken(): void {
 
 /**
  * S1b: írás a lap háttérbe kerülésekor / elhagyásakor — `fetch` + `keepalive` (a `sendBeacon` nem tud CSRF-fejlécet küldeni). Csak a már
- * gyorsítótárazott tokennel küld; a választ nem várja meg, hibát nem dob. Igaz, ha a kérés elindult.
- */
-/**
+ * gyorsítótárazott tokennel küld; hibát nem dob.
  * Lap-elhagyáskor is célba érő POST (`keepalive`). Review #510: `null`, ha el sem indulhatott (nincs CSRF-token); különben egy ígéret,
  * amely csak 2xx szerverválasznál `true` — hálózati hiba, 429 / 5xx esetén `false`, így a hívó a sikertelen küldést újrapróbálhatja.
  */
