@@ -1857,6 +1857,21 @@ fizika-esetek (pattogás, határok) változatlanok.
   - (L5) a kristály-felirat beférése a VALÓDI szélességgel (`canvas.measureText`, `labelFitsChip`): a törhetetlen, széles szó (22 × W) nem csonkul, hanem a sorszám + jelmagyarázat jön.
   - (L6) a hármas-lövés böngészős teszt determinisztikus: a hajó a célzott kristály alá a teszt-kampóval (`shipX`) kerül, a lövés előtt ellenőrzött állapot (nyitott kérdés, élesített kristályok).
   - (L7) a lobby leírása (`P/Games.tsx`) közös fájl: ORCHESTRÁTOR-KÉRÉS (a kristályos szöveg).
+- **Harmadik vak ellenőrzés (GPT-6.2 Sol, 2026-11-19, a 8243e5d6 fejre; L1–L7) javításai és döntési pontjai:**
+  - (L1, blokkoló) a „Válaszok” gomb a jelmagyarázat rácsának SAJÁT eleme (portrén a 3. oszlop), nem lebeg a szövegen. Fekvőn a jelmagyarázat a kérdéskártya MELLETT áll
+    (bal oszlop: 1–2., jobb: 3–4. válasz; `position: fixed`, a kártya felső pereme magasságában), a kristály-sorok fölött; a gomb alul középen áll. A kártya a nézet közepén van, a
+    kristályok a kártya ALATT: a szöveg és a kristály nem kerül egy helyre. Böngészős fedés-mérés 4 nézetben (360×640, 390×844, 412×915, 844×390; a banki leghosszabb tétel ÉS egy
+    négy, többsoros válaszú tétel): a szövegsorok (`Range.getClientRects`), a gomb, a kártya és a kristályok páronként nem fedik egymást, és minden kristály közepén a kristály a
+    találat-cél (`elementFromPoint`).
+  - (L2) a csak szilánkokat leölő bomba nem ad combót: a lap és a szimuláció ugyanazt a `bombKillRaisesCombo` feltételt hívja. Böngészős regresszió: rossz kristály → 3 szilánk → bomba → combo 0.
+  - (L3) NOT DONE — ORCHESTRÁTOR-KÉRÉS: a kihagyott (lejárt) kérdések számát a `recordRun` mentési szerződése nem viszi (`L/achievements.ts` közös fájl, additív `timeouts` mező kell). A szerver-pontséma
+    változatlan. A lapon a szám megvan (`runTotalsRef.timeouts`), a bekötés a közös fájl bővítése után egy sor.
+  - (L4) a lecke-kupon bónuszra a LEJÁRT kérdés `-1`-et küld (`couponClaimIndex`; a `useCouponSession` szerződése), a megszakított semmit; egység- és forrás-őr teszt.
+  - (L5) a szóbank-forrás a menet magjából (`words` adatfolyam) választ szót és elterelőt; a közös `useVocabQuizSource` egyetlen, additív, visszafelé kompatibilis 3. paramétert kapott (`rng`, alapból
+    `Math.random`, a többi játék változatlan). Teszt: azonos mag → azonos kérdés-sor, más mag → más. A közös fájl módosítása jelölt (orkesztrátor: a hunk önállóan visszavonható).
+  - (L6) az utolsó élet elvesztésekor a megválaszolt kérdés megoldás-kijelzése (≥ 1,8 mp) végigmegy: az eredmény azonnal rögzül (nincs további sebzés), az eredményképernyő a kijelzés VÉGE
+    után nyílik (`endRun(…, afterReveal)`); a megválaszolatlan kérdés megszakad, nincs új kérdés. Böngészős teszt: kijelzés közben `sa-over` nincs, ≥ 1,7 mp után megjelenik.
+  - (L7) a lobby leírása: változatlanul orkesztrátor-kérés (nem érintettem).
 - **Tartott tűz jelzése:** ha a lövedék átmegy a kristályon (nem élesített / régi nyomás), „Engedd el a tűzgombot, és lőj újra a válaszhoz!”
   jelenik meg 3,5 mp-re, amíg a gyerek lövéssel egyszer még nem válaszolt (`sa-hold-hint`).
 - **Átméretezés nyitott kérdésnél:** a mag új aréna-méretből újraszámolja a kristályok helyét (`rezoneCrystals`), az élesítés újraindul.

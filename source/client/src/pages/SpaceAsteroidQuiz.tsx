@@ -79,6 +79,8 @@ import {
   waveEnemyCount,
   volleyFor,
   waveSpawnInterval,
+  bombKillRaisesCombo,
+  couponClaimIndex,
 } from "@/lib/spaceAsteroid/physics";
 import {
   CRYSTAL_ARM_MS,
@@ -899,13 +901,15 @@ const INITIAL_HUD: Hud = { score: 0, wave: 1, lives: 3, combo: 0, powerLevel: 0,
 const HUD_STEP_MS = 100;
 
 /** A menet seedelt véletlen-forrásai: a világ (érkezés, hasadás, pickup), a kozmetika és a kérdés-kristályok külön. */
-type RunRng = { world: Rng; fx: Rng; crystal: Rng; pick: Rng };
+type RunRng = { world: Rng; fx: Rng; crystal: Rng; pick: Rng; words: Rng };
 function makeRunRng(seed: string | number): RunRng {
   return {
     world: createRng(seedFrom(ASTEROID_GAME_ID, seed, "world")),
     fx: createRng(seedFrom(ASTEROID_GAME_ID, seed, "fx")),
     crystal: createRng(seedFrom(ASTEROID_GAME_ID, seed, "crystals")),
     pick: createRng(seedFrom(ASTEROID_GAME_ID, seed, "pick")),
+    // vak 3. kör L5: a szóbank-forrás szó- és elterelő-választása is a menet magjából jön
+    words: createRng(seedFrom(ASTEROID_GAME_ID, seed, "vocab")),
   };
 }
 
@@ -1177,7 +1181,10 @@ export default function SpaceAsteroidQuiz() {
    * tölt, vagy ha a betöltés hibázott — ilyenkor a kézi `FALLBACK_QUIZZES` / évfolyam-bank megy, változatlanul.
    * A bekötés EGY helyen kapcsolható ki: itt (`enabled`).
    */
-  const vocab = useVocabQuizSource("en", true);
+  const runRngRef = useRef<RunRng>(makeRunRng(seedFrom(ASTEROID_GAME_ID, "init")));
+  // Vak 3. kör L5: a forrás a MENET magjából választ szót / elterelőt (azonos mag → azonos kérdés); a futó menet adatfolyamát olvassa.
+  const vocabRng = useCallback(() => runRngRef.current.words.next(), []);
+  const vocab = useVocabQuizSource("en", true, vocabRng);
 
   /* ============== Kérdésforrás a kérdés-ütemezőhöz (J6a) ============== */
 
@@ -1190,7 +1197,6 @@ export default function SpaceAsteroidQuiz() {
   couponActiveRef.current = coupon.active;
   const vocabRef = useRef(vocab);
   vocabRef.current = vocab;
-  const runRngRef = useRef<RunRng>(makeRunRng(seedFrom(ASTEROID_GAME_ID, "init")));
 
   /**
    * A kérdés-ütemező forrása: a régi `pickQuiz` sorrendje szétbontva a közös forrásrendhez (K.2): `material()` = nem látott
@@ -1405,7 +1411,9 @@ export default function SpaceAsteroidQuiz() {
       const picked = idx >= 0 ? crystalsRef.current[idx] : undefined;
       if (picked?.alive) hitCrystal(crystalsRef.current, picked.id);
       // A lecke-kupon bónusza: a valós (eredeti) opció-index.
-      if (o.pickedOriginalIndex !== null) maybeClaimCouponBonus(coupon, p.question.quiz.id, o.pickedOriginalIndex);
+      // Vak 3. kör L4: a lejárt kérdés `-1`-et küld (a kupon-munkamenet szerződése), a megszakított semmit.
+      const claimIdx = couponClaimIndex(o);
+      if (claimIdx !== null) maybeClaimCouponBonus(coupon, p.question.quiz.id, claimIdx);
       onCrystalOutcome(o.result, picked ?? null);
     },
   });
@@ -1558,7 +1566,7 @@ export default function SpaceAsteroidQuiz() {
    * A menet vége (győzelem / vereség / „Kör vége”): a kérdés lezárul (a nyitott kérdés „aborted”, nem hiba és nem ismétlés),
    * az eredmény a director VALÓS statisztikájából jön (a régi „leszedett ellenfél ≈ helyes válasz” közelítés megszűnt).
    */
-  const endRun = useCallback((wonIn: boolean, forcedCorrect?: number) => {
+  const endRun = useCallback((wonIn: boolean, forcedCorrect?: number, afterReveal = false) => {
     // A főellenfél legyőzése VÉGLEGES (review #486 M1): az 1,5 mp-es robbanás-ablakban semmi nem írhatja át „Kör vége”-re.
     const won = wonIn || bossDefeatedRef.current;
     runOverRef.current = true;
@@ -1566,6 +1574,9 @@ export default function SpaceAsteroidQuiz() {
     // következő körben: a vezérlők a kör végén ÉS indulásakor is nullázódnak (`startNewRun`).
     releaseControls();
     const ctl = qRef.current;
+    // Vak 3. kör L6: az utolsó élet elvesztésekor a már megválaszolt kérdés megoldás-kijelzése (≥ 1,8 mp) végigmegy: az eredmény
+    // azonnal rögzül, az eredményképernyő a kijelzés vége után nyílik. A megválaszolatlan kérdés megszakad (nincs kijelzés).
+    const revealLive = afterReveal && !!ctl.view().reveal;
     if (!ctl.finished()) ctl.finish();
     const clock = driverRef.current?.clockMs() ?? 0;
     const totals = questionTotals(ctl.director?.stats(clock));
@@ -1580,8 +1591,21 @@ export default function SpaceAsteroidQuiz() {
     setExpanded(false);
     setGameWon(won);
     publishHud(true);
+    if (revealLive) {
+      const waitRevealThenOver = () =>
+        pushRunTimeout(() => {
+          if (phaseRef.current !== "play") return;
+          if (pausedRef.current || qRef.current.view().reveal) {
+            waitRevealThenOver();
+            return;
+          }
+          setPhase("over");
+        }, 120);
+      waitRevealThenOver();
+      return;
+    }
     setPhase("over");
-  }, [releaseControls]);
+  }, [releaseControls, pushRunTimeout]);
 
   /* ============== „Miért?”: szünet + a valódi magyarázókártya ============== */
 
@@ -1728,6 +1752,8 @@ export default function SpaceAsteroidQuiz() {
           powerLevel: powerLevelRef.current,
           shieldTimer: shieldTimerRef.current,
           bombs: bombsRef.current,
+          combo: comboRef.current,
+          shards: enemiesRef.current.filter((en) => en.fromCrystal && !en.dead).length,
           // a kristályok világ-helye és helyessége (teszt: a célzott kristályt a középső lövedék találja-e)
           crystalWorld: JSON.stringify(crystalsRef.current.map((c) => [c.x, c.y, c.correct ? 1 : 0, c.alive ? 1 : 0])),
           crystalPx: JSON.stringify(
@@ -1743,7 +1769,7 @@ export default function SpaceAsteroidQuiz() {
         };
       },
       forceState: (rawPatch) => {
-        const patch = rawPatch as typeof rawPatch & { bossFinale?: boolean; shipX?: number; powerLevel?: number; noEnemies?: boolean; questionItem?: { id: string; prompt: string; options: string[]; correctIndex: number } };
+        const patch = rawPatch as typeof rawPatch & { bossFinale?: boolean; shipX?: number; powerLevel?: number; noEnemies?: boolean; bombs?: number; lastLife?: boolean; questionItem?: { id: string; prompt: string; options: string[]; correctIndex: number } };
         // Teszt (review #486 M1): a főellenfél elesik, EGY élettel, és egy ellenséges lövedék a hajón repül még — a győzelem végleges.
         if (patch.bossFinale === true && phaseRef.current === "play") bossFinaleRef.current();
         // Teszt (review #486 L1): hármas lövés (`powerLevel`) és üres pálya (`noEnemies`), hogy a zuhanó ellenfelek ne nyeljék el a lövedéket.
@@ -1756,6 +1782,18 @@ export default function SpaceAsteroidQuiz() {
           powerTimerRef.current = 600;
         }
         if (typeof patch.noEnemies === "boolean") noEnemiesRef.current = patch.noEnemies;
+        // Teszt (vak 3. kör L6): az utolsó élet elvesztése ugyanazon az úton, mint az ütközésnél (a kijelzés megvárásával).
+        if (patch.lastLife === true && phaseRef.current === "play") {
+          livesRef.current = 0;
+          markHud();
+          sfxExplode();
+          endRun(false, undefined, true);
+        }
+        // Teszt (vak 3. kör L2): a bomba-készlet beállítása.
+        if (typeof patch.bombs === "number") {
+          bombsRef.current = Math.max(0, Math.min(9, Math.floor(patch.bombs)));
+          markHud();
+        }
         // Teszt (hosszú válaszok mérése): a következő kérdés pontosan ez a tétel.
         if (patch.questionItem) forcedQuizRef.current = patch.questionItem;
         if (patch.phase === "intro" || patch.phase === "grade") {
@@ -2847,7 +2885,7 @@ export default function SpaceAsteroidQuiz() {
     markHud();
     if (nextLives <= 0) {
       sfxExplode();
-      endRun(false);
+      endRun(false, undefined, true);
       return;
     }
     playerRef.current.invuln = HIT_INVULN_SEC;
@@ -2922,7 +2960,9 @@ export default function SpaceAsteroidQuiz() {
         }
       } else {
         handleEnemyDestroyed(e);
-        killedAny = true;
+        // Vak 3. kör L2: a rossz kristály szilánkja nem jutalmaz — a bomba combo-lépését csak jutalomra jogosult leölés emeli
+        // (közös szabály a szimulációval: `bombKillRaisesCombo`).
+        if (bombKillRaisesCombo({ shard: e.fromCrystal === true })) killedAny = true;
       }
     }
     if (killedAny) {
@@ -3690,6 +3730,9 @@ export default function SpaceAsteroidQuiz() {
                               <span className="sa-legend-text">{opt.label}</span>
                             </p>
                           ))}
+                          <button type="button" className="sa-answers-open" data-testid="sa-answers-open" {...pointerTapHandlers(crystalTaps, 21, () => setExpanded(true))}>
+                            Válaszok
+                          </button>
                         </div>
                       )}
                       {longLabels && !qView.reveal && expanded && (
@@ -3712,11 +3755,6 @@ export default function SpaceAsteroidQuiz() {
                             <span className="sa-answers-close-x" aria-hidden="true">✕</span>
                           </button>
                         </div>
-                      )}
-                      {longLabels && !qView.reveal && !expanded && (
-                        <button type="button" className="sa-answers-open" data-testid="sa-answers-open" {...pointerTapHandlers(crystalTaps, 21, () => setExpanded(true))}>
-                          Válaszok
-                        </button>
                       )}
                     </div>
                   )}
@@ -4017,20 +4055,32 @@ export default function SpaceAsteroidQuiz() {
         /* Nem blokkoló jelmagyarázat (L1): a teljes szövegek a számozott kristályokkal EGYSZERRE látszanak, a világ fut, a lövés átmegy rajta. */
         .sa-legend {
           position: absolute; left: 6px; right: 6px; bottom: 6px; z-index: 2; pointer-events: none;
-          display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; padding: 6px 8px; border-radius: 12px;
+          display: grid; grid-template-columns: 1fr 1fr auto; gap: 4px 8px; padding: 6px 8px; border-radius: 12px; align-items: center;
           background: #0b1033d9; border: 1px solid #a5b4fc66; color: #f8fafc; font-size: 12px; line-height: 1.25; font-weight: 700;
         }
-        .sa-legend-item { display: flex; align-items: flex-start; gap: 6px; margin: 0; min-width: 0; }
+        .sa-legend-item { display: flex; align-items: flex-start; gap: 6px; margin: 0; min-width: 0; align-self: start; }
         .sa-legend-key { flex: 0 0 auto; min-width: 18px; height: 18px; border-radius: 9999px; background: #ffd86b; color: #1b1203; font-weight: 900; text-align: center; line-height: 18px; font-size: 11px; }
         .sa-legend-text { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
-        @media (orientation: landscape) and (max-height: 520px) { .sa-legend { left: 156px; right: 180px; } }
         .sa-answers-close-x { display: none; font-size: 20px; }
         @media (orientation: landscape) and (max-height: 520px) { .sa-answers-close-x { display: inline; } }
         .sa-answers-close, .sa-answers-open {
           min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid #a5b4fc99; background: #312e81; color: #fff; font-size: 14px; font-weight: 800; cursor: pointer; pointer-events: auto;
         }
-        .sa-answers-open { position: absolute; right: 8px; bottom: 8px; z-index: 3; min-width: 112px; background: #facc15; border-color: #fde68a; color: #1b1203; box-shadow: 0 6px 16px #0000008c; }
-        @media (orientation: landscape) and (max-height: 520px) { .sa-answers-open { right: 184px; } }
+        /* A „Válaszok” gomb a jelmagyarázat rácsának saját oszlopa: a szöveget nem takarja (vak 3. kör L1). */
+        .sa-answers-open { grid-column: 3; grid-row: 1 / span 2; min-width: 112px; background: #facc15; border-color: #fde68a; color: #1b1203; box-shadow: 0 6px 16px #0000008c; }
+        @media (orientation: landscape) and (max-height: 520px) {
+          /* Fekvőn a jelmagyarázat a kérdéskártya MELLETT áll (bal: 1–2., jobb: 3–4. válasz), a kristály-sorok fölött; a kártya
+             a nézet közepén van, a kristályok a kártya alatt: a szöveg és a kristály sosem kerül egy helyre. A gomb alul középen. */
+          .sa-legend {
+            position: fixed; top: calc(var(--play-question-top, 60px) + 2px); bottom: auto; left: 6px; right: 6px;
+            grid-template-columns: 27vw 1fr 27vw; grid-auto-flow: row dense; align-content: start; align-items: start;
+            padding: 0; background: transparent; border: 0; font-size: 11px; line-height: 1.2;
+          }
+          .sa-legend-item { padding: 4px 6px; border-radius: 10px; background: #0b1033e6; border: 1px solid #a5b4fc66; }
+          .sa-legend-item:nth-of-type(-n+2) { grid-column: 1; }
+          .sa-legend-item:nth-of-type(n+3) { grid-column: 3; }
+          .sa-answers-open { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); grid-column: auto; grid-row: auto; z-index: 3; }
+        }
         .sa-crystal[data-state="correct"] { filter: drop-shadow(0 0 14px rgba(74, 222, 128, 0.95)); }
         .sa-crystal[data-state="correct"] .sa-crystal-gem { background: linear-gradient(160deg, #eafff1 0%, #86efac 40%, #22c55e 100%); }
         .sa-crystal[data-state="dim"] { opacity: 0.5; }

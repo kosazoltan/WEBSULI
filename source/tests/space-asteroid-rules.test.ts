@@ -29,6 +29,8 @@ import {
   MAX_LIVES,
   MAX_SHIELD_SEC,
   applyPickupEffect,
+  bombKillRaisesCombo,
+  couponClaimIndex,
   dropChance,
   gradeEase,
   interpolate,
@@ -401,3 +403,18 @@ test("vak L5 — a kristály-felirat beférése a VALÓDI szélességgel számol
   // a karakterszám-küszöb továbbra is él
   assert.equal(crystalLabelsFit(["a".repeat(23)], () => true), false);
 });
+
+test("vak 3. kör L2: a bomba combo-lépését csak jutalomra jogosult leölés emeli — a szilánk nem", () => {
+  assert.equal(bombKillRaisesCombo({ shard: true }), false, "csak szilánkot leölő bomba nem ad combót");
+  assert.equal(bombKillRaisesCombo({ shard: false }), true);
+  assert.equal(bombKillRaisesCombo({}), true, "a közönséges ellenfél jutalmaz");
+});
+
+test("vak 3. kör L4: a lecke-kupon bónusz a lejárt kérdésre -1-et kap, a megszakított semmit, a választott a valós indexet", () => {
+  assert.equal(couponClaimIndex({ result: "timeout", pickedOriginalIndex: null }), -1);
+  assert.equal(couponClaimIndex({ result: "aborted", pickedOriginalIndex: null }), null, "megszakított kérdés nem megy a kuponra");
+  assert.equal(couponClaimIndex({ result: "wrong", pickedOriginalIndex: 2 }), 2);
+  assert.equal(couponClaimIndex({ result: "correct", pickedOriginalIndex: 0 }), 0, "a 0. index is érvényes választás");
+  assert.equal(couponClaimIndex({ result: "wrong", pickedOriginalIndex: null }), null);
+});
+

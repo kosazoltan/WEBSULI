@@ -4,7 +4,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { VOCAB_EN } from "../client/src/data/vocabBank/vocab-en";
+import { createSeenHistory, createVocabSource } from "../client/src/game-engine/vocab";
 import { WAVE_COUNT } from "../client/src/lib/spaceAsteroid/physics";
+import { createRng } from "../shared/game-rng";
+import { memoryStorage } from "./support/vocab-fixture";
 
 /**
  * Physics lives in lib/spaceAsteroid/physics.ts. A green unit suite on the
@@ -217,7 +221,8 @@ test("review #486 (kis UX): a tartott tűz átmegy a kristályon — rövid szö
 test("a kör végén nyomva tartott tűzgomb: a vezérlők az endRun-ban és a startNewRun-ban is nullázódnak (a közös HoldButton nem hív onHoldEnd-et lecsatoláskor)", () => {
   const end = code.slice(code.indexOf("const endRun = useCallback("), code.indexOf("const openWhy"));
   assert.match(end, /runOverRef\.current = true;[\s\S]{0,400}releaseControls\(\);/);
-  assert.match(end, /\}, \[releaseControls\]\);/);
+  // SZÁNDÉK változatlan (a vezérlők nullázása); a függőségi lista a vak 3. kör L6 miatt bővült (`pushRunTimeout`: a megoldás-kijelzés megvárása).
+  assert.match(end, /\}, \[releaseControls(, pushRunTimeout)?\]\);/);
   const start = code.slice(code.indexOf("const startNewRun = useCallback("));
   assert.match(start.slice(0, 3500), /releaseControls\(\);/);
 });
@@ -250,4 +255,54 @@ test("vak L2 / L3 / L4: a segített lövés nem válaszol, a szilánk nem jutalm
   assert.match(code, /maxStreak: answerStreakRef\.current\.best,/);
   assert.match(code, /perfect: gameWon && runTotalsRef\.current\.correct >= 3 && runTotalsRef\.current\.wrong === 0 && runTotalsRef\.current\.timeouts === 0,/);
   assert.doesNotMatch(code, /maxStreak: bestComboRef/, "a tanulási jelvény nem jöhet a harci kombóból");
+});
+
+test("vak 3. kör L1: a „Válaszok” gomb a jelmagyarázat rácsának saját eleme (nem lebeg rajta); fekvőn a jelmagyarázat a kártya mellett áll", () => {
+  const legend = code.slice(code.indexOf('className="sa-legend"'), code.indexOf('className="sa-answers"'));
+  assert.match(legend, /className="sa-answers-open"/, "a gomb a jelmagyarázat konténerében van");
+  assert.doesNotMatch(page, /\.sa-answers-open \{ position: absolute; right: 8px; bottom: 8px;/, "a régi, a szövegre lebegő elhelyezés visszatért");
+  assert.match(page, /\.sa-answers-open \{ grid-column: 3; grid-row: 1 \/ span 2;/, "portré: a gomb a rács 3. oszlopa");
+  assert.match(page, /\.sa-legend \{[^}]*position: fixed; top: calc\(var\(--play-question-top, 60px\) \+ 2px\);/, "fekvő: a jelmagyarázat a kártya magasságában, a kristály-sorok fölött");
+  assert.match(page, /grid-template-columns: 27vw 1fr 27vw;/, "fekvő: két oszlop a kártya két oldalán");
+});
+
+test("vak 3. kör L2: a lap bomba-ága a közös `bombKillRaisesCombo` szabályt hívja (a szimulációval azonos)", () => {
+  assert.match(code, /import \{[^}]*\bbombKillRaisesCombo\b[^}]*\} from "@\/lib\/spaceAsteroid\/physics"/);
+  assert.match(code, /if \(bombKillRaisesCombo\(\{ shard: e\.fromCrystal === true \}\)\) killedAny = true;/);
+  assert.doesNotMatch(code, /\} else \{\s*handleEnemyDestroyed\(e\);\s*killedAny = true;/, "a feltétel nélküli combo-lépés visszatért");
+  const sim = readFileSync(join(root, "client/src/lib/spaceAsteroid/sim.ts"), "utf8");
+  assert.match(sim, /if \(bombKillRaisesCombo\(t\)\) killed = true;/);
+});
+
+test("vak 3. kör L4: a lejárt kérdés -1-et küld a lecke-kupon bónuszra (a közös `couponClaimIndex`-szel)", () => {
+  assert.match(code, /const claimIdx = couponClaimIndex\(o\);\s*if \(claimIdx !== null\) maybeClaimCouponBonus\(coupon, p\.question\.quiz\.id, claimIdx\);/);
+  assert.doesNotMatch(code, /if \(o\.pickedOriginalIndex !== null\) maybeClaimCouponBonus/, "a régi, a lejáratot elnyelő ág visszatért");
+});
+
+test("vak 3. kör L5: a szóbank-forrás a menet magjából dolgozik (seedelt `vocab` adatfolyam), azonos mag → azonos szó és elterelők", () => {
+  assert.match(code, /type RunRng = \{[^}]*\bwords: Rng\b/);
+  assert.match(code, /words: createRng\(seedFrom\(ASTEROID_GAME_ID, seed, "vocab"\)\)/);
+  assert.match(code, /useVocabQuizSource\("en", true, vocabRng\)/);
+  assert.match(code, /const vocabRng = useCallback\(\(\) => runRngRef\.current\.words\.next\(\), \[\]\);/);
+  const hook = readFileSync(join(root, "client/src/game-engine/vocab/useVocabQuizSource.ts"), "utf8");
+  assert.match(hook, /export function useVocabQuizSource\(lang: VocabLang, enabled: boolean = true, rng\?: \(\) => number\)/);
+  assert.match(hook, /clozeStyle: "game", rng \}\)/);
+  // a mag viselkedése: ugyanaz a seed ugyanazt a kérdés-sort adja, más seed mást
+  const run = (seed: string) => {
+    const src = createVocabSource({ lang: "en", entries: VOCAB_EN, history: createSeenHistory(memoryStorage()), clozeStyle: "game", rng: createRng(seed).next });
+    return Array.from({ length: 12 }, () => {
+      const q = src.next(1);
+      return q ? JSON.stringify([q.prompt, q.options, q.correctIndex]) : "null";
+    });
+  };
+  assert.deepEqual(run("mag-1"), run("mag-1"), "azonos mag → azonos szó és elterelők");
+  assert.notDeepEqual(run("mag-1"), run("mag-2"), "más mag → más kérdés-sor");
+});
+
+test("vak 3. kör L6: az utolsó élet elvesztése megvárja a megoldás-kijelzést, mielőtt az eredményképernyő nyílik", () => {
+  assert.match(code, /const endRun = useCallback\(\(wonIn: boolean, forcedCorrect\?: number, afterReveal = false\) => \{/);
+  assert.match(code, /const revealLive = afterReveal && !!ctl\.view\(\)\.reveal;/);
+  assert.match(code, /if \(revealLive\) \{[\s\S]*?waitRevealThenOver\(\);\s*return;\s*\}\s*setPhase\("over"\);/);
+  assert.match(code, /sfxExplode\(\);\s*endRun\(false, undefined, true\);/, "az utolsó életnél a vég a kijelzés megvárásával hívódik");
+  assert.match(code, /if \(phaseRef\.current !== "play"\) return;\s*if \(pausedRef\.current \|\| qRef\.current\.view\(\)\.reveal\) \{/);
 });

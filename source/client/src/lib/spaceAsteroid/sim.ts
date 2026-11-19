@@ -51,6 +51,7 @@ import {
   MAX_LIVES,
   PICKUP_FALL_VY,
   applyPickupEffect,
+  bombKillRaisesCombo,
   dropChance,
   gradeEase,
   lifeLossOutcome,
@@ -478,7 +479,7 @@ export function createAsteroidWorld(opts: { seed: number | string; grade?: numbe
         else {
           threats = threats.filter((x) => x !== t);
           addScore(t);
-          if (!t.shard) killed = true;
+          if (bombKillRaisesCombo(t)) killed = true;
         }
       }
       if (killed) combo = before + 1;

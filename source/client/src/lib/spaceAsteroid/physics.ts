@@ -306,6 +306,24 @@ export function starScrollY(y: number, dt: number, moving: boolean): number {
 
 /* --------------------- közös szabályok (lap + szimuláció, review #486) --------------------- */
 
+/**
+ * Bomba: csak jutalomra jogosult leölés emeli a combót (vak 3. kör L2). A rossz kristály szilánkja (`shard`) nem jutalmaz, ezért egy
+ * csak szilánkokat leölő bomba nem ad combo-lépést. A lap és a szimuláció UGYANEZT a feltételt hívja.
+ */
+export function bombKillRaisesCombo(target: { shard?: boolean }): boolean {
+  return target.shard !== true;
+}
+
+/**
+ * A lecke-kupon bónuszának válasz-indexe (vak 3. kör L4): a választott kristály valós (eredeti) indexe; a LEJÁRT kérdés `-1`
+ * (a `useCouponSession.claimBonus` szerződése: „rossz válasz vagy lejárat”); a megszakított kérdés `null` — arra nem megy hívás.
+ */
+export function couponClaimIndex(o: { result: "correct" | "wrong" | "timeout" | "aborted"; pickedOriginalIndex: number | null }): number | null {
+  if (o.result === "aborted") return null;
+  if (o.pickedOriginalIndex !== null) return o.pickedOriginalIndex;
+  return o.result === "timeout" ? -1 : null;
+}
+
 /** Életvesztés-döntés: a menet eldőlte után (győzelem / vereség) sebzés nem érhet (M1); a tanító szakaszban nincs életvesztés. */
 export function lifeLossOutcome(a: { runOver: boolean; invuln: number; shield: number; elapsed: number }): "none" | "tutorial" | "life" {
   if (a.runOver || a.invuln > 0 || a.shield > 0) return "none";
