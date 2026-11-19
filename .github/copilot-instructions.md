@@ -15,6 +15,7 @@ Magyarul válaszolj. A részletes szabály az `AGENTS.md` „Review guidelines�
   - félkész munka: a PR-hoz tartozó spec és `-vegrehajtas.md` minden pontja teljesült-e (befejezési mandátum);
   - ARM64 + x64: architektúra-függő útvonal, bináris vagy csak egy CPU-n települő függőség.
 - **Evidencia:** csak fájl:sor hivatkozással és konkrét hibaforgatókönyvvel jelezz hibát.
-- **Gépi zár (2026-11-19):** nehéz kör (teljes `npm test`, e2e, DB-teszt, `gate:push` / `gate:pr`, `npm ci`) csak a
+- **Gépi zár (2026-11-19):** nehéz kör (teljes `npm test`, teljes `tsc`, e2e, DB-teszt, `gate:stage` / `gate:lint` / `gate:push` /
+  `gate:pr`, `npm ci`) csak a
   `node scripts/qa/machine-lock.mjs run --name <név> --timeout-min <perc> -- <parancs>` alatt; az ezt megkerülő szkript / utasítás hiba
   (`AGENTS.md` „Gépi zár”, `.agents/skills/websuli-gep-zar/SKILL.md`).

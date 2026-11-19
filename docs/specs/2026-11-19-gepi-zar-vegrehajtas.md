@@ -43,6 +43,9 @@ fájlból; nehéz kaput (`gate:push`, `gate:pr`, teljes `npm test`) ez a munka N
    `.github/copilot-instructions.md` egy sor. Commit.
 6. **Runbook, csapdák** — `docs/minosegkapuk.md` új alfejezet a „Push-fegyelem” után; `docs/agent-csapdak.md`: index-alfejezet a
    „Tesztelés, e2e, mérés” elé, a részletek a `## C-75` elé (C-80…C-85). Commit.
+6b. **Kiegészítés (terv D17)** — gyökér `package.json`: `gate:stage`, `gate:lint`, `check`, `check:test` burkolva; `AGENTS.md`, a
+   `websuli-gep-zar`, `websuli-lint-ellenor`, `websuli-push-elotti-kapu` skill (+ tükör), `.cursor/rules/gep-zar.mdc`, Copilot-sor,
+   `docs/minosegkapuk.md`: a `gate:stage` / teljes `tsc` a nehéz körök között. Bekötés-próba álgazdával a négy új parancsra is. Commit.
 7. **Ellenőrzés** — mutációs ellenpróba (a `machine-lock.mjs` másolatán, mutánsonként `node --test`, utána `cmp` az eredetivel);
    `npm run gate:stage`; `git merge-tree --write-tree feat/gepi-zar fix/kapu-gyorsitas` (kilépési kód 0); PR-leírás a munkafán kívül
    (`docs/minosegkapuk.md` szakaszai szerint).

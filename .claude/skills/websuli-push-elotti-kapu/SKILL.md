@@ -22,6 +22,9 @@ git push -u origin <ág>                 # 5. egy push
 
 Közvetlenül: `node scripts/qa/gates/pre-push-gate.mjs [--base origin/main] [--slice]`.
 
+**Gépi zár (2026-11-19, `websuli-gep-zar` skill):** az `npm run gate:push` magától sorba áll a zár alatt; a közvetlen `node` hívás NEM —
+azt csak a `node scripts/qa/machine-lock.mjs run --name gate-push --timeout-min 90 -- …` alatt szabad.
+
 ## Mit futtat
 
 tiszta munkafa → `git fetch` → teljes lint kapu (`--full`) → teljes egységteszt (TAP-elemzéssel) → háromfázisú rend

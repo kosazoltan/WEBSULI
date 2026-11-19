@@ -1,6 +1,6 @@
 ---
 name: websuli-gep-zar
-description: WEBSULI gépi zár - a nehéz körök egy sávban, érkezési sorrendben futnak. Töltsd be automatikusan MINDEN nehéz kör ELŐTT (npm ci, teljes npm test, böngészős / e2e kör, DB-tesztek, gate:push, gate:pr, mutációs és CPU-terheléses próbák, a vak futtató run_e2e / run_db_tests eszköze), és ha egy teszt csak párhuzamos terhelésnél bukik. Parancs - node scripts/qa/machine-lock.mjs run --name <név> --timeout-min <perc> -- <parancs>; állapot - node scripts/qa/machine-lock.mjs status.
+description: WEBSULI gépi zár - a nehéz körök egy sávban, érkezési sorrendben futnak. Töltsd be automatikusan MINDEN nehéz kör ELŐTT (npm ci, teljes npm test, böngészős / e2e kör, DB-tesztek, gate:stage, gate:lint, gate:push, gate:pr, teljes tsc / npm run check, mutációs és CPU-terheléses próbák, a vak futtató run_e2e / run_db_tests eszköze), és ha egy teszt csak párhuzamos terhelésnél bukik. Parancs - node scripts/qa/machine-lock.mjs run --name <név> --timeout-min <perc> -- <parancs>; állapot - node scripts/qa/machine-lock.mjs status.
 ---
 
 # Gépi zár — nehéz körök sorban (kötelező, tulajdonosi utasítás 2026-11-19)
@@ -19,9 +19,13 @@ Két nehéz kör egyszerre a gépen időzítésfüggő bukást okozott (kanban #
 ## Mi számít nehéz körnek
 
 `npm ci` / `npm.cmd ci`, a teljes `npm test` (gyökérből vagy `source/`-ban), böngészős / e2e kör (`test:e2e`, Playwright), DB-tesztek
-(`test:learning-db`, eldobható Postgres-konténer), `gate:push`, `gate:pr`, `verify`, mutációs ellenpróba-sorozat, CPU-terheléses
-mérés, a vak futtató `run_e2e` / `run_db_tests` eszköze. Nem nehéz: `gate:stage`, `gate:lint -- --fast`, egy-két célzott tesztfájl,
-`git`, `gh`, a `status`.
+(`test:learning-db`, eldobható Postgres-konténer), `gate:stage`, `gate:lint`, `gate:push`, `gate:pr`, `verify`, minden teljes `tsc`
+(`npm run check`, `npm run check:test`), mutációs ellenpróba-sorozat, CPU-terheléses mérés, a vak futtató `run_e2e` / `run_db_tests`
+eszköze. Nem nehéz: egy-két célzott tesztfájl, `git`, `gh`, a `status`.
+
+A `gate:stage` is nehéz (mért, 2026-11-19): egy zár nélküli `gate:stage` (teljes `tsc` + célzott egységtesztek) egy párhuzamos
+`gate:push` mellett hamis bukást okozott (`claude-stream-thinking-liveness.test.ts`, 250 ms-os falióra-korlát). A szakasz-kapu ezért
+sorban áll — a várakozás alatt végezz könnyű munkát.
 
 ## Hogyan
 
@@ -30,7 +34,7 @@ mérés, a vak futtató `run_e2e` / `run_db_tests` eszköze. Nem nehéz: `gate:s
 | Nehéz kör a zár alatt | `node scripts/qa/machine-lock.mjs run --name <név> --timeout-min <perc> -- <parancs> [arg…]` |
 | Ugyanez npm-mel | `npm run machine-lock -- run --name <név> --timeout-min <perc> -- <parancs>` |
 | Állapot (gazda, futási idő, sor) | `node scripts/qa/machine-lock.mjs status` (gépi alak: `--json`) |
-| Kapuk (maguktól a zár alatt) | `npm run gate:push`, `npm run gate:pr -- --body-file <út>`, gyökér `npm test`, `npm run test:e2e`, `npm run test:learning-db`, `npm run verify` |
+| Maguktól a zár alatt | `npm run gate:stage`, `npm run gate:lint`, `npm run gate:push`, `npm run gate:pr -- --body-file <út>`, gyökér `npm test`, `npm run check`, `npm run check:test`, `npm run test:e2e`, `npm run test:learning-db`, `npm run verify` (a `gate:merge` nem: gh-lekérdezések, könnyű) |
 
 Példák: `node scripts/qa/machine-lock.mjs run --name npm-ci-gepzar --timeout-min 20 -- npm --prefix source ci --ignore-scripts`;
 `node scripts/qa/machine-lock.mjs run --name mutacio-c80 --timeout-min 30 -- node scratch/mutacio.mjs`.

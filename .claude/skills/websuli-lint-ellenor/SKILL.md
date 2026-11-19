@@ -18,6 +18,10 @@ zöld után lehet továbblépni. Az API-keretet (független ellenőr, CI) nem ol
 
 Közvetlenül: `node scripts/qa/gates/stage-gate.mjs`, `node scripts/qa/gates/lint-gate.mjs --fast|--full [--base origin/main]`.
 
+**Gépi zár (2026-11-19, `websuli-gep-zar` skill):** a `gate:stage` és a `gate:lint` nehéz kör — az `npm run gate:stage` / `gate:lint`
+magától sorba áll a zár alatt. A közvetlen `node` hívást a `node scripts/qa/machine-lock.mjs run --name <név> --timeout-min 30 -- …`
+alá tedd; zár nélkül tilos (egy zár nélküli `gate:stage` párhuzamos `gate:push` mellett hamis bukást adott).
+
 ## Mit futtat
 
 `lint-gate`: `git diff --check` → nem követett fájlok (figyelmeztetés) → ESLint a változott `source/client/src` + `source/server`

@@ -1,5 +1,5 @@
 ---
-description: Gépi zár — a nehéz körök (npm ci, teljes npm test, e2e / böngészős kör, DB-tesztek, gate:push, gate:pr, mutációs / CPU-terheléses próbák) egy sávban, sorban, csak a machine-lock.mjs run-nal.
+description: Gépi zár — a nehéz körök (npm ci, teljes npm test, e2e / böngészős kör, DB-tesztek, gate:stage, gate:lint, gate:push, gate:pr, teljes tsc, mutációs / CPU-terheléses próbák) egy sávban, sorban, csak a machine-lock.mjs run-nal.
 alwaysApply: true
 ---
 
@@ -8,7 +8,8 @@ alwaysApply: true
 Skill: `.agents/skills/websuli-gep-zar/SKILL.md`. Runbook: `docs/minosegkapuk.md` „Gépi zár”. Szabály: `AGENTS.md` „Gépi zár”.
 
 1. Nehéz kör CSAK így indulhat: `node scripts/qa/machine-lock.mjs run --name <név> --timeout-min <perc> -- <parancs>` (a gyökér
-   `npm test`, `npm run test:e2e`, `npm run test:learning-db`, `npm run verify`, `npm run gate:push`, `npm run gate:pr` magától ezt teszi).
+   `npm test`, `npm run check`, `npm run check:test`, `npm run test:e2e`, `npm run test:learning-db`, `npm run verify`,
+   `npm run gate:stage`, `npm run gate:lint`, `npm run gate:push`, `npm run gate:pr` magától ezt teszi).
 2. Állapot: `node scripts/qa/machine-lock.mjs status`. Egy sáv, érkezési sorrend; előzni, a sorfájlt vagy a zárat kézzel írni / törölni tilos.
 3. Tilos: zárat szerezni futtatás nélkül; futó szkriptet szerkeszteni; folyamatot mintaillesztéssel leállítani (csak a sajátodat,
    pontos PID alapján); helyi időt használni (minden időbélyeg UTC).

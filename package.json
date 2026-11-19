@@ -3,8 +3,8 @@
   "private": true,
   "description": "Gyökér-manifest. Az alkalmazás a source/ alatt él (a függőségek is ott vannak); ez a fájl nem telepít semmit, csak a .github/workflows/ci.yml kapuit teszi felfedezhetővé a gyökérből — enélkül egy 369 tesztes repó úgy néz ki, mintha nem lenne futtatható parancsa.",
   "scripts": {
-    "check": "npm --prefix source run check",
-    "check:test": "npm --prefix source run check:test",
+    "check": "node scripts/qa/machine-lock.mjs run --name check --timeout-min 20 -- npm --prefix source run check",
+    "check:test": "node scripts/qa/machine-lock.mjs run --name check-test --timeout-min 20 -- npm --prefix source run check:test",
     "lint": "npm --prefix source run lint",
     "test": "node scripts/qa/machine-lock.mjs run --name npm-test --timeout-min 60 -- npm --prefix source run test",
     "build": "npm --prefix source run build",
@@ -12,8 +12,8 @@
     "test:learning-db": "node scripts/qa/machine-lock.mjs run --name test-learning-db --timeout-min 45 -- npm --prefix source run test:learning-db",
     "verify": "node scripts/qa/machine-lock.mjs run --name verify --timeout-min 90 -- npm --prefix source run verify",
     "machine-lock": "node scripts/qa/machine-lock.mjs",
-    "gate:lint": "node scripts/qa/gates/lint-gate.mjs",
-    "gate:stage": "node scripts/qa/gates/stage-gate.mjs",
+    "gate:lint": "node scripts/qa/machine-lock.mjs run --name gate-lint --timeout-min 30 -- node scripts/qa/gates/lint-gate.mjs",
+    "gate:stage": "node scripts/qa/machine-lock.mjs run --name gate-stage --timeout-min 30 -- node scripts/qa/gates/stage-gate.mjs",
     "gate:push": "node scripts/qa/machine-lock.mjs run --name gate-push --timeout-min 90 -- node scripts/qa/gates/pre-push-gate.mjs",
     "gate:pr": "node scripts/qa/gates/pre-pr-gate.mjs",
     "gate:merge": "node scripts/qa/gates/pre-merge-gate.mjs"

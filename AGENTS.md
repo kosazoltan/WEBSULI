@@ -165,8 +165,9 @@ blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 5. **A kapu megkerülése tilos**, vészkijárat nincs; ha a kapu hibás, a kaput kell javítani (teszttel).
 6. **API-költség elve:** előbb az olcsó helyi ellenőrzés; a független ellenőr (és a CI) csak zöld helyi kapuk után indul — ne a
    drága kör fogja meg az olcsó hibát.
-7. **Nehéz kör csak a gépi zár alatt** (2026-11-19): a `gate:push`, a `gate:pr` és minden más nehéz kör egy sávban, sorban fut
-   (`node scripts/qa/machine-lock.mjs run …`); a `npm run gate:push` / `gate:pr` ezt magától teszi — lásd „Gépi zár” lent.
+7. **Nehéz kör csak a gépi zár alatt** (2026-11-19): a `gate:stage`, a `gate:lint`, a `gate:push`, a `gate:pr` és minden más nehéz
+   kör egy sávban, sorban fut (`node scripts/qa/machine-lock.mjs run …`); a `npm run gate:*` (a `gate:merge` kivételével) ezt magától
+   teszi — lásd „Gépi zár” lent.
 
 A független ellenőr mellett második, más rendszerű véleményként a külső (Gemini) ellenőr is futtatható
 (`scripts/qa/gates/external-review.mjs`, kulcs csak `GEMINI_API_KEY`-ből); a jelentését az orkesztrátor a kódból visszaellenőrzi, a
@@ -183,14 +184,17 @@ A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja
 > futnia, és a továbbiakban ezt alkalmazva végezd a munkát a repóban.” — a tulajdonos, 2026-11-19 (választás: sorba állítás, egy sáv)
 
 - **Nehéz kör:** `npm ci` / `npm.cmd ci`; a teljes `npm test` (gyökérből vagy `source/`-ban); böngészős / e2e kör (`test:e2e`,
-  Playwright); DB-tesztek (`test:learning-db`, eldobható Postgres); `gate:push`; `gate:pr`; `verify`; mutációs és CPU-terheléses
-  próbák; a vak futtató `run_e2e` / `run_db_tests` eszköze. (Nem nehéz: `gate:stage`, `gate:lint -- --fast`, egy-két célzott
-  tesztfájl, `git` / `gh`.)
+  Playwright); DB-tesztek (`test:learning-db`, eldobható Postgres); `gate:stage`; `gate:lint`; `gate:push`; `gate:pr`; `verify`;
+  minden teljes `tsc` (`npm run check`, `npm run check:test`); mutációs és CPU-terheléses próbák; a vak futtató `run_e2e` /
+  `run_db_tests` eszköze. (Nem nehéz: egy-két célzott tesztfájl, `git` / `gh`, a `status`.) A `gate:stage` azért nehéz, mert egy zár
+  nélküli `gate:stage` (teljes `tsc` + célzott tesztek) egy párhuzamos `gate:push` mellett hamis bukást okozott (2026-11-19,
+  `claude-stream-thinking-liveness.test.ts`, 250 ms-os falióra-korlát).
 - **Egy sáv, érkezési sorrend (FIFO), egyetlen megengedett indítási mód:**
   `node scripts/qa/machine-lock.mjs run --name <név> --timeout-min <perc> -- <parancs>`. A szkript sorba áll, vár, megszerzi a zárat,
   AZONNAL lefuttatja a parancsot a saját gyerekeként időkorláttal, és a végén — hiba, időtúllépés, Ctrl+C / SIGTERM esetén is —
-  elengedi. A gyökér `npm test`, `npm run test:e2e`, `npm run test:learning-db`, `npm run verify`, `npm run gate:push`, `npm run gate:pr`
-  ezt magától teszi. Állapot: `node scripts/qa/machine-lock.mjs status`.
+  elengedi. A gyökér `npm test`, `npm run test:e2e`, `npm run test:learning-db`, `npm run verify`, `npm run check`,
+  `npm run check:test`, `npm run gate:stage`, `npm run gate:lint`, `npm run gate:push`, `npm run gate:pr` ezt magától teszi. Állapot:
+  `node scripts/qa/machine-lock.mjs status`.
 - **A zár helye** gépszintű és munkafa-független: `<git-common-dir>/websuli-machine-lock/` (minden munkamenet, munkafa és MI-eszköz
   ugyanazt látja). CI-ben (`CI=true`) a zár kikapcsol. Minden időbélyeg UTC.
 - **Tilos:** zárat szerezni futtatás nélkül („csak zároló” várakozó, „majd az ügynök futtat”); a sort előzni, a sor- / zárfájlokat

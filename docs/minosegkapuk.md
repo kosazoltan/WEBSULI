@@ -155,8 +155,13 @@ korábbi, munkamenet-ideiglenes zárat (két sáv `lock` / `lock2`, `kovetkezo.t
 - **Parancs:** `node scripts/qa/machine-lock.mjs run --name <név> --timeout-min <perc> [--max-wait-min <perc>] -- <parancs> [arg…]`
   (`npm run machine-lock -- run …`); állapot: `node scripts/qa/machine-lock.mjs status [--json]`.
 - **Magától a zár alatt:** gyökér `npm test` (60 perc), `npm run test:e2e` (150), `npm run test:learning-db` (45), `npm run verify` (90),
-  `npm run gate:push` (90), `npm run gate:pr` (300 — a `pre-pr-gate.mjs` önmaga áll sorba, a közvetlen `node` hívásnál is). A
-  `node scripts/qa/gates/pre-push-gate.mjs` közvetlen hívása NEM áll sorba — a push-kaput `npm run gate:push`-sal indítsd.
+  `npm run check` / `check:test` (20), `npm run gate:stage` (30), `npm run gate:lint` (30), `npm run gate:push` (90), `npm run gate:pr`
+  (300 — a `pre-pr-gate.mjs` önmaga áll sorba, a közvetlen `node` hívásnál is). A `stage-gate.mjs`, `lint-gate.mjs` és
+  `pre-push-gate.mjs` közvetlen `node` hívása NEM áll sorba — azt a `machine-lock.mjs run` alá kell tenni. A `gate:merge` nem nehéz
+  (gh-lekérdezések), nincs a zár alatt.
+- **A `gate:stage` is nehéz** (mért, 2026-11-19): egy zár nélküli `gate:stage` (teljes `tsc` + célzott egységtesztek) egy párhuzamos
+  `gate:push` mellett hamis bukást okozott (`claude-stream-thinking-liveness.test.ts`, 250 ms-os falióra-korlát). Ára: a szakasz-kapu
+  egy futó nehéz kör mögött vár (legfeljebb annak időkorlátjáig).
 - **Működés:** atomi beállás a sorba (`queue.mutex/` + `counter` + `queue/<sorszám>.json`, `wx`); zárat csak a sor első élő eleme
   szerez (atomi `mkdir lock/`, `lock/owner.json`: név, PID, gyerek PID, gép, parancs, kezdés UTC, időkorlát, token); a parancs AZONNAL
   gyerekként fut időkorláttal; a végén — hiba, időtúllépés (124), Ctrl+C (130), SIGTERM (143) esetén is — a saját gyerek leáll (POSIX:
