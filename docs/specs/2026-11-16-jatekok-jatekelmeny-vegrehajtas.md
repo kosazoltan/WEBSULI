@@ -1842,6 +1842,21 @@ fizika-esetek (pattogás, határok) változatlanok.
   sávjába is nyúlhat (a kártya alatt nincs több hely), de MINDEN kristály választható: a hajó alóluk bármelyiket eléri (teszt, 4 nézet); az
   alsó sor teljes kiemelése a hajó sávja fölé külön tervdöntést kér (jegyre). (L5) a rossz válasz nem jutalmaz: forrás-őr + böngészős teszt
   (rossz → nincs pajzs / hármas lövés / bomba / pont; jó → fejlesztés), a lapra tett `applyCrystalUpgrade()` a rossz ágban elbuktatja.
+- **Második vak ellenőrzés (GPT-6.2 Sol, 2026-11-19; L1–L6) javításai és döntési pontjai:**
+  - (L1, blokkoló) **az Ú5 automatikus listanyitása visszavonva** (döntési pont: az orkesztrátori Ú5 döntést a vak ellenőrzés blokkoló leletként felülírta — olvasni ÉS lőni
+    ugyanazon az állapoton kell): hosszú / nem férő válasznál a világ NEM áll meg magától; a teljes szövegek NEM blokkoló jelmagyarázatban (`sa-legend`, `pointer-events: none`)
+    látszanak a számozott kristályokkal egyszerre. A kézi lista („Válaszok” gomb) megmarad, megállít, amíg nyitva van.
+  - (L2, blokkoló) nyitott kérdésnél a célzássegéd NEM téríti el a lövést (`shotCenterVx`); az eltérített (segített) középső lövedék `side`-ként jelölt, a kristályon áthalad. Teszt:
+    a vak ellenőrzés számolt ellenpéldája, egység + forrás-őr. (Böngészős érintős teszt: a szintetikus pointer megbízhatatlan — NOT RUN, a fizika számolt.)
+  - (L3) a rossz kristály szilánkja nem jutalmaz: lelövése / bombázása nem ad pontot, kombót, kill-jelvényt és nem ejt zsákmányt (sim + lap; sim-teszt a lelet forgatókönyve szerint).
+    **Mellékhatás:** a szilánk-zsákmány megszűnése nehezítette a játékot, ezért a bot-küszöbök újrahangolva ugyanarra a nyerési sávra (AVG 19/20, SIM_YOUNG 16/20): `DODGE_IMPACT`
+    0,40 → 0,70, `PICKUP_CATCH_EASE` 0,85 → 0,95 (`DODGE_FIGHTER` 0,95, `DODGE_BOSS` 0,8 változatlan). Ez a LAP szabály-változásának következménye (a modell a lapot követi), nem a
+    teszt kiszolgálása; a korábbi (0,40 / 0,85) értékekkel az Ú1-teszt a 3–4. évfolyamon elbukott volna (75% → 18, 95% → 13), mert a szilánk-zsákmány nélkül a rossz válaszok drágábbak.
+  - (L4) a mentésben a kihagyott (lejárt) kérdés KÜLÖN (`timeouts`), a `wrongAnswers` csak a rossz válasz; a tanulási jelvény (`maxStreak`, `perfect`) a válaszsorozatból jön
+    (`perfect`: győzelem, ≥ 3 helyes, 0 rossz, 0 kihagyott), nem a harci kombóból. SPEC-VÁLTOZÁS: a `questionTotals` új alakja és a hozzá tartozó elvárások.
+  - (L5) a kristály-felirat beférése a VALÓDI szélességgel (`canvas.measureText`, `labelFitsChip`): a törhetetlen, széles szó (22 × W) nem csonkul, hanem a sorszám + jelmagyarázat jön.
+  - (L6) a hármas-lövés böngészős teszt determinisztikus: a hajó a célzott kristály alá a teszt-kampóval (`shipX`) kerül, a lövés előtt ellenőrzött állapot (nyitott kérdés, élesített kristályok).
+  - (L7) a lobby leírása (`P/Games.tsx`) közös fájl: ORCHESTRÁTOR-KÉRÉS (a kristályos szöveg).
 - **Tartott tűz jelzése:** ha a lövedék átmegy a kristályon (nem élesített / régi nyomás), „Engedd el a tűzgombot, és lőj újra a válaszhoz!”
   jelenik meg 3,5 mp-re, amíg a gyerek lövéssel egyszer még nem válaszolt (`sa-hold-hint`).
 - **Átméretezés nyitott kérdésnél:** a mag új aréna-méretből újraszámolja a kristályok helyét (`rezoneCrystals`), az élesítés újraindul.

@@ -197,15 +197,18 @@ test("ütközés: élet −1 és 2 mp sérthetetlenség, nem kvíz; a pajzs és 
 });
 
 test("a menet statisztikája valós kérdés-szám (recordRun: correctAnswers / wrongAnswers) — nem „leszedett ellenfél ≈ helyes válasz”", () => {
-  assert.deepEqual(questionTotals(null), { correct: 0, wrong: 0, total: 0 });
-  assert.deepEqual(questionTotals({ correct: 5, wrong: 2, timeouts: 1 }), { correct: 5, wrong: 3, total: 8 }, "a lejárt kérdés hibának számít");
+  // SPEC-VÁLTOZÁS 2026-11-19 (vak ellenőrzés L4, a végrehajtási fájl döntési pontja: a kihagyás és a rossz válasz KÜLÖN kimenet): a lejárt (kihagyott)
+  // kérdés nem hibás válasz — külön `timeouts`; a `total` mindháromból áll. A szigor nő: a két kimenet többé nem keveredik.
+  assert.deepEqual(questionTotals(null), { correct: 0, wrong: 0, timeouts: 0, total: 0 });
+  assert.deepEqual(questionTotals({ correct: 5, wrong: 2, timeouts: 1 }), { correct: 5, wrong: 2, timeouts: 1, total: 8 }, "a kihagyott kérdés külön számlálóban marad");
   for (const seed of simSeeds(GAME, 6)) {
     const sim = createSimGame({ seed, grade: 7, questions: true });
     runSim(() => sim as never, SIM_AVERAGE, { seed, seconds: 900, grade: 7 });
     const st = sim.stats();
     const t = questionTotals(st);
     assert.equal(t.correct, st.correct);
-    assert.equal(t.wrong, st.wrong + st.timeouts);
+    assert.equal(t.wrong, st.wrong);
+    assert.equal(t.timeouts, st.timeouts);
     assert.equal(t.total, st.answered + st.timeouts);
     assert.ok(t.total > 0 && t.total <= st.asked, "a válaszolt + lejárt ≤ feltett (a megszakított nem számít)");
     // a leszedett ellenfelek száma NEM a kérdés-szám (a régi proxy)
@@ -359,5 +362,25 @@ test("önellenőrző (b) — kupon (lecke-jutalom) módban 3 tételes leckével 
     assert.ok(keys.every((k) => k.startsWith("mat:lesson-")), `seed ${seed}: kupon módban csak lecke-tétel jöhet`);
     assert.ok(st.maxGapSec <= 25, `seed ${seed}: ${st.maxGapSec} s kérdés nélküli szakasz`);
     assert.ok(st.perMinute >= 3, `seed ${seed}: ${st.perMinute} kérdés/perc`);
+  }
+});
+
+test("vak L3 — a rossz kristályból hasadt szilánk lelövése NEM ad pontot, kombót, kill-jelvényt vagy zsákmányt (lövésre és bombára sem)", () => {
+  for (const mode of ["shoot", "bomb"] as const) {
+    const w = createAsteroidWorld({ seed: 17, overlap: 1, intensity: () => 0, signal: () => {} });
+    w.shatter({ x: 0, y: 5 });
+    assert.equal(w.state().threats.length, 3);
+    if (mode === "bomb") {
+      w.upgrade(0.9); // bomba
+      assert.equal(w.detonate(), true);
+    } else {
+      for (let i = 0; i < 3; i++) w.shoot();
+    }
+    const st = w.state();
+    assert.equal(st.threats.length, 0, `${mode}: a szilánkok eltűntek`);
+    assert.equal(st.score, 0, `${mode}: a szilánk lelövése pontot adott`);
+    assert.equal(st.kills, 0, `${mode}: a szilánk kill-jelvényt adott`);
+    assert.equal(st.combo, 0, `${mode}: a szilánk kombót adott`);
+    assert.equal(st.pickups, 0, `${mode}: a szilánk zsákmányt ejtett`);
   }
 });

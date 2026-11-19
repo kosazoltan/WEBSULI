@@ -13,6 +13,7 @@ import {
   bulletCountsAsAnswer,
   crystalAt,
   crystalLabelTier,
+  labelFitsChip,
   crystalLabelsFit,
   crystalZoneFor,
   hitCrystal,
@@ -38,6 +39,7 @@ import {
   visibleHalfWidth,
   volleyFor,
 } from "../client/src/lib/spaceAsteroid/physics";
+import { shotCenterVx } from "../client/src/lib/spaceAsteroid/aimAssist";
 import { createRng } from "../shared/game-rng";
 
 /** Review #486 — a közös szabálymag (ütközés, felvehető elemek, évfolyam-könnyítés, élesítés, zóna) tiszta tesztjei. */
@@ -318,7 +320,7 @@ test("L1 — hármas lövéssel (a játék saját `volleyFor`-ja) 0% téves vál
 test("L1 — a `volleyFor`: egyes lövésnél 1 középső, hármasnál +2 oldalsó (side) lövedék; az oldalsó soha nem válaszol", () => {
   assert.equal(volleyFor(0, 0).length, 1);
   assert.equal(volleyFor(0, 0)[0]!.side, false);
-  const triple = volleyFor(2, 0.4);
+  const triple = volleyFor(2, 0);
   assert.equal(triple.length, 3);
   assert.deepEqual(triple.map((b) => b.side), [false, true, true]);
   for (const s of triple.filter((b) => b.side)) {
@@ -363,4 +365,39 @@ test("L3 — minden nézetben (fekvőben is) MINDEN kristály lövéssel válasz
       assert.equal(hit, c.optionIndex, `${vp.width}×${vp.height}: a ${c.optionIndex}. kristály nem választható egyenes lövéssel`);
     }
   }
+});
+
+/* ------------------------------ vak ellenőrzés L2 / L5 ------------------------------ */
+
+test("vak L2 — nyitott kérdésnél a célzássegéd nem téríti el a középső lövedéket; az eltérített (segített) középső lövedék sem válaszolhat", () => {
+  // kérdés nyitva, a segéd egy oldalra levő sziklára mutatna (3,31): a lövés EGYENES marad
+  assert.equal(shotCenterVx({ touchAssist: true, questionOpen: true, assistVx: 3.31 }), 0);
+  // nincs nyitott kérdés: a segéd az ellenfél felé téríthet
+  assert.equal(shotCenterVx({ touchAssist: true, questionOpen: false, assistVx: 3.31 }), 3.31);
+  // billentyűzetnél soha
+  assert.equal(shotCenterVx({ touchAssist: false, questionOpen: false, assistVx: 3.31 }), 0);
+  // egy a kérdés előtt kilőtt, eltérített középső lövedék a kristályon áthalad (nem válaszol)
+  const assisted = volleyFor(0, 3.31)[0]!;
+  assert.equal(assisted.side, true, "az eltérített középső lövedék nem jogosult válaszra");
+  assert.equal(bulletCountsAsAnswer({ nowMs: 9000, shownAtMs: 0, pressAtMs: 5000, side: assisted.side }), false);
+  assert.equal(volleyFor(0, 0)[0]!.side, false, "az egyenes középső lövedék jogosult");
+  // a vak ellenőrzés számolt ellenpéldája: a helyes alól lőve, a rossz cél magasságán a lövedék x-e a hibás kristály közelében járna
+  const start = { x: -1.299, y: -8.9 };
+  const wrongTarget = { x: 1.299, y: 2.622 };
+  const t = (wrongTarget.y - start.y) / 14;
+  const xAtWrong = start.x + 3.31 * t;
+  assert.ok(Math.abs(xAtWrong - wrongTarget.x) < 0.3, `a segített lövedék a rossz célt találná (x ${xAtWrong.toFixed(2)} vs ${wrongTarget.x})`);
+});
+
+test("vak L5 — a kristály-felirat beférése a VALÓDI szélességgel számol: a törhetetlen, széles szó (22 × W) nem fér, a banki szavak igen", () => {
+  // modellezett betűszélesség (px, félkövér): W széles (0,95 em), kisbetű ~0,56 em
+  const measure = (word: string, px: number) => [...word].reduce((n, ch) => n + (ch === "W" || ch === "M" ? 0.95 : 0.56) * px, 0);
+  assert.equal(labelFitsChip("W".repeat(22), measure, 360), false, "22 × W 360 px-en nem fér");
+  assert.equal(labelFitsChip("W".repeat(22), measure, 844), false, "22 × W fekvőn sem");
+  assert.equal(labelFitsChip("Dunántúli-középhegység", measure, 360), true);
+  assert.equal(labelFitsChip("paradicsom", measure, 360), true);
+  assert.equal(crystalLabelsFit(["kör", "W".repeat(22)], (o) => labelFitsChip(o, measure, 360)), false, "a mért beférés a listát indítja");
+  assert.equal(crystalLabelsFit(["kör", "négyzet"], (o) => labelFitsChip(o, measure, 360)), true);
+  // a karakterszám-küszöb továbbra is él
+  assert.equal(crystalLabelsFit(["a".repeat(23)], () => true), false);
 });

@@ -54,9 +54,28 @@ export function crystalLabelTier(label: string): CrystalLabelTier {
   return longest >= 17 ? "xwide" : longest >= 13 ? "wide" : longest >= 9 ? "long" : "normal";
 }
 
-/** Beférnek-e az opciók a kristály-feliratba (a forrás-választás szűrője; tiszta, olcsó). */
-export function crystalLabelsFit(options: readonly string[]): boolean {
-  return options.every((o) => o.length <= CRYSTAL_LABEL_MAX_CHARS);
+/** A felirat betűmérete (px) a méret-fok szerint (a lap CSS-ének tükre). */
+export const CRYSTAL_TIER_FONT_PX: Record<CrystalLabelTier, number> = { normal: 14, long: 12, wide: 11, xwide: 10 };
+
+/**
+ * A felirat leghosszabb SZAVA befér-e a gomb szövegszélességébe a VALÓDI betűszélességgel (vak ellenőrzés L5): `measure(szó, px)` a
+ * lap `canvas.measureText`-je (a teszt modellt ad). A gomb max-szélessége a CSS-ből: normal 98 px, long min(116, 32vw), wide / xwide
+ * min(150, 40vw); a belső térköz 26 / 26 / 18 px.
+ */
+export function labelFitsChip(label: string, measure: (word: string, px: number) => number, viewportWidthPx: number): boolean {
+  const tier = crystalLabelTier(label);
+  const maxWidth = tier === "normal" ? 98 : tier === "long" ? Math.min(116, 0.32 * viewportWidthPx) : Math.min(150, 0.4 * viewportWidthPx);
+  const inner = maxWidth - (tier === "wide" || tier === "xwide" ? 18 : 26);
+  const px = CRYSTAL_TIER_FONT_PX[tier];
+  return label.split(/[\s-]+/u).every((w) => measure(w, px) <= inner);
+}
+
+/**
+ * Beférnek-e az opciók a kristály-feliratba (a forrás-választás szűrője; tiszta, olcsó): karakterszám ÉS — ha a hívó ad — a mért
+ * szélesség (`fits`, pl. `labelFitsChip`). Ha nem férnek be, a számozott kristályok + a teljes szövegű jelmagyarázat jön.
+ */
+export function crystalLabelsFit(options: readonly string[], fits?: (label: string) => boolean): boolean {
+  return options.every((o) => o.length <= CRYSTAL_LABEL_MAX_CHARS && (fits ? fits(o) : true));
 }
 
 /** A rossz kristályból ennyi apró szikla hasad. */

@@ -72,12 +72,13 @@ export const ASTEROID_GAME_ID = "space-asteroid-quiz" as const;
 /**
  * A menet valós kérdés-számai a director statisztikájából (K.2 „Menet-statisztika”): a `ResultScreen` és a `recordRun`
  * (`correctAnswers` / `wrongAnswers`) ebből kap értéket — a korábbi „leszedett ellenfél ≈ helyes válasz” közelítés megszűnt.
- * A lejárt kérdés hibának számít (nem válasz, de nem is helyes).
+ * A lejárt (kihagyott) kérdés KÜLÖN kimenet (`timeouts`): nem hibás válasz (vak ellenőrzés L4), de a `total`-ban szerepel.
  */
-export function questionTotals(stats: Pick<RunStatsSnapshot, "correct" | "wrong" | "timeouts"> | null | undefined): { correct: number; wrong: number; total: number } {
+export function questionTotals(stats: Pick<RunStatsSnapshot, "correct" | "wrong" | "timeouts"> | null | undefined): { correct: number; wrong: number; timeouts: number; total: number } {
   const correct = stats?.correct ?? 0;
-  const wrong = (stats?.wrong ?? 0) + (stats?.timeouts ?? 0);
-  return { correct, wrong, total: correct + wrong };
+  const wrong = stats?.wrong ?? 0;
+  const timeouts = stats?.timeouts ?? 0;
+  return { correct, wrong, timeouts, total: correct + wrong + timeouts };
 }
 
 /** A nyitott kérdés alatti világ-sebesség (végrehajtás J6a: `slowMo: 0.7`). */
@@ -186,6 +187,8 @@ export type WorldThreat = {
   vy: number;
   /** a vadászgép / főellenfél következő lövéséig (mp) */
   fire: number;
+  /** a rossz kristályból hasadt szilánk: lelövése nem ad pontot, kombót, kill-jelvényt vagy zsákmányt (vak ellenőrzés L3) */
+  shard?: boolean;
 };
 
 export type WorldPhase = "play" | "won" | "lost";
@@ -225,7 +228,7 @@ const range = (u: number, lo: number, hi: number): number => lo + u * (hi - lo);
  * a hulló elemeket (élet / pajzs / erő / bomba) is felveszi — ugyanazzal a drop-táblával, mint a lap (`physics.ts`).
  * Kalibráció (20 seed, 2026-11-17, review #486 M3): lásd `T/space-asteroid-sim.test.ts` fejkommentje.
  */
-export const DODGE_IMPACT = 0.40;
+export const DODGE_IMPACT = 0.7;
 export const DODGE_FIGHTER = 0.95;
 export const DODGE_BOSS = 0.8;
 
@@ -237,7 +240,7 @@ export const START_LIVES = 3;
 export { MAX_LIVES };
 
 /** A bot a felvehető elemet ilyen könnyítéssel éri el (ügyességi dobás; a hajó a hulló elem alá áll). */
-export const PICKUP_CATCH_EASE = 0.85;
+export const PICKUP_CATCH_EASE = 0.95;
 /** Az ütközéshez a hajónak és az ellenfélnek oldalirányban is át kell fednie (a lapon a hajó mozog; ennyi eséllyel ér a függőleges pályára). */
 export const LATERAL_OVERLAP = 0.6;
 
@@ -315,6 +318,7 @@ export function createAsteroidWorld(opts: { seed: number | string; grade?: numbe
   };
 
   const addScore = (t: WorldThreat): void => {
+    if (t.shard) return; // a rossz válasz szilánkja nem jutalmaz
     combo += 1;
     if (combo > bestCombo) bestCombo = combo;
     kills += 1;
@@ -338,7 +342,7 @@ export function createAsteroidWorld(opts: { seed: number | string; grade?: numbe
       for (let k = 0; k < 2; k++) {
         threats.push({ id: nextId++, kind: "rock", size, hp: enemyHp("rock", size), y: t.y, vy: Math.max(-2.8, t.vy + range(rng.next(), -0.5, 0.5)), fire: 0 });
       }
-    } else if (rng.next() < dropChance(t.kind)) {
+    } else if (!t.shard && rng.next() < dropChance(t.kind)) {
       pickups.push({ id: nextId++, kind: pickDropKind(rng.next()), y: t.y });
     }
   };
@@ -461,7 +465,7 @@ export function createAsteroidWorld(opts: { seed: number | string; grade?: numbe
     shatter(at) {
       for (const s of crystalShards(at, crystalRng.next)) {
         shardsSpawned += 1;
-        threats.push({ id: nextId++, kind: "rock", size: 1, hp: 1, y: Math.min(at.y, GAME_H / 2), vy: s.vy, fire: 0 });
+        threats.push({ id: nextId++, kind: "rock", size: 1, hp: 1, y: Math.min(at.y, GAME_H / 2), vy: s.vy, fire: 0, shard: true });
       }
     },
     detonate() {
@@ -474,7 +478,7 @@ export function createAsteroidWorld(opts: { seed: number | string; grade?: numbe
         else {
           threats = threats.filter((x) => x !== t);
           addScore(t);
-          killed = true;
+          if (!t.shard) killed = true;
         }
       }
       if (killed) combo = before + 1;

@@ -163,10 +163,13 @@ test("review #486 M2: a kristályt a lövedék csak élesítés után, új tűz-
   assert.doesNotMatch(code, /chip\.disabled !== lock/, "a koppintás / billentyű szándékos: nincs élesítési tiltás (az élesítés a lövedékre vonatkozik)");
 });
 
-test("review #486: a hosszú válaszok listája — a lista az egyetlen megállítási ok mellett válaszol, a világ áll alatta, és a hosszú válaszú kérdéssel magától nyílik", () => {
-  assert.match(code, /const long = !crystalLabelsFit\(p\.options\.map\(\(o\) => o\.label\)\);\s*setLongLabels\(long\);/);
-  // SPEC-VÁLTOZÁS 2026-11-17 (review #486 Ú5, orkesztrátori döntés): a hosszú válaszú tételnél a lista a kérdéssel együtt MAGÁTÓL megnyílik; a szigor nő.
-  assert.match(code, /if \(long\) setExpanded\(true\);/);
+test("review #486: a hosszú válaszok listája — a lista az egyetlen megállítási ok mellett válaszol, a világ áll alatta, a „Válaszok” gombra nyílik, magától NEM (nem blokkoló jelmagyarázat van helyette)", () => {
+  // SPEC-VÁLTOZÁS 2026-11-19 (vak ellenőrzés L1, blokkoló; felülírja az Ú5 automatikus nyitását): a hosszú / nem férő válasznál NEM áll meg magától a világ;
+  // a teljes szövegek nem blokkoló jelmagyarázatban látszanak a számozott kristályokkal egyszerre; a beférést a valódi szélesség adja (L5).
+  assert.match(code, /setLongLabels\(!crystalLabelsFit\(p\.options\.map\(\(o\) => o\.label\), measuredFit\)\);/);
+  assert.doesNotMatch(code, /if \(long\) setExpanded\(true\)/, "a lista nem nyílik magától");
+  assert.match(code, /data-testid="sa-legend"/);
+  assert.match(page, /\.sa-legend \{[^}]*pointer-events: none;/, "a jelmagyarázat nem blokkoló");
   assert.match(code, /const closeAnswerList = \(\) => \{\s*setExpanded\(false\);\s*crystalShownAtRef\.current = armClockRef\.current;/, "a lista zárása újraindítja az élesítést");
   assert.match(code, /listHoldRef\.current = expanded && longLabels && !paused && !gfxLost && feedback === null;/);
   assert.match(code, /data-testid="sa-answers"/);
@@ -232,4 +235,19 @@ test("review #486 L2: a kristály-felirat méret-foka a `crystalLabelTier`-ből 
   assert.match(code, /data-tier=\{crystalLabelTier\(opt\.label\)\}/);
   assert.doesNotMatch(page, /\/S\{9,\}\//, "a hibás regex (backslash nélküli S) visszatért");
   assert.match(page, /\.sa-crystal-label \{[^}]*overflow-wrap: normal;[^}]*hyphens: manual;/, "a szó nem törhet közepén");
+});
+
+test("vak L2 / L3 / L4: a segített lövés nem válaszol, a szilánk nem jutalmaz, a kihagyás és a tanulási jelvény külön — a lapon", () => {
+  // L2
+  assert.match(code, /const centerVx = shotCenterVx\(\{\s*touchAssist,\s*questionOpen,/);
+  assert.match(code, /import \{ aimAssistVx, shotCenterVx \} from "@\/lib\/spaceAsteroid\/aimAssist";/);
+  // L3: a szilánk jelölt, a jutalom-ágak őrzöttek
+  assert.match(code, /fromCrystal: true,/);
+  const destroyed = code.slice(code.indexOf("const handleEnemyDestroyed = "), code.indexOf("const handleHit = "));
+  assert.match(destroyed, /if \(!e\.fromCrystal\) \{\s*comboRef\.current = comboRef\.current \+ 1;/);
+  assert.match(destroyed, /\} else if \(!e\.fromCrystal\) \{\s*if \(runRngRef/);
+  // L4
+  assert.match(code, /maxStreak: answerStreakRef\.current\.best,/);
+  assert.match(code, /perfect: gameWon && runTotalsRef\.current\.correct >= 3 && runTotalsRef\.current\.wrong === 0 && runTotalsRef\.current\.timeouts === 0,/);
+  assert.doesNotMatch(code, /maxStreak: bestComboRef/, "a tanulási jelvény nem jöhet a harci kombóból");
 });

@@ -191,7 +191,8 @@ export type BulletSpec = { dx: number; dy: number; vx: number; vy: number; /** o
  * a szomszéd, nem célzott kristályt találná, és hamis rossz választ rögzítene (review #486 L1).
  */
 export function volleyFor(powerLevel: number, centerVx: number): BulletSpec[] {
-  const out: BulletSpec[] = [{ dx: 0, dy: 0.7, vx: centerVx, vy: BULLET_SPEED, side: false }];
+  // az eltérített (célzássegített) középső lövedék sem válaszolhat kristályon (vak ellenőrzés L2): `side`-ként jelölt
+  const out: BulletSpec[] = [{ dx: 0, dy: 0.7, vx: centerVx, vy: BULLET_SPEED, side: centerVx !== 0 }];
   if (powerLevel >= 1) {
     out.push({ dx: -0.45, dy: 0.5, vx: centerVx - 3.0, vy: BULLET_SPEED * 0.96, side: true });
     out.push({ dx: 0.45, dy: 0.5, vx: centerVx + 3.0, vy: BULLET_SPEED * 0.96, side: true });
