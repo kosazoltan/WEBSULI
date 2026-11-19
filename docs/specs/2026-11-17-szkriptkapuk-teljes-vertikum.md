@@ -211,7 +211,8 @@ konfigban megadott útvonal-mintákra illő változásnál dolgozik (S1: tesztf�
 ### 6.3 Figyelmeztető → tiltó mód kapunként
 
 `gates.config.json` → `"modes": { "<kapu>": { "local": "warn" | "block", "ci": "warn" | "block" } }`. Helyben a kapu `warn` módban
-`WARN`-t ad (a lánc zöld marad), `block` módban `FAIL`-t. A CI a `--mode block` kapcsolóval hívja (S1-től kezdve). Átállás `warn` →
+`WARN`-t ad (a lánc zöld marad), `block` módban `FAIL`-t. A CI is `warn` módban hívja (a job nem bukik; orkesztrátori döntés
+2026-11-19, vak review P1-K1): `block` csak a 6.3a tiltásra váltási feltételeinek teljesülése és tulajdonosi jóváhagyás után. Átállás `warn` →
 `block` helyben: két hét vagy 20 PR után, ha a hamis riasztás aránya < 10% (6.5).
 
 ### 6.3a Bevezetési lépcsők (WARN → TILT) és a váltás mért feltételei
@@ -362,7 +363,8 @@ A `gate-metrics.mjs` (S10) a bizonyíték-tárból és a `gh`-ból számol, nem 
 ## 9. F) Kockázatok és korlátok (őszintén)
 
 - **A hook és a helyi kapu nem biztonsági határ.** Kikapcsolható, a tár kézzel írható; a lánc-hash a figyelmetlenséget fogja, nem a
-  szándékos csalást. A megkerülhetetlen pont a CI — ezért az S1 ott tilt, és ahol lehet, minden új kapu a CI-ban is fut.
+  szándékos csalást. A megkerülhetetlen pont a CI — ezért minden új kapu a CI-ban is fut; az S1 ott is `warn` módban indul, és csak a
+  6.3a mért feltételei + tulajdonosi jóváhagyás után tilt (addig a CI ezt a védelmet még NEM adja).
 - **Hamis riasztás ára:** minden téves FAIL egy ügynöki kört (API-hívást) és bizalmat visz. Ezért a fokozatos bevezetés és a mérés.
   A diff-alapú heurisztika (S1) határesetei: refaktor, amely állítást mozgat (pár-keresés tompítja), új teszt átnevezése, generált
   pillanatképek — a hamis riasztást a mérce lazítása nélkül, pontosabb párosítással kell csökkenteni.

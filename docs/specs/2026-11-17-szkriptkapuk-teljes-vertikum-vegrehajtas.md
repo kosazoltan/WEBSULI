@@ -17,7 +17,7 @@ a háromfázisú ellenőr minden PR-ban látja a végrehajtási utasítást.
 | Szelet | Ág | Tartalom | Előfeltétel |
 |---|---|---|---|
 | P1 | `chore/szkriptkapuk-p1-terv` | a terv és ez a végrehajtási fájl (csak doksi) | — |
-| P2 | `chore/szkriptkapuk-p2-bizonyitek-lanc` | `scripts/qa/gates/evidence-chain.mjs` (+ teszt), `evidence-run.mjs`; a titok-szűrés bővítése a `lib.mjs` `redact`-jában; a szakasz- és a push-kapu láncolt rekordja hangos hibával; runbook-szakasz | P1 (a terv-commit elöl) |
+| P2 | `chore/szkriptkapuk-p2-bizonyitek-lanc` | `scripts/qa/gates/evidence-chain.mjs` (+ teszt), `evidence-run.mjs`; a titok-szűrés bővítése a `lib.mjs` `redact`-jában; a szakasz- és a push-kapu láncolt rekordja hangos hibával; runbook-szakasz | P1 (a terv-commit elöl), és a terv sorrendje szerint a #506 (`chore/hook-onfailure-tilt`) és a #513 (`fix/merge-kapu-rest`) összevonása után |
 | P3a | `chore/szkriptkapuk-p3a-teszt-integritas` | `test-integrity.mjs` diff-értelmező és mérce-szabályok + tesztjeik | P2 bent |
 | P3b | `chore/szkriptkapuk-p3b-teszt-integritas-kapu` | jelölés-igazolás, nézetek, CLI, lint-kapu lépés, CI-lépés (`warn`), `gates.config.json` `testIntegrity` / `modes`, runbook | P3a bent |
 | P4a | `chore/szkriptkapuk-p4a-hivatkozas` | `verify-report.mjs` hivatkozás-ellenőrzés, korpusz-futtató, sablon, tesztjeik | P2 bent |
@@ -185,8 +185,8 @@ Rekord: `test-integrity-<fej>.json` (`findings`, `mode`, `ms`).
    rögzített diff-mintával.
 3. Bekötés: `lint-gate.mjs` `runLintSteps` végén egy lépés (`teszt-integritás (S1)`), mód a `gates.config.json` `modes` szerint
    (helyben `warn`). Commit; `npm run gate:stage`.
-4. CI: a „Háromfázisú rend” jobban `node scripts/qa/gates/test-integrity.mjs --base origin/${{ github.base_ref }} --mode block
-   --pr-body-env PR_BODY` (`env: PR_BODY: ${{ github.event.pull_request.body }}` — a leírás környezeti változóban, nem a parancssorban).
+4. CI: a „Háromfázisú rend” jobban `node scripts/qa/gates/test-integrity.mjs --base origin/${{ github.base_ref }} --mode warn
+   --pr-body-env PR_BODY` (a job nem bukik; `block` csak a terv 6.3a feltételei és tulajdonosi jóváhagyás után — vak review P1-K1) (`env: PR_BODY: ${{ github.event.pull_request.body }}` — a leírás környezeti változóban, nem a parancssorban).
 5. Ellenpróba (csak olvasva): `node scripts/qa/gates/test-integrity.mjs --base origin/main --head origin/<ág>` az öt
    nyitott ágon (J1a, J3a, J5a, J6a, J7b). Elvárt: a J7b `tornado-sim.test.ts` „− 1” lazítása lelet; az Aszteroida
    `space-asteroid-play.spec.ts` küszöb-változása és a `DODGE_IMPACT` bot-konstans lelet; a jelölt és igazolt SPEC-VÁLTOZÁS átmegy.
