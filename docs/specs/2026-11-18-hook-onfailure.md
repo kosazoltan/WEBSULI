@@ -131,3 +131,35 @@ operációs-rendszer-szintű védelem csak a homokozóval).
   az `Edit(/.claude/settings.local.json)` szabályt (teszt), és a runbook SHALL kimondani, hogy ezután csak a tulajdonos módosítja.
 - [x] F12 WHEN az Edit / Write a belépési pontot jogosan átírja, vagy más hook-fájlban korai kilépés van THEN a repó-szabály SHALL nem
   tiltani; WHEN a bemenetben diff-szkennelés mező van, de a környezeti változó nincs THEN a `removes` szabály SHALL érvényes maradni.
+
+## Kiegészítés 3 — a harmadik vak ellenőrzés feltételei (2026-11-19)
+
+A harmadik vak ellenőrzés (fej `b5ab2de5`) ítélete: IGEN, FELTÉTELLEL. A feltételek és a további leletek ebben a PR-ben, mindegyik
+előbb bukó teszttel.
+
+**Tények a hivatalos dokumentációból** (code.claude.com/docs/en/hooks, „Disable or remove hooks”; /permissions, 2026-11-19):
+- a projekt `.claude/settings.json`-jában a hookok kikapcsoló kulcsa `false` értékkel felülírja a felhasználói beállítás `true`
+  értékét (a parancssori, egy futásra szóló beállítás ennél erősebb — azt repóból nem lehet lefedni);
+- a `/path` alak a fő munkakönyvtárhoz (projektgyökér) horgonyzott, a `//path` a fájlrendszer gyökeréhez, a `~/path` a saját
+  könyvtárhoz; a minta gitignore-szintaxisú (`**` tetszőleges mélység). A `//**` alak a felhasználói `~/.claude` mappát is lefedné
+  — ezt nem vesszük fel (a tulajdonos saját beállítása, repó-PR-ból nem korlátozzuk).
+
+**Döntés.**
+1. L13: a projekt-settingsbe a kikapcsoló kulcs kifejezett `false` értékkel kerül; teszt `JSON.parse`-szal olvassa (a JSON-escape-pel
+   írt kulcs is bukik), és a helyi settings-fájlban sem lehet `true`. A repó-szabály a kulcs `true` értékét fogja (a `false` nem
+   hamis tiltás), és a `false` eltávolítását is (`removes`). A runbook a forrással együtt, a kulcs megnevezése nélkül írja le.
+2. L12: a runbook pontosan kimondja a fedett kört (beépített fájlszerkesztő eszközök; a `/` a munkamenet fő munkakönyvtárához
+   horgonyzott) és a nem fedettet (felhasználói settings, a repón kívüli munkafa, PowerShell-fájlírás, MCP-fájlírók, fájlt maga
+   nyitó szkript). Új tiltás csak dokumentált alakkal: `Edit(/.claude/worktrees/**/.claude/settings.json)` és
+   `Edit(/.claude/worktrees/**/.claude/settings.local.json)`. A `ConfigChange` hook kanbanra (a következő hook-szelet).
+3. L14: a szöveg-őr szóhatára Unicode-tudatos (`(?<![\p{L}\p{N}_])…(?![\p{L}\p{N}_])`, `u` jelző); mintamondatos önteszt.
+4. L15: teszt fogja, ha a lint-kapu a hook-folyamatnak nem adja át a `WEBSULI_DIFF_SCAN=1` jelet.
+
+**Elfogadás (EARS).**
+- [ ] F13 WHEN a `.claude/settings.json`-t `JSON.parse`-szal olvassuk THEN a kikapcsoló kulcs SHALL `false` lenni, és a helyi
+  settings-fájlban (ha van) SHALL nem `true`; a runbook SHALL a forrást megnevezni.
+- [ ] F14 WHEN a `.claude/settings.json`-t olvassuk THEN a `permissions.deny` SHALL tartalmazni a két munkafa-szabályt, és SHALL nem
+  tartalmazni `//` vagy `~/` kezdetű szabályt; a runbook SHALL kimondani a fedett és a nem fedett kört.
+- [ ] F15 WHEN a szöveg-őr ékezetes szóval kezdődő / végződő felszólítást vizsgál THEN SHALL felismerni (önteszt mintamondatokkal),
+  és szó belsejében SHALL nem illeszkedni.
+- [ ] F16 WHEN a lint-kapu diff-szkennelése a hookot hívja THEN a hook-folyamat környezetében SHALL `WEBSULI_DIFF_SCAN=1` lenni (teszt).

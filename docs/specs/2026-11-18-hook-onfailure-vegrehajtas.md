@@ -43,3 +43,17 @@ Terv: `docs/specs/2026-11-18-hook-onfailure.md`, „Kiegészítés 2”.
 17. Kanban: L10, L11. `gate:stage`, mutáció, sorompó, `gate:push`.
 
 - [x] 14 · [x] 15 · [x] 16 · [ ] 17 (kapuk — folyamatban)
+
+## Kiegészítés 3 — a harmadik vak ellenőrzés feltételei (2026-11-19) — végrehajtás
+
+Terv: `docs/specs/2026-11-18-hook-onfailure.md`, „Kiegészítés 3”.
+
+18. Ez a doksi-commit, a kód előtt.
+19. L13: bukó teszt (`hook-failure.test.mjs`, F13) → `.claude/settings.json` kikapcsoló kulcs `false`; `repo-rules.json` a `true`
+    értéket és a `false` eltávolítását fogja; runbook forrással.
+20. L12: bukó teszt (F14) → két munkafa-tiltás; runbook fedett / nem fedett kör; kanban: `ConfigChange` hook.
+21. L14: bukó önteszt → Unicode-tudatos szóhatár a szöveg-őrben.
+22. L15: bukó teszt (`lint-gate.test.mjs`) a `WEBSULI_DIFF_SCAN` jelre.
+23. Célzott tesztek, mutációs ellenpróba (M7, M9, L14, a tiltások), `gate:stage`; 05:30 UTC után sorompó, `gate:push`, fej-hash.
+
+- [ ] 18 · [ ] 19 · [ ] 20 · [ ] 21 · [ ] 22 · [ ] 23
