@@ -170,7 +170,7 @@ export async function runLintSteps({ gate, ctx, mode }) {
       const text = ls.map((l) => l.text).join('\n');
       for (const h of applyRepoRules(rules, text, file)) hits.push({ ...h, file });
       if (existsSync(hook)) {
-        const r = exec(node, [hook], { cwd: root, input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: file, content: text, diff_scan: true } }), timeoutMs: 20_000 });
+        const r = exec(node, [hook], { cwd: root, input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: file, content: text } }), env: { ...process.env, WEBSULI_DIFF_SCAN: '1' }, timeoutMs: 20_000 });
         const c = classifyHookOutput(r.stdout);
         if (c) hits.push({ ...c, file });
       }

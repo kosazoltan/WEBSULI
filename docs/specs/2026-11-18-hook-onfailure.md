@@ -127,7 +127,7 @@ operációs-rendszer-szintű védelem csak a homokozóval).
    forrásból regexszel olvassa a korlátot — export / import).
 
 **Elfogadás (EARS).**
-- [ ] F11 WHEN a `.claude/settings.json`-t olvassuk THEN a `permissions.deny` SHALL tartalmazni az `Edit(/.claude/settings.json)` és
+- [x] F11 WHEN a `.claude/settings.json`-t olvassuk THEN a `permissions.deny` SHALL tartalmazni az `Edit(/.claude/settings.json)` és
   az `Edit(/.claude/settings.local.json)` szabályt (teszt), és a runbook SHALL kimondani, hogy ezután csak a tulajdonos módosítja.
-- [ ] F12 WHEN az Edit / Write a belépési pontot jogosan átírja, vagy más hook-fájlban korai kilépés van THEN a repó-szabály SHALL nem
+- [x] F12 WHEN az Edit / Write a belépési pontot jogosan átírja, vagy más hook-fájlban korai kilépés van THEN a repó-szabály SHALL nem
   tiltani; WHEN a bemenetben diff-szkennelés mező van, de a környezeti változó nincs THEN a `removes` szabály SHALL érvényes maradni.

@@ -84,8 +84,9 @@ try {
       if (!applies) continue;
       if (r.path && !(isEdit && new RegExp(r.path, 'i').test(fp.replace(/\\/g, '/')))) continue;
       if (r.removes) {
-        // A lint-kapu diff-szkennelése csak a hozzáadott sorokat adja át — az eltávolítás abból nem ítélhető meg.
-        if (ti.diff_scan === true) continue;
+        // A lint-kapu diff-szkennelése csak a hozzáadott sorokat adja át — az eltávolítás abból nem ítélhető meg. A jel a
+        // hook-folyamat környezeti változója (a lint-kapu állítja be), nem a bemenet mezője — azt a modell is megadhatná.
+        if (process.env.WEBSULI_DIFF_SCAN === '1') continue;
         const re = new RegExp(r.removes, `${(r.flags || '').replace(/g/g, '')}g`);
         const count = (t) => (String(t ?? '').match(re) || []).length;
         let before = '';

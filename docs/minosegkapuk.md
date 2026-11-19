@@ -193,8 +193,7 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
 - A hook saját „nem válaszolt” tiltása (a git / gh nem válaszolt, a keret elfogyott) és az audit-hook (`check-audit-ok`) ugyanilyen
   tiltása a teendőt is megmondja: **néhány másodperc múlva ugyanazt az egyszerű parancsot újra.** Az audit-hook a git
   időtúllépésekor / indítási hibájakor és belső hibájakor push-parancsra tilt (kanban #126; a belső git-korlát 10 s, a külső hook-korlát 20 s); nem push parancsnál és nem git-repóban
-  enged. A védelem eltávolítását / gyengítését (a settings-ből, a hook belépési pontjából) az `enforce-repo-rules` Edit / Write-ra
-  tiltja (`scripts/qa/repo-rules.json`).
+  enged.
 - **Ha tartósan fennáll** (pl. minden Bash / PowerShell parancs tiltott, mert a hook-szkript elromlott — félbemaradt összefésülés,
   szintaxishiba, hiányzó `node`): az ügynök **kizárólag a hookot javíthatja** — az Edit / Write eszközzel (azon nincs
   `onFailure`) a `scripts/qa/hooks/check-quality-gates.mjs`-ben, a hibát lefedő teszttel együtt. A védelmet (a `"onFailure"`
@@ -203,6 +202,14 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
 - **Ha a javításhoz nincs futtatókörnyezet** (pl. nincs `node`), vagy a javítás maga is csak a tiltott úton (a védelem kikapcsolásával) volna
   elvégezhető: az ügynök **megáll**, és a tulajdonostól kér segítséget — leírja a hibát, a kipróbált lépéseket és a javasolt
   hook-javítást.
+- **A settings-fájlok jogosultsági tiltás alatt állnak** (tulajdonosi döntés 2026-11-18): a `.claude/settings.json`
+  `permissions.deny` listája (`Edit(/.claude/settings.json)`, `Edit(/.claude/settings.local.json)`) minden módban megtiltja, hogy ügynök
+  ezeket a fájlokat a fájlszerkesztő eszközökkel, illetve héjban átirányítással vagy a felismert fájl-parancsokkal írja. **Ezután a
+  beállítás csak a tulajdonos kezével módosítható.** Dokumentált rés: a fájlt maga megnyitó szkript (pl. Node / Python) — ezt a
+  munkamenetben semmi nem fogja meg; ilyen írás a kapu megkerülése, tilos.
+- **A hook-szkript gyengítése ellen** a valódi védelem a CI-ben futó viselkedési hook-tesztek (`settings-hooks.test.mjs`,
+  `hook-failure.test.mjs`, `check-quality-gates.test.mjs`): a gyengített hook a PR-ban bukik. A `scripts/qa/repo-rules.json`
+  védő szabályai csak szűk, szó szerinti alakokat fognak — riasztók, nem biztonsági határ; amit átengednek, az sem megengedett.
 - **A védelem ideiglenes kikapcsolása kizárólag a tulajdonos saját kezű lépése** (kézzel, a saját gépén; utána vissza). Az ügynök
   ezt nem végezheti el, és nem is javasolhatja kerülőútként.
 

@@ -42,4 +42,4 @@ Terv: `docs/specs/2026-11-18-hook-onfailure.md`, „Kiegészítés 2”.
 16. L2b: runbook-pontosítás; `repo-rules.json` szűkítése; a diff-szkennelés jele `WEBSULI_DIFF_SCAN=1` (lint-gate → hook-folyamat); tesztek.
 17. Kanban: L10, L11. `gate:stage`, mutáció, sorompó, `gate:push`.
 
-- [ ] 14 · [ ] 15 · [ ] 16 · [ ] 17
+- [x] 14 · [x] 15 · [x] 16 · [ ] 17 (kapuk — folyamatban)

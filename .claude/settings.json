@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "deny": [
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/settings.local.json)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

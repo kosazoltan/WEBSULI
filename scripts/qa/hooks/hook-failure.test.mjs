@@ -153,7 +153,7 @@ const SETTINGS = join(repoRoot, '.claude', 'settings.json');
 const GATE = join(repoRoot, 'scripts', 'qa', 'hooks', 'check-quality-gates.mjs');
 const OFF = `"${'disable'}${'AllHooks'}": true`; // a kikapcsoló beállítás neve szándékosan darabolva (szöveg-őr)
 
-test('F9: a három próba (helyi settings-be hook-kikapcsolás, az onFailure törlése, a hook belépési pontjának kiürítése) TILTOTT', () => {
+test('F9: a szó szerinti próbák (hook-kikapcsolás, az onFailure törlése / cseréje, a kapu-bejegyzés cseréje, korai kilépés a kapu-hookban) TILTOTTAK', () => {
   const settingsText = readFileSync(SETTINGS, 'utf8');
   const probes = [
     { tool_name: 'Write', tool_input: { file_path: join(repoRoot, '.claude', 'settings.local.json'), content: `{ ${OFF} }` } },
@@ -162,7 +162,6 @@ test('F9: a három próba (helyi settings-be hook-kikapcsolás, az onFailure tö
     { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: settingsText.replace(/\s*"onFailure": "block",/g, '') } },
     { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: settingsText.replace(/check-quality-gates\.mjs/g, 'enforce-repo-rules.mjs') } },
     { tool_name: 'Edit', tool_input: { file_path: GATE, old_string: 'function main() {\n  let raw', new_string: 'function main() {\n  process.exit(0);\n  let raw' } },
-    { tool_name: 'Edit', tool_input: { file_path: GATE, old_string: ".endsWith('scripts/qa/hooks/check-quality-gates.mjs')) main();", new_string: ".endsWith('scripts/qa/hooks/check-quality-gates.mjs')) void 0;" } },
   ];
   for (const p of probes) assert.match(reason(run(rulesHook, p)) ?? '', /REPO-SZABÁLY/, JSON.stringify(p.tool_input).slice(0, 140));
 });
@@ -172,12 +171,17 @@ test('F9: a hook tartalmi javítása és a settings más részének szerkesztés
     { tool_name: 'Edit', tool_input: { file_path: GATE, old_string: "export const RETRY_HINT = 'próbáld újra", new_string: "export const RETRY_HINT = 'Próbáld újra" } },
     { tool_name: 'Edit', tool_input: { file_path: SETTINGS, old_string: '"timeout": 60,\n            "onFailure": "block",', new_string: '"timeout": 60,\n            "onFailure": "block",\n            "statusMessage": "x",' } },
     { tool_name: 'Edit', tool_input: { file_path: join(repoRoot, 'docs', 'x.md'), old_string: '"onFailure": "block"', new_string: '' } },
+    // F12: a belépési pont jogos refaktorja és más hook-fájl korai kilépése nem hamis tiltás
+    { tool_name: 'Edit', tool_input: { file_path: GATE, old_string: ".endsWith('scripts/qa/hooks/check-quality-gates.mjs')) main();", new_string: ".endsWith('scripts/qa/hooks/check-quality-gates.mjs');\nif (isMain) main();" } },
+    { tool_name: 'Edit', tool_input: { file_path: join(repoRoot, 'scripts', 'qa', 'hooks', 'warn-test-edit.mjs'), old_string: 'x', new_string: 'function main() {\n  process.exit(0);\n}' } },
   ];
   for (const p of allowed) assert.equal(reason(run(rulesHook, p)), null, JSON.stringify(p.tool_input).slice(0, 140));
-  // a lint-kapu diff-szkennelése (csak a hozzáadott sorok) nem ítélheti meg az eltávolítást
-  assert.equal(reason(run(rulesHook, { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: '"timeout": 20,', diff_scan: true } })), null);
-  // ugyanez diff_scan nélkül (valódi Write a teljes fájl helyére) tiltás
-  assert.match(reason(run(rulesHook, { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: '"timeout": 20,' } })) ?? '', /REPO-SZABÁLY/);
+  // a lint-kapu diff-szkennelése (csak a hozzáadott sorok; jel: a hook-folyamat környezeti változója) nem ítéli meg az eltávolítást
+  const diffScan = { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: '"timeout": 20,' } };
+  assert.equal(reason(run(rulesHook, diffScan, { WEBSULI_DIFF_SCAN: '1' })), null);
+  // valódi Write (a jel nélkül) tilt — a bemenetbe írt jelzőmező hatástalan (a modell is megadhatná)
+  assert.match(reason(run(rulesHook, diffScan)) ?? '', /REPO-SZABÁLY/);
+  assert.match(reason(run(rulesHook, { tool_name: 'Write', tool_input: { ...diffScan.tool_input, diff_scan: true } })) ?? '', /REPO-SZABÁLY/);
 });
 
 // ---- L5 / L8 / L7 (vak ellenőr, 2026-11-18) ---------------------------------------------------------------------------------
@@ -215,7 +219,9 @@ test('L7: a kikapcsoló mechanizmus neve és a védelem eltávolítására felsz
   const files = ['docs/minosegkapuk.md', 'docs/agent-csapdak.md', 'docs/handoffs/2026-11-18-kapu-hook-retro.md',
     'docs/specs/2026-11-18-hook-onfailure.md', 'docs/specs/2026-11-18-hook-onfailure-vegrehajtas.md',
     ...SKILLS.flatMap((s) => [`.agents/skills/${s}/SKILL.md`, `.claude/skills/${s}/SKILL.md`])];
-  const MECHANISM = [/onFailure[^.\n]{0,40}continue/i, /disable\s*All\s*Hooks/i, /settings\.local\.json/i, /"onFailure"\s*:\s*"continue"/i, /claude\s+--settings/i];
+  // A helyi settings-fájl NEVE megengedett (a tulajdonosi döntés szerint jogosultsági tiltás alatt áll, ezt a runbook leírja); ami
+  // tilos: a kikapcsoló kulcs neve, a „continue” érték, a parancssori settings-kapcsoló, és felszólítás a helyi fájlba írásra.
+  const MECHANISM = [/onFailure[^.\n]{0,40}continue/i, /disable\s*All\s*Hooks/i, /settings\.local\.json[^.\n]{0,60}\b(írd|tedd|vedd fel|add hozzá)\b/i, /"onFailure"\s*:\s*"continue"/i, /claude\s+--settings/i];
   for (const f of files) {
     const p = join(repoRoot, ...f.split('/'));
     if (!existsSync(p)) continue;
@@ -230,4 +236,16 @@ test('L7: a kikapcsoló mechanizmus neve és a védelem eltávolítására felsz
   for (const re of [/\btöröld/i, /\btávolítsd el\b/i, /\bkapcsold ki\b/i, /\bvedd ki\b/i, /állítsd[^.\n]*continue/i, /írd át/i, /\bkommenteld ki\b/i, /\bhagyd ki\b/i]) {
     assert.doesNotMatch(sec, re, `tiltott felszólítás: ${re}`);
   }
+});
+
+test('F11: a settings-fájlok jogosultsági tiltás alatt — permissions.deny a dokumentált Edit(/…) alakkal; a runbook kimondja', () => {
+  const settings = JSON.parse(readFileSync(SETTINGS, 'utf8'));
+  const deny = settings.permissions?.deny ?? [];
+  for (const rule of ['Edit(/.claude/settings.json)', 'Edit(/.claude/settings.local.json)']) assert.ok(deny.includes(rule), `hiányzó tiltás: ${rule}`);
+  // a Write(...) szabály a dokumentáció szerint nem illeszkedik — ne ezzel próbáljuk
+  assert.ok(!deny.some((r) => /^Write\(/.test(r)), 'Write(...) szabály hatástalan; az Edit(...) fedi a fájlíró eszközöket');
+  const md = readFileSync(join(repoRoot, 'docs', 'minosegkapuk.md'), 'utf8');
+  assert.match(md, /Ezután a\s+beállítás csak a tulajdonos kezével módosítható/);
+  assert.match(md, /nem biztonsági határ/);
+  assert.doesNotMatch(md, /az `enforce-repo-rules` Edit \/ Write-ra\s+tiltja/);
 });

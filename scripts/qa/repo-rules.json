@@ -48,14 +48,6 @@
     {
       "tool": "Edit|Write",
       "path": "(^|/)scripts/qa/hooks/check-quality-gates\\.mjs$",
-      "pattern": "(?!)",
-      "removes": "endsWith\\('scripts/qa/hooks/check-quality-gates\\.mjs'\\)\\) main\\(\\);",
-      "level": "deny",
-      "message": "a kapu-hook belépési pontjának (main() hívás) eltávolítása — a védelmet az ügynök nem távolíthatja el és nem gyengítheti (AGENTS.md: a kapu megkerülése tilos); elromlott hooknál a hookot javítsd teszttel, különben állj meg és kérj segítséget a tulajdonostól (docs/minosegkapuk.md „A kapu-hook hibája”)."
-    },
-    {
-      "tool": "Edit|Write",
-      "path": "(^|/)scripts/qa/hooks/[^/]+\\.mjs$",
       "pattern": "function main\\(\\)\\s*\\{\\s*(?:\\/\\/[^\\n]*\\n\\s*)*process\\.exit\\(",
       "level": "deny",
       "message": "feltétel nélküli kilépés a hook main()-jének elején (a hook kiürítése) — a védelmet az ügynök nem távolíthatja el és nem gyengítheti (AGENTS.md: a kapu megkerülése tilos); elromlott hooknál a hookot javítsd teszttel, különben állj meg és kérj segítséget a tulajdonostól (docs/minosegkapuk.md „A kapu-hook hibája”)."
