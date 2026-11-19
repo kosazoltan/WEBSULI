@@ -1111,6 +1111,11 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   kirajzolás előtt mérd végig (ne render → mérés → render láncban); mozgó figuránál a nyitott kérdés alatt kövesd. Elakadásnál
   az első lépés a döntés bemeneteinek naplója a teszt pontos lépéseivel, nem újabb időzítés-hangolás.
 
+- **Második kör (vak ellenőr, 2026-11-19):** a javított döntés is 44 px-es figurával számolt, a teszt pedig két középvonali pontot
+  mért (8 és 36 px) — a valós figura 75–95 px, a fej sosem került mérésre, így a teszt a kód saját feltevését igazolta. **Teendő:**
+  a mérce a ténylegesen kirajzolt geometria (a jelenet vetített befoglaló doboza), ne a kód állandója; rácsmérés a teljes testen;
+  és a döntés minden elérhető helyzetre (x = 8…92 %) ellenőrizze, hogy van-e szabad hely, ne csak az induló helyzetre.
+
 ## C-77 — A „lagg” oka egy lusta hangkontextus volt, nem a grafika (2026-11-18)
 - **Tünet:** a Szökőárban menet közben 200–950 ms-os megakadások; a tulajdonos fő panasza a lagg. Korábban a grafikát / a
   kérdésbankot gyanítottuk.
