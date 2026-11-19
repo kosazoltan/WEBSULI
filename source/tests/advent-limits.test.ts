@@ -6,7 +6,8 @@ import express from "express";
 import { adventClock } from "../server/advent/clock";
 import { ADVENT_LIMITS, ADVENT_ROUND_WORST, ADVENT_SCHOOL_KIDS, ADVENT_WRITES_PER_KID, createWindowCounter, type AdventLimits } from "../server/advent/limits";
 import { createAdventRouter } from "../server/advent/routes";
-import { adoptionChoice, solvedDoorsOf, type AdventRow, type AdventStore } from "../server/advent/store";
+import { doorScore, mergeAdoption, orderKeyFor, type AdoptionContext } from "../server/advent/adoption";
+import type { AdventRow, AdventStore } from "../server/advent/store";
 
 /**
  * Adventi naptár — kéréskorlátok és az óra HTTP-szinten, adatbázis nélkül (docs/specs/2026-11-18-adventi-naptar.md 16.1, 18.2,
@@ -234,8 +235,9 @@ test("IP-korlát: csak a SIKERES írás számít; a keret utáni kérés 429 (li
   } finally { await app.close(); }
 });
 
-test("az alapértelmezett korlátokkal a 291. írás 429 (alany), előtte egy sem — két teljes kör belefér (A49 felső határa, vak ellenőr k2)", async () => {
-  const app = await serve({});
+test("az alapértelmezett alanyi kerettel a 291. írás 429 (alany), előtte egy sem — két teljes kör belefér (A49 felső határa, vak ellenőr k2)", async () => {
+  // Az elutasított (409) kérés az érvénytelen-keretbe is számít (vak ellenőr KICSI-4) — itt azt kitágítjuk, hogy az alanyi keret határát mérjük.
+  const app = await serve({ limits: { ...ADVENT_LIMITS, ipInvalid: { limit: 100_000, windowMs: 60_000 } } });
   try {
     const statuses: number[] = [];
     for (let i = 0; i < 291; i++) statuses.push((await app.round(A, "10.3.0.1")).status);
@@ -305,18 +307,67 @@ test("óra NEM e2e-módban, valódi HTTP-n: a tesztidő-fejléc hatástalan, a s
   } finally { await e2e.close(); }
 });
 
-test("névtelen → párosított: melyik sor marad (tulajdonosi döntés 2026-11-18; terv 21.)", () => {
-  const attempt = (correct: boolean) => ({ questionId: "q", pick: 0, correct, at: "" });
-  const row = (doors: Record<number, boolean[]>): AdventRow => ({
-    id: "x", season: 2026, subjectKind: "device", subjectId: "x", grade: 5, round: 1, plan: {},
-    doors: { 1: Object.fromEntries(Object.entries(doors).map(([day, list]) => [day, { attempts: list.map(attempt) }])) },
-    finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(), updatedAt: new Date(),
+test("névtelen → párosított: ABLAKONKÉNTI egyesítés — minden ablaknál a jobb eredmény marad, semmi nem vész el a tanuló sorából (tulajdonosi döntés 2026-11-19; terv 21.)", () => {
+  const attempt = (questionId: string, correct: boolean) => ({ questionId, pick: 1, correct, at: "" });
+  const row = (kind: "device" | "learner", round: number, doors: Record<number, boolean[]>, extra: Partial<AdventRow> = {}): AdventRow => ({
+    id: kind, season: 2026, subjectKind: kind, subjectId: kind, grade: 5, round,
+    plan: { [round]: { round, layout: [], doors: Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 1, [kind + "-q" + (i + 1)]])), subjects: {}, seedKey: kind + ":seed" } as never },
+    doors: { [round]: Object.fromEntries(Object.entries(doors).map(([day, list]) => [day, { attempts: list.map((c) => attempt(kind + "-q" + day, c)) }])) },
+    finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0), ...extra,
   });
-  assert.equal(solvedDoorsOf(row({ 1: [true], 2: [false, true], 3: [false] })), 2);
-  assert.equal(adoptionChoice(row({ 1: [true] }), null), "none");
-  assert.equal(adoptionChoice(null, row({})), "drop-device", "válasz nélküli eszköz-sor: nincs mit átvinni");
-  assert.equal(adoptionChoice(null, row({ 1: [false] })), "move-device", "nincs tanulói sor: átkerül (hibás válasz is haladás)");
-  assert.equal(adoptionChoice(row({ 1: [true] }), row({ 1: [true], 2: [true] })), "replace-learner", "több megoldott az eszközön");
-  assert.equal(adoptionChoice(row({ 1: [true] }), row({ 2: [true] })), "drop-device", "egyenlőség: a tanulóé");
-  assert.equal(adoptionChoice(row({ 1: [true], 2: [true] }), row({ 3: [true] })), "drop-device");
+  const ctx: AdoptionContext = {
+    learnerId: "L", deviceKey: "device:D", learnerKey: "learner:L", learnerGrade: 3, maxRepairs: () => 2, now: new Date("2026-12-05T10:00:00Z"),
+    buildPlan: (_row, round, grade) => ({ round, layout: [], doors: Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 1, ["new-q" + (i + 1)]])), subjects: {}, grade, seedKey: "learner:L" }) as never,
+  };
+  assert.deepEqual([doorScore(undefined), doorScore({ attempts: [attempt("q", false)] }), doorScore({ attempts: [attempt("q", false), attempt("r", true)] })], [0, 1, 2]);
+  // Válasz nélküli eszköz-sor: nincs mit átvinni.
+  assert.equal(mergeAdoption(null, row("device", 1, {}), ctx), null);
+  // Nincs tanulói sor: új sor a tanuló PROFILJÁNAK évfolyamára (3., nem a vendég 5.-e), az eszköz ablakai átkerülnek, saját magjukkal.
+  const fresh = mergeAdoption(null, row("device", 1, { 1: [true], 2: [false] }), ctx)!;
+  assert.equal(fresh.grade, 3, "a vendég évfolyama nem írja felül a profilt (vak ellenőr KICSI-6)");
+  assert.deepEqual(Object.keys(fresh.doors[1]!).sort(), ["1", "2"]);
+  assert.deepEqual(fresh.plan[1]!.doors[1], ["device-q1"]);
+  assert.deepEqual(fresh.plan[1]!.doors[3], ["new-q3"], "a többi ablak a tanuló saját tervéből");
+  assert.equal(orderKeyFor(fresh.plan[1], 1, "x"), "device:seed", "az átvett ablak a vendég sorrendjével jelölődik (vak ellenőr K1)");
+  assert.equal(orderKeyFor(fresh.plan[1], 3, "x"), "learner:L");
+  // Van tanulói sor (2. kör, levél-foglalással, megfeleléssel): körszám, korábbi kör, foglalás, megfelelés MARAD (vak ellenőr K2);
+  // ablakonként a jobb: 1. ablak tanuló megoldotta → marad; 2. ablak tanuló rontott, vendég megoldotta → vendégé; 3. ablak csak a
+  // vendégnél → vendégé; 4. ablak egyenlő (mindkettő rontott) → tanulóé.
+  const learner = row("learner", 2, { 1: [true], 2: [false], 4: [false] }, { mailedTo: ["1:final:abc"], passedAt: new Date("2026-12-04T10:00:00Z"), grade: 6 });
+  learner.doors[1] = { 1: { attempts: [attempt("old-q1", false)] } };
+  learner.plan[1] = { round: 1, layout: [], doors: {}, subjects: {} } as never;
+  const merged = mergeAdoption(learner, row("device", 1, { 1: [false], 2: [true], 3: [false], 4: [false] }), ctx)!;
+  assert.equal(merged.round, 2);
+  assert.deepEqual(merged.mailedTo, ["1:final:abc"]);
+  assert.equal(merged.passedAt?.toISOString(), "2026-12-04T10:00:00.000Z");
+  assert.equal(merged.grade, 6, "a tanuló rögzített évfolyama marad");
+  assert.deepEqual(merged.doors[1], learner.doors[1], "a korábbi kör érintetlen");
+  assert.equal(merged.doors[2]![1]!.attempts[0]!.questionId, "learner-q1");
+  assert.equal(merged.doors[2]![2]!.attempts[0]!.questionId, "device-q2");
+  assert.equal(merged.doors[2]![3]!.attempts[0]!.questionId, "device-q3");
+  assert.equal(merged.doors[2]![4]!.attempts[0]!.questionId, "learner-q4");
+  assert.deepEqual(merged.plan[2]!.doors[2], ["device-q2"]);
+  assert.deepEqual(merged.plan[2]!.doors[4], ["learner-q4"]);
+  // Az eszköz KORÁBBI köreinek jobb ablakai sem vesznek el: ablakonként az eszköz összes körének legjobbja számít (egyenlőségnél
+  // az eszköz aktuális köre), a saját kérdéssorával és sorrend-magjával.
+  const multi = row("device", 2, { 6: [false] });
+  multi.doors[1] = { 6: { attempts: [attempt("dev-r1-q6", true)] }, 7: { attempts: [attempt("dev-r1-q7", false), attempt("dev-r1-q7", true)] } };
+  multi.plan[1] = { round: 1, layout: [], doors: { 6: ["dev-r1-q6"], 7: ["dev-r1-q7"] }, subjects: {}, seedKey: "device:r1" } as never;
+  const best = mergeAdoption(null, multi, ctx)!;
+  assert.equal(best.doors[1]![6]!.attempts[0]!.questionId, "dev-r1-q6", "az 1. körben megoldott ablak, nem a 2. körben rontott");
+  assert.equal(best.doors[1]![7]!.attempts.length, 2);
+  assert.deepEqual(best.plan[1]!.doors[6], ["dev-r1-q6"]);
+  assert.equal(orderKeyFor(best.plan[1], 6, "x"), "device:r1");
+});
+
+test("az elutasított (409) kérés is a rövid ablakú érvénytelen-keretbe számít: egy címről 300 véletlen eszközzel → 120 után 429 (vak ellenőr KICSI-4)", async () => {
+  const app = await serve({});
+  try {
+    const statuses: number[] = [];
+    for (let wave = 0; wave < 6; wave++) statuses.push(...(await Promise.all(Array.from({ length: 50 }, (_, i) => app.round("cccccccc-0000-4000-8000-" + String(wave * 50 + i).padStart(12, "0"), "10.30.0.1").then((r) => r.status)))));
+    assert.equal(statuses.filter((code) => code === 409).length, 120);
+    assert.equal(statuses.filter((code) => code === 429).length, 180);
+    // Másik cím szabályos (itt is 409-es) kérése nem érintett.
+    assert.equal((await app.round(A, "10.30.0.2")).status, 409);
+  } finally { await app.close(); }
 });

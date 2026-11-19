@@ -24,7 +24,8 @@ import { clientIpKeyGenerator } from "../lib/client-ip";
 import { logger } from "../lib/logger";
 import type { AdventResolution, AdventResolvedSubject } from "./identity";
 import { ADVENT_LIMITS, createWindowCounter, type AdventLimits } from "./limits";
-import { adoptionChoice, type AdventRow, type AdventStore, type AdventSubject } from "./store";
+import { mergeAdoption, orderKeyFor, planGradeOf, withPlanMeta, type AdoptionContext } from "./adoption";
+import type { AdventRow, AdventStore, AdventSubject } from "./store";
 
 
 export type AdventRouterDeps = {
@@ -135,20 +136,13 @@ function usedInEarlierRounds(row: AdventRow, round: number, bank: readonly Adven
  * Egy (tárolt vagy friss) próba eredménye. Ha a kérdés közben eltűnt a bankból (`item` null), a tárolt próba alapján csak az
  * eredmény megy ki: helyes válasz és magyarázat nélkül (`correctIndex: -1`) — hiba helyett (review C5).
  */
-function answerResult(item: AdventItem | null, attempt: DoorAttempt, subjectKey: string, season: number, door: AdventDoorView, state: AdventState): AdventAnswerResult {
-  const correctIndex = item ? gradePick(item, optionOrder(item.id, subjectKey, season), attempt.pick).correctIndex : -1;
+function answerResult(item: AdventItem | null, attempt: DoorAttempt, orderKey: string, season: number, door: AdventDoorView, state: AdventState): AdventAnswerResult {
+  const correctIndex = item ? gradePick(item, optionOrder(item.id, orderKey, season), attempt.pick).correctIndex : -1;
   return { correct: attempt.correct, correctIndex, explanation: item?.explanation ?? "", door, summary: state.summary, closing: state.closing };
 }
 
-type Locals = { at: AdventNow; now: Date; resolution: AdventResolution; body: Record<string, unknown>; adoptPreview?: AdventRow | null };
+type Locals = { at: AdventNow; now: Date; resolution: AdventResolution; body: Record<string, unknown>; pairedDevice?: string | null };
 
-/** A terv mellé a tervezés évfolyama is eltárolódik (a JSON-ban), hogy az első válaszig a profil változása új tervet adhasson. */
-type GradedPlan = AdventPlan & { grade?: number };
-const withPlanGrade = (plan: AdventPlan, grade: number): AdventPlan => ({ ...plan, grade } as GradedPlan);
-const planGradeOf = (plan: AdventPlan): number | undefined => {
-  const grade = (plan as GradedPlan).grade;
-  return typeof grade === "number" ? grade : undefined;
-};
 const anyAttempt = (row: AdventRow): boolean => Object.values(row.doors).some((round) => Object.values(round).some((door) => door.attempts.length > 0));
 
 export function createAdventRouter(deps: AdventRouterDeps): Router {
@@ -181,7 +175,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   };
   const fail = (req: Request, res: Response, next: NextFunction, error: unknown): void => {
     if (res.headersSent) return;
-    if (error instanceof AdventHttpError && error.status === 400) {
+    // Az érvénytelen (400) és az elutasított (409) kérés saját, rövid ablakú keretbe számít — a szabályos kérést ez nem állítja meg.
+    if (error instanceof AdventHttpError && (error.status === 400 || error.status === 409)) {
       const ip = clientIpKeyGenerator(req);
       if (invalidRequests.reserve(ip) === null) {
         res.setHeader("Retry-After", String(invalidRequests.retryAfterSec(ip)));
@@ -231,23 +226,32 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       throw new AdventHttpError(409, "A személyes linked lejárt — nyisd meg újra a napi levélből, vagy folytasd vendégként.", { pairing: "invalid" });
     }
     const at = adventNow(now);
-    // Névtelen → párosított átmenet (terv 21.): ha érvényes tanulói link ÉS eszközazonosító is érkezett, az eszköz névtelen sora
-    // a tanulóhoz kerül (vagy a jobb haladás marad). Csak ÍRÁSNÁL történik meg; az olvasás előnézetet ad, nem ír.
-    const pairedDevice = resolution.pairing === "ok" && resolution.subject?.kind === "learner" ? adventDeviceId.safeParse(input.device) : null;
-    let adoptPreview: AdventRow | null = null;
-    if (pairedDevice?.success) {
-      const device = { kind: "device" as const, id: pairedDevice.data.toLowerCase() };
-      const deviceRow = await store.read(at.season, device);
-      if (deviceRow) {
-        if (source === "body") await store.adopt(at.season, device.id, resolution.subject!.id);
-        else {
-          const learnerRow = await store.read(at.season, resolution.subject!);
-          const choice = adoptionChoice(learnerRow, deviceRow);
-          adoptPreview = choice === "move-device" || choice === "replace-learner" ? { ...deviceRow, subjectKind: "learner", subjectId: resolution.subject!.id } : null;
-        }
-      }
-    }
-    res.locals.advent = { at, now, resolution, body, adoptPreview } satisfies Locals;
+    // Névtelen → párosított átmenet (terv 21.): érvényes tanulói link ÉS eszközazonosító esetén az eszköz sora a tanulóhoz kerül —
+    // írásnál a korlátok és a fázis-ellenőrzés UTÁN (\`adoptStep\`), olvasásnál csak előnézet.
+    const paired = resolution.pairing === "ok" && resolution.subject?.kind === "learner" ? adventDeviceId.safeParse(input.device) : null;
+    const pairedDevice = paired?.success ? paired.data.toLowerCase() : null;
+    res.locals.advent = { at, now, resolution, body, pairedDevice } satisfies Locals;
+  });
+  /** Az egyesítés környezete egy tanulóhoz (a tanulói terv a tanuló profiljának évfolyamára készül, ha még nincs). */
+  const adoptionContext = (locals: Locals, deviceId: string): AdoptionContext => {
+    const learner = locals.resolution.subject!;
+    const learnerKey = subjectKeyOf(learner);
+    return {
+      learnerId: learner.id, deviceKey: `device:${deviceId}`, learnerKey,
+      learnerGrade: clampAdventGrade(learner.grade ?? 1),
+      maxRepairs: (grade) => limitsForGrade(grade).maxRepairs,
+      buildPlan: (row, round, grade) => withPlanMeta(buildAdventPlan({ bank, christmas, grade, season: locals.at.season, round, subjectKey: learnerKey, ...usedInEarlierRounds(row, round, bank, christmas) }), grade, learnerKey),
+      now: locals.now,
+    };
+  };
+  /** Az átvétel írásnál: a korlátok UTÁN és csak írható fázisban (vak ellenőr KICSI-5). */
+  const adoptStep = step(async (_req, res) => {
+    const locals = res.locals.advent as Locals;
+    if (!locals.pairedDevice || !isAdventWritable(locals.at.phase)) return;
+    const device = { kind: "device" as const, id: locals.pairedDevice };
+    if (!(await store.read(locals.at.season, device))) return;
+    const ctx = adoptionContext(locals, device.id);
+    await store.adopt(locals.at.season, device.id, ctx.learnerId, (learner, deviceRow) => mergeAdoption(learner, deviceRow, ctx));
   });
   const subjectOr400 = (res: Response): { locals: Locals; subject: AdventResolvedSubject } => {
     const locals = res.locals.advent as Locals;
@@ -304,15 +308,20 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   });
 
   router.get("/state", gate, identify("headers"), ipReadLimiter, wrap(async (_req, res) => {
-    const { at, resolution, adoptPreview } = res.locals.advent as Locals;
-    // Párosított eszközön az átvétel előnézete: azt mutatjuk, ami az első írásnál a tanulónál lesz.
-    const row = adoptPreview ?? (resolution.subject ? await store.read(at.season, resolution.subject) : null);
+    const locals = res.locals.advent as Locals;
+    const { at, resolution } = locals;
+    let row = resolution.subject ? await store.read(at.season, resolution.subject) : null;
+    // Párosított eszközön az átvétel előnézete (írás nélkül): azt mutatjuk, ami az első írásnál a tanulónál lesz.
+    if (locals.pairedDevice && adventRowIsSound(row)) {
+      const deviceRow = await store.read(at.season, { kind: "device", id: locals.pairedDevice });
+      if (deviceRow && adventRowIsSound(deviceRow)) row = mergeAdoption(row, deviceRow, adoptionContext(locals, locals.pairedDevice)) ?? row;
+    }
     if (!adventRowIsSound(row)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true });
     res.json(buildAdventState(at, resolution, row));
   }));
 
   // Előbb a bemenet és az alany (az érvénytelen kérés itt megáll, a hálózati keretet nem éri), utána a keretek.
-  const write = [gate, identify("body"), ipWriteLimiter, subjectLimiter] as const;
+  const write = [gate, identify("body"), ipWriteLimiter, subjectLimiter, adoptStep] as const;
   /** A módosító függvényekben: sérült sornál érthető 409, nem 500. */
   const sound = (row: AdventRow): void => { if (!adventRowIsSound(row)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true }); };
 
@@ -350,7 +359,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       // évfolyam és nincs válasz, a más évfolyamra készült terv új tervre cserélődik.
       if (plan && row.grade == null && !anyAttempt(row) && planGradeOf(plan) !== grade) plan = undefined;
       if (!plan) {
-        plan = withPlanGrade(buildAdventPlan({ bank, christmas, grade, season: locals.at.season, round, subjectKey: key, ...usedInEarlierRounds(row, round, bank, christmas) }), grade);
+        plan = withPlanMeta(buildAdventPlan({ bank, christmas, grade, season: locals.at.season, round, subjectKey: key, ...usedInEarlierRounds(row, round, bank, christmas) }), grade, key);
         changed = true;
       }
       const attempts = row.doors[round]?.[day]?.attempts ?? [];
@@ -365,10 +374,11 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       if (!item && !readOnly) throw new RangeError("advent: a kiosztott kérdés nem található");
       const nextRow: AdventRow = { ...row, plan: { ...row.plan, [round]: plan } };
       const view = buildAdventState(locals.at, locals.resolution, nextRow);
-      const answered = readOnly ? answerResult(item, attempts[attempts.length - 1]!, key, locals.at.season, view.doors[day - 1]!, view) : null;
+      const orderKey = orderKeyFor(plan, day, key);
+      const answered = readOnly ? answerResult(item, attempts[attempts.length - 1]!, orderKey, locals.at.season, view.doors[day - 1]!, view) : null;
       return {
         patch: changed ? { plan: nextRow.plan } : null,
-        result: { day, question: item ? toClientQuestion(item, optionOrder(item.id, key, locals.at.season)) : null, answered },
+        result: { day, question: item ? toClientQuestion(item, optionOrder(item.id, orderKey, locals.at.season)) : null, answered },
       };
     }));
     res.json(result);
@@ -398,7 +408,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       if (stored) {
         const item = findAdventItem(stored.questionId, bank, christmas);
         const view = viewOf(current);
-        return { patch: null, result: { answer: answerResult(item, stored, key, locals.at.season, view.doors[day - 1]!, view), recorded: false, maxRounds } };
+        return { patch: null, result: { answer: answerResult(item, stored, orderKeyFor(plan, day, key), locals.at.season, view.doors[day - 1]!, view), recorded: false, maxRounds } };
       }
       const state = doorState({ unlocked: true, attempts, maxRepairs });
       const expected = state === "open" || state === "repairable" ? plan.doors[day]![attempts.length] : undefined;
@@ -407,7 +417,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       }
       const item = findAdventItem(expected, bank, christmas);
       if (!item) throw new RangeError("advent: a kiosztott kérdés nem található");
-      const graded = gradePick(item, optionOrder(item.id, key, locals.at.season), parsed.data.pick);
+      const orderKey = orderKeyFor(plan, day, key);
+      const graded = gradePick(item, optionOrder(item.id, orderKey, locals.at.season), parsed.data.pick);
       const attempt: DoorAttempt = { questionId: expected, pick: parsed.data.pick, correct: graded.correct, at: locals.now.toISOString() };
       const doors = { ...current.doors, [round]: { ...(current.doors[round] ?? {}), [day]: { attempts: [...attempts, attempt] } } };
       const summary = adventSummary(doors[round]!, maxRepairs);
@@ -420,7 +431,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       return {
         // Az első válasz rögzíti az évfolyamot (k6).
         patch: { doors, finishedAt: next.finishedAt, passedAt: next.passedAt, ...(current.grade == null ? { grade } : {}) },
-        result: { answer: answerResult(item, attempt, key, locals.at.season, view.doors[day - 1]!, view), recorded: true, maxRounds },
+        result: { answer: answerResult(item, attempt, orderKey, locals.at.season, view.doors[day - 1]!, view), recorded: true, maxRounds },
       };
     });
     if (result.recorded && deps.onAnswer) {

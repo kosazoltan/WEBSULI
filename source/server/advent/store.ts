@@ -60,24 +60,11 @@ export class AdventRowGoneError extends Error {
   constructor() { super("advent: a sor közben megszűnt"); this.name = "AdventRowGoneError"; }
 }
 
-/** Megoldott ablakok száma a sor aktuális körében (a „jobb haladás” mércéje az átvételnél). */
-export function solvedDoorsOf(row: Pick<AdventRow, "round" | "doors">): number {
-  return Object.values(row.doors[row.round] ?? {}).filter((door) => door.attempts.some((attempt) => attempt.correct)).length;
-}
-const answeredAny = (row: Pick<AdventRow, "doors">): boolean => Object.values(row.doors).some((round) => Object.values(round).some((door) => door.attempts.length > 0));
-
 /**
- * Névtelen → párosított átmenet (terv 21., tulajdonosi döntés 2026-11-18): melyik sor marad a tanulónál.
- * - nincs eszköz-sor, vagy abban nincs válasz → a tanulóé marad (az üres eszköz-sor törlődik);
- * - nincs tanulói sor → az eszköz sora átkerül;
- * - mindkettő van → a több megoldott ablakkal rendelkező; egyenlőségnél a tanulóé.
+ * Névtelen → párosított átmenet (terv 21., tulajdonosi döntés 2026-11-19: ablakonkénti egyesítés): a hívó adja az egyesített
+ * tanulói sort (\`server/advent/adoption.ts\` \`mergeAdoption\`), vagy \`null\`-t, ha nincs mit átvinni.
  */
-export function adoptionChoice(learner: AdventRow | null, device: AdventRow | null): "none" | "drop-device" | "move-device" | "replace-learner" {
-  if (!device) return "none";
-  if (!answeredAny(device)) return "drop-device";
-  if (!learner) return "move-device";
-  return solvedDoorsOf(device) > solvedDoorsOf(learner) ? "replace-learner" : "drop-device";
-}
+export type AdoptionMerge = (learner: AdventRow | null, device: AdventRow) => AdventRow | null;
 
 export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
   return {
@@ -136,11 +123,11 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
     },
 
     /**
-     * Névtelen → párosított átmenet egy tranzakcióban, mindkét sort zárolva (terv 21.): az \`adoptionChoice\` szerint az eszköz
-     * sora átkerül a tanulóhoz, lecseréli a tanulóét, vagy törlődik — utána a gyereknek egyetlen élő sora van. Párhuzamos
-     * kérésnél (a tanulói sor közben jött létre) egyszer újrapróbál.
+     * Névtelen → párosított átmenet egy tranzakcióban, mindkét sort zárolva: az egyesített tanulói sor íródik (a tanulói sor
+     * körszáma, korábbi körei és levél-foglalásai érintetlenek — az UPDATE csak a módosítható mezőket írja), az eszköz sora
+     * törlődik. Utána a gyereknek egyetlen élő sora van. Párhuzamos kérésnél (a tanulói sor közben jött létre) egyszer újrapróbál.
      */
-    async adopt(season: number, deviceId: string, learnerId: string): Promise<ReturnType<typeof adoptionChoice>> {
+    async adopt(season: number, deviceId: string, learnerId: string, merge: AdoptionMerge): Promise<"none" | "dropped" | "merged"> {
       for (let attempt = 0; attempt < 2; attempt++) {
         const client: PoolClient = await pool.connect();
         try {
@@ -154,20 +141,26 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
           const rows = locked.rows.map(toRow);
           const device = rows.find((r) => r.subjectKind === "device") ?? null;
           const learner = rows.find((r) => r.subjectKind === "learner") ?? null;
-          const choice = adoptionChoice(learner, device);
-          if (choice === "replace-learner") await client.query(`DELETE FROM advent_progress WHERE id = $1`, [learner!.id]);
-          if (choice === "move-device" || choice === "replace-learner") {
+          if (!device) { await client.query("COMMIT"); return "none"; }
+          const merged = merge(learner, device);
+          if (merged && learner) {
             await client.query(
-              `UPDATE advent_progress SET subject_kind = 'learner', subject_id = $2, learner_id = $2, updated_at = now() WHERE id = $1`,
-              [device!.id, learnerId],
+              `UPDATE advent_progress SET grade = $2, plan = $3::jsonb, doors = $4::jsonb, finished_at = $5, passed_at = $6, updated_at = now() WHERE id = $1`,
+              [learner.id, merged.grade, JSON.stringify(merged.plan), JSON.stringify(merged.doors), merged.finishedAt, merged.passedAt],
+            );
+          } else if (merged) {
+            await client.query(
+              `INSERT INTO advent_progress (season, subject_kind, subject_id, learner_id, grade, round, plan, doors, finished_at, passed_at)
+               VALUES ($1, 'learner', $2, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8)`,
+              [season, learnerId, merged.grade, merged.round, JSON.stringify(merged.plan), JSON.stringify(merged.doors), merged.finishedAt, merged.passedAt],
             );
           }
-          if (choice === "drop-device") await client.query(`DELETE FROM advent_progress WHERE id = $1`, [device!.id]);
+          await client.query(`DELETE FROM advent_progress WHERE id = $1`, [device.id]);
           await client.query("COMMIT");
-          return choice;
+          return merged ? "merged" : "dropped";
         } catch (error) {
           await client.query("ROLLBACK").catch(() => undefined);
-          // 23505: a tanulói sor a zárolás után, párhuzamosan jött létre — újra, most már az összehasonlító ágon.
+          // 23505: a tanulói sor a zárolás után, párhuzamosan jött létre — újra, most már az egyesítő (UPDATE) ágon.
           if ((error as { code?: unknown } | null)?.code === "23505" && attempt === 0) continue;
           throw error;
         } finally {
