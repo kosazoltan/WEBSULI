@@ -2115,6 +2115,10 @@ export default function BlockCraftQuiz() {
           prepareMaterials(altMaterials);
         }
         activeMaterials = on && altMaterials ? altMaterials : blockMaterials;
+        // Review #504 (vak, L5): a víz-animáció csak az aktív készlet vízanyagát lépteti (a lista nem halmozódik).
+        waterMats.length = 0;
+        const water = activeMaterials.get(WATER);
+        if (water) waterMats.push(...(Array.isArray(water) ? water : [water]));
         builtVersion = -1;
       },
       setFog(on) {

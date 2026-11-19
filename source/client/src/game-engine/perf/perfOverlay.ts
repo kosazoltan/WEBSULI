@@ -146,14 +146,37 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     style.textContent =
       ".bc-perf-panel{position:absolute;left:50%;transform:translateX(-50%);z-index:60;width:max-content;" +
       "max-width:min(360px,calc(100% - 8px));pointer-events:none;display:flex;flex-direction:column;gap:3px}" +
+      // Review #504 (vak, L2): kis fekvő kijelzőn (568×320) se lógjon ki — a gombsor (benne az összecsukó) felül, mindig
+      // látszik; a szöveg a maradék magasságban görgethető.
+      ".bc-perf-panel>pre{min-height:0;overflow-y:auto;pointer-events:auto;overscroll-behavior:contain}" +
       "@media (orientation:landscape) and (max-height:600px){.bc-perf-panel{max-width:calc(100% - 340px)}}";
     document.head.append(style);
   }
+  // Review #504 (vak, L3): elrendezést a panel NEM olvas a képkocka-hurokban — a helyét és a vászon CSS-méretét a méretfigyelő
+  // és a másodperces időzítő frissíti (a mért JS / render idejébe így nem kerül kényszerített elrendezés-számítás).
+  let cssWidth = canvas.clientWidth;
+  let cssHeight = canvas.clientHeight;
   const placeTop = () => {
     const inset = opts.getTopInset?.() ?? 4;
-    root.style.top = `${Math.max(4, Math.round(Number.isFinite(inset) ? inset : 4))}px`;
+    const top = Math.max(4, Math.round(Number.isFinite(inset) ? inset : 4));
+    root.style.top = `${top}px`;
+    root.style.maxHeight = `calc(100% - ${top + 4}px)`;
   };
   placeTop();
+  const sizeObserver =
+    typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver((entries) => {
+          for (const e of entries) {
+            if (e.target === canvas) {
+              cssWidth = Math.round(e.contentRect.width);
+              cssHeight = Math.round(e.contentRect.height);
+            }
+          }
+          placeTop();
+        });
+  sizeObserver?.observe(canvas);
+  sizeObserver?.observe(host);
   const text = document.createElement("pre");
   text.dataset.testid = "bc-perf-text";
   text.style.cssText =
@@ -174,7 +197,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   bCollapse.setAttribute("aria-label", "A mérőpanel összecsukása");
   const toggleButtons = [bShadow, bRes, bMat, bFog, bProbe, bCopy];
   row.append(...toggleButtons, bCollapse);
-  root.append(text, row);
+  root.append(row, text);
   host.append(root);
 
   const syncLabels = () => {
@@ -273,8 +296,8 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       bufferWidth: bufferSize.x,
       bufferHeight: bufferSize.y,
       megapixels: megapixels(bufferSize.x, bufferSize.y),
-      cssWidth: canvas.clientWidth,
-      cssHeight: canvas.clientHeight,
+      cssWidth,
+      cssHeight,
       devicePixelRatio: window.devicePixelRatio || 1,
       pixelRatio: renderer.getPixelRatio(),
       longTasksPerSec: longTaskObserver ? longTasks.length / (WINDOW_MS / 1000) : null,
@@ -311,7 +334,6 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       reactLastCount = count;
       reactLastAt = nowMs;
     }
-    placeTop();
     renderText();
   };
 
@@ -344,10 +366,12 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   bProbe.addEventListener("click", () => {
     void runGpuProbe(40);
   });
+  let copyTimer = 0;
   bCopy.addEventListener("click", () => {
     const done = () => {
       bCopy.textContent = "Másolva";
-      window.setTimeout(() => {
+      window.clearTimeout(copyTimer);
+      copyTimer = window.setTimeout(() => {
         bCopy.textContent = "Másol";
       }, 1200);
     };
@@ -364,9 +388,17 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
 
   syncLabels();
   renderText();
-  // Ha a hurok áll (szünet, kérdés), a fejléc „áll”-ra vált — a képkocka-hurok nélkül is.
+  // Másodpercenként, a képkocka-huroktól függetlenül: ha az utolsó szövegfrissítés 1 s-nál régebbi (a hurok áll vagy befagyott),
+  // a szöveg — benne a „fut / áll” — újraíródik (review #504 vak L1). Itt (a mérésen kívül) frissül a panel helye is, és méretfigyelő
+  // nélkül a vászon CSS-mérete.
   const idleTimer = window.setInterval(() => {
-    if (!loopClock.running(performance.now(), opts.isRunning?.())) renderText();
+    const nowMs = performance.now();
+    placeTop();
+    if (!sizeObserver) {
+      cssWidth = canvas.clientWidth;
+      cssHeight = canvas.clientHeight;
+    }
+    if (nowMs - lastRefresh >= 1000) renderText();
   }, 1000);
 
   const api: PerfWindowApi = { snapshot, controls: { set: applyToggles }, runGpuProbe };
@@ -387,6 +419,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     afterRender() {
       const tAfter = performance.now();
       lastRender = tAfter - tBefore;
+      loopClock.rendered(tAfter);
       renderedFrames += 1;
       gpuTimer.end();
       calls = renderer.info.render.calls;
@@ -404,6 +437,10 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     runGpuProbe,
     dispose() {
       window.clearInterval(idleTimer);
+      window.clearTimeout(copyTimer);
+      sizeObserver?.disconnect();
+      // Review #504 (vak, L5): a panel stílusa sem marad a lap fejében.
+      document.getElementById("bc-perf-panel-style")?.remove();
       window.clearTimeout(probeTimer);
       probeDone?.(null);
       probeDone = null;

@@ -146,10 +146,12 @@ function simulate(clock: LoopClock, frameMs: readonly number[], gameRunning: boo
   const reads: boolean[] = [];
   for (const ms of frameMs) {
     clock.frame(t, t);
-    // A képkocka munkája alatt / után, a következő képkocka előtt olvasunk (ahogy a panel tétlen időzítője és a teszt).
-    reads.push(clock.running(t + ms * 0.5, gameRunning));
-    reads.push(clock.running(t + ms - 1, gameRunning));
-    t += ms;
+    // A képkocka munkája alatt a főszál foglalt — a panel (és a teszt `evaluate`-je) csak UTÁNA olvashat: közvetlenül a
+    // kirajzolás után és a következő képkocka előtt (review #504 vak L1: a frissesség a kirajzolás végétől számít).
+    clock.rendered(t + ms);
+    reads.push(clock.running(t + ms + 1, gameRunning));
+    reads.push(clock.running(t + ms + 15, gameRunning));
+    t += ms + 16;
   }
   return reads;
 }
@@ -170,10 +172,14 @@ describe("LoopClock — a játék jelzője az igazság (review #504 L1)", () => 
   it("szünet → folytatás egy képkockára → szünet: az álló hurok azonnal „áll” (nem 14 s-ig „fut”)", () => {
     const clock = new LoopClock();
     let t = 1000;
-    for (let i = 0; i < 60; i++, t += 16.7) clock.frame(t, t);
+    for (let i = 0; i < 60; i++, t += 16.7) {
+      clock.frame(t, t);
+      clock.rendered(t + 3);
+    }
     assert.equal(clock.running(t + 10, false), false, "első szünet");
     t += 8500;
     clock.frame(t, t); // folytatás: egyetlen képkocka
+    clock.rendered(t + 3);
     assert.equal(clock.running(t + 5, true), true, "fut a folytatás képkockáján");
     assert.equal(clock.running(t + 200, false), false, "újra szünet — azonnal áll");
     assert.equal(clock.running(t + 13_000, false), false);
@@ -193,5 +199,42 @@ describe("LoopClock — a játék jelzője az igazság (review #504 L1)", () => 
     assert.equal(clock.frame(1000, 1000), null, "első képkocka");
     assert.equal(clock.frame(1016, 1016), 16);
     assert.equal(clock.frame(9516, 9516), null, "8,5 s-os rés");
+  });
+});
+
+/**
+ * Review #504 (a3846493, vak, L1): a „fut” a játék jelzője ÉS friss kirajzolt képkocka. A frissesség a legutóbbi képkocka
+ * KIRAJZOLÁSÁNAK VÉGÉTŐL számít — a főszál egy hosszú képkocka alatt foglalt, a panel csak utána olvas, így egy hosszú, de
+ * befejezett képkocka nem ad hamis „áll”-t; a befagyott hurok (nincs több kirajzolás) viszont 1 s után „áll”.
+ */
+describe("LoopClock — befagyott hurok (review #504 vak L1)", () => {
+  it("a játék szerint fut, de 1,5 s óta nincs kirajzolt képkocka → „áll”", () => {
+    const clock = new LoopClock();
+    let t = 1000;
+    for (let i = 0; i < 20; i++, t += 16.7) {
+      clock.frame(t, t);
+      clock.rendered(t + 4);
+    }
+    assert.equal(clock.running(t, true), true, "friss képkocka mellett fut");
+    assert.equal(clock.running(t + 1500, true), false, "befagyott rAF / render előtti kivétel: áll");
+  });
+
+  it("valós ütemű hosszú képkockák (a főszál foglalt, olvasás a képkocka UTÁN): futó hurok nem „áll”", () => {
+    const clock = new LoopClock();
+    let t = 1000;
+    const series = [16.7, 16.7, 1600, 150, 150, 1600, 16.7, 2500, 16.7];
+    for (const ms of series) {
+      clock.frame(t, t);
+      clock.rendered(t + ms);
+      assert.equal(clock.running(t + ms + 1, true), true, `a ${ms} ms-os képkocka után`);
+      t += ms + 16.7;
+    }
+  });
+
+  it("a játék szerint áll → „áll”, akkor is, ha az imént volt képkocka", () => {
+    const clock = new LoopClock();
+    clock.frame(1000, 1000);
+    clock.rendered(1005);
+    assert.equal(clock.running(1006, false), false);
   });
 });

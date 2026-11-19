@@ -238,6 +238,9 @@ test("a vászon a szülő méretváltozását követi (G-7, review #504 L4)", as
 for (const view of [
   { name: "fekvő 800×360", width: 800, height: 360 },
   { name: "álló 360×800", width: 360, height: 800 },
+  // Review #504 (vak, L2): kis fekvő kijelzők — a panel nem lóghat ki, az összecsukó gomb elérhető.
+  { name: "fekvő 640×360", width: 640, height: 360 },
+  { name: "fekvő 568×320", width: 568, height: 320 },
 ]) {
   test(`a nyitott panel nem takarja a vezérlőket és a felső HUD-ot (${view.name}, review #504 L3)`, async ({ page }) => {
     test.setTimeout(180_000);
@@ -264,5 +267,30 @@ for (const view of [
       expect(overlaps(panelBox, box), `a panel takarja a(z) ${i}. vezérlőt`).toBe(false);
     }
     expect(checked, "van mért vezérlő").toBeGreaterThan(0);
+    // Az összecsukó gomb teljes egészében a nézetben van, és működik.
+    const collapse = page.getByTestId("bc-perf-collapse");
+    const cb = (await collapse.boundingBox())!;
+    expect(cb.y + cb.height, "az összecsukó gomb nem vágódik le").toBeLessThanOrEqual(view.height);
+    expect(cb.x + cb.width).toBeLessThanOrEqual(view.width);
+    await collapse.click();
+    await expect(page.getByTestId("bc-perf-text")).toBeHidden();
   });
 }
+
+test("befagyott képkocka-ciklus mellett a panel „áll”-t mutat (a játék szerint fut — review #504 vak L1)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  expect((await snapshot(page)).running).toBe(true);
+  // A rAF-ciklus leáll (pl. a meghajtó megakad, vagy a lépés minden képkockán kivételt dob) — a játék szándéka szerint fut tovább.
+  await page.evaluate(() => {
+    window.requestAnimationFrame = () => 0;
+  });
+  const frozen = (await snapshot(page)).renderedFrames;
+  await expect.poll(async () => (await snapshot(page)).running, { timeout: 10_000 }).toBe(false);
+  expect((await snapshot(page)).renderedFrames, "valóban nincs új kirajzolt képkocka").toBeLessThanOrEqual(frozen + 1);
+  await expect(page.getByTestId("game-pause-menu"), "a játék nem szünetel — a hurok fagyott be").toHaveCount(0);
+  // A szöveg is frissül (nem marad befagyva „fut”-on).
+  await expect(page.getByTestId("bc-perf-text")).toContainText("· áll", { timeout: 5_000 });
+});
