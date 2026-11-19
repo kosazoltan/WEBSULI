@@ -141,7 +141,10 @@ viszi bukásra.
   3. ha a PR **vagy** a main elmozdulása érint `scripts/qa/`, `.github/workflows/`, `.claude/` vagy `.agents/skills/` fájlt → a
      **teljes** `scripts/qa` (`*.test.mjs`, a `gates/` és `hooks/` alatt is) kört + `skills-sync-check` + `three-phase-check`; különben
      csak a PR által módosított `scripts/qa` teszteket.
-  A futás együttes időkorlátja 10 perc; összesen 0 lefutott teszt → FAIL. Zöld → PASS (a darabszám, az összefésült fa, a hatókör és az
+  A futás együttes időkorlátja 10 perc; összesen 0 lefutott teszt → FAIL. **Mérce (tulajdonosi döntés 2026-11-19): ≤ 7 perc** a teljes
+  egységkörös legrosszabb esetre; a kanban #205 (időérzékeny teszt hamis bukása gépterhelés alatt) megoldásáig a merge-kapu próbája
+  bukáskor **pontosan egyszer** újrafut — a naplóban és a `merge-probe-` bizonyítékban jelölve (`attempts: 2`, `retried: true`, az 1.
+  futás oka, a megjegyzésben „ÚJRAFUTTATVA (#205)”); a második bukás FAIL. Zöld → PASS (a darabszám, az összefésült fa, a hatókör és az
   időtartam a `merge-probe-<PR>-<fej>` rekordban); ütközés / piros / időtúllépés / hiányzó `source/node_modules` (előbb `npm.cmd ci`)
   → FAIL. **Előfeltételek (vak review L3):** a próba PR-kódot futtat, ezért csak akkor indul, ha a PR ugyanebből a tárolóból jön
   (fork-PR → FAIL, új CI kell), és a független ítélet és a kötelező ellenőrzések lépése már zöld. A gyermekfolyamat szűrt

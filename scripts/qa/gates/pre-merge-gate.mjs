@@ -154,6 +154,23 @@ async function fetchRt(url) {
  * A merge-kapu összefésült próbája: a PR feje (`refs/pull/<n>/head`) és a friss `origin/main` lekérése — mindkettő hash-egyezéssel a
  * GitHub-adatokhoz —, majd a közös `mergedProbe`. Bármely eltérés / hiba → FAIL-eredmény (fail-closed).
  */
+/**
+ * Tulajdonosi döntés (2026-11-19, „≤ 7 perc + 1 újrafuttatás”; kanban #205 megoldásáig): bukáskor a próba PONTOSAN egyszer újrafut.
+ * Az újrafuttatás jelölve: `attempts`, `retried`, `firstNote`, a megjegyzésben „ÚJRAFUTTATVA (#205)”, és a naplóban. A második bukás FAIL.
+ * A `run(attempt)` kivétele bukásnak számít. @returns {Promise<object>}
+ */
+export async function probeWithRetry(run, log = () => {}) {
+  const once = async (attempt) => {
+    try { return await run(attempt); } catch (e) { return { status: STATUS.FAIL, note: `a próba kivételt dobott (${String(e?.message ?? e).split('\n')[0]})` }; }
+  };
+  const first = await once(1);
+  if (first?.status === STATUS.PASS) return { ...first, attempts: 1, retried: false };
+  log(`[pre-merge-gate] az összefésült próba bukott (${first?.note ?? 'nincs eredmény'}) — egyszeri újrafuttatás (#205) — tulajdonosi döntés 2026-11-19`);
+  const second = await once(2);
+  const mark = `ÚJRAFUTTATVA (#205) — az 1. futás bukott: ${first?.note ?? 'nincs eredmény'}`;
+  return { ...second, status: second?.status === STATUS.PASS ? STATUS.PASS : STATUS.FAIL, attempts: 2, retried: true, firstNote: first?.note ?? null, note: `${second?.note ?? 'nincs eredmény'} — ${mark}` };
+}
+
 export async function runMergeProbe({ ctx, n, head, mainSha, log = () => {}, probe = mergedProbe }) {
   const { git } = ctx;
   const t0 = Date.now();
@@ -166,9 +183,13 @@ export async function runMergeProbe({ ctx, n, head, mainSha, log = () => {}, pro
   if (localMain !== mainSha) return fail(`a lekért main (${localMain.slice(0, 12)}) nem a GitHub szerinti csúcs (${String(mainSha).slice(0, 12)})`);
   log(`[pre-merge-gate] C-61: gépi összefésült próba — ${head.slice(0, 12)} + origin/main (${mainSha.slice(0, 12)})`);
   try {
-    return await probe(ctx, { head, base: 'origin/main', label: 'pre-merge-gate' });
-  } catch (e) {
-    return fail(`az összefésült próba nem futott (${String(e?.message ?? e).split('\n')[0]})`);
+    return await probeWithRetry(async () => {
+      try {
+        return await probe(ctx, { head, base: 'origin/main', label: 'pre-merge-gate' });
+      } catch (e) {
+        return fail(`az összefésült próba nem futott (${String(e?.message ?? e).split('\n')[0]})`);
+      }
+    }, log);
   } finally {
     // vak review L9: a segéd-ref ne maradjon ott távoli ágként
     git.run(['update-ref', '-d', `refs/remotes/origin/gate-pr-${n}`]);
@@ -268,7 +289,7 @@ async function main() {
       runProbe: () => runMergeProbe({ ctx, n, head, mainSha, log: (m) => gate.log(m) }),
     });
     for (const r of results) gate.add(r.name, r.status, r.note);
-    if (probe) writeEvidence(ctx.evDir, `merge-probe-${n}-${head}`, { kind: 'merge-probe', head, mainSha, status: probe.status, tree: probe.tree ?? null, counts: probe.counts ?? null, ms: probe.ms, note: probe.note, at: new Date().toISOString() });
+    if (probe) writeEvidence(ctx.evDir, `merge-probe-${n}-${head}`, { kind: 'merge-probe', head, mainSha, status: probe.status, tree: probe.tree ?? null, counts: probe.counts ?? null, ms: probe.ms, note: probe.note, attempts: probe.attempts ?? 1, retried: probe.retried === true, firstNote: probe.firstNote ?? null, at: new Date().toISOString() });
   } catch (e) {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);
   }

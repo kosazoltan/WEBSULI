@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, completeFiles, mergeDecision, probeStep, requiredChecks, runMergeProbe } from './pre-merge-gate.mjs';
+import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, completeFiles, mergeDecision, probeStep, probeWithRetry, requiredChecks, runMergeProbe } from './pre-merge-gate.mjs';
 
 const cfg = loadConfig();
 const HEAD = 'a'.repeat(40);
@@ -183,6 +183,36 @@ test('runMergeProbe: a PR feje és a main hash-egyezéssel; lekérési hiba / el
   }
   const boom = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, probe: async () => { throw new Error('lemez tele'); } });
   assert.deepEqual([boom.status, /nem futott \(lemez tele\)/.test(boom.note)], [STATUS.FAIL, true]);
+});
+
+test('probeWithRetry (tulajdonosi döntés „≤ 7 perc + 1 újrafuttatás”, #205): legfeljebb két futás, jelölve; a második bukás FAIL', async () => {
+  const seq = (...st) => { const calls = []; return { calls, run: async (attempt) => { calls.push(attempt); return { status: st[calls.length - 1], note: `futás ${calls.length}`, ms: 1 }; } }; };
+  const logs = [];
+  const pass = seq(STATUS.PASS);
+  const p = await probeWithRetry(pass.run, (m) => logs.push(m));
+  assert.deepEqual([p.status, p.attempts, p.retried, pass.calls], [STATUS.PASS, 1, false, [1]], 'első zöld → nincs újrafuttatás');
+  const flaky = seq(STATUS.FAIL, STATUS.PASS);
+  const f = await probeWithRetry(flaky.run, (m) => logs.push(m));
+  assert.deepEqual([f.status, f.attempts, f.retried, f.firstNote, flaky.calls], [STATUS.PASS, 2, true, 'futás 1', [1, 2]]);
+  assert.match(f.note, /ÚJRAFUTTATVA \(#205\)/, 'a jelölés a megjegyzésben');
+  assert.ok(logs.some((m) => /újrafuttatás \(#205\)/.test(m)), 'a jelölés a naplóban');
+  const red = seq(STATUS.FAIL, STATUS.FAIL, STATUS.PASS);
+  const r = await probeWithRetry(red.run, () => {});
+  assert.deepEqual([r.status, r.attempts, r.retried, red.calls], [STATUS.FAIL, 2, true, [1, 2]], 'kétszeri bukás → FAIL, harmadik futás nincs');
+  assert.match(r.note, /ÚJRAFUTTATVA \(#205\)/);
+  const thrown = await probeWithRetry(async (a) => { if (a === 1) throw new Error('lemez tele'); return { status: STATUS.PASS, note: 'ok' }; }, () => {});
+  assert.deepEqual([thrown.status, thrown.attempts, /lemez tele/.test(thrown.firstNote)], [STATUS.PASS, 2, true], 'kivétel is bukásnak számít');
+});
+
+test('runMergeProbe: a próba bukáskor egyszer újrafut, és a jelölés az eredményben marad', async () => {
+  const mk = () => ({ git: { run: (args) => {
+    if (args[0] === 'fetch' || args[0] === 'update-ref') return { code: 0, stdout: '' };
+    if (args[1] === 'refs/remotes/origin/gate-pr-7') return { code: 0, stdout: `${'a'.repeat(40)}\n` };
+    return { code: 0, stdout: `${'c'.repeat(40)}\n` };
+  } } });
+  let n = 0;
+  const r = await runMergeProbe({ ctx: mk(), n: '7', head: 'a'.repeat(40), mainSha: 'c'.repeat(40), probe: async () => { n += 1; return { status: STATUS.FAIL, note: `piros ${n}` }; } });
+  assert.deepEqual([r.status, r.attempts, r.retried, n], [STATUS.FAIL, 2, true, 2]);
 });
 
 test('probeStep (vak review L3): fork-PR → FAIL (új CI); ítélet / kötelező ellenőrzés nélkül nem fut; zöld előfeltételekkel fut', async () => {
