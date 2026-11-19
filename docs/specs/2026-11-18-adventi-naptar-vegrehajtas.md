@@ -619,3 +619,6 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
   `--max-usd`, `--ref`, száraz futás), `lib.ts` (hívásonkénti és összesített keret, költségkönyv, naplóhiba-őr), `run-lock.ts` (futás-zár),
   `review-page.ts --set`, `design-assets/advent/prompts.json` + `style.md`, `tests/advent-art-pipeline.test.ts`. A fizetős kör a
   koordinátor indítására lefutott (84 kép, kb. 5,22 / 7 USD); a válogatás és a beépítés az S3c.
+- 2026-11-19 — S3c-0 vak ellenőr 1. köre (terv `docs/specs/2026-11-18-adventi-naptar.md` 18.): a tétel `candidates` értéke 1–10 közötti egész,
+  érvénytelen értékre hibaüzenet (`candidatesOf`); a keret és a könyv a szolgáltató valódi árával is számol: `max(becslés, usage.cost)`
+  (`settleActualCost`, az „ok” sor `extraUsd` mezője). Előbb bukó teszt: `tests/advent-art-pipeline.test.ts`.
