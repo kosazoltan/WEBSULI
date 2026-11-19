@@ -33,7 +33,8 @@ A cél: a workflow működése változatlan marad, a szövege igaz és semleges 
 - `.github/workflows/auto-review.yml` — módosul (név, fejléc-megjegyzés, állapotkulcs, a PR-megjegyzés szövege).
 - `.harness/notes.md`, `.harness/release-log.md`, `.harness/spec.md`, `.harness/verify-report-B.md` — törlés (`git rm`).
 - `source/tests/auto-review-workflow-guard.test.ts` — új őr-teszt.
-- `docs/agent-csapdak.md` — új csapda-bejegyzés (önfejlesztési hurok).
+- `docs/agent-csapdak.md` — NEM módosul (C-48: szelet-PR nem ír a közös katalógusba; a csapda-javaslat a zárójelentésben megy
+  az orkesztrátornak).
 - `docs/specs/2026-11-19-bence-maradvany-tisztitas.md` és `-vegrehajtas.md` — ez a tervpár.
 
 Leltár (2026-11-19, `git grep -i` az `origin/main` 7176046f fején, a `source/`, `docs/archive/`, `docs/knowledge/`,

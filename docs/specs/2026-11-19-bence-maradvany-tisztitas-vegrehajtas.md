@@ -38,10 +38,11 @@ Tilos: `--no-verify`, rebase, force-push, push, PR. A `gate:push` és a `gate:pr
   a merge-et az orkesztrátor végzi a minőségkapuk (`docs/minosegkapuk.md`) után.
 - `Check` lépés: `stateKey = <!-- auto-review: ${headSha} -->`, `legacyKey = <!-- bence-auto-review: ${headSha} -->`,
   `alreadyTriggered = comments.some(c => c.body?.includes(stateKey) || c.body?.includes(legacyKey))`; a `state_key` kimenet az új kulcs.
-- A megjegyzés címe: `## :robot: Auto review triggered`. A bevezető: „A review botok most futnak…”, a listában a Vercel Agent is.
-- A záró két sor helyett:
-  `_Automatikus review-indito. A merge-et az orkesztrator vegzi a minosegkapuk (docs/minosegkapuk.md) utan;_`
-  `_a botok velemenye onmagaban nem indit merge-et._`
+- A megjegyzés címe: `## :robot: Auto review triggered`. A bevezető: „A review botok most futnak…”, a listában a Vercel Agent is
+  (`@` említés nélkül, hogy a botot csak az indító sor szólítsa meg).
+- A záró két sor helyett (egy dőlt bekezdés, két sorban):
+  `_Automatikus review-indito. A merge-et az orkesztrator vegzi a minosegkapuk (docs/minosegkapuk.md) utan;`
+  `a botok velemenye onmagaban nem indit merge-et._`
 - A job `name`, az `on:`, a `permissions:`, az `if:` és a `Skip` lépés változatlan.
 - Ellenőrzés: `node -e` YAML-olvasás helyett az őr-teszt + szemrevételezés (`git diff`); a szerkezet nem változik.
 
@@ -61,11 +62,11 @@ Tilos: `--no-verify`, rebase, force-push, push, PR. A `gate:push` és a `gate:pr
 
 ## 5. lépés — csapda-bejegyzés (önfejlesztési hurok)
 
-- Fájl: `docs/agent-csapdak.md`, új bejegyzés a végére: a gép által írt PR-megjegyzés is „élő dokumentáció”; megszűnt szereplőre /
-  folyamatra hivatkozó automatikus szöveg félretájékoztat; megelőzés: őr-teszt a workflow szövegére
-  (`source/tests/auto-review-workflow-guard.test.ts`).
-- Commit: `docs(csapdak): a gép által írt PR-megjegyzés is élő dokumentáció`.
-- Utána `npm run gate:stage` újra → elvárt: zöld.
+- A `docs/agent-csapdak.md` közös, hozzáfűzős katalógus: a C-48 szabály szerint szelet-PR nem ír bele. A csapda-javaslat a
+  zárójelentésbe és a PR-leírásba kerül, az orkesztrátor gyűjti: „a gép által írt PR-megjegyzés is élő dokumentáció; megszűnt
+  szereplőre / folyamatra hivatkozó automatikus szöveg félretájékoztat; megelőzés: őr-teszt a workflow szövegére
+  (`source/tests/auto-review-workflow-guard.test.ts`)”.
+- A tartós műtermék ebben a PR-ban maga az őr-teszt.
 
 ## 6. lépés — PR-leírás és jelentés
 
