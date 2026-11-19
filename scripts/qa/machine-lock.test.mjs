@@ -304,7 +304,7 @@ test('újrabelépés: a gyerek a kapott tokennel azonnal fut; hamis tokennel sor
   assert.match(bad.out, /nem a jelenlegi gazdáé/);
 });
 
-test('megszakítás futás közben: a saját gyerek leáll, a zár szabad, kód 143', async () => {
+test('megszakítás futás közben: a saját gyerek leáll, a zár szabad, kód 143', { timeout: 45_000 }, async () => {
   const dir = freshDir();
   const pidFile = join(dir, 'gyerek.pid');
   const ac = new AbortController();
@@ -313,13 +313,15 @@ test('megszakítás futás közben: a saját gyerek leáll, a zár szabad, kód 
     env: baseEnv(dir), lockDir: dir, pollMs: 50, signal: ac.signal, log: (s) => logs.push(s) });
   await waitFor(() => existsSync(pidFile), 'a gyerek fut');
   const pid = Number(readFileSync(pidFile, 'utf8'));
+  const t0 = Date.now();
   ac.abort('SIGTERM');
   assert.equal(await p, 143, logs.join('\n'));
+  assert.ok(Date.now() - t0 < 20_000, `a megszakítás ${Date.now() - t0} ms-ig tartott — a gyereket nem állította le`);
   await waitFor(() => !pidAlive(pid), 'a gyerek leállt');
   assert.equal(existsSync(join(dir, 'lock')), false);
 });
 
-test('megszakítás várakozás közben: a sorból kilép, a futó gazdát nem zavarja', async () => {
+test('megszakítás várakozás közben: a sorból kilép, a futó gazdát nem zavarja', { timeout: 45_000 }, async () => {
   const dir = freshDir();
   const pidFile = join(dir, 'gazda.pid');
   const acA = new AbortController();
@@ -329,8 +331,10 @@ test('megszakítás várakozás közben: a sorból kilép, a futó gazdát nem z
   await waitFor(() => existsSync(pidFile), 'A fut');
   const b = run({ name: 'B', timeoutMin: 1, command: [NODE, '-e', '0'], env: baseEnv(dir), lockDir: dir, pollMs: 50, signal: acB.signal, log: () => {} });
   await waitFor(() => queueEntries(dir).length === 1, 'B a sorban');
+  const t0 = Date.now();
   acB.abort('SIGINT');
   assert.equal(await b, 130);
+  assert.ok(Date.now() - t0 < 10_000, 'a várakozó megszakítása azonnali');
   assert.deepEqual(queueEntries(dir), []);
   assert.equal(pidAlive(Number(readFileSync(pidFile, 'utf8'))), true, 'A gyereke fut tovább');
   acA.abort('SIGTERM');
