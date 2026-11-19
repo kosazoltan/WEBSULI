@@ -81,6 +81,26 @@ test("a GLB-k Meshopt-tömörítettek, textúra nélküliek, a mesh-ek száma ke
   assert.equal(prims, meshes);
 });
 
+/*
+ * Vak ellenőr KICSI 3 (2026-11-19): a háromszögkeret a FÁJLOKBÓL számolva (a glTF accessorok indexszámából), nem a manifest
+ * saját számából — egy szkript-elírás így nem viheti át az őrt.
+ */
+test("a háromszögkeret a GLB-kből számolva is tart, és a manifest száma egyezik vele", () => {
+  let tris = 0;
+  for (const name of files) {
+    const gltf = readGlb(name) as Gltf & { accessors?: { count: number }[]; meshes?: { primitives: { indices?: number; mode?: number }[] }[] };
+    for (const m of gltf.meshes ?? []) {
+      for (const p of m.primitives) {
+        assert.ok(p.mode === undefined || p.mode === 4, `${name}: csak háromszög-primitív (mode ${p.mode})`);
+        assert.ok(typeof p.indices === "number", `${name}: indexelt primitív`);
+        tris += gltf.accessors![p.indices!]!.count / 3;
+      }
+    }
+  }
+  assert.ok(tris <= MAX_TRIANGLES, `${tris} háromszög a fájlokban`);
+  assert.equal(tris, manifest.triangles, "a manifest háromszögszáma a fájlokéval egyezik");
+});
+
 test("megvan minden díszlet-elem és figura-rész, amit a jelenet keres", () => {
   const names = new Set(files.flatMap((name) => (readGlb(name).nodes ?? []).map((n) => n.name)));
   const scenery = ["palm_a", "palm_b", "hut_a", "hut_b", "lighthouse", "rock_a", "rock_b", "bush", "cliff", "hill"];
