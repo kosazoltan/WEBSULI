@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 (harmadik vak ellenőrzés, 2026-11-19) kész, a következő vak ellenőrzés előtt – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 (negyedik vak ellenőrzés feltétele, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -212,6 +212,16 @@ Leletenként előbb BUKÓ teszt (`tests/lesson-result-email-partial-db.integrati
   „Vendég tanuló”, a fiók neve nincs benne.
 - **R17:** a pillanatkép-ágban `answered >= körméret` → `202 { queued: false, partial: true, complete: true }`. Teszt: 25 válaszos
   pillanatkép → nincs várakozó, nincs levél.
+- Utána: `gate:stage`, sorompó KÜLÖN lépésben, DB-kör, böngészős kör, fetch + ősellenőrzés, `gate:push`.
+
+## T14 — a negyedik vak ellenőrzés feltétele (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R18)
+
+- Előbb BUKÓ teszt (`tests/lesson-result-email-partial-db.integration.ts`): vendég (ujjlenyomattal) véglegesít → `clearFinalizedRounds()`
+  (újraindítás utánzása) → ujjlenyomat nélküli, más IP-jű pillanatkép ugyanarra a körre → `{ queued: false, finalized: true }`, nincs
+  levél; ugyanez fiók → vendég kilétváltással; a jelzősor `created_at`-ját 25 órával visszaállítva a pillanatkép újra ütemeződik.
+- Javítás (`server/lesson-result-email.ts`): `finalRoundKeyOf(roundId)`; a végleges kvíz-ágban a jelzősor beszúrása
+  (`onConflictDoUpdate` a `created_at` frissítésével; hiba → naplózás, a beküldés megy tovább); `roundFinalized` a jelzősort is nézi
+  (`created_at` > most − 24 óra).
 - Utána: `gate:stage`, sorompó KÜLÖN lépésben, DB-kör, böngészős kör, fetch + ősellenőrzés, `gate:push`.
 
 ## Kész-feltétel

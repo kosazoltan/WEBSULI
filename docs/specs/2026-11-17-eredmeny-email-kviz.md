@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17 – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18 – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -268,9 +268,19 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
     kerül — csak a beküldő SAJÁT levelére hat; a hamisítást a keret korlátozza (R5, R9).
   - (L5) A telepítés átfedésében a régi példánytól kapott CSRF-token jelzés nélküli: a lap újratöltéséig nem megy pillanatkép és új
     mező. Eredmény nem vész el (a végleges beküldés a régi alakkal megy), csak a félbehagyott kör levele marad el addig.
-  - (R15) Újraindítás után a véglegesítés-jelző csak a nyilvántartásból ismerhető, ott a végleges sor a tanuló-kulcson áll: ha
-    újraindítás ÉS közbeni kilétváltás is van, a várakozó pillanatkép úgysem él túl az újraindítást (R14 kiküldi leállításkor), így
-    késői „félbehagyva” levél ebből nem keletkezik.
+  - (R15, M2) A körazonosítót ismerő más beküldő végleges beküldéssel elnyomhatja egy másik tanuló „félbehagyva” levelét (a körazonosító
+    a kérdések és a kezdés ezredmásodpercének 32 bites lenyomata, csak a kérés törzsében utazik). Tudatos tervdöntés: személyes adat nem
+    szivárog, legfeljebb egy „félbehagyva” levél marad el.
+
+**Negyedik vak ellenőrzés (2026-11-19, `f847695a`: IGEN, FELTÉTELLEL; M1) — dokumentált spec-változás:**
+- **R18 — a véglegesítés tartós, tanulófüggetlen nyoma (M1; az R15 kiegészül).** Az R15 korábbi „újraindítás után nincs késői
+  »félbehagyva« levél” állítása hamis volt: véglegesítés → újraindítás (a memóriabeli jelző elvész) → MÁS kilétű (vendég, ujjlenyomat
+  nélküli, más IP-jű) pillanatkép ugyanarra a körre → a pillanatkép ütemeződött, és a „félbehagyva” levél a végleges UTÁN ment ki. Mostantól
+  a végleges kvízbeküldés a memóriabeli jelző mellett a kézbesítés-nyilvántartásba is ír egy tanulófüggetlen jelzősort (`kind = 'quiz'`,
+  `round_key = roundKeyOf("final-round", "quiz", körazonosító)`, `delivered` üres, sémaváltozás nélkül), és a véglegesítés-ellenőrzés
+  (a pillanatkép fogadásakor és a várakozó levél minden küldési kísérlete előtt) ezt is nézi — újraindítás után, más példányon és
+  bármely kilétnél is. Korlátos élettartam: a jelzősor 24 óráig számít (`created_at`), mint a memóriabeli jelző. A jelzősor írásának
+  hibája nem akasztja meg a beküldést (a memóriabeli jelző ilyenkor is védi az adott példányt; a hiba osztálya naplózódik).
 
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
@@ -302,6 +312,8 @@ Elfogadás (S1b):
   váltásnál sem megy „félbehagyva” levél a végleges után (R15).
 - E31. Vendég által rögzített kör átvételekor a „félbehagyva” levél neve „Vendég tanuló” (R16).
 - E32. Teljes (a körmérettel egyenlő számú válaszú) pillanatkép nem ütemez levelet (R17).
+- E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
+  „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
 - E25. AMIKOR a régi szerver az új mezők miatt 400-at ad, A RENDSZER a végleges beküldést egyszer az új mezők nélkül megismétli (az
   eredménylevél kérése sikerül); a pillanatképet nem alakítja végleges beküldéssé (R10).
 
@@ -345,4 +357,5 @@ Elfogadás (S1b):
 - [x] E30 – bármely véglegesítés elnyomja a részlegest; fiók → vendég sorrend: csak végleges levelek (valódi DB)
 - [x] E31 – vendég kör átvétele: „Vendég tanuló” név (valódi DB)
 - [x] E32 – teljes pillanatkép nem ütemez (valódi DB)
+- [ ] E33 – tartós, tanulófüggetlen véglegesítési nyom; újraindítás után más kilét / IP sem küld részlegest (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
