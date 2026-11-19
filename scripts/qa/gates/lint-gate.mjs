@@ -64,10 +64,14 @@ export function classifyHookOutput(stdout) {
 }
 
 /** A `scripts/qa/repo-rules.json` Edit|Write szabályai egy fájl hozzáadott szövegére. */
-export function applyRepoRules(rules, text) {
+export function applyRepoRules(rules, text, file = '') {
   const hits = [];
   for (const r of rules) {
     if (r.tool && r.tool !== 'Edit|Write' && r.tool !== 'Write' && r.tool !== 'Edit') continue;
+    // A diff hozzáadott sorai alapján az eltávolítás nem ítélhető meg (a `removes`-szabályt a hook Edit / Write-ra méri);
+    // a `path`-szabály csak az ilyen útvonalú fájlra vonatkozik (docs/specs/2026-11-18-hook-onfailure.md L2).
+    if (r.removes) continue;
+    if (r.path && !new RegExp(r.path, 'i').test(String(file).replace(/\\/g, '/'))) continue;
     try {
       if (new RegExp(r.pattern, r.flags || '').test(text)) hits.push({ level: r.level === 'deny' ? STATUS.FAIL : STATUS.WARN, msg: r.message || r.pattern });
     } catch { /* hibás szabály: a repo-rules.test.mjs felel érte */ }
@@ -164,9 +168,9 @@ export async function runLintSteps({ gate, ctx, mode }) {
     for (const [file, ls] of byFile) {
       if (SKIP_SCAN.test(file)) continue;
       const text = ls.map((l) => l.text).join('\n');
-      for (const h of applyRepoRules(rules, text)) hits.push({ ...h, file });
+      for (const h of applyRepoRules(rules, text, file)) hits.push({ ...h, file });
       if (existsSync(hook)) {
-        const r = exec(node, [hook], { cwd: root, input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: file, content: text } }), timeoutMs: 20_000 });
+        const r = exec(node, [hook], { cwd: root, input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: file, content: text } }), env: { ...process.env, WEBSULI_DIFF_SCAN: '1' }, timeoutMs: 20_000 });
         const c = classifyHookOutput(r.stdout);
         if (c) hits.push({ ...c, file });
       }

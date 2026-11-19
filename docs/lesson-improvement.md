@@ -45,6 +45,8 @@ Az öt évfolyamsáv (1–2, 3–4, 5–6, 7–8, 9+) vezérli a színintenzitá
 `docs/modszertan-nyitomese-jatekos-kerdezes.md`; gyártási szerződések `source/shared/lesson-opener.ts`. Bekapcsolás:
 `STUDIO_LESSON_OPENER=on` — a tulajdonos döntésére az S2b mérés után élesben bekapcsolva; kikapcsolás: a változó törlése a Renderen (spec: `docs/specs/2026-11-08-nyitomese-jatekos-kerdezes.md`).
 
+**A forrás vizuális leltára (2026-11-18; élesben KIKAPCSOLVA):** bekapcsolás `STUDIO_SOURCE_VISUALS=on` — tulajdonosi döntés az első mérés után; a változó hiánya vagy bármely más értéke a kapcsoló előtti gyártást adja (spec: `docs/specs/2026-11-18-tananyag-gyartas-minoseg.md`, 5. szakasz 14. pont).
+
 ## Útvonalak, promptok, méret és hibakezelés
 
 A készítő a feltöltés után három emberi fázist lát: forrás feldolgozása, tananyag készítése, ellenőrzés és közzététel. A gépi részlépések lenyithatók; a hiány és hibajelzés mindig látható. A forrásjegyzék haladó eszköz, nem új kötelező kézi lépés. Az animátor csak akkor kap új modellhívást, ha valamely fejezet ábrája hiányzik vagy nem felel meg az újrahasználat szerkezeti feltételeinek. A `visual-reuse.ts` az ábra tényleges megjelenítőparamétereit és tanított fogalomhoz kötését vizsgálja; ez nem szemantikai minőségmérés. A lektor és a kapu újrahasználat után is lefut, a változatlan bankcsomag pedig megőrzi tételazonosítóit.
