@@ -5,9 +5,9 @@
  */
 import { LESSON_MODELS } from "../../ai/models";
 import type { ModelReply } from "./conversation";
-import type { RunGates, RunTelemetry, StationTelemetry } from "../../../shared/run-telemetry";
+import { RUN_GATE_RESULT_LIMITS, type RunGateResult, type RunGates, type RunTelemetry, type StationTelemetry } from "../../../shared/run-telemetry";
 
-export type { RunGates, RunTelemetry, StationTelemetry } from "../../../shared/run-telemetry";
+export type { RunGateResult, RunGates, RunTelemetry, StationTelemetry } from "../../../shared/run-telemetry";
 export { telemetryOf } from "../../../shared/run-telemetry";
 
 const emptyGates = (): RunGates => ({ answerKeyNotes: 0, answerKeyFails: 0, quizBlindRemoved: 0, lektorRemoved: 0, rubricTightened: 0, outputTruncated: 0, lengthOverBudget: false, lengthShortened: false });
@@ -20,6 +20,7 @@ export class TelemetryRecorder {
   private readonly models: Set<string>;
   private readonly baseMs: number;
   readonly gates: RunGates;
+  private readonly gateResults: RunGateResult[];
 
   constructor(previous?: RunTelemetry | null, private readonly now: () => number = Date.now) {
     this.started = now();
@@ -28,6 +29,16 @@ export class TelemetryRecorder {
     this.models = new Set(previous?.models ?? []);
     this.baseMs = previous?.totalMs ?? 0;
     this.gates = { ...emptyGates(), ...(previous?.gates ?? {}) };
+    this.gateResults = structuredClone(previous?.gateResults ?? []);
+  }
+
+  /** Egy determinisztikus kapu eredménye (SK szelet) — vágott szövegekkel és listákkal; legfeljebb az utolsó 20 eredmény marad. */
+  recordGate(result: RunGateResult): void {
+    const L = RUN_GATE_RESULT_LIMITS;
+    this.gateResults.push({ gate: result.gate, mode: result.mode, ok: result.ok, metrics: { ...result.metrics },
+      problems: result.problems.slice(0, L.problems).map((p) => p.slice(0, L.problemChars)),
+      ...(result.missingIds ? { missingIds: result.missingIds.slice(0, L.missingIds) } : {}) });
+    if (this.gateResults.length > L.results) this.gateResults.splice(0, this.gateResults.length - L.results);
   }
 
   /** Egy modellforduló: `fix` = javító forduló az állomáson belül; `fresh` = előzmény nélküli beszélgetésben futott. */
@@ -45,7 +56,8 @@ export class TelemetryRecorder {
   snapshot(model: string): RunTelemetry {
     const models = [...this.models];
     return { version: 1, model, fallback: models.includes(LESSON_MODELS.fallback), models, totalMs: this.baseMs + Math.max(0, this.now() - this.started),
-      stations: structuredClone(this.stations), fresh: { ...this.freshTotals }, gates: { ...this.gates } };
+      stations: structuredClone(this.stations), fresh: { ...this.freshTotals }, gates: { ...this.gates },
+      ...(this.gateResults.length ? { gateResults: structuredClone(this.gateResults) } : {}) };
   }
 }
 

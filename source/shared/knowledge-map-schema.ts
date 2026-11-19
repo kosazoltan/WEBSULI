@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sourceVisualSchema } from "./source-visuals";
 
 /**
  * The KnowledgeMap: what a source document actually says, in structured form.
@@ -72,6 +73,8 @@ export const sourceFileSchema = z.object({
   kind: z.enum(SOURCE_KINDS),
   pages: z.number().int().positive().optional(),
   extractedText: z.string().optional(),
+  /** A fájl vizuális leltára (spec 2026-11-18-tananyag-gyartas-minoseg, S1a); régi térképen hiányzik. */
+  visuals: z.array(sourceVisualSchema).optional(),
 });
 
 export const knowledgeMapSchema = z.object({

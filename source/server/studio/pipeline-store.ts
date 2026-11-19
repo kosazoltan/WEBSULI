@@ -8,6 +8,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lessons, materialImprovementBackups, studioJobs, type InsertGameQuizItem } from "../../shared/schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import { deepWellFormed } from "../../shared/well-formed";
+import { visualsOfSourceFiles, type SourceVisual } from "../../shared/source-visuals";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
 import { isE2eMode } from "../lib/e2e-mode";
@@ -35,6 +36,8 @@ export type MapMeta = {
   id: string; title: string; subject: string; classroom: number;
   /** Spec 2026-09-24: a kivonatolt forrásszöveg a vak megoldóhoz (a lektor független bizonyítéka). */
   sourceText?: string | null;
+  /** Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a forrás vizuális leltára a térkép `source_files` elemeiből (nincs → üres). */
+  visuals?: SourceVisual[];
 };
 
 /** What the deterministic gate hands to the store when a lesson passes. */
@@ -145,6 +148,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           subject: knowledgeMaps.subject,
           classroom: knowledgeMaps.classroom,
           sourceText: knowledgeMaps.sourceText,
+          sourceFiles: knowledgeMaps.sourceFiles,
         })
         .from(knowledgeMaps)
         .where(eq(knowledgeMaps.id, mapId))
@@ -176,7 +180,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
 
       return {
         // Spec 2026-09-24: a forrásszöveg a vak megoldóhoz kell (élő mérés: nélküle a vak megoldó nem futott).
-        meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom, sourceText: map.sourceText },
+        meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom, sourceText: map.sourceText, visuals: visualsOfSourceFiles(map.sourceFiles) },
         concepts: concepts.map((c) => ({
           id: c.id,
           localId: c.localId,

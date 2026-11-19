@@ -11,7 +11,9 @@ import type { ExtractorFile } from "../extractor";
 import { createDrizzlePipelineStore } from "../pipeline-store";
 import { createLessonConversation, type ConversationState, type SingleRunEffort } from "./conversation";
 import { readSourceStation, runSingleLesson, SingleRunError, singleRunResumable, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
+import { sourceVisualsEnabled } from "../source-visuals-flag";
 import { eq } from "drizzle-orm";
+import { SOURCE_VISUALS_SCHEMA_VERSION } from "../../../shared/source-visuals";
 
 
 /**
@@ -24,6 +26,13 @@ import { eq } from "drizzle-orm";
  */
 export const kmConceptColumns = (c: { type: string; correction?: string | null }) => ({ type: c.type.slice(0, 24), verbatimReason: c.correction ? c.correction.slice(0, 32) : null });
 
+/** A térkép `source_files` eleme: név, fajta, a fájl átirata és — ha van — a fájlhoz tartozó vizuális tételek. */
+export function sourceFileRow(f: Pick<ExtractorFile, "name" | "kind" | "extractedText">, map: Pick<SingleRunMap, "fileTranscripts" | "visuals">) {
+  const text = map.fileTranscripts[f.name] ?? f.extractedText;
+  const visuals = map.visuals.filter((v) => v.sourceFile === f.name);
+  return { name: f.name, kind: f.kind, ...(text ? { extractedText: text } : {}), ...(visuals.length ? { visuals } : {}) };
+}
+
 export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[], ownerId: string, model: string, opts: { draft?: boolean; inputHash?: string } = {}): Promise<string> {
   // Gyártásnál egyedi bemeneti lenyomat (a tábla `input_hash` egyedi): az egyfutásos térkép gyártásonként új.
   const inputHash = opts.inputHash ?? createHash("sha256").update(`single-run:${randomUUID()}`).digest("hex");
@@ -32,7 +41,8 @@ export async function saveSingleRunMap(map: SingleRunMap, files: ExtractorFile[]
     const [row] = await tx.insert(knowledgeMaps).values({
       title: map.title, subject: map.subject, classroom: map.classroom, status: opts.draft ? "draft" : "approved",
       // Review #260: fájlonként a modell betűhű átirata (kép / szkennelt PDF is) — a későbbi idézetellenőrzés a saját fájlján mér.
-      sourceFiles: files.map((f) => { const text = map.fileTranscripts[f.name] ?? f.extractedText; return { name: f.name, kind: f.kind, ...(text ? { extractedText: text } : {}) }; }),
+      // Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a fájl vizuális leltára ugyanebben a jsonb-elemben (migráció nélkül).
+      sourceFiles: files.map((f) => sourceFileRow(f, map)),
       sourceText: map.transcript, inputHash, model, createdBy: ownerId, ...(opts.draft ? {} : { approvedBy: ownerId, approvedAt: new Date() }),
     }).returning({ id: knowledgeMaps.id });
     await tx.insert(kmConcepts).values(map.concepts.map((c, index) => ({
@@ -63,9 +73,12 @@ export async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFil
 }
 
 /** A különálló kinyerés tartalmi lenyomata: ugyanazok a fájlok ugyanazt a térképet adják vissza (nincs második modellhívás). */
-export function singleRunMapHash(files: ExtractorFile[], title?: string): string {
+export function singleRunMapHash(files: ExtractorFile[], title?: string, sourceVisuals: boolean = sourceVisualsEnabled()): string {
   // Review #261: egyértelmű (JSON) kódolás — a fájlhatár nem csúszhat el (egy fájl tartalma nem utánozhat két fájlt).
-  return createHash("sha256").update(JSON.stringify(["single-run-map-2", title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
+  // A leltár funkciókapcsolója: KI állapotban a lenyomat a kapcsoló előttivel azonos (a régi térkép változatlanul visszajön).
+  // Review J4 (S1a), BE állapotban: a lenyomat része a vizuális leltár sémaverziója — a leltár előtti, a KI állapotban kinyert vagy a
+  // régi sémájú térképet ugyanarra a fájlra nem adja vissza jelzés nélkül; a séma változásakor új kinyerés készül.
+  return createHash("sha256").update(JSON.stringify(["single-run-map-2", ...(sourceVisuals ? [`source-visuals-${SOURCE_VISUALS_SCHEMA_VERSION}`] : []), title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
 }
 
 /**
