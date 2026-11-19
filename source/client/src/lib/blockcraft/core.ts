@@ -430,6 +430,8 @@ export type RuneMineState = {
   level: number;
   goal: number;
   opened: number;
+  /** A menetben (a mag élete alatt, minden pályán) kinyitott rúnazárak száma — a végeredményhez (review #484 vak K4). */
+  runOpened: number;
   crystals: number;
   blocks: number;
   diamonds: number;
@@ -488,6 +490,12 @@ export type RuneMine = {
    * számol; a darabszám a válaszok számával egyezik.
    */
   setLockStones(stones: readonly Vec3[]): void;
+  /**
+   * A vászon koppintása egy KIVÁLASZTOTT kőre (a lap a kő vetített képernyő-téglalapjából dönti el, melyikre — review #484 vak
+   * K1): a terep nem vág el, de az ércre célzott koppintás (a sugár az ércet metszi) itt sem választ, és csak élesített zárnál,
+   * az élesítés után indult lenyomásra.
+   */
+  tapStone(index: number, origin: Vec3, dir: Vec3, pressStartedAt: number): boolean;
   /** A kérdés-sáv `onShow`-ja hívja: a várakozó rúnaérchez köti a megnyílt kérdést. */
   noteShow(p: QuestionPresentation): void;
   /** A kérdés-sáv `onOutcome`-ja hívja: zsákmány, kombó, pálya-cél. */
@@ -511,6 +519,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     level: 0,
     goal: 0,
     opened: 0,
+    runOpened: 0,
     crystals: 0,
     blocks: 0,
     diamonds: 0,
@@ -615,6 +624,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     st.crystals += crystals;
     st.xp += xp;
     st.opened += 1;
+    st.runOpened += 1;
     emit({ type: "runeBreak", ore, result, crystals, xp, combo: st.combo.count });
     if (st.phase === "play" && st.opened >= st.goal) {
       st.phase = "won";
@@ -776,6 +786,12 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
       const i = pickRuneStone(origin, dir, lock.stones, Math.min(6, blockDist));
       if (i < 0) return false;
       return this.pick(i, pressStartedAt);
+    },
+    tapStone(index, origin, dir, pressStartedAt) {
+      const lock = st.lock;
+      if (!lock || lock.resolved || index < 0 || index >= lock.stones.length) return false;
+      if (rayHitsCell(origin, dir, lock.ore, 6)) return false;
+      return this.pick(index, pressStartedAt);
     },
     setLockStones(stones) {
       const lock = st.lock;

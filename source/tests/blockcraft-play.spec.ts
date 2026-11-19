@@ -565,3 +565,112 @@ for (const size of [3, 5, 8]) {
     expect((await probe(page)).freeLocks, "nincs kérdés nélkül tört rúnazár").toBe(0);
   });
 }
+
+/* ------------------------- review #484 vak ellenőrzés: K1 (kőkoppintás), K2, K4, K6 ------------------------- */
+
+for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { width: 412, height: 915 }]) {
+  test.describe(`vak K1 ${vp.width}x${vp.height}`, () => {
+    test.use({ viewport: vp });
+    test("a látható 3D rúnakőre valódi érintéssel koppintva mind a 4 kő választ (a terep nem nyeli el)", async ({ page }) => {
+      test.setTimeout(Math.max(test.info().timeout, 180_000));
+      await startGame(page);
+      for (let i = 0; i < 4; i++) {
+        const before = Number((await probe(page)).questionsAnswered);
+        await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz, runesLeft: 99 }), LONG_WINDOW_QUIZ);
+        await expect(page.locator('[data-testid="bc-quiz"] [data-armed="true"]').first()).toBeVisible({ timeout: 20_000 });
+        await expect.poll(async () => String((await probe(page)).stoneBand), { timeout: 10_000 }).not.toBe("null");
+        const rects = JSON.parse(String((await probe(page)).stoneRects)) as Array<{ x0: number; y0: number; x1: number; y1: number } | null>;
+        const r = rects[i];
+        expect(r, `a(z) ${"ABCD"[i]} kő látszik`).toBeTruthy();
+        // B1: a kő középpontja nem eshet az érc vetületére (ott a bányászó koppintás érné el).
+        const ore = JSON.parse(String((await probe(page)).oreRect)) as { x0: number; y0: number; x1: number; y1: number } | null;
+        if (ore) {
+          const cx = (r!.x0 + r!.x1) / 2;
+          const cy = (r!.y0 + r!.y1) / 2;
+          expect(cx > ore.x0 && cx < ore.x1 && cy > ore.y0 && cy < ore.y1, `a(z) ${"ABCD"[i]} kő az érc vetületén (kő ${JSON.stringify(r)}, érc ${JSON.stringify(ore)})`).toBe(false);
+        }
+        await tapAt(page, (r!.x0 + r!.x1) / 2, (r!.y0 + r!.y1) / 2);
+        await expect.poll(async () => Number((await probe(page)).questionsAnswered), { timeout: 10_000, message: `a(z) ${"ABCD"[i]} kőre koppintás választott` }).toBe(before + 1);
+        await expect(page.getByTestId(`bc-rune-${i}`), "a koppintott kő a választott válasz").toHaveAttribute("data-state", /^(correct|wrong)$/);
+        await expect.poll(async () => (await probe(page)).lockOpen, { timeout: 15_000 }).toBe(0);
+        await expect.poll(async () => (await probe(page)).questionOpen, { timeout: 15_000 }).toBe(0);
+      }
+    });
+  });
+}
+
+test.describe("vak K2 360x640", () => {
+  test.use({ viewport: { width: 360, height: 640 } });
+  test("a megoldás-kijelzéskor a kérdéskártya nem lóg a látható rúnaréteg-szünetgombra; új kérdésnél a gomb újra látszik", async ({ page }) => {
+    await startGame(page);
+    await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONGEST_RUNE_QUIZ);
+    const wrong = page.locator('[data-testid="bc-quiz"] [data-correct="false"]').first();
+    await expect(wrong).toHaveAttribute("data-armed", "true", { timeout: 15_000 });
+    const overlap = () =>
+      page.evaluate(() => {
+        const pause = document.querySelector<HTMLElement>('[data-testid="bc-quiz-pause"]');
+        const card = document.querySelector<HTMLElement>(".play-question-card");
+        if (!pause || !card) return { visible: false, overlap: 0 };
+        const cs = getComputedStyle(pause);
+        const visible = cs.display !== "none" && cs.visibility !== "hidden";
+        const a = pause.getBoundingClientRect();
+        const b = card.getBoundingClientRect();
+        const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        return { visible, overlap: visible && w > 0 && h > 0 ? Math.round(w * h) : 0 };
+      });
+    expect((await overlap()).visible, "kérdés közben a szünetgomb látszik").toBe(true);
+    const wb = (await wrong.boundingBox())!;
+    await tapAt(page, wb.x + wb.width / 2, wb.y + wb.height / 2);
+    await expect(page.locator('[data-testid="bc-quiz"][data-state="reveal"]')).toBeVisible({ timeout: 10_000 });
+    // A mérés 5 Hz-es: a kijelzés alatt több mintát veszünk, egyik sem lóghat rá.
+    for (let k = 0; k < 6; k++) {
+      await page.waitForTimeout(250);
+      const o = await overlap();
+      expect(o.overlap, `a kártya ${o.overlap} px²-en lóg a látható szünetgombra`).toBe(0);
+    }
+    await expect.poll(async () => (await probe(page)).questionOpen, { timeout: 15_000 }).toBe(0);
+    await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONGEST_RUNE_QUIZ);
+    await expect(page.locator('[data-testid="bc-quiz"] [data-armed="true"]').first()).toBeVisible({ timeout: 20_000 });
+    await expect.poll(async () => (await overlap()).visible, { timeout: 5_000, message: "új kérdésnél a szünetgomb újra látszik" }).toBe(true);
+  });
+});
+
+test("vak K4: a végeredmény „Rúnaérc” száma a teljes menet kinyitott rúnazárai (nem csak az utolsó pályáé)", async ({ page }) => {
+  test.setTimeout(Math.max(test.info().timeout, 120_000));
+  await startGame(page);
+  const answerOne = async (runesLeft: number) => {
+    await page.evaluate((args) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz: args.quiz, runesLeft: args.runesLeft }), { quiz: LONG_WINDOW_QUIZ, runesLeft });
+    await expect(page.locator('[data-testid="bc-quiz"] [data-armed="true"]').first()).toBeVisible({ timeout: 20_000 });
+    await page.evaluate(() => document.querySelector<HTMLButtonElement>('[data-testid="bc-quiz"] [data-correct="true"]')!.click());
+  };
+  // 1. pálya: az utolsó rúnaérc → pálya teljesítve (1 valódi zár).
+  await answerOne(1);
+  await expect(page.getByTestId("bc-level-complete")).toBeVisible({ timeout: 20_000 });
+  await page.keyboard.press("r"); // a következő pálya
+  await expect.poll(async () => (await probe(page)).phase, { timeout: 15_000 }).toBe("play");
+  // 2. pálya: még 1 zár, majd a menet vége.
+  await answerOne(99);
+  await expect.poll(async () => (await probe(page)).questionOpen, { timeout: 15_000 }).toBe(0);
+  const runRunes = Number((await probe(page)).runRunes);
+  expect(runRunes, "a menetben 2 valódi rúnazár nyílt").toBe(2);
+  await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame!.forceState({ phase: "over" }));
+  await expect(page.getByTestId("bc-over")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("bc-over-runes")).toHaveText(String(runRunes));
+});
+
+test("vak K6: nyitott kérdés alatt a lap legfeljebb ~13 render/s (a kérdés-sáv 10 Hz-e; a HUD nem rajzol újra feleslegesen)", async ({ page }) => {
+  await startGame(page);
+  await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONG_WINDOW_QUIZ);
+  await expect(page.locator('[data-testid="bc-quiz"] [data-armed="true"]').first()).toBeVisible({ timeout: 20_000 });
+  const rate = await page.evaluate(async () => {
+    const w = window as unknown as GameTestWindow;
+    const r0 = Number(w.__websuliGame!.probe().renders);
+    const t0 = performance.now();
+    await new Promise((res) => setTimeout(res, 2500));
+    const r1 = Number(w.__websuliGame!.probe().renders);
+    return ((r1 - r0) * 1000) / (performance.now() - t0);
+  });
+  expect((await probe(page)).lockOpen, "a mérés nyitott zár alatt történt").toBe(1);
+  expect(rate, `render/s nyitott kérdés alatt: ${rate.toFixed(1)}`).toBeLessThanOrEqual(13);
+});

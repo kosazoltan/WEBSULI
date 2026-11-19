@@ -629,3 +629,70 @@ test("N1 (review #484): a lap áthelyezheti a köveket (setLockStones) — a kő
   assert.equal(r.mine.tapRay(eye, m.u, r.mine.clockMs(), 99), true, "az új helyen a kő választ");
   assert.ok(lock.resolved !== null);
 });
+
+test("vak K1 (review #484): tapStone — a lap által kiválasztott (vetített) kő választ a terep ellenére, de az ércre célzott sugárral és élesítés előtt nem", () => {
+  const r = rig();
+  const st = r.mine.state();
+  const ore = st.ores[0]!;
+  r.mine.hit(ore);
+  const lock = st.lock!;
+  const eye = { x: r.player.x, y: r.player.y + 1.62, z: r.player.z };
+  const toward = (t: Vec3) => {
+    const v = { x: t.x - eye.x, y: t.y - eye.y, z: t.z - eye.z };
+    const l = Math.hypot(v.x, v.y, v.z);
+    return { x: v.x / l, y: v.y / l, z: v.z / l };
+  };
+  // Élesítés előtt nincs válasz.
+  assert.equal(r.mine.tapStone(1, eye, toward(lock.stones[1]!), r.mine.clockMs()), false);
+  r.tick(RUNE_ARM_MS + STEP);
+  // Az érc közepére mutató sugár (a kő a képernyőn az érc előtt lenne) nem választ.
+  assert.equal(r.mine.tapStone(1, eye, toward({ x: ore.x + 0.5, y: ore.y + 0.5, z: ore.z + 0.5 }), r.mine.clockMs()), false);
+  assert.equal(lock.resolved, null);
+  // A kőre mutató sugár — a kő akár 8 egységnél messzebb, a talaj mögött is lehet (a lap a téglalapból döntött).
+  const far = { x: eye.x + 1, y: eye.y - 3, z: eye.z - 9 };
+  r.mine.setLockStones(lock.stones.map((s, i) => (i === 1 ? far : { ...s })));
+  assert.equal(r.mine.tapStone(1, eye, toward(far), r.mine.clockMs()), true);
+  assert.ok(lock.resolved !== null);
+});
+
+test("vak K4 (review #484): a menet kinyitott rúnazárainak száma (runOpened) a pályaváltás után is összegződik", () => {
+  const r = rig({ questions: false });
+  const st = r.mine.state();
+  for (let i = 0; i < st.goal; i++) {
+    r.mine.hit(st.ores[0]!);
+    r.tick(STEP);
+  }
+  assert.equal(st.phase, "won");
+  assert.equal(st.runOpened, BLOCK_CRAFT_LEVELS[0]!.runeGoal);
+  r.mine.startLevel(flatWorld(), 1, { x: 0, z: -1 });
+  assert.equal(st.opened, 0, "a pálya számlálója nullázódik");
+  r.mine.hit(st.ores[0]!);
+  r.tick(STEP);
+  assert.equal(st.opened, 1);
+  assert.equal(st.runOpened, BLOCK_CRAFT_LEVELS[0]!.runeGoal + 1, "a menet számlálója összegződik");
+});
+
+test("vak K5 (review #484): az újrahasznált (képkockánként átírt) célobjektum biztonságos — a tartás a következő blokkra lép, a zár érce saját másolat", () => {
+  const r = rig();
+  const st = r.mine.state();
+  const w = st.world;
+  const aim = { x: 5, y: 5, z: 5 };
+  vSet(w, 5, 5, 5, GRASS);
+  vSet(w, 6, 5, 5, GRASS);
+  r.mine.aim(aim);
+  r.mine.press();
+  r.tick(450);
+  assert.equal(vGet(w, 5, 5, 5), AIR);
+  aim.x = 6; // ugyanaz az objektum, új koordináta (a lap így adja képkockánként)
+  r.tick(450);
+  assert.equal(vGet(w, 6, 5, 5), AIR);
+  r.mine.release();
+  const ore = st.ores[0]!;
+  aim.x = ore.x;
+  aim.y = ore.y;
+  aim.z = ore.z;
+  r.mine.press(); // tartás az ércen → zár
+  assert.ok(st.lock);
+  aim.x = 1; // a célobjektum átírása nem mozdítja a zár ércét
+  assert.deepEqual(st.lock.ore, { x: ore.x, y: ore.y, z: ore.z });
+});
