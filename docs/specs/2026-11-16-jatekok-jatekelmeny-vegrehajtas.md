@@ -1416,6 +1416,34 @@ válaszok mellett mind a négy kő 0%, és a kérdéskártya rátakar az A/B rú
 - **K6**: a HUD-intervallum csak változáskor állít állapotot; nyitott kérdés alatt 20,3 → 11,3 render/s (a maradék a közös
   kérdés-sáv 10 Hz-es lépése). Renderszám-teszt ≤ 13/s.
 
+**D-04 (tulajdonosi döntés, 2026-11-19) — új pontskála, új verziókulcs, a régi rekordok archívak:** a Rúnabánya pontskálája
+(rúnaérc, kombó, pálya-XP) nem hasonlítható a régi Kockavadász XP-jéhez, ezért a #484 a merge ELŐTT új pontkulcsra áll át.
+Nincs nullázás és nincs átváltás: a régi rekordok érintetlenül megmaradnak a régi kulcs alatt (archív), az új menetek az új
+kulcs alá kerülnek, a két lista nem keveredik.
+- **Kulcs:** `shared/game-score-keys.ts` → `BLOCK_CRAFT_SCORE_KEY = "block-craft-quiz-v2"` (a régi:
+  `BLOCK_CRAFT_LEGACY_SCORE_KEY = "block-craft-quiz"`, egyben a játék azonosítója — útvonal, kérdésbank, napi kihívás,
+  jelvények, helyi statisztika változatlanul ezt használja; csak a pontszám-tárolás kulcsa új).
+- **Szerver-ranglista (`game_scores`):** a lap `postGameScore` hívása az új kulccsal küld; a `GET /api/games/leaderboard`
+  `gameId=block-craft-quiz-v2` lekérdezése így a régi sorokat nem látja. A `game_scores.game_id` idegen kulcs a
+  `games_catalog`-ra, ezért új, csak hozzáadó migráció: `migrations/0044_games_catalog_block_craft_v2.sql`
+  (`INSERT … ON CONFLICT DO NOTHING`, a 0012-es minta; séma- és indexváltozás nincs, a régi sorokhoz nem nyúl). A
+  pontkulcs nem külön játék: a `listGamesCatalog` a csak pontkulcs-sorokat kiszűri (`lobbyCatalog`), így a lobbiban és a
+  Stúdió visszajelzés-paneljén nem jelenik meg második csempe.
+- **Helyi rekord (`websuli.gameBest.v1`):** a lap `useBestScore` kulcsa is az új kulcs; a régi `block-craft-quiz` bejegyzés
+  a térképben marad (archív), az első új menet „Új rekord!” lehet.
+- **Admin / szülői nézet:** a `ParentDashboardPanel` címkéi: `block-craft-quiz` → „Kockavadász (régi pontozás)”,
+  `block-craft-quiz-v2` → „Kockavadász — Rúnabánya”.
+- **Régi kliens:** egy beolvasztás előtt nyitott, régi lap továbbra is a régi kulccsal küld — a régi pontskálájú menet így
+  helyesen a régi listára kerül.
+- **Elvetett változatok:** (a) `score_version` oszlop a `game_scores`-ban — egyedi index cseréje éles táblán, migráció és
+  Drizzle-séma változás, nagyobb kockázat ugyanazért; (b) a kulcs a `difficulty` mezőben — szemantikailag hibás, az admin
+  összesítők keverednének.
+- **Bukó teszt először** (`T/blockcraft-score-version.test.ts`): a régi helyi rekord nem látszik az új kulcson és nem vész
+  el; a lap az új kulccsal küld és ment; van migráció, amely az új kulcsot a katalógusba teszi, és egy migráció sem ír / töröl
+  `game_scores`-t a régi kulcsra; a lobbi-katalógus a pontkulcsot kiszűri. Valódi adatbázison
+  (`T/blockcraft-score-version-db.integration.ts`, a `run-learning-db-tests` listáján): a migráció kétszer futtatható; régi
+  rekord + új menet után az új ranglista csak az új sort adja, a régi sor értékei változatlanok, a régi ranglista csak a régi.
+
 **M5 (a #483 beolvasztása után, 2026-11-18):** a közös kupon-ismétlés (#483) a Kockavadász magján és lapján változtatás
 nélkül érvényes. A sim kapott `couponOnly` opciót és kérdés nélküli zár-számlálót; teszt: 3 / 5 / 8 tételes leckével 20 seed ×
 180 s — ≥ 7 kérdés/perc, ≤ 15 s rés, 0 kérdés nélküli zár, nincs közvetlen ismétlés, csak a lecke tételei, mind sorra kerül
