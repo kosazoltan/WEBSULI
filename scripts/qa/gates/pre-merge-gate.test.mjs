@@ -218,6 +218,21 @@ test('V2: a main() lépés-összerakása (mergeSteps) az ítéletet a helyi bizo
   assert.equal(st(mergeSteps({ ...common, evidence: { head: HEAD, verdict: 'NEM' } }), 'független ellenőr ítélete'), STATUS.FAIL);
 });
 
+test('W1: szigorú mód (blindReview.exclusive) a mergeSteps-en át — sima record-review rekord FAIL, a futtató rekordja PASS', () => {
+  const data = {
+    pr: prFromRest({ state: 'open', draft: false, mergeable_state: 'clean', head: { sha: HEAD }, base: { sha: MAIN } }, [{ filename: 'docs/a.md' }]),
+    required: REQUIRED, checkRuns: REQUIRED.map((nm) => run(nm)), statuses: [], threads: [], mainSha: MAIN, ciBaseSha: MAIN, mainFiles: null, mainFilesTruncated: false,
+  };
+  const strict = { repoWideScopes: cfg.repoWideScopes, blindReview: { exclusive: true, model: 'qwen/qwen4-max' } };
+  const common = { data, external: null, guard: { code: 0, summary: '' }, rt: { json: { mode: 'off' } }, cfg: strict };
+  const plain = { head: HEAD, verdict: 'IGEN' };
+  const runner = { head: HEAD, verdict: 'IGEN', reviewer: 'blind-review', blind: { model: 'qwen/qwen4-max' } };
+  assert.equal(st(mergeSteps({ ...common, evidence: plain }), 'független ellenőr ítélete'), STATUS.FAIL, 'szigorú mód: sima rekord nem elég');
+  assert.equal(st(mergeSteps({ ...common, evidence: runner }), 'független ellenőr ítélete'), STATUS.PASS);
+  assert.equal(st(mergeSteps({ ...common, evidence: { ...runner, blind: { model: 'mas/modell' } } }), 'független ellenőr ítélete'), STATUS.FAIL, 'más modell nem');
+  assert.equal(st(mergeSteps({ ...common, cfg: { ...strict, blindReview: { exclusive: false } }, evidence: plain }), 'független ellenőr ítélete'), STATUS.PASS, 'alap mód: sima rekord elég');
+});
+
 test('K6: previous_filename is útvonal; check-run lista lapozva, csonka / ismeretlen alak → kivétel; gyökér review-kommentek', () => {
   const pr = prFromRest({ state: 'open' }, [{ filename: 'docs/archiv/x.md', previous_filename: 'scripts/qa/gates/x.mjs' }, { filename: 'a.md' }]);
   assert.deepEqual(pr.files.map((f) => f.path), ['docs/archiv/x.md', 'scripts/qa/gates/x.mjs', 'a.md']);
@@ -298,7 +313,8 @@ test('K1: felhős út — a GraphQL bukása után a CCR (lapozva), REST-kereszte
   assert.ok(gi >= 0 && ci > gi, 'előbb a GraphQL, aztán a CCR');
   assert.ok(ok.g.calls[ci].includes('--paginate') && ok.g.calls[ci].includes('--slurp'), 'a CCR-út lapozva');
   assert.throws(() => collect({ graphql: gqlFail, ccr: [[]], reviewComments: [[{ id: 1 }]] }).run(), /üres/, 'V3: üres CCR + van gyökérkomment → kivétel');
-  assert.deepEqual(collect({ graphql: gqlFail, ccr: [[]], reviewComments: [[]] }).run().threads, [], 'V3: üres CCR + 0 gyökérkomment → nincs szál');
+  assert.deepEqual(collect({ graphql: gqlFail, ccr: [[]], reviewComments: [[]] }).run().threads, [], 'V3: üres CCR + üres review-kommentlista → nincs szál');
+  assert.throws(() => collect({ graphql: gqlFail, ccr: [[]], reviewComments: [[{ id: 2, in_reply_to_id: 1 }]] }).run(), /üres/, 'W2: csak válasz-komment (törölt gyökér) mellett az üres CCR nem megy át');
   assert.throws(() => collect({ graphql: gqlFail, ccr: [[{ resolved: true }]], reviewComments: [[{ id: 1 }, { id: 2 }]] }).run(), /csonka: 1 szál, de .* 2 gyökér/);
   assert.throws(() => collect({ graphql: gqlFail, ccr: [[{ isResolved: true }]] }).run(), /resolved/);
   assert.throws(() => collect({ graphql: gqlFail, ccr: { threads: [] } }).run(), /nem lista/);

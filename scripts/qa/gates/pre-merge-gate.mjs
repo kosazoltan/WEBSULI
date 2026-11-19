@@ -127,7 +127,11 @@ export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSh
  * szűrhető. A `blind` (a konfig `blindReview` szakasza) a vak ellenőr futtatójának szigorú módját viszi tovább a `resolveVerdict`-nek;
  * a ma még ezt nem ismerő `resolveVerdict` figyelmen kívül hagyja. Következmény: felhős munkamenetből összevonás nem lehetséges.
  */
+export const BLIND_RUNNER = 'blind-review';
 export function mergeVerdict(pr, evidence, blind = null) {
+  // W1: szigorú módban (`blindReview.exclusive` BE) csak a vak ellenőr futtatójának rekordja, egyező modellel — ezen az ágon is
+  // érvényesül (és mérhető), a vak ág `resolveVerdict`-jének azonos szabálya mellett is.
+  if (blind?.exclusive === true && !(evidence?.reviewer === BLIND_RUNNER && evidence?.blind?.model === blind.model)) return null;
   return resolveVerdict({ head: pr?.headRefOid ?? '', evidence, texts: [], blind });
 }
 
@@ -273,8 +277,10 @@ export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepS
     log(`[pre-merge-gate] a GraphQL-szál-lekérdezés nem sikerült (${String(e?.message ?? e).split('\n')[0]}) — a ccr/review_threads útról`);
     // Felhős munkamenet: a GraphQL tiltott, a szálak a CCR REST-útról jönnek (lapozva), REST-keresztellenőrzéssel; ha bármelyik
     // bukik, a kivétel → „adatgyűjtés” FAIL.
-    const roots = rootReviewComments(flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/comments?per_page=100`]), null, 'review-kommentlista'));
-    threads = threadsFromCcr(flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/ccr/review_threads`]), null, 'ccr-szállista'), { allowEmpty: roots === 0 });
+    const reviewComments = flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/comments?per_page=100`]), null, 'review-kommentlista');
+    const roots = rootReviewComments(reviewComments);
+    // W2: üres CCR csak TELJESEN üres review-kommentlistánál (a törölt gyökér válasza megmaradhat — a gyökérszám nem elég).
+    threads = threadsFromCcr(flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/ccr/review_threads`]), null, 'ccr-szállista'), { allowEmpty: reviewComments.length === 0 });
     if (roots > threads.length) throw new Error(`a ccr/review_threads csonka: ${threads.length} szál, de a review-kommentekből ${roots} gyökér-szál számolható`);
     threadSource = 'ccr';
   }
