@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { ADVENT_BUSY_FAILED_TEXT, ADVENT_BUSY_WAIT_MS, adventErrorText, isAdventBusy, retryWhenBusy } from "../client/src/advent/busy";
@@ -158,4 +158,22 @@ test("hibaszöveg a gyereknek: nyers szerverválasz (HTML, JSON, angol hibanév,
   ] as const) assert.equal(adventErrorText(err(message, status), fallback), fallback, String(status) + ": " + message.slice(0, 30));
   assert.equal(adventErrorText(null, fallback), fallback);
   assert.equal(adventErrorText({ status: 500 }, fallback), fallback);
+});
+
+test("kapcsoló KI mellett a fő csomagban nincs adventi kód és CSS, és a /adventi-naptar útvonal sem él (vak ellenőr K1, KICSI-5)", () => {
+  // Statikusan csak a lusta (külön darabba kerülő) adventi modulok emelhetik be a kártyát, az oldalt és a CSS-t.
+  const lazyOnly = /^import[^;]*["'](@\/components\/AdventHomeCard|@\/advent\/advent\.css|@\/pages\/AdventCalendar)["'];?$/m;
+  const allowed = new Set(["client/src/components/AdventHomeCard.tsx", "client/src/pages/AdventCalendar.tsx"]);
+  const walk = (dir: string): string[] => readdirSync(fileURLToPath(new URL(`../${dir}`, import.meta.url)), { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.(tsx?|css)$/.test(e.name) ? [`${dir}/${e.name}`] : []));
+  const offenders = walk("client/src").filter((f) => !allowed.has(f) && !f.startsWith("client/src/advent/") && lazyOnly.test(read(f)));
+  assert.deepEqual(offenders, [], "statikus adventi import a fő csomag felé");
+  // A főoldal a kis helyfoglaló foglalatot emeli be; a kártya csak bekapcsolt build-kapcsolónál, lustán töltődik.
+  const slot = read("client/src/components/AdventHomeSlot.tsx");
+  assert.match(slot, /ADVENT_BUILD_FLAG \? lazy\(\(\) => import\("@\/components\/AdventHomeCard"\)\) : null/);
+  assert.match(read("client/src/components/UserFileList.tsx"), /import AdventHomeSlot from "@\/components\/AdventHomeSlot";/);
+  // Az útvonal is a build-kapcsolóhoz kötött: KI mellett nincs naptároldal (és így eszközazonosító-írás sem).
+  const app = read("client/src/App.tsx");
+  assert.match(app, /const AdventCalendar = ADVENT_BUILD_FLAG \? lazy\(\(\) => import\("@\/pages\/AdventCalendar"\)\) : null;/);
+  assert.match(app, /\{AdventCalendar \? <Route path="\/adventi-naptar" component=\{AdventCalendar\} \/> : null\}/);
 });

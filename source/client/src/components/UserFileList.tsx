@@ -13,7 +13,7 @@ import HeroSection from "@/components/HeroSection";
 import SponsorBar from "@/components/SponsorBar";
 import HomePracticeGames from "@/components/HomePracticeGames";
 import WelcomeCard from "@/components/WelcomeCard";
-import AdventHomeCard from "@/components/AdventHomeCard";
+import AdventHomeSlot from "@/components/AdventHomeSlot";
 import { displayTopic } from "@shared/daily-reminder";
 import { useClassroomGrade } from "@/lib/classroomStore";
 import { CLASSROOM_VALUES, classroomDisplayLabel, getClassroomLabel, normalizeClassroom } from "@shared/classrooms";
@@ -268,7 +268,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
       <div className="min-h-screen relative">
         <div className="container py-12 relative z-10">
           {/* Adventi naptár (terv 14.2): üres listánál is elérhető. */}
-          <AdventHomeCard />
+          <AdventHomeSlot />
           {onToggleView && (
             <div className="flex justify-end mb-6">
               <Button
@@ -321,7 +321,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
         />
 
         {/* Adventi naptár (docs/specs/2026-11-18-adventi-naptar.md 14.): a Hero alatt, a tananyagok fölött; szezonon kívül nem látszik. */}
-        <AdventHomeCard />
+        <AdventHomeSlot />
 
         {/* Támogatók (docs/specs/2026-11-03-szponzor-fejlec.md) */}
         <SponsorBar />

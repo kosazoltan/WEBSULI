@@ -62,7 +62,8 @@ test("a naptár NEM kerül a játékok közé: a játéklista és a főoldali j�
   const list = read("client/src/components/UserFileList.tsx");
   // A kártya közvetlenül a Hero után, a támogatói sáv és a szűrő előtt áll.
   const hero = list.indexOf("<HeroSection", list.indexOf("{connectionError}"));
-  const card = list.indexOf("<AdventHomeCard />", hero);
+  // A kártya a lusta foglalatán át kerül a lapra (vak ellenőr K1: külön darab) — a helye ugyanaz.
+  const card = list.indexOf("<AdventHomeSlot />", hero);
   assert.ok(hero > 0 && card > hero, "a kártya a Hero után");
   assert.ok(card < list.indexOf("<SponsorBar />", hero), "a kártya a támogatói sáv előtt");
   assert.ok(card < list.indexOf("data-testid=\"button-filter-all\"", hero), "a kártya a szűrő előtt");

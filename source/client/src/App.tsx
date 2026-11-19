@@ -10,6 +10,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { LessonLoading } from "@/lesson-runtime/LessonLoading";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LearnerProfileSync from "@/components/LearnerProfileSync";
+import { ADVENT_BUILD_FLAG } from "@/advent/season-flag";
 
 // LS-2: lazy, hogy a mérőoldal kódja ne kerüljön a fő bundle-be.
 const LessonRuntimeProbe = lazy(() => import("@/lesson-runtime/LessonRuntimeProbe"));
@@ -45,8 +46,9 @@ const SpaceAsteroidQuiz = lazy(() => import("@/pages/SpaceAsteroidQuiz"));
 const TornadoHunter200 = lazy(() => import("@/pages/TornadoHunter200"));
 // JM3a: Párbaj — online két főre (MP_MODE mögött) + gépi ellenfél (flag nélkül, hálózat nélkül).
 const DuelOnline = lazy(() => import("@/pages/DuelOnline"));
-// Adventi naptár (docs/specs/2026-11-18-adventi-naptar.md 14.1): szezonális oldal, NEM a játékok között.
-const AdventCalendar = lazy(() => import("@/pages/AdventCalendar"));
+// Adventi naptár (docs/specs/2026-11-18-adventi-naptar.md 14.1): szezonális oldal, NEM a játékok között. Kikapcsolt build-kapcsolónál
+// az útvonal nem él (nincs oldal, nincs eszközazonosító-írás), és a lusta import sincs a buildben (vak ellenőr KICSI-5).
+const AdventCalendar = ADVENT_BUILD_FLAG ? lazy(() => import("@/pages/AdventCalendar")) : null;
 // JM7b: a /profile bejelentkezett játékosnál a „kis fiók”, vendégnél (és kikapcsolt flagnél) a régi helyi Profil oldal.
 const PlayerAccount = lazy(() => import("@/pages/PlayerAccount"));
 // JM7a: játékos belépés (PLAYER_ACCOUNTS flag mögött; kikapcsolva a „nem található” oldal jelenik meg).
@@ -104,7 +106,7 @@ function Router() {
         <Route path="/admin/stats" component={AdminStats} />
         <Route path="/admin/help" component={AdminDocumentation} />
         <Route path="/login" component={Login} />
-        <Route path="/adventi-naptar" component={AdventCalendar} />
+        {AdventCalendar ? <Route path="/adventi-naptar" component={AdventCalendar} /> : null}
         <Route path="/games" component={Games} />
         <Route path="/games/tsunami-english" component={TsunamiEscapeEnglish} />
         <Route path="/games/word-ladder-hu-en" component={WordLadderHuEn} />

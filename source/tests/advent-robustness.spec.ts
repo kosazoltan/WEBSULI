@@ -268,6 +268,38 @@ test("dupla koppintás a „Tovább” gombon: a második koppintás nem éri a 
   await expect(page.getByTestId("advent-summary-open")).toBeFocused();
 });
 
+test("a főoldalról (?nyit=ma) magától nyílt kérdés Escape-pel zárva: a fókusz a mai ablakra kerül, nem a lap aljára (vak ellenőr KICSI-3)", async ({ page }) => {
+  await openCalendar(page, DEC5, 5);
+  await page.goto("/adventi-naptar?nyit=ma");
+  await expect(page.getByTestId("advent-question")).toBeVisible();
+  await expect(page.locator('[data-testid="advent-dialog"]:focus-within')).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
+  await expect(page.getByTestId("advent-door-5")).toBeFocused();
+});
+
+test("a „Tovább” utáni védőidő csak az azonos pontot védi: a MÁSIK ablakra azonnal koppintva az kinyílik (vak ellenőr KICSI-4)", async ({ page }) => {
+  await openCalendar(page, DEC5, 5);
+  let opens = 0;
+  page.on("request", (r) => { if (r.method() === "POST" && /\/doors\/\d+\/open$/.test(r.url())) opens++; });
+  await tapDoor(page, 3);
+  await pickOption(page, false);
+  const next = (await page.getByTestId("advent-next").boundingBox())!;
+  const nx = next.x + next.width / 2; const ny = next.y + next.height / 2;
+  // Egy másik nyitható ablak, amely messze van a „Tovább” pontjától.
+  let target = 0; let tx = 0; let ty = 0;
+  for (const day of [1, 2, 4, 5]) {
+    const box = (await page.getByTestId(`advent-door-${day}`).boundingBox())!;
+    const cx = box.x + box.width / 2; const cy = box.y + box.height / 2;
+    if (Math.hypot(cx - nx, cy - ny) > 120) { target = day; tx = cx; ty = cy; break; }
+  }
+  expect(target, "van távoli ablak").toBeGreaterThan(0);
+  await page.touchscreen.tap(nx, ny);
+  await page.touchscreen.tap(tx, ty);
+  await expect(page.getByTestId("advent-question")).toBeVisible();
+  expect(opens, "a szándékos koppintás kinyitotta a másik ablakot").toBe(2);
+});
+
 test("magától megnyílt összesítés bezárása után a fókusz nem vész el (S5)", async ({ page }) => {
   await openCalendar(page, DEC24);
   await seedProgress(page, DEC24, { grade: 5, days: range(1, 23) });

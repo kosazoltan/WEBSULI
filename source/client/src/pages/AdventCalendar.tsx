@@ -16,6 +16,7 @@ import { isMuted, sfxClick, sfxSuccess, toggleMuted } from "@/lib/audioEngine";
 import AdventArt from "@/advent/AdventArt";
 import Snowfall from "@/advent/Snowfall";
 import { ADVENT_BUSY_WAITING_TEXT, adventErrorText, retryWhenBusy } from "@/advent/busy";
+import { guardSwallows, type GuardPoint } from "@/advent/tap-guard";
 import {
   ADVENT_STATE_KEY, adventApi, adventDevice, clearPairingLost, forgetLearnerPairing, isPairingLost, markPairingLost, useAdventState,
 } from "@/advent/useAdvent";
@@ -99,6 +100,8 @@ export default function AdventCalendar() {
   const questionRef = useRef<HTMLParagraphElement | null>(null);
   const nextRef = useRef<HTMLButtonElement | null>(null);
   const gridGuardUntil = useRef(0);
+  // A „Tovább” koppintásának pontja (billentyűs zárásnál null): a védőidő csak ezt a pontot védi (vak ellenőr KICSI-4).
+  const gridGuardPoint = useRef<GuardPoint | null>(null);
   // A kérdésből az összesítés nyílik: a bezáródó kérdés ne vigye a fókuszt az ablakra (a két párbeszédablak ne „versenyezzen”).
   const handoffToSummary = useRef(false);
   // A védőidő a DOM-on is látszik (data-guard), hogy a gép (teszt) is megvárhassa, mint a gyerek a második koppintás előtt.
@@ -177,8 +180,8 @@ export default function AdventCalendar() {
     return true;
   };
 
-  const onDoor = (door: AdventDoorView, el: HTMLButtonElement) => {
-    if (performance.now() < gridGuardUntil.current) return;
+  const onDoor = (door: AdventDoorView, el: HTMLButtonElement, tap: { detail: number; clientX: number; clientY: number }) => {
+    if (performance.now() < gridGuardUntil.current && guardSwallows(gridGuardPoint.current, { pointer: tap.detail > 0, x: tap.clientX, y: tap.clientY }, el === questionOpener.current)) return;
     if (pairingBlocks()) { say(CHOOSE_FIRST_TEXT); return; }
     if (door.state === "locked") { say(`${articleFor(door.day) === "az" ? "Az" : "A"} ${door.day}. ablak december ${door.day}${daySuffix(door.day)} nyílik.`); return; }
     if (busy) { say("Egy pillanat — még nyílik az előző ablak."); return; }
@@ -209,9 +212,10 @@ export default function AdventCalendar() {
     }
   };
 
-  const closeQuestion = () => {
+  const closeQuestion = (point: GuardPoint | null = null) => {
     const finished = open?.result && (open.result.closing.kind === "gift" || open.result.summary.answered === open.result.summary.total);
     gridGuardUntil.current = performance.now() + GRID_GUARD_MS;
+    gridGuardPoint.current = point;
     setGuarded(true);
     setOpen(null);
     setError(null);
@@ -259,7 +263,9 @@ export default function AdventCalendar() {
     if (!state || !wantsAuto.current || state.needsGrade || mustChoose) return;
     wantsAuto.current = false;
     const day = nextDoorToOpen(state);
-    if (day !== null) void openDoor(day, null, state.doors[day - 1]?.state === "repairable");
+    // A megnyitó a soron következő ablak gombja: bezárás után oda tér vissza a fókusz, nem a lap aljára (vak ellenőr KICSI-3).
+    const opener = day !== null ? document.querySelector<HTMLElement>(`[data-testid="advent-door-${day}"]`) : null;
+    if (day !== null) void openDoor(day, opener, state.doors[day - 1]?.state === "repairable");
     else if (roundIsOver(state)) setSummaryOpen(true);
   }, [state, openDoor, mustChoose]);
 
@@ -387,7 +393,7 @@ export default function AdventCalendar() {
                   type="button" className="advent-door" data-testid={`advent-door-${day}`} data-state={shown} data-opening={opening ? "true" : undefined}
                   aria-label={opening ? `${day}. ablak — nyílik…` : doorLabel(door, closed)} aria-busy={opening || undefined}
                   aria-disabled={shown === "locked" || closed || (busy && !opening) ? "true" : undefined}
-                  onClick={(e) => { if (closed) return; onDoor(door, e.currentTarget); }}
+                  onClick={(e) => { if (closed) return; onDoor(door, e.currentTarget, e); }}
                 >
                   {shown === "solved" ? <AdventArt id={doorArtId(day)} className="advent-door__art" decorative /> : null}
                   <span className="advent-door__num">{day}</span>
@@ -464,7 +470,7 @@ export default function AdventCalendar() {
                 {waiting ? <p className="advent-banner" role="status" data-testid="advent-busy">{ADVENT_BUSY_WAITING_TEXT}</p> : null}
                 {error ? <p className="advent-banner advent-banner--error" role="alert" data-testid="advent-error">{error}</p> : null}
                 {open.result ? (
-                  <button ref={nextRef} type="button" className="advent-btn advent-btn--primary" data-testid="advent-next" onClick={closeQuestion}>Tovább</button>
+                  <button ref={nextRef} type="button" className="advent-btn advent-btn--primary" data-testid="advent-next" onClick={(e) => closeQuestion(e.detail > 0 ? { x: e.clientX, y: e.clientY } : null)}>Tovább</button>
                 ) : (
                   <Dialog.Close asChild><button type="button" className="advent-btn advent-btn--ghost">Bezárás</button></Dialog.Close>
                 )}
