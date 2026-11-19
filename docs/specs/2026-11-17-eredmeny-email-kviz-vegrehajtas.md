@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 (keretek, telepítési sorrend, 2026-11-18) kész, a következő vak ellenőrzés előtt – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 (második vak ellenőrzés, 2026-11-18) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -170,6 +170,32 @@ a gyökérből `npm run gate:stage`, `npm run gate:push`.
   az új mezős törzset 400-zal utasítja el → a végleges kvíz és a feladatok kérése az új mezők nélkül elfogadva; a pillanatkép nem megy
   át végleges alakban).
 - Utána: `git merge origin/main`, `gate:stage`, e2e-sorompó KÜLÖN lépésben, böngészős kör, DB-kör, `gate:push`.
+
+## T12 — a második vak ellenőrzés leletei (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R11–R14)
+
+Leletenként előbb BUKÓ teszt, utána a javítás.
+- **R11** `server/lesson-result-email.ts`: `pendingPartials` kulcsa `lecke|kör` (a bejegyzés a `who`-t is tárolja); `mayActOn(owner, who)` =
+  `owner === who || owner.startsWith("guest:")`; a pillanatkép körkulcsa `roundKeyOf("partial-round", "quiz-partial", roundId)` (R6, R1
+  felülírás-vizsgálat, sendLessonResult); `finalizedRounds` értéke `{ until, who }`, a `roundFinalized` csak összeférő véglegesítést
+  vesz figyelembe. Teszt (`lesson-result-email-partial-db.integration.ts`): ujjlenyomat nélküli + ujjlenyomatos, és IP-váltásos
+  pillanatkép → 1 levél / címzett; részleges levél IP1-ről, végleges IP2-ről ujjlenyomattal → felülíró mondat; igazolt (párosított)
+  tanuló köre vendéggel nem írható felül / nem törölhető.
+- **R12** `shared/result-compat.ts`: `RESULT_API_VERSION = 2`; `server/routes.ts` `/api/csrf-token` → `{ csrfToken, resultApi }`;
+  `client/src/lib/queryClient.ts`: a token mellett a jelzés tárolása (`resultApiReady()` szinkron, `ensureResultApi()` aszinkron);
+  `resultReport.ts`: pillanatkép csak jelzéssel; a végleges törzs új mezői csak jelzéssel; az R10 ismétlés csak jelzéssel. A böngészős
+  csonkok (új szerver) `resultApi: 2`-t adnak; a „régi szerver” csonk nem. Teszt: egy gyerek kérései régi szerver mellett (háttérbe
+  kerüléssel is) → pontosan 1, régi alakú kérés; a rögzített kérést 30× visszajátszva a főág szigorú sémájának és 20-as, `skip`
+  nélküli keretének másolatára → 20 elfogadott, 10 × 429 (= a régi kliens eredménye), kettős küldés nincs. A korábbi R10 böngészőteszt
+  a jelzés nélküli útra változik (első kísérlet már régi alakú).
+- **R13** `shared/lesson-result-email.ts`: részleges levélben „Minden megválaszolt kérdésre helyes választ adott.”; `meta.lastAnsweredAt`
+  → „Utolsó válasz: …” (részleges levélnél a „Beküldve” helyett); séma: opcionális `clientNow` mindkét fajtánál; a szerver a
+  `clientNow`-val korrigálja az időbélyegeket és a 7 napos határt. Teszt: egység (szöveg, dátumsor, séma) + DB (késő kliensóra:
+  `startedAt`/`lastAnsweredAt`/`clientNow` 30 nappal a múltban, de egymáshoz képest frissek → elfogadva).
+- **R14** `server/lesson-result-email.ts`: `flushPendingPartials(timeoutMs)` — minden várakozó időzítő törlése és a küldés azonnal,
+  `Promise.race` időkorláttal; `server/index.ts` `gracefulShutdown`: a pool lezárása előtt, 15 s. Teszt (DB): 60 s-os késleltetésű
+  várakozó → ürítéskor azonnal kimegy; lefagyott küldőnél az ürítés az időkorláton belül visszatér.
+- **Jegy:** K5 (a kanban CLI e gépen nem elérhető: a jegyszöveg a zárójelentésben az orkesztrátornak).
+- Utána: `git merge origin/main`, `gate:stage`, sorompó KÜLÖN lépésben, DB-kör, böngészős kör, `gate:push`.
 
 ## Kész-feltétel
 
