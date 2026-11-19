@@ -1101,3 +1101,7 @@ Forrás: J7b Tornádó útelágazás, vak ellenőrzés K1 (`source/tests/tornado
   a jelentésben a mintákat is nevezd meg.
 - **Javítás iránya, ha a bemenet nem árulja el a szándékot:** a jutalom / büntetés olyan mozdulathoz kötődjön, amelyet a nem olvasó
   játékos nem tesz meg véletlenül (itt: oldalsó kapu folyosója ≥ 6 egységgel az egyenestől; a középső kapu csak koppintással).
+- Rokon apróság (ugyanebben a futásban): Git Bashből `npm.cmd run test:e2e -- … -g "a|b"` a cmd.exe-n át fut, amely a `|`-t
+  csővezetéknek, a szóközös argumentumot több argumentumnak veszi — a böngészős kör azonnal EXIT 255-tel állt le, és elveszett egy
+  gép-zár-sáv. Szűrős / szóközös argumentumnál a harnesst közvetlenül hívd: `node --import tsx scripts/run-e2e-tests.ts <spec> -g "…"`.
+  A futó várakozó-szkript fájlját se írd felül (a bash menet közben olvassa) — mindig új fájlnév.
