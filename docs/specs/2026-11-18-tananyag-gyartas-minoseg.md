@@ -365,12 +365,17 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
     Audióval azonosan azonnali, de megtartja a hangmagasságot a csúszka sebességénél (a Web Audio lejátszási sebessége a hangmagasságot
     is eltolja — éppen a torzítás volt az eredeti panasz), tömörített bájtokat tart a memóriában dekódolt minták helyett, és a lecke
     CSP-jéhez (`default-src 'self'`, `blob:` / `data:` nélkül) nem kell hozzányúlni.
-  - **A tartalék-út se várasson:** a böngészőhang kiválasztása és a „néma motor” felismerése EGYSZER dől el a munkamenetre: az első
-    felhasználói mozdulatnál egy nulla hangerejű próba-megszólalás fut a háttérben a rangsor szerint (itt a hálózati hang megkapja a
-    6 mp-es türelmét — a gyerek erre nem vár), az eredmény tárolódik. Igazolt hang → koppintásra azonnal az szól; igazoltan néma motor
-    → a felület előre tudja, és a böngészőhang-lépés kimarad. A korábbi indulási őrök (3 / 6 mp összesített csendkeret, 1,5 mp az
-    előre gyártott hangra) végső védőhálóként maradnak arra az esetre, ha a próba még nem futott le, vagy az igazolt hang később
-    mégsem indul.
+  - **A tartalék-út se várasson — a motorról csak VALÓDI koppintásból tanulunk** (spec-módosítás 2026-11-19, vak review B1–B3;
+    orkesztrátori döntés): kéretlen, nulla hangerejű próba-kimondás NINCS — semmi nem mond ki, nem áll a beszédsorba és nem szakít
+    meg kimondást a gyerek kifejezett koppintása nélkül (a lecke „Felolvasás” gombját és a kisfilm narrációját a lejátszó nem
+    zavarhatja). Pozitív bizonyíték: ha egy koppintásra a böngészőhang `start` eseménye megjön, az a hang a munkamenetre igazolt, a
+    következő koppintásokra közvetlenül az szól. Amíg nincs igazolás, az első koppintásnál az időkorlátos lánc fut — néma motornál ez
+    munkamenetenként egyszer 3 mp (helyi első hang) vagy 6 mp (hálózati első hang) csend a tartalék előtt. A negatív ítélet soha nem
+    végleges: a hibát adó / el nem induló hang és a néma motor csak a következő 2 koppintásra marad ki, utána a lánc újra megpróbálja
+    a rangsor legjobbját; az ítélet a lecke nyelve szerint él. Nem a hang hibája: a megszakítás (`interrupted` / `canceled` —
+    ugyanaz a hang kap egy újrapróbát, utána a tartalék jön), a hiányzó felhasználói aktiváció (`not-allowed`), és amit a lejátszó
+    maga állított le. Az indulási őrök (3 / 6 mp összesített csendkeret, 1,5 mp az előre gyártott hangra, 8 mp a szerveres tartalékra)
+    megmaradnak.
   - **Koppintás az előtöltés közben / a plafon fölötti szóra:** a még nem pufferelt szóra azonnal, a kattintás gesztusában a
     böngészőhang szól, a szó letöltése előre ugrik (a következő koppintásra már a pufferelt hang szól); ha böngészőhang nincs
     (néma motor), a hang kérésre töltődik. Egy koppintásra egy hang szól — a később megérkező letöltés nem szólal meg.
@@ -380,7 +385,8 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
     munkamenet végéig (60 mp után újra próbálható); a „nincs” jegyzék a lap újra láthatóvá válásakor (legfeljebb percenként) frissül;
     az utoljára ismert jegyzék helyben megmarad, így ismételt megnyitáskor hálózat nélkül is a tartós gyorsítótárból szól a hang;
     hiba esetén csendes visszaesés a láncra. A hangtár sebességkorlátja az előtöltéshez igazodik (egy osztály egyszerre nyit:
-    30 × 40 hang × 2 kérés a tartománykérések miatt + 30 jegyzék = 2 430, tartalékkal 3 000 kérés / 15 perc / IP).
+    a keret az előtöltés plafonjából, közös állandóból számol — 30 × 60 hang × 2 kérés a tartománykérések miatt + 30 jegyzék = 3 630,
+    20% tartalékkal 4 500 kérés / 15 perc / IP; a hangtár 429-es, 500-as és ismeretlen alútra adott válasza kifejezetten `no-store`).
   - **Mérhető elfogadás (böngészőteszt, a hang tényleges indulási eseményéből):** koppintástól a hangig előtöltött hangnál ≤ 300 ms
     (cél ≤ 150 ms), böngészőhangnál ≤ 1 s, késleltetett hangtár-válasz mellett is; kikapcsolt előtöltéssel a teszt bukik. Kockázat: a
     fejetlen böngésző időmérése nem azonos a valós eszközével (iOS Safari a `preload`-ot gesztus nélkül figyelmen kívül hagyhatja —
@@ -698,9 +704,10 @@ Determinisztikus kapuk (SK1–SK5, tulajdonosi elv):
   összméret-plafonig (3,5 MB), adatkímélő / lassú kapcsolaton csak az első szakaszt.
 - [ ] E51 WHEN a tanuló előtöltött hangú szóra koppint THEN the system SHALL a hangot hálózati kör nélkül, a koppintástól számított
   300 ms-on belül elindítani (böngészőtesztben a `playing` eseményből mérve; kikapcsolt előtöltéssel a teszt bukik).
-- [ ] E52 The system SHALL a böngészőhang kiválasztását és a néma motor felismerését munkamenetenként egyszer elvégezni (próba-
-  megszólalás az első felhasználói mozdulatnál), és koppintáskor az igazolt hangot 1 s-on belül indítani, igazoltan néma motornál a
-  böngészőhang-lépést kihagyni.
+- [ ] E52 The system SHALL a hangmotor állapotát kizárólag a tanuló valódi koppintásaiból megtanulni (kéretlen kimondás és más
+  kimondásának megszakítása nélkül): a `start` eseménnyel igazolt hangot a következő koppintásokra 1 s-on belül indítani; néma motornál
+  az első koppintás csendkerete (3 / 6 mp) után a következő 2 koppintásra a böngészőhang-lépést kihagyni, majd újra megpróbálni; a
+  megszakított / nem engedett kimondást nem a hang hibájának tekinteni; az ítéletet a lecke nyelve szerint tartani.
 - [ ] E53 WHEN a tanuló még nem pufferelt szóra koppint THEN the system SHALL azonnal, a gesztusban megszólaltatni a böngészőhangot
   (ha van), a szó letöltését előre venni, és egy koppintásra legfeljebb egy hangot megszólaltatni.
 - [ ] E54 WHEN a tanuló elhagyja a leckét vagy leckét vált THEN the system SHALL a futó letöltéseket megszakítani és a hangelemeket
