@@ -84,3 +84,16 @@ Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`, „4. kiegészítés” (
 28. Tesztek + mutációs ellenpróba; `gate:stage`; újramérés (nehéz kör csak 22:15 UTC után, sorompóval); `gate:push`.
 
 - [x] 24 · [x] 25 · [x] 26 · [x] 27 · [x] 28 (újramérés 2026-11-19: 2 / 9, a küszöb nem teljesült — `docs/minosegkapuk.md` „Mért alapvonal”)
+
+## 5. kiegészítés — GPT-6.2 Sol (high), kizárólagos futtató (2026-11-19) — végrehajtás
+
+Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`, „5. kiegészítés” (F1–F2).
+
+29. `gates.config.json` `blindReview`: `model`, `requestExtras` (`reasoning.effort: high`, `temperature` nélkül), `promptCache.mode: none`,
+    tartalék-árak, `exclusive: true`, `exclusiveSince`. `rules-guard.test.mjs`: a modell és a kapcsoló a döntés dátumával.
+30. Szövegek: a „Ki az ellenőr” jelölt bekezdés (AGENTS.md, skill), `CLAUDE.md`, Cursor / Copilot / Codex, runbook, a
+    `websuli-vak-ellenor` és a kapu-skillek, a kapu- és hook-üzenet; memória.
+31. Füstpróba a `fix/kitakaro-negyzetes-regex` fejen (`f024bb3d`); `record-review` kísérleti bizonyíték-tárral (a valódit nem írja felül).
+32. `gate:stage`; a futtatási parancs más munkafára.
+
+- [ ] 29 · [ ] 30 · [ ] 31 · [ ] 32

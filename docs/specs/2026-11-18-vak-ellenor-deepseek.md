@@ -517,3 +517,44 @@ futásnál lehet. Elszigetelt próba → a lelet legfeljebb „részben igazolt�
 - [ ] B33 WHEN a lelet próbája elszigetelt THEN a lelet SHALL legfeljebb „részben igazolt”; nem ellenőrizhető `input` → a `run`
   bizonyíték érvénytelen.
 - [ ] B34 Az újramérés táblázata a régi sor mellett, a küszöbhöz mérve, szépítés nélkül.
+
+## 5. kiegészítés — a vak ellenőr modellje: GPT-6.2 Sol (high), a futtató kizárólagos (2026-11-19)
+
+Tulajdonosi döntés (2026-11-19, szó szerint): „A teljes ökoszisztémában az ellenőr, független ellenőr modellt cseréld le skillekben,
+Agent MD fájlokban, memóriákban, a GPT-6.2 SOL modellre high efforttal.” — „Amint kicserélted az ellenőr modellt az összes futó
+folyamaton, folytasd a munkát.”
+
+Ez a kiegészítés FELÜLÍRJA az M1 (modell), az E1 (kapcsoló KI) és az E3 (átállás a küszöb után) ellentétes részeit.
+
+### F1 — Modell
+
+`gates.config.json` `blindReview.model`: `openai/gpt-6.2-sol` (OpenRouter; végpont-leíró, lekérve 2026-11-19:
+`https://openrouter.ai/api/v1/models/openai/gpt-6.2-sol/endpoints` — 1 050 000 token kontextus, eszközhívás és `reasoning` paraméter
+támogatott, `temperature` NEM; ár 2 / 10 USD / millió bemeneti / kimeneti token, gyorsítótárból olvasás 0,1, írás 2,5 USD / M; 272 000
+bemeneti token FÖLÖTT a kérés ára 4 / 15 / 0,2 / 5 USD / M). A kérés `reasoning: { effort: "high" }` paramétert kap
+(`blindReview.requestExtras`); a `temperature` kikerül. A modell egyetlen helyen áll; modell-kapcsoló továbbra sincs; az őr-teszt a
+modellt és a döntés dátumát rögzíti (más modell → bukik).
+
+- **Gyorsítótár:** az OpenAI-végpont nem fogad `cache_control` töréspontot (a szolgáltató maga gyorsítótáraz) → `promptCache.mode:
+  "none"`; az előtag-stabilitás (csak hozzáfűzés) és a futásonként állandó `session_id` marad — a találati arányt a bizonyíték méri.
+- **Plafon-becslés:** a tartalék-árak a 272 000 token fölötti (drágább) sávot veszik (4 / 15 / 0,2 / 5) — a becslés így felső
+  korlát; a tényleges költség továbbra is a válasz `usage` mezőjéből. A 2 karakter / token becslés (a Qwen-mérés) marad: a GPT
+  tokenizálója magyar szövegen hasonló vagy kedvezőbb, így a becslés legfeljebb felülbecsül. A költségkeret (alap 2, legfeljebb 6 USD)
+  és a futáskorlátok változatlanok.
+
+### F2 — A futtató kizárólagos (`blindReview.exclusive: true`)
+
+A tulajdonos a független ellenőr modelljének cseréjét rendelte el: a kötelező ítélet ezentúl a futtatóé (GPT-6.2 Sol, high); a
+Claude-alügynök ítéletet nem ad. `exclusiveSince` = az átkapcsolás időpontja — az előtte rögzített ítéletek érvényesek maradnak. A
+`record-review` csak a futtató bizonyítékával rögzít; a kapuk csak ilyen ítéletet fogadnak el (a PR-szöveg sora önmagában nem elég).
+Ha a futtató nem tud lefutni (kulcs, OpenRouter, költségplafon, NEM TELJES): a munka megáll, a tulajdonos dönt — csendes tartalék
+nincs. Az E3 küszöbe (≥ 7/9) a Qwen-mérésre szólt; a GPT-6.2 Sol-ra ugyanezen a két fejen mért alapvonal jegyre kerül.
+
+### Elfogadás — 5. kiegészítés
+
+- [ ] B35 WHEN a konfigot olvassuk THEN `blindReview.model` = `openai/gpt-6.2-sol`, `requestExtras.reasoning.effort` = `high`,
+  `exclusive` = true, érvényes `exclusiveSince`; más modell vagy kikapcsolt kizárólagosság → az őr-teszt bukik.
+- [ ] B36 WHEN bármely vezérlőfájlt / skillt olvassuk THEN a régi Qwen-modell és a „KI állásban az alügynök az ítélet” szabály nem él;
+  a „Ki az ellenőr” bekezdés a futtatót nevezi meg kizárólagosként.
+- [ ] B37 Füstpróba valódi hívással egy kis, kész célon: a futtató lefut, a jelentésben `Ítélet:` és `Fej:` sor, a `record-review`
+  elfogadja; költség és idő a jelentésben.
