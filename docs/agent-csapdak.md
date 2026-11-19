@@ -1095,8 +1095,10 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   eszközkészlet). A munkafa telepítése így használhatatlanná vált. Ezután egy elhamarkodott, ellenőrizetlen gépszintű következtetés
   született („a Node 26 nem jó, verzióváltás kell”), pedig a főrepó `source/`-ában a modul Node 26 alatt betöltődik.
 - **Költség:** egy munkafa telepítése elveszett (a szakasz- és a push-kapu nem futtatható benne), egy félrevezető javaslat.
-- **Szabály:** (1) `npm.cmd ci` ELŐTT nézd meg, hogy a natív modulhoz van-e előre fordított bináris a futó Node-ra, vagy van-e
-  fordítókészlet (`node -e "require('better-sqlite3')"` a működő főrepóban, `npm.cmd ci --dry-run`); ha egyik sem, NE futtasd — a
+- **Előzmény:** ugyanezt a C-38 már leírta (friss munkafában `npm ci --prefix source --ignore-scripts`, a helyben bukó `native-arch`
+  tesztet jelenteni) — a csapda-katalógus átnézése elmaradt, ezért ismétlődött.
+- **Szabály:** (0) ismert hibánál előbb a katalógus (`grep -n "<tünet>" docs/agent-csapdak.md`). (1) `npm.cmd ci` ELŐTT nézd meg, hogy a natív modulhoz van-e előre fordított bináris a futó Node-ra, vagy van-e
+  fordítókészlet (a natív kötés csak `new Database(':memory:')`-nél töltődik — a puszta `require` nem bizonyít); ha egyik sem, NE futtasd — a
   `ci` előbb töröl. (2) Gépszintű okot (Node-verzió, rendszer) csak két helyen mért, egyező bizonyítékkal állíts; a javaslatban a
   pontos hibasort idézd. (3) A kapuk naplói (`<git-common-dir>/websuli-qa-evidence/logs/`) minden munkafának közösek: egy másik
   munkafa futása felülírja — a bukás részleteit a futás után azonnal mentsd a scratchpadba (jegy: a naplóút kapjon fej- vagy
