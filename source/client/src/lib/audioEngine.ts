@@ -312,13 +312,20 @@ export function useAudioSettings(): {
  *
  * Autoplay-szabály (tulajdonosi döntés 2026-11-19, „A”): mozdulat nélkül NEM hozzuk létre (a böngésző minden betöltéskor
  * konzol-figyelmeztetést adott). Tétlen időben csak már aktivált lapon (`navigator.userActivation.hasBeenActive` — a
- * játéklistáról érkezve igaz) jön létre előre; különben az első aktiváló mozdulat (koppintás, kattintás, billentyű) a mozdulaton
- * BELÜL hozza létre, így rögtön fut. Több hívás (több horog egy lapon) ugyanazt az egy kontextust használja.
+ * játéklistáról érkezve igaz) jön létre előre; különben az első VALÓDI aktiváló mozdulat (`touchend`, `click`, `keydown`; ahol a
+ * böngésző megmondja, `navigator.userActivation.isActive`) hozza létre. Érintésnél a `pointerdown` NEM aktiváló, ezért nem
+ * figyeljük. Némított felhasználónál semmit nem hoz létre (a `beep()` is így tesz). Több horog egy lapon ugyanazt az egy
+ * kontextust használja.
  */
+type UserActivationLike = { hasBeenActive?: boolean; isActive?: boolean };
+function userActivation(): UserActivationLike | undefined {
+  if (typeof navigator === "undefined") return undefined;
+  return (navigator as Navigator & { userActivation?: UserActivationLike }).userActivation;
+}
+
 /** A lap kapott-e már felhasználói mozdulatot (ha a böngésző nem tudja megmondani: nem). */
 function pageActivated(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return (navigator as Navigator & { userActivation?: { hasBeenActive?: boolean } }).userActivation?.hasBeenActive === true;
+  return userActivation()?.hasBeenActive === true;
 }
 
 export function useAudioPrewarm(): void {
@@ -328,25 +335,54 @@ export function useAudioPrewarm(): void {
       requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
       cancelIdleCallback?: (id: number) => void;
     };
-    // Az aktiválást adó mozdulatok (érintésnél a `touchend` / `click` számít, nem a `pointerdown`). A figyelők addig maradnak,
-    // amíg a kontextus ténylegesen fut (a `resume` aszinkron).
-    const events = ["pointerdown", "touchend", "click", "keydown"] as const;
+    const events = ["touchend", "click", "keydown"] as const;
+    let deferred: number | null = null;
     const detach = () => events.forEach((e) => window.removeEventListener(e, onGesture, true));
-    function onGesture() {
-      prewarmAudio();
+    const detachIfRunning = () => {
       if (ctx && ctx.state === "running") detach();
+    };
+    function onGesture() {
+      if (isMuted()) return;
+      const ua = userActivation();
+      // Ahol a böngésző megmondja, csak valódi (átmeneti) aktiválásnál (pl. az Escape-billentyű nem ad aktiválást).
+      if (ua && typeof ua.isActive === "boolean" && !ua.isActive) return;
+      if (ctx) {
+        // Meglévő, felfüggesztett kontextus folytatása: olcsó, a mozdulaton belül kell.
+        prewarmAudio();
+        detachIfRunning();
+        return;
+      }
+      if (ua && typeof ua.isActive === "boolean") {
+        // A drága konstruktor (88–495 ms, mérve) NEM a figyelőben, hanem utána, az átmeneti aktiválás ablakán belül: a játék saját
+        // bemenet-kezelője nem vár rá.
+        if (deferred === null) {
+          deferred = window.setTimeout(() => {
+            deferred = null;
+            if (!isMuted()) prewarmAudio();
+            detachIfRunning();
+          }, 0);
+        }
+        return;
+      }
+      // `userActivation` API nélkül (régi Safari) csak a mozdulaton belül indul a kontextus.
+      prewarmAudio();
+      detachIfRunning();
     }
     events.forEach((e) => window.addEventListener(e, onGesture, { capture: true, passive: true }));
     let idle: number | null = null;
     let timer: number | null = null;
-    if (pageActivated()) {
-      if (w.requestIdleCallback) idle = w.requestIdleCallback(() => prewarmAudio(), { timeout: 2500 });
-      else timer = window.setTimeout(() => prewarmAudio(), 1200);
+    if (pageActivated() && !isMuted()) {
+      const warm = () => {
+        if (!isMuted()) prewarmAudio();
+      };
+      if (w.requestIdleCallback) idle = w.requestIdleCallback(warm, { timeout: 2500 });
+      else timer = window.setTimeout(warm, 1200);
     }
     return () => {
       detach();
       if (idle !== null) w.cancelIdleCallback?.(idle);
       if (timer !== null) window.clearTimeout(timer);
+      if (deferred !== null) window.clearTimeout(deferred);
     };
   }, []);
 }
