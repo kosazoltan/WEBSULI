@@ -39,6 +39,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-76** — `native-arch` önmagában ismert helyi kivétel (nem telepítési teendő); a push-kapu piros oka mindig a TÖBBI bukó teszt. Mérő-várakozás állapotra, ne időre.
 - **C-77** — Takarás-döntés: a figura test (téglalap), nem pont; a mérce (`elementsFromPoint`) és a döntés ugyanazt a felületet nézze. Elakadásnál előbb a döntés bemeneteit naplózd.
 - **C-78** — Menet közbeni lagg: profil előtt ne találgass; a `long-animation-frame` szkriptje és a CDP-minta megnevezi (itt: lusta `new AudioContext()` az első hangnál, 0,8–2 s). Tétlen főszál + hosszú képkocka = GPU-folyamat: Chrome-nyomkövetéssel nézd.
+- **C-79** — A kapu teljes naplója a `.git/websuli-qa-evidence/logs/` alatt van (lépésenként); a saját csomagoló szkript ne vágja le a kimenetet (`Select-Object -Last` a bukás okát dobja el). A three.js `extensions.get` hiányzó kiterjesztésnél figyelmeztet (M11) — `has`-szal kérdezz.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -1147,3 +1148,19 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
 - **Második tanulság:** ha a hosszú képkocka alatt a főszál TÉTLEN, a késés a GPU-folyamatban van (shader-összefűzés, raszter);
   a főszál-profil ilyenkor semmit nem mutat — Chrome-nyomkövetés kell (`Program::MainLinkLoadEvent::wait`, `WebGL`), és
   ellenpróba egy üres WebGL-oldallal ugyanabban a környezetben (terhelt gépen az is megakad).
+
+## C-79 — A kapu bukásának oka a kapu saját naplójában van; a jelenet-betöltés változása után a mobil mérő is kell (2026-11-19)
+- **Tünet:** a Szökőár `gate:pr` 86 perc után piros (mobil mérő + játék-spec-ek), a kimenetből csak „kilépési kód 1” látszott: a
+  saját zár-szkriptem a kapu kimenetét `Select-Object -Last 40`-nel vágta, a bukó tesztek neve és üzenete elveszett.
+- **Tény 1:** a kapu minden lépés TELJES kimenetét kiírja: `.git/websuli-qa-evidence/logs/pre-pr-gate-e2e-<lépés>.log` (a fő
+  checkout `.git` mappájában, munkafából futtatva is). Onnan percek alatt megvolt: M11 — `console.warning: THREE.WebGLRenderer:
+  KHR_parallel_shader_compile extension not supported.` a Szökőár mindhárom nézetében.
+- **Tény 2:** a three.js `renderer.compileAsync` a kiterjesztést `extensions.get`-tel kéri, ami hiányzó kiterjesztésnél (szoftveres
+  WebGL a mérőben, régebbi telefon) figyelmeztet; az `extensions.has` nem. A hibát a vak ellenőr K2 javítása vitte be, és a saját
+  böngészős köröm azért nem fogta meg, mert a javítás után csak a `tsunami-play` eseteit futtattam újra, a közös mobil mérőt nem.
+- **Tény 3:** a kör egyetlen beragadt tesztje (Vihargarázs 915×412, 20,8 perc; nem ennek az ágnak a kódja, kanban #204) elvitte a
+  60 perces Playwright-keretet — a lista-riporter összesítője (a bukások részletei) ilyenkor nem íródik ki; a részlet a
+  `source/test-results/<teszt>/error-context.md`-ben és a képen marad.
+- **Teendő:** (1) hosszú kapu / böngészős kör kimenetét MINDIG teljes fájlba írd, a képernyőre csak kivonatot; bukásnál előbb a
+  kapu naplóját olvasd. (2) Jelenetet / betöltést érintő javítás után a játék közös mobil mérője (M11: konzol- és WebGL-hiba) is
+  fusson, ne csak a játék saját spec-je. (3) Kiterjesztést three.js-ben `has`-szal kérdezz; a mérő zajszűrőjét ne bővítsd.
