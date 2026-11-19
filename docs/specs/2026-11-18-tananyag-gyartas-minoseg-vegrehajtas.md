@@ -1123,6 +1123,13 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
 - Új: az éles környezetben a proxy-titok (`WEBSULI_PROXY_SECRET`) beállításának ellenőrzése a hanggyártás előtt, csak olvasva (a
   meglévő `verify-render-settings` jellegű ellenőrzéssel) — hiányzó titoknál a sebességkeret az egész oldalra közös lenne.
 - Valódi iPad- és Android-próba hangfájllal (előtöltés gesztus nélkül, feloldás, tiltott hangszolgáltatású hálózat).
+- Szerver J2 (vak visszaellenőrzés): a korlát bekötésének őre a belépési ponton ma forrásszöveg-egyezés (a szerver egésze tesztben nem
+  építhető fel) — viselkedési őr kell (pl. a belépési pont rétegsorának kiemelése tesztelhető függvénybe).
+- Szerver J3: a hangtár kerete (4 500 kérés / 15 perc / IP) osztályonként 1,24 teljes leckenyitást bír 15 percenként — ha az osztály
+  újratölt vagy két leckét nyit egymás után, 429 jön (a kliens ilyenkor a böngészőhangra esik). A gyártás előtt a keretet a valós
+  használathoz kell méretezni (a CDN a sikeres hangfájlt tartósan tárolja, a mérés ezt is vegye figyelembe).
+- Szerver J5–J8: a munkamenet-réteg terhelése a hangkéréseken (a hangtár útjai ne nyissanak munkamenetet); hibás hang cseréje a tartós
+  gyorsítótár mellett (lásd K4); a tanácsadó zár időkorlátja (lásd K6); a visszaellenőrzés teszthézagai.
 
 ## S8d — Hang-előtöltés a lecke megnyitásakor (tulajdonosi kérés 2026-11-18)
 

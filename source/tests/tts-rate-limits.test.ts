@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import test from "node:test";
 import express from "express";
 import { mountTtsRateLimits, TTS_RATE_LIMITS } from "../server/tts/rate-limits";
+import { registerLessonTtsAudio } from "../server/tts/audio-routes";
 import { readFileSync } from "node:fs";
 import { lessonAudioRateLimitMax, LESSON_AUDIO_PRELOAD_MAX, LESSON_AUDIO_RATE_LIMIT } from "../shared/tts-audio-key";
 import { SPEECH_PRELOAD } from "../shared/speech-preload";
@@ -123,4 +124,81 @@ test("a hangtár saját kerete: egy egyszerre megnyitó osztály teljes előtöl
     assert.deepEqual(rest, { 200: LESSON_AUDIO_RATE_LIMIT.max - classLoad, 429: 25 }, "a jegyzék és a hangfájl közös hangtár-kereten van");
     assert.deepEqual(await burst(`${base}/api/tts/audio?text=a&lang=en`, 20), { 200: 20 }, "a kimerült hangtár-keret a tartalékot nem fogja meg");
   });
+});
+
+// Vak visszaellenőrzés (szerver) J1: az útvonal ELŐTT keletkező hibaválasz is `no-store` a hangtár előtagján. A próba a szerver
+// rétegsorrendjét követi: általános fejléc-réteg (kiterjesztés szerint akár egy évre tárolható) → korlátok → útvonalak → hibakezelő.
+test("J1: a hangtár előtagján minden nem sikeres válasz `no-store` — hibás kódolású cím, általános keret 429-e, 404 / 416 / 500, ismeretlen alút; a siker marad tartós", async () => {
+  const bytes = Buffer.from("ID3-0123456789");
+  const broken = "f".repeat(32);
+  const store = {
+    async get(id: string) { if (id === broken) throw new Error("adatbázishiba"); return id === ID ? { mime: "audio/mpeg", bytes, size: bytes.length } : null; },
+    async existing(keys: readonly string[]) { return keys.filter((key) => key === ID).map((id) => ({ id, size: bytes.length })); },
+    async has() { return new Set<string>(); }, async put() { return "stored" as const; }, async totalBytes() { return 0; },
+    async usage() { return { totalBytes: 0, rows: 0, byVersion: {} }; }, async purgeOtherVersions() { return { rows: 0, bytes: 0 }; },
+  };
+  const app = express();
+  app.set("trust proxy", 1);
+  // A szerver általános fejléc-rétegének megfelelője (server/index.ts): statikus kiterjesztésre egy év, /api-ra no-cache.
+  app.use((req, res, next) => {
+    if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/.test(req.path)) res.set("Cache-Control", "public, max-age=31536000, immutable");
+    else if (req.path.startsWith("/api/")) res.set("Cache-Control", "no-cache, must-revalidate");
+    next();
+  });
+  mountTtsRateLimits(app);
+  registerLessonTtsAudio(app, store);
+  app.get("/api/tts/audio", (_req, res) => { res.json({ ok: true }); });
+  app.use((err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => { res.status(err.status ?? 500).json({ message: "hiba" }); });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/tts/lesson-audio`;
+  const head = async (path: string, init?: RequestInit) => { const response = await fetch(`${base}${path}`, init); await response.arrayBuffer(); return [response.status, response.headers.get("cache-control")]; };
+  try {
+    // A siker tartósan tárolható — a hangfájl 200 / 206 / 304 és a jegyzék 200-a kifejezetten felülírja az alapértelmezést.
+    assert.deepEqual(await head(`/${ID}`), [200, "public, max-age=31536000, immutable"]);
+    assert.deepEqual(await head(`/${ID}`, { headers: { Range: "bytes=0-2" } }), [206, "public, max-age=31536000, immutable"]);
+    assert.deepEqual(await head(`/${ID}`, { headers: { "If-None-Match": `"${ID}"` } }), [304, "public, max-age=31536000, immutable"]);
+    assert.deepEqual(await head(`/available?keys=${ID}`), [200, "public, max-age=60"]);
+    // Az útvonal ELŐTT keletkező hibák (a mért négy eset közül az első kettő: hibás százalék-kódolás).
+    assert.deepEqual(await head("/%E0%A4%A"), [400, "no-store"]);
+    assert.deepEqual(await head("/%E0%A4%A.png"), [400, "no-store"], "a statikus kiterjesztés sem teszi egy évre tárolhatóvá");
+    // Az útvonal hibaválaszai és az ismeretlen alút.
+    assert.deepEqual(await head(`/${"0".repeat(32)}`), [404, "no-store"]);
+    assert.deepEqual(await head("/not-a-key.png"), [400, "no-store"]);
+    assert.deepEqual(await head(`/${ID}`, { headers: { Range: "bytes=500-" } }), [416, "no-store"]);
+    assert.deepEqual(await head(`/${broken}`), [500, "no-store"]);
+    assert.deepEqual(await head("/available"), [400, "no-store"]);
+    assert.deepEqual(await head(`/${ID}/extra.png`), [404, "no-store"]);
+    assert.deepEqual(await head(`/${ID}`, { method: "POST" }), [404, "no-store"]);
+    // A két mért 429-es eset: a többszegmensű alút az ÁLTALÁNOS (60-as) kereten van — a 61. kérés 429-e sem tárolható.
+    // Az általános keretből eddig egy kérés fogyott (a kétszegmensű `…/extra.png`); további 59 után a következő a 61.
+    const statuses = await burst(`${base}/a/b`, 59);
+    assert.equal(statuses[429], undefined, "a kereten belül nincs 429");
+    assert.deepEqual(await head("/a/b"), [429, "no-store"]);
+    assert.deepEqual(await head("/a/b.png"), [429, "no-store"], "429 statikus kiterjesztéssel: korábban egy évig `immutable` volt");
+    // Az előtagon KÍVÜL a réteg nem hat (a szerveres tartalék fejlécét a saját végpontja adja).
+    const fallback = await fetch(`${base.replace("/lesson-audio", "/audio")}?text=a&lang=en`);
+    await fallback.arrayBuffer();
+    assert.equal(fallback.headers.get("cache-control"), "no-cache, must-revalidate");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+// Vak visszaellenőrzés (szerver) J4: a hangtár korlátja a VALÓDI kliens címe szerint kulcsol — egy tanuló nem fogyasztja a másik keretét.
+test("J4: a hangtár kerete kliens-IP-nként külön: az egyik cím kimerült kerete a másik címet nem fogja meg", async () => {
+  const previous = process.env.WEBSULI_PROXY_SECRET;
+  const secret = "teszt-proxy-titok-0123456789-abcdefghij";
+  process.env.WEBSULI_PROXY_SECRET = secret;
+  try {
+    await withApp(async (base) => {
+      const from = (ip: string) => ({ headers: { "x-forwarded-for": ip, "x-websuli-proxy-secret": secret } });
+      const first = await burst(`${base}/api/tts/lesson-audio/${ID}`, LESSON_AUDIO_RATE_LIMIT.max + 5, from("203.0.113.10"));
+      assert.deepEqual(first, { 200: LESSON_AUDIO_RATE_LIMIT.max, 429: 5 });
+      assert.deepEqual(await burst(`${base}/api/tts/lesson-audio/${ID}`, 5, from("203.0.113.11")), { 200: 5 }, "másik tanuló címe: saját keret");
+      assert.deepEqual(await burst(`${base}/api/tts/lesson-audio/${ID}`, 1, from("203.0.113.10")), { 429: 1 });
+    });
+  } finally {
+    if (previous === undefined) delete process.env.WEBSULI_PROXY_SECRET; else process.env.WEBSULI_PROXY_SECRET = previous;
+  }
 });

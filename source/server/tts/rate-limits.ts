@@ -20,6 +20,11 @@ export const TTS_RATE_LIMITS = {
 const MESSAGE = "Túl sok felolvasási kérés. Próbáld újra később!";
 
 export function mountTtsRateLimits(app: Express): void {
+  // A hangtár előtagján a Vercel NEM tesz `no-store`-t a válaszra (a `vercel.json` kivétele a tartós gyorsítótár miatt), és a szerver
+  // általános fejléc-rétege a kiterjesztés alapján akár egy évre tárolhatóvá tenné (`….png`). Ezért itt, MINDEN más előtt, az
+  // alapértelmezés `no-store`: így az útvonal ELŐTT keletkező hibaválasz (hibás kódolású cím 400-a, az általános keret 429-e) sem
+  // tárolható. A tartós fejlécet kizárólag a sikeres hangfájl-válasz (200 / 206 / 304) és a jegyzék 200-a írja felül, kifejezetten.
+  app.use(TTS_AUDIO_ROUTE, (_req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
   const generalLimiter = rateLimit({
     keyGenerator: clientIpKeyGenerator, ...TTS_RATE_LIMITS.general, message: MESSAGE, standardHeaders: true, legacyHeaders: false,
     // A szerveres tartaléknak és a hangtárnak saját korlátja van: ezek az utak az általános (szűk) keretet nem fogyasztják.
