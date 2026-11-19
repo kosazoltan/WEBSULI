@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 (második vak ellenőrzés, 2026-11-18) folyamatban – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 (második vak ellenőrzés, 2026-11-18) kész, a következő vak ellenőrzés előtt – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -195,6 +195,9 @@ Leletenként előbb BUKÓ teszt, utána a javítás.
   `Promise.race` időkorláttal; `server/index.ts` `gracefulShutdown`: a pool lezárása előtt, 15 s. Teszt (DB): 60 s-os késleltetésű
   várakozó → ürítéskor azonnal kimegy; lefagyott küldőnél az ürítés az időkorláton belül visszatér.
 - **Jegy:** K5 (a kanban CLI e gépen nem elérhető: a jegyszöveg a zárójelentésben az orkesztrátornak).
+- **Beolvasztott párhuzamos javítás:** a távoli `db9323ea` (vendég két kulcsának összevonása) a kódban ennek az ágnak az R11-ével
+  helyettesítve; a DB-tesztje megtartva (`tests/lesson-result-email-db.integration.ts`, „független review K-1”), az ágon érvényes segédre
+  (`clearFinalizedRounds`) és az R5 szerinti összes-számra (25) igazítva.
 - Utána: `git merge origin/main`, `gate:stage`, sorompó KÜLÖN lépésben, DB-kör, böngészős kör, `gate:push`.
 
 ## Kész-feltétel
