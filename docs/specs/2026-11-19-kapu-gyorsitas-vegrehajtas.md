@@ -25,3 +25,22 @@ Minden pont ELŐBB bukó teszttel; mutációs ellenpróba másolaton; commit-üz
 8. Ellenőrzés: `node --test scripts/qa/gates/merged-probe.test.mjs scripts/qa/gates/carry-over.test.mjs scripts/qa/gates/pre-merge-gate.test.mjs scripts/qa/gates/pre-push-gate.test.mjs`;
    mutációs ellenpróba; `npm run gate:stage`; gép-zárral `npm run gate:push`, és az összefésült próba futásidejének mérése
    (≤ 3 perc).
+
+## Javítókör (vak review 1. kör: NEM) — terv: `docs/specs/2026-11-19-kapu-gyorsitas.md` 7. pont
+
+Minden pont ELŐBB bukó teszttel (a régi kódon bukik, az újon zöld); ez a doksi-commit a kód előtt.
+
+1. `scripts/qa/gates/merged-probe.mjs`: `probeScope({ prFiles, mainFiles })` (L2), `guardShortfall` (L4: a main az alsó korlát),
+   junit riporter az őrönkénti darabszámhoz (`tapCountsByFile`), `probeEnv` (L3: engedélylista, titoknevek és `NODE_TEST_*` nélkül),
+   `PROBE_TIMEOUT_MS` = 10 perc (L9), hiányzó `source/node_modules` → FAIL `npm.cmd ci` üzenettel; a `files` paraméter megszűnik
+   (a hatókör a `merge-base`-ből számolódik). Teszt: `merged-probe.test.mjs` (valódi ideiglenes tár, csonk `tsx`).
+2. `scripts/qa/gates/pre-merge-gate.mjs`: `probeStep` (L3: fork / ítélet / kötelező ellenőrzések előfeltétel), `mergeDecision`
+   (L6: a `main()` ezt hívja), `completeFiles` (L9: lapozott REST, csonka → kivétel), `runMergeProbe` `finally` ága törli a
+   `refs/remotes/origin/gate-pr-<n>` ref-et. Teszt: `pre-merge-gate.test.mjs`.
+3. `scripts/qa/gates/carry-over.mjs`: `--base` megszűnik (2-es kilépés), `freshMain` (L1), a próba a teljes hatókörrel az új fejen,
+   `mainSha` a `carry-` rekordban, `carryRecords` csak IGEN / IGEN, FELTÉTELLEL ítéletet visz át, `reviewedHead` + `carryChain` (L8).
+   Teszt: `carry-over.test.mjs` (csupasz tár mint `origin`).
+4. Doksi: `docs/minosegkapuk.md` (pontos hatókör, átvitel feltételei, vak-kör L7, „Ismert korlátok” L5 + L3), `AGENTS.md`, a
+   `websuli-fejlesztesi-ellenor` skill + tükör, `docs/agent-csapdak.md` C-76 / C-78.
+5. Mutációs ellenpróba másolaton (a vak ellenőr 9 túlélője is); `git merge origin/main`; `npm run gate:stage`; gép-zárral
+   (`kapugyorsitas`) a legrosszabb eset próba-mérése és `npm run gate:push`.

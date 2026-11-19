@@ -69,3 +69,34 @@ a fájllistát); (3) a `mergeSteps` a `probe`-ot továbbadja a `decideMerge`-nek
   bármely feltétel hiányában nem.
 - [ ] A vak-kör szabály, a gép-zár szabálya és a mai csapdák a runbookban / a skillekben / a katalógusban.
 - [ ] Az összefésült próba ≤ 3 perc (mérve).
+
+## 7. Javítókör a vak review 1. köre (ítélet: NEM) után — koordinátori döntések (2026-11-19)
+
+- **L1 (blokkoló):** a `gate:carry` `--base` kapcsolója megszűnik; az alap mindig a friss `origin/main` (a szkript lekéri, és a csúcsát
+  a GitHub szerinti `main`-nel egyezteti; hiba / eltérés → nincs átvitel); a `carry-` rekord a main hash-ét is tárolja. Halmozott
+  PR-láncra nincs átvitel (a doksi kimondja).
+- **L2 (próba-hatókör):** (a) minden őr; (b) ha a PR VAGY a main elmozdulása `scripts/qa/`, `.github/workflows/`, `.claude/`,
+  `.agents/skills/` fájlt érint → a teljes `scripts/qa` kör + `skills-sync-check` + `three-phase-check`; (c) ha a PR ÉS a main
+  elmozdulása is érint `source/`-t → a teljes egységkör, különben csak a PR által módosított tesztfájlok. Mérendő a legrosszabb eset
+  futásideje (cél ≤ 5 perc).
+- **L3:** fork-PR → FAIL („új CI kell”); a próba csak a független ítélet és a kötelező ellenőrzések zöldje után fut; szűrt
+  környezet (engedélylista); a `node_modules` hivatkozás marad — a maradó kockázat a doksiban.
+- **L4:** a main az őrök alsó korlátja: hiányzó őr → FAIL; őrönként kevesebb teszt, mint a mainen → FAIL; 0 teszt → FAIL.
+- **L5:** a maradó kockázat (böngészős regresszió, nem egységtesztelt szemantikus ütközés) az „Ismert korlátok” alatt; a runbook
+  pontosan azt írja, amit a kód futtat; az átvitel próbája ugyanazzal a hatókörrel fut.
+- **L6:** tesztek: próba-ütközés / piros / 0 teszt / az őrök tényleg futnak; a merge-kapu `main()` bekötése (`mergeDecision`);
+  `rec.head === from`; a túlélő mutánsok haljanak meg.
+- **L7:** vak-kör szabály: a súlyosságot az ellenőr állapítja meg (nem minősíthető le); jegyre tett lelet → „IGEN, FELTÉTELLEL”, a
+  jegyszámokkal a PR-leírásban; a célzott visszanézés a javítás hívóira is kiterjed.
+- **L8 / L9:** `NEM` ítélet nem vihető át; a `carriedFrom` mellett a lánc az eredetileg ellenőrzött fejet őrzi (`reviewedHead`,
+  `carryChain`); a próba időkorlátja 10 perc; a `gate-pr-<n>` segéd-ref törlődik; hiányzó `node_modules` → érthető üzenet; a PR
+  fájllistája 100 fölött lapozott REST-listából (csonka → FAIL).
+
+<!-- acceptance-checklist -->
+- [ ] AMIKOR a `gate:carry` `--base`-szel indul, 2-es kilépéssel megáll; az alap a friss, GitHubbal egyeztetett `origin/main`, eltérésnél nincs átvitel.
+- [ ] A próba hatóköre az L2 szerinti (őrök + feltételes teljes `scripts/qa` / egységkör), a main az őrök alsó korlátja (L4).
+- [ ] Fork-PR-en, illetve zöld ítélet / kötelező ellenőrzés nélkül a próba nem fut (FAIL); a környezet szűrt (L3).
+- [ ] `NEM` ítélet nem vihető át; a lánc megőrzi az eredeti fejet; 10 perces korlát; a segéd-ref törlődik; a fájllista hiánytalan (L8/L9).
+- [ ] A runbook a kód szerinti hatókört és a maradó kockázatot írja; a vak-kör szabály az L7 szerint (runbook, AGENTS, skill, C-76).
+- [ ] Minden javítás előbb bukó teszttel; a mutációs ellenpróba mutánsai (a vak ellenőr 9 túlélőjével együtt) elhalnak.
+- [ ] A legrosszabb eset próba-futásideje mérve és jelentve (cél ≤ 5 perc).
