@@ -99,6 +99,8 @@ export default function AdventCalendar() {
   const questionRef = useRef<HTMLParagraphElement | null>(null);
   const nextRef = useRef<HTMLButtonElement | null>(null);
   const gridGuardUntil = useRef(0);
+  // A kérdésből az összesítés nyílik: a bezáródó kérdés ne vigye a fókuszt az ablakra (a két párbeszédablak ne „versenyezzen”).
+  const handoffToSummary = useRef(false);
   // A védőidő a DOM-on is látszik (data-guard), hogy a gép (teszt) is megvárhassa, mint a gyerek a második koppintás előtt.
   const [guarded, setGuarded] = useState(false);
   useEffect(() => {
@@ -213,7 +215,7 @@ export default function AdventCalendar() {
     setGuarded(true);
     setOpen(null);
     setError(null);
-    if (finished && !open?.readOnly) { summaryOpener.current = questionOpener.current; setSummaryOpen(true); }
+    if (finished && !open?.readOnly) { summaryOpener.current = questionOpener.current; handoffToSummary.current = true; setSummaryOpen(true); }
   };
 
   const openSummary = (opener: HTMLElement | null) => { summaryOpener.current = opener; setSummaryOpen(true); };
@@ -419,7 +421,7 @@ export default function AdventCalendar() {
             className="advent-dialog" data-testid="advent-dialog" aria-describedby="advent-question-text"
             // A fókusz a KÉRDÉSRE kerül (nem az első válaszra): a képernyőolvasó felolvassa, és egy második Enter nem válaszol.
             onOpenAutoFocus={(event) => { event.preventDefault(); questionRef.current?.focus(); }}
-            onCloseAutoFocus={(event) => { event.preventDefault(); questionOpener.current?.focus(); }}
+            onCloseAutoFocus={(event) => { event.preventDefault(); if (handoffToSummary.current) { handoffToSummary.current = false; return; } questionOpener.current?.focus(); }}
           >
             {open ? (
               <>

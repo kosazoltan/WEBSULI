@@ -262,6 +262,8 @@ test("dupla koppintás a „Tovább” gombon: a második koppintás nem éri a 
   await page.getByTestId("advent-summary-open").focus();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("advent-summary")).toBeVisible();
+  // Mint a gyerek: a megnyílt párbeszédablakban (a fókusz már benne) nyomja meg az Escape-et.
+  await expect(page.locator('[data-testid="advent-summary"]:focus-within')).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("advent-summary-open")).toBeFocused();
 });
@@ -275,6 +277,8 @@ test("magától megnyílt összesítés bezárása után a fókusz nem vész el 
   await pickOption(page, true);
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("advent-summary")).toBeVisible();
+  // Mint a gyerek: a megnyílt párbeszédablakban (a fókusz már benne) nyomja meg az Escape-et.
+  await expect(page.locator('[data-testid="advent-summary"]:focus-within')).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("advent-summary")).toHaveCount(0);
   expect(await page.evaluate(() => document.activeElement?.tagName), "a fókusz nem a BODY-n van").not.toBe("BODY");
