@@ -76,8 +76,8 @@ elrendezés csak a jobbra mutatást használja.
 | képkocka-lap (`kabala-fooldal.b1fd2cd8.webp`) | 240 222 B | 44 képkocka, 130×216 px-es cella, 1040×1296 px; kibontva ≈ 5,1 MiB |
 | álló kép (`kabala-fooldal-allo.23544f4a.webp`) | 8 220 B | 130×216 px |
 | lusta JS-darab (`HomeMascot-*.js`) | 11 302 B (gzip 4 678 B) | megjelenítő + forgatókönyv + lejátszó + manifest |
-| lusta CSS (`HomeMascot-*.css`) | 3 067 B (gzip 1 191 B) | |
-| **átvitt összesen (böngészőben mérve)** | **262 836 B (≈ 256,7 KiB)** | keret: ≤ 350 KB — teljesül; a 250 KB-os CÉL fölött van ≈ 6,7 KiB-tal (lásd a terv 10. szakaszának 1. kérdését) |
+| lusta CSS (`HomeMascot-*.css`) | 3 825 B (gzip 1 385 B) | a kompakt telefonos sorral és a nyíllal |
+| **átvitt összesen (böngészőben mérve, 2026-11-18 23:41 UTC)** | **263 594 B (≈ 257,4 KiB)** | keret: ≤ 350 KB — teljesül; a 250 KB-os CÉL fölött van ≈ 7,4 KiB-tal — orkesztrátori döntéssel elfogadva (a terv 4.3 vége) |
 
 A gyártás megismételhető: háromszori futtatás ugyanazt a hash-t adta (Blender 5.3.0, Windows x64).
 
@@ -105,13 +105,18 @@ Az adat-kérések (API) száma bekapcsolva sem nő: a kabala a meglévő `/api/h
 - **Képkockák 4× lassított CPU-n** (a mérce a tervé: egyetlen 3 mp-es mérés, ≥ 50 képkocka/mp és nincs 50 ms-nál hosszabb képkocka;
   a korábbi „három mérésből a legjobb” változatot az orkesztrátor 2026-11-18-án mérce-gyengítésként elutasította, a teszt visszaállt;
   a mérés nyugodt gépen futott — legfeljebb 1 idegen e2e-konténer mellett) (3 mp-es mérés a lapon belül; mutatás → koppintás → szökkenés → mutatás):
-  - végleges változat, nyugodt gépen, három egymást követő mérés: 60,2 / 60,2 / 60,2 képkocka/mp, a leghosszabb képkocka
+  - **végleges (kompakt) változat, a terv mércéjével, nyugodt gépen (0 idegen konténer, 2026-11-18 23:41 UTC): 60,2 képkocka/mp,
+    a leghosszabb képkocka 16,9 ms, 50 ms fölött: 0 — TELJESÜL;**
+  - az előző (nagy telefonos sávú) változat, nyugodt gépen, három egymást követő mérés: 60,2 / 60,2 / 60,2 képkocka/mp, a leghosszabb képkocka
     17,3 / 16,9 / 17,0 ms; ugyanez erősen terhelt gépen (más ügynökök párhuzamos buildjei mellett): 59,9 / 52,2 / 59,9
     képkocka/mp, a leghosszabb képkocka 61,0 / 344,8 / 33,2 ms (a 344,8 ms-os a koppintás ELŐTT, 114 ms-nál volt — külső terhelés);
   - az optimalizálás ELŐTT (8 mérés): 57,7–62,0 képkocka/mp, a koppintás képkockája 36–54 ms (4 mérésben 50 ms fölött) — ezért a
     koppintás frissítése szeletelt (`startTransition`), a mozdulat a következő képkockában indul, és nincs kényszerített elrendezés;
   - köztes változat, erősen terhelt gépen (8 mérés): 55,9–64,3 képkocka/mp, a leghosszabb képkocka 16,9–50,1 ms.
-- **Elrendezés-ugrás (CLS):** kikapcsolva 0,0091, bekapcsolva 0,0004 (egy-egy mérés; a különbség mérési zaj — a keret: bekapcsolva ≤ kikapcsolva + 0,005). A sáv magassága a megjelenéstől végig rögzített (324 / 336 px három tananyagnál).
+- **Elrendezés-ugrás (CLS):** kikapcsolva 0,0089, bekapcsolva 0,0010 (keret: bekapcsolva ≤ kikapcsolva + 0,005). A sáv magassága a
+  megjelenéstől végig rögzített (telefonon 200 px, ≥ 640 px-en 336 px három tananyagnál).
+- **Kis telefon (360×640, ismert nevű tanuló):** a sáv 200 px; a lista eleje kikapcsolva 892 px-nél, bekapcsolva 800 px-nél kezdődik
+  (91 px-szel FELJEBB, mert látható makinál az üdvözlő kártya hármas listája elmarad).
 - **Kontraszt a buborékban:** 14,63:1 (`#1e293b` fehér alapon; a teszt a számított színekből méri).
 - **Érintőcélok:** telefonon a sorok 44 px, ≥ 640 px-en 68 px magasak; gombok 44 × 44 px; a maki telefonon 66 × 110 px.
 
