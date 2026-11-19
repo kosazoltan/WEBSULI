@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
@@ -85,8 +85,7 @@ test('resolveLockDir: a változó elsőbbsége, különben <git-common-dir>/webs
 test('resolveLockDir: alapértelmezés a valódi repóban a közös git-könyvtár', () => {
   const r = spawnSync('git', ['rev-parse', '--git-common-dir'], { cwd: dirname(SCRIPT), encoding: 'utf8' });
   const got = resolveLockDir({ env: {} });
-  assert.ok(got && got.endsWith('websuli-machine-lock'), got);
-  assert.ok(got.replace(/\\/g, '/').includes(r.stdout.trim().replace(/\\/g, '/').replace(/^\.\//, '')), `${got} ↔ ${r.stdout}`);
+  assert.equal(got, join(resolve(dirname(SCRIPT), r.stdout.trim()), 'websuli-machine-lock'));
 });
 
 test('isStaleOwner: halott PID (ugyanazon a gépen) elavult; élő gazda / élő gyerek / más gép nem', () => {
