@@ -77,6 +77,17 @@ export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx:
       if (doorScore(record) > doorScore(theirs)) { theirs = record; from = r; }
     }
     const mine = doors[day];
+    if (doorScore(theirs) === 0 && doorScore(mine) === 0) {
+      // Senki nem válaszolt még: azonos évfolyamnál a vendég (épp ezen az eszközön mutatott) kérdéssora és magja marad, hogy a
+      // megnyitott kérdésre érkező válasz ne legyen elavult; eltérő évfolyamnál a tanuló saját terve.
+      const current = device.plan[device.round] as PlanMeta | undefined;
+      if (current?.doors[day] && (planGradeOf(current) ?? device.grade) === grade) {
+        plan.doors[day] = [...current.doors[day]!];
+        if (current.subjects?.[day]) plan.subjects[day] = current.subjects[day]!;
+        plan.doorSeeds[day] = orderKeyFor(current, day, ctx.deviceKey);
+      }
+      continue;
+    }
     if (doorScore(theirs) <= doorScore(mine)) continue;
     const devicePlan = device.plan[from] as PlanMeta | undefined;
     doors[day] = { attempts: theirs!.attempts.map((attempt) => ({ ...attempt })) };

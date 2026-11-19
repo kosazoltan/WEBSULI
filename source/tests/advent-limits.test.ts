@@ -358,6 +358,13 @@ test("névtelen → párosított: ABLAKONKÉNTI egyesítés — minden ablaknál
   assert.equal(best.doors[1]![7]!.attempts.length, 2);
   assert.deepEqual(best.plan[1]!.doors[6], ["dev-r1-q6"]);
   assert.equal(orderKeyFor(best.plan[1], 6, "x"), "device:r1");
+  // Megnyitott, még meg nem válaszolt ablak (0–0): azonos évfolyamnál a vendég kérdéssora és magja marad — a gyereknek mutatott kérdésre
+  // érkező válasz így nem 409; eltérő évfolyamnál a tanuló saját terve.
+  const sameGrade = mergeAdoption(null, row("device", 1, { 1: [true] }, { grade: 3 }), ctx)!;
+  assert.deepEqual(sameGrade.plan[1]!.doors[2], ["device-q2"]);
+  assert.equal(orderKeyFor(sameGrade.plan[1], 2, "x"), "device:seed");
+  assert.deepEqual(fresh.plan[1]!.doors[2], ["device-q2"], "a 2. ablakot a vendég próbálta (1 > 0)");
+  assert.deepEqual(fresh.plan[1]!.doors[5], ["new-q5"], "eltérő évfolyam (vendég 5., profil 3.): a tanuló saját terve");
 });
 
 test("az elutasított (409) kérés is a rövid ablakú érvénytelen-keretbe számít: egy címről 300 véletlen eszközzel → 120 után 429 (vak ellenőr KICSI-4)", async () => {
