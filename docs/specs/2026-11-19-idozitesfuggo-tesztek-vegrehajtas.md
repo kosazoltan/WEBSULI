@@ -32,7 +32,7 @@ nehéz kapu (gate:push, gate:pr, teljes `npm test`, e2e) nem fut.
 5. Ellenőrzés: `cd source && node --import tsx --test tests/parallel-bank.test.ts` → elvárt `ℹ pass 5`, `ℹ fail 0`.
 6. Mutációs próba (terv 4.1): `server/studio/experience-builder.ts` másolata a scratchpadba; egyenként (a) `const concurrency = 1;`,
    (b) `Promise.allSettled(` → gyors hibájú `Promise.all`-burok, (c) `finished++; if (active.size) report();` → `finished++;`;
-   mindegyiknél a régi (`git show HEAD:source/tests/parallel-bank.test.ts` ideiglenes másolat) és az új teszt ugyanazokon bukik;
+   mindegyiknél a régi (`git show b7165a56955991c9a4bdf913f0cdd8974463077e:source/tests/parallel-bank.test.ts` ideiglenes másolat) és az új teszt ugyanazokon bukik;
    visszaállítás a másolatból, utána `cmp` és `git diff --quiet -- server/studio/experience-builder.ts`.
 7. Commit: `test(bank): a párhuzamos bank tesztjei vezérelt sorrenddel, falióra nélkül (#206)`.
 
@@ -63,7 +63,7 @@ nehéz kapu (gate:push, gate:pr, teljes `npm test`, e2e) nem fut.
 
 - Próbaszkript a session scratchpadjában (`loadrun.mjs`): `--busy N --seconds S [--burst 40:10 --prio above] <fájl>=<db> …`; a
   pörgetők maguktól leállnak, a határidő után még futó saját tesztfolyamatot a saját PID-je alapján állítja le.
-- Régi változat: `git show HEAD:source/tests/<fájl> > source/tests/zz-old-<fájl>` (ideiglenes; a mérés után törlendő, nem commitolható).
+- Régi változat: `git show b7165a56955991c9a4bdf913f0cdd8974463077e:source/tests/<fájl> > source/tests/zz-old-<fájl>` (ideiglenes; a mérés után törlendő, nem commitolható).
 - Ablakok (mindegyik ≤ 2 perc, régi és új EGYSZERRE, azonos terheléssel): szóbank — folyamatos 60 pörgető, 10 + 10; párhuzamos bank —
   szaggatott 22 pörgető, 10 + 10; stream-életjel — vegyes (30 folyamatos + 22 szaggatott), 10 + 10.
 - Elvárt: a régi mindháromnál legalább 1/10 bukás, az új 10/10 zöld. A kimenet záró sorai a PR-leírásba.
@@ -75,3 +75,23 @@ nehéz kapu (gate:push, gate:pr, teljes `npm test`, e2e) nem fut.
 - PR-leírás a munkafán kívül (az orkesztrátor megadott scratchpad-útvonalán, `body.md`), a `docs/minosegkapuk.md` szakaszaival, a
   mérésekkel (előtte / utána, terhelés alatt) és a `🤖 Generated with [Claude Code](https://claude.com/claude-code)` sorral.
 - Csapda-javaslat a zárójelentésbe (C-48: szelet-PR nem ír a közös katalógusba).
+
+## 7. lépés — A vak ellenőr leletei (NEM ítélet a `624b91fe` fejre; terv 4.1 L2, 4.2 L1, 7. pont L3)
+
+Sorrend: előbb a leletet bizonyító mutáns (a mostani fejen ZÖLD → a lelet valós), utána a javítás, utána ugyanaz a mutáns BUKIK.
+
+1. **L1 — `source/tests/vocab-distractor-overlap.test.ts`:** `CPU_LIMIT_MS = 60_000` és `WALL_LIMIT_MS = 150_000` konstans a teszt
+   előtt (indokló megjegyzéssel); a végén a CPU-állítás mellé `assert.ok(wallMs < WALL_LIMIT_MS, …)`. Bizonyító mutáns (scratchpad
+   `mut-l1.sh`): a `generateVocabQuestion` elejére 1000 hívásonként `Atomics.wait(…, 1500)`; futtatás a `source/`-ban, utána a
+   forrás visszaállítása + `cmp` + `git diff --quiet`. Elvárt: a `624b91fe` fejen zöld (CPU ~15 s, falióra ~178 s), a javítás után
+   bukik a falióra-állításon.
+2. **L2 — `source/tests/parallel-bank.test.ts`:** segédek: `SETTLE_TURNS = 50`, `loopTurns(n)`, `gateOrTurns(gate)`. A „hiba után is
+   megvárja” teszt: `firstFailed`, `releaseCall`, `saveEntered`, `releaseSave` kapuk; a külső ígéret állapota (`outerSettled`) a
+   hiba után 50 kör múlva és a mentés alatt 50 kör múlva is `false`; a mentés feloldása után elutasít; a `doneAtReject === 1`
+   állítás megmarad. Bizonyító mutáns (scratchpad `mut-l2.sh`): `Promise.allSettled` → gyors hibájú `Promise.all`, a hiba két
+   `setImmediate`-kör után dobva. Elvárt: a `624b91fe` fejen zöld, a javítás után bukik; a korábbi három mutáns változatlanul bukik.
+3. **L3 — doksik:** a régi változat forrása `git show b7165a56955991c9a4bdf913f0cdd8974463077e:<út>` (nem `HEAD`).
+4. Ellenőrzés: `node --import tsx --test tests/parallel-bank.test.ts tests/vocab-distractor-overlap.test.ts` → zöld; terheléses
+   ellenpróba csak gépi zárral, ≤ 2 perc; `npm run gate:stage` csak gépi zárral (az orkesztrátor írja be az `idozites` nevet).
+5. Commitok: `test(bank): a mentési teszt kapukkal (vak ellenőr L2)`, `test(szobank): falióra-felső korlát a CPU-korlát mellé (vak
+   ellenőr L1)`, `docs(teszt): …`.

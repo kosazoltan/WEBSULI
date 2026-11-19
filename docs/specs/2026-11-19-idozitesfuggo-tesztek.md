@@ -49,6 +49,12 @@ kiszorítja a tesztfolyamatot; ez a két párhuzamos teljes tesztkör alatti üt
   soros építés (`concurrency = 1`) → 3/3 teszt bukik mindkettőben; gyors hiba (`Promise.all` az `allSettled` helyett) → csak a
   „hiba után is megvárja” teszt bukik mindkettőben; befejezéskori haladásjelzés nélkül → csak a „befejezési sorrend” teszt bukik
   mindkettőben. A forrásfájl utána bájtazonosan visszaállítva (`cmp` + `git diff --quiet`).
+- **Vak ellenőr L2 (2026-11-19, közepes, elfogadva):** a „hiba után is megvárja” teszt egyetlen `setImmediate`-köre nem különíti el
+  a mentést megváró kódot a néhány körrel később továbbdobott korai hibától. Bizonyító mutáns (mérve a `624b91fe` fejen): gyors
+  hibájú `Promise.all`, a hiba két `setImmediate`-kör után dobva → a teszt ZÖLD maradt. **Javítás:** a sikeres modellválasz és a
+  mentés befejezése külön kapura vár; a kapuk között 50 eseményhurok-kör (falióra nélkül) után a teszt állítja, hogy a külső ígéret
+  még függőben van; minden várakozás legfeljebb 50 kör (elakadásvédelem). Mérve: a késleltetett mutáns most bukik; a korábbi három
+  mutáns ugyanott bukik. Korlát: a ~100 körnél tovább késleltetett továbbdobást a teszt nem különbözteti meg (véges keret).
 
 ### 4.2 `vocab-distractor-overlap.test.ts` (#205)
 
@@ -63,6 +69,14 @@ kiszorítja a tesztfolyamatot; ez a két párhuzamos teljes tesztkör alatti üt
   venni. A garancia (a munka ≤ 60 s) nem gyengül: a mért mennyiség a munka maga. A termékkód gyorsítása (a regex-fordítás) nem
   része ennek a szeletnek (NEM cél: termékkód) — jegy-szövegként a 8. pontban.
 - Mért terhelés alatt (folyamatos, 60 pörgető + 10 régi + 10 új példány): a CPU-idő 14,2–19,0 s maradt, a falióra 54,7–94,5 s lett.
+- **Vak ellenőr L1 (2026-11-19, blokkoló, elfogadva):** a CPU-korlát önmagában átengedi a CPU-t nem égető lassulást (szinkron alvás,
+  blokkoló I/O). Bizonyító mutáns (mérve a `624b91fe` fejen): 1000 kérdésenként 1,5 s `Atomics.wait` a `generateVocabQuestion`
+  elején → `CPU 15000 ms, falióra 177526 ms`, a teszt ZÖLD maradt. **Döntés (orkesztrátori irány):** a CPU-korlát (60 000 ms) marad a
+  gyorsasági mérce, MELLÉ terhelés-tűrő falióra-felső korlát: **150 000 ms**. Indoklás a mért adatokból: terheletlenül 11–22 s, a
+  legerősebb mesterséges terhelésnél (W1) legfeljebb 94,5 s, a valódi kettős-kapus hamis bukás 60,7 s; a 150 s ~1,6× a legrosszabb
+  mért terhelt idő. **Maradó eltérés (tulajdonosi döntésre jelezve):** a CPU-t nem égető lassulásra a garancia 60 s helyett 150 s
+  falióra; a régi, pontos 60 s-os falióra-garancia csak egy külön, soros teljesítményfutással volna megtartható (kapu-módosítás,
+  NEM része ennek a szeletnek).
 
 ### 4.3 `claude-stream-thinking-liveness.test.ts` (a 2. feladat mérése során talált)
 
@@ -95,7 +109,10 @@ kiszorítja a tesztfolyamatot; ez a két párhuzamos teljes tesztkör alatti üt
   a fájlban), és a három mutáns ugyanazokat a teszteket SHALL buktatni, mint a régi változatban.
 - WHEN a vizsgált viselkedés hiányzik (soros építés) THEN a teszt SHALL bukni 60 s-on belül (nem akad el).
 - WHEN a `vocab-distractor-overlap.test.ts` bank-szintű tesztje fut THEN a korlát SHALL a `process.cpuUsage()` CPU-idejére (60 000
-  ms) vonatkozni, és a teszt SHALL kiírni a CPU- és falióra-időt.
+  ms) vonatkozni, mellette a falióra SHALL 150 000 ms alatt maradni, és a teszt SHALL kiírni a CPU- és falióra-időt.
+- WHEN a generátor CPU-t nem égető lassulást kap (alvó mutáns) THEN a bank-szintű teszt SHALL bukni.
+- WHEN a banképítő a korai hibát a futó egység mentése előtt (akár néhány eseményhurok-körrel késleltetve) továbbdobja THEN a
+  „hiba után is megvárja” teszt SHALL bukni.
 - WHEN a claude-stream liveness tesztjei futnak THEN a keretek és a tétlenségi határidő SHALL hamis órán futni („A1+A3”, „A3”,
   „review #212”), és a két mutáns ugyanazokat a teszteket SHALL buktatni, mint a régi változatban.
 - WHEN a régi és az új változat azonos terhelésen 10–10 példányban fut THEN a régi SHALL legalább egyszer bukni, az új SHALL 10/10
@@ -106,7 +123,8 @@ kiszorítja a tesztfolyamatot; ez a két párhuzamos teljes tesztkör alatti üt
 
 - Célzott: `node --import tsx --test tests/<fájl>.test.ts` a `source/`-ban, mindhárom fájlra (terheletlenül).
 - Mutációs próba (4.1, 4.3) a forrás másolatával, utána `cmp` + `git diff --quiet`.
-- Terheléses ellenpróba: a régi változat a `git show HEAD:<út>` másolata (ideiglenes, nem commitolt `tests/zz-old-*.test.ts`), az
+- Terheléses ellenpróba (vak ellenőr L3: rögzített alap, nem `HEAD`; a mért W1–W12 másolatai az első commit előtt, ugyanerről a
+  `b7165a56` fejről készültek): a régi változat a `git show b7165a56955991c9a4bdf913f0cdd8974463077e:<út>` másolata (ideiglenes, nem commitolt `tests/zz-old-*.test.ts`), az
   új a munkafa fájlja; azonos ablakban 10 + 10 példány; ablakonként ≤ 2 perc terhelés.
 - `npm run gate:stage`.
 
