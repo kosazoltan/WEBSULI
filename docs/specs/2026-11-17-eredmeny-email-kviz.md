@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18 – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19 – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -282,6 +282,12 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
   bármely kilétnél is. Korlátos élettartam: a jelzősor 24 óráig számít (`created_at`), mint a memóriabeli jelző. A jelzősor írásának
   hibája nem akasztja meg a beküldést (a memóriabeli jelző ilyenkor is védi az adott példányt; a hiba osztálya naplózódik).
 
+**Vercel review (2026-11-19, szál 4626976445) — dokumentált spec-változás:**
+- **R19 — a küldés előtti ellenőrzés átmeneti hibája után is egy újrapróba.** Ha a „félbehagyva” levél kapujában a véglegesítés-
+  ellenőrzés (`roundFinalized`) dob (pl. átmeneti adatbázishiba), a levél eddig újrapróba nélkül elveszett (a 60 s-os újrapróba csak a
+  kapun BELÜL ütemeződött). Mostantól a kapu hibája után is EGY újrapróba ütemeződik a szokott késleltetéssel, és az ugyanazon a kapun
+  megy át — véglegesített körre így sem megy ki részleges levél. Az újrapróba hibája után nincs további (a hiba osztálya naplózódik).
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -312,6 +318,7 @@ Elfogadás (S1b):
   váltásnál sem megy „félbehagyva” levél a végleges után (R15).
 - E31. Vendég által rögzített kör átvételekor a „félbehagyva” levél neve „Vendég tanuló” (R16).
 - E32. Teljes (a körmérettel egyenlő számú válaszú) pillanatkép nem ütemez levelet (R17).
+- E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
 - E25. AMIKOR a régi szerver az új mezők miatt 400-at ad, A RENDSZER a végleges beküldést egyszer az új mezők nélkül megismétli (az
@@ -358,4 +365,5 @@ Elfogadás (S1b):
 - [x] E31 – vendég kör átvétele: „Vendég tanuló” név (valódi DB)
 - [x] E32 – teljes pillanatkép nem ütemez (valódi DB)
 - [x] E33 – tartós, tanulófüggetlen véglegesítési nyom; újraindítás után más kilét / IP sem küld részlegest (valódi DB)
+- [ ] E34 – a kapu átmeneti hibája után egy újrapróba, a véglegesítés-ellenőrzéssel (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)

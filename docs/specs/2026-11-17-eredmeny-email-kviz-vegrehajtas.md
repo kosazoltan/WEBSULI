@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 (negyedik vak ellenőrzés feltétele, 2026-11-19) kész, a következő vak ellenőrzés előtt – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -223,6 +223,15 @@ Leletenként előbb BUKÓ teszt (`tests/lesson-result-email-partial-db.integrati
   (`onConflictDoUpdate` a `created_at` frissítésével; hiba → naplózás, a beküldés megy tovább); `roundFinalized` a jelzősort is nézi
   (`created_at` > most − 24 óra).
 - Utána: `gate:stage`, sorompó KÜLÖN lépésben, DB-kör, böngészős kör, fetch + ősellenőrzés, `gate:push`.
+
+## T15 — Vercel-lelet: a kapu hibája után újrapróba (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R19)
+
+- Előbb BUKÓ teszt (`tests/lesson-result-email-partial-db.integration.ts`): teszthez való hibainjektálás a `roundFinalized`-be
+  (`setFinalizedCheckFault`, a meglévő `setReleaseFault` mintájára); egyszeri hiba a kapuban → az újrapróba a levelet kiküldi; egyszeri
+  hiba, majd a késleltetésen belül végleges beküldés → nincs részleges levél.
+- Javítás (`server/lesson-result-email.ts`, `sendLessonResult`): a kapu hibájának `catch` ágában `retry` esetén egy újrapróba
+  (`sendLessonResult(input, false, gate)`, `retryDelayMs` múlva), a napló „— újrapróbálja” utótaggal.
+- Utána: `gate:stage`, új fej; a vak visszanézés és a `gate:push` (zárral) az orkesztrátortól.
 
 ## Kész-feltétel
 
