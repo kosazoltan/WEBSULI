@@ -1123,6 +1123,14 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
 - Új: az éles környezetben a proxy-titok (`WEBSULI_PROXY_SECRET`) beállításának ellenőrzése a hanggyártás előtt, csak olvasva (a
   meglévő `verify-render-settings` jellegű ellenőrzéssel) — hiányzó titoknál a sebességkeret az egész oldalra közös lenne.
 - Valódi iPad- és Android-próba hangfájllal (előtöltés gesztus nélkül, feloldás, tiltott hangszolgáltatású hálózat).
+- **Kliens J5 (vak visszaellenőrzés, KIEMELT): hibázó hangtárnál (429 / 5xx) nincs megszakító** — minden kulcs háromszor próbálkozik
+  (azonnal, +4 mp, +15 mp): egy osztály megnyitásakor ez 5 400 kérés a 4 500-as kerettel szemben. Megszakító kell (pl. néhány egymást
+  követő hiba után az előtöltés leáll, és csak a jegyzék következő frissítése indítja újra).
+- Kliens J1: a megszakított, el sem indult kimondás újrapróbája idegen kimondás mellett; J3: egyetlen lassú indulás után a hang 2
+  koppintásra kimarad (mérlegelendő a türelem); J6: a 60 hangelemes plafon csak az előtöltésre érvényes (a plafon fölötti koppintott
+  szavak is hangelemet kapnak); J7: az adatforgalmi plafon a jegyzék méreteiben bízik (hiányzó méretnél 40 kB-os becslés); J8: a
+  `Retry-After` csak 120 mp-ig érvényesül, és a láthatósági frissítés nem nézi; J12: egyetlen modulszintű lejátszó (admin-előnézetben
+  két lecke egyszerre); J13 (valódi eszközön igazolandó): a `click`-feloldás hatása.
 - Szerver J2 (vak visszaellenőrzés): a korlát bekötésének őre a belépési ponton ma forrásszöveg-egyezés (a szerver egésze tesztben nem
   építhető fel) — viselkedési őr kell (pl. a belépési pont rétegsorának kiemelése tesztelhető függvénybe).
 - Szerver J3: a hangtár kerete (4 500 kérés / 15 perc / IP) osztályonként 1,24 teljes leckenyitást bír 15 percenként — ha az osztály
@@ -1170,7 +1178,9 @@ szerintem amikor megnyitja az adott tananyagot, pufferelje a hangokat a diáknak
 5. `client/src/lesson-runtime/speech-player.ts`: `createSpeechPlayer(env)` — a környezet (óra, időzítő, hangelem-gyár, beszédmotor,
    jegyzék-lekérés, kapcsolat, tár) befecskendezett, így a lánc bekötése ál-órával tesztelhető. Műveletek: `prepareLesson`,
    `release` (megszakítás, felszabadítás), `noteUserActivation` (valódi `click`: a futó hangletöltések feloldása iOS-en — a beszédmotorhoz nem nyúl),
-   `speak`, `stop`, `refresh`. A szinkron `done("failed")` utáni megszakító-felülírás (vak review A5) megszűnik.
+   `speak`, `stop`, `setVisible` (a lap láthatósága: háttérben nem indul letöltés; visszatéréskor a jegyzék ritkított frissítése),
+   `voicesChanged`. Azonos tartalmú leckére az ismételt `prepareLesson` nem teendő (a szülő újrarenderelése nem szakíthat meg hangot,
+   nem dobhat el puffert — vak visszaellenőrzés B1); a nézet effektje a lecke tartalmi kulcsától függ. A szinkron `done("failed")` utáni megszakító-felülírás (vak review A5) megszűnik.
 6. `server/tts/rate-limits.ts`: a három felolvasás-korlát (általános `/api/tts`, szerveres tartalék, hangtár) egy helyen, a bekötéssel
    együtt (`mountTtsRateLimits(app)`), hogy valódi HTTP-teszt mérje (vak review K4). A hangtár kerete: 30 tanuló × 40 hang × 2 kérés
    (tartománykérés) + 30 jegyzék = 2 430 → tartalékkal 3 000 kérés / 15 perc / IP. **Módosítás 2026-11-19 (szerveroldali vak review
@@ -1195,15 +1205,19 @@ tényleges indulási eseményéig).** A tulajdonosnak szánt táblázat — menn
 | Böngészőhang, a munkamenet első koppintása (működő motor) | 156 ms, ebből 150 ms a motor utánzott indulási ideje (határ: ≤ 1 s) | böngészőteszt, a beszéd `start` eseménye; a valódi motor indulási ideje eszközfüggő |
 | Böngészőhang igazolt hanggal (minden további koppintás, amíg a tár üres) | 155 ms, ebből 150 ms a motor utánzott indulási ideje (határ: ≤ 1 s) | böngészőteszt |
 | Koppintás az előtöltés közben / a plafon fölötti szóra | 167 ms (böngészőhang azonnal); a következő koppintás már pufferelt | böngészőteszt, 3 mp-es hangtár |
-| Néma motor, a munkamenet ELSŐ koppintása | 3 mp (helyi első hang; mérve 3 006 ms), 6 mp (hálózati első hang) — munkamenetenként egyszer | böngészőteszt és ál-órás egységteszt |
+| Néma motor, az első koppintás | 3 mp (helyi első hang; mérve 3 006 ms), 6 mp (hálózati első hang). TARTÓSAN néma motornál nem „munkamenetenként egyszer”: az ítélet lejárta után (minden 3. koppintásnál) a lánc újra megpróbálja a böngészőhangot, és újra 3 / 6 mp a várakozás | böngészőteszt és ál-órás egységteszt |
+| Igazolt hang, amely később elnémul | egyszer 3 mp (ha mögötte van helyi hang) – 6 mp (hálózati hang, mögötte nincs helyi) csend, utána a hang 2 koppintásra kimarad | ál-órás egységteszt |
+| A szülő újrarenderelése lejátszás közben (toast, belépés / beállítás megérkezése) | a hang nem szakad meg; nincs új jegyzék- és hangfájl-kérés | böngészőteszt (mérőoldal, új lecke-objektummal) és ál-órás egységteszt |
 | Néma motor, a következő 2 koppintás | 115 ms + a szerveres tartalék valós válaszideje (nem mért); a 3. koppintás újra megpróbálja a böngészőhangot | böngészőteszt helyi ál-végponttal |
 | Megszakított kimondás (gyors két koppintás, Android) | ugyanaz a brit hang újrapróbával; ha az is megszakad, a szerveres tartalék | böngészőteszt és ál-órás egységteszt |
 | Adatkímélő mód / 2g | az első 12 szöveg: mint az előtöltött; a többi: első koppintásra böngészőhang, utána pufferelt | ál-órás egységteszt |
 | Hálózat nélkül, ismételt megnyitás | a helyben megőrzött jegyzék + a böngésző tartós gyorsítótára: mint az előtöltött | ál-órás egységteszt; böngészőben NEM mért (a teszt hálózati elfogása kikapcsolja a HTTP-gyorsítótárat) |
 | Hálózat nélkül, első megnyitás | böngészőhang, a telepített helyi hang előre | ál-órás egységteszt |
 
-Mutációs ellenpróba: kikapcsolt előtöltéssel a böngészős időmérő eset bukik; a lejátszó, az előtöltés-logika, a lánc és a hangrangsor
-53 mutációjából 53 megölve. **Kockázat:** a fejetlen asztali Chrome időmérése nem azonos a valós eszközével; iOS Safari a
+Mutációs ellenpróba: kikapcsolt előtöltéssel a böngészős időmérő eset bukik; az objektum-azonosságra visszaállított előtöltés-effekt
+mellett a böngészős újrarenderelés-eset bukik. A fejlesztői mutációs kör (lejátszó, előtöltés-logika, lánc, hangrangsor) 53 mutációjából
+53 megölve; a független vak visszaellenőrzés saját 56 mutációjából 5 nem egyenértékű túlélt — mind az ötre teszt készült (késői
+hibaesemény a leállított lépésen, nyugvó motoron nincs `cancel()`, hálózat nélküli terv, a lánc végi néma ítélet, a hanglépés őrének törlése). **Kockázat:** a fejetlen asztali Chrome időmérése nem azonos a valós eszközével; iOS Safari a
 `preload`-ot felhasználói aktiváció nélkül figyelmen kívül hagyhatja (a kód a valódi koppintásnál „megérinti” a futó letöltéseket —
 valódi eszközön NEM igazolt); valódi iPad- és Android-próba kell az éles hanggyártás előtt. **A hangmotor-próba megszűnt** (vak
 review B1–B3, orkesztrátori döntés 2026-11-19): a lejátszó a gyerek kifejezett koppintása nélkül semmit nem mond ki és semmit nem

@@ -401,7 +401,8 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
     meg kimondást a gyerek kifejezett koppintása nélkül (a lecke „Felolvasás” gombját és a kisfilm narrációját a lejátszó nem
     zavarhatja). Pozitív bizonyíték: ha egy koppintásra a böngészőhang `start` eseménye megjön, az a hang a munkamenetre igazolt, a
     következő koppintásokra közvetlenül az szól. Amíg nincs igazolás, az első koppintásnál az időkorlátos lánc fut — néma motornál ez
-    munkamenetenként egyszer 3 mp (helyi első hang) vagy 6 mp (hálózati első hang) csend a tartalék előtt. A negatív ítélet soha nem
+    3 mp (helyi első hang) vagy 6 mp (hálózati első hang) csend a tartalék előtt; tartósan néma motornál az ítélet lejárta után (minden
+    3. koppintásnál) a lánc újra próbálkozik, tehát ez a várakozás ismétlődik. A háttérbe került lap alatti lejárat nem ítélet. A negatív ítélet soha nem
     végleges: a hibát adó / el nem induló hang és a néma motor csak a következő 2 koppintásra marad ki, utána a lánc újra megpróbálja
     a rangsor legjobbját; az ítélet a lecke nyelve szerint él. Nem a hang hibája: a megszakítás (`interrupted` / `canceled` —
     ugyanaz a hang kap egy újrapróbát, utána a tartalék jön), a hiányzó felhasználói aktiváció (`not-allowed`), és amit a lejátszó

@@ -22,6 +22,7 @@ function harness(options: { voices?: VoiceLike[]; manifest?: "all" | "none" | ((
   const audios: FakeAudio[] = [];
   const spoken: FakeUtterance[] = [];
   const idle: Array<() => void> = [];
+  const live: FakeUtterance[] = [];
   const state = { cancels: 0, activated: true, retryAfterMs: null as number | null, signals: [] as AbortSignal[], manifestCalls: [] as string[], manifestMode: options.manifest ?? "all" as "all" | "none" | "reject" | "limited" | ((keys: string[]) => unknown), connection: { online: true, ...options.connection } as { saveData?: boolean; effectiveType?: string; online: boolean }, stored: null as unknown, voices: options.voices ?? [HAZEL, ZIRA, SONIA], size: 20_000 };
   // Az ál-motor a valódi szabályokat utánozza: felhasználói aktiváció nélkül `not-allowed` hibaeseményt ad; a kimondás a közös
   // beszédsorba kerül (`speaking`), amelyet a `cancel()` ürít — így látszik, ha a lejátszó idegen kimondást szakít meg.
@@ -31,8 +32,10 @@ function harness(options: { voices?: VoiceLike[]; manifest?: "all" | "none" | ((
       spoken.push(utterance as FakeUtterance);
       if (!state.activated) { utterance.onerror?.({ error: "not-allowed" }); return; }
       synth.speaking = true;
+      live.push(utterance as FakeUtterance);
     },
-    cancel() { state.cancels += 1; synth.speaking = false; synth.pending = false; },
+    // A valódi motorok a megszakított kimondásnak hibaeseményt küldenek (`interrupted` / `canceled`).
+    cancel() { state.cancels += 1; synth.speaking = false; synth.pending = false; for (const utterance of live.splice(0)) utterance.onerror?.({ error: "interrupted" }); },
   };
   const env: SpeechEnv = {
     now: () => now,
@@ -747,4 +750,96 @@ test("a hanglista megváltozása (voiceschanged) után a munkamenet-ismeret újr
   assert.deepEqual([h.spoken.at(-1)?.voice, h.spoken.at(-1)?.volume], [HAZEL, 1]);
   h.spoken.at(-1)?.onstart?.();
   assert.equal(h.player.inspect().knowledge.verified, voiceKey(HAZEL));
+});
+
+// Vak visszaellenőrzés (kliens) B1: a szülő újrarenderelése ÚJ objektumokkal hívja a megnyitást — ugyanarra a leckére ez nem teendő.
+test("B1: azonos tartalmú leckével (új tömbbel) ismételt megnyitás NO-OP — nincs új jegyzék-kérés, a pufferek megmaradnak, a szóló hang nem szakad meg", async () => {
+  const h = harness();
+  await h.open(words(4));
+  const first = h.ready("word 1");
+  h.say("word 1");
+  first.onplaying?.();
+  const audiosBefore = h.audios.length;
+  for (let render = 0; render < 5; render++) { h.player.prepareLesson([...words(4)], "en-GB"); await h.settle(); h.runIdle(); }
+  assert.equal(h.state.manifestCalls.length, 1, "egyetlen jegyzék-kérés");
+  assert.deepEqual([first.paused, first.released], [false, false], "a szóló hang nem szakadt meg, a puffer megmaradt");
+  assert.equal(h.audios.length, audiosBefore, "új letöltés nem indult");
+  assert.equal(h.entry("word 1")?.state, "ready");
+  // Böngészőhang közben ugyanez: a kimondás nem szakad meg.
+  h.say("word 4");
+  const cancels = h.state.cancels;
+  h.spoken.at(-1)?.onstart?.();
+  h.player.prepareLesson([...words(4)], "en-GB");
+  assert.equal(h.state.cancels, cancels, "az újrarenderelés nem hív cancel()-t");
+  assert.deepEqual(h.errors, []);
+  // Eltérő tartalom (más szöveg vagy más nyelv): teljes csere.
+  h.player.prepareLesson([...words(3), "other"], "en-GB");
+  assert.equal(first.released, true, "valódi leckeváltásnál a régi pufferek felszabadulnak");
+  await h.settle();
+  assert.equal(h.state.manifestCalls.length, 2);
+  h.player.prepareLesson([...words(3), "other"], "en-US");
+  await h.settle();
+  assert.equal(h.player.inspect().lessonLanguage, "en-US");
+  // Lecsatolás után ugyanaz a lecke újra megnyitva: új előkészítés.
+  h.player.release();
+  h.player.prepareLesson(words(4), "en-GB");
+  await h.settle();
+  assert.equal(h.state.manifestCalls.length, 3);
+});
+
+// Vak visszaellenőrzés (kliens) J2: a háttérbe került lapon a böngésző visszafoghatja a kimondást — az ottani lejárat nem a hang hibája.
+test("J2: a lap háttérbe kerülése alatti indulási lejárat nem negatív ítélet — visszatérés után a koppintás újra a brit hangot próbálja", async () => {
+  const h = harness();
+  h.state.manifestMode = "none";
+  await h.open(words(1));
+  h.say("word 1");
+  h.player.setVisible(false);
+  h.advance(6000);
+  h.player.setVisible(true);
+  assert.deepEqual(h.player.inspect().knowledge, UNKNOWN_ENGINE, "sem a hang, sem a motor nem kapott ítéletet");
+  h.audios.at(-1)?.onplaying?.();
+  h.say("word 1");
+  assert.equal(h.spoken.at(-1)?.voice, SONIA, "nem a szerverhang és nem egy gyengébb hang szól");
+  // Ellenpróba: előtérben ugyanez a lejárat ítélet.
+  const g = harness();
+  g.state.manifestMode = "none";
+  await g.open(words(1));
+  g.say("word 1");
+  g.advance(3000);
+  assert.deepEqual(g.player.inspect().knowledge.skip, { [voiceKey(SONIA)]: 2 });
+});
+
+// Vak visszaellenőrzés (kliens) J10: a túlélő mutánsok esetei.
+test("J10: leállítás után a kimondás késői eseménye és őre hatástalan; nyugvó motoron a leállítás nem hív cancel()-t", async () => {
+  const h = harness();
+  h.state.manifestMode = "none";
+  await h.open(words(1));
+  h.say("word 1");
+  assert.equal(h.state.cancels, 0, "nyugvó motoron nincs cancel() a speak() előtt (Android: megszakítaná az új kimondást)");
+  h.player.stop();
+  assert.equal(h.timers.size, 0, "a megszakító a hanglépés indulási őrét is törli");
+  h.spoken[0].onerror?.({ error: "synthesis-failed" });
+  h.advance(10_000);
+  assert.equal(h.spoken.length, 1, "a leállított lépés késői hibaeseménye nem indít másik hangot");
+  assert.equal(h.audios.length, 0);
+  assert.deepEqual(h.errors, []);
+  assert.deepEqual(h.player.inspect().knowledge, UNKNOWN_ENGINE, "…és ítéletet sem ír");
+});
+
+test("J10: hálózat nélkül a koppintás terve a helyi hanggal indul; tartalék híján a csendes kör a végén is néma ítéletet ad", async () => {
+  const h = harness({ connection: { online: false } });
+  h.state.manifestMode = "none";
+  await h.open(words(1));
+  h.say("word 1");
+  assert.equal(h.spoken[0].voice, HAZEL, "hálózat nélkül nem a hálózati hang az első");
+  // 300 karakternél hosszabb szöveghez nincs szerveres tartalék: a lánc a böngészőhang-szakasszal ér véget.
+  const g = harness({ voices: [HAZEL] });
+  g.state.manifestMode = "none";
+  await g.open(words(1));
+  const long = "word ".repeat(70).trim();
+  g.say(long);
+  g.advance(3000);
+  assert.deepEqual(g.errors, [long], "nincs több lépés: hibaüzenet");
+  assert.equal(g.audios.length, 0);
+  assert.equal(g.player.inspect().knowledge.silentTaps, 2, "a csendes kör a lánc végén is ítélet");
 });

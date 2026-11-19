@@ -178,11 +178,13 @@ type ChainOptions = {
   engine?: "ok" | "silent" | "fail" | "android" | string;
   /** Ennyi idő múlva jön a beszéd `start` eseménye (a motor saját indulási ideje — itt utánzott érték). */
   engineStartMs?: number;
+  /** A kimondás elindul, de nem ér véget (hosszú mondat): a motor „beszél”, amíg valaki le nem állítja. */
+  speechNeverEnds?: boolean;
   playRejects?: string;
 };
 const WINDOWS_VOICES = [{ name: ZIRA, lang: "en-US", localService: true }, { name: HAZEL, lang: "en-GB", localService: true }, { name: SONIA, lang: "en-GB", localService: false }];
 async function preparedAudioPage(page: import("@playwright/test").Page, options: ChainOptions) {
-  await page.addInitScript(({ voices, engine, engineStartMs, playRejects }) => {
+  await page.addInitScript(({ voices, engine, engineStartMs, speechNeverEnds, playRejects }) => {
     const log: ChainLog = { speech: [], played: [], audios: [], clickAt: 0, cancels: 0, foreignSpeaking: false };
     let interruptNext = false;
     Object.defineProperty(window, "__chain", { value: log });
@@ -207,7 +209,9 @@ async function preparedAudioPage(page: import("@playwright/test").Page, options:
         setTimeout(() => {
           if (engine === "fail" || u.voice?.name === engine) { u.onerror?.({ error: "synthesis-failed" }); return; }
           entry.startedAt = performance.now() - log.clickAt;
-          u.onstart?.(); u.onend?.();
+          u.onstart?.();
+          if (speechNeverEnds) { log.foreignSpeaking = true; return; }
+          u.onend?.();
         }, engineStartMs);
       },
     } });
@@ -227,7 +231,7 @@ async function preparedAudioPage(page: import("@playwright/test").Page, options:
       if (playRejects && path.startsWith("/api/tts/lesson-audio/")) return Promise.reject(new DOMException("a böngésző tiltja", playRejects));
       return realPlay.call(this);
     };
-  }, { voices: options.voices ?? WINDOWS_VOICES, engine: options.engine ?? "ok", engineStartMs: options.engineStartMs ?? 10, playRejects: options.playRejects });
+  }, { voices: options.voices ?? WINDOWS_VOICES, engine: options.engine ?? "ok", engineStartMs: options.engineStartMs ?? 10, speechNeverEnds: options.speechNeverEnds ?? false, playRejects: options.playRejects });
   const lesson = fusionFixture(); lesson.subject = "angol";
   lesson.experience!.language = "en-GB";
   lesson.experience!.glossary = [{ word: "triangle", translation: "háromszög", partOfSpeech: "főnév", example: "This is a triangle.", exampleTranslation: "Ez egy háromszög." }];
@@ -310,6 +314,28 @@ test.describe("prepared audio", () => {
     expect(await spoken(), "böngészőhang nem szól").toEqual([]);
     expect(requests.fallback).toEqual([]);
     expect(requests.manifest.length).toBe(1);
+    await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
+  });
+
+  // Vak visszaellenőrzés (kliens) B1: a valódi leckenézet minden rendereléskor ÚJ lecke-objektumot kap (toast, belépés / beállítás
+  // megérkezése, újrakérés) — ettől sem a szóló hang nem szakadhat meg, sem a pufferek nem dobódhatnak el, sem új jegyzék-kérés nem mehet.
+  test("B1: a szülő újrarenderelése új lecke-objektummal lejátszás közben nem szakítja meg a hangot; nincs új jegyzék- és hangfájl-kérés", async ({ page }) => {
+    const { preloaded, log, say, speechState, engineLog, requests, word, sentence } = await preparedAudioPage(page, { manifest: "all", speechNeverEnds: true, playRejects: "NotAllowedError" });
+    await page.goto("/__lesson-runtime-probe?candidate=1&rerender=1");
+    await page.getByTestId("pronounce-entry").click();
+    await expect.poll(() => requests.manifest.length).toBe(1);
+    await preloaded();
+    // A böngészőhang szól (az előre gyártott hangot a próba kedvéért a böngésző „tiltja”), és még tart, amikor a szülő újrarenderel.
+    await say("triangle");
+    await expect.poll(async () => (await log()).speech[0]?.startedAt ?? null).not.toBeNull();
+    expect(await engineLog()).toEqual({ cancels: 0, foreignSpeaking: true });
+    for (let render = 0; render < 3; render++) { await page.getByTestId("probe-rerender").click(); await page.waitForTimeout(150); }
+    await page.waitForTimeout(600);
+    await expect(page.getByRole("heading", { name: "Szószedet · hallgasd és mondd utánam!" })).toBeVisible();
+    expect(await engineLog(), "a szóló kimondást az újrarenderelés nem szakította meg").toEqual({ cancels: 0, foreignSpeaking: true });
+    expect(requests.manifest.length, "új jegyzék-kérés nem ment").toBe(1);
+    expect(requests.audio, "a pufferek megmaradtak: nincs újratöltés").toEqual([word, sentence]);
+    expect((await speechState()).entries.map(e => e.state)).toEqual(["ready", "ready"]);
     await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
   });
 

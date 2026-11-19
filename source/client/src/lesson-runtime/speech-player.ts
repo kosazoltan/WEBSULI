@@ -15,8 +15,8 @@ import { hasPreparedAudio, ttsAudioAvailabilityUrl, ttsAudioPath, TTS_AUDIO_AVAI
  * tesztelhető (tests/speech-player.test.ts). A döntéseket a tiszta modulok adják (`shared/speech-chain.ts`, `shared/speech-preload.ts`).
  *
  * Működés: a lecke megnyitásakor a jegyzék szerint meglévő hangok a háttérben, korlátozott párhuzamossággal `preload="auto"`
- * hangelemekbe töltődnek; koppintásra a pufferelt hang hálózati kör nélkül szól. A böngészőhang kiválasztása és a néma motor
- * felismerése munkamenetenként egyszer, az első felhasználói mozdulatnál lefutó, nulla hangerejű próbával dől el.
+ * hangelemekbe töltődnek; koppintásra a pufferelt hang hálózati kör nélkül szól. A hangmotorról a lejátszó kizárólag a gyerek valódi
+ * koppintásaiból tanul (kéretlen kimondás nincs): a megszólalt hang igazolt, a negatív ítélet nyelvenkénti és lejár.
  */
 export type AudioLike = {
   src: string; preload: string; playbackRate: number; preservesPitch: boolean; currentTime: number;
@@ -48,7 +48,7 @@ export type SpeechEnv = {
 };
 
 type Entry = { id: string; audio: AudioLike | null; state: "queued" | "loading" | "ready" | "waiting" | "failed"; attempts: number; failedAt: number | null; timer: unknown };
-type Lesson = { language: string; ids: string[]; controller: AbortController; manifestUrl: string | null; manifestAt: number | null; retries: number; retryTimer: unknown };
+type Lesson = { signature: string; language: string; ids: string[]; controller: AbortController; manifestUrl: string | null; manifestAt: number | null; retries: number; retryTimer: unknown };
 type StepDone = (outcome: StepOutcome) => void;
 type PreparedFailure = "error" | "timeout" | "not-allowed" | "aborted";
 
@@ -59,6 +59,8 @@ export function createSpeechPlayer(env: SpeechEnv) {
   let pending: string[] = [];
   let lesson: Lesson | null = null;
   let visible = true;
+  /** Hányszor került a lap háttérbe — a háttérben a böngésző a kimondást és az időzítőket visszafoghatja: az ilyen lejárat nem a hang hibája. */
+  let hiddenCount = 0;
   /** A hangmotor ismerete a lecke NYELVE szerint (egy német lecke néma hangja nem némíthatja el az angol leckét). */
   const knowledge = new Map<string, EngineKnowledge>();
   /** Van-e a beszédsorban a lejátszó SAJÁT, még le nem zárt kimondása. */
@@ -166,8 +168,12 @@ export function createSpeechPlayer(env: SpeechEnv) {
 
   /** A lecke megnyitása: kulcsok, jegyzék (egy kérés), majd előtöltés üresjáratban. Más nyelvű leckénél nincs hangtár-forgalom. */
   function prepareLesson(texts: readonly string[], language: string): void {
+    // Ugyanaz a lecke (azonos nyelv és szövegek) újra: NINCS teendő — a szülő újrarenderelése új objektumokkal hívhat, de ettől sem a
+    // szóló hang nem szakadhat meg, sem a pufferek nem dobódhatnak el, sem új jegyzék-kérés nem mehet. Csere csak valódi leckeváltáskor.
+    const signature = `${language}\n${texts.join("\n")}`;
+    if (lesson?.signature === signature) return;
     release();
-    const owner: Lesson = { language, ids: [], controller: new AbortController(), manifestUrl: null, manifestAt: null, retries: 0, retryTimer: null };
+    const owner: Lesson = { signature, language, ids: [], controller: new AbortController(), manifestUrl: null, manifestAt: null, retries: 0, retryTimer: null };
     lesson = owner;
     if (!hasPreparedAudio(language)) return;
     const unique = Array.from(new Set(texts.filter((text) => text.trim()))).slice(0, TTS_AUDIO_AVAILABILITY_MAX_KEYS);
@@ -201,6 +207,7 @@ export function createSpeechPlayer(env: SpeechEnv) {
 
   /** A lap láthatósága: háttérben új letöltés nem indul; visszatéréskor folytatódik, és a jegyzék (ritkítva) frissül. */
   function setVisible(next: boolean): void {
+    if (visible && !next) hiddenCount += 1;
     visible = next;
     if (!visible || !lesson) return;
     if (lesson.manifestAt !== null && env.now() - lesson.manifestAt >= SPEECH_PRELOAD.manifestRefreshMs) void loadManifest(lesson);
@@ -294,6 +301,7 @@ export function createSpeechPlayer(env: SpeechEnv) {
     let settled = false;
     let started = false;
     let retried = false;
+    const hiddenAtStart = visible ? hiddenCount : -1;
     const note = (outcome: VoiceOutcome) => { outcomes.push(outcome); learn(language, (current) => engineAfter(current, voiceKey(voice), outcome)); };
     const finish = (outcome: StepOutcome, failure?: VoiceOutcome, skipVoices?: boolean) => {
       if (settled) return;
@@ -307,7 +315,8 @@ export function createSpeechPlayer(env: SpeechEnv) {
     };
     const begin = () => { if (!started) { started = true; note("started"); } };
     // Védőháló: ha a kimondás a kapott időn belül nem indul el, a következő lépés jön (igazolt hangnál ez ritka).
-    const watchdog = env.setTimeout(() => { if (!started) finish("failed", "timeout"); }, startTimeoutMs);
+    // Ha a lap a lépés alatt háttérben volt, a lejárat nem ítélet (visszatérés után a következő koppintás újra a legjobb hangot próbálja).
+    const watchdog = env.setTimeout(() => { if (!started) finish("failed", hiddenAtStart === hiddenCount ? "timeout" : undefined); }, startTimeoutMs);
     const say = (): boolean => {
       const utterance = env.createUtterance(text);
       if (!utterance) return false;
