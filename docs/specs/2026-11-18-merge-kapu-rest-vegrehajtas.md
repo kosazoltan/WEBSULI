@@ -32,5 +32,5 @@ Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`, „Javítókör a vak, hibaker
 9. K3: `collectMergeData({ exec, root, n, log, sleep })` — a `main()` adatgyűjtése, tesztelhető hamis `gh`-val; a `main()` ezt hívja.
 10. K2: az ítélet-lépés a `verdictTexts` szűrt szövegeiből; a PR-leírás önbevallott ítélet-sorának cseréje a valódi vak ítéletre
     (a szöveg a scratchpadban készül; a PR szerkesztése a gazda / tulajdonos jóváhagyásával).
-11. `node --test scripts/qa/gates/pre-merge-gate.test.mjs scripts/qa/gates/lib.test.mjs`; mutációs ellenpróba (másolaton);
+11. `node --test scripts/qa/gates/pre-merge-gate.test.mjs scripts/qa/gates/lib.test.mjs`; mutációs ellenpróba (másolaton; 16 / 17 megfogva — a `main()` egysoros bekötése a `mergeVerdict`-re teszteletlen);
     `npm run gate:stage`; `npm run gate:push`; vak visszanézés.

@@ -121,11 +121,37 @@ export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSh
   return out;
 }
 
+/** A REST-es szerző (`user.login`, `user.type`, `author_association`) — az ítélet-forrás szűréséhez (vak review #513 K2). */
+const authorOf = (x) => ({ login: x?.user?.login ?? null, type: x?.user?.type ?? null, association: x?.author_association ?? null });
+
+/** Megbízható ítélet-szerző: a repó tulajdonosa / tagja / írásjogú közreműködője, és nem bot (vak review #513 K2). */
+export const TRUSTED_ASSOCIATIONS = Object.freeze(['OWNER', 'MEMBER', 'COLLABORATOR']);
+export function trustedAuthor(a) {
+  if (!a || typeof a.login !== 'string' || !a.login) return false;
+  if (a.type === 'Bot' || /\[bot\]$/i.test(a.login)) return false;
+  return TRUSTED_ASSOCIATIONS.includes(String(a.association ?? '').toUpperCase());
+}
+
+/**
+ * Az ítélet-lépés szövegei: a PR-leírás és a kommentek, de a nem megbízható szerzőé üres szövegként (a sorrend — 0. = leírás —
+ * megmarad, a `resolveVerdict` forrás-címkéje ebből dolgozik). Nyilvános repóban így idegen komment nem írhat felül egy ítéletet.
+ */
+export function verdictTexts(pr) {
+  return [trustedAuthor(pr?.bodyAuthor) ? pr?.body ?? '' : '', ...(pr?.comments ?? []).map((c) => (trustedAuthor(c?.author) ? c?.body ?? '' : ''))];
+}
+
+/** Az ítélet a fejre: a helyi bizonyíték, különben a megbízható szerzőtől származó PR-szöveg (K2; a szigorú mód a futtatóé). */
+export function mergeVerdict(pr, evidence) {
+  return resolveVerdict({ head: pr?.headRefOid ?? '', evidence, texts: verdictTexts(pr) });
+}
+
 /**
  * A REST-es PR-válasz a `decideMerge` által várt (a korábbi `gh pr view --json` szerinti) alakra
- * (docs/specs/2026-11-18-merge-kapu-rest.md): a felhős munkamenetben a GraphQL tiltott, a REST nem.
+ * (docs/specs/2026-11-18-merge-kapu-rest.md): a felhős munkamenetben a GraphQL tiltott, a REST nem. Átnevezésnél a régi útvonal is
+ * számít (K6: a telepítés-jelzés és a C-61 hatókör a régi helyet is lássa).
  */
 export function prFromRest(pull, files = [], comments = []) {
+  const paths = [...new Set((files ?? []).flatMap((f) => [f?.filename, f?.previous_filename]).filter((x) => typeof x === 'string' && x))];
   return {
     number: pull?.number,
     state: String(pull?.state ?? '').toUpperCase(),
@@ -133,17 +159,36 @@ export function prFromRest(pull, files = [], comments = []) {
     mergeStateStatus: String(pull?.mergeable_state ?? 'unknown').toUpperCase(),
     headRefOid: pull?.head?.sha,
     baseRefOid: pull?.base?.sha,
-    files: (files ?? []).map((f) => ({ path: f.filename })),
+    files: paths.map((path) => ({ path })),
     body: pull?.body ?? '',
-    comments: (comments ?? []).map((c) => ({ body: c.body })),
+    bodyAuthor: authorOf(pull),
+    comments: (comments ?? []).map((c) => ({ body: c?.body, author: authorOf(c) })),
   };
 }
 
-/** A felhős REST-út (`pulls/<n>/ccr/review_threads`) szálai; hiányzó `resolved` = nyitott (fail-closed). */
+/**
+ * A felhős REST-út (`pulls/<n>/ccr/review_threads`) szálai (vak review #513 K1, fail-closed): nem lista, ÜRES lista (amíg nincs mért
+ * CCR-minta, az üres válasz nem igazolja, hogy nincs szál) vagy ismeretlen alakú elem (nem logikai `resolved`) → kivétel → FAIL.
+ */
 export function threadsFromCcr(list) {
-  // Nem tömb (üres törzs, burkolt objektum) → kivétel → „adatgyűjtés” FAIL, mint a GraphQL-úton bármely alakeltérés.
   if (!Array.isArray(list)) throw new Error('a ccr/review_threads válasza nem lista — a szálak állapota nem állapítható meg');
-  return list.map((t) => ({ isResolved: t?.resolved === true }));
+  if (!list.length) throw new Error('a ccr/review_threads válasza üres — üres lista a felhős úton nem igazolja, hogy nincs nyitott szál');
+  if (list.some((t) => typeof t?.resolved !== 'boolean')) throw new Error('a ccr/review_threads egy eleméből hiányzik a logikai „resolved” mező (ismeretlen alak)');
+  return list.map((t) => ({ isResolved: t.resolved === true }));
+}
+
+/** A review-kommentekből (`pulls/<n>/comments`) számolt szálak: a válasz nélküli gyökérkommentek (`in_reply_to_id` nincs). */
+export function rootReviewComments(comments) {
+  return (comments ?? []).filter((c) => c && c.in_reply_to_id == null).length;
+}
+
+/** `check-runs` lapozott (`--paginate --slurp`) válasza egy listává; csonka (a `total_count`-nál kevesebb) → kivétel (K6). */
+export function checkRunsFromPages(pages) {
+  if (!Array.isArray(pages) || !pages.length || pages.some((p) => !Array.isArray(p?.check_runs))) throw new Error('a check-run lista lapozott válasza ismeretlen alakú');
+  const all = pages.flatMap((p) => p.check_runs);
+  const total = pages[0].total_count;
+  if (typeof total === 'number' && all.length < total) throw new Error(`a check-run lista csonka (${all.length} / ${total})`);
+  return all;
 }
 
 /**
@@ -177,6 +222,92 @@ async function fetchRt(url) {
   }
 }
 
+const sleepSync = (ms) => { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+const THREADS_Q = 'query($o:String!,$r:String!,$n:Int!,$after:String){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100,after:$after){nodes{isResolved} pageInfo{hasNextPage endCursor}}}}}';
+export const GRAPHQL_MAX_PAGES = 50;
+export const MERGEABLE_RETRY_DELAYS_MS = Object.freeze([2_000, 4_000]);
+const mergeableKnown = (pull) => typeof pull?.mergeable_state === 'string' && pull.mergeable_state !== 'unknown';
+
+/**
+ * A merge-kapu adatgyűjtése REST-en (docs/specs/2026-11-18-merge-kapu-rest.md; vak review #513 K1, K3, K4, K6), injektált `exec`-kel
+ * (a tesztek hamis `gh`-val hívják). Minden alak- vagy teljességi hiba kivétel → a hívó „adatgyűjtés” FAIL-ja.
+ * Sorrend: tároló → PR (`mergeable_state` `unknown`-ra korlátos újrakérés) → fájl- és kommentlista (lapozva; hiányzó
+ * `changed_files` = hiba) → kötelező lista (védelmi végpont → `branches/main`) → check-runok (lapozva) → szálak (GraphQL lapozva →
+ * felhőben a CCR-út REST-keresztellenőrzéssel) → CI-futás → compare.
+ */
+export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepSync, delays = MERGEABLE_RETRY_DELAYS_MS }) {
+  const gj = (args) => ghJson(exec, root, args);
+  // A `{owner}/{repo}` helyőrzőt a gh a helyi git-remote-ból oldja fel.
+  const repo = gj(['api', 'repos/{owner}/{repo}'])?.full_name;
+  if (typeof repo !== 'string' || !repo.includes('/')) throw new Error('a tároló neve (full_name) nem olvasható');
+  const [owner, name] = repo.split('/');
+  let pull = gj(['api', `repos/${repo}/pulls/${n}`]);
+  for (const ms of delays) {
+    if (mergeableKnown(pull)) break;
+    log(`[pre-merge-gate] mergeable_state=${pull?.mergeable_state ?? '—'} — újrakérés ${ms} ms múlva`);
+    sleep(ms);
+    pull = gj(['api', `repos/${repo}/pulls/${n}`]);
+  }
+  if (!Number.isInteger(pull?.changed_files)) throw new Error('a PR-válaszból hiányzik a changed_files — a fájllista teljessége nem ellenőrizhető');
+  const pr = prFromRest(
+    pull,
+    flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/files?per_page=100`]), pull.changed_files, 'fájllista'),
+    flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/issues/${n}/comments?per_page=100`]), null, 'kommentlista'),
+  );
+  const head = pr.headRefOid;
+  if (typeof head !== 'string' || !/^[0-9a-f]{40}$/.test(head)) throw new Error('a PR fej-hash-e nem olvasható');
+  const mainBranch = gj(['api', `repos/${repo}/branches/main`]);
+  let required;
+  try {
+    required = gj(['api', `repos/${repo}/branches/main/protection`])?.required_status_checks?.contexts ?? [];
+  } catch (e) {
+    log(`[pre-merge-gate] a védelmi végpont nem olvasható (${String(e?.message ?? e).split('\n')[0]}) — a branches/main protection mezőjéből`);
+    // A védelmi végpont admin-jogot kér (felhős munkamenetben 403); ugyanez a lista az ág olvasható `protection` mezőjében.
+    required = mainBranch?.protection?.required_status_checks?.contexts ?? [];
+  }
+  const checkRuns = checkRunsFromPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/commits/${head}/check-runs?per_page=100`]));
+  const statuses = gj(['api', `repos/${repo}/commits/${head}/status`])?.statuses ?? [];
+  let threads;
+  let threadSource;
+  try {
+    threads = [];
+    let after = null;
+    for (let page = 0; ; page += 1) {
+      if (page >= GRAPHQL_MAX_PAGES) throw new Error(`a review-szálak lapozása ${GRAPHQL_MAX_PAGES} oldal után sem ért véget`);
+      const rt = gj(['api', 'graphql', '-f', `query=${THREADS_Q}`, '-f', `o=${owner}`, '-f', `r=${name}`, '-F', `n=${n}`, ...(after ? ['-f', `after=${after}`] : [])])
+        ?.data?.repository?.pullRequest?.reviewThreads;
+      if (!Array.isArray(rt?.nodes) || rt.nodes.some((t) => typeof t?.isResolved !== 'boolean')) throw new Error('a GraphQL review-szál válasz ismeretlen alakú');
+      threads.push(...rt.nodes.map((t) => ({ isResolved: t.isResolved })));
+      if (!rt.pageInfo?.hasNextPage) break;
+      after = rt.pageInfo.endCursor;
+      if (typeof after !== 'string' || !after) throw new Error('a GraphQL review-szál lapozásából hiányzik az endCursor');
+    }
+    threadSource = 'graphql';
+  } catch (e) {
+    log(`[pre-merge-gate] a GraphQL-szál-lekérdezés nem sikerült (${String(e?.message ?? e).split('\n')[0]}) — a ccr/review_threads útról`);
+    // Felhős munkamenet: a GraphQL tiltott, a szálak a CCR REST-útról jönnek (lapozva), REST-keresztellenőrzéssel; ha bármelyik
+    // bukik, a kivétel → „adatgyűjtés” FAIL.
+    threads = threadsFromCcr(flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/ccr/review_threads`]), null, 'ccr-szállista'));
+    const roots = rootReviewComments(flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/comments?per_page=100`]), null, 'review-kommentlista'));
+    if (roots > threads.length) throw new Error(`a ccr/review_threads csonka: ${threads.length} szál, de a review-kommentekből ${roots} gyökér-szál számolható`);
+    threadSource = 'ccr';
+  }
+  const mainSha = mainBranch?.commit?.sha;
+  const runs = gj(['api', `repos/${repo}/actions/runs?head_sha=${head}&event=pull_request&per_page=20`])?.workflow_runs ?? [];
+  const ci = runs.filter((r) => r.name === 'CI').sort((a, b) => b.id - a.id)[0];
+  const ciBaseSha = ci?.pull_requests?.[0]?.base?.sha ?? null;
+  // C-61 (kanban #92): a main elmozdulásának fájllistája a compare végpontból; hiba esetén null → a döntés fail-closed.
+  const cmpBase = ciBaseSha ?? pr.baseRefOid;
+  let mainFiles = null;
+  let mainFilesTruncated = false;
+  if (cmpBase && mainSha && cmpBase !== mainSha) {
+    try {
+      ({ mainFiles, mainFilesTruncated } = compareFiles(gj(['api', `repos/${repo}/compare/${cmpBase}...${mainSha}`])));
+    } catch { mainFiles = null; } // a null a decideMainMoved-ben fail-closed (ártalmatlan elnyelés)
+  }
+  return { repo, pr, required, checkRuns, statuses, threads, threadSource, mainSha, ciBaseSha, mainFiles, mainFilesTruncated };
+}
+
 async function main() {
   const n = process.argv.slice(2).find((a) => /^\d+$/.test(a));
   if (!n) { process.stderr.write('Használat: node scripts/qa/gates/pre-merge-gate.mjs <PR-szám>\n'); process.exit(2); }
@@ -185,60 +316,18 @@ async function main() {
   const gate = createGate('pre-merge-gate');
   let pr;
   try {
-    // REST (docs/specs/2026-11-18-merge-kapu-rest.md): a `{owner}/{repo}` helyőrzőt a gh a helyi git-remote-ból oldja fel.
-    const repo = ghJson(exec, root, ['api', 'repos/{owner}/{repo}']).full_name;
-    const [owner, name] = repo.split('/');
-    const pull = ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}`]);
-    pr = prFromRest(
-      pull,
-      flattenPages(ghJson(exec, root, ['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/files?per_page=100`]), pull?.changed_files ?? null, 'fájllista'),
-      flattenPages(ghJson(exec, root, ['api', '--paginate', '--slurp', `repos/${repo}/issues/${n}/comments?per_page=100`]), null, 'kommentlista'),
-    );
+    const d = collectMergeData({ exec, root, n, log: (m) => gate.log(m) });
+    pr = d.pr;
     const head = pr.headRefOid;
-    const mainBranch = ghJson(exec, root, ['api', `repos/${repo}/branches/main`]);
-    let required;
-    try {
-      required = ghJson(exec, root, ['api', `repos/${repo}/branches/main/protection`])?.required_status_checks?.contexts ?? [];
-    } catch (e) {
-      gate.log(`[pre-merge-gate] a védelmi végpont nem olvasható (${String(e?.message ?? e).split('\n')[0]}) — a branches/main protection mezőjéből`);
-      // A védelmi végpont admin-jogot kér (felhős munkamenetben 403); ugyanez a lista az ág olvasható `protection` mezőjében.
-      required = mainBranch?.protection?.required_status_checks?.contexts ?? [];
-    }
-    const checkRuns = ghJson(exec, root, ['api', `repos/${repo}/commits/${head}/check-runs?per_page=100`]).check_runs ?? [];
-    const statuses = ghJson(exec, root, ['api', `repos/${repo}/commits/${head}/status`]).statuses ?? [];
-    const q = 'query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}';
-    let threads;
-    try {
-      threads = ghJson(exec, root, ['api', 'graphql', '-f', `query=${q}`, '-f', `o=${owner}`, '-f', `r=${name}`, '-F', `n=${n}`])
-        .data.repository.pullRequest.reviewThreads.nodes;
-    } catch (e) {
-      gate.log(`[pre-merge-gate] a GraphQL-szál-lekérdezés nem sikerült (${String(e?.message ?? e).split('\n')[0]}) — a ccr/review_threads útról`);
-      // Felhős munkamenet: a GraphQL tiltott, a szálak a CCR REST-útról jönnek; ha ez is bukik, a kivétel → „adatgyűjtés” FAIL.
-      threads = threadsFromCcr(ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}/ccr/review_threads`]));
-    }
-    const mainSha = mainBranch?.commit?.sha;
-    const runs = ghJson(exec, root, ['api', `repos/${repo}/actions/runs?head_sha=${head}&event=pull_request&per_page=20`]).workflow_runs ?? [];
-    const ci = runs.filter((r) => r.name === 'CI').sort((a, b) => b.id - a.id)[0];
-    const ciBaseSha = ci?.pull_requests?.[0]?.base?.sha ?? null;
-    // C-61 (kanban #92): a main elmozdulásának fájllistája a compare végpontból; hiba esetén null → a döntés fail-closed.
-    const cmpBase = ciBaseSha ?? pr.baseRefOid;
-    let mainFiles = null;
-    let mainFilesTruncated = false;
-    if (cmpBase && mainSha && cmpBase !== mainSha) {
-      try {
-        ({ mainFiles, mainFilesTruncated } = compareFiles(ghJson(exec, root, ['api', `repos/${repo}/compare/${cmpBase}...${mainSha}`])));
-      } catch { mainFiles = null; }
-    }
-    const verdict = resolveVerdict({
-      head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: [pr.body, ...(pr.comments ?? []).map((c) => c.body)],
-    });
+    // Vak review #513 K2: PR-szöveges ítélet csak megbízható szerzőtől (verdictTexts); a szigorú mód a vak ellenőr futtatójáé.
+    const verdict = mergeVerdict(pr, readEvidence(ctx.evDir, `review-${head}`));
     const g = exec('bash', [join(root, 'scripts', 'qa', 'active-runs-guard.sh')], { cwd: root, timeoutMs: 90_000 });
     const summary = redact(`${g.stdout}\n${g.stderr}`).split('\n').filter((l) => /^(GUARD|AKTIV)/.test(l)).join(' ').trim();
     const rt = await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl);
     for (const r of decideMerge({
-      pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files: (pr.files ?? []).map((f) => f.path), verdict,
-      external: readEvidence(ctx.evDir, `external-${head}`), guard: { code: g.code, summary }, rt, repoWideScopes: cfg.repoWideScopes ?? [],
-      mainFiles, mainFilesTruncated,
+      pr, required: d.required, checkRuns: d.checkRuns, statuses: d.statuses, threads: d.threads, mainSha: d.mainSha, ciBaseSha: d.ciBaseSha,
+      files: (pr.files ?? []).map((f) => f.path), verdict, external: readEvidence(ctx.evDir, `external-${head}`),
+      guard: { code: g.code, summary }, rt, repoWideScopes: cfg.repoWideScopes ?? [], mainFiles: d.mainFiles, mainFilesTruncated: d.mainFilesTruncated,
     })) gate.add(r.name, r.status, r.note);
   } catch (e) {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);
