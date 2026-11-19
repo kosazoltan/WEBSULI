@@ -75,7 +75,7 @@ export type PerfSnapshot = {
 
 export type PerfOverlay = {
   /** A képkocka elején, a `requestAnimationFrame` időbélyegével. */
-  frameStart(now: number): void;
+  frameStart(now: number, restarted?: boolean): void;
   /** Közvetlenül a `renderer.render` előtt. */
   beforeRender(): void;
   /** Közvetlenül a `renderer.render` után. */
@@ -151,7 +151,10 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       // 2. vak kör M3: a szövegdoboz NEM érinthető (a „jobb: nézelődés” húzás a vászonhoz jut) — csak a gombok azok; a szöveg a
       // maradék magasságban levágódik (a gombsor felül, az összecsukó mindig elérhető).
       ".bc-perf-panel>pre{min-height:0;overflow:hidden;pointer-events:none}" +
-      "@media (orientation:landscape) and (max-height:600px){.bc-perf-panel{max-width:calc(100% - 340px)}}";
+      "@media (orientation:landscape) and (max-height:600px){.bc-perf-panel{max-width:calc(100% - 340px)}}" +
+      // GPT-vak review #504 L3: „Számok” nézet — a kapcsolók rejtve, a panel a teljes szélességet használja, hogy a mérősorok
+      // kis fekvő kijelzőn (568×320) is olvashatók legyenek; a szöveg itt sem érinthető (az érintés a játékhoz jut).
+      ".bc-perf-panel.bc-perf-reading{max-width:calc(100% - 8px)}";
     document.head.append(style);
   }
   // Review #504 (vak, L3): elrendezést a panel NEM olvas a képkocka-hurokban — a helyét és a vászon CSS-méretét a méretfigyelő
@@ -193,12 +196,20 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   const bProbe = button("bc-perf-probe");
   const bCopy = button("bc-perf-copy");
   const bCollapse = button("bc-perf-collapse");
+  const bView = button("bc-perf-view");
   bProbe.textContent = "GPU-próba";
   bCopy.textContent = "Másol";
   bCollapse.textContent = "–";
   bCollapse.setAttribute("aria-label", "A mérőpanel összecsukása");
   const toggleButtons = [bShadow, bRes, bMat, bFog, bProbe, bCopy];
-  row.append(...toggleButtons, bCollapse);
+  row.append(bView, ...toggleButtons, bCollapse);
+  let reading = false;
+  const syncView = () => {
+    root.classList.toggle("bc-perf-reading", reading);
+    bView.textContent = reading ? "Kapcsolók" : "Számok";
+    bView.setAttribute("aria-pressed", reading ? "true" : "false");
+    for (const b of toggleButtons) b.style.display = reading || collapsed ? "none" : "";
+  };
   root.append(row, text);
   host.append(root);
 
@@ -265,6 +276,8 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     // A kapcsoló utáni képkockák más költségűek: a régi minták ne keveredjenek az újakkal.
     frames.clear();
     gpuTimer.clearSamples();
+    // GPT-vak review #504 L4: a kapcsoló előtt indult szinkron GPU-próba a régi beállítást mérné — megszakítjuk (eredménye: nincs).
+    if (probeDone) finishProbe(null);
     gpuProbeMs = null;
     syncLabels();
   };
@@ -286,7 +299,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       running: loopClock.running(nowMs, opts.isRunning?.()),
       renderedFrames,
       tier: opts.tier,
-      frame: frames.summary(),
+      frame: frames.summary(nowMs),
       gpuMs: gpuAvg,
       gpuTimerAvailable: gpuTimer.available,
       gpuProbeMs,
@@ -381,14 +394,20 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     navigator.clipboard?.writeText(text.textContent ?? "").then(done, () => {});
   });
   let collapsed = false;
+  bView.addEventListener("click", () => {
+    reading = !reading;
+    syncView();
+  });
   bCollapse.addEventListener("click", () => {
     collapsed = !collapsed;
     text.style.display = collapsed ? "none" : "";
-    for (const b of toggleButtons) b.style.display = collapsed ? "none" : "";
+    bView.style.display = collapsed ? "none" : "";
+    syncView();
     bCollapse.textContent = collapsed ? "perf" : "–";
   });
 
   syncLabels();
+  syncView();
   renderText();
   // Másodpercenként, a képkocka-huroktól függetlenül: ha az utolsó szövegfrissítés 1 s-nál régebbi (a hurok áll vagy befagyott),
   // a szöveg — benne a „fut / áll” — újraíródik (review #504 vak L1). Itt (a mérésen kívül) frissül a panel helye is, és méretfigyelő
@@ -407,11 +426,11 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   (window as unknown as PerfWindow).__websuliPerf = api;
 
   return {
-    frameStart(now) {
+    frameStart(now, restarted = false) {
       tStart = performance.now();
       gpuTimer.poll();
-      const counted = loopClock.frame(now, tStart);
-      if (counted !== null) frames.push({ dt: counted, js: lastJs, render: lastRender });
+      const counted = loopClock.frame(now, tStart, restarted);
+      if (counted !== null) frames.push({ dt: counted, js: lastJs, render: lastRender, at: tStart });
     },
     beforeRender() {
       tBefore = performance.now();

@@ -207,7 +207,9 @@ describe("LoopClock — a játék jelzője az igazság (review #504 L1)", () => 
     let t = 1000;
     for (let i = 0; i < 60; i++, t += 16.7) clock.frame(t, t);
     t += 8500;
-    clock.frame(t, t);
+    // SPEC-VÁLTOZÁS (GPT-vak review #504 L1): a szünetet a hurok újraindulása jelzi (`restarted`), nem a köz hossza — a bemenet a
+    // valódi játék jelét kapja; az állítás változatlan.
+    clock.frame(t, t, true);
     assert.equal(clock.running(t + 2000), false, "2 s-mal az utolsó képkocka után a hurok áll (régen: 15 s-ig „fut”)");
   });
 
@@ -215,7 +217,9 @@ describe("LoopClock — a játék jelzője az igazság (review #504 L1)", () => 
     const clock = new LoopClock();
     assert.equal(clock.frame(1000, 1000), null, "első képkocka");
     assert.equal(clock.frame(1016, 1016), 16);
-    assert.equal(clock.frame(9516, 9516), null, "8,5 s-os rés");
+    // SPEC-VÁLTOZÁS (GPT-vak review #504 L1): a szünetet a hurok újraindulása jelzi (`restarted`), nem a köz hossza — a bemenet a
+    // valódi játék jelét kapja; az állítás változatlan.
+    assert.equal(clock.frame(9516, 9516, true), null, "8,5 s-os rés");
   });
 });
 
@@ -255,5 +259,64 @@ describe("LoopClock — befagyott hurok (review #504 vak L1)", () => {
     clock.frame(1000, 1000);
     clock.rendered(1005);
     assert.equal(clock.running(1006, false), false);
+  });
+});
+
+/**
+ * GPT-vak review #504 (4dbc3a8b) L1 / L2 — a mérőszám helyessége. L1: az élő hurok lassú (≥ 1 s-os) képkockái is számítanak; a
+ * szünetet a hurok ÚJRAINDULÁSA jelzi (a játék életciklusa), nem a köz hossza; a mintaablak ~4 s eltelt idő. L2: a frissesség csak
+ * BEFEJEZETT kirajzolásból számol — a kivétellel megszakadt, újra és újra ütemezett képkocka nem tartja „fut”-on a jelzőt.
+ */
+describe("FPS lassú, élő hurkon és megszakadó rajzolásnál (GPT-vak review #504 L1, L2)", () => {
+  it("L1: állandó 1200 ms-os, élő képkockák mind bekerülnek a statisztikába", () => {
+    const clock = new LoopClock();
+    let t = 1000;
+    clock.frame(t, t, true);
+    for (let i = 0; i < 6; i++) {
+      t += 1200;
+      assert.equal(clock.frame(t, t), 1200, `${i}. lassú képkocka`);
+    }
+  });
+
+  it("L1: gyors, majd lassú szakasz — a 4 s-os ablak a lassú FPS-t és 1% low-t mutatja, a régi gyors minták kiesnek", () => {
+    const w = new FrameWindow();
+    let t = 1000;
+    for (let i = 0; i < 120; i++) {
+      t += 16.7;
+      w.push({ dt: 16.7, js: 1, render: 1, at: t });
+    }
+    for (let i = 0; i < 5; i++) {
+      t += 1200;
+      w.push({ dt: 1200, js: 1, render: 1, at: t });
+    }
+    const s = w.summary(t)!;
+    assert.ok(s.fpsAvg < 1, `fpsAvg = ${s.fpsAvg}`);
+    assert.ok(s.fpsLow1 <= 1000 / 1200 + 1e-6, `fpsLow1 = ${s.fpsLow1}`);
+  });
+
+  it("L1: minta-elöregedés — 4 s után új képkocka nélkül nincs (elavult) FPS", () => {
+    const w = new FrameWindow();
+    w.push({ dt: 16.7, js: 1, render: 1, at: 1000 });
+    assert.ok(w.summary(1500));
+    assert.equal(w.summary(5200), null);
+  });
+
+  it("L1: a szünet utáni első képkocka (a hurok újraindult) nem számít", () => {
+    const clock = new LoopClock();
+    clock.frame(1000, 1000, true);
+    assert.equal(clock.frame(1016, 1016), 16);
+    assert.equal(clock.frame(9516, 9516, true), null);
+  });
+
+  it("L2: a képkockák elindulnak, de 3,5 s óta egy sem fejeződik be (a rajzolás kivételt dob) → „áll”", () => {
+    const clock = new LoopClock();
+    let t = 1000;
+    for (let i = 0; i < 20; i++, t += 16.7) {
+      clock.frame(t, t);
+      clock.rendered(t + 3);
+    }
+    const lastOk = t;
+    for (; t < lastOk + 3600; t += 16.7) clock.frame(t, t); // újraütemezett, de megszakadó képkockák
+    assert.equal(clock.running(t, true), false);
   });
 });

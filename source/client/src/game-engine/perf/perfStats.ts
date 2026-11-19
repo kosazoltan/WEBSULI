@@ -9,7 +9,11 @@
 export { perfEnabledFrom } from "./perfFlag";
 
 /** Egy képkocka mért idői ms-ban: `dt` az előző képkockától, `js` a frissítés, `render` a `renderer.render` hívás. */
-export type FrameSample = { dt: number; js: number; render: number };
+/** `at`: a képkocka időbélyege (ms, ugyanazon az órán, mint a `summary(nowMs)`); nélküle a minta nem öregszik. */
+export type FrameSample = { dt: number; js: number; render: number; at?: number };
+
+/** A mintaablak hossza (terv 6. szakasz: „az utolsó ~4 s ablakából”) — GPT-vak review #504 L1: eltelt idő, nem elemszám. */
+export const FRAME_WINDOW_MS = 4000;
 
 export type FrameSummary = {
   frames: number;
@@ -30,6 +34,8 @@ export class FrameWindow {
   private readonly js: Float32Array;
   private readonly render: Float32Array;
   private readonly sorted: Float32Array;
+  private readonly at: Float64Array;
+  private readonly picked: number[] = [];
   private head = 0;
   private count = 0;
 
@@ -38,6 +44,7 @@ export class FrameWindow {
     this.js = new Float32Array(capacity);
     this.render = new Float32Array(capacity);
     this.sorted = new Float32Array(capacity);
+    this.at = new Float64Array(capacity);
   }
 
   get size(): number {
@@ -48,6 +55,7 @@ export class FrameWindow {
     this.dt[this.head] = s.dt;
     this.js[this.head] = s.js;
     this.render[this.head] = s.render;
+    this.at[this.head] = s.at ?? Number.NaN;
     this.head = (this.head + 1) % this.capacity;
     if (this.count < this.capacity) this.count += 1;
   }
@@ -57,15 +65,26 @@ export class FrameWindow {
     this.count = 0;
   }
 
-  summary(): FrameSummary | null {
-    const n = this.count;
+  /**
+   * Összegzés. `nowMs` megadásával csak az utolsó `FRAME_WINDOW_MS` képkockái számítanak (időbélyeg nélküli minta mindig);
+   * ha az ablakban nincs minta, `null` — elavult FPS nem jelenik meg.
+   */
+  summary(nowMs?: number): FrameSummary | null {
+    const picked = this.picked;
+    picked.length = 0;
+    for (let i = 0; i < this.count; i++) {
+      const a = this.at[i]!;
+      if (nowMs === undefined || Number.isNaN(a) || a >= nowMs - FRAME_WINDOW_MS) picked.push(i);
+    }
+    const n = picked.length;
     if (n === 0) return null;
     let dtSum = 0;
     let jsSum = 0;
     let renderSum = 0;
-    for (let i = 0; i < n; i++) {
+    for (let k = 0; k < n; k++) {
+      const i = picked[k]!;
       const d = this.dt[i]!;
-      this.sorted[i] = d;
+      this.sorted[k] = d;
       dtSum += d;
       jsSum += this.js[i]!;
       renderSum += this.render[i]!;
@@ -170,21 +189,29 @@ export class LoopClock {
   private lastNow: number | null = null;
   private lastFrameAt = 0;
   private lastDt = 0;
-  /** Az utolsó néhány képkocka-köz (ms, egyenként legfeljebb 5000) — a lassú, de élő hurok frissességi küszöbéhez. */
+  /** Az utolsó néhány KIRAJZOLÁSOK közti köz (ms, egyenként legfeljebb 5000) — a lassú, de élő hurok frissességi küszöbéhez. */
   private readonly intervals: number[] = [];
+  /** A hurok (újra)indulása óta volt-e kirajzolás (a szünetet átívelő köz nem számít). */
+  private renderedSinceRestart = false;
+  /** A mostani futás (az utolsó (újra)indulás) első képkocka-kezdete — az első kirajzolásig ez a frissesség alapja. */
+  private runStartAt = 0;
   /** A legutóbbi KIRAJZOLT képkocka vége (`performance.now()`); 0 = még nem volt. */
   private lastRenderedAt = 0;
 
-  /** Képkocka eleje: `now` a rAF-időbélyeg, `wallMs` a `performance.now()`. Visszaadja a statisztikába számító dt-t (vagy null-t). */
-  frame(now: number, wallMs: number): number | null {
+  /**
+   * Képkocka eleje: `now` a rAF-időbélyeg, `wallMs` a `performance.now()`, `restarted`: a hurok most indult (újra) — a játék
+   * életciklusa (szünet / folytatás) jelzi, nem a köz hossza (GPT-vak review #504 L1). Visszaadja a statisztikába számító dt-t.
+   */
+  frame(now: number, wallMs: number, restarted = false): number | null {
     let counted: number | null = null;
+    if (restarted) {
+      this.lastNow = null;
+      this.renderedSinceRestart = false;
+    }
+    if (this.lastNow === null) this.runStartAt = wallMs;
     if (this.lastNow !== null) {
       const dt = now - this.lastNow;
-      const isFrame = dt > 0 && dt < 1000;
-      if (dt > 0) {
-        this.intervals.push(Math.min(dt, MAX_INTERVAL_MS));
-        if (this.intervals.length > INTERVAL_HISTORY) this.intervals.shift();
-      }
+      const isFrame = dt > 0;
       this.lastDt = isFrame ? dt : 0;
       if (isFrame) counted = dt;
     }
@@ -195,20 +222,24 @@ export class LoopClock {
 
   /** Egy képkocka kirajzolása véget ért (`afterRender`). */
   rendered(wallMs: number): void {
+    if (this.renderedSinceRestart && this.lastRenderedAt > 0 && wallMs > this.lastRenderedAt) {
+      this.intervals.push(Math.min(wallMs - this.lastRenderedAt, MAX_INTERVAL_MS));
+      if (this.intervals.length > INTERVAL_HISTORY) this.intervals.shift();
+    }
     this.lastRenderedAt = wallMs;
+    this.renderedSinceRestart = true;
   }
 
   /**
-   * Fut-e a hurok. A játék jelzője (`gameRunning`) a szándék; „fut” csak akkor, ha emellett friss képkocka is van (review #504 vak
-   * L1: befagyott rAF vagy a `render()` előtti kivétel mellett a szándék igaz, de semmi nem történik). Frissesség: a legutóbbi
-   * képkocka KEZDETE vagy kirajzolásának VÉGE közül a későbbi óta eltelt idő (2. vak kör M2: GPU-kötött huroknál a kirajzolás a köz
-   * elején véget ér, a főszál a köz többi részében tétlen; CPU-kötöttnél a kezdet számít). Küszöb: legalább 3 s, lassú, élő huroknál
-   * az utolsó 8 képkocka-köz MAXIMUMÁNAK háromszorosa — így egy élő, ≈ 1 fps-es, vagy egy egyszeri 2,5 s-os képkocka nem ad hamis
-   * „áll”-t, a befagyott hurok (új képkocka-kezdet sincs) pedig legkésőbb néhány másodperc múlva „áll”.
+   * Fut-e a hurok. A játék jelzője (`gameRunning`) a szándék; „fut” csak akkor, ha emellett friss BEFEJEZETT kirajzolás is van.
+   * Befagyott rAF, a `render()` előtti vagy alatti kivétel (a hurok újraütemez, de semmi nem rajzolódik ki — GPT-vak review #504
+   * L2) így „áll”. Küszöb: legalább 3 s (a 2,5 s-os élő képkocka nem lehet hamis „áll” — orkesztrátori döntés 2026-11-19), lassú,
+   * élő huroknál az utolsó 8 kirajzolás-köz MAXIMUMÁNAK háromszorosa (2. vak kör M2: egy ≈ 1 fps-es élő hurok sem villog).
    */
   running(wallMs: number, gameRunning?: boolean): boolean {
     if (gameRunning !== undefined) {
-      const last = Math.max(this.lastFrameAt, this.lastRenderedAt);
+      // Az első kirajzolásig a futás első képkocka-kezdete számít (rögzített pont — a megszakadó újrapróbálkozások nem frissítik).
+      const last = this.renderedSinceRestart ? this.lastRenderedAt : this.runStartAt;
       if (!gameRunning || last === 0) return false;
       const longest = this.intervals.length ? Math.max(...this.intervals) : 0;
       return wallMs - last < Math.max(FRESH_FLOOR_MS, 3 * longest);

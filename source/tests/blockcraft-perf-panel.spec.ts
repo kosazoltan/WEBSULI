@@ -274,6 +274,17 @@ for (const view of [
       y: tb.y + tb.height / 2,
     });
     expect(hitId, "a szövegdoboz átengedi az érintést").not.toBe("bc-perf-text");
+    // A mérősorok ténylegesen olvashatók (GPT-vak review #504 L3): a „Számok” nézetben a teljes szöveg kifér (nincs levágás),
+    // és a sorok magassága legalább 7 sornyi (a panel 7 mérősora).
+    await page.getByTestId("bc-perf-view").click();
+    await expect(page.getByTestId("bc-perf-view")).toHaveText("Kapcsolók");
+    const fit = await page.getByTestId("bc-perf-text").evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight, lh: parseFloat(getComputedStyle(el).lineHeight) }));
+    expect(fit.sh, `a mérősorok kiférnek (scrollHeight ${fit.sh}, clientHeight ${fit.ch})`).toBeLessThanOrEqual(fit.ch + 1);
+    expect(fit.ch, "legalább 7 sornyi magas").toBeGreaterThanOrEqual(7 * fit.lh);
+    const tbr = (await page.getByTestId("bc-perf-text").boundingBox())!;
+    expect(tbr.y + tbr.height, "a szöveg a nézetben").toBeLessThanOrEqual(view.height);
+    await page.getByTestId("bc-perf-view").click();
+    await expect(page.getByTestId("bc-perf-view")).toHaveText("Számok");
     // Az összecsukó gomb teljes egészében a nézetben van, és működik.
     const collapse = page.getByTestId("bc-perf-collapse");
     const cb = (await collapse.boundingBox())!;
@@ -330,4 +341,44 @@ test("élő, lassú (GPU-kötött) hurkon a panel nem villog „áll”-ra (nagy
   const frames = samples[samples.length - 1]!.frames - samples[0]!.frames;
   expect(frames, "a hurok élt a mintavétel alatt").toBeGreaterThan(3);
   expect(falseStops.length, `hamis „áll”: ${falseStops.slice(0, 5).map((s) => Math.round(s.t - samples[0]!.t)).join(", ")} ms`).toBe(0);
+});
+
+test("kapcsoláskor a futó GPU-próba megszakad — nincs vegyes beállításból számolt eredmény (GPT-vak review #504 L4)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  const result = await page.evaluate(async () => {
+    const api = (window as unknown as { __websuliPerf: { runGpuProbe(n: number): Promise<number | null>; controls: { set(p: Record<string, unknown>): void } } }).__websuliPerf;
+    const probe = api.runGpuProbe(500);
+    await new Promise((r) => setTimeout(r, 300));
+    api.controls.set({ resolution: 0.5 });
+    return probe;
+  });
+  expect(result, "a félbeszakadt próba nem ad eredményt").toBeNull();
+  expect((await snapshot(page)).toggles.resolution).toBe(0.5);
+  await expect(page.getByTestId("bc-perf-text")).toContainText("próba –");
+});
+
+test("élő, ≈ 0,8 fps-es hurkon a panel FPS-e is lassú (a lassú képkockák nem esnek ki — GPT-vak review #504 L1)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  // Minden képkocka 1,2 s-mal később indul (a rajzolás megmarad) — élő, súlyosan akadozó hurok.
+  await page.evaluate(() => {
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb: FrameRequestCallback) => window.setTimeout(() => raf(cb), 1200) as unknown as number;
+  });
+  // A Köd váltása üríti a mintaablakot; utána csak lassú képkockák jönnek.
+  await page.getByTestId("bc-perf-fog").click();
+  const before = (await snapshot(page)).renderedFrames;
+  await page.waitForTimeout(6500);
+  const s = await snapshot(page);
+  expect(s.renderedFrames - before, "a hurok él").toBeGreaterThanOrEqual(3);
+  expect(s.running, "élő hurok: fut").toBe(true);
+  expect(s.frame, "van mért képkocka").not.toBeNull();
+  const f = s.frame as unknown as { fpsAvg: number; fpsLow1: number };
+  expect(f.fpsAvg, `FPS ${f.fpsAvg}`).toBeLessThan(2);
+  expect(f.fpsLow1, `1% low ${f.fpsLow1}`).toBeLessThan(2);
 });

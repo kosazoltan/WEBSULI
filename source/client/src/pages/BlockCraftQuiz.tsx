@@ -2346,7 +2346,8 @@ export default function BlockCraftQuiz() {
       rafRef.current = requestAnimationFrame(step);
       const last = lastTRef.current ?? now;
       const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000));
-      perf?.frameStart(now);
+      // A hurok (újra)indulása (szünet / folytatás) a `lastTRef === null` — a panel ebből tudja, hogy a rés nem képkocka (L1).
+      perf?.frameStart(now, lastTRef.current === null);
       // A hurok (újra)indulásának első képkockáján is mérünk: a vászon szülője ekkor válik láthatóvá.
       if (sizeDirty || !sizeObserver || lastTRef.current === null) {
         sizeDirty = false;

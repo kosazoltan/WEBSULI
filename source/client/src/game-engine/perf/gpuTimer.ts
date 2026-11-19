@@ -33,7 +33,7 @@ export type GpuTimer = {
   end(): void;
   /** A minták átlaga ms-ban; null, ha nincs minta. */
   average(): number | null;
-  /** A minták eldobása (kapcsoló után a régi és az új költség ne keveredjen). */
+  /** A minták ÉS a függő mérések eldobása (kapcsoló után a régi és az új költség ne keveredjen). */
   clearSamples(): void;
   /** Kontextusvesztés: a függő lekérdezések és a régi minták eldobva (a `gl` hívása nélkül — a kontextus halott). */
   contextLost(): void;
@@ -113,6 +113,8 @@ export function createGpuTimer(gl: GpuTimerGl | null): GpuTimer {
       return samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : null;
     },
     clearSamples() {
+      // GPT-vak review #504 L4: a kapcsoló előtt indult (függő / nyitott) mérések a régi beállítást mérik — eldobjuk őket is.
+      dropQueries(gl !== null && !gl.isContextLost());
       samples.length = 0;
     },
     contextLost() {

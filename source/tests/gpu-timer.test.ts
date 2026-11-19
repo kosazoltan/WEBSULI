@@ -174,3 +174,19 @@ describe("createGpuTimer — kivétel a render() alatt (review #504 L5)", () => 
     assert.ok(timer.pendingCount <= 1);
   });
 });
+
+describe("createGpuTimer — kapcsoláskor nincs vegyes minta (GPT-vak review #504 L4)", () => {
+  it("a clearSamples() a függő (a váltás előtt indult) lekérdezéseket is eldobja", () => {
+    const f = fakeGl();
+    const timer = createGpuTimer(f.gl);
+    frame(timer);
+    frame(timer); // két függő mérés a régi beállítással (2 ms)
+    timer.clearSamples(); // kapcsoló
+    f.state.nextNs = 5_000_000;
+    for (let i = 0; i < 6; i++) {
+      frame(timer);
+      f.finishAll();
+    }
+    assert.equal(timer.average(), 5, "csak az új beállítás mérései");
+  });
+});
