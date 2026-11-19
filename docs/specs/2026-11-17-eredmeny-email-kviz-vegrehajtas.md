@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet) kész, E34 a DB-kör zöldjére vár; T16 (gépi vak ellenőrzés, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -232,6 +232,24 @@ Leletenként előbb BUKÓ teszt (`tests/lesson-result-email-partial-db.integrati
 - Javítás (`server/lesson-result-email.ts`, `sendLessonResult`): a kapu hibájának `catch` ágában `retry` esetén egy újrapróba
   (`sendLessonResult(input, false, gate)`, `retryDelayMs` múlva), a napló „— újrapróbálja” utótaggal.
 - Utána: `gate:stage`, új fej; a vak visszanézés és a `gate:push` (zárral) az orkesztrátortól.
+
+## T16 — gépi vak ellenőrzés (GPT-6.2 Sol) leletei (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R20–R23)
+
+Leletenként előbb BUKÓ teszt, utána a javítás.
+- **R20 (L1)** `client/src/lesson-runtime/resultReport.ts`: `sending` ref → az úton lévő kör azonosítója; a lezárulás egy állapot-
+  számlálót léptet (az effekt függősége), így a beküldő újra kiértékel. A `result-report-complete.test.ts` két forrásmintája a
+  szabályváltozást követi. Böngészőteszt: az első kör végleges válaszát a csonk visszatartja, közben új kör 25 válasszal → a második
+  végleges kérés gomb nélkül megérkezik; felengedés után sincs harmadik.
+- **R21 (L2)** `server/lesson-result-email.ts`: körönkénti pillanatkép-változat (`partialVersions`); `schedulePartial` a megtartott
+  állapot változatát írja; a kapu a saját változatát veti össze az aktuálissal. DB-teszt: egyszeri kapuhiba → újabb (4 válaszos)
+  pillanatkép hosszabb késleltetéssel → az eredeti újrapróba idején nincs levél → csak a 4 válaszos megy ki.
+- **R22 (L4)** ugyanott: a `waiting` beolvasása, a `conflict` döntés és a vendég-attribúció az `earlier` lekérdezés UTÁN. Teszthez:
+  `setPartialIntakeHook` (az utolsó várakozás után hívódik). DB-teszt: a vendég kérése a horogban áll, amíg az igazolt tanuló pillanatképe
+  ütemeződik → a vendég `conflict: true`, a levél az igazolt tanulóé.
+- **R23 (L3)** `client/src/lib/queryClient.ts` `sendKeepalive`: a 403 utáni új token után `resultApiReady()` nélkül nincs ismétlés.
+  Böngészőteszt: 403 után jelzés nélküli új token → egyetlen (elutasított) pillanatkép-kérés, a második nem megy.
+- **L5:** kanban-jegy.
+- Utána: `gate:stage`; a nehéz körök (reprodukció, DB, böngésző, `gate:push`) a zársorban.
 
 ## Kész-feltétel
 
