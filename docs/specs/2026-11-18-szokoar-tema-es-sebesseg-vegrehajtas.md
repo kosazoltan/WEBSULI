@@ -83,6 +83,12 @@ indítási cél a telefonos nézetben egy mérésben (250 ms) még nem teljesül
    f. `build_all.py`: normalizált tartalmi lenyomat a fájlnévben, 3 futással igazolva.
    g. Mérés nyugodt gépen 5–5-ször; képek (`c5-*`); kapuk.
 
+11. **Vak ellenőrzés javításai (terv `docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md` 7.6):** a bukó tesztek külön commitban a
+    javítás előtt (`tsunami-play.spec.ts`: teljes test, vezérlők, felső sáv; `tsunami-water.test.ts`: többletidő, ablak;
+    `tsunami-models-budget.test.ts`: háromszög a fájlokból), majd a javítások (`TsunamiEscapeEnglish.tsx`, `TsunamiScene3D.tsx`,
+    `lib/tsunami/water.ts`, `lib/tsunami/pacing.ts`), mérés nyugodt gépen, képek (álló 390×844 és 360×640, alacsony / közepes /
+    magas víz), kapuk.
+
 ## Elfogadás
 - A víz MINDIG látszik, a menedék MINDIG a képen van; jó válasznál a víz képi szintje 0,5 s-on belül csökken, rossznál nő.
 - A kérdés nem állítja meg a világot (a víz lassítva emelkedik); a válaszgombok ≥ 48 px, nem takarják a figurát és a tárcsát.

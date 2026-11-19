@@ -282,3 +282,19 @@ Sorrend (a lagg a tulajdonos fő panasza, ezért az előre kerül):
 6. **Blender-kimenet:** bájtazonosság, vagy ha az exportáló miatt nem megy, normalizált tartalmi lenyomat a fájlnévben —
    igazolva több futással.
 7. Meta-mérő a Szökőárra; a friss főág beolvasztása, a Brain Rot `pacing` és a determinizmus-őr összhangja.
+
+### 7.6 A vak, hibakereső ellenőrzés javításai (ítélet: NEM, fej c2da722a; 2026-11-19)
+
+Minden pont előbb bukó teszttel.
+- **B1:** a takarás-döntés a figura ténylegesen kirajzolt méretével számol (a jelenet vetített befoglaló dobozából, a talpponthoz
+  képest), nem 44 px-es állandóval; a tesztek a teljes testet mérik (5 × 7 rács a fej tetejéig) minden nézetben, az oldalra
+  mozgatós esetben 360×640-en is, x = 8 / 50 / 92 %, víz 50 %.
+- **K1:** a többletidőben csak a víz áll (a mag `holdWater` jelzője), a mozgás, a sodrás és a zóna fut.
+- **K2:** a modellek aszinkron fordulnak (`compileAsync`, a végleges jelenet fényeivel), és egy lépésben kerülnek a jelenetbe;
+  mérés nyugodt gépen (≤ 100 ms a kérdés megjelenésekor, ≤ 200 ms indításkor, 4× CPU).
+- **K3:** álló nézetben a taraj a felső sáv jelzői alatt, a vízfelszín fölött mindig látszik; a hegy keskenyebb.
+- **K4 / KICSI 5:** a vezérlők (tárcsa, Sprint — a tényleges dobozuk, bármelyik oldalon) és a felső sáv is akadály; a kép-eltolás
+  kérdés nélkül is követ, és ha a nulla eltolás is szabad, visszaáll.
+- **KICSI:** hangkontextus mozdulathoz kötve (nincs konzol-figyelmeztetés), az Indításkor is; részleges modellhibánál nincs
+  kettőzés; a modell-keret őre a GLB-kből számol; az olvasási ablak a director saját bemutatásán (helyes statisztika); a
+  mérési képek tömörítése.
