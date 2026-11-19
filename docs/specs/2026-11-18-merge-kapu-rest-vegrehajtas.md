@@ -26,11 +26,22 @@ Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`. Ág: `fix/merge-kapu-rest` (a 
 Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`, „Javítókör a vak, hibakereső ellenőrzés után”. Minden pont előbb bukó teszttel.
 
 7. `git merge origin/main` (rebase / force nincs).
-8. K4, K6, K1: `prFromRest` — szerző (`user.login`, `user.type`, `author_association`) a leírásra és a kommentekre,
-   `previous_filename`; `threadsFromCcr` — elemenként kötelező logikai `resolved`, üres lista → kivétel; új tiszta függvények:
-   `trustedAuthor`, `verdictTexts`, `rootReviewComments`, `checkRunsFromPages`, `threadsFromGraphqlPages`.
+8. K4, K6, K1: `prFromRest` — `previous_filename`; `threadsFromCcr` — elemenként kötelező logikai `resolved`, üres lista → kivétel;
+   új tiszta függvények: `rootReviewComments`, `checkRunsFromPages`; a GraphQL-szálak lapozása a `collectMergeData`-ban.
 9. K3: `collectMergeData({ exec, root, n, log, sleep })` — a `main()` adatgyűjtése, tesztelhető hamis `gh`-val; a `main()` ezt hívja.
-10. K2: az ítélet-lépés a `verdictTexts` szűrt szövegeiből; a PR-leírás önbevallott ítélet-sorának cseréje a valódi vak ítéletre
-    (a szöveg a scratchpadban készül; a PR szerkesztése a gazda / tulajdonos jóváhagyásával).
-11. `node --test scripts/qa/gates/pre-merge-gate.test.mjs scripts/qa/gates/lib.test.mjs`; mutációs ellenpróba (másolaton; 16 / 17 megfogva — a `main()` egysoros bekötése a `mergeVerdict`-re teszteletlen);
-    `npm run gate:stage`; `npm run gate:push`; vak visszanézés.
+10. (Első kör: K2 szerző-szűrés — a második vak kör V1 döntése szerint kivezetve.) A PR-leírás önbevallott ítélet-sorát a gazda
+    cseréli a feltöltés előtt (a szöveg a scratchpadban: `body-513-uj.md`).
+11. Első kör ellenőrzése: 20 teszt, mutáció 16 / 17; szakasz- és push-kapu zöld (`469b6cda`).
+
+## Második javítókör (2026-11-19; vak ítélet a `469b6cda` fejre: IGEN, FELTÉTELLEL, V1–V6)
+
+Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`, „K2 → V1” és az utána álló pontok.
+
+12. V1: `mergeVerdict(pr, evidence, blind)` — ítélet KIZÁRÓLAG helyi bizonyítékból (`texts: []`); a `trustedAuthor` /
+    `verdictTexts` / `TRUSTED_ASSOCIATIONS` és a PR-leírás / kommentek leképezése kikerül; a kommentlistát a kapu nem kéri le.
+13. V2: `mergeSteps({ data, evidence, external, guard, rt, cfg })` — a `main()` lépés-összerakása, a `cfg.blindReview` továbbadásával;
+    teszt: a leírás ítélet-sora bizonyíték nélkül FAIL, helyi IGEN PASS, helyi NEM FAIL.
+14. V3: üres CCR-lista csak a REST 0 gyökérkommentje mellett (`threadsFromCcr(list, { allowEmpty })`). V4: hiányzó `total_count` → FAIL.
+15. V6: `docs/minosegkapuk.md` „Merge előtt” sora és az „Ismert korlátok” ítélet-pontja. V5: jegy (a szöveg a scratchpadban).
+16. Célzott tesztek (`pre-merge-gate.test.mjs`, `lib.test.mjs`); mutációs ellenpróba (19 / 19); szakasz-kapu; 05:30 UTC után a
+    push-kapu; vak visszanézés.

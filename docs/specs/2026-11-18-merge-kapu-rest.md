@@ -63,20 +63,35 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
 ## Javítókör a vak, hibakereső ellenőrzés után (2026-11-19; ítélet a `c96e4801` fejre: IGEN, FELTÉTELLEL, K1–K6)
 
 - **K1 — CCR-szálak:** a `ccr/review_threads` hívás is `--paginate --slurp` + `flattenPages`; nem lista, üres vagy ismeretlen alakú
-  válasz (bármely elemnél hiányzó / nem logikai `resolved`) → kivétel → FAIL. Az üres lista sem igazol (amíg nincs mért CCR-minta,
-  a felhős szál-út nem adhat PASS-t üres listára — ekkor a szálakat GraphQL-ről kell igazolni). REST-keresztellenőrzés: a
+  válasz (bármely elemnél hiányzó / nem logikai `resolved`) → kivétel → FAIL. Az üres lista csak a V3 szerint fogadható el. REST-keresztellenőrzés: a
   `pulls/N/comments` (lapozva) `in_reply_to_id` nélküli gyökérkommentjeinek száma ≤ a CCR-szálak száma, különben FAIL (csonka).
-- **K2 — ítélet csak megbízható szerzőtől:** a PR-leírás és a kommentek közül csak az számít ítéletforrásnak, amelynek szerzője a
-  REST szerint `author_association` ∈ {OWNER, MEMBER, COLLABORATOR}, és nem bot (`user.type` ≠ `Bot`, a név nem `[bot]`-ra
-  végződik). Más szerző ítélet-sora figyelmen kívül marad (nem írhat felül egy NEM ítéletet sem).
-- **Ítélet-módok (összehangolás a vak ellenőr futtatójával, K5):**
+- **K2 → V1 (második vak kör, orkesztrátori döntés 2026-11-19):** a PR-leírás és a PR-kommentek SEMMILYEN módban nem
+  ítéletforrások: minden ügynök (fejlesztő, ellenőr, orkesztrátor, felhős munkamenet) a tulajdonos fiókjával ír, így a szerző-szűrés
+  (`author_association`) az önigazolást nem akadályozza, a leírás szerzője pedig mindig a fejlesztő. A merge-kapu ítéletet KIZÁRÓLAG
+  helyi, gépi bizonyítékból fogad el. A korábbi szerző-szűrő kód kikerült (nincs halott út); a PR-kommenteket a kapu nem is kéri le.
+- **Ítélet-módok:**
 
   | Mód | Mikor | Elfogadott ítéletforrás |
   |---|---|---|
-  | alap | `gates.config.json` `blindReview.exclusive` KI (ma) | a helyi `review-<fej>.json` (`record-review`), ennek hiányában a megbízható szerzőtől származó PR-szöveges sor (K2) |
-  | szigorú („required”) | `blindReview.exclusive` BE (csak a küszöb és tulajdonosi jóváhagyás után) | KIZÁRÓLAG a futtató által igazolt helyi bizonyíték; PR-szöveg soha — felhős munkamenetből csak akkor vonható össze, ha a futtató ott futott és helyben rögzített |
+  | alap | `gates.config.json` `blindReview.exclusive` KI (ma) | KIZÁRÓLAG a helyi `review-<fej>.json` (`record-review`) a jelenlegi fejre. Maradó kockázat: a fejlesztő munkamenet a `record-review`-val maga is írhat ilyen rekordot — az önigazolást ebben a módban csak a folyamat (vak, hibakereső alügynök) zárja ki, gép nem. |
+  | szigorú („required”) | `blindReview.exclusive` BE (csak a küszöb és tulajdonosi jóváhagyás után) | KIZÁRÓLAG a futtató (`npm run gate:blind-review`) által igazolt helyi rekord (`reviewer: blind-review`, egyező modell). |
 
-  A szigorú mód kódja a vak ellenőr futtatójának ágán érkezik; ez a PR az alap mód szerzőszűrését adja, a kettő egymásra épül.
+  Mindkét módban: felhős munkamenetből összevonás nem lehetséges (helyi bizonyíték nincs) — fail-closed, összhangban a tulajdonos
+  döntésével, hogy a felhős munkamenetek nem töltenek fel és nem vonnak össze. A `mergeVerdict(pr, evidence, blind)` a `blind`
+  paramétert a `resolveVerdict`-nek adja tovább; a lépés-összerakás (`mergeSteps`) tesztelt, a `main()` csak ezt hívja.
+- **Ütközés-feloldás a két `vak` ággal (V2):** a `chore/vak-hibakereso-ellenor` és a `chore/vak-ellenor-deepseek` a
+  `pre-merge-gate.mjs`-ben a `resolveVerdict({ head, blind: ctx.cfg.blindReview, evidence, texts: [pr.body, …] })` hívást és a külső
+  (Gemini) lépés törlését hozza. Feloldás: (1) a #513 `mergeSteps` / `mergeVerdict` szerkezete marad; (2) a `blind` a
+  `mergeSteps`-ben a `cfg.blindReview`-ból jön (ez már így van) — a szigorú mód így érvényesül; (3) a `texts` SOHA nem kapja meg a
+  PR-leírást / kommenteket (V1) — a vak ág `texts: [pr.body, …]` része elvetendő; (4) a külső (Gemini) lépés törlése a `decideMerge`-
+  ből átvehető, ez a #513-at nem érinti. Ellenőrzés a feloldás után: a `pre-merge-gate.test.mjs` „V1” és „V2” tesztje zöld, és a vak
+  ág saját szigorú módú tesztje is (a `resolveVerdict` ott a `blind`-ot érvényesíti).
+- **V3:** üres CCR-lista csak akkor fogadható el (nincs szál), ha a REST `pulls/N/comments` 0 gyökérkommentet ad (szál komment nélkül
+  nincs); különben FAIL.
+- **V4:** hiányzó / nem egész `total_count` a check-run listában → FAIL.
+- **V5 (maradó kockázat, jegyre):** a CCR keresztellenőrzése csak darabszámot véd; egy nyitott szál `resolved: true`-ként jelentését
+  vagy kipárnázott listát semmi nem fogja meg — a CCR-válasz valós mintája a repóban nincs. A V1 miatt felhőből úgysem vonható össze
+  PR, így ez ma nem kihasználható.
 - **K3:** az adatgyűjtés (`collectMergeData`) injektált `exec`-kel tesztelt: a lapozó kapcsolók, a tartalékutak sorrendje (GraphQL →
   CCR; védelmi végpont → `branches/main`), a hiba-ágak.
 - **K4:** a PR-válaszban hiányzó / nem szám `changed_files` → kivétel → FAIL (a csonkolás-ellenőrzés nem maradhat ki).
