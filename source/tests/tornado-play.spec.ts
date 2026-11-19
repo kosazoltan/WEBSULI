@@ -17,7 +17,9 @@ type GameWindow = {
     getJunction: () => { ox: number; oz: number; fx: number; fz: number; rx: number; rz: number; line: number; gates: number; spacing: number; frozen: boolean; questionId: number } | null;
     setPlayer: (patch: Record<string, number | boolean>) => void;
     getPlayer: () => { x: number; z: number; heading: number; speed: number };
+    getVehicleScreenBox: () => { left: number; right: number; top: number; bottom: number } | null;
   };
+  __websuliInput?: { renders: Record<string, number> };
 };
 
 // A játékos valódi várakozásai: a director bemelegítése (~10 s), a ≥ 1 s-os olvasás a rögzítés előtt (J7b döntések 25.),
@@ -54,6 +56,27 @@ async function startPlaying(page: Page): Promise<void> {
 
 const probe = (page: Page) => page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.probe!());
 
+/** WCAG kontraszt egy elem kiszámolt szöveg- és háttérszíne között (a háttér tömör — KICSI 2). */
+async function contrastOf(page: Page, testId: string): Promise<{ ratio: number; bg: string; fg: string; alpha: number }> {
+  const r = await page.evaluate((id) => {
+    const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
+    const cs = getComputedStyle(el);
+    const parse = (c: string) => (c.match(/[\d.]+/g) ?? []).map(Number);
+    const lum = ([r, g, b]: number[]) => {
+      const f = (v: number) => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * f(r!) + 0.7152 * f(g!) + 0.0722 * f(b!);
+    };
+    const bg = parse(cs.backgroundColor);
+    const fg = parse(cs.color);
+    const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a);
+    return { ratio: (hi! + 0.05) / (lo! + 0.05), bg: cs.backgroundColor, fg: cs.color, alpha: bg[3] ?? 1 };
+  }, testId);
+  return r;
+}
+
 /** Megvárja az első elágazást (a director bemelegítése után, ~10 mp). */
 async function waitJunction(page: Page): Promise<void> {
   await page.waitForFunction(() => (window as unknown as GameWindow).__websuliGame?.probe?.().questionKind === "junction", undefined, { timeout: 40_000 });
@@ -77,9 +100,21 @@ async function commitIntent(page: Page): Promise<void> {
   throw new Error("a táblák a fék után sem rögzültek");
 }
 
-/** A jármű a rögzült (`gate`.) kapu elé kerül, a kapuvonal felé néz, és a saját fizikájával áthajt rajta. */
+/**
+ * A jármű a rögzült (`gate`.) kapu elé kerül, a kapuvonal felé néz, és a saját fizikájával áthajt rajta.
+ * SPEC-VÁLTOZÁS 2026-11-19 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md, J7b döntések 33.): a középső (egyenes)
+ * kapun áthajtás nem válasz — a középső opciót a gyerek a „2” billentyűvel / koppintással választja, a teszt is így.
+ */
 async function driveThroughGate(page: Page, gate: number): Promise<void> {
   await commitIntent(page);
+  const center = await page.evaluate((g) => {
+    const j = (window as unknown as GameWindow).__websuliTornado!.getJunction()!;
+    return g - (j.gates - 1) / 2 === 0;
+  }, gate);
+  if (center) {
+    await page.keyboard.press(String(gate + 1));
+    return;
+  }
   await page.evaluate((g) => {
     const api = (window as unknown as GameWindow).__websuliTornado!;
     const j = api.getJunction()!;
@@ -151,6 +186,12 @@ for (const viewport of VIEWPORTS) {
       await driveThroughGate(page, correct);
       expect(await shown, "a helyes tábla felvillan").toBeGreaterThanOrEqual(800);
       await expect(page.getByTestId("tornado-chase-msg").or(page.getByTestId("tornado-nitro")).first()).toBeVisible({ timeout: 3_000 });
+      if (await page.getByTestId("tornado-chase-msg").isVisible()) {
+        // KICSI 2: a „Rövidítés — turbó!” felirat kontrasztja ≥ 4,5:1.
+        const tc = await contrastOf(page, "tornado-chase-msg");
+        expect(tc.ratio, `Turbó-felirat kontraszt (${tc.fg} / ${tc.bg})`).toBeGreaterThanOrEqual(4.5);
+        expect(tc.alpha, `a turbó-felirat háttere nem tömör (${tc.bg})`).toBe(1);
+      }
       expect(Number((await probe(page)).questionsCorrect)).toBe(1);
       await expect(page.getByTestId("quiz-feedback")).toHaveCount(0);
     });
@@ -182,6 +223,10 @@ for (const viewport of VIEWPORTS) {
       );
       await driveThroughGate(page, wrong);
       await expect(page.getByTestId("tornado-chase-msg")).toContainText("Kerülő");
+      // KICSI 2: a „Kerülő” felirat kontrasztja ≥ 4,5:1 (14 px, félkövér — nem „nagy szöveg”).
+      const kc = await contrastOf(page, "tornado-chase-msg");
+      expect(kc.ratio, `Kerülő-felirat kontraszt (${kc.fg} / ${kc.bg})`).toBeGreaterThanOrEqual(4.5);
+      expect(kc.alpha, `a Kerülő-felirat háttere nem tömör (${kc.bg}) — a 3D jelenet rontaná a kontrasztot`).toBe(1);
       await expect(page.getByTestId(`tornado-sign-${wrong}`)).toHaveAttribute("data-state", "wrong");
       await expect(page.locator('[role="dialog"]')).toHaveCount(0);
       await shot(page, testInfo, "wrong");
@@ -326,3 +371,126 @@ for (const viewport of VIEWPORTS) {
     });
   });
 }
+
+/* ---- a vak ellenőrzés (J7b döntések 33–36.) böngészős elvárásai ---- */
+
+type Rect = { left: number; right: number; top: number; bottom: number };
+const overlaps = (a: Rect, b: Rect, pad = 0) => a.left < b.right + pad && b.left < a.right + pad && a.top < b.bottom + pad && b.top < a.bottom + pad;
+const rectOf = (page: Page, selector: string) =>
+  page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+  }, selector);
+
+const NAV_VIEWPORTS = [
+  { width: 360, height: 640, touch: true },
+  { width: 390, height: 844, touch: true },
+  { width: 844, height: 390, touch: true },
+  { width: 1366, height: 768, touch: false },
+] as const;
+
+for (const vp of NAV_VIEWPORTS) {
+  test.describe(`J7b vak ellenőrzés után ${vp.width}x${vp.height}`, () => {
+    test.use({ viewport: { width: vp.width, height: vp.height }, hasTouch: vp.touch, isMobile: vp.touch });
+
+    test("K2 / KICSI 1: nyitott elágazás alatt is látszik a céljelző és a horgony-útmutató; a táblák, a sáv és a fajta-címke nem fedik egymást", async ({ page }, testInfo) => {
+      await startPlaying(page);
+      await expect(page.getByTestId("tornado-target-marker")).toBeVisible();
+      await expect(page.getByTestId("tornado-anchor-guidance")).toBeVisible();
+      await waitJunction(page);
+      await page.waitForTimeout(400);
+      // A jármű a tölcsértől elfelé néz (a kezdő irány), így a céljelző nyílnak látszania kell — a kérdés alatt is.
+      await expect(page.getByTestId("tornado-target-marker")).toBeVisible();
+      await expect(page.getByTestId("tornado-target-marker")).toHaveAttribute("data-compact", "1");
+      await expect(page.getByTestId("tornado-anchor-guidance")).toBeVisible();
+      await expect(page.getByTestId("tornado-anchor-guidance")).not.toBeEmpty();
+      const nav = (await rectOf(page, '[data-testid="tornado-question-nav"]'))!;
+      const card = (await rectOf(page, '[data-testid="tornado-quiz"] .play-question-card'))!;
+      const chip = await rectOf(page, '[data-testid="tornado-question-kind"]');
+      expect(nav.left).toBeGreaterThanOrEqual(0);
+      expect(nav.right).toBeLessThanOrEqual(vp.width + 1);
+      expect(nav.bottom).toBeLessThanOrEqual(vp.height + 1);
+      expect(overlaps(nav, card), "a tájékozódó sáv a kérdés-kártyát fedi").toBe(false);
+      for (let i = 0; i < 3; i++) {
+        const sign = (await rectOf(page, `[data-testid="tornado-sign-${i}"]`))!;
+        expect(overlaps(sign, nav), `a(z) ${i + 1}. tábla a tájékozódó sávot fedi`).toBe(false);
+        if (chip) expect(overlaps(sign, chip), `a fajta-címke a(z) ${i + 1}. tábla mögé kerül`).toBe(false);
+      }
+      // A tájékozódó elemek a sávon belül, egymást nem fedve.
+      const mk = (await rectOf(page, '[data-testid="tornado-target-marker"]'))!;
+      const gd = (await rectOf(page, '[data-testid="tornado-anchor-guidance"]'))!;
+      expect(overlaps(mk, gd), "a céljelző és az útmutató fedi egymást").toBe(false);
+      if (chip) {
+        expect(overlaps(chip, mk) || overlaps(chip, gd), "a fajta-címke a tájékozódó elemeket fedi").toBe(false);
+      }
+      await shot(page, testInfo, "junction-nav");
+    });
+  });
+}
+
+for (const viewport of [{ width: 360, height: 640 }, { width: 390, height: 844 }] as const) {
+  test.describe(`J7b K3 ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test("K3: álló nézetben a turbó-kérdés kártyája és gombjai nem takarják a járművet és az előtte lévő utat", async ({ page }, testInfo) => {
+      await startPlaying(page);
+      await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ question: true }));
+      await expect(page.getByTestId("tornado-quiz")).toHaveAttribute("data-mode", "buttons");
+      await page.waitForTimeout(500);
+      const car = (await page.evaluate(() => (window as unknown as GameWindow).__websuliTornado!.getVehicleScreenBox()))!;
+      expect(car.bottom - car.top, "a jármű látszik a képen").toBeGreaterThan(20);
+      // A jármű és előtte egy jármű-magasságnyi (≥ 48 px) út szabad.
+      const ahead = Math.max(48, car.bottom - car.top);
+      const clear: Rect = { left: car.left, right: car.right, top: car.top - ahead, bottom: car.bottom };
+      const card = (await rectOf(page, '[data-testid="tornado-quiz"] .play-question-card'))!;
+      expect(overlaps(card, clear), `a kártya (${Math.round(card.top)}–${Math.round(card.bottom)}) a járművet / az utat takarja (${Math.round(clear.top)}–${Math.round(clear.bottom)})`).toBe(false);
+      const opts = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('[data-testid="tornado-quiz"] .play-question-option')).map((el) => {
+          const r = el.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+        }),
+      );
+      expect(opts.length).toBe(3);
+      for (const [i, o] of opts.entries()) {
+        expect(overlaps(o, clear), `a(z) ${i + 1}. gomb (${Math.round(o.top)}–${Math.round(o.bottom)}) a járművet / az utat takarja`).toBe(false);
+        expect(o.bottom - o.top, "a gomb érintési célja ≥ 48 px").toBeGreaterThanOrEqual(48);
+        expect(o.right).toBeLessThanOrEqual(viewport.width + 1);
+      }
+      await shot(page, testInfo, "turbo-clear");
+      // A gomb továbbra is valódi érintéssel válaszol.
+      const btn = page.getByTestId("tornado-quiz").locator('[data-correct="true"]').first();
+      const box = (await btn.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(page.getByTestId("tornado-nitro")).toBeVisible({ timeout: 3_000 });
+    });
+  });
+}
+
+test.describe("J7b KICSI 6 390x844", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("KICSI 6: a kérdés-sáv levele a lap HUD-renderjétől függetlenül renderel (a memo hatásos)", async ({ page }) => {
+    await startPlaying(page);
+    const renders = () => page.evaluate(() => ({ ...((window as unknown as GameWindow).__websuliInput?.renders ?? {}) }));
+    // Kérdés nélkül (a director bemelegítése alatt): a lap a HUD miatt renderel, a levél nem.
+    expect(Number((await probe(page)).questionOpen)).toBe(0);
+    const a = await renders();
+    await page.waitForTimeout(2000);
+    const b = await renders();
+    const pageNoQ = (b["tornado-play"] ?? 0) - (a["tornado-play"] ?? 0);
+    const leafNoQ = (b["tornado-question-layer"] ?? 0) - (a["tornado-question-layer"] ?? 0);
+    expect(Number((await probe(page)).questionOpen), "a mérés alatt nem nyílt kérdés").toBe(0);
+    expect(pageNoQ, "a lap a HUD miatt renderel").toBeGreaterThanOrEqual(5);
+    expect(leafNoQ, `a levél a lappal együtt renderelt (${leafNoQ} / lap ${pageNoQ})`).toBeLessThanOrEqual(2);
+    // Nyitott elágazás alatt a levél a saját ≈ 10 Hz-es időcsíkja szerint renderel, nem a lap renderjei + a csík szerint.
+    await waitJunction(page);
+    const c = await renders();
+    await page.waitForTimeout(2000);
+    const d = await renders();
+    const pageQ = (d["tornado-play"] ?? 0) - (c["tornado-play"] ?? 0);
+    const leafQ = (d["tornado-question-layer"] ?? 0) - (c["tornado-question-layer"] ?? 0);
+    expect(leafQ, `a levél túl sokat renderelt (${leafQ} / lap ${pageQ})`).toBeLessThanOrEqual(2000 / 100 + 4);
+  });
+});

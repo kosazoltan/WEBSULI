@@ -1192,7 +1192,7 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
           <p className="font-semibold text-white/70 mt-2 mb-1">Mobil</p>
           <p>Bal: kormány · Jobb: gáz, fék, horgony. A gombok az irányítás-móddal oldalt válthatók.</p>
           <p className="font-semibold text-white/70 mt-2 mb-1">Elágazás</p>
-          <p>Koppints a jó táblára (vagy 1–3), vagy fékezz, és hajts át a kapuján.</p>
+          <p>Koppints a jó táblára (vagy 1–3). A bal vagy a jobb tábla kapuján fékezés után át is hajthatsz — egyenesen továbbhajtva nem választasz.</p>
         </div>
       </CardContent>
     </Card>
@@ -1693,7 +1693,12 @@ function PlayScreen(props: {
   // A kérdés-sáv horga a levél-komponensben (`TornadoQuestionLayer`) él: a ≈ 10 Hz-es időcsík ott renderel, a lap csak a
   // kérdés eseményeire (nyílás, kijelzés, lezárás) — a lapszintű időzített újrarenderelés a telefonos akadás forrása.
   // A horog API-ja a `qRef`-ben (a levél minden renderje után frissíti), a lap a `qView` tükrön át renderel.
-  const questionSetup = { config: directorConfig, provider, startBand: adaptiveRef.current.band, seed: runSeedRef.current };
+  // Vak ellenőrzés KICSI 6: a beállítás objektuma memózva — különben minden lap-render új objektumot adna, és a memózott levél
+  // (`TornadoQuestionLayer`) a lap ~9 Hz-es HUD-renderjével együtt rajzolódna újra. A horog a beállítást csak létrehozáskor és
+  // `reset`-kor olvassa (az újrakezdés seedjét / sávját a `reset` kapja), így a memó viselkedést nem változtat.
+  const setupBand = adaptiveRef.current.band;
+  const setupSeed = runSeedRef.current;
+  const questionSetup = useMemo(() => ({ config: directorConfig, provider, startBand: setupBand, seed: setupSeed }), [directorConfig, provider, setupBand, setupSeed]);
   const onQuestionShow = useCallback((p: QuestionPresentation) => driverRef.current?.core.onShow(p), []);
   const onQuestionOutcome = useCallback((o: QuestionOutcome, p: QuestionPresentation) => onOutcomeRef.current(o, p), []);
   const [qView, setQView] = useState<TornadoQuestionView>(EMPTY_QUESTION_VIEW);
@@ -1734,6 +1739,10 @@ function PlayScreen(props: {
   /** A válaszlista magassága (kérdésenként egyszer mérve) és utoljára írt helye — a rajzoló hurok nem olvas layoutot. */
   const answersHRef = useRef(0);
   const answersTopRef = useRef(-1);
+  /** A kérdés-alatti tájékozódó sáv (K2) és a táblák rétege; a sáv teteje a réteghez mérve (−1 = nincs sáv). */
+  const navRowRef = useRef<HTMLDivElement | null>(null);
+  const signLayerRef = useRef<HTMLDivElement | null>(null);
+  const navTopRef = useRef(-1);
   /** A mozgó táblák koppintás-követője (felengedéskor a cél aktuális dobozán belül = válasz; elhúzás nem). */
   const signTracker = useMemo(() => createPointerTapTracker(), []);
 
@@ -1999,6 +2008,32 @@ function PlayScreen(props: {
       /** J7b: a nyitott elágazás geometriája (a böngészős próba ezzel hajt át egy kapun). */
       getJunction: () => (junctionRef.current ? { ...junctionRef.current } : null),
       getPad: () => (padRef.current ? { ...padRef.current } : null),
+      /**
+       * Vak ellenőrzés K3: a jármű vetített doboza a nézetablakban (CSS px) — a böngészős mérő ebből nézi, hogy a kérdés kártyája /
+       * gombjai nem takarják-e a járművet és az előtte lévő utat.
+       */
+      getVehicleScreenBox: () => {
+        const sc = sceneRef.current;
+        const canvas = canvasRef.current;
+        if (!sc || !canvas) return null;
+        const rect = canvas.getBoundingClientRect();
+        const box = new THREE.Box3().setFromObject(sc.vehicle);
+        let left = Infinity;
+        let right = -Infinity;
+        let top = Infinity;
+        let bottom = -Infinity;
+        const v = new THREE.Vector3();
+        for (let k = 0; k < 8; k++) {
+          v.set(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z).project(sc.camera);
+          const x = rect.left + ((v.x + 1) / 2) * rect.width;
+          const y = rect.top + ((1 - v.y) / 2) * rect.height;
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+          top = Math.min(top, y);
+          bottom = Math.max(bottom, y);
+        }
+        return { left, right, top, bottom };
+      },
     };
     const w = window as unknown as { __websuliTornado?: typeof api };
     w.__websuliTornado = api;
@@ -2677,8 +2712,11 @@ function PlayScreen(props: {
       const el = signRefs.current[i];
       if (!el) continue;
       const x = signX[i]!;
-      // A3: a felirat alja a vezérlősáv (tárcsa) fölött marad.
-      const y = Math.max(96, cardBottomRef.current - sizeRef.current.top + 64, answersBottom + 54, Math.min(h - (h < 520 && w > h ? 180 : 130), signY[i]!));
+      // A3: a felirat alja a vezérlősáv (tárcsa) fölött marad; K2 / KICSI 1: a kérdés-alatti tájékozódó sáv (és benne a kérdés
+      // fajtája) fölött is.
+      const navTop = navTopRef.current;
+      const floor = Math.min(h - (h < 520 && w > h ? 180 : 130), navTop > 0 ? navTop - 6 : Number.POSITIVE_INFINITY);
+      const y = Math.max(96, cardBottomRef.current - sizeRef.current.top + 64, answersBottom + 54, Math.min(floor, signY[i]!));
       el.style.visibility = "visible";
       el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
     }
@@ -2871,8 +2909,13 @@ function PlayScreen(props: {
    * fajtája lent középen áll, és gomb-módban a bal felső panel elrejtve — különben a bal gombsor alá kerülne.
    */
   const shortLandscape = typeof window !== "undefined" && window.matchMedia?.("(orientation: landscape) and (max-height: 520px)").matches === true;
-  /** A kérdés fajtájának helye: fekvőn lent középen; állón sáv-módban lent balra, gomb-módban a bal felső panelben. */
-  const chipSpot: "panel" | "bottom-center" | "bottom-left" | null = !qKind ? null : shortLandscape ? "bottom-center" : qKind === "junction" ? "bottom-left" : "panel";
+  /** Álló nézet: a gomb-módú kérdés is fent áll (K3, J7b döntések 35.), ezért ott a bal felső panel helyén a kártya van. */
+  const portrait = typeof window !== "undefined" && window.matchMedia?.("(orientation: portrait)").matches === true;
+  /**
+   * A kérdés fajtájának helye: alacsony fekvőn lent középen; állón (mindkét módban) és asztali sáv-módban lent balra; asztali
+   * gomb-módban (a kártya lent) a bal felső panelben.
+   */
+  const chipSpot: "panel" | "bottom-center" | "bottom-left" | null = !qKind ? null : shortLandscape ? "bottom-center" : qKind === "junction" || portrait ? "bottom-left" : "panel";
   /**
    * J7b döntések 15. (M3): befér-e minden válasz a tábla VALÓDI szélességén (15 px, legfeljebb 2 sor, szóközépi törés
    * nélkül)? Ha nem, a táblák csak a jelet mutatják, és a teljes válaszok a kártya alatti listában látszanak.
@@ -2886,7 +2929,7 @@ function PlayScreen(props: {
     });
   })();
   /** A bal felső panel ott rejtett, ahol a kérdés-sáv kártyája / gombsora alá kerülne (R4: fekvőn a válaszlista helyén is). */
-  const hidePanel = qKind !== null && (shortLandscape ? qKind !== "junction" || compactSigns : qKind === "junction");
+  const hidePanel = qKind !== null && (shortLandscape ? qKind !== "junction" || compactSigns : qKind === "junction" || portrait);
   // K5: a válaszlista magassága kérdésenként egyszer (a rajzoló hurok ebből számol, képkockánként nem olvas layoutot).
   useLayoutEffect(() => {
     answersTopRef.current = -1;
@@ -2912,12 +2955,46 @@ function PlayScreen(props: {
     ? "calc(max(8px, var(--game-safe-bottom)) + 2 * var(--game-action-size) + 12px)"
     : "max(8px, var(--game-safe-bottom))";
   const next = result?.won ? props.next : null;
+  /**
+   * Tájékozódás (G-9b céljelző + horgony-útmutató). Vak ellenőrzés K2 (J7b döntések 34.): a kérdés alatt is látszik — kérdés
+   * nélkül a megszokott helyén, nyitott kérdésnél egy alsó sávban (a kérdés fajtájával egy sorban), a táblák fölötte maradnak.
+   */
+  const navOn = (phase === "seeking" || phase === "approach") && !result;
+  const marker = navOn ? targetMarker({ heading: 0, targetBearing: hud.targetRelDeg, halfFovDeg: 16.5 }) : null;
+  const guidanceText = playerRef.current.anchored
+    ? "Horgony rögzítve — tartsd ki a vihart!"
+    : hud.anchorReady
+      ? touch
+        ? "Jó pozíció! Nyomd a ⚓ gombot!"
+        : "Jó pozíció! Nyomd az F / Horgony gombot!"
+      : hud.distanceKm > bandSpec.anchorBand.max
+        ? "Menj közelebb a tornádóhoz!"
+        : hud.distanceKm < bandSpec.anchorBand.min
+          ? "Túl közel! Állj meg biztonságos sávban."
+          : "Keresd a tornádót, közelítsd meg és állj meg!";
+  const questionNav = navOn && pres !== null;
+  const chipInNav = questionNav && (chipSpot === "bottom-left" || (chipSpot === "bottom-center" && !compactSigns));
+  // A kérdés-alatti sáv teteje a táblák rétegéhez mérve (a rajzoló hurok ennél feljebb tartja a táblákat — KICSI 1 / K2). Csak a
+  // sáv tartalmának változásakor mérünk (nem képkockánként, K5).
+  const viewKey = typeof window !== "undefined" ? `${window.innerWidth}x${window.innerHeight}` : "";
+  useLayoutEffect(() => {
+    const row = navRowRef.current;
+    const layer = signLayerRef.current;
+    navTopRef.current = questionNav && row && layer ? row.getBoundingClientRect().top - layer.getBoundingClientRect().top : -1;
+  }, [questionNav, pres?.id, guidanceText, marker?.visible, marker?.side, chipInNav, compactSigns, viewKey]);
 
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden" data-tornado-play>
       {/* J7b: a gomb-módú kérdés a vezérlősáv (a tárcsa = 2 × akciógomb magas) FÖLÖTT álljon — a közös alapérték csak egy
           akciógombnyit hagy, álló telefonon a gombsor a tárcsára lógott. Lapra szűkített változó-felülírás (a közös CSS-t nem érinti). */}
-      <style>{`.play-question[data-testid="tornado-quiz"] { --play-question-bottom: calc(max(8px, var(--game-safe-bottom)) + 2 * var(--game-action-size) + 16px); }`}</style>
+      {/* Vak ellenőrzés K3 (J7b döntések 35.): álló nézetben a gomb-módú (turbó / horgony) kérdés a képernyő TETEJÉN áll, rövid
+          válaszoknál a három gomb egy sorban a kártya alatt — a jármű és az előtte lévő út szabadon marad (a vezetés nem áll). */}
+      <style>{`.play-question[data-testid="tornado-quiz"] { --play-question-bottom: calc(max(8px, var(--game-safe-bottom)) + 2 * var(--game-action-size) + 16px); }
+@media (orientation: portrait) {
+  .play-question[data-testid="tornado-quiz"][data-mode="buttons"] { justify-content: flex-start; }
+  .play-question[data-testid="tornado-quiz"][data-mode="buttons"][data-count="3"][data-cols="2"] .play-question-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .play-question[data-testid="tornado-quiz"][data-mode="buttons"][data-count="3"][data-cols="2"] .play-question-col[data-side="right"] > :only-child { grid-column: auto; }
+}`}</style>
       {/* Teljes képernyős 3D jelenet: a HUD és a vezérlők áttetszően fölötte (mobiljáték-elrendezés). */}
       <div className="absolute inset-0 bg-black">
         <canvas ref={canvasRef} className="w-full h-full block touch-none" />
@@ -2925,7 +3002,7 @@ function PlayScreen(props: {
       {/* J7b: az elágazás táblái — a feliratuk a tábla vetített helyén (a helyzetet a rajzoló hurok írja, React-állapot nélkül).
           Koppintással is választhatók (mozgó cél: `pointerTapHandlers`, J7b döntések 13.); hosszú válasznál a tábla csak a jelet
           mutatja, a teljes válaszok a kártya alatti listában (15.). */}
-      <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden" data-tornado-signs={pres && qKind === "junction" ? "open" : undefined}>
+      <div ref={signLayerRef} className="absolute inset-0 z-20 pointer-events-none overflow-hidden" data-tornado-signs={pres && qKind === "junction" ? "open" : undefined}>
         {pres && qKind === "junction" && compactSigns && (
           <ol
             ref={answersRef}
@@ -3032,14 +3109,7 @@ function PlayScreen(props: {
               vízszintes látószöge viszont csak ~33°. A gyerek azt olvasta, hogy
               „Menj közelebb a tornádóhoz!", de azt nem tudhatta, merre forduljon —
               húsz másodperc alatt 0,2 km-t közeledett, félig véletlenül. */}
-          {(phase === "seeking" || phase === "approach") && !pres && !result && (() => {
-            const marker = targetMarker({
-              heading: 0,
-              targetBearing: hud.targetRelDeg,
-              halfFovDeg: 16.5,
-            });
-            if (!marker.visible) return null;
-            return (
+          {navOn && !pres && marker?.visible && (
               <div
                 className={`absolute top-[40%] [@media(max-height:500px)]:top-[34%] -translate-y-1/2 ${marker.side === "right" ? "right-2" : "left-2"} z-10 pointer-events-none flex flex-col items-center gap-1`}
                 data-testid="tornado-target-marker"
@@ -3058,11 +3128,10 @@ function PlayScreen(props: {
                   {hud.distanceKm.toFixed(1)} km
                 </span>
               </div>
-            );
-          })()}
+          )}
 
           {/* Anchor guidance */}
-          {(phase === "seeking" || phase === "approach") && !pres && !result && (
+          {navOn && !pres && (
             <div
               data-testid="tornado-anchor-guidance"
               className={`absolute right-2 px-3 py-1.5 rounded-lg text-sm font-bold pointer-events-none max-w-[60%] text-right z-10 transition-colors ${
@@ -3070,17 +3139,43 @@ function PlayScreen(props: {
               }`}
               style={{ bottom: aboveControls }}
             >
-              {playerRef.current.anchored
-                ? "Horgony rögzítve — tartsd ki a vihart!"
-                : hud.anchorReady
-                  ? touch
-                    ? "Jó pozíció! Nyomd a ⚓ gombot!"
-                    : "Jó pozíció! Nyomd az F / Horgony gombot!"
-                  : hud.distanceKm > bandSpec.anchorBand.max
-                    ? "Menj közelebb a tornádóhoz!"
-                    : hud.distanceKm < bandSpec.anchorBand.min
-                      ? "Túl közel! Állj meg biztonságos sávban."
-                      : "Keresd a tornádót, közelítsd meg és állj meg!"}
+              {guidanceText}
+            </div>
+          )}
+
+          {/* K2 (J7b döntések 34.): nyitott kérdés alatt a céljelző és a horgony-útmutató egy alsó sávban marad látható (a kérdés
+              fajtájával egy sorban; alacsony fekvőn a vezérlők között, legalul). A táblák ennél feljebb rajzolódnak. */}
+          {questionNav && (
+            <div
+              ref={navRowRef}
+              data-testid="tornado-question-nav"
+              className={`absolute flex items-end gap-2 pointer-events-none z-10 ${
+                shortLandscape ? "left-1/2 -translate-x-1/2 w-max max-w-[calc(100%-22rem)]" : "inset-x-2"
+              }`}
+              style={{ bottom: shortLandscape ? "max(8px, var(--game-safe-bottom))" : aboveControls }}
+            >
+              {chipInNav && kindChip && <div className={`min-w-0 ${shortLandscape ? "shrink-0 whitespace-nowrap" : "flex-1"}`}>{kindChip}</div>}
+              <div className={`flex items-center gap-1 shrink-0 ${shortLandscape ? "" : "ml-auto max-w-[52%]"}`}>
+                {marker?.visible && (
+                  <div
+                    data-testid="tornado-target-marker"
+                    data-side={marker.side}
+                    data-compact="1"
+                    className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500 text-slate-950 text-sm font-black leading-none shadow-[0_0_12px_rgba(245,158,11,0.6)]"
+                  >
+                    <span aria-hidden="true">{marker.side === "right" ? "▶" : "◀"}</span>
+                    <span data-testid="tornado-target-marker-km" className="text-xs font-extrabold">
+                      {hud.distanceKm.toFixed(1)} km
+                    </span>
+                  </div>
+                )}
+                <div
+                  data-testid="tornado-anchor-guidance"
+                  className={`min-w-0 px-2 py-1 rounded-lg text-xs font-bold leading-snug ${hud.anchorReady ? "bg-emerald-700 text-white" : "bg-sky-900/85 text-white"}`}
+                >
+                  {guidanceText}
+                </div>
+              </div>
             </div>
           )}
 
@@ -3096,8 +3191,12 @@ function PlayScreen(props: {
           {feedback && !paused && <QuizFeedbackCard card={feedback} onDismiss={closeWhy} />}
 
           {/* Fekvőn a teljes válaszok listája (hosszú válasz) középen áll — ott a fajta-címke elmarad (a lista maga mutatja). */}
-          {(chipSpot === "bottom-left" || (chipSpot === "bottom-center" && !compactSigns)) && kindChip && (
-            <div className={`absolute inset-x-2 flex pointer-events-none z-10 ${chipSpot === "bottom-center" ? "justify-center" : "justify-start"}`} style={{ bottom: aboveControls }}>
+          {!chipInNav && (chipSpot === "bottom-left" || (chipSpot === "bottom-center" && !compactSigns)) && kindChip && (
+            <div
+              className={`absolute inset-x-2 flex pointer-events-none z-10 ${chipSpot === "bottom-center" ? "justify-center" : "justify-start"}`}
+              // KICSI 1: alacsony fekvőn legalul (a vezérlők között), nem a táblák alatt.
+              style={{ bottom: chipSpot === "bottom-center" ? "max(8px, var(--game-safe-bottom))" : aboveControls }}
+            >
               <div className={chipSpot === "bottom-center" ? "max-w-[40vw] text-center whitespace-nowrap" : "max-w-[70%]"}>{kindChip}</div>
             </div>
           )}
@@ -3106,7 +3205,8 @@ function PlayScreen(props: {
               <div
                 data-testid="tornado-chase-msg"
                 className={`px-3 py-1.5 rounded-lg text-sm font-extrabold border ${
-                  chaseMsg.tone === "good" ? "bg-emerald-600/90 border-emerald-200 text-white" : "bg-orange-600/90 border-orange-200 text-white"
+                  // KICSI 2: tömör, sötétebb alap — fehér 14 px-es szövegnél ≥ 4,5:1 (emerald-700 ≈ 5,5:1, orange-700 ≈ 5,2:1).
+                  chaseMsg.tone === "good" ? "bg-emerald-700 border-emerald-200 text-white" : "bg-orange-700 border-orange-200 text-white"
                 }`}
               >
                 {chaseMsg.text}
@@ -3250,7 +3350,7 @@ const LONG_ANSWER_FIXTURE: Question = {
 
 /** J7b: a kérdés fajtájának felirata (a kérdés-sáv mellett, a bal felső panelben). */
 const QUESTION_KIND_LABEL: Record<QuestionKind, string> = {
-  junction: "🔀 Elágazás — koppints a jó táblára, vagy fékezz, és hajts át a kapuján",
+  junction: "🔀 Elágazás — koppints a jó táblára, vagy fékezz, és kanyarodj át a bal / jobb kapun",
   turbo: "⚡ Turbópad",
   anchor: "⚓ Horgonyzási kérdés",
 };
@@ -3465,6 +3565,9 @@ const TornadoQuestionLayer = memo(function TornadoQuestionLayer(props: {
   onWhy: () => void;
   expandedRef: React.MutableRefObject<boolean>;
 }) {
+  // Mérő-kampó (csak teszt-kampós buildben): a levél renderszáma — a böngészős teszt ebből igazolja, hogy a lap HUD-renderje
+  // nem rajzolja újra a kérdés-sávot (vak ellenőrzés KICSI 6).
+  countRender("tornado-question-layer");
   const q = usePlayQuestion({
     setup: props.setup,
     // A rezgést a lap adja a játékbeli következménnyel együtt (egy kimenet = egy visszajelzés).

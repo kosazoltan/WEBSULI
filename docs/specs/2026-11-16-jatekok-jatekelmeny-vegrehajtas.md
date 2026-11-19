@@ -1993,7 +1993,8 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
     egymást.
 35. **Gomb-módú kérdés álló nézetben (K3):** a turbó- / horgony-kérdés kártyája álló nézetben a képernyő tetején áll (nem a
     jármű fölött), rövid válaszoknál (a közös elrendezés 2 oszlopos esete) a három gomb egy sorban a kártya alatt — lapra szűkített
-    CSS-felülírás, a közös `index.css` nem változik. Fekvőn a közös elrendezés marad (a gombok a két szélen). Böngészős elvárás
+    CSS-felülírás, a közös `index.css` nem változik. Álló nézetben ezért gomb-módban is rejtett a bal felső panel (a kártya helyén
+    állna), és a kérdés fajtája lent, a tájékozódó sávban látszik. Fekvőn a közös elrendezés marad (a gombok a két szélen). Böngészős elvárás
     360×640-en és 390×844-en: a jármű vetített doboza (`getVehicleScreenBox` teszt-kampó) és előtte egy jármű-magasságnyi (≥ 48 px)
     út nem esik a kártya vagy a gombok alá.
 36. **Apróságok (a vak ellenőrzés KICSI 1–6):** (1) alacsony fekvőn a kérdés fajta-címkéje legalul áll, nem a táblák alatt; (2) a
