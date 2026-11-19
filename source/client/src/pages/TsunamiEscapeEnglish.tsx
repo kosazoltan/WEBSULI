@@ -1870,13 +1870,27 @@ export default function TsunamiEscapeEnglish() {
     };
     // Elsőbbségi sorrend: (1) a figura most is szabad ÉS bárhová mozoghat; (2) bárhová mozoghat (eltolással); (3) a régi
     // tartalék: a fenti kompakt sáv.
-    const measured = candidates.map((c) => ({ c, obs: measure(c) }));
-    const pick =
-      measured.find((m) => !hitsAt(m.obs, fig, 0) && everyXSolvable(m.obs, fig)) ??
-      measured.find((m) => everyXSolvable(m.obs, fig)) ??
-      null;
-    const chosen = pick?.c ?? { place: "top" as const, high: true };
-    const obs = measure(chosen);
+    // Lustán mérünk (minden mérés egy kényszerített elrendezés — 4× lassított CPU-n a kérdés-nyitás képkockájának jelentős része):
+    // az első, (1)-nek megfelelő jelöltnél megállunk; a (2)-höz az addig mértek közül választunk.
+    let chosen: { place: "top" | "bottom"; high: boolean } | null = null;
+    let obs: Obstacle[] = [];
+    let fallback: { c: { place: "top" | "bottom"; high: boolean }; obs: Obstacle[] } | null = null;
+    for (const c of candidates) {
+      const o = measure(c);
+      const solvable = everyXSolvable(o, fig);
+      if (solvable && !hitsAt(o, fig, 0)) {
+        chosen = c;
+        obs = o;
+        break;
+      }
+      if (solvable && !fallback) fallback = { c, obs: o };
+    }
+    if (!chosen) {
+      chosen = fallback?.c ?? { place: "top", high: true };
+      obs = fallback ? fallback.obs : measure(chosen);
+      // A DOM-on az utoljára mért jelölt áll: a választottat írjuk vissza (a React is ezt írja a ref-ekből).
+      if (fallback) measure(chosen);
+    }
     quizPlaceRef.current = chosen.place;
     quizHighRef.current = chosen.high;
     const before = liveRef.current.shiftPx ?? 0;
