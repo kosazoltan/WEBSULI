@@ -1,4 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import express from "express";
+import rateLimit from "express-rate-limit";
+import type { AddressInfo } from "node:net";
+import { z } from "zod";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 
 /**
@@ -15,7 +19,7 @@ async function mock(page: Page) {
     const path = new URL(req.url()).pathname;
     if (path === "/api/lessons/lesson-q/results" && req.method() === "POST") { posts.push(req.postDataJSON()); return route.fulfill({ status: 202, json: { queued: true } }); }
     if (path === "/api/auth/user") return route.fulfill({ json: null });
-    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test" } });
+    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test", resultApi: 2 } });
     if (path === "/api/html-files/quiz-fixture") return route.fulfill({ json: { id: "quiz-fixture", title: "Lecke", contentType: "lesson", classroom: 7 } });
     if (path === "/api/lessons/by-file/quiz-fixture") return route.fulfill({ json: { lessonId: "lesson-q", version: 1, lesson: fusionFixture() } });
     if (path.startsWith("/api/design-assets/")) return route.fulfill({ status: 404, json: {} });
@@ -145,7 +149,7 @@ async function mockWith(page: Page, options: { failPartials?: number } = {}) {
       return route.fulfill({ status: 202, json: { queued: true } });
     }
     if (path === "/api/auth/user") return route.fulfill({ json: null });
-    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test" } });
+    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test", resultApi: 2 } });
     if (path === "/api/html-files") return route.fulfill({ json: [file("quiz-fixture", "Első lecke"), file("quiz-fixture-2", "Második lecke")] });
     if (path === "/api/html-files/quiz-fixture") return route.fulfill({ json: file("quiz-fixture", "Első lecke") });
     if (path === "/api/html-files/quiz-fixture-2") return route.fulfill({ json: file("quiz-fixture-2", "Második lecke") });
@@ -346,7 +350,7 @@ test("R3: a LEZÁRT kör cseréje nem küld pillanatképet (a végleges eredmén
 async function mockCsrf(page: Page) {
   const state = { valid: "token-1", tokenStatus: 200, tokenCalls: 0, rejected: [] as string[], accepted: [] as Array<{ token: string; body: Record<string, unknown> }> };
   await mockWith(page);
-  await page.route("**/api/csrf-token", route => { state.tokenCalls++; return state.tokenStatus === 200 ? route.fulfill({ json: { csrfToken: state.valid } }) : route.fulfill({ status: state.tokenStatus, json: { message: "hiba" } }); });
+  await page.route("**/api/csrf-token", route => { state.tokenCalls++; return state.tokenStatus === 200 ? route.fulfill({ json: { csrfToken: state.valid, resultApi: 2 } }) : route.fulfill({ status: state.tokenStatus, json: { message: "hiba" } }); });
   await page.route("**/api/lessons/lesson-q/results", route => {
     const token = route.request().headers()["x-csrf-token"] ?? "";
     if (route.request().method() !== "POST" || token !== state.valid) { state.rejected.push(token); return route.fulfill({ status: 403, json: { message: "invalid csrf token" } }); }
@@ -490,49 +494,53 @@ test("S6: a feladatoknál a teljes kitöltés a „Feladatok kiértékelése” 
 });
 
 /**
- * Terv R10 — telepítési sorrend: a kliens (Vercel) a szerver (Render) előtt települhet. A „régi szerver” csonk a főág szigorú sémáját
- * utánozza: az új mezőket (`startedAt`, `lastAnsweredAt`, `partial`) tartalmazó törzset 400-zal utasítja el, a régi alakot elfogadja.
+ * Terv R12 (az R10 módosul) — telepítési átmenet: a kliens (Vercel) és a szerver (Render) külön, nem vezérelhető sorrendben települ. A
+ * „régi szerver” csonk a főág viselkedését utánozza: a CSRF-token válaszában NINCS `resultApi` jelzés, és a szigorú séma minden ismeretlen
+ * mezőt 400-zal utasít el (`partial`, `startedAt`, `lastAnsweredAt`, `clientNow`).
  */
-async function mockOldServer(page: Page) {
-  const state = { rejected: [] as Array<Record<string, unknown>>, accepted: [] as Array<Record<string, unknown>> };
+const OLD_FIELDS: Record<string, readonly string[]> = { quiz: ["kind", "roundId", "picks", "fingerprint", "learner"], tasks: ["kind", "roundId", "answers", "fingerprint", "learner"] };
+const oldSchemaAccepts = (body: Record<string, unknown>) => Object.keys(body).every(field => (OLD_FIELDS[String(body.kind)] ?? []).includes(field));
+async function mockOldServer(page: Page, options: { signal?: boolean } = {}) {
+  const state = { rejected: [] as Array<Record<string, unknown>>, accepted: [] as Array<Record<string, unknown>>, all: [] as Array<Record<string, unknown>> };
   await mockWith(page);
+  // A jelzés nélküli token: így válaszol a régi szerver. (`signal: true`: új példány adta a tokent, de a kérés egy még régi példányra esik.)
+  await page.route("**/api/csrf-token", route => route.fulfill({ json: options.signal ? { csrfToken: "test", resultApi: 2 } : { csrfToken: "test" } }));
   await page.route("**/api/lessons/lesson-q/results", route => {
     const body = route.request().postDataJSON() as Record<string, unknown>;
-    if (["startedAt", "lastAnsweredAt", "partial"].some(field => field in body)) { state.rejected.push(body); return route.fulfill({ status: 400, json: { message: "Érvénytelen beküldés." } }); }
+    state.all.push(body);
+    if (!oldSchemaAccepts(body)) { state.rejected.push(body); return route.fulfill({ status: 400, json: { message: "Érvénytelen beküldés." } }); }
     state.accepted.push(body);
     return route.fulfill({ status: 202, json: { queued: true } });
   });
   return state;
 }
 
-test("R10: „régi szerver” mellett a kvíz végleges kérése sikerül (400 után egy ismétlés az új mezők nélkül); a pillanatkép NEM alakul végleges beküldéssé", async ({ page }) => {
+test("R12: jelzés nélküli (régi) szerver mellett nincs pillanatkép, a végleges kvíz EGYETLEN, régi alakú kéréssel megy — ismétlés nélkül", async ({ page }) => {
   const old = await mockOldServer(page);
   await page.setViewportSize({ width: 390, height: 844 });
   const quiz = await openQuiz(page);
   for (let i = 0; i < 3; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
   await page.waitForTimeout(800);
   await hide(page);
-  await expect.poll(() => old.rejected.length, { message: "a pillanatkép a régi szerverhez ért (és elutasította)" }).toBe(1);
-  await page.waitForTimeout(800);
-  expect(old.accepted, "a pillanatkép nem ment át végleges (partial nélküli) alakban").toHaveLength(0);
-  for (let i = 3; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
-  await expect.poll(() => old.accepted.length, { message: "a végleges kvíz az új mezők nélkül elfogadva" }).toBe(1);
-  const accepted = old.accepted[0];
-  expect(accepted.kind).toBe("quiz");
-  expect(accepted).not.toHaveProperty("startedAt");
-  expect(accepted).not.toHaveProperty("lastAnsweredAt");
-  expect(accepted).not.toHaveProperty("partial");
-  expect(Object.values(accepted.picks as Record<string, number>).filter(pick => pick >= 0)).toHaveLength(25);
-  expect(old.rejected.filter(body => body.partial !== true), "a végleges kérés első (új mezős) kísérlete").toHaveLength(1);
+  await page.evaluate(() => { window.dispatchEvent(new Event("pagehide")); });
   await page.waitForTimeout(1000);
-  expect(old.accepted, "pontosan egy végleges kérés ment át").toHaveLength(1);
+  expect(old.all, "jelzés nélkül nem megy pillanatkép (a régi szerver keretét sem fogyasztja)").toHaveLength(0);
+  for (let i = 3; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => old.accepted.length, { message: "a végleges kvíz régi alakkal elfogadva" }).toBe(1);
+  const accepted = old.accepted[0];
+  expect(Object.keys(accepted).sort()).toEqual(expect.arrayContaining(["kind", "picks", "roundId"]));
+  for (const field of ["startedAt", "lastAnsweredAt", "clientNow", "partial"]) expect(accepted).not.toHaveProperty(field);
+  expect(Object.values(accepted.picks as Record<string, number>).filter(pick => pick >= 0)).toHaveLength(25);
+  await page.waitForTimeout(1000);
+  expect(old.rejected, "egyetlen elutasított kérés sem volt").toHaveLength(0);
+  expect(old.all, "gyerekenként pontosan egy kérés (mint a régi kliensnél)").toHaveLength(1);
   await page.reload();
   await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
   await page.waitForTimeout(1200);
-  expect(old.accepted, "a sikeres visszalépés után a kör elküldöttként rögzült").toHaveLength(1);
+  expect(old.all, "a kör elküldöttként rögzült").toHaveLength(1);
 });
 
-test("R10: „régi szerver” mellett a feladatok végleges kérése is sikerül az új mezők nélkül", async ({ page }) => {
+test("R12: jelzés nélküli (régi) szerver mellett a feladatok végleges kérése is egyetlen, régi alakú kérés", async ({ page }) => {
   const old = await mockOldServer(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/preview/quiz-fixture");
@@ -544,5 +552,80 @@ test("R10: „régi szerver” mellett a feladatok végleges kérése is sikerü
   await expect.poll(() => old.accepted.filter(body => body.kind === "tasks").length).toBe(1);
   expect(old.accepted[0]).not.toHaveProperty("startedAt");
   expect(Object.keys(old.accepted[0].answers as object)).toHaveLength(15);
-  expect(old.rejected.filter(body => body.kind === "tasks"), "az első kísérlet új mezővel ment").toHaveLength(1);
+  await page.waitForTimeout(800);
+  expect(old.all.filter(body => body.kind === "tasks"), "pontosan egy kérés, elutasítás nélkül").toHaveLength(1);
+});
+
+test("R10 (jelzés mellett): ha egy még régi példány 400-at ad, a végleges kvíz egyszer az új mezők nélkül ismétel; a pillanatkép NEM alakul végleges beküldéssé", async ({ page }) => {
+  const old = await mockOldServer(page, { signal: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 3; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await hide(page);
+  await expect.poll(() => old.rejected.length, { message: "a pillanatkép a régi példányhoz ért (és elutasította)" }).toBe(1);
+  await page.waitForTimeout(800);
+  expect(old.accepted, "a pillanatkép nem ment át végleges (partial nélküli) alakban").toHaveLength(0);
+  for (let i = 3; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => old.accepted.length, { message: "a végleges kvíz az új mezők nélkül elfogadva" }).toBe(1);
+  for (const field of ["startedAt", "lastAnsweredAt", "clientNow", "partial"]) expect(old.accepted[0]).not.toHaveProperty(field);
+  expect(old.rejected.filter(body => body.partial !== true), "a végleges kérés első (új mezős) kísérlete").toHaveLength(1);
+  await page.waitForTimeout(1000);
+  expect(old.accepted, "pontosan egy végleges kérés ment át").toHaveLength(1);
+});
+
+/**
+ * R12 / K3: egy osztály (30 gyerek) közös IP mögött, régi szerver. Egy gyerek VALÓDI kliens-kéréseit (háttérbe kerüléssel, lapelhagyással)
+ * rögzítjük, és 30 gyerekre visszajátsszuk a főág szigorú sémájának (`origin/main`, `shared/lesson-result-email.ts` `resultRequestSchema`)
+ * és 20-as, `skip` nélküli keretének (`server/lesson-result-email.ts` `resultLimiter`) másolatára. Összevetés: a régi kliens gyerekenként
+ * egyetlen, régi alakú végleges kérést küldött → 20 eredmény ment át.
+ */
+const oldId = z.string().min(1).max(80);
+const oldRequestSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("tasks"), roundId: z.string().regex(/^[a-z0-9-]{4,64}$/), answers: z.record(oldId, z.string().max(4000)), fingerprint: z.string().max(80).optional(), learner: z.string().max(120).optional() }).strict(),
+  z.object({ kind: z.literal("quiz"), roundId: z.string().regex(/^[a-z0-9-]{4,64}$/), picks: z.record(oldId, z.number().int().min(-1).max(7)), fingerprint: z.string().max(80).optional(), learner: z.string().max(120).optional() }).strict(),
+]);
+async function replayOnOldServer(perChild: Array<Array<Record<string, unknown>>>) {
+  const app = express();
+  app.use(express.json());
+  app.post("/api/lessons/:lessonId/results", rateLimit({ keyGenerator: () => "iskolai-ip", windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }),
+    (req, res) => { if (!oldRequestSchema.safeParse(req.body).success) return res.status(400).json({ message: "Érvénytelen beküldés." }); return res.status(202).json({ queued: true }); });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const accepted: number[] = [];
+  try {
+    for (const requests of perChild) {
+      let ok = 0;
+      for (const body of requests) if ((await fetch(`${base}/api/lessons/lesson-q/results`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).status === 202 && body.partial !== true) ok++;
+      accepted.push(ok);
+    }
+  } finally { server.close(); }
+  return accepted;
+}
+
+test("R12 / K3: régi szerver + 30 gyerek egy IP-ről — legalább annyi végleges eredmény megy át, mint a régi kliensnél (20), kettős küldés nincs", async ({ page }) => {
+  const old = await mockOldServer(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 10; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await hide(page); // alkalmazásváltás a kvíz közben
+  await page.waitForTimeout(500);
+  for (let i = 10; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => old.accepted.length).toBe(1);
+  await page.waitForTimeout(800);
+  await hide(page);
+  await page.evaluate(() => { window.dispatchEvent(new Event("pagehide")); });
+  await page.waitForTimeout(800);
+  const child = old.all;
+  expect(child, "egy gyerek valódi kérései: egyetlen, régi alakú végleges kérés").toHaveLength(1);
+  const asChild = (n: number) => child.map(body => ({ ...body, roundId: `round-gyerek-${n}` }));
+  const newClient = await replayOnOldServer(Array.from({ length: 30 }, (_, n) => asChild(n)));
+  const legacy = old.accepted[0];
+  const oldClient = await replayOnOldServer(Array.from({ length: 30 }, (_, n) => [{ ...legacy, roundId: `round-gyerek-${n}` }]));
+  const delivered = (list: number[]) => list.filter(ok => ok > 0).length;
+  expect(delivered(oldClient), "a régi kliens összevetési alapja").toBe(20);
+  expect(delivered(newClient), "az új kliens nem rosszabb a régi szerver mellett").toBeGreaterThanOrEqual(delivered(oldClient));
+  expect(Math.max(...newClient), "egy gyerektől legfeljebb egy elfogadott végleges kérés").toBeLessThanOrEqual(1);
 });

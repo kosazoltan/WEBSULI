@@ -2,6 +2,7 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { logger } from "./logger";
 import { LESSON_SCORING_VERSION } from "@shared/answer-value";
 import { isRetryableRequestError } from "@shared/request-retry";
+import { RESULT_API_VERSION } from "@shared/result-compat";
 
 // A `preReadText` paraméter azért kell, mert a 403-as CSRF-ág már beolvasta
 // a body-t (res.text()) — a Response body csak egyszer olvasható, ismételt
@@ -32,6 +33,8 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
 class CSRFTokenManager {
   private token: string | null = null;
   private fetchPromise: Promise<string> | null = null;
+  /** Spec 2026-11-17-eredmeny-email-kviz (R12): a token mellett jött képesség-jelzés (a régi szerver nem küldi). */
+  private resultApi = false;
   
   async getToken(): Promise<string> {
     // Return cached token if available
@@ -64,12 +67,18 @@ class CSRFTokenManager {
     }
     
     const data = await res.json();
+    this.resultApi = data?.resultApi === RESULT_API_VERSION;
     return data.csrfToken;
   }
   
   // Invalidate cached token (e.g., when CSRF error occurs)
   invalidate() {
     this.token = null;
+  }
+
+  /** R12: a gyorsítótárazott token szervere jelezte-e az új eredmény-API-t (szinkron). */
+  resultApiReady(): boolean {
+    return this.token !== null && this.resultApi;
   }
 
   /** A már lekért token (vagy null) — szinkron, a lap elhagyásakor nincs idő hálózati körre. */
@@ -83,6 +92,17 @@ const csrfTokenManager = new CSRFTokenManager();
 /** Spec 2026-11-17-eredmeny-email-kviz (S1b): a CSRF-token előzetes lekérése, hogy a lap elhagyásakor küldött kérésnek már legyen tokenje. */
 export function warmCsrfToken(): void {
   void csrfTokenManager.getToken().catch(() => { /* A token nélküli pillanatkép egyszerűen nem megy el. */ });
+}
+
+/**
+ * Spec 2026-11-17-eredmeny-email-kviz (R12): a szerver jelezte-e (a CSRF-token válaszában), hogy ismeri az új eredmény-API-t — a
+ * pillanatkép és az új kérésmezők csak ekkor mennek. `resultApiReady` szinkron (a gyorsítótárazott tokenből), `ensureResultApi` szükség
+ * esetén lekéri a tokent; hibánál hamis (a régi viselkedés marad).
+ */
+export function resultApiReady(): boolean { return csrfTokenManager.resultApiReady(); }
+export async function ensureResultApi(): Promise<boolean> {
+  try { await csrfTokenManager.getToken(); } catch { return false; }
+  return csrfTokenManager.resultApiReady();
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { apiRequest, sendKeepalive, warmCsrfToken } from "@/lib/queryClient";
+import { apiRequest, ensureResultApi, resultApiReady, sendKeepalive, warmCsrfToken } from "@/lib/queryClient";
 import { getFingerprint, peekFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
 import { answeredCount, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
@@ -41,11 +41,15 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         const fingerprint = await getFingerprint().catch(() => undefined);
         // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi.
         const learner = getLearnerToken();
-        const started = round.startedAt > 0 ? { startedAt: round.startedAt } : {};
+        // Terv R12 (második vak ellenőrzés K3): az új mezők (`startedAt`, `lastAnsweredAt`, `clientNow`) CSAK akkor mennek, ha a szerver a
+        // CSRF-token válaszában jelezte, hogy ismeri őket — a Vercel-kliens a Render-szerver előtt is települhet, és a régi szerver
+        // szigorú sémája az ismeretlen mezőt 400-zal utasítaná el. Jelzés nélkül a régi alak megy, egyszer, ismétlés nélkül.
+        const capable = await ensureResultApi();
+        const fresh = capable ? { ...(round.startedAt > 0 ? { startedAt: round.startedAt } : {}), ...(kind === "quiz" && round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}), clientNow: Date.now() } : {};
         const body = kind === "tasks"
-          ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...started }
+          ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...fresh }
           // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
-          : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...started, ...(round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
+          : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...fresh };
         // J5 (spec 2026-11-10-gyartas-meres): ingadozó mobilhálózaton az eredmény ne vesszen el — hálózati hibánál, időtúllépésnél
         // és 5xx-nél legfeljebb 3 újrapróbálás (növekvő várakozással). Biztonságos: a szerver a kört egyedi kulccsal egyszer rögzíti.
         // R8: a kvíz végleges kérése `keepalive` — az utolsó válasz utáni azonnali lapbezárás ne szakítsa meg. A feladatoké nem: a
@@ -54,11 +58,10 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
           if (kind === "quiz") await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES, keepalive: true });
           else await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES });
         } catch (error) {
-          // R10 — telepítési sorrend: a kliens (Vercel) a szerver (Render) előtt települhet, és a régi szerver szigorú sémája az új mezőket
-          // (`startedAt`, `lastAnsweredAt`) 400-zal utasítja el. Ilyenkor EGY ismétlés a régi kliens alakjával (a levél dátumsor nélkül
-          // megy, de megy). Más hiba, illetve új mező nélküli törzs: nincs ismétlés.
+          // R10 (az R12 szerint csak jelzés MELLETT): ha a jelzést adó új példány mellett egy még régi példány 400-at ad, EGY ismétlés a
+          // régi alakkal. Jelzés nélkül eleve a régi alak ment — ott nincs ismétlés; más hiba / új mező nélküli törzs: nincs ismétlés.
           const legacy = legacyResultBody(body);
-          if ((error as { status?: unknown } | null)?.status !== 400 || !legacy) throw error;
+          if (!capable || (error as { status?: unknown } | null)?.status !== 400 || !legacy) throw error;
           await apiRequest("POST", `/api/lessons/${lessonId}/results`, legacy, { retries: RESULT_REPORT_RETRIES, ...(kind === "quiz" ? { keepalive: true } : {}) });
         }
         try {
@@ -88,7 +91,13 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
   useEffect(() => { if (kind === "quiz" && answered > 0) { warmCsrfToken(); void getFingerprint().catch(() => undefined); } }, [kind, answered > 0]);
   useEffect(() => {
     if (kind !== "quiz" || !lessonId) return;
+    // Terv R12: pillanatkép CSAK a szerver jelzése mellett — a régi szerver nem ismeri (400), és a 20-as keretét fogyasztaná. Ha még nincs
+    // token (vagy a korábbi lekérés elbukott), most kér egyet, és jelzés esetén akkor küld.
     const snapshot = () => {
+      if (resultApiReady()) { sendSnapshot(); return; }
+      void ensureResultApi().then(capable => { if (capable) sendSnapshot(); });
+    };
+    const sendSnapshot = () => {
       const current = committed.current;
       const count = answeredCount(current);
       if (current.finishedAt || quizRoundComplete(current) || count === 0 || roundTooOld(roundActivityAt(current), Date.now())) return;
@@ -103,7 +112,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
       if (!snapshotDue(state, roundId, count)) return;
       const learner = getLearnerToken();
       const fingerprint = peekFingerprint();
-      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}) };
+      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}), clientNow: Date.now() };
       const mark = { roundId, count };
       state.pending = mark;
       void sendKeepalive(`/api/lessons/${lessonId}/results`, body).then(accepted => {
