@@ -10,6 +10,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { LessonLoading } from "@/lesson-runtime/LessonLoading";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LearnerProfileSync from "@/components/LearnerProfileSync";
+import { RESULT_OUTBOX_KEY } from "@shared/quiz-round";
 
 // LS-2: lazy, hogy a mérőoldal kódja ne kerüljön a fő bundle-be.
 const LessonRuntimeProbe = lazy(() => import("@/lesson-runtime/LessonRuntimeProbe"));
@@ -122,7 +123,20 @@ function Router() {
   );
 }
 
+/**
+ * Spec 2026-11-17-eredmeny-email-kviz (R24): induláskor a végleges eredmény-beküldések kimenő sorának ürítése (pl. az utolsó válasz után
+ * azonnal elhagyott lecke). Csak ha van mit küldeni — a beküldő modul akkor töltődik be.
+ */
+function useResultOutboxDrain() {
+  useEffect(() => {
+    let pending = false;
+    try { pending = !!localStorage.getItem(RESULT_OUTBOX_KEY); } catch { /* tároló nélkül nincs tartós sor */ }
+    if (pending) void import("@/lesson-runtime/resultReport").then(module => module.drainResultOutbox()).catch(() => { /* csendes */ });
+  }, []);
+}
+
 function App() {
+  useResultOutboxDrain();
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

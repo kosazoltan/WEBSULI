@@ -41,3 +41,15 @@ export function snapshotDue(state: SnapshotState, roundId: string, count: number
 export function quizRoundComplete(round: { ids: readonly string[]; picks: Readonly<Record<string, number>> }): boolean {
   return round.ids.length > 0 && round.ids.every(id => round.picks[id] !== undefined);
 }
+
+/**
+ * Terv R24 (gépi vak ellenőrzés, 2. célzott kör L1 / L2): a végleges beküldések tartós kimenő sora. A sor kulcsa a böngésző tárolójában;
+ * laponként (oldalbetöltésenként) körönként legfeljebb ennyi kísérlet; a kísérletek közti késleltetés a 429-es válasz `Retry-After`
+ * ideje (legalább 1 s), ennek hiányában növekvő: 30 s, 60 s, … legfeljebb 5 perc — azonnali ismétlés nincs.
+ */
+export const RESULT_OUTBOX_KEY = "websuli:result-outbox:v1";
+export const OUTBOX_MAX_ATTEMPTS = 3;
+export function outboxRetryDelayMs(attempts: number, retryAfterSec?: number): number {
+  if (retryAfterSec !== undefined && Number.isFinite(retryAfterSec)) return Math.max(1000, Math.round(retryAfterSec * 1000));
+  return Math.min(300_000, 30_000 * 2 ** Math.max(0, attempts - 1));
+}

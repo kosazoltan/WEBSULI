@@ -393,35 +393,42 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     if (lastActivity !== undefined && roundTooOld(lastActivity, body.clientNow ?? receivedAt)) return res.status(202).json({ queued: false, stale: true });
     // PR #510: a már véglegesített kör késői pillanatképe nem ütemeződik — a befejezett kör mellé nem mehet „félbehagyva” levél.
     if (await roundFinalized(lessonId, partialWhos, body.roundId)) return res.status(202).json({ queued: false, finalized: true });
-    // R6 + R11: ha a körről már kiment (vagy éppen megy) „félbehagyva” levél — bármelyik tanuló-kulccsal —, újabb nem megy (körönként
-    // legfeljebb egy); a válasz ezt mondja.
-    const earlier = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
-      .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), eq(lessonResultEmails.roundKey, partialRoundKey)));
-    if (earlier.some(sentRow => sentRow.delivered.length > 0)) return res.status(202).json({ queued: false, partial: true, alreadySent: true });
     if (partialIntakeHook) await partialIntakeHook(who);
-    // R11 + R22 (gépi vak ellenőrzés L4): a várakozó beolvasása, az első rögzítő vizsgálata és az ütemezés az UTOLSÓ várakozás után, egy
-    // szinkron lépésben — párhuzamosan érkező pillanatképek nem olvashatnak elavult állapotot. A kör első rögzítőjével össze nem férő
-    // beküldő nem írhatja felül a várakozót (a körazonosítót a kliens választja).
-    const waiting = pendingPartials.get(lockKey);
-    if (waiting && !mayActOn(waiting.who, who)) return res.status(202).json({ queued: false, partial: true, conflict: true });
-    const lastAnsweredOnServer = onServerClock(body.lastAnsweredAt);
-    const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(startedAtOnServer ? { startedAt: startedAtOnServer } : {}), ...(lastAnsweredOnServer ? { lastAnsweredAt: lastAnsweredOnServer } : {}) } };
-    // R16: ha a kört vendég rögzítette és most más veszi át (pl. a kör közben bejelentkező tanuló), a kör vendég kör marad — a levél
-    // attribúciója „Vendég tanuló”, és az első rögzítő is a vendég (a többi vendég-beküldő továbbra is összefér vele).
-    const guestTakeover = waiting !== undefined && waiting.who.startsWith("guest:") && waiting.who !== who;
-    const recorder = guestTakeover ? waiting.who : who;
-    const sender = async () => (guestTakeover ? { learner: GUEST_LEARNER, guest: true } : { learner: await nameOf(), ...attribution });
-    // R1: a kapu MINDEN kísérlet (az újrapróba is) előtt, a kör kizárása alatt nézi, hogy a kör közben véglegesült-e.
-    // R21: a kapu a kísérlet saját pillanatkép-változatát is nézi — elavult (közben lecserélt) állapot nem megy ki.
-    const version = ++partialVersionSeq;
-    const gate: SendGate = attempt => withRoundLock(lockKey, async () => {
-      if (partialVersions.get(lockKey) !== version || await roundFinalized(lessonId, partialWhos, body.roundId)) return { sent: 0, duplicate: true };
-      if (gateCheckHook) await gateCheckHook(lockKey);
-      return attempt();
+    // R25 (gépi vak ellenőrzés, 2. célzott kör L3): a felvétel záró szakasza — a „már kiment” vizsgálat (R6), a várakozó beolvasása, az
+    // első rögzítő (R11 / R22) és az ütemezés — ugyanazon a körönkénti kizáráson megy át, mint a „félbehagyva” levél küldési kísérlete:
+    // vagy a régi küldés fejeződik be előbb (és ez a pillanatkép igaz `alreadySent` választ kap), vagy ez váltja le a régit (és a régi
+    // kísérlet a változat-ellenőrzésen megáll). Elfogadott új állapot mellett régi levél nem megy ki.
+    const outcome = await withRoundLock(lockKey, async () => {
+      // R6 + R11: ha a körről már kiment (vagy éppen megy) „félbehagyva” levél — bármelyik tanuló-kulccsal —, újabb nem megy (körönként
+      // legfeljebb egy); a válasz ezt mondja.
+      const earlier = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
+        .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), eq(lessonResultEmails.roundKey, partialRoundKey)));
+      if (earlier.some(sentRow => sentRow.delivered.length > 0)) return { queued: false, partial: true, alreadySent: true };
+      // R11 + R22: a várakozó beolvasása és az első rögzítő vizsgálata az utolsó várakozás után, szinkron az ütemezéssel. A kör első
+      // rögzítőjével össze nem férő beküldő nem írhatja felül a várakozót (a körazonosítót a kliens választja).
+      const waiting = pendingPartials.get(lockKey);
+      if (waiting && !mayActOn(waiting.who, who)) return { queued: false, partial: true, conflict: true };
+      const lastAnsweredOnServer = onServerClock(body.lastAnsweredAt);
+      const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(startedAtOnServer ? { startedAt: startedAtOnServer } : {}), ...(lastAnsweredOnServer ? { lastAnsweredAt: lastAnsweredOnServer } : {}) } };
+      // R16: ha a kört vendég rögzítette és most más veszi át (pl. a kör közben bejelentkező tanuló), a kör vendég kör marad — a levél
+      // attribúciója „Vendég tanuló”, és az első rögzítő is a vendég (a többi vendég-beküldő továbbra is összefér vele).
+      const guestTakeover = waiting !== undefined && waiting.who.startsWith("guest:") && waiting.who !== who;
+      const recorder = guestTakeover ? waiting.who : who;
+      const sender = async () => (guestTakeover ? { learner: GUEST_LEARNER, guest: true } : { learner: await nameOf(), ...attribution });
+      // R1 + R21: a kapu MINDEN kísérlet (az újrapróba is) előtt, a kör kizárása alatt nézi, hogy a kör közben véglegesült-e, és hogy a
+      // kísérlet még az aktuális pillanatkép-változatra vonatkozik-e.
+      const version = ++partialVersionSeq;
+      const gate: SendGate = attempt => withRoundLock(lockKey, async () => {
+        if (partialVersions.get(lockKey) !== version || await roundFinalized(lessonId, partialWhos, body.roundId)) return { sent: 0, duplicate: true };
+        if (gateCheckHook) await gateCheckHook(lockKey);
+        if (partialVersions.get(lockKey) !== version) return { sent: 0, duplicate: true };
+        return attempt();
+      });
+      const queued = schedulePartial(lockKey, `${lessonId}|${recorder}`, recorder, snapshot.meta?.partial?.answered ?? 0, version,
+        async () => sendLessonResult({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }, true, gate));
+      return { queued, partial: true };
     });
-    const queued = schedulePartial(lockKey, `${lessonId}|${recorder}`, recorder, snapshot.meta?.partial?.answered ?? 0, version,
-      async () => sendLessonResult({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }, true, gate));
-    return res.status(202).json({ queued, partial: true });
+    return res.status(202).json(outcome);
   }
   let graded: GradedTasks | GradedQuiz;
   if (body.kind === "tasks") {
