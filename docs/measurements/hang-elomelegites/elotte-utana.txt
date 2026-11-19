@@ -1,0 +1,20 @@
+# Hang-előmelegítés — mérés előtte (dist-main = origin/main dc76ba52) / utána (dist-hang = fix/hang-elomelegites f1abb499)
+# 390x844, dpr 3, valódi GPU (AMD Radeon 890M), fejes Chrome, csonk /api, 1 idegen e2e-konténer mellett, 2026-11-19 03:25 UTC
+# Módszer: menü 4 s → indítás → 4 s → kérdés kényszerítése (forceState) → 1,2 s → jó válasz → 1,5 s; 'kérdés + első válasz körül max' = leghosszabb képkocka ebben az ablakban;
+# 'AudioContext' = a konstruktor hívásának helye és ideje (a lapba injektált mérő).
+== bc dist-main
+bc futás 1: indítás körül max 300 ms | kérdés + első válasz körül max 217 ms, >50 ms: [217], AudioContext: [{"hol":"kérdés körül","relIndításMs":5690,"ctorMs":228}]
+bc futás 2: indítás körül max 233 ms | kérdés + első válasz körül max 83 ms, >50 ms: [83], AudioContext: [{"hol":"kérdés körül","relIndításMs":5664,"ctorMs":99}]
+bc futás 3: indítás körül max 167 ms | kérdés + első válasz körül max 117 ms, >50 ms: [117], AudioContext: [{"hol":"kérdés körül","relIndításMs":5611,"ctorMs":124}]
+== bc dist-hang
+bc futás 1: indítás körül max 383 ms | kérdés + első válasz körül max 117 ms, >50 ms: [117], AudioContext: [{"hol":"menü","relIndításMs":-3908,"ctorMs":252}]
+bc futás 2: indítás körül max 267 ms | kérdés + első válasz körül max 50 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-3928,"ctorMs":105}]
+bc futás 3: indítás körül max 183 ms | kérdés + első válasz körül max 33 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-3927,"ctorMs":103}]
+== br dist-main
+br futás 1: indítás körül max 17 ms | kérdés + első válasz körül max 133 ms, >50 ms: [133], AudioContext: [{"hol":"indítás után","relIndításMs":65,"ctorMs":495}]
+br futás 2: indítás körül max 333 ms | kérdés + első válasz körül max 50 ms, >50 ms: [], AudioContext: [{"hol":"indítás után","relIndításMs":53,"ctorMs":146}]
+br futás 3: indítás körül max 350 ms | kérdés + első válasz körül max 33 ms, >50 ms: [], AudioContext: [{"hol":"indítás után","relIndításMs":57,"ctorMs":152}]
+== br dist-hang
+br futás 1: indítás körül max 917 ms | kérdés + első válasz körül max 83 ms, >50 ms: [83], AudioContext: [{"hol":"menü","relIndításMs":-3655,"ctorMs":174}]
+br futás 2: indítás körül max 183 ms | kérdés + első válasz körül max 17 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-3946,"ctorMs":88}]
+br futás 3: indítás körül max 183 ms | kérdés + első válasz körül max 17 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-3905,"ctorMs":106}]
