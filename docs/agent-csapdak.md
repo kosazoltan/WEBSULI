@@ -24,6 +24,9 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-62** — Zöld CI után nincs további push (doksi sem); a mondanivaló a zárójelentésbe / PR-leírásba megy.
 - **C-63** — A kötelező ellenőrzés (E2E is) nem alku tárgya; megkerülés csak tulajdonosi engedéllyel.
 - **C-70** — Mutációs ellenpróba előtt commit vagy másolat; visszaállítás után `cmp` — ne `git checkout <fájl>` commitolatlan munkán.
+- **C-76** — Vak ellenőr: 1 teljes kör + célzott visszanézés, legfeljebb 3 kör; változatlan részben új, nem blokkoló lelet → jegy.
+- **C-77** — Nehéz kör csak gép-zárral, sorrendfájl szerint; folyamatot csak pontos saját PID alapján állíts le, mintaillesztéssel soha.
+- **C-78** — Main-beolvasztás után ne fizess új CI-t / vak kört: gépi összefésült próba (merge-kapu) és bizonyíték-átvitel (`gate:carry`).
 
 ### Shell, Windows, eszközök
 - **C-01** — A `node_modules` gépenként települ (`npm.cmd ci`), másolni tilos; gyanús natív hibánál `npm run doctor:arch`.
@@ -1106,3 +1109,31 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-76 — Vak-kör oszcilláció: hat kör egy doksin (2026-11-19)
+
+- **Tünet:** a #517 (csak doksi) terve hat vak, hibakereső kört kapott, mert minden visszanézés a VÁLTOZATLAN részben is talált egy
+  újabb, nem blokkoló ellentmondást, és mindegyik új javítókört nyitott.
+- **Költség:** öt extra kör (ellenőr + javítás + szakasz-kapu), fél nap; a P2 és a #513 közben állt.
+- **Szabály (tulajdonosi döntés 2026-11-19):** az 1. kör teljes; a visszanézés csak a javítást és a korábbi leleteket ellenőrzi; a
+  változatlan részben talált új, NEM blokkoló lelet kanban-jegy, nem új kör; legfeljebb 3 kör, utána tulajdonosi döntés; blokkoló
+  mindig megállít (`docs/minosegkapuk.md`, `websuli-fejlesztesi-ellenor` skill). A fejlesztő az 1. kör előtt maga olvassa végig a
+  doksit fogalom-egységesség szerint (definiált fogalmak, régi elnevezések, „egyetlen”-állítások).
+
+## C-77 — Gép-zár: nehéz kör csak zárral; folyamat-leállítás csak pontos PID alapján (2026-11-19)
+
+- **Tünet:** párhuzamos ügynökök egyszerre indítottak `npm ci`-t, teljes `npm test`-et, böngészős kört és DB-konténert — a gép
+  túlterhelődött, a tesztek ingadoztak. A gép-zár bevezetése után egy ügynök mintaillesztéssel (a parancssorban `gep-sav` / `gazda`)
+  14 bash-folyamatot állított le, köztük más ügynökök zár-várakozóit.
+- **Szabály:** nehéz kör csak a két zár (`lock` / `lock2`) egyikével, a `kovetkezo.txt` sorrendje szerint; a zárat csak azonnal futó,
+  időkorlátos, `trap`-pel elengedő szkript kérheti; a várakozó szkriptet futás közben nem írjuk felül (új fájlnév); folyamatot csak
+  pontos, saját PID alapján állítunk le (`Get-CimInstance … -Filter "ProcessId=<n>"` + a parancssor ellenőrzése), mintaillesztéssel
+  soha.
+
+## C-78 — Main-beolvasztás: új CI-kör és bizonyíték-vesztés helyett gépi próba és átvitel (2026-11-19)
+
+- **Tünet:** a C-61 (a main elmozdult, a PR őrt / kaput érint) eddig új teljes CI-t kért (~1 órás E2E); a main beolvasztása új fejet
+  adott, és a vak ítélet, a push- és a PR-kapu bizonyítéka elveszett — akkor is, ha a PR saját változása bájtra azonos maradt.
+- **Szabály (tulajdonosi döntés 2026-11-19):** a merge-kapu ilyenkor gépi összefésült próbát futtat (`merged-probe.mjs`: őr-tesztek +
+  a PR node-os tesztjei a PR feje + friss main állapotán); beolvasztás után a `npm run gate:carry -- --from <régi fej>` igazolja és
+  átviszi a bizonyítékot (ütközésmentes merge, azonos fa, azonos `patch-id`). Bármely eltérés → teljes kör.

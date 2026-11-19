@@ -129,12 +129,39 @@ viszi bukásra.
   ellenőrzést érint (`*-guard.test.ts`, `scripts/qa/**`, `.github/workflows/**`), és a main olyan fájlt változtatott, amelyet az
   ellenőrzés olvas: az őröknél és a workflow-nál bármit (`.*`), a `scripts/qa/`-nál a `scripts/qa/`, `.claude/settings.json`,
   `docs/specs/`, `render.yaml`, `.agents/skills/`, `.claude/skills/`, `.github/workflows/` alatt (indoklás fájl:sorral a konfigban;
-  átnevezett fájlnál a régi név is számít). FAIL akkor
-  is, ha a fájllista nem olvasható, csonka (≥ 300) vagy üres eltérő SHA mellett, illetve ha a hatókör-táblázat hiányzik vagy hibás.
+  átnevezett fájlnál a régi név is számít), vagy a fájllista nem olvasható / csonka (≥ 300) / üres eltérő SHA mellett. **Ilyenkor a
+  kapu NEM kér új CI-t** (kapu-gyorsítás, tulajdonosi döntés 2026-11-19): lekéri a PR fejét és a friss maint (hash-egyezéssel a
+  GitHub-adatokhoz), és ideiglenes, leválasztott munkafában lefuttatja a **gépi összefésült próbát** (`scripts/qa/gates/merged-probe.mjs`,
+  ugyanaz a kód, mint a push-kapu C-61 lépése): az összes őr-teszt + a PR által érintett `source/tests/*.test.ts` és `scripts/qa`
+  `*.test.mjs`. Zöld → PASS (a darabszám, az összefésült fa és az időtartam a `merge-probe-<PR>-<fej>` rekordban); ütközés / piros /
+  nem futtatható → FAIL. A hiányzó vagy hibás hatókör-táblázat továbbra is FAIL (konfighiba).
+- **Bizonyíték-átvitel főág-beolvasztás után (`npm run gate:carry -- --from <régi fej>`):** ha az új fej egy ütközésmentes
+  main-beolvasztás (két szülő: a régi, bizonyítékkal rendelkező fej és az `origin/main` egy őse; a gépi összefésülés fája = az új fej
+  fája), és a PR saját változása bájtra azonos (`git patch-id --verbatim`), a szkript az új fejen lefuttatja az összefésült próbát, és
+  zöld esetén átviszi a vak ítéletet (`review-`) és a `pre-push-` / `pre-pr-` bizonyítékot (csak `ok: true`; a vak ítélet kötelező) egy
+  gépi `carry-<új fej>` rekorddal. Bármely eltérés → nincs átvitel (a teljes kör kell). Az átvitt rekordot a hook a meglévő
+  `ok === true` szabállyal fogadja el.
   **WARN**, ha a main elmozdult, de nincs metszet (pl. csak játékkód változott egy `scripts/qa`-s PR mellett). **PASS**, ha a CI a
   jelenlegi mainnel futott.
 - A hook csak a WEBSULI-ból indított Claude Code munkamenetekre hat (a `.claude/settings.json`-t a munkamenet induláskor olvassa —
   a merge után induló munkamenetektől érvényes). Más ügynököt (Codex, Cursor) az `AGENTS.md`, a skillek és a `.cursor/rules` köt.
+
+## Vak, hibakereső ellenőr: körök szabálya (tulajdonosi döntés 2026-11-19: „1 teljes kör + célzott visszanézés”)
+
+- Az **1. kör teljes**: a teljes diff és a terv.
+- A **visszanézés** csak a javítást és a korábbi leleteket ellenőrzi (`git diff <régi fej>..<új fej>` + a korábbi lelet-lista).
+- A változatlan részben talált **új, NEM blokkoló** lelet **kanban-jegy**, nem új kör.
+- Legfeljebb **3 kör**; utána a tulajdonos dönt. **Blokkoló** lelet mindig megállít (javítás + visszanézés).
+
+## Gép-zár (nehéz kör: `npm.cmd ci`, teljes `npm test`, `gate:push` / `gate:pr`, böngészős, DB-konténer)
+
+- Két zár: `<scratchpad>/gep-sav/lock` és `lock2`; a `kovetkezo.txt` sorrendfájl soronként egy nevet tartalmaz. Zárat csak az kérhet,
+  akinek a neve a fájlban áll (vagy a fájl üres); a megszerzéskor a SAJÁT sorát törli, a többit meghagyja; a `gazda.txt` a megszerzett
+  zár mappájába kerül.
+- A zárat csak olyan szkript kérheti, amely a megszerzéskor azonnal fut, időkorláttal megszakít, és `trap`-pel elengedi; egy zárral
+  legfeljebb ~30 perc.
+- A várakozó szkriptet futás közben nem írjuk felül (új fájlnév); folyamatot csak pontos, saját PID alapján állítunk le, mintaillesztéssel
+  soha.
 
 ## Push-fegyelem (átmeneti kapu-szabály 5–8., 2026-11-17)
 

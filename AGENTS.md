@@ -158,7 +158,9 @@ blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 2. **Szakasz-kapu minden fejlesztési szakasz után:** `npm run gate:stage` (lint gyors mód + a változott fájlok egységtesztjei + minden
    őr-teszt). Csak zöld után lehet továbblépni; előbb a helyi hibát kell javítani.
 3. **Független ellenőr:** minden elkészült fejlesztést egy friss kontextusú, csak olvasó alügynök ellenőriz a PR megnyitása ELŐTT és
-   minden érdemi javító push előtt (a fejlesztő nem ellenőrizheti magát). Az ítéletet a `record-review.mjs` rögzíti.
+   minden érdemi javító push előtt (a fejlesztő nem ellenőrizheti magát). Az ítéletet a `record-review.mjs` rögzíti. Körök: 1 teljes kör
+   + célzott visszanézés (csak a javítás és a korábbi leletek); változatlan részben új, nem blokkoló lelet → kanban-jegy; legfeljebb 3
+   kör, utána tulajdonosi döntés; blokkoló mindig megállít (`docs/minosegkapuk.md`).
 4. **A kapuk sorrendje:** `gate:stage` (szakaszonként) → `gate:push` → független ellenőr + `record-review` →
    `gate:pr -- --body-file <leírás.md>` → push + PR → zöld CI → közvetlenül a merge előtt `gate:merge -- <PR>`. A `git push`,
    `gh pr create` és `gh pr merge` előtt a `check-quality-gates` hook a zöld bizonyítékot ellenőrzi.

@@ -140,6 +140,9 @@ node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head <fe
 - A javított fejet UGYANAZ az ellenőr kapja (SendMessage a meglévő alügynöknek), a `git diff <régi-fej> <új-fej>` kiindulással:
   minden korábbi lelet lezárása / állapota, és új hiba a javításban (a javítás gyakran új hibát hoz: C-68).
 - A jelentés végére új szakasz: `# Visszaellenőrzés — új fej <hash>` saját ítélettel.
+- **Körök szabálya (tulajdonosi döntés 2026-11-19):** az 1. kör teljes; a visszanézés CSAK a javítást és a korábbi leleteket nézi; a
+  változatlan részben talált új, NEM blokkoló lelet kanban-jegy (a jelentés „Jegyre menő leletek” szakaszába), nem új kör; legfeljebb 3
+  kör, utána tulajdonosi döntés; blokkoló lelet mindig megállít.
 
 ## 6. Az ítélet rögzítése (ezt olvassa a pre-pr-gate és a pre-merge-gate)
 
