@@ -93,12 +93,13 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     if (kind !== "quiz" || !lessonId) return;
     // Terv R12: pillanatkép CSAK a szerver jelzése mellett — a régi szerver nem ismeri (400), és a 20-as keretét fogyasztaná. Ha még nincs
     // token (vagy a korábbi lekérés elbukott), most kér egyet, és jelzés esetén akkor küld.
+    // A kör a hívás PILLANATÁBAN rögzül: ha előbb tokent kell kérni, közben a nézet már az új kört mutathatja (kör-csere, R3).
     const snapshot = () => {
-      if (resultApiReady()) { sendSnapshot(); return; }
-      void ensureResultApi().then(capable => { if (capable) sendSnapshot(); });
-    };
-    const sendSnapshot = () => {
       const current = committed.current;
+      if (resultApiReady()) { sendSnapshot(current); return; }
+      void ensureResultApi().then(capable => { if (capable) sendSnapshot(current); });
+    };
+    const sendSnapshot = (current: ExperienceRound) => {
       const count = answeredCount(current);
       if (current.finishedAt || quizRoundComplete(current) || count === 0 || roundTooOld(roundActivityAt(current), Date.now())) return;
       const roundId = `round-${experienceFingerprint({ ids: current.ids, startedAt: current.startedAt })}`;
