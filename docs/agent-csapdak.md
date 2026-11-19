@@ -37,6 +37,14 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-50** — Visszaperjeles szöveg csak Edit/Write-tal; bájtszintű visszaolvasás; szkriptes cserénél `git diff --stat` ellenőrzés.
 - **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
 
+### Gépi zár, párhuzamos nehéz körök (2026-11-19; a részletek a C-75 előtt — `websuli-gep-zar` skill)
+- **C-80** — Zárat csak a `machine-lock.mjs run` szerez, és azonnal futtat; a „csak zároló” várakozó 1 ó 40 percig üresen tartotta a zárat.
+- **C-81** — Érkezési sorrend (FIFO), a sorfájlt csak a szkript írja; a „bárki, aki a sorban van” szabálynál a hátrébb állók előztek.
+- **C-82** — Futó bash-szkriptet nem szerkesztünk (a bash bájtpozíció szerint olvas tovább); új fájlnév.
+- **C-83** — Folyamatot csak a sajátodat, pontos PID alapján; a mintaillesztéses leállítás idegen várakozókat ölt meg (rokon: C-77 más ágon).
+- **C-84** — Figyelő / lejárat UTC-ben, `Date.now()` különbségből; a helyi idő rossz várakozási időt adott.
+- **C-85** — Minden nehéz eszköz a zár alatt, a vak futtató `run_e2e` / `run_db_tests` is; zár nélkül időzítési hamis piros lett.
+
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
 - **C-13** — Egyedi színű `outline` gombnál a `hover:text-*` is; a teszt rámutatott állapotban is mérje a színt.
@@ -1086,6 +1094,54 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 - **Szabály:** láthatatlan vagy tipográfiai karaktert a forrásban mindig escape-pel írj, és írás után ellenőrizd a fájl nyers
   tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
   állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
+
+<!-- C-80…C-85: a számsorrenden kívül, a C-75 előtt — a fájl végére a párhuzamos ágak is hozzáfűznek (C-48), ott ütközne. -->
+
+## C-80 — „Csak zároló” várakozó: a zár 1 óra 40 percig üresen állt (2026-11-19)
+
+- **Tünet:** a régi, munkamenet-ideiglenes gépi zárnál egy várakozó szkript megszerezte a zárat, de nem futtatott semmit: a nehéz
+  kört az ügynöknek kellett volna utána elindítania, ő viszont közben befejezte a futását. A sáv 1 óra 40 percig foglalt volt, munka
+  nélkül; a sorban állók addig vártak.
+- **Gyökérok:** a zár megszerzése és a futtatás két külön szereplőnél volt.
+- **Szabály:** zárat CSAK a `node scripts/qa/machine-lock.mjs run … -- <parancs>` szerez, és AZONNAL a saját gyerekeként futtat,
+  időkorláttal, a végén (hiba / időtúllépés / jel esetén is) elenged (`docs/minosegkapuk.md` „Gépi zár”, `websuli-gep-zar` skill).
+
+## C-81 — A sorrend előzése: a hátrébb állók elvitték a sávot (2026-11-19)
+
+- **Tünet:** a régi szabály („zárat kérhet bárki, aki a `kovetkezo.txt`-ben áll”) mellett a sorban hátrébb állók megelőzték az
+  előttük állókat; a sorrendfájlt több ügynök kézzel írta.
+- **Szabály:** érkezési sorrend (FIFO): zárat csak a sor ELSŐ élő eleme szerezhet; a beállás atomi (sor-mutex + számláló + `wx`), a
+  sor- és zárfájlokat csak a szkript írja. Kézi szerkesztés / törlés tilos.
+
+## C-82 — Futó bash-szkript szerkesztése (2026-11-19)
+
+- **Tünet:** egy futó várakozó / zároló bash-szkriptet menet közben átírtak; a futó példány a módosított fájl közepéből folytatta.
+- **Gyökérok:** a bash a szkriptet futás közben, bájtpozíció szerint olvassa tovább — a szerkesztés a már futó példányt is elrontja.
+- **Szabály:** futó szkriptet nem szerkesztünk; új változat új fájlnéven. A gépi zárat bash-szkript helyett a repó Node-szkriptje adja.
+
+## C-83 — Mintaillesztéses folyamatleállítás idegen folyamatokat ölt meg (2026-11-19)
+
+- **Tünet:** a parancssor mintája szerinti leállítás (pl. a zár-mappa nevére illesztve) más ügynökök várakozóit és futásait is
+  leállította. Rokon bejegyzés más ágakon: C-77 (`fix/kapu-gyorsitas`, `perf/kockavadasz-telefon-gyors`).
+- **Szabály:** folyamatot csak a SAJÁTODAT, pontos PID alapján állíts le (a PID-et a saját indításodból vagy a
+  `machine-lock.mjs status` kimenetéből — és csak ha az a te `run`-od); `pkill -f`, név / parancssor szerinti `Stop-Process`,
+  `taskkill /IM` tilos. A `machine-lock.mjs` maga is csak a saját gyerekét állítja le (POSIX: a saját folyamatcsoportját; Windows:
+  `taskkill /PID <gyerek> /T /F`), elavult zárnál senkit.
+
+## C-84 — A figyelő helyi időt számolt UTC helyett (2026-11-19)
+
+- **Tünet:** a zár-figyelő a gazda-fájl UTC-időbélyegét helyi időként értelmezte, ezért rossz várakozási időt / lejáratot számolt.
+- **Szabály:** minden időbélyeg UTC (ISO 8601, `Z`); eltelt idő és lejárat `Date.now()` különbségéből, a helyi időzóna nem számít
+  (a `machine-lock.mjs` minden fájlja és kimenete így ír).
+
+## C-85 — A vak futtató nehéz eszközei zár nélkül futottak (2026-11-19)
+
+- **Tünet:** a vak futtató `run_e2e` / `run_db_tests` eszköze zár nélkül indított böngészős / DB-kört — a zárat tisztelő ügynökök
+  mellett is futhatott egy második nehéz kör. Két nehéz kör egyszerre a gépen időzítésfüggő hamis bukást adott (kanban #205: 60,6 s /
+  60 s; #206: `setTimeout`-sorrend — önmagukban zöldek).
+- **Szabály:** minden nehéz kör — más MI-eszközből, futtatóból, szkriptből is — a `machine-lock.mjs run` alatt (`AGENTS.md` „Gépi
+  zár”). Ha egy teszt csak párhuzamos terhelésnél bukik: előbb a zár nélküli párhuzamos kör keresése (`status`, `events.log`), a teszt
+  időzítési gyengesége kanban-jegy; a tesztet gyengíteni tilos.
 
 ## C-75 — Őrt / kaput érintő PR-ok: soros merge-ablak; a hook bekötését a valódi settings-szel mérd (2026-11-18)
 

@@ -145,6 +145,35 @@ viszi bukásra.
 3. Push után EGY hosszú figyelő a CI végére; közbenső „még fut” jelentés nélkül.
 4. Zöld CI-jú fejre csak blokkoló lelet javításáért pusholj — és akkor is mindent egy pushban.
 
+## Gépi zár — `machine-lock.mjs` (egy sáv, kötelező 2026-11-19)
+
+Terv: `docs/specs/2026-11-19-gepi-zar.md`. Skill: `websuli-gep-zar`. Szabály: `AGENTS.md` „Gépi zár”. Ez az alfejezet felvált minden
+korábbi, munkamenet-ideiglenes zárat (két sáv `lock` / `lock2`, `kovetkezo.txt`).
+
+- **Miért:** két nehéz kör egyszerre a gépen időzítésfüggő hamis bukást ad (kanban #205: 60,6 s a 60 s-os korláttal szemben; #206:
+  `setTimeout`-sorrend), a tesztek önmagukban zöldek.
+- **Parancs:** `node scripts/qa/machine-lock.mjs run --name <név> --timeout-min <perc> [--max-wait-min <perc>] -- <parancs> [arg…]`
+  (`npm run machine-lock -- run …`); állapot: `node scripts/qa/machine-lock.mjs status [--json]`.
+- **Magától a zár alatt:** gyökér `npm test` (60 perc), `npm run test:e2e` (150), `npm run test:learning-db` (45), `npm run verify` (90),
+  `npm run gate:push` (90), `npm run gate:pr` (300 — a `pre-pr-gate.mjs` önmaga áll sorba, a közvetlen `node` hívásnál is). A
+  `node scripts/qa/gates/pre-push-gate.mjs` közvetlen hívása NEM áll sorba — a push-kaput `npm run gate:push`-sal indítsd.
+- **Működés:** atomi beállás a sorba (`queue.mutex/` + `counter` + `queue/<sorszám>.json`, `wx`); zárat csak a sor első élő eleme
+  szerez (atomi `mkdir lock/`, `lock/owner.json`: név, PID, gyerek PID, gép, parancs, kezdés UTC, időkorlát, token); a parancs AZONNAL
+  gyerekként fut időkorláttal; a végén — hiba, időtúllépés (124), Ctrl+C (130), SIGTERM (143) esetén is — a saját gyerek leáll (POSIX:
+  folyamatcsoport; Windows: `taskkill /PID <gyerek> /T /F`), a zár elenged, a bejegyzés törlődik; kilépési kód a parancsé. A
+  várakozó 60 s-onként kiírja a helyét és a gazdát; `--max-wait-min` lejártakor 75 (a parancs nem fut).
+- **Elavult zár / bejegyzés:** visszavehető, ha a gazda és a gyereke ugyanazon a gépen nem él, vagy a kezdés + időkorlát + türelmi idő
+  (`WEBSULI_MACHINE_LOCK_GRACE_MIN`, alap 10 perc) lejárt, vagy 60 s után sincs gazda-fájl; a sorbejegyzés, ha a PID nem él vagy az
+  életjel 5 percnél régebbi. Atomi átnevezéssel, naplózva: `<zár-mappa>/events.log` (UTC). Élő folyamatot a szkript soha nem állít le.
+- **Újrabelépés:** a gyerek `WEBSULI_MACHINE_LOCK_HELD=<token>`-t örököl; csak a jelenlegi, élő gazda tokenje érvényes (a `gate:pr`
+  belső `npm run build` / `test:learning-db` hívása így nem vár a saját szülőjére). Hamis / régi token → figyelmeztetés, sorba állás.
+- **Hely:** `<git-common-dir>/websuli-machine-lock/` (a szkript saját repójáé — fő checkout, munkafa, ideiglenes munkafa ugyanaz);
+  `WEBSULI_MACHINE_LOCK_DIR` felülírja (teszt). CI-ben (`CI` igaz, nem `false` / `0`) átenged. Git és változó nélkül: kód 2, a parancs
+  nem fut.
+- **Ismert korlátok:** a PID-ellenőrzés csak ugyanazon a gépen érvényes; Windows-on a `run` kemény leállítása (TerminateProcess) után
+  a gyerek tovább futhat — a zár addig foglalt, utána elavult; a zár a Node-folyamatokra hat, a kézzel, zár nélkül indított nehéz kört
+  nem látja (szabály: `AGENTS.md`). A cmd.exe `%VAR%` kifejtését Windows-on az npm-parancs argumentumában nem lehet idézéssel tiltani.
+
 ## Melyik mért hibát melyik kapu fogja meg
 
 | # | Mért hibatípus (2026-11-16/17) | Gép fogja meg? | Melyik kapu / mi |
