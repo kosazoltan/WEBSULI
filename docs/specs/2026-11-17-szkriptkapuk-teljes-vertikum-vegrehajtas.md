@@ -64,6 +64,23 @@ Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` 6.1. Minden pont e
 14. P2-KI5: a csapda-katalógus bejegyzése C-76 (a #506 a C-75-öt hozza; a később beolvasztott kap új számot).
 15. Ellenőrzés: célzott tesztek, mutációs ellenpróba (másolaton); szakasz- és push-kapu az ütemezett ablakon kívül.
 
+### P2 — második javítókör (2026-11-19; vak ítélet a `15336c22` fejre: IGEN, FELTÉTELLEL)
+
+Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` 6.1, 6.3a. Minden pont előbb bukó teszttel.
+
+16. A `--verify` „régi” minősítése a láncba írt leltárból (`chain-baseline`: a lánc indulásakor meglévő kapu-rekordok neve + hash-e;
+    új leltár csak kifejezett `--baseline`-nal, naplózva) — nem a módosítási időből. Régi tartalom új néven → probléma (másolat). A
+    leltáron kívüli, láncolatlan kapu-rekord „átmeneti” kategória (P2 előtti kódú író vagy kézi rekord): nem nullázza a „2 hét
+    törés nélkül” mérést; `--strict` módban probléma (a P2 összevonása és a nyitott ágak újra-alapozása után).
+17. A javított, nem igazolt rekord a `--verify`-ban probléma („JAVÍTOTT (NEM IGAZOLT)”, nem 0-s „ÉP”); a kimenet kiírja a régi,
+    átmeneti és javított rekordok számát.
+18. Titok-szűrés: a puszta név is (`password=`, `TOKEN=`, `secret=`, `pwd=`) és a JSON / YAML alak (`"password": "x"`); a runbook
+    pontosan ezt állítja.
+19. Az átnevezés korlátos újrapróbával (EPERM / EBUSY, 5 kísérlet); az azonos nevű régi rekord helyére előbb nem-zöld helyőrző kerül
+    (a K4 maradék rése: a hook `ok === true`-t keres, a láncbeli eltérés így nem hagy zöldet). A hook nem változik (a #506 a hookot
+    módosítja; ütközés elkerülése).
+20. A zár-átvétel maradék versenyablaka (három szereplő, mikroszekundumos) a runbookban kimondva.
+
 ## R — Javítókör a független review után (2026-11-17; jelentés: a scratchpad `review-szkriptkapuk/jelentes.md`)
 
 Elv: a terv 6.3a „Bevezetési lépcsők” szakasza szerint MINDEN új kapu `warn` alapértékkel indul; a tiltás konfig-kapcsoló, alapból KI.
