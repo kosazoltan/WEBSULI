@@ -728,3 +728,7 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
 - 2026-11-18 — S4 KÉSZ: `client/src/components/AdventHomeCard.tsx` a `UserFileList.tsx`-ben a Hero és a támogatói sáv / tananyagok
   között (üres listánál is); `tests/advent-home-card.spec.ts` (9 böngészős eset; a kártya csak az állapot után jelenik meg — ellenőri lelet F1), `tests/advent-home-card.test.ts` (4). Mért: telefonon 132 px magas kártya, a lista 144 px-lel
   lejjebb; asztalon 160 px, a lista 172 px-lel lejjebb (terv 14.2 határa: 144 / 172).
+- 2026-11-19 — 3/3 PR vak ellenőr 1. köre (terv `docs/specs/2026-11-18-adventi-naptar.md` 20.): a főoldali kártya és a CSS-e külön, lusta
+  darab (`AdventHomeSlot`; kikapcsolt build-kapcsolónál a lusta import sincs a buildben, a foglalat a kártya méretén áll — CLS);
+  a `/adventi-naptar` útvonal a build-kapcsolóhoz kötött; `?nyit=ma` után a megnyitó a mai ablak (fókusz); a „Tovább” utáni
+  védőidő csak az azonos pontot védi (`client/src/advent/tap-guard.ts`). Előbb bukó tesztek (egység + böngésző).
