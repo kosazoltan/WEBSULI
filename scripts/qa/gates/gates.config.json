@@ -38,6 +38,38 @@
     "source/shared/schema",
     "source/migrations/"
   ],
+  "$gameE2e": "PR-kapu célzott böngészős köre (docs/specs/2026-11-19-gate-pr-celzott-e2e.md): játékonként a saját spec-ek és a mobil mérő szűrője. Minden, a games mintára illő spec pontosan egy játéknál szerepel (őr: pre-pr-gate.test.mjs).",
+  "gameE2e": {
+    "tsunami-english": { "specs": ["tsunami-play.spec.ts"], "meterGrep": "tsunami-english" },
+    "block-craft-quiz": { "specs": ["block-craft-real-touch.spec.ts", "blockcraft-two-finger.spec.ts"], "meterGrep": "block-craft-quiz" },
+    "brain-rot-steal": { "specs": ["brainrot-play.spec.ts"], "meterGrep": "brain-rot-steal" },
+    "space-asteroid-quiz": { "specs": [], "meterGrep": "space-asteroid-quiz" },
+    "speed-quiz-math": { "specs": ["speed-math-boss.spec.ts", "speed-math-play.spec.ts"], "meterGrep": "speed-quiz-math" },
+    "tornado-hunter-200": { "specs": ["tornado-hunter-render.spec.ts", "tornado-j7a.spec.ts"], "meterGrep": "tornado-hunter-200" },
+    "word-ladder-hu-en": { "specs": ["word-ladder-play.spec.ts", "word-ladder-readability.spec.ts"], "meterGrep": "word-ladder-hu-en" }
+  },
+  "$sharedGameFiles": "Közös játékfájlok (előtagok): ha változnak, a teljes helyi játék-kör fut (fail-safe). A sharedGamePatterns is ide számít.",
+  "sharedGameFiles": [
+    "source/client/src/lib/audioEngine.ts",
+    "source/client/src/components/AudioToggleButton.tsx",
+    "source/tests/helpers/",
+    "source/tests/fixtures/",
+    "source/tests/support/",
+    "source/tests/game-mobile-cases/",
+    "source/tests/game-win-cases/",
+    "source/tests/e2e-seed.ts",
+    "source/tests/coupon-expired-all-games.spec.ts",
+    "source/tests/game-meta-quality.spec.ts",
+    "source/tests/game-mobile-quality.spec.ts",
+    "source/tests/game-mobile-moving-targets.spec.ts",
+    "source/tests/game-viewport-experience.spec.ts",
+    "source/tests/game-win-paths.spec.ts",
+    "source/tests/game-explanation-pause.spec.ts",
+    "source/tests/games-lobby-mobile.spec.ts",
+    "source/tests/games-pointer-controls.spec.ts",
+    "source/tests/games-touch-controls.spec.ts",
+    "source/tests/joystick-response.spec.ts"
+  ],
   "alwaysGameSpecs": [
     "game-meta-quality.spec.ts",
     "coupon-expired-all-games.spec.ts"

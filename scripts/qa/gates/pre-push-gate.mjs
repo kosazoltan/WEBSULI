@@ -146,26 +146,46 @@ async function mergedGuardCheck(ctx) {
 }
 
 /** A push előtti kapu lépései (a PR előtti kapu is ezt hívja). */
-export async function runPrePushSteps({ gate, ctx, slice = false }) {
+/**
+ * Az olcsó, determinisztikus lépések (docs/specs/2026-11-19-gate-pr-celzott-e2e.md): tiszta munkafa → fetch → háromfázisú rend →
+ * PR-méret. `[név, fn]` párok — a push-kapu sorban lefuttatja, a PR-kapu az első bukásnál megáll (fail-fast).
+ */
+export function cheapSteps(ctx) {
+  const { exec, git, root, base, node } = ctx;
+  return [
+    ['tiszta munkafa (nincs commitolatlan és nem követett fájl)', () => {
+      const d = git.trackedDirty();
+      // Review J7: a nem követett fájl a helyi tsc-t / tesztet zöldre viheti, miközben a commitban nincs benne → csak a CI bukna.
+      const u = git.untracked();
+      if (!d.length && !u.length) return { status: STATUS.PASS };
+      return {
+        status: STATUS.FAIL,
+        note: `${d.length ? 'commitolatlan változás' : ''}${d.length && u.length ? ' + ' : ''}${u.length ? 'nem követett fájl (git add, .gitignore, vagy a scratchpadba vele)' : ''} — a bizonyíték a fej-commitra szól`,
+        detail: [...d, ...u.map((f) => `?? ${f}`)].join('\n'),
+      };
+    }],
+    [`git fetch (${base})`, () => {
+      const remote = base.split('/')[0];
+      const r = git.run(['fetch', remote, '--quiet']);
+      return r.code === 0 ? { status: STATUS.PASS } : { status: STATUS.FAIL, note: 'a fetch nem sikerült (hálózat?) — friss main nélkül nem igazolható', detail: r.stderr };
+    }],
+    ['háromfázisú rend (three-phase-check)', () => cmdResult(exec(node, [join(root, 'scripts/qa/three-phase-check.mjs'), '--base', base], { cwd: root }))],
+    ['PR-méret (pr-size-check)', () => {
+      const r = exec(node, [join(root, 'scripts/qa/pr-size-check.mjs'), '--base', base], { cwd: root });
+      const line = r.stdout.split('\n').find((l) => l.includes('[pr-size]')) ?? '';
+      if (r.code !== 0) return cmdResult(r);
+      return /FIGYELMEZTETÉS|TÚLLÉPÉS/.test(r.stdout)
+        ? { status: STATUS.WARN, note: `${line.replace(/^\[pr-size\]\s*/, '')} — bontsd szeletekre, vagy indokold a PR-ban` }
+        : { status: STATUS.PASS, note: line.replace(/^\[pr-size\]\s*/, '') };
+    }],
+  ];
+}
+
+/** A push előtti kapu lépései. `skipCheap`: az olcsó lépéseket a hívó (PR-kapu) már lefuttatta. */
+export async function runPrePushSteps({ gate, ctx, slice = false, skipCheap = false }) {
   const { exec, git, root, src, base, cfg, node } = ctx;
 
-  await gate.step('tiszta munkafa (nincs commitolatlan és nem követett fájl)', () => {
-    const d = git.trackedDirty();
-    // Review J7: a nem követett fájl a helyi tsc-t / tesztet zöldre viheti, miközben a commitban nincs benne → csak a CI bukna.
-    const u = git.untracked();
-    if (!d.length && !u.length) return { status: STATUS.PASS };
-    return {
-      status: STATUS.FAIL,
-      note: `${d.length ? 'commitolatlan változás' : ''}${d.length && u.length ? ' + ' : ''}${u.length ? 'nem követett fájl (git add, .gitignore, vagy a scratchpadba vele)' : ''} — a bizonyíték a fej-commitra szól`,
-      detail: [...d, ...u.map((f) => `?? ${f}`)].join('\n'),
-    };
-  });
-
-  await gate.step(`git fetch (${base})`, () => {
-    const remote = base.split('/')[0];
-    const r = git.run(['fetch', remote, '--quiet']);
-    return r.code === 0 ? { status: STATUS.PASS } : { status: STATUS.FAIL, note: 'a fetch nem sikerült (hálózat?) — friss main nélkül nem igazolható', detail: r.stderr };
-  });
+  if (!skipCheap) for (const [name, fn] of cheapSteps(ctx)) await gate.step(name, fn);
 
   const { changed } = await runLintSteps({ gate, ctx, mode: 'full' });
 
@@ -191,17 +211,6 @@ export async function runPrePushSteps({ gate, ctx, slice = false }) {
       return cmdResult(r, `${files.length} fájl`);
     });
   }
-
-  await gate.step('háromfázisú rend (three-phase-check)', () => cmdResult(exec(node, [join(root, 'scripts/qa/three-phase-check.mjs'), '--base', base], { cwd: root })));
-
-  await gate.step('PR-méret (pr-size-check)', () => {
-    const r = exec(node, [join(root, 'scripts/qa/pr-size-check.mjs'), '--base', base], { cwd: root });
-    const line = r.stdout.split('\n').find((l) => l.includes('[pr-size]')) ?? '';
-    if (r.code !== 0) return cmdResult(r);
-    return /FIGYELMEZTETÉS|TÚLLÉPÉS/.test(r.stdout)
-      ? { status: STATUS.WARN, note: `${line.replace(/^\[pr-size\]\s*/, '')} — bontsd szeletekre, vagy indokold a PR-ban` }
-      : { status: STATUS.PASS, note: line.replace(/^\[pr-size\]\s*/, '') };
-  });
 
   await gate.step(`friss ${base} beolvasztva (C-61)`, async () => {
     const r = git.run(['merge-base', '--is-ancestor', base, 'HEAD']);

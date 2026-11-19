@@ -30,15 +30,23 @@ Közvetlenül: `node scripts/qa/gates/pre-pr-gate.mjs --body-file <út> [--base 
 
 ## Mit futtat
 
-PR-leírás sablon → ítélet a fejre → a push előtti kapu minden lépése → `npm run build` → játék- / UI-változásnál a CI-AZONOS böngészős
+**Fail-fast (2026-11-19):** előbb az olcsó lépések — PR-leírás sablon → ítélet a fejre → külső sor → tiszta munkafa → `git fetch` →
+háromfázisú rend → PR-méret; az ELSŐ bukásnál a kapu megáll (`pre-pr-<fej>` `ok: false`), a drága lépés nem indul. Utána a push előtti
+kapu többi lépése → `npm run build` → játék- / UI-változásnál a CI-AZONOS böngészős
 út: a kapu egy gitignore-olt csomagoló konfigot ír (`source/playwright.gate.local.mts`: SwiftShader szoftveres WebGL, `workers: 1`,
 `.only` tiltva), és a meglévő harnesszel futtat (eldobható Postgres 17, migráció, seed, buildelt szerver saját szabad porton —
 `WEBSULI_E2E_PORT`):
 
 ```bash
 cd source && node --import tsx scripts/run-e2e-tests.ts --config playwright.gate.local.mts --workers=1 --grep "<játék-azonosító>" tests/game-mobile-quality.spec.ts
-cd source && node --import tsx scripts/run-e2e-tests.ts --config playwright.gate.local.mts --workers=1 tests/<játék>-*.spec.ts tests/game-meta-quality.spec.ts tests/coupon-expired-all-games.spec.ts
+cd source && node --import tsx scripts/run-e2e-tests.ts --config playwright.gate.local.mts --workers=1 <a játék gameE2e spec-jei>
 ```
+
+**Csak az érintett játék (tulajdonosi döntés 2026-11-19):** egy / néhány ismert játéknál a mobil mérő a játékra szűrve + a játék saját
+spec-jei a `gates.config.json` `gameE2e` táblájából; a meta-mérő, a lejárt kupon és minden más spec a CI-ra marad — a kapu kiírja, mit
+futtatott és mit hagyott a CI-ra. Közös / ismeretlen játékfájl (játékmotor, `Games.tsx`, hangmotor, mérő spec-ek, tesztsegédek, több
+játékra illő fájl, a táblában nem szereplő játék-spec) → teljes helyi játék-kör (fail-safe). Új játék-spec → a `gameE2e` táblába is
+(az őr-teszt különben bukik).
 
 (a kapu a pontos parancsot kiírja; közös `game-engine/` változásnál minden játék fut) → DB-változásnál (`source/server/**`,
 `source/shared/schema*`, `source/migrations/**`) `npm run test:learning-db` Dockerrel.

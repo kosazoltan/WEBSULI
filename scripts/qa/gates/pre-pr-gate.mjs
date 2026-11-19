@@ -12,28 +12,43 @@ import { basename, join } from 'node:path';
 import {
   STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog,
 } from './lib.mjs';
-import { evidenceRecord, runPrePushSteps } from './pre-push-gate.mjs';
+import { cheapSteps, evidenceRecord, runPrePushSteps } from './pre-push-gate.mjs';
 import { stemOf } from './stage-gate.mjs';
 
 export const WRAPPER_CONFIG = 'playwright.gate.local.mts';
 
-/** Mi változott: UI, mely játékok, közös játékmotor, adatbázis. */
+/**
+ * Mi változott: UI, mely játékok, közös / ismeretlen játékfájl (→ teljes helyi játék-kör, fail-safe), adatbázis.
+ * Közös: `sharedGamePatterns` + `sharedGameFiles`; ismeretlen: több játék mintájára illő fájl, vagy a `gameE2e` táblában nem szereplő
+ * játék-spec (docs/specs/2026-11-19-gate-pr-celzott-e2e.md).
+ */
 export function classifyChanges(changed, cfg) {
   const src = changed.filter((f) => f.startsWith('source/'));
-  const games = Object.entries(cfg.games ?? {}).filter(([, k]) => { const re = new RegExp(k, 'i'); return src.some((f) => re.test(f)); }).map(([id]) => id);
+  const gameRes = Object.entries(cfg.games ?? {}).map(([id, k]) => [id, new RegExp(k, 'i')]);
+  const owners = (f) => gameRes.filter(([, re]) => re.test(f)).map(([id]) => id);
+  const games = gameRes.filter(([, re]) => src.some((f) => re.test(f))).map(([id]) => id);
+  const sharedPrefixes = [...(cfg.sharedGamePatterns ?? []), ...(cfg.sharedGameFiles ?? [])];
+  const listedSpecs = new Set(Object.values(cfg.gameE2e ?? {}).flatMap((g) => g.specs ?? []));
+  const unknown = src.some((f) => {
+    const o = owners(f);
+    if (o.length > 1) return true;
+    const spec = /^source\/tests\/([^/]+\.spec\.ts)$/.exec(f)?.[1];
+    return Boolean(spec && o.length === 1 && !listedSpecs.has(spec));
+  });
   return {
     games,
-    allGames: src.some((f) => (cfg.sharedGamePatterns ?? []).some((p) => f.startsWith(p))),
+    allGames: unknown || src.some((f) => sharedPrefixes.some((p) => f.startsWith(p))),
     ui: src.some((f) => (cfg.uiPatterns ?? []).some((p) => f.startsWith(p))),
     db: src.some((f) => (cfg.dbPatterns ?? []).some((p) => f.startsWith(p))),
   };
 }
 
 /**
- * A futtatandó böngészős csomagok. Játéknál: a mobil mérő a játék-azonosítókra szűrve (külön futás, mert a `--grep` minden
- * spec-re hat), és egy futás a játék saját spec-jeivel + meta-mérő + lejárt-kupon spec. Más UI-nál: a változott komponens
- * nevét említő spec-ek. A változott spec-fájlok mindig benne vannak.
- * @returns {{ runs: { label: string, specs: string[], grep?: string }[], warning?: string }}
+ * A futtatandó böngészős csomagok (docs/specs/2026-11-19-gate-pr-celzott-e2e.md). Egy / néhány ismert játék: a mobil mérő a játékok
+ * `meterGrep`-jére szűrve (külön futás, mert a `--grep` minden spec-re hat) + a játékok `gameE2e` spec-jei; a meta-mérő, a lejárt
+ * kupon és minden más spec a CI-ra marad (`leftToCi`). Közös / ismeretlen játékfájl: teljes helyi játék-kör (minden játék mérője +
+ * minden játék-spec + `alwaysGameSpecs`). Más UI-nál: a változott komponens nevét említő spec-ek. A változott spec mindig fut.
+ * @returns {{ runs: { label: string, specs: string[], grep?: string }[], warning?: string, leftToCi?: string[] }}
  */
 export function pickE2eSpecs({ classification, specFiles, readSpec, cfg, changed }) {
   const runs = [];
@@ -41,12 +56,17 @@ export function pickE2eSpecs({ classification, specFiles, readSpec, cfg, changed
   const changedSpecs = changed.filter((f) => /^source\/tests\/[^/]+\.spec\.ts$/.test(f)).map((f) => basename(f));
   const mobile = cfg.mobileQualitySpec;
   if (ids.length) {
-    runs.push({ label: `mobil mérő (${classification.allGames ? 'minden játék' : ids.join(', ')})`, specs: [mobile], grep: classification.allGames ? undefined : ids.join('|') });
-    const res = ids.map((id) => new RegExp(cfg.games[id], 'i'));
-    const own = specFiles.filter((s) => s !== mobile && res.some((re) => re.test(s)));
-    const rest = [...new Set([...own, ...(cfg.alwaysGameSpecs ?? []), ...changedSpecs.filter((s) => s !== mobile)])].sort();
-    runs.push({ label: 'játék-spec-ek + meta-mérő + lejárt kupon', specs: rest });
-    return { runs };
+    const table = cfg.gameE2e ?? {};
+    runs.push({
+      label: `mobil mérő (${classification.allGames ? 'minden játék' : ids.join(', ')})`, specs: [mobile],
+      grep: classification.allGames ? undefined : ids.map((id) => table[id]?.meterGrep ?? id).sort().join('|'),
+    });
+    const own = ids.flatMap((id) => table[id]?.specs ?? []);
+    const extra = classification.allGames ? (cfg.alwaysGameSpecs ?? []) : [];
+    const rest = [...new Set([...own, ...extra, ...changedSpecs])].filter((s) => s !== mobile).sort();
+    if (rest.length) runs.push({ label: classification.allGames ? 'teljes játék-kör: minden játék-spec + meta-mérő + lejárt kupon' : `a játék saját spec-jei (${ids.join(', ')})`, specs: rest });
+    const local = new Set(runs.flatMap((r) => r.specs));
+    return { runs, leftToCi: specFiles.filter((s) => !local.has(s)).sort() };
   }
   if (classification.ui || changedSpecs.length) {
     const stems = changed.filter((f) => /^source\/client\/src\/.+\.(?:tsx?|css)$/.test(f)).map(stemOf).filter((s) => s.length >= 4);
@@ -56,6 +76,18 @@ export function pickE2eSpecs({ classification, specFiles, readSpec, cfg, changed
     else return { runs, warning: 'UI-változás, de egyetlen spec sem említi a változott komponenseket — írj böngészős próbát, vagy indokold a PR-ban' };
   }
   return { runs };
+}
+
+/** A PR-kapu olcsó, determinisztikus lépései, ebben a sorrendben (fail-fast; a lépésnevek eleje). */
+export const CHEAP_PR_STEPS = Object.freeze(['PR-leírás sablon', 'független ellenőr ítélete a fejre', 'külső (Gemini) ellenőr — második vélemény', 'tiszta munkafa', 'git fetch', 'háromfázisú rend', 'PR-méret']);
+
+/** Az olcsó lépések sorban; az első FAIL után megáll. @returns {Promise<boolean>} true, ha bukás miatt megállt. */
+export async function cheapPhase(gate, steps) {
+  for (const [name, fn] of steps) {
+    const item = await gate.step(name, fn);
+    if (item.status === STATUS.FAIL) return true;
+  }
+  return false;
 }
 
 /** A PR-leírás kötelező részei; a hiányzók listája. */
@@ -102,7 +134,7 @@ async function main() {
   const head = git.head();
   const bodyFile = argValue(args, '--body-file');
 
-  // 1) Olcsó, gyors lépések előre: PR-leírás és ítélet (a drága futás előtt derüljön ki, ha hiányzik).
+  // 1) Olcsó, gyors lépések előre: PR-leírás, ítélet, tiszta munkafa, fetch, háromfázisú rend, PR-méret.
   let prBody = null;
   let prTexts = [];
   const gh = exec('gh', ['--version'], { cwd: root, timeoutMs: 15_000 }).code === 0;
@@ -115,7 +147,8 @@ async function main() {
     }
   }
 
-  await gate.step('PR-leírás sablon', () => {
+  // Fail-fast (docs/specs/2026-11-19-gate-pr-celzott-e2e.md): az olcsó lépések előre, az első bukásnál a kapu megáll.
+  const prBodyStep = () => {
     let body = prBody;
     let from = 'a nyitott PR leírása';
     if (bodyFile) {
@@ -127,15 +160,22 @@ async function main() {
     if (body == null) return { status: STATUS.FAIL, note: 'nincs PR-leírás — add meg a tervezetet: --body-file <út> (elfogadási lista, futtatott ellenőrzések, nem futtatott + ok)' };
     const missing = checkPrBody(body);
     return missing.length ? { status: STATUS.FAIL, note: `hiányzik (${from}): ${missing.join('; ')}` } : { status: STATUS.PASS, note: from };
-  });
+  };
+  const stopped = await cheapPhase(gate, [
+    ['PR-leírás sablon', prBodyStep],
+    ['független ellenőr ítélete a fejre', () => verdictResult(resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head)],
+    ['külső (Gemini) ellenőr — második vélemény', () => externalResult(readEvidence(ctx.evDir, `external-${head}`), head)],
+    ...cheapSteps(ctx),
+  ]);
+  if (stopped) {
+    gate.log('[pre-pr-gate] FAIL-FAST: egy olcsó lépés bukott — a drága lépések (lint, npm test, build, böngésző) nem indultak.');
+    const code = gate.finish();
+    writeEvidence(ctx.evDir, `pre-pr-${head}`, evidenceRecord('pre-pr', head, gate));
+    process.exit(code || 1);
+  }
 
-  await gate.step('független ellenőr ítélete a fejre', () => verdictResult(
-    resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head));
-
-  await gate.step('külső (Gemini) ellenőr — második vélemény', () => externalResult(readEvidence(ctx.evDir, `external-${head}`), head));
-
-  // 2) A push előtti kapu minden lépése.
-  const { changed } = await runPrePushSteps({ gate, ctx, slice: args.includes('--slice') });
+  // 2) A push előtti kapu többi (drága) lépése.
+  const { changed } = await runPrePushSteps({ gate, ctx, slice: args.includes('--slice'), skipCheap: true });
 
   await gate.step('npm run build', () => {
     const r = exec('npm', ['run', 'build'], { cwd: src, timeoutMs: 20 * 60_000 });
@@ -146,11 +186,13 @@ async function main() {
   const cls = classifyChanges(changed, cfg);
   const dockerOk = () => exec('docker', ['version', '--format', '{{.Server.Version}}'], { cwd: root, timeoutMs: 30_000 }).code === 0;
   const specFiles = readdirSync(join(src, 'tests')).filter((f) => f.endsWith('.spec.ts')).sort();
-  const { runs, warning } = pickE2eSpecs({ classification: cls, specFiles, readSpec: (s) => { /* olvashatatlan spec → '' → legfeljebb kevesebb UI-spec + WARN (ártalmatlan) */ try { return readFileSync(join(src, 'tests', s), 'utf8'); } catch { return ''; } }, cfg, changed });
+  const { runs, warning, leftToCi } = pickE2eSpecs({ classification: cls, specFiles, readSpec: (s) => { /* olvashatatlan spec → '' → legfeljebb kevesebb UI-spec + WARN (ártalmatlan) */ try { return readFileSync(join(src, 'tests', s), 'utf8'); } catch { return ''; } }, cfg, changed });
 
   if (warning) gate.add('böngészős út (UI)', STATUS.WARN, warning);
   if (!runs.length && !warning) gate.add('böngészős út (CI-azonos)', STATUS.SKIP, 'nincs játék- / UI-változás');
   if (runs.length) {
+    gate.log(`[pre-pr-gate] böngészős kör helyben: ${runs.map((r) => `${r.label}: ${r.specs.join(', ')}${r.grep ? ` (--grep ${r.grep})` : ''}`).join(' | ')}`);
+    if (leftToCi) gate.log(`[pre-pr-gate] a CI-ra marad: ${leftToCi.length} spec${leftToCi.length ? ` (${leftToCi.join(', ')})` : ''}`);
     writeFileSync(join(src, WRAPPER_CONFIG), wrapperConfigSource());
     const docker = dockerOk();
     for (const run of runs) {
