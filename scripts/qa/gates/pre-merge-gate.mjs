@@ -121,28 +121,14 @@ export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSh
   return out;
 }
 
-/** A REST-es szerző (`user.login`, `user.type`, `author_association`) — az ítélet-forrás szűréséhez (vak review #513 K2). */
-const authorOf = (x) => ({ login: x?.user?.login ?? null, type: x?.user?.type ?? null, association: x?.author_association ?? null });
-
-/** Megbízható ítélet-szerző: a repó tulajdonosa / tagja / írásjogú közreműködője, és nem bot (vak review #513 K2). */
-export const TRUSTED_ASSOCIATIONS = Object.freeze(['OWNER', 'MEMBER', 'COLLABORATOR']);
-export function trustedAuthor(a) {
-  if (!a || typeof a.login !== 'string' || !a.login) return false;
-  if (a.type === 'Bot' || /\[bot\]$/i.test(a.login)) return false;
-  return TRUSTED_ASSOCIATIONS.includes(String(a.association ?? '').toUpperCase());
-}
-
 /**
- * Az ítélet-lépés szövegei: a PR-leírás és a kommentek, de a nem megbízható szerzőé üres szövegként (a sorrend — 0. = leírás —
- * megmarad, a `resolveVerdict` forrás-címkéje ebből dolgozik). Nyilvános repóban így idegen komment nem írhat felül egy ítéletet.
+ * Az ítélet a fejre (vak review #513 V1, V2): KIZÁRÓLAG helyi, gépi bizonyíték (`review-<fej>.json`, `record-review`). A PR-leírás és
+ * a kommentek SEMMILYEN módban nem ítéletforrások — minden ügynök a tulajdonos fiókjával ír, így szerző szerint az önigazolás nem
+ * szűrhető. A `blind` (a konfig `blindReview` szakasza) a vak ellenőr futtatójának szigorú módját viszi tovább a `resolveVerdict`-nek;
+ * a ma még ezt nem ismerő `resolveVerdict` figyelmen kívül hagyja. Következmény: felhős munkamenetből összevonás nem lehetséges.
  */
-export function verdictTexts(pr) {
-  return [trustedAuthor(pr?.bodyAuthor) ? pr?.body ?? '' : '', ...(pr?.comments ?? []).map((c) => (trustedAuthor(c?.author) ? c?.body ?? '' : ''))];
-}
-
-/** Az ítélet a fejre: a helyi bizonyíték, különben a megbízható szerzőtől származó PR-szöveg (K2; a szigorú mód a futtatóé). */
-export function mergeVerdict(pr, evidence) {
-  return resolveVerdict({ head: pr?.headRefOid ?? '', evidence, texts: verdictTexts(pr) });
+export function mergeVerdict(pr, evidence, blind = null) {
+  return resolveVerdict({ head: pr?.headRefOid ?? '', evidence, texts: [], blind });
 }
 
 /**
@@ -150,7 +136,7 @@ export function mergeVerdict(pr, evidence) {
  * (docs/specs/2026-11-18-merge-kapu-rest.md): a felhős munkamenetben a GraphQL tiltott, a REST nem. Átnevezésnél a régi útvonal is
  * számít (K6: a telepítés-jelzés és a C-61 hatókör a régi helyet is lássa).
  */
-export function prFromRest(pull, files = [], comments = []) {
+export function prFromRest(pull, files = []) {
   const paths = [...new Set((files ?? []).flatMap((f) => [f?.filename, f?.previous_filename]).filter((x) => typeof x === 'string' && x))];
   return {
     number: pull?.number,
@@ -160,19 +146,17 @@ export function prFromRest(pull, files = [], comments = []) {
     headRefOid: pull?.head?.sha,
     baseRefOid: pull?.base?.sha,
     files: paths.map((path) => ({ path })),
-    body: pull?.body ?? '',
-    bodyAuthor: authorOf(pull),
-    comments: (comments ?? []).map((c) => ({ body: c?.body, author: authorOf(c) })),
   };
 }
 
 /**
- * A felhős REST-út (`pulls/<n>/ccr/review_threads`) szálai (vak review #513 K1, fail-closed): nem lista, ÜRES lista (amíg nincs mért
- * CCR-minta, az üres válasz nem igazolja, hogy nincs szál) vagy ismeretlen alakú elem (nem logikai `resolved`) → kivétel → FAIL.
+ * A felhős REST-út (`pulls/<n>/ccr/review_threads`) szálai (vak review #513 K1, V3; fail-closed): nem lista vagy ismeretlen alakú
+ * elem (nem logikai `resolved`) → kivétel. ÜRES lista csak akkor fogadható el, ha a REST független adata szerint sincs szál
+ * (`allowEmpty`: 0 gyökér review-komment — szál komment nélkül nincs); különben kivétel → FAIL.
  */
-export function threadsFromCcr(list) {
+export function threadsFromCcr(list, { allowEmpty = false } = {}) {
   if (!Array.isArray(list)) throw new Error('a ccr/review_threads válasza nem lista — a szálak állapota nem állapítható meg');
-  if (!list.length) throw new Error('a ccr/review_threads válasza üres — üres lista a felhős úton nem igazolja, hogy nincs nyitott szál');
+  if (!list.length && !allowEmpty) throw new Error('a ccr/review_threads válasza üres, a REST szerint viszont van review-komment — üres lista így nem igazolja, hogy nincs nyitott szál');
   if (list.some((t) => typeof t?.resolved !== 'boolean')) throw new Error('a ccr/review_threads egy eleméből hiányzik a logikai „resolved” mező (ismeretlen alak)');
   return list.map((t) => ({ isResolved: t.resolved === true }));
 }
@@ -187,7 +171,9 @@ export function checkRunsFromPages(pages) {
   if (!Array.isArray(pages) || !pages.length || pages.some((p) => !Array.isArray(p?.check_runs))) throw new Error('a check-run lista lapozott válasza ismeretlen alakú');
   const all = pages.flatMap((p) => p.check_runs);
   const total = pages[0].total_count;
-  if (typeof total === 'number' && all.length < total) throw new Error(`a check-run lista csonka (${all.length} / ${total})`);
+  // V4: hiányzó / nem szám számláló → a teljesség nem ellenőrizhető → kivétel (a `changed_files`-szal azonos fail-closed minta).
+  if (!Number.isInteger(total)) throw new Error('a check-run lista válaszából hiányzik a total_count — a teljesség nem ellenőrizhető');
+  if (all.length < total) throw new Error(`a check-run lista csonka (${all.length} / ${total})`);
   return all;
 }
 
@@ -249,10 +235,10 @@ export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepS
     pull = gj(['api', `repos/${repo}/pulls/${n}`]);
   }
   if (!Number.isInteger(pull?.changed_files)) throw new Error('a PR-válaszból hiányzik a changed_files — a fájllista teljessége nem ellenőrizhető');
+  // A PR-kommentek nem ítéletforrások (V1), ezért nem kérjük le őket.
   const pr = prFromRest(
     pull,
     flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/files?per_page=100`]), pull.changed_files, 'fájllista'),
-    flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/issues/${n}/comments?per_page=100`]), null, 'kommentlista'),
   );
   const head = pr.headRefOid;
   if (typeof head !== 'string' || !/^[0-9a-f]{40}$/.test(head)) throw new Error('a PR fej-hash-e nem olvasható');
@@ -287,8 +273,8 @@ export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepS
     log(`[pre-merge-gate] a GraphQL-szál-lekérdezés nem sikerült (${String(e?.message ?? e).split('\n')[0]}) — a ccr/review_threads útról`);
     // Felhős munkamenet: a GraphQL tiltott, a szálak a CCR REST-útról jönnek (lapozva), REST-keresztellenőrzéssel; ha bármelyik
     // bukik, a kivétel → „adatgyűjtés” FAIL.
-    threads = threadsFromCcr(flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/ccr/review_threads`]), null, 'ccr-szállista'));
     const roots = rootReviewComments(flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/comments?per_page=100`]), null, 'review-kommentlista'));
+    threads = threadsFromCcr(flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/ccr/review_threads`]), null, 'ccr-szállista'), { allowEmpty: roots === 0 });
     if (roots > threads.length) throw new Error(`a ccr/review_threads csonka: ${threads.length} szál, de a review-kommentekből ${roots} gyökér-szál számolható`);
     threadSource = 'ccr';
   }
@@ -308,6 +294,19 @@ export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepS
   return { repo, pr, required, checkRuns, statuses, threads, threadSource, mainSha, ciBaseSha, mainFiles, mainFilesTruncated };
 }
 
+/**
+ * A merge-kapu lépései a begyűjtött adatokból (V2: a `main()` ítélet-bekötése ezen át tesztelt). Az ítélet `mergeVerdict`-ből —
+ * kizárólag helyi bizonyítékból, a konfig `blindReview` módjával.
+ */
+export function mergeSteps({ data, evidence, external, guard, rt, cfg }) {
+  const verdict = mergeVerdict(data.pr, evidence, cfg?.blindReview ?? null);
+  return decideMerge({
+    pr: data.pr, required: data.required, checkRuns: data.checkRuns, statuses: data.statuses, threads: data.threads, mainSha: data.mainSha,
+    ciBaseSha: data.ciBaseSha, files: (data.pr.files ?? []).map((f) => f.path), verdict, external, guard, rt,
+    repoWideScopes: cfg?.repoWideScopes ?? [], mainFiles: data.mainFiles, mainFilesTruncated: data.mainFilesTruncated,
+  });
+}
+
 async function main() {
   const n = process.argv.slice(2).find((a) => /^\d+$/.test(a));
   if (!n) { process.stderr.write('Használat: node scripts/qa/gates/pre-merge-gate.mjs <PR-szám>\n'); process.exit(2); }
@@ -319,15 +318,12 @@ async function main() {
     const d = collectMergeData({ exec, root, n, log: (m) => gate.log(m) });
     pr = d.pr;
     const head = pr.headRefOid;
-    // Vak review #513 K2: PR-szöveges ítélet csak megbízható szerzőtől (verdictTexts); a szigorú mód a vak ellenőr futtatójáé.
-    const verdict = mergeVerdict(pr, readEvidence(ctx.evDir, `review-${head}`));
     const g = exec('bash', [join(root, 'scripts', 'qa', 'active-runs-guard.sh')], { cwd: root, timeoutMs: 90_000 });
     const summary = redact(`${g.stdout}\n${g.stderr}`).split('\n').filter((l) => /^(GUARD|AKTIV)/.test(l)).join(' ').trim();
     const rt = await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl);
-    for (const r of decideMerge({
-      pr, required: d.required, checkRuns: d.checkRuns, statuses: d.statuses, threads: d.threads, mainSha: d.mainSha, ciBaseSha: d.ciBaseSha,
-      files: (pr.files ?? []).map((f) => f.path), verdict, external: readEvidence(ctx.evDir, `external-${head}`),
-      guard: { code: g.code, summary }, rt, repoWideScopes: cfg.repoWideScopes ?? [], mainFiles: d.mainFiles, mainFilesTruncated: d.mainFilesTruncated,
+    for (const r of mergeSteps({
+      data: d, evidence: readEvidence(ctx.evDir, `review-${head}`), external: readEvidence(ctx.evDir, `external-${head}`),
+      guard: { code: g.code, summary }, rt, cfg,
     })) gate.add(r.name, r.status, r.note);
   } catch (e) {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);

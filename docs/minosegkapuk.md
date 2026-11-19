@@ -36,7 +36,7 @@ terhelésétől függően ±50%.
 | Szakasz | `npm run gate:stage` | lint gyors + a változott fájlokhoz leképezett egységtesztek + minden `*-guard.test.ts` (23 db) + a `scripts/qa` tesztjei, ha érintett | 47 s (tsc nélkül); tsc-vel ~115 s |
 | Push előtt | `npm run gate:push` | tiszta fa; `git fetch`; lint teljes; teljes egységteszt; háromfázisú rend; PR-méret; friss main (ha nincs beolvasztva: őr-tesztek az összefésült állapoton); közös fájlok; `.audit-ok`; „zöld CI utáni push” | 251 s (ebből a teljes egységteszt 132 s) |
 | PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet; a push-kapu minden lépése; `npm run build`; játék / UI: CI-azonos böngészős út; DB: `test:learning-db` | 214 s böngészős út nélkül (build 20 s); böngészős futásonként + ~160 s (füstpróba: 1 spec, 11 eset, 164 s) |
-| Merge előtt | `npm run gate:merge -- <PR>` | (REST-ről gyűjt, így felhős munkamenetben is fut: fájl- és kommentlista lapozva; a szálak GraphQL-ről, ha az tiltott, a `pulls/<n>/ccr/review_threads` útról; a kötelező lista a védelmi végpont 403-ánál a `branches/main` `protection` mezőjéből) CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
+| Merge előtt | `npm run gate:merge -- <PR>` | (REST-ről gyűjt: fájllista és check-runok lapozva, csonka / számláló nélküli válasz FAIL; a szálak GraphQL-ről lapozva, ha az tiltott, a `pulls/<n>/ccr/review_threads` útról lapozva — üres lista csak a REST 0 gyökér review-kommentje mellett, egyébként és ismeretlen alaknál FAIL; a kötelező lista a védelmi végpont 403-ánál a `branches/main` `protection` mezőjéből; `mergeable_state` `unknown`-ra legfeljebb két újrakérés, ~6 s) CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet KIZÁRÓLAG helyi bizonyítékból (`review-<fej>.json`; a PR-leírás és a kommentek nem ítéletforrások — felhős munkamenetből ezért nem vonható össze); futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
 
 ### Külső (Gemini) ellenőr — második vélemény
 
@@ -172,8 +172,10 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
   `git add . && git commit -m "push fix"`) — a commit-üzenetet fájlból add (`git commit -F <fájl>`), a kibocsátást külön parancsban.
 - **A main-elmozdulás mérése** a CI-futás `base.sha`-ján alapul; ha az üres, a PR `baseRefOid`-jára esik vissza (UNVERIFIED, hogy
   minden esetben a CI alapja-e — jegyre javasolt).
-- **A merge-kapu a PR-kommentek szerzőjét nem szűri** (nyilvános repó: bárki írhat ítélet-sort) — a helyi `review-<fej>.json` a
-  megbízható forrás.
+- **A merge-kapu ítéletet csak a helyi `review-<fej>.json`-ból fogad el** (2026-11-19, #513 V1): a PR-leírás és a kommentek ítélet-sora
+  nem számít, mert minden ügynök a tulajdonos fiókjával ír (szerző szerint az önigazolás nem szűrhető). Maradó kockázat: a fejlesztő
+  munkamenet a `record-review`-val maga is írhat helyi bizonyítékot — ezt csak a vak ellenőr futtatójának szigorú módja
+  (`blindReview.exclusive` BE) zárja ki. A felhős CCR-szál-út megbízhatósága (mért válaszminta nincs) szintén maradó kockázat.
 - **Git-alias** (`git config alias.p push`): `git p` nem ismerhető fel olcsón — a hook nem biztonsági határ (lásd fent).
 - A hook csak a Claude Code munkamenetekre hat; Codex / Cursor / ember a skillek és az `AGENTS.md` szerint futtatja a kapukat.
 
