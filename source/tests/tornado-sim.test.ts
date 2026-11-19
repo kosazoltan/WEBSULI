@@ -111,11 +111,13 @@ test("kérdés nélküli mód: a menet végigjátszható, és van vesztési felt
   const runs = runSimSeeds(factory, SIM_AVERAGE, { gameId: GAME, seconds: 600, grade: 7, questions: false });
   assert.ok(runs.some((r) => r.won), "kérdés nélkül is lehet nyerni");
   for (const r of runs) assert.equal(r.stats.asked, 0);
-  // Vesztés: a jármű áll (a bot nem indul) → a tölcsér élettartama után vége.
-  const g = createSimGame({ seed: 7, grade: 7, questions: false });
+  // Vesztés: a jármű áll (`botSpeed: 0` — a bot valóban nem indul) → a tölcsér élettartama / az időkeret után vége, VERESÉGGEL.
+  // (A vak ellenőrzés KICSI 5: a korábbi változat alapsebességű botot futtatott, és győzelemmel ért véget.)
+  const g = createSimGame({ seed: 7, grade: 7, questions: false, botSpeed: 0 });
   let n = 0;
   while (!g.done() && n++ < 60 * 400) g.step(1000 / 60, { skillRoll: 0 });
-  assert.ok(g.done());
+  assert.ok(g.done(), "a menet véget ért");
+  assert.equal(g.won(), false, "a mozdulatlan jármű menete vereség");
 });
 
 test("arany visszajátszás: azonos seed + bemenet → azonos végállapot; más seed → más", () => {
@@ -334,6 +336,48 @@ test("25. / 29.: a NEM olvasó vezető botok (rezgés, kanyar + egyenesítés, �
     console.log(`[tornado-sim] nem olvasó vezető (${name}): ${asked} kérdés, ${frozen} rögzülés, ${answered} véletlen válasz`);
     assert.equal(answered, 0, `${name}: ${answered} véletlen válasz`);
     assert.equal(frozen, 0, `${name}: ${frozen} rögzülés szándék nélkül`);
+    assert.ok(asked > 40, `${name}: kevés kérdés (${asked})`);
+  }
+});
+
+test("33. (vak ellenőrzés K1): az olvasási küszöb UTÁN kezdett akadály-fék + egyenes haladás / kitérés — 0 válasz, 0 kerülő", () => {
+  // A korábbi minták (fent) csak a küszöb ELŐTT kezdett féket mérték; a küszöb utáni fék rögzít, és az egyenes továbbhaladás
+  // régen a középső kaput „választotta” (pont + nitró vagy 8–12 s kerülő olvasás nélkül). Most a rögzítés megtörténhet (ezt a
+  // `frozen > 0` igazolja: a teszt valóban a küszöb utáni utat járja), de válasz és kerülő nem lehet belőle.
+  const patterns: { name: string; drive: SimDrivePattern; mustFreeze: boolean }[] = [
+    { name: "fék 3 s-onként 0,25 s", drive: { kind: "brake-periodic", periodSec: 3, holdSec: 0.25 }, mustFreeze: true },
+    { name: "fék 6 s-onként 0,3 s", drive: { kind: "brake-periodic", periodSec: 6, holdSec: 0.3 }, mustFreeze: true },
+    { name: "fék 10 s-onként 0,3 s", drive: { kind: "brake-periodic", periodSec: 10, holdSec: 0.3 }, mustFreeze: true },
+    { name: "fék 3 s-onként + kitérés", drive: { kind: "brake-periodic", periodSec: 3, holdSec: 0.25, swerve: true }, mustFreeze: true },
+    { name: "fék a kérdés után 1,2 s-mal", drive: { kind: "brake-after", atSec: 1.2, holdSec: 0.3 }, mustFreeze: true },
+    { name: "fék a kérdés után 2,5 s-mal + kitérés", drive: { kind: "brake-after", atSec: 2.5, holdSec: 0.4, swerve: true }, mustFreeze: true },
+    // A tölcsér felé kormányzó (a kérdést nem olvasó) üldöző: a pályán marad, minden periódusnál rögzít.
+    { name: "üldöz + fék 3 s-onként", drive: { kind: "brake-periodic", periodSec: 3, holdSec: 0.25, chase: true }, mustFreeze: true },
+    { name: "üldöz + fék 6 s-onként + kitérés", drive: { kind: "brake-periodic", periodSec: 6, holdSec: 0.3, chase: true, swerve: true }, mustFreeze: true },
+    { name: "üldöz + fék 10 s-onként", drive: { kind: "brake-periodic", periodSec: 10, holdSec: 0.3, chase: true }, mustFreeze: true },
+    { name: "üldöz + fék a kérdés után 1,2 s-mal", drive: { kind: "brake-after", atSec: 1.2, holdSec: 0.3, chase: true }, mustFreeze: true },
+  ];
+  for (const { name, drive, mustFreeze } of patterns) {
+    let asked = 0;
+    let answered = 0;
+    let frozen = 0;
+    let detours = 0;
+    let nitros = 0;
+    for (const seed of simSeeds(GAME, 20)) {
+      for (const botSpeed of [15, 22]) {
+        const g = createSimGame({ seed, grade: 7, questions: true, passive: true, drive, botSpeed });
+        for (let i = 0; i < 60 * 180 && !g.done(); i++) g.step(1000 / 60, { skillRoll: 0.5 });
+        asked += g.stats().asked;
+        answered += g.stats().answered;
+        frozen += g.tally().frozen;
+        detours += g.tally().detours;
+        nitros += g.tally().nitros;
+      }
+    }
+    console.log(`[tornado-sim] akadály-fék a küszöb után (${name}): ${asked} kérdés, ${frozen} rögzülés, ${answered} válasz, ${detours} kerülő, ${nitros} nitró`);
+    assert.equal(answered, 0, `${name}: ${answered} olvasás nélküli válasz`);
+    assert.equal(detours, 0, `${name}: ${detours} kerülő akadály-kerülésért`);
+    if (mustFreeze) assert.ok(frozen > 0, `${name}: a minta nem érte el a küszöb utáni rögzülést — a teszt nem azt méri, amit kell`);
     assert.ok(asked > 40, `${name}: kevés kérdés (${asked})`);
   }
 });

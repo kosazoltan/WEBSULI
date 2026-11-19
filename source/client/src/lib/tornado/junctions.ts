@@ -4,8 +4,9 @@
  * RNG-je adja (`createRng`), így a lap és a node-szimuláció (`sim.ts`) ugyanazt a pályát kapja.
  *
  * Elágazás = „virtuális kapu” (U-J7-2: a `world.ts`-ben nincs út-gráf): a kérdés megjelenésekor a jármű előtt, a
- * menetirányra merőleges vonalon három kapu áll (bal / egyenes / jobb). A választás az áthajtás oldaliránya: ahol a
- * jármű a vonalat keresztezi, az a szektor (kapu) a válasz. A kapuk sorrendje a kérdés-sáv opcióinak sorrendje
+ * menetirányra merőleges vonalon három kapu áll (bal / egyenes / jobb). A választás koppintás a táblára, vagy (rögzítés után)
+ * áthajtás egy OLDALSÓ kapu folyosóján; az egyenes továbbhaladás és a kapuk közötti átlépés nem válasz (J7b döntések 33.,
+ * `gateAtLateral`). A kapuk sorrendje a kérdés-sáv opcióinak sorrendje
  * (0 = bal) — a director seedelten kever, így a helyes kapu helye véletlen (a tornádó felé kormányzás nem árulja el).
  *
  * J7b döntések 12–14 (a független ellenőrzés után): a táblák „várnak” — a megjelenéskori menetirányban a jármű előtt
@@ -20,13 +21,13 @@
 import type { Collider } from "./collision";
 import { HALF_WORLD } from "./world";
 
-/** Két szomszédos kapu oldaltávolsága (világegység; a jármű ~2,5 széles, az út fél-szélessége 9) — alapérték. */
-export const JUNCTION_GATE_SPACING = 16;
-/** Ha az alap köz egy akadály miatt nem szabad, ezekkel próbálkozunk. */
-export const JUNCTION_SPACINGS: readonly number[] = [16, 13, 20];
-/** A rögzülés után a vonalig ennyi idő marad a pillanatnyi sebességgel (+ `JUNCTION_FREEZE_EXTRA` egység). */
-export const JUNCTION_STEER_SEC = 2.2;
-export const JUNCTION_FREEZE_EXTRA = 4;
+/** Két szomszédos kapu oldaltávolsága (világegység; a jármű ~2,5 széles, az út fél-szélessége 9) — alapérték (terv, J7b döntések 1.). */
+export const JUNCTION_GATE_SPACING = 20;
+/** Ha az alap köz egy akadály miatt nem szabad, ezekkel próbálkozunk (J7b döntések 14.: 20 / 16 / 13). */
+export const JUNCTION_SPACINGS: readonly number[] = [20, 16, 13];
+/** A rögzülés után a vonalig ennyi idő marad a pillanatnyi sebességgel (+ `JUNCTION_FREEZE_EXTRA` egység; J7b döntések 13.). */
+export const JUNCTION_STEER_SEC = 2.4;
+export const JUNCTION_FREEZE_EXTRA = 10;
 /** A rögzülő vonal legkisebb távolsága (lassan a kormányzás rövidebb úton is kifér). */
 export const JUNCTION_FREEZE_MIN = 14;
 /** Várakozó (nem rögzült) táblák távolsága: ugyanez a képlet, legalább 40 egység. */
@@ -151,7 +152,7 @@ export function planJunction(args: {
   };
 }
 
-/** A rögzülő vonal távolsága a pillanatnyi sebességből (nitróval együtt): |v| × 2,2 s + 4, legalább 14. */
+/** A rögzülő vonal távolsága a pillanatnyi sebességből (nitróval együtt): |v| × 2,4 s + 10, legalább 14. */
 export function freezeLineDistance(speed: number): number {
   const v = Number.isFinite(speed) ? Math.abs(speed) : 0;
   return Math.max(JUNCTION_FREEZE_MIN, v * JUNCTION_STEER_SEC + JUNCTION_FREEZE_EXTRA);
@@ -210,10 +211,12 @@ export function segmentBlocked(
 
 /**
  * A táblák rögzítése a jármű pillanatnyi helyéről és MENETIRÁNYÁBÓL (R1: a középső kapu egyenesen előre van — a kanyar
- * vagy az úttartás utáni irány nem „választ”): a vonal |v| × 2,2 s + 4 (+0…48), a köz 16 / 13 / 20 — az első olyan
+ * vagy az úttartás utáni irány nem „választ”): a vonal |v| × 2,4 s + 10 (+0…48), a köz 20 / 16 / 13 — az első olyan
  * elrendezés, amelyben a jármű helyéről mindhárom kapuhoz (és 6 egységgel mögé) ütközőmentes egyenes folyosó vezet, és a
  * kapu a világon belül van. Ha nincs ilyen, `false` (a táblák tovább várnak). Helyben módosít.
  * R3: `attempt` megadásakor egy próba csak EGY vonal-távolságot néz (a keresés képkockák közé osztva, egy próba ≤ ~1 ms).
+ * `fits` (J7b döntések 33.): csak olyan elrendezés rögzülhet, amelynek a legtávolabbi kapuja a kérdés hátralévő (legfeljebb +5 s-mal
+ * hosszabbítható) idejében elérhető — különben a táblák tovább várnak (a rögzítés után a jó kapu felé kormányzó nem jár le).
  */
 export function freezeJunction(
   j: Junction,
@@ -221,6 +224,7 @@ export function freezeJunction(
   speed: number,
   collidersAt: (x: number, z: number) => readonly Collider[],
   attempt?: number,
+  fits?: (line: number, spacing: number) => boolean,
 ): boolean {
   if (j.frozen) return true;
   const base = freezeLineDistance(speed);
@@ -230,6 +234,7 @@ export function freezeJunction(
   const extras = attempt === undefined ? JUNCTION_FREEZE_SEARCH : [JUNCTION_FREEZE_SEARCH[attempt % JUNCTION_FREEZE_SEARCH.length]!];
   for (const extra of extras) {
     for (const spacing of JUNCTION_SPACINGS) {
+      if (fits && !fits(base + extra, spacing)) continue;
       const cand: Junction = { ...j, ox: pose.x, oz: pose.z, fx, fz, rx: -fz, rz: fx, line: base + extra, spacing };
       let ok = true;
       for (let i = 0; i < cand.gates && ok; i++) {
@@ -246,7 +251,7 @@ export function freezeJunction(
   return false;
 }
 
-/** Az `i`. kapu oldaliránya a középvonaltól (negatív = bal); 3 kapunál −20 / 0 / +20. */
+/** Az `i`. kapu oldaliránya a középvonaltól (negatív = bal); 3 kapunál −köz / 0 / +köz (pl. 16-os köznél −16 / 0 / +16). */
 export function gateOffset(j: Pick<Junction, "gates" | "spacing">, i: number): number {
   return (i - (j.gates - 1) / 2) * j.spacing;
 }
@@ -271,8 +276,33 @@ export function sectorFor(j: Pick<Junction, "gates" | "spacing">, lateral: numbe
 }
 
 /**
- * Áthajtott-e a jármű a kapuvonalon ebben a lépésben (előző → mostani pozíció)? Ha igen, a keresztezés pontjának
- * szektora (= opció-index), különben null. Csak előre irányú áthaladás számít (visszafelé tolatva nem választ).
+ * J7b döntések 33. (a vak ellenőrzés K1-lelete): a rögzült vonal átlépése csak a kapu FOLYOSÓJÁN belül válasz — a kapu
+ * közepétől legfeljebb ennyi oldaltávra (a jármű ~2,5 széles; 13-as köznél is marad rés két folyosó között).
+ */
+export const JUNCTION_GATE_HALF_WIDTH = 4.5;
+/**
+ * …és csak akkor, ha a keresztezés legalább ennyivel az egyenestől (a rögzüléskori menetiránytól) oldalra esik: az egyenes
+ * továbbhaladás (akadály miatti fék után is) SOHA nem válasz, a középső (egyenes) kapu csak koppintással / billentyűvel
+ * választható. Az akadály-kerülő kitérés (~2–3 egység) így nem éri el egyik folyosót sem.
+ */
+export const JUNCTION_MIN_STEER_LATERAL = 6;
+
+/** Áthajtással választható-e az `i`. kapu (oldalsó kapu; a középső / egyenes csak koppintással). */
+export function gateDrivable(j: Pick<Junction, "gates" | "spacing">, i: number): boolean {
+  return Math.abs(gateOffset(j, i)) >= JUNCTION_MIN_STEER_LATERAL;
+}
+
+/** Az oldalirányú keresztezési pont kapuja: a folyosón belül és kellően oldalra (33.); különben null (nem válasz). */
+export function gateAtLateral(j: Pick<Junction, "gates" | "spacing">, lateral: number): number | null {
+  if (!Number.isFinite(lateral) || Math.abs(lateral) < JUNCTION_MIN_STEER_LATERAL) return null;
+  const i = sectorFor(j, lateral);
+  return Math.abs(lateral - gateOffset(j, i)) <= JUNCTION_GATE_HALF_WIDTH ? i : null;
+}
+
+/**
+ * Áthajtott-e a jármű egy oldalsó kapun ebben a lépésben (előző → mostani pozíció)? Ha a rögzült vonalat egy kapu
+ * folyosóján, kellően oldalra keresztezte (33.), a kapu (= opció-index), különben null — a kapuk között / mellett / az
+ * egyenesben átlépés nem választ. Csak előre irányú áthaladás számít (visszafelé tolatva nem választ).
  */
 export function junctionCrossing(j: Junction, prev: { x: number; z: number }, cur: { x: number; z: number }): number | null {
   if (!j.frozen) return null;
@@ -281,7 +311,7 @@ export function junctionCrossing(j: Junction, prev: { x: number; z: number }, cu
   if (!(a.forward < j.line && b.forward >= j.line)) return null;
   const span = b.forward - a.forward;
   const t = span > 0 ? (j.line - a.forward) / span : 1;
-  return sectorFor(j, a.lateral + (b.lateral - a.lateral) * t);
+  return gateAtLateral(j, a.lateral + (b.lateral - a.lateral) * t);
 }
 
 export function planTurboPad(pose: Pose, nowMs: number): TurboPad {

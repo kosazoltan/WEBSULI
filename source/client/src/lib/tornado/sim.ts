@@ -31,6 +31,7 @@ import type { FourChoiceQuiz } from "@/types/gameQuiz";
 import { collidersNear, type Collider } from "./collision";
 import {
   freezeJunction,
+  gateDrivable,
   gatePoint,
   junctionCrossing,
   slideJunction,
@@ -248,6 +249,12 @@ export function createChaseCore(opts: {
     if (!q.pending()) requested = null; // a director most nem adott (min. rés / üres forrás): nincs függő kérés
     return false;
   };
+  /** A legtávolabbi kapuig vezető út ideje (ms) a pillanatnyi tempóval (J7b döntések 26.). Lépésenként nem foglal (K5). */
+  let fitGates = 3;
+  let fitCapEnd = 0;
+  const arriveFor = (line: number, spacing: number) =>
+    ((Math.hypot(line, ((fitGates - 1) / 2) * spacing) * FREEZE_PATH_SLACK) / Math.max(FREEZE_MIN_ARRIVE_SPEED, Math.abs(speed))) * 1000;
+  const fitsDeadline = (line: number, spacing: number) => clock + arriveFor(line, spacing) + FREEZE_DEADLINE_MARGIN_MS <= fitCapEnd;
   const abortOpen = () => {
     if (!q) return;
     const act = q.active();
@@ -286,10 +293,12 @@ export function createChaseCore(opts: {
               freezePose.x = v.x;
               freezePose.z = v.z;
               freezePose.heading = intentHeading;
-              if (freezeJunction(junction, freezePose, speed, collidersAt, freezeAttempt++)) {
+              // 33.: csak a hosszabbítási plafonon belül elérhető elrendezés rögzül (a rögzítés után a jó kapu felé tartó nem jár le).
+              fitGates = junction.gates;
+              fitCapEnd = act.startedAtSimMs + Math.max(act.windowMs, baseWindowMs + FREEZE_EXTEND_CAP_MS);
+              if (freezeJunction(junction, freezePose, speed, collidersAt, freezeAttempt++, fitsDeadline)) {
                 // J7b döntések 26.: a legtávolabbi kapuig vezető út + ráhagyás belefér az ablakba, legfeljebb +5 s.
-                const reach = Math.hypot(junction.line, ((junction.gates - 1) / 2) * junction.spacing) * FREEZE_PATH_SLACK;
-                const arriveMs = (reach / Math.max(FREEZE_MIN_ARRIVE_SPEED, Math.abs(speed))) * 1000;
+                const arriveMs = arriveFor(junction.line, junction.spacing);
                 const oldWindow = act.windowMs;
                 const want = clock - act.startedAtSimMs + arriveMs + FREEZE_DEADLINE_MARGIN_MS;
                 act.windowMs = Math.max(oldWindow, Math.min(want, baseWindowMs + FREEZE_EXTEND_CAP_MS));
@@ -496,13 +505,26 @@ export function detourWithGrace(detourSec: number, lifeLeftSec: number, timeLeft
  * kanyar, utána egyenesít; `curve`: 7 s-onként 1 s-os ±0,9 útkanyar; `random`: 0,7 s-onként véletlen kormány ±1;
  * `brake-early`: a kérdés után 0,3 s-mal fékez (vagy `reverse`: tolat), és `releaseSec`-kor enged el (az olvasási küszöb előtt
  * kezdett, akár tovább tartott fék / tolatás — akadály).
+ * A vak ellenőrzés K1-lelete után (J7b döntések 33.) az olvasási küszöb UTÁN kezdett akadály-fék is: `brake-periodic` — a
+ * kérdéstől függetlenül `periodSec`-enként `holdSec`-ig fékez; `brake-after` — a kérdés megjelenése után `atSec`-kor `holdSec`-ig.
+ * Kérdés nélkül a tölcsér felé tart; nyitott elágazás alatt egyenesen halad (a kormányhoz nem nyúl), vagy `chase`: akkor is a
+ * tölcsér felé kormányoz (a kérdést nem olvasó üldöző);
+ * `swerve`: a fék elengedése után ~2,4 egységes kitérés és vissza (az akadály kikerülése).
  */
 export type SimDrivePattern =
   | { kind: "wobble"; amp: number }
   | { kind: "turn-straighten" }
   | { kind: "curve" }
   | { kind: "random" }
-  | { kind: "brake-early"; releaseSec: number; reverse?: boolean };
+  | { kind: "brake-early"; releaseSec: number; reverse?: boolean }
+  | { kind: "brake-periodic"; periodSec: number; holdSec: number; swerve?: boolean; chase?: boolean }
+  | { kind: "brake-after"; atSec: number; holdSec: number; swerve?: boolean; chase?: boolean };
+
+/** A `swerve` kitérés kormánya a fék elengedése óta eltelt idő (s) szerint: ki, vissza, át, vissza (nettó oldaltáv ≈ 0). */
+function swerveSteer(sinceRelease: number): number {
+  if (sinceRelease < 0 || sinceRelease >= 2) return 0;
+  return sinceRelease < 0.5 || sinceRelease >= 1.5 ? 0.3 : -0.3;
+}
 
 export function createSimGame(opts: {
   seed: number;
@@ -567,6 +589,8 @@ export function createSimGame(opts: {
   const driveRng = createRng(seedFrom(TORNADO_GAME_ID, opts.seed, "drive")).next;
   let randomSteer = 0;
   let randomAt = 0;
+  /** A `brake-periodic` / `brake-after` minta: a fék legutóbbi elengedése óta eltelt idő (s; negatív = nincs kitérés). */
+  let sinceBrakeRelease = -1;
   const steerTo = (tx: number, tz: number, dt: number) => {
     const want = Math.atan2(tx - car.x, -(tz - car.z));
     const diff = ((want - car.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
@@ -577,6 +601,13 @@ export function createSimGame(opts: {
   const patternSteer = (dt: number): boolean => {
     const dp = opts.drive;
     if (!dp || dp.kind === "brake-early") return false;
+    if (dp.kind === "brake-periodic" || dp.kind === "brake-after") {
+      // Kérdés nélkül a tölcsér felé tart; nyitott elágazás alatt egyenesen halad (`chase`: akkor is a tölcsér felé, mint a
+      // kérdést nem olvasó üldöző). A kitérés az akadály kikerülése.
+      if (dp.chase || !driver!.core.junction()) steerTo(tp.x, tp.z, dt);
+      if (dp.swerve) car.heading += swerveSteer(sinceBrakeRelease) * BOT_TURN * dt;
+      return true;
+    }
     const want = Math.atan2(tp.x - car.x, -(tp.z - car.z));
     const diff = ((want - car.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     const sinceQ = (driver!.core.clockMs() - jShownAt) / 1000;
@@ -641,6 +672,17 @@ export function createSimGame(opts: {
       if (opts.drive.reverse) reverseOut = on;
       else brakeOut = on;
     }
+    if (opts.drive?.kind === "brake-periodic") {
+      const { periodSec, holdSec } = opts.drive;
+      const phase = elapsed % periodSec;
+      brakeOut = phase < holdSec;
+      sinceBrakeRelease = brakeOut ? -1 : phase - holdSec;
+    } else if (opts.drive?.kind === "brake-after") {
+      const { atSec, holdSec } = opts.drive;
+      const t = sinceShow / 1000;
+      brakeOut = openJ !== null && t >= atSec && t < atSec + holdSec;
+      sinceBrakeRelease = openJ !== null && t >= atSec + holdSec ? t - atSec - holdSec : -1;
+    }
     const anchorAsking = (() => {
       const act = ui.active();
       return (act !== null && core.kindOf(act.id) === "anchor") || (ui.view().reveal !== null && ui.view().presentation !== null && core.kindOf(ui.view().presentation!.id) === "anchor");
@@ -673,8 +715,9 @@ export function createSimGame(opts: {
         } else if (j) {
           if (choice && choice.id === j.questionId) {
             if (j.frozen) {
+              // A tábla felé (közvetlenül a kapupont mögé) kormányoz — a keresztezésnek a kapu folyosóján kell lennie (33.).
               const g = gatePoint(j, choice.option);
-              steerTo(g.x + j.fx * 20, g.z + j.fz * 20, dt);
+              steerTo(g.x + j.fx * 3, g.z + j.fz * 3, dt);
             } else if (sinceShow >= INTENT_MIN_READ_MS + 20) {
               // J7b döntések 25.: az olvasási küszöb után fékez (rögzít), utána a kormány visz a kapuhoz.
               brakeOut = !core.intentSeen();
@@ -728,8 +771,10 @@ export function createSimGame(opts: {
       const p = ui.active();
       if (!p || p.id !== id) return;
       if (opts.passive) return;
-      if (d.core.kindOf(id) === "junction" && opts.answerBy !== "tap") {
-        choice = { id, option }; // fék (rögzítés) után a választott kapu felé kormányoz; a válasz az áthajtás
+      const j = d.core.junction();
+      // 33.: a középső (egyenes) kapu csak koppintással választható — azt a bot is koppintással választja, mint a gyerek.
+      if (d.core.kindOf(id) === "junction" && opts.answerBy !== "tap" && j && gateDrivable(j, option)) {
+        choice = { id, option }; // fék (rögzítés) után a választott oldalsó kapu felé kormányoz; a válasz az áthajtás
         return;
       }
       ui.pick(option, d.core.clockMs());

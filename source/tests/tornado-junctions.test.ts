@@ -7,14 +7,23 @@ import {
   DETOUR_MIN_SEC,
   JUNCTION_GAP_MAX_MS,
   JUNCTION_GAP_MIN_MS,
+  JUNCTION_FREEZE_EXTRA,
+  JUNCTION_GATE_HALF_WIDTH,
+  JUNCTION_GATE_SPACING,
   JUNCTION_LINE_MAX,
   JUNCTION_LINE_MIN,
+  JUNCTION_MIN_STEER_LATERAL,
+  JUNCTION_SPACINGS,
+  JUNCTION_STEER_SEC,
   NITRO_MS,
   TURBO_GAP_MAX_MS,
   TURBO_GAP_MIN_MS,
   TURBO_PAD_LIFE_MS,
   detourSeconds,
   freezeJunction,
+  freezeLineDistance,
+  gateAtLateral,
+  gateDrivable,
   gateOffset,
   gatePoint,
   junctionCrossing,
@@ -65,6 +74,15 @@ test("ütemezés: elágazás 15–20 mp-enként, turbópad 25–30 mp-enként, k
   for (let i = 0; i < 20; i++) assert.equal(nextJunctionGapMs(a), nextJunctionGapMs(b));
 });
 
+test("a terv paraméterei (J7b döntések 1., 13., 14.; vak ellenőrzés KICSI 4): 20-as alapköz, 20 / 16 / 13 próbák, rögzülés ≥ 2,4 s + 10 egységre", () => {
+  assert.equal(JUNCTION_GATE_SPACING, 20);
+  assert.deepEqual([...JUNCTION_SPACINGS], [20, 16, 13]);
+  assert.equal(JUNCTION_STEER_SEC, 2.4);
+  assert.equal(JUNCTION_FREEZE_EXTRA, 10);
+  assert.equal(freezeLineDistance(15), 15 * 2.4 + 10);
+  assert.equal(freezeLineDistance(0), 14, "álló járműnél a legkisebb vonal");
+});
+
 test("a kapuvonal a sebesség × ablak 85%-ánál, 30–110 egység között (álló járműnél is elérhető)", () => {
   assert.equal(junctionLineDistance(0, 5500), JUNCTION_LINE_MIN);
   assert.equal(junctionLineDistance(16, 5500), 16 * 5.5 * 0.85);
@@ -76,7 +94,8 @@ test("a kapuvonal a sebesség × ablak 85%-ánál, 30–110 egység között (á
 test("három kapu a menetirányra merőleges vonalon: bal / egyenes / jobb, a kapupontok a vonalon", () => {
   for (const heading of [0, Math.PI / 2, Math.PI, -0.7]) {
     const j = planJunction({ pose: { x: 100, z: -50, heading }, speed: 15, windowMs: 5000, questionId: 1, optionCount: 3, rng: rng() });
-    assert.deepEqual([0, 1, 2].map((i) => gateOffset(j, i)), [-16, 0, 16]);
+    // A terv „J7b döntések” 1. / 14. pontja: 20 egység alapköz (a vak ellenőrzés KICSI 4 után a kód is ezt használja).
+    assert.deepEqual([0, 1, 2].map((i) => gateOffset(j, i)), [-20, 0, 20]);
     assert.equal(j.frozen, false, "a táblák várakozva indulnak (J7b döntések 13.)");
     for (let i = 0; i < 3; i++) {
       const g = gatePoint(j, i);
@@ -90,24 +109,43 @@ test("három kapu a menetirányra merőleges vonalon: bal / egyenes / jobb, a ka
   assert.ok(gatePoint(north, 1).z < 0, "előre = −Z");
 });
 
-test("a választás az áthajtás iránya: a keresztezés pontjának szektora; tolatás és a vonal előtt maradás nem választ", () => {
+// SPEC-VÁLTOZÁS 2026-11-19 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md, J7b döntések 33.): a rögzült vonal
+// átlépése csak egy OLDALSÓ kapu folyosóján válasz; az egyenes (középső kapu), a kapuk közötti és a szélső kapun kívüli
+// átlépés nem (régen: a legközelebbi szektor, a szélső a végtelenig — a vak ellenőrzés K1-lelete).
+test("33.: áthajtással csak oldalsó kapu folyosóján lehet választani; egyenesen, kapuk között, kívül nem; tolatás és a vonal előtt maradás sem", () => {
   const j = planJunction({ pose: { x: 0, z: 0, heading: 0 }, speed: 10, windowMs: 6000, questionId: 7, optionCount: 3, rng: rng() });
   const line = j.line;
   const through = (lateral: number) => junctionCrossing(j, { x: lateral, z: -(line - 1) }, { x: lateral, z: -(line + 1) });
   // Várakozó (nem rögzült) táblán át nincs választás (B1: szándék nélkül nincs kapuátlépés).
-  assert.equal(through(0), null);
+  assert.equal(through(-j.spacing), null);
   j.frozen = true;
-  assert.equal(through(-25), 0);
-  assert.equal(through(-9), 0);
-  assert.equal(through(-7), 1);
-  assert.equal(through(0), 1);
-  assert.equal(through(7), 1);
-  assert.equal(through(9), 2);
-  assert.equal(through(400), 2, "a szélső szektor a végtelenig tart");
-  // Ferdén áthajtva a keresztezés pontja számít (nem a kiinduló vagy a végpont oldaliránya).
-  assert.equal(junctionCrossing(j, { x: -22, z: -(line - 10) }, { x: 10, z: -(line + 10) }), 1);
-  assert.equal(junctionCrossing(j, { x: 0, z: -(line + 1) }, { x: 0, z: -(line - 1) }), null, "visszafelé");
-  assert.equal(junctionCrossing(j, { x: 0, z: -(line - 5) }, { x: 0, z: -(line - 1) }), null, "még a vonal előtt");
+  const half = JUNCTION_GATE_HALF_WIDTH;
+  const S = j.spacing;
+  assert.equal(S, JUNCTION_GATE_SPACING);
+  assert.equal(through(-S), 0, "a bal kapu közepe");
+  assert.equal(through(-S - half + 0.01), 0, "a bal folyosó külső széle");
+  assert.equal(through(-S + half - 0.01), 0, "a bal folyosó belső széle");
+  assert.equal(through(S), 2, "a jobb kapu közepe");
+  assert.equal(through(S - half + 0.01), 2);
+  for (const lat of [0, 2.5, -3, 5.9, -5.9, 10, -10]) assert.equal(through(lat), null, `egyenesen / akadály-kitérés / kapuk között (${lat}): nem válasz`);
+  assert.equal(through(-S - half - 0.5), null, "a bal kapun kívül");
+  assert.equal(through(-32), null);
+  assert.equal(through(400), null, "a szélső szektor nem tart a végtelenig");
+  assert.equal(gateDrivable(j, 1), false, "a középső kapu csak koppintással");
+  assert.equal(gateDrivable(j, 0) && gateDrivable(j, 2), true);
+  // Ferdén áthajtva a keresztezés pontja számít (nem a kiinduló vagy a végpont oldaliránya): −24 → −16 között a vonalon −20.
+  assert.equal(junctionCrossing(j, { x: -24, z: -(line - 10) }, { x: -16, z: -(line + 10) }), 0);
+  assert.equal(junctionCrossing(j, { x: -22, z: -(line - 10) }, { x: 10, z: -(line + 10) }), null, "a vonalon −6-nál: két kapu között");
+  assert.equal(junctionCrossing(j, { x: -S, z: -(line + 1) }, { x: -S, z: -(line - 1) }), null, "visszafelé");
+  assert.equal(junctionCrossing(j, { x: -S, z: -(line - 5) }, { x: -S, z: -(line - 1) }), null, "még a vonal előtt");
+  // 13-as és 20-as köznél is: a folyosók nem érnek össze, és az egyenes nem válasz.
+  for (const spacing of JUNCTION_SPACINGS) {
+    const k = { ...j, spacing };
+    assert.equal(gateAtLateral(k, 0), null);
+    assert.equal(gateAtLateral(k, -spacing), 0);
+    assert.equal(gateAtLateral(k, spacing), 2);
+    assert.ok(spacing - half >= JUNCTION_MIN_STEER_LATERAL, `${spacing}: az oldalsó folyosó belső széle is kellően oldalra esik`);
+  }
 });
 
 test("a helyes út rövidebb: helyes = nitró (turbó), rossz = 8–12 mp kerülő, lejárat / megszakítás = semmi", () => {
@@ -194,8 +232,27 @@ function driveThrough(h: ReturnType<typeof harness>, gate: number | "none" | "pa
   return events;
 }
 
-test("a kérdés-sáv 3 opciója = a 3 kapu; az áthajtott kapu az opció eredeti indexére képeződik vissza", () => {
-  for (let gate = 0; gate < 3; gate++) {
+// SPEC-VÁLTOZÁS 2026-11-19 (J7b döntések 33.): a középső (egyenes) kapun áthajtás nem válasz — a középső opciót a koppintás
+// képezi vissza (lent); itt az oldalsó kapuk, és a középső áthajtása lejárattal, büntetés nélkül zárul.
+test("a kérdés-sáv 3 opciója = a 3 kapu; az áthajtott OLDALSÓ kapu az opció eredeti indexére képeződik vissza; a középsőn áthajtás nem válasz", () => {
+  {
+    const h = harness();
+    const events = driveThrough(h, 1, 1200);
+    const done = events.find((e) => e.kind === "junction-done");
+    assert.ok(done && done.kind === "junction-done" && done.frozen, "rögzült, és a kérdés lezárult");
+    assert.equal(done.kind === "junction-done" ? done.result : null, "timeout", "a középső kapun egyenesen áthajtva nincs válasz");
+    assert.equal(done.kind === "junction-done" ? done.detourSec + done.nitroMs : -1, 0, "se kerülő, se nitró");
+    assert.equal(h.outcomes[0]!.picked, null);
+  }
+  {
+    // A középső opció koppintással (a lapon a táblára koppintás / „2” billentyű ugyanígy `pick`-el).
+    const h = harness();
+    h.core.step(1000 / 60, { x: 0, z: 0, heading: 0, speed: 15 }, { hold: false });
+    const p = h.ui.active()!;
+    h.ui.pick(1, h.core.clockMs());
+    assert.equal(h.outcomes[0]!.picked, p.options[1]!.originalIndex);
+  }
+  for (const gate of [0, 2]) {
     const h = harness();
     const events = driveThrough(h, gate);
     const shown = events.find((e) => e.kind === "junction");
