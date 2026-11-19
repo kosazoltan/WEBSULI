@@ -18,6 +18,11 @@ const deferred = () => { let resolve!: () => void; const promise = new Promise<v
 const nextLoopTurn = () => new Promise<void>((r) => setImmediate(r));
 /** A kapu feloldásáig vár, de legfeljebb egy eseményhurok-körig (a tartalék csak hibás viselkedésnél old fel). */
 const gateOrNextTurn = (gate: Promise<void>) => Promise.race([gate, nextLoopTurn()]);
+/** Bőséges, véges számú eseményhurok-kör (a késleltetve továbbdobott hiba is ennyi alatt jelentkezne; falióra nélkül). */
+const SETTLE_TURNS = 50;
+const loopTurns = async (n: number) => { for (let i = 0; i < n; i++) await nextLoopTurn(); };
+/** A kapu feloldásáig vár, de legfeljebb SETTLE_TURNS körig (elakadásvédelem: utána az állítás dönt). */
+const gateOrTurns = (gate: Promise<unknown>) => Promise.race([gate, loopTurns(SETTLE_TURNS)]);
 
 test("a párhuzamosság kapcsolója: alap 3, 1–5 között felülírható, érvénytelen érték → alap", () => {
   assert.equal(SINGLE_RUN_BANK_CONCURRENCY, 3);
@@ -94,17 +99,34 @@ test("review #265: az egyik egység hibája után is megvárja a többit és a c
   const { e, lesson } = twoSectionLesson();
   const saved: number[] = [];
   let doneAtReject = -1;
-  const firstFailed = deferred();
-  await assert.rejects(buildLessonExperience(lesson, [], { concurrency: 3,
-    save: async (cp) => { saved.push(Object.keys(cp.parts).length); },
+  let outerSettled = false;
+  // Vak ellenőr L2: a sikeres modellválasz ÉS a mentés befejezése külön kapura vár; a kapuk között bőséges (de véges, falióra
+  // nélküli) eseményhurok-kör telik el, így egy késleltetve (néhány körrel később) továbbdobott korai hiba is a kapuk alatt
+  // jelentkezne — és bukna. Elakadásvédelem: minden várakozás legfeljebb SETTLE_TURNS kör.
+  const firstFailed = deferred(), releaseCall = deferred(), saveEntered = deferred(), releaseSave = deferred();
+  const outer = buildLessonExperience(lesson, [], { concurrency: 3,
+    save: async (cp) => { saveEntered.resolve(); await releaseSave.promise; saved.push(Object.keys(cp.parts).length); },
     call: async (_s, user) => {
       const sectionIndex = Number(/sectionIndex=(\d+)/.exec(user)![1]);
       if (sectionIndex === 0) { firstFailed.resolve(); throw new Error("szolgáltatói hiba (nem javítható)"); }
-      // A sikeres csomag a hiba UTÁN végez: megvárja az 1. egység hibáját, majd egy teljes eseményhurok-kört (setImmediate:
-      // addig a hiba minden mikrotaszkban továbbterjedő lépése lefut) — falióra nélkül.
-      await firstFailed.promise;
-      await nextLoopTurn();
+      await releaseCall.promise; // a sikeres csomag csak a hiba végigterjedése UTÁN végez
       return { methods: e.methods.map((m) => ({ ...m, sectionIndex })), tasks: e.tasks.map((t) => ({ ...t, sectionIndex })), quiz: e.quiz.map((q) => ({ ...q, sectionIndex })), glossary: [] };
-    } }).catch((error) => { doneAtReject = saved.length; throw error; }), /szolgáltatói hiba/);
+    } }).catch((error) => { outerSettled = true; doneAtReject = saved.length; throw error; });
+  outer.catch(() => undefined); // a kimenetelt lent az assert.rejects méri; addig ne legyen kezeletlen elutasítás
+
+  await gateOrTurns(firstFailed.promise);
+  await loopTurns(SETTLE_TURNS);
+  assert.equal(outerSettled, false, "a 0. egység hibája nem megy tovább, amíg a másik egység még fut");
+  releaseCall.resolve();
+  let saveStarted = false;
+  void saveEntered.promise.then(() => { saveStarted = true; });
+  await gateOrTurns(saveEntered.promise);
+  assert.ok(saveStarted, "a sikeres csomag checkpoint-mentése elindult");
+  await loopTurns(SETTLE_TURNS);
+  assert.equal(outerSettled, false, "a hiba nem megy tovább, amíg a sikeres csomag mentése tart");
+  releaseSave.resolve();
+  await gateOrTurns(outer.then(() => undefined, () => undefined));
+  assert.equal(outerSettled, true, "a mentés után a hiba továbbmegy");
+  await assert.rejects(outer, /szolgáltatói hiba/);
   assert.equal(doneAtReject, 1, "a hiba csak a késleltetett, sikeres csomag mentése UTÁN megy tovább");
 });
