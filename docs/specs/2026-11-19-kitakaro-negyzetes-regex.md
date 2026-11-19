@@ -68,6 +68,11 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
   félbevágott kulcs vagy kulcsminta), csak ezután vágnak a végső hosszra. Így a végső kimenetben határon félbevágott kulcs
   sosem maradhat, a végső hossztól függetlenül. A teljes szöveget maszkoló hívók (pl. a jelentés kiírása, 652. sor) nem
   vágnak — ott a D2 biztosítja a lineáris futást.
+- **D3b — forrás-koordinátás vágás (vak L1, ff3ba86d):** a design-assets `redact` hosszabbíthat (`Bearer x` → `Bearer [kulcs]`),
+  ezért ott a vágás NEM a maszkolt kimenet végéről történik, hanem a forrásban (`safeCut`): a `w.length - max(64, kulcshossz)`
+  pontot addig toljuk lejjebb, amíg se teljes kulcs-előfordulást, se token-karakterfutást nem metsz, és csak az így kapott,
+  teljes előfordulásokat tartalmazó előtag kerül kitakarásra. Az `external-review` `maskSecrets` csak rövidít (`***`,
+  `AIza***`), ott a maszkolt végből dobott sáv a félbevágott kulcsot mindig fedi — ezt regressziós teszt rögzíti.
 - **D4:** a `split(key)` cseréje mindkét fájlban megmarad; a helyőrzők (`<email>`, `<token>`, `AIza***`, `***`, `[kulcs]`)
   változatlanok.
 

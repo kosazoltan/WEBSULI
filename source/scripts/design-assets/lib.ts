@@ -352,12 +352,34 @@ export function trimCrossingTokenRun(text: string, window: number): string {
 export const REDACT_WINDOW = 64 * 1024;
 
 /**
- * Vágás a kitakarás előtt: legfeljebb REDACT_WINDOW karakter kitakarva; vágott ablaknál a végéről a félbevágott kulcs
- * lehetséges helye (max(64, kulcshossz)) is eldobva, így a max hosszú kimenetben határon félbevágott kulcs nem maradhat.
+ * A biztonságos vágási pont FORRÁS-koordinátában (vak L1: a kitakarás hosszabbíthat — `Bearer x` → `Bearer [kulcs]` —, ezért a
+ * maszkolt kimenet végéből eldobott hossz nem fedi a félbevágott kulcsot). Kiindulás: `w.length - margin`; ezt addig toljuk
+ * lejjebb, amíg nem metsz se teljes kulcs-előfordulást (a `split(key)` balról jobbra, átfedés nélküli találatai), se
+ * token-karakterfutást. A pont csak csökken, a visszalépések diszjunkt szakaszokon futnak: lineáris.
+ */
+function safeCut(w: string, key: string, margin: number): number {
+  const occ: number[] = [];
+  if (key) for (let p = w.indexOf(key); p >= 0; p = w.indexOf(key, p + key.length)) occ.push(p);
+  let c = Math.max(0, w.length - margin);
+  let j = occ.length - 1;
+  for (;;) {
+    const before = c;
+    while (j >= 0 && occ[j] >= c) j--;
+    if (j >= 0 && occ[j] + key.length > c) c = occ[j];
+    if (c > 0 && isTokenChar(w.charCodeAt(c)) && isTokenChar(w.charCodeAt(c - 1))) {
+      while (c > 0 && isTokenChar(w.charCodeAt(c - 1))) c--;
+    }
+    if (c === before) return c;
+  }
+}
+
+/**
+ * Vágás a kitakarás előtt: legfeljebb REDACT_WINDOW karakter; vágott ablaknál a határon átnyúló token-futás, majd a végéről a
+ * félbevágott kulcs lehetséges helye (max(64, kulcshossz)) FORRÁS-koordinátában eldobva (safeCut), és csak a megmaradt, teljes
+ * előfordulásokat tartalmazó szöveg kitakarva — így a max hosszú kimenetben határon félbevágott kulcs nem maradhat.
  */
 export function redactClip(text: string, key: string, max: number): string {
-  const cut = text.length > REDACT_WINDOW;
-  let out = redact(cut ? trimCrossingTokenRun(text, REDACT_WINDOW) : text, key);
-  if (cut) out = out.slice(0, Math.max(0, out.length - Math.max(64, key.length)));
-  return out.slice(0, max);
+  if (text.length <= REDACT_WINDOW) return redact(text, key).slice(0, max);
+  const w = trimCrossingTokenRun(text, REDACT_WINDOW);
+  return redact(w.slice(0, safeCut(w, key, Math.max(64, key.length))), key).slice(0, max);
 }

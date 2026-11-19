@@ -107,3 +107,13 @@ Egy kommentsor a tömb fölé: miért korlátos / miért `{n}…*` (a terv hivat
   `maskClip` / `redactClip` ezt használja a `slice(0, WINDOW)` helyett; a `max(64, kulcshossz)` sáv marad.
 - **T6d** — terv: D1, D3, 5. pont, 7. pont, 8. pont igazítva. Ellenőrzés: a két T1 parancs zöld; `gate:stage` + `gate:push` a
   gép-zárral egy szkriptben.
+
+## T7 — Vak ellenőr L1 (GPT, ff3ba86d): vágás forrás-koordinátában
+
+- **T7a (teszt előbb)** `source/tests/design-assets.test.ts`: a jelentés bemenete a `requestImage` hibaágán (kulcs = választest =
+  `'SYNTHETIC_PRIVATE_MARKER ' + 'Bearer x '×8000`) → a hibaüzenetben nincs `SYNTHETIC`; `redactClip` ablakhatáron félbevágott,
+  `Bearer x`-eket tartalmazó kulccsal (5 / 100 / 2000 karakter kint) → nincs `MARKER`; ablakon belüli teljes előfordulás →
+  `[kulcs]`. `scripts/qa/gates/external-review.test.mjs`: ugyanez AIza-mintás kulccsal (regresszióőr).
+- **T7b** `source/scripts/design-assets/lib.ts`: új `safeCut(w, key, margin)` (D3b); `redactClip` = ablak + határ-futás levágása,
+  majd `redact(w.slice(0, safeCut(...)), key).slice(0, max)`. Az `external-review.mjs` változatlan (csak rövidít).
+
