@@ -1,8 +1,11 @@
 {
+  "disableAllHooks": false,
   "permissions": {
     "deny": [
       "Edit(/.claude/settings.json)",
-      "Edit(/.claude/settings.local.json)"
+      "Edit(/.claude/settings.local.json)",
+      "Edit(/.claude/worktrees/**/.claude/settings.json)",
+      "Edit(/.claude/worktrees/**/.claude/settings.local.json)"
     ]
   },
   "hooks": {

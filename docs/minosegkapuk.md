@@ -203,10 +203,22 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
   elvégezhető: az ügynök **megáll**, és a tulajdonostól kér segítséget — leírja a hibát, a kipróbált lépéseket és a javasolt
   hook-javítást.
 - **A settings-fájlok jogosultsági tiltás alatt állnak** (tulajdonosi döntés 2026-11-18): a `.claude/settings.json`
-  `permissions.deny` listája (`Edit(/.claude/settings.json)`, `Edit(/.claude/settings.local.json)`) minden módban megtiltja, hogy ügynök
-  ezeket a fájlokat a fájlszerkesztő eszközökkel, illetve héjban átirányítással vagy a felismert fájl-parancsokkal írja. **Ezután a
-  beállítás csak a tulajdonos kezével módosítható.** Dokumentált rés: a fájlt maga megnyitó szkript (pl. Node / Python) — ezt a
-  munkamenetben semmi nem fogja meg; ilyen írás a kapu megkerülése, tilos.
+  `permissions.deny` listája (`Edit(/.claude/settings.json)`, `Edit(/.claude/settings.local.json)`, valamint a repón belüli munkafákra
+  `Edit(/.claude/worktrees/**/.claude/settings.json)` és `Edit(/.claude/worktrees/**/.claude/settings.local.json)`) minden módban
+  megtiltja, hogy ügynök ezeket a fájlokat írja. **Ezután a beállítás csak a tulajdonos kezével módosítható.** A pontos kör a
+  hivatalos dokumentáció szerint (https://code.claude.com/docs/en/permissions — az `Edit(...)` szabály a beépített fájlszerkesztő
+  eszközökre vonatkozik; a `/…` alak a projektgyökérhez, a `//…` a fájlrendszer gyökeréhez, a `~/…` a saját könyvtárhoz horgonyzott;
+  a minta gitignore-szintaxisú):
+  - **Fedett:** a beépített fájlszerkesztő eszközök (Edit, Write, NotebookEdit), és Bash-ben a kimeneti átirányítás (`>`, `>>`, `2>`)
+    és a `tee` célja; a `/` a munkamenet fő munkakönyvtárához horgonyzott — ha a munkamenet a repó gyökerében indul, a fenti négy útvonal.
+  - **Nem fedett:** a felhasználói settings (`~/.claude/…` — a tulajdonos saját beállítása, repóból nem korlátozzuk; ezért nincs `//**`
+    alakú tiltás sem); a repón kívüli munkafa (pl. ideiglenes mappában) és a nem a repó gyökerében indult munkamenet; a PowerShell
+    fájlírása (a dokumentáció az átirányítás-ellenőrzést csak Bash-re írja le); az MCP-fájlírók; a fájlt maga megnyitó szkript (pl.
+    Node / Python). Ezeket a munkamenetben semmi nem fogja meg — ilyen
+    írás a kapu megkerülése, tilos. (A beállítás-változást figyelő hook a következő hook-szelet tétele, kanban.)
+- **A hookok kikapcsolása ellen** a projekt-settingsben a hookok kikapcsoló kulcsa kifejezett hamis értékkel áll. A hivatalos
+  dokumentáció szerint (https://code.claude.com/docs/en/hooks, „Disable or remove hooks”) a projekt-settings hamis értéke felülírja a felhasználói
+  settings igaz értékét; egy futásra szóló parancssori beállítás ennél erősebb — azt repóból nem lehet lefedni.
 - **A hook-szkript gyengítése ellen** a valódi védelem a CI-ben futó viselkedési hook-tesztek (`settings-hooks.test.mjs`,
   `hook-failure.test.mjs`, `check-quality-gates.test.mjs`): a gyengített hook a PR-ban bukik. A `scripts/qa/repo-rules.json`
   védő szabályai csak szűk, szó szerinti alakokat fognak — riasztók, nem biztonsági határ; amit átengednek, az sem megengedett.

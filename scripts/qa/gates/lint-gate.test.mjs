@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS } from './lib.mjs';
 import { applyRepoRules, classifyHookOutput, runLintSteps, scanAddedLines } from './lint-gate.mjs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fakeCtx, statusOf } from './_fake.mjs';
 
 // A minták futásidőben, darabokból — a saját kapunk ne bukjon a tesztfájl szövegén.
@@ -93,4 +95,25 @@ test('applyRepoRules: a path-szabály csak az illeszkedő fájlra, a removes-sza
   assert.deepEqual(applyRepoRules(rules, 'kikapcsol', '.claude/settings.local.json').map((h) => h.msg), ['p']);
   assert.deepEqual(applyRepoRules(rules, 'kikapcsol', 'scripts/qa/repo-rules.json'), []);
   assert.deepEqual(applyRepoRules(rules, 'x x x', '.claude/settings.json'), []);
+});
+
+test('L15: a diff-szkennelés a hook-folyamatnak átadja a WEBSULI_DIFF_SCAN=1 jelet (nélküle a removes-szabály hamisan tiltana)', async () => {
+  const diff = ['+++ b/docs/a.md', '@@ -0,0 +1 @@', '+uj sor'].join('\n');
+  const hookCalls = [];
+  const { ctx, gate, root } = fakeCtx({
+    changed: ['docs/a.md'],
+    diff,
+    respond: (cmd, args, opts) => {
+      if (String(args?.[0] ?? '').replace(/\\/g, '/').endsWith('scripts/qa/hooks/enforce-repo-rules.mjs')) {
+        hookCalls.push(opts);
+        return { code: 0, stdout: '' };
+      }
+      return undefined;
+    },
+  });
+  mkdirSync(join(root, 'scripts', 'qa', 'hooks'), { recursive: true });
+  writeFileSync(join(root, 'scripts', 'qa', 'hooks', 'enforce-repo-rules.mjs'), '');
+  await runLintSteps({ gate, ctx, mode: 'fast' });
+  assert.equal(hookCalls.length, 1, 'a diff-szkennelés a hookot a változott fájlra meghívja');
+  assert.equal(hookCalls[0].env?.WEBSULI_DIFF_SCAN, '1');
 });

@@ -115,7 +115,7 @@ test('F5 szöveg-őr: a runbook „A kapu-hook hibája” szakasza nem ad ügyn�
   const sec = md.slice(start, end < 0 ? undefined : end);
   // Codex P1 (#506): ügynöknek szóló felszólítás a védelem eltávolítására / kikapcsolására nem lehet benne, futtatható
   // kikapcsoló parancs sem.
-  for (const re of [/\btöröld\b/i, /\btávolítsd el\b/i, /\bkapcsold ki\b/i, /\bvedd ki\b/i, /claude\s+--settings/i]) {
+  for (const re of [...IMPERATIVE, /claude\s+--settings/iu]) { // IMPERATIVE: lent (L14, Unicode-tudatos szóhatár)
     assert.doesNotMatch(sec, re, `tiltott minta a szakaszban: ${re}`);
   }
   assert.match(sec, /kizárólag a hookot javíthatja/);
@@ -214,6 +214,27 @@ test('L8: a git-korlát tesztes felülírása NODE_TEST_CONTEXT nélkül hatást
   assert.doesNotMatch(r, /nem válaszolt/);
 });
 
+// L14 (vak ellenőr, 3. kör): a JS \b ASCII-alapú — ékezetes betűvel kezdődő / végződő szónál nem illeszkedik. Unicode-tudatos
+// szóhatár: előtte / utána nem lehet betű, szám vagy aláhúzás.
+const word = (src) => `(?<![\\p{L}\\p{N}_])(?:${src})(?![\\p{L}\\p{N}_])`;
+const W = (src) => new RegExp(word(src), 'iu');
+const MECHANISM = [/onFailure[^.\n]{0,40}continue/iu, /disable\s*All\s*Hooks/iu,
+  new RegExp(`settings\\.local\\.json[^.\\n]{0,60}${word('írd|tedd|vedd fel|add hozzá')}`, 'iu'), /"onFailure"\s*:\s*"continue"/iu, /claude\s+--settings/iu];
+const IMPERATIVE = [W('töröld'), W('távolítsd el'), W('kapcsold ki'), W('vedd ki'), /állítsd[^.\n]*continue/iu, W('írd át'), W('kommenteld ki'), W('hagyd ki')];
+
+test('L14: a szöveg-őr szóhatára Unicode-tudatos — ékezetes szó elején / végén illeszkedik, szó belsejében nem', () => {
+  const local = MECHANISM[2];
+  for (const s of ['a settings.local.json fájlba írd be a sort', 'a settings.local.json-ba add hozzá a sort', 'settings.local.json: add hozzá.', 'settings.local.json — tedd bele']) {
+    assert.match(s, local, s);
+  }
+  for (const s of ['a settings.local.json tartalmát nem módosítod', 'settings.local.json leírdal', 'settings.local.json átírdokumentum']) {
+    assert.doesNotMatch(s, local, s);
+  }
+  const hit = (s) => IMPERATIVE.some((re) => re.test(s));
+  for (const s of ['Írd át a hookot.', 'töröld a sort', 'Távolítsd el a bejegyzést!', 'kapcsold ki.', 'hagyd ki a lépést']) assert.ok(hit(s), s);
+  for (const s of ['a kitöröldött sor', 'átírd átmenet', 'megtávolítsd elemet', 'leírdát']) assert.ok(!hit(s), s);
+});
+
 test('L7: a kikapcsoló mechanizmus neve és a védelem eltávolítására felszólító szinonimák sehol nem szerepelnek ügynöknek szóló szövegben', () => {
   const SKILLS = ['websuli-lint-ellenor', 'websuli-fejlesztesi-ellenor', 'websuli-push-elotti-kapu', 'websuli-pr-elotti-kapu', 'websuli-merge-elotti-kapu'];
   const files = ['docs/minosegkapuk.md', 'docs/agent-csapdak.md', 'docs/handoffs/2026-11-18-kapu-hook-retro.md',
@@ -221,7 +242,6 @@ test('L7: a kikapcsoló mechanizmus neve és a védelem eltávolítására felsz
     ...SKILLS.flatMap((s) => [`.agents/skills/${s}/SKILL.md`, `.claude/skills/${s}/SKILL.md`])];
   // A helyi settings-fájl NEVE megengedett (a tulajdonosi döntés szerint jogosultsági tiltás alatt áll, ezt a runbook leírja); ami
   // tilos: a kikapcsoló kulcs neve, a „continue” érték, a parancssori settings-kapcsoló, és felszólítás a helyi fájlba írásra.
-  const MECHANISM = [/onFailure[^.\n]{0,40}continue/i, /disable\s*All\s*Hooks/i, /settings\.local\.json[^.\n]{0,60}\b(írd|tedd|vedd fel|add hozzá)\b/i, /"onFailure"\s*:\s*"continue"/i, /claude\s+--settings/i];
   for (const f of files) {
     const p = join(repoRoot, ...f.split('/'));
     if (!existsSync(p)) continue;
@@ -232,10 +252,7 @@ test('L7: a kikapcsoló mechanizmus neve és a védelem eltávolítására felsz
   const md = readFileSync(join(repoRoot, 'docs', 'minosegkapuk.md'), 'utf8').replace(/\r\n/g, '\n');
   const start = md.indexOf('## A kapu-hook hibája');
   const sec = md.slice(start, md.indexOf('\n## ', start + 3));
-  // (a JS \b ASCII-alapú — ékezetes betűvel kezdődő / végződő szónál nem használható, ezért ott nincs \b)
-  for (const re of [/\btöröld/i, /\btávolítsd el\b/i, /\bkapcsold ki\b/i, /\bvedd ki\b/i, /állítsd[^.\n]*continue/i, /írd át/i, /\bkommenteld ki\b/i, /\bhagyd ki\b/i]) {
-    assert.doesNotMatch(sec, re, `tiltott felszólítás: ${re}`);
-  }
+  for (const re of IMPERATIVE) assert.doesNotMatch(sec, re, `tiltott felszólítás: ${re}`);
 });
 
 test('F11: a settings-fájlok jogosultsági tiltás alatt — permissions.deny a dokumentált Edit(/…) alakkal; a runbook kimondja', () => {
@@ -248,4 +265,38 @@ test('F11: a settings-fájlok jogosultsági tiltás alatt — permissions.deny a
   assert.match(md, /Ezután a\s+beállítás csak a tulajdonos kezével módosítható/);
   assert.match(md, /nem biztonsági határ/);
   assert.doesNotMatch(md, /az `enforce-repo-rules` Edit \/ Write-ra\s+tiltja/);
+});
+
+// ---- L13 / L12 (vak ellenőr, 3. kör) ----------------------------------------------------------------------------------------
+
+const OFF_KEY = `${'disable'}${'AllHooks'}`; // a kikapcsoló kulcs neve szándékosan darabolva (szöveg-őr)
+
+test('F13: a projekt-settings kifejezetten nem kapcsolja ki a hookokat (JSON.parse — a JSON-escape-pel írt kulcs is számít)', () => {
+  // hooks.md „Disable or remove hooks”: a projekt-settings false értéke felülírja a felhasználói true-t
+  const settings = JSON.parse(readFileSync(SETTINGS, 'utf8'));
+  assert.equal(settings[OFF_KEY], false, 'a projekt-settingsben a kikapcsoló kulcs kifejezett false értékkel álljon');
+  const local = join(repoRoot, '.claude', 'settings.local.json');
+  if (existsSync(local)) assert.notEqual(JSON.parse(readFileSync(local, 'utf8'))[OFF_KEY], true, 'a helyi settings sem kapcsolhatja ki');
+  const md = readFileSync(join(repoRoot, 'docs', 'minosegkapuk.md'), 'utf8');
+  assert.match(md, /code\.claude\.com\/docs\/en\/hooks/, 'a runbook nevezze meg a forrást');
+  assert.match(md, /felülírja a felhasználói/);
+  // a repó-szabály a true értéket és a false eltávolítását fogja, a false-t nem tiltja
+  const settingsText = readFileSync(SETTINGS, 'utf8');
+  assert.equal(reason(run(rulesHook, { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: settingsText } })), null, 'a jelenlegi settings visszaírása ENGEDETT');
+  assert.match(reason(run(rulesHook, { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: settingsText.replace(`"${OFF_KEY}": false`, `"${OFF_KEY}": true`) } })) ?? '', /REPO-SZABÁLY/);
+  assert.match(reason(run(rulesHook, { tool_name: 'Write', tool_input: { file_path: SETTINGS, content: settingsText.replace(new RegExp(`\\s*"${OFF_KEY}": false,?`), '') } })) ?? '', /REPO-SZABÁLY/);
+});
+
+test('F14: a munkafák settings-fájljai is tiltás alatt (dokumentált /… alak), a felhasználói settings nem; a runbook kimondja a kört', () => {
+  const deny = JSON.parse(readFileSync(SETTINGS, 'utf8')).permissions?.deny ?? [];
+  for (const rule of ['Edit(/.claude/worktrees/**/.claude/settings.json)', 'Edit(/.claude/worktrees/**/.claude/settings.local.json)']) {
+    assert.ok(deny.includes(rule), `hiányzó tiltás: ${rule}`);
+  }
+  // a // (fájlrendszer-gyökér) és a ~/ (saját könyvtár) alak a tulajdonos felhasználói settingsét is lefedné — repóból nem korlátozzuk
+  for (const r of deny) assert.doesNotMatch(r, /^\w+\((?:\/\/|~)/, `nem repó-horgonyzott tiltás: ${r}`);
+  const md = readFileSync(join(repoRoot, 'docs', 'minosegkapuk.md'), 'utf8').replace(/\r\n/g, '\n');
+  for (const re of [/\*\*Fedett:\*\*[^\n]*beépített fájlszerkesztő eszközök/, /fő munkakönyvtárához horgonyzott/, /\*\*Nem fedett:\*\*/,
+    /felhasználói settings/, /repón kívüli munkafa/, /PowerShell/, /MCP/, /fájlt maga megnyitó szkript/, /code\.claude\.com\/docs\/en\/permissions/]) {
+    assert.match(md, re);
+  }
 });
