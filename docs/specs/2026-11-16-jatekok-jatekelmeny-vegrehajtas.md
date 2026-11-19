@@ -1305,8 +1305,10 @@ mérföldkövek), az változatlan marad (a függvények maradnak).
   világban; a legtávolabbi átköltözik). Mért (20 seed × 180 s): SIM_AVERAGE 10,8 kérdés/perc (min 9,9), leghosszabb rés ≤ 7,8 s;
   SIM_WEAK 8,7/perc; az 5 pálya mediánja 139 s.
 - **Rúnakövek:** a világban 4 színkódolt, betűs (A–D) kő az érc körül (U-J3-1), mellettük azonos színű DOM-rúnagombok a válasz
-  szövegével (`bc-quiz` réteg, `bc-rune-<i>`, `pointerTapHandlers`); a kövek a vásznon koppintással / célkereszttel is
-  választhatók. A kérdés-sáv `bc-question` / `bc-prompt`; a `bc-quiz-pause` a rúnaréteg saját 52 px-es szünetgombja (a
+  szövegével (`bc-quiz` réteg, `bc-rune-<i>`, `pointerTapHandlers`); a kövek a vásznon **koppintással** is választhatók: a
+  találat a kő vetített képernyő-téglalapja alapján, a terep előtt (`tapStone`; review #484 vak K1), az ércre célzott sugár és
+  az élesítés előtti lenyomás nem választ. **Célkereszttel nem** (a kövek a kamerához igazítva a szabad képernyő-sávban
+  lebegnek, a célkereszt — a képernyő közepe, az érc — sosem éri el őket; a bányászó gesztus nem válaszol). A kérdés-sáv `bc-question` / `bc-prompt`; a `bc-quiz-pause` a rúnaréteg saját 52 px-es szünetgombja (a
   sáv közös 48 px-es ikongombja Pixel 7 sűrűségen 47,x px-re kerekedett — mérve, M2). Nyitott zárnál a Lerak / Bányász rejtett.
 - **A pálya ideje** a menet kezdő sávjából (`adaptiveTimeBudget(timeLimit, runStartBand)`), a válaszok nem módosítják.
   Review #484: a pálya-cél teljesülése után (a megoldás-kijelzés még fut) a visszaszámlálás áll (`levelClockTick`) — az időkeret
@@ -1400,6 +1402,19 @@ válaszok mellett mind a négy kő 0%, és a kérdéskártya rátakar az A/B rú
   vetülete ≥ 70%-ban takaratlan; a kő ↔ rúnagomb megfeleltetés (szín / betű, elhelyezés) egyezik; e2e mért értékkel, mutációs
   ellenpróba. Az álló és fekvő képernyőképek újrakészülnek.
 - **Nem ebben a PR-ban:** N3, L4 maradéka, L6 (tulajdonosi döntés), a közös `pointerTap.ts`.
+
+**A vak, hibakereső ellenőrzés (b663204) leletei és javításuk (2026-11-19):**
+- **K1** (közepes): a látható kőre koppintás telefonon nem válaszolt (a sávba tett kő ~7,7 egységre volt, a 3D sugár a
+  6 egységes határnál / a talajnál elakadt). Javítás: a vászon-koppintás a kő vetített téglalapjából választ (8 px ráhagyás,
+  a terep előtt), a mag `tapStone`-ja tartja az érc-szabályt és az élesítést; az elhelyezés az érc vetületét is kerüli (ott az
+  érc-szabály miatt nem választana). E2e valódi érintéssel mind a 4 kőre 360×640, 390×844 és 412×915 méretben.
+- **K2**: 360×640-en a megoldás-kijelzéskor a kártya („Miért?” sorral) a rúnaréteg szünetgombjára lógott → ilyenkor a gomb
+  rejtett (`visibility: hidden`, a helye megmarad, a HUD szünetgombja mindig elérhető), új kérdésnél újra látszik.
+- **K3**: fekvőben a leghosszabb kérdés kártyája a jelenet közepét takarja — J3c-jegy marad (a válasz az oldalsó gombokkal megy).
+- **K4**: a végeredmény „Rúnaérc” a menet összesítése (`runOpened`), a pálya-vége képernyő „Jó válaszok” sora a pályáé.
+- **K5**: a célkereszt-cél újrahasznált objektum (nincs képkockánkénti foglalás).
+- **K6**: a HUD-intervallum csak változáskor állít állapotot; nyitott kérdés alatt 20,3 → 11,3 render/s (a maradék a közös
+  kérdés-sáv 10 Hz-es lépése). Renderszám-teszt ≤ 13/s.
 
 **M5 (a #483 beolvasztása után, 2026-11-18):** a közös kupon-ismétlés (#483) a Kockavadász magján és lapján változtatás
 nélkül érvényes. A sim kapott `couponOnly` opciót és kérdés nélküli zár-számlálót; teszt: 3 / 5 / 8 tételes leckével 20 seed ×
