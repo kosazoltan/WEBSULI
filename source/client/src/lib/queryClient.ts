@@ -129,6 +129,9 @@ export async function sendKeepalive(url: string, data: unknown): Promise<boolean
       csrfTokenManager.invalidate();
       token = await freshToken();
       if (!token) return false;
+      // Terv R23 (gépi vak ellenőrzés L3): ha az új tokent egy régi (jelzés nélküli) példány adta, nem küldünk neki újra — a régi szerver
+      // a pillanatképet nem ismeri (400), és a közös keretét fogyasztaná; a hívó nem rögzít elküldést.
+      if (!csrfTokenManager.resultApiReady()) return false;
       res = await post(token);
       // Ha az új token is 403-at kap, az sem marad a gyorsítótárban (a következő alkalom megint frisset kér).
       if (res.status === 403) csrfTokenManager.invalidate();

@@ -22,10 +22,13 @@ test("quizRoundComplete: van kérdés, és mindegyikre van válasz", () => {
 test("a küldés feltétele: lezárt kör VAGY (csak kvíznél) teljes kör; a feladatoknál továbbra is csak a lezárás", () => {
   const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8");
   assert.match(source, /const done = !!round\.finishedAt \|\| \(kind === "quiz" && quizRoundComplete\(round\)\);/);
-  assert.match(source, /if \(!lessonId \|\| !done \|\| sending\.current \|\| !\(ready \|\| timedOut\)\) return;/);
+  // Terv R20 (gépi vak ellenőrzés L1, dokumentált spec-változás): az „úton van” őr a KÖRHÖZ kötött, nem a komponenshez; a viselkedést a
+  // „R20 / L1” böngészőteszt méri (függő előző kör mellett az új kör is megy).
+  assert.match(source, /if \(!lessonId \|\| !done \|\| !\(ready \|\| timedOut\)\) return;/);
+  assert.match(source, /if \(sending\.current === roundId\) return;/);
   // A körönkénti egyszeri küldés őrei változatlanok: a localStorage-jelző és a folyamatban lévő küldés.
   assert.match(source, /if \(localStorage\.getItem\(flag\)\) return;/);
-  assert.match(source, /sending\.current = true;/);
+  assert.match(source, /sending\.current = roundId;/);
 });
 
 test("S1b: answeredCount csak a kör saját kérdéseit számolja; roundTooOld a 7 napos határon", () => {

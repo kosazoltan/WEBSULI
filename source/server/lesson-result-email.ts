@@ -200,7 +200,20 @@ export function setPartialDelay(ms: number): number { const previous = partialDe
  * Várakozó pillanatképek: kulcs → időzítő, a tanuló (a tanulónkénti korláthoz), a megválaszolt kérdések száma és a küldő. A Map beszúrási
  * sorrendje = életkor.
  */
-const pendingPartials = new Map<string, { timer: ReturnType<typeof setTimeout>; owner: string; who: string; answered: number; send: () => Promise<unknown> }>();
+const pendingPartials = new Map<string, { timer: ReturnType<typeof setTimeout>; owner: string; who: string; answered: number; version: number; send: () => Promise<unknown> }>();
+/**
+ * Terv R21 (gépi vak ellenőrzés L2): körönként (lecke + kör) az AKTUÁLIS pillanatkép változata. Minden küldési kísérlet — az időzítő első
+ * küldése, a 60 s-os újrapróba és az R19 kapu-újrapróba — a saját változatát a kapu alatt veti össze ezzel: ha közben újabb pillanatkép
+ * ütemeződött, a régi kísérlet nem küld (az újabb megy ki a saját időzítőjén). Korlátos méretű; a véglegesítés törli.
+ */
+const partialVersions = new Map<string, number>();
+const MAX_PARTIAL_VERSIONS = 20_000;
+let partialVersionSeq = 0;
+function setCurrentPartialVersion(key: string, version: number): void {
+  partialVersions.delete(key);
+  if (partialVersions.size >= MAX_PARTIAL_VERSIONS) partialVersions.delete(partialVersions.keys().next().value!);
+  partialVersions.set(key, version);
+}
 /**
  * Terv R11 (második vak ellenőrzés K1/K2): a várakozó pillanatkép kulcsa a LECKE + KÖR (`lecke|körazonosító`), nem a tanuló-kulcs — így
  * ujjlenyomat nélküli → ujjlenyomatos, IP-váltásos, be- / kijelentkezéses esetben is körönként egy várakozó (és legfeljebb egy levél) van.
@@ -223,11 +236,11 @@ function cancelPartial(key: string): void {
  * Review K1: telítéskor a jogos pillanatkép NEM vész el csendben — a legrégebbi várakozó (először a tanulóé, aztán az összesé) adja át a
  * helyét, és ez naplózódik (azonosító nélkül).
  */
-function schedulePartial(key: string, owner: string, who: string, answered: number, send: () => Promise<unknown>): boolean {
+function schedulePartial(key: string, owner: string, who: string, answered: number, version: number, send: () => Promise<unknown>): boolean {
   // R7: körönként a LEGTÖBB választ tartalmazó pillanatkép marad — a később érkező, kevesebb válaszú (sorrendcsere, másik fül régebbi
   // állapota) nem írja felül a tartalmat; az időzítő ettől még újraindul (a tanuló az imént még aktív volt).
   const waiting = pendingPartials.get(key);
-  const best = waiting && waiting.answered > answered ? { answered: waiting.answered, send: waiting.send, who: waiting.who, owner: waiting.owner } : { answered, send, who, owner };
+  const best = waiting && waiting.answered > answered ? { answered: waiting.answered, send: waiting.send, who: waiting.who, owner: waiting.owner, version: waiting.version } : { answered, send, who, owner, version };
   cancelPartial(key);
   const own = [...pendingPartials.entries()].filter(([, entry]) => entry.owner === best.owner).map(([k]) => k);
   if (own.length >= MAX_PENDING_PER_LEARNER) { cancelPartial(own[0]); logger.warn("[LESSON-RESULT] a tanuló legrégebbi várakozó félbehagyott köre kiszorult (tanulónkénti korlát)."); }
@@ -239,6 +252,8 @@ function schedulePartial(key: string, owner: string, who: string, answered: numb
   }, partialDelayMs);
   timer.unref?.();
   pendingPartials.set(key, { timer, ...best });
+  // R21: a megtartott állapot változata az aktuális (a kiszorított vagy elavult kísérletek a kapuban megállnak).
+  setCurrentPartialVersion(key, best.version);
   return true;
 }
 /** Teszthez: a várakozó pillanatképek száma. */
@@ -375,15 +390,17 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     if (lastActivity !== undefined && roundTooOld(lastActivity, body.clientNow ?? receivedAt)) return res.status(202).json({ queued: false, stale: true });
     // PR #510: a már véglegesített kör késői pillanatképe nem ütemeződik — a befejezett kör mellé nem mehet „félbehagyva” levél.
     if (await roundFinalized(lessonId, partialWhos, body.roundId)) return res.status(202).json({ queued: false, finalized: true });
-    // R11: a kör első rögzítőjével össze nem férő beküldő nem írhatja felül a várakozót (a körazonosítót a kliens választja).
-    const waiting = pendingPartials.get(lockKey);
-    if (waiting && !mayActOn(waiting.who, who)) return res.status(202).json({ queued: false, partial: true, conflict: true });
     // R6 + R11: ha a körről már kiment (vagy éppen megy) „félbehagyva” levél — bármelyik tanuló-kulccsal —, újabb nem megy (körönként
     // legfeljebb egy); a válasz ezt mondja.
     const earlier = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
       .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), eq(lessonResultEmails.roundKey, partialRoundKey)));
     if (earlier.some(sentRow => sentRow.delivered.length > 0)) return res.status(202).json({ queued: false, partial: true, alreadySent: true });
     if (partialIntakeHook) await partialIntakeHook(who);
+    // R11 + R22 (gépi vak ellenőrzés L4): a várakozó beolvasása, az első rögzítő vizsgálata és az ütemezés az UTOLSÓ várakozás után, egy
+    // szinkron lépésben — párhuzamosan érkező pillanatképek nem olvashatnak elavult állapotot. A kör első rögzítőjével össze nem férő
+    // beküldő nem írhatja felül a várakozót (a körazonosítót a kliens választja).
+    const waiting = pendingPartials.get(lockKey);
+    if (waiting && !mayActOn(waiting.who, who)) return res.status(202).json({ queued: false, partial: true, conflict: true });
     const lastAnsweredOnServer = onServerClock(body.lastAnsweredAt);
     const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(startedAtOnServer ? { startedAt: startedAtOnServer } : {}), ...(lastAnsweredOnServer ? { lastAnsweredAt: lastAnsweredOnServer } : {}) } };
     // R16: ha a kört vendég rögzítette és most más veszi át (pl. a kör közben bejelentkező tanuló), a kör vendég kör marad — a levél
@@ -392,8 +409,10 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     const recorder = guestTakeover ? waiting.who : who;
     const sender = async () => (guestTakeover ? { learner: GUEST_LEARNER, guest: true } : { learner: await nameOf(), ...attribution });
     // R1: a kapu MINDEN kísérlet (az újrapróba is) előtt, a kör kizárása alatt nézi, hogy a kör közben véglegesült-e.
-    const gate: SendGate = attempt => withRoundLock(lockKey, async () => ((await roundFinalized(lessonId, partialWhos, body.roundId)) ? { sent: 0, duplicate: true } : attempt()));
-    const queued = schedulePartial(lockKey, `${lessonId}|${recorder}`, recorder, snapshot.meta?.partial?.answered ?? 0,
+    // R21: a kapu a kísérlet saját pillanatkép-változatát is nézi — elavult (közben lecserélt) állapot nem megy ki.
+    const version = ++partialVersionSeq;
+    const gate: SendGate = attempt => withRoundLock(lockKey, async () => ((partialVersions.get(lockKey) !== version || await roundFinalized(lessonId, partialWhos, body.roundId)) ? { sent: 0, duplicate: true } : attempt()));
+    const queued = schedulePartial(lockKey, `${lessonId}|${recorder}`, recorder, snapshot.meta?.partial?.answered ?? 0, version,
       async () => sendLessonResult({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }, true, gate));
     return res.status(202).json({ queued, partial: true });
   }
@@ -416,6 +435,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     markFinalized(lessonId, body.roundId);
     // R15: a kör várakozó pillanatképét BÁRMELY véglegesítés törli (a beküldő kilététől függetlenül).
     cancelPartial(lockKey);
+    partialVersions.delete(lockKey);
     // R18: tartós, tanulófüggetlen nyom (újraindítás után is). A hibája nem akasztja meg a beküldést: a memóriabeli jelző véd.
     await recordFinalized(lessonId, body.roundId, graded.summary.percent).catch(error => logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`));
   }

@@ -16,7 +16,10 @@ import { experienceFingerprint, type ExperienceRound } from "./useExperienceRoun
 export const REPORT_FALLBACK_MS = 45_000;
 export const RESULT_REPORT_RETRIES = 3;
 export function useResultReport(lessonId: string | undefined, kind: "tasks" | "quiz", round: ExperienceRound, storageKey: string, ready = true) {
-  const sending = useRef(false);
+  // Terv R20 (gépi vak ellenőrzés L1): az „úton van” őr a KÖRHÖZ kötött (az úton lévő kör azonosítója), nem a komponenshez — függő előző
+  // kör mellett az új, befejezett kör is mehet; minden lezárulás lépteti a `settled` számlálót, így a beküldő újra kiértékeli a kört.
+  const sending = useRef<string | null>(null);
+  const [settled, setSettled] = useState(0);
   const [timedOut, setTimedOut] = useState(false);
   useEffect(() => {
     setTimedOut(false);
@@ -28,14 +31,15 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     // Spec 2026-11-17-eredmeny-email-kviz: a helyi kvíz kérdésenként azonnal visszajelez, a lezáró gombot sokan meg sem nyomják — a
     // teljesen megválaszolt kör lezárás nélkül is megy (körönként egyszer: a jelző és a szerver egyedi kulcsa változatlan).
     const done = !!round.finishedAt || (kind === "quiz" && quizRoundComplete(round));
-    if (!lessonId || !done || sending.current || !(ready || timedOut)) return;
+    if (!lessonId || !done || !(ready || timedOut)) return;
     // S1b (review K1) + R2: az a LE NEM ZÁRT kör, amelynek az UTOLSÓ VÁLASZA 7 napnál régebbi, utólag nem megy el (a lezárt kör a tanuló
     // döntése: az megy). A régen megnyitott, de ma megválaszolt kör megy — a korhatár nem a kvíz-fül első megnyitásához mér.
     if (!round.finishedAt && roundTooOld(roundActivityAt(round), Date.now())) return;
     const roundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
+    if (sending.current === roundId) return;
     const flag = `${storageKey}:${kind}:sent:${roundId}`;
     try { if (localStorage.getItem(flag)) return; } catch { /* privát módban a szerver egyedi kulcsa véd */ }
-    sending.current = true;
+    sending.current = roundId;
     void (async () => {
       try {
         const fingerprint = await getFingerprint().catch(() => undefined);
@@ -70,9 +74,9 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
           localStorage.removeItem(`${storageKey}:${kind}:partial:${roundId}`);
         } catch { /* elég a szerver egyedi kulcsa */ }
       } catch { /* csendes: a tanuló felülete nem függ a levéltől */ }
-      finally { sending.current = false; }
+      finally { if (sending.current === roundId) sending.current = null; setSettled(n => n + 1); }
     })();
-  }, [lessonId, kind, round, storageKey, ready, timedOut]);
+  }, [lessonId, kind, round, storageKey, ready, timedOut, settled]);
 
   // Spec 2026-11-17-eredmeny-email-kviz (S1b): a FÉLBEHAGYOTT helyi kvíz — a lap háttérbe kerülésekor / elhagyásakor a kör pillanatképe
   // megy a szerverhez (`partial: true`); a szerver csak akkor küld „félbehagyva” levelet, ha utána sem újabb pillanatkép, sem végleges
