@@ -1,0 +1,31 @@
+{
+  "$comment": "Állapot-ellenőrzők konfigurációja (docs/minosegkapuk.md „Állapot-ellenőrzők”). A listák kód-módosítás nélkül bővíthetők.",
+  "memory": {
+    "indexLineMax": 200,
+    "fileCharsWarn": 6000,
+    "totalCharsWarn": 80000,
+    "indexTokensWarn": 1500,
+    "types": ["user", "feedback", "project", "reference"],
+    "repoPathPrefixes": ["docs/", "scripts/", "source/", ".agents/", ".claude/", ".cursor/", ".github/"],
+    "timeBoundPatterns": [
+      "\\bkészül\\b",
+      "még nincs a main(?:en|ben)",
+      "használat előtt ellenőrizd, hogy a mainen van",
+      "\\bmost fut\\b",
+      "\\bholnap\\b",
+      "\\bma este\\b"
+    ],
+    "historicalPatterns": ["törölve", "törölt", "kivezetve", "kivezetett", "megszűnt", "archiválva"]
+  },
+  "kanban": {
+    "activeStatuses": ["in_progress", "in_review"],
+    "stuckDays": 3,
+    "reviewStuckDays": 2,
+    "openPrLimit": 50
+  },
+  "env": {
+    "slowGitStatusMs": 3000,
+    "rootTempPatterns": ["^tmp[-_]", "\\.tmp$", "^scratch", "\\.bak$", "\\.log$", "^nul$"],
+    "envExample": "source/.env.example"
+  }
+}
