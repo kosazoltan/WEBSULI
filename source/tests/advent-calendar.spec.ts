@@ -449,7 +449,7 @@ test.describe("asztali nézet 1366×768", () => {
     expect(boxes).toHaveLength(24);
     for (const b of boxes) expect(b.top >= 0 && b.left >= 0 && b.bottom <= 768 && b.right <= 1366, `ablak a nézeten belül: ${JSON.stringify(b)}`).toBe(true);
     await shot(page, "d-naptar");
-    await page.getByTestId("advent-door-23").click();
+    await tapDoor(page, 23, { how: "click" });
     await expect(page.getByTestId("advent-question")).toBeVisible();
     await shot(page, "d-kerdes");
     await pickOption(page, true, "click");
@@ -462,7 +462,7 @@ test.describe("asztali nézet 1366×768", () => {
     await page.getByTestId("advent-repair-from-summary").click();
     await pickOption(page, true, "click");
     await page.getByTestId("advent-next").click();
-    await page.getByTestId("advent-door-24").click();
+    await tapDoor(page, 24, { how: "click" });
     await pickOption(page, true, "click");
     await page.getByTestId("advent-next").click();
     await expect(page.getByTestId("advent-gift-message")).toHaveText(ADVENT_GIFT_MESSAGE);
