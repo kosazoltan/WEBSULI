@@ -357,5 +357,5 @@ Elfogadás (S1b):
 - [x] E30 – bármely véglegesítés elnyomja a részlegest; fiók → vendég sorrend: csak végleges levelek (valódi DB)
 - [x] E31 – vendég kör átvétele: „Vendég tanuló” név (valódi DB)
 - [x] E32 – teljes pillanatkép nem ütemez (valódi DB)
-- [ ] E33 – tartós, tanulófüggetlen véglegesítési nyom; újraindítás után más kilét / IP sem küld részlegest (valódi DB)
+- [x] E33 – tartós, tanulófüggetlen véglegesítési nyom; újraindítás után más kilét / IP sem küld részlegest (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
