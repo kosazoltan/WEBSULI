@@ -61,7 +61,7 @@ becsült / mért futásideje.
 | 6 | Független ellenőr | zöld push-kapu | `review-<fej>.json` | **Ü** + `record-review.mjs` (formai) | a jelentés állításainak gépi visszaellenőrzése (S2), „gép megfoghatta?” címke számlálása (E) | játéklogikai szándék, UX | ~20–60 perc ügynök | (a)–(f)(j) |
 | 7 | Push | zöld push-kapu + ítélet | távoli fej | **SZ** `check-quality-gates.mjs` hook | – | – | < 1 s | (k) |
 | 8 | PR | zöld `gate:pr` | PR-leírás | **SZ/r** `pre-pr-gate.mjs` (sablon: elfogadás, futtatott, NOT RUN) | a leírás `[x]` pipáinak és „PASS” állításainak bizonyíték-egyezése (S2, S3); SPEC-VÁLTOZÁS-lista (S1) | a leírás érthetősége | 214 s + e2e | (j)(h) |
-| 9 | CI | push | check-runok | **SZ** `.github/workflows/ci.yml` | teszt-integritás TILTÓ módban (S1), ingadozó-lista (S8) | – | ~60 perc (E2E) | (g)(l) |
+| 9 | CI | push | check-runok | **SZ** `.github/workflows/ci.yml` | teszt-integritás (S1; `warn`, tiltás a 6.3a szerint), ingadozó-lista (S8) | – | ~60 perc (E2E) | (g)(l) |
 | 10 | Bot-review | PR | review-szálak | **SZ/r** `pre-merge-gate.mjs` (nyitott szálak száma) | – | a bot-lelet jogossága | 36 s | – |
 | 11 | Merge | zöld CI, szálak, ítélet | `merge-<PR>-<fej>.json` | **SZ** `pre-merge-gate.mjs` + hook + `active-runs-guard.sh` | – | – | 36 s | (n)(o) |
 | 12 | Telepítés | merge `source/`-szal | Render deploy | **SZ/r** `verify-render-revision.mjs` (kézi indítás) | kötelező lépés a merge után (S5) | – | 2–10 perc (Render) | (o) |
@@ -388,10 +388,11 @@ A `gate-metrics.mjs` (S10) a bizonyíték-tárból és a `gh`-ból számol, nem 
 - [ ] A5: WHEN egy tesztfájl diffje (a main-hez VAGY commitonként) állítást töröl / kikommentez, számküszöböt / relációs jelet
   változtat, lazább matcherre vált, timeoutot / retries-t növel, `force: true`-t / `waitForTimeout`-ot vagy forrásszöveg-vizsgálatot
   vezet be, illetve sim-kalibrációs konstanst módosít, és nincs érvényes `SPEC-VÁLTOZÁS` jelölés THEN the test-integrity kapu SHALL a
-  konkrét fájl:sorral jelezni — S1. A jelzés módja a bevezetési lépcsőtől függ (6.3a): a main-hez képesti (összefésült) nézet
-  leletére helyben és a CI-ban is `WARN` (a job nem bukik), `FAIL` csak a `modes.test-integrity.*: block` kapcsoló után, amelyet a
-  6.3a mért feltételei és tulajdonosi jóváhagyás nyitnak; a commitonkénti nézet lelete MINDIG csak tájékoztató `WARN`, soha nem
-  tilt (egyik lépcsőben sem).
+  konkrét fájl:sorral jelezni — S1. A jelzés módja a bevezetési lépcsőtől függ (6.3a): a DÖNTŐ nézet (a main CSÚCSÁHOZ képesti,
+  összefésült diff: `git merge-tree --write-tree`; definíció: végrehajtási fájl S1.2) leletére helyben és a CI-ban is `WARN` (a job
+  nem bukik), `FAIL` csak a `modes.test-integrity` (`local` / `ci`) `block` kapcsoló után, amelyet a 6.3a mért feltételei és
+  tulajdonosi jóváhagyás nyitnak; a commitonkénti nézet lelete MINDIG csak tájékoztató `WARN`, soha nem tilt (egyik lépcsőben sem).
+  Tesztesetek: végrehajtási fájl S1.5/2 („A5/a”, „A5/b”).
 - [ ] A6: WHEN a jelölés megvan, a hivatkozott spec a diffben van és a tesztre utal, és a PR-leírás felsorolja THEN the kapu SHALL
   átengedni — S1.
 - [ ] A7: WHEN egy alügynök-jelentésből hiányzik a gépi `allitasok` blokk, vagy a fej / fájl:sor / PASS-bizonyíték / PR-állapot /

@@ -102,11 +102,14 @@ NEM nyúlunk (nyitott PR-ok); a `docs/agent-csapdak.md`-t nem módosítjuk. Amí
 
 ### S1.2 Bemenet
 
-- **Tartomány-mód** (mindig): `git diff -U6 --no-color -M <merge-base> --` a tesztfájl- és kalibrációs mintákra (munkafával együtt);
-  a törölt tesztfájlokhoz `git diff --name-status --diff-filter=D`.
-- **Commit-mód** (mindig, ha van commit): EGY hívás: `git log -p -U6 --no-color --no-merges -M --format=@@commit %H <base>..HEAD --`
-  a mintákra. Ez fogja a PR-on belüli lazítást, amely a main-hez képest „új fájlként” látszik (J7b, `4da8b3b9`). A commit-mód
-  leletét elejtjük, ha a lazított (hozzáadott) sor szövege a jelenlegi fájlban már nincs meg (később visszacsinálták).
+- **Döntő nézet** (mindig; EZ a „main-hez képesti nézet” egyetlen definíciója a tervben és ebben a fájlban): a main CSÚCSÁHOZ
+  képesti, összefésült diff — `git merge-tree --write-tree <main-csúcs> HEAD`, és a main csúcsa ↔ az összefésült fa diffje
+  (`-U6 --no-color -M`) a tesztfájl- és kalibrációs mintákra; ütközés esetén a merge-base-hez képesti diff (a CI-ban a
+  merge-commit). A squash-sel már összevont előzmény-ág commitjait így nem rója fel. A törölt tesztfájlok ugyanebből (`D` állapot).
+- **Commit-nézet** (kiegészítő, csak tájékoztató — SOHA nem tilt, egyik módban sem): csak a PR SAJÁT commitjai
+  (`git log -p -U6 --no-color --no-merges -M --cherry-pick --right-only <main-csúcs>...HEAD`) és csak a main csúcsán még NEM létező
+  fájlok. Ez fogja a PR-on belüli lazítást, amely a main-hez képest „új fájlként” látszik (J7b, `4da8b3b9`). A commit-nézet leletét
+  elejtjük, ha a lazított (hozzáadott) sor szövege a jelenlegi fájlban már nincs meg (később visszacsinálták).
 - Tesztfájl-minták (`gates.config.json` → `testIntegrity.testPatterns`): `\.(test|spec)\.[cm]?[jt]sx?$`, `\.browser\.ts$`,
   `^source/tests/game-mobile-cases/`, `^source/playwright[^/]*\.config\.[cm]?ts$`. Kalibráció: `^source/client/src/lib/[^/]+/sim\.ts$`.
 
@@ -135,7 +138,9 @@ jelölésben dátum (`ÉÉÉÉ-HH-NN`) és zárójeles hivatkozás van, ÉS (2) 
 nélkül) vagy a `SPEC-VÁLTOZÁS` szó, ÉS (3) ha a PR-leírás elérhető (`--body-file`, `--pr-body-env`), abban szerepel a tesztfájl neve
 és a `SPEC-VÁLTOZÁS` szó. Ha a PR-leírás nem elérhető (szakasz- / push-kapu), a (3) „később ellenőrzendő” megjegyzés.
 
-Eredmény: jelöletlen VAGY nem igazolt lelet → `warn` módban `WARN`, `block` módban `FAIL`; csak igazolt leletek → `PASS` a számmal.
+Eredmény: a DÖNTŐ nézet jelöletlen VAGY nem igazolt lelete → `warn` módban `WARN`, `block` módban `FAIL`; a commit-nézet lelete
+MINDEN módban `WARN` (tájékoztató, a kilépési kódot nem rontja); a higiénia-szabályok lelete szintén mindig `WARN`; csak igazolt
+leletek → `PASS` a számmal.
 Rekord: `test-integrity-<fej>.json` (`findings`, `mode`, `ms`).
 
 ### S1.5 Lépések
@@ -145,9 +150,12 @@ Rekord: `test-integrity-<fej>.json` (`findings`, `mode`, `ms`).
    `--body-file`, `--pr-body-env <VÁLTOZÓ>`, `--json`). Parancs: `node --test scripts/qa/gates/test-integrity.test.mjs` → zöld.
 2. Tesztek: minden szabályra pozitív ÉS negatív eset (új teszt nem lelet; szigorítás nem lelet; mozgatott állítás nem lelet; jelölt +
    igazolt átmegy; jelölt, de spec nélkül nem igazolt; commit-módú lazítás, amelyet később visszacsináltak, nem lelet); a J7b-eset
-   rögzített diff-mintával.
-3. Bekötés: `lint-gate.mjs` `runLintSteps` végén egy lépés (`teszt-integritás (S1)`), mód a `gates.config.json` `modes` szerint
-   (helyben `warn`). Commit; `npm run gate:stage`.
+   rögzített diff-mintával. Az A5 (terv) két állítása külön tesztesettel: **A5/a** — a döntő nézet jelöletlen lelete `--mode warn`
+   mellett `WARN` és 0-s kilépési kód (a CI nem bukik), `--mode block` mellett `FAIL`; **A5/b** (negatív teszt) — CSAK commit-nézetbeli
+   lelet `--mode block` mellett is `WARN` és 0-s kilépési kód.
+3. Bekötés: `lint-gate.mjs` `runLintSteps` végén egy lépés (`teszt-integritás (S1)`), mód a `gates.config.json`
+   `modes["test-integrity"]` kulcsa szerint (`{ "local": "warn", "ci": "warn" }`; a `block`-ra váltás a terv 6.3a feltételei +
+   tulajdonosi jóváhagyás után, külön PR-ban). Commit; `npm run gate:stage`.
 4. CI: a „Háromfázisú rend” jobban `node scripts/qa/gates/test-integrity.mjs --base origin/${{ github.base_ref }} --mode warn
    --pr-body-env PR_BODY` (a job nem bukik; `block` csak a terv 6.3a feltételei és tulajdonosi jóváhagyás után — vak review P1-K1) (`env: PR_BODY: ${{ github.event.pull_request.body }}` — a leírás környezeti változóban, nem a parancssorban).
 5. Ellenpróba (csak olvasva): `node scripts/qa/gates/test-integrity.mjs --base origin/main --head origin/<ág>` az öt
