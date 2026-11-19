@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, completeFiles, mergeDecision, probeStep, probeWithRetry, requiredChecks, runMergeProbe } from './pre-merge-gate.mjs';
+import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, completeFiles, mergeDecision, probeRecord, probeStep, probeWithRetry, requiredChecks, runMergeProbe } from './pre-merge-gate.mjs';
+import { resolveVerdict } from './lib.mjs';
 
 const cfg = loadConfig();
 const HEAD = 'a'.repeat(40);
@@ -20,7 +21,8 @@ function base(over = {}) {
     mainSha: MAIN,
     ciBaseSha: MAIN,
     files: ['source/server/a.ts'],
-    verdict: { verdict: 'IGEN', source: 'helyi bizonyíték' },
+    // 3. vak kör L1: a próbához megbízható (helyi, fejhez kötött) ítélet kell
+    verdict: { verdict: 'IGEN', source: 'helyi bizonyíték', trusted: true, head: HEAD },
     guard: { code: 0, summary: 'AKTIV=0' },
     rt: { json: { mode: 'off', activeMatches: 0 } },
     repoWideScopes: cfg.repoWideScopes,
@@ -161,27 +163,40 @@ test('runMergeProbe: a PR feje és a main hash-egyezéssel; lekérési hiba / el
   const H = 'a'.repeat(40);
   const M = 'c'.repeat(40);
   const deleted = [];
+  const refs = [];
   const mk = ({ fetch = 0, pr = H, main = M } = {}) => ({ git: { run: (args) => {
-    if (args[0] === 'fetch') return { code: fetch, stdout: '', stderr: 'hálózati hiba' };
+    if (args[0] === 'fetch') { refs.push(args[3].split(':')[1]); return { code: fetch, stdout: '', stderr: 'hálózati hiba' }; }
     if (args[0] === 'update-ref' && args[1] === '-d') { deleted.push(args[2]); return { code: 0, stdout: '' }; }
-    if (args[1] === 'refs/remotes/origin/gate-pr-7') return { code: 0, stdout: `${pr}\n` };
-    if (args[1] === 'refs/remotes/origin/main') return { code: 0, stdout: `${main}\n` };
+    if (/^refs\/remotes\/origin\/gate-pr-7-/.test(args[1])) return { code: 0, stdout: `${pr}\n` };
+    if (/^refs\/remotes\/origin\/gate-main-7-/.test(args[1])) return { code: 0, stdout: `${main}\n` };
     return { code: 1, stdout: '', stderr: '' };
   } } });
   let called = null;
   const probe = async (ctx, opts) => { called = opts; return { status: STATUS.PASS, note: 'zöld', counts: { pass: 3 }, tree: 't', ms: 5 }; };
-  const ok = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, probe });
-  assert.equal(ok.status, STATUS.PASS);
-  assert.deepEqual(called, { head: H, base: 'origin/main', label: 'pre-merge-gate' });
-  assert.deepEqual(deleted, ['refs/remotes/origin/gate-pr-7'], 'L9: a segéd-ref takarítva');
+  const ok = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, probe, mainNow: () => M });
+  assert.equal(ok.status, STATUS.PASS, ok.note);
+  // 3. vak kör L4: a próba a RÖGZÍTETT main SHA-t kapja, nem a mozgó origin/main refet
+  assert.deepEqual(called, { head: H, base: M, label: 'pre-merge-gate' });
+  // 3. vak kör L8: futásonként egyedi segéd-ref, és mind törlődik
+  assert.equal(refs.length, 1);
+  assert.match(refs[0], /^refs\/remotes\/origin\/gate-pr-7-\d+-/);
+  assert.deepEqual(deleted.sort(), [refs[0], refs[0].replace('gate-pr-7-', 'gate-main-7-')].sort(), 'a segéd-refek takarítva');
   for (const [over, re] of [[{ fetch: 1 }, /nem kérhető le/], [{ pr: 'b'.repeat(40) }, /nem a GitHub szerinti fej/], [{ main: 'd'.repeat(40) }, /nem a GitHub szerinti csúcs/]]) {
     called = null;
-    const r = await runMergeProbe({ ctx: mk(over), n: '7', head: H, mainSha: M, probe });
+    deleted.length = 0;
+    refs.length = 0;
+    const r = await runMergeProbe({ ctx: mk(over), n: '7', head: H, mainSha: M, probe, mainNow: () => M });
     assert.equal(r.status, STATUS.FAIL);
     assert.match(r.note, re);
     assert.equal(called, null, 'a próba nem fut');
+    assert.equal(deleted.length, 2, `3. vak kör L8: a segéd-refek a hibaúton is törlődnek (${re})`);
   }
-  const boom = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, probe: async () => { throw new Error('lemez tele'); } });
+  // 3. vak kör L4: ha a main a próba alatt elmozdult → FAIL
+  const moved = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, probe, mainNow: () => 'e'.repeat(40) });
+  assert.deepEqual([moved.status, /elmozdult/.test(moved.note)], [STATUS.FAIL, true], moved.note);
+  const unknown = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, probe, mainNow: () => { throw new Error('nincs hálózat'); } });
+  assert.equal(unknown.status, STATUS.FAIL, 'a main újraellenőrzésének hibája is FAIL');
+  const boom = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, probe: async () => { throw new Error('lemez tele'); }, mainNow: () => M });
   assert.deepEqual([boom.status, /nem futott \(lemez tele\)/.test(boom.note)], [STATUS.FAIL, true]);
 });
 
@@ -207,11 +222,11 @@ test('probeWithRetry (tulajdonosi döntés „≤ 7 perc + 1 újrafuttatás”, 
 test('runMergeProbe: a próba bukáskor egyszer újrafut, és a jelölés az eredményben marad', async () => {
   const mk = () => ({ git: { run: (args) => {
     if (args[0] === 'fetch' || args[0] === 'update-ref') return { code: 0, stdout: '' };
-    if (args[1] === 'refs/remotes/origin/gate-pr-7') return { code: 0, stdout: `${'a'.repeat(40)}\n` };
+    if (/^refs\/remotes\/origin\/gate-pr-7-/.test(args[1])) return { code: 0, stdout: `${'a'.repeat(40)}\n` };
     return { code: 0, stdout: `${'c'.repeat(40)}\n` };
   } } });
   let n = 0;
-  const r = await runMergeProbe({ ctx: mk(), n: '7', head: 'a'.repeat(40), mainSha: 'c'.repeat(40), probe: async () => { n += 1; return { status: STATUS.FAIL, note: `piros ${n}` }; } });
+  const r = await runMergeProbe({ ctx: mk(), n: '7', head: 'a'.repeat(40), mainSha: 'c'.repeat(40), probe: async () => { n += 1; return { status: STATUS.FAIL, note: `piros ${n}` }; }, mainNow: () => 'c'.repeat(40) });
   assert.deepEqual([r.status, r.attempts, r.retried, n], [STATUS.FAIL, 2, true, 2]);
 });
 
@@ -219,7 +234,8 @@ test('probeStep (vak review L3): fork-PR → FAIL (új CI); ítélet / kötelez�
   const need = { probeNeeded: true };
   let ran = 0;
   const run = async () => { ran += 1; return { status: STATUS.PASS, note: 'zöld' }; };
-  const okArgs = { pre: need, isFork: false, verdict: { verdict: 'IGEN', source: 'helyi bizonyíték' }, head: HEAD, required: REQUIRED, checkRuns: REQUIRED.map((nm) => run2(nm)), statuses: [], run };
+  // 3. vak kör L1 (spec-változás): a próba csak MEGBÍZHATÓ, helyi, fejhez kötött ítélettel indul — a fixture ezt jelöli
+  const okArgs = { pre: need, isFork: false, verdict: { verdict: 'IGEN', source: 'helyi bizonyíték', trusted: true, head: HEAD }, head: HEAD, required: REQUIRED, checkRuns: REQUIRED.map((nm) => run2(nm)), statuses: [], run };
   function run2(nm) { return { name: nm, status: 'completed', conclusion: 'success', id: 1 }; }
   assert.equal(await probeStep({ ...okArgs, pre: { probeNeeded: false } }), null);
   for (const isFork of [true, null]) assert.match((await probeStep({ ...okArgs, isFork })).note, /fork-PR.*új CI kell/);
@@ -245,11 +261,50 @@ test('mergeDecision (vak review L6, main() bekötése): a próba eredménye jut 
 
 test('completeFiles (vak review L9): a gh pr view 100 fájlos vágásánál a lapozott REST-lista; csonka / hiányzó szám → kivétel', () => {
   const view = Array.from({ length: 100 }, (_, i) => ({ path: `f${i}` }));
-  assert.equal(completeFiles({ viewFiles: view.slice(0, 3), changedFiles: 3, restPages: () => { throw new Error('nem kell'); } }).length, 3);
+  // 3. vak kör L10 (spec-változás): a fájllista MINDIG a lapozott REST-ből jön (a gh pr view a régi nevet nem adja)
+  assert.deepEqual(completeFiles({ viewFiles: [{ path: 'regi-archiv.mjs' }], changedFiles: 1, restPages: () => [[{ filename: 'regi-archiv.mjs', previous_filename: 'scripts/qa/regi.mjs' }]] }).sort(), ['regi-archiv.mjs', 'scripts/qa/regi.mjs']);
   const pages = [Array.from({ length: 100 }, (_, i) => ({ filename: `f${i}` })), [{ filename: 'g.mjs', previous_filename: 'regi.mjs' }]];
   const all = completeFiles({ viewFiles: view, changedFiles: 101, restPages: () => pages });
   assert.equal(all.length, 102);
   assert.ok(all.includes('regi.mjs'));
   assert.throws(() => completeFiles({ viewFiles: view, changedFiles: 150, restPages: () => pages }), /csonka \(101 \/ 150\)/);
   assert.throws(() => completeFiles({ viewFiles: view, changedFiles: undefined, restPages: () => pages }), /changed_files/);
+});
+
+test('3. vak kör L1: a PR-szöveg ítélet-sora nem indíthat helyi próbát; csak a helyi, pontos fejhez kötött bizonyíték', async () => {
+  const H = 'a'.repeat(40);
+  const fromText = resolveVerdict({ head: H, evidence: null, texts: [`Független ellenőr ítélete: IGEN (fej: ${H.slice(0, 12)})`] });
+  assert.equal(fromText.verdict, 'IGEN');
+  assert.notEqual(fromText.trusted, true, 'a nyilvános szöveg nem megbízható forrás');
+  const fromEv = resolveVerdict({ head: H, evidence: { head: H, verdict: 'IGEN' }, texts: [] });
+  assert.equal(fromEv.trusted, true);
+  const okRun = { name: 'CI', status: 'completed', conclusion: 'success', id: 1 };
+  let ran = 0;
+  const args = { pre: { probeNeeded: true }, isFork: false, head: H, required: ['CI'], checkRuns: [okRun], statuses: [], run: async () => { ran += 1; return { status: STATUS.PASS }; } };
+  const r = await probeStep({ ...args, verdict: fromText });
+  assert.deepEqual([r.status, /megbízható|helyi/.test(r.note), ran], [STATUS.FAIL, true, 0], r.note);
+  const other = await probeStep({ ...args, verdict: { ...fromEv, head: 'b'.repeat(40) } });
+  assert.deepEqual([other.status, ran], [STATUS.FAIL, 0], 'más fejre szóló helyi ítélet sem elég');
+  assert.equal((await probeStep({ ...args, verdict: fromEv })).status, STATUS.PASS);
+  assert.equal(ran, 1);
+});
+
+test('3. vak kör L4: a futásőr és az RT-állapot a próba UTÁN készül (late), és a döntésbe jut', async () => {
+  const order = [];
+  const inputs = { ...base({ mainSha: 'c'.repeat(40), files: ['scripts/qa/gates/lib.mjs'], mainFiles: ['scripts/qa/x.mjs'] }) };
+  delete inputs.guard; delete inputs.rt;
+  const res = await mergeDecision({
+    inputs: { ...inputs, late: async () => { order.push('late'); return { guard: { code: 1, summary: 'AKTIV gyártás' }, rt: { json: { mode: 'off', activeMatches: 0 } } }; } },
+    isFork: false, runProbe: async () => { order.push('probe'); return { status: STATUS.PASS, note: 'zöld' }; },
+  });
+  assert.deepEqual(order, ['probe', 'late']);
+  assert.equal(res.results.find((x) => /futásőr|aktív futás/i.test(x.name))?.status, STATUS.FAIL, 'a próba utáni futásőr-eredmény dönt');
+});
+
+test('3. vak kör L9: az újrafuttatás összideje, futásonkénti ideje és a hatókör a rekordban', async () => {
+  let k = 0;
+  const p = await probeWithRetry(async () => { k += 1; return { status: k === 1 ? STATUS.FAIL : STATUS.PASS, note: `f${k}`, ms: k * 100, scope: { qaFull: true, unitFull: false } }; });
+  assert.deepEqual([p.ms, p.attemptMs], [300, [100, 200]]);
+  const rec = probeRecord({ head: 'a'.repeat(40), mainSha: 'c'.repeat(40), probe: p, at: 'T' });
+  assert.deepEqual([rec.ms, rec.attemptMs, rec.scope, rec.attempts, rec.retried, rec.mainSha], [300, [100, 200], { qaFull: true, unitFull: false }, 2, true, 'c'.repeat(40)]);
 });

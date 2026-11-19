@@ -26,6 +26,9 @@ export const QA_SCOPE = /^(?:scripts\/qa\/|\.github\/workflows\/|\.claude\/|\.ag
  * A tesztfolyamat környezete: engedőlista (PATH, rendszerváltozók, ideiglenes mappa, saját mappa, NODE_*, CI-jelzők); a titok-gyanús
  * nevek (KEY / TOKEN / SECRET / PASSWORD / CREDENTIAL / DATABASE_URL) az engedőlistás előtag mellett sem.
  */
+/** A teljes QA-kör kötelező ellenőrzői (a CI külön indítja őket; 3. vak kör L6). */
+export const REQUIRED_QA_CHECKERS = Object.freeze(['scripts/qa/gates/skills-sync-check.mjs', 'scripts/qa/three-phase-check.mjs']);
+
 export function probeEnv(src = process.env) {
   const allow = /^(?:PATH|PATHEXT|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|TEMP|TMP|TMPDIR|HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|NUMBER_OF_PROCESSORS|PROCESSOR_ARCHITECTURE|OS|LANG|LC_[A-Z]+|TZ|CI|GITHUB_ACTIONS|NODE_[A-Z0-9_]+)$/i;
   const secret = /KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|DATABASE_URL/i;
@@ -78,7 +81,8 @@ export function tapCounts(out) {
 export function tapCountsByFile(out) {
   const by = {};
   for (const m of junitCases(out)) {
-    if (m.pseudo) continue;
+    // 3. vak kör L5: csak a ténylegesen sikeresen lefutott (önzáró, hiba / kihagyás nélküli) eset számít
+    if (m.pseudo || !m.passed) continue;
     by[m.file] = (by[m.file] ?? 0) + 1;
   }
   return by;
@@ -115,17 +119,25 @@ export function guardShortfall(mainGuards, mainCounts, mergedGuards, mergedCount
 
 /**
  * Az összefésült próba. @returns {Promise<{ status, note, detail?, tree?, counts?, scope?, ms }>}
- * @param {object} ctx makeContext()-ből: exec, git, src, node, evDir
- * @param {{ head?: string, base: string, label?: string, timeoutMs?: number, env?: object }} opts
+ * @param {object} ctx makeContext()-ből: exec, git, src, node, evDir, root
+ * @param {{ head?: string, base: string, scopeHead?: string, label?: string, timeoutMs?: number, env?: object }} opts
+ *   `scopeHead`: a hatókör történeti alapja (3. vak kör L3) — átvitelnél a régi, ellenőrzött fej; alapból a `head`.
+ *   `timeoutMs`: EGYÜTTES határidő (3. vak kör L9) — minden lépés (git is) a fennmaradó időt kapja; lejárt keret → FAIL.
  */
-export async function mergedProbe(ctx, { head = 'HEAD', base, label = 'merged-probe', timeoutMs = PROBE_TIMEOUT_MS, env = probeEnv() }) {
+export async function mergedProbe(ctx, { head = 'HEAD', base, scopeHead, label = 'merged-probe', timeoutMs = PROBE_TIMEOUT_MS, env = probeEnv() }) {
   const { exec, git, src, node } = ctx;
+  const root = ctx.root ?? process.cwd();
   const t0 = Date.now();
   const done = (r) => ({ ...r, ms: Date.now() - t0 });
-  const left = () => Math.max(1_000, timeoutMs - (Date.now() - t0));
+  const remaining = () => timeoutMs - (Date.now() - t0);
+  const expired = () => remaining() <= 0;
+  const deadlineFail = (extra = {}) => done({ status: STATUS.FAIL, note: `a próba együttes határideje (${Math.round(timeoutMs / 1000)} s) lejárt — nem értékelhető (időtúllépés)`, ...extra });
   const hr = git.run(['rev-parse', '--verify', '--quiet', `${head}^{commit}`]);
   const headSha = hr.code === 0 ? hr.stdout.trim() : null;
   if (!headSha) return done({ status: STATUS.FAIL, note: `a fej (${head}) nem oldható fel` });
+  const sr = scopeHead ? git.run(['rev-parse', '--verify', '--quiet', `${scopeHead}^{commit}`]) : null;
+  const scopeSha = scopeHead ? (sr.code === 0 ? sr.stdout.trim() : null) : headSha;
+  if (!scopeSha) return done({ status: STATUS.FAIL, note: `a hatókör alapja (${scopeHead}) nem oldható fel` });
   if (!existsSync(join(src, 'node_modules'))) return done({ status: STATUS.FAIL, note: 'nincs source/node_modules a futtató munkafában — előbb `npm.cmd ci` (a próba nem futtatható)' });
   // A munkafák szokásos, gitignore-olt helyén (a fő checkout .claude/worktrees/ mappájában), NEM az os.tmpdir() alatt: ott a
   // Windows 8.3-as rövid útja (`KSAZOL~1`) a `new URL(...).pathname`-t használó őr-segédeket (%7E) elrontotta (mérve 2026-11-17).
@@ -150,11 +162,14 @@ export async function mergedProbe(ctx, { head = 'HEAD', base, label = 'merged-pr
   const onSignal = (sig) => { cleanup(); process.exit(sig === 'SIGINT' ? 130 : 143); };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
+  const left = () => Math.max(1, remaining());
   const run = (cmd, args, cwd) => exec(cmd, args, { cwd, env, timeoutMs: left() });
-  const g = (args) => exec('git', args, { cwd: tmp });
+  const g = (args) => exec('git', args, { cwd: tmp, timeoutMs: left() });
   let log = '';
   try {
-    const add = git.run(['worktree', 'add', '--detach', tmp, base]);
+    if (expired()) return deadlineFail();
+    const add = exec('git', ['worktree', 'add', '--detach', tmp, base], { cwd: root, timeoutMs: left() });
+    if (expired()) return deadlineFail();
     if (add.code !== 0) return done({ status: STATUS.FAIL, note: 'ideiglenes munkafa nem jött létre', detail: add.stderr });
     if (!existsSync(join(tmp, 'source'))) return done({ status: STATUS.FAIL, note: 'az összefésült fában nincs source/ mappa — a próba nem futtatható' });
     symlinkSync(join(src, 'node_modules'), link, 'junction');
@@ -165,12 +180,17 @@ export async function mergedProbe(ctx, { head = 'HEAD', base, label = 'merged-pr
       const mg = run(node, ['--import', 'tsx', '--test', '--test-reporter=junit', ...mainGuards], join(tmp, 'source'));
       log += `== main őrök ==\n${mg.stdout}\n${mg.stderr}\n`;
       mainCounts = tapCountsByFile(mg.stdout);
+      if (expired()) return deadlineFail();
+      // 3. vak kör L5: érvénytelen alap → nincs összehasonlítás → FAIL
+      if (mg.code !== 0) { writeLog(ctx.evDir, label, 'merged-probe', log); return done({ status: STATUS.FAIL, note: `a main őr-alapmérése nem sikerült (kilépési kód ${mg.code}) — az alsó korlát nem állapítható meg`, detail: log }); }
     }
+    // a kötelező QA-ellenőrzők a mainen (L6)
+    const mainHasCheckers = REQUIRED_QA_CHECKERS.filter((f) => existsSync(join(tmp, f)));
     // 2) A fej + a main összefésülése.
     unlink();
     const co = g(['checkout', '-q', '--detach', headSha]);
     if (co.code !== 0) return done({ status: STATUS.FAIL, note: `a fej (${head}) nem tölthető be`, detail: co.stderr });
-    const m = exec('git', ['-c', 'user.name=gate', '-c', 'user.email=gate@pelda.hu', 'merge', '--no-commit', '--no-ff', base], { cwd: tmp });
+    const m = exec('git', ['-c', 'user.name=gate', '-c', 'user.email=gate@pelda.hu', 'merge', '--no-commit', '--no-ff', base], { cwd: tmp, timeoutMs: left() });
     if (m.code !== 0) {
       g(['merge', '--abort']);
       return done({ status: STATUS.FAIL, note: `a ${base} beolvasztása ütközik — olvaszd be a maint (git merge ${base}), oldd fel, és futtasd újra`, detail: `${m.stdout}\n${m.stderr}` });
@@ -182,10 +202,22 @@ export async function mergedProbe(ctx, { head = 'HEAD', base, label = 'merged-pr
     symlinkSync(join(src, 'node_modules'), link, 'junction');
     // a main sha-ja a munkafából (ha a fej már tartalmazza, nincs MERGE_HEAD)
     const baseSha = g(['rev-parse', `${base}^{commit}`]).stdout.trim();
-    const mb = g(['merge-base', 'HEAD', baseSha]).stdout.trim();
-    const names = (a, z) => g(['-c', 'core.quotePath=false', 'diff', '--name-only', a, z]).stdout.split('\n').map((s) => s.trim()).filter(Boolean);
-    const prFiles = names(mb, 'HEAD');
+    // 3. vak kör L3: a hatókör a történeti alap (scopeHead) és a main elágazási pontjától számol
+    const mbr = g(['merge-base', scopeSha, baseSha]);
+    if (mbr.code !== 0) return done({ status: STATUS.FAIL, note: 'a hatókör elágazási pontja nem állapítható meg', tree });
+    const mb = mbr.stdout.trim();
+    // 3. vak kör L10: átnevezésnél a régi és az új út is; ellenőrzött kilépés
+    const names = (a, z) => {
+      const d = g(['-c', 'core.quotePath=false', 'diff', '--name-only', '--no-renames', '-z', a, z]);
+      if (d.code !== 0) throw new Error(`a fájllista nem olvasható (${a.slice(0, 12)}..${z.slice(0, 12)})`);
+      return d.stdout.split('\0').map((s) => s.trim()).filter(Boolean);
+    };
+    const prFiles = names(mb, scopeSha);
     const mainFiles = names(mb, baseSha);
+    // 3. vak kör L7: szintetikus merge-commit (szülők: a fej és a main), hogy a történetet olvasó ellenőrző az összefésült állapotot lássa
+    const ct = exec('git', ['-c', 'user.name=gate', '-c', 'user.email=gate@pelda.hu', 'commit-tree', tree, '-p', headSha, '-p', baseSha, '-m', 'gate: összefésült próba'], { cwd: tmp, timeoutMs: left() });
+    if (ct.code !== 0 || g(['update-ref', '--no-deref', 'HEAD', ct.stdout.trim()]).code !== 0) return done({ status: STATUS.FAIL, note: 'a szintetikus merge-commit nem jött létre', detail: ct.stderr, tree });
+    if (expired()) return deadlineFail({ tree });
     const scope = probeScope({ prFiles, mainFiles });
     const exists = (p) => existsSync(join(tmp, p));
     const sel = selectProbeTests(prFiles, exists);
@@ -197,6 +229,7 @@ export async function mergedProbe(ctx, { head = 'HEAD', base, label = 'merged-pr
       : sel.unit;
     const r = run(node, ['--import', 'tsx', '--test', '--test-reporter=junit', ...guards, ...unit], join(tmp, 'source'));
     log += `== összefésült: őrök + egységtesztek ==\n${r.stdout}\n${r.stderr}\n`;
+    if (expired()) { writeLog(ctx.evDir, label, 'merged-probe', log); return deadlineFail({ detail: log, tree, scope }); }
     const counts = tapCounts(r.stdout) ?? { tests: 0, pass: 0, fail: 0 };
     // a teszt nélküli fájl álteszte nem számít lefutott tesztnek (L6)
     const pseudo = junitCases(r.stdout).filter((c) => c.pseudo && c.passed).length;
@@ -216,17 +249,22 @@ export async function mergedProbe(ctx, { head = 'HEAD', base, label = 'merged-pr
       const q = run(node, ['--test', '--test-reporter=tap', ...qa], tmp);
       log += `== scripts/qa ==\n${q.stdout}\n${q.stderr}\n`;
       addCounts(tapCounts(q.stdout));
+      if (expired()) { writeLog(ctx.evDir, label, 'merged-probe', log); return deadlineFail({ detail: log, tree, scope }); }
       if (q.code !== 0) return fail(`az összefésült állapoton bukik egy scripts/qa teszt (${what})`);
     }
     if (scope.qaFull) {
-      for (const [script, args] of [['scripts/qa/gates/skills-sync-check.mjs', []], ['scripts/qa/three-phase-check.mjs', ['--base', base]]]) {
-        if (!exists(script)) continue;
+      // 3. vak kör L6: a teljes QA-kör mindkét ellenőrzőt ígéri — hiányuk FAIL (a mainen meglévő és az elvárt is)
+      const gone = REQUIRED_QA_CHECKERS.filter((f) => !exists(f));
+      if (gone.length) return fail(`a teljes QA-kör kötelező ellenőrző hiányzik az összefésült fáról: ${gone.join(', ')}${mainHasCheckers.some((f) => gone.includes(f)) ? ' (a mainen megvan)' : ''}`);
+      for (const [script, args] of [['scripts/qa/gates/skills-sync-check.mjs', []], ['scripts/qa/three-phase-check.mjs', ['--base', baseSha]]]) {
         const s = run(node, [script, ...args], tmp);
         log += `== ${script} ==\n${s.stdout}\n${s.stderr}\n`;
+        if (expired()) { writeLog(ctx.evDir, label, 'merged-probe', log); return deadlineFail({ detail: log, tree, scope }); }
         if (s.code !== 0) return fail(`az összefésült állapoton bukik: ${script}`);
       }
     }
     writeLog(ctx.evDir, label, 'merged-probe', log);
+    if (expired()) return deadlineFail({ detail: log, tree, scope });
     if (!counts.pass) return done({ status: STATUS.FAIL, note: `az összefésült próba nem futtatott tesztet (${what}) — nem értékelhető`, detail: log, tree, counts, scope });
     return done({ status: STATUS.PASS, note: `${what} az összefésült állapoton zöld (${counts.pass} teszt, fa ${tree.slice(0, 12)})`, tree, counts, scope });
   } finally {

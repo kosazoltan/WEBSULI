@@ -147,20 +147,31 @@ viszi bukásra.
   futás oka, a megjegyzésben „ÚJRAFUTTATVA (#205)”); a második bukás FAIL. Zöld → PASS (a darabszám, az összefésült fa, a hatókör és az
   időtartam a `merge-probe-<PR>-<fej>` rekordban); ütközés / piros / időtúllépés / hiányzó `source/node_modules` (előbb `npm.cmd ci`)
   → FAIL. **Előfeltételek (vak review L3):** a próba PR-kódot futtat, ezért csak akkor indul, ha a PR ugyanebből a tárolóból jön
-  (fork-PR → FAIL, új CI kell), és a független ítélet és a kötelező ellenőrzések lépése már zöld. A gyermekfolyamat szűrt
+  (fork-PR → FAIL, új CI kell), a kötelező ellenőrzések zöldek, és **a fejre MEGBÍZHATÓ, helyi ítélet van rögzítve** (`record-review`
+  → `review-<fej>.json`; 3. vak kör L1) — a PR-leírás / komment ítélet-sora a próbát nem indíthatja. A gyermekfolyamat szűrt
   környezetet kap (engedélylista; titok-, token-, kulcsnevek nélkül), a `node_modules` csomópont-hivatkozás marad (a maradó kockázatot
-  lásd az „Ismert korlátok” alatt). A PR fájllistája hiánytalan: 100 fájl fölött a lapozott REST-lista; csonka lista → FAIL. A segéd-ref
-  (`refs/remotes/origin/gate-pr-<n>`) a próba után törlődik. A hiányzó vagy hibás hatókör-táblázat továbbra is FAIL (konfighiba).
+  lásd az „Ismert korlátok” alatt). A PR fájllistája mindig a lapozott REST-listából (az átnevezett fájl régi neve is); csonka lista →
+  FAIL; a próba saját git-listája `--no-renames`. **A main rögzített SHA** (3. vak kör L4): a próba a merge-kapu elején a GitHubtól
+  olvasott main SHA-n fut (nem a mozgó `origin/main` refen); a próba után a kapu újra lekérdezi a maint — elmozdult → FAIL; a futásőr és
+  az RT-állapot a próba UTÁN készül; a `merge-<PR>-<fej>` bizonyíték a `mainSha`-t is tárolja, és a `check-quality-gates` hook a
+  merge előtt a GitHub szerinti main csúccsal egyezteti (eltérés vagy régi, `mainSha` nélküli rekord → DENY, futtasd újra a
+  `gate:merge`-et). A segéd-refek futásonként egyediek, és minden úton törlődnek. **Határidő** (3. vak kör L9): egy próbára egy
+  együttes, monoton határidő (10 perc); minden lépés — a git is — a fennmaradó időt kapja, lejárt keretnél FAIL; a main őr-alapmérésének
+  bukása FAIL (L5); a teljes QA-körben a `skills-sync-check` / `three-phase-check` hiánya FAIL (L6), és a háromfázisú ellenőrző egy
+  szintetikus merge-commiton (szülők: a fej és a main) fut (L7). A `merge-probe-` rekord: összidő, futásonkénti idők, hatókör. A
+  hiányzó vagy hibás hatókör-táblázat továbbra is FAIL (konfighiba).
 - **Bizonyíték-átvitel főág-beolvasztás után (`npm run gate:carry -- --from <régi fej>`):** ha az új fej egy ütközésmentes
   main-beolvasztás (két szülő: a régi, bizonyítékkal rendelkező fej és az `origin/main` egy őse; a gépi összefésülés fája = az új fej
   fája), és a PR saját változása bájtra azonos (`git patch-id --verbatim`), a szkript az új fejen lefuttatja az összefésült próbát
-  (ugyanazzal a hatókörrel, mint a merge-kapu, lásd fent), és zöld esetén átviszi a vak ítéletet (`review-`) és a `pre-push-` /
+  (ugyanazzal a hatókörrel, mint a merge-kapu, lásd fent; a hatókör történeti alapja a régi, ellenőrzött fej — 3. vak kör L3 —,
+  a main a rögzített, GitHubbal egyeztetett SHA), és zöld esetén átviszi a vak ítéletet (`review-`) és a `pre-push-` /
   `pre-pr-` bizonyítékot (csak `ok: true`; a vak ítélet kötelező, és csak `IGEN` / `IGEN, FELTÉTELLEL` — `NEM` soha) egy gépi
   `carry-<új fej>` rekorddal. **Az alap mindig a friss `origin/main`** (vak review L1): a szkript maga kéri le, a csúcsát a GitHub
   szerinti `main`-nel egyezteti (eltérés / hiba → nincs átvitel), és a main hash-ét a `carry-` rekordba írja; `--base` kapcsoló
   nincs. **Halmozott PR-láncra nincs átvitel** (a másik szülő egy másik PR ága, nem a main őse → FAIL; a lánc tagjai teljes kört
-  kapnak). Az átvitt rekord megőrzi az eredetileg ellenőrzött fejet (`reviewedHead`) és az átvitelek láncát (`carryChain`). Bármely
-  eltérés → nincs átvitel (a teljes kör kell). Az átvitt rekordot a hook a meglévő `ok === true` szabállyal fogadja el.
+  kapnak). Az átvitt rekord megőrzi az eredetileg ellenőrzött fejet (`reviewedHead`) és az átvitelek láncát (`carryChain`). **A célfejre már rögzített ítéletet az átvitel soha nem írja felül** (3. vak kör L2: a
+  próba előtt és az írás előtt is vizsgálva, kizárólagos létrehozással; a célfejen meglévő `pre-push-` / `pre-pr-` rekord is megmarad).
+  Bármely eltérés → nincs átvitel (a teljes kör kell). Az átvitt rekordot a hook a meglévő `ok === true` szabállyal fogadja el.
   **WARN**, ha a main elmozdult, de nincs metszet (pl. csak játékkód változott egy `scripts/qa`-s PR mellett). **PASS**, ha a CI a
   jelenlegi mainnel futott.
 - A hook csak a WEBSULI-ból indított Claude Code munkamenetekre hat (a `.claude/settings.json`-t a munkamenet induláskor olvassa —

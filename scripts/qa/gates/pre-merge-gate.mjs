@@ -164,35 +164,57 @@ export async function probeWithRetry(run, log = () => {}) {
     try { return await run(attempt); } catch (e) { return { status: STATUS.FAIL, note: `a próba kivételt dobott (${String(e?.message ?? e).split('\n')[0]})` }; }
   };
   const first = await once(1);
-  if (first?.status === STATUS.PASS) return { ...first, attempts: 1, retried: false };
+  if (first?.status === STATUS.PASS) return { ...first, attempts: 1, retried: false, attemptMs: [first.ms ?? null] };
   log(`[pre-merge-gate] az összefésült próba bukott (${first?.note ?? 'nincs eredmény'}) — egyszeri újrafuttatás (#205) — tulajdonosi döntés 2026-11-19`);
   const second = await once(2);
   const mark = `ÚJRAFUTTATVA (#205) — az 1. futás bukott: ${first?.note ?? 'nincs eredmény'}`;
-  return { ...second, status: second?.status === STATUS.PASS ? STATUS.PASS : STATUS.FAIL, attempts: 2, retried: true, firstNote: first?.note ?? null, note: `${second?.note ?? 'nincs eredmény'} — ${mark}` };
+  // 3. vak kör L9: az összidő a két futás összege, a futásonkénti idő külön
+  const attemptMs = [first?.ms ?? null, second?.ms ?? null];
+  const ms = attemptMs.every(Number.isFinite) ? attemptMs[0] + attemptMs[1] : null;
+  return { ...second, status: second?.status === STATUS.PASS ? STATUS.PASS : STATUS.FAIL, attempts: 2, retried: true, firstNote: first?.note ?? null, note: `${second?.note ?? 'nincs eredmény'} — ${mark}`, ms, attemptMs };
 }
 
-export async function runMergeProbe({ ctx, n, head, mainSha, log = () => {}, probe = mergedProbe }) {
+/** A `merge-probe-<PR>-<fej>` rekord (3. vak kör L9: összidő, futásonkénti idő, hatókör; L4: a rögzített main SHA). */
+export function probeRecord({ head, mainSha, probe, at = new Date().toISOString() }) {
+  return {
+    kind: 'merge-probe', head, mainSha, status: probe.status, tree: probe.tree ?? null, counts: probe.counts ?? null, scope: probe.scope ?? null,
+    ms: probe.ms ?? null, attemptMs: probe.attemptMs ?? [probe.ms ?? null], note: probe.note, attempts: probe.attempts ?? 1, retried: probe.retried === true,
+    firstNote: probe.firstNote ?? null, at,
+  };
+}
+
+export async function runMergeProbe({ ctx, n, head, mainSha, log = () => {}, probe = mergedProbe, mainNow }) {
   const { git } = ctx;
   const t0 = Date.now();
   const fail = (note) => ({ status: STATUS.FAIL, note, ms: Date.now() - t0 });
-  const f1 = git.run(['fetch', '--quiet', 'origin', `+refs/pull/${n}/head:refs/remotes/origin/gate-pr-${n}`, '+refs/heads/main:refs/remotes/origin/main']);
-  if (f1.code !== 0) return fail(`a PR feje / a main nem kérhető le (${String(f1.stderr).split('\n')[0]})`);
-  const prHead = git.run(['rev-parse', `refs/remotes/origin/gate-pr-${n}`]).stdout.trim();
-  if (prHead !== head) return fail(`a lekért PR-fej (${prHead.slice(0, 12)}) nem a GitHub szerinti fej (${String(head).slice(0, 12)})`);
-  const localMain = git.run(['rev-parse', 'refs/remotes/origin/main']).stdout.trim();
-  if (localMain !== mainSha) return fail(`a lekért main (${localMain.slice(0, 12)}) nem a GitHub szerinti csúcs (${String(mainSha).slice(0, 12)})`);
-  log(`[pre-merge-gate] C-61: gépi összefésült próba — ${head.slice(0, 12)} + origin/main (${mainSha.slice(0, 12)})`);
+  // 3. vak kör L8: futásonként egyedi segéd-refek; a takarítás a lekéréstől kezdve minden úton
+  const tag = `${n}-${process.pid}-${Date.now()}`;
+  const prRef = `refs/remotes/origin/gate-pr-${tag}`;
+  const mainRef = `refs/remotes/origin/gate-main-${tag}`;
   try {
-    return await probeWithRetry(async () => {
+    const f1 = git.run(['fetch', '--quiet', 'origin', `+refs/pull/${n}/head:${prRef}`, `+refs/heads/main:${mainRef}`]);
+    if (f1.code !== 0) return fail(`a PR feje / a main nem kérhető le (${String(f1.stderr).split('\n')[0]})`);
+    const prHead = git.run(['rev-parse', prRef]).stdout.trim();
+    if (prHead !== head) return fail(`a lekért PR-fej (${prHead.slice(0, 12)}) nem a GitHub szerinti fej (${String(head).slice(0, 12)})`);
+    const localMain = git.run(['rev-parse', mainRef]).stdout.trim();
+    if (localMain !== mainSha) return fail(`a lekért main (${localMain.slice(0, 12)}) nem a GitHub szerinti csúcs (${String(mainSha).slice(0, 12)})`);
+    log(`[pre-merge-gate] C-61: gépi összefésült próba — ${head.slice(0, 12)} + main ${mainSha.slice(0, 12)} (rögzített SHA)`);
+    // 3. vak kör L4: a próba a RÖGZÍTETT main SHA-t kapja (nem a mozgó origin/main refet)
+    const r = await probeWithRetry(async () => {
       try {
-        return await probe(ctx, { head, base: 'origin/main', label: 'pre-merge-gate' });
+        return await probe(ctx, { head, base: mainSha, label: 'pre-merge-gate' });
       } catch (e) {
         return fail(`az összefésült próba nem futott (${String(e?.message ?? e).split('\n')[0]})`);
       }
     }, log);
+    // 3. vak kör L4: a próba után újra a GitHub szerinti main — ha elmozdult, a zöld nem a tényleges mainre szól
+    let now;
+    try { now = mainNow(); } catch (e) { return { ...r, status: STATUS.FAIL, note: `a main a próba után nem ellenőrizhető (${String(e?.message ?? e).split('\n')[0]}) — ${r.note}` }; }
+    if (now !== mainSha) return { ...r, status: STATUS.FAIL, note: `a main a próba alatt elmozdult (${mainSha.slice(0, 12)} → ${String(now).slice(0, 12)}) — futtasd újra a merge-kaput; ${r.note}` };
+    return r;
   } finally {
-    // vak review L9: a segéd-ref ne maradjon ott távoli ágként
-    git.run(['update-ref', '-d', `refs/remotes/origin/gate-pr-${n}`]);
+    git.run(['update-ref', '-d', prRef]);
+    git.run(['update-ref', '-d', mainRef]);
   }
 }
 
@@ -208,6 +230,10 @@ export async function probeStep({ pre, isFork, verdict, head, required, checkRun
   if (v.status === STATUS.FAIL || !required?.length || requiredChecks(required, checkRuns, statuses).length) {
     return { status: STATUS.FAIL, note: 'a próba nem futott: előbb a független ítélet és a kötelező ellenőrzések legyenek zöldek (a próba PR-kódot futtat)' };
   }
+  // 3. vak kör L1: a helyi kódfuttatás előfeltétele a MEGBÍZHATÓ, pontos fejhez kötött helyi ítélet (record-review); PR-szöveg nem elég
+  if (verdict?.trusted !== true || verdict?.head !== head) {
+    return { status: STATUS.FAIL, note: 'a próba nem futott: a helyi kódfuttatáshoz megbízható, erre a fejre rögzített helyi ítélet kell (record-review) — a PR-szöveg ítélet-sora nem indíthat próbát' };
+  }
   return run();
 }
 
@@ -218,13 +244,16 @@ export async function mergeDecision({ inputs, isFork, runProbe }) {
     mainFilesTruncated: inputs.mainFilesTruncated, repoWideScopes: inputs.repoWideScopes,
   });
   const probe = await probeStep({ pre, isFork, verdict: inputs.verdict, head: inputs.pr.headRefOid, required: inputs.required, checkRuns: inputs.checkRuns, statuses: inputs.statuses, run: runProbe });
-  return { probe, results: decideMerge({ ...inputs, probe }) };
+  // 3. vak kör L4: a futásőr és az RT-állapot a (hosszú) próba UTÁN készül
+  const late = inputs.late ? await inputs.late() : {};
+  const { late: _l, ...rest } = inputs;
+  return { probe, results: decideMerge({ ...rest, ...late, probe }) };
 }
 
 /** A PR fájllistája hiánytalanul: a `gh pr view --json files` 100-nál vág, ezért ilyenkor a lapozott REST-lista (csonka → kivétel). */
 export function completeFiles({ viewFiles, changedFiles, restPages }) {
-  const files = (viewFiles ?? []).map((f) => f.path);
-  if (Number.isInteger(changedFiles) && files.length >= changedFiles) return files;
+  // 3. vak kör L10: mindig a lapozott REST-lista — a `gh pr view` átnevezésnél a régi nevet nem adja
+  void viewFiles;
   if (!Number.isInteger(changedFiles)) throw new Error('a PR changed_files száma nem olvasható — a fájllista teljessége nem ellenőrizhető');
   const pages = restPages();
   if (!Array.isArray(pages) || pages.some((p) => !Array.isArray(p))) throw new Error('a PR lapozott fájllistája nem lista');
@@ -240,6 +269,7 @@ async function main() {
   const { exec, root, cfg } = ctx;
   const gate = createGate('pre-merge-gate');
   let pr;
+  let mergeMainSha = null;
   try {
     const repo = ghJson(exec, root, ['repo', 'view', '--json', 'nameWithOwner']).nameWithOwner;
     const [owner, name] = repo.split('/');
@@ -275,27 +305,32 @@ async function main() {
       viewFiles: pr.files, changedFiles: pull?.changed_files,
       restPages: () => ghJson(exec, root, ['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/files?per_page=100`]),
     });
-    const g = exec('bash', [join(root, 'scripts', 'qa', 'active-runs-guard.sh')], { cwd: root, timeoutMs: 90_000 });
-    const summary = redact(`${g.stdout}\n${g.stderr}`).split('\n').filter((l) => /^(GUARD|AKTIV)/.test(l)).join(' ').trim();
-    const rt = await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl);
+    // 3. vak kör L4: a futásőr és az RT-állapot a próba UTÁN (late), hogy a próba közben indult gyártás / meccs is látszódjon
+    const late = async () => {
+      const g = exec('bash', [join(root, 'scripts', 'qa', 'active-runs-guard.sh')], { cwd: root, timeoutMs: 90_000 });
+      const summary = redact(`${g.stdout}\n${g.stderr}`).split('\n').filter((l) => /^(GUARD|AKTIV)/.test(l)).join(' ').trim();
+      return { guard: { code: g.code, summary }, rt: await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl) };
+    };
     // Kapu-gyorsítás A: a C-61 esetben gépi összefésült próba a PR feje + a friss main állapotán (új CI helyett).
     const { probe, results } = await mergeDecision({
       inputs: {
         pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files, verdict,
-        external: readEvidence(ctx.evDir, `external-${head}`), guard: { code: g.code, summary }, rt, repoWideScopes: cfg.repoWideScopes ?? [],
+        external: readEvidence(ctx.evDir, `external-${head}`), late, repoWideScopes: cfg.repoWideScopes ?? [],
         mainFiles, mainFilesTruncated,
       },
       isFork,
-      runProbe: () => runMergeProbe({ ctx, n, head, mainSha, log: (m) => gate.log(m) }),
+      runProbe: () => runMergeProbe({ ctx, n, head, mainSha, log: (m) => gate.log(m), mainNow: () => ghJson(exec, root, ['api', `repos/${repo}/branches/main`]).commit?.sha }),
     });
     for (const r of results) gate.add(r.name, r.status, r.note);
-    if (probe) writeEvidence(ctx.evDir, `merge-probe-${n}-${head}`, { kind: 'merge-probe', head, mainSha, status: probe.status, tree: probe.tree ?? null, counts: probe.counts ?? null, ms: probe.ms, note: probe.note, attempts: probe.attempts ?? 1, retried: probe.retried === true, firstNote: probe.firstNote ?? null, at: new Date().toISOString() });
+    if (probe) writeEvidence(ctx.evDir, `merge-probe-${n}-${head}`, probeRecord({ head, mainSha, probe }));
+    mergeMainSha = mainSha;
   } catch (e) {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);
   }
   const code = gate.finish();
   if (pr?.headRefOid) {
-    writeEvidence(ctx.evDir, `merge-${n}-${pr.headRefOid}`, evidenceRecord('merge', pr.headRefOid, gate, { pr: Number(n) }));
+    // 3. vak kör L4: az engedély a PR + fej + main hármashoz kötött; a hook a merge előtt a GitHub szerinti main csúccsal egyezteti
+    writeEvidence(ctx.evDir, `merge-${n}-${pr.headRefOid}`, evidenceRecord('merge', pr.headRefOid, gate, { pr: Number(n), mainSha: mergeMainSha }));
     gate.log(`[pre-merge-gate] bizonyíték: merge-${n}-${pr.headRefOid.slice(0, 12)} (ok=${code === 0}; ${cfg.mergeEvidenceMaxMinutes} percig érvényes). A gh pr merge-et ez a kapu NEM hívja.`);
   }
   process.exit(code);

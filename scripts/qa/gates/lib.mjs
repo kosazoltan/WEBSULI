@@ -262,7 +262,8 @@ export function verdictLine(verdict, head) {
  * @returns {{ verdict: string, source: string } | null}
  */
 export function resolveVerdict({ head, evidence, texts = [] }) {
-  if (evidence && evidence.head === head && VERDICTS.includes(evidence.verdict)) return { verdict: evidence.verdict, source: 'helyi bizonyíték (record-review)' };
+  // `trusted`: csak a helyi, pontos fejhez kötött bizonyíték megbízható (3. vak kör L1) — a PR-szöveget bárki írhatja
+  if (evidence && evidence.head === head && VERDICTS.includes(evidence.verdict)) return { verdict: evidence.verdict, source: 'helyi bizonyíték (record-review)', trusted: true, head };
   let found = null;
   for (const [i, t] of texts.entries()) {
     for (const m of String(t ?? '').matchAll(VERDICT_LINE)) {

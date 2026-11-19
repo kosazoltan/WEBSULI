@@ -3,7 +3,7 @@
 // független ellenőr `probak/probe1.mjs` szkriptjéből.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { STATUS, makeContext, realExec } from './lib.mjs';
@@ -25,7 +25,8 @@ test('tapCounts / tapCountsByFile: az UTOLSÓ összesítő (TAP és JUnit); a te
   assert.equal(tapCounts('semmi'), null);
   const junit = ['<testcase name="a" file="D:\\r\\source\\tests\\x-guard.test.ts"/>', '<testcase name="b" time="1" file="D:\\r\\source\\tests\\x-guard.test.ts">',
     '<testcase name="c" file="/r/source/tests/y-guard.test.ts"/>'].join('\n');
-  assert.deepEqual(tapCountsByFile(junit), { 'x-guard.test.ts': 2, 'y-guard.test.ts': 1 });
+  // 3. vak kör L5 (dokumentált spec-változás): csak a sikeres (önzáró) eset számít — a gyermekelemes „b” (hiba / kihagyás) nem
+  assert.deepEqual(tapCountsByFile(junit), { 'x-guard.test.ts': 1, 'y-guard.test.ts': 1 });
 });
 
 test('probeScope / guardShortfall / probeEnv: hatókör, őr alsó korlát, szűrt környezet', () => {
@@ -66,7 +67,7 @@ function repo({ prFiles = {}, prDelete = [], mainFiles = {}, mainDelete = [], ba
   for (const f of mainDelete) ok(['rm', '-q', f]);
   ok(['add', '.']); ok(['commit', '-q', '--allow-empty', '-m', 'main']);
   ok(['switch', '-q', 'pr']);
-  return { dir, ctx: makeContext({ cwd: dir, cfg: {} }), head };
+  return { dir, ok, write, ctx: makeContext({ cwd: dir, cfg: {} }), head };
 }
 const probe = (r, extra = {}) => mergedProbe(r.ctx, { head: r.head, base: 'main', label: 'proba', ...extra });
 
@@ -154,7 +155,56 @@ test('mergedProbe (L3, L9): a tesztkód nem látja a szülő titkait; hiányzó 
   renameSync(join(nm.dir, 'source', 'node_modules'), join(nm.dir, 'source', 'nm-el'));
   const p9 = await probe(nm);
   assert.deepEqual([p9.status, /npm\.cmd ci/.test(p9.note)], [STATUS.FAIL, true]);
-  const slow = await probe(repo({ prFiles: { 'source/tests/a-guard.test.ts': "import { test } from 'node:test';\ntest('lassu', async () => { await new Promise((r) => setTimeout(r, 60_000)); });\n" } }), { timeoutMs: 4_000 });
+  // 3. vak kör L8: a takarítást a TÉNYLEGESEN lassú futás tárában kell nézni (nem a node_modules nélküli, el sem indult tárban)
+  const slowRepo = repo({ prFiles: { 'source/tests/a-guard.test.ts': "import { test } from 'node:test';\ntest('lassu', async () => { await new Promise((r) => setTimeout(r, 60_000)); });\n" } });
+  const slow = await probe(slowRepo, { timeoutMs: 15_000 });
   assert.equal(slow.status, STATUS.FAIL);
-  assert.equal(existsSync(join(nm.dir, '.claude', 'worktrees')) ? 'van' : 'nincs', 'nincs', 'nem marad ideiglenes munkafa');
+  const left = existsSync(join(slowRepo.dir, '.claude', 'worktrees')) ? readdirSync(join(slowRepo.dir, '.claude', 'worktrees')) : [];
+  assert.deepEqual(left, [], 'nem marad ideiglenes munkafa a lassú futás után');
+  assert.equal(slowRepo.ok(['worktree', 'list', '--porcelain']).split('\n').filter((l) => l.startsWith('worktree ')).length, 1, 'a git sem tart nyilván ideiglenes munkafát');
+});
+
+test('3. vak kör L5: ha a main őr-alapmérése bukik, a próba FAIL (a PR „javítása” sem pótolja az érvényes alapot)', async () => {
+  const p = await probe(repo({
+    mainFiles: { 'source/tests/b-guard.test.ts': "import { test } from 'node:test';\nimport { existsSync } from 'node:fs';\ntest('kell', () => { if (!existsSync(new URL('../../javitas.txt', import.meta.url))) throw new Error('hiányzik'); });\n" },
+    prFiles: { 'javitas.txt': 'x\n' },
+  }));
+  assert.deepEqual([p.status, /alapmérés/.test(p.note)], [STATUS.FAIL, true], p.note);
+});
+
+const QA_BASE = {
+  'scripts/qa/gates/skills-sync-check.mjs': 'process.exit(0);\n',
+  // a háromfázisú ellenőrző itt azt igazolja, hogy összefésült (kétszülős) commiton fut (L7)
+  'scripts/qa/three-phase-check.mjs': "import { execFileSync } from 'node:child_process';\nconst p = execFileSync('git', ['rev-list', '--parents', '-n', '1', 'HEAD'], { encoding: 'utf8' }).trim().split(' ');\nif (p.length !== 3) { console.error('nem merge-commit: ' + p.length); process.exit(1); }\n",
+  'scripts/qa/x.test.mjs': "import { test } from 'node:test';\ntest('x', () => {});\n",
+};
+
+test('3. vak kör L6 + L7: teljes QA-körnél a kötelező ellenőrző hiánya FAIL; a háromfázisú ellenőrző az összefésült (kétszülős) commiton fut', async () => {
+  const ok = await probe(repo({ baseFiles: QA_BASE, prFiles: { 'scripts/qa/y.mjs': 'export {};\n' } }));
+  assert.equal(ok.status, STATUS.PASS, ok.note);
+  const missing = await probe(repo({ baseFiles: QA_BASE, prDelete: ['scripts/qa/gates/skills-sync-check.mjs'] }));
+  assert.deepEqual([missing.status, /kötelező ellenőrző hiányzik.*skills-sync-check/.test(missing.note)], [STATUS.FAIL, true], missing.note);
+});
+
+test('3. vak kör L3: a már beolvasztott main-változás is a hatókörbe kerül, ha a próba a régi fejet kapja történeti alapnak (scopeHead)', async () => {
+  const base = { 'source/lib.ts': 'export const regi = 1;\n', 'source/tests/u.test.ts': "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { regi } from '../lib.ts';\ntest('u', () => assert.equal(regi, 1));\n" };
+  const r = repo({ baseFiles: base, prFiles: { 'source/other.ts': 'export const o = 1;\n' }, mainFiles: { 'source/lib.ts': 'export const uj = 1;\n' } });
+  const old = r.head;
+  r.ok(['merge', '-q', '--no-edit', 'main']);
+  const merged = r.ok(['rev-parse', 'HEAD']);
+  const p = await mergedProbe(r.ctx, { head: merged, base: r.ok(['rev-parse', 'main']), scopeHead: old, label: 'proba' });
+  assert.deepEqual([p.status, p.scope.unitFull], [STATUS.FAIL, true], p.note);
+});
+
+test('3. vak kör L9: lejárt együttes határidő → FAIL, a határidő megnevezésével', async () => {
+  const p = await probe(repo(), { timeoutMs: 1 });
+  assert.deepEqual([p.status, /határid/.test(p.note)], [STATUS.FAIL, true], p.note);
+});
+
+test('3. vak kör L10: átnevezés esetén a régi útvonal is a PR-fájlok között (a hatókör nem veszti el a scripts/qa-t)', async () => {
+  const r = repo({ baseFiles: { ...QA_BASE, 'scripts/qa/regi.mjs': 'export const a = 1;\n'.repeat(20) } });
+  r.ok(['mv', 'scripts/qa/regi.mjs', 'regi-archiv.mjs']);
+  r.ok(['commit', '-q', '-m', 'athelyezes']);
+  const p = await mergedProbe(r.ctx, { head: r.ok(['rev-parse', 'HEAD']), base: 'main', label: 'proba' });
+  assert.equal(p.scope.qaFull, true, p.note);
 });

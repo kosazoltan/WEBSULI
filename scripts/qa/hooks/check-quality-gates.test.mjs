@@ -159,14 +159,21 @@ test('valódi repó: bukott bizonyíték DENY; pre-pr bizonyíték a pushhoz is 
 test('gh pr merge: a PR jelenlegi fejére szóló, ≤ 15 perces zöld merge-bizonyíték kell; gh-hiba DENY', () => {
   const r = makeRepo();
   const head = 'd'.repeat(40);
-  const view = () => ({ number: 7, headRefOid: head });
+  const main = 'f'.repeat(40);
+  // 3. vak kör L4 (spec-változás): a merge-bizonyíték a GitHub szerinti main csúcshoz is kötött
+  const view = () => ({ number: 7, headRefOid: head, mainSha: main });
   const plan = { kind: 'pr-merge', target: '7', repoFlag: null };
   const now = Date.parse('2026-11-17T10:00:00Z');
   assert.match(checkAction(plan, r.wt, { now, ghView: view }), /npm run gate:merge -- 7/);
   writeEv(r.ev, `merge-7-${head}`, { ok: true, at: '2026-11-17T09:50:00Z' });
+  assert.match(checkAction(plan, r.wt, { now, ghView: view }), /main/, 'main-hash nélküli (régi) bizonyíték → DENY');
+  writeEv(r.ev, `merge-7-${head}`, { ok: true, at: '2026-11-17T09:50:00Z', mainSha: 'a'.repeat(40) });
+  assert.match(checkAction(plan, r.wt, { now, ghView: view }), /main.*elmozdult|elmozdult/, 'más main mellett készült bizonyíték → DENY');
+  assert.match(checkAction(plan, r.wt, { now, ghView: () => ({ number: 7, headRefOid: head }) }), /main/, 'nem olvasható main → DENY');
+  writeEv(r.ev, `merge-7-${head}`, { ok: true, at: '2026-11-17T09:50:00Z', mainSha: main });
   assert.equal(checkAction(plan, r.wt, { now, ghView: view }), null);
   assert.match(checkAction(plan, r.wt, { now: now + 6 * 60000, ghView: view }), /16 perces/);
-  assert.match(checkAction(plan, r.wt, { now, ghView: () => ({ number: 7, headRefOid: 'e'.repeat(40) }) }), /jelenlegi fejére/);
+  assert.match(checkAction(plan, r.wt, { now, ghView: () => ({ number: 7, headRefOid: 'e'.repeat(40), mainSha: main }) }), /jelenlegi fejére/);
   assert.match(checkAction(plan, r.wt, { now, ghView: () => null }), /nem olvasható/);
 });
 

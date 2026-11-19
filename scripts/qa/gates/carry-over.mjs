@@ -11,6 +11,14 @@
 
 import { STATUS, VERDICTS, argValue, isMain, makeContext, readEvidence, redact, writeEvidence } from './lib.mjs';
 import { mergedProbe } from './merged-probe.mjs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+/** Kizárólagos létrehozás (`wx`): ha a rekord már létezik, nem írja felül → false (3. vak kör L2). */
+function createEvidenceExclusive(dir, name, obj) {
+  mkdirSync(dir, { recursive: true });
+  try { writeFileSync(join(dir, `${name}.json`), `${JSON.stringify(obj, null, 2)}\n`, { flag: 'wx' }); return true; } catch (e) { if (e?.code === 'EEXIST') return false; throw e; }
+}
 
 const full = (git, ref) => { const r = git.run(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]); return r.code === 0 ? r.stdout.trim() : null; };
 
@@ -83,38 +91,47 @@ export function freshMain({ git, ghMainSha }) {
 
 /** Az átvitel teljes menete (a próba és a GitHub-lekérdezés injektálható). @returns {Promise<{ ok: boolean, why: string, written?: string[] }>} */
 export async function runCarry({ ctx, from, to = 'HEAD', probe = mergedProbe, ghMainSha, now = () => new Date() }) {
-  const base = 'origin/main';
   // a `patch-id` a diffet a szabványos bemenetén kapja — ezért a futtató `input`-ot is átad
   const gitIO = { run: (args, o = {}) => ctx.exec('git', args, { cwd: ctx.root, input: o.input, timeoutMs: 120_000 }) };
   const fm = freshMain({ git: gitIO, ghMainSha });
   if (!fm.ok) return { ok: false, why: fm.why };
-  const c = checkCarry({ git: gitIO, from, to, base });
+  // 3. vak kör L4: a feltételek is a rögzített (GitHubbal egyeztetett) main SHA-hoz mérve, nem a mozgó refhez
+  const c = checkCarry({ git: gitIO, from, to, base: fm.sha });
   if (!c.ok) return { ok: false, why: c.why };
   const recs = carryRecords({ from: c.from, read: (n) => readEvidence(ctx.evDir, n) });
   if (!recs.ok) return { ok: false, why: recs.why };
-  // az új fejen a teljes hatókörű összefésült próba (merged-probe.mjs: őrök + a PR / main szerinti teszthatókör)
-  const pr = await probe(ctx, { head: c.to, base, label: 'carry-over' });
+  // 3. vak kör L2: a célfejre már rögzített ítéletet az átvitel soha nem írja felül (a próba előtt és az írás előtt is vizsgálva)
+  const targetVerdict = () => readEvidence(ctx.evDir, `review-${c.to}`);
+  if (targetVerdict()) return { ok: false, why: `a célfejre (${c.to.slice(0, 12)}) már van rögzített ítélet (${targetVerdict().verdict ?? '?'}) — az átvitel nem írja felül` };
+  // az új fejen a teljes hatókörű összefésült próba; 3. vak kör L3 + L4: a rögzített main SHA, a hatókör alapja a régi, ellenőrzött fej
+  const pr = await probe(ctx, { head: c.to, base: fm.sha, scopeHead: c.from, label: 'carry-over' });
   if (pr.status !== STATUS.PASS) return { ok: false, why: `az új fejen az összefésült próba nem zöld: ${pr.note}` };
+  if (targetVerdict()) return { ok: false, why: `a próba közben ítélet került a célfejre (${c.to.slice(0, 12)}: ${targetVerdict().verdict ?? '?'}) — az átvitel nem írja felül` };
   const carry = `carry-${c.to}`;
   const at = now().toISOString();
-  writeEvidence(ctx.evDir, carry, {
-    kind: 'carry-over', ok: true, from: c.from, to: c.to, head: c.to, mainSha: fm.sha, mainParent: c.mainParent, patchId: c.patchId, tree: c.tree,
-    probe: { tree: pr.tree ?? null, counts: pr.counts ?? null, ms: pr.ms ?? null }, carried: recs.records.map((x) => x.kind), at,
-  });
-  const written = [carry];
+  // a vak ítélet (review) íródik először, kizárólagosan; a carry-rekord csak a sikeres átvitel UTÁN (3. vak kör L2)
+  const written = [];
   for (const { kind, rec } of recs.records) {
     // a lánc megőrzi az eredetileg ellenőrzött fejet (vak review L8)
-    writeEvidence(ctx.evDir, `${kind}-${c.to}`, {
-      ...rec, head: c.to, carriedFrom: c.from, reviewedHead: rec.reviewedHead ?? c.from, carryChain: [...(rec.carryChain ?? []), c.from], carry, carriedAt: at,
-    });
+    const body = { ...rec, head: c.to, carriedFrom: c.from, reviewedHead: rec.reviewedHead ?? c.from, carryChain: [...(rec.carryChain ?? []), c.from], carry, carriedAt: at };
+    // 3. vak kör L2: kizárólagos létrehozás — a célfejen meglévő (közben rögzített) rekordot nem írja felül
+    if (!createEvidenceExclusive(ctx.evDir, `${kind}-${c.to}`, body)) {
+      if (kind === 'review') return { ok: false, why: `a célfejre (${c.to.slice(0, 12)}) közben ítélet került — az átvitel nem írja felül` };
+      continue;
+    }
     written.push(`${kind}-${c.to}`);
   }
+  writeEvidence(ctx.evDir, carry, {
+    kind: 'carry-over', ok: true, from: c.from, to: c.to, head: c.to, mainSha: fm.sha, mainParent: c.mainParent, patchId: c.patchId, tree: c.tree,
+    probe: { tree: pr.tree ?? null, counts: pr.counts ?? null, ms: pr.ms ?? null }, carried: written.map((w) => w.slice(0, w.length - c.to.length - 1)), at,
+  });
+  written.unshift(carry);
   return { ok: true, why: c.why, written };
 }
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.includes('--base')) { process.stderr.write('[carry-over] NEM FUTOTT: a --base kapcsoló megszűnt — az alap mindig a friss origin/main\n'); process.exit(2); }
+  if (args.some((a) => a === '--base' || a.startsWith('--base='))) { process.stderr.write('[carry-over] NEM FUTOTT: a --base kapcsoló megszűnt — az alap mindig a friss origin/main\n'); process.exit(2); }
   const from = argValue(args, '--from');
   if (!from) { process.stderr.write('Használat: node scripts/qa/gates/carry-over.mjs --from <régi fej> [--to HEAD]\n'); process.exit(2); }
   let ctx;

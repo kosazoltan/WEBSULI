@@ -27,6 +27,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-76** — Vak ellenőr: 1 teljes kör + célzott visszanézés, legfeljebb 3 kör; változatlan részben új, nem blokkoló lelet → jegy.
 - **C-77** — Nehéz kör csak gép-zárral, sorrendfájl szerint; folyamatot csak pontos saját PID alapján állíts le, mintaillesztéssel soha.
 - **C-78** — Main-beolvasztás után ne fizess új CI-t / vak kört: gépi összefésült próba (merge-kapu) és bizonyíték-átvitel (`gate:carry`).
+- **C-79** — Gyorsító kapunál a bizalmi határ: nyilvános PR-szöveg nem indíthat helyi kódfuttatást; engedély PR + fej + main SHA-hoz kötve; meglévő ítéletet nem írunk felül.
 
 ### Shell, Windows, eszközök
 - **C-01** — A `node_modules` gépenként települ (`npm.cmd ci`), másolni tilos; gyanús natív hibánál `npm run doctor:arch`.
@@ -1146,3 +1147,15 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
 - **Mért csapda (2026-11-19, Node 24):** a `node --test` a teszt NÉLKÜLI fájlt egy, a fájl útját viselő „sikeres tesztként” számolja
   (`# pass 1`, JUnit `<testcase name="tests\x.test.ts" …/>`). Emiatt a „0 teszt → FAIL” sosem sült el, és egy kiüresített őr
   (`export {};`) a mainen futó 1 tesztet „pótolta”. Darabszám-alapú kapunál az álteszt kiszűrendő (`merged-probe.mjs` `junitCases`).
+
+## C-79 — Gyorsító kapu bizalmi határa: ki indíthat kódfuttatást, mihez kötött az engedély (2026-11-19)
+
+- **Tünet:** a kapu-gyorsítás 3. vak köre (GPT-6.2 Sol) 5 blokkolót talált a gyorsító utakon: a nyilvános PR-leírás ítélet-sora is
+  elindította a helyi próbát (PR-kód a gépen); a `gate:carry` felülírhatta a célfejre rögzített `NEM` ítéletet; a merge-engedély nem
+  volt a tényleges main SHA-hoz kötve (mozgó `origin/main`); a carry próbája a már beolvasztott main-változást nem látta; a main
+  őr-alapmérésének bukása nem állította meg a próbát.
+- **Költség:** egy teljes javítókör (11 lelet, mind bukó teszttel) és egy újabb vak visszanézés.
+- **Szabály:** gyorsító útnál (próba, átvitel, újrafuttatás) előre kell felírni a bizalmi határt: (1) helyi kódfuttatást csak megbízható,
+  helyi, pontos fejhez kötött bizonyíték indíthat; (2) az engedély minden azonosítóhoz kötött, amelytől a döntés függ (PR, fej, main
+  SHA), és a felhasználás előtt újraellenőrzött; (3) meglévő ítéletet / bizonyítékot gépi út nem ír felül (kizárólagos létrehozás);
+  (4) mozgó ref helyett rögzített SHA; (5) az összehasonlítás alapjának (baseline) érvényessége maga is feltétel.

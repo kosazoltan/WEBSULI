@@ -141,7 +141,8 @@ test('runCarry: a friss main hibája megállít; a próba az új fejen fut; buko
 
   const green = await runCarry({ ctx, from: r.from, to: 'HEAD', probe: greenProbe, ghMainSha: () => r.mainSha, now: () => new Date('2026-11-19T10:00:00Z') });
   assert.equal(green.ok, true, green.why);
-  assert.deepEqual(calls, [{ head: r.to, base: 'origin/main', label: 'carry-over' }], 'a próba a feloldott új fejen, a friss origin/main-nel');
+  // 3. vak kör L3 + L4 (spec-változás): rögzített main SHA, a hatókör történeti alapja a régi, ellenőrzött fej
+  assert.deepEqual(calls, [{ head: r.to, base: r.mainSha, scopeHead: r.from, label: 'carry-over' }], 'a próba a feloldott új fejen, a rögzített main SHA-val');
   assert.deepEqual(green.written, [`carry-${r.to}`, `review-${r.to}`, `pre-push-${r.to}`]);
   const carried = readEvidence(evDir, `review-${r.to}`);
   assert.deepEqual(
@@ -179,6 +180,44 @@ test('runCarry: NEM ítélet nem vihető át, a próba sem fut (L8)', async () =
 
 test('CLI: a --base kapcsoló megszűnt → 2-es kilépés, magyarázattal (L1)', () => {
   const p = realExec(process.execPath, [join(HERE, 'carry-over.mjs'), '--from', 'a'.repeat(40), '--base', 'valami/ag'], { cwd: HERE, timeoutMs: 60_000 });
+  assert.equal(p.code, 2);
+  assert.match(p.stderr, /--base kapcsoló megszűnt/);
+});
+
+test('3. vak kör L2: a célfejre már rögzített ítéletet (NEM) az átvitel nem írja felül — a próba előtt és közben rögzítve sem', async () => {
+  const r = repo();
+  const evDir = mkdtempSync(join(tmpdir(), 'carry-ev-'));
+  writeEvidence(evDir, `review-${r.from}`, { head: r.from, ok: true, verdict: 'IGEN' });
+  const ctx = { exec: realExec, root: r.dir, evDir };
+  writeEvidence(evDir, `review-${r.to}`, { head: r.to, ok: true, verdict: 'NEM' });
+  let ran = false;
+  const before = await runCarry({ ctx, from: r.from, to: r.to, probe: async () => { ran = true; return { status: STATUS.PASS, note: 'zöld' }; }, ghMainSha: () => r.mainSha });
+  assert.deepEqual([before.ok, /már van rögzített ítélet/.test(before.why), ran], [false, true, false], before.why);
+  assert.equal(readEvidence(evDir, `review-${r.to}`).verdict, 'NEM');
+  // a próba KÖZBEN rögzített NEM is megmarad
+  const ev2 = mkdtempSync(join(tmpdir(), 'carry-ev-'));
+  writeEvidence(ev2, `review-${r.from}`, { head: r.from, ok: true, verdict: 'IGEN' });
+  const during = await runCarry({ ctx: { ...ctx, evDir: ev2 }, from: r.from, to: r.to, ghMainSha: () => r.mainSha,
+    probe: async () => { writeEvidence(ev2, `review-${r.to}`, { head: r.to, ok: true, verdict: 'NEM' }); return { status: STATUS.PASS, note: 'zöld' }; } });
+  assert.equal(during.ok, false, during.why);
+  assert.equal(readEvidence(ev2, `review-${r.to}`).verdict, 'NEM');
+  assert.equal(readEvidence(ev2, `carry-${r.to}`), null, 'nincs carry-rekord sem');
+});
+
+test('3. vak kör L2: a célfejen meglévő pre-push bizonyítékot az átvitel nem írja felül', async () => {
+  const r = repo();
+  const evDir = mkdtempSync(join(tmpdir(), 'carry-ev-'));
+  writeEvidence(evDir, `review-${r.from}`, { head: r.from, ok: true, verdict: 'IGEN' });
+  writeEvidence(evDir, `pre-push-${r.from}`, { head: r.from, ok: true, src: 'regi' });
+  writeEvidence(evDir, `pre-push-${r.to}`, { head: r.to, ok: false, src: 'sajat' });
+  const res = await runCarry({ ctx: { exec: realExec, root: r.dir, evDir }, from: r.from, to: r.to, probe: async () => ({ status: STATUS.PASS, note: 'zöld' }), ghMainSha: () => r.mainSha });
+  assert.equal(res.ok, true, res.why);
+  assert.equal(readEvidence(evDir, `pre-push-${r.to}`).src, 'sajat');
+  assert.ok(!res.written.includes(`pre-push-${r.to}`));
+});
+
+test('3. vak kör L11: a --base=… alak is 2-es kilépés', () => {
+  const p = realExec(process.execPath, [join(HERE, 'carry-over.mjs'), '--from', 'a'.repeat(40), '--base=valami/ag'], { cwd: HERE, timeoutMs: 60_000 });
   assert.equal(p.code, 2);
   assert.match(p.stderr, /--base kapcsoló megszűnt/);
 });
