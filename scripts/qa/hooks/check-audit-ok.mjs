@@ -6,10 +6,11 @@
 // (a sentinel-t a pre-push-audit-lite.mjs / a repo saját audit-scriptje írja).
 // Konfig (opcionális) a repo .agentic-qa-kit.json-jában:
 //   { "audit": { "sentinel": ".audit-ok", "maxAgeMinutes": 10 } }
-// Fail-open belső hibára.
+// Kanban #126 (A7): a push-parancsnál a git időtúllépése / indítási hibája és a belső hiba TILT (fail-closed), teendővel;
+// a gyors, nem nulla kilépés (nem git-repó) és a nem push parancs változatlanul enged.
 
 import { readFileSync, statSync, existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 function deny(reason) {
@@ -23,22 +24,49 @@ function deny(reason) {
   process.exit(0);
 }
 
-try {
-  const payload = JSON.parse(readFileSync(0, 'utf8') || '{}');
-  const tool = payload.tool_name || '';
-  if (tool !== 'Bash' && tool !== 'PowerShell') process.exit(0);
-  const cmd = String(payload.tool_input?.command ?? '');
-  if (!/\bgit\b[^|;&]*\bpush\b/.test(cmd)) process.exit(0);
+const RETRY = 'próbáld újra néhány másodperc múlva ugyanazt az egyszerű parancsot; ha tartósan fennáll: docs/minosegkapuk.md — „A kapu-hook hibája”';
+/** A git nem adott választ (időtúllépés, jelzés, indítási hiba) — szemben a gyors, nem nulla kilépéssel. */
+const noAnswer = (e) => Boolean(e) && (e.code === 'ETIMEDOUT' || e.code === 'ENOENT' || e.code === 'EPERM' || e.code === 'EACCES'
+  || e.killed === true || Boolean(e.signal) || e.status === null || e.status === undefined);
 
+// A git-korlát 10 s (kanban #126); csak `node --test` alatt (NODE_TEST_CONTEXT) felülírható, felülről korlátozva. A külső
+// hook-korlát (.claude/settings.json) 20 s, hogy a belső mindig előbb járjon le érthető tiltással (L5).
+const GIT_TIMEOUT_MS = process.env.NODE_TEST_CONTEXT && Number(process.env.WEBSULI_AUDIT_GIT_TIMEOUT_MS) > 0
+  ? Math.min(Number(process.env.WEBSULI_AUDIT_GIT_TIMEOUT_MS), 10_000) : 10_000;
+
+let text = '';
+try { text = readFileSync(0, 'utf8'); } catch { /* nincs olvasható bemenet → üres szöveg */ }
+let payload;
+try {
+  payload = JSON.parse(text || '{}');
+} catch {
+  // Olvashatatlan hook-bemenet: ha a nyers szövegben push van → TILT (kanban #100), különben enged.
+  if (/\bgit\b[^|;&]*\bpush\b/.test(text)) deny(`A hook-bemenet nem értelmezhető, de push-parancsot tartalmaz — ${RETRY}.`);
+  process.exit(0);
+}
+// L5: érvényes, de nem objektum JSON (null, tömb, szám, szöveg) — nem összeomlás; push-szöveggel TILT, különben enged.
+if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+  if (/\bgit\b[^|;&]*\bpush\b/.test(text)) deny(`A hook-bemenet nem értelmezhető, de push-parancsot tartalmaz — ${RETRY}.`);
+  process.exit(0);
+}
+const tool = payload.tool_name || '';
+if (tool !== 'Bash' && tool !== 'PowerShell') process.exit(0);
+const cmd = String(payload.tool_input?.command ?? '');
+if (!/\bgit\b[^|;&]*\bpush\b/.test(cmd)) process.exit(0);
+
+try {
   let root;
   try {
-    root = execSync('git rev-parse --show-toplevel', {
+    root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
       cwd: payload.cwd || process.cwd(),
       encoding: 'utf8',
-      timeout: 5000,
+      timeout: GIT_TIMEOUT_MS,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
-  } catch {
-    process.exit(0); // nem git repo → nem a mi dolgunk
+  } catch (e) {
+    if (noAnswer(e)) deny(`A push előtti audit nem ellenőrizhető (a git nem válaszolt) — ${RETRY}.`);
+    process.exit(0); // gyors, nem nulla kilépés: nem git repo → nem a mi dolgunk
   }
 
   let sentinel = '.audit-ok';
@@ -63,6 +91,6 @@ try {
     `A push előtti audit nem futott le az elmúlt ${maxAgeMinutes} percben. ` +
     `Futtasd: npm run qa:audit (vagy a repo saját audit-scriptjét), majd pusholj újra.`
   );
-} catch {
-  process.exit(0);
+} catch (e) {
+  deny(`A push előtti audit-ellenőrzés hibára futott (${String(e?.message ?? e).split('\n')[0]}) — ${RETRY}.`);
 }
