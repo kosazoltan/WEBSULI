@@ -38,7 +38,7 @@ nehéz kapu (gate:push, gate:pr, teljes `npm test`, e2e) nem fut.
 
 ## 3. lépés — `source/tests/vocab-distractor-overlap.test.ts` (#205)
 
-1. A „bank-szintű invariáns …” teszt `(t) =>` paramétert kap; `Date.now()` helyett `performance.now()` (falióra, csak kiírásra) és
+1. A „bank-szintű invariáns …” teszt `(t) =>` paramétert kap; `Date.now()` helyett `performance.now()` (falióra: kiírás, a 7. lépés óta második korlát is — 150 000 ms) és
    `process.cpuUsage()` (mérce).
 2. A végén: `cpuMs = round((user + system) / 1000)`, `t.diagnostic("a bank-szintű invariáns: CPU <cpuMs> ms, falióra <wallMs> ms")`,
    `assert.ok(cpuMs < 60_000, …)` — a korlát értéke változatlan; a megjegyzés a terv 4.2 indoklására hivatkozik.
@@ -95,3 +95,17 @@ Sorrend: előbb a leletet bizonyító mutáns (a mostani fejen ZÖLD → a lelet
    ellenpróba csak gépi zárral, ≤ 2 perc; `npm run gate:stage` csak gépi zárral (az orkesztrátor írja be az `idozites` nevet).
 5. Commitok: `test(bank): a mentési teszt kapukkal (vak ellenőr L2)`, `test(szobank): falióra-felső korlát a CPU-korlát mellé (vak
    ellenőr L1)`, `docs(teszt): …`.
+
+## 8. lépés — A vak ellenőr 2. köre (IGEN, FELTÉTELLEL a `045a25bd` fejre; L1, L2 közepes, L3 kicsi)
+
+1. Bizonyító mutánsok a `045a25bd` fejen (scratchpad `mut-l2b.sh`): türelmi 120 kör → zöld (L1 valós); a 2. indítás 5 ms-os
+   időzítő mögött (érvényes, párhuzamos) → a „befejezési sorrend” teszt bukik (L2 valós).
+2. `source/tests/parallel-bank.test.ts`: `useFakeTimers(t)` (`setTimeout`, `setInterval`), `untilGate(t, gate)` és `driveWindow(t)`
+   (`WATCHDOG_STEPS = 1000`, `WATCHDOG_TICK_MS = 1000`); a három vezérelt teszt `(t)` paramétert kap; a `gateOrNextTurn`,
+   `gateOrTurns`, `loopTurns`, `SETTLE_TURNS` kikerül. A „hiba után is megvárja” teszt: a hiba után és a mentés alatt
+   `driveWindow`, utána `outerSettled === false`.
+3. Elvárt (`mut-l2b.sh` + `mut-l2.sh` az új teszten): a HIBÁS mutánsok (türelmi 120 kör / 50 ms / 30 s, gyors hiba, késleltetett
+   gyors hiba, soros, befejezési jelzés nélkül) bukik; a HELYES változatok (2. indítás `setImmediate` / időzítő mögött) zöldek.
+4. L3 (doksi): a CPU-idő és a falióra két külön mennyiség (terv 4.2); a 3. lépés 1. pontja a 150 s-os második korlátot említi.
+5. Commit: `test(bank): hamis órás őr a vezérelt bank-tesztekben (vak ellenőr 2. kör, L1–L2)` és `docs(teszt): …`; utána a zár
+   alatti `gate:stage` + terheléses újramérés az új fejen.

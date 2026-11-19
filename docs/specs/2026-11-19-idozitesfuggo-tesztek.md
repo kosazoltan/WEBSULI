@@ -55,6 +55,19 @@ kiszorítja a tesztfolyamatot; ez a két párhuzamos teljes tesztkör alatti üt
   mentés befejezése külön kapura vár; a kapuk között 50 eseményhurok-kör (falióra nélkül) után a teszt állítja, hogy a külső ígéret
   még függőben van; minden várakozás legfeljebb 50 kör (elakadásvédelem). Mérve: a késleltetett mutáns most bukik; a korábbi három
   mutáns ugyanott bukik. Korlát: a ~100 körnél tovább késleltetett továbbdobást a teszt nem különbözteti meg (véges keret).
+- **Vak ellenőr, 2. kör (2026-11-19, ítélet: IGEN, FELTÉTELLEL a `045a25bd` fejre; két közepes lelet, elfogadva):**
+  - L1: a véges (50 körös) ablakon túl, türelmi idő után dobott korai hibát a teszt átengedte. Bizonyító mutáns (mérve a
+    `045a25bd` fejen): gyors hiba 120 `setImmediate`-kör után → ZÖLD maradt.
+  - L2: az egy körös tartalék egy érvényes, de késleltetett párhuzamos indítást sorosnak / rossz sorrendűnek mérhetett. Pozitív
+    kontroll (mérve a `045a25bd` fejen): a 2. egység indítása egy 5 ms-os időzítő mögött (továbbra is párhuzamos) → a „befejezési
+    sorrend” teszt BUKOTT.
+  - **Javítás:** hamis óra (`t.mock.timers`: `setTimeout`, `setInterval`; a `setImmediate` valódi) mindhárom vezérelt tesztben; az
+    őr (`untilGate`, `driveWindow`) lépésenként egy kört vár és 1 hamis s-ot léptet, legfeljebb 1000 lépésig. A hiba után és a
+    mentés alatt a TELJES ablak lefut (1000 kör, 1000 hamis s). Mérve az új teszten: türelmi 120 kör, 50 ms és 30 s időzítő → mind
+    BUKIK; az eredeti négy mutáns változatlanul bukik; a két HELYES változat (2. indítás `setImmediate` / 5 ms-os időzítő mögött)
+    ZÖLD. Maradó korlát: 1000 körnél / 1000 hamis s-nál hosszabb türelmi idő, illetve valódi I/O-ra váró türelmi idő nem mérhető
+    egységteszt-keretben falióra nélkül — ilyen implementáció a bank-szerződés (`docs/specs/2026-10-16-parhuzamos-bank.md`)
+    szerint sem megengedett, és a kódreview tárgya.
 
 ### 4.2 `vocab-distractor-overlap.test.ts` (#205)
 
@@ -64,9 +77,11 @@ kiszorítja a tesztfolyamatot; ez a két párhuzamos teljes tesztkör alatti üt
 - A korlát maga a mérce: a #432 (`0b386870`) a generátort a teljes bankokra gyorsította, és a `< 60 000` ms ezt a teljesítmény-
   garanciát őrzi (a munka mennyisége). A falióra ezt csak közelíti: terhelt gépen a CPU-sorban állás is benne van.
 - **Döntés:** a korlát a folyamat CPU-idejére (`process.cpuUsage()`, user + system, minden szál) épül, változatlan 60 000 ms-os
-  értékkel; a teszt `t.diagnostic`-kal kiírja a CPU-időt és a falióra-időt (bizonyíték a naplóban). Indoklás: egyszálú munkánál a
-  CPU-idő ≤ falióra, tehát ami eddig átment, most is átmegy; a különbség pontosan a várakozás (ütemezés), amelyet ki akarunk
-  venni. A garancia (a munka ≤ 60 s) nem gyengül: a mért mennyiség a munka maga. A termékkód gyorsítása (a regex-fordítás) nem
+  értékkel; a teszt `t.diagnostic`-kal kiírja a CPU-időt és a falióra-időt (bizonyíték a naplóban). Indoklás: a CPU-sorban állás
+  (ütemezés) a CPU-időt nem növeli, ezért a terhelés nem buktatja. A folyamat szálain összegzett CPU-idő és az eltelt idő két
+  KÜLÖN mennyiség: a CPU-idő a GC- és betöltőszálak miatt a faliórát meg is haladhatja (vak ellenőr, 2. kör L3; mérve: 11 500 ms
+  CPU / 10 669 ms falióra), így a CPU-korlát adott esetben szigorúbb a régi falióra-korlátnál — nem igaz, hogy minden korábban
+  zöld futás zöld marad. A garancia (a munka ≤ 60 s) nem gyengül: a mért mennyiség a munka maga. A termékkód gyorsítása (a regex-fordítás) nem
   része ennek a szeletnek (NEM cél: termékkód) — jegy-szövegként a 8. pontban.
 - Mért terhelés alatt (folyamatos, 60 pörgető + 10 régi + 10 új példány): a CPU-idő 14,2–19,0 s maradt, a falióra 54,7–94,5 s lett.
 - **Vak ellenőr L1 (2026-11-19, blokkoló, elfogadva):** a CPU-korlát önmagában átengedi a CPU-t nem égető lassulást (szinkron alvás,
