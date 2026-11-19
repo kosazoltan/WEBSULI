@@ -88,7 +88,12 @@ const browserEnv: SpeechEnv = {
   synth: () => "speechSynthesis" in window ? window.speechSynthesis as unknown as SynthLike : undefined,
   createUtterance: text => typeof SpeechSynthesisUtterance === "undefined" ? undefined : new SpeechSynthesisUtterance(text) as unknown as UtteranceLike,
   hash: (text, language) => ttsAudioHash(text, language),
-  fetchManifest: async (url, signal) => { const response = await fetch(url, { credentials: "same-origin", signal }); return response.ok ? response.json() : null; },
+  fetchManifest: async (url, signal) => {
+    const response = await fetch(url, { credentials: "same-origin", signal });
+    if (response.ok) return { ok: true, body: await response.json() };
+    const seconds = Number(response.headers.get("Retry-After"));
+    return { ok: false, retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null };
+  },
   connection: () => {
     const info = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
     return { saveData: info?.saveData, effectiveType: info?.effectiveType, online: navigator.onLine !== false };
@@ -109,8 +114,9 @@ if (typeof window !== "undefined") {
       window.speechSynthesis.addEventListener?.("voiceschanged", () => { window.speechSynthesis.getVoices(); player.voicesChanged(); });
     } catch { /* hiányos felület: a lang beállítás dönt */ }
   }
-  // Az első felhasználói mozdulat: a hangmotor próbája és (iOS) a letöltések feloldása. Csak nyelvleckénél van teendő — a lejátszó dönt.
-  document.addEventListener("pointerdown", () => player.noteUserGesture(), { capture: true, passive: true });
+  // Valódi koppintás (`click` — ez ad felhasználói aktivációt; görgetés és hosszú nyomás nem): iOS-en a futó hangletöltések feloldása.
+  // A beszédmotorhoz itt semmi nem nyúl: kimondás csak a „Meghallgatás” gomb koppintására indul.
+  document.addEventListener("click", () => player.noteUserActivation(), { capture: true, passive: true });
   document.addEventListener("visibilitychange", () => player.setVisible(document.visibilityState !== "hidden"));
 }
 

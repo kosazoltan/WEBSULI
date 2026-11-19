@@ -78,6 +78,16 @@ test("mutáció: a gépies jelző („Desktop”) a jelzés nélküli helyi hang
   assert.deepEqual(names([local, { ...local, name: "Halo" }], "en-GB"), ["Hang", "Halo"], "ellenpróba: jelzés nélkül marad a sorrend");
 });
 
+// Vak review R03 / R05: az ismert brit névlista csak `en-GB` leckénél és csak pontos brit régiójú hangnál ad előnyt.
+test("a brit névlista nem ad előnyt más régiójú hangnak és más nyelvű leckének", () => {
+  const american: RankableVoice[] = [{ name: "Plain", lang: "en-US", localService: true }, { name: "Daniel", lang: "en-US", localService: true }];
+  assert.deepEqual(rankVoices(american, "en-GB"), [0, 1], "amerikai „Daniel” nem brit hang: marad az eredeti sorrend");
+  const german: RankableVoice[] = [{ name: "Hans", lang: "de-DE", localService: true }, { name: "Daniel", lang: "de-DE", localService: true }];
+  assert.deepEqual(rankVoices(german, "de-DE"), [0, 1], "német leckében a névlista nem számít");
+  const british: RankableVoice[] = [{ name: "Plain", lang: "en-GB", localService: true }, { name: "Daniel", lang: "en-GB", localService: true }];
+  assert.deepEqual(rankVoices(british, "en-GB"), [1, 0], "ellenpróba: brit leckében, brit hangnál előnyt ad");
+});
+
 test("az ismert brit hangnevek listája kisbetűs és ismétlés nélküli (az egyezés kisbetűs névvel történik)", () => {
   assert.ok(KNOWN_BRITISH_VOICES.length >= 5);
   assert.equal(new Set(KNOWN_BRITISH_VOICES).size, KNOWN_BRITISH_VOICES.length);

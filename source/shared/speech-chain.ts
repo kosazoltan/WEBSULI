@@ -1,5 +1,5 @@
 import { speechStartTimeoutMs, SPEECH_START_TIMEOUT_MS } from "./speech-fallback";
-import { UNKNOWN_ENGINE, voiceKey, type EngineKnowledge } from "./speech-preload";
+import { engineSilent, voiceSkipped, UNKNOWN_ENGINE, voiceKey, type EngineKnowledge } from "./speech-preload";
 import { rankVoices, type RankableVoice } from "./voice-rank";
 
 /**
@@ -40,7 +40,7 @@ export type SpeechPlanInput = {
    * előre gyártott lépés KIMARAD (a letöltés a háttérben előre ugrik); ha nincs, a hang kérésre töltődik.
    */
   prepared?: { id: string; ready: boolean } | null;
-  /** A hangmotor munkamenet-szintű ismerete (S8d): igazolt hang előre, elbukott hang kimarad, néma motornál nincs böngészőhang-lépés. */
+  /** A hangmotor munkamenet-szintű ismerete (S8d, valódi koppintásokból): igazolt hang előre; lejáró negatív ítéletű hang / néma motor kimarad. */
   engine?: EngineKnowledge;
   /** `navigator.onLine === false`: a telepített helyi hang a hálózati elé kerül (az nem tud megszólalni). */
   offline?: boolean;
@@ -57,7 +57,7 @@ const isLocal = (voice: RankableVoice | undefined) => voice?.localService !== fa
  */
 export function chainVoiceOrder(voices: ReadonlyArray<RankableVoice>, language: string, offline = false, engine: EngineKnowledge = UNKNOWN_ENGINE): number[] {
   // A munkamenetben elbukott hang kimarad; az igazoltan megszólaló hang az első (az már nem próba, azonnal szól).
-  const usable = rankVoices(voices, language).filter((i) => !engine.bad.includes(voiceKey(voices[i])));
+  const usable = rankVoices(voices, language).filter((i) => !voiceSkipped(engine, voiceKey(voices[i])));
   const verified = usable.find((i) => voiceKey(voices[i]) === engine.verified);
   const ranked = verified === undefined ? usable : [verified, ...usable.filter((i) => i !== verified)];
   const order = offline ? [...ranked.filter((i) => isLocal(voices[i])), ...ranked.filter((i) => !isLocal(voices[i]))] : ranked;
@@ -110,8 +110,8 @@ export function silenceBeforeFallbackMs(plan: ReadonlyArray<SpeechStep>, voices:
 export function speechPlan(input: SpeechPlanInput): SpeechStep[] {
   const engine = input.engine ?? UNKNOWN_ENGINE;
   const voiceSteps: SpeechStep[] = [];
-  if (input.synthAvailable && !engine.silent) {
-    if (input.voices.length === 0) { if (!engine.bad.includes(voiceKey(null))) voiceSteps.push({ kind: "voice", voiceIndex: null }); }
+  if (input.synthAvailable && !engineSilent(engine)) {
+    if (input.voices.length === 0) { if (!voiceSkipped(engine, voiceKey(null))) voiceSteps.push({ kind: "voice", voiceIndex: null }); }
     else for (const voiceIndex of chainVoiceOrder(input.voices, input.language, input.offline, engine)) voiceSteps.push({ kind: "voice", voiceIndex });
   }
   const steps: SpeechStep[] = [];
@@ -126,9 +126,13 @@ export function speechPlan(input: SpeechPlanInput): SpeechStep[] {
 /** A lépés kimenete: `done` — megszólalt (vagy a tanuló maga szakította meg): a lánc megáll; `failed` — a következő lépés jön. */
 export type StepOutcome = "done" | "failed";
 /** A következő lépés indexe; `null`: a lánc véget ért. `exhausted`: minden lépés elbukott — a hívó hibát jelez. */
-export function nextSpeechStep(plan: ReadonlyArray<SpeechStep>, index: number, outcome: StepOutcome): { next: number | null; exhausted: boolean } {
+export function nextSpeechStep(plan: ReadonlyArray<SpeechStep>, index: number, outcome: StepOutcome, options: { skipVoices?: boolean } = {}): { next: number | null; exhausted: boolean } {
   if (outcome === "done") return { next: null, exhausted: false };
-  return index + 1 < plan.length ? { next: index + 1, exhausted: false } : { next: null, exhausted: true };
+  // `skipVoices`: a böngészőhang-szakasz egészét át kell ugrani (a motor megszakította / nem engedte a kimondást — egy másik hang
+  // ugyanígy járna, és a rangsor legjobbja helyett szólna): a lánc a tartalékra lép.
+  let next = index + 1;
+  if (options.skipVoices) while (next < plan.length && plan[next].kind === "voice") next += 1;
+  return next < plan.length ? { next, exhausted: false } : { next: null, exhausted: true };
 }
 
 /** Miért nem szólt az előre gyártott hang. */

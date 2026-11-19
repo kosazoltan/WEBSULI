@@ -160,6 +160,8 @@ type ChainLog = {
   /** `unlock`: a lejátszást a hívó azonnal szüneteltette (iOS-feloldás a felhasználói mozdulatnál) — hang nem szól, nem lejátszási kísérlet. */
   played: Array<{ path: string; rate: number; preservesPitch: boolean; at: number; playingAt: number | null; unlock: boolean }>;
   audios: HTMLAudioElement[]; clickAt: number;
+  /** A közös beszédmotor `cancel()` hívásai, és hogy éppen „más beszél-e” (a lecke „Felolvasás” gombja, a kisfilm narrációja). */
+  cancels: number; foreignSpeaking: boolean;
 };
 type ChainOptions = {
   /** A jegyzék válasza: `all` — minden kért kulcs megvan; `none` — üres tár; szám — hibakód. */
@@ -168,8 +170,12 @@ type ChainOptions = {
   audio?: (route: import("@playwright/test").Route) => unknown;
   audioDelayMs?: number;
   voices?: Array<{ name: string; lang: string; localService: boolean }>;
-  /** `silent`: a motor semmilyen eseményt nem ad; `fail`: minden hang hibát ad; név: csak az a hang hibázik. */
-  engine?: "ok" | "silent" | "fail" | string;
+  /**
+   * `silent`: a motor semmilyen eseményt nem ad; `fail`: minden hang hibát ad; `android`: a `cancel()` utáni azonnali `speak()`-et a
+   * motor megszakítottnak jelzi (a repó A2 esete); név: csak az a hang hibázik. Felhasználói aktiváció nélkül a motor — mint a valódi
+   * Chrome — minden módban `not-allowed` hibát ad.
+   */
+  engine?: "ok" | "silent" | "fail" | "android" | string;
   /** Ennyi idő múlva jön a beszéd `start` eseménye (a motor saját indulási ideje — itt utánzott érték). */
   engineStartMs?: number;
   playRejects?: string;
@@ -177,18 +183,27 @@ type ChainOptions = {
 const WINDOWS_VOICES = [{ name: ZIRA, lang: "en-US", localService: true }, { name: HAZEL, lang: "en-GB", localService: true }, { name: SONIA, lang: "en-GB", localService: false }];
 async function preparedAudioPage(page: import("@playwright/test").Page, options: ChainOptions) {
   await page.addInitScript(({ voices, engine, engineStartMs, playRejects }) => {
-    const log: ChainLog = { speech: [], played: [], audios: [], clickAt: 0 };
+    const log: ChainLog = { speech: [], played: [], audios: [], clickAt: 0, cancels: 0, foreignSpeaking: false };
+    let interruptNext = false;
     Object.defineProperty(window, "__chain", { value: log });
     document.addEventListener("click", () => { log.clickAt = performance.now(); }, true);
     type Fake = { text: string; lang: string; volume: number; voice: { name: string } | null; onstart: (() => void) | null; onend: (() => void) | null; onerror: ((e: { error: string }) => void) | null };
     class FakeUtterance { lang = ""; rate = 1; volume = 1; voice: { name: string } | null = null; onstart = null; onend = null; onerror = null; constructor(public text: string) {} }
     Object.defineProperty(window, "SpeechSynthesisUtterance", { value: FakeUtterance, configurable: true });
     Object.defineProperty(window, "speechSynthesis", { value: {
-      speaking: false, pending: false, cancel() {}, getVoices: () => voices,
+      get speaking() { return log.foreignSpeaking; }, pending: false,
+      cancel() { log.cancels += 1; log.foreignSpeaking = false; interruptNext = true; },
+      getVoices: () => voices,
       speak(u: Fake) {
         const entry = { text: u.text, lang: u.lang, voice: u.voice?.name ?? null, volume: u.volume, at: performance.now() - log.clickAt, startedAt: null as number | null };
         log.speech.push(entry);
+        // A valódi Chrome felhasználói aktiváció nélkül nem enged kimondani.
+        if (!(navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive) { setTimeout(() => u.onerror?.({ error: "not-allowed" }), 0); return; }
         if (engine === "silent") return;
+        // Android Chrome: a `cancel()` utáni ELSŐ `speak()` megszakítottnak jelződik, mielőtt elindulna.
+        const interrupted = engine === "android" && interruptNext;
+        interruptNext = false;
+        if (interrupted) { setTimeout(() => u.onerror?.({ error: "interrupted" }), 5); return; }
         setTimeout(() => {
           if (engine === "fail" || u.voice?.name === engine) { u.onerror?.({ error: "synthesis-failed" }); return; }
           entry.startedAt = performance.now() - log.clickAt;
@@ -234,7 +249,9 @@ async function preparedAudioPage(page: import("@playwright/test").Page, options:
   });
   const word = ttsAudioPath(await ttsAudioHash("triangle", "en-GB"));
   const sentence = ttsAudioPath(await ttsAudioHash("This is a triangle.", "en-GB"));
-  const speechState = () => page.evaluate(() => (window as unknown as { __lessonSpeech(): { knowledge: { verified: string | null; silent: boolean }; probing: boolean; entries: Array<{ id: string; state: string }> } }).__lessonSpeech());
+  const speechState = () => page.evaluate(() => { const s = (window as unknown as { __lessonSpeech(): { knowledge: { verified: string | null; skip: Record<string, number>; silentTaps: number }; entries: Array<{ id: string; state: string }> } }).__lessonSpeech(); return { knowledge: s.knowledge, entries: s.entries }; });
+  const engineLog = () => page.evaluate(() => { const c = (window as unknown as { __chain: ChainLog }).__chain; return { cancels: c.cancels, foreignSpeaking: c.foreignSpeaking }; });
+  const setForeignSpeech = () => page.evaluate(() => { (window as unknown as { __chain: ChainLog }).__chain.foreignSpeaking = true; });
   const open = async () => {
     await page.goto("/__lesson-runtime-probe?candidate=1");
     await page.getByTestId("pronounce-entry").click();
@@ -254,7 +271,7 @@ async function preparedAudioPage(page: import("@playwright/test").Page, options:
   const say = (text: string) => page.getByRole("button", { name: `${text} meghallgatása`, exact: true }).click();
   /** A hallható (nem próba-) kimondások. */
   const spoken = async () => (await log()).speech.filter(s => s.volume > 0).map(({ text, lang, voice }) => ({ text, lang, voice }));
-  return { open, preloaded, log, say, spoken, speechState, requests, word, sentence };
+  return { open, preloaded, log, say, spoken, speechState, engineLog, setForeignSpeech, requests, word, sentence };
 }
 /** A tulajdonosnak szánt mért táblázat sorai a tesztjelentésbe (annotáció) és a kimenetre. */
 function measured(name: string, ms: number) {
@@ -356,40 +373,111 @@ test.describe("prepared audio", () => {
     });
   }
 
-  // E52: a hangmotor próbája az első mozdulat után, nulla hangerővel fut — koppintásra az igazolt hang szól.
-  test("a hangmotor próbája egyszer fut, hallhatatlanul; az igazolt böngészőhang koppintástól ≤ 1 s-on belül indul", async ({ page }) => {
+  // E52 (az S8d javítása után): KÉRETLEN kimondás nincs — a motorról a gyerek valódi koppintásai adnak ismeretet.
+  test("koppintás nélkül semmi nem mond ki; az első koppintás igazolja a hangot, a következőre az igazolt böngészőhang ≤ 1 s-on belül indul", async ({ page }) => {
     const { open, log, say, speechState } = await preparedAudioPage(page, { manifest: "none", engineStartMs: 150 });
     await open();
-    await expect.poll(async () => (await speechState()).knowledge.verified, { timeout: 5000 }).not.toBeNull();
-    const probes = (await log()).speech;
-    expect(probes.map(({ voice, volume }) => ({ voice, volume })), "egyetlen néma próba a rangsor legjobb hangjával").toEqual([{ voice: SONIA, volume: 0 }]);
-    await say("triangle");
-    await expect.poll(async () => (await log()).speech.find(s => s.volume > 0)?.startedAt ?? null).not.toBeNull();
-    const real = (await log()).speech.filter(s => s.volume > 0);
-    expect(real.map(s => s.voice)).toEqual([SONIA]);
-    measured("böngészőhang működő motorral (a motor utánzott indulási ideje 150 ms)", real[0].startedAt!);
-    expect(real[0].startedAt!, "koppintás → a beszéd `start` eseménye").toBeLessThanOrEqual(1000);
     await page.waitForTimeout(1500);
-    expect((await log()).speech.filter(s => s.volume === 0).length, "második próba nincs").toBe(1);
+    expect((await log()).speech, "megnyitás, jegyzék, várakozás: kimondás nincs (próba-megszólalás sincs)").toEqual([]);
+    await say("triangle");
+    await expect.poll(async () => (await log()).speech[0]?.startedAt ?? null).not.toBeNull();
+    const first = (await log()).speech[0];
+    expect({ voice: first.voice, volume: first.volume }).toEqual({ voice: SONIA, volume: 1 });
+    measured("böngészőhang, a munkamenet első koppintása (a motor utánzott indulási ideje 150 ms)", first.startedAt!);
+    expect(first.startedAt!).toBeLessThanOrEqual(1000);
+    await expect.poll(async () => (await speechState()).knowledge.verified).not.toBeNull();
+    await say("This is a triangle.");
+    await expect.poll(async () => (await log()).speech[1]?.startedAt ?? null).not.toBeNull();
+    const second = (await log()).speech[1];
+    expect(second.voice).toBe(SONIA);
+    measured("böngészőhang igazolt hanggal (a motor utánzott indulási ideje 150 ms)", second.startedAt!);
+    expect(second.startedAt!, "koppintás → a beszéd `start` eseménye").toBeLessThanOrEqual(1000);
+    expect((await log()).speech.length, "koppintásonként egy kimondás").toBe(2);
   });
 
-  test("néma motor, előre ismert: a próba a háttérben lefut, utána koppintásra a szerveres tartalék ≤ 1 s-on belül szól — nincs 3 mp-es csend", async ({ page }) => {
+  // Vak review B1: a közös beszédmotoron más is beszélhet (a lecke „Felolvasás” gombja, a kisfilm narrációja).
+  test("B1: más kimondása közben a lejátszó koppintás nélkül nem mond ki és nem szakít meg semmit — a „Meghallgatás” koppintás viszont igen", async ({ page }) => {
+    const { open, preloaded, log, say, engineLog, setForeignSpeech } = await preparedAudioPage(page, { manifest: "all", audioDelayMs: 300 });
+    await page.goto("/__lesson-runtime-probe?candidate=1");
+    await page.getByTestId("pronounce-entry").click();
+    // A fülváltás (mint eddig) leállítja a szóló hangot — az idegen kimondás ezért a fülváltás UTÁN indul.
+    await setForeignSpeech();
+    await preloaded();
+    await page.getByRole("heading", { name: "Szószedet · hallgasd és mondd utánam!" }).click();
+    await page.mouse.wheel(0, 200);
+    await page.waitForTimeout(4500);
+    expect(await engineLog(), "megnyitás, előtöltés, kattintás, görgetés, várakozás: a felolvasás tovább szól").toEqual({ cancels: 0, foreignSpeaking: true });
+    expect((await log()).speech).toEqual([]);
+    // A gyerek kifejezett koppintása — mint eddig — leállítja az éppen szóló hangot (egyszerre egy hang szól).
+    await say("triangle");
+    await expect.poll(async () => (await log()).played[0]?.playingAt ?? null).not.toBeNull();
+    expect(await engineLog()).toEqual({ cancels: 1, foreignSpeaking: false });
+  });
+
+  // Vak review B2: érintésnél a görgetés és a hosszú nyomás nem ad felhasználói aktivációt — a hangválasztást nem ronthatja el.
+  test("B2: görgetés és hosszú nyomás után (koppintás nélkül) nincs kimondás; az első valódi koppintásra a rangsor legjobb brit hangja szól", async ({ page }) => {
+    const { log, say, spoken, requests } = await preparedAudioPage(page, { manifest: "none" });
+    await page.goto("/__lesson-runtime-probe?candidate=1&tab=pronounce");
+    await page.mouse.wheel(0, 300);
+    await page.mouse.move(200, 300);
+    await page.mouse.down();
+    await page.waitForTimeout(1200);
+    await page.mouse.move(210, 420);
+    await page.waitForTimeout(3500);
+    expect((await log()).speech, "aktiváció nélkül a lejátszó meg sem próbál kimondani").toEqual([]);
+    await page.mouse.up();
+    await page.getByTestId("pronounce-entry").click();
+    await expect.poll(() => requests.manifest.length).toBe(1);
+    await say("triangle");
+    await expect.poll(spoken).toEqual([{ text: "triangle", lang: "en-GB", voice: SONIA }]);
+    await page.waitForTimeout(300);
+    expect((await log()).speech.map(s => s.voice), "nem a rangsor egy gyengébb hangja").toEqual([SONIA]);
+    expect(requests.fallback).toEqual([]);
+  });
+
+  // Vak review B3 (a repó A2 esete): Android Chrome a `cancel()` utáni azonnali `speak()`-et megszakítottnak jelzi.
+  test("B3: gyors két koppintás (az első még szól) után is a brit hang szól — a megszakítás nem a hang hibája", async ({ page }) => {
+    const { open, log, say, speechState, requests, setForeignSpeech } = await preparedAudioPage(page, { manifest: "none", engine: "android" });
+    await open();
+    await say("triangle");
+    await expect.poll(async () => (await log()).speech[0]?.startedAt ?? null).not.toBeNull();
+    // A második koppintáskor „még szól valami”: a lejátszó cancel()-t hív, majd azonnal speak()-et — a motor megszakítottnak jelzi.
+    await setForeignSpeech();
+    await say("This is a triangle.");
+    await expect.poll(async () => (await log()).speech.at(-1)?.startedAt ?? null, { timeout: 3000 }).not.toBeNull();
+    const speech = (await log()).speech;
+    expect(speech.map(s => s.voice), "az újrapróba ugyanazzal a brit hanggal megy, amerikai hang nem szól").toEqual([SONIA, SONIA, SONIA]);
+    expect((await speechState()).knowledge.skip, "negatív ítélet nem keletkezett").toEqual({});
+    await say("triangle");
+    await expect.poll(async () => (await log()).speech.length).toBe(4);
+    expect((await log()).speech[3].voice).toBe(SONIA);
+    expect(requests.fallback).toEqual([]);
+  });
+
+  test("néma motor: az első koppintás 3 mp után a tartalékra vált, a következő kettő ≤ 1 s-on belül; a negyedik újra megpróbálja a böngészőhangot", async ({ page }) => {
     const voices = [{ name: "English United Kingdom", lang: "en_GB", localService: true }, { name: "English United States", lang: "en_US", localService: true }];
     const { open, log, say, speechState, requests } = await preparedAudioPage(page, { manifest: "none", engine: "silent", voices });
     await open();
-    // A próba hangonként 3 mp-et vár (helyi hangok) — a háttérben, a gyerek erre nem vár.
-    await expect.poll(async () => (await speechState()).knowledge.silent, { timeout: 12000 }).toBe(true);
     await say("triangle");
-    await expect.poll(async () => (await log()).played[0]?.playingAt ?? null, { timeout: 3000 }).not.toBeNull();
-    const { played, speech } = await log();
-    expect(played[0].path).toBe("/api/tts/audio");
-    measured("néma motor, előre ismert → szerveres tartalék (helyi, azonnal válaszoló ál-végpont)", played[0].playingAt!);
-    expect(played[0].playingAt!).toBeLessThanOrEqual(1000);
-    expect(speech.filter(s => s.volume > 0), "a néma motort koppintáskor már nem próbálja").toEqual([]);
-    expect(requests.fallback.length).toBe(1);
+    await expect.poll(() => requests.fallback.length, { timeout: 5000 }).toBe(1);
+    const first = (await log()).played[0];
+    measured("néma motor, a munkamenet első koppintása → szerveres tartalék", first.at);
+    expect(first.at).toBeGreaterThan(2900);
+    expect(first.at).toBeLessThan(4000);
+    expect((await speechState()).knowledge.silentTaps).toBe(2);
+    for (const tap of [2, 3]) {
+      await say("triangle");
+      await expect.poll(async () => (await log()).played[tap - 1]?.playingAt ?? null, { timeout: 3000 }).not.toBeNull();
+      const played = (await log()).played[tap - 1];
+      if (tap === 2) measured("néma motor, a következő koppintás → szerveres tartalék (helyi, azonnal válaszoló ál-végpont)", played.playingAt!);
+      expect(played.playingAt!, `a ${tap}. koppintás nem vár 3 mp-et`).toBeLessThanOrEqual(1000);
+    }
+    expect((await log()).speech.length, "néma ítélet alatt a motort nem próbálja").toBe(1);
+    await say("triangle");
+    await expect.poll(async () => (await log()).speech.length).toBe(2);
+    expect((await log()).speech[1].voice, "az ítélet lejár: nem marad örökre a szerverhangon").toBe("English United Kingdom");
     await expect(page.getByText("A hang most nem érhető el ezen az eszközön.")).toHaveCount(0);
   });
-
   test("az első böngészőhang hibája → a legjobb telepített helyi hang szól, a szerveres tartalék nem", async ({ page }) => {
     const { open, say, spoken, requests } = await preparedAudioPage(page, { manifest: "none", engine: SONIA });
     await open();

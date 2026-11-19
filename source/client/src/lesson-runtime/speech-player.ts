@@ -1,10 +1,10 @@
 import {
   hasLaterLocalVoice, nextSpeechStep, preparedAudioCandidate, sizesFromManifest, speechPlan, voicePhaseBudgetMs, voiceStepTimeoutMs,
-  chainVoiceOrder, FALLBACK_AUDIO_START_TIMEOUT_MS, PREPARED_AUDIO_START_TIMEOUT_MS, type StepOutcome,
+  FALLBACK_AUDIO_START_TIMEOUT_MS, PREPARED_AUDIO_START_TIMEOUT_MS, type StepOutcome,
 } from "../../../shared/speech-chain";
 import { isSoftSpeechError, ttsAudioUrl } from "../../../shared/speech-fallback";
 import {
-  engineAfter, engineAfterRound, failureActive, mergeStoredManifest, nextPreloads, preloadPlan, prioritized, probeTimeoutMs, readStoredManifest,
+  engineAfter, engineAfterRound, engineAged, failureActive, manifestRetryDelayMs, mergeStoredManifest, nextPreloads, preloadPlan, prioritized, readStoredManifest,
   retryDelayMs, voiceKey, SPEECH_PRELOAD, UNKNOWN_ENGINE, type EngineKnowledge, type VoiceOutcome,
 } from "../../../shared/speech-preload";
 import { hasPreparedAudio, ttsAudioAvailabilityUrl, ttsAudioPath, TTS_AUDIO_AVAILABILITY_MAX_KEYS, TTS_VOICE_VERSION } from "../../../shared/tts-audio-key";
@@ -40,19 +40,17 @@ export type SpeechEnv = {
   /** undefined: nincs `SpeechSynthesisUtterance`. */
   createUtterance(text: string): UtteranceLike | undefined;
   hash(text: string, language: string): Promise<string>;
-  /** A jegyzék JSON-ja; null: nem sikeres válasz (pl. 429). Hálózati hibára elutasít. */
-  fetchManifest(url: string, signal: AbortSignal): Promise<unknown | null>;
+  /** A jegyzék JSON-ja; nem sikeres válasznál (pl. 429) a szerver `Retry-After` értéke (ms), ha adott. Hálózati hibára elutasít. */
+  fetchManifest(url: string, signal: AbortSignal): Promise<{ ok: true; body: unknown } | { ok: false; retryAfterMs: number | null }>;
   connection(): { saveData?: boolean; effectiveType?: string; online: boolean };
   /** A helyben megőrzött utolsó jegyzék (csak lenyomatok és méretek). */
   storage?: { read(): unknown; write(value: unknown): void };
 };
 
 type Entry = { id: string; audio: AudioLike | null; state: "queued" | "loading" | "ready" | "waiting" | "failed"; attempts: number; failedAt: number | null; timer: unknown };
-type Lesson = { language: string; ids: string[]; controller: AbortController; manifestUrl: string | null; manifestAt: number | null };
+type Lesson = { language: string; ids: string[]; controller: AbortController; manifestUrl: string | null; manifestAt: number | null; retries: number; retryTimer: unknown };
 type StepDone = (outcome: StepOutcome) => void;
 type PreparedFailure = "error" | "timeout" | "not-allowed" | "aborted";
-/** Az első felhasználói mozdulat után ennyivel indul a hangmotor próbája (hogy a mozdulat saját kimondása elé ne álljon be). */
-export const PROBE_DELAY_MS = 600;
 
 export function createSpeechPlayer(env: SpeechEnv) {
   const preparedIds = new Map<string, string>();
@@ -61,10 +59,10 @@ export function createSpeechPlayer(env: SpeechEnv) {
   let pending: string[] = [];
   let lesson: Lesson | null = null;
   let visible = true;
-  let knowledge: EngineKnowledge = UNKNOWN_ENGINE;
-  let probe: { cancel(): void } | null = null;
-  let probed = false;
-  let probeTimer: unknown = null;
+  /** A hangmotor ismerete a lecke NYELVE szerint (egy német lecke néma hangja nem némíthatja el az angol leckét). */
+  const knowledge = new Map<string, EngineKnowledge>();
+  /** Van-e a beszédsorban a lejátszó SAJÁT, még le nem zárt kimondása. */
+  let ownUtterance = false;
   let activeAudio: AudioLike | null = null;
   let cancelActive: (() => void) | null = null;
   const preparedKey = (text: string, language: string) => `${language}\n${text}`;
@@ -157,15 +155,19 @@ export function createSpeechPlayer(env: SpeechEnv) {
     if (!owner.manifestUrl) return;
     owner.manifestAt = env.now();
     try {
-      const body = await env.fetchManifest(owner.manifestUrl, owner.controller.signal);
-      if (body !== null) applyManifest(owner, sizesFromManifest(body, owner.ids), true);
+      const reply = await env.fetchManifest(owner.manifestUrl, owner.controller.signal);
+      if (reply.ok) { applyManifest(owner, sizesFromManifest(reply.body, owner.ids), true); return; }
+      // Elutasított kérés (429): a szerver `Retry-After` értékét tiszteletben tartva, felső korláttal próbálunk újra — addig a böngészőhang szól.
+      if (lesson !== owner || owner.retries >= SPEECH_PRELOAD.manifestRetries) return;
+      owner.retries += 1;
+      owner.retryTimer = env.setTimeout(() => { owner.retryTimer = null; if (lesson === owner) void loadManifest(owner); }, manifestRetryDelayMs(reply.retryAfterMs));
     } catch { /* hálózati hiba vagy megszakítás: a helyben megőrzött jegyzék marad érvényben */ }
   }
 
   /** A lecke megnyitása: kulcsok, jegyzék (egy kérés), majd előtöltés üresjáratban. Más nyelvű leckénél nincs hangtár-forgalom. */
   function prepareLesson(texts: readonly string[], language: string): void {
     release();
-    const owner: Lesson = { language, ids: [], controller: new AbortController(), manifestUrl: null, manifestAt: null };
+    const owner: Lesson = { language, ids: [], controller: new AbortController(), manifestUrl: null, manifestAt: null, retries: 0, retryTimer: null };
     lesson = owner;
     if (!hasPreparedAudio(language)) return;
     const unique = Array.from(new Set(texts.filter((text) => text.trim()))).slice(0, TTS_AUDIO_AVAILABILITY_MAX_KEYS);
@@ -187,8 +189,9 @@ export function createSpeechPlayer(env: SpeechEnv) {
 
   /** A lecke elhagyása / leckeváltás: a letöltések megszakadnak, a hangelemek felszabadulnak, a régi lecke hangja nem szólalhat meg. */
   function release(): void {
-    stop();
-    cancelProbe();
+    // A lecke megnyitása / elhagyása nem a gyerek kifejezett „hallgass el” mozdulata: idegen kimondást nem szakít meg.
+    stop(false);
+    if (lesson) env.clearTimeout(lesson.retryTimer);
     lesson?.controller.abort();
     lesson = null;
     entries.forEach(detach);
@@ -204,85 +207,40 @@ export function createSpeechPlayer(env: SpeechEnv) {
     pump();
   }
 
-  // ---- A hangmotor munkamenet-szintű próbája -------------------------------------------------------------------------------------
-  function cancelProbe(): void { env.clearTimeout(probeTimer); probeTimer = null; probe?.cancel(); probe = null; }
-  /** A hanglista megváltozott (`voiceschanged`): az addigi ismeret a régi listára szólt — a következő mozdulatnál új próba fut. */
-  function voicesChanged(): void { cancelProbe(); knowledge = UNKNOWN_ENGINE; probed = false; }
-  function startProbe(): void {
-    const synth = env.synth();
-    const language = lesson?.language;
-    // Ha éppen valódi kimondás fut, annak a kimenetele adja az ismeretet (próba nem kell); a következő mozdulat újra ütemezhet.
-    if (probed || probe || !synth || !language || cancelActive) return;
-    if (knowledge.verified !== null || knowledge.silent) { probed = true; return; }
-    const list = voices();
-    // Üres hanglistánál (Android: később töltődik) a próba vár: a `voiceschanged` után, a következő mozdulatnál fut. Hang nélküli
-    // („a lang dönt”) próbát nem indítunk — arról a valódi kimondás kimenetele ad ismeretet.
-    if (!list.length) return;
-    const candidates: VoiceLike[] = chainVoiceOrder(list, language, !env.connection().online).map((index) => list[index]);
-    if (!candidates.length) { probed = true; return; }
-    probed = true;
-    const outcomes: VoiceOutcome[] = [];
-    let cancelled = false;
-    let timer: unknown = null;
-    const finish = () => { env.clearTimeout(timer); if (probe === handle) probe = null; };
-    const handle = { cancel() { cancelled = true; env.clearTimeout(timer); if (synth.speaking || synth.pending) synth.cancel(); } };
-    probe = handle;
-    const attempt = (at: number) => {
-      const voice = candidates[at];
-      // Nulla hangerejű, rövid próba: a `start` esemény a hangerőtől függetlenül megjön, a gyerek semmit nem hall.
-      const utterance = env.createUtterance("a");
-      if (!utterance) { finish(); return; }
-      utterance.lang = language;
-      utterance.volume = 0;
-      utterance.rate = 1;
-      if (voice) { try { utterance.voice = voice; } catch { /* a lang dönt */ } }
-      let settled = false;
-      const settle = (outcome: VoiceOutcome) => {
-        if (settled || cancelled) return;
-        settled = true;
-        env.clearTimeout(timer);
-        outcomes.push(outcome);
-        knowledge = engineAfter(knowledge, voiceKey(voice), outcome);
-        if (outcome !== "started" && (synth.speaking || synth.pending)) synth.cancel();
-        if (outcome === "started" || at + 1 >= candidates.length) { knowledge = engineAfterRound(knowledge, outcomes); finish(); return; }
-        attempt(at + 1);
-      };
-      utterance.onstart = () => settle("started");
-      utterance.onboundary = () => settle("started");
-      utterance.onend = () => settle("started");
-      utterance.onerror = (event) => { if (!isSoftSpeechError(event?.error)) settle("error"); };
-      // A próba a háttérben fut: itt a hálózati hang megkapja a teljes türelmét (6 mp), a gyerek erre nem vár.
-      timer = env.setTimeout(() => settle("timeout"), probeTimeoutMs(voice));
-      try { synth.speak(utterance); } catch { settle("error"); }
-    };
-    attempt(0);
-  }
+  // ---- A hangmotor munkamenet-szintű ismerete (kizárólag valódi koppintásokból) ----------------------------------------------------
+  const knowledgeFor = (language: string): EngineKnowledge => knowledge.get(language.toLowerCase()) ?? UNKNOWN_ENGINE;
+  const learn = (language: string, update: (current: EngineKnowledge) => EngineKnowledge) => { knowledge.set(language.toLowerCase(), update(knowledgeFor(language))); };
+  /** A hanglista megváltozott (`voiceschanged`): az addigi ismeret a régi listára szólt — újraépül a következő koppintásokból. */
+  function voicesChanged(): void { knowledge.clear(); }
   /**
-   * Az első felhasználói mozdulat: (1) a hangmotor próbája; (2) iOS: a böngésző a hangelem letöltését gesztushoz kötheti — a már
-   * elindított, még nem kész letöltések „feloldása” (lejátszás + azonnali szünet: hang nem szól, a letöltés elindul).
+   * Valódi koppintás (`click`) a lapon — iOS: a böngésző a hangelem letöltését felhasználói aktivációhoz kötheti, ezért a már elindított,
+   * még nem kész letöltéseket „megérintjük” (lejátszás + azonnali szünet: hang nem szól, a letöltés elindul). Itt SEMMI nem mond ki,
+   * nem áll a beszédsorba és nem szakít meg kimondást — a beszédmotorhoz a lejátszó csak a „Meghallgatás” koppintására nyúl.
    */
-  function noteUserGesture(): void {
+  function noteUserActivation(): void {
     entries.forEach((entry) => {
       if (entry.state !== "loading" || !entry.audio || entry.audio === activeAudio) return;
       const audio = entry.audio;
       try { audio.play().catch(() => { /* a feloldás nem hiba */ }); audio.pause(); } catch { /* hiányos felület */ }
     });
-    // A próba nem a mozdulat pillanatában indul: ha a mozdulat maga egy „Meghallgatás” koppintás, a valódi kimondás elé nem állhat
-    // be (Android: a `cancel()` utáni azonnali `speak()` megszakadhat). A beszédmotorhoz elég, hogy a lapon már volt felhasználói mozdulat.
-    if (!probed && !probe && probeTimer === null) probeTimer = env.setTimeout(() => { probeTimer = null; startProbe(); }, PROBE_DELAY_MS);
   }
-
   // ---- Lejátszás ------------------------------------------------------------------------------------------------------------------
-  /** Minden hang leállítása: böngészőhang, előre gyártott hang, tartalék MP3 és az indulási őrök (új koppintás, fülváltás, a lecke elhagyása). */
-  function stop(): void {
+  /**
+   * Minden hang leállítása: böngészőhang, előre gyártott hang, tartalék MP3 és az indulási őrök. `foreignSpeech`: a közös beszédmotor
+   * más kimondását (a lecke „Felolvasás” gombja, a kisfilm narrációja) CSAK a gyerek kifejezett mozdulata állíthatja le (új
+   * „Meghallgatás” koppintás, fülváltás — egyszerre egy hang szól). A lecke megnyitása / elhagyása és a háttérmunka csak a lejátszó
+   * SAJÁT kimondását szakítja meg.
+   */
+  function stop(foreignSpeech = true): void {
     cancelActive?.();
     cancelActive = null;
     if (activeAudio) { activeAudio.pause(); activeAudio = null; }
     const synth = env.synth();
+    const own = ownUtterance;
+    ownUtterance = false;
     // Android Chrome: a feltétel nélküli cancel() közvetlenül a speak() előtt az új kimondást is megszakíthatja.
-    if (synth && (synth.speaking || synth.pending)) synth.cancel();
+    if (synth && (foreignSpeech || own) && (synth.speaking || synth.pending)) synth.cancel();
   }
-
   /** 1. lépés: az előre gyártott hang. Kész (pufferelt) elemnél a lejátszás azonnal indul; nem késznél kérésre töltődik. */
   function playPrepared(id: string, rate: number, done: StepDone): () => void {
     let entry = entries.get(id);
@@ -326,45 +284,60 @@ export function createSpeechPlayer(env: SpeechEnv) {
     return () => { settled = true; env.clearTimeout(watchdog); audio.onplaying = null; };
   }
 
-  /** 2. lépés: a böngésző egy hangja. A kimenetel a munkamenet-ismeretbe kerül (igazolt / elbukott hang). */
-  function speakWithVoice(synth: SynthLike, text: string, language: string, rate: number, voice: VoiceLike | undefined, startTimeoutMs: number, outcomes: VoiceOutcome[], done: StepDone): () => void {
+  /**
+   * 2. lépés: a böngésző egy hangja. A kimenetel a nyelv munkamenet-ismeretébe kerül: a `start` esemény igazolja a hangot; a kemény
+   * hiba és az esemény nélküli lejárat LEJÁRÓ negatív ítélet. A megszakítás és a hiányzó aktiváció nem a hang hibája.
+   */
+  function speakWithVoice(synth: SynthLike, text: string, language: string, rate: number, voice: VoiceLike | undefined, startTimeoutMs: number, outcomes: VoiceOutcome[], done: (outcome: StepOutcome, skipVoices?: boolean) => void): () => void {
     // A szakasz csendkerete elfogyott: ez a hang már nem próbálkozik (a lánc a tartalékra lép).
     if (startTimeoutMs <= 0) { done("failed"); return () => {}; }
-    const utterance = env.createUtterance(text);
-    if (!utterance) { done("failed"); return () => {}; }
-    utterance.lang = language;
-    utterance.rate = rate;
-    // A motor a nem saját hangobjektumot elutasítja: ilyenkor a `lang` beállítás dönt.
-    if (voice) { try { utterance.voice = voice; } catch { /* a lang dönt */ } }
     let settled = false;
     let started = false;
-    const note = (outcome: VoiceOutcome) => { outcomes.push(outcome); knowledge = engineAfter(knowledge, voiceKey(voice), outcome); };
-    const finish = (outcome: StepOutcome, failure?: VoiceOutcome) => {
+    let retried = false;
+    const note = (outcome: VoiceOutcome) => { outcomes.push(outcome); learn(language, (current) => engineAfter(current, voiceKey(voice), outcome)); };
+    const finish = (outcome: StepOutcome, failure?: VoiceOutcome, skipVoices?: boolean) => {
       if (settled) return;
       settled = true;
       env.clearTimeout(watchdog);
+      ownUtterance = false;
       if (failure) note(failure);
+      // Az el nem indult / elbukott SAJÁT kimondás nem maradhat a beszédsorban (különben a következő lépés alatt megszólalna).
       if (outcome === "failed" && (synth.speaking || synth.pending)) synth.cancel();
-      done(outcome);
+      done(outcome, skipVoices);
     };
     const begin = () => { if (!started) { started = true; note("started"); } };
-    // Védőháló: ha a kimondás a kapott időn belül nem indul el, a következő lépés jön (igazolt hangnál ez ritka — a próba már lefutott).
+    // Védőháló: ha a kimondás a kapott időn belül nem indul el, a következő lépés jön (igazolt hangnál ez ritka).
     const watchdog = env.setTimeout(() => { if (!started) finish("failed", "timeout"); }, startTimeoutMs);
-    utterance.onstart = begin;
-    // Egyes motorok `onstart` nélkül szólnak: a szóhatár-esemény is indulás.
-    utterance.onboundary = begin;
-    utterance.onend = () => finish("done");
-    utterance.onerror = (e: { error?: string }) => {
-      if (settled) return;
-      // A megszakítás (új koppintás, fülváltás) nem hiba: se másik hang, se üzenet. Ide csak a motor saját megszakítása jut: ha a kimondás
-      // el sem indult (Android Chrome: a `cancel()` utáni azonnali `speak()`), a tanuló semmit sem hallott — a következő lépés szól.
-      if (isSoftSpeechError(e?.error) && started) { finish("done"); return; }
-      finish("failed", started ? undefined : "error");
+    const say = (): boolean => {
+      const utterance = env.createUtterance(text);
+      if (!utterance) return false;
+      utterance.lang = language;
+      utterance.rate = rate;
+      // A motor a nem saját hangobjektumot elutasítja: ilyenkor a `lang` beállítás dönt.
+      if (voice) { try { utterance.voice = voice; } catch { /* a lang dönt */ } }
+      utterance.onstart = begin;
+      // Egyes motorok `onstart` nélkül szólnak: a szóhatár-esemény is indulás.
+      utterance.onboundary = begin;
+      utterance.onend = () => finish("done");
+      utterance.onerror = (e: { error?: string }) => {
+        if (settled) return;
+        // A megszakítás (új koppintás, fülváltás) nem hiba: se másik hang, se üzenet.
+        if (isSoftSpeechError(e?.error) && started) { finish("done"); return; }
+        if (started) { finish("failed"); return; }
+        // El sem indult, a motor mégis megszakítottnak jelzi (Android Chrome: a `cancel()` utáni azonnali `speak()`): NEM a hang hibája —
+        // ugyanaz a hang kap egy újrapróbát; ha az is megszakad, a lánc a tartalékra lép (más, gyengébb hang nem szól helyette).
+        if (isSoftSpeechError(e?.error)) { if (!retried) { retried = true; if (say()) return; } finish("failed", undefined, true); return; }
+        // Hiányzó felhasználói aktiváció: a böngésző nem engedi a kimondást — ez sem a hang hibája, és másik hang ugyanígy járna.
+        if (e?.error === "not-allowed") { finish("failed", undefined, true); return; }
+        finish("failed", "error");
+      };
+      ownUtterance = true;
+      try { synth.speak(utterance); } catch { return false; }
+      return true;
     };
-    try { synth.speak(utterance); } catch { finish("failed", "error"); }
+    if (!say()) finish("failed", "error");
     return () => { settled = true; env.clearTimeout(watchdog); };
   }
-
   /** 3. lépés: a szerver MP3-a azonos eredetről (/api/tts/audio). Lógó válasznál az őr hibára visz — üzenet jön, nem csend. */
   function playFallback(text: string, language: string, rate: number, done: StepDone): () => void {
     const url = ttsAudioUrl(text, language);
@@ -408,12 +381,14 @@ export function createSpeechPlayer(env: SpeechEnv) {
    */
   function speak(text: string, language: string, rate: number, onError?: () => void): void {
     stop();
-    cancelProbe();
     const synth = env.synth();
     const list = voices();
     const synthAvailable = !!synth && env.createUtterance("") !== undefined;
+    // A terv a koppintás ELŐTTI ismeretből készül; a koppintás a lejáró negatív ítéletek egy egységét „elhasználja”.
+    const engine = knowledgeFor(language);
+    learn(language, engineAged);
     const plan = speechPlan({
-      language, voices: list, synthAvailable, prepared: preparedFor(text, language), engine: knowledge,
+      language, voices: list, synthAvailable, prepared: preparedFor(text, language), engine,
       offline: !env.connection().online, fallbackAvailable: !!ttsAudioUrl(text, language),
     });
     let cancelled = false;
@@ -423,9 +398,9 @@ export function createSpeechPlayer(env: SpeechEnv) {
     // A böngészőhang-szakasz összesített csendkerete az első hanglépés indulásától számít.
     let voicePhase: { startedAt: number; budgetMs: number } | null = null;
     const voiceOutcomes: VoiceOutcome[] = [];
-    // A böngészőhang-szakasz lezárása (a tartalék indulásakor vagy a lánc végén): ha egyik hang sem adott eseményt, a motor néma —
-    // a következő koppintás már nem várja végig a csendkeretet.
-    const closeVoicePhase = () => { if (voiceOutcomes.length) knowledge = engineAfterRound(knowledge, voiceOutcomes.splice(0)); };
+    // A böngészőhang-szakasz lezárása (a tartalék indulásakor vagy a lánc végén): ha egyik hang sem adott eseményt, a motor a következő
+    // koppintásokra némának számít — azok nem várják végig újra a csendkeretet.
+    const closeVoicePhase = () => { const outcomes = voiceOutcomes.splice(0); if (outcomes.length) learn(language, (current) => engineAfterRound(current, outcomes)); };
     const end = (failed: boolean) => {
       if (cancelActive === cancel) cancelActive = null;
       closeVoicePhase();
@@ -437,14 +412,14 @@ export function createSpeechPlayer(env: SpeechEnv) {
       // A lépés a `done`-t szinkron is hívhatja (pl. elfogyott csendkeret): a következő lépés csak a megszakító beállítása UTÁN indul,
       // különben a külső értékadás felülírná az új lépés megszakítóját.
       let started = false;
-      let early: StepOutcome | null = null;
-      const proceed = (outcome: StepOutcome) => {
+      let early: { outcome: StepOutcome; skipVoices?: boolean } | null = null;
+      const proceed = (outcome: StepOutcome, skipVoices?: boolean) => {
         if (cancelled) return;
-        const { next, exhausted } = nextSpeechStep(plan, index, outcome);
+        const { next, exhausted } = nextSpeechStep(plan, index, outcome, { skipVoices });
         if (next !== null) { run(next); return; }
         end(exhausted);
       };
-      const done: StepDone = (outcome) => { if (started) proceed(outcome); else early = outcome; };
+      const done = (outcome: StepOutcome, skipVoices?: boolean) => { if (started) proceed(outcome, skipVoices); else early = { outcome, skipVoices }; };
       if (step.kind === "prepared") cancelStep = playPrepared(step.id, rate, done);
       else if (step.kind === "voice") {
         const voice = step.voiceIndex === null ? undefined : list[step.voiceIndex];
@@ -453,16 +428,16 @@ export function createSpeechPlayer(env: SpeechEnv) {
         cancelStep = speakWithVoice(synth!, text, language, rate, voice, startTimeoutMs, voiceOutcomes, done);
       } else { closeVoicePhase(); cancelStep = playFallback(text, language, rate, done); }
       started = true;
-      if (early !== null) proceed(early);
+      const pendingEarly = early as { outcome: StepOutcome; skipVoices?: boolean } | null;
+      if (pendingEarly) proceed(pendingEarly.outcome, pendingEarly.skipVoices);
     };
     run(0);
   }
-
   return {
-    prepareLesson, release, setVisible, voicesChanged, noteUserGesture, speak, stop,
+    prepareLesson, release, setVisible, voicesChanged, noteUserActivation, speak, stop,
     /** Állapot a tesztekhez és a méréshez. */
     inspect: () => ({
-      knowledge, probing: probe !== null, lessonLanguage: lesson?.language ?? null, pending: [...pending],
+      knowledge: knowledgeFor(lesson?.language ?? ""), knowledgeFor, lessonLanguage: lesson?.language ?? null, pending: [...pending],
       entries: Array.from(entries.values(), (entry) => ({ id: entry.id, state: entry.state, attempts: entry.attempts })),
       available: Array.from(availableSizes.keys()),
     }),

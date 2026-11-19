@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { createSpeechPlayer, PROBE_DELAY_MS, type AudioLike, type SpeechEnv, type SynthLike, type UtteranceLike, type VoiceLike } from "../client/src/lesson-runtime/speech-player";
-import { voiceKey } from "../shared/speech-preload";
+import { createSpeechPlayer, type AudioLike, type SpeechEnv, type SynthLike, type UtteranceLike, type VoiceLike } from "../client/src/lesson-runtime/speech-player";
+import { voiceKey, UNKNOWN_ENGINE } from "../shared/speech-preload";
 
 // Terv 2026-11-18-tananyag-gyartas-minoseg, S8d: a lejátszó BEKÖTÉSE ál-órával és ál-környezettel (hangelem, beszédmotor, jegyzék).
 // A valódi `createSpeechPlayer` fut; a böngésző felületeit a teszt adja, az időt a teszt lépteti.
@@ -22,8 +22,18 @@ function harness(options: { voices?: VoiceLike[]; manifest?: "all" | "none" | ((
   const audios: FakeAudio[] = [];
   const spoken: FakeUtterance[] = [];
   const idle: Array<() => void> = [];
-  const state = { cancels: 0, manifestCalls: [] as string[], manifestMode: options.manifest ?? "all" as "all" | "none" | "reject" | "limited" | ((keys: string[]) => unknown), connection: { online: true, ...options.connection } as { saveData?: boolean; effectiveType?: string; online: boolean }, stored: null as unknown, voices: options.voices ?? [HAZEL, ZIRA, SONIA], size: 20_000 };
-  const synth: SynthLike = { speaking: false, pending: false, getVoices: () => state.voices, speak(utterance) { spoken.push(utterance as FakeUtterance); }, cancel() { state.cancels += 1; synth.speaking = false; synth.pending = false; } };
+  const state = { cancels: 0, activated: true, retryAfterMs: null as number | null, signals: [] as AbortSignal[], manifestCalls: [] as string[], manifestMode: options.manifest ?? "all" as "all" | "none" | "reject" | "limited" | ((keys: string[]) => unknown), connection: { online: true, ...options.connection } as { saveData?: boolean; effectiveType?: string; online: boolean }, stored: null as unknown, voices: options.voices ?? [HAZEL, ZIRA, SONIA], size: 20_000 };
+  // Az ál-motor a valódi szabályokat utánozza: felhasználói aktiváció nélkül `not-allowed` hibaeseményt ad; a kimondás a közös
+  // beszédsorba kerül (`speaking`), amelyet a `cancel()` ürít — így látszik, ha a lejátszó idegen kimondást szakít meg.
+  const synth: SynthLike = {
+    speaking: false, pending: false, getVoices: () => state.voices,
+    speak(utterance) {
+      spoken.push(utterance as FakeUtterance);
+      if (!state.activated) { utterance.onerror?.({ error: "not-allowed" }); return; }
+      synth.speaking = true;
+    },
+    cancel() { state.cancels += 1; synth.speaking = false; synth.pending = false; },
+  };
   const env: SpeechEnv = {
     now: () => now,
     setTimeout: (callback, ms) => { const handle = nextTimer++; timers.set(handle, { at: now + ms, callback }); return handle; },
@@ -47,13 +57,14 @@ function harness(options: { voices?: VoiceLike[]; manifest?: "all" | "none" | ((
     hash: async (text, language) => hashOf(text, language),
     fetchManifest: async (url, signal) => {
       state.manifestCalls.push(url);
+      state.signals.push(signal);
       const keys = new URL(url, "http://x").searchParams.get("keys")!.split(",");
       if (state.manifestMode === "reject") throw new Error("offline");
-      if (state.manifestMode === "limited") return null;
+      if (state.manifestMode === "limited") return { ok: false as const, retryAfterMs: state.retryAfterMs };
       if (signal.aborted) throw new Error("aborted");
-      if (typeof state.manifestMode === "function") return state.manifestMode(keys);
+      if (typeof state.manifestMode === "function") return { ok: true as const, body: await state.manifestMode(keys) };
       const available = state.manifestMode === "all" ? keys : [];
-      return { available, sizes: Object.fromEntries(available.map((key) => [key, state.size])) };
+      return { ok: true as const, body: { available, sizes: Object.fromEntries(available.map((key) => [key, state.size])) } };
     },
     connection: () => state.connection,
     storage: { read: () => state.stored, write: (value) => { state.stored = value; } },
@@ -320,6 +331,48 @@ test("üres tár és hibás jegyzék (429, hálózati hiba): hangfájl-kérés e
   }
 });
 
+test("elutasított jegyzék-kérés (429): a szerver Retry-After értéke szerint, felső korláttal, legfeljebb kétszer próbál újra — addig a böngészőhang szól", async () => {
+  const h = harness();
+  h.state.manifestMode = "limited";
+  h.state.retryAfterMs = 900_000;
+  await h.open(words(2));
+  assert.equal(h.state.manifestCalls.length, 1);
+  h.say("word 1");
+  assert.equal(h.spoken.length, 1, "addig a böngészőhang szól");
+  h.spoken[0].onstart?.(); h.spoken[0].onend?.();
+  h.advance(119_999);
+  await h.settle();
+  assert.equal(h.state.manifestCalls.length, 1, "a 15 perces Retry-After felső korlátja 2 perc — addig nem zaklatja a szervert");
+  h.advance(1);
+  await h.settle();
+  assert.equal(h.state.manifestCalls.length, 2);
+  h.advance(120_000);
+  await h.settle();
+  assert.equal(h.state.manifestCalls.length, 3);
+  h.advance(600_000);
+  await h.settle();
+  assert.equal(h.state.manifestCalls.length, 3, "legfeljebb két újrapróba");
+  // Rövid Retry-After: a szerver kérése szerint (de legalább 5 mp múlva); sikeres újrapróba után indul az előtöltés.
+  const g = harness();
+  g.state.manifestMode = "limited";
+  g.state.retryAfterMs = 10_000;
+  await g.open(words(2));
+  g.state.manifestMode = "all";
+  g.advance(9999);
+  await g.settle();
+  assert.equal(g.state.manifestCalls.length, 1);
+  g.advance(1);
+  await g.settle(); g.runIdle();
+  assert.equal(g.state.manifestCalls.length, 2);
+  assert.equal(g.loading().length, 2, "a megérkezett jegyzék után az előtöltés elindul");
+  // A lecke elhagyása a függő újrapróbát is törli.
+  const k = harness();
+  k.state.manifestMode = "limited";
+  await k.open(words(1));
+  k.player.release();
+  assert.equal(k.timers.size, 0);
+});
+
 test("hálózat nélküli újranyitás: a helyben megőrzött jegyzékből indul az előtöltés (a hangok a tartós gyorsítótárból jönnek)", async () => {
   const h = harness();
   await h.open(words(2));
@@ -341,90 +394,177 @@ test("adatkímélő mód: csak az első szakasz (12 szöveg) töltődik elő", a
   assert.equal(h.player.inspect().entries.length, 12);
 });
 
-test("a hangmotor próbája egyszer fut a munkamenetben: nulla hangerővel, az első mozdulat után; az igazolt hang koppintásra azonnal szól", async () => {
+test("pozitív bizonyíték: az első koppintás `start` eseménye igazolja a hangot — a következő koppintásokra közvetlenül az szól", async () => {
   const h = harness();
   h.state.manifestMode = "none";
   await h.open(words(2));
-  assert.equal(h.spoken.length, 0, "felhasználói mozdulat előtt nincs próba");
-  h.player.noteUserGesture();
-  assert.equal(PROBE_DELAY_MS, 600);
-  h.advance(599);
-  assert.equal(h.spoken.length, 0, "a próba nem a mozdulat pillanatában indul (a mozdulat saját kimondása elé nem állhat be)");
-  h.advance(1);
-  assert.equal(h.spoken.length, 1);
-  assert.deepEqual([h.spoken[0].volume, h.spoken[0].voice, h.spoken[0].lang], [0, SONIA, "en-GB"], "néma próba a rangsor legjobb hangjával");
-  // A hálózati hang a próbában megkapja a 6 mp-es türelmét: 5 mp-nél még vár…
-  h.advance(5000);
-  assert.equal(h.spoken.length, 1);
+  h.advance(60_000);
+  assert.equal(h.spoken.length, 0, "koppintás nélkül semmi nem mond ki (kéretlen próba nincs)");
+  assert.deepEqual(h.player.inspect().knowledge, UNKNOWN_ENGINE);
+  h.say("word 1");
+  assert.deepEqual([h.spoken[0].voice, h.spoken[0].volume], [SONIA, 1]);
   h.spoken[0].onstart?.();
   assert.equal(h.player.inspect().knowledge.verified, voiceKey(SONIA));
-  assert.equal(h.player.inspect().probing, false);
-  h.player.noteUserGesture();
-  h.advance(10_000);
-  assert.equal(h.spoken.length, 1, "második próba nincs");
-  h.say("word 1");
-  assert.equal(h.spoken.length, 2);
-  assert.deepEqual([h.spoken[1].voice, h.spoken[1].volume], [SONIA, 1], "koppintásra az igazolt hang szól, teljes hangerővel");
+  h.spoken[0].onend?.();
+  for (let tap = 0; tap < 4; tap++) { h.say("word 2"); h.spoken.at(-1)?.onstart?.(); h.spoken.at(-1)?.onend?.(); }
+  assert.deepEqual(h.spoken.map((u) => u.voice), [SONIA, SONIA, SONIA, SONIA, SONIA]);
+  assert.equal(h.audios.length, 0);
 });
 
-test("néma motor: a próba végigmegy a hangokon (6 + 3 + 3 mp a háttérben), utána a felület ELŐRE tudja — koppintásra nincs böngészőhang-kör", async () => {
-  const h = harness();
-  h.state.manifestMode = "none";
-  await h.open(words(2));
-  h.player.noteUserGesture();
-  h.advance(PROBE_DELAY_MS);
-  h.advance(6000);
-  assert.deepEqual(h.spoken.map((u) => u.voice), [SONIA, HAZEL], "a néma hálózati hang után a helyi hang próbája");
-  h.advance(3000);
-  h.advance(3000);
-  assert.deepEqual(h.spoken.map((u) => u.voice), [SONIA, HAZEL, ZIRA]);
-  assert.ok(h.spoken.every((u) => u.volume === 0));
-  assert.equal(h.player.inspect().knowledge.silent, true);
-  const before = h.spoken.length;
-  h.say("word 1");
-  assert.equal(h.spoken.length, before, "néma motornál a böngészőhang-lépés kimarad");
-  const fallback = h.audios.at(-1)!;
-  assert.match(fallback.src, /^\/api\/tts\/audio\?text=word\+1&lang=en$/);
-  assert.equal(fallback.plays, 1, "a szerveres tartalék a koppintásban, várakozás nélkül indul");
-});
-
-test("részleges próba: a néma hálózati hang kiesik, a megszólaló helyi hang lesz az első — koppintáskor nincs 3 mp várakozás", async () => {
+test("részleges ítélet: a néma hálózati hang 2 koppintásra kimarad, a megszólaló helyi hang igazolt — a következő koppintás nem vár 3 mp-et", async () => {
   const h = harness();
   h.state.manifestMode = "none";
   await h.open(words(1));
-  h.player.noteUserGesture();
-  h.advance(PROBE_DELAY_MS + 6000);
-  h.spoken[1].onboundary?.();
-  assert.deepEqual(h.player.inspect().knowledge, { verified: voiceKey(HAZEL), bad: [voiceKey(SONIA)], silent: false });
   h.say("word 1");
+  const cancelsBefore = h.state.cancels;
+  h.advance(3000);
+  assert.equal(h.state.cancels, cancelsBefore + 1, "az el nem indult SAJÁT kimondás nem marad a beszédsorban");
+  assert.deepEqual(h.spoken.map((u) => u.voice), [SONIA, HAZEL]);
+  h.spoken[1].onstart?.();
+  assert.deepEqual(h.player.inspect().knowledge, { verified: voiceKey(HAZEL), skip: { [voiceKey(SONIA)]: 2 }, silentTaps: 0 });
+  h.spoken[1].onend?.();
+  h.say("word 1");
+  assert.equal(h.spoken.at(-1)?.voice, HAZEL, "az igazolt hang szól azonnal");
+});
+
+test("néma motor: az első koppintás kivárja a csendkeretet, a következő KETTŐ nem — a harmadik újra megpróbálja a böngészőhangot (az ítélet lejár)", async () => {
+  const h = harness({ voices: [HAZEL, ZIRA] });
+  h.state.manifestMode = "none";
+  await h.open(words(1));
+  h.say("word 1");
+  h.advance(3000);
+  assert.equal(h.audios.length, 1, "3 mp után a tartalék");
+  assert.equal(h.player.inspect().knowledge.silentTaps, 2);
+  h.audios[0].onplaying?.();
+  for (const expected of [2, 3]) {
+    h.say("word 1");
+    assert.equal(h.spoken.length, 1, "néma ítélet alatt nincs böngészőhang-kör");
+    assert.equal(h.audios.length, expected, "a tartalék a koppintásban, várakozás nélkül indul");
+    h.audios.at(-1)?.onplaying?.();
+  }
+  h.say("word 1");
+  assert.equal(h.spoken.length, 2, "a negyedik koppintás újra a böngészőhangot próbálja — nem marad örökre a szerverhangon");
+  h.spoken[1].onstart?.();
+  assert.deepEqual(h.player.inspect().knowledge, { verified: voiceKey(HAZEL), skip: {}, silentTaps: 0 }, "a megszólalt hang minden negatív ítéletet töröl");
+});
+
+// Vak review B3 (a repó A2 esete: Android Chrome a `cancel()` utáni azonnali `speak()`-et megszakítottnak jelzi).
+test("B3: az el sem indult, megszakítottnak jelzett kimondás NEM a hang hibája — ugyanaz a brit hang kap újrapróbát, az ismeret tiszta marad", async () => {
+  const h = harness();
+  h.state.manifestMode = "none";
+  await h.open(words(2));
+  h.say("word 1");
+  h.spoken[0].onstart?.();
+  h.say("word 2");
+  h.spoken[1].onerror?.({ error: "interrupted" });
+  assert.deepEqual(h.spoken.map((u) => u.voice), [SONIA, SONIA, SONIA], "gyors két koppintás: nem az amerikai, hanem újra a brit hang");
+  assert.deepEqual(h.player.inspect().knowledge.skip, {}, "a megszakítás nem ír negatív ítéletet");
+  h.spoken[2].onstart?.(); h.spoken[2].onend?.();
+  // Ha az újrapróba is megszakad: a lánc a tartalékra lép (mint a főágon) — gyengébb böngészőhang nem szól a brit helyett.
+  h.say("word 1");
+  h.spoken[3].onerror?.({ error: "canceled" });
+  h.spoken[4].onerror?.({ error: "interrupted" });
+  assert.deepEqual(h.spoken.map((u) => u.voice), [SONIA, SONIA, SONIA, SONIA, SONIA]);
+  assert.equal(h.audios.length, 1, "a tartalék szól");
+  assert.deepEqual(h.player.inspect().knowledge, { verified: voiceKey(SONIA), skip: {}, silentTaps: 0 });
+  h.audios[0].onplaying?.();
+  h.say("word 2");
+  assert.equal(h.spoken.at(-1)?.voice, SONIA, "a következő koppintásra is a brit hang");
+});
+
+// Vak review B2: felhasználói aktiváció nélkül a böngésző `not-allowed` hibával utasítja el a kimondást.
+test("B2: a `not-allowed` nem a hang hibája — nem próbál végig más hangokat, és a hangválasztást nem rontja el", async () => {
+  const h = harness();
+  h.state.manifestMode = "none";
+  await h.open(words(1));
+  h.state.activated = false;
+  h.say("word 1");
+  assert.deepEqual(h.spoken.map((u) => u.voice), [SONIA], "a többi hang ugyanígy járna: nincs próbalánc");
+  assert.equal(h.audios.length, 1, "a lánc a tartalékra lép");
+  assert.deepEqual(h.player.inspect().knowledge, UNKNOWN_ENGINE, "az ismeret érintetlen");
+  h.audios[0].onplaying?.();
+  h.state.activated = true;
+  h.say("word 1");
+  assert.equal(h.spoken.at(-1)?.voice, SONIA, "aktivációval a rangsor legjobb hangja szól");
+});
+
+// Vak review B1: a közös beszédmotoron a lecke „Felolvasás” gombja és a kisfilm narrációja is beszél.
+test("B1: idegen kimondás közben a lejátszó a gyerek koppintása nélkül semmit nem mond ki és semmit nem szakít meg", async () => {
+  const h = harness();
+  h.synth.speaking = true;
+  await h.open(words(4));
+  h.ready("word 1");
+  h.player.noteUserActivation();
+  h.player.setVisible(false);
+  h.advance(120_000);
+  h.player.setVisible(true);
+  await h.settle();
+  h.player.voicesChanged();
+  h.player.prepareLesson(words(2), "en-GB");
+  await h.settle(); h.runIdle();
+  h.player.release();
+  h.advance(120_000);
+  assert.equal(h.state.cancels, 0, "megnyitás, előtöltés, feloldás, háttér / előtér, leckeváltás, elhagyás: egyik sem hív cancel()-t");
+  assert.equal(h.spoken.length, 0, "…és egyik sem áll a beszédsorba");
+  assert.equal(h.synth.speaking, true, "a „Felolvasás” tovább szól");
+  // A kifejezett „Meghallgatás” koppintás viszont — mint eddig — leállítja az éppen szóló hangot (egyszerre egy hang szól).
+  await h.open(words(1));
+  h.say("word 1");
+  assert.equal(h.state.cancels, 1);
+  // A lejátszó SAJÁT, még szóló kimondását a lecke elhagyása leállítja.
+  h.spoken[0].onstart?.();
+  h.player.release();
+  assert.equal(h.state.cancels, 2);
+});
+
+test("K1: az ítélet nyelvenként él — a német lecke néma hangja nem némítja el az angol leckét", async () => {
+  const h = harness({ voices: [{ name: "Katja Online", lang: "de-DE", localService: false }, HAZEL] });
+  h.state.manifestMode = "none";
+  await h.open(["Dreieck"], "de-DE");
+  h.say("Dreieck", 0.85, "de-DE");
+  h.advance(6000);
+  assert.equal(h.player.inspect().knowledgeFor("de-DE").silentTaps, 2);
+  h.audios.at(-1)?.onplaying?.();
+  assert.deepEqual(h.player.inspect().knowledgeFor("en-GB"), UNKNOWN_ENGINE);
+  const before = h.spoken.length;
+  h.say("triangle");
+  assert.equal(h.spoken.length, before + 1, "az angol leckében a böngészőhang szól");
   assert.equal(h.spoken.at(-1)?.voice, HAZEL);
 });
 
-test("koppintás a próba közben: a próba megszakad, a valódi kimondás fut, és annak a kimenetele adja az ismeretet", async () => {
-  const h = harness();
+test("szóhatár-eseményt adó motor (`onstart` nélkül): a kimondás elindultnak számít — nincs tartalék, a hang igazolt", async () => {
+  const h = harness({ voices: [HAZEL] });
   h.state.manifestMode = "none";
   await h.open(words(1));
-  h.player.noteUserGesture();
-  h.advance(PROBE_DELAY_MS);
-  assert.equal(h.player.inspect().probing, true);
   h.say("word 1");
-  assert.equal(h.player.inspect().probing, false);
-  assert.equal(h.spoken.length, 2);
-  assert.equal(h.spoken[1].volume, 1);
-  h.spoken[0].onstart?.();
-  assert.equal(h.player.inspect().knowledge.verified, null, "a megszakított próba késői eseménye nem számít");
-  h.spoken[1].onstart?.();
-  assert.equal(h.player.inspect().knowledge.verified, voiceKey(SONIA));
-  // Mozdulat koppintással egy időben: a próba a kimondás elé nem áll be.
-  const g = harness();
-  g.state.manifestMode = "none";
-  await g.open(words(1));
-  g.player.noteUserGesture();
-  g.say("word 1");
-  g.advance(PROBE_DELAY_MS);
-  assert.equal(g.spoken.length, 1, "futó kimondás mellett nem indul próba");
+  h.spoken[0].onboundary?.();
+  h.advance(10_000);
+  assert.equal(h.audios.length, 0, "az indulási őr nem vált a tartalékra");
+  assert.equal(h.player.inspect().knowledge.verified, voiceKey(HAZEL));
 });
 
+test("megszakított előre gyártott lépés: a leállítás az 1,5 mp-es őrt is törli — utána sem böngészőhang, sem üzenet", async () => {
+  const h = harness();
+  await h.open(words(1));
+  const audio = h.ready("word 1");
+  h.say("word 1");
+  h.player.stop();
+  assert.equal(audio.paused, true);
+  assert.equal(h.timers.size, 0, "függő őr nem marad");
+  h.advance(5000);
+  assert.equal(h.spoken.length, 0);
+  assert.deepEqual(h.errors, []);
+});
+
+test("a lecke elhagyása megszakítja a még úton lévő jegyzék-kérést", async () => {
+  const h = harness();
+  h.state.manifestMode = () => new Promise(() => {});
+  h.player.prepareLesson(words(2), "en-GB");
+  await h.settle();
+  assert.equal(h.state.signals[0]?.aborted, false);
+  h.player.release();
+  assert.equal(h.state.signals[0]?.aborted, true);
+});
 test("védőháló próba nélkül: néma motornál az összesített csendkeret (3 mp helyi, 6 mp hálózati első hangnál) után a tartalék szól, és az ismeret megmarad", async () => {
   const h = harness({ voices: [HAZEL, ZIRA] });
   h.state.manifestMode = "none";
@@ -435,7 +575,7 @@ test("védőháló próba nélkül: néma motornál az összesített csendkeret 
   h.advance(1);
   assert.equal(h.audios.length, 1, "3 mp-nél a tartalék");
   assert.equal(h.spoken.length, 1, "a keret elfogytával a második hang nem próbálkozik");
-  assert.equal(h.player.inspect().knowledge.silent, true, "a valódi kimondás kimenetele is ismeret");
+  assert.equal(h.player.inspect().knowledge.silentTaps, 2, "a valódi kimondás kimenetele adja az ismeretet");
   h.audios[0].onplaying?.();
   h.say("word 1");
   assert.equal(h.spoken.length, 1, "a következő koppintás már nem vár 3 mp-et");
@@ -577,30 +717,34 @@ test("iOS-feloldás: a felhasználói mozdulat a már elindított, még nem kés
   const ready = h.ready("word 1");
   const loading = h.loading();
   assert.equal(loading.length, 3);
-  h.player.noteUserGesture();
+  h.player.noteUserActivation();
   assert.ok(loading.every((audio) => audio.plays === 1 && audio.paused), "lejátszás + azonnali szünet: hang nem szól");
   assert.equal(ready.plays, 0);
+  assert.equal(h.spoken.length, 0, "a feloldás a beszédmotorhoz nem nyúl");
+  // A koppintásra éppen (kérésre töltődve) szóló hangot a feloldás nem érinti meg.
+  const g = harness({ synth: false });
+  await g.open(words(5));
+  g.say("word 5");
+  const active = g.audioFor("word 5")!;
+  g.player.noteUserActivation();
+  assert.deepEqual([active.plays, active.paused], [1, false]);
 });
 
-test("üres hanglistánál a próba vár; a hanglista megváltozása (voiceschanged) után a munkamenet-ismeret újraépül, és új próba fut", async () => {
+test("a hanglista megváltozása (voiceschanged) után a munkamenet-ismeret újraépül a következő koppintásokból", async () => {
   const h = harness({ voices: [] });
   h.state.manifestMode = "none";
   await h.open(words(1));
-  h.player.noteUserGesture();
-  h.advance(PROBE_DELAY_MS + 10_000);
-  assert.equal(h.spoken.length, 0, "hang nélküli próba nem indul");
-  assert.deepEqual(h.player.inspect().knowledge, { verified: null, bad: [], silent: false });
-  // Valódi koppintás üres listával: a „lang dönt” kimondás néma marad → az ismeret a valódi kimenetelből jön.
+  // Üres listával a „lang dönt” kimondás néma marad → lejáró néma ítélet.
   h.say("word 1");
+  assert.equal(h.spoken[0].voice, null);
   h.advance(3000);
-  assert.equal(h.player.inspect().knowledge.silent, true);
+  assert.equal(h.player.inspect().knowledge.silentTaps, 2);
   h.audios.at(-1)?.onplaying?.();
   h.state.voices = [HAZEL];
   h.player.voicesChanged();
-  assert.deepEqual(h.player.inspect().knowledge, { verified: null, bad: [], silent: false }, "az addigi ismeret a régi listára szólt");
-  h.player.noteUserGesture();
-  h.advance(PROBE_DELAY_MS);
-  assert.deepEqual([h.spoken.at(-1)?.voice, h.spoken.at(-1)?.volume], [HAZEL, 0]);
+  assert.deepEqual(h.player.inspect().knowledge, UNKNOWN_ENGINE, "az addigi ismeret a régi listára szólt");
+  h.say("word 1");
+  assert.deepEqual([h.spoken.at(-1)?.voice, h.spoken.at(-1)?.volume], [HAZEL, 1]);
   h.spoken.at(-1)?.onstart?.();
   assert.equal(h.player.inspect().knowledge.verified, voiceKey(HAZEL));
 });

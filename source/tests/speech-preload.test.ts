@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chainVoiceOrder, sizesFromManifest, speechPlan, ASSUMED_AUDIO_BYTES, FALLBACK_AUDIO_START_TIMEOUT_MS, type SpeechStep } from "../shared/speech-chain";
+import { chainVoiceOrder, nextSpeechStep, sizesFromManifest, speechPlan, ASSUMED_AUDIO_BYTES, FALLBACK_AUDIO_START_TIMEOUT_MS, type SpeechStep } from "../shared/speech-chain";
 import {
-  constrainedConnection, engineAfter, engineAfterRound, failureActive, mergeStoredManifest, nextPreloads, preloadPlan, prioritized, probeTimeoutMs,
-  readStoredManifest, retryDelayMs, voiceKey, SPEECH_PRELOAD, STORED_MANIFEST_MAX_ENTRIES, UNKNOWN_ENGINE,
+  constrainedConnection, engineAfter, engineAfterRound, engineAged, engineSilent, failureActive, manifestRetryDelayMs, mergeStoredManifest, nextPreloads, preloadPlan, prioritized,
+  readStoredManifest, retryDelayMs, voiceKey, voiceSkipped, NEGATIVE_VERDICT_TAPS, SPEECH_PRELOAD, STORED_MANIFEST_MAX_ENTRIES, UNKNOWN_ENGINE,
 } from "../shared/speech-preload";
 import type { RankableVoice } from "../shared/voice-rank";
 
@@ -19,8 +19,12 @@ const WINDOWS = [HAZEL, ARIA, SONIA];
 test("az előtöltés korlátai: 3 párhuzamos letöltés, 3,5 MB és 60 hangelem leckénként, szűk kapcsolaton az első 12 szöveg", () => {
   assert.deepEqual({ ...SPEECH_PRELOAD }, {
     concurrency: 3, maxBytes: 3.5 * 1024 * 1024, maxElements: 60, firstSectionTexts: 12, retryDelaysMs: [4000, 15_000],
-    failureTtlMs: 60_000, manifestRefreshMs: 60_000, loadTimeoutMs: 20_000,
+    failureTtlMs: 60_000, manifestRefreshMs: 60_000, loadTimeoutMs: 20_000, manifestRetryMaxMs: 120_000, manifestRetries: 2,
   });
+  assert.equal(manifestRetryDelayMs(900_000), 120_000, "a 15 perces Retry-After felső korlátja 2 perc");
+  assert.equal(manifestRetryDelayMs(30_000), 30_000);
+  assert.equal(manifestRetryDelayMs(1), 5000, "legalább 5 mp");
+  for (const missing of [null, 0, -5, Number.NaN]) assert.equal(manifestRetryDelayMs(missing), 60_000, "Retry-After nélkül 1 perc");
 });
 
 test("előtöltési terv: a szószedet sorrendjében, csak a jegyzék szerint meglévő hang, ismétlés nélkül", () => {
@@ -74,41 +78,52 @@ test("a sor: legfeljebb 3 letöltés fut; a koppintott szó előre ugrik; hibán
   assert.equal(failureActive(1000, 61_000), false, "utána a szó újra próbálható — a 429 nem zár ki a munkamenet végéig");
 });
 
-test("hangmotor-ismeret: az elindult hang igazolt, az elbukott kimarad; csak az esemény nélkül lejárt próbasor jelent néma motort", () => {
-  assert.deepEqual(UNKNOWN_ENGINE, { verified: null, bad: [], silent: false });
+test("hangmotor-ismeret valódi koppintásokból: a megszólalt hang igazolt; a negatív ítélet LEJÁR (2 koppintás), soha nem végleges", () => {
+  assert.deepEqual(UNKNOWN_ENGINE, { verified: null, skip: {}, silentTaps: 0 });
+  assert.equal(NEGATIVE_VERDICT_TAPS, 2);
   const sonia = voiceKey(SONIA), hazel = voiceKey(HAZEL);
   assert.notEqual(sonia, hazel);
   assert.equal(voiceKey(undefined), "");
-  const started = engineAfter(UNKNOWN_ENGINE, sonia, "started");
-  assert.deepEqual(started, { verified: sonia, bad: [], silent: false });
+  // Pozitív bizonyíték: a `start` esemény igazolja a hangot, és minden negatív ítéletét törli (a néma ítéletet is).
+  assert.deepEqual(engineAfter(UNKNOWN_ENGINE, sonia, "started"), { verified: sonia, skip: {}, silentTaps: 0 });
+  assert.deepEqual(engineAfter({ verified: null, skip: { [sonia]: 2, [hazel]: 1 }, silentTaps: 2 }, sonia, "started"), { verified: sonia, skip: { [hazel]: 1 }, silentTaps: 0 }, "az elindult hang törli a saját és a „néma motor” ítéletet");
+  // Negatív ítélet: a kemény hiba és az esemény nélküli lejárat a hangot a következő 2 koppintásra kihagyja.
   const afterTimeout = engineAfter(UNKNOWN_ENGINE, sonia, "timeout");
-  assert.deepEqual(afterTimeout, { verified: null, bad: [sonia], silent: false });
-  assert.deepEqual(engineAfter(afterTimeout, hazel, "started"), { verified: hazel, bad: [sonia], silent: false }, "a rossz hálózati hang mögül a helyi hang lett az igazolt");
-  assert.deepEqual(engineAfter(started, sonia, "error"), { verified: null, bad: [sonia], silent: false }, "az igazolt hang későbbi bukása visszavonja az igazolást");
-  assert.deepEqual(engineAfter(afterTimeout, sonia, "timeout").bad, [sonia], "ismétlés nélkül");
-  assert.deepEqual(engineAfter(afterTimeout, sonia, "started"), { verified: sonia, bad: [], silent: false }, "ha mégis megszólal, újra használható");
-  // Néma motor: minden próbált hang esemény nélkül járt le.
-  assert.equal(engineAfterRound(afterTimeout, ["timeout", "timeout"]).silent, true);
-  assert.equal(engineAfterRound(afterTimeout, ["timeout", "error"]).silent, false, "hibaeseményt adó motor él — nem néma");
-  assert.equal(engineAfterRound(started, ["timeout", "timeout"]).silent, false, "igazolt hang mellett nem néma");
-  assert.equal(engineAfterRound(UNKNOWN_ENGINE, []).silent, false, "próba nélkül nincs ítélet");
-  assert.equal(probeTimeoutMs(SONIA), 6000, "a háttérpróbában a hálózati hang megkapja a 6 mp-es türelmét");
-  assert.equal(probeTimeoutMs(HAZEL), 3000);
-  assert.equal(probeTimeoutMs(undefined), 3000);
+  assert.deepEqual(afterTimeout, { verified: null, skip: { [sonia]: 2 }, silentTaps: 0 });
+  assert.deepEqual(engineAfter(UNKNOWN_ENGINE, sonia, "error").skip, { [sonia]: 2 });
+  assert.deepEqual(engineAfter({ verified: sonia, skip: {}, silentTaps: 0 }, sonia, "error"), { verified: null, skip: { [sonia]: 2 }, silentTaps: 0 }, "az igazolt hang későbbi bukása visszavonja az igazolást");
+  assert.equal(engineAfter({ verified: hazel, skip: {}, silentTaps: 0 }, sonia, "error").verified, hazel, "más hang bukása az igazolt hangot nem érinti");
+  assert.equal(voiceSkipped(afterTimeout, sonia), true);
+  assert.equal(voiceSkipped(afterTimeout, hazel), false);
+  // Lejárat: két koppintás után a hang újra próbálható.
+  const once = engineAged(afterTimeout), twice = engineAged(once);
+  assert.deepEqual([voiceSkipped(once, sonia), voiceSkipped(twice, sonia)], [true, false]);
+  assert.deepEqual(twice, UNKNOWN_ENGINE);
+  assert.equal(engineAged({ verified: sonia, skip: {}, silentTaps: 0 }).verified, sonia, "az igazolás nem jár le");
+  // Néma motor: minden próbált hang esemény nélkül járt le — ez is csak 2 koppintásra szól.
+  const silent = engineAfterRound(afterTimeout, ["timeout", "timeout"]);
+  assert.equal(silent.silentTaps, 2);
+  assert.deepEqual([engineSilent(silent), engineSilent(engineAged(silent)), engineSilent(engineAged(engineAged(silent)))], [true, true, false], "a harmadik koppintás újra megpróbálja a böngészőhangot");
+  assert.equal(engineSilent(engineAfterRound(afterTimeout, ["timeout", "error"])), false, "hibaeseményt adó motor él — nem néma");
+  assert.equal(engineSilent(engineAfterRound({ verified: hazel, skip: {}, silentTaps: 0 }, ["timeout", "timeout"])), false, "igazolt hang mellett nem néma");
+  assert.equal(engineSilent(engineAfterRound(UNKNOWN_ENGINE, [])), false, "kimondás nélkül nincs ítélet");
 });
 
 const kinds = (steps: SpeechStep[]) => steps.map((s) => s.kind === "voice" ? `voice:${s.voiceIndex === null ? "lang" : WINDOWS[s.voiceIndex].name.split(" ")[1]}` : s.kind);
 const plan = (over: Partial<Parameters<typeof speechPlan>[0]> = {}) => speechPlan({ language: "en-GB", voices: WINDOWS, synthAvailable: true, prepared: null, fallbackAvailable: true, ...over });
+const SILENT = { verified: null, skip: {}, silentTaps: 2 };
 
-test("a terv a munkamenet-ismerettel: igazolt hang előre, elbukott hang kimarad, néma motornál nincs böngészőhang-lépés", () => {
+test("a terv a munkamenet-ismerettel: igazolt hang előre, lejáró ítéletű hang kimarad, néma motornál nincs böngészőhang-lépés", () => {
   assert.deepEqual(kinds(plan()), ["voice:Sonia", "voice:Hazel", "voice:Aria", "fallback"]);
-  const hazelVerified = { verified: voiceKey(HAZEL), bad: [voiceKey(SONIA)], silent: false };
-  assert.deepEqual(kinds(plan({ engine: hazelVerified })), ["voice:Hazel", "voice:Aria", "fallback"], "a néma hálózati hang már nem várat: az igazolt helyi hang szól azonnal");
+  const hazelVerified = { verified: voiceKey(HAZEL), skip: { [voiceKey(SONIA)]: 2 }, silentTaps: 0 };
+  assert.deepEqual(kinds(plan({ engine: hazelVerified })), ["voice:Hazel", "voice:Aria", "fallback"], "a néma hálózati hang most nem várat: az igazolt helyi hang szól azonnal");
   assert.deepEqual(chainVoiceOrder(WINDOWS, "en-GB", false, hazelVerified), [0, 1]);
-  assert.deepEqual(kinds(plan({ engine: { verified: voiceKey(ARIA), bad: [], silent: false } })), ["voice:Aria", "voice:Hazel", "voice:Sonia", "fallback"], "az igazolt hang az első, akkor is, ha nem a rangsor legjobbja");
-  assert.deepEqual(kinds(plan({ engine: { verified: null, bad: [], silent: true } })), ["fallback"], "néma motor: a felület előre tudja");
-  assert.deepEqual(kinds(plan({ engine: { verified: null, bad: WINDOWS.map(voiceKey), silent: false } })), ["fallback"], "minden hang elbukott");
-  assert.deepEqual(kinds(plan({ voices: [], engine: { verified: null, bad: [""], silent: false } })), ["fallback"], "üres listánál a „lang dönt” kimondás is elbukhat");
+  assert.deepEqual(kinds(plan({ engine: engineAged(engineAged(hazelVerified)) })), ["voice:Hazel", "voice:Sonia", "voice:Aria", "fallback"], "lejárat után a hálózati brit hang visszakerül a tervbe");
+  assert.deepEqual(kinds(plan({ engine: { verified: voiceKey(ARIA), skip: {}, silentTaps: 0 } })), ["voice:Aria", "voice:Hazel", "voice:Sonia", "fallback"], "az igazolt hang az első, akkor is, ha nem a rangsor legjobbja");
+  assert.deepEqual(kinds(plan({ engine: SILENT })), ["fallback"], "néma motor: a következő koppintás nem vár");
+  assert.deepEqual(kinds(plan({ engine: engineAged(engineAged(SILENT)) })), ["voice:Sonia", "voice:Hazel", "voice:Aria", "fallback"], "…de a néma ítélet is lejár");
+  assert.deepEqual(kinds(plan({ engine: { verified: null, skip: Object.fromEntries(WINDOWS.map((v) => [voiceKey(v), 1])), silentTaps: 0 } })), ["fallback"], "minden hang ítélet alatt");
+  assert.deepEqual(kinds(plan({ voices: [], engine: { verified: null, skip: { "": 1 }, silentTaps: 0 } })), ["fallback"], "üres listánál a „lang dönt” kimondás is kaphat ítéletet");
   assert.deepEqual(kinds(plan({ voices: [] })), ["voice:lang", "fallback"]);
 });
 
@@ -116,12 +131,21 @@ test("a terv az előtöltéssel: kész hang elöl; nem kész hangnál a böngés
   const ready = { id: id(1), ready: true }, loading = { id: id(1), ready: false };
   assert.deepEqual(kinds(plan({ prepared: ready })), ["prepared", "voice:Sonia", "voice:Hazel", "voice:Aria", "fallback"]);
   assert.deepEqual(kinds(plan({ prepared: loading })), ["voice:Sonia", "voice:Hazel", "voice:Aria", "fallback"], "koppintás az előtöltés közben: nem vár a letöltésre");
-  assert.deepEqual(kinds(plan({ prepared: loading, engine: { verified: null, bad: [], silent: true } })), ["prepared", "fallback"], "néma motor: az előre gyártott hang kérésre töltődik");
+  assert.deepEqual(kinds(plan({ prepared: loading, engine: SILENT })), ["prepared", "fallback"], "néma motor: az előre gyártott hang kérésre töltődik");
   assert.deepEqual(kinds(plan({ prepared: loading, synthAvailable: false })), ["prepared", "fallback"]);
-  assert.deepEqual(kinds(plan({ prepared: ready, engine: { verified: null, bad: [], silent: true } })), ["prepared", "fallback"]);
+  assert.deepEqual(kinds(plan({ prepared: ready, engine: SILENT })), ["prepared", "fallback"]);
   assert.equal(FALLBACK_AUDIO_START_TIMEOUT_MS, 8000);
 });
 
+test("megszakított / nem engedett kimondás után a lánc a böngészőhang-szakaszt átugorja: gyengébb hang nem szól a legjobb helyett", () => {
+  const steps = plan({ prepared: { id: id(1), ready: true } });
+  assert.deepEqual(kinds(steps), ["prepared", "voice:Sonia", "voice:Hazel", "voice:Aria", "fallback"]);
+  assert.deepEqual(nextSpeechStep(steps, 1, "failed"), { next: 2, exhausted: false }, "valódi hiba: a következő hang");
+  assert.deepEqual(nextSpeechStep(steps, 1, "failed", { skipVoices: true }), { next: 4, exhausted: false }, "megszakítás / not-allowed: egyenesen a tartalék");
+  assert.deepEqual(nextSpeechStep(steps, 0, "failed", { skipVoices: true }), { next: 4, exhausted: false });
+  assert.deepEqual(nextSpeechStep(steps.slice(0, 4), 1, "failed", { skipVoices: true }), { next: null, exhausted: true }, "tartalék híján a lánc véget ér");
+  assert.deepEqual(nextSpeechStep(steps, 1, "done", { skipVoices: true }), { next: null, exhausted: false });
+});
 test("a jegyzék méretei: csak a kért kulcsokra; méret nélküli (régi alakú) válasznál becsült érték", () => {
   assert.deepEqual(sizesFromManifest({ available: [id(1), id(2), id(9)], sizes: { [id(1)]: 500, [id(2)]: "sok", [id(9)]: 7 } }, [id(1), id(2)]), { [id(1)]: 500, [id(2)]: ASSUMED_AUDIO_BYTES });
   assert.deepEqual(sizesFromManifest({ available: [id(1)] }, [id(1)]), { [id(1)]: ASSUMED_AUDIO_BYTES });
