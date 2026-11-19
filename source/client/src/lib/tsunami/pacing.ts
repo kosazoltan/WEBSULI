@@ -50,11 +50,17 @@ export function paceTsunamiDirector(base: QuestionDirector, opts: { grade: () =>
   const pace = (p: QuestionPresentation | null): QuestionPresentation | null => {
     if (!p) return null;
     if (last && last.src === p) return last.paced;
-    const windowMs = tsunamiWindowMs(p.question.quiz.prompt, p.options.map((o) => o.label), opts.grade(), p.windowMs);
-    const paced: QuestionPresentation = { ...p, windowMs };
-    sharedWindowOf.set(paced, p.windowMs);
-    last = { src: p, paced };
-    return paced;
+    // A közös ablak az első burkoláskor rögzül (az objektumot a burkoló átírja, ezért az ismételt burkolás nem nyújt tovább).
+    const shared = sharedWindowOf.get(p) ?? p.windowMs;
+    const windowMs = tsunamiWindowMs(p.question.quiz.prompt, p.options.map((o) => o.label), opts.grade(), shared);
+    /*
+     * Vak ellenőr KICSI 6 (2026-11-19): a director a SAJÁT bemutatás-objektumán számolja a menet-statisztikát (lejáratkor a
+     * válaszidő, válasznál az ablak) — ezért az olvasási ablak magán ezen az objektumon érvényes, nem egy másolaton.
+     */
+    (p as { windowMs: number }).windowMs = windowMs;
+    sharedWindowOf.set(p, shared);
+    last = { src: p, paced: p };
+    return p;
   };
   return {
     ...base,

@@ -192,6 +192,20 @@ test("K1: a többletidő alatt a víz NEM emelkedik, a közös ablakon belül la
 });
 
 /*
+ * Vak ellenőr KICSI 6 (2026-11-19): a director a SAJÁT bemutatás-objektumán számolja a menet-statisztikát (lejáratkor
+ * `responseMs = p.windowMs`, válasznál `windowMs: p.windowMs`) — a burkoló eddig csak egy másolaton nyújtotta meg az ablakot, így a
+ * statisztika a rövid közös ablakhoz mért. A burkoló után a director objektumán is az olvasási ablak legyen.
+ */
+test("vak KICSI 6: a burkolt ablak a director saját bemutatásán is érvényes (a statisztika a valódi ablakkal számol)", () => {
+  const own = { id: 7, startedAtSimMs: 0, windowMs: 9000, options: [{ label: "a", correct: true }], question: { quiz: { prompt: "x ".repeat(60), options: ["a", "b", "c", "d"] } } };
+  const base = { tick: () => own, request: () => own, active: () => own } as unknown as Parameters<typeof paceTsunamiDirector>[0];
+  const paced = paceTsunamiDirector(base, { grade: () => 4 }).active()!;
+  assert.ok(paced.windowMs > 9000, "a burkolt ablak hosszabb");
+  assert.equal(own.windowMs, paced.windowMs, "a director objektumán is az olvasási ablak");
+  assert.equal(extraTimeFrom(paced), 9000, "a többletidő kezdete továbbra is a közös ablak vége");
+});
+
+/*
  * Vak ellenőr K1 (2026-11-19): a többletidőben CSAK a víz álljon — a figura mozgása, a sodrás és a szimulációs idő nem (a régi
  * megoldás a teljes fix lépést megállította: a tárcsa / nyíl akár ~25 s-ig nem mozgatott, a gyerek ezt fagyásnak érezte).
  */
