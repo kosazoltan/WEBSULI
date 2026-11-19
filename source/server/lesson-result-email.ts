@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { clientIpKey } from "./lib/client-ip";
 import { partialLimiter, resultLimiter } from "./lesson-result-limits";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
 import { lessonSchema } from "../shared/lesson-schema";
@@ -256,12 +256,25 @@ function markFinalized(lessonId: string, roundId: string, now = Date.now()): voi
   if (finalizedRounds.size >= MAX_FINALIZED_ROUNDS) finalizedRounds.delete(finalizedRounds.keys().next().value!);
   finalizedRounds.set(key, now + FINALIZED_TTL_MS);
 }
+/**
+ * Terv R18 (negyedik vak ellenőrzés M1): a véglegesítés TARTÓS, tanulófüggetlen nyoma a kézbesítés-nyilvántartásban (sémaváltozás nélkül:
+ * `kind = 'quiz'`, ez a körkulcs, üres `delivered`) — újraindítás után, más példányon és bármely kilétnél is megfogja a késői
+ * pillanatképet. Korlátos élettartam: `FINALIZED_TTL_MS` (24 óra) a `created_at`-tól.
+ */
+export const finalRoundKeyOf = (roundId: string) => roundKeyOf("final-round", "quiz", roundId);
+async function recordFinalized(lessonId: string, roundId: string, percent: number): Promise<void> {
+  await db.insert(lessonResultEmails).values({ lessonId, kind: "quiz", roundKey: finalRoundKeyOf(roundId), percent })
+    .onConflictDoUpdate({ target: [lessonResultEmails.lessonId, lessonResultEmails.kind, lessonResultEmails.roundKey], set: { createdAt: sql`now()` } });
+}
 async function roundFinalized(lessonId: string, whos: readonly string[], roundId: string, now = Date.now()): Promise<boolean> {
   const key = `${lessonId}|${roundId}`;
   const until = finalizedRounds.get(key);
   if (until !== undefined) { if (until > now) return true; finalizedRounds.delete(key); }
+  // A nyilvántartás: a tanulófüggetlen jelzősor (R18, 24 órán belül) VAGY a kör végleges sora a pillanatkép tanuló-kulcsain.
   const rows = await db.select({ id: lessonResultEmails.id }).from(lessonResultEmails)
-    .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), inArray(lessonResultEmails.roundKey, whos.map(w => roundKeyOf(w, "quiz", roundId))))).limit(1);
+    .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), or(
+      and(eq(lessonResultEmails.roundKey, finalRoundKeyOf(roundId)), gt(lessonResultEmails.createdAt, new Date(now - FINALIZED_TTL_MS))),
+      inArray(lessonResultEmails.roundKey, whos.map(w => roundKeyOf(w, "quiz", roundId)))))).limit(1);
   return rows.length > 0;
 }
 /**
@@ -392,6 +405,8 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     markFinalized(lessonId, body.roundId);
     // R15: a kör várakozó pillanatképét BÁRMELY véglegesítés törli (a beküldő kilététől függetlenül).
     cancelPartial(lockKey);
+    // R18: tartós, tanulófüggetlen nyom (újraindítás után is). A hibája nem akasztja meg a beküldést: a memóriabeli jelző véd.
+    await recordFinalized(lessonId, body.roundId, graded.summary.percent).catch(error => logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`));
   }
   if (startedAtOnServer) graded = { ...graded, meta: { ...graded.meta, startedAt: startedAtOnServer } };
   const roundKey = roundKeyOf(who, body.kind, body.roundId);
