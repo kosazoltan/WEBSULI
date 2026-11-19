@@ -89,3 +89,21 @@ Egy kommentsor a tömb fölé: miért korlátos / miért `{n}…*` (a terv hivat
 3. `npm run gate:stage` a munkafa gyökeréből; a záró sorok a jelentésbe. 10 percnél hosszabb futásnál megállás és jelentés.
 4. PR-leírás a munkafán kívül (`docs/minosegkapuk.md` kötelező szakaszai: elfogadási lista `- [x]`, Futtatott ellenőrzések,
    Nem futtatott + ok), csapda-javaslattal (C-48: a közös katalógusba nem írunk).
+
+## T6 — A #521 review leletei (Codex / Sourcery), előbb bukó teszttel
+
+- **T6a (tesztek, commit: `test(qa): …`)** — `scripts/qa/gates/lib.test.mjs`: a 300 000-es tesztben minden bemenetre a pontos
+  elvárt kimenet (`same(s)` vagy `<email>`), új bemenetek: `'b'×n + '@pelda.hu'`, `'x@' + 'a.'×n/2 + 'com'`, cím a hosszú futás
+  végén / elején; a 10 M-s tesztben három pontos kimenet; új teszt: `person@` + `'1.'×17` + `example.com` → `<email>`, 40
+  egykarakteres címke, 80 betűs TLD, 70 karakteres címke, negatívok (`a@localhost`, `a@b.c`, `a@b..com`, `@pelda.hu`) és
+  `a@b.com123` → `<email>123`; a 80 karakteres helyi rész → pontosan `<email>`. `external-review.test.mjs`: határon átnyúló
+  `T`-futás (30 / 100 / 5000 karakter az ablakban) nem marad; 78 karakteres, `#`-et tartalmazó kulcs határesete (A3).
+  `design-assets.test.ts`: a `clipKey` nem illeszkedik az `sk-or-` / `Bearer` mintára (`"kulcs#" + … + "#vege"`); új teszt: határon
+  átnyúló `sk-or-…` / `Bearer …` token nem marad.
+- **T6b (`lib.mjs`)** — az e-mail-sor kikerül a `REDACTIONS`-ből; új `redactEmails(text)` a D1 szerint (karakterkód-vizsgálat,
+  `indexOf('@')`), a `redact()` a tömb után hívja.
+- **T6c (`external-review.mjs`, `design-assets/lib.ts`)** — új segéd `trimCrossingTokenRun(text, window)` mindkét fájlban: ha
+  `text[window-1]` és `text[window]` is token-karakter (`[A-Za-z0-9._~+/=-]`), a futás elejéig visszalép, és ott vág; a
+  `maskClip` / `redactClip` ezt használja a `slice(0, WINDOW)` helyett; a `max(64, kulcshossz)` sáv marad.
+- **T6d** — terv: D1, D3, 5. pont, 7. pont, 8. pont igazítva. Ellenőrzés: a két T1 parancs zöld; `gate:stage` + `gate:push` a
+  gép-zárral egy szkriptben.

@@ -95,19 +95,26 @@ test('verdictResult: IGEN → PASS, FELTÉTELLEL → WARN, NEM / hiány → FAIL
 
 test('redact: lineáris idő hosszú, @ nélküli és tartomány-futáson (300 000 kar. < 1 s bemenetenként)', () => {
   const n = 300_000;
+  // [bemenet, elvárt kimenet] — a kimenetet is ellenőrizzük, hogy egy „nagy bemenetet változatlanul visszaadó” gyors út bukjon (#521).
+  const same = (s) => [s, s];
   const inputs = {
-    betuk: 'a'.repeat(n),
-    pontsor: 'a.'.repeat(n / 2),
-    hex: '0123456789abcdef'.repeat(n / 16),
-    tartomany: `x${at}${'a'.repeat(n)}`,
-    cimkek: `x${at}${'a.'.repeat(n / 2)}1`,
-    kotojelek: `x${at}${'a-'.repeat(n / 2)}`,
+    betuk: same('a'.repeat(n)),
+    pontsor: same('a.'.repeat(n / 2)),
+    hex: same('0123456789abcdef'.repeat(n / 16)),
+    tartomany: same(`x${at}${'a'.repeat(n)}`),
+    cimkek: same(`x${at}${'a.'.repeat(n / 2)}1`),
+    kotojelek: same(`x${at}${'a-'.repeat(n / 2)}`),
+    hosszuHelyi: [`${'b'.repeat(n)}${at}pelda.hu`, '<email>'],
+    sokCimke: [`x${at}${'a.'.repeat(n / 2)}com`, '<email>'],
+    cimAVegen: [`${'a'.repeat(n)} info${at}pelda.hu`, `${'a'.repeat(n)} <email>`],
+    cimAzElejen: [`info${at}pelda.hu ${'0123456789abcdef'.repeat(n / 16)}`, `<email> ${'0123456789abcdef'.repeat(n / 16)}`],
   };
-  for (const [name, s] of Object.entries(inputs)) {
+  for (const [name, [s, expected]] of Object.entries(inputs)) {
     const t0 = performance.now();
-    redact(s);
+    const out = redact(s);
     const ms = performance.now() - t0;
     assert.ok(ms < 1000, `${name}: ${ms.toFixed(0)} ms`);
+    assert.ok(out === expected, `${name}: a kimenet eltér (hossz ${out.length}, eleje ${JSON.stringify(out.slice(0, 20))})`);
   }
 });
 
@@ -127,6 +134,10 @@ test('redact: 10 M karakteres token-, Bearer- és tartomány-futás nem omlik ö
     assert.doesNotThrow(() => { out = redact(s); }, s.slice(0, 12));
     if (expected) assert.ok(out.startsWith(expected), `${s.slice(0, 12)} kitakarva`);
   }
+  // #521: a nagy bemenetek kitakarása is ellenőrizve (pontos kimenet), nem csak a futás.
+  assert.ok(redact(`${'b'.repeat(n)}${at}pelda.hu`) === '<email>', '10 M helyi rész + tartomány → <email>');
+  assert.ok(redact(`x${at}${'a.'.repeat(n / 2)}com`) === '<email>', '5 M címke → <email>');
+  assert.ok(redact(`sk-${'a'.repeat(n)}`) === '<token>', '10 M sk-token → <token>');
 });
 
 test('redact: valós címek továbbra is kitakarva (64 karakteres helyi rész, aldomain, plusz-címke, több cím)', () => {
@@ -138,4 +149,17 @@ test('redact: valós címek továbbra is kitakarva (64 karakteres helyi rész, a
   const hosszu = redact(`${'b'.repeat(16)}.${'c'.repeat(63)}${at}${'d'.repeat(63)}.pelda.com`);
   assert.match(hosszu, /<email>$/);
   assert.ok(!hosszu.includes('pelda.com') && !hosszu.includes(at));
+  // #521: a teljes cím-szerű érték rejtve — a 64-nél hosszabb helyi rész eleje sem látszik.
+  assert.equal(hosszu, '<email>');
+});
+
+test('redact (#521): 16-nál több (numerikus / egykarakteres) tartománycímke és hosszú TLD is teljesen kitakarva', () => {
+  assert.equal(redact(`person${at}${'1.'.repeat(17)}example.com`), '<email>');
+  assert.equal(redact(`a${at}${'b.'.repeat(40)}hu vége`), '<email> vége');
+  assert.equal(redact(`a${at}x.${'c'.repeat(80)}`), '<email>');
+  assert.equal(redact(`a${at}${'d'.repeat(70)}.pelda.hu`), '<email>');
+  // ami a régi mintán sem volt cím, ma sem az: TLD nélküli, egybetűs TLD-s, üres címkés
+  for (const s of [`a${at}localhost`, `a${at}b.c`, `a${at}b..com`, `${at}pelda.hu`]) assert.equal(redact(s), s);
+  // a TLD betűs eleje számít (a régi minta szerint): a szám-farok marad
+  assert.equal(redact(`a${at}b.com123`), '<email>123');
 });

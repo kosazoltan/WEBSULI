@@ -161,7 +161,8 @@ test("sávkép: 9. o. matek → híd, 6–8. o. → Föld; a halloweeni borító
 });
 
 // docs/specs/2026-11-19-kitakaro-negyzetes-regex.md: vágás a kitakarás előtt, határon félbevágott kulcs nélkül.
-const clipKey = "sk-or-v1-" + "abcdef0123456789".repeat(4);
+// #521: a kulcs NEM illeszkedik az általános mintákra (sk-or- / Bearer), így a kulcs-kitakarást és a farok-kezelést méri; > 64 karakter.
+const clipKey = "kulcs#" + "abcdef0123456789".repeat(4) + "#vege";
 
 test("redactClip: az ablakhatáron félbevágott kulcs nem marad, a hossz korlátos; rövid szövegen a régi viselkedés", () => {
   for (const d of [1, 8, 20, clipKey.length - 1]) {
@@ -171,6 +172,17 @@ test("redactClip: az ablakhatáron félbevágott kulcs nem marad, a hossz korlá
   }
   const t = `hiba ${clipKey} ` + "z".repeat(1000);
   assert.equal(redactClip(t, clipKey, 300), redact(t, clipKey).slice(0, 300));
+});
+
+test("redactClip (#521): az ablakhatáron átnyúló általános token (sk-or- / Bearer) eleje sem marad", () => {
+  for (const inWindow of [7, 30, 100, 5000]) {
+    for (const tok of ["sk-or-v1-" + "Q".repeat(inWindow + 500), "Bearer " + "Q".repeat(inWindow + 500)]) {
+      const s = "#".repeat(REDACT_WINDOW - inWindow) + tok + " vége";
+      const out = redactClip(s, clipKey, REDACT_WINDOW);
+      assert.equal(out.includes("QQ"), false, `${tok.slice(0, 7)} ablakban ${inWindow}`);
+      assert.equal(/sk-or|Bearer\s*$/.test(out), false);
+    }
+  }
 });
 
 test("requestImage hibaága: nagy válaszban sincs kulcs, legfeljebb 300 karakteres részlet", async () => {

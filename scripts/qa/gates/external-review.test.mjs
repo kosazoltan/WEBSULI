@@ -109,6 +109,24 @@ describe("kulcs és maszkolás", () => {
       assert.ok(maskClip(s, FAKE_KEY, 600).length <= 600);
     }
   });
+  it("#521: az ablakhatáron átnyúló token-karakterfutás teljesen eltávolítva (nem csak fix 64 karakter)", () => {
+    for (const inWindow of [30, 100, 5000]) {
+      const s = "#".repeat(MASK_WINDOW - inWindow) + "T".repeat(inWindow + 500) + " vége";
+      const out = maskClip(s, FAKE_KEY, MASK_WINDOW);
+      assert.ok(!out.includes("T"), `ablakban ${inWindow} token-karakter`);
+      assert.ok(out.length > 0 && out.length <= MASK_WINDOW);
+    }
+    // a határon NEM átnyúló futás (szóköz a határon túl) megmarad
+    const kint = "#".repeat(MASK_WINDOW - 10) + "T".repeat(10) + " ".repeat(100);
+    assert.ok(maskClip(kint, FAKE_KEY, MASK_WINDOW).endsWith("#".repeat(10)), "a határ előtti szöveg a kulcshossz-sávon túl megmarad");
+  });
+  it("#521 / A3: 64-nél hosszabb, AIza-mintára nem illeszkedő (nem token-karakteres) kulcs az ablakhatáron sem marad", () => {
+    const key = "ab#cd#" + "ef#01#".repeat(12);
+    for (const d of [1, 8, 30, 70, key.length - 1]) {
+      const s = "x".repeat(MASK_WINDOW - d) + key + "y".repeat(1000);
+      assert.ok(!maskClip(s, key, MASK_WINDOW).includes(key.slice(0, Math.min(d, 8))), `eltolás ${d}`);
+    }
+  });
   it("az ablaknál rövidebb szövegen a régi viselkedés (maszkolás, majd vágás)", () => {
     const t = "e".repeat(300) + ` key=${FAKE_KEY} ` + "f".repeat(1700);
     assert.equal(maskClip(t, FAKE_KEY, 400), maskSecrets(t, FAKE_KEY).slice(0, 400));

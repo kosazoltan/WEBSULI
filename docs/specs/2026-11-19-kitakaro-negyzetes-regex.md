@@ -53,13 +53,18 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
 
 ## 4. Rögzített döntések és kényszerek
 
-- **D1 — e-mail:** `/[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.){1,16}[A-Za-z]{2,63}/g`. Helyi rész ≤ 64 (RFC 5321),
-  címke ≤ 63 (RFC 1035), legfeljebb 16 címke + TLD, TLD ≤ 63. Mérve: 1 M karakter ~0,2 s, 20 M ~4 s minden ellenséges
-  bemeneten, `RangeError` nélkül.
+- **D1 — e-mail (a #521 review után módosítva):** a cím-kitakarás NEM regex, hanem lineáris pásztázó (`redactEmails` a
+  `lib.mjs`-ben), a régi minta (`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`) PONTOS nyelvével, korlát
+  nélkül: minden `@`-ból visszafelé a helyi-rész-karakterek futása (legfeljebb az előző csere végéig), előre a címkék
+  (`[A-Za-z0-9-]+`, pont-elválasztva, üres címkénél vége); a vége a legutolsó, legalább a 2. címke, amely ≥ 2 betűvel kezdődik —
+  a betűs elejéig (a régi mohó TLD). Két szomszédos `@` közti szakaszt legfeljebb kétszer olvas (egyszer előre, egyszer
+  visszafelé), így a futás lineáris és rekurziómentes. (Az első változat korlátos regexe a 16-nál több címkés címet
+  teljesen, a 64-nél hosszabb helyi részt részben átengedte — Codex / Sourcery, #521.)
 - **D2 — token / Bearer / AIza:** `[osztály]{n,}` → `[osztály]{n}[osztály]*` (pontosan egyenértékű nyelv, ugyanazok a
   találatok, a `\b` horgonyok változatlanok).
-- **D3 — vágás a kitakarás előtt:** a vágott kimenetű hívók a szöveget előbb `64 * 1024` karakteres ablakra vágják, azon
-  maszkolnak, és ha az ablak vágott, a maszkolt ablak végéből `max(64, kulcshossz)` karaktert eldobnak (ott maradhatna egy
+- **D3 — vágás a kitakarás előtt:** a vágott kimenetű hívók a szöveget előbb `64 * 1024` karakteres ablakra vágják; ha a
+  határon token-karakterfutás (`[A-Za-z0-9._~+/=-]`) nyúlik át, azt az ablak végéről teljes hosszában levágják (lineáris
+  visszafelé lépés, #521), azon maszkolnak, és ha az ablak vágott, a maszkolt ablak végéből még `max(64, kulcshossz)` karaktert eldobnak (ott maradhatna egy
   félbevágott kulcs vagy kulcsminta), csak ezután vágnak a végső hosszra. Így a végső kimenetben határon félbevágott kulcs
   sosem maradhat, a végső hossztól függetlenül. A teljes szöveget maszkoló hívók (pl. a jelentés kiírása, 652. sor) nem
   vágnak — ott a D2 biztosítja a lineáris futást.
@@ -68,10 +73,11 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
 
 ## 5. Edge case-ek
 
-- 64 karakteres helyi rész → teljesen kitakarva. 65+ karakteres helyi rész (RFC-n kívül): az utolsó 64 karakter + a tartomány
-  kitakarva, az eleje látszik (eddig a teljes cím). Elfogadott: valós cím nem ilyen, a tartomány és a cím vége rejtve.
-- 17+ címkés tartomány: az első 16 címke + a következő betűs címke kitakarva, a maradék farok látszik. RFC-n belül, ritka.
-- 64+ betűs TLD: az első 63 betű kitakarva.
+- Bármilyen hosszú helyi rész, bármennyi (numerikus / egykarakteres) címke, bármilyen hosszú címke / TLD → a teljes cím
+  kitakarva, mint a régi mintán (részleges kitakarás nincs — #521).
+- Ami a régi mintán sem volt cím, ma sem az: TLD nélküli (`a@localhost`), egybetűs TLD-s, üres címkés (`a@b..com`), helyi rész
+  nélküli (`@pelda.hu`). A TLD betűs eleje számít: `a@b.com123` → `<email>123` (a régi mohó `[A-Za-z]{2,}` szerint).
+- Ablakhatáron átnyúló token-futás (pl. az átadott kulcstól eltérő általános token) → teljes hosszában levágva.
 - Kulcs az ablakhatáron félbevágva → a félbevágott darab az eldobott sávba esik.
 - Üres / `null` / `undefined` bemenet → üres szöveg (mint eddig).
 - Kulcs nélküli (üres `key`) hívás → csak a minta fut (mint eddig).
@@ -92,7 +98,7 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
 ## 7. Tesztterv
 
 - `scripts/qa/gates/lib.test.mjs`: (a) időkorlátos teljesítményteszt több ellenséges bemeneten (300 000 kar., < 1 s
-  bemenetenként); (b) 10 M karakteres token-, Bearer- és tartomány-futás nem dob; (d) pozitív esetek: 64 karakteres helyi rész,
+  bemenetenként, a pontos kimenet is ellenőrizve — #521); (b) 10 M karakteres token-, Bearer- és tartomány-futás nem dob; (d) pozitív esetek: 64 karakteres helyi rész,
   aldomaines cím, plusz-címkés cím, több cím egy sorban.
 - `scripts/qa/gates/external-review.test.mjs`: (b) 20 M `AIza…` futás nem dob, nincs kulcs; (c) ablakhatáron félbevágott kulcs
   nincs a kimenetben (több eltolással, a végső hossz az ablak méretével egyező is); rövid szövegen `maskClip` = régi viselkedés.
@@ -102,7 +108,8 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
 
 ## 8. Kockázatok / visszavonási terv
 
-- Kockázat: a korlátos e-mail-minta RFC-n kívüli címeknél részben takar (5. pont). Visszavonás: egy commit revertje.
+- A részleges kitakarás elfogadása megszűnt (#521): a pásztázó a régi minta teljes nyelvét takarja. Kockázat: kézzel írt
+  pásztázó — a régi mintával azonos viselkedést a pozitív / negatív / határ-tesztek rögzítik. Visszavonás: egy commit revertje.
 - A keresők (2. pont) 20 M-s sornál továbbra is dobhatnak, és a `lint-gate` `DB_URL` mintája ismétlődő `postgres://` soron
   négyzetes — lelet, nem e PR hatóköre.
 
