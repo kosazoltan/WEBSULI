@@ -29,7 +29,8 @@ const RETRY = 'próbáld újra néhány másodperc múlva ugyanazt az egyszerű 
 const noAnswer = (e) => Boolean(e) && (e.code === 'ETIMEDOUT' || e.code === 'ENOENT' || e.code === 'EPERM' || e.code === 'EACCES'
   || e.killed === true || Boolean(e.signal) || e.status === null || e.status === undefined);
 
-// A git-korlát 10 s (kanban #126); csak `node --test` alatt (NODE_TEST_CONTEXT) felülírható, felülről korlátozva.
+// A git-korlát 10 s (kanban #126); csak `node --test` alatt (NODE_TEST_CONTEXT) felülírható, felülről korlátozva. A külső
+// hook-korlát (.claude/settings.json) 20 s, hogy a belső mindig előbb járjon le érthető tiltással (L5).
 const GIT_TIMEOUT_MS = process.env.NODE_TEST_CONTEXT && Number(process.env.WEBSULI_AUDIT_GIT_TIMEOUT_MS) > 0
   ? Math.min(Number(process.env.WEBSULI_AUDIT_GIT_TIMEOUT_MS), 10_000) : 10_000;
 
@@ -40,6 +41,11 @@ try {
   payload = JSON.parse(text || '{}');
 } catch {
   // Olvashatatlan hook-bemenet: ha a nyers szövegben push van → TILT (kanban #100), különben enged.
+  if (/\bgit\b[^|;&]*\bpush\b/.test(text)) deny(`A hook-bemenet nem értelmezhető, de push-parancsot tartalmaz — ${RETRY}.`);
+  process.exit(0);
+}
+// L5: érvényes, de nem objektum JSON (null, tömb, szám, szöveg) — nem összeomlás; push-szöveggel TILT, különben enged.
+if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
   if (/\bgit\b[^|;&]*\bpush\b/.test(text)) deny(`A hook-bemenet nem értelmezhető, de push-parancsot tartalmaz — ${RETRY}.`);
   process.exit(0);
 }

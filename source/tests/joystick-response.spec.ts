@@ -4,6 +4,7 @@ import { CASE as blockCraft } from "./game-mobile-cases/block-craft-quiz";
 import { CASE as spaceAsteroid } from "./game-mobile-cases/space-asteroid-quiz";
 import { CASE as tornado } from "./game-mobile-cases/tornado-hunter-200";
 import { CASE as tsunami } from "./game-mobile-cases/tsunami-english";
+import { clickThenSettle, type Clock } from "./support/click-settle";
 import type { GameMobileCase } from "./support/game-mobile-quality";
 
 /**
@@ -61,6 +62,12 @@ type GameSpec = {
   /** A mozgás mértéke egy képkockában (pl. irányszög-sebesség, oldalsebesség). */
   motion: (prev: Frame, cur: Frame) => number;
   holdMs: number;
+  /**
+   * A render-ablak darabjainak száma (alap: 1 = egy 30 eseményes ablak). Ütemezett kérdésű játéknál a kérdés nélküli szakasz
+   * rövidebb lehet egy 30 eseményes ablaknál (`docs/specs/2026-11-18-joystick-tsunami-stabil.md`): a 30 esemény ennyi egyenlő
+   * darabban megy le, a számlálók és a hosszak összeadódnak. A 30 osztója legyen.
+   */
+  renderChunks?: number;
 };
 
 const rate = (key: string) => (prev: Frame, cur: Frame) => {
@@ -98,6 +105,9 @@ const GAMES: GameSpec[] = [
     input: "inX",
     motion: rate("x"),
     holdMs: 500,
+    // A Szökőár 8,2–10,9 mp-enként kapukérdést indít (`tsunamiDirectorConfig`); a CI-n egy 30 eseményes ablak 2,8–7 mp, a
+    // helyesen megválaszolt kérdés utáni kérdés nélküli szakasz ~5,8–8,5 mp — a 10 eseményes darab biztosan belefér.
+    renderChunks: 3,
   },
   {
     case: blockCraft,
@@ -165,14 +175,16 @@ async function waitFrames(page: Page, n: number): Promise<void> {
  * a CI-ben a Kockavadász minden Playwright-hívása egy ~0,7 s-os képkockára vár, ezért a külön `isVisible` lépcsőnként
  * egy képkockát fogyasztott.
  */
-async function readRec(page: Page, quizScope?: string): Promise<Rec & { quizOpen: boolean }> {
+async function readRec(page: Page, quizScope?: string): Promise<Rec & { quizOpen: boolean; stickGone: boolean }> {
   return page.evaluate((scope) => {
     const rec = (window as unknown as { __joyRec: Rec }).__joyRec;
     const out = { frames: rec.frames.slice(), events: rec.events.slice() };
     rec.frames.length = 0;
     rec.events.length = 0;
     const q = scope ? document.querySelector(scope) : null;
-    return { ...out, quizOpen: !!q && q.getClientRects().length > 0 };
+    // A tárcsa csak élő kör alatt van a lapon: ha a lépcső végére eltűnt, a kör a mérés ALATT ért véget (nem mérési eredmény).
+    const stick = document.querySelector('[data-testid="virtual-joystick"]');
+    return { ...out, quizOpen: !!q && q.getClientRects().length > 0, stickGone: !stick || stick.getClientRects().length === 0 };
   }, quizScope ?? null);
 }
 
@@ -187,16 +199,21 @@ const quizSelector = (g: GameSpec) =>
 /**
  * Render-ablak (E2E-ingadozók 3. kör, kanban #106): a kezdő olvasás képkockánkénti figyelőt indít, amely jelzi, ha az ablak alatt
  * BÁRMIKOR látszott kérdés-jel; a záró olvasás ugyanabban a lap-hívásban adja a számlálókat és ezt a jelzőt (C-64).
+ * 2026-11-18 (`docs/specs/2026-11-18-joystick-tsunami-stabil.md`): a figyelő azt is jelzi, ha a tárcsa az ablak alatt eltűnt
+ * (`gone` — a kör véget ért): álló játékon mért ablak nem vethető össze élő játékon mérttel.
  */
+type RenderWin = { quiz: boolean; gone: boolean; on: boolean };
+
 async function rendersOpen(page: Page, quizSel: string): Promise<Record<string, number>> {
   return page.evaluate((sel) => {
-    const w = window as unknown as InputWindow & { __joyWin?: { quiz: boolean; on: boolean } };
-    const win = { quiz: false, on: true };
+    const w = window as unknown as InputWindow & { __joyWin?: RenderWin };
+    const win: RenderWin = { quiz: false, gone: false, on: true };
     w.__joyWin = win;
-    const vis = () => Array.from(document.querySelectorAll(sel)).some((el) => el.getClientRects().length > 0);
+    const vis = (s: string) => Array.from(document.querySelectorAll(s)).some((el) => el.getClientRects().length > 0);
     const tick = () => {
       if (!win.on) return;
-      if (vis()) win.quiz = true;
+      if (vis(sel)) win.quiz = true;
+      if (!vis('[data-testid="virtual-joystick"]')) win.gone = true;
       requestAnimationFrame(tick);
     };
     tick();
@@ -204,13 +221,13 @@ async function rendersOpen(page: Page, quizSel: string): Promise<Record<string, 
   }, quizSel);
 }
 
-async function rendersClose(page: Page, quizSel: string): Promise<{ counts: Record<string, number>; quiz: boolean }> {
+async function rendersClose(page: Page, quizSel: string): Promise<{ counts: Record<string, number>; quiz: boolean; gone: boolean }> {
   return page.evaluate((sel) => {
-    const w = window as unknown as InputWindow & { __joyWin?: { quiz: boolean; on: boolean } };
-    const win = w.__joyWin ?? { quiz: true, on: false };
+    const w = window as unknown as InputWindow & { __joyWin?: RenderWin };
+    const win: RenderWin = w.__joyWin ?? { quiz: true, gone: false, on: false };
     win.on = false;
-    const now = Array.from(document.querySelectorAll(sel)).some((el) => el.getClientRects().length > 0);
-    return { counts: { ...(w.__websuliInput?.renders ?? {}) }, quiz: win.quiz || now };
+    const vis = (s: string) => Array.from(document.querySelectorAll(s)).some((el) => el.getClientRects().length > 0);
+    return { counts: { ...(w.__websuliInput?.renders ?? {}) }, quiz: win.quiz || vis(sel), gone: win.gone || !vis('[data-testid="virtual-joystick"]') };
   }, quizSel);
 }
 
@@ -370,29 +387,106 @@ function analyseStep(rec: Rec, g: GameSpec, t0: number, sign: number, d0 = NaN):
  * a vezetésről szól. #58 (run 43916330845): ha a kérdés épp a lépcső érintése alá nyílt, az érintés egy rossz választ
  * koppintott; ilyenkor a válaszgombok letiltva maradnak, amíg a magyarázókártyát be nem zárják — a korábbi feltétlen
  * `click()` a letiltott gombra 180 s-ig várt. Most: kártya bezárása, csak engedélyezett gombra kattintás, korlátos körök.
+ *
+ * 2026-11-18 (`docs/specs/2026-11-18-joystick-tsunami-stabil.md`, CI 44301362954): a „látható és engedélyezett?” ellenőrzés és
+ * a kattintás két külön hívás volt — közben a Szökőár kérdése lejárt, a sáv megoldás-kijelzésbe váltott, a gomb letiltódott,
+ * majd lecserélődött, és a kattintás 5 s után időtúllépéssel buktatta a tesztet. Most a kattintás CSAK megválaszolható gombra
+ * megy; ha a kérdés közben eldől, az nem hiba (a kör újraolvassa az állapotot), és a várakozások állapotra várnak, nem időre.
  */
+const correctSel = (g: GameSpec) => `${g.case.quizScope} [data-correct="true"]`;
+/** Megválaszolható jó válasz: a kérdés nyitott és élesített (a gomb látható, nem `aria-disabled`, nem `disabled`). */
+const answerableSel = (g: GameSpec) => `${correctSel(g)}:not([aria-disabled="true"]):not(:disabled)`;
+
+type QuizEvent = "answerable" | "closed" | "card";
+
+/**
+ * Várakozás a kérdés-réteg állapotára: `answerable` — megválaszolható jó válasz látszik; `closed` — a kérdés jó válasza már nem
+ * látszik; `card` — a magyarázókártya látszik. A felsoroltak bármelyike elég. Korlátos; a lejárat nem hiba (`false`).
+ */
+async function waitQuiz(page: Page, g: GameSpec, any: QuizEvent[], timeout: number): Promise<boolean> {
+  return page
+    .waitForFunction(
+      ({ correct, answerable, events }) => {
+        const vis = (sel: string) =>
+          Array.from(document.querySelectorAll(sel)).some((el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden");
+        return (
+          (events.includes("answerable") && vis(answerable)) ||
+          (events.includes("closed") && !vis(correct)) ||
+          (events.includes("card") && vis('[data-testid="quiz-feedback-dismiss"]'))
+        );
+      },
+      { correct: correctSel(g), answerable: answerableSel(g), events: any },
+      { timeout, polling: 50 },
+    )
+    .then(() => true, () => false);
+}
+
 async function clearQuiz(page: Page, g: GameSpec): Promise<boolean> {
   const card = page.getByTestId("quiz-feedback-dismiss");
-  const correct = page.locator(`${g.case.quizScope} [data-correct="true"]`).first();
+  const correct = page.locator(correctSel(g)).first();
+  const answerable = page.locator(answerableSel(g)).first();
   let acted = false;
   for (let round = 0; round < 4; round++) {
     if (await card.isVisible().catch(() => false)) {
-      await card.click({ timeout: 5_000 });
-      acted = true;
-      await page.waitForTimeout(500);
+      // Vak ellenőr KICSI-4: a kártya a láthatóság-ellenőrzés és a kattintás között magától is bezárulhat — a sikertelen kattintás
+      // nem hiba (újraolvasás), nem 5 s-os időtúllépés.
+      const closed = await clickThenSettle(
+        () => card.click({ timeout: 2_000 }),
+        () => card.waitFor({ state: "hidden", timeout: 3_000 }).catch(() => undefined),
+        500,
+        pageClock(page),
+      );
+      if (closed) acted = true;
       continue;
     }
     if (!(await correct.isVisible().catch(() => false))) break;
-    if (!(await correct.isEnabled().catch(() => false))) {
-      // Kiértékelés alatt (a helyes válasz kiemelve, a gombok letiltva): megvárjuk a következő állapotot.
-      await page.waitForTimeout(500);
+    if (!(await answerable.isVisible().catch(() => false))) {
+      // Kiértékelés / megoldás-kijelzés alatt (a helyes válasz kiemelve, a gombok letiltva): a KÖVETKEZŐ állapotra várunk.
+      await waitQuiz(page, g, ["answerable", "closed", "card"], 3_000);
       continue;
     }
-    await correct.click({ timeout: 5_000 });
+    // A kérdés a kattintás előtt eldőlhet (lejárat, tétlen átfutás): ilyenkor a gomb már nem megválaszolható — újraolvasunk.
+    // A megválaszolt kérdés lezárulására várunk (eltűnik, vagy hibás koppintásnál a magyarázókártya jön), majd a nyugvás a SIKERES
+    // kattintás végétől 1500 ms (review #514, P2: a kattintás előtti időbélyeggel a lassú CI-n rövidült volna).
+    const clicked = await clickThenSettle(
+      () => answerable.click({ timeout: 2_000 }),
+      () => waitQuiz(page, g, ["closed", "card"], 3_000),
+      1500,
+      pageClock(page),
+    );
+    if (!clicked) continue;
     acted = true;
-    await page.waitForTimeout(1500);
   }
   return acted;
+}
+
+/**
+ * A mérés feltételei ne változzanak: a kérdés lezárulása után a játék (turbó, feliratok) ugyanannyit nyugszik, mint a korábbi
+ * rögzített várakozásnál (`click()` → `waitForTimeout(minMs)`): `clickThenSettle` (`support/click-settle.ts`) az állapotra várás
+ * UTÁN a sikeres kattintás vége óta eltelt időt `minMs`-ig kiegészíti (soha nem indulunk korábban, mint eddig).
+ */
+const pageClock = (page: Page): Clock => ({ now: () => Date.now(), sleep: (ms) => page.waitForTimeout(ms) });
+
+/** A következő ütemezett kérdésre legfeljebb ennyit várunk (a Szökőár ütemezőjének legnagyobb köze 15 mp, + 1 mp). */
+const QUIZ_WAIT_MS = 16_000;
+
+/**
+ * Igazítás a kérdés nélküli szakaszhoz (`docs/specs/2026-11-18-joystick-tsunami-stabil.md`, CI 44317537385: „5 próbából sincs
+ * kérdés nélküli álló ablak”). Ütemezett kérdésű játéknál a megválaszolatlan kérdés utáni kérdés nélküli szakasz rövid
+ * (Szökőár: 0,6–3,3 mp), a helyesen megválaszolt kérdés utáni a leghosszabb (~5,8–8,5 mp). A render-ablak darabja ezért nem
+ * véletlen pillanatban indul: megvárjuk a KÖVETKEZŐ megválaszolható kérdést, helyesen megválaszoljuk, megvárjuk, hogy a
+ * kérdés-jel eltűnjön — innen indul a darab. Ha a korláton belül nem jön kérdés (pl. új kör bemelegítése), a darab így is
+ * elindul; a kérdéssel érintett darabot a hívó megismétli.
+ */
+async function alignToQuizGap(page: Page, g: GameSpec, quizSel: string): Promise<void> {
+  if (!(await waitQuiz(page, g, ["answerable"], QUIZ_WAIT_MS))) return;
+  await clearQuiz(page, g);
+  await page
+    .waitForFunction((sel) => !Array.from(document.querySelectorAll(sel)).some((el) => el.getClientRects().length > 0), quizSel, {
+      timeout: 6_000,
+      polling: 50,
+    })
+    .catch(() => undefined);
 }
 
 /**
@@ -429,7 +523,10 @@ async function ensurePlaying(page: Page, g: GameSpec): Promise<void> {
   await expect(stick, `${g.case.id}: a tárcsa nem látszik (se játék, se kör vége)`).toBeVisible({ timeout: 15_000 });
 }
 
-/** A lépcső mérési ablakában látható kérdés volt: a lépcsőt meg kell ismételni (nem mérési eredmény). */
+/**
+ * A lépcső mérési ablakában látható kérdés volt, vagy a kör a lépcső alatt véget ért (a tárcsa eltűnt): a lépcsőt meg kell
+ * ismételni (nem mérési eredmény).
+ */
 class StepQuizError extends Error {}
 
 /** Egy lépcső: ujj le a tárcsa közepén, (gáz), majd egy mozdulattal `fx`-nyi vízszintes kitérés, tartás, fel. */
@@ -480,9 +577,11 @@ async function stepOnce(page: Page, cdp: CDPSession, g: GameSpec, fx: number): P
   const moves = rec.events.filter((e) => e.type === "pointermove");
   const t0 = moves[moves.length - 1]?.t ?? NaN;
   const d0 = moves[moves.length - 1]?.d ?? NaN;
-  if (!Number.isFinite(t0) || rec.frames.length < 5 || rec.quizOpen) {
+  if (!Number.isFinite(t0) || rec.frames.length < 5 || rec.quizOpen || rec.stickGone) {
     // A rögzítő a lépcső ELŐTT ürül (a lenyomás és a gáz eldobva), ezért itt csak a lépcső `pointermove`-ja várható.
     if (rec.quizOpen) throw new StepQuizError(`${g.case.id}: a lépcső ablakában kérdés nyílt (képkockák ${rec.frames.length})`);
+    // 2026-11-18 (CI 44301362954, „teljes kitérés: 0”): a kör a lépcső ALATT ért véget — a tárcsa lecsatolódott, a bemenet 0.
+    if (rec.stickGone) throw new StepQuizError(`${g.case.id}: a kör a lépcső alatt véget ért (a tárcsa eltűnt; képkockák ${rec.frames.length})`);
     throw new Error(`${g.case.id}: nincs mérhető lépcső (a lépcső óta: események ${JSON.stringify(rec.events.map((e) => e.type))}, képkockák ${rec.frames.length})`);
   }
   return { rec, t0, d0 };
@@ -524,19 +623,28 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
   const cost = touchMoveCost.get(cdp);
   const perTouchMs = cost && cost.n > 0 ? cost.ms / cost.n : 0;
   const quizSel = quizSelector(g);
-  const hold = async (jiggle: boolean, extraMs = 0): Promise<{ counts: Record<string, number>; ms: number; quiz: boolean }> => {
+  // 2026-11-18 (`docs/specs/2026-11-18-joystick-tsunami-stabil.md`): egy `hold` egy DARAB — `events` mozgás-esemény (vagy
+  // ugyanennyi 16 ms-os várakozás állva + `extraMs`). A számláló a lenyomás és az első elmozdulás UTÁN nyit és a felengedés
+  // ELŐTT zár, ezért a darabolás nem ad a mérésbe húzás-kezdeti / -végi rendert; a darabok számlálói és hossza összeadódnak.
+  const hold = async (
+    jiggle: boolean,
+    events: number,
+    extraMs = 0,
+  ): Promise<{ counts: Record<string, number>; ms: number; quiz: boolean; gone: boolean }> => {
     await ensurePlaying(page, g);
-    const y = s.cy + g.dy * s.r;
-    await touch(cdp, "touchStart", s.cx, s.cy);
-    await touch(cdp, "touchMove", s.cx + 0.8 * s.r, y);
+    // Új kör után (`ensurePlaying` lassú útja) a tárcsa helye újramérve jön a gyorsítótárból.
+    const st = await stickGeometry(page);
+    const y = st.cy + g.dy * st.r;
+    await touch(cdp, "touchStart", st.cx, st.cy);
+    await touch(cdp, "touchMove", st.cx + 0.8 * st.r, y);
     const a = await rendersOpen(page, quizSel);
     const t0 = Date.now();
-    for (let i = 1; i <= 30; i++) {
-      if (jiggle) await touch(cdp, "touchMove", s.cx + (i % 2 === 0 ? 0.75 : 0.85) * s.r, y);
+    for (let i = 1; i <= events; i++) {
+      if (jiggle) await touch(cdp, "touchMove", st.cx + (i % 2 === 0 ? 0.75 : 0.85) * st.r, y);
       await page.waitForTimeout(16);
     }
     if (extraMs > 0) await page.waitForTimeout(extraMs);
-    const { counts: b, quiz } = await rendersClose(page, quizSel);
+    const { counts: b, quiz, gone } = await rendersClose(page, quizSel);
     const ms = Date.now() - t0;
     // Képernyőkép húzás közben (a gomb az ujj alatt), ha kérik: JOY_SHOT_DIR=<mappa>.
     if (jiggle && process.env.JOY_SHOT_DIR) {
@@ -552,25 +660,47 @@ async function measureGame(page: Page, g: GameSpec, cpu: number) {
     await page.waitForTimeout(300);
     const counts: Record<string, number> = {};
     for (const k of Object.keys(b)) counts[k] = (b[k] ?? 0) - (a[k] ?? 0);
-    return { counts, ms, quiz };
+    return { counts, ms, quiz, gone };
   };
   // E2E-ingadozók 3. kör (kanban #106): ha az álló VAGY a rezgő ablakba kérdés lógott (a Szökőárnál kérdés alatt a 24 Hz-es
   // hurok áll, csak az 1 mp-es visszaszámláló renderel — #483 CI 44124385498: többlet 11 és 34), az ablakpár nem összevethető:
   // megismételjük (ablakonként legfeljebb 5×), nem arányosítjuk. Ha 5 próbából sincs tiszta ablak, a teszt érthető üzenettel bukik.
   // Ablakonként ismétlünk (nem páronként): a Szökőár ~9,5 mp-enként kérdez, egy teljes pár ennél hosszabb is lehet.
+  // 2026-11-18: az ablak `renderChunks` darabban megy le (Szökőár: 3 × 10 esemény; a többi játék: 1 × 30, a korábbi menet). Nem
+  // mérési eredmény az a darab sem, amely alatt a kör véget ért (`gone`: álló játékon mért render-szám — helyben, CI-szerű
+  // késéssel: álló 33 ↔ rezgő 95, „többlet” 64; a CI 44317092042 futásban rezgő 2 ↔ álló 29, hamis zöld). A darabolt játéknál
+  // minden darab egy megválaszolt kérdés utáni szakaszra igazodik (`alignToQuizGap`). Az 5 próba darabonként értendő.
   const MAX_TRIES = 5;
+  const RENDER_EVENTS = 30;
   let pairs = 0;
-  const cleanHold = async (jiggle: boolean, extraMs = 0) => {
+  const chunks = g.renderChunks ?? 1;
+  const cleanChunk = async (jiggle: boolean, events: number, extraMs: number) => {
     for (let i = 1; ; i++) {
+      // Ütemezett kérdésű játéknál MINDEN darab ugyanabban a fázisban indul (közvetlenül egy helyesen megválaszolt kérdés után):
+      // így a darab belefér a kérdés nélküli szakaszba, és az álló / rezgő darabok alatt a játék ugyanazt csinálja.
+      if (chunks > 1) await alignToQuizGap(page, g, quizSel);
       pairs += 1;
-      const w = await hold(jiggle, extraMs);
-      if (!w.quiz) return w;
+      const w = await hold(jiggle, events, extraMs);
+      if (!w.quiz && !w.gone) return w;
       if (i >= MAX_TRIES) {
-        throw new Error(`${g.case.id}: ${MAX_TRIES} próbából sincs kérdés nélküli ${jiggle ? "rezgő" : "álló"} ablak — a render-szám nem mérhető`);
+        throw new Error(
+          `${g.case.id}: ${MAX_TRIES} próbából sincs kérdés nélküli ${jiggle ? "rezgő" : "álló"} ablak — a render-szám nem mérhető (utolsó ok: ${w.quiz ? "kérdés" : "a kör véget ért"})`,
+        );
       }
     }
   };
-  const still = await cleanHold(false, 30 * perTouchMs);
+  const cleanHold = async (jiggle: boolean, extraMsPerEvent = 0) => {
+    const events = RENDER_EVENTS / chunks;
+    if (!Number.isInteger(events)) throw new Error(`${g.case.id}: a renderChunks (${chunks}) nem osztója a ${RENDER_EVENTS} eseménynek`);
+    const total: { counts: Record<string, number>; ms: number } = { counts: {}, ms: 0 };
+    for (let c = 0; c < chunks; c++) {
+      const w = await cleanChunk(jiggle, events, events * extraMsPerEvent);
+      for (const k of Object.keys(w.counts)) total.counts[k] = (total.counts[k] ?? 0) + w.counts[k]!;
+      total.ms += w.ms;
+    }
+    return total;
+  };
+  const still = await cleanHold(false, perTouchMs);
   const moving = await cleanHold(true);
   const renderDelta: Record<string, number> = {};
   const renderDrag = moving.counts;

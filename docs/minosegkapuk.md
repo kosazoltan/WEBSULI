@@ -293,21 +293,42 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
 
 - A `.claude/settings.json` kapu-hook bejegyzésein (Bash, PowerShell) `"onFailure": "block"`: ha a hook-folyamat nem indul,
   összeomlik, túllépi a 60 s-os külső korlátot vagy érvénytelen kimenetet ad, a Claude Code a parancsot **tiltja** (alapból
-  átengedné). A többi hookon (`check-destructive`, `enforce-repo-rules`, `warn-test-edit`) nincs ilyen beállítás.
+  átengedné). A többi hookon (`check-audit-ok`, `check-destructive`, `enforce-repo-rules`, `warn-test-edit`) nincs ilyen beállítás: minden
+  Bash / PowerShell / Edit / Write hívásra futnak, a hibájuk minden munkát megállítana; a pusht a kapu-hook fedi.
 - A hook saját „nem válaszolt” tiltása (a git / gh nem válaszolt, a keret elfogyott) és az audit-hook (`check-audit-ok`) ugyanilyen
   tiltása a teendőt is megmondja: **néhány másodperc múlva ugyanazt az egyszerű parancsot újra.** Az audit-hook a git
-  időtúllépésekor / indítási hibájakor és belső hibájakor push-parancsra tilt (kanban #126); nem push parancsnál és nem git-repóban
+  időtúllépésekor / indítási hibájakor és belső hibájakor push-parancsra tilt (kanban #126; a belső git-korlát 10 s, a külső hook-korlát 20 s); nem push parancsnál és nem git-repóban
   enged.
 - **Ha tartósan fennáll** (pl. minden Bash / PowerShell parancs tiltott, mert a hook-szkript elromlott — félbemaradt összefésülés,
   szintaxishiba, hiányzó `node`): az ügynök **kizárólag a hookot javíthatja** — az Edit / Write eszközzel (azon nincs
   `onFailure`) a `scripts/qa/hooks/check-quality-gates.mjs`-ben, a hibát lefedő teszttel együtt. A védelmet (a `"onFailure"`
   beállítást, a hook-bejegyzést vagy bármely hookot) az ügynök **nem távolíthatja el, nem gyengítheti, és kerülőútként sem
   javasolhatja** — ez a kapu megkerülése, ami tilos (AGENTS.md: „ha a kapu hibás, a kaput kell javítani”).
-- **Ha a javításhoz nincs futtatókörnyezet**, vagy a javítás maga is csak a tiltott úton (a védelem kikapcsolásával) volna
+- **Ha a javításhoz nincs futtatókörnyezet** (pl. nincs `node`), vagy a javítás maga is csak a tiltott úton (a védelem kikapcsolásával) volna
   elvégezhető: az ügynök **megáll**, és a tulajdonostól kér segítséget — leírja a hibát, a kipróbált lépéseket és a javasolt
   hook-javítást.
-- **A védelem ideiglenes kikapcsolása kizárólag a tulajdonos saját kezű lépése** (pl. egy futásra a `disableAllHooks`
-  beállítással, utána vissza). Az ügynök ezt nem végezheti el, és nem is javasolhatja kerülőútként.
+- **A settings-fájlok jogosultsági tiltás alatt állnak** (tulajdonosi döntés 2026-11-18): a `.claude/settings.json`
+  `permissions.deny` listája (`Edit(/.claude/settings.json)`, `Edit(/.claude/settings.local.json)`, valamint a repón belüli munkafákra
+  `Edit(/.claude/worktrees/**/.claude/settings.json)` és `Edit(/.claude/worktrees/**/.claude/settings.local.json)`) minden módban
+  megtiltja, hogy ügynök ezeket a fájlokat írja. **Ezután a beállítás csak a tulajdonos kezével módosítható.** A pontos kör a
+  hivatalos dokumentáció szerint (https://code.claude.com/docs/en/permissions — az `Edit(...)` szabály a beépített fájlszerkesztő
+  eszközökre vonatkozik; a `/…` alak a projektgyökérhez, a `//…` a fájlrendszer gyökeréhez, a `~/…` a saját könyvtárhoz horgonyzott;
+  a minta gitignore-szintaxisú):
+  - **Fedett:** a beépített fájlszerkesztő eszközök (Edit, Write, NotebookEdit), és Bash-ben a kimeneti átirányítás (`>`, `>>`, `2>`)
+    és a `tee` célja; a `/` a munkamenet fő munkakönyvtárához horgonyzott — ha a munkamenet a repó gyökerében indul, a fenti négy útvonal.
+  - **Nem fedett:** a felhasználói settings (`~/.claude/…` — a tulajdonos saját beállítása, repóból nem korlátozzuk; ezért nincs `//**`
+    alakú tiltás sem); a repón kívüli munkafa (pl. ideiglenes mappában) és a nem a repó gyökerében indult munkamenet; a PowerShell
+    fájlírása (a dokumentáció az átirányítás-ellenőrzést csak Bash-re írja le); az MCP-fájlírók; a fájlt maga megnyitó szkript (pl.
+    Node / Python). Ezeket a munkamenetben semmi nem fogja meg — ilyen
+    írás a kapu megkerülése, tilos. (A beállítás-változást figyelő hook a következő hook-szelet tétele, kanban.)
+- **A hookok kikapcsolása ellen** a projekt-settingsben a hookok kikapcsoló kulcsa kifejezett hamis értékkel áll. A hivatalos
+  dokumentáció szerint (https://code.claude.com/docs/en/hooks, „Disable or remove hooks”) a projekt-settings hamis értéke felülírja a felhasználói
+  settings igaz értékét; egy futásra szóló parancssori beállítás ennél erősebb — azt repóból nem lehet lefedni.
+- **A hook-szkript gyengítése ellen** a valódi védelem a CI-ben futó viselkedési hook-tesztek (`settings-hooks.test.mjs`,
+  `hook-failure.test.mjs`, `check-quality-gates.test.mjs`): a gyengített hook a PR-ban bukik. A `scripts/qa/repo-rules.json`
+  védő szabályai csak szűk, szó szerinti alakokat fognak — riasztók, nem biztonsági határ; amit átengednek, az sem megengedett.
+- **A védelem ideiglenes kikapcsolása kizárólag a tulajdonos saját kezű lépése** (kézzel, a saját gépén; utána vissza). Az ügynök
+  ezt nem végezheti el, és nem is javasolhatja kerülőútként.
 
 ## Ellenpróbák (2026-11-17, a bevezető PR-ban)
 
