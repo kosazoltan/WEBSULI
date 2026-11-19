@@ -15,3 +15,13 @@ Push / PR csak az orkesztrátor jelére; a nehéz kör (`gate:push`) a gép-sáv
    ellenőr.
 
 - [x] 1 · [x] 2 · [x] 3 · [x] 4 (mutációs ellenpróba 8/8 elkapva) · [ ] 5 (kapuk — folyamatban)
+
+## Kiegészítés — a vak ellenőr 1. köre — végrehajtás
+
+Terv: `docs/specs/2026-11-19-audit-hook-kapuinditas.md`, „Kiegészítés”.
+
+6. Terv-kiegészítés (ez a doksi-commit).
+7. Bukó teszt (`check-audit-ok.test.mjs`: A6 a `PUSH` listában, A7 a `KAPU` listában) → `isPushSub` / `isPushProgram` a hookban.
+8. Kanban: L1, L4, L5 (a kapu-hookkal közös szelet). Mutációs ellenpróba; `gate:stage`; új fej; vak visszanézés.
+
+- [x] 6 · [x] 7 · [ ] 8

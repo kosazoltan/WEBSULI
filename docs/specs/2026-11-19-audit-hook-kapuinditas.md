@@ -51,3 +51,20 @@ Megbízás: az orkesztrátor, 2026-11-19 (a #506 összevonása után, `14c859ee`
 - [x] A3 WHEN a `git push` láncolt vagy álcázott (a fenti edge case-ek) THEN a hook SHALL tiltani.
 - [x] A4 WHEN az `.audit-ok` friss THEN a valódi `git push` SHALL engedett (változatlan).
 - [x] A5 a meglévő hook-tesztek (`hook-failure.test.mjs`, F3 / F4 / F10 / #100) SHALL zöldek maradni.
+
+## Kiegészítés — a vak ellenőr 1. köre (2026-11-19)
+
+Ítélet (fej `5c86f260`): IGEN, FELTÉTELLEL. Ebben a PR-ben, előbb bukó teszttel:
+
+- L2 (visszalépés): a push rokon alparancsai (`git http-push`, `git send-pack`) és önálló programjaik (`git-http-push`,
+  `git-send-pack`, útvonallal is) push-parancsnak számítanak.
+- L3: negatív teszt — `git` nélküli önálló „push” szó (`echo push`, jegyzet-szövegben) nem tilt (a sorrend-feltétel nélküli mutáns
+  ellen).
+
+Kanbanra (a kapu-hookkal közös következő szelet): L1 (további plumbing-alak, csővezetékből érkező „push”, ANSI-C idézés, előre
+beállított alias), L4 (a commit-üzenet / idézett argumentum „push” szava miatti téves tiltás), L5 (PowerShell-specifikus alakok
+tesztje).
+
+- [x] A6 WHEN a parancs `git http-push` / `git send-pack` vagy `git-http-push` / `git-send-pack` program és az `.audit-ok` régi THEN a
+  hook SHALL tiltani.
+- [x] A7 WHEN a parancsban nincs `git`, csak önálló „push” szó THEN a hook SHALL engedni.
