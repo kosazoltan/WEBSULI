@@ -92,6 +92,14 @@ a fájllistát); (3) a `mergeSteps` a `probe`-ot továbbadja a `decideMerge`-nek
   `carryChain`); a próba időkorlátja 10 perc; a `gate-pr-<n>` segéd-ref törlődik; hiányzó `node_modules` → érthető üzenet; a PR
   fájllistája 100 fölött lapozott REST-listából (csonka → FAIL).
 
+- **Tulajdonosi döntés (űrlap, 2026-11-19): a próba mércéje „≤ 7 perc + 1 újrafuttatás”.** Mért alap: a valódi eset 145 s; a
+  legrosszabb eset (teljes egységkör, 509 fájl) egységrésze 252 s, és egy időérzékeny teszt (`vocab-distractor-overlap` bank-invariáns,
+  60 s-os belső korlát) gépterhelés alatt hamisan bukott — kanban **#205** („Összefésült próba (merged-probe): a teljes egységkörben az
+  időérzékeny teszt … gépterhelés alatt hamis FAIL-t ad — known-flaky kezelés vagy a korlát mérése a próbában”). A cél ≤ 7 perc a teljes
+  egységkörös legrosszabb esetre. A #205 megoldásáig a merge-kapu próbája bukáskor **egyszer** újrafut; az újrafuttatás a naplóban és a
+  `merge-probe-<PR>-<fej>` bizonyítékban jelölve (`attempts: 2`, `retried: true`, az 1. futás oka); ha az újrafuttatás is bukik → FAIL;
+  kettőnél több futás nincs.
+
 <!-- acceptance-checklist -->
 - [ ] AMIKOR a `gate:carry` `--base`-szel indul, 2-es kilépéssel megáll; az alap a friss, GitHubbal egyeztetett `origin/main`, eltérésnél nincs átvitel.
 - [ ] A próba hatóköre az L2 szerinti (őrök + feltételes teljes `scripts/qa` / egységkör), a main az őrök alsó korlátja (L4).
@@ -99,4 +107,5 @@ a fájllistát); (3) a `mergeSteps` a `probe`-ot továbbadja a `decideMerge`-nek
 - [ ] `NEM` ítélet nem vihető át; a lánc megőrzi az eredeti fejet; 10 perces korlát; a segéd-ref törlődik; a fájllista hiánytalan (L8/L9).
 - [ ] A runbook a kód szerinti hatókört és a maradó kockázatot írja; a vak-kör szabály az L7 szerint (runbook, AGENTS, skill, C-76).
 - [ ] Minden javítás előbb bukó teszttel; a mutációs ellenpróba mutánsai (a vak ellenőr 9 túlélőjével együtt) elhalnak.
-- [ ] A legrosszabb eset próba-futásideje mérve és jelentve (cél ≤ 5 perc).
+- [ ] A legrosszabb eset próba-futásideje mérve és jelentve (tulajdonosi mérce: ≤ 7 perc).
+- [ ] A merge-kapu próbája bukáskor legfeljebb egyszer újrafut, jelölve a naplóban és a bizonyítékban; a második bukás FAIL (#205-ig).

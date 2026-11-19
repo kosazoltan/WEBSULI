@@ -42,5 +42,9 @@ Minden pont ELŐBB bukó teszttel (a régi kódon bukik, az újon zöld); ez a d
    Teszt: `carry-over.test.mjs` (csupasz tár mint `origin`).
 4. Doksi: `docs/minosegkapuk.md` (pontos hatókör, átvitel feltételei, vak-kör L7, „Ismert korlátok” L5 + L3), `AGENTS.md`, a
    `websuli-fejlesztesi-ellenor` skill + tükör, `docs/agent-csapdak.md` C-76 / C-78.
+6. Tulajdonosi döntés „≤ 7 perc + 1 újrafuttatás” (terv 7. pont, kanban #205): `scripts/qa/gates/pre-merge-gate.mjs`
+   `probeWithRetry(run, log)` — PASS → egy futás; FAIL → pontosan egy újrafuttatás, jelölve (`attempts`, `retried`, `firstNote`, a
+   megjegyzésben „ÚJRAFUTTATVA (#205)”); a második bukás FAIL. A `runMergeProbe` ezt hívja, a `merge-probe-` rekord a jelölést tárolja.
+   Teszt (`pre-merge-gate.test.mjs`): kétszeri bukás → FAIL; a jelölés kötelező; legfeljebb két futás; első PASS → nincs újrafuttatás.
 5. Mutációs ellenpróba másolaton (a vak ellenőr 9 túlélője is); `git merge origin/main`; `npm run gate:stage`; gép-zárral
    (`kapugyorsitas`) a legrosszabb eset próba-mérése és `npm run gate:push`.
