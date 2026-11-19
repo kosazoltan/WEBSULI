@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { illustrationLayoutProblems, sanitizeIllustration } from "./illustration-svg";
+import type { CompareCardsVisualParams, RuleBoxVisualParams, TableVisualParams } from "./source-visual-render";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md): a magyarázó ábrák paraméterei.
@@ -111,6 +112,72 @@ export const scene3dParamsSchema = z.object({
   if (count > SCENE3D_MAX_LABELS) ctx.addIssue({ code: "custom", path: ["labels"], message: `legfeljebb ${SCENE3D_MAX_LABELS} felirat (most ${count})` });
 });
 
+/**
+ * Spec 2026-11-18 (tananyaggyártás minősége, S2a): a forrás ábráit újrarajzoló megjelenítők paraméterei. Az ALAK a megosztott
+ * szerződésé (`shared/source-visual-render.ts` — a forrás-fedettségi kapu ugyanebből olvas); itt a SZIGORÚ érvényesség áll:
+ *  - ismeretlen kulcs (`hidden`, `maxRows`, `collapsed` …) elutasítva (`.strict()`): amit a séma elfogad, az mind megjelenik;
+ *  - a korlátok NEM szűkebbek a forrásleltárénál (`shared/source-visuals.ts`): 8 oszlop, 80 karakteres fejléc, a leltár 100 karakteres cellájánál bővebb (120) cella,
+ *    8 pontos / 240 karakteres szabálydoboz. Egyetlen kivétel a sorszám: egy blokk legfeljebb `SOURCE_TABLE_BLOCK_ROWS` sor — a
+ *    hosszabb forrástáblát a gyártó több, ugyanarra a tételre hivatkozó blokkra bontja (a kapu a hivatkozó blokkokat összeadja).
+ */
+export const SOURCE_TABLE_BLOCK_ROWS = 20;
+const toneSchema = z.enum(["a", "b", "c", "neutral"]);
+export const tableParamsSchema = z.object({
+  caption: label(160).optional(),
+  headers: z.array(label(80)).min(1).max(8),
+  /** A cella lehet üres (a forrás üres mezője is adat); minden sor a fejléc sorrendjében, a fejléccel azonos hosszban. */
+  rows: z.array(z.array(z.string().trim().max(120)).min(1).max(8)).min(1).max(SOURCE_TABLE_BLOCK_ROWS),
+  headerTones: z.array(toneSchema).max(8).optional(),
+}).strict().superRefine((p, ctx) => {
+  p.rows.forEach((row, i) => { if (row.length !== p.headers.length) ctx.addIssue({ code: "custom", path: ["rows", i], message: `a sor ${row.length} cellás, a fejléc ${p.headers.length} oszlopos` }); });
+  if (p.headerTones && p.headerTones.length !== p.headers.length) ctx.addIssue({ code: "custom", path: ["headerTones"], message: "oszloponként egy tónus kell" });
+  if (!p.rows.some((row) => row.some((cell) => cell.length > 0))) ctx.addIssue({ code: "custom", path: ["rows"], message: "minden cella üres" });
+});
+export const ruleBoxParamsSchema = z.object({
+  tone: z.enum(["rule", "warning", "tip"]),
+  heading: label(80).optional(),
+  items: z.array(label(240)).min(1).max(8),
+}).strict();
+export const compareCardsParamsSchema = z.object({
+  cards: z.array(z.object({
+    title: label(80),
+    tone: toneSchema.optional(),
+    lines: z.array(label(200)).min(1).max(8),
+    example: label(160).optional(),
+  }).strict()).min(2).max(3),
+}).strict();
+// Fordítási idejű őr: a séma kimenete a megosztott szerződés alakja (ha a szerződés változik, ez a sor nem fordul le).
+type Assignable<A extends B, B> = A;
+export type SourceVisualSchemaContract = [Assignable<z.infer<typeof tableParamsSchema>, TableVisualParams>,
+  Assignable<z.infer<typeof ruleBoxParamsSchema>, RuleBoxVisualParams>, Assignable<z.infer<typeof compareCardsParamsSchema>, CompareCardsVisualParams>];
+
+/**
+ * Független review B1 (S2a): a forrás-ábrák fajtáinál a hibás paraméterű blokkból a rajzoló SEMMIT nem rajzol — az ilyen blokk
+ * (fejléc üres törzzsel) nem kerülhet a tanuló elé. `sourceVisualProblems`: a hibák listája, vagy `null`, ha a blokk nem ilyen fajtájú
+ * vagy érvényes. `dropUndrawableSourceVisuals`: a szerző kimenetéből determinisztikusan kiveszi ezeket (javítókör nélkül; a hívó számol
+ * és naplóz); a többi blokk és a régi 16 fajta érintetlen.
+ */
+export const SOURCE_VISUAL_SCHEMA_KINDS = ["table", "ruleBox", "compareCards"] as const;
+export function sourceVisualProblems(block: unknown): string[] | null {
+  const b = block as { kind?: unknown; animKind?: unknown; params?: unknown } | null;
+  if (!b || b.kind !== "animate" || !(SOURCE_VISUAL_SCHEMA_KINDS as readonly unknown[]).includes(b.animKind)) return null;
+  const problems = visualParamProblems(b.animKind as string, b.params);
+  return problems.length ? problems : null;
+}
+export type DroppedSourceVisual = { path: string; animKind: string; problems: string[] };
+export function dropUndrawableSourceVisuals<L extends { sections: ReadonlyArray<{ blocks: ReadonlyArray<unknown> }> }>(lesson: L): { lesson: L; dropped: DroppedSourceVisual[] } {
+  const dropped: DroppedSourceVisual[] = [];
+  const sections = lesson.sections.map((section, i) => {
+    const blocks = section.blocks.filter((block, j) => {
+      const problems = sourceVisualProblems(block);
+      if (problems) dropped.push({ path: `sections[${i}].blocks[${j}]`, animKind: String((block as { animKind?: unknown }).animKind), problems: problems.slice(0, 5) });
+      return !problems;
+    });
+    return blocks.length === section.blocks.length ? section : { ...section, blocks };
+  });
+  return dropped.length ? { lesson: { ...lesson, sections }, dropped } : { lesson, dropped };
+}
+
 export const VISUAL_PARAM_SCHEMAS = {
   cycle: cycleParamsSchema,
   labeledShape: labeledShapeParamsSchema,
@@ -120,6 +187,9 @@ export const VISUAL_PARAM_SCHEMAS = {
   process: processParamsSchema,
   timeline: timelineParamsSchema,
   scene3d: scene3dParamsSchema,
+  table: tableParamsSchema,
+  ruleBox: ruleBoxParamsSchema,
+  compareCards: compareCardsParamsSchema,
 } as const;
 
 export type VisualParamKind = keyof typeof VISUAL_PARAM_SCHEMAS;
@@ -203,6 +273,10 @@ export function renderedVisualTexts(animKind: string, params: unknown): string[]
     case "labeledShape": return [...["width", "height", "depth", "radius"].flatMap((k) => str(p[k])), ...str(p.note)];
     case "illustration": { const check = sanitizeIllustration(p.svg); return check.ok ? check.labels : []; }
     case "scene3d": return [...field(p.objects, "label"), ...field(p.labels, "text")];
+    // S2a: minden kirajzolt szöveg — felirat, fejléc, cella; cím, pont; kártyacím, sor, példa (az üres cella nem szöveg).
+    case "table": return [...str(p.caption), ...strings(p.headers), ...(Array.isArray(p.rows) ? p.rows.flatMap(strings) : [])].filter((t) => t.trim());
+    case "ruleBox": return [...str(p.heading), ...strings(p.items)];
+    case "compareCards": return Array.isArray(p.cards) ? p.cards.flatMap((c) => (c && typeof c === "object" ? [...str((c as Record<string, unknown>).title), ...strings((c as Record<string, unknown>).lines), ...str((c as Record<string, unknown>).example)] : [])) : [];
     default: return [];
   }
 }
