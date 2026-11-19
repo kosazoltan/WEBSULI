@@ -142,7 +142,9 @@ node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head <fe
 - A jelentés végére új szakasz: `# Visszaellenőrzés — új fej <hash>` saját ítélettel.
 - **Körök szabálya (tulajdonosi döntés 2026-11-19):** az 1. kör teljes; a visszanézés CSAK a javítást és a korábbi leleteket nézi; a
   változatlan részben talált új, NEM blokkoló lelet kanban-jegy (a jelentés „Jegyre menő leletek” szakaszába), nem új kör; legfeljebb 3
-  kör, utána tulajdonosi döntés; blokkoló lelet mindig megállít.
+  kör, utána tulajdonosi döntés; blokkoló lelet mindig megállít. A súlyosságot az ELLENŐR állapítja meg — a fejlesztő és az
+  orkesztrátor nem minősítheti le. Jegyre tett lelet mellett az ítélet „IGEN, FELTÉTELLEL”, a jegyszámok a PR-leírásba kerülnek. A
+  célzott visszanézés a javítás hatását a HÍVÓIRA is nézi (a módosított függvény / adatszerkezet minden felhasználója).
 
 ## 6. Az ítélet rögzítése (ezt olvassa a pre-pr-gate és a pre-merge-gate)
 

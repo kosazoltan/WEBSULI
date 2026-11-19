@@ -1117,7 +1117,9 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
 - **Költség:** öt extra kör (ellenőr + javítás + szakasz-kapu), fél nap; a P2 és a #513 közben állt.
 - **Szabály (tulajdonosi döntés 2026-11-19):** az 1. kör teljes; a visszanézés csak a javítást és a korábbi leleteket ellenőrzi; a
   változatlan részben talált új, NEM blokkoló lelet kanban-jegy, nem új kör; legfeljebb 3 kör, utána tulajdonosi döntés; blokkoló
-  mindig megállít (`docs/minosegkapuk.md`, `websuli-fejlesztesi-ellenor` skill). A fejlesztő az 1. kör előtt maga olvassa végig a
+  mindig megállít (`docs/minosegkapuk.md`, `websuli-fejlesztesi-ellenor` skill). A súlyosságot az ellenőr állapítja meg (a fejlesztő /
+  orkesztrátor nem minősítheti le); jegyre tett lelet mellett „IGEN, FELTÉTELLEL”, a jegyszámokkal a PR-leírásban; a visszanézés a
+  javítás hívóira is kiterjed. A fejlesztő az 1. kör előtt maga olvassa végig a
   doksit fogalom-egységesség szerint (definiált fogalmak, régi elnevezések, „egyetlen”-állítások).
 
 ## C-77 — Gép-zár: nehéz kör csak zárral; folyamat-leállítás csak pontos PID alapján (2026-11-19)
@@ -1137,3 +1139,7 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
 - **Szabály (tulajdonosi döntés 2026-11-19):** a merge-kapu ilyenkor gépi összefésült próbát futtat (`merged-probe.mjs`: őr-tesztek +
   a PR node-os tesztjei a PR feje + friss main állapotán); beolvasztás után a `npm run gate:carry -- --from <régi fej>` igazolja és
   átviszi a bizonyítékot (ütközésmentes merge, azonos fa, azonos `patch-id`). Bármely eltérés → teljes kör.
+- **Vak review 1. kör (NEM) tanulsága:** a választható alap (`--base`) a láncolt / régi alap felé nyitott kaput hagyott — az alap
+  mindig a friss, GitHubbal egyeztetett `origin/main`; halmozott láncra nincs átvitel; `NEM` ítélet nem vihető át; a próba hatóköre
+  a main-elmozdulástól is függ (QA-hatókör → teljes `scripts/qa` kör, mindkét oldal `source/` → teljes egységkör), és a main az őrök
+  alsó korlátja. A próba nem teljes CI: a böngészős regressziót nem látja (`docs/minosegkapuk.md` „Ismert korlátok”).

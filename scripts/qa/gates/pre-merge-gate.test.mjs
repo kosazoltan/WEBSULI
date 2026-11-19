@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, requiredChecks, runMergeProbe } from './pre-merge-gate.mjs';
+import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, completeFiles, mergeDecision, probeStep, requiredChecks, runMergeProbe } from './pre-merge-gate.mjs';
 
 const cfg = loadConfig();
 const HEAD = 'a'.repeat(40);
@@ -160,24 +160,66 @@ test('C-61 + összefésült próba: zöld próba → PASS (új CI nem kell); pir
 test('runMergeProbe: a PR feje és a main hash-egyezéssel; lekérési hiba / eltérő fej / eltérő main → FAIL, a próba nem fut', async () => {
   const H = 'a'.repeat(40);
   const M = 'c'.repeat(40);
+  const deleted = [];
   const mk = ({ fetch = 0, pr = H, main = M } = {}) => ({ git: { run: (args) => {
     if (args[0] === 'fetch') return { code: fetch, stdout: '', stderr: 'hálózati hiba' };
+    if (args[0] === 'update-ref' && args[1] === '-d') { deleted.push(args[2]); return { code: 0, stdout: '' }; }
     if (args[1] === 'refs/remotes/origin/gate-pr-7') return { code: 0, stdout: `${pr}\n` };
     if (args[1] === 'refs/remotes/origin/main') return { code: 0, stdout: `${main}\n` };
     return { code: 1, stdout: '', stderr: '' };
   } } });
   let called = null;
   const probe = async (ctx, opts) => { called = opts; return { status: STATUS.PASS, note: 'zöld', counts: { pass: 3 }, tree: 't', ms: 5 }; };
-  const ok = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, files: ['scripts/qa/x.test.mjs'], probe });
+  const ok = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, probe });
   assert.equal(ok.status, STATUS.PASS);
-  assert.deepEqual(called, { head: H, base: 'origin/main', files: ['scripts/qa/x.test.mjs'], label: 'pre-merge-gate' });
+  assert.deepEqual(called, { head: H, base: 'origin/main', label: 'pre-merge-gate' });
+  assert.deepEqual(deleted, ['refs/remotes/origin/gate-pr-7'], 'L9: a segéd-ref takarítva');
   for (const [over, re] of [[{ fetch: 1 }, /nem kérhető le/], [{ pr: 'b'.repeat(40) }, /nem a GitHub szerinti fej/], [{ main: 'd'.repeat(40) }, /nem a GitHub szerinti csúcs/]]) {
     called = null;
-    const r = await runMergeProbe({ ctx: mk(over), n: '7', head: H, mainSha: M, files: [], probe });
+    const r = await runMergeProbe({ ctx: mk(over), n: '7', head: H, mainSha: M, probe });
     assert.equal(r.status, STATUS.FAIL);
     assert.match(r.note, re);
     assert.equal(called, null, 'a próba nem fut');
   }
-  const boom = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, files: [], probe: async () => { throw new Error('lemez tele'); } });
+  const boom = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, probe: async () => { throw new Error('lemez tele'); } });
   assert.deepEqual([boom.status, /nem futott \(lemez tele\)/.test(boom.note)], [STATUS.FAIL, true]);
+});
+
+test('probeStep (vak review L3): fork-PR → FAIL (új CI); ítélet / kötelező ellenőrzés nélkül nem fut; zöld előfeltételekkel fut', async () => {
+  const need = { probeNeeded: true };
+  let ran = 0;
+  const run = async () => { ran += 1; return { status: STATUS.PASS, note: 'zöld' }; };
+  const okArgs = { pre: need, isFork: false, verdict: { verdict: 'IGEN', source: 'helyi bizonyíték' }, head: HEAD, required: REQUIRED, checkRuns: REQUIRED.map((nm) => run2(nm)), statuses: [], run };
+  function run2(nm) { return { name: nm, status: 'completed', conclusion: 'success', id: 1 }; }
+  assert.equal(await probeStep({ ...okArgs, pre: { probeNeeded: false } }), null);
+  for (const isFork of [true, null]) assert.match((await probeStep({ ...okArgs, isFork })).note, /fork-PR.*új CI kell/);
+  assert.match((await probeStep({ ...okArgs, verdict: null })).note, /nem futott: előbb a független ítélet/);
+  assert.match((await probeStep({ ...okArgs, checkRuns: [run2('Lint & Typecheck')] })).note, /nem futott/);
+  assert.match((await probeStep({ ...okArgs, required: [] })).note, /nem futott/);
+  assert.equal(ran, 0, 'egyik tiltott esetben sem futott PR-kód');
+  assert.equal((await probeStep(okArgs)).status, STATUS.PASS);
+  assert.equal(ran, 1);
+});
+
+test('mergeDecision (vak review L6, main() bekötése): a próba eredménye jut a döntésbe; nem kell próba → nem fut', async () => {
+  const inputs = { ...base({ mainSha: 'c'.repeat(40), files: ['scripts/qa/gates/lib.mjs'], mainFiles: ['scripts/qa/x.mjs'] }) };
+  const red = await mergeDecision({ inputs, isFork: false, runProbe: async () => ({ status: STATUS.FAIL, note: 'bukik egy őr' }) });
+  assert.equal(st(red.results, 'main elmozdulása'), STATUS.FAIL);
+  assert.equal(red.probe.status, STATUS.FAIL);
+  const green = await mergeDecision({ inputs, isFork: false, runProbe: async () => ({ status: STATUS.PASS, note: 'zöld', counts: { pass: 5 }, tree: 't', ms: 1 }) });
+  assert.equal(st(green.results, 'main elmozdulása'), STATUS.PASS);
+  let called = false;
+  const none = await mergeDecision({ inputs: { ...inputs, files: ['source/server/a.ts'] }, isFork: false, runProbe: async () => { called = true; return { status: STATUS.PASS }; } });
+  assert.deepEqual([none.probe, called], [null, false]);
+});
+
+test('completeFiles (vak review L9): a gh pr view 100 fájlos vágásánál a lapozott REST-lista; csonka / hiányzó szám → kivétel', () => {
+  const view = Array.from({ length: 100 }, (_, i) => ({ path: `f${i}` }));
+  assert.equal(completeFiles({ viewFiles: view.slice(0, 3), changedFiles: 3, restPages: () => { throw new Error('nem kell'); } }).length, 3);
+  const pages = [Array.from({ length: 100 }, (_, i) => ({ filename: `f${i}` })), [{ filename: 'g.mjs', previous_filename: 'regi.mjs' }]];
+  const all = completeFiles({ viewFiles: view, changedFiles: 101, restPages: () => pages });
+  assert.equal(all.length, 102);
+  assert.ok(all.includes('regi.mjs'));
+  assert.throws(() => completeFiles({ viewFiles: view, changedFiles: 150, restPages: () => pages }), /csonka \(101 \/ 150\)/);
+  assert.throws(() => completeFiles({ viewFiles: view, changedFiles: undefined, restPages: () => pages }), /changed_files/);
 });

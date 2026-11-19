@@ -132,15 +132,32 @@ viszi bukásra.
   átnevezett fájlnál a régi név is számít), vagy a fájllista nem olvasható / csonka (≥ 300) / üres eltérő SHA mellett. **Ilyenkor a
   kapu NEM kér új CI-t** (kapu-gyorsítás, tulajdonosi döntés 2026-11-19): lekéri a PR fejét és a friss maint (hash-egyezéssel a
   GitHub-adatokhoz), és ideiglenes, leválasztott munkafában lefuttatja a **gépi összefésült próbát** (`scripts/qa/gates/merged-probe.mjs`,
-  ugyanaz a kód, mint a push-kapu C-61 lépése): az összes őr-teszt + a PR által érintett `source/tests/*.test.ts` és `scripts/qa`
-  `*.test.mjs`. Zöld → PASS (a darabszám, az összefésült fa és az időtartam a `merge-probe-<PR>-<fej>` rekordban); ütközés / piros /
-  nem futtatható → FAIL. A hiányzó vagy hibás hatókör-táblázat továbbra is FAIL (konfighiba).
+  ugyanaz a kód, mint a push-kapu C-61 lépése és a `gate:carry`). **Pontosan ezt futtatja** (`probeScope`, a PR-fájlok = `merge-base..fej`,
+  a main-fájlok = `merge-base..friss main`):
+  1. **minden** `source/tests/*-guard.test.ts` őr-tesztet — előbb a friss mainen, utána az összefésült fán; a main az alsó korlát:
+     a mainen létező, de az összefésült fáról hiányzó őr → FAIL; őrönként kevesebb lefutott teszt, mint a mainen → FAIL; 0 őr → FAIL;
+  2. ha a PR **és** a main elmozdulása is érint `source/`-t → a **teljes** `source/tests/*.test.ts` egységtesztkört; különben csak a PR
+     által módosított `source/tests/*.test.ts` fájlokat;
+  3. ha a PR **vagy** a main elmozdulása érint `scripts/qa/`, `.github/workflows/`, `.claude/` vagy `.agents/skills/` fájlt → a
+     **teljes** `scripts/qa` (`*.test.mjs`, a `gates/` és `hooks/` alatt is) kört + `skills-sync-check` + `three-phase-check`; különben
+     csak a PR által módosított `scripts/qa` teszteket.
+  A futás együttes időkorlátja 10 perc; összesen 0 lefutott teszt → FAIL. Zöld → PASS (a darabszám, az összefésült fa, a hatókör és az
+  időtartam a `merge-probe-<PR>-<fej>` rekordban); ütközés / piros / időtúllépés / hiányzó `source/node_modules` (előbb `npm.cmd ci`)
+  → FAIL. **Előfeltételek (vak review L3):** a próba PR-kódot futtat, ezért csak akkor indul, ha a PR ugyanebből a tárolóból jön
+  (fork-PR → FAIL, új CI kell), és a független ítélet és a kötelező ellenőrzések lépése már zöld. A gyermekfolyamat szűrt
+  környezetet kap (engedélylista; titok-, token-, kulcsnevek nélkül), a `node_modules` csomópont-hivatkozás marad (a maradó kockázatot
+  lásd az „Ismert korlátok” alatt). A PR fájllistája hiánytalan: 100 fájl fölött a lapozott REST-lista; csonka lista → FAIL. A segéd-ref
+  (`refs/remotes/origin/gate-pr-<n>`) a próba után törlődik. A hiányzó vagy hibás hatókör-táblázat továbbra is FAIL (konfighiba).
 - **Bizonyíték-átvitel főág-beolvasztás után (`npm run gate:carry -- --from <régi fej>`):** ha az új fej egy ütközésmentes
   main-beolvasztás (két szülő: a régi, bizonyítékkal rendelkező fej és az `origin/main` egy őse; a gépi összefésülés fája = az új fej
-  fája), és a PR saját változása bájtra azonos (`git patch-id --verbatim`), a szkript az új fejen lefuttatja az összefésült próbát, és
-  zöld esetén átviszi a vak ítéletet (`review-`) és a `pre-push-` / `pre-pr-` bizonyítékot (csak `ok: true`; a vak ítélet kötelező) egy
-  gépi `carry-<új fej>` rekorddal. Bármely eltérés → nincs átvitel (a teljes kör kell). Az átvitt rekordot a hook a meglévő
-  `ok === true` szabállyal fogadja el.
+  fája), és a PR saját változása bájtra azonos (`git patch-id --verbatim`), a szkript az új fejen lefuttatja az összefésült próbát
+  (ugyanazzal a hatókörrel, mint a merge-kapu, lásd fent), és zöld esetén átviszi a vak ítéletet (`review-`) és a `pre-push-` /
+  `pre-pr-` bizonyítékot (csak `ok: true`; a vak ítélet kötelező, és csak `IGEN` / `IGEN, FELTÉTELLEL` — `NEM` soha) egy gépi
+  `carry-<új fej>` rekorddal. **Az alap mindig a friss `origin/main`** (vak review L1): a szkript maga kéri le, a csúcsát a GitHub
+  szerinti `main`-nel egyezteti (eltérés / hiba → nincs átvitel), és a main hash-ét a `carry-` rekordba írja; `--base` kapcsoló
+  nincs. **Halmozott PR-láncra nincs átvitel** (a másik szülő egy másik PR ága, nem a main őse → FAIL; a lánc tagjai teljes kört
+  kapnak). Az átvitt rekord megőrzi az eredetileg ellenőrzött fejet (`reviewedHead`) és az átvitelek láncát (`carryChain`). Bármely
+  eltérés → nincs átvitel (a teljes kör kell). Az átvitt rekordot a hook a meglévő `ok === true` szabállyal fogadja el.
   **WARN**, ha a main elmozdult, de nincs metszet (pl. csak játékkód változott egy `scripts/qa`-s PR mellett). **PASS**, ha a CI a
   jelenlegi mainnel futott.
 - A hook csak a WEBSULI-ból indított Claude Code munkamenetekre hat (a `.claude/settings.json`-t a munkamenet induláskor olvassa —
@@ -152,6 +169,10 @@ viszi bukásra.
 - A **visszanézés** csak a javítást és a korábbi leleteket ellenőrzi (`git diff <régi fej>..<új fej>` + a korábbi lelet-lista).
 - A változatlan részben talált **új, NEM blokkoló** lelet **kanban-jegy**, nem új kör.
 - Legfeljebb **3 kör**; utána a tulajdonos dönt. **Blokkoló** lelet mindig megállít (javítás + visszanézés).
+- A **súlyosságot az ellenőr állapítja meg**; a fejlesztő és az orkesztrátor nem minősítheti le (vita esetén a tulajdonos dönt).
+- Jegyre tett lelet mellett az ítélet **„IGEN, FELTÉTELLEL”**, és a jegyszámok a PR-leírásba kerülnek.
+- A célzott visszanézés a javítás **hatását a hívóira** is nézi (a módosított függvény / adatszerkezet minden felhasználója), nem csak
+  a módosított sorokat.
 
 ## Gép-zár (nehéz kör: `npm.cmd ci`, teljes `npm test`, `gate:push` / `gate:pr`, böngészős, DB-konténer)
 
@@ -203,6 +224,15 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
   megbízható forrás.
 - **Git-alias** (`git config alias.p push`): `git p` nem ismerhető fel olcsón — a hook nem biztonsági határ (lásd fent).
 - A hook csak a Claude Code munkamenetekre hat; Codex / Cursor / ember a skillek és az `AGENTS.md` szerint futtatja a kapukat.
+- **A gépi összefésült próba (merge-kapu C-61, `gate:carry`) nem teljes CI** (vak review L5): csak node-os teszteket futtat (őrök,
+  egység- és `scripts/qa`-tesztek a fenti hatókörrel). **Nem látja:** a böngészős (Playwright E2E) regressziót, a build- / típus- /
+  lint-hibát, és a nem egységtesztelt szemantikus ütközést (pl. a main egy hívót módosít, amelyet a PR-tesztek nem érintenek, és
+  a teljes egységkör sem fut, mert a két oldal közül csak az egyik nyúlt `source/`-hoz). Ezeket a PR saját CI-ja (a régebbi mainnel)
+  és a beolvasztás utáni main-CI fogja meg.
+- **A próba PR-kódot futtat a gépen** (vak review L3): a fork-PR kizárva, és előfeltétel a független ítélet + a zöld kötelező
+  ellenőrzések; a gyermekfolyamat szűrt környezetet kap (titok-, token-, kulcsnevek nélkül). Maradó kockázat: a PR-kód a felhasználó
+  jogaival fut (fájlrendszer, hálózat, a `git` / `gh` hitelesítés a felhasználói profilból elérhető), és a `source/node_modules`
+  csomópont-hivatkozáson át a fő checkout függőségeit írhatja. A védelem a független ítélet (a kód elolvasása) a próba előtt.
 
 ## Ha bukik
 

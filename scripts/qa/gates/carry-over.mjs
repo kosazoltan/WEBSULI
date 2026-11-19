@@ -4,10 +4,12 @@
 // bájtra azonos, a vak ítélet (`review-`) és a `pre-push-` / `pre-pr-` bizonyíték átvihető az új fejre — egy gépi `carry-<fej>`
 // rekorddal, az új fejen lefutott összefésült próba után. Bármi eltér → nincs átvitel (fail-closed).
 //
-// Használat: node scripts/qa/gates/carry-over.mjs --from <régi fej> [--to HEAD] [--base origin/main]   (npm run gate:carry -- …)
+// Használat: node scripts/qa/gates/carry-over.mjs --from <régi fej> [--to HEAD]   (npm run gate:carry -- …)
+// Az alap MINDIG a friss `origin/main` (vak review L1): a szkript maga kéri le, és a csúcsát a GitHub szerinti `main`-nel egyezteti;
+// kapcsolóval nem választható. Halmozott PR-láncra (a másik szülő egy másik PR ága) nincs átvitel.
 // Kilépési kód: 0 = átvitve; 1 = nem vihető át (az ok kiírva); 2 = nem futott.
 
-import { STATUS, argValue, isMain, makeContext, readEvidence, writeEvidence } from './lib.mjs';
+import { STATUS, VERDICTS, argValue, isMain, makeContext, readEvidence, redact, writeEvidence } from './lib.mjs';
 import { mergedProbe } from './merged-probe.mjs';
 
 const full = (git, ref) => { const r = git.run(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]); return r.code === 0 ? r.stdout.trim() : null; };
@@ -48,36 +50,63 @@ export function checkCarry({ git, from, to, base }) {
 
 export const CARRIED = Object.freeze(['review', 'pre-push', 'pre-pr']);
 
-/** Az átvihető régi rekordok: csak `ok: true`, a régi fejre szóló; a vak ítélet (`review-`) kötelező. */
+/**
+ * Az átvihető régi rekordok: csak `ok: true`, a régi fejre szóló; a vak ítélet (`review-`) kötelező, és csak IGEN / IGEN, FELTÉTELLEL
+ * ítélet vihető át (vak review L8: a `NEM` és az ítélet nélküli rekord nem).
+ */
 export function carryRecords({ from, read }) {
   const out = [];
   for (const kind of CARRIED) {
     const rec = read(`${kind}-${from}`);
-    if (rec && rec.head === from && rec.ok === true) out.push({ kind, rec });
+    if (!(rec && rec.head === from && rec.ok === true)) continue;
+    if (kind === 'review' && !(VERDICTS.includes(rec.verdict) && rec.verdict !== 'NEM')) continue;
+    out.push({ kind, rec });
   }
   if (!out.some((x) => x.kind === 'review')) return { ok: false, why: `nincs átvihető (ok: true) vak ítélet a régi fejre (review-${from.slice(0, 12)})`, records: [] };
   return { ok: true, records: out };
 }
 
-/** Az átvitel teljes menete (a próba injektálható). @returns {Promise<{ ok: boolean, why: string, written?: string[] }>} */
-export async function runCarry({ ctx, from, to = 'HEAD', base = 'origin/main', probe = mergedProbe, now = () => new Date() }) {
+/**
+ * A friss `origin/main`: lekérés + egyeztetés a GitHub szerinti csúccsal (`gh api repos/{owner}/{repo}/branches/main`). Hiba vagy
+ * eltérés → `{ ok: false }`. @returns {{ ok: boolean, why?: string, sha?: string }}
+ */
+export function freshMain({ git, ghMainSha }) {
+  const f = git.run(['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main']);
+  if (f.code !== 0) return { ok: false, why: `a main nem kérhető le (${String(f.stderr).split('\n')[0]})` };
+  const local = git.run(['rev-parse', 'refs/remotes/origin/main']).stdout.trim();
+  let remote = null;
+  try { remote = ghMainSha(); } catch (e) { return { ok: false, why: `a GitHub szerinti main nem olvasható (${String(e?.message ?? e).split('\n')[0]})` }; }
+  if (!/^[0-9a-f]{40}$/.test(String(remote))) return { ok: false, why: 'a GitHub szerinti main hash-e nem olvasható' };
+  if (local !== remote) return { ok: false, why: `a lekért origin/main (${local.slice(0, 12)}) nem a GitHub szerinti csúcs (${remote.slice(0, 12)})` };
+  return { ok: true, sha: local };
+}
+
+/** Az átvitel teljes menete (a próba és a GitHub-lekérdezés injektálható). @returns {Promise<{ ok: boolean, why: string, written?: string[] }>} */
+export async function runCarry({ ctx, from, to = 'HEAD', probe = mergedProbe, ghMainSha, now = () => new Date() }) {
+  const base = 'origin/main';
   // a `patch-id` a diffet a szabványos bemenetén kapja — ezért a futtató `input`-ot is átad
   const gitIO = { run: (args, o = {}) => ctx.exec('git', args, { cwd: ctx.root, input: o.input, timeoutMs: 120_000 }) };
+  const fm = freshMain({ git: gitIO, ghMainSha });
+  if (!fm.ok) return { ok: false, why: fm.why };
   const c = checkCarry({ git: gitIO, from, to, base });
   if (!c.ok) return { ok: false, why: c.why };
   const recs = carryRecords({ from: c.from, read: (n) => readEvidence(ctx.evDir, n) });
   if (!recs.ok) return { ok: false, why: recs.why };
-  const pr = await probe(ctx, { head: c.to, base, files: [], label: 'carry-over' });
+  // az új fejen a teljes hatókörű összefésült próba (merged-probe.mjs: őrök + a PR / main szerinti teszthatókör)
+  const pr = await probe(ctx, { head: c.to, base, label: 'carry-over' });
   if (pr.status !== STATUS.PASS) return { ok: false, why: `az új fejen az összefésült próba nem zöld: ${pr.note}` };
   const carry = `carry-${c.to}`;
   const at = now().toISOString();
   writeEvidence(ctx.evDir, carry, {
-    kind: 'carry-over', ok: true, from: c.from, to: c.to, head: c.to, mainParent: c.mainParent, patchId: c.patchId, tree: c.tree,
+    kind: 'carry-over', ok: true, from: c.from, to: c.to, head: c.to, mainSha: fm.sha, mainParent: c.mainParent, patchId: c.patchId, tree: c.tree,
     probe: { tree: pr.tree ?? null, counts: pr.counts ?? null, ms: pr.ms ?? null }, carried: recs.records.map((x) => x.kind), at,
   });
   const written = [carry];
   for (const { kind, rec } of recs.records) {
-    writeEvidence(ctx.evDir, `${kind}-${c.to}`, { ...rec, head: c.to, carriedFrom: c.from, carry, carriedAt: at });
+    // a lánc megőrzi az eredetileg ellenőrzött fejet (vak review L8)
+    writeEvidence(ctx.evDir, `${kind}-${c.to}`, {
+      ...rec, head: c.to, carriedFrom: c.from, reviewedHead: rec.reviewedHead ?? c.from, carryChain: [...(rec.carryChain ?? []), c.from], carry, carriedAt: at,
+    });
     written.push(`${kind}-${c.to}`);
   }
   return { ok: true, why: c.why, written };
@@ -85,11 +114,24 @@ export async function runCarry({ ctx, from, to = 'HEAD', base = 'origin/main', p
 
 async function main() {
   const args = process.argv.slice(2);
+  if (args.includes('--base')) { process.stderr.write('[carry-over] NEM FUTOTT: a --base kapcsoló megszűnt — az alap mindig a friss origin/main\n'); process.exit(2); }
   const from = argValue(args, '--from');
-  if (!from) { process.stderr.write('Használat: node scripts/qa/gates/carry-over.mjs --from <régi fej> [--to HEAD] [--base origin/main]\n'); process.exit(2); }
+  if (!from) { process.stderr.write('Használat: node scripts/qa/gates/carry-over.mjs --from <régi fej> [--to HEAD]\n'); process.exit(2); }
   let ctx;
   try { ctx = makeContext({}); } catch (e) { process.stderr.write(`[carry-over] NEM FUTOTT: ${e.message}\n`); process.exit(2); }
-  const r = await runCarry({ ctx, from, to: argValue(args, '--to', 'HEAD'), base: argValue(args, '--base', 'origin/main') });
+  let r;
+  try {
+    r = await runCarry({
+      ctx, from, to: argValue(args, '--to', 'HEAD'),
+      ghMainSha: () => {
+        const g = ctx.exec('gh', ['api', 'repos/{owner}/{repo}/branches/main', '--jq', '.commit.sha'], { cwd: ctx.root, timeoutMs: 60_000 });
+        if (g.code !== 0) throw new Error(redact(g.stderr).split('\n')[0]);
+        return g.stdout.trim();
+      },
+    });
+  } catch (e) {
+    r = { ok: false, why: `kivétel: ${String(e?.message ?? e).split('\n')[0]}` };
+  }
   if (!r.ok) { process.stdout.write(`[carry-over] NINCS ÁTVITEL: ${r.why}\n`); process.exit(1); }
   process.stdout.write(`[carry-over] ÁTVITVE (${r.why}): ${r.written.join(', ')}\n`);
   process.exit(0);

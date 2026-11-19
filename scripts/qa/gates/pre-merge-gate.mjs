@@ -154,7 +154,7 @@ async function fetchRt(url) {
  * A merge-kapu összefésült próbája: a PR feje (`refs/pull/<n>/head`) és a friss `origin/main` lekérése — mindkettő hash-egyezéssel a
  * GitHub-adatokhoz —, majd a közös `mergedProbe`. Bármely eltérés / hiba → FAIL-eredmény (fail-closed).
  */
-export async function runMergeProbe({ ctx, n, head, mainSha, files, log = () => {}, probe = mergedProbe }) {
+export async function runMergeProbe({ ctx, n, head, mainSha, log = () => {}, probe = mergedProbe }) {
   const { git } = ctx;
   const t0 = Date.now();
   const fail = (note) => ({ status: STATUS.FAIL, note, ms: Date.now() - t0 });
@@ -166,10 +166,50 @@ export async function runMergeProbe({ ctx, n, head, mainSha, files, log = () => 
   if (localMain !== mainSha) return fail(`a lekért main (${localMain.slice(0, 12)}) nem a GitHub szerinti csúcs (${String(mainSha).slice(0, 12)})`);
   log(`[pre-merge-gate] C-61: gépi összefésült próba — ${head.slice(0, 12)} + origin/main (${mainSha.slice(0, 12)})`);
   try {
-    return await probe(ctx, { head, base: 'origin/main', files, label: 'pre-merge-gate' });
+    return await probe(ctx, { head, base: 'origin/main', label: 'pre-merge-gate' });
   } catch (e) {
     return fail(`az összefésült próba nem futott (${String(e?.message ?? e).split('\n')[0]})`);
+  } finally {
+    // vak review L9: a segéd-ref ne maradjon ott távoli ágként
+    git.run(['update-ref', '-d', `refs/remotes/origin/gate-pr-${n}`]);
   }
+}
+
+/**
+ * Vak review L3: a próba PR-kódot futtat, ezért CSAK akkor fut, ha (1) a PR ugyanebből a tárolóból jön (fork-PR → FAIL, új CI kell),
+ * és (2) a független ítélet és a kötelező ellenőrzések lépése már nem bukik. Ha nem kell próba: null.
+ * @returns {Promise<object|null>}
+ */
+export async function probeStep({ pre, isFork, verdict, head, required, checkRuns, statuses, run }) {
+  if (!pre?.probeNeeded) return null;
+  if (isFork !== false) return { status: STATUS.FAIL, note: 'fork-PR (vagy nem megállapítható eredet): a gép idegen PR-kódot nem futtat — új CI kell' };
+  const v = verdictResult(verdict, head);
+  if (v.status === STATUS.FAIL || !required?.length || requiredChecks(required, checkRuns, statuses).length) {
+    return { status: STATUS.FAIL, note: 'a próba nem futott: előbb a független ítélet és a kötelező ellenőrzések legyenek zöldek (a próba PR-kódot futtat)' };
+  }
+  return run();
+}
+
+/** A merge-kapu döntése a próbával együtt (a `main()` ezt hívja; tesztelt bekötés — vak review L6). */
+export async function mergeDecision({ inputs, isFork, runProbe }) {
+  const pre = decideMainMoved({
+    base: inputs.ciBaseSha ?? inputs.pr.baseRefOid, mainSha: inputs.mainSha, files: inputs.files, mainFiles: inputs.mainFiles,
+    mainFilesTruncated: inputs.mainFilesTruncated, repoWideScopes: inputs.repoWideScopes,
+  });
+  const probe = await probeStep({ pre, isFork, verdict: inputs.verdict, head: inputs.pr.headRefOid, required: inputs.required, checkRuns: inputs.checkRuns, statuses: inputs.statuses, run: runProbe });
+  return { probe, results: decideMerge({ ...inputs, probe }) };
+}
+
+/** A PR fájllistája hiánytalanul: a `gh pr view --json files` 100-nál vág, ezért ilyenkor a lapozott REST-lista (csonka → kivétel). */
+export function completeFiles({ viewFiles, changedFiles, restPages }) {
+  const files = (viewFiles ?? []).map((f) => f.path);
+  if (Number.isInteger(changedFiles) && files.length >= changedFiles) return files;
+  if (!Number.isInteger(changedFiles)) throw new Error('a PR changed_files száma nem olvasható — a fájllista teljessége nem ellenőrizhető');
+  const pages = restPages();
+  if (!Array.isArray(pages) || pages.some((p) => !Array.isArray(p))) throw new Error('a PR lapozott fájllistája nem lista');
+  const all = [...new Set(pages.flat().flatMap((f) => [f?.filename, f?.previous_filename]).filter((x) => typeof x === 'string' && x))];
+  if (pages.flat().length < changedFiles) throw new Error(`a PR fájllistája csonka (${pages.flat().length} / ${changedFiles})`);
+  return all;
 }
 
 async function main() {
@@ -207,19 +247,27 @@ async function main() {
     const verdict = resolveVerdict({
       head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: [pr.body, ...(pr.comments ?? []).map((c) => c.body)],
     });
-    // Kapu-gyorsítás A: a C-61 esetben gépi összefésült próba a PR feje + a friss main állapotán (új CI helyett).
-    const files = (pr.files ?? []).map((f) => f.path);
-    const pre = decideMainMoved({ base: ciBaseSha ?? pr.baseRefOid, mainSha, files, mainFiles, mainFilesTruncated, repoWideScopes: cfg.repoWideScopes ?? [] });
-    let probe = null;
-    if (pre.probeNeeded) probe = await runMergeProbe({ ctx, n, head, mainSha, files, log: (m) => gate.log(m) });
+    // A PR eredete (fork?) és a hiánytalan fájllista a REST-ből (vak review L3, L9).
+    const pull = ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}`]);
+    const isFork = typeof pull?.head?.repo?.full_name === 'string' ? pull.head.repo.full_name !== repo : null;
+    const files = completeFiles({
+      viewFiles: pr.files, changedFiles: pull?.changed_files,
+      restPages: () => ghJson(exec, root, ['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/files?per_page=100`]),
+    });
     const g = exec('bash', [join(root, 'scripts', 'qa', 'active-runs-guard.sh')], { cwd: root, timeoutMs: 90_000 });
     const summary = redact(`${g.stdout}\n${g.stderr}`).split('\n').filter((l) => /^(GUARD|AKTIV)/.test(l)).join(' ').trim();
     const rt = await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl);
-    for (const r of decideMerge({
-      pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files: (pr.files ?? []).map((f) => f.path), verdict,
-      external: readEvidence(ctx.evDir, `external-${head}`), guard: { code: g.code, summary }, rt, repoWideScopes: cfg.repoWideScopes ?? [],
-      mainFiles, mainFilesTruncated, probe,
-    })) gate.add(r.name, r.status, r.note);
+    // Kapu-gyorsítás A: a C-61 esetben gépi összefésült próba a PR feje + a friss main állapotán (új CI helyett).
+    const { probe, results } = await mergeDecision({
+      inputs: {
+        pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files, verdict,
+        external: readEvidence(ctx.evDir, `external-${head}`), guard: { code: g.code, summary }, rt, repoWideScopes: cfg.repoWideScopes ?? [],
+        mainFiles, mainFilesTruncated,
+      },
+      isFork,
+      runProbe: () => runMergeProbe({ ctx, n, head, mainSha, log: (m) => gate.log(m) }),
+    });
+    for (const r of results) gate.add(r.name, r.status, r.note);
     if (probe) writeEvidence(ctx.evDir, `merge-probe-${n}-${head}`, { kind: 'merge-probe', head, mainSha, status: probe.status, tree: probe.tree ?? null, counts: probe.counts ?? null, ms: probe.ms, note: probe.note, at: new Date().toISOString() });
   } catch (e) {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);
