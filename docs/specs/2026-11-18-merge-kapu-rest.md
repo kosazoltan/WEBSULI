@@ -60,6 +60,30 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
 - A leképezők egységtesztje a `pre-merge-gate.test.mjs`-ben; a meglévő tesztek változatlanul zöldek.
 - Élő próba felhős munkamenetből: `npm run gate:merge -- <PR>` az adatgyűjtésen túljut (lépéstábla, valódi PASS/FAIL).
 
+## Javítókör a vak, hibakereső ellenőrzés után (2026-11-19; ítélet a `c96e4801` fejre: IGEN, FELTÉTELLEL, K1–K6)
+
+- **K1 — CCR-szálak:** a `ccr/review_threads` hívás is `--paginate --slurp` + `flattenPages`; nem lista, üres vagy ismeretlen alakú
+  válasz (bármely elemnél hiányzó / nem logikai `resolved`) → kivétel → FAIL. Az üres lista sem igazol (amíg nincs mért CCR-minta,
+  a felhős szál-út nem adhat PASS-t üres listára — ekkor a szálakat GraphQL-ről kell igazolni). REST-keresztellenőrzés: a
+  `pulls/N/comments` (lapozva) `in_reply_to_id` nélküli gyökérkommentjeinek száma ≤ a CCR-szálak száma, különben FAIL (csonka).
+- **K2 — ítélet csak megbízható szerzőtől:** a PR-leírás és a kommentek közül csak az számít ítéletforrásnak, amelynek szerzője a
+  REST szerint `author_association` ∈ {OWNER, MEMBER, COLLABORATOR}, és nem bot (`user.type` ≠ `Bot`, a név nem `[bot]`-ra
+  végződik). Más szerző ítélet-sora figyelmen kívül marad (nem írhat felül egy NEM ítéletet sem).
+- **Ítélet-módok (összehangolás a vak ellenőr futtatójával, K5):**
+
+  | Mód | Mikor | Elfogadott ítéletforrás |
+  |---|---|---|
+  | alap | `gates.config.json` `blindReview.exclusive` KI (ma) | a helyi `review-<fej>.json` (`record-review`), ennek hiányában a megbízható szerzőtől származó PR-szöveges sor (K2) |
+  | szigorú („required”) | `blindReview.exclusive` BE (csak a küszöb és tulajdonosi jóváhagyás után) | KIZÁRÓLAG a futtató által igazolt helyi bizonyíték; PR-szöveg soha — felhős munkamenetből csak akkor vonható össze, ha a futtató ott futott és helyben rögzített |
+
+  A szigorú mód kódja a vak ellenőr futtatójának ágán érkezik; ez a PR az alap mód szerzőszűrését adja, a kettő egymásra épül.
+- **K3:** az adatgyűjtés (`collectMergeData`) injektált `exec`-kel tesztelt: a lapozó kapcsolók, a tartalékutak sorrendje (GraphQL →
+  CCR; védelmi végpont → `branches/main`), a hiba-ágak.
+- **K4:** a PR-válaszban hiányzó / nem szám `changed_files` → kivétel → FAIL (a csonkolás-ellenőrzés nem maradhat ki).
+- **K6:** a check-run lista lapozva (`total_count`-tal egyeztetve, csonka → FAIL); a GraphQL-szálak lapozva (`pageInfo`,
+  legfeljebb 50 oldal, túllépés → FAIL); a fájllista `previous_filename`-je is útvonal; `mergeable_state` `unknown` / hiányzó →
+  legfeljebb 3 újrakérés (2 s, 4 s várakozással), utána a meglévő szabály szerint FAIL.
+
 ## Visszavonás
 
 A változtatás visszavonása (`git revert`): a kapu újra csak GraphQL-lel fut.
