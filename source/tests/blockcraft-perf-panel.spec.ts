@@ -220,7 +220,12 @@ test("a vászon a szülő méretváltozását követi (G-7, review #504 L4)", as
     // Tájolásváltáskor a játék magától szünetel (a main viselkedése); szünetben nincs képkocka, ami átméretezne — a G-7 a
     // következő KIRAJZOLT képkockára írja elő a követést, ezért a mérés a folytatás után történik.
     const resume = page.getByTestId("game-resume");
-    if (await resume.isVisible({ timeout: 1500 }).catch(() => false)) await resume.click();
+    if (await resume.isVisible({ timeout: 1500 }).catch(() => false)) {
+      // A menü a láthatóság-ellenőrzés és a kattintás között magától is bezárulhat — a kattintás rövid időkorláttal próbál,
+      // utána a menü tényleges állapota dönt.
+      await resume.click({ timeout: 5_000 }).catch(() => undefined);
+    }
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0, { timeout: 15_000 });
     await expect
       .poll(async () => {
         const s = await snapshot(page);
