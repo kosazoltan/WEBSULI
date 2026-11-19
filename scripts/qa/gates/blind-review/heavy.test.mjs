@@ -2,14 +2,16 @@
 // Valódi Dockert / böngészőt NEM indít: a futtató és a `docker ps` hamis; a biztonsági döntéseket méri.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CFG, makeRepo } from './_fixture.mjs';
-import { assertSafeHeavyEnv, freshForeign, heavyEnv, ownLeftovers, parseDockerPs, unsafeHeavyEnvKeys, validateScenario, waitForMachine } from './heavy.mjs';
+import { acquireMachineLock, assertSafeHeavyEnv, freshForeign, heavyEnv, lockOwner, ownLeftovers, parseDockerPs, unsafeHeavyEnvKeys, validateScenario, waitForMachine } from './heavy.mjs';
 import { SCENARIO_RUNNER, SCENARIO_SPEC_REL, TMP_DIR, cleanEnv, makeTools } from './tools.mjs';
 
+// A tesztek a valódi gépi zárhoz nem nyúlhatnak, akkor sem, ha a futtató környezetében be van állítva.
+delete process.env.WEBSULI_MACHINE_LOCK_DIR;
 const NOW = Date.parse('2026-11-18T22:00:00+01:00');
 const psLine = (name, minsAgo) => {
   const d = new Date(NOW - minsAgo * 60_000 + 60 * 60_000); // +01:00 helyi idő szövegként
@@ -39,7 +41,7 @@ function harness({ image = true, psBefore = '', psAfter = null, onNode, envFile 
   const dockerPs = async () => { psCount += 1; return !nodeRan || psAfter == null ? psBefore : psAfter; };
   if (envFile) writeFileSync(join(repo.root, 'source', '.env'), 'X=1\n');
   const tools = makeTools({ root: repo.root, base: repo.base, head: repo.head, cfg: { ...CFG, maxHeavyRuns: 2, heavyWaitMaxSec: 30 }, env: { ...process.env, RESEND_API_KEY: 're_titok_123', DATABASE_URL: 'x' },
-    run, dockerPs, sleep: async (ms) => { clock += ms; }, now: () => clock, onReport: () => ({ ok: true }), isTracked: (rel) => existsSync(join(repo.root, rel)) });
+    machineLockDir: null, run, dockerPs, sleep: async (ms) => { clock += ms; }, now: () => clock, onReport: () => ({ ok: true }), isTracked: (rel) => existsSync(join(repo.root, rel)) });
   return { tools, calls };
 }
 
@@ -191,4 +193,81 @@ test('a rögzített forgatókönyv-spec szintaktikailag érvényes TypeScript, �
   assert.match(src, /route\.abort\('blockedbyclient'\)/);
   assert.match(src, /if \(!isLocal\)/);
   assert.doesNotMatch(src, /child_process|require\(/, 'a rögzített spec nem indít folyamatot');
+});
+
+// ---- Gépi zár (tulajdonosi utasítás 2026-11-19: két nehéz kör ne fusson egyszerre) -------------------------------------------------
+
+const lockBase = () => { const d = join(repo.dir, `zar-${Math.random().toString(36).slice(2)}`); mkdirSync(d); return join(d, 'lock'); };
+
+test('gépi zár: szabad zárat azonnal megszerez (atomi mkdir), a gazda.txt „blind-review <fej12> <eszköz> <UTC>”; elengedéskor eltűnik', async () => {
+  const dir = lockBase();
+  const owner = lockOwner('abcdef1234567890', 'run_e2e', new Date('2026-11-19T17:00:00Z'));
+  assert.equal(owner, 'blind-review abcdef123456 run_e2e 2026-11-19T17:00:00.000Z');
+  const l = await acquireMachineLock({ dir, owner, maxWaitMs: 0 });
+  assert.equal(l.ok, true);
+  assert.equal(readFileSync(join(dir, 'gazda.txt'), 'utf8'), owner);
+  assert.equal(l.release(), true);
+  assert.equal(existsSync(dir), false);
+});
+
+test('gépi zár: foglalt zárnál vár, és a felszabadulás után megszerzi; időtúllépésnél nem szerzi meg és NEM töri fel', async () => {
+  const dir = lockBase();
+  mkdirSync(dir);
+  writeFileSync(join(dir, 'gazda.txt'), 'idegen-kapu gate:push');
+  let t = 0;
+  let polls = 0;
+  const waited = await acquireMachineLock({ dir, owner: 'blind-review x', maxWaitMs: 60_000, pollMs: 10_000, now: () => t,
+    sleep: async (ms) => { t += ms; polls += 1; if (polls === 3) rmSync(dir, { recursive: true, force: true }); } });
+  assert.equal(waited.ok, true, 'a felszabadult zárat megszerezte');
+  assert.equal(waited.waitedMs, 30_000);
+  waited.release();
+  mkdirSync(dir);
+  writeFileSync(join(dir, 'gazda.txt'), 'idegen-kapu gate:push');
+  t = 0;
+  const timeout = await acquireMachineLock({ dir, owner: 'blind-review x', maxWaitMs: 30_000, pollMs: 10_000, now: () => t, sleep: async (ms) => { t += ms; } });
+  assert.equal(timeout.ok, false);
+  assert.match(timeout.reason, /nem szabadult fel/);
+  assert.equal(timeout.holder, 'idegen-kapu gate:push');
+  assert.equal(readFileSync(join(dir, 'gazda.txt'), 'utf8'), 'idegen-kapu gate:push', 'az idegen zár érintetlen');
+});
+
+test('gépi zár: az elengedés nem bontja más zárát (ha a gazda.txt már nem a miénk)', async () => {
+  const dir = lockBase();
+  const l = await acquireMachineLock({ dir, owner: 'blind-review sajat', maxWaitMs: 0 });
+  writeFileSync(join(dir, 'gazda.txt'), 'valaki más');
+  assert.equal(l.release(), false);
+  assert.ok(existsSync(dir), 'más zárához nem nyúl');
+});
+
+test('nehéz futás a gépi zárral: megszerzi, a futás alatt fogja, hibánál is elengedi; foglalt gépen „NEM FUTOTT: gép foglalt”, nem bukás', async () => {
+  const dir = lockBase();
+  let seenDuringRun = null;
+  const mk = (onNode, extra = {}) => {
+    const calls = [];
+    const run = async (file, args, opts) => {
+      calls.push({ file, args });
+      if (file === 'docker') return { code: 0, stdout: '', stderr: '', ms: 1 };
+      return onNode(file, args, opts);
+    };
+    const tools = makeTools({ root: repo.root, base: repo.base, head: repo.head, cfg: { ...CFG, machineLockWaitSec: 30 }, env: process.env, run, dockerPs: async () => '',
+      sleep: async () => {}, onReport: () => ({ ok: true }), isTracked: () => true, machineLockDir: dir, ...extra });
+    return { tools, calls };
+  };
+  const ok = mk(() => { seenDuringRun = existsSync(dir) ? readFileSync(join(dir, 'gazda.txt'), 'utf8') : null; return { code: 0, stdout: 'kész', stderr: '', ms: 1 }; });
+  assert.match(await ok.tools.call('run_db_tests', {}), /kilépési kód: 0/);
+  assert.match(seenDuringRun, new RegExp(`^blind-review ${repo.head.slice(0, 12)} run_db_tests \\d{4}-`));
+  assert.equal(existsSync(dir), false, 'siker után elengedve');
+  const boom = mk(() => { throw new Error('a futtató összeomlott'); });
+  assert.match(await boom.tools.call('run_db_tests', {}), /^HIBA: a futtató összeomlott/);
+  assert.equal(existsSync(dir), false, 'hibánál is elengedve (finally)');
+  mkdirSync(dir);
+  writeFileSync(join(dir, 'gazda.txt'), 'eredmeny-510 gate:push');
+  let t = 0;
+  const busy = mk(() => ({ code: 0, stdout: '', stderr: '', ms: 1 }), { now: () => t, sleep: async (ms) => { t += ms; } });
+  const out = await busy.tools.call('run_e2e', { specs: ['source/tests/advent-calendar.spec.ts'] });
+  assert.match(out, /^NEM FUTOTT: gép foglalt — .*eredmeny-510 gate:push/);
+  assert.ok(!busy.calls.some((c) => c.file === process.execPath), 'foglalt gépen a nehéz kör nem indul');
+  assert.equal(readFileSync(join(dir, 'gazda.txt'), 'utf8'), 'eredmeny-510 gate:push', 'az idegen zár érintetlen');
+  const noLock = mk(() => ({ code: 0, stdout: 'kész', stderr: '', ms: 1 }), { machineLockDir: null });
+  assert.match(await noLock.tools.call('run_db_tests', {}), /kilépési kód: 0/, 'zár-mappa nélkül (CI) nincs zárolás');
 });

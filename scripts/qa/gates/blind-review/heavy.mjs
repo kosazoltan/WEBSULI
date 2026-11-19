@@ -2,7 +2,7 @@
 // (docs/specs/2026-11-18-vak-ellenor-deepseek.md, 4. kiegészítés, E2). Kiindulás: a modell bármit kérhet — a biztonsági feltételeket
 // a futtató gépileg kényszeríti ki: valódi e-mail SEMMILYEN úton, csak saját konténer, kimenő hálózat tiltva, idő- és darabplafon.
 
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ---- Biztonságos gyerek-környezet ---------------------------------------------------------------------------------------------
@@ -89,6 +89,54 @@ export function ownLeftovers(before, after, output) {
   const had = new Set(before.map((c) => c.name));
   return after.map((c) => c.name).filter((n) => !had.has(n) && /^websuli-/.test(n) && String(output).includes(n));
 }
+
+// ---- Gépi zár (egy sáv a nehéz köröknek) --------------------------------------------------------------------------------------
+
+/** A zár mappájának környezeti változója. Ha nincs megadva, nincs zárolás (a CI-ben nincs ilyen). */
+export const MACHINE_LOCK_ENV = 'WEBSULI_MACHINE_LOCK_DIR';
+const HELD = new Map(); // zár-mappa → gazda-szöveg (a folyamat kilépésekor is elengedjük)
+let exitHook = false;
+
+function releaseSync(dir) {
+  const mine = HELD.get(dir);
+  if (mine == null) return false;
+  HELD.delete(dir);
+  try {
+    // Csak a SAJÁT zárat bontjuk: ha a gazda.txt már nem a miénk, a zárhoz nem nyúlunk.
+    const cur = existsSync(join(dir, 'gazda.txt')) ? readFileSync(join(dir, 'gazda.txt'), 'utf8') : null;
+    if (cur !== null && cur !== mine) return false;
+    rmSync(dir, { recursive: true, force: true });
+    return true;
+  } catch { return false; } // a zár már nincs meg — nincs mit elengedni
+}
+
+/**
+ * A gépi zár megszerzése: atomi `mkdir` (ha a mappa létezik, a zár foglalt), utána `gazda.txt`. Foglalt zárnál `pollMs`-onként vár,
+ * legfeljebb `maxWaitMs`-ig; a zárat SOHA nem töri fel (más folyamaté lehet).
+ * @returns {Promise<{ ok: true, waitedMs: number, release: () => boolean } | { ok: false, waitedMs: number, holder: string|null, reason: string }>}
+ */
+export async function acquireMachineLock({ dir, owner, maxWaitMs, pollMs = 10_000, now = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)), shouldStop = () => null }) {
+  const t0 = now();
+  for (;;) {
+    let created = false;
+    try { mkdirSync(dir); created = true; } catch (e) { if (e?.code !== 'EEXIST') return { ok: false, waitedMs: now() - t0, holder: null, reason: `a gépi zár nem hozható létre (${e?.code ?? 'hiba'})` }; }
+    if (created) {
+      try { writeFileSync(join(dir, 'gazda.txt'), owner); } catch { /* a mappa a zár; a gazda-szöveg csak tájékoztató */ }
+      HELD.set(dir, owner);
+      if (!exitHook) { exitHook = true; process.once('exit', () => { for (const d of [...HELD.keys()]) releaseSync(d); }); }
+      return { ok: true, waitedMs: now() - t0, release: () => releaseSync(dir) };
+    }
+    let holder = null;
+    try { holder = readFileSync(join(dir, 'gazda.txt'), 'utf8').trim().slice(0, 200); } catch { /* a gazda épp ír vagy enged el */ }
+    const stop = shouldStop();
+    if (stop) return { ok: false, waitedMs: now() - t0, holder, reason: stop };
+    if (now() - t0 >= maxWaitMs) return { ok: false, waitedMs: now() - t0, holder, reason: `a gépi zár ${Math.round(maxWaitMs / 60_000)} percen belül nem szabadult fel` };
+    await sleep(pollMs);
+  }
+}
+
+/** A zár gazda-szövege: „blind-review <fej12> <eszköz> <UTC>”. */
+export const lockOwner = (head, tool, date = new Date()) => `blind-review ${String(head).slice(0, 12)} ${tool} ${date.toISOString()}`;
 
 // ---- A saját böngészős forgatókönyv érvényesítése ------------------------------------------------------------------------------
 

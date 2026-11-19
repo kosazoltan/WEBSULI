@@ -6,7 +6,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { dirname, isAbsolute, join, relative, resolve, sep, win32, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { maskSecrets } from './openrouter.mjs';
-import { assertSafeHeavyEnv, heavyEnv, heavyPreconditions, ownLeftovers, parseDockerPs, validateScenario, waitForMachine } from './heavy.mjs';
+import { MACHINE_LOCK_ENV, acquireMachineLock, assertSafeHeavyEnv, heavyEnv, heavyPreconditions, lockOwner, ownLeftovers, parseDockerPs, validateScenario, waitForMachine } from './heavy.mjs';
 
 export const TMP_DIR = '.blind-review-tmp';
 export const LOADER_PATH = join(dirname(fileURLToPath(import.meta.url)), 'ts-sandbox-loader.mjs');
@@ -342,15 +342,29 @@ export function makeTools(ctx) {
   let scenarioRuns = 0;
   const dockerPs = ctx.dockerPs ?? (async () => (await run('docker', ['ps', '--format', '{{.Names}}\t{{.CreatedAt}}'], { cwd: root, env, timeoutMs: 30_000 })).stdout);
   /**
-   * Egy nehéz futás: darabplafon → előfeltételek → gépi sorompó → biztonságos környezet (ellenőrizve) → futás → saját konténer takarítása.
+   * Egy nehéz futás: darabplafon → előfeltételek → GÉPI ZÁR (ha `WEBSULI_MACHINE_LOCK_DIR` meg van adva) → konténer-sorompó →
+   * biztonságos környezet (ellenőrizve) → futás → saját konténer takarítása → a zár elengedése (finally — hibánál is).
    * @returns {Promise<{ text: string, ok: boolean }>}
    */
-  const heavyRun = async ({ label, kind, argvRepr, args, extraEnv = {}, sources = '' }) => {
+  const heavyRun = async (opts) => {
     const max = cfg.maxHeavyRuns ?? 4;
     if (heavyRuns >= max) return { ok: false, text: `ELUTASÍTVA: a nehéz futások száma elérte a plafont (${max} / futás) — a „Mit NEM vizsgáltam” szakaszban jelezd` };
-    const src = join(root, 'source');
     const pre = await heavyPreconditions({ root, run, env });
     if (pre) return { ok: false, text: `ELUTASÍTVA: ${pre}` };
+    const lockDir = ctx.machineLockDir !== undefined ? ctx.machineLockDir : (process.env[MACHINE_LOCK_ENV] || null);
+    if (!lockDir) return heavyRunLocked(opts, 0);
+    const remaining0 = ctx.remainingMs ? ctx.remainingMs() : Infinity;
+    const lock = await acquireMachineLock({ dir: lockDir, owner: lockOwner(ctx.head ?? head, opts.tool, new Date(ctx.now ? ctx.now() : Date.now())),
+      maxWaitMs: Math.max(0, Math.min((cfg.machineLockWaitSec ?? 1200) * 1000, remaining0 - 150_000)), pollMs: 10_000, sleep: ctx.sleep, now: ctx.now, shouldStop: ctx.shouldStop ?? (() => null) });
+    if (!lock.ok) return { ok: false, text: `NEM FUTOTT: gép foglalt — ${lock.reason}${lock.holder ? ` (a zár gazdája: ${lock.holder})` : ''}. Ez nem bukás: a „Mit NEM vizsgáltam” szakaszban jelezd, vagy később próbáld újra.` };
+    try {
+      return await heavyRunLocked(opts, lock.waitedMs);
+    } finally {
+      lock.release();
+    }
+  };
+  const heavyRunLocked = async ({ label, kind, argvRepr, args, extraEnv = {}, sources = '' }, lockWaitedMs) => {
+    const src = join(root, 'source');
     const gate = await waitForMachine({ ps: dockerPs, maxWaitMs: (cfg.heavyWaitMaxSec ?? 600) * 1000, sleep: ctx.sleep, now: ctx.now, shouldStop: ctx.shouldStop ?? (() => null) });
     if (!gate.ok) return { ok: false, text: `ELUTASÍTVA: ${gate.reason}` };
     const remaining = ctx.remainingMs ? ctx.remainingMs() : Infinity;
@@ -367,7 +381,7 @@ export function makeTools(ctx) {
       await run('docker', ['stop', '--time', '2', name], { cwd: root, env, timeoutMs: 60_000 });
       stopped.push(name);
     }
-    const head = `$ ${label}\nkilépési kód: ${x.code}${x.timedOut ? ' (IDŐTÚLLÉPÉS — a folyamat leállítva)' : ''}; idő: ${(x.ms / 1000).toFixed(1)} s${gate.waitedMs > 1000 ? `; sorompó-várakozás: ${Math.round(gate.waitedMs / 1000)} s` : ''}${stopped.length ? `; a futtató leállította a maradék saját konténert: ${stopped.length} db` : ''}`;
+    const head = `$ ${label}\nkilépési kód: ${x.code}${x.timedOut ? ' (IDŐTÚLLÉPÉS — a folyamat leállítva)' : ''}; idő: ${(x.ms / 1000).toFixed(1)} s${lockWaitedMs > 1000 ? `; gépi zár-várakozás: ${Math.round(lockWaitedMs / 1000)} s` : ''}${gate.waitedMs > 1000 ? `; sorompó-várakozás: ${Math.round(gate.waitedMs / 1000)} s` : ''}${stopped.length ? `; a futtató leállította a maradék saját konténert: ${stopped.length} db` : ''}`;
     const text = out(`${head}\n--- stdout ---\n${x.stdout}\n--- stderr ---\n${x.stderr}`);
     runLog.push({ argv: argvRepr, output: text, kind, sources });
     return { ok: x.code === 0, text };
@@ -491,7 +505,7 @@ export function makeTools(ctx) {
       return `megírva: ${r.rel} (${content.length} karakter)`;
     },
     async run_db_tests() {
-      const r = await heavyRun({ label: 'npm run test:learning-db (eldobható postgres:17)', kind: 'db', argvRepr: ['run_db_tests'], args: ['--import', 'tsx', 'scripts/run-learning-db-tests.ts'] });
+      const r = await heavyRun({ tool: 'run_db_tests', label: 'npm run test:learning-db (eldobható postgres:17)', kind: 'db', argvRepr: ['run_db_tests'], args: ['--import', 'tsx', 'scripts/run-learning-db-tests.ts'] });
       return r.text;
     },
     async run_e2e({ specs }) {
@@ -504,7 +518,7 @@ export function makeTools(ctx) {
         if (!/^source\/tests\/[^/]+\.spec\.ts$/.test(r.rel) || !existsSync(r.abs) || !planCtx.isTracked(r.rel)) return `ELUTASÍTVA: csak a fej követett source/tests/*.spec.ts fájlja futtatható: ${s}`;
         rels.push(r.rel);
       }
-      const r = await heavyRun({ label: `npm run test:e2e -- ${rels.join(' ')} --workers=1`, kind: 'e2e', argvRepr: ['run_e2e', ...specs], sources: sourcesOf(rels),
+      const r = await heavyRun({ tool: 'run_e2e', label: `npm run test:e2e -- ${rels.join(' ')} --workers=1`, kind: 'e2e', argvRepr: ['run_e2e', ...specs], sources: sourcesOf(rels),
         args: ['--import', 'tsx', 'scripts/run-e2e-tests.ts', ...rels.map((x) => x.replace(/^source\//, '')), '--workers=1', '--retries=0', '--reporter=line'] });
       return r.text;
     },
@@ -521,7 +535,7 @@ export function makeTools(ctx) {
       const frozen = join(outDir, 'scenario.json');
       writeFileSync(frozen, JSON.stringify(v.scenario));
       writeFileSync(join(root, 'source', SCENARIO_SPEC_REL), readFileSync(SCENARIO_RUNNER, 'utf8'));
-      const h = await heavyRun({ label: `saját böngészős forgatókönyv: ${r.rel} (${v.scenario.cases.length} eset)`, kind: 'scenario', argvRepr: ['run_browser_scenario', f], sources: raw,
+      const h = await heavyRun({ tool: 'run_browser_scenario', label: `saját böngészős forgatókönyv: ${r.rel} (${v.scenario.cases.length} eset)`, kind: 'scenario', argvRepr: ['run_browser_scenario', f], sources: raw,
         args: ['--import', 'tsx', 'scripts/run-e2e-tests.ts', SCENARIO_SPEC_REL, '--workers=1', '--retries=0', '--reporter=line'],
         extraEnv: { BLIND_SCENARIO_FILE: frozen, BLIND_SCENARIO_OUT: outDir } });
       const files = existsSync(outDir) ? readdirSync(outDir).sort() : [];

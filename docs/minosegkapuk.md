@@ -97,7 +97,10 @@ node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --re
   deklaratív forgatókönyv; képernyőkép a modellnek). Gépileg kikényszerítve: a gyerek-környezetben nincs e-mail-küldő kulcs és
   adatbázis-URL; `source/.env` a munkafában → tilos; a `postgres:17` képnek helyben kell lennie (nincs letöltés); Node-kimenő forgalom
   halott proxyn át; a forgatókönyvben a nem helyi böngésző-kérés megszakítva; sorompó (≥ 2 friss idegen `websuli-*` konténer →
-  várakozás, legfeljebb 10 perc); saját konténer leállítása; `maxHeavyRuns` 4, egyenként legfeljebb 15 perc.
+  várakozás, legfeljebb 10 perc); saját konténer leállítása; `maxHeavyRuns` 4, egyenként legfeljebb 15 perc. **Gépi zár:** a
+  `WEBSULI_MACHINE_LOCK_DIR` által mutatott zár-mappát (atomi `mkdir`, `gazda.txt`: „blind-review <fej12> <eszköz> <UTC>”) a nehéz
+  eszköz a futás előtt megszerzi (legfeljebb `machineLockWaitSec` = 1200 s várakozás), utána — hibánál is — elengedi; foglalt
+  gépen „NEM FUTOTT: gép foglalt” (nem bukás); a változó nélkül nincs zárolás (CI).
 - **Ha a futtató nem tud lefutni** (kulcs, OpenRouter, plafon): megáll, nem nulla kóddal — „a vak ellenőr nem futott”. A kapu áll,
   csendes tartalék nincs — a tulajdonos dönt (követett konfigváltozás: `blindReview.exclusive` / `model`).
 - **Nincs CI-bekötés** (külön szelet): kell hozzá az `OPENROUTER_API_KEY` GitHub-titok és költési keret a kulcson (tulajdonosi

@@ -118,6 +118,10 @@ Megszakítás futás közben: `<git-common-dir>/websuli-qa-evidence/blind-review
   e-mail nem mehet ki: a gyerek-környezetben nincs küldő kulcs és adatbázis-URL (gépi ellenőrzés); saját konténer, a végén leállítva;
   a Node-folyamatok kifelé halott proxyn át; a saját forgatókönyvben a böngésző nem helyi kérése megszakítva. Gépi sorompó: legalább
   2 friss idegen `websuli-*` konténernél várakozás (legfeljebb 10 perc), utána elutasítás.
+- **Gépi zár (egy sáv a nehéz köröknek, tulajdonosi utasítás 2026-11-19):** ha a `WEBSULI_MACHINE_LOCK_DIR` környezeti változó a gép
+  zár-mappájára mutat, a három nehéz eszköz futás előtt megszerzi a zárat (atomi `mkdir`, `gazda.txt`: „blind-review <fej12> <eszköz>
+  <UTC>”), legfeljebb 20 percig vár (a falióra-kereten belül), és a futás után — hibánál is — elengedi. Foglalt gépen az eszköz
+  „NEM FUTOTT: gép foglalt” eredményt ad (nem bukás). A változó nélkül (CI) nincs zárolás. Idegen zárat a futtató soha nem bont.
 - A futtatással igazolt lelet „részben igazolt”, ha a próba elszigetelt volt (saját homokozós fájl, egységteszt, típusellenőrzés —
   a valódi hívási lánc helyett); „teljes úton igazolt” csak böngészős vagy adatbázisos futás lehet.
 - Az eldobható munkafa `source/node_modules`-a a futtató checkoutjának telepítésére csatol; eltérő `package-lock.json` esetén az
