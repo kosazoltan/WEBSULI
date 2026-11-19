@@ -22,8 +22,9 @@ const REDACTIONS = [
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, '<email>'],
   // Szkriptkapuk P2 (független review K5): jelszó-kapcsoló, NÉV=érték titok, JWT, szolgáltatói kulcs-előtagok.
   [/(--?(?:password|passwd|pass|token|secret|api-?key|auth)(?:=|\s+))\S+/gi, '$1<titok>'],
-  [/\b([A-Za-z][A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|CREDENTIALS?))=\S+/gi, '$1=<titok>'],
-  [/\b((?:password|passwd|secret|token|api[_-]?key)\s*:\s*)\S+/gi, '$1<titok>'],
+  // 2. kör: a puszta név is (`password=`, `TOKEN=`, `pwd=`), és a JSON / YAML alak (`"password": "x"`, `token: x`).
+  [/\b([A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|CREDENTIALS?))\s*=\s*\S+/gi, '$1=<titok>'],
+  [/(["']?\b[A-Za-z0-9_]*(?:password|passwd|pwd|secret|token|api[_-]?key|credentials?)["']?\s*:\s*)(["']?)[^"'\s,}]+/gi, '$1$2<titok>'],
   [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '<jwt>'],
   [/\b(?:sk-proj-|sk_live_|sk_test_|rk_live_|AIza|xox[abposr]-|rnd_|glpat-|npm_)[A-Za-z0-9_-]{10,}\b/g, '<token>'],
 ];

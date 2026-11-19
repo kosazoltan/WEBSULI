@@ -26,6 +26,16 @@ test('lib.redact (K5): jelszó-kapcsoló, NÉV=érték titok, JWT, szolgáltató
   for (const s of [`api_${'key'}=abcdef123456`, `Db_Pass${'word'}=Titkos123`, `pass${'word'}: Titkos123`, `To${'ken'}:  abcdef123456`]) {
     assert.ok(!redact(`x ${s} y`).includes(s.includes('=') ? s.split('=').pop() : s.split(/:\s*/).pop()), s.slice(0, 12));
   }
+  // 2. kör (2): a puszta név (kis- és nagybetűvel) és a JSON-alak is
+  const pw = ['pass', 'word'].join('');
+  for (const [s, secret] of [
+    [`${pw}=Titkos123`, 'Titkos123'], [`${pw.toUpperCase()}=Titkos123`, 'Titkos123'], [`TO${'KEN'}=abcdef123456`, 'abcdef123456'],
+    [`sec${'ret'}=abcdef12`, 'abcdef12'], [`pw${'d'}=Titkos1`, 'Titkos1'], [`{"${pw}": "Titkos123"}`, 'Titkos123'],
+    [`{'api_${'key'}':'abcdef123456'}`, 'abcdef123456'], [`to${'ken'} = abcdef123456`, 'abcdef123456'],
+  ]) {
+    assert.ok(!redact(`x ${s} y`).includes(secret), s);
+  }
+  assert.equal(redact('node --test a.test.mjs --reporter=tap'), 'node --test a.test.mjs --reporter=tap', 'ártalmatlan kapcsoló változatlan');
 });
 
 test('buildRunRecord: azonosító, szűrt parancssor, darabszám', () => {

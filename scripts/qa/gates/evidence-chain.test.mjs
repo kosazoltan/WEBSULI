@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, unlinkSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { CHAIN_FILE, LOCK_FILE, LOCK_MAX_AGE_MS, LOCK_STALE_MS, LOCK_TIMEOUT_MS, REPAIR_LOG, appendRecord, lastChainLine, pidAlive, chainStatus, linkRecord, repairChain, validId, verifyChain, withLock } from './evidence-chain.mjs';
+import { CHAIN_FILE, LOCK_FILE, LOCK_MAX_AGE_MS, LOCK_STALE_MS, LOCK_TIMEOUT_MS, REPAIR_LOG, appendRecord, lastChainLine, pidAlive, renameWithRetry, writeBaseline, chainStatus, linkRecord, repairChain, validId, verifyChain, withLock } from './evidence-chain.mjs';
 
 const H = 'a'.repeat(40);
 const tmp = () => mkdtempSync(join(tmpdir(), 'ev-chain-'));
@@ -90,7 +90,12 @@ test('repairChain: a törött láncot archiválja, újat indít (repair: true), 
   const r = repairChain(dir, { now: () => new Date('2026-11-17T21:00:00Z') });
   assert.equal(r.relinked, 2);
   assert.ok(existsSync(join(dir, r.archived)), 'a régi lánc archiválva, nem törölve');
-  assert.equal(verifyChain(dir).ok, true);
+  // SPEC-VÁLTOZÁS 2026-11-19 (docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum-vegrehajtas.md P2, vak review 2. kör (3)): a
+  // javítás után a lánc ép, de a javított, nem igazolt rekordok miatt a `--verify` nem „ÉP”.
+  const vr = verifyChain(dir);
+  assert.equal(vr.breaks.length, 0, 'az új lánc ép');
+  assert.deepEqual(vr.repaired.sort(), ['stage-r1', 'stage-r2']);
+  assert.equal(vr.ok, false);
   const s = chainStatus(dir, 'stage-r1');
   // SPEC-VÁLTOZÁS 2026-11-19 (docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum-vegrehajtas.md P2, vak review P2-K3): a javított
   // rekord külön állapot, nem „ok”.
@@ -133,27 +138,81 @@ test('lastChainLine (P2): a lánc utolsó sora a fájl végéről — 64 KB-nál
   assert.equal(verifyChain(d2).ok, true);
 });
 
-test('verifyChain (vak review P2-K1): láncon kívüli kézi rekord és törölt lánc → TÖRÖTT; a lánc előtti régi rekord csak jelzés', () => {
+test('verifyChain (vak review P2-K1, 2. kör (1)): a „régi” minősítés a láncba írt leltárból jön, nem a módosítási időből', () => {
   const dir = tmp();
-  writeFileSync(join(dir, 'pre-push-regi.json'), '{"ok":true}\n');
-  const old = new Date(Date.now() - 3_600_000);
-  utimesSync(join(dir, 'pre-push-regi.json'), old, old);
-  appendRecord(dir, 'stage-a1', { head: H, ok: true });
+  writeFileSync(join(dir, 'pre-push-regi.json'), '{"ok":true,"head":"regi"}\n');
+  appendRecord(dir, 'stage-a1', { head: H, ok: true }); // a lánc indulása: leltár a meglévő régi rekordról
   let v = verifyChain(dir);
   assert.equal(v.ok, true, v.problems.join('\n'));
-  assert.deepEqual(v.legacy, ['pre-push-regi'], 'a lánc indulása előtti rekord: régi, nem probléma');
-  writeFileSync(join(dir, 'pre-push-kezi.json'), '{"ok":true}\n');
-  writeFileSync(join(dir, 'review-masfajta.json'), '{"ok":true}\n');
+  assert.deepEqual(v.legacy, ['pre-push-regi'], 'a leltárban név + hash szerint szereplő rekord régi');
+  // a) hanyag másolás új fej nevére (a módosítási idő megmarad) → másolat, probléma
+  writeFileSync(join(dir, 'pre-push-masolt.json'), readFileSync(join(dir, 'pre-push-regi.json')));
+  utimesSync(join(dir, 'pre-push-masolt.json'), new Date('2020-01-01'), new Date('2020-01-01'));
   v = verifyChain(dir);
   assert.equal(v.ok, false);
-  assert.ok(v.problems.some((p) => p.startsWith('pre-push-kezi:') && /láncon kívüli/.test(p)), v.problems.join('\n'));
-  assert.ok(!v.problems.some((p) => p.startsWith('review-masfajta')), 'nem láncba író fajta nem probléma (P2)');
+  assert.ok(v.problems.some((p) => p.startsWith('pre-push-masolt:') && /másolat/.test(p)), v.problems.join('\n'));
+  unlinkSync(join(dir, 'pre-push-masolt.json'));
+  // b) visszadátumozott, de a leltárban nem szereplő rekord nem „régi”: átmeneti (strict módban probléma)
+  writeFileSync(join(dir, 'pre-push-kezi.json'), '{"ok":true,"head":"uj"}\n');
+  utimesSync(join(dir, 'pre-push-kezi.json'), new Date('2020-01-01'), new Date('2020-01-01'));
+  v = verifyChain(dir);
+  assert.ok(!v.legacy.includes('pre-push-kezi'), 'a visszadátumozás nem tesz régivé');
+  assert.deepEqual(v.transitional, ['pre-push-kezi'], 'c) P2 előtti kódú író / kézi rekord: átmeneti kategória, nem nullázza a mérést');
+  assert.equal(v.ok, true);
+  assert.equal(verifyChain(dir, null, { strict: true }).ok, false, 'strict módban probléma');
+  // a régi rekord utólagos átírása: már nem leltári → átmeneti, nem régi
+  writeFileSync(join(dir, 'pre-push-regi.json'), '{"ok":true,"head":"atirt"}\n');
+  assert.ok(!verifyChain(dir).legacy.includes('pre-push-regi'));
+  writeFileSync(join(dir, 'review-masfajta.json'), '{"ok":true}\n');
+  assert.ok(!verifyChain(dir, null, { strict: true }).problems.some((p) => p.startsWith('review-masfajta')), 'nem láncba író fajta nem probléma (P2)');
+  // törölt lánc rekordok mellett → probléma
   const d2 = tmp();
   appendRecord(d2, 'stage-b1', { head: H, ok: true });
   unlinkSync(join(d2, CHAIN_FILE));
   v = verifyChain(d2);
   assert.equal(v.ok, false, 'törölt lánc rekordok mellett');
   assert.match(v.problems.join('\n'), /lánc .* hiányzik/);
+});
+
+test('verifyChain (2. kör (3)): a javított, nem igazolt rekord nem „ÉP”; új leltár (--baseline) után régi', () => {
+  const dir = tmp();
+  appendRecord(dir, 'stage-f1', { head: H, ok: true });
+  writeFileSync(join(dir, CHAIN_FILE), `${readFileSync(join(dir, CHAIN_FILE), 'utf8')}{nem json\n`);
+  repairChain(dir);
+  let v = verifyChain(dir);
+  assert.equal(v.ok, false);
+  assert.deepEqual(v.repaired, ['stage-f1']);
+  writeBaseline(dir);
+  v = verifyChain(dir);
+  assert.equal(v.ok, true, v.problems.join('\n'));
+  assert.deepEqual(v.legacy, ['stage-f1'], 'a kifejezett, naplózott leltár után régi (nem igazolt, de elfogadott múlt)');
+  assert.match(readFileSync(join(dir, REPAIR_LOG), 'utf8'), /leltár \(kézi leltár/);
+});
+
+test('appendRecord (2. kör, K4 maradék): azonos nevű régi zöld rekord helyére előbb nem-zöld helyőrző kerül', () => {
+  const dir = tmp();
+  appendRecord(dir, 'pre-push-g1', { head: H, ok: true });
+  mkdirSync(join(dir, 'x'));
+  // a láncba kötés bukjon: a lánc helyén könyvtár
+  const chain = readFileSync(join(dir, CHAIN_FILE), 'utf8');
+  unlinkSync(join(dir, CHAIN_FILE));
+  mkdirSync(join(dir, CHAIN_FILE));
+  assert.throws(() => appendRecord(dir, 'pre-push-g1', { head: H, ok: false }));
+  const left = JSON.parse(readFileSync(join(dir, 'pre-push-g1.json'), 'utf8'));
+  assert.notEqual(left.ok, true, 'nem a régi zöld rekord maradt');
+  assert.ok(chain.length > 0);
+});
+
+test('renameWithRetry (2. kör): EPERM / EBUSY → korlátos újrapróba; tartós hibánál kivétel (fail-closed)', () => {
+  let n = 0;
+  const flaky = () => { n += 1; if (n < 3) { const e = new Error('foglalt'); e.code = 'EPERM'; throw e; } };
+  renameWithRetry('a', 'b', { rename: flaky, sleep: () => {} });
+  assert.equal(n, 3);
+  let m = 0;
+  const stuck = () => { m += 1; const e = new Error('foglalt'); e.code = 'EBUSY'; throw e; };
+  assert.throws(() => renameWithRetry('a', 'b', { rename: stuck, sleep: () => {}, tries: 4 }), /foglalt/);
+  assert.equal(m, 4);
+  assert.throws(() => renameWithRetry('a', 'b', { rename: () => { const e = new Error('nincs'); e.code = 'ENOENT'; throw e; }, sleep: () => {} }), /nincs/, 'más hibára nincs újrapróba');
 });
 
 test('verifyChain (P2-K8 / M12): az utólag átírt rekordot a --verify is jelzi', () => {
