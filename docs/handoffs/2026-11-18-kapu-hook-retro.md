@@ -34,7 +34,7 @@ naplófájljai, a valódi héjas próbák kimenete).
    bekötést nem. Ára: egy teljes ellenőri kör + javító kör a #490-ben.
 3. **Szöveg alapú idézés-tiltás** (a 2. körben) a szabályos PR-folyamatot hamisan tiltotta, és a héjjal ellentétes értelmezés két
    alakot átengedett — a valódi héjjal végzett különbségi próba nélkül ez nem látszott. Ára: egy NEM ítélet, három revert.
-4. **Csapdaszám-ütközés:** a C-73 sorszámot egy másik, még nyitott ág is kiosztotta magának. **Tanulság: a csapdaszámot a
+4. **Csapdaszám-ütközés:** a C-73 sorszámot egy másik, még nyitott ág is kiosztotta magának (ez az ág végül a C-75-öt kapta). **Tanulság: a csapdaszámot a
    beolvasztáskor kell kiosztani, nem az ágon** — a beolvasztáskor a friss főág legnagyobb C-száma után a következő szabad, a
    hivatkozásokkal együtt.
 5. **Saját parancsok hamis tiltása:** a fejlesztés közben a hook többször tiltotta a saját, kapu-köteles szót csak szövegként
@@ -51,7 +51,7 @@ naplófájljai, a valódi héjas próbák kimenete).
 - `scripts/qa/hooks/check-audit-ok.mjs`: időtúllépéskor / indítási hibánál / belső hibánál tilt (#506, kanban #126).
 - `docs/minosegkapuk.md`: élő próba a merge után; „A kapu-hook hibája” (az ügynök csak a hookot javíthatja, a védelem kikapcsolása
   tulajdonosi lépés — szöveg-őr teszttel).
-- `docs/agent-csapdak.md`: C-73.
+- `docs/agent-csapdak.md`: C-75 (a beolvasztáskor osztva — a C-73 / C-74 közben a főágra került).
 
 ## 4. Kanbanra került
 
