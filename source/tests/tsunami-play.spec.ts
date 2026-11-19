@@ -415,6 +415,8 @@ for (const viewport of [
         // nyugalom a kérdés megjelenésétől ≤ 600 ms alatt beáll; utána a nyitott kérdés alatt végig szabad a figura (3 minta).
         await expect(quiz).toHaveAttribute("data-layout", "settled", { timeout: 3_000 });
         const settleMs = (await probe(page) as unknown as { layoutSettleMs: number | null }).layoutSettleMs;
+        // A mért érték a naplóba is kerül (a kapu naplójából a tartalék látszik, nem csak a bukás).
+        console.log(`SETTLE|${viewport.width}x${viewport.height}|víz ${water ?? "eleje"}|${settleMs} ms`);
         expect(settleMs, "az elrendezés a megjelenéstől mért beállási ideje (ms)").not.toBeNull();
         expect(settleMs!, `az elrendezés ≤ 600 ms alatt nyugalomba ér (mért: ${settleMs} ms)`).toBeLessThanOrEqual(600);
         const figureFree = () =>

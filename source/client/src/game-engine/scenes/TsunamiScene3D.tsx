@@ -978,7 +978,10 @@ function setupTsunami(
       const boltProbe = new THREE.Mesh(bolt.geometry, boltMat);
       pending.add(boltProbe);
       const r = renderer as THREE.WebGLRenderer & { compileAsync?: (o: THREE.Object3D, c: THREE.Camera, t?: THREE.Scene) => Promise<unknown> };
-      if (r.compileAsync) await r.compileAsync(pending, camera, scene);
+      // A three.js `compileAsync`-ja a kiterjesztést `extensions.get`-tel kéri, ami hiányzó kiterjesztésnél konzol-figyelmeztetést
+      // ír (a mobil mérő M11 pontja ezt hibának veszi); a `has` nem ír. Kiterjesztés nélkül a programok amúgy is szinkron
+      // fordulnak, ezért ott a sima `compile` ugyanazt adja, figyelmeztetés nélkül.
+      if (r.compileAsync && renderer.extensions.has("KHR_parallel_shader_compile")) await r.compileAsync(pending, camera, scene);
       else renderer.compile(pending, camera, scene);
       pending.remove(boltProbe);
       if (disposed) return;
