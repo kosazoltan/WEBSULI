@@ -69,6 +69,10 @@ kiszorítja a tesztfolyamatot; ez a két párhuzamos teljes tesztkör alatti üt
 - Gyökérok: a mock stream valós `setTimeout`-os szünetei (30 / 50 ms) versenyeznek a tétlenségi őr 80 ms-os időzítőjével
   (`stream-collect.ts:27-47`: `Date.now()` határidő + `setTimeout`). Kiszorításnál a keret feldolgozása a határidő után történik.
 - Mért: szaggatott terhelésnél az „A3: csak gondolkodás-állapotjelek … → siker” teszt bukott (W4: 1/3; W8 vegyes terhelés: 3/10).
+- Orkesztrátori jelzés (2026-11-19 ~17:45 UTC): a „review #212 üres szövegblokk” teszt `Date.now() - t0 < 250` falióra-korlátja
+  (`:79-81`) a `gate:push` teljes `npm test` körében bukott (párhuzamos tsc / egységteszt-kör mellett), egyedül 8/8 zöld. Helyben
+  reprodukálva tesztkör-szerű terhelésnél (W12: 16 szaggatott pörgető + 24 párhuzamos nehéz tesztfájl): `eltelt: 263 ms`, 1/10.
+  A tiszta CPU-terhelés (W10, W11) ezt nem hozta elő: a késést a sok párhuzamos tesztfolyamat (betöltés, GC) adja.
 - **Döntés:** hamis óra (node:test `t.mock.timers`, `setTimeout` + `Date`), egy `onFakeClock` segéddel: a hamis idő 5 ms-os
   lépésekben halad, minden lépés előtt két (nem hamisított) `setImmediate`-kör; így a keret és a határidő sorrendjét a hamis idő
   dönti el. Érintett: „A1+A3”, „A3”, „review #212 üres szövegblokk” (a `< 250` ms-os határ hamis ms-ban marad). Új, erősítő állítás:
@@ -121,9 +125,11 @@ kiszorítja a tesztfolyamatot; ez a két párhuzamos teljes tesztkör alatti üt
   determinisztikus) vagy egyetlen várakozású minták, zöldek: `lesson-experience.test.ts:235`, `bank-cross-repair.test.ts:59,128`,
   `single-run-engine.test.ts:562,573`, `admin-korszerusites.test.ts:70`, `studio-one-step-persist.test.ts:27,125`,
   `html-files-cache-swr.test.ts`, `arbiter.test.ts:127`, `design-thumb.test.ts:10`, `jm0-privacy-guards.test.ts:142`,
-  `lesson-clip.test.ts:83`, `web-studio-handoff.test.ts:26`, `player-codes.test.ts:136-156`. A legerősebb (vegyes) terhelésnél a
-  `single-run-engine`, `arbiter`, `lesson-experience`, `bank-cross-repair`, `hook-failure` a próbaszkript 110 s-os határidején
-  túl futott (leállítva, nem bukás) — NEM DÖNTHETŐ EL; teendő: a következő ingadozásnál a bukó teszt nevével új jegy.
+  `lesson-clip.test.ts:83`, `web-studio-handoff.test.ts:26`, `player-codes.test.ts:136-156`. A legerősebb (vegyes) terhelésnél
+  (W9) a `single-run-engine`, `arbiter`, `lesson-experience`, `bank-cross-repair`, `hook-failure` a próbaszkript határidején túl
+  futott (leállítva, nem bukás); a tesztkör-szerű W12-ben a `single-run-engine`, `lesson-experience`, `nickname-filter` 8/8 zöld.
+  Az `arbiter`, `bank-cross-repair`, `hook-failure` extrém terhelésnél NEM DÖNTHETŐ EL; teendő: a következő ingadozásnál a bukó
+  teszt nevével új jegy.
 
 ## 9. Végrehajtási utasítás
 
