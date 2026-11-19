@@ -1473,7 +1473,8 @@ function setupTsunami(
       d.obj.position.set(x, terrainHeight(x, -d.zz, hw) + d.lift, -d.zz);
     }
     // A szikla-hegy teteje pontosan a menedék talppontja (a kép SHELTER_X / felső deszka pontja), a hegy mélységében.
-    cliffScale = THREE.MathUtils.clamp(hw / 4.2, 0.8, 1.5);
+    // Álló nézetben keskenyebb hegy (vak ellenőr K3: a kép jobb felét eltakarta, a szökőár nem volt felismerhető).
+    cliffScale = THREE.MathUtils.clamp(hw / 4.2, aspect < 1 ? 0.6 : 0.8, 1.5);
     // Keskeny (álló) képen a dombok és a díszlet arányosan kisebbek, hogy az öböl és a hullámfal látsszon.
     hillK = THREE.MathUtils.clamp(hw / 7.5, 0.5, 1.15);
     propK = THREE.MathUtils.clamp(hw / 6, 0.72, 1.1);
@@ -1627,11 +1628,22 @@ function setupTsunami(
       waveUniforms.uTime.value = t;
       waveUniforms.uDanger.value = damp(waveUniforms.uDanger.value, danger, 2, dt);
       const dg = waveUniforms.uDanger.value;
-      const dz = THREE.MathUtils.lerp(120, 34, dg);
+      const dz = THREE.MathUtils.lerp(hw < HALF_H ? 95 : 120, hw < HALF_H ? 30 : 34, dg);
       // A taraj a kép 71 %-ától (távol) a 86 %-áig (közel) ér fel: a horizont (60 %), a part és a dombok FÖLÖTT van, de a
       // felső sáv (HUD) alatt marad — a habos taraj álló nézetben is látszik.
       // Álló nézetben (keskeny kép) a taraj már alacsony víznél is a felső stég és a menedék FÖLÖTT van (csiszoló kör 1. pont).
-      const wallTop = worldY(THREE.MathUtils.lerp(hw < HALF_H ? 0.815 : 0.71, hw < HALF_H ? 0.85 : 0.86, dg), -dz);
+      /*
+       * Vak ellenőr K3 (2026-11-19): álló nézetben a taraj a felső sáv jelzői alá esett, és magas víznél a fal eltűnt a vízfelszín
+       * mögött. Álló nézetben ezért a taraj alacsonyabban (a jelzők alatt bőven, a felső stég magasságában) és közelebb jön, és a
+       * vízszinttel együtt emelkedik, mindig legalább a kép ~13 %-ával a vízfelszín fölött — így a fal minden vízállásnál
+       * látszik.
+       */
+      const portraitView = hw < HALF_H;
+      const surfaceFrac = (level - worldY(0)) / (worldY(1) - worldY(0));
+      const crestFrac = portraitView
+        ? Math.max(THREE.MathUtils.lerp(0.73, 0.79, dg), Math.min(0.8, surfaceFrac + 0.13))
+        : THREE.MathUtils.lerp(0.71, 0.86, dg);
+      const wallTop = worldY(crestFrac, -dz);
       const wallBottom = level - 1.5;
       const wallH = Math.max(1, wallTop - wallBottom);
       const span = hw * 3 * ((CAM_DIST + dz) / CAM_DIST) + wallH;
