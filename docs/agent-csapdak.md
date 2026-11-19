@@ -1143,3 +1143,6 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   mindig a friss, GitHubbal egyeztetett `origin/main`; halmozott láncra nincs átvitel; `NEM` ítélet nem vihető át; a próba hatóköre
   a main-elmozdulástól is függ (QA-hatókör → teljes `scripts/qa` kör, mindkét oldal `source/` → teljes egységkör), és a main az őrök
   alsó korlátja. A próba nem teljes CI: a böngészős regressziót nem látja (`docs/minosegkapuk.md` „Ismert korlátok”).
+- **Mért csapda (2026-11-19, Node 24):** a `node --test` a teszt NÉLKÜLI fájlt egy, a fájl útját viselő „sikeres tesztként” számolja
+  (`# pass 1`, JUnit `<testcase name="tests\x.test.ts" …/>`). Emiatt a „0 teszt → FAIL” sosem sült el, és egy kiüresített őr
+  (`export {};`) a mainen futó 1 tesztet „pótolta”. Darabszám-alapú kapunál az álteszt kiszűrendő (`merged-probe.mjs` `junitCases`).
