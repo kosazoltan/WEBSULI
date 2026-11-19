@@ -80,6 +80,16 @@ function getOrCreateAudioContext(): AudioContext | null {
   return ctx;
 }
 
+/**
+ * A hangkontextus létrehozása ELŐRE, tétlen időben (pl. a játék menüjében). Mérve (2026-11-18, Windows, Chrome): az első
+ * `new AudioContext()` a főszálon 380–2000 ms (a hangeszköz megnyitása). Lusta létrehozásnál ez az első hangra esik — a
+ * kérdés-director `onShow` suhogására, azaz a menet közepére (2 s-os megakadás a kérdés megjelenésekor). Többszöri hívás
+ * ártalmatlan; a kontextus gesztus nélkül felfüggesztve jöhet létre, az első hang folytatja (`resume`, aszinkron).
+ */
+export function prewarmAudio(): void {
+  getOrCreateAudioContext();
+}
+
 export function isMuted(): boolean {
   loadSettings();
   return settings.muted;
@@ -293,4 +303,41 @@ export function useAudioSettings(): {
       setMutedState(next);
     },
   };
+}
+
+/**
+ * A játék menüjében / betöltésekor: a hangkontextus tétlen időben, előre jöjjön létre (terv:
+ * docs/specs/2026-11-19-hang-elomelegites.md; C-75). Mérve: az első `new AudioContext()` a főszálon 0,8–2 s — lusta
+ * létrehozásnál ez a menet közepére (az első kérdés suhogására / az első hangra) vagy az indító koppintásra esett.
+ *
+ * Autoplay-szabály (Chrome, iOS Safari): mozdulat nélkül a kontextus felfüggesztve jön létre, hangot nem ad, a `resume`
+ * elutasítása el van nyelve; az első aktiváló mozdulat (koppintás, kattintás, billentyű) folytatja, így az első hang biztosan megszólal.
+ * Több hívás (több horog egy lapon) ugyanazt az egy kontextust használja.
+ */
+export function useAudioPrewarm(): void {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    // Az aktiválást adó mozdulatok (érintésnél a `touchend` / `click` számít, nem a `pointerdown`). A figyelők addig maradnak,
+    // amíg a kontextus ténylegesen fut (a `resume` aszinkron).
+    const events = ["pointerdown", "touchend", "click", "keydown"] as const;
+    const detach = () => events.forEach((e) => window.removeEventListener(e, onGesture, true));
+    function onGesture() {
+      prewarmAudio();
+      if (ctx && ctx.state === "running") detach();
+    }
+    events.forEach((e) => window.addEventListener(e, onGesture, { capture: true, passive: true }));
+    let idle: number | null = null;
+    let timer: number | null = null;
+    if (w.requestIdleCallback) idle = w.requestIdleCallback(() => prewarmAudio(), { timeout: 2500 });
+    else timer = window.setTimeout(() => prewarmAudio(), 1200);
+    return () => {
+      detach();
+      if (idle !== null) w.cancelIdleCallback?.(idle);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
 }

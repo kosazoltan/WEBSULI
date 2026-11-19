@@ -25,7 +25,7 @@ import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import ClassroomGateModal from "@/components/ClassroomGateModal";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import { useStreakProtector } from "@/hooks/useStreakProtector";
-import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning } from "@/lib/audioEngine";
+import { sfxSuccess, sfxError, sfxLevelUp, sfxWarning, useAudioPrewarm } from "@/lib/audioEngine";
 import { recordRun, type Achievement } from "@/lib/achievements";
 import { isTodaysGameAvailable, markDailyCompleted } from "@/lib/dailyChallenge";
 import AchievementToast from "@/components/AchievementToast";
@@ -1129,6 +1129,8 @@ function isLookZone(x: number, width: number): boolean {
 }
 
 export default function BlockCraftQuiz() {
+  // A hangkontextus a menü / betöltés alatt, tétlen időben jön létre (C-75: lusta létrehozásnál 0,8–2 s menet közben).
+  useAudioPrewarm();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // S11: a közös érintés-észlelés (any-pointer: coarse + maxTouchPoints) — érintős laptop is kap vezérlőt.
   const touchCapable = useTouchCapable();

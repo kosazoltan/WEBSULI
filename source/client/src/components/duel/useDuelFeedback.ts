@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useHaptics } from "@/game-engine/mobile";
 import { createFeel, type Feel, type ShakeOffset } from "@/game-engine/play";
-import { beep, sfxClick, sfxHit, sfxLevelUp, sfxSuccess, sfxWarning } from "@/lib/audioEngine";
+import { beep, sfxClick, sfxHit, sfxLevelUp, sfxSuccess, sfxWarning, useAudioPrewarm } from "@/lib/audioEngine";
 import { createRng } from "@shared/game-rng";
 
 export type DuelFeedback = {
@@ -24,6 +24,8 @@ export type DuelFeedback = {
 };
 
 export function useDuelFeedback(opts: { reducedMotion: boolean; fxSeed?: string }): DuelFeedback {
+  // A hangkontextus a menü / betöltés alatt, tétlen időben jön létre (C-75: lusta létrehozásnál 0,8–2 s menet közben).
+  useAudioPrewarm();
   const haptic = useHaptics();
   const boxRef = useRef<HTMLElement | null>(null);
   const feelRef = useRef<Feel | null>(null);

@@ -42,7 +42,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { createRng, seedFrom } from "@shared/game-rng";
-import { sfxStumble, sfxSuccess, sfxWhoosh } from "@/lib/audioEngine";
+import { sfxStumble, sfxSuccess, sfxWhoosh, useAudioPrewarm } from "@/lib/audioEngine";
 import type { StorageLike } from "@/game-engine/vocab";
 import { safeLocalStorage } from "@/game-engine/vocab";
 import { useHaptics } from "@/game-engine/mobile/haptics";
@@ -79,6 +79,9 @@ function makeDirector(o: UseQuestionDirectorOptions, review: ReviewQueue, seed: 
 export function useQuestionDirector(opts: UseQuestionDirectorOptions): { director: QuestionDirector; reset(seed: number | string, startBand: number): void };
 export function useQuestionDirector(opts: UseQuestionDirectorOptions | null): { director: QuestionDirector | null; reset(seed: number | string, startBand: number): void };
 export function useQuestionDirector(opts: UseQuestionDirectorOptions | null): { director: QuestionDirector | null; reset(seed: number | string, startBand: number): void } {
+  // A hangkontextus a menü / betöltés alatt, tétlen időben jön létre — minden, a közös directort használó játékban (C-75: lusta
+  // létrehozásnál az első kérdés suhogására 0,8–2 s-os megakadás esett).
+  useAudioPrewarm();
   const optsRef = useRef(opts);
   optsRef.current = opts;
   const reviewRef = useRef<ReviewQueue | null>(null);
