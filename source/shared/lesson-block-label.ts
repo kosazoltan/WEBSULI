@@ -37,7 +37,30 @@ export const ANIM_LABELS: Readonly<Record<string, string>> = {
   numberLine: "Számegyenes", fraction: "Törtmodell", timeline: "Idővonal", geometry: "Ábra", process: "Folyamat", map: "Térkép",
   wordBuilder: "Szóépítő", sentenceParts: "Mondatelemzés", triangleArea: "Kísérlet", decisionStory: "Döntéshelyzet", cycle: "Körforgás",
   labeledShape: "Feliratos ábra", barChart: "Diagram", venn: "Halmazábra", illustration: "Illusztráció", scene3d: "3D-modell",
+  table: "Táblázat", ruleBox: "Szabály", compareCards: "Hasonlítsd össze!",
 };
+
+/**
+ * Spec 2026-11-18 (tananyaggyártás minősége, S2a): a forrás-ábrák megjelenítőinek feliratai — KÓDSZÓTÁR, nem modellkimenet. A
+ * blokkfejléc korosztályonként; a megjelenítőn belüli feliratok (a tónus neve, „Példa”, a görgetés jelzése) sávfüggetlenek.
+ */
+export type RuleBoxTone = "rule" | "warning" | "tip";
+export const SOURCE_VISUAL_HEAD_LABELS: Readonly<Record<AgeBand, { table: string; compareCards: string; ruleBox: Record<RuleBoxTone, string> }>> = {
+  kid: { table: "Táblázat", compareCards: "Hasonlítsd össze!", ruleBox: { rule: "Jegyezd meg!", warning: "Figyelj!", tip: "Tipp" } },
+  teen: { table: "Táblázat", compareCards: "Hasonlítsd össze!", ruleBox: { rule: "Szabály", warning: "Figyelj!", tip: "Tipp" } },
+  senior: { table: "Táblázat", compareCards: "Összehasonlítás", ruleBox: { rule: "Szabály", warning: "Figyelem", tip: "Tipp" } },
+};
+export const SOURCE_VISUAL_TEXT = {
+  ruleBoxTone: { rule: "Szabály", warning: "Figyelj!", tip: "Tipp" } as Readonly<Record<RuleBoxTone, string>>,
+  example: "Példa",
+  tableFallbackName: "Táblázat",
+  /** Görgő táblánál: érintőképernyőn húzni kell, egérrel / billentyűvel görgetni (a megjelenítő a mutatóeszköz szerint választ). */
+  scrollHintTouch: "Húzd oldalra a táblázatot",
+  scrollHint: "A táblázat oldalra görgethető",
+  /** Elágazás-alapértelmezés a döntési fához (S2b használja). */
+  branchYes: "Igen", branchNo: "Nem",
+} as const;
+const ruleBoxTone = (params: unknown): RuleBoxTone => { const t = (params as { tone?: unknown } | null)?.tone; return t === "warning" || t === "tip" ? t : "rule"; };
 
 export const TRY_LABELS: Readonly<Record<string, string>> = { dragSort: "Rendezd sorba", fillBlank: "Egészítsd ki", match: "Párosítsd" };
 
@@ -80,7 +103,12 @@ export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: 
       const lastRecap = isLastSection && !blocks.slice(index + 1).some((b) => b.kind === "recap");
       return lastRecap ? "A lecke tanulsága" : theme.labels.recap;
     }
-    case "animate": return ANIM_LABELS[block.animKind] ?? "Ábra";
+    case "animate": {
+      const own = SOURCE_VISUAL_HEAD_LABELS[band];
+      if (block.animKind === "ruleBox") return own.ruleBox[ruleBoxTone(block.params)];
+      if (block.animKind === "table" || block.animKind === "compareCards") return own[block.animKind];
+      return ANIM_LABELS[block.animKind] ?? "Ábra";
+    }
     case "try": return TRY_LABELS[block.tryKind] ?? "Próbáld ki";
   }
 }
