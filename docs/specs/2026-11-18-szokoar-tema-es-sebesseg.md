@@ -313,10 +313,27 @@ A `gate:pr` a böngészős körben két, a saját kódomból eredő hibát fogot
   **Mérés (2026-11-19, fej 6b124a33):** a mérő-környezetben (szoftveres WebGL, 15 futás) eltolásnál a beállás 427–437 ms
   (ebből 420 ms a rögzített eltolás-idő), a tartalék ~165 ms; valódi GPU-n a döntés késése 4× CPU-n 75–104 ms, 6× CPU-n
   118–176 ms — ott eltolással 540–600 ms, a mérce határán. A bukó állítás szövege a kapu időtúllépése miatt nem maradt meg, a
-  bukás 45 ismételt futásban (15 elrendezés-eset × 3) nem jött elő újra: az ok tehát NEM bizonyított, csak a szűk tartalék mért.
+  bukás 45 ismételt futásban (15 elrendezés-eset × 3) nem jött elő újra. **Helyesbítés (a `gate:pr` 2. futása, fej 577c9945):** az ok
+  mért — lásd alább, „A nyugalom-jelző oka”.
   **Javítás:** az eltolás gyorsabb (csillapítás 12 → 16, a nyugalom-jelző 420 → 320 ms; 320 ms után < 1 % marad hátra), így a
   tartalék ~265 ms, és 6× lassított CPU-n is a mércén belül marad. A mérce és a tesztek állításai változatlanok.
   **Utómérés a teljes körből (fej f419a4c0, 2026-11-19 14:14 UTC, 75/75 zöld):** `SETTLE` eltolással 327–339 ms (tartalék
   261–273 ms), eltolás nélkül 5–12 ms. Nézetenként (eleje / 35 / 45 / 50 / 70 %): 360×640 12 / 337 / 331 / 331 / 334;
   390×844 7 / 5 / 339 / 330 / 5; 844×390 334 / 327 / 328 / 332 / 6 ms. A közös mobil mérő M11-je mindhárom nézetben zöld.
 - Friss `origin/main` beolvasztva; a csapdakatalógusban a saját bejegyzések a főág C-75-e után (C-76 / C-77 / C-78).
+
+**A nyugalom-jelző oka (mért, `gate:pr` fej 577c9945, 2026-11-19 16:09–16:59 UTC):** terhelt gépen (szoftveres WebGL) négy
+elrendezés-eset bukott (360×640 / 70 %; 844×390 / 35, 45, 50 %) ugyanazzal az állítással: a `data-layout="settled"` után az első
+mintában a figura teste 5–30 rácspontban a kérdés alatt volt, miközben a mért beállás 334–340 ms (a 600 ms-os mérce teljesült). Ok:
+a jelző falióra szerinti 320 ms-os időzítő, a kirajzolt eltolás viszont képkockánként, 50 ms-ra vágott `dt`-vel csillapodik — hosszú
+képkockáknál a kép a jelzés idejére még nem ért oda (vak visszanézés KICSI 1). A 420 → 320 ms-os gyorsítás a tartalékot elvette; a
+fej 90b3f83f egyszeri bukása ugyanez.
+
+**Javítás (koordinátori döntés „A”, 2026-11-19):**
+- A nyugalom a KIRAJZOLT eltoláshoz kötött: „nyugalomban”, ha a jelenet által visszaírt eltolás (`shownShiftPx`) és a kívánt
+  eltolás (`shiftPx`) különbsége < 1 px — egy kódhelyen (`lib/tsunami/shift.ts`), a lap képkocka-követője ellenőrzi. Időzítő nincs.
+- A csillapítás (16) ugyanabból a modulból jön (vak KICSI 2); az eltolás a valós eltelt idővel csillapodik (legfeljebb 250 ms
+  lépésenként), nem a játékmenet 50 ms-ra vágott `dt`-jével — így lassú képkockáknál is ~300 ms falióra alatt beáll.
+- WebGL nélkül (nincs kirajzolt eltolás) és csökkentett mozgásnál az eltolás azonnali, a jelző a döntéskor vált.
+- Bukó teszt előbb: 844×390, 35 %-os víz, 6× lassított CPU — a „nyugalomban” jelzéskor a figura teljes teste szabad. A 600 ms-os
+  mérce és a meglévő tesztállítások változatlanok.

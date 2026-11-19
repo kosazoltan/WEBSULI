@@ -104,3 +104,10 @@ indítási cél a telefonos nézetben egy mérésben (250 ms) még nem teljesül
 - A kérdés nem állítja meg a világot (a víz lassítva emelkedik); a válaszgombok ≥ 48 px, nem takarják a figurát és a tárcsát.
 - Autó, kapu, sáv nincs a pályán.
 - Közös mobil mérő Szökőár 3 nézet, meta-mérő, lejárt kupon, `tsunami-play`, joystick-mérő Szökőár: zöld.
+13. **A nyugalom-jelző a kirajzolt eltoláshoz (terv `docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md` 7.7, „A nyugalom-jelző oka”):**
+   a. Bukó teszt külön commitban: `tsunami-play.spec.ts`, 844×390, 35 %-os víz, 6× lassított CPU (CDP), a „settled” jelzéskor a
+      figura teljes teste szabad.
+   b. `client/src/lib/tsunami/shift.ts`: `SHIFT_DAMPING`, `isShiftSettled(shown, target)` (+ egységteszt).
+   c. `TsunamiScene3D.tsx`: a csillapítás a közös állandóval és valós eltelt idővel; `TsunamiEscapeEnglish.tsx`: a
+      `markSettled` időzítője helyett a képkocka-követő vált, amikor `isShiftSettled` igaz.
+   d. `gate:stage`, majd egy zárral a célzott böngészős kör (Szökőár-esetek) és a `gate:push`.
