@@ -539,3 +539,28 @@ test("review K1 + R9: a pillanatkép-keret 60 / 15 perc / cím — a 61. pillana
     assert.equal(sent.length, before + 2);
   } finally { clearPendingPartials(); resetPartialLimiter(); setPartialDelay(previous); }
 });
+
+test("független review K-1 (#510, valódi HTTP + DB): vendégnél ujjlenyomat NÉLKÜLI, majd ujjlenyomatos pillanatkép ugyanarra a körre → EGY „félbehagyva” levél (a legutolsóból)", async () => {
+  // Beolvasztva a távoli db9323ea-ból; ezen az ágon a véglegesített körök memóriáját a `clearFinalizedRounds` üríti.
+  const { setPartialDelay, clearPendingPartials, clearFinalizedRounds, pendingPartialCount, partialLimiter, resultLimiter } = await import("../server/lesson-result-email");
+  const { ipKeyGenerator } = await import("express-rate-limit");
+  for (const ip of ["127.0.0.1", "::1"]) { await partialLimiter.resetKey(ipKeyGenerator(ip)); await resultLimiter.resetKey(ipKeyGenerator(ip)); }
+  const previous = setPartialDelay(400);
+  const q = lesson.experience!.quiz.slice(0, 5);
+  const picks = (answered: number) => Object.fromEntries(q.map((item, i) => [item.id, i < answered ? item.correctIndex : -1]));
+  const post = (body: object) => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  try {
+    clearPendingPartials();
+    sent.length = 0;
+    // 1. pillanatkép: az ujjlenyomat még nem töltődött be (IP-kulcs) …
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-k1-dual", picks: picks(1), partial: true })).json(), { queued: true, partial: true });
+    // … 2. pillanatkép ugyanarra a körre, már ujjlenyomattal.
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-k1-dual", picks: picks(4), partial: true, fingerprint: "fp-k1-dual" })).json(), { queued: true, partial: true });
+    assert.equal(pendingPartialCount(), 1, "ugyanarra a körre egy várakozó marad");
+    await waitFor(() => sent.length === 2);
+    await new Promise(r => setTimeout(r, 700));
+    assert.equal(sent.length, 2, "egy „félbehagyva” levél címzettenként, nem kettő");
+    // Terv R5 (S3): az „összes” a szerver körmérete (a fixture köre 25 kérdés), nem a beküldött 5 azonosító.
+    assert.ok(sent.every(mail => /félbehagyva: 4 \/ 25/.test(mail.subject)), "a legutolsó (4 válaszos) állapotból");
+  } finally { clearPendingPartials(); clearFinalizedRounds(); setPartialDelay(previous); }
+});
