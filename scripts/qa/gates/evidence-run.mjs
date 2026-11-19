@@ -13,14 +13,22 @@ import { appendRecord } from './evidence-chain.mjs';
 
 // A parancssor és a kimenet a `lib.redact`-on megy át (K5: token-alakok, jelszó-kapcsoló, NÉV=érték titok, JWT, kulcs-előtagok).
 
-/** node:test (spec és TAP) összesítőjéből a darabszámok; ha nincs, null. */
+/**
+ * node:test (spec és TAP) összesítőjéből a darabszámok; ha nincs, null. Az UTOLSÓ összesítő számít (vak review P2-K7: egy korábban
+ * kiírt hamis „pass 999” sor nem írhatja felül a valódi összesítőt).
+ */
 export function testCounts(out) {
   const s = String(out);
-  const num = (re) => { const m = re.exec(s); return m ? Number(m[1]) : null; };
+  const num = (re) => { const all = [...s.matchAll(new RegExp(re.source, 'gm'))]; return all.length ? Number(all[all.length - 1][1]) : null; };
   const pass = num(/^(?:ℹ|#) pass (\d+)/m);
   const fail = num(/^(?:ℹ|#) fail (\d+)/m);
   const tests = num(/^(?:ℹ|#) tests (\d+)/m);
   return pass == null && fail == null ? null : { tests, pass, fail };
+}
+
+/** Commitolatlan-e a munkafa: követett változás VAGY nem követett fájl (a szakasz- és a push-kapu J7-tel egyezően; P2-K2). */
+export function dirtyOf(git) {
+  return git.trackedDirty().length > 0 || git.untracked().length > 0;
 }
 
 /**
@@ -49,7 +57,7 @@ function main() {
   let ctx;
   try { ctx = makeContext({}); } catch (e) { process.stderr.write(`[evidence-run] nem git-munkafa: ${e.message}\n`); process.exit(2); }
   const head = ctx.git.head();
-  const dirty = ctx.git.trackedDirty().length > 0;
+  const dirty = dirtyOf(ctx.git);
   const [cmd, ...args] = rest;
   const result = realExec(cmd, args, { cwd: process.cwd() });
   process.stdout.write(redact(result.stdout));

@@ -22,7 +22,8 @@ const REDACTIONS = [
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, '<email>'],
   // Szkriptkapuk P2 (független review K5): jelszó-kapcsoló, NÉV=érték titok, JWT, szolgáltatói kulcs-előtagok.
   [/(--?(?:password|passwd|pass|token|secret|api-?key|auth)(?:=|\s+))\S+/gi, '$1<titok>'],
-  [/\b([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|CREDENTIALS?))=\S+/g, '$1=<titok>'],
+  [/\b([A-Za-z][A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|CREDENTIALS?))=\S+/gi, '$1=<titok>'],
+  [/\b((?:password|passwd|secret|token|api[_-]?key)\s*:\s*)\S+/gi, '$1<titok>'],
   [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '<jwt>'],
   [/\b(?:sk-proj-|sk_live_|sk_test_|rk_live_|AIza|xox[abposr]-|rnd_|glpat-|npm_)[A-Za-z0-9_-]{10,}\b/g, '<token>'],
 ];
@@ -55,8 +56,9 @@ export function realExec(cmd, args = [], { cwd, env, timeoutMs = 30 * 60_000, in
   let file = cmd;
   let argv = args;
   let shell = false;
-  if (IS_WIN && (cmd === 'npm' || cmd === 'npx')) {
-    file = `${cmd}.cmd`;
+  // A `.cmd` / `.bat` (pl. a repó szabálya szerinti `npm.cmd`) is shellen át indul (vak review P2-K7: `spawnSync npm.cmd EINVAL`).
+  if (IS_WIN && (cmd === 'npm' || cmd === 'npx' || /\.(cmd|bat)$/i.test(cmd))) {
+    file = /\.(cmd|bat)$/i.test(cmd) ? (/\s/.test(cmd) ? `"${cmd}"` : cmd) : `${cmd}.cmd`;
     argv = args.map(quoteWin);
     shell = true;
   }

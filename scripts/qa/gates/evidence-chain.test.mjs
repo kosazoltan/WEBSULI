@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -81,7 +81,7 @@ test('withLock (R2): a régi zárat NEM veszi el, ha a benne álló PID él; a v
   assert.equal(pidAlive(0), false);
 });
 
-test('repairChain: a törött láncot archiválja, újat indít (repair: true), naplóz — a rekordok utána „ok, javított”', () => {
+test('repairChain: a törött láncot archiválja, újat indít (repair: true), naplóz — a rekordok utána „javított, nem igazolt”', () => {
   const dir = tmp();
   appendRecord(dir, 'stage-r1', { head: H, ok: true });
   appendRecord(dir, 'stage-r2', { head: H, ok: true });
@@ -92,11 +92,14 @@ test('repairChain: a törött láncot archiválja, újat indít (repair: true), 
   assert.ok(existsSync(join(dir, r.archived)), 'a régi lánc archiválva, nem törölve');
   assert.equal(verifyChain(dir).ok, true);
   const s = chainStatus(dir, 'stage-r1');
-  assert.equal(s.status, 'ok');
+  // SPEC-VÁLTOZÁS 2026-11-19 (docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum-vegrehajtas.md P2, vak review P2-K3): a javított
+  // rekord külön állapot, nem „ok”.
+  assert.equal(s.status, 'repaired-unverified');
   assert.equal(s.repaired, true);
   assert.match(readFileSync(join(dir, REPAIR_LOG), 'utf8'), /lánc-javítás/);
   linkRecord(dir, 'stage-r1');
   assert.equal(chainStatus(dir, 'stage-r1').repaired, false, 'egy újabb rendes írás után már nem „javított”');
+  assert.equal(chainStatus(dir, 'stage-r1').status, 'ok');
 });
 
 test('M3: 8 párhuzamos író × 200 rekord egy tárba → 0 törés, 1600 sor', async () => {
@@ -128,4 +131,76 @@ test('lastChainLine (P2): a lánc utolsó sora a fájl végéről — 64 KB-nál
   const d2 = tmp();
   for (let i = 0; i < 5; i += 1) appendRecord(d2, `run-x-${i}`, { head: H, i });
   assert.equal(verifyChain(d2).ok, true);
+});
+
+test('verifyChain (vak review P2-K1): láncon kívüli kézi rekord és törölt lánc → TÖRÖTT; a lánc előtti régi rekord csak jelzés', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, 'pre-push-regi.json'), '{"ok":true}\n');
+  const old = new Date(Date.now() - 3_600_000);
+  utimesSync(join(dir, 'pre-push-regi.json'), old, old);
+  appendRecord(dir, 'stage-a1', { head: H, ok: true });
+  let v = verifyChain(dir);
+  assert.equal(v.ok, true, v.problems.join('\n'));
+  assert.deepEqual(v.legacy, ['pre-push-regi'], 'a lánc indulása előtti rekord: régi, nem probléma');
+  writeFileSync(join(dir, 'pre-push-kezi.json'), '{"ok":true}\n');
+  writeFileSync(join(dir, 'review-masfajta.json'), '{"ok":true}\n');
+  v = verifyChain(dir);
+  assert.equal(v.ok, false);
+  assert.ok(v.problems.some((p) => p.startsWith('pre-push-kezi:') && /láncon kívüli/.test(p)), v.problems.join('\n'));
+  assert.ok(!v.problems.some((p) => p.startsWith('review-masfajta')), 'nem láncba író fajta nem probléma (P2)');
+  const d2 = tmp();
+  appendRecord(d2, 'stage-b1', { head: H, ok: true });
+  unlinkSync(join(d2, CHAIN_FILE));
+  v = verifyChain(d2);
+  assert.equal(v.ok, false, 'törölt lánc rekordok mellett');
+  assert.match(v.problems.join('\n'), /lánc .* hiányzik/);
+});
+
+test('verifyChain (P2-K8 / M12): az utólag átírt rekordot a --verify is jelzi', () => {
+  const dir = tmp();
+  appendRecord(dir, 'stage-c1', { head: H, ok: false });
+  writeFileSync(join(dir, 'stage-c1.json'), JSON.stringify({ head: H, ok: true }));
+  const v = verifyChain(dir);
+  assert.equal(v.ok, false);
+  assert.match(v.problems.join('\n'), /stage-c1: a rekord tartalma eltér/);
+});
+
+test('repairChain (P2-K3): ép láncon nem fut (csak force-szal); a javított rekord „repaired-unverified”, nem „ok”', () => {
+  const dir = tmp();
+  appendRecord(dir, 'stage-d1', { head: H, ok: true });
+  writeFileSync(join(dir, 'run-kezi1234.json'), '{"ok":true}\n');
+  const old = new Date(Date.now() - 3_600_000);
+  utimesSync(join(dir, 'run-kezi1234.json'), old, old);
+  assert.equal(verifyChain(dir).ok, true, 'a régi kézi rekord nem rontja el az ellenőrzést');
+  const skip = repairChain(dir);
+  assert.match(skip.skipped, /ép/);
+  assert.equal(chainStatus(dir, 'run-kezi1234').status, 'not-in-chain', 'ép láncon a kézi rekord nem emelkedik fel');
+  const forced = repairChain(dir, { force: true });
+  assert.ok(forced.relinked >= 2);
+  assert.equal(chainStatus(dir, 'run-kezi1234').status, 'repaired-unverified');
+});
+
+test('appendRecord (P2-K4): ha a láncba kötés bukik, végleges (láncolatlan) rekord nem marad, ideiglenes sem', () => {
+  const dir = tmp();
+  mkdirSync(join(dir, CHAIN_FILE)); // a lánc helyén könyvtár → a hozzáfűzés kivételt dob
+  assert.throws(() => appendRecord(dir, 'pre-push-e1', { head: H, ok: true }));
+  assert.equal(existsSync(join(dir, 'pre-push-e1.json')), false, 'nincs láncolatlan zöld rekord');
+  assert.deepEqual(readdirSync(dir).filter((f) => f.includes('.tmp-')), [], 'nincs ottmaradt ideiglenes fájl');
+});
+
+test('withLock (P2-K5): az elárvultnak ítélt, közben átvett friss zárat nem veszi el; a finally csak a saját zárát törli', () => {
+  const dir = tmp();
+  const lock = join(dir, LOCK_FILE);
+  writeFileSync(lock, '4242\n');
+  const old = new Date(Date.now() - 120_000);
+  utimesSync(lock, old, old);
+  // a döntés (alive) és az átvétel között „A” átveszi a zárat: friss, saját tokennel
+  const alive = () => { unlinkSync(lock); writeFileSync(lock, '7777 aaaa\n'); return false; };
+  assert.throws(() => withLock(dir, () => 1, { timeoutMs: 50, alive }), /sem szabadult fel/);
+  assert.equal(readFileSync(lock, 'utf8'), '7777 aaaa\n', 'A zárja visszaállítva, B nem lépett be');
+  assert.deepEqual(readdirSync(dir).filter((f) => f.includes('.stale-')), [], 'nem maradt átnevezett zárfájl');
+  // finally: a kritikus szakaszban idegen zárra cserélt fájlt nem törli
+  const d2 = tmp();
+  withLock(d2, () => { writeFileSync(join(d2, LOCK_FILE), 'idegen\n'); });
+  assert.equal(readFileSync(join(d2, LOCK_FILE), 'utf8'), 'idegen\n');
 });

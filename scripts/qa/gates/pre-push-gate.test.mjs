@@ -109,15 +109,16 @@ test('runPrePushSteps: native-arch az egyetlen bukás + bukó doctor:arch → KI
   assert.equal(gate.finish(), 0);
 });
 
-test('finalizeEvidence (szkriptkapuk P2, K-f): sikertelen láncba kötésnél a zöld bizonyíték ok: false-ra íródik, a kód nem nulla', () => {
+test('finalizeEvidence (szkriptkapuk P2, K-f, vak review P2-K4): írás + láncba kötés egy lépésben; hibánál ok: false, a kód nem nulla', () => {
   const store = new Map();
   const write = (dir, name, rec) => { store.set(name, rec); return `${dir}/${name}.json`; };
-  const ok = finalizeEvidence({ evDir: 'ev', name: 'x-1', rec: { ok: true }, code: 0, write, link: () => {} });
-  assert.deepEqual([ok.code, ok.error, store.get('x-1').ok], [0, undefined, true]);
-  const bad = finalizeEvidence({ evDir: 'ev', name: 'x-2', rec: { ok: true }, code: 0, write, link: () => { throw new Error('zár foglalt\nrészlet'); } });
+  const append = (dir, name, rec) => { store.set(name, { ...rec, chained: true }); };
+  const ok = finalizeEvidence({ evDir: 'ev', name: 'x-1', rec: { ok: true }, code: 0, append, write });
+  assert.deepEqual([ok.code, ok.error, store.get('x-1').ok, store.get('x-1').chained], [0, undefined, true, true], 'a zöld rekord csak láncolva íródik');
+  const bad = finalizeEvidence({ evDir: 'ev', name: 'x-2', rec: { ok: true }, code: 0, append: () => { throw new Error('zár foglalt\nrészlet'); }, write });
   assert.equal(bad.code, 2);
   assert.equal(bad.error, 'zár foglalt');
   assert.equal(store.get('x-2').ok, false, 'a hook a bizonyítékot nem fogadhatja el zöldnek');
   assert.equal(store.get('x-2').chainError, 'zár foglalt');
-  assert.equal(finalizeEvidence({ evDir: 'ev', name: 'x-3', rec: { ok: false }, code: 1, write, link: () => { throw new Error('x'); } }).code, 1, 'bukott kapu kódja marad');
+  assert.equal(finalizeEvidence({ evDir: 'ev', name: 'x-3', rec: { ok: false }, code: 1, append: () => { throw new Error('x'); }, write }).code, 1, 'bukott kapu kódja marad');
 });

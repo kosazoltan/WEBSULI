@@ -99,6 +99,19 @@ export async function runStageSteps({ gate, ctx, changed }) {
   }
 }
 
+/**
+ * A szakasz-bizonyíték láncolt rekordja (`stage-<fej>`). A rekordhiány nem csendes (független review R2): írási hibánál a kód nem
+ * nulla (2 = a kapu nem futott le teljesen). @returns {{ code: number, error?: string }}
+ */
+export function finalizeStage({ evDir, head, code, dirty, results, append = appendRecord, now = () => new Date() }) {
+  try {
+    append(evDir, `stage-${head}`, { kind: 'stage', head, ok: code === 0, dirty, at: now().toISOString(), steps: results.map((r) => ({ name: r.name, status: r.status })) });
+    return { code };
+  } catch (e) {
+    return { code: code || 2, error: String(e?.message ?? e).split('\n')[0] };
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const ctx = makeContext({ base: argValue(args, '--base') });
@@ -107,18 +120,12 @@ async function main() {
   await runStageSteps({ gate, ctx, changed });
   const code = gate.finish();
   // S2 (terv 6.1): láncolt bizonyíték a fejre — a commitolatlan változással futott szakasz-kaput a `dirty` jelzi.
-  try {
-    const head = ctx.git.head();
-    appendRecord(ctx.evDir, `stage-${head}`, {
-      kind: 'stage', head, ok: code === 0, dirty: ctx.git.trackedDirty().length > 0 || ctx.git.untracked().length > 0,
-      at: new Date().toISOString(), steps: gate.results.map((r) => ({ name: r.name, status: r.status })),
-    });
-  } catch (e) {
-    // R2 (független review): a hiányzó rekord nem lehet csendes — hangos hiba és nem nulla kód (2 = a kapu nem futott le teljesen).
-    process.stderr.write(`[stage-gate] HIBA: a szakasz-bizonyíték nem írható (${String(e?.message ?? e).split('\n')[0]}) — futtasd újra a kaput\n`);
-    process.exit(code || 2);
-  }
-  process.exit(code);
+  const fin = finalizeStage({
+    evDir: ctx.evDir, head: ctx.git.head(), code, results: gate.results,
+    dirty: ctx.git.trackedDirty().length > 0 || ctx.git.untracked().length > 0,
+  });
+  if (fin.error) process.stderr.write(`[stage-gate] HIBA: a szakasz-bizonyíték nem írható (${fin.error}) — futtasd újra a kaput\n`);
+  process.exit(fin.code);
 }
 
 if (isMain(import.meta.url)) main();

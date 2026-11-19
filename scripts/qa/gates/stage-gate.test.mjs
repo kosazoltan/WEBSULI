@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { STATUS, loadConfig } from './lib.mjs';
-import { mapTests, runStageSteps, stemOf } from './stage-gate.mjs';
+import { finalizeStage, mapTests, runStageSteps, stemOf } from './stage-gate.mjs';
 import { fakeCtx, statusOf } from './_fake.mjs';
 
 const cfg = loadConfig();
@@ -53,4 +53,17 @@ test('runStageSteps: bukó egységteszt → FAIL', async () => {
   await runStageSteps({ gate, ctx, changed: ['source/tests/coupon-clock.test.ts'] });
   assert.equal(statusOf(gate, 'egységtesztek'), STATUS.FAIL);
   assert.equal(gate.finish(), 1);
+});
+
+test('finalizeStage (szkriptkapuk P2, vak review P2-K8): a stage-<fej> rekord íródik; írási hibánál nem nulla kód', () => {
+  const H = 'c'.repeat(40);
+  const calls = [];
+  const ok = finalizeStage({ evDir: 'ev', head: H, code: 0, dirty: true, results: [{ name: 'a', status: 'PASS' }], append: (d, n, r) => calls.push([n, r]), now: () => new Date('2026-11-19T00:00:00Z') });
+  assert.deepEqual(ok, { code: 0 });
+  assert.equal(calls.length, 1, 'a rekord íródik');
+  assert.equal(calls[0][0], `stage-${H}`);
+  assert.deepEqual([calls[0][1].ok, calls[0][1].dirty, calls[0][1].steps], [true, true, [{ name: 'a', status: 'PASS' }]]);
+  const bad = finalizeStage({ evDir: 'ev', head: H, code: 0, dirty: false, results: [], append: () => { throw new Error('lemez tele\nx'); } });
+  assert.deepEqual(bad, { code: 2, error: 'lemez tele' });
+  assert.equal(finalizeStage({ evDir: 'ev', head: H, code: 1, dirty: false, results: [], append: () => { throw new Error('x'); } }).code, 1, 'bukott kapu kódja marad');
 });

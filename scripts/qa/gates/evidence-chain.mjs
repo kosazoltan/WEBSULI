@@ -11,9 +11,9 @@
 // Használat: node scripts/qa/gates/evidence-chain.mjs --verify [--json]   (kód: 0 ép / 1 törött / 2 nem futott)
 //            node scripts/qa/gates/evidence-chain.mjs --repair            (a törött láncot archiválja, újat indít — naplózva)
 
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
-  appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, unlinkSync,
+  appendFileSync, closeSync, existsSync, fstatSync, linkSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, unlinkSync,
   writeFileSync, writeSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -59,26 +59,39 @@ export function withLock(dir, fn, { timeoutMs = LOCK_TIMEOUT_MS, staleMs = LOCK_
       // Windows: a törlés alatt álló zárfájlra EPERM / EACCES jön — ugyanúgy „foglalt”, újrapróba
       if (!['EEXIST', 'EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw e;
       try {
-        const pid = Number.parseInt(readFileSync(lock, 'utf8').trim(), 10);
+        const seen = readFileSync(lock, 'utf8');
+        const pid = Number.parseInt(seen.trim(), 10);
         const age = now() - statSync(lock).mtimeMs;
         const live = pid !== process.pid && alive(pid);
         if ((age > staleMs && !live) || age > maxAgeMs) {
-          unlinkSync(lock);
-          const why = live ? `${maxAgeMs} ms-os felső korlát fölött, a PID ${pid} él (PID-újrahasznosítás / beragadt idegen folyamat)` : `${staleMs} ms-nál régebbi, PID ${Number.isNaN(pid) ? '?' : pid} nem él`;
-          appendFileSync(join(dir, REPAIR_LOG), `${new Date().toISOString()} elárvult zár törölve (${why})\n`);
-          continue;
+          // Atomi átvétel (vak review P2-K5): a zárat nem töröljük, hanem egyedi névre nevezzük át; ha az átnevezett fájl már NEM az,
+          // amit elárvultnak ítéltünk (közben egy másik várakozó átvette és újat írt), visszaállítjuk (`link`: atomi, foglalt helyre
+          // nem ír), és tovább várunk.
+          const grabbed = `${lock}.stale-${process.pid}-${randomBytes(4).toString('hex')}`;
+          renameSync(lock, grabbed);
+          if (readFileSync(grabbed, 'utf8') !== seen) {
+            try { linkSync(grabbed, lock); } catch { /* a helyet közben más foglalta: az ő zárja él */ }
+            unlinkSync(grabbed);
+          } else {
+            unlinkSync(grabbed);
+            const why = live ? `${maxAgeMs} ms-os felső korlát fölött, a PID ${pid} él (PID-újrahasznosítás / beragadt idegen folyamat)` : `${staleMs} ms-nál régebbi, PID ${Number.isNaN(pid) ? '?' : pid} nem él`;
+            appendFileSync(join(dir, REPAIR_LOG), `${new Date().toISOString()} elárvult zár törölve (${why})\n`);
+            continue;
+          }
         }
-      } catch { /* közben eltűnt: újra */ }
+      } catch { /* közben eltűnt / átnevezték: újra */ }
       if (now() - t0 > timeoutMs) throw new Error(`a lánc zárja ${timeoutMs} ms után sem szabadult fel (${lock})`);
       sleep(5 + Math.floor(Math.random() * 20));
     }
   }
+  // Egyedi zár-token (PID + véletlen): a `finally` csak a SAJÁT zárát törli (P2-K5), egy közben átvett idegen zárat nem.
+  const token = `${process.pid} ${randomBytes(6).toString('hex')}\n`;
   try {
-    writeSync(fd, `${process.pid}\n`);
+    writeSync(fd, token);
     return fn();
   } finally {
     try { closeSync(fd); } catch { /* már zárva */ }
-    try { unlinkSync(lock); } catch { /* már törölve */ }
+    try { if (readFileSync(lock, 'utf8') === token) unlinkSync(lock); } catch { /* már nincs: nincs mit törölni */ }
   }
 }
 
@@ -116,8 +129,7 @@ export function lastChainLine(dir) {
   }
 }
 
-function linkUnlocked(dir, name, extra = {}) {
-  const text = readFileSync(join(dir, `${name}.json`), 'utf8');
+function linkUnlocked(dir, name, extra = {}, text = readFileSync(join(dir, `${name}.json`), 'utf8')) {
   let head = null;
   try { head = JSON.parse(text).head ?? null; } catch { /* nem JSON: a hash így is köt */ }
   const last = lastChainLine(dir);
@@ -133,15 +145,29 @@ export function linkRecord(dir, name, opts) {
   return withLock(dir, () => linkUnlocked(dir, name), opts);
 }
 
-/** Rekord kiírása ÉS láncba kötése, egy zár alatt. */
+/**
+ * Rekord kiírása ÉS láncba kötése, egy zár alatt. A rekord ideiglenes néven íródik, a lánc-sor a tartalmára köt, és csak ezután kapja
+ * meg a végleges nevét (vak review P2-K4): ha a folyamat bármikor leáll, láncon kívüli végleges rekord (pl. láncolatlan zöld) nem marad.
+ */
 export function appendRecord(dir, name, rec, opts) {
   if (!validId(name)) throw new Error(`érvénytelen bizonyíték-azonosító: ${name}`);
   mkdirSync(dir, { recursive: true });
   return withLock(dir, () => {
-    writeFileSync(join(dir, `${name}.json`), `${JSON.stringify(rec, null, 2)}\n`);
-    return linkUnlocked(dir, name);
+    const text = `${JSON.stringify(rec, null, 2)}\n`;
+    const tmp = join(dir, `${name}.json.tmp-${process.pid}`);
+    writeFileSync(tmp, text);
+    try {
+      const entry = linkUnlocked(dir, name, {}, text);
+      renameSync(tmp, join(dir, `${name}.json`));
+      return entry;
+    } finally {
+      try { if (existsSync(tmp)) unlinkSync(tmp); } catch { /* a takarítás hibája nem dönt: a végleges rekord a lánc szerint ellenőrzött */ }
+    }
   }, opts);
 }
+
+/** Azok a rekord-fajták, amelyeket a láncba író kapuk (P2) írnak — a láncon kívüli ilyen rekord gyanús (P2-K1). */
+export const CHAINED_PREFIXES = Object.freeze(['stage-', 'pre-push-', 'run-']);
 
 export function readRecord(dir, name) {
   if (!validId(name)) return null;
@@ -156,7 +182,7 @@ export function readRecord(dir, name) {
  * @param {string[]} [names] a (2) csak ezekre (alapérték: mind)
  * @returns {{ ok: boolean, exists: boolean, problems: string[], breaks: number[], last: Map<string, object> }}
  */
-export function verifyChain(dir, names = null) {
+export function verifyChain(dir, names = null, { prefixes = CHAINED_PREFIXES } = {}) {
   const exists = existsSync(join(dir, CHAIN_FILE));
   const lines = chainLines(dir);
   const problems = [];
@@ -176,7 +202,22 @@ export function verifyChain(dir, names = null) {
     if (!existsSync(p)) { problems.push(`${name}: a rekordfájl hiányzik`); continue; }
     if (sha256(readFileSync(p, 'utf8')) !== e.sha256) problems.push(`${name}: a rekord tartalma eltér a láncba írt hash-től (utólag módosították?)`);
   }
-  return { ok: problems.length === 0, exists, problems, breaks, last };
+  // (3) P2-K1: a láncba író kapuk (CHAINED_PREFIXES) rekordjai közül a láncon kívüliek. Hiányzó láncnál minden ilyen rekord
+  // probléma (törölt lánc); meglévő láncnál csak a lánc indulása UTÁN írtak — a korábbiak a lánc bevezetése előtti, régi rekordok.
+  const legacy = [];
+  if (!names) {
+    let since = null;
+    try { since = lines.length ? Date.parse(JSON.parse(lines[0]).at) : null; } catch { since = null; }
+    for (const f of existsSync(dir) ? readdirSync(dir) : []) {
+      if (!f.endsWith('.json')) continue;
+      const name = f.slice(0, -5);
+      if (!validId(name) || !prefixes.some((x) => name.startsWith(x)) || last.has(name)) continue;
+      if (!exists) { problems.push(`${name}: láncba író kapu rekordja, de a lánc (${CHAIN_FILE}) hiányzik — törölt lánc?`); continue; }
+      if (since != null && statSync(join(dir, f)).mtimeMs < since) legacy.push(name);
+      else problems.push(`${name}: láncon kívüli rekord (kézzel írt / átnevezett?) — a láncba író kapu rekordja a lánc indulása után`);
+    }
+  }
+  return { ok: problems.length === 0, exists, problems, breaks, last, legacy };
 }
 
 /**
@@ -193,7 +234,9 @@ export function chainStatus(dir, id) {
   const e = v.last.get(id);
   if (!e) return { status: 'not-in-chain', breaks: v.breaks.length };
   if (sha256(readFileSync(p, 'utf8')) !== e.sha256) return { status: 'mismatch', breaks: v.breaks.length };
-  return { status: 'ok', breaks: v.breaks.length, repaired: Boolean(e.repair) };
+  // P2-K3: a `--repair` által újra-láncolt rekord NEM igazolt bizonyíték — külön állapot, a hívók nem fogadhatják el zöldnek.
+  if (e.repair) return { status: 'repaired-unverified', breaks: v.breaks.length, repaired: true };
+  return { status: 'ok', breaks: v.breaks.length, repaired: false };
 }
 
 /**
@@ -201,7 +244,12 @@ export function chainStatus(dir, id) {
  * tárban most lévő rekordokat újra-láncolja `repair: true` jelöléssel; minden lépés a `chain-repair.log`-ba kerül. Az újra-láncolt
  * rekordot az ellenőrző „javítás után” megjegyzéssel fogadja el.
  */
-export function repairChain(dir, { now = () => new Date() } = {}) {
+export function repairChain(dir, { now = () => new Date(), force = false } = {}) {
+  // P2-K3: ép láncon a javítás nem fut (különben minden kézi rekordot újra-láncolna), csak kifejezett `force`-szal.
+  if (!force) {
+    const v = verifyChain(dir);
+    if (v.exists && v.ok) return { archived: null, relinked: 0, skipped: 'a lánc ép — javítás nem kell (kényszerítés: --force)' };
+  }
   return withLock(dir, () => {
     const stamp = now().toISOString().replace(/[:.]/g, '-');
     const p = join(dir, CHAIN_FILE);
@@ -221,19 +269,20 @@ async function main() {
   try { ctx = makeContext({}); } catch (e) { process.stderr.write(`[evidence-chain] NEM FUTOTT: ${e.message}\n`); process.exit(2); }
   if (args.includes('--repair')) {
     let r;
-    try { r = repairChain(ctx.evDir); } catch (e) {
+    try { r = repairChain(ctx.evDir, { force: args.includes('--force') }); } catch (e) {
       // F2: nem kezeletlen kivétel — érthető hiba és teendő, 2-es kód
       process.stderr.write(`[evidence-chain] NEM FUTOTT: a javítás nem sikerült (${String(e?.message ?? e).split('\n')[0]}). Teendő: néhány másodperc múlva futtasd újra; ha a zár 40 s-nál öregebb, a következő futás magától átveszi (napló: ${join(ctx.evDir, REPAIR_LOG)}).\n`);
       process.exit(2);
     }
-    process.stdout.write(`[evidence-chain] javítva: ${r.archived ? `a régi lánc archiválva (${r.archived})` : 'nem volt lánc'}; ${r.relinked} rekord újra-láncolva\n`);
+    if (r.skipped) { process.stdout.write(`[evidence-chain] ${r.skipped}\n`); process.exit(0); }
+    process.stdout.write(`[evidence-chain] javítva: ${r.archived ? `a régi lánc archiválva (${r.archived})` : 'nem volt lánc'}; ${r.relinked} rekord újra-láncolva — ezek NEM igazolt bizonyítékok (repaired-unverified): futtasd újra a kapukat\n`);
     process.exit(0);
   }
   const v = verifyChain(ctx.evDir);
   if (args.includes('--json')) {
     process.stdout.write(`${JSON.stringify({ schema: 'websuli-check/1', tool: 'evidence-chain', head: null, ok: v.ok, exitCode: v.ok ? 0 : 1, counts: { problems: v.problems.length, breaks: v.breaks.length, records: v.last.size }, items: v.problems.map((p) => ({ id: p.split(':')[0], status: 'FAIL', ref: CHAIN_FILE, detail: p })) })}\n`);
   } else {
-    process.stdout.write(`[evidence-chain] ${v.ok ? 'ÉP' : 'TÖRÖTT'}: ${v.last.size} rekord, ${v.breaks.length} törés, ${v.problems.length} probléma${v.ok ? '' : ' — javítás: node scripts/qa/gates/evidence-chain.mjs --repair'}\n`);
+    process.stdout.write(`[evidence-chain] ${v.ok ? 'ÉP' : 'TÖRÖTT'}: ${v.last.size} rekord, ${v.breaks.length} törés, ${v.problems.length} probléma${v.legacy.length ? `; ${v.legacy.length} régi (a lánc előtti) láncon kívüli rekord` : ''}${v.ok ? '' : ' — javítás: node scripts/qa/gates/evidence-chain.mjs --repair'}\n`);
     for (const p of v.problems.slice(0, 40)) process.stdout.write(`    | ${p}\n`);
   }
   process.exit(v.ok ? 0 : 1);

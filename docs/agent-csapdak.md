@@ -1087,7 +1087,7 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
   állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
 
-## C-75 — `npm ci` a runbook szerint, de ellenőrizetlen gépszintű következtetéssel; a kapu-napló közös útvonalon (2026-11-19)
+## C-76 — `npm ci` a runbook szerint, de ellenőrizetlen gépszintű következtetéssel; a kapu-napló közös útvonalon (2026-11-19)
 
 - **Tünet:** a push-kapu natív tesztje bukott (`better-sqlite3`), a `doctor:arch` „`npm.cmd ci`”-t javasolt. A munkafában lefutott
   `npm.cmd ci` törölte a meglévő `node_modules`-t, majd a natív modul fordításán elbukott (`prebuild-install warn install No prebuilt
