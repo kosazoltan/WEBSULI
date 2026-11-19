@@ -120,6 +120,15 @@ describe("kulcs és maszkolás", () => {
     const kint = "#".repeat(MASK_WINDOW - 10) + "T".repeat(10) + " ".repeat(100);
     assert.ok(maskClip(kint, FAKE_KEY, MASK_WINDOW).endsWith("#".repeat(10)), "a határ előtti szöveg a kulcshossz-sávon túl megmarad");
   });
+  it("vak L1 (ff3ba86d): ablakhatáron félbevágott, belül AIza-mintákat tartalmazó hosszú kulcs eleje sem marad", () => {
+    const key = "MARKER#" + ("AIza" + "Q".repeat(30) + " ").repeat(800);
+    for (const missing of [5, 100, 2000]) {
+      const s = "y ".repeat((MASK_WINDOW - (key.length - missing)) / 2 + 1) + key + " vége";
+      assert.ok(!maskClip(s, key, MASK_WINDOW * 2).includes("MARKER"), `a kulcsból ${missing} karakter esik kívül`);
+    }
+    const big = "SYNTHETIC_PRIVATE_MARKER " + ("AIza" + "Q".repeat(30) + " ").repeat(3000);
+    assert.ok(!maskClip(big, big, 600).includes("SYNTHETIC"), "ablaknál hosszabb kulcs");
+  });
   it("#521 / A3: 64-nél hosszabb, AIza-mintára nem illeszkedő (nem token-karakteres) kulcs az ablakhatáron sem marad", () => {
     const key = "ab#cd#" + "ef#01#".repeat(12);
     for (const d of [1, 8, 30, 70, key.length - 1]) {

@@ -185,6 +185,32 @@ test("redactClip (#521): az ablakhatáron átnyúló általános token (sk-or- /
   }
 });
 
+// Vak ellenőr (GPT, ff3ba86d) L1: a hosszabbító csere (`Bearer x` → `Bearer [kulcs]`) után a maszkolt kimenet végéből
+// eldobott kulcshossz nem fedi a félbevágott kulcsot — a vágásnak forrás-koordinátában kell történnie.
+test("requestImage hibaága (vak L1): ablaknál hosszabb, hosszabbító mintákat tartalmazó kulcs sem szivárog", async () => {
+  const key = "SYNTHETIC_PRIVATE_MARKER " + "Bearer x ".repeat(8000);
+  const fetchImpl = (async () => new Response(key, { status: 500 })) as unknown as typeof fetch;
+  await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key, body: {} }), (e: Error) => {
+    assert.equal(e.message.includes("SYNTHETIC"), false);
+    assert.ok(e.message.length <= "HTTP 500: ".length + 300);
+    return true;
+  });
+});
+
+test("redactClip (vak L1): ablakhatáron félbevágott, hosszabbító mintákat tartalmazó kulcs eleje sem marad", () => {
+  const key = "MARKER#" + "Bearer x ".repeat(3000);
+  for (const missing of [5, 100, 2000]) {
+    const s = "y ".repeat((REDACT_WINDOW - (key.length - missing)) / 2 + 1) + key + " vége";
+    const out = redactClip(s, key, REDACT_WINDOW * 2);
+    assert.equal(out.includes("MARKER"), false, `a kulcsból ${missing} karakter esik az ablakon kívül`);
+  }
+  // a teljes, ablakon belüli kulcs-előfordulás kitakarva, a határ előtti szöveg megmarad
+  const inside = "elotte " + key + " utana " + "z ".repeat(REDACT_WINDOW);
+  const out2 = redactClip(inside, key, REDACT_WINDOW * 2);
+  assert.ok(out2.startsWith("elotte [kulcs] utana "));
+  assert.equal(out2.includes("MARKER"), false);
+});
+
 test("requestImage hibaága: nagy válaszban sincs kulcs, legfeljebb 300 karakteres részlet", async () => {
   const body = "x".repeat(REDACT_WINDOW - 10) + clipKey + "z".repeat(5_000_000);
   const fetchImpl = (async () => new Response(body, { status: 500 })) as unknown as typeof fetch;
