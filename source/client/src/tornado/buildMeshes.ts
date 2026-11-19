@@ -248,7 +248,8 @@ export function buildVehicle(vehicle: Vehicle): THREE.Group {
   blob.userData.blobShadow = true;
   group.add(blob);
   group.userData.blob = blob;
-  group.userData.size = { width, length };
+  // `height`: a karosszéria (alváz) magassága — a böngészős mérő ebből vetíti a jármű dobozát (J7b, vak ellenőrzés K3).
+  group.userData.size = { width, length, height };
   group.userData.disposables = [chassis.geometry, cab.geometry, bodyMat, accentMat, glassMat];
 
   return group;

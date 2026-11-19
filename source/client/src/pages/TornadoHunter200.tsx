@@ -2013,26 +2013,40 @@ function PlayScreen(props: {
        * gombjai nem takarják-e a járművet és az előtte lévő utat.
        */
       getVehicleScreenBox: () => {
+        // A KAROSSZÉRIA (alváz + fülke) orientált doboza — a tengelyre igazított `Box3` a jármű forgatása, az árnyék-folt és az
+        // antenna miatt a valódi képnél jóval nagyobb dobozt adna. `aheadTop`: az előtte lévő út (1,5 járműhossz) vetített teteje.
         const sc = sceneRef.current;
         const canvas = canvasRef.current;
         if (!sc || !canvas) return null;
         const rect = canvas.getBoundingClientRect();
-        const box = new THREE.Box3().setFromObject(sc.vehicle);
+        const size = sc.vehicle.userData.size as { width: number; length: number; height?: number } | undefined;
+        const p = playerRef.current;
+        const hw = (size?.width ?? 2.4) / 2;
+        const hl = (size?.length ?? 5.2) / 2;
+        const top = (size?.height ?? 1.6) * 1.4 + 0.62;
+        const gy = sc.vehicle.position.y;
+        const fx = Math.sin(p.heading);
+        const fz = -Math.cos(p.heading);
+        const v = new THREE.Vector3();
+        const toScreen = (x: number, y: number, z: number) => {
+          v.set(x, y, z).project(sc.camera);
+          return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
+        };
         let left = Infinity;
         let right = -Infinity;
-        let top = Infinity;
+        let boxTop = Infinity;
         let bottom = -Infinity;
-        const v = new THREE.Vector3();
         for (let k = 0; k < 8; k++) {
-          v.set(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z).project(sc.camera);
-          const x = rect.left + ((v.x + 1) / 2) * rect.width;
-          const y = rect.top + ((1 - v.y) / 2) * rect.height;
-          left = Math.min(left, x);
-          right = Math.max(right, x);
-          top = Math.min(top, y);
-          bottom = Math.max(bottom, y);
+          const f = k & 1 ? hl : -hl;
+          const r = k & 2 ? hw : -hw;
+          const s = toScreen(p.x + fx * f - fz * r, gy + (k & 4 ? top : 0), p.z + fz * f + fx * r);
+          left = Math.min(left, s.x);
+          right = Math.max(right, s.x);
+          boxTop = Math.min(boxTop, s.y);
+          bottom = Math.max(bottom, s.y);
         }
-        return { left, right, top, bottom };
+        const ahead = toScreen(p.x + fx * hl * 3, gy, p.z + fz * hl * 3);
+        return { left, right, top: boxTop, bottom, aheadTop: Math.min(boxTop, ahead.y) };
       },
     };
     const w = window as unknown as { __websuliTornado?: typeof api };

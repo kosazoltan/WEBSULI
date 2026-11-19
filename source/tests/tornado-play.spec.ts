@@ -17,7 +17,7 @@ type GameWindow = {
     getJunction: () => { ox: number; oz: number; fx: number; fz: number; rx: number; rz: number; line: number; gates: number; spacing: number; frozen: boolean; questionId: number } | null;
     setPlayer: (patch: Record<string, number | boolean>) => void;
     getPlayer: () => { x: number; z: number; heading: number; speed: number };
-    getVehicleScreenBox: () => { left: number; right: number; top: number; bottom: number } | null;
+    getVehicleScreenBox: () => { left: number; right: number; top: number; bottom: number; aheadTop: number } | null;
   };
   __websuliInput?: { renders: Record<string, number> };
 };
@@ -441,9 +441,8 @@ for (const viewport of [{ width: 360, height: 640 }, { width: 390, height: 844 }
       await page.waitForTimeout(500);
       const car = (await page.evaluate(() => (window as unknown as GameWindow).__websuliTornado!.getVehicleScreenBox()))!;
       expect(car.bottom - car.top, "a jármű látszik a képen").toBeGreaterThan(20);
-      // A jármű és előtte egy jármű-magasságnyi (≥ 48 px) út szabad.
-      const ahead = Math.max(48, car.bottom - car.top);
-      const clear: Rect = { left: car.left, right: car.right, top: car.top - ahead, bottom: car.bottom };
+      // A jármű karosszériája és előtte 1,5 járműhossznyi út (vetítve; legalább 48 px) szabad.
+      const clear: Rect = { left: car.left, right: car.right, top: Math.min(car.aheadTop, car.top - 48), bottom: car.bottom };
       const card = (await rectOf(page, '[data-testid="tornado-quiz"] .play-question-card'))!;
       expect(overlaps(card, clear), `a kártya (${Math.round(card.top)}–${Math.round(card.bottom)}) a járművet / az utat takarja (${Math.round(clear.top)}–${Math.round(clear.bottom)})`).toBe(false);
       const opts = await page.evaluate(() =>
