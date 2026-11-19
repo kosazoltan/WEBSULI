@@ -116,4 +116,3 @@ Egy kommentsor a tömb fölé: miért korlátos / miért `{n}…*` (a terv hivat
   `[kulcs]`. `scripts/qa/gates/external-review.test.mjs`: ugyanez AIza-mintás kulccsal (regresszióőr).
 - **T7b** `source/scripts/design-assets/lib.ts`: új `safeCut(w, key, margin)` (D3b); `redactClip` = ablak + határ-futás levágása,
   majd `redact(w.slice(0, safeCut(...)), key).slice(0, max)`. Az `external-review.mjs` változatlan (csak rövidít).
-
