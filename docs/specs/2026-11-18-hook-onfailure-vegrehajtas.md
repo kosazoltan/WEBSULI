@@ -32,3 +32,14 @@ Terv: `docs/specs/2026-11-18-hook-onfailure.md`, „Kiegészítés” fejezet.
 13. `gate:stage`, mutációs ellenpróba, sorompó, `gate:push`, fej-hash.
 
 - [x] 8 · [x] 9 · [x] 10 · [x] 11 · [x] 12 · [ ] 13 (kapuk — folyamatban)
+
+## Kiegészítés 2 — jogosultsági tiltás (2026-11-19) — végrehajtás
+
+Terv: `docs/specs/2026-11-18-hook-onfailure.md`, „Kiegészítés 2”.
+
+14. Ez a doksi-commit.
+15. `.claude/settings.json` `permissions.deny` (két `Edit(...)` szabály) + teszt; runbook: ezután csak a tulajdonos módosítja.
+16. L2b: runbook-pontosítás; `repo-rules.json` szűkítése; a diff-szkennelés jele `WEBSULI_DIFF_SCAN=1` (lint-gate → hook-folyamat); tesztek.
+17. Kanban: L10, L11. `gate:stage`, mutáció, sorompó, `gate:push`.
+
+- [ ] 14 · [ ] 15 · [ ] 16 · [ ] 17

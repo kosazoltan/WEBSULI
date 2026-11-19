@@ -101,3 +101,33 @@ PowerShell eszközt figyeli; MCP-eszközök), L6 (szokatlan JSON-bemenetek), és
   engedett maradni.
 - [x] F10 WHEN az audit-hook `null` / nem objektum bemenetet kap THEN SHALL nem összeomlani; a külső korlát SHALL TÖBB lenni, mint a belső git-korlát
   + 5 s.
+
+## Kiegészítés 2 — jogosultsági szintű tiltás a settings-fájlokra (tulajdonosi döntés, 2026-11-18)
+
+Tulajdonosi döntés (kérdőíven): a `.claude/settings*.json` fájlokra jogosultsági szintű tiltás kerüljön — „Igen, tiltsuk meg”.
+
+**Tények a hivatalos dokumentációból** (code.claude.com/docs/en/permissions, /settings, /permission-modes, 2026-11-19):
+a szabály alakja `Tool(specifier)`; az `Edit(...)` szabály „all built-in tools that edit files” — a Write / NotebookEdit / MultiEdit
+is — rá vonatkozik (`Write(...)` szabály nem illeszkedik); a `/path` a settings-forráshoz, projekt-settingsben a fő munkakönyvtárhoz
+(projektgyökér) képest értendő; gitignore-mintázat. A tiltás minden módban érvényes („Deny rules block in every mode, including
+bypassPermissions”); a listák a settings-szintek között összeadódnak, egy helyi / felhasználói fájl nem veheti el. Héjban az `Edit`
+tiltás vonatkozik az átirányítás céljára (`>`, `>>`, `2>`), a `tee` célra és a felismert fájl-parancsokra (`cat`, `head`, `tail`,
+`sed`); NEM vonatkozik a fájlt maga nyitó szkriptre (pl. `node -e`, Python) — ez a dokumentáció szerint is nyitva marad (teljes,
+operációs-rendszer-szintű védelem csak a homokozóval).
+
+**Döntés.**
+1. `.claude/settings.json` `permissions.deny`: `Edit(/.claude/settings.json)`, `Edit(/.claude/settings.local.json)`. Ez az utolsó
+   szerkesztés, amelyet ügynök ezen a fájlon végez; ezután a beállítás csak a tulajdonos kezével módosítható (runbook).
+2. L2b: a runbook nem állítja, hogy a repó-szabály tiltja a hook gyengítését — a valódi védelem a jogosultsági tiltás (settings) és a
+   CI-ben futó viselkedési hook-tesztek (hook-szkript). A repó-szabályok csak szűk, szó szerinti alakokat fognak (riasztó, nem határ).
+   A hamis tiltások szűkítése: a belépési pont pontos szövegét számoló szabály megszűnik (jogos refaktort tiltott); a „kilépés a `main()`
+   elején” szabály csak a kapu-hookra vonatkozik. A diff-szkennelés jele a modell által nem adható környezeti változó
+   (`WEBSULI_DIFF_SCAN=1` a hook-folyamatnak), nem a bemenet mezője.
+3. Jegyre: L10 (a többi hook regexe is lassú, kitöltéssel kijátszható — a következő hook-szelet első tétele az L3-mal), L11 (a teszt a
+   forrásból regexszel olvassa a korlátot — export / import).
+
+**Elfogadás (EARS).**
+- [ ] F11 WHEN a `.claude/settings.json`-t olvassuk THEN a `permissions.deny` SHALL tartalmazni az `Edit(/.claude/settings.json)` és
+  az `Edit(/.claude/settings.local.json)` szabályt (teszt), és a runbook SHALL kimondani, hogy ezután csak a tulajdonos módosítja.
+- [ ] F12 WHEN az Edit / Write a belépési pontot jogosan átírja, vagy más hook-fájlban korai kilépés van THEN a repó-szabály SHALL nem
+  tiltani; WHEN a bemenetben diff-szkennelés mező van, de a környezeti változó nincs THEN a `removes` szabály SHALL érvényes maradni.
