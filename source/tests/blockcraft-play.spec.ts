@@ -579,7 +579,26 @@ for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { wi
         await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz, runesLeft: 99 }), LONG_WINDOW_QUIZ);
         await expect(page.locator('[data-testid="bc-quiz"] [data-armed="true"]').first()).toBeVisible({ timeout: 20_000 });
         await expect.poll(async () => String((await probe(page)).stoneBand), { timeout: 10_000 }).not.toBe("null");
-        const rects = JSON.parse(String((await probe(page)).stoneRects)) as Array<{ x0: number; y0: number; x1: number; y1: number } | null>;
+        // A kövek a sávba a zár első képkockáján kerülnek: a lassú szoftveres WebGL-en a téglalapot csak két egymást követő
+        // képkockán stabil helyzetben olvassuk ki (C-65), különben a probe a sávba helyezés előtti állapotot kaphatná.
+        type R = { x0: number; y0: number; x1: number; y1: number } | null;
+        let rects: R[] = [];
+        await expect
+          .poll(
+            async () => {
+              const a = await probe(page);
+              const f0 = Number(a.frames);
+              await expect.poll(async () => Number((await probe(page)).frames), { timeout: 10_000 }).toBeGreaterThan(f0 + 1);
+              const b2 = await probe(page);
+              const ra = JSON.parse(String(a.stoneRects)) as R[];
+              const rb = JSON.parse(String(b2.stoneRects)) as R[];
+              const stable = rb.length === 4 && rb.every((x, k) => x && ra[k] && Math.abs(x.x0 - ra[k]!.x0) <= 4 && Math.abs(x.y0 - ra[k]!.y0) <= 4);
+              if (stable) rects = rb;
+              return stable;
+            },
+            { timeout: 30_000, message: "a kövek helyzete stabil" },
+          )
+          .toBe(true);
         const r = rects[i];
         expect(r, `a(z) ${"ABCD"[i]} kő látszik`).toBeTruthy();
         // B1: a kő középpontja nem eshet az érc vetületére (ott a bányászó koppintás érné el).
