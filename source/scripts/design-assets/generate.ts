@@ -30,7 +30,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   attemptWithinBudget, buildImageRequest, composePrompt, estimateUsd, ledgerProblem, loadStyle, missingReferences, parseMax, parseMaxUsd, parseRefs, parseResolution,
-  parseSetName, planJobs, readLedger, redact, requestImage, runJobs, settleActualCost, type AssetItem, type AssetManifest, type Budget, type Resolution, type Style,
+  parseSetName, planJobs, readLedger, redact, requestImage, runJobs, runUnderLock, settleActualCost, type AssetItem, type AssetManifest, type Budget, type Resolution, type Style,
 } from "./lib";
 import { acquireRunLock } from "./run-lock";
 
@@ -130,28 +130,38 @@ async function runSet(manifest: AssetManifest, style: Style, items: AssetItem[],
   const maxUsd = parseMaxUsd(process.argv.includes("--max-usd") ? (arg("max-usd") ?? "") : undefined);
   const refFiles = parseRefs(process.argv, CANDIDATES);
   const log = path.join(CANDIDATES, "log.jsonl");
-  const ledger = existsSync(log) ? readLedger(readFileSync(log, "utf8")) : { spentUsd: 0, corruptLines: [] };
-  const alreadySpent = ledger.spentUsd;
-  // Minden jelölt a készlet mappájában (nem csak a most kért tételeké): ha van kép, de nincs napló, a keret nem nyílhat újra.
-  const candidateFiles = manifest.items.reduce((n, item) => {
-    const dir = path.join(CANDIDATES, item.id);
-    return n + (existsSync(dir) ? readdirSync(dir).filter(f => IMAGE_FILE.test(f)).length : 0);
-  }, 0);
-  const problem = ledgerProblem({ logExists: existsSync(log), candidateFiles, corruptLines: ledger.corruptLines });
-  const existing: Record<string, number> = {};
-  for (const item of items) {
-    const dir = path.join(CANDIDATES, item.id);
-    existing[item.id] = existsSync(dir) ? readdirSync(dir).filter(f => IMAGE_FILE.test(f)).length : 0;
-  }
-  const plan = planJobs(items, { resolution, max, maxUsd, existing, alreadySpent });
+  /**
+   * A futás pillanatképe: a költségkönyv összege, a meglévő jelöltek és az ezekből számolt terv. Az előnézet (kiírás, száraz futás)
+   * és az ÉLES futás is ezt hívja — az éles a futás-zár megszerzése UTÁN, hogy ne egy közben lefutott másik futás előtti
+   * állapotból dolgozzon (PR #519 review).
+   */
+  const takeSnapshot = () => {
+    const ledger = existsSync(log) ? readLedger(readFileSync(log, "utf8")) : { spentUsd: 0, corruptLines: [] };
+    const alreadySpent = ledger.spentUsd;
+    // Minden jelölt a készlet mappájában (nem csak a most kért tételeké): ha van kép, de nincs napló, a keret nem nyílhat újra.
+    const candidateFiles = manifest.items.reduce((n, item) => {
+      const dir = path.join(CANDIDATES, item.id);
+      return n + (existsSync(dir) ? readdirSync(dir).filter(f => IMAGE_FILE.test(f)).length : 0);
+    }, 0);
+    const problem = ledgerProblem({ logExists: existsSync(log), candidateFiles, corruptLines: ledger.corruptLines });
+    const existing: Record<string, number> = {};
+    for (const item of items) {
+      const dir = path.join(CANDIDATES, item.id);
+      existing[item.id] = existsSync(dir) ? readdirSync(dir).filter(f => IMAGE_FILE.test(f)).length : 0;
+    }
+    const plan = planJobs(items, { resolution, max, maxUsd, existing, alreadySpent });
+    return { alreadySpent, problem, plan, missing: missingReferences(plan.jobs, new Set(Object.keys(refFiles))) };
+  };
+  // Előnézet (zár nélkül): csak kiírásra, száraz futásra és a korai megállásra — az éles futás NEM ebből dolgozik.
+  const preview = takeSnapshot();
+  const { plan, problem, missing } = preview;
   console.log(`${plan.jobs.length} kép · becsült költség ≈ ${plan.totalUsd.toFixed(2)} USD (${manifest.model}, készlet: ${SET})`);
-  if (alreadySpent > 0 || plan.skippedExisting > 0) console.log(`Eddig elszámolva (napló): ≈ ${alreadySpent.toFixed(2)} USD · már meglévő jelölt, nem készül újra: ${plan.skippedExisting}`);
-  if (maxUsd !== null) console.log(`Keret: ${maxUsd} USD összesen · a futás után várhatóan elszámolva: ≈ ${(alreadySpent + plan.totalUsd).toFixed(2)} USD`);
+  if (preview.alreadySpent > 0 || plan.skippedExisting > 0) console.log(`Eddig elszámolva (napló): ≈ ${preview.alreadySpent.toFixed(2)} USD · már meglévő jelölt, nem készül újra: ${plan.skippedExisting}`);
+  if (maxUsd !== null) console.log(`Keret: ${maxUsd} USD összesen · a futás után várhatóan elszámolva: ≈ ${(preview.alreadySpent + plan.totalUsd).toFixed(2)} USD`);
   if (plan.cutBy === "max") console.log(`KORLÁT: a kért ${plan.requested} képből csak ${plan.jobs.length} fut (--max ${max}).`);
   if (plan.cutBy === "max-usd") console.log(`KÖLTSÉGPLAFON: a kért ${plan.requested} képből csak ${plan.jobs.length} fér a keretbe (--max-usd ${maxUsd}).`);
   if (maxUsd === null) console.log("FIGYELEM: nincs költségplafon (--max-usd) — éles futás csak plafonnal indul.");
   if (problem) console.log(`NAPLÓHIBA: ${problem}`);
-  const missing = missingReferences(plan.jobs, new Set(Object.keys(refFiles)));
   if (missing.length) console.log(`HIÁNYZÓ REFERENCIA: ${missing.join(", ")} — add meg a kiválasztott képet: --ref <azonosító>=<fájl a candidates/${SET}/ alatt>`);
   if (flag("dry-run")) {
     const seen = new Set<string>();
@@ -167,9 +177,17 @@ async function runSet(manifest: AssetManifest, style: Style, items: AssetItem[],
   if (missing.length) throw new Error("Külön készlet éles futása csak kiválasztott (--ref) vagy ugyanebben a futásban készülő stílus-referenciával indul.");
   if (problem) throw new Error(problem);
   const key = readKey();
-  const releaseLock = acquireRunLock(CANDIDATES);
-  try {
-  const budget: Budget = { spent: alreadySpent, maxUsd };
+  await runUnderLock({
+    acquire: () => acquireRunLock(CANDIDATES),
+    snapshot: takeSnapshot,
+    run: async (live) => {
+  // A zár alatt újraolvasott állapot az irányadó: ha közben egy másik futás költött vagy jelöltet gyártott, ebből látszik.
+  if (live.problem) throw new Error(live.problem);
+  if (live.missing.length) throw new Error("Külön készlet éles futása csak kiválasztott (--ref) vagy ugyanebben a futásban készülő stílus-referenciával indul.");
+  if (Math.abs(live.alreadySpent - preview.alreadySpent) > 1e-9 || live.plan.jobs.length !== plan.jobs.length) {
+    console.log(`FRISSÍTVE a futás-zár alatt (közben másik futás dolgozott): ${live.plan.jobs.length} kép · eddig elszámolva ≈ ${live.alreadySpent.toFixed(2)} USD · a futás után várhatóan ≈ ${(live.alreadySpent + live.plan.totalUsd).toFixed(2)} / ${maxUsd} USD`);
+  }
+  const budget: Budget = { spent: live.alreadySpent, maxUsd };
   const madeThisRun = new Set<string>();
   const reference = (id: string): string | null => {
     if (refFiles[id]) return dataUrl(refFiles[id]!);
@@ -180,7 +198,7 @@ async function runSet(manifest: AssetManifest, style: Style, items: AssetItem[],
   };
   const ctx: Ctx = { manifest, style, key, log, budget, reference };
   const outcome = await runJobs({
-    jobs: plan.jobs,
+    jobs: live.plan.jobs,
     chosenRefs: new Set(Object.keys(refFiles)),
     generate: async (job) => {
       const one = await generateOne(job.item, job.resolution, ctx);
@@ -191,9 +209,8 @@ async function runSet(manifest: AssetManifest, style: Style, items: AssetItem[],
   if (outcome.stopped === "budget") console.log(`KÖLTSÉGPLAFON elérve (${budget.spent.toFixed(2)} / ${maxUsd} USD) — megállok.`);
   if (outcome.stopped === "reference") console.log(`REFERENCIA NÉLKÜL NEM FOLYTATOM: a(z) ${outcome.missingRef} ebben a futásban nem készült el — a rá épülő képek nem készülnek el referencia nélkül.`);
   console.log(`Kész: ${outcome.made} kép. Elszámolva összesen (becsült ár, a sikertelen hívásokkal együtt): ≈ ${budget.spent.toFixed(2)} / ${maxUsd} USD. Válogatóoldal: npx tsx scripts/design-assets/review-page.ts --set ${SET}`);
-  } finally {
-    releaseLock();
-  }
+    },
+  });
 }
 
 async function main() {

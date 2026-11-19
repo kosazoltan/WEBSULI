@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -240,7 +240,8 @@ test("a generátor külön készletet csak plafonnal és referenciával futtat �
   const run = src.slice(src.indexOf("async function runSet("), src.indexOf("async function main()"));
   assert.ok(run.indexOf("csak --max-usd költségplafonnal indul") < run.indexOf("readKey()"));
   assert.ok(run.indexOf("stílus-referenciával indul") < run.indexOf("readKey()"));
-  assert.match(run, /const budget: Budget = \{ spent: alreadySpent, maxUsd \}/);
+  // A keret a könyv összegéből indul — a futás-zár ALATT újraolvasott értékből (PR #519 review; korábban a zár előtti érték volt).
+  assert.match(run, /const budget: Budget = \{ spent: live\.alreadySpent, maxUsd \}/);
   assert.equal(src.split("requestImage(fetch").length - 1, 1, "egyetlen hálózati hívóhely");
   assert.equal(src.split("fetch(").length - 1, 0, "közvetlen fetch-hívás nincs — csak a requestImage-en át");
   assert.match(src.slice(src.indexOf("async function generateOne(")), /attemptWithinBudget\(\{\s*budget: ctx\.budget,/);
@@ -385,4 +386,86 @@ test("a költségkeret a szolgáltató valódi árával (usage.cost) is számol:
   const run = read("scripts/design-assets/generate.ts");
   assert.match(run, /settleActualCost\(ctx\.budget, cost, img\.usage\)/);
   assert.match(run, /extraUsd/);
+});
+
+test("két átfedő futás: a költségkönyv, a jelöltszámlálás és a terv a futás-zár VÉDELMÉBEN készül — a másodikként zároló futás nem költ a plafon fölé és nem gyárt újra kész jelöltet (PR #519 review)", async () => {
+  const runUnderLock = (artLib as unknown as { runUnderLock?: <S, R>(opts: { acquire: () => () => void; snapshot: () => S; run: (state: S) => Promise<R> }) => Promise<R> }).runUnderLock;
+  assert.equal(typeof runUnderLock, "function", "runUnderLock hiányzik");
+  const MAX_USD = 7;
+  const item = { ...byId("advent-frame"), candidates: 2, resolution: "2K" as const, references: [] }; // 2 × 0,09 USD
+  const setup = () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "advent-zar-"));
+    const log = path.join(dir, "log.jsonl");
+    writeFileSync(log, JSON.stringify({ status: "started", estUsd: 6.8 }) + "\n"); // a könyv induláskor: 6,80 / 7 USD
+    const net = fakeFetch(Array.from({ length: 8 }, () => okImage));
+    const made = () => (existsSync(path.join(dir, item.id)) ? readdirSync(path.join(dir, item.id)).length : 0);
+    // Ugyanaz a pillanatkép, amit a generátor készít: a könyv összege, a meglévő jelöltek és az ezekből számolt terv.
+    const snapshot = () => {
+      const alreadySpent = readLedger(readFileSync(log, "utf8")).spentUsd;
+      return { alreadySpent, plan: planJobs([item], { resolution: "2K", max: 100, maxUsd: MAX_USD, existing: { [item.id]: made() }, alreadySpent }) };
+    };
+    const live = async (state: ReturnType<typeof snapshot>) => {
+      const budget: Budget = { spent: state.alreadySpent, maxUsd: MAX_USD };
+      return runJobs({
+        jobs: state.plan.jobs, chosenRefs: new Set<string>(),
+        generate: async (job) => attemptWithinBudget({
+          budget, estUsd: job.estUsd, maxAttempts: 1,
+          onStart: () => appendFileSync(log, JSON.stringify({ status: "started", estUsd: job.estUsd }) + "\n"),
+          attempt: async () => {
+            await requestImage(net.impl, { endpoint: "https://example.invalid/images", key: "k", body: {} });
+            mkdirSync(path.join(dir, job.item.id), { recursive: true });
+            writeFileSync(path.join(dir, job.item.id, `${made()}.jpg`), "kép");
+          },
+          onError: () => undefined,
+        }),
+      });
+    };
+    const spent = () => readLedger(readFileSync(log, "utf8")).spentUsd;
+    return { dir, net, made, snapshot, live, spent };
+  };
+
+  // Ellenpróba — a HIBÁS sorrend (pillanatkép a zár ELŐTT) ugyanezzel a felállással túlkölt: így tudjuk, hogy a próba megfogja a hibát.
+  const stale = setup();
+  try {
+    const before = stale.snapshot(); // a „B” futás a zár előtt olvas (6,80 USD, 0 jelölt → 2 képet tervez)
+    await runUnderLock!({ acquire: () => acquireRunLock(stale.dir), snapshot: stale.snapshot, run: stale.live }); // közben az „A” futás 0,18-at költ
+    const release = acquireRunLock(stale.dir);
+    try { await stale.live(before); } finally { release(); }
+    assert.ok(stale.spent() > MAX_USD + 1e-9, `a régi sorrend túlkölt: ${stale.spent()}`);
+    assert.equal(stale.made(), 4, "a régi sorrend újragyártja a kész jelölteket");
+  } finally { rmSync(stale.dir, { recursive: true, force: true }); }
+
+  // A JAVÍTOTT sorrend: a „B” futás elindul (előnézet), közben az „A” lefut, majd a „B” a zár ALATT újra olvas és tervez.
+  const fixed = setup();
+  try {
+    const preview = fixed.snapshot();
+    assert.equal(preview.plan.jobs.length, 2, "az előnézet még 2 képet tervez");
+    // Valódi egyidejűség: amíg az „A” a zárat tartja, a „B” el sem indul (hívás nélkül, érthető üzenettel).
+    await runUnderLock!({
+      acquire: () => acquireRunLock(fixed.dir), snapshot: fixed.snapshot,
+      run: async (state) => {
+        await assert.rejects(runUnderLock!({ acquire: () => acquireRunLock(fixed.dir), snapshot: fixed.snapshot, run: fixed.live }), /Már fut egy generálás/);
+        return fixed.live(state);
+      },
+    });
+    assert.equal(fixed.net.calls.length, 2);
+    assert.ok(Math.abs(fixed.spent() - 6.98) < 1e-9, `az „A” után: ${fixed.spent()}`);
+    // A „B” most kapja meg a zárat: a friss könyvből (6,98) és a 2 kész jelöltből tervez → nem indít hívást.
+    const outcome = await runUnderLock!({ acquire: () => acquireRunLock(fixed.dir), snapshot: fixed.snapshot, run: fixed.live });
+    assert.equal(outcome.made, 0);
+    assert.equal(fixed.net.calls.length, 2, "a második futás nem indított fizetős hívást");
+    assert.ok(fixed.spent() <= MAX_USD + 1e-9 && Math.abs(fixed.spent() - 6.98) < 1e-9, `a keret nem lépődött túl: ${fixed.spent()}`);
+    assert.equal(fixed.made(), 2, "kész jelölt nem készült újra");
+    // A zár a futás után (hiba esetén is) felszabadul.
+    await assert.rejects(runUnderLock!({ acquire: () => acquireRunLock(fixed.dir), snapshot: fixed.snapshot, run: async () => { throw new Error("megszakadt"); } }), /megszakadt/);
+    acquireRunLock(fixed.dir)();
+  } finally { rmSync(fixed.dir, { recursive: true, force: true }); }
+
+  // A generátor éles útja ezt használja: a zár alatti pillanatképből (nem az előnézetből) veszi a keretet és a tervet.
+  const src = read("scripts/design-assets/generate.ts");
+  const body = src.slice(src.indexOf("async function runSet("), src.indexOf("async function main()"));
+  assert.match(body, /await runUnderLock\(\{\s*acquire: \(\) => acquireRunLock\(CANDIDATES\),\s*snapshot: takeSnapshot,/);
+  assert.match(body, /const budget: Budget = \{ spent: live\.alreadySpent, maxUsd \};/);
+  assert.match(body, /jobs: live\.plan\.jobs,/);
+  assert.doesNotMatch(body, /jobs: plan\.jobs,|spent: alreadySpent,/, "az éles futás nem az előnézetből dolgozik");
 });

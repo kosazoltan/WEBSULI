@@ -221,6 +221,20 @@ export async function runJobs(opts: {
   return { made, stopped: null, missingRef: null };
 }
 
+/**
+ * Éles futás a futás-zár VÉDELMÉBEN (PR #519 review): a pillanatkép (költségkönyv, meglévő jelöltek, terv) a zár megszerzése UTÁN
+ * készül, és a futás csak ebből dolgozik. Így a másodikként zároló folyamat nem számol egy közben lefutott másik futás előtti
+ * állapotból — nem költhet a plafon fölé, és nem gyártja újra a már elkészült jelölteket. A zár hiba esetén is felszabadul.
+ */
+export async function runUnderLock<S, R>(opts: { acquire: () => () => void; snapshot: () => S; run: (state: S) => Promise<R> }): Promise<R> {
+  const release = opts.acquire();
+  try {
+    return await opts.run(opts.snapshot());
+  } finally {
+    release();
+  }
+}
+
 export const IMAGE_TIMEOUT_MS = 180_000;
 
 /** Egy képkérés a szolgáltatóhoz, időkorláttal; a kulcs csak a fejlécben megy, a hibaszöveg kitakarva. */
