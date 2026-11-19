@@ -14,7 +14,6 @@ import { experienceFingerprint, type ExperienceRound } from "./useExperienceRoun
 /** Review #280: a feladatok beküldése megvárja a döntőbíró ítéleteit (`ready`), hogy a levél ugyanazt a pontot kapja, amit a tanuló lát;
  *  biztonsági háló: a lezárás után legkésőbb 45 s-mal mindenképp beküld (a döntőbíró hibája esetén a pontozó ítélete marad). */
 export const REPORT_FALLBACK_MS = 45_000;
-export const RESULT_REPORT_RETRIES = 3;
 /**
  * Terv R24 (gépi vak ellenőrzés, 2. célzott kör L1 / L2): a végleges beküldések TARTÓS kimenő sora. A befejezett kör törzse a befejezés
  * pillanatában, várakozás nélkül a böngésző tárolójába kerül (körönként egy bejegyzés); a sort a lecke beküldője és az alkalmazás minden
@@ -25,19 +24,29 @@ export const RESULT_REPORT_RETRIES = 3;
  */
 type OutboxEntry = { id: string; lessonId: string; kind: "tasks" | "quiz"; body: Record<string, unknown>; flag: string; partialKey: string };
 let memoryOutbox: OutboxEntry[] = [];
+/** Terv R28 (3. célzott kör L4): a tárolóba NEM írható bejegyzések memóriasora — az ürítő a tárolóból olvasottak mellett ezt is olvassa. */
+let unpersistedOutbox: OutboxEntry[] = [];
 const isOutboxEntry = (value: unknown): value is OutboxEntry => {
   const e = value as Partial<OutboxEntry> | null;
   return !!e && typeof e.id === "string" && typeof e.lessonId === "string" && (e.kind === "tasks" || e.kind === "quiz") && typeof e.flag === "string" && typeof e.partialKey === "string" && !!e.body && typeof e.body === "object";
 };
 function readOutbox(): OutboxEntry[] {
+  let stored: OutboxEntry[];
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(RESULT_OUTBOX_KEY) ?? "[]");
-    return Array.isArray(parsed) ? parsed.filter(isOutboxEntry) : [];
-  } catch { return memoryOutbox; }
+    stored = Array.isArray(parsed) ? parsed.filter(isOutboxEntry) : [];
+  } catch { stored = memoryOutbox; }
+  return [...stored, ...unpersistedOutbox.filter(entry => !stored.some(e => e.id === entry.id))];
 }
 function writeOutbox(list: OutboxEntry[]): void {
   memoryOutbox = list;
-  try { if (list.length) localStorage.setItem(RESULT_OUTBOX_KEY, JSON.stringify(list)); else localStorage.removeItem(RESULT_OUTBOX_KEY); } catch { /* a memóriabeli sor marad */ }
+  try {
+    if (list.length) localStorage.setItem(RESULT_OUTBOX_KEY, JSON.stringify(list)); else localStorage.removeItem(RESULT_OUTBOX_KEY);
+    unpersistedOutbox = [];
+  } catch {
+    // R28: az írás dobott (pl. kvóta) — a lista memóriában marad, és az ürítő onnan is olvassa (a lapon belül elmegy).
+    unpersistedOutbox = list;
+  }
 }
 const removeFromOutbox = (id: string) => writeOutbox(readOutbox().filter(entry => entry.id !== id));
 const flagSet = (flag: string) => { try { return !!localStorage.getItem(flag); } catch { return false; } };
@@ -67,16 +76,17 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     const fingerprint = entry.body.fingerprint ?? await getFingerprint().catch(() => undefined);
     const full = { ...entry.body, ...(fingerprint ? { fingerprint } : {}), ...(capable ? { clientNow: Date.now() } : {}) };
     const body = capable ? full : (legacyResultBody(full) ?? full);
-    // J5 (spec 2026-11-10-gyartas-meres): hálózati hibánál, időtúllépésnél és 5xx-nél legfeljebb 3 belső újrapróbálás. R8: a kvíz végleges
-    // kérése `keepalive`; a feladatoké nem (a törzsük meghaladhatja a `keepalive` 64 KB-os keretét).
+    // R26 (3. célzott kör L2) + J5: a hálózati / 5xx hibavárakozást CSAK a kimenő sor kezeli (laponként legfeljebb OUTBOX_MAX_ATTEMPTS
+    // kísérlet) — az `apiRequest` belső újrapróbája itt 0, különben a kettő szorzódna. R8: a kvíz végleges kérése `keepalive`; a feladatoké
+    // nem (a törzsük meghaladhatja a `keepalive` 64 KB-os keretét).
     try {
-      if (kind === "quiz") await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES, keepalive: true });
-      else await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES });
+      if (kind === "quiz") await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: 0, keepalive: true });
+      else await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: 0 });
     } catch (error) {
       // R10: ha a jelzést adó új példány mellett egy még régi példány 400-at ad, EGY ismétlés a régi alakkal.
       const legacy = legacyResultBody(body);
       if (!capable || (error as { status?: unknown } | null)?.status !== 400 || !legacy) throw error;
-      await apiRequest("POST", `/api/lessons/${lessonId}/results`, legacy, { retries: RESULT_REPORT_RETRIES, ...(kind === "quiz" ? { keepalive: true } : {}) });
+      await apiRequest("POST", `/api/lessons/${lessonId}/results`, legacy, { retries: 0, ...(kind === "quiz" ? { keepalive: true } : {}) });
     }
     try {
       localStorage.setItem(entry.flag, "1");

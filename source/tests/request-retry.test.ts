@@ -30,8 +30,10 @@ test("J5 — isRetryableRequestError: a becsomagolt hálózati hiba és időtúl
 
 test("J5 — forrásőr: az eredménybeküldés újrapróbál, az apiRequest a becsomagolt hibát is felismeri", () => {
   const report = source("../client/src/lesson-runtime/resultReport.ts");
-  assert.match(report, /export const RESULT_REPORT_RETRIES = [1-5];/);
-  assert.match(report, /\/results`, body, \{ retries: RESULT_REPORT_RETRIES \}\)/);
+  // Spec 2026-11-17-eredmeny-email-kviz R26 (dokumentált spec-változás): az eredménybeküldés újrapróbáját a tartós kimenő sor végzi
+  // (laponként legfeljebb OUTBOX_MAX_ATTEMPTS kísérlet, Retry-After / növekvő késleltetés); a beágyazott belső újrapróba 0, hogy ne szorzódjon.
+  assert.match(report, /\/results`, body, \{ retries: 0 \}\)/);
+  assert.match(report, /if \(attempts < OUTBOX_MAX_ATTEMPTS\) setTimeout\(drainResultOutbox, delay\);/);
   const client = source("../client/src/lib/queryClient.ts");
   assert.match(client, /isRetryableRequestError\(error\)/);
   // az írási műveletek alapértéke változatlanul 0 újrapróbálás (duplikáció ellen)

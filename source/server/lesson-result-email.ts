@@ -279,10 +279,18 @@ function markFinalized(lessonId: string, roundId: string, now = Date.now()): voi
  * `kind = 'quiz'`, ez a körkulcs, üres `delivered`) — újraindítás után, más példányon és bármely kilétnél is megfogja a késői
  * pillanatképet. Korlátos élettartam: `FINALIZED_TTL_MS` (24 óra) a `created_at`-tól.
  */
-export const finalRoundKeyOf = (roundId: string) => roundKeyOf("final-round", "quiz", roundId);
-async function recordFinalized(lessonId: string, roundId: string, percent: number): Promise<void> {
-  await db.insert(lessonResultEmails).values({ lessonId, kind: "quiz", roundKey: finalRoundKeyOf(roundId), percent })
-    .onConflictDoUpdate({ target: [lessonResultEmails.lessonId, lessonResultEmails.kind, lessonResultEmails.roundKey], set: { createdAt: sql`now()` } });
+export const finalRoundKeyOf = (roundId: string, kind: "tasks" | "quiz" = "quiz") => roundKeyOf("final-round", kind, roundId);
+/**
+ * Terv R27 (gépi vak ellenőrzés, 3. célzott kör L3): a tanulófüggetlen végleges-jelzősor mindkét fajtánál — a kvízé egyben az R18 nyoma.
+ * Igaz, ha ez az ELSŐ végleges beküldés a körre; ismétlésnél a jelzősor `created_at`-ja frissül (az R18 élettartama), és hamis.
+ */
+async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId: string, percent: number): Promise<boolean> {
+  const fresh = await db.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalRoundKeyOf(roundId, kind), percent })
+    .onConflictDoNothing().returning({ id: lessonResultEmails.id });
+  if (fresh.length) return true;
+  await db.update(lessonResultEmails).set({ createdAt: sql`now()` })
+    .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, kind), eq(lessonResultEmails.roundKey, finalRoundKeyOf(roundId, kind))));
+  return false;
 }
 let finalizedCheckFault: (() => void) | null = null;
 let partialIntakeHook: ((who: string) => Promise<void>) | null = null;
@@ -399,6 +407,9 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     // vagy a régi küldés fejeződik be előbb (és ez a pillanatkép igaz `alreadySent` választ kap), vagy ez váltja le a régit (és a régi
     // kísérlet a változat-ellenőrzésen megáll). Elfogadott új állapot mellett régi levél nem megy ki.
     const outcome = await withRoundLock(lockKey, async () => {
+      // R29 (3. célzott kör L5): a felvétel közben véglegesített körre nem keletkezik várakozó, és a válasz ezt mondja.
+      const finalizedUntil = finalizedRounds.get(lockKey);
+      if (finalizedUntil !== undefined && finalizedUntil > Date.now()) return { queued: false, finalized: true };
       // R6 + R11: ha a körről már kiment (vagy éppen megy) „félbehagyva” levél — bármelyik tanuló-kulccsal —, újabb nem megy (körönként
       // legfeljebb egy); a válasz ezt mondja.
       const earlier = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
@@ -450,9 +461,18 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     // R15: a kör várakozó pillanatképét BÁRMELY véglegesítés törli (a beküldő kilététől függetlenül).
     cancelPartial(lockKey);
     partialVersions.delete(lockKey);
-    // R18: tartós, tanulófüggetlen nyom (újraindítás után is). A hibája nem akasztja meg a beküldést: a memóriabeli jelző véd.
-    await recordFinalized(lessonId, body.roundId, graded.summary.percent).catch(error => logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`));
   }
+  // R18 + R27: tartós, tanulófüggetlen végleges-jelzősor (mindkét fajtánál). Ha a kör végleges beküldése már megtörtént, és a mostani
+  // beküldő saját végleges sora még nincs meg, ez ugyanannak a körnek MÁS kiléttel ismételt beküldése (pl. elveszett 202 után fiókba lépve):
+  // második levél és más név nem megy. Ugyanazon kilét ismétlése a meglévő címzettenkénti pótlásra fut. A jelzősor hibája nem akasztja meg
+  // a beküldést (a memóriabeli véglegesítés véd; a hiba osztálya naplózódik).
+  try {
+    if (!(await claimFinalRound(lessonId, body.kind, body.roundId, graded.summary.percent))) {
+      const own = await db.select({ id: lessonResultEmails.id }).from(lessonResultEmails)
+        .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, body.kind), eq(lessonResultEmails.roundKey, roundKeyOf(who, body.kind, body.roundId)))).limit(1);
+      if (!own.length) return res.status(202).json({ queued: false, duplicate: true });
+    }
+  } catch (error) { logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`); }
   if (startedAtOnServer) graded = { ...graded, meta: { ...graded.meta, startedAt: startedAtOnServer } };
   const roundKey = roundKeyOf(who, body.kind, body.roundId);
   // Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény (a levéltől független), utána a szigorítás automatikus lazítása. Nem
