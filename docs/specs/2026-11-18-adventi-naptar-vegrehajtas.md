@@ -609,6 +609,30 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
   Teljes kör (válogatás után): `npx.cmd tsx scripts/design-assets/generate.ts --set advent --max 94 --max-usd 7 --ref advent-bg-portrait=advent-bg-portrait/<a kiválasztott fájl>`
 - **S5 / S6:** a levél szabálya a terv 18.1; az évadzáró küldés a takarító része (`closed` fázisban, egyszer).
 
+## Kiegészítés 10 — az S3c PR összetétele és sorrendje (2026-11-19; terv `docs/specs/2026-11-18-adventi-naptar.md` 13., 20.)
+
+**Döntés:** a `feat/advent-s3c-kepek` ágon álló félkész előkészítés (`b198047c`: `scripts/design-assets/approve-advent.ts`,
+`advent-approve-lib.ts`, a képhelyek bájtcéljai a `shared/advent/art.ts`-ben, az `/advent` statikus mappa a `server/vite.ts`-ben) az
+**S3c PR**-be tartozik, nem a képgyártó PR-be (az csak a gyártást és a költségvédelmeket hozza; a beépítés a tulajdonos válogatása
+után jön) és nem elavult (a terv 13. és 20. szakasza a mai érvényes cél).
+
+**Mikor és hogyan:** a 3/3 felület-PR és a képgyártó PR összevonása UTÁN, a tulajdonos képválasztását követően, új ágon a friss
+főágról (a régi ág a régi felület-fejre épül, ezért nem folytatható közvetlenül). Lépések:
+
+1. A `b198047c` két szkriptje (`approve-advent.ts`, `advent-approve-lib.ts`) változatlanul; a bájtcélok (`maxBytes`) és a
+   `ADVENT_ART_TOTAL_MAX_BYTES` újra felvezetve a 3/3 PR `art.ts`-jére (abban a girland már 1200 × 150, 8 : 1). A legyártott jelöltek
+   aránya (mérve: ablak és sarokdísz 1 : 1, girland és főoldali sáv 16 : 9, hátterek 16 : 9 / 9 : 16, záró kép 4 : 3) — a beépítő
+   középre vág a képhely arányára.
+2. `server/vite.ts` `/advent` statikus mappa (immutable, 1 év) — CSAK a helyi és az e2e-kiszolgáláshoz; élesben a Vercel statikus
+   buildje adja a képeket, ezért ugyanez a `source/vercel.json` `headers` listájába (`/advent/(.*)`, 7. kiegészítés), őr-teszttel.
+3. Tesztek: `advent-approve-lib` egységteszt (kiválasztás-ellenőrzés, tartalom-hashes név, bájtcélhoz igazított minőség, jegyzék
+   forrásszövege, összes bájtkeret); a kanban #161 (a `prompts.json` és az `ADVENT_ART_SPECS` azonosítóinak egyezése) visszatétele;
+   bájtcél-őr a beépített fájlokra (A41); böngészős mérés a képes állapotban (a helyőrzős és a képes doboz azonos).
+4. A beépítés (`npx.cmd tsx scripts/design-assets/approve-advent.ts kivalasztas.json`) csak a tulajdonos `kivalasztas.json`-jával;
+   előtte `--dry-run` (fizetős hívás nincs: a már legyártott jelölteket olvassa).
+
+A régi `feat/advent-s3c-kepek` ág az új S3c ág elkészülte után archiválható (a tartalma ott él tovább).
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.
