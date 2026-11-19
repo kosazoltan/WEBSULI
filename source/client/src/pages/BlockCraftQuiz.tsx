@@ -1163,6 +1163,8 @@ export default function BlockCraftQuiz() {
   const freeLocksRef = useRef(0);
   /** Teszt-kampó (review #484 vak K6): a lap renderjeinek száma (nyitott kérdés alatti újrarajzolás mérése). */
   const renderCountRef = useRef(0);
+  /** Teszt-kampó (diagnosztika, review #484 vak K1): az utolsó vászon-koppintás útja és a döntés oka. */
+  const lastTapRef = useRef("");
   renderCountRef.current += 1;
   /**
    * Review #484 N1: a kövek képernyő-sávja (CSS px, a nézetablakhoz) — a kérdéskártya alja és a rúnagombok (álló) / az alsó
@@ -3210,6 +3212,7 @@ export default function BlockCraftQuiz() {
           questionSource: view?.presentation?.question.source ?? null,
           freeLocks: freeLocksRef.current,
           renders: renderCountRef.current,
+          lastTap: lastTapRef.current,
           runRunes: st?.runOpened ?? 0,
           stoneBand: JSON.stringify(stoneBandRef.current),
           geometries: rendererMemRef.current?.geometries ?? 0,
@@ -3485,8 +3488,12 @@ export default function BlockCraftQuiz() {
         else startMine();
         return;
       }
+      lastTapRef.current = `le:${e.pointerType}:${Math.round(e.clientX)},${Math.round(e.clientY)}`;
       // Egy már futó körbenéző ujj mellett a második vászon-érintés nem veszi át a nézést.
-      if (touchLookRef.current) return;
+      if (touchLookRef.current) {
+        lastTapRef.current = `lenyomás-elnyelve:${touchLookRef.current.id}`;
+        return;
+      }
       canvas.setPointerCapture?.(e.pointerId);
       const rect = canvas.getBoundingClientRect();
       const look = isLookZone(e.clientX - rect.left, rect.width);
@@ -3518,9 +3525,15 @@ export default function BlockCraftQuiz() {
         return;
       }
       const tl = touchLookRef.current;
-      if (!tl || tl.id !== e.pointerId) return;
+      if (!tl || tl.id !== e.pointerId) {
+        lastTapRef.current = `nincs-lenyomás:${tl ? `${tl.id}≠${e.pointerId}` : "null"}`;
+        return;
+      }
       touchLookRef.current = null;
-      if (tl.moved >= 12 || pausedRef.current || whyRef.current || expandedRef.current || phaseRef.current !== "play") return;
+      if (tl.moved >= 12 || pausedRef.current || whyRef.current || expandedRef.current || phaseRef.current !== "play") {
+        lastTapRef.current = `kihagyva:moved=${Math.round(tl.moved)}`;
+        return;
+      }
       const mine = mineRef.current;
       if (!mine) return;
       // Rövid tap = egy „ütés” (3 ütés = egy blokk); rúnaércen Rúna-zár. Nyitott zárnál a koppintás csak akkor választ,
@@ -3531,6 +3544,7 @@ export default function BlockCraftQuiz() {
       const canvas = e.currentTarget;
       const lock = mine.state().lock;
       const lockOpenNow = !!lock && !lock.resolved;
+      lastTapRef.current = `fel:zár=${lock ? (lock.resolved ? `kész(${lock.resolved})` : "nyitva") : "nincs"}:cam=${cam ? 1 : 0}`;
       if (cam) {
         const rect = canvas.getBoundingClientRect();
         const ndcX = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
@@ -3559,9 +3573,12 @@ export default function BlockCraftQuiz() {
             }
           });
           if (best >= 0) {
-            mine.tapStone(best, cam.position, dir, tl.downAt);
+            const ok = mine.tapStone(best, cam.position, dir, tl.downAt);
+            const lk = mine.state().lock;
+            lastTapRef.current = `kő:${best}:${ok ? "választott" : "elutasítva"}:down=${Math.round(tl.downAt)}:armed=${lk ? Math.round(lk.armedAt) : "-"}:clock=${Math.round(mine.clockMs())}`;
             return;
           }
+          lastTapRef.current = `nincs-kő:${Math.round(px)},${Math.round(py)}:${JSON.stringify(stoneRectsNow())}`;
           // A voxel-találat távolsága (a blokk elülső lapjáig, közelítve): a kő csak ennél közelebb választható.
           const blockDist = hit ? Math.hypot(hit.x + 0.5 - cam.position.x, hit.y + 0.5 - cam.position.y, hit.z + 0.5 - cam.position.z) - 0.5 : Infinity;
           mine.tapRay(cam.position, dir, tl.downAt, blockDist);

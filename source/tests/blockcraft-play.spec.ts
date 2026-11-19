@@ -574,10 +574,18 @@ for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { wi
     test("a látható 3D rúnakőre valódi érintéssel koppintva mind a 4 kő választ (a terep nem nyeli el)", async ({ page }) => {
       test.setTimeout(Math.max(test.info().timeout, 180_000));
       await startGame(page);
+      let lastId: number | null = null;
       for (let i = 0; i < 4; i++) {
         const before = Number((await probe(page)).questionsAnswered);
         await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz, runesLeft: 99 }), LONG_WINDOW_QUIZ);
-        await expect(page.locator('[data-testid="bc-quiz"] [data-armed="true"]').first()).toBeVisible({ timeout: 20_000 });
+        // Az ÚJ zár nyitva és élesítve (a mag szerint) — az előző zár megoldás-kijelzésének gombjai nem számítanak.
+        await expect
+          .poll(async () => {
+            const pr = await probe(page);
+            return pr.lockOpen === 1 && pr.armed === 1 && pr.questionId !== null && pr.questionId !== lastId;
+          }, { timeout: 30_000, message: `${i + 1}. zár nyitva és élesítve` })
+          .toBe(true);
+        lastId = Number((await probe(page)).questionId);
         await expect.poll(async () => String((await probe(page)).stoneBand), { timeout: 10_000 }).not.toBe("null");
         // A kövek a sávba a zár első képkockáján kerülnek: a lassú szoftveres WebGL-en a téglalapot csak két egymást követő
         // képkockán stabil helyzetben olvassuk ki (C-65), különben a probe a sávba helyezés előtti állapotot kaphatná.
@@ -608,11 +616,22 @@ for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { wi
           const cy = (r!.y0 + r!.y1) / 2;
           expect(cx > ore.x0 && cx < ore.x1 && cy > ore.y0 && cy < ore.y1, `a(z) ${"ABCD"[i]} kő az érc vetületén (kő ${JSON.stringify(r)}, érc ${JSON.stringify(ore)})`).toBe(false);
         }
-        await tapAt(page, (r!.x0 + r!.x1) / 2, (r!.y0 + r!.y1) / 2);
-        await expect.poll(async () => Number((await probe(page)).questionsAnswered), { timeout: 10_000, message: `a(z) ${"ABCD"[i]} kőre koppintás választott` }).toBe(before + 1);
+        const tx = (r!.x0 + r!.x1) / 2;
+        const ty = (r!.y0 + r!.y1) / 2;
+        const under = await page.evaluate(([x, y]) => {
+          const el = document.elementFromPoint(x!, y!) as HTMLElement | null;
+          return el ? `${el.tagName}.${String(el.className).slice(0, 60)}#${el.getAttribute("data-testid") ?? ""}` : "null";
+        }, [tx, ty]);
+        await tapAt(page, tx, ty);
+        await expect
+          .poll(async () => Number((await probe(page)).questionsAnswered), {
+            timeout: 10_000,
+            message: `a(z) ${"ABCD"[i]} kőre koppintás választott (kő ${JSON.stringify(r)}; a ponton: ${under}; utolsó koppintás: ${String((await probe(page)).lastTap)})`,
+          })
+          .toBe(before + 1);
         await expect(page.getByTestId(`bc-rune-${i}`), "a koppintott kő a választott válasz").toHaveAttribute("data-state", /^(correct|wrong)$/);
-        await expect.poll(async () => (await probe(page)).lockOpen, { timeout: 15_000 }).toBe(0);
-        await expect.poll(async () => (await probe(page)).questionOpen, { timeout: 15_000 }).toBe(0);
+        // A megoldás-kijelzés végéig várunk (a rúnaréteg eltűnik).
+        await expect(page.getByTestId("bc-quiz")).toHaveCount(0, { timeout: 20_000 });
       }
     });
   });
@@ -648,9 +667,9 @@ test.describe("vak K2 360x640", () => {
       const o = await overlap();
       expect(o.overlap, `a kártya ${o.overlap} px²-en lóg a látható szünetgombra`).toBe(0);
     }
-    await expect.poll(async () => (await probe(page)).questionOpen, { timeout: 15_000 }).toBe(0);
+    await expect(page.getByTestId("bc-quiz")).toHaveCount(0, { timeout: 20_000 });
     await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONGEST_RUNE_QUIZ);
-    await expect(page.locator('[data-testid="bc-quiz"] [data-armed="true"]').first()).toBeVisible({ timeout: 20_000 });
+    await expect.poll(async () => { const pr = await probe(page); return pr.lockOpen === 1 && pr.armed === 1; }, { timeout: 30_000 }).toBe(true);
     await expect.poll(async () => (await overlap()).visible, { timeout: 5_000, message: "új kérdésnél a szünetgomb újra látszik" }).toBe(true);
   });
 });
