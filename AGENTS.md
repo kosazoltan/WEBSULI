@@ -165,14 +165,44 @@ blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 5. **A kapu megkerülése tilos**, vészkijárat nincs; ha a kapu hibás, a kaput kell javítani (teszttel).
 6. **API-költség elve:** előbb az olcsó helyi ellenőrzés; a független ellenőr (és a CI) csak zöld helyi kapuk után indul — ne a
    drága kör fogja meg az olcsó hibát.
+7. **Nehéz kör csak a gépi zár alatt** (2026-11-19): a `gate:push`, a `gate:pr` és minden más nehéz kör egy sávban, sorban fut
+   (`node scripts/qa/machine-lock.mjs run …`); a `npm run gate:push` / `gate:pr` ezt magától teszi — lásd „Gépi zár” lent.
 
 A független ellenőr mellett második, más rendszerű véleményként a külső (Gemini) ellenőr is futtatható
 (`scripts/qa/gates/external-review.mjs`, kulcs csak `GEMINI_API_KEY`-ből); a jelentését az orkesztrátor a kódból visszaellenőrzi, a
 hiánya nem bukás.
 
 Skillek (`.agents/skills/` forrás, `.claude/skills/` tükör): `websuli-lint-ellenor`, `websuli-fejlesztesi-ellenor`,
-`websuli-push-elotti-kapu`, `websuli-pr-elotti-kapu`, `websuli-merge-elotti-kapu`. Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md).
+`websuli-push-elotti-kapu`, `websuli-pr-elotti-kapu`, `websuli-merge-elotti-kapu`, `websuli-gep-zar`. Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md).
 A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
+
+## Gépi zár: nehéz körök sorban (kötelező, tulajdonosi utasítás 2026-11-19)
+
+> „Keress a jelentkező időzítési bukásokra megoldást: hogyha két nehéz kapu fut egyszerre a gépen, akkor vagy állítsd sorba őket, vagy
+> javítsd meg a nehéz futás sikeres elvégzését.” „Ne csak a memóriában ird be, hanem az Agent MD-be készíts skillt, hogy ekként kell
+> futnia, és a továbbiakban ezt alkalmazva végezd a munkát a repóban.” — a tulajdonos, 2026-11-19 (választás: sorba állítás, egy sáv)
+
+- **Nehéz kör:** `npm ci` / `npm.cmd ci`; a teljes `npm test` (gyökérből vagy `source/`-ban); böngészős / e2e kör (`test:e2e`,
+  Playwright); DB-tesztek (`test:learning-db`, eldobható Postgres); `gate:push`; `gate:pr`; `verify`; mutációs és CPU-terheléses
+  próbák; a vak futtató `run_e2e` / `run_db_tests` eszköze. (Nem nehéz: `gate:stage`, `gate:lint -- --fast`, egy-két célzott
+  tesztfájl, `git` / `gh`.)
+- **Egy sáv, érkezési sorrend (FIFO), egyetlen megengedett indítási mód:**
+  `node scripts/qa/machine-lock.mjs run --name <név> --timeout-min <perc> -- <parancs>`. A szkript sorba áll, vár, megszerzi a zárat,
+  AZONNAL lefuttatja a parancsot a saját gyerekeként időkorláttal, és a végén — hiba, időtúllépés, Ctrl+C / SIGTERM esetén is —
+  elengedi. A gyökér `npm test`, `npm run test:e2e`, `npm run test:learning-db`, `npm run verify`, `npm run gate:push`, `npm run gate:pr`
+  ezt magától teszi. Állapot: `node scripts/qa/machine-lock.mjs status`.
+- **A zár helye** gépszintű és munkafa-független: `<git-common-dir>/websuli-machine-lock/` (minden munkamenet, munkafa és MI-eszköz
+  ugyanazt látja). CI-ben (`CI=true`) a zár kikapcsol. Minden időbélyeg UTC.
+- **Tilos:** zárat szerezni futtatás nélkül („csak zároló” várakozó, „majd az ügynök futtat”); a sort előzni, a sor- / zárfájlokat
+  kézzel írni vagy törölni; futó szkriptet szerkeszteni (új fájlnevet használj); folyamatot mintaillesztéssel leállítani — csak a
+  sajátodat, pontos PID alapján; helyi időt használni UTC helyett; nehéz kört a zár megkerülésével indítani (más MI-eszközből is);
+  a `WEBSULI_MACHINE_LOCK_HELD` változót kézzel beállítani.
+- **Elavult zárat** a `run` maga vesz vissza (halott gazda ugyanazon a gépen, vagy lejárt időkorlát + türelmi idő), naplózva; élő
+  folyamatot soha nem állít le.
+
+Skill: [`.agents/skills/websuli-gep-zar/SKILL.md`](.agents/skills/websuli-gep-zar/SKILL.md) (tükör: `.claude/skills/`). Runbook:
+[`docs/minosegkapuk.md`](docs/minosegkapuk.md) „Gépi zár”. Terv: `docs/specs/2026-11-19-gepi-zar.md`. Csapdák: C-80…C-85. Cursor:
+`.cursor/rules/gep-zar.mdc`. A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 
 ## Verifikáció
 
