@@ -114,8 +114,11 @@ export async function sendLessonResult(input: SendInput, retry = true, gate?: Se
   if (!gate) return attemptLessonResult(input, retry);
   try { return await gate(() => attemptLessonResult(input, retry, gate)); }
   catch (error) {
-    // A kapu hibája (pl. az ellenőrző lekérdezésé) után nem küldünk vakon: a levél elmarad, a hiba osztálya naplózódik. Sosem dob.
-    logger.error(`[LESSON-RESULT] a küldés előtti ellenőrzés nem sikerült: ${errorClass(error)}`);
+    // A kapu hibája (pl. az ellenőrző lekérdezés átmeneti adatbázishibája) után nem küldünk vakon. Terv R19 (Vercel-szál 4626976445): a
+    // levél ettől nem veszhet el — EGY újrapróba ütemeződik a szokott késleltetéssel, ugyanazon a kapun át (véglegesített körre így sem
+    // megy ki részleges levél). Az újrapróba hibája után nincs további; a napló csak a hiba osztályát írja. Sosem dob.
+    logger.error(`[LESSON-RESULT] a küldés előtti ellenőrzés nem sikerült: ${errorClass(error)}${retry ? " — újrapróbálja" : ""}`);
+    if (retry) setTimeout(() => { void sendLessonResult(input, false, gate); }, retryDelayMs).unref?.();
     return { sent: 0, duplicate: false };
   }
 }
