@@ -421,7 +421,7 @@ export default function AdventCalendar() {
             className="advent-dialog" data-testid="advent-dialog" aria-describedby="advent-question-text"
             // A fókusz a KÉRDÉSRE kerül (nem az első válaszra): a képernyőolvasó felolvassa, és egy második Enter nem válaszol.
             onOpenAutoFocus={(event) => { event.preventDefault(); questionRef.current?.focus(); }}
-            onCloseAutoFocus={(event) => { event.preventDefault(); if (handoffToSummary.current) { handoffToSummary.current = false; return; } questionOpener.current?.focus(); }}
+            onCloseAutoFocus={(event) => { event.preventDefault(); if (handoffToSummary.current) { handoffToSummary.current = false; return; } returnFocus(questionOpener.current); }}
           >
             {open ? (
               <>
@@ -479,7 +479,7 @@ export default function AdventCalendar() {
           <Dialog.Overlay className="advent-overlay" />
           <Dialog.Content
             className="advent-dialog advent-summary" data-testid="advent-summary" data-kind={state.closing.kind} aria-describedby={undefined}
-            onCloseAutoFocus={(event) => { event.preventDefault(); const target = summaryOpener.current?.isConnected ? summaryOpener.current : summaryButton.current; target?.focus(); }}
+            onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus(summaryOpener.current?.isConnected ? summaryOpener.current : summaryButton.current); }}
           >
             <AdventArt id="advent-frame" className="advent-dialog__frame" decorative />
             <Dialog.Title className="advent-dialog__title">Összesítés</Dialog.Title>
@@ -512,6 +512,18 @@ export default function AdventCalendar() {
       </Dialog.Root>
     </Shell>
   );
+}
+
+/**
+ * Fókusz-visszaadás a párbeszédablak bezárása után: azonnal, és ha a könyvtár saját takarítása közben a fókusz a lap aljára
+ * (body) esett, a következő ütemben még egyszer — így a fókusz megbízhatóan a megnyitó elemre kerül.
+ */
+function returnFocus(target: HTMLElement | null | undefined): void {
+  target?.focus();
+  window.setTimeout(() => {
+    const active = document.activeElement;
+    if (target?.isConnected && (!active || active === document.body)) target.focus();
+  }, 0);
 }
 
 function BackHome() {
