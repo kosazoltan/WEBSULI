@@ -45,3 +45,13 @@ Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`, „K2 → V1” és az utána 
 15. V6: `docs/minosegkapuk.md` „Merge előtt” sora és az „Ismert korlátok” ítélet-pontja. V5: jegy (a szöveg a scratchpadban).
 16. Célzott tesztek (`pre-merge-gate.test.mjs`, `lib.test.mjs`); mutációs ellenpróba (19 / 19); szakasz-kapu; 05:30 UTC után a
     push-kapu; vak visszanézés.
+
+## Harmadik javítókör (2026-11-19; vak ítélet a `10e79d78` fejre: IGEN, FELTÉTELLEL, W1–W4)
+
+Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`, „W1”, „V3 → W2”, „W4” és a „Cél” / EARS pontosítása.
+
+17. W1: `mergeVerdict` szigorú módban csak a futtató rekordját fogadja el; `mergeSteps`-teszt `exclusive: true`-val (sima rekord
+    FAIL, futtató-rekord PASS); előbb bukó mutáns (`blind` helyett `null`).
+18. W2: az üres CCR-lista csak teljesen üres review-kommentlistánál megy át, teszttel (csak válasz-komment → FAIL).
+19. W3: a terv „Cél” és EARS pontjai; a javasolt új PR-cím a scratchpad `body-513-uj.md` tetején (a címet a gazda módosítja).
+20. W4: jegy-szöveg a scratchpadba. Ellenőrzés: célzott tesztek, mutáció, szakasz- és push-kapu.

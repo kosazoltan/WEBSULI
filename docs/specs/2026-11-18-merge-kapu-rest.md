@@ -18,7 +18,9 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
 
 ## Cél
 
-- A kapu ugyanazokat az adatokat REST-ről gyűjti, így a fejlesztői gépen ÉS a felhős munkamenetben is lefut.
+- A kapu ugyanazokat az adatokat REST-ről gyűjti, lapozva és fail-closed alak- / teljesség-ellenőrzéssel; az adatgyűjtés a felhős
+  munkamenetben is lefut (diagnosztika), de **felhőből összevonás szándékosan NEM lehetséges**: az ítélet kizárólag helyi, gépi
+  bizonyítékból jön (V1, orkesztrátori döntés 2026-11-19), és a felhős munkamenetek nem töltenek fel, nem vonnak össze.
 - A döntés (`decideMerge`) változatlan: ugyanazok a lépések, ugyanazok a mércék.
 
 ## Nem cél
@@ -54,11 +56,15 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
 
 ## Elfogadás (EARS)
 
-- AMIKOR a GraphQL tiltott, a kapu AKKOR IS végigfut, és a lépései ugyanazok, mint a fejlesztői gépen.
+- AMIKOR a GraphQL tiltott, az adatgyűjtés AKKOR IS végigfut (lépéstábla); az ítélet-lépés helyi bizonyíték nélkül FAIL, ezért
+  felhőből összevonás nem lehetséges (szándékos, V1).
 - AMIKOR a REST-válasz `mergeable_state: "clean"`, `state: "open"`, `draft: false`, a „PR állapota” lépés PASS.
 - AMIKOR a CCR-szálak között `resolved: false` (vagy hiányzó) van, a „lezáratlan review-szálak” lépés FAIL.
 - A leképezők egységtesztje a `pre-merge-gate.test.mjs`-ben; a meglévő tesztek változatlanul zöldek.
-- Élő próba felhős munkamenetből: `npm run gate:merge -- <PR>` az adatgyűjtésen túljut (lépéstábla, valódi PASS/FAIL).
+- Élő próba felhős munkamenetből: `npm run gate:merge -- <PR>` az adatgyűjtésen túljut (lépéstábla, valódi PASS/FAIL); az
+  ítélet-lépés ott FAIL (szándékos).
+- AMIKOR `blindReview.exclusive` BE, a `mergeSteps` sima `record-review` rekorddal FAIL, a futtató rekordjával (`reviewer:
+  blind-review`, egyező modell) PASS (W1).
 
 ## Javítókör a vak, hibakereső ellenőrzés után (2026-11-19; ítélet a `c96e4801` fejre: IGEN, FELTÉTELLEL, K1–K6)
 
@@ -84,10 +90,15 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
   (Gemini) lépés törlését hozza. Feloldás: (1) a #513 `mergeSteps` / `mergeVerdict` szerkezete marad; (2) a `blind` a
   `mergeSteps`-ben a `cfg.blindReview`-ból jön (ez már így van) — a szigorú mód így érvényesül; (3) a `texts` SOHA nem kapja meg a
   PR-leírást / kommenteket (V1) — a vak ág `texts: [pr.body, …]` része elvetendő; (4) a külső (Gemini) lépés törlése a `decideMerge`-
-  ből átvehető, ez a #513-at nem érinti. Ellenőrzés a feloldás után: a `pre-merge-gate.test.mjs` „V1” és „V2” tesztje zöld, és a vak
-  ág saját szigorú módú tesztje is (a `resolveVerdict` ott a `blind`-ot érvényesíti).
-- **V3:** üres CCR-lista csak akkor fogadható el (nincs szál), ha a REST `pulls/N/comments` 0 gyökérkommentet ad (szál komment nélkül
-  nincs); különben FAIL.
+  ből átvehető, ez a #513-at nem érinti. Ellenőrzés a feloldás után (kötelező lépés, W1): a `pre-merge-gate.test.mjs` „V1”, „V2” és „W1” tesztje zöld — a W1 a `mergeSteps`-et
+  szigorú módban (`exclusive: true`) hívja: sima `record-review` rekord → FAIL, futtató-rekord → PASS; ha a `blind` a
+  továbbadás során elveszik (pl. `null` megy tovább), bukik —, és a vak ág saját szigorú módú tesztje is.
+- **V3 → W2:** üres CCR-lista csak akkor fogadható el (nincs szál), ha a REST `pulls/N/comments` review-kommentlistája TELJESEN üres
+  (a gyökérszám nem elég: a törölt gyökér válasza megmaradhat); különben FAIL.
+- **W1:** a `mergeVerdict` a szigorú módot maga is érvényesíti (`exclusive: true` → csak a futtató rekordja, egyező modellel), így a
+  `blind` továbbadása ezen az ágon is mérhető; a vak ág `resolveVerdict`-je ugyanezt a szabályt adja, a kettő nem ütközik.
+- **W4 (jegyre):** a PR előtti kapu (`pre-pr-gate.mjs`) még elfogad PR-szöveges ítéletet (a `--body-file`-ból) — a két kapu
+  ítélet-szabályának egységesítése külön jegy.
 - **V4:** hiányzó / nem egész `total_count` a check-run listában → FAIL.
 - **V5 (maradó kockázat, jegyre):** a CCR keresztellenőrzése csak darabszámot véd; egy nyitott szál `resolved: true`-ként jelentését
   vagy kipárnázott listát semmi nem fogja meg — a CCR-válasz valós mintája a repóban nincs. A V1 miatt felhőből úgysem vonható össze
