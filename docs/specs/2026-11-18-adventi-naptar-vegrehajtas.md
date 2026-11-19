@@ -636,6 +636,18 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
 4. Tulajdonosi döntések (2026-11-18): a mondat a szülői párosítási útmutatóba (`shared/pairing-guide.ts` `ADVENT_GUEST_PROGRESS_NOTE`, teszt:
    `tests/pairing-guide.test.ts`); fióktörléskor a tanuló sora megmarad (DB-teszt a kötött fiók törlésére).
 
+## Kiegészítés 11 — a 2/3 PR második vak köre: ablakonkénti egyesítés, stabil válaszsorrend (2026-11-19; terv `docs/specs/2026-11-18-adventi-naptar.md` 21.)
+
+1. `server/advent/adoption.ts` (új, tiszta): `mergeAdoption(tanulóiSor | null, eszközSor, ctx)` — ablakonként a jobb eredmény a tanuló aktuális
+   körébe, a tanulói sor többi mezője érintetlen; `orderKeyFor(terv, nap, tartalék)` — a sorrend magja a terv `seedKey` / `doorSeeds`
+   értéke; `withPlanMeta`, `planGradeOf`.
+2. `store.adopt(évad, eszköz, tanuló, merge)`: egy tranzakció, mindkét sor zárolva; UPDATE csak a módosítható mezőkre (a `round`,
+   `mailed_to` nem íródik), vagy INSERT, ha még nincs tanulói sor; az eszköz sora törlődik.
+3. `routes.ts`: az átvétel külön lépés (`adoptStep`) a korlátok után és csak írható fázisban; az olvasás előnézete ugyanez az egyesítés;
+   minden sorrend-számítás `orderKeyFor`-ral; a 409 is az érvénytelen-keretbe számít.
+4. Tesztek: egységteszt (egyesítés, 409-keret); DB: a sorrend az átvétel után változatlan és a tokennel érkező válasz helyesen
+   pontozódik; a körszám, az előzmény, a foglalás és a megfelelés megmarad; bezárt évadban nincs átvétel; ablakonkénti egyesítés.
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.

@@ -1052,7 +1052,7 @@ pótlási terhelés nem volt kiszámolva), és a hálózati keretet érvénytele
 | Új névtelen sor / IP | 240 / óra | 8 osztály |
 | Új névtelen sor / munkamenet | 3 / óra | egy kliens a hálózati keret töredékét fogyaszthatja |
 | Írás / alany | 290 / 15 perc | két teljes kör: 2 × 144 + évfolyam + új kör |
-| Érvénytelen kérés / IP | 120 / perc | csak az érvénytelen kérést utasítja el, a szabályosat soha |
+| Érvénytelen (400) vagy elutasított (409) kérés / IP | 120 / perc | csak ezeket utasítja el 429-cel, a szabályosat soha (a 409: 2026-11-19, vak ellenőr KICSI-4) |
 
 **Kizárás elleni védelem:** a hálózati keretbe csak az érvényes, alanyhoz köthető, SIKERES (2xx) kérés számít — a bemenet-ellenőrzés
 és az alany feloldása a hálózati korlát ELŐTT fut. Minden 429-en \`Retry-After\` van.
@@ -1061,6 +1061,16 @@ pótlási terhelés nem volt kiszámolva), és a hálózati keretet érvénytele
 írásokkal továbbra is elfogyaszthatja egy hálózat keretét (ehhez ~49 eszköz és ~17 munkamenet kell 15 percen belül) — erős
 azonosítás nélkül ez nem zárható ki; a következmény legfeljebb 15 perces írás-szünet egy címen, adatvesztés nélkül. A kliens-IP
 megállapításának megbízhatósága (a Render közvetlen elérhetősége) külön jegy.
+
+**FELÜLÍRVA 2026-11-19 — TULAJDONOSI DÖNTÉS (kérdőív): „Ablakonkénti egyesítés”.** Átvételkor minden naptárablaknál a jobb eredmény
+marad meg (megoldva > próbálkozott > nincs próba; egyenlőségnél a tanulóé), és semmi nem vész el a tanuló sorából: a körszám, a korábbi
+körök, a megfelelés időpontja és a szülői levél foglalásai a tanulói sorban maradnak; az eszköz jobb ablakai (ablakonként az eszköz összes köréből a legjobb; a
+kérdéssorukkal együtt) a tanuló aktuális körébe kerülnek, az eszköz sora utána törlődik. A tanulói terv a tanuló PROFILJÁNAK
+évfolyamára készül (a vendégként választott évfolyam nem írja felül). A válaszlehetőségek sorrendjének magja a tervhez kötött kulcs
+(`seedKey`, átvett ablaknál a vendég kulcsa: `doorSeeds`) — átvétel után a tárolt választás, a helyes válasz jelölése és a pontozás
+ugyanaz. Az átvétel írásnál a korlátok és a fázis-ellenőrzés UTÁN fut; az olvasás ugyanezt az egyesítést előnézetként mutatja.
+Megvalósítás: `server/advent/adoption.ts` (`mergeAdoption`, `orderKeyFor`), `store.adopt`. (Vak ellenőr K1, K2, K3, KICSI-5, KICSI-6.)
+Az alábbi bekezdés „a több megoldott ablakkal rendelkező marad, a másik törlődik” szabálya ezzel érvényét vesztette.
 
 **Névtelen → párosított átmenet (vak ellenőr k1; TULAJDONOSI DÖNTÉS 2026-11-18, kérdőíven: „Igen, vigyük át.”):** ha egy kérés
 érvényes tanulói linket ÉS eszközazonosítót is hoz, az eszköz névtelen sora a tanulóhoz kerül: ha a tanulónak még nincs sora, az
