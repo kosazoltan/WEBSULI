@@ -21,9 +21,14 @@ az első hang menet közben már ne hozzon létre kontextust.
 
 ## Megoldás
 1. `audioEngine.ts`: `prewarmAudio()` — a Szökőár-ágon írt változattal BÁJTRA azonos blokk (összefésülés ütközés nélkül).
-2. `audioEngine.ts` végén: `useAudioPrewarm()` horog — felcsatoláskor `requestIdleCallback`-kel (tartalék: `setTimeout`) hívja a
-   `prewarmAudio()`-t, és az első felhasználói mozdulatra (`pointerdown` / `keydown`, egyszer) is létrehozza / folytatja a
-   kontextust. Hangot nem ad; hibát nem dob (a létrehozás és a `resume` hibái el vannak nyelve, ahogy eddig).
+2. `audioEngine.ts` végén: `useAudioPrewarm()` horog (tulajdonosi döntés „A”, 2026-11-19: kontextus CSAK felhasználói mozdulat
+   után). Már aktivált lapon (`navigator.userActivation.hasBeenActive`) felcsatoláskor `requestIdleCallback`-kel (tartalék:
+   `setTimeout`) hívja a `prewarmAudio()`-t; nem aktivált lapon az első VALÓDI aktiváló mozdulat (`touchend` / `click` / `keydown`,
+   és ahol a böngésző megmondja, `navigator.userActivation.isActive` igaz) hozza létre. A `pointerdown` érintésnél nem aktiváló
+   esemény, ezért nem figyeljük. A drága konstruktor nem a mozdulat figyelőjében, hanem utána (`setTimeout(…, 0)`, az átmeneti
+   aktiválás ablakán belül) fut, így a játék bemenete nem vár rá; meglévő, felfüggesztett kontextus folytatása (olcsó) a
+   figyelőben marad. A `userActivation` API nélküli böngészőben (régi Safari) a létrehozás a figyelőben marad (ott csak így indul).
+   Némított felhasználónál a horog semmit nem hoz létre (a `beep()` is így tesz). Hangot nem ad; hibát nem dob.
 3. Bekötés:
    - a közös `useQuestionDirector`-ba (lefedi: Brain Rot, Szólétra, Matek sprint, Szökőár, PlayLab);
    - közvetlenül hangot hívó lapok: Kockavadász (`BlockCraftQuiz`), Aszteroida (`SpaceAsteroidQuiz`), Viharvadász
@@ -32,14 +37,19 @@ az első hang menet közben már ne hozzon létre kontextust.
    A Szökőár-lapot nem kell módosítani (a director lefedi) — így a Szökőár-ággal (ahol a lap saját hívása is megvan) nincs ütközés.
 
 ## Autoplay-szabály (Chrome, iOS Safari)
-- Felhasználói mozdulat nélkül a kontextus létrejöhet felfüggesztve (`suspended`), hangot nem ad; a `resume()` elutasítása el van
-  nyelve. Az első koppintás / billentyű a kontextust folytatja, így a játék első hangja biztosan megszólal.
-- A konstruktor költsége (a hangeszköz megnyitása) így is a menüre esik, nem a menetre.
+- Felhasználói mozdulat nélkül a horog NEM hoz létre kontextust (tulajdonosi döntés „A”: a böngésző különben minden betöltéskor
+  konzol-figyelmeztetést ad). Aktivált lapon a konstruktor költsége a menüre esik; nem aktivált lapon az indító koppintásra (az
+  aktiváló esemény után, nem a figyelőben) — a menetre egyik esetben sem.
+- Az első aktiváló mozdulat után a kontextus fut, így a játék első hangja megszólal; a figyelők a futó kontextusig maradnak.
 
 ## Edge case-ek
 - WebGL / hang nélküli környezet (`AudioContext` nincs): a hívás csendben semmit nem tesz.
 - Többszöri hívás (több horog egy lapon): egyetlen kontextus.
 - SSR / teszt (`window` nincs): a horog nem fut, a függvény `null`-lal tér vissza.
+- Némított felhasználó: nincs kontextus (sem tétlen időben, sem mozdulatra); feloldás után az első hang hozza létre (a régi út).
+- Érintés: `pointerdown` (nem aktiváló) → `touchend` (aktiváló): a kontextus csak a `touchend` után jön létre.
+- Leválasztás: a figyelők, a tétlen feladat és a halasztott létrehozás is törlődik.
+- iOS „interrupted” állapot (háttérbe kerülés, hívás): meglévő viselkedés, nem e terv része — jegy.
 
 ## Elfogadás (EARS)
 - AMIKOR egy játék menüje megjelent és a böngésző tétlen, a hangkontextus létrejön (egységteszt: egyszeri létrehozás).
@@ -49,4 +59,5 @@ az első hang menet közben már ne hozzon létre kontextust.
 
 ## Tesztek
 - `tests/audio-engine-prewarm.test.ts` (a Szökőár-ággal azonos fájl) + `tests/audio-engine-prewarm-hook.test.ts` (a horog: tétlen
-  időben egyszer, az első mozdulatra is; hiba nélkül, ha nincs `AudioContext`).
+  időben egyszer, az első mozdulatra is; hiba nélkül, ha nincs `AudioContext`; vak ellenőr 1. kör: `pointerdown` → `touchend`
+  sorrend, halasztott létrehozás `isActive` mellett, némított felhasználó, leválasztás).

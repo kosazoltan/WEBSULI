@@ -17,3 +17,8 @@ Terv: `docs/specs/2026-11-19-hang-elomelegites.md`. Ág: `fix/hang-elomelegites`
 7. Böngészős tesztek (sorompó után, `--workers=1`): a közös mobil mérő (`game-mobile-quality.spec.ts`) érintett játékai, a
    párbaj (`duel*.spec.ts`), a joystick-mérő.
 8. `npm run gate:push`; jelentés: fej, mérés előtte / utána, tesztek.
+9. **Vak ellenőr 1. kör (ítélet: NEM, fej e3d8867d) javításai** (terv: `docs/specs/2026-11-19-hang-elomelegites.md`, Megoldás 2.,
+   Autoplay-szabály, Edge case-ek): ELŐBB bukó tesztek a `tests/audio-engine-prewarm-hook.test.ts`-ben (érintés-sorrend,
+   halasztott létrehozás, némítás, leválasztás), külön commitban; utána a javítás a `useAudioPrewarm()`-ban (a `prewarmAudio()`
+   blokk a Szökőár-ággal bájtazonos marad); utána-mérés a végső kódon (`docs/measurements/hang-elomelegites/elotte-utana.txt`
+   frissítése); `gate:stage`. Az iOS „interrupted” állapot jegy.
