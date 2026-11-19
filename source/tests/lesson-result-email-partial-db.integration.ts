@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -458,4 +458,46 @@ test("R19: a kapu véglegesítés-ellenőrzése átmeneti DB-hibát kap → a �
     await sleep(700); // az újrapróba (400 ms) lefutott
     assert.deepEqual(sent.map(mail => (isPartial(mail) ? "P" : "F")), ["F", "F"], "véglegesített körre az újrapróba sem küld részlegest");
   } finally { setFinalizedCheckFault(null); clearPendingPartials(); setPartialDelay(previousDelay); setRetryDelay(previousRetry); }
+});
+
+/* Gépi vak ellenőrzés (GPT-6.2 Sol, 2026-11-19), terv R21 / R22. */
+test("R21 / L2: kapuhiba után frissebb pillanatkép érkezik → az eredeti újrapróba idején nincs levél, csak a frissebb (4 válaszos) állapot megy ki", async () => {
+  reset();
+  const previousDelay = setPartialDelay(100);
+  const previousRetry = setRetryDelay(500);
+  let left = 1;
+  try {
+    clearPendingPartials();
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-l2-stale", picks: picks(2), partial: true, fingerprint: "fp-l2" })).json(), { queued: true, partial: true });
+    setFinalizedCheckFault(() => { if (left > 0) { left--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } });
+    await sleep(250); // az első időzítő lejárt, a kapu hibát kapott, az újrapróba ~500 ms múlva jönne
+    assert.equal(left, 0, "a kapuhiba megtörtént");
+    setPartialDelay(1500); // a frissebb pillanatkép saját, hosszabb időzítőt kap (élesben 15 perc a 60 s-os újrapróbával szemben)
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-l2-stale", picks: picks(4), partial: true, fingerprint: "fp-l2" })).json(), { queued: true, partial: true });
+    await sleep(800); // az eredeti újrapróba ideje lejárt
+    assert.equal(sent.length, 0, "az elavult (2 válaszos) újrapróba nem küldött");
+    assert.ok(await waitFor(() => sent.length === 2, 4000), "a frissebb állapot kiment");
+    assert.ok(sent.every(mail => new RegExp(`félbehagyva: 4 / ${ROUND_SIZE}\\)`).test(mail.subject)), "csak a 4 válaszos állapot");
+  } finally { setFinalizedCheckFault(null); clearPendingPartials(); setPartialDelay(previousDelay); setRetryDelay(previousRetry); }
+});
+
+test("R22 / L4: párhuzamos pillanatképek — a vendég kérése az utolsó várakozásnál áll, közben az igazolt tanuló rögzít → a vendég nem írja felül (conflict), a levél az igazolt tanulóé", async () => {
+  reset();
+  const previousDelay = setPartialDelay(300);
+  let releaseGuest!: () => void;
+  const parked = new Promise<void>(resolve => { releaseGuest = resolve; });
+  let guestParked = false;
+  setPartialIntakeHook(async who => { if (who === "guest:fp-l4-guest") { guestParked = true; await parked; } });
+  try {
+    clearPendingPartials();
+    const guestRequest = post({ kind: "quiz", roundId: "round-l4-race", picks: picks(4), partial: true, fingerprint: "fp-l4-guest" });
+    assert.ok(await waitFor(() => guestParked, 3000), "a vendég kérése az utolsó várakozás után áll");
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-l4-race", picks: picks(2), partial: true }, freshIp(), "u-l4")).json(), { queued: true, partial: true });
+    releaseGuest();
+    assert.deepEqual(await (await guestRequest).json(), { queued: false, partial: true, conflict: true }, "az igazolt első rögzítőt a párhuzamos vendég sem írja felül");
+    assert.equal(pendingPartialCount(), 1);
+    assert.ok(await waitFor(() => sent.length === 2));
+    assert.ok(sent.every(mail => new RegExp(`félbehagyva: 2 / ${ROUND_SIZE}\\)`).test(mail.subject)), "az igazolt tanuló (2 válaszos) állapota");
+    assert.ok(sent.every(mail => !mail.html.includes("Vendég tanuló")), "nem vendég-attribúcióval");
+  } finally { releaseGuest(); setPartialIntakeHook(null); clearPendingPartials(); setPartialDelay(previousDelay); }
 });

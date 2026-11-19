@@ -270,6 +270,9 @@ async function recordFinalized(lessonId: string, roundId: string, percent: numbe
     .onConflictDoUpdate({ target: [lessonResultEmails.lessonId, lessonResultEmails.kind, lessonResultEmails.roundKey], set: { createdAt: sql`now()` } });
 }
 let finalizedCheckFault: (() => void) | null = null;
+let partialIntakeHook: ((who: string) => Promise<void>) | null = null;
+/** Teszthez: a pillanatkép-ág UTOLSÓ várakozása után hívódik (párhuzamos felvétel utánzása); `null` kikapcsolja. */
+export function setPartialIntakeHook(hook: ((who: string) => Promise<void>) | null): void { partialIntakeHook = hook; }
 /** Teszthez: hibainjektálás a véglegesítés-ellenőrzés elé (átmeneti adatbázishiba utánzása); `null` kikapcsolja. */
 export function setFinalizedCheckFault(fault: (() => void) | null): void { finalizedCheckFault = fault; }
 async function roundFinalized(lessonId: string, whos: readonly string[], roundId: string, now = Date.now()): Promise<boolean> {
@@ -380,6 +383,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     const earlier = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
       .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), eq(lessonResultEmails.roundKey, partialRoundKey)));
     if (earlier.some(sentRow => sentRow.delivered.length > 0)) return res.status(202).json({ queued: false, partial: true, alreadySent: true });
+    if (partialIntakeHook) await partialIntakeHook(who);
     const lastAnsweredOnServer = onServerClock(body.lastAnsweredAt);
     const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(startedAtOnServer ? { startedAt: startedAtOnServer } : {}), ...(lastAnsweredOnServer ? { lastAnsweredAt: lastAnsweredOnServer } : {}) } };
     // R16: ha a kört vendég rögzítette és most más veszi át (pl. a kör közben bejelentkező tanuló), a kör vendég kör marad — a levél

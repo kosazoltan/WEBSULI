@@ -348,9 +348,9 @@ test("R3: a LEZÁRT kör cseréje nem küld pillanatképet (a végleges eredmén
 
 /** R4: munkamenethez kötött CSRF-token utánzása — a szerver csak az ÉRVÉNYES tokent fogadja el, a többire 403. */
 async function mockCsrf(page: Page) {
-  const state = { valid: "token-1", tokenStatus: 200, tokenCalls: 0, rejected: [] as string[], accepted: [] as Array<{ token: string; body: Record<string, unknown> }> };
+  const state = { valid: "token-1", tokenStatus: 200, tokenCalls: 0, signal: true, rejected: [] as string[], accepted: [] as Array<{ token: string; body: Record<string, unknown> }> };
   await mockWith(page);
-  await page.route("**/api/csrf-token", route => { state.tokenCalls++; return state.tokenStatus === 200 ? route.fulfill({ json: { csrfToken: state.valid, resultApi: 2 } }) : route.fulfill({ status: state.tokenStatus, json: { message: "hiba" } }); });
+  await page.route("**/api/csrf-token", route => { state.tokenCalls++; return state.tokenStatus === 200 ? route.fulfill({ json: state.signal ? { csrfToken: state.valid, resultApi: 2 } : { csrfToken: state.valid } }) : route.fulfill({ status: state.tokenStatus, json: { message: "hiba" } }); });
   await page.route("**/api/lessons/lesson-q/results", route => {
     const token = route.request().headers()["x-csrf-token"] ?? "";
     if (route.request().method() !== "POST" || token !== state.valid) { state.rejected.push(token); return route.fulfill({ status: 403, json: { message: "invalid csrf token" } }); }
@@ -628,4 +628,50 @@ test("R12 / K3: régi szerver + 30 gyerek egy IP-ről — legalább annyi végle
   expect(delivered(oldClient), "a régi kliens összevetési alapja").toBe(20);
   expect(delivered(newClient), "az új kliens nem rosszabb a régi szerver mellett").toBeGreaterThanOrEqual(delivered(oldClient));
   expect(Math.max(...newClient), "egy gyerektől legfeljebb egy elfogadott végleges kérés").toBeLessThanOrEqual(1);
+});
+
+/* Gépi vak ellenőrzés (GPT-6.2 Sol, 2026-11-19), terv R20 / R23. */
+test("R20 / L1: az előző kör végleges kérése még függőben van, közben új, teljesen megválaszolt kör → a második kör is beküldődik, gomb nélkül", async ({ page }) => {
+  await mockWith(page);
+  const finals: Array<Record<string, unknown>> = [];
+  let releaseFirst!: () => void;
+  const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve; });
+  await page.route("**/api/lessons/lesson-q/results", async route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial === true) return route.fulfill({ status: 202, json: { queued: true, partial: true } });
+    finals.push(body);
+    if (finals.length === 1) await firstHeld; // az első kör válasza függőben marad
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => finals.length, { message: "az első kör végleges kérése elindult" }).toBe(1);
+  await page.getByRole("button", { name: "Új kvíz" }).click();
+  await page.getByRole("button", { name: "Új kör indítása", exact: true }).click();
+  await expect(page.locator('[data-quiz-id] button.lesson-option[aria-pressed="true"]')).toHaveCount(0);
+  const second = page.locator("[data-quiz-id]");
+  for (let i = 0; i < 25; i++) await second.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => finals.length, { message: "a második kör is beküldődött, az első függő kérése mellett" }).toBe(2);
+  expect(finals[1].roundId).not.toBe(finals[0].roundId);
+  expect(Object.values(finals[1].picks as Record<string, number>).filter(pick => pick >= 0)).toHaveLength(25);
+  releaseFirst();
+  await page.waitForTimeout(1500);
+  expect(finals, "az első válasz felengedése után sincs harmadik (ismételt) kérés").toHaveLength(2);
+});
+
+test("R23 / L3: 403 után a frissített token jelzés nélküli (régi példány) → a pillanatkép nem megy újra, és nem rögzül elküldöttként", async ({ page }) => {
+  const csrf = await mockCsrf(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 2; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800); // a (jelzéses) token előtöltődik
+  csrf.valid = "token-2";
+  csrf.signal = false; // a 403 utáni új tokent egy régi példány adja: jelzés nélkül
+  await hide(page);
+  await expect.poll(() => csrf.rejected.length, { message: "az első pillanatkép a régi tokennel 403-at kapott" }).toBe(1);
+  await page.waitForTimeout(1000);
+  expect(csrf.accepted, "jelzés nélküli új tokennel nem megy második pillanatkép").toHaveLength(0);
+  expect(csrf.rejected, "nincs második (régi szervernek szóló) pillanatkép-kérés").toHaveLength(1);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes(":quiz:partial:")).length), "nem rögzült elküldöttként").toBe(0);
 });
