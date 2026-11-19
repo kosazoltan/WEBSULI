@@ -14,6 +14,7 @@ import {
 } from './lib.mjs';
 import { evidenceRecord, runPrePushSteps } from './pre-push-gate.mjs';
 import { stemOf } from './stage-gate.mjs';
+import { relaunchUnderMachineLock } from '../machine-lock.mjs';
 
 export const WRAPPER_CONFIG = 'playwright.gate.local.mts';
 
@@ -181,4 +182,6 @@ async function main() {
   process.exit(code);
 }
 
-if (isMain(import.meta.url)) main();
+// Gépi zár (docs/specs/2026-11-19-gepi-zar.md D13): a kapu önmaga áll sorba (a package.json gate:pr sora a kapu-gyorsítás ág miatt
+// változatlan); zár alatt (érvényes WEBSULI_MACHINE_LOCK_HELD) és CI-ben a main() közvetlenül fut.
+if (isMain(import.meta.url) && !relaunchUnderMachineLock({ name: 'gate-pr', timeoutMin: 300 })) main();
