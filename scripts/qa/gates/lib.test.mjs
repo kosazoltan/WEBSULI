@@ -111,8 +111,9 @@ test('redact: lineáris idő hosszú, @ nélküli és tartomány-futáson (300 0
   }
 });
 
-test('redact: 20 M karakteres token-, Bearer- és tartomány-futás nem omlik össze', () => {
-  const n = 20_000_000;
+// A régi minták itt (Windows x64, Node) már 6–7 M karakternél dobtak; a 10 M tartalékkal bukik a régi kódon, és ~10 s alatt fut.
+test('redact: 10 M karakteres token-, Bearer- és tartomány-futás nem omlik össze', () => {
+  const n = 10_000_000;
   const cases = [
     [`ghp_${'a'.repeat(n)}_`, null],
     [`github_pat_${'a'.repeat(n)}-`, '<token>'],

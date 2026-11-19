@@ -80,7 +80,7 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
 ## 6. Elfogadási kritériumok (EARS)
 
 - WHEN a `redact()` 300 000 karakteres `@` nélküli futást kap THEN the system SHALL 1 s alatt visszatérni (CI-n is).
-- WHEN a `redact()` 20 M karakteres token- / Bearer- / tartomány-futást kap THEN the system SHALL kivétel nélkül visszatérni.
+- WHEN a `redact()` 10 M karakteres (a régi minták 6–7 M-nál már dobtak) token- / Bearer- / tartomány-futást kap THEN the system SHALL kivétel nélkül visszatérni.
 - WHEN a `maskSecrets()` / `maskClip()` 20 M karakteres `AIza…` futást kap THEN the system SHALL nem dobni, és a kimenet
   nem tartalmaz kulcsot.
 - WHEN a kulcs a 64 KB-os ablak határán félbe van vágva THEN the system SHALL a végső kimenetben a kulcs egyetlen 8+
@@ -92,7 +92,7 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
 ## 7. Tesztterv
 
 - `scripts/qa/gates/lib.test.mjs`: (a) időkorlátos teljesítményteszt több ellenséges bemeneten (300 000 kar., < 1 s
-  bemenetenként); (b) 20 M karakteres token-, Bearer- és tartomány-futás nem dob; (d) pozitív esetek: 64 karakteres helyi rész,
+  bemenetenként); (b) 10 M karakteres token-, Bearer- és tartomány-futás nem dob; (d) pozitív esetek: 64 karakteres helyi rész,
   aldomaines cím, plusz-címkés cím, több cím egy sorban.
 - `scripts/qa/gates/external-review.test.mjs`: (b) 20 M `AIza…` futás nem dob, nincs kulcs; (c) ablakhatáron félbevágott kulcs
   nincs a kimenetben (több eltolással, a végső hossz az ablak méretével egyező is); rövid szövegen `maskClip` = régi viselkedés.

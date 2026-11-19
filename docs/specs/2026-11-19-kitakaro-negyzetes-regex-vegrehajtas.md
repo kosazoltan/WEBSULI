@@ -10,8 +10,8 @@
   - `redact: lineáris idő hosszú, @ nélküli és tartomány-futáson` — bemenetek, mindegyik 300 000 karakter: `'a'.repeat(n)`,
     `'a.'.repeat(n/2)`, `'x' + at + 'a'.repeat(n)`, `'x' + at + 'a.'.repeat(n/2) + '1'`, `'x' + at + 'a-'.repeat(n/2)`,
     `'0123456789abcdef'.repeat(n/16)`; mindegyikre `performance.now()` különbség `< 1000` ms (bemenetenként külön).
-  - `redact: 20 M karakteres futás nem omlik össze` — `ghp_` + 20 M `a` + `_`; `github_pat_` + 20 M `a` + `-`; `sk-` + 20 M `-`;
-    `Bearer x` + 20 M `a`; `x` + at + `a.`×10 M; `assert.doesNotThrow`, és a token-előtagos esetekben a kimenet nem kezdődik
+  - `redact: 10 M karakteres futás nem omlik össze` (a régi minták 6–7 M-nál már dobtak; a 20 M itt ~20 s lenne) — `ghp_` + 10 M `a` + `_`; `github_pat_` + 10 M `a` + `-`; `sk-` + 10 M `-`;
+    `Bearer x` + 10 M `a`; `x` + at + `a.`×5 M; `assert.doesNotThrow`, és a token-előtagos esetekben a kimenet nem kezdődik
     a nyers előtag + 16 karakterrel (azaz ki van takarva, ahol az eredeti is kitakarta).
   - `redact: valós címek továbbra is kitakarva` — 64 karakteres helyi rész (`'a'.repeat(64) + at + 'pelda.hu'`) → pontosan
     `<email>`; `kovacs.janos+teszt` + at + `mail.pelda.co.uk` → `<email>`; két cím egy sorban → két `<email>`; zárójelben,
