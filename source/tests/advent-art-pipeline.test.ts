@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { acquireRunLock } from "../scripts/design-assets/run-lock";
+import * as artLib from "../scripts/design-assets/lib";
 
 import {
   attemptWithinBudget, canSpend, composePrompt, estimateUsd, ledgerProblem, loadStyle, missingReferences, parseMaxUsd, parseRefs, parseSetName, planJobs, readLedger, requestImage, runJobs, spentFromLog,
@@ -354,4 +355,34 @@ test("futás-zár (review L7): ugyanarra a készletre második futás nem indul,
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("a jelöltszám (candidates) 1–10 közötti egész; érvénytelen értékre a terv hibaüzenettel áll meg, nem fut el (vak ellenőr KICSI-1)", () => {
+  const item = byId("advent-frame");
+  assert.equal(planJobs([{ ...item, candidates: 10 }], { resolution: "1K", max: 1000, maxUsd: null }).jobs.length, 10);
+  assert.equal(planJobs([{ ...item, candidates: undefined }], { resolution: "1K", max: 1000, maxUsd: null }).jobs.length, 1, "hiányzó érték: 1");
+  for (const bad of [11, 1000, 0, -1, 2.5, Number.NaN, "3" as unknown as number]) {
+    assert.throws(() => planJobs([{ ...item, candidates: bad }], { resolution: "1K", max: 1000, maxUsd: null }), /advent-frame: hibás candidates érték.*1–10/, String(bad));
+  }
+  // A generátor a hibát üzenetként írja ki (main().catch → error.message), nem veremnyomattal.
+  assert.match(read("scripts/design-assets/generate.ts"), /main\(\)\.catch\(error => \{ console\.error\(error instanceof Error \? error\.message/);
+});
+
+test("a költségkeret a szolgáltató valódi árával (usage.cost) is számol: max(becslés, valódi ár) a keretben és a könyvben (vak ellenőr KICSI-2)", () => {
+  const settle = (artLib as unknown as { settleActualCost?: (budget: Budget | null, estUsd: number, usage: unknown) => number }).settleActualCost;
+  assert.equal(typeof settle, "function", "settleActualCost hiányzik");
+  const budget: Budget = { spent: 0.09, maxUsd: 7 }; // a hívás indításakor a becslés már terhelve
+  const extra = settle!(budget, 0.09, { cost: 0.12, prompt_tokens: 10 });
+  assert.ok(Math.abs(extra - 0.03) < 1e-9 && Math.abs(budget.spent - 0.12) < 1e-9, "drágább valódi ár: a különbözet is terhel");
+  assert.equal(settle!(budget, 0.09, { cost: 0.05 }), 0, "olcsóbb valódi ár: marad a becslés (max)");
+  for (const usage of [null, undefined, {}, { cost: "0.5" }, { cost: -1 }, { cost: Number.POSITIVE_INFINITY }]) assert.equal(settle!(budget, 0.09, usage), 0, JSON.stringify(usage));
+  assert.ok(Math.abs(budget.spent - 0.12) < 1e-9);
+  assert.ok(Math.abs(settle!(null, 0.09, { cost: 0.5 }) - 0.41) < 1e-9, "keret nélkül (régi készlet) is kiszámolja a különbözetet");
+  // A könyv: az „ok” sor extraUsd mezője is a költésbe számít — a következő futás kerete a valódi árból indul.
+  const log = [JSON.stringify({ status: "started", estUsd: 0.09 }), JSON.stringify({ status: "ok", imageUsd: 0.09, extraUsd: 0.03, usage: { cost: 0.12 } })].join("\n");
+  assert.ok(Math.abs(readLedger(log).spentUsd - 0.12) < 1e-9, `könyv: ${readLedger(log).spentUsd}`);
+  // A generátor az „ok” sorba írja és a keretbe terheli a különbözetet.
+  const run = read("scripts/design-assets/generate.ts");
+  assert.match(run, /settleActualCost\(ctx\.budget, cost, img\.usage\)/);
+  assert.match(run, /extraUsd/);
 });

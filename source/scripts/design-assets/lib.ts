@@ -62,6 +62,19 @@ export function parseMaxUsd(raw: string | undefined): number | null {
   return Number(raw);
 }
 
+/** Tételenként legfeljebb ennyi jelölt (elütés ellen: 100 a 10 helyett) — nagyobb csak a kód módosításával (vak ellenőr KICSI-1). */
+export const MAX_CANDIDATES = 10;
+
+/** A tétel jelöltszáma: hiányzó érték 1; egyébként 1 és MAX_CANDIDATES közötti egész, különben hibaüzenet. */
+export function candidatesOf(item: AssetItem): number {
+  const raw: unknown = item.candidates;
+  if (raw === undefined) return 1;
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > MAX_CANDIDATES) {
+    throw new Error(`${item.id}: hibás candidates érték: ${JSON.stringify(raw) ?? String(raw)} (1–${MAX_CANDIDATES} közötti egész szám).`);
+  }
+  return raw;
+}
+
 export type ImageJob = { item: AssetItem; resolution: Resolution; estUsd: number };
 export type JobPlan = { jobs: ImageJob[]; totalUsd: number; requested: number; skippedExisting: number; cutBy: "max" | "max-usd" | null };
 
@@ -80,7 +93,7 @@ export function planJobs(
   const all: ImageJob[] = items.flatMap(item => {
     const resolution = item.resolution ?? opts.resolution;
     const estUsd = estimateUsd(1, item.references?.length ?? 0, resolution);
-    const wanted = Number.isSafeInteger(item.candidates) && (item.candidates as number) > 0 ? (item.candidates as number) : 1;
+    const wanted = candidatesOf(item);
     const have = Math.min(wanted, Math.max(0, opts.existing?.[item.id] ?? 0));
     skippedExisting += have;
     return Array.from({ length: wanted - have }, () => ({ item, resolution, estUsd }));
@@ -134,7 +147,20 @@ export async function attemptWithinBudget(opts: {
 }
 
 /**
- * A készlet naplója mint költségkönyv: minden `estUsd` mező összege. Új alak: a hívás ELŐTT „started” sor viszi az `estUsd`-t
+ * A szolgáltató valódi ára (vak ellenőr KICSI-2): ha a válasz `usage.cost` mezője véges, nemnegatív szám és nagyobb a becslésnél,
+ * a különbözet is a keretbe terhelődik (`max(becslés, valódi ár)`), és a visszaadott értéket a hívó az „ok” naplósor `extraUsd`
+ * mezőjébe írja — így a könyv is a valódi árból számol. Olcsóbb vagy hiányzó valódi árnál marad a becslés (0 a különbözet).
+ */
+export function settleActualCost(budget: Budget | null, estUsd: number, usage: unknown): number {
+  const cost = usage && typeof usage === "object" ? (usage as { cost?: unknown }).cost : undefined;
+  if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) return 0;
+  const extra = Math.max(0, cost - estUsd);
+  if (budget && extra > 0) budget.spent += extra;
+  return extra;
+}
+
+/**
+ * A készlet naplója mint költségkönyv: minden `estUsd` és `extraUsd` mező összege. Új alak: a hívás ELŐTT „started” sor viszi az `estUsd`-t
  * (a lezáró „ok” / „error” sor már nem — azok `imageUsd`-t írnak), a régi alakban az „ok” / „error” sor viszi; a kettő keverhető.
  * A sérült sorok sorszámát visszaadja: éles futás sérült naplóval NEM indul (review G2) — a keret nem maradhat alulbecsülve.
  */
@@ -144,9 +170,11 @@ export function readLedger(logText: string): { spentUsd: number; corruptLines: n
   logText.split(/\r?\n/).forEach((line, index) => {
     if (!line.trim()) return;
     try {
-      const row = JSON.parse(line) as { estUsd?: unknown } | null;
+      const row = JSON.parse(line) as { estUsd?: unknown; extraUsd?: unknown } | null;
       if (!row || typeof row !== "object") { corruptLines.push(index + 1); return; }
       if (typeof row.estUsd === "number" && Number.isFinite(row.estUsd) && row.estUsd > 0) spentUsd += row.estUsd;
+      // A valódi ár becslés feletti része (settleActualCost) az „ok” soron.
+      if (typeof row.extraUsd === "number" && Number.isFinite(row.extraUsd) && row.extraUsd > 0) spentUsd += row.extraUsd;
     } catch { corruptLines.push(index + 1); }
   });
   return { spentUsd, corruptLines };

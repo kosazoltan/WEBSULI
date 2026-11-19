@@ -30,7 +30,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   attemptWithinBudget, buildImageRequest, composePrompt, estimateUsd, ledgerProblem, loadStyle, missingReferences, parseMax, parseMaxUsd, parseRefs, parseResolution,
-  parseSetName, planJobs, readLedger, redact, requestImage, runJobs, type AssetItem, type AssetManifest, type Budget, type Resolution, type Style,
+  parseSetName, planJobs, readLedger, redact, requestImage, runJobs, settleActualCost, type AssetItem, type AssetManifest, type Budget, type Resolution, type Style,
 } from "./lib";
 import { acquireRunLock } from "./run-lock";
 
@@ -110,7 +110,9 @@ async function generateOne(item: AssetItem, resolution: Resolution, ctx: Ctx): P
       mkdirSync(dir, { recursive: true });
       const file = path.join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}.${img.ext}`);
       writeFileSync(file, img.bytes);
-      appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), id: item.id, model: manifest.model, promptHash: createHash("sha256").update(body.prompt).digest("hex").slice(0, 16), refs: refs.length, ...(ctx.budget ? { imageUsd: cost } : { estUsd: cost }), usage: img.usage ?? null, file: path.relative(CANDIDATES, file), status: "ok" }) + "\n");
+      // A valódi ár (usage.cost) becslés feletti része is a keretbe és a könyvbe kerül (vak ellenőr KICSI-2).
+      const extraUsd = settleActualCost(ctx.budget, cost, img.usage);
+      appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), id: item.id, model: manifest.model, promptHash: createHash("sha256").update(body.prompt).digest("hex").slice(0, 16), refs: refs.length, ...(ctx.budget ? { imageUsd: cost } : { estUsd: cost }), ...(extraUsd > 0 ? { extraUsd } : {}), usage: img.usage ?? null, file: path.relative(CANDIDATES, file), status: "ok" }) + "\n");
       console.log(`  ✓ ${item.id} → ${path.relative(ROOT, file)}`);
     },
     onError: (attempt, error) => {
