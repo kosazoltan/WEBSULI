@@ -13,6 +13,7 @@ import {
 } from "@shared/lesson-schema";
 import { BAND_THEME, learningAgeGroup } from "@shared/lesson-band";
 import { blockLabel } from "@shared/lesson-block-label";
+import { sourceVisualProblems } from "@shared/lesson-visual-params";
 import { LESSON_FONT_FALLBACK, lessonFontPair, nfcDeep } from "@shared/lesson-typography";
 
 import { SectionProba } from "./SectionProba";
@@ -42,7 +43,7 @@ import "./lesson-design.css";
 import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom } from "@shared/lesson-design";
 import { BAND_ICON } from "@/lib/band-icons";
 import { VerdictFeedback } from "./VerdictFeedback";
-import { explainIsLong, explainParagraphs } from "./explain-paragraphs";
+import { explainIsLong, explainParts } from "./explain-paragraphs";
 import { displayHeading } from "@shared/lesson-ui-text";
 
 /** A koncepciókép sávjelvényei: levél · iránytű · agy · lombik · emelkedő grafikon (szabályterv 1.2). */
@@ -116,7 +117,9 @@ function ExplainBlock({ block, band, label }: { block: Extract<Block, { kind: "e
           {block.depth === "why" ? "Miért?" : "Mélyebben"}
         </span>
       )}
-      {explainParagraphs(block.text).map((para, i) => <p key={i}><RichText text={para} /></p>)}
+      {explainParts(block.text).map((part, i) => (part.kind === "ul"
+        ? <ul key={i} className="lesson-explain-list">{part.items.map((item, k) => <li key={k}><RichText text={item} /></li>)}</ul>
+        : <p key={i}><RichText text={part.text} /></p>))}
       {canSpeak && (
         <Button
           variant="ghost"
@@ -313,6 +316,10 @@ export function LessonBlock({
       return <RecapBlock block={block} band={band} label={label} />;
     case "animate": {
       const Anim = ANIMATE_REGISTRY[block.animKind];
+      // S2a (review B1): hibás paraméterű forrás-ábrából a rajzoló semmit nem rajzol — fejléc üres törzzsel nem jelenhet meg, a blokk kimarad.
+      if (sourceVisualProblems(block)) return null;
+      // S2a (review J3): a szabálydoboz tónusfelirata a doboz SAJÁT fejléce — külön blokkfejléc nélkül (nem hangzik el és nem látszik kétszer).
+      if (block.animKind === "ruleBox") return <div className="space-y-2" data-block="animate"><Anim params={block.params} caption={block.caption} label={label} /></div>;
       // Review #279: a mozgókép és a próba blokk is blokkfejlécet kap (a sáv jelzőjével), mint a többi négy típus.
       return <div className="space-y-2" data-block="animate"><BlockHead icon={PlayCircle} label={label ?? "Mozgókép"} kind="animate" /><Anim params={block.params} caption={block.caption} /></div>;
     }
