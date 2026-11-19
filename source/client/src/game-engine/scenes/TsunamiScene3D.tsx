@@ -14,6 +14,7 @@ import {
   type ThreeSceneContext,
   type ThreeSceneController,
 } from "@/game-engine/three-look";
+import { dampShift } from "@/lib/tsunami/shift";
 
 /**
  * Side-view 3D seaside for Tsunami Escape (spec: docs/specs/2026-09-29-jatekok-3d-latvany.md,
@@ -1533,6 +1534,7 @@ function setupTsunami(
 
   let warmFrames = 0;
   let shiftY = 0;
+  let lastShiftAt: number | null = null;
   let lastW = -1;
   let lastH = -1;
   // A figura képernyő-dobozának mérése (vetített befoglaló doboz) — 4 képkockánként.
@@ -1601,9 +1603,14 @@ function setupTsunami(
 
       // K2: kép-eltolás nyitott kérdés alatt (a kamera felfelé mozdul → a világ lejjebb kerül a képen).
       const live = p.live?.current;
-      // ≈ 300 ms-os lassuló beállás (terv 7.7: a 600 ms-os mércéhez lassú gépen is maradjon tartalék); csökkentett mozgásnál azonnali.
+      // ≈ 300 ms-os lassuló beállás a VALÓS eltelt idővel (terv 7.7, „A nyugalom-jelző oka”: a játékmenet 50 ms-ra vágott dt-jével
+      // lassú képkockáknál a kép késett a jelzéshez képest); a csillapítás és a lap „nyugalomban” döntése közös modulból jön.
+      // Csökkentett mozgásnál azonnali.
       const shiftTarget = (live?.shiftPx ?? 0) * worldPerPx;
-      shiftY = reducedMotion ? shiftTarget : damp(shiftY, shiftTarget, 16, dt);
+      const nowMs = performance.now();
+      const shiftDt = lastShiftAt === null ? 0 : (nowMs - lastShiftAt) / 1000;
+      lastShiftAt = nowMs;
+      shiftY = reducedMotion ? shiftTarget : dampShift(shiftY, shiftTarget, shiftDt);
       if (live) live.shownShiftPx = shiftY / worldPerPx;
       camera.position.y = EYE + shiftY;
       sky.position.y = camera.position.y;

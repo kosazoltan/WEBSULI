@@ -87,6 +87,7 @@ import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import TsunamiScene3D, { SHELTER_TOP_LANDSCAPE, SHELTER_TOP_PORTRAIT, SHELTER_X, type TsunamiLive } from "@/game-engine/scenes/TsunamiScene3D";
 import { paceTsunamiDirector } from "@/lib/tsunami/pacing";
+import { isShiftSettled } from "@/lib/tsunami/shift";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import {
   TSUNAMI_GAME_ID,
@@ -1753,21 +1754,24 @@ export default function TsunamiEscapeEnglish() {
   }
   /*
    * Elrendezés-nyugalom (koordinátori spec-pontosítás 2026-11-18): a figura a kérdés megjelenése után ≤ 600 ms-on belül szabad,
-   * és a nyitott kérdés alatt végig az. A sáv `data-layout="settled"`-et kap, amikor a hely / kompakt mód / kép-eltolás
-   * eldőlt és az eltolás (≈ 300 ms) lefutott; a beállás ideje a teszt-kampóban (`layoutSettleMs`).
+   * és a nyitott kérdés alatt végig az. A sáv `data-layout="settled"`-et kap, amikor a hely / kompakt mód / kép-eltolás eldőlt
+   * ÉS a KIRAJZOLT eltolás megérkezett (terv 7.7, „A nyugalom-jelző oka”: időzítő helyett — terhelt gépen a rögzített idő előbb
+   * lejárt, mint ahogy a kép megnyugodott). A döntés egy helyen: `isShiftSettled` (`lib/tsunami/shift.ts`), a képkocka-követő
+   * hívja. A beállás ideje a teszt-kampóban (`layoutSettleMs`).
    */
   const settledForRef = useRef<number | null>(null);
   const settleMsRef = useRef<number | null>(null);
-  const markSettled = (id: number, delayMs: number) => {
-    const done = () => {
-      if (placedForRef.current !== id) return;
-      settledForRef.current = id;
-      settleMsRef.current = Math.round(performance.now() - shownAtRef.current);
-      setPlaceTick((n) => n + 1);
-    };
-    if (delayMs <= 0) done();
-    else window.setTimeout(done, delayMs);
+  /** A döntés megszületett, a kirajzolt eltolás még úton lehet: a képkocka-követő ennek a kérdésnek a nyugalmát várja. */
+  const awaitSettleForRef = useRef<number | null>(null);
+  const markSettled = (id: number) => {
+    if (placedForRef.current !== id || settledForRef.current === id) return;
+    awaitSettleForRef.current = null;
+    settledForRef.current = id;
+    settleMsRef.current = Math.round(performance.now() - shownAtRef.current);
+    setPlaceTick((n) => n + 1);
   };
+  /** Nyugalomban van-e a kirajzolt kép (csökkentett mozgásnál az eltolás azonnali). */
+  const shiftArrived = () => reducedMotion || isShiftSettled(liveRef.current.shownShiftPx, liveRef.current.shiftPx ?? 0);
   const quizElRef = useRef<HTMLDivElement | null>(null);
   const decidedForRef = useRef<number | null>(null);
   /** Egy akadály: a doboza, és hogy álló nézetben a teljes szélességet foglalja-e (a kérdés-felület: a figura alatta mozog). */
@@ -1897,8 +1901,10 @@ export default function TsunamiEscapeEnglish() {
     const shift = solveShift(obs, fig, before);
     liveRef.current.shiftPx = shift;
     trackRef.current = { at: performance.now(), obs, id: presIdNow };
-    // ≈ 300 ms-os lassuló eltolás (a jelenet `damp(…, 16)`-ja: 320 ms után < 1 % marad); változatlan eltolásnál azonnal nyugalom.
-    markSettled(presIdNow, Math.abs(shift - before) > 1 && !reducedMotion ? 320 : 0);
+    // A nyugalom a kirajzolt eltoláshoz kötött: ha már megérkezett (változatlan eltolás, csökkentett mozgás, WebGL nélkül), most;
+    // különben a képkocka-követő jelzi, amikor a jelenet visszaírt eltolása 1 px-en belül van.
+    if (shiftArrived()) markSettled(presIdNow);
+    else awaitSettleForRef.current = presIdNow;
   });
   /*
    * „Végig szabad”: a víz a nyitott kérdés alatt is emelkedik (lassítva), a figura oldalra is mozog (fekvő nézetben a szélső
@@ -1922,6 +1928,7 @@ export default function TsunamiEscapeEnglish() {
     const fig = figureRect();
     if (!fig) return;
     liveRef.current.shiftPx = solveShift(cache.obs, fig, liveRef.current.shiftPx ?? 0);
+    if (id !== null && awaitSettleForRef.current === id && shiftArrived()) markSettled(id);
   };
 
   return (
