@@ -93,6 +93,7 @@
     "heavyWaitMaxSec": 600,
     "maxScreenshots": 6,
     "machineLockWaitSec": 1200,
+    "machineLockWaitTotalSec": 1800,
     "promptCache": { "mode": "none", "ttlSec": 300 },
     "fallbackPriceUsdPerMTok": { "input": 4, "output": 15, "cacheRead": 0.2, "cacheWrite": 5 },
     "npmScripts": ["check", "check:test", "lint"],

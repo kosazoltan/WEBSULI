@@ -339,6 +339,9 @@ export function makeTools(ctx) {
     return text;
   };
   let heavyRuns = 0;
+  let lockWaitTotal = 0;
+  /** A gép foglaltsága miatt NEM FUTOTT nehéz eszközök — a jelentés „Mit NEM vizsgáltam” szakaszának meg kell neveznie őket. */
+  const notRun = [];
   let scenarioRuns = 0;
   const dockerPs = ctx.dockerPs ?? (async () => (await run('docker', ['ps', '--format', '{{.Names}}\t{{.CreatedAt}}'], { cwd: root, env, timeoutMs: 30_000 })).stdout);
   /**
@@ -353,9 +356,13 @@ export function makeTools(ctx) {
     if (pre) return { ok: false, text: `ELUTASÍTVA: ${pre}` };
     const lockDir = ctx.machineLockDir !== undefined ? ctx.machineLockDir : (process.env[MACHINE_LOCK_ENV] || null);
     if (!lockDir) return heavyRunLocked(opts, 0);
-    const remaining0 = ctx.remainingMs ? ctx.remainingMs() : Infinity;
+    // A zár-várakozás saját, futásonkénti összkorláttal (machineLockWaitTotalSec), a falióra-keretbe NEM számítva (onLockWait).
+    const budgetLeft = (cfg.machineLockWaitTotalSec ?? 1800) * 1000 - lockWaitTotal;
     const lock = await acquireMachineLock({ dir: lockDir, owner: lockOwner(ctx.head ?? head, opts.tool, new Date(ctx.now ? ctx.now() : Date.now())),
-      maxWaitMs: Math.max(0, Math.min((cfg.machineLockWaitSec ?? 1200) * 1000, remaining0 - 150_000)), pollMs: 10_000, sleep: ctx.sleep, now: ctx.now, shouldStop: ctx.shouldStop ?? (() => null) });
+      maxWaitMs: Math.max(0, Math.min((cfg.machineLockWaitSec ?? 1200) * 1000, budgetLeft)), pollMs: 10_000, sleep: ctx.sleep, now: ctx.now, shouldStop: ctx.shouldStop ?? (() => null) });
+    lockWaitTotal += lock.waitedMs;
+    ctx.onLockWait?.(lock.waitedMs);
+    if (!lock.ok) notRun.push({ tool: opts.tool, reason: lock.reason });
     if (!lock.ok) return { ok: false, text: `NEM FUTOTT: gép foglalt — ${lock.reason}${lock.holder ? ` (a zár gazdája: ${lock.holder})` : ''}. Ez nem bukás: a „Mit NEM vizsgáltam” szakaszban jelezd, vagy később próbáld újra.` };
     try {
       return await heavyRunLocked(opts, lock.waitedMs);
@@ -559,6 +566,7 @@ export function makeTools(ctx) {
   return {
     counts,
     runLog,
+    notRun,
     async call(name, args) {
       if (!Object.hasOwn(impl, name)) return `HIBA: ismeretlen eszköz: ${String(name).slice(0, 60)}`;
       counts[name] = (counts[name] ?? 0) + 1;

@@ -100,7 +100,9 @@ node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --re
   várakozás, legfeljebb 10 perc); saját konténer leállítása; `maxHeavyRuns` 4, egyenként legfeljebb 15 perc. **Gépi zár:** a
   `WEBSULI_MACHINE_LOCK_DIR` által mutatott zár-mappát (atomi `mkdir`, `gazda.txt`: „blind-review <fej12> <eszköz> <UTC>”) a nehéz
   eszköz a futás előtt megszerzi (legfeljebb `machineLockWaitSec` = 1200 s várakozás), utána — hibánál is — elengedi; foglalt
-  gépen „NEM FUTOTT: gép foglalt” (nem bukás); a változó nélkül nincs zárolás (CI).
+  gépen „NEM FUTOTT: gép foglalt” (nem bukás; a futás folytatódik, a „Mit NEM vizsgáltam” kötelezően megnevezi). A zárra várt idő
+  nem számít a falióra-keretbe (saját összkorlát: `machineLockWaitTotalSec` = 1800 s / futás; a Gépi összegzés kiírja). A változó
+  nélkül nincs zárolás (CI).
 - **Ha a futtató nem tud lefutni** (kulcs, OpenRouter, plafon): megáll, nem nulla kóddal — „a vak ellenőr nem futott”. A kapu áll,
   csendes tartalék nincs — a tulajdonos dönt (követett konfigváltozás: `blindReview.exclusive` / `model`).
 - **Nincs CI-bekötés** (külön szelet): kell hozzá az `OPENROUTER_API_KEY` GitHub-titok és költési keret a kulcson (tulajdonosi

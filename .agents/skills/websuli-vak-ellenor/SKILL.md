@@ -121,7 +121,10 @@ Megszakítás futás közben: `<git-common-dir>/websuli-qa-evidence/blind-review
 - **Gépi zár (egy sáv a nehéz köröknek, tulajdonosi utasítás 2026-11-19):** ha a `WEBSULI_MACHINE_LOCK_DIR` környezeti változó a gép
   zár-mappájára mutat, a három nehéz eszköz futás előtt megszerzi a zárat (atomi `mkdir`, `gazda.txt`: „blind-review <fej12> <eszköz>
   <UTC>”), legfeljebb 20 percig vár (a falióra-kereten belül), és a futás után — hibánál is — elengedi. Foglalt gépen az eszköz
-  „NEM FUTOTT: gép foglalt” eredményt ad (nem bukás). A változó nélkül (CI) nincs zárolás. Idegen zárat a futtató soha nem bont.
+  „NEM FUTOTT: gép foglalt” eredményt ad (nem bukás), a futás a többi eszközzel folytatódik, és a jelentés „Mit NEM vizsgáltam”
+  szakaszának kötelezően meg kell neveznie a nem futott eszközt (gépi ellenőrzés). A zárra várt idő NEM számít a falióra-keretbe:
+  saját összkorlátja van (`machineLockWaitTotalSec` = 30 perc / futás), és a Gépi összegzés kiírja. A változó nélkül (CI) nincs
+  zárolás. Idegen zárat a futtató soha nem bont.
 - A futtatással igazolt lelet „részben igazolt”, ha a próba elszigetelt volt (saját homokozós fájl, egységteszt, típusellenőrzés —
   a valódi hívási lánc helyett); „teljes úton igazolt” csak böngészős vagy adatbázisos futás lehet.
 - Az eldobható munkafa `source/node_modules`-a a futtató checkoutjának telepítésére csatol; eltérő `package-lock.json` esetén az

@@ -104,7 +104,7 @@ export function buildUserMessage({ head, base, specs, goal, stat, warnings = [] 
  * A leadott jelentés ellenőrzése: forma (ugyanazokkal a függvényekkel, mint a record-review.mjs) + a leletek GÉPI visszaellenőrzése
  * (findings.mjs). Csak akkor fogadható el, ha minden blokkoló / közepes lelet hivatkozása visszaellenőrizhető.
  */
-export function validateReport(text, head, cfg, { findings, root, runLog = [] } = {}) {
+export function validateReport(text, head, cfg, { findings, root, runLog = [], notRun = [] } = {}) {
   if (text.length > (cfg.reportMaxChars ?? 40_000)) return { ok: false, error: `a jelentés túl hosszú (legfeljebb ${cfg.reportMaxChars ?? 40_000} karakter)` };
   const problems = [];
   const verdict = reportVerdict(text);
@@ -116,7 +116,21 @@ export function validateReport(text, head, cfg, { findings, root, runLog = [] } 
   if (miss.length) problems.push(`hiányzó kötelező fejléc: ${miss.map((m) => `„## ${m}”`).join(', ')}`);
   const check = verifyFindings({ findings, root, runLog, reportText: text, verdict });
   problems.push(...check.errors);
+  const notTested = notTestedSection(text);
+  for (const t of [...new Set(notRun.map((n) => n.tool))]) {
+    if (!notTested.includes(t)) problems.push(`a(z) ${t} eszköz nem futott (gép foglalt) — a „## Mit NEM vizsgáltam” szakasz nevezze meg (${t}), és írja le, mit nem tudtál így mérni`);
+  }
   return problems.length ? { ok: false, error: problems.join('; ') } : { ok: true, check };
+}
+
+/** A „## Mit NEM vizsgáltam” szakasz szövege (a következő `## ` fejlécig). */
+export function notTestedSection(text) {
+  const s = String(text).replace(/\r\n/g, '\n');
+  const a = s.search(/^#{1,6}\s*Mit NEM vizsgáltam/m);
+  if (a < 0) return '';
+  const rest = s.slice(a);
+  const b = rest.slice(3).search(/^#{1,6}\s/m);
+  return b < 0 ? rest : rest.slice(0, b + 3);
 }
 
 // ---- Prompt-gyorsítótár (docs/specs/2026-11-18-vak-ellenor-deepseek.md, C1–C5) ---------------------------------------------------
@@ -172,12 +186,13 @@ export function estimateNextUsd({ pendingChars, lastPromptTokens, cacheWarm, cfg
  */
 export function createBudget({ maxUsd, maxRounds, maxWallMs, maxCompletionTokens, cfg = {}, now = () => Date.now(), stopRequested = () => null }) {
   const s = { spentUsd: 0, calls: 0, retries: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0,
-    costSources: new Set(), startedAt: now(), lastPromptTokens: 0, lastCallUsd: 0, lastCallAt: null, callsDetail: [] };
+    costSources: new Set(), startedAt: now(), lastPromptTokens: 0, lastCallUsd: 0, lastCallAt: null, callsDetail: [], lockWaitMs: 0 };
   const ttlMs = (cfg.promptCache?.ttlSec ?? 300) * 1000;
   const soft = () => {
     const stop = stopRequested();
     if (stop) return `megszakítva (${stop})`;
-    if (now() - s.startedAt >= maxWallMs) return `falióra-időkorlát (${Math.round(maxWallMs / 60_000)} perc)`;
+    // A gépi zárra várakozás (lockWaitMs) NEM számít a falióra-keretbe — annak saját korlátja van (machineLockWaitTotalSec).
+    if (now() - s.startedAt - s.lockWaitMs >= maxWallMs) return `falióra-időkorlát (${Math.round(maxWallMs / 60_000)} perc; a gépi zár-várakozás nélkül)`;
     return null;
   };
   return {
@@ -197,6 +212,8 @@ export function createBudget({ maxUsd, maxRounds, maxWallMs, maxCompletionTokens
       return null;
     },
     begin() { s.calls += 1; },
+    /** A gépi zárra várakozott idő: kivonódik a falióra-keretből. */
+    excludeLockWait(ms) { s.lockWaitMs += Math.max(0, Number(ms) || 0); },
     /** Sikeres válasz: a tényleges `usage` alapján (a gyorsítótár kedvezményével együtt); `usage` nélkül a becsléssel terhel. */
     charge(usage, estimateUsd) {
       const c = usageCost(usage, cfg.fallbackPriceUsdPerMTok);
@@ -398,7 +415,8 @@ export function incompleteReport({ head, stopReason, notes }) {
 export function runFooter({ model, state, cache }) {
   return `\n---\n_Gépi lábléc (blind-review futtató): modell ${model}; ${state.calls} modellhívás (${state.retries} újrapróba); `
     + `tokenek: ${state.promptTokens} be (gyorsítótárból ${state.cachedTokens}) / ${state.completionTokens} ki; `
-    + `gyorsítótár-találat a 2. hívástól: ${cache.hitRatioFromSecondCall == null ? '—' : `${(cache.hitRatioFromSecondCall * 100).toFixed(1)}%`}; költség: ${state.spentUsd.toFixed(4)} USD._\n`;
+    + `gyorsítótár-találat a 2. hívástól: ${cache.hitRatioFromSecondCall == null ? '—' : `${(cache.hitRatioFromSecondCall * 100).toFixed(1)}%`}; költség: ${state.spentUsd.toFixed(4)} USD; `
+    + `gépi zár-várakozás: ${((state.lockWaitMs ?? 0) / 60_000).toFixed(1)} perc (a falióra-keretbe nem számít)._\n`;
 }
 
 export function buildEvidence({ args, cfg, baseSha, result, state, counts, reportText, verdict, startedAt, endedAt, reportPath, cache, findings = null }) {
@@ -419,6 +437,7 @@ export function buildEvidence({ args, cfg, baseSha, result, state, counts, repor
     retries: state.retries,
     tokens: { prompt: state.promptTokens, completion: state.completionTokens, cached: state.cachedTokens, cacheWrite: state.cacheWriteTokens, reasoning: state.reasoningTokens },
     cache,
+    lockWaitMs: state.lockWaitMs,
     callsDetail: state.callsDetail,
     costUsd: Number(state.spentUsd.toFixed(6)),
     costSource: [...state.costSources],
@@ -499,8 +518,9 @@ async function main() {
     let budgetRef = null;
     const tools = makeTools({
       root: wt.root, base: baseSha, head, cfg, key, nodeModulesReal: wt.nodeModulesReal,
-      remainingMs: () => (budgetRef ? args.maxMinutes * 60_000 - (Date.now() - budgetRef.state.startedAt) : Infinity),
-      onReport: (t, findings, runLog) => { const v = validateReport(t, head, cfg, { findings, root: wt.root, runLog }); if (v.ok) { box.report = t; box.check = v.check; } return v; },
+      remainingMs: () => (budgetRef ? args.maxMinutes * 60_000 - (Date.now() - budgetRef.state.startedAt - budgetRef.state.lockWaitMs) : Infinity),
+      onLockWait: (ms) => budgetRef?.excludeLockWait(ms),
+      onReport: (t, findings, runLog) => { const v = validateReport(t, head, cfg, { findings, root: wt.root, runLog, notRun: tools.notRun }); if (v.ok) { box.report = t; box.check = v.check; } return v; },
     });
     const stopFile = join(evDir, 'blind-review.stop');
     const budget = createBudget({

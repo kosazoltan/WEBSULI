@@ -140,6 +140,7 @@ export function summaryMarkdown({ items, counts, cache, state, model }) {
     `- tokenek: ${state.promptTokens} bemeneti (ebből gyorsítótárból: ${state.cachedTokens}, gyorsítótárba írva: ${state.cacheWriteTokens}), ${state.completionTokens} kimeneti`,
     `- gyorsítótár-találati arány a 2. hívástól: ${cache.hitRatioFromSecondCall == null ? '—' : `${(cache.hitRatioFromSecondCall * 100).toFixed(1)}%`}; becsült megtakarítás: ${cache.savedUsdEstimate.toFixed(4)} USD`,
     `- költség (a tényleges usage alapján): ${state.spentUsd.toFixed(4)} USD`,
+    `- gépi zár-várakozás összesen: ${((state.lockWaitMs ?? 0) / 60_000).toFixed(1)} perc (a falióra-keretbe nem számít)`,
     '',
   ].join('\n');
 }

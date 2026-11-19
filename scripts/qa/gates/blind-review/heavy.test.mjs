@@ -271,3 +271,44 @@ test('nehéz futás a gépi zárral: megszerzi, a futás alatt fogja, hibánál 
   const noLock = mk(() => ({ code: 0, stdout: 'kész', stderr: '', ms: 1 }), { machineLockDir: null });
   assert.match(await noLock.tools.call('run_db_tests', {}), /kilépési kód: 0/, 'zár-mappa nélkül (CI) nincs zárolás');
 });
+
+// ---- A gépi zár-várakozás nem a falióra-keretből megy (mért: a hang-ág ellenőrzése kétszer NEM TELJES lett a zárra várva) --------
+
+test('zár-várakozás: a falióra-keretbe NEM számít, saját összkorláttal; a NEM FUTOTT eszköz bekerül a notRun listába', async () => {
+  const dir = lockBase();
+  mkdirSync(dir);
+  writeFileSync(join(dir, 'gazda.txt'), 'idegen-kapu gate:push');
+  let t = 0;
+  const waits = [];
+  const calls = [];
+  const run = async (file, args) => { calls.push(file); return { code: 0, stdout: '', stderr: '', ms: 1 }; };
+  const tools = makeTools({ root: repo.root, base: repo.base, head: repo.head, cfg: { ...CFG, machineLockWaitSec: 1200, machineLockWaitTotalSec: 1500 }, env: process.env, run,
+    dockerPs: async () => '', now: () => t, sleep: async (ms) => { t += ms; }, onReport: () => ({ ok: true }), isTracked: () => true, machineLockDir: dir,
+    onLockWait: (ms) => waits.push(ms) });
+  assert.match(await tools.call('run_db_tests', {}), /^NEM FUTOTT: gép foglalt/);
+  assert.match(await tools.call('run_db_tests', {}), /^NEM FUTOTT: gép foglalt/);
+  assert.match(await tools.call('run_e2e', { specs: ['source/tests/advent-calendar.spec.ts'] }), /^NEM FUTOTT: gép foglalt/);
+  assert.deepEqual(waits, [1_200_000, 300_000, 0], 'az első kérés legfeljebb 20 percet, utána csak az összkeret maradéka (25 perc összesen)');
+  assert.deepEqual(tools.notRun.map((n) => n.tool), ['run_db_tests', 'run_db_tests', 'run_e2e']);
+  assert.ok(!calls.includes(process.execPath));
+
+  const { createBudget } = await import('./blind-review.mjs');
+  let clock = 0;
+  const b = createBudget({ maxUsd: 2, maxRounds: 99, maxWallMs: 40 * 60_000, maxCompletionTokens: 1e9, cfg: CFG, now: () => clock });
+  clock = 55 * 60_000;
+  assert.match(b.precheck(0), /falióra-időkorlát/, 'zár-várakozás nélkül 55 perc túllépné a 40 perces keretet');
+  b.excludeLockWait(25 * 60_000);
+  assert.equal(b.precheck(0), null, 'a 25 perc zár-várakozás nem számít bele: 55 − 25 = 30 perc < 40');
+  assert.equal(b.state.lockWaitMs, 25 * 60_000);
+});
+
+test('a NEM FUTOTT nehéz eszközt a jelentés „Mit NEM vizsgáltam” szakasza kötelezően megnevezi', async () => {
+  const { validateReport } = await import('./blind-review.mjs');
+  const report = (notTested) => `# R\nFej: ${'b'.repeat(40)}\n## Ítélet: IGEN\n## Leletek\n## Mit próbáltam megtörni, és nem sikerült\n- x\n## Mit NEM vizsgáltam\n${notTested}\n## Megcáfolt gyanúk\n- run_e2e itt nem számít\n`;
+  const opts = { findings: [], root: repo.root, runLog: [], notRun: [{ tool: 'run_e2e', reason: 'foglalt' }] };
+  const bad = validateReport(report('- böngésző'), 'b'.repeat(40), CFG, opts);
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /a\(z\) run_e2e eszköz nem futott \(gép foglalt\)/);
+  assert.equal(validateReport(report('- run_e2e: a gép foglalt volt, a böngészős út nem mérve'), 'b'.repeat(40), CFG, opts).ok, true);
+  assert.equal(validateReport(report('- böngésző'), 'b'.repeat(40), CFG, { ...opts, notRun: [] }).ok, true);
+});
