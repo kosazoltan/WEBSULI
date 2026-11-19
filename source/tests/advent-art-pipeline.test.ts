@@ -469,3 +469,54 @@ test("két átfedő futás: a költségkönyv, a jelöltszámlálás és a terv 
   assert.match(body, /jobs: live\.plan\.jobs,/);
   assert.doesNotMatch(body, /jobs: plan\.jobs,|spent: alreadySpent,/, "az éles futás nem az előnézetből dolgozik");
 });
+
+test("a runUnderLock a pillanatképet a zár megszerzése UTÁN készíti: ha a másik futás a „B” indulása és zárolása KÖZÖTT fejeződik be, a „B” már annak a könyvét és jelöltjeit látja (vak ellenőr 3. kör KÖZEPES-1; M3 mutáció)", async () => {
+  const MAX_USD = 7;
+  const item = { ...byId("advent-frame"), candidates: 2, resolution: "2K" as const, references: [] }; // 2 × 0,09 USD
+  const dir = mkdtempSync(path.join(tmpdir(), "advent-zar-sorrend-"));
+  try {
+    const log = path.join(dir, "log.jsonl");
+    const lockFile = path.join(dir, ".run.lock");
+    writeFileSync(log, JSON.stringify({ status: "started", estUsd: 6.8 }) + "\n"); // induláskor 6,80 / 7 USD, 0 jelölt
+    const net = fakeFetch(Array.from({ length: 8 }, () => okImage));
+    const made = () => (existsSync(path.join(dir, item.id)) ? readdirSync(path.join(dir, item.id)).length : 0);
+    const save = () => { mkdirSync(path.join(dir, item.id), { recursive: true }); writeFileSync(path.join(dir, item.id, `${made()}.jpg`), "kép"); };
+    const events: string[] = [];
+    const outcome = await artLib.runUnderLock({
+      // A „B” futás a zárat kéri. Közvetlenül előtte ér véget az „A” futás (a „B” indulása UTÁN): 2 kép, 0,18 USD a könyvben.
+      acquire: () => {
+        for (let i = 0; i < 2; i++) { appendFileSync(log, JSON.stringify({ status: "started", estUsd: 0.09 }) + "\n"); save(); }
+        const release = acquireRunLock(dir);
+        events.push("acquire");
+        return () => { events.push("release"); release(); };
+      },
+      snapshot: () => {
+        events.push(existsSync(lockFile) ? "snapshot-zár-alatt" : "snapshot-ZÁR-NÉLKÜL");
+        const alreadySpent = readLedger(readFileSync(log, "utf8")).spentUsd;
+        return { alreadySpent, plan: planJobs([item], { resolution: "2K", max: 100, maxUsd: MAX_USD, existing: { [item.id]: made() }, alreadySpent }) };
+      },
+      run: async (state) => {
+        events.push("run");
+        const budget: Budget = { spent: state.alreadySpent, maxUsd: MAX_USD };
+        return runJobs({
+          jobs: state.plan.jobs, chosenRefs: new Set<string>(),
+          generate: async (job) => attemptWithinBudget({
+            budget, estUsd: job.estUsd, maxAttempts: 1,
+            onStart: () => appendFileSync(log, JSON.stringify({ status: "started", estUsd: job.estUsd }) + "\n"),
+            attempt: async () => { await requestImage(net.impl, { endpoint: "https://example.invalid/images", key: "k", body: {} }); save(); },
+            onError: () => undefined,
+          }),
+        });
+      },
+    });
+    // A sorrend: zár → pillanatkép (a zárfájl már létezik) → futás → elengedés.
+    assert.deepEqual(events, ["acquire", "snapshot-zár-alatt", "run", "release"]);
+    // A viselkedés: a „B” az „A” utáni állapotból tervez → nem indít fizetős hívást, nem költ a plafon fölé, nem gyárt újra.
+    assert.equal(net.calls.length, 0, "a „B” futás nem indított hívást");
+    assert.equal(outcome.made, 0);
+    const spent = readLedger(readFileSync(log, "utf8")).spentUsd;
+    assert.ok(Math.abs(spent - 6.98) < 1e-9 && spent <= MAX_USD, `a könyv: ${spent}`);
+    assert.equal(made(), 2, "kész jelölt nem készült újra");
+    assert.equal(existsSync(lockFile), false, "a zár felszabadult");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
