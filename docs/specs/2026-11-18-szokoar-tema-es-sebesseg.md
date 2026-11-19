@@ -298,3 +298,16 @@ Minden pont előbb bukó teszttel.
 - **KICSI:** hangkontextus mozdulathoz kötve (nincs konzol-figyelmeztetés), az Indításkor is; részleges modellhibánál nincs
   kettőzés; a modell-keret őre a GLB-kből számol; az olvasási ablak a director saját bemutatásán (helyes statisztika); a
   mérési képek tömörítése.
+
+### 7.7 A PR előtti kapu leletei (fej 90b3f83f, 2026-11-19)
+
+A `gate:pr` a böngészős körben két, a saját kódomból eredő hibát fogott (a harmadik bukás — Vihargarázs 915×412 — nem ennek az
+ágnak a kódja; jelentve).
+- **M11 (közös mobil mérő, Szökőár, mindhárom nézet):** a K2 javítás `compileAsync` hívása a three.js-ben `extensions.get`-tel
+  kérdezi a `KHR_parallel_shader_compile` kiterjesztést, ami hiányzó kiterjesztésnél konzol-figyelmeztetést ír. Javítás: a
+  jelenet `extensions.has`-szal kérdez (az nem ír), és kiterjesztés nélkül a szinkron `compile`-t hívja — ott a programok amúgy
+  is szinkron fordulnak. A mérő zajszűrőjét NEM bővítjük. Bukó teszt: a meglévő M11 (a kapu naplójában 3 bukás).
+- **7.3 mérce terhelt gépen (360×640, 70 %-os víz, egyszeri bukás):** az ok méréssel dől el, nem találgatással — a beállási idő
+  (`layoutSettleMs`) és a figura tényleges szabaddá válása 1× / 4× / 6× CPU-n, valódi GPU-val; a teszt a mért értéket a naplóba is
+  kiírja (`SETTLE|…`). A javítás a mérésből következik; a 600 ms-os mérce nem lazul.
+- Friss `origin/main` beolvasztva; a csapdakatalógusban a saját bejegyzések a főág C-75-e után (C-76 / C-77 / C-78).

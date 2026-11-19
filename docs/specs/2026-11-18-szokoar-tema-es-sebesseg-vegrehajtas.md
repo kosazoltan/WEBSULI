@@ -89,6 +89,16 @@ indítási cél a telefonos nézetben egy mérésben (250 ms) még nem teljesül
     `lib/tsunami/water.ts`, `lib/tsunami/pacing.ts`), mérés nyugodt gépen, képek (álló 390×844 és 360×640, alacsony / közepes /
     magas víz), kapuk.
 
+12. **A PR előtti kapu leletei (terv `docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md` 7.7):**
+   a. `git merge origin/main`; a `docs/agent-csapdak.md` saját bejegyzései a főág számai után, a hivatkozások követik.
+   b. `TsunamiScene3D.tsx`: `compileAsync` csak akkor, ha `renderer.extensions.has("KHR_parallel_shader_compile")`; különben
+      `renderer.compile`. Ellenőrzés: a közös mobil mérő Szökőár-köre (M11) zöld.
+   c. `tsunami-play.spec.ts`: a mért beállási idő kiírása (`SETTLE|nézet|víz|ms`) — a mérce változatlan.
+   d. Mérés (`layoutSettleMs`, a figura szabaddá válása; 1× / 4× / 6× CPU, 360×640, 70 %-os víz), és a mérésből következő
+      javítás a `TsunamiEscapeEnglish.tsx` / `TsunamiScene3D.tsx` eltolás-időzítésében; utána a 360×640-es elrendezés-esetek
+      ismételt futtatása (`--repeat-each`).
+   e. Kapuk: `gate:stage` → böngészős kör → `gate:push` → vak visszanézés (koordinátor) → `gate:pr`.
+
 ## Elfogadás
 - A víz MINDIG látszik, a menedék MINDIG a képen van; jó válasznál a víz képi szintje 0,5 s-on belül csökken, rossznál nő.
 - A kérdés nem állítja meg a világot (a víz lassítva emelkedik); a válaszgombok ≥ 48 px, nem takarják a figurát és a tárcsát.
