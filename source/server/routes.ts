@@ -2660,7 +2660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Spec 2026-11-09-felolvasas-tartalek: a lecke „Meghallgatás” gombjának tartaléka, ha a böngésző beszédmotorja nem szól.
   // Azonos eredetű MP3 (a Vercel CSP data:/blob: hangot nem enged); mellékhatás nélküli, gyorsítótárazható (böngésző 1 nap,
-  // Vercel CDN 7 nap); a ttsAudioLimiter (index.ts) védi. Tartománykérésre 206 (iOS Safari így tölti a hangot).
+  // Vercel CDN 7 nap); a szerveres tartalék saját korlátja védi (server/tts/rate-limits.ts). Tartománykérésre 206 (iOS Safari így tölti a hangot).
   const ttsAudioCache = new TtsAudioCache<Buffer>();
   app.get("/api/tts/audio", async (req, res) => {
     const parsed = parseTtsAudioQuery(req.query as Record<string, unknown>);

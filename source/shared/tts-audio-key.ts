@@ -17,11 +17,21 @@ export const TTS_AUDIO_AVAILABLE_ROUTE = `${TTS_AUDIO_ROUTE}/available`;
 export const TTS_AUDIO_AVAILABILITY_MAX_KEYS = 200;
 /**
  * A hangtár (hangfájl + jegyzék) SAJÁT sebességkorlátja, egy közös IP-ről netező osztályra méretezve. Az előtöltés (S8d) miatt egy
- * osztály a lecke megnyitásakor EGYSZERRE kér: 30 tanuló × ~40 szöveg (20 tételes szószedet: szó + példamondat) × 2 kérés (iOS Safari
- * a hangot tartománykérésekkel tölti, és a 206-os válasz nem kerül a CDN gyorsítótárába) = 2 400 hangfájl-kérés + 30 jegyzék-kérés
- * = 2 430; tartalékkal kerekítve 3 000 kérés / 15 perc / IP. A szerveres tartalék (`/api/tts/audio`) kerete ettől független.
+ * osztály a lecke megnyitásakor EGYSZERRE kér: 30 tanuló × legfeljebb 60 előtöltött hang × 2 kérés (iOS Safari
+ * a hangot tartománykérésekkel tölti, és a 206-os válasz nem kerül a CDN gyorsítótárába). A keret az ELŐTÖLTÉS PLAFONJÁBÓL
+ * (`LESSON_AUDIO_PRELOAD_MAX` = 60 hang) számol: 30 × 60 × 2 + 30 = 3 630 kérés, 20% tartalékkal 4 500 kérés / 15 perc / IP — ha a
+ * plafon nő, a keret vele nő. A szerveres tartalék (`/api/tts/audio`) kerete ettől független.
  */
-export const LESSON_AUDIO_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 3000, classSize: 30, textsPerLesson: 40, requestsPerAudio: 2 } as const;
+/** Egy lecke megnyitásakor legfeljebb ennyi hang töltődik elő (S8d) — a sebességkeret EBBŐL számol, a kettő nem válhat szét. */
+export const LESSON_AUDIO_PRELOAD_MAX = 60;
+/**
+ * A hangtár kerete a megadott előtöltési plafonhoz: egy 30 fős osztály teljes előtöltése (hangonként 2 kérés a tartománykérések
+ * miatt) + 30 jegyzék-kérés, 20% tartalékkal, 500-ra felfelé kerekítve.
+ */
+export function lessonAudioRateLimitMax(preloadMax: number, classSize = 30, requestsPerAudio = 2): number {
+  return Math.ceil((classSize * preloadMax * requestsPerAudio + classSize) * 1.2 / 500) * 500;
+}
+export const LESSON_AUDIO_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: lessonAudioRateLimitMax(LESSON_AUDIO_PRELOAD_MAX), classSize: 30, textsPerLesson: LESSON_AUDIO_PRELOAD_MAX, requestsPerAudio: 2 } as const;
 const LANGUAGE_CODE = /^[a-z]{2,3}(-[A-Z0-9]{2,4})?$/;
 const VOICE_VERSION = /^[a-z0-9][a-z0-9.-]{0,15}$/;
 

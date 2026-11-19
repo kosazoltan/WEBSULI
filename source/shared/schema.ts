@@ -1293,6 +1293,8 @@ export const lessonTtsAudio = pgTable(
     language: varchar("language", { length: 8 }).notNull(),
     mime: varchar("mime", { length: 40 }).notNull(),
     bytes: bytea("bytes").notNull(),
+    // A migráció `CHECK (size > 0)` megkötését a séma — a repó meglévő tábláinak mintájára (pl. lesson_clip_media) — nem fejezi ki;
+    // az érvényes méretet az írás előtt a tároló réteg ellenőrzi (server/tts/audio-store.ts).
     size: integer("size").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

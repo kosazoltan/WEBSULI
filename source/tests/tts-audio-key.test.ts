@@ -31,6 +31,11 @@ test("normalizálás: a kiejtést nem érintő írásmód-különbség nem ad m�
 });
 
 test("ami a kiejtést módosítja, az megmarad: kis- / nagybetű és írásjel külön kulcsot ad", async () => {
+  // Vak review (szerver) K8: a módosító aposztróf és a nulla szélességű jelek egyenként.
+  for (const [raw, clean] of [["don\u02BCt", "don't"], ["tri\u200Cangle", "triangle"], ["tri\u200Dangle", "triangle"], ["tri\u2060angle", "triangle"]]) {
+    assert.equal(normalizeSpeechText(raw), clean, JSON.stringify(raw));
+    assert.equal(await ttsAudioHash(raw, "en-GB"), await ttsAudioHash(clean, "en-GB"));
+  }
   assert.equal(normalizeSpeechText("Polish"), "Polish");
   // Review A2: NFC, nem NFKC — a kompatibilitási alakok (felső index, ligatúra, teljes szélességű betű) nem olvadnak össze.
   for (const [compat, plain] of [["x\u00B2", "x2"], ["\uFB01sh", "fish"], ["\uFF21", "A"], ["\u2460", "1"]]) {

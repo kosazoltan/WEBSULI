@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
 import express from "express";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { registerLessonTtsAudio, ttsAudioReply, ttsAvailabilityReply, TTS_AUDIO_CACHE_CONTROL_IMMUTABLE } from "../server/tts/audio-routes";
 import { LESSON_AUDIO_RATE_LIMIT, TTS_AUDIO_AVAILABILITY_MAX_KEYS, parseTtsAvailabilityQuery, ttsAudioAvailabilityUrl } from "../shared/tts-audio-key";
 import {
-  assertTotalWithinLimit, ttsAudioLimits, validateTtsAudioRow, TtsAudioInputError, TtsStorageLimitError, TTS_AUDIO_LIMITS,
+  assertTotalWithinLimit, ttsAudioLimits, validateTtsAudioRow, DbTtsAudioStore, TtsAudioInputError, TtsStorageLimitError, TTS_AUDIO_LIMITS,
   type TtsAudioRow, type TtsAudioStore,
 } from "../server/tts/audio-store";
 
@@ -261,12 +263,62 @@ test("jegyzék végpont (valódi HTTP): az „available” nem kulcs — a jegyz
 test("sebességkorlát: a hangtár kerete egy egyszerre megnyitó osztály előtöltésére méretezett", () => {
   const { classSize, textsPerLesson, requestsPerAudio, max, windowMs } = LESSON_AUDIO_RATE_LIMIT;
   const classLoad = classSize * textsPerLesson * requestsPerAudio + classSize;
-  assert.equal(classLoad, 2430, "30 tanuló × 40 hang × 2 kérés (tartománykérés) + 30 jegyzék-kérés");
+  assert.equal(classLoad, 3630, "30 tanuló × 60 előtöltött hang × 2 kérés (tartománykérés) + 30 jegyzék-kérés");
   assert.ok(max >= classLoad * 1.2, "tartalékkal");
-  assert.equal(max, 3000);
+  assert.equal(max, 4500);
   assert.equal(windowMs, 15 * 60 * 1000);
 });
 
+// Vak review (szerver) K2: a hangtár útjain a Vercel nem tesz `no-store`-t — a belső hiba és az ismeretlen alút válasza a szerveren múlik.
+test("K2: a hangtár 500-as válasza és az ismeretlen alút / metódus 404-e kifejezetten `no-store`", async () => {
+  const store: TtsAudioStore = {
+    async get() { throw new Error("adatbázishiba"); },
+    async existing() { throw new Error("adatbázishiba"); },
+    async has() { return new Set(); },
+    async put() { return "stored"; },
+    async totalBytes() { return 0; },
+    async usage() { return { totalBytes: 0, rows: 0, byVersion: {} }; },
+    async purgeOtherVersions() { return { rows: 0, bytes: 0 }; },
+  };
+  const app = express();
+  registerLessonTtsAudio(app, store);
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/tts/lesson-audio`;
+  try {
+    for (const path of [`/${ID}`, `/available?keys=${ID}`]) {
+      const failed = await fetch(`${base}${path}`);
+      assert.deepEqual([failed.status, failed.headers.get("cache-control")], [500, "no-store"], path);
+      assert.deepEqual(await failed.json(), { message: "A hang most nem érhető el." }, "a hiba részletei nem kerülnek a válaszba");
+    }
+    for (const [path, method] of [[`/${ID}/extra`, "GET"], ["/a/b/c", "GET"], [`/${ID}`, "POST"], [`/${ID}`, "DELETE"], ["/available", "PUT"], ["", "GET"]] as const) {
+      const unknown = await fetch(`${base}${path}`, { method });
+      assert.deepEqual([unknown.status, unknown.headers.get("cache-control")], [404, "no-store"], `${method} ${path}`);
+      await unknown.arrayBuffer();
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+// Vak review (szerver) K8: az adatbázisos tároló kulcsalak-őre és a jegyzék vágása — adatbázis nélkül, ál-kapcsolattal.
+test("K8: a tároló hibás alakú kulcsra nem kérdez az adatbázistól; a jegyzék legfeljebb 200 érvényes kulcsot kérdez, egy lekérdezéssel", async () => {
+  const queries: number[] = [];
+  const dialect = new PgDialect();
+  const database = { execute: async (query: SQL) => { queries.push(dialect.sqlToQuery(query).params.length); return { rows: [] }; } };
+  const store = new DbTtsAudioStore(async () => database as never);
+  for (const bad of ["", "abc", ID.toUpperCase(), `${ID}0`, "'; SELECT 1; --"]) assert.equal(await store.get(bad), null, bad);
+  assert.deepEqual(queries, [], "hibás kulcsra nincs lekérdezés");
+  assert.equal(await store.get(ID), null);
+  assert.deepEqual(queries, [1]);
+  queries.length = 0;
+  const many = Array.from({ length: 260 }, (_, i) => i.toString(16).padStart(32, "0"));
+  assert.deepEqual(await store.existing([...many, "nem-kulcs", many[0]]), []);
+  assert.deepEqual(queries, [200], "egyetlen lekérdezés, a darabszám-plafonra vágva, érvénytelen és ismételt kulcs nélkül");
+  queries.length = 0;
+  assert.deepEqual(await store.existing(["nem-kulcs", ""]), []);
+  assert.deepEqual(queries, [], "érvényes kulcs híján nincs lekérdezés");
+});
 test("a Vercel a leckehangot gyorsítótárazhatja (nincs no-store, átírás-gyorsítótár bekapcsolva), a többi /api választ nem", () => {
   const cfg = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
   const noStore = cfg.headers.filter((h) => h.headers.some((x) => x.key === "Cache-Control" && x.value.includes("no-store")));

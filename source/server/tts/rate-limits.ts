@@ -26,7 +26,11 @@ export function mountTtsRateLimits(app: Express): void {
     skip: (req) => isTtsAudioSubPath(req.path) || isTtsLessonAudioSubPath(req.path),
   });
   const fallbackLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, ...TTS_RATE_LIMITS.fallback, message: MESSAGE, standardHeaders: true, legacyHeaders: false });
-  const lessonAudioLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, ...TTS_RATE_LIMITS.lessonAudio, message: MESSAGE, standardHeaders: true, legacyHeaders: false });
+  const lessonAudioLimiter = rateLimit({
+    keyGenerator: clientIpKeyGenerator, ...TTS_RATE_LIMITS.lessonAudio, message: MESSAGE, standardHeaders: true, legacyHeaders: false,
+    // A hangtár útjain a Vercel nem tesz `no-store`-t (a tartós gyorsítótár kivétele miatt): a 429 kifejezetten nem tárolható.
+    handler: (_req, res, _next, options) => { res.status(options.statusCode).set("Cache-Control", "no-store").send(options.message); },
+  });
   app.use("/api/tts", generalLimiter);
   app.use("/api/tts/audio", fallbackLimiter);
   app.use(TTS_AUDIO_ROUTE, lessonAudioLimiter);

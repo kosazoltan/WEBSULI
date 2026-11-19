@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { TtsAudioCache, parseAudioRange } from "../../shared/speech-fallback";
 import { parseTtsAvailabilityQuery, TTS_AUDIO_AVAILABLE_ROUTE, TTS_AUDIO_ID, TTS_AUDIO_ROUTE } from "../../shared/tts-audio-key";
 import { asyncRoute } from "../lib/async-route";
+import { logger } from "../lib/logger";
 import type { TtsAudio, TtsAudioEntry, TtsAudioStore } from "./audio-store";
 
 /**
@@ -66,11 +67,20 @@ export function registerLessonTtsAudio(app: Express, store: TtsAudioStore): void
   const cache = new TtsAudioCache<Buffer>();
   const mimes = new Map<string, string>();
   // A jegyzék útvonala a `/:id` ELŐTT áll (különben az „available” szó kulcsnak számítana, és 400-at kapna).
-  app.get(TTS_AUDIO_AVAILABLE_ROUTE, asyncRoute(async (req: Request, res: Response) => {
+  // A hangtár útjain a Vercel NEM tesz `no-store`-t a válaszra (a `vercel.json` kivétele a tartós gyorsítótár miatt), ezért itt
+  // MINDEN nem sikeres válasz kifejezetten `no-store`: a belső hiba (500) és az ismeretlen alút / metódus (404) is.
+  const guarded = (handler: (req: Request, res: Response) => Promise<unknown>) => asyncRoute(async (req: Request, res: Response) => {
+    try { await handler(req, res); }
+    catch (error) {
+      logger.error("[TTS-AUDIO] A hangtár végpontja hibázott:", error);
+      if (!res.headersSent) res.status(500).set("Cache-Control", NO_STORE).json({ message: "A hang most nem érhető el." });
+    }
+  });
+  app.get(TTS_AUDIO_AVAILABLE_ROUTE, guarded(async (req, res) => {
     const reply = await ttsAvailabilityReply(req.query as Record<string, unknown>, (keys) => store.existing(keys));
     res.status(reply.status).set(reply.headers).json(reply.body);
   }));
-  app.get(`${TTS_AUDIO_ROUTE}/:id`, asyncRoute(async (req: Request, res: Response) => {
+  app.get(`${TTS_AUDIO_ROUTE}/:id`, guarded(async (req, res) => {
     const id = req.params.id;
     let audio: Pick<TtsAudio, "mime" | "bytes"> | null = null;
     if (TTS_AUDIO_ID.test(id)) {
@@ -95,4 +105,6 @@ export function registerLessonTtsAudio(app: Express, store: TtsAudioStore): void
     if (reply.status === 404) return res.json({ message: "Nincs ilyen hang." });
     res.end(reply.body);
   }));
+  // Minden más a hangtár előtagja alatt (ismeretlen alút, más metódus): 404, kifejezetten nem tárolható.
+  app.use(TTS_AUDIO_ROUTE, (_req: Request, res: Response) => { res.status(404).set("Cache-Control", NO_STORE).json({ message: "Nincs ilyen hang." }); });
 }
