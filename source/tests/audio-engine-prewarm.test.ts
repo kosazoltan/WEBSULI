@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 /**
- * Csiszoló kör 4. pont (C-75): az első `new AudioContext()` a főszálon 0,8–2 s. A `prewarmAudio()` ezt előre (a menü alatt)
+ * Hang-előmelegítés: az első `new AudioContext()` a főszálon 0,8–2 s. A `prewarmAudio()` ezt előre (a menü alatt)
  * elvégzi, így az első hang (a kérdés-director suhogása, menet közben) már nem hoz létre kontextust.
  */
 test("prewarmAudio egyszer hozza létre a hangkontextust; utána a hangok nem hoznak létre újat", async () => {

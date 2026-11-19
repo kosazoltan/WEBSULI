@@ -307,7 +307,7 @@ export function useAudioSettings(): {
 
 /**
  * A játék menüjében / betöltésekor: a hangkontextus tétlen időben, előre jöjjön létre (terv:
- * docs/specs/2026-11-19-hang-elomelegites.md; C-75). Mérve: az első `new AudioContext()` a főszálon 0,8–2 s — lusta
+ * docs/specs/2026-11-19-hang-elomelegites.md). Mérve: az első `new AudioContext()` a főszálon 0,8–2 s — lusta
  * létrehozásnál ez a menet közepére (az első kérdés suhogására / az első hangra) vagy az indító koppintásra esett.
  *
  * Autoplay-szabály (Chrome, iOS Safari): mozdulat nélkül a kontextus felfüggesztve jön létre, hangot nem ad, a `resume`

@@ -762,7 +762,7 @@ function buildPowerPickupMesh(): THREE.Group {
 /* ===================== Komponens ===================== */
 
 export default function SpaceAsteroidQuiz() {
-  // A hangkontextus a menü / betöltés alatt, tétlen időben jön létre (C-75: lusta létrehozásnál 0,8–2 s menet közben).
+  // A hangkontextus a menü / betöltés alatt, tétlen időben jön létre (terv: docs/specs/2026-11-19-hang-elomelegites.md — lusta létrehozásnál 0,8–2 s menet közben).
   useAudioPrewarm();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // S10 / terv 4.5: közös érintés-észlelés (any-pointer: coarse + valódi érintés) — érintős laptop is kap vezérlőt.

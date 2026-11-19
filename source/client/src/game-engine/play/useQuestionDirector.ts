@@ -79,7 +79,7 @@ function makeDirector(o: UseQuestionDirectorOptions, review: ReviewQueue, seed: 
 export function useQuestionDirector(opts: UseQuestionDirectorOptions): { director: QuestionDirector; reset(seed: number | string, startBand: number): void };
 export function useQuestionDirector(opts: UseQuestionDirectorOptions | null): { director: QuestionDirector | null; reset(seed: number | string, startBand: number): void };
 export function useQuestionDirector(opts: UseQuestionDirectorOptions | null): { director: QuestionDirector | null; reset(seed: number | string, startBand: number): void } {
-  // A hangkontextus a menü / betöltés alatt, tétlen időben jön létre — minden, a közös directort használó játékban (C-75: lusta
+  // A hangkontextus a menü / betöltés alatt, tétlen időben jön létre — minden, a közös directort használó játékban (terv: docs/specs/2026-11-19-hang-elomelegites.md — lusta
   // létrehozásnál az első kérdés suhogására 0,8–2 s-os megakadás esett).
   useAudioPrewarm();
   const optsRef = useRef(opts);

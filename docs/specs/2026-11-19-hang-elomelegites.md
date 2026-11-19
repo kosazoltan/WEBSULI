@@ -1,7 +1,7 @@
 # Hang-előmelegítés — a menet közbeni 1–2 mp-es megakadás megszüntetése minden játékban
 
 Állapot: TERV (2026-11-19). Végrehajtási utasítás: `docs/specs/2026-11-19-hang-elomelegites-vegrehajtas.md`.
-Előzmény: a Szökőár csiszoló köre (`fix/szokoar-tema-es-sebesseg`, `docs/agent-csapdak.md` C-75).
+Előzmény: a Szökőár csiszoló köre (`fix/szokoar-tema-es-sebesseg`, a hangkontextus-megakadás csapda-bejegyzése ott kerül a `docs/agent-csapdak.md`-be).
 
 ## Tény (mérve, 2026-11-18)
 - A Szökőár CPU-profiljában (long-animation-frame + CDP-mintavételezés, 1× CPU) egyetlen 2038 ms-os képkocka közvetlenül az első

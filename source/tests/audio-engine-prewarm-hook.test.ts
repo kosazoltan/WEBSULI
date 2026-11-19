@@ -1,5 +1,5 @@
 /**
- * Hang-előmelegítés horga (terv: docs/specs/2026-11-19-hang-elomelegites.md; C-75). Valódi React-gyökérben (jsdom):
+ * Hang-előmelegítés horga (terv: docs/specs/2026-11-19-hang-elomelegites.md). Valódi React-gyökérben (jsdom):
  * (1) a horog felcsatoláskor NEM hoz létre azonnal kontextust, a tétlen időben igen — egyszer, akkor is, ha több komponens hívja;
  * (2) mozdulat nélkül felfüggesztett kontextusnál az első aktiváló mozdulat folytatja (`resume`), és hangot nem ad;
  * (3) `AudioContext` nélküli böngészőben nem dob hibát; (4) leválasztáskor a figyelők és az időzítő eltűnnek.
