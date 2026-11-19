@@ -13,8 +13,9 @@ export const IS_WIN = process.platform === 'win32';
 // ---- Kimenet-szűrés (D3, E15) ---------------------------------------------------------------------------------------
 
 // A minták lineárisak és nem omlanak össze (docs/specs/2026-11-19-kitakaro-negyzetes-regex.md): `[x]{n}[x]*` a `[x]{n,}` helyett
-// (azonos nyelv, de a V8 a `{n,}` alakot 20 M karakternél veremtúlcsordulással dobja); az e-mail korlátos (helyi rész ≤ 64,
-// címke ≤ 63, ≤ 16 címke), mert a nyitott `[…]+@` minden kezdőpozícióból végigolvasott (300 000 kar. → ~1 perc).
+// (azonos nyelv, de a V8 a `{n,}` alakot 20 M karakternél veremtúlcsordulással dobja). Az e-mail-cím nem regexszel, hanem
+// lineáris pásztázóval megy (redactEmails): a nyitott `[…]+@` minden kezdőpozícióból végigolvasott (300 000 kar. → ~1 perc), a
+// korlátos regex pedig a 16-nál több címkés / 64-nél hosszabb helyi részű címet átengedte (#521).
 const REDACTIONS = [
   [/postgres(?:ql)?:\/\/[^\s"'`<>]+/gi, '<db-url>'],
   [/\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{16}[A-Za-z0-9]*\b/g, '<token>'],
@@ -22,14 +23,64 @@ const REDACTIONS = [
   [/\bsk-(?:ant-)?[A-Za-z0-9_-]{16}[A-Za-z0-9_-]*\b/g, '<token>'],
   [/\bAKIA[0-9A-Z]{16}\b/g, '<aws-key>'],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]{8}[A-Za-z0-9._~+/=-]*/g, 'Bearer <token>'],
-  [/[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.){1,16}[A-Za-z]{2,63}/g, '<email>'],
 ];
+
+const isAlnum = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+const isLetter = (c) => (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+/** Helyi rész: [A-Za-z0-9._%+-] */
+const isLocalChar = (c) => isAlnum(c) || c === 46 || c === 95 || c === 37 || c === 43 || c === 45;
+/** Címke: [A-Za-z0-9-] */
+const isLabelChar = (c) => isAlnum(c) || c === 45;
+
+/**
+ * A tartomány vége a régi minta (`[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`, mohó) szerint, vagy -1: pont-elválasztott,
+ * nem üres címkék; a vége a legutolsó (legalább 2.) címke ≥ 2 betűs elejének vége. Egyszer olvassa a címkefutást.
+ */
+function domainEnd(s, start) {
+  let i = start;
+  let best = -1;
+  for (let label = 0; ; label++) {
+    const ls = i;
+    while (i < s.length && isLabelChar(s.charCodeAt(i))) i++;
+    if (i === ls) break; // üres címke: itt a vége
+    if (label >= 1) {
+      let k = ls;
+      while (k < i && isLetter(s.charCodeAt(k))) k++;
+      if (k - ls >= 2) best = k;
+    }
+    if (i < s.length && s.charCodeAt(i) === 46) i++;
+    else break;
+  }
+  return best;
+}
+
+/**
+ * E-mail-cím → `<email>`, a régi minta (`[A-Za-z0-9._%+-]+@` + tartomány) teljes nyelvével, korlát nélkül, lineárisan: minden
+ * `@`-ból visszafelé a helyi-rész-futás (legfeljebb az előző csere végéig), előre a tartomány. Két szomszédos `@` közti szakaszt
+ * legfeljebb kétszer olvas (a `@` se helyi-, se címkekarakter), rekurzió és visszalépés nincs.
+ */
+function redactEmails(s) {
+  let at = s.indexOf('@');
+  if (at < 0) return s;
+  let out = '';
+  let last = 0;
+  while (at >= 0) {
+    let st = at;
+    while (st > last && isLocalChar(s.charCodeAt(st - 1))) st--;
+    const end = st < at ? domainEnd(s, at + 1) : -1;
+    if (end < 0) { at = s.indexOf('@', at + 1); continue; }
+    out += s.slice(last, st) + '<email>';
+    last = end;
+    at = s.indexOf('@', end);
+  }
+  return out + s.slice(last);
+}
 
 /** Titok, kapcsolati szöveg és e-mail-cím helyőrzőre cserélve — minden kiírás és napló ezen megy át. */
 export function redact(text) {
   let out = String(text ?? '');
   for (const [re, rep] of REDACTIONS) out = out.replace(re, rep);
-  return out;
+  return redactEmails(out);
 }
 
 export function tail(text, n = 40) {

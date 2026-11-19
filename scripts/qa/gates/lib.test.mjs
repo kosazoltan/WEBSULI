@@ -118,7 +118,7 @@ test('redact: lineáris idő hosszú, @ nélküli és tartomány-futáson (300 0
   }
 });
 
-// A régi minták itt (Windows x64, Node) már 6–7 M karakternél dobtak; a 10 M tartalékkal bukik a régi kódon, és ~10 s alatt fut.
+// A régi minták itt (Windows x64, Node) már 6–7 M karakternél dobtak; a 10 M tartalékkal bukik a régi kódon (a pásztázóval < 1 s).
 test('redact: 10 M karakteres token-, Bearer- és tartomány-futás nem omlik össze', () => {
   const n = 10_000_000;
   const cases = [

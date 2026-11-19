@@ -331,6 +331,23 @@ export function redact(text: string, key: string): string {
   return out;
 }
 
+/** Token-karakter: [A-Za-z0-9._~+/=-] (a Bearer- és az sk-or-minta karakterei). */
+const isTokenChar = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+  || c === 46 || c === 95 || c === 126 || c === 43 || c === 47 || c === 61 || c === 45;
+
+/**
+ * Az első `window` karakter; ha a határon token-karakterfutás nyúlik át (az utolsó bent és az első kint is token-karakter), az
+ * egész futás levágva (lineáris visszalépés) — így egy határon átnyúló, a megadott kulcstól eltérő token eleje sem marad (#521).
+ */
+export function trimCrossingTokenRun(text: string, window: number): string {
+  if (text.length <= window) return text;
+  let end = window;
+  if (isTokenChar(text.charCodeAt(window)) && isTokenChar(text.charCodeAt(window - 1))) {
+    while (end > 0 && isTokenChar(text.charCodeAt(end - 1))) end--;
+  }
+  return text.slice(0, end);
+}
+
 /** A kitakarás ablaka a vágott hibarészletekhez (docs/specs/2026-11-19-kitakaro-negyzetes-regex.md). */
 export const REDACT_WINDOW = 64 * 1024;
 
@@ -340,7 +357,7 @@ export const REDACT_WINDOW = 64 * 1024;
  */
 export function redactClip(text: string, key: string, max: number): string {
   const cut = text.length > REDACT_WINDOW;
-  let out = redact(cut ? text.slice(0, REDACT_WINDOW) : text, key);
+  let out = redact(cut ? trimCrossingTokenRun(text, REDACT_WINDOW) : text, key);
   if (cut) out = out.slice(0, Math.max(0, out.length - Math.max(64, key.length)));
   return out.slice(0, max);
 }

@@ -192,6 +192,23 @@ export function maskSecrets(s, key) {
   return out.replace(/AIza[0-9A-Za-z_\-]{20}[0-9A-Za-z_\-]*/g, "AIza***");
 }
 
+/** Token-karakter: [A-Za-z0-9._~+/=-] (az AIza- és a Bearer-minta karakterei). */
+const isTokenChar = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+  || c === 46 || c === 95 || c === 126 || c === 43 || c === 47 || c === 61 || c === 45;
+
+/**
+ * Az első `window` karakter; ha a határon token-karakterfutás nyúlik át (az utolsó bent és az első kint is token-karakter), az
+ * egész futás levágva (lineáris visszalépés) — így egy határon átnyúló, a megadott kulcstól eltérő token eleje sem marad (#521).
+ */
+export function trimCrossingTokenRun(text, window) {
+  if (text.length <= window) return text;
+  let end = window;
+  if (isTokenChar(text.charCodeAt(window)) && isTokenChar(text.charCodeAt(window - 1))) {
+    while (end > 0 && isTokenChar(text.charCodeAt(end - 1))) end--;
+  }
+  return text.slice(0, end);
+}
+
 /** A maszkolás ablaka: a vágott kimenetű hívók csak ennyit maszkolnak a (akár óriási) válaszból. */
 export const MASK_WINDOW = 64 * 1024;
 
@@ -202,7 +219,7 @@ export const MASK_WINDOW = 64 * 1024;
 export function maskClip(s, key, max) {
   const text = String(s ?? "");
   const cut = text.length > MASK_WINDOW;
-  let out = maskSecrets(cut ? text.slice(0, MASK_WINDOW) : text, key);
+  let out = maskSecrets(cut ? trimCrossingTokenRun(text, MASK_WINDOW) : text, key);
   if (cut) out = out.slice(0, Math.max(0, out.length - Math.max(64, key ? key.length : 0)));
   return out.slice(0, max);
 }
