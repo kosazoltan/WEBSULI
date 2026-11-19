@@ -148,7 +148,9 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       "max-width:min(360px,calc(100% - 8px));pointer-events:none;display:flex;flex-direction:column;gap:3px}" +
       // Review #504 (vak, L2): kis fekvő kijelzőn (568×320) se lógjon ki — a gombsor (benne az összecsukó) felül, mindig
       // látszik; a szöveg a maradék magasságban görgethető.
-      ".bc-perf-panel>pre{min-height:0;overflow-y:auto;pointer-events:auto;overscroll-behavior:contain}" +
+      // 2. vak kör M3: a szövegdoboz NEM érinthető (a „jobb: nézelődés” húzás a vászonhoz jut) — csak a gombok azok; a szöveg a
+      // maradék magasságban levágódik (a gombsor felül, az összecsukó mindig elérhető).
+      ".bc-perf-panel>pre{min-height:0;overflow:hidden;pointer-events:none}" +
       "@media (orientation:landscape) and (max-height:600px){.bc-perf-panel{max-width:calc(100% - 340px)}}";
     document.head.append(style);
   }

@@ -267,6 +267,13 @@ for (const view of [
       expect(overlaps(panelBox, box), `a panel takarja a(z) ${i}. vezérlőt`).toBe(false);
     }
     expect(checked, "van mért vezérlő").toBeGreaterThan(0);
+    // A szövegdoboz nem nyeli el a vászonra szánt érintést (2. vak kör M3): a közepén a találat nem a panel szövege.
+    const tb = (await page.getByTestId("bc-perf-text").boundingBox())!;
+    const hitId = await page.evaluate(({ x, y }) => (document.elementFromPoint(x, y) as HTMLElement | null)?.dataset.testid ?? "", {
+      x: tb.x + tb.width * 0.75,
+      y: tb.y + tb.height / 2,
+    });
+    expect(hitId, "a szövegdoboz átengedi az érintést").not.toBe("bc-perf-text");
     // Az összecsukó gomb teljes egészében a nézetben van, és működik.
     const collapse = page.getByTestId("bc-perf-collapse");
     const cb = (await collapse.boundingBox())!;

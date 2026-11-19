@@ -162,12 +162,16 @@ export function isLoopRunning(sinceLastFrameMs: number, lastFrameDtMs: number): 
  * — a Kockavadászban a `runningRef`); a falióra-becslés (`isLoopRunning`) csak akkor dönt, ha a játék nem ad jelzőt.
  * A szünet utáni rés (≥ 1 s) nem képkockaidő: ott a `lastDt` 0, hogy a tartalék becslés ne nyújtsa meg a „fut” időt.
  */
+const FRESH_FLOOR_MS = 3000;
+const INTERVAL_HISTORY = 8;
+const MAX_INTERVAL_MS = 5000;
+
 export class LoopClock {
   private lastNow: number | null = null;
   private lastFrameAt = 0;
   private lastDt = 0;
-  /** Két képkocka-kezdet közti idő (ms, legfeljebb 2000) — a lassú, de élő hurok frissességi küszöbéhez. */
-  private lastInterval = 0;
+  /** Az utolsó néhány képkocka-köz (ms, egyenként legfeljebb 5000) — a lassú, de élő hurok frissességi küszöbéhez. */
+  private readonly intervals: number[] = [];
   /** A legutóbbi KIRAJZOLT képkocka vége (`performance.now()`); 0 = még nem volt. */
   private lastRenderedAt = 0;
 
@@ -177,7 +181,10 @@ export class LoopClock {
     if (this.lastNow !== null) {
       const dt = now - this.lastNow;
       const isFrame = dt > 0 && dt < 1000;
-      this.lastInterval = dt > 0 && dt <= 2000 ? dt : 0;
+      if (dt > 0) {
+        this.intervals.push(Math.min(dt, MAX_INTERVAL_MS));
+        if (this.intervals.length > INTERVAL_HISTORY) this.intervals.shift();
+      }
       this.lastDt = isFrame ? dt : 0;
       if (isFrame) counted = dt;
     }
@@ -192,15 +199,19 @@ export class LoopClock {
   }
 
   /**
-   * Fut-e a hurok. A játék jelzője (`gameRunning`) a szándék; „fut” csak akkor, ha emellett friss KIRAJZOLT képkocka is van
-   * (review #504 vak L1: befagyott rAF vagy a `render()` előtti kivétel mellett a szándék igaz, de semmi nem rajzolódik). A
-   * frissesség a kirajzolás VÉGÉTŐL számít: a főszál egy hosszú képkocka alatt foglalt, a panel csak utána olvas — így egy hosszú,
-   * de befejezett képkocka nem ad hamis „áll”-t. Küszöb: legalább 1 s, lassú (élő) huroknál a képkocka-köz háromszorosa (≤ 6 s).
+   * Fut-e a hurok. A játék jelzője (`gameRunning`) a szándék; „fut” csak akkor, ha emellett friss képkocka is van (review #504 vak
+   * L1: befagyott rAF vagy a `render()` előtti kivétel mellett a szándék igaz, de semmi nem történik). Frissesség: a legutóbbi
+   * képkocka KEZDETE vagy kirajzolásának VÉGE közül a későbbi óta eltelt idő (2. vak kör M2: GPU-kötött huroknál a kirajzolás a köz
+   * elején véget ér, a főszál a köz többi részében tétlen; CPU-kötöttnél a kezdet számít). Küszöb: legalább 3 s, lassú, élő huroknál
+   * az utolsó 8 képkocka-köz MAXIMUMÁNAK háromszorosa — így egy élő, ≈ 1 fps-es, vagy egy egyszeri 2,5 s-os képkocka nem ad hamis
+   * „áll”-t, a befagyott hurok (új képkocka-kezdet sincs) pedig legkésőbb néhány másodperc múlva „áll”.
    */
   running(wallMs: number, gameRunning?: boolean): boolean {
     if (gameRunning !== undefined) {
-      if (!gameRunning || this.lastRenderedAt === 0) return false;
-      return wallMs - this.lastRenderedAt < Math.max(1000, 3 * this.lastInterval);
+      const last = Math.max(this.lastFrameAt, this.lastRenderedAt);
+      if (!gameRunning || last === 0) return false;
+      const longest = this.intervals.length ? Math.max(...this.intervals) : 0;
+      return wallMs - last < Math.max(FRESH_FLOOR_MS, 3 * longest);
     }
     return this.lastFrameAt > 0 && isLoopRunning(wallMs - this.lastFrameAt, this.lastDt);
   }

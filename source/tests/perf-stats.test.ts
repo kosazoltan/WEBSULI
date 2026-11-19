@@ -138,35 +138,52 @@ describe("isLoopRunning", () => {
 });
 
 /**
- * Review #504 L1 — idősorok a vak ellenőr próbáiból (`ci-repro-*.json`, `t2-stale-fut.json`): a jelzőt minden képkocka-hossz
- * közepén (a főszál a képkocka munkáját végzi) és a képkockák között is kiolvassuk.
+ * Review #504 L1 — idősorok a vak ellenőr próbáiból (`ci-repro-*.json`, `t2-stale-fut.json`): a jelzőt minden képkocka-köz
+ * KÖZEPÉN és VÉGÉN kiolvassuk (az eredeti olvasási pontok — review #504, 2. vak kör M1: ezeket tilos az implementációhoz igazítani).
+ * Két modell: CPU-kötött (a kirajzolás a köz végén ér véget, előtte a főszál foglalt) és GPU-kötött (a `render()` gyorsan
+ * visszatér, a kirajzolás a köz elején +5 ms-kor véget ér, a főszál a köz többi részében TÉTLEN — szoftveres WebGL, gyenge GPU).
  */
-function simulate(clock: LoopClock, frameMs: readonly number[], gameRunning: boolean | undefined) {
+type RenderModel = "cpu" | "gpu";
+function simulate(clock: LoopClock, frameMs: readonly number[], gameRunning: boolean | undefined, model: RenderModel = "gpu") {
   let t = 1000;
   const reads: boolean[] = [];
   for (const ms of frameMs) {
     clock.frame(t, t);
-    // A képkocka munkája alatt a főszál foglalt — a panel (és a teszt `evaluate`-je) csak UTÁNA olvashat: közvetlenül a
-    // kirajzolás után és a következő képkocka előtt (review #504 vak L1: a frissesség a kirajzolás végétől számít).
-    clock.rendered(t + ms);
-    reads.push(clock.running(t + ms + 1, gameRunning));
-    reads.push(clock.running(t + ms + 15, gameRunning));
-    t += ms + 16;
+    if (model === "gpu") clock.rendered(t + Math.min(5, ms / 2));
+    reads.push(clock.running(t + ms * 0.5, gameRunning));
+    reads.push(clock.running(t + ms - 1, gameRunning));
+    if (model === "cpu") clock.rendered(t + ms - 0.5);
+    t += ms;
   }
   return reads;
 }
 
 describe("LoopClock — a játék jelzője az igazság (review #504 L1)", () => {
+  it("GPU-kötött, élő, lassú hurok (≈ 1 fps, 900–1200 ms-os közök; 2. vak kör M2): soha nem „áll”", () => {
+    const series = [16.7, 16.7, 16.7, 400, 958, 1005, 1066, 1111, 1159, 1200, 1200, 1005, 900, 1200];
+    const reads = simulate(new LoopClock(), series, true, "gpu");
+    assert.equal(reads.filter((r) => !r).length, 0);
+  });
+
+  it("GPU-kötött, állandó 1200 ms-os köz: soha nem „áll”", () => {
+    const reads = simulate(new LoopClock(), Array.from({ length: 20 }, () => 1200), true, "gpu");
+    assert.equal(reads.filter((r) => !r).length, 0);
+  });
+
   it("150 / 150 / 1600 ms váltakozva: futó hurok soha nem „áll”", () => {
     const series = Array.from({ length: 30 }, (_, i) => (i % 3 === 2 ? 1600 : 150));
-    const reads = simulate(new LoopClock(), series, true);
-    assert.equal(reads.filter((r) => !r).length, 0);
+    for (const model of ["cpu", "gpu"] as const) {
+      const reads = simulate(new LoopClock(), series, true, model);
+      assert.equal(reads.filter((r) => !r).length, 0, `${model}-kötött`);
+    }
   });
 
   it("19 gyors képkocka, majd egy 2500 ms-os: futó hurok soha nem „áll”", () => {
     const series = [...Array.from({ length: 19 }, () => 16.7), 2500, 16.7, 16.7];
-    const reads = simulate(new LoopClock(), series, true);
-    assert.equal(reads.filter((r) => !r).length, 0);
+    for (const model of ["cpu", "gpu"] as const) {
+      const reads = simulate(new LoopClock(), series, true, model);
+      assert.equal(reads.filter((r) => !r).length, 0, `${model}-kötött`);
+    }
   });
 
   it("szünet → folytatás egy képkockára → szünet: az álló hurok azonnal „áll” (nem 14 s-ig „fut”)", () => {
