@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { bankProgressText, SINGLE_RUN_BANK_CONCURRENCY, singleRunBankConcurrency } from "../server/studio/single-run/engine";
 import { buildLessonExperience } from "../server/studio/experience-builder";
@@ -9,20 +9,31 @@ import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 
 /*
  * Vezérelt sorrend falióra helyett (docs/specs/2026-11-19-idozitesfuggo-tesztek.md, kanban #206): a hívások kézzel feloldott
- * ígéretre várnak, így a befejezési sorrend a gép terhelésétől független. A banképítő az egy körbe tartozó egységek hívásait
- * ugyanabban a szinkron lépésben indítja (a `deps.call` előtt nincs várakozás), ezért egy eseményhurok-kör (`setImmediate`)
- * után a várt hívás vagy már elindult, vagy (hibás, soros építésnél) nem is fog: ekkor a kapu tartalékként felold, és a teszt
- * az állításán bukik — nem akad el, és nem falióra dönt.
+ * ígéretre várnak, így a befejezési sorrend a gép terhelésétől független. Az időzítőket a teszt hamis órán futtatja
+ * (node:test `mock.timers`: `setTimeout` / `setInterval`; a `setImmediate` valódi). Az őr (`untilGate` / `driveWindow`)
+ * lépésenként egy eseményhurok-kört vár és 1 hamis másodpercet léptet, legfeljebb 1000 lépésig: ennyi alatt egy késleltetett, de
+ * párhuzamos indítás (eseményhurok-kör vagy időzítő mögött) megtörténik, egy véges türelmi idő (körszám vagy időzítő, akár
+ * perces) lejár — a teszt pedig sosem akad el, és nem a falióra dönt (vak ellenőr, 2. kör: L1, L2).
  */
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>((r) => { resolve = r; }); return { promise, resolve }; };
 const nextLoopTurn = () => new Promise<void>((r) => setImmediate(r));
-/** A kapu feloldásáig vár, de legfeljebb egy eseményhurok-körig (a tartalék csak hibás viselkedésnél old fel). */
-const gateOrNextTurn = (gate: Promise<void>) => Promise.race([gate, nextLoopTurn()]);
-/** Bőséges, véges számú eseményhurok-kör (a késleltetve továbbdobott hiba is ennyi alatt jelentkezne; falióra nélkül). */
-const SETTLE_TURNS = 50;
-const loopTurns = async (n: number) => { for (let i = 0; i < n; i++) await nextLoopTurn(); };
-/** A kapu feloldásáig vár, de legfeljebb SETTLE_TURNS körig (elakadásvédelem: utána az állítás dönt). */
-const gateOrTurns = (gate: Promise<unknown>) => Promise.race([gate, loopTurns(SETTLE_TURNS)]);
+const WATCHDOG_STEPS = 1000;
+const WATCHDOG_TICK_MS = 1000;
+const useFakeTimers = (t: TestContext) => t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+/** A kapu feloldásáig vár, legfeljebb WATCHDOG_STEPS lépésig (lépésenként egy kör + 1 hamis s); igaz, ha a kapu feloldott. */
+async function untilGate(t: TestContext, gate: Promise<unknown>): Promise<boolean> {
+  let open = false;
+  void gate.then(() => { open = true; }, () => { open = true; });
+  for (let i = 0; i < WATCHDOG_STEPS && !open; i++) {
+    await nextLoopTurn();
+    if (!open) t.mock.timers.tick(WATCHDOG_TICK_MS);
+  }
+  return open;
+}
+/** A teljes őr-ablak (1000 kör, 1000 hamis s) kapu nélkül: ennyi alatt bármely reális véges türelmi idő lejár. */
+async function driveWindow(t: TestContext): Promise<void> {
+  for (let i = 0; i < WATCHDOG_STEPS; i++) { await nextLoopTurn(); t.mock.timers.tick(WATCHDOG_TICK_MS); }
+}
 
 test("a párhuzamosság kapcsolója: alap 3, 1–5 között felülírható, érvénytelen érték → alap", () => {
   assert.equal(SINGLE_RUN_BANK_CONCURRENCY, 3);
@@ -39,7 +50,8 @@ test("haladásszöveg: egy vagy több készülő csomag, ismétlődő fejezet n�
   assert.equal(bankProgressText("Gyakorlóbank", { done: 5, total: 5 }), "Gyakorlóbank: 5/5 csomag kész…");
 });
 
-test("a banképítő haladása a párhuzamosan készülő egységeket adja (building), a kész darab a csomag után nő", async () => {
+test("a banképítő haladása a párhuzamosan készülő egységeket adja (building), a kész darab a csomag után nő", async (t) => {
+  useFakeTimers(t);
   const base = standardFusionFixture(), e = base.experience!;
   const lesson = lessonSchema.parse({ ...base, experience: undefined, sections: [base.sections[0], { ...base.sections[0], heading: "Második fejezet ugyanarról" }] });
   const packetFor = (sectionIndex: number) => ({
@@ -54,7 +66,7 @@ test("a banképítő haladása a párhuzamosan készülő egységeket adja (buil
   await buildLessonExperience(lesson, [], { concurrency: 3, onProgress: (p) => progress.push(p), call: async (_s, user) => {
     inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
     if (++started === 2) bothStarted.resolve();
-    await gateOrNextTurn(bothStarted.promise); // egyik hívás sem végez, amíg a másik egység hívása el nem indult
+    await untilGate(t, bothStarted.promise); // egyik hívás sem végez, amíg a másik egység hívása el nem indult (őr: soros kód)
     inFlight--;
     return packetFor(Number(/sectionIndex=(\d+)/.exec(user)![1]));
   } });
@@ -69,7 +81,8 @@ const twoSectionLesson = () => {
   return { e: base.experience!, lesson: lessonSchema.parse({ ...base, experience: undefined, sections: [base.sections[0], { ...base.sections[0], heading: "Második fejezet ugyanarról" }] }) };
 };
 
-test("review #265: a haladás a valóban futó egységeket követi — eltérő befejezési sorrendnél és ütköző csomag soros újraépítésénél is", async () => {
+test("review #265: a haladás a valóban futó egységeket követi — eltérő befejezési sorrendnél és ütköző csomag soros újraépítésénél is", async (t) => {
+  useFakeTimers(t);
   const { e, lesson } = twoSectionLesson();
   const calls: number[] = [];
   const progress: Array<{ done: number; total: number; current?: number; building?: number[] }> = [];
@@ -82,7 +95,7 @@ test("review #265: a haladás a valóban futó egységeket követi — eltérő 
     const rebuild = calls.filter((s) => s === sectionIndex).length > 1;
     if (!rebuild) {
       if (calls.length === 2) firstRound[1].resolve(); // mindkét egység első hívása elindult → a 2. egység végez
-      await gateOrNextTurn(firstRound[sectionIndex].promise);
+      await untilGate(t, firstRound[sectionIndex].promise);
     }
     const suffix = rebuild ? " (második változat)" : "";
     // Első körben ugyanazok a kérdések → ütközés → a 2. egység sorosan újraépül.
@@ -95,14 +108,15 @@ test("review #265: a haladás a valóban futó egységeket követi — eltérő 
   assert.deepEqual(progress.at(-1), { done: 2, total: 2 });
 });
 
-test("review #265: az egyik egység hibája után is megvárja a többit és a checkpoint-mentésüket (a kifizetett csomag nem vész el)", async () => {
+test("review #265: az egyik egység hibája után is megvárja a többit és a checkpoint-mentésüket (a kifizetett csomag nem vész el)", async (t) => {
+  useFakeTimers(t);
   const { e, lesson } = twoSectionLesson();
   const saved: number[] = [];
   let doneAtReject = -1;
   let outerSettled = false;
-  // Vak ellenőr L2: a sikeres modellválasz ÉS a mentés befejezése külön kapura vár; a kapuk között bőséges (de véges, falióra
-  // nélküli) eseményhurok-kör telik el, így egy késleltetve (néhány körrel később) továbbdobott korai hiba is a kapuk alatt
-  // jelentkezne — és bukna. Elakadásvédelem: minden várakozás legfeljebb SETTLE_TURNS kör.
+  // Vak ellenőr (1. kör L2, 2. kör L1): a sikeres modellválasz ÉS a mentés befejezése külön kapura vár; mindkét kapu alatt a teljes
+  // őr-ablak lefut (1000 kör + 1000 hamis s), így egy körszámra vagy időzítőre (akár percekre) késleltetett korai hiba is a kapuk
+  // alatt jelentkezne — és bukna.
   const firstFailed = deferred(), releaseCall = deferred(), saveEntered = deferred(), releaseSave = deferred();
   const outer = buildLessonExperience(lesson, [], { concurrency: 3,
     save: async (cp) => { saveEntered.resolve(); await releaseSave.promise; saved.push(Object.keys(cp.parts).length); },
@@ -114,18 +128,15 @@ test("review #265: az egyik egység hibája után is megvárja a többit és a c
     } }).catch((error) => { outerSettled = true; doneAtReject = saved.length; throw error; });
   outer.catch(() => undefined); // a kimenetelt lent az assert.rejects méri; addig ne legyen kezeletlen elutasítás
 
-  await gateOrTurns(firstFailed.promise);
-  await loopTurns(SETTLE_TURNS);
+  assert.ok(await untilGate(t, firstFailed.promise), "a 0. egység hívása elindult és hibázott");
+  await driveWindow(t);
   assert.equal(outerSettled, false, "a 0. egység hibája nem megy tovább, amíg a másik egység még fut");
   releaseCall.resolve();
-  let saveStarted = false;
-  void saveEntered.promise.then(() => { saveStarted = true; });
-  await gateOrTurns(saveEntered.promise);
-  assert.ok(saveStarted, "a sikeres csomag checkpoint-mentése elindult");
-  await loopTurns(SETTLE_TURNS);
+  assert.ok(await untilGate(t, saveEntered.promise), "a sikeres csomag checkpoint-mentése elindult");
+  await driveWindow(t);
   assert.equal(outerSettled, false, "a hiba nem megy tovább, amíg a sikeres csomag mentése tart");
   releaseSave.resolve();
-  await gateOrTurns(outer.then(() => undefined, () => undefined));
+  await untilGate(t, outer);
   assert.equal(outerSettled, true, "a mentés után a hiba továbbmegy");
   await assert.rejects(outer, /szolgáltatói hiba/);
   assert.equal(doneAtReject, 1, "a hiba csak a késleltetett, sikeres csomag mentése UTÁN megy tovább");
