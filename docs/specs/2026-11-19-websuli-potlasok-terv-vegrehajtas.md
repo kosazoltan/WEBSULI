@@ -8,8 +8,9 @@
 
 ### 0.1 Indítás (orkesztrátor)
 
-1. Döntések: a terv 8. szakaszának D-01…D-16 kérdését EGY űrlapon tedd fel a tulajdonosnak (az ajánlott opció elöl, indokkal). A
-   válaszokat dátummal írd be a terv 8. szakaszába („Válasz: … — 2026-11-…”), külön docs-commitban.
+1. Döntések: a terv 8. szakaszának kérdéseire a tulajdonos 2026-11-19 ~17:55 UTC-kor válaszolt (a terv 6. és 8. szakasza); nyitott
+   tulajdonosi kérdés nincs. Új kérdés csak új tényből; akkor űrlapon, az ajánlott opció elöl. A futó #484 (J3a) merge-e előtt a D-04
+   (a) szerint új pontskála-verziókulcs és új ranglista kell, a régi rekordok archívként megmaradnak — ezt a #484 megvalósítójának add át.
 2. Indítási feltétel: a terv 3. szakaszának futó munkái beolvadtak, VAGY tulajdonosi válaszra várnak (ez nem tartja vissza a
    tervet). Egyszerre legfeljebb 4 szelet van folyamatban (WIP ≤ 4, projektmemória „kapugyorsítás döntései”).
 3. Sorrend: a terv 7.1 táblázata. Egy szelet akkor indul, ha a „Függőség” oszlop minden eleme teljesült (beolvadt PR / megvan a
@@ -80,7 +81,8 @@ eltávolítva; távoli ág csak jóváhagyással).
 
 ### A-1 — Advent S6: admin-előnézet, takarító, bekapcsolás
 
-- Előfeltétel: a PR-B és a PR-C beolvadt; D-11 válasz. Határidő: a merge legkésőbb november 30.
+- Előfeltétel: a PR-B és a PR-C beolvadt. Határidő: a merge legkésőbb november 30. (D-11 (a): a bekapcsolás az A-1 beolvadásával,
+  a tulajdonos előnézeti próbája után).
 - Ág: `feat/advent-s6-elonezet-takarito`.
 - Lépések:
   1. Hajtsd végre a `docs/specs/2026-11-18-adventi-naptar-vegrehajtas.md` „S6” fejezetét (313–341. sor) a „Kiegészítés 5”
@@ -91,7 +93,8 @@ eltávolítva; távoli ág csak jóváhagyással).
   3. #171: az adventi terv E21 szövegét igazítsd: kikapcsolt flagnél a CSRF nélküli POST 403 (mellékhatás nélkül).
   4. #166: a `source/tests/advent-calendar.spec.ts`-ben (a PR-C / S6 hozza létre; a mainen még nincs) bejelentkezett játékos esete; ha az e2e-szerveren a `PLAYER_ACCOUNTS` csak
      specenként kapcsolható, kapcsold BE abban a specben; ha nem lehetséges, NOT RUN + ok a PR-ben, és a HTTP-szintű DB-teszt fedje.
-  5. A `render.yaml`-ba `ADVENT_CALENDAR=on` CSAK a D-11 szerinti időpontra; a PR-leírás első sora: „ÉLES BEKAPCSOLÁS — tulajdonosi
+  5. A `render.yaml`-ba `ADVENT_CALENDAR=on` kerül ebben a PR-ban (D-11 (a)); a merge csak a tulajdonos előnézeti próbája után,
+     legkésőbb november 30-án; a PR-leírás első sora: „ÉLES BEKAPCSOLÁS — tulajdonosi
      jóváhagyás kell a merge előtt”.
 - Ellenőrzés (a `source/`-ból): `node --import tsx --test tests/admin-route-guard.test.ts tests/advent-flag-sweeper-guard.test.ts` →
   `fail 0`; `node --import tsx scripts/run-e2e-tests.ts tests/advent-calendar.spec.ts` (gépi zárral) → minden `passed`;
@@ -208,9 +211,9 @@ eltávolítva; távoli ág csak jóváhagyással).
 
 ## 2. P2 szeletek
 
-### G-21 — Szólétra olvashatóság és nyelvhelyesség (helye: D-16)
+### G-21 — Szólétra olvashatóság és nyelvhelyesség (a P1-blokk után — D-16 (a))
 
-- Előfeltétel: D-05 válasz. Ág: `fix/szoletra-olvashatosag-2`.
+- Előfeltétel: nincs (D-05 eldöntve). Ág: `fix/szoletra-olvashatosag-2`.
 - Lépések:
   1. Bukó tesztek ELŐBB: (a) `source/tests/hu-accusative-guard.test.ts` — a `source/client/src` `.ts` / `.tsx` fájljaiban nincs
      `${…}t!`, `${…}ot!`, `${…}et!`, `${…}öt!` sablonos tárgyrag; (b) a `word-ladder-readability.spec.ts`-ben: győzelmi cím „Legyőzted
@@ -220,7 +223,9 @@ eltávolítva; távoli ág csak jóváhagyással).
      1816. sor ebből olvas.
   3. 1744. sor: a `${HOLD}-label` árnyéka csak sötét háttérnél; világos gombon nincs. A 3D-mód (1789–1797) változatlan.
   4. 1684–1695: a „Te” / „Villám” felirat a jelölővel együtt mozog (vagy a jelölő fölött / alatt), egyenlő állásnál nem fedik egymást.
-  5. A célszó megjelenítése a D-05 szerint (`source/client/src/lib/wordLadder/focus.ts` + a kérdés-sáv megjelenítése).
+  5. A célszó D-05 (a) szerint: a szó a mondatban marad, kiemelve (címkeszerű kiemelés a mondaton belül), a nagy külön kártya elmarad,
+     „„…”” helyőrző nincs (`source/client/src/lib/wordLadder/focus.ts` + a kérdés-sáv megjelenítése); a teszt: a kérdésszöveg
+     tartalmazza a célszót, és nincs külön célszó-kártya.
 - Ellenőrzés: `node --import tsx --test tests/hu-accusative-guard.test.ts` → `fail 0`; mutációs ellenpróba (visszaírt `${RIVAL_NAME}t`
   → bukik); `node --import tsx scripts/run-e2e-tests.ts tests/word-ladder-readability.spec.ts` (gépi zárral) → `passed`;
   képernyőkép 827×896 dpr 2,625 nézetben a tulajdonosnak.
@@ -284,9 +289,10 @@ eltávolítva; távoli ág csak jóváhagyással).
 
 ### G-3 — Főoldali maki
 
-- Előfeltétel: D-12 válasz. Ág: a meglévő `feat/kabala-fooldal` friss mainnel.
-- Lépések: `git merge origin/main`; a `docs/specs/2026-11-18-kabala-fooldal.md` 10. szakaszába a D-12 válasz; az orr környéke
-  képernyőképen (álló kép + 3 képkocka) a tulajdonosnak; `HOME_MASCOT` a D-12 szerint.
+- Előfeltétel: nincs (D-12 eldöntve). Ág: a meglévő `feat/kabala-fooldal` friss mainnel.
+- Lépések: `git merge origin/main`; a `docs/specs/2026-11-18-kabala-fooldal.md` 10. szakaszába a D-12 (a) válasz (a 2. és 3. kérdés:
+  bekapcsolás ellenőrzés után, körbevezetés csak az első látogatáskor); az orr környéke képernyőképen (álló kép + 3 képkocka) a
+  tulajdonosnak; a `HOME_MASCOT` bekapcsolása CSAK a tulajdonos „rendben” válasza után (tulajdonosi flag-lépés).
 - Ellenőrzés: `node --import tsx --test tests/home-mascot.test.ts tests/home-mascot-flag.test.ts tests/home-mascot-assets-guard.test.ts
   tests/kabala-model-budget-guard.test.ts` → `fail 0`; `home-mascot.spec.ts` (gépi zárral) → `passed`.
 - Kész, ha: 0.5 + a tulajdonos az orrot rendben találta.
@@ -319,8 +325,10 @@ eltávolítva; távoli ág csak jóváhagyással).
 
 ### G-7 — Szünet alatti rajzolás (#74)
 
-- Előfeltétel: D-10. Ág: `perf/szunet-rajzolas`. Fájl: `source/client/src/game-engine/mobile/index.ts` (`requestGameFrame`).
-- Ellenőrzés: böngészős mérés: szünetben a képkocka-számláló nem nő (D-10 (a) esetén); `game-explanation-pause.spec.ts` → `passed`.
+- Előfeltétel: nincs (D-10 (a): szünetben álló, elmosott kép). Ág: `perf/szunet-rajzolas`. Fájl:
+  `source/client/src/game-engine/mobile/index.ts` (`requestGameFrame`).
+- Ellenőrzés: böngészős mérés: szünetben a képkocka-számláló nem nő, a háttér az utolsó képkocka elmosott álló képe; folytatáskor a
+  játék ugyanonnan megy tovább; `game-explanation-pause.spec.ts` → `passed`.
 - Kész, ha: 0.5.
 
 ### G-8 — Szökőár utómunka
@@ -338,8 +346,26 @@ Mindegyik külön szelet, külön ág (`feat/jatek-<j-azonosító>-<rövid-név>
 megfelelő fejezete szerint (sorszámok: terv 7.5). Mindegyiknél kötelező: a fejezet „Elfogadás” pontjai tételesen a PR-ben; a
 `docs/minosegkapuk.md` 150–157. sor 1–6. hibatípusára célzott teszt (véletlen válasz, kupon-kimerülés, levágás, a sim a szabályt
 méri, győzelem nem fordul vereségre, a megállítási okok nem oldják fel egymást); a közös mobil mérő három nézetben. Kiegészítések:
-G-13 (#93 J3c pont), G-15 (#85 K.4 pontjai; a balkezes tükrözés nem készül), G-17 (D-09 szerint), G-18 (a pontok a M-4 pontkönyvből),
-G-19 (záró mérés az összes G-szelet után; átfogó review PR-kommentként).
+G-13 (#93 J3c pont), G-15a (#85 K.4 pontjai; a balkezes tükrözés nem készül), G-17 (D-09 (a): a megállással adott válasz rövid
+megerősítést kér — második koppintás vagy rövid tartás; bukó teszt ELŐBB: megállás megerősítés nélkül → nincs válasz), G-18 (a pontok
+a M-4 pontkönyvből), G-19 (záró mérés az összes G-szelet után; átfogó review PR-kommentként).
+
+### G-15b — Aszteroida egyujjas mód (D-08 (b))
+
+- Előfeltétel: #486 és G-15a beolvadt. Ág: `feat/aszteroida-egyujjas`.
+- Lépések:
+  1. A szelet tervében rögzítsd a „tudatos célzás” jelét méréssel (pl. a kristály a célzás közepén van legalább X ms-ig, vagy külön
+     koppintás a kristályra); a választás indoka a mért véletlen-válasz arány.
+  2. Bukó tesztek ELŐBB: seedelt sim-teszt — 80 menet egyujjas módban, automata tüzeléssel, tudatos célzás nélkül → 0 válasz; tudatos
+     célzással → menetenként pontosan annyi válasz, ahány célzás; a kérdés megjelenésekor már lenyomott ujj → első válasz csak
+     felengedés és új célzás után; a kétujjas mód meglévő tesztjei változatlanul zöldek.
+  3. Megvalósítás az Aszteroida oldalon és a #486-tal jött magban (a pontos útvonal a #486 beolvadása után; `git grep -l crystal
+     source/client/src`); módválasztó a játék beállításaiban.
+  4. Mutációs ellenpróba: a tudatos-célzás feltétel kivétele → a sim-teszt bukik.
+- Ellenőrzés: a sim-teszt (`node --import tsx --test tests/<aszteroida-sim>.test.ts`) → `fail 0`; egyujjas érintéses böngészős kör
+  360×640 és 844×390 nézetben (`game-mobile-quality.spec.ts`, Aszteroida eset, gépi zárral) → `passed`.
+- Vak ellenőr kifejezett megtörési pontja: véletlen válasz automata tüzelésből, tartott ujj, több kristály egymás mellett.
+- Kész, ha: 0.5.
 
 ### M-1 — Közös játék előfeltétele (#73, #97)
 
@@ -347,7 +373,8 @@ G-19 (záró mérés az összes G-szelet után; átfogó review PR-kommentként)
 - Lépések: bukó állapotgép-teszt ELŐBB (3–4 fő, kilépés a visszavágó alatt); javítás; a #97 G-B leletek tételesen (kanban `show 97`,
   a hivatkozott visszaellenőrzött lelet-lista).
 - Ellenőrzés: `node --import tsx --test tests/rt-room-machine.test.ts` → `fail 0`; `duel-online.spec.ts` (gépi zárral) → `passed`.
-- Kész, ha: 0.5; utána D-07 szerint admin-pilot (a flag-váltás tulajdonosi lépés).
+- Kész, ha: 0.5; utána D-07 (a): `MP_MODE` admin-pilot (a flag-váltás tulajdonosi lépés); a nyilvános bekapcsolás csak az M-5 (JM3b)
+  beolvadása után.
 
 ### M-2 — JM7c-2, tiltás-holtpont, G-A leletek (#62, #75, #96)
 
@@ -366,8 +393,13 @@ G-19 (záró mérés az összes G-szelet után; átfogó review PR-kommentként)
 
 ### M-5…M-8
 
-JM3b, JM4–JM6, JM9–JM11 a JÁTÉK végrehajtás fejezetei szerint (terv 7.7); M-8 a D-06 válasza szerint, a meglévő fiókokhoz
-automatikus adatlépés nélkül (ütközéslista az admin-panelen).
+JM3b, JM4–JM6, JM9–JM11 a JÁTÉK végrehajtás fejezetei szerint (terv 7.7); az M-5 (JM3b) az `MP_MODE` admin-pilot után indul, a
+beolvadása után a tulajdonos kapcsolhat nyilvánosra (D-07 (a)).
+
+M-8 (D-06 (a)), ág `feat/jatekos-kanonikus-cim`: a Gmail-cím kanonikus alakja (pont és +címke nélkül) új oszlopban, egyedi index csak
+az új regisztrációkra érvényesítve; bukó DB-teszt ELŐBB (alias-címmel új regisztráció → elutasítás érthető üzenettel); a migráció a
+meglévő ütköző fiókokat NEM módosítja, csak listázza (admin-panel lista); automatikus összevonás nincs. Ellenőrzés:
+`npm.cmd run test:learning-db` (`player-account-db.integration.ts`) → `fail 0`; Drizzle-séma ↔ migráció egyezés a PR-ben.
 
 ### T-4 — Kérdésbank S2–S3 (#71, #149)
 
@@ -386,9 +418,12 @@ automatikus adatlépés nélkül (ütközéslista az admin-panelen).
 
 Alszeletenként külön ág és PR, a terv 7.6 sorrendjében, a `docs/specs/2026-11-18-tananyag-gyartas-minoseg-vegrehajtas.md` 0. fejezete
 (közös szabályok, 0.6 szkript-ellenőr, 0.7 kapcsoló) és a saját fejezete szerint. Kiegészítések: SK3 előtt a TGM-terv SK3 szakaszának
-igazítása (külön docs-commit, D-02 szerint); S10/1 fizetős (≤ 30 USD, eldobható DB, előtte futásőr); S8c gyártás a tulajdonos
-indításával; S9-ben a `.agents/skills/websuli-gyartas-analitika/SKILL.md` forrás pótlása (`node scripts/qa/gates/skills-sync-check.mjs`
-→ zöld) és a D-01 átvezetése; S10/2 után kérdés a tulajdonosnak a `STUDIO_SOURCE_VISUALS` bekapcsolásáról, a mért számokkal.
+igazítása (külön docs-commit, D-02 (a): új futásidő- és összesített körszám-megállító NEM készül); S10/1 fizetős (≤ 30 USD,
+eldobható DB, előtte futásőr); SK1c-ben D-03 (a): `enforce` módban a kapu saját hibájánál a lecke vázlat marad (nem publikálódik), és
+e-mail megy az adminoknak (bukó teszt ELŐBB: a kapu kivételt dob → a lecke állapota vázlat, egy értesítés ment ki hamis küldővel);
+S8c gyártás a tulajdonos indításával; S9-ben a `.agents/skills/websuli-gyartas-analitika/SKILL.md` forrás pótlása
+(`node scripts/qa/gates/skills-sync-check.mjs` → zöld) és a D-01 (a) jóváhagyás (néma próbakimondás nélkül; 40 MB / hangverzió + 80 MB
+abszolút) átvezetése a TGM-terv D4 / E48 pontjába; S10/2 után kérdés a tulajdonosnak a `STUDIO_SOURCE_VISUALS` bekapcsolásáról, a mért számokkal.
 
 ### Q-4 — Hook-szelet 2 (#124, #125, #177, #192–#195)
 
@@ -397,8 +432,14 @@ indításával; S9-ben a `.agents/skills/websuli-gyartas-analitika/SKILL.md` for
 
 ### Q-5 — Hook-szelet 3 (#120, #164, #175, #181, #184)
 
-- Előfeltétel: D-13, Q-4. Ág: `chore/hook-szelet-3`.
-- A `.claude/settings*.json` módosítását az ügynök NEM végzi: a PR-ban a pontos javasolt módosítás, „Tulajdonosi teendő” címmel.
+- Előfeltétel: Q-4. Ág: `chore/hook-szelet-3`.
+- D-13 (a), két rész:
+  1. A `.claude/settings.local.json` kikerül a követésből: `git rm --cached .claude/settings.local.json` + `.gitignore`-sor (a helyi
+     fájl a gépen megmarad, a fájl tartalmához az ügynök nem nyúl). Teszt: a `settings-hooks.test.mjs` (vagy új őr) bukik, ha a fájl
+     újra követett.
+  2. A GitHub-MCP PR-nyitó / -összevonó / fájlfeltöltő eszközei a kapu-hook alá: a hook-kód (`scripts/qa/hooks/check-quality-gates.mjs`)
+     felismeri ezek bemenetét, és ugyanazt a bizonyítékot követeli, mint a `gh pr create` / `gh pr merge`; viselkedési teszt ELŐBB. A
+     `.claude/settings.json` matcher-sorát az ügynök NEM írja: a PR-ban a pontos javasolt sor „Tulajdonosi teendő” címmel.
 - Kész, ha: 0.5.
 
 ### Q-6 — Szkriptkapuk P3–P5

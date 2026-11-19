@@ -1,8 +1,8 @@
 # Spec: WEBSULI pótlások — a heti elmaradások teljes vertikumú pótlási terve
 
-> Dátum: 2026-11-19 · Szerző: Claude (tervező alügynök) · Állapot: JÓVÁHAGYVA a döntésfüggetlen szeletekre (a tulajdonos a munkát
-> 2026-11-19-én kérte: „a jelenlegi javítások, fejlesztések lefutása után automatikusan az elkészült tervet hajtsd végre”); a
-> döntésfüggő szeletek a 8. szakasz válaszáig várnak.
+> Dátum: 2026-11-19 · Szerző: Claude (tervező alügynök) · Állapot: JÓVÁHAGYVA (a tulajdonos a munkát 2026-11-19-én kérte: „a
+> jelenlegi javítások, fejlesztések lefutása után automatikusan az elkészült tervet hajtsd végre”; a 8. szakasz kérdéseire
+> 2026-11-19 ~17:55 UTC-kor űrlapon válaszolt — a válaszok a 6. és a 8. szakaszban, a szeletek ehhez igazítva).
 > Szabály: `docs/agent-haromfazisu-munka.md`. Végrehajtás: `docs/specs/2026-11-19-websuli-potlasok-terv-vegrehajtas.md`.
 
 ## 0. Források és rögzített állapot
@@ -44,7 +44,7 @@ december 1-jére éljen; a fejlesztési lánc (kapuk, hookok, ellenőr) ne lass�
 | Szkriptkapuk P1 terv, merge-kapu REST | `chore/szkriptkapuk-p1-terv` / #517, `fix/merge-kapu-rest` / #513 | P-042 (P1), P-044 |
 | Kockavadász telefon + perf panel | `perf/kockavadasz-telefon-gyors` / #504 | P-004 (kanban #90, #117, #123) |
 | J6a Aszteroida | `feat/jatek-j6a-aszteroida-kristaly` / #486 | P-002 |
-| J3a Kockavadász Rúnabánya | `feat/jatek-j3a-kockavadasz-runabanya` / #484 | P-001 (+ döntés D-04 = P-063) |
+| J3a Kockavadász Rúnabánya | `feat/jatek-j3a-kockavadasz-runabanya` / #484 | P-001 (D-04 (a): új pontskála-verziókulcs a merge előtt, P-063) |
 | J7b Tornádó | `feat/jatek-j7b-tornado-utelagazas` | P-003 (kanban #83, #87) |
 | Szökőár téma és sebesség, nyugalom-jelző | `fix/szokoar-tema-es-sebesseg` | P-005 (kanban #129 ELLENŐRIZENDŐ, lásd G-8) |
 | Hang-előmelegítés | `fix/hang-elomelegites` | P-040 |
@@ -63,13 +63,13 @@ Jelmagyarázat: **fut** = a 3. szakasz egyik munkája viszi · **kész** = a mai
 
 | P | Valódi cél (a tulajdonos szemével) | Sors | Bizonyíték / javítás a leltárhoz képest |
 |---|---|---|---|
-| P-001 | A Kockavadász legyen valódi bányászjáték, ne kvízmodál. | fut #484 | + D-04 (pontskála) a merge előtt |
+| P-001 | A Kockavadász legyen valódi bányászjáték, ne kvízmodál. | fut #484 | a merge előtt a D-04 (a) szerint új pontskála-verziókulcs (P-063) |
 | P-002 | Az Aszteroidában a lövés maga a válasz, ne megszakító kapu. | fut #486 | — |
 | P-003 | A Tornádóban a kérdés a pályán dőljön el (útjelző, turbó). | fut J7b | — |
 | P-004 | A Kockavadász ne akadjon kihajtott telefonon. | fut #504 | #123 a #504-ben (`93d4e213`, leltár) |
 | P-005 | A Szökőár újra szökőáras legyen, olvasható kérdéssel, akadás nélkül (T: 2026-11-18T09:12). | fut | — |
 | P-006 | A jobbkezes gyerek a jobb hüvelykujjával kormányozzon, a tűz bal oldalon (T: 2026-11-18T16:49). | szelet G-2 | ág `feat/joystick-jobb-kez` @ `fc012178`, nem fut |
-| P-007 | A főoldalon animált, cuki maki ajánlja a 3 legújabb tananyagot, telefonon könnyen; az orra ne „lebegjen” (T: 2026-11-18T16:26, 16:30). | szelet G-3 + D-12 | **A leltár célja szűk volt** („kompakt sáv”): az ág terve (`docs/specs/2026-11-18-kabala-fooldal.md` 1–13. sor) pontosan a tulajdonosi kérést valósítja meg; a `kiserlet/kabala-maki` be van olvasztva az ágba (`4a33e510`, `7f35f04f`), az orr-javítás `bc3196e0` („beágyazott orr”) — képen ELLENŐRIZENDŐ |
+| P-007 | A főoldalon animált, cuki maki ajánlja a 3 legújabb tananyagot, telefonon könnyen; az orra ne „lebegjen” (T: 2026-11-18T16:26, 16:30). | szelet G-3 | **A leltár célja szűk volt** („kompakt sáv”): az ág terve (`docs/specs/2026-11-18-kabala-fooldal.md` 1–13. sor) pontosan a tulajdonosi kérést valósítja meg; a `kiserlet/kabala-maki` be van olvasztva az ágba (`4a33e510`, `7f35f04f`), az orr-javítás `bc3196e0` („beágyazott orr”) — képen ELLENŐRIZENDŐ |
 | P-008 | A Brain Rot a közös kupon-ismétlést használja. | **kész** | `couponRepeat.ts` törölve a #483-ban (`git log --diff-filter=D` → `a11b1b79`); a #133 doksisor kész (`2026-11-16-jatekok-jatekelmeny-vegrehajtas.md:1470`); maradék 1 komment (#141) és a #109 visszaellenőrzése → G-4 |
 | P-009 | A játék ne töltsön le fölösleges kérdésbankot, és ne adjon elavultat. | szelet T-4 | kanban #71, #149 |
 | P-010 | A hibázott kuponos kérdés a menetben biztosan, kiszámítható időn belül visszajöjjön (tanulási hurok). | szelet G-1 | `questionDirector.ts:140` `LATE_RETURN_MAX = 10`, `:241` — megerősítve |
@@ -77,30 +77,30 @@ Jelmagyarázat: **fut** = a 3. szakasz egyik munkája viszi · **kész** = a mai
 | P-012 | A Szólétra tempója és jutalma következetes, tesztelhető legyen. | szelet G-20 (#148) | A #112 tempó / ranglista kérdést a 2026-11-18-i „azonos XP” döntés eldöntötte (leltár P-012) → a #112 maradék javaslata lezárva |
 | P-013 | A Szökőár J1a után teljes játék legyen (mentőöv, főellenfél), apróhibák nélkül. | szelet G-8, G-9, G-10 | a futó Szökőár-ág után |
 | P-014 | A többi játék is fejezze be a megkezdett játékhurkot (J2b, J3b/c, J6b, J7c, J8, J9). | szelet G-11…G-19 | JÁTÉK végrehajtás fejezetei (6. szakasz) |
-| P-015 | A Brain Rotban legyen ellenfél és visszalopás, véletlen válasz nélkül. | szelet G-17 + D-09 | kanban #88 |
+| P-015 | A Brain Rotban legyen ellenfél és visszalopás, véletlen válasz nélkül. | szelet G-17 | kanban #88; D-09 (a): rövid megerősítés |
 | P-016 | A közös motor lassú telefonon is igazságos döntési időt adjon. | szelet G-5, G-6 | kanban #86, #98, #102, #114, #134, #199 |
-| P-017 | Az élő képernyők apróhibái tűnjenek el. | szelet G-4, G-7, G-8 | #178/#196–#198 a Szökőár-ág után (G-8); #64, #111 G-4; #74 G-7 + D-10 |
-| P-018 | A gyerekek 3–4-en is játszhassanak együtt, győzteshirdetéssel (T: 2026-11-16T05:36). | szelet M-1, M-5, M-6 + D-07 | kanban #52, #73, #97 |
+| P-017 | Az élő képernyők apróhibái tűnjenek el. | szelet G-4, G-7, G-8 | #178/#196–#198 a Szökőár-ág után (G-8); #64, #111 G-4; #74 G-7 (D-10 (a): álló, elmosott kép szünetben) |
+| P-018 | A gyerekek 3–4-en is játszhassanak együtt, győzteshirdetéssel (T: 2026-11-16T05:36). | szelet M-1, M-5, M-6 | kanban #52, #73, #97; D-07 (a) |
 | P-019 | A játékos-fiók gyűjtse a pontokat (T: 2026-11-16T05:36), a régi belépés kapcsolódjon. | szelet M-2, M-3, M-4, M-7 | **kiegészítve K-06:** a pontmentés ma a régi Google + értesítőlista feltételhez kötött (`gameScoreService.ts:47–53`, `useGameScoreSync.ts:22`) |
-| P-020 | Egy postafiók ne nyithasson több ranglista-profilt. | döntés D-06 → M-8 | kanban #77 |
-| P-021 | Az Aszteroida a kristály után legyen gyors és kényelmes (pool, vezérlés, napi seed Budapest szerint). | szelet G-15 + D-08 | kanban #85 |
-| P-022 | A fiókok és a közös játék biztonságos sorrendben élesedjenek. | döntés D-07 (csak a közös játék) | **Javítva:** a fiókokat a tulajdonos 2026-11-16-án bekapcsoltatta (T: 2026-11-16T19:57); az átirat szerint „fiókok bekapcsolva, a közös játék továbbra is kikapcsolva”. Nyitott csak az `MP_MODE` pilot |
-| P-023 | A nyilvános repó előzményeiben maradt címadat sorsa. | döntés D-14 | kanban #57 |
+| P-020 | Egy postafiók ne nyithasson több ranglista-profilt. | szelet M-8 | kanban #77; D-06 (a): új regisztrációnál kanonikus egyediség, a meglévők csak listázva |
+| P-021 | Az Aszteroida a kristály után legyen gyors és kényelmes (pool, vezérlés, egyujjas mód, napi seed Budapest szerint). | szelet G-15a, G-15b | kanban #85; D-08 (b): egyujjas mód IGEN (G-15b) |
+| P-022 | A fiókok és a közös játék biztonságos sorrendben élesedjenek. | szelet M-1 → admin-pilot → M-5 → nyilvános | **Javítva:** a fiókokat a tulajdonos 2026-11-16-án bekapcsoltatta (T: 2026-11-16T19:57); az átirat szerint „fiókok bekapcsolva, a közös játék továbbra is kikapcsolva”. D-07 (a): `MP_MODE` admin-pilot az M-1 után, nyilvánosan a JM3b (M-5) után |
+| P-023 | A nyilvános repó előzményeiben maradt címadat sorsa. | lezárva | D-14 (a): megőrizzük, nincs történetátírás (kanban #57 már `done`) |
 | P-024 | A kvíz eredménye is menjen el a szülőnek, félbehagyáskor is (T: 2026-11-17T18:13). | fut #510 | — |
 | P-025 | Egy kör eredménye pontosan egyszer menjen ki, hibák után se duplán / se elveszve. | szelet T-3 | kanban #127, #128, #135, #189–#191 |
 | P-026 | A keresőben az osztályos keresés a ragos / tartományos alakra is működjön. | szelet T-5 | kanban #142; a főoldali megjelenítés kész (#494) |
 | P-027 | A pontozó ne vegyen el pontot helyes válaszért, és ne adjon üres válaszért. | szelet T-1, T-2 | `polynomial.ts:203` a záró pontsort határnak veszi (#121), `answer-value.ts:184` `GAP_OR_NUMBER` (#122) — kód alapján megerősítve, futtatva NEM |
 | P-028 | A lecke tartsa meg a forrás-PDF ábráit (T: 2026-11-18T09:53). | szelet TGM-S2b, S3a, S3b, SK1c | `source-visuals-flag.ts` alapból KI (#515) |
-| P-029 | A gyártás gépileg ellenőrizze a számolást és jelezze a költséget. | szelet TGM-S4a, S4b, SK3 + D-02 | — |
+| P-029 | A gyártás gépileg ellenőrizze a számolást és jelezze a költséget. | szelet TGM-S4a, S4b, SK3 | D-02 (a): az SK3-ban nincs új megállító korlát |
 | P-030 | A leckék ne legyenek monotonok (T: 2026-11-18T09:53). | szelet TGM-S5a…SK2 | `source/shared/variety-metrics.ts` hiányzik — megerősítve |
 | P-031 | A tömör, helyes nyílt válasz fél pontot kapjon (T: 2026-11-17T19:40). | szelet TGM-S7a, S7b | — |
-| P-032 | Élethű brit kiejtés a leckékben (T: 2026-11-18T09:53). | szelet TGM-#183, S8c, #150 + D-01 | `audio-store.ts:8` 40 / 80 MB — megerősítve |
-| P-033 | A minőségjavulás mérhető, a kiadás őrzött legyen. | szelet TGM-S10/0, S10/1, SK4, SK5, S9, S10/2 + D-03 | `.agents/skills/websuli-gyartas-analitika` hiányzik, a `.claude` tükör megvan — megerősítve; `source/scripts/measure/` alatt nincs `source-gap-table.mts` |
+| P-032 | Élethű brit kiejtés a leckékben (T: 2026-11-18T09:53). | szelet TGM-#183, S8c, #150 | `audio-store.ts:8` 40 / 80 MB — megerősítve, D-01 (a) jóváhagyta |
+| P-033 | A minőségjavulás mérhető, a kiadás őrzött legyen. | szelet TGM-S10/0, S10/1, SK4, SK5, S9, S10/2 | `.agents/skills/websuli-gyartas-analitika` hiányzik, a `.claude` tükör megvan — megerősítve; `source/scripts/measure/` alatt nincs `source-gap-table.mts` |
 | P-034 | Az adventi haladás tartósan mentődjön. | fut PR-B | — |
 | P-035 | Az adventi naptár kis képernyőn, érintéssel, billentyűzettel menjen. | fut PR-C | #162 a PR-C része |
 | P-036 | Szép, klasszikus karácsonyi képek (T: 2026-11-18T09:38). | fut S3c | a képek legyártva (átirat 2026-11-18T12:32: 84 kép), a tulajdonos válogatására vár |
 | P-037 | A képgyártó ne lépje túl a keretet, és megszakítás után induljon újra. | szelet A-3 | kanban #200–#203 |
-| P-038 | Az advent december 1-jén éljen admin-előnézettel, takarítással, levéllel. | szelet A-1, A-2, A-4 + D-11 | `shared/advent/calendar.ts:61–71` december 1-jén nyit |
+| P-038 | Az advent december 1-jén éljen admin-előnézettel, takarítással, levéllel. | szelet A-1, A-2, A-4 | `shared/advent/calendar.ts:61–71` december 1-jén nyit |
 | P-039 | Az elsős is tudja használni (felolvasás), a tételek ne árulják el egymást. | szelet A-5 | kanban #151, #153 |
 | P-040 | Az első hangeffekt ne késsen. | fut | — |
 | P-041 | A kisfilm-gyártás ne döntse be a szervert. | szelet I-2 | `lesson-clips.ts:20` `CLIP_PARALLEL = 2` — megerősítve; #418 nyitott |
@@ -118,21 +118,21 @@ Jelmagyarázat: **fut** = a 3. szakasz egyik munkája viszi · **kész** = a mai
 | P-053 | Kevesebb fölösleges nagy olvasás és csomag. | szelet I-3, I-4 | kanban #69, #72 |
 | P-054 | Éles műveleteket determinisztikus szkript-őr korlátozzon (T: 2026-11-18T10:56). | szelet I-5 | kanban #145 (J3–J10); a J1 a TGM-SK3 |
 | P-055 | A vendég-haladás párosításkor ne vesszen el. | fut PR-B | — |
-| P-056 | A képválogatás és a levél a tulajdonos jóváhagyásával menjen. | döntés (S3c: fut; S8: A-4) | Az S8 terve szerint az éles küldést a tulajdonos maga indítja a panelről (`2026-11-18-adventi-naptar-vegrehajtas.md` 445–446) |
-| P-057 | A hook-beállítások szándéka legyen eldöntve. | döntés D-13 | kanban #175, #185 |
+| P-056 | A képválogatás és a levél a tulajdonos jóváhagyásával menjen. | fut (S3c képválogatás) + A-4 | Az S8 terve szerint az éles küldést a tulajdonos maga indítja a panelről (`2026-11-18-adventi-naptar-vegrehajtas.md` 445–446) |
+| P-057 | A hook-beállítások szándéka legyen eldöntve. | szelet Q-5 | kanban #175, #185; D-13 (a): a `settings.local.json` ki a követésből, az MCP PR-eszközök a kapu-hook alá |
 | P-058 | Párhuzamos munkafák bizonyítéka ne vesszen el. | szelet Q-1 | `docs/agent-csapdak.md` C-75 |
 | P-059 | Régi tananyag-migráció. | lezárva | A projektmemória indexe: „lezárva 178/178” (legacy-migration-cycles); az októberi #6/#7/#15/#16 a heti körön kívül esik |
 | P-060 | A háttérfolyamatok ne maradjanak árván, a fő munkakönyvtár legyen friss. | szelet Q-10 | a TaskStop-árva figyelő eszközhiba, nem repó-feladat; a fő checkout frissessége gépileg nincs ellenőrizve (a `scripts/qa/gates/` alatt nincs ilyen lépés — keresés `ff-only` / „fő checkout” szóra) |
 | P-061 | A nyitott PR-szálak és a kiváltott PR-ok rendezve legyenek. | lezárva | folyamatlépés minden merge-nél (gate:merge nyitott szál ellenőrzés); #441 → #443 kiváltva |
 | P-062 | Az oldalszál anyaga a fő szálba kerüljön (T: 2026-11-19T08:46). | lezárva | a teendők a TGM-szeletekben (P-028…P-033) |
-| P-063 | A régi és az új Kockavadász-pontok ne keveredjenek. | döntés D-04 | `BlockCraftQuiz.tsx:1097,3321,3340` (leltár) |
-| P-064 | A TTS két eltérése (néma próbakimondás, 80 MB) jóváhagyott legyen. | döntés D-01 | Oldalszál 00:18–20 |
-| P-065 | Az SK3 ne vezessen be új megállító korlátot. | döntés D-02 | Oldalszál 00:16–17 |
-| P-066 | A forrásábra-kapu saját hibája `enforce` módban mit tegyen. | döntés D-03 | Oldalszál 00:24–25 |
+| P-063 | A régi és az új Kockavadász-pontok ne keveredjenek. | fut #484 | D-04 (a): új verziókulcs, új ranglista, a régi rekordok archívként; `BlockCraftQuiz.tsx:1097,3321,3340` (leltár) |
+| P-064 | A TTS két eltérése (néma próbakimondás, 80 MB) jóváhagyott legyen. | kész | D-01 (a): mindkettő jóváhagyva; a mainen él (`audio-store.ts:8`); a TGM-terv D4 / E48 pontjába az S9 vezeti át |
+| P-065 | Az SK3 ne vezessen be új megállító korlátot. | szelet TGM-SK3 | D-02 (a): kimarad; Oldalszál 00:16–17 |
+| P-066 | A forrásábra-kapu saját hibája `enforce` módban mit tegyen. | szelet TGM-SK1c | D-03 (a): a lecke vázlat marad + e-mail; Oldalszál 00:24–25 |
 | P-067 | A review-indító ne ígérjen automatikus merge-et. | fut (Bence-ág) | döntés NEM kell: a minőségkapuk szerint merge csak gate:merge után (`docs/minosegkapuk.md` 92–95: `--auto` DENY) |
 | P-068 | Kell-e külön GitHub-munkamenet. | lezárva | A tulajdonos 2026-11-19T08:46: minden a fő szálba („szűnjön meg ez a sok szana-szét fókuszált munka”) |
 
-**Sorsok darabszáma:** fut 16 · kész 1 · szelet 38 · döntés 9 · lezárva 4 = 68.
+**Sorsok darabszáma (a 2026-11-19-i döntések után):** fut 18 · kész 2 · szelet 43 · lezárva 5 · döntésre vár 0 = 68.
 
 ## 5. A leltárból kimaradt vagy félreértett kérések (most felvéve)
 
@@ -140,21 +140,22 @@ Jelmagyarázat: **fut** = a 3. szakasz egyik munkája viszi · **kész** = a mai
 |---|---|---|---|
 | K-01 | Szólétra: a válaszgombok szövegárnyéka miatt olvashatatlan (T: 2026-11-19T09:02; Átadó 25) | fehér gombon a fekete, elmosott árnyék „dupla” betűt ad — a szöveg legyen éles | G-21 (`WordLadderHuEn.tsx:1744` `${HOLD}-label` árnyéka) |
 | K-02 | Haladássáv „felcserélt színei” (Átadó 26) | **Ellenőrizve a tulajdonos két képén:** a színek helyesek (Te = kék pötty a te fokodon: 8/16 → ~50%, 14/16 → ~87%; Villám = lila). A félrevezető rész: a „Te” felirat fixen balra, a „Villám” fixen jobbra áll, így a „Te” a lila, a „Villám” a kék jelölő alá kerül. Cél: a név a saját jelölőjéhez kötve jelenjen meg | G-21 (`WordLadderHuEn.tsx:1684–1695` `.wl-race-*`) |
-| K-03 | „Mit jelent: „…”?” (Átadó 26) | a célszó-kiemelés (#498) a szót kiveszi a mondatból és „…”-tal pótolja; a mondat így furcsa | G-21 + D-05 |
+| K-03 | „Mit jelent: „…”?” (Átadó 26) | a célszó-kiemelés (#498) a szót kiveszi a mondatból és „…”-tal pótolja; a mondat így furcsa | G-21 (D-05 (a)) |
 | K-04 | „Legyőzted Villámt” → „Villámot”, minden ellenfélnévre (T: 2026-11-19T09:09; Átadó 27) | helyes magyar tárgyeset, nem `${név}t` sablon | G-21 (`:808`, `:1816`; `RIVAL_NAME` `:148`) + őr-teszt |
 | K-05 | Maki a főoldalon (T: 2026-11-18T16:26, 16:30) | lásd P-007 — a leltár célja szűk volt | G-3 |
 | K-06 | Pontgyűjtés a játékos-fiókban (T: 2026-11-16T05:36) — a tulajdonos győzelmi képernyőjén „Az e-mail címed nincs a WebSuli értesítő listáján” áll | a fiók bekapcsolva, de a pontmentés még a régi feltétel (Google + értesítőlista) | M-3, M-4 |
 | K-07 | „Kapcsold be majd a fiókokat” (T: 2026-11-16T19:57) | a leltár „döntésre vár”-nak vette | P-022 javítva |
 | K-08 | Teljes takarítás a repóban, programban, adatbázisban (T: 2026-11-18T07:06, 07:09) | az éles DB-tömörítés lefutott (átirat 2026-11-18T12:32: 350 → 235,7 MB); a „szemét ne termelődjön újra” tartós megőrzési szabály megléte ELLENŐRIZETLEN | I-5/J10 1. lépése ellenőrzi |
-| K-09 | Mintavideó és öt próbavideó egy cég videóötletei alapján (T: 2026-11-15T21:13) | az asszisztens pontosítást kért (átirat 21:13:59), válasz nem jött; nem WEBSULI-kód | D-15 |
 | K-10 | A kommunikáció leszakad (T: 2026-11-19T12:32) | üzemeltetési: zárvárakozás és figyelő; a gépi zár (fut) kezeli | lezárva |
 | K-11 | Cloudflare / belépés (T: 2026-11-18T06:20–06:29) | az ok a VPN volt, DNS-hez senki nem nyúlt (átirat 06:31) | lezárva |
 | K-12 | A Gemini-sor kivétele (T: 2026-11-18T16:04) | kanban #99 (Gemini nem vizsgált területei) nem időszerű; a G-A / G-B / G-C megerősített leletei érvényes hibák | #99 lezárva; #96 → M-2, #97 → M-1, #98 → G-6 |
 
+A 2026-11-15T21:13-i videós kérés (korábban K-09) kikerült: nem WEBSULI-feladat, tulajdonos 2026-11-19.
+
 ## 6. Rögzített döntések és kényszerek (a legújabb él)
 
 - Játékos-fiók: diák saját regisztrációja, becenév + e-mail, nincs szülői kapu (T: 2026-11-16T05:58); Google-belépés admin
-  felülethez csak engedélylistáról (T: 2026-11-16T06:00); fiókok BE (T: 2026-11-16T19:57); közös játék (`MP_MODE`) KI — D-07.
+  felülethez csak engedélylistáról (T: 2026-11-16T06:00); fiókok BE (T: 2026-11-16T19:57); közös játék (`MP_MODE`) KI, admin-pilot az M-1 után, nyilvánosan a JM3b után (D-07).
 - Tiltott fiók lenyomata 12 hónap (T: 2026-11-16T19:39).
 - Joystick marad (T: 2026-11-17T05:51), jobb kézre kerül, a tűz bal kézre (T: 2026-11-18T16:49).
 - Szólétra: nyugodt tempó, azonos XP (2026-11-18, leltár P-012).
@@ -170,6 +171,14 @@ Jelmagyarázat: **fut** = a 3. szakasz egyik munkája viszi · **kész** = a mai
 - A nehéz körök (gate:push, gate:pr, e2e, DB) gépi zár alatt (`feat/gepi-zar` beolvadása után a repó zárszkriptje; addig a futó
   munkamenet zárszabálya).
 - Halmozott PR-nál minden PR önállóan semleges; kapcsoló a lánc alján, alapból KI.
+- **Tulajdonosi döntések 2026-11-19 (~17:55 UTC, űrlap; részletek a 8. szakaszban):** D-01 a néma próbakimondás elhagyása és a
+  40 / 80 MB-os hangtár jóváhagyva · D-02 az SK3-ban nincs új megállító korlát · D-03 `enforce`-kapu saját hibájánál a lecke vázlat
+  marad, e-mail megy · D-04 Rúnabánya: új verziókulcs, új ranglista, a régi rekordok archívként · D-05 Szólétra: a célszó a mondatban,
+  kiemelve, a nagy kártya elmarad · D-06 alias: új regisztrációnál kanonikus egyediség, a meglévők csak listázva · D-07 `MP_MODE`
+  admin-pilot az M-1 után, nyilvánosan a JM3b után · D-08 Aszteroida egyujjas mód IGEN (G-15b) · D-09 Brain Rot: rövid megerősítés ·
+  D-10 szünetben álló, elmosott kép · D-11 advent BE az A-1 beolvadásával, legkésőbb november 30., a tulajdonos előnézeti próbája után ·
+  D-12 maki: ellenőrzés után BE, körbevezetés csak először · D-13 `.claude/settings.local.json` ki a követésből, az MCP PR-eszközök
+  a kapu-hook alá · D-14 nincs történetátírás · D-15 törölve (nem WEBSULI-feladat) · D-16 a G-21 a P1-blokk után.
 
 ## 7. Szeletek
 
@@ -177,7 +186,7 @@ Jelmagyarázat: **fut** = a 3. szakasz egyik munkája viszi · **kész** = a mai
 
 | # | Szelet | Prio | Tételek | Függőség |
 |---|---|---|---|---|
-| 1 | A-1 Advent S6: admin-előnézet, 60 napos takarító, bekapcsolás | P1 | P-038, #155(S6), #172, #166, #171 | PR-B, PR-C (fut); D-11; **határidő: november 30.** |
+| 1 | A-1 Advent S6: admin-előnézet, 60 napos takarító, bekapcsolás | P1 | P-038, #155(S6), #172, #166, #171 | PR-B, PR-C (fut); a tulajdonos előnézeti próbája (D-11); **határidő: november 30.** |
 | 2 | A-2 Advent S5: eredménylevél az adminoknak | P1 | P-038, #155(S5) | PR-B |
 | 3 | T-1 Pontozó: polinom végpont, két számeredmény | P1 | P-027, #121, #122 | — |
 | 4 | T-2 Pontozó: igen/nem/szám rubrika, kérdés-visszamásolás | P1 | P-027, #130, #132 | T-1 (ugyanaz a korpusz) |
@@ -187,36 +196,36 @@ Jelmagyarázat: **fut** = a 3. szakasz egyik munkája viszi · **kész** = a mai
 | 8 | Q-1 Szkriptkapuk P2: bizonyítéklánc + munkafánkénti napló | P1 | P-042 (P2), P-058 | #517, #513 merge |
 | 9 | Q-2 Hook-szelet 1: fail-closed bemenet és lassúság | P1 | P-045, #158–#160, #174, #176, #179, #180, #182 | #520 merge |
 | 10 | Q-3 Kapu: squash-követő háromfázisú hamis bukás, lépés-időkorlát | P1 | P-046, #144, #168 | kapugyorsítás merge |
-| 11 | G-21 Szólétra olvashatóság és nyelvhelyesség | P2 | P-011, K-01…K-04 | D-05, D-16 (helye a sorban) |
+| 11 | G-21 Szólétra olvashatóság és nyelvhelyesség | P2 | P-011, K-01…K-04 | — (D-05, D-16 eldöntve) |
 | 12 | A-3 Advent képgyártó utómunka | P2 | P-037, #200–#203 | minden további fizetős képkör ELŐTT |
 | 13 | A-4 Advent S8 értesítő (száraz futás, tulajdonosi küldés) | P2 | P-038, P-056, #155(S8) | A-1 |
 | 14 | A-5 Advent: elsős felolvasás, tételátfedés | P2 | P-039, #151, #153 | PR-C; lehetőleg december 1. előtt |
 | 15 | A-6 Advent DB-kör két folyamatra | P2 | #152, #167, #173 | PR-B |
 | 16 | G-1 Kupon-ismétlés felső korlátja | P2 | P-010, #108, #136 | — |
 | 17 | G-2 Joystick jobb kézre | P2 | P-006 | Szökőár-ág merge |
-| 18 | G-3 Főoldali maki | P2 | P-007, K-05 | D-12 |
+| 18 | G-3 Főoldali maki | P2 | P-007, K-05 | — (BE csak az orr képes ellenőrzése után, D-12) |
 | 19 | G-4 Élő apróhibák | P2 | P-008 maradék, P-017, #64, #109, #111, #141 | — |
 | 20 | G-5 Közös motor: órák lassú képkockán | P2 | P-016, #114, #134, #199 | — |
 | 21 | G-6 Közös mérő, HoldButton, kérdés-sáv költség | P2 | P-016, #86, #98, #102 | G-5 |
-| 22 | G-7 Szünet alatti rajzolás | P2 | P-017, #74 | D-10 |
+| 22 | G-7 Szünet alatti rajzolás | P2 | P-017, #74 | — |
 | 23 | G-8 Szökőár utómunka | P2 | P-013, P-017, #94 (ÚA3, ÚA4), #129 (ha maradt), #178, #186, #196–#198 | Szökőár-ág merge |
 | 24 | G-9 J1b, G-10 J1c | P2 | P-013 | G-8 |
 | 25 | G-11 J2b | P2 | P-014 | G-21 |
-| 26 | G-12 J3b, G-13 J3c | P2 | P-014, #93 (J3c) | #484 merge, D-04 |
-| 27 | G-14 J6b, G-15 Aszteroida K.4 | P2 | P-014, P-021, #85 | #486 merge, D-08 |
+| 26 | G-12 J3b, G-13 J3c | P2 | P-014, #93 (J3c) | #484 merge (a D-04 szerinti verziókulccsal) |
+| 27 | G-14 J6b, G-15a Aszteroida K.4, G-15b egyujjas mód | P2 | P-014, P-021, #85 | #486 merge; G-15b a G-15a után |
 | 28 | G-16 J7c | P2 | P-014, #104 | J7b merge |
-| 29 | G-17 J5b | P2 | P-015, #88 | D-09, G-1 |
+| 29 | G-17 J5b | P2 | P-015, #88 | G-1 |
 | 30 | G-18 J8 meta-fejlődés | P2 | P-014 | M-4 |
 | 31 | M-1 Közös játék előfeltétele: 3–4 fős kilépés, G-B leletek | P2 | P-018, #73, #97 | — |
 | 32 | M-2 JM7c-2 + tiltás-holtpont + G-A leletek | P2 | P-019, #62, #75, #96 | — |
 | 33 | M-3 JM8a pontkönyv (szerver), M-4 JM8b (kliens) | P2 | P-019, K-06 | M-2 |
-| 34 | M-5 JM3b, M-6 JM4–JM6, M-7 JM9–JM11 | P2 | P-018, P-019, #52 | M-1, D-07 |
-| 35 | M-8 Alias-egyediség | P2 | P-020, #77 | D-06 |
+| 34 | M-5 JM3b, M-6 JM4–JM6, M-7 JM9–JM11 | P2 | P-018, P-019, #52 | M-1 + az `MP_MODE` admin-pilot (tulajdonosi flag-lépés); a nyilvános bekapcsolás az M-5 után |
+| 35 | M-8 Alias-egyediség | P2 | P-020, #77 | — |
 | 36 | T-4 Kérdésbank S2–S3 | P2 | P-009, #71, #149 | — |
 | 37 | T-5 Tananyagkereső szélei | P2 | P-026, #142 | — |
-| 38 | TGM-lánc (S2b … S10/2, 23 alszelet) | P2 | P-028…P-033 | 7.6 szerint; D-01, D-02, D-03 |
+| 38 | TGM-lánc (S2b … S10/2, 23 alszelet) | P2 | P-028…P-033 | 7.6 szerint |
 | 39 | Q-4 Hook-szelet 2: hamis tiltások, PowerShell, alias | P2 | P-045, #124, #125, #177, #192–#195 | Q-2 |
-| 40 | Q-5 Hook-szelet 3: runbook, szöveg-őr, ConfigChange, MCP | P2 | P-045, P-057, #120, #164, #175, #181, #184 | D-13, Q-4 |
+| 40 | Q-5 Hook-szelet 3: runbook, szöveg-őr, ConfigChange, MCP | P2 | P-045, P-057, #120, #164, #175, #181, #184 | Q-4 |
 | 41 | Q-6 Szkriptkapuk P3–P5 | P2 | P-042, #187, #188 | Q-1 |
 | 42 | Q-7 CI ingadozók gyökéroka | P2 | P-050, #76, #105, #143, #204 | — |
 | 43 | Q-8 Workflow-jogosultság, SHA-rögzítés, szeletsúlyok | P2 | P-050 | — |
@@ -228,8 +237,8 @@ Jelmagyarázat: **fut** = a 3. szakasz egyik munkája viszi · **kész** = a mai
 | 49 | Q-10 Fő checkout frissesség-ellenőrzés | P3 | P-060 | — |
 | 50 | I-6 Vezérlés-diéta 2. lépcső | P3 | P-051, #34 | — |
 
-A G-21 helye a sorban tulajdonosi kérdés (D-16): a tulajdonos „a sor legvégére” tette (T: 2026-11-19T09:02), amikor a sorban a
-most futó munkák álltak. Javaslat: a P1-blokk után (11. hely); a másik opció a terv legvége.
+A G-21 a P1-blokk után áll (11. hely) — D-16 (a), 2026-11-19. A tulajdonos 2026-11-19T09:02-i „sor vége” kérése a most futó
+munkákra vonatkozott.
 
 ### 7.2 Advent (A-1…A-6)
 
@@ -250,7 +259,7 @@ most futó munkák álltak. Javaslat: a P1-blokk után (11. hely); a másik opci
 - EARS: WHEN az admin az `?elonezet=2026-12-05` címet nyitja THEN a naptár a december 5-i állapotot mutatja; WHEN a flag BE
   THEN a szerver indulásakor és 24 óránként fut a `store.sweep`; WHEN nem admin kéri az előnézetet THEN 401/403 és nincs mellékhatás.
 - Ellenőrzés: `admin-route-guard.test.ts`, `advent-calendar.spec.ts`, `test:learning-db` (gépi zárral), mobil 360×640 és 844×390.
-- Kockázat: a flag bekapcsolása éles viselkedés — a PR-leírásban külön kiemelve, a merge előtt a tulajdonos jóváhagyása (D-11).
+- Kockázat: a flag bekapcsolása éles viselkedés — a PR-leírásban külön kiemelve, a merge előtt a tulajdonos előnézeti próbája és jóváhagyása (D-11 (a)); a bekapcsolás az A-1 beolvadásával, legkésőbb november 30-án.
 
 **A-2 — S5: eredménylevél.** Részletek: ugyanott „S5” (290–311. sor) + „Kiegészítés 5”. Cél: a végigért kör eredménye eljusson a
 címzettekhez egyszer. EARS: WHEN egy `learner` alany első `finished_at` értéke beáll THEN címzettenként pontosan egy levél megy
@@ -346,7 +355,9 @@ nem „kilépési kód 127”. Előfeltétel: a kapugyorsítás beolvadása (ugy
 normalizálás), #177 (`git stash push`, `git log --grep push`), #192–#195. EARS: WHEN `git log --format={a,b}` THEN nincs tiltás;
 WHEN `gh pr merge -R https://github.com/<tulaj>/WEBSULI.git` THEN a WEBSULI-ra vonatkozó szabály fut.
 
-**Q-5 — Hook-szelet 3.** D-13 után. Tételek: #120 (args-os hook-alak), #164 (szöveg-őr a teljes runbookra és az öt kapu-skillre),
+**Q-5 — Hook-szelet 3.** D-13 (a): a `.claude/settings.local.json` kikerül a követésből (`git rm --cached` + `.gitignore`-sor; a
+helyi fájl megmarad), a GitHub-MCP PR-nyitó / -összevonó eszközök a kapu-hook alá kerülnek (a hook-kód kezeli az MCP-bemenetet; a
+`.claude/settings.json` matcher-sorát a tulajdonos alkalmazza). Tételek: #120 (args-os hook-alak), #164 (szöveg-őr a teljes runbookra és az öt kapu-skillre),
 #175 (MCP-eszközök a matcherben a döntés szerint), #181 (ConfigChange hook), #184 (runbook-pontosítás). A `.claude/settings*.json`
 szerkesztése ügynöknek tiltott (`docs/minosegkapuk.md` 205–208): az ügynök a módosítást a PR-ban javaslatként adja, a beállítást a
 tulajdonos alkalmazza.
@@ -384,7 +395,7 @@ lejárt kupon + hibás válasz együtt.
 átfedés nélkül 360×640, 844×390, 827×896 nézetben. Ellenőrzés: `game-touch-controls.test.ts`, valódi érintéses böngészős kör.
 
 **G-3 — Főoldali maki.** Forrás: `feat/kabala-fooldal` @ `80f4c6cc` (terv: `docs/specs/2026-11-18-kabala-fooldal.md`). Teendő:
-friss main beolvasztása, az orrfolt képes ellenőrzése (a tulajdonosnak képernyőkép), a terv 10. szakaszának válaszai (D-12),
+friss main beolvasztása, az orrfolt képes ellenőrzése (a tulajdonosnak képernyőkép), a D-12 (a) válasz átvezetése a terv 10. szakaszába (bekapcsolás az orr ellenőrzése után, körbevezetés csak először),
 kapuk. EARS: WHEN a főoldal betölt és `HOME_MASCOT` BE THEN a maki a 3 legújabb (évfolyamhoz illő) tananyagot ajánlja, a képkészlet
 ≤ 300 KB, a CLS nem nő; WHEN `prefers-reduced-motion` THEN álló kép. Kockázat: a 250 KB-os célt az ág 6,7 KiB-tal túllépi (terv
 105–107. sor) — a keret 350 KB, ezen belül.
@@ -403,7 +414,8 @@ director burkolt ablakot ad THEN a flow / intensity a burkoltat látja.
 EARS: WHEN a HoldButtont az ujj elhagyja vagy a lap elveszti a fókuszt THEN felenged; WHEN a mérő 827×896 és 896×827 nézetben fut THEN
 a főszál-blokk játék közben < 50 ms/s.
 
-**G-7 — Szünet alatti rajzolás (#74).** D-10 után. Fájl: `source/client/src/game-engine/mobile/index.ts` (`requestGameFrame`).
+**G-7 — Szünet alatti rajzolás (#74).** D-10 (a): szünetben a 3D és a díszítő háttér nem rajzol; az utolsó képkocka álló, elmosott
+képként marad. EARS: WHEN a szünet menü nyitva THEN a képkocka-számláló nem nő, és a háttér elmosott álló kép. Fájl: `source/client/src/game-engine/mobile/index.ts` (`requestGameFrame`).
 
 **G-8 — Szökőár utómunka.** A Szökőár-ág beolvadása után: #94 ÚA3 (tétlen átfutásnál 0-t mutató időzítő), ÚA4 (kapu előtti
 takarítás látható akadályt tüntet el), #196 (betöltés közbeni csupasz jelenet), #197 (a figura negyede kilóg álló nézetben), #186 /
@@ -413,10 +425,31 @@ ellenőrzés az ág végső fején).
 **G-9…G-19 — A játékhullám maradéka.** Részletes lépések és elfogadás: `docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md`
 — J1b (1116), J1c (1129), elfogadás J1 (1143); J2b (1220), elfogadás (1233); J3b (1296), J3c (1307), elfogadás (1317); J5b (1650),
 elfogadás (1665); J6b (1726), elfogadás (1736); J7c (1855), elfogadás (1890); J8 (1904), elfogadás (1952); J9 (1978), elfogadás (2003).
-Kiegészítés: G-15 = kanban #85 K.4 pontjai (pool, InstancedMesh, 4× CPU, kétujjas teszt, jelvényszöveg, napi seed Budapest szerint —
+Kiegészítés: G-15a = kanban #85 K.4 pontjai (pool, InstancedMesh, 4× CPU, kétujjas teszt, jelvényszöveg, napi seed Budapest szerint —
 óraátállás-teszttel; a balkezes tükrözés a G-2 jobbkezes döntése után nem készül, mert a tulajdonos fix jobbkezes elrendezést kért);
-G-13 = #93 J3c-pontja (fekvőben a kérdés alá eső kövek). Minden G-szelet a C-61…C-72 csapdák 1–6. hibatípusára célzott tesztet kap
+G-15b = egyujjas mód (D-08 (b), 2026-11-19) — lásd lent;
+G-13 = #93 J3c-pontja (fekvőben a kérdés alá eső kövek); G-17 = D-09 (a): a megállással adott válasz rövid megerősítést kér
+(második koppintás vagy rövid tartás) — EARS: WHEN a játékos megáll egy lény előtt THEN válasz csak a megerősítés után születik. Minden G-szelet a C-61…C-72 csapdák 1–6. hibatípusára célzott tesztet kap
 (`docs/minosegkapuk.md` 150–157).
+
+**G-15b — Aszteroida egyujjas mód (D-08 (b), 2026-11-19).**
+- Cél: az Aszteroida egy ujjal is játszható legyen (mozgás és célzás egy érintéssel, automata tüzeléssel), úgy, hogy az automata
+  tüzelés ne adjon véletlen választ a kérdés-kristályokra.
+- Nem cél: a kétujjas mód viselkedésének változása; új kérdéstípus.
+- Fájlok: `source/client/src/pages/SpaceAsteroidQuiz.tsx` és a #486-tal jövő `crystals.ts`, `physics.ts`, `sim.ts` (a pontos útvonal
+  a #486 beolvadása után ELLENŐRIZENDŐ), `source/tests/game-mobile-cases/space-asteroid-quiz.ts` (leltár P-002).
+- Rögzített szabály: egyujjas módban az automata tüzelés találata a kérdés-kristályon NEM válasz; válasz csak tudatos célzással
+  születik (pl. a kristály a célzás közepén van egy minimális ideig, vagy külön koppintás a kristályra) — a pontos jelet a szelet
+  terve méréssel rögzíti.
+- Edge: kristály akadály mögött; több kristály egymás mellett; a kérdés megjelenésekor már lenyomott ujj; lejárt kupon; fekvő és
+  álló nézet; módváltás menet közben.
+- EARS: WHEN egyujjas módban az automata tüzelés a kristályt eltalálja, de a játékos nem célzott rá tudatosan THEN válasz nem
+  születik; WHEN a játékos a kristályt a terv szerinti jellel tudatosan célozza THEN pontosan egy válasz születik; WHEN az ujj már a
+  kérdés megjelenése előtt le volt nyomva THEN válasz csak felengedés és új célzás után születhet; WHEN a kétujjas mód fut THEN a
+  viselkedése változatlan (a meglévő tesztek zöldek).
+- Ellenőrzés: seedelt sim-teszt (80 menet automata tüzeléssel, tudatos célzás nélkül → 0 válasz), böngészős egyujjas érintéses kör
+  360×640 és 844×390 nézetben, mutációs ellenpróba (a tudatos-célzás feltétel kivétele → a teszt bukik).
+- Függőség: #486, G-15a. Kockázat: a minőségkapuk 1. hibatípusa (véletlen válasz) — a vak ellenőr kifejezett megtörési pontja.
 
 **G-20 — Szólétra `pacing.ts` (#148).** A tárolás külön fájlba, a tiszta időzítés a determinizmus-őr alá, a hamis fejkomment javítva.
 
@@ -431,7 +464,7 @@ G-13 = #93 J3c-pontja (fekvőben a kérdés alá eső kövek). Minden G-szelet a
   `{ név, tárgyeset }` párból; WHEN bármely kliensfájlban `${…}t!` / `${…}ot!` sablonos tárgyrag áll THEN az őr-teszt FAIL; WHEN a
   válaszgomb világos háttéren áll THEN a szövegen nincs sötét elmosott árnyék (WCAG AA kontraszt mérve); WHEN a haladássáv
   kirajzolódik THEN a „Te” és a „Villám” felirat a saját jelölője közelében áll (a jelölő vízszintes helyéhez kötve); WHEN a kérdésnek
-  célszava van THEN a mondat D-05 szerint jelenik meg, „„…”” helyőrző nélkül.
+  célszava van THEN a szó a mondatban marad, kiemelve (D-05 (a)), a nagy külön kártya nem jelenik meg, és „„…”” helyőrző nincs.
 - Ellenőrzés: `word-ladder-readability.spec.ts` bővítése (360×640, 844×390 és kihajtott 827×896, dpr 2,625 — a tulajdonos képernyőképének mérete), képernyőkép a
   tulajdonosnak; őr-teszt mutációs ellenpróbával.
 - Kockázat: a #498 célszó-kiemelés tesztjei.
@@ -443,17 +476,18 @@ Részletes lépések: `docs/specs/2026-11-18-tananyag-gyartas-minoseg-vegrehajta
 1. S2b (355) — döntési fa, képes kártya.
 2. S3a (419), S3b (509) — a forrás és az ábrák állomás összekötése, szókeret / szerző / lektor / bank.
 3. S4a (544), S4b (572) — számolási hamis riasztások, idézet-áthelyezés, zárt világ-lista.
-4. SK3 (602) — D-02 után; a spec SK3 szakaszát előbb az Oldalszál 00:10 szerint igazítani („csak jelez”, nincs vészleállító).
+4. SK3 (602) — D-02 (a): új megállító korlát nincs; a spec SK3 szakaszát előbb az Oldalszál 00:10 szerint igazítani („csak jelez”, nincs vészleállító).
 5. S10/0 (667) — `source-gap-table.mts`, `trial-ledger.mts`, fixture-ök.
 6. S10/1 (689) — fizetős első mérés ≤ 30 USD, eldobható DB-n (D2 döntés megvan); indítás előtt a futásőr.
-7. SK1c (kanban #163) — az S10/1 valódi kimenetével; D-03.
+7. SK1c (kanban #163) — az S10/1 valódi kimenetével; D-03 (a): `enforce` módban a kapu saját hibájánál a lecke vázlat marad (nem
+   publikálódik), és e-mail megy az adminoknak; az ismert lefedettségi bukás bukás marad.
 8. S5a (741), S5b (773), S6a (795), S6b (829), S6c (850), SK2 (873).
 9. S7a (904), S7b (950) — #131.
 10. #183 (8 lelet), majd S8c (1060) — az ElevenLabs-gyártás tulajdonosi indítással (Oldalszál 99 4. szakasz: ~3,4 USD), előtte
     valódi iPad / Android próba; #150 a tartaléklánc.
 11. SK4 (1225), SK5 (1253).
 12. S9 (1272) — kiegészítés: a `.agents/skills/websuli-gyartas-analitika/SKILL.md` forrás pótlása a `.claude` tükörből
-    (skills-sync-check), a D-01 válasz átvezetése a D4 / E48 pontba (Oldalszál 00:18–20).
+    (skills-sync-check), a D-01 (a) jóváhagyás átvezetése a D4 / E48 pontba (Oldalszál 00:18–20).
 13. S10/2 (729) — záró mérés; utána a `STUDIO_SOURCE_VISUALS` bekapcsolási kérdése a tulajdonosnak a mért számokkal.
 
 ### 7.7 Többjátékos mód és fiók (M-1…M-8)
@@ -472,7 +506,10 @@ JM7c (2762), JM8a (2842), JM8b (2884), JM9 (2894), JM10 (2911), JM11 (2921).
   játékos-fióknál nem jelenik meg. EARS: WHEN játékos-fiókkal belépett gyerek befejez egy menetet THEN a pont a fiókjában
   megjelenik, és az eredménykártya ezt mondja.
 - **M-5…M-7:** a terv sorrendjében; a győzteshirdetés csoportban a tulajdonos 2026-11-16-i kérése.
-- **M-8:** D-06 után; a meglévő ütközések kezelése a választott opció szerint, visszafordíthatatlan adatlépés nélkül.
+- **M-8:** D-06 (a): új regisztrációnál a Gmail-cím kanonikus alakja (pont és +címke nélkül) egyedi; a meglévő ütközéseket csak
+  listázzuk az admin-panelen, automatikus összevonás és visszafordíthatatlan adatlépés nincs. EARS: WHEN egy már regisztrált
+  postafiók alias-címével új regisztráció érkezik THEN elutasítás érthető üzenettel; WHEN a migráció fut THEN a meglévő ütköző
+  fiókok változatlanok és listázva vannak.
 
 ### 7.8 Infrastruktúra (I-1…I-6)
 
@@ -500,26 +537,26 @@ A Resend és az éles adat külön tulajdonosi felhatalmazást igényel.
 **I-6 — Vezérlés-diéta 2.** `docs/specs/2026-11-17-vezerles-dieta.md` 2. lépcső; kanban #34 (holt kód, függőségek, régi márkanév,
 VPS-doksik).
 
-## 8. Tulajdonosi döntések (űrlapra; az ajánlott opció elöl)
+## 8. Tulajdonosi döntések (megválaszolva 2026-11-19 ~17:55 UTC, űrlapon)
 
-| D | Kérdés | Opciók (ajánlott elöl) | Indok |
-|---|---|---|---|
-| D-01 | A brit hang két, már élesben lévő eltérését jóváhagyod? | **(a) Igen, mindkettőt** (néma próbakimondás nélkül; hangtár 40 MB hangverziónként + 80 MB abszolút) · (b) csak a 80 MB-ot, a próbakimondás visszajön · (c) egyiket sem — visszaállítás 40 MB-ra | a mainen fut (`audio-store.ts:8`); a 80 MB a hangcsere átmeneti kettős készlete, nélküle hangcsere közben a feltöltés megállna |
-| D-02 | Az SK3-ban maradjon ki az új futásidő- és összesített körszám-megállító? | **(a) Igen, maradjon ki** · (b) legyen, de csak jelezzen · (c) legyen megállító | összhangban a 2026-11-18-i „csak jelezzen, vészleállító nem kell” döntéssel |
-| D-03 | Ha a forrásábra-kapu maga hibázik `enforce` módban, mi legyen? | **(a) A lecke vázlatként marad, nem jelenik meg; e-mail megy** · (b) a gyártás megáll · (c) csak e-mail, a lecke megjelenik | kapu-hiba nem engedhet ellenőrizetlen leckét a gyerekhez, de pénzt sem dob ki (a kész gyártás megmarad) |
-| D-04 | A Rúnabánya új pontskálájánál mi legyen a régi Kockavadász-rekordokkal? | **(a) Új verziókulcs: új ranglista, a régi rekordok megmaradnak archívként** · (b) nullázás · (c) közös lista átváltással | visszafordítható; nincs adatvesztés; a két skála nem összevethető |
-| D-05 | A Szólétra kérdésében a kiemelt szó hogyan álljon? | **(a) A szó a mondatban marad, kiemelve (sárga címkeként); a nagy kártya elmarad** · (b) marad a nagy kártya, a mondat „Mit jelent ez a szó?” · (c) mindkettő | természetes mondat, és a kiemelés (#498 cél) megmarad |
-| D-06 | Egy Gmail-postafiók alias-címei (pont, +címke) nyithassanak-e külön játékos-fiókot? | **(a) Nem: új regisztrációnál kanonikus cím-egyediség; a meglévő ütközéseket csak listázzuk, te döntesz** · (b) igen, maradjon így · (c) a meglévőket is automatikusan összevonjuk | a ranglista-duplikálás megszűnik, és meglévő fiókhoz automatikusan nem nyúlunk |
-| D-07 | Mikor induljon a közös (online) játék? | **(a) Admin-pilot az M-1 (kilépési hiba + G-B leletek) után, nyilvánosan a JM3b után** · (b) maradjon KI a játékhullám végéig · (c) azonnal admin-pilot | a jegy szerint a G-B leletek javítása a pilot előfeltétele |
-| D-08 | Az Aszteroidában készüljön külön egyujjas mód? | **(a) Most nem; a J6a visszajelzése után újra** · (b) igen, a G-15-ben | a forrás szerint az automata tüzelés véletlen válaszokat okozhat |
-| D-09 | A Brain Rotban a megállással adott válasz kérjen-e megerősítést? | **(a) Igen, rövid megerősítés (második koppintás / tartás)** · (b) hosszabb megállási küszöb · (c) marad | a mért önkéntelen válasz a minőségkapuk 1. hibatípusa |
-| D-10 | Szünet alatt a 3D háttér rajzolódjon tovább? | **(a) Ne: álló, elmosott kép szünetben** · (b) lassítva fusson · (c) maradjon így | akkumulátor, és a szünet valódi szünet |
-| D-11 | Mikor kapcsoljuk be az adventi naptárat élesben? | **(a) Az A-1 beolvadásával, legkésőbb november 30-án, a te előnézeti próbád után** · (b) december 1-jén reggel · (c) csak az S3c végleges képei után | december 1-jén nyílik az első ablak |
-| D-12 | A főoldali maki bekapcsolása és körbevezetése? | **(a) A végleges modell + az orrfolt képes ellenőrzése után BE; körbevezetés csak először** · (b) BE most · (c) KI marad | a terv 10. szakaszának ajánlásai; nem idegesítő a visszatérőnek |
-| D-13 | A követett `.claude/settings.local.json` szándékos-e, és a GitHub-MCP eszközök kerüljenek-e a kapu-hook alá? | **(a) Nem szándékos: kivenni a követésből; az MCP PR-nyitó / -összevonó eszközök a kapu-hook alá** · (b) szándékos marad; MCP kívül · (c) szándékos; MCP a hook alá | a kapu ma csak Bash / PowerShell-t lát (kanban #175) |
-| D-14 | A nyilvános git-előzményben maradt régi címadat? | **(a) Megőrizzük, nincs történetátírás** (a követett fájlok már tiszták, őr-teszt véd) · (b) szervezett történetátírás force-pusszal | a már klónozott másolatokat az átírás sem törli; force-push minden ágat és PR-t érint |
-| D-15 | A 2026-11-15-i „mintavideó + öt próbavideó” kérés él még? | **(a) Nem WEBSULI-feladat: külön munkamenetben, ha kell** · (b) igen, ebben a repóban | pontosítás 2026-11-15 óta nem jött; a WEBSULI-ban nincs videógyártó folyamat |
-| D-16 | A Szólétra-javítás (árnyék, tárgyrag, haladássáv) hol álljon a sorban? | **(a) A P1-blokk után** · (b) a teljes terv végén | felhasználói hiba, rövid szelet; a „sor vége” a most futó munkákra vonatkozott |
+| D | Kérdés | Opciók (az ajánlott elöl) | Indok | Döntés (2026-11-19) |
+|---|---|---|---|---|
+| D-01 | A brit hang két, már élesben lévő eltérését jóváhagyod? | **(a) Igen, mindkettőt** (néma próbakimondás nélkül; hangtár 40 MB hangverziónként + 80 MB abszolút) · (b) csak a 80 MB-ot, a próbakimondás visszajön · (c) egyiket sem — visszaállítás 40 MB-ra | a mainen fut (`audio-store.ts:8`); a 80 MB a hangcsere átmeneti kettős készlete, nélküle hangcsere közben a feltöltés megállna | **(a)** igen, mindkettő |
+| D-02 | Az SK3-ban maradjon ki az új futásidő- és összesített körszám-megállító? | **(a) Igen, maradjon ki** · (b) legyen, de csak jelezzen · (c) legyen megállító | összhangban a 2026-11-18-i „csak jelezzen, vészleállító nem kell” döntéssel | **(a)** maradjon ki |
+| D-03 | Ha a forrásábra-kapu maga hibázik `enforce` módban, mi legyen? | **(a) A lecke vázlatként marad, nem jelenik meg; e-mail megy** · (b) a gyártás megáll · (c) csak e-mail, a lecke megjelenik | kapu-hiba nem engedhet ellenőrizetlen leckét a gyerekhez, de pénzt sem dob ki (a kész gyártás megmarad) | **(a)** vázlat marad + e-mail |
+| D-04 | A Rúnabánya új pontskálájánál mi legyen a régi Kockavadász-rekordokkal? | **(a) Új verziókulcs: új ranglista, a régi rekordok megmaradnak archívként** · (b) nullázás · (c) közös lista átváltással | visszafordítható; nincs adatvesztés; a két skála nem összevethető | **(a)** új verziókulcs, új ranglista, a régi archív |
+| D-05 | A Szólétra kérdésében a kiemelt szó hogyan álljon? | **(a) A szó a mondatban marad, kiemelve (sárga címkeként); a nagy kártya elmarad** · (b) marad a nagy kártya, a mondat „Mit jelent ez a szó?” · (c) mindkettő | természetes mondat, és a kiemelés (#498 cél) megmarad | **(a)** a szó a mondatban, kiemelve; a nagy kártya elmarad |
+| D-06 | Egy Gmail-postafiók alias-címei (pont, +címke) nyithassanak-e külön játékos-fiókot? | **(a) Nem: új regisztrációnál kanonikus cím-egyediség; a meglévő ütközéseket csak listázzuk, te döntesz** · (b) igen, maradjon így · (c) a meglévőket is automatikusan összevonjuk | a ranglista-duplikálás megszűnik, és meglévő fiókhoz automatikusan nem nyúlunk | **(a)** új regisztrációnál kanonikus egyediség; a meglévők csak listázva |
+| D-07 | Mikor induljon a közös (online) játék? | **(a) Admin-pilot az M-1 (kilépési hiba + G-B leletek) után, nyilvánosan a JM3b után** · (b) maradjon KI a játékhullám végéig · (c) azonnal admin-pilot | a jegy szerint a G-B leletek javítása a pilot előfeltétele | **(a)** admin-pilot az M-1 után, nyilvánosan a JM3b után |
+| D-08 | Az Aszteroidában készüljön külön egyujjas mód? | **(a) Most nem; a J6a visszajelzése után újra** · (b) igen, a G-15-ben | a forrás szerint az automata tüzelés véletlen válaszokat okozhat | **(b)** IGEN — egyujjas mód a G-15b-ben, a véletlen válasz kizárásával (csak tudatos célzás válaszol) |
+| D-09 | A Brain Rotban a megállással adott válasz kérjen-e megerősítést? | **(a) Igen, rövid megerősítés (második koppintás / tartás)** · (b) hosszabb megállási küszöb · (c) marad | a mért önkéntelen válasz a minőségkapuk 1. hibatípusa | **(a)** rövid megerősítés |
+| D-10 | Szünet alatt a 3D háttér rajzolódjon tovább? | **(a) Ne: álló, elmosott kép szünetben** · (b) lassítva fusson · (c) maradjon így | akkumulátor, és a szünet valódi szünet | **(a)** álló, elmosott kép szünetben |
+| D-11 | Mikor kapcsoljuk be az adventi naptárat élesben? | **(a) Az A-1 beolvadásával, legkésőbb november 30-án, a te előnézeti próbád után** · (b) december 1-jén reggel · (c) csak az S3c végleges képei után | december 1-jén nyílik az első ablak | **(a)** az A-1 beolvadásával, legkésőbb november 30-án, a tulajdonos előnézeti próbája után |
+| D-12 | A főoldali maki bekapcsolása és körbevezetése? | **(a) A végleges modell + az orrfolt képes ellenőrzése után BE; körbevezetés csak először** · (b) BE most · (c) KI marad | a terv 10. szakaszának ajánlásai; nem idegesítő a visszatérőnek | **(a)** ellenőrzés után BE, körbevezetés csak először |
+| D-13 | A követett `.claude/settings.local.json` szándékos-e, és a GitHub-MCP eszközök kerüljenek-e a kapu-hook alá? | **(a) Nem szándékos: kivenni a követésből; az MCP PR-nyitó / -összevonó eszközök a kapu-hook alá** · (b) szándékos marad; MCP kívül · (c) szándékos; MCP a hook alá | a kapu ma csak Bash / PowerShell-t lát (kanban #175) | **(a)** a `settings.local.json` ki a követésből; az MCP PR-eszközök a kapu-hook alá |
+| D-14 | A nyilvános git-előzményben maradt régi címadat? | **(a) Megőrizzük, nincs történetátírás** (a követett fájlok már tiszták, őr-teszt véd) · (b) szervezett történetátírás force-pusszal | a már klónozott másolatokat az átírás sem törli; force-push minden ágat és PR-t érint | **(a)** megőrizzük, nincs történetátírás |
+| D-15 | — | — | — | **törölve:** nem WEBSULI-feladat, tulajdonos 2026-11-19 |
+| D-16 | A Szólétra-javítás (árnyék, tárgyrag, haladássáv) hol álljon a sorban? | **(a) A P1-blokk után** · (b) a teljes terv végén | felhasználói hiba, rövid szelet; a „sor vége” a most futó munkákra vonatkozott | **(a)** a G-21 a P1-blokk után |
 
 ## 9. Közös edge case-ek és kockázatok
 
@@ -537,11 +574,12 @@ VPS-doksik).
 A repóban nincs `npm run qa:spec`; a jelölő a meglévő tervek (ADVENT) szokását követi.
 
 - [ ] WHEN a végrehajtás befejeződött THEN a 4. szakasz minden „szelet” sora mögött beolvasztott PR áll (szám + merge-commit).
-- [ ] WHEN egy „döntés” sorra a tulajdonos válaszolt THEN a válasz dátummal bekerül ebbe a tervbe, és a hozzá tartozó szelet elindul.
+- [x] WHEN a tulajdonos a 8. szakasz kérdéseire válaszolt THEN a válasz dátummal bekerült a 6. és 8. szakaszba, és a szeletek
+  ehhez igazodtak (2026-11-19).
 - [ ] WHEN egy „fut” munka beolvad THEN a tételtérkép sora „kész”-re vált a merge-commit hash-ével.
 - [ ] WHEN a kanbanon egy jegy a 4. szakasz szerint kész (#31, #63, #68, #95, #99, #100, #106, #126, #133, #140, #165) THEN a jegy
   lezárul a bizonyíték hivatkozásával.
-- [ ] WHEN az A-1 beolvad THEN december 1. előtt az adventi naptár élesben nyitható (D-11 szerint).
+- [ ] WHEN az A-1 beolvad THEN legkésőbb november 30-án az adventi naptár élesben BE (D-11 (a), a tulajdonos előnézeti próbája után).
 - [ ] WHEN a G-21 beolvad THEN a tulajdonos telefonos képernyőképén a 4 tünet (K-01…K-04) nem látható.
 - [ ] WHEN bármely szelet beolvad THEN a gate:stage → gate:push → vak ellenőr → gate:pr → CI → gate:merge bizonyítéka megvan.
 
