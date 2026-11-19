@@ -43,11 +43,36 @@ function mockClaude(t: TestContext, frames: Array<string | number>, opts: { stal
   return bodies;
 }
 
+const FAKE_STEP_MS = 5;
+const FAKE_LIMIT_MS = 5_000;
+
+/**
+ * Vezérelt óra falióra helyett (docs/specs/2026-11-19-idozitesfuggo-tesztek.md): a mock stream szünetei és a tétlenségi őr
+ * (`collectStream`: `setTimeout` + `Date.now`) ugyanazon a hamis órán futnak (node:test `mock.timers`). A hamis idő 5 ms-os
+ * lépésekben halad, és csak azután lép, hogy két (nem hamisított) `setImmediate`-kör alatt minden addig ütemezett, I/O-mentes
+ * stream-lépés lefutott — így a keretek és a tétlenségi határidő sorrendjét a hamis idő dönti el, nem a gép terhelése.
+ */
+async function onFakeClock<T>(t: TestContext, run: () => Promise<T>): Promise<{ value?: T; error?: unknown; elapsedMs: number }> {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const outcome: { value?: T; error?: unknown; done: boolean } = { done: false };
+  void run().then((value) => { outcome.value = value; }, (error: unknown) => { outcome.error = error; }).finally(() => { outcome.done = true; });
+  const turn = () => new Promise<void>((r) => setImmediate(r));
+  for (let elapsed = 0; ; elapsed += FAKE_STEP_MS) {
+    await turn();
+    await turn();
+    if (outcome.done) return { value: outcome.value, error: outcome.error, elapsedMs: Date.now() };
+    assert.ok(elapsed < FAKE_LIMIT_MS, `a hívás ${FAKE_LIMIT_MS} hamis ms alatt sem zárult le`);
+    t.mock.timers.tick(FAKE_STEP_MS);
+  }
+}
+
 test("A1+A3: összefoglaló gondolkodás-delták idleMs-en túl → nem tétlenség; a kérés summarized display-t kér", async (t) => {
   const deltas = Array.from({ length: 6 }, (_, i) => [30, ev("content_block_delta", { index: 0, delta: { type: "thinking_delta", thinking: `lépés ${i} ` } })]).flat();
   const bodies = mockClaude(t, [start, thinkingStart, ...deltas, ev("content_block_delta", { index: 0, delta: { type: "signature_delta", signature: "sig" } }), ev("content_block_stop", { index: 0 }), ...textTail]);
   const p = new ClaudeProvider({ apiKey: "test-placeholder", model: "claude-opus-5-5", maxTokens: 1000 });
-  const res = await p.chat(msgs, undefined, { stream: { idleMs: 80 } });
+  const { value: res, error, elapsedMs } = await onFakeClock(t, () => p.chat(msgs, undefined, { stream: { idleMs: 80 } }));
+  assert.equal(error, undefined, String(error));
+  assert.ok(res && elapsedMs > 80, `a stream az idleMs-nél tovább tartott (${elapsedMs} hamis ms)`);
   assert.equal(res.content, "kész", "a gondolkodás szövege nem kerül a tartalomba");
   assert.equal(res.finishReason, "end_turn");
   assert.deepEqual(bodies[0]?.thinking, { type: "adaptive", display: "summarized" });
@@ -58,7 +83,10 @@ test("A3: csak gondolkodás-állapotjelek (blokk-kezdet, aláírás, blokk-vég)
     ev("content_block_stop", { index: 0 }), 50, ev("content_block_start", { index: 1, content_block: { type: "redacted_thinking", data: "x" } }), 50,
     ev("content_block_stop", { index: 1 }), 50, ...textTail]);
   const p = new ClaudeProvider({ apiKey: "test-placeholder", model: "claude-opus-5-5", maxTokens: 1000 });
-  assert.equal((await p.chat(msgs, undefined, { stream: { idleMs: 80 } })).content, "kész");
+  const { value: res, error, elapsedMs } = await onFakeClock(t, () => p.chat(msgs, undefined, { stream: { idleMs: 80 } }));
+  assert.equal(error, undefined, String(error));
+  assert.ok(res && elapsedMs > 80, `a stream az idleMs-nél tovább tartott (${elapsedMs} hamis ms)`);
+  assert.equal(res.content, "kész");
 });
 
 test("A4: a valódi elakadás védett — gondolkodás-kezdet után csak ping (az SDK eldobja) → tétlenségi hiba", async (t) => {
@@ -76,9 +104,9 @@ test("review #212: ismételt ÜRES szövegblokk-kezdet/-vég (nem gondolkodás) 
   const emptyText = (i: number) => [30, ev("content_block_start", { index: i, content_block: { type: "text", text: "" } }), ev("content_block_stop", { index: i })];
   mockClaude(t, [start, ...Array.from({ length: 10 }, (_, i) => emptyText(i)).flat()], { stall: true });
   const p = new ClaudeProvider({ apiKey: "test-placeholder", model: "claude-opus-5-5", maxTokens: 1000 });
-  const t0 = Date.now();
-  await assert.rejects(p.chat(msgs, undefined, { stream: { idleMs: 80 } }), (e: unknown) => e instanceof AIProviderIdleTimeoutError);
-  assert.ok(Date.now() - t0 < 250, `a nem-gondolkodási blokk-vég nem életjel (eltelt: ${Date.now() - t0} ms)`);
+  const { error, elapsedMs } = await onFakeClock(t, () => p.chat(msgs, undefined, { stream: { idleMs: 80 } }));
+  assert.ok(error instanceof AIProviderIdleTimeoutError, String(error));
+  assert.ok(elapsedMs < 250, `a nem-gondolkodási blokk-vég nem életjel (eltelt: ${elapsedMs} hamis ms)`);
 });
 
 test("review #212: a Haiku 5.5 és a Mythos 5 effort nélkül is summarized gondolkodást kér", async (t) => {
