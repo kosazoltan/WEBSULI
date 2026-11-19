@@ -29,6 +29,29 @@ export function reportVerdict(text) {
 }
 
 /**
+ * A jelentés ZÁRÓ (utolsó) önálló `Fej: <40 jegyű hash>` sora (markdown-díszítés megengedett: `**Fej:** \`<hash>\``) és a sor indexe.
+ * Szabad szövegbeli hash-említés NEM számít (docs/specs/2026-11-20-itelet-fej-egyeztetes.md).
+ * @returns {{ head: string, line: number } | null}
+ */
+export function reportHeadLine(text) {
+  const lines = String(text).split(/\r?\n/);
+  let found = null;
+  lines.forEach((l, i) => {
+    const m = /^[\s>#*_-]*Fej\s*:[\s*_]*`?([0-9a-f]{40})`?[\s*_]*$/i.exec(l);
+    if (m) found = { head: m[1].toLowerCase(), line: i };
+  });
+  return found;
+}
+
+/** Az utolsó `Ítélet:` sor indexe (−1, ha nincs). */
+function lastVerdictLine(text) {
+  const lines = String(text).split(/\r?\n/);
+  let idx = -1;
+  lines.forEach((l, i) => { if (/Ítélet\s*:/i.test(l)) idx = i; });
+  return idx;
+}
+
+/**
  * @returns {{ ok: true, record: object, line: string } | { ok: false, error: string }}
  */
 export function buildRecord({ head, verdict, report, resolveHead, readReport, now = () => new Date() }) {
@@ -45,9 +68,14 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, no
   const inReport = reportVerdict(text);
   if (!inReport) return { ok: false, error: 'a jelentésben nincs „Ítélet: IGEN | IGEN, FELTÉTELLEL | NEM” sor (a megbízás-sablon kötelező része)' };
   if (inReport !== v) return { ok: false, error: `a --verdict (${v}) eltér a jelentés utolsó ítéletétől (${inReport})` };
+  // A jelentés ZÁRÓ `Fej:` sora a vizsgált fej (régi jelentés új fejre nem rögzíthető), és a záró szakasznak van ítélete.
+  const rh = reportHeadLine(text);
+  if (!rh) return { ok: false, error: 'a jelentésben nincs önálló „Fej: <teljes, 40 jegyű hash>” sor — nem igazolható, melyik fejet vizsgálta (skill-sablon)' };
+  if (rh.head !== full.toLowerCase()) return { ok: false, error: `a jelentés záró „Fej:” sora (${rh.head.slice(0, 12)}) egy másik fejre szól, nem a ${full.slice(0, 12)}-re — új (vagy visszanézési) jelentés kell` };
+  if (lastVerdictLine(text) < rh.line) return { ok: false, error: 'a jelentés záró „Fej:” szakaszában nincs „Ítélet:” sor — az utolsó ítélet egy korábbi fejé' };
   return {
     ok: true,
-    record: { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() },
+    record: { kind: 'review', head: full, reportHead: rh.head, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() },
     line: verdictLine(v, full),
   };
 }

@@ -167,7 +167,9 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
 
 - **Az ítélet önbevallásos** (review J5): a `Független ellenőr ítélete: IGEN (fej: …)` sort bárki beírhatja a PR-leírásba; a kapu
   a sor meglétét ellenőrzi, nem a jelentés valódiságát. A helyi `review-<fej>.json` a jelentés hash-ét is rögzíti, és a
-  `record-review` a jelentés saját `Ítélet:` sorával egyezteti — a merge-et végző orkesztrátor ezt a helyi bizonyítékot nézze.
+  `record-review` a jelentés saját `Ítélet:` sorával egyezteti — a merge-et végző orkesztrátor ezt a helyi bizonyítékot nézze. A
+  `record-review` a jelentés ZÁRÓ `Fej: <teljes hash>` sorát is egyezteti a rögzített fejjel (hiány / rövid / más fej → hiba; az utolsó
+  ítéletnek a záró `Fej:` szakaszban kell állnia), és a rekordba `reportHead`-et ír — így régi jelentés új fejre nem rögzíthető.
 - **Hamis DENY (fail-closed):** láncolt parancsban, idézett szövegként előforduló `git … push` / `gh pr merge` is DENY-t ad (pl.
   `git add . && git commit -m "push fix"`) — a commit-üzenetet fájlból add (`git commit -F <fájl>`), a kibocsátást külön parancsban.
 - **A main-elmozdulás mérése** a CI-futás `base.sha`-ján alapul; ha az üres, a PR `baseRefOid`-jára esik vissza (UNVERIFIED, hogy

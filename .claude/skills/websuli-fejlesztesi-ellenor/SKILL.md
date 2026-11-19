@@ -56,6 +56,7 @@ Szabályok:
 
 A jelentés formája:
 # Független review — <ág / PR>, fej `<hash>`
+Fej: <a vizsgált fej TELJES, 40 jegyű hash-e — önálló sor, kötelező>
 ## Ítélet: IGEN | IGEN, FELTÉTELLEL | NEM
 (NEM, ha van blokkoló; FELTÉTELLEL, ha a nem blokkoló leletek jegyre mennek)
 ## Blokkoló leletek (fájl:sor, forgatókönyv, javítási javaslat)
@@ -139,7 +140,9 @@ node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head <fe
 
 - A javított fejet UGYANAZ az ellenőr kapja (SendMessage a meglévő alügynöknek), a `git diff <régi-fej> <új-fej>` kiindulással:
   minden korábbi lelet lezárása / állapota, és új hiba a javításban (a javítás gyakran új hibát hoz: C-68).
-- A jelentés végére új szakasz: `# Visszaellenőrzés — új fej <hash>` saját ítélettel.
+- A jelentés végére új szakasz: `# Visszaellenőrzés — új fej <hash>`, alatta önálló `Fej: <új fej teljes, 40 jegyű hash-e>` sor és
+  saját `Ítélet:` sor (a `record-review` a ZÁRÓ `Fej:` sort egyezteti a `--head`-del, és az utolsó ítéletnek ebben a szakaszban kell
+  állnia — szabad szövegbeli hash-említés nem számít).
 
 ## 6. Az ítélet rögzítése (ezt olvassa a pre-pr-gate és a pre-merge-gate)
 
@@ -149,6 +152,8 @@ node scripts/qa/gates/record-review.mjs --head <fej-hash> --verdict IGEN --repor
 ```
 
 - A bizonyíték: `<git-common-dir>/websuli-qa-evidence/review-<fej>.json` (helyi, nem commitolható; munkafából is látszik).
+- A `record-review` megtagadja a rögzítést, ha a jelentés záró `Fej:` sora hiányzik, rövid, vagy más fejre szól, illetve ha a záró
+  `Fej:` szakaszban nincs ítélet (régi jelentés új fejre nem rögzíthető; docs/specs/2026-11-20-itelet-fej-egyeztetes.md).
 - A szkript kiír egy sort: `Független ellenőr ítélete: IGEN (fej: <hash>)`. Ezt — és CSAK ezt — tedd a PR-leírásba (vagy kommentbe).
   A nyilvános repóra biztonsági részlet, leletlista, jelentés-útvonal nem kerül.
 - `IGEN, FELTÉTELLEL`: a feltételek jegyre (kanban) és a PR-leírásba kerüljenek. `NEM`: javítás → helyi kapuk → visszaellenőrzés.
