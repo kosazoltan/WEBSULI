@@ -416,6 +416,7 @@ for (const viewport of [
         await expect(quiz).toHaveAttribute("data-layout", "settled", { timeout: 3_000 });
         const settleMs = (await probe(page) as unknown as { layoutSettleMs: number | null }).layoutSettleMs;
         // A mért érték a naplóba is kerül (a kapu naplójából a tartalék látszik, nem csak a bukás).
+        // eslint-disable-next-line no-console
         console.log(`SETTLE|${viewport.width}x${viewport.height}|víz ${water ?? "eleje"}|${settleMs} ms`);
         expect(settleMs, "az elrendezés a megjelenéstől mért beállási ideje (ms)").not.toBeNull();
         expect(settleMs!, `az elrendezés ≤ 600 ms alatt nyugalomba ér (mért: ${settleMs} ms)`).toBeLessThanOrEqual(600);
@@ -502,6 +503,66 @@ for (const viewport of [
     }
   });
 }
+
+/*
+ * Terv 7.7, „A nyugalom-jelző oka” (a gate:pr bukása, fej 577c9945): terhelt gépen a „nyugalomban” jelzés előbb jött, mint ahogy a
+ * kirajzolt kép megnyugodott — a figura a jelzéskor még a kérdés alatt volt. Itt 6× lassított CPU-n mérünk, és a takarást PONTOSAN
+ * a jelzés pillanatában (az attribútum-váltás megfigyelőjében, a következő kirajzolás előtt) nézzük, nem egy későbbi körúton.
+ */
+test.describe("844x390: 6× lassított CPU — a „nyugalomban” jelzéskor a figura teljes teste már szabad", () => {
+  test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+  test("35 %-os víz, leghosszabb kérdés: a jelzés pillanatában nincs takart rácspont", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").tap();
+    await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+    await openQuestion(page, { water: 35 });
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
+    try {
+      const atSettle = await page.evaluate(
+        () =>
+          new Promise<{ hits: string[]; box: unknown; settleMs: number | null } | null>((resolve) => {
+            const api = (window as unknown as {
+              __websuliGame: { forceState: (p: Record<string, unknown>) => void; probe: () => Record<string, number | null> };
+            }).__websuliGame;
+            const cover = () => {
+              const pr = api.probe();
+              if (pr.figureBoxLeft === null || pr.figureBoxLeft === undefined) return { hits: ["nincs doboz"], box: null, settleMs: null };
+              const box = { left: pr.figureBoxLeft, top: pr.figureBoxTop!, right: pr.figureBoxRight!, bottom: pr.figureBoxBottom! };
+              const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+              const hits: string[] = [];
+              for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 5; c++) {
+                  const x = stage.left + box.left + 3 + ((box.right - box.left - 6) * c) / 4;
+                  const y = stage.top + box.top + 3 + ((box.bottom - box.top - 6) * r) / 6;
+                  if (document.elementsFromPoint(x, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]'))) hits.push(`${r},${c}`);
+                }
+              }
+              return { hits, box, settleMs: pr.layoutSettleMs ?? null };
+            };
+            const timeout = window.setTimeout(() => resolve(null), 60_000);
+            const observer = new MutationObserver(() => {
+              const quiz = document.querySelector('[data-testid="ts-quiz"]');
+              if (quiz?.getAttribute("data-layout") !== "settled") return;
+              observer.disconnect();
+              window.clearTimeout(timeout);
+              resolve(cover());
+            });
+            observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["data-layout"], childList: true });
+            api.forceState({ question: true, longAnswers: true, longPrompt: true });
+          }),
+      );
+      expect(atSettle, "a kérdés-sáv 60 s-on belül nyugalomba ér").not.toBeNull();
+      // eslint-disable-next-line no-console
+      console.log(`SETTLE6X|844x390|víz 35|${atSettle!.settleMs} ms|takart: ${atSettle!.hits.length}`);
+      expect(atSettle!.hits, `a „nyugalomban” jelzés pillanatában a figura teljes teste szabad (doboz ${JSON.stringify(atSettle!.box)})`).toEqual([]);
+    } finally {
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+    }
+  });
+});
 
 /*
  * Csiszoló kör 3. pont (koordinátori kérés 2026-11-18): a figura a nyitott kérdés alatt oldalra mozog — fekvő nézetben a
