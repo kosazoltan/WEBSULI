@@ -46,6 +46,24 @@ Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` (6.1 láncolt bizo
 6. Ellenőrzés: `node --test scripts/qa/gates/evidence-chain.test.mjs scripts/qa/gates/evidence-run.test.mjs scripts/qa/gates/lib.test.mjs`;
    `npm run gate:stage`; mutációs ellenpróba a zár-ágakra és a K-f ágra (másolaton); 22:15 UTC után `npm run gate:push`.
 
+### P2 — javítókör a vak, hibakereső ellenőrzés után (2026-11-19; ítélet a `febee69c` fejre: IGEN, FELTÉTELLEL)
+
+Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` 6.1. Minden pont előbb bukó teszttel.
+
+7. P2-K1: a `--verify` (`verifyChain`) a láncba író kapuk rekordjai (`stage-`, `pre-push-`, `run-`) közül jelzi a láncon kívülit (a
+   lánc indulása után írtat; a korábbiak „régi” jelzést kapnak) és a rekordok melletti hiányzó láncot — nem „ÉP” 0-s kóddal.
+8. P2-K2: az `evidence-run` `dirty` mezője a nem követett fájlokat is számolja (`dirtyOf`; a push-kapu J7-tel egyezően).
+9. P2-K3: a `--repair` ép láncon nem fut (csak `--force`-szal); az újra-láncolt rekord állapota `repaired-unverified`, nem `ok`.
+10. P2-K4: a push-kapu rekordja `appendRecord`-dal íródik (zár alatt, ideiglenes néven, a lánc-sor után kapja a végleges nevét);
+    láncolatlan zöld rekord leállt folyamatból sem marad; a `main()` mindig a `finalizeEvidence` kódjával lép ki.
+11. P2-K5: az elárvult zár átvétele atomi (átnevezés + tartalom-ellenőrzés + `link`-es visszaállítás); a `finally` csak a saját
+    (egyedi tokenes) zárát törli.
+12. P2-K7: `testCounts` az UTOLSÓ összesítőt veszi; a `realExec` Windows-on a `.cmd` / `.bat` parancsot (pl. `npm.cmd`) shellen át
+    indítja; a titok-szűrés kis- és vegyes betűs `név=érték` és `név: érték` alakra is.
+13. P2-K8: tesztek a túlélő mutánsokra (`finalizeStage`, `finalizeEvidence` kódja, `verifyChain` hash-ellenőrzés, `dirtyOf`).
+14. P2-KI5: a csapda-katalógus bejegyzése C-76 (a #506 a C-75-öt hozza; a később beolvasztott kap új számot).
+15. Ellenőrzés: célzott tesztek, mutációs ellenpróba (másolaton); szakasz- és push-kapu az ütemezett ablakon kívül.
+
 ## R — Javítókör a független review után (2026-11-17; jelentés: a scratchpad `review-szkriptkapuk/jelentes.md`)
 
 Elv: a terv 6.3a „Bevezetési lépcsők” szakasza szerint MINDEN új kapu `warn` alapértékkel indul; a tiltás konfig-kapcsoló, alapból KI.
