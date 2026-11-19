@@ -206,7 +206,13 @@ const TREE_BANKS: Array<[VocabLang, VocabEntry[]]> = [["en", VOCAB_EN], ["de", V
  * A futásidő-korlát teljesítmény-garancia (a generátor a teljes bankokon is gyors: #432), ezért a mérce a folyamat
  * CPU-ideje, nem a falióra (docs/specs/2026-11-19-idozitesfuggo-tesztek.md, kanban #205): terhelt gépen (két párhuzamos
  * teljes tesztkör) a falióra a CPU-sorban állással nő, a végzett munka nem — ugyanaz a 60 s-os korlát a munkát méri.
+ * Mellette terhelés-tűrő falióra-felső korlát (vak ellenőr L1): a CPU-időt nem égető lassulást (szinkron alvás, blokkoló
+ * I/O, várakozás) csak a falióra látja. Értéke 150 s — mérve: terheletlenül 11–22 s, a legerősebb mesterséges terhelésnél
+ * (60 pörgető + 20 párhuzamos példány) legfeljebb 94,5 s, a két párhuzamos teljes kör alatti hamis bukás 60,7 s volt; az alvó
+ * mutáns (1000 kérdésenként 1,5 s) 177,5 s-ot mért, és ezen bukik.
  */
+const CPU_LIMIT_MS = 60_000;
+const WALL_LIMIT_MS = 150_000;
 test("bank-szintű invariáns minden fában lévő bankra: minden bejegyzés × minden generálható típus × 5 seed", (t) => {
   const wallStarted = performance.now();
   const cpuStarted = process.cpuUsage();
@@ -233,7 +239,8 @@ test("bank-szintű invariáns minden fában lévő bankra: minden bejegyzés × 
   const cpuMs = Math.round((cpu.user + cpu.system) / 1000);
   const wallMs = Math.round(performance.now() - wallStarted);
   t.diagnostic(`a bank-szintű invariáns: CPU ${cpuMs} ms, falióra ${wallMs} ms`);
-  assert.ok(cpuMs < 60_000, `a bank-szintű invariáns CPU-ideje ${cpuMs} ms (falióra ${wallMs} ms)`);
+  assert.ok(cpuMs < CPU_LIMIT_MS, `a bank-szintű invariáns CPU-ideje ${cpuMs} ms (falióra ${wallMs} ms)`);
+  assert.ok(wallMs < WALL_LIMIT_MS, `a bank-szintű invariáns falióra-ideje ${wallMs} ms (CPU ${cpuMs} ms): CPU nélküli várakozás`);
 });
 
 test("report: a jelentés-átfedő párok összesítő sora mindig ott van; --overlaps a párokat is listázza; nem hiba", () => {
