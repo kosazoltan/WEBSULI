@@ -1086,3 +1086,18 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 - **Szabály:** láthatatlan vagy tipográfiai karaktert a forrásban mindig escape-pel írj, és írás után ellenőrizd a fájl nyers
   tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
   állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
+
+## C-75 — `npm ci` a runbook szerint, de ellenőrizetlen gépszintű következtetéssel; a kapu-napló közös útvonalon (2026-11-19)
+
+- **Tünet:** a push-kapu natív tesztje bukott (`better-sqlite3`), a `doctor:arch` „`npm.cmd ci`”-t javasolt. A munkafában lefutott
+  `npm.cmd ci` törölte a meglévő `node_modules`-t, majd a natív modul fordításán elbukott (`prebuild-install warn install No prebuilt
+  binaries found (target=26.13.1 …)`, utána `node-gyp`: „Could not find any Visual Studio installation to use” — nincs VC++
+  eszközkészlet). A munkafa telepítése így használhatatlanná vált. Ezután egy elhamarkodott, ellenőrizetlen gépszintű következtetés
+  született („a Node 26 nem jó, verzióváltás kell”), pedig a főrepó `source/`-ában a modul Node 26 alatt betöltődik.
+- **Költség:** egy munkafa telepítése elveszett (a szakasz- és a push-kapu nem futtatható benne), egy félrevezető javaslat.
+- **Szabály:** (1) `npm.cmd ci` ELŐTT nézd meg, hogy a natív modulhoz van-e előre fordított bináris a futó Node-ra, vagy van-e
+  fordítókészlet (`node -e "require('better-sqlite3')"` a működő főrepóban, `npm.cmd ci --dry-run`); ha egyik sem, NE futtasd — a
+  `ci` előbb töröl. (2) Gépszintű okot (Node-verzió, rendszer) csak két helyen mért, egyező bizonyítékkal állíts; a javaslatban a
+  pontos hibasort idézd. (3) A kapuk naplói (`<git-common-dir>/websuli-qa-evidence/logs/`) minden munkafának közösek: egy másik
+  munkafa futása felülírja — a bukás részleteit a futás után azonnal mentsd a scratchpadba (jegy: a naplóút kapjon fej- vagy
+  munkafa-azonosítót).
