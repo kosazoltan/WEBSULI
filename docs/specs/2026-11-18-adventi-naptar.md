@@ -1067,7 +1067,9 @@ megállapításának megbízhatósága (a Render közvetlen elérhetősége) kü
 marad meg, és semmi nem vész el a tanuló sorából: a körszám, a korábbi körök, a megfelelés időpontja és a szülői levél foglalásai a
 tanulói sorban maradnak. A „jobb” sorrendje ablakonként (pontosítás 2026-11-19, vak ellenőr 3. kör KÖZEPES-A, a döntés szellemében: az
 elbukott próba nem „jobb”, mint a még meglévő lehetőség): **megoldva > érintetlen / még javítható > végleg elbukott**; egyenlőségnél a
-tanulóé. Csak az eszköz AKTUÁLIS körének ablakai egyesülnek (korábbi kör kudarca soha nem kerül a tanuló aktuális körébe), és próba
+tanulóé. A tanuló saját, VÉGLEG ELBUKOTT ablakát csak MEGOLDOTT ablak írhatja felül — a vendég még javítható / folyamatban lévő próbája nem
+(orkesztrátori döntés 2026-11-19, a biztonságos irány: a gyerek vendégként ne „állíthassa vissza” a saját kudarcát); vagyis átkerülni
+csak megoldott ablak tud. Csak az eszköz AKTUÁLIS körének ablakai egyesülnek (korábbi kör kudarca soha nem kerül a tanuló aktuális körébe), és próba
 nélküli eszköz-ablak soha nem töröl a tanuló sorából. A jobb ablak a kérdéssorával együtt a tanuló aktuális körébe kerül, az eszköz sora
 utána törlődik. A tanulói terv a tanuló PROFILJÁNAK
 évfolyamára készül (a vendégként választott évfolyam nem írja felül). A válaszlehetőségek sorrendjének magja a tervhez kötött kulcs
