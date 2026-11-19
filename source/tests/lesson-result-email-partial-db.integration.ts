@@ -528,3 +528,40 @@ test("R25 / L3: a régi pillanatkép küldése a kapuban (lassú ellenőrzés) �
     assert.equal(pendingPartialCount(), 0);
   } finally { releaseGate(); setGateCheckHook(null); clearPendingPartials(); setPartialDelay(previousDelay); }
 });
+
+/* Gépi vak ellenőrzés, 3. célzott kör (GPT-6.2 Sol, 2026-11-19), terv R27 / R29. */
+test("R27 / L3: a vendégként elfogadott végleges kört (elveszett 202 után) ugyanazon az eszközön fiókba lépve újraküldik → második levél nincs, az eredeti név marad", async () => {
+  reset();
+  try {
+    const body = { kind: "quiz", roundId: "round-l3-identity", picks: picks(5), fingerprint: "fp-l3-identity" };
+    assert.equal((await post(body)).status, 202);
+    assert.ok(await waitFor(() => sent.length === 2), "az első (vendég) végleges levél kiment");
+    const again = await post(body, freshIp(), "u-l3-account");
+    assert.deepEqual([again.status, await again.json()], [202, { queued: false, duplicate: true }], "más kiléttel ismételt végleges beküldés");
+    await sleep(800);
+    assert.equal(sent.length, 2, "körönként egy végleges levél címzettenként");
+    assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")), "az eredeti attribúció");
+    // Ugyanazon kilét ismétlése változatlanul a meglévő úton fut (nem kap duplicate-választ, levél sem megy újra).
+    assert.deepEqual(await (await post(body)).json(), { queued: true });
+    await sleep(500);
+    assert.equal(sent.length, 2);
+  } finally { /* nincs várakozó */ }
+});
+
+test("R29 / L5: a pillanatkép a felvétel utolsó várakozásánál áll, közben véglegesítik a kört → a pillanatkép nem kap queued:true választ, várakozó nem marad", async () => {
+  reset();
+  const previousDelay = setPartialDelay(60_000);
+  let release!: () => void;
+  const parked = new Promise<void>(resolve => { release = resolve; });
+  let isParked = false;
+  setPartialIntakeHook(async who => { if (who === "guest:fp-l5-final") { isParked = true; await parked; } });
+  try {
+    clearPendingPartials();
+    const snapshot = post({ kind: "quiz", roundId: "round-l5-final", picks: picks(2), partial: true, fingerprint: "fp-l5-final" });
+    assert.ok(await waitFor(() => isParked, 3000));
+    assert.equal((await post({ kind: "quiz", roundId: "round-l5-final", picks: picks(5), fingerprint: "fp-l5-final" })).status, 202);
+    release();
+    assert.deepEqual(await (await snapshot).json(), { queued: false, finalized: true });
+    assert.equal(pendingPartialCount(), 0, "a véglegesített körre nem keletkezett várakozó");
+  } finally { release(); setPartialIntakeHook(null); clearPendingPartials(); setPartialDelay(previousDelay); }
+});

@@ -738,3 +738,42 @@ test("R24 / L2: lassú token mellett az utolsó válasz után azonnali dokumentu
   await page.waitForTimeout(1500);
   expect(finals, "pontosan egyszer").toHaveLength(1);
 });
+
+/* Gépi vak ellenőrzés, 3. célzott kör (GPT-6.2 Sol, 2026-11-19), terv R26 / R28. */
+test("R26 / L2: folyamatos 503 mellett a végleges beküldés nem ismétlődik beágyazott ciklusban — 6 s alatt egyetlen POST", async ({ page }) => {
+  await mockWith(page);
+  const finals: number[] = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial === true) return route.fulfill({ status: 202, json: { queued: true, partial: true } });
+    finals.push(Date.now());
+    return route.fulfill({ status: 503, json: { message: "átmeneti hiba" } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await answerAll(page);
+  await expect.poll(() => finals.length).toBe(1);
+  await page.waitForTimeout(6000);
+  expect(finals, "a hibavárakozást csak a kimenő sor kezeli (30 s-tól)").toHaveLength(1);
+});
+
+test("R28 / L4: olvasható, de nem írható tárolónál (kvóta) a befejezett kör a lapon belül is elmegy", async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key === "websuli:result-outbox:v1") throw new DOMException("A tároló megtelt.", "QuotaExceededError");
+      return original.call(this, key, value);
+    };
+  });
+  await mockWith(page);
+  const finals: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) finals.push(body);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await answerAll(page);
+  await expect.poll(() => finals.length, { message: "a memóriabeli sorból elment" }).toBe(1);
+  await page.waitForTimeout(1200);
+  expect(finals).toHaveLength(1);
+});
