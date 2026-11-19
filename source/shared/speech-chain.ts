@@ -26,6 +26,12 @@ export type SpeechStep =
 export const PREPARED_AUDIO_START_TIMEOUT_MS = 1500;
 /** Legfeljebb ennyi böngészőhangot próbál a lánc, hogy a hibás motor ne nyújtsa a csendet a végtelenbe. */
 export const MAX_BROWSER_VOICE_ATTEMPTS = 3;
+/**
+ * Ennél rövidebb időszeletet böngészőhang nem kap: a beszédmotor indulási eseménye ennyi idő alatt nem jön meg (a leggyorsabb helyi
+ * motoré is tíz ezredmásodperces nagyságrend, a böngésző időzítőinek szórása néhány ezredmásodperc), így a rövidebb szelet biztosan
+ * lejárna — hang nélkül, hamis negatív ítélettel. A csendkeretet ez legfeljebb ennyivel RÖVIDÍTI (a tartalék hamarabb szól), nem nyújtja.
+ */
+export const MIN_VOICE_STEP_MS = 250;
 /** A szerveres tartalék betöltési őre: lógó válasznál (lassú háló, lassú külső szolgáltatás) ennyi után hibaüzenet jön, nem csend. */
 export const FALLBACK_AUDIO_START_TIMEOUT_MS = 8000;
 
@@ -78,9 +84,13 @@ export function voicePhaseBudgetMs(firstVoice: RankableVoice | undefined): numbe
 /**
  * Egy böngészőhang-lépés indulási őre a kereten belül. Hálózati hang, amely után még helyi hang jön, legfeljebb 3 mp-et kap (utána a
  * helyi hang próbálkozik a maradék keretből); minden más lépés a teljes maradékot. 0: a keret elfogyott — a lépés kimondás nélkül kimarad.
+ * A `MIN_VOICE_STEP_MS`-nél kisebb maradék is ELFOGYOTT keret: az előző lépés őre a keret vége előtt töredék ezredmásodperccel is
+ * lejárhat (az óra tört ezredmásodperces, az időzítő késleltetése egészre vágott) — a maradék „0,3 ms”-ból a következő hang csak egy
+ * fölösleges kimondást és egy hamis „nem indult el” ítéletet kapna.
  */
 export function voiceStepTimeoutMs(input: { budgetMs: number; elapsedMs: number; network: boolean; laterLocalVoice: boolean }): number {
-  const remaining = Math.max(0, input.budgetMs - input.elapsedMs);
+  const remaining = input.budgetMs - input.elapsedMs;
+  if (!(remaining >= MIN_VOICE_STEP_MS)) return 0;
   return input.network && input.laterLocalVoice ? Math.min(remaining, SPEECH_START_TIMEOUT_MS) : remaining;
 }
 

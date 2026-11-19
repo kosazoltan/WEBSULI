@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   availableFromManifest, chainVoiceOrder, hasLaterLocalVoice, nextSpeechStep, preparedAudioCandidate, rememberPreparedFailure, silenceBeforeFallbackMs,
-  speechPlan, voicePhaseBudgetMs, voiceStepTimeoutMs, MAX_BROWSER_VOICE_ATTEMPTS, PREPARED_AUDIO_START_TIMEOUT_MS, type SpeechStep, type StepOutcome,
+  speechPlan, voicePhaseBudgetMs, voiceStepTimeoutMs, MAX_BROWSER_VOICE_ATTEMPTS, MIN_VOICE_STEP_MS, PREPARED_AUDIO_START_TIMEOUT_MS, type SpeechStep, type StepOutcome,
 } from "../shared/speech-chain";
 import { rankVoices, voiceLanguageKey, type RankableVoice } from "../shared/voice-rank";
 
@@ -107,6 +107,17 @@ test("B1: néma motornál a csend nem nő a próbált hangok számával — hely
   assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: 3000, network: false, laterLocalVoice: false }), 3000);
   assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: 6000, network: true, laterLocalVoice: false }), 0, "a keret elfogyott: a hang nem próbálkozik");
   assert.equal(voiceStepTimeoutMs({ budgetMs: 3000, elapsedMs: 3500, network: false, laterLocalVoice: false }), 0);
+  // CI-hiba (#516): az előző lépés őre a keret vége ELŐTT töredék ezredmásodperccel jár le — a használhatatlanul kicsi maradék is
+  // elfogyott keret (különben egy további hang kapna kimondást, majd azonnal hamis „nem indult el” ítéletet).
+  assert.equal(MIN_VOICE_STEP_MS, 250);
+  assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: 5999.3, network: false, laterLocalVoice: false }), 0);
+  assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: 5999.3, network: true, laterLocalVoice: true }), 0);
+  assert.equal(voiceStepTimeoutMs({ budgetMs: 3000, elapsedMs: 2999.999, network: false, laterLocalVoice: false }), 0);
+  assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: 5750.1, network: false, laterLocalVoice: false }), 0, "a legkisebb szelet alatt");
+  assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: 5750, network: false, laterLocalVoice: false }), 250, "pontosan a legkisebb szelet még próbálkozhat");
+  assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: 2999.3, network: false, laterLocalVoice: false }), 3000.7, "a bőséges maradék változatlan (a helyi hang a hálózati után a teljes maradékot kapja)");
+  assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: 0.4, network: true, laterLocalVoice: true }), 3000, "a hálózati hang 3 mp-es felső korlátja változatlan");
+  assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: Number.NaN, network: false, laterLocalVoice: false }), 0, "értelmezhetetlen idő: nincs próbálkozás");
   // Hibaeseménynél a következő hang azonnal jön: az eltelt idő kicsi, a helyi hang a keret szinte egészét megkapja.
   assert.equal(voiceStepTimeoutMs({ budgetMs: 6000, elapsedMs: 20, network: false, laterLocalVoice: false }), 5980);
   const edgePlan = plan({ voices: EDGE, prepared: null });

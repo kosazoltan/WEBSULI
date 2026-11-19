@@ -23,7 +23,7 @@ function harness(options: { voices?: VoiceLike[]; manifest?: "all" | "none" | ((
   const spoken: FakeUtterance[] = [];
   const idle: Array<() => void> = [];
   const live: FakeUtterance[] = [];
-  const state = { cancels: 0, activated: true, retryAfterMs: null as number | null, signals: [] as AbortSignal[], manifestCalls: [] as string[], manifestMode: options.manifest ?? "all" as "all" | "none" | "reject" | "limited" | ((keys: string[]) => unknown), connection: { online: true, ...options.connection } as { saveData?: boolean; effectiveType?: string; online: boolean }, stored: null as unknown, voices: options.voices ?? [HAZEL, ZIRA, SONIA], size: 20_000 };
+  const state = { cancels: 0, timerEarlyMs: 0, activated: true, retryAfterMs: null as number | null, signals: [] as AbortSignal[], manifestCalls: [] as string[], manifestMode: options.manifest ?? "all" as "all" | "none" | "reject" | "limited" | ((keys: string[]) => unknown), connection: { online: true, ...options.connection } as { saveData?: boolean; effectiveType?: string; online: boolean }, stored: null as unknown, voices: options.voices ?? [HAZEL, ZIRA, SONIA], size: 20_000 };
   // Az ál-motor a valódi szabályokat utánozza: felhasználói aktiváció nélkül `not-allowed` hibaeseményt ad; a kimondás a közös
   // beszédsorba kerül (`speaking`), amelyet a `cancel()` ürít — így látszik, ha a lejátszó idegen kimondást szakít meg.
   const synth: SynthLike = {
@@ -82,7 +82,8 @@ function harness(options: { voices?: VoiceLike[]; manifest?: "all" | "none" | ((
       const due = [...timers.entries()].filter(([, timer]) => timer.at <= end).sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
       if (!due) break;
       timers.delete(due[0]);
-      now = Math.max(now, due[1].at);
+      // `timerEarlyMs`: a böngésző időzítője a tört ezredmásodperces órához képest a határidő ELŐTT is lejárhat.
+      now = Math.max(now, due[1].at - state.timerEarlyMs);
       due[1].callback();
     }
     now = end;
@@ -842,4 +843,22 @@ test("J10: hálózat nélkül a koppintás terve a helyi hanggal indul; tartalé
   assert.deepEqual(g.errors, [long], "nincs több lépés: hibaüzenet");
   assert.equal(g.audios.length, 0);
   assert.equal(g.player.inspect().knowledge.silentTaps, 2, "a csendes kör a lánc végén is ítélet");
+});
+
+// CI-hiba (#516): a csendkeret végi versenyhelyzet — a 2. hang őre a keret vége előtt 0,7 ms-mal jár le.
+test("a csendkeret vége: töredék ezredmásodperccel korábban lejáró őr után a harmadik hang NEM kap kimondást és hamis ítéletet — a tartalék jön", async () => {
+  for (const early of [0.7, 0.001, 3]) {
+    const h = harness();
+    h.state.manifestMode = "none";
+    h.state.timerEarlyMs = early;
+    await h.open(words(1));
+    h.say("word 1");
+    h.advance(3000);
+    assert.deepEqual(h.spoken.map((u) => u.voice), [SONIA, HAZEL], `3 mp-nél a helyi hang (${early} ms)`);
+    h.advance(3000);
+    assert.deepEqual(h.spoken.map((u) => u.voice), [SONIA, HAZEL], `a keret végén további hang nem próbálkozik (${early} ms)`);
+    assert.equal(h.audios.length, 1, "a szerveres tartalék szól");
+    assert.deepEqual(Object.keys(h.player.inspect().knowledge.skip).sort(), [voiceKey(HAZEL), voiceKey(SONIA)].sort(), "a ki sem próbált harmadik hang nem kap ítéletet");
+    assert.equal(h.player.inspect().knowledge.silentTaps, 2);
+  }
 });
