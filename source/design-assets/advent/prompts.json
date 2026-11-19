@@ -1,0 +1,518 @@
+{
+  "model": "bytedance-seed/seedream-5-0-pro",
+  "items": [
+    {
+      "id": "advent-bg-portrait",
+      "kind": "background",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "falu",
+        "éjszaka",
+        "hó"
+      ],
+      "alt": "Havas falu éjszaka, templomtoronnyal és fenyőkkel.",
+      "aspect_ratio": "9:16",
+      "candidates": 4,
+      "resolution": "2K",
+      "prompt": "A snow-covered Hungarian village at night seen from a gentle hill: a small whitewashed church with a tall tower, cottages with snowy roofs and dark windows, snow-laden fir trees framing both sides, a winding path with sleigh tracks, a deep blue sky full of stars, soft falling snow. Tall portrait composition."
+    },
+    {
+      "id": "advent-door-01",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "hópehely"
+      ],
+      "alt": "Hópehely.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A single large, delicate six-pointed snowflake."
+    },
+    {
+      "id": "advent-door-02",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "havas fenyő"
+      ],
+      "alt": "Havas fenyőfa.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A fir tree heavy with fresh snow in a quiet forest clearing."
+    },
+    {
+      "id": "advent-door-03",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "adventi koszorú"
+      ],
+      "alt": "Adventi koszorú négy gyertyával.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "An Advent wreath of fir branches with four candles, red ribbons and pine cones."
+    },
+    {
+      "id": "advent-door-04",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "gyertya"
+      ],
+      "alt": "Égő gyertya fenyőággal.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "One burning candle in a brass holder with a sprig of fir."
+    },
+    {
+      "id": "advent-door-05",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "puttony"
+      ],
+      "alt": "Puttony ajándékokkal, almával és dióval.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A woven wicker back-basket filled with wrapped gifts, apples and walnuts."
+    },
+    {
+      "id": "advent-door-06",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "Mikulás"
+      ],
+      "alt": "A Mikulás piros köpenyben, püspöksüveggel.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "Saint Nicholas as a kind old bishop with a white beard, red cloak and mitre, holding a staff, in falling snow."
+    },
+    {
+      "id": "advent-door-07",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "szánkó"
+      ],
+      "alt": "Fa szánkó a havas domboldalon.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A classic wooden sledge on a snowy slope."
+    },
+    {
+      "id": "advent-door-08",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "rénszarvas"
+      ],
+      "alt": "Rénszarvas csengővel a nyakában.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A gentle reindeer standing in the snow with a small bell on a red collar."
+    },
+    {
+      "id": "advent-door-09",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "hóember"
+      ],
+      "alt": "Hóember répaorral és piros sállal.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A cheerful snowman with a carrot nose, a red scarf and an old pot for a hat."
+    },
+    {
+      "id": "advent-door-10",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "korcsolya"
+      ],
+      "alt": "Egy pár régi korcsolya.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A pair of old-fashioned ice skates hanging by their laces."
+    },
+    {
+      "id": "advent-door-11",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "mézeskalács"
+      ],
+      "alt": "Mézeskalács szívek és csillagok.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "Hungarian gingerbread hearts and stars decorated with white icing."
+    },
+    {
+      "id": "advent-door-12",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "dió és alma"
+      ],
+      "alt": "Dió és piros alma fatálban.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "Walnuts and shiny red apples in a small wooden bowl with a fir twig."
+    },
+    {
+      "id": "advent-door-13",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "harang és csengők"
+      ],
+      "alt": "Harang két kis csengővel és piros szalaggal.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A bronze church bell with two small jingle bells and a red ribbon."
+    },
+    {
+      "id": "advent-door-14",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "fagyöngy"
+      ],
+      "alt": "Fagyöngycsokor piros masnival.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A bunch of mistletoe with white berries tied with a red bow."
+    },
+    {
+      "id": "advent-door-15",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "szaloncukor"
+      ],
+      "alt": "Szaloncukor a fenyőágon.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "Hungarian szaloncukor: fondant sweets wrapped in shiny fringed paper, hanging on a fir branch."
+    },
+    {
+      "id": "advent-door-16",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "bejgli"
+      ],
+      "alt": "Diós és mákos bejgli szeletek.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "Slices of Hungarian bejgli, walnut roll and poppy seed roll, on a porcelain plate."
+    },
+    {
+      "id": "advent-door-17",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "templom"
+      ],
+      "alt": "Havas falusi templom világos ablakkal.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A small snowy village church with a warmly lit window and an open door."
+    },
+    {
+      "id": "advent-door-18",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "angyal"
+      ],
+      "alt": "Karácsonyi angyal csengővel.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A gentle Christmas angel with soft wings holding a small bell."
+    },
+    {
+      "id": "advent-door-19",
+      "kind": "scene",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "pásztorok"
+      ],
+      "alt": "Pásztorok a bárányokkal a csillag alatt.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "Shepherds in sheepskin coats with a few sheep, looking up at a bright star."
+    },
+    {
+      "id": "advent-door-20",
+      "kind": "scene",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "háromkirályok"
+      ],
+      "alt": "A háromkirályok ajándékokkal követik a csillagot.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "The three wise men travelling at night with gifts, following a star."
+    },
+    {
+      "id": "advent-door-21",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "betlehemi csillag"
+      ],
+      "alt": "A betlehemi csillag a havas háztetők fölött.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "The bright star of Bethlehem with a long tail of light over snowy roofs."
+    },
+    {
+      "id": "advent-door-22",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "ajándékdoboz"
+      ],
+      "alt": "Piros ajándékdoboz arany masnival.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A gift box wrapped in red paper with a golden bow."
+    },
+    {
+      "id": "advent-door-23",
+      "kind": "door",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "karácsonyfa"
+      ],
+      "alt": "Feldíszített karácsonyfa gyertyákkal és szaloncukorral.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A decorated Christmas tree with candles, szaloncukor sweets, glass baubles and a star on top."
+    },
+    {
+      "id": "advent-door-24",
+      "kind": "scene",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "betlehemi jászol"
+      ],
+      "alt": "Betlehemi jászol a kis Jézussal, fölötte a csillag.",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A classic nativity scene: the infant Jesus in a manger with straw, Mary and Joseph beside him, an ox and a donkey, and the star shining above the stable."
+    },
+    {
+      "id": "advent-bg-landscape",
+      "kind": "background",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "falu",
+        "éjszaka",
+        "széles"
+      ],
+      "alt": "Havas falu éjszaka, széles nézetben.",
+      "aspect_ratio": "16:9",
+      "candidates": 4,
+      "resolution": "2K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "The same snow-covered Hungarian village at night in a wide panoramic view: church tower in the middle distance, rows of cottages with snowy roofs, fir forest on the horizon, starry deep blue sky."
+    },
+    {
+      "id": "advent-closing",
+      "kind": "background",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "szenteste",
+        "karácsonyfa"
+      ],
+      "alt": "A kivilágított falu szenteste, a téren karácsonyfa ragyogó csillaggal.",
+      "aspect_ratio": "4:3",
+      "candidates": 4,
+      "resolution": "2K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "The village on Christmas Eve, every window glowing warm gold, a large decorated Christmas tree in the square with a shining star on top and gifts beneath it, gentle snowfall."
+    },
+    {
+      "id": "advent-home-banner",
+      "kind": "background",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "banner",
+        "főoldal"
+      ],
+      "alt": "",
+      "aspect_ratio": "16:9",
+      "candidates": 4,
+      "resolution": "2K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A very wide, low festive banner: snowy rooftops and fir trees along the bottom edge, a deep blue starry night sky above, a small sleigh with a reindeer on the right; the left two thirds stay calm and dark for overlaid text."
+    },
+    {
+      "id": "advent-garland",
+      "kind": "ornament",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "girland"
+      ],
+      "alt": "",
+      "aspect_ratio": "16:9",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A horizontal garland of fir branches with red berries, golden ribbon and small bells."
+    },
+    {
+      "id": "advent-frame",
+      "kind": "ornament",
+      "band": "advent",
+      "subjects": [],
+      "keywords": [
+        "sarokdísz"
+      ],
+      "alt": "",
+      "aspect_ratio": "1:1",
+      "candidates": 3,
+      "resolution": "1K",
+      "references": [
+        "advent-bg-portrait"
+      ],
+      "prompt": "A corner ornament of holly leaves, a fir twig and a small golden bell."
+    }
+  ]
+}
