@@ -1052,7 +1052,8 @@ pótlási terhelés nem volt kiszámolva), és a hálózati keretet érvénytele
 | Új névtelen sor / IP | 240 / óra | 8 osztály |
 | Új névtelen sor / munkamenet | 3 / óra | egy kliens a hálózati keret töredékét fogyaszthatja |
 | Írás / alany | 290 / 15 perc | két teljes kör: 2 × 144 + évfolyam + új kör |
-| Érvénytelen (400) vagy elutasított (409) kérés / IP | 120 / perc | csak ezeket utasítja el 429-cel, a szabályosat soha (a 409: 2026-11-19, vak ellenőr KICSI-4) |
+| Érvénytelen (400) kérés / IP | 120 / perc | csak ezeket utasítja el 429-cel, a szabályosat soha |
+| Elutasított (409) kérés / IP | 720 / perc (120 gyerek × 3 szabályos 409 × 2) | saját keret: a 409 szabályos forgalomban is előfordul (lejárt link, elavult kérdés); vak ellenőr KICSI-4, 3. kör KICSI-B |
 
 **Kizárás elleni védelem:** a hálózati keretbe csak az érvényes, alanyhoz köthető, SIKERES (2xx) kérés számít — a bemenet-ellenőrzés
 és az alany feloldása a hálózati korlát ELŐTT fut. Minden 429-en \`Retry-After\` van.
@@ -1063,9 +1064,12 @@ azonosítás nélkül ez nem zárható ki; a következmény legfeljebb 15 perces
 megállapításának megbízhatósága (a Render közvetlen elérhetősége) külön jegy.
 
 **FELÜLÍRVA 2026-11-19 — TULAJDONOSI DÖNTÉS (kérdőív): „Ablakonkénti egyesítés”.** Átvételkor minden naptárablaknál a jobb eredmény
-marad meg (megoldva > próbálkozott > nincs próba; egyenlőségnél a tanulóé), és semmi nem vész el a tanuló sorából: a körszám, a korábbi
-körök, a megfelelés időpontja és a szülői levél foglalásai a tanulói sorban maradnak; az eszköz jobb ablakai (ablakonként az eszköz összes köréből a legjobb; a
-kérdéssorukkal együtt) a tanuló aktuális körébe kerülnek, az eszköz sora utána törlődik. A tanulói terv a tanuló PROFILJÁNAK
+marad meg, és semmi nem vész el a tanuló sorából: a körszám, a korábbi körök, a megfelelés időpontja és a szülői levél foglalásai a
+tanulói sorban maradnak. A „jobb” sorrendje ablakonként (pontosítás 2026-11-19, vak ellenőr 3. kör KÖZEPES-A, a döntés szellemében: az
+elbukott próba nem „jobb”, mint a még meglévő lehetőség): **megoldva > érintetlen / még javítható > végleg elbukott**; egyenlőségnél a
+tanulóé. Csak az eszköz AKTUÁLIS körének ablakai egyesülnek (korábbi kör kudarca soha nem kerül a tanuló aktuális körébe), és próba
+nélküli eszköz-ablak soha nem töröl a tanuló sorából. A jobb ablak a kérdéssorával együtt a tanuló aktuális körébe kerül, az eszköz sora
+utána törlődik. A tanulói terv a tanuló PROFILJÁNAK
 évfolyamára készül (a vendégként választott évfolyam nem írja felül). A válaszlehetőségek sorrendjének magja a tervhez kötött kulcs
 (`seedKey`, átvett ablaknál a vendég kulcsa: `doorSeeds`) — átvétel után a tárolt választás, a helyes válasz jelölése és a pontozás
 ugyanaz. Az átvétel írásnál a korlátok és a fázis-ellenőrzés UTÁN fut; az olvasás ugyanezt az egyesítést előnézetként mutatja.

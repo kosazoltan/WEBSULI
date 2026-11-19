@@ -648,6 +648,15 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
 4. Tesztek: egységteszt (egyesítés, 409-keret); DB: a sorrend az átvétel után változatlan és a tokennel érkező válasz helyesen
    pontozódik; a körszám, az előzmény, a foglalás és a megfelelés megmarad; bezárt évadban nincs átvétel; ablakonkénti egyesítés.
 
+## Kiegészítés 12 — a 2/3 PR harmadik vak köre (2026-11-19; terv `docs/specs/2026-11-18-adventi-naptar.md` 21.)
+
+1. `adoption.ts`: `doorRank(rekord, maxRepairs)` — megoldva (2) > érintetlen / még javítható (1) > végleg elbukott (0); csak az eszköz
+   aktuális köre egyesül; próba nélküli eszköz-ablak nem töröl. Teszt: egységteszt (rang, V5, a korábbi kör kudarca) és DB (V5: a
+   testvér rontott próbája nem kerül a gyerek érintetlen ablakába).
+2. `limits.ts` `ipConflicts` (720 / perc, képletből), `routes.ts` `fail()`: a 409 ebbe számít, a 400 az `ipInvalid`-be. Teszt: egy
+   osztálynyi szabályos 409 (240) átmegy, a visszaélés 720 után 429.
+3. A DB-kör tartaléka: #173 (mérési jegyzet).
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.
