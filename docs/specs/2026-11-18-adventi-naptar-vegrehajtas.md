@@ -622,3 +622,7 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
 - 2026-11-19 — S3c-0 vak ellenőr 1. köre (terv `docs/specs/2026-11-18-adventi-naptar.md` 18.): a tétel `candidates` értéke 1–10 közötti egész,
   érvénytelen értékre hibaüzenet (`candidatesOf`); a keret és a könyv a szolgáltató valódi árával is számol: `max(becslés, usage.cost)`
   (`settleActualCost`, az „ok” sor `extraUsd` mezője). Előbb bukó teszt: `tests/advent-art-pipeline.test.ts`.
+- 2026-11-19 — S3c-0, a #519 review lelete (terv `docs/specs/2026-11-18-adventi-naptar.md` 18.): az éles futás a költségkönyvet, a meglévő
+  jelölteket és a tervet a futás-zár megszerzése UTÁN olvassa újra (`runUnderLock`, `takeSnapshot`) — a másodikként zároló futás nem
+  dolgozik elavult pillanatképből (nem költ a plafon fölé, nem gyárt újra kész jelöltet). Előbb bukó teszt: két átfedő futás hamis
+  hálózattal (`tests/advent-art-pipeline.test.ts`).
