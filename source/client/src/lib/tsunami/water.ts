@@ -82,7 +82,8 @@ export type WaterState = {
 export type WaterEventType = "waterDrop" | "waterSurge" | "zoneMove" | "won" | "lost";
 export type WaterEvent = { type: WaterEventType; amount: number; at: number };
 
-export type WaterInput = { move: number; sprint: boolean };
+/** `holdWater`: a meghajtó állítja — az olvasási többletidőben a víz nem emelkedik (a mozgás, a sodrás és a zóna fut). */
+export type WaterInput = { move: number; sprint: boolean; holdWater?: boolean };
 
 export type WaterCore = {
   state(): Readonly<WaterState>;
@@ -143,7 +144,7 @@ export function createWaterCore(opts: { seed: number | string; difficulty: Tsuna
       st.drift = Math.sin(st.timeMs * 0.0017) * (4 + s * 18);
       st.inZone = Math.abs(st.x - st.zoneX) <= ZONE_HALF;
       const zoneFactor = st.inZone ? 0.74 : 1.04;
-      st.water += tuning.risePerSec * (0.62 + s * 1.18) * zoneFactor * pace * dt;
+      if (!input.holdWater) st.water += tuning.risePerSec * (0.62 + s * 1.18) * zoneFactor * pace * dt;
       if (st.water >= WATER_LOSE) {
         st.water = WATER_LOSE;
         end(false);
@@ -269,11 +270,12 @@ export function createTsunamiDriver(opts: {
       feel.update(paused ? 0 : dt);
       if (q && !core.running() && !q.finished()) q.finish();
       if (q && !paused && core.running()) q.frame(clock, { calm: pace.calm() });
-      // Olvasási többletidő (pacing.ts): a közös ablakon túl a víz áll, amíg a kérdés nyitva.
+      // Olvasási többletidő (pacing.ts): a közös ablakon túl CSAK a víz áll, amíg a kérdés nyitva — a figura mozgása, a sodrás
+      // és a zóna fut tovább (vak ellenőr K1, 2026-11-19: a régi megoldás a teljes fix lépést megállította, a figura „lefagyott”).
       const act = q && core.running() ? q.active() : null;
       const extraFrom = extraTimeFrom(act);
-      const inExtra = extraFrom !== null && clock >= extraFrom;
-      loop.setTimeScale(paused || inExtra ? 0 : q ? q.timeScale() : 1);
+      core.input.holdWater = extraFrom !== null && clock >= extraFrom;
+      loop.setTimeScale(paused ? 0 : q ? q.timeScale() : 1);
       const alpha = loop.frame(real);
       drain(onEvent);
       return alpha;

@@ -191,6 +191,31 @@ test("K1: a többletidő alatt a víz NEM emelkedik, a közös ablakon belül la
   assert.equal(driver.core.state().water, w10, "a többletidőben áll");
 });
 
+/*
+ * Vak ellenőr K1 (2026-11-19): a többletidőben CSAK a víz álljon — a figura mozgása, a sodrás és a szimulációs idő nem (a régi
+ * megoldás a teljes fix lépést megállította: a tárcsa / nyíl akár ~25 s-ig nem mozgatott, a gyerek ezt fagyásnak érezte).
+ */
+test("vak K1: a többletidőben a víz áll, de a figura a bemenetre mozog és a szimuláció fut", () => {
+  const pres = { id: 1, startedAtSimMs: 0, windowMs: 9000, options: [{ label: "a", correct: true }], question: { quiz: { prompt: "x ".repeat(60), options: ["a", "b", "c", "d"] } } };
+  const base = { tick: () => pres, request: () => pres, active: () => pres } as unknown as Parameters<typeof paceTsunamiDirector>[0];
+  const p = paceTsunamiDirector(base, { grade: () => 4 }).active()!;
+  const from = extraTimeFrom(p)!;
+  const driver = createTsunamiDriver({
+    seed: 1,
+    difficulty: "normal",
+    questions: { frame: () => {}, timeScale: () => 0.6, finished: () => false, finish: () => null, pick: () => null, active: () => p },
+  });
+  for (let t = 0; t < from + 500; t += 50) driver.frame(50, false); // a többletidőben vagyunk
+  const s0 = driver.loop.simTimeMs();
+  const w0 = driver.core.state().water;
+  const x0 = driver.core.state().x;
+  driver.core.input.move = 1;
+  for (let t = 0; t < 2000; t += 50) driver.frame(50, false);
+  assert.equal(driver.core.state().water, w0, "a többletidőben a víz áll");
+  assert.ok(driver.core.state().x > x0 + 5, `a figura a bemenetre mozog (${x0} → ${driver.core.state().x})`);
+  assert.ok(driver.loop.simTimeMs() > s0, "a szimulációs idő fut (sodrás, zóna)");
+});
+
 /* ---- K5: a kiesett, játékmenettől független állítások pótlása ---- */
 test("K5: meghajtó-determinizmus egyenetlen képkockákkal — 16,67 és 33,3 ms-os képkockákkal bitre azonos állapot", () => {
   const a = createTsunamiDriver({ seed: "d", difficulty: "normal", questions: null });
