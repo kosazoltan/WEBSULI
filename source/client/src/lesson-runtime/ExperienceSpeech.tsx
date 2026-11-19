@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, Square, Volume2 } from "lucide-react";
 import { pronunciationVerdict, type PronunciationVerdict } from "@shared/pronunciation";
-import { hasVoiceFor, isSoftSpeechError, speechStartTimeoutMs, ttsAudioUrl } from "@shared/speech-fallback";
+import { ttsAudioHash } from "@shared/tts-audio-key";
+import { createSpeechPlayer, type AudioLike, type SpeechEnv, type SynthLike, type UtteranceLike } from "./speech-player";
 
 type Alternative = { transcript: string };
 type Recognition = {
@@ -72,84 +73,76 @@ export function DictationButton({ onText, active = true, language = "hu-HU" }: {
 }
 
 /**
- * Spec 2026-10-21-nyelvlecke-kiejtes: a nyelvhez illő hang — pontos egyezés (en-GB), különben a nyelvi előtag (en-*). Androidon a hangok
- * később töltődnek be (`voiceschanged`); hang nélkül a `lang` beállítás dönt.
+ * A lecke felolvasásának bekötése a valódi böngészőhöz (terv 2026-11-18-tananyag-gyartas-minoseg, S8d). A logika a
+ * `speech-player.ts`-ben van (befecskendezett környezettel, ál-órával tesztelve); itt csak a böngésző felületei állnak:
+ * hangelem, beszédmotor, jegyzék-lekérés, kapcsolat, helyi tár, és a munkamenet-szintű figyelők.
  */
-function pickVoice(language: string): SpeechSynthesisVoice | undefined {
-  // Egyes (régi / gyártói) böngészőkben a hanglista-felület hiányos — ilyenkor a `lang` beállítás dönt.
-  if (typeof window.speechSynthesis.getVoices !== "function") return undefined;
-  const voices = window.speechSynthesis.getVoices() ?? [];
-  const norm = (l: string) => l.replace("_", "-").toLowerCase();
-  return voices.find(v => norm(v.lang) === norm(language)) ?? voices.find(v => norm(v.lang).startsWith(`${norm(language).split("-")[0]}-`));
-}
-if (typeof window !== "undefined" && "speechSynthesis" in window && typeof window.speechSynthesis?.getVoices === "function") {
-  // A hanglista „bemelegítése” (Android Chrome: az első lekérés üres lehet). Hiba esetén sem állhat le a lecke.
-  try {
-    window.speechSynthesis.getVoices();
-    window.speechSynthesis.addEventListener?.("voiceschanged", () => window.speechSynthesis.getVoices());
-  } catch { /* hiányos felület: a lang beállítás dönt */ }
+const MANIFEST_STORAGE_KEY = "websuli-lesson-audio-manifest";
+type NetworkInformationLike = { saveData?: boolean; effectiveType?: string };
+const browserEnv: SpeechEnv = {
+  now: () => performance.now(),
+  setTimeout: (callback, ms) => window.setTimeout(callback, ms),
+  clearTimeout: handle => { if (typeof handle === "number") window.clearTimeout(handle); },
+  idle: callback => { if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(() => callback(), { timeout: 2000 }); else window.setTimeout(callback, 200); },
+  createAudio: () => new Audio() as unknown as AudioLike,
+  synth: () => "speechSynthesis" in window ? window.speechSynthesis as unknown as SynthLike : undefined,
+  createUtterance: text => typeof SpeechSynthesisUtterance === "undefined" ? undefined : new SpeechSynthesisUtterance(text) as unknown as UtteranceLike,
+  hash: (text, language) => ttsAudioHash(text, language),
+  fetchManifest: async (url, signal) => {
+    const response = await fetch(url, { credentials: "same-origin", signal });
+    if (response.ok) return { ok: true, body: await response.json() };
+    const seconds = Number(response.headers.get("Retry-After"));
+    return { ok: false, retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null };
+  },
+  connection: () => {
+    const info = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+    return { saveData: info?.saveData, effectiveType: info?.effectiveType, online: navigator.onLine !== false };
+  },
+  storage: {
+    read: () => { const raw = window.localStorage.getItem(MANIFEST_STORAGE_KEY); return raw ? JSON.parse(raw) : null; },
+    write: value => window.localStorage.setItem(MANIFEST_STORAGE_KEY, JSON.stringify(value)),
+  },
+};
+const player = createSpeechPlayer(browserEnv);
+
+if (typeof window !== "undefined") {
+  // A hanglista „bemelegítése” (Android Chrome: az első lekérés üres lehet); a később betöltődő hangok (`voiceschanged`) után a
+  // munkamenet-ismeret újraépül. Hiba esetén sem állhat le a lecke.
+  if ("speechSynthesis" in window && typeof window.speechSynthesis?.getVoices === "function") {
+    try {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.addEventListener?.("voiceschanged", () => { window.speechSynthesis.getVoices(); player.voicesChanged(); });
+    } catch { /* hiányos felület: a lang beállítás dönt */ }
+  }
+  // Valódi koppintás (`click` — ez ad felhasználói aktivációt; görgetés és hosszú nyomás nem): iOS-en a futó hangletöltések feloldása.
+  // A beszédmotorhoz itt semmi nem nyúl: kimondás csak a „Meghallgatás” gomb koppintására indul.
+  document.addEventListener("click", () => player.noteUserActivation(), { capture: true, passive: true });
+  document.addEventListener("visibilitychange", () => player.setVisible(document.visibilityState !== "hidden"));
 }
 
-// Spec 2026-11-09-felolvasas-tartalek: egyszerre egy hang szól — az új gombnyomás az előző kimondást és a tartalék hangot is leállítja.
-let activeFallback: HTMLAudioElement | null = null;
-let cancelActiveSpeech: (() => void) | null = null;
-
-/** Minden hang leállítása: böngészőhang, tartalék MP3 és az indulási őr (új gombnyomás, fülváltás, a lecke elhagyása). */
+/** Minden hang leállítása: böngészőhang, előre gyártott hang, tartalék MP3 és az indulási őrök (új gombnyomás, fülváltás, a lecke elhagyása). */
 export function stopSpeech(): void {
-  cancelActiveSpeech?.();
-  cancelActiveSpeech = null;
-  if (activeFallback) { activeFallback.pause(); activeFallback = null; }
-  const synth = "speechSynthesis" in window ? window.speechSynthesis : undefined;
-  // Android Chrome: a feltétel nélküli cancel() közvetlenül a speak() előtt az új kimondást is megszakíthatja.
-  if (synth && (synth.speaking || synth.pending)) synth.cancel();
+  player.stop();
 }
 
-/** A szerver MP3-a azonos eredetről (/api/tts/audio) — a böngésző beszédmotorja nélkül is szól. */
-function playFallback(text: string, language: string, rate: number, onError?: () => void): void {
-  const url = ttsAudioUrl(text, language);
-  if (!url) { onError?.(); return; }
-  const audio = new Audio(url);
-  audio.playbackRate = rate;
-  activeFallback = audio;
-  const fail = () => { if (activeFallback === audio) { activeFallback = null; onError?.(); } };
-  audio.onerror = fail;
-  audio.play().catch(fail);
+/** A lecke megnyitása: a szószedet hangjainak jegyzéke (egy kérés) és előtöltése a háttérben. */
+export function prepareLessonSpeech(texts: readonly string[], language: string): void {
+  player.prepareLesson(texts, language);
+}
+
+/** A lecke elhagyása: a futó letöltések megszakadnak, a pufferelt hangok felszabadulnak. */
+export function releaseLessonSpeech(): void {
+  player.release();
 }
 
 export function speakText(text: string, language: string, rate: number, onError?: () => void): void {
-  stopSpeech();
-  const synth = "speechSynthesis" in window ? window.speechSynthesis : undefined;
-  const voices = synth && typeof synth.getVoices === "function" ? synth.getVoices() ?? [] : [];
-  // Nincs beszédmotor, vagy van hanglista, de a nyelvhez nincs hang → azonnal a szerver hangja.
-  if (!synth || typeof SpeechSynthesisUtterance === "undefined" || !hasVoiceFor(voices, language)) { playFallback(text, language, rate, onError); return; }
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = language;
-  utterance.rate = rate;
-  const voice = pickVoice(language);
-  if (voice) utterance.voice = voice;
-  let settled = false;
-  let started = false;
-  const finish = () => { settled = true; clearTimeout(watchdog); if (cancelActiveSpeech === cancel) cancelActiveSpeech = null; };
-  const cancel = () => { settled = true; clearTimeout(watchdog); };
-  const fallBack = () => { finish(); if (synth.speaking || synth.pending) synth.cancel(); playFallback(text, language, rate, onError); };
-  // Néma motor (pl. Google-szolgáltatás nélküli Android): ha a kimondás nem indul el, a tartalék szól. Hálózati hangnak több idő jár.
-  const watchdog = setTimeout(() => { if (!settled && !started) fallBack(); }, speechStartTimeoutMs(voice?.localService));
-  cancelActiveSpeech = cancel;
-  utterance.onstart = () => { started = true; };
-  // Egyes motorok `onstart` nélkül szólnak: a szóhatár-esemény is indulás.
-  utterance.onboundary = () => { started = true; };
-  utterance.onend = () => { if (!settled) finish(); };
-  utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
-    if (settled) return;
-    // A megszakítás (új gombnyomás, fülváltás) nem hiba: se tartalék, se üzenet. Az új gombnyomás és a fülváltás ezt a kimondást előbb
-    // lezárja (`settled`), ide tehát csak a motor saját megszakítása jut: ha a kimondás el sem indult (Android Chrome: a `cancel()` utáni
-    // azonnali `speak()`), a tanuló semmit sem hallott — a tartalék szól.
-    if (isSoftSpeechError(e?.error) && started) { finish(); return; }
-    fallBack();
-  };
-  synth.speak(utterance);
+  player.speak(text, language, rate, onError);
 }
 
+/** Mérés és teszt: a lejátszó állapota (előtöltés, hangmotor-ismeret). Csak a futásidejű próba-kapcsolóval érhető el. */
+if (typeof window !== "undefined" && import.meta.env.VITE_ENABLE_RUNTIME_PROBE === "1") {
+  (window as unknown as { __lessonSpeech?: () => ReturnType<typeof player.inspect> }).__lessonSpeech = () => player.inspect();
+}
 export function SpeakButton({ text, language, rate }: { text: string; language: string; rate: number }) {
   const [error, setError] = useState("");
   return <><button className="lesson-outline-btn" data-tts={text} aria-label={`${text} meghallgatása`} onClick={() => {
@@ -157,7 +150,6 @@ export function SpeakButton({ text, language, rate }: { text: string; language: 
     speakText(text, language, rate, () => setError("A hang most nem érhető el ezen az eszközön."));
   }}><Volume2 size={18} /> Meghallgatás</button>{error && <span role="status">{error}</span>}</>;
 }
-
 const VERDICT_TEXT: Record<PronunciationVerdict["state"], string> = {
   ok: "✅ Szép kiejtés!",
   close: "🟡 Majdnem! Hallgasd meg még egyszer, és próbáld újra.",
