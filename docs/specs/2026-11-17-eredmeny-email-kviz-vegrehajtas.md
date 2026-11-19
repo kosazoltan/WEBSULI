@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet) kész, E34 a DB-kör zöldjére vár; T16 kész (bizonyíték a zársorban); T17 (2. célzott kör, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet) kész, E34 a DB-kör zöldjére vár; T16 kész (bizonyíték a zársorban); T17 kész (bizonyíték a zársorban); T18 (3. célzott kör, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -265,6 +265,20 @@ Leletenként előbb BUKÓ teszt, utána a javítás.
   `withRoundLock(lockKey, …)` alatt. Teszthez: `setGateCheckHook` (a kapuban a véglegesítés-ellenőrzés után). DB-teszt: a régi kísérlet a
   horogban áll, közben új pillanatkép → felengedés után a régi (2 válaszos) levél megy ki, az új pillanatkép válasza `alreadySent: true`.
 - Utána: `gate:stage`; a nehéz körök a zársorban.
+
+## T18 — gépi vak ellenőrzés 3. célzott köre (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R26–R29; L1 → T-3)
+
+Leletenként előbb BUKÓ teszt, utána a javítás.
+- **L1:** a terv Nem-cél és Kockázat része + tervvázlat (`docs/specs/2026-11-20-eredmenylevel-tartos-sor.md`); kód nincs.
+- **R26 (L2)** `client/src/lesson-runtime/resultReport.ts`: az ürítő `apiRequest`-je `retries: 0`; a `RESULT_REPORT_RETRIES` megszűnik. A
+  `tests/request-retry.test.ts` J5 forrásőre a szabályváltozást követi (dokumentált spec-változás). Böngészőteszt: 503 → 6 s alatt 1 POST.
+- **R27 (L3)** `server/lesson-result-email.ts`: `claimFinalRound(lessonId, kind, roundId, percent)` (beszúrás `onConflictDoNothing` +
+  ütközésnél a `created_at` frissítése); ütközésnél a beküldő saját végleges sora nélkül → `{ queued: false, duplicate: true }`. DB-teszt:
+  vendég végleges → ugyanaz a kör fiókkal → második levél nincs, a név „Vendég tanuló”.
+- **R28 (L4)** ugyanott (kliens): `unpersistedOutbox` memóriasor; `readOutbox` = tároló ∪ memória. Böngészőteszt: a sor kulcsára dobó
+  `setItem` → a végleges kérés a lapon belül megérkezik.
+- **R29 (L5)** szerver: a felvétel záró szakaszában `finalizedRounds` ellenőrzés. DB-teszt a `setPartialIntakeHook`-kal.
+- Utána: a nehéz körök (`gate:stage` is) CSAK a zárral, egy szkriptben.
 
 ## Kész-feltétel
 

@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R25 – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -16,6 +16,9 @@ szülőknek, a kvíz eredményét nem.”
 
 ## Nem-cél
 
+- **A 202 utáni tartós szerveres küldési sor** (DB-tábla + újraindításkori újrapróba) — tulajdonosi döntés (űrlap, 2026-11-19):
+  „Szűkítés + tartós sor külön”. A pótlási terv T-3 szelete (`docs/specs/2026-11-19-websuli-potlasok-terv.md`, a `docs/websuli-potlasok`
+  ágon) tartós sorral pótolja; tervvázlat: `docs/specs/2026-11-20-eredmenylevel-tartos-sor.md`.
 - A kézbesítés-nyilvántartás versenyhelyzete (`server/lesson-result-email.ts:48-66`, külön jegy) — nem nyúlunk hozzá, nem rontjuk.
 - A címzettek köre (ma: az `ADMIN_EMAILS` környezeti változó listája) és a levél szétküldése tanulónkénti szülőcímre.
 - A feladatok és a kvíz EGY közös levélbe vonása (a két rész külön időpontban zárul; a nyilvántartás részenként egyedi).
@@ -320,6 +323,26 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
   régi küldés fejeződik be előbb (és az új pillanatkép igaz `alreadySent` választ kap), vagy az új pillanatkép váltja le a régit (és a
   régi kísérlet a változat-ellenőrzésen megáll) — elfogadott új állapot mellett régi levél nem megy ki.
 
+**Gépi vak ellenőrzés, 3. célzott kör (GPT-6.2 Sol, 2026-11-19, `64d6710e`: NEM) és tulajdonosi döntés („Szűkítés + tartós sor külön”):**
+- **Kockázat (vállalt, a T-3 pótolja — L1):** a szerver a 202 után a levelet memóriában ütemezett küldéssel (és egy memóriabeli
+  újrapróbával) küldi. Ha a szolgáltató az első és az egyetlen újrapróbán is hibát ad, vagy a példány a 202 után, a háttérküldés előtt /
+  közben újraindul, a végleges levél elveszhet (a kliens a 202 után eldobja a törzset). Ezt a pótlási terv T-3 szelete tartós szerveres
+  sorral pótolja (`docs/specs/2026-11-20-eredmenylevel-tartos-sor.md`); a #510 nem kéri számon.
+- **R26 — az eredmény-POST-nak nincs beágyazott újrapróbája (L2; a J5 forrásőr ehhez igazodik).** A végleges beküldés hálózati / 5xx
+  hibavárakozását CSAK a kimenő sor kezeli (laponként legfeljebb 3 kísérlet, R24); az `apiRequest` belső újrapróbája ezen az úton 0. A
+  protokoll szintű ismétlések maradnak: a 403 utáni egyszeri tokenfrissítés (`apiRequest`) és a 400 utáni egyszeri régi-alakú ismétlés
+  (R10). Így folyamatos 503 mellett laponként legfeljebb 3 POST megy (nem 12).
+- **R27 — körönként egy végleges levél, kiléttől függetlenül (L3).** A végleges beküldés (mindkét fajtánál) a kézbesítés-nyilvántartásba
+  tanulófüggetlen végleges-jelzősort ír (`roundKeyOf("final-round", fajta, kör)`; a kvízé azonos az R18 jelzősorával). Ha a jelzősor már
+  létezett (ugyanannak a körnek az ismételt beküldése), és a mostani beküldő saját végleges sora még nincs meg, a beküldés MÁS kiléttel
+  ismételt (pl. elveszett 202 után fiókba lépve): `202 { queued: false, duplicate: true }`, második levél és más név nem megy. Ugyanazon
+  kilét ismétlése változatlanul a meglévő címzettenkénti pótlásra fut.
+- **R28 — a sikertelen tárolóírás nem rejti el a kimenő bejegyzést (L4).** Ha a kimenő sor írása dob (pl. kvóta), a bejegyzés egy csak
+  memóriabeli sorba kerül, amelyet az ürítő a tárolóból olvasott bejegyzések MELLETT olvas (a lapon belül elmegy); siker után onnan is
+  kikerül.
+- **R29 — véglegesítés a felvétel közben (L5).** A pillanatkép-felvétel záró szakasza (a kör zárán, R25) az ütemezés előtt a memóriabeli
+  véglegesítést is nézi: a felvétel közben véglegesített körre `202 { queued: false, finalized: true }`, várakozó nem keletkezik.
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -358,6 +381,10 @@ Elfogadás (S1b):
 - E40. AMIKOR a tanuló az utolsó válasz után azonnal elhagyja az oldalt (lassú token mellett), A RENDSZER a végleges kört a következő
   indításkor elküldi (R24).
 - E41. Ha a régi pillanatkép küldése már fut, az új pillanatkép nem kap `queued: true` választ úgy, hogy közben a régi levél megy ki (R25).
+- E42. Folyamatos 503 mellett a végleges beküldés laponként legfeljebb 3 POST-ot küld (R26).
+- E43. Elveszett 202 utáni, más kiléttel ismételt végleges beküldés nem küld második levelet; az eredeti név marad (R27).
+- E44. Olvasható, de nem írható tárolónál a befejezett kör a lapon belül elmegy (R28).
+- E45. A felvétel közben véglegesített körre a pillanatkép nem kap `queued: true` választ (R29).
 - E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
@@ -413,4 +440,8 @@ Elfogadás (S1b):
 - [ ] E39 – 429: nincs azonnali ismétlés; Retry-After mellett legfeljebb 3 kísérlet (böngésző + egységteszt)
 - [ ] E40 – azonnali dokumentumváltás után a végleges kör a következő indításkor megy (böngésző)
 - [ ] E41 – a pillanatkép-felvétel a kör zárán; futó régi küldés mellett igaz válasz (valódi DB)
+- [ ] E42 – 503: laponként legfeljebb 3 POST (böngésző)
+- [ ] E43 – más kiléttel ismételt végleges beküldés: egy levél, eredeti név (valódi DB)
+- [ ] E44 – írhatatlan tároló: a kör a lapon belül elmegy (böngésző)
+- [ ] E45 – felvétel közbeni véglegesítés: nincs queued:true (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
