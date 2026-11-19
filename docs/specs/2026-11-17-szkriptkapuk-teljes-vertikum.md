@@ -27,8 +27,8 @@ maradjon, amit gép nem lát. Elvek (ezekhez mérjük a szeleteket):
 2. **Amit szkript eldönt, azt nem ügynök dönti el.** A gép által nem látható dolgok listája rögzített (5. fejezet), és szűkül.
 3. **Láncolt bizonyíték:** a fázis kilépő bizonyítéka a következő fázis belépő feltétele.
 4. **Fejlesztésidejű eszköz:** a kapuk a `source/` futásidejét nem érintik, a programot nem törhetik. Bevezetés fokozatosan:
-   előbb FIGYELMEZTET (és méri a hamis riasztást), aztán TILT. A CI-ban, ahol nincs kit megkerülni, a determinisztikus kapu
-   azonnal tilthat.
+   előbb FIGYELMEZTET (és méri a hamis riasztást), aztán TILT — a CI-ban is: a tiltásra váltás csak a 6.3a mért feltételei és
+   tulajdonosi jóváhagyás után jöhet (a független review mérése szerint azonnali tiltásnál mind az öt nyitott PR elbukott volna).
 5. **Gyors kapu:** szakaszonként < 60 s cél; a drága lépés csak ott fut, ahol a változás érinti (útvonal-alapú kiválasztás).
 
 ## 2. NEM cél
@@ -388,7 +388,10 @@ A `gate-metrics.mjs` (S10) a bizonyíték-tárból és a `gh`-ból számol, nem 
 - [ ] A5: WHEN egy tesztfájl diffje (a main-hez VAGY commitonként) állítást töröl / kikommentez, számküszöböt / relációs jelet
   változtat, lazább matcherre vált, timeoutot / retries-t növel, `force: true`-t / `waitForTimeout`-ot vagy forrásszöveg-vizsgálatot
   vezet be, illetve sim-kalibrációs konstanst módosít, és nincs érvényes `SPEC-VÁLTOZÁS` jelölés THEN the test-integrity kapu SHALL a
-  konkrét fájl:sorral jelezni (helyben `WARN`, a CI-ban `FAIL`) — S1.
+  konkrét fájl:sorral jelezni — S1. A jelzés módja a bevezetési lépcsőtől függ (6.3a): a main-hez képesti (összefésült) nézet
+  leletére helyben és a CI-ban is `WARN` (a job nem bukik), `FAIL` csak a `modes.test-integrity.*: block` kapcsoló után, amelyet a
+  6.3a mért feltételei és tulajdonosi jóváhagyás nyitnak; a commitonkénti nézet lelete MINDIG csak tájékoztató `WARN`, soha nem
+  tilt (egyik lépcsőben sem).
 - [ ] A6: WHEN a jelölés megvan, a hivatkozott spec a diffben van és a tesztre utal, és a PR-leírás felsorolja THEN the kapu SHALL
   átengedni — S1.
 - [ ] A7: WHEN egy alügynök-jelentésből hiányzik a gépi `allitasok` blokk, vagy a fej / fájl:sor / PASS-bizonyíték / PR-állapot /
