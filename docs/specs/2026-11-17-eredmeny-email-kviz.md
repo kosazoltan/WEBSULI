@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14 – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17 – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -247,8 +247,30 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
   15 másodpercig, az adatbázis-pool lezárása ELŐTT (a meglévő tananyag-eredmény ürítés mintájára). Az időkorlát után a leállás
   folytatódik (a még nem kézbesített levél elvész, naplózva). A 15 percnél korábbi küldés ára: a gyerek az ablakon belül még
   folytathatná — ekkor a végleges levél felülíró mondattal megy (R1).
-- **Jegyre (nem javítva ebben a szeletben):** K5 — hamisított pillanatkép, amelyben a megválaszolt kérdések száma eléri a körméretet
-  (a becsületes kliens ilyet nem küld; javítás iránya: `answered >= körméret` → `queued: false`).
+- **K5:** a harmadik vak ellenőrzés után javítva, lásd R17.
+
+**Harmadik vak ellenőrzés (2026-11-19, `0e411d47`: NEM; 1 közepes, 4 kicsi) — a szabályok így változnak (dokumentált spec-változás):**
+- **R15 — BÁRMELY véglegesítés elnyomja a kör „félbehagyva” levelét (L1; az R11 „első rögzítő” szabálya szűkül).** Az elnyomás
+  ártalmatlan irány (legfeljebb egy „félbehagyva” levél marad el), az elmaradása viszont ellentmondó levélpárt ad: ha a bejelentkezett
+  tanuló munkamenete a kör közben megszűnik és vendégként fejezi be, a végleges beküldés a várakozót eddig nem törölte, és a
+  „félbehagyva” levél a végleges UTÁN ment ki. Mostantól a végleges beküldés a kör (lecke + kör) várakozó pillanatképét a beküldő
+  kilététől függetlenül törli, és a memóriabeli véglegesítés-jelző is tanulófüggetlen. Az „első rögzítő” védelem (`mayActOn`) CSAK a
+  pillanatkép TARTALMÁNAK felülírására vonatkozik (igazolt tanuló pillanatképét más nem írhatja felül a saját válaszaival).
+- **R16 — a vendég köre vendég kör marad (L2; az R11 állítása így teljesül).** Ha a kört vendég rögzítette, és egy másik beküldő
+  (pl. a kör közben bejelentkező tanuló) veszi át, a „félbehagyva” levél attribúciója „Vendég tanuló” marad (vendég-útmutatóval), nem
+  az átvevő neve; a kör első rögzítője is vendég marad. (A tartalom — a több válaszú állapot — az átvevőé lehet: a vendég azonosítója nem
+  igazolt, ezért ez nem személyes adat kiadása.)
+- **R17 — teljes kör nem „félbehagyva” (L3 = K5).** Ha a pillanatképben a megválaszolt kérdések száma eléri a szerver körméretét, a
+  pillanatkép nem ütemez részleges levelet: `202 { queued: false, partial: true, complete: true }` (a becsületes kliens ilyenkor
+  végleges beküldést küld).
+- **Vállalt korlátok (kiegészítés):**
+  - (L4) Hamis, a saját időbélyegeivel együtt eltolt `clientNow`-val a 7 napos határ megkerülhető, és a levélbe hamis „Utolsó válasz”
+    kerül — csak a beküldő SAJÁT levelére hat; a hamisítást a keret korlátozza (R5, R9).
+  - (L5) A telepítés átfedésében a régi példánytól kapott CSRF-token jelzés nélküli: a lap újratöltéséig nem megy pillanatkép és új
+    mező. Eredmény nem vész el (a végleges beküldés a régi alakkal megy), csak a félbehagyott kör levele marad el addig.
+  - (R15) Újraindítás után a véglegesítés-jelző csak a nyilvántartásból ismerhető, ott a végleges sor a tanuló-kulcson áll: ha
+    újraindítás ÉS közbeni kilétváltás is van, a várakozó pillanatkép úgysem él túl az újraindítást (R14 kiküldi leállításkor), így
+    késői „félbehagyva” levél ebből nem keletkezik.
 
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
@@ -276,6 +298,10 @@ Elfogadás (S1b):
 - E28. A részleges levél nem állítja, hogy minden kérdésre helyes választ adott; a dátumsora az utolsó válasz ideje; a 7 napos határ
   a kliens órájától független (R13).
 - E29. Leállításkor a várakozó „félbehagyva” levél korlátos időn belül kimegy (R14).
+- E30. AMIKOR a kör véglegesül (bármely beküldő kilétével), A RENDSZER a kör „félbehagyva” levelét nem küldi ki — fiók → vendég
+  váltásnál sem megy „félbehagyva” levél a végleges után (R15).
+- E31. Vendég által rögzített kör átvételekor a „félbehagyva” levél neve „Vendég tanuló” (R16).
+- E32. Teljes (a körmérettel egyenlő számú válaszú) pillanatkép nem ütemez levelet (R17).
 - E25. AMIKOR a régi szerver az új mezők miatt 400-at ad, A RENDSZER a végleges beküldést egyszer az új mezők nélkül megismétli (az
   eredménylevél kérése sikerül); a pillanatképet nem alakítja végleges beküldéssé (R10).
 
@@ -316,4 +342,7 @@ Elfogadás (S1b):
 - [x] E27 – képesség-jelzés; „régi szerver” + 30 gyerek egy címről ≥ 20, nincs kettős küldés (böngésző)
 - [x] E28 – részleges levél szövege, utolsó válasz ideje, kliensóra-független határ (egységteszt + valódi DB)
 - [x] E29 – leállításkor a várakozók kimennek, korlátos időben (valódi DB)
+- [ ] E30 – bármely véglegesítés elnyomja a részlegest; fiók → vendég sorrend: csak végleges levelek (valódi DB)
+- [ ] E31 – vendég kör átvétele: „Vendég tanuló” név (valódi DB)
+- [ ] E32 – teljes pillanatkép nem ütemez (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)

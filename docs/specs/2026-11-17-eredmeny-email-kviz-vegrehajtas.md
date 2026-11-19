@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 (második vak ellenőrzés, 2026-11-18) kész, a következő vak ellenőrzés előtt – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 (harmadik vak ellenőrzés, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -199,6 +199,20 @@ Leletenként előbb BUKÓ teszt, utána a javítás.
   helyettesítve; a DB-tesztje megtartva (`tests/lesson-result-email-db.integration.ts`, „független review K-1”), az ágon érvényes segédre
   (`clearFinalizedRounds`) és az R5 szerinti összes-számra (25) igazítva.
 - Utána: `git merge origin/main`, `gate:stage`, sorompó KÜLÖN lépésben, DB-kör, böngészős kör, `gate:push`.
+
+## T13 — a harmadik vak ellenőrzés leletei (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R15–R17)
+
+Leletenként előbb BUKÓ teszt (`tests/lesson-result-email-partial-db.integration.ts`), utána a javítás (`server/lesson-result-email.ts`).
+- **R15:** `finalizedRounds` értéke újra csak a lejárat (tanulófüggetlen), `roundFinalized` kilét-feltétel nélkül; a végleges ág a
+  `lecke|kör` várakozót feltétel nélkül törli. A meglévő „R11 (első rögzítő)” teszt végleges-beküldéses része az R15 szerint változik
+  (a vendég végleges beküldése mostantól elnyomja), a tartalom-felülírás tiltása (`conflict: true`) változatlanul mérve. Új teszt: fiók
+  pillanatképe, majd vendég végleges → csak két végleges levél, „félbehagyva” nincs, a várakozó azonnal törlődik.
+- **R16:** a pillanatkép-ágban, ha a várakozó első rögzítője vendég és a beküldő más, a küldő vendég-attribúcióval épül
+  (`GUEST_LEARNER`, `guest: true`), és a bejegyzés `who`-ja a vendég marad. Teszt: vendég kör → bejelentkezett átvétel → a levélben
+  „Vendég tanuló”, a fiók neve nincs benne.
+- **R17:** a pillanatkép-ágban `answered >= körméret` → `202 { queued: false, partial: true, complete: true }`. Teszt: 25 válaszos
+  pillanatkép → nincs várakozó, nincs levél.
+- Utána: `gate:stage`, sorompó KÜLÖN lépésben, DB-kör, böngészős kör, fetch + ősellenőrzés, `gate:push`.
 
 ## Kész-feltétel
 
