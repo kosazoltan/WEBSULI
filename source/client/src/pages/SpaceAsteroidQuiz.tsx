@@ -14,7 +14,7 @@ import {
 import { loadClassroomGrade, saveClassroomGrade } from "@/lib/classroomStore";
 import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import * as THREE from "three";
@@ -92,6 +92,8 @@ import {
   labelFitsChip,
   crystalShards,
   crystalZoneFor,
+  legendLayoutFor,
+  type LegendLayout,
   hitCrystal,
   rezoneCrystals,
   spawnCrystals,
@@ -972,6 +974,8 @@ export default function SpaceAsteroidQuiz() {
   const [expanded, setExpanded] = useState(false);
   /** A bemutatott kérdés valamelyik válasza nem fér a kristály-feliratba: sorszámos kristályok + teljes válasz-lista. */
   const [longLabels, setLongLabels] = useState(false);
+  const longLabelsRef = useRef(false);
+  const [legend, setLegend] = useState<LegendLayout | null>(null);
   const whyOpen = feedback !== null || expanded;
   // K.4/7: a WebGL-környezet elvesztése → szünet + „Grafika újraindítása”; az újraindítás új vászon + új renderer.
   const [gfxLost, setGfxLost] = useState(false);
@@ -1204,7 +1208,9 @@ export default function SpaceAsteroidQuiz() {
    * bank; `restore()` = ismétlés (csak a saját játék / angol szóbank / évfolyam-bank / tananyag tétele).
    */
   const provider = useMemo<QuestionProvider>(() => {
-    const couponMaterialOnly = () => couponActiveRef.current && quizPoolRef.current.some((q) => q.source === "material");
+    // Vak 4. kör L3: a kupon-mód a kupon ÁLLAPOTÁBÓL jön (nem a betöltött lista hosszából): a tananyag-végpont hibája / üres listája
+    // mellett sem nyílik évfolyam-bank — kérdés nélkül megy a lövöldözés, amíg a lecke-forrás elérhető nem lesz.
+    const couponMaterialOnly = () => couponActiveRef.current;
     const toMaterialPlay = (m: Quiz): PlayQuestion =>
       materialPlayQuestion(
         { id: m.id ?? "", prompt: m.prompt, options: m.options, correctIndex: m.correctIndex, explanation: m.explanation ?? undefined },
@@ -1328,6 +1334,10 @@ export default function SpaceAsteroidQuiz() {
   /** Az utolsó tűz-NYOMÁS (a le-fel élváltás) ideje a kristály-órán; a lövedék ezt viszi magával. */
   const firePressAtRef = useRef(Number.NEGATIVE_INFINITY);
   const firePrevRef = useRef(false);
+  /** A tűz-NYOMÁS (le-fel él) bélyegzése a bemeneti kezelőben, a kristály-órával azonos időalapon; a lenyomva tartott tűz nem bélyegez újra. */
+  const markFirePress = () => {
+    if (!(keysRef.current.fire || touchRef.current.fire)) firePressAtRef.current = armClockRef.current;
+  };
   /** Teszt-kampó: a következő kérdés ez a tétel lesz (hosszú válaszok mérése). */
   const forcedQuizRef = useRef<{ id: string; prompt: string; options: string[]; correctIndex: number } | null>(null);
   /** Az élesítés kész-e (a kristályok választhatók). */
@@ -1353,21 +1363,27 @@ export default function SpaceAsteroidQuiz() {
    * A kristály-zóna a játéksíkon: a magban (`crystalZoneFor`) EGYSZER eldöntve a kérdés bemutatásakor; bemenet a vászon mérete
    * és a kérdés szövege (a kártya becsült magassága). A rajz csak olvassa — nincs képkockánkénti DOM-mérés (KSZ-1).
    */
-  const decideCrystalZone = useCallback((prompt: string) => {
+  /** A vászon doboza és a nézet (egyszer olvasva a kérdés bemutatásakor / átméretezéskor — nincs képkockánkénti mérés). */
+  const sceneMetrics = useCallback(() => {
     const box = sceneBoxRef.current;
-    if (!box) return crystalZoneFor({ boxWidthPx: 360, boxHeightPx: 450, boxTopPx: 80, viewport: { width: 360, height: 640 }, prompt, safeTopPx: 0 });
+    if (!box) return { boxWidthPx: 360, boxHeightPx: 450, boxTopPx: 80, viewport: { width: 360, height: 640 }, safeTopPx: 0 };
     const rect = box.getBoundingClientRect();
     const probe = safeProbeRef.current;
     const safeTopPx = probe ? Number.parseFloat(getComputedStyle(probe).paddingTop) || 0 : 0;
-    return crystalZoneFor({
-      boxWidthPx: rect.width,
-      boxHeightPx: rect.height,
-      boxTopPx: rect.top,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      prompt,
-      safeTopPx,
-    });
+    return { boxWidthPx: rect.width, boxHeightPx: rect.height, boxTopPx: rect.top, viewport: { width: window.innerWidth, height: window.innerHeight }, safeTopPx };
   }, []);
+  const decideCrystalZone = useCallback(
+    (prompt: string, reservePx = 0) => crystalZoneFor({ ...sceneMetrics(), prompt, reservePx }),
+    [sceneMetrics],
+  );
+  /**
+   * A jelmagyarázat elrendezése (vak 3. kör L1): HELYET FOGLAL — álló nézetben a kártya alatt (a kristály-zóna ez alatt kezdődik),
+   * fekvőn a kártya mellett. A lista magassága korlátos, a többi görgethető: a szöveg nem nő rá a kristályokra és a kártyára.
+   */
+  const decideLegend = useCallback(
+    (prompt: string, labels: readonly string[]): LegendLayout => legendLayoutFor({ ...sceneMetrics(), labels, prompt }),
+    [sceneMetrics],
+  );
 
   rezoneNowRef.current = () => {
     const list = crystalsRef.current;
@@ -1375,7 +1391,9 @@ export default function SpaceAsteroidQuiz() {
     if (list.length === 0 || !pres) return;
     const before = list.map((c) => ({ x: c.homeX, y: c.homeY }));
     // A mag az új aréna-méretből számol; a találat-vizsgálat (`crystalAt`) és a rajz ugyanezt a helyet olvassa.
-    rezoneCrystals(list, decideCrystalZone(pres.question.quiz.prompt), 1);
+    const legendNow = longLabelsRef.current ? decideLegend(pres.question.quiz.prompt, pres.options.map((o) => o.label)) : null;
+    setLegend(legendNow);
+    rezoneCrystals(list, decideCrystalZone(pres.question.quiz.prompt, legendNow?.reservePx ?? 0), 1);
     // Érdemi elmozdulásnál az élesítés újraindul (a kristály az új helyén is kapjon előjelzést).
     if (list.some((c, i) => Math.hypot(c.homeX - before[i]!.x, c.homeY - before[i]!.y) > 0.3)) crystalShownAtRef.current = armClockRef.current;
   };
@@ -1388,13 +1406,18 @@ export default function SpaceAsteroidQuiz() {
     onShow: (p) => {
       sfxWhoosh();
       // A kérdés kristályai a kártya alatti zónába érkeznek (a zóna a magban, a kártya becsült magasságából — egyszer).
-      crystalsRef.current = spawnCrystals(p, decideCrystalZone(p.question.quiz.prompt), runRngRef.current.crystal.next);
+      const labels = p.options.map((o) => o.label);
+      const long = !crystalLabelsFit(labels, measuredFit);
+      const legendNow = long ? decideLegend(p.question.quiz.prompt, labels) : null;
+      longLabelsRef.current = long;
+      setLegend(legendNow);
+      crystalsRef.current = spawnCrystals(p, decideCrystalZone(p.question.quiz.prompt, legendNow?.reservePx ?? 0), runRngRef.current.crystal.next);
       // Élesítés (review #486 M2, KSZ-11): a kristály ≥ CRYSTAL_ARM_MS-ig látszik, mielőtt választható; a korábbi tűz-nyomás nem válaszol.
       crystalShownAtRef.current = armClockRef.current;
       // Hosszú / a gombba nem férő válasznál a kristályon a sorszám áll, a TELJES szövegek NEM blokkoló jelmagyarázatban látszanak
       // a kristályokkal egyszerre (vak ellenőrzés L1: a világ nem áll meg magától, olvasni ÉS lőni ugyanazon az állapoton lehet).
       // A beférést a VALÓDI betűszélességgel mérjük (L5), nem csak a karakterszámmal.
-      setLongLabels(!crystalLabelsFit(p.options.map((o) => o.label), measuredFit));
+      setLongLabels(long);
     },
     onOutcome: (o, p) => {
       // A hosszú válaszok listája a válasszal (vagy a menet végével) bezárul: a világ fut tovább.
@@ -1438,6 +1461,11 @@ export default function SpaceAsteroidQuiz() {
     stickRef.current.y = 0;
     setJoyReset((n) => n + 1);
   }, []);
+
+  // Vak 4. kör L4: a kupon lejáratakor a nyitott kérdés megszakítottként zárul (a „Lejárt” réteg alatt nem marad aktív; az `abort` idempotens).
+  useEffect(() => {
+    if (coupon.expired) qRef.current?.abort();
+  }, [coupon.expired]);
 
   // A játék áll szünetben ÉS amíg a „Miért?” kártya nyitva van (a kérdés-óra és a világ is).
   useEffect(() => {
@@ -1769,7 +1797,7 @@ export default function SpaceAsteroidQuiz() {
         };
       },
       forceState: (rawPatch) => {
-        const patch = rawPatch as typeof rawPatch & { bossFinale?: boolean; shipX?: number; powerLevel?: number; noEnemies?: boolean; bombs?: number; lastLife?: boolean; questionItem?: { id: string; prompt: string; options: string[]; correctIndex: number } };
+        const patch = rawPatch as typeof rawPatch & { bossFinale?: boolean; shipX?: number; powerLevel?: number; noEnemies?: boolean; bombs?: number; lastLife?: boolean; crystalAgeMs?: number; questionItem?: { id: string; prompt: string; options: string[]; correctIndex: number } };
         // Teszt (review #486 M1): a főellenfél elesik, EGY élettel, és egy ellenséges lövedék a hajón repül még — a győzelem végleges.
         if (patch.bossFinale === true && phaseRef.current === "play") bossFinaleRef.current();
         // Teszt (review #486 L1): hármas lövés (`powerLevel`) és üres pálya (`noEnemies`), hogy a zuhanó ellenfelek ne nyeljék el a lövedéket.
@@ -1782,6 +1810,8 @@ export default function SpaceAsteroidQuiz() {
           powerTimerRef.current = 600;
         }
         if (typeof patch.noEnemies === "boolean") noEnemiesRef.current = patch.noEnemies;
+        // Teszt (vak 4. kör L2): a kristályok „kora” — pl. 495 ms: a következő képkocka az élesítési határ fölé viszi.
+        if (typeof patch.crystalAgeMs === "number") crystalShownAtRef.current = armClockRef.current - patch.crystalAgeMs;
         // Teszt (vak 3. kör L6): az utolsó élet elvesztése ugyanazon az úton, mint az ütközésnél (a kijelzés megvárásával).
         if (patch.lastLife === true && phaseRef.current === "play") {
           livesRef.current = 0;
@@ -2169,8 +2199,9 @@ export default function SpaceAsteroidQuiz() {
     if (gameElapsedRef.current < HINT_SEC && gameElapsedRef.current + dt >= HINT_SEC) markHud();
 
     // Tűz-NYOMÁS élváltás: csak az élesítés UTÁNI új nyomás válaszolhat a kristályon (a tartott tűz és a kérdés előtti lövés nem).
+    // A nyomás idejét a BEMENETI kezelő bélyegzi (`markFirePress`, vak 4. kör L2): a fix lépés a képkocka órája UTÁN fut, a később
+    // bélyegzett nyomás az élesítés előtti valódi nyomást élesítettnek mutatná.
     const fireNow = keysRef.current.fire || touchRef.current.fire;
-    if (fireNow && !firePrevRef.current) firePressAtRef.current = armClockRef.current;
     firePrevRef.current = fireNow;
     // Lövés
     if (fireNow && p.cooldown <= 0) {
@@ -2453,7 +2484,7 @@ export default function SpaceAsteroidQuiz() {
       const newWave = waveRef.current + 1;
       if (newWave > BOSS_FINAL_WAVE) {
         // Győzelem (elvileg ide csak akkor jutunk, ha a boss-ág nem futott le)
-        endRun(true);
+        endRun(true, undefined, true);
         return;
       }
       // J6a: nincs hullám-kapu — a hullám AZONNAL vált, a „HULLÁM n” felirat 2 mp-ig látszik; a hullám-bónusz teljesítményhez
@@ -2657,7 +2688,8 @@ export default function SpaceAsteroidQuiz() {
         return;
       }
       if (phaseRef.current !== "play") return;
-      endRun(true);
+      // Vak 4. kör L5: a már élő megoldás-kijelzés (≥ 1,8 mp) a győzelemnél sem csonkul: az eredmény rögzül, a réteg a kijelzés után nyílik.
+      endRun(true, undefined, true);
     }, ms);
   };
 
@@ -3315,7 +3347,7 @@ export default function SpaceAsteroidQuiz() {
         case "ArrowRight": case "d": case "D": keysRef.current.right = true; break;
         case "ArrowUp": case "w": case "W": keysRef.current.up = true; break;
         case "ArrowDown": case "s": case "S": keysRef.current.down = true; break;
-        case " ": keysRef.current.fire = true; break;
+        case " ": markFirePress(); keysRef.current.fire = true; break;
         case "p": case "P":
           // A „Miért?” kártya / kibontott kérdés olvasása közben a P nem oldja fel a játékot (az olvasásért nem járhat életvesztés).
           if (phaseRef.current === "play" && !holdRef.current) {
@@ -3724,16 +3756,25 @@ export default function SpaceAsteroidQuiz() {
                         Engedd el a tűzgombot, és lőj újra a válaszhoz!
                       </p>
                       {longLabels && !qView.reveal && !expanded && (
-                        <div className="sa-legend" data-testid="sa-legend" role="note" aria-label="A válaszok teljes szövege">
-                          {qView.presentation.options.map((opt, idx) => (
-                            <p key={`leg-${qView.presentation!.id}-${idx}`} className="sa-legend-item">
-                              <span className="sa-legend-key" aria-hidden="true">{idx + 1}</span>
-                              <span className="sa-legend-text">{opt.label}</span>
-                            </p>
-                          ))}
+                        <div
+                          className="sa-legend"
+                          data-testid="sa-legend"
+                          data-scroll={legend?.scroll ? "true" : "false"}
+                          role="note"
+                          aria-label="A válaszok teljes szövege"
+                          style={legend ? ({ "--sa-legend-top": `${legend.topPx - legend.boxTopPx}px`, "--sa-legend-top-abs": `${legend.topPx}px`, "--sa-legend-list": `${legend.listPx}px` } as CSSProperties) : undefined}
+                        >
                           <button type="button" className="sa-answers-open" data-testid="sa-answers-open" {...pointerTapHandlers(crystalTaps, 21, () => setExpanded(true))}>
                             Válaszok
                           </button>
+                          <div className="sa-legend-list" data-testid="sa-legend-list" tabIndex={legend?.scroll ? 0 : undefined}>
+                            {qView.presentation.options.map((opt, idx) => (
+                              <p key={`leg-${qView.presentation!.id}-${idx}`} className="sa-legend-item">
+                                <span className="sa-legend-key" aria-hidden="true">{idx + 1}</span>
+                                <span className="sa-legend-text">{opt.label}</span>
+                              </p>
+                            ))}
+                          </div>
                         </div>
                       )}
                       {longLabels && !qView.reveal && expanded && (
@@ -3872,6 +3913,7 @@ export default function SpaceAsteroidQuiz() {
                       label="Tűz"
                       size="auto"
                       onHoldStart={() => {
+                        markFirePress();
                         touchRef.current.fire = true;
                         haptics("tap");
                       }}
@@ -4053,34 +4095,39 @@ export default function SpaceAsteroidQuiz() {
         }
         .sa-hold-hint { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); max-width: 92%; margin: 0; padding: 8px 14px; border-radius: 12px; background: #0b1033ee; border: 1px solid #fde68a; color: #fff; font-size: 15px; font-weight: 800; text-align: center; pointer-events: none; opacity: 0; visibility: hidden; }
         .sa-hold-hint[data-visible="true"] { opacity: 1; visibility: visible; }
-        /* Nem blokkoló jelmagyarázat (L1): a teljes szövegek a számozott kristályokkal EGYSZERRE látszanak, a világ fut, a lövés átmegy rajta. */
+        /* Jelmagyarázat (vak 3. kör L1): HELYET FOGLAL. Álló nézetben a kártya alatt áll, a kristály-zóna ez alatt kezdődik (a
+           magban számolt --sa-legend-top / --sa-legend-list); a lista magassága korlátos, a többi BELÜL görgethető — a szöveg nem
+           nő rá a kristályokra. Nem blokkoló (a lövés átmegy rajta), kivéve a görgethető lista és a gomb. */
         .sa-legend {
-          position: absolute; left: 6px; right: 6px; bottom: 6px; z-index: 2; pointer-events: none;
-          display: grid; grid-template-columns: 1fr 1fr auto; gap: 4px 8px; padding: 6px 8px; border-radius: 12px; align-items: center;
-          background: #0b1033d9; border: 1px solid #a5b4fc66; color: #f8fafc; font-size: 12px; line-height: 1.25; font-weight: 700;
+          position: absolute; left: 6px; right: 6px; top: var(--sa-legend-top, 38%); z-index: 2; pointer-events: none;
+          display: flex; flex-direction: column; gap: 4px; color: #f8fafc; font-size: 12px; line-height: 15px; font-weight: 700;
         }
-        .sa-legend-item { display: flex; align-items: flex-start; gap: 6px; margin: 0; min-width: 0; align-self: start; }
+        .sa-legend-list {
+          box-sizing: border-box; max-height: var(--sa-legend-list, 120px); overflow-y: auto; overscroll-behavior: contain; padding: 5px 8px;
+          display: flex; flex-direction: column; gap: 4px; border-radius: 12px; background: #0b1033d9; border: 1px solid #a5b4fc66;
+        }
+        .sa-legend[data-scroll="true"] .sa-legend-list { pointer-events: auto; touch-action: pan-y; }
+        .sa-legend-item { display: flex; align-items: flex-start; gap: 6px; margin: 0; min-width: 0; }
         .sa-legend-key { flex: 0 0 auto; min-width: 18px; height: 18px; border-radius: 9999px; background: #ffd86b; color: #1b1203; font-weight: 900; text-align: center; line-height: 18px; font-size: 11px; }
-        .sa-legend-text { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+        .sa-legend-text { min-width: 0; overflow-wrap: break-word; hyphens: manual; white-space: normal; }
         .sa-answers-close-x { display: none; font-size: 20px; }
         @media (orientation: landscape) and (max-height: 520px) { .sa-answers-close-x { display: inline; } }
         .sa-answers-close, .sa-answers-open {
           min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid #a5b4fc99; background: #312e81; color: #fff; font-size: 14px; font-weight: 800; cursor: pointer; pointer-events: auto;
         }
-        /* A „Válaszok” gomb a jelmagyarázat rácsának saját oszlopa: a szöveget nem takarja (vak 3. kör L1). */
-        .sa-answers-open { grid-column: 3; grid-row: 1 / span 2; min-width: 112px; background: #facc15; border-color: #fde68a; color: #1b1203; box-shadow: 0 6px 16px #0000008c; }
+        .sa-answers-open { align-self: flex-end; min-height: 44px; min-width: 140px; background: #facc15; border-color: #fde68a; color: #1b1203; box-shadow: 0 6px 16px #0000008c; }
         @media (orientation: landscape) and (max-height: 520px) {
-          /* Fekvőn a jelmagyarázat a kérdéskártya MELLETT áll (bal: 1–2., jobb: 3–4. válasz), a kristály-sorok fölött; a kártya
-             a nézet közepén van, a kristályok a kártya alatt: a szöveg és a kristály sosem kerül egy helyre. A gomb alul középen. */
-          .sa-legend {
-            position: fixed; top: calc(var(--play-question-top, 60px) + 2px); bottom: auto; left: 6px; right: 6px;
-            grid-template-columns: 27vw 1fr 27vw; grid-auto-flow: row dense; align-content: start; align-items: start;
-            padding: 0; background: transparent; border: 0; font-size: 11px; line-height: 1.2;
+          /* Fekvőn a jelmagyarázat a kérdéskártya MELLETT áll (bal: 1–2., jobb: 3–4. válasz), a kártya magasságában, a kristály-sorok fölött;
+             a kártya a nézet közepén van, a kristályok a kártya alatt: a szöveg és a kristály sosem kerül egy helyre. A gomb alul középen. */
+          .sa-legend { position: fixed; top: var(--sa-legend-top-abs, 62px); display: block; }
+          .sa-legend-list {
+            display: grid; grid-template-columns: 27vw 1fr 27vw; grid-auto-flow: row dense; align-content: start; gap: 4px 0;
+            padding: 0; background: transparent; border: 0; font-size: 11px; line-height: 13.5px;
           }
-          .sa-legend-item { padding: 4px 6px; border-radius: 10px; background: #0b1033e6; border: 1px solid #a5b4fc66; }
+          .sa-legend-item { padding: 4px 6px; border-radius: 10px; background: #0b1033e6; box-shadow: inset 0 0 0 1px #a5b4fc66; }
           .sa-legend-item:nth-of-type(-n+2) { grid-column: 1; }
           .sa-legend-item:nth-of-type(n+3) { grid-column: 3; }
-          .sa-answers-open { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); grid-column: auto; grid-row: auto; z-index: 3; }
+          .sa-answers-open { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); z-index: 3; }
         }
         .sa-crystal[data-state="correct"] { filter: drop-shadow(0 0 14px rgba(74, 222, 128, 0.95)); }
         .sa-crystal[data-state="correct"] .sa-crystal-gem { background: linear-gradient(160deg, #eafff1 0%, #86efac 40%, #22c55e 100%); }

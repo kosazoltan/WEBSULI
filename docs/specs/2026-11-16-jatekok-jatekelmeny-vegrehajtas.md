@@ -1872,6 +1872,17 @@ fizika-esetek (pattogás, határok) változatlanok.
   - (L6) az utolsó élet elvesztésekor a megválaszolt kérdés megoldás-kijelzése (≥ 1,8 mp) végigmegy: az eredmény azonnal rögzül (nincs további sebzés), az eredményképernyő a kijelzés VÉGE
     után nyílik (`endRun(…, afterReveal)`); a megválaszolatlan kérdés megszakad, nincs új kérdés. Böngészős teszt: kijelzés közben `sa-over` nincs, ≥ 1,7 mp után megjelenik.
   - (L7) a lobby leírása: változatlanul orkesztrátor-kérés (nem érintettem).
+- **Negyedik vak ellenőrzés (GPT-6.2 Sol, 2026-11-19, a c37d79ac fejre; L1–L7) javításai** (az L1 itt FELÜLÍRJA a harmadik kör elrendezését):
+  - (L6, előbb) az átfedésmérő a VALÓDI kártyát (`.play-question-card`) méri, nem a nézetet fedő `sa-question` gyökeret; kontroll-teszt: a mérő a kényszerített (kristályra tolt) jelmagyarázatot elbuktatja, a jó elrendezést átengedi.
+  - (L1, blokkoló) a jelmagyarázat HELYET FOGLAL, a magban számolt elrendezéssel (`legendLayoutFor`, `crystalZoneFor({ reservePx })`): álló nézetben közvetlenül a kérdéskártya ALATT áll (a „Válaszok” gomb a feje, alatta a lista),
+    a kristály-zóna ez alatt kezdődik (a zóna teteje legfeljebb a doboz 70%-ánál, azaz a jelmagyarázat nélküli zóna korlátjával azonos). A lista magassága korlátos (a nézet 28%-a / a hely), a többi a listában BELÜL görgethető (nem nő rá a
+    kristályokra); a magyar szót a jelmagyarázat nem töri közepén. Fekvőn a kártya MELLETT áll (bal: 1–2., jobb: 3–4. válasz, a kártya magasságában, szintén belül görgethető), a gomb alul középen. A hely-becslés óvatos (széles betű), a tiszta
+    mag tesztelt 4 nézetben; a böngészős mérés a valódi dobozokat méri (tananyag-szerű teljes mondatos válaszok hosszú prompttal + a banki leghosszabb tétel).
+  - (L2) a tűz-nyomás idejét a bemeneti kezelő bélyegzi (`markFirePress`, a kristály-órával azonos időalapon), nem a következő fix lépés; teszt: 495 ms-os kristály-korral, ugyanabban a böngészőfeladatban érkező nyomás és tartott tűz nem válaszol.
+  - (L3) a kupon-mód a kupon állapotából jön (`couponActiveRef`), nem a betöltött tananyag-lista hosszából: hibás / üres tananyag-végpontnál sem nyílik évfolyam-bank.
+  - (L4) a kupon lejáratakor a nyitott kérdés megszakítottként zárul (`abort`, idempotens).
+  - (L5) a főellenfél győzelménél is végigmegy a megoldás-kijelzés (`endRun(…, afterReveal)`); böngészős teszt.
+  - (L7) a lobby leírása: változatlanul orkesztrátor-kérés.
 - **Tartott tűz jelzése:** ha a lövedék átmegy a kristályon (nem élesített / régi nyomás), „Engedd el a tűzgombot, és lőj újra a válaszhoz!”
   jelenik meg 3,5 mp-re, amíg a gyerek lövéssel egyszer még nem válaszolt (`sa-hold-hint`).
 - **Átméretezés nyitott kérdésnél:** a mag új aréna-méretből újraszámolja a kristályok helyét (`rezoneCrystals`), az élesítés újraindul.

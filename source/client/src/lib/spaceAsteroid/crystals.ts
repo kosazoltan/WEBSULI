@@ -324,6 +324,11 @@ export function estimateCardHeightPx(prompt: string, vp: PromptViewport): number
   return PLAY_QUESTION_CARD_CHROME_PX + lines * lineHeightPx;
 }
 
+/** A kérdés-kártya becsült alsó pereme a nézetben (px): a teteje + a becsült magasság. */
+export function cardBottomPxFor(vp: PromptViewport, safeTopPx: number, prompt: string): number {
+  return playQuestionTopPx(vp, safeTopPx) + estimateCardHeightPx(prompt, vp);
+}
+
 /** A kristály-gomb fél magassága (px): 48 px a legkisebb érintési cél + a lebegés ráhagyása. */
 export const CRYSTAL_CHIP_HALF_PX = 26;
 /** A két kristály-sor legkisebb függőleges távolsága (px). */
@@ -343,10 +348,13 @@ export function crystalZoneFor(args: {
   viewport: PromptViewport;
   prompt: string;
   safeTopPx: number;
+  /** A kártya alatt a jelmagyarázat által elfoglalt hely (px; `legendLayoutFor().reservePx`): a kristály-sorok ez alatt kezdődnek. */
+  reservePx?: number;
 }): CrystalBounds {
   const h = Math.max(1, args.boxHeightPx);
-  const cardBottom = playQuestionTopPx(args.viewport, args.safeTopPx) + estimateCardHeightPx(args.prompt, args.viewport);
-  const topFrac = Math.min(0.7, Math.max(0.05, (cardBottom + 10 + CRYSTAL_CHIP_HALF_PX - args.boxTopPx) / h));
+  const reserve = Math.max(0, args.reservePx ?? 0);
+  const cardBottom = cardBottomPxFor(args.viewport, args.safeTopPx, args.prompt) + reserve;
+  const topFrac = Math.min(reserve > 0 ? LEGEND_ZONE_TOP_MAX_FRAC : 0.7, Math.max(0.05, (cardBottom + 10 + CRYSTAL_CHIP_HALF_PX - args.boxTopPx) / h));
   const bottomFrac = Math.min(0.85, Math.max(topFrac + CRYSTAL_MIN_ROW_GAP_PX / h, CRYSTAL_ZONE_BOTTOM_FRAC));
   const topY = worldYAtScreenFrac(topFrac);
   const bottomY = worldYAtScreenFrac(bottomFrac);
@@ -357,4 +365,85 @@ export function crystalZoneFor(args: {
     maxY: topY,
     minHeight: Math.max(CRYSTAL_MIN_ZONE_HEIGHT, topY - worldYAtScreenFrac(topFrac + CRYSTAL_MIN_ROW_GAP_PX / h)),
   });
+}
+
+/* --------------------- jelmagyarázat-elrendezés (vak 3. kör L1) --------------------- */
+
+/**
+ * A hosszú válaszok jelmagyarázata HELYET FOGLAL: álló nézetben közvetlenül a kérdés-kártya ALATT áll (a kristály-zóna ez alatt
+ * kezdődik, `crystalZoneFor({ reservePx })`), fekvő nézetben a kártya MELLETT, a kártya magasságában (a kristály-sorok a kártya
+ * alatt vannak). A lista magassága korlátos: ha a becsült szöveg nem fér, a lista BELÜL görgethető — a szöveg nem nő rá a
+ * kristályokra / a kártyára. Tiszta számítás: a lap a kérdés bemutatásakor EGYSZER hívja (nincs képkockánkénti mérés).
+ */
+export const LEGEND_FONT_PX = 12;
+export const LEGEND_LINE_PX = 15;
+export const LEGEND_LANDSCAPE_FONT_PX = 11;
+export const LEGEND_LANDSCAPE_LINE_PX = 13.5;
+/** Egy betű átlagos szélessége a félkövér betűtípusnál (em): óvatos (széles) becslés. */
+export const LEGEND_CHAR_EM = 0.68;
+export const LEGEND_ITEM_GAP_PX = 4;
+export const LEGEND_PAD_PX = 12;
+export const LEGEND_BUTTON_PX = 44;
+export const LEGEND_GAP_PX = 6;
+export const LEGEND_MIN_LIST_PX = 44;
+/** Az álló jelmagyarázat listája legfeljebb a nézet ekkora hányada (a többi görgethető). */
+export const LEGEND_MAX_LIST_FRAC = 0.28;
+/** A kristály-zóna teteje legfeljebb a doboz ekkora hányadánál kezdődhet (a jelmagyarázat nélküli zóna korlátjával azonos). */
+export const LEGEND_ZONE_TOP_MAX_FRAC = 0.7;
+/** Fekvőn a két oszlop szélessége a nézet szélességének hányada (a kártya a középen áll). */
+export const LEGEND_LANDSCAPE_COL_FRAC = 0.27;
+
+export type LegendLayout = {
+  landscape: boolean;
+  /** A jelmagyarázat teteje a NÉZETBEN (px). */
+  topPx: number;
+  /** A vászon-doboz teteje a nézetben (px): az álló nézet a dobozhoz képest pozicionál. */
+  boxTopPx: number;
+  /** A lista (görgethető rész) magassága (px). */
+  listPx: number;
+  /** A lista görgethető-e (a becsült szöveg magasabb a hasznos helynél). */
+  scroll: boolean;
+  /** A kártya alatt foglalt hely (px, álló nézet) — a kristály-zóna bemenete; fekvőn 0. */
+  reservePx: number;
+};
+
+function legendLines(label: string, textWidthPx: number, fontPx: number): number {
+  const perLine = Math.max(4, Math.floor(textWidthPx / (fontPx * LEGEND_CHAR_EM)));
+  return Math.max(1, Math.ceil(label.length / perLine));
+}
+
+export function legendLayoutFor(args: {
+  labels: readonly string[];
+  viewport: PromptViewport;
+  safeTopPx: number;
+  prompt: string;
+  boxTopPx: number;
+  boxHeightPx: number;
+}): LegendLayout {
+  const vp = args.viewport;
+  const landscape = vp.width > vp.height && vp.height <= 520;
+  const cardTop = playQuestionTopPx(vp, args.safeTopPx);
+  const cardBottom = cardBottomPxFor(vp, args.safeTopPx, args.prompt);
+  if (landscape) {
+    const colW = vp.width * LEGEND_LANDSCAPE_COL_FRAC;
+    const textW = colW - 12 - 24; // belső térköz + sorszám
+    const colHeight = (idx: readonly number[]): number =>
+      idx.reduce((n, i) => n + legendLines(args.labels[i] ?? "", textW, LEGEND_LANDSCAPE_FONT_PX) * LEGEND_LANDSCAPE_LINE_PX + 8, 0) + LEGEND_ITEM_GAP_PX * Math.max(0, idx.length - 1);
+    const left = args.labels.map((_, i) => i).filter((i) => i < 2);
+    const right = args.labels.map((_, i) => i).filter((i) => i >= 2);
+    const est = Math.max(colHeight(left), colHeight(right));
+    const topPx = cardTop + 2;
+    const avail = Math.max(LEGEND_MIN_LIST_PX, cardBottom - topPx);
+    const listPx = Math.min(est, avail);
+    return { landscape, topPx, boxTopPx: args.boxTopPx, listPx, scroll: est > listPx + 0.5, reservePx: 0 };
+  }
+  const textW = vp.width - 12 - 18 - 24;
+  const est = args.labels.reduce((n, l) => n + legendLines(l, textW, LEGEND_FONT_PX) * LEGEND_LINE_PX, 0) + LEGEND_ITEM_GAP_PX * Math.max(0, args.labels.length - 1) + LEGEND_PAD_PX;
+  const header = LEGEND_BUTTON_PX + LEGEND_ITEM_GAP_PX;
+  const topPx = cardBottom + LEGEND_GAP_PX;
+  // a legalsó megengedett perem: itt kezdődik a legfelső kristály-gomb teteje (zóna teteje − fél gomb) mínusz a 10 px ráhagyás
+  const lowest = args.boxTopPx + LEGEND_ZONE_TOP_MAX_FRAC * Math.max(1, args.boxHeightPx) - CRYSTAL_CHIP_HALF_PX - 10;
+  const avail = Math.max(LEGEND_MIN_LIST_PX, lowest - topPx - header);
+  const listPx = Math.min(est, Math.max(LEGEND_MIN_LIST_PX, Math.min(avail, vp.height * LEGEND_MAX_LIST_FRAC)));
+  return { landscape, topPx, boxTopPx: args.boxTopPx, listPx, scroll: est > listPx + 0.5, reservePx: LEGEND_GAP_PX + header + listPx };
 }

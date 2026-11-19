@@ -133,7 +133,8 @@ test("J6a: a renderer a közös gyárral készül (KSZ-8), a WebGL-környezet el
 // a régi (DOM-mérő) minta TILOS lett, a nem látható gomb láthatósága továbbra is képkockánként egyeztetett.
 test("J6a: a kristály-zónát a mag dönti el egyszer (nincs DOM-mérés / képkockánkénti átrendezés), és a nem látható gomb láthatósága képkockánként egyeztetett", () => {
   assert.match(code, /crystalZoneFor\(\{/);
-  assert.match(code, /spawnCrystals\(p, decideCrystalZone\(p\.question\.quiz\.prompt\), runRngRef\.current\.crystal\.next\)/);
+  // SZÁNDÉK változatlan (a zónát a mag dönti el, egyszer): a jelmagyarázat helyfoglalása (vak 3. kör L1) a zóna bemenete lett.
+  assert.match(code, /spawnCrystals\(p, decideCrystalZone\(p\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0\), runRngRef\.current\.crystal\.next\)/);
   assert.doesNotMatch(code, /querySelector<HTMLElement>\('\[data-testid="sa-question"\]/, "a lap nem méri a kérdés-kártyát");
   // SPEC-VÁLTOZÁS 2026-11-17 (Vercel-lelet, átméretezés): az átrendezés csak az átméretezés ágon (`rezoneNowRef`) engedett; a RAJZ továbbra sem rendez át.
   assert.doesNotMatch(code.slice(code.indexOf("const render = (now: number)")), /rezoneCrystals\(/, "a rajz nem rendezi át a kristályokat");
@@ -159,7 +160,9 @@ test("review #486 M1: az ütközés szabálya a közös magból jön, és a főe
 test("review #486 M2: a kristályt a lövedék csak élesítés után, új tűz-nyomással választja (a koppintás / billentyű szándékos, azonnali)", () => {
   const tick = code.slice(code.indexOf("const tick = (dt: number)"), code.indexOf("const enemyRadius"));
   assert.match(tick, /bulletCountsAsAnswer\(\{ nowMs: armClockRef\.current, shownAtMs: crystalShownAtRef\.current, pressAtMs: b\.pressAtMs/);
-  assert.match(tick, /if \(fireNow && !firePrevRef\.current\) firePressAtRef\.current = armClockRef\.current;/);
+  // SPEC-VÁLTOZÁS 2026-11-19 (vak 4. kör L2): a nyomás idejét a BEMENETI kezelő bélyegzi (a fix lépés a képkocka órája után fut) — a szigor nő;
+  // a részletes őr alább („vak 4. kör L2”). A tick csak a tartott állapotot követi.
+  assert.match(tick, /firePrevRef\.current = fireNow;/);
   // SPEC-VÁLTOZÁS 2026-11-17 (review #486 L1): a lövedékek a magból jönnek (`volleyFor`), a szigor nő: a nyomás ideje ÉS az oldalsó jelölés is a lövedéken.
   assert.match(tick, /volleyFor\(powerLevelRef\.current, centerVx\)\.forEach/);
   assert.match(tick, /pressAtMs, side: spec\.side/, "a lövedék viszi a tűz-nyomás idejét és az oldalsó jelölést");
@@ -170,7 +173,7 @@ test("review #486 M2: a kristályt a lövedék csak élesítés után, új tűz-
 test("review #486: a hosszú válaszok listája — a lista az egyetlen megállítási ok mellett válaszol, a világ áll alatta, a „Válaszok” gombra nyílik, magától NEM (nem blokkoló jelmagyarázat van helyette)", () => {
   // SPEC-VÁLTOZÁS 2026-11-19 (vak ellenőrzés L1, blokkoló; felülírja az Ú5 automatikus nyitását): a hosszú / nem férő válasznál NEM áll meg magától a világ;
   // a teljes szövegek nem blokkoló jelmagyarázatban látszanak a számozott kristályokkal egyszerre; a beférést a valódi szélesség adja (L5).
-  assert.match(code, /setLongLabels\(!crystalLabelsFit\(p\.options\.map\(\(o\) => o\.label\), measuredFit\)\);/);
+  assert.match(code, /const long = !crystalLabelsFit\(labels, measuredFit\);[\s\S]*?setLongLabels\(long\);/);
   assert.doesNotMatch(code, /if \(long\) setExpanded\(true\)/, "a lista nem nyílik magától");
   assert.match(code, /data-testid="sa-legend"/);
   assert.match(page, /\.sa-legend \{[^}]*pointer-events: none;/, "a jelmagyarázat nem blokkoló");
@@ -207,7 +210,7 @@ test("review #486 (CI): a shader-előmelegítés csak a KHR_parallel_shader_comp
 
 test("review #486 (Vercel): átméretezés / elforgatás nyitott kérdésnél a mag új aréna-méretből számolja újra a kristályok helyét, és az élesítés újraindul", () => {
   assert.match(code, /camera\.updateProjectionMatrix\(\);\s*rezoneNowRef\.current\(\);/);
-  assert.match(code, /rezoneCrystals\(list, decideCrystalZone\(pres\.question\.quiz\.prompt\), 1\)/);
+  assert.match(code, /rezoneCrystals\(list, decideCrystalZone\(pres\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0\), 1\)/);
   assert.match(code, /crystalShownAtRef\.current = armClockRef\.current;\s*\n?\s*};/);
 });
 
@@ -257,13 +260,19 @@ test("vak L2 / L3 / L4: a segített lövés nem válaszol, a szilánk nem jutalm
   assert.doesNotMatch(code, /maxStreak: bestComboRef/, "a tanulási jelvény nem jöhet a harci kombóból");
 });
 
-test("vak 3. kör L1: a „Válaszok” gomb a jelmagyarázat rácsának saját eleme (nem lebeg rajta); fekvőn a jelmagyarázat a kártya mellett áll", () => {
+test("vak 3. kör L1: a jelmagyarázat HELYET FOGLAL (a kristály-zóna a számolt elrendezés alatt kezdődik), a gomb a jelmagyarázat része, a lista belül görgethető", () => {
   const legend = code.slice(code.indexOf('className="sa-legend"'), code.indexOf('className="sa-answers"'));
   assert.match(legend, /className="sa-answers-open"/, "a gomb a jelmagyarázat konténerében van");
+  assert.match(legend, /className="sa-legend-list"/, "a lista saját, görgethető elem");
+  assert.match(code, /legendLayoutFor\(\{ \.\.\.sceneMetrics\(\), labels, prompt \}\)/, "a lap a magban számolt elrendezést használja");
+  assert.match(code, /decideCrystalZone\(p\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0\)/, "a kristály-zóna a jelmagyarázat alatt kezdődik (kérdés bemutatásakor)");
+  assert.match(code, /rezoneCrystals\(list, decideCrystalZone\(pres\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0\), 1\)/, "átméretezéskor is");
   assert.doesNotMatch(page, /\.sa-answers-open \{ position: absolute; right: 8px; bottom: 8px;/, "a régi, a szövegre lebegő elhelyezés visszatért");
-  assert.match(page, /\.sa-answers-open \{ grid-column: 3; grid-row: 1 \/ span 2;/, "portré: a gomb a rács 3. oszlopa");
-  assert.match(page, /\.sa-legend \{[^}]*position: fixed; top: calc\(var\(--play-question-top, 60px\) \+ 2px\);/, "fekvő: a jelmagyarázat a kártya magasságában, a kristály-sorok fölött");
+  assert.doesNotMatch(page, /\.sa-legend \{[^}]*bottom: 6px;/, "a régi, alulról nőő (a kristályokra felnövő) jelmagyarázat visszatért");
+  assert.match(page, /\.sa-legend-list \{[^}]*max-height: var\(--sa-legend-list, 120px\); overflow-y: auto;/, "a lista magassága korlátos, belül görgethető");
+  assert.match(page, /\.sa-legend \{ position: fixed; top: var\(--sa-legend-top-abs, 62px\); display: block; \}/, "fekvő: a jelmagyarázat a kártya magasságában");
   assert.match(page, /grid-template-columns: 27vw 1fr 27vw;/, "fekvő: két oszlop a kártya két oldalán");
+  assert.doesNotMatch(page, /\.sa-legend-text \{[^}]*overflow-wrap: anywhere/, "a magyar szót nem törhetjük közepén");
 });
 
 test("vak 3. kör L2: a lap bomba-ága a közös `bombKillRaisesCombo` szabályt hívja (a szimulációval azonos)", () => {
@@ -316,4 +325,25 @@ test("vak 3. kör L3: a lap a kihagyott kérdések számát a `recordRun` `timeo
       assert.ok(m[1]!.split(",").length <= 2, `${f}: a közös hook más hívója nem kaphat 3. (rng) argumentumot`);
     }
   }
+});
+
+test("vak 4. kör L2: a tűz-nyomás idejét a bemeneti kezelő bélyegzi (nem a fix lépés), a tartott tűz nem bélyegez újra", () => {
+  assert.match(code, /const markFirePress = \(\) => \{\s*if \(!\(keysRef\.current\.fire \|\| touchRef\.current\.fire\)\) firePressAtRef\.current = armClockRef\.current;\s*\};/);
+  assert.match(code, /case " ": markFirePress\(\); keysRef\.current\.fire = true; break;/);
+  assert.match(code, /onHoldStart=\{\(\) => \{\s*markFirePress\(\);\s*touchRef\.current\.fire = true;/);
+  assert.doesNotMatch(code, /if \(fireNow && !firePrevRef\.current\) firePressAtRef\.current = armClockRef\.current;/, "a fix lépésben bélyegzett nyomás (a képkocka órája után) visszatért");
+});
+
+test("vak 4. kör L3: a kupon-mód a KUPON állapotából jön, nem a betöltött lista hosszából — hibás / üres tananyag-forrásnál sem nyílik évfolyam-bank", () => {
+  assert.match(code, /const couponMaterialOnly = \(\) => couponActiveRef\.current;/);
+  assert.doesNotMatch(code, /couponActiveRef\.current && quizPoolRef\.current\.some/, "a lista hosszától függő kupon-mód visszatért");
+  assert.match(code, /get couponOnly\(\) \{\s*return couponMaterialOnly\(\);\s*\}/);
+});
+
+test("vak 4. kör L4: a kupon lejárata a nyitott kérdést megszakítottként zárja (idempotens), nem hagyja a réteg alatt aktívnak", () => {
+  assert.match(code, /useEffect\(\(\) => \{\s*if \(coupon\.expired\) qRef\.current\?\.abort\(\);\s*\}, \[coupon\.expired\]\);/);
+});
+
+test("vak 4. kör L5: a boss győzelmi eredménye is megvárja a megoldás-kijelzést (a közös `afterReveal` ág)", () => {
+  assert.match(code, /if \(phaseRef\.current !== "play"\) return;\s*endRun\(true, undefined, true\);/);
 });
