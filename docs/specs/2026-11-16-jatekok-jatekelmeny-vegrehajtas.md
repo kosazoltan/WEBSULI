@@ -1969,6 +1969,42 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
     `1147b9e9`, az első ellenőrzés M1 lelete): a mindig jót választó bot lassú (8 e/s) tempónál 5,5 s-os ablakkal lejárt a
     kapu elérése előtt; a 6 s-os alap a director 9 s-os plafonján belül marad, és a J2 / J3 küszöbök teljesülnek.
 
+#### J7b döntések — a vak, hibakereső ellenőrzés után (2026-11-19; a 25. és a 26. pontot pontosítják)
+
+33. **Áthajtás csak oldalsó kapu folyosóján (K1):** a mért hiba: az olvasási küszöb UTÁN, akadály miatt lenyomott fék rögzítette a
+    táblákat, és az egyenes továbbhaladás a középső kaput „választotta” (20 seed × 180 s, 3 s-onként 0,25 s fék: 260 kérdésből 80
+    olvasás nélküli válasz, pont + nitró vagy 8–12 s kerülő). Mostantól a rögzült vonal átlépése csak akkor válasz, ha egy kapu
+    FOLYOSÓJÁN (a kapu közepétől ≤ 4,5 egység) ÉS az egyenestől (a rögzüléskori menetiránytól) ≥ 6 egységgel oldalra történik
+    (`gateAtLateral`). Következmények: az egyenes továbbhaladás, a kapuk közötti és a szélső kapun kívüli átlépés soha nem válasz (a
+    szélső szektor nem tart a végtelenig); az akadály-kerülő kitérés (~2–3 egység) nem éri el a folyosót; a középső (egyenes) kapu
+    csak koppintással / „2” billentyűvel választható (a 21. pont eredeti szabálya tér vissza). A fék a táblákat továbbra is
+    rögzíti (a 25. pont szerint), de a rögzítés önmagában nem válasz és nem büntetés. A feladat-felirat: „koppints a jó táblára, vagy
+    fékezz, és kanyarodj át a bal / jobb kapun”; a súgó: „…egyenesen továbbhajtva nem választasz”. **A 26. pont pontosítása:** a
+    táblák csak olyan elrendezésben rögzülnek, amelynek a legtávolabbi kapuja a hosszabbítási plafonon (eredeti ablak + 5 s) belül
+    elérhető (`freezeJunction` `fits` próbája) — különben tovább várnak; így „a rögzítés után a jó kapu felé kormányzó nem jár le”
+    a messzire tolt (akadály miatti +40 egységes) vonalnál is igaz. Sim-elvárás (új minták: `brake-periodic`, `brake-after`,
+    egyenesen / kitéréssel / a tölcsér felé kormányozva, 15 és 22 e/s): 0 nyilvántartott válasz, 0 kerülő, és van rögzülés (a minta
+    valóban a küszöb utáni utat járja). A fék + kormány úton válaszoló bot a középső kaput koppintással választja.
+34. **Tájékozódás a kérdés alatt (K2):** a céljelző nyíl (G-9b) és a horgony-útmutató nyitott kérdés alatt sem tűnik el: kérdés
+    nélkül a megszokott helyén áll, nyitott kérdésnél egy alsó sávban (`tornado-question-nav`) — álló nézetben és asztalon a
+    vezérlősáv fölött, a kérdés fajtájával egy sorban; alacsony fekvőn legalul, a vezérlők között. A sáv tetejét a lap kérdésenként /
+    tartalomváltáskor egyszer méri (nem képkockánként), és a táblák ennél feljebb rajzolódnak. Böngészős elvárás mind a 4 nézetben
+    (360×640, 390×844, 844×390, 1366×768): a céljelző és az útmutató látszik, és a sáv, a táblák, a kártya, a fajta-címke nem fedik
+    egymást.
+35. **Gomb-módú kérdés álló nézetben (K3):** a turbó- / horgony-kérdés kártyája álló nézetben a képernyő tetején áll (nem a
+    jármű fölött), rövid válaszoknál (a közös elrendezés 2 oszlopos esete) a három gomb egy sorban a kártya alatt — lapra szűkített
+    CSS-felülírás, a közös `index.css` nem változik. Fekvőn a közös elrendezés marad (a gombok a két szélen). Böngészős elvárás
+    360×640-en és 390×844-en: a jármű vetített doboza (`getVehicleScreenBox` teszt-kampó) és előtte egy jármű-magasságnyi (≥ 48 px)
+    út nem esik a kártya vagy a gombok alá.
+36. **Apróságok (a vak ellenőrzés KICSI 1–6):** (1) alacsony fekvőn a kérdés fajta-címkéje legalul áll, nem a táblák alatt; (2) a
+    „Kerülő” / „Rövidítés — turbó!” felirat tömör emerald-700 / orange-700 alapon (fehér 14 px-es szövegnél ≥ 4,5:1); (3) a
+    determinizmus-őr a Tornado `junctions.ts`, `collision.ts` és `world.ts` fájlját is fedi; (4) **a kód a tervhez igazodik** (nem a
+    terv a kódhoz): az alap kapuköz 20, a próbák 20 / 16 / 13 (1., 14. pont), a rögzülő vonal |v| × 2,4 s + 10 (13. pont) — a sim és
+    az M2-mérés ezzel is teljesül (400 útpozícióból 381 rögzül, elzárt kapu 0); (5) a „kérdés nélküli mód — vesztési feltétel” teszt
+    mozdulatlan járművel (`botSpeed: 0`) a vereség útját futtatja, és `won() === false`-t vár; (6) a kérdés-sáv beállítása
+    (`questionSetup`) memózott, a levél renderszámát a teszt-kampós build méri (`countRender("tornado-question-layer")`): kérdés
+    nélkül a levél nem renderel a lap HUD-renderjével, nyitott kérdésnél csak a saját ≈ 10 Hz-es időcsíkja szerint.
+
 ### J7c — zaj-alapú tornádópálya, Műszer-kalibrálás (Q2), szupercella (Opus)
 
 1. Állapot-sor commit.

@@ -1086,3 +1086,18 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 - **Szabály:** láthatatlan vagy tipográfiai karaktert a forrásban mindig escape-pel írj, és írás után ellenőrizd a fájl nyers
   tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
   állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
+
+## C-75 — Sim-teszt csak a küszöb ELŐTTI eseményt mérte: a „véletlen válasz 0” a választott mintákra volt szabva (2026-11-19)
+
+Forrás: J7b Tornádó útelágazás, vak ellenőrzés K1 (`source/tests/tornado-sim.test.ts`, `source/client/src/lib/tornado/junctions.ts`).
+
+- **Tünet:** a „nem olvasó vezető” sim-minták mind a kérdés után 0,3 s-mal KEZDŐDŐ (az 1 s-os olvasási küszöb előtti) fékkel /
+  tolatással mértek, ezért zöldek voltak — a küszöb UTÁN lenyomott akadály-fék viszont rögzítette a táblákat, és az egyenes
+  továbbhaladás a középső kaput „választotta”: 260 kérdésből 80 olvasás nélküli válasz (pont + nitró vagy 8–12 s kerülő). A
+  tulajdonosi elvárás („válasz nélkül nincs pont”) erre az útra nem teljesült, a teszt mégis zöld volt.
+- **Szabály:** ha egy szabálynak küszöbe van (idő, távolság, sebesség), a viselkedési teszt mintái a küszöb MINDKÉT oldalát fedjék
+  (előtte kezdett, átnyúló, utána kezdett, periodikus — a kérdéstől függetlenül is), és a teszt igazolja, hogy a minta tényleg
+  elérte a vizsgált ágat (itt: `frozen > 0` mellett 0 válasz, 0 kerülő). A „0 hiba” állítás csak a lefedett mintákra érvényes —
+  a jelentésben a mintákat is nevezd meg.
+- **Javítás iránya, ha a bemenet nem árulja el a szándékot:** a jutalom / büntetés olyan mozdulathoz kötődjön, amelyet a nem olvasó
+  játékos nem tesz meg véletlenül (itt: oldalsó kapu folyosója ≥ 6 egységgel az egyenestől; a középső kapu csak koppintással).
