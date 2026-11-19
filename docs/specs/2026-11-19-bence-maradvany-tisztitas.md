@@ -95,7 +95,15 @@ A workflow nevére („Auto Review (Bence)”), a megjegyzés címére és az á
 ## 7. Tesztterv
 
 - `source/tests/auto-review-workflow-guard.test.ts` (node:test, a `*-guard.test.ts` minta szerint — a `gate:stage` minden őr-tesztet
-  futtat): a workflow szövegét olvassa, és a 6. fejezet feltételeit méri; a `.harness/`-t `git ls-files`-szal.
+  futtat): a 6. fejezet feltételeit méri; a `.harness/`-t `git ls-files`-szal.
+  - **Futtatásos mérés** (vak ellenőr 1. kör, K-1): a két `script: |` blokkot kinyeri, és `node:vm`-ben hamis `github` / `context` /
+    `core` objektummal lefuttatja. Üres lista → 1 megjegyzés; a törzs az új kulccsal kezdődik, a három indító önálló sor, benne az
+    átfogó review bekezdése, nincs megszűnt szereplő és merge-ígéret, kimondja az orkesztrátori merge-et. Ugyanaz a SHA új vagy régi
+    kulccsal → 0; más SHA kulcsa, SHA nélküli említés, üres törzs → 1.
+  - **Szöveges, formázástűrő rögzítés:** a `pull_request` esemény típusai, a `permissions` blokk pontos tartalma, a job draft-
+    feltétele, a Post / Skip lépés `if` feltétele, a `STATE_KEY` átadása, a workflow és a job neve.
+  - **Tiltott nevek szóhatárral** (`\b…\b`), hogy a „Szilveszterkor”-féle szavak ne adjanak hamis bukást.
+- Mutációs ellenpróba (20 eset, a scratchpadban): 16 mutáció → bukás, 4 formázási változat → zöld.
 - Ellenpróba (mutáció): a tisztítás ELŐTTI workflow-n a teszt bukik (a teszt előbb készül el, mint a tisztítás commitja; a bukást a
   végrehajtás rögzíti).
 - `npm run gate:stage` a munkafa gyökeréből.

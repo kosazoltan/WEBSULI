@@ -68,6 +68,20 @@ Tilos: `--no-verify`, rebase, force-push, push, PR. A `gate:push` és a `gate:pr
   (`source/tests/auto-review-workflow-guard.test.ts`)”.
 - A tartós műtermék ebben a PR-ban maga az őr-teszt.
 
+## 5/b lépés — a vak ellenőr 1. körének javítása (ítélet: NEM, 837579fd)
+
+- `source/tests/auto-review-workflow-guard.test.ts` újraírva (K-1, Ki-1, Ki-2): a két `script: |` blokk kinyerése a lépés neve
+  alapján, futtatás `node:vm`-ben hamis `github` / `context` / `core` / `process.env` objektummal; esetek: üres lista → 1
+  megjegyzés (kulcs az első sor, három önálló indító, átfogó review, nincs szereplő / merge-ígéret, orkesztrátori mondat); ugyanaz a
+  SHA új / régi kulccsal → 0; más SHA kulcsa + SHA nélküli említés + `null` / hiányzó törzs → 1. Szöveges, formázástűrő
+  (whitespace, idézőjel) rögzítés: `types`, `permissions`, a job draft-`if`-je, a Post / Skip `if`, a `STATE_KEY`. Tiltott nevek
+  szóhatárral.
+- `.github/workflows/auto-review.yml` (Ki-3): a fejléc botlistájában és a kézi indítónál a Vercel is; a „legutolsó 50 komment”
+  megjegyzés helyett: az első (legrégebbi) 100 komment, lapozás nélkül (ismert korlát).
+- Ellenőrzés: célzott teszt → 8 / 8 pass; mutációs ellenpróba (scratchpad `bence/mut2.cjs`, a workflow-t mentésből állítja vissza)
+  → 0 eltérés / 20; `npm run gate:stage` → zöld.
+- Commit: `test(ci): az auto-review őr futtatja a workflow szkriptjeit (vak ellenőr K-1)`.
+
 ## 6. lépés — PR-leírás és jelentés
 
 - PR-leírás a munkafán KÍVÜL, az orkesztrátor által megadott scratchpad-útvonalon (`bence/body.md`): elfogadási lista (`- [x]`),
