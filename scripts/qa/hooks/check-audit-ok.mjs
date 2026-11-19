@@ -34,6 +34,28 @@ const noAnswer = (e) => Boolean(e) && (e.code === 'ETIMEDOUT' || e.code === 'ENO
 const GIT_TIMEOUT_MS = process.env.NODE_TEST_CONTEXT && Number(process.env.WEBSULI_AUDIT_GIT_TIMEOUT_MS) > 0
   ? Math.min(Number(process.env.WEBSULI_AUDIT_GIT_TIMEOUT_MS), 10_000) : 10_000;
 
+// Push-parancs felismerése (docs/specs/2026-11-19-audit-hook-kapuinditas.md): LINEÁRIS szó-futam bejárás — egy `git` futamot
+// (`git`, `git.exe`, útvonallal `…/git(.exe)`) később egy pontosan `push` futam követ. A `gate:push`, `pre-push-gate`, `.git/`
+// egyetlen futam, így a push-kapu indítása nem push-parancs. Álcázás ellen két normalizált szövegen fut: idézőjel / `` ` `` / `^`
+// törölve, a visszaperjel (a) `/`-re cserélve (Windows-útvonal), (b) törölve (escape a szó belsejében). Konzervatív: a
+// `git stash push` is push-parancsnak számít (téves tiltás olcsóbb, mint az átengedés).
+const WORD_RUN = /[\w./:-]+/g;
+// a `:` előtag a nyers (hibás) JSON-bemenethez kell: idézőjelek nélkül `command:git` egy futam
+const isGitRun = (w) => /(?:^|[/:])git(?:\.exe)?$/.test(w);
+function hasGitThenPush(s) {
+  let sawGit = false;
+  for (const m of s.matchAll(WORD_RUN)) {
+    const w = m[0].toLowerCase();
+    if (!sawGit) sawGit = isGitRun(w);
+    else if (w === 'push') return true;
+  }
+  return false;
+}
+function isPushCommand(raw) {
+  const base = String(raw ?? '').replace(/['"`^‘’‚‛“”„]/g, '');
+  return hasGitThenPush(base.replace(/\\/g, '/')) || hasGitThenPush(base.replace(/\\/g, ''));
+}
+
 let text = '';
 try { text = readFileSync(0, 'utf8'); } catch { /* nincs olvasható bemenet → üres szöveg */ }
 let payload;
@@ -41,18 +63,18 @@ try {
   payload = JSON.parse(text || '{}');
 } catch {
   // Olvashatatlan hook-bemenet: ha a nyers szövegben push van → TILT (kanban #100), különben enged.
-  if (/\bgit\b[^|;&]*\bpush\b/.test(text)) deny(`A hook-bemenet nem értelmezhető, de push-parancsot tartalmaz — ${RETRY}.`);
+  if (isPushCommand(text)) deny(`A hook-bemenet nem értelmezhető, de push-parancsot tartalmaz — ${RETRY}.`);
   process.exit(0);
 }
 // L5: érvényes, de nem objektum JSON (null, tömb, szám, szöveg) — nem összeomlás; push-szöveggel TILT, különben enged.
 if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-  if (/\bgit\b[^|;&]*\bpush\b/.test(text)) deny(`A hook-bemenet nem értelmezhető, de push-parancsot tartalmaz — ${RETRY}.`);
+  if (isPushCommand(text)) deny(`A hook-bemenet nem értelmezhető, de push-parancsot tartalmaz — ${RETRY}.`);
   process.exit(0);
 }
 const tool = payload.tool_name || '';
 if (tool !== 'Bash' && tool !== 'PowerShell') process.exit(0);
 const cmd = String(payload.tool_input?.command ?? '');
-if (!/\bgit\b[^|;&]*\bpush\b/.test(cmd)) process.exit(0);
+if (!isPushCommand(cmd)) process.exit(0);
 
 try {
   let root;
@@ -88,8 +110,9 @@ try {
   }
 
   deny(
-    `A push előtti audit nem futott le az elmúlt ${maxAgeMinutes} percben. ` +
-    `Futtasd: npm run qa:audit (vagy a repo saját audit-scriptjét), majd pusholj újra.`
+    `A push előtti audit nem futott le az elmúlt ${maxAgeMinutes} percben (hiányzik vagy régi a(z) ${sentinel} jel). ` +
+    `Teendő: npm run gate:push zöld → a(z) ${sentinel} frissítése külön parancsban (a repó gyökerében) → ` +
+    `git push külön, egyszerű parancsként (docs/minosegkapuk.md).`
   );
 } catch (e) {
   deny(`A push előtti audit-ellenőrzés hibára futott (${String(e?.message ?? e).split('\n')[0]}) — ${RETRY}.`);
