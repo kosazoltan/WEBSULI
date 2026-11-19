@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  decideReentry, isCiEnv, isStaleEntry, isStaleOwner, pidAlive, readStatus, resolveLockDir, run,
+  decideReentry, isCiEnv, isStaleEntry, isStaleOwner, pidAlive, readStatus, relaunchUnderMachineLock, resolveLockDir, run,
 } from './machine-lock.mjs';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'machine-lock.mjs');
@@ -354,6 +354,24 @@ test('valódi jel a run folyamatnak (POSIX SIGTERM; Windows-on a megszakítás a
   assert.equal(r.code, 143, r.out);
   await waitFor(() => !pidAlive(Number(readFileSync(pidFile, 'utf8'))), 'a gyerek leállt');
   assert.equal(existsSync(join(dir, 'lock')), false);
+});
+
+test('relaunchUnderMachineLock: zár alatt újraindít; CI-ben és érvényes örökölt tokennel nem', () => {
+  const dir = freshDir();
+  const calls = [];
+  const exits = [];
+  const fake = (file, args, opts) => { calls.push({ file, args, opts }); return { status: 9 }; };
+  const argv = [NODE, 'scripts/qa/gates/pre-pr-gate.mjs', '--body-file', 'x.md'];
+  const r = relaunchUnderMachineLock({ name: 'gate-pr', timeoutMin: 300, env: baseEnv(dir), argv, execPath: NODE, spawnSyncImpl: fake, exit: (c) => exits.push(c) });
+  assert.equal(r, true);
+  assert.deepEqual(exits, [9], 'a gyerek kódjával lép ki');
+  assert.deepEqual(calls[0].args, [SCRIPT, 'run', '--name', 'gate-pr', '--timeout-min', '300', '--', NODE, 'scripts/qa/gates/pre-pr-gate.mjs', '--body-file', 'x.md']);
+  assert.equal(relaunchUnderMachineLock({ name: 'gate-pr', timeoutMin: 300, env: baseEnv(dir, { CI: 'true' }), argv, execPath: NODE, spawnSyncImpl: fake, exit: (c) => exits.push(c) }), false);
+  mkdirSync(join(dir, 'lock'), { recursive: true });
+  writeFileSync(ownerFile(dir), JSON.stringify({ name: 'szulo', pid: process.pid, host: hostname(), startedUtc: new Date().toISOString(), timeoutMin: 60, token: 'tok' }));
+  assert.equal(relaunchUnderMachineLock({ name: 'gate-pr', timeoutMin: 300, env: baseEnv(dir, { WEBSULI_MACHINE_LOCK_HELD: 'tok' }), argv, execPath: NODE, spawnSyncImpl: fake, exit: (c) => exits.push(c) }), false);
+  assert.equal(relaunchUnderMachineLock({ name: 'gate-pr', timeoutMin: 300, env: baseEnv(dir, { WEBSULI_MACHINE_LOCK_HELD: 'hamis' }), argv, execPath: NODE, spawnSyncImpl: fake, exit: (c) => exits.push(c) }), true);
+  assert.equal(calls.length, 2);
 });
 
 test('readStatus: elavult gazda jelölve, a fájlokat nem módosítja', () => {
