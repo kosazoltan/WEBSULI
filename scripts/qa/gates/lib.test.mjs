@@ -90,3 +90,51 @@ test('verdictResult: IGEN → PASS, FELTÉTELLEL → WARN, NEM / hiány → FAIL
   assert.equal(none.status, STATUS.FAIL);
   assert.match(none.note, /record-review\.mjs --head c{12}/);
 });
+
+// ---- docs/specs/2026-11-19-kitakaro-negyzetes-regex.md: lineáris kitakarás, összeomlás nélkül ----------------------------
+
+test('redact: lineáris idő hosszú, @ nélküli és tartomány-futáson (300 000 kar. < 1 s bemenetenként)', () => {
+  const n = 300_000;
+  const inputs = {
+    betuk: 'a'.repeat(n),
+    pontsor: 'a.'.repeat(n / 2),
+    hex: '0123456789abcdef'.repeat(n / 16),
+    tartomany: `x${at}${'a'.repeat(n)}`,
+    cimkek: `x${at}${'a.'.repeat(n / 2)}1`,
+    kotojelek: `x${at}${'a-'.repeat(n / 2)}`,
+  };
+  for (const [name, s] of Object.entries(inputs)) {
+    const t0 = performance.now();
+    redact(s);
+    const ms = performance.now() - t0;
+    assert.ok(ms < 1000, `${name}: ${ms.toFixed(0)} ms`);
+  }
+});
+
+test('redact: 20 M karakteres token-, Bearer- és tartomány-futás nem omlik össze', () => {
+  const n = 20_000_000;
+  const cases = [
+    [`ghp_${'a'.repeat(n)}_`, null],
+    [`github_pat_${'a'.repeat(n)}-`, '<token>'],
+    [`sk-${'a'.repeat(n)}`, '<token>'],
+    [`sk-${'-'.repeat(n)}`, null],
+    [`Bearer x${'a'.repeat(n)}`, 'Bearer <token>'],
+    [`x${at}${'a.'.repeat(n / 2)}`, null],
+  ];
+  for (const [s, expected] of cases) {
+    let out;
+    assert.doesNotThrow(() => { out = redact(s); }, s.slice(0, 12));
+    if (expected) assert.ok(out.startsWith(expected), `${s.slice(0, 12)} kitakarva`);
+  }
+});
+
+test('redact: valós címek továbbra is kitakarva (64 karakteres helyi rész, aldomain, plusz-címke, több cím)', () => {
+  assert.equal(redact(`${'a'.repeat(64)}${at}pelda.hu`), '<email>');
+  assert.equal(redact(`kovacs.janos+teszt${at}mail.pelda.co.uk`), '<email>');
+  assert.equal(redact(`elso${at}pelda.hu, masodik_2${at}x-y.pelda.org`), '<email>, <email>');
+  assert.equal(redact(`írj ide: (info${at}pelda.hu).`), 'írj ide: (<email>).');
+  // RFC-n kívüli (80 karakteres) helyi rész: a tartomány és a cím vége akkor is rejtve marad.
+  const hosszu = redact(`${'b'.repeat(16)}.${'c'.repeat(63)}${at}${'d'.repeat(63)}.pelda.com`);
+  assert.match(hosszu, /<email>$/);
+  assert.ok(!hosszu.includes('pelda.com') && !hosszu.includes(at));
+});

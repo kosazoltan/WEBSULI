@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { buildImageRequest, composePrompt, estimateUsd, loadStyle, redact, type AssetManifest } from "../scripts/design-assets/lib";
+import { buildImageRequest, composePrompt, estimateUsd, loadStyle, redact, redactClip, REDACT_WINDOW, requestImage, type AssetManifest } from "../scripts/design-assets/lib";
 import { designAssetSchema } from "../shared/design-assets";
 import { lessonCoverId } from "../shared/lesson-cover-key";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
@@ -158,4 +158,27 @@ test("sávkép: 9. o. matek → híd, 6–8. o. → Föld; a halloweeni borító
   for (let i = 0; i < 30; i++) assert.notEqual(pickLessonArt({ subject: "Matematika", title: `Feladatsor ${i}`, seed: `x${i}` }, "laboratory", DESIGN_ASSET_CATALOG).cover?.id, "cover-ismetlodes");
   assert.notEqual(pic("Matematika", "Ismétlődő minta és füzér", "laboratory"), "cover-ismetlodes", "más sáv témaborítója nem jöhet");
   assert.equal(pic("Matematika", "Ismétlődő minta és füzér", "studio"), "cover-ismetlodes", "a saját sávban a kulcsszóra igen");
+});
+
+// docs/specs/2026-11-19-kitakaro-negyzetes-regex.md: vágás a kitakarás előtt, határon félbevágott kulcs nélkül.
+const clipKey = "sk-or-v1-" + "abcdef0123456789".repeat(4);
+
+test("redactClip: az ablakhatáron félbevágott kulcs nem marad, a hossz korlátos; rövid szövegen a régi viselkedés", () => {
+  for (const d of [1, 8, 20, clipKey.length - 1]) {
+    const s = "x".repeat(REDACT_WINDOW - d) + clipKey + "y".repeat(1000);
+    assert.equal(redactClip(s, clipKey, REDACT_WINDOW).includes(clipKey.slice(0, Math.min(d, 8))), false, `eltolás ${d}`);
+    assert.ok(redactClip(s, clipKey, 300).length <= 300);
+  }
+  const t = `hiba ${clipKey} ` + "z".repeat(1000);
+  assert.equal(redactClip(t, clipKey, 300), redact(t, clipKey).slice(0, 300));
+});
+
+test("requestImage hibaága: nagy válaszban sincs kulcs, legfeljebb 300 karakteres részlet", async () => {
+  const body = "x".repeat(REDACT_WINDOW - 10) + clipKey + "z".repeat(5_000_000);
+  const fetchImpl = (async () => new Response(body, { status: 500 })) as unknown as typeof fetch;
+  await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key: clipKey, body: {} }), (e: Error) => {
+    assert.equal(e.message.includes(clipKey.slice(0, 8)), false);
+    assert.ok(e.message.length <= "HTTP 500: ".length + 300);
+    return true;
+  });
 });

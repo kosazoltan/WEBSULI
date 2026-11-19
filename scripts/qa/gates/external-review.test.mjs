@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
-  classifyHttp, estimateTokens, extractSections, fitBudget, isEnvFile, isExcludedPath, main, maskSecrets, parseArgs,
+  classifyHttp, estimateTokens, extractSections, fitBudget, isEnvFile, isExcludedPath, main, maskClip, maskSecrets, MASK_WINDOW, parseArgs,
   readKeyFromEnvFile, scanSecrets, DEFAULT_THINKING,
 } from "./external-review.mjs";
 
@@ -90,6 +90,29 @@ describe("kulcs és maszkolás", () => {
       assert.match(fs.readFileSync(ki, "utf8"), /KIHAGYVA/);
       assert.equal(await main(["--no-diff", "--extra", lista, "--ki", ki, "--strict"]), 2);
     } finally { if (saved !== undefined) process.env.GEMINI_API_KEY = saved; }
+  });
+  // docs/specs/2026-11-19-kitakaro-negyzetes-regex.md: összeomlás nélkül, vágás a kitakarás előtt.
+  it("20 M karakteres AIza-futás: nem dob, nincs kulcs", () => {
+    const s = "AIza" + "a".repeat(20_000_000);
+    let m;
+    assert.doesNotThrow(() => { m = maskSecrets(s, FAKE_KEY); });
+    assert.equal(m, "AIza***");
+    let c;
+    assert.doesNotThrow(() => { c = maskClip(s + FAKE_KEY, FAKE_KEY, 600); });
+    assert.ok(c.length <= 600); assert.ok(!c.includes(FAKE_KEY.slice(0, 8)));
+  });
+  it("az ablakhatáron félbevágott kulcs nem marad a kimenetben, a végső hossz korlátos", () => {
+    for (const d of [1, 8, 20, 30, FAKE_KEY.length - 1]) {
+      const s = "x".repeat(MASK_WINDOW - d) + FAKE_KEY + "y".repeat(1000);
+      const out = maskClip(s, FAKE_KEY, MASK_WINDOW);
+      assert.ok(!out.includes(FAKE_KEY.slice(0, Math.min(d, 8))), `eltolás ${d}`);
+      assert.ok(maskClip(s, FAKE_KEY, 600).length <= 600);
+    }
+  });
+  it("az ablaknál rövidebb szövegen a régi viselkedés (maszkolás, majd vágás)", () => {
+    const t = "e".repeat(300) + ` key=${FAKE_KEY} ` + "f".repeat(1700);
+    assert.equal(maskClip(t, FAKE_KEY, 400), maskSecrets(t, FAKE_KEY).slice(0, 400));
+    assert.equal(maskClip(undefined, FAKE_KEY, 10), "");
   });
 });
 
