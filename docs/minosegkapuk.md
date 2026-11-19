@@ -118,8 +118,29 @@ A nyilvános repóba csak a számok kerülnek (leletlista nem).
 | `qwen/qwen4-max` — (b) | igen | 1 / 1 / 3 | 0 (a „részben” lelet forgatókönyve téves) | 36 | 12,7 perc | 3 579 417 (3 432 564) | 33 579 | 97,0% | 0,65 USD |
 | `deepseek/deepseek-v4.1-flash-1017` — (a) (bejáratás) | igen | 0 / 0 / 4 | 2 valós | 42 | 7,3 perc | 3 544 455 (3 383 296) | 57 605 | 95,8% | 0,04 USD |
 | `deepseek/deepseek-v4.1-flash-1017` — (b) (összehasonlítás) | NEM TELJES | — (nem adott le jelentést) | — | 45 | 5,6 perc | 4 786 292 (4 650 112) | 70 859 | 98,0% | 0,09 USD |
+| **`qwen/qwen4-max` + böngésző / DB — (a)** (2026-11-19) | igen | 1 / 0 / 3 | 0 (+1 kicsi) | 40 | 43,0 perc | 3 508 397 (3 017 383) | 54 817 | 86,3% | 1,32 USD |
+| **`qwen/qwen4-max` + böngésző / DB — (b)** (2026-11-19) | igen | 1 / 0 / 4 | 1 valós (a referenciában kicsi) | 41 | 40,3 perc | 4 775 838 (4 289 573) | 80 454 | 90,6% | 1,52 USD |
 
-Mit mutat a mérés (szépítés nélkül):
+**Újramérés böngészővel és eldobható adatbázissal (2026-11-19, tulajdonosi döntés: „Kapjon böngészőt és DB-t, addig marad a mai.”):**
+
+- **Találat:** a 9 közepes referencia-leletből 2 (22%) — (a) a lejárt CSRF-token miatt elnémuló pillanatkép (a referencia K4-e), (b) az első
+  látogatáskori elrendezés-ugrás (a referencia K2-je). Részleges találat nincs. Az első méréshez képest (1 teljes + 1 részben) a szám
+  érdemben nem javult; a megtalált leletek mások.
+- **Ítélet az (a) fejre:** ismét IGEN, FELTÉTELLEL (a referencia: NEM).
+- **Küszöb (≥ 7/9 ÉS NEM / FELTÉTELLEL a blokkoló / közepes leletekkel): NEM teljesült** — a `blindReview.exclusive` KI marad.
+- **Az új eszközök használata:** (a) `run_db_tests` ×2 (az első a gép terhelése miatt a repó futtatójának 300 s-os korlátján kifutott,
+  a második 210/210 zöld), `run_e2e` ×1 — saját böngészős forgatókönyv nem; (b) `run_e2e` ×1, `run_browser_scenario` ×3 (3
+  képernyőkép, a modell megnézte). A (b) mindkét közepes lelete böngészős futással igazolt (teljes út); az (a) közepes lelete
+  elszigetelt próbával (a gépi összegzés „részben igazolt”-nak jelölte — az E4 szabály működik).
+- **Mit nem tud még:** saját adatbázisos próbát (a referencia (a) K1-ét és versenyhelyzet-leleteit saját integrációs teszttel
+  találta) — a `run_db_tests` a repó rögzített csomagját futtatja, saját tesztfájl nem adható hozzá. A referencia (b) K1 / K5
+  leleteit (nyers szerverhiba a gyereknek, lassú hálózat jelzése) a `mockApi` / `delayApi` lépésekkel mérhette volna, de nem
+  próbálta.
+- **Idő és gép:** a nehéz futások a gépi sorompó miatt összesen ~17 percet vártak (idegen e2e-konténerek); egy futás így ~40 perc.
+- **Költség:** 1,32 + 1,52 = 2,84 USD (keret: 8 USD); gyorsítótár 86–91% (cél ≥ 80%) — a nehéz futás utáni hívások újraírják a
+  gyorsítótárat (5 perces élettartam), ezért alacsonyabb, mint a böngésző nélküli futásnál (96–97%).
+
+Mit mutat az első mérés (szépítés nélkül):
 
 - **Találati arány a referenciához:** a konfigurált modell a két fej 9 közepes referencia-leletéből 1-et talált meg teljesen és 1-et
   részben (11%, a részlegessel 22%); az olcsó modell a 4-ből 0-t, a második fejen jelentést sem adott le.

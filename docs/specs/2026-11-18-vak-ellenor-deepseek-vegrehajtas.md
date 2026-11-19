@@ -83,4 +83,4 @@ Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`, „4. kiegészítés” (
 27. `findings.mjs`: `run.input`, `run.scope`, a parancs fajtája → „részben igazolt”; összegzés-oszlop.
 28. Tesztek + mutációs ellenpróba; `gate:stage`; újramérés (nehéz kör csak 22:15 UTC után, sorompóval); `gate:push`.
 
-- [x] 24 · [x] 25 · [x] 26 · [x] 27 · [ ] 28 (újramérés: 23:40 UTC után, a gép-koordináció szerint)
+- [x] 24 · [x] 25 · [x] 26 · [x] 27 · [x] 28 (újramérés 2026-11-19: 2 / 9, a küszöb nem teljesült — `docs/minosegkapuk.md` „Mért alapvonal”)

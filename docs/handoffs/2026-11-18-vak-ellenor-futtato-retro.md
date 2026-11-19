@@ -36,6 +36,13 @@ beolvasztáskor kell kiosztani (`docs/agent-csapdak.md` — az ágon nem nyúltu
    (~2 perc, kézi leállítás). Javítás: a hamis óra az alvással együtt lép; tanulság: minden várakozó ciklus tesztje időkorláttal
    (`timeout`) fusson.
 
+10. **A futás a heti keret elfogyása miatt megszakadt**, majd a sorompó és a gép-koordináció (nehéz kör csak bizonyos ablakokban)
+    miatt az újramérés ~5 órával később futott. A nehéz futások összesen ~17 percet vártak idegen konténerekre. Tanulság: a mérési
+    terv számoljon a gép terhelésével (nehéz futásonként 5–10 perc sorompó-várakozás reális).
+11. **Az újramérés sem érte el a küszöböt** (2 / 9). A böngésző és a DB hozzáadása önmagában nem javított a találati arányon: a modell
+    a repó meglévő (zöld) tesztjeit futtatta, saját hibakereső próbát ritkán írt. Javaslat (tulajdonosi döntésre): saját eldobható
+    integrációs teszt engedélyezése a DB-úton, és a megbízásban kötelező „minden közepes kockázatú útra saját forgatókönyv” pont.
+
 ## Mit mértünk (a legfontosabb tanulság)
 
 - A „kapun átment” ≠ „a cél teljesült”: a futtató minden kapuja zöld, a mért alapvonal mégis azt mutatja, hogy a konfigurált modell
