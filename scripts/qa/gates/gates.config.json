@@ -43,6 +43,7 @@
     "coupon-expired-all-games.spec.ts"
   ],
   "mobileQualitySpec": "game-mobile-quality.spec.ts",
+  "$repoWideScopes": "C-61 hatókör-tábla (kapu-gyorsítás A, docs/specs/2026-11-19-kapu-gyorsitas.md): ha a main elmozdult a PR CI-ja óta, a PR érinti a pattern-t, és a main a mainScope-ba nyúlt (vagy a main-fájllista nem olvasható), a merge-kapu NEM kér új CI-t, hanem gépi összefésült próbát futtat (merged-probe.mjs); annak eredménye dönt.",
   "repoWideScopes": [
     {
       "pattern": "-guard\\.test\\.ts$",

@@ -5,14 +5,14 @@
 // Használat: node scripts/qa/gates/pre-push-gate.mjs [--base origin/main] [--slice]
 //   --slice  szelet-mód: a közös modulok (gates.config.json sliceSharedPatterns) érintése is figyelmeztet
 
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import {
   STATUS, argValue, cmdResult, createGate, isMain, makeContext, writeEvidence, writeLog,
 } from './lib.mjs';
 import { runLintSteps } from './lint-gate.mjs';
 import { listFiles } from './stage-gate.mjs';
+import { mergedProbe } from './merged-probe.mjs';
 
 export const NATIVE_ARCH_TEST = 'native-arch.test.ts';
 
@@ -98,52 +98,6 @@ function readAuditCfg(root, cfg) {
   return { sentinel, maxAge };
 }
 
-/** C-61: az őr-tesztek a HEAD + friss origin/main összefésült állapotán, ideiglenes leválasztott munkafában. */
-async function mergedGuardCheck(ctx) {
-  const { exec, git, src, base, node } = ctx;
-  // A munkafák szokásos, gitignore-olt helyén (a fő checkout .claude/worktrees/ mappájában), NEM az os.tmpdir() alatt: ott a
-  // Windows 8.3-as rövid útja (`KSAZOL~1`) a `new URL(...).pathname`-t használó őr-segédeket (%7E) elrontotta (mérve 2026-11-17).
-  const common = git.commonDir();
-  const parent = basename(common) === '.git' ? join(dirname(common), '.claude', 'worktrees') : tmpdir();
-  mkdirSync(parent, { recursive: true });
-  const tmp = mkdtempSync(join(parent, '_gate-merge-'));
-  const link = join(tmp, 'source', 'node_modules');
-  const cleanup = () => {
-    // Előbb a csomópont-hivatkozás (soha nem rekurzív törlés rajta át!), aztán a munkafa. A fő munkafában semmit nem abortálunk.
-    const linkGone = () => !lstatSync(link, { throwIfNoEntry: false });
-    try { if (!linkGone()) unlinkSync(link); } catch { /* lent kezelve */ }
-    if (!linkGone()) {
-      process.stderr.write(`[pre-push-gate] FIGYELEM: a csomópont-hivatkozás nem törölhető, az ideiglenes munkafa megmarad: ${tmp}\n`);
-      return;
-    }
-    git.run(['worktree', 'remove', '--force', tmp]);
-    if (existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
-    git.run(['worktree', 'prune']);
-  };
-  // Review J11: Ctrl-C / SIGTERM esetén is takarítson (különben a csomópont-hivatkozás ottmarad egy későbbi rekurzív törlés útjában).
-  const onSignal = (sig) => { cleanup(); process.exit(sig === 'SIGINT' ? 130 : 143); };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
-  try {
-    const add = git.run(['worktree', 'add', '--detach', tmp, 'HEAD']);
-    if (add.code !== 0) return { status: STATUS.FAIL, note: 'ideiglenes munkafa nem jött létre', detail: add.stderr };
-    const m = exec('git', ['-c', 'user.name=gate', '-c', 'user.email=gate@pelda.hu', 'merge', '--no-commit', '--no-ff', base], { cwd: tmp });
-    if (m.code !== 0) {
-      exec('git', ['merge', '--abort'], { cwd: tmp });
-      return { status: STATUS.FAIL, note: `a ${base} beolvasztása ütközik — olvaszd be a maint (git merge ${base}), oldd fel, és futtasd újra`, detail: `${m.stdout}\n${m.stderr}` };
-    }
-    symlinkSync(join(src, 'node_modules'), link, 'junction');
-    const guards = listFiles(join(tmp, 'source', 'tests'), /-guard\.test\.ts$/).map((f) => `tests/${f}`);
-    const r = exec(node, ['--import', 'tsx', '--test', ...guards], { cwd: join(tmp, 'source') });
-    writeLog(ctx.evDir, 'pre-push-gate', 'merged-guards', `${r.stdout}\n${r.stderr}`);
-    if (r.code !== 0) return { status: STATUS.FAIL, note: `az összefésült állapoton (HEAD + ${base}) bukik egy repó-szintű őr — olvaszd be a maint és javítsd (C-61)`, detail: `${r.stdout}\n${r.stderr}` };
-    return { status: STATUS.PASS, note: `${guards.length} őr-teszt az összefésült állapoton zöld` };
-  } finally {
-    process.removeListener('SIGINT', onSignal);
-    process.removeListener('SIGTERM', onSignal);
-    cleanup();
-  }
-}
 
 /** A push előtti kapu lépései (a PR előtti kapu is ezt hívja). */
 export async function runPrePushSteps({ gate, ctx, slice = false }) {
@@ -206,7 +160,8 @@ export async function runPrePushSteps({ gate, ctx, slice = false }) {
   await gate.step(`friss ${base} beolvasztva (C-61)`, async () => {
     const r = git.run(['merge-base', '--is-ancestor', base, 'HEAD']);
     if (r.code === 0) return { status: STATUS.PASS, note: 'a friss main a HEAD őse' };
-    const merged = await mergedGuardCheck(ctx);
+    // C-61: a közös összefésült próba (docs/specs/2026-11-19-kapu-gyorsitas.md A) — a merge-kapu ugyanezt hívja.
+    const merged = await mergedProbe(ctx, { head: 'HEAD', base, label: 'pre-push-gate' });
     if (merged.status === STATUS.PASS) return { status: STATUS.WARN, note: `a ${base} nincs beolvasztva (git merge ${base} ajánlott); ${merged.note}` };
     return merged;
   });

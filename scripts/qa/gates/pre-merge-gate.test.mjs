@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, requiredChecks } from './pre-merge-gate.mjs';
+import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, requiredChecks, runMergeProbe } from './pre-merge-gate.mjs';
 
 const cfg = loadConfig();
 const HEAD = 'a'.repeat(40);
@@ -135,4 +135,49 @@ test('decideMerge: /api/rt/status — hálózati hiba FAIL, off PASS, aktív mec
   assert.equal(st(decideMerge(base({ rt: { error: 'fetch failed' } })), 'valós idejű'), STATUS.FAIL);
   assert.equal(st(decideMerge(base({ rt: { json: { mode: 'on', activeMatches: 0 } } })), 'valós idejű'), STATUS.PASS);
   assert.equal(st(decideMerge(base({ rt: { json: { mode: 'admin', activeMatches: 2 } } })), 'valós idejű'), STATUS.FAIL);
+});
+
+// Kapu-gyorsítás A (docs/specs/2026-11-19-kapu-gyorsitas.md): a C-61 esetben a gépi összefésült próba dönt, nem új CI.
+test('C-61 + összefésült próba: zöld próba → PASS (új CI nem kell); piros / nem futott → FAIL; konfighiba próba nélkül is FAIL', () => {
+  const moved = { base: MAIN, mainSha: 'c'.repeat(40), repoWideScopes: cfg.repoWideScopes, files: ['scripts/qa/gates/lib.mjs'], mainFiles: ['scripts/qa/three-phase-check.mjs'] };
+  const green = { status: STATUS.PASS, note: 'zöld', counts: { pass: 42 }, tree: 'f'.repeat(40), ms: 61_000 };
+  const red = { status: STATUS.FAIL, note: 'bukik egy őr' };
+  const pre = decideMainMoved(moved);
+  assert.deepEqual([pre.status, pre.probeNeeded], [STATUS.FAIL, true], 'próba nélkül: FAIL, de próbát kér');
+  assert.match(pre.note, /próba nem futott/);
+  const ok = decideMainMoved({ ...moved, probe: green });
+  assert.equal(ok.status, STATUS.PASS);
+  assert.match(ok.note, /összefésült próba zöld \(42 teszt, fa ffffffffffff, 61 s\); új CI nem kell/);
+  assert.doesNotMatch(ok.note, /várd meg az új CI-t/);
+  assert.equal(decideMainMoved({ ...moved, probe: red }).status, STATUS.FAIL);
+  for (const m of [null, []]) assert.equal(decideMainMoved({ ...moved, mainFiles: m, probe: green }).status, STATUS.PASS, `olvashatatlan main-lista (${m}): a próba dönt`);
+  const cfgErr = decideMainMoved({ ...moved, repoWideScopes: [], probe: green });
+  assert.deepEqual([cfgErr.status, Boolean(cfgErr.probeNeeded)], [STATUS.FAIL, false], 'hiányzó hatókör-tábla: konfighiba, próba sem ment fel');
+  assert.equal(decideMainMoved({ ...moved, files: ['source/server/a.ts'] }).probeNeeded, undefined, 'nem érintett: nincs próba');
+  assert.equal(st(decideMerge(base({ mainSha: 'c'.repeat(40), files: ['scripts/qa/gates/lib.mjs'], mainFiles: ['scripts/qa/x.mjs'], probe: green })), 'main elmozdulása'), STATUS.PASS, 'a decideMerge továbbadja');
+});
+
+test('runMergeProbe: a PR feje és a main hash-egyezéssel; lekérési hiba / eltérő fej / eltérő main → FAIL, a próba nem fut', async () => {
+  const H = 'a'.repeat(40);
+  const M = 'c'.repeat(40);
+  const mk = ({ fetch = 0, pr = H, main = M } = {}) => ({ git: { run: (args) => {
+    if (args[0] === 'fetch') return { code: fetch, stdout: '', stderr: 'hálózati hiba' };
+    if (args[1] === 'refs/remotes/origin/gate-pr-7') return { code: 0, stdout: `${pr}\n` };
+    if (args[1] === 'refs/remotes/origin/main') return { code: 0, stdout: `${main}\n` };
+    return { code: 1, stdout: '', stderr: '' };
+  } } });
+  let called = null;
+  const probe = async (ctx, opts) => { called = opts; return { status: STATUS.PASS, note: 'zöld', counts: { pass: 3 }, tree: 't', ms: 5 }; };
+  const ok = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, files: ['scripts/qa/x.test.mjs'], probe });
+  assert.equal(ok.status, STATUS.PASS);
+  assert.deepEqual(called, { head: H, base: 'origin/main', files: ['scripts/qa/x.test.mjs'], label: 'pre-merge-gate' });
+  for (const [over, re] of [[{ fetch: 1 }, /nem kérhető le/], [{ pr: 'b'.repeat(40) }, /nem a GitHub szerinti fej/], [{ main: 'd'.repeat(40) }, /nem a GitHub szerinti csúcs/]]) {
+    called = null;
+    const r = await runMergeProbe({ ctx: mk(over), n: '7', head: H, mainSha: M, files: [], probe });
+    assert.equal(r.status, STATUS.FAIL);
+    assert.match(r.note, re);
+    assert.equal(called, null, 'a próba nem fut');
+  }
+  const boom = await runMergeProbe({ ctx: mk(), n: '7', head: H, mainSha: M, files: [], probe: async () => { throw new Error('lemez tele'); } });
+  assert.deepEqual([boom.status, /nem futott \(lemez tele\)/.test(boom.note)], [STATUS.FAIL, true]);
 });
