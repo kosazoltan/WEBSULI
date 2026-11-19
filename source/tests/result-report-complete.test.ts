@@ -110,3 +110,15 @@ test("R10: legacyResultBody — a végleges beküldés régi alakja az új mező
   // A bemenet nem módosul.
   assert.equal(quiz.startedAt, 1);
 });
+
+test("R24 / L1: a kimenő sor újrapróbájának késleltetése — Retry-After tiszteletben, különben növekvő, felső korláttal; azonnali ismétlés nincs", async () => {
+  const { outboxRetryDelayMs, OUTBOX_MAX_ATTEMPTS } = await import("../shared/quiz-round");
+  assert.equal(OUTBOX_MAX_ATTEMPTS, 3);
+  assert.equal(outboxRetryDelayMs(1, 1), 1000, "Retry-After: 1 → 1 s");
+  assert.equal(outboxRetryDelayMs(2, 120), 120_000, "Retry-After: 120 → 120 s");
+  assert.equal(outboxRetryDelayMs(1, 0), 1000, "értelmetlen Retry-After esetén is legalább 1 s");
+  assert.equal(outboxRetryDelayMs(1), 30_000);
+  assert.equal(outboxRetryDelayMs(2), 60_000);
+  assert.equal(outboxRetryDelayMs(10), 300_000, "legfeljebb 5 perc");
+  for (let attempt = 1; attempt <= 5; attempt++) assert.ok(outboxRetryDelayMs(attempt) >= 30_000, "Retry-After nélkül sincs azonnali ismétlés");
+});

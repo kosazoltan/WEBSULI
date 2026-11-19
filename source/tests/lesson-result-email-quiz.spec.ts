@@ -675,3 +675,66 @@ test("R23 / L3: 403 után a frissített token jelzés nélküli (régi példány
   expect(csrf.rejected, "nincs második (régi szervernek szóló) pillanatkép-kérés").toHaveLength(1);
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes(":quiz:partial:")).length), "nem rögzült elküldöttként").toBe(0);
 });
+
+/* Gépi vak ellenőrzés, 2. célzott kör (GPT-6.2 Sol, 2026-11-19), terv R24. */
+async function answerAll(page: Page) {
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+}
+
+test("R24 / L1: 429 (Retry-After nélkül) után a végleges beküldés nem ismétlődik azonnal — 3 s alatt egyetlen kérés", async ({ page }) => {
+  await mockWith(page);
+  const finals: number[] = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial === true) return route.fulfill({ status: 202, json: { queued: true, partial: true } });
+    finals.push(Date.now());
+    return route.fulfill({ status: 429, json: { message: "Túl sok beküldés." } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await answerAll(page);
+  await expect.poll(() => finals.length).toBe(1);
+  await page.waitForTimeout(3000);
+  expect(finals, "nincs POST-hurok ugyanarra a körre").toHaveLength(1);
+});
+
+test("R24 / L1: 429 + Retry-After: 1 → a kör legfeljebb 3 kísérletet kap, a kísérletek között legalább ~1 s", async ({ page }) => {
+  await mockWith(page);
+  const finals: number[] = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial === true) return route.fulfill({ status: 202, json: { queued: true, partial: true } });
+    finals.push(Date.now());
+    return route.fulfill({ status: 429, headers: { "Retry-After": "1" }, json: { message: "Túl sok beküldés." } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await answerAll(page);
+  await expect.poll(() => finals.length, { timeout: 8000 }).toBe(3);
+  await page.waitForTimeout(3000);
+  expect(finals, "a felső korlát (3) után nincs több kísérlet").toHaveLength(3);
+  for (let i = 1; i < finals.length; i++) expect(finals[i] - finals[i - 1], "a Retry-After idejét megtartja").toBeGreaterThanOrEqual(800);
+});
+
+test("R24 / L2: lassú token mellett az utolsó válasz után azonnali dokumentumváltás → a végleges kör a következő oldalbetöltéskor elmegy", async ({ page }) => {
+  await mockWith(page);
+  let tokenCalls = 0;
+  await page.route("**/api/csrf-token", async route => {
+    tokenCalls++;
+    if (tokenCalls === 1) { await new Promise(resolve => setTimeout(resolve, 20_000)); try { await route.fulfill({ json: { csrfToken: "test", resultApi: 2 } }); } catch { /* a lap közben elnavigált */ } return; }
+    return route.fulfill({ json: { csrfToken: "test", resultApi: 2 } });
+  });
+  const finals: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) finals.push(body);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await answerAll(page);
+  expect(finals, "a lassú token miatt a leckeoldalon még nem ment el").toHaveLength(0);
+  await page.goto("/"); // valódi dokumentumváltás: a leckeoldal JavaScriptje leáll
+  await expect.poll(() => finals.length, { timeout: 15_000, message: "a következő oldalbetöltés kiküldte a végleges kört" }).toBe(1);
+  expect(Object.values(finals[0].picks as Record<string, number>).filter(pick => pick >= 0)).toHaveLength(25);
+  await page.waitForTimeout(1500);
+  expect(finals, "pontosan egyszer").toHaveLength(1);
+});

@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -500,4 +500,31 @@ test("R22 / L4: párhuzamos pillanatképek — a vendég kérése az utolsó vá
     assert.ok(sent.every(mail => new RegExp(`félbehagyva: 2 / ${ROUND_SIZE}\\)`).test(mail.subject)), "az igazolt tanuló (2 válaszos) állapota");
     assert.ok(sent.every(mail => !mail.html.includes("Vendég tanuló")), "nem vendég-attribúcióval");
   } finally { releaseGuest(); setPartialIntakeHook(null); clearPendingPartials(); setPartialDelay(previousDelay); }
+});
+
+/* Gépi vak ellenőrzés, 2. célzott kör (GPT-6.2 Sol, 2026-11-19), terv R25. */
+test("R25 / L3: a régi pillanatkép küldése a kapuban (lassú ellenőrzés) áll, közben új pillanatkép érkezik → nem kap queued:true választ, miközben a régi levél megy ki", async () => {
+  reset();
+  const previousDelay = setPartialDelay(100);
+  let releaseGate!: () => void;
+  const held = new Promise<void>(resolve => { releaseGate = resolve; });
+  let parked = false;
+  setGateCheckHook(async lockKey => { if (lockKey.endsWith("|round-l3-lock")) { parked = true; await held; } });
+  try {
+    clearPendingPartials();
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-l3-lock", picks: picks(2), partial: true, fingerprint: "fp-l3-lock" })).json(), { queued: true, partial: true });
+    assert.ok(await waitFor(() => parked, 3000), "a régi kísérlet a kapuban áll (a véglegesítés-ellenőrzés után)");
+    setPartialDelay(60_000);
+    const fresh = post({ kind: "quiz", roundId: "round-l3-lock", picks: picks(4), partial: true, fingerprint: "fp-l3-lock" });
+    await sleep(400);
+    releaseGate();
+    const answer = await (await fresh).json();
+    assert.ok(await waitFor(() => sent.length === 2));
+    await sleep(300);
+    assert.equal(sent.length, 2);
+    const oldWentOut = sent.every(mail => new RegExp(`félbehagyva: 2 / ${ROUND_SIZE}\\)`).test(mail.subject));
+    assert.ok(oldWentOut, "a már elindult régi küldés befejeződött");
+    assert.deepEqual(answer, { queued: false, partial: true, alreadySent: true }, "az új pillanatkép igaz választ kap — nem fogadtuk el úgy, hogy a régi levél megy ki");
+    assert.equal(pendingPartialCount(), 0);
+  } finally { releaseGate(); setGateCheckHook(null); clearPendingPartials(); setPartialDelay(previousDelay); }
 });

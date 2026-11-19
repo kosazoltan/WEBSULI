@@ -286,6 +286,9 @@ async function recordFinalized(lessonId: string, roundId: string, percent: numbe
 }
 let finalizedCheckFault: (() => void) | null = null;
 let partialIntakeHook: ((who: string) => Promise<void>) | null = null;
+let gateCheckHook: ((lockKey: string) => Promise<void>) | null = null;
+/** Teszthez: a „félbehagyva” levél kapujában, a véglegesítés-ellenőrzés UTÁN hívódik (lassú adatbázis utánzása); `null` kikapcsolja. */
+export function setGateCheckHook(hook: ((lockKey: string) => Promise<void>) | null): void { gateCheckHook = hook; }
 /** Teszthez: a pillanatkép-ág UTOLSÓ várakozása után hívódik (párhuzamos felvétel utánzása); `null` kikapcsolja. */
 export function setPartialIntakeHook(hook: ((who: string) => Promise<void>) | null): void { partialIntakeHook = hook; }
 /** Teszthez: hibainjektálás a véglegesítés-ellenőrzés elé (átmeneti adatbázishiba utánzása); `null` kikapcsolja. */
@@ -411,7 +414,11 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     // R1: a kapu MINDEN kísérlet (az újrapróba is) előtt, a kör kizárása alatt nézi, hogy a kör közben véglegesült-e.
     // R21: a kapu a kísérlet saját pillanatkép-változatát is nézi — elavult (közben lecserélt) állapot nem megy ki.
     const version = ++partialVersionSeq;
-    const gate: SendGate = attempt => withRoundLock(lockKey, async () => ((partialVersions.get(lockKey) !== version || await roundFinalized(lessonId, partialWhos, body.roundId)) ? { sent: 0, duplicate: true } : attempt()));
+    const gate: SendGate = attempt => withRoundLock(lockKey, async () => {
+      if (partialVersions.get(lockKey) !== version || await roundFinalized(lessonId, partialWhos, body.roundId)) return { sent: 0, duplicate: true };
+      if (gateCheckHook) await gateCheckHook(lockKey);
+      return attempt();
+    });
     const queued = schedulePartial(lockKey, `${lessonId}|${recorder}`, recorder, snapshot.meta?.partial?.answered ?? 0, version,
       async () => sendLessonResult({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }, true, gate));
     return res.status(202).json({ queued, partial: true });
