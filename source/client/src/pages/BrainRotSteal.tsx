@@ -48,6 +48,7 @@ import {
   type BrainRotTuning,
   type Cage,
 } from "@/lib/brainRot/core";
+import { baseWindowMs, paceBrainRotDirector } from "@/lib/brainRot/pacing";
 import {
   GameHud,
   GameShell,
@@ -85,6 +86,7 @@ import {
   materialPlayQuestion,
   restoreReviewQuestion,
   usePlayQuestion,
+  useQuestionDirector,
   vocabPlayQuestion,
   type PlayQuestion,
   type QuestionPresentation,
@@ -492,6 +494,8 @@ export default function BrainRotSteal() {
       arenaW: w / unit,
       arenaH: h / unit,
       reducedMotion,
+      // D5-módosítás: a kérdés alatt a régi ablaknyi menet-idő fogy (a hosszabbítás és az előjelzés alatt áll).
+      questionRoundMs: baseWindowMs,
     });
   };
   const driverRef = useRef<BrainRotDriver | null>(null);
@@ -512,8 +516,12 @@ export default function BrainRotSteal() {
     return !cageLabelsFit(labels, cageWidthU(w / unit, h / unit, labels.length, topU) * unit);
   };
 
+  // Válaszidő (terv 2026-11-17-brainrot-valaszido, D1–D2): a saját director presentation-jét a Brain Rot olvasásalapú
+  // ablaka burkolja (az óra az előjelzés után indul) — a sim ugyanezt a burkolót használja.
+  const ownDirector = useQuestionDirector({ config: directorConfig, provider, startBand: difficultyRef.current, seed: runSeedRef.current });
+  const pacedDirector = useMemo(() => paceBrainRotDirector(ownDirector.director, { grade: () => gradeForGame(gradeRef.current) ?? null }), [ownDirector.director]);
   const q = usePlayQuestion({
-    setup: { config: directorConfig, provider, startBand: difficultyRef.current, seed: runSeedRef.current },
+    director: pacedDirector,
     // A rezgést a lap adja (a játékbeli következménnyel együtt), hogy egy kimenet = egy visszajelzés.
     haptics: false,
     onShow: (p) => {
@@ -707,6 +715,7 @@ export default function BrainRotSteal() {
     maxMultiplierRef.current = 1;
     firstCageSeenRef.current = false;
     driverRef.current = makeDriver(seed);
+    ownDirector.reset(seed, difficultyRef.current); // új director → a burkoló és a kérdés-sáv is újraindul
     q.reset(seed, difficultyRef.current);
     floatsRef.current = [];
     lastEscapeRef.current = null;
@@ -1488,6 +1497,8 @@ export default function BrainRotSteal() {
       {inRun && (
         <InlineQuestion
           {...q.bind}
+          // D6 (review L2): az előjelzés alatt a hátralévő idő legfeljebb az ablak (a számláló ne mutasson egy mp-cel többet).
+          remainingMs={q.bind.presentation ? Math.min(q.bind.remainingMs, q.bind.presentation.windowMs) : q.bind.remainingMs}
           onPick={onAnswer}
           mode="bar"
           skin="arena"

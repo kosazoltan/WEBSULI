@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { ANIM_KINDS, blockSchema, type Block, type Lesson } from "../../shared/lesson-schema";
+import { ANIM_KINDS, legacyAnimKindSchema, modelBlockSchema, type Block, type Lesson } from "../../shared/lesson-schema";
 import { renderedVisualTexts, visualParamProblems } from "../../shared/lesson-visual-params";
 import { sanitizeIllustration, ungroundedLabels } from "../../shared/illustration-svg";
 import { blockText, checkGrounding } from "./grounding";
 import type { MapConcept } from "./coverage";
+import { sourceVisualsEnabled } from "./source-visuals-flag";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 3. szelet): az ábrakészítő CSAK az
@@ -24,15 +25,25 @@ const visualSchema = z.object({
   params: z.record(z.unknown()),
   caption: z.string().trim().min(1).max(500),
   coversConceptIds: z.array(z.string().trim().min(1).max(64)).min(1),
+  /** Spec 2026-11-18 (S1b / SK1): az ábra által megjelenített forrás-vizuális tétel azonosítója; a hibás alak elmarad. */
+  sourceVisualId: z.string().trim().min(1).max(12).optional().catch(undefined),
 });
+/** A folt BŐVÍTÉS ELŐTTI sémája (a főágéval azonos): régi ábrafajta-felsorolás, `sourceVisualId` nélkül (a kéretlen mező levágva). */
+const legacyVisualSchema = visualSchema.omit({ sourceVisualId: true }).extend({ animKind: legacyAnimKindSchema });
 export const visualPatchSchema = z.object({
   sections: z.array(z.object({ index: z.number().int().min(0), visuals: z.array(z.unknown()).max(4) })).min(1),
 });
 
 export type VisualPatchResult = { lesson: Lesson; added: number; replaced: number; rejected: string[]; notes: string[] };
 
-/** A folt a leckébe illesztve, vagy `null`, ha a válasz nem folt (pl. régi alakú teljes lecke). */
-export function applyVisualPatch(original: Lesson, json: unknown, concepts: ReadonlyArray<MapConcept> = []): VisualPatchResult | null {
+/**
+ * A folt a leckébe illesztve, vagy `null`, ha a válasz nem folt (pl. régi alakú teljes lecke).
+ * `opts.sourceVisualKinds`: elfogadható-e a modell foltjában a forrás-ábrák új fajtája (`table`, `ruleBox`, `compareCards`) — alapból a
+ * forrás vizuális leltárának funkciókapcsolója dönt (KI: az ilyen ábra a bővítés előtti hibával kimarad, és a folt kéretlen
+ * `sourceVisualId` mezője sem kerül a blokkba — mint a kapcsoló előtt).
+ */
+export function applyVisualPatch(original: Lesson, json: unknown, concepts: ReadonlyArray<MapConcept> = [], opts: { sourceVisualKinds?: boolean } = {}): VisualPatchResult | null {
+  const sourceVisualKinds = opts.sourceVisualKinds ?? sourceVisualsEnabled();
   const conceptById = new Map(concepts.map((c) => [c.localId, c] as const));
   const patch = visualPatchSchema.safeParse(json);
   if (!patch.success) return null;
@@ -48,12 +59,13 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
     if (!section) { rejected.push(`${entry.index + 1}. fejezet: nincs ilyen fejezet`); continue; }
     const taught = new Set(section.blocks.flatMap((b) => ("coversConceptIds" in b ? b.coversConceptIds : [])));
     // Apply from the highest position down so earlier indices stay valid (they refer to the original blocks).
-    const items = entry.visuals.map((raw, n) => ({ raw, n, parsed: visualSchema.safeParse(raw) }));
+    const items = entry.visuals.map((raw, n) => ({ raw, n, parsed: sourceVisualKinds ? visualSchema.safeParse(raw) : legacyVisualSchema.safeParse(raw) }));
     const valid: Array<{ block: Block; after: number; replace?: number }> = [];
     for (const { parsed, n } of items) {
       const where = `${entry.index + 1}. fejezet ${n + 1}. ábra`;
       if (!parsed.success) { rejected.push(`${where}: ${parsed.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`); continue; }
       const v = parsed.data;
+      const sourceVisualId = "sourceVisualId" in v ? v.sourceVisualId : undefined;
       const problems = visualParamProblems(v.animKind, v.params);
       let params = v.params;
       let contrastNote: string | null = null;
@@ -72,7 +84,7 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
         const ungrounded = ungroundedLabels(renderedVisualTexts("scene3d", v.params), corpus);
         if (ungrounded.length) problems.push(`a leckében nem szereplő felirat: ${ungrounded.join(", ").slice(0, 160)}`);
       }
-      const block = blockSchema.safeParse({ kind: "animate", animKind: v.animKind, params, caption: v.caption, coversConceptIds: v.coversConceptIds });
+      const block = modelBlockSchema(sourceVisualKinds).safeParse({ kind: "animate", animKind: v.animKind, params, caption: v.caption, coversConceptIds: v.coversConceptIds, ...(sourceVisualId ? { sourceVisualId } : {}) });
       if (!block.success) problems.push(...block.error.issues.map((i) => `${i.path.join(".")} ${i.message}`));
       const foreign = v.coversConceptIds.filter((id) => !taught.has(id));
       if (foreign.length) problems.push(`a fejezetben nem tanított fogalom: ${foreign.join(", ")}`);
