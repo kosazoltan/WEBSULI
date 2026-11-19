@@ -60,3 +60,15 @@ Minden pont ELŐBB bukó teszttel (a régi kódon bukik, az újon zöld); ez a d
    L9 lejárt keret).
 3. Kód: `merged-probe.mjs`, `pre-merge-gate.mjs`, `carry-over.mjs`, `scripts/qa/hooks/check-quality-gates.mjs`.
 4. Doksi: `docs/minosegkapuk.md` (L1, L4, L9 a runbookban). `gate:stage`, új fej.
+
+## Szűkítés (4. vak kör: NEM; tulajdonosi döntés: „Carry kivétele, külön PR”) — terv: `docs/specs/2026-11-19-kapu-gyorsitas.md` 9. pont
+
+1. Ez a doksi-commit (a 9. pont + a külön vázlat: `docs/specs/2026-11-20-bizonyitek-atvitel.md`), a kód előtt.
+2. Tesztek ELŐBB: `lib.test.mjs` / `record-review.test.mjs` (L1: fej nélküli / más fejű jelentés → hiba; `reportHead` nélküli
+   rekord nem megbízható; átvitt rekord nem ítélet), `check-quality-gates.test.mjs` (átvitt pre-push / pre-pr rekord → DENY),
+   `merged-probe.test.mjs` (L5: túlfutás a takarítással → FAIL; L6: `profile: 'guards'` nem futtat egység- / QA-kört),
+   `pre-push-gate.test.mjs` (L6: a push-kapu az őr-only profilt kéri), skill-tartalom teszt (L7).
+3. Kód: `git rm scripts/qa/gates/carry-over.mjs scripts/qa/gates/carry-over.test.mjs`, `package.json` `gate:carry` ki;
+   `record-review.mjs`, `lib.mjs`, `merged-probe.mjs`, `pre-push-gate.mjs`, `scripts/qa/hooks/check-quality-gates.mjs`.
+4. Doksi: `docs/minosegkapuk.md` (átvitel ki, fail-closed átmenet, őr-only push-profil), `docs/agent-csapdak.md` C-78 / C-79,
+   `websuli-merge-elotti-kapu` skill + tükör. `gate:stage` gép-zárral.

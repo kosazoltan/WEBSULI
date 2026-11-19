@@ -136,3 +136,27 @@ Minden lelet ELŐBB bukó teszttel (a lelet forgatókönyvével); a biztonsági 
 
 <!-- acceptance-checklist -->
 - [ ] L1–L11 mindegyikére bukó teszt a javítás előtt, zöld utána; `gate:stage` zöld az új fejen.
+
+## 9. Szűkítés a 4. vak kör (ítélet: NEM, fej `cc42ad3b`) után — tulajdonosi döntés: „Carry kivétele, külön PR”
+
+- **A bizonyíték-átvitel KIKERÜL ebből a PR-ból** (a fenti B rész, a 7. pont L1/L8 átviteli tételei és a 8. pont L2/L3/L11
+  átviteli tételei érvényüket vesztik itt): `scripts/qa/gates/carry-over.mjs` + teszt, `npm run gate:carry`, a runbook / csapda
+  átviteli részei. Külön terv: `docs/specs/2026-11-20-bizonyitek-atvitel.md` (vázlat; a 3. és 4. kör átviteli leletei az elfogadási
+  pontjai). **Fail-closed átmenet:** a kapuk (ítélet-olvasó) és a `check-quality-gates` hook átvitt (`carriedFrom` / `carry` mezős)
+  rekordot nem fogadnak el.
+- **Marad:** a C-61 helyetti összefésült próba, az egyszeri újrafuttatás (#205), a 3. kör javításai.
+- **4. kör, a maradó részt érintő leletek:**
+  - **L1:** a `record-review` a jelentés UTOLSÓ fej-hivatkozását (`Fej: …` / „fej `…`” / „új fej …”) egyezteti a feloldott fejjel
+    (eltérés / hiány → hiba), és a rekordba `reportHead`-et ír; a helyi ítélet csak `reportHead === fej` esetén megbízható (a régi
+    rekord nem).
+  - **L5:** monoton óra (`performance.now()`); a fej feloldása és a takarítás is határolt keretet kap; az `ms` a takarítás UTÁN mérve,
+    túlfutás → FAIL.
+  - **L6:** a push / PR-kapu C-61 lépése őr-only profilon fut (`profile: 'guards'`: a main őr-alapmérése + őrök az összefésült fán);
+    a teljes hatókör a merge-kapué. (A C-38 natív-kivétel így itt nem érintett: a `native-arch` nem őr.)
+  - **L7:** a `websuli-merge-elotti-kapu` skill (és tükre): C-61-nél az első út a gépi összefésült próba (feltételeivel), a
+    main-beolvasztás csak ütközés / piros próba esetén.
+
+<!-- acceptance-checklist -->
+- [ ] Átvitel-kód, parancs és doksi kivéve; átvitt rekordot az ítélet-olvasó és a hook nem fogad el (bukó teszttel).
+- [ ] 4. kör L1, L5, L6, L7: bukó teszt előbb, zöld utána.
+- [ ] `gate:stage` (gép-zárral) zöld az új fejen.
