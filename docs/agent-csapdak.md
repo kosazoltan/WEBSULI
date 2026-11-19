@@ -36,9 +36,9 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-46** — Unicode-tartomány forrásban `\p{…}` kategóriával, ne `\uXXXX`-szel (az eszközparaméter dekódolja); `cat -A` ellenőrzés.
 - **C-50** — Visszaperjeles szöveg csak Edit/Write-tal; bájtszintű visszaolvasás; szkriptes cserénél `git diff --stat` ellenőrzés.
 - **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
-- **C-73** — `native-arch` önmagában ismert helyi kivétel (nem telepítési teendő); a push-kapu piros oka mindig a TÖBBI bukó teszt. Mérő-várakozás állapotra, ne időre.
-- **C-74** — Takarás-döntés: a figura test (téglalap), nem pont; a mérce (`elementsFromPoint`) és a döntés ugyanazt a felületet nézze. Elakadásnál előbb a döntés bemeneteit naplózd.
-- **C-75** — Menet közbeni lagg: profil előtt ne találgass; a `long-animation-frame` szkriptje és a CDP-minta megnevezi (itt: lusta `new AudioContext()` az első hangnál, 0,8–2 s). Tétlen főszál + hosszú képkocka = GPU-folyamat: Chrome-nyomkövetéssel nézd.
+- **C-75** — `native-arch` önmagában ismert helyi kivétel (nem telepítési teendő); a push-kapu piros oka mindig a TÖBBI bukó teszt. Mérő-várakozás állapotra, ne időre.
+- **C-76** — Takarás-döntés: a figura test (téglalap), nem pont; a mérce (`elementsFromPoint`) és a döntés ugyanazt a felületet nézze. Elakadásnál előbb a döntés bemeneteit naplózd.
+- **C-77** — Menet közbeni lagg: profil előtt ne találgass; a `long-animation-frame` szkriptje és a CDP-minta megnevezi (itt: lusta `new AudioContext()` az első hangnál, 0,8–2 s). Tétlen főszál + hosszú képkocka = GPU-folyamat: Chrome-nyomkövetéssel nézd.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -1067,7 +1067,30 @@ Forrás: #475 (K1b). Rokon: C-59.
 - Git Bashben az `npx.cmd` szóközös felhasználói útvonalon elhasalhat: Playwrightot PowerShellből futtasd.
 - e2e-ben a „szabad port keresése, lezárás, újranyitás” versenyhelyzet (`EADDRINUSE`): a szerver válasszon portot.
 
-## C-73 — A push-kapu `native-arch` bukása önmagában kivétel; állapotra várj, ne időre (2026-11-18)
+## C-73 — Mutációs teszt megosztott fixtúra-objektumon: a mutáció a mércét is elrontja (2026-11-18)
+
+Forrás: SK1 (forrás-fedettségi kapu), `tests/fixtures/source-coverage-hm.ts`.
+
+- **Tünet:** a „döntési fa egy levéllel kevesebb” mutációt a kapu nem fogta meg. A fixtúra fája modulszinten EGYSZER jött létre,
+  a lecke blokkja és a forrásleltár ugyanarra az objektumra mutatott — a blokk elrontása a forrást is elrontotta, a kettő így
+  egyezett.
+- **Szabály:** a fixtúra-gyár hívásonként friss példányt adjon (`structuredClone`), és a belőle képzett blokk se osszon
+  hivatkozást a mércével. Ha egy mutációt a kapu „nem fog meg”, előbb azt ellenőrizd, hogy a mutáció nem szivárgott-e át a mércébe.
+- Rokon apróság: a Bash eszköz heredocja aposztrófot / hármas idézőjelet tartalmazó tartalomnál elhasalhat — a tartalmat fájlba
+  írd (Write), és azt futtasd vagy fűzd hozzá.
+
+## C-74 — Unicode-escape a forrásban: az ügynök fájlíró eszköze literál karakterré alakíthatja (2026-11-18)
+
+Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló reguláris kifejezései).
+
+- **Tünet:** a `\uXXXX` alakban megírt karakterosztály (nem törő szóköz, tipográfiai idézőjel, kétirányú vezérlő) a fájlba
+  LITERÁL karakterként került: a kód működött, de a forrásban láthatatlan / összetéveszthető karakterek álltak, amelyeket sem a
+  review, sem a diff nem mutat meg.
+- **Szabály:** láthatatlan vagy tipográfiai karaktert a forrásban mindig escape-pel írj, és írás után ellenőrizd a fájl nyers
+  tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
+  állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
+
+## C-75 — A push-kapu `native-arch` bukása önmagában kivétel; állapotra várj, ne időre (2026-11-18)
 - **Tünet:** a `gate:push` piros, a jelentésben a `native-arch.test.ts` (a `better-sqlite3` nincs lefordítva) és még egy teszt.
   Tévesen gépi akadálynak (Visual Studio Build Tools) jelentettem.
 - **Tény:** a `pre-push-gate.mjs` (D10 / C-38) a `native-arch.test.ts`-t ismert helyi kivételként kezeli, ha CSAK az bukik és a
@@ -1076,7 +1099,7 @@ Forrás: #475 (K1b). Rokon: C-59.
 - **Rokon:** a közös mérők (joystick, mobil mérő) kérdés-elhárítása a megoldás-kijelzés alatt lecserélődő gombra kattintott
   (#500 ingadozó) — a hatókör a nyitott, élesített kérdés (`[data-state="open"][data-armed="true"]`), így a segéd állapotra vár.
 
-## C-74 — Takarás-döntés pontból: a rács hézagában „szabad”, közben takarva (2026-11-18)
+## C-76 — Takarás-döntés pontból: a rács hézagában „szabad”, közben takarva (2026-11-18)
 - **Tünet:** Szökőár, 360×640: a kérdés-sáv a figurára ült, az elrendezés mégis „nyugalomban” volt; ha a kérdés ~0,8 mp-cel később
   nyílt, minden jó. Az előző kör órákig az időzítést, a React-felülírást és a 3D-vetítést gyanította — egyik sem volt.
 - **Tény (a döntés bemeneteinek naplójából):** a menet elején a figura x = 50 % (180 px), a kétoszlopos válaszrács oszlopai
@@ -1088,7 +1111,7 @@ Forrás: #475 (K1b). Rokon: C-59.
   kirajzolás előtt mérd végig (ne render → mérés → render láncban); mozgó figuránál a nyitott kérdés alatt kövesd. Elakadásnál
   az első lépés a döntés bemeneteinek naplója a teszt pontos lépéseivel, nem újabb időzítés-hangolás.
 
-## C-75 — A „lagg” oka egy lusta hangkontextus volt, nem a grafika (2026-11-18)
+## C-77 — A „lagg” oka egy lusta hangkontextus volt, nem a grafika (2026-11-18)
 - **Tünet:** a Szökőárban menet közben 200–950 ms-os megakadások; a tulajdonos fő panasza a lagg. Korábban a grafikát / a
   kérdésbankot gyanítottuk.
 - **Tény (profil: `long-animation-frame` + CDP-mintavételezés, 1× CPU):** egyetlen 2038 ms-os képkocka közvetlenül az első kérdés
