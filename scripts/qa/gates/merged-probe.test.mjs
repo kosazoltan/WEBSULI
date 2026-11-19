@@ -43,7 +43,7 @@ test('probeScope / guardShortfall / probeEnv: hatókör, őr alsó korlát, szű
 });
 
 const GUARD_OK = "import { test } from 'node:test';\ntest('or', () => {});\n";
-function repo({ prFiles = {}, prDelete = [], mainFiles = {}, baseFiles = {} } = {}) {
+function repo({ prFiles = {}, prDelete = [], mainFiles = {}, mainDelete = [], baseFiles = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'probe-'));
   const run = (args) => realExec('git', ['-c', 'user.name=t', '-c', 'user.email=t@pelda.hu', '-c', 'commit.gpgsign=false', '-c', 'core.autocrlf=false', ...args], { cwd: dir, timeoutMs: 60_000 });
   const ok = (args) => { const r = run(args); assert.equal(r.code, 0, `${args.join(' ')}: ${r.stderr}${r.stdout}`); return r.stdout.trim(); };
@@ -63,6 +63,7 @@ function repo({ prFiles = {}, prDelete = [], mainFiles = {}, baseFiles = {} } = 
   const head = ok(['rev-parse', 'HEAD']);
   ok(['switch', '-q', 'main']);
   for (const [f, t] of Object.entries(mainFiles)) write(f, t);
+  for (const f of mainDelete) ok(['rm', '-q', f]);
   ok(['add', '.']); ok(['commit', '-q', '--allow-empty', '-m', 'main']);
   ok(['switch', '-q', 'pr']);
   return { dir, ctx: makeContext({ cwd: dir, cfg: {} }), head };
@@ -93,6 +94,17 @@ test('mergedProbe (L4): a main az alsó korlát — törölt őr → FAIL (más 
   const two = "import { test } from 'node:test';\ntest('or1', () => {});\ntest('or2', () => {});\n";
   const shrunk = await probe(repo({ baseFiles: { 'source/tests/a-guard.test.ts': two }, prFiles: { 'source/tests/a-guard.test.ts': GUARD_OK } }));
   assert.deepEqual([shrunk.status, /1 teszt futott, a mainen 2/.test(shrunk.note)], [STATUS.FAIL, true]);
+  // ha a mainen sincs őr (a PR és a main is törli), a „nincs őr” ág dönt — nem az alsó korlát
+  const none = await probe(repo({ prDelete: ['source/tests/a-guard.test.ts'], mainDelete: ['source/tests/a-guard.test.ts'], baseFiles: { 'source/tests/masik.test.ts': "import { test } from 'node:test';\ntest('nem or', () => {});\n" } }));
+  assert.deepEqual([none.status, /nincs egyetlen őr-teszt/.test(none.note)], [STATUS.FAIL, true], none.note);
+});
+
+test('mergedProbe (L6): PR-egységteszt mellett az őrök is ténylegesen lefutnak (az őr bukása megállít)', async () => {
+  const red = await probe(repo({
+    mainFiles: { 'source/tests/b-guard.test.ts': "import { test } from 'node:test';\nimport { existsSync } from 'node:fs';\ntest('tiltott', () => { if (existsSync(new URL('../../tiltott.txt', import.meta.url))) throw new Error('tiltott'); });\n" },
+    prFiles: { 'tiltott.txt': 'x\n', 'source/tests/u.test.ts': "import { test } from 'node:test';\ntest('u', () => {});\n" },
+  }));
+  assert.deepEqual([red.status, /bukik egy teszt/.test(red.note)], [STATUS.FAIL, true], red.note);
 });
 
 test('mergedProbe (L6): ha egyetlen teszt sem fut le (üres őr a mainen és a PR-ben is), FAIL — „0 teszt” nem zöld', async () => {
