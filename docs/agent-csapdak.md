@@ -26,7 +26,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-70** — Mutációs ellenpróba előtt commit vagy másolat; visszaállítás után `cmp` — ne `git checkout <fájl>` commitolatlan munkán.
 - **C-76** — Vak ellenőr: 1 teljes kör + célzott visszanézés, legfeljebb 3 kör; változatlan részben új, nem blokkoló lelet → jegy.
 - **C-77** — Nehéz kör csak gép-zárral, sorrendfájl szerint; folyamatot csak pontos saját PID alapján állíts le, mintaillesztéssel soha.
-- **C-78** — Main-beolvasztás után ne fizess új CI-t / vak kört: gépi összefésült próba (merge-kapu) és bizonyíték-átvitel (`gate:carry`).
+- **C-78** — Main-beolvasztás után ne fizess új CI-t: gépi összefésült próba a merge-kapuban (a bizonyíték-átvitel külön PR, addig fail-closed).
 - **C-79** — Gyorsító kapunál a bizalmi határ: nyilvános PR-szöveg nem indíthat helyi kódfuttatást; engedély PR + fej + main SHA-hoz kötve; meglévő ítéletet nem írunk felül.
 
 ### Shell, Windows, eszközök
@@ -1138,7 +1138,7 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
 - **Tünet:** a C-61 (a main elmozdult, a PR őrt / kaput érint) eddig új teljes CI-t kért (~1 órás E2E); a main beolvasztása új fejet
   adott, és a vak ítélet, a push- és a PR-kapu bizonyítéka elveszett — akkor is, ha a PR saját változása bájtra azonos maradt.
 - **Szabály (tulajdonosi döntés 2026-11-19):** a merge-kapu ilyenkor gépi összefésült próbát futtat (`merged-probe.mjs`: őr-tesztek +
-  a PR node-os tesztjei a PR feje + friss main állapotán); beolvasztás után a `npm run gate:carry -- --from <régi fej>` igazolja és
+  a PR node-os tesztjei a PR feje + friss main állapotán); beolvasztás után a bizonyíték-átvitel (`gate:carry`) — **kivéve, külön PR** (tulajdonosi döntés 2026-11-19, a 4. vak kör után; `docs/specs/2026-11-20-bizonyitek-atvitel.md`) — igazolta volna és
   átviszi a bizonyítékot (ütközésmentes merge, azonos fa, azonos `patch-id`). Bármely eltérés → teljes kör.
 - **Vak review 1. kör (NEM) tanulsága:** a választható alap (`--base`) a láncolt / régi alap felé nyitott kaput hagyott — az alap
   mindig a friss, GitHubbal egyeztetett `origin/main`; halmozott láncra nincs átvitel; `NEM` ítélet nem vihető át; a próba hatóköre
@@ -1159,3 +1159,6 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   helyi, pontos fejhez kötött bizonyíték indíthat; (2) az engedély minden azonosítóhoz kötött, amelytől a döntés függ (PR, fej, main
   SHA), és a felhasználás előtt újraellenőrzött; (3) meglévő ítéletet / bizonyítékot gépi út nem ír felül (kizárólagos létrehozás);
   (4) mozgó ref helyett rögzített SHA; (5) az összehasonlítás alapjának (baseline) érvényessége maga is feltétel.
+- **4. vak kör tanulsága:** az átvitel versenyhelyzetei (main elmozdul a próba alatt, a FORRÁS ítéletet közben visszavonják,
+  félbeszakadt publikálás) külön tervezést kívánnak — a gyorsító utat csak teljes bizalmi modellel szabad bekapcsolni, ezért külön PR.
+  A `record-review` a jelentés utolsó fej-hivatkozását egyezteti (régi jelentés új fejre nem rögzíthető).

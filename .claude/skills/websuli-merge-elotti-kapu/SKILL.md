@@ -24,8 +24,11 @@ A `gh pr merge --auto` tilos (a hook megtagadja): az összevonás később, fut�
 3. Lezáratlan review-szál = 0 (GraphQL `reviewThreads`). Csak a megválaszolt szálat zárd le.
 4. A main elmozdult-e a PR CI-ja óta (a CI-futás `base.sha` vs. a main csúcsa). Ha igen, és a PR repó-szintű őrt / ellenőrzést érint
    (`*-guard.test.ts`, `scripts/qa/**`, `.github/workflows/**`), a kapu a main elmozdulásának fájllistáját (GitHub compare) a
-   `gates.config.json` `repoWideScopes` táblázatával veti össze: bukás „előbb olvaszd be a maint” (C-61), ha a main az ellenőrzés által
-   olvasott fájlt változtatott, vagy a lista nem olvasható / csonka / üres; egyébként figyelmeztetés. Részletek: `docs/minosegkapuk.md`.
+   `gates.config.json` `repoWideScopes` táblázatával veti össze. Ha a main az ellenőrzés által olvasott fájlt változtatott, vagy a
+   lista nem olvasható / csonka / üres (C-61), a kapu ELSŐKÉNT a **gépi összefésült próbát** futtatja a PR feje + a rögzített main SHA
+   állapotán (új CI és main-beolvasztás nélkül) — feltételei: azonos tárolóból jövő PR, zöld kötelező ellenőrzések és erre a fejre
+   rögzített, megbízható helyi ítélet (`record-review`). Zöld próba → PASS; main-beolvasztás CSAK ütközés vagy piros próba esetén
+   kell. Nincs metszet → figyelmeztetés. Részletek: `docs/minosegkapuk.md`.
 5. A független ellenőr ítélete a JELENLEGI fejre IGEN / IGEN, FELTÉTELLEL (helyi `review-<fej>.json`, vagy a PR-leírás / komment
    `Független ellenőr ítélete: … (fej: <hash>)` sora).
 6. Futásőr: `bash scripts/qa/active-runs-guard.sh` kilépési kódja 0 (1 = aktív gyártás → ne vonj össze; 2 = hiba → vakon tilos).
@@ -38,7 +41,8 @@ Zöld → `merge-<PR>-<fej>.json` (15 percig érvényes; új push után érvény
 
 - A zöld PR-okat egy ablakban vond össze, egymás után; az ablakot előre jelezd a tulajdonosnak.
 - MINDEN egyes merge előtt újra a kapu (a futásőr „közvetlenül előtte” szabálya). Az első merge után a többi PR állapota átmenetileg
-  `UNKNOWN` / a main elmozdult: a kapu ezt jelzi; repó-szintű őrt érintő PR-t előbb frissíts a mainnel.
+  `UNKNOWN` / a main elmozdult: a kapu ezt jelzi, és repó-szintű őrt érintő PR-nél a gépi összefésült próbával dönt (fent, 4. pont);
+  a PR-t csak ütközés vagy piros próba esetén frissítsd a mainnel (a csak-merge push újraindítja a kötelező E2E-t).
 - Zöld CI után nincs push (C-62); a kötelező ellenőrzés nem alku tárgya (C-63).
 
 ## Ha bukik

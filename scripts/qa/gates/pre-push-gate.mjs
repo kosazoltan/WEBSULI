@@ -14,6 +14,9 @@ import { runLintSteps } from './lint-gate.mjs';
 import { listFiles } from './stage-gate.mjs';
 import { mergedProbe } from './merged-probe.mjs';
 
+/** 4. vak kör L6: a push / PR-kapu C-61 lépése őr-only profilon fut (a teljes egység- / QA-hatókör a merge-kapué). */
+export const PUSH_PROBE_PROFILE = 'guards';
+
 export const NATIVE_ARCH_TEST = 'native-arch.test.ts';
 
 /** A TAP-kimenet legfelső szintű bukásai fájlnév szerint (a `location` mezőből; betöltési hibánál a teszt neve a fájl). */
@@ -161,7 +164,7 @@ export async function runPrePushSteps({ gate, ctx, slice = false }) {
     const r = git.run(['merge-base', '--is-ancestor', base, 'HEAD']);
     if (r.code === 0) return { status: STATUS.PASS, note: 'a friss main a HEAD őse' };
     // C-61: a közös összefésült próba (docs/specs/2026-11-19-kapu-gyorsitas.md A) — a merge-kapu ugyanezt hívja.
-    const merged = await mergedProbe(ctx, { head: 'HEAD', base, label: 'pre-push-gate' });
+    const merged = await mergedProbe(ctx, { head: 'HEAD', base, label: 'pre-push-gate', profile: PUSH_PROBE_PROFILE });
     if (merged.status === STATUS.PASS) return { status: STATUS.WARN, note: `a ${base} nincs beolvasztva (git merge ${base} ajánlott); ${merged.note}` };
     return merged;
   });

@@ -74,7 +74,9 @@ test('bizonyíték-tár: írás / olvasás, a napló szűrve', () => {
 test('resolveVerdict: helyi bizonyíték, PR-sor előtag-egyezéssel, idegen fej nem számít, az utolsó sor nyer', () => {
   const head = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
   // 3. vak kör L1 (spec-változás): a helyi bizonyíték megbízható (trusted) és fejhez kötött
-  assert.deepEqual(resolveVerdict({ head, evidence: { head, verdict: 'IGEN' } }), { verdict: 'IGEN', source: 'helyi bizonyíték (record-review)', trusted: true, head });
+  // 4. vak kör L1 (spec-változás): megbízható csak a jelentés fejével egyeztetett (reportHead) helyi rekord
+  assert.deepEqual(resolveVerdict({ head, evidence: { head, verdict: 'IGEN', reportHead: head } }), { verdict: 'IGEN', source: 'helyi bizonyíték (record-review)', trusted: true, head });
+  assert.equal(resolveVerdict({ head, evidence: { head, verdict: 'IGEN' } }).trusted, false);
   assert.equal(resolveVerdict({ head, evidence: { head: 'ffff', verdict: 'IGEN' } }), null);
   assert.equal(resolveVerdict({ head, texts: [verdictLine('IGEN', 'b'.repeat(40))] }), null);
   const v = resolveVerdict({ head, texts: ['leírás', `${verdictLine('NEM', head)}\n…\n${verdictLine('IGEN, FELTÉTELLEL', head)}`] });

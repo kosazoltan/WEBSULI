@@ -5,7 +5,8 @@ import { buildRecord, normalizeVerdict, reportVerdict } from './record-review.mj
 import { resolveVerdict } from './lib.mjs';
 
 const FULL = '0123456789abcdef0123456789abcdef01234567';
-const ok = { resolveHead: (h) => (FULL.startsWith(h) ? FULL : null), readReport: (p) => (p === 'j.md' ? '# Jelentés\nÍtélet: IGEN' : null) };
+// 4. vak kör L1 (spec-változás): a jelentésnek a vizsgált fejre kell hivatkoznia (az utolsó fej-hivatkozás egyezzen)
+const ok = { resolveHead: (h) => (FULL.startsWith(h) ? FULL : null), readReport: (p) => (p === 'j.md' ? `# Független review — x, fej \`${FULL.slice(0, 12)}\`\nÍtélet: IGEN` : null) };
 
 test('normalizeVerdict: IGEN / NEM / IGEN, FELTÉTELLEL (ASCII-alak is); más érték nem', () => {
   assert.equal(normalizeVerdict('igen'), 'IGEN');
@@ -30,7 +31,7 @@ test('reportVerdict / review J6: a --verdict a jelentés utolsó ítéletével e
   assert.equal(reportVerdict('## Ítélet: **IGEN, FELTÉTELLEL**'), 'IGEN, FELTÉTELLEL');
   assert.equal(reportVerdict('## Ítélet: NEM\n…\n# Visszaellenőrzés\n## Ítélet: ÖSSZEVONHATÓ — IGEN'), 'IGEN');
   assert.equal(reportVerdict('nincs ilyen sor'), null);
-  const mismatch = buildRecord({ head: FULL, verdict: 'IGEN', report: 'n.md', resolveHead: ok.resolveHead, readReport: () => '## Ítélet: NEM' });
+  const mismatch = buildRecord({ head: FULL, verdict: 'IGEN', report: 'n.md', resolveHead: ok.resolveHead, readReport: () => `Fej: ${FULL}\n## Ítélet: NEM` });
   assert.equal(mismatch.ok, false);
   assert.match(mismatch.error, /eltér/);
   assert.equal(buildRecord({ head: FULL, verdict: 'IGEN', report: 'x.md', resolveHead: ok.resolveHead, readReport: () => 'jelentés ítélet nélkül' }).ok, false);
@@ -43,4 +44,20 @@ test('buildRecord: hibás ítélet / fej / hiányzó vagy üres jelentés → hi
   assert.equal(buildRecord({ head: FULL, verdict: 'IGEN', report: 'nincs.md', ...ok }).ok, false);
   assert.equal(buildRecord({ head: FULL, verdict: 'IGEN', report: undefined, ...ok }).ok, false);
   assert.equal(buildRecord({ head: FULL, verdict: 'IGEN', report: 'j.md', resolveHead: ok.resolveHead, readReport: () => '  ' }).ok, false);
+});
+
+test('4. vak kör L1: a jelentés utolsó fej-hivatkozása a feloldott fej legyen; hiány / más fej → hiba; a rekord reportHead-et kap', () => {
+  const OLD = 'fedcba9876543210fedcba9876543210fedcba98';
+  const rep = (t) => ({ resolveHead: ok.resolveHead, readReport: () => t });
+  assert.match(buildRecord({ head: FULL, verdict: 'IGEN', report: 'r.md', ...rep('# Jelentés\nÍtélet: IGEN') }).error, /fej/);
+  assert.match(buildRecord({ head: FULL, verdict: 'IGEN', report: 'r.md', ...rep(`Fej: ${OLD}\nÍtélet: IGEN`) }).error, /másik fejre|nem a/);
+  // a visszanézési szakasz (utolsó hivatkozás) dönt: régi fej elöl, az új a végén → jó; fordítva → hiba
+  const good = buildRecord({ head: FULL, verdict: 'IGEN', report: 'r.md', ...rep(`Fej: ${OLD}\nÍtélet: NEM\n# Visszaellenőrzés — új fej ${FULL.slice(0, 12)}\nÍtélet: IGEN`) });
+  assert.equal(good.ok, true, good.error);
+  assert.equal(good.record.reportHead, FULL);
+  assert.equal(buildRecord({ head: FULL, verdict: 'IGEN', report: 'r.md', ...rep(`Fej: ${FULL}\nÍtélet: IGEN\n# Visszaellenőrzés — új fej ${OLD.slice(0, 12)}`) }).ok, false);
+  // a helyi rekord csak reportHead-del megbízható; átvitt rekord egyáltalán nem ítélet (fail-closed, a carry külön PR)
+  assert.equal(resolveVerdict({ head: FULL, evidence: { head: FULL, verdict: 'IGEN' } }).trusted, false, 'régi, reportHead nélküli rekord nem megbízható');
+  assert.equal(resolveVerdict({ head: FULL, evidence: good.record }).trusted, true);
+  assert.equal(resolveVerdict({ head: FULL, evidence: { ...good.record, carriedFrom: OLD } }), null, 'átvitt rekord nem fogadható el');
 });

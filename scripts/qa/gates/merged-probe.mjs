@@ -1,6 +1,6 @@
 // Gépi összefésült próba (docs/specs/2026-11-19-kapu-gyorsitas.md A; C-61): egy ideiglenes, leválasztott munkafában a megadott fej
-// + a friss main összefésült állapotán. A push-kapu (`head: 'HEAD'`), a merge-kapu (`head: <PR feje>`) és a bizonyíték-átvitel
-// ugyanezt hívja. Fail-closed: hiányzó node_modules, ütközés, hiányzó / kevesebb tesztet futtató őr, piros teszt, 0 teszt, időtúllépés
+// + a friss main összefésült állapotán. A push-kapu (`head: 'HEAD'`, őr-only profil) és a merge-kapu (`head: <PR feje>`, teljes
+// hatókör) hívja (a bizonyíték-átvitel külön PR: docs/specs/2026-11-20-bizonyitek-atvitel.md). Fail-closed: hiányzó node_modules, ütközés, hiányzó / kevesebb tesztet futtató őr, piros teszt, 0 teszt, időtúllépés
 // → FAIL.
 //
 // Hatókör (vak review L2, L4 — tulajdonosi döntés 2026-11-19):
@@ -124,18 +124,38 @@ export function guardShortfall(mainGuards, mainCounts, mergedGuards, mergedCount
  *   `scopeHead`: a hatókör történeti alapja (3. vak kör L3) — átvitelnél a régi, ellenőrzött fej; alapból a `head`.
  *   `timeoutMs`: EGYÜTTES határidő (3. vak kör L9) — minden lépés (git is) a fennmaradó időt kapja; lejárt keret → FAIL.
  */
-export async function mergedProbe(ctx, { head = 'HEAD', base, scopeHead, label = 'merged-probe', timeoutMs = PROBE_TIMEOUT_MS, env = probeEnv() }) {
+export async function mergedProbe(ctx, opts) {
+  // 4. vak kör L5: monoton óra; az idő a takarítást (a belső `finally`) is tartalmazza; túlfutás → FAIL
+  const t0 = performance.now();
+  const r = await probeBody(ctx, { ...opts, t0 });
+  return finalizeProbe(r, { elapsed: performance.now() - t0, timeoutMs: opts.timeoutMs ?? PROBE_TIMEOUT_MS });
+}
+
+/** A végső mérés (4. vak kör L5): `ms` = a teljes eltelt idő; zöld eredmény a határidőn túl → FAIL. */
+export function finalizeProbe(r, { elapsed, timeoutMs }) {
+  if (r.status === STATUS.PASS && elapsed > timeoutMs) {
+    return { ...r, status: STATUS.FAIL, note: `a próba a takarítással együtt túllépte az együttes határidőt (${Math.round(elapsed / 1000)} s > ${Math.round(timeoutMs / 1000)} s) — ${r.note}`, ms: Math.round(elapsed) };
+  }
+  return { ...r, ms: Math.round(elapsed) };
+}
+
+/** A próba teste. `profile: 'guards'` (4. vak kör L6): csak a main őr-alapmérése + az őrök az összefésült fán (push / PR-kapu). */
+async function probeBody(ctx, { head = 'HEAD', base, scopeHead, label = 'merged-probe', timeoutMs = PROBE_TIMEOUT_MS, env = probeEnv(), profile = 'full', t0 }) {
   const { exec, git, src, node } = ctx;
   const root = ctx.root ?? process.cwd();
-  const t0 = Date.now();
-  const done = (r) => ({ ...r, ms: Date.now() - t0 });
-  const remaining = () => timeoutMs - (Date.now() - t0);
+  const done = (r) => ({ ...r, ms: performance.now() - t0 });
+  // a spawnSync egész ms-ot vár
+  const remaining = () => Math.floor(timeoutMs - (performance.now() - t0));
+  const guardsOnly = profile === 'guards';
   const expired = () => remaining() <= 0;
   const deadlineFail = (extra = {}) => done({ status: STATUS.FAIL, note: `a próba együttes határideje (${Math.round(timeoutMs / 1000)} s) lejárt — nem értékelhető (időtúllépés)`, ...extra });
-  const hr = git.run(['rev-parse', '--verify', '--quiet', `${head}^{commit}`]);
+  const quick = (args) => exec('git', args, { cwd: root, timeoutMs: Math.max(1, Math.min(60_000, remaining())) });
+  if (expired()) return deadlineFail();
+  const hr = quick(['rev-parse', '--verify', '--quiet', `${head}^{commit}`]);
   const headSha = hr.code === 0 ? hr.stdout.trim() : null;
+  if (!headSha && expired()) return deadlineFail();
   if (!headSha) return done({ status: STATUS.FAIL, note: `a fej (${head}) nem oldható fel` });
-  const sr = scopeHead ? git.run(['rev-parse', '--verify', '--quiet', `${scopeHead}^{commit}`]) : null;
+  const sr = scopeHead ? quick(['rev-parse', '--verify', '--quiet', `${scopeHead}^{commit}`]) : null;
   const scopeSha = scopeHead ? (sr.code === 0 ? sr.stdout.trim() : null) : headSha;
   if (!scopeSha) return done({ status: STATUS.FAIL, note: `a hatókör alapja (${scopeHead}) nem oldható fel` });
   if (!existsSync(join(src, 'node_modules'))) return done({ status: STATUS.FAIL, note: 'nincs source/node_modules a futtató munkafában — előbb `npm.cmd ci` (a próba nem futtatható)' });
@@ -154,9 +174,10 @@ export async function mergedProbe(ctx, { head = 'HEAD', base, scopeHead, label =
       process.stderr.write(`[${label}] FIGYELEM: a csomópont-hivatkozás nem törölhető, az ideiglenes munkafa megmarad: ${tmp}\n`);
       return;
     }
-    git.run(['worktree', 'remove', '--force', tmp]);
+    // határolt takarítás (4. vak kör L5): hívásonként legfeljebb 60 s, a mért idő része
+    exec('git', ['worktree', 'remove', '--force', tmp], { cwd: root, timeoutMs: 60_000 });
     if (existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
-    git.run(['worktree', 'prune']);
+    exec('git', ['worktree', 'prune'], { cwd: root, timeoutMs: 60_000 });
   };
   // Review J11: Ctrl-C / SIGTERM esetén is takarítson (különben a csomópont-hivatkozás ottmarad egy későbbi rekurzív törlés útjában).
   const onSignal = (sig) => { cleanup(); process.exit(sig === 'SIGINT' ? 130 : 143); };
@@ -218,13 +239,13 @@ export async function mergedProbe(ctx, { head = 'HEAD', base, scopeHead, label =
     const ct = exec('git', ['-c', 'user.name=gate', '-c', 'user.email=gate@pelda.hu', 'commit-tree', tree, '-p', headSha, '-p', baseSha, '-m', 'gate: összefésült próba'], { cwd: tmp, timeoutMs: left() });
     if (ct.code !== 0 || g(['update-ref', '--no-deref', 'HEAD', ct.stdout.trim()]).code !== 0) return done({ status: STATUS.FAIL, note: 'a szintetikus merge-commit nem jött létre', detail: ct.stderr, tree });
     if (expired()) return deadlineFail({ tree });
-    const scope = probeScope({ prFiles, mainFiles });
+    const scope = { ...probeScope({ prFiles, mainFiles }), profile };
     const exists = (p) => existsSync(join(tmp, p));
     const sel = selectProbeTests(prFiles, exists);
     // 3) Őrök az összefésült fán + az egységtesztek (teljes kör vagy a PR által módosítottak).
     const guards = listFiles(join(tmp, 'source', 'tests'), /-guard\.test\.ts$/).map((f) => `tests/${f}`);
     if (!guards.length) return done({ status: STATUS.FAIL, note: 'az összefésült fában nincs egyetlen őr-teszt sem — nem értékelhető', tree, scope });
-    const unit = scope.unitFull
+    const unit = guardsOnly ? [] : scope.unitFull
       ? listFiles(join(tmp, 'source', 'tests'), /\.test\.ts$/).filter((f) => !/-guard\.test\.ts$/.test(f)).map((f) => `tests/${f}`)
       : sel.unit;
     const r = run(node, ['--import', 'tsx', '--test', '--test-reporter=junit', ...guards, ...unit], join(tmp, 'source'));
@@ -237,12 +258,12 @@ export async function mergedProbe(ctx, { head = 'HEAD', base, scopeHead, label =
     counts.tests = Math.max(0, (counts.tests ?? 0) - pseudo);
     const addCounts = (c) => { if (!c) return; counts.tests = (counts.tests ?? 0) + (c.tests ?? 0); counts.pass = (counts.pass ?? 0) + (c.pass ?? 0); counts.fail = (counts.fail ?? 0) + (c.fail ?? 0); };
     const short = guardShortfall(mainGuards, mainCounts, guards, tapCountsByFile(r.stdout));
-    const what = `${guards.length} őr + ${scope.unitFull ? `teljes egységteszt-kör (${unit.length} fájl)` : `${unit.length} PR-egységteszt`} + ${scope.qaFull ? 'teljes scripts/qa kör' : `${sel.qa.length} PR scripts/qa teszt`}`;
+    const what = guardsOnly ? `${guards.length} őr (őr-only profil; a teljes hatókör a merge-kapué)` : `${guards.length} őr + ${scope.unitFull ? `teljes egységteszt-kör (${unit.length} fájl)` : `${unit.length} PR-egységteszt`} + ${scope.qaFull ? 'teljes scripts/qa kör' : `${sel.qa.length} PR scripts/qa teszt`}`;
     const fail = (note) => { writeLog(ctx.evDir, label, 'merged-probe', log); return done({ status: STATUS.FAIL, note, detail: log, tree, counts, scope }); };
     if (r.code !== 0) return fail(`az összefésült állapoton (${headSha.slice(0, 12)} + ${base}) bukik egy teszt vagy lejárt az időkorlát (${what}) — olvaszd be a maint és javítsd (C-61)`);
     if (short.length) return fail(`az őrök alsó korlátja (a main) sérül: ${short.join('; ')}`);
     // 4) scripts/qa: teljes kör + a két CI-lépés, vagy a PR által módosított tesztfájlok.
-    const qa = scope.qaFull
+    const qa = guardsOnly ? [] : scope.qaFull
       ? ['', 'gates', 'hooks'].flatMap((sub) => listFiles(join(tmp, 'scripts', 'qa', sub), /\.test\.mjs$/).map((f) => `scripts/qa/${sub ? `${sub}/` : ''}${f}`))
       : sel.qa;
     if (qa.length) {
@@ -252,7 +273,7 @@ export async function mergedProbe(ctx, { head = 'HEAD', base, scopeHead, label =
       if (expired()) { writeLog(ctx.evDir, label, 'merged-probe', log); return deadlineFail({ detail: log, tree, scope }); }
       if (q.code !== 0) return fail(`az összefésült állapoton bukik egy scripts/qa teszt (${what})`);
     }
-    if (scope.qaFull) {
+    if (scope.qaFull && !guardsOnly) {
       // 3. vak kör L6: a teljes QA-kör mindkét ellenőrzőt ígéri — hiányuk FAIL (a mainen meglévő és az elvárt is)
       const gone = REQUIRED_QA_CHECKERS.filter((f) => !exists(f));
       if (gone.length) return fail(`a teljes QA-kör kötelező ellenőrző hiányzik az összefésült fáról: ${gone.join(', ')}${mainHasCheckers.some((f) => gone.includes(f)) ? ' (a mainen megvan)' : ''}`);

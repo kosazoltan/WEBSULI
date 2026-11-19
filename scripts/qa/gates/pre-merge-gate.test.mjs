@@ -1,6 +1,7 @@
 // docs/specs/2026-11-17-minosegkapuk.md E9: a merge előtti kapu döntése hamis gh / futásőr / rt-adatokkal.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { STATUS, loadConfig } from './lib.mjs';
 import { COMPARE_FILE_LIMIT, compareFiles, decideMainMoved, decideMerge, completeFiles, mergeDecision, probeRecord, probeStep, probeWithRetry, requiredChecks, runMergeProbe } from './pre-merge-gate.mjs';
 import { resolveVerdict } from './lib.mjs';
@@ -276,7 +277,7 @@ test('3. vak kör L1: a PR-szöveg ítélet-sora nem indíthat helyi próbát; c
   const fromText = resolveVerdict({ head: H, evidence: null, texts: [`Független ellenőr ítélete: IGEN (fej: ${H.slice(0, 12)})`] });
   assert.equal(fromText.verdict, 'IGEN');
   assert.notEqual(fromText.trusted, true, 'a nyilvános szöveg nem megbízható forrás');
-  const fromEv = resolveVerdict({ head: H, evidence: { head: H, verdict: 'IGEN' }, texts: [] });
+  const fromEv = resolveVerdict({ head: H, evidence: { head: H, verdict: 'IGEN', reportHead: H }, texts: [] });
   assert.equal(fromEv.trusted, true);
   const okRun = { name: 'CI', status: 'completed', conclusion: 'success', id: 1 };
   let ran = 0;
@@ -307,4 +308,13 @@ test('3. vak kör L9: az újrafuttatás összideje, futásonkénti ideje és a h
   assert.deepEqual([p.ms, p.attemptMs], [300, [100, 200]]);
   const rec = probeRecord({ head: 'a'.repeat(40), mainSha: 'c'.repeat(40), probe: p, at: 'T' });
   assert.deepEqual([rec.ms, rec.attemptMs, rec.scope, rec.attempts, rec.retried, rec.mainSha], [300, [100, 200], { qaFull: true, unitFull: false }, 2, true, 'c'.repeat(40)]);
+});
+
+test('4. vak kör L7: a merge-kapu skill C-61-nél előbb a gépi összefésült próbát írja (nem a main-beolvasztást)', () => {
+  for (const p of ['.agents/skills/websuli-merge-elotti-kapu/SKILL.md', '.claude/skills/websuli-merge-elotti-kapu/SKILL.md']) {
+    const t = readFileSync(new URL(`../../../${p}`, import.meta.url), 'utf8');
+    const c61 = t.split('\n').filter((l) => /C-61|main elmozdult|frissíts a mainnel|olvaszd be a maint/i.test(l)).join(' ');
+    assert.match(c61, /összefésült prób/i, `${p}: a C-61 út az összefésült próba`);
+    assert.doesNotMatch(t, /repó-szintű őrt érintő PR-t előbb frissíts a mainnel/, `${p}: nincs feltétel nélküli main-beolvasztásra terelés`);
+  }
 });

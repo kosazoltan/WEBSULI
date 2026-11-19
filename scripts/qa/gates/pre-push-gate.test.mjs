@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { auditStatus, decideNativeArch, parseTapFailures, rollupState, runPrePushSteps, sharedTouched, NATIVE_ARCH_TEST } from './pre-push-gate.mjs';
+import { PUSH_PROBE_PROFILE, auditStatus, decideNativeArch, parseTapFailures, rollupState, runPrePushSteps, sharedTouched, NATIVE_ARCH_TEST } from './pre-push-gate.mjs';
 import { fakeCtx, statusOf } from './_fake.mjs';
 
 const TAP = [
@@ -107,4 +107,8 @@ test('runPrePushSteps: native-arch az egyetlen bukás + bukó doctor:arch → KI
   await runPrePushSteps({ gate, ctx });
   assert.equal(statusOf(gate, 'teljes egységteszt'), STATUS.EXCEPTION);
   assert.equal(gate.finish(), 0);
+});
+
+test('4. vak kör L6: a push / PR-kapu C-61 lépése az őr-only profilt kéri (a teljes hatókör a merge-kapué)', () => {
+  assert.equal(PUSH_PROBE_PROFILE, 'guards');
 });

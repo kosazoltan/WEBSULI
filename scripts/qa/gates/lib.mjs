@@ -262,8 +262,12 @@ export function verdictLine(verdict, head) {
  * @returns {{ verdict: string, source: string } | null}
  */
 export function resolveVerdict({ head, evidence, texts = [] }) {
-  // `trusted`: csak a helyi, pontos fejhez kötött bizonyíték megbízható (3. vak kör L1) — a PR-szöveget bárki írhatja
-  if (evidence && evidence.head === head && VERDICTS.includes(evidence.verdict)) return { verdict: evidence.verdict, source: 'helyi bizonyíték (record-review)', trusted: true, head };
+  // `trusted`: csak a helyi, a jelentés fejével egyeztetett (`reportHead`) bizonyíték megbízható (3. vak kör L1, 4. vak kör L1) — a
+  // PR-szöveget bárki írhatja. Átvitt (carriedFrom / carry) rekord nem fogadható el: a bizonyíték-átvitel külön PR (fail-closed).
+  const carried = evidence && (evidence.carriedFrom || evidence.carry);
+  if (evidence && !carried && evidence.head === head && VERDICTS.includes(evidence.verdict)) {
+    return { verdict: evidence.verdict, source: 'helyi bizonyíték (record-review)', trusted: evidence.reportHead === head, head };
+  }
   let found = null;
   for (const [i, t] of texts.entries()) {
     for (const m of String(t ?? '').matchAll(VERDICT_LINE)) {

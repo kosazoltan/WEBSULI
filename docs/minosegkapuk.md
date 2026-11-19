@@ -132,7 +132,7 @@ viszi bukásra.
   átnevezett fájlnál a régi név is számít), vagy a fájllista nem olvasható / csonka (≥ 300) / üres eltérő SHA mellett. **Ilyenkor a
   kapu NEM kér új CI-t** (kapu-gyorsítás, tulajdonosi döntés 2026-11-19): lekéri a PR fejét és a friss maint (hash-egyezéssel a
   GitHub-adatokhoz), és ideiglenes, leválasztott munkafában lefuttatja a **gépi összefésült próbát** (`scripts/qa/gates/merged-probe.mjs`,
-  ugyanaz a kód, mint a push-kapu C-61 lépése és a `gate:carry`). **Pontosan ezt futtatja** (`probeScope`, a PR-fájlok = `merge-base..fej`,
+  ugyanaz a modul, mint a push-kapu C-61 lépése — ott őr-only profillal). **Pontosan ezt futtatja** (`probeScope`, a PR-fájlok = `merge-base..fej`,
   a main-fájlok = `merge-base..friss main`):
   1. **minden** `source/tests/*-guard.test.ts` őr-tesztet — előbb a friss mainen, utána az összefésült fán; a main az alsó korlát:
      a mainen létező, de az összefésült fáról hiányzó őr → FAIL; őrönként kevesebb lefutott teszt, mint a mainen → FAIL; 0 őr → FAIL;
@@ -160,18 +160,13 @@ viszi bukásra.
   bukása FAIL (L5); a teljes QA-körben a `skills-sync-check` / `three-phase-check` hiánya FAIL (L6), és a háromfázisú ellenőrző egy
   szintetikus merge-commiton (szülők: a fej és a main) fut (L7). A `merge-probe-` rekord: összidő, futásonkénti idők, hatókör. A
   hiányzó vagy hibás hatókör-táblázat továbbra is FAIL (konfighiba).
-- **Bizonyíték-átvitel főág-beolvasztás után (`npm run gate:carry -- --from <régi fej>`):** ha az új fej egy ütközésmentes
-  main-beolvasztás (két szülő: a régi, bizonyítékkal rendelkező fej és az `origin/main` egy őse; a gépi összefésülés fája = az új fej
-  fája), és a PR saját változása bájtra azonos (`git patch-id --verbatim`), a szkript az új fejen lefuttatja az összefésült próbát
-  (ugyanazzal a hatókörrel, mint a merge-kapu, lásd fent; a hatókör történeti alapja a régi, ellenőrzött fej — 3. vak kör L3 —,
-  a main a rögzített, GitHubbal egyeztetett SHA), és zöld esetén átviszi a vak ítéletet (`review-`) és a `pre-push-` /
-  `pre-pr-` bizonyítékot (csak `ok: true`; a vak ítélet kötelező, és csak `IGEN` / `IGEN, FELTÉTELLEL` — `NEM` soha) egy gépi
-  `carry-<új fej>` rekorddal. **Az alap mindig a friss `origin/main`** (vak review L1): a szkript maga kéri le, a csúcsát a GitHub
-  szerinti `main`-nel egyezteti (eltérés / hiba → nincs átvitel), és a main hash-ét a `carry-` rekordba írja; `--base` kapcsoló
-  nincs. **Halmozott PR-láncra nincs átvitel** (a másik szülő egy másik PR ága, nem a main őse → FAIL; a lánc tagjai teljes kört
-  kapnak). Az átvitt rekord megőrzi az eredetileg ellenőrzött fejet (`reviewedHead`) és az átvitelek láncát (`carryChain`). **A célfejre már rögzített ítéletet az átvitel soha nem írja felül** (3. vak kör L2: a
-  próba előtt és az írás előtt is vizsgálva, kizárólagos létrehozással; a célfejen meglévő `pre-push-` / `pre-pr-` rekord is megmarad).
-  Bármely eltérés → nincs átvitel (a teljes kör kell). Az átvitt rekordot a hook a meglévő `ok === true` szabállyal fogadja el.
+- **Bizonyíték-átvitel: NINCS ebben a változatban** (tulajdonosi döntés 2026-11-19, „Carry kivétele, külön PR”; terv:
+  `docs/specs/2026-11-20-bizonyitek-atvitel.md`). Main-beolvasztás után az új fej teljes kört kap (vak ítélet, `gate:push`,
+  `gate:pr`). **Fail-closed átmenet:** az ítélet-olvasó és a `check-quality-gates` hook átvitt (`carriedFrom` / `carry` mezős)
+  rekordot nem fogad el. A helyi ítélet csak akkor megbízható (a próba indításához), ha a `record-review` a jelentés utolsó
+  fej-hivatkozását a fejjel egyeztette (`reportHead`; 4. vak kör L1).
+  - **A push / PR-kapu C-61 lépése őr-only profilon fut** (4. vak kör L6): a main őr-alapmérése + az őrök az összefésült fán; a teljes
+    egység- / QA-hatókör a merge-kapué (így a push-kapu nem ismétli meg a teljes egységkört, és a C-38 natív kivétel sem érintett).
   **WARN**, ha a main elmozdult, de nincs metszet (pl. csak játékkód változott egy `scripts/qa`-s PR mellett). **PASS**, ha a CI a
   jelenlegi mainnel futott.
 - A hook csak a WEBSULI-ból indított Claude Code munkamenetekre hat (a `.claude/settings.json`-t a munkamenet induláskor olvassa —
@@ -238,7 +233,7 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
   megbízható forrás.
 - **Git-alias** (`git config alias.p push`): `git p` nem ismerhető fel olcsón — a hook nem biztonsági határ (lásd fent).
 - A hook csak a Claude Code munkamenetekre hat; Codex / Cursor / ember a skillek és az `AGENTS.md` szerint futtatja a kapukat.
-- **A gépi összefésült próba (merge-kapu C-61, `gate:carry`) nem teljes CI** (vak review L5): csak node-os teszteket futtat (őrök,
+- **A gépi összefésült próba (merge-kapu C-61) nem teljes CI** (vak review L5): csak node-os teszteket futtat (őrök,
   egység- és `scripts/qa`-tesztek a fenti hatókörrel). **Nem látja:** a böngészős (Playwright E2E) regressziót, a build- / típus- /
   lint-hibát, és a nem egységtesztelt szemantikus ütközést (pl. a main egy hívót módosít, amelyet a PR-tesztek nem érintenek, és
   a teljes egységkör sem fut, mert a két oldal közül csak az egyik nyúlt `source/`-hoz). Ezeket a PR saját CI-ja (a régebbi mainnel)

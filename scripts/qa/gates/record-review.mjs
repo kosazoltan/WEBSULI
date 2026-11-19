@@ -29,6 +29,15 @@ export function reportVerdict(text) {
 }
 
 /**
+ * A jelentés UTOLSÓ fej-hivatkozása (`Fej: <hash>`, „fej `<hash>`”, „új fej <hash>”) — a visszanézési szakasz a végén áll, ezért az
+ * utolsó számít (4. vak kör L1). @returns {string|null} a hash (7–40 jegy) vagy null
+ */
+export function reportHead(text) {
+  const all = [...String(text).matchAll(/\bfej\b\s*[:`]?\s*`?([0-9a-f]{7,40})\b/gi)];
+  return all.length ? all[all.length - 1][1].toLowerCase() : null;
+}
+
+/**
  * @returns {{ ok: true, record: object, line: string } | { ok: false, error: string }}
  */
 export function buildRecord({ head, verdict, report, resolveHead, readReport, now = () => new Date() }) {
@@ -45,9 +54,13 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, no
   const inReport = reportVerdict(text);
   if (!inReport) return { ok: false, error: 'a jelentésben nincs „Ítélet: IGEN | IGEN, FELTÉTELLEL | NEM” sor (a megbízás-sablon kötelező része)' };
   if (inReport !== v) return { ok: false, error: `a --verdict (${v}) eltér a jelentés utolsó ítéletétől (${inReport})` };
+  // 4. vak kör L1: a jelentés a feloldott fejről szóljon (az utolsó fej-hivatkozás) — régi jelentés új fejre nem rögzíthető
+  const rh = reportHead(text);
+  if (!rh) return { ok: false, error: 'a jelentésben nincs fej-hivatkozás (`Fej: <hash>` / „fej `<hash>`” / „új fej <hash>”) — nem igazolható, melyik fejet vizsgálta' };
+  if (!full.toLowerCase().startsWith(rh)) return { ok: false, error: `a jelentés utolsó fej-hivatkozása (${rh.slice(0, 12)}) egy másik fejre szól, nem a ${full.slice(0, 12)}-re — új (vagy visszanézési) jelentés kell` };
   return {
     ok: true,
-    record: { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() },
+    record: { kind: 'review', head: full, reportHead: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() },
     line: verdictLine(v, full),
   };
 }

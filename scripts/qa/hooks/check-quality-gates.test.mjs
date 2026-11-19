@@ -462,3 +462,12 @@ test('H11: amit a valódi héj kibocsátásként futtat (a próbatábla héjas e
   });
   assert.deepEqual(slips, []);
 });
+
+test('bizonyíték-átvitel kivétele (tulajdonosi döntés, külön PR): átvitt (carriedFrom / carry) pre-push / pre-pr rekord → DENY', () => {
+  const r = makeRepo();
+  writeEv(r.ev, `pre-push-${r.headWt}`, { ok: true, at: new Date().toISOString(), carriedFrom: 'a'.repeat(40), carry: `carry-${r.headWt}` });
+  assert.ok(denied(runHook('git push', r.wt)), 'átvitt pre-push nem engedélyez pusht');
+  writeEv(r.ev, `pre-pr-${r.headWt}`, { ok: true, at: new Date().toISOString(), carriedFrom: 'a'.repeat(40) });
+  assert.ok(denied(runHook('gh pr create --title t --body-file b.md', r.wt)), 'átvitt pre-pr nem engedélyez PR-t');
+  assert.ok(denied(runHook('git push', r.wt)), 'átvitt pre-pr pusht sem engedélyez');
+});

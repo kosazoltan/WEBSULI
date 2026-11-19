@@ -405,7 +405,7 @@ export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '', run
       }
       const ev = readEv(info.evDir, `pre-push-${sha}`);
       const pr = readEv(info.evDir, `pre-pr-${sha}`);
-      if (ev?.ok === true || pr?.ok === true) return null;
+      if (green(ev) || green(pr)) return null;
       const why = ev ? `az utolsó futás erre a commitra BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték erre a commitra';
       return `A push előtti kapu nem zöld a kimenő ${sha.slice(0, 12)} commitra (${label}; ${why}). Futtasd a munkafa gyökeréből: npm run gate:push — és ha zöld, pusholj újra.`;
     }
@@ -419,7 +419,7 @@ export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '', run
         sha = run('git', ['rev-parse', '--verify', 'HEAD^{commit}'], info.top);
       }
       const ev = readEv(info.evDir, `pre-pr-${sha}`);
-      if (ev?.ok === true) return null;
+      if (green(ev)) return null;
       const why = ev ? `az utolsó futás BUKOTT (${ev.at ?? '?'})` : 'nincs zöld bizonyíték';
       return `A PR előtti kapu nem zöld a ${sha.slice(0, 12)} fejre (${why}). Előbb a független ellenőr (websuli-fejlesztesi-ellenor skill), aztán: npm run gate:pr -- --body-file <PR-leírás.md>.`;
     }
@@ -442,6 +442,11 @@ export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '', run
     return null;
   }
   return 'Ismeretlen kibocsátó művelet — nem engedhető.';
+}
+
+/** Zöld bizonyíték: `ok === true`, és NEM átvitt (`carriedFrom` / `carry`) — a bizonyíték-átvitel külön PR, addig fail-closed. */
+function green(ev) {
+  return ev?.ok === true && !ev.carriedFrom && !ev.carry;
 }
 
 function defaultGhView(plan, top, run) {

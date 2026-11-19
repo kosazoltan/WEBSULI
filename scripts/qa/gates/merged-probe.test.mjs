@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { STATUS, makeContext, realExec } from './lib.mjs';
-import { guardShortfall, junitCases, mergedProbe, probeEnv, probeScope, selectProbeTests, tapCounts, tapCountsByFile } from './merged-probe.mjs';
+import { finalizeProbe, guardShortfall, junitCases, mergedProbe, probeEnv, probeScope, selectProbeTests, tapCounts, tapCountsByFile } from './merged-probe.mjs';
 
 test('selectProbeTests: a PR-ből a node-os egységtesztek és a scripts/qa tesztek; őr, integrációs, e2e és törölt fájl nem', () => {
   const files = [
@@ -76,7 +76,8 @@ test('mergedProbe (valódi): zöld alapeset PASS (darabszám, fa, hatókör); ü
   assert.equal(p.status, STATUS.PASS, p.note);
   assert.ok(p.counts.pass >= 1);
   assert.match(p.tree, /^[0-9a-f]{40}$/);
-  assert.deepEqual(p.scope, { qaFull: false, unitFull: false });
+  // 4. vak kör L6 (spec-változás): a hatókör a profilt is rögzíti
+  assert.deepEqual(p.scope, { qaFull: false, unitFull: false, profile: 'full' });
   const c = await probe(repo({ prFiles: { 'k.txt': '1\nPR\n3\n' }, mainFiles: { 'k.txt': '1\nMAIN\n3\n' } }));
   assert.deepEqual([c.status, /ütközik/.test(c.note)], [STATUS.FAIL, true]);
   const red = await probe(repo({
@@ -207,4 +208,31 @@ test('3. vak kör L10: átnevezés esetén a régi útvonal is a PR-fájlok köz
   r.ok(['commit', '-q', '-m', 'athelyezes']);
   const p = await mergedProbe(r.ctx, { head: r.ok(['rev-parse', 'HEAD']), base: 'main', label: 'proba' });
   assert.equal(p.scope.qaFull, true, p.note);
+});
+
+test('4. vak kör L5: a mért idő a takarítást is tartalmazza (monoton óra); túlfutás → FAIL', async () => {
+  const r = repo();
+  const t0 = performance.now();
+  const p = await probe(r);
+  const outer = performance.now() - t0;
+  assert.equal(p.status, STATUS.PASS, p.note);
+  assert.ok(outer - p.ms < 250, `az ms (${Math.round(p.ms)}) a takarítás utáni (külső: ${Math.round(outer)})`);
+  assert.deepEqual(finalizeProbe({ status: STATUS.PASS, note: 'zöld' }, { elapsed: 1200, timeoutMs: 1000 }).status, STATUS.FAIL);
+  assert.match(finalizeProbe({ status: STATUS.PASS, note: 'zöld' }, { elapsed: 1200, timeoutMs: 1000 }).note, /határid/);
+  assert.deepEqual(finalizeProbe({ status: STATUS.PASS, note: 'zöld' }, { elapsed: 900, timeoutMs: 1000 }), { status: STATUS.PASS, note: 'zöld', ms: 900 });
+  assert.equal(finalizeProbe({ status: STATUS.FAIL, note: 'x' }, { elapsed: 1200, timeoutMs: 1000 }).note, 'x', 'a meglévő FAIL oka marad');
+});
+
+test('4. vak kör L6: őr-only profil (push / PR-kapu) — egység- és QA-kört nem futtat, a main-alapmérés és az őrök futnak', async () => {
+  const base = { 'source/lib.ts': 'export const regi = 1;\n', 'source/tests/u.test.ts': "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { regi } from '../lib.ts';\ntest('u', () => assert.equal(regi, 1));\n" };
+  const mk = () => repo({ baseFiles: base, prFiles: { 'source/other.ts': 'export const o = 1;\n' }, mainFiles: { 'source/lib.ts': 'export const uj = 1;\n' } });
+  const g = await probe(mk(), { profile: 'guards' });
+  assert.equal(g.status, STATUS.PASS, g.note);
+  assert.equal(g.scope.profile, 'guards');
+  assert.match(g.note, /őr/);
+  const red = await probe(repo({
+    mainFiles: { 'source/tests/b-guard.test.ts': "import { test } from 'node:test';\nimport { existsSync } from 'node:fs';\ntest('tiltott', () => { if (existsSync(new URL('../../tiltott.txt', import.meta.url))) throw new Error('tiltott'); });\n" },
+    prFiles: { 'tiltott.txt': 'x\n' },
+  }), { profile: 'guards' });
+  assert.equal(red.status, STATUS.FAIL, 'az őr-only profilban is bukik a piros őr');
 });
