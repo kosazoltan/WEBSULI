@@ -1813,7 +1813,8 @@ export default function TsunamiEscapeEnglish() {
    * visszaáll); ha a jelenlegi szabad, az marad (nem remeg); különben a jelöltek — minden ütköző doboz alá, minden ütköző doboz
    * fölé — közül a jelenlegihez legközelebbi, amelynél a figura egyik akadállyal sem ütközik és a képen marad.
    */
-  const solveShift = (obs: Obstacle[], f: FigureRect, current: number): number => {
+  /** Szabad eltolás, vagy null, ha ennél az elrendezésnél nincs (a figura sehol nem fér el). */
+  const findShift = (obs: Obstacle[], f: FigureRect, current: number): number | null => {
     if (!hitsAt(obs, f, 0)) return 0;
     if (!hitsAt(obs, f, current)) return current;
     const stage = stageRef.current?.getBoundingClientRect();
@@ -1822,8 +1823,25 @@ export default function TsunamiEscapeEnglish() {
     const over = obs.filter(({ box, wide }) => wide || (f.r >= box.left && f.l <= box.right)).map((o) => o.box);
     const candidates = [...over.map((b) => b.bottom + 16 - f.t), ...over.map((b) => b.top - 16 - f.b)];
     const ok = candidates.filter((c) => f.t + c >= minTop && f.b + c <= maxBottom && !hitsAt(obs, f, c));
-    if (!ok.length) return current;
+    if (!ok.length) return null;
     return ok.reduce((best, c) => (Math.abs(c - current) < Math.abs(best - current) ? c : best));
+  };
+  const solveShift = (obs: Obstacle[], f: FigureRect, current: number): number => findShift(obs, f, current) ?? current;
+  /**
+   * Az elrendezés akkor jó, ha a figura a kérdés alatt BÁRHOVÁ mozoghat (x = 8…92 %): minden helyzetben van szabad eltolás.
+   * Fekvő nézetben a szélső válasz-oszlop és a tárcsa között nincs hely a figurának — ott a középre tett kompakt sáv a jó (a két
+   * oldal szabadon marad). Álló nézetben a kérdés teljes szélességű, a vízszintes helyzet nem számít.
+   */
+  const everyXSolvable = (obs: Obstacle[], f: FigureRect): boolean => {
+    const stage = stageRef.current?.getBoundingClientRect();
+    const st = driverRef.current?.core.state();
+    if (!stage || !st || portrait()) return findShift(obs, f, 0) !== null;
+    const fx = stage.left + (st.x / 100) * stage.width;
+    for (let x = 8; x <= 92; x += 7) {
+      const dx = stage.left + (x / 100) * stage.width - fx;
+      if (findShift(obs, { l: f.l + dx, r: f.r + dx, t: f.t, b: f.b }, 0) === null) return false;
+    }
+    return true;
   };
   /*
    * A döntés EGY lépésben, a kirajzolás előtt születik (nincs köztes, félig eldőlt állapot): a jelölteket — ugyanott, ugyanott
@@ -1850,21 +1868,15 @@ export default function TsunamiEscapeEnglish() {
       el.setAttribute("data-high", c.high ? "true" : "false");
       return withQuestion(questionBoxes());
     };
-    let chosen = candidates[candidates.length - 1]!;
-    let obs: Obstacle[] = [];
-    let free = false;
-    for (const c of candidates) {
-      obs = measure(c);
-      if (!hitsAt(obs, fig, 0)) {
-        chosen = c;
-        free = true;
-        break;
-      }
-    }
-    if (!free) {
-      chosen = { place: "top", high: true };
-      obs = measure(chosen);
-    }
+    // Elsőbbségi sorrend: (1) a figura most is szabad ÉS bárhová mozoghat; (2) bárhová mozoghat (eltolással); (3) a régi
+    // tartalék: a fenti kompakt sáv.
+    const measured = candidates.map((c) => ({ c, obs: measure(c) }));
+    const pick =
+      measured.find((m) => !hitsAt(m.obs, fig, 0) && everyXSolvable(m.obs, fig)) ??
+      measured.find((m) => everyXSolvable(m.obs, fig)) ??
+      null;
+    const chosen = pick?.c ?? { place: "top" as const, high: true };
+    const obs = measure(chosen);
     quizPlaceRef.current = chosen.place;
     quizHighRef.current = chosen.high;
     const before = liveRef.current.shiftPx ?? 0;
