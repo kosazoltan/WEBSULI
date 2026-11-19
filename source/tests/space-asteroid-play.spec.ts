@@ -676,8 +676,17 @@ for (const vp of [
       await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
       await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
       for (const [i, item] of LABEL_ITEMS.entries()) {
-        await force(page, { question: true, noEnemies: true, questionItem: { id: `l2-${i}`, prompt: item.prompt, options: [...item.options], correctIndex: item.correctIndex } });
-        await expect(crystals(page)).toHaveCount(4, { timeout: 6_000 });
+        // az ütemező két kérdés közt rövid szünetet tart: a kérést addig ismételjük, amíg a kristályok meg nem jelennek
+        await expect
+          .poll(
+            async () => {
+              await force(page, { question: true, questionItem: { id: `l2-${i}`, prompt: item.prompt, options: [...item.options], correctIndex: item.correctIndex } });
+              await page.waitForTimeout(700);
+              return crystals(page).count();
+            },
+            { timeout: 20_000, intervals: [0] },
+          )
+          .toBe(4);
         await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 6_000 });
         await page.waitForTimeout(250); // a gombok helye beáll
         const m = await page.evaluate(() => {
@@ -693,6 +702,7 @@ for (const vp of [
             }
           return {
             text: labels.map((l) => l.textContent?.trim() ?? ""),
+            dims: labels.map((l) => `${l.textContent?.trim()} sh${l.scrollHeight}/ch${l.clientHeight} sw${l.scrollWidth}/cw${l.clientWidth} ${getComputedStyle(l).fontSize}`),
             clippedY: labels.map((l) => l.scrollHeight > l.clientHeight + 1),
             clippedX: labels.map((l) => l.scrollWidth > l.clientWidth + 1),
             inView: rects.every((r) => r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight),
@@ -700,7 +710,7 @@ for (const vp of [
           };
         });
         const ctx = `${vp.width}×${vp.height} «${item.options.join(" | ")}»`;
-        expect(m.clippedY.some(Boolean), `${ctx}: a felirat függőlegesen csonkul`).toBe(false);
+        expect(m.clippedY.some(Boolean), `${ctx}: a felirat függőlegesen csonkul ${JSON.stringify(m.dims)}`).toBe(false);
         expect(m.clippedX.some(Boolean), `${ctx}: a felirat szó közepén törik / kilóg`).toBe(false);
         expect(m.overlaps, `${ctx}: a kristály-gombok fedik egymást`).toBe(0);
         expect(m.inView, `${ctx}: a gomb kilóg a vászonból`).toBe(true);

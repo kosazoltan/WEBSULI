@@ -3927,7 +3927,7 @@ export default function SpaceAsteroidQuiz() {
           background: linear-gradient(160deg, #fffbe0 0%, #ffe27a 38%, #ffb52e 100%);
         }
         .sa-crystal:focus-visible { outline: 3px solid #fff; outline-offset: 3px; border-radius: 12px; }
-        .sa-crystal-label { position: relative; z-index: 1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: normal; word-break: normal; hyphens: manual; font-size: 14px; line-height: 1.15; }
+        .sa-crystal-label { position: relative; z-index: 1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: normal; word-break: normal; hyphens: manual; font-size: 14px; line-height: 1.28; }
         /* méret-fok a leghosszabb szó szerint: a szó nem törik közepén, a felirat nem csonkul (review #486 L2) */
         .sa-crystal-label[data-tier="long"] { font-size: 12px; }
         .sa-crystal-label[data-tier="wide"] { font-size: 11px; }
