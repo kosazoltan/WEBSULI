@@ -14,4 +14,4 @@ Push / PR csak az orkesztrátor jelére; a nehéz kör (`gate:push`) a gép-sáv
 5. `npm run gate:stage`; a gép-zár megszerzése (`hook-auditok`) → `npm run gate:push` → a zár elengedése; az új fej jelentése; vak
    ellenőr.
 
-- [ ] 1 · [ ] 2 · [ ] 3 · [ ] 4 · [ ] 5
+- [x] 1 · [x] 2 · [x] 3 · [x] 4 (mutációs ellenpróba 8/8 elkapva) · [ ] 5 (kapuk — folyamatban)

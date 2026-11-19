@@ -44,10 +44,10 @@ Megbízás: az orkesztrátor, 2026-11-19 (a #506 összevonása után, `14c859ee`
 
 ## Elfogadás (EARS)
 
-- [ ] A1 WHEN a parancs `npm run gate:push` / `npm.cmd run gate:push` (önállóan vagy egy korábbi `git` paranccsal elválasztva) és az
+- [x] A1 WHEN a parancs `npm run gate:push` / `npm.cmd run gate:push` (önállóan vagy egy korábbi `git` paranccsal elválasztva) és az
   `.audit-ok` régi THEN a hook SHALL engedni.
-- [ ] A2 WHEN a parancs valódi `git push` (vagy `push --delete`) és az `.audit-ok` régi / hiányzik THEN a hook SHALL tiltani, az üzenet
+- [x] A2 WHEN a parancs valódi `git push` (vagy `push --delete`) és az `.audit-ok` régi / hiányzik THEN a hook SHALL tiltani, az üzenet
   SHALL a `gate:push` → `.audit-ok` frissítése → `git push` lépést írni, és SHALL nem hivatkozni a `qa:audit`-ra.
-- [ ] A3 WHEN a `git push` láncolt vagy álcázott (a fenti edge case-ek) THEN a hook SHALL tiltani.
-- [ ] A4 WHEN az `.audit-ok` friss THEN a valódi `git push` SHALL engedett (változatlan).
-- [ ] A5 a meglévő hook-tesztek (`hook-failure.test.mjs`, F3 / F4 / F10 / #100) SHALL zöldek maradni.
+- [x] A3 WHEN a `git push` láncolt vagy álcázott (a fenti edge case-ek) THEN a hook SHALL tiltani.
+- [x] A4 WHEN az `.audit-ok` friss THEN a valódi `git push` SHALL engedett (változatlan).
+- [x] A5 a meglévő hook-tesztek (`hook-failure.test.mjs`, F3 / F4 / F10 / #100) SHALL zöldek maradni.
