@@ -1196,19 +1196,19 @@ szerintem amikor megnyitja az adott tananyagot, pufferelje a hangokat a diáknak
    hangnál késleltetett hangtár mellett; böngészőhang ≤ 1 s; kikapcsolt előtöltéssel a mérés bukik (mutációs ellenpróba).
 8. 0.3 szerinti kapuk. Elvárt: E50–E55.
 
-**Mért eredmény (2026-11-19, fejetlen Chrome, `tests/lesson-fusion.spec.ts` „prepared audio” esetei; a koppintás `click` eseményétől a hang
+**Mért eredmény (2026-11-19, a végleges kódon, nyugodt gépen; fejetlen Chrome, `tests/lesson-fusion.spec.ts` „prepared audio” esetei; a koppintás `click` eseményétől a hang
 tényleges indulási eseményéig).** A tulajdonosnak szánt táblázat — mennyit vár a gyerek:
 
 | Eset | Koppintástól a hangig | A mérés módja |
 |---|---|---|
-| Előtöltött hang (tipikus, ha a tárban van hang) | 8 ms (határ: ≤ 300 ms) | böngészőteszt, `playing` esemény; a hangtár 800 ms-mal lassítva — a késleltetést a megnyitás fizeti ki |
-| Böngészőhang, a munkamenet első koppintása (működő motor) | 156 ms, ebből 150 ms a motor utánzott indulási ideje (határ: ≤ 1 s) | böngészőteszt, a beszéd `start` eseménye; a valódi motor indulási ideje eszközfüggő |
+| Előtöltött hang (tipikus, ha a tárban van hang) | 12 ms (határ: ≤ 300 ms) | böngészőteszt, `playing` esemény; a hangtár 800 ms-mal lassítva — a késleltetést a megnyitás fizeti ki |
+| Böngészőhang, a munkamenet első koppintása (működő motor) | 153 ms, ebből 150 ms a motor utánzott indulási ideje (határ: ≤ 1 s) | böngészőteszt, a beszéd `start` eseménye; a valódi motor indulási ideje eszközfüggő |
 | Böngészőhang igazolt hanggal (minden további koppintás, amíg a tár üres) | 155 ms, ebből 150 ms a motor utánzott indulási ideje (határ: ≤ 1 s) | böngészőteszt |
-| Koppintás az előtöltés közben / a plafon fölötti szóra | 167 ms (böngészőhang azonnal); a következő koppintás már pufferelt | böngészőteszt, 3 mp-es hangtár |
-| Néma motor, az első koppintás | 3 mp (helyi első hang; mérve 3 006 ms), 6 mp (hálózati első hang). TARTÓSAN néma motornál nem „munkamenetenként egyszer”: az ítélet lejárta után (minden 3. koppintásnál) a lánc újra megpróbálja a böngészőhangot, és újra 3 / 6 mp a várakozás | böngészőteszt és ál-órás egységteszt |
+| Koppintás az előtöltés közben / a plafon fölötti szóra | 157 ms (böngészőhang azonnal); a következő koppintás már pufferelt | böngészőteszt, 3 mp-es hangtár |
+| Néma motor, az első koppintás | 3 mp (helyi első hang; mérve 3 005 ms), 6 mp (hálózati első hang). TARTÓSAN néma motornál nem „munkamenetenként egyszer”: az ítélet lejárta után (minden 3. koppintásnál) a lánc újra megpróbálja a böngészőhangot, és újra 3 / 6 mp a várakozás | böngészőteszt és ál-órás egységteszt |
 | Igazolt hang, amely később elnémul | egyszer 3 mp (ha mögötte van helyi hang) – 6 mp (hálózati hang, mögötte nincs helyi) csend, utána a hang 2 koppintásra kimarad | ál-órás egységteszt |
 | A szülő újrarenderelése lejátszás közben (toast, belépés / beállítás megérkezése) | a hang nem szakad meg; nincs új jegyzék- és hangfájl-kérés | böngészőteszt (mérőoldal, új lecke-objektummal) és ál-órás egységteszt |
-| Néma motor, a következő 2 koppintás | 115 ms + a szerveres tartalék valós válaszideje (nem mért); a 3. koppintás újra megpróbálja a böngészőhangot | böngészőteszt helyi ál-végponttal |
+| Néma motor, a következő 2 koppintás | 46 ms + a szerveres tartalék valós válaszideje (nem mért); a 3. koppintás újra megpróbálja a böngészőhangot | böngészőteszt helyi ál-végponttal |
 | Megszakított kimondás (gyors két koppintás, Android) | ugyanaz a brit hang újrapróbával; ha az is megszakad, a szerveres tartalék | böngészőteszt és ál-órás egységteszt |
 | Adatkímélő mód / 2g | az első 12 szöveg: mint az előtöltött; a többi: első koppintásra böngészőhang, utána pufferelt | ál-órás egységteszt |
 | Hálózat nélkül, ismételt megnyitás | a helyben megőrzött jegyzék + a böngésző tartós gyorsítótára: mint az előtöltött | ál-órás egységteszt; böngészőben NEM mért (a teszt hálózati elfogása kikapcsolja a HTTP-gyorsítótárat) |
