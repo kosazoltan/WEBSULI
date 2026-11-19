@@ -93,7 +93,13 @@ after(() => {
   dom.window.close();
 });
 
-test("tétlen időben egyszer jön létre (két hívó komponens mellett is), hang nélkül; az első mozdulat folytatja; leválasztáskor takarít", async () => {
+/*
+ * Tulajdonosi döntés (2026-11-19, „A”): mozdulat nélkül a kontextus NEM jön létre (a böngésző minden betöltéskor
+ * konzol-figyelmeztetést adott: „The AudioContext was not allowed to start…”). Nem aktivált lapon a tétlen idő semmit nem hoz
+ * létre; az első aktiváló mozdulat a mozdulaton BELÜL hozza létre (így rögtön fut). Már aktivált lapon (a játéklistáról
+ * érkezve: `navigator.userActivation.hasBeenActive`) tétlen időben előre létrejön.
+ */
+test("nem aktivált lapon: tétlen időben NEM jön létre (nincs figyelmeztetés); az első mozdulaton belül létrejön és fut, hang nélkül; utána a figyelők leválnak", async () => {
   const React = await import("react");
   const { createRoot } = await import("react-dom/client");
   const { act } = await import("react");
@@ -106,24 +112,19 @@ test("tétlen időben egyszer jön létre (két hívó komponens mellett is), ha
   await act(async () => {
     root.render(React.createElement(React.Fragment, null, React.createElement(Game), React.createElement(Game)));
   });
-  assert.equal(stats.created, 0, "felcsatoláskor még nincs kontextus (a menü első rajza nem akad)");
-  assert.equal(idleQueue.length, 2, "két tétlen feladat (két hívó)");
+  assert.equal(stats.created, 0, "felcsatoláskor nincs kontextus");
   await act(async () => {
     for (const cb of idleQueue.splice(0)) cb();
   });
-  assert.equal(stats.created, 1, "tétlen időben pontosan egy kontextus jön létre");
-  assert.equal(stats.oscillators, 0, "az előmelegítés hangot nem ad");
-  assert.ok(stats.resumed >= 1, "felfüggesztett kontextusnál folytatási kísérlet (az elutasítás el van nyelve)");
-  assert.equal(lastCtx().state, "suspended", "mozdulat nélkül a kontextus felfüggesztve marad");
-  // Az első aktiváló mozdulat (érintés vége) folytatja a kontextust.
+  assert.equal(stats.created, 0, "nem aktivált lapon a tétlen idő sem hoz létre kontextust (nincs konzol-figyelmeztetés)");
+  // Az első aktiváló mozdulat (érintés vége): a mozdulaton belül jön létre, ezért rögtön fut.
   inGesture = true;
   window.dispatchEvent(new window.Event("touchend"));
   inGesture = false;
-  assert.equal(lastCtx().state, "running", "az első aktiváló mozdulat után a kontextus fut");
-  assert.equal(stats.created, 1, "a mozdulat nem hoz létre új kontextust");
-  assert.equal(stats.oscillators, 0, "a folytatás sem ad hangot");
+  assert.equal(stats.created, 1, "az első mozdulat pontosan egy kontextust hoz létre (két hívó mellett is)");
+  assert.equal(lastCtx().state, "running", "a mozdulaton belül létrehozott kontextus fut");
+  assert.equal(stats.oscillators, 0, "az előmelegítés hangot nem ad");
   // Futó kontextusnál a figyelők leváltak: egy későbbi felfüggesztés után a mozdulat már nem a horgon át folytat.
-  window.dispatchEvent(new window.Event("click")); // ez a hívás észleli a futó állapotot és leválaszt
   lastCtx().state = "suspended";
   const before = stats.resumed;
   inGesture = true;
@@ -131,6 +132,31 @@ test("tétlen időben egyszer jön létre (két hívó komponens mellett is), ha
   inGesture = false;
   assert.equal(stats.resumed, before, "futó kontextus után a mozdulat-figyelők leváltak");
   await act(async () => root.unmount());
+});
+
+test("már aktivált lapon (userActivation.hasBeenActive): tétlen időben előre létrejön", async () => {
+  const React = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const { act } = await import("react");
+  const freshUrl = new URL("../client/src/lib/audioEngine.ts?aktivalt-lap", import.meta.url).href;
+  const audio = (await import(freshUrl)) as typeof import("../client/src/lib/audioEngine");
+  Object.defineProperty(navigator, "userActivation", { value: { hasBeenActive: true }, configurable: true });
+  function Game() {
+    audio.useAudioPrewarm();
+    return null;
+  }
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => root.render(React.createElement(Game)));
+  const createdBefore = stats.created;
+  assert.equal(idleQueue.length, 1, "egy tétlen feladat");
+  await act(async () => {
+    for (const cb of idleQueue.splice(0)) cb();
+  });
+  assert.equal(stats.created, createdBefore + 1, "aktivált lapon tétlen időben létrejön (az első hang már nem akad)");
+  await act(async () => root.unmount());
+  delete (navigator as unknown as Record<string, unknown>).userActivation;
 });
 
 test("AudioContext nélküli böngészőben a horog nem dob hibát", async () => {

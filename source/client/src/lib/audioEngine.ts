@@ -310,10 +310,17 @@ export function useAudioSettings(): {
  * docs/specs/2026-11-19-hang-elomelegites.md). Mérve: az első `new AudioContext()` a főszálon 0,8–2 s — lusta
  * létrehozásnál ez a menet közepére (az első kérdés suhogására / az első hangra) vagy az indító koppintásra esett.
  *
- * Autoplay-szabály (Chrome, iOS Safari): mozdulat nélkül a kontextus felfüggesztve jön létre, hangot nem ad, a `resume`
- * elutasítása el van nyelve; az első aktiváló mozdulat (koppintás, kattintás, billentyű) folytatja, így az első hang biztosan megszólal.
- * Több hívás (több horog egy lapon) ugyanazt az egy kontextust használja.
+ * Autoplay-szabály (tulajdonosi döntés 2026-11-19, „A”): mozdulat nélkül NEM hozzuk létre (a böngésző minden betöltéskor
+ * konzol-figyelmeztetést adott). Tétlen időben csak már aktivált lapon (`navigator.userActivation.hasBeenActive` — a
+ * játéklistáról érkezve igaz) jön létre előre; különben az első aktiváló mozdulat (koppintás, kattintás, billentyű) a mozdulaton
+ * BELÜL hozza létre, így rögtön fut. Több hívás (több horog egy lapon) ugyanazt az egy kontextust használja.
  */
+/** A lap kapott-e már felhasználói mozdulatot (ha a böngésző nem tudja megmondani: nem). */
+function pageActivated(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (navigator as Navigator & { userActivation?: { hasBeenActive?: boolean } }).userActivation?.hasBeenActive === true;
+}
+
 export function useAudioPrewarm(): void {
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -332,8 +339,10 @@ export function useAudioPrewarm(): void {
     events.forEach((e) => window.addEventListener(e, onGesture, { capture: true, passive: true }));
     let idle: number | null = null;
     let timer: number | null = null;
-    if (w.requestIdleCallback) idle = w.requestIdleCallback(() => prewarmAudio(), { timeout: 2500 });
-    else timer = window.setTimeout(() => prewarmAudio(), 1200);
+    if (pageActivated()) {
+      if (w.requestIdleCallback) idle = w.requestIdleCallback(() => prewarmAudio(), { timeout: 2500 });
+      else timer = window.setTimeout(() => prewarmAudio(), 1200);
+    }
     return () => {
       detach();
       if (idle !== null) w.cancelIdleCallback?.(idle);
