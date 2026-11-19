@@ -8,17 +8,19 @@
  * J2 (átvilágítás 2026-10-16): a gyakorlóbank csomagjai, a lektorálás körei és a kulcsmentes ellenőrzések ugyanazzal a modellpárral, de
  * FRISS, célzott beszélgetésben futnak (önálló kérés; a lektor független a gyártás menetétől). J3: futásonkénti telemetria a jobon.
  */
-import { lessonSchema, type Lesson } from "../../../shared/lesson-schema";
+import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
 import { OPEN_ANSWER_RULES_HU } from "../../../shared/lesson-experience-score";
 import { checkVerbatim } from "../verbatim";
-import { checkCoverageGate, type MapConcept } from "../coverage";
+import { checkCoverageGate, visualCoverage, withVisualCoverage, type MapConcept } from "../coverage";
 import { buildAuthorPrompt, buildAnimatorPrompt, buildLektorPrompt, buildPedagoguePrompt, checkAnimatorResult, lessonIdsSubsetOfMap, outlineCoversMap, outlineSchema, parseLektorResponse, type OwnerContext } from "../step-io";
-import { autofixOutline } from "../tools/outline-autofix";
+import { autofixOutline, autofixOutlineVisuals } from "../tools/outline-autofix";
 import { applyVisualPatch } from "../visual-patch";
 import { stripUngroundedAnimateLabels } from "../grounding";
+import { dropUndrawableSourceVisuals, type DroppedSourceVisual } from "../../../shared/lesson-visual-params";
+import type { SourceCoverageResult } from "../gates/source-coverage-gate";
 import { ensureSectionVisuals } from "../section-visuals";
 import { scoringRulesOf } from "../../../shared/scoring-rules";
 import { bankStaticPrefix, buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceBuildDeps, type ExperienceCheckpoint } from "../experience-builder";
@@ -44,6 +46,11 @@ import { catalogPoolFor, catalogQueryOf, catalogS6Enabled, planningContextBlock,
 import { catalogVerbatimPaths, type CatalogPool } from "../../catalog/retrieval";
 import { isMemorySnapshot, memorySnapshot, snapshotPromptBlock, subjectMemoryEnabled, type MemorySnapshot } from "../../memory/subject-memory";
 import { subjectKeyOf } from "../../../shared/subject-key";
+import { gateMode, type GateMode, type GateName } from "../gates/config";
+import { sourceCoverageGate } from "../gates/source-coverage-gate";
+import { sourceVisualsEnabled } from "../source-visuals-flag";
+import { undrawableDropNotes } from "../undrawable-visuals";
+import { cleanModelText, sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual, type SourceVisualsResult } from "../../../shared/source-visuals";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
 /** Állomásonként ennyi javító forduló jár a determinisztikus visszajelzés után. */
@@ -90,7 +97,8 @@ export type SourceConcept = { id: string; term: string; definition: string; quot
   correction?: string };
 /** `fileTranscripts`: fájlnév → a fájl betűhű átirata (review #260: a fogalom eredete és idézete a saját fájlján mérve). */
 /** `corrections`: a forrás hamis egyenlőségeinek determinisztikus helyesbítései (spec 2026-10-03-forras-aritmetika-helyesbites). */
-export type SingleRunMap = { title: string; subject: string; classroom: number; transcript: string; fileTranscripts: Record<string, string>; concepts: SourceConcept[]; corrections: SourceCorrection[] };
+/** `visuals`: a forrás vizuális leltára, a program által megítélve (spec 2026-11-18-tananyag-gyartas-minoseg, S1a). */
+export type SingleRunMap = { title: string; subject: string; classroom: number; transcript: string; fileTranscripts: Record<string, string>; concepts: SourceConcept[]; corrections: SourceCorrection[]; visuals: SourceVisual[] };
 
 export type SingleRunDeps = {
   conversation: LessonConversation;
@@ -108,7 +116,43 @@ export type SingleRunDeps = {
    * szerzői munka (terv, tananyag, ábra, lektori javítás) a fő beszélgetésben marad.
    */
   fresh(system: string, opts?: { effort?: SingleRunEffort }): LessonConversation;
+  /** A gyártási kapuk üzemmódjának futásonkénti felülírása (teszt, mérőharness); alapból a `gates/config.ts` értékei érvényesek. */
+  gateModes?: Partial<Record<GateName, GateMode>>;
+  /** A forrás-fedettségi kapu függvénye — csak a teszt cseréli (a kapu hibaága így mérhető); alapból a `sourceCoverageGate`. */
+  coverageGate?: typeof sourceCoverageGate;
+  /**
+   * A forrás vizuális leltárának funkciókapcsolója a futásra (teszt, mérőharness). Hiányában a környezet dönt
+   * (`sourceVisualsEnabled()`, alapból KI) — KI állapotban a gyártás a kapcsoló előtti állapottal azonos.
+   */
+  sourceVisuals?: boolean;
 };
+
+/**
+ * S2a (független review B1): a kirajzolhatatlan (hibás paraméterű) `table` / `ruleBox` / `compareCards` blokkok kivétele a szerző
+ * kimenetéből — determinisztikus, javítókör nélkül; tételenként naplózva, a darabszám a telemetriában. Változatlan leckénél ugyanazt
+ * az objektumot adja vissza.
+ */
+export function withoutUndrawableVisuals(lesson: Lesson, log?: (line: string) => void, telemetry?: { gates: { undrawableVisualsDropped?: number } }, onDropped?: (dropped: DroppedSourceVisual[]) => void): Lesson {
+  const { lesson: kept, dropped } = dropUndrawableSourceVisuals(lesson);
+  if (dropped.length) onDropped?.(dropped);
+  for (const d of dropped) log?.(`[EGYFUTÁS] Kirajzolhatatlan ábrablokk kivéve: ${d.path} (${d.animKind}) — ${d.problems.join("; ").slice(0, 300)}`);
+  if (dropped.length && telemetry) telemetry.gates.undrawableVisualsDropped = (telemetry.gates.undrawableVisualsDropped ?? 0) + dropped.length;
+  return kept;
+}
+
+export { undrawableDropNotes };
+
+/**
+ * A forráspótló forduló foltja a leckébe illesztve (SK1, `enforce`): ábrafolt → címke-tisztítás (ugyanaz, mint a 4. állomás után —
+ * független review F8: az alá nem támasztott fogalom-címke lekerül, nem a teljes foltot buktatja) → séma → az ábrakészítő
+ * szerződése (csak `animate` blokk változhat). `lesson: null`, ha a válasz nem illeszthető folt.
+ */
+export function coveragePatchedLesson(base: Lesson, json: unknown, concepts: MapConcept[], sourceVisualKinds?: boolean): { lesson: Lesson | null; rejected: string[] } {
+  const patched = applyVisualPatch(base, json, concepts, { sourceVisualKinds });
+  if (!patched) return { lesson: null, rejected: [] };
+  const checked = modelLessonSchema(sourceVisualKinds ?? sourceVisualsEnabled()).safeParse(stripUngroundedAnimateLabels(patched.lesson, concepts).lesson);
+  return { lesson: checked.success && checkAnimatorResult(base, checked.data).ok ? checked.data : null, rejected: patched.rejected };
+}
 
 /**
  * Spec 2026-11-02-ellenorzes-effort-ab: az ellenőrzés-állomás (válaszkulcs-teszt, kvíz vak előszűrő) efforja a
@@ -119,7 +163,7 @@ export function checkEffort(env: NodeJS.ProcessEnv = process.env): SingleRunEffo
 }
 
 /** Az állomás-futtató függősége: a beszélgetés, a napló és (ha van) a telemetria gyűjtője. */
-export type StationDeps = Pick<SingleRunDeps, "conversation" | "log"> & { telemetry?: TelemetryRecorder;
+export type StationDeps = Pick<SingleRunDeps, "conversation" | "log" | "sourceVisuals"> & { telemetry?: TelemetryRecorder;
   /** Spec 2026-10-16-gyartas-haladas: a javító forduló a felületnek is jelzés (az állomás neve, a forduló sorszáma 1-től). */
   onFix?(name: string, round: number): void };
 
@@ -286,8 +330,37 @@ function ownerContextOf(instruction?: string, corrections: SourceCorrection[] = 
   return instruction || corrections.length ? { ...(instruction ? { instruction } : {}), ...(corrections.length ? { corrections } : {}) } : undefined;
 }
 
+/**
+ * A vizuális leltár oldal-környezete (review J1): oldalszöveg és oldalszám-határ CSAK a program által kinyert PDF-szövegből (ott minden
+ * oldalnak van jelölője); a modell átirata (kép, natív PDF) sem felső határt, sem `verified: "text"` igazolást nem ad. Oldalszám csak
+ * hézagmentes 1…N jelölősorból képződik — hiányos jelölősornál nincs felső határ (érvényes tétel nem eshet ki).
+ */
+export function sourcePageContext(files: ReadonlyArray<Pick<ExtractorFile, "name" | "kind">>, real: ReadonlyMap<string, string>): { pageTexts: Record<string, Record<number, string>>; pageCounts: Record<string, number> } {
+  const pageTexts = Object.fromEntries(files.flatMap((f) => (f.kind === "pdf" && real.has(f.name) ? [[f.name, splitPageTexts(real.get(f.name)!)] as const] : [])));
+  const pageCounts = Object.fromEntries(Object.entries(pageTexts).flatMap(([n, pages]) => {
+    const nums = Object.keys(pages).map(Number);
+    return nums.length && Math.max(...nums) === nums.length ? [[n, nums.length] as const] : [];
+  }));
+  return { pageTexts, pageCounts };
+}
+
+/**
+ * Review J3: a fizetett állomás után az érvényesítő váratlan hibája sem állíthatja meg a futást — a leltár üresre esik vissza, a nyers
+ * tételek „az érvényesítő hibája” okkal kihagyottnak számítanak. `sanitize`: a tesztben cserélhető (a hibaág így mérhető).
+ */
+export function judgeSourceVisuals(rawVisuals: unknown, ctx: Parameters<typeof sanitizeSourceVisuals>[1], log?: (message: string) => void, sanitize: typeof sanitizeSourceVisuals = sanitizeSourceVisuals): SourceVisualsResult {
+  try { return sanitize(rawVisuals, ctx); }
+  catch (error) {
+    log?.(`[EGYFUTÁS] Vizuális leltár: az érvényesítő hibázott, a leltár üres — ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 200)}`);
+    return { visuals: [], dropped: (Array.isArray(rawVisuals) ? rawVisuals : []).map(() => ({ reason: "az érvényesítő hibája" })), removedConceptRefs: [], truncatedCells: [] };
+  }
+}
+
 /** 1. állomás — a forrás beolvasása, megértése, tudásbank (fogalmak szó szerinti idézettel; az idézetet a program az átiraton méri). */
 export async function readSourceStation(deps: StationDeps, files: ExtractorFile[], instruction?: string): Promise<SingleRunMap> {
+  // Funkciókapcsoló (alapból KI): KI állapotban a kérés a leltárt nem kéri, a válasz `visuals` mezője — ha a modell kéretlenül adná —
+  // feldolgozatlan marad, a térképre üres leltár megy, és a leltár számlálói, naplósorai nem keletkeznek.
+  const visualsOn = deps.sourceVisuals ?? sourceVisualsEnabled();
   const request: TurnBlock[] = [
     ...files.map((file): TurnBlock => ({ type: "source", file })),
     text([
@@ -303,12 +376,13 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
         `TÖBB FORRÁSFÁJL (${files.map((f) => f.name).join(", ")}): adj meg fájlonkénti átiratot is: "fileTranscripts": [{"name": fájlnév, "text": a fájl betűhű átirata}]`,
         '(minden fájlhoz egyet), és minden fogalomnál "sourceFile": a fájl neve, amelyből az idézet származik — a quote ennek a fájlnak az átiratából, szó szerint.',
       ].join("\n") : "",
+      visualsOn ? SOURCE_VISUALS_CONTRACT : "",
     ].filter(Boolean).join("\n")),
   ];
   const names = files.map((f) => f.name);
   const real = new Map(files.flatMap((f) => { const t = realSourceText(f); return t ? [[f.name, t] as const] : []; }));
   return runStation(deps, "forrás és tudásbank", withRoleRunbook(request, "extract"), (json) => {
-    const raw = json as Partial<Omit<SingleRunMap, "fileTranscripts">> & { concepts?: Array<Partial<SourceConcept>>; fileTranscripts?: unknown };
+    const raw = json as Partial<Omit<SingleRunMap, "fileTranscripts" | "visuals">> & { concepts?: Array<Partial<SourceConcept>>; fileTranscripts?: unknown; visuals?: unknown };
     const problems: string[] = [];
     if (!raw || typeof raw !== "object") return { ok: false, problems: ["A válasz nem objektum."] };
     if (real.size < names.length && (typeof raw.transcript !== "string" || raw.transcript.trim().length < 20)) problems.push("Hiányzik a forrás átirata (transcript).");
@@ -352,7 +426,21 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
       return fix ? { ...c, ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), correction: correctionReasonCode(fix) } : c;
     });
     for (const fix of corrections) deps.log?.(`[EGYFUTÁS] Forrás-helyesbítés ${fix.localId}: ${correctionAuditText(fix)}`);
-    return { ok: true, value: { title: (raw.title ?? "").trim() || "Névtelen tananyag", subject: raw.subject!.trim(), classroom: raw.classroom as number, transcript: names.length === 1 ? perFile[names[0]] : names.map((n) => perFile[n]).join("\n\n"), fileTranscripts: perFile, concepts: corrected, corrections } };
+    const accepted = { title: (raw.title ?? "").trim() || "Névtelen tananyag", subject: raw.subject!.trim(), classroom: raw.classroom as number, transcript: names.length === 1 ? perFile[names[0]] : names.map((n) => perFile[n]).join("\n\n"), fileTranscripts: perFile, concepts: corrected, corrections };
+    if (!visualsOn) return { ok: true, value: { ...accepted, visuals: [] } };
+    // Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a vizuális leltár megítélése az ELFOGADOTT fogalmak után. A hibás tétel kimarad
+    // és megszámolódik — a `problems` listába nem kerül, ezért javító fordulót nem indít (az a teljes JSON-t az átirattal kérné újra).
+    // Az oldal-környezet és az érvényesítő hibaága: `sourcePageContext`, `judgeSourceVisuals` (review J1, J3).
+    const { visuals, dropped, removedConceptRefs, truncatedCells } = judgeSourceVisuals(raw.visuals, { fileNames: names, conceptIds: ids, ...sourcePageContext(files, real) }, deps.log);
+    const visualsMissing = Array.isArray(raw.visuals) ? 0 : 1;
+    const visualsConceptRefsRemoved = removedConceptRefs.reduce((sum, r) => sum + r.conceptIds.length, 0);
+    const visualsCellsTruncated = truncatedCells.reduce((sum, t) => sum + t.cells, 0);
+    if (deps.telemetry) Object.assign(deps.telemetry.gates, { visualsDropped: dropped.length, visualsMissing, visualsConceptRefsRemoved, visualsCellsTruncated });
+    for (const t of truncatedCells) deps.log?.(`[EGYFUTÁS] Vizuális leltár: ${t.id} — ${t.cells} túl hosszú cella / fejléc csonkolva (a táblázat megmaradt)`);
+    for (const r of removedConceptRefs) deps.log?.(`[EGYFUTÁS] Vizuális leltár: ${r.id} — törölt, nem létező fogalom-hivatkozás: ${r.conceptIds.join(", ")}`);
+    if (visualsMissing) deps.log?.("[EGYFUTÁS] Vizuális leltár: a válaszban nincs `visuals` tömb — a futás üres leltárral megy tovább.");
+    for (const d of dropped) deps.log?.(`[EGYFUTÁS] Vizuális leltár: kihagyott tétel${d.id ? ` (${d.id})` : ""} — ${d.reason}`);
+    return { ok: true, value: { ...accepted, visuals } };
   });
 }
 
@@ -475,7 +563,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const telemetry = new TelemetryRecorder(input.resume ? telemetryOf(input.resume.output) : null);
   const resumed = input.resume ? resumePointOf(input.resume.output) : null;
   if (input.resume && !input.mapId) throw new SingleRunError("folytatás", ["A folytatáshoz a job térképe szükséges."]);
-  const station: StationDeps = { conversation, log: deps.log, telemetry, onFix };
+  // A leltár funkciókapcsolója EGYSZER, a futás elején dől el (befecskendezett érték, különben a környezet; alapból KI).
+  const visualsOn = deps.sourceVisuals ?? sourceVisualsEnabled();
+  const station: StationDeps = { conversation, log: deps.log, telemetry, onFix, sourceVisuals: visualsOn };
 
   // 1. Forrás + tudásbank (review #262: meglévő térképnél a gondozott térkép, stabil fogalomazonosítókkal).
   await workflowPhase("source"); await workflowPhase("scope");
@@ -494,11 +584,18 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const map = await store.loadMap(mapId);
   if (!map || !map.concepts.length) throw new SingleRunError("tudásbank", ["A tudásbankban nincs tanítható fogalom."]);
   const sourceText = map.meta.sourceText?.trim() ?? "";
+  // S1a: a leltár a térképről jön (új forrásnál a most mentett, térképről indításnál a korábban mentett) — S1b: a tervező, a szerző,
+  // az ábrakészítő és a lektor promptja is megkapja (`promptMap.visuals` → `sourceVisualsBlock`).
+  // Funkciókapcsoló: KI állapotban a futás a térkép KORÁBBAN mentett leltárát sem használja — ez az EGYETLEN lista, amelyből a
+  // promptok, a terv tisztítása, a fedettségi kapu és a fedettség-kimenet dolgozik —, és a számláló nem jelenik meg a telemetriában.
+  const visuals: SourceVisual[] = visualsOn ? map.meta.visuals ?? [] : [];
+  const visualIds = new Set(visuals.map((v) => v.id));
+  if (visualsOn) telemetry.gates.visualsFound = visuals.length;
   // A forrás hamis egyenlőségének helyesbítése a tanított fogalmakon (új térképnél már a mentés előtt megtörtént — ott ugyanaz az eredmény).
   const corrections: SourceCorrection[] = arithmeticSourceCorrections(map.concepts.map((c) => ({ localId: c.localId, term: c.term, definition: c.definition, quote: c.quote })));
   const concepts: MapConcept[] = applySourceCorrections(map.concepts, corrections);
   const owner = ownerContextOf(input.instruction, corrections);
-  const promptMap = { title: map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom, concepts };
+  const promptMap = { title: map.meta.title, subject: map.meta.subject, classroom: map.meta.classroom, concepts, ...(visuals.length ? { visuals } : {}) };
   const jobId = input.resume ? input.resume.jobId
     : await store.createJob({ mapId, step: "pedagogue", status: "running", model: conversation.model, promptVersion: SINGLE_RUN_VERSION, inputHash: `${SINGLE_RUN_VERSION}:${mapId}` });
   await workflowResource(jobId); // review #260: a job a futás gazdájához kötött (piszkozatkezelés, lízing)
@@ -600,13 +697,43 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   phase("pedagogue", resumed?.outline ? "A mentett tananyagterv ellenőrzése…" : input.approvedOutline ? "A jóváhagyott tanulási terv ellenőrzése…" : "A tananyagterv készül…");
   const planned = resumed?.outline ?? input.approvedOutline;
   const outline = planned !== undefined ? approvedOutlineOf(planned, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${withKnowledge(buildPedagoguePrompt(promptMap, undefined, owner), await knowledgeBlock("pedagogue"))}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
-    const fixed = autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline;
+    // S1b: a forrás-vizuális hivatkozások tisztítása a fejezet-összevonás UTÁN (az összevont fejezet tételei megmaradnak).
+    const fixed = autofixOutlineVisuals(autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline, visualIds).outline;
     const parsed = outlineSchema.safeParse(fixed);
     if (!parsed.success) return { ok: false, problems: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
     const covers = outlineCoversMap(parsed.data.sections, concepts);
     return covers.ok ? { ok: true, value: parsed.data } : { ok: false, problems: [`A vázlat nem fedi le a kötelező fogalmakat: ${JSON.stringify(covers).slice(0, 600)}`] };
   });
   output = { ...output, outline, approvedOutline: outline };
+
+  // SK1 — a forrás-fedettségi kapu mérése (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. Független review F12: a
+  // kapu hibája (kivétel) egyik módban sem állítja meg a kifizetett futást — megszámolva, naplózva, `null` ítélettel (nincs következmény).
+  // Funkciókapcsoló: KI állapotban a kapu NEM fut (nincs leltár, amit mérne) — a telemetriába nem kerül „0 / 0, rendben” sor, a futás
+  // kimenete a kapcsoló előttivel azonos.
+  const coverageMode: GateMode = visualsOn ? gateMode("sourceCoverage", deps.gateModes) : "off";
+  const skippedVisuals = outline.skippedVisuals ?? [];
+  const judgeCoverage = (l: Lesson): SourceCoverageResult | null => {
+    try {
+      const verdict = (deps.coverageGate ?? sourceCoverageGate)(l, visuals, skippedVisuals);
+      telemetry.recordGate({ gate: verdict.gate, mode: coverageMode, ok: verdict.ok, problems: verdict.problems, metrics: verdict.metrics, missingIds: verdict.missingIds });
+      if (verdict.metrics.total) log(`[EGYFUTÁS] Forrás-fedettségi kapu (${coverageMode}): ${verdict.metrics.shown}/${verdict.metrics.total - verdict.metrics.skipped} tétel jelent meg, ${verdict.ok ? "rendben" : `HIÁNYOS — ${verdict.missingIds.join(", ").slice(0, 300)}`}`);
+      return verdict;
+    } catch (error) {
+      telemetry.gates.gateErrors = (telemetry.gates.gateErrors ?? 0) + 1;
+      log(`[EGYFUTÁS] Forrás-fedettségi kapu: a kapu hibázott, a futás megy tovább — ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 200)}`);
+      return null;
+    }
+  };
+  // Független review F7: a kapunál megállt job folytatása (mentett `gateStop`) `enforce` módban ELŐBB a mentett leckén méri a kaput —
+  // ha ismét bukik, a futás modellhívás (fizetős lektorkör) NÉLKÜL áll meg; pótló forduló sem jár újra.
+  const stoppedAtCoverage = (input.resume?.output as { gateStop?: { gate?: unknown } } | undefined)?.gateStop?.gate === "sourceCoverage";
+  if (stoppedAtCoverage && coverageMode === "enforce" && resumed?.lesson) {
+    const verdict = judgeCoverage(resumed.lesson);
+    if (verdict && !verdict.ok) {
+      output = { ...output, gateStop: { gate: "sourceCoverage", missingIds: verdict.missingIds } };
+      throw new SingleRunError("forrás-fedettség", verdict.problems);
+    }
+  }
   if (!resumed?.lesson) await save("author", output);
 
   // 3. Tananyag (tanítás).
@@ -616,15 +743,28 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const authorRequest = (notes: Parameters<typeof buildAuthorPrompt>[2]) =>
     withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner), authorKnowledge)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
   const validateLesson = (json: unknown): { ok: true; value: Lesson } | { ok: false; problems: string[] } => {
-    const parsed = lessonSchema.safeParse({ ...(json as object), mapId, sourceOnly: true });
-    if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
+    // Funkciókapcsoló (vak ellenőr B1): KI állapotban a modell kimenetét a bővítés ELŐTTI séma méri (`modelLessonSchema(false)`) — az új
+    // ábrafajta ugyanazzal a sémahibával, ugyanabban a sorrendben megy javító fordulóra, a kéretlen `sourceVisualId` mező pedig
+    // ugyanúgy levágódik, mint a kapcsoló előtt (a modell KI állapotban egyiket sem hallja).
+    const strict = modelLessonSchema(visualsOn).safeParse({ ...(json as object), mapId, sourceOnly: true });
+    if (!strict.success) return { ok: false, problems: strict.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
+    // S2a (független review B1): a hibás paraméterű táblázat / szabálydoboz / kártya blokk kiesik (a rajzoló semmit nem rajzolna belőle) —
+    // megszámolva és naplózva; a kapuk a megmaradt leckét mérik. Ha a kivétel UTÁN kapu bukik, a javító üzenet ELSŐ sora a kivétel
+    // oka (vak ellenőr B1) — különben a modell csak a félrevezető következményt látná („egyetlen blokk sem tanít”, „nincs animáció”).
+    let droppedNow: DroppedSourceVisual[] = [];
+    const parsed = { data: withoutUndrawableVisuals(strict.data, deps.log, telemetry, (dropped) => { droppedNow = dropped; }) };
+    const dropNotes = undrawableDropNotes(droppedNow);
     const unknown = lessonIdsSubsetOfMap(parsed.data, concepts);
-    if (unknown.length) return { ok: false, problems: [`A tudásbankban nem szereplő fogalomazonosítók: ${unknown.join(", ")}`] };
+    if (unknown.length) return { ok: false, problems: [...dropNotes, `A tudásbankban nem szereplő fogalomazonosítók: ${unknown.join(", ")}`] };
     // Review #260: a tanításon mérhető végkapuk már itt (javító forduló jár rájuk, nem a bank és a lektor után derülnek ki).
     const coverage = checkCoverageGate(parsed.data, concepts);
     const arc = checkLessonArc(parsed.data);
     const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons)];
-    return problems.length ? { ok: false, problems } : { ok: true, value: parsed.data };
+    if (problems.length && dropNotes.length) {
+      telemetry.gates.undrawableVisualsExplained = (telemetry.gates.undrawableVisualsExplained ?? 0) + dropNotes.length;
+      log(`[EGYFUTÁS] A javító üzenet megnevezi a kivett ábrablokkot (${dropNotes.length}) — a kivétel után kapu bukott.`);
+    }
+    return problems.length ? { ok: false, problems: [...dropNotes, ...problems] } : { ok: true, value: parsed.data };
   };
   /** J5: egyetlen rövidítő forduló — érvénytelen vagy nem rövidebb válasznál az eredeti lecke marad (nincs további javító kör). */
   async function shortenLesson(base: Lesson, baseWords: number, budget: ReturnType<typeof lessonLengthBudget>, validate: typeof validateLesson, count: (l: Lesson) => number): Promise<Lesson> {
@@ -678,7 +818,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   if (!pastAnimator) try {
     const request = withRoleRunbook([text(`4. ÁLLOMÁS — ÁBRÁK.\n${buildAnimatorPrompt(lesson, promptMap)}\nVálaszolj kizárólag az ábrafolt JSON-jával.`)], "animator");
     const reply = await timed(telemetry, "ábrák", () => conversation.send(request));
-    const patched = applyVisualPatch(lesson, parseModelJson(reply.text).json, concepts);
+    const patched = applyVisualPatch(lesson, parseModelJson(reply.text).json, concepts, { sourceVisualKinds: visualsOn });
     const checked = patched ? lessonSchema.safeParse(patched.lesson) : null;
     if (patched && checked?.success && checkAnimatorResult(lesson, checked.data).ok) lesson = checked.data;
     else log("[EGYFUTÁS] Az ábrafolt nem illeszthető — az eredeti tanítás megy tovább.");
@@ -806,7 +946,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     // Review #311 (S6, kapcsolós): a szó szerint átvett, szülő által ellenőrzött katalógus-kvízek útvonala a lektornak (igazolt forrás) —
     // különben a feltöltött forráshoz mérve hamis source_conflictot kaphatnának. Üres halmaz → a kérés változatlan.
     const catalogPaths = catalogVerbatimPaths(lesson, await ensureCatalogPool("lektor"));
-    const report = await runStation(reviewer, "lektorálás", withRoleRunbook([...sourceBlock, text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, previousBlockers, owner, undefined, undefined, catalogPaths.size ? catalogPaths : undefined)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)], "lektor"),
+    const report = await runStation(reviewer, "lektorálás", withRoleRunbook([...sourceBlock, text(`6. ÁLLOMÁS — LEKTORÁLÁS (${round + 1}. kör). A forráshoz mérve, szigorúan.\n${buildLektorPrompt(lesson, promptMap, previousBlockers, owner, undefined, undefined, catalogPaths.size ? catalogPaths : undefined, visualCoverage(lesson, visuals).missingIds)}\nVálaszolj kizárólag a lektori jelentés JSON-jával.`)], "lektor"),
       (json) => {
         const r = parseLektorResponse(json);
         if (!r.ok) return { ok: false, problems: [r.reason] };
@@ -866,30 +1006,92 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   const choice = resolveChoiceGate(lesson, openBankFindingFlags(lesson, openFindings));
   if ("error" in choice) throw new SingleRunError("végellenőrzés", [choice.error]);
   if (choice.removed.length) { lesson = choice.lesson; warnings.push(`A végkapu kivette: ${choice.removed.join(", ")}`); }
+  // S2a (review B1): utolsó védvonal — kirajzolhatatlan forrás-ábra blokk nem megy közzétételre (a végkapuk a megmaradt leckét mérik).
+  const drawable = withoutUndrawableVisuals(lesson, deps.log, telemetry);
+  if (drawable !== lesson) { lesson = drawable; warnings.push("A végkapu kivett hibás paraméterű (kirajzolhatatlan) ábrablokkot."); }
   const final = lessonSchema.safeParse(lesson);
   if (!final.success) throw new SingleRunError("végellenőrzés", final.error.issues.slice(0, 20).map((i) => `${i.path.join(".")}: ${i.message}`));
-  const coverage = checkCoverageGate(final.data, concepts);
-  const skill = verifyLessonSkillBank(final.data.experience, final.data.subject, final.data.sections);
-  const problems = [...experienceProblems(final.data), ...(skill.ok ? [] : skill.problems), ...(coverage.ok ? [] : coverage.reasons), ...(checkLessonArc(final.data).ok ? [] : checkLessonArc(final.data).reasons)];
+  /** A végkapu determinisztikus leletei egy (sémán már átment) leckére — a forráspótlás foltja után is ugyanez a mérce. */
+  const finalProblems = (l: Lesson) => {
+    const cov = checkCoverageGate(l, concepts);
+    const skill = verifyLessonSkillBank(l.experience, l.subject, l.sections);
+    const arc = checkLessonArc(l);
+    return { coverage: cov, problems: [...experienceProblems(l), ...(skill.ok ? [] : skill.problems), ...(cov.ok ? [] : cov.reasons), ...(arc.ok ? [] : arc.reasons)] };
+  };
+  let publishable: Lesson = final.data;
+  const first = finalProblems(publishable);
+  let coverage = first.coverage;
+  const problems = first.problems;
   if (problems.length) throw new SingleRunError("végellenőrzés", problems);
+
+  // SK1 — forrás-fedettségi kapu (a `judgeCoverage` a terv után definiált): `report`: mér és ment, NEM állít meg. `enforce`: bukásnál
+  // PONTOSAN EGY pótló forduló a fő beszélgetésben; ha utána is bukik, a futás megáll a meglévő megállási úton (SingleRunError → a job
+  // „error” állapota), `gateStop` a kimenetben, közzététel nincs. Harmadik próba nincs. A kapu hibája egyik módban sem állít meg.
+  const firstVerdict = coverageMode === "off" ? null : judgeCoverage(publishable);
+  if (firstVerdict) {
+    const judge = (l: Lesson) => judgeCoverage(l) ?? { ...firstVerdict, ok: true, problems: [], missingIds: [] };
+    let verdict = firstVerdict;
+    // A pótló forduló futásonként EGY: a kapunál már megállt job folytatása (mentett `gateStop`) nem kap újabbat — ha a kapu a
+    // folytatáskor is bukik, a futás azonnal megáll.
+    if (!verdict.ok && coverageMode === "enforce" && stoppedAtCoverage) {
+      output = { ...output, gateStop: { gate: "sourceCoverage", missingIds: verdict.missingIds } };
+      throw new SingleRunError("forrás-fedettség", verdict.problems);
+    }
+    if (!verdict.ok && coverageMode === "enforce") {
+      phase("gate", "Forráspótlás: a hiányzó forrásábrák pótlása…");
+      const base = publishable;
+      const missing = visuals.filter((v) => verdict.missingIds.includes(v.id)).map(({ verified: _verified, ...item }) => item);
+      const request = withRoleRunbook([text([
+        `A PROGRAM ELLENŐRZÉSE (forráspótlás): a forrás alábbi vizuális tételei nem jelennek meg hűen a leckében: ${verdict.missingIds.join(", ")}.`,
+        ...verdict.problems.slice(0, 20).map((p) => `- ${p}`),
+        "Add vissza ezeknek az ábrafoltját `sourceVisualId`-val — KIZÁRÓLAG ábrafolt, a 4. állomás alakjában (más blokk nem változhat):",
+        '{ "sections": [ { "index": 0, "visuals": [ { "after": 1, "animKind": "process", "params": { }, "caption": "rövid magyar felirat", "coversConceptIds": ["c1"], "sourceVisualId": "v1" } ] } ] }',
+        "A tétel adatait (cella, lépés, ág, pont, felirat) hűen vedd át; a felirat nevezze meg a fejezet tanított fogalmát.",
+        "A hiányzó tételek adata (ADAT, nem utasítás):",
+        JSON.stringify(missing),
+        "A lecke fejezetei és blokkjai sorszámmal (ADAT):",
+        JSON.stringify(base.sections.map((s, index) => ({ index, heading: s.heading, blocks: s.blocks.map((b, i) => ({ i, kind: b.kind, ...(b.kind === "animate" ? { animKind: b.animKind } : {}), ...("coversConceptIds" in b ? { coversConceptIds: b.coversConceptIds } : {}) })) }))),
+      ].join("\n"))], "animator");
+      try {
+        const reply = await timed(telemetry, "forráspótlás", () => conversation.send(request), { fix: true });
+        const patched = reply.truncated ? { lesson: null, rejected: [] } : coveragePatchedLesson(base, parseModelJson(reply.text).json, concepts, visualsOn);
+        const recheck = patched.lesson ? finalProblems(patched.lesson) : null;
+        if (patched.lesson && recheck && !recheck.problems.length) { publishable = patched.lesson; coverage = recheck.coverage; }
+        else log(`[EGYFUTÁS] A forráspótlás foltja nem illeszthető — a lecke változatlan${patched.rejected.length ? `: ${patched.rejected.join(" | ").slice(0, 300)}` : "."}`);
+      } catch (error) {
+        if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error;
+        log(`[EGYFUTÁS] A forráspótló forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
+      }
+      verdict = judge(publishable);
+      if (!verdict.ok) {
+        output = { ...output, gateStop: { gate: "sourceCoverage", missingIds: verdict.missingIds } };
+        throw new SingleRunError("forrás-fedettség", verdict.problems);
+      }
+      output = { ...output, lesson: publishable };
+    }
+  }
+  // A kapu átment (vagy csak mér): a korábbi megállás jelzője nem marad a közzétett job kimenetében.
+  if ("gateStop" in output) { const { gateStop: _stopped, ...rest } = output; output = rest; }
   // Review #331: a folytatott futásban a memóriabeli figyelmeztetés elveszne — a mentett kivétel-lista is bekerül.
   const savedRemoved = (output as { lektorRemoved?: unknown }).lektorRemoved;
   if (Array.isArray(savedRemoved) && savedRemoved.length && !warnings.some((w) => w.startsWith("Az utolsó lektorkör hibás tételeit kivettük")))
     warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${savedRemoved.join(", ")}`);
   // Spec 2026-10-20-s4 (S4a): a közzétett bank szigorított feladatai (beállítás, nem halmozás — a folytatott futás sem számol kétszer).
-  telemetry.gates.rubricTightened = final.data.experience?.tasks.filter((t) => t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder).length ?? 0;
+  telemetry.gates.rubricTightened = publishable.experience?.tasks.filter((t) => t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder).length ?? 0;
   // Review #353: az archívum a végleges feladatokra szűkül (végleges azonosítóval).
   if (Array.isArray(output.answerKeyArchive)) {
-    output = { ...output, answerKeyArchive: finalizeAnswerKeyArchive(output.answerKeyArchive as Array<{ sectionIndex: number; q: string } & Record<string, unknown>>, final.data.experience?.tasks ?? []) };
+    output = { ...output, answerKeyArchive: finalizeAnswerKeyArchive(output.answerKeyArchive as Array<{ sectionIndex: number; q: string } & Record<string, unknown>>, publishable.experience?.tasks ?? []) };
   }
-  const lessonId = await store.upsertLesson(null, mapId, final.data);
+  const lessonId = await store.upsertLesson(null, mapId, publishable);
   const published = await store.publishLesson({
-    lessonId, mapId, title: final.data.title, classroom: final.data.classroom, coverage: coverage.coverage,
-    quizItems: exportQuizItemsForPublish(final.data, lessonId, conceptIdResolver(concepts)),
+    lessonId, mapId, title: publishable.title, classroom: publishable.classroom,
+    // S1b: a fedettség-kimenet (`lessons.coverage`) a vizuális tételeket is számolja — leltár nélkül a kulcs elmarad.
+    coverage: withVisualCoverage(coverage.coverage, publishable, visuals),
+    quizItems: exportQuizItemsForPublish(publishable, lessonId, conceptIdResolver(concepts)),
     ...(typeof output.targetHtmlFileId === "string" ? { targetHtmlFileId: output.targetHtmlFileId, ...(typeof output.targetBaseline === "string" ? { targetBaseline: output.targetBaseline } : {}) } : {}),
   });
   await store.saveStep(jobId, { step: "done", status: "ok", lessonId, finishedAt: new Date(),
-    output: { ...output, lesson: final.data, htmlFileId: published.htmlFileId, exportedQuizItems: published.exportedQuizItems, quality: { removed: [], warnings },
+    output: { ...output, lesson: publishable, htmlFileId: published.htmlFileId, exportedQuizItems: published.exportedQuizItems, quality: { removed: [], warnings },
       telemetry: telemetry.snapshot(conversation.model), singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } });
   phase("done", "A tananyag elkészült és közzétéve.");
   log(`[EGYFUTÁS] Kész: lecke ${lessonId} → html_files ${published.htmlFileId}, modell: ${conversation.model}`);

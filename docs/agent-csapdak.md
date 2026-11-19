@@ -1064,7 +1064,30 @@ Forrás: #475 (K1b). Rokon: C-59.
 - Git Bashben az `npx.cmd` szóközös felhasználói útvonalon elhasalhat: Playwrightot PowerShellből futtasd.
 - e2e-ben a „szabad port keresése, lezárás, újranyitás” versenyhelyzet (`EADDRINUSE`): a szerver válasszon portot.
 
-## C-73 — Őrt / kaput érintő PR-ok: soros merge-ablak; a hook bekötését a valódi settings-szel mérd (2026-11-18)
+## C-73 — Mutációs teszt megosztott fixtúra-objektumon: a mutáció a mércét is elrontja (2026-11-18)
+
+Forrás: SK1 (forrás-fedettségi kapu), `tests/fixtures/source-coverage-hm.ts`.
+
+- **Tünet:** a „döntési fa egy levéllel kevesebb” mutációt a kapu nem fogta meg. A fixtúra fája modulszinten EGYSZER jött létre,
+  a lecke blokkja és a forrásleltár ugyanarra az objektumra mutatott — a blokk elrontása a forrást is elrontotta, a kettő így
+  egyezett.
+- **Szabály:** a fixtúra-gyár hívásonként friss példányt adjon (`structuredClone`), és a belőle képzett blokk se osszon
+  hivatkozást a mércével. Ha egy mutációt a kapu „nem fog meg”, előbb azt ellenőrizd, hogy a mutáció nem szivárgott-e át a mércébe.
+- Rokon apróság: a Bash eszköz heredocja aposztrófot / hármas idézőjelet tartalmazó tartalomnál elhasalhat — a tartalmat fájlba
+  írd (Write), és azt futtasd vagy fűzd hozzá.
+
+## C-74 — Unicode-escape a forrásban: az ügynök fájlíró eszköze literál karakterré alakíthatja (2026-11-18)
+
+Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló reguláris kifejezései).
+
+- **Tünet:** a `\uXXXX` alakban megírt karakterosztály (nem törő szóköz, tipográfiai idézőjel, kétirányú vezérlő) a fájlba
+  LITERÁL karakterként került: a kód működött, de a forrásban láthatatlan / összetéveszthető karakterek álltak, amelyeket sem a
+  review, sem a diff nem mutat meg.
+- **Szabály:** láthatatlan vagy tipográfiai karaktert a forrásban mindig escape-pel írj, és írás után ellenőrizd a fájl nyers
+  tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
+  állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
+
+## C-75 — Őrt / kaput érintő PR-ok: soros merge-ablak; a hook bekötését a valódi settings-szel mérd (2026-11-18)
 
 - **Tünet:** két őr-érintő PR nem lehet egyszerre zöld — a C-61 hatókör (a main elmozdulása a repó-szintű ellenőrzés fájlkörében)
   és a ~2 órás böngészős kör együtt minden mainre kerülő PR után új beolvasztást + új CI-t kényszerít (a #499-nél két extra kör).
