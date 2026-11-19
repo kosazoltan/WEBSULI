@@ -1,6 +1,7 @@
 # Spec: Tananyaggyártás minősége — értelmezett forrásbeolvasás, változatosság, mért javítás, brit felolvasás
 
 > Dátum: 2026-11-18 · Szerző: ügynök (tényfeltárás + terv) · Állapot: JÓVÁHAGYVA — tulajdonosi döntések 2026-11-18 (9. szakasz); a D6 egyeztetés alatt
+> Módosítás 2026-11-18: az SK3 a tulajdonos kérdőíves döntéséhez igazítva (D7 — éles gyártásban a költségkeret túllépése csak jelez, nem állít meg; gyártás-stop kapcsoló nem épül).
 > Végrehajtási utasítás: [`2026-11-18-tananyag-gyartas-minoseg-vegrehajtas.md`](2026-11-18-tananyag-gyartas-minoseg-vegrehajtas.md)
 > Ág: `claude/tananyag-gyartas-minoseg-8fa0b9` (terv); a szeletek saját ágon, saját PR-ban készülnek.
 > Jelölés: **TÉNY** = a kódból / mérésből ellenőrizve · **BECSLÉS** = számolt, nem mért · **UNVERIFIED** = nem ellenőrzött.
@@ -37,6 +38,10 @@ A munka tíz tartalmi szeletben (S1–S10) és egy kapu-szeletben (SK1–SK5), s
   számának csökkentése, a gépi rubrika-szigorítás átírása (a 04-es jelentés P2, P3, P11 tétele) — mért, de külön szelet; kanbanba.
 - DOCX / MHT forrás képi értelmezése (ezeknél a modell nem lát képet), a régi lépésenkénti csővezeték és a webes gyűjtő út.
 - A 04-es jelentés „diktálási mondat” része (a tulajdonos kérésére nem értelmezzük).
+- Vészleállító / egységes gyártás-stop kapcsoló (D7 döntés: „Nem kell”) és éles gyártásban a költség vagy a futásidő miatti
+  megállítás (D7: „Csak jelezzen”) — nem épül. A meglévő körszám-plafonok értéke és viselkedése nem változik.
+- Más őrök: a borító-újrapróba, az e-mail-visszapattanás webhookja, az éles adatbázis-írás hookja, az éjszakai invariáns-söprés és
+  a telepítés utáni füstpróba — ez a munka nem nyúl hozzájuk (az SK3 riasztó őre önálló, a futás telemetriájára épül).
 
 ## 3. Tényfeltárás — az öt jelentés lényege
 
@@ -210,7 +215,8 @@ Az okok a szerződésben vannak, nem a modellben (TÉNY, kódhelyek):
    spec-változás: a tulajdonosi döntés (fél pont) szövege 3 491 → 3 657 karakter (a jelentés mérése); a „tömör maradjon” szándék
    megmarad, és mellé rögzített lenyomat-őr kerül.
 10. **Fizetős próbafutás csak a D2 keretén belül** (30 USD, eldobható adatbázison; futásonként 7,5 USD programból tartott
-    plafon); túllépés előtt megállás és kérdés. Az éles adatbázist ügynök csak olvassa.
+    plafon); túllépés előtt megállás és kérdés. Ez a PRÓBAKERET kemény plafon marad (D7) — az éles gyártás költségkerete ettől
+    eltérően csak jelez. Az éles adatbázist ügynök csak olvassa.
 11. **A szeletek sorrendje:** S1a → S1b + SK1 → S2 → S3 → S4 → SK3 → S10 (első mérés) → S5 → S6 + SK2 → S7 → S8 → SK4 (+ SK5) →
     S9 → S10 (záró mérés).
 12. **Állandó tulajdonosi elv (2026-11-18), szó szerint:** „A programon belül minél kiterjedtebb módon használd a webhookokat,
@@ -218,12 +224,29 @@ Az okok a szerződésben vannak, nem a modellben (TÉNY, kódhelyek):
     mesterséges intelligencia-ügynök hallucinációja, túlgondolása, túlfutása károsan hasson a program céljaira, futására.”
     Következmény ebben a tervben: (a) a modell kimenetét séma, szabály és mérőszám ítéli meg — másik modell csak ott, ahol szkript
     nem tud dönteni; (b) minden kapu bukásának következménye determinisztikus és véges (legfeljebb egy célzott pótló forduló,
-    utána megállás és jelzés); (c) a kör-, költség- és időkeretet a program tartja; (d) minden kapuhoz mutációs ellenpróba és mért
+    utána megállás és jelzés); (c) a meglévő körszám-plafont és a próbakeretet a program tartja, éles gyártásban a költségkeret
+    túllépését a program jelzi (e-mail), de a futást nem állítja meg (D7); (d) minden kapuhoz mutációs ellenpróba és mért
     alapvonal tartozik (SK szelet); (e) minden szelethez tartozik szkript-ellenőr (6. szakasz vége). A kapuk a gyártás
     csővezetékébe kötött programpontok (belső hookok) és parancssori szkriptek; külső eseményre épülő webhook ebben a körben
     nincs — ahol később külső esemény vezérel folyamatot, ugyanez az elv érvényes.
 13. **Hangfájlok az adatbázisban (D4):** külön tábla, tartalom-lenyomat szerinti kulcs, cserélhető tároló réteg, méretőr; a
     migráció a repó rendje szerint (`migrations/` + Drizzle-séma, a telepítés `db:migrate` lépése futtatja); `db:push` tilos.
+14. **Önálló beolvaszthatóság — a forrás vizuális leltára funkciókapcsoló mögött áll**
+    (*Spec-pontosítás 2026-11-18 — vak ellenőr: önálló beolvaszthatóság*). A szeletek PR-jai egyenként olvadnak a főágra, és minden
+    beolvadás élesre telepít; a köztes állapotok órákig élhetnek. Ezért **minden PR önállóan beolvadva is változatlanul hagyja a
+    mai éles gyártást**. Eszköze egyetlen szerveroldali kapcsoló a lánc alján: `STUDIO_SOURCE_VISUALS` (`on` = BE; bármi más és a
+    hiány = **KI**, ez az alapérték), egy helyen olvasva (`server/studio/source-visuals-flag.ts`), a motorba függőségként is
+    befecskendezhető (`SingleRunDeps.sourceVisuals`).
+    - **KI:** az 1. állomás nem kéri és nem dolgozza fel a leltárt (a modell kéretlen `visuals` mezője sem jut a térképbe), a
+      `source_files` sorába nem kerül `visuals`, a leltár számlálói nem jelennek meg a telemetriában, a térképen korábban mentett
+      leltárt a futás nem használja, a különálló kinyerés tartalmi lenyomata változatlan. Következmény: a lejjebb lévő promptok
+      bájtra azonosak a kapcsoló előttivel, az új ábrafajták neve nem jut a modellhez, a fedettségi kapu nem mér.
+    - **BE:** az S1–S3 szeletek leírt viselkedése.
+    - **Ki kapcsolja be:** a tesztek és a mérőharness (`scripts/measure/single-run-measure.mts`, S10). Az **éles bekapcsolás
+      tulajdonosi döntés az első mérés (S10/1) után** — addig az éles környezetben a változó nincs beállítva.
+    - **Bizonyíték:** `tests/source-visuals-flag.test.ts` — egy rögzített, modell nélküli mintafutáson a gyártás MINDEN modellnek
+      küldött kérésének lenyomata KI állapotban egyezik a főág kódján lefuttatott ugyanazon mintafutáséval (az előállítás módja a
+      `tests/helpers/production-prompt-fingerprint.ts` fejlécében). Ez a teszt a lánc minden ágán zöld kell legyen.
 
 ## 6. Szeletek
 
@@ -243,6 +266,9 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
   a fedettségmérő a vizuális tételeket is számolja (`coverage.visuals: { total, shown, missingIds }`) — a hiány **bukás**: a kaput az SK1 adja
   (ugyanabban a körben; `report` módban érkezik, az S3b élesíti — lásd SK1).
 - **Visszamérés:** egységtesztek; az S10 első mérése (a leltár tételszáma a két mintán a 02-es jelentés leltárához mérve).
+- **Funkciókapcsoló** (*Spec-pontosítás 2026-11-18 — vak ellenőr: önálló beolvaszthatóság*): az S1 teljes viselkedése a
+  `STUDIO_SOURCE_VISUALS=on` kapcsoló mögött áll, alapból KI (5. szakasz 14. pont) — KI állapotban az 1. állomás kérése,
+  feldolgozása és mentése a kapcsoló előttivel azonos.
 
 ### S2 — Új megjelenítők a leckében
 
@@ -280,8 +306,13 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
 
 ### S10 — Mérés (első mérés az SK3 után, záró mérés a végén) — a D2 kerethez méretezve
 
-- **Keret (D2):** 30 USD, eldobható adatbázison; futásonkénti kemény plafon 7,5 USD az SK3 futáskeretével (4 × 7,5 = 30) —
-  a plafont a program tartja, nem az ügynök. Túllépés előtt megállás és kérdés a tulajdonosnak.
+- **Keret (D2):** 30 USD, eldobható adatbázison; futásonkénti kemény plafon 7,5 USD az SK3 próbakeret-paraméterével
+  (4 × 7,5 = 30) — a plafont a program tartja, nem az ügynök. Túllépés előtt megállás és kérdés a tulajdonosnak. (A kemény plafon
+  csak a próbafutásra érvényes; éles gyártásban a költségkeret túllépése jelzés — D7.)
+- **Funkciókapcsoló** (*Spec-pontosítás 2026-11-18 — vak ellenőr: önálló beolvaszthatóság*): a mérőharness a forrás vizuális
+  leltárát **bekapcsolva** futtatja (`sourceVisuals: true`; a kimenet `flags.sourceVisuals` mezője rögzíti), mert az éles
+  alapérték KI (5. szakasz 14. pont). Az **éles bekapcsolásról a tulajdonos dönt az első mérés eredménye alapján** — a mérés
+  jelentése ezt a döntést opciókkal és javaslattal külön kéri.
 - **Fizetős futások:** a két minta-PDF egy-egy „utána” futása (HM, PT), **fájlból indítva** (a `MEASURE_SAME_MAP` mód a kész
   térképről indul, az 1. állomást nem méri — a fájlból indítás módja UNVERIFIED, a szelet első lépése ellenőrzi) + legfeljebb 2
   tartalék futás (megszakadt futás megismétlésére vagy a záró mérésre, ha a keret engedi).
@@ -407,27 +438,53 @@ ez a munka nem nyúl). Minden kapu kimenete gépi: `{ gate, ok, problems[], metr
 - **SK1 — forrás-fedettségi kapu (az S1b-vel együtt):** a strukturált forrásleírás tételeire. Ami a forrásban megvan és a leckében
   nincs, az **bukás**, nem 100%.
   - *Megjelent* egy tétel, ha van rá hivatkozó blokk (`sourceVisualId`), a blokk fajtája a tétel fajtájához illik (táblázat →
-    `table`; folyamat → `process`; döntési fa → `decisionTree`; szabálydoboz → `ruleBox`; képes kártya → `pictureCards`), ÉS a
-    tartalma hű: a forrás celláinak / lépéseinek / pontjainak / kártyáinak legalább 80%-a szerepel a megjelenített szövegben, a
+    `table` vagy `compareCards`; folyamat → `process`; döntési fa → `decisionTree`; szabálydoboz → `ruleBox`; képes kártya →
+    `pictureCards`), ÉS a tartalma hű: a forrás celláinak / lépéseinek / pontjainak / kártyáinak legalább 80%-a megjelenik, a
     döntési fa leveleinek száma nem kevesebb a forrásénál.
+  - *Spec-pontosítás 2026-11-18 (független review F1–F3, F5–F6) — a hűség SZERKEZET szerint mér*, a megjelenítők megosztott
+    paraméter-szerződéséből (`shared/source-visual-render.ts`), nem a blokk bármely szövegén: a táblázat cellái a megjelenítő
+    celláiban (oszlop szerint igazítva), a folyamat lépései a lépésekben és SORRENDBEN, a döntési fa csomópontjai és ágfeliratai
+    útvonal szerint, a szabálydoboz címe a címben és pontjai a pontokban, a képes kártya feliratával ÉS képével, a képes feladat a
+    képeivel együtt; rész nélküli ábránál az üres blokk nem megjelenés. A felirat, a rejtett paraméter vagy a folyó szöveg nem pótol.
+    Egész cella / egész lépés egyezik (szabad szövegű megjelenítőnél 3+ karakteres szöveg szóhatáron). Az összevetés normalizált
+    (idézőjel, gondolatjel, hárompont, mondatvégi írásjel, szóköz, kis- / nagybetű, NFC); az ékezet nem hajtogatható. Több hivatkozó
+    blokk tartalma összeadódik, egy forrásrész egyszer számít. A leltárban csonkolt (túl hosszú) cella a megjelenített cella
+    elejével egyezik.
   - *Küszöb (kezdőérték, tesztekkel behangolva):* táblázat, folyamat, döntési fa, szabálydoboz: a nem kihagyott tételek **100%-a**;
     képes kártya, feladat, egyéb ábra: **legalább 80%-a**. A színkód nem önálló tétel (a tónusokban él tovább).
   - *Megengedett, indokolt kihagyás:* csak a tervező kifejezett jelölésével (`skippedVisuals: [{ id, reason }]`), zárt oklistából:
     `admin_meta` (iskolai adminisztráció, forrásjegyzék), `answer_key` (megoldókulcs), `duplicate` (a megnevezett, megjelenő tétel
     ismétlése), `decorative` (csak díszítő kép, fogalom-hivatkozás nélkül). A szabályt a program ellenőrzi: tanított fogalomra
     hivatkozó tétel csak `duplicate` okkal hagyható ki; a kihagyások a tételek legfeljebb 30%-a; érvénytelen kihagyás = hiány.
+  - *Spec-pontosítás 2026-11-18 (független review F4):* a kihagyási keret `max(1, ⌊30%⌋)` — kis leltárnál (3 vagy kevesebb tétel)
+    is legalább egy kihagyás megengedett. Az ok FAJTÁNKÉNT megengedett, zárt megfeleltetéssel: táblázat / folyamat / döntési fa /
+    szabálydoboz nem lehet `decorative`; `answer_key` csak feladatnál; `admin_meta` és `duplicate` bármelyiknél, de a `duplicate`
+    csak akkor érvényes, ha megnevezi a másik tételt, és az megjelent. Érvénytelen ok = hiány.
   - *A bukás következménye determinisztikus:* **egyetlen** célzott pótló forduló a hiányzó tételekre; ha a kapu utána is bukik, a
     futás megáll, a lecke nem jelenik meg, a hiányzó azonosítók a job kimenetébe és a tulajdonosnak szóló jelzésbe kerülnek.
     Újabb kör nincs.
   - *Élesítés:* a kapu három üzemmódú állandó (`off` / `report` / `enforce`). Az SK1 `report` módban érkezik (mér és ment, de nem
     állít meg), mert a megjelenítők (S2) és az ábrakészítő bekötése (S3) nélkül minden forrásábrás gyártás megállna; az S3b utolsó
     lépése kapcsolja `enforce`-ra, teszttel. Leltár nélküli forrásnál a kapu átmegy (0 / 0).
-- **SK3 — költség- és körszám-plafon (az S4 után):** egy helyen lévő táblázat (`shared/run-budget.ts`): állomásonkénti javítókör-
-  korlát (a mai állandók: 3 javító forduló, 2 + 1 lektorkör, 3 + 1 bankkísérlet), futásonkénti összes javító forduló (kezdőérték
-  12), futásonkénti számolt költség (kezdőérték: figyelmeztetés 9 USD, megállás 12 USD; a próbafutásokon 7,5 USD) és futásidő
-  (45 perc). A program minden modellhívás ELŐTT ellenőriz; túlfutásnál megáll és jelez, újabb kört nem indít; az állapot mentve,
-  folytatni csak kifejezett, emelt kerettel lehet. A kezdőértékeket a szelet a meglévő futások telemetriájából hangolja (csak
-  olvasó szkript; mért átlag 6,64 USD, mért legnagyobb 11,34 USD).
+- **SK3 — körszám-plafon, költségjelzés, próbakeret (az S4 után; tulajdonosi döntés: D7, 2026-11-18):** egy helyen lévő táblázat
+  (`shared/run-budget.ts`).
+  - *Körszám:* a meglévő plafonok maradnak, ahogy vannak (a mai állandók: 3 javító forduló állomásonként, 2 + 1 lektorkör, 3 + 1
+    bankkísérlet). A szelet csak egy helyre gyűjti őket; az értékük és a megállás mai módja nem változik. Új, futásonkénti
+    összesített javítókör-plafon és futásidő-plafon NEM készül.
+  - *Éles gyártás — „Csak jelezzen”:* a token- / költségkeret túllépésekor a futás megy tovább, a program NEM állít meg. A
+    túllépésről e-mail megy a tulajdonosnak: futásonként egyszer, amikor a futás számolt költsége átlépi a futásonkénti küszöböt,
+    és naponta egyszer (Europe/Budapest naptári nap), amikor az aznapi futások összege átlépi a napi küszöböt. A levél a meglévő,
+    szerveroldali adminlevél-úton megy (az `ADMIN_EMAILS` címzettjeinek, a `sendResultEmail` mögötti út mintájára —
+    `resolveAdminRecipients`, `server/lib/material-result.ts`); `mailto:` tilos. A levélküldés hibája a gyártást nem akasztja meg
+    (naplózva; a jelzés a futás telemetriájában is megmarad).
+  - *Küszöbök:* futásonkénti és napi küszöb, a meglévő futások telemetriájából hangolva (csak olvasó szkript; mért átlag
+    6,64 USD, mért legnagyobb 11,34 USD). Kezdőérték futásonként 9 USD; a napi küszöb kezdőértékét az alapvonal-mérés adja.
+  - *A riasztó őr* a `server/studio/single-run/telemetry.ts` rögzítésére épül: a `TelemetryRecorder` token-számaiból számolt
+    költség; a döntés tiszta függvény, modell nélkül.
+  - *Vészleállító / egységes gyártás-stop kapcsoló:* „Nem kell” — nem épül.
+  - *Próbakeret (D2):* a 30 USD-os keret (a mérőharness főkönyve; futásonként 7,5 USD) kemény plafon marad: a próbafutás a keret
+    elérésekor a következő modellhívás ELŐTT megáll. Ez kizárólag a mérőharness kifejezett indítási paraméterével kapcsolódik be;
+    éles gyártásra nem hat.
 - **SK2 — változatosság mérőszáma és küszöbe (az S6-tal):** tiszta mérőfüggvények (`shared/variety-metrics.ts`) + parancssori
   mérő a repóban, a kiadott állományból mért alapvonallal (csak összesített számok: 61,6% / 40,4% / 46,8% / 85,8% / 6 nem használt
   fajta). Leckeszintű kapu: a fejezetek blokksora egyezik a kiosztott mintával; a modell nem írt bátorító nyitást (ha mégis, a
@@ -455,7 +512,7 @@ tud dönteni — a tartalmi forráshűség megítélése marad a lektornál):
 | S2a / S2b | paraméter-séma, sorhossz, mélység, SVG-tisztító; böngészős mérő (átfedés, levágás, görgetés) |
 | S3a / S3b | címke-megalapozás a forrástételhez, az eldobás oka, szókeret-számítás, a bankkulcs változatlansága |
 | S4a / S4b | számolási állítások (hamis riasztás nélkül), idézet-áthelyezés, zárt világ-lista, okok mentése |
-| SK3 | körszám- és költségplafon |
+| SK3 | a meglévő körszám-plafon változatlansága, a költségküszöb-jelzés (futásonkénti és napi), a próbakeret kemény plafonja |
 | S5a / S5b | a nyitás a szótárból jön, a régi előtag levágása, módszerfajták teljessége, verzióállandó |
 | S6a–c + SK2 | a kiosztott minta betartása, ívkapu, `try`- és fajtaarány, a szimuláció küszöbe |
 | S7a / S7b | lenyomat-őr, hosszkorlát, a döntőbíró plafonja (kódból, nem promptból) |
@@ -494,8 +551,10 @@ tud dönteni — a tartalmi forráshűség megítélése marad a lektornál):
 - **Adatvédelem:** a hanggyártóhoz csak a tananyag szövege megy; a mérőszkript kimenete (leckecímek, szövegminták) nem kerül a
   repóba; a `telemetry.fixReasons` a lecke tartalmából idéz, tanulói adatot nem.
 - **Kapuk:** leltár nélküli forrás → a fedettségi kapu átmegy (0 / 0); a pótló forduló után is hiányzó tétel → megállás, nem
-  harmadik kör; a futáskeret a modellhívás ELŐTT állít meg (félbehagyott hívás nincs), az állapot folytatható; kapu `report`
-  módban soha nem állít meg, csak mér.
+  harmadik kör; a kapunál megállt job folytatása modellhívás nélkül áll meg újra, ha a kapu a mentett leckén ismét bukik; a
+  PRÓBAKERET (csak a mérőharness próbafutása — D7) a modellhívás ELŐTT állít meg (félbehagyott hívás nincs), az állapot
+  folytatható — éles gyártásban költség miatt nincs megállás; kapu `report` módban soha nem állít meg, csak mér, és a kapu hibája
+  (kivétel) sem állítja meg a gyártást.
 - **Hangtár:** a plafon elérésekor az írás megtagadva, a gyártás megáll; azonos kulcs ismételt írása nem hiba (`exists`); hangverzió
   cseréje új kulcsokat ad, a régi sorok maradnak (törlésük külön, tulajdonosi döntés).
   **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** hangcsere idejére a tár az abszolút 80 MB-os plafonig nőhet (verziónként 40 MB); a régi
@@ -531,8 +590,9 @@ tud dönteni — a tartalmi forráshűség megítélése marad a lektornál):
   terv-javítókör ≈ 0,01 USD. Együtt **≈ −0,25–0,3 USD és −1–3 perc futásonként**.
 - **Nettó:** futásonként nagyjából +0,1–0,3 USD (+2–5%) mellett lényegesen teljesebb vizuális tartalom; a tényleges számot az S10 méri.
 - **S10 próbagyártás:** D2 — 30 USD keret: 2 „utána” futás + legfeljebb 2 tartalék, futásonként 7,5 USD plafonnal.
-- **SK1 pótló forduló:** ha kell, futásonként egy (≈ 0,3 USD, BECSLÉS); **SK3:** a futás számolt költsége legfeljebb a megállási
-  érték (kezdőérték 12 USD) — a mért legrosszabb futás (11,34 USD) alatta marad.
+- **SK1 pótló forduló:** ha kell, futásonként egy (≈ 0,3 USD, BECSLÉS); **SK3:** éles futásnál költség miatt nincs megállás
+  (D7) — a küszöb (kezdőérték 9 USD futásonként) átlépéséről e-mail megy, a mért legrosszabb futás (11,34 USD) is végigfut; a
+  próbafutás kemény plafonja 7,5 USD.
 - **S8:** leckék: ≈ 3,44 USD egyszeri ElevenLabs-költség (háromszoros ráhagyással ≈ 10 USD), új angol leckénként ≈ 0,09 USD;
   adatbázis: +~25 MB. Ez a D2 próbakeretén KÍVÜLI, tulajdonos által indított gyártás.
 - **Fejlesztési idő:** 25 alszelet-PR (a D6 szerinti ág PR-ja nélkül); PR-onként egy ~1 órás kötelező E2E-kör a CI-ban (a push-fegyelem szerint szeletenként egy push).
@@ -594,6 +654,15 @@ egysoros változtatással visszavehető.
 - B: az ág tartalma az S7-be olvad (egy nagy PR, a méretkorlát felett).
 - C: az ág elvetése, a pontozó újraírása az S7-ben.
 - **Döntés: egyeztetés alatt** (az orkesztrátor egyeztet a szülő munkamenettel).
+
+**D7 — Költségkeret és gyártás-stop éles gyártásban (tulajdonosi kérdőív, 2026-11-18)**
+- Éles gyártásban a token- / költségkeret túllépése: **„Csak jelezzen”** — a futás megy tovább, e-mail megy a túllépésről
+  (futásonkénti és napi küszöb, a meglévő telemetriából hangolva; a meglévő adminlevél-úton, `mailto:` nélkül); NEM állít meg.
+- Vészleállító / egységes gyártás-stop kapcsoló: **„Nem kell”** — nem épül.
+- A meglévő körszám-plafon marad, ahogy van. A 30 USD-os próbakeret (a mérőharness főkönyve) kemény plafon marad.
+- Következmény: az SK3 a korábbi „megáll a keretnél” tervről jelző őrre változik (6. szakasz, SK3; E41, E42); a más őrök
+  (borító-újrapróba, e-mail-visszapattanás webhook, éles adatbázis-írás hook, éjszakai invariáns-söprés, telepítés utáni füstpróba)
+  nem tartoznak ehhez a munkához (2. szakasz).
 
 **Orkesztrátori alapértelmezések:** a vizuális tétel önálló, oldalszámmal igazolt tanítható tartalom (5. szakasz 3. pont); a
 változatosság 1–7. javaslata most készül (S5, S6), a 8. (új képgyártás) nem cél.
@@ -682,9 +751,12 @@ Determinisztikus kapuk (SK1–SK5, tulajdonosi elv):
   bukásnál megállni, a leckét nem közzétenni, a hiányzó azonosítókat jelezni.
 - [ ] E40 WHEN új lecke készül THEN the system SHALL a változatosság leckeszintű kapuját (kiosztott fejezetminta, modell írta
   bátorító nyitás hiánya) futtatni; a repóban lévő mérő a kiadott állományból mért alapvonalhoz küszöbbel hasonlít.
-- [ ] E41 WHEN egy állomás vagy a futás eléri a javítókör-korlátot THEN the system SHALL megállni és jelezni, újabb kör nélkül.
-- [ ] E42 WHEN a futás számolt költsége vagy ideje eléri a keretet THEN the system SHALL a következő modellhívás ELŐTT megállni,
-  az állapotot menteni és jelezni.
+- [ ] E41 WHEN egy állomás eléri a meglévő javítókör-korlátját THEN the system SHALL a mai módon zárni (változatlan érték és
+  viselkedés, az állandók egy helyről olvasva); új, futásonkénti összesített kör- vagy időplafont a rendszer nem vezet be (D7).
+- [ ] E42 WHEN egy ÉLES futás számolt költsége átlépi a futásonkénti küszöböt, vagy az aznapi futások összege a napi küszöböt THEN
+  the system SHALL a futást FOLYTATNI, és a túllépésről küszöbönként egyszer e-mailt küldeni az adminlevél-úton (`mailto:` nélkül;
+  a levél hibája a gyártást nem akasztja meg). WHEN egy PRÓBAFUTÁS (mérőharness) eléri a próbakeretét THEN the system SHALL a
+  következő modellhívás ELŐTT megállni és az állapotot menteni. The system SHALL NOT vészleállító / gyártás-stop kapcsolót adni.
 - [ ] E43 WHEN egy lecke közzététel előtt áll THEN the system SHALL a kiadás előtti kaput futtatni (séma, tiltott minták, a
   pontozási szabály lenyomat-őre), és bukásnál nem közzétenni.
 - [ ] E44 WHEN `en-GB` lecke áll közzététel előtt, és a hangfájl-kötelezettség be van kapcsolva THEN the system SHALL a szószedet
@@ -754,7 +826,8 @@ Determinisztikus kapuk (SK1–SK5, tulajdonosi elv):
 14. A költség- és időbecslések (8. szakasz) — az S10 méri.
 15. A meglévő admin-végpontok hitelesítési és CSRF-mintája, valamint az `/api/` útvonal azonos eredetű elérése és CDN-gyorsítótárazása
     a lecke oldaláról (az S8b / S8c első lépése olvassa ki a kódból).
-16. Hogyan áll meg ma a motor egy állomás javítóköreinek kimerülése után (az SK1 / SK3 ezt az utat használja), és hol véglegesül a
-    szószedet az egyfutásos motorban (S8c 6. lépés).
-17. Az SK kapuk kezdő küszöbértékei (80% hűség, 30% kihagyás, 12 USD, 12 javító forduló, 40 MB) — a szeletek tesztjei és az
-    alapvonal-mérés hangolják.
+16. Hol véglegesül a szószedet az egyfutásos motorban (S8c 6. lépés). (A megállás útja ELLENŐRIZVE az SK1-ben: az állomás
+    `SingleRunError`-t dob, a `runSingleLesson` ezt elkapja, a jobot `error` állapottal és a mentett kimenettel zárja —
+    `server/studio/single-run/engine.ts`; az SK1 `enforce` módja és a próbakeret megállása ezt az utat használja.)
+17. Az SK kapuk kezdő küszöbértékei (80% hűség, 30% kihagyás, 9 USD futásonkénti jelzési küszöb, a napi küszöb, 40 MB) — a szeletek
+    tesztjei és az alapvonal-mérés hangolják.

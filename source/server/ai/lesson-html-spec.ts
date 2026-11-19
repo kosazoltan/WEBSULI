@@ -298,7 +298,7 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 \`\`\`
 - Egy \`required\` fogalom akkor teljesül, ha BÁRMELYIK szinonimája előfordul; többszavas kifejezésnél minden szó szükséges. Legalább egy required csoport mindig kell. A bonus önmagában nem ad teljes pontot.
 - A motor három rétege: (1) fogalmi illesztés szinonimákkal; (2) hosszú szavaknál korlátozott elírástűrés és magyar tövezés; szám, rövid szó és tagadás nem javítható más válasszá; (3) minimális szószám, koherencia és váratlan tagadás vizsgálata. Ez gyakorló visszajelzés, nem teljes jelentéselemzés vagy hivatalos osztályzat.
-- HÁROMÁLLAPOTÚ KIMENET: ✅ Elfogadva (1 pont): minden kötelező fogalom + koherens; 🟡 Részben jó (0.5): a kötelezők fele megvan VAGY minden megvan, de szólista-szerű → „📖 Mintaválasz megnézése" gomb; ❌ Hiányos (0): túl rövid vagy túl kevés kötelező fogalom. A fél pontok beszámítanak.
+- HÁROMÁLLAPOTÚ KIMENET: ✅ Elfogadva (1 pont): minden kötelező fogalom + koherens; 🟡 Részben jó (0.5): a kötelezők fele megvan VAGY minden megvan, de szólista-szerű → „📖 Mintaválasz megnézése" gomb; a minimális szószámnál rövidebb, de minden kötelező fogalmat tartalmazó válasz is 0.5 (teljes pont csak kifejtve); ❌ Hiányos (0): rövid ÉS hiányos, vagy túl kevés kötelező fogalom. A fél pontok beszámítanak.
 - A MOTOR REFERENCIA-IMPLEMENTÁCIÓJA (ES5, az IIFE-be ágyazva, EZT építsd be — ne rögtönözz mást):
 \`\`\`javascript
 function ee_norm(s){
@@ -421,7 +421,12 @@ function ee_evaluate(answer, task){
   for(i=0;i<bon.length;i++){ if(ee_conceptHit(norm,tokens,stems,bon[i])) hitBonus++; }
   var totalReq = req.length;
   if(wordCount < minW){
-    return {state:'fail', score:0, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'A válasz még túl rövid.'};
+    if(totalReq > 0 && hitReq === totalReq){
+      return {state:'partial', score:0.5, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus,
+              reason:'A lényeg megvan. Teljes pontért fejtsd ki egész mondatban, legalább ' + minW + ' szóval.'};
+    }
+    return {state:'fail', score:0, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus,
+            reason:'Még nincs benne minden fontos fogalom, és rövid is: írj legalább ' + minW + ' szót.'};
   }
   if(totalReq === 0){
     return {state:'fail', score:0, reason:'Hiányzó értékelési feltétel.'};
@@ -438,7 +443,7 @@ function ee_evaluate(answer, task){
   if(ratio >= 1){
     if((task.needsSentence && !hasFunc) || unexpectedNegation){
       return {state:'partial', score:0.5, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus,
-              reason:unexpectedNegation?'A tagadás eltér a mintaválasztól.':'A fogalmak megvannak, de összefüggő mondat szükséges.'};
+              reason:unexpectedNegation?'A tagadás eltér a mintaválasztól.':'A fogalmak megvannak. Teljes pontért kösd össze őket kötőszóval (mert, hogy, és, ezért…) — az írásjel nem számít.'};
     }
     return {state:'ok', score:1, hitReq:hitReq, totalReq:totalReq, hitBonus:hitBonus, reason:'Minden kötelező fogalom megvan.'};
   }

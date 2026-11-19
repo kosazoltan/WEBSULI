@@ -7,7 +7,8 @@ a munkafa gyökeréből futnak, ha a lépés mást nem mond.
 Sorrend (tulajdonosi döntések 2026-11-18 után): **S1a → S1b → SK1 → S2a → S2b → S3a → S3b → S4a → S4b → SK3 → S10/0 → S10/1 (első
 mérés) → S5a → S5b → S6a → S6b → S6c → SK2 → S7a → S7b → S8a → S8b → S8c → SK4 → SK5 → S9 → S10/2 (záró mérés).** Egy alszelet =
 egy ág = egy PR. Döntések: D1 újrarajzolás · D2 30 USD próbakeret · D3 ElevenLabs előre gyártva · D4 hangfájlok az adatbázisban,
-csak a leckék · D5 fél pontos plafon igen · D6 egyeztetés alatt (az S7a nem indul, amíg nincs döntés).
+csak a leckék · D5 fél pontos plafon igen · D6 egyeztetés alatt (az S7a nem indul, amíg nincs döntés) · D7 éles gyártásban a
+költségkeret túllépése csak jelez (e-mail), nem állít meg; gyártás-stop kapcsoló nem épül; a 30 USD próbakeret kemény plafon marad.
 
 ## 0. Közös szabályok (minden szeletre)
 
@@ -79,7 +80,7 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 | S2a / S2b | `tests/lesson-source-visual-kinds.test.ts`, `playwright.source-visuals.config.ts` | paraméter-séma, SVG-tisztító; átfedés / levágás / görgetés |
 | S3a / S3b | `tests/visual-patch.test.ts`, `tests/section-visuals.test.ts`, `tests/single-run-engine.test.ts` | megalapozás a forrástételhez, eldobási ok, szókeret, bankkulcs |
 | S4a / S4b | `tests/arithmetic-false-alarms.test.ts`, `tests/single-run-engine.test.ts` | hamis riasztás nélkül; áthelyezés, világ-lista, okok |
-| SK3 | `tests/run-budget.test.ts` | körszám-, költség-, időplafon |
+| SK3 | `tests/run-budget.test.ts`, `tests/run-budget-alert.test.ts` | a körszám-plafon változatlansága, költségküszöb-jelzés (futásonkénti, napi), a próbakeret kemény plafonja |
 | S5a / S5b | `tests/lesson-feedback-openers.test.ts`, `tests/lesson-opener.test.ts`, `tests/seeded.test.ts` | szótár, levágás, determinizmus, verzió |
 | S6a–c | `tests/lesson-section-shapes.test.ts`, `tests/lesson-arc.test.ts`, `tests/visual-kind-plan.test.ts`, `scripts/measure/shape-simulation.mts` | kiosztás, ívkapu, arányok, szimuláció |
 | SK2 | `tests/variety-metrics.test.ts`, `scripts/measure/variety-measure.mjs` | változatosság-mutatók és küszöbök |
@@ -89,6 +90,27 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 | SK4 / SK5 | `tests/release-gate.test.ts`, `tests/gate-mutations.test.ts`, `scripts/measure/gate-baseline.mts` | kiadás előtti kapu, mutációk, alapvonal |
 | S9 | `node scripts/qa/gates/skills-sync-check.mjs` (csak futtatva) | skill forrás ↔ tükör |
 | S10 | `scripts/measure/source-gap-table.mts`, a futáskeret főkönyve | hiánytábla gépi része, keret |
+| minden szelet (S1–S3) | `tests/source-visuals-flag.test.ts` | KI állapotban a gyártás minden kérése a főágéval azonos (0.7) |
+
+### 0.7 Funkciókapcsoló — önálló beolvaszthatóság (*Spec-pontosítás 2026-11-18 — vak ellenőr: önálló beolvaszthatóság*)
+
+A terv 5. szakaszának 14. pontja szerint a forrás vizuális leltára a `STUDIO_SOURCE_VISUALS` kapcsoló mögött áll (`on` = BE;
+minden más és a hiány = KI). Minden szeletre érvényes szabályok:
+
+1. A környezetet egyetlen függvény olvassa: `sourceVisualsEnabled()` (`server/studio/source-visuals-flag.ts`). Más helyen
+   `process.env.STUDIO_SOURCE_VISUALS` olvasása tilos. A motor a futás elején egyszer dönt:
+   `deps.sourceVisuals ?? sourceVisualsEnabled()`; teszt és mérőharness a `SingleRunDeps.sourceVisuals` mezővel fecskendez be.
+2. KI állapotban a futás a leltárt sehonnan nem kapja meg: az 1. állomás nem kéri és nem dolgozza fel (a kéretlen `visuals` mező
+   is eldobva, számláló és naplósor nélkül), a térképről betöltött (korábban mentett) leltár üres listára cserélődik, mielőtt
+   bármelyik prompt-építő, kapu vagy számláló látná. Új, leltártól függő kódút csak ebből a szűrt listából dolgozhat.
+3. Ami a modell kimenetének határán új ábrafajtát fogad el (S2 / S3), KI állapotban ugyanúgy utasítja el, mint a kapcsoló előtt.
+4. A `tests/source-visuals-flag.test.ts` rögzített főág-lenyomatai a lánc MINDEN ágán zöldek: KI állapotban a mintafutás összes
+   modellnek küldött kérése bájtra azonos a főágéval. A lenyomat előállítása (csak akkor frissítendő, ha a főág promptjai
+   szándékosan változtak): a `source/` mappából `mkdir .main-ref`, `git archive origin/main:source server shared | tar -x -C .main-ref`,
+   `node --import tsx tests/helpers/production-prompt-fingerprint.ts .main-ref`, majd a `.main-ref` törlése.
+5. Az S1a–S3 meglévő tesztjei BE állapotban futnak (`sourceVisuals: true` a függőségekben); az alapértéket (KI) külön teszt rögzíti.
+6. Az éles bekapcsolás NEM része egyik szeletnek sem: tulajdonosi döntés az S10/1 mérés után (Render: `STUDIO_SOURCE_VISUALS=on`;
+   kikapcsolás: a változó törlése). Ügynök az éles környezet változóit nem állítja.
 
 ---
 
@@ -143,6 +165,14 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 
 ## S1b — A leltár átadása a promptoknak és a vizuális fedettség
 
+> **Megvalósítva (2026-11-18, ág `feat/tgm-s1b-sk1-forras-fedettseg`) — eltérések, amelyeket a következő szeletnek tudnia kell:**
+> (1) a terv forrás-vizuális hivatkozásait külön függvény tisztítja (`autofixOutlineVisuals`, `server/studio/tools/outline-autofix.ts`)
+> az `autofixOutline` UTÁN — az utóbbi hívási alakját őr-teszt rögzíti; (2) a terv és a blokk új mezői engedékeny sémájúak (a
+> többlet vágva, a hibás `sourceVisualId` elmarad) — formai hiba nem indít fizetős javítókört; (3) a lektor a mért hiányzó
+> azonosítókat a leltár blokkjában, TÁJÉKOZTATÁSKÉNT kapja (nem a `previousBlockers` listában), mert `report` módban a hiány nem
+> állíthat meg gyártást; (4) a szerző és az ábrakészítő szabálymondata a `sourceVisualId` kitöltését is kéri; (5) az S1a review
+> U1–U4 feltétele és a J4 ugyanebben az ágban teljesült (a leltár-sémaverzió: `SOURCE_VISUALS_SCHEMA_VERSION`).
+
 > **Teendő az S1a független review-jából (J4):** a különálló kinyerés tartalmi lenyomata (`server/studio/single-run/live.ts`,
 > `singleRunMapHash`, ma `single-run-map-2`) kapjon leltár-sémaverziót, hogy ugyanarra a fájlra a régi, leltár nélküli térképet ne
 > adja vissza jelzés nélkül; teszt rögzítse.
@@ -174,6 +204,22 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 
 ## SK1 — Forrás-fedettségi kapu (az S1b-vel egy körben; külön PR, ha az S1b-vel együtt 400 sor fölé menne)
 
+> **Megvalósítva (2026-11-18, ugyanazon az ágon, `report` módban) — eltérések:** (1) a kapu a leckét szerkezetileg olvassa (a
+> hűséget a hivatkozó blokk összes megjelenő szövegén méri, a tétel címe nélkül), így az S2 új ábrafajtáit a sémabővítés előtt is
+> helyesen ítéli meg; (2) a `problems` a bukást okozó tételeket sorolja, a megengedett („legalább 80%”) hiány csak a `missingIds`
+> listában és a mérőszámokban látszik; (3) a `sourceVisualId` mezőt az ábrafolt sémája már most átengedi
+> (`server/studio/visual-patch.ts`) — enélkül a pótló forduló foltja nem hivatkozhatna; a nem létező azonosító törlése és a
+> megalapozási kivétel az S3a-ban marad; (4) az üzemmód futásonként felülírható (`SingleRunDeps.gateModes`) — a teszt és a
+> mérőharness ezzel kapcsol `enforce`-ra; (5) az alapvonal-fixtúra (`tests/fixtures/source-coverage-hm.ts`) a HM-minta számait
+> hordozza (38 tétel; ma 6 teljes, 23 részben, 9 sehogy) — a 7 felsorolt csoport 35 tétele mellé 3 lépéssor került a 38-as összeghez.
+>
+> **SK1b (2026-11-18, ág `fix/tgm-sk1b-fedettsegi-kapu-kemenyites`, kanban #157) — a független review leletei az `enforce` ELŐTT:**
+> szerkezeti hűségmérés és normalizálás (F1–F3), kihagyási keret és ok fajtánként (F4), megosztott paraméter-szerződés (F5–F6),
+> a megállt job folytatása modellhívás nélkül áll meg (F7), címke-tisztítás a pótló folton (F8), a kapu hibája nem állít meg
+> (F12), a parancssori futtató hibás térképre 2-es kóddal áll meg (F10). Az alapvonal-teszt a mai leckealakra **0/38** (a kapu
+> szerkezeti mércéje); a „6/38” a tényfeltárás EMBERI tartalmi megítélése — a fixtúra megjegyzése elkülöníti (F9). A fenti (1)–(2)
+> pontot ez a kör felülírja: a hűség már nem „a blokk összes szövegén” mér. A kapu `report` módban marad.
+
 Ág: `feat/forras-fedettsegi-kapu-sk1` (az S1b ágáról vagy — ha az S1b már bent van — az `origin/main`-ről). Fájlok:
 `server/studio/gates/types.ts`, `server/studio/gates/config.ts`, `server/studio/gates/source-coverage-gate.ts`,
 `scripts/gates/run-gates.mts` (mind új), `server/studio/step-io.ts`, `server/studio/tools/outline-autofix.ts`,
@@ -187,7 +233,16 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
    `sourceCoverageGate(lesson, visuals, skipped): GateResult & { missingIds: string[] }`.
    - `SOURCE_COVERAGE_THRESHOLDS = { must: ["table","process","decisionTree","ruleBox"], mustShare: 1, should:
      ["pictureCard","exercise","diagram"], shouldShare: 0.8, fidelity: 0.8, maxSkipShare: 0.3 }`; a `colorCode` nem számít.
-   - Megfeleltetés: `table` → `table`; `process` → `process`; `decisionTree` → `decisionTree`; `ruleBox` → `ruleBox`;
+   - **Spec-pontosítás 2026-11-18 (független review F1–F6; megvalósítva az SK1b-ben, kanban #157):** a hűség SZERKEZET szerint
+     mér, a megjelenítők megosztott paraméter-szerződéséből (`shared/source-visual-render.ts`: `TableVisualParams`,
+     `RuleBoxVisualParams`, `CompareCardsVisualParams`, `DecisionTreeVisualParams`, `PictureCardsVisualParams` + engedékeny olvasók
+     + `normalizeVisualText`) — nem a blokk bármely szövegén. Táblázat: cella a cellában, oszlop szerint (a `compareCards` kártyája
+     egy oszlop); folyamat: lépés a lépésben, sorrendben; döntési fa: csomópont és ágfelirat útvonal szerint; szabálydoboz: cím a
+     címben (vagy a feliratban), pont a pontban; képes kártya: felirat + nem üres `svg`; képes feladat: a képek száma is egység;
+     rész nélküli ábra: az üres `animate` blokk nem megjelenés. Normalizálás: idézőjel, gondolatjel, hárompont, mondatvégi
+     írásjel, szóköz, kis- / nagybetű, NFC — az ékezet NEM. Több hivatkozó blokk összeadódik. Az alábbi két bekezdés ezzel együtt
+     érvényes.
+   - Megfeleltetés: `table` → `table` vagy `compareCards`; `process` → `process`; `decisionTree` → `decisionTree`; `ruleBox` → `ruleBox`;
      `pictureCard` → `pictureCards`; `diagram` → bármely `animate` fajta; `exercise` → `example` / `try` / `check` /
      `pictureCards` blokk. A megfeleltetés állandó tábla ugyanebben a fájlban.
    - „Megjelent”: van `sourceVisualId`-val hivatkozó, a megfeleltetésnek megfelelő blokk, ÉS a tétel `sourceVisualTexts`
@@ -199,6 +254,10 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
      `diagram` / `pictureCard` fajtánál és üres `conceptIds` mellett; tanított fogalomra hivatkozó tétel csak `duplicate` okkal;
      az érvényes kihagyások száma ≤ `maxSkipShare` × a számlálóban lévő tételek száma (a többlet a lista végéről érvénytelen).
      Érvénytelen kihagyás → a tétel hiányzónak számít, a `problems` megnevezi az okot.
+     **Spec-pontosítás 2026-11-18 (független review F4):** a keret `max(1, floor(maxSkipShare × n))` (`minSkips: 1`); az ok
+     fajtánként megengedett (`SOURCE_SKIP_REASONS_BY_KIND`): `table` / `process` / `decisionTree` / `ruleBox` → `admin_meta`,
+     `duplicate`; `exercise` → + `answer_key`; `pictureCard` / `diagram` → + `decorative`. A `duplicate` csak megnevezett, megjelent
+     párral érvényes. Érvénytelen ok = hiány.
    - Ítélet: `ok`, ha a `must` fajták nem kihagyott tételei mind megjelentek, és a `should` fajtáké legalább `shouldShare`
      arányban (a megengedett hiány: `floor((1 − shouldShare) × n)`). Leltár nélkül: `ok: true`, `metrics.total = 0`.
 3. A terv sémája (`step-io.ts:97-115`) opcionális `skippedVisuals` mezőt kap a fenti alakban; a tervező promptja a zárt oklistát
@@ -236,7 +295,28 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 > nélkül tárolódnak — a megjelenítő kizárólag szövegként rajzolja ki őket (React szövegcsomópont; `dangerouslySetInnerHTML` tilos);
 > a böngészős próba egy `<script>` / `<img onerror>` szövegű cellával igazolja, hogy jelölőként nem értelmeződik.
 
-Ág: `feat/lecke-megjelenitok-s2a`. Fájlok: `shared/lesson-schema.ts`, `shared/lesson-visual-params.ts`,
+> **Paraméter-szerződés (SK1b, független review F5–F6) — az S2b-re is:** a megjelenítők paramétereinek alakja a
+> `shared/source-visual-render.ts` típusaiban RÖGZÍTETT, és a forrás-fedettségi kapu ezekből olvas. Az S2 paraméter-sémái
+> (`lesson-visual-params.ts`) és megjelenítői ehhez igazodjanak: `table` `{ caption?, headers, rows, headerTones? }`; `ruleBox`
+> `{ tone, heading?, items }`; `compareCards` `{ cards: [{ title, tone?, lines, example? }] }` (a kártya egy oszlop); `decisionTree`
+> `{ root: { text, branches?: [{ label, node }] } }` — NEM `children`; `pictureCards` `{ cards: [{ label, svg, caption?, example? }] }`
+> (a kép a nem üres `svg`). Ha az alakon változtatni kell, a típusfájlban és a kapu tesztjeivel együtt változzon; a
+> `renderedVisualTexts` ugyanezeket a mezőket adja vissza. Teszt rögzítse, hogy a séma által elfogadott paramétert a szerződés
+> olvasója (`readTableParams`, `readDecisionTreeParams`, …) veszteség nélkül olvassa.
+
+> **Megvalósítási pontosítás (S2a, 2026-11-18; az S1a review J1 lelete nyomán):** a megjelenítők korlátja nem lehet szűkebb a
+> forrásleltárénál (`shared/source-visuals.ts`), ezért a 2. lépés számai helyett: `table` — 1..8 oszlop, fejléc ≤ 80, cella ≤ 120
+> (lehet üres), felirat ≤ 160, blokkonként 1..20 sor (`SOURCE_TABLE_BLOCK_ROWS`; a hosszabb forrástáblát a gyártó több, ugyanarra a
+> tételre hivatkozó blokkra bontja — a kapu összeadja), `headerTones` hossza = az oszlopoké; `ruleBox` — 1..8 pont, pont ≤ 240;
+> `compareCards` — 2..3 kártya, cím ≤ 80, 1..8 sor, sor ≤ 200, a `tone` elhagyható (a szerződés szerint). Minden séma `.strict()`:
+> ismeretlen / rejtő kulcs elutasítva. A sorfejléc (`th scope="row"`, rögzített első oszlop) csak 3+ oszlopnál; a kétoszlopos tábla két
+> egyenrangú oszlop. Az ág neve `feat/tgm-s2a-megjelenitok` (az SK1b ágára épül). A lektor-nézet (5. lépés) már vesztésmentesen adja a
+> strukturált `params`-ot — kódváltozás nem kellett, teszt rögzíti. A szabálydoboz ikonja a lejátszóban bevett lucide-készletből
+> való (nem a blokkjelző-képekből); a doboznak nincs külön blokkfejléce — a tónus kódszótári felirata a doboz saját fejléce, a blokk
+> felirata a kereten belül áll. A görgő tábla kerete csak görgetéskor fókuszmegálló. Az új fajták az S3a-ig NINCSENEK a gyártó
+> promptjaiban (`PROMPT_ANIM_KINDS`), a hibás paraméterű blokk a szerző kimenetéből és a lejátszóból is kimarad (review B1). Mérőlecke: `/__lesson-runtime-probe?source-visuals=1|max`.
+
+Ág: `feat/lecke-megjelenitok-s2a`. Fájlok: `shared/source-visual-render.ts` (a szerződés — meglévő), `shared/lesson-schema.ts`, `shared/lesson-visual-params.ts`,
 `shared/lesson-block-label.ts`, `client/src/lesson-runtime/blocks/source-visuals.tsx` (új),
 `client/src/lesson-runtime/blocks/animate-blocks.tsx`, `client/src/lesson-runtime/lesson-design.css`,
 `client/src/lesson-runtime/explain-paragraphs.ts`, `server/studio/lektor-view.ts`, `tests/lesson-source-visual-kinds.test.ts` (új),
@@ -274,6 +354,48 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 
 ## S2b — Megjelenítők: elágazó döntési fa, képes kártyák
 
+> **Teendők a VAK ellenőr S2a-leleteiből (2026-11-18; a vak ellenőr saját sorszámaival — „vak J…”, nem azonos a fenti független
+> review J-számaival) — ennek a szeletnek a kötelező részei.** Az S2a-ban lezárva: vak B1 (funkciókapcsoló + a kiesés oka a javító
+> üzenetben), vak J1 (a „•” elem eleji műveleti jel megmarad), vak J3 (a kétoszlopos tábla fejléce nem törik szó közepén).
+> - **vak J2 — görgetésjelző és táblacím:** a „görgethető” jelző a tábla FÖLÖTT is (vagy ragadósan / szélső árnyékkal) látsszon — a
+>   8 oszlopos táblánál 360 px-en ma ~11 képernyővel lejjebb van; a táblázat címe kerüljön a görgő kereten KÍVÜLRE (ma vízszintesen
+>   levágódik). Böngészős állítás: a jelző a tábla első képernyőjén látszik, a cím teljes szövege görgetés nélkül olvasható.
+> - **vak J5 — kontraszt:** a „Példa” címke (`lesson-design.css`, kártya) az `adventure` sávban 3,88:1, a `future` sávban 3,13:1; a
+>   `future` „a” tónusjele 2,69:1; csendes nézetben a `future` `--ws-accent-2/3` 1,76–2,09:1. Cél: szöveg ≥ 4,5:1, jel ≥ 3:1 minden
+>   sávban és a csendes nézetben; számolt őr-teszt a tokenekből (a vak ellenőr `contrast.mjs` mérésének megfelelője a repóban).
+> - **vak J6 — fejezet-kisfilm:** a `clips/clip2-overlays.tsx` ráúszó ábrája szűrő nélkül és levágva (`lesson-clips2.css`,
+>   `max-height` + `overflow: hidden`) rajzolná a HTML-táblát / kártyát / dobozt; a `server/lesson-clips.ts` a hibás paraméterű
+>   blokk indexét is felkínálja. Teendő: az új fajták a kisfilm ráúszó ábrájából kimaradnak (vagy saját, görgetés nélküli
+>   kicsinyített nézetet kapnak), a hibás paraméterű blokk indexe nem kínálható fel. UNVERIFIED böngészőben — előbb reprodukáld.
+> - **vak J7 — fölösleges görgetés 3 oszlopnál:** `min-width: calc(var(--sv-cols) * 6.5em)` miatt egy „1 | 2 | 3” tartalmú tábla is
+>   görög 360 px-en. Teendő: a legkisebb szélesség a tartalomból (nem oszlopszám × állandó); állítás a böngészős próbában.
+> - **vak J8 — a „-” kezdetű felsorolás felismerése (külön, későbbi szelet):** a teljes tartalmú vak ellenőr J3 lelete után
+>   (2026-11-18) listává CSAK az egyértelmű „•” kezdetű sorok alakulnak; a „-” / „–” / „*” kezdetű sorok a főágéval azonosan,
+>   bekezdésként jelennek meg (`explain-paragraphs.ts`; őr: `tests/explain-paragraphs.test.ts`, a főág kimenetéhez rögzítve) — a már
+>   kiadott leckékben a kötőjel előjel („- a = -3”), egyenletsor („- x + 5 = 2”, U+2212 is) vagy párbeszédjel is lehet. Teendő, ha
+>   a „-” listák mégis kellenek: ELŐBB mérés a kiadott állományon (csak olvasva: hány magyarázat tartalmaz „-” kezdetű sorfutást, és
+>   ezek közül mennyi lista / egyenlet / párbeszéd — kézi minta), esetlista egységtesztként (szószedet, felszólító lista,
+>   kérdőszavak, számmal kezdődő pont, kijelentő párbeszéd, előjel, `=` / műveleti jel a sorban), és csak olyan szabály vezethető
+>   be, amely a mért állományban egyetlen jelet sem tüntet el. Addig a gyártó promptja a felsorolást „•” jellel kérje (S3a).
+> - **vak J10 — a böngészős próba a CI-ban:** tisztázva (2026-11-18): a CI alap Playwright-lépése (`npx playwright test`, a
+>   `playwright.config.ts` `testMatch: '**/*.spec.ts'` mintájával, a `VITE_ENABLE_RUNTIME_PROBE=1` builddel) a
+>   `tests/source-visuals.spec.ts`-t is futtatja — a saját `playwright.source-visuals.config.ts` a gyors helyi körre való (vite,
+>   `--workers=1`), a workflow-ban nem kell megnevezni. Teendő: az első PR CI-futásán ellenőrizd, hogy a spec az alap
+>   konfigurációval (30 mp-es alapidő, éles build) is zöld; ha ott ingadozik, a spec saját időkorlátot kapjon (a workflow-hoz
+>   ügynök nem nyúl).
+> - **vak J11 — nyomtatás:** nincs `@media print`; a görgő tábla nyomtatásban levágódik. UNVERIFIED — előbb reprodukáld; ha áll:
+>   nyomtatásban a tábla tördelhető, görgetés nélküli.
+> - **vak J12 — kódhigiénia:** a `SOURCE_VISUAL_TEXT.branchYes / branchNo` (ebben a szeletben a döntési fa használja — ha nem,
+>   törlendő); a három fajta felirata egy helyen éljen (`ANIM_LABELS` ↔ `SOURCE_VISUAL_HEAD_LABELS`).
+>
+> **A teljes tartalmú vak ellenőr (2026-11-18, a lánc teteje) leletei — a kapcsoló BEKAPCSOLÁSA előtt kötelező („tt J…”):**
+> - **tt J6 — döntési fa és képes kártya:** a leltár gyűjti, a prompt fejezethez rendelteti, a fedettségi kapu „must” / „should”
+>   hiánynak méri (`gates/source-coverage-gate.ts`), de megjelenítő és sémafajta ebben a szeletben készül. Amíg nincs kész: BE
+>   állapotban minden ilyen forrás „HIÁNYOS”, és a modell `animKind: "decisionTree"` blokkja fizetős javítókört indít — a kapu
+>   `enforce` módra csak e szelet UTÁN kapcsolható; a szelet tesztje rögzítse, hogy a két fajta a kapun „megjelent”.
+> - **tt J9 — `useHeaderFit`:** a mérés nem fut újra, ha a tábla paraméterei csere nélkül változnak (szerkesztő / előnézet);
+>   közzétett leckénél nem jelentkezik. UNVERIFIED — reprodukáld az előnézetben; ha áll, a hatás függjön a fejlécek szövegétől.
+
 Ág: `feat/lecke-megjelenitok-s2b`. Fájlok: mint az S2a (a `source-visuals.tsx`, a séma, a címkék, a lektor-nézet, a spec bővül).
 
 1. `ANIM_KINDS` bővül: `"decisionTree"`, `"pictureCards"`. Sémák: `decisionTree` `{ root: Node }`, `Node = { text (≤ 120),
@@ -295,6 +417,61 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 7. 0.3 szerinti kapuk; képernyőképek a PR-leírásba. Elvárt: E6 (mind az öt fajtára), E7 teljesül.
 
 ## S3a — Az ábrák állomás a forrásra kötve; az eldobás oka a kimenetben
+
+> **Teendők az S2a független review-jából (2026-11-18) — ennek a szeletnek a kötelező részei:**
+> - **B1 — a hirdetés bekapcsolása:** a gyártó promptjai (szerzői blokk-katalógus, ábrakészítő, fejezetenkénti ábratervező) a
+>   `shared/lesson-schema.ts` `PROMPT_ANIM_KINDS` listájából sorolják fel az ábrafajtákat; az S2a óta ebben a `table` / `ruleBox` /
+>   `compareCards` NINCS benne. EBBEN a szeletben kerül a hirdetett listába a három (az S2b után az öt) új fajta, a
+>   `VISUAL_PARAMS_CONTRACT` bővítésével EGYÜTT, egy commitban; a `tests/studio-author-catalog.test.ts` két rögzített listája
+>   (`ADVERTISED`, `NOT_YET_ADVERTISED`) ugyanakkor változik. Alak nélkül hirdetni tilos. A szerző kimenetén a hibás paraméterű új
+>   fajtájú blokk ma kiesik (`withoutUndrawableVisuals`, telemetria: `undrawableVisualsDropped`) — a szám a próbafutások jelentésébe kerül.
+> - **J8:** a prompt tiltsa a `**kiemelés**` jelölést a táblázat celláiban, a szabálydoboz pontjaiban és a kártyák soraiban (a
+>   megjelenítő ezeket nyers szövegként rajzolja — a csillagok betűre megjelennének).
+> - **J11:** a prompt terelje a gyártót a nagy tábla bontására: sok oszlop + hosszú cella helyett több kisebb tábla vagy kártya (a
+>   megengedett legnagyobb tábla — 8 oszlop × 20 sor × 100+ karakter — ép, de telefonon ~15 000 px magas).
+> - A hosszabb forrástáblát több, azonos `sourceVisualId`-jú blokkra kell bontani (`SOURCE_TABLE_BLOCK_ROWS`), a rövidebb sort a
+>   fejléc hosszára kitölteni.
+>
+> **Teendők a VAK ellenőr S2a-leleteiből (2026-11-18; „vak J…” = a vak ellenőr sorszáma) — ennek a szeletnek a kötelező részei:**
+> - **vak B1 — a kapcsoló és a hirdetés együtt:** a modell kimenetének határa (szerzői lecke: `validateLesson`; ábrafolt:
+>   `applyVisualPatch`) az új fajtákat csak a `STUDIO_SOURCE_VISUALS` kapcsoló BE állapotában fogadja el (0.7); a hirdetés
+>   (`PROMPT_ANIM_KINDS`, `VISUAL_PARAMS_CONTRACT`) bővítése is CSAK BE állapotban juthat a promptokba — KI állapotban a
+>   `tests/source-visuals-flag.test.ts` főág-lenyomatai változatlanul zöldek kell legyenek (a hirdetett lista és a szerződés
+>   kapcsolófüggő építése, teszttel).
+> - **vak J4 — a szigorú séma apróságért a TELJES blokkot kiveszi:** mért kiesések: üres `caption` / `heading` / `example`, üres
+>   `headerTones`, számcella (`rows: [[2, 3, 6]]`), egy cellával rövidebb sor, 21–40 soros tábla, 121 karakteres cella, 9 pontos
+>   doboz, 4 kártya, extra kulcs. Teendő: determinisztikus normalizálás a séma ELŐTT (üres opcionális → hiányzó, szám → szöveg,
+>   rövid sor kitöltése, hosszú tábla bontása `SOURCE_TABLE_BLOCK_ROWS` szerint, ismeretlen kulcs elhagyása), és csak a
+>   normalizálhatatlan essen ki; a normalizálás számlálva (`telemetry.gates`), esetenként egységteszt + mutációs ellenpróba. A
+>   kiesés oka a javító üzenetben már megjelenik (`undrawableDropNotes`, `undrawableVisualsExplained`) — a normalizálás után a
+>   megmaradó kiesésekre is.
+> - **vak J9 — a tesztek ereje (47 mutációból 13 túlélte):** az S2a-ban lezárva F5 / F6 (a kiesés bekötése a szerzői állomáson és a
+>   végkapun — motorteszt) és F7 (a lejátszó szűrője — szerkezeti őr; a kirajzolt eredményt a böngészős próba méri). NYITOTT, ebben
+>   a szeletben pótlandó teszt: F8 a telemetria-nézet sora (`run-telemetry.ts`, `undrawableVisualsDropped`); P4 / P5 az új fajta
+>   említése a séma-javító üzenetben és a lektor-szabályban; S13 / S14 / S18 / S19 a `compareCards` külső `.strict()`-je, a
+>   táblacím (160), a kártyacím / példa (80 / 160), a dobozcím (80) korlátja; E4 / E5 / E7 az `explain-paragraphs.ts` „bounded”,
+>   „opened” feltétele és a „– soha nem lista” szabálya (mindegyikre olyan eset, amelyet más védelem nem fog meg).
+>
+> **A teljes tartalmú vak ellenőr (2026-11-18, a lánc teteje) leletei — a kapcsoló BEKAPCSOLÁSA előtt kötelező („tt J…”):**
+> - **A modellkimenet határa (lezárva, szabályként él tovább):** a modell kimenetét (szerzői lecke, ábrafolt, fogalomjavítás,
+>   leckejavítás) a `modelLessonSchema(kapcsoló)` / `modelBlockSchema(kapcsoló)` méri — KI állapotban a bővítés előtti séma. Új
+>   modellkimenet-határ csak ezzel köthető be; a `lessonSchema` a TÁROLT lecke olvasására való. Új séma-mező vagy ábrafajta
+>   felvételekor a `legacy…` változatból ki kell hagyni, és a `tests/source-visuals-flag.test.ts` séma-próbája (`modelSchemaProbe`)
+>   bővítendő.
+> - **tt J5 — leltár ↔ megjelenítő szerződés:** (a) az üres sarokfejlécű tábla (`headers: ["", "jelen", "múlt"]`) a leltárból
+>   kiesik (`shared/source-visuals.ts`, `filled`); (b) szám típusú cella miatt az egész tábla kiesik; (c) a leltár 40 sort enged, a
+>   blokk 20-at — a bontást a prompt mondja ki, az egy blokkba másolt tábla ne essen ki némán; (d) a leltár elfogad csonka sort (2
+>   cella 3 oszlophoz), a megjelenítő soha — ilyen tétel a kapu szerint örökre hiányzik. Teendő: a leltár-érvényesítő és a
+>   blokk-séma ugyanazt a normalizálást futtassa (a „vak J4” ponttal együtt), esetenként egységteszt a teljes láncon (leltár →
+>   blokk → kapu „megjelent”).
+> - **tt J7 — a köztes BE állapot alulbecsül:** BE állapotban a szerző / ábrakészítő promptja a leltár `table` / `ruleBox`
+>   tételeit mutatja, de a hirdetett ábrafajta-lista ezeket ebben a szeletben kapja meg — az S10/1 mérés CSAK e szelet után
+>   értelmezhető (előtte a fedettség mért értéke a hirdetés hiányát méri, nem a gyártó képességét).
+> - **tt J8 — visszakapcsolás (BE → KI):** a BE alatt jóváhagyott / mentett terv `sourceVisualIds` / `skippedVisuals` mezője a
+>   jóváhagyott terv útján megmarad (`approvedOutlineOf`, nincs `autofixOutlineVisuals`), és leltár nélkül a szerző promptjába
+>   kerül; a BE alatt mentett, folytatott job leckéje (`resumePointOf`) a teljes sémával olvasódik. Teendő: KI állapotban a
+>   jóváhagyott / folytatott terv és lecke forrástétel-mezői kerüljenek le (teszt: BE alatt mentett terv + KI futás kérései a
+>   főágéval azonosak). A leckejavítás `coverage.visuals` írása már kapcsolófüggő (`structured-improvement.ts`).
 
 Ág: `feat/abrakeszito-forrasra-kotve-s3a`. Fájlok: `server/studio/step-io.ts`, `server/studio/role-skills.ts`,
 `shared/lesson-visual-params.ts`, `server/studio/visual-patch.ts`, `server/studio/section-visuals.ts`,
@@ -330,6 +507,11 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 8. 0.3 szerinti kapuk. Elvárt: E9, E10 teljesül.
 
 ## S3b — Szókeret, szerző, lektor, bank a forrástételekkel
+
+> **Teendő az S2a független review-jából (J9, „SK1c”) — a fedettségi kapu `enforce` élesítése ELŐTT kötelező:** a forrás-fedettségi
+> kapu (`server/studio/gates/source-coverage-gate.ts`, `substantive` / `whyNotShown`) a `table` / `ruleBox` / `compareCards` (és az
+> S2b két fajtája) hivatkozó blokkjainál a SÉMA érvényességét is mérje (`visualParamProblems(...)` üres) — ma az engedékeny olvasóval
+> dönt, így egy 21 soros vagy extra kulcsos tábla „megjelent”, miközben a kliens nem rajzolja ki. Mutációs ellenpróbával.
 
 Ág: `feat/abrakeszito-forrasra-kotve-s3b`. Fájlok: `server/studio/lesson-metrics.ts`, `server/studio/single-run/engine.ts`,
 `server/studio/step-io.ts`, `server/studio/experience-builder.ts`, tesztek.
@@ -417,35 +599,67 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
    source` → hibátlan.
 6. 0.3 szerinti kapuk. Elvárt: E23–E26 teljesül.
 
-## SK3 — Költség- és körszám-plafon
+## SK3 — Körszám-plafon, költségjelzés, próbakeret
+
+> **Tulajdonosi döntés (D7, kérdőív, 2026-11-18) — ez a fejezet ehhez igazodik:** éles gyártásban a token- / költségkeret
+> túllépése „Csak jelezzen” (a futás megy tovább, e-mail megy; NEM állít meg); vészleállító / egységes gyártás-stop kapcsoló „Nem
+> kell” (ne épüljön); a meglévő körszám-plafon marad, ahogy van; a 30 USD-os próbakeret kemény plafon marad.
 
 Ág: `feat/futaskeret-sk3`. Fájlok: `shared/run-budget.ts` (új), `server/studio/single-run/telemetry.ts`,
-`server/studio/single-run/engine.ts`, `server/studio/experience-builder.ts` (csak az állandók forrása),
-`scripts/measure/run-budget-baseline.mts` (új), `scripts/measure/single-run-measure.mts` (a keret átadása),
-`tests/run-budget.test.ts` (új), `tests/single-run-engine.test.ts`.
+`server/studio/single-run/engine.ts`, `server/studio/single-run/budget-alert.ts` (új), `server/studio/experience-builder.ts` (csak
+az állandók forrása), `scripts/measure/run-budget-baseline.mts` (új), `scripts/measure/single-run-measure.mts` (a próbakeret
+átadása), `tests/run-budget.test.ts`, `tests/run-budget-alert.test.ts` (újak), `tests/single-run-engine.test.ts`.
+
+**Nem cél ebben a szeletben:** vészleállító / gyártás-stop kapcsoló; éles futás megállítása költség vagy futásidő miatt; új,
+futásonkénti összesített javítókör-plafon; a borító-újrapróba, az e-mail-visszapattanás webhookja, az éles adatbázis-írás hookja, az
+éjszakai invariáns-söprés és a telepítés utáni füstpróba (ezekhez a szelet nem nyúl); új adatbázis-tábla vagy migráció.
 
 1. Alapvonal ELŐBB (csak olvasva, fizetős hívás nélkül): `run-budget-baseline.mts` a meglévő futások telemetriájából (írásvédett
-   tranzakció; azonosító a kimenetbe nem kerül) kiszámolja futásonként a számolt költséget, az összes javító fordulót, a futásidőt,
-   és ezek átlagát, 95. percentilisét, legnagyobb értékét. A jelentés mért értékei: átlag 6,64 USD és 18,3 perc, legnagyobb
-   11,34 USD és 31 perc. A kimenet a PR-leírásba kerül.
+   tranzakció; azonosító a kimenetbe nem kerül) kiszámolja futásonként a számolt költséget és a futásidőt, valamint naptári
+   naponként (Europe/Budapest) a futások összegét; ezek átlagát, 95. percentilisét, legnagyobb értékét. A jelentés mért értékei:
+   futásonként átlag 6,64 USD és 18,3 perc, legnagyobb 11,34 USD és 31 perc. A kimenet a PR-leírásba kerül.
 2. `shared/run-budget.ts` (tiszta): `PRICE_PER_MTOK = { input: 4, cached: 0.2, output: 20 }`; `runCostUsd(telemetry)`;
-   `RUN_BUDGET_DEFAULT = { stationFixRounds: 3, reviewRounds: 2, packetAttempts: 3, packetRescue: 1, totalFixTurns: 12, warnUsd: 9,
-   stopUsd: 12, stopMinutes: 45 }` — a végső számokat az 1. lépés alapvonalából állítod be ezzel a szabállyal: a megállási érték
-   a 95. percentilis 1,25-szöröse, de legalább a mért legnagyobb érték; az eltérést a PR-leírás indokolja.
-   `budgetVerdict(telemetry, startedAt, now, budget): { state: "ok" | "warn" | "stop"; reason?: string }`.
-   A keret felülírható: környezeti változó (`RUN_BUDGET_USD`) és a futás indítási paramétere — csak lefelé szabadon; felfelé
-   kizárólag kifejezett paraméterrel (a mérőharness és a folytatás adja át).
-3. A mai körkorlát-állandók (`engine.ts:50`, `:71`; a bankkísérletek állandói az `experience-builder.ts`-ben) a
-   `RUN_BUDGET_DEFAULT`-ból olvasnak — egy helyen állíthatók; az értékük nem változik.
-4. `engine.ts`: a `timed(…)` burkoló (minden modellhívás előtt) meghívja a `budgetVerdict`-et: `warn` → napló és
-   `telemetry.gateResults` bejegyzés (egyszer); `stop` → a hívás NEM indul el, az állapot mentődik (a meglévő mentési úton), a job
-   kimenetébe `gateStop: { gate: "runBudget", reason }` kerül, a futás megáll. A javító fordulók indítása előtt a `totalFixTurns`
-   is ellenőrződik: elérve nincs újabb javító forduló — az állomás a „javítókörök kimerültek” úton zárul.
-5. `single-run-measure.mts`: a próbafutás kerete paraméter (`MEASURE_BUDGET_USD`, alapérték 7,5), amelyet a motor megkap.
-6. `tests/run-budget.test.ts`: költségszámítás rögzített telemetriára; `ok` / `warn` / `stop` határok; időplafon hamis órával;
-   mutációk: 12,01 USD → `stop`; 13. javító forduló → megtagadva; felfelé állító környezeti változó kifejezett paraméter nélkül →
-   figyelmen kívül marad. `tests/single-run-engine.test.ts`: a keret elérése után a hamis modell hívásszáma nem nő, a `gateStop`
-   kitöltve, az állapot folytatható.
+   `RUN_ROUND_LIMITS = { stationFixRounds: 3, reviewRounds: 2, packetAttempts: 3, packetRescue: 1 }` (a mai értékek, változatlanul);
+   `RUN_BUDGET_ALERT = { runUsd: 9, dayUsd: <az alapvonalból> }` — a végső számokat az 1. lépés alapvonalából állítod be ezzel a
+   szabállyal: a futásonkénti küszöb a futásköltségek 95. percentilise (két tizedesre kerekítve), a napi küszöb a napi összegek
+   95. percentilise; az eltérést a PR-leírás indokolja. Környezeti felülírás: `RUN_BUDGET_ALERT_USD`, `RUN_BUDGET_ALERT_DAY_USD`
+   (érvénytelen érték → az alapérték).
+   `budgetAlerts(input: { runUsd: number; dayUsdBefore: number; alreadySent: { run: boolean; day: boolean } }, thresholds):
+   Array<"run" | "day">` — mely küszöbök lépődtek át MOST (küszöbönként egyszer; a napi akkor, ha `dayUsdBefore + runUsd` átlépi
+   a napi küszöböt, és aznap még nem ment levél).
+   `trialBudgetVerdict(telemetry, hardStopUsd): { state: "ok" | "stop"; reason?: string }` — KIZÁRÓLAG a próbafutáshoz.
+3. A mai körkorlát-állandók (`engine.ts` — `SINGLE_RUN_FIX_ROUNDS`, `SINGLE_RUN_REVIEW_ROUNDS`; a bankkísérletek állandói az
+   `experience-builder.ts`-ben) a `RUN_ROUND_LIMITS`-ból olvasnak — egy helyen állíthatók; az értékük és a megállás mai módja NEM
+   változik (ezt teszt rögzíti: az állandók értéke 3 / 2 / 3 / 1, és a meglévő „3 javító forduló után megáll” teszt változatlanul
+   zöld).
+4. Éles jelzés (`budget-alert.ts` + `engine.ts`): a `timed(…)` burkoló minden modellhívás UTÁN (a `TelemetryRecorder` rögzítése
+   után — az őr erre a rögzítésre épül) kiszámolja a futás költségét, és meghívja a `budgetAlerts`-et. Átlépett küszöbnél:
+   (a) `telemetry.gateResults` bejegyzés (`gate: "runBudget"`, `mode: "report"`, a küszöb és a költség a `metrics`-ben) és napló;
+   (b) e-mail a tulajdonosnak a meglévő szerveroldali adminlevél-úton (`resolveAdminRecipients` — `server/lib/material-result.ts`
+   — és a meglévő levélküldő, a `sendResultEmail` mögötti út mintájára; `mailto:` tilos): tárgy „WEBSULI gyártás — költségküszöb
+   átlépve”, tartalom: melyik küszöb (futásonkénti / napi), a számolt költség, a küszöb, a futás állomása és eddigi ideje;
+   azonosítóként csak a job azonosítója (cím, tanulói adat, forrásszöveg nem megy levélbe). A futás NEM áll meg, a hívás
+   eredménye változatlanul megy tovább. A levél hibája (nincs címzett, a küldő hibázik) naplózva, a gyártás megy tovább.
+   Egyszeriség: a futásonkénti jelzés a job kimenetében (`budgetAlert.run`), folytatott futásnál sem megy újra; a napi jelzés
+   egyszerisége és az aznapi összeg a meglévő jobok telemetriájából olvasva (az aznap indult / zárult egyfutásos jobok
+   `output.telemetry`-je és `output.budgetAlert.day` jelzője — új tábla nélkül). A napi összeg lekérdezésének hibája → csak a
+   futásonkénti jelzés megy (fail-open, naplózva). E2E-módban (a repó meglévő e2e-kapcsolója) levél nem megy.
+5. Próbakeret (kemény plafon, csak a mérőharness): `single-run-measure.mts` a próbafutás keretét paraméterként adja át a motornak
+   (`MEASURE_BUDGET_USD`, alapérték 7,5 → `SingleRunInput.trialBudgetUsd`). Csak ha ez a paraméter meg van adva: a `timed(…)`
+   minden modellhívás ELŐTT meghívja a `trialBudgetVerdict`-et; `stop` → a hívás NEM indul el, az állapot mentődik (a meglévő
+   megállási úton: `SingleRunError` → a job `error` állapota, a kimenet megmarad), a job kimenetébe `gateStop: { gate:
+   "trialBudget", reason }` kerül. Éles indítási út (`runSingleUpload`, `runSingleFromMap`, `runSingleResume`) ezt a paramétert
+   nem adja át — ezt teszt rögzíti.
+6. `tests/run-budget.test.ts`: költségszámítás rögzített telemetriára; a körkorlát-állandók rögzített értékei; a
+   `trialBudgetVerdict` határa (7,49 → `ok`, 7,50 → `stop`); a `budgetAlerts` küszöbei. Mutációk (mind a megnevezett eredménnyel):
+   9,01 USD → `["run"]`, de `alreadySent.run` mellett `[]`; a napi küszöb átlépése másodszor → `[]`; érvénytelen környezeti
+   felülírás → az alapérték; 8,99 USD → `[]`.
+   `tests/run-budget-alert.test.ts` (hamis levélküldővel és hamis napi összeggel): küszöb felett pontosan egy levél megy, a
+   címzettek az `ADMIN_EMAILS` listája, a levélben nincs `mailto:`; a levélküldő hibája nem dob; címzett nélkül nincs küldés és
+   nincs hiba.
+   `tests/single-run-engine.test.ts`: éles (paraméter nélküli) futásban a küszöb feletti költség mellett a hamis modell hívásszáma
+   UGYANANNYI, mint küszöb nélkül, a lecke közzétéve, a `gateResults` tartalmazza a `runBudget` jelzést, a levélküldő egyszer
+   hívódott; próbakerettel indítva a keret elérése után a hívásszám nem nő, a `gateStop` kitöltve, az állapot folytatható.
 7. 0.3 szerinti kapuk. Elvárt: E41, E42.
 
 ## S10 — Mérés (D2: 30 USD keret, eldobható adatbázison)
@@ -474,6 +688,11 @@ legalább három mutációs ellenpróbát is ír (elrontott bemenet → a várt 
 
 ### S10/1 — Első mérés (az SK3 merge után; fizetős)
 
+> **Előfeltételek a teljes tartalmú vak ellenőr (2026-11-18) leleteiből — a mérés és az éles bekapcsolás előtt:** az S3a „tt J5”
+> (leltár ↔ megjelenítő szerződés), „tt J7” (a hirdetett ábrafajta-lista bővítése — nélküle a mérés alulbecsül) és „tt J8”
+> (visszakapcsolás BE → KI) pontja, valamint az S2b „tt J6” pontja (döntési fa, képes kártya megjelenítője) LEZÁRVA. A mérés
+> jelentése mondja ki tételesen, melyik lezárt, és a kapu `enforce` módra kapcsolása csak a „tt J6” után javasolható.
+
 Futásterv: **2 fizetős futás** (HM „utána”, PT „utána”) + legfeljebb **2 tartalék**. „Előtte” futás NINCS: a HM alapvonala a
 meglévő éles lecke (6 / 38), a PT alapvonala a forrásleltár (0 / 39), a változatosságé a kiadott állomány.
 
@@ -485,16 +704,25 @@ meglévő éles lecke (6 / 38), a PT alapvonala a forrásleltár (0 / 39), a vá
    kell ehhez a méréshez.
 3. Száraz futás előbb: `MEASURE_DRY=1` mindkét PDF-fel → a promptok felépülnek, modellhívás nincs. Ellenőrizd a kimenetben, hogy
    az 1. állomás kérése tartalmazza a leltár szerződését, és a futáskeret 7,5 USD.
+   *Spec-pontosítás 2026-11-18 (vak ellenőr: önálló beolvaszthatóság):* a harness a leltárt bekapcsolva futtatja (0.7) — a
+   kimenet `flags.sourceVisuals` mezője legyen `true`; `false` esetén a futás a mai éles viselkedést méri (csak A/B alapvonalnak,
+   `STUDIO_SOURCE_VISUALS=off` a futtató környezetében), a fizetős „utána” futás így NEM indítható. A mérés jelentése a végén
+   külön döntési kérdést tesz fel a tulajdonosnak az éles bekapcsolásról (opciók + javaslat).
 4. Minden fizetős futás ELŐTT: `trial-ledger.mts check --next 7.5` → nulla kilépési kód. Nem nulla esetén NEM indítasz futást:
    megállsz, és az orkesztrátoron át a tulajdonost kérdezed (a keret emelése tulajdonosi döntés).
 5. Éles próbafutás: HM-PDF, majd PT-PDF, egymás után (nem párhuzamosan), `MEASURE_SAVE_LESSON=1`, `MEASURE_BUDGET_USD=7.5`. A
    PDF-ek a tulajdonostól / a munkamenet jegyzeteiből jönnek, a repóba nem kerülnek. Futás közben aktív követés (napló,
-   telemetria). Minden futás után `trial-ledger.mts add`. Ha egy futást a futáskeret (SK3) vagy egy kapu megállít: az eredmény
+   telemetria). Minden futás után `trial-ledger.mts add`. Ha egy futást a próbakeret (SK3) vagy egy kapu megállít: az eredmény
    így is mérési adat — tartalék futást csak akkor használsz, ha a megállás oka a mérőkörnyezet hibája (nem a gyártásé), vagy az
    orkesztrátor kéri.
 6. Kiértékelés: `source-gap-table.mts` mindkét leckére (a jelöléseket tételenként, a lecke JSON-ja és a megjelenített oldal
    képernyőképei alapján töltöd ki); a futás telemetriájából: állomásonkénti token / idő / `fixTurns`, `gates.visualsFound /
    visualsDropped`, `telemetry.visuals`, `fixReasons`, `gateResults` (SK1, SK3), `coverage.visuals`; a futás számolt ára.
+   **Mérési pontok a független review-ból (SK1b):** (F11) a lektor a hiányzó tételek listáját tájékoztatásként kapja — mérd a
+   lektorkörök számát és a lektor `coverage_gap` blokkolóit az alapvonalhoz képest (ad-e blokkolót a hiánylistára, nő-e miatta a
+   körszám vagy a megállás); ha igen, a hiánylista az S3-ig kerüljön ki a lektor kéréséből. (F13) A leltár háromszor kerül a fő
+   beszélgetésbe (terv, tananyag, ábrák) és körönként a lektorhoz — mérd állomásonként a bemeneti és a gyorsítótárból jövő
+   tokent a leltár méretéhez viszonyítva (a legnagyobb leltárnál promptonként ≈ +39 ezer karakter), és számold ki a költséghatást.
 7. Eredmény: `docs/handoffs/2026-11-18-tananyag-minoseg-meres-1.md` (hiánytábla, költség a főkönyvből, eltérés a terv becsléseitől,
    a kapuk ítélete, a következő szeleteket érintő leletek).
 
@@ -665,7 +893,7 @@ meglévő éles lecke (6 / 38), a PT alapvonala a forrásleltár (0 / 39), a vá
    kiosztott mintával (S6a; a forráshoz kötött ábrák és a kiosztott `try` hozzáadása megengedett eltérés); a visszajelzésekben
    nincs a régi bátorító előtag — ha van, a program a mentés előtt levágja (`stripLegacyOpener`), modellkör nélkül, és megszámolja;
    (b) **jelzés** (nem állít meg): `tryShare < minTryShare`, egy fajta aránya `> maxKindShare`. A kapu (a) részének bukása:
-   egyetlen célzott javító forduló a szerzőnél az eltérő fejezetekre (az SK3 keretén belül), utána megállás és jelzés.
+   egyetlen célzott javító forduló a szerzőnél az eltérő fejezetekre (a meglévő körszám-plafonon belül), utána megállás és jelzés.
    Üzemmód a `GATE_MODES`-ban: kezdőérték `report`; `enforce`-ra az S10 záró mérése után, orkesztrátori döntéssel vált (a váltás
    egysoros, teszttel).
 6. `tests/variety-metrics.test.ts`: kézzel számolt elvárás 4 szintetikus leckére; mutációk: minden fejezet azonos mintájú →
@@ -864,7 +1092,7 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    szolgáltatóhívás; `maxChars` elérésekor megáll; tárplafonnál megáll és jelez; 2 újragenerálás után „kézi átnézés”; az admin
    végpont hitelesítés nélkül 401 / 403, párhuzamos indításra 409.
 6. **Új leckék hangja (kapcsolóval, alapból KI):** a leckegyártás végén, a szószedet véglegesítése után ugyanez a modul futhat a
-   lecke saját szövegeire (`TTS_AUTO_GENERATE` környezeti kapcsoló; lecke-szintű `maxChars` 5 000; az SK3 futáskerete és a
+   lecke saját szövegeire (`TTS_AUTO_GENERATE` környezeti kapcsoló; lecke-szintű `maxChars` 5 000; az SK3 költségjelzése és a
    méretőr érvényes; hibája a közzétételt nem akasztja meg, amíg az SK4 `ttsPresence` kapuja `report` módban van). A kapcsolót a
    tulajdonos állítja be a szerver környezetében; a kód alapértéke kikapcsolt. A beillesztési pontot a szelet elején térképezd fel
    (hol véglegesül a szószedet az egyfutásos motorban), és a tervbe visszaírod fájl:sorral.

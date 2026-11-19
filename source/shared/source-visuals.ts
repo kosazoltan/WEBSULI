@@ -8,6 +8,11 @@ import { z } from "zod";
 export const SOURCE_VISUAL_KINDS = ["table", "process", "decisionTree", "ruleBox", "pictureCard", "colorCode", "exercise", "diagram"] as const;
 export type SourceVisualKind = (typeof SOURCE_VISUAL_KINDS)[number];
 export const SOURCE_VISUAL_LIMITS = { maxItems: 60, maxChars: 40000 } as const;
+/**
+ * A leltár sémaverziója (review J4): a különálló kinyerés tartalmi lenyomatának része (`singleRunMapHash`), így a séma változása után
+ * ugyanarra a fájlra nem a régi alakú (vagy leltár nélküli) térkép jön vissza jelzés nélkül. A séma érdemi változásakor emelendő.
+ */
+export const SOURCE_VISUALS_SCHEMA_VERSION = 1;
 /** A döntési fa legnagyobb mélysége (a gyökér az 1. szint). */
 export const SOURCE_VISUAL_TREE_DEPTH = 4;
 /** `verified: "text"`, ha a tétel 3+ betűs szavainak legalább ekkora hányada szerepel az oldal kinyert szövegében. */
@@ -21,6 +26,14 @@ export const SOURCE_VISUAL_MAX_NESTING = 24;
  * ~34 000 karakter JSON-ként) belefér a `maxChars` keretbe.
  */
 export const SOURCE_VISUAL_TABLE = { columns: 8, rows: 40, cellChars: 100, headerChars: 80 } as const;
+
+/**
+ * A tervező által megjelölhető kihagyás zárt oklistája (spec 2026-11-18-tananyag-gyartas-minoseg, SK1): iskolai adminisztráció /
+ * forrásjegyzék, megoldókulcs, egy megnevezett megjelenő tétel ismétlése, csak díszítő kép. A szabályt a forrás-fedettségi kapu ítéli meg.
+ */
+export const SOURCE_VISUAL_SKIP_REASONS = ["admin_meta", "answer_key", "duplicate", "decorative"] as const;
+export type SourceVisualSkipReason = (typeof SOURCE_VISUAL_SKIP_REASONS)[number];
+export type SkippedSourceVisual = { id: string; reason: string; duplicateOf?: string };
 
 const filled = (max: number) => z.string().trim().min(1).max(max);
 const tone = z.enum(["a", "b", "c", "neutral"]);
@@ -115,10 +128,23 @@ export type SourceVisualContext = { fileNames: string[]; conceptIds: Set<string>
 export type DroppedSourceVisual = { id?: string; reason: string };
 export type SourceVisualsResult = { visuals: SourceVisual[]; dropped: DroppedSourceVisual[];
   /** A törölt, nem létező fogalom-hivatkozások (a tétel marad): tételazonosító + a törölt azonosítók (review J2). */
-  removedConceptRefs: Array<{ id: string; conceptIds: string[] }> };
+  removedConceptRefs: Array<{ id: string; conceptIds: string[] }>;
+  /** A megtartott táblázatok csonkolt (túl hosszú) cellái és fejlécei: tételazonosító + darabszám (review U1). */
+  truncatedCells: Array<{ id: string; cells: number }> };
 
 /** Review J7: a modell szövege naplózás és tárolás előtt — vezérlőkarakter (sortörés, NUL) és magányos helyettesítő helyett szóköz. */
-export const cleanModelText = (s: string) => s.replace(/[\p{Cc}\p{Cs}]+/gu, " ");
+/**
+ * Független review F15: a kétirányú (bidi) vezérlőkarakterek — a szöveg megjelenő sorrendjét hamisíthatják — eltávolítva; a Unicode
+ * sor- és bekezdéselválasztó (U+2028 / U+2029) sortörésként kezelve (egysoros szövegben szóköz, többsorosban `\n`).
+ */
+const BIDI_CONTROLS = /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+const LINE_SEPARATORS = /[\u2028\u2029]/g;
+export const cleanModelText = (s: string) => s.replace(BIDI_CONTROLS, "").replace(LINE_SEPARATORS, " ").replace(/[\p{Cc}\p{Cs}]+/gu, " ");
+/**
+ * Review U4: többsoros tartalomnál (vers, párbeszéd, példamondat-lista) a sortörés a tartalom része — megmarad (`\r\n` / `\r` → `\n`,
+ * legfeljebb egy üres sor egymás után); minden más vezérlőkarakter és a magányos helyettesítő helyett szóköz. Naplóba NEM való.
+ */
+export const cleanModelMultilineText = (s: string) => s.replace(BIDI_CONTROLS, "").replace(LINE_SEPARATORS, "\n").replace(/\r\n?/g, "\n").replace(/[^\P{Cc}\n]+|\p{Cs}+/gu, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n");
 
 /** A nyers érték beágyazási mélysége ITERATÍVAN, `limit` fölött megállva (review J3: a mély fa nem dobhat veremhibát). */
 function nestingExceeds(value: unknown, limit: number): boolean {
@@ -132,13 +158,49 @@ function nestingExceeds(value: unknown, limit: number): boolean {
   return false;
 }
 
-/** A (már korlátos mélységű) nyers tétel szövegeinek tisztítása; a kulcsok is tisztulnak. */
-function cleanDeep(value: unknown): unknown {
-  if (typeof value === "string") return cleanModelText(value);
-  if (Array.isArray(value)) return value.map(cleanDeep);
-  if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [cleanModelText(k), cleanDeep(v)]));
+/** A (már korlátos mélységű) nyers érték szövegeinek tisztítása; a kulcsok mindig egysorosak. `multiline`: a sortörés megmarad (U4). */
+function cleanDeep(value: unknown, multiline: boolean): unknown {
+  if (typeof value === "string") return multiline ? cleanModelMultilineText(value) : cleanModelText(value);
+  if (Array.isArray(value)) return value.map((v) => cleanDeep(v, multiline));
+  if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [cleanModelText(k), cleanDeep(v, multiline)]));
   return value;
 }
+
+/**
+ * A nyers tétel tisztítása: a közös mezők (azonosító, fájlnév, szerep, cím) és a táblázat cellái egysorosak; a többi fajta `data`
+ * szövegében a sortörés megmarad (review U4).
+ */
+function cleanEntry(entry: object): Record<string, unknown> {
+  const table = (entry as { kind?: unknown }).kind === "table";
+  return Object.fromEntries(Object.entries(entry).map(([k, v]) => [cleanModelText(k), cleanDeep(v, k === "data" && !table)]));
+}
+
+/** A `max`-nál hosszabb szöveg csonkolva, a végén „…” jelöléssel (fél helyettesítő-pár nélkül); a rövidebb változatlan. */
+function clipText(value: unknown, max: number, onClip: () => void): unknown {
+  if (typeof value !== "string") return value;
+  const text = value.trim();
+  if (text.length <= max) return value;
+  onClip();
+  return `${text.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, "").trimEnd()}…`;
+}
+
+/**
+ * Review U1: egyetlen túl hosszú cella (vagy fejléc) nem dobhatja el a teljes táblázatot — a szöveg a korlátra csonkolódik („…”
+ * jelöléssel), a táblázat marad; a visszatérés a csonkolt szövegek száma. Más alakhibához nem nyúl (azt a séma ítéli meg).
+ */
+function clipTableTexts(fields: Record<string, unknown>): { fields: Record<string, unknown>; clipped: number } {
+  const data = fields.data as { headers?: unknown; rows?: unknown } | null | undefined;
+  if (fields.kind !== "table" || !data || typeof data !== "object") return { fields, clipped: 0 };
+  let clipped = 0;
+  const count = () => { clipped++; };
+  const headers = Array.isArray(data.headers) ? data.headers.map((h) => clipText(h, SOURCE_VISUAL_TABLE.headerChars, count)) : data.headers;
+  const rows = Array.isArray(data.rows) ? data.rows.map((row) => (Array.isArray(row) ? row.map((cell) => clipText(cell, SOURCE_VISUAL_TABLE.cellChars, count)) : row)) : data.rows;
+  return clipped ? { fields: { ...fields, data: { ...data, headers, rows } }, clipped } : { fields, clipped: 0 };
+}
+
+const errorText = (error: unknown): string => {
+  try { return cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 120); } catch { return "ismeretlen hiba"; }
+};
 
 /**
  * A modell leltárának determinisztikus megítélése, tételenként: séma, létező forrásfájl és oldal, egyedi azonosító, korlátok. A nem
@@ -148,18 +210,25 @@ export function sanitizeSourceVisuals(raw: unknown, ctx: SourceVisualContext): S
   const visuals: SourceVisual[] = [];
   const dropped: DroppedSourceVisual[] = [];
   const removedConceptRefs: SourceVisualsResult["removedConceptRefs"] = [];
+  const truncatedCells: SourceVisualsResult["truncatedCells"] = [];
   const seen = new Set<string>();
   let chars = 0;
-  for (const entry of Array.isArray(raw) ? raw : []) {
-    const rawId = (entry as { id?: unknown } | null)?.id;
-    const id = typeof rawId === "string" ? cleanModelText(rawId).slice(0, 40) : undefined;
+  // A függvény SOHA nem dob (review J3, U2): a védelmi határ a bejárást (hossz, elem olvasása) és az azonosító olvasását is fedi —
+  // dobó getter vagy Proxy is csak az adott tételt (a hossz olvasásának hibája a teljes listát) hagyja ki.
+  let length = 0;
+  try { length = Array.isArray(raw) ? raw.length : 0; } catch (error) { dropped.push({ reason: `váratlan hiba a bejárásban: ${errorText(error)}` }); }
+  for (let index = 0; index < length; index++) {
+    let id: string | undefined;
     const drop = (reason: string) => { dropped.push({ ...(id ? { id } : {}), reason }); };
-    // A függvény SOHA nem dob (review J3): a váratlan hiba is csak az adott tételt hagyja ki.
     try {
+    const entry: unknown = (raw as unknown[])[index];
+    const rawId = (entry as { id?: unknown } | null)?.id;
+    id = typeof rawId === "string" ? cleanModelText(rawId).slice(0, 40) : undefined;
     if (nestingExceeds(entry, SOURCE_VISUAL_MAX_NESTING)) { drop("hibás alak: túl mély beágyazás"); continue; }
     // Egyetlen forrásfájlnál a fájlnév egyértelmű (mint a fogalmaknál): a hiányzó `sourceFile` azt jelenti.
     // A `verified` mezőt a program tölti: a modell értéke eldobódik.
-    const { verified: _model, ...fields } = (entry && typeof entry === "object" && !Array.isArray(entry) ? cleanDeep(entry) : {}) as Record<string, unknown>;
+    const { verified: _model, ...cleaned } = entry && typeof entry === "object" && !Array.isArray(entry) ? cleanEntry(entry) : {} as Record<string, unknown>;
+    const { fields, clipped } = clipTableTexts(cleaned);
     const candidate = ctx.fileNames.length === 1 && fields.sourceFile === undefined ? { ...fields, sourceFile: ctx.fileNames[0] } : fields;
     const parsed = sourceVisualSchema.safeParse(candidate);
     if (!parsed.success) { drop(`hibás alak: ${parsed.error.issues.slice(0, 2).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ").slice(0, 200)}`); continue; }
@@ -178,10 +247,11 @@ export function sanitizeSourceVisuals(raw: unknown, ctx: SourceVisualContext): S
     seen.add(v.id); chars += size;
     const unknownRefs = v.conceptIds.filter((c) => !ctx.conceptIds.has(c));
     if (unknownRefs.length) removedConceptRefs.push({ id: v.id, conceptIds: unknownRefs.map((c) => c.slice(0, 40)) });
+    if (clipped) truncatedCells.push({ id: v.id, cells: clipped });
     visuals.push({ ...v, conceptIds: v.conceptIds.filter((c) => ctx.conceptIds.has(c)), verified: share >= SOURCE_VISUAL_TEXT_SHARE ? "text" : "visual-only" });
-    } catch (error) { drop(`váratlan hiba: ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 120)}`); }
+    } catch (error) { drop(`váratlan hiba: ${errorText(error)}`); }
   }
-  return { visuals, dropped, removedConceptRefs };
+  return { visuals, dropped, removedConceptRefs, truncatedCells };
 }
 
 /** A térkép `source_files` jsonb elemeiből a leltár egy listában (betöltés; hiányzó vagy hibás kulcs → nincs tétel). */
