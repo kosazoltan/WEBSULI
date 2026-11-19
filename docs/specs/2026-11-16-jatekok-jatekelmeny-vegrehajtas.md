@@ -1864,11 +1864,11 @@ fizika-esetek (pattogás, határok) változatlanok.
     négy, többsoros válaszú tétel): a szövegsorok (`Range.getClientRects`), a gomb, a kártya és a kristályok páronként nem fedik egymást, és minden kristály közepén a kristály a
     találat-cél (`elementFromPoint`).
   - (L2) a csak szilánkokat leölő bomba nem ad combót: a lap és a szimuláció ugyanazt a `bombKillRaisesCombo` feltételt hívja. Böngészős regresszió: rossz kristály → 3 szilánk → bomba → combo 0.
-  - (L3) NOT DONE — ORCHESTRÁTOR-KÉRÉS: a kihagyott (lejárt) kérdések számát a `recordRun` mentési szerződése nem viszi (`L/achievements.ts` közös fájl, additív `timeouts` mező kell). A szerver-pontséma
-    változatlan. A lapon a szám megvan (`runTotalsRef.timeouts`), a bekötés a közös fájl bővítése után egy sor.
+  - (L3) a kihagyott (lejárt) kérdések száma a `recordRun`-ban: a közös `L/achievements.ts` additív, opcionális `timeouts` mezőt (és `totalTimeouts` élettartam-számlálót) kapott
+    (orkesztrátori engedéllyel); hiányzó mező = 0, régi mentés / régi hívó változatlan (`achievements-timeouts.test.ts`). A lap `runTotalsRef.timeouts`-ot küldi. A szerver-pontséma változatlan.
   - (L4) a lecke-kupon bónuszra a LEJÁRT kérdés `-1`-et küld (`couponClaimIndex`; a `useCouponSession` szerződése), a megszakított semmit; egység- és forrás-őr teszt.
   - (L5) a szóbank-forrás a menet magjából (`words` adatfolyam) választ szót és elterelőt; a közös `useVocabQuizSource` egyetlen, additív, visszafelé kompatibilis 3. paramétert kapott (`rng`, alapból
-    `Math.random`, a többi játék változatlan). Teszt: azonos mag → azonos kérdés-sor, más mag → más. A közös fájl módosítása jelölt (orkesztrátor: a hunk önállóan visszavonható).
+    `Math.random`, a többi játék változatlan). Teszt: azonos mag → azonos kérdés-sor, más mag → más. A módosítást az orkesztrátor engedélyezte; a többi hívó változatlanságát forrás-őr igazolja.
   - (L6) az utolsó élet elvesztésekor a megválaszolt kérdés megoldás-kijelzése (≥ 1,8 mp) végigmegy: az eredmény azonnal rögzül (nincs további sebzés), az eredményképernyő a kijelzés VÉGE
     után nyílik (`endRun(…, afterReveal)`); a megválaszolatlan kérdés megszakad, nincs új kérdés. Böngészős teszt: kijelzés közben `sa-over` nincs, ≥ 1,7 mp után megjelenik.
   - (L7) a lobby leírása: változatlanul orkesztrátor-kérés (nem érintettem).

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -305,4 +305,15 @@ test("vak 3. kör L6: az utolsó élet elvesztése megvárja a megoldás-kijelz�
   assert.match(code, /if \(revealLive\) \{[\s\S]*?waitRevealThenOver\(\);\s*return;\s*\}\s*setPhase\("over"\);/);
   assert.match(code, /sfxExplode\(\);\s*endRun\(false, undefined, true\);/, "az utolsó életnél a vég a kijelzés megvárásával hívódik");
   assert.match(code, /if \(phaseRef\.current !== "play"\) return;\s*if \(pausedRef\.current \|\| qRef\.current\.view\(\)\.reveal\) \{/);
+});
+
+test("vak 3. kör L3: a lap a kihagyott kérdések számát a `recordRun` `timeouts` mezőjében menti; a többi `useVocabQuizSource` hívó változatlan (2 argumentum)", () => {
+  assert.match(code, /wrongAnswers: runTotalsRef\.current\.wrong,\s*timeouts: runTotalsRef\.current\.timeouts,/);
+  const pagesDir = join(root, "client/src/pages");
+  for (const f of readdirSync(pagesDir).filter((n) => n.endsWith(".tsx") && n !== "SpaceAsteroidQuiz.tsx")) {
+    const src = stripComments(readFileSync(join(pagesDir, f), "utf8"));
+    for (const m of src.matchAll(/useVocabQuizSource\(([^)]*)\)/g)) {
+      assert.ok(m[1]!.split(",").length <= 2, `${f}: a közös hook más hívója nem kaphat 3. (rng) argumentumot`);
+    }
+  }
 });

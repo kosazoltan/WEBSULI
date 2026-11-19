@@ -3410,6 +3410,7 @@ export default function SpaceAsteroidQuiz() {
       // Valós kérdés-statisztika a directorból (K.2 „Menet-statisztika”); a kihagyott (lejárt) kérdés NEM hibás válasz (L4).
       correctAnswers: runTotalsRef.current.correct,
       wrongAnswers: runTotalsRef.current.wrong,
+      timeouts: runTotalsRef.current.timeouts, // vak 3. kör L3: a kihagyott kérdések külön számláló
       maxStreak: answerStreakRef.current.best, // a legjobb válaszsorozat (nem a harci kombó, L4)
       enemiesKilled: enemiesKilledRef.current,
       alienKills: alienKillsRef.current,
