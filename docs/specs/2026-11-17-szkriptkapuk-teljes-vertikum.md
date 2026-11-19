@@ -224,7 +224,7 @@ kötelező lépcsőzést ír elő. Minden kapu-kapcsoló a `gates.config.json` `
 | Kapu | 1. lépcső (most) | 2. lépcső (tiltás) | A váltás MÉRT feltétele (mind teljesül) | Mérőeszköz |
 |---|---|---|---|---|
 | S1 teszt-integritás, helyben | `warn` | `block` | a nyitott PR-ok korpuszán (az öt játékág + a #490 + a #418) a mérce-leletek hamis riasztási aránya ≤ 10%; 2 hét / 20 PR hamis riasztás-jelölés nélkül | `node scripts/qa/gates/test-integrity.mjs --head origin/<ág> --json` ágonként; kézi besorolás a PR-ban |
-| S1 a CI-ban | `warn` (a job nem bukik; a leletek a job-összefoglalóba kerülnek) | `block` | ugyanaz, ÉS a commit-nézet leletei soha nem tiltanak (csak a main-hez képesti, összefésült nézet), ÉS előfeltétel a K1 megoldása (a leírás szerkesztése is újrafuttatja a lépést, vagy a lépés a leírást futásidőben kérdezi le — különben a „PR-leírás nem sorolja fel” javítása új pusht + E2E-kört kér) | a CI job-összefoglalója; egy próba-PR leírás-szerkesztése |
+| S1 a CI-ban | `warn` (a job nem bukik; a leletek a job-összefoglalóba kerülnek) | `block` | ugyanaz, ÉS a commit-nézet leletei soha nem tiltanak (csak a döntő — main-csúcshoz képesti, összefésült — nézet), ÉS előfeltétel a K1 megoldása (a leírás szerkesztése is újrafuttatja a lépést, vagy a lépés a leírást futásidőben kérdezi le — különben a „PR-leírás nem sorolja fel” javítása új pusht + E2E-kört kér) | a CI job-összefoglalója; egy próba-PR leírás-szerkesztése |
 | S2 a `record-review`-ban | `warn` (a HAMIS lista kiírva, az ítélet rögzül, a rekord számolja) | `block` (HAMIS → nincs rögzítés) | a regressziós korpuszon (a 12 valódi ellenőri jelentés + a saját doksik) 0 hamis HAMIS, ÉS 10 egymást követő új valódi jelentés hamis riasztás nélkül | `node scripts/qa/gates/verify-report-corpus.mjs --root <scratchpad>` |
 | S2 a `gate:pr`-ban (a #490 után) | `warn` | `block` | ugyanaz, mint a `record-review`-nál | ugyanaz |
 | S2 `--report` (alügynök-jelentés) | `block` (az orkesztrátor kézi eszköze; a hiányzó / ellentmondó gépi blokk bukás) | — | — | — |
@@ -375,7 +375,8 @@ A `gate-metrics.mjs` (S10) a bizonyíték-tárból és a `gh`-ból számol, nem 
   sorokon.
 - **Szkript is hibázhat:** a kapu hibás szabálya hamis biztonságot ad. Ezért minden szabálynak van pozitív ÉS negatív tesztje, és
   mutációs ellenpróba (commit után, C-70).
-- **Sebesség:** a git ebben a repóban Windows-on lassú lehet; a kapu egyetlen `git log -p` hívással dolgozik, nem commitonként.
+- **Sebesség:** a git ebben a repóban Windows-on lassú lehet; a kapu kevés, összevont git-hívással dolgozik (döntő nézet: egy
+  `merge-tree` + egy `diff`; commit-nézet: egy `git log -p`; a fej-tartalmak egy `git cat-file --batch`), nem commitonként.
 
 <!-- acceptance-checklist -->
 - [ ] A1: a terv tartalmazza a teljes vertikum fázis-leltárát (41 fázis; belépő / kilépő / ma ki ellenőrzi / mit lehetne / mit nem
@@ -385,13 +386,13 @@ A `gate-metrics.mjs` (S10) a bizonyíték-tárból és a `gh`-ból számol, nem 
   mérése, helyi / CI megosztás.
 - [ ] A4: szeletterv S0–S10, fájlokkal, tesztekkel, bevezetési móddal, párhuzamossággal; az S4 adapter-interfésze és a hét játékmag
   illeszthetősége.
-- [ ] A5: WHEN egy tesztfájl diffje (a main-hez VAGY commitonként) állítást töröl / kikommentez, számküszöböt / relációs jelet
+- [ ] A5: WHEN egy tesztfájl diffje (a döntő nézetben VAGY a commit-nézetben; definíció: végrehajtási fájl S1.2) állítást töröl / kikommentez, számküszöböt / relációs jelet
   változtat, lazább matcherre vált, timeoutot / retries-t növel, `force: true`-t / `waitForTimeout`-ot vagy forrásszöveg-vizsgálatot
   vezet be, illetve sim-kalibrációs konstanst módosít, és nincs érvényes `SPEC-VÁLTOZÁS` jelölés THEN the test-integrity kapu SHALL a
   konkrét fájl:sorral jelezni — S1. A jelzés módja a bevezetési lépcsőtől függ (6.3a): a DÖNTŐ nézet (a main CSÚCSÁHOZ képesti,
   összefésült diff: `git merge-tree --write-tree`; definíció: végrehajtási fájl S1.2) leletére helyben és a CI-ban is `WARN` (a job
   nem bukik), `FAIL` csak a `modes.test-integrity` (`local` / `ci`) `block` kapcsoló után, amelyet a 6.3a mért feltételei és
-  tulajdonosi jóváhagyás nyitnak; a commitonkénti nézet lelete MINDIG csak tájékoztató `WARN`, soha nem tilt (egyik lépcsőben sem).
+  tulajdonosi jóváhagyás nyitnak; a commit-nézet lelete MINDIG csak tájékoztató `WARN`, soha nem tilt (egyik lépcsőben sem).
   Tesztesetek: végrehajtási fájl S1.5/2 („A5/a”, „A5/b”).
 - [ ] A6: WHEN a jelölés megvan, a hivatkozott spec a diffben van és a tesztre utal, és a PR-leírás felsorolja THEN the kapu SHALL
   átengedni — S1.
