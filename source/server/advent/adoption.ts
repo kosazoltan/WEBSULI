@@ -55,7 +55,7 @@ export type AdoptionContext = {
 /**
  * Az egyesített tanulói sor, vagy \`null\`, ha az eszköz sorában nincs egyetlen válasz sem (nincs mit átvinni — az eszköz sora
  * egyszerűen törlődik). Csak az eszköz AKTUÁLIS körének ablakai kerülnek a tanuló aktuális körébe (korábbi kör kudarca soha), ablakonként
- * akkor, ha a rangjuk (`doorRank`) szigorúan jobb a tanulóénál; egyenlőségnél a tanulóé marad. Próba nélküli eszköz-ablak soha nem
+ * akkor, ha MEGOLDOTTAK és a tanulóé nem az (`doorRank`); minden más esetben a tanulóé marad. Próba nélküli eszköz-ablak soha nem
  * töröl a tanuló sorából. Az átvett ablakkal a kérdéssora és a sorrend magja is átkerül (a jelölés így változatlan).
  */
 export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx: AdoptionContext): AdventRow | null {
@@ -87,7 +87,9 @@ export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx:
       }
       continue;
     }
-    if (!theirs?.attempts.length || doorRank(theirs, repairs) <= doorRank(mine, repairs)) continue;
+    // Felülírni csak MEGOLDOTT ablak tud (és csak nem megoldottat): a vendég rontott / javítható próbája sem az érintetlen, sem a
+    // tanuló végleg elbukott ablakát nem váltja le — a gyerek vendégként nem „állíthatja vissza” a saját kudarcát (döntés 2026-11-19).
+    if (!theirs?.attempts.length || doorRank(theirs, repairs) !== 2 || doorRank(mine, repairs) === 2) continue;
     doors[day] = { attempts: theirs!.attempts.map((attempt) => ({ ...attempt })) };
     if (devicePlan?.doors[day]) plan.doors[day] = [...devicePlan.doors[day]!];
     if (devicePlan?.subjects?.[day]) plan.subjects[day] = devicePlan.subjects[day]!;

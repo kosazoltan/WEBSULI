@@ -338,7 +338,7 @@ test("névtelen → párosított: ABLAKONKÉNTI egyesítés — megoldott > éri
   assert.equal(orderKeyFor(fresh.plan[1], 3, "x"), "learner:L");
   // Van tanulói sor (2. kör, levél-foglalással, megfeleléssel): körszám, korábbi kör, foglalás, megfelelés MARAD (vak ellenőr K2).
   // 1: tanuló megoldotta → marad; 2: tanuló rontott (javítható), vendég megoldotta → vendégé; 3: csak a vendég rontott → NEM kerül át;
-  // 4: mindkettő rontott → tanulóé; 5: tanuló végleg elbukott, vendég még javítható → vendégé; 6: tanuló érintetlen, vendég végleg
+  // 4: mindkettő rontott → tanulóé; 5: tanuló végleg elbukott, vendég még javítható → a tanulóé marad (orkesztrátori döntés 2026-11-19); 6: tanuló érintetlen, vendég végleg
   // elbukott → érintetlen marad (V5: más gyerek kudarca nem rontja a gyerekét); 7: tanuló végleg elbukott, vendég érintetlen → a
   // tanuló saját kudarca marad (az érintetlen eszköz-ablak nem töröl).
   const learner = row("learner", 2, { 1: [true], 2: [false], 4: [false], 5: FAILED, 7: FAILED }, { mailedTo: ["1:final:abc"], passedAt: new Date("2026-12-04T10:00:00Z"), grade: 6 });
@@ -355,7 +355,8 @@ test("névtelen → párosított: ABLAKONKÉNTI egyesítés — megoldott > éri
   assert.equal(now[2]!.attempts[0]!.questionId, "device-q2");
   assert.equal(now[3], undefined, "a vendég rontott próbája nem jobb az érintetlen ablaknál");
   assert.equal(now[4]!.attempts[0]!.questionId, "learner-q4");
-  assert.equal(now[5]!.attempts[0]!.questionId, "device-q5", "a még javítható jobb a végleg elbukottnál");
+  assert.deepEqual([now[5]!.attempts.length, now[5]!.attempts[0]!.questionId], [3, "learner-q5"], "a tanuló végleg elbukott ablakát csak MEGOLDOTT ablak írhatja felül — a vendég javítható próbája nem (nincs „visszaállítás”)");
+  assert.deepEqual(merged.plan[2]!.doors[5], ["learner-q5"]);
   assert.equal(now[6], undefined, "a vendég végleges kudarca nem kerül a gyerek érintetlen ablakába (V5)");
   assert.equal(now[7]!.attempts.length, 3, "a tanuló saját kudarcát az érintetlen eszköz-ablak nem törli");
   assert.deepEqual(merged.plan[2]!.doors[2], ["device-q2"]);
