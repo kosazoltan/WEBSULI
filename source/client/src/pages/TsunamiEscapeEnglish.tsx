@@ -1754,7 +1754,7 @@ export default function TsunamiEscapeEnglish() {
   /*
    * Elrendezés-nyugalom (koordinátori spec-pontosítás 2026-11-18): a figura a kérdés megjelenése után ≤ 600 ms-on belül szabad,
    * és a nyitott kérdés alatt végig az. A sáv `data-layout="settled"`-et kap, amikor a hely / kompakt mód / kép-eltolás
-   * eldőlt és az eltolás (≈ 400 ms) lefutott; a beállás ideje a teszt-kampóban (`layoutSettleMs`).
+   * eldőlt és az eltolás (≈ 300 ms) lefutott; a beállás ideje a teszt-kampóban (`layoutSettleMs`).
    */
   const settledForRef = useRef<number | null>(null);
   const settleMsRef = useRef<number | null>(null);
@@ -1897,8 +1897,8 @@ export default function TsunamiEscapeEnglish() {
     const shift = solveShift(obs, fig, before);
     liveRef.current.shiftPx = shift;
     trackRef.current = { at: performance.now(), obs, id: presIdNow };
-    // ≈ 400 ms-os lassuló eltolás (a jelenet `damp(…, 12)`-je); változatlan eltolásnál az elrendezés azonnal nyugalomban van.
-    markSettled(presIdNow, Math.abs(shift - before) > 1 && !reducedMotion ? 420 : 0);
+    // ≈ 300 ms-os lassuló eltolás (a jelenet `damp(…, 16)`-ja: 320 ms után < 1 % marad); változatlan eltolásnál azonnal nyugalom.
+    markSettled(presIdNow, Math.abs(shift - before) > 1 && !reducedMotion ? 320 : 0);
   });
   /*
    * „Végig szabad”: a víz a nyitott kérdés alatt is emelkedik (lassítva), a figura oldalra is mozog (fekvő nézetben a szélső

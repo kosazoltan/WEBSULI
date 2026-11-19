@@ -310,4 +310,10 @@ A `gate:pr` a böngészős körben két, a saját kódomból eredő hibát fogot
 - **7.3 mérce terhelt gépen (360×640, 70 %-os víz, egyszeri bukás):** az ok méréssel dől el, nem találgatással — a beállási idő
   (`layoutSettleMs`) és a figura tényleges szabaddá válása 1× / 4× / 6× CPU-n, valódi GPU-val; a teszt a mért értéket a naplóba is
   kiírja (`SETTLE|…`). A javítás a mérésből következik; a 600 ms-os mérce nem lazul.
+  **Mérés (2026-11-19, fej 6b124a33):** a mérő-környezetben (szoftveres WebGL, 15 futás) eltolásnál a beállás 427–437 ms
+  (ebből 420 ms a rögzített eltolás-idő), a tartalék ~165 ms; valódi GPU-n a döntés késése 4× CPU-n 75–104 ms, 6× CPU-n
+  118–176 ms — ott eltolással 540–600 ms, a mérce határán. A bukó állítás szövege a kapu időtúllépése miatt nem maradt meg, a
+  bukás 45 ismételt futásban (15 elrendezés-eset × 3) nem jött elő újra: az ok tehát NEM bizonyított, csak a szűk tartalék mért.
+  **Javítás:** az eltolás gyorsabb (csillapítás 12 → 16, a nyugalom-jelző 420 → 320 ms; 320 ms után < 1 % marad hátra), így a
+  tartalék ~265 ms, és 6× lassított CPU-n is a mércén belül marad. A mérce és a tesztek állításai változatlanok.
 - Friss `origin/main` beolvasztva; a csapdakatalógusban a saját bejegyzések a főág C-75-e után (C-76 / C-77 / C-78).

@@ -1601,9 +1601,9 @@ function setupTsunami(
 
       // K2: kép-eltolás nyitott kérdés alatt (a kamera felfelé mozdul → a világ lejjebb kerül a képen).
       const live = p.live?.current;
-      // ≈ 400 ms-os lassuló beállás (koordinátori pontosítás 2026-11-18); csökkentett mozgásnál azonnali.
+      // ≈ 300 ms-os lassuló beállás (terv 7.7: a 600 ms-os mércéhez lassú gépen is maradjon tartalék); csökkentett mozgásnál azonnali.
       const shiftTarget = (live?.shiftPx ?? 0) * worldPerPx;
-      shiftY = reducedMotion ? shiftTarget : damp(shiftY, shiftTarget, 12, dt);
+      shiftY = reducedMotion ? shiftTarget : damp(shiftY, shiftTarget, 16, dt);
       if (live) live.shownShiftPx = shiftY / worldPerPx;
       camera.position.y = EYE + shiftY;
       sky.position.y = camera.position.y;
