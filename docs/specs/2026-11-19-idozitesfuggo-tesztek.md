@@ -74,9 +74,10 @@ kiszorítja a tesztfolyamatot; ez a két párhuzamos teljes tesztkör alatti üt
   elején → `CPU 15000 ms, falióra 177526 ms`, a teszt ZÖLD maradt. **Döntés (orkesztrátori irány):** a CPU-korlát (60 000 ms) marad a
   gyorsasági mérce, MELLÉ terhelés-tűrő falióra-felső korlát: **150 000 ms**. Indoklás a mért adatokból: terheletlenül 11–22 s, a
   legerősebb mesterséges terhelésnél (W1) legfeljebb 94,5 s, a valódi kettős-kapus hamis bukás 60,7 s; a 150 s ~1,6× a legrosszabb
-  mért terhelt idő. **Maradó eltérés (tulajdonosi döntésre jelezve):** a CPU-t nem égető lassulásra a garancia 60 s helyett 150 s
-  falióra; a régi, pontos 60 s-os falióra-garancia csak egy külön, soros teljesítményfutással volna megtartható (kapu-módosítás,
-  NEM része ennek a szeletnek).
+  mért terhelt idő. Eltérés a régi mércétől: a CPU-t nem égető lassulásra a garancia 60 s helyett 150 s falióra; a pontos 60 s-os
+  falióra-garancia csak egy külön, soros teljesítményfutással volna megtartható (kapu-módosítás, NEM része ennek a szeletnek).
+- **Tulajdonosi döntés (2026-11-19, űrlapon): „Igen, 60 s CPU + 150 s”** — a bank-szintű invariáns mércéje: CPU-idő < 60 000 ms ÉS
+  falióra < 150 000 ms. Ez a dokumentált követelményváltozás (AGENTS.md „Teszt-integritás”: valódi, dokumentált spec-változás).
 
 ### 4.3 `claude-stream-thinking-liveness.test.ts` (a 2. feladat mérése során talált)
 
