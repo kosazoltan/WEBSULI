@@ -1,0 +1,71 @@
+# Terv: kapu-gyorsítás — gépi összefésült próba a merge-kapuban, bizonyíték-átvitel főág-beolvasztás után, vak-kör szabály
+
+> Dátum: 2026-11-19 · Állapot: tulajdonosi döntések (kérdőív, 2026-11-19) · Végrehajtás:
+> `docs/specs/2026-11-19-kapu-gyorsitas-vegrehajtas.md` · Kanban: #91 (szkriptkapuk), #92 (C-61)
+
+## 1. Probléma (mérve, 2026-11-17…19)
+
+- **C-61 új CI-kör:** ha a main elmozdult a PR CI-ja óta, és a PR repó-szintű őrt / ellenőrzést érint, a `pre-merge-gate` FAIL-lel
+  új teljes CI-t kér (a main beolvasztása + push → ~1 órás Playwright E2E). Egy őr-érintő PR így naponta több E2E-kört is fizetett.
+- **Bizonyíték-vesztés beolvasztáskor:** a main beolvasztása új fejet ad; a vak ítélet (`review-<fej>`), a `pre-push-<fej>` és a
+  `pre-pr-<fej>` a régi fejre szól, ezért a teljes push- / PR-kapu és egy újabb vak kör futott — akkor is, ha a PR saját változása
+  bájtra azonos maradt.
+- **Vak-kör oszcilláció:** egy doksin hat vak kör futott (#517), mert minden kör a változatlan részben is új, nem blokkoló leletet
+  talált, és mindegyik új kört nyitott.
+
+## 2. Cél
+
+- **A)** A merge-kapu a C-61 esetben NEM kér új CI-t: maga futtatja le egy ideiglenes, leválasztott munkafában a PR feje + a friss
+  `origin/main` összefésült állapotán (a) az összes őr-tesztet (ugyanaz a kód, amelyet a `pre-push-gate` C-61 lépése már futtat —
+  közös modulba kiemelve), (b) a PR által érintett node-os egységteszteket (`source/tests/*.test.ts`) és `scripts/qa` teszteket
+  (`*.test.mjs`). Ütközés / piros teszt / nem futtatható → FAIL (fail-closed); zöld → PASS. A bizonyítékba: a futtatott tesztek
+  száma, az összefésült fa azonosítója, az időtartam. Cél: ≤ 3 perc.
+- **B)** Bizonyíték-átvitel (`carry-over`) főág-beolvasztás után, szkripttel igazolva: ha az új fej egy merge commit, amelynek egyik
+  szülője a korábbi, bizonyítékkal rendelkező fej, a másik az `origin/main` egy őse, a merge ütközésmentes (a `merge-tree` ugyanazt a
+  fát adja), és a PR saját változása bájtra azonos (`git patch-id --verbatim` a régi és az új diffre), akkor a vak ítélet és a
+  `pre-push` / `pre-pr` bizonyíték átvihető az új fejre egy gépi `carry-<fej>` rekorddal — az új fejen ekkor csak az A) szerinti
+  összefésült próba fut. Bármi eltér → nincs átvitel.
+- **C)** A vak körök szabálya: 1 teljes kör + célzott visszanézés (legfeljebb 3 kör), a gép-zár szabálya és a mai csapdák a
+  runbookban / katalógusban.
+
+## 3. Nem cél
+
+- A CI, a `check-quality-gates` hook és a döntési szabályok (`decideMerge` többi lépése) módosítása; az átvitt rekordokat a hook a
+  meglévő `ok === true` szabállyal fogadja el.
+- E2E / böngészős / DB-teszt az összefésült próbában (az a CI dolga; a próba a node-os teszteket futtatja).
+
+## 4. Megoldás
+
+- **Közös modul** `scripts/qa/gates/merged-probe.mjs`: `mergedProbe(ctx, { head, base, files })` — a `pre-push-gate` eddigi
+  `mergedGuardCheck` kódja (ideiglenes munkafa a `.claude/worktrees/_gate-merge-*` alatt, `git merge --no-commit --no-ff`,
+  csomópont-hivatkozás a `node_modules`-ra, takarítás jelzésnél is), kiegészítve: a PR-fájlokból választott tesztek
+  (`selectProbeTests`), TAP-összesítő a darabszámhoz (`tapCounts`), az összefésült fa (`git write-tree`) és az időtartam. A
+  `pre-push-gate` ugyanezt hívja (`head: 'HEAD'`, `files: []`) — viselkedése változatlan.
+- **Merge-kapu:** a `decideMainMoved` a „main elmozdult + a PR repó-szintű ellenőrzést érint, és a main a hatókörébe nyúlt / a lista
+  nem olvasható” esetben `probeNeeded: true`-t ad; a `main()` ekkor lekéri a PR fejét (`git fetch origin pull/<n>/head`, a hash
+  egyezik a `headRefOid`-dal) és a friss maint (a hash egyezik a GitHub `main` csúcsával), lefuttatja a próbát, és a döntés a próba
+  eredményén múlik: PASS → „összefésült próba zöld (N teszt, fa, s)”, minden más → FAIL. A hatókör-tábla (`repoWideScopes`) a próba
+  kiváltója marad. A hiányzó hatókör-tábla továbbra is FAIL (konfighiba).
+- **Átvitel:** `scripts/qa/gates/carry-over.mjs` (`npm run gate:carry -- --from <régi fej> [--to HEAD]`): a feltételek ellenőrzése
+  (`checkCarry`), a próba (`mergedProbe`), majd a `carry-<új fej>.json` és az átvitt `review-` / `pre-push-` / `pre-pr-<új fej>`
+  rekordok (`carriedFrom`, `carry` mezővel). Csak `ok: true` régi rekord vihető át; a vak ítélet kötelező.
+
+## 5. Ütközés a #513-mal (`fix/merge-kapu-rest`, `2373a3f4`)
+
+A #513 a `pre-merge-gate.mjs` adatgyűjtését (`collectMergeData`) és lépés-összerakását (`mergeSteps`) írja át. A kapu-gyorsítás megy
+előbb a főágra; a #513 beolvasztásakor a feloldás: (1) a `decideMainMoved` / `decideMerge` `probe` paramétere marad; (2) a próba a
+`main()`-ben a `collectMergeData` UTÁN és a `mergeSteps` ELŐTT fut (a `collectMergeData` adja a `pr.headRefOid`-ot, a `mainSha`-t,
+a fájllistát); (3) a `mergeSteps` a `probe`-ot továbbadja a `decideMerge`-nek. Ellenőrzés a feloldás után: a „C-61 / próba” tesztek
+és a #513 W1 / V1 tesztjei is zöldek.
+
+## 6. Elfogadás (EARS)
+
+<!-- acceptance-checklist -->
+- [ ] AMIKOR a main elmozdult és a PR repó-szintű ellenőrzést érint, a merge-kapu NEM kér új CI-t, hanem az összefésült próba
+  eredménye dönt (zöld → PASS a darabszámmal, a fa azonosítójával, az időtartammal; ütközés / piros / nem futtatható → FAIL).
+- [ ] A `pre-push-gate` C-61 lépése ugyanazt a modult hívja; viselkedése változatlan.
+- [ ] AMIKOR a fej egy ütközésmentes main-beolvasztás, amelynek egyik szülője a bizonyítékkal rendelkező régi fej, és a PR saját
+  változása bájtra azonos, a `gate:carry` átviszi a vak ítéletet és a `pre-push` / `pre-pr` bizonyítékot (gépi `carry-` rekorddal);
+  bármely feltétel hiányában nem.
+- [ ] A vak-kör szabály, a gép-zár szabálya és a mai csapdák a runbookban / a skillekben / a katalógusban.
+- [ ] Az összefésült próba ≤ 3 perc (mérve).
