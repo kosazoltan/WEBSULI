@@ -25,3 +25,14 @@ Terv: `docs/specs/2026-11-19-audit-hook-kapuinditas.md`, „Kiegészítés”.
 8. Kanban: L1, L4, L5 (a kapu-hookkal közös szelet). Mutációs ellenpróba; `gate:stage`; új fej; vak visszanézés.
 
 - [x] 6 · [x] 7 · [ ] 8
+
+## Kiegészítés 2 — a #520 Sourcery-leletei — végrehajtás
+
+Terv: `docs/specs/2026-11-19-audit-hook-kapuinditas.md`, „Kiegészítés 2”.
+
+9. `git merge origin/main` (C-61), majd ez a doksi-commit (a terv „Nem cél” javítása + kiegészítés).
+10. Bukó teszt (`check-audit-ok.test.mjs`: `.cmd` / `.bat` alakok a `PUSH` és a láncolt listában) → `isGitRun` a `.cmd` / `.bat`
+    kiterjesztést is elfogadja.
+11. Szálválaszok a scratchpadba; `gate:stage`; célzott vak visszanézés; `checkPrBody`; zárral `gate:push` + `gate:pr`.
+
+- [x] 9 · [x] 10 · [ ] 11

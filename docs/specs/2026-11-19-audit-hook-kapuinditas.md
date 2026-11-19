@@ -14,8 +14,9 @@ Megbízás: az orkesztrátor, 2026-11-19 (a #506 összevonása után, `14c859ee`
 ## Nem cél
 
 - A kapu-hook (`check-quality-gates.mjs`) módosítása — a push / PR / merge bizonyíték-ellenőrzése ott marad.
-- Git-álnevek (pl. egy `push`-ra mutató alias) vagy változóból összerakott parancsnév felismerése — ezt a kapu-hook fail-closed
-  ellenőrzése fedi; itt ismert korlát.
+- Git-álnevek (pl. egy `push`-ra mutató alias) vagy változóból összerakott parancsnév felismerése. Ismert korlát, és **a kapu-hook
+  sem fedi**: az aliasokat ma egyik hook sem ismeri fel (javítva a #520 Sourcery-lelete alapján; a korábbi „a kapu-hook fedi” állítás
+  téves volt). A felismerés a kapu-hookkal közös következő szelet tétele (kanban #192).
 - Az `.audit-ok` jel írása szkriptből (külön kérdés; most a runbook szerinti kézi frissítés marad).
 
 ## Megoldás
@@ -68,3 +69,14 @@ tesztje).
 - [x] A6 WHEN a parancs `git http-push` / `git send-pack` vagy `git-http-push` / `git-send-pack` program és az `.audit-ok` régi THEN a
   hook SHALL tiltani.
 - [x] A7 WHEN a parancsban nincs `git`, csak önálló „push” szó THEN a hook SHALL engedni.
+
+## Kiegészítés 2 — a #520 Sourcery-leletei (2026-11-19)
+
+- S1 (alias): a terv „Nem cél” pontja tévesen állította, hogy a kapu-hook fedi az aliasokat — javítva: egyik hook sem ismeri fel;
+  a felismerés a #192 jegyen (a kapu-hookkal közös szelet). Kódváltozás nincs.
+- S2 (`.cmd` / `.bat`): a Windows git-indító `git.cmd` / `git.bat` (útvonallal, nagybetűvel is) git-futamnak számít — előbb bukó,
+  folyamat-szintű teszttel.
+- S3 (túlfelismerés: idézett szöveg, commit-üzenet, `echo push`): a tervben vállalt konzervatív túlfelismerés; szűkítés a #193 jegyen.
+  Kódváltozás nincs.
+
+- [x] A8 WHEN a parancs `git.cmd push` / `git.bat push` (útvonallal vagy nagybetűvel is) és az `.audit-ok` régi THEN a hook SHALL tiltani.
