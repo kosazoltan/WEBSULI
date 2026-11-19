@@ -36,9 +36,9 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-46** — Unicode-tartomány forrásban `\p{…}` kategóriával, ne `\uXXXX`-szel (az eszközparaméter dekódolja); `cat -A` ellenőrzés.
 - **C-50** — Visszaperjeles szöveg csak Edit/Write-tal; bájtszintű visszaolvasás; szkriptes cserénél `git diff --stat` ellenőrzés.
 - **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
-- **C-75** — `native-arch` önmagában ismert helyi kivétel (nem telepítési teendő); a push-kapu piros oka mindig a TÖBBI bukó teszt. Mérő-várakozás állapotra, ne időre.
-- **C-76** — Takarás-döntés: a figura test (téglalap), nem pont; a mérce (`elementsFromPoint`) és a döntés ugyanazt a felületet nézze. Elakadásnál előbb a döntés bemeneteit naplózd.
-- **C-77** — Menet közbeni lagg: profil előtt ne találgass; a `long-animation-frame` szkriptje és a CDP-minta megnevezi (itt: lusta `new AudioContext()` az első hangnál, 0,8–2 s). Tétlen főszál + hosszú képkocka = GPU-folyamat: Chrome-nyomkövetéssel nézd.
+- **C-76** — `native-arch` önmagában ismert helyi kivétel (nem telepítési teendő); a push-kapu piros oka mindig a TÖBBI bukó teszt. Mérő-várakozás állapotra, ne időre.
+- **C-77** — Takarás-döntés: a figura test (téglalap), nem pont; a mérce (`elementsFromPoint`) és a döntés ugyanazt a felületet nézze. Elakadásnál előbb a döntés bemeneteit naplózd.
+- **C-78** — Menet közbeni lagg: profil előtt ne találgass; a `long-animation-frame` szkriptje és a CDP-minta megnevezi (itt: lusta `new AudioContext()` az első hangnál, 0,8–2 s). Tétlen főszál + hosszú képkocka = GPU-folyamat: Chrome-nyomkövetéssel nézd.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -1090,7 +1090,27 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
   állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
 
-## C-75 — A push-kapu `native-arch` bukása önmagában kivétel; állapotra várj, ne időre (2026-11-18)
+## C-75 — Őrt / kaput érintő PR-ok: soros merge-ablak; a hook bekötését a valódi settings-szel mérd (2026-11-18)
+
+- **Tünet:** két őr-érintő PR nem lehet egyszerre zöld — a C-61 hatókör (a main elmozdulása a repó-szintű ellenőrzés fájlkörében)
+  és a ~2 órás böngészős kör együtt minden mainre kerülő PR után új beolvasztást + új CI-t kényszerít (a #499-nél két extra kör).
+- **Szabály:** az őrt / kaput érintő PR-okat elsőként, egyenként kell beolvasztani; a merge-ablakot az orkesztrátor jelzi, a
+  beolvasztást a fejlesztő a jelre végzi (előtte próbabeolvasztás: `git merge-tree --write-tree HEAD origin/main`).
+- **Tünet 2:** a hook-szkript tesztje zöld volt, a hook mégsem futott alkönyvtárból (relatív útvonal a settings-ben, #490 M1).
+- **Szabály 2:** hookot a VALÓDI `.claude/settings.json` parancsával, több munkakönyvtárból kell tesztelni
+  (`scripts/qa/hooks/settings-hooks.test.mjs`); héj-értelmezést valódi héjjal (Git Bash, PowerShell 7 és 5.1) végzett különbségi
+  próbával (`scripts/qa/hooks/fixtures/quoting-forms.json`).
+- **Tünet 3 (eszközhasználat):** Git Bashben a kettős idézőjeles `node -e "…"` szövegben álló backtick parancshelyettesítésként
+  lefutott (fájlnevek „futtatva”, a beírt szöveg kiürült). **Szabály 3:** backticket tartalmazó szöveget fájlba írj (Write eszköz),
+  és a szkriptet fájlból futtasd — ne kettős idézőjeles parancssorban.
+- **Tünet 4 (eszközhasználat, #506 3. kör):** visszaperjelet (`\\`) tartalmazó tesztkódot heredoc + `sed` láncban fűztem a fájlhoz —
+  az egyik visszaperjel elveszett, a tesztfájl szintaxishibás lett. **Szabály 4:** a 3. szabály a visszaperjelre is áll: regexet,
+  escape-et tartalmazó kódot csak a Write / Edit eszközzel írj; mutációs ellenpróbát JS-szkriptben, szöveges keresés-cserével
+  (nem többszörösen escape-elt héjparancsban).
+
+Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-76 — A push-kapu `native-arch` bukása önmagában kivétel; állapotra várj, ne időre (2026-11-18)
 - **Tünet:** a `gate:push` piros, a jelentésben a `native-arch.test.ts` (a `better-sqlite3` nincs lefordítva) és még egy teszt.
   Tévesen gépi akadálynak (Visual Studio Build Tools) jelentettem.
 - **Tény:** a `pre-push-gate.mjs` (D10 / C-38) a `native-arch.test.ts`-t ismert helyi kivételként kezeli, ha CSAK az bukik és a
@@ -1099,7 +1119,7 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 - **Rokon:** a közös mérők (joystick, mobil mérő) kérdés-elhárítása a megoldás-kijelzés alatt lecserélődő gombra kattintott
   (#500 ingadozó) — a hatókör a nyitott, élesített kérdés (`[data-state="open"][data-armed="true"]`), így a segéd állapotra vár.
 
-## C-76 — Takarás-döntés pontból: a rács hézagában „szabad”, közben takarva (2026-11-18)
+## C-77 — Takarás-döntés pontból: a rács hézagában „szabad”, közben takarva (2026-11-18)
 - **Tünet:** Szökőár, 360×640: a kérdés-sáv a figurára ült, az elrendezés mégis „nyugalomban” volt; ha a kérdés ~0,8 mp-cel később
   nyílt, minden jó. Az előző kör órákig az időzítést, a React-felülírást és a 3D-vetítést gyanította — egyik sem volt.
 - **Tény (a döntés bemeneteinek naplójából):** a menet elején a figura x = 50 % (180 px), a kétoszlopos válaszrács oszlopai
@@ -1116,7 +1136,7 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   a mérce a ténylegesen kirajzolt geometria (a jelenet vetített befoglaló doboza), ne a kód állandója; rácsmérés a teljes testen;
   és a döntés minden elérhető helyzetre (x = 8…92 %) ellenőrizze, hogy van-e szabad hely, ne csak az induló helyzetre.
 
-## C-77 — A „lagg” oka egy lusta hangkontextus volt, nem a grafika (2026-11-18)
+## C-78 — A „lagg” oka egy lusta hangkontextus volt, nem a grafika (2026-11-18)
 - **Tünet:** a Szökőárban menet közben 200–950 ms-os megakadások; a tulajdonos fő panasza a lagg. Korábban a grafikát / a
   kérdésbankot gyanítottuk.
 - **Tény (profil: `long-animation-frame` + CDP-mintavételezés, 1× CPU):** egyetlen 2038 ms-os képkocka közvetlenül az első kérdés

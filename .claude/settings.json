@@ -1,4 +1,13 @@
 {
+  "disableAllHooks": false,
+  "permissions": {
+    "deny": [
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/settings.local.json)",
+      "Edit(/.claude/worktrees/**/.claude/settings.json)",
+      "Edit(/.claude/worktrees/**/.claude/settings.local.json)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -37,7 +46,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/check-audit-ok.mjs\"",
-            "timeout": 15,
+            "timeout": 20,
             "statusMessage": "Audit-sentinel ellenőrzés push előtt..."
           }
         ]
@@ -48,7 +57,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/check-audit-ok.mjs\"",
-            "timeout": 15,
+            "timeout": 20,
             "statusMessage": "Audit-sentinel ellenőrzés push előtt..."
           }
         ]
@@ -60,6 +69,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/check-quality-gates.mjs\"",
             "timeout": 60,
+            "onFailure": "block",
             "statusMessage": "Minőségkapu-bizonyíték ellenőrzése..."
           }
         ]
@@ -71,6 +81,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/check-quality-gates.mjs\"",
             "timeout": 60,
+            "onFailure": "block",
             "statusMessage": "Minőségkapu-bizonyíték ellenőrzése..."
           }
         ]

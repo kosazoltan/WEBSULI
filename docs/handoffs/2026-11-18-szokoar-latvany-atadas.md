@@ -60,12 +60,12 @@ Végrehajtás: `docs/specs/2026-11-18-szokoar-tema-es-sebesseg-vegrehajtas.md` (
   (előtte: `docker ps --filter name=websuli-e2e-`).
 
 ## Ne felejtsd
-- Háromfázisú rend, `gate:stage` szakaszonként, `gate:push` a végén (a `native-arch` önmagában ismert kivétel — C-75).
+- Háromfázisú rend, `gate:stage` szakaszonként, `gate:push` a végén (a `native-arch` önmagában ismert kivétel — C-76).
 - Tesztet gyengíteni tilos; a `tsunami-play.spec.ts` elrendezés-esetei (≤ 600 ms-os nyugalom, figura / menedék szabadsága) maradnak.
 
 ## Kiegészítés — látvány 4. lépés (átvevő fejlesztő, 2026-11-18; terv 7.4, végrehajtás 9.)
 
-**Elrendezés (360×640) — gyökérok és javítás:** `docs/agent-csapdak.md` C-76. A takarás-döntés a figura testére szól, a jelöltek
+**Elrendezés (360×640) — gyökérok és javítás:** `docs/agent-csapdak.md` C-77. A takarás-döntés a figura testére szól, a jelöltek
 egy lépésben mérve; a nyitott kérdés alatt a kép-eltolás követi a figurát. A döntés NEM függ a tárcsa oldalától: a kérdés-sáv
 alsó határa a vezérlők (`tsunami-touch-controls` gyerekei) mért tetejéből jön, a takarás a figura és a kérdés dobozaiból.
 
@@ -100,7 +100,7 @@ rajzolási hívás 155 → 45 (asztali, bloommal: 166 → 59); háromszög 72,7 
 
 ## Kiegészítés — csiszoló kör (terv 7.5, végrehajtás 10.)
 
-- **Lagg gyökéroka:** C-77 (lusta `new AudioContext()` az első kérdés suhogásánál, 0,8–2 s). Javítva `prewarmAudio()`-val a
+- **Lagg gyökéroka:** C-78 (lusta `new AudioContext()` az első kérdés suhogásánál, 0,8–2 s). Javítva `prewarmAudio()`-val a
   menü alatt. A közös director minden játékban így viselkedik — a többi játékban is be kell kötni (kanban-javaslat).
 - **Maradék:** megoldás-kijelzéskor 50–160 ms-os képkockák (a GPU a DOM raszterhez Skia-shadert fűz össze); ritkán 350–500 ms-os
   GPU-megakadás tétlen főszállal, játékeseménytől függetlenül — terhelt gépen egy üres WebGL-oldal is 160 ms-ot mutatott, ezért

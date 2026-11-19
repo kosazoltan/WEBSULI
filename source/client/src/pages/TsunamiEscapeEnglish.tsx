@@ -1802,7 +1802,7 @@ export default function TsunamiEscapeEnglish() {
     return { l: fx - ext.left, r: fx + ext.right, t: fy - ext.up, b: fy + ext.down };
   };
   /*
-   * A takarás-döntés a figura TESTÉRE szól (C-76): a figura téglalapja és az akadály metszi-e egymást. A kérdés-felület álló
+   * A takarás-döntés a figura TESTÉRE szól (C-77): a figura téglalapja és az akadály metszi-e egymást. A kérdés-felület álló
    * nézetben a teljes szélességet foglalja (a figura alatta oldalra mozog), ezért ott csak a magasság dönt. A dobozok teteje
    * 12 px ráhagyást kap: a kártya belépő animációja (10 px) alatt mérünk, a végleges hely ennyivel feljebb van.
    */
