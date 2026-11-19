@@ -288,7 +288,9 @@ test("R11 / K2: a részleges levél IP1-ről ujjlenyomat nélkül ment ki, a vé
   } finally { clearPendingPartials(); setPartialDelay(previousDelay); }
 });
 
-test("R11 (első rögzítő): igazolt tanuló várakozó körét vendég nem írja felül és nem törli; vendég körét az igazolt tanuló átveheti", async () => {
+// Terv R15 / R16 (harmadik vak ellenőrzés, dokumentált spec-változás): az első rögzítő védelme csak a TARTALOM felülírására vonatkozik;
+// bármely véglegesítés elnyomja a kör „félbehagyva” levelét; a vendég kör átvételekor a levél neve „Vendég tanuló” marad.
+test("R11 + R15 + R16 (első rögzítő): igazolt tanuló pillanatképének TARTALMÁT vendég nem írja felül; bármely véglegesítés elnyomja; vendég kör átvétele „Vendég tanuló” névvel", async () => {
   reset();
   const previousDelay = setPartialDelay(400);
   try {
@@ -297,11 +299,13 @@ test("R11 (első rögzítő): igazolt tanuló várakozó körét vendég nem ír
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-owner", picks: picks(2), partial: true }, freshIp(), "user-owner")).json(), { queued: true, partial: true });
     // … a körazonosítót ismerő vendég nem írhatja felül (több válasszal sem) …
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-owner", picks: picks(4), partial: true, fingerprint: "fp-intruder" }, freshIp())).json(), { queued: false, partial: true, conflict: true });
-    // … és végleges beküldéssel sem törölheti / nyomhatja el.
+    assert.equal(pendingPartialCount(), 1, "a tartalom-felülírás elutasítva, a várakozó az igazolt tanulóé");
+    // R15: a végleges beküldés — bárki küldi — elnyomja a kör „félbehagyva” levelét (ártalmatlan irány: legfeljebb ez a levél marad el).
     assert.equal((await post({ kind: "quiz", roundId: "round-owner", picks: picks(5), fingerprint: "fp-intruder" }, freshIp())).status, 202);
-    assert.equal(pendingPartialCount(), 1, "az igazolt tanuló várakozó köre megmaradt");
-    assert.ok(await waitFor(() => sent.filter(isPartial).length === 2), "az igazolt tanuló „félbehagyva” levele kiment");
-    assert.ok(sent.filter(isPartial).every(mail => new RegExp(`félbehagyva: 2 / ${ROUND_SIZE}\\)`).test(mail.subject)), "a saját (2 válaszos) állapota, nem a betolakodóé");
+    assert.equal(pendingPartialCount(), 0, "a véglegesítés törölte a várakozót");
+    assert.ok(await waitFor(() => sent.length === 2), "a végleges levél kiment");
+    await sleep(700);
+    assert.equal(sent.filter(isPartial).length, 0, "a véglegesített kör után nem megy „félbehagyva” levél");
     // Vendég kör → az igazolt tanuló (pl. bejelentkezés a kör közben) átveheti.
     reset();
     clearPendingPartials();
@@ -312,6 +316,41 @@ test("R11 (első rögzítő): igazolt tanuló várakozó körét vendég nem ír
     await sleep(600);
     assert.equal(sent.length, 2);
     assert.ok(sent.every(mail => new RegExp(`félbehagyva: 3 / ${ROUND_SIZE}\\)`).test(mail.subject)));
+    // R16: a vendég kör vendég kör marad — a levél neve „Vendég tanuló”, nem az átvevőé.
+    assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló")), "vendég-attribúció");
+    assert.ok(sent.every(mail => !mail.html.includes("Bejelentkezett tanuló")), "az átvevő (fiók) neve nincs a levélben");
+  } finally { clearPendingPartials(); setPartialDelay(previousDelay); }
+});
+
+test("R15 / L1: a bejelentkezett tanuló munkamenete a kör közben megszűnik, vendégként fejezi be → csak végleges levelek, „félbehagyva” a végleges után nem megy", async () => {
+  reset();
+  const previousDelay = setPartialDelay(300);
+  try {
+    clearPendingPartials();
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-l1-logout", picks: picks(2), partial: true }, freshIp(), "u-anna")).json(), { queued: true, partial: true });
+    assert.equal((await post({ kind: "quiz", roundId: "round-l1-logout", picks: picks(5), fingerprint: "fp-l1" }, freshIp())).status, 202);
+    assert.equal(pendingPartialCount(), 0, "a vendégként küldött végleges beküldés is törölte a várakozót");
+    assert.ok(await waitFor(() => sent.length === 2));
+    await sleep(900); // a pillanatkép időzítője (300 ms) bőven lejárt volna
+    assert.deepEqual(sent.map(mail => (isPartial(mail) ? "P" : "F")), ["F", "F"], "csak a két végleges levél");
+    assert.ok(sent.every(mail => !supersedes(mail)), "részleges nem ment ki → felülíró mondat sincs");
+  } finally { clearPendingPartials(); setPartialDelay(previousDelay); }
+});
+
+test("R17 / L3 (K5): a körmérettel egyenlő számú válaszú pillanatkép nem ütemez „félbehagyva” levelet", async () => {
+  reset();
+  const previousDelay = setPartialDelay(150);
+  try {
+    clearPendingPartials();
+    const full = Object.fromEntries(lesson.experience!.quiz.slice(0, ROUND_SIZE).map(item => [item.id, item.correctIndex]));
+    const res = await post({ kind: "quiz", roundId: "round-l3-full", picks: full, partial: true, fingerprint: "fp-l3" });
+    assert.deepEqual([res.status, await res.json()], [202, { queued: false, partial: true, complete: true }]);
+    assert.equal(pendingPartialCount(), 0);
+    await sleep(500);
+    assert.equal(sent.length, 0, "nincs „félbehagyva: N / N” levél");
+    // Egy válasszal kevesebb: továbbra is rendes pillanatkép.
+    const almost = Object.fromEntries(lesson.experience!.quiz.slice(0, ROUND_SIZE - 1).map(item => [item.id, item.correctIndex]));
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-l3-almost", picks: almost, partial: true, fingerprint: "fp-l3" })).json(), { queued: true, partial: true });
   } finally { clearPendingPartials(); setPartialDelay(previousDelay); }
 });
 
