@@ -58,8 +58,8 @@ test("D-04: régi rekord + új menet → az új ranglista csak az új sort adja,
   assert.ok(!freshXp.includes(9_000), "a régi rekord nem kerülhet az új listára");
   assert.deepEqual(freshXp.filter((x) => x === 120 || x === 80), [120, 80]);
 
-  const after = (await dbPool.query("SELECT * FROM game_scores WHERE user_id = $1 AND game_id = $2", [oldPlayer, LEGACY])).rows[0];
-  assert.deepEqual(after, before, "a régi rekord nem veszhet el és nem változhat (nincs nullázás, nincs átváltás)");
+  const afterRow = (await dbPool.query("SELECT * FROM game_scores WHERE user_id = $1 AND game_id = $2", [oldPlayer, LEGACY])).rows[0];
+  assert.deepEqual(afterRow, before, "a régi rekord nem veszhet el és nem változhat (nincs nullázás, nincs átváltás)");
 
   const archive = (await getLeaderboard(LEGACY, "normal", 50)).map((r) => r.bestRunXp);
   assert.ok(archive.includes(9_000));

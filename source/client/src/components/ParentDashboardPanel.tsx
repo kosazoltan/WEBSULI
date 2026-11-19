@@ -79,7 +79,9 @@ type DashboardResponse = {
 const GAME_LABELS: Record<string, { name: string; emoji: string }> = {
   "tsunami-english": { name: "Szökőár", emoji: "🌊" },
   "word-ladder-hu-en": { name: "Szólétra", emoji: "📚" },
-  "block-craft-quiz": { name: "Kockavadász", emoji: "🧱" },
+  // D-04: új pontskála = új pontkulcs; a régi kulcs sorai archívak.
+  "block-craft-quiz": { name: "Kockavadász (régi pontozás)", emoji: "🧱" },
+  "block-craft-quiz-v2": { name: "Kockavadász — Rúnabánya", emoji: "⛏️" },
   "speed-quiz-math": { name: "Gyors matek", emoji: "⚡" },
   "brain-rot-steal": { name: "Brain Rot", emoji: "🧠" },
   "space-asteroid-quiz": { name: "Aszteroida", emoji: "🚀" },

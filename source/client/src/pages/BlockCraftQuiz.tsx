@@ -115,6 +115,7 @@ import {
 } from "@/game-engine/play";
 
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
+import { BLOCK_CRAFT_SCORE_KEY } from "@shared/game-score-keys";
 /** 2D pixel-minta cellaméret — a menü-előnézet (MenuBlock) rajzolásához. */
 const TILE = 24;
 
@@ -1094,7 +1095,8 @@ export default function BlockCraftQuiz() {
   // S11: a közös érintés-észlelés (any-pointer: coarse + maxTouchPoints) — érintős laptop is kap vezérlőt.
   const touchCapable = useTouchCapable();
   const haptics = useHaptics();
-  const bestScore = useBestScore("block-craft-quiz");
+  // D-04: a Rúnabánya pontskálája új kulcs alá ment; a régi „block-craft-quiz” helyi rekord archívként megmarad.
+  const bestScore = useBestScore(BLOCK_CRAFT_SCORE_KEY);
   const [, navigate] = useLocation();
 
   // LS-4 (D3): the play-time coupon earned in a lesson, exactly as in BrainRot —
@@ -3318,7 +3320,8 @@ export default function BlockCraftQuiz() {
     scoreSubmittedRef.current = true;
     const sum = runSummary();
     void postGameScore({
-      gameId: "block-craft-quiz",
+      // D-04: új ranglista (új pontkulcs); a régi Kockavadász-rekordok a régi kulcs alatt archívak.
+      gameId: BLOCK_CRAFT_SCORE_KEY,
       difficulty: "normal",
       runXp: sum.xp,
       // J3a / terv J12: a menet LEGJOBB kombó-sorozata (a régi kód a pillanatnyi sorozatot küldte).
