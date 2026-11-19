@@ -10,8 +10,8 @@ Runbook: `docs/minosegkapuk.md`. A hook a `gh pr create` előtt a `pre-pr-<HEAD>
 ## Menet
 
 1. Helyi kapuk zöldek: `npm run gate:stage`, `npm run gate:push`.
-2. Vak, hibakereső ellenőr (`websuli-fejlesztesi-ellenor` skill) — mellé a gépi futtató kiegészítőként (`websuli-vak-ellenor` skill:
-   `npm run gate:blind-review -- --base <ref> --head <fej> --spec <terv.md> --goal <cél.md> --out <jelentés.md>`) → ítélet rögzítve:
+2. Vak ellenőr — KIZÁRÓLAG a gépi futtató (`websuli-vak-ellenor` skill, `openai/gpt-6.2-sol` high):
+   `npm run gate:blind-review -- --base <ref> --head <fej> --spec <terv.md> --goal <cél.md> --out <jelentés.md>` → ítélet rögzítve (a futtató bizonyítéka nélkül a `record-review` elutasít):
    `node scripts/qa/gates/record-review.mjs --head <fej> --verdict IGEN --report <jelentés.md>`.
 3. PR-leírás tervezete a scratchpadban (nem a repóban), benne:
    - elfogadási lista `- [x]` tételekkel (az „Elfogadás” alatt),
@@ -48,8 +48,8 @@ cd source && node --import tsx scripts/run-e2e-tests.ts --config playwright.gate
 
 - Zöld → `pre-pr-<fej>.json` ÉS `pre-push-<fej>.json` (a push is mehet).
 - `PR-leírás sablon FAIL`: pótold a hiányzó részt (a hiba megnevezi).
-- `független ellenőr ítélete FAIL`: nincs ítélet / NEM / más fejre szól — futtasd a vak ellenőrt (és mellé a futtatót:
-  `npm run gate:blind-review`), rögzítsd az új fejre. Ha a `blindReview.exclusive` BE van kapcsolva, csak a futtató ítélete érvényes.
+- `független ellenőr ítélete FAIL`: nincs ítélet / NEM / más fejre szól / nem a futtató készítette — futtasd a futtatót
+  (`npm run gate:blind-review`), rögzítsd az új fejre. A PR-leírás ítélet-sora önmagában nem bizonyíték.
 - `böngészős út FAIL … nincs Docker`: a kötelező böngészős út nem hagyható ki csendben; indítsd a Dockert, vagy jelezd a tulajdonosnak
   (NOT DONE + ok + kockázat).
 - `DB-integrációs teszt NOT RUN`: Docker nélkül; `--strict` mellett bukás. A CI DB-jobja futtatja, de a kockázatot a PR-ban jelezd.

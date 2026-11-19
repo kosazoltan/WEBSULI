@@ -10,6 +10,8 @@ import { assertSafeHeavyEnv, heavyEnv, heavyPreconditions, ownLeftovers, parseDo
 
 export const TMP_DIR = '.blind-review-tmp';
 export const LOADER_PATH = join(dirname(fileURLToPath(import.meta.url)), 'ts-sandbox-loader.mjs');
+/** A futtató Node-ja ismeri-e a hálózati jogosultságot (Node 25+): enélkül a homokozó a hálózatot nem zárja ki. */
+export const NODE_NET_LOCK = process.allowedNodeEnvironmentFlags.has('--allow-net');
 export const SCENARIO_RUNNER = join(dirname(fileURLToPath(import.meta.url)), 'scenario-runner.spec.ts.txt');
 export const SCENARIO_SPEC_REL = 'tests/zz-blind-review-scenario.spec.ts';
 /** A parancs-fajták, amelyek a valódi hívási láncot futtatják (E4): csak ezekkel lehet egy lelet „teljes úton igazolt”. */
@@ -163,6 +165,9 @@ export function planCommand(argv, ctx) {
 
   const sandbox = (f) => {
     if (!/\.(mjs|js|ts|mts|tsx)$/.test(f.rel)) return refuse('a saját fájl kiterjesztése .mjs / .js / .ts / .mts / .tsx legyen');
+    if (!(ctx.netLock ?? NODE_NET_LOCK)) {
+      return refuse(`a homokozó ezen a Node-verzión (${process.version}) nem zárja ki a hálózatot (a --allow-net jogosultság Node 25+-tól van) — saját ellenpróba most nem futtatható; használd a követett teszteket / a böngészős forgatókönyvet, és a „Mit NEM vizsgáltam” szakaszban jelezd`);
+    }
     const args = ['--permission', `--allow-fs-read=${root}`, `--allow-fs-read=${LOADER_PATH}`, `--allow-fs-write=${tmpAbs}`];
     if (ctx.nodeModulesReal) args.push(`--allow-fs-read=${ctx.nodeModulesReal}`);
     args.push('--import', pathToFileURL(LOADER_PATH).href, f.abs);

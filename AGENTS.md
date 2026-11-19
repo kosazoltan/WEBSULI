@@ -175,17 +175,16 @@ Ez a szabály MINDEN ügynök-környezetre érvényes (Claude Code, Codex — he
 ### Ki az ellenőr
 
 <!-- vak-ellenor:ki-az-ellenor:begin — EGYETLEN hely: ezt a bekezdést a gépi futtató ága (külön PR) cseréli -->
-Friss kontextusú, a fejlesztő következtetéseit nem ismerő ügynök. Ahol a környezet tud alügynököt indítani, alügynök; ahol nem (egyes
-Codex / Cursor / Gemini futások), új, tiszta munkamenet vagy másik eszköz, amely CSAK a tervet és a diffet kapja. A fejlesztő saját
-magát soha nem ellenőrizheti.
-
-**A gépi futtató — kiegészítő, amíg a `blindReview.exclusive` kapcsoló KI** (tulajdonosi döntés 2026-11-18: „Kapjon böngészőt és
-DB-t, addig marad a mai.”): `npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>`
-— független (nem Anthropic) modellel, eldobható munkafában, géppel visszaellenőrzött leletekkel (`websuli-vak-ellenor` skill).
-Futtasd a fenti ellenőr MELLÉ: az eredménye kiegészítő bizonyíték (a `record-review` csatolja), az ítéletet nem helyettesíti.
-KIZÁRÓLAGOS ellenőrré csak akkor válik, ha az újramérés eléri a küszöböt (a referencia közepes leleteinek legalább 7/9-e, és a hibás
-fejre NEM vagy IGEN, FELTÉTELLEL) ÉS a tulajdonos jóváhagyja a `blindReview.exclusive` átkapcsolását
-(`docs/specs/2026-11-18-vak-ellenor-deepseek.md`, 4. kiegészítés).
+**Ki az ellenőr — KIZÁRÓLAG a gépi futtató** (tulajdonosi döntés 2026-11-19: „A teljes ökoszisztémában az ellenőr, független
+ellenőr modellt cseréld le skillekben, Agent MD fájlokban, memóriákban, a GPT-6.2 SOL modellre high efforttal.”):
+`npm run gate:blind-review -- --base <ref> --head <teljes fej-hash> --spec <terv.md> --goal <cél.md> --out <jelentés.md>` — a modell a
+`scripts/qa/gates/gates.config.json` `blindReview.model` sora: `openai/gpt-6.2-sol` (OpenRouter, `reasoning.effort: high`; független,
+nem Anthropic; modell-kapcsoló nincs). A `blindReview.exclusive` BE: a kötelező ítélet a futtatóé; Claude-alügynök, kézzel írt vagy
+más forrású jelentés ítéletet nem ad — a `record-review` csak a futtató gépi bizonyítékával rögzít. A futtató minden futása
+új, tiszta munkamenet, amely CSAK a tervet és a diffet kapja (a fejlesztő jelentését, „zöld” állításait nem — erre kapcsoló sincs),
+eldobható munkafában olvas, futtat (böngésző és eldobható adatbázis is), és a leleteit géppel visszaellenőrzi. Ha a futtató nem tud lefutni
+(kulcs, OpenRouter, költségplafon, NEM TELJES jelentés): a munka megáll, a tulajdonos dönt — csendes tartalék nincs. A fejlesztő saját
+magát soha nem ellenőrizheti. A futtatás leírása: `websuli-vak-ellenor` skill.
 <!-- vak-ellenor:ki-az-ellenor:end -->
 
 A megbízás szövege egyetlen fájlban: `scripts/qa/gates/vak-ellenor-megbizas.md`. Indítási leírás (alügynökkel és alügynök-eszköz nélkül):
@@ -202,8 +201,8 @@ felül.
 2. **Szakasz-kapu minden fejlesztési szakasz után:** `npm run gate:stage` (lint gyors mód + a változott fájlok egységtesztjei + minden
    őr-teszt). Csak zöld után lehet továbblépni; előbb a helyi hibát kell javítani.
 3. **Független ellenőr — VAK és HIBAKERESŐ:** a „Vak hibakereső ellenőr — kötelező” szakasz szerint (fent), a PR megnyitása ELŐTT
-   és minden érdemi javító push előtt (mellé a gépi futtató kiegészítőként: `npm run gate:blind-review`); az ítéletet a
-   `record-review.mjs` rögzíti (a hiányos jelentést elutasítja; `blindReview.exclusive` BE állásban csak a futtató bizonyítékával).
+   és minden érdemi javító push előtt — KIZÁRÓLAG a gépi futtatóval (`npm run gate:blind-review`, `openai/gpt-6.2-sol`, high); az
+   ítéletet a `record-review.mjs` rögzíti, csak a futtató bizonyítékával (a hiányos jelentést elutasítja).
 4. **A kapuk sorrendje:** `gate:stage` (szakaszonként) → `gate:push` → független ellenőr + `record-review` →
    `gate:pr -- --body-file <leírás.md>` → push + PR → zöld CI → közvetlenül a merge előtt `gate:merge -- <PR>`. A `git push`,
    `gh pr create` és `gh pr merge` előtt a `check-quality-gates` hook a zöld bizonyítékot ellenőrzi.

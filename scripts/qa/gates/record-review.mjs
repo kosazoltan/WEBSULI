@@ -94,8 +94,8 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, no
   if (bad) return { ok: false, error: bad };
   const record = { kind: 'review', head: full, verdict: v, ok: v !== 'NEM', report: resolve(report), reportSha256: createHash('sha256').update(text).digest('hex'), at: now().toISOString() };
   // docs/specs/2026-11-18-vak-ellenor-deepseek.md — K1 / E1. Kizárólagos módban (`blindReview.exclusive`) az ítélet CSAK a vak ellenőr
-  // futtatójának bizonyítékával rögzíthető. Alapból (KI) a mai szabály: a vak, hibakereső alügynök teljes jelentése rögzül, és ha a
-  // fejre van teljes futtató-bizonyíték, az kiegészítő bizonyítékként csatolódik. Felmentő kapcsoló nincs.
+  // futtatójának bizonyítékával rögzíthető (2026-11-19 óta BE — terv, 5. kiegészítés). KI állásban (csak tulajdonosi döntéssel) a vak
+  // alügynök teljes jelentése rögzül, a futtató teljes bizonyítéka kiegészítőként csatolódik. Felmentő kapcsoló nincs.
   if (blind?.cfg) {
     const evidence = blind.readEvidence(full);
     const b = checkBlindEvidence({ evidence, head: full, reportSha256: record.reportSha256, verdict: v, cfg: blind.cfg });

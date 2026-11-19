@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CFG, makeRepo } from './_fixture.mjs';
-import { TMP_DIR, cleanEnv, makeTools, planCommand, resolveInside, truncate } from './tools.mjs';
+import { NODE_NET_LOCK, TMP_DIR, cleanEnv, makeTools, planCommand, resolveInside, truncate } from './tools.mjs';
 
 const repo = makeRepo({
   files: {
@@ -26,7 +26,7 @@ after(() => { rmSync(join(repo.root, 'kifele'), { recursive: false, force: true 
 
 const SECRET_ENV = { ...process.env, OPENROUTER_API_KEY: 'NE-SZIVAROGJON-123456', DATABASE_URL: ['postgres:', '', ['u:p', 'elesgep'].join('@'), 'db'].join('/'), GITHUB_TOKEN: 'x', NODE_OPTIONS: '--inspect' };
 const tools = (extra = {}) => makeTools({ root: repo.root, base: repo.base, head: repo.head, cfg: CFG, env: SECRET_ENV, key: 'NE-SZIVAROGJON-123456', onReport: () => ({ ok: true }), ...extra });
-const planCtx = { root: repo.root, node: process.execPath, cfg: CFG, nodeModulesReal: null, isTracked: (rel) => !rel.startsWith(TMP_DIR) && existsSync(join(repo.root, rel)) };
+const planCtx = { root: repo.root, node: process.execPath, cfg: CFG, nodeModulesReal: null, netLock: true, isTracked: (rel) => !rel.startsWith(TMP_DIR) && existsSync(join(repo.root, rel)) };
 
 test('B3: útvonal-őr — a munkafán kívülre mutató útvonal minden alakja elutasítva', () => {
   for (const p of ['../x', 'docs/../../x', '/etc/passwd', 'C:\\Windows\\win.ini', 'C:/Windows/win.ini', 'c:titok', '\\\\gep\\megosztas\\x', '//gep/megosztas/x',
@@ -106,7 +106,21 @@ test('B5: valódi gyerekfolyamat (követett teszt) környezetében nincs kulcs �
   assert.ok(!outText.includes('NE-SZIVAROGJON'));
 });
 
-test('B6: a modell saját fájlja valódi homokozóban fut — munkafán kívüli olvasás / írás, gyerekfolyamat, hálózat tiltva; a kulcs nem látszik', async () => {
+test('B6: hálózati zár nélküli Node-on (Node < 25) a saját fájl NEM fut (fail-closed); zárral igen', () => {
+  writeFileSync(join(repo.root, TMP_DIR, 'zar.mjs'), 'export {};\n');
+  const noLock = planCommand(['node', `${TMP_DIR}/zar.mjs`], { ...planCtx, netLock: false });
+  assert.equal(noLock.ok, false);
+  assert.match(noLock.error, /nem zárja ki a hálózatot/);
+  assert.equal(planCommand(['node', `${TMP_DIR}/zar.mjs`], { ...planCtx, netLock: true }).ok, true);
+});
+
+test('B6: a modell saját fájlja valódi homokozóban fut — munkafán kívüli olvasás / írás, gyerekfolyamat, hálózat tiltva; a kulcs nem látszik', async (tc) => {
+  if (!NODE_NET_LOCK) {
+    const refused = await tools().call('run_command', { argv: ['node', `${TMP_DIR}/zar.mjs`] });
+    assert.match(refused, /^ELUTASÍTVA: a homokozó ezen a Node-verzión/);
+    tc.skip(`ezen a gépen Node ${process.version}: a homokozó hálózati zárja nem érhető el — a futtató fail-closed elutasít (fent mérve)`);
+    return;
+  }
   const t = tools();
   const probe = `import fs from 'node:fs';
 import cp from 'node:child_process';
@@ -150,6 +164,7 @@ test('az eszköz-eredmény maszkolt, csonkolt, és a munkafa abszolút útvonala
 });
 
 test('a homokozó TypeScript-betöltője: saját .ts ellenpróba importálja a vizsgált modult (álnév és kiterjesztés nélküli import)', async (tc) => {
+  if (!NODE_NET_LOCK) { tc.skip(`Node ${process.version}: a homokozó fail-closed (hálózati zár nélkül nem fut)`); return; }
   const nm = join(repo.root, 'source', 'node_modules');
   const real = join(import.meta.dirname, '..', '..', '..', '..', 'source', 'node_modules');
   if (!existsSync(join(real, 'typescript'))) { tc.skip('nincs telepített typescript ebben a checkoutban (source/node_modules)'); return; }

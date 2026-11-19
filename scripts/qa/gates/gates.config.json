@@ -68,12 +68,12 @@
     "websuli-pr-elotti-kapu",
     "websuli-merge-elotti-kapu"
   ],
-  "$blindReview": "A vak hibakereső ellenőr futtatója (docs/specs/2026-11-18-vak-ellenor-deepseek.md). A modell EGYETLEN forrása a blindReview.model sor; a futtatónak nincs modell-kapcsolója. exclusive: false (alap) = a mai szabály: a vak, hibakereső alügynök jelentése az ítélet, a futtatóé kiegészítő bizonyíték; true = az ítélet CSAK a futtató bizonyítékával érvényes (exclusiveSince előtt rögzítettek maradnak). Az exclusive átállítása KIZÁRÓLAG tulajdonosi jóváhagyással, az alapvonal-küszöb teljesülése után (terv, 4. kiegészítés, E1/E3), a rules-guard őr-teszttel együtt. promptCache.mode: explicit = cache_control töréspontok (Alibaba / Qwen), none = a szolgáltató automatikus gyorsítótára. A fallbackPriceUsdPerMTok csak a hívás ELŐTTI plafon-becsléshez és a megtakarítás-becsléshez kell; a tényleges költség a válasz usage mezőjéből jön. Módosítása tulajdonosi döntés.",
+  "$blindReview": "A vak hibakereső ellenőr futtatója (docs/specs/2026-11-18-vak-ellenor-deepseek.md). A modell EGYETLEN forrása a blindReview.model sor; a futtatónak nincs modell-kapcsolója. exclusive: true (tulajdonosi döntés 2026-11-19: a független ellenőr modellje a GPT-6.2 Sol, high) = az ítélet CSAK a futtató bizonyítékával érvényes (exclusiveSince előtt rögzítettek maradnak); false = a vak alügynök az ítélet, a futtatóé kiegészítő. Átállítása KIZÁRÓLAG tulajdonosi döntéssel, a rules-guard őr-teszttel együtt (terv, 5. kiegészítés). A fallbackPriceUsdPerMTok a 272k token fölötti (drágább) OpenAI-sáv — a hívás előtti becslés felső korlátja. promptCache.mode: explicit = cache_control töréspontok (Alibaba / Qwen), none = a szolgáltató automatikus gyorsítótára. A fallbackPriceUsdPerMTok csak a hívás ELŐTTI plafon-becsléshez és a megtakarítás-becsléshez kell; a tényleges költség a válasz usage mezőjéből jön. Módosítása tulajdonosi döntés.",
   "blindReview": {
-    "model": "qwen/qwen4-max",
+    "model": "openai/gpt-6.2-sol",
     "endpoint": "https://openrouter.ai/api/v1/chat/completions",
-    "exclusive": false,
-    "exclusiveSince": null,
+    "exclusive": true,
+    "exclusiveSince": "2026-11-19T15:56:00Z",
     "minToolCalls": 5,
     "maxUsdDefault": 2,
     "maxUsdHardCap": 6,
@@ -92,11 +92,11 @@
     "heavyTimeoutSec": 900,
     "heavyWaitMaxSec": 600,
     "maxScreenshots": 6,
-    "promptCache": { "mode": "explicit", "ttlSec": 300 },
-    "fallbackPriceUsdPerMTok": { "input": 1.425, "output": 4.275, "cacheRead": 0.07125, "cacheWrite": 1.78125 },
+    "promptCache": { "mode": "none", "ttlSec": 300 },
+    "fallbackPriceUsdPerMTok": { "input": 4, "output": 15, "cacheRead": 0.2, "cacheWrite": 5 },
     "npmScripts": ["check", "check:test", "lint"],
     "allowPlaywright": false,
-    "requestExtras": { "temperature": 0.2 }
+    "requestExtras": { "reasoning": { "effort": "high" } }
   },
   "mergeEvidenceMaxMinutes": 15,
   "$hookTimeouts": "A check-quality-gates hook korlátai (kanban #100): git- és gh-hívásonként, és a teljes keret. A keret a .claude/settings.json hook-időkorlátja (60 s) alatt marad; ha a git / gh nem válaszol, a hook TILT (fail-closed), nem enged.",

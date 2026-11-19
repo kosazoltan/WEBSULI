@@ -289,7 +289,7 @@ export const BLIND_NOT_RUN = 'a vak ellenőr nem futott; a tulajdonos dönt';
 
 /**
  * A vak ellenőr futtatója KIZÁRÓLAGOS-e (gates.config.json `blindReview.exclusive`)? Alapból KI: a mai szabály (vak, hibakereső
- * alügynök) él, a futtató eredménye kiegészítő bizonyíték. Átállítása tulajdonosi jóváhagyással (terv, 4. kiegészítés, E1).
+ * alügynök) él, a futtató eredménye kiegészítő bizonyíték. 2026-11-19 óta BE (tulajdonosi döntés; terv, 5. kiegészítés).
  */
 export function blindRequired(cfg) {
   return Boolean(cfg) && cfg.exclusive === true;
@@ -310,7 +310,7 @@ export function acceptRecordedReview(record, cfg) {
 
 /** Az ítélet lépés-eredménye. */
 export function verdictResult(v, head) {
-  const how = `futtasd a vak, hibakereső ellenőrt (websuli-fejlesztesi-ellenor skill; mellé a futtató, websuli-vak-ellenor skill: ${BLIND_REVIEW_CMD.replace('<teljes fej-hash>', head)}) — majd: node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict <ítélet> --report <jelentés.md>`;
+  const how = `futtasd a vak ellenőr futtatóját (websuli-vak-ellenor skill): ${BLIND_REVIEW_CMD.replace('<teljes fej-hash>', head)} — majd: node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict <ítélet> --report <jelentés.md>`;
   if (!v) return { status: STATUS.FAIL, note: `nincs független ellenőr-ítélet a ${head.slice(0, 12)} fejre — ${how}` };
   if (v.invalid) return { status: STATUS.FAIL, note: `érvénytelen ítélet a ${head.slice(0, 12)} fejre: ${v.invalid} — ${how}. Ha a futtató nem tud lefutni: ${BLIND_NOT_RUN}.` };
   if (v.verdict === 'NEM') return { status: STATUS.FAIL, note: `a független ellenőr ítélete NEM (${v.source}) — javítsd a blokkoló leleteket, és futtasd újra a vak ellenőrt az új fejre` };

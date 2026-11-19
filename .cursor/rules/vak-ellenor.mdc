@@ -15,4 +15,4 @@ A szabály forrása: `AGENTS.md`, „Vak hibakereső ellenőr — kötelező” 
    pontokkal és egy „bármi más” ponttal; az ellenőr saját munkafában futtat és ellenpróbáz.
 4. A jelentés kötelező szakaszai: leletek evidenciával, „Mit próbáltam megtörni, és nem sikerült”, „Mit NEM vizsgáltam”; `Fej:` és
    `Ítélet:` sor. Az ítéletet a `node scripts/qa/gates/record-review.mjs` rögzíti (a hiányos jelentést elutasítja).
-5. Ki az ellenőr: ma a vak, hibakereső ellenőr az AGENTS.md „Ki az ellenőr” bekezdés szerint; a gépi futtató (`npm run gate:blind-review`, skill: `websuli-vak-ellenor`) mellette kiegészítő bizonyíték. KIZÁRÓLAGOS csak a `blindReview.exclusive` kapcsoló tulajdonosi átállítása után (ha az újramérés eléri a küszöböt).
+5. Ki az ellenőr (AGENTS.md „Ki az ellenőr” bekezdés): KIZÁRÓLAG a gépi futtató — `npm run gate:blind-review` (skill: `websuli-vak-ellenor`), modell `openai/gpt-6.2-sol`, high (tulajdonosi döntés 2026-11-19); `blindReview.exclusive` BE: alügynök vagy kézzel írt jelentés nem ad ítéletet; ha a futtató nem fut le, a munka megáll, a tulajdonos dönt.

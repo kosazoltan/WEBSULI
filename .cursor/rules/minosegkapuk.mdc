@@ -10,7 +10,7 @@ Runbook: `docs/minosegkapuk.md`. Skillek: `.agents/skills/websuli-{lint-ellenor,
 1. Minden fejlesztési szakasz után: `npm run gate:stage` — csak zöld után lépj tovább.
 2. Bármilyen kibocsátás előtt a lint kapu: `npm run gate:lint` (a push-kapu is futtatja).
 3. Push előtt: `npm run gate:push`. PR előtt: VAK, hibakereső független ellenőr (AGENTS.md „Vak hibakereső ellenőr — kötelező”; `vak-ellenor.mdc`;
-   `websuli-fejlesztesi-ellenor`; mellé a gépi futtató kiegészítőként: `npm run gate:blind-review`, `websuli-vak-ellenor`), ítélet rögzítése
+   KIZÁRÓLAG a gépi futtatóval: `npm run gate:blind-review`, `websuli-vak-ellenor`, `openai/gpt-6.2-sol` high), ítélet rögzítése
    (`node scripts/qa/gates/record-review.mjs …`), majd `npm run gate:pr -- --body-file <leírás.md>`. Merge előtt, közvetlenül:
    `npm run gate:merge -- <PR>`.
 4. A kaput megkerülni tilos, vészkijárat nincs; hibás kapunál a kaput kell javítani (teszttel).

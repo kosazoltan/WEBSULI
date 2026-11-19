@@ -65,4 +65,4 @@ tiszta munkafa → `git fetch` → teljes lint kapu (`--full`) → teljes egysé
 ## Egy-push elv
 
 A PR megnyitása után a javításokat egy kötegben, egy pushban küldd (minden push újraindítja az ~1 órás E2E-t). Minden érdemi javító
-push előtt: vak visszaellenőrzés az új fejre (`websuli-fejlesztesi-ellenor`; mellé a futtató: `npm run gate:blind-review`, `websuli-vak-ellenor` skill), utána ez a kapu.
+push előtt: vak visszaellenőrzés az új fejre — KIZÁRÓLAG a futtatóval (`npm run gate:blind-review`, `websuli-vak-ellenor` skill) —, utána ez a kapu.

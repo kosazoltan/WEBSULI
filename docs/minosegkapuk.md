@@ -50,17 +50,16 @@ A szabály forrása: `AGENTS.md` „Vak hibakereső ellenőr — kötelező” (
   hibakeresés a keret; a mérce a tulajdonosi cél (felületnél a képernyőképek is). Anthropic modell is lehet — a sablon ezért
   kifejezetten hibakeresésre utasít.
 - **Kötelező jelentés-elemek** (a `record-review.mjs` gépileg ellenőrzi): `Fej:` sor a rögzítendő fejre, `Ítélet:` sor, a
-  „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc. Indítás: `websuli-fejlesztesi-ellenor` skill.
+  „Mit próbáltam megtörni, és nem sikerült” és a „Mit NEM vizsgáltam” fejléc. Indítás: a gépi futtató (`websuli-vak-ellenor` skill, lent).
 
-### A vak ellenőr gépi futtatója — kiegészítő, kizárólagossá kapcsolható (tulajdonosi utasítások 2026-11-18)
+### A vak ellenőr gépi futtatója — KIZÁRÓLAG ez az ellenőr (tulajdonosi döntés 2026-11-19)
 
-Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md` (4. kiegészítés: kapcsoló, böngésző, DB). Skill: `websuli-vak-ellenor`. A futtató a
-`scripts/qa/gates/gates.config.json` `blindReview.model` modelljével dolgozik (most `qwen/qwen4-max`, OpenRouter — független, nem Anthropic;
-modell-kapcsoló nincs). **Amíg a `blindReview.exclusive` KI (alap, tulajdonosi döntés 2026-11-18: „Kapjon böngészőt és DB-t, addig
-marad a mai.”):** az ítélet a vak, hibakereső alügynöké (fent; AGENTS.md „Ki az ellenőr” bekezdés), a futtató MELLETTE fut, és a
-`record-review` az eredményét kiegészítő bizonyítékként csatolja. **Átállás (BE):** csak ha az újramérés eléri a küszöböt (a referencia
-közepes leleteinek legalább 7/9-e, és a hibás fejre NEM / IGEN, FELTÉTELLEL), a tulajdonos jóváhagyásával, követett konfigváltozással
-(`exclusive: true`, `exclusiveSince`) és a `rules-guard` őr-teszt módosításával egy PR-ban.
+Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md` (5. kiegészítés). Skill: `websuli-vak-ellenor`. Tulajdonosi döntés (2026-11-19):
+„A teljes ökoszisztémában az ellenőr, független ellenőr modellt cseréld le […] a GPT-6.2 SOL modellre high efforttal.” A futtató a
+`scripts/qa/gates/gates.config.json` `blindReview.model` modelljével dolgozik: `openai/gpt-6.2-sol` (OpenRouter, `reasoning.effort: high`;
+független, nem Anthropic; modell-kapcsoló nincs). **A `blindReview.exclusive` BE:** a kötelező ítélet a futtatóé (AGENTS.md „Ki az
+ellenőr” bekezdés); a Claude-alügynök ítéletet nem ad, a `record-review` csak a futtató bizonyítékával rögzít. Az átkapcsolás
+(`exclusiveSince`) előtt rögzített ítéletek érvényesek maradnak.
 
 ```bash
 npm run gate:blind-review -- --base origin/main --head <teljes fej-hash> --spec docs/specs/<terv>.md \
@@ -83,29 +82,31 @@ node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --re
 - **Futáskorlátok:** USD-plafon (alap 2, legfeljebb 6; minden hívás ELŐTT az eddigi tényleges költség + a következő hívás becslése),
   körszám (60), falióra (40 perc), kimenet-plafon, megszakító fájl (`<bizonyíték-tár>/blind-review.stop`) / SIGINT. Plafonnál a
   jelentés „NEM TELJES” (nem ítélet), a kilépési kód 3.
-- **Prompt-gyorsítótár:** az Alibaba / Qwen végpont explicit töréspontot kér (`cache_control: {"type": "ephemeral"}`, 5 perces
-  élettartam, írás 1,25×, olvasás a végpont árlistája szerint 0,05× — forrás:
-  `https://openrouter.ai/docs/guides/best-practices/prompt-caching.md`, „Alibaba Qwen”; a `qwen/qwen4-max` végpontján mérve működik).
-  A futtató üzenetlistája csak bővül (rögzített rendszerüzenet → rögzített feladatblokk → eszközhívások); töréspont a rögzített
-  blokk végén és a beszélgetés mozgó végén; a költség a válasz `usage` mezőjéből jön (a kedvezménnyel együtt). A találati arány és a
+- **Prompt-gyorsítótár:** a GPT-6.2 Sol végpontja nem fogad `cache_control` töréspontot, a szolgáltató maga gyorsítótáraz
+  (`promptCache.mode: "none"`; gyorsítótárból olvasás 0,1 USD / M). A futtató üzenetlistája csak bővül (rögzített rendszerüzenet →
+  rögzített feladatblokk → eszközhívások), és futásonként állandó `session_id`-t küld; a költség a válasz `usage` mezőjéből jön
+  (a kedvezménnyel együtt). (A korábbi Qwen-modellhez explicit töréspontok kellettek — a kód `promptCache.mode: "explicit"` mellett
+  ma is ezt teszi.) A találati arány és a
   megtakarítás a bizonyítékban és a Gépi összegzésben áll.
 - **Bizonyíték:** `<git-common-dir>/websuli-qa-evidence/blind-review-<fej>.json` — a VÁLASZBÓL visszaolvasott modell, az OpenRouter
   válasz-azonosítói, a jelentés sha256-a, hívásonkénti tokenek (gyorsítótárral), költség, eszközhívások fajtánként, a leletek
-  igazoltsága. KI állásban a `record-review.mjs` kiegészítőként csatolja (`blindSupplement`), a futtató saját jelentésénél
-  `reviewer: "blind-review"`; BE állásban csak ezzel egyező jelentést rögzít, és a kapuk csak ilyen ítéletet fogadnak el (a PR-leírás
-  ítélet-sora önmagában nem bizonyíték).
+  igazoltsága. A `record-review.mjs` csak ezzel egyező jelentést rögzít (`reviewer: "blind-review"`), és a kapuk csak ilyen ítéletet
+  fogadnak el (a PR-leírás ítélet-sora önmagában nem bizonyíték). (KI állásban — csak tulajdonosi döntéssel — kiegészítőként csatolná:
+  `blindSupplement`.)
 - **Böngésző és adatbázis (nehéz futás):** `run_db_tests`, `run_e2e` (követett spec, `--workers=1`), `run_browser_scenario` (saját,
   deklaratív forgatókönyv; képernyőkép a modellnek). Gépileg kikényszerítve: a gyerek-környezetben nincs e-mail-küldő kulcs és
   adatbázis-URL; `source/.env` a munkafában → tilos; a `postgres:17` képnek helyben kell lennie (nincs letöltés); Node-kimenő forgalom
   halott proxyn át; a forgatókönyvben a nem helyi böngésző-kérés megszakítva; sorompó (≥ 2 friss idegen `websuli-*` konténer →
   várakozás, legfeljebb 10 perc); saját konténer leállítása; `maxHeavyRuns` 4, egyenként legfeljebb 15 perc.
-- **Ha a futtató nem tud lefutni** (kulcs, OpenRouter, plafon): megáll, nem nulla kóddal — „a vak ellenőr nem futott”. KI állásban a
-  kapu nem áll meg (az ítélet a vak alügynöké); BE állásban a kapu áll, csendes tartalék nincs — a tulajdonos dönt (követett
-  konfigváltozás: `blindReview.exclusive` / `model`).
+- **Ha a futtató nem tud lefutni** (kulcs, OpenRouter, plafon): megáll, nem nulla kóddal — „a vak ellenőr nem futott”. A kapu áll,
+  csendes tartalék nincs — a tulajdonos dönt (követett konfigváltozás: `blindReview.exclusive` / `model`).
 - **Nincs CI-bekötés** (külön szelet): kell hozzá az `OPENROUTER_API_KEY` GitHub-titok és költési keret a kulcson (tulajdonosi
   teendő), egy workflow-job a PR fejére (fork-PR-ra nem), és a `pr-verdict-check.mjs` összekötése a bizonyítékkal.
 
-#### Mért alapvonal (2026-11-18) — két fej, amelyen egy Anthropic vak ellenőr valódi hibákat talált
+#### Mért alapvonal (2026-11-18 / 19, a korábbi modellekkel) — két fej, amelyen egy Anthropic vak ellenőr valódi hibákat talált
+
+A táblázat a GPT-6.2 Sol előtti modellek (Qwen4 Max, DeepSeek V4.1 Flash) mérése — történeti adat, nem élő szabály. A GPT-6.2 Sol
+ugyanezen a két fejen mért alapvonala jegyre került.
 
 A futtató két olyan fejet kapott, amelyen aznap egy Anthropic vak ellenőr (alügynök, böngészős és adatbázisos futtatással) valódi
 hibákat talált. A referencia-jelentést a futtató nem kapta meg; a `--goal` fájl a tulajdonosi célból és a tervből készült, a
