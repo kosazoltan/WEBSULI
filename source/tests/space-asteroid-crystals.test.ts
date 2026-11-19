@@ -47,7 +47,6 @@ test("a kristályzóna a hajó legfelső helye fölött marad, ha van hely; kül
   const high = crystalBounds({ halfWidth: 9, minY: 3, maxY: 40 });
   assert.ok(high.maxY <= 12 - CRYSTAL_RADIUS + 1e-9);
   assert.ok(high.maxY >= high.minY);
-  const b = roomy;
   // érvénytelen félszélesség: biztonságos alapérték, nem NaN
   const bad = crystalBounds({ halfWidth: Number.NaN, minY: 0, maxY: 6 });
   assert.ok(Number.isFinite(bad.minX) && bad.minX < bad.maxX);

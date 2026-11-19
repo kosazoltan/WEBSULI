@@ -77,6 +77,7 @@ import {
   pickRockSize,
   waveBaseVy,
   waveEnemyCount,
+  volleyFor,
   waveSpawnInterval,
 } from "@/lib/spaceAsteroid/physics";
 import {
@@ -85,6 +86,7 @@ import {
   CRYSTAL_RADIUS,
   bulletCountsAsAnswer,
   crystalAt,
+  crystalLabelTier,
   crystalLabelsFit,
   crystalShards,
   crystalZoneFor,
@@ -240,6 +242,8 @@ type BulletState = {
   fromEnemy: boolean;
   /** A lövést indító tűz-NYOMÁS ideje (ms, a kérdés-óra): csak az élesítés UTÁNI nyomás válaszolhat kristályon (review #486 M2). */
   pressAtMs?: number;
+  /** a hármas lövés oldalsó lövedéke: a kérdés-kristályon áthalad, nem válaszol */
+  side?: boolean;
   px?: number;
   py?: number;
 };
@@ -278,7 +282,6 @@ const GRADES: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 /** Játéktér méretei: `physics.ts` (18×24). A játékos az alsó 40%-ban mozog. */
 const PLAYER_BASE_Y = -GAME_H / 2 + 2.4;
 
-const BULLET_SPEED = 14;
 const BULLET_COOLDOWN = 0.18;
 const BULLET_TRIPLE_COOLDOWN = 0.10;
 const POWER_DURATION = 10; // sec
@@ -1293,6 +1296,8 @@ export default function SpaceAsteroidQuiz() {
   const safeProbeRef = useRef<HTMLDivElement>(null);
   const crystalLayerRef = useRef<HTMLDivElement>(null);
   const listHoldRef = useRef(false);
+  /** Teszt-kampó: üres pálya (a menet többi része változatlan). */
+  const noEnemiesRef = useRef(false);
   /** „Engedd el, és lőj újra” jelzés: eddig látszik (kristály-óra, ms); `bulletAnsweredRef`: a gyerek már válaszolt lövéssel. */
   const holdHintUntilRef = useRef(0);
   const bulletAnsweredRef = useRef(false);
@@ -1690,6 +1695,13 @@ export default function SpaceAsteroidQuiz() {
           crystalClock: armClockRef.current,
           crystalShownAt: Number.isFinite(crystalShownAtRef.current) ? crystalShownAtRef.current : -1,
           // A mag találati helye vászon-pixelben (a kirajzolt gombbal vethető össze; átméretezés-teszt).
+          shipX: playerRef.current.x,
+          shipY: playerRef.current.y,
+          powerLevel: powerLevelRef.current,
+          shieldTimer: shieldTimerRef.current,
+          bombs: bombsRef.current,
+          // a kristályok világ-helye és helyessége (teszt: a célzott kristályt a középső lövedék találja-e)
+          crystalWorld: JSON.stringify(crystalsRef.current.map((c) => [c.x, c.y, c.correct ? 1 : 0, c.alive ? 1 : 0])),
           crystalPx: JSON.stringify(
             crystalsRef.current.map((c) => {
               const cam = sceneRefs.current?.camera;
@@ -1703,9 +1715,15 @@ export default function SpaceAsteroidQuiz() {
         };
       },
       forceState: (rawPatch) => {
-        const patch = rawPatch as typeof rawPatch & { bossFinale?: boolean; questionItem?: { id: string; prompt: string; options: string[]; correctIndex: number } };
+        const patch = rawPatch as typeof rawPatch & { bossFinale?: boolean; powerLevel?: number; noEnemies?: boolean; questionItem?: { id: string; prompt: string; options: string[]; correctIndex: number } };
         // Teszt (review #486 M1): a főellenfél elesik, EGY élettel, és egy ellenséges lövedék a hajón repül még — a győzelem végleges.
         if (patch.bossFinale === true && phaseRef.current === "play") bossFinaleRef.current();
+        // Teszt (review #486 L1): hármas lövés (`powerLevel`) és üres pálya (`noEnemies`), hogy a zuhanó ellenfelek ne nyeljék el a lövedéket.
+        if (typeof patch.powerLevel === "number") {
+          powerLevelRef.current = Math.max(0, Math.min(2, patch.powerLevel));
+          powerTimerRef.current = 600;
+        }
+        if (typeof patch.noEnemies === "boolean") noEnemiesRef.current = patch.noEnemies;
         // Teszt (hosszú válaszok mérése): a következő kérdés pontosan ez a tétel.
         if (patch.questionItem) forcedQuizRef.current = patch.questionItem;
         if (patch.phase === "intro" || patch.phase === "grade") {
@@ -2023,6 +2041,10 @@ export default function SpaceAsteroidQuiz() {
     const p = playerRef.current;
     if (!p.alive) return;
 
+    if (noEnemiesRef.current && enemiesRef.current.length > 0) {
+      for (const e of enemiesRef.current) e.dead = true;
+      enemiesRef.current = enemiesRef.current.filter((en) => !en.dead);
+    }
     // A rajz-interpolációhoz: az előző fix lépés helye (a lépés végén a mostani hely az „új”, a rajz a kettő közt keveri).
     playerPrevRef.current.x = p.x;
     playerPrevRef.current.y = p.y;
@@ -2092,11 +2114,10 @@ export default function SpaceAsteroidQuiz() {
         ? aimAssistVx({ x: p.x, y: p.y }, enemiesRef.current.map((e) => ({ x: e.x, y: e.y, alive: !e.dead })))
         : 0;
       const pressAtMs = firePressAtRef.current;
-      bulletsRef.current.push({ id, x: p.x, y: p.y + 0.7, vx: centerVx, vy: BULLET_SPEED, life: 1.6, fromEnemy: false, pressAtMs });
-      if (powerLevelRef.current >= 1) {
-        bulletsRef.current.push({ id: nextEntityIdRef.current++, x: p.x - 0.45, y: p.y + 0.5, vx: centerVx - 3.0, vy: BULLET_SPEED * 0.96, life: 1.6, fromEnemy: false, pressAtMs });
-        bulletsRef.current.push({ id: nextEntityIdRef.current++, x: p.x + 0.45, y: p.y + 0.5, vx: centerVx + 3.0, vy: BULLET_SPEED * 0.96, life: 1.6, fromEnemy: false, pressAtMs });
-      }
+      // A lövés lövedékei a magból (`volleyFor`): a hármas lövés oldalsó lövedéke nem válaszolhat kristályon (L1).
+      volleyFor(powerLevelRef.current, centerVx).forEach((spec, k) => {
+        bulletsRef.current.push({ id: k === 0 ? id : nextEntityIdRef.current++, x: p.x + spec.dx, y: p.y + spec.dy, vx: spec.vx, vy: spec.vy, life: 1.6, fromEnemy: false, pressAtMs, side: spec.side });
+      });
       sfxShoot();
     }
 
@@ -2117,8 +2138,10 @@ export default function SpaceAsteroidQuiz() {
         for (const b of bulletsRef.current) {
           if (b.life <= 0 || b.fromEnemy) continue;
           // Csak az élesítés UTÁNI tűz-nyomással kilőtt lövedék válaszol; a többi átrepül a kristályon (nem fogy el).
-          const counts = bulletCountsAsAnswer({ nowMs: armClockRef.current, shownAtMs: crystalShownAtRef.current, pressAtMs: b.pressAtMs ?? Number.NEGATIVE_INFINITY });
+          const counts = bulletCountsAsAnswer({ nowMs: armClockRef.current, shownAtMs: crystalShownAtRef.current, pressAtMs: b.pressAtMs ?? Number.NEGATIVE_INFINITY, side: b.side });
           if (!counts) {
+            // az oldalsó (hármas lövés) lövedék áthalad a kristályon: nem válaszol és a jelzést sem váltja ki
+            if (b.side) continue;
             // Rövid szöveges jelzés (amíg a gyerek lövéssel még nem válaszolt): a lövedék átment a kristályon.
             if (!bulletAnsweredRef.current && crystalAt(crystals, b.x, b.y)) holdHintUntilRef.current = armClockRef.current + 3500;
             continue;
@@ -3606,7 +3629,7 @@ export default function SpaceAsteroidQuiz() {
                                 {idx + 1}
                               </span>
                             )}
-                            <span className="sa-crystal-label" data-list={longLabels ? "true" : "false"} data-long={opt.label.length > CRYSTAL_LABEL_MAX_CHARS || /S{9,}/.test(opt.label) ? "true" : "false"}>
+                            <span className="sa-crystal-label" data-list={longLabels ? "true" : "false"} data-tier={crystalLabelTier(opt.label)}>
                               {opt.label}
                             </span>
                           </button>
@@ -3905,8 +3928,13 @@ export default function SpaceAsteroidQuiz() {
           background: linear-gradient(160deg, #fffbe0 0%, #ffe27a 38%, #ffb52e 100%);
         }
         .sa-crystal:focus-visible { outline: 3px solid #fff; outline-offset: 3px; border-radius: 12px; }
-        .sa-crystal-label { position: relative; z-index: 1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 14px; line-height: 1.15; }
-        .sa-crystal-label[data-long="true"] { font-size: 12px; }
+        .sa-crystal-label { position: relative; z-index: 1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: normal; word-break: normal; hyphens: manual; font-size: 14px; line-height: 1.15; }
+        /* méret-fok a leghosszabb szó szerint: a szó nem törik közepén, a felirat nem csonkul (review #486 L2) */
+        .sa-crystal-label[data-tier="long"] { font-size: 12px; }
+        .sa-crystal-label[data-tier="wide"] { font-size: 11px; }
+        .sa-crystal-label[data-tier="xwide"] { font-size: 10px; }
+        .sa-crystal:has(.sa-crystal-label[data-tier="long"]) { max-width: min(116px, 32vw); }
+        .sa-crystal:has(.sa-crystal-label[data-tier="wide"]), .sa-crystal:has(.sa-crystal-label[data-tier="xwide"]) { max-width: min(150px, 40vw); padding-left: 9px; padding-right: 9px; }
         /* Hosszú válaszok: a kristályon a sorszám; a teljes szöveg a listában (a címke látszólag rejtett, de olvasható marad). */
         .sa-crystal-label[data-list="true"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
         .sa-crystal-num { position: relative; z-index: 1; font-size: 22px; font-weight: 900; line-height: 1; }

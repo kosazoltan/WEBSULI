@@ -156,7 +156,10 @@ test("review #486 M2: a kristályt a lövedék csak élesítés után, új tűz-
   const tick = code.slice(code.indexOf("const tick = (dt: number)"), code.indexOf("const enemyRadius"));
   assert.match(tick, /bulletCountsAsAnswer\(\{ nowMs: armClockRef\.current, shownAtMs: crystalShownAtRef\.current, pressAtMs: b\.pressAtMs/);
   assert.match(tick, /if \(fireNow && !firePrevRef\.current\) firePressAtRef\.current = armClockRef\.current;/);
-  assert.match(tick, /pressAtMs\s*\}/, "a lövedék viszi a tűz-nyomás idejét");
+  // SPEC-VÁLTOZÁS 2026-11-17 (review #486 L1): a lövedékek a magból jönnek (`volleyFor`), a szigor nő: a nyomás ideje ÉS az oldalsó jelölés is a lövedéken.
+  assert.match(tick, /volleyFor\(powerLevelRef\.current, centerVx\)\.forEach/);
+  assert.match(tick, /pressAtMs, side: spec\.side/, "a lövedék viszi a tűz-nyomás idejét és az oldalsó jelölést");
+  assert.match(tick, /side: b\.side \}\)/, "az oldalsó lövedék nem válaszolhat");
   assert.doesNotMatch(code, /chip\.disabled !== lock/, "a koppintás / billentyű szándékos: nincs élesítési tiltás (az élesítés a lövedékre vonatkozik)");
 });
 
@@ -214,4 +217,19 @@ test("a kör végén nyomva tartott tűzgomb: a vezérlők az endRun-ban és a s
   assert.match(end, /\}, \[releaseControls\]\);/);
   const start = code.slice(code.indexOf("const startNewRun = useCallback("));
   assert.match(start.slice(0, 3500), /releaseControls\(\);/);
+});
+
+test("review #486 L5: a rossz válasz nem jutalmaz — az `applyCrystalUpgrade()` és a pont csak a jó ágban van (a rossz ág előtt)", () => {
+  const out = code.slice(code.indexOf("const onCrystalOutcome = "), code.indexOf("installGameTestApi("));
+  assert.equal(out.split("applyCrystalUpgrade()").length - 1, 1, "az `applyCrystalUpgrade()` pontosan egyszer szerepel");
+  assert.ok(out.indexOf("applyCrystalUpgrade()") < out.indexOf("sfxError();"), "a fejlesztés a jó ág része (a rossz ág `sfxError` előtt zárul)");
+  assert.match(out, /if \(result === "correct"\) \{[\s\S]{0,200}applyCrystalUpgrade\(\);[\s\S]{0,900}return;\s*\}\s*sfxError\(\);/, "a jó ág `return`-nel zárul, közvetlenül a rossz ág (`sfxError`) előtt");
+  const wrong = out.slice(out.indexOf("sfxError();"));
+  assert.doesNotMatch(wrong, /scoreRef\.current \+=/, "a rossz ág nem ad pontot");
+});
+
+test("review #486 L2: a kristály-felirat méret-foka a `crystalLabelTier`-ből jön (a hibás `/S{9,}/` regex megszűnt), a szó nem törhet közepén", () => {
+  assert.match(code, /data-tier=\{crystalLabelTier\(opt\.label\)\}/);
+  assert.doesNotMatch(page, /\/S\{9,\}\//, "a hibás regex (backslash nélküli S) visszatért");
+  assert.match(page, /\.sa-crystal-label \{[^}]*overflow-wrap: normal;[^}]*hyphens: manual;/, "a szó nem törhet közepén");
 });

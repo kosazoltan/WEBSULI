@@ -43,6 +43,17 @@ export const CRYSTAL_DRIFT_Y = 0;
  */
 export const CRYSTAL_LABEL_MAX_CHARS = 22;
 
+/**
+ * A kristály-felirat méret-foka a leghosszabb SZÓ szerint (a szó nem törhet közepén, és a felirat nem csonkulhat — review #486 L2):
+ * `normal` (≤ 8 karakteres szó, 14 px), `long` (9–12, 12 px), `wide` (13–16, 11 px, szélesebb gomb), `xwide` (≥ 17, 10 px, szélesebb gomb).
+ * A kötőjel törési hely (a „Dunántúli-középhegység” két szóként számít).
+ */
+export type CrystalLabelTier = "normal" | "long" | "wide" | "xwide";
+export function crystalLabelTier(label: string): CrystalLabelTier {
+  const longest = label.split(/[\s-]+/u).reduce((m, w) => Math.max(m, w.length), 0);
+  return longest >= 17 ? "xwide" : longest >= 13 ? "wide" : longest >= 9 ? "long" : "normal";
+}
+
 /** Beférnek-e az opciók a kristály-feliratba (a forrás-választás szűrője; tiszta, olcsó). */
 export function crystalLabelsFit(options: readonly string[]): boolean {
   return options.every((o) => o.length <= CRYSTAL_LABEL_MAX_CHARS);
@@ -251,7 +262,8 @@ export const CRYSTAL_ARM_MS = 500;
  * megnyomása (`pressAtMs`) ezután történt: a tartott tűz és a kérdés előtt kilőtt lövedék soha nem „válaszol” — a gyerek olvasás
  * nélkül, véletlenül nem lő rossz választ. Az idők a kérdés-óra ms-ai.
  */
-export function bulletCountsAsAnswer(a: { nowMs: number; shownAtMs: number; pressAtMs: number }): boolean {
+export function bulletCountsAsAnswer(a: { nowMs: number; shownAtMs: number; pressAtMs: number; /** a hármas lövés oldalsó lövedéke: soha nem válaszol (L1) */ side?: boolean }): boolean {
+  if (a.side === true) return false;
   const armedAt = a.shownAtMs + CRYSTAL_ARM_MS;
   return a.nowMs >= armedAt && a.pressAtMs >= armedAt;
 }

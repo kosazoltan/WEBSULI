@@ -9,8 +9,10 @@ import {
   CRYSTAL_ARM_MS,
   CRYSTAL_LABEL_MAX_CHARS,
   CRYSTAL_MIN_ROW_GAP_PX,
+  CRYSTAL_RADIUS,
   bulletCountsAsAnswer,
   crystalAt,
+  crystalLabelTier,
   crystalLabelsFit,
   crystalZoneFor,
   hitCrystal,
@@ -30,7 +32,11 @@ import {
   gradeEase,
   interpolate,
   lifeLossOutcome,
+  PLAYER_Y_MIN,
   pickDropKind,
+  playerXLimit,
+  visibleHalfWidth,
+  volleyFor,
 } from "../client/src/lib/spaceAsteroid/physics";
 import { createRng } from "../shared/game-rng";
 
@@ -255,4 +261,106 @@ test("hosszú válaszok (> 22 karakter): a leghosszabb tétel a bankban megkeres
   // a vászon 360×640-en ~ 640 - 70 (HUD) - 140 (vezérlősáv) = 430 px; a lista legfeljebb 72% (max-height), fölötte görgethető
   const sceneHeight = 640 - 70 - 140;
   assert.ok(worstHeight <= sceneHeight * 0.72 + 1, `a legrosszabb lista ${Math.round(worstHeight)} px > ${Math.round(sceneHeight * 0.72)} px`);
+});
+
+/* ------------------------------ L1: hármas lövés (review #486, vak ellenőrzés) ------------------------------ */
+
+test("L1 — hármas lövéssel (a játék saját `volleyFor`-ja) 0% téves válasz: az oldalsó lövedék nem válaszolhat, a célzott kristályt a középső találja (minden nézet, hajó-magasság, célzási hiba)", () => {
+  const VPS = [
+    { width: 360, height: 640, box: 0.7 },
+    { width: 390, height: 844, box: 0.72 },
+    { width: 412, height: 915, box: 0.72 },
+    { width: 844, height: 390, box: 0.77 },
+  ] as const;
+  const rng = createRng(21);
+  let volleys = 0;
+  let wrong = 0;
+  let missedTarget = 0;
+  for (const vp of VPS) {
+    const zone = crystalZoneFor({ boxWidthPx: vp.width, boxHeightPx: vp.height * vp.box, boxTopPx: 70, viewport: { width: vp.width, height: vp.height }, prompt: "Mennyi?", safeTopPx: 0 });
+    for (const shipY of [-9.6, -8, -6, -4, -2.4]) {
+      for (let target = 0; target < 4; target++) {
+        for (const err of [-0.6, -0.3, 0, 0.3, 0.6]) {
+          const crystals = spawnCrystals(presentation, zone, rng.next);
+          const aimed = crystals[target]!;
+          // a hajó a célpont alatt (célzási hiba: ±0,6 egység), a hajó nem repülhet a kristály fölé: csak ha a kristály a hajó fölött van
+          if (aimed.y - CRYSTAL_RADIUS < shipY + 0.7) continue;
+          const shipX = aimed.x + err;
+          const bullets = volleyFor(1, 0).map((s) => ({ x: shipX + s.dx, y: shipY + s.dy, vx: s.vx, vy: s.vy, side: s.side }));
+          let answered: number | null = null;
+          // a lap tick-je: előbb minden lövedék mozog, aztán sorban az ütközés-vizsgálat; az első jogosult találat válaszol
+          for (let step = 0; step < 100 && answered === null; step++) {
+            for (const b of bullets) {
+              b.x += b.vx / 60;
+              b.y += b.vy / 60;
+            }
+            for (const b of bullets) {
+              if (!bulletCountsAsAnswer({ nowMs: 5000, shownAtMs: 0, pressAtMs: 4000, side: b.side })) continue;
+              const c = crystalAt(crystals, b.x, b.y);
+              if (c) {
+                answered = c.optionIndex;
+                break;
+              }
+            }
+          }
+          volleys++;
+          if (answered === null) missedTarget++;
+          else if (answered !== target) wrong++;
+        }
+      }
+    }
+  }
+  assert.ok(volleys > 100, `kevés próba: ${volleys}`);
+  assert.equal(wrong, 0, `${wrong}/${volleys} hármas lövés a NEM célzott kristályra válaszolt`);
+  assert.equal(missedTarget, 0, `${missedTarget}/${volleys} lövés a célzott kristályt sem találta (a középső lövedék legyen elég)`);
+});
+
+test("L1 — a `volleyFor`: egyes lövésnél 1 középső, hármasnál +2 oldalsó (side) lövedék; az oldalsó soha nem válaszol", () => {
+  assert.equal(volleyFor(0, 0).length, 1);
+  assert.equal(volleyFor(0, 0)[0]!.side, false);
+  const triple = volleyFor(2, 0.4);
+  assert.equal(triple.length, 3);
+  assert.deepEqual(triple.map((b) => b.side), [false, true, true]);
+  for (const s of triple.filter((b) => b.side)) {
+    assert.equal(bulletCountsAsAnswer({ nowMs: 9000, shownAtMs: 0, pressAtMs: 5000, side: s.side }), false);
+  }
+  assert.equal(bulletCountsAsAnswer({ nowMs: 9000, shownAtMs: 0, pressAtMs: 5000, side: false }), true);
+});
+
+/* ------------------------------ L2: kristály-felirat méret-fok (review #486) ------------------------------ */
+
+test("L2 — a kristály-felirat méret-foka a leghosszabb szó szerint (kötőjel törési hely); a regex-hiba (`S{9,}`) nem tér vissza", () => {
+  assert.equal(crystalLabelTier("kör"), "normal");
+  assert.equal(crystalLabelTier("paradicsom"), "long"); // 10 karakter
+  assert.equal(crystalLabelTier("környezetszennyezés"), "xwide"); // 19
+  assert.equal(crystalLabelTier("jobbágyfelszabadítást"), "xwide"); // 21
+  assert.equal(crystalLabelTier("Dunántúli-középhegység"), "long"); // a kötőjel két szóra bontja: 9 és 12
+  assert.equal(crystalLabelTier("tizennégykarakter"), "xwide");
+  assert.equal(crystalLabelTier("tizenkétbetűs1"), "wide"); // 14
+  assert.equal(crystalLabelTier("nyolcbetű"), "long"); // 9
+  assert.equal(crystalLabelTier("nyolcbet"), "normal"); // 8
+});
+
+test("L3 — minden nézetben (fekvőben is) MINDEN kristály lövéssel választható: a hajó a legalsó helyéről a kristály alá áll, és a középső lövedék pontosan azt találja", () => {
+  const VPS = [
+    { width: 360, height: 640, box: 0.7 },
+    { width: 390, height: 844, box: 0.72 },
+    { width: 412, height: 915, box: 0.72 },
+    { width: 844, height: 390, box: 0.77 },
+  ] as const;
+  const rng = createRng(33);
+  for (const vp of VPS) {
+    const zone = crystalZoneFor({ boxWidthPx: vp.width, boxHeightPx: vp.height * vp.box, boxTopPx: 70, viewport: { width: vp.width, height: vp.height }, prompt: "Melyik a terület mértékegysége?", safeTopPx: 0 });
+    const aspect = vp.width / (vp.height * vp.box);
+    const limit = playerXLimit(visibleHalfWidth(CAMERA_FOV_DEG, aspect, CAMERA_Z));
+    const crystals = spawnCrystals(presentation, zone, rng.next);
+    for (const c of crystals) {
+      assert.ok(Math.abs(c.x) <= limit + 1e-9, `${vp.width}×${vp.height}: a ${c.optionIndex}. kristály (x ${c.x.toFixed(2)}) a hajó vízszintes határán (±${limit.toFixed(2)}) kívül van`);
+      assert.ok(c.y - CRYSTAL_RADIUS > PLAYER_Y_MIN + 0.7, `${vp.width}×${vp.height}: a ${c.optionIndex}. kristály a hajó legalsó helye alatt van`);
+      // a legalsó helyről, a kristály alól lőve a középső lövedék pontosan ezt a kristályt találja
+      let hit: number | null = null;
+      for (let y = PLAYER_Y_MIN + 0.7; y < 12 && hit === null; y += 0.1) hit = crystalAt(crystals, c.x, y)?.optionIndex ?? null;
+      assert.equal(hit, c.optionIndex, `${vp.width}×${vp.height}: a ${c.optionIndex}. kristály nem választható egyenes lövéssel`);
+    }
+  }
 });

@@ -41,7 +41,7 @@ test('source-only manufacturing on mobile and desktop sends no author grade',asy
 // a játékban, nem blokkoló kristály-sávban érkezik; hibás válasznál nincs dialógus, a helyes kristály világít, a TELJES magyarázat
 // (a bank szövege / a szóbank sablonja) a „Miért?” gombra nyílik, és olvasható marad; bezárása után a játék fut tovább.
 test('asteroid wrong-answer explanation: no blocking dialog, the Why? card stays readable and closes back to the running game',async({page})=>{
- test.setTimeout(240000);
+ test.setTimeout(150000);
  await page.setViewportSize({width:390,height:844});
  await page.goto('/games/space-asteroid-quiz');
  await page.getByRole('button',{name:/Indulhat —/}).click();

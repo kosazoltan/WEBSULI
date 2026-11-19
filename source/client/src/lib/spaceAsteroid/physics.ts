@@ -182,6 +182,23 @@ export function waveSpawnInterval(wave: number, intensity: number): number {
   return clamp(1.4 - wave * 0.06, 0.4, 1.4) * SPAWN_BASE_SCALE * (1 + i * SPAWN_RELIEF_MAX);
 }
 
+/** A játékos lövedékének sebessége (egység / mp). */
+export const BULLET_SPEED = 14;
+export type BulletSpec = { dx: number; dy: number; vx: number; vy: number; /** oldalsó (hármas lövés) lövedék */ side: boolean };
+/**
+ * Egy lövés lövedékei a hajó helyéhez képest: a KÖZÉPSŐ (célzott) mindig; `powerLevel ≥ 1`-nél két oldalsó is, szétnyílva. A lap és a
+ * tesztek ugyanezt hívják. A kérdés-kristályra CSAK a középső lövedék válaszolhat (`side` → `bulletCountsAsAnswer` hamis): az oldalsó
+ * a szomszéd, nem célzott kristályt találná, és hamis rossz választ rögzítene (review #486 L1).
+ */
+export function volleyFor(powerLevel: number, centerVx: number): BulletSpec[] {
+  const out: BulletSpec[] = [{ dx: 0, dy: 0.7, vx: centerVx, vy: BULLET_SPEED, side: false }];
+  if (powerLevel >= 1) {
+    out.push({ dx: -0.45, dy: 0.5, vx: centerVx - 3.0, vy: BULLET_SPEED * 0.96, side: true });
+    out.push({ dx: 0.45, dy: 0.5, vx: centerVx + 3.0, vy: BULLET_SPEED * 0.96, side: true });
+  }
+  return out;
+}
+
 /** A hullám-felirat („HULLÁM n”) látszási ideje (mp) — a hullámok közt nincs kapu, csak ez a felirat. */
 export const WAVE_BANNER_SEC = 2;
 

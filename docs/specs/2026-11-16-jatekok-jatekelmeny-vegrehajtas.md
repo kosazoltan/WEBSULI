@@ -1834,6 +1834,14 @@ fizika-esetek (pattogás, határok) változatlanok.
     Az új küszöbök a botot NEHEZEBBEN játszatják (kevesebb győzelem) — az elfogadási pontok NEM könnyebben teljesülnek: a régi értékekkel a „kérdés
     nélkül is el lehet veszíteni” (gyenge: 3/20 nyer) és az „átlagos játékos olykor veszít” (20/20) elbukna, vagyis a régi értékek a mai modellben
     LAZÁBBAK voltak. A kalibráció a gyerek modellezése, nem a teszt kiszolgálása.
+- **Vak ellenőrzés (L1–L5) javításai:** (L1) a hármas lövés oldalsó lövedéke a kristályon áthalad, NEM válaszol — a lövedékek a magból jönnek
+  (`volleyFor`, `side` jelölés), a választ csak a középső (célzott) lövedék adhatja; teszt: a játék saját függvényeivel 4 nézetben 0% téves, és
+  böngészős eset üres pályán (`noEnemies`) hármas lövéssel; ellenpróbával. (L2) a felirat-regex javítva és a méret-fok a leghosszabb szó szerint
+  (`crystalLabelTier`: 14 / 12 / 11 / 10 px, szélesebb gomb a hosszú szónál, nincs szó közepi törés, nincs csonkolás); böngészős mérés a
+  legnehezebb banki szavakkal (köztük „Dunántúli-középhegység”, „paradicsom”) 3 nézetben. (L3) fekvő nézetben a kristály-zóna a hajó felső
+  sávjába is nyúlhat (a kártya alatt nincs több hely), de MINDEN kristály választható: a hajó alóluk bármelyiket eléri (teszt, 4 nézet); az
+  alsó sor teljes kiemelése a hajó sávja fölé külön tervdöntést kér (jegyre). (L5) a rossz válasz nem jutalmaz: forrás-őr + böngészős teszt
+  (rossz → nincs pajzs / hármas lövés / bomba / pont; jó → fejlesztés), a lapra tett `applyCrystalUpgrade()` a rossz ágban elbuktatja.
 - **Tartott tűz jelzése:** ha a lövedék átmegy a kristályon (nem élesített / régi nyomás), „Engedd el a tűzgombot, és lőj újra a válaszhoz!”
   jelenik meg 3,5 mp-re, amíg a gyerek lövéssel egyszer még nem válaszolt (`sa-hold-hint`).
 - **Átméretezés nyitott kérdésnél:** a mag új aréna-méretből újraszámolja a kristályok helyét (`rezoneCrystals`), az élesítés újraindul.
