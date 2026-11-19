@@ -1598,6 +1598,8 @@ export default function TsunamiEscapeEnglish() {
           figureX: st.x / 100,
           // A ténylegesen kirajzolt kép-eltolással (a jelenet visszaírja; WebGL nélkül a cél-eltolás).
           figureY: 1 - (st.water * WATER_VIEW_SCALE) / 100 + (liveRef.current.shownShiftPx ?? liveRef.current.shiftPx ?? 0) / Math.max(1, stageRef.current?.clientHeight ?? 1),
+          // A figura ténylegesen kirajzolt doboza a játéktér bal felső sarkától (px; a jelenet vetíti), vagy null (WebGL nélkül).
+          figureBox: liveRef.current.figureBoxPx ?? null,
           quizPlace: quizPlaceRef.current,
           sprint: driver.core.input.sprint ? 1 : 0,
           layoutSettleMs: settleMsRef.current,

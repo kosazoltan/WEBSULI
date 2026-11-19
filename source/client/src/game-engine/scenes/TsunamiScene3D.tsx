@@ -62,6 +62,11 @@ export type TsunamiLive = {
   shiftPx?: number;
   /** A jelenet írja vissza képkockánként: a ténylegesen alkalmazott (simított) eltolás képpontban — a mérésekhez. */
   shownShiftPx?: number;
+  /**
+   * A jelenet írja vissza (néhány képkockánként): a figura TÉNYLEGESEN kirajzolt képernyő-doboza a vászon bal felső sarkától,
+   * képpontban (a vetített befoglaló doboz — fej teteje, deszka alja, karok). A kép-eltolás benne van.
+   */
+  figureBoxPx?: { left: number; top: number; right: number; bottom: number };
 };
 
 /** The shelter (goal) on the top plank: % from the left. Always on screen (D4). */
@@ -1495,6 +1500,30 @@ function setupTsunami(
   let shiftY = 0;
   let lastW = -1;
   let lastH = -1;
+  // A figura képernyő-dobozának mérése (vetített befoglaló doboz) — 4 képkockánként.
+  const figBox = new THREE.Box3();
+  const figCorner = new THREE.Vector3();
+  let figBoxTick = 0;
+  const measureFigureBox = (live: TsunamiLive) => {
+    if (lastW <= 0 || lastH <= 0) return;
+    kid.group.updateMatrixWorld(true);
+    figBox.setFromObject(kid.group);
+    camera.updateMatrixWorld();
+    let l = Infinity;
+    let r = -Infinity;
+    let t = Infinity;
+    let b = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      figCorner.set(i & 1 ? figBox.max.x : figBox.min.x, i & 2 ? figBox.max.y : figBox.min.y, i & 4 ? figBox.max.z : figBox.min.z).project(camera);
+      const x = ((figCorner.x + 1) / 2) * lastW;
+      const y = ((1 - figCorner.y) / 2) * lastH;
+      l = Math.min(l, x);
+      r = Math.max(r, x);
+      t = Math.min(t, y);
+      b = Math.max(b, y);
+    }
+    if (Number.isFinite(l + r + t + b)) live.figureBoxPx = { left: l, top: t, right: r, bottom: b };
+  };
   const controller: ThreeSceneController = {
     camera,
     // The sky near the sun is ~1.5 (disc ~3): only the disc, buoy lights and lightning should glow.
@@ -1803,6 +1832,7 @@ function setupTsunami(
       }
 
       sparkles.update(dt);
+      if (live && (figBoxTick++ & 3) === 0) measureFigureBox(live);
     },
     dispose() {
       disposed = true;

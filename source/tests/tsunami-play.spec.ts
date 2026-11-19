@@ -88,6 +88,34 @@ async function openQuestion(page: Page, patch: Record<string, unknown> = { quest
 
 const SHORT_ANSWERS = ["cat", "dog", "sun", "map"];
 
+const QUIZ_SEL = '[data-testid="ts-quiz"], [data-testid="ts-question"]';
+const CONTROLS_SEL = '[data-testid="tsunami-touch-controls"] > *';
+const HUD_SEL = "[data-game-hud]";
+
+/**
+ * Vak ellenőr B1 (2026-11-19): a figura TELJES teste — a jelenet által ténylegesen kirajzolt képernyő-doboz (fej teteje, deszka
+ * alja, karok), 5 oszlop × 7 sor rácson, `elementsFromPoint`-tal. Visszaad: a doboz (játéktér-relatív px) és a takart pontok
+ * („sor,oszlop:mi takarja”). A régi két középvonali pont (8 és 36 px) a fejet sosem mérte.
+ */
+async function bodyCover(page: Page, selector: string): Promise<{ box: { left: number; top: number; right: number; bottom: number } | null; hits: string[] }> {
+  return page.evaluate((sel) => {
+    const pr = (window as unknown as { __websuliGame: { probe: () => { figureBox: { left: number; top: number; right: number; bottom: number } | null } } }).__websuliGame.probe();
+    const box = pr.figureBox;
+    if (!box) return { box: null, hits: [] };
+    const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+    const hits: string[] = [];
+    for (let r = 0; r < 7; r++) {
+      for (let c = 0; c < 5; c++) {
+        const x = stage.left + box.left + 3 + ((box.right - box.left - 6) * c) / 4;
+        const y = stage.top + box.top + 3 + ((box.bottom - box.top - 6) * r) / 6;
+        const hit = document.elementsFromPoint(x, y).find((el) => !!el.closest(sel));
+        if (hit) hits.push(`${r},${c}:${(hit.closest(sel) as HTMLElement).dataset.testid ?? hit.className.toString().slice(0, 24)}`);
+      }
+    }
+    return { box, hits };
+  }, selector);
+}
+
 /**
  * B2 (független ellenőr): a menedék VALÓDI láthatósága — takarás-mérés `elementsFromPoint`-tal. Álló nézetben a 3D-ház pontja
  * (a felső deszka fölött, `SHELTER_X`; a deszka álló nézetben 24 %, fekvőben 30 %) és a címke; fekvőben a ház a közös felső sáv mögé esik, ott a címke (dokumentált
@@ -400,6 +428,9 @@ for (const viewport of [
           });
         for (let sample = 0; sample < 3; sample++) {
           expect(await figureFree(), `a figura a nyitott kérdés alatt végig szabad (${sample + 1}. minta)`).toEqual([false, false]);
+          const body = await bodyCover(page, QUIZ_SEL);
+          expect(body.box, "a jelenet visszaírja a figura dobozát").not.toBeNull();
+          expect(body.hits, `a figura TELJES teste (fej tetejéig) szabad (${sample + 1}. minta, doboz ${JSON.stringify(body.box)})`).toEqual([]);
           await page.waitForTimeout(300);
         }
         const m = await page.evaluate(() => {
@@ -478,6 +509,7 @@ for (const viewport of [
 for (const viewport of [
   { width: 844, height: 390 },
   { width: 390, height: 844 },
+  { width: 360, height: 640 },
 ]) {
   test.describe(`${viewport.width}x${viewport.height}: a figura a nyitott kérdés alatt oldalra mozog — ≤ 600 ms-on belül újra szabad`, () => {
     test.use({ viewport, hasTouch: true, isMobile: true });
@@ -486,7 +518,7 @@ for (const viewport of [
       await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
       await page.getByTestId("button-tsunami-start").tap();
       await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
-      await openQuestion(page, { water: 45 });
+      await openQuestion(page, { water: 50 });
       await openQuestion(page, { question: true, longAnswers: true, longPrompt: true });
       const quiz = page.getByTestId("ts-quiz");
       await expect(quiz).toHaveAttribute("data-armed", "true", { timeout: 10_000 });
@@ -499,16 +531,23 @@ for (const viewport of [
           const fy = stage.top + pr.figureY * stage.height;
           return [fy - 8, fy - 36].map((y) => document.elementsFromPoint(fx, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]')));
         });
-      for (const x of [10, 90]) {
+      for (const x of [8, 50, 92]) {
         // A mozgatás és a mérés egy lépésben, a lapon belül: a figura ettől a pillanattól képkockánként szabad-e.
         const freeAfterMs = await page.evaluate(async (target) => {
           const api = (window as unknown as { __websuliGame: { forceState: (p: Record<string, unknown>) => void; probe: () => { figureX: number; figureY: number } } }).__websuliGame;
+          // A teljes test (a jelenet által kirajzolt doboz, 5 × 7 rács) — nem csak a középvonal.
           const isCovered = () => {
-            const pr = api.probe();
+            const box = (api.probe() as unknown as { figureBox: { left: number; top: number; right: number; bottom: number } | null }).figureBox;
+            if (!box) return true;
             const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
-            const fx = stage.left + pr.figureX * stage.width;
-            const fy = stage.top + pr.figureY * stage.height;
-            return [fy - 8, fy - 36].some((y) => document.elementsFromPoint(fx, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]')));
+            for (let r = 0; r < 7; r++) {
+              for (let c = 0; c < 5; c++) {
+                const x = stage.left + box.left + 3 + ((box.right - box.left - 6) * c) / 4;
+                const y = stage.top + box.top + 3 + ((box.bottom - box.top - 6) * r) / 6;
+                if (document.elementsFromPoint(x, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]'))) return true;
+              }
+            }
+            return false;
           };
           api.forceState({ x: target });
           const t0 = performance.now();
@@ -523,11 +562,61 @@ for (const viewport of [
         await page.waitForTimeout(450); // az eltolás lefut
         for (let sample = 0; sample < 3; sample++) {
           expect(await covered(), `x = ${x} %: a figura végig szabad (${sample + 1}. minta)`).toEqual([false, false]);
+          const body = await bodyCover(page, QUIZ_SEL);
+          expect(body.hits, `x = ${x} %: a TELJES test szabad (${sample + 1}. minta, doboz ${JSON.stringify(body.box)})`).toEqual([]);
           await page.waitForTimeout(250);
         }
         await shot(page, `tsunami-${viewport.width}x${viewport.height}-szelen-${x}.jpg`);
       }
       expect(await page.evaluate(() => document.querySelector('[data-testid="ts-quiz"]')?.getAttribute("data-state")), "a mérés végig nyitott kérdésnél").toBe("open");
+    });
+  });
+}
+
+/*
+ * Vak ellenőr K4 és KICSI 5 (2026-11-19): a figura teste a vezérlők (tárcsa, Sprint) és a felső sáv alá sem kerülhet —
+ * alacsony víznél a két szélen (kérdés nélkül), és magas víznél nyitott kérdéssel. A tárcsa helyét nem feltételezi (a vezérlők
+ * tényleges dobozát nézi), így a jobb oldali tárcsával is érvényes.
+ */
+for (const viewport of [
+  { width: 844, height: 390 },
+  { width: 390, height: 844 },
+  { width: 360, height: 640 },
+]) {
+  test.describe(`${viewport.width}x${viewport.height}: a figura a vezérlők és a felső sáv alá sem kerül`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test("alacsony víznél a két szélen a tárcsa / Sprint nem takarja a figurát", async ({ page }) => {
+      await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
+      await page.getByTestId("button-tsunami-start").tap();
+      await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+      await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: { forceState?: unknown } }).__websuliGame?.forceState === "function");
+      for (const x of [8, 92]) {
+        await page.evaluate((v) => {
+          const api = (window as unknown as { __websuliGame: { forceState: (p: Record<string, unknown>) => void } }).__websuliGame;
+          api.forceState({ water: 12 });
+          api.forceState({ x: v });
+        }, x);
+        await page.waitForTimeout(700); // ≤ 600 ms-os beállás + egy képkocka
+        const body = await bodyCover(page, CONTROLS_SEL);
+        expect(body.box, "a jelenet visszaírja a figura dobozát").not.toBeNull();
+        expect(body.hits, `x = ${x} %: a figura teste nincs a vezérlők alatt (doboz ${JSON.stringify(body.box)})`).toEqual([]);
+      }
+    });
+
+    test("magas víznél nyitott kérdéssel a felső sáv és a kérdés nem lóg a figura fejébe", async ({ page }) => {
+      await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
+      await page.getByTestId("button-tsunami-start").tap();
+      await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+      await openQuestion(page, { water: 85 });
+      await openQuestion(page, { question: true, longAnswers: true, longPrompt: true });
+      const quiz = page.getByTestId("ts-quiz");
+      await expect(quiz).toHaveAttribute("data-layout", "settled", { timeout: 3_000 });
+      await page.waitForTimeout(500);
+      for (const sel of [HUD_SEL, QUIZ_SEL]) {
+        const body = await bodyCover(page, sel);
+        expect(body.hits, `${sel}: a figura teste szabad (doboz ${JSON.stringify(body.box)})`).toEqual([]);
+      }
     });
   });
 }
