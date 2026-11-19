@@ -6,7 +6,7 @@ import express from "express";
 import { adventClock } from "../server/advent/clock";
 import { ADVENT_LIMITS, ADVENT_ROUND_WORST, ADVENT_SCHOOL_KIDS, ADVENT_WRITES_PER_KID, createWindowCounter, type AdventLimits } from "../server/advent/limits";
 import { createAdventRouter } from "../server/advent/routes";
-import { doorScore, mergeAdoption, orderKeyFor, type AdoptionContext } from "../server/advent/adoption";
+import { doorRank, mergeAdoption, orderKeyFor, type AdoptionContext } from "../server/advent/adoption";
 import type { AdventRow, AdventStore } from "../server/advent/store";
 
 /**
@@ -83,7 +83,10 @@ test("a korlátok egy helyen állnak, és iskolai legrosszabb esetre méretezett
     newDeviceRows: { limit: 240, windowMs: 3_600_000 },
     sessionNewRows: { limit: 3, windowMs: 3_600_000 },
     ipInvalid: { limit: 120, windowMs: 60_000 },
+    ipConflicts: { limit: 720, windowMs: 60_000 },
   });
+  // Elutasított (409) kérés: 120 gyerek × 3 szabályos 409 / perc (lejárt link, elavult kérdés, „előbb nyisd ki”) × 2 tartalék (vak ellenőr 3. kör KICSI-B).
+  assert.equal(ADVENT_LIMITS.ipConflicts.limit, ADVENT_SCHOOL_KIDS * 3 * 2);
   // A képlet: 120 gyerek × (évfolyam + 24 × (megnyitás + válasz) + 5 javítás × 2) × 2 tartalék.
   assert.equal(ADVENT_SCHOOL_KIDS, 120);
   assert.equal(ADVENT_WRITES_PER_KID, 59);
@@ -236,8 +239,8 @@ test("IP-korlát: csak a SIKERES írás számít; a keret utáni kérés 429 (li
 });
 
 test("az alapértelmezett alanyi kerettel a 291. írás 429 (alany), előtte egy sem — két teljes kör belefér (A49 felső határa, vak ellenőr k2)", async () => {
-  // Az elutasított (409) kérés az érvénytelen-keretbe is számít (vak ellenőr KICSI-4) — itt azt kitágítjuk, hogy az alanyi keret határát mérjük.
-  const app = await serve({ limits: { ...ADVENT_LIMITS, ipInvalid: { limit: 100_000, windowMs: 60_000 } } });
+  // Az elutasított (409) kérésnek saját kerete van (vak ellenőr KICSI-4, 3. kör KICSI-B) — itt azt kitágítjuk, hogy az alanyi keret határát mérjük.
+  const app = await serve({ limits: { ...ADVENT_LIMITS, ipConflicts: { limit: 100_000, windowMs: 60_000 } } });
   try {
     const statuses: number[] = [];
     for (let i = 0; i < 291; i++) statuses.push((await app.round(A, "10.3.0.1")).status);
@@ -307,7 +310,7 @@ test("óra NEM e2e-módban, valódi HTTP-n: a tesztidő-fejléc hatástalan, a s
   } finally { await e2e.close(); }
 });
 
-test("névtelen → párosított: ABLAKONKÉNTI egyesítés — minden ablaknál a jobb eredmény marad, semmi nem vész el a tanuló sorából (tulajdonosi döntés 2026-11-19; terv 21.)", () => {
+test("névtelen → párosított: ABLAKONKÉNTI egyesítés — megoldott > érintetlen / még javítható > végleg elbukott; csak az eszköz AKTUÁLIS köre; semmi nem vész el a tanuló sorából (tulajdonosi döntés 2026-11-19; vak ellenőr 3. kör KÖZEPES-A; terv 21.)", () => {
   const attempt = (questionId: string, correct: boolean) => ({ questionId, pick: 1, correct, at: "" });
   const row = (kind: "device" | "learner", round: number, doors: Record<number, boolean[]>, extra: Partial<AdventRow> = {}): AdventRow => ({
     id: kind, season: 2026, subjectKind: kind, subjectId: kind, grade: 5, round,
@@ -319,61 +322,75 @@ test("névtelen → párosított: ABLAKONKÉNTI egyesítés — minden ablaknál
     learnerId: "L", deviceKey: "device:D", learnerKey: "learner:L", learnerGrade: 3, maxRepairs: () => 2, now: new Date("2026-12-05T10:00:00Z"),
     buildPlan: (_row, round, grade) => ({ round, layout: [], doors: Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 1, ["new-q" + (i + 1)]])), subjects: {}, grade, seedKey: "learner:L" }) as never,
   };
-  assert.deepEqual([doorScore(undefined), doorScore({ attempts: [attempt("q", false)] }), doorScore({ attempts: [attempt("q", false), attempt("r", true)] })], [0, 1, 2]);
+  const FAILED = [false, false, false]; // 2 javítás után végleg elbukott
+  // A rang: végleg elbukott (0) < érintetlen vagy még javítható (1) < megoldott (2).
+  assert.deepEqual([doorRank(undefined, 2), doorRank({ attempts: [attempt("q", false)] }, 2), doorRank({ attempts: FAILED.map((c) => attempt("q", c)) }, 2), doorRank({ attempts: [attempt("q", false), attempt("r", true)] }, 2)], [1, 1, 0, 2]);
   // Válasz nélküli eszköz-sor: nincs mit átvinni.
   assert.equal(mergeAdoption(null, row("device", 1, {}), ctx), null);
-  // Nincs tanulói sor: új sor a tanuló PROFILJÁNAK évfolyamára (3., nem a vendég 5.-e), az eszköz ablakai átkerülnek, saját magjukkal.
+  // Nincs tanulói sor: új sor a tanuló PROFILJÁNAK évfolyamára (3., nem a vendég 5.-e); a megoldott ablak saját magjával átkerül, a vendég
+  // még javítható (rontott) próbája NEM (az érintetlen ablak legalább ugyanolyan jó).
   const fresh = mergeAdoption(null, row("device", 1, { 1: [true], 2: [false] }), ctx)!;
   assert.equal(fresh.grade, 3, "a vendég évfolyama nem írja felül a profilt (vak ellenőr KICSI-6)");
-  assert.deepEqual(Object.keys(fresh.doors[1]!).sort(), ["1", "2"]);
+  assert.deepEqual(Object.keys(fresh.doors[1]!).sort(), ["1"]);
   assert.deepEqual(fresh.plan[1]!.doors[1], ["device-q1"]);
-  assert.deepEqual(fresh.plan[1]!.doors[3], ["new-q3"], "a többi ablak a tanuló saját tervéből");
+  assert.deepEqual(fresh.plan[1]!.doors[2], ["new-q2"], "a rontott vendég-ablak a tanuló saját tervéből");
   assert.equal(orderKeyFor(fresh.plan[1], 1, "x"), "device:seed", "az átvett ablak a vendég sorrendjével jelölődik (vak ellenőr K1)");
   assert.equal(orderKeyFor(fresh.plan[1], 3, "x"), "learner:L");
-  // Van tanulói sor (2. kör, levél-foglalással, megfeleléssel): körszám, korábbi kör, foglalás, megfelelés MARAD (vak ellenőr K2);
-  // ablakonként a jobb: 1. ablak tanuló megoldotta → marad; 2. ablak tanuló rontott, vendég megoldotta → vendégé; 3. ablak csak a
-  // vendégnél → vendégé; 4. ablak egyenlő (mindkettő rontott) → tanulóé.
-  const learner = row("learner", 2, { 1: [true], 2: [false], 4: [false] }, { mailedTo: ["1:final:abc"], passedAt: new Date("2026-12-04T10:00:00Z"), grade: 6 });
+  // Van tanulói sor (2. kör, levél-foglalással, megfeleléssel): körszám, korábbi kör, foglalás, megfelelés MARAD (vak ellenőr K2).
+  // 1: tanuló megoldotta → marad; 2: tanuló rontott (javítható), vendég megoldotta → vendégé; 3: csak a vendég rontott → NEM kerül át;
+  // 4: mindkettő rontott → tanulóé; 5: tanuló végleg elbukott, vendég még javítható → vendégé; 6: tanuló érintetlen, vendég végleg
+  // elbukott → érintetlen marad (V5: más gyerek kudarca nem rontja a gyerekét); 7: tanuló végleg elbukott, vendég érintetlen → a
+  // tanuló saját kudarca marad (az érintetlen eszköz-ablak nem töröl).
+  const learner = row("learner", 2, { 1: [true], 2: [false], 4: [false], 5: FAILED, 7: FAILED }, { mailedTo: ["1:final:abc"], passedAt: new Date("2026-12-04T10:00:00Z"), grade: 6 });
   learner.doors[1] = { 1: { attempts: [attempt("old-q1", false)] } };
   learner.plan[1] = { round: 1, layout: [], doors: {}, subjects: {} } as never;
-  const merged = mergeAdoption(learner, row("device", 1, { 1: [false], 2: [true], 3: [false], 4: [false] }), ctx)!;
+  const merged = mergeAdoption(learner, row("device", 1, { 1: [false], 2: [true], 3: [false], 4: [false], 5: [false], 6: FAILED }), ctx)!;
   assert.equal(merged.round, 2);
   assert.deepEqual(merged.mailedTo, ["1:final:abc"]);
   assert.equal(merged.passedAt?.toISOString(), "2026-12-04T10:00:00.000Z");
   assert.equal(merged.grade, 6, "a tanuló rögzített évfolyama marad");
   assert.deepEqual(merged.doors[1], learner.doors[1], "a korábbi kör érintetlen");
-  assert.equal(merged.doors[2]![1]!.attempts[0]!.questionId, "learner-q1");
-  assert.equal(merged.doors[2]![2]!.attempts[0]!.questionId, "device-q2");
-  assert.equal(merged.doors[2]![3]!.attempts[0]!.questionId, "device-q3");
-  assert.equal(merged.doors[2]![4]!.attempts[0]!.questionId, "learner-q4");
+  const now = merged.doors[2]!;
+  assert.equal(now[1]!.attempts[0]!.questionId, "learner-q1");
+  assert.equal(now[2]!.attempts[0]!.questionId, "device-q2");
+  assert.equal(now[3], undefined, "a vendég rontott próbája nem jobb az érintetlen ablaknál");
+  assert.equal(now[4]!.attempts[0]!.questionId, "learner-q4");
+  assert.equal(now[5]!.attempts[0]!.questionId, "device-q5", "a még javítható jobb a végleg elbukottnál");
+  assert.equal(now[6], undefined, "a vendég végleges kudarca nem kerül a gyerek érintetlen ablakába (V5)");
+  assert.equal(now[7]!.attempts.length, 3, "a tanuló saját kudarcát az érintetlen eszköz-ablak nem törli");
   assert.deepEqual(merged.plan[2]!.doors[2], ["device-q2"]);
   assert.deepEqual(merged.plan[2]!.doors[4], ["learner-q4"]);
-  // Az eszköz KORÁBBI köreinek jobb ablakai sem vesznek el: ablakonként az eszköz összes körének legjobbja számít (egyenlőségnél
-  // az eszköz aktuális köre), a saját kérdéssorával és sorrend-magjával.
-  const multi = row("device", 2, { 6: [false] });
-  multi.doors[1] = { 6: { attempts: [attempt("dev-r1-q6", true)] }, 7: { attempts: [attempt("dev-r1-q7", false), attempt("dev-r1-q7", true)] } };
-  multi.plan[1] = { round: 1, layout: [], doors: { 6: ["dev-r1-q6"], 7: ["dev-r1-q7"] }, subjects: {}, seedKey: "device:r1" } as never;
-  const best = mergeAdoption(null, multi, ctx)!;
-  assert.equal(best.doors[1]![6]!.attempts[0]!.questionId, "dev-r1-q6", "az 1. körben megoldott ablak, nem a 2. körben rontott");
-  assert.equal(best.doors[1]![7]!.attempts.length, 2);
-  assert.deepEqual(best.plan[1]!.doors[6], ["dev-r1-q6"]);
-  assert.equal(orderKeyFor(best.plan[1], 6, "x"), "device:r1");
+  // Csak az eszköz AKTUÁLIS köre egyesül (vak ellenőr 3. kör, Forgatókönyv 2): az eszköz 1. körének 24 végleges kudarca nem kerül a
+  // tanuló friss 2. körébe; az eszköz korábbi körének megoldott ablaka sem (más kör kérdéssora).
+  const oldFails = row("device", 2, { 6: [true] });
+  oldFails.doors[1] = Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 1, { attempts: FAILED.map((c) => attempt("dev-r1-q" + (i + 1), c)) }]));
+  oldFails.doors[1]![7] = { attempts: [attempt("dev-r1-q7", true)] };
+  const fresh2 = row("learner", 2, { 1: [true] });
+  const mergedRounds = mergeAdoption(fresh2, oldFails, ctx)!;
+  assert.deepEqual(Object.keys(mergedRounds.doors[2]!).sort(), ["1", "6"], "csak a tanuló saját ablaka és az eszköz aktuális körének megoldása");
+  assert.equal(mergedRounds.doors[1], undefined, "az eszköz korábbi köre nem kerül a tanulóhoz");
   // Megnyitott, még meg nem válaszolt ablak (0–0): azonos évfolyamnál a vendég kérdéssora és magja marad — a gyereknek mutatott kérdésre
   // érkező válasz így nem 409; eltérő évfolyamnál a tanuló saját terve.
   const sameGrade = mergeAdoption(null, row("device", 1, { 1: [true] }, { grade: 3 }), ctx)!;
   assert.deepEqual(sameGrade.plan[1]!.doors[2], ["device-q2"]);
   assert.equal(orderKeyFor(sameGrade.plan[1], 2, "x"), "device:seed");
-  assert.deepEqual(fresh.plan[1]!.doors[2], ["device-q2"], "a 2. ablakot a vendég próbálta (1 > 0)");
   assert.deepEqual(fresh.plan[1]!.doors[5], ["new-q5"], "eltérő évfolyam (vendég 5., profil 3.): a tanuló saját terve");
 });
 
-test("az elutasított (409) kérés is a rövid ablakú érvénytelen-keretbe számít: egy címről 300 véletlen eszközzel → 120 után 429 (vak ellenőr KICSI-4)", async () => {
+test("az elutasított (409) kérésnek saját, iskolai méretű kerete van: egy osztálynyi szabályos 409 (2 / gyerek) átmegy, a visszaélés 720 után 429 (vak ellenőr KICSI-4, 3. kör KICSI-B)", async () => {
+  const wave = async (app: Awaited<ReturnType<typeof serve>>, from: number, count: number, ip: string) => {
+    const statuses: number[] = [];
+    for (let at = from; at < from + count; at += 50) statuses.push(...(await Promise.all(Array.from({ length: Math.min(50, from + count - at) }, (_, i) => app.round("cccccccc-0000-4000-8000-" + String(at + i).padStart(12, "0"), ip).then((r) => r.status)))));
+    return statuses;
+  };
   const app = await serve({});
   try {
-    const statuses: number[] = [];
-    for (let wave = 0; wave < 6; wave++) statuses.push(...(await Promise.all(Array.from({ length: 50 }, (_, i) => app.round("cccccccc-0000-4000-8000-" + String(wave * 50 + i).padStart(12, "0"), "10.30.0.1").then((r) => r.status)))));
-    assert.equal(statuses.filter((code) => code === 409).length, 120);
-    assert.equal(statuses.filter((code) => code === 429).length, 180);
+    // Szabályos osztályforgalom egy iskolai címről: 120 gyerek × 2 elutasított kérés egy percen belül — egy sem kap 429-et.
+    const legit = await wave(app, 0, 240, "10.30.0.1");
+    assert.deepEqual([legit.filter((c) => c === 409).length, legit.filter((c) => c === 429).length], [240, 0]);
+    // Visszaélés: összesen 800 elutasított kérés → 720 után 429.
+    const abuse = await wave(app, 240, 560, "10.30.0.1");
+    assert.deepEqual([abuse.filter((c) => c === 409).length, abuse.filter((c) => c === 429).length], [480, 80]);
     // Másik cím szabályos (itt is 409-es) kérése nem érintett.
     assert.equal((await app.round(A, "10.30.0.2")).status, 409);
   } finally { await app.close(); }

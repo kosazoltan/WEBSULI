@@ -169,17 +169,21 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   const sessionNewRows = createWindowCounter(limits.sessionNewRows);
   /** Érvénytelen kérések IP-nként: a keret betelte után az ÉRVÉNYTELEN kérés 429 (a szabályos kérést ez soha nem állítja meg). */
   const invalidRequests = createWindowCounter(limits.ipInvalid);
+  /** Elutasított (409) kérések IP-nként: saját, iskolai méretű keret (vak ellenőr 3. kör KICSI-B). */
+  const conflictRequests = createWindowCounter(limits.ipConflicts);
   const sessionKeyOf = (req: Request): string | null => {
     const session = (req as Request & { session?: unknown; sessionID?: unknown });
     return session.session && typeof session.sessionID === "string" && session.sessionID ? session.sessionID : null;
   };
   const fail = (req: Request, res: Response, next: NextFunction, error: unknown): void => {
     if (res.headersSent) return;
-    // Az érvénytelen (400) és az elutasított (409) kérés saját, rövid ablakú keretbe számít — a szabályos kérést ez nem állítja meg.
+    // Az érvénytelen (400) és az elutasított (409) kérés saját, rövid ablakú keretbe számít (a 409 iskolai méretűbe) — a szabályos
+    // kérést ez nem állítja meg.
     if (error instanceof AdventHttpError && (error.status === 400 || error.status === 409)) {
       const ip = clientIpKeyGenerator(req);
-      if (invalidRequests.reserve(ip) === null) {
-        res.setHeader("Retry-After", String(invalidRequests.retryAfterSec(ip)));
+      const counter = error.status === 409 ? conflictRequests : invalidRequests;
+      if (counter.reserve(ip) === null) {
+        res.setHeader("Retry-After", String(counter.retryAfterSec(ip)));
         res.status(429).json({ message: "Túl sok hibás kérés — próbáld újra egy kicsit később.", limit: "invalid" });
         return;
       }

@@ -14,6 +14,8 @@ export const ADVENT_SCHOOL_KIDS = 4 * 30;
 export const ADVENT_WRITES_PER_KID = 1 + 24 * 2 + 5 * 2;
 /** Egy kör legrosszabb esete egy alanynál: 24 ablak × 3 kérdés × (megnyitás + válasz). */
 export const ADVENT_ROUND_WORST = 24 * 3 * 2;
+/** Egy gyerek szabályos elutasított (409) kérései egy perc alatt: lejárt link, elavult kérdés (másik lap / eszköz), „előbb nyisd ki”. */
+export const ADVENT_CONFLICTS_PER_KID = 3;
 const RESERVE = 2;
 
 export type AdventLimit = { limit: number; windowMs: number };
@@ -30,6 +32,11 @@ export type AdventLimits = {
   sessionNewRows: AdventLimit;
   /** Érvénytelen kérés IP-nként (rövid ablak): csak az érvénytelen kérést utasítja el 429-cel, a szabályosat soha. */
   ipInvalid: AdventLimit;
+  /**
+   * Elutasított (409) kérés IP-nként: 120 gyerek × 3 / perc × 2 = 720 / perc. Saját keret, mert a 409 szabályos forgalomban is
+   * előfordul (pl. kulcscsere után minden gyerek első írása) — az érvénytelen-keret ezt nem állíthatja meg (vak ellenőr 3. kör KICSI-B).
+   */
+  ipConflicts: AdventLimit;
 };
 
 export const ADVENT_LIMITS: AdventLimits = {
@@ -39,6 +46,7 @@ export const ADVENT_LIMITS: AdventLimits = {
   newDeviceRows: { limit: 240, windowMs: 60 * 60_000 },
   sessionNewRows: { limit: 3, windowMs: 60 * 60_000 },
   ipInvalid: { limit: 120, windowMs: 60_000 },
+  ipConflicts: { limit: ADVENT_SCHOOL_KIDS * ADVENT_CONFLICTS_PER_KID * RESERVE, windowMs: 60_000 },
 };
 
 /**

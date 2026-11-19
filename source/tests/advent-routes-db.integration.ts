@@ -577,6 +577,22 @@ describe("adventi naptár — végpontok", () => {
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
+  it("névtelen → párosított: más gyerek (testvér) rontott próbája a közös eszközön nem rontja a gyerek érintetlen ablakát (vak ellenőr 3. kör KÖZEPES-A, V5)", async () => {
+    const learner = await newLearner(5);
+    const tablet = await kid(); tablet.learner = learner.token;
+    await tablet.answer(1, await tablet.open(1), true);
+    const shared = await kid();
+    assert.equal((await shared.post("/grade", { grade: 5 })).status, 200);
+    await shared.answer(4, await shared.open(4), false);
+    shared.learner = learner.token;
+    assert.equal((await shared.post("/doors/2/open")).status, 200);
+    const [row] = await q<{ d1: Json; d4: Json }>(`SELECT doors->(round::text)->'1' AS d1, doors->(round::text)->'4' AS d4 FROM advent_progress WHERE learner_id = $1`, [learner.id]);
+    assert.equal(row!.d1.attempts[0].correct, true, "a gyerek megoldott ablaka marad");
+    assert.equal(row!.d4, null, "a testvér rontott próbája nem került a gyerekhez");
+    assert.deepEqual(await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [shared.device]), []);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
   it("névtelen → párosított, versenyhelyzet: az átvétellel egyidejű válasz sem ad 500-at, és nem vész el — végül egyetlen tanulói sor (terv 21., #170)", async () => {
     for (let round = 0; round < 3; round++) {
       const learner = await newLearner(5);

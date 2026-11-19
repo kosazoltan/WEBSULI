@@ -11,7 +11,7 @@
  * Tiszta modul: az adatbázis-tranzakciót a \`store.adopt\`, az előnézetet a \`GET /state\` használja ugyanerre a függvényre.
  */
 import type { AdventPlan } from "../../shared/advent/assignment";
-import { ADVENT_DOORS, adventSummary, type DoorRecord } from "../../shared/advent/rules";
+import { ADVENT_DOORS, adventSummary, doorState, type DoorRecord } from "../../shared/advent/rules";
 import type { AdventRow } from "./store";
 
 /** A tervvel együtt tárolt meta: tervezési évfolyam, a sorrend magja, és az átvett ablakok saját magja. */
@@ -30,11 +30,14 @@ export function orderKeyFor(plan: AdventPlan | undefined, day: number, fallbackS
   return meta?.doorSeeds?.[day] ?? meta?.seedKey ?? fallbackSubjectKey;
 }
 
-/** Egy ablak eredményének rangja: megoldva (2) > próbálkozott, de nem megoldott (1) > nincs próba (0). */
-export function doorScore(record: DoorRecord | undefined): 0 | 1 | 2 {
+/**
+ * Egy ablak eredményének rangja (vak ellenőr 3. kör KÖZEPES-A): megoldva (2) > érintetlen vagy még javítható (1) > végleg elbukott (0).
+ * Az elbukott próba nem „jobb”, mint a még meglévő lehetőség.
+ */
+export function doorRank(record: DoorRecord | undefined, maxRepairs: number): 0 | 1 | 2 {
   const attempts = record?.attempts ?? [];
-  if (attempts.some((attempt) => attempt.correct)) return 2;
-  return attempts.length > 0 ? 1 : 0;
+  const state = doorState({ unlocked: true, attempts, maxRepairs });
+  return state === "solved" ? 2 : state === "failed" ? 0 : 1;
 }
 
 export type AdoptionContext = {
@@ -51,11 +54,13 @@ export type AdoptionContext = {
 
 /**
  * Az egyesített tanulói sor, vagy \`null\`, ha az eszköz sorában nincs egyetlen válasz sem (nincs mit átvinni — az eszköz sora
- * egyszerűen törlődik). Az eszköz ablakai a tanuló AKTUÁLIS körébe kerülnek, ablakonként a jobb eredmény szerint: az eszköz oldalán
- * az összes köre közül a legjobb (egyenlőségnél a későbbi kör), és ha az jobb a tanulóénál, az kerül át; egyenlőségnél a tanulóé marad. Az átvett ablakkal a kérdéssora és a sorrend magja is átkerül (a jelölés így változatlan).
+ * egyszerűen törlődik). Csak az eszköz AKTUÁLIS körének ablakai kerülnek a tanuló aktuális körébe (korábbi kör kudarca soha), ablakonként
+ * akkor, ha a rangjuk (`doorRank`) szigorúan jobb a tanulóénál; egyenlőségnél a tanulóé marad. Próba nélküli eszköz-ablak soha nem
+ * töröl a tanuló sorából. Az átvett ablakkal a kérdéssora és a sorrend magja is átkerül (a jelölés így változatlan).
  */
 export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx: AdoptionContext): AdventRow | null {
-  if (!Object.values(device.doors).some((round) => Object.values(round).some((door) => door.attempts.length > 0))) return null;
+  const deviceDoors = device.doors[device.round] ?? {};
+  if (!Object.values(deviceDoors).some((door) => door.attempts.length > 0)) return null;
   const base: AdventRow = learner ?? {
     id: "", season: device.season, subjectKind: "learner", subjectId: ctx.learnerId, grade: null, round: 1, plan: {}, doors: {},
     finishedAt: null, passedAt: null, mailedTo: [], createdAt: ctx.now, updatedAt: ctx.now,
@@ -67,29 +72,22 @@ export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx:
     : { ...(ctx.buildPlan(base, round, grade) as PlanMeta) };
   plan.doorSeeds ??= {};
   const doors: Record<number, DoorRecord> = { ...(base.doors[round] ?? {}) };
-  // Az eszköz köreit a legutóbbitól visszafelé járjuk: szigorúan jobb korábbi eredmény felülírja a későbbit.
-  const deviceRounds = Object.keys(device.doors).map(Number).filter((n) => Number.isInteger(n)).sort((a, b) => b - a);
+  const devicePlan = device.plan[device.round] as PlanMeta | undefined;
+  const repairs = ctx.maxRepairs(grade);
   for (let day = 1; day <= ADVENT_DOORS; day++) {
-    let theirs: DoorRecord | undefined;
-    let from = device.round;
-    for (const r of deviceRounds) {
-      const record = device.doors[r]?.[day];
-      if (doorScore(record) > doorScore(theirs)) { theirs = record; from = r; }
-    }
+    const theirs = deviceDoors[day];
     const mine = doors[day];
-    if (doorScore(theirs) === 0 && doorScore(mine) === 0) {
+    if (!theirs?.attempts.length && !mine?.attempts.length) {
       // Senki nem válaszolt még: azonos évfolyamnál a vendég (épp ezen az eszközön mutatott) kérdéssora és magja marad, hogy a
       // megnyitott kérdésre érkező válasz ne legyen elavult; eltérő évfolyamnál a tanuló saját terve.
-      const current = device.plan[device.round] as PlanMeta | undefined;
-      if (current?.doors[day] && (planGradeOf(current) ?? device.grade) === grade) {
-        plan.doors[day] = [...current.doors[day]!];
-        if (current.subjects?.[day]) plan.subjects[day] = current.subjects[day]!;
-        plan.doorSeeds[day] = orderKeyFor(current, day, ctx.deviceKey);
+      if (devicePlan?.doors[day] && (planGradeOf(devicePlan) ?? device.grade) === grade) {
+        plan.doors[day] = [...devicePlan.doors[day]!];
+        if (devicePlan.subjects?.[day]) plan.subjects[day] = devicePlan.subjects[day]!;
+        plan.doorSeeds[day] = orderKeyFor(devicePlan, day, ctx.deviceKey);
       }
       continue;
     }
-    if (doorScore(theirs) <= doorScore(mine)) continue;
-    const devicePlan = device.plan[from] as PlanMeta | undefined;
+    if (!theirs?.attempts.length || doorRank(theirs, repairs) <= doorRank(mine, repairs)) continue;
     doors[day] = { attempts: theirs!.attempts.map((attempt) => ({ ...attempt })) };
     if (devicePlan?.doors[day]) plan.doors[day] = [...devicePlan.doors[day]!];
     if (devicePlan?.subjects?.[day]) plan.subjects[day] = devicePlan.subjects[day]!;
