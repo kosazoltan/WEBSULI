@@ -36,6 +36,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-46** — Unicode-tartomány forrásban `\p{…}` kategóriával, ne `\uXXXX`-szel (az eszközparaméter dekódolja); `cat -A` ellenőrzés.
 - **C-50** — Visszaperjeles szöveg csak Edit/Write-tal; bájtszintű visszaolvasás; szkriptes cserénél `git diff --stat` ellenőrzés.
 - **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
+- **C-76** — Folyamatot csak saját, egyedi jelölő vagy pontos PID alapján állíts le — parancssori mintaillesztéssel soha.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -1102,3 +1103,16 @@ Forrás: #504 (Kockavadász `?perf=1`), 2. vak kör M1 (blokkoló). Rokon: C-15.
   követelmény-ütközés: állj meg, és kérj döntést opciókkal — ne a kényelmesebbik tesztet lazítsd.
 - **Ellenőrzés:** a push előtt `git diff <előző visszanézett fej>..HEAD -- source/tests` — minden megváltozott állítás mellé indoklás
   a commit-üzenetben; elvárás-érték módosítása csak dokumentált spec-döntéssel.
+
+## C-76 — Folyamatot csak saját, egyedi jelölő vagy pontos PID alapján állíts le, mintaillesztéssel soha (2026-11-19)
+
+Forrás: #504, a közös gép-zár (`scratchpad\gep-sav\lock`) bevezetésének napja. Rokon: a memória „TaskStop árva figyelő” bejegyzése.
+
+- **Tünet:** a saját zár-várakozó bash-ciklus leállítása után (Windows alatt a TaskStop a ciklust árván hagyhatja) az ügynök a
+  maradékot `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'gep-sav' -and … -match 'gazda' }` szűrővel
+  kereste és `Stop-Process`-szel leállította — 14 folyamatot, ebből egy volt a sajátja; a többi más munkamenetek ugyanilyen
+  szövegű zár-várakozója volt. Azok sorban állása elveszett, újra kellett indítaniuk.
+- **Szabály:** a háttérbe indított, később esetleg leállítandó parancsba tegyél egyedi jelölőt (pl. `: KV504WAIT;` az elején, vagy a
+  saját munkafa abszolút útvonala), és leállításkor CSAK erre a jelölőre vagy a pontosan ismert PID-re (és annak gyermekeire)
+  szűrj. Közös erőforrás nevére (zár-, sorrend-, napló-mappa), általános parancsnévre (`node`, `bash`, `pre-push-gate`) szűrni tilos.
+  Leállítás előtt listázd ki a találatokat, és ha nem mind a tiéd, ne állíts le semmit — jelezd.
