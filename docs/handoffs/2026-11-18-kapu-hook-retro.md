@@ -51,10 +51,14 @@ naplófájljai, a valódi héjas próbák kimenete).
 - `scripts/qa/hooks/check-audit-ok.mjs`: időtúllépéskor / indítási hibánál / belső hibánál tilt (#506, kanban #126).
 - `docs/minosegkapuk.md`: élő próba a merge után; „A kapu-hook hibája” (az ügynök csak a hookot javíthatja, a védelem kikapcsolása
   tulajdonosi lépés — szöveg-őr teszttel).
-- `docs/agent-csapdak.md`: C-75 (a beolvasztáskor osztva — a C-73 / C-74 közben a főágra került).
+- `docs/agent-csapdak.md`: C-75 (a beolvasztáskor osztva — a C-73 / C-74 közben a főágra került); 4. szabály: escape-et tartalmazó
+  kód csak Write / Edit eszközzel (3. vak kör).
+- `.claude/settings.json` + `scripts/qa/hooks/hook-failure.test.mjs` (F13, F14, L14) + `scripts/qa/gates/lint-gate.test.mjs` (L15):
+  projekt-szintű hamis kikapcsoló érték, munkafa-tiltás, Unicode-tudatos szöveg-őr, a diff-szkennelés jelének tesztje; mutációs
+  ellenpróba 10/10 elkapva (#506, 3. vak kör).
 
 ## 4. Kanbanra került
 
-#124 (hamis tiltások), #125 (a repó-érték normalizálása), #126 (audit-hook — a #506 zárja), #158–#160 (nem szöveg típusú parancsmező;
+#181 (a beállítás-változást figyelő hook a jogosultsági tiltás réseire — 3. vak kör, L12), #124 (hamis tiltások), #125 (a repó-érték normalizálása), #126 (audit-hook — a #506 zárja), #158–#160 (nem szöveg típusú parancsmező;
 az audit-hook ismeretlen eszköznévnél; az audit-hook null bemenetre), #164 (a szöveg-őr kiterjesztése a teljes runbookra és a
 kapu-skillekre).

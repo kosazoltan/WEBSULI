@@ -1100,5 +1100,9 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 - **Tünet 3 (eszközhasználat):** Git Bashben a kettős idézőjeles `node -e "…"` szövegben álló backtick parancshelyettesítésként
   lefutott (fájlnevek „futtatva”, a beírt szöveg kiürült). **Szabály 3:** backticket tartalmazó szöveget fájlba írj (Write eszköz),
   és a szkriptet fájlból futtasd — ne kettős idézőjeles parancssorban.
+- **Tünet 4 (eszközhasználat, #506 3. kör):** visszaperjelet (`\\`) tartalmazó tesztkódot heredoc + `sed` láncban fűztem a fájlhoz —
+  az egyik visszaperjel elveszett, a tesztfájl szintaxishibás lett. **Szabály 4:** a 3. szabály a visszaperjelre is áll: regexet,
+  escape-et tartalmazó kódot csak a Write / Edit eszközzel írj; mutációs ellenpróbát JS-szkriptben, szöveges keresés-cserével
+  (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
