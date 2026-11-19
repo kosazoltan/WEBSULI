@@ -316,4 +316,7 @@ A `gate:pr` a böngészős körben két, a saját kódomból eredő hibát fogot
   bukás 45 ismételt futásban (15 elrendezés-eset × 3) nem jött elő újra: az ok tehát NEM bizonyított, csak a szűk tartalék mért.
   **Javítás:** az eltolás gyorsabb (csillapítás 12 → 16, a nyugalom-jelző 420 → 320 ms; 320 ms után < 1 % marad hátra), így a
   tartalék ~265 ms, és 6× lassított CPU-n is a mércén belül marad. A mérce és a tesztek állításai változatlanok.
+  **Utómérés a teljes körből (fej f419a4c0, 2026-11-19 14:14 UTC, 75/75 zöld):** `SETTLE` eltolással 327–339 ms (tartalék
+  261–273 ms), eltolás nélkül 5–12 ms. Nézetenként (eleje / 35 / 45 / 50 / 70 %): 360×640 12 / 337 / 331 / 331 / 334;
+  390×844 7 / 5 / 339 / 330 / 5; 844×390 334 / 327 / 328 / 332 / 6 ms. A közös mobil mérő M11-je mindhárom nézetben zöld.
 - Friss `origin/main` beolvasztva; a csapdakatalógusban a saját bejegyzések a főág C-75-e után (C-76 / C-77 / C-78).
