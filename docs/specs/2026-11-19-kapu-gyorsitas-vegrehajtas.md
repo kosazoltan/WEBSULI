@@ -48,3 +48,15 @@ Minden pont ELŐBB bukó teszttel (a régi kódon bukik, az újon zöld); ez a d
    Teszt (`pre-merge-gate.test.mjs`): kétszeri bukás → FAIL; a jelölés kötelező; legfeljebb két futás; első PASS → nincs újrafuttatás.
 5. Mutációs ellenpróba másolaton (a vak ellenőr 9 túlélője is); `git merge origin/main`; `npm run gate:stage`; gép-zárral
    (`kapugyorsitas`) a legrosszabb eset próba-mérése és `npm run gate:push`.
+
+## 3. javítókör (vak review 3. kör: NEM) — terv: `docs/specs/2026-11-19-kapu-gyorsitas.md` 8. pont
+
+1. Ez a doksi-commit, a kód előtt.
+2. Tesztek ELŐBB (a régi kódon bukjanak): `pre-merge-gate.test.mjs` (L1 PR-szöveges ítélet → nincs próba; L4 main-elmozdulás a próba
+   alatt → FAIL, rögzített SHA a próbának; L8 egyedi ref, takarítás hash-eltérésnél is; L9 összidő; L10 kis PR átnevezéssel),
+   `check-quality-gates.test.mjs` (L4: `mainSha` nélküli / eltérő merge-bizonyíték → DENY), `carry-over.test.mjs` (L2 célfej `NEM`
+   megmarad mindkét sorrendben; L3 a próba `scopeHead`-et kap; L11 `--base=`), `merged-probe.test.mjs` (L3 beolvasztott main +
+   `scopeHead`; L5 bukó main-alapmérés; L6 hiányzó ellenőrző; L7 háromfázisú ellenőrző a szintetikus merge-en; L8 lassú futás tára;
+   L9 lejárt keret).
+3. Kód: `merged-probe.mjs`, `pre-merge-gate.mjs`, `carry-over.mjs`, `scripts/qa/hooks/check-quality-gates.mjs`.
+4. Doksi: `docs/minosegkapuk.md` (L1, L4, L9 a runbookban). `gate:stage`, új fej.

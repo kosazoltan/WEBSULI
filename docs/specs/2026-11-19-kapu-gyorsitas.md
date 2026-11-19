@@ -109,3 +109,30 @@ a fájllistát); (3) a `mergeSteps` a `probe`-ot továbbadja a `decideMerge`-nek
 - [ ] Minden javítás előbb bukó teszttel; a mutációs ellenpróba mutánsai (a vak ellenőr 9 túlélőjével együtt) elhalnak.
 - [ ] A legrosszabb eset próba-futásideje mérve és jelentve (tulajdonosi mérce: ≤ 7 perc).
 - [ ] A merge-kapu próbája bukáskor legfeljebb egyszer újrafut, jelölve a naplóban és a bizonyítékban; a második bukás FAIL (#205-ig).
+
+## 8. Javítókör a 3. vak kör (GPT-6.2 Sol, ítélet: NEM, fej `00c939a8`) után
+
+Minden lelet ELŐBB bukó teszttel (a lelet forgatókönyvével); a biztonsági leleteknél (L1, L2, L4) fail-closed.
+
+- **L1:** a helyi próba (PR-kódot futtat) előfeltétele a MEGBÍZHATÓ, pontos fejhez kötött helyi ítélet (`review-<fej>.json`,
+  `record-review`); a PR-leírás / komment ítélet-sora a próbát nem indíthatja.
+- **L2:** a `gate:carry` nem ír felül a célfejre már rögzített ítéletet: ha `review-<új fej>` létezik → nincs átvitel; a vizsgálat a
+  próba előtt ÉS közvetlenül az írás előtt fut, az írás kizárólagos létrehozással (`wx`) — a próba közben rögzített ítélet megmarad.
+  A célfejen meglévő `pre-push-` / `pre-pr-` rekordot az átvitel nem írja felül.
+- **L3:** a próba hatókörének történeti alapja külön bemenet (`scopeHead`): átvitelnél a régi, ellenőrzött fej; a PR- és a
+  main-oldali fájllista a régi fej és a rögzített main SHA elágazási pontjától számolódik.
+- **L4:** a próba és az átvitel a rögzített main SHA-t használja (nem a mozgó `origin/main` refet); a próba után a GitHub szerinti
+  main újra lekérdezve — elmozdult → FAIL; a futásőr és az RT-állapot a próba UTÁN készül; a `merge-<PR>-<fej>` bizonyíték a
+  `mainSha`-t is tárolja, a `check-quality-gates` hook a merge előtt a GitHub szerinti main csúccsal egyezteti (eltérés / hiány → DENY).
+- **L5:** a main őr-alapmérése sikertelen (nem 0 kilépés) → FAIL; a korlát a ténylegesen sikeresen lefutott esetekből számol.
+- **L6:** teljes QA-körnél a `skills-sync-check` / `three-phase-check` hiánya FAIL.
+- **L7:** a próba szintetikus merge-commitot készít (szülők: a PR-fej és a main SHA), és a háromfázisú ellenőrző ezen fut.
+- **L8:** futásonként egyedi segéd-ref, a takarítás a lekéréstől kezdve (minden hibaúton); a munkafa-takarítás tesztje a ténylegesen
+  lassú futás tárát nézi.
+- **L9:** egy monoton határidő a próbára: minden lépés (git is) a fennmaradó időt kapja, lejárt keretnél FAIL, a PASS előtt is
+  ellenőrizve; a `merge-probe-` rekord az összidőt, futásonkénti időket és a hatókört is tárolja.
+- **L10:** a PR fájllistája mindig a lapozott REST-listából (a régi név is); a próba git-listája `--no-renames`, ellenőrzött kilépéssel.
+- **L11:** a `--base=…` alak is 2-es kilépés.
+
+<!-- acceptance-checklist -->
+- [ ] L1–L11 mindegyikére bukó teszt a javítás előtt, zöld utána; `gate:stage` zöld az új fejen.
