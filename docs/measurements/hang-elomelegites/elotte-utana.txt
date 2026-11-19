@@ -18,3 +18,14 @@ br futás 3: indítás körül max 350 ms | kérdés + első válasz körül max
 br futás 1: indítás körül max 917 ms | kérdés + első válasz körül max 83 ms, >50 ms: [83], AudioContext: [{"hol":"menü","relIndításMs":-3655,"ctorMs":174}]
 br futás 2: indítás körül max 183 ms | kérdés + első válasz körül max 17 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-3946,"ctorMs":88}]
 br futás 3: indítás körül max 183 ms | kérdés + első válasz körül max 17 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-3905,"ctorMs":106}]
+
+# Utána a VÉGSŐ kódon (fix/hang-elomelegites a91fe552 — vak ellenőr 1. körének javítása után), ugyanazzal a módszerrel,
+# 2026-11-19 16:09 (br) és 17:11 (bc) UTC; a br-kör alatt a gépen egy másik böngészős kör is futott.
+== bc dist-hang-vegso
+bc futás 1: indítás körül max 233 ms | kérdés + első válasz körül max 50 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-4818,"ctorMs":608}]
+bc futás 2: indítás körül max 200 ms | kérdés + első válasz körül max 17 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-4080,"ctorMs":70}]
+bc futás 3: indítás körül max 150 ms | kérdés + első válasz körül max 17 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-4088,"ctorMs":67}]
+== br dist-hang-vegso
+br futás 1: indítás körül max 17 ms | kérdés + első válasz körül max 117 ms, >50 ms: [117, 50], AudioContext: [{"hol":"menü","relIndításMs":-3718,"ctorMs":692}]
+br futás 2: indítás körül max 233 ms | kérdés + első válasz körül max 50 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-3715,"ctorMs":100}]
+br futás 3: indítás körül max 233 ms | kérdés + első válasz körül max 34 ms, >50 ms: [], AudioContext: [{"hol":"menü","relIndításMs":-3879,"ctorMs":143}]
