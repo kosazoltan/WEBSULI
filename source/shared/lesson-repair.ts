@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { lessonSchema } from "./lesson-schema";
+import { lessonSchema, modelLessonSchema } from "./lesson-schema";
 
 /** A reviewable candidate, never HTML disguised as a structured lesson. */
 export const lessonRepairSchema = z.object({
@@ -32,6 +32,15 @@ export const lessonRepairSchema = z.object({
   })).optional(),
 });
 export type LessonRepair = z.infer<typeof lessonRepairSchema>;
+/**
+ * A frissen ÉPÍTETT javítás sémája. CSAK a `candidate` a modell kimenete: a funkciókapcsoló KI állapotában azt a bővítés előtti séma
+ * méri. A `previousLesson` a TÁROLT lecke pillanatképe (nem modellkimenet) — mindig a teljes olvasási séma (`lessonSchema`) olvassa:
+ * egy BE állapotban mentett, új fajtájú ábrát tartalmazó lecke javítása a kapcsoló KI-re állítása után sem bukhat el a pillanatképen
+ * (a fizetett javítás és lektorálás UTÁN). Régi leckére a teljes séma a bővítés előttivel azonos eredményt ad (őr: séma-próba).
+ */
+export function modelLessonRepairSchema(sourceVisuals: boolean): z.ZodType<LessonRepair, z.ZodTypeDef, unknown> {
+  return sourceVisuals ? lessonRepairSchema : lessonRepairSchema.extend({ candidate: modelLessonSchema(false) });
+}
 export function parseLessonRepair(content?: string): LessonRepair | null {
   if (!content?.trim().startsWith("{")) return null;
   try { const parsed = lessonRepairSchema.safeParse(JSON.parse(content)); return parsed.success ? parsed.data : null; }
