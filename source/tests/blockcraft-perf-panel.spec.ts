@@ -301,3 +301,33 @@ test("befagyott képkocka-ciklus mellett a panel „áll”-t mutat (a játék s
   // A szöveg is frissül (nem marad befagyva „fut”-on).
   await expect(page.getByTestId("bc-perf-text")).toContainText("· áll", { timeout: 5_000 });
 });
+
+test("élő, lassú (GPU-kötött) hurkon a panel nem villog „áll”-ra (nagy nézet; 2. vak kör M2)", async ({ page }) => {
+  test.setTimeout(240_000);
+  // Nagy vászon a CI szoftveres WebGL-jén: a képkocka-köz ≈ 1 s, a főszál a köz nagy részében tétlen (a vak próba: 10 hamis „áll” / 20 s).
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 30_000 });
+  await expectFramesAfterToggle(page);
+  // 20 s mintavétel tétlen időben, 50 ms-onként, a lapon belül (C-64): hamis „áll” = running=false, miközben a szünetmenü zárva,
+  // és a kirajzolt képkockák száma a következő 3 s-ban nő (a hurok él).
+  const samples = await page.evaluate(async () => {
+    const api = (window as unknown as PerfWindow).__websuliPerf!;
+    const out: { t: number; running: boolean; frames: number; paused: boolean }[] = [];
+    const t0 = performance.now();
+    while (performance.now() - t0 < 20_000) {
+      const s = api.snapshot();
+      out.push({ t: performance.now(), running: s.running, frames: s.renderedFrames, paused: !!document.querySelector('[data-testid="game-pause-menu"]') });
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return out;
+  });
+  const falseStops = samples.filter((s, i) => {
+    if (s.running || s.paused) return false;
+    const later = samples.find((o, j) => j > i && o.t - s.t <= 3_000 && o.frames > s.frames);
+    return later !== undefined;
+  });
+  const frames = samples[samples.length - 1]!.frames - samples[0]!.frames;
+  expect(frames, "a hurok élt a mintavétel alatt").toBeGreaterThan(3);
+  expect(falseStops.length, `hamis „áll”: ${falseStops.slice(0, 5).map((s) => Math.round(s.t - samples[0]!.t)).join(", ")} ms`).toBe(0);
+});

@@ -73,3 +73,10 @@ Tiszta, egységtesztelt segédek új modulban: `game-engine/perf/pixelBudget.ts`
   `blockcraft-perf-panel.spec.ts` (áthozva, a main lapjához igazítva)
 - ÚJ `docs/measurements/2026-11-17-kockavadasz-telefon-gyors/` (előtte / utána képek, mérőtábla)
 - ÁTHOZVA `docs/specs/2026-11-17-kockavadasz-telefon.md`, `-vegrehajtas.md`
+
+## 7. Spec-döntés: a `?perf=1` panel „fut / áll” jelzője (orkesztrátori döntés 2026-11-19)
+
+- „Fut” = a játék futásjelzője (`runningRef`) ÉS friss képkocka: a legutóbbi képkocka KEZDETE vagy kirajzolásának VÉGE közül a
+  későbbi óta eltelt idő kisebb, mint `max(3 s, 3 × az utolsó 8 képkocka-köz maximuma)`.
+- A 2,5 s-os élő képkocka nem lehet hamis „áll” (a vak review M1 visszaállított idősor-mércéje), ezért a fagyásjelzés (befagyott
+  rAF, a `render()` előtti kivétel) alsóhatára 3 s. A befagyott-ciklus egységteszt eredeti 1,5 s-os elvárása ezért 3,5 s-ra módosult.

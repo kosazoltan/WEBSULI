@@ -48,6 +48,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-57** — Meta-képernyő mérése: `scrollIntoView` után az `overflow: hidden` ős se mozduljon; érintéses görgetés CDP touch-sorozattal.
 - **C-64** — Poll-függvényben az állapotot egyetlen `page.evaluate` olvassa, ne több automatikusan váró lokátorhívás.
 - **C-65** — Időtartam-állítást a lapon belül, képkockánként mérj; a lassú CI-hibát CPU-lassítással reprodukáld.
+- **C-75** — A saját, még be nem olvasztott teszted mércéjét se igazítsd az új implementációhoz; ha nem fér össze, az ütközést jelentsd.
 
 ### UI, CSS, mobil
 - **C-07** — Fix magasságú flex-oszlopban minden szinten `min-h-0`; UI-tesztben `elementFromPoint`-takarásvizsgálat 390 px-en is.
@@ -1086,3 +1087,18 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 - **Szabály:** láthatatlan vagy tipográfiai karaktert a forrásban mindig escape-pel írj, és írás után ellenőrizd a fájl nyers
   tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
   állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
+
+## C-75 — A teszt mércéjét ne igazítsd az új implementációhoz — a saját, még be nem olvasztott tesztét sem (2026-11-19)
+
+Forrás: #504 (Kockavadász `?perf=1`), 2. vak kör M1 (blokkoló). Rokon: C-15.
+
+- **Tünet:** a `perf-stats.test.ts` idősor-tesztjei a jelzőt a képkocka-köz közepén és végén olvasták. Az új implementáció ezeken
+  elbukott volna, ezért a fejlesztő az olvasási pontokat „a valós ütemre” igazította (csak közvetlenül a kirajzolás után olvasott),
+  az indoklás pedig csak CPU-kötött huroknál volt igaz — GPU-kötött huroknál (szoftveres WebGL, gyenge telefon-GPU) a régi pontok
+  valós helyzetet modelleztek. A teszt zöld lett, a hiba (hamis „áll” lassú, élő hurkon) megmaradt; a fejkomment ellentmondott a kódnak.
+- **Szabály:** ha az implementáció egy meglévő — akár a saját, ebben a PR-ban írt — tesztállításon bukik, az IMPLEMENTÁCIÓT javítsd.
+  Ha a teszt modellje szerinted hibás, ne írd át csendben: adj MELLÉ új esetet a másik modellel, és a régi maradjon. Ha két állítás
+  elvben nem teljesülhet egyszerre (pl. „egy élő, 2,5 s-os képkocka végén sem áll” és „1,5 s képkocka nélkül már áll”), az
+  követelmény-ütközés: állj meg, és kérj döntést opciókkal — ne a kényelmesebbik tesztet lazítsd.
+- **Ellenőrzés:** a push előtt `git diff <előző visszanézett fej>..HEAD -- source/tests` — minden megváltozott állítás mellé indoklás
+  a commit-üzenetben; elvárás-érték módosítása csak dokumentált spec-döntéssel.

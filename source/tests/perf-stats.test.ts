@@ -225,7 +225,9 @@ describe("LoopClock — a játék jelzője az igazság (review #504 L1)", () => 
  * befejezett képkocka nem ad hamis „áll”-t; a befagyott hurok (nincs több kirajzolás) viszont 1 s után „áll”.
  */
 describe("LoopClock — befagyott hurok (review #504 vak L1)", () => {
-  it("a játék szerint fut, de 1,5 s óta nincs kirajzolt képkocka → „áll”", () => {
+  // SPEC-DÖNTÉS (orkesztrátori döntés 2026-11-19): a 2,5 s-os élő képkocka nem lehet hamis „áll” (a visszaállított idősor-mérce),
+  // ezért a fagyásjelzés alsóhatára 3 s — az eredeti 1,5 s-os elvárás 3,5 s-ra módosult. Terv: docs/specs/2026-11-17-kockavadasz-telefon-gyors.md.
+  it("a játék szerint fut, de 3,5 s óta nincs kirajzolt képkocka → „áll”", () => {
     const clock = new LoopClock();
     let t = 1000;
     for (let i = 0; i < 20; i++, t += 16.7) {
@@ -233,7 +235,7 @@ describe("LoopClock — befagyott hurok (review #504 vak L1)", () => {
       clock.rendered(t + 4);
     }
     assert.equal(clock.running(t, true), true, "friss képkocka mellett fut");
-    assert.equal(clock.running(t + 1500, true), false, "befagyott rAF / render előtti kivétel: áll");
+    assert.equal(clock.running(t + 3500, true), false, "befagyott rAF / render előtti kivétel: áll");
   });
 
   it("valós ütemű hosszú képkockák (a főszál foglalt, olvasás a képkocka UTÁN): futó hurok nem „áll”", () => {
