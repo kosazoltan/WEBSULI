@@ -56,4 +56,4 @@ Terv: `docs/specs/2026-11-18-hook-onfailure.md`, „Kiegészítés 3”.
 22. L15: bukó teszt (`lint-gate.test.mjs`) a `WEBSULI_DIFF_SCAN` jelre.
 23. Célzott tesztek, mutációs ellenpróba (M7, M9, L14, a tiltások), `gate:stage`; 05:30 UTC után sorompó, `gate:push`, fej-hash.
 
-- [ ] 18 · [ ] 19 · [ ] 20 · [ ] 21 · [ ] 22 · [ ] 23
+- [x] 18 · [x] 19 · [x] 20 (kanban #181) · [x] 21 · [x] 22 · [ ] 23 (kapuk — folyamatban)

@@ -156,10 +156,10 @@ előbb bukó teszttel.
 4. L15: teszt fogja, ha a lint-kapu a hook-folyamatnak nem adja át a `WEBSULI_DIFF_SCAN=1` jelet.
 
 **Elfogadás (EARS).**
-- [ ] F13 WHEN a `.claude/settings.json`-t `JSON.parse`-szal olvassuk THEN a kikapcsoló kulcs SHALL `false` lenni, és a helyi
+- [x] F13 WHEN a `.claude/settings.json`-t `JSON.parse`-szal olvassuk THEN a kikapcsoló kulcs SHALL `false` lenni, és a helyi
   settings-fájlban (ha van) SHALL nem `true`; a runbook SHALL a forrást megnevezni.
-- [ ] F14 WHEN a `.claude/settings.json`-t olvassuk THEN a `permissions.deny` SHALL tartalmazni a két munkafa-szabályt, és SHALL nem
+- [x] F14 WHEN a `.claude/settings.json`-t olvassuk THEN a `permissions.deny` SHALL tartalmazni a két munkafa-szabályt, és SHALL nem
   tartalmazni `//` vagy `~/` kezdetű szabályt; a runbook SHALL kimondani a fedett és a nem fedett kört.
-- [ ] F15 WHEN a szöveg-őr ékezetes szóval kezdődő / végződő felszólítást vizsgál THEN SHALL felismerni (önteszt mintamondatokkal),
+- [x] F15 WHEN a szöveg-őr ékezetes szóval kezdődő / végződő felszólítást vizsgál THEN SHALL felismerni (önteszt mintamondatokkal),
   és szó belsejében SHALL nem illeszkedni.
-- [ ] F16 WHEN a lint-kapu diff-szkennelése a hookot hívja THEN a hook-folyamat környezetében SHALL `WEBSULI_DIFF_SCAN=1` lenni (teszt).
+- [x] F16 WHEN a lint-kapu diff-szkennelése a hookot hívja THEN a hook-folyamat környezetében SHALL `WEBSULI_DIFF_SCAN=1` lenni (teszt).
