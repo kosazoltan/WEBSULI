@@ -165,3 +165,25 @@ test("R2: a kvíz beküldésének új, opcionális `lastAnsweredAt` mezője — 
   for (const lastAnsweredAt of [0, -5, 1.5, "tegnap"]) assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, lastAnsweredAt }), false, String(lastAnsweredAt));
   assert.equal(ok({ kind: "tasks", roundId: "round-abcd", answers: { t1: "x" }, lastAnsweredAt: 1_763_408_470_000 }), false);
 });
+
+test("R13 / K6: a részleges levél nem állítja, hogy minden kérdésre helyes választ adott; a dátumsora az utolsó válasz ideje", () => {
+  const partial = gradePartialQuiz(QUIZ3, { q1: 0, q2: -1, q3: -1 }, 3)!;
+  const lastAnsweredAt = Date.parse("2026-11-17T19:20:00Z");
+  const html = buildResultEmail({ lessonTitle: "Lecke", classroom: 5, learner: "Vendég tanuló", url: "", graded: { ...partial, meta: { ...partial.meta, lastAnsweredAt } }, sentAt: AT }).html;
+  assert.doesNotMatch(html, /Minden kérdésre helyes választ adott/);
+  assert.match(html, /Minden megválaszolt kérdésre helyes választ adott\./);
+  assert.match(html, /<strong>Utolsó válasz:<\/strong> 2026\. 11\. 17\. 20:20/);
+  assert.doesNotMatch(html, /Beküldve:/, "a részleges levél nem a 15 perccel későbbi küldési időt mutatja");
+  // Utolsó válasz nélkül (régi kliens) marad a „Beküldve”; a végleges levél szövege változatlan.
+  assert.match(buildResultEmail({ lessonTitle: "Lecke", classroom: 5, learner: "Vendég tanuló", url: "", graded: partial, sentAt: AT }).html, /<strong>Beküldve:<\/strong>/);
+  const full = buildResultEmail({ lessonTitle: "Lecke", classroom: 5, learner: "Vendég tanuló", url: "", graded: gradeQuiz(QUIZ3, { q1: 0, q2: 1, q3: 2 }), sentAt: AT }).html;
+  assert.match(full, /Minden kérdésre helyes választ adott\./);
+  assert.match(full, /<strong>Beküldve:<\/strong>/);
+});
+
+test("R13: a beküldés új, opcionális `clientNow` mezője — pozitív egész, mindkét fajtánál", () => {
+  const ok = (body: object) => resultRequestSchema.safeParse(body).success;
+  assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, partial: true, clientNow: 1_763_408_470_000 }), true);
+  assert.equal(ok({ kind: "tasks", roundId: "round-abcd", answers: { t1: "x" }, clientNow: 1_763_408_470_000 }), true);
+  for (const clientNow of [0, -5, 1.5, "most"]) assert.equal(ok({ kind: "quiz", roundId: "round-abcd", picks: { q1: 0 }, clientNow }), false, String(clientNow));
+});
