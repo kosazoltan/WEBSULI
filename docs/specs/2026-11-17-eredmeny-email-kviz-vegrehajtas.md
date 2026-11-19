@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet) kész, E34 a DB-kör zöldjére vár; T16 (gépi vak ellenőrzés, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet) kész, E34 a DB-kör zöldjére vár; T16 kész (bizonyíték a zársorban); T17 (2. célzott kör, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -250,6 +250,21 @@ Leletenként előbb BUKÓ teszt, utána a javítás.
   Böngészőteszt: 403 után jelzés nélküli új token → egyetlen (elutasított) pillanatkép-kérés, a második nem megy.
 - **L5:** kanban-jegy.
 - Utána: `gate:stage`; a nehéz körök (reprodukció, DB, böngésző, `gate:push`) a zársorban.
+
+## T17 — gépi vak ellenőrzés 2. célzott köre (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R24–R25)
+
+Leletenként előbb BUKÓ teszt, utána a javítás.
+- **R24 (L1, L2)** `client/src/lesson-runtime/resultReport.ts`: kimenő sor (`websuli:result-outbox:v1` a `localStorage`-ban; memória-tartalék),
+  `enqueueResult` (szinkron, a befejezéskor), `drainResultOutbox` (egyszerre egy; körönkénti memóriabeli kísérlet-számláló és
+  `nextAt`); az ürítő hívja az `apiRequest`-et (a meglévő forrásminták szerinti alakkal), sikernél jelző + a részleges kulcs törlése.
+  `shared/quiz-round.ts`: `outboxRetryDelayMs(attempts, retryAfterSec)` tiszta függvény. `client/src/App.tsx`: induláskor
+  `drainResultOutbox()`. A `result-report-complete.test.ts` R20-as forrásmintái a sorra változnak (dokumentált spec-változás). Tesztek:
+  egység (késleltetés), böngésző (429 Retry-After nélkül: 3 s alatt 1 kérés; `Retry-After: 1` mellett pontosan 3 kérés; lassú token +
+  azonnali dokumentumváltás a főoldalra → a végleges kérés az új oldalon megérkezik).
+- **R25 (L3)** `server/lesson-result-email.ts`: a pillanatkép-ág R6-vizsgálata, várakozó-beolvasása, `mayActOn` és ütemezése
+  `withRoundLock(lockKey, …)` alatt. Teszthez: `setGateCheckHook` (a kapuban a véglegesítés-ellenőrzés után). DB-teszt: a régi kísérlet a
+  horogban áll, közben új pillanatkép → felengedés után a régi (2 válaszos) levél megy ki, az új pillanatkép válasza `alreadySent: true`.
+- Utána: `gate:stage`; a nehéz körök a zársorban.
 
 ## Kész-feltétel
 

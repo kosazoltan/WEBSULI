@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R23 – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R25 – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -306,6 +306,20 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
 - **Jegyre (L5, kicsi):** a „Beküldve” sor a levél összeállításának ideje, nem a fogadásé (éjfél körül napot csúszhat) — a fogadáskor
   rögzített idő átadása a küldési bemenetben.
 
+**Gépi vak ellenőrzés, 2. célzott kör (GPT-6.2 Sol, 2026-11-19, `256f0b56`: NEM; L1 blokkoló, L2 + L3 közepes) — dokumentált spec-változás:**
+- **R24 — tartós kimenő sor a végleges beküldésekre, korlátos újrapróbával (L1, L2; az R20 megvalósítása helyett).** A befejezett kör
+  végleges törzse a befejezés pillanatában, VÁRAKOZÁS NÉLKÜL a böngésző tárolójába kerül (körönként egy bejegyzés, a már elküldött kör
+  nem); a sort a lecke beküldője és az alkalmazás minden indulása üríti (más nézetből és későbbi megnyitáskor is), egyszerre egy ürítő
+  fut, a közben érkező új bejegyzés is sorra kerül. A token és az ujjlenyomat a küldéskor kerül a kérésbe (a képesség-jelzés szerint új
+  mezőkkel vagy régi alakkal, R12). Sikeres (2xx) válasz után a kör elküldöttként rögzül és kikerül a sorból; 400-as (érvénytelen)
+  válasz után kikerül (újrapróba nincs); minden más hiba után a kör laponként legfeljebb 3 kísérletet kap, a 429-es válasz
+  `Retry-After` idejét megtartva, egyébként növekvő (30 s, 60 s, legfeljebb 5 perc) késleltetéssel — azonnali ismétlés nincs; a
+  kimerült kör a következő oldalbetöltéskor kap új kísérleteket.
+- **R25 — a pillanatkép-felvétel záró szakasza a kör zárán (L3).** A „már kiment” vizsgálat (R6), a várakozó beolvasása, az első
+  rögzítő vizsgálata és az ütemezés ugyanazon a körönkénti kizáráson megy át, mint a „félbehagyva” levél küldési kísérlete. Így vagy a
+  régi küldés fejeződik be előbb (és az új pillanatkép igaz `alreadySent` választ kap), vagy az új pillanatkép váltja le a régit (és a
+  régi kísérlet a változat-ellenőrzésen megáll) — elfogadott új állapot mellett régi levél nem megy ki.
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -340,6 +354,10 @@ Elfogadás (S1b):
 - E36. Kapuhiba után érkező frissebb pillanatkép mellett a régi újrapróba nem küld; csak a frissebb állapot megy ki (R21).
 - E37. Párhuzamos pillanatképeknél az igazolt első rögzítő pillanatképét más nem írja felül (R22).
 - E38. 403 után jelzés nélküli új tokennél nincs második pillanatkép-kérés (R23).
+- E39. 429 után a végleges beküldés nem ismétlődik azonnal; `Retry-After` mellett legfeljebb 3 kísérlet (R24).
+- E40. AMIKOR a tanuló az utolsó válasz után azonnal elhagyja az oldalt (lassú token mellett), A RENDSZER a végleges kört a következő
+  indításkor elküldi (R24).
+- E41. Ha a régi pillanatkép küldése már fut, az új pillanatkép nem kap `queued: true` választ úgy, hogy közben a régi levél megy ki (R25).
 - E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
@@ -392,4 +410,7 @@ Elfogadás (S1b):
 - [ ] E36 – kapuhiba után a frissebb pillanatkép megy ki, a régi újrapróba nem (valódi DB)
 - [ ] E37 – párhuzamos pillanatképeknél az első rögzítő védelme (valódi DB)
 - [ ] E38 – 403 után jelzés nélküli tokennél nincs második pillanatkép (böngésző)
+- [ ] E39 – 429: nincs azonnali ismétlés; Retry-After mellett legfeljebb 3 kísérlet (böngésző + egységteszt)
+- [ ] E40 – azonnali dokumentumváltás után a végleges kör a következő indításkor megy (böngésző)
+- [ ] E41 – a pillanatkép-felvétel a kör zárán; futó régi küldés mellett igaz válasz (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
