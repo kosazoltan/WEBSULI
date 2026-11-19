@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -397,5 +397,37 @@ test("R14 / K4: leállításkor a várakozó „félbehagyva” levél a késlel
       await flushPendingPartials(500);
       assert.ok(Date.now() - t0 < 2_000, "az ürítés az időkorlát után visszatér");
     } finally { setResultSender(sender); setSendTimeout(previousTimeout); }
+  } finally { clearPendingPartials(); setPartialDelay(previousDelay); }
+});
+
+/* Negyedik vak ellenőrzés (2026-11-19), terv R18: a véglegesítés tartós, tanulófüggetlen nyoma. */
+test("R18 / M1: véglegesítés → újraindítás → MÁS kilétű pillanatkép ugyanarra a körre → nem ütemez „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít", async () => {
+  reset();
+  const previousDelay = setPartialDelay(200);
+  const finalMarker = (roundId: string) => roundKeyOf("final-round", "quiz", roundId);
+  try {
+    clearPendingPartials();
+    // 1. Vendég (ujjlenyomattal) véglegesít IP-A-ról, majd a szerver „újraindul” (a memóriabeli jelző elvész).
+    assert.equal((await post({ kind: "quiz", roundId: "round-r18-guest", picks: picks(5), fingerprint: "fp-r18" }, freshIp())).status, 202);
+    assert.ok(await waitFor(() => sent.length === 2), "a végleges levél kiment");
+    clearFinalizedRounds();
+    // 2. Ujjlenyomat nélküli pillanatkép más IP-ről, ugyanarra a körre.
+    const late = await post({ kind: "quiz", roundId: "round-r18-guest", picks: picks(2), partial: true }, freshIp());
+    assert.deepEqual(await late.json(), { queued: false, finalized: true }, "a tartós, tanulófüggetlen nyom újraindítás után is megfogja");
+    assert.equal(pendingPartialCount(), 0);
+    // 3. Fiók véglegesít, újraindítás, vendég-pillanatkép (kilétváltás).
+    assert.equal((await post({ kind: "quiz", roundId: "round-r18-user", picks: picks(5) }, freshIp(), "u-r18")).status, 202);
+    assert.ok(await waitFor(() => sent.length === 4));
+    clearFinalizedRounds();
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r18-user", picks: picks(3), partial: true, fingerprint: "fp-r18-guest" }, freshIp())).json(), { queued: false, finalized: true });
+    await sleep(500);
+    assert.equal(sent.filter(isPartial).length, 0, "véglegesített körre „félbehagyva” levél nem ment");
+    // 4. Korlátos élettartam: a 24 óránál régebbi jelzősor már nem számít.
+    const [marker] = await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, LESSON), eq(lessonResultEmails.roundKey, finalMarker("round-r18-guest"))));
+    assert.ok(marker, "a jelzősor a nyilvántartásban van");
+    assert.deepEqual(marker.delivered, [], "a jelzősor nem kézbesítés");
+    await db.update(lessonResultEmails).set({ createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) }).where(eq(lessonResultEmails.id, marker.id));
+    clearFinalizedRounds();
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r18-guest", picks: picks(2), partial: true }, freshIp())).json(), { queued: true, partial: true }, "a lejárt jelzősor nem nyom el");
   } finally { clearPendingPartials(); setPartialDelay(previousDelay); }
 });
