@@ -202,8 +202,14 @@ function assertOptionInvariant(options: string[], correctIndex: number, entry: V
 
 const TREE_BANKS: Array<[VocabLang, VocabEntry[]]> = [["en", VOCAB_EN], ["de", VOCAB_DE], ["fr", VOCAB_FR]];
 
-test("bank-szintű invariáns minden fában lévő bankra: minden bejegyzés × minden generálható típus × 5 seed", () => {
-  const started = Date.now();
+/**
+ * A futásidő-korlát teljesítmény-garancia (a generátor a teljes bankokon is gyors: #432), ezért a mérce a folyamat
+ * CPU-ideje, nem a falióra (docs/specs/2026-11-19-idozitesfuggo-tesztek.md, kanban #205): terhelt gépen (két párhuzamos
+ * teljes tesztkör) a falióra a CPU-sorban állással nő, a végzett munka nem — ugyanaz a 60 s-os korlát a munkát méri.
+ */
+test("bank-szintű invariáns minden fában lévő bankra: minden bejegyzés × minden generálható típus × 5 seed", (t) => {
+  const wallStarted = performance.now();
+  const cpuStarted = process.cpuUsage();
   for (const [lang, bank] of TREE_BANKS) {
     let made = 0;
     let nulls = 0;
@@ -223,8 +229,11 @@ test("bank-szintű invariáns minden fában lévő bankra: minden bejegyzés × 
     // A null nem hiba (kevés jelölt a kind-ban), de a bankok többségéből kérdés kell, hogy legyen.
     assert.ok(nulls <= made, `${lang}: túl sok null (${nulls} / ${made + nulls})`);
   }
-  const ms = Date.now() - started;
-  assert.ok(ms < 60_000, `a bank-szintű invariáns futásideje ${ms} ms`);
+  const cpu = process.cpuUsage(cpuStarted);
+  const cpuMs = Math.round((cpu.user + cpu.system) / 1000);
+  const wallMs = Math.round(performance.now() - wallStarted);
+  t.diagnostic(`a bank-szintű invariáns: CPU ${cpuMs} ms, falióra ${wallMs} ms`);
+  assert.ok(cpuMs < 60_000, `a bank-szintű invariáns CPU-ideje ${cpuMs} ms (falióra ${wallMs} ms)`);
 });
 
 test("report: a jelentés-átfedő párok összesítő sora mindig ott van; --overlaps a párokat is listázza; nem hiba", () => {
