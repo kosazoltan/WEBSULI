@@ -39,6 +39,9 @@ const KAPU = [
   'git fetch origin; npm.cmd run gate:push',
   'node scripts/qa/gates/pre-push-gate.mjs',
   'git log -1 --format=%H .git/websuli-qa-evidence/pre-push-x.json',
+  // L3 (vak kör 1): git nélküli, önálló „push” szó nem push-parancs
+  'echo push',
+  'node scripts/kanban.mjs note 5 "push után"',
 ];
 
 const PUSH = [
@@ -48,6 +51,11 @@ const PUSH = [
   'git push origin :feat/x',
   'git -C D:/repo/x push origin x',
   'git -c credential.helper= push',
+  // L2 (vak kör 1): a push rokon alparancsai / önálló programjai
+  'git http-push https://example.invalid/repo.git main',
+  'git send-pack origin main',
+  'git-send-pack origin main',
+  '/usr/lib/git-core/git-http-push https://example.invalid/repo.git main',
 ];
 
 const CHAINED_OR_DISGUISED = [

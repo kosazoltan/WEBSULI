@@ -42,12 +42,17 @@ const GIT_TIMEOUT_MS = process.env.NODE_TEST_CONTEXT && Number(process.env.WEBSU
 const WORD_RUN = /[\w./:-]+/g;
 // a `:` előtag a nyers (hibás) JSON-bemenethez kell: idézőjelek nélkül `command:git` egy futam
 const isGitRun = (w) => /(?:^|[/:])git(?:\.exe)?$/.test(w);
+// L2 (vak kör 1): a push rokon alparancsai (`http-push`, `send-pack`) is push; önálló programként (`git-send-pack`,
+// `…/git-core/git-http-push`) git-futam nélkül is.
+const isPushSub = (w) => w === 'push' || w === 'http-push' || w === 'send-pack';
+const isPushProgram = (w) => /(?:^|[/:])git-(?:http-push|send-pack)(?:\.exe)?$/.test(w);
 function hasGitThenPush(s) {
   let sawGit = false;
   for (const m of s.matchAll(WORD_RUN)) {
     const w = m[0].toLowerCase();
+    if (isPushProgram(w)) return true;
     if (!sawGit) sawGit = isGitRun(w);
-    else if (w === 'push') return true;
+    else if (isPushSub(w)) return true;
   }
   return false;
 }
