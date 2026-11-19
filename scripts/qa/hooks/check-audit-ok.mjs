@@ -41,7 +41,8 @@ const GIT_TIMEOUT_MS = process.env.NODE_TEST_CONTEXT && Number(process.env.WEBSU
 // `git stash push` is push-parancsnak számít (téves tiltás olcsóbb, mint az átengedés).
 const WORD_RUN = /[\w./:-]+/g;
 // a `:` előtag a nyers (hibás) JSON-bemenethez kell: idézőjelek nélkül `command:git` egy futam
-const isGitRun = (w) => /(?:^|[/:])git(?:\.exe)?$/.test(w);
+// #520 (Sourcery): a Windows git-indító `.cmd` / `.bat` alakja is git (a futam kisbetűs)
+const isGitRun = (w) => /(?:^|[/:])git(?:\.exe|\.cmd|\.bat)?$/.test(w);
 // L2 (vak kör 1): a push rokon alparancsai (`http-push`, `send-pack`) is push; önálló programként (`git-send-pack`,
 // `…/git-core/git-http-push`) git-futam nélkül is.
 const isPushSub = (w) => w === 'push' || w === 'http-push' || w === 'send-pack';

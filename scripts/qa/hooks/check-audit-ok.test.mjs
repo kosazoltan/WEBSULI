@@ -56,6 +56,12 @@ const PUSH = [
   'git send-pack origin main',
   'git-send-pack origin main',
   '/usr/lib/git-core/git-http-push https://example.invalid/repo.git main',
+  // A8 (#520 Sourcery): a Windows git-indító .cmd / .bat alakja (útvonallal, nagybetűvel is)
+  'git.cmd push origin x',
+  'git.bat push',
+  'GIT.CMD push',
+  '"C:\\Program Files\\Git\\cmd\\git.cmd" push origin x',
+  'C:/tools/Git/cmd/Git.Bat push --delete origin x',
 ];
 
 const CHAINED_OR_DISGUISED = [
@@ -96,7 +102,7 @@ test('A2: valódi git push régi / hiányzó .audit-ok mellett TILTOTT; az üzen
 test('A3: láncolt és álcázott git push régi .audit-ok mellett TILTOTT', () => {
   const repo = repoWithSentinel(60);
   for (const c of CHAINED_OR_DISGUISED) assert.match(decide(c, repo) ?? '', /audit nem futott le/, JSON.stringify(c));
-  for (const c of ['git status; git push', "& 'C:\\Program Files\\Git\\cmd\\git.exe' push", 'g`it push']) {
+  for (const c of ['git status; git push', "& 'C:\\Program Files\\Git\\cmd\\git.exe' push", 'g`it push', "& 'C:\\Program Files\\Git\\cmd\\git.cmd' push", 'git status; git.bat push']) {
     assert.match(decide(c, repo, 'PowerShell') ?? '', /audit nem futott le/, `PowerShell: ${JSON.stringify(c)}`);
   }
 });
