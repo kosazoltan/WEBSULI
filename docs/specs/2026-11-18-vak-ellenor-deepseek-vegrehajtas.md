@@ -96,4 +96,4 @@ Terv: `docs/specs/2026-11-18-vak-ellenor-deepseek.md`, „5. kiegészítés” (
 31. Füstpróba a `fix/kitakaro-negyzetes-regex` fejen (`f024bb3d`); `record-review` kísérleti bizonyíték-tárral (a valódit nem írja felül).
 32. `gate:stage`; a futtatási parancs más munkafára.
 
-- [ ] 29 · [ ] 30 · [ ] 31 · [ ] 32
+- [x] 29 · [x] 30 · [x] 31 · [x] 32

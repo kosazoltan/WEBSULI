@@ -308,3 +308,13 @@ test('E2: a képernyőkép a kör eszköz-eredményei UTÁN, egy user-üzenetben
   assert.deepEqual(img.content.at(-1).cache_control, { type: 'ephemeral' }, 'mozgó töréspont a képes utolsó üzeneten');
   assert.equal(img.content[0].cache_control, undefined);
 });
+
+test('F1: a konfig requestExtras mezője (reasoning.effort: high) minden kérésben ott van, és a modellt nem írhatja felül', async () => {
+  const cfg = { ...CFG, requestExtras: { reasoning: { effort: 'high' }, model: 'masik/modell' } };
+  const s = setup([reply({ calls: [['git_diff', { stat: true }]] }), submit()], { cfg });
+  await s.run();
+  for (const b of s.bodies) {
+    assert.deepEqual(b.reasoning, { effort: 'high' });
+    assert.equal(b.model, CFG.model, 'a requestExtras nem írhatja felül a konfigurált modellt');
+  }
+});

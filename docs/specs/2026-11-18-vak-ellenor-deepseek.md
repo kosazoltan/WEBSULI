@@ -558,3 +558,16 @@ nincs. Az E3 küszöbe (≥ 7/9) a Qwen-mérésre szólt; a GPT-6.2 Sol-ra ugyan
   a „Ki az ellenőr” bekezdés a futtatót nevezi meg kizárólagosként.
 - [ ] B37 Füstpróba valódi hívással egy kis, kész célon: a futtató lefut, a jelentésben `Ítélet:` és `Fej:` sor, a `record-review`
   elfogadja; költség és idő a jelentésben.
+
+### Mért tények az átálláskor (2026-11-19)
+
+- **Füstpróba** (`fix/kitakaro-negyzetes-regex`, fej `f024bb3d`): a futtató lefutott (modell a válasz szerint `openai/gpt-6.2-sol`),
+  8 hívás, 0,065 USD, 0,9 perc, gyorsítótár 92,5% a 2. hívástól; `Fej:` és `Ítélet: IGEN, FELTÉTELLEL` sor, 1 közepes lelet
+  (hivatkozás géppel igazolva); a `record-review` kísérleti bizonyíték-tárban elfogadta (`reviewer: blind-review`). A futás sekély volt
+  (1 fájlolvasás); a jelentés ezt maga is jelzi a „Mit NEM vizsgáltam” szakaszban.
+- **`reasoning.effort: high`:** a kérés tartalmazza (teszt: `blind-review.test.mjs` „F1”), de a válasz `usage` mezője 0 (illetve 49)
+  gondolkodó tokent jelez, effort nélkül is 0-t — a hatása a válaszból NEM ellenőrizhető (UNVERIFIED). A szolgáltató hívásonként változik
+  (OpenAI / Azure / Amazon Bedrock — mind az OpenRouter listáján).
+- **Node 24 a gépen:** a gép Node-ja 26.13.1-ről 24.22.3-ra váltott; Node 24 jogosultsági modelljében nincs hálózati zár
+  (`--allow-net`), ezért a futtató a modell SAJÁT ellenpróba-fájlját fail-closed elutasítja (teszttel); a követett tesztek, a
+  böngészős és az adatbázisos út ettől függetlenül fut. A saját ellenpróba Node 25+ kell.
