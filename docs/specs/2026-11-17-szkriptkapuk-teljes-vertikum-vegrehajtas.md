@@ -61,7 +61,7 @@ Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` 6.1. Minden pont e
 12. P2-K7: `testCounts` az UTOLSÓ összesítőt veszi; a `realExec` Windows-on a `.cmd` / `.bat` parancsot (pl. `npm.cmd`) shellen át
     indítja; a titok-szűrés kis- és vegyes betűs `név=érték` és `név: érték` alakra is.
 13. P2-K8: tesztek a túlélő mutánsokra (`finalizeStage`, `finalizeEvidence` kódja, `verifyChain` hash-ellenőrzés, `dirtyOf`).
-14. P2-KI5: a csapda-katalógus bejegyzése C-76 (a #506 a C-75-öt hozza; a később beolvasztott kap új számot).
+14. P2-KI5: a csapda-katalógus bejegyzése C-86 (a #506 a C-75-öt hozta; a C-76…C-85 nyitott ágakon foglalt — kapu-gyorsítás archív ág, `feat/gepi-zar` —, ezért a main-beolvasztáskor új szám).
 15. Ellenőrzés: célzott tesztek, mutációs ellenpróba (másolaton); szakasz- és push-kapu az ütemezett ablakon kívül.
 
 ### P2 — második javítókör (2026-11-19; vak ítélet a `15336c22` fejre: IGEN, FELTÉTELLEL)

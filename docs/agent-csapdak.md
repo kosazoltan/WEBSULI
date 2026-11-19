@@ -1087,7 +1087,27 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
   állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
 
-## C-76 — `npm ci` a runbook szerint, de ellenőrizetlen gépszintű következtetéssel; a kapu-napló közös útvonalon (2026-11-19)
+## C-75 — Őrt / kaput érintő PR-ok: soros merge-ablak; a hook bekötését a valódi settings-szel mérd (2026-11-18)
+
+- **Tünet:** két őr-érintő PR nem lehet egyszerre zöld — a C-61 hatókör (a main elmozdulása a repó-szintű ellenőrzés fájlkörében)
+  és a ~2 órás böngészős kör együtt minden mainre kerülő PR után új beolvasztást + új CI-t kényszerít (a #499-nél két extra kör).
+- **Szabály:** az őrt / kaput érintő PR-okat elsőként, egyenként kell beolvasztani; a merge-ablakot az orkesztrátor jelzi, a
+  beolvasztást a fejlesztő a jelre végzi (előtte próbabeolvasztás: `git merge-tree --write-tree HEAD origin/main`).
+- **Tünet 2:** a hook-szkript tesztje zöld volt, a hook mégsem futott alkönyvtárból (relatív útvonal a settings-ben, #490 M1).
+- **Szabály 2:** hookot a VALÓDI `.claude/settings.json` parancsával, több munkakönyvtárból kell tesztelni
+  (`scripts/qa/hooks/settings-hooks.test.mjs`); héj-értelmezést valódi héjjal (Git Bash, PowerShell 7 és 5.1) végzett különbségi
+  próbával (`scripts/qa/hooks/fixtures/quoting-forms.json`).
+- **Tünet 3 (eszközhasználat):** Git Bashben a kettős idézőjeles `node -e "…"` szövegben álló backtick parancshelyettesítésként
+  lefutott (fájlnevek „futtatva”, a beírt szöveg kiürült). **Szabály 3:** backticket tartalmazó szöveget fájlba írj (Write eszköz),
+  és a szkriptet fájlból futtasd — ne kettős idézőjeles parancssorban.
+- **Tünet 4 (eszközhasználat, #506 3. kör):** visszaperjelet (`\\`) tartalmazó tesztkódot heredoc + `sed` láncban fűztem a fájlhoz —
+  az egyik visszaperjel elveszett, a tesztfájl szintaxishibás lett. **Szabály 4:** a 3. szabály a visszaperjelre is áll: regexet,
+  escape-et tartalmazó kódot csak a Write / Edit eszközzel írj; mutációs ellenpróbát JS-szkriptben, szöveges keresés-cserével
+  (nem többszörösen escape-elt héjparancsban).
+
+Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-86 — `npm ci` a runbook szerint, de ellenőrizetlen gépszintű következtetéssel; a kapu-napló közös útvonalon (2026-11-19)
 
 - **Tünet:** a push-kapu natív tesztje bukott (`better-sqlite3`), a `doctor:arch` „`npm.cmd ci`”-t javasolt. A munkafában lefutott
   `npm.cmd ci` törölte a meglévő `node_modules`-t, majd a natív modul fordításán elbukott (`prebuild-install warn install No prebuilt
