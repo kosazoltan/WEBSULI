@@ -855,6 +855,8 @@ function setupTsunami(
   };
 
   let disposed = false;
+  /** A modellek a jelenetbe kerültek (utána egy hiba már nem építhet melléjük tartalék-díszletet). */
+  let applied = false;
   /*
    * Minden shader-program a menü alatt forduljon le, és a pufferek is töltődjenek fel (ne menet közben). Csiszoló kör 4. pont,
    * profillal mérve: a `renderer.compile` csak a LÁTHATÓ objektumokat fordítja; a villám (`bolt`) láthatatlanul indul, így a
@@ -925,7 +927,14 @@ function setupTsunami(
       };
       for (const g of gltfs) g.scene.traverse((o) => ((o as THREE.Mesh).material as THREE.Material | undefined)?.dispose?.());
 
-      // Díszlet: modellenként egy példányosított háló.
+      /*
+       * Vak ellenőr K2 és KICSI 2 (2026-11-19): minden új háló előbb egy nem látható csoportba kerül, és a végleges jelenet
+       * fényeivel / ködével, ASZINKRON fordul le (`compileAsync`, KHR_parallel_shader_compile) — így a menet közben érkező modellek
+       * sem állítják meg a főszálat (mérve: 205–260 ms-os akadás). Utána egyetlen szinkron lépésben kerülnek a jelenetbe; ha ez
+       * előtt hiba van, a jelenet érintetlen, és csak a tartalék-díszlet épül meg (nincs kettőzés).
+       */
+      const pending = new THREE.Group();
+      const newBatches: Batch[] = [];
       const byModel = new Map<string, Spot[]>();
       for (const s of spots) byModel.set(s.model, [...(byModel.get(s.model) ?? []), s]);
       const tint = new THREE.Color();
@@ -935,27 +944,19 @@ function setupTsunami(
         const mesh = new THREE.InstancedMesh(g, propMat, items.length);
         mesh.frustumCulled = false;
         items.forEach((s, i) => mesh.setColorAt(i, tint.set(s.tint ?? "#ffffff")));
-        scene.add(mesh);
-        const batch = { mesh, items };
-        batches.push(batch);
-        if (model.startsWith("palm")) palmBatches.push(batch);
+        pending.add(mesh);
+        newBatches.push({ mesh, items });
       }
-      // A szikla-hegy és rajta a menedék (világítótorony).
       const cliffGeo = geo("cliff");
-      if (cliffGeo) {
-        cliff = new THREE.Mesh(cliffGeo, propMat);
-        cliff.frustumCulled = false;
-        scene.add(cliff);
+      const newCliff = cliffGeo ? new THREE.Mesh(cliffGeo, propMat) : null;
+      if (newCliff) {
+        newCliff.frustumCulled = false;
+        pending.add(newCliff);
       }
       const lhGeo = geo("lighthouse");
-      if (lhGeo) {
-        const lh = new THREE.Mesh(lhGeo, propMat);
-        fitInto(shelter.group, lh, 1.5);
-        lampGlow = createGlowSprite("#ffd76a", 2.6, 0.8);
-        lampGlow.position.set(0, 3.77, 0.35);
-        lh.add(lampGlow);
-      }
-      // Törmelék: modellenként egy példányosított háló, képkockánként ringatva.
+      const lhMesh = lhGeo ? new THREE.Mesh(lhGeo, propMat) : null;
+      if (lhMesh) pending.add(lhMesh);
+      const newDrifts: { mesh: THREE.InstancedMesh; items: Drift[] }[] = [];
       const driftBy = new Map<string, Drift[]>();
       for (const d of lean ? DRIFT.filter((_, i) => i % 2 === 0) : DRIFT) driftBy.set(d.model, [...(driftBy.get(d.model) ?? []), d]);
       for (const [model, items] of Array.from(driftBy)) {
@@ -964,15 +965,39 @@ function setupTsunami(
         const mesh = new THREE.InstancedMesh(g, propMat, items.length);
         mesh.frustumCulled = false;
         mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-        scene.add(mesh);
-        drifts.push({ mesh, items });
+        pending.add(mesh);
+        newDrifts.push({ mesh, items });
       }
-      // A figura: a kódból épített részek helyére a Blender-modell kerül, ugyanazokra a forgáspontokra.
       const kidParts: [THREE.Object3D, string][] = [
         [kid.group, "kid_board"], [kid.rider, "kid_torso"], [kid.head, "kid_head"],
         [kid.armL, "kid_arm"], [kid.armR, "kid_arm"], [kid.legL, "kid_leg"], [kid.legR, "kid_leg"],
       ];
-      if (kidParts.every(([, n]) => geo(n))) {
+      const kidOk = kidParts.every(([, n]) => geo(n));
+      // A villám programja is (láthatatlanul indul, a `compile` különben kihagyná).
+      makeBolt();
+      const boltProbe = new THREE.Mesh(bolt.geometry, boltMat);
+      pending.add(boltProbe);
+      const r = renderer as THREE.WebGLRenderer & { compileAsync?: (o: THREE.Object3D, c: THREE.Camera, t?: THREE.Scene) => Promise<unknown> };
+      if (r.compileAsync) await r.compileAsync(pending, camera, scene);
+      else renderer.compile(pending, camera, scene);
+      pending.remove(boltProbe);
+      if (disposed) return;
+      // Egy szinkron lépésben a jelenetbe.
+      for (const o of [...pending.children]) scene.add(o);
+      for (const b of newBatches) {
+        batches.push(b);
+        if (b.items[0]?.model.startsWith("palm")) palmBatches.push(b);
+      }
+      drifts.push(...newDrifts);
+      cliff = newCliff;
+      if (lhMesh) {
+        fitInto(shelter.group, lhMesh, 1.5);
+        lampGlow = createGlowSprite("#ffd76a", 2.6, 0.8);
+        lampGlow.position.set(0, 3.77, 0.35);
+        lhMesh.add(lampGlow);
+      }
+      // A figura: a kódból épített részek helyére a Blender-modell kerül, ugyanazokra a forgáspontokra.
+      if (kidOk) {
         for (const [holder, n] of kidParts) {
           for (const c of [...holder.children]) {
             const old = c as THREE.Mesh;
@@ -983,10 +1008,11 @@ function setupTsunami(
           holder.add(new THREE.Mesh(geo(n)!, propMat));
         }
       }
+      applied = true;
       layout();
       prewarmPrograms();
     } catch {
-      if (!disposed) {
+      if (!disposed && !applied) {
         buildFallbackDecor();
         prewarmPrograms();
       }

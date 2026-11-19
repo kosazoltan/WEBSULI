@@ -704,16 +704,27 @@ export default function TsunamiEscapeEnglish() {
   }, [scenePrewarm]);
   /*
    * A hangkontextus is a menü alatt jön létre (csiszoló kör 4. pont, CPU-profillal mérve): lustán az első kérdés suhogó hangja
-   * hozta létre, és a `new AudioContext()` a menet közepén ~2 s-ra megállította a főszálat. Tétlen időben, a menüben előre.
+   * hozta létre, és a `new AudioContext()` a menet közepén ~2 s-ra megállította a főszálat.
+   * Vak ellenőr KICSI 1 (2026-11-19): mozdulat nélkül létrehozva a böngésző minden betöltéskor konzol-figyelmeztetést adott
+   * („The AudioContext was not allowed to start…”). Ezért: tétlen időben csak akkor, ha a lap már kapott felhasználói mozdulatot
+   * (`navigator.userActivation.hasBeenActive` — a játéklistáról érkezve igaz), különben az első mozdulatkor (koppintás, kattintás,
+   * billentyű) a mozdulaton belül; az „Indítás” koppintás (`startGame`) mindenképp létrehozza / folytatja.
    */
   useEffect(() => {
     const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
-    if (w.requestIdleCallback) {
-      const id = w.requestIdleCallback(() => prewarmAudio(), { timeout: 2500 });
-      return () => w.cancelIdleCallback?.(id);
-    }
-    const id = window.setTimeout(prewarmAudio, 1200);
-    return () => window.clearTimeout(id);
+    const activated = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive === true;
+    const events = ["pointerdown", "touchend", "click", "keydown"] as const;
+    const onGesture = () => {
+      prewarmAudio();
+      events.forEach((e) => window.removeEventListener(e, onGesture, true));
+    };
+    events.forEach((e) => window.addEventListener(e, onGesture, { capture: true, passive: true }));
+    let idle: number | null = null;
+    if (activated && w.requestIdleCallback) idle = w.requestIdleCallback(() => prewarmAudio(), { timeout: 2500 });
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, onGesture, true));
+      if (idle !== null) w.cancelIdleCallback?.(idle);
+    };
   }, []);
   /** S9 / terv 4.5: szünet (kézi vagy automatikus, ha a lap háttérbe kerül). */
   const [paused, setPaused] = useState(false);
@@ -1155,6 +1166,8 @@ export default function TsunamiEscapeEnglish() {
   qRef.current = q;
 
   const startGame = useCallback(() => {
+    // Az „Indítás” koppintás felhasználói mozdulat: a hangkontextus itt biztosan létrejön / fut (vak ellenőr KICSI 1).
+    prewarmAudio();
     runIdRef.current += 1;
     runIndexRef.current += 1;
     // Új menet: a kérdés-azonosítók újra 1-től indulnak — a régi élesítés ne öröklődjön.
