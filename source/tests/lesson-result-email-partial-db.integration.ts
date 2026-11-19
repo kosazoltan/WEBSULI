@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -430,4 +430,32 @@ test("R18 / M1: véglegesítés → újraindítás → MÁS kilétű pillanatké
     clearFinalizedRounds();
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r18-guest", picks: picks(2), partial: true }, freshIp())).json(), { queued: true, partial: true }, "a lejárt jelzősor nem nyom el");
   } finally { clearPendingPartials(); setPartialDelay(previousDelay); }
+});
+
+/* Vercel review (2026-11-19, szál 4626976445), terv R19: a küldés előtti ellenőrzés átmeneti hibája után is egy újrapróba. */
+test("R19: a kapu véglegesítés-ellenőrzése átmeneti DB-hibát kap → a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesül, nem megy ki", async () => {
+  reset();
+  const previousDelay = setPartialDelay(100);
+  const previousRetry = setRetryDelay(400);
+  const oneShot = () => { let left = 1; return () => { if (left > 0) { left--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } }; };
+  try {
+    clearPendingPartials();
+    // 1. Egyszeri hiba a kapuban (a pillanatkép fogadása után injektálva) → az újrapróba kiküldi.
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r19-retry", picks: picks(2), partial: true, fingerprint: "fp-r19" })).json(), { queued: true, partial: true });
+    setFinalizedCheckFault(oneShot());
+    await sleep(250); // az időzítő lejárt, a kapu hibát kapott
+    assert.equal(sent.length, 0, "a hibás kísérlet nem küldött");
+    assert.ok(await waitFor(() => sent.length === 2, 3000), "az újrapróba kiküldte a „félbehagyva” levelet (nem veszett el)");
+    assert.ok(sent.every(isPartial));
+    // 2. Egyszeri hiba, majd az újrapróba előtt véglegesül a kör → az újrapróba sem küld részleges levelet.
+    reset();
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r19-final", picks: picks(2), partial: true, fingerprint: "fp-r19b" })).json(), { queued: true, partial: true });
+    setFinalizedCheckFault(oneShot());
+    await sleep(250);
+    setFinalizedCheckFault(null);
+    assert.equal((await post({ kind: "quiz", roundId: "round-r19-final", picks: picks(5), fingerprint: "fp-r19b" })).status, 202);
+    assert.ok(await waitFor(() => sent.length === 2));
+    await sleep(700); // az újrapróba (400 ms) lefutott
+    assert.deepEqual(sent.map(mail => (isPartial(mail) ? "P" : "F")), ["F", "F"], "véglegesített körre az újrapróba sem küld részlegest");
+  } finally { setFinalizedCheckFault(null); clearPendingPartials(); setPartialDelay(previousDelay); setRetryDelay(previousRetry); }
 });

@@ -266,7 +266,11 @@ async function recordFinalized(lessonId: string, roundId: string, percent: numbe
   await db.insert(lessonResultEmails).values({ lessonId, kind: "quiz", roundKey: finalRoundKeyOf(roundId), percent })
     .onConflictDoUpdate({ target: [lessonResultEmails.lessonId, lessonResultEmails.kind, lessonResultEmails.roundKey], set: { createdAt: sql`now()` } });
 }
+let finalizedCheckFault: (() => void) | null = null;
+/** Teszthez: hibainjektálás a véglegesítés-ellenőrzés elé (átmeneti adatbázishiba utánzása); `null` kikapcsolja. */
+export function setFinalizedCheckFault(fault: (() => void) | null): void { finalizedCheckFault = fault; }
 async function roundFinalized(lessonId: string, whos: readonly string[], roundId: string, now = Date.now()): Promise<boolean> {
+  finalizedCheckFault?.();
   const key = `${lessonId}|${roundId}`;
   const until = finalizedRounds.get(key);
   if (until !== undefined) { if (until > now) return true; finalizedRounds.delete(key); }
