@@ -82,7 +82,6 @@ import {
 } from "@/lib/spaceAsteroid/physics";
 import {
   CRYSTAL_ARM_MS,
-  CRYSTAL_LABEL_MAX_CHARS,
   CRYSTAL_RADIUS,
   bulletCountsAsAnswer,
   crystalAt,

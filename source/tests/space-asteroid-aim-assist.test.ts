@@ -99,7 +99,11 @@ test("forrásőr: a lövés-ág aimAssistVx-et csak érintős ágon hívja", () 
   assert.doesNotMatch(page, /touchAssist\s*=[^;]*keysRef/, "billentyűzetnél nem kapcsolhat be a segéd");
 });
 
-test("forrásőr: a hármas lövés oldalsó lövedékei a középsőhöz képest ±3,0", () => {
-  assert.match(page, /vx:\s*centerVx\s*-\s*3\.0/);
-  assert.match(page, /vx:\s*centerVx\s*\+\s*3\.0/);
+// SPEC-VÁLTOZÁS 2026-11-17 (review #486 L1): a lövedékek a magból jönnek (`volleyFor`, `physics.ts`); az oldalsó lövedékek ±3,0-ja ott áll,
+// a lap a `volleyFor`-t hívja — a szigor nem csökken (a számérték és a lap bekötése is őrzött).
+test("forrásőr: a hármas lövés oldalsó lövedékei a középsőhöz képest ±3,0 (a magban), a lap azt hívja", () => {
+  const physics = stripComments(readFileSync(join(root, "client/src/lib/spaceAsteroid/physics.ts"), "utf8"));
+  assert.match(physics, /vx:\s*centerVx\s*-\s*3\.0/);
+  assert.match(physics, /vx:\s*centerVx\s*\+\s*3\.0/);
+  assert.match(page, /volleyFor\(powerLevelRef\.current,\s*centerVx\)/);
 });
