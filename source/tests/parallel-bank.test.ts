@@ -7,6 +7,18 @@ import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 
 /* docs/specs/2026-10-16-parhuzamos-bank.md: a gyakorlóbank egységei párhuzamosan; a haladásjelzés a készülő csomagokat megnevezi. */
 
+/*
+ * Vezérelt sorrend falióra helyett (docs/specs/2026-11-19-idozitesfuggo-tesztek.md, kanban #206): a hívások kézzel feloldott
+ * ígéretre várnak, így a befejezési sorrend a gép terhelésétől független. A banképítő az egy körbe tartozó egységek hívásait
+ * ugyanabban a szinkron lépésben indítja (a `deps.call` előtt nincs várakozás), ezért egy eseményhurok-kör (`setImmediate`)
+ * után a várt hívás vagy már elindult, vagy (hibás, soros építésnél) nem is fog: ekkor a kapu tartalékként felold, és a teszt
+ * az állításán bukik — nem akad el, és nem falióra dönt.
+ */
+const deferred = () => { let resolve!: () => void; const promise = new Promise<void>((r) => { resolve = r; }); return { promise, resolve }; };
+const nextLoopTurn = () => new Promise<void>((r) => setImmediate(r));
+/** A kapu feloldásáig vár, de legfeljebb egy eseményhurok-körig (a tartalék csak hibás viselkedésnél old fel). */
+const gateOrNextTurn = (gate: Promise<void>) => Promise.race([gate, nextLoopTurn()]);
+
 test("a párhuzamosság kapcsolója: alap 3, 1–5 között felülírható, érvénytelen érték → alap", () => {
   assert.equal(SINGLE_RUN_BANK_CONCURRENCY, 3);
   assert.equal(singleRunBankConcurrency({}), 3);
@@ -31,11 +43,13 @@ test("a banképítő haladása a párhuzamosan készülő egységeket adja (buil
     quiz: e.quiz.map((q) => ({ ...q, sectionIndex, question: `${q.question} (${sectionIndex}. fejezet)` })),
     glossary: [],
   });
-  let inFlight = 0, maxInFlight = 0;
+  let inFlight = 0, maxInFlight = 0, started = 0;
+  const bothStarted = deferred();
   const progress: Array<{ done: number; total: number; building?: number[] }> = [];
   await buildLessonExperience(lesson, [], { concurrency: 3, onProgress: (p) => progress.push(p), call: async (_s, user) => {
     inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
-    await new Promise((r) => setTimeout(r, 5));
+    if (++started === 2) bothStarted.resolve();
+    await gateOrNextTurn(bothStarted.promise); // egyik hívás sem végez, amíg a másik egység hívása el nem indult
     inFlight--;
     return packetFor(Number(/sectionIndex=(\d+)/.exec(user)![1]));
   } });
@@ -54,11 +68,17 @@ test("review #265: a haladás a valóban futó egységeket követi — eltérő 
   const { e, lesson } = twoSectionLesson();
   const calls: number[] = [];
   const progress: Array<{ done: number; total: number; current?: number; building?: number[] }> = [];
-  await buildLessonExperience(lesson, [], { concurrency: 3, onProgress: (p) => progress.push(p), call: async (_s, user) => {
+  // Az első kör befejezési sorrendje vezérelt: a 2. egység (index 1) végez előbb, az 1. egység (index 0) csak azután, hogy a
+  // haladásjelzés a 2. egység elkészültét (done: 1) már jelentette.
+  const firstRound = [deferred(), deferred()];
+  await buildLessonExperience(lesson, [], { concurrency: 3, onProgress: (p) => { progress.push(p); if (p.done === 1) firstRound[0].resolve(); }, call: async (_s, user) => {
     const sectionIndex = Number(/sectionIndex=(\d+)/.exec(user)![1]);
     calls.push(sectionIndex);
-    await new Promise((r) => setTimeout(r, sectionIndex === 0 ? 30 : 5)); // a 2. egység (index 1) végez előbb
     const rebuild = calls.filter((s) => s === sectionIndex).length > 1;
+    if (!rebuild) {
+      if (calls.length === 2) firstRound[1].resolve(); // mindkét egység első hívása elindult → a 2. egység végez
+      await gateOrNextTurn(firstRound[sectionIndex].promise);
+    }
     const suffix = rebuild ? " (második változat)" : "";
     // Első körben ugyanazok a kérdések → ütközés → a 2. egység sorosan újraépül.
     return { methods: e.methods.map((m) => ({ ...m, sectionIndex, title: m.title + suffix, prompt: m.prompt + suffix })), tasks: e.tasks.map((t) => ({ ...t, sectionIndex, q: t.q + suffix })),
@@ -74,12 +94,16 @@ test("review #265: az egyik egység hibája után is megvárja a többit és a c
   const { e, lesson } = twoSectionLesson();
   const saved: number[] = [];
   let doneAtReject = -1;
+  const firstFailed = deferred();
   await assert.rejects(buildLessonExperience(lesson, [], { concurrency: 3,
     save: async (cp) => { saved.push(Object.keys(cp.parts).length); },
     call: async (_s, user) => {
       const sectionIndex = Number(/sectionIndex=(\d+)/.exec(user)![1]);
-      if (sectionIndex === 0) throw new Error("szolgáltatói hiba (nem javítható)");
-      await new Promise((r) => setTimeout(r, 20));
+      if (sectionIndex === 0) { firstFailed.resolve(); throw new Error("szolgáltatói hiba (nem javítható)"); }
+      // A sikeres csomag a hiba UTÁN végez: megvárja az 1. egység hibáját, majd egy teljes eseményhurok-kört (setImmediate:
+      // addig a hiba minden mikrotaszkban továbbterjedő lépése lefut) — falióra nélkül.
+      await firstFailed.promise;
+      await nextLoopTurn();
       return { methods: e.methods.map((m) => ({ ...m, sectionIndex })), tasks: e.tasks.map((t) => ({ ...t, sectionIndex })), quiz: e.quiz.map((q) => ({ ...q, sectionIndex })), glossary: [] };
     } }).catch((error) => { doneAtReject = saved.length; throw error; }), /szolgáltatói hiba/);
   assert.equal(doneAtReject, 1, "a hiba csak a késleltetett, sikeres csomag mentése UTÁN megy tovább");
