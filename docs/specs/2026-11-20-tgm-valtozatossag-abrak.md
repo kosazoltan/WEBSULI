@@ -366,6 +366,46 @@ Elfogadás (EARS):
 - [ ] V23 prompt BE / KI, ajánlótábla
 - [ ] V24 fajta-arány jelzés
 
+## 15. SK2 — a változatosság gépi mérőszáma és kapuja
+
+Alap: TGM-terv SK2 (TGM-végrehajtás 873. sortól). Kapcsoló: `STUDIO_LESSON_VARIETY` (a kapu csak BE kapcsolónál fut a gyártásban).
+
+Felülvizsgálat (TÉNY): a mérés eddig csak a munkamenet jegyzeteiben élt (`variety-fetch.mjs`, `variety-measure.mjs`, 402 sor, saját
+számítással); a repóban nincs mérőszám, küszöb és kapu (`server/studio/gates/` csak a `sourceCoverage` kaput ismeri).
+
+Döntések:
+
+1. `shared/variety-metrics.ts` (tiszta, a mérőszkript és a kapu közös forrása): `sectionPattern` (blokkbetűk: E, X, A, C, T, R — a mért
+   jelentés jelölése), `sectionSkeleton` (ábra és try nélkül, ismétlés összevonva), `patternShares`, `samePatternProbability` (két
+   KÜLÖNBÖZŐ leckéből vett fejezet azonos mintája), `feedbackOpenerShares` (a hibás válasz első két szava), `tryShare` (S6b), `animKindShares`,
+   `measureVariety`, `thresholdReport`. `VARIETY_THRESHOLDS = { topPatternShare: 0.35, samePatternProbability: 0.2,
+   topFeedbackOpenerShare: 0.1, maxKindShare: 0.4, minTryShare: 1/3 }`.
+2. `scripts/measure/fixtures/variety-baseline.json`: csak összesített alapvonal (239 lecke): 0,616 · 0,404 · 0,468 · 0,858 · 6 · 0,007.
+3. `scripts/measure/variety-fetch.mjs` a jegyzetekből (átnézve: kapcsolati szöveg csak a `--env` fájlból, kiírás nélkül; `SET
+   default_transaction_read_only = on`; csak `select`/`with`; útvonalak paraméterként). A 402 soros régi mérő helyett új, rövid
+   `scripts/measure/variety-measure.mts` a közös modullal: `--population <json> --baseline <json> [--since <dátum>]` → táblázat
+   (alapvonal | most | küszöb | megfelel); legalább 10 lecke alatt „kis minta” és 0 kilépési kód, különben küszöbsértésnél 1.
+4. `server/studio/gates/variety-gate.ts` (bejegyezve a `GATE_REGISTRY`-be, `GATE_MODES.variety = "report"`): (a) **kapu** — a fogalom-
+   fejezetek ábra és try nélküli váza (`sectionSkeleton`) egy készletbeli minta vázával egyezik (az S6a kiosztott mintáit nem mentjük, ezért
+   „bármely készletbeli minta” — terv 12. szakasz 5. pont; az ábrakészítő beszúrt ábrái és a nyitóblokkok nem számítanak), és a
+   visszajelzésekben nincs régi bátorító előtag (számolva); (b) **jelzés** — `tryShare < 1/3`, egy fajta > 40%. `report` módban a
+   gyártást nem állítja meg; a motor BE kapcsolónál futtatja, a telemetriába (`varietyGate`) és a naplóba ír. `enforce` (egy célzott javító
+   forduló) az S10 záró mérése után, orkesztrátori döntéssel — ebben a szeletben nem épül.
+
+Elfogadás (EARS):
+
+- **V25** — THE mérőszámok SHALL 4 szintetikus leckén a kézzel számolt értéket adni.
+- **V26** — WHEN minden fejezet azonos, készleten kívüli vázú, THE kapu SHALL bukni a fejezet megnevezésével; WHEN a vázak a készletből
+  valók (ábrával, try-jal, nyitóblokkal tarkítva is), SHALL átmenni.
+- **V27** — WHEN egy visszajelzés „Jó próba, de…” kezdetű, THE kapu SHALL megszámolni; WHEN 10 ábrából 5 azonos, SHALL jelezni.
+- **V28** — THE mérőszkript SHALL a küszöbtáblát kiírni, kis mintánál 0, küszöbsértésnél 1 kilépési kóddal (füstpróba 2 és 12 leckén).
+
+<!-- acceptance-checklist -->
+- [ ] V25 mérőszámok kézi elvárással
+- [ ] V26 kapu: készleten kívüli váz bukik, készletbeli átmegy
+- [ ] V27 régi előtag számolva, fajta-arány jelzés
+- [ ] V28 mérőszkript kilépési kódjai
+
 ## 17. S2b-2 — a megjelenítők vak-leletei (vak J2, J5, J6, J7, J11, tt J9)
 
 Alap: TGM-végrehajtás „S2b” vak-leletei (357–413. sor). Megjelenítési változás, adatírás nélkül; a forrás-ábrafajták élesben a

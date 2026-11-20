@@ -211,6 +211,17 @@ A TGM-végrehajtás „S2b” fejezete (355. sortól) változatlanul; a `STUDIO_
    tests/single-run-engine.test.ts tests/lesson-source-visual-kinds.test.ts` → pass; `tsc` 0; eslint 0.
 4. Nehéz kör zárral (`tgm-s6c`), a böngészős próbával (képernyőképek a PR-be).
 
+## SK2 — Változatosság gépi mérőszáma és kapuja (részletes lépések)
+
+Ág: `feat/tgm-sk2-valtozatossag-kapu` (az S6c ágáról), munkafa `.claude/worktrees/tgm-sk2`. Terv: `docs/specs/2026-11-20-tgm-valtozatossag-abrak.md`
+15. szakasz. Fájlok: `shared/variety-metrics.ts`, `server/studio/gates/variety-gate.ts` (újak), `server/studio/gates/config.ts`,
+`server/studio/single-run/engine.ts`, `shared/run-telemetry.ts`, `scripts/measure/variety-fetch.mjs`, `scripts/measure/variety-measure.mts`,
+`scripts/measure/fixtures/variety-baseline.json` (újak), `tests/variety-metrics.test.ts` (új), `docs/agent-csapdak.md` (C-76).
+
+1. Bukó tesztek V25–V28. 2. Kód. 3. `node --import tsx --test tests/variety-metrics.test.ts tests/source-coverage-gate.test.ts
+   tests/source-visuals-flag.test.ts tests/single-run-engine.test.ts` → pass; `tsc --noEmit` és `tsc -p tsconfig.test.json` 0; eslint 0.
+4. Nehéz kör a kapu-sorban (`tgm-sk2`).
+
 ## S2b-2 — A megjelenítők vak-leletei (részletes lépések)
 
 Ág: `feat/tgm-s2b2-megjelenito-leletek` (az S2b-1 ágáról), munkafa `.claude/worktrees/tgm-s2b2`. Terv:
