@@ -58,6 +58,11 @@ export function adventRowIsSound(row: AdventRow | null): boolean {
   for (const plan of Object.values(row.plan)) {
     if (!isObject(plan) || !isObject(plan.doors) || !Array.isArray(plan.layout) || !isObject(plan.subjects)) return false;
     if (!Object.values(plan.subjects).every((subject) => typeof subject === "string")) return false;
+    // Minden nap kulcsa megvan, legalább egy kérdéssel (PR-B 4. kör L5): a hiányzó nap megnyitáskor 500-at okozna.
+    for (let day = 1; day <= ADVENT_DOORS; day++) {
+      const ids = (plan.doors as Record<string, unknown>)[String(day)];
+      if (!Array.isArray(ids) || ids.length === 0) return false;
+    }
     for (const ids of Object.values(plan.doors)) if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return false;
   }
   // A próbák belső alakja is (GPT-vak L4): egy [null] vagy hiányos elem a pontozásnál 500-at okozna.
@@ -303,11 +308,14 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   router.get("/state", gate, identify("headers"), ipReadLimiter, wrap(async (_req, res) => {
     const locals = res.locals.advent as Locals;
     const { at, resolution } = locals;
-    let row = resolution.subject ? await store.read(at.season, resolution.subject) : null;
+    const pairedLearner = locals.pairedDevice && resolution.subject?.kind === "learner" && isAdventWritable(at.phase) ? resolution.subject : null;
+    // Párosított eszközön a két sor EGY lekérdezésből (PR-B 4. kör L2): egy közben commitolt átvétel nem adhat átmenetileg üres nézetet.
+    const pair = pairedLearner && locals.pairedDevice ? await store.readPair(at.season, pairedLearner.id, locals.pairedDevice) : null;
+    let row = pair ? pair.learner : resolution.subject ? await store.read(at.season, resolution.subject) : null;
     // Párosított eszközön az átvétel előnézete (írás nélkül): azt mutatjuk, ami az első írásnál a tanulónál lesz. Csak írható
     // fázisban (élesítés előtti L3): lezárás után átvétel nincs, ezért a mentett tanulói állás látszik (nincs mentetlen ajándéküzenet).
-    if (locals.pairedDevice && isAdventWritable(at.phase) && adventRowIsSound(row)) {
-      const deviceRow = await store.read(at.season, { kind: "device", id: locals.pairedDevice });
+    if (pair && locals.pairedDevice && adventRowIsSound(row)) {
+      const deviceRow = pair.device;
       if (deviceRow && !adventRowIsSound(deviceRow)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true });
       if (deviceRow) row = mergeAdoption(row, deviceRow, adoptionContext(locals, locals.pairedDevice)) ?? row;
     }

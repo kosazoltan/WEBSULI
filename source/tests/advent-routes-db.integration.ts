@@ -797,6 +797,58 @@ describe("adventi naptár — végpontok", () => {
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
+  it("a PR-B 4. kör L1 forgatókönyve: 7.-es megnyitás válasz nélkül → profil 5.-re → vendégként megoldott 2. ablak → a személyes linkkel megnyitott 1. ablak ötödikes, és 5 rögzül", async () => {
+    const learner = await newLearner(7);
+    const tablet = await kid(); tablet.learner = learner.token;
+    await tablet.open(1);
+    await dbPool.query(`UPDATE learners SET grade = 5 WHERE id = $1`, [learner.id]);
+    const phone = await kid();
+    assert.equal((await phone.post("/grade", { grade: 5 })).status, 200);
+    await phone.answer(2, await phone.open(2), true);
+    phone.learner = learner.token;
+    const opened = await phone.post("/doors/1/open");
+    assert.equal(opened.status, 200);
+    const item = findAdventItem(opened.json.question.id, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS)! as { grade?: number; minGrade?: number; maxGrade?: number };
+    if (item.grade !== undefined) assert.equal(item.grade, 5); else assert.ok(item.minGrade! <= 5 && 5 <= item.maxGrade!);
+    await phone.answer(1, opened.json.question, true);
+    assert.deepEqual(await q(`SELECT grade FROM advent_progress WHERE learner_id = $1`, [learner.id]), [{ grade: 5 }]);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("a párosított olvasás a tanulói és a vendégsort EGY lekérdezésből kapja: az átvétel commitja előtt és után sem üres a nézet (PR-B 4. kör L2)", async () => {
+    const learner = await newLearner(5);
+    const phone = await kid();
+    assert.equal((await phone.post("/grade", { grade: 5 })).status, 200);
+    await phone.answer(1, await phone.open(1), true);
+    const store = createAdventStore(dbPool) as unknown as { readPair?: (season: number, learnerId: string, deviceId: string) => Promise<{ learner: unknown; device: unknown }> };
+    assert.equal(typeof store.readPair, "function", "readPair hiányzik");
+    // Egy lekérdezés = egy pillanatkép: az átvétel előtt és után is a két sor egységes állapota jön vissza.
+    const before = await store.readPair!(2026, learner.id, phone.device);
+    assert.ok(before.device && !before.learner, "commit előtt: vendégsor van, tanulói nincs");
+    phone.learner = learner.token;
+    assert.equal((await phone.post("/doors/2/open")).status, 200);
+    const after = await store.readPair!(2026, learner.id, phone.device);
+    assert.ok(after.learner && !after.device, "commit után: tanulói sor van, vendégsor nincs");
+    // A route is ezt használja (nem két külön olvasást).
+    const src = (await import("node:fs")).readFileSync(new URL("../server/advent/routes.ts", import.meta.url), "utf8");
+    assert.match(src, /store\.readPair\(at\.season, resolution\.subject\.id, locals\.pairedDevice\)/);
+    assert.equal((await phone.state()).json.summary.solved, 1);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("hiányzó napkulcs a meglévő körtervben: az olvasás és a megnyitás is 409 corrupt, a sor változatlan (PR-B 4. kör L5)", async () => {
+    const k = await kid();
+    assert.equal((await k.post("/grade", { grade: 5 })).status, 200);
+    await k.answer(1, await k.open(1), true);
+    await dbPool.query(`UPDATE advent_progress SET plan = jsonb_set(plan, '{1,doors}', (plan->'1'->'doors') - '2') WHERE subject_id = $1`, [k.device]);
+    const before = await q(`SELECT plan, doors FROM advent_progress WHERE subject_id = $1`, [k.device]);
+    const r = await k.state();
+    assert.deepEqual({ status: r.status, corrupt: r.json.corrupt }, { status: 409, corrupt: true });
+    const w = await k.post("/doors/2/open");
+    assert.deepEqual({ status: w.status, corrupt: w.json.corrupt }, { status: 409, corrupt: true });
+    assert.deepEqual(await q(`SELECT plan, doors FROM advent_progress WHERE subject_id = $1`, [k.device]), before);
+  });
+
   it("névtelen → párosított, versenyhelyzet: az átvétellel egyidejű válasz sem ad 500-at, és nem vész el — végül egyetlen tanulói sor (terv 21., #170)", async () => {
     for (let round = 0; round < 3; round++) {
       const learner = await newLearner(5);

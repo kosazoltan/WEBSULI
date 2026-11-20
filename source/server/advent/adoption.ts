@@ -15,7 +15,11 @@ import { ADVENT_DOORS, adventSummary, clampAdventGrade, doorState, limitsForGrad
 import type { AdventRow } from "./store";
 
 /** A tervvel együtt tárolt meta: tervezési évfolyam, a sorrend magja, és az átvett ablakok saját magja. */
-export type PlanMeta = AdventPlan & { grade?: number; seedKey?: string; doorSeeds?: Record<number, string> };
+export type PlanMeta = AdventPlan & {
+  grade?: number; seedKey?: string; doorSeeds?: Record<number, string>;
+  /** Az átvételkor lecserélt (a vendég jobb eredményével felülírt) tanulói próbák kérdései: többé nem játszhatók (PR-B 4. kör L3). */
+  retired?: string[];
+};
 
 export const withPlanMeta = (plan: AdventPlan, grade: number, seedKey: string): AdventPlan => ({ ...plan, grade, seedKey } as PlanMeta);
 
@@ -58,15 +62,15 @@ export type AdoptionContext = {
 export function usedInEarlierRounds(row: AdventRow, round: number, bank: readonly AdventBankItem[], christmas: readonly ChristmasItem[]) {
   const usedIds = new Set<string>();
   const usedPrompts = new Set<string>();
+  const add = (id: string) => {
+    usedIds.add(id);
+    const item = findAdventItem(id, bank, christmas);
+    if (item) usedPrompts.add(normalizePrompt(item.prompt));
+  };
   for (const [key, plan] of Object.entries(row.plan)) {
     if (Number(key) >= round) continue;
-    for (const ids of Object.values(plan.doors)) {
-      for (const id of ids) {
-        usedIds.add(id);
-        const item = findAdventItem(id, bank, christmas);
-        if (item) usedPrompts.add(normalizePrompt(item.prompt));
-      }
-    }
+    for (const ids of Object.values(plan.doors)) for (const id of ids) add(id);
+    for (const id of (plan as PlanMeta).retired ?? []) add(id);
   }
   return { usedIds, usedPrompts };
 }
@@ -86,7 +90,15 @@ export function createAdoptionContext(input: {
     learnerGrade: clampAdventGrade(input.learnerGrade),
     maxRepairs: (grade) => limitsForGrade(grade).maxRepairs,
     buildPlan: (row, round, grade) => withPlanMeta(buildAdventPlan({ bank, christmas, grade, season, round, subjectKey: learnerKey, ...usedInEarlierRounds(row, round, bank, christmas) }), grade, learnerKey),
-    dedupe: (plan, row, round, grade, historicalByDay) => dedupePlanDoors(plan, { bank, christmas, grade, ...usedInEarlierRounds(row, round, bank, christmas), historicalByDay }).plan,
+    dedupe: (plan, row, round, grade, historicalByDay) => {
+      const used = usedInEarlierRounds(row, round, bank, christmas);
+      for (const id of (plan as PlanMeta).retired ?? []) {
+        used.usedIds.add(id);
+        const item = findAdventItem(id, bank, christmas);
+        if (item) used.usedPrompts.add(normalizePrompt(item.prompt));
+      }
+      return dedupePlanDoors(plan, { bank, christmas, grade, ...used, historicalByDay }).plan;
+    },
     now: input.now,
   };
 }
@@ -134,6 +146,8 @@ export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx:
     // Felülírni csak MEGOLDOTT ablak tud (és csak nem megoldottat): a vendég rontott / javítható próbája sem az érintetlen, sem a
     // tanuló végleg elbukott ablakát nem váltja le — a gyerek vendégként nem „állíthatja vissza” a saját kudarcát (döntés 2026-11-19).
     if (!theirs?.attempts.length || doorRank(theirs, repairs) !== 2 || doorRank(mine, repairs) === 2) continue;
+    // A tanuló itteni (most lecserélt) próbáinak kérdései többé nem játszhatók (PR-B 4. kör L3).
+    if (mine?.attempts.length) plan.retired = [...new Set([...(plan.retired ?? []), ...mine.attempts.map((a) => a.questionId)])];
     doors[day] = { attempts: theirs!.attempts.map((attempt) => ({ ...attempt })) };
     if (devicePlan?.doors[day]) plan.doors[day] = [...devicePlan.doors[day]!];
     if (devicePlan?.subjects?.[day]) plan.subjects[day] = devicePlan.subjects[day]!;

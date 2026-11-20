@@ -7,7 +7,10 @@ import { QueryClient } from "@tanstack/react-query";
 import { createAdoptionContext, mergeAdoption, planGradeOf, withPlanMeta } from "../server/advent/adoption";
 import type { AdventRow } from "../server/advent/store";
 import { adventNow } from "../shared/advent/calendar";
-import { buildAdventPlan, findAdventItem } from "../shared/advent/assignment";
+import { buildAdventPlan, dedupePlanDoors, findAdventItem } from "../shared/advent/assignment";
+import { isChristmasDoor } from "../shared/advent/rules";
+import { adventRowIsSound } from "../server/advent/routes";
+import { usedInEarlierRounds } from "../server/advent/adoption";
 import { CHRISTMAS_ITEMS } from "../shared/advent/christmasBank/index";
 import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank/index";
 import * as sync from "../client/src/advent/sync";
@@ -99,4 +102,49 @@ test("L6: a válasz teljes ablaklistája az összesítéssel együtt cserélődi
   const legacy = fn.applyAnswerResult!(state, { door: { day: 2, state: "solved" }, summary: { solved: 1 }, closing: { kind: "none" } });
   assert.deepEqual(legacy.doors, [{ day: 1, state: "open" }, { day: 2, state: "solved" }]);
   assert.match(read("client/src/pages/AdventCalendar.tsx"), /applyAnswerResult\(current, result\)/);
+});
+
+test("PR-B 4. kör L3: a lecserélt (vendég megoldásával felülírt) tanulói próba kérdése nem válik újra játszhatóvá — sem most, sem a későbbi körökben", () => {
+  const season = 2026; const grade = 1;
+  const base = buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 1, subjectKey: "learner:L" });
+  const strip = (ids: string[]) => ids.filter((id) => id !== "xmas-002" && id !== "xmas-003");
+  const learnerPlan = withPlanMeta({ ...base, doors: Object.fromEntries(Object.entries(base.doors).map(([d, ids]) => [d, strip(ids)])) }, grade, "learner:L");
+  learnerPlan.doors[1] = ["xmas-002", ...learnerPlan.doors[1]!.slice(1)];
+  const devBase = buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 1, subjectKey: "device:D" });
+  const devicePlan = withPlanMeta({ ...devBase, doors: Object.fromEntries(Object.entries(devBase.doors).map(([d, ids]) => [d, strip(ids)])) }, grade, "device:D");
+  devicePlan.doors[1] = ["xmas-003", ...devicePlan.doors[1]!.slice(1)];
+  devicePlan.doors[2] = ["xmas-002", ...devicePlan.doors[2]!.slice(1)];
+  const learner: AdventRow = { id: "l", season, subjectKind: "learner", subjectId: "L", grade, round: 1, plan: { 1: learnerPlan }, doors: { 1: { 1: { attempts: [{ questionId: "xmas-002", pick: 0, correct: false, at: "" }] } } }, finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0) };
+  const device: AdventRow = { ...learner, id: "d", subjectKind: "device", subjectId: "D", plan: { 1: devicePlan }, doors: { 1: { 1: { attempts: [{ questionId: "xmas-003", pick: 0, correct: true, at: "" }] } } } };
+  const ctx = createAdoptionContext({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, season, learnerId: "L", learnerGrade: grade, deviceId: "D", now: new Date("2026-12-02T10:00:00Z") });
+  const merged = mergeAdoption(learner, device, ctx)!;
+  assert.equal(merged.doors[1]![1]!.attempts[0]!.questionId, "xmas-003", "az 1. ablak a vendég megoldása");
+  const playable = Object.entries(merged.plan[1]!.doors).flatMap(([d, ids]) => ids.slice((merged.doors[1]![Number(d)]?.attempts.length) ?? 0));
+  assert.ok(!playable.includes("xmas-002"), "a tanuló már kiértékelt kérdése nem játszható újra");
+  // A későbbi körök kizárólistáján is rajta van.
+  assert.ok(usedInEarlierRounds({ ...merged, round: 2 }, 2, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS).usedIds.has("xmas-002"));
+});
+
+test("PR-B 4. kör L4: vegyes évfolyamú átvételnél a karácsonyi tárgyú hely pótlása a karácsonyi készletből jön (a tanuló bankos napján is)", () => {
+  const grade = 3;
+  // A karácsonyi nap az ELSŐ, a bankos nap a KÉSŐBBI: így a bankos napon lévő ismétlődés kap pótlást (ott hibázott a régi készletválasztás).
+  const xmasDay = Array.from({ length: 24 }, (_, i) => i + 1).find((d) => isChristmasDoor(d, grade))!;
+  const bankDay = Array.from({ length: 24 }, (_, i) => i + 1).find((d) => d > xmasDay && !isChristmasDoor(d, grade))!;
+  const plan = { round: 1, layout: [], doors: { [xmasDay]: ["xmas-002"], [bankDay]: ["xmas-002"] }, subjects: { [xmasDay]: "christmas", [bankDay]: "christmas" } };
+  const out = dedupePlanDoors(plan as never, { bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, usedIds: new Set(), usedPrompts: new Set(), historicalByDay: new Map([[xmasDay, 1], [bankDay, 1]]) });
+  const ids = Object.values(out.plan.doors).flat();
+  assert.equal(new Set(ids).size, ids.length, "a terv egyedi");
+  const replaced = out.plan.doors[bankDay]![0]!;
+  assert.ok(CHRISTMAS_ITEMS.some((c) => c.id === replaced), "a pótlás karácsonyi tétel: " + replaced);
+});
+
+test("PR-B 4. kör L5: a meglévő körterv hiányzó napkulcsa (vagy üres kérdéssora) sérült sor — 409 corrupt, nem 500", () => {
+  const plan = buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade: 5, season: 2026, round: 1, subjectKey: "learner:L" });
+  const row = (p: unknown) => ({ id: "x", season: 2026, subjectKind: "device", subjectId: "d", grade: 5, round: 1, plan: { 1: p }, doors: {}, finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0) }) as unknown as AdventRow;
+  assert.equal(adventRowIsSound(row(plan)), true, "teljes terv");
+  const missing = { ...plan, doors: { ...plan.doors } }; delete (missing.doors as Record<number, string[]>)[2];
+  assert.equal(adventRowIsSound(row(missing)), false, "hiányzó 2. nap");
+  assert.equal(adventRowIsSound(row({ ...plan, doors: { ...plan.doors, 3: [] } })), false, "üres kérdéssor");
+  // Az első megnyitás előtti üres terv megengedett.
+  assert.equal(adventRowIsSound({ ...row(plan), plan: {} }), true);
 });

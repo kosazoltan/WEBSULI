@@ -229,7 +229,8 @@ const byItemId = (a: AdventItem, b: AdventItem) => (a.id < b.id ? -1 : a.id > b.
  * különben a terv szerinti tárgy tételei a nap nehézségi sorrendjében. `null`, ha a tárgy nem ismert.
  */
 function replacementCandidates(day: number, grade: number, subject: string | null, bank: readonly AdventBankItem[], christmas: readonly ChristmasItem[]): AdventItem[] | null {
-  if (isChristmasDoor(day, grade)) return christmas.filter((c) => c.minGrade <= grade && grade <= c.maxGrade).sort(byItemId);
+  // Karácsonyi nap VAGY karácsonyi tárgyú (pl. eltérő évfolyamú vendégtől átvett) hely: a karácsonyi készlet (PR-B 4. kör L4).
+  if (isChristmasDoor(day, grade) || subject === CHRISTMAS_SUBJECT) return christmas.filter((c) => c.minGrade <= grade && grade <= c.maxGrade).sort(byItemId);
   if (!subject) return null;
   const inGrade = bank.filter((q) => q.grade === grade && q.subject === subject);
   return tierOrder(tierForDay(day)).flatMap((tier) => inGrade.filter((q) => q.tier === tier).sort(byItemId));
