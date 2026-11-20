@@ -1106,3 +1106,19 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-89 — Ingadozó fókuszteszt: előbb napló (ki viszi a fókuszt), csak utána javítás; Radix-réteg Escape-vaksága (2026-11-20)
+
+- **Tünet:** az adventi `toBeFocused()` 10-ből 2, majd 20-ból 5 bukás; három vak javítás (ismételt fókusz-visszaadás 0–200 ms,
+  generációszámláló, „más elemről is visszaveszi”) nem segített — a harmadik ÚJ hibát hozott (a szándékosan áthelyezett fókuszt
+  visszarántotta, az Enter rossz gombot nyomott).
+- **Gyökérok (mérve):** ideiglenes diagnosztikai spec `addInitScript`-tel — `HTMLElement.prototype.focus` hívási verem + `focusin`,
+  `keydown`, `click` időbélyeggel, a napló kiírása bukáskor. Kiderült: a „más elemen álló fókusz” valójában a NYITVA MARADT
+  párbeszédablak belseje; a Radix DismissableLayer a frissen megnyílt réteget csak egy későbbi, nem szinkron renderelés után tekinti
+  legfelsőnek, addig az Escape-et eldobja (a `:focus-within` várakozás ezt nem fedi le).
+- **Szabály 1:** ingadozó fókusz-/eseményteszt javítása ELŐTT eseménynapló kell a böngészőből (ki hívta a `focus()`-t, mi volt az
+  utolsó billentyű, nyitva van-e még a réteg); a „fókusz máshol” állítás mellé az `activeElement` pontos neve kerüljön.
+- **Szabály 2:** Radix párbeszédablakban az Escape-et a tartalom `onKeyDown`-ja is kezelje, ha a könyvtár nem tette meg
+  (`client/src/advent/dialog-escape.ts`); a fókusz-visszaadás ismétlése csak az ELVESZETT (body) fókuszt adhatja vissza.
+
+Forrás: `wip/advent-c-javitas`, ec22e759. Rokon: C-61.
