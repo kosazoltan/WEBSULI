@@ -10,7 +10,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { LessonLoading } from "@/lesson-runtime/LessonLoading";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LearnerProfileSync from "@/components/LearnerProfileSync";
-import { RESULT_OUTBOX_KEY } from "@shared/quiz-round";
+import { hasPendingOutbox } from "@shared/result-outbox";
 
 // LS-2: lazy, hogy a mérőoldal kódja ne kerüljön a fő bundle-be.
 const LessonRuntimeProbe = lazy(() => import("@/lesson-runtime/LessonRuntimeProbe"));
@@ -130,7 +130,8 @@ function Router() {
 function useResultOutboxDrain() {
   useEffect(() => {
     let pending = false;
-    try { pending = !!localStorage.getItem(RESULT_OUTBOX_KEY); } catch { /* tároló nélkül nincs tartós sor */ }
+    // R32: a sor bejegyzésenként külön kulcson áll — az előtagot nézi.
+    try { pending = hasPendingOutbox(localStorage); } catch { /* tároló nélkül nincs tartós sor */ }
     if (pending) void import("@/lesson-runtime/resultReport").then(module => module.drainResultOutbox()).catch(() => { /* csendes */ });
   }, []);
 }

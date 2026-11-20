@@ -39,6 +39,15 @@ export function isOutboxEntry(value: unknown): value is OutboxEntry {
     && (e.subject === undefined || e.subject === null || typeof e.subject === "string");
 }
 
+/** R32: van-e függő bejegyzés a tárolóban (az alkalmazás induláskor ennek láttán tölti be a beküldőt). Sosem dob. */
+export function hasPendingOutbox(storage: OutboxStorage | null): boolean {
+  try {
+    if (!storage) return false;
+    for (let i = 0; i < storage.length; i++) if (storage.key(i)?.startsWith(PREFIX)) return true;
+  } catch { /* olvashatatlan tároló: nincs tartós sor */ }
+  return false;
+}
+
 /** R30: a bejegyzés lejárt (a kör utolsó tevékenysége 7 napnál régebbi) — küldés nélkül kikerül a sorból. */
 export const outboxEntryExpired = (entry: Pick<OutboxEntry, "activityAt">, now: number) => roundTooOld(entry.activityAt, now);
 
