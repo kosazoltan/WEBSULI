@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet) kész, E34 a DB-kör zöldjére vár; T16 kész (bizonyíték a zársorban); T17 kész (bizonyíték a zársorban); T18 (3. célzott kör, 2026-11-19) kész; T19 (PR-review a 44487292-es fejre, 2026-11-20) folyamatban – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet) kész, E34 a DB-kör zöldjére vár; T16 kész (bizonyíték a zársorban); T17 kész (bizonyíték a zársorban); T18 (3. célzott kör, 2026-11-19) kész; T19 (PR-review a 44487292-es fejre, 2026-11-20) kész; T20 (6. gépi kör, 2026-11-20) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -299,6 +299,22 @@ Leletenként előbb BUKÓ teszt, utána a javítás.
   véglegesítésig. A felvétel az első rögzítő vizsgálatát erre is elvégzi. DB-teszt: igazolt tanuló pillanatképe, kapuhiba → vendég
   pillanatkép `conflict` → az újrapróba az igazolt tanuló állapotát küldi ki.
 - Utána: a nehéz körök (`gate:stage` is) CSAK a kapusoron (`kapu-feladatok.txt`).
+
+## T20 — gépi vak ellenőrzés 6. köre (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R35–R38; L2 → követő szelet)
+
+Leletenként előbb BUKÓ teszt, utána a javítás.
+- **R35 (L1)** `shared/result-outbox.ts`: az `add` igazat ad, ha új bejegyzést vett fel; `resultReport.ts`: `enqueuedHere` csak ekkor.
+  Egységteszt + böngészőteszt: lassú token → a kör `subject: null`-lal a sorban → ugyanaz a lecke új dokumentumban, más címkéjű tokennel →
+  a POST `subject: "?"`.
+- **R36 (L3)** `server/lesson-result-email.ts`: az R29 vizsgálat az `earlier` lekérdezés utánra kerül; teszthorog `setPartialScheduleHook`
+  (a „már kiment” lekérdezés után). DB-teszt: a pillanatkép a horogban áll, közben végleges beküldés → `finalized: true`, várakozó nincs.
+- **R37 (L4)** `client/src/lib/queryClient.ts`: az időzítő törlése `finally`-ba (a törzs olvasása után); a tokenlekérés 15 s-os
+  `AbortController`-rel. Böngészőteszt: a `fetch` csonkja 202-es fejlécet és megakadó törzset ad, a 60 s-os időzítő 500 ms-ra
+  gyorsítva → a kérés jele megszakad.
+- **R38 (L5)** ugyanott (szerver): a `sendLessonResult` bemenete lehet késleltetett (`() => Promise<SendInput>`), a feloldás az
+  `attemptLessonResult` `try` ágában; teszthorog `setAttributionFault`. DB-teszt: egyszeri hiba → egy újrapróbával kimegy; kétszeri hiba
+  → nincs levél, és utána vendég pillanatkép elfogadva (az első rögzítő felszabadult).
+- Utána: a nehéz körök a kapusoron.
 
 ## Kész-feltétel
 

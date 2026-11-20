@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 6. gépi kör (804569c1) leletei: R35–R38, L2 követő szelet; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -365,6 +365,21 @@ PR-review a 44487292-es fejre (Vercel 4642268402, Copilot 4642333188 / 464233324
   (R11 / R22) erre is elvégzi: kapuhibás vagy bukott első küldés után a vendég pillanatképe `conflict` választ kap, és nem tilthatja le
   az eredeti pótlását.
 
+Gépi vak ellenőrzés, 6. kör (GPT-6.2 Sol, 804569c1, 2026-11-20):
+- **R35 — címkét csak az ebben a dokumentumban LÉTREHOZOTT bejegyzés kaphat utólag (L1).** Az R31 pótlása kizárólag arra a bejegyzésre
+  vonatkozik, amelyet ez a dokumentum ténylegesen újonnan vett fel a sorba; a korábbi dokumentumból megmaradt, címke nélküli bejegyzés
+  (akkor is, ha a helyreállított kör újra felvenné) `?` címkével megy, így fiók nélküliként fut. Más munkamenet címkéjét sosem kapja meg.
+- **R36 — a véglegesítés a pillanatkép-felvétel utolsó várakozása után is látszik (L3).** Az R29 vizsgálat a kör zárán a „már kiment”
+  lekérdezés UTÁN, közvetlenül a várakozó beolvasása és az ütemezés előtt fut.
+- **R37 — a kérés időkorlátja a válasz törzsének olvasását is fedi (L4).** Az `apiRequest` időzítője a törzs beolvasásáig él (a fejlécek
+  megérkezése nem állítja le); a CSRF-token lekérése saját, 15 s-os határidőt kap.
+- **R38 — az attribúció feloldása a küldési ciklus része (L5).** A „félbehagyva” levél nevének feloldása a küldési kísérleten belül fut:
+  a hibája ugyanúgy egy újrapróbát kap, mint a küldésé, és a ciklus végén az első rögzítő bejegyzése (R34) felszabadul.
+- **L2 (leckerevízió) — követő szelet, nem a #510 része.** A helyben tárolt kör nem viszi a leckerevíziót, a szerver a mostani bankból
+  pontoz. A beküldés–pontozás e viselkedése a főágon is így van (a feladatoké is); a #510 tartós sora az ablakot legfeljebb 7 napra (R30)
+  szélesíti. A javítás a revízió átvezetése a lekérdezéstől (`lessonId` + `version`) a beküldőig és a szerveri összevetés — három kliensréteg
+  és a kérésszerződés változása, külön tervvel.
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -412,6 +427,10 @@ Elfogadás (S1b):
 - E48. Két fül egyidejű felvételénél egyik bejegyzés sem vész el (R32).
 - E49. A leállítás ürítései párhuzamosan, a kényszerleállítás előtt végeznek (R33).
 - E50. Kapuhibás első küldés után a vendég pillanatképe nem tiltja le az igazolt első rögzítő pótlását (R34).
+- E51. A korábbi dokumentumból címke nélkül maradt kör ugyanabba a leckébe visszatérve sem kapja meg az új munkamenet címkéjét (R35).
+- E52. A „már kiment” lekérdezés alatt véglegesített körre a pillanatkép nem kap `queued: true` választ (R36).
+- E53. A fejlécek után megakadt választest az időkorláton belül megszakad (R37).
+- E54. A névfeloldás átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy, és az első rögzítő felszabadul (R38).
 - E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
@@ -476,4 +495,8 @@ Elfogadás (S1b):
 - [ ] E48 – bejegyzésenkénti kulcs, fülek közti elveszés nincs (egységteszt)
 - [ ] E49 – a leállítás ürítései párhuzamosan, a határidőn belül (egységteszt)
 - [ ] E50 – kapuhiba utáni vendég-pillanatkép: conflict, az eredeti pótlás kimegy (valódi DB)
+- [ ] E51 – címke nélküli régi bejegyzés: `?`, nem az új munkamenet címkéje (böngésző + egységteszt)
+- [ ] E52 – véglegesítés a „már kiment” lekérdezés alatt: nincs queued:true (valódi DB)
+- [ ] E53 – megakadt választest: megszakad az időkorláton belül (böngésző)
+- [ ] E54 – névfeloldási hiba: egy újrapróba, az első rögzítő felszabadul (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
