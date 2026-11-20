@@ -750,6 +750,15 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
    Teszt: egység (álfetch) + a kártya forrás-őre.
 6. L6 — `AdventAnswerResult.doors`; `applyAnswerResult` (kliens): az összes ablak cseréje. Teszt: DB (két eszköz) + egység.
 
+## Kiegészítés 16 — a 2/3 PR 4. GPT-körének feltételei a D ágon (2026-11-20; terv `docs/specs/2026-11-18-adventi-naptar.md` 22. 7–10.)
+
+1. L1 — ellenőrzés a 2/3 PR jelentésének forgatókönyvével (DB-teszt; a javítás a 15. kiegészítés 1. pontja).
+2. L2 — `store.readPair`; a `GET /state` párosított írható fázisban ezt használja. Teszt: DB.
+3. L3 — `PlanMeta.retired`; `mergeAdoption` gyűjti; `usedInEarlierRounds` és a dedupe kizárja. Teszt: egység (xmas-002 / xmas-003).
+4. L4 — `replacementCandidates`: karácsonyi tárgynál a karácsonyi készlet. Teszt: egység (3. évfolyam, bankos nap).
+5. L5 — `adventRowIsSound`: mind a 24 nap kulcsa, nem üres sorral. Teszt: egység + DB. A korábbi sorőr-tesztek egynapos terve
+   teljes, 24 napos tervre bővült (a szigorúbb szabály miatt; dokumentált fixture-változás).
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.

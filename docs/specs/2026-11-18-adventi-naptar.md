@@ -1158,3 +1158,15 @@ Külön, a 3/3 PR-re halmozott ágon (`wip/advent-d-elesites-elott`); a 3/3 PR f
    a helyén marad az alapfelirattal és a belépővel, a státusz újrapróbálható.
 6. **Két eszköz, egy tanuló (L6):** a válasz a teljes, azonos állapotú ablaklistát is visszaadja (`doors`); a kliens az összesítéssel
    együtt az összes ablakot cseréli.
+
+**A 2/3 PR 4. GPT-körének feltételei (2026-11-20, ugyanezen az ágon):**
+
+7. **Átmenetileg üres párosított olvasás (L2):** a tanulói és a vendégsor egy lekérdezésből (egy pillanatkép) — egy közben commitolt
+   átvétel nem adhat üres nézetet.
+8. **Lecserélt tanulói próba (L3):** ha átvételkor a vendég jobb eredménye felülírja a tanuló egy ablakát, a tanuló ottani próbáinak
+   kérdései a terv `retired` listájára kerülnek: sem az egyesített terv játszható helyein, sem a későbbi körökben nem jönnek újra.
+9. **Vegyes évfolyamú pótlás (L4):** a karácsonyi tárgyú hely pótlása a karácsonyi készletből jön, akkor is, ha a tanuló évfolyamán
+   az a nap bankos nap.
+10. **Hiányzó napkulcs (L5):** a meglévő körterv minden napja megvan, legalább egy kérdéssel; különben 409 corrupt (olvasás és írás),
+    változatlan sorral. Az első megnyitás előtti üres terv megengedett.
+Az L1 (friss évfolyam az átvételnél) a fenti 1. pont; a 2/3 PR jelentésének forgatókönyve is tesztelt.
