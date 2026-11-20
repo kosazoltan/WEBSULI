@@ -313,7 +313,9 @@ test("magától megnyílt összesítés bezárása után a fókusz nem vész el 
   await expect(page.locator('[data-testid="advent-summary"]:focus-within')).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("advent-summary")).toHaveCount(0);
-  expect(await page.evaluate(() => document.activeElement?.tagName), "a fókusz nem a BODY-n van").not.toBe("BODY");
+  // A könyvtár a fókusz-visszaadást az eltávolítás UTÁNI ütemben hívja: a végállapotot várjuk, és pontosan a megnyitó elemet
+  // (a 24. ablakot) követeljük meg — nem csak azt, hogy „nem a BODY” (mérés 2026-11-19: azonnali olvasással 5-ből 2 bukás).
+  await expect(page.getByTestId("advent-door-24")).toBeFocused();
 });
 
 test("bezárt naptár (január): nincs „javítható” ablak és „december N-én nyílik” felirat; semmi nem koppintható (S6)", async ({ page }) => {
