@@ -5,7 +5,7 @@ import { sanitizeIllustration } from "@shared/illustration-svg";
 import { normalizeVisualText, type DecisionTreeVisualNode, type VisualTone } from "@shared/source-visual-render";
 
 /**
- * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S2b-1, 16. szakasz): a forrás döntési fájának és képes kártyáinak
+ * Spec docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md (S2b-1): a forrás döntési fájának és képes kártyáinak
  * újrarajzolása. Csak érvényes paraméterből rajzolunk (`shared/lesson-visual-params.ts` szigorú sémája); a szöveg React
  * szövegcsomópont. A kártya rajza a meglévő illusztráció-tisztító allowlistjén átment SVG (nincs script, esemény, hivatkozás, stílus) —
  * ugyanaz az út, mint az `illustration` ábráé (`explanatory-visuals.tsx`). Szín a sáv tokenjeiből (`lesson-design.css`, `.sv-tree*`,

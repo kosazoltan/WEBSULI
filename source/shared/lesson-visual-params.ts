@@ -147,7 +147,7 @@ export const compareCardsParamsSchema = z.object({
   }).strict()).min(2).max(3),
 }).strict();
 /**
- * S2b-1 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 16. szakasz): döntési fa — legfeljebb 3 szint, csomópontonként 2–4 ág,
+ * S2b-1 (docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): döntési fa — legfeljebb 3 szint, csomópontonként 2–4 ág,
  * összesen legfeljebb 13 csomópont; a levél az ág nélküli csomópont.
  */
 export const DECISION_TREE_MAX_DEPTH = 3;

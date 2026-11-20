@@ -50,7 +50,7 @@ export const ANIM_KINDS = [
   "table",
   "ruleBox",
   "compareCards",
-  // S2b-1 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 16. szakasz): elágazó döntési fa, képes kártyák.
+  // S2b-1 (docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): elágazó döntési fa, képes kártyák.
   "decisionTree",
   "pictureCards",
 ] as const;

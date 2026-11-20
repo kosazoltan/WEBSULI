@@ -22,7 +22,7 @@ const MAP = { meta: { title: "T", subject: "s", classroom: 4 }, concepts: [] } a
  */
 const ADVERTISED = ["numberLine", "fraction", "timeline", "geometry", "process", "map", "wordBuilder", "sentenceParts", "triangleArea", "decisionStory",
   "cycle", "labeledShape", "barChart", "venn", "illustration", "scene3d"];
-// S2b-1 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 16. szakasz): a döntési fa és a képes kártyák is az S3a-ig nem hirdetett fajták.
+// S2b-1 (docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): a döntési fa és a képes kártyák is az S3a-ig nem hirdetett fajták.
 const NOT_YET_ADVERTISED = ["table", "ruleBox", "compareCards", "decisionTree", "pictureCards"];
 
 test("az author és javító prompt a HIRDETETT animációtípusokat közli (a paraméter-alak nélküli új fajtákat nem)", () => {

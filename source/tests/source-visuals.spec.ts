@@ -281,7 +281,7 @@ for (const band of [{ classroom: 2, id: "explorer" }, { classroom: 4, id: "adven
   });
 }
 
-// Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S2b-1, 16. szakasz; V32): döntési fa és képes kártyák három nézetben.
+// Spec docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md (S2b-1; V32): döntési fa és képes kártyák három nézetben.
 for (const viewport of [{ name: "allo-360", width: 360, height: 640 }, { name: "fekvo-844", width: 844, height: 390 }, { name: "asztali-1280", width: 1280, height: 800 }]) {
   test(`döntési fa és képes kártyák — ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize(viewport);

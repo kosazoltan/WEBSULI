@@ -10,7 +10,7 @@ import { ANIM_LABELS } from "../shared/lesson-block-label";
 import { sourceCoverageGate } from "../server/studio/gates/source-coverage-gate";
 import type { SourceVisual } from "../shared/source-visuals";
 
-// Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (16. szakasz; V29–V32): döntési fa és képes kártyák.
+// Spec docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md (V29–V32): döntési fa és képes kártyák.
 
 (globalThis as { React?: typeof React }).React = React;
 const SVG = (word: string) => `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="45" r="30" fill="#d33"/><text x="50" y="95">${word}</text></svg>`;

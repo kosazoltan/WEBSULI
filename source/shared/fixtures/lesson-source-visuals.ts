@@ -68,7 +68,7 @@ const broken: Lesson["sections"] = [
 ];
 
 /**
- * `tree` (S2b-1, docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 16. szakasz): Igen / Nem fa (a HM-minta alakja), kétszintű háromágú fa
+ * `tree` (S2b-1, docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): Igen / Nem fa (a HM-minta alakja), kétszintű háromágú fa
  * (a PT-minta döntési ábrájának alakja) és 8 képes kártya — szintetikus tartalommal, egyszerű, felirattal ellátott SVG-rajzokkal.
  */
 const card = (label: string, shape: string, example?: string) => ({ label, example,
