@@ -1106,3 +1106,18 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-76 — Célzott ellenőrzésből kimaradt teszt-típusellenőrzés; CRLF-es munkafa a szöveges cseréknél (2026-11-20)
+
+- **Tünet 1:** az S5b (`feat/tgm-s5b-nyitasformak`) célzott köre zöld volt (`node --import tsx --test …`, `tsc --noEmit`), a `gate:push`
+  `check:test` lépése mégis elbukott: `tests/lesson-feedback-openers.test.ts(110,16) TS2352` — a tesztben egy `{ title, mapId, classroom }`
+  objektumot `{ variety: … }` típusra kasztoltam. A `tsx` nem ellenőriz típust, a `tsc --noEmit` (`tsconfig.json`) a `tests/` mappát nem
+  fedi — csak a `tsconfig.test.json`. Költség: egy elveszett zárkör (~45 perc gépidő) és egy javító commit a halmozott lánc minden ágán.
+- **Szabály 1:** új vagy módosított tesztfájlnál a célzott ellenőrzés része a `npx.cmd tsc -p tsconfig.test.json` (a `source/` mappából);
+  kasztolás helyett a bemenetet a valódi (opcionális mezős) típussal írd le.
+- **Tünet 2:** a munkafákban a követett fájlok CRLF sorvégűek is lehetnek (`core.autocrlf`); a `node -e` / Python szöveges cseréim `"\n"`-t
+  tartalmazó mintái nem illeszkedtek („not unique” / némán kimaradt csere), egy Pythonos csere pedig valódi sortörést írt egy
+  karakterlánc-literálba. **Szabály 2:** többsoros cserét az Edit eszközzel végezz; szkriptes cserénél előbb normalizáld a sorvéget
+  (`s.replace(/\r\n/g, "\n")`), és írd vissza az eredetivel; a csere után mindig `tsc` / teszt.
+
+Forrás: TGM változatossági lánc (S5b–S6c), 2026-11-20. Rokon: C-74, C-75 (3–4. szabály).
