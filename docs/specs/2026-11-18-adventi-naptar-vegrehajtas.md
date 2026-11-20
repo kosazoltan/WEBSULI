@@ -743,3 +743,6 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
   jelölteket és a tervet a futás-zár megszerzése UTÁN olvassa újra (`runUnderLock`, `takeSnapshot`) — a másodikként zároló futás nem
   dolgozik elavult pillanatképből (nem költ a plafon fölé, nem gyárt újra kész jelöltet). Előbb bukó teszt: két átfedő futás hamis
   hálózattal (`tests/advent-art-pipeline.test.ts`).
+- 2026-11-20 — 3/3 PR, vak ellenőr 2. kör KÖZEPES-A (fókusz az összesítés után): a szigorított teszt 10-ből 2-szer bukott (Escape után az
+  összesítés nyitva maradt). Javítás: az összesítés a kérdés-ablak TELJES bezárása után nyílik (`onCloseAutoFocus`), a fókusz-visszaadás
+  korlátos időzítő-sorral ismétel (0–200 ms; A31: nincs képkocka-hurok).
