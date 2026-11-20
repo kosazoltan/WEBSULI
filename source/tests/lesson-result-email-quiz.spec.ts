@@ -778,3 +778,57 @@ test("R28 / L4: olvasható, de nem írható tárolónál (kvóta) a befejezett k
   await page.waitForTimeout(1200);
   expect(finals).toHaveLength(1);
 });
+
+/* Gépi vak ellenőrzés, 6. kör (GPT-6.2 Sol, 804569c1, 2026-11-20), terv R35 / R37. */
+test("R35 / L1: a korábbi dokumentumból címke nélkül maradt kör ugyanabba a leckébe visszatérve sem kapja meg az új munkamenet címkéjét", async ({ page }) => {
+  await mockWith(page);
+  let tokenCalls = 0;
+  await page.route("**/api/csrf-token", async route => {
+    tokenCalls++;
+    if (tokenCalls === 1) { await new Promise(resolve => setTimeout(resolve, 20_000)); try { await route.fulfill({ json: { csrfToken: "test", resultApi: 2, resultSubject: "elso-cimke" } }); } catch { /* a lap közben elnavigált */ } return; }
+    return route.fulfill({ json: { csrfToken: "test", resultApi: 2, resultSubject: "masik-fiok-cimke" } });
+  });
+  const finals: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) finals.push(body);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await answerAll(page);
+  expect(finals, "a lassú token miatt még nem ment el; a sorban címke nélkül áll").toHaveLength(0);
+  await openQuiz(page); // új dokumentum, UGYANAZ a lecke: a tárolt teljes kör helyreáll, és más munkamenet tokenje él
+  await expect.poll(() => finals.length, { timeout: 15_000 }).toBe(1);
+  expect(finals[0].subject, "a régi, címke nélküli eredmény nem kapja meg az új munkamenet címkéjét").toBe("?");
+  await page.waitForTimeout(1500);
+  expect(finals).toHaveLength(1);
+});
+
+test("R37 / L4: a 202-es fejlécek után megakadó választest az időkorláton belül megszakad (a sor nem ragad be)", async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = { started: 0, aborted: 0 };
+    (window as unknown as { __stalled: typeof state }).__stalled = state;
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/api/lessons/lesson-q/results") && init?.method === "POST" && typeof init.body === "string" && !(JSON.parse(init.body) as { partial?: boolean }).partial) {
+        state.started++;
+        const signal = init.signal;
+        const stream = new ReadableStream<Uint8Array>({ start(controller) {
+          controller.enqueue(new TextEncoder().encode("{"));
+          signal?.addEventListener("abort", () => { state.aborted++; controller.error(new DOMException("aborted", "AbortError")); });
+        } });
+        return new Response(stream, { status: 202, headers: { "content-type": "application/json" } });
+      }
+      return originalFetch(input, init);
+    };
+    // Csak a kérés 60 s-os alap-időkorlátja gyorsul 500 ms-ra (minden más időzítő változatlan).
+    const originalSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, ms?: number, ...args: unknown[]) => originalSetTimeout(handler, ms === 60_000 ? 500 : ms, ...args)) as typeof window.setTimeout;
+  });
+  await mockWith(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await answerAll(page);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __stalled: { started: number } }).__stalled.started)).toBe(1);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __stalled: { aborted: number } }).__stalled.aborted), { timeout: 5000, message: "a megakadt törzs olvasását az időkorlát megszakította" }).toBe(1);
+});

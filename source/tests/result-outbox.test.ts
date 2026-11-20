@@ -127,3 +127,26 @@ test("R32: az alkalmazás induláskor a bejegyzésenkénti kulcsokat nézi — a
   assert.match(app, /pending = hasPendingOutbox\(localStorage\);/);
   assert.doesNotMatch(app, /localStorage\.getItem\(RESULT_OUTBOX_KEY\)/, "a régi, közös kulcs ellenőrzése megszűnt");
 });
+
+test("R35 (6. kör L1): a felvétel jelzi, hogy új bejegyzés jött-e létre; címkét utólag csak az ebben a dokumentumban létrehozott kaphat", async () => {
+  const { createOutboxStore } = await import("../shared/result-outbox");
+  const tab = tabStorage();
+  const earlier = createOutboxStore(() => tab);
+  assert.equal(earlier.add({ ...entry("a"), subject: null }), true, "új bejegyzés");
+  // Új dokumentum (új tárolóréteg ugyanazon a tárolón): a helyreállított kör újrafelvétele nem hoz létre új bejegyzést.
+  const later = createOutboxStore(() => tab);
+  assert.equal(later.add({ ...entry("a"), subject: "masik-fiok" }), false, "a megmaradt bejegyzés nem az új dokumentumé");
+  assert.equal(later.read()[0].subject, null, "a régi bejegyzés címkéje változatlan");
+  const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(outbox\.add\(entry\)\) enqueuedHere\.add\(entry\.id\);/);
+  assert.doesNotMatch(source, /enqueuedHere\.add\(entry\.id\);\n\s*outbox\.add\(entry\);/);
+});
+
+test("R37 (6. kör L4): az apiRequest időzítője a törzs olvasásáig él; a tokenlekérésnek saját határideje van", () => {
+  const client = readFileSync(new URL("../client/src/lib/queryClient.ts", import.meta.url), "utf8");
+  const body = client.slice(client.indexOf("export async function apiRequest"), client.indexOf("type UnauthorizedBehavior"));
+  assert.doesNotMatch(body, /signal: controller\.signal,\n\s*\.\.\.keepalive,\n\s*\}\);\n\s*\n\s*clearTimeout\(timeoutId\);/, "a fejlécek után nem törli az időzítőt");
+  assert.match(body, /\} finally \{\n\s*clearTimeout\(timeoutId\);\n\s*\}/);
+  assert.match(client, /const CSRF_TOKEN_TIMEOUT_MS = 15_000;/);
+  assert.match(client, /signal: AbortSignal\.timeout\(CSRF_TOKEN_TIMEOUT_MS\)/);
+});

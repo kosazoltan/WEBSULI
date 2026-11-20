@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -609,4 +609,48 @@ test("R34 (4642333345): igazolt tanuló pillanatképe, az első küldés kapuja 
     assert.ok(sent.every(mail => new RegExp(`félbehagyva: 2 / ${ROUND_SIZE}\\)`).test(mail.subject)), "az igazolt tanuló (2 válaszos) állapota");
     assert.ok(sent.every(mail => !mail.html.includes("Vendég tanuló")));
   } finally { setFinalizedCheckFault(null); clearPendingPartials(); setPartialDelay(previousDelay); setRetryDelay(previousRetry); }
+});
+
+/* Gépi vak ellenőrzés, 6. kör (GPT-6.2 Sol, 804569c1, 2026-11-20), terv R36 / R38. */
+test("R36 / L3: a véglegesítés a „már kiment” lekérdezés alatt történik → a pillanatkép nem kap queued:true választ, várakozó nem marad", async () => {
+  reset();
+  const previousDelay = setPartialDelay(60_000);
+  let release!: () => void;
+  const parked = new Promise<void>(resolve => { release = resolve; });
+  let isParked = false;
+  setPartialScheduleHook(async who => { if (who === "guest:fp-r36") { isParked = true; await parked; } });
+  try {
+    clearPendingPartials();
+    const snapshot = post({ kind: "quiz", roundId: "round-r36", picks: picks(2), partial: true, fingerprint: "fp-r36" });
+    assert.ok(await waitFor(() => isParked, 3000), "a pillanatkép a „már kiment” lekérdezés után áll");
+    assert.equal((await post({ kind: "quiz", roundId: "round-r36", picks: picks(5), fingerprint: "fp-r36" })).status, 202);
+    release();
+    assert.deepEqual(await (await snapshot).json(), { queued: false, finalized: true });
+    assert.equal(pendingPartialCount(), 0, "a véglegesített körre nem keletkezett várakozó");
+  } finally { release(); setPartialScheduleHook(null); clearPendingPartials(); setPartialDelay(previousDelay); }
+});
+
+test("R38 / L5: a névfeloldás átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; kétszeri hibánál nincs levél, és az első rögzítő felszabadul", async () => {
+  reset();
+  const previousDelay = setPartialDelay(100);
+  const previousRetry = setRetryDelay(300);
+  let left = 0;
+  setAttributionFault(() => { if (left > 0) { left--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } });
+  try {
+    clearPendingPartials();
+    left = 1;
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r38-once", picks: picks(2), partial: true }, freshIp(), "u-r38")).json(), { queued: true, partial: true });
+    assert.ok(await waitFor(() => sent.length === 2, 3000), "az újrapróba kiküldte a „félbehagyva” levelet");
+    assert.equal(left, 0, "a névfeloldás egyszer hibázott");
+    assert.ok(sent.every(isPartial));
+    // Kétszeri hiba: a ciklus levél nélkül zárul, és az első rögzítő bejegyzése felszabadul (nem ragad be).
+    reset();
+    left = 2;
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r38-twice", picks: picks(2), partial: true }, freshIp(), "u-r38b")).json(), { queued: true, partial: true });
+    assert.ok(await waitFor(() => left === 0, 3000), "mindkét kísérlet lefutott");
+    await sleep(200);
+    assert.equal(sent.length, 0);
+    setPartialDelay(60_000);
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r38-twice", picks: picks(3), partial: true, fingerprint: "fp-r38-guest" })).json(), { queued: true, partial: true }, "a lezárult ciklus után az első rögzítő nem tartja a kört");
+  } finally { setAttributionFault(null); clearPendingPartials(); setPartialDelay(previousDelay); setRetryDelay(previousRetry); }
 });
