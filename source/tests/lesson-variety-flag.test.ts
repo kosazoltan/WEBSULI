@@ -25,17 +25,17 @@ test("V1: KI állapotban a szerző- és a bankszabály bájtra a régi konstans,
   assert.match(PLAYFUL_QUESTIONING_CONTRACT, /Jó próba/u);
 });
 
-test("V2: BE állapotban nincs „Jó próba” mintamondat és bátorító-előírás; a verzió nyitomese-2; a többi szabály megmarad", () => {
+test("V2: BE állapotban nincs „Jó próba” mintamondat és bátorító-előírás; a verzió nyitomese-3 (S5b, dokumentált spec-változás: terv 11. szakasz 5. pont); a többi szabály megmarad", () => {
   for (const text of [playfulAuthorRules(true), playfulQuestioningContract(true)]) {
     assert.doesNotMatch(text, /Jó próba/u);
     assert.doesNotMatch(text, /bátorító (nyitás|első mondat)|első mondat bátorító/u);
     assert.match(text, /Bátorító vagy megerősítő nyitást NE írj — azt a program adja\./u);
-    assert.match(text, /nyitomese-2/u);
+    assert.match(text, /nyitomese-3/u);
     assert.doesNotMatch(text, /nyitomese-1/u);
   }
-  assert.equal(lessonOpenerVersion(true), "nyitomese-2");
-  // A visszajelzésen kívüli sorok változatlanok (csak a visszajelzés-sor és a verzió cserélődik).
-  const otherLines = (t: string) => t.split("\n").slice(1).filter((l) => !/Visszajelzés|feedbackPerOption/u.test(l));
+  assert.equal(lessonOpenerVersion(true), "nyitomese-3");
+  // A visszajelzésen kívüli sorok változatlanok (csak a visszajelzés-sor, a verzió és — S5b — a módszer-sor „Peti” példája cserélődik).
+  const otherLines = (t: string) => t.split("\n").slice(1).filter((l) => !/Visszajelzés|feedbackPerOption|^- Módszerek:/u.test(l));
   assert.deepEqual(otherLines(playfulQuestioningContract(true)), otherLines(PLAYFUL_QUESTIONING_CONTRACT));
   assert.deepEqual(otherLines(playfulAuthorRules(true)), otherLines(PLAYFUL_AUTHOR_RULES));
 });

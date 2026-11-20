@@ -6,6 +6,8 @@ import {
 } from "../shared/lesson-feedback-openers";
 import { AGE_BANDS } from "../shared/lesson-schema";
 import { stripVerdictPrefix } from "../shared/lesson-ui-text";
+import { openerVarietyPick } from "../shared/lesson-opener";
+import { seedFrom } from "../shared/seeded";
 
 // Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S5a; V3–V5): a bátorító / megerősítő nyitás kódszótárból, korosztályonként,
 // kérdésenként a magból — a változatosság mérhető.
@@ -120,4 +122,8 @@ test("withVarietyMarker: KI — a jelölő (a modelltől jött is) törlődik; B
   assert.deepEqual(withVarietyMarker(lesson, true), { title: "T", variety: { version: LESSON_VARIETY_VERSION } });
   assert.equal(withVarietyMarker(null, true), null);
   assert.deepEqual(withVarietyMarker([1], true), [1]);
+  // S5b (terv 11. szakasz 5. pont): a jelölő a lecke térképéből és évfolyamából a promptéval azonos nyitásformát hordozza.
+  const full = withVarietyMarker({ title: "T", mapId: "map-7", classroom: 6 }, true) as { variety: { version: string; openingForm?: string } };
+  assert.equal(full.variety.version, "valtozatossag-2");
+  assert.equal(full.variety.openingForm, openerVarietyPick(6, seedFrom("map-7")).form.id);
 });
