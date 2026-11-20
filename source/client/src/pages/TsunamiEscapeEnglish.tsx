@@ -87,7 +87,7 @@ import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import QuizFeedbackCard from "@/game-engine/QuizFeedbackCard";
 import TsunamiScene3D, { SHELTER_TOP_LANDSCAPE, SHELTER_TOP_PORTRAIT, SHELTER_X, type TsunamiLive } from "@/game-engine/scenes/TsunamiScene3D";
 import { paceTsunamiDirector } from "@/lib/tsunami/pacing";
-import { isShiftSettled } from "@/lib/tsunami/shift";
+import { dampShift, isShiftSettled } from "@/lib/tsunami/shift";
 import { buildFeedback, type FeedbackCard } from "@/game-engine/feedback";
 import {
   TSUNAMI_GAME_ID,
@@ -740,6 +740,8 @@ export default function TsunamiEscapeEnglish() {
   const touch = useTouchCapable();
   const haptics = useHaptics();
   const reducedMotion = useReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
   const [, navigate] = useLocation();
   const bestScore = useBestScore("tsunami-english");
   const [bestResult, setBestResult] = useState<{ best: number; isNewBest: boolean } | null>(null);
@@ -932,6 +934,7 @@ export default function TsunamiEscapeEnglish() {
   const liveRef = useRef<TsunamiLive>({ water: 12, playerX: 50, safeZoneX: 50, sprinting: false });
   /** A nyitott kérdés alatti kép-eltolás képkockánkénti követése (a törzse lejjebb, az elrendezés-döntésnél). */
   const trackShiftRef = useRef<() => void>(() => {});
+  const resetLayoutRef = useRef<() => void>(() => {});
   /** Pont és kombó (a lap számolja a kérdés-kimenetekből). */
   const scoreRef = useRef({ score: 0, combo: 0, best: 0 });
   const qRef = useRef<ReturnType<typeof usePlayQuestion>>(null as unknown as ReturnType<typeof usePlayQuestion>);
@@ -1171,9 +1174,11 @@ export default function TsunamiEscapeEnglish() {
     prewarmAudio();
     runIdRef.current += 1;
     runIndexRef.current += 1;
-    // Új menet: a kérdés-azonosítók újra 1-től indulnak — a régi élesítés ne öröklődjön.
+    // Új menet: a kérdés-azonosítók újra 1-től indulnak — a régi élesítés és a régi elrendezés-döntés / nyugalom ne öröklődjön
+    // (vak ellenőr GPT L3: az új menet 1-es kérdése a régi 1-es kérdés „settled” állapotát kapta).
     armedNowRef.current = null;
     setArmedId(null);
+    resetLayoutRef.current();
     const seed = seedFrom(seedBase, runIndexRef.current);
     runSeedRef.current = seed;
     pickRngRef.current = createRng(seedFrom(TSUNAMI_GAME_ID, seed, "pick"));
@@ -1470,7 +1475,7 @@ export default function TsunamiEscapeEnglish() {
         driver.feel.shakeOffset(off, stageRef.current?.clientHeight ?? 600);
         shake.style.transform = off.x || off.y || off.rot ? `translate3d(${off.x.toFixed(1)}px, ${off.y.toFixed(1)}px, 0) rotate(${((off.rot * 180) / Math.PI).toFixed(2)}deg)` : "";
       }
-      if (flatCanvasRef.current) drawFlat(flatCanvasRef.current, driver);
+      if (flatCanvasRef.current) drawFlat(flatCanvasRef.current, driver, liveRef.current, reducedMotionRef.current);
       if (!core.running() && qRef.current.settled()) {
         if (endAt === null) endAt = now + (core.state().phase === "won" ? WIN_SCENE_MS : END_PAUSE_MS);
         if (now >= endAt) {
@@ -1770,6 +1775,16 @@ export default function TsunamiEscapeEnglish() {
     settleMsRef.current = Math.round(performance.now() - shownAtRef.current);
     setPlaceTick((n) => n + 1);
   };
+  /** Új menet: az elrendezés-döntés, a nyugalom és a követés minden kérdéshez kötött állapota törlődik (vak GPT L3). */
+  resetLayoutRef.current = () => {
+    placedForRef.current = null;
+    decidedForRef.current = null;
+    settledForRef.current = null;
+    settleMsRef.current = null;
+    awaitSettleForRef.current = null;
+    trackRef.current = { at: 0, obs: [], id: null };
+    stageRectRef.current = null;
+  };
   /** Nyugalomban van-e a kirajzolt kép (csökkentett mozgásnál az eltolás azonnali). */
   const shiftArrived = () => reducedMotion || isShiftSettled(liveRef.current.shownShiftPx, liveRef.current.shiftPx ?? 0);
   const quizElRef = useRef<HTMLDivElement | null>(null);
@@ -1795,11 +1810,28 @@ export default function TsunamiEscapeEnglish() {
    * állandó a 75–95 px-es figura fejét kihagyta). WebGL nélkül (lapos tartalék) a rajz méretével számol.
    */
   type FigureRect = { l: number; r: number; t: number; b: number };
+  /*
+   * Vak ellenőr GPT L4: a képkocka-követő ne olvasson minden képkockán DOM-geometriát. A játéktér doboza gyorsítótárban; frissül
+   * a döntéskor, a követő 250 ms-os akadály-frissítésekor és átméretezéskor (`resize`).
+   */
+  const stageRectRef = useRef<DOMRect | null>(null);
+  const measureStage = (): DOMRect | null => {
+    const r = stageRef.current?.getBoundingClientRect() ?? null;
+    stageRectRef.current = r;
+    return r;
+  };
+  const stageRect = (): DOMRect | null => stageRectRef.current ?? measureStage();
+  useEffect(() => {
+    const onResize = () => {
+      stageRectRef.current = null;
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const figureRect = (): FigureRect | null => {
-    const stage = stageRef.current;
     const st = driverRef.current?.core.state();
-    if (!stage || !st) return null;
-    const sr = stage.getBoundingClientRect();
+    const sr = stageRect();
+    if (!sr || !st) return null;
     const fx = sr.left + (st.x / 100) * sr.width;
     const fy = sr.top + (1 - (st.water * WATER_VIEW_SCALE) / 100) * sr.height;
     const ext = liveRef.current.figureExtentPx ?? { up: FIGURE_HEIGHT_PX, down: 10, left: FIGURE_HALF_WIDTH_PX, right: FIGURE_HALF_WIDTH_PX };
@@ -1821,7 +1853,7 @@ export default function TsunamiEscapeEnglish() {
   const findShift = (obs: Obstacle[], f: FigureRect, current: number): number | null => {
     if (!hitsAt(obs, f, 0)) return 0;
     if (!hitsAt(obs, f, current)) return current;
-    const stage = stageRef.current?.getBoundingClientRect();
+    const stage = stageRect();
     const minTop = (stage?.top ?? 0) + 4;
     const maxBottom = (stage?.bottom ?? window.innerHeight) - 4;
     const over = obs.filter(({ box, wide }) => wide || (f.r >= box.left && f.l <= box.right)).map((o) => o.box);
@@ -1857,6 +1889,7 @@ export default function TsunamiEscapeEnglish() {
     if (presIdNow === null) return;
     if (decidedForRef.current === presIdNow) return;
     const el = quizElRef.current;
+    measureStage();
     const fig = figureRect();
     if (!el || !fig) return;
     // Csak a teljes elrendezésre döntünk: ha a válaszgombok még nincsenek a DOM-ban (az első képkocka), a következő rendernél.
@@ -1924,6 +1957,7 @@ export default function TsunamiEscapeEnglish() {
       cache.at = now;
       cache.id = id;
       cache.obs = id !== null && !view.reveal ? withQuestion(questionBoxes()) : frameObstacles();
+      measureStage();
     }
     const fig = figureRect();
     if (!fig) return;
@@ -2276,7 +2310,17 @@ export default function TsunamiEscapeEnglish() {
 }
 
 /** A DOM-tartalék (WebGL nélkül, spec E7): oldalnézeti 2D rajz a mag állapotából — a játék így is végigjátszható. */
-function drawFlat(canvas: HTMLCanvasElement, driver: TsunamiDriver): void {
+/** A lapos rajz figurájának mérete a vízfelszínhez képest (px): a középpont 14 px-cel fölötte, 12 px-es sugár. */
+const FLAT_FIGURE = { up: 28, down: 2, half: 14 } as const;
+const flatClock = new WeakMap<HTMLCanvasElement, number>();
+
+/**
+ * Lapos (2D) tartalék — WebGL nélkül vagy kontextusvesztés után. Vak ellenőr GPT L1 / L2: a kérdés-sáv miatti kép-eltolást ez a
+ * rajz is kirajzolja (a 3D-jelenettel azonos csillapítással, `lib/tsunami/shift.ts`), és MINDEN képkockán visszaírja a kirajzolt
+ * eltolást és a figura dobozát — így a „nyugalomban” jelző a ténylegesen kirajzolt képhez kötött, és a 3D-renderelő régi
+ * értékére sem várhat.
+ */
+function drawFlat(canvas: HTMLCanvasElement, driver: TsunamiDriver, live: TsunamiLive, reducedMotion: boolean): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const w = canvas.clientWidth;
@@ -2285,10 +2329,19 @@ function drawFlat(canvas: HTMLCanvasElement, driver: TsunamiDriver): void {
     canvas.width = w;
     canvas.height = h;
   }
+  const now = performance.now();
+  const prevAt = flatClock.get(canvas);
+  flatClock.set(canvas, now);
+  const target = live.shiftPx ?? 0;
+  const prevShown = live.shownShiftPx ?? target;
+  const shift = reducedMotion ? target : dampShift(prevShown, target, prevAt === undefined ? 0 : (now - prevAt) / 1000);
+  live.shownShiftPx = shift;
   const st = driver.core.state();
-  const yOf = (pct: number) => h * (1 - (pct * WATER_VIEW_SCALE) / 100);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "#7dd3fc";
   ctx.fillRect(0, 0, w, h);
+  ctx.setTransform(1, 0, 0, 1, 0, shift);
+  const yOf = (pct: number) => h * (1 - (pct * WATER_VIEW_SCALE) / 100);
   ctx.fillStyle = "#c4843f";
   const first = w > h ? SHELTER_TOP_LANDSCAPE : SHELTER_TOP_PORTRAIT;
   for (const top of [0, 1, 2, 3].map((i) => first + ((78 - first) * i) / 3)) ctx.fillRect(w * 0.08, h * (top / 100) - 6, w * 0.84, 12);
@@ -2316,8 +2369,18 @@ function drawFlat(canvas: HTMLCanvasElement, driver: TsunamiDriver): void {
   }
   ctx.fillStyle = "#fb7a1c";
   ctx.beginPath();
-  ctx.arc(w * (st.x / 100), wy - 14, 12, 0, Math.PI * 2);
+  const fx = w * (st.x / 100);
+  ctx.arc(fx, wy - 14, 12, 0, Math.PI * 2);
   ctx.fill();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Felfelé tolt képnél (negatív eltolás) a kép alja se maradjon víz nélkül.
+  if (shift < 0) {
+    ctx.fillStyle = "rgba(14,116,190,0.9)";
+    ctx.fillRect(0, h + shift, w, -shift);
+  }
+  // A kirajzolt figura doboza (a játéktér-koordinátákban, mint a 3D-jelenet `figureBoxPx`-e) és a talpponthoz mért kiterjedése.
+  live.figureBoxPx = { left: fx - FLAT_FIGURE.half, top: wy - FLAT_FIGURE.up + shift, right: fx + FLAT_FIGURE.half, bottom: wy + FLAT_FIGURE.down + shift };
+  live.figureExtentPx = { up: FLAT_FIGURE.up, down: FLAT_FIGURE.down, left: FLAT_FIGURE.half, right: FLAT_FIGURE.half };
 }
 
 /**

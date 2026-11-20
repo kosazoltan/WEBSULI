@@ -14,7 +14,7 @@ import {
   type ThreeSceneContext,
   type ThreeSceneController,
 } from "@/game-engine/three-look";
-import { dampShift } from "@/lib/tsunami/shift";
+import { dampShift, isShiftSettled } from "@/lib/tsunami/shift";
 
 /**
  * Side-view 3D seaside for Tsunami Escape (spec: docs/specs/2026-09-29-jatekok-3d-latvany.md,
@@ -1541,6 +1541,7 @@ function setupTsunami(
   const figBox = new THREE.Box3();
   const figCorner = new THREE.Vector3();
   let figBoxTick = 0;
+  let wasShiftMoving = false;
   const measureFigureBox = (live: TsunamiLive) => {
     if (lastW <= 0 || lastH <= 0) return;
     kid.group.updateMatrixWorld(true);
@@ -1890,7 +1891,11 @@ function setupTsunami(
       }
 
       sparkles.update(dt);
-      if (live && (figBoxTick++ & 3) === 0) measureFigureBox(live);
+      // A figura doboza 4 képkockánként — de amíg a kép-eltolás úton van (és a megérkezés képkockáján), MINDEN képkockán: a lap
+      // „nyugalomban” jelzésekor a doboz ugyanabból a képkockából való, mint a kirajzolt eltolás (vak ellenőr GPT L5).
+      const shiftMoving = live ? !isShiftSettled(live.shownShiftPx, live.shiftPx ?? 0) : false;
+      if (live && (shiftMoving || wasShiftMoving || (figBoxTick++ & 3) === 0)) measureFigureBox(live);
+      wasShiftMoving = shiftMoving;
     },
     dispose() {
       disposed = true;
