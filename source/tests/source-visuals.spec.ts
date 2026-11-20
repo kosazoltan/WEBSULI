@@ -127,7 +127,9 @@ for (const viewport of VIEWPORTS) {
         // Review J7: fókuszmegálló és nevesített régió csak a ténylegesen görgő táblán.
         expect(await scroller.getAttribute("tabindex"), "fókuszmegálló csak görgő táblán").toBe(state.wide ? "0" : null);
         expect(await scroller.getAttribute("role")).toBe(state.wide ? "region" : null);
-        const hint = scroller.locator("xpath=following-sibling::p[@data-testid='sv-scroll-hint']");
+        // S2b-2 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 17. szakasz 1. pont, vak J2 — dokumentált spec-változás): a jelző a SAJÁT
+        // tábla görgő kerete ELŐTT áll (a tábla fölött); a szándék változatlan: görgő táblánál pontosan egy jelző, a helyes táblához.
+        const hint = scroller.locator("xpath=preceding-sibling::p[@data-testid='sv-scroll-hint']");
         await expect(hint).toHaveCount(state.wide ? 1 : 0);
         if (!state.wide) continue;
         // Review J6: egérrel a semleges felirat látszik (a „Húzd oldalra” csak érintőképernyőn).
@@ -263,16 +265,20 @@ for (const band of [{ classroom: 2, id: "explorer" }, { classroom: 4, id: "adven
     const report = await measure(page);
     expect(report.pageOverflow).toBeLessThanOrEqual(0);
     expect(report.problems).toEqual([]);
-    // A fejléc tónusa a sáv tokenjéből jön: az „a” tónusú oszlopfej alsó szegélye a sáv főszíne.
+    // A fejléc tónusa a sáv tokenjéből jön. S2b-2 (17. szakasz 2. pont, vak J5 — dokumentált spec-változás): az „a” tónusú oszlopfej alsó
+    // szegélye a sáv JELZŐ-tokenje (`--ws-mark-a`, alapértéke a főszín; a future sávban világosabb, hogy a sötét fejlécen ≥ 3:1 legyen).
     const tone = await page.locator('figure[data-anim="table"] thead th[data-tone="a"]').first().evaluate((el) => {
-      const probe = document.createElement("span");
-      probe.style.color = "var(--ws-accent)";
-      el.appendChild(probe);
-      const accent = getComputedStyle(probe).color;
-      probe.remove();
-      return { border: getComputedStyle(el).borderBottomColor, accent };
+      const resolve = (value: string) => { const probe = document.createElement("span"); probe.style.color = value; el.appendChild(probe); const c = getComputedStyle(probe).color; probe.remove(); return c; };
+      // A fejléc háttere (color-mix) és a szegély relatív fénysűrűsége → kontraszt (WCAG 2.x képlet).
+      const rgb = (c: string) => { const n = c.match(/[\d.]+/g)!.map(Number); return c.startsWith("color(srgb") ? n.slice(0, 3).map((v) => v * 255) : n.slice(0, 3); };
+      const lum = (c: string) => { const [r, g, b] = rgb(c).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+      const border = getComputedStyle(el).borderBottomColor;
+      const bg = getComputedStyle(el).backgroundColor;
+      const [hi, lo] = [lum(border), lum(bg)].sort((a, b) => b - a);
+      return { border, mark: resolve("var(--ws-mark-a, var(--ws-accent))"), contrast: (hi + 0.05) / (lo + 0.05) };
     });
-    expect(tone.border).toBe(tone.accent);
+    expect(tone.border).toBe(tone.mark);
+    expect(tone.contrast, `${band.id}: a jel kontrasztja a fejléc hátterén`).toBeGreaterThanOrEqual(3);
     // Vak ellenőr J3: 360 px-en, a sáv betűméretével sem törik ketté a fejléc szava (a régi képeken „megszámlál / ható”).
     const head = await headerWords(page);
     expect(head.broken, `${band.id}: a fejléc szavai épek (jelző: ${head.fit}, betű: ${head.headFont}px)`).toEqual([]);
