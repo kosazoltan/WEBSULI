@@ -3,9 +3,10 @@
 > Terv: `docs/specs/2026-11-17-szkriptkapuk-teljes-vertikum.md` · Kanban: #91
 > Munkafa: `.claude/worktrees/szkriptkapuk`. A kidolgozó lánc (`chore/kapu-ingadozo`, fej `f98dfc42`; benne `docs/szkriptkapuk-terv`,
 > `chore/kapu-teszt-integritas`, `chore/kapu-allitas-ellenor`) PR nélkül áll — a főágra a lenti P1–P5 szeletekben kerül, friss ágakon.
-> **Állapot (2026-11-18):** S0, S1, S2, S8 a kidolgozó láncban kész; a független ellenőr harmadik köre (`0a4548b3`): IGEN, FELTÉTELLEL
-> (F1, F2 javítva: `f98dfc42`). P1 (a terv) kész, PR-ra vár · P2 folyamatban · P3–P5 a lenti sorrendben · S3, S5, S6, S7 kiadható megbízás (lent) ·
-> S4 az összevonások után.
+> **Állapot (2026-11-20):** S0, S1, S2, S8 a kidolgozó láncban kész (`f98dfc42`). P1 (ez a terv): beolvasztva (PR #517, öt vak,
+> hibakereső javítókör után; egységesítve a döntő nézet / commit-nézet / `warn` → `block` fogalmakra) · P2 (bizonyíték-lánc) a saját
+> ágán, a main-beolvasztás után vak ellenőrzésre vár · P3–P5 a lenti sorrendben · S3, S5, S6, S7 kiadható megbízás (lent) · S4 az
+> összevonások után.
 
 ## Szeletelés a főágra (orkesztrátori döntés 2026-11-18, „A” opció)
 
@@ -105,10 +106,11 @@ Elv: a terv 6.3a „Bevezetési lépcsők” szakasza szerint MINDEN új kapu `w
    --verify` és `--repair` (archivál + naplóz, nem simít); a lánc-ellenőrzés `modes.evidence-chain` szerint (`warn` alapból); a runbook
    őszintén leírja, mit véd és mit nem.
 6. **S1 (B2, M4):** a CI-ban `warn` + job-összefoglaló (`$GITHUB_STEP_SUMMARY`); a döntő nézet a main CSÚCSÁHOZ képesti, összefésült
-   diff (`git merge-tree --write-tree`), a commit-nézet csak a mainen még nem létező fájlokra fut és soha nem tilt; a SPEC-VÁLTOZÁS a
-   fejen meglévő terv hivatkozott pontjával is igazolt; a lazítás visszaállítása / ugyanazon alany megmaradó állítása nem lelet; minták:
-   `*.integration.ts`, `source/tests/support/`; többsoros állítás, új időkorlát módosított fájlban, tűrés-konstans a tesztfájlban,
-   `.skip(` / `.fixme(` a CI-ban is; a kapu saját fájljainak változása hangos jelzés (K2); a `--json` egyetlen JSON (K4); a fej-tartalmak
+   diff (`git merge-tree --write-tree`), a commit-nézet csak a mainen még nem létező fájlokra fut és soha nem tilt; a SPEC-VÁLTOZÁS
+   igazolásának EGYETLEN szabálya az S1.4 (a hivatkozott spec a döntő nézetben változik — a fejen már meglévő tervpontra mutatás
+   NEM igazol; a kidolgozó lánc ezt még elfogadja, a P3-ban a terv szerint javítandó); a lazítás visszaállítása / ugyanazon alany
+   megmaradó állítása nem lelet; az S1 teljes hatóköre (minták, szabályok, `.skip` / `.fixme`): S1.2 és S1.3; a kapu saját fájljainak
+   változása hangos jelzés (K2); a `--json` egyetlen JSON (K4); a fej-tartalmak
    egyetlen `git cat-file --batch` hívással (K10); „Mit NEM fog meg” a runbookban és „ismert korlát” tesztként.
 7. **Egyéb:** K5 (bővebb parancssor- és kimenet-szűrés az `evidence-run`-ban), K8 (a doksik és a kód egyeztetése), K9 (a számok
    forrással), K1 és K3 maradéka jegyre / a megfeleltetési táblába.
@@ -136,7 +138,9 @@ Szabályok minden szeletre: a `source/` futásidejű kódja nem módosul; minden
 (`exec`), `node --test` tesztekkel, Windows x64 / ARM64 / Linux; regexet csak Edit / Write eszközzel írj és olvasd vissza; tesztet
 gyengíteni tilos; titok / e-mail-cím / kapcsolati szöveg sehova (a tesztben a mintát futásidőben, darabokból); mutációs ellenpróba
 commit / másolat után (C-70); commit-üzenet fájlból; a játékok lapjaihoz, magjaihoz, tesztjeihez és a `source/tests/support/*`-hoz
-NEM nyúlunk (nyitott PR-ok); a `docs/agent-csapdak.md`-t nem módosítjuk. Amíg a #490 (`chore/kulso-ellenor`) nincs a mainen, a
+NEM nyúlunk (nyitott PR-ok); a `docs/agent-csapdak.md`-ben a meglévő bejegyzések nem módosulnak, de a szelet saját tanulsága ÚJ
+bejegyzésként felvehető (a repó önfejlesztési szabálya szerint), a C-sorszám ütközésének ellenőrzésével (a később összevont ág kap
+új számot). Amíg a #490 (`chore/kulso-ellenor`) nincs a mainen, a
 `scripts/qa/gates/lib.mjs`, `pre-pr-gate.mjs`, `pre-merge-gate.mjs`, a `websuli-fejlesztesi-ellenor` skill nem módosul; az `AGENTS.md`
 és a `docs/minosegkapuk.md` csak a #490 hunkjaitól távoli, rövid kiegészítést kap.
 
@@ -156,13 +160,26 @@ NEM nyúlunk (nyitott PR-ok); a `docs/agent-csapdak.md`-t nem módosítjuk. Amí
 
 ### S1.2 Bemenet
 
-- **Tartomány-mód** (mindig): `git diff -U6 --no-color -M <merge-base> --` a tesztfájl- és kalibrációs mintákra (munkafával együtt);
-  a törölt tesztfájlokhoz `git diff --name-status --diff-filter=D`.
-- **Commit-mód** (mindig, ha van commit): EGY hívás: `git log -p -U6 --no-color --no-merges -M --format=@@commit %H <base>..HEAD --`
-  a mintákra. Ez fogja a PR-on belüli lazítást, amely a main-hez képest „új fájlként” látszik (J7b, `4da8b3b9`). A commit-mód
-  leletét elejtjük, ha a lazított (hozzáadott) sor szövege a jelenlegi fájlban már nincs meg (később visszacsinálták).
-- Tesztfájl-minták (`gates.config.json` → `testIntegrity.testPatterns`): `\.(test|spec)\.[cm]?[jt]sx?$`, `\.browser\.ts$`,
-  `^source/tests/game-mobile-cases/`, `^source/playwright[^/]*\.config\.[cm]?ts$`. Kalibráció: `^source/client/src/lib/[^/]+/sim\.ts$`.
+- **Döntő nézet** (mindig; EZ a „main-hez képesti nézet” egyetlen definíciója a tervben és ebben a fájlban): a main CSÚCSÁHOZ
+  képesti, összefésült diff — `git merge-tree --write-tree <main-csúcs> HEAD`, és a main csúcsa ↔ az összefésült fa diffje
+  (`-U6 --no-color -M`) a tesztfájl- és kalibrációs mintákra. A squash-sel már összevont előzmény-ág commitjait így nem rója fel.
+  A törölt tesztfájlok ugyanebből (`D` állapot). A CI-ban (`pull_request`, `fetch-depth: 0`) a `HEAD` a GitHub merge-refje, amely
+  már tartalmazza a maint — az összefésülés ott triviális, az eredmény ugyanez. **Ütközés:** a `merge-tree` 1-es kilépési kóddal
+  jelzi (a kiírt fában ütközési jelölők vannak) — ezt a fát NEM diffeljük, és merge-base-es tartalék sincs: a döntő nézet ilyenkor
+  „nem számolható (ütközés)” tájékoztató `WARN`, `block` módban sem `FAIL` (ütköző PR amúgy sem vonható össze, és ütköző PR-ra a
+  GitHub merge-refet sem készít, a `pull_request` CI le sem fut).
+- **Szakasz-kapu (commitolatlan munka):** a döntő és a commit-nézet is a commitolt `HEAD`-et nézi, a munkafa még nem commitolt
+  változását nem — a szakasz-kapuban az S1 így csak a commitolt állapotot értékeli. Ez elég, mert a push-kapu tiszta fát követel (a
+  commitolatlan lazítás ott már commit, tehát látszik), és a döntés helye úgyis a push-kapu / a CI; a szakasz-kapuban csak a korai
+  jelzés vész el.
+- **Commit-nézet** (kiegészítő, csak tájékoztató — SOHA nem tilt, egyik módban sem): csak a PR SAJÁT commitjai
+  (`git log -p -U6 --no-color --no-merges -M --cherry-pick --right-only <main-csúcs>...HEAD`) és csak a main csúcsán még NEM létező
+  fájlok. Ez fogja a PR-on belüli lazítást, amely a main-hez képest „új fájlként” látszik (J7b, `4da8b3b9`). A commit-nézet leletét
+  elejtjük, ha a lazított (hozzáadott) sor szövege a jelenlegi fájlban már nincs meg (később visszacsinálták).
+- **Az S1 teljes hatóköre** (EZ az egyetlen igazságforrás; a R/6 csak hivatkozik rá). Tesztfájl-minták (`gates.config.json` →
+  `testIntegrity.testPatterns`): `\.(test|spec)\.[cm]?[jt]sx?$`, `\.browser\.ts$`, `\.integration\.ts$`, `^source/tests/support/`
+  (a közös teszt-segédek, pl. a sim-botok), `^source/tests/game-mobile-cases/`, `^source/playwright[^/]*\.config\.[cm]?ts$`.
+  Kalibráció: `^source/client/src/lib/[^/]+/sim\.ts$`. A szabályok: S1.3 (a tűrés-konstans és a `.skip` / `.fixme` is ott).
 
 ### S1.3 Szabályok (mindegyik egy leletet ad: `{ rule, file, line, commit?, text }`, érték kiírása csak a sor szövegéig, szűrve)
 
@@ -176,32 +193,51 @@ NEM nyúlunk (nyitott PR-ok); a `docs/agent-csapdak.md`-t nem módosítjuk. Amí
 | `matcher-loosened` | a párban szigorú matcher (`toBe`, `toEqual`, `toStrictEqual`, `strictEqual`, `deepStrictEqual`, `equal`, `deepEqual`, `toHaveLength`, `toHaveCount`, `toHaveText`) lazára vált (`toBeGreaterThan*`, `toBeLessThan*`, `toContain*`, `toMatch`, `toBeTruthy`, `toBeDefined`, `ok`, `match`, `toBeCloseTo`) |
 | `timeout-raised` | párban `timeout` / `setTimeout(` / `retries` száma nő; vagy módosított (nem új) fájlba `retries` kerül |
 | `force-or-fixed-wait` | hozzáadott `force: true` vagy `waitForTimeout(` |
-| `skip-added` | hozzáadott `.todo(`, `test.fail(`, feltételes `{ skip: … }` (az `.only` / `.skip` / `fixme` a lint-kapu FAIL-je marad) |
+| `skip-added` | hozzáadott `.skip(`, `.only(`, `fixme(`, `.todo(`, `test.fail(`, feltételes `{ skip: … }` — az S1 a CI-ban is jelzi (helyben a lint-kapu ezeket külön is `FAIL`-ozza, a CI-ban a lint-kapu nem fut) |
 | `source-regex-test` | hozzáadott `readFileSync` / `readFile` a `client/`, `server/`, `shared/`, `pages/`, `lib/` forrásra egy tesztben |
 | `sim-calibration` | kalibrációs fájlban egy NAGYBETŰS konstans (`const X_Y = <szám…>`) értéke változik |
+| `tolerance-changed` | tesztfájlban egy NAGYBETŰS szám-konstans (tűrés / küszöb, pl. `const TOLERANCE = 0.1`) értéke számról számra változik |
+| `timeout-added` (higiénia) | már létező tesztfájlba új, érték-összevetés nélküli időkorlát / `test.slow()` kerül (a NÖVELÉS a `timeout-raised`) |
+| `gate-changed` (higiénia) | a kapu saját fájljai (`test-integrity.mjs`, `gates.config.json`, a CI-workflow) változnak — a CI a PR saját változatát futtatja, ezért hangos jelzés |
 
 ### S1.4 Jelölés és átengedés
 
-Egy lelet akkor jelölt, ha a sorában vagy a fölötte lévő ≤ 8 sorban (a hunk kontextusában; commit-módban a jelenlegi fájlban a sor
+Egy lelet akkor jelölt, ha a sorában vagy a fölötte lévő ≤ 8 sorban (a hunk kontextusában; a commit-nézetben a jelenlegi fájlban a sor
 szövege fölött) `SPEC-VÁLTOZÁS` áll; a `source-regex-test`-nél a `FORRÁS-ŐR: <indok>` is jelölés. A jelölés **igazolt**, ha (1) a
 jelölésben dátum (`ÉÉÉÉ-HH-NN`) és zárójeles hivatkozás van, ÉS (2) a hivatkozott `docs/specs/…md` (vagy, ha a hivatkozásban nincs
-útvonal, bármely `docs/specs/*.md`) a tartomány-diffben változik, és a hozzáadott soraiban szerepel a tesztfájl neve (kiterjesztés
+útvonal, bármely `docs/specs/*.md`) a döntő nézetben változik, és a hozzáadott soraiban szerepel a tesztfájl neve (kiterjesztés
 nélkül) vagy a `SPEC-VÁLTOZÁS` szó, ÉS (3) ha a PR-leírás elérhető (`--body-file`, `--pr-body-env`), abban szerepel a tesztfájl neve
 és a `SPEC-VÁLTOZÁS` szó. Ha a PR-leírás nem elérhető (szakasz- / push-kapu), a (3) „később ellenőrzendő” megjegyzés.
 
-Eredmény: jelöletlen VAGY nem igazolt lelet → `warn` módban `WARN`, `block` módban `FAIL`; csak igazolt leletek → `PASS` a számmal.
+Eredmény: a DÖNTŐ nézet jelöletlen VAGY nem igazolt lelete → `warn` módban `WARN`, `block` módban `FAIL`; a commit-nézet lelete
+MINDEN módban `WARN` (tájékoztató, a kilépési kódot nem rontja). A **higiénia-osztály** lelete szintén mindig `WARN`; ide KIZÁRÓLAG
+két szabály tartozik: `timeout-added` (új, érték-összevetés nélküli időkorlát / `test.slow()` egy már létező tesztfájlban) és
+`gate-changed` (a kapu saját fájljai — szkript, konfig, CI — változnak a PR-ban). Az S1.3 többi szabálya mérce-szabály, a
+lazítás-szabályok (`timeout-raised` timeout- / retries-növelés, `force-or-fixed-wait`, `skip-added`, `source-regex-test`,
+`threshold-changed`, `matcher-loosened`, `assert-*`, `test-*`, `sim-calibration`) SOHA nem higiénia: a döntő nézetben `block` módban
+`FAIL`. (A kidolgozó lánc kódja a `force-or-fixed-wait`-et és a `source-regex-test`-et még higiéniaként kezeli — a P3 átvitelkor ez
+a terv szerint javítandó.) Csak igazolt leletek → `PASS` a számmal.
 Rekord: `test-integrity-<fej>.json` (`findings`, `mode`, `ms`).
 
 ### S1.5 Lépések
 
 1. `test-integrity.mjs`: tiszta függvények (megvalósítva — K8: `parseDiff`, `analyzeFile`, `subjectOf`, `thresholdDirection`,
-   `stripGuard`, `joinLogical`, `findMarker`, `verifyMarker`, `analyze`) + `runTestIntegrityStep({ gate, ctx, mode, prBody })` + CLI (`--base`, `--mode warn|block`,
-   `--body-file`, `--pr-body-env <VÁLTOZÓ>`, `--json`). Parancs: `node --test scripts/qa/gates/test-integrity.test.mjs` → zöld.
+   `stripGuard`, `joinLogical`, `findMarker`, `verifyMarker`, `analyze`) + `runTestIntegrityStep({ gate, ctx, mode, prBody })` + CLI (`--base`, `--head <ref>` (alapérték
+   `HEAD`), `--mode warn|block`, `--body-file`, `--pr-body-env <VÁLTOZÓ>`, `--json`). Parancs: `node --test scripts/qa/gates/test-integrity.test.mjs` → zöld.
 2. Tesztek: minden szabályra pozitív ÉS negatív eset (új teszt nem lelet; szigorítás nem lelet; mozgatott állítás nem lelet; jelölt +
-   igazolt átmegy; jelölt, de spec nélkül nem igazolt; commit-módú lazítás, amelyet később visszacsináltak, nem lelet); a J7b-eset
-   rögzített diff-mintával.
-3. Bekötés: `lint-gate.mjs` `runLintSteps` végén egy lépés (`teszt-integritás (S1)`), mód a `gates.config.json` `modes` szerint
-   (helyben `warn`). Commit; `npm run gate:stage`.
+   igazolt átmegy; jelölt, de spec nélkül nem igazolt; commit-nézetbeli lazítás, amelyet később visszacsináltak, nem lelet); a J7b-eset
+   rögzített diff-mintával. Az A5 (terv) két állítása külön tesztesettel: **A5/a** — a döntő nézet jelöletlen lelete `--mode warn`
+   mellett `WARN` és 0-s kilépési kód (a CI nem bukik), `--mode block` mellett `FAIL`; **A5/b** (negatív teszt) — CSAK commit-nézetbeli
+   lelet `--mode block` mellett is `WARN` és 0-s kilépési kód. A döntő nézet és a commit-nézet sajátos esetei: **S1/merge-tree** — egy
+   squash-sel már összevont előzmény-ág lazítását a döntő nézet NEM rója fel (a merge-base-hez képesti diff felróná); **S1/ütközés** —
+   a `merge-tree` 1-es kódjánál a döntő nézet „nem számolható (ütközés)” `WARN`, `--mode block` mellett is 0-s kód, a jelölős fát nem
+   diffeli; **S1/fájlszűrés** — a main csúcsán már létező fájlra nincs commit-nézetbeli lelet; **S1/cherry-pick** — a mainre már
+   (más hash-sel) felkerült, a PR-ban megismételt commit (`--cherry-pick --right-only`) nem ad commit-nézetbeli leletet. A
+   higiénia-osztályra: `timeout-added` és `gate-changed` `--mode block` mellett is `WARN`; a `timeout-raised` és a
+   `force-or-fixed-wait` a döntő nézetben `--mode block` mellett `FAIL`.
+3. Bekötés: `lint-gate.mjs` `runLintSteps` végén egy lépés (`teszt-integritás (S1)`), mód a `gates.config.json`
+   `modes["test-integrity"]` kulcsa szerint (`{ "local": "warn", "ci": "warn" }`; a `block`-ra váltás a terv 6.3a feltételei +
+   tulajdonosi jóváhagyás után, külön PR-ban). Commit; `npm run gate:stage`.
 4. CI: a „Háromfázisú rend” jobban `node scripts/qa/gates/test-integrity.mjs --base origin/${{ github.base_ref }} --mode warn
    --pr-body-env PR_BODY` (a job nem bukik; `block` csak a terv 6.3a feltételei és tulajdonosi jóváhagyás után — vak review P1-K1) (`env: PR_BODY: ${{ github.event.pull_request.body }}` — a leírás környezeti változóban, nem a parancssorban).
 5. Ellenpróba (csak olvasva): `node scripts/qa/gates/test-integrity.mjs --base origin/main --head origin/<ág>` az öt
@@ -250,7 +286,8 @@ A jelentés végén egy kerített blokk, info-sztringje `json allitasok` (JSON, 
 3. `changedFiles` = `git diff --name-only <base>...<head>` (halmaz-egyezés; a hiányzó és a többlet fájl név szerint).
 4. `refs`: a fájl létezik a fejen (`git show <head>:<fájl>`), a sor létezik, és a `text` azon a soron (vagy a megadott
    `line: "12-15"` tartományban) megvan.
-5. `commands` / `tests`: minden `PASS`-hoz van `evidence` rekord a tárban, `head`-je a jelentés feje, `code` = 0 / `ok` = true; a
+5. `commands` / `tests`: minden `PASS`-hoz van `evidence` rekord a tárban, `head`-je a jelentés feje, `code` = 0 / `ok` = true, és `dirty: false`
+   (commitolatlan / nem követett fájllal futott rekord NEM IGAZOLT — a P4-ben megvalósítandó; a P2 `evidence-run` a `dirty` mezőt már írja); a
    `tests` `pass` / `fail` száma egyezik a rekordba írt számmal, ha az rögzítette. `FAIL` állítás rekord nélkül is elfogadott (a
    bukás bevallása nem kitalálás).
 6. `pr`: `gh pr view <n> --json state,headRefOid,statusCheckRollup` → az `state` egyezik; a `ci` a `rollupState` (a

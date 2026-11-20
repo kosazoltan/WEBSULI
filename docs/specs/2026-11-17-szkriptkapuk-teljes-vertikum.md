@@ -27,8 +27,8 @@ maradjon, amit gép nem lát. Elvek (ezekhez mérjük a szeleteket):
 2. **Amit szkript eldönt, azt nem ügynök dönti el.** A gép által nem látható dolgok listája rögzített (5. fejezet), és szűkül.
 3. **Láncolt bizonyíték:** a fázis kilépő bizonyítéka a következő fázis belépő feltétele.
 4. **Fejlesztésidejű eszköz:** a kapuk a `source/` futásidejét nem érintik, a programot nem törhetik. Bevezetés fokozatosan:
-   előbb FIGYELMEZTET (és méri a hamis riasztást), aztán TILT. A CI-ban, ahol nincs kit megkerülni, a determinisztikus kapu
-   azonnal tilthat.
+   előbb FIGYELMEZTET (és méri a hamis riasztást), aztán TILT — a CI-ban is: a tiltásra váltás csak a 6.3a mért feltételei és
+   tulajdonosi jóváhagyás után jöhet (a független review mérése szerint azonnali tiltásnál mind az öt nyitott PR elbukott volna).
 5. **Gyors kapu:** szakaszonként < 60 s cél; a drága lépés csak ott fut, ahol a változás érinti (útvonal-alapú kiválasztás).
 
 ## 2. NEM cél
@@ -41,7 +41,8 @@ maradjon, amit gép nem lát. Elvek (ezekhez mérjük a szeleteket):
 - Vészkijárat a kapukhoz. A hamis riasztást a kapu javítása szünteti meg (teszttel), nem kapcsoló.
 - A játékok lapjainak, magjainak, tesztjeinek és a `source/tests/support/*`-nak a módosítása ebben a körben (nyitott PR-ok: #483–#486,
   J7b). Az S4 és S7 megvalósítása ezek összevonása után indul.
-- A `docs/agent-csapdak.md` módosítása (a csapda-javaslatok a zárójelentésbe mennek, C-48).
+- A `docs/agent-csapdak.md` meglévő bejegyzéseinek módosítása (C-48). Egy szelet saját tanulsága ÚJ bejegyzésként felvehető (a repó
+  önfejlesztési szabálya), a C-sorszám ütközésének ellenőrzésével.
 
 ## 3. A) Fázis-leltár
 
@@ -61,7 +62,7 @@ becsült / mért futásideje.
 | 6 | Független ellenőr | zöld push-kapu | `review-<fej>.json` | **Ü** + `record-review.mjs` (formai) | a jelentés állításainak gépi visszaellenőrzése (S2), „gép megfoghatta?” címke számlálása (E) | játéklogikai szándék, UX | ~20–60 perc ügynök | (a)–(f)(j) |
 | 7 | Push | zöld push-kapu + ítélet | távoli fej | **SZ** `check-quality-gates.mjs` hook | – | – | < 1 s | (k) |
 | 8 | PR | zöld `gate:pr` | PR-leírás | **SZ/r** `pre-pr-gate.mjs` (sablon: elfogadás, futtatott, NOT RUN) | a leírás `[x]` pipáinak és „PASS” állításainak bizonyíték-egyezése (S2, S3); SPEC-VÁLTOZÁS-lista (S1) | a leírás érthetősége | 214 s + e2e | (j)(h) |
-| 9 | CI | push | check-runok | **SZ** `.github/workflows/ci.yml` | teszt-integritás TILTÓ módban (S1), ingadozó-lista (S8) | – | ~60 perc (E2E) | (g)(l) |
+| 9 | CI | push | check-runok | **SZ** `.github/workflows/ci.yml` | teszt-integritás (S1; `warn`, tiltás a 6.3a szerint), ingadozó-lista (S8) | – | ~60 perc (E2E) | (g)(l) |
 | 10 | Bot-review | PR | review-szálak | **SZ/r** `pre-merge-gate.mjs` (nyitott szálak száma) | – | a bot-lelet jogossága | 36 s | – |
 | 11 | Merge | zöld CI, szálak, ítélet | `merge-<PR>-<fej>.json` | **SZ** `pre-merge-gate.mjs` + hook + `active-runs-guard.sh` | – | – | 36 s | (n)(o) |
 | 12 | Telepítés | merge `source/`-szal | Render deploy | **SZ/r** `verify-render-revision.mjs` (kézi indítás) | kötelező lépés a merge után (S5) | – | 2–10 perc (Render) | (o) |
@@ -213,7 +214,7 @@ konfigban megadott útvonal-mintákra illő változásnál dolgozik (S1: tesztf�
 `gates.config.json` → `"modes": { "<kapu>": { "local": "warn" | "block", "ci": "warn" | "block" } }`. Helyben a kapu `warn` módban
 `WARN`-t ad (a lánc zöld marad), `block` módban `FAIL`-t. A CI is `warn` módban hívja (a job nem bukik; orkesztrátori döntés
 2026-11-19, vak review P1-K1): `block` csak a 6.3a tiltásra váltási feltételeinek teljesülése és tulajdonosi jóváhagyás után. Átállás `warn` →
-`block` helyben: két hét vagy 20 PR után, ha a hamis riasztás aránya < 10% (6.5).
+`block` helyben és a CI-ban is: ≤ 10% hamis riasztás ÉS 2 hét / 20 PR (amelyik később teljesül) ÉS tulajdonosi jóváhagyás (6.3a, 6.5).
 
 ### 6.3a Bevezetési lépcsők (WARN → TILT) és a váltás mért feltételei
 
@@ -223,8 +224,8 @@ kötelező lépcsőzést ír elő. Minden kapu-kapcsoló a `gates.config.json` `
 
 | Kapu | 1. lépcső (most) | 2. lépcső (tiltás) | A váltás MÉRT feltétele (mind teljesül) | Mérőeszköz |
 |---|---|---|---|---|
-| S1 teszt-integritás, helyben | `warn` | `block` | a nyitott PR-ok korpuszán (az öt játékág + a #490 + a #418) a mérce-leletek hamis riasztási aránya ≤ 10%; 2 hét / 20 PR hamis riasztás-jelölés nélkül | `node scripts/qa/gates/test-integrity.mjs --head origin/<ág> --json` ágonként; kézi besorolás a PR-ban |
-| S1 a CI-ban | `warn` (a job nem bukik; a leletek a job-összefoglalóba kerülnek) | `block` | ugyanaz, ÉS a commit-nézet leletei soha nem tiltanak (csak a main-hez képesti, összefésült nézet), ÉS előfeltétel a K1 megoldása (a leírás szerkesztése is újrafuttatja a lépést, vagy a lépés a leírást futásidőben kérdezi le — különben a „PR-leírás nem sorolja fel” javítása új pusht + E2E-kört kér) | a CI job-összefoglalója; egy próba-PR leírás-szerkesztése |
+| S1 teszt-integritás, helyben | `warn` | `block` | a nyitott PR-ok korpuszán (az öt játékág + a #490 + a #418) a mérce-leletek hamis riasztási aránya ≤ 10% ÉS 2 hét / 20 PR (amelyik később teljesül) hamis riasztás-jelölés nélkül ÉS tulajdonosi jóváhagyás | `node scripts/qa/gates/test-integrity.mjs --head origin/<ág> --json` ágonként; kézi besorolás a PR-ban |
+| S1 a CI-ban | `warn` (a job nem bukik; a leletek a job-összefoglalóba kerülnek) | `block` | ugyanaz, ÉS a commit-nézet leletei soha nem tiltanak (csak a döntő — main-csúcshoz képesti, összefésült — nézet), ÉS előfeltétel a K1 megoldása (a leírás szerkesztése is újrafuttatja a lépést, vagy a lépés a leírást futásidőben kérdezi le — különben a „PR-leírás nem sorolja fel” javítása új pusht + E2E-kört kér) | a CI job-összefoglalója; egy próba-PR leírás-szerkesztése |
 | S2 a `record-review`-ban | `warn` (a HAMIS lista kiírva, az ítélet rögzül, a rekord számolja) | `block` (HAMIS → nincs rögzítés) | a regressziós korpuszon (a 12 valódi ellenőri jelentés + a saját doksik) 0 hamis HAMIS, ÉS 10 egymást követő új valódi jelentés hamis riasztás nélkül | `node scripts/qa/gates/verify-report-corpus.mjs --root <scratchpad>` |
 | S2 a `gate:pr`-ban (a #490 után) | `warn` | `block` | ugyanaz, mint a `record-review`-nál | ugyanaz |
 | S2 `--report` (alügynök-jelentés) | `block` (az orkesztrátor kézi eszköze; a hiányzó / ellentmondó gépi blokk bukás) | — | — | — |
@@ -370,12 +371,16 @@ A `gate-metrics.mjs` (S10) a bizonyíték-tárból és a `gh`-ból számol, nem 
   pillanatképek — a hamis riasztást a mérce lazítása nélkül, pontosabb párosítással kell csökkenteni.
 - **Karbantartási teher:** minden kapu kód + teszt; a konfig-listák (tesztfájl-minták, játék-kulcsszavak) elavulhatnak — a
   `gates.config.json`-ban, kód nélkül bővíthetők.
+- **A PR-on belül új fájlban végzett lazítás nem tilt:** a terv mintaesete (a J7b `tornado-sim.test.ts` „− 1”, 4.1) a main-hez képest
+  új fájlban születik, ezért csak a commit-nézetben látszik — az pedig egyik lépcsőben sem tilt, csak `WARN`-t ad. Ilyenkor a tiltó
+  védelem a független (vak, hibakereső) ellenőr, akinek a kapu célzottan megmutatja a leletet.
 - **A jelölés kijátszható:** egy `SPEC-VÁLTOZÁS` megjegyzés önmagában semmit nem igazol; ezért kell a spec-diff ÉS a PR-leírás
   egyezése. A döntés jogosságát gép nem látja (5. fejezet) — azt a független ellenőr nézi, de már célzottan, a kapu által felsorolt
   sorokon.
 - **Szkript is hibázhat:** a kapu hibás szabálya hamis biztonságot ad. Ezért minden szabálynak van pozitív ÉS negatív tesztje, és
   mutációs ellenpróba (commit után, C-70).
-- **Sebesség:** a git ebben a repóban Windows-on lassú lehet; a kapu egyetlen `git log -p` hívással dolgozik, nem commitonként.
+- **Sebesség:** a git ebben a repóban Windows-on lassú lehet; a kapu kevés, összevont git-hívással dolgozik (döntő nézet: egy
+  `merge-tree` + egy `diff`; commit-nézet: egy `git log -p`; a fej-tartalmak egy `git cat-file --batch`), nem commitonként.
 
 <!-- acceptance-checklist -->
 - [ ] A1: a terv tartalmazza a teljes vertikum fázis-leltárát (41 fázis; belépő / kilépő / ma ki ellenőrzi / mit lehetne / mit nem
@@ -385,12 +390,17 @@ A `gate-metrics.mjs` (S10) a bizonyíték-tárból és a `gh`-ból számol, nem 
   mérése, helyi / CI megosztás.
 - [ ] A4: szeletterv S0–S10, fájlokkal, tesztekkel, bevezetési móddal, párhuzamossággal; az S4 adapter-interfésze és a hét játékmag
   illeszthetősége.
-- [ ] A5: WHEN egy tesztfájl diffje (a main-hez VAGY commitonként) állítást töröl / kikommentez, számküszöböt / relációs jelet
-  változtat, lazább matcherre vált, timeoutot / retries-t növel, `force: true`-t / `waitForTimeout`-ot vagy forrásszöveg-vizsgálatot
+- [ ] A5: WHEN egy tesztfájl diffje (a döntő nézetben VAGY a commit-nézetben; definíció: végrehajtási fájl S1.2) állítást töröl / kikommentez, számküszöböt / relációs jelet
+  változtat, lazább matcherre vált, timeoutot / retries-t növel (meglévő érték növelése; egy már létező
+  fájlba újonnan felvett, korábban nem létező időkorlát a higiénia-osztály: `timeout-added`, mindig `WARN` — végrehajtási fájl S1.4), `force: true`-t / `waitForTimeout`-ot vagy forrásszöveg-vizsgálatot
   vezet be, illetve sim-kalibrációs konstanst módosít, és nincs érvényes `SPEC-VÁLTOZÁS` jelölés THEN the test-integrity kapu SHALL a
-  konkrét fájl:sorral jelezni (helyben `WARN`, a CI-ban `FAIL`) — S1.
-- [ ] A6: WHEN a jelölés megvan, a hivatkozott spec a diffben van és a tesztre utal, és a PR-leírás felsorolja THEN the kapu SHALL
-  átengedni — S1.
+  konkrét fájl:sorral jelezni — S1. A jelzés módja a bevezetési lépcsőtől függ (6.3a): a DÖNTŐ nézet (a main CSÚCSÁHOZ képesti,
+  összefésült diff: `git merge-tree --write-tree`; definíció: végrehajtási fájl S1.2) leletére helyben és a CI-ban is `WARN` (a job
+  nem bukik), `FAIL` csak a `modes.test-integrity` (`local` / `ci`) `block` kapcsoló után, amelyet a 6.3a mért feltételei és
+  tulajdonosi jóváhagyás nyitnak; a commit-nézet lelete MINDIG csak tájékoztató `WARN`, soha nem tilt (egyik lépcsőben sem).
+  Tesztesetek: végrehajtási fájl S1.5/2 („A5/a”, „A5/b”).
+- [ ] A6: WHEN a jelölés megvan, a hivatkozott spec a döntő nézetben változik és a tesztre utal, és a PR-leírás felsorolja THEN the
+  kapu SHALL átengedni — S1 (egyetlen szabály: végrehajtási fájl S1.4; a fejen már meglévő tervpontra mutatás nem igazol).
 - [ ] A7: WHEN egy alügynök-jelentésből hiányzik a gépi `allitasok` blokk, vagy a fej / fájl:sor / PASS-bizonyíték / PR-állapot /
   módosított-fájl-lista / kapu-lánc nem egyezik a valósággal THEN the `verify-report.mjs` SHALL `FAIL`-t adni a konkrét eltéréssel —
   S2.
