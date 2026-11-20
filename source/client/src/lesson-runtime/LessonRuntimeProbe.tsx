@@ -236,6 +236,27 @@ function probeLesson(search: string): Lesson {
   return lesson;
 }
 
+/**
+ * S5a / S5b (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md): jelölt lecke; `&opening=<forma>` mellett az 1. fejezet elé Célkártya és
+ * nyitóblokk kerül, a jelölő a kiosztott formát hordozza (a nyitóblokk fejléce a formából).
+ */
+function withProbeVariety(lesson: Lesson, opening: string | null): Lesson {
+  if (!opening || !/^[a-z]{2,24}$/.test(opening)) return { ...lesson, variety: { version: LESSON_VARIETY_VERSION } };
+  const [first, ...rest] = lesson.sections;
+  const concept = first.blocks.flatMap((b) => ("coversConceptIds" in b ? b.coversConceptIds : [])).slice(0, 1);
+  const goal = "**Mit tanulunk ma?** Megtudjuk, hol készít táplálékot a növény.\n\n**Mi lehet nehéz?** Sokan a gyökérre gondolnak.\n\n**Miért?** Mert a gyökér veszi fel a vizet.\n\n**Így sikerül!** Megnézzük, melyik rész zöld.";
+  const opener = "Ábel reggel észrevette, hogy a sötét szekrénybe tett palánta levelei elsárgultak. Az ablakban hagyott testvére viszont zöld maradt. Vajon mi hiányzott a szekrényben?";
+  return {
+    ...lesson,
+    variety: { version: LESSON_VARIETY_VERSION, openingForm: opening },
+    sections: [{ ...first, blocks: [
+      { kind: "explain", text: goal, depth: "core", readAloud: true, coversConceptIds: concept },
+      { kind: "explain", text: opener, depth: "core", readAloud: true, coversConceptIds: concept },
+      ...first.blocks,
+    ] }, ...rest],
+  };
+}
+
 export default function LessonRuntimeProbe() {
   const [candidate, setCandidate] = useState<Lesson | null>(null);
   const [error, setError] = useState("");
@@ -260,7 +281,7 @@ export default function LessonRuntimeProbe() {
   const practice = new URLSearchParams(window.location.search).get("practice") === "1";
   const probed = candidate ?? probeLesson(window.location.search);
   // Spec 2026-11-20-tgm-valtozatossag-abrak (S5a): `&variety=1` — a változatossági jelölővel mentett lecke (kódszótári visszajelzés-nyitás).
-  const lesson = new URLSearchParams(window.location.search).get("variety") === "1" ? { ...probed, variety: { version: LESSON_VARIETY_VERSION } } : probed;
+  const lesson = new URLSearchParams(window.location.search).get("variety") === "1" ? withProbeVariety(probed, new URLSearchParams(window.location.search).get("opening")) : probed;
   // `&rerender=1`: gomb, amely a szülőt ÚJ lecke-objektumfával rendereli újra — a valódi leckenézet (LessonView) minden rendereléskor
   // újraértelmezi a leckét, ezt utánozza (S8d vak review B1: az újrarenderelés nem szakíthatja meg a szóló hangot).
   const rerender = new URLSearchParams(window.location.search).has("rerender");

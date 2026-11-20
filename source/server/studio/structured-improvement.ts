@@ -27,6 +27,9 @@ import { logger } from "../lib/logger";
 import { repairHash } from "../lib/canonical-hash";
 import { descriptionAfterLessonChange } from "../../shared/lesson-teaser";
 import { withLessonArt } from "../design-assets";
+import { withVarietyMarker } from "../../shared/lesson-feedback-openers";
+import { seedFrom } from "../../shared/seeded";
+import { lessonVarietyEnabled } from "./lesson-variety-flag";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
 import { applySourceCorrections, arithmeticSourceCorrections, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
@@ -173,7 +176,7 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
   const added = corrected.concepts.filter(c => c.examWeight !== "extra" && !taught.has(c.localId));
   if (added.length && outline.length) outline[outline.length - 1].conceptIds.push(...added.map(c => c.localId));
   const addedLine = added.length ? ` Új fogalmak a térképen — tanítsd őket a témájuk szerinti fejezetben, a fogalom szavaival: ${added.map(c => `${c.localId} „${c.term}”`).join(", ")}.` : "";
-  const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined);
+  const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined, { seed: seedFrom(original.mapId) });
   const gradeLine = owner.classroom !== undefined
     ? `Az évfolyam a tanár kifejezett kérésére ${owner.classroom}. osztály: a classroom mező ${owner.classroom} legyen, a nyelvezet és a mélység ehhez igazodjon.`
     : "Az évfolyamot a program már a forrásból állapította meg, ne változtasd.";
@@ -287,7 +290,8 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     const reviewed = { ...source, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}), concepts: applySourceCorrections(source.concepts, corrections) };
     const coverage = assertRepairCandidate(lessonSchema.parse(current.json), repair.candidate, reviewed, repair.classroom ?? lessonSchema.parse(current.json).classroom);
     // Review #274: az évfolyamot váltó javítás az új sáv arculatát kapja (ugyanaz a normalizálás, mint az upsertLesson-ben).
-    const candidate = await withLessonArt(repair.candidate, current.id, tx);
+    // Spec 2026-11-20-tgm-valtozatossag-abrak (11. szakasz 6. pont): a jelölő a mentéskori kapcsolót tükrözi (a modell jelölője nem marad).
+    const candidate = await withLessonArt(withVarietyMarker(repair.candidate, lessonVarietyEnabled()), current.id, tx);
     if (workflowMode() === "apply") await workflowPhase("apply");
     await workflowFence(tx);
     const quiz = await tx.select().from(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));

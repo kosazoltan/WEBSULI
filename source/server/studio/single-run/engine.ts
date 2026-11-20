@@ -9,6 +9,7 @@
  * FRISS, célzott beszélgetésben futnak (önálló kérés; a lektor független a gyártás menetétől). J3: futásonkénti telemetria a jobon.
  */
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
+import { seedFrom } from "../../../shared/seeded";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
@@ -741,7 +742,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   phase("author", "A tananyag készül…");
   const authorKnowledge = resumed?.lesson ? "" : await knowledgeBlock("author");
   const authorRequest = (notes: Parameters<typeof buildAuthorPrompt>[2]) =>
-    withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner), authorKnowledge)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
+    withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner, { seed: seedFrom(mapId) }), authorKnowledge)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
   const validateLesson = (json: unknown): { ok: true; value: Lesson } | { ok: false; problems: string[] } => {
     // Funkciókapcsoló (vak ellenőr B1): KI állapotban a modell kimenetét a bővítés ELŐTTI séma méri (`modelLessonSchema(false)`) — az új
     // ábrafajta ugyanazzal a sémahibával, ugyanabban a sorrendben megy javító fordulóra, a kéretlen `sourceVisualId` mező pedig

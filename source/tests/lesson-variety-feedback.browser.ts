@@ -68,3 +68,22 @@ test("jelöletlen lecke: nincs kódnyitás (a mai kimenet)", async ({ page }) =>
   await expect(feedback.getByTestId("verdict-opener")).toHaveCount(0);
   await expect(feedback).toContainText("Nem a gyökér: az vizet");
 });
+
+// S5b (terv 11. szakasz; V11): a jelölt lecke nyitóblokkjának fejléce a kiosztott formából, három nézetben.
+for (const viewport of VIEWPORTS) {
+  test(`nyitóblokk fejléce a kiosztott formából ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/__lesson-runtime-probe?variety=1&opening=rejtely&classroom=6");
+    await expect(page.getByText("A lecke célja", { exact: true })).toBeVisible();
+    const label = page.getByText("Rejtély", { exact: true });
+    await expect(label).toBeVisible();
+    await label.scrollIntoViewIfNeeded();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/tgm-s5b/nyitas-rejtely-${viewport.width}x${viewport.height}.png` });
+  });
+}
+
+test("forma nélküli jelölt lecke: a régi „Történet” fejléc", async ({ page }) => {
+  await page.goto("/__lesson-runtime-probe?variety=1&opening=ismeretlen&classroom=6");
+  await expect(page.getByText("Történet", { exact: true })).toBeVisible();
+});
