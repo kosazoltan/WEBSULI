@@ -196,6 +196,21 @@ A TGM-végrehajtás „S2b” fejezete (355. sortól) változatlanul; a `STUDIO_
 2. Kód; 3. `node --import tsx --test tests/lesson-try-voices.test.ts tests/lesson-section-shapes.test.ts tests/source-visuals-flag.test.ts
    tests/single-run-engine.test.ts tests/lesson-opening-forms.test.ts` → pass; szimuláció; `tsc` 0; eslint 0. 4. Nehéz kör zárral (`tgm-s6b`).
 
+## S6c — Ábrafajta-terv és szebb ábrák (részletes lépések)
+
+Ág: `feat/tgm-s6c-abrafajta` (az S6b ágáról), munkafa `.claude/worktrees/tgm-s6c`. Terv: `docs/specs/2026-11-20-tgm-valtozatossag-abrak.md`
+14. szakasz. Fájlok: `client/src/lesson-runtime/blocks/animate-blocks.tsx`, `client/src/lesson-runtime/blocks/variety-visuals.tsx` (új),
+`client/src/lesson-runtime/lesson-design.css`, `client/src/lesson-runtime/LessonRuntimeProbe.tsx` (`&kinds=1`), `shared/visual-kind-plan.ts`
+(új), `shared/lesson-visual-params.ts` (`visualParamsContract`), `server/studio/step-io.ts`, `server/studio/single-run/engine.ts`,
+`shared/run-telemetry.ts`; tesztek: `tests/visual-kind-plan.test.ts` (új), `tests/variety-visuals.test.ts` (új),
+`tests/lesson-variety-feedback.browser.ts` (bővül).
+
+1. Bukó tesztek: V22 (DOM jelölt / jelöletlen), V23 (prompt, ajánlótábla), V24 (arány-jelzés), a négy fajta tokenes megjelenítése
+   (nincs kódba írt szín), és a böngészős V21-eset.
+2. Kód. 3. `node --import tsx --test tests/visual-kind-plan.test.ts tests/variety-visuals.test.ts tests/source-visuals-flag.test.ts
+   tests/single-run-engine.test.ts tests/lesson-source-visual-kinds.test.ts` → pass; `tsc` 0; eslint 0.
+4. Nehéz kör zárral (`tgm-s6c`), a böngészős próbával (képernyőképek a PR-be).
+
 ## S2b-2 — A megjelenítők vak-leletei (részletes lépések)
 
 Ág: `feat/tgm-s2b2-megjelenito-leletek` (az S2b-1 ágáról), munkafa `.claude/worktrees/tgm-s2b2`. Terv:
