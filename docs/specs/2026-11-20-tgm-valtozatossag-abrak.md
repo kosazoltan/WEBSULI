@@ -457,3 +457,34 @@ Elfogadás (EARS):
 - [ ] V35 kisfilm: nincs forrás-ábra / hibás blokk
 - [ ] V36 rövid tábla nem görög; nyomtatás
 - [ ] V37 fejléc-illesztés újramér
+
+## 18. S3a és S3b — szeletterv (a pótlási terv 7.6 sorrendje; a WIP-korlát miatt az S3b után megállás)
+
+Alap: TGM-végrehajtás „S3a” (419–508. sor) és „S3b” (509–543. sor). Az S3a a kilenc lépésen felül a független review (B1, J8, J11) és a
+vak ellenőr (vak B1, J4, J9; tt J5, J7, J8) kötelező teendőit hordozza — egy PR-ban messze 400 sor fölött. Bontás, mindhárom a
+`STUDIO_SOURCE_VISUALS` mögött (KI: a `tests/source-visuals-flag.test.ts` főág-lenyomatai zöldek):
+
+- **S3a-1 — hirdetés és ábrakészítő a forrásra kötve** (ág `feat/tgm-s3a1-abrakeszito-forrasra`): (1) `PROMPT_ANIM_KINDS` és a
+  paraméter-szerződés kapcsolófüggő építése — BE: az öt forrás-fajta (table, ruleBox, compareCards, decisionTree, pictureCards) a
+  hirdetett listában ÉS az alakjuk a szerződésben, egy commitban; KI: bájtra a régi (vak B1, review B1; a `studio-author-catalog` két
+  listája BE / KI szerint); (2) prompt-szabályok: nincs `**kiemelés**` cellában / pontban / kártyasorban (J8), a nagy tábla bontása,
+  a hosszú forrástábla több azonos `sourceVisualId`-jú blokkra (J11, `SOURCE_TABLE_BLOCK_ROWS`); (3) `buildAnimatorPrompt`: ELŐSZÖR a
+  fejezethez rendelt forrástételek a megfelelő fajtával és `sourceVisualId`-val, csak utána új ábra; a forráshoz kötött ábra nem számít
+  a „legfeljebb 2” korlátba (fejezetenként összesen ≤ 4); (4) `visual-patch.ts`: `sourceVisualId` elfogadva (nem létező → törölve), a
+  megalapozási korpusz a tétel `sourceVisualTexts` szövegével bővül, a „felirat nevezze meg a fogalmat” szabály forráshoz kötött ábránál
+  nem fut, `dropped[]` okkal; (5) `engine.ts`: `telemetry.visuals = { proposed, kept, dropped }` (≤ 40 tétel, ok ≤ 200 karakter), eldobott
+  forrásábrára EGY célzott javító forduló (`fix: true`); (6) `section-visuals.ts`: forráshoz kötött ábra mellett nincs pótló `process`;
+  (7) tt J7 rögzítése a mérési jelentés sablonjában (az S10/1 csak e szelet után értelmezhető).
+- **S3a-2 — normalizálás és a tesztek ereje** (ág `feat/tgm-s3a2-normalizalas`): (1) vak J4 + tt J5: közös, determinisztikus
+  normalizálás a leltár-érvényesítő ÉS a blokk-séma előtt (üres opcionális → hiányzó, szám → szöveg, rövid sor kitöltése, hosszú tábla
+  bontása, üres sarokfejléc megengedve, ismeretlen kulcs elhagyva), számlálva (`telemetry.gates`), esetenként egységteszt + mutációs
+  ellenpróba, és lánc-teszt (leltár → blokk → kapu „megjelent”); (2) vak J9: a hiányzó tesztek (F8 telemetria-sor; P4 / P5 az új fajta a
+  séma-javító üzenetben és a lektor-szabályban; S13 / S14 / S18 / S19 korlátok; E4 / E5 / E7 az `explain-paragraphs.ts` feltételei);
+  (3) tt J8: KI állapotban a jóváhagyott / folytatott terv és lecke forrástétel-mezői (`sourceVisualIds`, `skippedVisuals`,
+  `sourceVisualId`) lekerülnek — teszt: BE alatt mentett terv + KI futás kérései a főágéval azonosak.
+- **S3b — szókeret, szerző, lektor, bank** (ág `feat/tgm-s3b-szokeret-szerzo-lektor-bank`): a TGM-végrehajtás S3b 1–6. lépése és az
+  SK1c review-teendő (a fedettségi kapu a hivatkozó blokk SÉMA-érvényességét is méri, mutációs ellenpróbával). **Igazítás:** az S3b 7.
+  lépése (a fedettségi kapu `enforce`-ra kapcsolása) NEM ebben a szeletben történik — a pótlási terv 7.6 7. pontja szerint az SK1c-ben,
+  az S10/1 valódi kimenetével és a D-03 (a) döntéssel (a kapu saját hibájánál a lecke vázlat marad + e-mail).
+
+Elfogadás: a TGM-terv E9–E11 (S3a / S3b), a fenti pontok egységtesztjei, és minden szeletnél a KI-lenyomat zöldje.
