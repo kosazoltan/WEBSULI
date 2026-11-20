@@ -696,14 +696,15 @@ app.use((req, res, next) => {
       shuttingDown = true;
       stopSkillLearningAudit();
       log(`${signal} received. Starting graceful shutdown...`);
-      // R33 (spec 2026-11-17-eredmeny-email-kviz): a kényszerleállítás határideje — a pool előtti ürítések kerete ebből számolódik.
+      // R33 (spec 2026-11-17-eredmeny-email-kviz): a kényszerleállítás határideje — a pool előtti ürítések kerete ebből számolódik. A lenti
+      // setTimeout a literál 295_000-et tartja (az S1 őr, tests/resource-s1.test.ts, ezt nézi); a kettő egyezését a shutdown-flush teszt méri.
       const FORCE_EXIT_MS = 295_000;
       const SHUTDOWN_POOL_RESERVE_MS = 2_000;
       const shutdownStartedAt = Date.now();
       const force = setTimeout(() => {
         logger.error("Could not close connections in time, forcefully shutting down");
         process.exit(1);
-      }, FORCE_EXIT_MS);
+      }, 295_000);
       force.unref();
       try {
         const cron = (await import("node-cron")).default;

@@ -48,6 +48,8 @@ test("R33: a lefagyott ürítés a saját korlátja és a közös keret közül 
 test("R33: a leállítás a három ürítést együtt, a 295 s-os határidőből számolt kerettel futtatja", () => {
   const source = readFileSync(new URL("../server/index.ts", import.meta.url), "utf8");
   assert.match(source, /const FORCE_EXIT_MS = 295_000;/);
+  // A kényszerleállítás időzítője ugyanazt az értéket tartja (literálként: az S1 őr, `tests/resource-s1.test.ts`, ezt a mintát nézi).
+  assert.match(source, /process\.exit\(1\);\r?\n\s+\}, 295_000\);/);
   assert.match(source, /await runShutdownFlushes\(\[/);
   assert.match(source, /FORCE_EXIT_MS - \(Date\.now\(\) - shutdownStartedAt\) - SHUTDOWN_POOL_RESERVE_MS/);
   for (const name of ["flushPendingMaterialResults", "pendingNewLessonNotifications", "flushPendingPartials"]) assert.match(source, new RegExp(name));
