@@ -115,6 +115,30 @@ export const PLAYFUL_AUTHOR_RULES = [
   "- feedbackPerOption: helyes válasznál röviden, miért jó; rossz válasznál az első mondat bátorító, utána mi tévesztett meg, mit kérdezett valójában a kérdés, és a helyes gondolatmenet egy mondatban. Az erőfeszítést dicséred, nem minősítesz.",
 ].join("\n");
 
+/**
+ * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S5a): a változatossági kapcsolóval (`STUDIO_LESSON_VARIETY`, a szerveren) a
+ * bátorító / megerősítő nyitást a lejátszó adja kódszótárból (`shared/lesson-feedback-openers.ts`) — a modell csak az indoklást írja,
+ * a szerződés verziója `nyitomese-2`. KI kapcsolónál a régi konstansok bájtra változatlanok.
+ */
+const LESSON_OPENER_VERSION_VARIETY = "nyitomese-2";
+const VARIETY_FEEDBACK_RULE = "Bátorító vagy megerősítő nyitást NE írj — azt a program adja. Rossz válasznál: mi tévesztett meg, mit kérdezett a kérdés, mi a helyes gondolatmenet. Helyes válasznál: röviden, miért jó.";
+
+export function lessonOpenerVersion(variety: boolean): string {
+  return variety ? LESSON_OPENER_VERSION_VARIETY : LESSON_OPENER_VERSION;
+}
+
+const lineStarting = (text: string, prefix: string): string => text.split("\n").find((l) => l.startsWith(prefix)) ?? prefix;
+
+/** A régi szöveg két helyének cseréje: a verzió a fejlécben és a visszajelzés-sor. A csere pontosságát a teszt méri. */
+function withVarietyFeedback(text: string, oldLine: string, newLine: string): string {
+  return text.replace(`(${LESSON_OPENER_VERSION};`, `(${LESSON_OPENER_VERSION_VARIETY};`).replace(oldLine, newLine);
+}
+
+export function playfulAuthorRules(variety: boolean): string {
+  if (!variety) return PLAYFUL_AUTHOR_RULES;
+  return withVarietyFeedback(PLAYFUL_AUTHOR_RULES, lineStarting(PLAYFUL_AUTHOR_RULES, "- feedbackPerOption:"), `- feedbackPerOption: ${VARIETY_FEEDBACK_RULE} Az erőfeszítést elismered, nem minősítesz.`);
+}
+
 /** Lektori ellenőrzőlista (nem blokkoló age jegyzetek; blokkoló biztonsági kapu: S3). */
 export const LESSON_OPENER_LEKTOR_CHECKLIST = [
   `CÉLKÁRTYA- ÉS MESE-ELLENŐRZÉS (${LESSON_OPENER_VERSION}): az 1. fejezet első blokkja a Célkártya, a második a mini mese.`,
@@ -136,6 +160,12 @@ export const PLAYFUL_QUESTIONING_CONTRACT = [
   "- Visszajelzés a KIMENETI KERETEN belül (kvízopciónként 1 mondat, ≤ 200 karakter; módszer answer legfeljebb 2 mondat): helyes válasznál röviden, miért jó; rossz válasznál EGY mondatba sűrítve egy rövid bátorító nyitás és az, mi tévesztett meg, illetve mit kérdezett valójában a feladat (pl. „Jó próba, de itt a … a kérdés, ezért …”). Az erőfeszítést dicséred, nem minősítesz.",
   "- A játékos keret nem enged új tényt: továbbra is KIZÁRÓLAG a Tananyag lapon ténylegesen megtanított állítás kérdezhető.",
 ].join("\n");
+
+export function playfulQuestioningContract(variety: boolean): string {
+  if (!variety) return PLAYFUL_QUESTIONING_CONTRACT;
+  return withVarietyFeedback(PLAYFUL_QUESTIONING_CONTRACT, lineStarting(PLAYFUL_QUESTIONING_CONTRACT, "- Visszajelzés a KIMENETI KERETEN"),
+    `- Visszajelzés a KIMENETI KERETEN belül (kvízopciónként 1 mondat, ≤ 200 karakter; módszer answer legfeljebb 2 mondat): ${VARIETY_FEEDBACK_RULE}`);
+}
 
 /** Önálló HTML-út — statikus (évfolyamfüggetlen) rész a gyorsítótárazott spec mögé. */
 export const LESSON_OPENER_HTML_CONTRACT = [

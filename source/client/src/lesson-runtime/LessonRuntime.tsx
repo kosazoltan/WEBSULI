@@ -43,6 +43,7 @@ import "./lesson-design.css";
 import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom } from "@shared/lesson-design";
 import { BAND_ICON } from "@/lib/band-icons";
 import { VerdictFeedback } from "./VerdictFeedback";
+import { FeedbackVarietyContext } from "./feedback-variety";
 import { explainIsLong, explainParts } from "./explain-paragraphs";
 import { displayHeading } from "@shared/lesson-ui-text";
 
@@ -243,7 +244,7 @@ function CheckBlock({
 
       {/* Feedback is written per option, so a wrong pick teaches instead of just failing. */}
       {picked !== null && (
-        <VerdictFeedback right={picked === block.correctIndex} text={block.feedbackPerOption[picked]} testId="check-feedback" />
+        <VerdictFeedback right={picked === block.correctIndex} text={block.feedbackPerOption[picked]} testId="check-feedback" question={{ text: block.question, options: block.options }} />
       )}
 
       {block.hint && !correct && (
@@ -508,6 +509,8 @@ export function LessonRuntime({
   const designTheme = designThemeForClassroom(lesson.classroom);
   const clipHeadings = useMemo(() => lesson.sections.map((s) => s.heading), [lesson.sections]);
   // Változatos képválasztás: a lecke azonosítója szerint rotál (ugyanaz a lecke mindig ugyanazt kapja).
+  // Spec 2026-11-20-tgm-valtozatossag-abrak (S5a): csak a változatossági jelölővel mentett leckén ad kódszótári visszajelzés-nyitást.
+  const feedbackVariety = useMemo(() => lesson.variety ? { marker: lesson.variety, band, mapId: lesson.mapId } : null, [lesson.variety, band, lesson.mapId]);
   const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
   // Ikonkészlet: a mentéskor az adatbázisból rendelt ikon elsőbbséget kap; régi leckénél a katalógus-választás marad.
   // Ha a lecke évfolyama a mentés óta megváltozott (javítás), a más sávú ikon nem jelenik meg.
@@ -562,6 +565,7 @@ export function LessonRuntime({
     // nem jelenik meg (tulajdonosi döntés 2026-10-16) — a `data-experience` állandó, így a régi téma- és világszabályok nem illeszkednek.
     <DesignBandContext.Provider value={designTheme}>
     <ChoiceLayoutContext.Provider value={choiceLayout}>
+    <FeedbackVarietyContext.Provider value={feedbackVariety}>
     <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
       <ClipProvider lessonId={lessonId} headings={clipHeadings} sections={lesson.sections} preset={clipsPreset}>
       <article className="mx-auto py-6 space-y-6" data-testid="lesson-runtime">
@@ -631,6 +635,7 @@ export function LessonRuntime({
       </article>
       </ClipProvider>
     </div>
+    </FeedbackVarietyContext.Provider>
     </ChoiceLayoutContext.Provider>
     </DesignBandContext.Provider>
   );
