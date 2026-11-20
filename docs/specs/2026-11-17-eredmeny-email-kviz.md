@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** kész, PR előtt – 2026-11-17, ág `fix/eredmeny-email-kviz`
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -16,6 +16,9 @@ szülőknek, a kvíz eredményét nem.”
 
 ## Nem-cél
 
+- **A 202 utáni tartós szerveres küldési sor** (DB-tábla + újraindításkori újrapróba) — tulajdonosi döntés (űrlap, 2026-11-19):
+  „Szűkítés + tartós sor külön”. A pótlási terv T-3 szelete (`docs/specs/2026-11-19-websuli-potlasok-terv.md`, a `docs/websuli-potlasok`
+  ágon) tartós sorral pótolja; tervvázlat: `docs/specs/2026-11-20-eredmenylevel-tartos-sor.md`.
 - A kézbesítés-nyilvántartás versenyhelyzete (`server/lesson-result-email.ts:48-66`, külön jegy) — nem nyúlunk hozzá, nem rontjuk.
 - A címzettek köre (ma: az `ADMIN_EMAILS` környezeti változó listája) és a levél szétküldése tanulónkénti szülőcímre.
 - A feladatok és a kvíz EGY közös levélbe vonása (a két rész külön időpontban zárul; a nyilvántartás részenként egyedi).
@@ -85,12 +88,313 @@ egy tartalmaz `mailto:` hivatkozást, a `sendResultEmail` hívását egyik sem (
 - E7. A meglévő tesztek (`lesson-result-email.test.ts`, `learner-attribution.test.ts`, `lesson-result-email.spec.ts`) módosítás nélkül
   zöldek.
 
+## S1b — félbehagyott kvíz, dátum a levélben, korkorlát (független review M1/1 és K1; orkesztrátori döntés 2026-11-17)
+
+**Mit old meg és mit nem.** Az S1a a „mind megválaszolva, csak a gomb maradt el” esetet javítja. Az S1b a FÉLBEHAGYOTT helyi kvízt
+(pl. 18 / 25 kérdés után bezárt lap) is elküldi. A bejelentkezett felhasználó szerveres kvíze külön szelet (S2:
+`2026-11-17-eredmeny-email-foglalas.md`, ág `fix/eredmeny-email-foglalas`). Ez az ág önmagában tehát a panaszt a vendég / párosított
+tanuló útján oldja meg, a bejelentkezett úton nem.
+
+**Választott megoldás: késleltetett, szerveroldali küldés a legutolsó pillanatképből.** A kliens a lap háttérbe kerülésekor
+(`visibilitychange` → rejtett) és elhagyásakor (`pagehide`) elküldi a kör PILLANATKÉPÉT (`partial: true`), ha van legalább egy
+válasz és több, mint a legutóbb elküldött pillanatképben. A szerver a pillanatképet memóriában tartja (körönként a legutolsót), és
+csak akkor küld „félbehagyva” levelet, ha 15 percig nem érkezik újabb pillanatkép vagy végleges beküldés. A végleges beküldés (kör
+lezárva / mind megválaszolva) törli a várakozó pillanatképet.
+- Miért nem azonnali küldés: telefonon a megbízható esemény a `visibilitychange`, amely alkalmazásváltáskor is jön — azonnali
+  küldéssel a szülő „3 / 25 félbehagyva” levelet kapna, miközben a gyerek folytatja; körönként egyszeri korláttal pedig a későbbi,
+  pontosabb állapot nem menne el. A késleltetés körönként legfeljebb EGY, a legutolsó állapotot mutató „félbehagyva” levelet ad.
+- Nincs ellentmondó levélpár: ha a gyerek a 15 percen belül befejezi, csak a végleges levél megy. Ha később (a „félbehagyva” levél
+  után) fejezi be, a végleges levél kimondja: „Ez a befejezett kör eredménye — a korábbi, »félbehagyva« jelzésű levél helyébe lép.”
+- Ár (vállalt, dokumentált): a várakozó pillanatkép memóriában él — szerver-újraindításkor (telepítés) a még el nem küldött
+  „félbehagyva” levél elvész (a végleges levelet ez nem érinti). Adatbázis-séma nem változik. Több példány esetén a pillanatkép és
+  a végleges beküldés más példányra eshet (ma egy példány fut) — akkor a „félbehagyva” levél a végleges mellett is kimehet; a
+  végleges levél felülíró mondata ezt az esetet is kezeli.
+- Védelem: a `/results` végpont CSRF-tokenes (nem kivétel a `server/routes.ts:826-845` listáján) → a pillanatkép `fetch` +
+  `keepalive: true` hívással megy, a már gyorsítótárazott tokennel (a `sendBeacon` nem tud fejlécet küldeni); a tokent a kliens az
+  első kvízválasznál előre lekéri. GET-en nincs mellékhatás. Külön korlát a pillanatképekre (40 / 15 perc / IP), hogy a végleges
+  beküldés kerete (20 / 15 perc) ne fogyjon el.
+- Alsó küszöb: 0 megválaszolt kérdésnél nincs pillanatkép, nincs levél.
+
+**A „félbehagyva” levél tartalma:** tárgy „… — Kvíz (félbehagyva: 18 / 25) — 72% (…)”; a pont és a százalék a MEGVÁLASZOLT
+kérdésekre vonatkozik (13 / 18), a lista csak a megválaszolt kérdéseket mutatja; a fejben: „Állapot: félbehagyva — 18 / 25 kérdésre
+válaszolt; a pont a megválaszolt kérdésekre vonatkozik.”
+
+**Dátum (K1):** minden eredménylevél fejében „Beküldve: 2026. 11. 17. 20:41 (magyar idő)” (Europe/Budapest), és ha a kliens küldi,
+„A kör kezdete: …”. A kérés új, opcionális `startedAt` mezője (ezredmásodperc; a szerver csak a múltbeli, 400 napnál nem régebbi
+értéket fogadja el megjelenítésre).
+
+**Korkorlát (K1), N = 7 nap:** a 7 napnál régebben kezdett, LE NEM ZÁRT kör utólag nem megy el (sem „mind megválaszolva”, sem
+pillanatképként). Indok: a tároló leckénként egy kört őriz; egy hétnél régebbi, félbehagyott kör levele már nem a mostani tanulást
+mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kifejezett döntése) korlát nélkül megy, mint eddig.
+
+**Független review (2026-11-17, `959f286c`: NEM) — javítva ebben a szeletben:**
+- **B1 (blokkoló):** vendégnél a pillanatkép ujjlenyomat nélkül, a végleges ujjlenyomattal ment → más kulcs, a végleges nem törölte a
+  várakozót, és ellentmondó „félbehagyva” levél ment ki. Javítás mindkét oldalon: a kliens az ujjlenyomatot az első válasznál előre
+  lekéri, és a pillanatkép ugyanazzal megy (`peekFingerprint`); a szerver a végleges beküldésnél MINDKÉT vendég-kulcsot (ujjlenyomat és
+  IP) törli és nézi. Teszt a valódi kliens törzsével (ujjlenyomat nélküli pillanatkép + ujjlenyomatos végleges).
+- **K1:** a pillanatkép-keret 40 → 10 / 15 perc / IP; tanulónként legfeljebb 3 várakozó kör, telítéskor a LEGRÉGEBBI szorul ki
+  (naplózva), a jogos új pillanatkép nem vész el csendben.
+- **K4:** a várakozó-küldés naplója csak a hiba osztályát írja (a közös `errorClass` az S2-vel jön; összefésüléskor arra cserélendő).
+- **K2 — példányszám:** a `render.yaml` a `websuli-api-eu` szolgáltatásnál `numInstances`-t nem ad meg (`plan: starter`); a Render
+  alapértelmezése egy példány. A dashboardon beállított skálázás nem ellenőrzött (UNVERIFIED). Több példánynál a várakozó levél és a
+  végleges beküldés más példányra eshet — jegy: kanban #135.
+
+**PR #510 — Codex-leletek (2026-11-18), mind a négy valós, a pillanatkép-küldés szabályai így pontosulnak:**
+- **P1 — elhagyás az alkalmazáson belül:** a leckéből a főoldalra navigálás (útvonalváltás) nem vált ki `pagehide`-ot és nem teszi
+  rejtetté a lapot. Új szabály: a pillanatkép a beküldő komponens LEBONTÁSAKOR is megy (ugyanazokkal a feltételekkel).
+- **P2 — új kör ugyanabban a nézetben:** a „legutóbb elküldött” számláló a KÖR azonosítójához kötött; új kör tiszta lappal indul.
+- **P3 — csak az elfogadott küldés rögzül:** a pillanatkép „elküldve” állapota csak a szerver sikeres (2xx) válasza után íródik be.
+  Hálózati hiba, 429 és 5xx után az állapot újrapróbálható marad. Ha a válasz a lap bezárása miatt nem várható meg, semmi nem
+  rögzül: a következő betöltéskor a böngészőben tárolt kör a következő háttérbe kerüléskor / lebontáskor újra megy. Az ismételt
+  küldés ártalmatlan: a szerver körönként a legutolsó pillanatképet tartja, a már kiment „félbehagyva” levelet a kézbesítés-
+  nyilvántartás nem küldi újra. Egyidejűleg egy pillanatkép-kérés van úton (az azonos állapot nem megy kétszer párhuzamosan).
+- **P4 — késve érkező pillanatkép a végleges után:** a szerver a pillanatkép fogadásakor ÉS a várakozó levél küldése előtt ellenőrzi,
+  hogy a kör végleges eredménye megérkezett-e; ha igen, a pillanatkép nem ütemeződik / a levél nem megy ki. Két forrás: memóriában a
+  véglegesített körök (lecke + körazonosító, 24 óráig, korlátos méret — a vendég eltérő kulcsát is fedi), és a kézbesítés-
+  nyilvántartás végleges sora (újraindítás után is). Mindkét kérési sorrendre teszt.
+
+**Vak hibakereső ellenőrzés (2026-11-18, `fec8d8b9`: NEM; 4 közepes, 6 kicsi) — a szabályok így változnak / pontosulnak:**
+- **R1 — kizárás a „félbehagyva” levél és a véglegesítés között (K1, S1).** A „félbehagyva” levél MINDEN küldési kísérlete (az időzítő
+  első küldése és a 60 mp-es újrapróba is) és a végleges beküldés „kiment-e már részleges levél?” vizsgálata ugyanazon a körönkénti
+  (lecke + körazonosító) kizáráson megy át. A részleges kísérlet a kizárás ALATT ellenőrzi, hogy a kör véglegesült-e (memória és
+  nyilvántartás), és a küldés végéig tartja; a végleges beküldés a kört azonnal (szinkron) véglegesítettnek jelöli, a felülírás-
+  vizsgálatot és a végleges levél küldését a kizárás megszerzése után, a háttérben végzi (a tanuló válasza nem vár rá). Így csak két
+  kimenet lehet: (a) a részleges levél a végleges ELŐTT kiment → a végleges levél tartalmazza a felülíró mondatot; (b) nem ment ki →
+  a véglegesítés után már soha nem megy ki, a végleges levélben nincs felülíró mondat. Vállalt korlátok: a kizárás példányon belüli
+  (több példány: kanban #135, a nyilvántartás-ellenőrzés ott is fut); ha a részleges levél csak a címzettek egy részének ment ki, a
+  felülíró mondatot minden címzett megkapja; az időkorlát (30 mp) után bukottnak vett küldés sorsa a szolgáltatónál nem ismert.
+- **R2 — a 7 napos korhatár az UTOLSÓ VÁLASZHOZ mér (K2; az E12 módosul).** A kör tárolja az utolsó kvízválasz idejét
+  (`lastAnsweredAt`). A le nem zárt kör akkor „régi”, ha az utolsó válasza (ennek hiányában — régebbi tárolt körnél — a kezdete)
+  7 napnál régebbi. A régen megnyitott, de MA megválaszolt kör tehát megy (végleges és pillanatkép is); a levél „A kör kezdete”
+  sora a valódi, régi kezdést mutatja. A lezárt kör továbbra is korlát nélkül megy.
+- **R3 — kör-csere a kör közepén (K3).** Ha a kör a nézeten belül lecserélődik („Új kvíz” → „Új kör indítása”), az ELHAGYOTT körről
+  a csere pillanatában pillanatkép megy, ugyanazokkal a feltételekkel, mint háttérbe kerüléskor (rejtés nélkül is).
+- **R4 — lejárt / érvénytelen CSRF-token (K4).** A `keepalive`-os küldés 403 válasz után érvényteleníti a gyorsítótárazott tokent, újat
+  kér, és EGYSZER megismétli a kérést. Ha nincs gyorsítótárazott token (a korábbi előtöltés elbukott), a küldés előbb kér egyet;
+  gyorsítótárazott tokennel azonnal, előzetes hálózati kör nélkül küld. Ha a lap közben bezárul (az ismétlésre nincs mód), semmi nem rögzül: a következő betöltéskor a tárolt kör
+  friss tokennel újra megy.
+- **R5 — a pillanatkép „összes” száma és a korhatár a szerveren (S3).** A „félbehagyva” levél összes-száma a szerver által ismert
+  körméret (`experienceRoundSizes(...).quizRound`), nem a kliens által küldött azonosítók száma (ha a megválaszoltak száma ennél
+  nagyobb, akkor az). A szerver a pillanatképet nem fogadja el, ha a kliens által küldött utolsó tevékenység (`lastAnsweredAt`,
+  ennek hiányában `startedAt`) 7 napnál régebbi (`202 { queued: false, stale: true }`). Korlát: mindkét időbélyeg a klienstől jön —
+  a szerver a becsületes (régi / hibás) klienst fogja meg, a szándékos hamisítást nem (azt a keret korlátozza). A VÉGLEGES beküldésnél
+  a szerver nem érvényesít korhatárt (a lezárt kör korlát nélkül megy, és a szerver nem tudja megkülönböztetni a lezárt kört a
+  „mind megválaszolva” körtől), és az összes-szám ott a beküldött kérdések száma marad (S1a, változatlan).
+- **R6 — igaz visszajelzés (S4).** Ha a körről már kiment „félbehagyva” levél, a későbbi pillanatkép nem ütemeződik, és a válasz ezt
+  mondja: `202 { queued: false, partial: true, alreadySent: true }` (a „körönként legfeljebb EGY” szabály marad; a kliens a 2xx választ
+  továbbra is elfogadottként rögzíti, mert újraküldeni nincs mit).
+- **R7 — a LEGTÖBB választ tartalmazó pillanatkép marad (S5).** Ha egy körre kevesebb választ tartalmazó pillanatkép érkezik, mint a
+  várakozó (sorrendcsere, két fül), a várakozó tartalma marad; az időzítő újraindul.
+- **R8 — a teljes kör végleges beküldése is `keepalive` (S5).** A kvíz végleges kérése `keepalive: true` jelzővel megy, hogy az utolsó
+  válasz utáni azonnali lapbezárás ne szakítsa meg (a feladatoké nem: a törzsük meghaladhatja a `keepalive` 64 KB-os keretét).
+  Sikeres végleges beküldés után a kör `…:partial:<kör>` kulcsa törlődik a `localStorage`-ból.
+- **Mérlegelve, NEM változik (indokkal):** (1) a tanulónkénti „3 várakozó kör” leckénként értendő (`lecke|tanuló`), és vendégnél
+  megkerülhető — a tényleges védelem az IP-keret és a teljes (5000) korlát; a szigorúbb kulcs a több leckét egymás után félbehagyó
+  tanuló jogos leveleit dobná el. (2) A véglegesített körök memóriája tanulótól független, a körazonosító 32 bites lenyomat: ütközéshez
+  ugyanazon lecke két köre kell 24 órán belül azonos lenyomattal (a lenyomat a kezdés ezredmásodpercét is tartalmazza); a következmény
+  egy elmaradó „félbehagyva” levél — elfogadott. (3) A `…:sent:<kör>` jelzők körönként halmozódnak (néhány bájt / kör, a főágon is így
+  van) — nem takarítjuk.
+- **S2 — a pillanatkép-keret: ELDÖNTVE (tulajdonos, kérdőív, 2026-11-18: „Egy osztályra méretezve”) → R9.**
+
+**Tulajdonosi döntés és telepítési sorrend (2026-11-18) — dokumentált spec-változás:**
+- **R9 — a keretek egy osztályra méretezve (S2; a K1 korábbi 10-es kerete és a végleges 20-as kerete módosul).** Egy osztály közös IP
+  mögött (iskolai wifi) ül: kicsengetéskor ~30 pillanatkép és ~30 végleges beküldés érkezik egy címről percek alatt. A pillanatkép-
+  keret 60 / 15 perc / IP, a végleges beküldés kerete is 60 / 15 perc / IP — a két keret független (a pillanatképek nem fogyasztják a
+  véglegesét). Egy helyen áll: `server/lesson-result-limits.ts` (`RESULT_RATE_LIMIT`); a kulcs változatlanul a valódi kliens-IP
+  (`clientIpKeyGenerator`). Ár: a visszaélési plafon IP-nként 60 „félbehagyva” + 60 végleges levél / 15 perc (címzettenként).
+- **R10 — a kliens visszafelé kompatibilis a régi szerverrel.** A kliens (Vercel) és a szerver (Render) egymástól függetlenül települ, a
+  Vercel jellemzően hamarabb kész: a telepítés perceiben az új kliens a régi szervert hívja, amelynek sémája szigorú (`.strict()`), és
+  az új mezőket (`startedAt`, `lastAnsweredAt`, `partial`) 400-zal utasítja el. Szabály: ha a VÉGLEGES beküldés 400-at kap, és a törzs
+  új mezőt tartalmazott, a kliens EGYSZER megismétli a kérést az új mezők nélkül (a régi kliens alakjával; a szerver így is pontoz,
+  csak a dátumsor marad ki). A PILLANATKÉP nem lép vissza: a régi szerver a `partial` nélküli pillanatképet végleges beküldésnek
+  venné (a kihagyott kérdések hibásként, a végleges levél foglalná a kör kulcsát) — a pillanatkép 400 után nem rögzül elküldöttként,
+  és a szerver telepítése után a következő háttérbe kerüléskor / betöltéskor megy.
+  Választás indoka (a „szerver jelzi, hogy ismeri” megoldással szemben): csak kliensoldali, a régi szerverhez nem kell semmi; a jelzéses
+  megoldáshoz új szerverjelzés és a lap elhagyásakor nem megvárható előzetes kör kellene, és a régi szerver úgysem jelezne.
+
+- **Párhuzamos távoli commitok (2026-11-18 este):** a távoli ágra egy másik folyamat a régi `0eb6a4a1` fejre három commitot töltött
+  (`569178f4`, `189ddb10`, `ab7dfe88`) ugyanarra a négy Codex-leletre (P1–P4), amelyet a `fec8d8b9` már megold. A beolvasztásban ez az
+  ág (P1–P4 + R1–R10) az alap: a `189ddb10` új esetet nem kezel (a véglegesítési jelzője a pillanatkép-kulcshoz kötött, a mienk a
+  lecke + körhöz, és a nyilvántartást is nézi), a tesztjei a meglévő P1–P4 tesztek megfelelői. Az `ab7dfe88` forrásmintái
+  (`if (!token) return null;`, `void sending.then(…)`) a `189ddb10` szerződését rögzítik, amely nem került be — visszavonva; a mögöttes
+  viselkedést (csak 2xx rögzül, token nélkül nincs kérés) a böngészős „503” és „R4 + S6” tesztek mérik.
+
+**Második vak ellenőrzés (2026-11-18, `0d120177`: NEM; 3 közepes, 4 kicsi) — a szabályok így változnak (dokumentált spec-változás):**
+- **R11 — a „félbehagyva” levél a LECKE + KÖR szerint egy (K1, K2).** A várakozó pillanatkép kulcsa, a „már kiment” vizsgálat (R6) és a
+  felülírás-vizsgálat (R1) nem a tanuló-kulcstól (`who`: fiók / párosítás / vendég-ujjlenyomat / vendég-IP) függ, hanem a lecke +
+  körazonosítótól — mint a kör kizárása és a véglegesített körök tárolója. A kézbesítés-nyilvántartásban a pillanatkép körkulcsa
+  `roundKeyOf("partial-round", "quiz-partial", körazonosító)`: tanulótól független, így a „körönként legfeljebb EGY” az újraindítás és
+  több példány esetén is az egyedi kulcson áll. Így ujjlenyomat nélküli → ujjlenyomatos, IP-váltásos, be- / kijelentkezéses esetben sem
+  megy két levél, és a végleges levél felülíró mondata a más kulcson kiment részleges levelet is látja.
+  **Védelem a kliens által választott körazonosítóval szemben (első rögzítő):** a várakozó pillanatképet csak a kör ELSŐ rögzítőjével
+  „összeférő” beküldő írhatja felül vagy törölheti (végleges beküldéssel), és a véglegesített kör is csak összeférő pillanatképet nyom
+  el. Összeférő: ugyanaz a tanuló-kulcs, VAGY az első rögzítő vendég (`guest:…`) — a vendég azonosítója (ujjlenyomat, IP) nem igazolt,
+  ezért vendég körét bárki átveheti (a levél neve ekkor is „Vendég tanuló”), az igazolt (fiók / párosított) tanuló körét viszont csak ő.
+  Nem összeférő pillanatkép: `202 { queued: false, partial: true, conflict: true }`. Vállalt korlát: a kör közbeni kijelentkezés
+  (fiók → vendég) után a vendég-pillanatkép nem írja felül a fiókét (a fiók korábbi, kevesebb válaszú pillanatképe megy).
+- **R12 — képesség-jelzés a telepítési átmenethez (K3; az R10 módosul).** A kliens (Vercel) és a szerver (Render) külön, nem
+  vezérelhető sorrendben települ. A szerver a `GET /api/csrf-token` válaszában jelzi, hogy ismeri az új eredmény-API-t
+  (`resultApi: 2`); a régi szerver ezt nem küldi. A kliens CSAK jelzés esetén küld pillanatképet és új mezőt (`startedAt`,
+  `lastAnsweredAt`, `clientNow`); jelzés nélkül a régi viselkedés: pillanatkép nincs, a végleges beküldés egyszer, a régi alakkal megy.
+  A végleges beküldés előtt a kliens megvárja a token (és vele a jelzés) lekérését; ha a token nem kérhető le, a régi alak megy. Az R10
+  egyszeri, új mezők nélküli ismétlése csak jelzés MELLETT marad (ha egy átfedő, még régi példány 400-at ad); jelzés nélkül ismétlés
+  nincs. Így régi szerver mellett gyerekenként pontosan annyi kérés megy, mint a régi kliensnél (a régi 20-as keret szerint).
+- **R13 — a „félbehagyva” levél szövege (K6) és a kliens órája (K7).** Részleges levélben, ha minden megválaszolt kérdés helyes: „Minden
+  megválaszolt kérdésre helyes választ adott.” (nem „Minden kérdésre…”). A részleges levél dátumsora „Utolsó válasz: …” (a gyerek
+  utolsó válaszának ideje) a 15 perccel későbbi küldési idő helyett. A kliens elküldi a saját „most” idejét (`clientNow`); a szerver a
+  7 napos határt a kliens két időbélyegének KÜLÖNBSÉGÉBŐL méri, és a levélbe írt időpontokat a saját órájára számolja át
+  (`fogadás ideje − (clientNow − időbélyeg)`), így a késő / siető kliensóra nem dob el valódi pillanatképet és nem ír hamis időt.
+  `clientNow` nélkül (régi kliens) a régi viselkedés (a szerver órájához mér).
+- **R14 — leállításkor a várakozó „félbehagyva” levelek kimennek (K4).** A szerver leállításakor (SIGTERM / SIGINT) a várakozó
+  pillanatképek a késleltetés kivárása nélkül, a szokott kapun (kizárás + véglegesítés-ellenőrzés) át azonnal küldődnek, legfeljebb
+  15 másodpercig, az adatbázis-pool lezárása ELŐTT (a meglévő tananyag-eredmény ürítés mintájára). Az időkorlát után a leállás
+  folytatódik (a még nem kézbesített levél elvész, naplózva). A 15 percnél korábbi küldés ára: a gyerek az ablakon belül még
+  folytathatná — ekkor a végleges levél felülíró mondattal megy (R1).
+- **K5:** a harmadik vak ellenőrzés után javítva, lásd R17.
+
+**Harmadik vak ellenőrzés (2026-11-19, `0e411d47`: NEM; 1 közepes, 4 kicsi) — a szabályok így változnak (dokumentált spec-változás):**
+- **R15 — BÁRMELY véglegesítés elnyomja a kör „félbehagyva” levelét (L1; az R11 „első rögzítő” szabálya szűkül).** Az elnyomás
+  ártalmatlan irány (legfeljebb egy „félbehagyva” levél marad el), az elmaradása viszont ellentmondó levélpárt ad: ha a bejelentkezett
+  tanuló munkamenete a kör közben megszűnik és vendégként fejezi be, a végleges beküldés a várakozót eddig nem törölte, és a
+  „félbehagyva” levél a végleges UTÁN ment ki. Mostantól a végleges beküldés a kör (lecke + kör) várakozó pillanatképét a beküldő
+  kilététől függetlenül törli, és a memóriabeli véglegesítés-jelző is tanulófüggetlen. Az „első rögzítő” védelem (`mayActOn`) CSAK a
+  pillanatkép TARTALMÁNAK felülírására vonatkozik (igazolt tanuló pillanatképét más nem írhatja felül a saját válaszaival).
+- **R16 — a vendég köre vendég kör marad (L2; az R11 állítása így teljesül).** Ha a kört vendég rögzítette, és egy másik beküldő
+  (pl. a kör közben bejelentkező tanuló) veszi át, a „félbehagyva” levél attribúciója „Vendég tanuló” marad (vendég-útmutatóval), nem
+  az átvevő neve; a kör első rögzítője is vendég marad. (A tartalom — a több válaszú állapot — az átvevőé lehet: a vendég azonosítója nem
+  igazolt, ezért ez nem személyes adat kiadása.)
+- **R17 — teljes kör nem „félbehagyva” (L3 = K5).** Ha a pillanatképben a megválaszolt kérdések száma eléri a szerver körméretét, a
+  pillanatkép nem ütemez részleges levelet: `202 { queued: false, partial: true, complete: true }` (a becsületes kliens ilyenkor
+  végleges beküldést küld).
+- **Vállalt korlátok (kiegészítés):**
+  - (L4) Hamis, a saját időbélyegeivel együtt eltolt `clientNow`-val a 7 napos határ megkerülhető, és a levélbe hamis „Utolsó válasz”
+    kerül — csak a beküldő SAJÁT levelére hat; a hamisítást a keret korlátozza (R5, R9).
+  - (L5) A telepítés átfedésében a régi példánytól kapott CSRF-token jelzés nélküli: a lap újratöltéséig nem megy pillanatkép és új
+    mező. Eredmény nem vész el (a végleges beküldés a régi alakkal megy), csak a félbehagyott kör levele marad el addig.
+  - (R15, M2) A körazonosítót ismerő más beküldő végleges beküldéssel elnyomhatja egy másik tanuló „félbehagyva” levelét (a körazonosító
+    a kérdések és a kezdés ezredmásodpercének 32 bites lenyomata, csak a kérés törzsében utazik). Tudatos tervdöntés: személyes adat nem
+    szivárog, legfeljebb egy „félbehagyva” levél marad el.
+
+**Negyedik vak ellenőrzés (2026-11-19, `f847695a`: IGEN, FELTÉTELLEL; M1) — dokumentált spec-változás:**
+- **R18 — a véglegesítés tartós, tanulófüggetlen nyoma (M1; az R15 kiegészül).** Az R15 korábbi „újraindítás után nincs késői
+  »félbehagyva« levél” állítása hamis volt: véglegesítés → újraindítás (a memóriabeli jelző elvész) → MÁS kilétű (vendég, ujjlenyomat
+  nélküli, más IP-jű) pillanatkép ugyanarra a körre → a pillanatkép ütemeződött, és a „félbehagyva” levél a végleges UTÁN ment ki. Mostantól
+  a végleges kvízbeküldés a memóriabeli jelző mellett a kézbesítés-nyilvántartásba is ír egy tanulófüggetlen jelzősort (`kind = 'quiz'`,
+  `round_key = roundKeyOf("final-round", "quiz", körazonosító)`, `delivered` üres, sémaváltozás nélkül), és a véglegesítés-ellenőrzés
+  (a pillanatkép fogadásakor és a várakozó levél minden küldési kísérlete előtt) ezt is nézi — újraindítás után, más példányon és
+  bármely kilétnél is. Korlátos élettartam: a jelzősor 24 óráig számít (`created_at`), mint a memóriabeli jelző. A jelzősor írásának
+  hibája nem akasztja meg a beküldést (a memóriabeli jelző ilyenkor is védi az adott példányt; a hiba osztálya naplózódik).
+
+**Vercel review (2026-11-19, szál 4626976445) — dokumentált spec-változás:**
+- **R19 — a küldés előtti ellenőrzés átmeneti hibája után is egy újrapróba.** Ha a „félbehagyva” levél kapujában a véglegesítés-
+  ellenőrzés (`roundFinalized`) dob (pl. átmeneti adatbázishiba), a levél eddig újrapróba nélkül elveszett (a 60 s-os újrapróba csak a
+  kapun BELÜL ütemeződött). Mostantól a kapu hibája után is EGY újrapróba ütemeződik a szokott késleltetéssel, és az ugyanazon a kapun
+  megy át — véglegesített körre így sem megy ki részleges levél. Az újrapróba hibája után nincs további (a hiba osztálya naplózódik).
+
+**Gépi vak ellenőrzés (GPT-6.2 Sol, 2026-11-19, `6b5f2e68`: NEM; L1 blokkoló, L2 + L4 közepes, L3 + L5 kicsi) — dokumentált spec-változás:**
+- **R20 — körönkénti beküldés-állapot a kliensen (L1).** A végleges beküldés „úton van” őre eddig a komponensé volt: ha az előző kör
+  kérése még függőben volt, az új, teljesen megválaszolt kör beküldése elmaradt, és a kérés végén semmi nem indította újra. Mostantól az
+  őr a kör azonosítójához kötött (más kör beküldése párhuzamosan mehet), és minden beküldés lezárulása után a beküldő újra kiértékeli a
+  pillanatnyi kört, így függő kérés mellett befejezett kör sem marad el.
+- **R21 — az újrapróba csak az aktuális pillanatképre vonatkozhat (L2).** A „félbehagyva” levél minden küldési kísérlete (az időzítő
+  első küldése, a 60 s-os újrapróba és az R19 kapu-újrapróba) a kör (lecke + kör) aktuális pillanatkép-változatához kötött: ha közben
+  újabb pillanatkép ütemeződött, a régi kísérlet nem küld (a kapu alatt ellenőrizve), és az újabb állapot megy ki a saját időzítőjén.
+  Vállalt: ha a sikertelen küldés után KEVESEBB választ tartalmazó pillanatkép jön, az az aktuális (a becsületes kliens csak növekvő
+  állapotot küld).
+- **R22 — az első rögzítő ellenőrzése az utolsó várakozás után (L4).** A várakozó pillanatkép beolvasása, az első rögzítő (`mayActOn`)
+  és a vendég-attribúció vizsgálata, valamint az ütemezés a pillanatkép-ág utolsó `await`-je UTÁN, egyetlen szinkron lépésben történik
+  — párhuzamosan érkező pillanatképek nem kerülhetik meg.
+- **R23 — 403 utáni ismétlés csak képesség-jelzés mellett (L3).** A pillanatkép 403 utáni egyszeri ismétlése előtt a kliens újra nézi
+  az R12 jelzést: ha az új token jelzés nélküli (régi példány), nem küld újra, és nem rögzít elküldést.
+- **Jegyre (L5, kicsi):** a „Beküldve” sor a levél összeállításának ideje, nem a fogadásé (éjfél körül napot csúszhat) — a fogadáskor
+  rögzített idő átadása a küldési bemenetben.
+
+**Gépi vak ellenőrzés, 2. célzott kör (GPT-6.2 Sol, 2026-11-19, `256f0b56`: NEM; L1 blokkoló, L2 + L3 közepes) — dokumentált spec-változás:**
+- **R24 — tartós kimenő sor a végleges beküldésekre, korlátos újrapróbával (L1, L2; az R20 megvalósítása helyett).** A befejezett kör
+  végleges törzse a befejezés pillanatában, VÁRAKOZÁS NÉLKÜL a böngésző tárolójába kerül (körönként egy bejegyzés, a már elküldött kör
+  nem); a sort a lecke beküldője és az alkalmazás minden indulása üríti (más nézetből és későbbi megnyitáskor is), egyszerre egy ürítő
+  fut, a közben érkező új bejegyzés is sorra kerül. A token és az ujjlenyomat a küldéskor kerül a kérésbe (a képesség-jelzés szerint új
+  mezőkkel vagy régi alakkal, R12). Sikeres (2xx) válasz után a kör elküldöttként rögzül és kikerül a sorból; 400-as (érvénytelen)
+  válasz után kikerül (újrapróba nincs); minden más hiba után a kör laponként legfeljebb 3 kísérletet kap, a 429-es válasz
+  `Retry-After` idejét megtartva, egyébként növekvő (30 s, 60 s, legfeljebb 5 perc) késleltetéssel — azonnali ismétlés nincs; a
+  kimerült kör a következő oldalbetöltéskor kap új kísérleteket.
+- **R25 — a pillanatkép-felvétel záró szakasza a kör zárán (L3).** A „már kiment” vizsgálat (R6), a várakozó beolvasása, az első
+  rögzítő vizsgálata és az ütemezés ugyanazon a körönkénti kizáráson megy át, mint a „félbehagyva” levél küldési kísérlete. Így vagy a
+  régi küldés fejeződik be előbb (és az új pillanatkép igaz `alreadySent` választ kap), vagy az új pillanatkép váltja le a régit (és a
+  régi kísérlet a változat-ellenőrzésen megáll) — elfogadott új állapot mellett régi levél nem megy ki.
+
+**Gépi vak ellenőrzés, 3. célzott kör (GPT-6.2 Sol, 2026-11-19, `64d6710e`: NEM) és tulajdonosi döntés („Szűkítés + tartós sor külön”):**
+- **Kockázat (vállalt, a T-3 pótolja — L1):** a szerver a 202 után a levelet memóriában ütemezett küldéssel (és egy memóriabeli
+  újrapróbával) küldi. Ha a szolgáltató az első és az egyetlen újrapróbán is hibát ad, vagy a példány a 202 után, a háttérküldés előtt /
+  közben újraindul, a végleges levél elveszhet (a kliens a 202 után eldobja a törzset). Ezt a pótlási terv T-3 szelete tartós szerveres
+  sorral pótolja (`docs/specs/2026-11-20-eredmenylevel-tartos-sor.md`); a #510 nem kéri számon.
+- **R26 — az eredmény-POST-nak nincs beágyazott újrapróbája (L2; a J5 forrásőr ehhez igazodik).** A végleges beküldés hálózati / 5xx
+  hibavárakozását CSAK a kimenő sor kezeli (laponként legfeljebb 3 kísérlet, R24); az `apiRequest` belső újrapróbája ezen az úton 0. A
+  protokoll szintű ismétlések maradnak: a 403 utáni egyszeri tokenfrissítés (`apiRequest`) és a 400 utáni egyszeri régi-alakú ismétlés
+  (R10). Így folyamatos 503 mellett laponként legfeljebb 3 POST megy (nem 12).
+- **R27 — körönként egy végleges levél, kiléttől függetlenül (L3).** A végleges beküldés (mindkét fajtánál) a kézbesítés-nyilvántartásba
+  tanulófüggetlen végleges-jelzősort ír (`roundKeyOf("final-round", fajta, kör)`; a kvízé azonos az R18 jelzősorával). Ha a jelzősor már
+  létezett (ugyanannak a körnek az ismételt beküldése), és a mostani beküldő saját végleges sora még nincs meg, a beküldés MÁS kiléttel
+  ismételt (pl. elveszett 202 után fiókba lépve): `202 { queued: false, duplicate: true }`, második levél és más név nem megy. Ugyanazon
+  kilét ismétlése változatlanul a meglévő címzettenkénti pótlásra fut.
+- **R28 — a sikertelen tárolóírás nem rejti el a kimenő bejegyzést (L4).** Ha a kimenő sor írása dob (pl. kvóta), a bejegyzés egy csak
+  memóriabeli sorba kerül, amelyet az ürítő a tárolóból olvasott bejegyzések MELLETT olvas (a lapon belül elmegy); siker után onnan is
+  kikerül.
+- **R29 — véglegesítés a felvétel közben (L5).** A pillanatkép-felvétel záró szakasza (a kör zárán, R25) az ütemezés előtt a memóriabeli
+  véglegesítést is nézi: a felvétel közben véglegesített körre `202 { queued: false, finalized: true }`, várakozó nem keletkezik.
+
+Elfogadás (S1b):
+- E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
+  pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
+- E9. AMIKOR egy pillanatkép után 15 percig nem jön újabb pillanatkép vagy végleges beküldés, A RENDSZER egy „félbehagyva” levelet
+  küld a legutolsó pillanatképből; a végleges beküldés a várakozó pillanatképet törli.
+- E10. AMIKOR a „félbehagyva” levél után a kör végleges eredménye megjön, A RENDSZER a végleges levélben jelzi a felülírást.
+- E11. Minden eredménylevél tartalmazza a beküldés idejét magyar idő szerint.
+- E12. Az a le nem zárt kör, amelynek UTOLSÓ VÁLASZA 7 napnál régebbi, nem megy el (R2; a régen megnyitott, ma megválaszolt kör megy).
+- E17. Véglegesített körre „félbehagyva” levél SOHA nem megy ki — az újrapróbából sem; ha a részleges levél már kiment, a végleges
+  levél tartalmazza a felülíró mondatot (R1; bukó küldővel és legalább 50 ismételt versenyhelyzettel mérve).
+- E18. AMIKOR a kör a nézeten belül lecserélődik, A RENDSZER az elhagyott körről pillanatképet küld (R3).
+- E19. AMIKOR a pillanatkép 403-at kap, A RENDSZER új tokent kér és egyszer ismétel; ha nem tud, a következő betöltés pótol (R4).
+- E20. A „félbehagyva” levél összes-száma a szerver körmérete; a 7 napnál régebbi utolsó tevékenységű pillanatképet a szerver sem
+  fogadja el (R5).
+- E21. Már kiment „félbehagyva” levél utáni pillanatképre a válasz `queued: false, alreadySent: true` (R6).
+- E22. Körönként a legtöbb választ tartalmazó pillanatkép marad (R7).
+- E23. A kvíz végleges beküldése `keepalive` kérés (R8).
+- E24. Ugyanarról a címről a 60. pillanatkép és a 60. végleges beküldés átmegy, a 61. 429; más cím kerete független (R9).
+- E26. Egy körre — eltérő tanuló-kulcsú (ujjlenyomat nélküli / ujjlenyomatos, IP-váltásos) pillanatképekkel is — legfeljebb egy
+  „félbehagyva” levél megy; a végleges levél a más kulcson kiment részleges levél után is felülíró mondatot tartalmaz; igazolt tanuló
+  várakozó körét más nem írja felül és nem törli (R11).
+- E27. Jelzés (`resultApi: 2`) nélkül a kliens nem küld pillanatképet, a végleges beküldést egyszer, régi alakkal küldi; „régi
+  szerver” mellett 30 gyerek egy címről legalább annyi végleges eredményt ad át, mint a régi kliens (20), kettős küldés nincs (R12).
+- E28. A részleges levél nem állítja, hogy minden kérdésre helyes választ adott; a dátumsora az utolsó válasz ideje; a 7 napos határ
+  a kliens órájától független (R13).
+- E29. Leállításkor a várakozó „félbehagyva” levél korlátos időn belül kimegy (R14).
+- E30. AMIKOR a kör véglegesül (bármely beküldő kilétével), A RENDSZER a kör „félbehagyva” levelét nem küldi ki — fiók → vendég
+  váltásnál sem megy „félbehagyva” levél a végleges után (R15).
+- E31. Vendég által rögzített kör átvételekor a „félbehagyva” levél neve „Vendég tanuló” (R16).
+- E32. Teljes (a körmérettel egyenlő számú válaszú) pillanatkép nem ütemez levelet (R17).
+- E35. AMIKOR az előző kör beküldése még függőben van, A RENDSZER az új, teljesen megválaszolt kört is beküldi, gombnyomás nélkül (R20).
+- E36. Kapuhiba után érkező frissebb pillanatkép mellett a régi újrapróba nem küld; csak a frissebb állapot megy ki (R21).
+- E37. Párhuzamos pillanatképeknél az igazolt első rögzítő pillanatképét más nem írja felül (R22).
+- E38. 403 után jelzés nélküli új tokennél nincs második pillanatkép-kérés (R23).
+- E39. 429 után a végleges beküldés nem ismétlődik azonnal; `Retry-After` mellett legfeljebb 3 kísérlet (R24).
+- E40. AMIKOR a tanuló az utolsó válasz után azonnal elhagyja az oldalt (lassú token mellett), A RENDSZER a végleges kört a következő
+  indításkor elküldi (R24).
+- E41. Ha a régi pillanatkép küldése már fut, az új pillanatkép nem kap `queued: true` választ úgy, hogy közben a régi levél megy ki (R25).
+- E42. Folyamatos 503 mellett a végleges beküldés laponként legfeljebb 3 POST-ot küld (R26).
+- E43. Elveszett 202 utáni, más kiléttel ismételt végleges beküldés nem küld második levelet; az eredeti név marad (R27).
+- E44. Olvasható, de nem írható tárolónál a befejezett kör a lapon belül elmegy (R28).
+- E45. A felvétel közben véglegesített körre a pillanatkép nem kap `queued: true` választ (R29).
+- E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
+- E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
+  „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
+- E25. AMIKOR a régi szerver az új mezők miatt 400-at ad, A RENDSZER a végleges beküldést egyszer az új mezők nélkül megismétli (az
+  eredménylevél kérése sikerül); a pillanatképet nem alakítja végleges beküldéssé (R10).
+
 ## Tulajdonosi döntést igénylő pontok
 
-1. Részben kitöltött, le nem zárt kvíz: (A — javasolt) nem megy el, mint a feladatoknál; (B) az oldal elhagyásakor a megválaszolt
-   rész elmegy „félbehagyva” jelöléssel.
-2. Bejelentkezett felhasználó szerveres kvíze: ott is csak a lezárás küld. (A — javasolt) az utolsó válasz után a kliens
-   automatikusan lezárja a kört (jutalom is ekkor jár) — a kézbesítés versenyhelyzetének javítása UTÁN; (B) marad.
+1. Részben kitöltött, le nem zárt kvíz — ELDÖNTVE (orkesztrátor, 2026-11-17): elmegy „félbehagyva” jelöléssel (S1b).
+2. Bejelentkezett felhasználó szerveres kvíze — ELDÖNTVE (orkesztrátor, 2026-11-17): külön szelet (S2), a kézbesítés-foglalással.
 3. Címzettek: ma az `ADMIN_EMAILS` közös listája. (A — javasolt) marad; (B) tanulónkénti szülőcím a párosításhoz kötve (új adat,
    adatvédelmi terv kell).
 4. Egy közös levél a feladatokról és a kvízről: (A — javasolt) marad a két külön levél; (B) napi összesítő.
@@ -103,3 +407,41 @@ egy tartalmaz `mailto:` hivatkozást, a `sendResultEmail` hívását egyik sem (
 - [x] E5 – mintaválasz a feladatok levelében
 - [x] E6 – escape
 - [x] E7 – a meglévő tesztek változatlanul zöldek
+- [x] E8 – pillanatkép háttérbe kerüléskor / elhagyáskor (böngésző)
+- [x] E9 – késleltetett „félbehagyva” levél a legutolsó pillanatképből; a végleges törli (valódi DB)
+- [x] E10 – a végleges levél jelzi a felülírást
+- [x] E11 – dátum a levélben (Europe/Budapest)
+- [x] E12 – 7 napos korkorlát a le nem zárt körre, az UTOLSÓ VÁLASZHOZ mérve (böngésző + egységteszt)
+- [x] E13 – pillanatkép a komponens lebontásakor (alkalmazáson belüli elhagyás) (böngésző)
+- [x] E14 – új kör első válaszai is mennek (körhöz kötött számláló)
+- [x] E15 – sikertelen pillanatkép (hálózati hiba / 429 / 5xx) újrapróbálható marad
+- [x] E16 – véglegesített kör késői pillanatképe nem küld „félbehagyva” levelet (mindkét sorrend, valódi DB)
+- [x] E17 – véglegesített körre nincs „félbehagyva” levél: újrapróba (bukó küldő) + 60 ismételt versenyhelyzet (valódi DB)
+- [x] E18 – kör-csere a kör közepén → pillanatkép az elhagyott körről, rejtés nélkül (böngésző)
+- [x] E19 – 403 → új token + egyszeri ismétlés; sikertelen tokenkérés után a következő betöltés pótol (böngésző)
+- [x] E20 – összes-szám a szerver körméretéből; szerveroldali 7 napos határ a pillanatképre (valódi DB)
+- [x] E21 – igaz válasz a már kiment „félbehagyva” levél utáni pillanatképre (valódi DB)
+- [x] E22 – a legtöbb választ tartalmazó pillanatkép marad (valódi DB)
+- [x] E23 – a kvíz végleges beküldése `keepalive` (böngésző)
+- [x] E24 – keret 60 / 15 perc / IP mindkét fajtára, a kulcs ellenőrzésével + mutációs ellenpróba (egységteszt + valódi DB)
+- [x] E26 – lecke + kör kulcs, első rögzítő védelme (valódi DB)
+- [x] E27 – képesség-jelzés; „régi szerver” + 30 gyerek egy címről ≥ 20, nincs kettős küldés (böngésző)
+- [x] E28 – részleges levél szövege, utolsó válasz ideje, kliensóra-független határ (egységteszt + valódi DB)
+- [x] E29 – leállításkor a várakozók kimennek, korlátos időben (valódi DB)
+- [x] E30 – bármely véglegesítés elnyomja a részlegest; fiók → vendég sorrend: csak végleges levelek (valódi DB)
+- [x] E31 – vendég kör átvétele: „Vendég tanuló” név (valódi DB)
+- [x] E32 – teljes pillanatkép nem ütemez (valódi DB)
+- [x] E33 – tartós, tanulófüggetlen véglegesítési nyom; újraindítás után más kilét / IP sem küld részlegest (valódi DB)
+- [ ] E34 – a kapu átmeneti hibája után egy újrapróba, a véglegesítés-ellenőrzéssel (valódi DB)
+- [ ] E35 – függő előző kör mellett az új teljes kör is beküldődik (böngésző)
+- [ ] E36 – kapuhiba után a frissebb pillanatkép megy ki, a régi újrapróba nem (valódi DB)
+- [ ] E37 – párhuzamos pillanatképeknél az első rögzítő védelme (valódi DB)
+- [ ] E38 – 403 után jelzés nélküli tokennél nincs második pillanatkép (böngésző)
+- [ ] E39 – 429: nincs azonnali ismétlés; Retry-After mellett legfeljebb 3 kísérlet (böngésző + egységteszt)
+- [ ] E40 – azonnali dokumentumváltás után a végleges kör a következő indításkor megy (böngésző)
+- [ ] E41 – a pillanatkép-felvétel a kör zárán; futó régi küldés mellett igaz válasz (valódi DB)
+- [ ] E42 – 503: laponként legfeljebb 3 POST (böngésző)
+- [ ] E43 – más kiléttel ismételt végleges beküldés: egy levél, eredeti név (valódi DB)
+- [ ] E44 – írhatatlan tároló: a kör a lapon belül elmegy (böngésző)
+- [ ] E45 – felvétel közbeni véglegesítés: nincs queued:true (valódi DB)
+- [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)

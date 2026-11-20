@@ -6,6 +6,7 @@ import { createServer, type Server } from "http";
 import { gunzipSync } from "node:zlib";
 import express from "express";
 import { csrfSync } from "csrf-sync";
+import { RESULT_API_VERSION } from "../shared/result-compat";
 import { storage } from "./storage";
 import { registerAdminUserRoutes } from "./admin-users";
 import { insertHtmlFileSchema, insertMaterialCommentSchema, type User, type HtmlFile } from "@shared/schema";
@@ -986,7 +987,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Frontend fetches this token and includes it in all mutating requests (POST/PUT/DELETE)
   app.get('/api/csrf-token', (req: Request, res) => {
     const csrfToken = generateToken(req);
-    res.json({ csrfToken });
+    // Spec 2026-11-17-eredmeny-email-kviz (R12): képesség-jelzés — a kliens csak ennek láttán küld pillanatképet és új eredménymezőt
+    // (a Vercel-kliens és a Render-szerver külön, nem vezérelhető sorrendben települ).
+    res.json({ csrfToken, resultApi: RESULT_API_VERSION });
   });
 
   // HEALTH CHECK endpoint - Fast response for Autoscale deployment health checks
