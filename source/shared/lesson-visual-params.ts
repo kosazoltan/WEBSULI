@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { illustrationLayoutProblems, sanitizeIllustration } from "./illustration-svg";
-import type { CompareCardsVisualParams, RuleBoxVisualParams, TableVisualParams } from "./source-visual-render";
+import type { CompareCardsVisualParams, DecisionTreeVisualParams, PictureCardsVisualParams, RuleBoxVisualParams, TableVisualParams } from "./source-visual-render";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md): a magyarázó ábrák paraméterei.
@@ -146,10 +146,37 @@ export const compareCardsParamsSchema = z.object({
     example: label(160).optional(),
   }).strict()).min(2).max(3),
 }).strict();
+/**
+ * S2b-1 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 16. szakasz): döntési fa — legfeljebb 3 szint, csomópontonként 2–4 ág,
+ * összesen legfeljebb 13 csomópont; a levél az ág nélküli csomópont.
+ */
+export const DECISION_TREE_MAX_DEPTH = 3;
+export const DECISION_TREE_MAX_NODES = 13;
+type TreeNode = { text: string; branches?: Array<{ label: string; node: TreeNode }> };
+const treeNodeSchema: z.ZodType<TreeNode> = z.lazy(() => z.object({
+  text: label(120),
+  branches: z.array(z.object({ label: label(40), node: treeNodeSchema }).strict()).min(2).max(4).optional(),
+}).strict());
+const treeDepth = (n: TreeNode): number => 1 + Math.max(0, ...(n.branches ?? []).map((b) => treeDepth(b.node)));
+const treeSize = (n: TreeNode): number => 1 + (n.branches ?? []).reduce((a, b) => a + treeSize(b.node), 0);
+export const decisionTreeParamsSchema = z.object({ root: treeNodeSchema }).strict().superRefine((p, ctx) => {
+  if (treeDepth(p.root) > DECISION_TREE_MAX_DEPTH) ctx.addIssue({ code: "custom", path: ["root"], message: `legfeljebb ${DECISION_TREE_MAX_DEPTH} szint` });
+  if (treeSize(p.root) > DECISION_TREE_MAX_NODES) ctx.addIssue({ code: "custom", path: ["root"], message: `legfeljebb ${DECISION_TREE_MAX_NODES} csomópont` });
+});
+/** Képes kártyák: 2–8 kártya; a rajz a meglévő illusztráció-tisztítón megy át (csak tisztított, felirattal ellátott SVG rajzolódik). */
+export const pictureCardsParamsSchema = z.object({
+  cards: z.array(z.object({
+    label: label(40),
+    svg: z.string().max(6000).refine((svg) => sanitizeIllustration(svg).ok, { message: "a rajz nem megy át az illusztráció-tisztítón" }),
+    caption: label(80).optional(),
+    example: label(120).optional(),
+  }).strict()).min(2).max(8),
+}).strict();
 // Fordítási idejű őr: a séma kimenete a megosztott szerződés alakja (ha a szerződés változik, ez a sor nem fordul le).
 type Assignable<A extends B, B> = A;
 export type SourceVisualSchemaContract = [Assignable<z.infer<typeof tableParamsSchema>, TableVisualParams>,
-  Assignable<z.infer<typeof ruleBoxParamsSchema>, RuleBoxVisualParams>, Assignable<z.infer<typeof compareCardsParamsSchema>, CompareCardsVisualParams>];
+  Assignable<z.infer<typeof ruleBoxParamsSchema>, RuleBoxVisualParams>, Assignable<z.infer<typeof compareCardsParamsSchema>, CompareCardsVisualParams>,
+  Assignable<z.infer<typeof decisionTreeParamsSchema>, DecisionTreeVisualParams>, Assignable<z.infer<typeof pictureCardsParamsSchema>, PictureCardsVisualParams>];
 
 /**
  * Független review B1 (S2a): a forrás-ábrák fajtáinál a hibás paraméterű blokkból a rajzoló SEMMIT nem rajzol — az ilyen blokk
@@ -157,7 +184,7 @@ export type SourceVisualSchemaContract = [Assignable<z.infer<typeof tableParamsS
  * vagy érvényes. `dropUndrawableSourceVisuals`: a szerző kimenetéből determinisztikusan kiveszi ezeket (javítókör nélkül; a hívó számol
  * és naplóz); a többi blokk és a régi 16 fajta érintetlen.
  */
-export const SOURCE_VISUAL_SCHEMA_KINDS = ["table", "ruleBox", "compareCards"] as const;
+export const SOURCE_VISUAL_SCHEMA_KINDS = ["table", "ruleBox", "compareCards", "decisionTree", "pictureCards"] as const;
 export function sourceVisualProblems(block: unknown): string[] | null {
   const b = block as { kind?: unknown; animKind?: unknown; params?: unknown } | null;
   if (!b || b.kind !== "animate" || !(SOURCE_VISUAL_SCHEMA_KINDS as readonly unknown[]).includes(b.animKind)) return null;
@@ -190,6 +217,8 @@ export const VISUAL_PARAM_SCHEMAS = {
   table: tableParamsSchema,
   ruleBox: ruleBoxParamsSchema,
   compareCards: compareCardsParamsSchema,
+  decisionTree: decisionTreeParamsSchema,
+  pictureCards: pictureCardsParamsSchema,
 } as const;
 
 export type VisualParamKind = keyof typeof VISUAL_PARAM_SCHEMAS;
@@ -277,6 +306,9 @@ export function renderedVisualTexts(animKind: string, params: unknown): string[]
     case "table": return [...str(p.caption), ...strings(p.headers), ...(Array.isArray(p.rows) ? p.rows.flatMap(strings) : [])].filter((t) => t.trim());
     case "ruleBox": return [...str(p.heading), ...strings(p.items)];
     case "compareCards": return Array.isArray(p.cards) ? p.cards.flatMap((c) => (c && typeof c === "object" ? [...str((c as Record<string, unknown>).title), ...strings((c as Record<string, unknown>).lines), ...str((c as Record<string, unknown>).example)] : [])) : [];
+    // S2b-1: a csomópontok szövege és az ágfeliratok (bejárási sorrendben); a kártya felirata, aláírása, példája és a rajz feliratai.
+    case "decisionTree": { const walk = (n: unknown): string[] => { const o = (n && typeof n === "object" ? n : {}) as Record<string, unknown>; return [...str(o.text), ...(Array.isArray(o.branches) ? o.branches.flatMap((b) => (b && typeof b === "object" ? [...str((b as Record<string, unknown>).label), ...walk((b as Record<string, unknown>).node)] : [])) : [])]; }; return walk(p.root); }
+    case "pictureCards": return Array.isArray(p.cards) ? p.cards.flatMap((c) => { const o = (c && typeof c === "object" ? c : {}) as Record<string, unknown>; const check = sanitizeIllustration(o.svg); return [...str(o.label), ...str(o.caption), ...str(o.example), ...(check.ok ? check.labels : [])]; }) : [];
     default: return [];
   }
 }
