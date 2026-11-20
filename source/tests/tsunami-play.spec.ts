@@ -558,9 +558,185 @@ test.describe("844x390: 6× lassított CPU — a „nyugalomban” jelzéskor a 
       // eslint-disable-next-line no-console
       console.log(`SETTLE6X|844x390|víz 35|${atSettle!.settleMs} ms|takart: ${atSettle!.hits.length}`);
       expect(atSettle!.hits, `a „nyugalomban” jelzés pillanatában a figura teljes teste szabad (doboz ${JSON.stringify(atSettle!.box)})`).toEqual([]);
+      // Vak ellenőr (GPT) L5: a 600 ms-os mérce a lassított esetben is érvényes.
+      expect(atSettle!.settleMs, "a beállási idő mérve").not.toBeNull();
+      expect(atSettle!.settleMs!, `6× lassított CPU-n is ≤ 600 ms alatt nyugalomba ér (mért: ${atSettle!.settleMs} ms)`).toBeLessThanOrEqual(600);
     } finally {
       await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
     }
+  });
+});
+
+/*
+ * Vak ellenőr (GPT-6.2 Sol, fej 5bd568a2) L1 / L2 / L3. A takarást a TÉNYLEGESEN kirajzolt képből mérjük: a lapos (2D) tartalékban
+ * a narancs figura (#fb7a1c) pixeleit a vászon tartalmából keressük meg — nem a teszt-kampó becsült helyét.
+ */
+async function flatFigureCover(page: Page): Promise<{ found: boolean; hits: string[]; box: { l: number; t: number; r: number; b: number } | null }> {
+  return page.evaluate(() => {
+    const canvas = document.querySelector('[data-testid="tsunami-flat"]') as HTMLCanvasElement | null;
+    if (!canvas) return { found: false, hits: ["nincs lapos vászon"], box: null };
+    const ctx = canvas.getContext("2d");
+    if (!ctx || !canvas.width || !canvas.height) return { found: false, hits: ["üres vászon"], box: null };
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let l = Infinity;
+    let t = Infinity;
+    let r = -Infinity;
+    let b = -Infinity;
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x++) {
+        const i = (y * canvas.width + x) * 4;
+        if (Math.abs(img[i] - 251) < 6 && Math.abs(img[i + 1] - 122) < 6 && Math.abs(img[i + 2] - 28) < 6) {
+          l = Math.min(l, x);
+          t = Math.min(t, y);
+          r = Math.max(r, x);
+          b = Math.max(b, y);
+        }
+      }
+    }
+    if (!Number.isFinite(l)) return { found: false, hits: ["a figura nincs a vásznon"], box: null };
+    const cr = canvas.getBoundingClientRect();
+    const sx = cr.width / canvas.width;
+    const sy = cr.height / canvas.height;
+    const box = { l: cr.left + l * sx, t: cr.top + t * sy, r: cr.left + r * sx, b: cr.top + b * sy };
+    const hits: string[] = [];
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        const x = box.l + 1 + ((box.r - box.l - 2) * col) / 4;
+        const y = box.t + 1 + ((box.b - box.t - 2) * row) / 4;
+        if (document.elementsFromPoint(x, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]'))) hits.push(`${row},${col}`);
+      }
+    }
+    return { found: true, hits, box };
+  });
+}
+
+/** A WebGL-kontextus elvesztése (a böngésző saját bővítményével), ahogy GPU-hibánál / túl sok lapnál történik. */
+async function loseWebgl(page: Page): Promise<void> {
+  const lost = await page.evaluate(() => {
+    const c = document.querySelector("canvas[data-engine]") as HTMLCanvasElement | null;
+    const gl = (c?.getContext("webgl2") ?? c?.getContext("webgl")) as WebGLRenderingContext | null;
+    const ext = gl?.getExtension("WEBGL_lose_context");
+    if (!ext) return false;
+    ext.loseContext();
+    return true;
+  });
+  expect(lost, "a WebGL-kontextus elveszett").toBe(true);
+  await expect(page.getByTestId("tsunami-flat"), "a lapos tartalék megjelent").toBeVisible({ timeout: 10_000 });
+}
+
+test.describe("360x640: a lapos (2D) tartalék — a kép-eltolás kirajzolva, a jelző a kirajzolt képhez kötve (vak L1, L2)", () => {
+  test.use({ viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true });
+
+  test("L1: WebGL-vesztés után nyitott hosszú kérdésnél a kirajzolt figura szabad, és ≤ 600 ms alatt nyugalom", async ({ page }) => {
+    await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").tap();
+    await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+    await loseWebgl(page);
+    await openQuestion(page, { water: 47 });
+    await openQuestion(page, { question: true, longAnswers: true, longPrompt: true });
+    const quiz = page.getByTestId("ts-quiz");
+    await expect(quiz).toHaveAttribute("data-layout", "settled", { timeout: 3_000 });
+    const settleMs = ((await probe(page)) as unknown as { layoutSettleMs: number | null }).layoutSettleMs;
+    expect(settleMs!, `≤ 600 ms alatt nyugalom (mért: ${settleMs} ms)`).toBeLessThanOrEqual(600);
+    await page.waitForTimeout(100);
+    const cover = await flatFigureCover(page);
+    expect(cover.found, "a figura a lapos vásznon").toBe(true);
+    expect(cover.hits, `a kirajzolt figura szabad (doboz ${JSON.stringify(cover.box)})`).toEqual([]);
+  });
+
+  test("L2: a WebGL a kérdés beállása KÖZBEN vész el — a jelző a lapos kép eltolására vált, nyugalomba ér, a figura szabad", async ({ page }) => {
+    await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").tap();
+    await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+    await openQuestion(page, { water: 46 });
+    const lostWhileSettling = await page.evaluate(
+      () =>
+        new Promise<boolean>((resolve) => {
+          const api = (window as unknown as { __websuliGame: { forceState: (p: Record<string, unknown>) => void } }).__websuliGame;
+          const t0 = performance.now();
+          const tick = () => {
+            const quiz = document.querySelector('[data-testid="ts-quiz"]');
+            if (quiz && quiz.getAttribute("data-layout") === "settling") {
+              const c = document.querySelector("canvas[data-engine]") as HTMLCanvasElement | null;
+              const gl = (c?.getContext("webgl2") ?? c?.getContext("webgl")) as WebGLRenderingContext | null;
+              gl?.getExtension("WEBGL_lose_context")?.loseContext();
+              resolve(true);
+              return;
+            }
+            if (performance.now() - t0 > 3_000) {
+              resolve(false);
+              return;
+            }
+            requestAnimationFrame(tick);
+          };
+          api.forceState({ question: true, longAnswers: true, longPrompt: true });
+          requestAnimationFrame(tick);
+        }),
+    );
+    expect(lostWhileSettling, "a kontextus a beállás közben veszett el").toBe(true);
+    await expect(page.getByTestId("tsunami-flat")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("ts-quiz"), "a lapos kép eltolására vált és nyugalomba ér").toHaveAttribute("data-layout", "settled", { timeout: 3_000 });
+    await page.waitForTimeout(100);
+    const cover = await flatFigureCover(page);
+    expect(cover.found, "a figura a lapos vásznon").toBe(true);
+    expect(cover.hits, `a kirajzolt figura szabad (doboz ${JSON.stringify(cover.box)})`).toEqual([]);
+  });
+});
+
+test.describe("360x640: Szünet → Újrakezdés után az új menet első kérdése friss elrendezést kap (vak L3)", () => {
+  test.use({ viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true });
+
+  test("ugyanaz a kérdés-azonosító, más vízszint és kártyaméret: nem örökli a régi „settled”-et, és a jelzéskor a figura szabad", async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.goto("/games/tsunami-english?seed=29&difficulty=easy");
+    await page.getByTestId("button-tsunami-start").tap();
+    await expect(page.getByTestId("tsunami-touch-controls")).toBeVisible();
+    await openQuestion(page, { question: true, answers: SHORT_ANSWERS });
+    await expect(page.getByTestId("ts-quiz")).toHaveAttribute("data-layout", "settled", { timeout: 3_000 });
+    await page.getByTestId("game-pause").tap();
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    await page.getByTestId("game-restart").tap();
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+    await page.waitForFunction(() => !document.querySelector('[data-testid="ts-quiz"]'), null, { timeout: 10_000 });
+    await openQuestion(page, { water: 54 });
+    const atSettle = await page.evaluate(
+      () =>
+        new Promise<{ hits: string[]; sawSettling: boolean } | null>((resolve) => {
+          const api = (window as unknown as {
+            __websuliGame: { forceState: (p: Record<string, unknown>) => void; probe: () => Record<string, number | null> };
+          }).__websuliGame;
+          // Az új sáv „settling” állapotból indul-e: a megfigyelő a `data-layout` régi értékét is kapja (ha a sáv eleve
+          // „settled”-ként kerül a DOM-ba — a régi menet állapota —, ilyen rekord nincs).
+          let sawSettling = false;
+          const timeout = window.setTimeout(() => resolve(null), 10_000);
+          const observer = new MutationObserver((records) => {
+            if (records.some((r) => r.type === "attributes" && r.attributeName === "data-layout" && r.oldValue === "settling")) sawSettling = true;
+            const quiz = document.querySelector('[data-testid="ts-quiz"]');
+            if (!quiz) return;
+            if (quiz.getAttribute("data-layout") !== "settled") return;
+            observer.disconnect();
+            window.clearTimeout(timeout);
+            const pr = api.probe();
+            const hits: string[] = [];
+            if (pr.figureBoxLeft !== null && pr.figureBoxLeft !== undefined) {
+              const stage = document.querySelector('[data-testid="tsunami-stage"]')!.getBoundingClientRect();
+              for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 5; c++) {
+                  const x = stage.left + pr.figureBoxLeft + 3 + ((pr.figureBoxRight! - pr.figureBoxLeft - 6) * c) / 4;
+                  const y = stage.top + pr.figureBoxTop! + 3 + ((pr.figureBoxBottom! - pr.figureBoxTop! - 6) * r) / 6;
+                  if (document.elementsFromPoint(x, y).some((el) => !!el.closest('[data-testid="ts-quiz"], [data-testid="ts-question"]'))) hits.push(`${r},${c}`);
+                }
+              }
+            } else hits.push("nincs doboz");
+            resolve({ hits, sawSettling });
+          });
+          observer.observe(document.body, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ["data-layout"], childList: true });
+          api.forceState({ question: true, longAnswers: true, longPrompt: true });
+        }),
+    );
+    expect(atSettle, "az új menet kérdése nyugalomba ér").not.toBeNull();
+    expect(atSettle!.sawSettling, "az új kérdés „settling” állapotból indul (nem örökli a régi menet „settled”-jét)").toBe(true);
+    expect(atSettle!.hits, "a jelzéskor a figura teste szabad").toEqual([]);
   });
 });
 
