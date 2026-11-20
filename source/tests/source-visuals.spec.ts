@@ -298,13 +298,13 @@ for (const viewport of [{ name: "allo-360", width: 360, height: 640 }, { name: "
     });
     expect(siblings[0]).toBe(2);
     await expect(page.locator('figure[data-anim="decisionTree"]')).toHaveCount(2);
-    await expect(page.locator('figure[data-anim="pictureCards"] .sv-card')).toHaveCount(8);
+    await expect(page.locator('figure[data-anim="pictureCards"] .sv-pcard')).toHaveCount(8);
     for (const fig of await page.locator('figure[data-anim="decisionTree"], figure[data-anim="pictureCards"]').all()) {
       await fig.scrollIntoViewIfNeeded();
       const box = await fig.boundingBox();
       expect(box && box.x >= 0 && box.x + box.width <= viewport.width + 0.5).toBe(true);
       // Szöveg nincs levágva a csomópontokban és a kártyákon.
-      const clipped = await fig.evaluate((f) => [...f.querySelectorAll<HTMLElement>(".sv-tree-node, .sv-card-label, .sv-card-example")]
+      const clipped = await fig.evaluate((f) => [...f.querySelectorAll<HTMLElement>(".sv-tree-node, .sv-pcard-label, .sv-pcard-example")]
         .filter((n) => n.scrollWidth > n.clientWidth + 1 || n.scrollHeight > n.clientHeight + 1).map((n) => n.textContent));
       expect(clipped).toEqual([]);
     }

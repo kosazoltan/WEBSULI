@@ -480,14 +480,14 @@
 }
 
 /* Képes kártyák: 360 px-en 2, széles nézetben 4 oszlop. */
-[data-ws-theme] .sv-cards-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (min-width: 900px) { [data-ws-theme] .sv-cards-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-[data-ws-theme] .sv-card {
+[data-ws-theme] .sv-pcards-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 900px) { [data-ws-theme] .sv-pcards-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+[data-ws-theme] .sv-pcard {
   display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 8px; border-radius: 14px;
   border: 2px solid color-mix(in srgb, var(--sv-tone) 55%, var(--ws-line)); background: var(--lesson-surface);
 }
-[data-ws-theme] .sv-card-art { border-radius: 10px; overflow: hidden; }
-[data-ws-theme] .sv-card-art > svg { display: block; width: 100%; height: auto; }
-[data-ws-theme] .sv-card-label { font-weight: 800; font-size: 1.05em; overflow-wrap: anywhere; color: var(--ws-title, var(--ws-ink)); }
-[data-ws-theme] .sv-card-caption { font-size: 0.88em; color: var(--ws-muted); overflow-wrap: anywhere; }
-[data-ws-theme] .sv-card-example { font-size: 0.88em; font-style: italic; overflow-wrap: anywhere; }
+[data-ws-theme] .sv-pcard-art { border-radius: 10px; overflow: hidden; }
+[data-ws-theme] .sv-pcard-art > svg { display: block; width: 100%; height: auto; }
+[data-ws-theme] .sv-pcard-label { font-weight: 800; font-size: 1.05em; overflow-wrap: anywhere; color: var(--ws-title, var(--ws-ink)); }
+[data-ws-theme] .sv-pcard-caption { font-size: 0.88em; color: var(--ws-muted); overflow-wrap: anywhere; }
+[data-ws-theme] .sv-pcard-example { font-size: 0.88em; font-style: italic; overflow-wrap: anywhere; }
