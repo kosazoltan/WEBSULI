@@ -125,6 +125,10 @@ Megszakítás futás közben: `<git-common-dir>/websuli-qa-evidence/blind-review
   szakaszának kötelezően meg kell neveznie a nem futott eszközt (gépi ellenőrzés). A zárra várt idő NEM számít a falióra-keretbe:
   saját összkorlátja van (`machineLockWaitTotalSec` = 30 perc / futás), és a Gépi összegzés kiírja. A változó nélkül (CI) nincs
   zárolás. Idegen zárat a futtató soha nem bont.
+- **Mélységi őr:** a jelentést a futtató csak legalább 8 vizsgáló eszközhívás után fogadja el, és csak ha a diff minden érdemi
+  (kód / teszt / konfig) fájlját beolvasta vagy a „Mit NEM vizsgáltam” szakaszban indokolta — különben visszautasítja, és a modell
+  folytatja. A szolgáltató rögzített (OpenAI, Azure — az Amazon Bedrock útvonalon a high effort nem érvényesül); más válaszadónál a
+  futás NEM TELJES. A Gépi összegzés kiírja a szolgáltatót és a gondolkodó tokenek számát.
 - A futtatással igazolt lelet „részben igazolt”, ha a próba elszigetelt volt (saját homokozós fájl, egységteszt, típusellenőrzés —
   a valódi hívási lánc helyett); „teljes úton igazolt” csak böngészős vagy adatbázisos futás lehet.
 - Az eldobható munkafa `source/node_modules`-a a futtató checkoutjának telepítésére csatol; eltérő `package-lock.json` esetén az

@@ -287,6 +287,10 @@ export const TOOL_SCHEMAS = [
   }, ['report', 'findings']),
 ];
 
+/** Érdemi (kód / teszt / konfig) fájl a diffben: a mélységi őr ezeket kéri (dokumentum, kép, lock-fájl nem). */
+export function isSubstantive(f) {
+  return /\.(m?[jt]sx?|cjs|css|scss|sql|py|sh|ps1|ya?ml|html|json)$/i.test(f) && !/(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(f) && !/(^|\/)docs\//.test(f);
+}
 export const INVESTIGATIVE = ['read_file', 'list_dir', 'search', 'git_diff', 'git_log', 'git_show', 'run_command', 'write_temp_file', 'run_db_tests', 'run_e2e', 'run_browser_scenario'];
 export const READING = ['read_file', 'search', 'git_diff', 'git_show'];
 
@@ -342,6 +346,14 @@ export function makeTools(ctx) {
   let lockWaitTotal = 0;
   /** A gép foglaltsága miatt NEM FUTOTT nehéz eszközök — a jelentés „Mit NEM vizsgáltam” szakaszának meg kell neveznie őket. */
   const notRun = [];
+  /** A diff ÉRDEMI (kód / teszt / konfig) fájljai — a mélységi őr ezeket kéri beolvasva vagy indokolva. */
+  const substantive = (() => {
+    if (Array.isArray(ctx.diffFiles)) return ctx.diffFiles.filter(isSubstantive);
+    const r = spawnSync('git', ['diff', '--name-only', '--diff-filter=d', `${base}...${head}`], { cwd: root, encoding: 'utf8', windowsHide: true, env });
+    return r.status === 0 ? r.stdout.split('\n').map((x) => x.trim().replace(/\\/g, '/')).filter(Boolean).filter(isSubstantive) : [];
+  })();
+  const seen = new Set();
+  const markSeenFromDiff = (text) => { for (const m of String(text).matchAll(/^diff --git a\/(\S+) b\//gm)) seen.add(m[1]); };
   let scenarioRuns = 0;
   const dockerPs = ctx.dockerPs ?? (async () => (await run('docker', ['ps', '--format', '{{.Names}}\t{{.CreatedAt}}'], { cwd: root, env, timeoutMs: 30_000 })).stdout);
   /**
@@ -416,6 +428,7 @@ export function makeTools(ctx) {
       const from = Math.max(1, Number(a) || 1);
       const to = Math.min(lines.length, Number(b) || from + 399, from + 399);
       const body = lines.slice(from - 1, to).map((l, i) => `${String(from + i).padStart(5)}  ${l}`).join('\n');
+      seen.add(r.rel);
       return out(`${r.rel} — ${from}–${to}. sor (összesen ${lines.length})\n${body}`);
     },
     async list_dir({ path = '.' }) {
@@ -459,7 +472,10 @@ export function makeTools(ctx) {
       if (!p.ok) return `HIBA: ${p.error}`;
       const ctxN = Math.max(0, Math.min(20, Number.isFinite(Number(n)) && n != null ? Number(n) : 3));
       const x = await git(['diff', '--no-color', '--no-ext-diff', '--no-textconv', stat ? '--stat' : `-U${ctxN}`, `${base}...${head}`, '--', ...(p.list.length ? p.list : ['.'])]);
-      return x.code === 0 ? out(x.stdout || 'nincs különbség') : `HIBA: ${out(x.stderr)}`;
+      if (x.code !== 0) return `HIBA: ${out(x.stderr)}`;
+      const shownDiff = out(x.stdout || 'nincs különbség');
+      markSeenFromDiff(shownDiff); // csak ami a (csonkolt) kimenetben ténylegesen látszik (a --stat összesítőben nincs fejléc)
+      return shownDiff;
     },
     async git_log({ paths: ps, max_count: m }) {
       const p = paths(ps);
@@ -481,6 +497,7 @@ export function makeTools(ctx) {
         const r = resolveInside(root, path);
         if (!r.ok) return `HIBA: ${r.error}`;
         const x = await git(['show', '--no-color', '--no-ext-diff', '--no-textconv', `${sha}:${r.rel}`]);
+        if (x.code === 0) seen.add(r.rel);
         return x.code === 0 ? out(x.stdout) : `HIBA: ${out(x.stderr)}`;
       }
       const x = await git(['show', '--no-color', '--no-ext-diff', '--no-textconv', '--stat', '--patch', '--format=fuller', sha]);
@@ -567,6 +584,8 @@ export function makeTools(ctx) {
     counts,
     runLog,
     notRun,
+    /** A mélységi őr adatai: a diff érdemi fájljai közül a még nem látottak, és a vizsgáló eszközhívások száma. */
+    depth: () => ({ substantive: [...substantive], unseen: substantive.filter((f) => !seen.has(f)), investigative: INVESTIGATIVE.reduce((n, k) => n + (counts[k] ?? 0), 0) }),
     async call(name, args) {
       if (!Object.hasOwn(impl, name)) return `HIBA: ismeretlen eszköz: ${String(name).slice(0, 60)}`;
       counts[name] = (counts[name] ?? 0) + 1;

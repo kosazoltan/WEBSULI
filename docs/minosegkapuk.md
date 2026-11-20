@@ -103,6 +103,10 @@ node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --re
   gépen „NEM FUTOTT: gép foglalt” (nem bukás; a futás folytatódik, a „Mit NEM vizsgáltam” kötelezően megnevezi). A zárra várt idő
   nem számít a falióra-keretbe (saját összkorlát: `machineLockWaitTotalSec` = 1800 s / futás; a Gépi összegzés kiírja). A változó
   nélkül nincs zárolás (CI).
+- **Mélységi őr és szolgáltató (2026-11-20):** a `submit_report` csak ≥ 8 vizsgáló eszközhívás után, és csak ha a diff minden érdemi
+  fájlja beolvasva vagy a „Mit NEM vizsgáltam”-ban indokolva; a szolgáltató rögzített (`provider.order`: OpenAI, Azure, tartalék
+  nélkül — az Amazon Bedrock útvonalon a high effort mérten 0 gondolkodó tokent adott); a Gépi összegzés a szolgáltatót és a
+  gondolkodó tokeneket is kiírja.
 - **Ha a futtató nem tud lefutni** (kulcs, OpenRouter, plafon): megáll, nem nulla kóddal — „a vak ellenőr nem futott”. A kapu áll,
   csendes tartalék nincs — a tulajdonos dönt (követett konfigváltozás: `blindReview.exclusive` / `model`).
 - **Nincs CI-bekötés** (külön szelet): kell hozzá az `OPENROUTER_API_KEY` GitHub-titok és költési keret a kulcson (tulajdonosi

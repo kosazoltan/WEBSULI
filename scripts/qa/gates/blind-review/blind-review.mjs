@@ -104,7 +104,7 @@ export function buildUserMessage({ head, base, specs, goal, stat, warnings = [] 
  * A leadott jelentés ellenőrzése: forma (ugyanazokkal a függvényekkel, mint a record-review.mjs) + a leletek GÉPI visszaellenőrzése
  * (findings.mjs). Csak akkor fogadható el, ha minden blokkoló / közepes lelet hivatkozása visszaellenőrizhető.
  */
-export function validateReport(text, head, cfg, { findings, root, runLog = [], notRun = [] } = {}) {
+export function validateReport(text, head, cfg, { findings, root, runLog = [], notRun = [], depth = null } = {}) {
   if (text.length > (cfg.reportMaxChars ?? 40_000)) return { ok: false, error: `a jelentés túl hosszú (legfeljebb ${cfg.reportMaxChars ?? 40_000} karakter)` };
   const problems = [];
   const verdict = reportVerdict(text);
@@ -117,6 +117,12 @@ export function validateReport(text, head, cfg, { findings, root, runLog = [], n
   const check = verifyFindings({ findings, root, runLog, reportText: text, verdict });
   problems.push(...check.errors);
   const notTested = notTestedSection(text);
+  if (depth) {
+    const min = cfg.minInvestigativeCalls ?? 8;
+    if (depth.investigative < min) problems.push(`MÉLYSÉGI ŐR: eddig csak ${depth.investigative} vizsgáló eszközhívás történt (legalább ${min} kell) — folytasd a vizsgálatot (a változott fájlok TELJES olvasása, a hívók, tesztfuttatás), és csak utána add le a jelentést`);
+    const missing = depth.unseen.filter((f) => !notTested.includes(f));
+    if (missing.length) problems.push(`MÉLYSÉGI ŐR: a diff ${missing.length} érdemi fájlját nem olvastad be (read_file / git_show / git_diff a fájlra), és a „## Mit NEM vizsgáltam” sem indokolja: ${missing.slice(0, 25).join(', ')}${missing.length > 25 ? ' …' : ''} — olvasd be őket, vagy nevezd meg és indokold a „Mit NEM vizsgáltam” szakaszban`);
+  }
   for (const t of [...new Set(notRun.map((n) => n.tool))]) {
     if (!notTested.includes(t)) problems.push(`a(z) ${t} eszköz nem futott (gép foglalt) — a „## Mit NEM vizsgáltam” szakasz nevezze meg (${t}), és írja le, mit nem tudtál így mérni`);
   }
@@ -186,7 +192,7 @@ export function estimateNextUsd({ pendingChars, lastPromptTokens, cacheWarm, cfg
  */
 export function createBudget({ maxUsd, maxRounds, maxWallMs, maxCompletionTokens, cfg = {}, now = () => Date.now(), stopRequested = () => null }) {
   const s = { spentUsd: 0, calls: 0, retries: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0,
-    costSources: new Set(), startedAt: now(), lastPromptTokens: 0, lastCallUsd: 0, lastCallAt: null, callsDetail: [], lockWaitMs: 0 };
+    costSources: new Set(), startedAt: now(), lastPromptTokens: 0, lastCallUsd: 0, lastCallAt: null, callsDetail: [], lockWaitMs: 0, providers: new Set() };
   const ttlMs = (cfg.promptCache?.ttlSec ?? 300) * 1000;
   const soft = () => {
     const stop = stopRequested();
@@ -296,6 +302,11 @@ export async function runReview({ cfg, key, system, user, tools, box, budget, se
     }
     pending = 0;
     if (json.model) reportedModels.add(String(json.model));
+    if (json.provider) budget.state.providers.add(String(json.provider));
+    const allowed = cfg.requestExtras?.provider?.order;
+    if (Array.isArray(allowed) && allowed.length && !allowed.includes(String(json.provider ?? ''))) {
+      return done(false, `a válaszadó szolgáltató (${json.provider ?? 'ismeretlen'}) nincs a konfigurált listán (${allowed.join(', ')}) — ott a reasoning-beállítás nem garantált`, true);
+    }
     if (json.id) generationIds.push(String(json.id));
     const msg = json.choices?.[0]?.message;
     if (!msg) return done(false, 'OpenRouter-hiba: a válaszban nincs üzenet', true);
@@ -438,6 +449,7 @@ export function buildEvidence({ args, cfg, baseSha, result, state, counts, repor
     tokens: { prompt: state.promptTokens, completion: state.completionTokens, cached: state.cachedTokens, cacheWrite: state.cacheWriteTokens, reasoning: state.reasoningTokens },
     cache,
     lockWaitMs: state.lockWaitMs,
+    providers: [...(state.providers ?? [])],
     callsDetail: state.callsDetail,
     costUsd: Number(state.spentUsd.toFixed(6)),
     costSource: [...state.costSources],
@@ -520,7 +532,7 @@ async function main() {
       root: wt.root, base: baseSha, head, cfg, key, nodeModulesReal: wt.nodeModulesReal,
       remainingMs: () => (budgetRef ? args.maxMinutes * 60_000 - (Date.now() - budgetRef.state.startedAt - budgetRef.state.lockWaitMs) : Infinity),
       onLockWait: (ms) => budgetRef?.excludeLockWait(ms),
-      onReport: (t, findings, runLog) => { const v = validateReport(t, head, cfg, { findings, root: wt.root, runLog, notRun: tools.notRun }); if (v.ok) { box.report = t; box.check = v.check; } return v; },
+      onReport: (t, findings, runLog) => { const v = validateReport(t, head, cfg, { findings, root: wt.root, runLog, notRun: tools.notRun, depth: tools.depth() }); if (v.ok) { box.report = t; box.check = v.check; } return v; },
     });
     const stopFile = join(evDir, 'blind-review.stop');
     const budget = createBudget({

@@ -75,6 +75,7 @@
     "exclusive": true,
     "exclusiveSince": "2026-11-19T15:56:00Z",
     "minToolCalls": 5,
+    "minInvestigativeCalls": 8,
     "maxUsdDefault": 2,
     "maxUsdHardCap": 6,
     "maxRounds": 60,
@@ -98,7 +99,7 @@
     "fallbackPriceUsdPerMTok": { "input": 4, "output": 15, "cacheRead": 0.2, "cacheWrite": 5 },
     "npmScripts": ["check", "check:test", "lint"],
     "allowPlaywright": false,
-    "requestExtras": { "reasoning": { "effort": "high" } }
+    "requestExtras": { "reasoning": { "effort": "high" }, "provider": { "order": ["OpenAI", "Azure"], "allow_fallbacks": false } }
   },
   "mergeEvidenceMaxMinutes": 15,
   "$hookTimeouts": "A check-quality-gates hook korlátai (kanban #100): git- és gh-hívásonként, és a teljes keret. A keret a .claude/settings.json hook-időkorlátja (60 s) alatt marad; ha a git / gh nem válaszol, a hook TILT (fail-closed), nem enged.",

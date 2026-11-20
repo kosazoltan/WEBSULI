@@ -23,6 +23,10 @@ test('B12 / B17: a vak ellenőr modellje a konfig EGYETLEN sorában áll, nem An
   assert.equal(cfg.model, 'openai/gpt-6.2-sol');
   assert.deepEqual(cfg.requestExtras?.reasoning, { effort: 'high' }, 'a tulajdonos high effortot rendelt el');
   assert.equal(cfg.requestExtras?.temperature, undefined, 'a modell nem fogad temperature paramétert');
+  // Mért 2026-11-20: az Amazon Bedrock útvonalon a reasoning.effort nem érvényesül (0 gondolkodó token), az OpenAI és az Azure
+  // útvonalon igen — a szolgáltató ezért rögzített, tartalék nélkül.
+  assert.deepEqual(cfg.requestExtras?.provider, { order: ['OpenAI', 'Azure'], allow_fallbacks: false });
+  assert.ok(cfg.minInvestigativeCalls >= 8, 'mélységi őr: legalább 8 vizsgáló eszközhívás');
   assert.ok(isIndependentModel(cfg.model));
   for (const bad of ['anthropic/claude-opus-5', 'openrouter/claude-sonnet', 'x/Fable-5', 'claude', '', null, 'qwen4-max']) assert.equal(isIndependentModel(bad), false, String(bad));
   assert.equal(new URL(cfg.endpoint).hostname, 'openrouter.ai');
@@ -58,6 +62,8 @@ test('B17: a futtató kódjában nincs modell-literál és nincs modell- / szolg
   for (const flag of [...VALUE_FLAGS, ...BOOL_FLAGS]) assert.doesNotMatch(flag, /model|provider|endpoint|report|summary|context|dev/i, flag);
   const runner = readFileSync(join(here, 'blind-review.mjs'), 'utf8');
   assert.match(runner, /model: cfg\.model/);
+  // A mélységi őr a valódi futásban is be van kötve (a jelentés-ellenőrzés megkapja a futás mélységi adatait).
+  assert.match(runner, /validateReport\(t, head, cfg, \{[^}]*depth: tools\.depth\(\)/);
   assert.equal(runner.split('model:').filter((_, i) => i > 0).filter((rest) => !/^ (cfg\.model|result\.reportedModels|\{)/.test(rest) && !/^ ?[`'"]?\$?\{?(model|result)/.test(rest)).length, 0, 'a kérés modellje csak cfg.model lehet');
 });
 

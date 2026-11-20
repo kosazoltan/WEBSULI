@@ -8,6 +8,7 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import './blind-review/blind-review.test.mjs';
+import './blind-review/depth.test.mjs';
 import './blind-review/evidence.test.mjs';
 import './blind-review/findings.test.mjs';
 import './blind-review/heavy.test.mjs';
@@ -15,7 +16,7 @@ import './blind-review/openrouter.test.mjs';
 import './blind-review/rules-guard.test.mjs';
 import './blind-review/tools.test.mjs';
 
-const IMPORTED = ['blind-review.test.mjs', 'evidence.test.mjs', 'findings.test.mjs', 'heavy.test.mjs', 'openrouter.test.mjs', 'rules-guard.test.mjs', 'tools.test.mjs'];
+const IMPORTED = ['blind-review.test.mjs', 'depth.test.mjs', 'evidence.test.mjs', 'findings.test.mjs', 'heavy.test.mjs', 'openrouter.test.mjs', 'rules-guard.test.mjs', 'tools.test.mjs'];
 
 test('az almappa minden tesztfájlja be van kötve ebbe a belépőbe', () => {
   const found = readdirSync(fileURLToPath(new URL('./blind-review/', import.meta.url))).filter((f) => f.endsWith('.test.mjs')).sort();

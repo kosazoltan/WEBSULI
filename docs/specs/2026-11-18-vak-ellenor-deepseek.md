@@ -550,6 +550,22 @@ Claude-alügynök ítéletet nem ad. `exclusiveSince` = az átkapcsolás időpon
 Ha a futtató nem tud lefutni (kulcs, OpenRouter, költségplafon, NEM TELJES): a munka megáll, a tulajdonos dönt — csendes tartalék
 nincs. Az E3 küszöbe (≥ 7/9) a Qwen-mérésre szólt; a GPT-6.2 Sol-ra ugyanezen a két fejen mért alapvonal jegyre kerül.
 
+
+### F3 — Mélységi őr és rögzített szolgáltató (mért ok, 2026-11-20)
+
+- **Tünet:** 2026-11-20 05:36 UTC óta 8 ellenőrzés ~1 perc alatt, 4–6 hívással, 0,05–0,1 USD-ért „IGEN, FELTÉTELLEL”-t adott (előtte
+  ugyanez a kód 12–27 hívással, 15–60 perc alatt vizsgált).
+- **Ok (mérve):** az OpenRouter a kéréseket az **Amazon Bedrock** útvonalra tette, ahol a `reasoning.effort: high` NEM érvényesül:
+  azonos kérdésre Bedrock 0 gondolkodó token, OpenAI 213, Azure 224 (próba 2026-11-20). A sekély futások naplójában 0–8 gondolkodó
+  token; a mélyekben 186–516 / hívás. A modell egy időtúllépéses tesztfuttatás után azonnal leadta a jelentést — a futtatónak nem volt
+  mélységi feltétele.
+- **Javítás:** (1) `requestExtras.provider: { order: ["OpenAI", "Azure"], allow_fallbacks: false }`; ha a válaszadó szolgáltató mégis
+  más, a futás NEM TELJES (nem ítélet). (2) **Mélységi őr** (`minInvestigativeCalls` = 8): a `submit_report` csak akkor fogadható el,
+  ha legalább 8 vizsgáló eszközhívás történt, ÉS a diff minden érdemi (kód / teszt / konfig) fájlja beolvasva (read_file / git_show /
+  a teljes diff kimenetében látszik) vagy a „Mit NEM vizsgáltam” szakaszban megnevezve; különben a futtató visszautasítja, és a modell
+  folytatja (a keret / idő végén NEM TELJES). (3) A Gépi összegzés kiírja a szolgáltatót és a gondolkodó tokenek számát; a bizonyíték
+  `providers` mezőt kap.
+
 ### Elfogadás — 5. kiegészítés
 
 - [ ] B35 WHEN a konfigot olvassuk THEN `blindReview.model` = `openai/gpt-6.2-sol`, `requestExtras.reasoning.effort` = `high`,
