@@ -1106,3 +1106,16 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-87 — A GPT-modell „megáll, mielőtt végrehajtaná”: terv / kérdés / félbehagyott jelentés, vagy élő, de nem haladó futás (2026-11-20)
+
+- **Tünet:** a GPT 6.2 a kész munka helyett tervet ad („következő lépésként megnézem…”, „ha szeretnéd…”, „folytassam?”), javaslat
+  nélküli leletet ír, hibakereső pontot kihagy; vagy jelzés nélkül megáll (csendben álló stream, Codex újracsatlakozási hurok élő
+  folyamattal). Nem interaktív futásban erre senki nem válaszol — a munka elveszik.
+- **Szabály:** GPT-futás csak a teljesítési őrrel: szerződés a promptban, determinisztikus teljesség-ellenőrző a kimeneten
+  (`scripts/qa/gates/blind-review/completeness.mjs`), automatikus folytatás ugyanabban a beszélgetésben a hiánylistával (legfeljebb 3),
+  díjmentes életjel-felügyelet (stream csend-óra, szívverés-fájl, Codex: kimenet- és munkamenet-fájl méret). Codexnél
+  `codex exec resume <azonosító> -` — a `--last` tilos (más munkamenetet folytathat); a „tokens used” szám a következő sorban,
+  szóközös ezres tagolással is állhat.
+- Forrás: `docs/specs/2026-11-20-gpt-teljesitesi-or.md`. Ütközés-kockázat: a sorszámot a beolvasztáskor egyeztetni kell (C-86 volt a
+  legmagasabb a nyitott ágakon, 2026-11-20).

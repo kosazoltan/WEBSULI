@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto';
 import { BLIND_NOT_RUN, BLIND_REVIEW_CMD } from '../lib.mjs';
 import { INVESTIGATIVE, READING } from './tools.mjs';
+import { checkCompleteness } from './completeness.mjs';
 
 export const EVIDENCE_KIND = 'blind-review';
 export const evidenceName = (head) => `blind-review-${head}`;
@@ -15,7 +16,7 @@ const sum = (counts, names) => names.reduce((n, k) => n + (counts?.[k] ?? 0), 0)
  * A futtató bizonyítékának ellenőrzése egy rögzítendő ítélethez.
  * @returns {{ ok: true, summary: object } | { ok: false, error: string }}
  */
-export function checkBlindEvidence({ evidence, head, reportSha256, verdict, cfg }) {
+export function checkBlindEvidence({ evidence, head, reportSha256, verdict, cfg, reportText = null }) {
   const run = BLIND_REVIEW_CMD.replace('<teljes fej-hash>', head);
   const fail = (why) => ({ ok: false, error: `${why} A vak ellenőr KIZÁRÓLAG a futtatóval (${cfg.model}) készülhet: ${run}. Ha a futtató nem tud lefutni: ${BLIND_NOT_RUN} (websuli-vak-ellenor skill).` });
   if (!evidence || evidence.kind !== EVIDENCE_KIND) return fail(`Nincs futtató-bizonyíték (${evidenceName(head.slice(0, 12))}….json) ehhez a fejhez.`);
@@ -30,6 +31,15 @@ export function checkBlindEvidence({ evidence, head, reportSha256, verdict, cfg 
   const inv = sum(evidence.toolCalls, INVESTIGATIVE);
   if (inv < min) return fail(`Az ellenőr csak ${inv} vizsgáló eszközhívást végzett (legalább ${min} kell) — üres ítélet nem rögzíthető.`);
   if (sum(evidence.toolCalls, READING) < 1) return fail('Az ellenőr egyetlen olvasó / kereső / diff-hívást sem végzett.');
+  // GPT teljesítési őr (docs/specs/2026-11-20-gpt-teljesitesi-or.md, T7): teljesség-bizonyíték nélkül nincs rögzítés, és a jelentés
+  // szövegét a bizonyítékban rögzített pontlistával újra ellenőrizzük.
+  if (cfg.requireCompleteness) {
+    if (evidence.completeness?.ok !== true || !Array.isArray(evidence.completeness.points)) return fail('Nincs érvényes teljesség-bizonyíték (a futtató teljesítési őre nem fogadta el a jelentést).');
+    if (reportText != null) {
+      const c = checkCompleteness(reportText, { points: evidence.completeness.points });
+      if (!c.ok) return fail(`A jelentés a teljesség-ellenőrzésen nem megy át: ${c.problems.slice(0, 4).join(' | ')}.`);
+    }
+  }
   if (evidence.verdict !== verdict) return fail(`A --verdict (${verdict}) eltér a futtató által rögzített ítélettől (${evidence.verdict}).`);
   return {
     ok: true,

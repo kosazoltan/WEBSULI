@@ -16,4 +16,7 @@ Push / PR nincs; nehéz kör (gate:stage, teljes teszt) csak a gépi zárral (`z
 8. Skill (forrás + tükör), `docs/minosegkapuk.md` egy sora, csapda-bejegyzés.
 9. Mutációs ellenpróba (≥ 4 mutáns); `gate:stage` a zárral; fej-hash.
 
-- [x] 1 · [ ] 2 · [ ] 3 · [ ] 4 · [ ] 5 · [ ] 6 · [ ] 7 · [ ] 8 · [ ] 9
+10. Kiegészítés (életjel): `stream.mjs` (streaming csend-óra), `heartbeat.mjs` (szívverés + díjmentes felügyelő), a `codex-complete.mjs`
+    beragadás-felismerése (`watchedExec`), hálózati hurok, „tokens used” olvasás; tesztek: `liveness.test.mjs`.
+
+- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [x] 6 · [x] 7 · [x] 8 · [~] 9 (mutáció 13 / 13; gate:stage a kapu-sorban) · [x] 10

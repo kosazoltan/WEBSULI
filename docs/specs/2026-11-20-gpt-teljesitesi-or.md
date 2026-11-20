@@ -51,6 +51,30 @@ egyetlen fájlolvasással (az ok a szolgáltató volt — `1e564a01`), és a jel
    támogatott.
 6. **Skill + csapda:** a `websuli-vak-ellenor` skill (forrás + tükör) szabálya; csapda-bejegyzés a `docs/agent-csapdak.md`-ben.
 
+## Kiegészítés — díjmentes életjel-felügyelet (tulajdonosi kérés 2026-11-20)
+
+> „a GPT 6.2-es modelleknél nagyon gyakori, hogy egyszerűen csak megáll minden jelzés nélkül… alakíts ki olyan scripteket, webhook-okat,
+> hook-okat, amivel folyamatosan, API-költségmentesen ellenőrzöd, hogy fut-e, és valóban dolgozik-e, vagy visszakérdezéssel leáll és
+> csak várakozik…”
+
+- **Vak futtató (OpenRouter):** streaming hívás (`stream.mjs`, `cfg.stream`): minden darab — a szolgáltató életjel-megjegyzése is —
+  újraindítja a csend-órát (`streamIdleSec` = 120 s); csendnél a hívás megszakad, a futtató ugyanazokkal az üzenetekkel újrapróbál (a
+  meglévő korlátos, exponenciális újrapróba és a USD-plafon szerint); a `finish_reason` nélküli stream csonka → újrapróba. A teljes
+  hívás-korlát 900 s (a high gondolkodás hosszú lehet). Szívverés-fájl (`<bizonyíték-tár>/blind-review-<fej12>.heartbeat.json`)
+  minden eseménynél; `heartbeat.mjs` díjmentesen megmondja: halad / beragadt / nem él / befejeződött.
+- **Codex CLI (`codex-complete.mjs`):** a folyamatot a burok indítja; percenként a kimenet, a válaszfájl és a Codex munkamenet-fájl
+  (`~/.codex/sessions/ÉÉÉÉ/HH/NN/rollout-*<id>.jsonl`) méretét nézi — ha `--stall-min` (25) percig semmi nem nő, a pontos folyamatfát
+  leállítja, és `codex exec resume <azonosító> -` technikai folytatással megy tovább (legfeljebb `--max-net` = 8); hálózati hurok
+  („Reconnecting... 5/5”, 429) a naplóban → ugyanígy. Gépújraindítás után: `--resume <azonosító>`. A „tokens used” szám a következő
+  sorban, szóközös tagolással is olvasva.
+- A felügyelet maga nem hív API-t; API-hívás csak a félbehagyott munka folytatásakor történik.
+
+- [ ] T10 WHEN a stream `streamIdleSec` ideig csendes THEN a hívás SHALL megszakadni, és a futtató ugyanazokkal az üzenetekkel újrapróbál;
+  finish_reason nélküli vég → újrapróba.
+- [ ] T11 WHEN a Codex-folyamat él, de a kimenete és a munkamenet-fájl nem nő THEN a burok SHALL leállítani és ugyanabban a munkamenetben
+  folytatni; a „tokens used” szóközös tagolású száma helyesen olvasva.
+- [ ] T12 WHEN a szívverés régi / a folyamat nem él THEN a `heartbeat.mjs` SHALL ezt kilépési kóddal jelezni, API-hívás nélkül.
+
 ## Nem cél
 
 - A közös megbízás-sablon (`vak-ellenor-megbizas.md`) átírása — a szerződés a futtató saját kiegészítésébe kerül.

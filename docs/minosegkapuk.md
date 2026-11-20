@@ -103,6 +103,10 @@ node scripts/qa/gates/record-review.mjs --head <fej> --verdict "<ítélet>" --re
   gépen „NEM FUTOTT: gép foglalt” (nem bukás; a futás folytatódik, a „Mit NEM vizsgáltam” kötelezően megnevezi). A zárra várt idő
   nem számít a falióra-keretbe (saját összkorlát: `machineLockWaitTotalSec` = 1800 s / futás; a Gépi összegzés kiírja). A változó
   nélkül nincs zárolás (CI).
+- **GPT teljesítési őr (2026-11-20):** teljesítési szerződés a rendszerüzenetben; `completeness.mjs` determinisztikus ellenőrzés
+  (szakaszok, minden hibakereső pont, lelet-javaslat, tiltott fordulatok, zárósor); automatikus folytatás ugyanabban a beszélgetésben
+  (legfeljebb 3), utána NEM TELJES; `record-review`: teljesség-bizonyíték kötelező. Életjel (díjmentes): streaming csend-figyelés,
+  szívverés-fájl + `heartbeat.mjs`; Codex CLI: `codex-complete.mjs` (beragadás, hálózati hurok, `codex exec resume <azonosító> -`).
 - **Mélységi őr és szolgáltató (2026-11-20):** a `submit_report` csak ≥ 8 vizsgáló eszközhívás után, és csak ha a diff minden érdemi
   fájlja beolvasva vagy a „Mit NEM vizsgáltam”-ban indokolva; a szolgáltató rögzített (`provider.order`: OpenAI, Azure, tartalék
   nélkül — az Amazon Bedrock útvonalon a high effort mérten 0 gondolkodó tokent adott); a Gépi összegzés a szolgáltatót és a

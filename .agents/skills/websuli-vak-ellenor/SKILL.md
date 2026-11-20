@@ -125,6 +125,13 @@ Megszakítás futás közben: `<git-common-dir>/websuli-qa-evidence/blind-review
   szakaszának kötelezően meg kell neveznie a nem futott eszközt (gépi ellenőrzés). A zárra várt idő NEM számít a falióra-keretbe:
   saját összkorlátja van (`machineLockWaitTotalSec` = 30 perc / futás), és a Gépi összegzés kiírja. A változó nélkül (CI) nincs
   zárolás. Idegen zárat a futtató soha nem bont.
+- **GPT teljesítési őr (2026-11-20):** a rendszerüzenet teljesítési szerződést tartalmaz (nem interaktív; tiltott megállási /
+  felajánló fordulatok; minden pont saját sorral; minden lelethez `scenario` + `fix`; zárósor `TELJESSÉG: x / y pont — HIÁNYZÓ: …`).
+  A futtató a leadott jelentést determinisztikusan ellenőrzi (`completeness.mjs`); hiánynál UGYANABBAN a beszélgetésben visszaküldi a
+  hiánylistát (legfeljebb 3-szor), utána NEM TELJES. A `record-review` teljesség-bizonyíték nélkül nem rögzít. Életjel: streaming
+  csend-figyelés (120 s), szívverés-fájl (`heartbeat.mjs` — díjmentes állapot: halad / beragadt / nem él). Codex CLI-futásokhoz:
+  `node scripts/qa/gates/blind-review/codex-complete.mjs --cwd <munkafa> --prompt <megbízás.md> --out <válasz.md> [--review --goal <cél.md>]`
+  (beragadás- és hálózati hurok-felismerés, `codex exec resume <azonosító> -` folytatás).
 - **Mélységi őr:** a jelentést a futtató csak legalább 8 vizsgáló eszközhívás után fogadja el, és csak ha a diff minden érdemi
   (kód / teszt / konfig) fájlját beolvasta vagy a „Mit NEM vizsgáltam” szakaszban indokolta — különben visszautasítja, és a modell
   folytatja. A szolgáltató rögzített (OpenAI, Azure — az Amazon Bedrock útvonalon a high effort nem érvényesül); más válaszadónál a

@@ -98,7 +98,7 @@ export function buildRecord({ head, verdict, report, resolveHead, readReport, no
   // alügynök teljes jelentése rögzül, a futtató teljes bizonyítéka kiegészítőként csatolódik. Felmentő kapcsoló nincs.
   if (blind?.cfg) {
     const evidence = blind.readEvidence(full);
-    const b = checkBlindEvidence({ evidence, head: full, reportSha256: record.reportSha256, verdict: v, cfg: blind.cfg });
+    const b = checkBlindEvidence({ evidence, head: full, reportSha256: record.reportSha256, verdict: v, cfg: blind.cfg, reportText: text });
     if (blindRequired(blind.cfg)) {
       if (!b.ok) return { ok: false, error: b.error };
       record.reviewer = BLIND_REVIEWER;

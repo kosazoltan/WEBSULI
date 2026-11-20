@@ -274,6 +274,8 @@ export const TOOL_SCHEMAS = [
           file: { type: 'string', description: 'útvonal a munkafa gyökeréhez képest' },
           line: { type: 'integer', description: 'a hibás sor száma a vizsgált fejen' },
           quote: { type: 'string', description: 'a hivatkozott sor(ok) kódja SZÓ SZERINT (legalább 8 karakter)' },
+          scenario: { type: 'string', description: 'a hibaforgatókönyv: ki, milyen eszközön, mit csinál, mi történik (legalább egy teljes mondat)' },
+          fix: { type: 'string', description: 'a KONKRÉT javítási javaslat: mit, hol, hogyan — teszttel' },
           run: {
             type: 'object',
             description: 'csak ha a leletet futtatással igazoltad: argv = a ténylegesen futtatott run_command argv-je (vagy ["run_db_tests"] / ["run_e2e", …] / ["run_browser_scenario", fájl]); output_excerpt = a kimenet szó szerinti részlete; input = a próba bemenete szó szerint (a futtatott fájlból / forgatókönyvből vagy a kimenetből); scope = teljes_ut (a valódi hívási lánc: böngésző / adatbázis) vagy elszigetelt (függvény közvetlen hívása, egységteszt)',
@@ -281,7 +283,7 @@ export const TOOL_SCHEMAS = [
             required: ['argv', 'output_excerpt', 'input', 'scope'],
           },
         },
-        required: ['id', 'severity', 'title', 'file', 'line', 'quote'],
+        required: ['id', 'severity', 'title', 'file', 'line', 'quote', 'scenario', 'fix'],
       },
     },
   }, ['report', 'findings']),

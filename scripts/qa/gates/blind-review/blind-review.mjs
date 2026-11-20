@@ -18,6 +18,9 @@ import { BLIND_NOT_RUN, GATES_DIR, evidenceDir, isMain, loadConfig, writeEvidenc
 import { missingSections, reportHead, reportVerdict } from '../record-review.mjs';
 import { EVIDENCE_KIND, evidenceName, sha256 } from './evidence.mjs';
 import { summaryMarkdown, verifyFindings } from './findings.mjs';
+import { checkCompleteness, continuationPrompt, debugPoints } from './completeness.mjs';
+import { callOpenRouterStream } from './stream.mjs';
+import { writeHeartbeat } from './heartbeat.mjs';
 import { LOCAL_CONFIG_NAME, OpenRouterError, callOpenRouter, loadApiKey, maskSecrets, usageCost } from './openrouter.mjs';
 import { TMP_DIR, TOOL_SCHEMAS, cleanEnv, makeTools } from './tools.mjs';
 
@@ -137,6 +140,34 @@ export function notTestedSection(text) {
   const rest = s.slice(a);
   const b = rest.slice(3).search(/^#{1,6}\s/m);
   return b < 0 ? rest : rest.slice(0, b + 3);
+}
+
+/**
+ * A jelentés-leadás kapuja a teljesítési őrrel (docs/specs/2026-11-20-gpt-teljesitesi-or.md): forma + leletek + (opcionálisan) mélység,
+ * ÉS a determinisztikus teljesség-ellenőrző. Hiánynál a futtató ugyanabban a beszélgetésben visszaküldi a pontos hiánylistát; a
+ * `maxRetries` teljesség-visszautasítás UTÁNI újabb hiányos leadás a futást megszakítja (`box.abort` → NEM TELJES, nem ítélet).
+ */
+export function makeReportGate({ head, cfg, root, points, box, maxRetries = 3, getTools = () => null, useDepth = false }) {
+  const state = { completenessRejections: 0, attempts: 0, last: null };
+  const onReport = (text, findings, runLog) => {
+    state.attempts += 1;
+    const tools = getTools();
+    const v = validateReport(text, head, cfg, { findings, root, runLog, notRun: tools?.notRun ?? [], depth: useDepth && tools?.depth ? tools.depth() : null });
+    const c = checkCompleteness(text, { points, findings });
+    state.last = c;
+    if (v.ok && c.ok) { box.report = text; box.check = v.check; return v; }
+    const errs = [];
+    if (!v.ok) errs.push(v.error);
+    if (!c.ok) {
+      state.completenessRejections += 1;
+      if (state.completenessRejections > maxRetries) {
+        box.abort = `teljesség: ${maxRetries} folytatás után is hiányos — hiányzik: ${c.missing.join(', ') || '—'}; ${c.problems.slice(0, 6).join(' | ')}`;
+      }
+      errs.push(continuationPrompt(c));
+    }
+    return { ok: false, error: errs.join('\n') };
+  };
+  return { onReport, state };
 }
 
 // ---- Prompt-gyorsítótár (docs/specs/2026-11-18-vak-ellenor-deepseek.md, C1–C5) ---------------------------------------------------
@@ -279,8 +310,10 @@ export async function runReview({ cfg, key, system, user, tools, box, budget, se
       if (stop) return done(false, stop);
       budget.begin();
       try {
-        json = await callOpenRouter({
-          fetchImpl, endpoint: cfg.endpoint, key, timeoutMs: (cfg.httpTimeoutSec ?? 180) * 1000,
+        // Streaming (cfg.stream): díjmentes életjel-felügyelet — csendben álló stream esetén megszakítás és újrapróba ugyanazokkal az üzenetekkel.
+        const call = cfg.stream ? callOpenRouterStream : callOpenRouter;
+        json = await call({
+          fetchImpl, endpoint: cfg.endpoint, key, timeoutMs: (cfg.stream ? (cfg.httpTimeoutSec ?? 900) : (cfg.httpTimeoutSec ?? 180)) * 1000, idleMs: (cfg.streamIdleSec ?? 120) * 1000,
           body: {
             ...(cfg.requestExtras ?? {}), model: cfg.model, messages: withCacheMarkers(messages, cfg.promptCache?.mode), tools: TOOL_SCHEMAS, tool_choice: 'auto',
             max_tokens: cfg.maxTokensPerCall, usage: { include: true }, ...(sessionId ? { session_id: sessionId } : {}),
@@ -355,6 +388,7 @@ export async function runReview({ cfg, key, system, user, tools, box, budget, se
       pending += chars(imgMsg);
       log({ type: 'images', names: images.map((i) => i.name) });
     }
+    if (box.abort) return done(false, box.abort);
     if (box.report !== null) return done(true, null);
   }
 }
@@ -435,7 +469,7 @@ export function runFooter({ model, state, cache }) {
     + `gépi zár-várakozás: ${((state.lockWaitMs ?? 0) / 60_000).toFixed(1)} perc (a falióra-keretbe nem számít)._\n`;
 }
 
-export function buildEvidence({ args, cfg, baseSha, result, state, counts, reportText, verdict, startedAt, endedAt, reportPath, cache, findings = null }) {
+export function buildEvidence({ args, cfg, baseSha, result, state, counts, reportText, verdict, startedAt, endedAt, reportPath, cache, findings = null, completeness = null }) {
   return {
     kind: EVIDENCE_KIND,
     head: args.head,
@@ -454,6 +488,7 @@ export function buildEvidence({ args, cfg, baseSha, result, state, counts, repor
     tokens: { prompt: state.promptTokens, completion: state.completionTokens, cached: state.cachedTokens, cacheWrite: state.cacheWriteTokens, reasoning: state.reasoningTokens },
     cache,
     lockWaitMs: state.lockWaitMs,
+    completeness: completeness ?? null,
     providers: [...(state.providers ?? [])],
     callsDetail: state.callsDetail,
     costUsd: Number(state.spentUsd.toFixed(6)),
@@ -493,7 +528,8 @@ async function main() {
     else if (existsSync(p)) specs.push({ path: p, text: readFileSync(p, 'utf8') });
     else { process.stderr.write(`[blind-review] HIBA: a terv nincs meg sem a fejen, sem helyi fájlként: ${p}\n`); return 1; }
   }
-  const system = buildSystemPrompt(readFileSync(TEMPLATE_PATH, 'utf8'), readFileSync(join(HERE, 'futtato-kiegeszites.md'), 'utf8'));
+  const templateText = readFileSync(TEMPLATE_PATH, 'utf8');
+  const system = buildSystemPrompt(templateText, readFileSync(join(HERE, 'futtato-kiegeszites.md'), 'utf8'));
 
   const common = git(repo, ['rev-parse', '--git-common-dir']).stdout.trim();
   const commonDir = isAbsolute(common) ? common : resolve(repo, common);
@@ -531,27 +567,33 @@ async function main() {
     mkdirSync(dirname(out), { recursive: true });
     const transcript = `${out}.atirat.jsonl`;
     writeFileSync(transcript, '');
-    const box = { report: null, check: null };
+    const box = { report: null, check: null, abort: null };
+    const points = debugPoints(templateText, goal);
+    let tools = null;
+    const reportGate = makeReportGate({ head, cfg, root: wt.root, points, box, maxRetries: cfg.completenessMaxRetries ?? 3, getTools: () => tools, useDepth: true });
     let budgetRef = null;
-    const tools = makeTools({
+    tools = makeTools({
       root: wt.root, base: baseSha, head, cfg, key, nodeModulesReal: wt.nodeModulesReal,
       remainingMs: () => (budgetRef ? args.maxMinutes * 60_000 - (Date.now() - budgetRef.state.startedAt - budgetRef.state.lockWaitMs) : Infinity),
       onLockWait: (ms) => budgetRef?.excludeLockWait(ms),
-      onReport: (t, findings, runLog) => { const v = validateReport(t, head, cfg, { findings, root: wt.root, runLog, notRun: tools.notRun, depth: tools.depth() }); if (v.ok) { box.report = t; box.check = v.check; } return v; },
+      onReport: (t, findings, runLog) => reportGate.onReport(t, findings, runLog),
     });
     const stopFile = join(evDir, 'blind-review.stop');
     const budget = createBudget({
       maxUsd: args.maxUsd, maxRounds: args.maxRounds, maxWallMs: args.maxMinutes * 60_000, maxCompletionTokens: cfg.maxCompletionTokensTotal, cfg,
       stopRequested: () => stopSignal ?? (existsSync(stopFile) ? 'megszakító fájl: blind-review.stop' : null),
     });
+    const heartbeat = join(evDir, `blind-review-${head.slice(0, 12)}.heartbeat.json`);
     const log = (e) => {
       appendFileSync(transcript, `${transcriptLine({ t: new Date().toISOString(), ...e }, key)}\n`);
+      writeHeartbeat(heartbeat, { head, phase: e.type, calls: budget.state.calls, spentUsd: Number(budget.state.spentUsd.toFixed(4)) });
       if (e.type === 'assistant') say(`kör ${budget.state.calls}: ${e.tools.length ? e.tools.join(', ') : '(szöveg)'} — eddig ${budget.state.spentUsd.toFixed(4)} USD`);
       if (e.type === 'error') say(`hiba (próba ${e.attempt + 1}): ${e.message}`);
     };
     budgetRef = budget;
     const result = await runReview({ cfg, key, system, user, tools, box, budget, log, sessionId: `blind-review-${head}` });
     const endedAt = Date.now();
+    writeHeartbeat(heartbeat, { head, phase: 'done', calls: budget.state.calls, spentUsd: Number(budget.state.spentUsd.toFixed(4)), complete: result.complete });
     const body = result.complete ? box.report.replace(/\r\n/g, '\n').trimEnd() : incompleteReport({ head, stopReason: result.stopReason, notes: result.notes });
     const cache = cacheStats(budget.state, cfg);
     const model = result.reportedModels.join(', ') || cfg.model;
@@ -561,7 +603,8 @@ async function main() {
     const text = maskSecrets(`${body}\n${tail}`, key);
     writeFileSync(out, text);
     const verdict = result.complete ? reportVerdict(text) : null;
-    const ev = buildEvidence({ args, cfg, baseSha, result, state: budget.state, counts: tools.counts, reportText: text, verdict, startedAt, endedAt, reportPath: out, cache, findings: box.check });
+    const ev = buildEvidence({ args, cfg, baseSha, result, state: budget.state, counts: tools.counts, reportText: text, verdict, startedAt, endedAt, reportPath: out, cache, findings: box.check,
+      completeness: reportGate.state.last ? { ok: Boolean(result.complete && reportGate.state.last.ok), covered: reportGate.state.last.covered, total: reportGate.state.last.total, missing: reportGate.state.last.missing, attempts: reportGate.state.attempts, points } : null });
     const evPath = writeEvidence(evDir, result.complete ? evidenceName(head) : `blind-review-incomplete-${head}`, ev);
     say(`jelentés: ${out}`);
     say(`bizonyíték: ${evPath}`);

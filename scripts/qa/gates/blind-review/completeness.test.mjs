@@ -115,7 +115,7 @@ test('T6: 1. leadás hiányos → ugyanabban a beszélgetésben folytatás a hi�
   const r = await s.run();
   assert.equal(r.complete, true);
   const toolMsgs = s.or.bodies[1].messages.filter((m) => m.role === 'tool').map((m) => (Array.isArray(m.content) ? m.content.map((p) => p.text).join('') : m.content));
-  assert.match(toolMsgs.at(-1), /ELUTASÍTVA — javítsd, és add le újra: .*TELJESSÉG.*8b/);
+  assert.match(toolMsgs.at(-1), /ELUTASÍTVA — javítsd, és add le újra: .*TELJESSÉG.*8b/s);
   assert.match(toolMsgs.at(-1), /megállási \/ felajánló fordulat/);
   assert.equal(s.gate.state.completenessRejections, 1);
   assert.equal(s.gate.state.last.ok, true);
@@ -137,13 +137,13 @@ test('T7: kizárólagos módban a teljesség-bizonyíték nélküli vagy hiányo
   const sha = createHash('sha256').update(text).digest('hex');
   const ev = { kind: 'blind-review', head: HEAD, complete: true, verdict: 'IGEN, FELTÉTELLEL', reportSha256: sha, modelRequested: CFG.model, modelReported: [CFG.model],
     toolCalls: { read_file: 5, git_diff: 2, search: 1, submit_report: 1 }, completeness: { ok: true, covered: 10, total: 10, attempts: 1, points: POINTS } };
-  const args = (e, t = text) => ({ evidence: e, head: HEAD, reportSha256: createHash('sha256').update(t).digest('hex'), verdict: 'IGEN, FELTÉTELLEL', cfg: CFG, reportText: t });
+  const args = (e, t = text) => ({ evidence: e, head: HEAD, reportSha256: createHash('sha256').update(t).digest('hex'), verdict: 'IGEN, FELTÉTELLEL', cfg: { ...CFG, requireCompleteness: true }, reportText: t });
   assert.equal(checkBlindEvidence(args(ev)).ok, true);
   const { completeness: _c, ...noComp } = ev;
   assert.match(checkBlindEvidence(args(noComp)).error, /teljesség-bizonyíték/);
   assert.match(checkBlindEvidence(args({ ...ev, completeness: { ...ev.completeness, ok: false } })).error, /teljesség-bizonyíték/);
   const bad = report({ extra: '## Megjegyzés\nHa szeretnéd, folytatom.' });
-  assert.match(checkBlindEvidence(args({ ...ev, reportSha256: createHash('sha256').update(bad).digest('hex') }, bad)).error, /a jelentés a teljesség-ellenőrzésen nem megy át/);
+  assert.match(checkBlindEvidence(args({ ...ev, reportSha256: createHash('sha256').update(bad).digest('hex') }, bad)).error, /a jelentés a teljesség-ellenőrzésen nem megy át/i);
 });
 
 // ---- T8: Codex CLI-burok -----------------------------------------------------------------------------------------------------

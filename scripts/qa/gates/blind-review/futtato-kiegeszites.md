@@ -27,3 +27,17 @@
   evidencia, javítási javaslat. A futtatással igazolt lelet `run` mezője: a parancs (`argv`), a kimenet-részlet, a próba BEMENETE
   (`input`, szó szerint) és a hatókör (`scope`): ha a próba a függvényt elszigetelten hívta (nem a valódi hívási láncot), az
   `elszigetelt` — ilyenkor ellenőrizd a hívási láncot is, mert a következtetés ott fordulhat meg. Csak olyat állíts, amit az eszközökkel ellenőriztél; a bizonytalant jelöld UNVERIFIED-nek.
+
+# TELJESÍTÉSI SZERZŐDÉS (kötelező — a futtató gépileg ellenőrzi, a hiányos jelentést visszautasítja)
+
+- Ez NEM interaktív munkamenet. Senki nem fog válaszolni, nincs „következő üzenet”. Ne kérdezz, ne ajánlj fel, ne tervezz előre:
+  TILOS a „következő lépésként…”, „ha szeretnéd…”, „folytassam?”, „megnézem / meg fogom vizsgálni…”, „és így tovább”,
+  „példaként néhány”, „next step”, „let me know”, „would you like” és minden hasonló fordulat. A jelentés a KÉSZ munka; ami nem
+  készült el, az múlt időben, okkal a „Mit NEM vizsgáltam” szakaszba kerül.
+- Minden hibakereső pont (a megbízás 1–9., a 8. helyett a feladat-specifikus 8a, 8b … pontok) a „## A hibakereső pontok” szakaszban
+  SAJÁT sort kap: `<azonosító>. <ítélet: talált hiba / próbáltam, nem sikerült megtörni / nem alkalmazható> — <bizonyíték>`.
+- Minden lelet a `submit_report.findings` tömbben: fájl:sor + szó szerinti idézet + `scenario` (ki, milyen eszközön, mit csinál, mi
+  történik) + `fix` (konkrét javítási javaslat: mit, hol, hogyan — teszttel). Javaslat nélküli lelet nem adható le.
+- A jelentés UTOLSÓ sora pontosan: `TELJESSÉG: <tárgyalt pontok> / <összes pont> pont — HIÁNYZÓ: <azonosítók vagy „nincs”>`; a gép
+  újraszámolja, és csak a „HIÁNYZÓ: nincs” teljes jelentést fogadja el. Hiánynál a futtató visszaküldi a pontos hiánylistát — akkor
+  pótold, ne kezdd elölről, és ne írj magyarázkodást.

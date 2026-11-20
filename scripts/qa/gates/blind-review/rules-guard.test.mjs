@@ -27,6 +27,15 @@ test('B12 / B17: a vak ellenőr modellje a konfig EGYETLEN sorában áll, nem An
   // útvonalon igen — a szolgáltató ezért rögzített, tartalék nélkül.
   assert.deepEqual(cfg.requestExtras?.provider, { order: ['OpenAI', 'Azure'], allow_fallbacks: false });
   assert.ok(cfg.minInvestigativeCalls >= 8, 'mélységi őr: legalább 8 vizsgáló eszközhívás');
+  // GPT teljesítési őr (docs/specs/2026-11-20-gpt-teljesitesi-or.md): teljesség kötelező, legfeljebb 3 folytatás, streaming életjel-felügyelet.
+  assert.equal(cfg.requireCompleteness, true);
+  assert.equal(cfg.completenessMaxRetries, 3);
+  assert.equal(cfg.stream, true);
+  assert.ok(cfg.streamIdleSec > 0 && cfg.streamIdleSec <= 300);
+  const addendum = readFileSync(join(here, 'futtato-kiegeszites.md'), 'utf8');
+  for (const must of ['TELJESÍTÉSI SZERZŐDÉS', 'NEM interaktív', 'TELJESSÉG: <tárgyalt pontok> / <összes pont> pont — HIÁNYZÓ:', '`fix`', '`scenario`']) assert.ok(addendum.includes(must), must);
+  const runner = readFileSync(join(here, 'blind-review.mjs'), 'utf8');
+  assert.match(runner, /onReport: \(t, findings, runLog\) => reportGate\.onReport\(t, findings, runLog\)/, 'a teljesség-kapu be van kötve');
   assert.ok(isIndependentModel(cfg.model));
   for (const bad of ['anthropic/claude-opus-5', 'openrouter/claude-sonnet', 'x/Fable-5', 'claude', '', null, 'qwen4-max']) assert.equal(isIndependentModel(bad), false, String(bad));
   assert.equal(new URL(cfg.endpoint).hostname, 'openrouter.ai');
@@ -63,7 +72,8 @@ test('B17: a futtató kódjában nincs modell-literál és nincs modell- / szolg
   const runner = readFileSync(join(here, 'blind-review.mjs'), 'utf8');
   assert.match(runner, /model: cfg\.model/);
   // A mélységi őr a valódi futásban is be van kötve (a jelentés-ellenőrzés megkapja a futás mélységi adatait).
-  assert.match(runner, /validateReport\(t, head, cfg, \{[^}]*depth: tools\.depth\(\)/);
+  // 2026-11-20: a mélységi őr a teljesség-kapun át (makeReportGate, useDepth: true) van bekötve.
+  assert.match(runner, /makeReportGate\(\{[^}]*useDepth: true[^}]*\}\)/);
   assert.equal(runner.split('model:').filter((_, i) => i > 0).filter((rest) => !/^ (cfg\.model|result\.reportedModels|\{)/.test(rest) && !/^ ?[`'"]?\$?\{?(model|result)/.test(rest)).length, 0, 'a kérés modellje csak cfg.model lehet');
 });
 
