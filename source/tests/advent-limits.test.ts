@@ -5,8 +5,11 @@ import express from "express";
 
 import { adventClock } from "../server/advent/clock";
 import { ADVENT_LIMITS, ADVENT_ROUND_WORST, ADVENT_SCHOOL_KIDS, ADVENT_WRITES_PER_KID, createWindowCounter, type AdventLimits } from "../server/advent/limits";
-import { createAdventRouter } from "../server/advent/routes";
-import { doorRank, mergeAdoption, orderKeyFor, type AdoptionContext } from "../server/advent/adoption";
+import { createAdoptionContext, doorRank, mergeAdoption, orderKeyFor, withPlanMeta, type AdoptionContext } from "../server/advent/adoption";
+import { adventRowIsSound, createAdventRouter } from "../server/advent/routes";
+import { buildAdventPlan, findAdventItem, normalizePrompt } from "../shared/advent/assignment";
+import { CHRISTMAS_ITEMS } from "../shared/advent/christmasBank/index";
+import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank/index";
 import type { AdventRow, AdventStore } from "../server/advent/store";
 
 /**
@@ -395,4 +398,52 @@ test("az elutasított (409) kérésnek saját, iskolai méretű kerete van: egy 
     // Másik cím szabályos (itt is 409-es) kérése nem érintett.
     assert.equal((await app.round(A, "10.30.0.2")).status, 409);
   } finally { await app.close(); }
+});
+
+test("egyesítés után a tanuló aktuális körében nincs ismétlődő kérdés (azonosító és normalizált szöveg) — két, eredetileg egyedi tervben közös kérdéssel; a megválaszolt kérdések védettek (GPT-vak L3)", () => {
+  const season = 2026; const grade = 1;
+  const learnerKey = "learner:L"; const deviceKey = "device:D";
+  const learnerPlan = withPlanMeta(buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 1, subjectKey: learnerKey }), grade, learnerKey);
+  const devicePlan = withPlanMeta(buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 1, subjectKey: deviceKey }), grade, deviceKey);
+  // Egy közös kérdés: a tanuló A. ablakának első kérdése a vendég B. ablakában is szerepel (A ≠ B).
+  let common: { a: number; b: number; id: string } | null = null;
+  for (let a = 1; a <= 24 && !common; a++) for (let b = 1; b <= 24 && !common; b++) {
+    if (a !== b && devicePlan.doors[b]!.includes(learnerPlan.doors[a]![0]!)) common = { a, b, id: learnerPlan.doors[a]![0]! };
+  }
+  assert.ok(common, "a két terv közös kérdést tartalmaz");
+  const solvedDevice = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24].find((d) => d !== common!.a && d !== common!.b)!;
+  const attempt = (questionId: string) => ({ questionId, pick: 0, correct: true, at: "" });
+  const row = (kind: "learner" | "device", plan: typeof learnerPlan, solvedDay: number): AdventRow => ({
+    id: kind, season, subjectKind: kind, subjectId: kind, grade, round: 1, plan: { 1: plan },
+    doors: { 1: { [solvedDay]: { attempts: [attempt(plan.doors[solvedDay]![0]!)] } } },
+    finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0),
+  });
+  // A tanuló a közös kérdést (A. ablak) megválaszolta; a vendég egy harmadik ablakot oldott meg, a B. ablaka érintetlen (azonos évfolyam →
+  // a vendég kérdéssora maradna, benne a közös kérdéssel).
+  const ctx = createAdoptionContext({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, season, learnerId: "L", learnerGrade: grade, deviceId: "D", now: new Date("2026-12-22T10:00:00Z") });
+  const merged = mergeAdoption(row("learner", learnerPlan, common!.a), row("device", devicePlan, solvedDevice), ctx)!;
+  const plan = merged.plan[1]!;
+  const ids = Object.values(plan.doors).flat();
+  assert.equal(new Set(ids).size, ids.length, "nincs ismétlődő azonosító");
+  const prompts = ids.map((id) => normalizePrompt(findAdventItem(id, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS)!.prompt));
+  assert.equal(new Set(prompts).size, prompts.length, "nincs ismétlődő (normalizált) kérdésszöveg");
+  // A megválaszolt kérdések helye és azonosítója változatlan.
+  assert.equal(plan.doors[common!.a]![0], common!.id);
+  assert.equal(merged.doors[1]![common!.a]!.attempts[0]!.questionId, common!.id);
+  assert.equal(plan.doors[solvedDevice]![0], devicePlan.doors[solvedDevice]![0]);
+  // Determinisztikus: ugyanabból a bemenetből ugyanaz.
+  assert.deepEqual(mergeAdoption(row("learner", learnerPlan, common!.a), row("device", devicePlan, solvedDevice), ctx)!.plan[1], plan);
+});
+
+test("a sorőr a próbák és a terv belső alakját is nézi: [null], hiányzó / rossz típusú mező, nem szöveg azonosító → sérült (GPT-vak L4)", () => {
+  const base = { id: "x", season: 2026, subjectKind: "device" as const, subjectId: "d", grade: 5, round: 1, finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0) };
+  const ok = { ...base, plan: { 1: { round: 1, layout: [1], doors: { 1: ["q1"] }, subjects: {} } }, doors: { 1: { 1: { attempts: [{ questionId: "q1", pick: 0, correct: true, at: "" }] } } } } as unknown as AdventRow;
+  assert.equal(adventRowIsSound(ok), true);
+  const bad = (doors: unknown, plan: unknown = ok.plan) => adventRowIsSound({ ...ok, doors, plan } as unknown as AdventRow);
+  assert.equal(bad({ 1: { 1: { attempts: [null] } } }), false);
+  assert.equal(bad({ 1: { 1: { attempts: [{ questionId: "q1" }] } } }), false);
+  assert.equal(bad({ 1: { 1: { attempts: [{ questionId: 5, pick: 0, correct: true, at: "" }] } } }), false);
+  assert.equal(bad({ 1: { 1: { attempts: [{ questionId: "q1", pick: "0", correct: true, at: "" }] } } }), false);
+  assert.equal(bad({ 1: { 1: { attempts: [{ questionId: "q1", pick: 0, correct: "igen", at: "" }] } } }), false);
+  assert.equal(bad(ok.doors, { 1: { round: 1, layout: [1], doors: { 1: [null] }, subjects: {} } }), false);
 });

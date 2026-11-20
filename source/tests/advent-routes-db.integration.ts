@@ -593,6 +593,60 @@ describe("adventi naptár — végpontok", () => {
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
+  it("névtelen → párosított: az elutasított írás (holnapi ablak 403, érvénytelen válasz 400, elavult kérdés 409) NEM véglegesíti az átvételt — mindkét sor tartalma változatlan (GPT-vak L2)", async () => {
+    const learner = await newLearner(5);
+    const tablet = await kid(); tablet.learner = learner.token;
+    await tablet.answer(1, await tablet.open(1), true);
+    const phone = await kid();
+    phone.now = "2026-12-03T10:00:00Z";
+    tablet.now = phone.now;
+    assert.equal((await phone.post("/grade", { grade: 5 })).status, 200);
+    await phone.answer(2, await phone.open(2), true);
+    await phone.answer(3, await phone.open(3), false); // a 3. ablak még javítható
+    const snapshot = async () => q<{ kind: string; doors: Json; plan: Json }>(`SELECT subject_kind AS kind, doors, plan FROM advent_progress WHERE subject_id = ANY($1) ORDER BY subject_kind`, [[phone.device, learner.id]]);
+    const before = await snapshot();
+    assert.deepEqual(before.map((r) => r.kind), ["device", "learner"]);
+    phone.learner = learner.token;
+    // Holnapi ablak: 403, állapotváltozás nélkül.
+    assert.equal((await phone.post("/doors/4/open")).status, 403);
+    assert.deepEqual(await snapshot(), before, "403 után mindkét sor érintetlen");
+    // Érvénytelen választest: 400, állapotváltozás nélkül.
+    assert.equal((await phone.post("/doors/3/answer", { questionId: 42, pick: "x" })).status, 400);
+    assert.deepEqual(await snapshot(), before, "400 után mindkét sor érintetlen");
+    // DB-függő elutasítás (elavult kérdés): 409, állapotváltozás nélkül — az ellenőrzés és az átvétel egy tranzakcióban.
+    assert.equal((await phone.post("/doors/3/answer", { questionId: "nem-letezo-kerdes", pick: 0 })).status, 409);
+    assert.deepEqual(await snapshot(), before, "409 után mindkét sor érintetlen");
+    // Az első SIKERES írás végzi el az átvételt.
+    assert.equal((await phone.post("/doors/1/open")).status, 200);
+    const after = await snapshot();
+    assert.deepEqual(after.map((r) => r.kind), ["learner"]);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("sérült próbaelem ([null], hiányzó mező) a tárolt sorban: 500 helyett 409 corrupt — olvasáskor és az átvételkor is, a sorok érintetlenek (GPT-vak L4)", async () => {
+    const k = await kid();
+    assert.equal((await k.post("/grade", { grade: 5 })).status, 200);
+    await k.answer(1, await k.open(1), true);
+    for (const bad of ['{"1": {"1": {"attempts": [null]}}}', '{"1": {"1": {"attempts": [{"questionId": "x"}]}}}']) {
+      await dbPool.query(`UPDATE advent_progress SET doors = $2::jsonb WHERE subject_id = $1`, [k.device, bad]);
+      const r = await k.state();
+      assert.deepEqual({ status: r.status, corrupt: r.json.corrupt }, { status: 409, corrupt: true }, bad);
+      const w = await k.post("/doors/1/open");
+      assert.deepEqual({ status: w.status, corrupt: w.json.corrupt }, { status: 409, corrupt: true }, bad + " (írás)");
+    }
+    // Átvételkor: a sérült vendégsor nem kerül át és nem törlődik; 409 corrupt, a tanulói sor érintetlen.
+    const learner = await newLearner(5);
+    const tablet = await kid(); tablet.learner = learner.token;
+    await tablet.answer(2, await tablet.open(2), true);
+    const learnerBefore = await q(`SELECT doors, plan FROM advent_progress WHERE learner_id = $1`, [learner.id]);
+    k.learner = learner.token;
+    const adopt = await k.post("/doors/2/open");
+    assert.deepEqual({ status: adopt.status, corrupt: adopt.json.corrupt }, { status: 409, corrupt: true });
+    assert.deepEqual(await q(`SELECT doors, plan FROM advent_progress WHERE learner_id = $1`, [learner.id]), learnerBefore, "a tanulói sor érintetlen");
+    assert.equal((await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [k.device])).length, 1, "a sérült vendégsor megmaradt");
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
   it("névtelen → párosított, versenyhelyzet: az átvétellel egyidejű válasz sem ad 500-at, és nem vész el — végül egyetlen tanulói sor (terv 21., #170)", async () => {
     for (let round = 0; round < 3; round++) {
       const learner = await newLearner(5);

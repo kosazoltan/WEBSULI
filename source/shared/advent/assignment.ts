@@ -192,22 +192,14 @@ export function repairPlanDoor(
       if (known) usedPrompts.add(normalizePrompt(known.prompt));
     }
   }
-  const byId = (a: AdventItem, b: AdventItem) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   const free = (item: AdventItem) => !usedIds.has(item.id) && !usedPrompts.has(normalizePrompt(item.prompt));
   const existing = current.map((id) => findAdventItem(id, input.bank, input.christmas));
-  const christmasDoor = isChristmasDoor(day, grade);
   const subject = plan.subjects?.[day] ?? existing.map((q) => (q ? subjectOf(q) : null)).find((s) => s && s !== CHRISTMAS_SUBJECT) ?? null;
   let changed = false;
   const next = current.map((id, index) => {
     if (existing[index] || input.protectedIds?.has(id)) return id;
-    let candidates: AdventItem[];
-    if (christmasDoor) {
-      candidates = input.christmas.filter((c) => c.minGrade <= grade && grade <= c.maxGrade).sort(byId);
-    } else {
-      if (!subject) return id;
-      const inGrade = input.bank.filter((q) => q.grade === grade && q.subject === subject);
-      candidates = tierOrder(tierForDay(day)).flatMap((tier) => inGrade.filter((q) => q.tier === tier).sort(byId));
-    }
+    const candidates = replacementCandidates(day, grade, subject, input.bank, input.christmas);
+    if (!candidates) return id;
     const replacement = candidates.find(free);
     if (!replacement) return id;
     usedIds.add(replacement.id);
@@ -216,4 +208,66 @@ export function repairPlanDoor(
     return replacement.id;
   });
   return changed ? { plan: { ...plan, doors: { ...plan.doors, [day]: next } }, changed } : { plan, changed };
+}
+
+const byItemId = (a: AdventItem, b: AdventItem) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * Egy ablak pótlási jelöltjei determinisztikus (azonosító szerinti) sorrendben: karácsonyi ablaknál az évfolyam karácsonyi tételei,
+ * különben a terv szerinti tárgy tételei a nap nehézségi sorrendjében. `null`, ha a tárgy nem ismert.
+ */
+function replacementCandidates(day: number, grade: number, subject: string | null, bank: readonly AdventBankItem[], christmas: readonly ChristmasItem[]): AdventItem[] | null {
+  if (isChristmasDoor(day, grade)) return christmas.filter((c) => c.minGrade <= grade && grade <= c.maxGrade).sort(byItemId);
+  if (!subject) return null;
+  const inGrade = bank.filter((q) => q.grade === grade && q.subject === subject);
+  return tierOrder(tierForDay(day)).flatMap((tier) => inGrade.filter((q) => q.tier === tier).sort(byItemId));
+}
+
+/**
+ * Ütközésmentesítés (GPT-vak L3; terv A4, A36): két terv egyesítése után (névtelen → párosított átvétel) ugyanaz a kérdés két ablakba
+ * is kerülhet. A `protectedByDay` (a már megválaszolt próbák kérdései ablakonként) SOHA nem változik, és elsőbbséget kap; a többi
+ * kiosztott helyen a nap szerinti sorrendben az első előfordulás marad, a későbbi ismétlődés (azonosító VAGY normalizált kérdésszöveg
+ * egyezése — az évad korábbi köreivel is) az ablak saját készletéből determinisztikusan pótlódik. Ha nincs szabad pótlás, a hely
+ * változatlan marad.
+ */
+export function dedupePlanDoors(
+  plan: AdventPlan,
+  input: {
+    bank: readonly AdventBankItem[];
+    christmas: readonly ChristmasItem[];
+    grade: number;
+    usedIds: ReadonlySet<string>;
+    usedPrompts: ReadonlySet<string>;
+    protectedByDay: ReadonlyMap<number, ReadonlySet<string>>;
+  },
+): { plan: AdventPlan; changed: boolean } {
+  const grade = clampAdventGrade(input.grade);
+  const seenIds = new Set(input.usedIds);
+  const seenPrompts = new Set(input.usedPrompts);
+  const promptOf = (id: string): string | null => {
+    const item = findAdventItem(id, input.bank, input.christmas);
+    return item ? normalizePrompt(item.prompt) : null;
+  };
+  const mark = (id: string) => { seenIds.add(id); const p = promptOf(id); if (p) seenPrompts.add(p); };
+  for (const ids of input.protectedByDay.values()) for (const id of ids) mark(id);
+  const taken = (id: string) => { const p = promptOf(id); return seenIds.has(id) || (p !== null && seenPrompts.has(p)); };
+  const free = (item: AdventItem) => !seenIds.has(item.id) && !seenPrompts.has(normalizePrompt(item.prompt));
+  const days = Object.keys(plan.doors).map(Number).filter((d) => Number.isInteger(d)).sort((a, b) => a - b);
+  const doors: Record<number, string[]> = { ...plan.doors };
+  let changed = false;
+  for (const day of days) {
+    const guarded = input.protectedByDay.get(day) ?? new Set<string>();
+    const seenInDay = new Set<string>();
+    doors[day] = (plan.doors[day] ?? []).map((id) => {
+      if (guarded.has(id) && !seenInDay.has(id)) { seenInDay.add(id); return id; }
+      if (!taken(id)) { mark(id); return id; }
+      const subject = plan.subjects?.[day] ?? null;
+      const replacement = replacementCandidates(day, grade, subject, input.bank, input.christmas)?.find(free);
+      if (!replacement) return id;
+      mark(replacement.id);
+      changed = true;
+      return replacement.id;
+    });
+  }
+  return changed ? { plan: { ...plan, doors }, changed } : { plan, changed };
 }

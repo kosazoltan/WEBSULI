@@ -10,8 +10,8 @@
  *
  * Tiszta modul: az adatbázis-tranzakciót a \`store.adopt\`, az előnézetet a \`GET /state\` használja ugyanerre a függvényre.
  */
-import type { AdventPlan } from "../../shared/advent/assignment";
-import { ADVENT_DOORS, adventSummary, doorState, type DoorRecord } from "../../shared/advent/rules";
+import { buildAdventPlan, dedupePlanDoors, findAdventItem, normalizePrompt, type AdventBankItem, type AdventPlan, type ChristmasItem } from "../../shared/advent/assignment";
+import { ADVENT_DOORS, adventSummary, clampAdventGrade, doorState, limitsForGrade, type DoorRecord } from "../../shared/advent/rules";
 import type { AdventRow } from "./store";
 
 /** A tervvel együtt tárolt meta: tervezési évfolyam, a sorrend magja, és az átvett ablakok saját magja. */
@@ -49,8 +49,47 @@ export type AdoptionContext = {
   maxRepairs: (grade: number) => number;
   /** A tanuló adott körének terve (meta-val), ha a sorában még nincs. */
   buildPlan: (row: AdventRow, round: number, grade: number) => AdventPlan;
+  /** Ütközésmentesítés az egyesített terven (GPT-vak L3): a megválaszolt kérdések védettek. Hiányában nincs ilyen lépés. */
+  dedupe?: (plan: AdventPlan, row: AdventRow, round: number, grade: number, protectedByDay: ReadonlyMap<number, ReadonlySet<string>>) => AdventPlan;
   now: Date;
 };
+
+/** Az évad korábbi köreiben kiosztott azonosítók és normalizált kérdésszövegek (a tervezés és a pótlás kizárólistája). */
+export function usedInEarlierRounds(row: AdventRow, round: number, bank: readonly AdventBankItem[], christmas: readonly ChristmasItem[]) {
+  const usedIds = new Set<string>();
+  const usedPrompts = new Set<string>();
+  for (const [key, plan] of Object.entries(row.plan)) {
+    if (Number(key) >= round) continue;
+    for (const ids of Object.values(plan.doors)) {
+      for (const id of ids) {
+        usedIds.add(id);
+        const item = findAdventItem(id, bank, christmas);
+        if (item) usedPrompts.add(normalizePrompt(item.prompt));
+      }
+    }
+  }
+  return { usedIds, usedPrompts };
+}
+
+/**
+ * Az egyesítés teljes környezete egy tanulóhoz a valódi kérdésbankokkal: a tanulói terv a tanuló profiljának évfolyamára készül (ha
+ * még nincs), és az egyesített terv ütközésmentesítve (L3). A router és a tesztek ugyanezt használják.
+ */
+export function createAdoptionContext(input: {
+  bank: readonly AdventBankItem[]; christmas: readonly ChristmasItem[]; season: number;
+  learnerId: string; learnerGrade: number; deviceId: string; now: Date;
+}): AdoptionContext {
+  const learnerKey = `learner:${input.learnerId}`;
+  const { bank, christmas, season } = input;
+  return {
+    learnerId: input.learnerId, deviceKey: `device:${input.deviceId}`, learnerKey,
+    learnerGrade: clampAdventGrade(input.learnerGrade),
+    maxRepairs: (grade) => limitsForGrade(grade).maxRepairs,
+    buildPlan: (row, round, grade) => withPlanMeta(buildAdventPlan({ bank, christmas, grade, season, round, subjectKey: learnerKey, ...usedInEarlierRounds(row, round, bank, christmas) }), grade, learnerKey),
+    dedupe: (plan, row, round, grade, protectedByDay) => dedupePlanDoors(plan, { bank, christmas, grade, ...usedInEarlierRounds(row, round, bank, christmas), protectedByDay }).plan,
+    now: input.now,
+  };
+}
 
 /**
  * Az egyesített tanulói sor, vagy \`null\`, ha az eszköz sorában nincs egyetlen válasz sem (nincs mit átvinni — az eszköz sora
@@ -94,6 +133,13 @@ export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx:
     if (devicePlan?.doors[day]) plan.doors[day] = [...devicePlan.doors[day]!];
     if (devicePlan?.subjects?.[day]) plan.subjects[day] = devicePlan.subjects[day]!;
     plan.doorSeeds[day] = orderKeyFor(devicePlan, day, ctx.deviceKey);
+  }
+  // Ütközésmentesítés (L3): a két terv egyesítése után ugyanaz a kérdés ne kerülhessen két ablakba; a megválaszolt kérdések védettek.
+  if (ctx.dedupe) {
+    const protectedByDay = new Map<number, Set<string>>();
+    for (const [day, record] of Object.entries(doors)) protectedByDay.set(Number(day), new Set(record.attempts.map((a) => a.questionId)));
+    const deduped = ctx.dedupe(plan, base, round, grade, protectedByDay) as PlanMeta;
+    plan.doors = deduped.doors;
   }
   const summary = adventSummary(doors, ctx.maxRepairs(grade));
   const answeredAny = Object.values(doors).some((door) => door.attempts.length > 0);
