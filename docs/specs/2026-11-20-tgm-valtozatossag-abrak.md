@@ -264,3 +264,41 @@ Elfogadás (EARS):
 - [ ] V14 szomszéd- és 40%-szabály
 - [ ] V15 átírás BE-nél, KI bájtra a régi
 - [ ] V16 szimuláció < 35% / < 20%
+
+## 13. S6b — `try` minimum és rotáció, szerzői hangok
+
+Alap: TGM-terv S6b (TGM-végrehajtás 829. sortól). Kapcsoló: `STUDIO_LESSON_VARIETY`.
+
+Felülvizsgálat (TÉNY): a `try` a blokkok 0,7%-a, 239 leckéből 196-ban egy sincs (TGM-terv 3.3); a szerző regiszterét sávonként egyetlen
+mondat adja (`shared/lesson-band.ts:59-68`). Előfeltétel ellenőrizve: a `try` eredménye nem számít bele a pontozásba és a Próbába (a
+`check` számít; `shared/lesson-arc.ts:34` csak a megmutató réteghez sorolja) — a pontozás nem változik.
+
+Döntések:
+
+1. A kiosztás (S6a `applySectionShapes`) a fogalom-fejezetek legalább harmadára (felfelé kerekítve) `try`-t ad: ha a kiosztott minták
+   kevesebbet adnak, a magból választott fejezetek mintájába a `check` elé (ha nincs `check`, a végére, recap elé) `try` kerül. A
+   különleges fejezetek nem változnak; a `try` nem gyakorlóblokk, az ívkapu aránya csak javul.
+2. Fajta a fejezettípusból: `procedure` → `dragSort`, `comparison` → `match`, `description` → `fillBlank`, `any` → a magból forgatva úgy,
+   hogy két egymást követő `try` ne legyen azonos fajtájú. A fajta a terv fejezetén `tryKind` mezőként megy a szerzőhöz (a vázlat
+   JSON-jában), a szerző-prompt BE ága egy mondattal kéri a betartását. KI-nél a kéretlen `tryKind` is eldobva.
+3. Jelzés, nem kapu: BE kapcsolónál `telemetry.gates.tryShare` (a kész lecke `try`-t tartalmazó fejezeteinek aránya, két tizedes) és
+   `qualityNotes` bejegyzés (`try_share_low`), ha 1/3 alatt marad.
+4. Szerzői hang sávonként (`BAND_VOICES`, sávonként 3 leírt hang, 2–3 mondat: mondatritmus, a kérdések aránya, a példák keretezése); a
+   magból választva (`bandVoiceForPrompt(band, seed)`), a regisztersor után. A szöveg kimondja: a hang a tényekre és a fogalmak
+   szóhasználatára nem hat.
+
+Elfogadás (EARS):
+
+- **V17** — WHEN a kiosztás 3…12 fogalom-fejezetre fut, THE `try`-t tartalmazó fejezetek aránya SHALL ≥ 1/3 lenni, a fajta SHALL a
+  típushoz illeni, és két egymást követő `try` SHALL NOT azonos fajtájú lenni, ha van választás (`any`).
+- **V18** — WHEN a kapcsoló BE, THE kész lecke `try`-aránya SHALL a telemetriába kerülni, és 1/3 alatt SHALL minőségi jelzést adni
+  (megállás nélkül).
+- **V19** — THE hangkiosztás SHALL determinisztikus lenni, és 50 magon sávonként SHALL ≥ 2 hang előfordulni; KI kapcsolónál a szerző-prompt
+  SHALL bájtra a régi lenni.
+- **V20** — WHEN a szimuláció fut, THE V16 küszöbei SHALL a `try`-beszúrással is teljesülni.
+
+<!-- acceptance-checklist -->
+- [ ] V17 try-minimum, fajta, rotáció
+- [ ] V18 tryShare jelzés
+- [ ] V19 hangok, KI bájtra a régi
+- [ ] V20 szimuláció a beszúrással
