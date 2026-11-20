@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  FEEDBACK_OPENERS, LESSON_VARIETY_VERSION, feedbackOpener, feedbackOpenerKey, feedbackView, stripLegacyOpener, withVarietyMarker,
+  FEEDBACK_OPENERS, LESSON_VARIETY_VERSION, type LessonVarietyMarker, feedbackOpener, feedbackOpenerKey, feedbackView, stripLegacyOpener, withVarietyMarker,
 } from "../shared/lesson-feedback-openers";
 import { AGE_BANDS } from "../shared/lesson-schema";
 import { stripVerdictPrefix } from "../shared/lesson-ui-text";
@@ -107,7 +107,9 @@ test("withVarietyMarker: KI — a jelölő (a modelltől jött is) törlődik; B
   assert.equal(withVarietyMarker(null, true), null);
   assert.deepEqual(withVarietyMarker([1], true), [1]);
   // S5b (terv 11. szakasz 5. pont): a jelölő a lecke térképéből és évfolyamából a promptéval azonos nyitásformát hordozza.
-  const full = withVarietyMarker({ title: "T", mapId: "map-7", classroom: 6 }, true) as { variety: { version: string; openingForm?: string } };
-  assert.equal(full.variety.version, "valtozatossag-2");
-  assert.equal(full.variety.openingForm, openerVarietyPick(6, seedFrom("map-7")).form.id);
+  // A bemenet a tárolt lecke alakja (a jelölő opcionális mezője típushelyesen, kasztolás nélkül).
+  const input: { title: string; mapId: string; classroom: number; variety?: LessonVarietyMarker } = { title: "T", mapId: "map-7", classroom: 6 };
+  const full = withVarietyMarker(input, true);
+  assert.equal(full.variety?.version, "valtozatossag-2");
+  assert.equal(full.variety?.openingForm, openerVarietyPick(6, seedFrom("map-7")).form.id);
 });
