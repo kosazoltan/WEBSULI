@@ -131,3 +131,16 @@ böngészős próbája 360×640, 844×390, 1280×800 nézetben, képernyőképpe
 ## S2b
 
 A TGM-végrehajtás „S2b” fejezete (355. sortól) változatlanul; a `STUDIO_SOURCE_VISUALS` kapcsoló érvényes.
+
+
+## S2b-2 — A megjelenítők vak-leletei (részletes lépések)
+
+Ág: `feat/tgm-s2b2-megjelenito-leletek` (az S2b-1 ágáról), munkafa `.claude/worktrees/tgm-s2b2`. Terv:
+`docs/specs/2026-11-20-tgm-valtozatossag-abrak.md` 17. szakasz. Fájlok: `client/src/lesson-runtime/blocks/source-visuals.tsx`,
+`client/src/lesson-runtime/lesson-design.css`, `client/src/lesson-runtime/clips/clip2-overlays.tsx`, `shared/lesson-clip.ts`,
+`shared/fixtures/lesson-source-visuals.ts`; tesztek: `tests/source-visual-contrast.test.ts`, `tests/source-visuals-findings.test.ts` (újak),
+`tests/source-visuals.spec.ts` (bővül).
+
+1. Bukó tesztek V33–V37. 2. Kód. 3. `node --import tsx --test tests/source-visual-contrast.test.ts tests/source-visuals-findings.test.ts
+   tests/lesson-source-visual-kinds.test.ts tests/lesson-design.test.ts tests/lesson-clip*.test.ts` → pass; `tsc` (mindkettő) 0; eslint 0.
+4. Kapu-sor (`tgm-s2b2`): gate:stage → `playwright.source-visuals.config.ts` → gate:push.
