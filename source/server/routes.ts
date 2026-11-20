@@ -47,7 +47,7 @@ import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
 import { SPEECH_BRIDGE_SCRIPT } from "./lib/speech-bridge";
-import { lessonResultsRouter } from "./lesson-result-email";
+import { lessonResultsRouter, resultSubjectOf } from "./lesson-result-email";
 
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { studioRouter } from "./studio/routes";
@@ -989,7 +989,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const csrfToken = generateToken(req);
     // Spec 2026-11-17-eredmeny-email-kviz (R12): képesség-jelzés — a kliens csak ennek láttán küld pillanatképet és új eredménymezőt
     // (a Vercel-kliens és a Render-szerver külön, nem vezérelhető sorrendben települ).
-    res.json({ csrfToken, resultApi: RESULT_API_VERSION });
+    // R31: a munkamenet fiókjának álnevesített kilét-címkéje — a kliens a kimenő eredmény-bejegyzésbe írja (kilétváltás elleni kötés).
+    res.json({ csrfToken, resultApi: RESULT_API_VERSION, resultSubject: resultSubjectOf((req.user as { id?: string } | undefined)?.id) });
   });
 
   // HEALTH CHECK endpoint - Fast response for Autoscale deployment health checks

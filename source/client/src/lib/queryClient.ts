@@ -35,6 +35,8 @@ class CSRFTokenManager {
   private fetchPromise: Promise<string> | null = null;
   /** Spec 2026-11-17-eredmeny-email-kviz (R12): a token mellett jött képesség-jelzés (a régi szerver nem küldi). */
   private resultApi = false;
+  /** Terv R31: a munkamenet fiókjának álnevesített kilét-címkéje (a token mellett jön; a régi szerver nem küldi). */
+  private subject: string | null = null;
   
   async getToken(): Promise<string> {
     // Return cached token if available
@@ -68,6 +70,7 @@ class CSRFTokenManager {
     
     const data = await res.json();
     this.resultApi = data?.resultApi === RESULT_API_VERSION;
+    this.subject = typeof data?.resultSubject === "string" ? data.resultSubject : null;
     return data.csrfToken;
   }
   
@@ -79,6 +82,11 @@ class CSRFTokenManager {
   /** R12: a gyorsítótárazott token szervere jelezte-e az új eredmény-API-t (szinkron). */
   resultApiReady(): boolean {
     return this.token !== null && this.resultApi;
+  }
+
+  /** R31: a gyorsítótárazott token mellett jött kilét-címke (vagy null) — szinkron. */
+  resultSubject(): string | null {
+    return this.token !== null ? this.subject : null;
   }
 
   /** A már lekért token (vagy null) — szinkron, a lap elhagyásakor nincs idő hálózati körre. */
@@ -100,6 +108,11 @@ export function warmCsrfToken(): void {
  * esetén lekéri a tokent; hibánál hamis (a régi viselkedés marad).
  */
 export function resultApiReady(): boolean { return csrfTokenManager.resultApiReady(); }
+/**
+ * Terv R31 (review 4642333188): a munkamenet fiókjának kilét-címkéje a gyorsítótárazott tokenből (szinkron), vagy null, ha még nincs
+ * token / a szerver nem küldte. A kimenő eredmény-bejegyzés ezt viszi, hogy kilétváltás után ne a később bejelentkezett fiókhoz kerüljön.
+ */
+export function resultSubject(): string | null { return csrfTokenManager.resultSubject(); }
 export async function ensureResultApi(): Promise<boolean> {
   try { await csrfTokenManager.getToken(); } catch { return false; }
   return csrfTokenManager.resultApiReady();

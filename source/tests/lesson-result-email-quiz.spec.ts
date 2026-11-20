@@ -760,7 +760,8 @@ test("R28 / L4: olvasható, de nem írható tárolónál (kvóta) a befejezett k
   await page.addInitScript(() => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key: string, value: string) {
-      if (key === "websuli:result-outbox:v1") throw new DOMException("A tároló megtelt.", "QuotaExceededError");
+      // R32: a sor bejegyzésenként külön kulcson áll (`websuli:result-outbox:v1:<azonosító>`) — minden sorkulcs írása dob.
+      if (key.startsWith("websuli:result-outbox:v1")) throw new DOMException("A tároló megtelt.", "QuotaExceededError");
       return original.call(this, key, value);
     };
   });

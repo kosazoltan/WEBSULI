@@ -17,9 +17,11 @@ const startedAt = z.number().int().positive().optional();
 const lastAnsweredAt = z.number().int().positive().optional();
 // R13 (második vak ellenőrzés K7): a kliens saját „most” ideje — a szerver ebből számolja ki a kliens órájának eltérését.
 const clientNow = z.number().int().positive().optional();
+/** Terv R31: a sorba kerüléskori kilét-címke (`anon` vagy a fiók álnevesített lenyomata; `?`: ismeretlen). */
+const subject = z.string().max(64).optional();
 export const resultRequestSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional(), learner, startedAt, clientNow }).strict(),
-  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner, startedAt, lastAnsweredAt, clientNow, partial: z.boolean().optional() }).strict(),
+  z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional(), learner, startedAt, clientNow, subject }).strict(),
+  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner, startedAt, lastAnsweredAt, clientNow, subject, partial: z.boolean().optional() }).strict(),
 ]);
 export type ResultRequest = z.infer<typeof resultRequestSchema>;
 

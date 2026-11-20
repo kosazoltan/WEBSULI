@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { clientIpKey } from "./lib/client-ip";
 import { partialLimiter, resultLimiter } from "./lesson-result-limits";
@@ -50,6 +50,15 @@ export function errorClass(error: unknown): string {
  */
 export function resultIdempotencyKey(lessonId: string, kind: string, roundKey: string, to: string): string {
   return `lesson-result/${createHash("sha256").update([lessonId, kind, roundKey, to.trim().toLowerCase()].join("|")).digest("hex")}`;
+}
+/**
+ * Terv R31 (review 4642333188): a munkamenet fiókjának álnevesített kilét-címkéje — a `GET /api/csrf-token` adja a kliensnek, a kliens a
+ * kimenő bejegyzésbe írja (`subject`). Fiók nélkül `anon`; fiókkal a SESSION_SECRET-tel kulcsolt HMAC rövid lenyomata (nem visszafejthető,
+ * fiókonként más). A beküldés, ha a címke nem egyezik a mostani munkamenetével, a munkamenet fiókját nem használja.
+ */
+export function resultSubjectOf(userId: string | undefined): string {
+  if (!userId) return "anon";
+  return createHmac("sha256", process.env.SESSION_SECRET || "websuli-result-subject").update(`result-subject|${userId}`).digest("base64url").slice(0, 22);
 }
 /** Az újrapróba késleltetése (a meghiúsult címzett és a váratlan kivétel után is). */
 let retryDelayMs = 60_000;
@@ -110,19 +119,29 @@ export type SendOutcome = { sent: number; duplicate: boolean };
  */
 export type SendGate = (attempt: () => Promise<SendOutcome>) => Promise<SendOutcome>;
 type SendInput = { lessonId: string; roundKey: string; learner: string; learnerFirst?: string; learnerId?: string; guest?: boolean; graded: GradedTasks | GradedQuiz };
-export async function sendLessonResult(input: SendInput, retry = true, gate?: SendGate): Promise<SendOutcome> {
-  if (!gate) return attemptLessonResult(input, retry);
-  try { return await gate(() => attemptLessonResult(input, retry, gate)); }
-  catch (error) {
-    // A kapu hibája (pl. az ellenőrző lekérdezés átmeneti adatbázishibája) után nem küldünk vakon. Terv R19 (Vercel-szál 4626976445): a
-    // levél ettől nem veszhet el — EGY újrapróba ütemeződik a szokott késleltetéssel, ugyanazon a kapun át (véglegesített körre így sem
-    // megy ki részleges levél). Az újrapróba hibája után nincs további; a napló csak a hiba osztályát írja. Sosem dob.
-    logger.error(`[LESSON-RESULT] a küldés előtti ellenőrzés nem sikerült: ${errorClass(error)}${retry ? " — újrapróbálja" : ""}`);
-    if (retry) setTimeout(() => { void sendLessonResult(input, false, gate); }, retryDelayMs).unref?.();
-    return { sent: 0, duplicate: false };
+/**
+ * Terv R34 (review 4642333345): `onSettled` akkor hívódik (egyszer), amikor a küldési ciklus véget ért — az utolsó kísérlet lefutott, és
+ * további újrapróba már nem ütemeződik. A „félbehagyva” levél első rögzítőjének kiléte eddig őrződik.
+ */
+export async function sendLessonResult(input: SendInput, retry = true, gate?: SendGate, onSettled?: () => void): Promise<SendOutcome> {
+  let rescheduled = false;
+  const again = () => { rescheduled = true; setTimeout(() => { void sendLessonResult(input, false, gate, onSettled); }, retryDelayMs).unref?.(); };
+  try {
+    if (!gate) return await attemptLessonResult(input, retry, again);
+    try { return await gate(() => attemptLessonResult(input, retry, again)); }
+    catch (error) {
+      // A kapu hibája (pl. az ellenőrző lekérdezés átmeneti adatbázishibája) után nem küldünk vakon. Terv R19 (Vercel-szál 4626976445): a
+      // levél ettől nem veszhet el — EGY újrapróba ütemeződik a szokott késleltetéssel, ugyanazon a kapun át (véglegesített körre így sem
+      // megy ki részleges levél). Az újrapróba hibája után nincs további; a napló csak a hiba osztályát írja. Sosem dob.
+      logger.error(`[LESSON-RESULT] a küldés előtti ellenőrzés nem sikerült: ${errorClass(error)}${retry ? " — újrapróbálja" : ""}`);
+      if (retry) again();
+      return { sent: 0, duplicate: false };
+    }
+  } finally {
+    if (!rescheduled) onSettled?.();
   }
 }
-async function attemptLessonResult(input: SendInput, retry: boolean, gate?: SendGate): Promise<SendOutcome> {
+async function attemptLessonResult(input: SendInput, retry: boolean, again: () => void): Promise<SendOutcome> {
   try {
     const [row] = await db.select({ json: lessons.json, htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, input.lessonId));
     const lesson = row ? lessonSchema.safeParse(row.json) : null;
@@ -165,14 +184,14 @@ async function attemptLessonResult(input: SendInput, retry: boolean, gate?: Send
     }
     if (ok.length < claimed.length) {
       logger.warn(`[LESSON-RESULT] ${claimed.length - ok.length} címzettnek nem ment el${retry ? " — 60 s múlva újrapróbálja" : ""}.`);
-      if (retry) setTimeout(() => { void sendLessonResult(input, false, gate); }, retryDelayMs).unref?.();
+      if (retry) again();
     }
     return { sent: ok.length, duplicate: false };
   } catch (error) {
     // Review K3: csak a hiba osztálya / kódja — a lekérdezés hibaüzenete a paramétereket (e-mail-címet) is tartalmazná.
     logger.error(`[LESSON-RESULT] a küldés nem sikerült: ${errorClass(error)}${retry ? " — újrapróbálja" : ""}`);
     // Review (2026-11-17): a váratlan kivétel (az `allSettled`-en kívül: adatbázis, foglalás) után is egy újrapróba — levél ne vesszen el.
-    if (retry) setTimeout(() => { void sendLessonResult(input, false, gate); }, retryDelayMs).unref?.();
+    if (retry) again();
     return { sent: 0, duplicate: false };
   }
 }
@@ -228,6 +247,20 @@ export const partialRoundKeyOf = (roundId: string) => roundKeyOf("partial-round"
 const MAX_PENDING_PARTIALS = 5000;
 /** Review K1: tanulónként (fiók / párosítás / vendég) legfeljebb ennyi várakozó kör; a legrégebbi adja át a helyét. */
 export const MAX_PENDING_PER_LEARNER = 3;
+/**
+ * Terv R34 (review 4642333345): a KÜLDÉS ALATT álló kör első rögzítője (lecke + kör → kilét, változat) — az időzítő lejártától addig, amíg
+ * a küldési kísérlet és minden újrapróbája véget nem ér (`onSettled`), vagy a kör nem véglegesül. A pillanatkép-felvétel az első rögzítő
+ * vizsgálatát (R11 / R22) erre is elvégzi: a kapuhibás / bukott első küldés után a vendég pillanatképe nem veheti át a kört. Korlátos.
+ */
+const sendingPartials = new Map<string, { who: string; version: number }>();
+function markSending(key: string, who: string, version: number): void {
+  sendingPartials.delete(key);
+  if (sendingPartials.size >= MAX_PENDING_PARTIALS) sendingPartials.delete(sendingPartials.keys().next().value!);
+  sendingPartials.set(key, { who, version });
+}
+function settleSending(key: string, version: number): void {
+  if (sendingPartials.get(key)?.version === version) sendingPartials.delete(key);
+}
 function cancelPartial(key: string): void {
   const entry = pendingPartials.get(key);
   if (entry) { clearTimeout(entry.timer); pendingPartials.delete(key); }
@@ -246,6 +279,8 @@ function schedulePartial(key: string, owner: string, who: string, answered: numb
   if (own.length >= MAX_PENDING_PER_LEARNER) { cancelPartial(own[0]); logger.warn("[LESSON-RESULT] a tanuló legrégebbi várakozó félbehagyott köre kiszorult (tanulónkénti korlát)."); }
   if (pendingPartials.size >= MAX_PENDING_PARTIALS) { cancelPartial(pendingPartials.keys().next().value!); logger.warn("[LESSON-RESULT] a legrégebbi várakozó félbehagyott kör kiszorult (teljes korlát)."); }
   const timer = setTimeout(() => {
+    // R34: a kör első rögzítője a küldési ciklus végéig őrződik (a várakozók közül kikerül, a „küldés alatt” nyilvántartásba kerül).
+    markSending(key, best.who, best.version);
     pendingPartials.delete(key);
     // Review K4: csak a hiba osztálya / kódja (`errorClass`) — a lekérdezés hibaüzenete felhasználói azonosítót tartalmazhatna.
     void best.send().catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${errorClass(error)}`));
@@ -336,7 +371,7 @@ async function withRoundLock<T>(key: string, run: () => Promise<T>): Promise<T> 
 export function clearFinalizedRounds(): void { finalizedRounds.clear(); }
 
 /** Teszthez: a várakozó pillanatképek eldobása (küldés nélkül). */
-export function clearPendingPartials(): void { for (const key of [...pendingPartials.keys()]) cancelPartial(key); }
+export function clearPendingPartials(): void { for (const key of [...pendingPartials.keys()]) cancelPartial(key); sendingPartials.clear(); }
 /**
  * Terv R14 (második vak ellenőrzés K4): leállításkor a várakozó „félbehagyva” levelek a késleltetés kivárása nélkül kimennek, a szokott
  * kapun (kizárás + véglegesítés-ellenőrzés) át, legfeljebb `timeoutMs`-ig. Az időkorlát után visszatér (a leállás folytatódik). Sosem dob.
@@ -366,7 +401,10 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   const experience = lesson?.success ? lesson.data.experience : undefined;
   if (!experience) return res.status(404).json({ message: "Ez a lecke nem érhető el." });
   const body = parsed.data;
-  const userId = (req.user as { id?: string } | undefined)?.id;
+  const sessionUserId = (req.user as { id?: string } | undefined)?.id;
+  // Terv R31 (review 4642333188): ha a kérés a sorba kerüléskori kilét-címkét viszi, és az nem a mostani munkamenet fiókjáé (kilétváltás
+  // ugyanabban a böngészőben), a munkamenet fiókja nem kapja meg az eredményt — a kérés fiók nélküliként (párosított tanuló / vendég) fut.
+  const userId = body.subject !== undefined && body.subject !== resultSubjectOf(sessionUserId) ? undefined : sessionUserId;
   // Tanulói profil (S2): a párosított eszköz tanulója (ellenőrzött token). Átfogó review: bejelentkezve is a tanuló naplójába kerül
   // (mint a régi anyagnál); a levél neve bejelentkezve a fiók neve marad.
   const paired = body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
@@ -417,7 +455,8 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
       if (earlier.some(sentRow => sentRow.delivered.length > 0)) return { queued: false, partial: true, alreadySent: true };
       // R11 + R22: a várakozó beolvasása és az első rögzítő vizsgálata az utolsó várakozás után, szinkron az ütemezéssel. A kör első
       // rögzítőjével össze nem férő beküldő nem írhatja felül a várakozót (a körazonosítót a kliens választja).
-      const waiting = pendingPartials.get(lockKey);
+      // R34: a várakozó mellett a KÜLDÉS ALATT álló kör első rögzítője is számít (kapuhiba / bukott küldés utáni újrapróba alatt).
+      const waiting = pendingPartials.get(lockKey) ?? sendingPartials.get(lockKey);
       if (waiting && !mayActOn(waiting.who, who)) return { queued: false, partial: true, conflict: true };
       const lastAnsweredOnServer = onServerClock(body.lastAnsweredAt);
       const partialGraded: GradedQuiz = { ...snapshot, meta: { ...snapshot.meta, ...(startedAtOnServer ? { startedAt: startedAtOnServer } : {}), ...(lastAnsweredOnServer ? { lastAnsweredAt: lastAnsweredOnServer } : {}) } };
@@ -436,7 +475,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
         return attempt();
       });
       const queued = schedulePartial(lockKey, `${lessonId}|${recorder}`, recorder, snapshot.meta?.partial?.answered ?? 0, version,
-        async () => sendLessonResult({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }, true, gate));
+        async () => sendLessonResult({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }, true, gate, () => settleSending(lockKey, version)));
       return { queued, partial: true };
     });
     return res.status(202).json(outcome);
@@ -461,6 +500,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     // R15: a kör várakozó pillanatképét BÁRMELY véglegesítés törli (a beküldő kilététől függetlenül).
     cancelPartial(lockKey);
     partialVersions.delete(lockKey);
+    sendingPartials.delete(lockKey);
   }
   // R18 + R27: tartós, tanulófüggetlen végleges-jelzősor (mindkét fajtánál). Ha a kör végleges beküldése már megtörtént, és a mostani
   // beküldő saját végleges sora még nincs meg, ez ugyanannak a körnek MÁS kiléttel ismételt beküldése (pl. elveszett 202 után fiókba lépve):

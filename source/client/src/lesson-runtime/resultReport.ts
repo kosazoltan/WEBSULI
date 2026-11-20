@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { apiRequest, ensureResultApi, resultApiReady, sendKeepalive, warmCsrfToken } from "@/lib/queryClient";
+import { apiRequest, ensureResultApi, resultApiReady, resultSubject, sendKeepalive, warmCsrfToken } from "@/lib/queryClient";
 import { getFingerprint, peekFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
-import { answeredCount, OUTBOX_MAX_ATTEMPTS, outboxRetryDelayMs, quizRoundComplete, RESULT_OUTBOX_KEY, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
+import { answeredCount, OUTBOX_MAX_ATTEMPTS, outboxRetryDelayMs, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
+import { createOutboxStore, outboxEntryExpired, type OutboxEntry } from "@shared/result-outbox";
 import { legacyResultBody } from "@shared/result-compat";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
@@ -22,46 +23,26 @@ export const REPORT_FALLBACK_MS = 45_000;
  * laponként legfeljebb OUTBOX_MAX_ATTEMPTS kísérlet, a 429 `Retry-After` idejét megtartva, egyébként növekvő késleltetéssel — azonnali
  * ismétlés (POST-hurok) nincs. Körönként egyszerre egy kérés lehet úton; különböző körök párhuzamosan mehetnek (R20).
  */
-type OutboxEntry = { id: string; lessonId: string; kind: "tasks" | "quiz"; body: Record<string, unknown>; flag: string; partialKey: string };
-let memoryOutbox: OutboxEntry[] = [];
-/** Terv R28 (3. célzott kör L4): a tárolóba NEM írható bejegyzések memóriasora — az ürítő a tárolóból olvasottak mellett ezt is olvassa. */
-let unpersistedOutbox: OutboxEntry[] = [];
-const isOutboxEntry = (value: unknown): value is OutboxEntry => {
-  const e = value as Partial<OutboxEntry> | null;
-  return !!e && typeof e.id === "string" && typeof e.lessonId === "string" && (e.kind === "tasks" || e.kind === "quiz") && typeof e.flag === "string" && typeof e.partialKey === "string" && !!e.body && typeof e.body === "object";
-};
-function readOutbox(): OutboxEntry[] {
-  let stored: OutboxEntry[];
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(RESULT_OUTBOX_KEY) ?? "[]");
-    stored = Array.isArray(parsed) ? parsed.filter(isOutboxEntry) : [];
-  } catch { stored = memoryOutbox; }
-  return [...stored, ...unpersistedOutbox.filter(entry => !stored.some(e => e.id === entry.id))];
-}
-function writeOutbox(list: OutboxEntry[]): void {
-  memoryOutbox = list;
-  try {
-    if (list.length) localStorage.setItem(RESULT_OUTBOX_KEY, JSON.stringify(list)); else localStorage.removeItem(RESULT_OUTBOX_KEY);
-    unpersistedOutbox = [];
-  } catch {
-    // R28: az írás dobott (pl. kvóta) — a lista memóriában marad, és az ürítő onnan is olvassa (a lapon belül elmegy).
-    unpersistedOutbox = list;
-  }
-}
-const removeFromOutbox = (id: string) => writeOutbox(readOutbox().filter(entry => entry.id !== id));
+// Terv R28 / R30 / R32: a tárolóréteg (`shared/result-outbox.ts`) — bejegyzésenkénti kulcs (fülbiztos), memóriasor írhatatlan tárolónál,
+// korhatár. A `localStorage` hozzáférése is dobhat (privát mód): ekkor csak a memóriasor él.
+const outbox = createOutboxStore(() => localStorage);
 const flagSet = (flag: string) => { try { return !!localStorage.getItem(flag); } catch { return false; } };
+/** Terv R31: az ezen a lapon sorba tett bejegyzések — ha a kilét-címke a sorba kerüléskor még nem volt meg, az első küldés előtt pótolható. */
+const enqueuedHere = new Set<string>();
 /** Kísérletek laponként (memóriában: a kimerült kör a következő oldalbetöltéskor új kísérleteket kap). */
 const outboxAttempts = new Map<string, { attempts: number; nextAt: number }>();
 const outboxInFlight = new Set<string>();
 export function enqueueResult(entry: OutboxEntry): void {
-  const list = readOutbox();
-  if (!list.some(e => e.id === entry.id)) writeOutbox([...list, entry]);
+  enqueuedHere.add(entry.id);
+  outbox.add(entry);
 }
 /** A sor ürítése: minden esedékes, nem úton lévő bejegyzés elindul (nem várja meg egymást). */
 export function drainResultOutbox(): void {
   const now = Date.now();
-  for (const entry of readOutbox()) {
-    if (flagSet(entry.flag)) { removeFromOutbox(entry.id); continue; }
+  for (const entry of outbox.read()) {
+    if (flagSet(entry.flag)) { outbox.remove(entry.id); continue; }
+    // R30 (review 4642268402): a 7 napnál régebbi tevékenységű bejegyzés küldés nélkül kikerül (a le nem zárt, régi kör nem megy el).
+    if (outboxEntryExpired(entry, now)) { outbox.remove(entry.id); continue; }
     const state = outboxAttempts.get(entry.id);
     if (outboxInFlight.has(entry.id) || (state && (state.attempts >= OUTBOX_MAX_ATTEMPTS || state.nextAt > now))) continue;
     outboxInFlight.add(entry.id);
@@ -74,7 +55,15 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     // Terv R12: az új mezők CSAK a szerver jelzése mellett mennek; jelzés nélkül a régi alak, egyszer, ismétlés nélkül.
     const capable = await ensureResultApi();
     const fingerprint = entry.body.fingerprint ?? await getFingerprint().catch(() => undefined);
-    const full = { ...entry.body, ...(fingerprint ? { fingerprint } : {}), ...(capable ? { clientNow: Date.now() } : {}) };
+    // R31 (review 4642333188): a bejegyzés a sorba kerüléskori kilétéhez kötött — a címke a kérésbe kerül, és a szerver eltérésnél a
+    // mostani munkamenet fiókját nem használja. Ha a sorba kerüléskor még nem volt címke: ezen a lapon most pótlódik (a token ugyanannak a
+    // munkamenetnek a része), korábbi lapról ismeretlen (`?`: soha nem egyezik, a kérés fiók nélküliként fut).
+    let subject = entry.subject ?? null;
+    if (subject === null && enqueuedHere.has(entry.id)) {
+      subject = resultSubject();
+      if (subject !== null) outbox.update({ ...entry, subject });
+    }
+    const full = { ...entry.body, ...(fingerprint ? { fingerprint } : {}), ...(capable ? { clientNow: Date.now(), subject: subject ?? "?" } : {}) };
     const body = capable ? full : (legacyResultBody(full) ?? full);
     // R26 (3. célzott kör L2) + J5: a hálózati / 5xx hibavárakozást CSAK a kimenő sor kezeli (laponként legfeljebb OUTBOX_MAX_ATTEMPTS
     // kísérlet) — az `apiRequest` belső újrapróbája itt 0, különben a kettő szorzódna. R8: a kvíz végleges kérése `keepalive`; a feladatoké
@@ -94,11 +83,11 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
       localStorage.removeItem(entry.partialKey);
     } catch { /* elég a szerver egyedi kulcsa */ }
     outboxAttempts.delete(entry.id);
-    removeFromOutbox(entry.id);
+    outbox.remove(entry.id);
   } catch (error) {
     const e = error as { status?: unknown; retryAfterSec?: unknown } | null;
     // Érvénytelen kérés: újrapróbának nincs értelme (csendes — a tanuló felülete nem függ a levéltől).
-    if (e?.status === 400) { outboxAttempts.delete(entry.id); removeFromOutbox(entry.id); return; }
+    if (e?.status === 400) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
     const attempts = (outboxAttempts.get(entry.id)?.attempts ?? 0) + 1;
     const delay = outboxRetryDelayMs(attempts, typeof e?.retryAfterSec === "number" ? e.retryAfterSec : undefined);
     outboxAttempts.set(entry.id, { attempts, nextAt: Date.now() + delay });
@@ -135,7 +124,9 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
       ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...fresh }
       // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
       : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...fresh };
-    enqueueResult({ id: `${lessonId}|${kind}|${roundId}`, lessonId, kind, body, flag, partialKey: `${storageKey}:${kind}:partial:${roundId}` });
+    // R30: a bejegyzés korhatárának alapja — lezárt körnél a sorba kerülés, le nem zártnál a kör utolsó tevékenysége. R31: a kilét-címke.
+    const activityAt = round.finishedAt ? Date.now() : roundActivityAt(round) || Date.now();
+    enqueueResult({ id: `${lessonId}|${kind}|${roundId}`, lessonId, kind, body, flag, partialKey: `${storageKey}:${kind}:partial:${roundId}`, activityAt, subject: resultSubject() });
     drainResultOutbox();
   }, [lessonId, kind, round, storageKey, ready, timedOut]);
 
@@ -178,7 +169,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
       if (!snapshotDue(state, roundId, count)) return;
       const learner = getLearnerToken();
       const fingerprint = peekFingerprint();
-      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}), clientNow: Date.now() };
+      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}), clientNow: Date.now(), ...(resultSubject() ? { subject: resultSubject() } : {}) };
       const mark = { roundId, count };
       state.pending = mark;
       void sendKeepalive(`/api/lessons/${lessonId}/results`, body).then(accepted => {

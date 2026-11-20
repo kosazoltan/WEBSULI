@@ -5,7 +5,8 @@
  * nincs régi alakja: a régi szerver a `partial` nélküli törzset végleges beküldésnek venné (a kihagyott kérdések hibásként, és a levél a kör
  * kulcsát foglalná). Import nélküli, tiszta függvény (kliens és egységteszt is hívja).
  */
-const NEW_FIELDS = ["startedAt", "lastAnsweredAt", "clientNow"] as const;
+/** R31: a kilét-címke (`subject`) is új mező — a régi szerver nem ismeri. */
+const NEW_FIELDS = ["startedAt", "lastAnsweredAt", "clientNow", "subject"] as const;
 /**
  * Terv R12 (második vak ellenőrzés K3): a szerver a `GET /api/csrf-token` válaszában ezzel jelzi, hogy ismeri az új eredmény-API-t
  * (pillanatkép, új mezők). A régi szerver nem küldi; a kliens jelzés nélkül a régi alakkal, pillanatkép nélkül dolgozik.

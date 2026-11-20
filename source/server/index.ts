@@ -696,10 +696,14 @@ app.use((req, res, next) => {
       shuttingDown = true;
       stopSkillLearningAudit();
       log(`${signal} received. Starting graceful shutdown...`);
+      // R33 (spec 2026-11-17-eredmeny-email-kviz): a kényszerleállítás határideje — a pool előtti ürítések kerete ebből számolódik.
+      const FORCE_EXIT_MS = 295_000;
+      const SHUTDOWN_POOL_RESERVE_MS = 2_000;
+      const shutdownStartedAt = Date.now();
       const force = setTimeout(() => {
         logger.error("Could not close connections in time, forcefully shutting down");
         process.exit(1);
-      }, 295_000);
+      }, FORCE_EXIT_MS);
       force.unref();
       try {
         const cron = (await import("node-cron")).default;
@@ -726,12 +730,19 @@ app.use((req, res, next) => {
           await new Promise((resolve) => setTimeout(resolve, 3_000));
         }
         await realtimeDrained;
-        // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
-        await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
-        // Review #365 (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők a pool lezárása előtt (max 15 s).
-        await Promise.race([(await import("./daily-reminder")).pendingNewLessonNotifications(), new Promise((resolve) => setTimeout(resolve, 15_000))]).catch((err: unknown) => logger.warn("New lesson notification flush failed", err));
-        // Spec 2026-11-17-eredmeny-email-kviz (R14): a várakozó „félbehagyva” eredménylevelek a pool lezárása előtt (max 15 s).
-        await (await import("./lesson-result-email")).flushPendingPartials(15_000).catch((err: unknown) => logger.warn("Partial result flush failed", err));
+        // R33 (spec 2026-11-17-eredmeny-email-kviz, review 4642333294): a pool lezárása előtti ürítések EGYSZERRE, mindegyik a saját
+        // korlátjáig, de legfeljebb a kényszerleállításig hátralévő időig (tartalékkal a pool lezárására) — sorosan a 270 + 3 + 10 + 15 + 15 s
+        // túllépte volna a 295 s-ot. Spec 2026-10-18-regi-anyag-eredmeny-azonnal: a régi anyagok összevont eredményei (max 10 s); review #365
+        // (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők (max 15 s); R14: a várakozó „félbehagyva” eredménylevelek (max 15 s).
+        const { pendingNewLessonNotifications } = await import("./daily-reminder");
+        const { flushPendingPartials } = await import("./lesson-result-email");
+        const { runShutdownFlushes } = await import("./shutdown-flush");
+        const flushBudgetMs = FORCE_EXIT_MS - (Date.now() - shutdownStartedAt) - SHUTDOWN_POOL_RESERVE_MS;
+        await runShutdownFlushes([
+          { name: "Material result flush", maxMs: 10_000, run: () => flushPendingMaterialResults() },
+          { name: "New lesson notification flush", maxMs: 15_000, run: () => pendingNewLessonNotifications() },
+          { name: "Partial result flush", maxMs: 15_000, run: () => flushPendingPartials(Math.max(0, Math.min(15_000, flushBudgetMs))) },
+        ], flushBudgetMs, (name, err) => logger.warn(`${name} failed`, err));
         await dbPool.end();
         log("Database pool closed");
         log("Graceful shutdown completed");
