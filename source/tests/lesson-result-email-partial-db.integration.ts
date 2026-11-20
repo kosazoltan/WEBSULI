@@ -569,20 +569,22 @@ test("R29 / L5: a pillanatkép a felvétel utolsó várakozásánál áll, közb
 /* PR-review a 44487292-es fejre (2026-11-20), terv R31 / R34. */
 test("R31 (4642333188): a sorban maradt végleges eredményt más fiók munkamenete küldi → nem a mostani fiók nevére kerül; egyező címkénél a fiók neve", async () => {
   reset();
+  // Csak a saját kör levelei számítanak (az előző teszt háttérben futó végleges levelei a reset után is megérkezhetnek).
+  const mailsOf = (who: string, roundId: string) => { const keys = RECIPIENTS.map(to => resultIdempotencyKey(LESSON, "quiz", roundKeyOf(who, "quiz", roundId), to)); return sent.filter(mail => keys.includes(mail.key)); };
   // A sorba kerüléskor az u-r31-a fiók volt bejelentkezve; a küldéskor már u-r31-b munkamenete él (ugyanabban a böngészőben).
   assert.equal((await post({ kind: "quiz", roundId: "round-r31-switch", picks: picks(5), fingerprint: "fp-r31", subject: resultSubjectOf("u-r31-a") }, freshIp(), "u-r31-b")).status, 202);
-  assert.ok(await waitFor(() => sent.length === 2), "a levél kiment");
-  assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")), "nem a mostani fiók nevére");
+  assert.ok(await waitFor(() => mailsOf("guest:fp-r31", "round-r31-switch").length === 2), "a levél vendég-kulcson kiment (nem a mostani fiókén)");
+  assert.equal(mailsOf("u-r31-b", "round-r31-switch").length, 0, "a mostani fiók kulcsán nem ment levél");
+  assert.ok(mailsOf("guest:fp-r31", "round-r31-switch").every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")), "nem a mostani fiók nevére");
   // Fiók nélkül tette a sorba (vendég), azóta valaki bejelentkezett → továbbra is vendég.
-  reset();
   assert.equal((await post({ kind: "quiz", roundId: "round-r31-anon", picks: picks(5), fingerprint: "fp-r31b", subject: resultSubjectOf(undefined) }, freshIp(), "u-r31-b")).status, 202);
-  assert.ok(await waitFor(() => sent.length === 2));
-  assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")));
+  assert.ok(await waitFor(() => mailsOf("guest:fp-r31b", "round-r31-anon").length === 2));
+  assert.equal(mailsOf("u-r31-b", "round-r31-anon").length, 0);
+  assert.ok(mailsOf("guest:fp-r31b", "round-r31-anon").every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")));
   // Egyező címke: a fiók neve (a megszokott út).
-  reset();
   assert.equal((await post({ kind: "quiz", roundId: "round-r31-same", picks: picks(5), subject: resultSubjectOf("u-r31-c") }, freshIp(), "u-r31-c")).status, 202);
-  assert.ok(await waitFor(() => sent.length === 2));
-  assert.ok(sent.every(mail => mail.html.includes("Bejelentkezett tanuló") && !mail.html.includes("Vendég tanuló")));
+  assert.ok(await waitFor(() => mailsOf("u-r31-c", "round-r31-same").length === 2));
+  assert.ok(mailsOf("u-r31-c", "round-r31-same").every(mail => mail.html.includes("Bejelentkezett tanuló") && !mail.html.includes("Vendég tanuló")));
   // A címke a fiókhoz kötött, nem visszafejthető azonosító.
   assert.notEqual(resultSubjectOf("u-r31-a"), resultSubjectOf("u-r31-b"));
   assert.ok(!resultSubjectOf("u-r31-a").includes("u-r31-a"));

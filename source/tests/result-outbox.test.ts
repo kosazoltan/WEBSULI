@@ -113,3 +113,17 @@ test("R31: a régi alak (R10) a kilét-címkét sem küldi; a szerver a CSRF-tok
   const client = readFileSync(new URL("../client/src/lib/queryClient.ts", import.meta.url), "utf8");
   assert.match(client, /export function resultSubject\(\): string \| null/);
 });
+
+test("R32: az alkalmazás induláskor a bejegyzésenkénti kulcsokat nézi — a függő bejegyzés miatt betölti a beküldőt és üríti a sort", async () => {
+  const { createOutboxStore, hasPendingOutbox } = await import("../shared/result-outbox");
+  const tab = tabStorage();
+  assert.equal(hasPendingOutbox(tab), false, "üres sor");
+  tab.setItem("mas:kulcs", "1");
+  assert.equal(hasPendingOutbox(tab), false, "idegen kulcs nem függő bejegyzés");
+  createOutboxStore(() => tab).add(entry("a"));
+  assert.equal(hasPendingOutbox(tab), true, "a bejegyzés saját kulcson áll, és az induló ellenőrzés látja");
+  assert.equal(hasPendingOutbox(null), false);
+  const app = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /pending = hasPendingOutbox\(localStorage\);/);
+  assert.doesNotMatch(app, /localStorage\.getItem\(RESULT_OUTBOX_KEY\)/, "a régi, közös kulcs ellenőrzése megszűnt");
+});
