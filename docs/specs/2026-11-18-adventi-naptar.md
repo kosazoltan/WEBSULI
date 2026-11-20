@@ -1140,3 +1140,21 @@ meg a naptárat azon az eszközön, amelyen addig vendégként játszott, a vend
 
 **Évfolyam (vak ellenőr k6):** az évfolyam az első VÁLASZNÁL rögzül, nem a megnyitáskor (R6, E10); az első válaszig a profil
 változása új tervet ad. **Sérült sor (k3):** 500 helyett érthető 409 (\`corrupt: true\`) minden végponton.
+
+## 22. Élesítés előtti javítások (a 3/3 PR GPT-vak ítélete, 2026-11-20 — a kapcsoló bekapcsolásának feltétele)
+
+Külön, a 3/3 PR-re halmozott ágon (`wip/advent-d-elesites-elott`); a 3/3 PR feje változatlan marad.
+
+1. **Átvétel és javított évfolyam (L1):** rögzítetlen évfolyamnál az átvétel a tanuló FRISS profiljának évfolyamát használja; a még meg
+   nem válaszolt, más évfolyamra készült saját terv a vendégmegoldások illesztése ELŐTT újraépül. Az átvett vendégablak kérdéssora
+   csak azonos évfolyamnál marad meg kérdésként a tervben (a próba és az eredmény mindig átkerül).
+2. **Alanyváltás az SPA-ban (L2):** az adventi állapot a kliens gyorsítótárában az alanyhoz kötött; játékos be- és kilépéskor (és a
+   tanulói link változásakor) a korábbi adat törlődik, a függőben lévő régi kérés nem töltheti vissza.
+3. **Lezárt évad (L3):** lezárt évadban az olvasás NEM mutat egyesített előnézetet: a mentett tanulói állás látszik (a lezárás után
+   átvétel nincs).
+4. **Éjféli frissítés eltérő eszközórával (L4):** az állapot a szerver által számolt várakozást is adja (`nextOpensInMs`); a kliens a
+   frissítést ehhez, a válasz érkezésének pillanatától ütemezi — az eszköz órája nem számít.
+5. **Átmeneti szerverhiba a főoldalon (L5):** a státusz HTTP-hibája nem azonos a hiteles „kikapcsolt” válasszal: hiba esetén a kártya
+   a helyén marad az alapfelirattal és a belépővel, a státusz újrapróbálható.
+6. **Két eszköz, egy tanuló (L6):** a válasz a teljes, azonos állapotú ablaklistát is visszaadja (`doors`); a kliens az összesítéssel
+   együtt az összes ablakot cseréli.

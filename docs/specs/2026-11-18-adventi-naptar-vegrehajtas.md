@@ -736,6 +736,20 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
 5. L5 — `account-store.exportAccount`: sérült adventi sor `corrupt: true`, számlálók nélkül; az alap-export megy. Teszt (DB, KI / BE).
 6. L6 — az újsor-korlát mutációs ellenpróbája ugyanazzal a 90-es kerettel, a hibás ág túllépését és a foglalás pontosságát méri.
 
+## Kiegészítés 15 — élesítés előtti javítások (2026-11-20; terv `docs/specs/2026-11-18-adventi-naptar.md` 22.)
+
+Ág: `wip/advent-d-elesites-elott` (a 3/3 PR `ebd03a42` fejére halmozva). Minden pont előbb bukó teszttel.
+
+1. L1 — `adoption.ts` `mergeAdoption`: `grade = base.grade ?? ctx.learnerGrade`; a válasz nélküli, más évfolyamú saját terv újraépül; a
+   vendég kérdéssora csak azonos évfolyamnál kerül a tervbe. Teszt: egység + DB (két eszköz, profiljavítás, a 2. ablak kérdése).
+2. L2 — `usePlayer.ts` `clearPlayerCache`: az adventi állapot is törlődik (előtte a függő kérés megszakítva); a lekérdezés a
+   `signal`-t továbbadja. Teszt: egység (QueryClient, késleltetett válasz).
+3. L3 — `routes.ts` `GET /state`: előnézet csak írható fázisban. Teszt: DB (január 7., párosított olvasás a mentett állással).
+4. L4 — `calendar.ts` `adventNow` `nextOpensInMs`; `buildAdventState` továbbadja; `useAdvent.ts` `refreshDelayMs`. Teszt: egység.
+5. L5 — `fetchAdventStatus`: nem sikeres HTTP-válasz hibát dob (a sikeres `enabled: false` ettől különül); a kártya hibánál marad.
+   Teszt: egység (álfetch) + a kártya forrás-őre.
+6. L6 — `AdventAnswerResult.doors`; `applyAnswerResult` (kliens): az összes ablak cseréje. Teszt: DB (két eszköz) + egység.
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.
