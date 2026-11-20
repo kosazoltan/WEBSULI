@@ -513,5 +513,351 @@
       "answer": "Ez reggel volt.",
       "expected": 0
     }
+  ],
+  "typedCases": [
+    {
+      "name": "polinom: kipontozás (…) a végén",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 10x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "10x"
+          }
+        ]
+      },
+      "answer": "10x…",
+      "expected": 1
+    },
+    {
+      "name": "polinom: két pont a végén",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 10x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "10x"
+          }
+        ]
+      },
+      "answer": "10x..",
+      "expected": 1
+    },
+    {
+      "name": "polinom: három pont a végén",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 10x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "10x"
+          }
+        ]
+      },
+      "answer": "10x...",
+      "expected": 1
+    },
+    {
+      "name": "polinom: szóköz + kipontozás",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 10x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "10x"
+          }
+        ]
+      },
+      "answer": "10x …",
+      "expected": 1
+    },
+    {
+      "name": "polinom: mondatzáró egy pont (változatlan)",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 10x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "10x"
+          }
+        ]
+      },
+      "answer": "10x.",
+      "expected": 1
+    },
+    {
+      "name": "polinom: mondatban, kipontozással",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 10x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "10x"
+          }
+        ]
+      },
+      "answer": "Az eredmény 10x…",
+      "expected": 1
+    },
+    {
+      "name": "polinom: rossz polinom kipontozással",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 10x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "10x"
+          }
+        ]
+      },
+      "answer": "10x + 1…",
+      "expected": 0
+    },
+    {
+      "name": "polinom: rossz együttható két ponttal",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 10x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "10x"
+          }
+        ]
+      },
+      "answer": "11x..",
+      "expected": 0
+    },
+    {
+      "name": "polinom: tizedes együttható (változatlan)",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 2.5x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "2.5x"
+          }
+        ]
+      },
+      "answer": "2.5x",
+      "expected": 1
+    },
+    {
+      "name": "polinom: tizedes együttható két ponttal",
+      "source": "#121 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 2.5x.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "polynomial",
+            "value": "2.5x"
+          }
+        ]
+      },
+      "answer": "2.5x..",
+      "expected": 1
+    },
+    {
+      "name": "két szám: lépés után szóközzel a háromjegyű eredmény",
+      "source": "#122 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "30 · 7 = 210",
+        "typedAnswers": [
+          {
+            "part": "lépés",
+            "kind": "expression",
+            "value": "30 · 7",
+            "form": "intermediate-step"
+          },
+          {
+            "part": "eredmény",
+            "kind": "number",
+            "value": "210"
+          }
+        ]
+      },
+      "answer": "30 · 7 210",
+      "expected": 1
+    },
+    {
+      "name": "két szám: rossz eredmény nem ad hamis pontot",
+      "source": "#122 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "30 · 7 = 210",
+        "typedAnswers": [
+          {
+            "part": "lépés",
+            "kind": "expression",
+            "value": "30 · 7",
+            "form": "intermediate-step"
+          },
+          {
+            "part": "eredmény",
+            "kind": "number",
+            "value": "210"
+          }
+        ]
+      },
+      "answer": "30 · 7 211",
+      "expected": 0
+    },
+    {
+      "name": "ezres tagolás: 12 000 a lépés végén egy szám",
+      "source": "#122 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az első lépés: 35 + 64 − 12.",
+        "typedAnswers": [
+          {
+            "part": "lépés",
+            "kind": "expression",
+            "value": "35 + 64 − 12",
+            "form": "intermediate-step"
+          }
+        ]
+      },
+      "answer": "35 + 64 − 12 000",
+      "expected": 0
+    },
+    {
+      "name": "ezres tagolás: leválasztott csoport találat nélkül nem számít",
+      "source": "#122 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az első lépés: 35 + 64 − 12.",
+        "typedAnswers": [
+          {
+            "part": "lépés",
+            "kind": "expression",
+            "value": "35 + 64 − 12",
+            "form": "intermediate-step"
+          }
+        ]
+      },
+      "answer": "35 + 64 − 12 345",
+      "expected": 0
+    },
+    {
+      "name": "ezres tagolás: 0-val kezdődő csoport nem válik le",
+      "source": "#122 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "35 + 64 − 12, aztán 0",
+        "typedAnswers": [
+          {
+            "part": "lépés",
+            "kind": "expression",
+            "value": "35 + 64 − 12",
+            "form": "intermediate-step"
+          },
+          {
+            "part": "eredmény",
+            "kind": "number",
+            "value": "0"
+          }
+        ]
+      },
+      "answer": "35 + 64 − 12 000",
+      "expected": 0
+    },
+    {
+      "name": "ezres tagolás: a lépés elején álló 12 000 egy szám",
+      "source": "#122 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az első lépés: 12 000 : 4.",
+        "typedAnswers": [
+          {
+            "part": "lépés",
+            "kind": "expression",
+            "value": "12 000 : 4",
+            "form": "intermediate-step"
+          }
+        ]
+      },
+      "answer": "12 000 : 4 3000",
+      "expected": 1
+    },
+    {
+      "name": "ezres tagolás: önálló 12 000 egy szám",
+      "source": "#122 (T-1, szintetikus)",
+      "task": {
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Az eredmény 12 000.",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "number",
+            "value": "12000"
+          }
+        ]
+      },
+      "answer": "12 000",
+      "expected": 1
+    }
   ]
 }
