@@ -111,3 +111,7 @@ indítási cél a telefonos nézetben egy mérésben (250 ms) még nem teljesül
    c. `TsunamiScene3D.tsx`: a csillapítás a közös állandóval és valós eltelt idővel; `TsunamiEscapeEnglish.tsx`: a
       `markSettled` időzítője helyett a képkocka-követő vált, amikor `isShiftSettled` igaz.
    d. `gate:stage`, majd egy zárral a célzott böngészős kör (Szökőár-esetek) és a `gate:push`.
+14. **GPT-vak leletek (terv `docs/specs/2026-11-18-szokoar-tema-es-sebesseg.md` 7.7, „A GPT-vak ellenőr leletei”):** bukó tesztek
+   (L1, L2, L3, L5) külön commitban, futtatva a javítás előtti kódon; utána `TsunamiEscapeEnglish.tsx` (lapos rajz eltolással és
+   visszaírással, `startGame` elrendezés-törlés, játéktér-doboz gyorsítótár) és `TsunamiScene3D.tsx` (doboz mérése mozgó
+   eltolásnál minden képkockán); `gate:stage`, majd egy zárral a célzott böngészős kör és a `gate:push`.

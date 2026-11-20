@@ -337,3 +337,17 @@ fej 90b3f83f egyszeri bukása ugyanez.
 - WebGL nélkül (nincs kirajzolt eltolás) és csökkentett mozgásnál az eltolás azonnali, a jelző a döntéskor vált.
 - Bukó teszt előbb: 844×390, 35 %-os víz, 6× lassított CPU — a „nyugalomban” jelzéskor a figura teljes teste szabad. A 600 ms-os
   mérce és a meglévő tesztállítások változatlanok.
+
+**A GPT-vak ellenőr leletei (ítélet: NEM, fej 5bd568a2, böngészővel futtatva) — javítás:**
+- **L1 (blokkoló):** a lapos (2D) tartalék nem rajzolta ki a kép-eltolást. Javítás: a lapos rajz ugyanazzal a csillapítással
+  (`dampShift`) kirajzolja, és minden képkockán visszaírja a kirajzolt eltolást és a figura dobozát / kiterjedését.
+- **L2 (közepes):** kontextusvesztés után a jelző a 3D-renderelő meg nem újuló értékére várt. Javítás: a lapos rajz minden képkockán
+  felülírja a kirajzolt eltolást, így a jelző az élő renderelőre vált.
+- **L3 (blokkoló):** újrakezdéskor az új menet 1-es kérdése a régi 1-es kérdés döntését és „settled” állapotát kapta. Javítás: új
+  menetnél (`startGame`) az elrendezés-döntés, a nyugalom, a várakozás és a követés állapota törlődik.
+- **L4 (közepes):** a követő képkockánként olvasta a játéktér dobozát. Javítás: a játéktér doboza gyorsítótárban; frissül a
+  döntéskor, a követő 250 ms-os frissítésekor és átméretezéskor.
+- **L5 (közepes):** a 6×-es célzott teszt is érvényesíti a 600 ms-ot; a 3D-jelenet a figura dobozát mozgó eltolásnál (és a
+  megérkezés képkockáján) minden képkockán méri, így a jelzéskori doboz ugyanabból a képkockából való.
+- Bukó tesztek előbb (`tsunami-play.spec.ts`): lapos tartalék (pixelből mért figura), kontextusvesztés beállás közben, újrakezdés
+  ugyanazzal a kérdés-azonosítóval, 6×-es eset 600 ms-mal.
