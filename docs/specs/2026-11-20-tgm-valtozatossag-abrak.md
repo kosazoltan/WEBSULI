@@ -302,3 +302,46 @@ Elfogadás (EARS):
 - [ ] V18 tryShare jelzés
 - [ ] V19 hangok, KI bájtra a régi
 - [ ] V20 szimuláció a beszúrással
+
+## 14. S6c — ábrafajta-terv és szebb ábrák
+
+Alap: TGM-terv S6c (TGM-végrehajtás 850. sortól), a tulajdonos 2026-11-20-i kérésével („lényegesen szebb ábrák”). Kapcsoló: `STUDIO_LESSON_VARIETY`.
+
+Felülvizsgálat (TÉNY):
+- A `fraction`, `map`, `wordBuilder`, `sentenceParts` paraméter-alakja nincs a `VISUAL_PARAMS_CONTRACT`-ban
+  (`shared/lesson-visual-params.ts:240-250`), ezért a modell nem választja őket (a 239 kiadott leckében 0 előfordulás, TGM-terv 3.3).
+- A négy megjelenítő (`client/src/lesson-runtime/blocks/animate-blocks.tsx:38-187`) egyszerű dobozsor, kódba írt színekkel
+  (`#10b981`, `bg-emerald-500`, `bg-sky-100`…), nem az évfolyamsáv tokenjeivel (`--ws-accent`, `--ws-accent-2`, `--ws-accent-3`,
+  `lesson-design.css:40-60`). A `process` és a `timeline` (a kiadott ábrák többsége a szabad rajzzal együtt) szintén.
+- Nincs tantárgyi fajta-ajánlás és fajta-arány jelzés; az ábrakészítő minden tantárgyban ugyanazt a listát kapja (`step-io.ts:767`).
+
+Döntések:
+
+1. **A négy, élesben soha nem használt fajta megjelenítője újrarajzolva** a sáv tokenjeivel (tört: körcikk + téglalapsáv + számláló /
+   nevező; térkép: pontok számozott jelölővel, jelmagyarázattal; szóépítés: színezett szórészek kötőjellel és eredménnyel; mondatrészek:
+   színkódolt elemek szerepcímkével). Mivel élesben 0 előfordulásuk van, a változás a kiadott leckéken semleges (a jelölt S1-es
+   leckékre sem hat — ott ez a négy fajta nincs). Mobilon sortörés, vízszintes görgetés nélkül.
+2. **`process` és `timeline` új megjelenése csak jelölt leckén** (`FeedbackVarietyContext`): számozott, sávszínű lépéskörök
+   nyilakkal, mobilon függőleges elrendezésben; jelöletlen leckén a régi megjelenítő (bájtra azonos DOM).
+3. **Prompt (BE):** `visualParamsContract(true)` a négy fajta paraméter-alakjával; `shared/visual-kind-plan.ts`: `SUBJECT_KIND_HINTS`
+   (tantárgy → legalább két ajánlott fajta a hirdetett listából) és a tantárgy ajánlása az ábrakészítő promptjában; KI: bájtra a régi.
+4. **Jelzés, nem kapu:** `kindShareProblems(lesson)` — ha egy fajta a lecke nem forráshoz kötött ábráinak több mint 40%-a (legalább 5
+   ábránál), `qualityNotes` (`visual_kind_share`); BE-nél `telemetry.gates.visualKinds` (fajtánkénti darabszám).
+5. **Nem változik:** a szerepleírás (`role-skills.ts:146`) illusztráció-színlistája — a szabad SVG rajz konkrét színeket kér (a tisztító
+   `currentColor`-t átszínez, `var()`-t nem ismer, `shared/illustration-svg.ts:88-90`); a paraméteres fajták színét a megjelenítő adja a
+   sáv tokenjeiből. A `pictureCards` és `table` ajánlása az S2b / S3a után kerül a táblába (ma nincs a hirdetett listában).
+
+Elfogadás (EARS):
+
+- **V21** — THE négy fajta megjelenítője 360×640, 844×390 és 1280×800 nézetben SHALL átfedés, levágás és oldalszintű vízszintes görgetés
+  nélkül, a sáv színeivel rajzolni (böngészős próba, képernyőkép).
+- **V22** — WHEN a lecke jelölt, THE `process` / `timeline` SHALL az új megjelenítővel rajzolódni; WHEN jelöletlen, SHALL a régi DOM-mal.
+- **V23** — WHEN a kapcsoló BE, THE ábrakészítő promptja SHALL a négy fajta paraméter-alakját és a tantárgy ajánlását tartalmazni; WHEN KI,
+  SHALL bájtra a régi lenni. THE ajánlótábla SHALL minden katalógus-tantárgyra legalább két, a hirdetett listában szereplő fajtát adni.
+- **V24** — THE fajta-arány jelzés SHALL 10 ábrából 5 azonosnál megszólalni, 4-nél nem, és a forráshoz kötött ábrák SHALL NOT számítani.
+
+<!-- acceptance-checklist -->
+- [ ] V21 négy fajta, három nézet, képernyőkép
+- [ ] V22 process / timeline új megjelenés csak jelölt leckén
+- [ ] V23 prompt BE / KI, ajánlótábla
+- [ ] V24 fajta-arány jelzés
