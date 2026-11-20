@@ -8,7 +8,8 @@
  * Negatív index a végétől számít; tartományon kívüli index → kivétel.
  */
 export function withDifferentChar(value: string, index: number): string {
-  const at = index < 0 ? value.length + index : index;
+  // Előbb az EREDETI index egészségét nézzük: a normalizálás (pl. 32 + (-1 - ε) → 31) lebegőpontos kerekítéssel elfedné a törtet.
+  const at = Number.isInteger(index) ? (index < 0 ? value.length + index : index) : Number.NaN;
   if (!Number.isInteger(at) || at < 0 || at >= value.length) throw new RangeError(`withDifferentChar: a(z) ${index}. pozíció nincs a ${value.length} hosszú értékben`);
   const replacement = value[at] === "A" ? "B" : "A";
   return `${value.slice(0, at)}${replacement}${value.slice(at + 1)}`;
