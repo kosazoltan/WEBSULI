@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -564,4 +564,47 @@ test("R29 / L5: a pillanatkép a felvétel utolsó várakozásánál áll, közb
     assert.deepEqual(await (await snapshot).json(), { queued: false, finalized: true });
     assert.equal(pendingPartialCount(), 0, "a véglegesített körre nem keletkezett várakozó");
   } finally { release(); setPartialIntakeHook(null); clearPendingPartials(); setPartialDelay(previousDelay); }
+});
+
+/* PR-review a 44487292-es fejre (2026-11-20), terv R31 / R34. */
+test("R31 (4642333188): a sorban maradt végleges eredményt más fiók munkamenete küldi → nem a mostani fiók nevére kerül; egyező címkénél a fiók neve", async () => {
+  reset();
+  // A sorba kerüléskor az u-r31-a fiók volt bejelentkezve; a küldéskor már u-r31-b munkamenete él (ugyanabban a böngészőben).
+  assert.equal((await post({ kind: "quiz", roundId: "round-r31-switch", picks: picks(5), fingerprint: "fp-r31", subject: resultSubjectOf("u-r31-a") }, freshIp(), "u-r31-b")).status, 202);
+  assert.ok(await waitFor(() => sent.length === 2), "a levél kiment");
+  assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")), "nem a mostani fiók nevére");
+  // Fiók nélkül tette a sorba (vendég), azóta valaki bejelentkezett → továbbra is vendég.
+  reset();
+  assert.equal((await post({ kind: "quiz", roundId: "round-r31-anon", picks: picks(5), fingerprint: "fp-r31b", subject: resultSubjectOf(undefined) }, freshIp(), "u-r31-b")).status, 202);
+  assert.ok(await waitFor(() => sent.length === 2));
+  assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")));
+  // Egyező címke: a fiók neve (a megszokott út).
+  reset();
+  assert.equal((await post({ kind: "quiz", roundId: "round-r31-same", picks: picks(5), subject: resultSubjectOf("u-r31-c") }, freshIp(), "u-r31-c")).status, 202);
+  assert.ok(await waitFor(() => sent.length === 2));
+  assert.ok(sent.every(mail => mail.html.includes("Bejelentkezett tanuló") && !mail.html.includes("Vendég tanuló")));
+  // A címke a fiókhoz kötött, nem visszafejthető azonosító.
+  assert.notEqual(resultSubjectOf("u-r31-a"), resultSubjectOf("u-r31-b"));
+  assert.ok(!resultSubjectOf("u-r31-a").includes("u-r31-a"));
+  assert.equal(resultSubjectOf(undefined), "anon");
+});
+
+test("R34 (4642333345): igazolt tanuló pillanatképe, az első küldés kapuja hibát kap → a vendég pillanatképe conflict; az újrapróba az igazolt tanuló állapotát küldi ki", async () => {
+  reset();
+  const previousDelay = setPartialDelay(100);
+  const previousRetry = setRetryDelay(500);
+  let left = 1;
+  try {
+    clearPendingPartials();
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r34-owner", picks: picks(2), partial: true }, freshIp(), "u-r34")).json(), { queued: true, partial: true });
+    setFinalizedCheckFault(() => { if (left > 0) { left--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } });
+    await sleep(250); // az időzítő lejárt, a kapu hibát kapott, az újrapróba ~500 ms múlva jön
+    assert.equal(left, 0, "a kapuhiba megtörtént");
+    assert.equal(sent.length, 0);
+    setPartialDelay(60_000);
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r34-owner", picks: picks(4), partial: true, fingerprint: "fp-r34-guest" })).json(), { queued: false, partial: true, conflict: true }, "a vendég a küldési ciklus alatt sem veheti át a kört");
+    assert.ok(await waitFor(() => sent.length === 2, 3000), "az igazolt tanuló pótlása kiment");
+    assert.ok(sent.every(mail => new RegExp(`félbehagyva: 2 / ${ROUND_SIZE}\\)`).test(mail.subject)), "az igazolt tanuló (2 válaszos) állapota");
+    assert.ok(sent.every(mail => !mail.html.includes("Vendég tanuló")));
+  } finally { setFinalizedCheckFault(null); clearPendingPartials(); setPartialDelay(previousDelay); setRetryDelay(previousRetry); }
 });
