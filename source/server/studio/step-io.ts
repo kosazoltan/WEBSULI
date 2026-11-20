@@ -5,12 +5,12 @@ import { DECISION_STORY_CONTRACT } from "../../shared/decision-story";
 
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
-import { PROMPT_ANIM_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT_LIMITS } from "../../shared/lesson-schema";
+import { PROMPT_ANIM_KINDS, TRY_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT_LIMITS } from "../../shared/lesson-schema";
 import { VISUAL_PARAMS_CONTRACT } from "../../shared/lesson-visual-params";
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { lessonLengthBudget } from "../../shared/lesson-length";
 import { DEFAULT_REWARD_POLICY } from "../../shared/reward-policy";
-import { bandRegisterForPrompt } from "../../shared/lesson-band";
+import { bandRegisterForPrompt, bandVoiceForPrompt } from "../../shared/lesson-band";
 import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { lessonOpenerContract, lessonOpenerLektorChecklist, playfulAuthorRules } from "../../shared/lesson-opener";
@@ -105,6 +105,8 @@ export const outlineSectionSchema = z.object({
    * Engedékeny: hibás érték elhagyva; a motor a kiosztás után (és KI kapcsolónál is) eldobja — a szerzőhöz nem jut.
    */
   sectionKind: z.enum(SECTION_KINDS).optional().catch(undefined),
+  /** S6b (13. szakasz): a kiosztott `try`-fajta — a program írja (BE kapcsolónál), a modell kéretlen értékét a motor eldobja. */
+  tryKind: z.enum(TRY_KINDS).optional().catch(undefined),
 });
 
 export type OutlineSection = z.infer<typeof outlineSectionSchema>;
@@ -550,7 +552,9 @@ export function buildAuthorPrompt(
   const parts = [
     "A FELADAT: a vázlatból teljes, magyar nyelvű lecke, a tanuló korosztályának megfelelő nyelven és mélységben.",
     // LS-9: a korosztályt nem az osztályszám sejteti, hanem néven nevezve, leírt regiszterrel (spec §3).
-    `Korosztály: ${band} (${map.classroom}. osztály). ${bandRegisterForPrompt(band)}`,
+    `Korosztály: ${band} (${map.classroom}. osztály). ${bandRegisterForPrompt(band)}${variety && effectiveLessonVariety() ? ` ${bandVoiceForPrompt(band, variety.seed)}` : ""}`,
+    // S6b (13. szakasz): a kiosztott try-fajta a vázlat fejezetén (tryKind) — csak BE kapcsolónál van ilyen mező.
+    ...(variety && effectiveLessonVariety() ? ["Ha a vázlat fejezete tryKind mezőt ad, a fejezet try blokkja pontosan ezt a fajtát használja (dragSort, fillBlank vagy match)."] : []),
     "",
     D1_RULE_TEXT,
     TRANSCRIPTION_RULE_TEXT,
