@@ -115,3 +115,32 @@ test("forma nélküli jelölt lecke: a régi „Történet” fejléc", async ({
   await page.goto("/__lesson-runtime-probe?variety=1&opening=ismeretlen&classroom=6");
   await expect(page.getByText("Történet", { exact: true })).toBeVisible();
 });
+
+// S6c (terv 14. szakasz; V21, V22): a négy újrarajzolt fajta és a jelölt lecke folyamat / idővonal ábrája három nézetben.
+for (const viewport of VIEWPORTS) {
+  test(`szebb ábrák a sáv színeivel ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    const errors: string[] = []; page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/__lesson-runtime-probe?kinds=1&variety=1&classroom=6");
+    for (const kind of ["fraction", "map", "wordBuilder", "sentenceParts", "process", "timeline"]) {
+      const fig = page.locator(`figure[data-anim="${kind}"]`).first();
+      await expect(fig).toBeVisible();
+      await fig.scrollIntoViewIfNeeded();
+      await assertLayout(page, fig, viewport.width);
+      // A sáv színe ér el a rajzig (nem átlátszó, nem a böngésző alapértelmezett fekete).
+      const tone = await fig.evaluate((n) => getComputedStyle(n.querySelector(".vv-tone-a, .vv-fill-a, .vv-cell-on") ?? n).getPropertyValue("--vv-tone").trim() || getComputedStyle(n.querySelector(".vv-fill-a, .vv-cell-on") ?? n).fill);
+      expect(tone).not.toBe("");
+      await fig.screenshot({ path: `test-results/tgm-s6c/${kind}-${viewport.width}x${viewport.height}.png` });
+    }
+    await expect(page.locator('figure[data-anim="process"][data-style="v2"]')).toHaveCount(1);
+    await page.screenshot({ path: `test-results/tgm-s6c/oldal-${viewport.width}x${viewport.height}.png`, fullPage: true });
+    expect(errors).toEqual([]);
+  });
+}
+
+test("jelöletlen lecke: a folyamat a régi megjelenítővel", async ({ page }) => {
+  await page.goto("/__lesson-runtime-probe?kinds=1&classroom=6");
+  await expect(page.locator('figure[data-anim="process"]').first()).toBeVisible();
+  await expect(page.locator('figure[data-anim="process"][data-style="v2"]')).toHaveCount(0);
+  await expect(page.locator('figure[data-anim="fraction"] .vv-pie')).toBeVisible();
+});
