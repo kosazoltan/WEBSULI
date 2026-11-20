@@ -183,3 +183,15 @@ A TGM-végrehajtás „S2b” fejezete (355. sortól) változatlanul; a `STUDIO_
    tests/single-run-engine.test.ts tests/studio-role-skills.test.ts` → pass; `node --import tsx scripts/measure/shape-simulation.mts` →
    a két szám a PR-be; `tsc --noEmit` 0; eslint 0.
 4. Nehéz kör zárral (`tgm-s6a`).
+
+## S6b — `try` minimum és rotáció, szerzői hangok (részletes lépések)
+
+Ág: `feat/tgm-s6b-try-hang` (az S6a ágáról), munkafa `.claude/worktrees/tgm-s6b`. Terv: `docs/specs/2026-11-20-tgm-valtozatossag-abrak.md`
+13. szakasz. Fájlok: `shared/lesson-section-shapes.ts` (`planSections`, try-beszúrás, `tryKind`, `tryShare`), `shared/lesson-band.ts`
+(`BAND_VOICES`, `bandVoiceForPrompt`), `server/studio/step-io.ts` (séma `tryKind`, szerző-prompt BE sorai), `server/studio/single-run/engine.ts`
+(telemetria + minőségi jelzés), `shared/run-telemetry.ts` (`tryShare`), `tests/lesson-try-voices.test.ts` (új).
+
+1. Bukó tesztek: V17 (3…12 fejezet × 200 mag), V18 (`tryShare` tiszta függvény; a motor bekötése forrásszöveg-őrrel), V19 (hangok, KI
+   prompt), V20 (szimuláció).
+2. Kód; 3. `node --import tsx --test tests/lesson-try-voices.test.ts tests/lesson-section-shapes.test.ts tests/source-visuals-flag.test.ts
+   tests/single-run-engine.test.ts tests/lesson-opening-forms.test.ts` → pass; szimuláció; `tsc` 0; eslint 0. 4. Nehéz kör zárral (`tgm-s6b`).
