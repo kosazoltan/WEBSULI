@@ -219,7 +219,9 @@ export default function AdventCalendar() {
     setGuarded(true);
     setOpen(null);
     setError(null);
-    if (finished && !open?.readOnly) { summaryOpener.current = questionOpener.current; handoffToSummary.current = true; setSummaryOpen(true); }
+    // Az összesítés a kérdés-ablak TELJES bezárása után nyílik (a kérdés-ablak onCloseAutoFocus eseményéből): ha ugyanabban az ütemben
+    // nyílna, amikor a kérdés-ablak még záródik, az Escape a záródó réteghez kerülhetne, és az összesítés nyitva maradna.
+    if (finished && !open?.readOnly) { summaryOpener.current = questionOpener.current; handoffToSummary.current = true; }
   };
 
   const openSummary = (opener: HTMLElement | null) => { summaryOpener.current = opener; setSummaryOpen(true); };
@@ -427,7 +429,7 @@ export default function AdventCalendar() {
             className="advent-dialog" data-testid="advent-dialog" aria-describedby="advent-question-text"
             // A fókusz a KÉRDÉSRE kerül (nem az első válaszra): a képernyőolvasó felolvassa, és egy második Enter nem válaszol.
             onOpenAutoFocus={(event) => { event.preventDefault(); questionRef.current?.focus(); }}
-            onCloseAutoFocus={(event) => { event.preventDefault(); if (handoffToSummary.current) { handoffToSummary.current = false; return; } returnFocus(questionOpener.current); }}
+            onCloseAutoFocus={(event) => { event.preventDefault(); if (handoffToSummary.current) { handoffToSummary.current = false; setSummaryOpen(true); return; } returnFocus(questionOpener.current); }}
           >
             {open ? (
               <>
@@ -521,15 +523,19 @@ export default function AdventCalendar() {
 }
 
 /**
- * Fókusz-visszaadás a párbeszédablak bezárása után: azonnal, és ha a könyvtár saját takarítása közben a fókusz a lap aljára
- * (body) esett, a következő ütemben még egyszer — így a fókusz megbízhatóan a megnyitó elemre kerül.
+ * Fókusz-visszaadás a párbeszédablak bezárása után: azonnal, majd ha a könyvtár saját takarítása közben a fókusz a lap aljára (body)
+ * esett, néhány rövid, korlátos időzítővel újra (0–200 ms; nem képkocka-hurok, A31) — így a fókusz megbízhatóan a megnyitó elemre
+ * kerül, akkor is, ha a takarítás később fut, mint egyetlen időzítő.
  */
+const RETURN_FOCUS_RETRIES_MS = [0, 16, 50, 100, 200];
 function returnFocus(target: HTMLElement | null | undefined): void {
   target?.focus();
-  window.setTimeout(() => {
-    const active = document.activeElement;
-    if (target?.isConnected && (!active || active === document.body)) target.focus();
-  }, 0);
+  for (const delay of RETURN_FOCUS_RETRIES_MS) {
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (target?.isConnected && (!active || active === document.body)) target.focus();
+    }, delay);
+  }
 }
 
 function BackHome() {
