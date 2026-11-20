@@ -438,7 +438,9 @@ test('L2: a zár csak a saját folyamatfa (újrabelépő gyerekekkel együtt) le
   const result = join(dir, 'b.json');
   const stubborn = (f) => `process.on('SIGTERM',()=>{});require('fs').writeFileSync(${JSON.stringify(f)},String(process.pid));setInterval(()=>{},1000);`;
   const childSrc = `const {spawn}=require('child_process');spawn(${JSON.stringify(NODE)},['-e',${JSON.stringify(stubborn(g1))}],{stdio:'ignore'});`
-    + `spawn(${JSON.stringify(NODE)},${JSON.stringify([SCRIPT, 'run', '--name', 'belso', '--timeout-min', '1', '--', NODE, '-e', stubborn(g2)])},{stdio:'ignore'});setInterval(()=>{},1000);`;
+    // A belső (újrabelépő) run türelmi ideje HOSSZABB a külsőnél: a külső SIGKILL-je előbb éri el, mint ahogy maga takarítana —
+    // a leszármazottja csak akkor hal meg, ha ugyanabban a (külső által felügyelt) csoportban van.
+    + `spawn(${JSON.stringify(NODE)},${JSON.stringify([SCRIPT, 'run', '--name', 'belso', '--timeout-min', '1', '--', NODE, '-e', stubborn(g2)])},{stdio:'ignore',env:{...process.env,WEBSULI_MACHINE_LOCK_KILL_GRACE_MS:'30000'}});setInterval(()=>{},1000);`;
   const env = baseEnv(dir, { WEBSULI_MACHINE_LOCK_KILL_GRACE_MS: '1500' });
   const a = startCli(['run', '--name', 'A', '--timeout-min', '0.08', '--', NODE, '-e', childSrc], env);
   await waitFor(() => existsSync(g1) && existsSync(g2), 'a leszármazottak futnak', 30_000);
