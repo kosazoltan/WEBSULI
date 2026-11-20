@@ -10,7 +10,7 @@
  */
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { seedFrom } from "../../../shared/seeded";
-import { applySectionShapes } from "../../../shared/lesson-section-shapes";
+import { applySectionShapes, tryShare } from "../../../shared/lesson-section-shapes";
 import { lessonVarietyEnabled } from "../lesson-variety-flag";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
@@ -813,6 +813,12 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
       ? [{ reason: "length_over_budget", note: `A Tananyag lap ${visibleWords} látható szó — a terjedelmi keret legfeljebb ${lengthBudget.maxWords} (cél ${lengthBudget.targetWords}, ${lengthBudget.requiredConcepts} tanítandó fogalom).`, round: 0 }]
       : [];
     telemetry.gates.lengthOverBudget = qualityNotes.length > 0;
+    // S6b (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 13. szakasz): jelzés, nem kapu — a kész lecke try-aránya (BE kapcsolónál).
+    if (lessonVarietyEnabled()) {
+      const share = tryShare(lesson);
+      telemetry.gates.tryShare = share;
+      if (share < 1 / 3) qualityNotes.push({ reason: "try_share_low", note: `A fejezetek ${Math.round(share * 100)}%-ában van kipróbálható feladat (try) — a cél legalább a harmaduk.`, round: 0 });
+    }
     output = { ...output, lesson, ...(qualityNotes.length ? { qualityNotes } : {}) };
     await save("animator", output);
   }
