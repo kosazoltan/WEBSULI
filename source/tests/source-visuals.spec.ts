@@ -319,3 +319,29 @@ for (const viewport of [{ name: "allo-360", width: 360, height: 640 }, { name: "
     expect(errors).toEqual([]);
   });
 }
+
+// Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S2b-2, 17. szakasz; V33, V36): jelző a tábla fölött, cím kívül; rövid tábla nem
+// görög 360 px-en; nyomtatásban a görgő keret nem vág.
+test("vak J2 / J7 / J11 — 360 px", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.goto("/__lesson-runtime-probe?source-visuals=max&classroom=6");
+  const wide = page.locator('figure[data-anim="table"]').first();
+  await wide.waitFor({ state: "visible", timeout: 30_000 });
+  await page.evaluate(() => document.fonts.ready);
+  await wide.scrollIntoViewIfNeeded();
+  const hint = wide.getByTestId("sv-scroll-hint");
+  await expect(hint).toBeVisible();
+  const [hintBox, scrollBox, titleBox] = await Promise.all([hint.boundingBox(), wide.locator(".sv-table-scroll").boundingBox(), wide.locator(".sv-table-title").boundingBox()]);
+  expect(hintBox!.y).toBeLessThan(scrollBox!.y);
+  expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(360);
+  expect(await wide.locator(".sv-table-title").evaluate((n) => n.scrollWidth <= n.clientWidth + 1)).toBe(true);
+  await page.screenshot({ path: `${SHOTS}/vak-j2-360.png` });
+  await page.goto("/__lesson-runtime-probe?source-visuals=tree&classroom=6");
+  const compact = page.locator('figure[data-anim="table"]').first();
+  await compact.waitFor({ state: "visible", timeout: 30_000 });
+  expect(await compact.locator(".sv-table-scroll").evaluate((n) => n.scrollWidth <= n.clientWidth + 1)).toBe(true);
+  await page.emulateMedia({ media: "print" });
+  await page.goto("/__lesson-runtime-probe?source-visuals=max&classroom=6");
+  await page.locator('figure[data-anim="table"]').first().waitFor({ state: "visible", timeout: 30_000 });
+  expect(await page.locator(".sv-table-scroll").first().evaluate((n) => getComputedStyle(n).overflowX)).toBe("visible");
+});
