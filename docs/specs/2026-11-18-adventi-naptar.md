@@ -1110,7 +1110,13 @@ utána törlődik. A tanulói terv a tanuló PROFILJÁNAK
 évfolyamára készül (a vendégként választott évfolyam nem írja felül). A válaszlehetőségek sorrendjének magja a tervhez kötött kulcs
 (`seedKey`, átvett ablaknál a vendég kulcsa: `doorSeeds`) — átvétel után a tárolt választás, a helyes válasz jelölése és a pontozás
 ugyanaz. Az átvétel írásnál a korlátok és a fázis-ellenőrzés UTÁN fut; az olvasás ugyanezt az egyesítést előnézetként mutatja.
-Megvalósítás: `server/advent/adoption.ts` (`mergeAdoption`, `orderKeyFor`), `store.adopt`. (Vak ellenőr K1, K2, K3, KICSI-5, KICSI-6.)
+Megvalósítás: `server/advent/adoption.ts` (`mergeAdoption`, `orderKeyFor`, `createAdoptionContext`), `store.mutate` (`adopt`). (Vak ellenőr
+K1, K2, K3, KICSI-5, KICSI-6.) **Pontosítás 2026-11-20 (GPT-vak L2–L4):** az átvétel a végpont saját ellenőrzései (nap, fázis, bemenet)
+UTÁN, a módosítással EGY tranzakcióban fut, és csak sikeres módosítással véglegesül — elutasított (4xx) írás vagy hiba után mindkét
+sor (tanulói és eszköz) érintetlen. Az egyesített tervben egy kérdés (azonosító vagy normalizált szöveg) legfeljebb egyszer szerepel: a
+megválaszolt kérdések védettek, a későbbi ismétlődés az ablak saját készletéből determinisztikusan pótlódik (`dedupePlanDoors`). Sérült
+sor (hibás próbaelem is) olvasáskor, íráskor és átvételkor is 409 corrupt, átvétel nélkül. A szülői párosítási útmutató naptár-
+bekezdése csak bekapcsolt naptárnál kerül a levélbe (L5).
 Az alábbi bekezdés „a több megoldott ablakkal rendelkező marad, a másik törlődik” szabálya ezzel érvényét vesztette.
 
 **Névtelen → párosított átmenet (vak ellenőr k1; TULAJDONOSI DÖNTÉS 2026-11-18, kérdőíven: „Igen, vigyük át.”):** ha egy kérés

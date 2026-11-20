@@ -65,6 +65,8 @@ export class AdventRowGoneError extends Error {
  * tanulói sort (\`server/advent/adoption.ts\` \`mergeAdoption\`), vagy \`null\`-t, ha nincs mit átvinni.
  */
 export type AdoptionMerge = (learner: AdventRow | null, device: AdventRow) => AdventRow | null;
+/** Átvétel a módosítás tranzakciójában (GPT-vak L2): az eszköz sora és az egyesítés. */
+export type AdoptionRequest = { deviceId: string; merge: AdoptionMerge };
 
 export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
   return {
@@ -78,15 +80,34 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
      * Zárolt módosítás: a sort (ha nincs) létrehozza, zárolja, és a `fn` által adott mezőket írja. A `fn` tiszta legyen (a
      * zár alatt fut); ha `null`-t ad, nincs írás (de egy most létrehozott sor megmarad); ha dob, MINDEN visszagördül — a most
      * létrehozott sor is, így sikertelen megnyitás nem hagy üres sort. `created`: ebben a hívásban jött-e létre a sor.
+     *
+     * `adopt` (névtelen → párosított átvétel, terv 21.; GPT-vak L2): UGYANEBBEN a tranzakcióban mindkét sor zárolódik, a `fn` már az
+     * egyesített tanulói sort kapja, és az egyesítés + az eszközsor törlése csak akkor véglegesül, ha a `fn` nem dob — egy elutasított
+     * (4xx) módosítás vagy hiba esetén mindkét sor érintetlen marad.
      */
     async mutate<T>(
       season: number,
       subject: AdventSubject,
       fn: (row: AdventRow, created: boolean) => { patch: AdventPatch | null; result: T },
+      adopt?: AdoptionRequest,
     ): Promise<{ row: AdventRow; created: boolean; result: T }> {
       const client: PoolClient = await pool.connect();
       try {
         await client.query("BEGIN");
+        // Átvételnél előbb mindkét (meglévő) sor zárolása, azonosító szerinti sorrendben (holtpont ellen).
+        let deviceRow: AdventRow | null = null;
+        let learnerBefore: AdventRow | null = null;
+        if (adopt && subject.kind === "learner") {
+          const both = await client.query<DbRow>(
+            `SELECT ${COLUMNS} FROM advent_progress
+              WHERE season = $1 AND ((subject_kind = 'device' AND subject_id = $2) OR (subject_kind = 'learner' AND subject_id = $3))
+              ORDER BY id FOR UPDATE`,
+            [season, adopt.deviceId, subject.id],
+          );
+          const rows = both.rows.map(toRow);
+          deviceRow = rows.find((r) => r.subjectKind === "device") ?? null;
+          learnerBefore = rows.find((r) => r.subjectKind === "learner") ?? null;
+        }
         const inserted = await client.query<{ id: string }>(
           `INSERT INTO advent_progress (season, subject_kind, subject_id, learner_id, player_id)
            VALUES ($1, $2, $3, $4, $5)
@@ -99,11 +120,14 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
           [season, subject.kind, subject.id],
         );
         if (!locked.rows[0]) throw new AdventRowGoneError();
-        const current = toRow(locked.rows[0]);
+        let current = toRow(locked.rows[0]);
+        // Az egyesített tanulói sor (a körszám, a korábbi körök és a levél-foglalások a tanulóé maradnak).
+        const merged = deviceRow ? adopt!.merge(learnerBefore, deviceRow) : null;
+        if (merged) current = { ...current, grade: merged.grade, plan: merged.plan, doors: merged.doors, finishedAt: merged.finishedAt, passedAt: merged.passedAt };
         const { patch, result } = fn(current, created);
         let row = current;
-        if (patch) {
-          const next = { ...current, ...patch };
+        if (patch || merged) {
+          const next = { ...current, ...(patch ?? {}) };
           const updated = await client.query<DbRow>(
             `UPDATE advent_progress
                 SET grade = $2, round = $3, plan = $4::jsonb, doors = $5::jsonb, finished_at = $6, passed_at = $7, updated_at = now()
@@ -112,6 +136,8 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
           );
           row = toRow(updated.rows[0]!);
         }
+        // Az eszköz sora az átvétellel (vagy ha nem volt mit átvinni) megszűnik — csak a sikeres módosítással együtt.
+        if (deviceRow) await client.query(`DELETE FROM advent_progress WHERE id = $1`, [deviceRow.id]);
         await client.query("COMMIT");
         return { row, created, result };
       } catch (error) {
@@ -120,54 +146,6 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
       } finally {
         client.release();
       }
-    },
-
-    /**
-     * Névtelen → párosított átmenet egy tranzakcióban, mindkét sort zárolva: az egyesített tanulói sor íródik (a tanulói sor
-     * körszáma, korábbi körei és levél-foglalásai érintetlenek — az UPDATE csak a módosítható mezőket írja), az eszköz sora
-     * törlődik. Utána a gyereknek egyetlen élő sora van. Párhuzamos kérésnél (a tanulói sor közben jött létre) egyszer újrapróbál.
-     */
-    async adopt(season: number, deviceId: string, learnerId: string, merge: AdoptionMerge): Promise<"none" | "dropped" | "merged"> {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const client: PoolClient = await pool.connect();
-        try {
-          await client.query("BEGIN");
-          const locked = await client.query<DbRow>(
-            `SELECT ${COLUMNS} FROM advent_progress
-              WHERE season = $1 AND ((subject_kind = 'device' AND subject_id = $2) OR (subject_kind = 'learner' AND subject_id = $3))
-              ORDER BY id FOR UPDATE`,
-            [season, deviceId, learnerId],
-          );
-          const rows = locked.rows.map(toRow);
-          const device = rows.find((r) => r.subjectKind === "device") ?? null;
-          const learner = rows.find((r) => r.subjectKind === "learner") ?? null;
-          if (!device) { await client.query("COMMIT"); return "none"; }
-          const merged = merge(learner, device);
-          if (merged && learner) {
-            await client.query(
-              `UPDATE advent_progress SET grade = $2, plan = $3::jsonb, doors = $4::jsonb, finished_at = $5, passed_at = $6, updated_at = now() WHERE id = $1`,
-              [learner.id, merged.grade, JSON.stringify(merged.plan), JSON.stringify(merged.doors), merged.finishedAt, merged.passedAt],
-            );
-          } else if (merged) {
-            await client.query(
-              `INSERT INTO advent_progress (season, subject_kind, subject_id, learner_id, grade, round, plan, doors, finished_at, passed_at)
-               VALUES ($1, 'learner', $2, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8)`,
-              [season, learnerId, merged.grade, merged.round, JSON.stringify(merged.plan), JSON.stringify(merged.doors), merged.finishedAt, merged.passedAt],
-            );
-          }
-          await client.query(`DELETE FROM advent_progress WHERE id = $1`, [device.id]);
-          await client.query("COMMIT");
-          return merged ? "merged" : "dropped";
-        } catch (error) {
-          await client.query("ROLLBACK").catch(() => undefined);
-          // 23505: a tanulói sor a zárolás után, párhuzamosan jött létre — újra, most már az egyesítő (UPDATE) ágon.
-          if ((error as { code?: unknown } | null)?.code === "23505" && attempt === 0) continue;
-          throw error;
-        } finally {
-          client.release();
-        }
-      }
-      return "none";
     },
 
     /**
