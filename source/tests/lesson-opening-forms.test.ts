@@ -92,3 +92,24 @@ test("V11: a nyitóblokk fejléce a kiosztott formából; forma nélkül a régi
   // Ismeretlen forma (újabb programverzió) → a régi címke.
   assert.equal(blockLabel(blocks, 1, 0, "kid", 3, false, "ismeretlen"), "Mese");
 });
+
+test("V8/V9 bekötés: a szerzői prompt csak BE változatossági kapcsolónál kapja a kiosztott formát; KI-nél a mag hatástalan", async () => {
+  const { buildAuthorPrompt } = await import("../server/studio/step-io");
+  const map = { title: "T", subject: "matek", classroom: 6, concepts: [{ localId: "c1", examWeight: "core" as const, term: "terület" }] };
+  const sections = [{ heading: "H", conceptIds: ["c1"], plannedBlocks: ["explain" as const], animationSuggestions: [] as string[] }];
+  const keys = ["STUDIO_LESSON_OPENER", "STUDIO_LESSON_VARIETY"] as const;
+  const saved = keys.map((k) => process.env[k]);
+  try {
+    process.env.STUDIO_LESSON_OPENER = "on";
+    delete process.env.STUDIO_LESSON_VARIETY;
+    const off = buildAuthorPrompt(sections, map, [], undefined, undefined, { seed: 7 });
+    assert.equal(off, buildAuthorPrompt(sections, map, []));
+    assert.match(off, /PONTOSAN 5 mondat/u);
+    process.env.STUDIO_LESSON_VARIETY = "on";
+    const on = buildAuthorPrompt(sections, map, [], undefined, undefined, { seed: 7 });
+    assert.ok(on.includes(`A hős neve: ${openerVarietyPick(6, 7).hero}.`));
+    assert.doesNotMatch(on, /PONTOSAN 5|Jó próba/u);
+  } finally {
+    keys.forEach((k, i) => (saved[i] === undefined ? delete process.env[k] : (process.env[k] = saved[i])));
+  }
+});

@@ -10,11 +10,13 @@ import type { AgeBand } from "./lesson-schema";
 import { choiceSeed } from "./option-order";
 import { seedFrom, seededPick } from "./seeded";
 import { stripVerdictPrefix } from "./lesson-ui-text";
+import { openerVarietyPick } from "./lesson-opener";
 
 /** A lecke jelölőjének verziója: a lejátszó ebből tudja, hogy a nyitást a kód adja. */
-export const LESSON_VARIETY_VERSION = "valtozatossag-1";
+export const LESSON_VARIETY_VERSION = "valtozatossag-2";
 
-export type LessonVarietyMarker = { version: string };
+/** `openingForm` (S5b): a nyitás kiosztott formája — a lejátszó ebből adja a nyitóblokk fejlécét. */
+export type LessonVarietyMarker = { version: string; openingForm?: string };
 
 /**
  * Sávonként hibás- és helyes-nyitás. Szabályok (teszt: tests/lesson-feedback-openers.test.ts): ≤ 40 karakter, írásjellel zárul, egyedi,
@@ -119,7 +121,10 @@ export function feedbackView(input: {
 export function withVarietyMarker<T>(lesson: T, enabled: boolean): T {
   if (!lesson || typeof lesson !== "object" || Array.isArray(lesson)) return lesson;
   const { variety: _dropped, ...rest } = lesson as Record<string, unknown>;
-  return (enabled ? { ...rest, variety: { version: LESSON_VARIETY_VERSION } } : rest) as T;
+  if (!enabled) return rest as T;
+  // S5b: a nyitásforma ugyanabból a magból (térkép) és évfolyamból, mint a szerző promptjában (`engine.ts` → `lessonOpenerContract`).
+  const form = typeof rest.mapId === "string" && typeof rest.classroom === "number" ? openerVarietyPick(rest.classroom, seedFrom(rest.mapId)).form.id : undefined;
+  return { ...rest, variety: { version: LESSON_VARIETY_VERSION, ...(form ? { openingForm: form } : {}) } } as T;
 }
 
 /** A tárolt lecke érvényes jelölője (a `lessonSchema` engedékeny alakja: nem üres, legfeljebb 40 karakteres verzió), különben `undefined`. */
@@ -127,7 +132,10 @@ export function storedVarietyMarker(stored: unknown): LessonVarietyMarker | unde
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return undefined;
   const marker = (stored as { variety?: unknown }).variety;
   const version = marker && typeof marker === "object" ? (marker as { version?: unknown }).version : undefined;
-  return typeof version === "string" && version.trim() && version.trim().length <= 40 ? { version: version.trim() } : undefined;
+  if (typeof version !== "string" || !version.trim() || version.trim().length > 40) return undefined;
+  // S5b-v2: a nyitásforma a tárolt jelölő része — a javítás / fogalomjavítás megőrzi (csak ismert alakú azonosító; más → elhagyva).
+  const form = (marker as { openingForm?: unknown }).openingForm;
+  return { version: version.trim(), ...(typeof form === "string" && /^[a-z0-9-]{1,40}$/.test(form) ? { openingForm: form } : {}) };
 }
 
 /**

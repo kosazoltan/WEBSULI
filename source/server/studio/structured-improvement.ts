@@ -29,6 +29,8 @@ import { logger } from "../lib/logger";
 import { repairHash } from "../lib/canonical-hash";
 import { descriptionAfterLessonChange } from "../../shared/lesson-teaser";
 import { withLessonArt } from "../design-assets";
+import { withVarietyMarker } from "../../shared/lesson-feedback-openers";
+import { seedFrom } from "../../shared/seeded";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
 import { applySourceCorrections, arithmeticSourceCorrections, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
@@ -187,7 +189,7 @@ async function buildStructuredImprovementScoped(original: Lesson, source: Repair
   const added = corrected.concepts.filter(c => c.examWeight !== "extra" && !taught.has(c.localId));
   if (added.length && outline.length) outline[outline.length - 1].conceptIds.push(...added.map(c => c.localId));
   const addedLine = added.length ? ` Új fogalmak a térképen — tanítsd őket a témájuk szerinti fejezetben, a fogalom szavaival: ${added.map(c => `${c.localId} „${c.term}”`).join(", ")}.` : "";
-  const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined);
+  const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined, { seed: seedFrom(original.mapId) });
   const gradeLine = owner.classroom !== undefined
     ? `Az évfolyam a tanár kifejezett kérésére ${owner.classroom}. osztály: a classroom mező ${owner.classroom} legyen, a nyelvezet és a mélység ehhez igazodjon.`
     : "Az évfolyamot a program már a forrásból állapította meg, ne változtasd.";

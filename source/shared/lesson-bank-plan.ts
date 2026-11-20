@@ -1,4 +1,5 @@
 import type { Lesson } from "./lesson-schema";
+import { seededShuffle } from "./seeded";
 import { LESSON_METHOD_VERSION, LESSON_BANK_RESERVE, LESSON_BANK_RESERVE_RATIO, LESSON_BANK_SIZES, METHOD_KINDS, type LessonBankPlan } from "./lesson-experience";
 
 /** Plan from taught concepts, never from a filename or a target token count. */
@@ -16,7 +17,7 @@ export function planLessonBank(lesson: Pick<Lesson, "sections" | "classroom">, v
 }
 
 /** Deterministic quotas are part of the checkpoint hash, including method coverage. */
-export function bankUnitQuota(plan: LessonBankPlan, unitIndex: number) {
+export function bankUnitQuota(plan: LessonBankPlan, unitIndex: number, seed?: number) {
   const minimums = (kind: "tasks" | "quiz") => {
     const base = plan.units.map(u => kind === "tasks" ? Math.max(2, u.conceptIds.length) : u.conceptIds.length * 2);
     const extra = Math.max(0, LESSON_BANK_SIZES[kind] - base.reduce((a, b) => a + b, 0));
@@ -41,7 +42,10 @@ export function bankUnitQuota(plan: LessonBankPlan, unitIndex: number) {
     return mins[unitIndex] + shares[unitIndex];
   };
   const kinds = plan.units.map(() => [] as Array<typeof METHOD_KINDS[number]>);
-  [...METHOD_KINDS, "gate" as const].forEach((kind, i) => kinds[i % kinds.length].push(kind));
+  // Spec 2026-11-20-tgm-valtozatossag-abrak (11. szakasz 4. pont): maggal (a változatossági kapcsolóval) a sorrend keveredik — a lecke
+  // nem mindig `prediction`-nel indul; mag nélkül a kiosztás bájtra a régi.
+  const order = [...METHOD_KINDS, "gate" as const];
+  (seed === undefined ? order : seededShuffle(order, seed)).forEach((kind, i) => kinds[i % kinds.length].push(kind));
   for (const [i, list] of kinds.entries()) {
     for (let k = i; new Set(list).size < 2; k++) if (!list.includes(METHOD_KINDS[k % METHOD_KINDS.length])) list.push(METHOD_KINDS[k % METHOD_KINDS.length]);
   }

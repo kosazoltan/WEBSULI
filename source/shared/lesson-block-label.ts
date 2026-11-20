@@ -1,6 +1,6 @@
 import type { AgeBand, Block } from "./lesson-schema";
 import { BAND_THEME } from "./lesson-band";
-import { OPENER_STAGES } from "./lesson-opener";
+import { OPENER_STAGES, OPENING_FORM_LABEL } from "./lesson-opener";
 
 /**
  * Spec 2026-11-08-borito-blokkcimkek: a blokk fejléce a TARTALOMBÓL — Célkártya, mese, a magyarázat mélysége, az ábra és a feladat fajtája.
@@ -80,7 +80,8 @@ export function checkFormLabel(question: string): string | null {
   return CHECK_FORMS.find(([re]) => re.test(question))?.[1] ?? null;
 }
 
-export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand, classroom?: number, isLastSection?: boolean): string {
+/** `openingForm` (S5b, docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 11. szakasz): a jelölt lecke kiosztott nyitásformája. */
+export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand, classroom?: number, isLastSection?: boolean, openingForm?: string): string {
   const block = blocks[index];
   const theme = BAND_THEME[band];
   switch (block.kind) {
@@ -88,6 +89,8 @@ export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: 
       if (sectionIdx === 0 && index === 0 && isGoalCardText(block.text)) return "A lecke célja";
       const prev = blocks[index - 1];
       if (sectionIdx === 0 && index === 1 && prev?.kind === "explain" && isGoalCardText(prev.text)) {
+        // S5b: a kiosztott forma címkéje (kódszótár); ismeretlen vagy hiányzó formánál a régi szabály.
+        if (openingForm && Object.prototype.hasOwnProperty.call(OPENING_FORM_LABEL, openingForm)) return OPENING_FORM_LABEL[openingForm];
         // Review #405: „Mese” csak 1–4. évfolyamon; a programozás (0) a kid sávba esik, de 7–8. korcsoport → „Történet”.
         const young = classroom === undefined ? band === "kid" : classroom >= 1 && classroom <= 4;
         return young ? "Mese" : "Történet";

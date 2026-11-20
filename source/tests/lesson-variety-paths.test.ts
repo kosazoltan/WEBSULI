@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { standardFusionFixture, fusionFixture } from "../shared/fixtures/lesson-fusion";
+import { openerVarietyPick } from "../shared/lesson-opener";
+import { seedFrom } from "../shared/seeded";
 import { LESSON_VARIETY_VERSION, carryVarietyMarker, feedbackOpenerKey, feedbackView } from "../shared/lesson-feedback-openers";
 import { fixConceptInConversation, type ConceptFixSource } from "../server/studio/single-run/concept-fix";
 import { effectiveLessonVariety, lessonVarietyForRun, runWithLessonVariety } from "../server/studio/lesson-variety-flag";
@@ -19,6 +21,12 @@ import type { MapConcept } from "../server/studio/coverage";
 // jelölt leckén sem nyúl (a korábbi L2-levágási teszt dokumentált spec-változással kikerült).
 
 const MARK = { version: LESSON_VARIETY_VERSION };
+/** A mentett lecke VÁRT jelölője (S5b): verzió + a térképből és évfolyamból számolt nyitásforma — a kódtól függetlenül újraszámolva. */
+const markerOf = (lesson: unknown) => {
+  const l = lesson as { mapId?: string; classroom?: number };
+  assert.equal(typeof l.mapId, "string", "a mentett leckének van térképe");
+  return { ...MARK, openingForm: openerVarietyPick(l.classroom!, seedFrom(l.mapId!)).form.id };
+};
 
 function withEnv<T>(name: string, value: string | undefined, fn: () => Promise<T>): Promise<T> {
   const before = process.env[name];
@@ -164,7 +172,7 @@ const lastOutput = (mem: ReturnType<typeof memory>) => mem.steps.at(-1)!.output 
 test("első gyártás: BE → a mentett leckén a szerver jelölője, a job állapotában lessonVariety; KI → egyik sincs (a modell jelölője is eldobva)", async () => {
   const on = memory();
   await runSingleLesson({ files, ownerId: "u1" }, runDeps(client(), on, { lessonVariety: true }));
-  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, MARK);
+  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, markerOf(on.lessons.at(-1)));
   assert.equal(lastOutput(on).lessonVariety, true);
   const off = memory();
   await withEnv("STUDIO_LESSON_VARIETY", "on", () => runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ modelMarker: true }), off, { lessonVariety: false, sourceVisuals: true })));
@@ -195,7 +203,7 @@ test("vak kör 2, L2: KI módban a modell jelölője a job egyik mentett leckep�
   const on = memory();
   await runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ modelMarker: true }), on, { lessonVariety: true, sourceVisuals: true }));
   for (const s of on.steps.filter((x) => (x.output as { lesson?: unknown } | undefined)?.lesson)) assert.equal("variety" in ((s.output as { lesson: object }).lesson), false, `BE lépés: ${s.step}`);
-  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, MARK);
+  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, markerOf(on.lessons.at(-1)));
 });
 
 // --- a célzott fogalomjavítás (vak kör 2, L3): a tárolt lecke állapota és jelölője ---
@@ -264,4 +272,11 @@ test("javítás-artefaktum bekötése: a szerver a lezárt (jelölő-visszaírt)
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../server/studio/structured-improvement.ts", import.meta.url), "utf8");
   assert.match(src, /return markRepairCandidate\(parseArtefact\(\)\);/);
+});
+
+test("S5b-v2: a javítás megőrzi a tárolt jelölő nyitásformáját; hibás alakú formát nem visz át", () => {
+  const stored = { variety: { version: LESSON_VARIETY_VERSION, openingForm: "rejtely" } };
+  assert.deepEqual(carryVarietyMarker({ title: "T", variety: { version: "modell", openingForm: "mas" } }, stored), { title: "T", variety: { version: LESSON_VARIETY_VERSION, openingForm: "rejtely" } });
+  assert.deepEqual(carryVarietyMarker({ title: "T" }, { variety: { version: LESSON_VARIETY_VERSION, openingForm: "<script>" } }), { title: "T", variety: { version: LESSON_VARIETY_VERSION } });
+  assert.deepEqual(carryVarietyMarker({ title: "T" }, { variety: { version: LESSON_VARIETY_VERSION, openingForm: 5 } }), { title: "T", variety: { version: LESSON_VARIETY_VERSION } });
 });

@@ -7,6 +7,7 @@ import { LESSON_BANK_RESERVE, LESSON_BANK_SIZES, LESSON_METHOD_CONTRACT, LESSON_
 import { lessonOpenerVersion, playfulQuestioningContract } from "../../shared/lesson-opener";
 import { lessonOpenerEnabled } from "./lesson-opener-flag";
 import { effectiveLessonVariety } from "./lesson-variety-flag";
+import { seedFrom } from "../../shared/seeded";
 import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, missingOrder, missingPhrases, normalizeAnswer } from "../../shared/lesson-experience-score";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { planLessonBank, bankUnitQuota } from "../../shared/lesson-bank-plan";
@@ -517,7 +518,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     return problems;
   };
   const unitTeaching = (unitIndex: number, unit: (typeof plan.units)[number]) => {
-    const { taskCount, quizCount, taskTarget, quizTarget, methodKinds } = bankUnitQuota(plan, unitIndex);
+    // Spec 2026-11-20-tgm-valtozatossag-abrak (11. szakasz 4. pont): BE kapcsolónál a módszersorrend a térkép magjából keveredik.
+    const { taskCount, quizCount, taskTarget, quizTarget, methodKinds } = bankUnitQuota(plan, unitIndex, effectiveLessonVariety() ? seedFrom(lesson.mapId) : undefined);
     const source = concepts.filter(c => unit.conceptIds.includes(c.localId)).sort((a, b) => a.localId.localeCompare(b.localId));
     // Review #359: a kalibráció viselkedésének verziója a csomag hash-ében — a változás előtt mentett (pontos-alak szigorítás nélküli)
     // csomag folytatáskor sem kerül át kalibrálatlanul.
