@@ -28,6 +28,9 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
   }
 }
 
+/** R37: a CSRF-token lekérésének határideje (a törzs olvasásával együtt). */
+const CSRF_TOKEN_TIMEOUT_MS = 15_000;
+
 // SECURITY: CSRF Token Manager
 // Fetches and caches CSRF token for protecting mutating requests
 class CSRFTokenManager {
@@ -60,8 +63,10 @@ class CSRFTokenManager {
   }
   
   private async fetchTokenFromServer(): Promise<string> {
+    // R37 (6. kör L4): a tokenlekérésnek saját határideje van — a megakadt lekérés nem tarthatja végtelenül a várakozó beküldést.
     const res = await fetch('/api/csrf-token', {
       credentials: 'include',
+      signal: AbortSignal.timeout(CSRF_TOKEN_TIMEOUT_MS),
     });
     
     if (!res.ok) {
@@ -242,7 +247,8 @@ export async function apiRequest<T = unknown>(
           ...keepalive,
         });
 
-        clearTimeout(timeoutId);
+        // R37 (spec 2026-11-17-eredmeny-email-kviz, 6. kör L4): az időzítő a törzs beolvasásáig él (lent, a `finally` ágban törlődik) — a
+        // fejlécek után megakadó választest sem vonja ki a kérést az időkorlát alól.
         debugLog(`[API REQUEST] ${method} ${url} → ${res.status} ${res.statusText}`);
 
         // SECURITY: If CSRF token invalid (403 Forbidden), refresh token and retry ONCE
@@ -297,8 +303,6 @@ export async function apiRequest<T = unknown>(
         const result = await res.json();
         return result;
       } catch (error) {
-        clearTimeout(timeoutId);
-        
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error('[API REQUEST] Timeout after', timeout, 'ms');
           throw new Error(`A kérés túllépte az időkorlátot (${timeout / 1000}s). Kérlek ellenőrizd az internetkapcsolatot!`, { cause: error });
@@ -311,6 +315,8 @@ export async function apiRequest<T = unknown>(
         }
         
         throw error;
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
     retries,

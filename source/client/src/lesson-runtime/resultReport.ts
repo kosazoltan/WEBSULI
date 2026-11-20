@@ -33,8 +33,9 @@ const enqueuedHere = new Set<string>();
 const outboxAttempts = new Map<string, { attempts: number; nextAt: number }>();
 const outboxInFlight = new Set<string>();
 export function enqueueResult(entry: OutboxEntry): void {
-  enqueuedHere.add(entry.id);
-  outbox.add(entry);
+  // R35 (6. kör L1): a címke utólagos pótlása csak az ebben a dokumentumban ÚJONNAN létrehozott bejegyzést illeti — a korábbi dokumentumból
+  // megmaradt (a helyreállított kör újrafelvétele) `?` címkével megy, más munkamenet címkéjét sosem kapja meg.
+  if (outbox.add(entry)) enqueuedHere.add(entry.id);
 }
 /** A sor ürítése: minden esedékes, nem úton lévő bejegyzés elindul (nem várja meg egymást). */
 export function drainResultOutbox(): void {

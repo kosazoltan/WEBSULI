@@ -85,8 +85,15 @@ export function createOutboxStore(getStorage: () => OutboxStorage | null) {
   }
   return {
     read,
-    /** Felvétel; a már sorban álló azonosító nem kerül be másodszor (az első felvétel marad). */
-    add(entry: OutboxEntry): void { if (!read().some(e => e.id === entry.id)) write(entry); },
+    /**
+     * Felvétel; a már sorban álló azonosító nem kerül be másodszor (az első felvétel marad). R35: igaz, ha ÚJ bejegyzés jött létre —
+     * csak az ilyen kaphat utólag kilét-címkét (a korábbi dokumentumból megmaradt nem).
+     */
+    add(entry: OutboxEntry): boolean {
+      if (read().some(e => e.id === entry.id)) return false;
+      write(entry);
+      return true;
+    },
     /** A bejegyzés módosított változatának visszaírása (pl. a kilét-címke pótlása, R31). */
     update(entry: OutboxEntry): void { write(entry); },
     remove(id: string): void {

@@ -120,10 +120,15 @@ export type SendOutcome = { sent: number; duplicate: boolean };
 export type SendGate = (attempt: () => Promise<SendOutcome>) => Promise<SendOutcome>;
 type SendInput = { lessonId: string; roundKey: string; learner: string; learnerFirst?: string; learnerId?: string; guest?: boolean; graded: GradedTasks | GradedQuiz };
 /**
+ * Terv R38 (6. kör L5): a bemenet késleltetett is lehet — a feloldása (pl. a tanuló nevének lekérdezése) a küldési kísérleten BELÜL fut,
+ * így a hibája ugyanúgy egy újrapróbát kap, mint a küldésé, és a ciklus végén az `onSettled` lefut.
+ */
+type SendSource = SendInput | (() => Promise<SendInput>);
+/**
  * Terv R34 (review 4642333345): `onSettled` akkor hívódik (egyszer), amikor a küldési ciklus véget ért — az utolsó kísérlet lefutott, és
  * további újrapróba már nem ütemeződik. A „félbehagyva” levél első rögzítőjének kiléte eddig őrződik.
  */
-export async function sendLessonResult(input: SendInput, retry = true, gate?: SendGate, onSettled?: () => void): Promise<SendOutcome> {
+export async function sendLessonResult(input: SendSource, retry = true, gate?: SendGate, onSettled?: () => void): Promise<SendOutcome> {
   let rescheduled = false;
   const again = () => { rescheduled = true; setTimeout(() => { void sendLessonResult(input, false, gate, onSettled); }, retryDelayMs).unref?.(); };
   try {
@@ -141,8 +146,9 @@ export async function sendLessonResult(input: SendInput, retry = true, gate?: Se
     if (!rescheduled) onSettled?.();
   }
 }
-async function attemptLessonResult(input: SendInput, retry: boolean, again: () => void): Promise<SendOutcome> {
+async function attemptLessonResult(source: SendSource, retry: boolean, again: () => void): Promise<SendOutcome> {
   try {
+    const input = typeof source === "function" ? await source() : source;
     const [row] = await db.select({ json: lessons.json, htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, input.lessonId));
     const lesson = row ? lessonSchema.safeParse(row.json) : null;
     if (!row || !lesson?.success) return { sent: 0, duplicate: false };
@@ -198,6 +204,7 @@ async function attemptLessonResult(input: SendInput, retry: boolean, again: () =
 
 async function learnerName(userId: string | undefined): Promise<string> {
   if (!userId) return GUEST_LEARNER;
+  attributionFault?.();
   const [u] = await db.select({ first: users.firstName, last: users.lastName }).from(users).where(eq(users.id, userId));
   const name = `${u?.last ?? ""} ${u?.first ?? ""}`.trim();
   return name || "Bejelentkezett tanuló";
@@ -330,6 +337,12 @@ async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId
 let finalizedCheckFault: (() => void) | null = null;
 let partialIntakeHook: ((who: string) => Promise<void>) | null = null;
 let gateCheckHook: ((lockKey: string) => Promise<void>) | null = null;
+let partialScheduleHook: ((who: string) => Promise<void>) | null = null;
+let attributionFault: (() => void) | null = null;
+/** Teszthez (R36): a pillanatkép-felvételben a „már kiment” lekérdezés UTÁN hívódik; `null` kikapcsolja. */
+export function setPartialScheduleHook(hook: ((who: string) => Promise<void>) | null): void { partialScheduleHook = hook; }
+/** Teszthez (R38): hibainjektálás a tanuló nevének lekérdezése elé; `null` kikapcsolja. */
+export function setAttributionFault(fault: (() => void) | null): void { attributionFault = fault; }
 /** Teszthez: a „félbehagyva” levél kapujában, a véglegesítés-ellenőrzés UTÁN hívódik (lassú adatbázis utánzása); `null` kikapcsolja. */
 export function setGateCheckHook(hook: ((lockKey: string) => Promise<void>) | null): void { gateCheckHook = hook; }
 /** Teszthez: a pillanatkép-ág UTOLSÓ várakozása után hívódik (párhuzamos felvétel utánzása); `null` kikapcsolja. */
@@ -446,13 +459,16 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     // kísérlet a változat-ellenőrzésen megáll). Elfogadott új állapot mellett régi levél nem megy ki.
     const outcome = await withRoundLock(lockKey, async () => {
       // R29 (3. célzott kör L5): a felvétel közben véglegesített körre nem keletkezik várakozó, és a válasz ezt mondja.
-      const finalizedUntil = finalizedRounds.get(lockKey);
-      if (finalizedUntil !== undefined && finalizedUntil > Date.now()) return { queued: false, finalized: true };
       // R6 + R11: ha a körről már kiment (vagy éppen megy) „félbehagyva” levél — bármelyik tanuló-kulccsal —, újabb nem megy (körönként
       // legfeljebb egy); a válasz ezt mondja.
       const earlier = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
         .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), eq(lessonResultEmails.roundKey, partialRoundKey)));
       if (earlier.some(sentRow => sentRow.delivered.length > 0)) return { queued: false, partial: true, alreadySent: true };
+      if (partialScheduleHook) await partialScheduleHook(who);
+      // R36 (6. kör L3): a véglegesítés az UTOLSÓ várakozás után, közvetlenül az ütemezés előtt nézve (az R29 helye) — a lekérdezés alatt
+      // véglegesített körre sem keletkezik várakozó. Innentől az ütemezésig nincs várakozás.
+      const finalizedUntil = finalizedRounds.get(lockKey);
+      if (finalizedUntil !== undefined && finalizedUntil > Date.now()) return { queued: false, finalized: true };
       // R11 + R22: a várakozó beolvasása és az első rögzítő vizsgálata az utolsó várakozás után, szinkron az ütemezéssel. A kör első
       // rögzítőjével össze nem férő beküldő nem írhatja felül a várakozót (a körazonosítót a kliens választja).
       // R34: a várakozó mellett a KÜLDÉS ALATT álló kör első rögzítője is számít (kapuhiba / bukott küldés utáni újrapróba alatt).
@@ -475,7 +491,8 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
         return attempt();
       });
       const queued = schedulePartial(lockKey, `${lessonId}|${recorder}`, recorder, snapshot.meta?.partial?.answered ?? 0, version,
-        async () => sendLessonResult({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }, true, gate, () => settleSending(lockKey, version)));
+        // R38: a név feloldása a küldési kísérleten belül (hibája újrapróbát kap, a ciklus végén az első rögzítő felszabadul).
+        async () => sendLessonResult(async () => ({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }), true, gate, () => settleSending(lockKey, version)));
       return { queued, partial: true };
     });
     return res.status(202).json(outcome);
@@ -537,10 +554,12 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     return partialRows.some(partialRow => partialRow.delivered.length > 0);
   }).catch(error => { logger.error(`[LESSON-RESULT] a felülírás-vizsgálat nem sikerült: ${errorClass(error)}`); return false; });
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
-  void Promise.all([paired && !userId ? Promise.resolve(paired.name) : learnerName(userId), superseding]).then(([learner, supersedesPartial]) => sendLessonResult({ lessonId: req.params.lessonId, roundKey, learner,
-    ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), guest: !userId && !paired,
-    graded: supersedesPartial ? { ...finalGraded, meta: { ...finalGraded.meta, supersedesPartial: true } } : finalGraded }))
-    .catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
+  // R38: a név feloldása a végleges levélnél is a küldési kísérleten belül fut (a hibája újrapróbát kap, nem veszíti el a levelet).
+  void sendLessonResult(async () => {
+    const [learner, supersedesPartial] = await Promise.all([paired && !userId ? Promise.resolve(paired.name) : learnerName(userId), superseding]);
+    return { lessonId: req.params.lessonId, roundKey, learner, ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), guest: !userId && !paired,
+      graded: supersedesPartial ? { ...finalGraded, meta: { ...finalGraded.meta, supersedesPartial: true } } : finalGraded };
+  }).catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
   return res.status(202).json({ queued: true });
   } catch (error) { next(error); }
 });
