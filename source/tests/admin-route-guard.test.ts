@@ -129,6 +129,8 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "GET /api/html-files/search": "publikus keresés",
   "GET /api/html-files/:id": "publikus tananyag",
   "GET /api/tts/audio": "felolvasás — korlát",
+  "GET /api/tts/lesson-audio/:id": "S8b: előre gyártott leckehang — csak olvasás, tartalomcímzett, korlát",
+  "GET /api/tts/lesson-audio/available": "S8b: a hangtár elérhetőségi jegyzéke — csak olvasás, csak kulcsformátum, darabszám-plafon, korlát",
   "POST /api/tts": "felolvasás — CSRF + korlát",
   "POST /api/push/subscribe": "push-feliratkozás — CSRF + korlát",
   "POST /api/push/unsubscribe": "push-leiratkozás — CSRF + korlát",

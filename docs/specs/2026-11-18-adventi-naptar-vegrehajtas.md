@@ -732,3 +732,14 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
   darab (`AdventHomeSlot`; kikapcsolt build-kapcsolónál a lusta import sincs a buildben, a foglalat a kártya méretén áll — CLS);
   a `/adventi-naptar` útvonal a build-kapcsolóhoz kötött; `?nyit=ma` után a megnyitó a mai ablak (fókusz); a „Tovább” utáni
   védőidő csak az azonos pontot védi (`client/src/advent/tap-guard.ts`). Előbb bukó tesztek (egység + böngésző).
+- 2026-11-18 — S3c-0 KÉSZ (képgyártó előkészítés és költségvédelmek, hívás nélkül): `scripts/design-assets/generate.ts` (`--set`, `--max`,
+  `--max-usd`, `--ref`, száraz futás), `lib.ts` (hívásonkénti és összesített keret, költségkönyv, naplóhiba-őr), `run-lock.ts` (futás-zár),
+  `review-page.ts --set`, `design-assets/advent/prompts.json` + `style.md`, `tests/advent-art-pipeline.test.ts`. A fizetős kör a
+  koordinátor indítására lefutott (84 kép, kb. 5,22 / 7 USD); a válogatás és a beépítés az S3c.
+- 2026-11-19 — S3c-0 vak ellenőr 1. köre (terv `docs/specs/2026-11-18-adventi-naptar.md` 18.): a tétel `candidates` értéke 1–10 közötti egész,
+  érvénytelen értékre hibaüzenet (`candidatesOf`); a keret és a könyv a szolgáltató valódi árával is számol: `max(becslés, usage.cost)`
+  (`settleActualCost`, az „ok” sor `extraUsd` mezője). Előbb bukó teszt: `tests/advent-art-pipeline.test.ts`.
+- 2026-11-19 — S3c-0, a #519 review lelete (terv `docs/specs/2026-11-18-adventi-naptar.md` 18.): az éles futás a költségkönyvet, a meglévő
+  jelölteket és a tervet a futás-zár megszerzése UTÁN olvassa újra (`runUnderLock`, `takeSnapshot`) — a másodikként zároló futás nem
+  dolgozik elavult pillanatképből (nem költ a plafon fölé, nem gyárt újra kész jelöltet). Előbb bukó teszt: két átfedő futás hamis
+  hálózattal (`tests/advent-art-pipeline.test.ts`).

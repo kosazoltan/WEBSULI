@@ -603,7 +603,7 @@ export const knowledgeMaps = pgTable(
     status: varchar("status", { length: 16 }).notNull().default("draft"),
     sourceFiles: jsonb("source_files")
       .notNull()
-      .$type<Array<{ name: string; kind: string; pages?: number; extractedText?: string }>>(),
+      .$type<Array<{ name: string; kind: string; pages?: number; extractedText?: string; visuals?: import("./source-visuals").SourceVisual[] }>>(),
     /** A kivonatolt nyers forrásszöveg — ehhez mérjük a szó szerinti idézeteket (D1). */
     sourceText: text("source_text"),
     classification: jsonb("classification").$type<import("./source-classification").ScopeClassification>(),
@@ -1280,6 +1280,26 @@ export const lessonClipMedia = pgTable("lesson_clip_media", {
   size: integer("size").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * A nyelvleckék előre gyártott felolvasó hangjai (migrations/0043; terv 2026-11-18-tananyag-gyartas-minoseg, S8b / D4). Az azonosító a
+ * (hangverzió, nyelv, normalizált szöveg) lenyomata (shared/tts-audio-key.ts); a szöveg nem tárolódik, a sor soha nem módosul.
+ */
+export const lessonTtsAudio = pgTable(
+  "lesson_tts_audio",
+  {
+    id: char("id", { length: 32 }).primaryKey(),
+    voiceVersion: varchar("voice_version", { length: 16 }).notNull(),
+    language: varchar("language", { length: 8 }).notNull(),
+    mime: varchar("mime", { length: 40 }).notNull(),
+    bytes: bytea("bytes").notNull(),
+    // A migráció `CHECK (size > 0)` megkötését a séma — a repó meglévő tábláinak mintájára (pl. lesson_clip_media) — nem fejezi ki;
+    // az érvényes méretet az írás előtt a tároló réteg ellenőrzi (server/tts/audio-store.ts).
+    size: integer("size").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ voiceLanguage: index("lesson_tts_audio_voice_language_idx").on(table.voiceVersion, table.language) }),
+);
 
 /**
  * JM7a játékos-fiók (migrations/0040; docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4, D11 / D12). SZERKEZETILEG külön a
