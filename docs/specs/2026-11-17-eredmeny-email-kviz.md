@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -343,6 +343,28 @@ mutatja, és a mostani párosítás nevére menne. A lezárt kör (a tanuló kif
 - **R29 — véglegesítés a felvétel közben (L5).** A pillanatkép-felvétel záró szakasza (a kör zárán, R25) az ütemezés előtt a memóriabeli
   véglegesítést is nézi: a felvétel közben véglegesített körre `202 { queued: false, finalized: true }`, várakozó nem keletkezik.
 
+PR-review a 44487292-es fejre (Vercel 4642268402, Copilot 4642333188 / 4642333249 / 4642333294 / 4642333345; 2026-11-20):
+- **R30 — a kimenő bejegyzésnek korhatára van (4642268402).** Minden bejegyzés a kör utolsó tevékenységének idejét viszi (`activityAt`:
+  lezárt körnél a sorba kerülés ideje, le nem zártnál `roundActivityAt`). Az ürítő a 7 napnál (`STALE_ROUND_DAYS`) régebbi bejegyzést
+  küldés nélkül eldobja; a le nem zárt, régi kör így a későbbi betöltéskor sem megy el (R2 a sor oldalán is).
+- **R31 — a bejegyzés a sorba kerüléskori kilétéhez kötött (4642333188).** A szerver a `GET /api/csrf-token` válaszában a munkamenet
+  fiókjának álnevesített címkéjét is küldi (`resultSubject`: `anon`, vagy a fiókazonosító SESSION_SECRET-tel kulcsolt HMAC-lenyomata). A
+  kliens a címkét a sorba kerüléskor a bejegyzésbe (és a pillanatképbe) írja (`subject`); ha akkor még nincs meg, ugyanazon a lapon az első
+  küldés előtt kéri le, más lapon a bejegyzés `?` címkét kap. A szerver, ha a kérés `subject` mezője nem egyezik a mostani munkamenet
+  címkéjével, a munkamenet fiókját figyelmen kívül hagyja (a kérést fiók nélküliként — párosított tanulóként vagy vendégként — kezeli). Így
+  a sorban maradt eredmény más (később bejelentkezett) fiók nevére nem kerül. A régi alak (R10 / R12) a mezőt nem küldi.
+- **R32 — fülbiztos kimenő sor (4642333249).** A sor bejegyzésenként külön kulcson áll (`websuli:result-outbox:v1:<azonosító>`); a
+  felvétel és a törlés egyetlen kulcs írása / törlése, a közös lista olvasás-módosítás-írása megszűnik, így két fül egyidejű írása nem
+  veszít bejegyzést. Az R28 memóriasora bejegyzésenként marad.
+- **R33 — a leállítás ürítései párhuzamosan, a közös határidőn belül (4642333294).** A pool lezárása előtti ürítések (régi anyagok
+  eredményei, új-lecke értesítők, „félbehagyva” levelek) egyszerre indulnak; mindegyik a saját felső korlátja és a 295 s-os kényszerleállításig
+  hátralévő idő (biztonsági tartalékkal) közül a kisebbikig vár. Legrosszabb esetben 270 + 3 + 2,5 + 15 s < 295 s.
+- **R34 — az első rögzítő kiléte a teljes küldési ciklus végéig őrződik (4642333345).** Az időzítő lejártakor a várakozó kör első
+  rögzítője (kilét + változat) egy „küldés alatt” nyilvántartásba kerül, és ott marad, amíg a küldési kísérlet és minden újrapróbája
+  (a 60 s-os és az R19 kapu-újrapróba) be nem fejeződik, vagy a kör nem véglegesül. A pillanatkép-felvétel az első rögzítő vizsgálatát
+  (R11 / R22) erre is elvégzi: kapuhibás vagy bukott első küldés után a vendég pillanatképe `conflict` választ kap, és nem tilthatja le
+  az eredeti pótlását.
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -385,6 +407,11 @@ Elfogadás (S1b):
 - E43. Elveszett 202 utáni, más kiléttel ismételt végleges beküldés nem küld második levelet; az eredeti név marad (R27).
 - E44. Olvasható, de nem írható tárolónál a befejezett kör a lapon belül elmegy (R28).
 - E45. A felvétel közben véglegesített körre a pillanatkép nem kap `queued: true` választ (R29).
+- E46. A 7 napnál régebbi tevékenységű kimenő bejegyzés küldés nélkül kikerül a sorból (R30).
+- E47. AMIKOR a sorban maradt eredményt más fiók munkamenete küldené, A RENDSZER nem rendeli a mostani fiókhoz (R31).
+- E48. Két fül egyidejű felvételénél egyik bejegyzés sem vész el (R32).
+- E49. A leállítás ürítései párhuzamosan, a kényszerleállítás előtt végeznek (R33).
+- E50. Kapuhibás első küldés után a vendég pillanatképe nem tiltja le az igazolt első rögzítő pótlását (R34).
 - E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
@@ -444,4 +471,9 @@ Elfogadás (S1b):
 - [ ] E43 – más kiléttel ismételt végleges beküldés: egy levél, eredeti név (valódi DB)
 - [ ] E44 – írhatatlan tároló: a kör a lapon belül elmegy (böngésző)
 - [ ] E45 – felvétel közbeni véglegesítés: nincs queued:true (valódi DB)
+- [ ] E46 – kimenő bejegyzés korhatára (egységteszt)
+- [ ] E47 – kilétváltás: a sorban maradt eredmény nem kerül a mostani fiókhoz (egységteszt + valódi DB)
+- [ ] E48 – bejegyzésenkénti kulcs, fülek közti elveszés nincs (egységteszt)
+- [ ] E49 – a leállítás ürítései párhuzamosan, a határidőn belül (egységteszt)
+- [ ] E50 – kapuhiba utáni vendég-pillanatkép: conflict, az eredeti pótlás kimegy (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)

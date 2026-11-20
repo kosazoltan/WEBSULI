@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — eredmény-e-mail: kvíz beküldése és kérdésenkénti levél
 
-**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet) kész, E34 a DB-kör zöldjére vár; T16 kész (bizonyíték a zársorban); T17 kész (bizonyíték a zársorban); T18 (3. célzott kör, 2026-11-19) folyamatban – ág `fix/eredmeny-email-kviz`
+**Állapot:** T1–T9 kész; T10 kész; T11 kész; T12 kész; T13 kész; T14 kész; T15 (Vercel-lelet) kész, E34 a DB-kör zöldjére vár; T16 kész (bizonyíték a zársorban); T17 kész (bizonyíték a zársorban); T18 (3. célzott kör, 2026-11-19) kész; T19 (PR-review a 44487292-es fejre, 2026-11-20) folyamatban – ág `fix/eredmeny-email-kviz`
 Terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`
 
 Útvonalak a `source/` alatt. Meglévő tesztet nem módosítunk; a `tests/lesson-result-email.spec.ts`-hez nem nyúlunk (#492).
@@ -279,6 +279,26 @@ Leletenként előbb BUKÓ teszt, utána a javítás.
   `setItem` → a végleges kérés a lapon belül megérkezik.
 - **R29 (L5)** szerver: a felvétel záró szakaszában `finalizedRounds` ellenőrzés. DB-teszt a `setPartialIntakeHook`-kal.
 - Utána: a nehéz körök (`gate:stage` is) CSAK a zárral, egy szkriptben.
+
+## T19 — PR-review leletei a 44487292-es fejre (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R30–R34)
+
+Leletenként előbb BUKÓ teszt, utána a javítás.
+- **R30 + R32 (4642268402, 4642333249)** új, tiszta modul `shared/result-outbox.ts`: `createOutboxStore(getStorage)` bejegyzésenkénti
+  kulccsal (`outboxKeyOf(id)`), memóriasorral (R28), `outboxEntryExpired(entry, now)`. A `client/src/lesson-runtime/resultReport.ts` ezt
+  használja; az ürítő a lejárt bejegyzést küldés nélkül törli. Egységteszt (`tests/result-outbox.test.ts`): két, egymásról nem tudó
+  „fül” egyidejű felvétele → mindkét bejegyzés megmarad; lejárt bejegyzés kiesik.
+- **R31 (4642333188)** szerver: `resultSubjectOf(userId)` (`server/lesson-result-email.ts`), a `/api/csrf-token` válaszában
+  `resultSubject`; a séma `subject` mezője; eltérésnél a munkamenet fiókja figyelmen kívül marad. Kliens: `resultSubject()` a
+  `queryClient.ts`-ben, a bejegyzés és a pillanatkép `subject` mezője; `legacyResultBody` a mezőt is elhagyja. DB-teszt: más fiók
+  címkéjével érkező végleges → „Vendég tanuló”; egyező címke → a fiók neve. Egységteszt: a régi alak `subject` nélkül.
+- **R33 (4642333294)** új modul `server/shutdown-flush.ts`: `runShutdownFlushes(tasks, budgetMs, onError)`; a `server/index.ts` a három
+  ürítést ezzel, a 295 s-os határidőből számolt kerettel futtatja. Egységteszt: párhuzamos futás, a keret és a feladatonkénti korlát
+  betartása, hibatűrés; forrásőr a `server/index.ts`-re.
+- **R34 (4642333345)** szerver: `sendLessonResult(input, retry, gate, onSettled)` — az `onSettled` akkor hívódik, amikor a ciklus
+  további újrapróbát már nem ütemez; `sendingPartials` (lecke + kör → kilét, változat) az időzítő lejártától az `onSettled`-ig / a
+  véglegesítésig. A felvétel az első rögzítő vizsgálatát erre is elvégzi. DB-teszt: igazolt tanuló pillanatképe, kapuhiba → vendég
+  pillanatkép `conflict` → az újrapróba az igazolt tanuló állapotát küldi ki.
+- Utána: a nehéz körök (`gate:stage` is) CSAK a kapusoron (`kapu-feladatok.txt`).
 
 ## Kész-feltétel
 
