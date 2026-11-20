@@ -27,3 +27,10 @@ Push / PR nincs; nehéz kör (gate:stage, teljes teszt) csak a gépi zárral (`z
 
 - [x] 1 · [x] 2 · [x] 3 · [x] 4 · [x] 5 · [x] 6 · [x] 7 · [x] 8 · [~] 9 (mutáció 13 / 13; gate:stage a kapu-sorban) · [x] 10
 - [x] 11 (mutáció 8 / 8; gate:stage a kapu-sorban)
+
+12. Kiegészítés 3 (a vak ellenőr 1. köre, terv: `docs/specs/2026-11-20-gpt-teljesitesi-or.md` „Kiegészítés 3”): bukó tesztek
+    `hardening.test.mjs` (a régi fejen futtatva bukik); javítás: `completeness.mjs`, `findings.mjs`, `tools.mjs`, `blind-review.mjs`,
+    `codex-complete.mjs`, `stream.mjs`, `heartbeat.mjs`, `exit-trace.mjs`, új `sensitive.mjs`; szerződés-szöveg
+    (`futtato-kiegeszites.md`); mutációs ellenpróba; gate:stage a kapu-soron.
+
+- [x] 12

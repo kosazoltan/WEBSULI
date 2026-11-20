@@ -37,8 +37,10 @@ export function createExitTrace({ write = (s) => { try { writeSync(2, s); } catc
      * A kezelők telepítése: 'exit' (mindig a KILÉPÉS-sor), 'uncaughtException' / 'unhandledRejection' (ok + kilépés 2),
      * SIGTERM / SIGHUP / SIGBREAK (ok + kilépés 2), 'beforeExit' (kiürült eseményhurok a fő ígéret teljesülése előtt).
      * A SIGINT-et a futtató maga kezeli (rendezett megállás), ide csak az állapotot jegyezzük.
+     * `onSignal`: a jelzésre a kilépés ELŐTT lefutó takarítás (saját nehéz gyerekfolyamat-fa és konténer leállítása) — a gépi zárat
+     * a folyamat 'exit' kezelője csak ezután engedi el (vak ellenőr L13). Legfeljebb `signalGraceMs`-ig várunk rá.
      */
-    install(proc = process) {
+    install(proc = process, { onSignal = null, signalGraceMs = 60_000 } = {}) {
       proc.on('exit', (code) => write(api.line(code)));
       proc.on('uncaughtException', (e) => {
         api.reason(`kezeletlen kivétel: ${e?.stack ?? e?.message ?? e}`);
@@ -48,11 +50,25 @@ export function createExitTrace({ write = (s) => { try { writeSync(2, s); } catc
         api.reason(`kezeletlen ígéret-elutasítás: ${r?.stack ?? r?.message ?? r}`);
         proc.exit(2);
       });
+      let stopping = false;
+      const onSig = async (sig) => {
+        api.reason(`jelzés: ${sig} (külső leállítási kérés)`);
+        if (stopping) return;
+        stopping = true;
+        if (onSignal) {
+          let timer;
+          const grace = new Promise((r) => { timer = setTimeout(r, signalGraceMs); });
+          try { await Promise.race([Promise.resolve().then(onSignal), grace]); } catch { /* a takarítás hibája a kilépést nem akadályozza */ }
+          clearTimeout(timer);
+        }
+        proc.exit(2);
+      };
       for (const sig of SIGNALS) {
-        try { proc.on(sig, () => { api.reason(`jelzés: ${sig} (külső leállítási kérés)`); proc.exit(2); }); } catch { /* a platformon nem kérhető */ }
+        try { proc.on(sig, () => { onSig(sig); }); } catch { /* a platformon nem kérhető */ }
       }
       proc.on('beforeExit', () => {
-        if (!settled) api.reason('kiürült eseményhurok — a fő ígéret nem teljesült (elveszett várakozás / időzítő)');
+        // Elveszett fő ígéret: nem sikeres kilépés (vak ellenőr L12) — a sor-futtató ne kapjon 0-t jelentés nélkül.
+        if (!settled) { api.reason('kiürült eseményhurok — a fő ígéret nem teljesült (elveszett várakozás / időzítő)'); proc.exitCode = 2; }
       });
       return api;
     },

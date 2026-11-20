@@ -12,7 +12,7 @@
 //
 // Használat:
 //   node scripts/qa/gates/blind-review/codex-complete.mjs --cwd <munkafa> --prompt <megbízás.md> --out <válasz.md>
-//     [--goal <cél.md>] [--review] [--model gpt-6.2-sol] [--stall-min 25] [--max-resumes 3] [--max-net 8]
+//     [--goal <cél.md>] [--review] [--model gpt-6.2-sol] [--stall-min 25] [--max-resumes ≤3] [--max-net ≤8] [--total <feladatszám>]
 //   --review: a vak-ellenőr jelentés-szabályai (szakaszok + hibakereső pontok a sablonból és a célból); nélküle általános mód
 //   (zárósor + tiltott fordulatok + nem üres válasz).
 
@@ -75,28 +75,43 @@ const size = (p) => { try { return p && existsSync(p) ? statSync(p).size : 0; } 
  * Valódi futtató életjel-felügyelettel: a folyamatot csak akkor állítja le, ha `stallMs` ideig sem a kimenete, sem a figyelt fájlok
  * (válasz, munkamenet-fájl) nem nőnek. Díjmentes: csak helyi méret / időbélyeg.
  */
-export function watchedExec(file, args, { input, cwd, stallMs = 25 * 60_000, pollMs = 60_000, watch = () => [] } = {}) {
+export function watchedExec(file, args, { input, cwd, stallMs = 25 * 60_000, pollMs = 60_000, watch = () => [], netPolls = 3 } = {}) {
   return new Promise((done) => {
     let stdout = '';
     let stderr = '';
-    const child = spawn(file, args, { cwd, shell: process.platform === 'win32' && file === 'codex', windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    const posix = process.platform !== 'win32';
+    // POSIX: saját folyamatcsoport — leállításkor a teljes fa (unokák is) leáll (vak ellenőr L11)
+    const child = spawn(file, args, { cwd, shell: !posix && file === 'codex', windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], detached: posix });
     child.stdout.on('data', (d) => { stdout += d; });
     child.stderr.on('data', (d) => { stderr += d; });
     if (input != null) child.stdin.end(input); else child.stdin.end();
     let last = -1;
     let still = 0;
+    let netSeen = 0;
+    let verdict = null; // { stalled } | { network } — csak a fa lezárása UTÁN tér vissza (a folytatás nem indulhat élő régi fa mellett)
+    const killTree = () => {
+      try {
+        if (!posix) spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+        else { try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); } }
+      } catch { /* közben kilépett */ }
+    };
     const timer = setInterval(() => {
       const total = stdout.length + stderr.length + watch(stdout).reduce((n, p) => n + size(p), 0);
       if (total === last) still += pollMs; else { still = 0; last = total; }
-      if (still >= stallMs) {
+      // élő hálózati hurok: a kimenet nő (a csend-óra nem jár le), de a vége folyamatosan kapcsolódási hiba (vak ellenőr L11)
+      netSeen = networkStall(`${stdout}\n${stderr}`) ? netSeen + 1 : 0;
+      if (still >= stallMs || netSeen >= netPolls) {
         clearInterval(timer);
-        if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
-        else child.kill('SIGKILL');
-        done({ code: 124, stdout, stderr, stalled: true });
+        verdict = still >= stallMs ? { stalled: true } : { network: true };
+        killTree();
       }
     }, pollMs);
     child.on('error', (e) => { clearInterval(timer); done({ code: 127, stdout, stderr: `${stderr}\n${e.message}`, stalled: false }); });
-    child.on('close', (code) => { clearInterval(timer); done({ code: code ?? 1, stdout, stderr, stalled: false }); });
+    child.on('close', (code) => {
+      clearInterval(timer);
+      if (verdict) done({ code: 124, stdout, stderr, stalled: Boolean(verdict.stalled), network: Boolean(verdict.network) });
+      else done({ code: code ?? 1, stdout, stderr, stalled: false });
+    });
   });
 }
 
@@ -106,12 +121,22 @@ const TECH_PROMPT = 'A futás technikai okból (hálózat / beragadás / gépúj
  * A burok magja (a futtató injektálható — tesztben hamis).
  * @returns {Promise<{ ok: boolean, resumes: number, netRetries: number, reason: string|null, result: object|null, sessionId: string|null, tokens: number }>}
  */
-export async function runCodexComplete({ exec, prompt, out, points = [], mode = 'review', maxResumes = 3, maxNet = 8, execArgs = [], resumeArgs = [], sessionId = null, onEvent = () => {} }) {
+/** Kemény plafonok (vak ellenőr L7): a kapcsoló csak lefelé állíthat; nem egész / határon kívüli érték az indítás ELŐTT hiba. */
+export const MAX_RESUMES = 3;
+export const MAX_NET = 8;
+const limit = (v, name, hard) => {
+  if (!Number.isInteger(v) || v < 0 || v > hard) throw new RangeError(`a ${name} 0 és ${hard} közötti egész lehet (kemény plafon) — kapott: ${v}`);
+  return v;
+};
+
+export async function runCodexComplete({ exec, prompt, out, points = [], mode = 'review', maxResumes = MAX_RESUMES, maxNet = MAX_NET, execArgs = [], resumeArgs = [], sessionId = null, onEvent = () => {}, expectedTotal = null }) {
+  limit(maxResumes, '--max-resumes', MAX_RESUMES);
+  limit(maxNet, '--max-net', MAX_NET);
   let id = sessionId;
   let resumes = 0;
   let netRetries = 0;
   let tokens = 0;
-  const check = () => checkCompleteness(existsSync(out) ? readFileSync(out, 'utf8') : '', { points, mode });
+  const check = () => checkCompleteness(existsSync(out) ? readFileSync(out, 'utf8') : '', { points, mode, expectedTotal });
   let r = id
     ? await exec('codex', ['exec', 'resume', id, '-', '--json', ...resumeArgs, '-o', out], { input: TECH_PROMPT })
     : await exec('codex', ['exec', '--json', ...execArgs, '-o', out, '-'], { input: prompt });
@@ -119,7 +144,7 @@ export async function runCodexComplete({ exec, prompt, out, points = [], mode = 
     id = id ?? sessionIdFrom(`${r.stdout}\n${r.stderr}`);
     tokens += tokensUsed(`${r.stdout}\n${r.stderr}`) ?? 0;
     const c = check();
-    const technical = r.stalled || (r.code !== 0 && networkStall(`${r.stdout}\n${r.stderr}`));
+    const technical = r.stalled || r.network || (r.code !== 0 && networkStall(`${r.stdout}\n${r.stderr}`));
     if (!technical && r.code === 0 && c.ok) return { ok: true, resumes, netRetries, reason: null, result: c, sessionId: id, tokens };
     if (!id) return { ok: false, resumes, netRetries, reason: 'nincs munkamenet-azonosító a Codex kimenetében — a munka nem folytatható biztonságosan (a --last más munkamenetet folytathatna)', result: c, sessionId: null, tokens };
     let input;
@@ -154,13 +179,21 @@ async function main() {
   const stallMs = Number(arg(a, '--stall-min', 25)) * 60_000;
   let sid = resumeId;
   const exec = (file, args, { input }) => watchedExec(file, args, { input, cwd, stallMs, watch: (so) => [out, sessionFile(sid ?? sessionIdFrom(so))] });
-  const r = await runCodexComplete({
+  const total = arg(a, '--total', null);
+  let r;
+  try {
+    r = await runCodexComplete({
     exec, prompt: promptFile ? readFileSync(promptFile, 'utf8') : '', out, points, mode: review ? 'review' : 'generic', sessionId: resumeId,
-    maxResumes: Number(arg(a, '--max-resumes', 3)), maxNet: Number(arg(a, '--max-net', 8)),
+    maxResumes: Number(arg(a, '--max-resumes', MAX_RESUMES)), maxNet: Number(arg(a, '--max-net', MAX_NET)), expectedTotal: total == null ? null : Number(total),
     execArgs: ['-m', model, '-c', 'model_reasoning_effort=high', '-s', 'workspace-write', '-C', cwd],
     resumeArgs: ['-m', model, '-c', 'model_reasoning_effort=high', '-c', 'sandbox_mode="workspace-write"'],
     onEvent: (e) => { if (e.sessionId) sid = e.sessionId; process.stdout.write(`[codex-complete] ${JSON.stringify(e)}\n`); },
-  });
+    });
+  } catch (e) {
+    if (!(e instanceof RangeError)) throw e;
+    process.stderr.write(`[codex-complete] HIBA: ${e.message}\n`);
+    return 1;
+  }
   process.stdout.write(`[codex-complete] ${r.ok ? 'TELJES' : 'NEM TELJES'} — folytatás: ${r.resumes}, technikai újrapróba: ${r.netRetries}, tokenek: ${r.tokens}${r.reason ? `; ok: ${r.reason}` : ''}\n`);
   return r.ok ? 0 : 5;
 }

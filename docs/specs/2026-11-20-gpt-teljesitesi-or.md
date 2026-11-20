@@ -111,6 +111,31 @@ Megoldás:
 - [ ] T14 WHEN a futtató bármely úton kilép (saját kód, kezeletlen kivétel / elutasítás, leállítási jelzés, kiürült eseményhurok)
   THEN SHALL a `KILÉPÉS <kód> — ok: …; utolsó állapot: …` sort írni; argumentum-hibánál az ok a hibaüzenet.
 
+## Kiegészítés 3 — a GPT-6.2 Sol vak ellenőr 1. körének leletei (ítélet: NEM, fej 27d51327)
+
+Minden lelethez előbb bukó teszt (`scripts/qa/gates/blind-review/hardening.test.mjs`, a régi kódon futtatva bukik), utána a
+legkisebb javítás.
+
+| Lelet | Javítás |
+| --- | --- |
+| L1 (blokkoló) a pont címe ítéletnek számított | zárt ítélet-tokenek (`talált hiba` / `próbáltam [megtörni,] nem sikerült` / `nem alkalmazható`) + elválasztó + külön bizonyíték (≥ 30 karakter); `talált hiba` mellett a Leletek azonosítója kötelező |
+| L2 (blokkoló) Markdown-lelet a findings tömb nélkül | a Leletek szakasz és a findings tömb kétirányú egyezése; rögzítéskor a gépi összegzés új listája („Leletek forgatókönyvvel és javítással”) a viszonyítás, tömb és összegzés nélkül a lelet szövegében kell a forgatókönyv és a javaslat; „IGEN, FELTÉTELLEL” / „NEM” lelet nélkül elutasítva |
+| L3 kódkerítésben idézett fejléc | a fejléc- és pontsor-felismerés hosszhű, kerítés-mentes szövegen fut |
+| L4 `\b` az ékezetes szóhatáron | Unicode-betűhatár (`\p{L}`) minden fordulat-mintában |
+| L5 üres leadás nem fogyaszt keretet | az üres leadás is a jelentés-kapun megy át (számolt elutasítás) |
+| L6 keretelfogyáskor nincs hiánylista | a megállás oka a legutóbbi hiányos leadás zárósorát és hiányait is tartalmazza |
+| L7 Codex `--max-resumes` / `--max-net` nem kemény | 0–3 / 0–8 egész, különben indítás előtti hiba |
+| L8 Codex alapmód visszakérdezést fogad el | a zárósor előtti törzs nem lehet üres vagy kérdés; 0-s nevező hiba; `--total` megadásakor a nevező kötött |
+| L9 életjel friss tárban / hosszú streamnél | a szívverés-író létrehozza a mappát, atomi csere; induló jel; stream-haladás 30 s-onként; végjel a műtermékek után; felügyelő alapértéke 20 perc |
+| L10 fejlécek előtti csend | a csend-óra a kérés indításakor élesedik |
+| L11 élő Codex-hálózati hurok, POSIX-fa | folyamatos hálózati hiba 3 lekérdezésen át → leállítás és technikai folytatás; POSIX-on saját folyamatcsoport; a burok a fa lezárása után tér vissza |
+| L12 elveszett fő ígéret 0-val | `beforeExit` → kilépési kód 2 |
+| L13 SIGTERM után a zár a gyerek előtt szabadul | jelzésre `emergencyCleanup()`: a saját gyerekfák leállítása és lezárásuk megvárása, a futás óta indult saját konténerek leállítása — a zár csak utána szabadul |
+| L14 titok a megbízásban | API-hívás előtti szűrő (`sensitive.mjs`): a célon minden minta (e-mail, kapcsolati szöveg, értékadás is), a terveken a nagy biztonságú token-minták; találatnál megállás az érték kiírása nélkül; a saját kulcs szövegbeli előfordulása is |
+
+- [ ] T15 WHEN a vak ellenőr bármely L1–L14 forgatókönyvét kapja THEN a futtató / ellenőrző / burok SHALL a fenti módon viselkedni
+  (`hardening.test.mjs`); mutációs ellenpróba legalább 4 mutánssal.
+
 ## Nem cél
 
 - A közös megbízás-sablon (`vak-ellenor-megbizas.md`) átírása — a szerződés a futtató saját kiegészítésébe kerül.

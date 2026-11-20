@@ -1133,3 +1133,13 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   napló utolsó soráról következtetni.
 - Forrás: `docs/specs/2026-11-20-gpt-teljesitesi-or.md` („Kiegészítés 2”). Sorszám-ütközés: a beolvasztáskor egyeztetni (C-87 is ezé
   az ágé).
+
+## C-89 — Laza teljesség-minták: a cím ítéletnek, az idézet fejlécnek, az ékezet szóhatárnak számított (2026-11-20)
+
+- **Tünet:** a GPT-őr teljesség-ellenőrzője elfogadta a puszta pontcímet („…hibakereső pont” — a `hiba` részszó ítéletnek számított),
+  a findings tömbből kimaradt Markdown-leletet, a kódkerítésben idézett fejlécet szakaszhatárnak vette, és a `\b` miatt az
+  „és így tovább” átjutott. A vak ellenőr (GPT-6.2 Sol) NEM ítélettel fogta meg.
+- **Szabály:** gépi szöveg-szerződésnél zárt, határolt token-készlet (nem részszó-keresés), külön bizonyíték-mező, kétirányú egyezés a
+  strukturált és a szöveges adat között, kerítés-tudatos (hosszhű) feldolgozás, Unicode-betűhatár (`\p{L}`, `u` jelző). Minden
+  mintához negatív teszt önmagában álló bemenettel (két tiltás egy mintában nem bizonyít semmit).
+- Forrás: `docs/specs/2026-11-20-gpt-teljesitesi-or.md` („Kiegészítés 3”), `scripts/qa/gates/blind-review/hardening.test.mjs`.

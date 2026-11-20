@@ -42,9 +42,10 @@ export function assembleStream(events) {
 }
 
 /**
- * @param {{ fetchImpl?: Function, endpoint: string, key: string, body: object, idleMs?: number, timeoutMs?: number }} o
+ * @param {{ fetchImpl?: Function, endpoint: string, key: string, body: object, idleMs?: number, timeoutMs?: number, onProgress?: Function }} o
+ *   onProgress: minden beérkezett darabra (az életjel-megjegyzésre is) — a hívó ebből ír szívverést.
  */
-export async function callOpenRouterStream({ fetchImpl = globalThis.fetch, endpoint, key, body, idleMs = 120_000, timeoutMs = 900_000 }) {
+export async function callOpenRouterStream({ fetchImpl = globalThis.fetch, endpoint, key, body, idleMs = 120_000, timeoutMs = 900_000, onProgress = () => {} }) {
   const ctrl = new AbortController();
   let why = null;
   let reader = null;
@@ -55,6 +56,8 @@ export async function callOpenRouterStream({ fetchImpl = globalThis.fetch, endpo
   const kick = () => { clearTimeout(idle); idle = setTimeout(() => stop(`a stream ${Math.round(idleMs / 1000)} s óta csendben áll (életjel nélkül)`), idleMs); };
   try {
     let res;
+    // a csend-óra már a kérés indításakor él: a válaszfejlécek előtti csend is megszakít (vak ellenőr L10)
+    kick();
     try {
       res = await fetchImpl(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, stream: true }), signal: ctrl.signal });
     } catch (e) {
@@ -64,6 +67,7 @@ export async function callOpenRouterStream({ fetchImpl = globalThis.fetch, endpo
       const text = await res.text().catch(() => '');
       throw new OpenRouterError(`OpenRouter HTTP ${res.status}: ${maskSecrets(text, key).slice(0, 500)}`, { status: res.status, retryable: res.status === 429 || res.status >= 500 });
     }
+    if (why) throw new OpenRouterError(`OpenRouter stream megszakítva: ${why}`, { retryable: true });
     reader = res.body.getReader();
     const dec = new TextDecoder();
     const events = [];
@@ -75,6 +79,7 @@ export async function callOpenRouterStream({ fetchImpl = globalThis.fetch, endpo
         const { value, done: end } = await reader.read();
         if (end) break;
         kick(); // minden darab (az életjel-megjegyzés is) élő kapcsolatot jelez
+        try { onProgress(); } catch { /* az életjel nem kritikus */ }
         buf += dec.decode(value, { stream: true });
         let cut;
         while ((cut = buf.indexOf('\n')) >= 0) {

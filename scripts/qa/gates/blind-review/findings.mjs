@@ -5,6 +5,7 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { FULL_PATH_KINDS, resolveInside } from './tools.mjs';
+import { SUMMARY_FINDINGS_HEADING } from './completeness.mjs';
 
 export const SEVERITIES = ['blokkoló', 'közepes', 'kicsi'];
 const MUST_VERIFY = new Set(['blokkoló', 'közepes']);
@@ -85,6 +86,7 @@ export function verifyFindings({ findings, root, runLog, reportText, verdict }) 
     const runWhy = rc?.error ?? null;
     const runOk = runGiven && !runWhy;
     items.push({ id, severity, title: norm(f.title).slice(0, 200), file: String(f.file ?? ''), line: Number(f.line) || null, refOk: !refWhy, refWhy, runGiven, runOk,
+      scenario: norm(f.scenario).slice(0, 1200), fix: norm(f.fix).slice(0, 1200),
       runFull: runOk && rc.full, runPartial: runOk && !rc.full, runKind: runOk ? rc.kind : null, runWhy });
     if (refWhy && MUST_VERIFY.has(severity)) errors.push(`${id} (${severity}): a hivatkozás nem ellenőrizhető — ${refWhy}`);
     if (runWhy) errors.push(`${id}: a futtatási bizonyíték nem ellenőrizhető — ${runWhy}`);
@@ -114,6 +116,8 @@ export function summaryMarkdown({ items, counts, cache, state, model }) {
   const rows = SEVERITIES.map((s) => `| ${s} | ${counts[s].total} | ${counts[s].refVerified} | ${counts[s].runFull} | ${counts[s].runPartial} | ${counts[s].invalid} |`);
   const how = (i) => (i.runFull ? '; futtatással igazolt (teljes út)' : i.runPartial ? `; RÉSZBEN igazolt (elszigetelt próba: ${i.runKind})` : '');
   const list = items.filter((i) => i.severity !== 'kicsi').map((i) => `- **${i.id}** (${i.severity}) ${i.title} — \`${i.file}:${i.line}\` — hivatkozás igazolt${how(i)}`);
+  // a forgatókönyv és a javítás a rögzített jelentésben is olvasható (vak ellenőr L2) — a rögzítő ehhez veti a „Leletek” szakaszt
+  const detail = items.map((i) => `- **${i.id}** (${i.severity}) ${i.title} — forgatókönyv: ${i.scenario || '—'} — javítás: ${i.fix || '—'}`);
   const invalid = items.filter((i) => !i.refOk).map((i) => `- **${i.id}** (${i.severity}) ${i.title} — NEM visszaellenőrizhető: ${i.refWhy}`);
   return [
     '',
@@ -131,6 +135,9 @@ export function summaryMarkdown({ items, counts, cache, state, model }) {
     '',
     '### Blokkoló és közepes leletek (mind igazolt hivatkozással)',
     list.length ? list.join('\n') : '(nincs)',
+    '',
+    SUMMARY_FINDINGS_HEADING,
+    detail.length ? detail.join('\n') : '(nincs)',
     '',
     '### Érvénytelen leletek',
     invalid.length ? invalid.join('\n') : '(nincs)',

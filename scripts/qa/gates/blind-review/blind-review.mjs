@@ -13,17 +13,18 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, rmdirSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { BLIND_NOT_RUN, GATES_DIR, evidenceDir, isMain, loadConfig, writeEvidence } from '../lib.mjs';
 import { missingSections, reportHead, reportVerdict } from '../record-review.mjs';
 import { EVIDENCE_KIND, evidenceName, sha256 } from './evidence.mjs';
 import { summaryMarkdown, verifyFindings } from './findings.mjs';
-import { checkCompleteness, continuationPrompt, debugPoints } from './completeness.mjs';
+import { checkCompleteness, closingLine, continuationPrompt, debugPoints } from './completeness.mjs';
 import { callOpenRouterStream } from './stream.mjs';
 import { writeHeartbeat } from './heartbeat.mjs';
 import { createExitTrace, lockWaitReporter } from './exit-trace.mjs';
 import { LOCAL_CONFIG_NAME, OpenRouterError, callOpenRouter, loadApiKey, maskSecrets, usageCost } from './openrouter.mjs';
-import { TMP_DIR, TOOL_SCHEMAS, cleanEnv, makeTools } from './tools.mjs';
+import { TMP_DIR, TOOL_SCHEMAS, cleanEnv, emergencyCleanup, makeTools } from './tools.mjs';
+import { findSensitive } from './sensitive.mjs';
 
 const HERE = join(GATES_DIR, 'blind-review');
 const RUNNER_ROOT = resolve(GATES_DIR, '..', '..', '..');
@@ -160,6 +161,7 @@ export function makeReportGate({ head, cfg, root, points, box, maxRetries = 3, g
     const errs = [];
     if (!v.ok) errs.push(v.error);
     if (!c.ok) {
+      box.lastIncomplete = `${closingLine(c)}; ${c.problems.slice(0, 6).join(' | ')}`;
       state.completenessRejections += 1;
       if (state.completenessRejections > maxRetries) {
         box.abort = `teljesség: ${maxRetries} folytatás után is hiányos — hiányzik: ${c.missing.join(', ') || '—'}; ${c.problems.slice(0, 6).join(' | ')}`;
@@ -294,14 +296,18 @@ export const backoffMs = (attempt) => Math.min(30_000, 2000 * 2 ** attempt);
  *           budget: ReturnType<typeof createBudget>, sessionId?: string, fetchImpl?: Function, log?: (e: object) => void, sleep?: (ms: number) => Promise<void> }} o
  * @returns {Promise<{ complete: boolean, stopReason: string|null, fatal: boolean, reportedModels: string[], generationIds: string[], notes: string[] }>}
  */
-export async function runReview({ cfg, key, system, user, tools, box, budget, sessionId, fetchImpl = globalThis.fetch, log = () => {}, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function runReview({ cfg, key, system, user, tools, box, budget, sessionId, fetchImpl = globalThis.fetch, log = () => {}, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), onProgress = () => {} }) {
   const messages = [{ role: 'system', content: system }, { role: 'user', content: user }];
   const reportedModels = new Set();
   const generationIds = [];
   const notes = [];
   let pending = chars(messages) + JSON.stringify(TOOL_SCHEMAS).length;
   let nudges = 0;
-  const done = (complete, stopReason, fatal = false) => ({ complete, stopReason, fatal, reportedModels: [...reportedModels], generationIds, notes });
+  // Nem teljes megálláskor (plafon, hiba) a legutóbbi hiányos leadás hiánylistája is a megállás okába kerül (vak ellenőr L6).
+  const done = (complete, stopReason, fatal = false) => {
+    const tail = !complete && box?.lastIncomplete && !String(stopReason).startsWith('teljesség:') ? ` — utolsó leadás hiányos: ${box.lastIncomplete}` : '';
+    return { complete, stopReason: tail ? `${stopReason}${tail}` : stopReason, fatal, reportedModels: [...reportedModels], generationIds, notes };
+  };
 
   for (;;) {
     let json = null;
@@ -314,7 +320,7 @@ export async function runReview({ cfg, key, system, user, tools, box, budget, se
         // Streaming (cfg.stream): díjmentes életjel-felügyelet — csendben álló stream esetén megszakítás és újrapróba ugyanazokkal az üzenetekkel.
         const call = cfg.stream ? callOpenRouterStream : callOpenRouter;
         json = await call({
-          fetchImpl, endpoint: cfg.endpoint, key, timeoutMs: (cfg.stream ? (cfg.httpTimeoutSec ?? 900) : (cfg.httpTimeoutSec ?? 180)) * 1000, idleMs: (cfg.streamIdleSec ?? 120) * 1000,
+          fetchImpl, endpoint: cfg.endpoint, key, onProgress, timeoutMs: (cfg.stream ? (cfg.httpTimeoutSec ?? 900) : (cfg.httpTimeoutSec ?? 180)) * 1000, idleMs: (cfg.streamIdleSec ?? 120) * 1000,
           body: {
             ...(cfg.requestExtras ?? {}), model: cfg.model, messages: withCacheMarkers(messages, cfg.promptCache?.mode), tools: TOOL_SCHEMAS, tool_choice: 'auto',
             max_tokens: cfg.maxTokensPerCall, usage: { include: true }, ...(sessionId ? { session_id: sessionId } : {}),
@@ -533,6 +539,11 @@ async function main() {
     else if (existsSync(p)) specs.push({ path: p, text: readFileSync(p, 'utf8') });
     else { return fail(`a terv nincs meg sem a fejen, sem helyi fájlként: ${p}`); }
   }
+  // Titokszűrés az API-hívás ELŐTT (vak ellenőr L14): a cél (scratchpad) és a tervek nem vihetnek titkot / személyes adatot a
+  // modellhez. Felismert mintánál megállunk — az értéket nem írjuk vissza, csak a fajtáját és a helyét.
+  const hits = [...findSensitive(goal, { email: true }).map((h) => ({ ...h, file: args.goal })),
+    ...specs.flatMap((sp) => findSensitive(sp.text).map((h) => ({ ...h, file: sp.path })))];
+  if (hits.length) return fail(`a cél / terv titokra vagy személyes adatra utaló minta van benne: ${hits.slice(0, 5).map((h) => `${h.kind} (${basename(h.file)}:${h.line})`).join(', ')} — távolítsd el, az értéket nem írom ki`);
   const templateText = readFileSync(TEMPLATE_PATH, 'utf8');
   const system = buildSystemPrompt(templateText, readFileSync(join(HERE, 'futtato-kiegeszites.md'), 'utf8'));
 
@@ -542,7 +553,10 @@ async function main() {
   const loaded = loadApiKey({ localConfigPath: join(commonDir, LOCAL_CONFIG_NAME) });
   if (!loaded.key && !args.dryRun) { fail(loaded.error, 2, 'MEGÁLLT'); process.stderr.write(`[blind-review] ${NOT_RUN}.\n`); return 2; }
   const key = loaded.key ?? '';
+  if (key && [goal, ...specs.map((sp) => sp.text)].some((t) => t.includes(key))) return fail('a cél / terv a saját OpenRouter-kulcsot tartalmazza — távolítsd el, az értéket nem írom ki');
   trace.setMask((x) => maskSecrets(x, key));
+  // Életjel már az induláskor (friss bizonyíték-tárban is — a writeHeartbeat létrehozza a mappát; vak ellenőr L9).
+  writeHeartbeat(join(evDir, `blind-review-${head.slice(0, 12)}.heartbeat.json`), { head, phase: 'start', calls: 0, spentUsd: 0 });
   trace.set({ phase: 'előkészítés (munkafa)' });
 
   const stale = git(repo, ['worktree', 'list', '--porcelain']).stdout.split('\n').filter((l) => l.startsWith('worktree ') && l.includes('websuli-blind-'));
@@ -611,9 +625,11 @@ async function main() {
     };
     budgetRef = budget;
     trace.set({ phase: 'modellhívások' });
-    const result = await runReview({ cfg, key, system, user, tools, box, budget, log, sessionId: `blind-review-${head}` });
+    // a stream haladása is életjel (ritkítva, 30 s-onként) — a hosszú, folyamatos válasz nem látszik beragadásnak (vak ellenőr L9)
+    let lastBeat = 0;
+    const onProgress = () => { const t = Date.now(); if (t - lastBeat >= 30_000) { lastBeat = t; beat({ phase: 'stream' }); } };
+    const result = await runReview({ cfg, key, system, user, tools, box, budget, log, onProgress, sessionId: `blind-review-${head}` });
     const endedAt = Date.now();
-    beat({ phase: 'done', complete: result.complete });
     trace.set({ phase: 'jelentés és bizonyíték' });
     const body = result.complete ? box.report.replace(/\r\n/g, '\n').trimEnd() : incompleteReport({ head, stopReason: result.stopReason, notes: result.notes });
     const cache = cacheStats(budget.state, cfg);
@@ -629,6 +645,8 @@ async function main() {
     const evPath = writeEvidence(evDir, result.complete ? evidenceName(head) : `blind-review-incomplete-${head}`, ev);
     say(`jelentés: ${out}`);
     say(`bizonyíték: ${evPath}`);
+    // a végjel csak a műtermékek (jelentés, bizonyíték) írása után (vak ellenőr L9)
+    beat({ phase: 'done', complete: result.complete });
     say(`modell (a válasz szerint): ${result.reportedModels.join(', ') || '—'}; ${budget.state.calls} hívás; költség ${budget.state.spentUsd.toFixed(4)} USD; gyorsítótár-találat a 2. hívástól: ${cache.hitRatioFromSecondCall == null ? '—' : `${(cache.hitRatioFromSecondCall * 100).toFixed(1)}%`}; idő ${((endedAt - startedAt) / 60_000).toFixed(1)} perc`);
     if (result.complete) say(`leletek: ${Object.entries(box.check.counts).map(([k, v]) => `${k} ${v.total} (igazolt hivatkozás ${v.refVerified}, futtatással ${v.runVerified}, érvénytelen ${v.invalid})`).join('; ')}`);
     if (result.complete) {
@@ -651,7 +669,8 @@ async function main() {
 }
 
 if (isMain(import.meta.url)) {
-  trace.install();
+  // Leállítási jelzésre előbb a saját nehéz gyerekfolyamat-fa és konténer áll le, a gépi zár csak utána szabadul (vak ellenőr L13).
+  trace.install(process, { onSignal: () => emergencyCleanup() });
   main().then((c) => { trace.settle(); process.exit(c); }, (e) => {
     trace.settle();
     const msg = maskSecrets(String(e?.message ?? e));

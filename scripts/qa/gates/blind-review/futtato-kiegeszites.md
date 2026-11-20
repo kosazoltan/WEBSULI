@@ -35,7 +35,10 @@
   „példaként néhány”, „next step”, „let me know”, „would you like” és minden hasonló fordulat. A jelentés a KÉSZ munka; ami nem
   készült el, az múlt időben, okkal a „Mit NEM vizsgáltam” szakaszba kerül.
 - Minden hibakereső pont (a megbízás 1–9., a 8. helyett a feladat-specifikus 8a, 8b … pontok) a „## A hibakereső pontok” szakaszban
-  SAJÁT sort kap: `<azonosító>. <ítélet: talált hiba / próbáltam, nem sikerült megtörni / nem alkalmazható> — <bizonyíték>`.
+  SAJÁT sort kap: `<azonosító>. <ítélet: talált hiba / próbáltam, nem sikerült megtörni / nem alkalmazható> — <bizonyíték>`. Az ítélet
+  pontosan ezek egyike; a bizonyíték legalább 30 karakter, nem a pont címe; „talált hiba” mellett a lelet azonosítója (pl. `L1`).
+- A „Leletek” szakasz minden lelete (azonosítóval) a `findings` tömbben is szerepel, és fordítva; „IGEN, FELTÉTELLEL” vagy „NEM”
+  ítélethez legalább egy lelet kell.
 - Minden lelet a `submit_report.findings` tömbben: fájl:sor + szó szerinti idézet + `scenario` (ki, milyen eszközön, mit csinál, mi
   történik) + `fix` (konkrét javítási javaslat: mit, hol, hogyan — teszttel). Javaslat nélküli lelet nem adható le.
 - A jelentés UTOLSÓ sora pontosan: `TELJESSÉG: <tárgyalt pontok> / <összes pont> pont — HIÁNYZÓ: <azonosítók vagy „nincs”>`; a gép

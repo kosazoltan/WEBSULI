@@ -102,12 +102,32 @@ export function realRun(file, args, { cwd, env, timeoutMs = 300_000, maxBuffer =
       return;
     }
     const cap = (cur, d) => (cur.length < maxBuffer ? cur + d : cur);
+    const closed = new Promise((r) => child.once('close', r));
+    ACTIVE.set(child, closed);
     child.stdout.on('data', (d) => { out = cap(out, d); });
     child.stderr.on('data', (d) => { err = cap(err, d); });
     const timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
-    child.on('error', (e) => { clearTimeout(timer); done({ code: 127, stdout: out, stderr: `${err}\n${e.message}`, timedOut, ms: Date.now() - t0 }); });
-    child.on('close', (code) => { clearTimeout(timer); done({ code: timedOut ? 124 : (code ?? 1), stdout: out, stderr: err, timedOut, ms: Date.now() - t0 }); });
+    child.on('error', (e) => { clearTimeout(timer); ACTIVE.delete(child); done({ code: 127, stdout: out, stderr: `${err}\n${e.message}`, timedOut, ms: Date.now() - t0 }); });
+    child.on('close', (code) => { clearTimeout(timer); ACTIVE.delete(child); done({ code: timedOut ? 124 : (code ?? 1), stdout: out, stderr: err, timedOut, ms: Date.now() - t0 }); });
   });
+}
+
+/** A futó saját gyerekfolyamatok (→ a lezárásuk ígérete) és a nehéz futások vészhelyzeti takarítói (vak ellenőr L13). */
+const ACTIVE = new Map();
+const CLEANUPS = new Set();
+export const activeChildPids = () => [...ACTIVE.keys()].map((c) => c.pid);
+
+/**
+ * Leállítási jelzésre (SIGTERM / SIGHUP / SIGBREAK) a kilépés ELŐTT: a saját gyerekfolyamat-fák leállítása, megvárva a lezárásukat
+ * (legfeljebb `graceMs`), utána a nehéz futások saját konténereinek leállítása. A gépi zárat csak ezután engedi el a folyamat.
+ */
+export async function emergencyCleanup({ graceMs = 20_000 } = {}) {
+  const waits = [];
+  for (const [child, closed] of ACTIVE) { killTree(child); waits.push(closed); }
+  let timer;
+  await Promise.race([Promise.all(waits), new Promise((r) => { timer = setTimeout(r, graceMs); })]);
+  clearTimeout(timer);
+  for (const fn of [...CLEANUPS]) { try { await fn(); } catch { /* a takarítás többi része fusson */ } }
 }
 
 /** Csonkolás: az eleje és a vége marad (a tesztkimenet lényege jellemzően a végén van). */
@@ -397,7 +417,22 @@ export function makeTools(ctx) {
     assertSafeHeavyEnv(childEnv);
     heavyRuns += 1;
     const before = parseDockerPs(await dockerPs());
-    const x = await run(node, args, { cwd: src, env: childEnv, timeoutMs, maxBuffer: 4_000_000 });
+    // Leállítási jelzésre (emergencyCleanup) a futás közben indult saját konténerek is leállnak, a zár elengedése előtt.
+    // A megszakított gyerek kimenete nem áll rendelkezésre: a futás óta megjelent `websuli-*` konténer a miénk (a gépi zár alatt
+    // idegen nehéz kör nem indulhat).
+    const emergency = async () => {
+      const had = new Set(before.map((c) => c.name));
+      for (const { name } of parseDockerPs(await dockerPs())) {
+        if (!had.has(name) && /^websuli-/.test(name)) await run('docker', ['stop', '--time', '2', name], { cwd: root, env, timeoutMs: 60_000 });
+      }
+    };
+    CLEANUPS.add(emergency);
+    let x;
+    try {
+      x = await run(node, args, { cwd: src, env: childEnv, timeoutMs, maxBuffer: 4_000_000 });
+    } finally {
+      CLEANUPS.delete(emergency);
+    }
     const after = parseDockerPs(await dockerPs());
     const stopped = [];
     for (const name of ownLeftovers(before, after, `${x.stdout}\n${x.stderr}`)) {
@@ -578,8 +613,9 @@ export function makeTools(ctx) {
       return images.length ? { text, images } : text;
     },
     async submit_report({ report, findings }) {
-      if (typeof report !== 'string' || !report.trim()) return 'HIBA: üres jelentés';
-      const r = ctx.onReport(report, findings, runLog);
+      // Az üres leadás is a jelentés-kapun megy át (vak ellenőr L5): ugyanúgy elutasított és számolt leadás, hiánylistával.
+      const r = ctx.onReport(typeof report === 'string' ? report : '', findings, runLog);
+      if (typeof report !== 'string' || !report.trim()) return `ELUTASÍTVA — üres jelentés; add le a teljes jelentést: ${r.ok ? '' : r.error}`;
       return r.ok ? 'ELFOGADVA — a jelentés rögzítve, a munka lezárult.' : `ELUTASÍTVA — javítsd, és add le újra: ${r.error}`;
     },
   };

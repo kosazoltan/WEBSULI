@@ -75,7 +75,8 @@ test('B17: a futtató kódjában nincs modell-literál és nincs modell- / szolg
   // 2026-11-20: a mélységi őr a teljesség-kapun át (makeReportGate, useDepth: true) van bekötve.
   assert.match(runner, /makeReportGate\(\{[^}]*useDepth: true[^}]*\}\)/);
   // 2026-11-20 (néma kilépés hibajegye): a kilépési nyom telepítve, a zárvárási életjel és az eszköz-állapot bekötve.
-  assert.match(runner, /trace\.install\(\);/);
+  assert.match(runner, /trace\.install\(process, \{ onSignal: \(\) => emergencyCleanup\(\) \}\);/);
+  assert.match(runner, /findSensitive\(goal, \{ email: true \}\)/, 'a cél titokszűrése az API-hívás előtt (vak ellenőr L14)');
   assert.match(runner, /lockWaitReporter\(\{ say, beat \}\)/);
   assert.match(runner, /onLockPoll: \(p\) =>/);
   assert.match(runner, /onToolStart: \(name\) => trace\.set/);

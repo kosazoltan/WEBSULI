@@ -57,9 +57,10 @@ test('T14b: kezeletlen ígéret-elutasítás → KILÉPÉS 2 okkal (nem néma)',
   assert.match(r.stderr, /KILÉPÉS 2 — ok: kezeletlen ígéret-elutasítás: .*elutasítva/);
 });
 
-test('T14c: kiürült eseményhurok (elveszett várakozás) → a KILÉPÉS-sor megnevezi', () => {
+test('T14c: kiürült eseményhurok (elveszett várakozás) → nem nulla kód (2), a KILÉPÉS-sor megnevezi (vak ellenőr L12)', () => {
   const r = child('drain');
-  assert.match(r.stderr, /KILÉPÉS 0 — ok: kiürült eseményhurok — a fő ígéret nem teljesült/);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /KILÉPÉS 2 — ok: kiürült eseményhurok — a fő ígéret nem teljesült/);
 });
 
 test('T14d: külső leállítási jelzés (SIGTERM) → KILÉPÉS 2, ok: jelzés', () => {
