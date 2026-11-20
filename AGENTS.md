@@ -174,6 +174,29 @@ Skillek (`.agents/skills/` forrás, `.claude/skills/` tükör): `websuli-lint-el
 `websuli-push-elotti-kapu`, `websuli-pr-elotti-kapu`, `websuli-merge-elotti-kapu`. Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md).
 A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 
+## Session-zárás: kérés-összevetés a higiénia előtt (kötelező, tulajdonosi utasítás 2026-11-20)
+
+> „…minden session végeztével, a higiénia előtt, végigveszed az ahhoz a sorhoz […] beadott összes adatot, utasítást, képet, és
+> újra retrospektív módon leellenőrzöd, hogy valóban minden kérés bekerült-e a fejlesztéssorba. Csak ezután végezheted el a
+> higiéniát, és minden esetben felelősséggel kell nyilatkoznod róla…” — a tulajdonos, 2026-11-20
+
+Minden session / futás végén, a záró jelentés és a higiénia ELŐTT (skill: `websuli-session-zaras`, terv:
+`docs/specs/2026-11-20-session-zaras.md`):
+
+1. `node scripts/qa/session-closeout.mjs collect --transcript <átirat>` — a gép kigyűjti a tulajdonos minden üzenetét (szöveg, kép,
+   beillesztett blokk) `U-001…` tételekre, a közös bizonyíték-tárba (repón kívül);
+2. minden tételhez állapot + bizonyíték (PR / commit / kanban-jegy / fájl:sor / tulajdonosi döntés); az elmaradt kérést előbb
+   pótolni kell, vagy kanban-jegyre / tulajdonosi kérdésre tenni;
+3. felelős nyilatkozat a listában („…elvégeztem és ellenőriztem; a nyitott tételek és okaik: …”);
+4. `node scripts/qa/session-closeout.mjs verify --transcript <átirat>` — amíg nem zöld, pótolni és újra ellenőrizni (loop);
+5. csak ezután a higiénia: `npm run session:hygiene -- --transcript <átirat>` (zöld összevetés nélkül megáll), majd a memória-,
+   skill-, kanban-, mappa-, ág- és munkafa-rendrakás.
+
+A `Stop` hook (`scripts/qa/hooks/check-session-closeout.mjs`) a zárásra utaló választ visszafordítja, ha a legutóbbi zöld
+összevetés óta feldolgozatlan tulajdonosi üzenet van; a bekötése a `.claude/settings.json`-ban tulajdonosi lépés (a terv
+„Tulajdonosi lépés” szakasza). Más MI-eszköz (Codex: `--format codex`; Cursor / kézi átirat: `--format plain`) ugyanígy zár.
+A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
+
 ## Verifikáció
 
 A változáshoz illő legkisebb ellenőrzési kört futtasd: célzott teszt/lint/typecheck
@@ -189,7 +212,7 @@ változatlan bemenettel újrafuttatni tilos.
 ## Zárás
 
 A záró jelentés tartalmazza: módosított fájlok, futtatott ellenőrzések (pass/fail),
-fennmaradó kockázatok.
+fennmaradó kockázatok — és a zöld kérés-összevetés felelős nyilatkozatát a nyitott tételekkel (lásd „Session-zárás”).
 
 ## Aktív munkafázis-követés (kötelező, tulajdonosi utasítás 2026-09-05)
 

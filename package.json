@@ -14,6 +14,9 @@
     "gate:stage": "node scripts/qa/gates/stage-gate.mjs",
     "gate:push": "node scripts/qa/gates/pre-push-gate.mjs",
     "gate:pr": "node scripts/qa/gates/pre-pr-gate.mjs",
-    "gate:merge": "node scripts/qa/gates/pre-merge-gate.mjs"
+    "gate:merge": "node scripts/qa/gates/pre-merge-gate.mjs",
+    "session:collect": "node scripts/qa/session-closeout.mjs collect",
+    "session:verify": "node scripts/qa/session-closeout.mjs verify",
+    "session:hygiene": "node scripts/qa/session-hygiene.mjs"
   }
 }

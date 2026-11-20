@@ -14,4 +14,5 @@ Magyarul válaszolj. A részletes szabály az `AGENTS.md` „Review guidelines�
   - indítás / cron / leállítás;
   - félkész munka: a PR-hoz tartozó spec és `-vegrehajtas.md` minden pontja teljesült-e (befejezési mandátum);
   - ARM64 + x64: architektúra-függő útvonal, bináris vagy csak egy CPU-n települő függőség.
+  - session-zárás (2026-11-20): a sessiont / futást lezáró PR-ban a kérés-összevetés (`scripts/qa/session-closeout.mjs`, skill `websuli-session-zaras`) nem kerülhető meg, és tulajdonosi szöveg / személyes adat nem kerülhet a repóba.
 - **Evidencia:** csak fájl:sor hivatkozással és konkrét hibaforgatókönyvvel jelezz hibát.

@@ -18,3 +18,7 @@ Lánc: keresés + `web_fetch` → idézetellenőrzött forrásjegyzék → taní
 ## Stack
 
 Éles: **Vercel** (SPA) + **Render** (API) + **Neon** (PostgreSQL, Drizzle). Titok csak környezeti változóban. Háromfázisú munka: `docs/agent-haromfazisu-munka.md`.
+
+## Session-zárás (kötelező, 2026-11-20)
+
+Minden session végén, a záró jelentés és a higiénia ELŐTT: `node scripts/qa/session-closeout.mjs collect` → tételes kitöltés + felelős nyilatkozat → `verify` zöldig; csak utána higiénia (`npm run session:hygiene`). Cursor-átirathoz: `--format plain`. Részletek: `AGENTS.md` „Session-zárás”, `.agents/skills/websuli-session-zaras/SKILL.md`.
