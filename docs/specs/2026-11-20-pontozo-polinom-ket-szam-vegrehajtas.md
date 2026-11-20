@@ -39,6 +39,7 @@ Szülő: `docs/specs/2026-11-19-websuli-potlasok-terv-vegrehajtas.md`, „T-1”
 - `node --import tsx --test tests/scorer-corpus.test.ts tests/scoring-v2.test.ts tests/polynomial-answer.test.ts tests/single-choice-check.test.ts tests/no-lookbehind-client.test.ts` → `fail 0`
   (a ténylegesen létező fájlnevekkel; amelyik nincs, NOT RUN).
 - Mutációs ellenpróba: V2 visszavonása → a korpusz típusos tesztje bukik (#121 esetek); V3-ban a második olvasat kikapcsolása → bukik
-  („30 · 7 210”); a `starts`-feltétel kikapcsolása → bukik („35 + 64 − 12 345”). Mindhárom után visszaállítás, zöld.
+  („30 · 7 210”); a `starts`-feltétel kikapcsolása → bukik („35 + 64 − 12 345”, „30 · 7 211”); a 0-val kezdődő csoport kizárásának kikapcsolása
+  → bukik („35 + 64 − 12 000” lépés + 0). Mindhárom után visszaállítás, zöld.
 - Nehéz kör (gépi zárral): `npm.cmd run gate:stage`, `npm.cmd test` → `fail 0`; a `fill-blank-punctuation.spec.ts` a gate:pr
   böngészős körében.

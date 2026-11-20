@@ -72,9 +72,10 @@ Szülőterv: `docs/specs/2026-11-19-websuli-potlasok-terv.md`, 7.3 „T-1 — Po
 - A műveleti jel nélküli „120 360” (két számeredmény vagy ezres tagolás?) — ebben a szeletben nem változik (nem-cél).
 
 <!-- acceptance-checklist -->
-- [ ] E1 – polinom + pontsor / „…” helyes (korpusz)
-- [ ] E2 – rossz polinom ponttal hibás (korpusz)
-- [ ] E3 – „30 · 7 210” 2 / 2 (korpusz)
-- [ ] E4 – „12 000” egy szám, „35 + 64 − 12 000” 0 (korpusz + scoring-v2)
-- [ ] E5 – „2.5x”, „10x.” változatlan (korpusz)
-- [ ] E6 – meglévő tesztek zöldek; mutációs ellenpróba megfogva
+- [x] E1 – polinom + pontsor / „…” helyes (korpusz)
+- [x] E2 – rossz polinom ponttal hibás (korpusz)
+- [x] E3 – „30 · 7 210” 2 / 2 (korpusz)
+- [x] E4 – „12 000” egy szám, „35 + 64 − 12 000” 0 (korpusz + scoring-v2)
+- [x] E5 – „2.5x”, „10x.” változatlan (korpusz)
+- [ ] E6 – meglévő tesztek zöldek (célzott kör 127 / 127 zöld; a teljes `npm test` a gépi záras nehéz körben); mutációs ellenpróba
+  megfogva (M1–M4)
