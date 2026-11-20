@@ -30,8 +30,9 @@ Fájlok: `shared/seeded.ts` (új), `shared/option-order.ts` (csak a kiemelt seg�
 `shared/lesson-opener.ts`, `server/studio/lesson-variety-flag.ts` (új), `server/studio/step-io.ts`,
 `server/studio/experience-builder.ts`, `server/studio/pipeline-store.ts`, `client/src/lesson-runtime/VerdictFeedback.tsx`,
 `client/src/lesson-runtime/LessonRuntime.tsx`, `client/src/lesson-runtime/LessonExperienceView.tsx`; tesztek:
-`tests/seeded.test.ts`, `tests/lesson-feedback-openers.test.ts`, `tests/lesson-variety-flag.test.ts` (újak),
-`tests/lesson-opener.test.ts` (bővül).
+`tests/seeded.test.ts`, `tests/lesson-feedback-openers.test.ts`, `tests/lesson-variety-flag.test.ts`,
+`tests/verdict-feedback-variety.test.ts` (újak; az utóbbi a `VerdictFeedback` DOM-ját méri jelöletlen és jelölt leckén),
+`client/src/lesson-runtime/feedback-variety.ts` (új, a kontextus — külön fájlban a gyorsfrissítés-szabály miatt).
 
 1. **Bukó tesztek ELŐBB** (a modulok még nem léteznek → `ERR_MODULE_NOT_FOUND` / assert-bukás):
    - `tests/seeded.test.ts`: `seedFrom("abc")` rögzített érték (FNV-1a: egyezik a `shared/option-order.ts` régi `hash32`-jével);
@@ -53,7 +54,9 @@ Fájlok: `shared/seeded.ts` (új), `shared/option-order.ts` (csak a kiemelt seg�
    `stripLegacyOpener(text)`; `feedbackOpenerKey(mapId, question, options)` (`choiceSeed`-del); `feedbackView({ right, text, variety })`
    → `{ opener?: string; reason: string }` — jelöletlen leckén `{ reason: stripVerdictPrefix(text, right) }`.
 4. `shared/lesson-schema.ts`: `variety: z.object({ version: z.string().trim().min(1).max(40) }).passthrough().optional().catch(undefined)`
-   a `lessonSchema` gyökerén; a `modelLessonSchema` mindkét ága `.omit({ variety: true })` (a modell nem adhat jelölőt).
+   a `lessonSchema` gyökerén; a bővítés előtti (KI) modell-séma `.omit({ variety: true })` (a főághoz híven elhagyja). A BE ág a teljes
+   `lessonSchema` marad (azonosság-őr: `tests/source-visuals-flag.test.ts` „KI (J2)” — nem gyengíthető); ott a jelölőt a mentés határa
+   írja felül / törli (8. lépés). A javítási út (`structured-improvement.ts`) jelölő-kezelése az S5b feladata.
    `LESSON_VARIETY_VERSION = "valtozatossag-1"` a `shared/lesson-feedback-openers.ts`-ben.
 5. `shared/lesson-opener.ts`: `PLAYFUL_AUTHOR_RULES` és `PLAYFUL_QUESTIONING_CONTRACT` változatlan konstans marad (KI); új
    `playfulAuthorRules(variety)`, `playfulQuestioningContract(variety)`, `lessonOpenerVersion(variety)` — BE-nél a 115. és 136. sor
