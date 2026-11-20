@@ -271,11 +271,17 @@ export function createPlayerAccountStore(pool: Db) {
           ORDER BY season`,
         [id],
       );
+      // Sérült adventi mentés (pl. [null] próba) nem töri el az adatletöltést (GPT-vak 3. kör L5): a sor jelölve, számlálók nélkül.
+      const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+      const doorsAreSound = (doors: unknown): boolean => isObject(doors) && Object.values(doors).every((round) => isObject(round)
+        && Object.values(round).every((door) => isObject(door) && Array.isArray(door.attempts) && door.attempts.every((t) => isObject(t) && typeof t.correct === "boolean")));
       return {
         adventCalendar: advent.rows.map((a) => {
+          const base = { season: a.season, grade: a.grade, round: a.round, finishedAt: a.finished_at, passedAt: a.passed_at };
+          if (a.doors !== null && !doorsAreSound(a.doors)) return { ...base, corrupt: true as const, answeredDoors: null, solvedDoors: null };
           const current = Object.values(a.doors?.[String(a.round)] ?? {});
           return {
-            season: a.season, grade: a.grade, round: a.round, finishedAt: a.finished_at, passedAt: a.passed_at,
+            ...base,
             answeredDoors: current.filter((d) => (d.attempts?.length ?? 0) > 0).length,
             solvedDoors: current.filter((d) => d.attempts?.some((t) => t.correct === true)).length,
           };

@@ -146,10 +146,15 @@ test("foglalás: ellenőrzés és rögzítés egy lépésben, a visszaadott hely
 });
 
 test("új névtelen sor kerete PÁRHUZAMOS kérésekkel sem léphető túl: 120 egyidejű létrehozás egy címről, 90-es kerettel → pontosan 90 sor (review U1)", async () => {
-  // Mutációs ellenpróba a számlálón: a régi rend (előbb kérdez, a várakozás UTÁN számol) mind a 120-at átengedi.
-  const naive = createWindowCounter(ADVENT_LIMITS.newDeviceRows);
+  // Mutációs ellenpróba a számlálón UGYANAZZAL a 90-es kerettel (GPT-vak 3. kör L6): a régi rend (előbb kérdez, a várakozás UTÁN
+  // számol) túllépi a keretet, a foglalás (egy lépésben ellenőriz és rögzít) pontosan 90-et enged át.
+  const rule = { limit: 90, windowMs: 3_600_000 };
+  const naive = createWindowCounter(rule);
   const passed = await Promise.all(Array.from({ length: 120 }, async () => { if (naive.full("ip")) return false; await tick(); naive.hit("ip"); return true; }));
-  assert.equal(passed.filter(Boolean).length, 120, "a régi rend túllépi a keretet — ezt zárja ki a foglalás");
+  assert.ok(passed.filter(Boolean).length > rule.limit, "a régi rend túllépi a 90-es keretet — ezt zárja ki a foglalás");
+  const reserving = createWindowCounter(rule);
+  const reserved = await Promise.all(Array.from({ length: 120 }, async () => { const ticket = reserving.reserve("ip"); await tick(); return ticket !== null; }));
+  assert.equal(reserved.filter(Boolean).length, rule.limit, "a foglalás pontosan a keretet engedi át");
 
   const memory = memoryStore();
   const app = await serve({ store: memory.store, limits: { ...ADVENT_LIMITS, newDeviceRows: { limit: 90, windowMs: 3_600_000 } } });
@@ -446,4 +451,57 @@ test("a sorőr a próbák és a terv belső alakját is nézi: [null], hiányzó
   assert.equal(bad({ 1: { 1: { attempts: [{ questionId: "q1", pick: "0", correct: true, at: "" }] } } }), false);
   assert.equal(bad({ 1: { 1: { attempts: [{ questionId: "q1", pick: 0, correct: "igen", at: "" }] } } }), false);
   assert.equal(bad(ok.doors, { 1: { round: 1, layout: [1], doors: { 1: [null] }, subjects: {} } }), false);
+});
+
+test("két MEGVÁLASZOLT példány ugyanabból a kérdésből (tanuló az A., vendég a B. ablakban): mindkét megoldás megmarad, de a játszható terv egyedi, és nem tartalmaz korábbi körös kérdést (GPT-vak 3. kör L2)", () => {
+  const season = 2026; const grade = 1;
+  const learnerKey = "learner:L"; const deviceKey = "device:D";
+  const learnerPlan = withPlanMeta(buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 1, subjectKey: learnerKey }), grade, learnerKey);
+  const devicePlan = withPlanMeta(buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 1, subjectKey: deviceKey }), grade, deviceKey);
+  // Közös kérdés: a tanuló A. ablakának ELSŐ kérdése a vendég B. ablakának ELSŐ kérdése is (mindkettő megválaszolt lesz).
+  let pair: { a: number; b: number; id: string } | null = null;
+  for (let a = 1; a <= 24 && !pair; a++) for (let b = 1; b <= 24 && !pair; b++) {
+    if (a !== b && devicePlan.doors[b]![0] === learnerPlan.doors[a]![0]) pair = { a, b, id: learnerPlan.doors[a]![0]! };
+  }
+  if (!pair) {
+    // Ha a véletlen terv nem ad ilyen párt, a vendég B. ablakának első helyére tesszük a tanuló A. kérdését (a többi a valódi terv).
+    const a = 1; const b = 2;
+    devicePlan.doors[b] = [learnerPlan.doors[a]![0]!, ...devicePlan.doors[b]!.slice(1)];
+    pair = { a, b, id: learnerPlan.doors[a]![0]! };
+  }
+  const solved = (id: string) => ({ attempts: [{ questionId: id, pick: 0, correct: true, at: "" }] });
+  const learnerRow: AdventRow = { id: "l", season, subjectKind: "learner", subjectId: "L", grade, round: 1, plan: { 1: learnerPlan }, doors: { 1: { [pair.a]: solved(pair.id) } }, finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0) };
+  const deviceRow: AdventRow = { ...learnerRow, id: "d", subjectKind: "device", subjectId: "D", plan: { 1: devicePlan }, doors: { 1: { [pair.b]: solved(pair.id) } } };
+  const ctx = createAdoptionContext({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, season, learnerId: "L", learnerGrade: grade, deviceId: "D", now: new Date("2026-12-22T10:00:00Z") });
+  const merged = mergeAdoption(learnerRow, deviceRow, ctx)!;
+  // Mindkét megoldott állapot és a hozzá tartozó (történeti) kérdés megmarad.
+  assert.equal(merged.doors[1]![pair.a]!.attempts[0]!.questionId, pair.id);
+  assert.equal(merged.doors[1]![pair.b]!.attempts[0]!.questionId, pair.id);
+  // A terv egyedi: azonosító és normalizált szöveg szerint is legfeljebb egyszer szerepel minden kérdés.
+  const ids = Object.values(merged.plan[1]!.doors).flat();
+  assert.equal(new Set(ids).size, ids.length, "a terv azonosítói egyediek");
+  const prompts = ids.map((id) => normalizePrompt(findAdventItem(id, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS)!.prompt));
+  assert.equal(new Set(prompts).size, prompts.length, "a terv kérdésszövegei egyediek");
+
+  // Korábbi körrel való egyezés: a tanuló 2. körében a játszható helyek nem tartalmazzák az 1. kör kérdéseit.
+  const round2Learner: AdventRow = { ...learnerRow, round: 2, plan: { 1: learnerPlan }, doors: { 1: { [pair.a]: solved(pair.id) } } };
+  const round1Ids = new Set(Object.values(learnerPlan.doors).flat());
+  const leaking: typeof devicePlan = { ...devicePlan, doors: { ...devicePlan.doors, 5: [learnerPlan.doors[7]![0]!, ...devicePlan.doors[5]!.slice(1)] } };
+  const device2: AdventRow = { ...deviceRow, plan: { 1: leaking }, doors: { 1: { 3: solved(leaking.doors[3]![0]!) } } };
+  const merged2 = mergeAdoption(round2Learner, device2, ctx)!;
+  const played = merged2.doors[2] ?? {};
+  for (const [day, ids2] of Object.entries(merged2.plan[2]!.doors)) {
+    const historical = new Set((played[Number(day)]?.attempts ?? []).map((t) => t.questionId));
+    for (const id of ids2) if (!historical.has(id)) assert.ok(!round1Ids.has(id), `a ${day}. ablak játszható helyén korábbi körös kérdés: ${id}`);
+  }
+});
+
+test("a sorőr a terv subjects mezőjét is megköveteli (objektum, szöveges értékekkel) — hiányában 409 corrupt, nem kivétel (GPT-vak 3. kör L4)", () => {
+  const base = { id: "x", season: 2026, subjectKind: "device" as const, subjectId: "d", grade: 5, round: 1, finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0) };
+  const doors = { 1: { 1: { attempts: [{ questionId: "q1", pick: 0, correct: true, at: "" }] } } };
+  const withPlan = (plan: unknown) => adventRowIsSound({ ...base, plan: { 1: plan }, doors } as unknown as AdventRow);
+  assert.equal(withPlan({ round: 1, layout: [1], doors: { 1: ["q1"] }, subjects: { 1: "matek" } }), true);
+  assert.equal(withPlan({ round: 1, layout: [1], doors: { 1: ["q1"] } }), false, "hiányzó subjects");
+  assert.equal(withPlan({ round: 1, layout: [1], doors: { 1: ["q1"] }, subjects: [] }), false, "tömb subjects");
+  assert.equal(withPlan({ round: 1, layout: [1], doors: { 1: ["q1"] }, subjects: { 1: 5 } }), false, "nem szöveges tárgy");
 });

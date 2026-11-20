@@ -96,7 +96,6 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
         await client.query("BEGIN");
         // Átvételnél előbb mindkét (meglévő) sor zárolása, azonosító szerinti sorrendben (holtpont ellen).
         let deviceRow: AdventRow | null = null;
-        let learnerBefore: AdventRow | null = null;
         if (adopt && subject.kind === "learner") {
           const both = await client.query<DbRow>(
             `SELECT ${COLUMNS} FROM advent_progress
@@ -104,9 +103,7 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
               ORDER BY id FOR UPDATE`,
             [season, adopt.deviceId, subject.id],
           );
-          const rows = both.rows.map(toRow);
-          deviceRow = rows.find((r) => r.subjectKind === "device") ?? null;
-          learnerBefore = rows.find((r) => r.subjectKind === "learner") ?? null;
+          deviceRow = both.rows.map(toRow).find((r) => r.subjectKind === "device") ?? null;
         }
         const inserted = await client.query<{ id: string }>(
           `INSERT INTO advent_progress (season, subject_kind, subject_id, learner_id, player_id)
@@ -121,8 +118,10 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
         );
         if (!locked.rows[0]) throw new AdventRowGoneError();
         let current = toRow(locked.rows[0]);
-        // Az egyesített tanulói sor (a körszám, a korábbi körök és a levél-foglalások a tanulóé maradnak).
-        const merged = deviceRow ? adopt!.merge(learnerBefore, deviceRow) : null;
+        // Az egyesített tanulói sor (a körszám, a korábbi körök és a levél-foglalások a tanulóé maradnak). Az egyesítés alapja a
+        // MÁSODIK, zárolt olvasás sora (GPT-vak 3. kör L1): READ COMMITTED mellett a párhuzamos első átvétel közben beszúrt és mentett
+        // tanulói sora csak itt látszik — üres alap (null) csak akkor, ha a sort EZ a tranzakció szúrta be.
+        const merged = deviceRow ? adopt!.merge(created ? null : current, deviceRow) : null;
         if (merged) current = { ...current, grade: merged.grade, plan: merged.plan, doors: merged.doors, finishedAt: merged.finishedAt, passedAt: merged.passedAt };
         const { patch, result } = fn(current, created);
         let row = current;
