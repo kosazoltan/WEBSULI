@@ -112,6 +112,9 @@ export default function AdventCalendar() {
     return () => window.clearTimeout(timer);
   }, [guarded]);
   const wantsAuto = useRef(false);
+  // Új párbeszédablak nyílásakor a korábbi bezárás függőben lévő fókusz-visszaadása érvényét veszti.
+  const dialogOpen = open !== null || summaryOpen;
+  useEffect(() => { if (dialogOpen) cancelReturnFocus(); }, [dialogOpen]);
   const volatileDevice = useMemo(() => adventDevice().volatile, []);
 
   useEffect(() => {
@@ -528,10 +531,17 @@ export default function AdventCalendar() {
  * kerül, akkor is, ha a takarítás később fut, mint egyetlen időzítő.
  */
 const RETURN_FOCUS_RETRIES_MS = [0, 16, 50, 100, 200];
+/** A függőben lévő visszaadások generációja: új visszaadás vagy új párbeszédablak érvényteleníti a régieket (ne vigyék máshová a fókuszt). */
+let returnFocusGeneration = 0;
+function cancelReturnFocus(): void {
+  returnFocusGeneration++;
+}
 function returnFocus(target: HTMLElement | null | undefined): void {
+  const generation = ++returnFocusGeneration;
   target?.focus();
   for (const delay of RETURN_FOCUS_RETRIES_MS) {
     window.setTimeout(() => {
+      if (generation !== returnFocusGeneration) return;
       const active = document.activeElement;
       if (target?.isConnected && (!active || active === document.body)) target.focus();
     }, delay);
