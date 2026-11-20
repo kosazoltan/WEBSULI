@@ -13,4 +13,4 @@ kapu-sorban `teszt-utkozes` néven.
 5. Célzott egységtesztek (`support-tamper`, `rt-ticket`), `npm run gate:stage`, majd a kapu-sorban `gate:stage && gate:push` (A5);
    az új fej és a NOT RUN tételek jelentése.
 
-- [x] 1 · [ ] 2 · [ ] 3 · [ ] 4 · [ ] 5
+- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [ ] 5 (kapu-sor: teszt-utkozes)

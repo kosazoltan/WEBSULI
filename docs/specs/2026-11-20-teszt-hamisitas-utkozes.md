@@ -42,12 +42,12 @@ A cél: a hamisítás MINDIG eltérő (és aláírásnál a dekódolt bájtokban
 ## 6. Elfogadási kritériumok (EARS)
 
 <!-- acceptance-checklist -->
-- [ ] A1 WHEN a segéd bármely bemenetet és érvényes pozíciót kap THEN SHALL a kimenet eltérjen a bemenettől, azonos hosszú legyen,
+- [x] A1 WHEN a segéd bármely bemenetet és érvényes pozíciót kap THEN SHALL a kimenet eltérjen a bemenettől, azonos hosszú legyen,
   és csak abban az egy pozícióban különbözzön.
-- [ ] A2 WHEN egy base64url-aláírás első karakterét cseréli THEN SHALL a dekódolt bájtsor is eltérjen (minden első karakterre).
-- [ ] A3 WHEN a véletlen `state` / aláírás teszt-szinten a régi rögzített végződésre (`…xx` / `…AA`) van kényszerítve THEN SHALL a
+- [x] A2 WHEN egy base64url-aláírás első karakterét cseréli THEN SHALL a dekódolt bájtsor is eltérjen (minden első karakterre).
+- [x] A3 WHEN a véletlen `state` / aláírás teszt-szinten a régi rögzített végződésre (`…xx` / `…AA`) van kényszerítve THEN SHALL a
   régi hamisítás az eredetivel azonos értéket adjon (bukó bizonyíték), az új pedig eltérőt.
-- [ ] A4 WHEN a `player-google-stub.ts` `tamperState` és az `rt-ticket.test.ts` hamisítása fut THEN SHALL mindkettő az új segédet
+- [x] A4 WHEN a `player-google-stub.ts` `tamperState` és az `rt-ticket.test.ts` hamisítása fut THEN SHALL mindkettő az új segédet
   használja, a régi `slice(0, -2)` + rögzített végződés minta nélkül.
 - [ ] A5 WHEN `npm run gate:stage` és `npm run gate:push` fut THEN SHALL mindkettő zöld legyen.
 
