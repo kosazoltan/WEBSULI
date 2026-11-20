@@ -385,3 +385,40 @@ Elfogadás (EARS):
 - [ ] V26 kapu: készleten kívüli váz bukik, készletbeli átmegy
 - [ ] V27 régi előtag számolva, fajta-arány jelzés
 - [ ] V28 mérőszkript kilépési kódjai
+
+## 16. S2b — döntési fa és képes kártyák (két alszelet)
+
+Alap: TGM-végrehajtás „S2b” (355. sortól). Kapcsoló: `STUDIO_SOURCE_VISUALS` (a modell kimenetének határa KI állapotban az új fajtát a
+bővítés előtti hibával utasítja el — `legacyAnimKindSchema`); a megjelenítés a tárolt leckén kapcsolótól független (mint az S2a-nál).
+
+A TGM-végrehajtás S2b-je a két megjelenítőn felül nyolc vak-leletet is kötelezővé tesz (vak J2, J5, J6, J7, J11, J12, tt J6, tt J9) —
+együtt jóval 400 sor fölött. Ezért két alszelet:
+
+- **S2b-1 (ez a PR):** `decisionTree` és `pictureCards` — `ANIM_KINDS` + `SOURCE_VISUAL_ANIM_KINDS` + `SOURCE_VISUAL_SCHEMA_KINDS`
+  (a hibás paraméterű blokk nem rajzol, a szerzői kimenetből kimarad), szigorú paraméter-sémák a megosztott szerződés alakjával
+  (`shared/source-visual-render.ts`; fordítási őr), `renderedVisualTexts` (lektor-nézet és címke-őr), feliratok (`ANIM_LABELS`),
+  megjelenítők (`source-visuals.tsx`; sávtokenes CSS), tt J6 (a fedettségi kapu a két fajtát „megjelent”-nek méri — teszt), vak J12
+  (`branchYes / branchNo` a fa alapértelmezett ágfelirata). Böngészős próba: kétszintű háromágú fa, Igen / Nem fa, 8 képes kártya,
+  360×640, 844×390, 1280×800, képernyőképpel.
+- **S2b-2 (következő PR):** vak J2 (görgetésjelző a tábla fölött, cím a görgőn kívül), J5 (kontraszt-őr a tokenekből), J6 (kisfilm
+  ráúszó ábrája az új fajták nélkül), J7 (a tábla legkisebb szélessége a tartalomból), J11 (nyomtatás), tt J9 (`useHeaderFit`).
+
+Sémák (S2b-1): `decisionTree` `{ root: Node }`, `Node = { text ≤ 120, branches?: 2..4 × { label ≤ 40, node } }`, legfeljebb 3 szint,
+összesen ≤ 13 csomópont. `pictureCards` `{ cards: 2..8 × { label ≤ 40, svg ≤ 6000 (a meglévő illusztráció-tisztítón át), caption? ≤ 80,
+example? ≤ 120 } }`.
+
+Elfogadás (EARS):
+
+- **V29** — THE séma SHALL elutasítani a 4 szintű fát, az 1 ágú csomópontot, a 14 csomópontos fát és a 9 kártyát; a `<script>`-et
+  tartalmazó kártya-SVG SHALL ártalmatlan maradni.
+- **V30** — WHEN `STUDIO_SOURCE_VISUALS` KI, THE modell kimenetének sémája SHALL a két új fajtát a korábbi hibával elutasítani
+  (lenyomat-teszt zöld).
+- **V31** — THE fedettségi kapu SHALL a forrás döntési fáját és képes kártyáit a megfelelő blokk mellett „megjelent”-nek mérni.
+- **V32** — THE fa két levele SHALL ugyanannak a szülőnek két gyereke lenni a DOM-ban (nem nyíllal összekötött sor), és a három nézetben
+  SHALL átfedés, levágás és oldalszintű vízszintes görgetés nélkül megjelenni (böngészős próba, képernyőkép).
+
+<!-- acceptance-checklist -->
+- [ ] V29 sémahatárok és SVG-tisztítás
+- [ ] V30 KI kapcsolónál a modell-séma változatlan
+- [ ] V31 fedettségi kapu: megjelent
+- [ ] V32 DOM-szerkezet és böngészős próba

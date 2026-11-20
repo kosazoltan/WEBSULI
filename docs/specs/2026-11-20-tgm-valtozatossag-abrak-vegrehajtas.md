@@ -187,3 +187,16 @@ A TGM-végrehajtás „S2b” fejezete (355. sortól) változatlanul; a `STUDIO_
 1. Bukó tesztek V25–V28. 2. Kód. 3. `node --import tsx --test tests/variety-metrics.test.ts tests/source-coverage-gate.test.ts
    tests/source-visuals-flag.test.ts tests/single-run-engine.test.ts` → pass; `tsc --noEmit` és `tsc -p tsconfig.test.json` 0; eslint 0.
 4. Nehéz kör a kapu-sorban (`tgm-sk2`).
+
+## S2b-1 — Döntési fa és képes kártyák (részletes lépések)
+
+Ág: `feat/tgm-s2b-dontesi-fa-kepes-kartya` (az SK2 ágáról), munkafa `.claude/worktrees/tgm-s2b`. Terv:
+`docs/specs/2026-11-20-tgm-valtozatossag-abrak.md` 16. szakasz. Fájlok: `shared/lesson-schema.ts`, `shared/lesson-visual-params.ts`,
+`shared/lesson-block-label.ts`, `client/src/lesson-runtime/blocks/source-visuals.tsx`, `client/src/lesson-runtime/blocks/animate-blocks.tsx`,
+`client/src/lesson-runtime/lesson-design.css`, `shared/fixtures/lesson-source-visuals.ts`, `client/src/lesson-runtime/LessonRuntimeProbe.tsx`;
+tesztek: `tests/lesson-tree-cards.test.ts` (új), `tests/source-visuals.spec.ts` (bővül).
+
+1. Bukó tesztek V29–V31 (egység) és V32 (böngésző). 2. Kód. 3. `node --import tsx --test tests/lesson-tree-cards.test.ts
+   tests/lesson-source-visual-kinds.test.ts tests/source-coverage-gate.test.ts tests/source-visuals-flag.test.ts tests/studio-author-catalog.test.ts`
+   → pass; `tsc --noEmit`, `tsc -p tsconfig.test.json` 0; eslint 0. 4. Kapu-sor (`tgm-s2b`): gate:stage → böngészős próba
+   (`playwright.source-visuals.config.ts`) → gate:push.
