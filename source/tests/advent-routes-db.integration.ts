@@ -577,8 +577,10 @@ describe("adventi naptár — végpontok", () => {
     k.now = "2027-01-07T10:00:00Z";
     assert.equal((await k.post("/doors/1/open")).status, 409, "bezárt évad");
     assert.deepEqual(await q(`SELECT subject_kind FROM advent_progress WHERE subject_id = ANY($1) ORDER BY subject_kind`, [[k.device, learner.id]]), [{ subject_kind: "device" }], "nem történt átvétel");
-    // Az olvasás közben is az egyesített előnézetet mutatja (írás nélkül).
-    assert.equal((await k.state()).json.summary.solved, 1);
+    // Lezárt évadban az olvasás a MENTETT tanulói állást mutatja, nem egyesített előnézetet (terv 22.3, élesítés előtti L3 — dokumentált
+    // specváltozás; korábban itt az előnézet 1 megoldást mutatott). A tanulónak még nincs mentett sora → 0; az olvasás sem ír.
+    assert.equal((await k.state()).json.summary.solved, 0);
+    assert.deepEqual(await q(`SELECT subject_kind FROM advent_progress WHERE subject_id = ANY($1) ORDER BY subject_kind`, [[k.device, learner.id]]), [{ subject_kind: "device" }], "az olvasás után sem történt átvétel");
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
