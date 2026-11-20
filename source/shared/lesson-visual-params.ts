@@ -280,3 +280,18 @@ export function renderedVisualTexts(animKind: string, params: unknown): string[]
     default: return [];
   }
 }
+
+/**
+ * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (14. szakasz): a változatossági kapcsolóval a négy, eddig leíratlan fajta
+ * paraméter-alakja is a promptba kerül (a megjelenítőjük a sáv színeivel rajzol, böngészőben ellenőrizve). KI: bájtra a régi.
+ */
+export function visualParamsContract(variety: boolean): string {
+  if (!variety) return VISUAL_PARAMS_CONTRACT;
+  return [
+    VISUAL_PARAMS_CONTRACT,
+    'fraction — tört kördiagrammal és sávval: {"numerator":3,"denominator":4} (nevező 2–24; a számláló lehet nagyobb is: áltört).',
+    'map — helyek számozott jelölővel és jelmagyarázattal: {"spots":[{"label":"Budapest","x":52,"y":38}]} 1–8 pont; x, y a kép szélességének / magasságának százaléka (vázlatos elhelyezés).',
+    'wordBuilder — szóépítés (tő + képző / rag, összetett szó): {"parts":["kert","ész"]} 2–6 rész; a szórészeket írd, az összeolvasott szót a program rajzolja ki.',
+    'sentenceParts — mondatrészek színkóddal: {"parts":["[alany] A kutya","[állítmány] ugat"]} 1–8 rész; a szögletes zárójelben a szerep.',
+  ].join("\n");
+}

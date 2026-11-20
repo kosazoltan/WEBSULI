@@ -20,6 +20,8 @@ export type RunGates = {
   visualsFound?: number;
   /** S6b (2026-11-20-tgm-valtozatossag-abrak, 13. szakasz): a kész lecke try-t tartalmazó fejezeteinek aránya (BE kapcsolónál). */
   tryShare?: number;
+  /** S6c (14. szakasz): a lecke nem forráshoz kötött ábráinak fajtánkénti darabszáma (BE kapcsolónál). */
+  visualKinds?: Record<string, number>;
   /** Az 1. állomás leltárából a program által kihagyott hibás tételek (javító forduló nélkül). */
   visualsDropped?: number;
   /** S2a (review B1): a szerző kimenetéből kivett, hibás paraméterű (kirajzolhatatlan) forrás-ábra blokkok száma. */

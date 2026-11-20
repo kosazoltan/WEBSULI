@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { useContext, type ComponentType } from "react";
 
 import type { AnimKind } from "@shared/lesson-schema";
 import { TriangleAreaLab } from "./TriangleAreaLab";
@@ -6,6 +6,8 @@ import { DecisionStory } from "./DecisionStory";
 import { BarChartAnim, CycleAnim, IllustrationAnim, LabeledShapeAnim, RichNumberLineAnim, VennAnim } from "./explanatory-visuals";
 import { Scene3dAnim } from "./scene3d-anim";
 import { CompareCardsAnim, RuleBoxAnim, TableAnim } from "./source-visuals";
+import { FractionVisual, MapVisual, ProcessVisual, SentencePartsVisual, TimelineVisual, WordBuilderVisual } from "./variety-visuals";
+import { FeedbackVarietyContext } from "../feedback-variety";
 
 /**
  * LS-4 — the eight planned animation kinds (master plan §4).
@@ -24,10 +26,6 @@ function str(v: unknown, fallback: string): string {
   return typeof v === "string" && v.length > 0 ? v : fallback;
 }
 
-function num(v: unknown, fallback: number): number {
-  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
-}
-
 function strArray(v: unknown, fallback: string[]): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : fallback;
 }
@@ -36,39 +34,7 @@ const FRAME = "motion-safe:animate-draw border rounded-lg bg-card p-4 motion-red
 
 /* ------------------------------------------------------------------ */
 
-function FractionAnim({ params, caption }: AnimProps) {
-  const numerator = num(params.numerator, 1);
-  const denominator = Math.max(2, num(params.denominator, 2));
-  const segs = 12;
-  const filled = Math.round((numerator / denominator) * segs);
-  return (
-    <figure className={FRAME} data-anim="fraction">
-      <div className="flex items-center gap-4">
-        <svg viewBox="0 0 64 64" className="w-20 h-20" role="img" aria-label={`${numerator}/${denominator}`}>
-          {Array.from({ length: segs }, (_, i) => {
-            const a0 = (i / segs) * 2 * Math.PI - Math.PI / 2;
-            const a1 = ((i + 1) / segs) * 2 * Math.PI - Math.PI / 2;
-            return (
-              <path
-                key={i}
-                d={`M32 32 L${32 + 28 * Math.cos(a0)} ${32 + 28 * Math.sin(a0)} A28 28 0 0 1 ${32 + 28 * Math.cos(a1)} ${32 + 28 * Math.sin(a1)} Z`}
-                fill={i < filled ? "#10b981" : "currentColor"}
-                opacity={i < filled ? 1 : 0.25}
-              />
-            );
-          })}
-          <circle cx="32" cy="32" r="6" style={{ fill: "hsl(var(--background))" }} />
-        </svg>
-        <div className="text-3xl font-bold">
-          {numerator}<span className="block text-sm font-normal text-muted-foreground">/ {denominator}</span>
-        </div>
-      </div>
-      <figcaption className="text-sm text-muted-foreground mt-1">{str(caption, "Tört")}</figcaption>
-    </figure>
-  );
-}
-
-function TimelineAnim({ params, caption }: AnimProps) {
+function LegacyTimelineAnim({ params, caption }: AnimProps) {
   // Spec 2026-09-24: kitalált alapesemény („Kezdet”) helyett nincs ábra.
   const events = strArray(params.events, []);
   if (events.length < 2) return null;
@@ -107,7 +73,7 @@ function GeometryAnim({ params, caption }: AnimProps) {
   );
 }
 
-function ProcessAnim({ params, caption }: AnimProps) {
+function LegacyProcessAnim({ params, caption }: AnimProps) {
   // Spec 2026-09-24: kitalált alaplépés („1. lépés”) helyett nincs ábra.
   const steps = strArray(params.steps, []);
   if (steps.length < 2) return null;
@@ -126,75 +92,27 @@ function ProcessAnim({ params, caption }: AnimProps) {
   );
 }
 
-function MapAnim({ params, caption }: AnimProps) {
-  const spots = Array.isArray(params.spots)
-    ? (params.spots as Array<Record<string, unknown>>).filter((s) => s && typeof s === "object")
-    : [];
-  return (
-    <figure className={FRAME} data-anim="map">
-      <div className="relative border rounded-md bg-muted/20 h-40">
-        {spots.slice(0, 8).map((spot, i) => (
-          <div
-            key={i}
-            className="absolute flex flex-col items-center"
-            style={{
-              left: `${num(spot.x, 20 + i * 12)}%`,
-              top: `${num(spot.y, 50)}%`,
-            }}
-          >
-            <span className="w-3 h-3 rounded-full bg-emerald-500 border-2 border-background" />
-            <span className="text-[10px] bg-card/90 px-1 rounded">{str(spot.label, "")}</span>
-          </div>
-        ))}
-        {spots.length === 0 && <div className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">Nincs megadott pont</div>}
-      </div>
-      <figcaption className="text-sm text-muted-foreground mt-1">{str(caption, "Térkép")}</figcaption>
-    </figure>
-  );
+/**
+ * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (14. szakasz): a folyamat és az idővonal új, sávszínű megjelenése csak a
+ * változatossági jelölővel mentett leckén — jelöletlen leckén a régi megjelenítő (a kiadott leckék kinézete változatlan).
+ */
+function ProcessAnim(props: AnimProps) {
+  return useContext(FeedbackVarietyContext) ? <ProcessVisual {...props} /> : <LegacyProcessAnim {...props} />;
 }
-
-function WordBuilderAnim({ params, caption }: AnimProps) {
-  const parts = strArray(params.parts, ["szó", "tag"]);
-  return (
-    <figure className={FRAME} data-anim="wordBuilder">
-      <div className="flex flex-wrap items-center gap-1">
-        {parts.map((part, i) => (
-          <span key={i} className="inline-flex items-center">
-            <span className="border rounded-md px-3 py-2 text-lg font-semibold bg-muted/40">{part}</span>
-            {i < parts.length - 1 && <span className="text-muted-foreground mx-1">+</span>}
-          </span>
-        ))}
-      </div>
-      <figcaption className="text-sm text-muted-foreground mt-2">{str(caption, "Szóépítés")}</figcaption>
-    </figure>
-  );
-}
-
-function SentencePartsAnim({ params, caption }: AnimProps) {
-  const parts = strArray(params.parts, ["[alany]", "[állítmány]", "[tárgy]"]);
-  const colors = ["bg-sky-100 dark:bg-sky-950", "bg-emerald-100 dark:bg-emerald-950", "bg-amber-100 dark:bg-amber-950"];
-  return (
-    <figure className={FRAME} data-anim="sentenceParts">
-      <div className="flex flex-wrap gap-1.5">
-        {parts.map((part, i) => (
-          <span key={i} className={`rounded-md px-3 py-2 text-sm font-medium ${colors[i % colors.length]}`}>{part}</span>
-        ))}
-      </div>
-      <figcaption className="text-sm text-muted-foreground mt-2">{str(caption, "Mondatrészek")}</figcaption>
-    </figure>
-  );
+function TimelineAnim(props: AnimProps) {
+  return useContext(FeedbackVarietyContext) ? <TimelineVisual {...props} /> : <LegacyTimelineAnim {...props} />;
 }
 
 /** Every planned animate kind mapped to its renderer — the LS-4 guard test pins this. */
 export const ANIMATE_REGISTRY: Record<AnimKind, ComponentType<AnimProps>> = {
   numberLine: RichNumberLineAnim,
-  fraction: FractionAnim,
+  fraction: FractionVisual,
   timeline: TimelineAnim,
   geometry: GeometryAnim,
   process: ProcessAnim,
-  map: MapAnim,
-  wordBuilder: WordBuilderAnim,
-  sentenceParts: SentencePartsAnim,
+  map: MapVisual,
+  wordBuilder: WordBuilderVisual,
+  sentenceParts: SentencePartsVisual,
   triangleArea: TriangleAreaLab,
   decisionStory: DecisionStory,
   cycle: CycleAnim,
