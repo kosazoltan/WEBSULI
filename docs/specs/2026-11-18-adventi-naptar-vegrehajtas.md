@@ -657,6 +657,23 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
    osztálynyi szabályos 409 (240) átmegy, a visszaélés 720 után 429.
 3. A DB-kör tartaléka: #173 (mérési jegyzet).
 
+## Kiegészítés 13 — a 2/3 PR GPT-vak köre (2026-11-20; terv `docs/specs/2026-11-18-adventi-naptar.md` 21.)
+
+1. L2 — `store.mutate(évad, alany, fn, adopt?)`: átvételnél mindkét sor zárolva, a `fn` az egyesített tanulói sort kapja; az egyesítés
+   és az eszközsor törlése csak akkor véglegesül, ha a `fn` nem dob. A külön `store.adopt` és az `adoptStep` köztes lépés megszűnik;
+   a végpontok (`open`, `answer`, `round`) a saját nap- / fázis- / bemenet-ellenőrzésük után `adoptionFor(locals)`-szal kérik.
+   Teszt (DB): holnapi ablak 403, érvénytelen törzs 400, elavult kérdés 409 után mindkét sor tartalma változatlan; az első sikeres írás
+   végzi az átvételt.
+2. L3 — `shared/advent/assignment.ts` `dedupePlanDoors` (a pótlási jelöltek a `repairPlanDoor`-ral közös `replacementCandidates`-ből);
+   `adoption.ts` `createAdoptionContext` (a router és a teszt közös kontextusa) és `usedInEarlierRounds`. Teszt: két valódi, egyenként
+   egyedi terv közös kérdéssel → az egyesítettben nincs ismétlődő azonosító / szöveg, a megválaszoltak változatlanok, determinisztikus.
+3. L4 — `adventRowIsSound`: a próbaelem objektum, `questionId` szöveg, `pick` egész, `correct` logikai; a terv azonosítói szövegek; az
+   átvétel egyesítője mindkét zárolt sort ellenőrzi. Teszt: egység (sorőr) és DB (`[null]` / hiányos próba → 409 corrupt, átvételnél is,
+   a sorok érintetlenek).
+4. L5 — `parentPairingGuideEmail(…, { advent })`, `planPairingGuides(…, { advent })`; a `learner-reports.ts` az `adventEnabled()`
+   értékét adja. Teszt: KI → nincs bekezdés, BE → van.
+5. L1 (nincs oldal / kártya) hatókör-tévedés: a felület a 3/3 PR-ben van — nem javítandó (koordinátori döntés).
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.
