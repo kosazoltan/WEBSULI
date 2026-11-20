@@ -57,6 +57,8 @@ export type AdventState = {
   today: string;
   openDay: number;
   nextOpensAt: string | null;
+  /** A következő nyitásig hátralévő idő a szerver órájából (ms), vagy null (élesítés előtti L4). */
+  nextOpensInMs: number | null;
   daysUntilStart: number;
   identity: "learner" | "player" | "device" | "preview" | null;
   /** `invalid`: a kérés tanulói tokent hozott, de az érvénytelen — a felület újrapárosítást kér (terv 16.5). */
@@ -93,6 +95,8 @@ export type AdventAnswerResult = {
    */
   recorded: boolean;
   door: AdventDoorView;
+  /** A teljes, a válasszal azonos állapotú ablaklista (élesítés előtti L6: két eszköz, egy tanuló). */
+  doors: AdventDoorView[];
   summary: AdventSummary;
   closing: AdventClosing;
 };

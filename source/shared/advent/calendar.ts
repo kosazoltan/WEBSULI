@@ -53,9 +53,19 @@ export type AdventNow = {
   nextOpensAt: string | null;
   /** Hány nap van még december 1-jéig (csak `before` / `teaser` fázisban > 0). */
   daysUntilStart: number;
+  /**
+   * A következő nyitásig hátralévő idő ezredmásodpercben, a SZERVER órájából (élesítés előtti L4): a kliens ehhez, a válasz érkezésétől
+   * ütemezi a frissítést — az eszköz eltérő órája nem számít. `null`, ha nincs következő nyitás.
+   */
+  nextOpensInMs: number | null;
 };
 
 export function adventNow(now: Date): AdventNow {
+  const base = adventNowBase(now);
+  return { ...base, nextOpensInMs: base.nextOpensAt ? Math.max(0, Date.parse(base.nextOpensAt) - now.getTime()) : null };
+}
+
+function adventNowBase(now: Date): Omit<AdventNow, "nextOpensInMs"> {
   const { year, month, day } = budapestParts(now);
   const today = `${year}-${pad(month)}-${pad(day)}`;
   if (month === 11) {

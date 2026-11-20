@@ -21,6 +21,7 @@ import { guardSwallows, type GuardPoint } from "@/advent/tap-guard";
 import {
   ADVENT_STATE_KEY, adventApi, adventDevice, clearPairingLost, forgetLearnerPairing, isPairingLost, markPairingLost, useAdventState,
 } from "@/advent/useAdvent";
+import { applyAnswerResult } from "@/advent/sync";
 import "@/advent/advent.css";
 
 const SUBJECT_LABEL: Record<string, string> = {
@@ -209,7 +210,8 @@ export default function AdventCalendar() {
       if (result.correct && result.recorded && !muted) sfxSuccess();
       // Az állapot a válasz eredményéből helyben frissül — nem megy utána külön olvasás (osztálynyi terhelésnél ez számít).
       const current = queryClient.getQueryData<AdventState | null>(ADVENT_STATE_KEY);
-      if (current) setState({ ...current, doors: current.doors.map((d) => (d.day === day ? result.door : d)), summary: result.summary, closing: result.closing });
+      // A teljes ablaklista az összesítéssel együtt (élesítés előtti L6: a másik eszközön megoldott ablak is világít).
+      if (current) setState(applyAnswerResult(current, result));
     } catch (e) {
       setError(adventErrorText(e, "Most nem sikerült elküldeni a válaszodat. Próbáld meg újra — nem veszett el semmi!"));
       // 409: a kérdés már nem aktuális (pl. másik eszközön megválaszolták) — a régi kérdés bezárul, az állapot frissül.

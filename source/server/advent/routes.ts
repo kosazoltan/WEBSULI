@@ -105,7 +105,7 @@ export function buildAdventState(at: AdventNow, resolution: AdventResolution, ro
   const waiting = doors.filter((d) => d.state === "open").length;
   return {
     enabled: true,
-    season: at.season, phase: at.phase, today: at.today, openDay: at.openDay, nextOpensAt: at.nextOpensAt, daysUntilStart: at.daysUntilStart,
+    season: at.season, phase: at.phase, today: at.today, openDay: at.openDay, nextOpensAt: at.nextOpensAt, nextOpensInMs: at.nextOpensInMs, daysUntilStart: at.daysUntilStart,
     identity: subject?.kind ?? null,
     pairing: resolution.pairing,
     firstName: subject?.firstName ?? null,
@@ -127,7 +127,7 @@ export function buildAdventState(at: AdventNow, resolution: AdventResolution, ro
  */
 function answerResult(item: AdventItem | null, attempt: DoorAttempt, orderKey: string, season: number, door: AdventDoorView, state: AdventState, recorded = true): AdventAnswerResult {
   const correctIndex = item ? gradePick(item, optionOrder(item.id, orderKey, season), attempt.pick).correctIndex : -1;
-  return { correct: attempt.correct, correctIndex, explanation: item?.explanation ?? "", pick: attempt.pick, recorded, door, summary: state.summary, closing: state.closing };
+  return { correct: attempt.correct, correctIndex, explanation: item?.explanation ?? "", pick: attempt.pick, recorded, door, doors: state.doors, summary: state.summary, closing: state.closing };
 }
 
 type Locals = { at: AdventNow; now: Date; resolution: AdventResolution; body: Record<string, unknown>; pairedDevice?: string | null };
@@ -304,8 +304,9 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
     const locals = res.locals.advent as Locals;
     const { at, resolution } = locals;
     let row = resolution.subject ? await store.read(at.season, resolution.subject) : null;
-    // Párosított eszközön az átvétel előnézete (írás nélkül): azt mutatjuk, ami az első írásnál a tanulónál lesz.
-    if (locals.pairedDevice && adventRowIsSound(row)) {
+    // Párosított eszközön az átvétel előnézete (írás nélkül): azt mutatjuk, ami az első írásnál a tanulónál lesz. Csak írható
+    // fázisban (élesítés előtti L3): lezárás után átvétel nincs, ezért a mentett tanulói állás látszik (nincs mentetlen ajándéküzenet).
+    if (locals.pairedDevice && isAdventWritable(at.phase) && adventRowIsSound(row)) {
       const deviceRow = await store.read(at.season, { kind: "device", id: locals.pairedDevice });
       if (deviceRow && !adventRowIsSound(deviceRow)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true });
       if (deviceRow) row = mergeAdoption(row, deviceRow, adoptionContext(locals, locals.pairedDevice)) ?? row;

@@ -746,6 +746,55 @@ describe("adventi naptár — végpontok", () => {
     }
   });
 
+  it("átvétel a profil javítása után: a mentett évfolyam és a 2. ablak kérdése a friss profilé (élesítés előtti L1)", async () => {
+    const learner = await newLearner(4);
+    const tablet = await kid(); tablet.learner = learner.token;
+    await tablet.open(1); // a tanuló negyedikesként csak megnyit
+    await dbPool.query(`UPDATE learners SET grade = 5 WHERE id = $1`, [learner.id]);
+    const phone = await kid();
+    assert.equal((await phone.post("/grade", { grade: 5 })).status, 200);
+    await phone.answer(1, await phone.open(1), true);
+    phone.learner = learner.token;
+    const opened = await phone.post("/doors/2/open");
+    assert.equal(opened.status, 200);
+    const [row] = await q<{ grade: number }>(`SELECT grade FROM advent_progress WHERE learner_id = $1`, [learner.id]);
+    assert.equal(row!.grade, 5, "a mentett évfolyam a friss profilé");
+    const item = findAdventItem(opened.json.question.id, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS)! as { grade?: number; minGrade?: number; maxGrade?: number };
+    if (item.grade !== undefined) assert.equal(item.grade, 5, "a 2. ablak kérdése ötödikes");
+    else assert.ok(item.minGrade! <= 5 && 5 <= item.maxGrade!, "a karácsonyi kérdés az 5. évfolyamnak szól");
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("lezárt évadban a párosított olvasás a MENTETT tanulói állást mutatja, nem egyesített előnézetet (nincs mentetlen ajándéküzenet) (élesítés előtti L3)", async () => {
+    const learner = await newLearner(5);
+    const tablet = await kid(); tablet.learner = learner.token;
+    await tablet.answer(1, await tablet.open(1), true);
+    const phone = await kid();
+    assert.equal((await phone.post("/grade", { grade: 5 })).status, 200);
+    await phone.answer(2, await phone.open(2), true);
+    phone.learner = learner.token; phone.now = "2027-01-07T10:00:00Z"; tablet.now = phone.now;
+    const viaPhone = (await phone.state()).json;
+    const viaTablet = (await tablet.state()).json;
+    assert.equal(viaPhone.summary.solved, viaTablet.summary.solved, "a telefon is a mentett állást látja");
+    assert.equal(viaPhone.summary.solved, 1);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("két eszköz, egy tanuló: a válasz a teljes ablaklistát adja — a másik eszközön megoldott ablak is benne van (élesítés előtti L6)", async () => {
+    const learner = await newLearner(5);
+    const tablet = await kid(); tablet.learner = learner.token;
+    const phone = await kid(); phone.learner = learner.token;
+    const q2 = await phone.open(2);
+    await tablet.answer(1, await tablet.open(1), true);
+    const result = await phone.answer(2, q2, true);
+    assert.ok(Array.isArray(result.doors), "a válaszban a teljes ablaklista");
+    assert.equal(result.doors.length, 24);
+    assert.equal(result.doors[0].state, "solved", "a tablet 1. ablaka is világít");
+    assert.equal(result.doors[1].state, "solved");
+    assert.equal(result.summary.solved, 2);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
   it("névtelen → párosított, versenyhelyzet: az átvétellel egyidejű válasz sem ad 500-at, és nem vész el — végül egyetlen tanulói sor (terv 21., #170)", async () => {
     for (let round = 0; round < 3; round++) {
       const learner = await newLearner(5);

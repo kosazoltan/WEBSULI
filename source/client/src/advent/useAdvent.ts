@@ -10,7 +10,8 @@ import { LEARNER_TOKEN_REJECTED_KEY, clearLearnerToken, getLearnerToken } from "
 import type { AdventAnswerResult, AdventOpenResult, AdventState } from "@shared/advent/contract";
 
 export const ADVENT_DEVICE_KEY = "websuli.advent.device";
-export const ADVENT_STATE_KEY = ["advent-state"] as const;
+import { ADVENT_STATE_KEY, refreshDelayMs, statusFromResponse } from "@/advent/sync";
+export { ADVENT_STATE_KEY };
 export const ADVENT_STATUS_KEY = ["advent-status"] as const;
 
 let memoryDevice: string | null = null;
@@ -66,19 +67,19 @@ export type AdventStatus = { enabled: boolean; phase?: AdventState["phase"]; sea
 
 export async function fetchAdventStatus(): Promise<AdventStatus> {
   const res = await fetch("/api/advent/status", { credentials: "same-origin", headers: { accept: "application/json" } });
-  if (!res.ok) return { enabled: false };
-  return (await res.json()) as AdventStatus;
+  // A HTTP-hiba nem „kikapcsolt” (élesítés előtti L5): hibát dob, a lekérdezés újrapróbálja, a kártya a helyén marad.
+  return statusFromResponse<AdventStatus>(res);
 }
 
 /** Az állapot; `null`, ha a naptár nem érhető el (kikapcsolt flag → 404). Hálózati / szerverhiba esetén dob. */
-export async function fetchAdventState(createDevice = true): Promise<AdventState | null> {
+export async function fetchAdventState(createDevice = true, signal?: AbortSignal): Promise<AdventState | null> {
   // A naptároldal létrehozza az eszközazonosítót (ott a gyerek játszani jött); a főoldali kártya csak a meglévőt küldi.
   const device = createDevice ? adventDevice().id : peekAdventDevice();
   const learner = getLearnerToken();
   const headers: Record<string, string> = { accept: "application/json" };
   if (device) headers["X-Advent-Device"] = device;
   if (learner) headers["X-Learner-Token"] = learner;
-  const res = await fetch("/api/advent/state", { credentials: "same-origin", headers });
+  const res = await fetch("/api/advent/state", { credentials: "same-origin", headers, signal });
   if (res.status === 404) return null;
   // A státuszkód a hibán marad (429: betelt olvasási keret) — a felület megtartott állapot mellett csak sávot mutat.
   if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
@@ -99,21 +100,22 @@ export function useAdventState(enabled = true, createDevice = true) {
   const queryClient = useQueryClient();
   const query = useQuery<AdventState | null>({
     queryKey: ADVENT_STATE_KEY,
-    queryFn: () => fetchAdventState(createDevice),
+    queryFn: ({ signal }) => fetchAdventState(createDevice, signal),
     enabled,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
     // Betelt olvasási keretnél (429) nincs azonnali újrapróba — az csak tovább fogyasztaná a keretet.
     retry: (failures, error) => failures < 1 && (error as { status?: unknown } | null)?.status !== 429,
   });
-  const nextOpensAt = query.data?.nextOpensAt ?? null;
+  // A következő nyitás frissítése a szerver által adott várakozásból, a válasz érkezésétől (élesítés előtti L4): eltérő eszközórával is.
+  const nextOpensInMs = query.data?.nextOpensInMs ?? null;
+  const receivedAt = query.dataUpdatedAt;
   useEffect(() => {
-    if (!nextOpensAt) return;
-    const delay = new Date(nextOpensAt).getTime() - Date.now();
-    if (!Number.isFinite(delay) || delay <= 0 || delay > 2_147_000_000) return;
-    const timer = window.setTimeout(() => { void queryClient.invalidateQueries({ queryKey: ADVENT_STATE_KEY }); }, delay + 1000);
+    const delay = refreshDelayMs({ nextOpensInMs }, receivedAt, Date.now());
+    if (delay === null) return;
+    const timer = window.setTimeout(() => { void queryClient.invalidateQueries({ queryKey: ADVENT_STATE_KEY }); }, delay);
     return () => window.clearTimeout(timer);
-  }, [nextOpensAt, queryClient]);
+  }, [nextOpensInMs, receivedAt, queryClient]);
   return query;
 }
 

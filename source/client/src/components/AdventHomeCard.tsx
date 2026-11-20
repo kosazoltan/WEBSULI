@@ -25,7 +25,7 @@ export default function AdventHomeCard() {
     return { teaser: at.phase === "teaser", daysUntilStart: at.daysUntilStart };
   }, []);
   const active = clock !== null;
-  const status = useQuery({ queryKey: ADVENT_STATUS_KEY, queryFn: fetchAdventStatus, enabled: active, staleTime: 5 * 60_000, retry: 1 });
+  const status = useQuery({ queryKey: ADVENT_STATUS_KEY, queryFn: fetchAdventStatus, enabled: active, staleTime: 5 * 60_000, retry: 3 });
   const serverSaysOff = status.isSuccess && !(status.data.enabled === true && status.data.phase !== "before" && status.data.phase !== "closed");
   // A fázis a szervertől jön, amint megvan; addig a böngésző órája szerinti.
   const teaser = status.data?.phase ? status.data.phase === "teaser" : clock?.teaser ?? false;

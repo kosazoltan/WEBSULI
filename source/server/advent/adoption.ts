@@ -105,8 +105,13 @@ export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx:
     finishedAt: null, passedAt: null, mailedTo: [], createdAt: ctx.now, updatedAt: ctx.now,
   };
   const round = base.round;
-  const grade = base.grade ?? planGradeOf(base.plan[round]) ?? ctx.learnerGrade;
-  const existingPlan = base.plan[round] as PlanMeta | undefined;
+  // Rögzítetlen évfolyamnál a FRISS profil évfolyama számít (élesítés előtti L1; R6 / E10): a még meg nem válaszolt, más évfolyamra
+  // készült saját terv a vendégmegoldások illesztése ELŐTT újraépül.
+  const grade = base.grade ?? ctx.learnerGrade;
+  const learnerAnswered = Object.values(base.doors[round] ?? {}).some((door) => door.attempts.length > 0);
+  const storedPlan = base.plan[round] as PlanMeta | undefined;
+  const stalePlan = storedPlan !== undefined && base.grade == null && !learnerAnswered && planGradeOf(storedPlan) !== undefined && planGradeOf(storedPlan) !== grade;
+  const existingPlan = stalePlan ? undefined : storedPlan;
   const plan: PlanMeta = existingPlan ? { ...existingPlan, doors: { ...existingPlan.doors }, subjects: { ...existingPlan.subjects }, doorSeeds: { ...(existingPlan.doorSeeds ?? {}) } }
     : { ...(ctx.buildPlan(base, round, grade) as PlanMeta) };
   plan.doorSeeds ??= {};
