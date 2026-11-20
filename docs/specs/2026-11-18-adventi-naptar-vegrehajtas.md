@@ -674,6 +674,18 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
    értékét adja. Teszt: KI → nincs bekezdés, BE → van.
 5. L1 (nincs oldal / kártya) hatókör-tévedés: a felület a 3/3 PR-ben van — nem javítandó (koordinátori döntés).
 
+## Kiegészítés 14 — a 2/3 PR GPT-vak 3. köre (2026-11-20; terv `docs/specs/2026-11-18-adventi-naptar.md` 21.)
+
+1. L1 — `store.mutate`: `merge(created ? null : current, eszközsor)` (a második, zárolt olvasás sora). Teszt (DB): két kapcsolat,
+   szinkronizációs pont a beszúrásnál; mindkét eszköz megoldása megmarad.
+2. L2 — `dedupePlanDoors(…, { historicalByDay })`: a történeti helyek elsőbbsége, de a terv egyedi; a játszható helyeken nincs már
+   szereplő vagy korábbi körös kérdés. Teszt: védett–védett ütközés és korábbi körös egyezés.
+3. L3 — `answer`: rögzítetlen évfolyamnál a terv évfolyama ≠ profil → 409 (`refresh`), mentés nélkül. Teszt (DB).
+4. L4 — a párosított `GET /state` sérült vendégsorra 409 corrupt; `adventRowIsSound`: `plan.subjects` objektum szöveges értékekkel;
+   `doorView` védett indexeléssel. Teszt: egység (sorőr) és DB (párosított olvasás, hiányzó subjects).
+5. L5 — `account-store.exportAccount`: sérült adventi sor `corrupt: true`, számlálók nélkül; az alap-export megy. Teszt (DB, KI / BE).
+6. L6 — az újsor-korlát mutációs ellenpróbája ugyanazzal a 90-es kerettel, a hibás ág túllépését és a foglalás pontosságát méri.
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.

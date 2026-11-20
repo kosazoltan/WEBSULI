@@ -1081,7 +1081,13 @@ UTÁN, a módosítással EGY tranzakcióban fut, és csak sikeres módosítássa
 sor (tanulói és eszköz) érintetlen. Az egyesített tervben egy kérdés (azonosító vagy normalizált szöveg) legfeljebb egyszer szerepel: a
 megválaszolt kérdések védettek, a későbbi ismétlődés az ablak saját készletéből determinisztikusan pótlódik (`dedupePlanDoors`). Sérült
 sor (hibás próbaelem is) olvasáskor, íráskor és átvételkor is 409 corrupt, átvétel nélkül. A szülői párosítási útmutató naptár-
-bekezdése csak bekapcsolt naptárnál kerül a levélbe (L5).
+bekezdése csak bekapcsolt naptárnál kerül a levélbe (L5). **Pontosítás 2026-11-20 (GPT-vak 3. kör):** két eszköz párhuzamos első
+átvételénél az egyesítés alapja a tranzakció zárolt (második) olvasásának tanulói sora — egyik eszköz megoldása sem vész el (L1). A
+megválaszolt (történeti) helyek a próbákban élnek; a terv akkor is egyedi, ha két megválaszolt hely ugyanazt a kérdést hordozta (a
+későbbi helyén a terv pótlást kap, a próba és a visszajelzés érintetlen), és a játszható helyeken nincs korábbi körös kérdés (L2).
+Rögzítetlen évfolyamnál a válasz is összeveti a terv évfolyamát a profiléval; eltérésnél 409, mentés nélkül (L3). A párosított olvasás a
+sérült vendégsort 409 corrupt-ként jelzi; a sorőr a terv `subjects` mezőjét is ellenőrzi (L4). Sérült adventi mentés a játékos
+adatletöltését nem töri el: a sor `corrupt: true` jelölést kap (L5).
 Az alábbi bekezdés „a több megoldott ablakkal rendelkező marad, a másik törlődik” szabálya ezzel érvényét vesztette.
 
 **Névtelen → párosított átmenet (vak ellenőr k1; TULAJDONOSI DÖNTÉS 2026-11-18, kérdőíven: „Igen, vigyük át.”):** ha egy kérés
