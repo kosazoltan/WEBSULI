@@ -1106,3 +1106,20 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-76 — Böngészős tartós sor: közös lista, kilét és korhatár nélkül; leállítási várakozások összege (2026-11-20)
+
+- **Tünet (#510, review a 44487292-es fejre):** a kimenő eredménysor egyetlen `localStorage`-kulcson tartott listát olvasott-módosított-írt
+  (két fül egyidejű írásánál bejegyzés veszett el), a bejegyzés nem kötődött a sorba kerüléskori kilétéhez (kilétváltás után a később
+  bejelentkezett fiók nevére mehetett), és nem volt korhatára. A szerveren a leállítás soros várakozásainak összege (270 + 3 + 10 + 15 + 15 s)
+  túllépte a 295 s-os kényszerleállítást; a „félbehagyva” levél első rögzítője pedig a küldés INDULÁSAKOR törlődött, nem a ciklus végén.
+- **Szabály 1:** böngészős tartós sort bejegyzésenkénti kulccsal építs (felvétel / törlés = egy kulcs), tiszta, tárolót paraméterként kapó
+  modulban, hogy két „fül” versenye egységtesztben modellezhető legyen (`shared/result-outbox.ts`, `tests/result-outbox.test.ts`).
+- **Szabály 2:** ami később, más munkamenetben küldődik el, az a sorba kerüléskori kilétet vigye (szerver által adott, álnevesített címke);
+  eltérésnél a szerver a mostani munkamenetnek ne adja oda. Minden tartós bejegyzésnek legyen korhatára.
+- **Szabály 3:** leállítási ürítést ne fűzz sorosan a meglévők mögé: a várakozások ÖSSZEGÉT vesd össze a kényszerleállítással, és a
+  független ürítéseket egy közös határidőből számolt kerettel, párhuzamosan futtasd (`server/shutdown-flush.ts`).
+- **Szabály 4:** ha egy állapot (első rögzítő, foglalás) újrapróbás ciklust véd, a ciklus VÉGÉN szabadítsd fel (`onSettled`), ne az első
+  kísérlet indulásakor.
+
+Forrás: #510 (R30–R34). Rokon: C-71.
