@@ -318,3 +318,15 @@ test('F1: a konfig requestExtras mezője (reasoning.effort: high) minden kérés
     assert.equal(b.model, CFG.model, 'a requestExtras nem írhatja felül a konfigurált modellt');
   }
 });
+
+test('az átirat-sor maszkolva is érvényes JSON (escape-elt idézőjel és Authorization-minta mellett is), a kulcs nincs benne', async () => {
+  const { transcriptLine } = await import('./blind-review.mjs');
+  const key = 'ATIRAT-KULCS-0000111122223333';
+  const ev = { type: 'tool', result: 'assert.equal(redact("Authorization: Bearer abcdef12345678", ""), "x"); kulcs: ' + key, args: '{"path":"a"}' };
+  const line = transcriptLine(ev, key);
+  const back = JSON.parse(line);
+  assert.equal(back.type, 'tool');
+  assert.ok(!line.includes(key));
+  assert.doesNotMatch(back.result, /abcdef12345678/);
+  assert.equal(back.args, '{"path":"a"}');
+});

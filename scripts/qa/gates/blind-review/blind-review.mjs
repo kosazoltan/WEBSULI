@@ -422,6 +422,11 @@ export function incompleteReport({ head, stopReason, notes }) {
   ].join('\n');
 }
 
+/** Egy átirat-sor: minden szöveges mező maszkolva, utána JSON — a sor mindig érvényes JSON marad. */
+export function transcriptLine(event, key) {
+  return JSON.stringify(event, (_k, v) => (typeof v === 'string' ? maskSecrets(v, key) : v));
+}
+
 /** A NEM TELJES jelentés gépi lábléce (teljes jelentésnél a findings.mjs összegzése kerül a végére). */
 export function runFooter({ model, state, cache }) {
   return `\n---\n_Gépi lábléc (blind-review futtató): modell ${model}; ${state.calls} modellhívás (${state.retries} újrapróba); `
@@ -540,7 +545,7 @@ async function main() {
       stopRequested: () => stopSignal ?? (existsSync(stopFile) ? 'megszakító fájl: blind-review.stop' : null),
     });
     const log = (e) => {
-      appendFileSync(transcript, `${maskSecrets(JSON.stringify({ t: new Date().toISOString(), ...e }), key)}\n`);
+      appendFileSync(transcript, `${transcriptLine({ t: new Date().toISOString(), ...e }, key)}\n`);
       if (e.type === 'assistant') say(`kör ${budget.state.calls}: ${e.tools.length ? e.tools.join(', ') : '(szöveg)'} — eddig ${budget.state.spentUsd.toFixed(4)} USD`);
       if (e.type === 'error') say(`hiba (próba ${e.attempt + 1}): ${e.message}`);
     };
