@@ -92,6 +92,11 @@ const LEGACY_OPENER = new RegExp(
 );
 
 /** A régi bátorító előtag levágása; 12 karakternél rövidebb maradéknál az eredeti szöveg marad. A maradék nagybetűvel kezdődik. */
+/** SK2: van-e régi, modell írta bátorító előtag (a levágás 12 karakteres maradék-szabályától függetlenül — a mérés ezt számolja). */
+export function hasLegacyOpener(text: string): boolean {
+  return LEGACY_OPENER.test(text);
+}
+
 export function stripLegacyOpener(text: string): string {
   const rest = text.replace(LEGACY_OPENER, "");
   if (rest === text || rest.trim().length < 12) return text;

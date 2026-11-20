@@ -12,6 +12,7 @@ import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/le
 import { seedFrom } from "../../../shared/seeded";
 import { applySectionShapes, tryShare } from "../../../shared/lesson-section-shapes";
 import { kindShareProblems, visualKindCounts } from "../../../shared/visual-kind-plan";
+import { varietyGate } from "../gates/variety-gate";
 import { lessonVarietyEnabled } from "../lesson-variety-flag";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
@@ -842,6 +843,13 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     telemetry.gates.visualKinds = visualKindCounts(lesson);
     const kindNotes = kindShareProblems(lesson).map((note) => ({ reason: "visual_kind_share", note, round: 0 }));
     if (kindNotes.length) output = { ...output, qualityNotes: [...(Array.isArray(output.qualityNotes) ? output.qualityNotes as unknown[] : []), ...kindNotes] };
+    // SK2 (15. szakasz): a változatosság kapuja — `report` módban mér és naplóz, a gyártást nem állítja meg (`off` → nem fut).
+    if (gateMode("variety", deps.gateModes) !== "off") {
+      const variety = varietyGate({ lesson, visuals: [] });
+      telemetry.gates.varietySkeletonMisses = variety.metrics.skeletonMisses;
+      telemetry.gates.legacyOpeners = variety.metrics.legacyOpeners;
+      for (const problem of variety.problems) log(`[EGYFUTÁS] Változatosság-kapu (${gateMode("variety", deps.gateModes)}): ${problem}`);
+    }
   }
 
   // 5. Gyakorlóbank — a meglévő banképítő (kvóta, autofix, séma, javító kísérletek); J2: minden csomag FRISS beszélgetésben.

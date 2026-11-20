@@ -22,6 +22,9 @@ export type RunGates = {
   tryShare?: number;
   /** S6c (14. szakasz): a lecke nem forráshoz kötött ábráinak fajtánkénti darabszáma (BE kapcsolónál). */
   visualKinds?: Record<string, number>;
+  /** SK2 (15. szakasz): a változatosság-kapu készleten kívüli fejezetvázai és a régi bátorító előtagok száma (BE kapcsolónál). */
+  varietySkeletonMisses?: number;
+  legacyOpeners?: number;
   /** Az 1. állomás leltárából a program által kihagyott hibás tételek (javító forduló nélkül). */
   visualsDropped?: number;
   /** S2a (review B1): a szerző kimenetéből kivett, hibás paraméterű (kirajzolhatatlan) forrás-ábra blokkok száma. */
