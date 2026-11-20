@@ -6,6 +6,7 @@ import { lessonSchema, type AnimKind, type Lesson } from "@shared/lesson-schema"
 import { useEffect, useState } from "react";
 import { fusionFixture } from "@shared/fixtures/lesson-fusion";
 import { EXPERIENCE_THEMES } from "@shared/lesson-experience";
+import { sourceVisualsFixture } from "@shared/fixtures/lesson-source-visuals";
 
 /**
  * A fixed lesson used to render the runtime in a browser test (LS-2).
@@ -194,6 +195,12 @@ const CYCLE_LONG_LESSON: Lesson = {
 
 function probeLesson(search: string): Lesson {
   const q = new URLSearchParams(search);
+  // Spec 2026-11-18 (S2a): `?source-visuals=1|max&classroom=N` — a forrás-ábrák megjelenítői (táblázat, szabálydoboz, összehasonlító kártyák).
+  if (q.has("source-visuals")) {
+    const grade = Number(q.get("classroom"));
+    const variant = q.get("source-visuals");
+    return sourceVisualsFixture(variant === "max" || variant === "broken" ? variant : "typical", q.has("classroom") && Number.isInteger(grade) && grade >= 0 && grade <= 12 ? grade : 6);
+  }
   if (q.has("scene3d")) return SCENE3D_LESSON;
   if (q.has("visuals")) return VISUALS_LESSON;
   if (q.has("cycle-long")) return CYCLE_LONG_LESSON;
@@ -251,7 +258,13 @@ export default function LessonRuntimeProbe() {
   // Stable persistId so B7 localStorage round-trips work; no lessonId → no Próba API.
   const practice = new URLSearchParams(window.location.search).get("practice") === "1";
   const lesson = candidate ?? probeLesson(window.location.search);
-  return <LessonRuntime lesson={lesson} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} clipsPreset={wantClips2 ? clips2 ?? undefined : undefined} />;
+  // `&rerender=1`: gomb, amely a szülőt ÚJ lecke-objektumfával rendereli újra — a valódi leckenézet (LessonView) minden rendereléskor
+  // újraértelmezi a leckét, ezt utánozza (S8d vak review B1: az újrarenderelés nem szakíthatja meg a szóló hangot).
+  const rerender = new URLSearchParams(window.location.search).has("rerender");
+  return <>
+    {rerender && candidate && <button type="button" data-testid="probe-rerender" onClick={() => setCandidate(current => current ? lessonSchema.parse(JSON.parse(JSON.stringify(current))) : current)}>Szülő újrarenderelése új lecke-objektummal</button>}
+    <LessonRuntime lesson={lesson} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} clipsPreset={wantClips2 ? clips2 ?? undefined : undefined} />
+  </>;
 }
 
 

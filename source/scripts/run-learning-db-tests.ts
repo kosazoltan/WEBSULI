@@ -101,11 +101,16 @@ try {
   const adventMigration = await readFile(new URL("../migrations/0042_advent_progress.sql", import.meta.url), "utf8");
   await pool.query(adventMigration);
   await pool.query(adventMigration);
+  // S8b: a leckehangok táblája (0043) a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
+  await pool.query("DROP TABLE lesson_tts_audio");
+  const ttsAudioMigration = await readFile(new URL("../migrations/0043_lesson_tts_audio.sql", import.meta.url), "utf8");
+  await pool.query(ttsAudioMigration);
+  await pool.query(ttsAudioMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
     // The reconciler intentionally scans all workflow rows; isolate suite-owned lifecycle tests.
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/daily-reminder-db.integration.ts", "tests/newsletter-db.integration.ts", "tests/admin-authz-matrix-db.integration.ts", "tests/player-auth-db.integration.ts", "tests/player-account-db.integration.ts", "tests/material-classroom-db.integration.ts", "tests/admin-allowlist-db.integration.ts", "tests/set-admin-script-db.integration.ts", "tests/quiz-bank-scale-db.integration.ts", "tests/advent-db.integration.ts", "tests/advent-routes-db.integration.ts"], {
+    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/daily-reminder-db.integration.ts", "tests/newsletter-db.integration.ts", "tests/admin-authz-matrix-db.integration.ts", "tests/player-auth-db.integration.ts", "tests/player-account-db.integration.ts", "tests/material-classroom-db.integration.ts", "tests/admin-allowlist-db.integration.ts", "tests/set-admin-script-db.integration.ts", "tests/quiz-bank-scale-db.integration.ts", "tests/advent-db.integration.ts", "tests/advent-routes-db.integration.ts", "tests/tts-audio-db.integration.ts"], {
       cwd, env: { ...env, DATABASE_URL: databaseUrl, NODE_ENV: "test", WEBSULI_DISPOSABLE_DB: name },
       windowsHide: true, stdio: "inherit",
     });
