@@ -9693,7 +9693,7 @@ Cél: `source/server/studio/document-source.ts`, `source/tests/document-source.t
 Hullám: 24 · előd: — · PR: — · ág: —
 
 - **A PDF-feldolgozás hibájának magyar visszajelzése** · R-PR-069-S01 (RÉSZBEN, 02:762) · R-PR-069-S06 (RÉSZBEN, 02:766) · R-PR-069-S10 (RÉSZBEN, 02:770)
-  - Próba és teendő: A korábbi eltérést és az érintetlen bemenetet külön próbáld (`source/tests/document-source.test.ts`). Vesd össze a kért állítást a hivatkozott dokumentum történetével és a végrehajtott változtatással. Ellenőrizendő: Kezeld az OCR-tartalék elutasítását is PDF-hibak��nt.
+  - Próba és teendő: A korábbi eltérést és az érintetlen bemenetet külön próbáld (`source/tests/document-source.test.ts`). Vesd össze a kért állítást a hivatkozott dokumentum történetével és a végrehajtott változtatással. Ellenőrizendő: Kezeld az OCR-tartalék elutasítását is PDF-hibaként.
   - Elfogadás: A PDF-feldolgozási hibát leképezett magyar üzenettel add vissza az érintett nézetnek. Kezeld az OCR-tartalék elutasítását is PDF-hibaként. Tesztbeli szolgáltatóval külön váltsd ki az első út hibáját és a második út sikerét vagy kudarcát. Ellenőrizd a hívásszámot és a mentett végállapotot.
   - Bizonyíték: source/server/studio/document-source.ts:131 magyar hibaüzenetet ad az üres átiratra. A transzkripció elutasítását előbb kezeli a hívási lánc, ezért ott még hiányzik az azonos felirat igazolása. · source/server/studio/document-source.ts:131 — Üres átiratnál van magyar PDF-hiba. A tartalék transzkripció saját elutasítása ezt az ágat meg sem járja.
 
