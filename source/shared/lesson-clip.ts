@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Lesson } from "./lesson-schema";
+import { SOURCE_VISUAL_ANIM_KINDS, type Lesson } from "./lesson-schema";
+import { sourceVisualProblems } from "./lesson-visual-params";
 import { isGoalCardText } from "./lesson-block-label";
 import { DESIGN_THEME_IDS, type DesignThemeId } from "./lesson-design";
 import { CLIP_BAND_STYLE } from "./clip-style";
@@ -84,8 +85,18 @@ export function clipSource(lesson: Pick<Lesson, "sections">, sectionIndex: numbe
 }
 
 /** A fejezet ábrablokkjainak indexei — a `lessonVisual` ábra csak ezekre mutathat. */
+/**
+ * S2b-2 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 17. szakasz, vak J6): ráúszó ábra csak a régi, kicsinyítve is olvasható
+ * fajtákból lehet — a forrás-ábrafajták (tábla, doboz, kártya, fa) a kisfilm levágott keretében olvashatatlanok, a hibás paraméterű
+ * blokk pedig semmit nem rajzolna.
+ */
+export function isClipVisualBlock(block: unknown): boolean {
+  const b = block as { kind?: unknown; animKind?: unknown } | null;
+  return !!b && b.kind === "animate" && !(SOURCE_VISUAL_ANIM_KINDS as readonly unknown[]).includes(b.animKind) && sourceVisualProblems(b) === null;
+}
+
 export function animateBlockIndexes(lesson: Pick<Lesson, "sections">, sectionIndex: number): number[] {
-  return (lesson.sections[sectionIndex]?.blocks ?? []).flatMap((block, index) => (block.kind === "animate" ? [index] : []));
+  return (lesson.sections[sectionIndex]?.blocks ?? []).flatMap((block, index) => (isClipVisualBlock(block) ? [index] : []));
 }
 
 function overlayTexts(overlay: ClipOverlay | undefined): string[] {

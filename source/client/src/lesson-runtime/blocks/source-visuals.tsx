@@ -74,7 +74,7 @@ export function headerWordBroken(table: HTMLTableElement): boolean {
  * Mérés után a tábla `data-head-fit` jelzője: nincs (a szavak épek) → `fit` (szűkebb térköz, a tónusjel külön sorban, az oszlopok a
  * fejléc szavaihoz igazodnak) → `break` (végső eset: így sem fér ki görgetés nélkül — a szó elválasztással törik, a tábla nem görög).
  */
-function useHeaderFit(scrollRef: { current: HTMLElement | null }, enabled: boolean) {
+function useHeaderFit(scrollRef: { current: HTMLElement | null }, enabled: boolean, headerKey: string) {
   const [fit, setFit] = useState<"fit" | "break" | undefined>(undefined);
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -99,26 +99,33 @@ function useHeaderFit(scrollRef: { current: HTMLElement | null }, enabled: boole
     const observer = new ResizeObserver(measure);
     observer.observe(scroller);
     return () => { alive = false; observer.disconnect(); };
-  }, [scrollRef, enabled]);
+  // tt J9 (S2b-2): a fejlécek szövegének változására (szerkesztő / előnézet) is újramér.
+  }, [scrollRef, enabled, headerKey]);
   return fit;
 }
 
 export function TableAnim({ params, caption }: AnimProps) {
   const p = parseVisualParams("table", params);
   const [scrollRef, overflowing] = useOverflowing<HTMLDivElement>();
-  const headFit = useHeaderFit(scrollRef, !!p && p.headers.length <= 2);
+  const headFit = useHeaderFit(scrollRef, !!p && p.headers.length <= 2, p ? p.headers.join("") : "");
   if (!p) return null;
   const columns = p.headers.length;
   // Három vagy több oszlopnál az első oszlop sorfejléc (és görgetéskor a helyén marad); a kétoszlopos tábla két egyenrangú oszlop.
   const rowHeaders = columns >= 3;
   const name = p.caption ?? (caption || SOURCE_VISUAL_TEXT.tableFallbackName);
+  // Vak J7 (S2b-2): rövid tartalmú táblánál nincs oszlopszám-alapú legkisebb szélesség (egy „1 | 2 | 3” tábla 360 px-en sem görög).
+  const compact = [p.headers, ...p.rows].every((row) => row.every((cell) => cell.length <= 12));
   return (
     <figure className={FRAME} data-anim="table">
+      {/* Vak J2 (S2b-2): a cím a görgő kereten KÍVÜL (görgetés nélkül olvasható); a jelző a tábla FÖLÖTT. */}
+      {p.caption && <p className="sv-table-title" aria-hidden="true">{p.caption}</p>}
+      {overflowing && <p className="sv-scroll-hint" data-testid="sv-scroll-hint"><MoveHorizontal className="w-4 h-4" aria-hidden="true" />
+        <span className="sv-hint-touch">{SOURCE_VISUAL_TEXT.scrollHintTouch}</span><span className="sv-hint-pointer">{SOURCE_VISUAL_TEXT.scrollHint}</span></p>}
       {/* Fókuszmegálló és nevesített régió csak akkor, ha a tábla tényleg görög (különben fölös Tab-megálló lenne). */}
       <div ref={scrollRef} className="sv-table-scroll" data-overflowing={overflowing ? "true" : undefined}
         {...(overflowing ? { tabIndex: 0, role: "region", "aria-label": name } : {})}>
-        <table className="sv-table" data-cols={columns} data-row-headers={rowHeaders ? "true" : undefined} data-head-fit={headFit} style={{ "--sv-cols": columns } as CSSProperties}>
-          {p.caption && <caption>{p.caption}</caption>}
+        <table className="sv-table" data-cols={columns} data-row-headers={rowHeaders ? "true" : undefined} data-head-fit={headFit} data-compact={compact ? "true" : undefined} style={{ "--sv-cols": columns } as CSSProperties}>
+          {p.caption && <caption className="sr-only">{p.caption}</caption>}
           <thead>
             <tr>
               {p.headers.map((header, c) => {
@@ -138,8 +145,6 @@ export function TableAnim({ params, caption }: AnimProps) {
           </tbody>
         </table>
       </div>
-      {overflowing && <p className="sv-scroll-hint" data-testid="sv-scroll-hint"><MoveHorizontal className="w-4 h-4" aria-hidden="true" />
-        <span className="sv-hint-touch">{SOURCE_VISUAL_TEXT.scrollHintTouch}</span><span className="sv-hint-pointer">{SOURCE_VISUAL_TEXT.scrollHint}</span></p>}
       <Caption caption={caption} shown={[p.caption]} />
     </figure>
   );

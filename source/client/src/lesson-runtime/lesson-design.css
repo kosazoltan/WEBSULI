@@ -63,6 +63,8 @@
   --ws-surface: #132540; --ws-accent: #0C929C; --ws-ink: #EFF8FF; --ws-panel: #233956; --ws-soft: #1B3150; --ws-deep: #0B1A2E;
   --ws-muted: #BCD0E4; --ws-line: #35506E; --ws-strong: #0C929C; --ws-strong-ink: #061A22; --grade-size: 16px;
   --ws-title: var(--ws-ink);
+  /* S2b-2 (vak J5): a forrás-ábrák tónusjele a sötét fejlécen ≥ 3:1 (a főszín 2,69:1 lenne) — csak a jelző, a főszín marad. */
+  --ws-mark-a: #33C3CD;
   /* A sín a csempe színe: a főszín-kitöltés rajta 3,13:1 (a grafikus állapotjelző minimuma 3:1, §2.6). */
   --ws-secondary-bg: #2C4566; --ws-secondary-ink: #EFF8FF; --ws-track: #233956;
   --lesson-ok-bg: #12291B; --lesson-ok-bg-ink: #D9FFE4; --lesson-ok: #86EFAC; --lesson-ok-ink: #062A1C;
@@ -74,6 +76,8 @@
 [data-band][data-experience][data-ws-theme]:has(.fusion-view[data-quiet="true"]) {
   --ws-surface: #F7F6F2; --ws-panel: #FFFEFA; --ws-ink: #28313A; --ws-muted: #535D68; --ws-line: #D5D8D8; --ws-soft: #EEEFEA;
   --ws-accent: #384F68; --ws-deep: #384F68; --ws-strong: #384F68; --ws-strong-ink: #FFFFFF; --ws-title: var(--ws-deep);
+  /* S2b-2 (vak J5): a forrás-ábrák tónusjelei a halk, világos felületen is ≥ 3:1 (a sötét sáv kísérőszínei itt 1,8–2,1:1 lennének). */
+  --ws-mark-a: #384F68; --ws-mark-b: #5E4AA0; --ws-mark-c: #76561A;
   --ws-secondary-bg: #EAF0F6; --ws-secondary-ink: #24435D; --ws-track: #DCE6ED;
   --lesson-ok-bg: #E0F6EC; --lesson-ok-bg-ink: #145537; --lesson-ok: #146B44; --lesson-ok-ink: #FFFFFF;
   --lesson-warn-bg: #FFF3CF; --lesson-warn-ink: #6D4800; --lesson-error: #9C213A;
@@ -286,14 +290,20 @@
   background: var(--lesson-surface); color: var(--lesson-ink); min-width: 0; max-width: 100%;
   font-size: max(15px, calc(var(--grade-size, 16px) * 0.92)); line-height: 1.45;
 }
-[data-ws-theme] .sv-tone-a { --sv-tone: var(--ws-accent); }
-[data-ws-theme] .sv-tone-b { --sv-tone: var(--ws-accent-2); }
-[data-ws-theme] .sv-tone-c { --sv-tone: var(--ws-accent-3); }
-[data-ws-theme] .sv-tone-neutral { --sv-tone: var(--ws-muted); }
-[data-ws-theme] .sv-tone-mark { color: var(--sv-tone); margin-right: 0.4em; font-size: 0.8em; }
+[data-ws-theme] .sv-tone-a { --sv-tone: var(--ws-accent); --sv-mark: var(--ws-mark-a, var(--ws-accent)); }
+[data-ws-theme] .sv-tone-b { --sv-tone: var(--ws-accent-2); --sv-mark: var(--ws-mark-b, var(--ws-accent-2)); }
+[data-ws-theme] .sv-tone-c { --sv-tone: var(--ws-accent-3); --sv-mark: var(--ws-mark-c, var(--ws-accent-3)); }
+[data-ws-theme] .sv-tone-neutral { --sv-tone: var(--ws-muted); --sv-mark: var(--ws-muted); }
+/* S2b-2 (vak J5): a jel és a fejléc alsó vonala a jelző-tokent kapja (≥ 3:1 a fejléc hátterén — tests/source-visual-contrast.test.ts). */
+[data-ws-theme] .sv-tone-mark { color: var(--sv-mark); margin-right: 0.4em; font-size: 0.8em; }
 
 [data-ws-theme] .sv-table-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--lesson-line); border-radius: 12px; overscroll-behavior-x: contain; }
 [data-ws-theme] .sv-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: calc(var(--sv-cols, 2) * 6.5em); }
+/* S2b-2 (vak J7): rövid tartalmú tábla — a legkisebb szélesség a tartalomból (a megjelenítő méri: minden cella ≤ 12 karakter). */
+[data-ws-theme] .sv-table[data-compact] { min-width: 0; }
+[data-ws-theme] .sv-table[data-compact] :is(th, td) { min-width: 0; }
+/* S2b-2 (vak J2): a táblacím a görgő kereten kívül, teljes szélességben olvasható. */
+[data-ws-theme] .sv-table-title { margin: 0 0 8px; font-weight: 800; color: var(--ws-title); overflow-wrap: anywhere; }
 [data-ws-theme] .sv-table caption { caption-side: top; text-align: left; padding: 10px 12px; font-weight: 800; color: var(--ws-title); background: var(--ws-soft); overflow-wrap: anywhere; }
 [data-ws-theme] .sv-table :is(th, td) {
   padding: 9px 12px; text-align: left; vertical-align: top; overflow-wrap: break-word; min-width: 5.5em;
@@ -302,7 +312,7 @@
 [data-ws-theme] .sv-table :is(th, td):last-child { border-right: 0; }
 [data-ws-theme] .sv-table tbody tr:last-child > * { border-bottom: 0; }
 [data-ws-theme] .sv-table thead th {
-  font-weight: 800; color: var(--ws-title); border-bottom: 3px solid var(--sv-tone);
+  font-weight: 800; color: var(--ws-title); border-bottom: 3px solid var(--sv-mark, var(--sv-tone));
   background: color-mix(in srgb, var(--sv-tone) 14%, var(--lesson-surface));
 }
 [data-ws-theme] .sv-table tbody tr:nth-child(even) > * { background: color-mix(in srgb, var(--ws-soft) 55%, var(--lesson-surface)); }
@@ -331,7 +341,14 @@
   [data-ws-theme] .sv-hint-touch { display: inline; }
   [data-ws-theme] .sv-hint-pointer { display: none; }
 }
-[data-ws-theme] .sv-scroll-hint { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 14px; font-weight: 600; color: var(--ws-muted); }
+[data-ws-theme] .sv-scroll-hint { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--ws-muted); }
+/* S2b-2 (vak J11): nyomtatásban a görgő keret nem vág, a tábla tördelhető, a jelző rejtett. */
+@media print {
+  [data-ws-theme] .sv-table-scroll { overflow: visible; border: 0; }
+  [data-ws-theme] .sv-table { min-width: 0; }
+  [data-ws-theme] .sv-table :is(th, td) { min-width: 0; overflow-wrap: anywhere; }
+  [data-ws-theme] .sv-scroll-hint { display: none; }
+}
 
 [data-ws-theme] .sv-figure[data-anim="ruleBox"] { padding: 0; border: 0; background: transparent; box-shadow: none; }
 [data-ws-theme] .sv-rule {
@@ -363,7 +380,7 @@
 [data-ws-theme] .sv-card-lines li { padding-top: 6px; border-top: 1px dashed var(--lesson-line); white-space: pre-line; overflow-wrap: anywhere; }
 [data-ws-theme] .sv-card-lines li:first-child { padding-top: 0; border-top: 0; }
 [data-ws-theme] .sv-card-example { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--lesson-surface); border: 1px solid var(--lesson-line); overflow-wrap: anywhere; }
-[data-ws-theme] .sv-example-label { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.8em; font-weight: 800; background: var(--sv-tone); color: var(--lesson-surface); }
+[data-ws-theme] .sv-example-label { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.8em; font-weight: 800; background: var(--ws-strong); color: var(--ws-strong-ink); }
 
 /* Felsorolás a magyarázatban (E8): a „•” / „-” kezdetű sorok valódi lista. */
 [data-ws-theme] .lesson-explain-list { margin: 4px 0; padding-left: 1.3em; list-style: disc; display: grid; gap: 4px; }

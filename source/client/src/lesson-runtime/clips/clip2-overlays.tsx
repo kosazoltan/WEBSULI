@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ClipOverlay as Overlay } from "@shared/lesson-clip";
+import { isClipVisualBlock, type ClipOverlay as Overlay } from "@shared/lesson-clip";
 import type { Section } from "@shared/lesson-schema";
 import { ANIMATE_REGISTRY } from "../blocks/animate-blocks";
 
@@ -74,7 +74,8 @@ export function ClipOverlay({ overlay, ms, section }: { overlay: Overlay; ms: nu
       return <Vectors overlay={overlay} ms={ms} />;
     case "lessonVisual": {
       const block = section?.blocks[overlay.blockIndex];
-      if (block?.kind !== "animate") return null;
+      // S2b-2 (vak J6): a régi kisfilm forrás-ábrára / hibás blokkra mutató hivatkozása sem rajzolódik ki.
+      if (block?.kind !== "animate" || !isClipVisualBlock(block)) return null;
       const Anim = ANIMATE_REGISTRY[block.animKind];
       return <div className="clip2-visual"><Anim params={block.params} caption="" /></div>;
     }
