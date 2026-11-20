@@ -18,7 +18,9 @@ test("V13: mind a hat minta átmegy az ívkapun (nyitóblokkokkal, záró recap-
       const sections = [
         { heading: "Nyitó", blocks: blocks(position === "first" ? ["explain", "explain", ...own] : ["explain", "explain", "explain", "example", "animate", "check"]) },
         ...(position === "middle" ? [{ heading: "Közép", blocks: blocks(own) }] : []),
-        ...(position !== "first" ? [{ heading: "Vég", blocks: blocks(position === "last" ? own : ["explain", "example", "check", "recap"]) }] : [{ heading: "Vég", blocks: blocks(["explain", "example", "check", "recap"]) }]),
+        // A kitöltő fejezetek hordozzák a lecke-szintű „megmutató réteget” (animate) — itt a minta SAJÁT fejezetszabályait mérjük; a
+        // lecke-szintű szabályt a kiosztás garantálja (V14: legalább egy megmutató minta).
+        ...(position !== "first" ? [{ heading: "Vég", blocks: blocks(position === "last" ? own : ["explain", "example", "animate", "check", "recap"]) }] : [{ heading: "Vég", blocks: blocks(["explain", "example", "animate", "check", "recap"]) }]),
       ];
       const report = checkLessonArc({ sections } as unknown as Lesson);
       assert.equal(report.ok, true, `${shape.id}/${position}: ${report.reasons.join(" | ")}`);
@@ -39,6 +41,8 @@ test("V14: szomszéd nem azonos, egy minta ≤ 40% (felfelé kerekítve), 3…12
       const counts = new Map<string, number>();
       for (const id of out) counts.set(id, (counts.get(id) ?? 0) + 1);
       if (n >= 3) for (const [id, c] of counts) assert.ok(c <= cap, `${n}/${s}: ${id} ${c} > ${cap}`);
+      // Az ívkapu lecke-szintű szabálya (legalább egy animate / try): a kiosztás mindig ad megmutató mintát.
+      assert.ok(out.some((id) => SECTION_SHAPES.find((sh) => sh.id === id)!.blocks.some((b) => b === "animate" || b === "try")), `${n}/${s}: nincs megmutató minta`);
       out.forEach((id, i) => {
         const shape = SECTION_SHAPES.find((sh) => sh.id === id)!;
         assert.ok(kinds[i] === "any" || shape.fits.includes(kinds[i]), `${id} nem illik: ${kinds[i]}`);
