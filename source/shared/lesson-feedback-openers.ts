@@ -99,6 +99,9 @@ export function startsWithLegacyOpener(text: string): boolean {
   return LEGACY_OPENER_PREFIXES.some((p) => text.startsWith(p) && (text.length === p.length || !/\p{L}/u.test(text.charAt(p.length))));
 }
 
+/** SK2: van-e régi, modell írta bátorító előtag — a mérés ezt számolja (ugyanaz a szabály, mint a megjelenítésé). */
+export const hasLegacyOpener = startsWithLegacyOpener;
+
 /**
  * A visszajelzés megjelenítése. Jelöletlen lecke: a mai kimenet (az ítélet-előtag levágása, változatlanul a korábbi). Jelölt lecke
  * (tulajdonosi döntés 2026-11-22, „NINCS LEVÁGÁS”): a modell szövege BÁJTRA változatlan; a kódszótári nyitás csak akkor kerül elé, ha

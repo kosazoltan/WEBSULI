@@ -392,7 +392,8 @@ test("determinisztikus: ugyanarra a bemenetre bájtra ugyanaz a kimenet; a bemen
 });
 
 test("üzemmód és bejegyzés: a kapu `report` módban marad; a jegyzék név szerint futtat", () => {
-  assert.deepEqual(GATE_MODES, { sourceCoverage: "report" }, "az `enforce`-ot az S3b utolsó lépése kapcsolja be");
+  // SK2 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 15. szakasz, dokumentált spec-változás): a `variety` kapu is `report` módban érkezik.
+  assert.deepEqual(GATE_MODES, { sourceCoverage: "report", variety: "report" }, "az `enforce`-ot az S3b utolsó lépése (sourceCoverage), illetve az S10 záró mérése (variety) kapcsolja be");
   assert.equal(gateMode("sourceCoverage"), "report");
   assert.equal(gateMode("sourceCoverage", { sourceCoverage: "enforce" }), "enforce");
   assert.equal(gateMode("sourceCoverage", { sourceCoverage: "off" }), "off");
