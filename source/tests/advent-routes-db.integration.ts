@@ -16,6 +16,7 @@ const { ADVENT_GIFT_MESSAGE } = await import("../shared/advent/rules");
 const { learnerTokenFor } = await import("../server/learners");
 const { createPlayerAccountStore } = await import("../server/player/account-store");
 const { createAdventStore } = await import("../server/advent/store");
+const { createAdoptionContext, mergeAdoption } = await import("../server/advent/adoption");
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Question = { id: string; subject: string; prompt: string; options: string[] };
@@ -649,6 +650,100 @@ describe("adventi naptár — végpontok", () => {
     assert.deepEqual(await q(`SELECT doors, plan FROM advent_progress WHERE learner_id = $1`, [learner.id]), learnerBefore, "a tanulói sor érintetlen");
     assert.equal((await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [k.device])).length, 1, "a sérült vendégsor megmaradt");
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("két eszköz ELSŐ, párhuzamos átvétele (READ COMMITTED, két kapcsolat, szinkronizációs pont): mindkét eszköz megoldása megmarad (GPT-vak 3. kör L1)", async () => {
+    const learner = await newLearner(5);
+    const phone = await kid(); const tablet = await kid();
+    for (const k of [phone, tablet]) assert.equal((await k.post("/grade", { grade: 5 })).status, 200);
+    await phone.answer(1, await phone.open(1), true);
+    await tablet.answer(2, await tablet.open(2), true);
+    assert.deepEqual(await q(`SELECT 1 FROM advent_progress WHERE learner_id = $1`, [learner.id]), [], "még nincs tanulói sor");
+    // Mindkét tranzakció az első (zároló) olvasás után a beszúrásnál találkozik: egyik sem látja a másik tanulói sorát.
+    let arrived = 0; let open!: () => void;
+    const barrier = new Promise<void>((resolve) => { open = resolve; });
+    const syncedPool = {
+      query: dbPool.query.bind(dbPool),
+      connect: async () => {
+        const client = await dbPool.connect();
+        const query = client.query.bind(client);
+        return new Proxy(client, { get(target, prop) {
+          if (prop !== "query") return Reflect.get(target, prop);
+          return async (text: unknown, params?: unknown[]) => {
+            if (typeof text === "string" && /^\s*INSERT INTO advent_progress/.test(text)) {
+              if (++arrived === 2) open();
+              await barrier;
+            }
+            return query(text as string, params as unknown[]);
+          };
+        } });
+      },
+    };
+    const store = createAdventStore(syncedPool as never);
+    const ctxFor = (device: string) => createAdoptionContext({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, season: 2026, learnerId: learner.id, learnerGrade: 5, deviceId: device, now: new Date("2026-12-05T10:00:00Z") });
+    const adoptFor = (device: string) => ({ deviceId: device, merge: (l: never, d: never) => mergeAdoption(l, d, ctxFor(device)) });
+    const subject = { kind: "learner" as const, id: learner.id };
+    const results = await Promise.allSettled([phone.device, tablet.device].map((device) => store.mutate(2026, subject, () => ({ patch: null, result: null }), adoptFor(device) as never)));
+    assert.deepEqual(results.map((r) => r.status), ["fulfilled", "fulfilled"]);
+    const [row] = await q<{ d1: Json; d2: Json }>(`SELECT doors->(round::text)->'1' AS d1, doors->(round::text)->'2' AS d2 FROM advent_progress WHERE learner_id = $1`, [learner.id]);
+    assert.equal(row!.d1?.attempts?.[0]?.correct, true, "a telefon megoldása megmaradt");
+    assert.equal(row!.d2?.attempts?.[0]?.correct, true, "a tablet megoldása megmaradt");
+    assert.deepEqual(await q(`SELECT 1 FROM advent_progress WHERE subject_id = ANY($1)`, [[phone.device, tablet.device]]), [], "mindkét vendégsor átkerült");
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("a profil évfolyama a megnyitás és a válasz között változik: a régi kérdésre adott válasz 409 mentés nélkül, az újranyitott kérdésre adott válasz a helyes évfolyamot rögzíti (GPT-vak 3. kör L3)", async () => {
+    const learner = await newLearner(7);
+    const k = await kid(); k.learner = learner.token;
+    const oldQ = await k.open(1);
+    await dbPool.query(`UPDATE learners SET grade = 5 WHERE id = $1`, [learner.id]);
+    const item = findAdventItem(oldQ.id, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS)!;
+    const before = await q(`SELECT grade, doors FROM advent_progress WHERE learner_id = $1`, [learner.id]);
+    const stale = await k.post("/doors/1/answer", { questionId: oldQ.id, pick: oldQ.options.indexOf(item.options[item.correctIndex]!) });
+    assert.equal(stale.status, 409, "a régi évfolyamú kérdésre adott válasz nem rögzül");
+    assert.deepEqual(await q(`SELECT grade, doors FROM advent_progress WHERE learner_id = $1`, [learner.id]), before, "mentés nélkül");
+    await k.answer(1, await k.open(1), true);
+    assert.deepEqual(await q(`SELECT grade FROM advent_progress WHERE learner_id = $1`, [learner.id]), [{ grade: 5 }]);
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("sérült vendégsor párosított OLVASÁSKOR is 409 corrupt (nem csendes kihagyás); a terv hiányzó subjects mezője is 409 corrupt, nem kivétel; a sorok érintetlenek (GPT-vak 3. kör L4)", async () => {
+    const learner = await newLearner(5);
+    const tablet = await kid(); tablet.learner = learner.token;
+    await tablet.answer(2, await tablet.open(2), true);
+    const k = await kid();
+    assert.equal((await k.post("/grade", { grade: 5 })).status, 200);
+    await k.answer(1, await k.open(1), true);
+    await dbPool.query(`UPDATE advent_progress SET doors = '{"1": {"1": {"attempts": [null]}}}'::jsonb WHERE subject_id = $1`, [k.device]);
+    const snapshot = () => q(`SELECT subject_kind, doors, plan FROM advent_progress WHERE subject_id = ANY($1) ORDER BY subject_kind`, [[k.device, learner.id]]);
+    const before = await snapshot();
+    k.learner = learner.token;
+    const r = await k.state();
+    assert.deepEqual({ status: r.status, corrupt: r.json.corrupt }, { status: 409, corrupt: true }, "párosított olvasás");
+    assert.deepEqual(await snapshot(), before);
+    // A tanulói sor tervéből hiányzik a subjects (megválaszolt ablakkal): 409 corrupt, nem 500.
+    await dbPool.query(`UPDATE advent_progress SET plan = (SELECT jsonb_object_agg(key, value - 'subjects') FROM jsonb_each(plan)) WHERE learner_id = $1`, [learner.id]);
+    const r2 = await tablet.state();
+    assert.deepEqual({ status: r2.status, corrupt: r2.json.corrupt }, { status: 409, corrupt: true }, "hiányzó subjects");
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
+  });
+
+  it("sérült adventi próba ([null]) nem töri el a játékos adatletöltését: az alap-export megy, a sérült adventi rész jelölve — kikapcsolt naptárral is (GPT-vak 3. kör L5)", async () => {
+    const [player] = await q<{ id: string }>(`INSERT INTO player_accounts (email) VALUES ($1) RETURNING id`, [`advent-${randomUUID()}@websuli.example`]);
+    await createAdventStore(dbPool).mutate(2026, { kind: "player", id: player!.id }, () => ({ patch: { grade: 6, doors: { 1: { 1: { attempts: [null as never] } } } }, result: null }));
+    const flag = process.env.ADVENT_CALENDAR;
+    try {
+      for (const value of ["on", ""]) {
+        process.env.ADVENT_CALENDAR = value;
+        const exported = await createPlayerAccountStore(dbPool).exportAccount(player!.id, () => []) as Json;
+        assert.ok(exported?.account?.email, "az alap-export megvan (" + (value || "KI") + ")");
+        assert.equal(exported.adventCalendar.length, 1);
+        assert.equal(exported.adventCalendar[0].corrupt, true, "a sérült adventi rész jelölve");
+      }
+    } finally {
+      process.env.ADVENT_CALENDAR = flag;
+      await dbPool.query(`DELETE FROM player_accounts WHERE id = $1`, [player!.id]);
+    }
   });
 
   it("névtelen → párosított, versenyhelyzet: az átvétellel egyidejű válasz sem ad 500-at, és nem vész el — végül egyetlen tanulói sor (terv 21., #170)", async () => {

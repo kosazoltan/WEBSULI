@@ -236,11 +236,12 @@ function replacementCandidates(day: number, grade: number, subject: string | nul
 }
 
 /**
- * Ütközésmentesítés (GPT-vak L3; terv A4, A36): két terv egyesítése után (névtelen → párosított átvétel) ugyanaz a kérdés két ablakba
- * is kerülhet. A `protectedByDay` (a már megválaszolt próbák kérdései ablakonként) SOHA nem változik, és elsőbbséget kap; a többi
- * kiosztott helyen a nap szerinti sorrendben az első előfordulás marad, a későbbi ismétlődés (azonosító VAGY normalizált kérdésszöveg
- * egyezése — az évad korábbi köreivel is) az ablak saját készletéből determinisztikusan pótlódik. Ha nincs szabad pótlás, a hely
- * változatlan marad.
+ * Ütközésmentesítés (GPT-vak L3 és 3. kör L2; terv A4, A36): két terv egyesítése után (névtelen → párosított átvétel) ugyanaz a kérdés
+ * két ablakba is kerülhet. A TÖRTÉNETI helyek (`historicalByDay`: ablakonként a már megválaszolt próbák száma — a terv első N helye) a
+ * próbákban élnek tovább; a TERV mégis egyedi marad: ha két történeti hely ugyanazt a kérdést hordozza, a nap szerinti első marad a
+ * tervben, a többi helyén a terv pótlást kap (a tárolt próba és visszajelzése érintetlen — a megválaszolt ablak a próbából olvas).
+ * A játszható helyeken (a próbák után) minden olyan kérdés pótlódik, amely bármely történeti helyen, korábbi játszható helyen vagy az
+ * évad korábbi köreiben már szerepelt (azonosító VAGY normalizált szöveg). A pótlás az ablak saját készletéből, determinisztikus.
  */
 export function dedupePlanDoors(
   plan: AdventPlan,
@@ -250,7 +251,7 @@ export function dedupePlanDoors(
     grade: number;
     usedIds: ReadonlySet<string>;
     usedPrompts: ReadonlySet<string>;
-    protectedByDay: ReadonlyMap<number, ReadonlySet<string>>;
+    historicalByDay: ReadonlyMap<number, number>;
   },
 ): { plan: AdventPlan; changed: boolean } {
   const grade = clampAdventGrade(input.grade);
@@ -261,25 +262,23 @@ export function dedupePlanDoors(
     return item ? normalizePrompt(item.prompt) : null;
   };
   const mark = (id: string) => { seenIds.add(id); const p = promptOf(id); if (p) seenPrompts.add(p); };
-  for (const ids of input.protectedByDay.values()) for (const id of ids) mark(id);
   const taken = (id: string) => { const p = promptOf(id); return seenIds.has(id) || (p !== null && seenPrompts.has(p)); };
   const free = (item: AdventItem) => !seenIds.has(item.id) && !seenPrompts.has(normalizePrompt(item.prompt));
   const days = Object.keys(plan.doors).map(Number).filter((d) => Number.isInteger(d)).sort((a, b) => a - b);
-  const doors: Record<number, string[]> = { ...plan.doors };
+  const doors: Record<number, string[]> = {};
+  for (const day of days) doors[day] = [...(plan.doors[day] ?? [])];
   let changed = false;
-  for (const day of days) {
-    const guarded = input.protectedByDay.get(day) ?? new Set<string>();
-    const seenInDay = new Set<string>();
-    doors[day] = (plan.doors[day] ?? []).map((id) => {
-      if (guarded.has(id) && !seenInDay.has(id)) { seenInDay.add(id); return id; }
-      if (!taken(id)) { mark(id); return id; }
-      const subject = plan.subjects?.[day] ?? null;
-      const replacement = replacementCandidates(day, grade, subject, input.bank, input.christmas)?.find(free);
-      if (!replacement) return id;
-      mark(replacement.id);
-      changed = true;
-      return replacement.id;
-    });
-  }
-  return changed ? { plan: { ...plan, doors }, changed } : { plan, changed };
+  const replace = (day: number, index: number) => {
+    const replacement = replacementCandidates(day, grade, plan.subjects?.[day] ?? null, input.bank, input.christmas)?.find(free);
+    if (!replacement) return;
+    mark(replacement.id);
+    doors[day]![index] = replacement.id;
+    changed = true;
+  };
+  // 1) Történeti helyek (elsőbbség): a nap szerinti első előfordulás marad a tervben, a későbbi ismétlődés helye pótlást kap.
+  const historical = (day: number) => Math.min(input.historicalByDay.get(day) ?? 0, doors[day]!.length);
+  for (const day of days) for (let i = 0; i < historical(day); i++) { const id = doors[day]![i]!; if (taken(id)) replace(day, i); else mark(id); }
+  // 2) Játszható helyek: minden már szereplő kérdés pótlódik.
+  for (const day of days) for (let i = historical(day); i < doors[day]!.length; i++) { const id = doors[day]![i]!; if (taken(id)) replace(day, i); else mark(id); }
+  return changed ? { plan: { ...plan, doors: { ...plan.doors, ...doors } }, changed } : { plan, changed };
 }

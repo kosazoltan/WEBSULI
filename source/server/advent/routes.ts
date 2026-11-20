@@ -56,7 +56,8 @@ export function adventRowIsSound(row: AdventRow | null): boolean {
   const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
   if (!isObject(row.plan) || !isObject(row.doors)) return false;
   for (const plan of Object.values(row.plan)) {
-    if (!isObject(plan) || !isObject(plan.doors) || !Array.isArray(plan.layout)) return false;
+    if (!isObject(plan) || !isObject(plan.doors) || !Array.isArray(plan.layout) || !isObject(plan.subjects)) return false;
+    if (!Object.values(plan.subjects).every((subject) => typeof subject === "string")) return false;
     for (const ids of Object.values(plan.doors)) if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return false;
   }
   // A próbák belső alakja is (GPT-vak L4): egy [null] vagy hiányos elem a pontozásnál 500-at okozna.
@@ -87,7 +88,7 @@ export function effectiveGrade(subject: AdventResolvedSubject, row: AdventRow | 
 function doorView(day: number, at: AdventNow, grade: number | null, plan: AdventPlan | undefined, record: DoorRecord | undefined, maxRepairs: number): AdventDoorView {
   const attempts = record?.attempts ?? [];
   const state = doorState({ unlocked: isDoorUnlocked(day, at), attempts, maxRepairs });
-  const subject = attempts.length > 0 && plan ? plan.subjects[day] ?? null : grade != null && isChristmasDoor(day, grade) ? "christmas" : null;
+  const subject = attempts.length > 0 && plan ? plan.subjects?.[day] ?? null : grade != null && isChristmasDoor(day, grade) ? "christmas" : null;
   return { day, state, subject, repairsLeft: state === "repairable" ? maxRepairs - attempts.length + 1 : 0 };
 }
 
@@ -306,7 +307,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
     // Párosított eszközön az átvétel előnézete (írás nélkül): azt mutatjuk, ami az első írásnál a tanulónál lesz.
     if (locals.pairedDevice && adventRowIsSound(row)) {
       const deviceRow = await store.read(at.season, { kind: "device", id: locals.pairedDevice });
-      if (deviceRow && adventRowIsSound(deviceRow)) row = mergeAdoption(row, deviceRow, adoptionContext(locals, locals.pairedDevice)) ?? row;
+      if (deviceRow && !adventRowIsSound(deviceRow)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true });
+      if (deviceRow) row = mergeAdoption(row, deviceRow, adoptionContext(locals, locals.pairedDevice)) ?? row;
     }
     if (!adventRowIsSound(row)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true });
     res.json(buildAdventState(at, resolution, row));
@@ -395,6 +397,13 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       // A rögzített évfolyam, különben az, amelyre a terv készült (a profil közbeni változása ezt nem írja át).
       const grade = current.grade ?? (plan ? planGradeOf(plan) : undefined) ?? effectiveGrade(subject, current);
       if (grade == null || !plan) throw new AdventHttpError(409, "Előbb nyisd ki az ablakot.");
+      // A profil évfolyama a megnyitás óta változott, és még nincs rögzített évfolyam (GPT-vak 3. kör L3; R6 / E10): a régi évfolyamú
+      // kérdésre adott válasz nem rögzül — frissítést kér, mentés nélkül (a megnyitás új tervet ad a helyes évfolyamra).
+      const profileGrade = effectiveGrade(subject, current);
+      const plannedGrade = planGradeOf(plan);
+      if (current.grade == null && profileGrade != null && plannedGrade !== undefined && plannedGrade !== profileGrade) {
+        throw new AdventHttpError(409, "Az évfolyamod közben megváltozott — frissítjük a naptárat.", { state: buildAdventState(locals.at, locals.resolution, current), refresh: true });
+      }
       const { maxRepairs, maxRounds } = limitsForGrade(grade);
       const attempts = current.doors[round]?.[day]?.attempts ?? [];
       const viewOf = (r: AdventRow) => buildAdventState(locals.at, locals.resolution, r);
