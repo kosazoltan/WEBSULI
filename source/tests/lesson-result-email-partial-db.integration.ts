@@ -635,21 +635,23 @@ test("R38 / L5: a névfeloldás átmeneti hibája után a „félbehagyva” lev
   const previousDelay = setPartialDelay(100);
   const previousRetry = setRetryDelay(300);
   let left = 0;
+  // Csak a saját kör „félbehagyva” levelei számítanak (az előző teszt háttérben futó végleges levelei a reset után is megérkezhetnek).
+  const partialMailsOf = (roundId: string) => { const keys = RECIPIENTS.map(to => resultIdempotencyKey(LESSON, "quiz", partialRoundKey(roundId), to)); return sent.filter(mail => keys.includes(mail.key)); };
   setAttributionFault(() => { if (left > 0) { left--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } });
   try {
     clearPendingPartials();
     left = 1;
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r38-once", picks: picks(2), partial: true }, freshIp(), "u-r38")).json(), { queued: true, partial: true });
-    assert.ok(await waitFor(() => sent.length === 2, 3000), "az újrapróba kiküldte a „félbehagyva” levelet");
+    assert.ok(await waitFor(() => partialMailsOf("round-r38-once").length === 2, 3000), "az újrapróba kiküldte a „félbehagyva” levelet");
     assert.equal(left, 0, "a névfeloldás egyszer hibázott");
-    assert.ok(sent.every(isPartial));
+    assert.ok(partialMailsOf("round-r38-once").every(isPartial));
     // Kétszeri hiba: a ciklus levél nélkül zárul, és az első rögzítő bejegyzése felszabadul (nem ragad be).
     reset();
     left = 2;
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r38-twice", picks: picks(2), partial: true }, freshIp(), "u-r38b")).json(), { queued: true, partial: true });
     assert.ok(await waitFor(() => left === 0, 3000), "mindkét kísérlet lefutott");
     await sleep(200);
-    assert.equal(sent.length, 0);
+    assert.equal(partialMailsOf("round-r38-twice").length, 0);
     setPartialDelay(60_000);
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r38-twice", picks: picks(3), partial: true, fingerprint: "fp-r38-guest" })).json(), { queued: true, partial: true }, "a lezárult ciklus után az első rögzítő nem tartja a kört");
   } finally { setAttributionFault(null); clearPendingPartials(); setPartialDelay(previousDelay); setRetryDelay(previousRetry); }
