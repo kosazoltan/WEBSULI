@@ -10,6 +10,8 @@
  */
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { seedFrom } from "../../../shared/seeded";
+import { applySectionShapes } from "../../../shared/lesson-section-shapes";
+import { lessonVarietyEnabled } from "../lesson-variety-flag";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
@@ -697,7 +699,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   await workflowPhase("pedagogue");
   phase("pedagogue", resumed?.outline ? "A mentett tananyagterv ellenőrzése…" : input.approvedOutline ? "A jóváhagyott tanulási terv ellenőrzése…" : "A tananyagterv készül…");
   const planned = resumed?.outline ?? input.approvedOutline;
-  const outline = planned !== undefined ? approvedOutlineOf(planned, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${withKnowledge(buildPedagoguePrompt(promptMap, undefined, owner), await knowledgeBlock("pedagogue"))}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
+  const plannedOutline = planned !== undefined ? approvedOutlineOf(planned, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${withKnowledge(buildPedagoguePrompt(promptMap, undefined, owner), await knowledgeBlock("pedagogue"))}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
     // S1b: a forrás-vizuális hivatkozások tisztítása a fejezet-összevonás UTÁN (az összevont fejezet tételei megmaradnak).
     const fixed = autofixOutlineVisuals(autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline, visualIds).outline;
     const parsed = outlineSchema.safeParse(fixed);
@@ -705,6 +707,9 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
     const covers = outlineCoversMap(parsed.data.sections, concepts);
     return covers.ok ? { ok: true, value: parsed.data } : { ok: false, problems: [`A vázlat nem fedi le a kötelező fogalmakat: ${JSON.stringify(covers).slice(0, 600)}`] };
   });
+  // S6a (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 12. szakasz): BE kapcsolónál a modell tervének fogalom-fejezetei a kiosztott
+  // fejezetmintát kapják (a tulajdonos jóváhagyott terve nem változik); KI-nél a terv a régi (csak a kéretlen `sectionKind` esik ki).
+  const outline = applySectionShapes(plannedOutline, planned === undefined && lessonVarietyEnabled() ? seedFrom(mapId) : undefined);
   output = { ...output, outline, approvedOutline: outline };
 
   // SK1 — a forrás-fedettségi kapu mérése (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. Független review F12: a
