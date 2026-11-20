@@ -786,6 +786,9 @@ test("R35 / L1: a korábbi dokumentumból címke nélkül maradt kör ugyanabba 
   await page.route("**/api/csrf-token", async route => {
     tokenCalls++;
     if (tokenCalls === 1) { await new Promise(resolve => setTimeout(resolve, 20_000)); try { await route.fulfill({ json: { csrfToken: "test", resultApi: 2, resultSubject: "elso-cimke" } }); } catch { /* a lap közben elnavigált */ } return; }
+    // Az új dokumentum tokenje is lassú: az induló ürítés a token alatt áll, közben a helyreállított kör újra felvevődik (a hibás kód ekkor
+    // az új munkamenet címkéjét adta a régi bejegyzésnek — a 6. kör L1 reprodukciója).
+    await new Promise(resolve => setTimeout(resolve, 4000));
     return route.fulfill({ json: { csrfToken: "test", resultApi: 2, resultSubject: "masik-fiok-cimke" } });
   });
   const finals: Array<Record<string, unknown>> = [];
