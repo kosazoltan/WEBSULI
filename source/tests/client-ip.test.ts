@@ -80,7 +80,8 @@ test("A2: titok nélkül vagy rossz titokkal a kliens által írt fejléc nem v�
 });
 
 test("A4: a CF-Connecting-IP csak Renderen számít; érvényes titok mellett a Vercel címe az első", () => {
-  const headers = { "cf-connecting-ip": "198.51.100.77", "x-forwarded-for": "203.0.113.7" };
+  // Spec 2026-11-20-kliens-ip-cloudflare-ut: a valódi lánc végén a Cloudflare-élszerver áll (különben a fejléc igazolatlan).
+  const headers = { "cf-connecting-ip": "198.51.100.77", "x-forwarded-for": "203.0.113.7, 172.70.1.1" };
   assert.deepEqual(resolveClientIp({ headers, ip: SOCKET_IP }, { ...ENV, RENDER: "true" }), { ip: "198.51.100.77", source: "cloudflare" });
   assert.deepEqual(resolveClientIp({ headers, ip: SOCKET_IP }, ENV), { ip: SOCKET_IP, source: "socket" });
   assert.deepEqual(resolveClientIp({ headers: { "cf-connecting-ip": "nem-cím" }, ip: SOCKET_IP }, { RENDER: "true" }), { ip: SOCKET_IP, source: "socket" });
@@ -169,6 +170,67 @@ test("A1 (élő korlát): a proxyn át két különböző kliens külön keretet
     // A közvetlen hívó kerete független a proxyn át érkező kliensekétől.
     assert.equal((await get(server, behindLoadBalancer("192.0.2.10"))).remaining, 2);
   });
+});
+
+// --- Spec 2026-11-20-kliens-ip-cloudflare-ut (#169): a CF-Connecting-IP csak igazolt Cloudflare-úton kulcs ----------------------
+
+const CF_EDGE_V4 = "172.70.1.1"; // 172.64.0.0/13
+const CF_EDGE_V6 = "2a06:98c0:3600::103"; // 2a06:98c0::/29
+const ATTACKER = "192.0.2.10";
+const RENDER_ENV = { RENDER: "true" };
+
+test("I1: Renderen a Cloudflare-t megkerülő hamis CF-Connecting-IP nem kulcs", () => {
+  const headers = { "cf-connecting-ip": "198.51.100.77", "x-forwarded-for": ATTACKER };
+  assert.deepEqual(resolveClientIp({ headers, ip: ATTACKER }, RENDER_ENV), { ip: ATTACKER, source: "socket" });
+  assert.notEqual(clientIpKey({ headers, ip: ATTACKER }, RENDER_ENV), "198.51.100.77");
+  // XFF nélkül, nem Cloudflare-című közvetlen szomszéd.
+  assert.deepEqual(resolveClientIp({ headers: { "cf-connecting-ip": "198.51.100.77" }, ip: ATTACKER }, RENDER_ENV), { ip: ATTACKER, source: "socket" });
+});
+
+test("I2: a lánc bal oldalára írt Cloudflare-cím (privát elemekkel keverve) nem igazol; érvénytelen lánc sem", () => {
+  const spoof = (xff: string, ip: string) => resolveClientIp({ headers: { "cf-connecting-ip": "198.51.100.77", "x-forwarded-for": xff }, ip }, RENDER_ENV);
+  assert.deepEqual(spoof(`172.70.9.9, 10.0.0.5, ${ATTACKER}`, ATTACKER), { ip: ATTACKER, source: "socket" });
+  assert.deepEqual(spoof(`104.16.0.1, ${ATTACKER}, 10.1.2.3`, "10.1.2.3"), { ip: "10.1.2.3", source: "socket" });
+  assert.deepEqual(spoof(`unknown, ${CF_EDGE_V4}`, CF_EDGE_V4), { ip: CF_EDGE_V4, source: "socket" });
+  // Csupa privát lánc (helyi futás, belső hívó): nincs Cloudflare-élszerver.
+  assert.deepEqual(spoof("10.0.0.1, 192.168.1.2", "192.168.1.2"), { ip: "192.168.1.2", source: "socket" });
+});
+
+test("I3: a valódi Cloudflare-úton (IPv4 / IPv6, belső hoppal is) a CF-Connecting-IP a kulcs", () => {
+  const via = (xff: string | string[] | undefined, ip: string) =>
+    resolveClientIp({ headers: { "cf-connecting-ip": "198.51.100.77", ...(xff === undefined ? {} : { "x-forwarded-for": xff }) }, ip }, RENDER_ENV);
+  const expected = { ip: "198.51.100.77", source: "cloudflare" };
+  assert.deepEqual(via(`198.51.100.77, ${CF_EDGE_V4}`, CF_EDGE_V4), expected);
+  assert.deepEqual(via(`198.51.100.77, ${CF_EDGE_V4}, 10.0.0.5`, "10.0.0.5"), expected);
+  assert.deepEqual(via(`198.51.100.77, ${CF_EDGE_V6}`, CF_EDGE_V6), expected);
+  assert.deepEqual(via(["198.51.100.77", `${CF_EDGE_V4}, 100.64.0.9`], "100.64.0.9"), expected);
+  assert.deepEqual(via(undefined, `::ffff:${CF_EDGE_V4}`), expected);
+  // Renderen kívül a valódi Cloudflare-lánc mellett sem számít.
+  assert.deepEqual(resolveClientIp({ headers: { "cf-connecting-ip": "198.51.100.77", "x-forwarded-for": `198.51.100.77, ${CF_EDGE_V4}` }, ip: CF_EDGE_V4 }, {}), { ip: CF_EDGE_V4, source: "socket" });
+});
+
+test("I4 (élő korlát): Renderen a Cloudflare-t megkerülő hamis CF-Connecting-IP nem ad új keretet; a Cloudflare-út kliensenként számol", async () => {
+  const previousRender = process.env.RENDER;
+  process.env.RENDER = "true";
+  try {
+    await withLimitedApp(3, async (server) => {
+      const seen: number[] = [];
+      for (let i = 0; i < 3; i += 1) {
+        const response = await get(server, behindLoadBalancer(ATTACKER, { "cf-connecting-ip": `203.0.113.${i + 1}` }));
+        assert.equal(response.status, 200);
+        seen.push(response.remaining);
+      }
+      assert.deepEqual(seen, [2, 1, 0]);
+      assert.equal((await get(server, behindLoadBalancer(ATTACKER, { "cf-connecting-ip": "203.0.113.99", "x-forwarded-for": CF_EDGE_V4 }))).status, 429);
+      const viaCloudflare = (clientIp: string) => get(server, behindLoadBalancer(CF_EDGE_V4, { "cf-connecting-ip": clientIp, "x-forwarded-for": clientIp }));
+      assert.equal((await viaCloudflare("198.51.100.1")).remaining, 2);
+      assert.equal((await viaCloudflare("198.51.100.1")).remaining, 1);
+      assert.equal((await viaCloudflare("198.51.100.2")).remaining, 2);
+    });
+  } finally {
+    if (previousRender === undefined) delete process.env.RENDER;
+    else process.env.RENDER = previousRender;
+  }
 });
 
 // --- Forrásőrök ---------------------------------------------------------------------------------------------------------------

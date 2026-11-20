@@ -52,7 +52,9 @@
   Render csak jobbra fűz). Ha ez nem érvényes IP: `x-real-ip`; ha az sem: a közvetlen ág.
 - **Kulcs titok nélkül (közvetlen hívás):** a Renderen (`RENDER=true`) a `CF-Connecting-IP` (a Cloudflare írja; a kliens által
   küldöttet a Cloudflare elutasítja — mérve), különben `req.ip`. A `CF-Connecting-IP`-t Renderen kívül (helyi futás, saját
-  nginx) nem vesszük figyelembe, mert ott a kliens írhatná.
+  nginx) nem vesszük figyelembe, mert ott a kliens írhatná. **Módosítás (2026-11-20, #169):** Renderen is csak akkor számít, ha a
+  kérés igazoltan a Cloudflare-en át jött (az `X-Forwarded-For` lánc jobbról első nyilvános eleme Cloudflare-cím) —
+  `docs/specs/2026-11-20-kliens-ip-cloudflare-ut.md`.
 - A cím normalizálása: `::ffff:a.b.c.d` → `a.b.c.d`; érvénytelen érték kihagyva; a végén `ipKeyGenerator(ip)`.
 - Minden IP-alapú `rateLimit(...)` a közös `clientIpKeyGenerator`-t kapja. Forrásőr-teszt: a `server/` alatt nincs `rateLimit(`
   hívás `keyGenerator` nélkül.
