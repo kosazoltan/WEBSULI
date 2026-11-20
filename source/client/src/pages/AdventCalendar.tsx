@@ -16,6 +16,7 @@ import { isMuted, sfxClick, sfxSuccess, toggleMuted } from "@/lib/audioEngine";
 import AdventArt from "@/advent/AdventArt";
 import Snowfall from "@/advent/Snowfall";
 import { ADVENT_BUSY_WAITING_TEXT, adventErrorText, retryWhenBusy } from "@/advent/busy";
+import { escapeMissedByLayer } from "@/advent/dialog-escape";
 import { guardSwallows, type GuardPoint } from "@/advent/tap-guard";
 import {
   ADVENT_STATE_KEY, adventApi, adventDevice, clearPairingLost, forgetLearnerPairing, isPairingLost, markPairingLost, useAdventState,
@@ -184,7 +185,11 @@ export default function AdventCalendar() {
   };
 
   const onDoor = (door: AdventDoorView, el: HTMLButtonElement, tap: { detail: number; clientX: number; clientY: number }) => {
-    if (performance.now() < gridGuardUntil.current && guardSwallows(gridGuardPoint.current, { pointer: tap.detail > 0, x: tap.clientX, y: tap.clientY }, el === questionOpener.current)) return;
+    if (performance.now() < gridGuardUntil.current && guardSwallows(gridGuardPoint.current, { pointer: tap.detail > 0, x: tap.clientX, y: tap.clientY }, el === questionOpener.current)) {
+      // Az elnyelt (a „Tovább” második) koppintás a fókuszt sem viszi a mögöttes ablakra: az a megnyitón marad (S4, S5).
+      if (questionOpener.current?.isConnected && document.activeElement !== questionOpener.current) questionOpener.current.focus();
+      return;
+    }
     if (pairingBlocks()) { say(CHOOSE_FIRST_TEXT); return; }
     if (door.state === "locked") { say(`${articleFor(door.day) === "az" ? "Az" : "A"} ${door.day}. ablak december ${door.day}${daySuffix(door.day)} nyílik.`); return; }
     if (busy) { say("Egy pillanat — még nyílik az előző ablak."); return; }
@@ -433,6 +438,7 @@ export default function AdventCalendar() {
             // A fókusz a KÉRDÉSRE kerül (nem az első válaszra): a képernyőolvasó felolvassa, és egy második Enter nem válaszol.
             onOpenAutoFocus={(event) => { event.preventDefault(); questionRef.current?.focus(); }}
             onCloseAutoFocus={(event) => { event.preventDefault(); if (handoffToSummary.current) { handoffToSummary.current = false; setSummaryOpen(true); return; } returnFocus(questionOpener.current); }}
+            onKeyDown={(event) => { if (escapeMissedByLayer(event)) closeQuestion(); }}
           >
             {open ? (
               <>
@@ -491,6 +497,7 @@ export default function AdventCalendar() {
           <Dialog.Content
             className="advent-dialog advent-summary" data-testid="advent-summary" data-kind={state.closing.kind} aria-describedby={undefined}
             onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus(summaryOpener.current?.isConnected ? summaryOpener.current : summaryButton.current); }}
+            onKeyDown={(event) => { if (escapeMissedByLayer(event)) setSummaryOpen(false); }}
           >
             <AdventArt id="advent-frame" className="advent-dialog__frame" decorative />
             <Dialog.Title className="advent-dialog__title">Összesítés</Dialog.Title>
@@ -527,8 +534,11 @@ export default function AdventCalendar() {
 
 /**
  * Fókusz-visszaadás a párbeszédablak bezárása után: azonnal, majd ha a könyvtár saját takarítása közben a fókusz a lap aljára (body)
- * vagy máshová került, néhány rövid, korlátos időzítővel újra (0–200 ms; nem képkocka-hurok, A31; nyitott párbeszédablakban nem) — így a fókusz megbízhatóan a megnyitó elemre
- * kerül, akkor is, ha a takarítás később fut, mint egyetlen időzítő.
+ * esett, néhány rövid, korlátos időzítővel újra (0–200 ms; nem képkocka-hurok, A31; nyitott párbeszédablakban nem) — így a fókusz
+ * megbízhatóan a megnyitó elemre kerül, akkor is, ha a takarítás később fut, mint egyetlen időzítő. Ha a fókusz közben egy MÁSIK elemre
+ * került (a gyerek / a billentyűzet szándékosan odavitte), az ismétlés NEM veszi vissza — különben elrántaná a fókuszt arról, amin a
+ * gyerek éppen Entert nyom (mérés 2026-11-20: a „Javítom”-kérdés bezárása utáni ismétlés az „Összesítés” gombról a „Javítom”-ra
+ * rántotta vissza a fókuszt, és az Enter az összesítés helyett a kérdést nyitotta).
  */
 const RETURN_FOCUS_RETRIES_MS = [0, 16, 50, 100, 200];
 /** A függőben lévő visszaadások generációja: új visszaadás vagy új párbeszédablak érvényteleníti a régieket (ne vigyék máshová a fókuszt). */
@@ -542,9 +552,9 @@ function returnFocus(target: HTMLElement | null | undefined): void {
   for (const delay of RETURN_FOCUS_RETRIES_MS) {
     window.setTimeout(() => {
       if (generation !== returnFocusGeneration || !target?.isConnected) return;
-      // Amíg nincs nyitott párbeszédablak, a fókusz a megnyitó elemre kerül — akkor is, ha a könyvtár takarítása közben máshová
-      // (nem csak a lap aljára) került. Nyitott ablakban nem nyúlunk hozzá.
-      if (document.activeElement !== target && !document.querySelector("[role=\"dialog\"], [role=\"alertdialog\"]")) target.focus();
+      // Csak az ELVESZETT (a lap aljára esett) fókuszt adjuk vissza; nyitott párbeszédablakban nem nyúlunk hozzá.
+      const active = document.activeElement;
+      if ((!active || active === document.body) && !document.querySelector("[role=\"dialog\"], [role=\"alertdialog\"]")) target.focus();
     }, delay);
   }
 }

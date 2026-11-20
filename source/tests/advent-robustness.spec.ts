@@ -252,6 +252,8 @@ test("dupla koppintás a „Tovább” gombon: a második koppintás nem éri a 
   await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
   await expect(page.getByTestId("advent-notice")).toHaveCount(0);
   expect(opens, "a második koppintás nem nyitott ablakot").toBe(1);
+  // A második (elnyelt) koppintás a fókuszt sem vitte a mögöttes ablakra: az ott van, ahonnan a kérdés nyílt (S5).
+  await expect(page.getByTestId("advent-door-3")).toBeFocused();
   // Fókusz: a „Javítom …” gombbal nyitott kérdés bezárása után a gombra megy vissza.
   await page.getByTestId("advent-repair").focus();
   await page.keyboard.press("Enter");
@@ -265,6 +267,8 @@ test("dupla koppintás a „Tovább” gombon: a második koppintás nem éri a 
   // Mint a gyerek: a megnyílt párbeszédablakban (a fókusz már benne) nyomja meg az Escape-et.
   await expect(page.locator('[data-testid="advent-summary"]:focus-within')).toHaveCount(1);
   await page.keyboard.press("Escape");
+  // Az Escape a megnyílás pillanatától zár (a könyvtár késve regisztrált rétege sem nyeli el — client/src/advent/dialog-escape.ts).
+  await expect(page.getByTestId("advent-summary")).toHaveCount(0);
   await expect(page.getByTestId("advent-summary-open")).toBeFocused();
 });
 
