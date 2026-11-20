@@ -42,6 +42,9 @@ egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a
 3. Egy új lecke közzététele után a Render-naplóban `[lesson-clips]` sorok: fejezetenként „kész: … N kép, N hang, N mozgókép, … kB”.
    Ha „nincs ffmpeg a szerveren” sor jelenik meg, a kisfilmek állóképesek — ekkor szólni kell.
 4. A lecke megnyitása: a gombok megjelennek, ahogy a fejezetek elkészülnek.
+5. Kikapcsolási feltétel (PR #418): a bekapcsolás utáni első körben a Render memória- és eseménymérését figyelni kell. Ha a példány
+   újraindul, vagy a memória tartósan a 480 MB-ot (az 512 MB-os korlát közelét) súrolja, azonnal `LESSON_CLIPS_AUTO=off`, és szólni
+   kell. A „memóriaőr miatt megállt” naplósor önmagában nem ok a kikapcsolásra: az a védelem működése.
 
 ## Költség és méret (mérve 2026-11-10, két automatikus fejezeten)
 
