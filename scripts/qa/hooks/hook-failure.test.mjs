@@ -236,9 +236,11 @@ test('L14: a szöveg-őr szóhatára Unicode-tudatos — ékezetes szó elején 
 });
 
 test('L7: a kikapcsoló mechanizmus neve és a védelem eltávolítására felszólító szinonimák sehol nem szerepelnek ügynöknek szóló szövegben', () => {
-  const SKILLS = ['websuli-lint-ellenor', 'websuli-fejlesztesi-ellenor', 'websuli-push-elotti-kapu', 'websuli-pr-elotti-kapu', 'websuli-merge-elotti-kapu'];
+  const SKILLS = ['websuli-lint-ellenor', 'websuli-fejlesztesi-ellenor', 'websuli-push-elotti-kapu', 'websuli-pr-elotti-kapu', 'websuli-merge-elotti-kapu',
+    'websuli-session-zaras'];
   const files = ['docs/minosegkapuk.md', 'docs/agent-csapdak.md', 'docs/handoffs/2026-11-18-kapu-hook-retro.md',
     'docs/specs/2026-11-18-hook-onfailure.md', 'docs/specs/2026-11-18-hook-onfailure-vegrehajtas.md',
+    'docs/specs/2026-11-20-session-zaras.md', 'docs/specs/2026-11-20-session-zaras-vegrehajtas.md',
     ...SKILLS.flatMap((s) => [`.agents/skills/${s}/SKILL.md`, `.claude/skills/${s}/SKILL.md`])];
   // A helyi settings-fájl NEVE megengedett (a tulajdonosi döntés szerint jogosultsági tiltás alatt áll, ezt a runbook leírja); ami
   // tilos: a kikapcsoló kulcs neve, a „continue” érték, a parancssori settings-kapcsoló, és felszólítás a helyi fájlba írásra.

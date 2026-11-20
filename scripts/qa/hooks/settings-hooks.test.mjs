@@ -33,9 +33,25 @@ function bashPath() {
   return bash;
 }
 
+/** A Stop hook próbájához: szintetikus átirat egy tulajdonosi üzenettel (docs/specs/2026-11-20-session-zaras.md). */
+function stopTranscript() {
+  const p = join(mkdtempSync(join(tmpdir(), 'hookstop-')), 'proba-session.jsonl');
+  writeFileSync(p, `${JSON.stringify({ type: 'user', uuid: 'p-1', isSidechain: false, origin: { kind: 'human' }, message: { role: 'user', content: 'Szintetikus kérés' } })}\n`);
+  return p;
+}
+
 /** Hookonként a próba és az elvárt kimenet. */
 function probeFor({ command, matcher }) {
   const tool = matcher.split('|')[0];
+  if (/check-session-closeout\.mjs/.test(command)) {
+    const transcript = stopTranscript();
+    return {
+      tool: null,
+      payload: (cwd) => ({ hook_event_name: 'Stop', session_id: 'proba-session', transcript_path: transcript, cwd, stop_hook_active: false,
+        last_assistant_message: 'Záró jelentés: a módosított fájlok és a futtatott ellenőrzések.', background_tasks: [], session_crons: [] }),
+      expect: 'block',
+    };
+  }
   if (/check-quality-gates\.mjs/.test(command)) return { tool, input: { command: 'git push origin proba' }, expect: 'deny' };
   if (/check-audit-ok\.mjs/.test(command)) return { tool, input: { command: 'git push origin proba' }, expect: 'deny' };
   if (/check-destructive\.mjs/.test(command)) return { tool, input: { command: 'rm -rf /' }, expect: 'deny' };
@@ -73,7 +89,7 @@ function runSettingsHook(bash, command, projectDir, cwd, probe, { substitute = f
   Object.assign(env, { WEBSULI_HOOK_GIT_TIMEOUT_MS: '120000', WEBSULI_HOOK_GH_TIMEOUT_MS: '120000', WEBSULI_HOOK_BUDGET_MS: '600000' });
   // A dokumentáció szerint a Claude Code a ${CLAUDE_PROJECT_DIR} helyőrzőt maga is behelyettesítheti; mindkét utat mérjük.
   const cmd = substitute ? command.split('${CLAUDE_PROJECT_DIR}').join(projectDir) : command;
-  const payload = JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: probe.tool, tool_input: probe.input, cwd });
+  const payload = JSON.stringify(probe.payload ? probe.payload(cwd) : { hook_event_name: 'PreToolUse', tool_name: probe.tool, tool_input: probe.input, cwd });
   return spawnSync(bash, ['-c', cmd], { cwd, env, input: payload, encoding: 'utf8', timeout: 300_000, windowsHide: true });
 }
 
@@ -82,6 +98,7 @@ function verdict(r) {
   let j = null;
   try { j = r.stdout.trim() ? JSON.parse(r.stdout) : null; } catch { return `nem JSON kimenet: ${r.stdout.slice(0, 200)}`; }
   if (j?.hookSpecificOutput?.permissionDecision === 'deny') return 'deny';
+  if (j?.decision === 'block') return 'block';
   if (j?.systemMessage) return 'message';
   return 'átengedte';
 }
@@ -102,7 +119,8 @@ test('a kapu-hook a Bash- ÉS a PowerShell-eszközre is be van kötve, az időko
   for (const e of gate) assert.ok(Number(e.hook.timeout) * 1000 > budgetMs + 5_000, `${e.matcher}: timeout ${e.hook.timeout} s, keret ${budgetMs} ms`);
 });
 
-test('H1: a valódi settings minden hookja lefut és a várt döntést adja — gyökérből, source/-ből, mélyebb könyvtárból, munkafából', () => {
+/** A hook-bejegyzések futtatása minden helyről; a hibák listája. */
+function runEntries(entries) {
   const bash = bashPath();
   const { proj, wt } = makeProject();
   const places = [
@@ -122,5 +140,28 @@ test('H1: a valódi settings minden hookja lefut és a várt döntést adja — 
     const sub = verdict(runSettingsHook(bash, entry.command, proj, join(proj, 'source'), probe, { substitute: true }));
     if (sub !== probe.expect) failures.push(`${entry.matcher} ${entry.command} @ source/ (behelyettesítve): várt ${probe.expect}, kapott ${sub}`);
   }
-  assert.deepEqual(failures, []);
+  return failures;
+}
+
+test('H1: a valódi settings minden hookja lefut és a várt döntést adja — gyökérből, source/-ből, mélyebb könyvtárból, munkafából', () => {
+  assert.deepEqual(runEntries(hookEntries()), []);
+});
+
+// docs/specs/2026-11-20-session-zaras.md „Tulajdonosi lépés”: a settings jogosultsági tiltás alatt, a Stop hookot a tulajdonos köti be
+// a terv JSON-részlete szerint. Ez a próba a részletet ugyanúgy futtatja, mint a H1 a valódi settingst — így a bekötendő parancs
+// már most minden helyről ellenőrzött, és a részlet nem csúszhat el a hooktól.
+test('H1-Stop: a terv tulajdonosi Stop-részlete minden helyről lefut, és zárásra utaló válasznál tilt', () => {
+  const spec = readFileSync(join(repoRoot, 'docs', 'specs', '2026-11-20-session-zaras.md'), 'utf8').replace(/\r\n/g, '\n');
+  const sec = spec.slice(spec.indexOf('## Tulajdonosi lépés'));
+  const block = /```json\n([\s\S]*?)\n```/.exec(sec)?.[1];
+  assert.ok(block, 'a terv „Tulajdonosi lépés” szakaszában nincs JSON-részlet');
+  const stop = JSON.parse(`{${block}}`).Stop;
+  const entries = stop.flatMap((g) => g.hooks.map((h) => ({ event: 'Stop', matcher: g.matcher ?? '', command: h.command, hook: h })));
+  assert.equal(entries.length, 1);
+  assert.match(entries[0].command, /^node "\$\{CLAUDE_PROJECT_DIR\}\/scripts\/qa\/hooks\/check-session-closeout\.mjs"$/);
+  assert.ok(entries[0].hook.timeout >= 5, 'a Stop hook időkorlátja legalább 5 s');
+  assert.deepEqual(runEntries(entries), []);
+  // ha a tulajdonos bekötötte, a valódi settingsben is pontosan ez áll
+  const real = (settings.hooks?.Stop ?? []).flatMap((g) => g.hooks.map((h) => h.command));
+  if (real.length) assert.deepEqual(real, entries.map((e) => e.command));
 });

@@ -30,9 +30,10 @@ test('checkSkills: frontmatter nélküli forrás → hiba', () => {
   assert.match(checkSkills({ root, names: ['x'] })[0].problem, /frontmatter/);
 });
 
-test('a repó öt minőségkapu-skillje mindkét helyen azonos (a valódi fájlokon)', () => {
+test('a repó hat tükrözött skillje (öt minőségkapu + session-zárás) mindkét helyen azonos (a valódi fájlokon)', () => {
   const root = resolve(GATES_DIR, '..', '..', '..');
   const names = loadConfig().mirroredSkills;
-  assert.equal(names.length, 5);
+  assert.equal(names.length, 6);
+  assert.ok(names.includes('websuli-session-zaras'), 'a session-zárás skillje a tükrözött listában');
   assert.deepEqual(checkSkills({ root, names }).filter((r) => r.problem), []);
 });
