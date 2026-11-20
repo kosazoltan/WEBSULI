@@ -80,7 +80,7 @@ Render írhatja, így a támadó által a bal oldalra írt Cloudflare-cím nem k
 - [x] I2: WHEN a támadó a lánc bal oldalára Cloudflare-címet ír (privát elemekkel is keverve) THEN a fejléc SHALL NOT kulcs.
 - [x] I3: WHEN a lánc jobbról első nyilvános eleme Cloudflare-cím (IPv4 vagy IPv6, belső hoppal vagy anélkül) THEN a kulcs SHALL a
       `CF-Connecting-IP` (a valódi Cloudflare-út változatlan).
-- [ ] I4 (élő korlát, Express + `express-rate-limit`): Cloudflare-t megkerülő, kérésenként más hamis `CF-Connecting-IP` nem ad új
+- [x] I4 (élő korlát, Express + `express-rate-limit`): Cloudflare-t megkerülő, kérésenként más hamis `CF-Connecting-IP` nem ad új
       keretet; a valódi Cloudflare-úton két különböző kliens külön keretet kap.
 - [x] I5: a meglévő A1, A2, A3, A5, A7, A8 tesztek változatlanul zöldek; az A4 Renderen kívüli és Vercel-elsőbbségi állítása változatlan.
 - [ ] I6 (élő, tulajdonosi mérés a telepítés után): közvetlen `websuli-api-eu.onrender.com` hívás 8× ugyanarról a gépről egyetlen,
