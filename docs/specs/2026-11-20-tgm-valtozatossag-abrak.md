@@ -232,3 +232,44 @@ Elfogadás (EARS):
 - [ ] V10 módszerkiosztás maggal
 - [ ] V11 nyitóblokk-címke a formából
 - [ ] V12 javítási út jelölője és visszaolvasás
+
+## 12. S6a — fejezetív-készlet
+
+Alap: TGM-terv S6a (TGM-végrehajtás 795. sortól). Kapcsoló: `STUDIO_LESSON_VARIETY`.
+
+Felülvizsgálat (TÉNY): a tervező egyetlen ívet kap, kétszer (`server/studio/step-io.ts:395` „explain → example → check, a végén
+legfeljebb egy rövid recap”, `:404` „A plannedBlocks sorrendje EZT az ívet kövesse”), a szerző a terv sorrendjét követi
+(`server/studio/role-skills.ts:116`) → a fejezetek 61,6%-a pontosan azonos blokksorú (TGM-terv 3.3).
+
+Döntések:
+
+1. `shared/lesson-section-shapes.ts`: hat fejezetminta — `alap` (explain, example, animate, check, recap), `megmutatas` (explain,
+   animate, example, try, check), `kerdesfelveto` (explain, example, check, explain, recap), `gyakorlo` (explain, example, try, check,
+   recap), `osszehasonlito` (explain, animate, example, example, check), `donteshelyzet` (explain, example, animate, check). Mind
+   átmegy a `shared/lesson-arc.ts` kapuján (magyarázattal kezd, példa a kérdés előtt, a gyakorlóarány ≤ 75%) — a kapu NEM változik.
+2. A tervező BE kapcsolónál fejezettípust ad (`sectionKind`: `procedure` | `description` | `comparison` | `any`; engedékeny, opcionális
+   mező); a fogalom-fejezetek `plannedBlocks`-át a program a terv elfogadása UTÁN a kiosztott mintára írja át (determinisztikus, modellkör
+   nélkül). A különleges fejezetek (`sectionRoleOf` szerint: kidolgozott feladat, leggyakoribb hibák, ellenőrzés) és a tulajdonos
+   jóváhagyott (`approvedOutline`) terve változatlan. Az utolsó fejezet mindig `recap`-pal zárul (a program hozzáfűzi).
+3. Kiosztás (`assignSectionShapes(kinds, seed)`): a típushoz illő minták közül a magból (`seedFrom(mapId)`); szomszédos fejezet nem kapja
+   ugyanazt; egy minta a fejezetek legfeljebb 40%-a (felfelé kerekítve); ha a szabályok ütköznek, előbb a 40%-os, majd a szomszéd-szabály
+   enged. Illeszkedés: `any` → mind a hat; `procedure` → alap, megmutatás, gyakorló, döntéshelyzet; `description` → alap, megmutatás,
+   kérdésfelvető; `comparison` → összehasonlító, döntéshelyzet, alap.
+4. KI kapcsolónál a terv bájtra a régi (a kéretlen `sectionKind` mező is eldobva), a pedagógus-prompt bájtra a régi.
+5. A kiosztott minták mentése (az SK2 kapujához) az SK2 feladata; addig az SK2 a „bármely készletbeli minta” szabályt méri.
+
+Elfogadás (EARS):
+
+- **V13** — THE hat minta SHALL átmenni a `checkLessonArc` kapun (nyitóblokkokkal és záró recap-pal épített ál-leckében).
+- **V14** — WHEN a kiosztás 3…12 fejezetre fut 200 magon, THE szomszédos fejezetek SHALL NOT azonos mintát kapni, és egy minta SHALL
+  legfeljebb a fejezetek 40%-a (felfelé kerekítve) lenni.
+- **V15** — WHEN a kapcsoló BE, THE modell által tervezett fogalom-fejezetek `plannedBlocks`-a SHALL a kiosztott minta lenni, a különleges
+  fejezeteké SHALL változatlan lenni, és az utolsó fejezet SHALL recap-pal zárulni; WHEN KI, THE terv SHALL bájtra a régi lenni.
+- **V16** — WHEN a kiosztás szimulációja (modellhívás nélkül, minden típus `any`, 3–12 fejezet) fut, THE leggyakoribb fejezetminta
+  aránya SHALL < 35% és két véletlen fejezet azonos mintájának valószínűsége SHALL < 20% lenni (alapvonal: 61,6% és 40,4%).
+
+<!-- acceptance-checklist -->
+- [ ] V13 minták az ívkapun
+- [ ] V14 szomszéd- és 40%-szabály
+- [ ] V15 átírás BE-nél, KI bájtra a régi
+- [ ] V16 szimuláció < 35% / < 20%
