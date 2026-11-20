@@ -87,6 +87,42 @@ a régi); BE: `nyitomese-3`; a jelölő verziója `valtozatossag-2`, ha a leját
 (`server/studio/structured-improvement.ts:196`) a meglévő `variety` jelölő megőrzése (a `modelLessonSchema` elhagyja) — teszttel.
 Mérés: 100 magon ≥ 3 nyitásforma és ≥ 25 név; 50 magon az első módszer ≥ 6-féle.
 
+Részletes lépések (munkafa `.claude/worktrees/tgm-s5b`; a terv 11. szakasza szerint):
+
+Fájlok: `shared/lesson-opener.ts`, `shared/lesson-bank-plan.ts`, `shared/lesson-feedback-openers.ts`, `shared/lesson-block-label.ts`,
+`server/studio/step-io.ts`, `server/studio/experience-builder.ts`, `server/studio/single-run/engine.ts`,
+`server/studio/structured-improvement.ts`, `server/workflows/apply.ts`, `client/src/lesson-runtime/LessonRuntime.tsx`; tesztek:
+`tests/lesson-opening-forms.test.ts` (új), `tests/lesson-bank-plan-seed.test.ts` (új), `tests/lesson-variety-flag.test.ts`,
+`tests/lesson-feedback-openers.test.ts` (bővül).
+
+1. **Bukó tesztek ELŐBB:**
+   - `tests/lesson-opening-forms.test.ts`: `OPENING_FORMS` lépcsőcsoportonként (L1–L2, L3–L4, L5–L6) 3–4 forma, mindegyik leírása 2–3
+     mondat; `HERO_NAMES` ≥ 40 egyedi név, a „Bence”, „Dóra”, „Dóri” nélkül; `openerVarietyPick(classroom, seed)` determinisztikus;
+     100 magon csoportonként ≥ 3 forma és ≥ 25 név; `lessonOpenerContract(c, { variety: { seed } })` BE: nincs „PONTOSAN 5”, van
+     „3–6 mondat”, a hős neve és a forma a promptban, fejléc `nyitomese-3`, a Célkártya-sorok bájtra a régiek; mag nélkül bájtra a régi.
+     `playfulQuestioningContract(true)` nem tartalmazza a „Peti” szót; `lessonOpenerLektorChecklist(true)` „3–6 mondat”, KI = régi
+     konstans; `blockLabel` a nyitóblokkra a kiosztott forma címkéjét adja (`openingForm` paraméter), nélküle a régi „Mese” / „Történet”.
+   - `tests/lesson-bank-plan-seed.test.ts`: mag nélkül a kimenet a régi (rögzített példán); 50 magon minden csomagkészletben mind a tíz
+     fajta + két `gate`, csomagonként ≥ 2 fajta, az első csomag első fajtája ≥ 6-féle.
+   - `tests/lesson-feedback-openers.test.ts`: `withVarietyMarker` BE-nél `{ version: "valtozatossag-2", openingForm }` a lecke
+     `mapId` + `classroom` alapján (ugyanaz, amit a prompt kapott).
+   - Javítási út: `appliedLessonMatches` (`server/workflows/apply.ts`) a `variety` kulcsot is figyelmen kívül hagyja, mint az `art`-ot.
+2. `shared/lesson-opener.ts`: `HERO_NAMES`, `OPENING_FORMS`, `OPENING_FORM_LABEL`, `openerVarietyPick`, a `lessonOpenerContract`
+   `variety` opciója, `lessonOpenerLektorChecklist(variety)`; a `playfulAuthorRules` / `playfulQuestioningContract` BE ága
+   `nyitomese-3`, a „Peti szerint…” példa helyett „egy megnevezett szereplő téves állítása és a lecke ténye”. (Az S5a `nyitomese-2`
+   elvárása dokumentált spec-változással `nyitomese-3`-ra lép — terv 11. szakasz.)
+3. `shared/lesson-bank-plan.ts`: `bankUnitQuota(plan, unitIndex, seed?)` — maggal a `[...METHOD_KINDS, "gate"]` `seededShuffle`-lel
+   keveredik a körbeosztás előtt.
+4. Bekötés: `engine.ts` a `buildAuthorPrompt` új, opcionális `variety` paraméterébe `{ seed: seedFrom(mapId) }`-t ad BE kapcsolónál;
+   `step-io.ts` a `lessonOpenerContract`-nak továbbadja, a lektor a `lessonOpenerLektorChecklist(lessonVarietyEnabled())`-t kapja;
+   `experience-builder.ts` a `bankUnitQuota`-nak BE kapcsolónál `seedFrom(lesson.mapId)`-t ad; `structured-improvement.ts` a mentés
+   előtt `withVarietyMarker`; `LessonRuntime.tsx` a `blockLabel`-nek a `lesson.variety?.openingForm`-ot adja.
+5. Futtasd: `node --import tsx --test tests/lesson-opening-forms.test.ts tests/lesson-bank-plan-seed.test.ts
+   tests/lesson-variety-flag.test.ts tests/lesson-feedback-openers.test.ts tests/lesson-opener.test.ts tests/bank-item-ref.test.ts
+   tests/source-visuals-flag.test.ts tests/single-run-engine.test.ts tests/lesson-block-label*.test.ts` → `pass`; `tsc --noEmit` 0;
+   eslint a változott fájlokra 0.
+6. Nehéz kör (zárral, `tgm-s5b`): gate:stage → npm test → böngészős próba (a nyitóblokk címkéje jelölt leckén) → gate:push.
+
 ## S6a, S6b, S6c, SK2
 
 A TGM-végrehajtás megfelelő fejezetei (795., 829., 850., 873. sortól), a terv 4. szakaszának sorszám-igazításaival és a 0. szakasz
