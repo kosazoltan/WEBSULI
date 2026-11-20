@@ -527,7 +527,7 @@ export default function AdventCalendar() {
 
 /**
  * Fókusz-visszaadás a párbeszédablak bezárása után: azonnal, majd ha a könyvtár saját takarítása közben a fókusz a lap aljára (body)
- * esett, néhány rövid, korlátos időzítővel újra (0–200 ms; nem képkocka-hurok, A31) — így a fókusz megbízhatóan a megnyitó elemre
+ * vagy máshová került, néhány rövid, korlátos időzítővel újra (0–200 ms; nem képkocka-hurok, A31; nyitott párbeszédablakban nem) — így a fókusz megbízhatóan a megnyitó elemre
  * kerül, akkor is, ha a takarítás később fut, mint egyetlen időzítő.
  */
 const RETURN_FOCUS_RETRIES_MS = [0, 16, 50, 100, 200];
@@ -541,9 +541,10 @@ function returnFocus(target: HTMLElement | null | undefined): void {
   target?.focus();
   for (const delay of RETURN_FOCUS_RETRIES_MS) {
     window.setTimeout(() => {
-      if (generation !== returnFocusGeneration) return;
-      const active = document.activeElement;
-      if (target?.isConnected && (!active || active === document.body)) target.focus();
+      if (generation !== returnFocusGeneration || !target?.isConnected) return;
+      // Amíg nincs nyitott párbeszédablak, a fókusz a megnyitó elemre kerül — akkor is, ha a könyvtár takarítása közben máshová
+      // (nem csak a lap aljára) került. Nyitott ablakban nem nyúlunk hozzá.
+      if (document.activeElement !== target && !document.querySelector("[role=\"dialog\"], [role=\"alertdialog\"]")) target.focus();
     }, delay);
   }
 }
