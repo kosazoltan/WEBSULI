@@ -815,24 +815,39 @@ describe("adventi naptár — végpontok", () => {
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
-  it("a párosított olvasás a tanulói és a vendégsort EGY lekérdezésből kapja: az átvétel commitja előtt és után sem üres a nézet (PR-B 4. kör L2)", async () => {
+  it("a párosított olvasás a tanulói és a vendégsort EGY pillanatképből kapja: egy GET egyetlen olvasás; két kapcsolattal a nyitott (még nem commitolt) átvétel előtt és után sem üres a pár (PR-B 4. kör L2)", async () => {
     const learner = await newLearner(5);
     const phone = await kid();
     assert.equal((await phone.post("/grade", { grade: 5 })).status, 200);
     await phone.answer(1, await phone.open(1), true);
-    const store = createAdventStore(dbPool) as unknown as { readPair?: (season: number, learnerId: string, deviceId: string) => Promise<{ learner: unknown; device: unknown }> };
-    assert.equal(typeof store.readPair, "function", "readPair hiányzik");
-    // Egy lekérdezés = egy pillanatkép: az átvétel előtt és után is a két sor egységes állapota jön vissza.
-    const before = await store.readPair!(2026, learner.id, phone.device);
-    assert.ok(before.device && !before.learner, "commit előtt: vendégsor van, tanulói nincs");
     phone.learner = learner.token;
-    assert.equal((await phone.post("/doors/2/open")).status, 200);
-    const after = await store.readPair!(2026, learner.id, phone.device);
-    assert.ok(after.learner && !after.device, "commit után: tanulói sor van, vendégsor nincs");
-    // A route is ezt használja (nem két külön olvasást).
-    const src = (await import("node:fs")).readFileSync(new URL("../server/advent/routes.ts", import.meta.url), "utf8");
-    assert.match(src, /store\.readPair\(at\.season, resolution\.subject\.id, locals\.pairedDevice\)/);
-    assert.equal((await phone.state()).json.summary.solved, 1);
+    // 1) A párosított GET pontosan EGY advent_progress-olvasást végez (két külön olvasás közé commit eshetne).
+    const original = dbPool.query.bind(dbPool);
+    let reads = 0;
+    (dbPool as unknown as { query: unknown }).query = (text: unknown, ...rest: unknown[]) => {
+      const sql = typeof text === "string" ? text : (text as { text?: string } | null)?.text ?? "";
+      if (/FROM advent_progress/.test(sql)) reads++;
+      return (original as (...args: unknown[]) => unknown)(text, ...rest);
+    };
+    let preview: Json;
+    try { preview = (await phone.state()).json; } finally { (dbPool as unknown as { query: unknown }).query = original; }
+    assert.equal(reads, 1, "egy olvasás = egy pillanatkép");
+    assert.equal(preview!.summary.solved, 1, "az előnézet nem üres");
+    // 2) Két kapcsolat: a második kapcsolaton nyitott átvétel (tanulói sor beszúrva, vendégsor törölve, még NEM commitolt).
+    const store = createAdventStore(dbPool);
+    const writer = await dbPool.connect();
+    try {
+      await writer.query("BEGIN");
+      await writer.query(`INSERT INTO advent_progress (season, subject_kind, subject_id, learner_id, grade, round, plan, doors)
+        SELECT season, 'learner', $2, $2, grade, round, plan, doors FROM advent_progress WHERE subject_kind = 'device' AND subject_id = $1`, [phone.device, learner.id]);
+      await writer.query(`DELETE FROM advent_progress WHERE subject_kind = 'device' AND subject_id = $1`, [phone.device]);
+      const during = await store.readPair(2026, learner.id, phone.device);
+      assert.ok(during.device && !during.learner, "commit előtt: a régi, egységes állapot (vendégsor)");
+      await writer.query("COMMIT");
+    } catch (error) { await writer.query("ROLLBACK").catch(() => undefined); throw error; } finally { writer.release(); }
+    const after = await store.readPair(2026, learner.id, phone.device);
+    assert.ok(after.learner && !after.device, "commit után: az új, egységes állapot (tanulói sor)");
+    assert.equal((await phone.state()).json.summary.solved, 1, "a nézet a commit után sem üres");
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
