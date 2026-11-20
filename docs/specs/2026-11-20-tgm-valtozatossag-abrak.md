@@ -339,11 +339,11 @@ Döntések:
 
 1. **A négy, élesben soha nem használt fajta megjelenítője újrarajzolva** a sáv tokenjeivel (tört: körcikk + téglalapsáv + számláló /
    nevező; térkép: pontok számozott jelölővel, jelmagyarázattal; szóépítés: színezett szórészek kötőjellel és eredménnyel; mondatrészek:
-   színkódolt elemek szerepcímkével). Mivel élesben 0 előfordulásuk van, a változás a kiadott leckéken semleges (a jelölt S1-es
-   leckékre sem hat — ott ez a négy fajta nincs). Mobilon sortörés, vízszintes görgetés nélkül.
+   színkódolt elemek szerepcímkével). Mivel a mért kiadott állományban 0 előfordulásuk van, a változás a kiadott leckéken gyakorlatilag
+   semleges (UNVERIFIED a 2026-11-18 utáni gyártásra — ott is csak a kinézet változik, adat nem). Mobilon sortörés, vízszintes görgetés nélkül.
 2. **`process` és `timeline` új megjelenése csak jelölt leckén** (`FeedbackVarietyContext`): számozott, sávszínű lépéskörök
    nyilakkal, mobilon függőleges elrendezésben; jelöletlen leckén a régi megjelenítő (bájtra azonos DOM).
-3. **Prompt (BE):** `visualParamsContract(true)` a négy fajta paraméter-alakjával; `shared/visual-kind-plan.ts`: `SUBJECT_KIND_HINTS`
+3. **Prompt (BE):** az ábrakészítő promptjában (`buildAnimatorPrompt`) `visualParamsContract(true)` a négy fajta paraméter-alakjával (a szerzői blokk-katalógus és a fejezet-ábratervező állandó szövege változatlan, gyorsítótár-előtag); `shared/visual-kind-plan.ts`: `SUBJECT_KIND_HINTS`
    (tantárgy → legalább két ajánlott fajta a hirdetett listából) és a tantárgy ajánlása az ábrakészítő promptjában; KI: bájtra a régi.
 4. **Jelzés, nem kapu:** `kindShareProblems(lesson)` — ha egy fajta a lecke nem forráshoz kötött ábráinak több mint 40%-a (legalább 5
    ábránál), `qualityNotes` (`visual_kind_share`); BE-nél `telemetry.gates.visualKinds` (fajtánkénti darabszám).

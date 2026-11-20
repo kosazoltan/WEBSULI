@@ -11,6 +11,7 @@
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { seedFrom } from "../../../shared/seeded";
 import { applySectionShapes, tryShare } from "../../../shared/lesson-section-shapes";
+import { kindShareProblems, visualKindCounts } from "../../../shared/visual-kind-plan";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
@@ -881,6 +882,12 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     else log("[EGYFUTÁS] Az ábrafolt nem illeszthető — az eredeti tanítás megy tovább.");
   } catch (error) { log(`[EGYFUTÁS] Az ábra-forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
   if (!pastAnimator) lesson = ensureSectionVisuals(stripUngroundedAnimateLabels(lesson, concepts).lesson, concepts).lesson;
+  // S6c (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 14. szakasz): jelzés, nem kapu — az ábrafajták eloszlása és a 40%-os arány.
+  if (!pastAnimator && varietyOn) {
+    telemetry.gates.visualKinds = visualKindCounts(lesson);
+    const kindNotes = kindShareProblems(lesson).map((note) => ({ reason: "visual_kind_share", note, round: 0 }));
+    if (kindNotes.length) output = { ...output, qualityNotes: [...(Array.isArray(output.qualityNotes) ? output.qualityNotes as unknown[] : []), ...kindNotes] };
+  }
 
   // 5. Gyakorlóbank — a meglévő banképítő (kvóta, autofix, séma, javító kísérletek); J2: minden csomag FRISS beszélgetésben.
   let checkpoint: ExperienceCheckpoint | undefined = resumed?.checkpoint;

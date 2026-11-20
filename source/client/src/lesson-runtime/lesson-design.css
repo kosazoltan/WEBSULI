@@ -432,3 +432,82 @@
 [data-ws-theme] .sv-pcard-label { font-weight: 800; font-size: 1.05em; overflow-wrap: anywhere; color: var(--ws-title, var(--ws-ink)); }
 [data-ws-theme] .sv-pcard-caption { font-size: 0.88em; color: var(--ws-muted); overflow-wrap: anywhere; }
 [data-ws-theme] .sv-pcard-example { font-size: 0.88em; font-style: italic; overflow-wrap: anywhere; }
+/* Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (14. szakasz): szebb ábrák — kizárólag a sáv tokenjeivel (blocks/variety-visuals.tsx). */
+[data-band] .vv-figure {
+  --vv-tone: var(--ws-accent, var(--lesson-accent));
+  margin: 0; padding: 14px 16px; min-width: 0; max-width: 100%; border-radius: 16px;
+  background: var(--ws-panel, var(--lesson-surface)); color: var(--ws-ink, var(--lesson-ink));
+  border: 1px solid var(--ws-line, var(--lesson-line));
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--ws-deep, var(--lesson-ink)) 8%, transparent);
+  font-size: max(15px, calc(var(--grade-size, 16px) * 0.92)); line-height: 1.45;
+}
+[data-band] .vv-tone-a { --vv-tone: var(--ws-accent, var(--lesson-accent)); }
+[data-band] .vv-tone-b { --vv-tone: var(--ws-accent-2, var(--lesson-accent)); }
+[data-band] .vv-tone-c { --vv-tone: var(--ws-accent-3, var(--lesson-accent)); }
+[data-band] .vv-caption { margin-top: 10px; font-size: 0.88em; color: var(--ws-muted, var(--lesson-muted)); }
+
+/* Tört */
+[data-band] .vv-fraction { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+[data-band] .vv-pie { width: 96px; height: 96px; flex: none; }
+[data-band] .vv-pie path { stroke: var(--ws-panel, var(--lesson-surface)); stroke-width: 1.5; }
+[data-band] .vv-fill-a { fill: var(--ws-accent, var(--lesson-accent)); }
+[data-band] .vv-fill-empty { fill: color-mix(in srgb, var(--ws-accent, var(--lesson-accent)) 14%, var(--ws-panel, var(--lesson-surface))); }
+[data-band] .vv-fraction-number { display: inline-flex; flex-direction: column; align-items: center; font-size: 2em; font-weight: 800; line-height: 1.1; color: var(--ws-deep, var(--lesson-ink)); }
+[data-band] .vv-fraction-line { display: block; width: 100%; min-width: 1.4em; height: 3px; margin: 2px 0; border-radius: 2px; background: currentColor; }
+[data-band] .vv-bars { display: grid; gap: 6px; margin-top: 12px; }
+[data-band] .vv-bar { display: flex; gap: 3px; min-width: 0; }
+[data-band] .vv-cell { flex: 1 1 0; min-width: 0; height: 18px; border-radius: 4px; background: color-mix(in srgb, var(--ws-accent, var(--lesson-accent)) 14%, var(--ws-panel, var(--lesson-surface))); }
+[data-band] .vv-cell-on { background: var(--ws-accent, var(--lesson-accent)); }
+
+/* Térkép: számozott jelölők + jelmagyarázat (a feliratok nem takarják egymást mobilon sem). */
+[data-band] .vv-map {
+  position: relative; height: 180px; border-radius: 12px; overflow: hidden;
+  background-color: color-mix(in srgb, var(--ws-accent-3, var(--lesson-accent)) 10%, var(--ws-panel, var(--lesson-surface)));
+  background-image: linear-gradient(color-mix(in srgb, var(--ws-line, var(--lesson-line)) 70%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ws-line, var(--lesson-line)) 70%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+[data-band] .vv-marker {
+  position: absolute; transform: translate(-50%, -50%); width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--ws-panel, var(--lesson-surface));
+  display: grid; place-items: center; font-weight: 800; font-size: 13px; color: var(--ws-strong-ink, var(--lesson-accent-ink));
+  background: var(--vv-tone); box-shadow: 0 2px 6px color-mix(in srgb, var(--ws-deep, var(--lesson-ink)) 30%, transparent);
+}
+[data-band] .vv-legend { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+[data-band] .vv-legend li { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+[data-band] .vv-legend-dot { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; color: var(--ws-strong-ink, var(--lesson-accent-ink)); background: var(--vv-tone); }
+
+/* Szóépítés és mondatrészek */
+[data-band] .vv-word, [data-band] .vv-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+[data-band] .vv-word-item { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+[data-band] .vv-chip {
+  padding: 8px 14px; border-radius: 12px; font-weight: 700; font-size: 1.15em; overflow-wrap: anywhere;
+  border: 2px solid var(--vv-tone); background: color-mix(in srgb, var(--vv-tone) 14%, var(--ws-panel, var(--lesson-surface)));
+}
+[data-band] .vv-chip-result { border-style: solid; background: var(--ws-accent, var(--lesson-accent)); color: var(--ws-strong-ink, var(--lesson-accent-ink)); }
+[data-band] .vv-op { font-weight: 800; font-size: 1.2em; color: var(--ws-muted, var(--lesson-muted)); }
+[data-band] .vv-part {
+  display: inline-flex; flex-direction: column; gap: 2px; min-width: 0; padding: 6px 12px 8px; border-radius: 12px;
+  border-bottom: 4px solid var(--vv-tone); background: color-mix(in srgb, var(--vv-tone) 12%, var(--ws-panel, var(--lesson-surface)));
+}
+[data-band] .vv-role { font-size: 0.72em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--vv-tone); }
+[data-band] .vv-part-text { font-weight: 600; overflow-wrap: anywhere; }
+
+/* Folyamat (jelölt lecke): számozott lépéskörök nyíllal; keskeny képernyőn egymás alatt. */
+[data-band] .vv-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px 28px; }
+[data-band] .vv-step { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 160px; }
+[data-band] .vv-step:not(:last-child)::after { content: "→"; position: absolute; right: -22px; top: 50%; translate: 0 -50%; font-weight: 800; color: var(--ws-muted, var(--lesson-muted)); }
+[data-band] .vv-step-num { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: var(--ws-strong-ink, var(--lesson-accent-ink)); background: var(--vv-tone); }
+[data-band] .vv-step-text { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  [data-band] .vv-steps { flex-direction: column; gap: 18px; }
+  [data-band] .vv-step { flex: none; }
+  [data-band] .vv-step:not(:last-child)::after { content: "↓"; right: auto; left: 10px; top: auto; bottom: -19px; translate: 0 0; }
+}
+
+/* Idővonal (jelölt lecke): függőleges sín pontokkal, év kiemelve. */
+[data-band] .vv-timeline { list-style: none; margin: 0; padding: 0 0 0 22px; position: relative; display: grid; gap: 12px; }
+[data-band] .vv-timeline::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--ws-line, var(--lesson-line)); }
+[data-band] .vv-event { position: relative; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; min-width: 0; }
+[data-band] .vv-event-dot { position: absolute; left: -21px; top: 0.35em; width: 14px; height: 14px; border-radius: 50%; background: var(--vv-tone); box-shadow: 0 0 0 3px var(--ws-panel, var(--lesson-surface)); }
+[data-band] .vv-event-when { font-weight: 800; color: var(--vv-tone); white-space: nowrap; }
+[data-band] .vv-event-what { min-width: 0; overflow-wrap: anywhere; }

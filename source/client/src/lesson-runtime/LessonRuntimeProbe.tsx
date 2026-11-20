@@ -203,6 +203,26 @@ function probeLesson(search: string): Lesson {
     const variant = q.get("source-visuals");
     return sourceVisualsFixture(variant === "max" || variant === "broken" || variant === "tree" ? variant : "typical", q.has("classroom") && Number.isInteger(grade) && grade >= 0 && grade <= 12 ? grade : 6);
   }
+  // S6c (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 14. szakasz): `?kinds=1` — a négy újrarajzolt fajta + folyamat + idővonal.
+  if (q.has("kinds")) {
+    const grade = Number(q.get("classroom"));
+    const concept = PROBE_LESSON.sections[0].blocks.flatMap((b) => ("coversConceptIds" in b ? b.coversConceptIds : [])).slice(0, 1);
+    const fig = (animKind: AnimKind, params: Record<string, unknown>, caption: string) => ({ kind: "animate" as const, animKind, params, caption, coversConceptIds: concept });
+    return {
+      ...PROBE_LESSON,
+      classroom: Number.isInteger(grade) && grade >= 0 && grade <= 12 ? grade : 6,
+      sections: [{ ...PROBE_LESSON.sections[0], heading: "Ábrák a sáv színeivel", blocks: [
+        { kind: "explain", text: "Néhány ábra a lecke változatos megjelenítéséhez.", depth: "core", readAloud: true, coversConceptIds: concept },
+        fig("fraction", { numerator: 3, denominator: 8 }, "A torta háromnyolcada."),
+        fig("map", { spots: [{ label: "Budapest", x: 52, y: 38 }, { label: "Debrecen", x: 82, y: 30 }, { label: "Pécs", x: 40, y: 82 }, { label: "Győr", x: 22, y: 30 }] }, "Magyarország nagyvárosai."),
+        fig("wordBuilder", { parts: ["kert", "ész"] }, "A kertész szó a kert tőből és az -ész képzőből áll."),
+        fig("sentenceParts", { parts: ["[alany] A kis kutya", "[állítmány] vidáman ugat", "[határozó] a kertben"] }, "A mondat részei."),
+        fig("process", { steps: ["A víz felmelegszik", "Elpárolog", "Felhővé sűrűsödik", "Eső formájában lehullik"] }, "A víz körforgásának lépései."),
+        fig("timeline", { events: ["i. e. 776: az első olimpia", "896: honfoglalás", "1000: István koronázása", "1848: forradalom"] }, "Fontos évszámok."),
+        { kind: "recap", bullets: ["Az ábra megmutatja, amit a szöveg elmond."] },
+      ] }],
+    } as Lesson;
+  }
   if (q.has("scene3d")) return SCENE3D_LESSON;
   if (q.has("visuals")) return VISUALS_LESSON;
   if (q.has("cycle-long")) return CYCLE_LONG_LESSON;
