@@ -75,6 +75,42 @@ egyetlen fájlolvasással (az ok a szolgáltató volt — `1e564a01`), és a jel
   folytatni; a „tokens used” szóközös tagolású száma helyesen olvasva.
 - [ ] T12 WHEN a szívverés régi / a folyamat nem él THEN a `heartbeat.mjs` SHALL ezt kilépési kóddal jelezni, API-hívás nélkül.
 
+## Kiegészítés 2 — „néma 1-es kilépés” hibajegy (orkesztrátori bejelentés, 2026-11-20)
+
+Bejelentés: a `gate:blind-review` két fejen (advent-b, advent-c) 1-es kóddal, hibaüzenet nélkül lépett ki, „a 2. körben, zárvárás közben”.
+
+Mért tények (a sor-futtató naplói és a folyamatlista alapján):
+
+- A kilépési 1-es kódot a futtatóban KIZÁRÓLAG a korai bemenet-ellenőrzések adják (`return 1`: hibás argumentum, nem létező fej /
+  alap, repón belüli `--out`, hiányzó cél- vagy tervfájl). A belső hiba 2, a NEM TELJES 3, a kezeletlen kivétel stack-kel 1 lenne.
+- Az advent-c futás megmaradt naplója: `HIBA: a --max-usd legfeljebb 6 USD lehet (kemény felső határ)` — a sorba `8` került. A futtató
+  tehát kiírta az okot, de a sor-futtató kész-naplója csak az `ÍTÉLET` sort emeli ki, az újrapróba pedig felülírja a naplót.
+- A sor-futtató (2 próba, köztük 300 s alvás) időbélyegei szerint mindkét fej minden próbája másodpercek alatt ért véget — nem a 2.
+  körben. Az advent-b korábbi naplóit a következő, ép futás felülírta; az ott olvasott „kör 2: … run_db_tests” a 10:29:58Z-kor indult,
+  élő futásé volt, amely a zárvárást túlélte (lásd a záró jelentést). Az advent-b korai kilépésének pontos szövege nem maradt meg
+  (UNVERIFIED; az időzítés ugyanarra a bemenet-hibára utal).
+- Zárvárásban a futtató nem hal meg: a `acquireMachineLock` 10 s-onként kérdez, a hiba nem dob, a maximum után „NEM FUTOTT” eredményt ad.
+
+Tanulság: a futtató naplójából kilépéskor nem derült ki egyértelmű, géppel kiemelhető ok, és zárvárás alatt nem volt életjel — ezért
+lehetett egy élő várakozást és egy korai argumentum-hibát összetéveszteni.
+
+Megoldás:
+
+- `exit-trace.mjs`: MINDEN kilépési úton egy sor a stderr-re: `[blind-review] KILÉPÉS <kód> — ok: <ok>; utolsó állapot: szakasz …,
+  kör n, eszköz …, várakozás: …`. Kezelők: `exit`, `uncaughtException` és `unhandledRejection` (ok + kilépés 2), SIGTERM / SIGHUP /
+  SIGBREAK (ok + kilépés 2), `beforeExit` (kiürült eseményhurok a fő ígéret teljesülése előtt). Az első megadott ok marad; a szöveg a
+  kulcsra maszkolva. A korai hibák a `fail()` segéden át rögzítik az okot. Ha a sor HIÁNYZIK, a folyamatot kívülről, kezelhetetlenül
+  állították le (Windows TerminateProcess / `taskkill /F`, `kill -9`, gépleállás) — ez maga a diagnózis.
+- Zárvárási életjel: az `acquireMachineLock` minden várakozó lekérdezéskor `onPoll({ waitedMs, holder })`-t hív; a futtató ebből
+  percenként (`lockWaitReporter`) naplósort ír („zárvárás: <eszköz> — m perc s mp óta vár a gépi zárra; gazda: …”) és szívverést
+  (`phase: "lock-wait"`), így a díjmentes felügyelet a várakozást nem nézi beragadásnak. Az eszköz neve és a várakozás a kilépési
+  nyom állapotába is bekerül.
+
+- [ ] T13 WHEN a futtató a gépi zárra vár THEN SHALL legfeljebb percenként egy „zárvárás:” naplósort és `lock-wait` szívverést írni
+  (az első lekérdezéskor azonnal); a jelző hibája a várakozást nem szakíthatja meg.
+- [ ] T14 WHEN a futtató bármely úton kilép (saját kód, kezeletlen kivétel / elutasítás, leállítási jelzés, kiürült eseményhurok)
+  THEN SHALL a `KILÉPÉS <kód> — ok: …; utolsó állapot: …` sort írni; argumentum-hibánál az ok a hibaüzenet.
+
 ## Nem cél
 
 - A közös megbízás-sablon (`vak-ellenor-megbizas.md`) átírása — a szerződés a futtató saját kiegészítésébe kerül.

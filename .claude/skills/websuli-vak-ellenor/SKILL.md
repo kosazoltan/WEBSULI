@@ -105,6 +105,9 @@ A PR-leírásba CSAK a `record-review` által kiírt sor kerül (`Független ell
 | `NEM TELJES — a modell nem adott le jelentést` | Egy új futás. Ha ismétlődik: tulajdonosi döntés. |
 | `MEGÁLLT: nincs OpenRouter-kulcs` | A kulcs beállítása a 3. szakasz szerint (a kulcsot ne írd ki). |
 | `OpenRouter-hiba` (hálózat, 401 / 402 / 429 / 5xx, megszűnt modell) | Várj és ismételd egyszer. Ha marad: **a vak ellenőr nem futott; a tulajdonos dönt.** |
+| `KILÉPÉS <kód> — ok: …; utolsó állapot: …` (a napló utolsó sora, MINDEN kilépéskor) | Az okot ebből vedd, ne az `ÍTÉLET` sor hiányából. `1` = hibás bemenet (az ok megnevezi, pl. `--max-usd` a kemény határ fölött) → javítsd az argumentumot; `2` = belső hiba / kezeletlen kivétel / leállítási jelzés; `3` = NEM TELJES. |
+| A naplóból HIÁNYZIK a `KILÉPÉS` sor | A folyamatot kívülről, kezelhetetlenül állították le (`taskkill /F`, `kill -9`, gépleállás). Keresd a leállítót; az utolsó `kör` / `zárvárás:` sor mutatja, hol tartott. |
+| `zárvárás: <eszköz> — m perc s mp óta vár a gépi zárra; gazda: …` (percenként) | Nem beragadás: a futtató a gépi zárra vár (legfeljebb 20 perc / alkalom, 30 perc / futás), utána „NEM FUTOTT” eredménnyel folytatja. |
 
 Nincs csendes tartalék: NE indíts helyette alügynököt, NE írj kézzel jelentést, NE rögzíts ítéletet más úton; a kapu áll, amíg a
 futtató teljes jelentést nem ad, vagy a tulajdonos a konfigot (követett változással) át nem állítja.

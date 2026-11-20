@@ -74,6 +74,15 @@ test('B17: a futtató kódjában nincs modell-literál és nincs modell- / szolg
   // A mélységi őr a valódi futásban is be van kötve (a jelentés-ellenőrzés megkapja a futás mélységi adatait).
   // 2026-11-20: a mélységi őr a teljesség-kapun át (makeReportGate, useDepth: true) van bekötve.
   assert.match(runner, /makeReportGate\(\{[^}]*useDepth: true[^}]*\}\)/);
+  // 2026-11-20 (néma kilépés hibajegye): a kilépési nyom telepítve, a zárvárási életjel és az eszköz-állapot bekötve.
+  assert.match(runner, /trace\.install\(\);/);
+  assert.match(runner, /lockWaitReporter\(\{ say, beat \}\)/);
+  assert.match(runner, /onLockPoll: \(p\) =>/);
+  assert.match(runner, /onToolStart: \(name\) => trace\.set/);
+  assert.doesNotMatch(runner, /HIBA: [^\r\n]*\\n[`']\); return 1;/, 'minden korai hiba-kilépés a fail()-en át rögzíti az okot');
+  const toolsSrc = readFileSync(join(here, 'tools.mjs'), 'utf8');
+  assert.match(toolsSrc, /onPoll: \(p\) => ctx\.onLockPoll\?\.\(\{ tool: opts\.tool, \.\.\.p \}\)/);
+  assert.match(toolsSrc, /ctx\.onToolStart\?\.\(name\)/);
   assert.equal(runner.split('model:').filter((_, i) => i > 0).filter((rest) => !/^ (cfg\.model|result\.reportedModels|\{)/.test(rest) && !/^ ?[`'"]?\$?\{?(model|result)/.test(rest)).length, 0, 'a kérés modellje csak cfg.model lehet');
 });
 

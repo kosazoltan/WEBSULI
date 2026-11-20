@@ -21,6 +21,7 @@ import { summaryMarkdown, verifyFindings } from './findings.mjs';
 import { checkCompleteness, continuationPrompt, debugPoints } from './completeness.mjs';
 import { callOpenRouterStream } from './stream.mjs';
 import { writeHeartbeat } from './heartbeat.mjs';
+import { createExitTrace, lockWaitReporter } from './exit-trace.mjs';
 import { LOCAL_CONFIG_NAME, OpenRouterError, callOpenRouter, loadApiKey, maskSecrets, usageCost } from './openrouter.mjs';
 import { TMP_DIR, TOOL_SCHEMAS, cleanEnv, makeTools } from './tools.mjs';
 
@@ -503,30 +504,34 @@ export function buildEvidence({ args, cfg, baseSha, result, state, counts, repor
 // ---- Belépő ----------------------------------------------------------------------------------------------------------------
 
 const say = (s) => process.stdout.write(`[blind-review] ${s}\n`);
+/** Kilépési nyom: minden kilépési úton „KILÉPÉS <kód> — ok: …; utolsó állapot: …” sor a naplóba (exit-trace.mjs). */
+const trace = createExitTrace();
+/** Hibás bemenet / előfeltétel: üzenet a naplóba, a kilépés oka rögzítve. */
+const fail = (msg, code = 1, label = 'HIBA') => { process.stderr.write(`[blind-review] ${label}: ${msg}\n`); trace.reason(`${label}: ${msg}`); return code; };
 
 async function main() {
   const cfg = loadConfig().blindReview;
-  if (!cfg?.model) { process.stderr.write('[blind-review] HIBA: a gates.config.json-ban nincs blindReview.model\n'); return 1; }
+  if (!cfg?.model) { return fail('a gates.config.json-ban nincs blindReview.model'); }
   let args;
-  try { args = parseArgs(process.argv.slice(2), cfg); } catch (e) { process.stderr.write(`[blind-review] HIBA: ${e.message}\n`); return 1; }
+  try { args = parseArgs(process.argv.slice(2), cfg); } catch (e) { return fail(`${e.message}`); }
 
   const repo = RUNNER_ROOT;
   const rev = (r) => { const x = git(repo, ['rev-parse', '--verify', '--quiet', `${r}^{commit}`]); return x.status === 0 ? x.stdout.trim() : null; };
   const head = rev(args.head);
-  if (!head || head !== args.head) { process.stderr.write(`[blind-review] HIBA: a --head nem létező commit ebben a tárban: ${args.head}\n`); return 1; }
+  if (!head || head !== args.head) { return fail(`a --head nem létező commit ebben a tárban: ${args.head}`); }
   const baseSha = rev(args.base);
-  if (!baseSha) { process.stderr.write(`[blind-review] HIBA: a --base nem oldható fel: ${args.base}\n`); return 1; }
+  if (!baseSha) { return fail(`a --base nem oldható fel: ${args.base}`); }
   const out = resolve(args.out);
   const relOut = relative(repo, out);
-  if (!relOut.startsWith('..') && !isAbsolute(relOut)) { process.stderr.write('[blind-review] HIBA: a --out a repón KÍVÜL legyen (scratchpad) — a jelentés nem kerülhet a nyilvános repóba\n'); return 1; }
-  if (!existsSync(args.goal)) { process.stderr.write(`[blind-review] HIBA: a --goal fájl nem olvasható: ${args.goal}\n`); return 1; }
+  if (!relOut.startsWith('..') && !isAbsolute(relOut)) { return fail('a --out a repón KÍVÜL legyen (scratchpad) — a jelentés nem kerülhet a nyilvános repóba'); }
+  if (!existsSync(args.goal)) { return fail(`a --goal fájl nem olvasható: ${args.goal}`); }
   const goal = readFileSync(args.goal, 'utf8');
   const specs = [];
   for (const p of args.specs) {
     const shown = git(repo, ['show', `${head}:${p.replace(/\\/g, '/')}`]);
     if (shown.status === 0) specs.push({ path: p, text: shown.stdout });
     else if (existsSync(p)) specs.push({ path: p, text: readFileSync(p, 'utf8') });
-    else { process.stderr.write(`[blind-review] HIBA: a terv nincs meg sem a fejen, sem helyi fájlként: ${p}\n`); return 1; }
+    else { return fail(`a terv nincs meg sem a fejen, sem helyi fájlként: ${p}`); }
   }
   const templateText = readFileSync(TEMPLATE_PATH, 'utf8');
   const system = buildSystemPrompt(templateText, readFileSync(join(HERE, 'futtato-kiegeszites.md'), 'utf8'));
@@ -535,8 +540,10 @@ async function main() {
   const commonDir = isAbsolute(common) ? common : resolve(repo, common);
   const evDir = evidenceDir(commonDir);
   const loaded = loadApiKey({ localConfigPath: join(commonDir, LOCAL_CONFIG_NAME) });
-  if (!loaded.key && !args.dryRun) { process.stderr.write(`[blind-review] MEGÁLLT: ${loaded.error}\n[blind-review] ${NOT_RUN}.\n`); return 2; }
+  if (!loaded.key && !args.dryRun) { fail(loaded.error, 2, 'MEGÁLLT'); process.stderr.write(`[blind-review] ${NOT_RUN}.\n`); return 2; }
   const key = loaded.key ?? '';
+  trace.setMask((x) => maskSecrets(x, key));
+  trace.set({ phase: 'előkészítés (munkafa)' });
 
   const stale = git(repo, ['worktree', 'list', '--porcelain']).stdout.split('\n').filter((l) => l.startsWith('worktree ') && l.includes('websuli-blind-'));
   if (stale.length) say(`figyelem: ${stale.length} korábbi (megszakadt?) vak-ellenőr munkafa maradt — nézd meg: git worktree list`);
@@ -546,7 +553,7 @@ async function main() {
   say(`modell: ${cfg.model}; fej: ${head.slice(0, 12)}; base: ${baseSha.slice(0, 12)}; keret: ${args.maxUsd} USD, ${args.maxRounds} kör, ${args.maxMinutes} perc; kulcs: ${loaded.key ? loaded.source : '— (dry-run)'}`);
   const wt = prepareWorktree({ repo, head, nodeModulesSrc: existsSync(nmSrc) ? nmSrc : null });
   let stopSignal = null;
-  const onSig = () => { stopSignal = 'SIGINT'; };
+  const onSig = () => { stopSignal = 'SIGINT'; trace.set({ phase: `${trace.state.phase} (SIGINT: rendezett megállás kérve)` }); };
   process.on('SIGINT', onSig);
   const startedAt = Date.now();
   let code = 1;
@@ -562,6 +569,7 @@ async function main() {
     const user = buildUserMessage({ head, base: baseSha, specs, goal, stat, warnings });
     if (args.dryRun) {
       say(`dry-run: rendszerüzenet ${system.length} karakter, megbízás ${user.length} karakter, ${TOOL_SCHEMAS.length} eszköz; modellhívás nem történt.`);
+      trace.reason('dry-run (modellhívás nélkül)');
       return 0;
     }
     mkdirSync(dirname(out), { recursive: true });
@@ -572,10 +580,21 @@ async function main() {
     let tools = null;
     const reportGate = makeReportGate({ head, cfg, root: wt.root, points, box, maxRetries: cfg.completenessMaxRetries ?? 3, getTools: () => tools, useDepth: true });
     let budgetRef = null;
+    const heartbeat = join(evDir, `blind-review-${head.slice(0, 12)}.heartbeat.json`);
+    const beat = (d) => writeHeartbeat(heartbeat, { head, calls: budgetRef?.state.calls ?? 0, spentUsd: Number((budgetRef?.state.spentUsd ?? 0).toFixed(4)), ...d });
+    // Zárvárás alatt percenként naplósor + szívverés (a díjmentes felügyelet így látja: vár, nem ragadt be).
+    const lockReport = lockWaitReporter({ say, beat });
     tools = makeTools({
       root: wt.root, base: baseSha, head, cfg, key, nodeModulesReal: wt.nodeModulesReal,
       remainingMs: () => (budgetRef ? args.maxMinutes * 60_000 - (Date.now() - budgetRef.state.startedAt - budgetRef.state.lockWaitMs) : Infinity),
       onLockWait: (ms) => budgetRef?.excludeLockWait(ms),
+      onLockPoll: (p) => {
+        if (p.done) { trace.set({ waiting: null }); return; }
+        trace.set({ waiting: `gépi zár (${p.tool}), ${Math.round(p.waitedMs / 1000)} mp óta` });
+        lockReport(p);
+      },
+      onToolStart: (name) => trace.set({ tool: name }),
+      onToolEnd: () => trace.set({ tool: null }),
       onReport: (t, findings, runLog) => reportGate.onReport(t, findings, runLog),
     });
     const stopFile = join(evDir, 'blind-review.stop');
@@ -583,17 +602,19 @@ async function main() {
       maxUsd: args.maxUsd, maxRounds: args.maxRounds, maxWallMs: args.maxMinutes * 60_000, maxCompletionTokens: cfg.maxCompletionTokensTotal, cfg,
       stopRequested: () => stopSignal ?? (existsSync(stopFile) ? 'megszakító fájl: blind-review.stop' : null),
     });
-    const heartbeat = join(evDir, `blind-review-${head.slice(0, 12)}.heartbeat.json`);
     const log = (e) => {
       appendFileSync(transcript, `${transcriptLine({ t: new Date().toISOString(), ...e }, key)}\n`);
-      writeHeartbeat(heartbeat, { head, phase: e.type, calls: budget.state.calls, spentUsd: Number(budget.state.spentUsd.toFixed(4)) });
+      beat({ phase: e.type });
+      if (e.type === 'assistant') trace.set({ round: budget.state.calls });
       if (e.type === 'assistant') say(`kör ${budget.state.calls}: ${e.tools.length ? e.tools.join(', ') : '(szöveg)'} — eddig ${budget.state.spentUsd.toFixed(4)} USD`);
       if (e.type === 'error') say(`hiba (próba ${e.attempt + 1}): ${e.message}`);
     };
     budgetRef = budget;
+    trace.set({ phase: 'modellhívások' });
     const result = await runReview({ cfg, key, system, user, tools, box, budget, log, sessionId: `blind-review-${head}` });
     const endedAt = Date.now();
-    writeHeartbeat(heartbeat, { head, phase: 'done', calls: budget.state.calls, spentUsd: Number(budget.state.spentUsd.toFixed(4)), complete: result.complete });
+    beat({ phase: 'done', complete: result.complete });
+    trace.set({ phase: 'jelentés és bizonyíték' });
     const body = result.complete ? box.report.replace(/\r\n/g, '\n').trimEnd() : incompleteReport({ head, stopReason: result.stopReason, notes: result.notes });
     const cache = cacheStats(budget.state, cfg);
     const model = result.reportedModels.join(', ') || cfg.model;
@@ -612,14 +633,17 @@ async function main() {
     if (result.complete) say(`leletek: ${Object.entries(box.check.counts).map(([k, v]) => `${k} ${v.total} (igazolt hivatkozás ${v.refVerified}, futtatással ${v.runVerified}, érvénytelen ${v.invalid})`).join('; ')}`);
     if (result.complete) {
       say(`ÍTÉLET: ${verdict}`);
+      trace.reason(`ÍTÉLET: ${verdict}`);
       say(`rögzítés: node scripts/qa/gates/record-review.mjs --head ${head} --verdict "${verdict}" --report "${out}"`);
       code = 0;
     } else {
       process.stderr.write(`[blind-review] MEGÁLLT — NEM TELJES: ${result.stopReason}\n[blind-review] ${NOT_RUN}.\n`);
+      trace.reason(`NEM TELJES: ${result.stopReason}`);
       code = result.fatal ? 2 : 3;
     }
   } finally {
     process.off('SIGINT', onSig);
+    trace.set({ phase: 'takarítás (munkafa)' });
     const c = cleanupWorktree({ repo, wt });
     if (!c.ok) process.stderr.write(`[blind-review] FIGYELEM: ${c.error}\n`);
   }
@@ -627,5 +651,12 @@ async function main() {
 }
 
 if (isMain(import.meta.url)) {
-  main().then((c) => process.exit(c), (e) => { process.stderr.write(`[blind-review] HIBA: ${maskSecrets(String(e?.message ?? e))}\n[blind-review] ${NOT_RUN}.\n`); process.exit(2); });
+  trace.install();
+  main().then((c) => { trace.settle(); process.exit(c); }, (e) => {
+    trace.settle();
+    const msg = maskSecrets(String(e?.message ?? e));
+    trace.reason(`HIBA: ${msg}`);
+    process.stderr.write(`[blind-review] HIBA: ${msg}\n[blind-review] ${NOT_RUN}.\n`);
+    process.exit(2);
+  });
 }

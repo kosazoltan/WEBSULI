@@ -112,10 +112,10 @@ function releaseSync(dir) {
 
 /**
  * A gépi zár megszerzése: atomi `mkdir` (ha a mappa létezik, a zár foglalt), utána `gazda.txt`. Foglalt zárnál `pollMs`-onként vár,
- * legfeljebb `maxWaitMs`-ig; a zárat SOHA nem töri fel (más folyamaté lehet).
+ * legfeljebb `maxWaitMs`-ig; a zárat SOHA nem töri fel (más folyamaté lehet). Minden várakozó lekérdezéskor `onPoll({ waitedMs, holder })`.
  * @returns {Promise<{ ok: true, waitedMs: number, release: () => boolean } | { ok: false, waitedMs: number, holder: string|null, reason: string }>}
  */
-export async function acquireMachineLock({ dir, owner, maxWaitMs, pollMs = 10_000, now = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)), shouldStop = () => null }) {
+export async function acquireMachineLock({ dir, owner, maxWaitMs, pollMs = 10_000, now = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)), shouldStop = () => null, onPoll = () => {} }) {
   const t0 = now();
   for (;;) {
     let created = false;
@@ -131,6 +131,8 @@ export async function acquireMachineLock({ dir, owner, maxWaitMs, pollMs = 10_00
     const stop = shouldStop();
     if (stop) return { ok: false, waitedMs: now() - t0, holder, reason: stop };
     if (now() - t0 >= maxWaitMs) return { ok: false, waitedMs: now() - t0, holder, reason: `a gépi zár ${Math.round(maxWaitMs / 60_000)} percen belül nem szabadult fel` };
+    // Életjel a várakozás alatt (a hívó percenként naplóz belőle); a hibája a várakozást nem szakíthatja meg.
+    try { onPoll({ waitedMs: now() - t0, holder }); } catch { /* az életjel nem kritikus */ }
     await sleep(pollMs);
   }
 }

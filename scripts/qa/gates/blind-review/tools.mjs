@@ -373,7 +373,9 @@ export function makeTools(ctx) {
     // A zár-várakozás saját, futásonkénti összkorláttal (machineLockWaitTotalSec), a falióra-keretbe NEM számítva (onLockWait).
     const budgetLeft = (cfg.machineLockWaitTotalSec ?? 1800) * 1000 - lockWaitTotal;
     const lock = await acquireMachineLock({ dir: lockDir, owner: lockOwner(ctx.head ?? head, opts.tool, new Date(ctx.now ? ctx.now() : Date.now())),
-      maxWaitMs: Math.max(0, Math.min((cfg.machineLockWaitSec ?? 1200) * 1000, budgetLeft)), pollMs: 10_000, sleep: ctx.sleep, now: ctx.now, shouldStop: ctx.shouldStop ?? (() => null) });
+      maxWaitMs: Math.max(0, Math.min((cfg.machineLockWaitSec ?? 1200) * 1000, budgetLeft)), pollMs: 10_000, sleep: ctx.sleep, now: ctx.now, shouldStop: ctx.shouldStop ?? (() => null),
+      onPoll: (p) => ctx.onLockPoll?.({ tool: opts.tool, ...p }) });
+    ctx.onLockPoll?.({ tool: opts.tool, waitedMs: lock.waitedMs, holder: null, done: true });
     lockWaitTotal += lock.waitedMs;
     ctx.onLockWait?.(lock.waitedMs);
     if (!lock.ok) notRun.push({ tool: opts.tool, reason: lock.reason });
@@ -591,10 +593,13 @@ export function makeTools(ctx) {
     async call(name, args) {
       if (!Object.hasOwn(impl, name)) return `HIBA: ismeretlen eszköz: ${String(name).slice(0, 60)}`;
       counts[name] = (counts[name] ?? 0) + 1;
+      ctx.onToolStart?.(name);
       try {
         return await impl[name](args && typeof args === 'object' ? args : {});
       } catch (e) {
         return `HIBA: ${maskSecrets(String(e?.message ?? e), ctx.key).slice(0, 500)}`;
+      } finally {
+        ctx.onToolEnd?.(name);
       }
     },
   };

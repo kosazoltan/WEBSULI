@@ -1119,3 +1119,17 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   szóközös ezres tagolással is állhat.
 - Forrás: `docs/specs/2026-11-20-gpt-teljesitesi-or.md`. Ütközés-kockázat: a sorszámot a beolvasztáskor egyeztetni kell (C-86 volt a
   legmagasabb a nyitott ágakon, 2026-11-20).
+
+## C-88 — „Néma” kilépés: az ok a naplóban volt, csak senki nem emelte ki; élő zárvárást halálnak néztünk (2026-11-20)
+
+- **Tünet:** a sor-futtató kész-naplója `KILÉPÉS=1 hívás=0`-t mutatott üres ítélettel; a vizsgált napló „kör 2: … run_db_tests”-nél
+  állt, ezért a hibát a zárvárásra fogtuk. Valójában a futtató másodpercek alatt, argumentum-hibával lépett ki (`--max-usd 8` a 6 USD-s
+  kemény határ fölött) és KIÍRTA az okot; a kész-napló csak az `ÍTÉLET` sort emelte ki, az újrapróba felülírta a naplót, a látott
+  „kör 2” pedig egy későbbi, élő (zárra váró) futásé volt.
+- **Szabály:** a futtató minden kilépéskor `[blind-review] KILÉPÉS <kód> — ok: …; utolsó állapot: …` sort ír
+  (`scripts/qa/gates/blind-review/exit-trace.mjs`) — sor-futtatóban ezt kell kiemelni, nem az ítélet hiányát. Zárvárás alatt percenként
+  `zárvárás:` sor és `lock-wait` szívverés jön; ha nincs `KILÉPÉS` sor, a folyamatot kívülről ölték meg. Hibás futás naplóját újrapróba
+  előtt el kell tenni (sorszámozott másolat), és a „mikor halt meg” állítást a napló- és folyamat-időbélyegekből kell igazolni, nem a
+  napló utolsó soráról következtetni.
+- Forrás: `docs/specs/2026-11-20-gpt-teljesitesi-or.md` („Kiegészítés 2”). Sorszám-ütközés: a beolvasztáskor egyeztetni (C-87 is ezé
+  az ágé).
