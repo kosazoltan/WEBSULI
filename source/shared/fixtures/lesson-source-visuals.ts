@@ -9,7 +9,7 @@ import { SOURCE_TABLE_BLOCK_ROWS } from "../lesson-visual-params";
  */
 const covers = { coversConceptIds: ["c1"] };
 type LessonBlock = Lesson["sections"][number]["blocks"][number];
-const animate = (animKind: "table" | "ruleBox" | "compareCards", params: Record<string, unknown>, caption: string): LessonBlock =>
+const animate = (animKind: "table" | "ruleBox" | "compareCards" | "decisionTree" | "pictureCards", params: Record<string, unknown>, caption: string): LessonBlock =>
   ({ kind: "animate", animKind, params, caption, ...covers });
 /** Pontosan `length` karakteres, szavakra tagolt töltőszöveg. */
 const fill = (seed: string, length: number) => { let s = seed; while (s.length < length) s += ` ${seed}`; return s.slice(0, length - 1).trimEnd().padEnd(length, "x"); };
@@ -67,6 +67,35 @@ const broken: Lesson["sections"] = [
   ] },
 ];
 
-export function sourceVisualsFixture(variant: "typical" | "max" | "broken" = "typical", classroom = 6): Lesson {
-  return { title: "Forrás-ábrák próbája", subject: "angol", classroom, mapId: "probe-map", sourceOnly: true, misconceptions: [], sections: variant === "max" ? max : variant === "broken" ? broken : typical };
+/**
+ * `tree` (S2b-1, docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 16. szakasz): Igen / Nem fa (a HM-minta alakja), kétszintű háromágú fa
+ * (a PT-minta döntési ábrájának alakja) és 8 képes kártya — szintetikus tartalommal, egyszerű, felirattal ellátott SVG-rajzokkal.
+ */
+const card = (label: string, shape: string, example?: string) => ({ label, example,
+  svg: `<svg viewBox="0 0 120 90" xmlns="http://www.w3.org/2000/svg">${shape}<text x="60" y="84" text-anchor="middle" font-size="12">${label}</text></svg>` });
+const tree: Lesson["sections"] = [
+  { heading: "Döntési fák és képes kártyák", probaEnabled: false, blocks: [
+    { kind: "explain", depth: "core", readAloud: false, ...covers, text: "Döntsd el lépésről lépésre, melyik kérdőszó illik." },
+    animate("decisionTree", { root: { text: "Meg tudod számolni?", branches: [
+      { label: "Igen", node: { text: "How many …?" } }, { label: "Nem", node: { text: "How much …?" } }] } }, "Melyik kérdőszó kell?"),
+    animate("decisionTree", { root: { text: "Mikor történik?", branches: [
+      { label: "napszak", node: { text: "in", branches: [{ label: "reggel", node: { text: "in the morning" } }, { label: "délután", node: { text: "in the afternoon" } }] } },
+      { label: "nap", node: { text: "on", branches: [{ label: "hétköznap", node: { text: "on Monday" } }, { label: "dátum", node: { text: "on 5 May" } }] } },
+      { label: "pontos idő", node: { text: "at", branches: [{ label: "óra", node: { text: "at 7 o'clock" } }, { label: "ünnep", node: { text: "at Christmas" } }] } }] } }, "Az időhatározó elöljárószavak."),
+    animate("pictureCards", { cards: [
+      card("apple", '<circle cx="60" cy="40" r="26" fill="#d94841"/><rect x="57" y="8" width="6" height="12" fill="#6b4f2a"/>', "How many apples?"),
+      card("milk", '<rect x="42" y="14" width="36" height="54" rx="4" fill="#e9eef5" stroke="#6b7a90"/>', "How much milk?"),
+      card("egg", '<ellipse cx="60" cy="42" rx="20" ry="27" fill="#f3e2c3" stroke="#a3875a"/>'),
+      card("bread", '<rect x="28" y="26" width="64" height="36" rx="14" fill="#c98b3f"/>'),
+      card("water", '<path d="M60 10 C40 40 40 66 60 66 C80 66 80 40 60 10Z" fill="#4a90d9"/>'),
+      card("banana", '<path d="M30 30 Q60 80 92 30 Q60 62 30 30Z" fill="#f2c94c"/>'),
+      card("rice", '<ellipse cx="60" cy="50" rx="34" ry="14" fill="#f5f1e6" stroke="#9c927c"/>'),
+      card("cheese", '<polygon points="26,62 94,62 94,30" fill="#f4c542" stroke="#b08a1e"/>'),
+    ] }, "Megszámlálható és megszámlálhatatlan szavak képekkel."),
+    { kind: "recap", bullets: ["Megszámlálhatónál many, megszámlálhatatlannál much."] },
+  ] },
+];
+
+export function sourceVisualsFixture(variant: "typical" | "max" | "broken" | "tree" = "typical", classroom = 6): Lesson {
+  return { title: "Forrás-ábrák próbája", subject: "angol", classroom, mapId: "probe-map", sourceOnly: true, misconceptions: [], sections: variant === "max" ? max : variant === "broken" ? broken : variant === "tree" ? tree : typical };
 }
