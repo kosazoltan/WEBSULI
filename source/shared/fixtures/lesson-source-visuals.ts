@@ -76,6 +76,8 @@ const card = (label: string, shape: string, example?: string) => ({ label, examp
 const tree: Lesson["sections"] = [
   { heading: "Döntési fák és képes kártyák", probaEnabled: false, blocks: [
     { kind: "explain", depth: "core", readAloud: false, ...covers, text: "Döntsd el lépésről lépésre, melyik kérdőszó illik." },
+    // S2b-2 (vak J7): rövid tartalmú, háromoszlopos tábla — 360 px-en sem görög.
+    animate("table", { headers: ["1", "2", "3"], rows: [["one", "two", "three"], ["egy", "kettő", "három"]] }, "Számok három nyelven."),
     animate("decisionTree", { root: { text: "Meg tudod számolni?", branches: [
       { label: "Igen", node: { text: "How many …?" } }, { label: "Nem", node: { text: "How much …?" } }] } }, "Melyik kérdőszó kell?"),
     animate("decisionTree", { root: { text: "Mikor történik?", branches: [
