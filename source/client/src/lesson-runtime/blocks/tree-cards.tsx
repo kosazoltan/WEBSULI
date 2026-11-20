@@ -9,7 +9,7 @@ import { normalizeVisualText, type DecisionTreeVisualNode, type VisualTone } fro
  * újrarajzolása. Csak érvényes paraméterből rajzolunk (`shared/lesson-visual-params.ts` szigorú sémája); a szöveg React
  * szövegcsomópont. A kártya rajza a meglévő illusztráció-tisztító allowlistjén átment SVG (nincs script, esemény, hivatkozás, stílus) —
  * ugyanaz az út, mint az `illustration` ábráé (`explanatory-visuals.tsx`). Szín a sáv tokenjeiből (`lesson-design.css`, `.sv-tree*`,
- * `.sv-card*`), és a levél tónusát alakjel is jelzi.
+ * `.sv-pcard*` — a compareCards `.sv-card` osztályától elkülönítve), és a levél tónusát alakjel is jelzi.
  */
 type AnimProps = { params: Record<string, unknown>; caption: string };
 
@@ -63,7 +63,7 @@ function CardArt({ svg, label }: { svg: string; label: string }) {
   if (!check.ok) return null;
   return (
     <div
-      className="sv-card-art lesson-figure-paper"
+      className="sv-pcard-art lesson-figure-paper"
       role="img"
       aria-label={label}
       // A tartalom a shared/illustration-svg.ts allowlistjén átment SVG (nincs script, esemény, link, stílus).
@@ -77,13 +77,13 @@ export function PictureCardsAnim({ params, caption }: AnimProps) {
   if (!p) return null;
   return (
     <figure className={FRAME} data-anim="pictureCards">
-      <ul className="sv-cards-grid">
+      <ul className="sv-pcards-grid">
         {p.cards.map((c, i) => (
-          <li key={i} className={`sv-card sv-tone-${TONES[i % TONES.length]}`}>
+          <li key={i} className={`sv-pcard sv-tone-${TONES[i % TONES.length]}`}>
             <CardArt svg={c.svg} label={c.label} />
-            <span className="sv-card-label">{c.label}</span>
-            {c.caption && <span className="sv-card-caption">{c.caption}</span>}
-            {c.example && <span className="sv-card-example">{c.example}</span>}
+            <span className="sv-pcard-label">{c.label}</span>
+            {c.caption && <span className="sv-pcard-caption">{c.caption}</span>}
+            {c.example && <span className="sv-pcard-example">{c.example}</span>}
           </li>
         ))}
       </ul>
