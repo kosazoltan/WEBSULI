@@ -205,7 +205,7 @@ A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja
   folyamatot soha nem állít le.
 
 Skill: [`.agents/skills/websuli-gep-zar/SKILL.md`](.agents/skills/websuli-gep-zar/SKILL.md) (tükör: `.claude/skills/`). Runbook:
-[`docs/minosegkapuk.md`](docs/minosegkapuk.md) „Gépi zár”. Terv: `docs/specs/2026-11-19-gepi-zar.md`. Csapdák: C-80…C-85. Cursor:
+[`docs/minosegkapuk.md`](docs/minosegkapuk.md) „Gépi zár”. Terv: `docs/specs/2026-11-19-gepi-zar.md`. Csapdák: C-80…C-86. Cursor:
 `.cursor/rules/gep-zar.mdc`. A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 
 ## Verifikáció

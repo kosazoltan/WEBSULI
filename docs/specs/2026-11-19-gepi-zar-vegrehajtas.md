@@ -46,6 +46,10 @@ fájlból; nehéz kaput (`gate:push`, `gate:pr`, teljes `npm test`) ez a munka N
 6b. **Kiegészítés (terv D17)** — gyökér `package.json`: `gate:stage`, `gate:lint`, `check`, `check:test` burkolva; `AGENTS.md`, a
    `websuli-gep-zar`, `websuli-lint-ellenor`, `websuli-push-elotti-kapu` skill (+ tükör), `.cursor/rules/gep-zar.mdc`, Copilot-sor,
    `docs/minosegkapuk.md`: a `gate:stage` / teljes `tsc` a nehéz körök között. Bekötés-próba álgazdával a négy új parancsra is. Commit.
+6c. **Vak review javítókör (terv D18, L1–L7)** — előbb bukó tesztek (`machine-lock.test.mjs` „L1”…„L7”, valódi folyamatokkal; L3
+   hamis és — ha van helyi `node:24-alpine` kép — valódi Dockerrel), commit; utána a kód (`state.mutex`, `acquireOrReclaim`,
+   `updateOwner`, `releaseLock`, `reapGroup`, `cleanupNewContainers`, `hashToken`, `installSignalHandlers`, határidő a foglalás előtt),
+   a runbook és a terv. Mutációs ellenpróba 26 mutánssal Windows-on és Linux-konténerben (`--init`). Commit.
 7. **Ellenőrzés** — mutációs ellenpróba (a `machine-lock.mjs` másolatán, mutánsonként `node --test`, utána `cmp` az eredetivel);
    `npm run gate:stage`; `git merge-tree --write-tree feat/gepi-zar fix/kapu-gyorsitas` (kilépési kód 0); PR-leírás a munkafán kívül
    (`docs/minosegkapuk.md` szakaszai szerint).

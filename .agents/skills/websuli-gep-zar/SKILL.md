@@ -8,7 +8,7 @@ description: WEBSULI gépi zár - a nehéz körök egy sávban, érkezési sorre
 > „Keress a jelentkező időzítési bukásokra megoldást: hogyha két nehéz kapu fut egyszerre a gépen, akkor vagy állítsd sorba őket, vagy
 > javítsd meg a nehéz futás sikeres elvégzését.” — a tulajdonos választása: **sorba állítás, egy sáv**.
 
-Szabály: `AGENTS.md` „Gépi zár”. Runbook: `docs/minosegkapuk.md` „Gépi zár”. Terv: `docs/specs/2026-11-19-gepi-zar.md`. Csapdák: C-80…C-85
+Szabály: `AGENTS.md` „Gépi zár”. Runbook: `docs/minosegkapuk.md` „Gépi zár”. Terv: `docs/specs/2026-11-19-gepi-zar.md`. Csapdák: C-80…C-86
 (`docs/agent-csapdak.md`).
 
 ## Miért
@@ -91,3 +91,6 @@ következő `run` visszaveszi.
   Folyamatot csak a sajátodat, pontos PID alapján (rokon: C-77 a kapu-gyorsítás / telefonos ágon).
 - **C-84** — Helyi idő UTC helyett a figyelőben: minden időbélyeg és lejárat UTC (`Z`), a különbség `Date.now()`-ból.
 - **C-85** — Zár nélküli nehéz eszköz (a vak futtató `run_e2e` / `run_db_tests`): minden nehéz kör a `run` alatt, más MI-eszköznél is.
+- **C-86** — Saját zárlogika „ellenőrzöm, aztán cselekszem” lépéspárral: a régi gazda lebonthatja az új zárat. A zár fájljait
+  (`state.mutex/`, `lock/`, `queue/`) csak a `machine-lock.mjs` kezeli; a `status` a tokent nem mutatja, a gazda-fájlban csak a
+  lenyomata áll.

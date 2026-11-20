@@ -44,6 +44,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-83** — Folyamatot csak a sajátodat, pontos PID alapján; a mintaillesztéses leállítás idegen várakozókat ölt meg (rokon: C-77 más ágon).
 - **C-84** — Figyelő / lejárat UTC-ben, `Date.now()` különbségből; a helyi idő rossz várakozási időt adott.
 - **C-85** — Minden nehéz eszköz a zár alatt, a vak futtató `run_e2e` / `run_db_tests` is; zár nélkül időzítési hamis piros lett.
+- **C-86** — Zárnál döntés + cselekvés egy mutex alatt; hibaágon a közös `lock/`-ot soha ne töröld; elengedés csak a teljes saját folyamatfa leállása után.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -1142,6 +1143,17 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 - **Szabály:** minden nehéz kör — más MI-eszközből, futtatóból, szkriptből is — a `machine-lock.mjs run` alatt (`AGENTS.md` „Gépi
   zár”). Ha egy teszt csak párhuzamos terhelésnél bukik: előbb a zár nélküli párhuzamos kör keresése (`status`, `events.log`), a teszt
   időzítési gyengesége kanban-jegy; a tesztet gyengíteni tilos.
+
+## C-86 — Zár „ellenőrzöm, aztán cselekszem” lépéspárral: a régi gazda lebontotta volna az új zárat (2026-11-19)
+
+- **Tünet (vak review, `feat/gepi-zar` 747ebb20):** az elengedés előbb a token egyezését olvasta, utána átnevezte a `lock/`-ot; a
+  két lépés között egy elavult-zár visszavétel és új foglalás lezajlhatott, és a régi gazda az ÚJ gazda zárát bontotta volna le. A
+  hibaágon (`catch`) a közös `lock/` törlése ugyanezt tette. POSIX-on a zár a közvetlen gyerek kilépésekor felszabadult, miközben a
+  csoport többi tagja (és az új csoportba indított újrabelépő gyerek) még futott.
+- **Szabály:** fájlrendszeri zárnál minden döntés + cselekvés (foglalás, visszavétel, frissítés, elengedés) ugyanazon rövid mutex
+  alatt; a közös útvonalat hibaágon soha nem törlöd, csak a félretett, saját nevű mappát. Folyamatfát felügyelő zárnál az elengedés a
+  teljes saját fa (csoport) igazolt leállása UTÁN jön; a gyerekek nem léphetnek ki a felügyelt határból. Az ilyen versenyt valódi
+  folyamatokkal, megállított köztes állapottal teszteld (a „tartott mutex alatti elengedés” mintája: `scripts/qa/machine-lock.test.mjs` L1).
 
 ## C-75 — Őrt / kaput érintő PR-ok: soros merge-ablak; a hook bekötését a valódi settings-szel mérd (2026-11-18)
 

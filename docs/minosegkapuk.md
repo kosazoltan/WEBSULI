@@ -162,16 +162,30 @@ korábbi, munkamenet-ideiglenes zárat (két sáv `lock` / `lock2`, `kovetkezo.t
 - **A `gate:stage` is nehéz** (mért, 2026-11-19): egy zár nélküli `gate:stage` (teljes `tsc` + célzott egységtesztek) egy párhuzamos
   `gate:push` mellett hamis bukást okozott (`claude-stream-thinking-liveness.test.ts`, 250 ms-os falióra-korlát). Ára: a szakasz-kapu
   egy futó nehéz kör mögött vár (legfeljebb annak időkorlátjáig).
-- **Működés:** atomi beállás a sorba (`queue.mutex/` + `counter` + `queue/<sorszám>.json`, `wx`); zárat csak a sor első élő eleme
-  szerez (atomi `mkdir lock/`, `lock/owner.json`: név, PID, gyerek PID, gép, parancs, kezdés UTC, időkorlát, token); a parancs AZONNAL
-  gyerekként fut időkorláttal; a végén — hiba, időtúllépés (124), Ctrl+C (130), SIGTERM (143) esetén is — a saját gyerek leáll (POSIX:
-  folyamatcsoport; Windows: `taskkill /PID <gyerek> /T /F`), a zár elenged, a bejegyzés törlődik; kilépési kód a parancsé. A
-  várakozó 60 s-onként kiírja a helyét és a gazdát; `--max-wait-min` lejártakor 75 (a parancs nem fut).
+- **Működés:** atomi beállás a sorba (`state.mutex/` + `counter` + `queue/<sorszám>.json`, `wx`); zárat csak a sor első élő eleme
+  szerez (`mkdir lock/`, `lock/owner.json`: név, PID, gyerek PID, gép, parancs, kezdés UTC, időkorlát, a token SHA-256 lenyomata —
+  a nyers tokent csak a gyerek környezete kapja); a parancs AZONNAL gyerekként fut időkorláttal; a végén — hiba, időtúllépés (124),
+  Ctrl+C (130), SIGTERM (143) esetén is — a saját gyerek leáll (POSIX: folyamatcsoport, SIGTERM → türelmi idő → SIGKILL; Windows:
+  `taskkill /PID <gyerek> /T /F`), a zár elenged, a bejegyzés törlődik; kilépési kód a parancsé. A várakozó 60 s-onként kiírja a helyét
+  és a gazdát; `--max-wait-min` lejártakor 75 — a határidő a foglalási kísérlet ELŐTT dönt, a várakozás a hátralévő időre korlátozott,
+  így lejárt várakozás után a parancs nem indul el.
+- **Az állapot-mutex** (`state.mutex/`, gazdája `holder.json`-t ír): a sorba állás, a megszerzés, az elavult zár visszavétele, a
+  gazda-fájl frissítése és az elengedés ugyanez alatt dönt és cselekszik — a régi gazda így nem bonthatja le az új gazda zárát. Az
+  elengedés félreteszi a `lock/`-ot (átnevezés) és a mutexen kívül takarít; ha az átnevezés nem sikerül, a `lock/`-ot nem törli
+  (elavultként veszik vissza). A mutex elavult, ha a gazdája ugyanazon a gépen nem él, vagy 60 s-nál régebbi.
+- **A folyamatfa leállása a zár előtt (POSIX):** a gyerek saját folyamatcsoportot kap; a kilépése után a zár csak az üres csoport után
+  szabadul fel (SIGTERM → `WEBSULI_MACHINE_LOCK_KILL_GRACE_MS`, alap 10 s → SIGKILL → legfeljebb 5 s). Az újrabelépő `run` gyereke a
+  szülő csoportjában marad (a felügyelt határon belül). Windows-on a rendes kilépés után leválasztott unokák nem követhetők (korlát).
+- **Kényszerleállítás után konténer-takarítás:** időtúllépésnél / megszakításnál a futás ALATT keletkezett saját eldobható Postgres-
+  konténer (`websuli-e2e-*`, `websuli-learning-test-*`) leáll (`docker stop`), a futás előtt már meglévő (más futásé) érintetlen. A
+  rendes kilépésnél a harness maga takarít. `WEBSULI_MACHINE_LOCK_DOCKER_CLEANUP=0` kikapcsolja (csak teszt).
 - **Elavult zár / bejegyzés:** visszavehető, ha a gazda és a gyereke ugyanazon a gépen nem él, vagy a kezdés + időkorlát + türelmi idő
   (`WEBSULI_MACHINE_LOCK_GRACE_MIN`, alap 10 perc) lejárt, vagy 60 s után sincs gazda-fájl; a sorbejegyzés, ha a PID nem él vagy az
   életjel 5 percnél régebbi. Atomi átnevezéssel, naplózva: `<zár-mappa>/events.log` (UTC). Élő folyamatot a szkript soha nem állít le.
-- **Újrabelépés:** a gyerek `WEBSULI_MACHINE_LOCK_HELD=<token>`-t örököl; csak a jelenlegi, élő gazda tokenje érvényes (a `gate:pr`
-  belső `npm run build` / `test:learning-db` hívása így nem vár a saját szülőjére). Hamis / régi token → figyelmeztetés, sorba állás.
+- **Újrabelépés:** a gyerek `WEBSULI_MACHINE_LOCK_HELD=<token>`-t örököl; csak a jelenlegi, élő, nem lejárt gazda tokenje érvényes (a
+  `gate:pr` belső `npm run build` / `test:learning-db` hívása így nem vár a saját szülőjére). Hamis / régi token → figyelmeztetés, sorba
+  állás. A token nem kerül a gazda-fájlba és a `status` (szöveges / `--json`) kimenetébe; a `--json` engedélylistás mezőket és számolt
+  `ranMinutes` / `waitedMinutes` értéket ad (`nowUtc` pillanatképből).
 - **Hely:** `<git-common-dir>/websuli-machine-lock/` (a szkript saját repójáé — fő checkout, munkafa, ideiglenes munkafa ugyanaz);
   `WEBSULI_MACHINE_LOCK_DIR` felülírja (teszt). CI-ben (`CI` igaz, nem `false` / `0`) átenged. Git és változó nélkül: kód 2, a parancs
   nem fut.
