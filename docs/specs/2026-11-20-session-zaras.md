@@ -167,16 +167,16 @@ is minden helyről (gyökér, `source/`, mélyebb könyvtár, munkafa) ellenőrz
 - **A12** A skill-tükör azonos, és a `mirroredSkills` darabszám-őre 6.
 
 <!-- acceptance-checklist -->
-- [ ] A1 collect: csak tulajdonosi sorok, kép, beillesztett blokk, U-azonosító
-- [ ] A2 kitöltetlen tétel → bukás
-- [ ] A3 KÉSZ bizonyíték gépi igazolása
-- [ ] A4 nyitott tétel → nyitott kanban / PR
-- [ ] A5 felelős nyilatkozat ellenőrzése
-- [ ] A6 frissesség
-- [ ] A7 zöld bizonyíték
-- [ ] A8 higiénia-kapu
-- [ ] A9 Stop hook tilt zárásnál
-- [ ] A10 Stop hook nem tilt közbenső válasznál
-- [ ] A11 mért futásidő
-- [ ] A12 skill-tükör + darabszám
+- [x] A1 collect: csak tulajdonosi sorok, kép, beillesztett blokk, U-azonosító
+- [x] A2 kitöltetlen tétel → bukás
+- [x] A3 KÉSZ bizonyíték gépi igazolása
+- [x] A4 nyitott tétel → nyitott kanban / PR
+- [x] A5 felelős nyilatkozat ellenőrzése
+- [x] A6 frissesség
+- [x] A7 zöld bizonyíték
+- [x] A8 higiénia-kapu
+- [x] A9 Stop hook tilt zárásnál
+- [x] A10 Stop hook nem tilt közbenső válasznál
+- [x] A11 mért futásidő
+- [x] A12 skill-tükör + darabszám
 - [ ] Tulajdonosi lépés: a Stop hook bekötése a settingsbe (ügynök nem teheti meg)
