@@ -145,3 +145,14 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
 ## 9. Végrehajtási utasítás
 
 - Végrehajtás: `docs/specs/2026-11-19-kitakaro-negyzetes-regex-vegrehajtas.md`
+
+## 10. Kiegészítés — 3. vak kör (25de6739), D6 pontosítva
+
+- **D6a — minták:** a tokenminták szókarakterhez tapadva is illeszkednek (nincs `\b` horgony): `sk-(ant|or|proj)-…`,
+  `ghp_…`, `github_pat_…`; az általános `sk-` + 16 csak betű / szám után nem indul (`(?<![A-Za-z0-9])`, `risk-…` ne legyen
+  találat); `AKIA` mellett `ASIA`; a HTTP-séma kis- és nagybetűs (`\bbearer\s+…`, `i`) — a szóhoz tapadó `…Bearer` ártalmatlan
+  szó marad; a DB-URL a `\`-nél megáll (JSON-ban a `\n` / `\"` escape-et nem nyeli el; ára: a jelszóban álló `\` utáni rész
+  nem a DB-URL-tartomány része).
+- **D6b — korlátos vágás:** `max(64 KB, max)` feletti szövegnél a `clipText` csak `limit + 6 × margin + 1024` karakteres
+  előtagot vizsgál (a határon átnyúló token- / e-mail- / escape-futás végéig meghosszabbítva), és csak a `limit` előtt kezdődő
+  tartományokat tárolja; a mérés (`stats`) tesztben rögzített.

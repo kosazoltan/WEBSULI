@@ -154,3 +154,17 @@ NEM ítélet: 3 blokkoló, 1 közepes, 2 kicsi; mind valódi. Orkesztrátori ké
   CLI ismeretlen kapcsolót figyelmen kívül hagy, és valódi, fizetős képgenerálást indít. A futás 1 kép után leállítva (becsült
   0,093 USD; `source/design-assets/candidates/`, git-ignorált). Teendő: fizetős CLI-t füstpróbára soha ne indíts; a CLI kapjon
   ismeretlen-kapcsoló hibát / `--help`-et (külön jegy).
+
+## 2026-11-21 — 3. vak kör (25de6739)
+
+NEM ítélet: 2 blokkoló, 3 közepes, 1 kicsi; mind valódi, mind a közös `kitakaro.mjs`-ben.
+
+- **Tesztek előbb** (`01f30609`): az esettábla új formái (AWS ASIA, `bearer`, `BEARER`, `PostgreSQL`) és új alakja
+  (szókarakterhez tapadó: `id_…_x`; a Bearer-séma előtt előtag nélkül); L4-mérés (9 M-es, 1 M találatos bemenet: vizsgált hossz
+  és tárolt találat a korláttal arányos); L5 (JSON-hiba `\n` / `\"` a DB-URL után); L6 (nagy bemenet pontos, maszkolt előtagja).
+  Piros: 7 bukás a kapuknál (sk-ant tapadó, L4 stats, L5), 3 a design-assetsnél.
+- **Javítás** (D6a, D6b): `\b` nélküli tokenminták, általános `sk-` betű / szám utáni tiltással, `ASIA`, kisbetűs `bearer`,
+  `\`-nél megálló DB-URL; korlátos előtag-vizsgálat, csak a `limit` előtti tartományok tárolva.
+- **L6 mutánspróba:** a vágott ágban `t.slice(0, max)` (maszkolás nélkül) → az új L6-tesztek mindkét fájlban bukták (sok más
+  teszttel együtt), visszaállítva.
+- Fizetős külső szolgáltatást hívó eszközt (a `generate.ts`-t sem) ebben a körben nem indítottam.
