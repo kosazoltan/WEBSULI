@@ -12,15 +12,18 @@
 export const WINDOW = 64 * 1024;
 
 // `[x]{n}[x]*` a `[x]{n,}` helyett: azonos nyelv, de a V8 20 M karakteren sem dob (D2).
+// 3. vak kör (25de6739): a tokenminták szókarakterhez tapadva is (`field_sk-or-…`, `id_ghp_…_x`) illeszkednek — nincs `\b`
+// horgony; az általános `sk-` csak betű / szám után nem indul (`risk-…` ne legyen találat); `AKIA` mellett `ASIA`; a HTTP-séma
+// kis- és nagybetűs (`bearer`); a DB-URL `\`-nél megáll, hogy JSON-szövegben ne nyelje el a `\n` / `\"` escape-et (L5).
 const PATTERNS = [
-  ['dburl', /postgres(?:ql)?:\/\/[^\s"'`<>]+/gi],
-  ['token', /\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{16}[A-Za-z0-9]*\b/g],
-  ['token', /\bgithub_pat_[A-Za-z0-9_]{16}[A-Za-z0-9_]*\b/g],
-  ['token', /\bsk-(?:ant-)?[A-Za-z0-9_-]{16}[A-Za-z0-9_-]*\b/g],
-  ['token', /\bsk-or-[A-Za-z0-9_-]+/g],
-  ['aws', /\bAKIA[0-9A-Z]{16}\b/g],
+  ['dburl', /postgres(?:ql)?:\/\/[^\s"'`<>\\]+/gi],
+  ['token', /(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{16}[A-Za-z0-9]*/g],
+  ['token', /github_pat_[A-Za-z0-9_]{16}[A-Za-z0-9_]*/g],
+  ['token', /sk-(?:ant|or|proj)-[A-Za-z0-9_-]+/g],
+  ['token', /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{16}[A-Za-z0-9_-]*/g],
+  ['aws', /(?:AKIA|ASIA)[0-9A-Z]{16}/g],
   ['aiza', /AIza[0-9A-Za-z_-]{20}[0-9A-Za-z_-]*/g],
-  ['bearer', /\bBearer\s+[A-Za-z0-9._~+/=-]+/g],
+  ['bearer', /\bbearer\s+[A-Za-z0-9._~+/=-]+/gi],
 ];
 
 /** Helyőrző-készletek (a régi szerződések). */
@@ -147,12 +150,13 @@ const PRIO = { key: 0, dburl: 1, token: 2, aws: 3, aiza: 4, bearer: 5, email: 6 
  * Az érzékeny tartományok az eredeti szövegen, egyesítve: rendezett, diszjunkt `[{ s, e, kind }]`. A metsző tartományok egybe
  * olvadnak; a helyőrző fajtája a legkorábban kezdődő (azonosnál a leghosszabb, majd a pontos kulcs) tartományé.
  */
-export function findRanges(text, keys = []) {
+export function findRanges(text, keys = [], before = Infinity) {
   const ks = keys.filter((k) => typeof k === 'string' && k.length > 0);
   const raw = [];
-  scan(text, ks, (s, e, kind) => { raw.push({ s, e, kind }); });
+  // `before`: csak az ennél korábban kezdődő tartomány kerül tárolásra (a vágott kimenet eldobott farka nem foglal memóriát).
+  scan(text, ks, (s, e, kind) => { if (s < before) raw.push({ s, e, kind }); });
   const v = decodedView(text);
-  if (v) scan(v.d, ks, (s, e, kind) => { raw.push({ s: v.map[s], e: v.map[e], kind }); });
+  if (v) scan(v.d, ks, (s, e, kind) => { const os = v.map[s]; if (os < before) raw.push({ s: os, e: v.map[e], kind }); });
   raw.sort((a, b) => a.s - b.s || b.e - a.e || PRIO[a.kind] - PRIO[b.kind]);
   const out = [];
   for (const r of raw) {
@@ -200,15 +204,25 @@ export function cutPoint(text, ranges, limit, margin) {
 
 /**
  * Kitakarás és vágás `max` hosszra. Ha a szöveg legfeljebb max(WINDOW, max) hosszú: teljes kitakarás, majd vágás (a régi
- * viselkedés). Különben a forrás a `cutPoint`-ig marad (az ablak végéről legalább max(64, kulcshossz) karakter), és csak a
- * vágáspont előtti — ott teljes — tartományok cserélődnek.
+ * viselkedés). Különben csak egy korlátos előtagot vizsgál (3. vak kör L4): `limit + 6 × margin + 1024` karakter — ebbe a
+ * vágáspont előtt kezdődő bármely találat felismerhető eleje \uXXXX-kódolva is belefér —, meghosszabbítva a határon átnyúló
+ * token- / e-mail- / escape-karakterfutás végéig; és csak a `limit` előtt kezdődő tartományokat tárolja. A forrás a
+ * `cutPoint`-ig marad (az ablak végéről legalább max(64, kulcshossz) karakter); csak az ott teljes tartományok cserélődnek.
+ * `stats` (opcionális): `{ scanned, stored }` a mérésekhez.
  */
-export function clipText(text, { keys = [], ph, max }) {
+export function clipText(text, { keys = [], ph, max, stats }) {
   const t = String(text ?? '');
   const ks = keys.filter((k) => typeof k === 'string' && k.length > 0);
-  const ranges = findRanges(t, ks);
   const limit = Math.max(WINDOW, max);
-  if (t.length <= limit) return replaceRanges(t, ranges, ph, t.length).slice(0, max);
+  if (t.length <= limit) {
+    const all = findRanges(t, ks);
+    if (stats) Object.assign(stats, { scanned: t.length, stored: all.length });
+    return replaceRanges(t, all, ph, t.length).slice(0, max);
+  }
   const margin = Math.max(64, ...ks.map((k) => k.length));
+  let end = Math.min(t.length, limit + 6 * margin + 1024);
+  while (end < t.length && (isSensitiveChar(t.charCodeAt(end)) || t.charCodeAt(end) === 92)) end++;
+  const ranges = findRanges(t.slice(0, end), ks, limit);
+  if (stats) Object.assign(stats, { scanned: end, stored: ranges.length });
   return replaceRanges(t, ranges, ph, cutPoint(t, ranges, limit, margin)).slice(0, max);
 }
