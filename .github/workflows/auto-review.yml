@@ -1,17 +1,25 @@
-name: Auto Review (Bence)
+name: Auto Review
 
-# Automatikus review pipeline - Bence agent helyett GitHub Actions triggereli
-# a ket reviewer bot-ot (Sourcery AI + Codex) minden uj / ready PR-en.
+# Automatikus review-indito: minden uj / ready / frissitett PR-en egy kommenttel
+# meghivja a review botokat (Sourcery AI, Codex, Vercel Agent).
 #
-# Muveletek:
-#   1. PR nyitas / draft->ready / sync -> @sourcery-ai review + @codex review komment
-#   2. Post-CI -> ha CI green, badge-kommenttel jelzi a review-allapotot
+# Mukodes:
+#   - PR nyitas / draft->ready / sync / ujranyitas -> egy komment a fej SHA-jara:
+#     @sourcery-ai review + @codex review + @vercel run a review
+#   - SHA-nkent egyszer fut (allapotkulcs a kommentben).
+#
+# Ez a workflow NEM merge-el es nem javit. A merge-et az orkesztrator vegzi a
+# minosegkapuk utan (docs/minosegkapuk.md, npm run gate:merge).
 #
 # Bot felhasznalok:
 #   - sourcery-ai[bot]      - statikus analizis, stilus, bug_risk
 #   - chatgpt-codex-connector[bot] - javaslatok + P1/P2 badge-ek
+#   - Vercel Agent (Vercel-integracio) - review
 #
-# Manual trigger: @sourcery-ai review vagy @codex review komment egy PR-en.
+# Manual trigger: @sourcery-ai review, @codex review vagy @vercel run a review
+# komment egy PR-en.
+#
+# Or-teszt: source/tests/auto-review-workflow-guard.test.ts
 
 on:
   pull_request:
@@ -40,11 +48,14 @@ jobs:
               issue_number: context.issue.number,
               per_page: 100,
             });
-            // Az utolso 50 komment kozott keresunk mar meghivott bot-trigger-t
-            // EZEN a commit-sha-n belul (hogy push utan ismet fusson).
+            // Az elso (legregebbi) 100 komment kozott keresunk mar meghivott bot-trigger-t
+            // EZEN a commit-sha-n belul (hogy push utan ismet fusson). Lapozas nincs:
+            // 100 komment folott az egyszeriseg nem garantalt (ismert korlat).
             const headSha = context.payload.pull_request.head.sha;
-            const stateKey = `<!-- bence-auto-review: ${headSha} -->`;
-            const alreadyTriggered = comments.some(c => c.body?.includes(stateKey));
+            const stateKey = `<!-- auto-review: ${headSha} -->`;
+            // Atallas: a korabbi kulccsal mar megjelolt SHA-ra ne menjen masodik komment.
+            const legacyKey = `<!-- bence-auto-review: ${headSha} -->`;
+            const alreadyTriggered = comments.some(c => c.body?.includes(stateKey) || c.body?.includes(legacyKey));
             core.setOutput('already', alreadyTriggered ? 'true' : 'false');
             core.setOutput('state_key', stateKey);
 
@@ -58,12 +69,13 @@ jobs:
             const stateKey = process.env.STATE_KEY;
             const body = [
               stateKey,
-              '## :robot: Auto review triggered (Bence)',
+              '## :robot: Auto review triggered',
               '',
-              'A ket reviewer bot most fut a legfrissebb commit-on:',
+              'A review botok most futnak a legfrissebb commit-on:',
               '',
               '- **@sourcery-ai** - statikus analizis, stilus, bug_risk',
               '- **@codex** - javaslatok + P1/P2 badge-ek',
+              '- **Vercel Agent** - review a Vercel-integracion at',
               '',
               '**Atfogo review** (docs/specs/2026-10-18-atfogo-review.md): a teljes PR-t es a diff altal erintett programreszeket',
               'vizsgaljatok, szeletes funkcional a tervet es a mar osszevont szeleteket is, vegponttol vegpontig — lasd AGENTS.md',
@@ -79,8 +91,8 @@ jobs:
               '',
               '---',
               '',
-              '_Automatikus Bence trigger. Kovetkezo lepes: ha CI zold + mindket bot approved,',
-              'Bence merge-eli. Ha CHANGES_REQUESTED, Junior javit es push-ol._',
+              '_Automatikus review-indito. A merge-et az orkesztrator vegzi a minosegkapuk (docs/minosegkapuk.md) utan;',
+              'a botok velemenye onmagaban nem indit merge-et._',
             ].join('\n');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
