@@ -1122,3 +1122,14 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   (`client/src/advent/dialog-escape.ts`); a fókusz-visszaadás ismétlése csak az ELVESZETT (body) fókuszt adhatja vissza.
 
 Forrás: `wip/advent-c-javitas`, ec22e759. Rokon: C-61.
+
+## C-90 — `sed -i` visszaper-backtick mintával a Bash eszközből: minden sor elé backtick került (2026-11-21)
+
+- **Tünet:** a megjegyzésekbe került `\`` (visszaper + backtick) kiírtására futtatott `sed -i 's/\`/`/g' <fájlok>` négy forrásfájl
+  MINDEN sora elé egy backtick-et írt (a minta az eszköz shell-rétegén át sor eleji illesztéssé torzult); a diff fájlnyi lett.
+- **Javítás:** Python-szkript a scratchpadben (a sor eleji backtick eltávolítása, ellenőrizve, hogy minden sor érintett volt), utána a
+  diff újra csak a szándékos sorokat mutatta.
+- **Szabály:** backtick-et, visszapert vagy `$`-t tartalmazó csere NEM megy `sed`-del / heredoc-kal a Bash eszközből — Python-szkript
+  fájlból (a mintát a szkript építi össze karakterekből), utána `git diff --stat` ellenőrzés a várt sorszámra.
+
+Forrás: `feat/advent-c-felulet-es-elesites`, a PR-C vak körének javítása.

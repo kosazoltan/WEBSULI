@@ -759,6 +759,37 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
 5. L5 — `adventRowIsSound`: mind a 24 nap kulcsa, nem üres sorral. Teszt: egység + DB. A korábbi sorőr-tesztek egynapos terve
    teljes, 24 napos tervre bővült (a szigorúbb szabály miatt; dokumentált fixture-változás).
 
+## 2026-11-21 — a PR-C vak köre (efa4c580) L1–L8
+
+Terv: `docs/specs/2026-11-18-adventi-naptar.md` 22. szakasz, 11–18. pont. Ellenőr-jelentés: NEM, 8 lelet; mind valódinak bizonyult a kódból.
+Új egységteszt-fájl: `source/tests/advent-pr-c-vak.test.ts` (előbb 9/9 bukott, javítás után 9/9 zöld).
+
+- **L1 — javítva (részben; a szélső eset tulajdonosi döntés):** `usedInEarlierRounds` a próbákból és a `retired` listából számol
+  (`server/advent/adoption.ts`); a `POST /round` a következő kör tervét a körváltással egy tranzakcióban építi és menti, építhetetlen
+  körnél 409 `noMoreQuestions` körváltás nélkül, és az állapot ilyenkor nem ajánl új kört (`server/advent/routes.ts` `nextRoundPlan`,
+  `stateOf`). Teszt: egység (L1 ×2) + DB („PR-C vak L1” ×2: a 2. kör mind a 24 ablaka megnyitható, nem ismétlés; szélső esetben
+  nincs új kör és nincs 503). Dokumentált teszt-változás: `tests/advent-limits.test.ts` „két MEGVÁLASZOLT példány …” a korábbi kör
+  MEGMUTATOTT kérdéseit zárja ki (terv 22.11). NYITOTT: szélső esetben ismétlés engedése vs. nincs új kör (tulajdonos).
+- **L2 — javítva:** `AdventState.adoptionPending`, `POST /api/advent/adopt` (CSRF, idempotens), a kliens az összesítés megnyitásakor /
+  végigjátszott körnél ment (`shouldAdopt`, `AdventCalendar.tsx`). Teszt: DB („PR-C vak L2”: GET nem ír, CSRF nélkül 403, átvétel,
+  idempotens ismétlés, másik eszköz és lezárás után is 24/24) + egység (L2). Végpont-leltár: `tests/admin-route-guard.test.ts`.
+- **L3 — javítva:** alany-generáció a kulcsban (`client/src/advent/sync.ts` `adventStateKey`, `watchAdventSubject`,
+  `setAdventStateIfCurrent`; `clearAdventCache` is új generáció), a token-változás jelzése (`lib/learnerProfile.ts`
+  `LEARNER_TOKEN_CHANGED_EVENT`), a fiókoldal a kapcsolat változásakor üríti (`PlayerAccount.tsx`); generációváltáskor a nyitott kérdés
+  bezárul. Teszt: egység (L3).
+- **L4 — javítva:** `nextRefreshAnchor` (a horgony csak új szervermintánál mozdul), `useAdvent.ts`. Teszt: egység (L4) + böngésző
+  („PR-C vak L4”: léptetett óra, válasz éjfél előtt, az 5. ablak újratöltés nélkül nyílik).
+- **L5 — javítva:** `mergeAdoption` más évfolyamnál csak a próbák kérdéseit (történeti helyek) veszi át, a többi hely és a tárgy a
+  tanulóé, a sorrend magja a vendégé. Teszt: egység (L5).
+- **L6 — javítva:** `adventWriteBlocked` + `writeBlocked()` minden író belépőben (nyitás, válasz, évfolyam, új kör, átvétel, automatikus
+  nyitás); az automatikus nyitás szándéka megmarad. Teszt: egység (L6, tiszta segéd + bekötés-őr). A böngészős versenyhelyzet
+  időzített reprodukciója NOT RUN (a lelet is UNVERIFIED-ként adta; az őr szinkron, renderfüggetlen).
+- **L7 — javítva:** `adventStateError` megőrzi a `corrupt` jelzőt; az oldal célzott, felnőtthöz irányító üzenetet ad „Újra” nélkül, és a
+  lekérdezés nem próbálja újra. Teszt: egység (L7) + böngésző („PR-C vak L7”).
+- **L8 — javítva:** `advent-tree-star` a fejlécben, a 24. ablak `solved` állapotát követi, egyszeri 1,2 s-os felfénylés, csökkentett
+  mozgásnál animáció nélkül (`advent.css`). Teszt: egység (L8) + böngésző („PR-C vak L8”: 22/24 mellett is felgyullad, ajándéküzenet
+  nélkül; csökkentett mozgásnál `animation-name: none`).
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.

@@ -221,7 +221,8 @@ Drizzle-sémáéval azonosak, visszaállítás (`DROP TABLE IF EXISTS advent_pro
 | `POST /api/advent/grade` | évfolyam megadása (csak `player` / `device`, csak az első válasz előtt) | CSRF + IP-korlát |
 | `POST /api/advent/doors/:day/open` | az ablak aktuális kérdése (helyes válasz NÉLKÜL); az első hívás hozza létre a sort és a kiosztást; idempotens | CSRF + IP-korlát |
 | `POST /api/advent/doors/:day/answer` | `{ questionId, pick }` → `{ correct, correctIndex, explanation, door, summary }`; ugyanarra a kérdésre a második beküldés a tárolt eredményt adja | CSRF + IP-korlát; soronkénti zár (`SELECT … FOR UPDATE` tranzakcióban) |
-| `POST /api/advent/round` | új kör (csak ha végigért, nem felelt meg, nincs javítható ablak, és a kör < 3) | CSRF + IP-korlát |
+| `POST /api/advent/round` | új kör (csak ha végigért, nem felelt meg, nincs javítható ablak, és a kör < 3); a következő kör terve ugyanabban a tranzakcióban készül, és ha ismétlés nélkül nem építhető fel, a kör nem vált (409 `noMoreQuestions`; 22.11) | CSRF + IP-korlát |
+| `POST /api/advent/adopt` | a párosított eszköz függő (a `GET /state`-en `adoptionPending: true` előnézetként mutatott) vendégsorának kifejezett átvétele; idempotens — átvehető sor nélkül a mentett állapotot adja (22.12) | CSRF + IP-korlát |
 | `…/api/admin/advent/preview/*` | ugyanez a router az adminnak, választható dátummal (R9) | `isAuthenticatedAdmin` |
 
 Az író kérések a tanulói tokent és az eszközazonosítót a kérés TÖRZSÉBEN viszik (mint a lecke-eredmény), URL-be egyik sem kerül.
@@ -1170,3 +1171,27 @@ Külön, a 3/3 PR-re halmozott ágon (`wip/advent-d-elesites-elott`); a 3/3 PR f
 10. **Hiányzó napkulcs (L5):** a meglévő körterv minden napja megvan, legalább egy kérdéssel; különben 409 corrupt (olvasás és írás),
     változatlan sorral. Az első megnyitás előtti üres terv megengedett.
 Az L1 (friss évfolyam az átvételnél) a fenti 1. pont; a 2/3 PR jelentésének forgatókönyve is tesztelt.
+
+**A PR-C vak körének (efa4c580, 2026-11-21) feltételei:**
+
+11. **Kizárólista és körváltás (L1):** a korábbi körök kizárólistája a MEGMUTATOTT kérdésekből áll: a próbák és a lecserélt (`retired`)
+    tanulói próbák kérdései. A lezárt kör fel nem használt foglalásai (a meg sem nyitott javító kérdések) nem számítanak — a gyerek
+    sosem látta őket (a 12.3 „körökön át sem ismétlődik” szabálya a látott kérdésekre vonatkozik). A következő kör terve a körváltással
+    EGY tranzakcióban készül és mentődik; ha ismétlés nélkül már nem építhető fel (a gyerek több kérdést látott, mint amennyi a
+    készletben marad — csak átvétel után, szélső esetben fordulhat elő), az új kör nem ajánlható fel (a zárószöveg „done”), és a
+    `POST /round` 409 `noMoreQuestions`, körváltás nélkül. NYITOTT tulajdonosi kérdés: ilyenkor ismétlés engedése a 2. körben, vagy
+    (jelenlegi, biztonságos alapértelmezés) nincs új kör.
+12. **Kész vendégeredmény átvétele (L2):** a `GET /state` párosított eszközön `adoptionPending: true`-val jelzi, ha a nézet egy még nem
+    mentett átvétel előnézete; a kliens az összesítés megnyitásakor, illetve végigjátszott körnél kifejezett, CSRF-védett, idempotens
+    `POST /adopt` kéréssel menti. A GET mellékhatás nélkül marad.
+13. **Alany-generáció a kliensben (L3):** az adventi állapot gyorsítótár-kulcsa nem titkos alany-generációt hordoz; a tanulói kapcsolat
+    kötése / bontása, a token eltárolása / törlése / elutasítása és a másik lapon változott token új generációt ad, a nyitott kérdés
+    bezárul, és a régi generációval indult GET / POST eredménye nem kerül a gyorsítótárba.
+14. **Éjféli frissítés horgonya (L4):** a frissítés a szerverminta érkezéséhez horgonyzott; a válasz helyi állapotírása nem tolja el.
+15. **Más évfolyamú vendégablak (L5):** az átvett ablak terve a próbák kérdéseit (történeti helyek) és a tanuló saját tervének többi
+    helyét és tárgyát kapja; a vendég fel nem használt kérdéssora és tárgya nem kerül át; a sorrend magja a vendégé.
+16. **Lejárt párosítás (L6):** minden író belépő (automatikus nyitás is) szinkron ellenőrzi az állapot `pairing: invalid` jelzését, a
+    munkameneti jelzőt és a választási kényszert; az automatikus nyitás szándéka a gyerek döntéséig megmarad.
+17. **Sérült mentés a kliensben (L7):** a `409 corrupt` olvasási hiba célzott, felnőtthöz irányító üzenetet ad, újrapróba nélkül.
+18. **A karácsonyfa csillaga (L8, A43):** a 24. ablak `solved` állapotát követi (nem a pontszámot), a felgyulladáskor egyszer (1,2 s)
+    felfénylik; csökkentett mozgásnál animáció nélkül világít.
