@@ -304,3 +304,16 @@ test("design-assets (vak L4 / L5 / L6, 169cb025): átfedő kulcs, kulcs a vágá
   }
   assert.equal(redactClip("MODE: LifeboatBearer\n" + "A".repeat(REDACT_WINDOW + 10), CALLER_KEY, 300), "MODE: LifeboatBearer\n");
 });
+
+test("design-assets (vak L5 / L6, 25de6739): JSON-hibában a DB-URL határa; nagy HTTP-hiba pontos, maszkolt előtagja", async () => {
+  const dsn = ["postgres", "://admin:", "titok123", "@", "ep-pelda.neon.tech/db"].join("");
+  const a = JSON.stringify({ error: `connect ${dsn}\nConnectionRefused` });
+  assert.equal(JSON.parse(redact(a, CALLER_KEY)).error, "connect [kulcs]\nConnectionRefused");
+  assert.equal(JSON.parse(redactClip(a, CALLER_KEY, 300)).error, "connect [kulcs]\nConnectionRefused");
+  const body = `pre ${CALLER_KEY} kozte Bearer ` + "c".repeat(5_000_000);
+  const fetchImpl = (async () => new Response(body, { status: 500 })) as unknown as typeof fetch;
+  await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key: CALLER_KEY, body: {} }), (e: Error) => {
+    assert.equal(e.message, "HTTP 500: pre [kulcs] kozte ");
+    return true;
+  });
+});

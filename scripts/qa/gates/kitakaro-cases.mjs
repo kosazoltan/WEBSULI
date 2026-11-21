@@ -23,6 +23,11 @@ export const SECRET_CASES = [
   { name: 'GitHub ghp', raw: J('gh', 'p_', 'A1b2C3d4E5f6'.repeat(3)), body: 'A1b2C3d4E5f6'.repeat(3) },
   { name: 'GitHub pat', raw: J('github', '_pat_', 'B2c3D4e5F6g7'.repeat(3)), body: 'B2c3D4e5F6g7'.repeat(3) },
   { name: 'AWS', raw: J('AK', 'IA', 'ABCDEFGH12345678'), body: 'ABCDEFGH12345678' },
+  // 3. vak kör (25de6739): ideiglenes AWS-azonosító, kis- / nagybetűs HTTP-séma, nagybetűs DB-séma.
+  { name: 'AWS ASIA', raw: J('AS', 'IA', 'QRSTUVWX87654321'), body: 'QRSTUVWX87654321' },
+  { name: 'bearer kisbetűs', raw: J('bearer ', 'lo0k', '+Wx/Yz=~', 'N'.repeat(12)), body: J('lo0k', '+Wx/Yz=~', 'N'.repeat(12)) },
+  { name: 'BEARER nagybetűs', raw: J('BEARER ', 'UP9k', '+Rs/Tu=~', 'H'.repeat(12)), body: J('UP9k', '+Rs/Tu=~', 'H'.repeat(12)) },
+  { name: 'PostgreSQL nagybetűs', raw: J('PostgreSQL', '://dba:', 'jelszo987', at, 'db.pelda.hu/prod'), body: J('dba:', 'jelszo987', at, 'db.pelda.hu/prod') },
   { name: 'e-mail', raw: J('fiok.tulaj', at, 'pelda.hu'), body: J('fiok.tulaj', at, 'pelda.hu') },
   { name: 'e-mail tokenalakú helyi résszel', raw: J('AI', 'za', 'Sy', 'M'.repeat(30), at, 'levelezo.pelda.org'), body: J('Sy', 'M'.repeat(30), at, 'levelezo.pelda.org') },
   { name: 'DB-URL', raw: J('postgres', '://admin:', 'titok123', at, 'ep-pelda.neon.tech/db'), body: J('admin:', 'titok123', at, 'ep-pelda.neon.tech/db') },
@@ -36,6 +41,9 @@ export const ENCODINGS = {
   sima: (raw) => `pre ${raw} post`,
   json: (raw) => JSON.stringify({ error: { message: `pre ${raw} post` } }).split(at).join('\\u0040'),
   unicode: (raw) => `{"error":"pre ${[...raw].map(u4).join('')} post"}`,
+  // Szókarakterhez tapadó alak (3. vak kör): `id_` előtag és `_x` utótag. A Bearer-séma előtt nincs előtag — a szóhoz tapadó
+  // `…Bearer` ártalmatlan szó (2. vak kör L6), azt szándékosan nem takarjuk.
+  tapado: (raw) => (/^bearer/i.test(raw) ? `pre ${raw}_x post` : `pre id_${raw}_x post`),
 };
 
 /** Független (a vizsgált kódtól eltérő) JSON-escape-dekódolás a szivárgás-ellenőrzéshez. */

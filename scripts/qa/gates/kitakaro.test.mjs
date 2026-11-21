@@ -98,3 +98,36 @@ test('vak L6 (169cb025): `Bearer` végű ártalmatlan szó a hosszú futás elő
   const s = 'MODE: LifeboatBearer\n' + 'A'.repeat(MASK_WINDOW + 10);
   assert.equal(maskClip(s, CALLER_KEY, 600), 'MODE: LifeboatBearer\n');
 });
+
+// ---- 3. vak kör (25de6739) -------------------------------------------------------------------------------------------
+
+test('vak L4 (25de6739): sűrű nagy bemenetnél a tárolt találatok és a vizsgált hossz a kimeneti korláttal arányos', async () => {
+  const { clipText, PH_EXTERNAL, WINDOW } = await import('./kitakaro.mjs');
+  const line = 'Bearer x\n';
+  const s = line.repeat(1_000_000); // 9 000 000 karakter, 1 000 000 találat
+  const stats = {};
+  const out = clipText(s, { keys: [CALLER_KEY], ph: PH_EXTERNAL, max: 300, stats });
+  assert.ok(stats.scanned <= WINDOW + 8 * 1024, `vizsgált hossz: ${stats.scanned}`);
+  assert.ok(stats.stored <= (WINDOW + 8 * 1024) / line.length + 2, `tárolt találat: ${stats.stored}`);
+  assert.ok(out.startsWith('Bearer <token>\nBearer <token>\n') && out.length <= 300);
+});
+
+test('vak L5 (25de6739): JSON-hibában a DB-URL nem nyeli el a következő sort és az idézőjelezést', () => {
+  const dsn = ['postgres', '://admin:', 'titok123', '@', 'ep-pelda.neon.tech/db'].join('');
+  const a = JSON.stringify({ error: `connect ${dsn}\nConnectionRefused` });
+  const b = JSON.stringify({ error: `dsn "${dsn}" rossz` });
+  for (const [name, out] of [['redact', redact(a)], ['maskSecrets', maskSecrets(a, CALLER_KEY)], ['maskClip', maskClip(a, CALLER_KEY, 600)]]) {
+    assert.equal(JSON.parse(out).error, 'connect <db-url>\nConnectionRefused', name);
+  }
+  for (const [name, out] of [['redact', redact(b)], ['maskSecrets', maskSecrets(b, CALLER_KEY)], ['maskClip', maskClip(b, CALLER_KEY, 600)]]) {
+    assert.equal(JSON.parse(out).error, 'dsn "<db-url>" rossz', name);
+  }
+});
+
+test('vak L6 (25de6739): nagy bemenet — a megtartott előtag pontosan maszkolt, a hosszú AIza-futás saját részlete sincs', () => {
+  const key = ['AI', 'za', 'Sy', 'X'.repeat(33)].join('');
+  const s = `pre ${key} kozte ` + 'AI' + 'za' + 'b'.repeat(20_000_000);
+  const out = maskClip(s, key, 600);
+  assert.equal(out, 'pre *** kozte ');
+  assert.ok(!out.includes('bbbbbbbb'));
+});
