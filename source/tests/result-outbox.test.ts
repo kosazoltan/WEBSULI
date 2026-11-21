@@ -97,7 +97,7 @@ test("R30: a 7 napnál régebbi tevékenységű bejegyzés lejárt; a frissebb n
 });
 
 test("R30 + R31 + R32: a beküldő a tárolóréteget használja — a lejárt bejegyzés küldés nélkül kikerül, a bejegyzés kilétet visz", () => {
-  const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(source, /createOutboxStore\(/);
   assert.match(source, /if \(outboxEntryExpired\(entry, now\)\) \{ outbox\.remove\(entry\.id\); continue; \}/);
   assert.doesNotMatch(source, /localStorage\.setItem\(RESULT_OUTBOX_KEY/, "a közös lista írása megszűnt");
@@ -108,9 +108,9 @@ test("R31: a régi alak (R10) a kilét-címkét sem küldi; a szerver a CSRF-tok
   const { legacyResultBody } = await import("../shared/result-compat");
   assert.deepEqual(legacyResultBody({ kind: "quiz", roundId: "r", picks: { q1: 0 }, subject: "anon", clientNow: 5 }), { kind: "quiz", roundId: "r", picks: { q1: 0 } });
   assert.deepEqual(legacyResultBody({ kind: "tasks", roundId: "r", answers: { t1: "x" }, subject: "abc" }), { kind: "tasks", roundId: "r", answers: { t1: "x" } });
-  const routes = readFileSync(new URL("../server/routes.ts", import.meta.url), "utf8");
+  const routes = readFileSync(new URL("../server/routes.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(routes, /res\.json\(\{ csrfToken, resultApi: RESULT_API_VERSION, resultSubject: resultSubjectOf\(/);
-  const client = readFileSync(new URL("../client/src/lib/queryClient.ts", import.meta.url), "utf8");
+  const client = readFileSync(new URL("../client/src/lib/queryClient.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(client, /export function resultSubject\(\): string \| null/);
 });
 
@@ -123,7 +123,7 @@ test("R32: az alkalmazás induláskor a bejegyzésenkénti kulcsokat nézi — a
   createOutboxStore(() => tab).add(entry("a"));
   assert.equal(hasPendingOutbox(tab), true, "a bejegyzés saját kulcson áll, és az induló ellenőrzés látja");
   assert.equal(hasPendingOutbox(null), false);
-  const app = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(app, /pending = hasPendingOutbox\(localStorage\);/);
   assert.doesNotMatch(app, /localStorage\.getItem\(RESULT_OUTBOX_KEY\)/, "a régi, közös kulcs ellenőrzése megszűnt");
 });
@@ -137,13 +137,13 @@ test("R35 (6. kör L1): a felvétel jelzi, hogy új bejegyzés jött-e létre; c
   const later = createOutboxStore(() => tab);
   assert.equal(later.add({ ...entry("a"), subject: "masik-fiok" }), false, "a megmaradt bejegyzés nem az új dokumentumé");
   assert.equal(later.read()[0].subject, null, "a régi bejegyzés címkéje változatlan");
-  const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(source, /if \(outbox\.add\(entry\)\) enqueuedHere\.add\(entry\.id\);/);
   assert.doesNotMatch(source, /enqueuedHere\.add\(entry\.id\);\n\s*outbox\.add\(entry\);/);
 });
 
 test("R37 (6. kör L4): az apiRequest időzítője a törzs olvasásáig él; a tokenlekérésnek saját határideje van", () => {
-  const client = readFileSync(new URL("../client/src/lib/queryClient.ts", import.meta.url), "utf8");
+  const client = readFileSync(new URL("../client/src/lib/queryClient.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const body = client.slice(client.indexOf("export async function apiRequest"), client.indexOf("type UnauthorizedBehavior"));
   assert.doesNotMatch(body, /signal: controller\.signal,\n\s*\.\.\.keepalive,\n\s*\}\);\n\s*\n\s*clearTimeout\(timeoutId\);/, "a fejlécek után nem törli az időzítőt");
   assert.match(body, /\} finally \{\n\s*clearTimeout\(timeoutId\);\n\s*\}/);
