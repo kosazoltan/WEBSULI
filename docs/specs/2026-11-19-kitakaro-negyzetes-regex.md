@@ -83,7 +83,17 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
   cseréli; az `external-review` `maskSecrets` a kulcs és az `AIza***` után a kapuk `redact`-ját is futtatja (e-mail, Bearer-,
   GitHub-, `sk-`-token, DB-URL); a design-assets `redact` a teljes Bearer-karakterkészletet és az e-mail-címet (`[e-mail]`,
   a `redactEmails` TS-mása) is kitakarja — a `generate.ts` naplója is ezen megy át.
-- **D4:** a `split(key)` cseréje mindkét fájlban megmarad; a helyőrzők (`<email>`, `<token>`, `AIza***`, `***`, `[kulcs]`)
+- **D6 — egy közös kitakaró (2. vak kör, 169cb025; felülírja a D3c / D5 megvalósítását):** `scripts/qa/gates/kitakaro.mjs`
+  (+ `.d.mts`) az egyetlen kitakaró; a kapuk `redact`-ja, a külső ellenőr `maskSecrets` / `maskClip`-je és a képgyártó
+  `redact` / `redactClip`-je csak a helyőrző-készletben különbözik (`PH_GATE`, `PH_EXTERNAL`, `PH_DESIGN`). Menet: az érzékeny
+  tartományokat az EREDETI szövegen gyűjti — a pontos kulcs minden, átfedő előfordulását KMP-vel, a tokenmintákat (DB-URL,
+  GitHub, `sk-` / `sk-ant-` / `sk-or-`, AWS, AIza, `\bBearer\s+` + teljes `[A-Za-z0-9._~+/=-]` készlet) lineáris regexszel, az
+  e-mailt a D1-pásztázóval —, és ugyanezt a szöveg JSON-escape-dekódolt nézetén (`\uXXXX`, `\n`, `\"` …) is, visszavetítve; a
+  metsző tartományokat egyesíti, és csak utána cserél (egy korábbi csere nem törheti szét a későbbi találatot). A vágáspont
+  `limit - max(64, kulcshossz)`-ból indul, és se egyesített tartományt, se token- / e-mail-futást nem metsz; a `Bearer`-előtagot
+  a valódi `\bBearer` tartomány fedi (nincs szövegheurisztika). Egy szintű escape-dekódolás: a kétszeresen escape-elt
+  (`\\u0040`) alak nem cél.
+- **D4:** (a D6 óta a `split(key)` helyett KMP, átfedő előfordulással is;) a helyőrzők (`<email>`, `<token>`, `AIza***`, `***`, `[kulcs]`)
   változatlanok.
 
 ## 5. Edge case-ek

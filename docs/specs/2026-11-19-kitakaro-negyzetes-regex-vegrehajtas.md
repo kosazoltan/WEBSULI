@@ -134,3 +134,23 @@ A független vak ellenőr (GPT-6.2 Sol) NEM ítélete, négy lelet; mind valódi
   a `cut` ágból a `maskSecrets` kivéve → csak ez a teszt bukik (1 fail / 70 pass), visszaállítva.
 - A #521 hat review-szála (Codex 4633480787; Sourcery 4633501833, …847, …861, …869, …883) a fejen már kezelve volt
   (`3e7b4914` tesztek, `ff3ba86d` javítás); a 4633501833 határ-token tesztjei a D3c-vel is zöldek.
+
+## 2026-11-21 — 2. vak kör (169cb025)
+
+NEM ítélet: 3 blokkoló, 1 közepes, 2 kicsi; mind valódi. Orkesztrátori kérés: a kitakaró egy helyre, táblázatos teszttel.
+
+- **Tesztek előbb** (`0a911218`): `scripts/qa/gates/kitakaro-cases.mjs` (+ `.d.mts`) közös esettábla — 13 forma (AIza; Bearer
+  teljes készlettel, sortöréssel, `sk-proj` előtaggal; sk-ant; sk-or; GitHub ghp / pat; AWS; e-mail, tokenalakú helyi résszel is;
+  DB-URL; hívói kulcs) × 3 alak (sima, JSON-hibatörzs `@`-val, teljesen `\uXXXX`) × 4 vágási helyzet (előtte, a vágásponton,
+  az ablakhatáron, utána). `kitakaro.test.mjs`: kapu `redact` + `writeLog`, külső `maskSecrets` / `maskClip` / `generate` napló;
+  `design-assets.test.ts`: `redact` / `redactClip` / `requestImage`. Piros: 7/8 a kapuknál, 3 a design-assetsnél.
+- **L1** (képgyártó AIza), **L2** (korai csere szétszakít), **L3** (escape-elt cím / Bearer), **L4** (átfedő kulcs) — egy
+  javítással: közös `kitakaro.mjs` (D6), a három hívó csak helyőrző-készletet ad át.
+- **L5** — a vágópont-védelem mutánsa eredetileg túlélt, mert a `replaceRanges` a metsző tartományt is helyőrzőre cseréli (két
+  független védelem, szivárgás nélkül). A teszt most azt is kikényszeríti, hogy a metsző kulcs a vágás ELŐTT maradjon ki;
+  mutánspróba: a `cutPoint` tartomány-sora kivéve → 1 bukás mindkét fájlban, visszaállítva.
+- **L6** — a `Bearer` szöveg-heurisztika megszűnt; a vágó a valódi `\bBearer` tartományt használja. Teszt: `MODE: LifeboatBearer`.
+- **Csapda (javaslat a katalógusba, C-48 miatt ide írva):** a `npx tsx scripts/design-assets/generate.ts --help` NEM súgó — a
+  CLI ismeretlen kapcsolót figyelmen kívül hagy, és valódi, fizetős képgenerálást indít. A futás 1 kép után leállítva (becsült
+  0,093 USD; `source/design-assets/candidates/`, git-ignorált). Teendő: fizetős CLI-t füstpróbára soha ne indíts; a CLI kapjon
+  ismeretlen-kapcsoló hibát / `--help`-et (külön jegy).
