@@ -1123,3 +1123,20 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   kísérlet indulásakor.
 
 Forrás: #510 (R30–R34). Rokon: C-71.
+
+## C-77 — Bizonytalan képesség ≠ régi szerver; a törzs és a token két külön válaszból; aszinkron előkészítés utáni korhatár (2026-11-21)
+
+- **Mi történt:** a kimenő eredménysor a CSRF-token lekérésének ÁTMENETI hibáját (502) „régi szervernek” értelmezte, és címke nélküli
+  régi alakot épített; a POST közben már egy MÁSIK fiók érvényes tokenjével ment, a szerver ezért a mostani fióknak adta a régi eredményt.
+  Ugyanott a 7 napos korhatárt csak az ürítés elején nézte — a token várakozása alatt lejárt bejegyzés kiment. A szerveren a leállítás
+  ürítése nem látta a futó és a halasztott (60 s-os) „félbehagyva” kísérletet; a végleges jelzősor tulajdonos nélkül rögzült, így a 202
+  előtt megszakadt kérés eredeti beküldőjét is duplikátumnak vette.
+- **Szabály 1:** a képességjelzést hordozó válasz HIÁNYA háromállapotú: van / nincs / ismeretlen. Ismeretlennél ne válassz alapértelmezett
+  (régi) utat — halaszd. A kérés törzsét abból a válaszból építsd, amelynek tokenjével ténylegesen küldesz (`apiRequest` `prepare`).
+- **Szabály 2:** minden időkorlátot közvetlenül a mellékhatás (küldés) előtt ellenőrizz, minden aszinkron várakozás UTÁN is.
+- **Szabály 3:** leállítási ürítésnél a „várakozó” mellett a FUTÓ és a HALASZTOTT (újrapróba-időzítős) munkát is tartsd nyilván.
+- **Szabály 4:** a „már megtörtént” jelző mellé atomi módon rögzítsd, KI rögzítette, hogy a megszakadt első kérés ismétlése folytatható legyen.
+- **Tesztcsapda:** ha a kód `Date.now() + késleltetés` alapján dönt az esedékességről, a `setTimeout` gyorsítása kevés — hamis óra
+  (`page.clock.install()` + `fastForward`) kell, különben a teszt hamisan piros / zöld.
+
+Forrás: #510 (R39–R42). Rokon: C-76.
