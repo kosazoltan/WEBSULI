@@ -163,3 +163,14 @@ test('redact (#521): 16-nál több (numerikus / egykarakteres) tartománycímke 
   // a TLD betűs eleje számít (a régi minta szerint): a szám-farok marad
   assert.equal(redact(`a${at}b.com123`), '<email>123');
 });
+
+test('redact (vak L2, a188a33d): az önálló AIza-kulcs is kitakarva; a writeLog naplója visszaolvasva sem tartalmazza', () => {
+  const aiza = ['AI', 'za', 'Sy', 'K'.repeat(33)].join('');
+  assert.equal(redact(`GEMINI_API_KEY=${aiza} kész`), 'GEMINI_API_KEY=<token> kész');
+  assert.ok(redact(`AIza${'a'.repeat(10_000_000)}`) === '<token>', '10 M AIza-futás → <token>');
+  const dir = mkdtempSync(join(tmpdir(), 'gate-l2-'));
+  const p = writeLog(dir, 'stage', 'egységteszt', `stderr: GEMINI_API_KEY=${aiza}\nminden teszt zöld`);
+  const txt = readFileSync(p, 'utf8');
+  assert.ok(!txt.includes(aiza.slice(4)), 'a kulcs törzse nincs a naplóban');
+  assert.ok(txt.includes('GEMINI_API_KEY=<token>') && txt.includes('minden teszt zöld'), 'az ártalmatlan környezet megmarad');
+});

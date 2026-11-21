@@ -141,6 +141,45 @@ describe("kulcs és maszkolás", () => {
     assert.equal(maskClip(t, FAKE_KEY, 400), maskSecrets(t, FAKE_KEY).slice(0, 400));
     assert.equal(maskClip(undefined, FAKE_KEY, 10), "");
   });
+  // Vak kör (a188a33d): a szintetikus címet / tokent futásidőben rakjuk össze.
+  const vakMail = ["fiok.tulaj", "pelda.hu"].join("@");
+  const vakTok = ["ya29", "+AbC/dEf=~", "Q".repeat(12)].join("");
+  const noLeak = (s, msg) => {
+    for (const frag of ["fiok.tulaj", "pelda.hu", "AbC/dEf", "QQQQ"]) assert.ok(!s.includes(frag), `${msg}: ${frag}`);
+  };
+  it("vak L1 (a188a33d): a szolgáltatói hibaszövegben az e-mail és a teljes Bearer-token (+ / = ~) is maszkolva", () => {
+    const m = maskSecrets(`account ${vakMail}; Bearer ${vakTok}`, FAKE_KEY);
+    noLeak(m, "maskSecrets");
+    assert.equal(m, "account <email>; Bearer <token>");
+    noLeak(maskClip(`account ${vakMail}; Bearer ${vakTok}`, FAKE_KEY, 160), "maskClip");
+  });
+  it("vak L1 (a188a33d): a generate újrapróbálási naplója és a végső hiba sem tartalmaz e-mailt / Bearer-tokent", async () => {
+    const { generate } = await import("./external-review.mjs");
+    const logs = [];
+    const body = `{"error":"quota for ${vakMail}; Bearer ${vakTok}"}`;
+    const t = async () => ({ status: 503, text: body, retryAfter: "0" });
+    await assert.rejects(generate({ model: "m", key: FAKE_KEY, systemText: "s", userText: "u", thinking: "high", retries: 1, log: (s) => logs.push(s), transport: t, sleep: async () => {} }), (e) => {
+      noLeak(e.message, "hiba"); return true;
+    });
+    assert.equal(logs.length, 1);
+    noLeak(logs.join("\n"), "napló");
+  });
+  it("vak L1 (a188a33d): az ablakhatáron átnyúló hosszú e-mail helyi része (`%` / `@` a határon) sem marad", () => {
+    for (const sep of ["%M@", "@"]) {
+      const s = " ".repeat(MASK_WINDOW - 150) + "L".repeat(150) + sep + "pelda.hu vége";
+      assert.ok(!maskClip(s, FAKE_KEY, MASK_WINDOW).includes("L"), `elválasztó ${sep}`);
+    }
+  });
+  it("vak L3 (a188a33d): a határon átnyúló hosszú futás előtti, különálló diagnosztika megmarad; max-nál rövidebb bemenet változatlan", () => {
+    assert.equal(maskClip("Image backend is offline\n" + "x".repeat(MASK_WINDOW + 1), FAKE_KEY, 600), "Image backend is offline\n");
+    const h = "#".repeat(65_537);
+    assert.equal(maskClip(h, "", 65_538), h);
+  });
+  it("vak L4 (a188a33d): nagy bemenet elején a teljes kulcs és egy eltérő AIza-minta pontosan maszkolva marad", () => {
+    const other = ["AI", "za", "Q".repeat(30)].join("");
+    const s = `elotte ${FAKE_KEY} kozte ${other} utana ` + "z ".repeat(MASK_WINDOW);
+    assert.equal(maskClip(s, FAKE_KEY, 60), ("elotte *** kozte AIza*** utana " + "z ".repeat(20)).slice(0, 60));
+  });
 });
 
 describe("egyéb", () => {

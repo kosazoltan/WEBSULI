@@ -211,6 +211,37 @@ test("redactClip (vak L1): ablakhatáron félbevágott, hosszabbító mintákat 
   assert.equal(out2.includes("MARKER"), false);
 });
 
+// Vak kör (a188a33d): a szintetikus címet / tokent futásidőben rakjuk össze.
+const vakMail = ["fiok.tulaj", "pelda.hu"].join("@");
+const vakTok = ["ya29", "+AbC/dEf=~", "Q".repeat(12)].join("");
+const noLeak = (s: string, msg: string) => {
+  for (const frag of ["fiok.tulaj", "pelda.hu", "AbC/dEf", "QQQQ"]) assert.equal(s.includes(frag), false, `${msg}: ${frag}`);
+};
+
+test("redact (vak L1, a188a33d): az e-mail és a teljes Bearer-token (+ / = ~) is kitakarva — a generate.ts naplója is ezt hívja", () => {
+  const out = redact(`account ${vakMail}; Bearer ${vakTok} vége`, clipKey);
+  noLeak(out, "redact");
+  assert.equal(out, "account [e-mail]; Bearer [kulcs] vége");
+});
+
+test("requestImage hibaága (vak L1, a188a33d): rövid szolgáltatói hibában sincs e-mail és Bearer-token", async () => {
+  const fetchImpl = (async () => new Response(`{"error":"account ${vakMail}; Bearer ${vakTok}"}`, { status: 401 })) as unknown as typeof fetch;
+  await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key: clipKey, body: {} }), (e: Error) => {
+    noLeak(e.message, "hiba");
+    return true;
+  });
+});
+
+test("redactClip (vak L1 / L3, a188a33d): határon átnyúló e-mail nem marad; a futás előtti diagnosztika megmarad", () => {
+  for (const sep of ["%M@", "@"]) {
+    const s = " ".repeat(REDACT_WINDOW - 150) + "L".repeat(150) + sep + "pelda.hu vége";
+    assert.equal(redactClip(s, clipKey, REDACT_WINDOW).includes("L"), false, `elválasztó ${sep}`);
+  }
+  assert.equal(redactClip("Image backend is offline\n" + "x".repeat(REDACT_WINDOW + 1), clipKey, 300), "Image backend is offline\n");
+  const h = "#".repeat(65_537);
+  assert.equal(redactClip(h, "", 65_538), h);
+});
+
 test("requestImage hibaága: nagy válaszban sincs kulcs, legfeljebb 300 karakteres részlet", async () => {
   const body = "x".repeat(REDACT_WINDOW - 10) + clipKey + "z".repeat(5_000_000);
   const fetchImpl = (async () => new Response(body, { status: 500 })) as unknown as typeof fetch;
