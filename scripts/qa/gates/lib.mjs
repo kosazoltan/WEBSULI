@@ -12,14 +12,17 @@ export const IS_WIN = process.platform === 'win32';
 
 // ---- Kimenet-szűrés (D3, E15) ---------------------------------------------------------------------------------------
 
+// A minták lineárisak és nem omlanak össze (docs/specs/2026-11-19-kitakaro-negyzetes-regex.md): `[x]{n}[x]*` a `[x]{n,}` helyett
+// (azonos nyelv, de a V8 a `{n,}` alakot 20 M karakternél veremtúlcsordulással dobja); az e-mail korlátos (helyi rész ≤ 64,
+// címke ≤ 63, ≤ 16 címke), mert a nyitott `[…]+@` minden kezdőpozícióból végigolvasott (300 000 kar. → ~1 perc).
 const REDACTIONS = [
   [/postgres(?:ql)?:\/\/[^\s"'`<>]+/gi, '<db-url>'],
-  [/\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{16,}\b/g, '<token>'],
-  [/\bgithub_pat_[A-Za-z0-9_]{16,}\b/g, '<token>'],
-  [/\bsk-(?:ant-)?[A-Za-z0-9_-]{16,}\b/g, '<token>'],
+  [/\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{16}[A-Za-z0-9]*\b/g, '<token>'],
+  [/\bgithub_pat_[A-Za-z0-9_]{16}[A-Za-z0-9_]*\b/g, '<token>'],
+  [/\bsk-(?:ant-)?[A-Za-z0-9_-]{16}[A-Za-z0-9_-]*\b/g, '<token>'],
   [/\bAKIA[0-9A-Z]{16}\b/g, '<aws-key>'],
-  [/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/g, 'Bearer <token>'],
-  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, '<email>'],
+  [/\bBearer\s+[A-Za-z0-9._~+/=-]{8}[A-Za-z0-9._~+/=-]*/g, 'Bearer <token>'],
+  [/[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.){1,16}[A-Za-z]{2,63}/g, '<email>'],
 ];
 
 /** Titok, kapcsolati szöveg és e-mail-cím helyőrzőre cserélve — minden kiírás és napló ezen megy át. */

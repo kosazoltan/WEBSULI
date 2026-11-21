@@ -249,7 +249,7 @@ export async function requestImage(
     signal: AbortSignal.timeout(opts.timeoutMs ?? IMAGE_TIMEOUT_MS),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${redact(text, opts.key).slice(0, 300)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${redactClip(text, opts.key, 300)}`);
   const json = JSON.parse(text) as { data?: Array<{ b64_json?: string; media_type?: string }>; usage?: unknown };
   const img = json.data?.[0];
   if (!img?.b64_json || !/^image\//.test(img.media_type ?? "image/png")) throw new Error("Üres vagy nem képtípusú válasz.");
@@ -329,4 +329,18 @@ export function redact(text: string, key: string): string {
   let out = key ? text.split(key).join("[kulcs]") : text;
   out = out.replace(/Bearer\s+[A-Za-z0-9._-]+/g, "Bearer [kulcs]").replace(/sk-or-[A-Za-z0-9_-]+/g, "[kulcs]");
   return out;
+}
+
+/** A kitakarás ablaka a vágott hibarészletekhez (docs/specs/2026-11-19-kitakaro-negyzetes-regex.md). */
+export const REDACT_WINDOW = 64 * 1024;
+
+/**
+ * Vágás a kitakarás előtt: legfeljebb REDACT_WINDOW karakter kitakarva; vágott ablaknál a végéről a félbevágott kulcs
+ * lehetséges helye (max(64, kulcshossz)) is eldobva, így a max hosszú kimenetben határon félbevágott kulcs nem maradhat.
+ */
+export function redactClip(text: string, key: string, max: number): string {
+  const cut = text.length > REDACT_WINDOW;
+  let out = redact(cut ? text.slice(0, REDACT_WINDOW) : text, key);
+  if (cut) out = out.slice(0, Math.max(0, out.length - Math.max(64, key.length)));
+  return out.slice(0, max);
 }
