@@ -1140,3 +1140,17 @@ Forrás: #510 (R30–R34). Rokon: C-71.
   (`page.clock.install()` + `fastForward`) kell, különben a teszt hamisan piros / zöld.
 
 Forrás: #510 (R39–R42). Rokon: C-76.
+
+## C-78 — Kilenc vak kör után is NEM: a hatókör szűkítése kapcsolóval, nem újabb javítókör (2026-11-21)
+
+- **Mi történt:** a #510 minden vak köre új leletet talált a böngészős tartós sor (kilét, lejárat, fülek, dokumentumok) határesetein —
+  minden javítás új határesetet nyitott. A tulajdonos szűkített: a tartós sor kapcsoló mögé került (alapból KI), külön szeletben (T-3)
+  véglegesítjük.
+- **Szabály 1:** ha egy funkciórész 3+ körön át új határeset-leletet ad, javasold (űrlapon) a leválasztását: kapcsoló alapból KI, a kód
+  és a tesztjei maradnak (BE kapcsolóval futnak), az éles út a szűkebb, már stabil viselkedés.
+- **Szabály 2:** az e2e-buildben a kapcsolót futásidejű horog (`window.__…`) is állíthassa, hogy egyetlen buildön mindkét állás mérhető
+  legyen; élesben csak a build-idejű kapcsoló számítson (forrásőr).
+- **Tesztcsapda:** a „félbehagyva” körnél a címzett-foglalás (`delivered`) MEGELŐZI a küldést, így futó küldés alatt a felvétel
+  `alreadySent`-et ad, mielőtt az első rögzítőt (conflict) nézné — az első rögzítő átadását közvetlenül (teszt-segéddel) mérd.
+
+Forrás: #510 (szűkítés, R43–R46). Rokon: C-76, C-77.
