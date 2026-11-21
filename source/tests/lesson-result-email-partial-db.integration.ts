@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault, sendingPartialWho } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -389,10 +389,12 @@ test("R14 / K4: leállításkor a várakozó „félbehagyva” levél a késlel
     assert.equal(pendingPartialCount(), 0);
     // Lefagyott küldő: az ürítés legfeljebb az időkorlátig vár.
     reset();
+    clearPendingPartials(); // R45: a lezárult ürítés után a felvétel zárva (503) — új „példány” utánzása, hogy a pillanatkép befogadódjon
+    assert.equal(pendingPartialCount(), 0);
     const previousTimeout = setSendTimeout(60_000);
     setResultSender(async () => { await new Promise(() => { /* soha nem tér vissza */ }); });
     try {
-      await post({ kind: "quiz", roundId: "round-k4-hang", picks: picks(2), partial: true, fingerprint: "fp-k4-hang" });
+      assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-k4-hang", picks: picks(2), partial: true, fingerprint: "fp-k4-hang" })).json(), { queued: true, partial: true });
       const t0 = Date.now();
       await flushPendingPartials(500);
       assert.ok(Date.now() - t0 < 2_000, "az ürítés az időkorlát után visszatér");
@@ -678,6 +680,7 @@ test("R41 / L3: leállítás a kapuhiba utáni újrapróba-várakozás alatt →
     assert.equal(partialMailsOf("round-r41-retry").length, 2, "az ürítés kiküldte a halasztott újrapróbát");
     // 2. A küldés éppen fut (lassú küldő), amikor a leállítás jön → az ürítés megvárja.
     reset();
+    clearPendingPartials(); // R45: a lezárult ürítés után a felvétel zárva — új „példány” utánzása
     setFinalizedCheckFault(null);
     sendDelayMs = 700;
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r41-active", picks: picks(2), partial: true, fingerprint: "fp-r41b" })).json(), { queued: true, partial: true });
@@ -687,6 +690,7 @@ test("R41 / L3: leállítás a kapuhiba utáni újrapróba-várakozás alatt →
     assert.equal(partialMailsOf("round-r41-active").length, 2, "az ürítés a futó küldés végét megvárta");
     // 3. A halasztott újrapróba is a kapun megy: véglegesített körre az előrehozott kísérlet sem küld.
     reset();
+    clearPendingPartials();
     left = 1;
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r41-final", picks: picks(2), partial: true, fingerprint: "fp-r41c" })).json(), { queued: true, partial: true });
     // A kapu hibája a felvétel UTÁN (a felvétel is nézi a véglegesítést), az időzítő lejárta előtt.
@@ -721,4 +725,31 @@ test("R42 / L4: a tanulófüggetlen végleges jelzősor rögzült, de a kérés 
     assert.ok(await waitFor(() => sent.length === 2), "az eredeti beküldő levele kiment");
     assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló")));
   } finally { setFinalClaimFault(null); }
+});
+
+/* Gépi vak ellenőrzés, 8. kör (GPT-6.2 Sol, e36518e5, 2026-11-21), terv R45. */
+test("R45 / L3: leállítás közben befogadott pillanatkép az ürítéssel kimegy; az ürítés az első rögzítőt átadja; a lezárult ürítés után a felvétel 503", async () => {
+  reset();
+  const previousDelay = setPartialDelay(60_000);
+  const partialMailsOf = (roundId: string) => { const keys = RECIPIENTS.map(to => resultIdempotencyKey(LESSON, "quiz", partialRoundKey(roundId), to)); return sent.filter(mail => keys.includes(mail.key)); };
+  try {
+    clearPendingPartials();
+    // Igazolt tanuló várakozó köre; a küldő lassú, így az ürítés egy ideig fut.
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r45-user", picks: picks(2), partial: true }, freshIp(), "u-r45")).json(), { queued: true, partial: true });
+    sendDelayMs = 700;
+    const flushing = flushPendingPartials(5_000);
+    await sleep(100);
+    // 1. Az ürítés ugyanazon az indító úton indít, mint az időzítő: az első rögzítő (igazolt tanuló) a küldés alatt nyilvántartott (R34).
+    assert.equal(sendingPartialWho(LESSON, "round-r45-user"), "u-r45", "az ürítés átadta az első rögzítőt");
+    // 2. Az ürítés alatt befogadott ÚJ kör: nem marad a (le nem futó) 60 s-os időzítőn — az ürítés kiküldi.
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r45-late", picks: picks(2), partial: true, fingerprint: "fp-r45-late" })).json(), { queued: true, partial: true });
+    await flushing;
+    assert.equal(partialMailsOf("round-r45-user").length, 2, "a várakozó kör kiment");
+    assert.equal(partialMailsOf("round-r45-late").length, 2, "az ürítés közben befogadott kör is kiment");
+    assert.equal(pendingPartialCount(), 0);
+    // 3. A lezárult ürítés után: nincs elfogadó 202 (a kliens nem jelöli elküldöttnek), várakozó sem keletkezik.
+    const closed = await post({ kind: "quiz", roundId: "round-r45-after", picks: picks(2), partial: true, fingerprint: "fp-r45-after" });
+    assert.equal(closed.status, 503);
+    assert.equal(pendingPartialCount(), 0);
+  } finally { sendDelayMs = 0; clearPendingPartials(); setPartialDelay(previousDelay); }
 });

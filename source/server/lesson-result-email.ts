@@ -275,6 +275,8 @@ function markSending(key: string, who: string, version: number): void {
   if (sendingPartials.size >= MAX_PENDING_PARTIALS) sendingPartials.delete(sendingPartials.keys().next().value!);
   sendingPartials.set(key, { who, version });
 }
+/** Teszthez (R45): a kör „küldés alatt” nyilvántartott első rögzítője (vagy `undefined`). */
+export function sendingPartialWho(lessonId: string, roundId: string): string | undefined { return sendingPartials.get(`${lessonId}|${roundId}`)?.who; }
 function settleSending(key: string, version: number): void {
   if (sendingPartials.get(key)?.version === version) sendingPartials.delete(key);
 }
@@ -286,7 +288,14 @@ function settleSending(key: string, version: number): void {
 const activePartialSends = new Set<Promise<unknown>>();
 const deferredPartialRetries = new Map<number, { timer: ReturnType<typeof setTimeout>; run: () => Promise<unknown> }>();
 let deferredPartialSeq = 0;
-let flushingPartials = false;
+/**
+ * Terv R45 (8. vak kör L3): a leállítás állapota — `running`: az ürítés fut (az újonnan befogadott pillanatkép és minden újrapróba
+ * azonnal, követve indul, az ürítés megvárja); `done`: az ürítés lezárult (új pillanatképet a szerver nem fogad el: 503, a kliens nem
+ * jelöli elküldöttnek, a következő alkalommal újra küldi). Csak a teszt-segéd állítja vissza.
+ */
+let partialShutdown: "running" | "done" | null = null;
+/** R45: a leállítás ürítése lezárult — a pillanatkép-felvétel ilyenkor nem fogad el új állapotot. */
+export function partialIntakeClosed(): boolean { return partialShutdown === "done"; }
 function trackPartialSend(sending: Promise<unknown>): Promise<unknown> {
   const tracked = sending.catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${errorClass(error)}`));
   activePartialSends.add(tracked);
@@ -294,7 +303,7 @@ function trackPartialSend(sending: Promise<unknown>): Promise<unknown> {
   return tracked;
 }
 const schedulePartialRetry: RetryScheduler = (run, delayMs) => {
-  if (flushingPartials) { void trackPartialSend(Promise.resolve().then(run)); return; }
+  if (partialShutdown !== null) { void trackPartialSend(Promise.resolve().then(run)); return; }
   const id = ++deferredPartialSeq;
   const timer = setTimeout(() => { deferredPartialRetries.delete(id); void trackPartialSend(run()); }, delayMs);
   timer.unref?.();
@@ -317,19 +326,27 @@ function schedulePartial(key: string, owner: string, who: string, answered: numb
   const own = [...pendingPartials.entries()].filter(([, entry]) => entry.owner === best.owner).map(([k]) => k);
   if (own.length >= MAX_PENDING_PER_LEARNER) { cancelPartial(own[0]); logger.warn("[LESSON-RESULT] a tanuló legrégebbi várakozó félbehagyott köre kiszorult (tanulónkénti korlát)."); }
   if (pendingPartials.size >= MAX_PENDING_PARTIALS) { cancelPartial(pendingPartials.keys().next().value!); logger.warn("[LESSON-RESULT] a legrégebbi várakozó félbehagyott kör kiszorult (teljes korlát)."); }
-  const timer = setTimeout(() => {
-    // R34: a kör első rögzítője a küldési ciklus végéig őrződik (a várakozók közül kikerül, a „küldés alatt” nyilvántartásba kerül).
-    markSending(key, best.who, best.version);
-    pendingPartials.delete(key);
-    // Review K4: csak a hiba osztálya / kódja (`errorClass`) — a lekérdezés hibaüzenete felhasználói azonosítót tartalmazhatna.
-    // R41: a futó küldés nyilvántartott (a leállítás ürítése megvárja).
-    void trackPartialSend(Promise.resolve().then(best.send));
-  }, partialDelayMs);
+  const timer = setTimeout(() => startPartial(key), partialDelayMs);
   timer.unref?.();
   pendingPartials.set(key, { timer, ...best });
   // R21: a megtartott állapot változata az aktuális (a kiszorított vagy elavult kísérletek a kapuban megállnak).
   setCurrentPartialVersion(key, best.version);
+  // R45: leállítás közben befogadott pillanatkép nem marad a (le nem futó) időzítőn — azonnal, követve indul.
+  if (partialShutdown !== null) startPartial(key);
   return true;
+}
+/**
+ * R45 (8. vak kör L3): a várakozó kör küldésének EGYETLEN indító útja — az időzítő lejártakor és a leállítás ürítésekor is. R34: a kör
+ * első rögzítője a küldési ciklus végéig őrződik (a várakozók közül kikerül, a „küldés alatt” nyilvántartásba kerül); R41: a futó küldés
+ * nyilvántartott (a leállítás ürítése megvárja). Review K4: a hiba naplója csak a hiba osztálya (`trackPartialSend`).
+ */
+function startPartial(key: string): void {
+  const entry = pendingPartials.get(key);
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  markSending(key, entry.who, entry.version);
+  pendingPartials.delete(key);
+  void trackPartialSend(Promise.resolve().then(entry.send));
 }
 /** Teszthez: a várakozó pillanatképek száma. */
 export function pendingPartialCount(): number { return pendingPartials.size; }
@@ -437,19 +454,18 @@ export function clearPendingPartials(): void {
   deferredPartialRetries.clear();
   // A futó kísérletek nyilvántartása is ürül (a kísérlet maga lefut; egy korábbi, lefagyott küldés nem tartja a következő ürítést).
   activePartialSends.clear();
+  partialShutdown = null;
 }
 /**
  * Terv R14 (második vak ellenőrzés K4): leállításkor a várakozó „félbehagyva” levelek a késleltetés kivárása nélkül kimennek, a szokott
  * kapun (kizárás + véglegesítés-ellenőrzés) át, legfeljebb `timeoutMs`-ig. Az időkorlát után visszatér (a leállás folytatódik). Sosem dob.
  */
 export async function flushPendingPartials(timeoutMs: number): Promise<void> {
-  // R41: az ürítés alatt keletkező újrapróba azonnal fut (nyilvántartva), nem halasztódik a leállás utánra.
-  flushingPartials = true;
+  // R41 + R45: az ürítés alatt keletkező újrapróba és az ekkor befogadott pillanatkép azonnal fut (nyilvántartva), nem halasztódik a
+  // leállás utánra; a várakozók ugyanazon az indító úton (első rögzítő átadásával) indulnak, mint az időzítőből.
+  partialShutdown = "running";
   try {
-    const entries = [...pendingPartials.values()];
-    for (const entry of entries) clearTimeout(entry.timer);
-    pendingPartials.clear();
-    for (const entry of entries) void trackPartialSend(Promise.resolve().then(entry.send));
+    for (const key of [...pendingPartials.keys()]) startPartial(key);
     // R41: a halasztott újrapróbák előrehozva — a korábbi időzítő törlődik, a kísérlet ugyanazon a kapun és záron megy.
     const deferred = [...deferredPartialRetries.values()];
     deferredPartialRetries.clear();
@@ -463,7 +479,7 @@ export async function flushPendingPartials(timeoutMs: number): Promise<void> {
     const outcome = await Promise.race([sending, limit]);
     clearTimeout(timer);
     if (outcome === "timeout") logger.warn(`[LESSON-RESULT] leállítás: ${total} „félbehagyva” levél kiküldése nem fejeződött be ${timeoutMs} ms alatt.`);
-  } finally { flushingPartials = false; }
+  } finally { partialShutdown = "done"; }
 }
 
 /** POST /api/lessons/:lessonId/results — a feladatok / a helyi kvíz befejezésekor (vendég is). Mindig 202, ha a kérés érvényes. */
@@ -554,12 +570,15 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
         if (partialVersions.get(lockKey) !== version) return { sent: 0, duplicate: true };
         return attempt();
       });
+      // R45: a leállítás ürítése már lezárult — az állapotot nem fogadjuk el (nem kap 202-t; a kliens a következő alkalommal újra küldi).
+      if (partialShutdown === "done") return { closed: true as const };
       const queued = schedulePartial(lockKey, `${lessonId}|${recorder}`, recorder, snapshot.meta?.partial?.answered ?? 0, version,
         // R38: a név feloldása a küldési kísérleten belül (hibája újrapróbát kap, a ciklus végén az első rögzítő felszabadul).
         // R41: az újrapróba nyilvántartott ütemezőn át (leállításkor előrehozható).
         async () => sendLessonResult(async () => ({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }), true, gate, () => settleSending(lockKey, version), schedulePartialRetry));
       return { queued, partial: true };
     });
+    if ("closed" in outcome) return res.status(503).json({ message: "A szerver éppen újraindul." });
     return res.status(202).json(outcome);
   }
   let graded: GradedTasks | GradedQuiz;

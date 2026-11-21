@@ -69,3 +69,42 @@ test("R9: a kulcs a valódi kliens-IP — a titokfejléc nélküli `X-Forwarded-
   assert.deepEqual(out.slice(0, 60), Array(60).fill(202));
   assert.equal(out[60], 429, "a fejléc cserélgetése nem kerüli meg a keretet");
 });
+
+/* Gépi vak ellenőrzés, 8. kör (e36518e5, 2026-11-21), terv R46 / L5: a `/api/lessons` közös írási kerete (100 / 15 perc / IP) nem írhatja
+   felül a két független eredménykeretet. Az alkalmazás belépési rétege (`lessonsWriteGate`, amelyet a `server/index.ts` szerel fel) és a
+   router saját két korlátozója együtt, valódi HTTP-n. */
+test("R46 / L5: a közös írási kapu mögött ugyanarról a címről 60 pillanatkép ÉS 60 végleges beküldés is átmegy; a többi lecke-írást a közös keret továbbra is fogja", async () => {
+  const { lessonsWriteGate } = await import("../server/lesson-result-limits");
+  const rateLimit = (await import("express-rate-limit")).default;
+  const { clientIpKeyGenerator } = await import("../server/lib/client-ip");
+  const shared = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+  const app = express();
+  app.use(express.json());
+  app.use("/api/lessons", lessonsWriteGate(shared));
+  app.post("/api/lessons/:lessonId/results", resultLimiter, partialLimiter, (_req, res) => { res.status(202).json({ queued: false }); });
+  app.post("/api/lessons/:lessonId/other", (_req, res) => { res.status(200).json({}); });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  const gated = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    resetPartialLimiter();
+    const ip = "10.88.9.1";
+    const send = (path: string, body: object) => fetch(`${gated}${path}`, { method: "POST",
+      headers: { "content-type": "application/json", [PROXY_SECRET_HEADER]: SECRET, "x-forwarded-for": ip }, body: JSON.stringify(body) }).then(res => res.status);
+    const out: number[] = [];
+    for (let i = 0; i < 60; i++) out.push(await send("/api/lessons/lecke/results", { kind: "quiz", roundId: "r", picks: {}, partial: true }));
+    for (let i = 0; i < 60; i++) out.push(await send("/api/lessons/lecke/results", { kind: "quiz", roundId: "r", picks: {} }));
+    assert.deepEqual(out, Array(120).fill(202), "60 pillanatkép + 60 végleges ugyanarról a címről (a saját keretek szerint) átmegy");
+    assert.equal(await send("/api/lessons/lecke/results", { kind: "quiz", roundId: "r", picks: {} }), 429, "a végleges saját kerete (60) érvényes");
+    const others: number[] = [];
+    for (let i = 0; i < 101; i++) others.push(await send("/api/lessons/lecke/other", {}));
+    assert.deepEqual(others.slice(0, 100), Array(100).fill(200));
+    assert.equal(others[100], 429, "más lecke-írásra a közös keret változatlanul érvényes");
+  } finally { server.close(); }
+});
+
+test("R46: a szerver a közös kaput használja (nem saját, a kivételt nem ismerő köztes réteget)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const index = readFileSync(new URL("../server/index.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  assert.match(index, /app\.use\("\/api\/lessons", lessonsWriteGate\(publicWriteLimiter\)\);/);
+});
