@@ -30,6 +30,8 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
 
 /** R37: a CSRF-token lekérésének határideje (a törzs olvasásával együtt). */
 const CSRF_TOKEN_TIMEOUT_MS = 15_000;
+/** R44: a lap elhagyásakor küldött (keepalive) pillanatkép-kérés kísérletenkénti határideje. */
+export const SNAPSHOT_POST_TIMEOUT_MS = 15_000;
 
 /** R39: egy tokenválasz tartalma — a token, a képesség-jelzés (R12) és a kilét-címke (R31). */
 export type CsrfTokenInfo = { token: string; resultApi: boolean; subject: string | null };
@@ -146,10 +148,19 @@ export async function ensureResultApi(): Promise<boolean> {
  * ismétlésre nincs mód (a lap bezárult, a tokenkérés bukik), hamis: a következő betöltéskor a tárolt kör friss tokennel megy.
  */
 export async function sendKeepalive(url: string, data: unknown): Promise<boolean> {
-  const post = (csrfToken: string) => fetch(url, {
-    method: "POST", keepalive: true, credentials: "include", body: JSON.stringify(data),
-    headers: { "Content-Type": "application/json", "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), "X-CSRF-Token": csrfToken },
-  });
+  // Terv R44 (8. vak kör L2): minden kísérletnek (az elsőnek és a 403 utáninak is) határideje van — a választ nem adó kapcsolaton függő
+  // kérés nem tarthatja „úton lévőnek” az állapotot, a határidő után ugyanaz az állapot újra küldhető. (A gyorsítótárazott tokennel induló
+  // első kérés továbbra sem vár előzetes hálózati körre.)
+  const post = async (csrfToken: string) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SNAPSHOT_POST_TIMEOUT_MS);
+    try {
+      return await fetch(url, {
+        method: "POST", keepalive: true, credentials: "include", body: JSON.stringify(data), signal: controller.signal,
+        headers: { "Content-Type": "application/json", "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), "X-CSRF-Token": csrfToken },
+      });
+    } finally { clearTimeout(timer); }
+  };
   const freshToken = () => csrfTokenManager.getToken().catch(() => null);
   try {
     let token = csrfTokenManager.peek() ?? await freshToken();

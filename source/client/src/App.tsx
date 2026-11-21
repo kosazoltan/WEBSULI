@@ -11,6 +11,7 @@ import { LessonLoading } from "@/lesson-runtime/LessonLoading";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LearnerProfileSync from "@/components/LearnerProfileSync";
 import { hasPendingOutbox } from "@shared/result-outbox";
+import { resultOutboxEnabled } from "@/lib/resultOutboxFlag";
 
 // LS-2: lazy, hogy a mérőoldal kódja ne kerüljön a fő bundle-be.
 const LessonRuntimeProbe = lazy(() => import("@/lesson-runtime/LessonRuntimeProbe"));
@@ -129,6 +130,8 @@ function Router() {
  */
 function useResultOutboxDrain() {
   useEffect(() => {
+    // Tulajdonosi döntés (2026-11-21, „Szűkítés: tartós sor külön”): a tartós sor alapból KI — ilyenkor induláskor nincs ürítés.
+    if (!resultOutboxEnabled()) return;
     let pending = false;
     // R32: a sor bejegyzésenként külön kulcson áll — az előtagot nézi.
     try { pending = hasPendingOutbox(localStorage); } catch { /* tároló nélkül nincs tartós sor */ }

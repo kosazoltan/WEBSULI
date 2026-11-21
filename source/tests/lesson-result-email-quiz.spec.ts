@@ -81,6 +81,13 @@ test("hiányos kör lezárása a kihagyásokkal: egy beküldés, a kihagyott ké
 });
 
 /** S1b: a lap háttérbe kerülésének utánzása (a telefonon megbízható esemény a `visibilitychange`). */
+/**
+ * Tulajdonosi döntés (2026-11-21, „Szűkítés: tartós sor külön”): a böngészős TARTÓS kimenő sor kapcsoló mögött, alapból KI. A tartós sor
+ * tesztjei BE kapcsolóval futnak (az e2e-build futásidejű horga: `window.__websuliResultOutbox`); a többi teszt az éles, KI állást méri.
+ */
+async function enableOutbox(page: Page) {
+  await page.addInitScript(() => { (window as unknown as { __websuliResultOutbox: boolean }).__websuliResultOutbox = true; });
+}
 async function hide(page: Page) {
   await page.evaluate(() => {
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
@@ -716,6 +723,7 @@ test("R24 / L1: 429 + Retry-After: 1 → a kör legfeljebb 3 kísérletet kap, a
 });
 
 test("R24 / L2: lassú token mellett az utolsó válasz után azonnali dokumentumváltás → a végleges kör a következő oldalbetöltéskor elmegy", async ({ page }) => {
+  await enableOutbox(page); // tartós sor (BE)
   await mockWith(page);
   let tokenCalls = 0;
   await page.route("**/api/csrf-token", async route => {
@@ -757,6 +765,7 @@ test("R26 / L2: folyamatos 503 mellett a végleges beküldés nem ismétlődik b
 });
 
 test("R28 / L4: olvasható, de nem írható tárolónál (kvóta) a befejezett kör a lapon belül is elmegy", async ({ page }) => {
+  await enableOutbox(page); // tartós sor (BE)
   await page.addInitScript(() => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key: string, value: string) {
@@ -781,6 +790,7 @@ test("R28 / L4: olvasható, de nem írható tárolónál (kvóta) a befejezett k
 
 /* Gépi vak ellenőrzés, 6. kör (GPT-6.2 Sol, 804569c1, 2026-11-20), terv R35 / R37. */
 test("R35 / L1: a korábbi dokumentumból címke nélkül maradt kör ugyanabba a leckébe visszatérve sem kapja meg az új munkamenet címkéjét", async ({ page }) => {
+  await enableOutbox(page); // tartós sor (BE)
   await mockWith(page);
   let tokenCalls = 0;
   await page.route("**/api/csrf-token", async route => {
@@ -849,6 +859,7 @@ async function seedOutbox(page: Page, entry: { subject: string | null; activityO
 }
 
 test("R39 / L1: az ürítés első tokenkérése átmenetileg bukik (502), a következő már MÁSIK fiók tokenje → a régi eredmény nem megy címke nélkül (a sor később, az eredeti címkével küldi)", async ({ page }) => {
+  await enableOutbox(page); // tartós sor (BE)
   // Hamis óra: a kimenő sor első (30 s-os) várakozását előretekerjük (a valós idő közben normálisan folyik).
   await page.clock.install();
   await seedOutbox(page, { subject: "anon", activityOffsetMs: 0 });
@@ -878,6 +889,7 @@ test("R39 / L1: az ürítés első tokenkérése átmenetileg bukik (502), a kö
 });
 
 test("R40 / L2: a tokenre várás közben lejár a bejegyzés (7 nap) → a lejárt eredmény nem megy ki, és kikerül a sorból", async ({ page }) => {
+  await enableOutbox(page); // tartós sor (BE)
   await seedOutbox(page, { subject: "anon", activityOffsetMs: -7 * 86_400_000 + 2500 });
   await mockWith(page);
   await page.route("**/api/csrf-token", async route => {
@@ -896,4 +908,86 @@ test("R40 / L2: a tokenre várás közben lejár a bejegyzés (7 nap) → a lej�
   await page.waitForTimeout(1000);
   expect(finals, "a POST pillanatában lejárt bejegyzés nem megy ki").toHaveLength(0);
   expect(await page.evaluate(() => localStorage.getItem("seed:quiz:sent:round-seeded")), "nem jelölődik elküldöttnek").toBeNull();
+});
+
+/* Szűkítés (tulajdonosi döntés, 2026-11-21) és gépi vak ellenőrzés, 8. kör (GPT-6.2 Sol, e36518e5), terv R43–R44 + a kapcsoló. */
+test("Kapcsoló KI (alap): a tartós sorba nem kerül semmi, induláskor nincs ürítés — a befejezett kör mégis kimegy, pontosan egyszer", async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __outboxWrites: string[] };
+    w.__outboxWrites = [];
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.startsWith("websuli:result-outbox:v1")) w.__outboxWrites.push(key);
+      return original.call(this, key, value);
+    };
+  });
+  // Egy korábbi (BE állású) buildből maradt bejegyzés: KI állásban az induló ürítés nem nyúl hozzá.
+  await seedOutbox(page, { subject: "anon", activityOffsetMs: 0 });
+  await mockWith(page);
+  const finals: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) finals.push(body);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.waitForTimeout(2000);
+  expect(finals, "induláskor nincs ürítés").toHaveLength(0);
+  await answerAll(page);
+  await expect.poll(() => finals.length, { message: "a befejezett kör közvetlenül kiment" }).toBe(1);
+  expect(finals[0].roundId).not.toBe("round-seeded");
+  expect(Object.values(finals[0].picks as Record<string, number>).filter(pick => pick >= 0)).toHaveLength(25);
+  await page.waitForTimeout(1500);
+  expect(finals, "pontosan egyszer").toHaveLength(1);
+  expect(await page.evaluate(() => (window as unknown as { __outboxWrites: string[] }).__outboxWrites), "a tartós sor kulcsára nem ír").toEqual([]);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("websuli:result-outbox:v1:"))), "a korábbi bejegyzés érintetlen (nincs ürítés)")
+    .toEqual(["websuli:result-outbox:v1:lesson-q|quiz|round-seeded"]);
+});
+
+test("R43 / L1 (KI állás, lapon belüli újrapróba): címke nélkül felvett kör, a tokenkérés bukik, utána MÁSIK fiók tokenje → a kör nem kapja meg az új fiók címkéjét", async ({ page }) => {
+  await page.clock.install();
+  await mockWith(page);
+  let failTokens = true;
+  await page.route("**/api/csrf-token", route => (failTokens ? route.fulfill({ status: 502, body: "Bad Gateway" }) : route.fulfill({ json: { csrfToken: "test", resultApi: 2, resultSubject: "fiok-b" } })));
+  const finals: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) finals.push(body);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await answerAll(page); // a token előtöltése is bukott: a kör címke nélkül kerül a (memóriabeli) sorba, az első kísérlet tokenhibán áll meg
+  await page.waitForTimeout(1500);
+  expect(finals, "tokenhiba mellett nem ment el").toHaveLength(0);
+  failTokens = false; // közben egy másik fülben B fiók lépett be: a token már az ő munkamenetéé
+  await page.clock.fastForward(31_000);
+  await expect.poll(() => finals.length, { timeout: 15_000, message: "a lapon belüli újrapróba kiküldte" }).toBe(1);
+  expect(finals[0].subject, "a felvételkori kilét ismeretlen: fiók nélküliként megy, nem B nevén").toBe("?");
+});
+
+test("R44 / L2: a válasz nélkül függő pillanatkép-kérés határideje után ugyanaz az állapot újra küldhető", async ({ page }) => {
+  await page.clock.install();
+  const posts = await mockWith(page);
+  let held = 0;
+  await page.route("**/api/lessons/lesson-q/results", async route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial === true && held === 0) { held++; return; } // az első pillanatkép válasz nélkül függ (a kapcsolat nem felel)
+    posts.push({ lesson: "lesson-q", body });
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  const quiz = await openQuiz(page);
+  for (let i = 0; i < 2; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800); // a CSRF-token előzetes lekérése
+  await hide(page);
+  await expect.poll(() => held).toBe(1);
+  await hide(page);
+  await page.waitForTimeout(500);
+  expect(partialsOf(posts), "a függő kérés alatt ugyanaz az állapot nem megy újra").toHaveLength(0);
+  await page.clock.fastForward(16_000); // a kérés határideje (15 s) letelik
+  await page.waitForTimeout(300);
+  await hide(page);
+  await expect.poll(() => partialsOf(posts).length, { message: "a határidő után ugyanaz az állapot újra elment" }).toBe(1);
+  expect(answeredIn(partialsOf(posts)[0].body)).toBe(2);
 });

@@ -150,3 +150,14 @@ test("R37 (6. kör L4): az apiRequest időzítője a törzs olvasásáig él; a 
   assert.match(client, /const CSRF_TOKEN_TIMEOUT_MS = 15_000;/);
   assert.match(client, /signal: AbortSignal\.timeout\(CSRF_TOKEN_TIMEOUT_MS\)/);
 });
+
+test("Szűkítés (tulajdonosi döntés, 2026-11-21): a tartós sor kapcsolója alapból KI — élesben csak a build-idejű `VITE_RESULT_OUTBOX_ENABLED=1`, a futásidejű horog csak az e2e-buildben", () => {
+  const flag = readFileSync(new URL("../client/src/lib/resultOutboxFlag.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const body = flag.slice(flag.indexOf("export function resultOutboxEnabled"));
+  assert.match(body, /if \(import\.meta\.env\.VITE_RESULT_OUTBOX_ENABLED === "1"\) return true;\n\s*if \(import\.meta\.env\.VITE_ENABLE_RUNTIME_PROBE !== "1"\) return false;/);
+  assert.equal((body.match(/return true/g) ?? []).length, 1, "egyetlen bekapcsoló ág (a build-idejű kapcsoló)");
+  const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  assert.match(source, /const outbox = createOutboxStore\(\(\) => \(resultOutboxEnabled\(\) \? localStorage : null\)\);/);
+  const app = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  assert.match(app, /if \(!resultOutboxEnabled\(\)\) return;\n\s*let pending = false;/);
+});

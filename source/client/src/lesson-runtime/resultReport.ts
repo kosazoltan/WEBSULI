@@ -5,6 +5,7 @@ import { getLearnerToken } from "@/lib/learnerProfile";
 import { answeredCount, OUTBOX_MAX_ATTEMPTS, outboxRetryDelayMs, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
 import { createOutboxStore, outboxEntryExpired, type OutboxEntry } from "@shared/result-outbox";
 import { legacyResultBody } from "@shared/result-compat";
+import { resultOutboxEnabled } from "@/lib/resultOutboxFlag";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -25,7 +26,9 @@ export const REPORT_FALLBACK_MS = 45_000;
  */
 // Terv R28 / R30 / R32: a tárolóréteg (`shared/result-outbox.ts`) — bejegyzésenkénti kulcs (fülbiztos), memóriasor írhatatlan tárolónál,
 // korhatár. A `localStorage` hozzáférése is dobhat (privát mód): ekkor csak a memóriasor él.
-const outbox = createOutboxStore(() => localStorage);
+// Tulajdonosi döntés (2026-11-21, „Szűkítés: tartós sor külön”): a tartós sor kapcsoló mögött, alapból KI — ilyenkor a tároló nem
+// érhető el a sor számára, a bejegyzés csak memóriában él (lapon belüli újrapróba), a `localStorage`-ba nem kerül.
+const outbox = createOutboxStore(() => (resultOutboxEnabled() ? localStorage : null));
 const flagSet = (flag: string) => { try { return !!localStorage.getItem(flag); } catch { return false; } };
 /** Terv R31: az ezen a lapon sorba tett bejegyzések — ha a kilét-címke a sorba kerüléskor még nem volt meg, az első küldés előtt pótolható. */
 const enqueuedHere = new Set<string>();
@@ -54,6 +57,8 @@ export function drainResultOutbox(): void {
 class OutboxEntryExpired extends Error {}
 async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
   const { lessonId, kind } = entry;
+  /** R43 (8. vak kör L1): a kísérlet eljutott-e egy tokenválaszig (a törzs összeállt). */
+  let tokenReached = false;
   try {
     const fingerprint = entry.body.fingerprint ?? await getFingerprint().catch(() => undefined);
     // Terv R39 (7. vak kör L1): a törzs a token MEGÉRKEZÉSE UTÁN, ugyanabból a tokenválaszból áll össze, amelynek tokenjével a kérés megy
@@ -61,6 +66,7 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     // ismeretlen: a kérés NEM megy el régi alakban — a hiba a sor szokott várakozását kapja (lent), és később próbálkozik.
     let sent: { capable: boolean; body: Record<string, unknown> } | null = null;
     const build = (info: CsrfTokenInfo): Record<string, unknown> => {
+      tokenReached = true;
       // R40: a korhatár a tényleges küldés előtt is (a token / ujjlenyomat várakozása alatt lejárt bejegyzés nem megy ki).
       if (outboxEntryExpired(entry, Date.now())) throw new OutboxEntryExpired();
       // Terv R12: az új mezők CSAK a szerver jelzése mellett mennek; jelzés nélkül a régi alak, egyszer, ismétlés nélkül.
@@ -102,6 +108,9 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     outbox.remove(entry.id);
   } catch (error) {
     const e = error as { status?: unknown; retryAfterSec?: unknown } | null;
+    // R43 (8. vak kör L1): ha a kísérlet tokenválaszig sem jutott (átmeneti tokenhiba), a felvételkori munkamenet folytonossága nem
+    // bizonyítható — a címke később sem pótolható egy (közben esetleg más fiókba lépett) munkamenet tokenjéből: a bejegyzés `?`-lel megy.
+    if (!tokenReached) enqueuedHere.delete(entry.id);
     // Érvénytelen kérés — vagy (R40) a küldés pillanatában lejárt bejegyzés: újrapróbának nincs értelme (csendes — a tanuló felülete nem
     // függ a levéltől).
     if (e?.status === 400 || error instanceof OutboxEntryExpired) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
