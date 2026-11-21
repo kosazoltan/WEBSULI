@@ -25,7 +25,7 @@ import https from "node:https";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { evidenceDir, writeEvidence } from "./lib.mjs";
+import { evidenceDir, redact, writeEvidence } from "./lib.mjs";
 
 export const DEFAULT_MODEL = "gemini-4-carbon";
 // generateContent REST: ThinkingConfig.thinkingLevel enum (MINIMAL/LOW/MEDIUM/HIGH/XHIGH). Tulajdonosi döntés: sima HIGH.
@@ -189,39 +189,57 @@ export function maskSecrets(s, key) {
   let out = String(s ?? "");
   if (key) out = out.split(key).join("***");
   // `{20}…*` a `{20,}` helyett: azonos nyelv, de 20 M karakteren sem dob (docs/specs/2026-11-19-kitakaro-negyzetes-regex.md).
-  return out.replace(/AIza[0-9A-Za-z_\-]{20}[0-9A-Za-z_\-]*/g, "AIza***");
+  out = out.replace(/AIza[0-9A-Za-z_\-]{20}[0-9A-Za-z_\-]*/g, "AIza***");
+  // Vak L1 (a188a33d): a kapuk közös, lineáris szűrője is (e-mail, Bearer- / GitHub- / sk-token, DB-URL) — minden kimeneten.
+  return redact(out);
 }
 
-/** Token-karakter: [A-Za-z0-9._~+/=-] (az AIza- és a Bearer-minta karakterei). */
-const isTokenChar = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
-  || c === 46 || c === 95 || c === 126 || c === 43 || c === 47 || c === 61 || c === 45;
+/** Határ-érzékeny karakter: token-karakter [A-Za-z0-9._~+/=-], valamint az e-mail `%` és `@` jele (vak L1, a188a33d). */
+const isSensitiveChar = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+  || c === 46 || c === 95 || c === 126 || c === 43 || c === 47 || c === 61 || c === 45 || c === 37 || c === 64;
+const isSpaceChar = (c) => c === 32 || (c >= 9 && c <= 13) || c === 160;
 
 /**
- * Az első `window` karakter; ha a határon token-karakterfutás nyúlik át (az utolsó bent és az első kint is token-karakter), az
- * egész futás levágva (lineáris visszalépés) — így egy határon átnyúló, a megadott kulcstól eltérő token eleje sem marad (#521).
+ * Biztonságos vágási pont FORRÁS-koordinátában (vak L1 / L3, a188a33d): `limit - margin`-ből indul (az EREDETI ablakhatárhoz
+ * mérve), és addig lép lejjebb, amíg se teljes kulcs-előfordulást (a `split(key)` balról jobbra, átfedés nélküli találatai), se
+ * érzékeny-karakterfutást (token / e-mail), se az előtte álló `Bearer` + szóköz előtagot nem metsz. A futást az eredeti szövegen
+ * nézi (a `limit`-en túl is). A pont csak csökken, a visszalépések diszjunkt szakaszokon futnak: lineáris.
  */
-export function trimCrossingTokenRun(text, window) {
-  if (text.length <= window) return text;
-  let end = window;
-  if (isTokenChar(text.charCodeAt(window)) && isTokenChar(text.charCodeAt(window - 1))) {
-    while (end > 0 && isTokenChar(text.charCodeAt(end - 1))) end--;
+export function safeCut(text, limit, key, margin) {
+  const occ = [];
+  if (key) {
+    const w = text.slice(0, Math.min(text.length, limit + key.length));
+    for (let p = w.indexOf(key); p >= 0; p = w.indexOf(key, p + key.length)) occ.push(p);
   }
-  return text.slice(0, end);
+  let c = Math.max(0, Math.min(text.length, limit) - margin);
+  let j = occ.length - 1;
+  for (;;) {
+    const before = c;
+    while (j >= 0 && occ[j] >= c) j--;
+    if (j >= 0 && occ[j] + key.length > c) c = occ[j];
+    if (c > 0 && isSensitiveChar(text.charCodeAt(c)) && isSensitiveChar(text.charCodeAt(c - 1))) {
+      while (c > 0 && isSensitiveChar(text.charCodeAt(c - 1))) c--;
+      let k = c;
+      while (k > 0 && isSpaceChar(text.charCodeAt(k - 1))) k--;
+      if (k < c && k >= 6 && text.slice(k - 6, k) === "Bearer") c = k - 6;
+    }
+    if (c === before) return c;
+  }
 }
 
 /** A maszkolás ablaka: a vágott kimenetű hívók csak ennyit maszkolnak a (akár óriási) válaszból. */
 export const MASK_WINDOW = 64 * 1024;
 
 /**
- * Vágás a kitakarás előtt: legfeljebb MASK_WINDOW karakter maszkolva, és ha az ablak vágott, a végéről a félbevágott kulcs
- * lehetséges helye (max(64, kulcshossz)) is eldobva — így a végső, max hosszú kimenetben határon félbevágott kulcs nem maradhat.
+ * Vágás a kitakarás előtt. Ha a szöveg legfeljebb max(MASK_WINDOW, max) hosszú: a régi viselkedés (teljes maszkolás, majd
+ * vágás). Különben a forrás a `safeCut` pontjáig marad (az ablak végéről legalább max(64, kulcshossz) karakter, és a határon
+ * átnyúló kulcs / token / e-mail teljes hosszában eldobva), csak ez kerül maszkolásra, majd max hosszra vágásra.
  */
 export function maskClip(s, key, max) {
   const text = String(s ?? "");
-  const cut = text.length > MASK_WINDOW;
-  let out = maskSecrets(cut ? trimCrossingTokenRun(text, MASK_WINDOW) : text, key);
-  if (cut) out = out.slice(0, Math.max(0, out.length - Math.max(64, key ? key.length : 0)));
-  return out.slice(0, max);
+  const limit = Math.max(MASK_WINDOW, max);
+  if (text.length <= limit) return maskSecrets(text, key).slice(0, max);
+  return maskSecrets(text.slice(0, safeCut(text, limit, key, Math.max(64, key ? key.length : 0))), key).slice(0, max);
 }
 
 // ---------------------------------------------------------------- keret

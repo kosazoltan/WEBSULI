@@ -22,6 +22,8 @@ const REDACTIONS = [
   [/\bgithub_pat_[A-Za-z0-9_]{16}[A-Za-z0-9_]*\b/g, '<token>'],
   [/\bsk-(?:ant-)?[A-Za-z0-9_-]{16}[A-Za-z0-9_-]*\b/g, '<token>'],
   [/\bAKIA[0-9A-Z]{16}\b/g, '<aws-key>'],
+  // Vak L2 (a188a33d): az önálló Google API-kulcs is (a külső ellenőr mintája, lineáris alakban).
+  [/AIza[0-9A-Za-z_-]{20}[0-9A-Za-z_-]*/g, '<token>'],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]{8}[A-Za-z0-9._~+/=-]*/g, 'Bearer <token>'],
 ];
 
