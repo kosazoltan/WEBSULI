@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { childPairingGuideEmail, parentPairingGuideEmail, planPairingGuides } from "../shared/pairing-guide";
+import { ADVENT_GUEST_PROGRESS_NOTE, childPairingGuideEmail, parentPairingGuideEmail, planPairingGuides } from "../shared/pairing-guide";
 import { firstNameOf } from "../shared/daily-reminder";
 
 // docs/specs/2026-10-21-tanulo-parositas.md („Kiegészítés — párosítási útmutató e-mailben”).
@@ -52,4 +52,18 @@ test("terv: minden tanuló minden (egyedi) címe a saját linkjét kapja, a szü
   assert.match(parent[0].html, /Próba Bence Máté, Minta Lili Anna/);
   assert.ok(!parent[0].html.includes("Cím Nélküli") && !parent[0].html.includes("Titok Nélküli"));
   assert.deepEqual(planPairingGuides([], ["p1@x.hu"], firstNameOf), []);
+});
+
+test("szülőlevél: az adventi naptár vendégként elért haladásának átkerüléséről szóló mondat (tulajdonosi döntés 2026-11-18) — csak BEKAPCSOLT naptárnál (GPT-vak L5)", () => {
+  assert.equal(ADVENT_GUEST_PROGRESS_NOTE, "Ha a gyermek a személyes linkjével nyitja meg a naptárat azon az eszközön, amelyen addig vendégként játszott, a vendégként elért haladás a gyermek profiljához kerül.");
+  // Kikapcsolt naptárnál (alapértelmezés) a levél nem ígér olyat, ami nem érhető el.
+  const off = parentPairingGuideEmail({ names: ["Kiss Lili"] });
+  assert.ok(!off.html.includes(ADVENT_GUEST_PROGRESS_NOTE) && !off.html.includes("Adventi naptár"), "kikapcsolt naptárnál nincs bekezdés");
+  assert.ok(!planPairingGuides([{ id: "1", name: "Kiss Lili", emails: ["a@x.hu"], pairLink: "https://websuli.vip/?t=a.1.x" }], ["p@x.hu"], (n) => n).some((m) => m.html.includes(ADVENT_GUEST_PROGRESS_NOTE)));
+  assert.ok(planPairingGuides([{ id: "1", name: "Kiss Lili", emails: ["a@x.hu"], pairLink: "https://websuli.vip/?t=a.1.x" }], ["p@x.hu"], (n) => n, { advent: true }).some((m) => m.kind === "parent" && m.html.includes(ADVENT_GUEST_PROGRESS_NOTE)));
+  const m = parentPairingGuideEmail({ names: ["Kiss Lili"] }, { advent: true });
+  assert.ok(m.html.includes(ADVENT_GUEST_PROGRESS_NOTE), "a mondat szó szerint az útmutatóban");
+  assert.match(m.html, /<strong>Adventi naptár:<\/strong>/);
+  // A gyereklevélbe nem kerül (a szülőnek szól).
+  assert.ok(!childPairingGuideEmail({ firstName: "Lili", pairLink: "https://websuli.vip/?t=abc.1.x" }).html.includes(ADVENT_GUEST_PROGRESS_NOTE));
 });

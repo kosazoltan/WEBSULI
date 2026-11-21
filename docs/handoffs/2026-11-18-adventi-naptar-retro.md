@@ -78,3 +78,34 @@ képcsere), #155 (S5, S6, S8), #156 (ágak rebase-e a friss mainre push előtt).
   Minden adventi PR megnyitása előtt ellenőrizni kell a friss főágon (`git ls-tree origin/main source/migrations/`), hogy a 0042 szabad-e —
   ha nem, megállás és jelzés. Mérve 2026-11-18, `origin/main` = `2b873e3c`: az utolsó migráció a 0041, a 0042 szabad (a journal csak a 0000-t
   tartja nyilván, a futtató fájlnév szerint dolgozik).
+
+## 7. Kiegészítés — az S2b 2–3. ellenőri köre (2026-11-18)
+
+- **Mi ment rosszul:** az új-sor keret első javítása („csak a létrejött sor számít”) az ellenőrzést és a számolást két adatbázis-kör
+  közé tette, így párhuzamos kérésekkel a keret túlléphető lett (U1). A soros teszt ezt nem láthatta. Ár: egy teljes ellenőri kör.
+  **Javítás ebben a futásban:** `source/server/advent/limits.ts` (`reserve` / `release`, ablakonkénti söprés),
+  `source/server/advent/routes.ts` (`creatingDeviceRow`), `source/tests/advent-limits.test.ts` (120 egyidejű kérés, mutációs
+  ellenpróbával). **Tanulság:** keretet / kvótát érintő javításhoz mindig tartozzon egyidejű kéréses teszt.
+- **A DB-kör ideje:** terhelt gépen, soros kliensekkel 475 s volt a 480 s-os korlátból; párhuzamos kliensekkel, terheletlen gépen
+  300 s (37% tartalék). **Javítás:** `source/tests/advent-routes-db.integration.ts`; a szabály a futtatóban megjegyzésként áll
+  (`source/scripts/run-learning-db-tests.ts`): 15% alatti tartaléknál a tesztet kell gyorsítani, nem a korlátot emelni.
+- **Egyetlen nagy löket a kapcsolatkészleten (M2):** a 119 egyidejű kérés a 10-es kapcsolatkészleten terhelt CI-gépen ingadozhat.
+  **Javítás:** három hullám (40 + 40 + 39); a pontos állítás megmaradt (összesen 90 sor, a harmadik hullám 39 egyidejű kéréséből
+  pontosan 9 jut be, 30 kap 429-et) — a keret határát továbbra is párhuzamos kérések támadják.
+- **Felülírt szám a terv eredeti helyén (U3):** a tulajdonosi döntés először csak új szakaszba került. **Tanulság:** felülírt
+  értéket a HELYÉN kell jelölni (dátum + hivatkozás), nem csak a döntési szakaszban.
+
+## 11. Kiegészítés — a 2/3 PR vak, hibakereső ellenőrzése (IGEN, FELTÉTELLEL; 2026-11-18)
+
+- **Mi ment rosszul:** a hálózati (IP-) keretek a bemenet-ellenőrzés ELŐTT számoltak, ezért 1500 érvénytelen kérés 5,4 mp alatt 15
+  percre kizárta egy iskola címét (K1); a keretek a szabályos iskolai pótlásnál is elfogytak volna (K2), mert a méretezés csak egy
+  osztály napi játékát számolta, a pótlást nem. A korábbi körök a keretet csak „a szabályos legrosszabb eset átfér-e” oldalról
+  tesztelték, a támadó oldaláról nem. **Javítás ebben a futásban:** `source/server/advent/limits.ts` (képletből számolt keretek,
+  munkamenet- és érvénytelen-keret, `retryAfterSec`), `source/server/advent/routes.ts` (sorrend, `skipFailedRequests`,
+  `Retry-After`, sérült sor 409, évfolyam az első válasznál), `source/tests/advent-limits.test.ts` (az ellenőr három támadása után
+  egy osztálytárs ír), DB-tesztek. **Tanulság:** közös (hálózati) keretet mindig a támadó oldaláról is tesztelni kell: „egy kliens
+  el tudja-e fogyasztani a többiek elől?”; a méretezés képlete álljon a kódban, ne csak a számok.
+- **Maradó kockázat:** szkriptelt munkamenet- és eszközcserével a keret továbbra is elfogyasztható (terv 21.); a kliens-IP
+  megbízhatósága külön KÖZEPES jegy (#169).
+- k1: a tulajdonos döntése (2026-11-18, „Igen, vigyük át”) után a névtelen → párosított átmenet ugyanebben a PR-ban elkészült (#170 lezárva).
+- Kanban: #169 (kliens-IP), #170 (névtelen → párosított átmenet), #171 (k4), #172 (k7: takarító az S6 előtt), #173 (k8: DB-kör bontása).
