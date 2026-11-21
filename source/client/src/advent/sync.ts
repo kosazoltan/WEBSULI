@@ -37,10 +37,27 @@ export async function clearAdventCache(queryClient: QueryClient): Promise<void> 
 /** L6 — a válasz alkalmazása: a teljes ablaklista (ha a szerver adja) az összesítéssel együtt cserélődik; régi válasznál a megválaszolt ablak. */
 export function applyAnswerResult<D extends { day: number }, T extends { doors: D[]; summary: unknown; closing: unknown }>(
   state: T,
-  result: { door: D; doors?: D[]; summary: T["summary"]; closing: T["closing"] },
+  result: { door: D; doors?: D[]; summary: T["summary"]; closing: T["closing"]; version?: number },
 ): T {
   const doors = Array.isArray(result.doors) && result.doors.length > 0 ? result.doors : state.doors.map((d) => (d.day === result.door.day ? result.door : d));
-  return { ...state, doors, summary: result.summary, closing: result.closing };
+  // A válasz utáni szerververzió is átkerül (PR-C 3. vak L1): egy később kézbesített régebbi írás ehhez mérődik.
+  return { ...state, doors, summary: result.summary, closing: result.closing, ...(typeof result.version === "number" ? { version: result.version } : {}) };
+}
+
+/**
+ * PR-C 3. vak L1 — régebbi-e a bejövő állás a gyorsítótárban lévőnél: mindkettő szerververziója szám, és a bejövőé kisebb. (Verzió nélküli
+ * — régi szervertől jövő — állásnál nincs összevetés.) A szerver a sor módosítási idejét adja, amely a soronkénti zár miatt az írások
+ * sorrendjében nő; így egy korábban feldolgozott, de később kézbesített válasz (pl. az összesítés átvétele) nem festi vissza a már
+ * megoldott ablakot.
+ */
+export function isOlderAdventState(next: unknown, current: unknown): boolean {
+  const versionOf = (value: unknown): number | null => {
+    const v = typeof value === "object" && value !== null ? (value as { version?: unknown }).version : undefined;
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  const a = versionOf(next);
+  const b = versionOf(current);
+  return a !== null && b !== null && a < b;
 }
 
 /**
@@ -140,8 +157,14 @@ export async function applyAdventWrite(queryClient: QueryClient, generation: num
   const reading = queryClient.isFetching({ queryKey: key }) > 0;
   await queryClient.cancelQueries({ queryKey: key });
   if (generation !== subjectGeneration) return false;
-  const next = update(queryClient.getQueryData(key));
+  const current = queryClient.getQueryData(key);
+  const next = update(current);
   if (next === undefined || next === null) return false;
+  // A régebbi szerververziójú állás eldobása (PR-C 3. vak L1): a később kézbesített régi válasz nem írja felül az újabbat.
+  if (isOlderAdventState(next, current)) {
+    if (reading) void queryClient.invalidateQueries({ queryKey: key });
+    return false;
+  }
   setAdventStateIfCurrent(queryClient, generation, next);
   if (reading) void queryClient.invalidateQueries({ queryKey: key });
   return true;

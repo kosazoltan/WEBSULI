@@ -79,6 +79,11 @@ export type AdventState = {
    * (összesítés, végigjátszott kör) a `POST /adopt` kéréssel menti el (PR-C vak L2); a GET mellékhatás nélkül marad.
    */
   adoptionPending: boolean;
+  /**
+   * Az állás szerververziója (a sor utolsó módosításának ideje, ms; nincs sor → 0). Az írások sorrendjében nő: a kliens a régebbi
+   * verziójú, később kézbesített választ eldobja (PR-C 3. vak L1).
+   */
+  version: number;
 };
 
 export type AdventOpenResult = {
@@ -106,4 +111,6 @@ export type AdventAnswerResult = {
   doors: AdventDoorView[];
   summary: AdventSummary;
   closing: AdventClosing;
+  /** Az állás szerververziója a válasz után (lásd `AdventState.version`; PR-C 3. vak L1). */
+  version: number;
 };

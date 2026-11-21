@@ -1009,4 +1009,26 @@ describe("adventi naptár — végpontok", () => {
     assert.equal((await stranger.post("/adopt")).status, 409);
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
+  it("PR-C 3. vak L4: kirajzolhatatlan ablakrács (tartományon kívüli, ismétlődő, hiányzó elem, üres tömb) a tárolt sorban: olvasás és írás 409 corrupt, a sor változatlan", async () => {
+    const k = await kid();
+    assert.equal((await k.post("/grade", { grade: 5 })).status, 200);
+    await k.answer(1, await k.open(1), true);
+    const [{ layout }] = await q<{ layout: number[] }>(`SELECT plan->'1'->'layout' AS layout FROM advent_progress WHERE subject_id = $1`, [k.device]);
+    assert.equal(layout.length, 24, "az ép sor rácsa teljes");
+    const variants: Record<string, number[]> = {
+      "tartományon kívüli (25)": [...layout.slice(0, 23), 25],
+      "ismétlődő": [...layout.slice(0, 23), layout[0]!],
+      "hiányzó (23 elem)": layout.slice(0, 23),
+      "üres": [],
+    };
+    for (const [label, bad] of Object.entries(variants)) {
+      await dbPool.query(`UPDATE advent_progress SET plan = jsonb_set(plan, '{1,layout}', $2::jsonb) WHERE subject_id = $1`, [k.device, JSON.stringify(bad)]);
+      const before = await q(`SELECT plan, doors, updated_at FROM advent_progress WHERE subject_id = $1`, [k.device]);
+      const r = await k.state();
+      assert.deepEqual({ status: r.status, corrupt: r.json.corrupt }, { status: 409, corrupt: true }, label + ": olvasás");
+      const w = await k.post("/doors/2/open");
+      assert.deepEqual({ status: w.status, corrupt: w.json.corrupt }, { status: 409, corrupt: true }, label + ": írás");
+      assert.deepEqual(await q(`SELECT plan, doors, updated_at FROM advent_progress WHERE subject_id = $1`, [k.device]), before, label + ": a sor változatlan");
+    }
+  });
 });

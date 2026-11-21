@@ -139,11 +139,13 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
         if (merged) current = { ...current, grade: merged.grade, plan: merged.plan, doors: merged.doors, finishedAt: merged.finishedAt, passedAt: merged.passedAt };
         const { patch, result } = fn(current, created);
         let row = current;
+        // A módosítás ideje a FALIÓRÁBÓL (clock_timestamp, nem a tranzakció kezdete): a soronkénti zár miatt az írások sorrendjében nő,
+        // így a kliens a verzió szerint el tudja dobni a később kézbesített, de korábban feldolgozott választ (PR-C 3. vak L1).
         if (patch || merged) {
           const next = { ...current, ...(patch ?? {}) };
           const updated = await client.query<DbRow>(
             `UPDATE advent_progress
-                SET grade = $2, round = $3, plan = $4::jsonb, doors = $5::jsonb, finished_at = $6, passed_at = $7, updated_at = now()
+                SET grade = $2, round = $3, plan = $4::jsonb, doors = $5::jsonb, finished_at = $6, passed_at = $7, updated_at = clock_timestamp()
               WHERE id = $1 RETURNING ${COLUMNS}`,
             [current.id, next.grade, next.round, JSON.stringify(next.plan), JSON.stringify(next.doors), next.finishedAt, next.passedAt],
           );

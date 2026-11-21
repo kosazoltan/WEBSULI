@@ -499,6 +499,88 @@ test("PR-C 2. vak L5: 360 px-en a fejléc csillaga teljes egészében látszik �
   expect(box.hit, "a csillag nincs levágva / eltakarva").toBe(true);
 });
 
+/**
+ * PR-C 3. vak: a párosított tanuló függő átvételét (`adoptionPending`) a teszt a valódi szerverválasz IGAZÍTÁSÁVAL állítja elő (a
+ * böngészőnek nincs valódi tanulói linkje); minden más kérés — évfolyam, nyitás, válasz — a valódi szerverhez megy.
+ */
+async function pretendPendingAdoption(page: import("@playwright/test").Page): Promise<{ last: () => Record<string, unknown> }> {
+  let last: Record<string, unknown> = {};
+  await page.route("**/api/advent/state", async (route) => {
+    const response = await route.fetch({ headers: proxyHeaders(route.request().headers()) });
+    last = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({ response, json: { ...last, identity: "learner", adoptionPending: true } });
+  });
+  return { last: () => last };
+}
+
+test("PR-C 3. vak L1: az összesítés késve érkező átvételi válasza nem festi vissza a közben megoldott ablakot (a régebbi szerververzió eldobva)", async ({ page }) => {
+  await setAdventTime(page, DEC5);
+  await page.goto("/adventi-naptar");
+  const gradeResponse = page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith("/api/advent/grade"));
+  await chooseGrade(page, 5);
+  // A régi pillanatkép: az évfolyam mentése utáni állás (0 megoldott ablak, régebbi szerververzió).
+  const snapshot = (await (await gradeResponse).json()) as Record<string, unknown>;
+  await pretendPendingAdoption(page);
+  await page.reload();
+  await expect(page.getByTestId("advent-grid")).toBeVisible();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/advent/adopt", async (route) => { await held; await route.fulfill({ json: { ...snapshot, identity: "learner", adoptionPending: false } }); });
+  const adoptSent = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/api/advent/adopt"));
+  await page.getByTestId("advent-summary-open").tap();
+  await adoptSent;
+  await page.getByTestId("advent-summary-close").tap();
+  await expect(page.getByTestId("advent-summary")).toHaveCount(0);
+  await playDoor(page, 1, true);
+  await expect(page.getByTestId("advent-progress")).toContainText("1 / 24");
+  release();
+  await page.waitForTimeout(600);
+  await expect(page.getByTestId("advent-door-1")).toHaveAttribute("data-state", "solved");
+  await expect(page.getByTestId("advent-progress")).toContainText("1 / 24");
+});
+
+test("PR-C 3. vak L2: az átvétel 503-a után az „Újra” valóban újraküldi az átvételt (POST /adopt), és a mentésig látható a függő állapot", async ({ page }) => {
+  await openCalendar(page, DEC5, 5);
+  const real = await pretendPendingAdoption(page);
+  await page.reload();
+  await expect(page.getByTestId("advent-grid")).toBeVisible();
+  let adopts = 0;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/advent/adopt", async (route) => {
+    adopts++;
+    if (adopts === 1) return route.fulfill({ status: 503, json: { message: "Átmeneti hiba." } });
+    await held;
+    return route.fulfill({ json: { ...real.last(), identity: "learner", adoptionPending: false } });
+  });
+  await page.getByTestId("advent-summary-open").tap();
+  await expect.poll(() => adopts).toBe(1);
+  await page.getByTestId("advent-summary-close").tap();
+  await expect(page.getByTestId("advent-error")).toBeVisible();
+  await page.getByTestId("advent-error-retry").tap();
+  await expect.poll(() => adopts, { message: "az „Újra” az átvételt küldi újra, nem csak állapotot olvas" }).toBe(2);
+  await expect(page.getByTestId("advent-saving")).toBeVisible();
+  release();
+  await expect(page.getByTestId("advent-saving")).toHaveCount(0);
+  await expect(page.getByTestId("advent-error")).toHaveCount(0);
+});
+
+test("PR-C 3. vak L3: a főoldalról indított nyitás 503-a után az „Újra” friss állapotból megnyitja a mai kérdést (a szándék nem vész el)", async ({ page }) => {
+  await openCalendar(page, DEC5, 5);
+  let opens = 0;
+  await page.route("**/api/advent/doors/*/open", (route) => {
+    opens++;
+    return opens === 1 ? route.fulfill({ status: 503, json: { message: "Átmeneti hiba." } }) : route.fallback();
+  });
+  await page.goto("/adventi-naptar?nyit=ma");
+  await expect(page.getByTestId("advent-error")).toBeVisible();
+  await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
+  expect(opens).toBe(1);
+  await page.getByTestId("advent-error-retry").tap();
+  await expect(page.getByTestId("advent-question"), "a kérdés külön ablakkoppintás nélkül nyílik").toBeVisible();
+  expect(opens).toBe(2);
+});
+
 test("szezon: november 29. „Hamarosan”; január 7. lezárt; tesztidő nélkül a naptár nem érhető el (A14, A15, A51)", async ({ page }) => {
   await openCalendar(page, "2026-11-29T10:00:00Z");
   await expect(page.getByTestId("advent-teaser")).toContainText("Hamarosan");
