@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { DrawnFrameClock, FrameWindow, LoopClock, fmt, isLoopRunning, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
+import { DrawnFrameClock, FrameWindow, LoopClock, probeLabel, probeOutcome, fmt, isLoopRunning, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
 
 /** `?perf=1` diagnosztika — a tiszta számolás (terv: docs/specs/2026-11-17-kockavadasz-telefon.md, 6. szakasz). */
 
@@ -373,5 +373,38 @@ describe("DrawnFrameClock — FPS csak BEFEJEZETT, tényleg kirajzolt képkocká
   it("completed() start() nélkül nem ad mintát", () => {
     const c = new DrawnFrameClock();
     assert.equal(c.completed(true), null);
+  });
+
+  it("2. vak kör L1: kapcsolás (reset) után az első új kép csak alap, a második adja az első mintát", () => {
+    const c = new DrawnFrameClock();
+    c.start(1000, true);
+    c.completed(true);
+    // 1200 ms várakozás a váltás ELŐTT, majd kapcsolás.
+    c.reset();
+    c.start(2208, false);
+    assert.equal(c.completed(true), null, "az első új kép nem hordozza a váltás előtti várakozást");
+    c.start(2224, false);
+    assert.equal(c.completed(true), 16, "a második új kép a két új kép közét adja");
+  });
+});
+
+describe("probeOutcome — teljes / részleges / üres GPU-próba (2. vak kör L3)", () => {
+  it("teljes próba: a medián az eredmény", () => {
+    assert.deepEqual(probeOutcome([3, 1, 2], 3), { value: 2, samples: 3, requested: 3, partial: false });
+  });
+
+  it("részleges próba (időtúllépés): nincs teljes eredmény, a mintaszám látszik", () => {
+    assert.deepEqual(probeOutcome([3.5], 40), { value: null, samples: 1, requested: 40, partial: true });
+  });
+
+  it("üres próba: nincs eredmény, 0 minta", () => {
+    assert.deepEqual(probeOutcome([], 40), { value: null, samples: 0, requested: 40, partial: true });
+  });
+
+  it("a felirat a részleges és az üres próbát megkülönbözteti a teljestől", () => {
+    assert.equal(probeLabel(probeOutcome([1, 2, 3], 3)), "2.00 ms");
+    assert.equal(probeLabel(probeOutcome([3.5], 40)), "részleges 1/40");
+    assert.equal(probeLabel(probeOutcome([], 40)), "részleges 0/40");
+    assert.equal(probeLabel(null), "–");
   });
 });

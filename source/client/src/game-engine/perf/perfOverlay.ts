@@ -10,7 +10,7 @@
 import type * as THREE from "three";
 
 import { createGpuTimer } from "./gpuTimer";
-import { DrawnFrameClock, FrameWindow, LoopClock, fmt, median, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
+import { DrawnFrameClock, FrameWindow, LoopClock, fmt, probeLabel, probeOutcome, type ProbeOutcome, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
 
 export type PerfResolution = 1 | 0.75 | 0.5;
 
@@ -53,6 +53,8 @@ export type PerfSnapshot = {
   gpuTimerAvailable: boolean;
   /** A szinkron próba mediánja (ms): `render()` + a GPU bevárása `readPixels`-szel. */
   gpuProbeMs: number | null;
+  /** A legutóbbi próba kimenete (2. vak kör L3): mintaszám és részlegesség; null, ha nincs / megszakadt. */
+  gpuProbe: ProbeOutcome | null;
   calls: number;
   triangles: number;
   textures: number;
@@ -243,6 +245,8 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   let probeDone: ((value: number | null) => void) | null = null;
   let probeTimer = 0;
   let gpuProbeMs: number | null = null;
+  let gpuProbe: ProbeOutcome | null = null;
+  let probeRequested = 0;
   const probeBuf = new Uint8Array(4);
 
   const longTasks: { at: number; ms: number }[] = [];
@@ -283,6 +287,9 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     // GPT-vak review #504 L4: a kapcsoló előtt indult szinkron GPU-próba a régi beállítást mérné — megszakítjuk (eredménye: nincs).
     if (probeDone) finishProbe(null);
     gpuProbeMs = null;
+    gpuProbe = null;
+    // 2. vak kör L1: a váltás előtti utolsó kép nem az új mód első közének kezdete.
+    drawnClock.reset();
     syncLabels();
   };
 
@@ -307,6 +314,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       gpuMs: gpuAvg,
       gpuTimerAvailable: gpuTimer.available,
       gpuProbeMs,
+      gpuProbe,
       calls,
       triangles,
       textures: info.memory.textures,
@@ -335,7 +343,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     const lines = [
       `${opts.title} · perf · szint: ${s.tier} · ${s.running ? "fut" : "áll"}`,
       `FPS ${fmt(f?.fpsAvg)} · 1% low ${fmt(f?.fpsLow1)} · p50 ${fmt(f?.dtP50)} · p95 ${fmt(f?.dtP95)} · min ${fmt(f?.dtMin)} ms`,
-      `JS ${fmt(f?.jsAvg, 2)} · render() ${fmt(f?.renderAvg, 2)} · GPU ${s.gpuTimerAvailable ? fmt(s.gpuMs, 2) : "n. a."} · próba ${s.gpuProbeMs === null ? "–" : fmt(s.gpuProbeMs, 2)} ms`,
+      `JS ${fmt(f?.jsAvg, 2)} · render() ${fmt(f?.renderAvg, 2)} · GPU ${s.gpuTimerAvailable ? fmt(s.gpuMs, 2) : "n. a."} · próba ${probeLabel(s.gpuProbe)}`,
       `hívás ${s.calls} · háromszög ${tri} · textúra ${s.textures} · geom. ${s.geometries} · program ${s.programs}`,
       `vászon ${s.bufferWidth}×${s.bufferHeight} (${s.megapixels.toFixed(2)} Mpx) · CSS ${s.cssWidth}×${s.cssHeight} · dpr ${s.devicePixelRatio.toFixed(2)} → ${s.pixelRatio.toFixed(2)}`,
       `hosszú feladat ${fmt(s.longTasksPerSec)}/s · ${fmt(s.longTaskMsPerSec, 0)} ms/s · React-render ${fmt(s.reactRendersPerSec)}/s`,
@@ -356,13 +364,15 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     renderText();
   };
 
-  const finishProbe = (value: number | null) => {
+  /** `outcome === null`: megszakított próba (kapcsoló, kontextusvesztés) — nincs eredmény. */
+  const finishProbe = (outcome: ProbeOutcome | null) => {
     window.clearTimeout(probeTimer);
     probeLeft = 0;
-    gpuProbeMs = value;
+    gpuProbe = outcome;
+    gpuProbeMs = outcome?.value ?? null;
     const done = probeDone;
     probeDone = null;
-    done?.(value);
+    done?.(gpuProbeMs);
     renderText();
   };
 
@@ -370,10 +380,12 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     if (probeDone) finishProbe(null);
     probeSamples = [];
     probeLeft = Math.max(1, Math.floor(count));
+    probeRequested = probeLeft;
     return new Promise<number | null>((resolve) => {
       probeDone = resolve;
-      // Ha a képkocka-hurok áll (szünet, kérdés), a próba nem akadhat be.
-      probeTimer = window.setTimeout(() => finishProbe(median(probeSamples)), 10_000);
+      // Ha a képkocka-hurok áll (szünet, kérdés), a próba nem akadhat be. Időtúllépéskor a részleges minta NEM teljes
+      // eredmény (2. vak kör L3): a felirat „részleges n/N”, a visszatérési érték null.
+      probeTimer = window.setTimeout(() => finishProbe(probeOutcome(probeSamples, probeRequested)), 10_000);
     });
   };
 
@@ -462,7 +474,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probeBuf);
         probeSamples.push(performance.now() - tBefore);
         probeLeft -= 1;
-        if (probeLeft === 0) finishProbe(median(probeSamples));
+        if (probeLeft === 0) finishProbe(probeOutcome(probeSamples, probeRequested));
       }
       if (tAfter - lastRefresh >= REFRESH_MS) refresh(tAfter);
     },

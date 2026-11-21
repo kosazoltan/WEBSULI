@@ -1968,7 +1968,19 @@ export default function BlockCraftQuiz() {
     const markSizeDirty = () => {
       sizeDirty = true;
     };
-    const sizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(markSizeDirty);
+    // 2. vak kör L2 (G-7): a megfigyelő az adott képkocka rAF-lépése UTÁN, a festés ELŐTT jelez — az a kép még a régi pufferrel
+    // készült. Futó hurokban itt (a friss elrendezésből, képkockánkénti olvasás nélkül) azonnal alkalmazzuk az új méretet és
+    // újrarajzolunk, így a festett első kép már az új méretű.
+    const onParentResize = () => {
+      sizeDirty = true;
+      if (disposed || !runningRef.current || lastTRef.current === null) return;
+      sizeDirty = false;
+      const prevW = appliedW;
+      const prevH = appliedH;
+      syncSize();
+      if (appliedW !== prevW || appliedH !== prevH) renderer.render(scene, camera);
+    };
+    const sizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(onParentResize);
     if (sizeObserver && canvas.parentElement) sizeObserver.observe(canvas.parentElement);
     window.addEventListener("resize", markSizeDirty);
 

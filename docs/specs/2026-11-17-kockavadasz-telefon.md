@@ -104,7 +104,8 @@ Tornadót nem érinti.
   megapixel, CSS-méret, eszköz-dpr → alkalmazott képpontarány; grafikai szint; **hosszú feladat / s és ms / s**; **React-render / s**;
   WebGL renderer-név (`WEBGL_debug_renderer_info`); rövidített `userAgent` (böngésző + főverzió, rendszer + főverzió).
 - **Kapcsolók** (a panelen, azonnal hatnak, a lap újratöltéséig élnek): **Árnyék** be / ki · **Felbontás** 100 / 75 / 50 % ·
-  **Anyag** PBR / egyszerű (Lambert) · **Köd** be / ki. Gombok: **GPU-próba** (40 képkocka szinkron mérése), **Másol** (a panel
+  **Anyag** PBR / egyszerű (Lambert) · **Köd** be / ki. Gombok: **GPU-próba** (40 képkocka szinkron mérése; ha 10 s alatt nem gyűlik össze mind a 40 minta, nincs teljes eredmény — a felirat
+  „részleges n/40”, 2026-11-21, 2. vak kör L3), **Másol** (a panel
   szövege a vágólapra — helyben, hálózat nélkül), **–** (összecsukás).
 - **Adatvédelem:** semmit nem küld, nem tárol; a `userAgent` rövidítve; nincs azonosító, nincs felhasználói adat.
 - **Hibatűrés:** ha a panel modulja nem tölthető be vagy a GPU-kiterjesztés hiányzik, a játék változatlanul fut.

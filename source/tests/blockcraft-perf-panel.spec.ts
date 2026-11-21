@@ -62,11 +62,85 @@ async function expectFramesAfterToggle(page: Page): Promise<void> {
   await expect.poll(async () => (await snapshot(page)).renderedFrames - before, { timeout: 30_000 }).toBeGreaterThan(2);
 }
 
+/**
+ * WebGL-szintű hatásmérő (2. vak kör L4): a kapcsoló VALÓDI hatását méri, nem a feliratot. A betöltés ELŐTT telepítve minden
+ * shaderprogram forrását megjegyzi, és a fő renderpassz (alapértelmezett framebuffer) rajzolási hívásait a használt program
+ * jellemzői szerint számolja: PBR (`#define STANDARD`), Lambert (`#define LAMBERT`), köd (`#define USE_FOG`), árnyékot fogadó
+ * árnyéktérkép megvilágított anyagon (`#define USE_SHADOWMAP` + Lambert / Phong / PBR — a fénytelen anyagok programja a régi
+ * definíciót megtarthatja, rájuk az árnyék nem hat); a nem alapértelmezett framebufferbe menő (árnyéktérkép-) rajzolásokat külön.
+ */
+type GlCounters = { total: number; std: number; lambert: number; fog: number; shadowRecv: number; offscreen: number };
+async function installGlProbe(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __bcGl: GlCounters };
+    w.__bcGl = { total: 0, std: 0, lambert: 0, fog: 0, shadowRecv: 0, offscreen: 0 };
+    const proto = WebGL2RenderingContext.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
+    const src = new WeakMap<object, string>();
+    const prog = new WeakMap<object, string>();
+    type Flags = { std: boolean; lambert: boolean; fog: boolean; shadowRecv: boolean };
+    const flags = new WeakMap<object, Flags>();
+    let cur: Flags | null = null;
+    let offscreen = false;
+    const wrap = (name: string, before: (self: unknown, args: unknown[]) => void) => {
+      const orig = proto[name]!;
+      proto[name] = function (this: unknown, ...args: unknown[]) {
+        before(this, args);
+        return orig.apply(this, args);
+      };
+    };
+    wrap("shaderSource", (_s, [sh, text]) => src.set(sh as object, String(text)));
+    wrap("attachShader", (_s, [p, sh]) => prog.set(p as object, (prog.get(p as object) ?? "") + (src.get(sh as object) ?? "")));
+    wrap("useProgram", (_s, [p]) => {
+      if (!p) {
+        cur = null;
+        return;
+      }
+      let f = flags.get(p as object);
+      if (!f) {
+        const t = prog.get(p as object) ?? "";
+        f = { std: /#define STANDARD\b/.test(t), lambert: /#define LAMBERT\b/.test(t), fog: /#define USE_FOG\b/.test(t), shadowRecv: /#define USE_SHADOWMAP\b/.test(t) && /#define (STANDARD|LAMBERT|PHONG)\b/.test(t) };
+        flags.set(p as object, f);
+      }
+      cur = f;
+    });
+    wrap("bindFramebuffer", (_s, [, fb]) => {
+      offscreen = fb !== null;
+    });
+    for (const name of ["drawElements", "drawArrays", "drawElementsInstanced", "drawArraysInstanced"]) {
+      wrap(name, () => {
+        const c = w.__bcGl;
+        if (offscreen) {
+          c.offscreen += 1;
+          return;
+        }
+        c.total += 1;
+        if (cur?.std) c.std += 1;
+        if (cur?.lambert) c.lambert += 1;
+        if (cur?.fog) c.fog += 1;
+        if (cur?.shadowRecv) c.shadowRecv += 1;
+      });
+    }
+  });
+}
+const resetGl = (page: Page) =>
+  page.evaluate(() => {
+    (window as unknown as { __bcGl: GlCounters }).__bcGl = { total: 0, std: 0, lambert: 0, fog: 0, shadowRecv: 0, offscreen: 0 };
+  });
+const glCounters = (page: Page) => page.evaluate(() => ({ ...(window as unknown as { __bcGl: GlCounters }).__bcGl }));
+/** A kapcsoló utáni állapot: néhány kép a váltás után, majd nullázás, és a mérés csak az ezt követő képekről szól. */
+async function glAfterToggle(page: Page): Promise<GlCounters> {
+  await expectFramesAfterToggle(page);
+  await resetGl(page);
+  await expectFramesAfterToggle(page);
+  return glCounters(page);
+}
+
 test("perf=1: a panel megjelenik a mért sorokkal, és a négy kapcsoló hat a jelenetre", async ({ page }) => {
   test.setTimeout(180_000);
   const pageErrors: string[] = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
 
+  await installGlProbe(page);
   await startGame(page, "&perf=1&look=medium");
   const panel = page.getByTestId("bc-perf-panel");
   await expect(panel).toBeVisible({ timeout: 20_000 });
@@ -113,17 +187,28 @@ test("perf=1: a panel megjelenik a mért sorokkal, és a négy kapcsoló hat a j
   // E-5: anyagkészlet-váltás (telefonon az alap a Lambert; a kapcsoló a PBR-re vált, hogy a csere hatása visszamérhető legyen).
   const mat = page.getByTestId("bc-perf-mat");
   await expect(mat).toHaveText("Anyag: Lambert");
+  // 2. vak kör L4: a valódi hatás — a fő renderpassz programjai (nem a felirat).
+  const glBase = await glAfterToggle(page);
+  console.log("[gl] alap", JSON.stringify(glBase));
+  expect(glBase.lambert, "telefonos alap: Lambert-programmal rajzol").toBeGreaterThan(0);
+  expect(glBase.fog, "köd be: ködös programmal rajzol").toBeGreaterThan(0);
   await mat.click();
   await expect(mat).toHaveText("Anyag: PBR");
   expect((await snapshot(page)).toggles.simpleMaterials).toBe(true);
-  await expectFramesAfterToggle(page);
+  const glPbr = await glAfterToggle(page);
+  console.log("[gl] PBR", JSON.stringify(glPbr));
+  expect(glPbr.std, "PBR-re váltva PBR-programmal rajzol").toBeGreaterThan(glBase.std);
+  expect(glPbr.lambert, "a blokkok már nem Lamberttel rajzolódnak").toBeLessThan(glBase.lambert);
 
   // E-6: köd ki.
   const fog = page.getByTestId("bc-perf-fog");
   await fog.click();
   await expect(fog).toHaveText("Köd: ki");
   expect((await snapshot(page)).toggles.fog).toBe(false);
-  await expectFramesAfterToggle(page);
+  const glNoFog = await glAfterToggle(page);
+  console.log("[gl] köd ki", JSON.stringify(glNoFog));
+  expect(glNoFog.total).toBeGreaterThan(0);
+  expect(glNoFog.fog, "köd ki: egyetlen rajzolás sem ködös programmal").toBe(0);
   const last = await snapshot(page);
   expect(last.running).toBe(true);
   expect(last.calls).toBeGreaterThan(0);
@@ -142,6 +227,7 @@ test("high szinten az árnyéktérkép megmarad, és a panelről kapcsolható", 
   test.setTimeout(180_000);
   const pageErrors: string[] = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
+  await installGlProbe(page);
   await startGame(page, "&perf=1&look=high");
   await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
   await expect.poll(async () => (await snapshot(page)).calls, { timeout: 60_000 }).toBeGreaterThan(0);
@@ -151,13 +237,26 @@ test("high szinten az árnyéktérkép megmarad, és a panelről kapcsolható", 
   await expect(shadow).toBeEnabled();
   await expect(page.getByTestId("bc-perf-mat")).toHaveText("Anyag: PBR");
   expect((await snapshot(page)).toggles.shadows).toBe(true);
-  // E-3: árnyék ki, majd vissza — a jelenet mindkét állapotban rajzol.
+  // E-3: árnyék ki, majd vissza — a jelenet mindkét állapotban rajzol, és (2. vak kör L4) a valódi hatás is mérve: a fő
+  // renderpassz programjai árnyékot fogadnak / nem fogadnak, visszakapcsoláskor az árnyéktérkép újra kirajzolódik.
+  const glOn = await glAfterToggle(page);
+  console.log("[gl] árnyék be", JSON.stringify(glOn));
+  expect(glOn.shadowRecv, "árnyék be: árnyékot fogadó programmal rajzol").toBeGreaterThan(0);
   await shadow.click();
   await expect(shadow).toHaveText("Árnyék: ki");
-  await expectFramesAfterToggle(page);
+  const glOff = await glAfterToggle(page);
+  console.log("[gl] árnyék ki", JSON.stringify(glOff));
+  expect(glOff.total).toBeGreaterThan(0);
+  expect(glOff.shadowRecv, "árnyék ki: egyetlen rajzolás sem árnyékot fogadó programmal").toBe(0);
+  expect(glOff.offscreen, "árnyék ki: nincs árnyéktérkép-rajzolás").toBe(0);
+  await resetGl(page);
   await shadow.click();
   await expect(shadow).toHaveText("Árnyék: be");
   await expectFramesAfterToggle(page);
+  const glBack = await glCounters(page);
+  console.log("[gl] árnyék vissza", JSON.stringify(glBack));
+  expect(glBack.offscreen, "visszakapcsolva az árnyéktérkép újra kirajzolódik").toBeGreaterThan(0);
+  expect(glBack.shadowRecv).toBeGreaterThan(0);
   expect(pageErrors, pageErrors.join(" | ")).toEqual([]);
 });
 
@@ -494,4 +593,124 @@ test("álló 360×640-en a panel a sort törő érintési súgó alatt kezdődik
       { timeout: 4_000 },
     )
     .toBe("ok");
+});
+
+/**
+ * Kézi rAF-vezérlés (2. vak kör): a képkockákat a teszt engedi el egyenként — a sorrend determinisztikus, nem időzítésfüggő.
+ * `holdFrames` után minden ütemezett callback várakozik; `releaseFrame` az addig gyűlt összeset egy valódi rAF-ra engedi.
+ */
+type RafWindow = { __bcQueue: FrameRequestCallback[]; __bcNativeRaf: (cb: FrameRequestCallback) => number };
+async function holdFrames(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as RafWindow;
+    w.__bcQueue = [];
+    w.__bcNativeRaf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb: FrameRequestCallback) => {
+      w.__bcQueue.push(cb);
+      return 0;
+    };
+  });
+  await expect.poll(() => page.evaluate(() => (window as unknown as RafWindow).__bcQueue.length), { timeout: 30_000 }).toBeGreaterThan(0);
+}
+/** Egy új képkocka elengedése, és megvárja, hogy a játék kirajzolja (a következő lépés újra a sorba kerül). */
+async function releaseFrame(page: Page): Promise<void> {
+  const before = (await snapshot(page)).renderedFrames;
+  await page.evaluate(() => {
+    const w = window as unknown as RafWindow;
+    for (const cb of w.__bcQueue.splice(0)) w.__bcNativeRaf(cb);
+  });
+  await expect.poll(async () => (await snapshot(page)).renderedFrames, { timeout: 30_000 }).toBe(before + 1);
+  await expect.poll(() => page.evaluate(() => (window as unknown as RafWindow).__bcQueue.length), { timeout: 30_000 }).toBeGreaterThan(0);
+}
+
+test("anyagváltás után az első új kép nem ad FPS-mintát, a második az új képek közét adja (2. vak kör L1)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  await holdFrames(page);
+  // A váltás ELŐTTI várakozás (akadozó futás): ez a köz nem kerülhet az új mód FPS-ébe.
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => (window as unknown as PerfTestWindow).__websuliPerf.controls.set({ simpleMaterials: true }));
+  expect((await snapshot(page)).frame, "váltáskor üres a mintaablak").toBeNull();
+  await releaseFrame(page);
+  expect((await snapshot(page)).frame, "az első új kép csak alap, nem minta").toBeNull();
+  await releaseFrame(page);
+  const f = (await snapshot(page)).frame as unknown as { frames: number; dtMin: number; dtP95: number };
+  expect(f, "a második új kép adja az első mintát").not.toBeNull();
+  expect(f.frames).toBe(1);
+  expect(f.dtP95, `a minta a két új kép köze, nem a váltás előtti várakozás (${f.dtP95} ms)`).toBeLessThan(1000);
+});
+
+test("a szülő méretváltozása után az ELSŐ festett kép már az új pufferméretű (2. vak kör L2, G-7)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  // Minden rajzolási hívás a képkocka idővonal-idejével (egy képkockán belül — a rAF és a méretfigyelő hívásai — azonos) és a
+  // rajzpuffer szélességével. Egy képkocka festett képe a képkocka UTOLSÓ rajzolása.
+  await page.evaluate(() => {
+    const w = window as unknown as { __bcDraws: { t: number; w: number }[] };
+    w.__bcDraws = [];
+    const proto = WebGL2RenderingContext.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
+    for (const name of ["drawElements", "drawArrays", "drawElementsInstanced", "drawArraysInstanced"]) {
+      const orig = proto[name]!;
+      proto[name] = function (this: WebGL2RenderingContext, ...args: unknown[]) {
+        if (w.__bcDraws.length < 50_000) w.__bcDraws.push({ t: Number(document.timeline.currentTime), w: this.drawingBufferWidth });
+        return orig.apply(this, args);
+      };
+    }
+  });
+  await expectFramesAfterToggle(page);
+  for (const shrink of [113, 41]) {
+    const from = await page.evaluate((px) => {
+      const w = window as unknown as { __bcDraws: { t: number; w: number }[] };
+      const canvas = document.querySelector('[data-testid="bc-perf-panel"]')!.parentElement!.querySelector("canvas")!;
+      const parent = canvas.parentElement!;
+      w.__bcDraws.length = 0;
+      parent.style.width = `${parent.clientWidth - px}px`;
+      return canvas.width;
+    }, shrink);
+    await expect
+      .poll(() => page.evaluate(() => new Set((window as unknown as { __bcDraws: { t: number }[] }).__bcDraws.map((d) => d.t)).size), { timeout: 30_000 })
+      .toBeGreaterThanOrEqual(3);
+    const r = await page.evaluate(() => {
+      const draws = (window as unknown as { __bcDraws: { t: number; w: number }[] }).__bcDraws;
+      const canvas = document.querySelector('[data-testid="bc-perf-panel"]')!.parentElement!.querySelector("canvas")!;
+      const firstFrame = draws.filter((d) => d.t === draws[0]!.t);
+      return { firstPainted: firstFrame[firstFrame.length - 1]!.w, now: canvas.width };
+    });
+    expect(r.now, "a puffer követte a méretet").not.toBe(from);
+    expect(r.firstPainted, `az első festett kép puffere (${r.firstPainted}) = az új méret (${r.now}), nem a régi (${from})`).toBe(r.now);
+  }
+});
+
+test("részleges GPU-próba (időtúllépés) nem teljes eredmény: null és „részleges n/40” felirat; a teljes próba számot ad (2. vak kör L3)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  await holdFrames(page);
+  await page.evaluate(() => {
+    const w = window as unknown as PerfTestWindow & { __bcProbe?: { done: boolean; value: number | null } };
+    w.__bcProbe = { done: false, value: null };
+    void w.__websuliPerf.runGpuProbe(40).then((v) => {
+      w.__bcProbe = { done: true, value: v };
+    });
+  });
+  // Csak két kép készül a 40-ből, utána a hurok áll — a próba a 10 s-os időkorláttal zárul.
+  await releaseFrame(page);
+  await releaseFrame(page);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __bcProbe: { done: boolean } }).__bcProbe.done), { timeout: 20_000 }).toBe(true);
+  const partial = await page.evaluate(() => (window as unknown as { __bcProbe: { value: number | null } }).__bcProbe.value);
+  expect(partial, "2/40 minta nem teljes eredmény").toBeNull();
+  await expect(page.getByTestId("bc-perf-text")).toContainText("próba részleges 2/40");
+  // A hurok újra él: a teljes próba számot ad.
+  await page.evaluate(() => {
+    const w = window as unknown as RafWindow;
+    window.requestAnimationFrame = w.__bcNativeRaf;
+    for (const cb of w.__bcQueue.splice(0)) w.__bcNativeRaf(cb);
+  });
+  const full = await page.evaluate(() => (window as unknown as PerfTestWindow).__websuliPerf.runGpuProbe(3));
+  expect(typeof full, "a teljes próba számot ad").toBe("number");
 });

@@ -76,7 +76,13 @@ Tiszta, egységtesztelt segédek új modulban: `game-engine/perf/pixelBudget.ts`
 
 ## 7. Spec-döntés: a `?perf=1` panel „fut / áll” jelzője (orkesztrátori döntés 2026-11-19)
 
-- „Fut” = a játék futásjelzője (`runningRef`) ÉS friss képkocka: a legutóbbi képkocka KEZDETE vagy kirajzolásának VÉGE közül a
-  későbbi óta eltelt idő kisebb, mint `max(3 s, 3 × az utolsó 8 képkocka-köz maximuma)`.
+- „Fut” = a játék futásjelzője (`runningRef`) ÉS friss, BEFEJEZETT kirajzolás (pontosítva 2026-11-21, 2. vak kör L5 — a kód
+  és a tesztek szerinti, elfogadott működés; `LoopClock.running`, `perfStats.ts`):
+  - a mérce az utolsó (újra)indulás óta utoljára BEFEJEZETT kirajzolás vége; a csak elindult, de kivétellel megszakadó képkocka
+    (befagyott rAF, a `render()` előtti / alatti kivétel) NEM frissíti — így a folyamatosan kivételt dobó, újraütemező hurok is „áll”;
+  - türelmi idő az első befejezésig: a futás (szünet utáni újraindulás) első képkocka-kezdete a mérce, rögzített pont;
+  - küszöb: `max(3 s, 3 × az utolsó 8 kirajzolás-köz maximuma)`, ahol minden köz egyenként legfeljebb 5000 ms-nak számít
+    (egy szünet utáni vagy elakadt köz se nyújthassa 15 s fölé a „fut”-ot);
+  - elveszett WebGL-kontextuson a rajzolás nélküli `render()` nem befejezett kirajzolás (1. vak kör L2).
 - A 2,5 s-os élő képkocka nem lehet hamis „áll” (a vak review M1 visszaállított idősor-mércéje), ezért a fagyásjelzés (befagyott
   rAF, a `render()` előtti kivétel) alsóhatára 3 s. A befagyott-ciklus egységteszt eredeti 1,5 s-os elvárása ezért 3,5 s-ra módosult.

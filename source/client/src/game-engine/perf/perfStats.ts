@@ -204,6 +204,29 @@ export class DrawnFrameClock {
     this.lastDrawnNow = now;
     return prev !== null && now > prev ? now - prev : null;
   }
+
+  /**
+   * Kapcsolás (2. vak kör L1): a váltás előtti utolsó kép nem lehet az új mód első közének kezdete — a következő sikeres kép
+   * csak új alap, az első minta a második új képpel születik.
+   */
+  reset(): void {
+    this.lastDrawnNow = null;
+  }
+}
+
+/** A szinkron GPU-próba kimenete (2. vak kör L3): teljes eredmény csak akkor, ha a kért összes minta megvan. */
+export type ProbeOutcome = { value: number | null; samples: number; requested: number; partial: boolean };
+
+export function probeOutcome(samples: readonly number[], requested: number): ProbeOutcome {
+  const partial = samples.length < requested;
+  return { value: partial ? null : median(samples), samples: samples.length, requested, partial };
+}
+
+/** A panel „próba” mezője: teljes → „x.xx ms”; részleges / üres (időtúllépés) → „részleges n/N”; nincs / megszakítva → „–”. */
+export function probeLabel(outcome: ProbeOutcome | null): string {
+  if (!outcome) return "–";
+  if (outcome.partial) return `részleges ${outcome.samples}/${outcome.requested}`;
+  return `${fmt(outcome.value, 2)} ms`;
 }
 
 /**
