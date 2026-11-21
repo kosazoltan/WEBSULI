@@ -7,7 +7,7 @@ import { CLIP_BAND_STYLE } from "../shared/clip-style";
 import { huNumberWords, spokenHu } from "../shared/hu-numbers";
 import { lessonClipMedia, lessonClips } from "../shared/schema";
 import { CLIP_MEDIA_CACHE_CONTROL, mediaId, mediaReply } from "../server/lesson-clip-media";
-import { CLIP_AUDIO_FORMAT, ELEVENLABS_PARALLEL, limiter, mp3DurationMs } from "../server/lesson-clips-providers";
+import { CLIP_AUDIO_FORMAT, ELEVENLABS_PARALLEL, FFMPEG_ARGS, limiter, mp3DurationMs } from "../server/lesson-clips-providers";
 
 // docs/specs/2026-11-10-fejezet-kisfilmek-v2.md — fejezetszöveg, forgatókönyv-kapuk, média, migrációk.
 
@@ -86,6 +86,13 @@ test("a hangkérések sorba állnak: egyszerre legfeljebb annyi fut, amennyit az
   // Hibázó feladat nem akasztja meg a sort.
   await assert.rejects(queue(async () => { throw new Error("hiba"); }));
   assert.equal(await queue(async () => "megy tovább"), "megy tovább");
+});
+
+test("az átkódolás egy szálon, előretekintés nélkül fut (mérve: így 75 MB, alapbeállítással 171 MB — a példány 512 MB-os)", () => {
+  const args = FFMPEG_ARGS("be.mp4", "ki.mp4");
+  assert.equal(args.filter((a, i) => a === "-threads" && args[i + 1] === "1").length, 2, "a dekódoló és a kódoló is egy szálon");
+  assert.ok(args.includes("-an") && args.includes("scale=960:-2") && args.at(-1) === "ki.mp4");
+  assert.match(args[args.indexOf("-x264-params") + 1], /rc-lookahead=0/);
 });
 
 test("a néma jelenet legalább 2,5 mp, hosszabb mondatnál arányosan több", () => {
