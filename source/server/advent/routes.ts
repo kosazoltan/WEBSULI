@@ -37,6 +37,11 @@ export type AdventRouterDeps = {
   /** A naptár órája; `null` = a naptár kikapcsoltként viselkedik (e2e-mód tesztidő nélkül). */
   clock: (req: Request) => Date | null;
   resolve: (req: Request, input: { learnerToken?: unknown; device?: unknown }) => Promise<AdventResolution>;
+  /**
+   * Ha az óra nem ad időt (`clock` → null), a „nem létezik” (404) helyett EZ a válasz — a végső kezelőben, hogy a köztes lépések
+   * (és az admin-őr mátrixtesztje) változatlanok maradjanak. Az admin-előnézet használja (érvénytelen dátum → 400; terv 16.5).
+   */
+  invalidClock?: { status: number; message: string };
   /** A kéréskorlátok (alap: `ADVENT_LIMITS`); tesztben kisebb értékkel adható meg. */
   limits?: AdventLimits;
   /** Minden rögzített válasz után (nem várjuk meg): az S5 innen dönt a szülői levélről. */
@@ -207,6 +212,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   };
   /** Végpont: a válasz elküldése a függvény dolga; a hibát egységesen kezeljük (Express 4 nem továbbítja az async hibát). */
   const wrap = (fn: (req: Request, res: Response) => Promise<void>): RequestHandler => (req, res, next) => {
+    if (res.locals.adventClockInvalid === true && deps.invalidClock) { res.status(deps.invalidClock.status).json({ message: deps.invalidClock.message }); return; }
     fn(req, res).catch((error: unknown) => fail(req, res, next, error));
   };
   /** Köztes lépés: siker esetén továbblép. */
@@ -218,6 +224,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   const gate: RequestHandler = (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     const now = deps.enabled() ? deps.clock(req) : null;
+    // Érvénytelen óra a beállított válasszal (admin-előnézet: 400) — a végső kezelő adja ki (`wrap`).
+    if (!now && deps.invalidClock && deps.enabled()) { res.locals.adventClockInvalid = true; next(); return; }
     if (!now) { res.status(404).json({ message: "Not found" }); return; }
     res.locals.adventNow = now;
     next();
@@ -225,6 +233,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
 
   /** Az alany feloldása: olvasásnál fejlécből, írásnál a törzsből. */
   const identify = (source: "headers" | "body"): RequestHandler => step(async (req, res) => {
+    if (res.locals.adventClockInvalid === true) return;
     const now = res.locals.adventNow as Date;
     const body = (source === "body" && req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
     if (source === "body" && !adventIdentityBody.safeParse(body).success) throw new AdventHttpError(400, "Érvénytelen kérés.");

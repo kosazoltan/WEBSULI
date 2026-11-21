@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
-import { dbPool, injectSession, startApp } from "./support/authz-db-harness";
+import { Client, dbPool, injectSession, startApp } from "./support/authz-db-harness";
 
 const { GRADE_QUIZ_ITEMS } = await import("../client/src/data/gradeQuizBank/index");
 const { CHRISTMAS_ITEMS } = await import("../shared/advent/christmasBank/index");
@@ -1030,5 +1030,93 @@ describe("adventi naptár — végpontok", () => {
       assert.deepEqual({ status: w.status, corrupt: w.json.corrupt }, { status: 409, corrupt: true }, label + ": írás");
       assert.deepEqual(await q(`SELECT plan, doors, updated_at FROM advent_progress WHERE subject_id = $1`, [k.device]), before, label + ": a sor változatlan");
     }
+  });
+});
+
+describe("adventi naptár — admin-előnézet (S6, A16; terv 16.5)", () => {
+  const ADMIN = { id: "advent-preview-admin", email: "advent-preview-admin@websuli.example" };
+  const USER = { id: "advent-preview-user", email: "advent-preview-user@websuli.example" };
+  let preview: Awaited<ReturnType<typeof startApp>>;
+  let previousAllowlist: string | undefined;
+  const P = "/api/admin/advent/preview";
+  const session = async (userId: string | null): Promise<Client> => {
+    const c = new Client(preview.base, userId ? await injectSession({ passport: { user: userId } }) : null);
+    await c.fetchCsrf();
+    return c;
+  };
+  before(async () => {
+    previousAllowlist = process.env.ADMIN_ALLOWLIST;
+    process.env.ADMIN_ALLOWLIST = ADMIN.email;
+    // A kapcsoló KI: az előnézet ettől függetlenül működik (a bekapcsolás előtti próbára — D-11).
+    process.env.ADVENT_CALENDAR = "off";
+    await dbPool.query(
+      `INSERT INTO users (id, email, password, is_admin, is_banned) VALUES ($1, $2, NULL, true, false), ($3, $4, NULL, false, false)
+       ON CONFLICT (id) DO UPDATE SET is_admin = EXCLUDED.is_admin, is_banned = false`,
+      [ADMIN.id, ADMIN.email, USER.id, USER.email],
+    );
+    preview = await startApp();
+  });
+  after(async () => {
+    await dbPool.query(`DELETE FROM advent_progress WHERE subject_kind = 'preview'`);
+    await dbPool.query(`DELETE FROM users WHERE id = ANY($1)`, [[ADMIN.id, USER.id]]);
+    if (previousAllowlist === undefined) delete process.env.ADMIN_ALLOWLIST; else process.env.ADMIN_ALLOWLIST = previousAllowlist;
+    delete process.env.ADVENT_CALENDAR;
+    await preview.close();
+  });
+
+  it("kikapcsolt naptár mellett az admin a megadott nap szerinti naptárat látja (ELŐNÉZET-alany), levél nélkül; a nyilvános API közben 404", async () => {
+    const admin = await session(ADMIN.id);
+    assert.equal((await admin.request("GET", "/api/advent/state")).status, 404, "a nyilvános naptár kikapcsolva");
+    const s = await admin.request("GET", `${P}/state?date=2026-12-10`);
+    assert.equal(s.status, 200, s.text.slice(0, 200));
+    const state = s.json as Json;
+    assert.deepEqual({ identity: state.identity, phase: state.phase, openDay: state.openDay, today: state.today, needsGrade: state.needsGrade }, { identity: "preview", phase: "open", openDay: 10, today: "2026-12-10", needsGrade: true });
+    assert.equal((await admin.request("POST", `${P}/grade?date=2026-12-10`, { grade: 5 })).status, 200);
+    const opened = await admin.request("POST", `${P}/doors/10/open?date=2026-12-10`, {});
+    assert.equal(opened.status, 200, opened.text.slice(0, 200));
+    const question = (opened.json as Json).question as Question;
+    const item = findAdventItem(question.id, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS)!;
+    const answered = await admin.request("POST", `${P}/doors/10/answer?date=2026-12-10`, { questionId: question.id, pick: question.options.indexOf(item.options[item.correctIndex]!) });
+    assert.equal(answered.status, 200);
+    assert.equal((answered.json as Json).correct, true);
+    assert.equal((await admin.request("POST", `${P}/doors/11/open?date=2026-12-10`, {})).status, 403, "a 11. ablak 10-én még zárt");
+    const rows = await q<{ subject_kind: string; subject_id: string; mailed_to: string[] }>(`SELECT subject_kind, subject_id, mailed_to FROM advent_progress WHERE subject_id = $1`, [ADMIN.id]);
+    assert.deepEqual(rows, [{ subject_kind: "preview", subject_id: ADMIN.id, mailed_to: [] }], "a saját előnézeti sor, levélfoglalás nélkül");
+    // Másik nap ugyanazzal a sorral: december 26. → mind a 24 ablak nyitható (pótlás).
+    const later = (await admin.request("GET", `${P}/state?date=2026-12-26`)).json as Json;
+    assert.deepEqual({ phase: later.phase, solved: (later.summary as Json).solved }, { phase: "catchup", solved: 1 });
+  });
+
+  it("érvénytelen vagy hiányzó dátum: 400 (olvasás és írás); nem admin 403, névtelen 401 — az írás sem jut át", async () => {
+    const admin = await session(ADMIN.id);
+    for (const bad of ["", "?date=2026-02-30", "?date=2026-12-1", "?date=holnap", "?date=1999-12-10"]) {
+      assert.equal((await admin.request("GET", `${P}/state${bad}`)).status, 400, `olvasás: ${bad || "dátum nélkül"}`);
+    }
+    assert.equal((await admin.request("POST", `${P}/doors/1/open`, {})).status, 400, "írás dátum nélkül");
+    const user = await session(USER.id);
+    assert.equal((await user.request("GET", `${P}/state?date=2026-12-10`)).status, 403);
+    assert.equal((await user.request("POST", `${P}/grade?date=2026-12-10`, { grade: 5 })).status, 403);
+    assert.equal((await user.request("DELETE", P)).status, 403);
+    const anonymous = await session(null);
+    assert.equal((await anonymous.request("GET", `${P}/state?date=2026-12-10`)).status, 401);
+    assert.equal((await anonymous.request("DELETE", P)).status, 401);
+    assert.equal((await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [USER.id])).length, 0);
+  });
+
+  it("„Előnézet törlése”: a DELETE CSRF nélkül 403; tokennel csak a SAJÁT előnézeti sort törli, utána friss (évfolyamot kérő) előnézet", async () => {
+    const admin = await session(ADMIN.id);
+    // Tiszta kezdés (az előző eset sorát is): utána egy friss előnézeti sor évfolyammal.
+    assert.equal((await admin.request("DELETE", P)).status, 200);
+    assert.equal((await admin.request("POST", `${P}/grade?date=2026-12-03`, { grade: 7 })).status, 200);
+    // Egy másik (idegen) előnézeti sor, amelyhez a törlés nem nyúlhat.
+    await dbPool.query(`INSERT INTO advent_progress (season, subject_kind, subject_id) VALUES (2026, 'preview', 'masik-admin') ON CONFLICT DO NOTHING`);
+    const noCsrf = new Client(preview.base, admin.cookie);
+    assert.equal((await noCsrf.request("DELETE", P)).status, 403, "CSRF nélkül nincs törlés");
+    assert.equal((await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [ADMIN.id])).length, 1);
+    const removed = await admin.request("DELETE", P);
+    assert.deepEqual({ status: removed.status, removed: (removed.json as Json).removed }, { status: 200, removed: 1 });
+    assert.equal((await q(`SELECT 1 FROM advent_progress WHERE subject_id = $1`, [ADMIN.id])).length, 0);
+    assert.equal((await q(`SELECT 1 FROM advent_progress WHERE subject_id = 'masik-admin'`)).length, 1, "más admin előnézete megmarad");
+    assert.equal(((await admin.request("GET", `${P}/state?date=2026-12-03`)).json as Json).needsGrade, true);
   });
 });

@@ -16,6 +16,8 @@ import { ticketSecret } from "./realtime/ticket";
 import { startPlayerCodeSweeper } from "./player/sweeper";
 import { createPlayerStore } from "./player/store";
 import { banMaintenanceEnabled } from "./player/account-store";
+import { startAdventSweeper } from "./advent/sweeper";
+import { createAdventStore } from "./advent/store";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
@@ -642,6 +644,10 @@ app.use((req, res, next) => {
       // K1b: a tiltás-karbantartás (kulcsrotáció-egyeztetés, megőrzés) csak élesben / PLAYER_BAN_MAINTENANCE=on mellett.
       const playerStore = createPlayerStore(dbPool);
       startPlayerCodeSweeper(() => playerStore.purgeOldCodes(), globalThis, banMaintenanceEnabled() ? playerStore.banMaintenance : null);
+      // Adventi naptár (terv E23, 16.6; végrehajtás S6): a régi névtelen / előnézeti sorok és a korábbi évadok értesítő-foglalásainak
+      // takarítása induláskor és 24 óránként — a kapcsolótól függetlenül, E2E-ben nem.
+      const adventStore = createAdventStore(dbPool);
+      startAdventSweeper({ sweep: (now, season) => adventStore.sweep(now, season) });
       if (banMaintenanceEnabled() && !process.env.PLAYER_BAN_KEY) {
         logger.info("[PLAYER] PLAYER_BAN_KEY nincs beállítva — a törölt fiókok tiltás-ujjlenyomata a SESSION_SECRET-ből levezetett kulccsal készül (rotációja ezeket érvényteleníti)");
       }

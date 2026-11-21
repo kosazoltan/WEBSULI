@@ -49,6 +49,7 @@ import { SPEECH_BRIDGE_SCRIPT } from "./lib/speech-bridge";
 import { lessonResultsRouter } from "./lesson-result-email";
 import { createAdventRouter } from "./advent/routes";
 import { createAdventStore } from "./advent/store";
+import { createAdventPreviewRouter } from "./advent/preview";
 import { adventClock, adventEnabled } from "./advent/clock";
 import { defaultAdventIdentityDeps, resolveAdventSubject } from "./advent/identity";
 import { SERVER_GRADE_BANK } from "./realtime/question-provider";
@@ -898,6 +899,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     enabled: () => adventEnabled(),
     clock: (req) => adventClock(req),
     resolve: (req, input) => resolveAdventSubject(req, input, adventIdentity),
+  }));
+  // Adventi naptár — admin-előnézet (terv 16.5, A16; végrehajtás S6): az admin-őr mögött, a kapcsolótól FÜGGETLENÜL (a bekapcsolás
+  // előtti tulajdonosi próbára — D-11); `?date=ÉÉÉÉ-HH-NN`, a saját előnézeti sor, levél nélkül; `DELETE` a saját sort törli (CSRF).
+  app.use("/api/admin/advent/preview", isAuthenticatedAdmin, createAdventPreviewRouter({
+    store: createAdventStore(dbPool),
+    bank: SERVER_GRADE_BANK,
+    christmas: CHRISTMAS_ITEMS,
   }));
   app.use("/api/lessons", lessonPublicRouter);
   // Spec 2026-11-10-fejezet-kisfilmek-v2 (6.): a kisfilmek tartalomcímzett médiája (kép, hang, mozgókép) — azonos eredet, korlátlanul gyorsítótárazható.

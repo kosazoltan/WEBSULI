@@ -177,6 +177,12 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
       await pool.query(`UPDATE advent_progress SET mailed_to = array_remove(mailed_to, $2) WHERE id = $1`, [id, key]);
     },
 
+    /** Az admin saját előnézeti sorainak törlése (minden évad; S6 „Előnézet törlése”) — a törölt sorok száma. */
+    async deletePreview(adminId: string): Promise<number> {
+      const removed = await pool.query(`DELETE FROM advent_progress WHERE subject_kind = 'preview' AND subject_id = $1`, [adminId]);
+      return removed.rowCount ?? 0;
+    },
+
     /**
      * Takarítás: a régóta nem használt névtelen (eszköz-) sorok és a régi előnézeti sorok törlése (terv E23), valamint a
      * korábbi évadok értesítő-foglalásai (terv 16.6). A tanulói és a játékos-sorok nem törlődnek itt.

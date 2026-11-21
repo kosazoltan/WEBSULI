@@ -1,4 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import bcrypt from "bcryptjs";
+import pg from "pg";
 
 import { ADVENT_GIFT_MESSAGE } from "../shared/advent/rules";
 import { chooseGrade, clearAdventTime, contrastOf, pickOption, playDoor, proxyHeaders, seedProgress, setAdventServerTime, setAdventTime, settle, shot, tapDoor } from "./support/advent-e2e";
@@ -723,5 +726,67 @@ test.describe("asztali nézet 1366×768", () => {
     await expect(page.getByTestId("advent-gift-message")).toHaveText(ADVENT_GIFT_MESSAGE);
     await settle(page);
     await shot(page, "d-ajandek-uzenet");
+  });
+});
+
+/**
+ * S6 / A16 — admin-előnézet valódi böngészőben: valódi jelszavas admin-belépés (a playwright-környezet engedélylistás címével, mint az
+ * `admin-allowlist.spec.ts`), az előnézet a megadott nap szerinti naptárat mutatja „ELŐNÉZET” jelöléssel; nem admin ugyanazzal a címmel a
+ * normál naptárat kapja (a valódi — itt a teszt — dátum szerint).
+ */
+test.describe("admin-előnézet (A16, S6)", () => {
+  const ADMIN_EMAIL = "e2e-allowlisted-admin@websuli.example";
+  const ADMIN_ID = "advent-e2e-preview-admin";
+  const PASSWORD = `Adv-${randomBytes(9).toString("hex")}`;
+  const ORIGIN = `https://localhost:${process.env.WEBSULI_E2E_PORT ?? "5000"}`;
+  let pool: pg.Pool;
+  test.beforeAll(async () => {
+    pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+    const hash = await bcrypt.hash(PASSWORD, 4);
+    // Az engedélylistás cím egyedi: egy korábbi (más tesztfájl által létrehozott) sor helyére a saját, ismert jelszavú admin kerül.
+    await pool.query(`DELETE FROM users WHERE email = $1 AND id <> $2`, [ADMIN_EMAIL, ADMIN_ID]);
+    await pool.query(
+      `INSERT INTO users (id, email, password, is_admin, is_banned) VALUES ($1, $2, $3, true, false)
+       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, password = EXCLUDED.password, is_admin = true, is_banned = false`,
+      [ADMIN_ID, ADMIN_EMAIL, hash],
+    );
+  });
+  test.afterAll(async () => {
+    await pool.query(`DELETE FROM advent_progress WHERE subject_kind = 'preview' AND subject_id = $1`, [ADMIN_ID]);
+    await pool.query(`DELETE FROM users WHERE id = $1`, [ADMIN_ID]);
+    await pool.end();
+  });
+
+  test("admin belépve: ?elonezet=2026-12-10 → „ELŐNÉZET” sáv, a 10. ablak nyitható, a 11. zárt, játszható; „Előnézet törlése” után friss előnézet — kilépve ugyanez a cím a normál naptár (A16)", async ({ page, request, context }) => {
+    const login = await request.post("/api/login", {
+      headers: { origin: ORIGIN, "x-forwarded-proto": "https", "content-type": "text/plain" },
+      data: JSON.stringify({ email: ADMIN_EMAIL, password: PASSWORD }),
+    });
+    expect(login.status(), "admin-belépés").toBe(200);
+    const cookie = login.headersArray().find((h) => h.name.toLowerCase() === "set-cookie" && h.value.startsWith("connect.sid="));
+    expect(cookie, "munkamenet-süti").toBeTruthy();
+    await context.addCookies([{ name: "connect.sid", value: cookie!.value.split(";")[0]!.slice("connect.sid=".length), domain: "localhost", path: "/", httpOnly: true, secure: false, sameSite: "Lax" }]);
+    // A nyilvános naptár órája december 5. (a teszt fejléce); az előnézet a saját dátumát használja.
+    await setAdventTime(page, DEC5);
+    await page.goto("/adventi-naptar?elonezet=2026-12-10");
+    await expect(page.getByTestId("advent-preview-banner")).toBeVisible();
+    await expect(page.getByTestId("advent-preview-banner")).toContainText("ELŐNÉZET");
+    await chooseGrade(page, 5);
+    await expect(page.getByTestId("advent-door-10")).toHaveAttribute("data-state", "open");
+    await expect(page.getByTestId("advent-door-11")).toHaveAttribute("data-state", "locked");
+    await playDoor(page, 10, true);
+    await expect(page.getByTestId("advent-door-10")).toHaveAttribute("data-state", "solved");
+    await expect(page.getByTestId("advent-progress")).toContainText("1 / 24");
+    await page.getByTestId("advent-preview-reset").tap();
+    await expect(page.getByTestId("advent-grade-picker"), "a törölt előnézet újra évfolyamot kér").toBeVisible();
+    // Kilépve (munkamenet nélkül) ugyanez a cím: nincs előnézet, a normál naptár a valódi (teszt)dátum szerint — december 5.
+    await context.clearCookies();
+    await page.reload();
+    await expect(page.getByTestId("advent-page")).toBeVisible();
+    await expect(page.getByTestId("advent-preview-banner")).toHaveCount(0);
+    await chooseGrade(page, 5);
+    await expect(page.getByTestId("advent-door-5")).toHaveAttribute("data-state", "open");
+    await expect(page.getByTestId("advent-door-6")).toHaveAttribute("data-state", "locked");
+    await expect(page.getByTestId("advent-preview-banner")).toHaveCount(0);
   });
 });

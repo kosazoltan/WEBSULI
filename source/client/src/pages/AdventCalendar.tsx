@@ -338,6 +338,21 @@ export default function AdventCalendar() {
     finally { if (isCurrent(started)) setBusy(false); }
   };
 
+  /** „Előnézet törlése” (S6): az admin saját előnézeti sora törlődik, utána friss (évfolyamot kérő) előnézet töltődik. */
+  const resetPreview = async () => {
+    const started = generation;
+    setBusy(true);
+    setError(null);
+    setOpen(null);
+    setSummaryOpen(false);
+    try { await adventApi.resetPreview(); }
+    catch (e) { if (isCurrent(started)) setError(adventErrorText(e, "Most nem sikerült törölni az előnézetet. Próbáld meg újra!")); }
+    finally {
+      if (isCurrent(started)) { setBusy(false); setPendingGrade(null); setChangingGrade(false); }
+      await refresh();
+    }
+  };
+
   const continueAsGuest = () => {
     // Csak a figyelmeztetés generációjának (lejárt) tokenjét felejti el — egy azóta (másik lapon) eltárolt új linket nem (L4).
     if (adventSubjectGeneration() === warnedGeneration.current) forgetLearnerPairing();
@@ -506,6 +521,13 @@ export default function AdventCalendar() {
         <div className="advent-banner" role="alert" data-testid="advent-pairing-invalid">
           <span>{PAIRING_TEXT}</span>
           <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-continue-guest" onClick={continueAsGuest}>Folytatom vendégként</button>
+        </div>
+      ) : null}
+      {/* Admin-előnézet (A16, S6): a megadott nap szerinti naptár a saját előnézeti soron — levél nem megy ki róla. */}
+      {state.identity === "preview" ? (
+        <div className="advent-banner advent-banner--preview" role="status" data-testid="advent-preview-banner">
+          <span><strong>ELŐNÉZET</strong> — {adventDateLabel(state.today)} szerint; a válaszaid csak az előnézetben mentődnek, levél nem megy ki.</span>
+          <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-preview-reset" disabled={busy} onClick={() => void resetPreview()}>Előnézet törlése</button>
         </div>
       ) : null}
       {volatileDevice ? <p className="advent-banner" role="status">Ezen az eszközön nem tudjuk megjegyezni a naptáradat.</p> : null}
