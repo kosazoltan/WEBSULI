@@ -316,6 +316,30 @@ Leletenként előbb BUKÓ teszt, utána a javítás.
   → nincs levél, és utána vendég pillanatkép elfogadva (az első rögzítő felszabadult).
 - Utána: a nehéz körök a kapusoron.
 
+## 2026-11-21 — vak kör (0ec08148) L1–L5 (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R39–R42 + L5)
+
+Leletenként előbb BUKÓ teszt, utána a javítás (R26 / R31 / R35 / R10 / R12 / R14 / R19 / R27 / R34 viselkedése változatlan).
+- **R39 (L1)** `client/src/lib/queryClient.ts`: `CsrfTokenInfo` + `getTokenInfo()` (token, képesség, címke egy válaszból); az `apiRequest`
+  új `prepare` opciója a törzset a token megérkezése után (és a 403 utáni frissítéskor újra) építi, tokenhibánál nem küld.
+  `client/src/lesson-runtime/resultReport.ts`: a `sendOutboxEntry` a törzset `prepare`-ben építi (nincs külön `ensureResultApi`); az R10
+  ismétlése is `prepare`-rel. Böngészőteszt (`R39 / L1`, hamis óra): az első tokenkérés 800 ms után 502, a többi más fiók V2-tokenje →
+  előbb nincs POST, 31 s előretekerés után egy POST `subject: "anon"`-nal. A régi kóddal piros volt (`undefined` címke).
+  Dokumentált spec-változás: a `tests/request-retry.test.ts` J5 forrásőre a feladatok kérésének új alakját nézi
+  (`apiRequest("POST", url, undefined, { retries: 0, prepare: build })` — a szándék, a belső 0 újrapróba és a keepalive hiánya, változatlan).
+- **R40 (L2)** ugyanott: a `prepare` elején `outboxEntryExpired` → `OutboxEntryExpired` → a bejegyzés újrapróba nélkül kikerül.
+  Böngészőteszt (`R40 / L2`): `activityAt` = most − 7 nap + 2,5 s, a token 4 s-ot késik → nincs POST, a sor üres, jelző nincs. A régi
+  kóddal piros volt (a lejárt bejegyzés kiment).
+- **R41 (L3)** `server/lesson-result-email.ts`: a `sendLessonResult` újrapróbája ütemezőn át megy; a „félbehagyva” út ütemezője a
+  halasztott újrapróbát és a futó kísérleteket nyilvántartja; a `flushPendingPartials` előrehozza a halasztottat (időzítő törlése,
+  ugyanaz a kapu), és mindet megvárja a határidőig; a `clearPendingPartials` a halasztottakat is eldobja. DB-teszt (`R41 / L3`):
+  kapuhiba → 10 perces újrapróba → az ürítés kiküldi; lassú küldő alatt az ürítés megvárja; véglegesített körre az előrehozott sem küld.
+- **R42 (L4)** ugyanott: a `claimFinalRound` tranzakcióban a jelzősorral együtt a kilét tulajdonos-sorát is rögzíti
+  (`finalOwnerKeyOf`); a duplikátum-vizsgálat a saját sort VAGY a tulajdonos-sort keresi. Teszthorog `setFinalClaimFault` (a jelzősor
+  után, a 202 előtt). DB-teszt (`R42 / L4`): megszakadt első kérés (500) → más kilét `duplicate` → az eredeti ismétlése `queued: true`,
+  két levél „Vendég tanuló” névvel. A régi kóddal piros volt (`duplicate: true`).
+- **L5** kódváltozás nélkül: a 44487292 nem része a főágnak, az előnézeti build más eredetű; a feltétel a tervben (L5 pont) rögzítve.
+- Utána: célzott egységtesztek, `test:learning-db`, az érintett böngészős spec, `gate:stage`.
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

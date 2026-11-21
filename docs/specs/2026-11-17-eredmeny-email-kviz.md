@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 6. gépi kör (804569c1) leletei: R35–R38, L2 követő szelet; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 6. gépi kör (804569c1) leletei: R35–R38, L2 követő szelet; a 7. gépi kör (0ec08148) leletei: R39–R42, L5 feltétellel dokumentálva; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -380,6 +380,30 @@ Gépi vak ellenőrzés, 6. kör (GPT-6.2 Sol, 804569c1, 2026-11-20):
   szélesíti. A javítás a revízió átvezetése a lekérdezéstől (`lessonId` + `version`) a beküldőig és a szerveri összevetés — három kliensréteg
   és a kérésszerződés változása, külön tervvel.
 
+Gépi vak ellenőrzés, 7. kör (GPT-6.2 Sol, 0ec08148, 2026-11-21):
+- **R39 — a kimenő bejegyzés törzse és tokenje egy tokenválaszból (L1).** A végleges beküldés törzse a CSRF-token MEGÉRKEZÉSE után,
+  ugyanabból a tokenválaszból (képesség-jelzés + kilét-címke) áll össze, amelynek tokenjével a kérés ténylegesen megy; a 403 utáni
+  tokenfrissítéskor az eredeti bejegyzés címkéjével újraépül. Ha a token nem kérhető le (átmeneti hiba), a képesség ISMERETLEN: a kérés
+  nem megy el régi alakban, a bejegyzés a sor szokott várakozását kapja. (A valódi, jelzés nélküli régi szervernek továbbra is a régi
+  alak megy, R12; R10 változatlan.)
+- **R40 — a korhatár a tényleges küldés előtt is (L2).** A kimenő bejegyzés lejáratát (R30) a token- / ujjlenyomat-várakozás után,
+  közvetlenül a kérés előtt (a 403 utáni és az R10 ismétlés előtt is) újra ellenőrzi; a közben lejárt bejegyzés küldés nélkül kikerül,
+  elküldöttnek nem jelölődik.
+- **R41 — leállításkor a küldés alatt álló és a halasztott „félbehagyva” levél sem marad ki (L3).** A „félbehagyva” levél éppen futó
+  küldési kísérletei és a halasztott (60 s-os, R19 kapu-) újrapróbái nyilvántartottak; az ürítés (R14) a halasztottat a korábbi időzítő
+  törlésével előrehozza — ugyanazon a kapun és záron (véglegesített / elavult körre így sem küld) —, és mindegyik végét megvárja a
+  határidőig. Az ürítés alatt keletkező újrapróba azonnal fut.
+- **R42 — a végleges jelzősor első rögzítője folytathatja a megszakadt utat (L4).** A tanulófüggetlen végleges jelzősorral (R27) EGY
+  utasításban (tranzakcióban) a beküldő kilétéhez kötött tulajdonos-sor is rögzül (álnevesített körkulcs, üres kézbesítés). Ha a kérés a
+  jelzősor után, a 202 előtt megszakad, az EREDETI beküldő ismétlése továbbmegy (levél megy), más kilét továbbra is duplikátum-választ kap.
+- **L5 (a 44487292-es build közös kulcsú sora) — nincs migráció, feltétellel.** A közös kulcsú (`websuli:result-outbox:v1` tömb) sort
+  csak a PR #510 ágának 44487292-es közbenső buildje írta; ez a commit nem része a főágnak (`git merge-base --is-ancestor 44487292
+  origin/main` → hamis). Az éles kliens a főágból épül; egy PR-előnézeti (Vercel) build más eredetű (origin) címen fut, és a
+  `localStorage` eredetenként külön van — az előnézeten írt sor az éles címen sosem látszik. Feltétel: ha a közbenső buildet valódi
+  tanuló az ÉLES címen használta volna (ez a fenti okból nem lehetséges, hacsak az ág nem került élesbe a főágon kívül), a régi tömb elemei
+  nem mennek ki (ismeretlen korúak, R30 / R31 szerint automatikusan nem is küldhetők biztonságosan) — ez esetben egyszeri, `?` címkés,
+  korhatáros migráció kell külön szeletben. Az előnézeti címen maradt régi tömb (csak fejlesztői / ellenőri próbák) elhagyható.
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -431,6 +455,12 @@ Elfogadás (S1b):
 - E52. A „már kiment” lekérdezés alatt véglegesített körre a pillanatkép nem kap `queued: true` választ (R36).
 - E53. A fejlécek után megakadt választest az időkorláton belül megszakad (R37).
 - E54. A névfeloldás átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy, és az első rögzítő felszabadul (R38).
+- E55. AMIKOR az ürítés tokenkérése átmenetileg bukik, és utána más fiók tokenje jön, A RENDSZER a régi eredményt nem küldi címke
+  nélkül; később az eredeti címkével megy (R39).
+- E56. A token várakozása alatt lejárt kimenő bejegyzés nem megy ki, és kikerül a sorból (R40).
+- E57. Leállításkor a kapuhiba utáni, halasztott és a küldés alatt álló „félbehagyva” levél is kimegy a határidőn belül, ugyanazon a
+  kapun (véglegesített körre nem) (R41).
+- E58. A végleges jelzősor után, a 202 előtt megszakadt kérést az eredeti beküldő megismételve a levél kimegy; más kilét duplikátum (R42).
 - E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
@@ -499,4 +529,8 @@ Elfogadás (S1b):
 - [ ] E52 – véglegesítés a „már kiment” lekérdezés alatt: nincs queued:true (valódi DB)
 - [ ] E53 – megakadt választest: megszakad az időkorláton belül (böngésző)
 - [ ] E54 – névfeloldási hiba: egy újrapróba, az első rögzítő felszabadul (valódi DB)
+- [ ] E55 – tokenhiba után más fiók tokenje: nincs címke nélküli küldés, később az eredeti címkével (böngésző)
+- [ ] E56 – a token alatt lejárt bejegyzés nem megy ki, kikerül (böngésző)
+- [ ] E57 – leállítás: halasztott és futó „félbehagyva” levél is kimegy, a kapun át (valódi DB)
+- [ ] E58 – a 202 előtt megszakadt végleges kérés: az eredeti beküldő pótolja, más kilét duplikátum (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
