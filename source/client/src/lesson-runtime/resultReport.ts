@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { apiRequest, ensureResultApi, resultApiReady, resultSubject, sendKeepalive, warmCsrfToken } from "@/lib/queryClient";
+import { apiRequest, ensureResultApi, resultApiReady, resultSubject, sendKeepalive, warmCsrfToken, type CsrfTokenInfo } from "@/lib/queryClient";
 import { getFingerprint, peekFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
 import { answeredCount, OUTBOX_MAX_ATTEMPTS, outboxRetryDelayMs, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
@@ -50,33 +50,48 @@ export function drainResultOutbox(): void {
     void sendOutboxEntry(entry).finally(() => outboxInFlight.delete(entry.id));
   }
 }
+/** Terv R40 (7. vak kör L2): a bejegyzés a küldés pillanatában (a token megérkezése után) lejárt — küldés nélkül kikerül. */
+class OutboxEntryExpired extends Error {}
 async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
   const { lessonId, kind } = entry;
   try {
-    // Terv R12: az új mezők CSAK a szerver jelzése mellett mennek; jelzés nélkül a régi alak, egyszer, ismétlés nélkül.
-    const capable = await ensureResultApi();
     const fingerprint = entry.body.fingerprint ?? await getFingerprint().catch(() => undefined);
-    // R31 (review 4642333188): a bejegyzés a sorba kerüléskori kilétéhez kötött — a címke a kérésbe kerül, és a szerver eltérésnél a
-    // mostani munkamenet fiókját nem használja. Ha a sorba kerüléskor még nem volt címke: ezen a lapon most pótlódik (a token ugyanannak a
-    // munkamenetnek a része), korábbi lapról ismeretlen (`?`: soha nem egyezik, a kérés fiók nélküliként fut).
-    let subject = entry.subject ?? null;
-    if (subject === null && enqueuedHere.has(entry.id)) {
-      subject = resultSubject();
-      if (subject !== null) outbox.update({ ...entry, subject });
-    }
-    const full = { ...entry.body, ...(fingerprint ? { fingerprint } : {}), ...(capable ? { clientNow: Date.now(), subject: subject ?? "?" } : {}) };
-    const body = capable ? full : (legacyResultBody(full) ?? full);
+    // Terv R39 (7. vak kör L1): a törzs a token MEGÉRKEZÉSE UTÁN, ugyanabból a tokenválaszból áll össze, amelynek tokenjével a kérés megy
+    // (a 403 utáni tokenfrissítéskor is újra, az eredeti bejegyzés címkéjével). Ha a token nem kérhető le (átmeneti hiba), a képesség
+    // ismeretlen: a kérés NEM megy el régi alakban — a hiba a sor szokott várakozását kapja (lent), és később próbálkozik.
+    let sent: { capable: boolean; body: Record<string, unknown> } | null = null;
+    const build = (info: CsrfTokenInfo): Record<string, unknown> => {
+      // R40: a korhatár a tényleges küldés előtt is (a token / ujjlenyomat várakozása alatt lejárt bejegyzés nem megy ki).
+      if (outboxEntryExpired(entry, Date.now())) throw new OutboxEntryExpired();
+      // Terv R12: az új mezők CSAK a szerver jelzése mellett mennek; jelzés nélkül a régi alak, egyszer, ismétlés nélkül.
+      const capable = info.resultApi;
+      // R31 (review 4642333188): a bejegyzés a sorba kerüléskori kilétéhez kötött — a címke a kérésbe kerül, és a szerver eltérésnél a
+      // mostani munkamenet fiókját nem használja. Ha a sorba kerüléskor még nem volt címke: ezen a lapon most pótlódik (a token ugyanannak a
+      // munkamenetnek a része), korábbi lapról ismeretlen (`?`: soha nem egyezik, a kérés fiók nélküliként fut).
+      let subject = entry.subject ?? null;
+      if (subject === null && enqueuedHere.has(entry.id) && info.subject !== null) {
+        subject = info.subject;
+        entry = { ...entry, subject };
+        outbox.update(entry);
+      }
+      const full = { ...entry.body, ...(fingerprint ? { fingerprint } : {}), ...(capable ? { clientNow: Date.now(), subject: subject ?? "?" } : {}) };
+      const body = capable ? full : (legacyResultBody(full) ?? full);
+      sent = { capable, body };
+      return body;
+    };
     // R26 (3. célzott kör L2) + J5: a hálózati / 5xx hibavárakozást CSAK a kimenő sor kezeli (laponként legfeljebb OUTBOX_MAX_ATTEMPTS
     // kísérlet) — az `apiRequest` belső újrapróbája itt 0, különben a kettő szorzódna. R8: a kvíz végleges kérése `keepalive`; a feladatoké
     // nem (a törzsük meghaladhatja a `keepalive` 64 KB-os keretét).
+    const url = `/api/lessons/${lessonId}/results`;
     try {
-      if (kind === "quiz") await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: 0, keepalive: true });
-      else await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: 0 });
+      if (kind === "quiz") await apiRequest("POST", url, undefined, { retries: 0, keepalive: true, prepare: build });
+      else await apiRequest("POST", url, undefined, { retries: 0, prepare: build });
     } catch (error) {
       // R10: ha a jelzést adó új példány mellett egy még régi példány 400-at ad, EGY ismétlés a régi alakkal.
-      const legacy = legacyResultBody(body);
-      if (!capable || (error as { status?: unknown } | null)?.status !== 400 || !legacy) throw error;
-      await apiRequest("POST", `/api/lessons/${lessonId}/results`, legacy, { retries: 0, ...(kind === "quiz" ? { keepalive: true } : {}) });
+      const last = sent as { capable: boolean; body: Record<string, unknown> } | null;
+      if (!last?.capable || (error as { status?: unknown } | null)?.status !== 400 || !legacyResultBody(last.body)) throw error;
+      const legacy = (info: CsrfTokenInfo) => { const body = build(info); return legacyResultBody(body) ?? body; };
+      await apiRequest("POST", url, undefined, { retries: 0, prepare: legacy, ...(kind === "quiz" ? { keepalive: true } : {}) });
     }
     try {
       localStorage.setItem(entry.flag, "1");
@@ -87,8 +102,9 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     outbox.remove(entry.id);
   } catch (error) {
     const e = error as { status?: unknown; retryAfterSec?: unknown } | null;
-    // Érvénytelen kérés: újrapróbának nincs értelme (csendes — a tanuló felülete nem függ a levéltől).
-    if (e?.status === 400) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
+    // Érvénytelen kérés — vagy (R40) a küldés pillanatában lejárt bejegyzés: újrapróbának nincs értelme (csendes — a tanuló felülete nem
+    // függ a levéltől).
+    if (e?.status === 400 || error instanceof OutboxEntryExpired) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
     const attempts = (outboxAttempts.get(entry.id)?.attempts ?? 0) + 1;
     const delay = outboxRetryDelayMs(attempts, typeof e?.retryAfterSec === "number" ? e.retryAfterSec : undefined);
     outboxAttempts.set(entry.id, { attempts, nextAt: Date.now() + delay });

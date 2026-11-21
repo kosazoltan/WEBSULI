@@ -32,7 +32,9 @@ test("J5 — forrásőr: az eredménybeküldés újrapróbál, az apiRequest a b
   const report = source("../client/src/lesson-runtime/resultReport.ts");
   // Spec 2026-11-17-eredmeny-email-kviz R26 (dokumentált spec-változás): az eredménybeküldés újrapróbáját a tartós kimenő sor végzi
   // (laponként legfeljebb OUTBOX_MAX_ATTEMPTS kísérlet, Retry-After / növekvő késleltetés); a beágyazott belső újrapróba 0, hogy ne szorzódjon.
-  assert.match(report, /\/results`, body, \{ retries: 0 \}\)/);
+  // R39 (7. vak kör L1, dokumentált spec-változás): a törzs a token megérkezése után, `prepare`-ben épül — a feladatok kérése változatlanul
+  // belső újrapróba nélküli (0) és nem keepalive.
+  assert.match(report, /apiRequest\("POST", url, undefined, \{ retries: 0, prepare: build \}\)/);
   assert.match(report, /if \(attempts < OUTBOX_MAX_ATTEMPTS\) setTimeout\(drainResultOutbox, delay\);/);
   const client = source("../client/src/lib/queryClient.ts");
   assert.match(client, /isRetryableRequestError\(error\)/);

@@ -31,6 +31,9 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
 /** R37: a CSRF-token lekérésének határideje (a törzs olvasásával együtt). */
 const CSRF_TOKEN_TIMEOUT_MS = 15_000;
 
+/** R39: egy tokenválasz tartalma — a token, a képesség-jelzés (R12) és a kilét-címke (R31). */
+export type CsrfTokenInfo = { token: string; resultApi: boolean; subject: string | null };
+
 // SECURITY: CSRF Token Manager
 // Fetches and caches CSRF token for protecting mutating requests
 class CSRFTokenManager {
@@ -79,6 +82,15 @@ class CSRFTokenManager {
     return data.csrfToken;
   }
   
+  /**
+   * Terv R39 (7. vak kör L1): a token ÉS az ugyanabban a válaszban jött képesség-jelzés / kilét-címke együtt — a hívó a kérés törzsét
+   * ebből építi, így a törzs és a ténylegesen elküldött token sosem két különböző tokenválaszból származik.
+   */
+  async getTokenInfo(): Promise<CsrfTokenInfo> {
+    const token = await this.getToken();
+    return { token, resultApi: this.resultApi, subject: this.subject };
+  }
+
   // Invalidate cached token (e.g., when CSRF error occurs)
   invalidate() {
     this.token = null;
@@ -208,13 +220,22 @@ export async function apiRequest<T = unknown>(
   method: string,
   url: string,
   data?: unknown | undefined,
-  options?: { retries?: number; timeout?: number; keepalive?: boolean }
+  options?: {
+    retries?: number; timeout?: number; keepalive?: boolean;
+    /**
+     * Terv R39 / R40 (7. vak kör L1 / L2): a törzs a CSRF-token MEGÉRKEZÉSE UTÁN, közvetlenül a küldés előtt áll össze — abból a
+     * tokenválaszból, amelynek tokenjével a kérés ténylegesen megy (a 403 utáni frissítésnél is újra). Ha megadott, és a token nem kérhető
+     * le, a kérés NEM megy el (a hiba a hívóhoz kerül: bizonytalan képességnél nincs vak küldés); a függvény dobása is megállítja a kérést.
+     */
+    prepare?: (token: CsrfTokenInfo) => unknown;
+  }
 ): Promise<T> {
   const retries = options?.retries ?? 0; // No automatic retries for write operations (causes duplicates)
   const timeout = options?.timeout ?? 60000; // 60 second default timeout
   // Spec 2026-11-17-eredmeny-email-kviz (R8): `keepalive` — a kérés a lap bezárása után is célba ér (csak kis törzsű írásnál: 64 KB a keret).
   const keepalive = options?.keepalive ? { keepalive: true } : {};
-  
+  const prepare = options?.prepare;
+
   return retryWithBackoff(
     async () => {
       const controller = new AbortController();
@@ -223,25 +244,30 @@ export async function apiRequest<T = unknown>(
       }, timeout);
 
       try {
-        debugLog(`[API REQUEST] ${method} ${url}, size: ${data ? JSON.stringify(data).length : 0} bytes`);
-        
         // SECURITY: Fetch CSRF token for mutating requests (POST/PUT/PATCH/DELETE)
         // Spec 2026-09-30 (U1, §C-V/1): a kliens közli a támogatott pontozó-verziót; a kiszolgáló az újabb leckét 409-cel utasítja el.
-        const headers: Record<string, string> = { "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), ...(data ? { "Content-Type": "application/json" } : {}) };
+        const headers: Record<string, string> = { "X-Websuli-Scoring": String(LESSON_SCORING_VERSION) };
+        // R39: `prepare` mellett a törzs a token mellé épül (lent); egyébként a kapott adat.
+        let payload = data;
         if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
           try {
-            const csrfToken = await csrfTokenManager.getToken();
-            headers['X-CSRF-Token'] = csrfToken;
+            const info = await csrfTokenManager.getTokenInfo();
+            headers['X-CSRF-Token'] = info.token;
+            if (prepare) payload = prepare(info);
           } catch (error) {
+            // R39 / R40: a törzsét a tokenhez kötő kérés token nélkül (vagy ha a törzs nem állhat össze) nem megy el.
+            if (prepare) throw error;
             logger.warn('[CSRF] Failed to fetch CSRF token, continuing without it:', error);
             // Continue anyway - backend will reject if CSRF required
           }
         }
-        
+        if (payload) headers["Content-Type"] = "application/json";
+        debugLog(`[API REQUEST] ${method} ${url}, size: ${payload ? JSON.stringify(payload).length : 0} bytes`);
+
         const res = await fetch(url, {
           method,
           headers,
-          body: data ? JSON.stringify(data) : undefined,
+          body: payload ? JSON.stringify(payload) : undefined,
           credentials: "include",
           signal: controller.signal,
           ...keepalive,
@@ -263,8 +289,10 @@ export async function apiRequest<T = unknown>(
             csrfTokenManager.invalidate();
             
             // Retry with new token (fresh controller in case original timed out)
-            const newCsrfToken = await csrfTokenManager.getToken();
-            headers['X-CSRF-Token'] = newCsrfToken;
+            const fresh = await csrfTokenManager.getTokenInfo();
+            headers['X-CSRF-Token'] = fresh.token;
+            // R39: az új tokenválaszhoz újraépített törzs (más munkamenet / példány más képességet és címkét adhat).
+            if (prepare) payload = prepare(fresh);
             
             const retryController = new AbortController();
             const retryTimeoutId = setTimeout(() => retryController.abort(), timeout);
@@ -273,7 +301,7 @@ export async function apiRequest<T = unknown>(
               const retryRes = await fetch(url, {
                 method,
                 headers,
-                body: data ? JSON.stringify(data) : undefined,
+                body: payload ? JSON.stringify(payload) : undefined,
                 credentials: "include",
                 signal: retryController.signal,
                 ...keepalive,

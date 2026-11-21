@@ -835,3 +835,65 @@ test("R37 / L4: a 202-es fejlécek után megakadó választest az időkorláton 
   await expect.poll(() => page.evaluate(() => (window as unknown as { __stalled: { started: number } }).__stalled.started)).toBe(1);
   await expect.poll(() => page.evaluate(() => (window as unknown as { __stalled: { aborted: number } }).__stalled.aborted), { timeout: 5000, message: "a megakadt törzs olvasását az időkorlát megszakította" }).toBe(1);
 });
+
+/* Gépi vak ellenőrzés, 7. kör (GPT-6.2 Sol, 0ec08148, 2026-11-21), terv R39 / R40. */
+/** A tartós kimenő sorba egy korábbi munkamenetből maradt végleges bejegyzés (egyszer, az első dokumentum indulása előtt). */
+async function seedOutbox(page: Page, entry: { subject: string | null; activityOffsetMs: number }) {
+  await page.addInitScript(seed => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    const id = "lesson-q|quiz|round-seeded";
+    localStorage.setItem(`websuli:result-outbox:v1:${id}`, JSON.stringify({ id, lessonId: "lesson-q", kind: "quiz", body: { kind: "quiz", roundId: "round-seeded", picks: { q1: 0 } },
+      flag: "seed:quiz:sent:round-seeded", partialKey: "seed:quiz:partial:round-seeded", activityAt: Date.now() + seed.activityOffsetMs, subject: seed.subject }));
+  }, entry);
+}
+
+test("R39 / L1: az ürítés első tokenkérése átmenetileg bukik (502), a következő már MÁSIK fiók tokenje → a régi eredmény nem megy címke nélkül (a sor később, az eredeti címkével küldi)", async ({ page }) => {
+  // Hamis óra: a kimenő sor első (30 s-os) várakozását előretekerjük (a valós idő közben normálisan folyik).
+  await page.clock.install();
+  await seedOutbox(page, { subject: "anon", activityOffsetMs: 0 });
+  await mockWith(page);
+  let tokenCalls = 0;
+  await page.route("**/api/csrf-token", async route => {
+    tokenCalls++;
+    if (tokenCalls === 1) { await new Promise(resolve => setTimeout(resolve, 800)); return route.fulfill({ status: 502, body: "Bad Gateway" }); }
+    return route.fulfill({ json: { csrfToken: "test", resultApi: 2, resultSubject: "fiok-b" } });
+  });
+  const finals: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) finals.push(body);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect.poll(() => tokenCalls, { message: "az ürítés tokent kért" }).toBeGreaterThanOrEqual(1);
+  await page.waitForTimeout(2000); // az első (502-es) tokenkérés lezárult
+  expect(finals.map(body => body.subject), "a tokenhiba után nem ment el régi alakban (címke nélkül)").toEqual([]);
+  await page.clock.fastForward(31_000); // a sor szokott várakozása (30 s) letelik
+  await expect.poll(() => finals.length, { timeout: 15_000, message: "a sor a tokenhiba után is kiküldi" }).toBeGreaterThanOrEqual(1);
+  await page.waitForTimeout(1500);
+  expect(finals.map(body => body.subject), "minden kérés az eredeti (sorba kerüléskori) címkét viszi — címke nélküli régi alak nem megy").toEqual(["anon"]);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("websuli:result-outbox:v1:")).length), "elküldve: kikerült a sorból").toBe(0);
+});
+
+test("R40 / L2: a tokenre várás közben lejár a bejegyzés (7 nap) → a lejárt eredmény nem megy ki, és kikerül a sorból", async ({ page }) => {
+  await seedOutbox(page, { subject: "anon", activityOffsetMs: -7 * 86_400_000 + 2500 });
+  await mockWith(page);
+  await page.route("**/api/csrf-token", async route => {
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    try { await route.fulfill({ json: { csrfToken: "test", resultApi: 2, resultSubject: "anon" } }); } catch { /* a lap közben bezárult */ }
+  });
+  const finals: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) finals.push(body);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("websuli:result-outbox:v1:")).length), { timeout: 10_000, message: "a lejárt bejegyzés kikerült" }).toBe(0);
+  await page.waitForTimeout(1000);
+  expect(finals, "a POST pillanatában lejárt bejegyzés nem megy ki").toHaveLength(0);
+  expect(await page.evaluate(() => localStorage.getItem("seed:quiz:sent:round-seeded")), "nem jelölődik elküldöttnek").toBeNull();
+});
