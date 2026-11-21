@@ -1107,7 +1107,7 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
 
-## C-90 — Gépváltás: `core.autocrlf=true` mellett a forrás-szöveget olvasó tesztek sorvég-érzékenyek (2026-11-21)
+## C-91 — Gépváltás: `core.autocrlf=true` mellett a forrás-szöveget olvasó tesztek sorvég-érzékenyek (2026-11-21)
 
 - **Tünet:** az új gépen a `#510` ágán a `gate:stage` bukott (`source/tests/result-outbox.test.ts`): a `readFileSync`-kel beolvasott
   forrásra írt `\n`-es regex nem illeszkedett, mert a munkafa CRLF sorvégű (`git ls-files --eol`: `i/lf w/crlf`). A régi gépen és a
