@@ -9,6 +9,7 @@ import { after, before, describe, it } from "node:test";
 import bcrypt from "bcryptjs";
 import { Client, dbPool, injectSession, startApp } from "./support/authz-db-harness";
 import { getNoFollow, installAdminGoogleStub, playerGoogleLogin } from "./support/player-google-stub";
+import { withDifferentChar } from "./support/tamper";
 
 const { emailHash, playerAuthKey, codeHash, limitHash, deleteLimitHash, linkHash, generateLinkToken, purposeEmailHash, allPurposeEmailHashes, MAX_FAILED_ATTEMPTS_PER_DAY } = await import("../server/player/codes");
 const { createPlayerStore } = await import("../server/player/store");
@@ -38,6 +39,20 @@ async function adminClient(): Promise<Client> {
   assert.equal(r.status, 200, `admin-belépés: ${r.text}`);
   await c.fetchCsrf();
   return c;
+}
+
+/**
+ * Garantáltan ROSSZ belépőkód a címhez: a legkisebb nyolcjegyű, amelynek kódlenyomata nincs a cím kódrekordjai között. A fix
+ * „00000000” 1/10^8 eséllyel épp a frissen kiadott kód lehetett (`generateCode`: `randomInt(0, 10^8)`, balról nullázva) — akkor a
+ * „rossz” próba beléptetett volna (vak ellenőr 1. kör L3; docs/specs/2026-11-20-teszt-hamisitas-utkozes.md).
+ */
+async function wrongLoginCode(email: string): Promise<string> {
+  const k = playerAuthKey();
+  const issued = new Set((await q<{ code_hash: string }>(`SELECT code_hash FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [allPurposeEmailHashes(k, email)])).map((r) => r.code_hash.trim()));
+  for (let n = 0; ; n++) {
+    const code = String(n).padStart(8, "0");
+    if (!issued.has(codeHash(k, emailHash(k, email), code))) return code;
+  }
 }
 
 /** Játékos valódi e-mailes kódbeváltással (friss `at` a munkamenetben). */
@@ -303,7 +318,9 @@ describe("JM7b — tanulói profil összekapcsolása (review #445 K3)", () => {
   it("csak érvényes, aláírt tanulói tokennel ÉS kifejezett megerősítéssel; egy tanuló egy fiókhoz; a válasz tanulói adatot nem ad", async () => {
     await dbPool.query(`INSERT INTO learners (id, name, grade) VALUES ('jm7b-learner-1', 'Teszt Tanuló Anna', 5), ('jm7b-learner-2', 'Teszt Tanuló Béla', 6)`);
     const token = learnerTokenFor("jm7b-learner-1", 1)!;
-    const forged = `${token.slice(0, -4)}AAAA`;
+    // Mindig eltérő aláírás: a kulcs (SESSION_SECRET) futásonként véletlen, a régi `…AAAA` 1/16,8 millió eséllyel azonos volt.
+    const forged = withDifferentChar(token, -1);
+    assert.notEqual(forged, token);
     const otherLearnerWithMySig = token.replace("jm7b-learner-1", "jm7b-learner-2");
     const a = await emailPlayer("link-a@pelda.hu");
     const withToken = async (c: Client, t: string | null, body: unknown) => {
@@ -444,6 +461,16 @@ describe("JM7b — review #449: belépő- és törlési kód cél szerint elkül
       .then(async () => { if (ageMs) await dbPool.query(`UPDATE player_auth_codes SET created_at = now() - ($1::int * interval '1 millisecond') WHERE email_hash = $2`, [ageMs, h]); });
   };
 
+  it("a garantáltan rossz kód: ha épp „00000000” a kiadott, a régi fix rossz kód BELÉPTETNE — a választó ilyenkor másikat ad (L3)", async () => {
+    const email = "rossz-kod-utkozes@pelda.hu";
+    await plant(email, "login", "00000000");
+    assert.equal(await wrongLoginCode(email), "00000001", "a kiadott „00000000” kimarad");
+    const rejected = new Client(app.base);
+    assert.equal((await rejected.request("POST", "/api/player/auth/verify", { kind: "code", email, code: await wrongLoginCode(email) })).status, 400, "a választott kód rossz");
+    const lucky = new Client(app.base);
+    assert.equal((await lucky.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "00000000" })).status, 200, "a régi fix „rossz” kód itt beléptetett volna");
+  });
+
   it("törlési kóddal NEM lehet belépni; belépőkóddal NEM lehet törölni (mindkét keresztirány)", async () => {
     const email = "kereszt@pelda.hu";
     await emailPlayer(email); // fiók
@@ -508,7 +535,7 @@ describe("JM7b — review #449: belépő- és törlési kód cél szerint elkül
     const k = key();
     const owner = await emailPlayer(email);
     const attacker = new Client(app.base);
-    const wrongLogin = async () => assert.equal((await attacker.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "00000000" })).status, 400);
+    const wrongLogin = async () => assert.equal((await attacker.request("POST", "/api/player/auth/verify", { kind: "code", email, code: await wrongLoginCode(email) })).status, 400);
     // Idegen: kódkérés + 5 rossz próba, újabb kódkérés + 5 rossz próba (a valódi végpontokon), majd a keret kimerítése.
     for (let round = 0; round < 2; round++) {
       assert.equal((await attacker.request("POST", "/api/player/auth/start", { email })).status, 202);
