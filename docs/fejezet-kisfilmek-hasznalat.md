@@ -51,6 +51,11 @@ egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a
 5. Kikapcsolási feltétel (PR #418): a bekapcsolás utáni első körben a Render memória- és eseménymérését figyelni kell. Ha a példány
    újraindul, vagy a memória tartósan a 0. pontban jóváhagyott küszöböt (javaslat: 480 MB, az 512 MB-os korlát közele) súrolja, azonnal `LESSON_CLIPS_AUTO=off`, és szólni
    kell. A „memóriaőr miatt megállt” naplósor önmagában nem ok a kikapcsolásra: az a védelem működése.
+6. **Az első éles kör mérése — kötelező (tulajdonosi döntés, 2026-11-21: „Mérés az első éles körben (Javasolt)”).** A kód a már elindult
+   átkódolást memória miatt nem állítja le, ezért az első kör teljes ideje alatt a Render memóriamérését (a példány teljes
+   használata, a gyerekfolyamatokkal együtt) figyelni és a csúcsot rögzíteni kell. Ha a csúcs **450 MB fölé** megy: azonnal
+   `LESSON_CLIPS_AUTO=off`, a mért csúcs és időpont a PR-ba / a kanbanra, és a futás közbeni memóriafigyelő külön PR-ban készül el,
+   mielőtt a gyártás újra bekapcsol. 450 MB alatt a gyártás maradhat, a mért csúcsot akkor is rögzíteni kell.
 
 ## Költség és méret (mérve 2026-11-10, két automatikus fejezeten)
 

@@ -35,6 +35,10 @@ A gyártósor tartalmi lépései, a lejátszó, a séma, a plafonok (napi lecke,
   ffmpeg-gyereket nem tartalmazza). A kihagyásról óránként legfeljebb egy figyelmeztetés kerül a naplóba (M3).
 - **Beakadó átkódolás:** a 90 mp-es időkorlát SIGKILL-lel öli az ffmpeg-et (SIGTERM-et figyelmen kívül hagyó gyerek nem tarthatja
   fel örökre az egyetlen átkódolási sort; review L1). A letöltési hiba külön üzenetet kap, és a hibás válasz törzse lezárul (L3).
+- **Futás közbeni memóriaőr (tulajdonosi döntés, 2026-11-21, űrlapon; 2. vak kör L1):** a választott opció szó szerint: „Mérés az
+  első éles körben (Javasolt)”. Marad a mostani újramérés (a kör elején, fejezetenként, átkódolás előtt); a már elindult ffmpeg-et
+  memória miatt a kód nem állítja le. Az első éles kört a jóváhagyott kézi küszöbbel élőben mérjük; ha a csúcs 450 MB fölé megy,
+  külön PR-ban jön a futás közbeni figyelő.
 - Mérés a javított gyártósorral (valódi szolgáltatók, egy fejezet): a próbafolyamat csúcsmemóriája 144 MB, a fejezet 132 mp alatt kész.
 
 ## 5. Edge case-ek
@@ -57,7 +61,8 @@ mozgókép hibaágai az új felülettel); élő próba a `source/scripts/clip-tr
 ## 8. Kockázat / visszavonás
 
 A tartalék kicsi marad (alap ~210–290 MB + ~50 MB gyártás + 75 MB átkódolás az 512 MB-ból): a bekapcsolás utáni első kört mérni
-kell. Visszavonás: `LESSON_CLIPS_AUTO=off` (azonnal).
+kell. Visszavonás: `LESSON_CLIPS_AUTO=off` (azonnal). Nyitott kockázat (tulajdonosi döntéssel vállalva, 2026-11-21): a már futó
+átkódolás alatt nincs memóriaőr — az első éles kör mérése dönti el, kell-e futás közbeni figyelő (450 MB fölötti csúcsnál igen, külön PR).
 
 ## 9. Végrehajtási utasítás
 
