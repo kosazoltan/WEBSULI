@@ -72,6 +72,11 @@ export type AdventState = {
   doors: AdventDoorView[];
   summary: AdventSummary;
   closing: AdventClosing;
+  /**
+   * Párosított eszközön a nézet egy még NEM mentett átvétel előnézete (a vendégsor még létezik). A kliens a megtekintési útról
+   * (összesítés, végigjátszott kör) a `POST /adopt` kéréssel menti el (PR-C vak L2); a GET mellékhatás nélkül marad.
+   */
+  adoptionPending: boolean;
 };
 
 export type AdventOpenResult = {

@@ -485,9 +485,15 @@ test("két MEGVÁLASZOLT példány ugyanabból a kérdésből (tanuló az A., ve
   const prompts = ids.map((id) => normalizePrompt(findAdventItem(id, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS)!.prompt));
   assert.equal(new Set(prompts).size, prompts.length, "a terv kérdésszövegei egyediek");
 
-  // Korábbi körrel való egyezés: a tanuló 2. körében a játszható helyek nem tartalmazzák az 1. kör kérdéseit.
+  // Korábbi körrel való egyezés: a tanuló 2. körében a játszható helyek nem tartalmazzák az 1. kör MEGMUTATOTT kérdéseit (a próbákat és a
+  // lecserélt próbákat). Spec-változás 2026-11-21 (terv 22.11, PR-C vak L1): a lezárt kör fel nem használt foglalásai (a meg sem nyitott
+  // javító kérdések) nem számítanak korábbi körös kérdésnek — a gyerek sosem látta őket, és a kis készletű évfolyamon a következő kör
+  // bankját fognák el.
   const round2Learner: AdventRow = { ...learnerRow, round: 2, plan: { 1: learnerPlan }, doors: { 1: { [pair.a]: solved(pair.id) } } };
-  const round1Ids = new Set(Object.values(learnerPlan.doors).flat());
+  const round1Ids = new Set([
+    ...Object.values(round2Learner.doors[1]!).flatMap((door) => door.attempts.map((attempt) => attempt.questionId)),
+    ...((learnerPlan as { retired?: string[] }).retired ?? []),
+  ]);
   const leaking: typeof devicePlan = { ...devicePlan, doors: { ...devicePlan.doors, 5: [learnerPlan.doors[7]![0]!, ...devicePlan.doors[5]!.slice(1)] } };
   const device2: AdventRow = { ...deviceRow, plan: { 1: leaking }, doors: { 1: { 3: solved(leaking.doors[3]![0]!) } } };
   const merged2 = mergeAdoption(round2Learner, device2, ctx)!;

@@ -58,7 +58,12 @@ export type AdoptionContext = {
   now: Date;
 };
 
-/** Az évad korábbi köreiben kiosztott azonosítók és normalizált kérdésszövegek (a tervezés és a pótlás kizárólistája). */
+/**
+ * Az évad korábbi köreiben MEGMUTATOTT kérdések azonosítói és normalizált szövegei (a tervezés és a pótlás kizárólistája): a próbák
+ * kérdései és a lecserélt (\`retired\`) tanulói próbák kérdései. A lezárt kör fel nem használt foglalásai (a meg sem nyitott javító
+ * kérdések) NEM számítanak — a gyerek sosem látta őket, és a kis készletű évfolyamon a következő kör bankját fognák (PR-C vak L1).
+ * Lezárt körben minden ablak megoldott vagy végleg hibás, így a megmutatott kérdés = a megválaszolt kérdés.
+ */
 export function usedInEarlierRounds(row: AdventRow, round: number, bank: readonly AdventBankItem[], christmas: readonly ChristmasItem[]) {
   const usedIds = new Set<string>();
   const usedPrompts = new Set<string>();
@@ -67,9 +72,12 @@ export function usedInEarlierRounds(row: AdventRow, round: number, bank: readonl
     const item = findAdventItem(id, bank, christmas);
     if (item) usedPrompts.add(normalizePrompt(item.prompt));
   };
+  for (const [key, doors] of Object.entries(row.doors)) {
+    if (Number(key) >= round) continue;
+    for (const door of Object.values(doors)) for (const attempt of door.attempts) add(attempt.questionId);
+  }
   for (const [key, plan] of Object.entries(row.plan)) {
     if (Number(key) >= round) continue;
-    for (const ids of Object.values(plan.doors)) for (const id of ids) add(id);
     for (const id of (plan as PlanMeta).retired ?? []) add(id);
   }
   return { usedIds, usedPrompts };
@@ -149,8 +157,16 @@ export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx:
     // A tanuló itteni (most lecserélt) próbáinak kérdései többé nem játszhatók (PR-B 4. kör L3).
     if (mine?.attempts.length) plan.retired = [...new Set([...(plan.retired ?? []), ...mine.attempts.map((a) => a.questionId)])];
     doors[day] = { attempts: theirs!.attempts.map((attempt) => ({ ...attempt })) };
-    if (devicePlan?.doors[day]) plan.doors[day] = [...devicePlan.doors[day]!];
-    if (devicePlan?.subjects?.[day]) plan.subjects[day] = devicePlan.subjects[day]!;
+    if ((planGradeOf(devicePlan) ?? device.grade) === grade) {
+      if (devicePlan?.doors[day]) plan.doors[day] = [...devicePlan.doors[day]!];
+      if (devicePlan?.subjects?.[day]) plan.subjects[day] = devicePlan.subjects[day]!;
+    } else {
+      // Más évfolyamú vendég (terv 22.1, PR-C vak L5): csak az EREDMÉNY kerül át — a terv történeti helyei a próbák kérdései (így a
+      // kizárásukat maguk a próbák adják), a többi hely és az ablak tárgya a tanuló saját (az ő évfolyamára készült) tervéé marad.
+      const historical = doors[day]!.attempts.map((attempt) => attempt.questionId);
+      plan.doors[day] = [...historical, ...(plan.doors[day] ?? []).slice(historical.length)];
+    }
+    // A sorrend magja mindig a vendégé: a tárolt választás és a helyes válasz jelölése így változatlan.
     plan.doorSeeds[day] = orderKeyFor(devicePlan, day, ctx.deviceKey);
   }
   // Ütközésmentesítés (L3): a két terv egyesítése után ugyanaz a kérdés ne kerülhessen két ablakba; a megválaszolt kérdések védettek.
