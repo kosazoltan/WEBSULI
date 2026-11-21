@@ -44,8 +44,11 @@ export type AdventRouterDeps = {
   invalidClock?: { status: number; message: string };
   /** A kéréskorlátok (alap: `ADVENT_LIMITS`); tesztben kisebb értékkel adható meg. */
   limits?: AdventLimits;
-  /** Minden rögzített válasz után (nem várjuk meg): az S5 innen dönt a szülői levélről. */
-  onAnswer?: (event: { row: AdventRow; subject: AdventResolvedSubject; summary: AdventSummary; maxRounds: number }) => void;
+  /**
+   * Minden rögzített válasz és minden átvétel után (nem várjuk meg): az S5 innen dönt a szülői levélről (terv 18.1). Az előnézeti
+   * routerben nincs bekötve.
+   */
+  onResult?: (event: { row: AdventRow; subject: AdventResolvedSubject; summary: AdventSummary; maxRounds: number; phase: AdventNow["phase"] }) => void;
 };
 
 class AdventHttpError extends Error {
@@ -500,8 +503,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
         result: { answer: answerResult(item, attempt, orderKey, locals.at.season, view.doors[day - 1]!, view), recorded: true, maxRounds },
       };
     }, adopt);
-    if (result.recorded && deps.onAnswer) {
-      try { deps.onAnswer({ row, subject, summary: result.answer.summary, maxRounds: result.maxRounds }); }
+    if (result.recorded && deps.onResult) {
+      try { deps.onResult({ row, subject, summary: result.answer.summary, maxRounds: result.maxRounds, phase: locals.at.phase }); }
       catch (error) { logger.error(`[ADVENT] válasz utáni teendő hiba: ${errorClass(error)}`); }
     }
     // A válasz az írás UTÁNI szerververziót viszi (a mentett sor módosítási ideje — L1).
@@ -548,6 +551,13 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       return;
     }
     const { row } = await store.mutate(locals.at.season, subject, (current) => { sound(current); return { patch: null, result: null }; }, adopt);
+    // Az átvett (kész) vendégeredmény is lehet végleges (18.1): a szülői levél döntése ugyanaz, mint válasz után.
+    if (deps.onResult) {
+      const grade = effectiveGrade(subject, row) ?? 5;
+      const { maxRepairs, maxRounds } = limitsForGrade(grade);
+      try { deps.onResult({ row, subject, summary: adventSummary(row.doors[row.round] ?? {}, maxRepairs), maxRounds, phase: locals.at.phase }); }
+      catch (error) { logger.error(`[ADVENT] átvétel utáni teendő hiba: ${errorClass(error)}`); }
+    }
     res.json(stateOf(locals, row));
   }));
 

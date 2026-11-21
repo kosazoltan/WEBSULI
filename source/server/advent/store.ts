@@ -7,6 +7,7 @@
 import type { Pool, PoolClient } from "pg";
 import type { AdventPlan } from "../../shared/advent/assignment";
 import type { DoorRecord } from "../../shared/advent/rules";
+import { firstNameOf } from "../../shared/daily-reminder";
 
 export type AdventSubjectKind = "learner" | "player" | "device" | "preview";
 export type AdventSubject = { kind: AdventSubjectKind; id: string };
@@ -175,6 +176,21 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
     /** A sikertelen küldés foglalásának felszabadítása (a következő hívás pótolhatja). */
     async releaseMail(id: string, key: string): Promise<void> {
       await pool.query(`UPDATE advent_progress SET mailed_to = array_remove(mailed_to, $2) WHERE id = $1`, [id, key]);
+    },
+
+    /**
+     * Az évad megkezdett, MÉG LEVÉL NÉLKÜLI tanulói sorai (egyetlen `final:` foglalásuk sincs) a tanuló keresztnevével — az évadzáró
+     * szülői levélhez (terv 18.1 3. pont). Írás nélkül.
+     */
+    async unmailedLearnerRows(season: number): Promise<{ row: AdventRow; firstName: string | null }[]> {
+      const found = await pool.query<DbRow & { learner_name: string | null }>(
+        `SELECT ${COLUMNS.split(", ").map((c) => `p.${c}`).join(", ")}, l.name AS learner_name
+           FROM advent_progress p LEFT JOIN learners l ON l.id = p.learner_id
+          WHERE p.season = $1 AND p.subject_kind = 'learner'
+            AND NOT EXISTS (SELECT 1 FROM unnest(p.mailed_to) AS k WHERE k LIKE 'final:%')`,
+        [season],
+      );
+      return found.rows.map((r) => ({ row: toRow(r), firstName: r.learner_name ? firstNameOf(r.learner_name) : null }));
     },
 
     /** Az admin saját előnézeti sorainak törlése (minden évad; S6 „Előnézet törlése”) — a törölt sorok száma. */

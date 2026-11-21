@@ -18,6 +18,9 @@ import { createPlayerStore } from "./player/store";
 import { banMaintenanceEnabled } from "./player/account-store";
 import { startAdventSweeper } from "./advent/sweeper";
 import { createAdventStore } from "./advent/store";
+import { adventEnabled } from "./advent/clock";
+import { closeAdventSeason } from "./advent/result-email";
+import { adventNow } from "../shared/advent/calendar";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
@@ -647,7 +650,11 @@ app.use((req, res, next) => {
       // Adventi naptár (terv E23, 16.6; végrehajtás S6): a régi névtelen / előnézeti sorok és a korábbi évadok értesítő-foglalásainak
       // takarítása induláskor és 24 óránként — a kapcsolótól függetlenül, E2E-ben nem.
       const adventStore = createAdventStore(dbPool);
-      startAdventSweeper({ sweep: (now, season) => adventStore.sweep(now, season) });
+      startAdventSweeper({
+        sweep: (now, season) => adventStore.sweep(now, season),
+        // S5 (terv 18.1 3.): lezárt évadban a levél nélküli, megkezdett tanulói sorokra egyszer — csak bekapcsolt naptárnál.
+        closeSeason: async (now) => (adventEnabled() ? closeAdventSeason(adventStore, adventNow(now)) : 0),
+      });
       if (banMaintenanceEnabled() && !process.env.PLAYER_BAN_KEY) {
         logger.info("[PLAYER] PLAYER_BAN_KEY nincs beállítva — a törölt fiókok tiltás-ujjlenyomata a SESSION_SECRET-ből levezetett kulccsal készül (rotációja ezeket érvényteleníti)");
       }

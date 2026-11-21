@@ -55,7 +55,7 @@ test("S6: bekötés — az előnézet az admin-őr mögött, a kapcsoló nélkü
   assert.doesNotMatch(preview, /onAnswer/, "az előnézetről levél nem megy");
   const index = read("server/index.ts");
   const block = index.slice(index.indexOf("if (!e2e) {"), index.indexOf("// Express error handler"));
-  assert.match(block, /startAdventSweeper\(\{ sweep: \(now, season\) => adventStore\.sweep\(now, season\)/, "a takarító csak az E2E-n kívüli ágban indul");
+  assert.match(block, /startAdventSweeper\(\{\s+sweep: \(now, season\) => adventStore\.sweep\(now, season\)/, "a takarító csak az E2E-n kívüli ágban indul");
   // A kliens előnézeti útja: 401 / 403 → normál naptár; a sáv és a törlés gombja.
   const hook = read("client/src/advent/useAdvent.ts");
   assert.match(hook, /if \(refusedPreview\(res\.status\)\) \{ refuseAdventPreview\(\); return fetchAdventState\(createDevice, signal\); \}/);
