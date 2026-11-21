@@ -1150,4 +1150,3 @@ Forrás: `feat/advent-c-felulet-es-elesites`, a PR-C vak körének javítása.
   módosítja.
 
 Forrás: `feat/advent-s5-s6-elesites`. Rokon: C-61, C-90.
-

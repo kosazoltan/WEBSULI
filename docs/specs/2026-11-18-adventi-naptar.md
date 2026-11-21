@@ -1237,4 +1237,3 @@ Az L1 (friss évfolyam az átvételnél) a fenti 1. pont; a 2/3 PR jelentéséne
     Redeploy — a pontos lépések: a végrehajtási utasítás „Bekapcsolás és kikapcsolás lépésről lépésre” része (0. lépés: előnézeti próba;
     az oldal a Vercel-buildhez kötött, ezért a próbához a Vercel-kapcsoló kell előbb — november 24. előtt ez nyilvánosan láthatatlan).
     Határidő: a naptár legkésőbb 2026-11-30-ig bekapcsolható legyen.
-
