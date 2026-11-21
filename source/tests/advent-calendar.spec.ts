@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { ADVENT_GIFT_MESSAGE } from "../shared/advent/rules";
-import { chooseGrade, clearAdventTime, contrastOf, pickOption, playDoor, proxyHeaders, seedProgress, setAdventTime, settle, shot, tapDoor } from "./support/advent-e2e";
+import { chooseGrade, clearAdventTime, contrastOf, pickOption, playDoor, proxyHeaders, seedProgress, setAdventServerTime, setAdventTime, settle, shot, tapDoor } from "./support/advent-e2e";
 import { MOBILE_VIEWPORTS, emulateSafeArea, hideAndShowPage, measureOverflow, overlappingTargets, safeAreaViolations, smallFonts, smallTargets } from "./support/game-mobile-quality";
 
 /**
@@ -324,6 +324,61 @@ test("végleg sikertelen kör → „Új naptárat kérek” → új kör nyitha
   await page.getByTestId("advent-new-round").tap();
   await expect(page.getByTestId("advent-progress")).toContainText("2. kör");
   await expect(page.getByTestId("advent-door-1")).toHaveAttribute("data-state", "open");
+});
+
+test("PR-C vak L4: éjfél előtti válasz után a nyitva hagyott lapon az új ablak éjfélkor újratöltés nélkül nyílik (A13)", async ({ page }) => {
+  // A böngésző órája léptethető (időzítőkkel együtt); a szerver órája a fejléc. Budapesten december 4., 23:59:00.
+  const T0 = "2026-12-04T22:59:00Z";
+  await page.clock.install({ time: new Date(T0) });
+  await setAdventServerTime(page, T0);
+  await page.goto("/adventi-naptar");
+  await chooseGrade(page, 5);
+  await expect(page.getByTestId("advent-door-5")).toHaveAttribute("data-state", "locked");
+  // 55 másodperc telik el a lapon, utána a gyerek válaszol (a válasz helyi állapotírása nem tolhatja el az éjféli frissítést).
+  await page.clock.fastForward("00:55");
+  await playDoor(page, 4, true);
+  await expect(page.getByTestId("advent-door-4")).toHaveAttribute("data-state", "solved");
+  // Éjfél után a szerver már december 5-öt mond; a lap a GET-ből számolt határidőnél magától frissít.
+  await setAdventServerTime(page, "2026-12-04T23:00:02Z");
+  await page.clock.fastForward("00:08");
+  await expect(page.getByTestId("advent-door-5")).toHaveAttribute("data-state", "open", { timeout: 5000 });
+});
+
+test("PR-C vak L7: sérült mentés az állapot-olvasásnál célzott, gondozóhoz irányító üzenetet ad — nem hálózati „próbáld újra” sávot", async ({ page }) => {
+  await setAdventTime(page, DEC5);
+  let reads = 0;
+  await page.route("**/api/advent/state", (route) => { reads++; return route.fulfill({ status: 409, json: { message: "A naptárad mentésében hibát találtunk.", corrupt: true } }); });
+  await page.goto("/adventi-naptar");
+  await expect(page.getByTestId("advent-corrupt")).toBeVisible();
+  await expect(page.getByTestId("advent-corrupt")).toContainText("kérj segítséget egy felnőttől");
+  await expect(page.getByTestId("advent-load-error")).toHaveCount(0);
+  await expect(page.getByTestId("advent-error-retry")).toHaveCount(0);
+  await expect(page.getByTestId("advent-back-home")).toBeVisible();
+  expect(reads, "sérült mentésnél nincs automatikus újrapróba").toBe(1);
+  await shot(page, "pr-c-l7-serult-mentes");
+});
+
+test("PR-C vak L8: a karácsonyfa csillaga a 24. ablak megoldásakor gyullad fel — két korábbi hibás ablak mellett is, ajándéküzenet nélkül (A43)", async ({ page }) => {
+  await openCalendar(page, DEC24);
+  await seedProgress(page, DEC24, { grade: 5, days: range(1, 23), wrong: [7, 12] });
+  await page.reload();
+  const star = page.getByTestId("advent-tree-star");
+  await expect(star).toHaveAttribute("data-lit", "false");
+  await tapDoor(page, 24);
+  await pickOption(page, true);
+  await expect(star).toHaveAttribute("data-lit", "true");
+  await expect(star).toHaveAttribute("data-flash", "true");
+  await expect(star).not.toHaveAttribute("data-flash", "true", { timeout: 3000 });
+  await page.getByTestId("advent-next").tap();
+  await expect(page.getByTestId("advent-gift-message")).toHaveCount(0);
+  await expect(page.getByTestId("advent-summary")).toBeVisible();
+  // Csökkentett mozgásnál animáció nélkül világít (újratöltés után is a mentett állapotból).
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.reload();
+  await expect(star).toHaveAttribute("data-lit", "true");
+  const look = await star.evaluate((el) => { const cs = getComputedStyle(el); return { animation: cs.animationName, shadow: cs.textShadow }; });
+  expect(look.animation).toBe("none");
+  expect(look.shadow).not.toBe("none");
 });
 
 test("szezon: november 29. „Hamarosan”; január 7. lezárt; tesztidő nélkül a naptár nem érhető el (A14, A15, A51)", async ({ page }) => {

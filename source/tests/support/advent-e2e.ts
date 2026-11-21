@@ -36,6 +36,15 @@ export function proxyHeaders(original: Record<string, string>): Record<string, s
   return headers;
 }
 
+/**
+ * Csak a SZERVER tesztideje (a böngésző órájához nem nyúl): a Playwright saját, léptethető órájával (`page.clock.install`) együtt
+ * használható, ha a teszt a böngésző időzítőit is lépteti (PR-C vak L4: éjféli nyitás újratöltés nélkül).
+ */
+export async function setAdventServerTime(page: Page, iso: string): Promise<void> {
+  await proxyApi(page.context());
+  await page.context().setExtraHTTPHeaders({ "X-Advent-Test-Now": iso });
+}
+
 /** A szerver és a böngésző órája ugyanarra az időpontra (ISO, UTC). */
 export async function setAdventTime(page: Page, iso: string): Promise<void> {
   await proxyApi(page.context());

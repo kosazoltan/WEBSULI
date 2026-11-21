@@ -190,6 +190,10 @@
 /* A záró kép a doboz magasságához igazodik és megtartja az arányát (nem nyomódik össze alacsony nézetben sem). */
 .advent-summary__art { align-self: center; width: auto; max-width: 100%; height: clamp(84px, 30vh, 240px); object-fit: contain; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #fff3c4 0%, var(--advent-gold) 40%, var(--advent-night-2) 100%); }
 .advent-gift { margin: 0; font-size: 22px; line-height: 1.35; font-weight: 800; color: var(--advent-gold-2); text-align: center; animation: advent-star 1.2s ease-out 1; }
+/* A karácsonyfa csillaga (A43, PR-C vak L8): a 24. ablak megoldásakor gyullad fel, egyszeri 1,2 s-os felfényléssel. */
+.advent-tree-star { display: inline-block; font-size: 0.9em; line-height: 1; color: rgba(255, 255, 255, 0.35); }
+.advent-tree-star[data-lit="true"] { color: var(--advent-gold-2); text-shadow: 0 0 6px rgba(255, 214, 102, 0.9), 0 0 14px rgba(255, 196, 61, 0.6); }
+.advent-tree-star[data-flash="true"] { animation: advent-star 1.2s ease-out 1; }
 @keyframes advent-star { 0% { opacity: 0.2; transform: scale(0.96); } 60% { opacity: 1; transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }
 .advent-encourage { margin: 0; font-size: 18px; line-height: 1.45; font-weight: 700; }
 .advent-summary__stats { margin: 0; padding: 0; list-style: none; font-size: 15px; line-height: 1.6; }
@@ -212,7 +216,7 @@
 @keyframes advent-fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(var(--advent-drift, 0px), 105vh, 0); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .advent-door[data-state="solved"], .advent-gift, .advent-dialog, .advent-snow__flake, .advent-door__spinner { animation: none; }
+  .advent-door[data-state="solved"], .advent-gift, .advent-dialog, .advent-snow__flake, .advent-door__spinner, .advent-tree-star { animation: none; }
 }
 
 /* Főoldali kártya (terv 14.): teljes szélesség, alacsony; a doboz mérete rögzített, hogy a lista ne ugorjon. */

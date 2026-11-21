@@ -12,6 +12,14 @@ export const LEARNER_TOKEN_KEY = "websuli.learnerToken";
  * ahelyett hogy csendben névtelenként folytatná. Új, érvényes link eltárolása törli.
  */
 export const LEARNER_TOKEN_REJECTED_KEY = "websuli.learnerTokenRejected";
+/**
+ * Saját lapon belüli jelzés: a tanulói token eltárolódott vagy törlődött (a másik lap a `storage` eseményből tudja). Az adventi naptár
+ * ebből vált alanyt, hogy a korábbi tanuló állapota ne látszódjon (PR-C vak L3). Az esemény nem visz adatot (tokent sem).
+ */
+export const LEARNER_TOKEN_CHANGED_EVENT = "websuli:learner-token-changed";
+function announceLearnerTokenChange(): void {
+  try { window.dispatchEvent(new Event(LEARNER_TOKEN_CHANGED_EVENT)); } catch { /* nincs ablak (szerveroldal / teszt) */ }
+}
 const TOKEN_SHAPE = /^[A-Za-z0-9-]{8,64}\.[1-9][0-9]{0,8}\.[A-Za-z0-9_-]{22}$/;
 
 /** Tiszta: a `t` paraméter (ha tokenszerű) és a nélküle maradó URL (a többi paraméter és a hash változatlan). */
@@ -38,6 +46,7 @@ export function clearLearnerToken(): void {
   } catch {
     // nincs tárhely: nincs mit törölni
   }
+  announceLearnerTokenChange();
 }
 
 /** Induláskor: a link tokenje eltárolódik, és a címsorból (előzményből) eltűnik. */
@@ -53,6 +62,7 @@ export function captureLearnerTokenFromUrl(): void {
     if (taken.token) {
       window.localStorage.setItem(LEARNER_TOKEN_KEY, taken.token);
       window.sessionStorage.removeItem(LEARNER_TOKEN_REJECTED_KEY);
+      announceLearnerTokenChange();
     }
   } catch {
     // privát mód / tele tárhely: a párosítás nem marad meg — a tanuló névtelen

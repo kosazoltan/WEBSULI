@@ -3,15 +3,27 @@
  * Az állapot a SZERVERTŐL jön (a kliens órája nem dönt). A tanulói token és az eszközazonosító olvasásnál fejlécben, írásnál a
  * kérés törzsében megy — URL-be soha. Az írás a közös `apiRequest`-en át megy (CSRF-token).
  */
-import { useEffect } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { LEARNER_TOKEN_REJECTED_KEY, clearLearnerToken, getLearnerToken } from "@/lib/learnerProfile";
+import { LEARNER_TOKEN_CHANGED_EVENT, LEARNER_TOKEN_KEY, LEARNER_TOKEN_REJECTED_KEY, clearLearnerToken, getLearnerToken } from "@/lib/learnerProfile";
 import type { AdventAnswerResult, AdventOpenResult, AdventState } from "@shared/advent/contract";
 
 export const ADVENT_DEVICE_KEY = "websuli.advent.device";
-import { ADVENT_STATE_KEY, refreshDelayMs, statusFromResponse } from "@/advent/sync";
+import {
+  ADVENT_STATE_KEY, adventStateError, adventStateKey, adventSubjectGeneration, nextRefreshAnchor, refreshDelayMs, statusFromResponse,
+  subscribeAdventSubject, watchAdventSubject, type RefreshAnchor,
+} from "@/advent/sync";
 export { ADVENT_STATE_KEY };
+
+// A tanulói token változása (másik lap, elutasítás, „Folytatom vendégként”, új link) új alany-generáció — akkor is, ha épp nincs
+// adventi nézet a lapon (PR-C vak L3). Egyszer, a modul betöltésekor.
+if (typeof window !== "undefined") watchAdventSubject(window, LEARNER_TOKEN_KEY, LEARNER_TOKEN_CHANGED_EVENT);
+
+/** Az aktuális alany-generáció, reaktívan (változáskor a komponens újrarajzol, a lekérdezés új kulcsra vált). */
+export function useAdventSubjectGeneration(): number {
+  return useSyncExternalStore(subscribeAdventSubject, adventSubjectGeneration, adventSubjectGeneration);
+}
 export const ADVENT_STATUS_KEY = ["advent-status"] as const;
 
 let memoryDevice: string | null = null;
@@ -81,8 +93,9 @@ export async function fetchAdventState(createDevice = true, signal?: AbortSignal
   if (learner) headers["X-Learner-Token"] = learner;
   const res = await fetch("/api/advent/state", { credentials: "same-origin", headers, signal });
   if (res.status === 404) return null;
-  // A státuszkód a hibán marad (429: betelt olvasási keret) — a felület megtartott állapot mellett csak sávot mutat.
-  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+  // A státuszkód és a gépi jelző a hibán marad (429: betelt olvasási keret → csak sáv; 409 corrupt → célzott, gondozóhoz irányító
+  // üzenet — PR-C vak L7).
+  if (!res.ok) throw await adventStateError(res);
   return (await res.json()) as AdventState;
 }
 
@@ -93,30 +106,37 @@ export const adventApi = {
     // Az újraküldés biztonságos: ugyanarra a kérdésre a szerver a tárolt eredményt adja.
     apiRequest<AdventAnswerResult>("POST", `/api/advent/doors/${day}/answer`, { ...identity(), questionId, pick }, { retries: 1, timeout: ADVENT_TIMEOUT_MS }),
   round: () => apiRequest<AdventState>("POST", "/api/advent/round", identity(), { timeout: ADVENT_TIMEOUT_MS }),
+  /** A függő (előnézetként mutatott) átvétel kifejezett mentése a megtekintési útról — idempotens (PR-C vak L2). */
+  adopt: () => apiRequest<AdventState>("POST", "/api/advent/adopt", identity(), { timeout: ADVENT_TIMEOUT_MS }),
 };
 
 /** Az állapot lekérdezése: frissül fókuszra, és magától a következő ablak nyitásának pillanatában. */
 export function useAdventState(enabled = true, createDevice = true) {
   const queryClient = useQueryClient();
+  const generation = useAdventSubjectGeneration();
   const query = useQuery<AdventState | null>({
-    queryKey: ADVENT_STATE_KEY,
+    queryKey: adventStateKey(generation),
     queryFn: ({ signal }) => fetchAdventState(createDevice, signal),
     enabled,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
-    // Betelt olvasási keretnél (429) nincs azonnali újrapróba — az csak tovább fogyasztaná a keretet.
-    retry: (failures, error) => failures < 1 && (error as { status?: unknown } | null)?.status !== 429,
+    // Betelt olvasási keretnél (429) nincs azonnali újrapróba — az csak tovább fogyasztaná a keretet; sérült mentésnél (409 corrupt)
+    // sem, mert ugyanarra a sorra ugyanaz jönne (PR-C vak L7).
+    retry: (failures, error) => failures < 1 && (error as { status?: unknown } | null)?.status !== 429 && (error as { corrupt?: unknown } | null)?.corrupt !== true,
   });
-  // A következő nyitás frissítése a szerver által adott várakozásból, a válasz érkezésétől (élesítés előtti L4): eltérő eszközórával is.
+  // A következő nyitás frissítése a szerver által adott várakozásból, a MINTA érkezésétől (élesítés előtti L4): eltérő eszközórával is.
+  // A horgony csak új szervermintánál mozdul — a válasz helyi állapotírása nem tolja el az éjféli nyitást (PR-C vak L4).
   const nextOpensInMs = query.data?.nextOpensInMs ?? null;
-  const receivedAt = query.dataUpdatedAt;
+  const anchorRef = useRef<RefreshAnchor | null>(null);
+  anchorRef.current = nextRefreshAnchor(anchorRef.current, nextOpensInMs, query.dataUpdatedAt);
+  const { wait, at } = anchorRef.current;
   useEffect(() => {
-    const delay = refreshDelayMs({ nextOpensInMs }, receivedAt, Date.now());
+    const delay = refreshDelayMs({ nextOpensInMs: wait }, at, Date.now());
     if (delay === null) return;
     const timer = window.setTimeout(() => { void queryClient.invalidateQueries({ queryKey: ADVENT_STATE_KEY }); }, delay);
     return () => window.clearTimeout(timer);
-  }, [nextOpensInMs, receivedAt, queryClient]);
-  return query;
+  }, [wait, at, queryClient]);
+  return { ...query, generation };
 }
 
 // Ugyanaz a jelző, amelyet az alkalmazás profil-lekérdezése állít be, ha a szerver elutasítja a tokent (és törli azt).
