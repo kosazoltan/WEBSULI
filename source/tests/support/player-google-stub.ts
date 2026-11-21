@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import passport from "passport";
 import type { Client } from "./authz-db-harness";
+import { withDifferentChar } from "./tamper";
 
 export type FakeGoogleProfile = { id: string; emails?: { value: string; verified?: boolean | string }[] };
 
@@ -62,7 +63,8 @@ export async function playerGoogleLogin(client: Client, profile: FakeGoogleProfi
     assert.equal(url.searchParams.get("scope"), "email", "csak e-mail hatókör (név / kép nem kell)");
   }
   if (opts.skipCallback || !state) return { start, state, callback: null, code };
-  const sent = opts.tamperState ? `${state.slice(0, -2)}xx` : state;
+  // Mindig eltérő (az utolsó karakter cseréje; az alak `p.` + 32 karakter marad) — a régi `…xx` 1/4096 eséllyel azonos volt.
+  const sent = opts.tamperState ? withDifferentChar(state, -1) : state;
   const callback = await rawGet(client, `/auth/google/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(sent)}`);
   return { start, state, callback, code };
 }

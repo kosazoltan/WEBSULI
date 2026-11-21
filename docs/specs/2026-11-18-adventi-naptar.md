@@ -860,11 +860,13 @@ Az A15 és az A28 a kártyára a fentiek szerint értendő (főoldali kártya; M
 
 ### 16.1 K1 — korlátok alanyonként (S2b; felülírja az R8 „60 kérés / 15 perc / IP” szabályát)
 
-- Írási korlát ALANYONKÉNT (a feloldott `subject_kind:subject_id` kulcsra): 200 kérés / 15 perc. A szabályos legrosszabb eset
+- Írási korlát ALANYONKÉNT (a feloldott `subject_kind:subject_id` kulcsra): **290** kérés / 15 perc (két teljes kör) (FELÜLÍRVA 2026-11-18, orkesztrátori döntés a vak ellenőr K1 / K2 lelete után — 21. szakasz.) Eredetileg: 200 kérés / 15 perc. A szabályos legrosszabb eset
   24 ablak × 3 kérdés × 2 kérés (megnyitás + válasz) = 144 írás — ennek korlát nélkül át kell mennie.
-- IP-korlát csak lazán, visszaélés ellen: **1500** írás / 15 perc / IP (több osztály egy iskolai NAT mögött belefér).
+- IP-korlát: **14 160** érvényes, sikeres írás / 15 perc / IP (FELÜLÍRVA 2026-11-18, orkesztrátori döntés a vak ellenőr K1 / K2 lelete után — 21. szakasz.) Korábban:
+  **1500** írás / 15 perc / IP (több osztály egy iskolai NAT mögött belefér).
   (FELÜLÍRVA 2026-11-18, tulajdonosi döntés — „Emeljük iskolai méretre”, 19. szakasz; az eredeti érték 600 volt.)
-- Sor-LÉTREHOZÁSRA külön, szűk korlát (ez védi a Neon-keretet): **90** új `device` sor / óra / IP.
+- Sor-LÉTREHOZÁSRA külön korlát (ez védi a Neon-keretet): **240** új `device` sor / óra / IP és **3** / óra / munkamenet (FELÜLÍRVA 2026-11-18, orkesztrátori döntés a vak ellenőr K1 / K2 lelete után — 21. szakasz.)
+  Korábban: **90** új `device` sor / óra / IP.
   (FELÜLÍRVA 2026-11-18, tulajdonosi döntés, 19. szakasz; az eredeti érték 30 volt.) A keretből a létrehozás ELŐTT hely foglalódik,
   és visszajár, ha a sor nem jött létre — párhuzamos kérésekkel sem léphető túl (S2b 2. visszanézés, U1).
 - Integrációs teszt: egy alany a legrosszabb esetet játssza végig — 24 ablak, mindegyiken 3 kérdés, megnyitás + válasz = 144 írás
@@ -925,9 +927,11 @@ A karácsonyi készlet minimuma az 1–2. évfolyamra ezért **144** érvényes 
 
 ### 16.7 A3 — a „baráti” védelem őszintén
 
-A szerveroldali pontozás a naptár ÁLLAPOTÁT védi (nem írható át a böngészőben), de a bank-ablakok helyes válaszát NEM rejti el: a
-kliens megkapja a kérdés azonosítóját, a közös évfolyam-bank pedig a helyes válasszal együtt a nyilvános kliens-csomag része. Egy
-ügyes gyerek kikeresheti. A karácsonyi készlet csak a szerveren van. A szülői levél tehát azt igazolja, hogy a naptár ezen a
+A szerveroldali pontozás a naptár ÁLLAPOTÁT védi (nem írható át a böngészőben), de a helyes választ NEM rejti el: a kliens megkapja
+a kérdés azonosítóját, a közös évfolyam-bank a helyes válasszal együtt a nyilvános kliens-csomag része, a válaszsorrend pedig a
+nyilvános kódból kiszámítható. Egy ügyes gyerek kikeresheti. **JAVÍTVA 2026-11-18 (vak ellenőr k5):** a karácsonyi készlet sem titkos — a
+repó nyilvános, a készlet a `shared/advent/christmasBank/` alatt a helyes válaszokkal együtt olvasható (a kliens-csomagba nem kerül
+be, de ez nem védelem). Az eredeti mondat („A karácsonyi készlet csak a szerveren van.”) nem igaz. A szülői levél tehát azt igazolja, hogy a naptár ezen a
 szerveren végig lett játszva — azt nem, hogy segítség nélkül. Ez a (d) D1 „baráti” szint; erre erősebb állítást nem építünk.
 
 ### 16.8 Séma-kiegészítés (S2a)
@@ -945,8 +949,9 @@ leírásban indokolva); (3) S3c-0; (4) S1b. Mindegyik külön ág a közös ágr
 <!-- acceptance-checklist -->
 
 - [ ] A49 WHEN egy alany 15 percen belül mind a 24 ablak mindhárom kérdését megnyitja és megválaszolja (144 írás) THEN the system SHALL
-  egyetlen kérést sem elutasítani korlát miatt; WHEN egy IP-ről egy órán belül **90-nél** több új névtelen sor jönne létre THEN the
-  system SHALL a továbbiakat 429-cel elutasítani — párhuzamos kéréseknél is. (FELÜLÍRVA 2026-11-18, tulajdonosi döntés, 19. szakasz:
+  egyetlen kérést sem elutasítani korlát miatt; WHEN egy IP-ről egy órán belül **240-nél** (egy munkamenetből 3-nál) több új névtelen sor jönne létre THEN the
+  system SHALL a továbbiakat 429-cel és `Retry-After` fejléccel elutasítani — párhuzamos kéréseknél is; az érvénytelen kérés a hálózati
+  keretet nem fogyaszthatja. (FELÜLÍRVA 2026-11-18, 21. szakasz: korábban „90-nél több”.) (FELÜLÍRVA 2026-11-18, tulajdonosi döntés, 19. szakasz:
   eredetileg „30-nál több”.)
 - [ ] A50 WHEN a tanuló eredménye még nem végleges (van javítható ablaka vagy további köre, és nem felelt meg) THEN the system
   SHALL szülői levelet nem küldeni; WHEN az eredmény végleges (18.1) THEN the system SHALL évadonként és címzettenként pontosan
@@ -1027,3 +1032,76 @@ nyílik az első ablak!”. Lezárt naptárnál, ha a tanuló egy ablakot sem ol
 - **C5:** ha egy már megválaszolt kérdés kikerül a bankból, az ablak újranyitása a tárolt eredményt adja kérdés nélkül
   (`question: null`, `correctIndex: -1`), nem hibát.
 - **C6 (jegy):** a helyi DB-kör a korlát közelében fut — a következő DB-teszt előtt érdemes két folyamatra bontani.
+- **Olvasási keret (2026-11-18, tulajdonosi döntés — az „iskolai méret” következménye, a felület ellenőri köre, S3 K4 után):** az
+  állapot-olvasás (`GET /api/advent/state`) korlátja **400 / perc / IP** (eredetileg 120) — három-négy osztály egyszerre, egy
+  iskolai hálózatról. Helye: `server/advent/limits.ts` `ADVENT_LIMITS.ipReads`; teszt: `tests/advent-limits.test.ts`. A kliens a
+  válasz után nem olvas külön állapotot (az eredményből frissít), 429-nél pedig megtartja a látható naptárat.
+- **C6 lezárva (2026-11-18):** a DB-kör terheletlen gépen 300 s a 480 s-os korlátból (37% tartalék), párhuzamos kliensekkel.
+
+## 21. A kéréskorlátok második méretezése és a kizárás elleni védelem (2026-11-18, orkesztrátori döntés; a vak ellenőr K1 / K2 lelete)
+
+A tulajdonos szándéka „iskolai méret”: egy iskola egyszerre, egy hálózati címről. A 19. szakasz számai ezt nem fedték le (a
+pótlási terhelés nem volt kiszámolva), és a hálózati keretet érvénytelen kérésekkel egy gyerek másodpercek alatt elfogyaszthatta.
+
+**Méretezés** (egy helyen: \`server/advent/limits.ts\` \`ADVENT_LIMITS\`; pontos értéket rögzítő teszt: \`tests/advent-limits.test.ts\`):
+
+| Keret | Érték | Számítás |
+|---|---|---|
+| Érvényes, sikeres írás / IP | 14 160 / 15 perc | 4 osztály × 30 gyerek × (évfolyam 1 + 24 × (megnyitás + válasz) + 5 javítás × 2 = 59 írás) × 2 tartalék |
+| Állapot-olvasás / IP | 1200 / perc | 120 gyerek × ~5 olvasás / perc × 2 |
+| Új névtelen sor / IP | 240 / óra | 8 osztály |
+| Új névtelen sor / munkamenet | 3 / óra | egy kliens a hálózati keret töredékét fogyaszthatja |
+| Írás / alany | 290 / 15 perc | két teljes kör: 2 × 144 + évfolyam + új kör |
+| Érvénytelen (400) kérés / IP | 120 / perc | csak ezeket utasítja el 429-cel, a szabályosat soha |
+| Elutasított (409) kérés / IP | 720 / perc (120 gyerek × 3 szabályos 409 × 2) | saját keret: a 409 szabályos forgalomban is előfordul (lejárt link, elavult kérdés); vak ellenőr KICSI-4, 3. kör KICSI-B |
+
+**Kizárás elleni védelem:** a hálózati keretbe csak az érvényes, alanyhoz köthető, SIKERES (2xx) kérés számít — a bemenet-ellenőrzés
+és az alany feloldása a hálózati korlát ELŐTT fut. Minden 429-en \`Retry-After\` van.
+
+**Maradó kockázat (tudatosan vállalt, „baráti” szint):** egy szkriptelő, aki munkamenetet és eszközazonosítót cserélget, sikeres
+írásokkal továbbra is elfogyaszthatja egy hálózat keretét (ehhez ~49 eszköz és ~17 munkamenet kell 15 percen belül) — erős
+azonosítás nélkül ez nem zárható ki; a következmény legfeljebb 15 perces írás-szünet egy címen, adatvesztés nélkül. A kliens-IP
+megállapításának megbízhatósága (a Render közvetlen elérhetősége) külön jegy.
+
+**FELÜLÍRVA 2026-11-19 — TULAJDONOSI DÖNTÉS (kérdőív): „Ablakonkénti egyesítés”.** Átvételkor minden naptárablaknál a jobb eredmény
+marad meg, és semmi nem vész el a tanuló sorából: a körszám, a korábbi körök, a megfelelés időpontja és a szülői levél foglalásai a
+tanulói sorban maradnak. A „jobb” sorrendje ablakonként (pontosítás 2026-11-19, vak ellenőr 3. kör KÖZEPES-A, a döntés szellemében: az
+elbukott próba nem „jobb”, mint a még meglévő lehetőség): **megoldva > érintetlen / még javítható > végleg elbukott**; egyenlőségnél a
+tanulóé. A tanuló saját, VÉGLEG ELBUKOTT ablakát csak MEGOLDOTT ablak írhatja felül — a vendég még javítható / folyamatban lévő próbája nem
+(orkesztrátori döntés 2026-11-19, a biztonságos irány: a gyerek vendégként ne „állíthassa vissza” a saját kudarcát); vagyis átkerülni
+csak megoldott ablak tud. Csak az eszköz AKTUÁLIS körének ablakai egyesülnek (korábbi kör kudarca soha nem kerül a tanuló aktuális körébe), és próba
+nélküli eszköz-ablak soha nem töröl a tanuló sorából. A jobb ablak a kérdéssorával együtt a tanuló aktuális körébe kerül, az eszköz sora
+utána törlődik. A tanulói terv a tanuló PROFILJÁNAK
+évfolyamára készül (a vendégként választott évfolyam nem írja felül). A válaszlehetőségek sorrendjének magja a tervhez kötött kulcs
+(`seedKey`, átvett ablaknál a vendég kulcsa: `doorSeeds`) — átvétel után a tárolt választás, a helyes válasz jelölése és a pontozás
+ugyanaz. Az átvétel írásnál a korlátok és a fázis-ellenőrzés UTÁN fut; az olvasás ugyanezt az egyesítést előnézetként mutatja.
+Megvalósítás: `server/advent/adoption.ts` (`mergeAdoption`, `orderKeyFor`, `createAdoptionContext`), `store.mutate` (`adopt`). (Vak ellenőr
+K1, K2, K3, KICSI-5, KICSI-6.) **Pontosítás 2026-11-20 (GPT-vak L2–L4):** az átvétel a végpont saját ellenőrzései (nap, fázis, bemenet)
+UTÁN, a módosítással EGY tranzakcióban fut, és csak sikeres módosítással véglegesül — elutasított (4xx) írás vagy hiba után mindkét
+sor (tanulói és eszköz) érintetlen. Az egyesített tervben egy kérdés (azonosító vagy normalizált szöveg) legfeljebb egyszer szerepel: a
+megválaszolt kérdések védettek, a későbbi ismétlődés az ablak saját készletéből determinisztikusan pótlódik (`dedupePlanDoors`). Sérült
+sor (hibás próbaelem is) olvasáskor, íráskor és átvételkor is 409 corrupt, átvétel nélkül. A szülői párosítási útmutató naptár-
+bekezdése csak bekapcsolt naptárnál kerül a levélbe (L5). **Pontosítás 2026-11-20 (GPT-vak 3. kör):** két eszköz párhuzamos első
+átvételénél az egyesítés alapja a tranzakció zárolt (második) olvasásának tanulói sora — egyik eszköz megoldása sem vész el (L1). A
+megválaszolt (történeti) helyek a próbákban élnek; a terv akkor is egyedi, ha két megválaszolt hely ugyanazt a kérdést hordozta (a
+későbbi helyén a terv pótlást kap, a próba és a visszajelzés érintetlen), és a játszható helyeken nincs korábbi körös kérdés (L2).
+Rögzítetlen évfolyamnál a válasz is összeveti a terv évfolyamát a profiléval; eltérésnél 409, mentés nélkül (L3). A párosított olvasás a
+sérült vendégsort 409 corrupt-ként jelzi; a sorőr a terv `subjects` mezőjét is ellenőrzi (L4). Sérült adventi mentés a játékos
+adatletöltését nem töri el: a sor `corrupt: true` jelölést kap (L5).
+Az alábbi bekezdés „a több megoldott ablakkal rendelkező marad, a másik törlődik” szabálya ezzel érvényét vesztette.
+
+**Névtelen → párosított átmenet (vak ellenőr k1; TULAJDONOSI DÖNTÉS 2026-11-18, kérdőíven: „Igen, vigyük át.”):** ha egy kérés
+érvényes tanulói linket ÉS eszközazonosítót is hoz, az eszköz névtelen sora a tanulóhoz kerül: ha a tanulónak még nincs sora, az
+eszköz sora átkerül (újrakulcsolva, ugyanaz a sor); ha van, a TÖBB megoldott ablakkal rendelkező marad (egyenlőségnél a tanulóé), a
+másik törlődik; válasz nélküli eszköz-sor egyszerűen törlődik. Utána a gyereknek egyetlen élő sora van. Az átvétel csak ÍRÁSNÁL
+történik (egy tranzakcióban, mindkét sor zárolva; GET-en nincs mellékhatás) — az olvasás előnézetként már a megtartandó haladást
+mutatja. Az átvétellel egyidejű válasz nem vész el és nem ad 500-at (a zár sorba rendezi; a közben megszűnt sorra írás 409
+„frissítjük”). Adatvédelem: az eszköz haladása a tanuló személyes adatává válik — a tanuló sora a tanulóval együtt törlődik (idegen
+kulcs), a tanulóhoz kötött játékos-fiók adatletöltése tartalmazza. **TULAJDONOSI DÖNTÉS 2026-11-18:** a játékos-fiók TÖRLÉSEKOR a tanuló
+adventi haladása NEM törlődik, a tanulónál marad (a tanuló sora a tanulóé; a fiók csak a saját, `player` sorát viszi); a szülői
+párosítási útmutató (`shared/pairing-guide.ts` `ADVENT_GUEST_PROGRESS_NOTE`) kimondja: „Ha a gyermek a személyes linkjével nyitja
+meg a naptárat azon az eszközön, amelyen addig vendégként játszott, a vendégként elért haladás a gyermek profiljához kerül.” Megvalósítás: \`server/advent/store.ts\` \`adoptionChoice\`,
+\`adopt\`; \`server/advent/routes.ts\` (az alany feloldása után). Jegy: #170 (lezárva).
+
+**Évfolyam (vak ellenőr k6):** az évfolyam az első VÁLASZNÁL rögzül, nem a megnyitáskor (R6, E10); az első válaszig a profil
+változása új tervet ad. **Sérült sor (k3):** 500 helyett érthető 409 (\`corrupt: true\`) minden végponton.

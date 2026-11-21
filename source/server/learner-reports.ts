@@ -6,6 +6,7 @@ import { alertPeriodKey, inactivityAlertEmail, isInactive, pendingAlertRecipient
 import { isSchoolDay } from "../shared/school-calendar";
 import { firstNameOf } from "../shared/daily-reminder";
 import { planPairingGuides } from "../shared/pairing-guide";
+import { adventEnabled } from "./advent/clock";
 import { learnerTokenFor } from "./learners";
 import { getBaseUrl } from "./utils/config";
 import { resolveAdminRecipients } from "./lib/material-result";
@@ -123,7 +124,8 @@ export async function sendPairingGuides(send: Send = defaultSend): Promise<{ chi
     byId.set(r.id, entry);
   }
   const out = { children: 0, parents: 0, failed: 0 };
-  for (const mail of planPairingGuides([...byId.values()], recipients(), firstNameOf)) {
+  // Az adventi bekezdés csak bekapcsolt naptárnál kerül a szülőlevélbe (GPT-vak L5).
+  for (const mail of planPairingGuides([...byId.values()], recipients(), firstNameOf, { advent: adventEnabled() })) {
     try {
       await send(mail.subject, mail.html, mail.to);
       out[mail.kind === "child" ? "children" : "parents"]++;

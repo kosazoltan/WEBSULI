@@ -6,7 +6,8 @@
 
 /**
  * A szolgáltatás (google-tts-api) csak az alapnyelvet fogadja el — mérve 2026-11-09: `en-GB` → „lang might not exist”, `en` / `hu` → MP3.
- * Ezért a régiós kódot (en-GB, de-AT) az alapnyelvre képezzük.
+ * Újramérve 2026-11-18 (S8a): `en-uk` → ugyanez a hiba. Ezért a régiós kódot (en-GB, de-AT) az alapnyelvre képezzük; a brit
+ * hangot a böngésző rangsorolt hangja adja (`shared/voice-rank.ts`), a tartalék csak akkor szól, ha az nem tud.
  */
 export const TTS_LANGS = ["hu", "en", "de", "fr", "es", "it", "pl", "ro", "sk", "cs", "pt", "nl", "sv", "da", "fi", "no"] as const;
 export const TTS_AUDIO_MAX_CHARS = 300;
