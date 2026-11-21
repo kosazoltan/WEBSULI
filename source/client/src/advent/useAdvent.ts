@@ -126,7 +126,8 @@ export function useAdventState(enabled = true, createDevice = true) {
   });
   // A következő nyitás frissítése a szerver által adott várakozásból, a MINTA érkezésétől (élesítés előtti L4): eltérő eszközórával is.
   // A horgony csak új szervermintánál mozdul — a válasz helyi állapotírása nem tolja el az éjféli nyitást (PR-C vak L4).
-  const nextOpensInMs = query.data?.nextOpensInMs ?? null;
+  // A következő állapotváltás (ablaknyitás VAGY fázisváltás, pl. január 7-i zárás) — régi szervernél a következő nyitás (PR-C 2. vak L3).
+  const nextOpensInMs = query.data?.refreshInMs ?? query.data?.nextOpensInMs ?? null;
   const anchorRef = useRef<RefreshAnchor | null>(null);
   anchorRef.current = nextRefreshAnchor(anchorRef.current, nextOpensInMs, query.dataUpdatedAt);
   const { wait, at } = anchorRef.current;

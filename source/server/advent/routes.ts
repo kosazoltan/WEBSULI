@@ -114,7 +114,7 @@ export function buildAdventState(at: AdventNow, resolution: AdventResolution, ro
   const waiting = doors.filter((d) => d.state === "open").length;
   return {
     enabled: true,
-    season: at.season, phase: at.phase, today: at.today, openDay: at.openDay, nextOpensAt: at.nextOpensAt, nextOpensInMs: at.nextOpensInMs, daysUntilStart: at.daysUntilStart,
+    season: at.season, phase: at.phase, today: at.today, openDay: at.openDay, nextOpensAt: at.nextOpensAt, nextOpensInMs: at.nextOpensInMs, refreshInMs: at.refreshInMs, daysUntilStart: at.daysUntilStart,
     identity: subject?.kind ?? null,
     pairing: resolution.pairing,
     firstName: subject?.firstName ?? null,

@@ -1198,3 +1198,18 @@ Az L1 (friss évfolyam az átvételnél) a fenti 1. pont; a 2/3 PR jelentéséne
 17. **Sérült mentés a kliensben (L7):** a `409 corrupt` olvasási hiba célzott, felnőtthöz irányító üzenetet ad, újrapróba nélkül.
 18. **A karácsonyfa csillaga (L8, A43):** a 24. ablak `solved` állapotát követi (nem a pontszámot), a felgyulladáskor egyszer (1,2 s)
     felfénylik; csökkentett mozgásnál animáció nélkül világít.
+
+**A PR-C 2. vak körének (058986b7, 2026-11-21) feltételei:**
+
+19. **Késve érkező válasz alanyváltás után (L1):** minden kliensművelet (nyitás, válasz, évfolyam, új kör, átvétel) az indító
+    alany-generációhoz kötött: váltás után sem az eredménye, sem a hibája, sem a `finally` ága nem módosítja az új nézetet, a nyitott
+    kérdés nem nyílik meg, és a 429 utáni újrapróba elmarad (nem ír az új alany nevében).
+20. **Régi olvasás a sikeres írás után (L2):** az írás eredményének alkalmazása előtt a függő (az írás előtt indult) állapotolvasás
+    megszakad; ha futott, az írás után friss olvasás indul.
+21. **Fázisváltás a nyitva hagyott lapon (L3):** az állapot a következő állapotváltásig (ablaknyitás vagy fázishatár: november 24.,
+    december 1., december 25., január 7.) hátralévő időt is adja (`refreshInMs`); a kliens ehhez ütemezi a frissítést, így január 7-én
+    éjfélkor újratöltés nélkül lezártra vált.
+22. **Újrapárosítás másik lapon (L4):** az aktuális generáció igazolt `pairing: ok` válasza feloldja a lejárt link tiltását; a
+    „Folytatom vendégként” csak a figyelmeztetés generációjának tokenjét felejti el.
+23. **A csillag helye (L5):** a fejlécben a csillag önálló, nem zsugorodó helyen áll; csak a cím szövege csonkolódhat (360 px-en is
+    teljesen látszik).

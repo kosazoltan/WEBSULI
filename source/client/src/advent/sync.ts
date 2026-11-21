@@ -128,3 +128,29 @@ export async function adventStateError(res: { status: number; json: () => Promis
   const corrupt = typeof body === "object" && body !== null && (body as { corrupt?: unknown }).corrupt === true;
   return Object.assign(new Error(`HTTP ${res.status}`), { status: res.status, corrupt });
 }
+
+/**
+ * PR-C 2. vak L2 — írás eredményének alkalmazása versenyhelyzet ellen: a kérés indításakori generációra, és előtte a függő (az írás
+ * ELŐTT indult, régi pillanatképet hozó) állapotolvasás megszakad, hogy ne írhassa vissza a régebbi állást. Ha olvasás futott, az írás
+ * után egy friss olvasás indul (az már az írás utáni állapotot látja). Régi generációnál nem ír.
+ */
+export async function applyAdventWrite(queryClient: QueryClient, generation: number, update: (current: unknown) => unknown): Promise<boolean> {
+  if (generation !== subjectGeneration) return false;
+  const key = adventStateKey(generation);
+  const reading = queryClient.isFetching({ queryKey: key }) > 0;
+  await queryClient.cancelQueries({ queryKey: key });
+  if (generation !== subjectGeneration) return false;
+  const next = update(queryClient.getQueryData(key));
+  if (next === undefined || next === null) return false;
+  setAdventStateIfCurrent(queryClient, generation, next);
+  if (reading) void queryClient.invalidateQueries({ queryKey: key });
+  return true;
+}
+
+/**
+ * PR-C 2. vak L4 — a lejárt link tiltásának feloldása: az aktuális generáció szervertől igazolt `pairing: ok` válasza (pl. a gyerek
+ * másik lapon érvényes új linket nyitott). A névtelen („none”) válasz nem igazolás.
+ */
+export function pairingRecovered(input: { pairing: string | null | undefined; mustChoose: boolean }): boolean {
+  return input.mustChoose && input.pairing === "ok";
+}

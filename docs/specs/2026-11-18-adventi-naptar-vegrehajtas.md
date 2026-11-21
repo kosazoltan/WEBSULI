@@ -794,6 +794,26 @@ Terv: `docs/specs/2026-11-18-adventi-naptar.md` 22. szakasz, 11–18. pont. Elle
   mozgásnál animáció nélkül (`advent.css`). Teszt: egység (L8) + böngésző („PR-C vak L8”: 22/24 mellett is felgyullad, ajándéküzenet
   nélkül; csökkentett mozgásnál `animation-name: none`).
 
+## 2026-11-21 — a PR-C 2. vak köre (058986b7)
+
+Terv: `docs/specs/2026-11-18-adventi-naptar.md` 22. szakasz, 19–23. pont. Ellenőr-jelentés: NEM (1 blokkoló, 3 közepes, 1 kicsi); mind
+valódinak bizonyult a kódból. Új egységteszt-fájl: `source/tests/advent-pr-c-vak2.test.ts` (előbb 5/5 bukott); böngésző:
+`tests/advent-calendar.spec.ts` „PR-C 2. vak L1–L5” (a javítás előtt 5/5 bukott — az L2 első változata a valódi szerverhez szóló
+késleltetett GET miatt nem reprodukált, ezért rögzített, válasz előtti pillanatképpel fut).
+
+- **L1 (blokkoló) — javítva:** `AdventCalendar.tsx` `isCurrent(started)` minden művelet eredmény / hiba / `finally` ágában;
+  generációváltáskor a busy / nyitás / várakozás / hiba jelző visszaáll; `busy.ts` `retryWhenBusy` `cancelled` opció (nincs újrapróba
+  más nevében). Teszt: egység + böngésző (késleltetett nyitás, 429-várakozás közbeni váltás).
+- **L2 — javítva:** `sync.ts` `applyAdventWrite` (függő olvasás megszakítása, utána friss olvasás); minden írás ezen megy. Teszt: egység
+  (késve feloldott fetch) + böngésző (léptetett óra, éjféli GET a válasz után érkezik). A `tests/advent-pr-c-vak.test.ts` L3 forrás-őre
+  a bekötés új nevére (`applyAdventWrite`) állt át — dokumentált, a szigorúbb út.
+- **L3 — javítva:** `shared/advent/calendar.ts` `refreshInMs` (következő állapotváltás), `contract.ts`, `routes.ts`, `useAdvent.ts`.
+  Teszt: egység (határidők) + böngésző (január 6. → 7. újratöltés nélkül; a javítás szervert érint, DB-kör lefutott).
+- **L4 — javítva:** `pairingRecovered` + a figyelmeztetés generációja (`warnedGeneration`). Teszt: egység + böngésző (új token jelzése után
+  a tiltás és a munkameneti jelző eltűnik).
+- **L5 — javítva:** `advent-hud__name` csonkolható szöveg, a csillag `flex: 0 0 auto`. Teszt: egység + böngésző (360 px: a csillag a
+  címen és a nézeten belül, nincs eltakarva).
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.

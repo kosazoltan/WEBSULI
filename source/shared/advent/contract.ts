@@ -59,6 +59,8 @@ export type AdventState = {
   nextOpensAt: string | null;
   /** A következő nyitásig hátralévő idő a szerver órájából (ms), vagy null (élesítés előtti L4). */
   nextOpensInMs: number | null;
+  /** A következő állapotváltásig (ablaknyitás vagy fázisváltás) hátralévő idő a szerver órájából (ms), vagy null (PR-C 2. vak L3). */
+  refreshInMs: number | null;
   daysUntilStart: number;
   identity: "learner" | "player" | "device" | "preview" | null;
   /** `invalid`: a kérés tanulói tokent hozott, de az érvénytelen — a felület újrapárosítást kér (terv 16.5). */

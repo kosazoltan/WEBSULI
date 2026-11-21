@@ -58,14 +58,30 @@ export type AdventNow = {
    * ütemezi a frissítést — az eszköz eltérő órája nem számít. `null`, ha nincs következő nyitás.
    */
   nextOpensInMs: number | null;
+  /**
+   * A következő ÁLLAPOTVÁLTÁSIG (ablaknyitás vagy fázisváltás: „Hamarosan”, december 1., december 25., január 7.) hátralévő idő a szerver
+   * órájából (ms), vagy null, ha az évadban nincs több váltás. A kliens ehhez ütemezi a frissítést (PR-C 2. vak L3).
+   */
+  refreshInMs: number | null;
 };
 
 export function adventNow(now: Date): AdventNow {
   const base = adventNowBase(now);
-  return { ...base, nextOpensInMs: base.nextOpensAt ? Math.max(0, Date.parse(base.nextOpensAt) - now.getTime()) : null };
+  const until = (iso: string | null) => (iso ? Math.max(0, Date.parse(iso) - now.getTime()) : null);
+  return { ...base, nextOpensInMs: until(base.nextOpensAt), refreshInMs: until(nextChangeAt(now, base)) };
 }
 
-function adventNowBase(now: Date): Omit<AdventNow, "nextOpensInMs"> {
+/** A következő állapotváltás pillanata (ISO): a napi nyitás, illetve a fázishatár (november 24., december 1., december 25., január 7.). */
+function nextChangeAt(now: Date, base: Omit<AdventNow, "nextOpensInMs" | "refreshInMs">): string | null {
+  const { year, month } = budapestParts(now);
+  if (base.nextOpensAt) return base.nextOpensAt;
+  if (base.phase === "before" && month === 11) return budapestMidnightUtc(year, 11, ADVENT_RULES.teaserFromDay).toISOString();
+  if (base.phase === "open") return budapestMidnightUtc(year, 12, ADVENT_DOORS + 1).toISOString();
+  if (base.phase === "catchup") return budapestMidnightUtc(base.season + 1, 1, ADVENT_RULES.catchupUntilJan + 1).toISOString();
+  return null;
+}
+
+function adventNowBase(now: Date): Omit<AdventNow, "nextOpensInMs" | "refreshInMs"> {
   const { year, month, day } = budapestParts(now);
   const today = `${year}-${pad(month)}-${pad(day)}`;
   if (month === 11) {

@@ -62,7 +62,8 @@
 /* A fejléc mögött tömör sáv: a hópelyhek nem haladnak át a szöveg mögött. */
 .advent-hud { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; flex: 0 0 auto; padding: 2px; border-radius: 14px; background: rgba(11, 29, 58, 0.82); }
 .advent-hud__title { flex: 1 1 auto; min-width: 0; }
-.advent-hud__title h1 { margin: 0; font-size: 18px; line-height: 1.2; font-weight: 800; color: var(--advent-gold-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.advent-hud__title h1 { margin: 0; font-size: 18px; line-height: 1.2; font-weight: 800; color: var(--advent-gold-2); display: flex; align-items: center; gap: 4px; min-width: 0; }
+.advent-hud__name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .advent-hud__title p { margin: 0; font-size: 13px; line-height: 1.3; color: var(--advent-snow); }
 
 .advent-btn, .advent-icon-btn {
@@ -191,7 +192,7 @@
 .advent-summary__art { align-self: center; width: auto; max-width: 100%; height: clamp(84px, 30vh, 240px); object-fit: contain; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #fff3c4 0%, var(--advent-gold) 40%, var(--advent-night-2) 100%); }
 .advent-gift { margin: 0; font-size: 22px; line-height: 1.35; font-weight: 800; color: var(--advent-gold-2); text-align: center; animation: advent-star 1.2s ease-out 1; }
 /* A karácsonyfa csillaga (A43, PR-C vak L8): a 24. ablak megoldásakor gyullad fel, egyszeri 1,2 s-os felfényléssel. */
-.advent-tree-star { display: inline-block; font-size: 0.9em; line-height: 1; color: rgba(255, 255, 255, 0.35); }
+.advent-tree-star { display: inline-block; flex: 0 0 auto; font-size: 0.9em; line-height: 1; color: rgba(255, 255, 255, 0.35); }
 .advent-tree-star[data-lit="true"] { color: var(--advent-gold-2); text-shadow: 0 0 6px rgba(255, 214, 102, 0.9), 0 0 14px rgba(255, 196, 61, 0.6); }
 .advent-tree-star[data-flash="true"] { animation: advent-star 1.2s ease-out 1; }
 @keyframes advent-star { 0% { opacity: 0.2; transform: scale(0.96); } 60% { opacity: 1; transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }

@@ -146,7 +146,8 @@ test("L3: a tanulói kapcsolat / token változása új alany-generációt ad —
   assert.match(hook, /queryKey: adventStateKey\(generation\)/, "a lekérdezés kulcsa a generációt is hordozza");
   assert.match(hook, /watchAdventSubject\(window, LEARNER_TOKEN_KEY, LEARNER_TOKEN_CHANGED_EVENT\)/);
   const page = read("client/src/pages/AdventCalendar.tsx");
-  assert.match(page, /setAdventStateIfCurrent\(queryClient, generation, /, "a POST-eredmény csak az indításkori generációra íródik");
+  // (2026-11-21, PR-C 2. vak L2: az írás a versenyhelyzet-álló applyAdventWrite-on át megy, amely a setAdventStateIfCurrent-et hívja.)
+  assert.match(page, /applyAdventWrite\(queryClient, generation, /, "a POST-eredmény csak az indításkori generációra íródik");
   assert.doesNotMatch(page, /setQueryData\(ADVENT_STATE_KEY/, "nincs generáció nélküli írás");
 });
 

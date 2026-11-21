@@ -19,7 +19,7 @@ export function isAdventBusy(error: unknown): boolean {
  */
 export async function retryWhenBusy<T>(
   run: () => Promise<T>,
-  opts: { onWait?: (waiting: boolean) => void; delayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+  opts: { onWait?: (waiting: boolean) => void; delayMs?: number; sleep?: (ms: number) => Promise<void>; cancelled?: () => boolean } = {},
 ): Promise<T> {
   try {
     return await run();
@@ -29,6 +29,8 @@ export async function retryWhenBusy<T>(
     opts.onWait?.(true);
     try {
       await sleep(opts.delayMs ?? ADVENT_BUSY_WAIT_MS);
+      // A várakozás közben a kérés érvényét vesztette (pl. alanyváltás, PR-C 2. vak L1): nincs újrapróba más nevében.
+      if (opts.cancelled?.()) throw Object.assign(new Error("advent: a kérés érvényét vesztette"), { cancelled: true });
       return await run();
     } finally {
       opts.onWait?.(false);

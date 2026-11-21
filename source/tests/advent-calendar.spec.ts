@@ -381,6 +381,124 @@ test("PR-C vak L8: a karácsonyfa csillaga a 24. ablak megoldásakor gyullad fel
   expect(look.shadow).not.toBe("none");
 });
 
+/** Alanyváltás a lapon (a produkcióban is figyelt, adatot nem hordozó jelzés): új alany-generáció, a lekérdezés új kulcsra vált. */
+const switchSubject = (page: import("@playwright/test").Page) => page.evaluate(() => window.dispatchEvent(new Event("websuli:learner-token-changed")));
+const FAKE_OPEN = { day: 1, question: { id: "elozo-alany", subject: "christmas", prompt: "Az előző alany kérdése", options: ["A", "B", "C", "D"] }, answered: null };
+
+test("PR-C 2. vak L1: alanyváltás után a régi alany késve érkező kérdése nem nyílik meg — késleltetett nyitásnál és a 429-es várakozás közben sem", async ({ page }) => {
+  await openCalendar(page, DEC5, 5);
+  // 1) Késleltetett nyitás: a válasz csak az alanyváltás UTÁN érkezik meg.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/advent/doors/1/open", async (route) => { await held; await route.fulfill({ json: FAKE_OPEN }); });
+  const pending = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/doors/1/open"));
+  await tapDoor(page, 1);
+  await pending;
+  await switchSubject(page);
+  await expect(page.getByTestId("advent-grid")).toBeVisible();
+  release();
+  await page.waitForTimeout(600);
+  await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
+  await expect(page.getByText("Az előző alany kérdése")).toHaveCount(0);
+  await expect(page.getByTestId("advent-grid")).toHaveAttribute("data-busy", "false");
+  // 2) 429 és várakozás: alanyváltás után nincs újrapróba (nem ír az új alany nevében) és nem nyílik kérdés.
+  let opens = 0;
+  await page.route("**/api/advent/doors/2/open", (route) => { opens++; return route.fulfill({ status: 429, json: { message: "Túl sok kérés.", limit: "ip" } }); });
+  await tapDoor(page, 2);
+  await expect(page.getByTestId("advent-busy")).toBeVisible();
+  await switchSubject(page);
+  await page.waitForTimeout(5000);
+  expect(opens, "alanyváltás után nincs újrapróba").toBe(1);
+  await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
+  await expect(page.getByTestId("advent-busy")).toHaveCount(0);
+});
+
+test("PR-C 2. vak L2: a válasz előtt indult, később érkező állapotolvasás nem festi vissza nyithatóra a megoldott ablakot", async ({ page }) => {
+  const T0 = "2026-12-04T22:59:00Z";
+  await page.clock.install({ time: new Date(T0) });
+  await setAdventServerTime(page, T0);
+  await page.goto("/adventi-naptar");
+  const gradeResponse = page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith("/api/advent/grade"));
+  await chooseGrade(page, 5);
+  // A válasz ELŐTTI pillanatkép (az évfolyam mentésének állapota: a 4. ablak nyitható, 0 megoldott).
+  const snapshot = (await (await gradeResponse).json()) as Record<string, unknown>;
+  await tapDoor(page, 4);
+  await expect(page.getByTestId("advent-question")).toBeVisible();
+  // Az éjféli frissítés GET-je a válasz ELŐTTI pillanatképet hozza, de csak a sikeres válasz után érkezik meg.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let first = true;
+  await page.route("**/api/advent/state", async (route) => {
+    if (!first) return route.fallback();
+    first = false;
+    await held;
+    await route.fulfill({ json: snapshot });
+  });
+  const late = page.waitForRequest((r) => r.method() === "GET" && r.url().endsWith("/api/advent/state"));
+  await page.clock.fastForward("01:02");
+  await late;
+  await pickOption(page, true);
+  await expect(page.getByTestId("advent-progress")).toContainText("1 / 24");
+  release();
+  await page.waitForTimeout(600);
+  await page.getByTestId("advent-next").tap();
+  await expect(page.getByTestId("advent-door-4")).toHaveAttribute("data-state", "solved");
+  await expect(page.getByTestId("advent-progress")).toContainText("1 / 24");
+});
+
+test("PR-C 2. vak L3: január 6-án éjfélkor a nyitva hagyott lap újratöltés nélkül lezártra vált — nem kínál több javítást", async ({ page }) => {
+  const T0 = "2027-01-06T22:59:00Z";
+  await page.clock.install({ time: new Date(T0) });
+  await setAdventServerTime(page, T0);
+  await page.goto("/adventi-naptar");
+  await chooseGrade(page, 5);
+  await playDoor(page, 1, false);
+  await expect(page.getByTestId("advent-repair")).toBeVisible();
+  await setAdventServerTime(page, "2027-01-06T23:00:02Z");
+  await page.clock.fastForward("01:10");
+  await expect(page.getByTestId("advent-closed")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId("advent-repair")).toHaveCount(0);
+});
+
+test("PR-C 2. vak L4: másik lapon sikeres újrapárosítás (új, érvényes link) feloldja a régi lap lejárt-link tiltását", async ({ page }) => {
+  await setAdventTime(page, DEC5);
+  await page.addInitScript(() => {
+    if (window.sessionStorage.getItem("advent-test-token-set")) return;
+    window.localStorage.setItem("websuli.learnerToken", "00000000-0000-4000-8000-000000000000.1.AAAAAAAAAAAAAAAAAAAAAA");
+    window.sessionStorage.setItem("advent-test-token-set", "1");
+  });
+  await page.goto("/adventi-naptar");
+  await expect(page.getByTestId("advent-pairing-invalid")).toBeVisible();
+  // A másik lapon megnyitott új link: a szerver az új tokenre `pairing: ok`-t ad (a teszt a választ ennyiben igazítja).
+  await page.route("**/api/advent/state", async (route) => {
+    const response = await route.fetch({ headers: proxyHeaders(route.request().headers()) });
+    const body = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({ response, json: { ...body, pairing: "ok" } });
+  });
+  await page.evaluate(() => {
+    window.localStorage.setItem("websuli.learnerToken", "11111111-1111-4111-8111-111111111111.1.BBBBBBBBBBBBBBBBBBBBBB");
+    window.dispatchEvent(new Event("websuli:learner-token-changed"));
+  });
+  await expect(page.getByTestId("advent-grade-picker")).toBeVisible();
+  await expect(page.getByTestId("advent-pairing-invalid")).toHaveCount(0);
+  expect(await page.evaluate(() => window.sessionStorage.getItem("websuli.learnerTokenRejected")), "a régi tiltás jelzője törlődött").toBeNull();
+});
+
+test("PR-C 2. vak L5: 360 px-en a fejléc csillaga teljes egészében látszik — csak a cím szövege csonkolódhat (A43)", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openCalendar(page, DEC5, 5);
+  const box = await page.getByTestId("advent-tree-star").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const h1 = (el.closest("h1") as HTMLElement).getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { width: r.width, right: r.right, h1Right: h1.right, vw: window.innerWidth, hit: hit === el };
+  });
+  expect(box.width).toBeGreaterThan(4);
+  expect(box.right).toBeLessThanOrEqual(box.h1Right + 0.5);
+  expect(box.right).toBeLessThanOrEqual(box.vw);
+  expect(box.hit, "a csillag nincs levágva / eltakarva").toBe(true);
+});
+
 test("szezon: november 29. „Hamarosan”; január 7. lezárt; tesztidő nélkül a naptár nem érhető el (A14, A15, A51)", async ({ page }) => {
   await openCalendar(page, "2026-11-29T10:00:00Z");
   await expect(page.getByTestId("advent-teaser")).toContainText("Hamarosan");
