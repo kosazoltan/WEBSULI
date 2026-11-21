@@ -1,13 +1,13 @@
 import { execFile } from "node:child_process";
-import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { Readable } from "node:stream";
+import { createWriteStream, readdirSync, rmSync, statSync } from "node:fs";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { logger } from "./lib/logger";
-import type { ClipDeps } from "./lesson-clips";
+import { CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, ClipAbortError, type ClipDeps } from "./lesson-clips";
 
 /**
  * A kisfilm-gyártás valódi szolgáltatói (docs/specs/2026-11-10-fejezet-kisfilmek-v2-p1p2-vegrehajtas.md, D2–D6). A kulcsok csak a
@@ -18,6 +18,11 @@ export const CLIP_VIDEO_MODEL = "bytedance/seedance-1-5-pro";
 export const CLIP_IMAGE_MODEL_OPENAI = "gpt-image-2.5-flare";
 export const CLIP_IMAGE_MODEL_OPENROUTER = "bytedance-seed/seedream-5-0-pro";
 const OPENROUTER = "https://openrouter.ai/api/v1";
+const OPENROUTER_ORIGIN = new URL(OPENROUTER).origin;
+/** A szolgáltatói válaszban kapott cím feloldva; csak HTTPS (különben null). */
+function providerUrl(raw: string): URL | null {
+  try { const url = new URL(raw, OPENROUTER); return url.protocol === "https:" ? url : null; } catch { return null; }
+}
 /** A tulajdonos által jóváhagyott hangminőség. A 22 kHz / 32 kbit/s-os változatot a szemle elutasította (elmosódott kiejtés). */
 export const CLIP_AUDIO_FORMAT = "mp3_44100_128";
 export const CLIP_HEAR_MODEL = "scribe_v1";
@@ -75,9 +80,11 @@ export function limiter(limit: number): <T>(work: () => Promise<T>) => Promise<T
   let running = 0;
   const waiting: Array<() => void> = [];
   return async (work) => {
+    // A felszabaduló hely közvetlenül a várakozóé (a számláló nem csökken közben): a köztes érkező nem előzhet, és nem futhat
+    // egyszerre `limit`-nél több feladat (vak kör L6).
     if (running >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
-    running++;
-    try { return await work(); } finally { running--; waiting.shift()?.(); }
+    else running++;
+    try { return await work(); } finally { const next = waiting.shift(); if (next) next(); else running--; }
   };
 }
 const elevenLabsQueue = limiter(ELEVENLABS_PARALLEL);
@@ -91,36 +98,110 @@ async function fetchPatiently(send: () => Promise<Response>, waitMs = 2500): Pro
   }
 }
 
+/** A kisfilm-munkamappák saját előtagja: induláskor csak ezek söpörhetők (vak kör L5). */
+export const CLIP_TMP_PREFIX = "websuli-clip-";
+/** A nyers (szolgáltatói) klip legfeljebb ekkora lehet (mérve 4–17 MB) — fölötte a letöltés megszakad, a jelenet állóképes (vak kör L4). */
+export const CLIP_RAW_MAX_BYTES = 40 * 1024 * 1024;
+/** Ennél régebbi saját munkamappa biztosan nem egy futó átkódolásé (a letöltés legfeljebb 3, az átkódolás 1,5 perc). */
+const STALE_DIR_MS = 60 * 60_000;
+/** Az átkódoló indítása (élesben `execFile`; tesztben csonkolható). */
+export type ExecLike = (file: string, args: string[], options: { timeout: number; killSignal: NodeJS.Signals }, callback: (error: Error | null) => void) => { kill(signal?: NodeJS.Signals): boolean };
+const realExec: ExecLike = (file, args, options, callback) => execFile(file, args, options, (error) => callback(error));
+/** A futó átkódolások leállítója (a szerver leállításakor; vak kör L5). */
+const activeTranscodes = new Set<() => void>();
+/** Leállításkor: minden futó átkódolást SIGKILL-lel leállít; a jelenetük `ClipAbortError`-ral (nem állóképesként) zárul. */
+export function abortClipTranscodes(): number {
+  shuttingDown = true;
+  const n = activeTranscodes.size;
+  for (const abort of [...activeTranscodes]) abort();
+  return n;
+}
+/** Induláskor: a korábbi folyamat (SIGTERM / OOM / `process.exit`) után maradt, régi saját munkamappák törlése. */
+export function sweepStaleClipDirs(root = tmpdir(), now = Date.now()): number {
+  let removed = 0;
+  let names: string[];
+  try { names = readdirSync(root); } catch { return 0; } // nincs ideiglenes könyvtár: nincs mit söpörni
+  for (const name of names) {
+    if (!name.startsWith(CLIP_TMP_PREFIX)) continue;
+    const dir = path.join(root, name);
+    try {
+      const info = statSync(dir);
+      if (!info.isDirectory() || now - info.mtimeMs < STALE_DIR_MS) continue;
+      rmSync(dir, { recursive: true, force: true });
+      removed++;
+    } catch (error) {
+      logger.warn(`[lesson-clips] a régi munkamappa nem törölhető (${name}): ${error instanceof Error ? error.message.slice(0, 120) : String(error)}`);
+    }
+  }
+  return removed;
+}
+/** A letöltés bájtszámlálója: a korlát fölött hibával megszakítja az adatfolyamot. */
+function byteLimit(max: number): Transform {
+  let seen = 0;
+  return new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      seen += chunk.length;
+      done(seen > max ? new Error(`a nyers mozgókép nagyobb ${max} bájtnál`) : null, chunk);
+    },
+  });
+}
 let warnedNoFfmpeg = false;
 /**
  * Egyszerre EGY átkódolás fut, egy szálon. Élesben mérve (2026-11-10): nyolc párhuzamos átkódolás (egyenként 171 MB) a 512 MB-os
  * példányt 3–4 percenként újraindította; egy szálon, előretekintés nélkül egy átkódolás 75 MB (alapbeállítással 171 MB).
  */
 const ffmpegQueue = limiter(1);
-export const FFMPEG_ARGS = (input: string, output: string): string[] => ["-y", "-v", "error", "-threads", "1", "-i", input, "-an", "-vf", "scale=960:-2", "-c:v", "libx264", "-threads", "1",
-  "-preset", "veryfast", "-x264-params", "rc-lookahead=0:ref=1:bframes=0:sync-lookahead=0", "-b:v", "700k", "-maxrate", "900k", "-bufsize", "1400k", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
 /**
- * A nyers mozgókép letöltése LEMEZRE (nem a memóriába), majd átkódolás 960 px széles, kb. 700 kbit/s-os, hang nélküli H.264-re.
- * `ffmpeg` hiányában vagy hibánál null.
+ * Globális `-filter_threads 1`: megadás nélkül az ffmpeg a szűrőlánchoz (scale) annyi szálat indít, ahány CPU-t lát (vak kör L2).
+ * `-protocol_whitelist file`: a demuxer csak a helyi bemeneti fájlt nyithatja (vak kör L8). `-t 15`: a kimenet legfeljebb 15 mp
+ * (a kért klip legfeljebb 12 mp; vak kör L4).
  */
-export async function downloadAndShrink(download: () => Promise<Response>, ffmpeg = "ffmpeg", timeoutMs = 90_000): Promise<Buffer | null> {
-  const dir = await mkdtemp(path.join(tmpdir(), "clip-"));
+export const FFMPEG_ARGS = (input: string, output: string): string[] => ["-y", "-v", "error", "-filter_threads", "1", "-threads", "1", "-protocol_whitelist", "file", "-i", input, "-t", "15", "-an", "-vf", "scale=960:-2", "-c:v", "libx264", "-threads", "1",
+  "-preset", "veryfast", "-x264-params", "rc-lookahead=0:ref=1:bframes=0:sync-lookahead=0", "-b:v", "700k", "-maxrate", "900k", "-bufsize", "1400k", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
+let shuttingDown = false;
+/**
+ * A nyers mozgókép letöltése LEMEZRE (nem a memóriába, kemény bájtkorláttal), majd átkódolás 960 px széles, kb. 700 kbit/s-os, hang
+ * nélküli H.264-re. `ffmpeg` hiányában, hibánál, memóriahatár fölött vagy túlméretes kimenetnél null. Leállításkor `ClipAbortError`.
+ */
+export async function downloadAndShrink(download: () => Promise<Response>, ffmpeg = "ffmpeg", timeoutMs = 90_000, opt: { exec?: ExecLike; rss?: () => number; rawMaxBytes?: number } = {}): Promise<Buffer | null> {
+  const exec = opt.exec ?? realExec, rss = opt.rss ?? (() => process.memoryUsage().rss), rawMax = opt.rawMaxBytes ?? CLIP_RAW_MAX_BYTES;
+  const dir = await mkdtemp(path.join(tmpdir(), CLIP_TMP_PREFIX));
   let stage: "letöltés" | "átkódolás" = "letöltés";
   try {
     const input = path.join(dir, "in.mp4"), output = path.join(dir, "out.mp4");
     const res = await download();
-    if (!res.ok || !res.body) {
+    const declared = Number(res.headers.get("content-length") ?? "");
+    if (!res.ok || !res.body || declared > rawMax) {
       await res.body?.cancel().catch(() => undefined);
-      throw new Error(`HTTP ${res.status}`);
+      throw new Error(res.ok && res.body ? `a nyers mozgókép nagyobb ${rawMax} bájtnál (${declared})` : `HTTP ${res.status}`);
     }
-    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(input));
+    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), byteLimit(rawMax), createWriteStream(input));
     stage = "átkódolás";
-    // SIGKILL: a SIGTERM-et figyelmen kívül hagyó ffmpeg se tarthassa fel örökre az egyetlen átkódolási sort (review L1).
-    await ffmpegQueue(() => new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, FFMPEG_ARGS(input, output), { timeout: timeoutMs, killSignal: "SIGKILL" }, (error) => (error ? reject(error) : resolve()));
-    }));
-    return await readFile(output);
+    // A sor a beolvasást is fogja: a következő átkódolás csak a kimenet beolvasása után indul (vak kör L4).
+    return await ffmpegQueue(async () => {
+      if (shuttingDown) throw new ClipAbortError("a szerver leáll");
+      // Újramérés a sorból kivételkor: a fejezet indulása óta nőhetett a memória (vak kör L3).
+      const used = rss();
+      if (used > CLIP_RSS_LIMIT_BYTES) throw new Error(`memóriaőr: a folyamat memóriája ${Math.round(used / 1048576)} MB, az átkódolás kimarad`);
+      let aborted = false;
+      await new Promise<void>((resolve, reject) => {
+        // SIGKILL: a SIGTERM-et figyelmen kívül hagyó ffmpeg se tarthassa fel örökre az egyetlen átkódolási sort (review L1).
+        let abort = () => undefined as void;
+        const child = exec(ffmpeg, FFMPEG_ARGS(input, output), { timeout: timeoutMs, killSignal: "SIGKILL" }, (error) => {
+          activeTranscodes.delete(abort);
+          if (aborted) reject(new ClipAbortError("a szerver leáll"));
+          else if (error) reject(error);
+          else resolve();
+        });
+        abort = () => { aborted = true; child.kill("SIGKILL"); };
+        activeTranscodes.add(abort);
+      });
+      const { size } = await stat(output);
+      if (size <= 0 || size > CLIP_VIDEO_MAX_BYTES) throw new Error(`az átkódolt klip mérete ${size} bájt (határ: ${CLIP_VIDEO_MAX_BYTES})`);
+      return await readFile(output);
+    });
   } catch (error) {
+    if (error instanceof ClipAbortError) throw error;
     const missing = stage === "átkódolás" && (error as NodeJS.ErrnoException)?.code === "ENOENT";
     const detail = error instanceof Error ? error.message.slice(0, 160) : String(error);
     if (!missing || !warnedNoFfmpeg) logger.warn(`[lesson-clips] ${missing ? "nincs ffmpeg a szerveren (FFMPEG_PATH / PATH) — a kisfilmek mozgókép nélkül készülnek" : `a mozgókép ${stage === "letöltés" ? "letöltése" : "átkódolása"} nem sikerült: ${detail}`}`);
@@ -182,18 +263,22 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
       const submitted = await submit.text();
       if (!submit.ok) throw fail("mozgókép", submit.status, submitted);
       let job = JSON.parse(submitted) as { status?: string; polling_url?: string; unsigned_urls?: string[]; error?: unknown };
-      const pollingUrl = job.polling_url;
-      if (!pollingUrl) throw new Error("mozgókép: a válaszban nincs lekérdezési cím");
+      // A hitelesített lekérdezés csak a szolgáltató saját HTTPS-originjére mehet (vak kör L8).
+      const pollingUrl = job.polling_url ? providerUrl(job.polling_url) : null;
+      if (!pollingUrl || pollingUrl.origin !== OPENROUTER_ORIGIN) throw new Error("mozgókép: a válaszban nincs (vagy idegen) lekérdezési cím");
       const deadline = Date.now() + VIDEO_TIMEOUT_MS;
       while (!["completed", "failed", "cancelled", "expired"].includes(job.status ?? "")) {
         if (Date.now() > deadline) throw new Error("mozgókép: időtúllépés");
         await new Promise((resolve) => setTimeout(resolve, VIDEO_POLL_MS));
-        const poll = await fetch(new URL(pollingUrl, OPENROUTER), { headers: orHeaders, signal: AbortSignal.timeout(60_000) });
+        const poll = await fetch(pollingUrl, { headers: orHeaders, signal: AbortSignal.timeout(60_000) });
         if (poll.ok) job = JSON.parse(await poll.text());
       }
       if (job.status !== "completed" || !job.unsigned_urls?.[0]) throw new Error(`mozgókép: ${job.status} ${scrub(JSON.stringify(job.error ?? ""))}`);
-      const url = new URL(job.unsigned_urls[0], OPENROUTER);
-      return downloadAndShrink(() => fetch(url, { headers: { Authorization: orHeaders.Authorization }, signal: AbortSignal.timeout(180_000) }), keys.ffmpeg);
+      // Letöltés csak HTTPS-ről; a kulcs csak a szolgáltató saját originjére megy, idegen (CDN) címre kulcs nélkül (vak kör L8).
+      const url = providerUrl(job.unsigned_urls[0]);
+      if (!url) throw new Error("mozgókép: a letöltési cím nem HTTPS");
+      const headers: Record<string, string> = url.origin === OPENROUTER_ORIGIN ? { Authorization: orHeaders.Authorization } : {};
+      return downloadAndShrink(() => fetch(url, { headers, signal: AbortSignal.timeout(180_000) }), keys.ffmpeg);
     },
   };
   if (keys.elevenLabs) {

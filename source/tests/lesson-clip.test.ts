@@ -95,6 +95,41 @@ test("az átkódolás egy szálon, előretekintés nélkül fut (mérve: így 75
   assert.match(args[args.indexOf("-x264-params") + 1], /rc-lookahead=0/);
 });
 
+test("az átkódolás szűrőlánca is egy szálon fut, a bemenet csak helyi fájl, a kimenet legfeljebb 15 mp (vak kör L2, L4, L8)", () => {
+  const args = FFMPEG_ARGS("be.mp4", "ki.mp4");
+  const input = args.indexOf("-i");
+  // Megadás nélkül az ffmpeg a szűrőlánchoz (scale) annyi szálat indít, ahány CPU-t lát — a két `-threads 1` ezt nem fedi.
+  const ft = args.indexOf("-filter_threads");
+  assert.ok(ft >= 0 && ft < input && args[ft + 1] === "1", "globális -filter_threads 1 a bemenet előtt");
+  const proto = args.indexOf("-protocol_whitelist");
+  assert.ok(proto >= 0 && proto < input && args[proto + 1] === "file", "a demuxer csak helyi fájlt nyithat");
+  const t = args.indexOf("-t");
+  assert.ok(t > input && Number(args[t + 1]) <= 15, "a kimenet hossza korlátos (a kért klip legfeljebb 12 mp)");
+});
+
+test("a sor a felszabaduló helyet közvetlenül a várakozónak adja: köztes érkező nem előzhet, és nem lehet két feladat (vak kör L6)", async () => {
+  for (const outcome of ["siker", "hiba"] as const) {
+    const queue = limiter(1);
+    let active = 0, peak = 0;
+    const order: string[] = [];
+    const job = (name: string) => async () => { order.push(name); peak = Math.max(peak, ++active); await new Promise((r) => setTimeout(r, 5)); active--; };
+    let release!: () => void, fail!: (e: Error) => void;
+    const gate = new Promise<void>((resolve, reject) => { release = resolve; fail = reject; });
+    gate.then(() => { active--; }, () => { active--; });
+    // A munka magát a kaput adja vissza: a sor folytatása így pontosan egy mikrofeladattal a kapu után jön.
+    const a = queue(() => { order.push("A"); peak = Math.max(peak, ++active); return gate; });
+    const b = queue(job("B"));
+    let c: Promise<void> | undefined;
+    // A felszabadulása és B folytatása közé érkezik C (a mikrofeladat-sorban A folytatása után, B ébresztése előtt).
+    if (outcome === "siker") release(); else fail(new Error("A hibázik"));
+    queueMicrotask(() => { c = queue(job("C")); });
+    await (outcome === "siker" ? a : assert.rejects(a));
+    await b; await c;
+    assert.deepEqual(order, ["A", "B", "C"], `${outcome}: a sorrend megmarad`);
+    assert.equal(peak, 1, `${outcome}: egyszerre egy feladat`);
+  }
+});
+
 test("a néma jelenet legalább 2,5 mp, hosszabb mondatnál arányosan több", () => {
   assert.equal(silentSceneMs("rövid"), 2500);
   assert.equal(silentSceneMs("a".repeat(100)), 6500);

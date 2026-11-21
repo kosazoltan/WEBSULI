@@ -21,6 +21,15 @@ function toState(body: unknown): LessonClipsState {
   return { clips, pending: raw?.pending === true };
 }
 
+/**
+ * A válasz utáni állapot: tovább kérdez-e a kliens, és mit mutat. Ha a várakozás lejárt (CLIP_POLL_MAX_MS), a „Készülnek a
+ * kisfilmek…” jelzés eltűnik — a kliens már nem kérdez, a jelzés nem ragadhat kint (vak kör L7).
+ */
+export function settleClips(next: LessonClipsState, elapsedMs: number): { state: LessonClipsState; poll: boolean } {
+  if (!next.pending) return { state: next, poll: false };
+  return elapsedMs < CLIP_POLL_MAX_MS ? { state: next, poll: true } : { state: { clips: next.clips, pending: false }, poll: false };
+}
+
 export function useLessonClips(lessonId: string | undefined, preset?: LessonClipsResponse, pollMs = CLIP_POLL_MS): LessonClipsState {
   const [state, setState] = useState<LessonClipsState>(() => (preset ? toState(preset) : EMPTY));
   useEffect(() => {
@@ -38,9 +47,10 @@ export function useLessonClips(lessonId: string | undefined, preset?: LessonClip
         next = EMPTY; // hálózati hiba: a lecke kisfilm nélkül megy tovább
       }
       if (stopped) return;
+      const settled = settleClips(next, Date.now() - started);
       // Hibás lekérés nem törli a már megjelent kisfilmeket.
-      setState((old) => (next === EMPTY && old.clips.size ? { clips: old.clips, pending: false } : next));
-      if (next.pending && Date.now() - started < CLIP_POLL_MAX_MS) timer = setTimeout(() => void load(), pollMs);
+      setState((old) => (next === EMPTY && old.clips.size ? { clips: old.clips, pending: false } : settled.state));
+      if (settled.poll) timer = setTimeout(() => void load(), pollMs);
     };
     void load();
     return () => { stopped = true; clearTimeout(timer); };
