@@ -335,8 +335,9 @@ Idő és szezon:
   mutatni; WHEN január 7. vagy későbbi THEN the system SHALL az írást elutasítani és a saját összesítést mutatni.
 - [ ] A15 WHEN a fázis `before` vagy `closed`, vagy a flag ki van kapcsolva THEN the system SHALL nem mutatni a szezonális
   kártyát a játéklistán és a főoldalon; WHEN `teaser` THEN the system SHALL „Hamarosan” kártyát mutatni visszaszámlálással.
-- [ ] A16 WHEN az admin a `?elonezet=ÉÉÉÉ-HH-NN` címet nyitja THEN the system SHALL a megadott nap szerinti naptárat mutatni
+- [x] A16 WHEN az admin a `?elonezet=ÉÉÉÉ-HH-NN` címet nyitja THEN the system SHALL a megadott nap szerinti naptárat mutatni
   „ELŐNÉZET” jelöléssel, levélküldés nélkül; WHEN nem admin teszi THEN the system SHALL a valódi dátumot használni.
+  Bizonyíték (2026-11-21, S6): böngésző `tests/advent-calendar.spec.ts` „admin-előnézet (A16, S6)” (admin belépve / kilépve); DB `tests/advent-routes-db.integration.ts` „admin-előnézet (S6, A16; terv 16.5)” (3 eset: kikapcsolt naptár mellett is, levélfoglalás nélkül; 400 / 401 / 403; „Előnézet törlése” CSRF-fel); `tests/admin-route-guard.test.ts` „adventi naptár S6 (A16)”; `tests/advent-s6.test.ts`.
 
 Azonosítás, adat, biztonság:
 - [ ] A17 WHEN párosított tanuló játszik THEN the system SHALL a `learners.grade` évfolyamot használni és az előrehaladást a
@@ -356,8 +357,9 @@ Azonosítás, adat, biztonság:
   Drizzle-definícióval egyezni.
 
 Szülői levél (E1 — ha a tulajdonos kéri):
-- [ ] A25 WHEN egy azonosított tanuló mind a 24 ablakra választ adott THEN the system SHALL címzettenként pontosan egy levelet
+- [x] A25 WHEN egy azonosított tanuló mind a 24 ablakra választ adott THEN the system SHALL címzettenként pontosan egy levelet
   küldeni az `ADMIN_EMAILS` listára az eredménnyel; WHEN névtelen vagy előnézet THEN the system SHALL nem küldeni.
+  Bizonyíték (2026-11-21, S5 — a pillanat a 18.1 szerint: a VÉGLEGES eredménykor, évadonként egy levél): DB `tests/advent-routes-db.integration.ts` „S5 (A25, A50; terv 18.1)” (három címzett → három levél, ismétlésre nincs több, névtelen sorról soha); egység `tests/advent-s5.test.ts` (előnézeti / játékos- / névtelen sor soha, bukó küldő felszabadít és pótol).
 
 Mobil, akadálymentesség, teljesítmény:
 - [ ] A26 WHEN a naptár 360×640, 390×844 vagy 844×390 nézetben fut (naptár, kérdés, visszajelzés, összesítés állapotban)
@@ -959,9 +961,10 @@ leírásban indokolva); (3) S3c-0; (4) S1b. Mindegyik külön ág a közös ágr
   system SHALL a továbbiakat 429-cel és `Retry-After` fejléccel elutasítani — párhuzamos kéréseknél is; az érvénytelen kérés a hálózati
   keretet nem fogyaszthatja. (FELÜLÍRVA 2026-11-18, 21. szakasz: korábban „90-nél több”.) (FELÜLÍRVA 2026-11-18, tulajdonosi döntés, 19. szakasz:
   eredetileg „30-nál több”.)
-- [ ] A50 WHEN a tanuló eredménye még nem végleges (van javítható ablaka vagy további köre, és nem felelt meg) THEN the system
+- [x] A50 WHEN a tanuló eredménye még nem végleges (van javítható ablaka vagy további köre, és nem felelt meg) THEN the system
   SHALL szülői levelet nem küldeni; WHEN az eredmény végleges (18.1) THEN the system SHALL évadonként és címzettenként pontosan
   egy levelet küldeni, és utána többet nem.
+  Bizonyíték (2026-11-21, S5): egység `tests/advent-s5.test.ts` „S5 (18.1): a végleges eredmény oka …” (22 + 2 javítható → nincs; megfelelt → van; 1. kör sikertelen, van 2. kör → nincs; utolsó kör lezárva → van; lezárt évad → van) és „… címzettenként pontosan egy levél …”; DB „S5 (A25, A50; terv 18.1)” (javítás utáni megfelelés → egy levél címzettenként; újabb válasz és évadzárás → nincs második; évadzáráskor a levél nélküli tanulói sor egyszer).
 - [ ] A51 WHEN a szerver e2e-módban fut és a kérés nem hoz érvényes tesztidő-fejlécet THEN the system SHALL a naptárat
   kikapcsoltnak mutatni a valódi dátumtól függetlenül.
 - [ ] A52 WHEN a naptár lezárt vagy pótlási időszakban van THEN the system SHALL nem mutatni „gyere vissza holnap” szöveget, és
@@ -1213,3 +1216,25 @@ Az L1 (friss évfolyam az átvételnél) a fenti 1. pont; a 2/3 PR jelentéséne
     „Folytatom vendégként” csak a figyelmeztetés generációjának tokenjét felejti el.
 23. **A csillag helye (L5):** a fejlécben a csillag önálló, nem zsugorodó helyen áll; csak a cím szövege csonkolódhat (360 px-en is
     teljesen látszik).
+
+**A PR-C 3. vak körének (d53178ef, 2026-11-21; ítélet: IGEN, FELTÉTELLEL) feltételei:**
+
+24. **Késve kézbesített régi válasz (L1):** az állapot és a válasz a szerververziót is adja (a sor módosítási ideje, írás-sorrendben növő
+    óra); a kliens a már alkalmazottnál régebbi verziójú állást eldobja — egy korábban feldolgozott, de később kézbesített átvételi válasz
+    nem festi vissza a közben megoldott ablakot.
+25. **Átvétel újrapróbája (L2):** az átvétel hibája után az „Újra” tényleges, az aktuális alanyhoz kötött `POST /adopt` kérést küld; az
+    igazolt mentésig látható függő állapot jelzi, hogy az eredmény még nincs elmentve.
+26. **A főoldalról indított nyitás szándéka (L3):** átmeneti hibánál nem vész el — az „Újra” friss állapotból folytatja a kérdésnyitást;
+    csak a siker (vagy szándékos megszakítás) fogyasztja el.
+27. **Kirajzolható ablakrács (L4):** a tárolt körterv `layout` mezője az 1…24 permutációja; minden más (tartományon kívüli, ismétlődő,
+    hiányzó elem, üres tömb) sérült sor: 409 corrupt olvasáskor és íráskor, változatlan sorral.
+
+**A bekapcsolás rendje (tulajdonosi D-11, 2026-11-21):**
+
+28. **Bekapcsolás csak a tulajdonos előnézeti jóváhagyása után, KÜLÖN, egysoros PR-ral.** Az S5 / S6 PR a kapcsolót nem kapcsolja be (a
+    `render.yaml` változatlan). A tulajdonos az admin-előnézetben (`/adventi-naptar?elonezet=ÉÉÉÉ-HH-NN`) kipróbálja a naptárat; a
+    jóváhagyása után a Render `ADVENT_CALENDAR=on` (dashboard, vagy egysoros `render.yaml` PR), majd a Vercel `VITE_ADVENT_CALENDAR=on` +
+    Redeploy — a pontos lépések: a végrehajtási utasítás „Bekapcsolás és kikapcsolás lépésről lépésre” része (0. lépés: előnézeti próba;
+    az oldal a Vercel-buildhez kötött, ezért a próbához a Vercel-kapcsoló kell előbb — november 24. előtt ez nyilvánosan láthatatlan).
+    Határidő: a naptár legkésőbb 2026-11-30-ig bekapcsolható legyen.
+
