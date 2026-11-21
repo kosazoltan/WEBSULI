@@ -87,7 +87,10 @@ test('vak L5 (169cb025): a pontos (nem token-karakteres) kulcs pont a vágáspon
     const start = MASK_WINDOW - margin - back;
     const s = 'w '.repeat(start).slice(0, start) + key + ' ' + 'v '.repeat(3000);
     assert.ok(s.length > MASK_WINDOW, 'a bemenet hosszabb a tényleges limitnél (vágási ág)');
-    assert.ok(!maskClip(s, key, MASK_WINDOW).includes('ab#cd'), `vissza ${back}`);
+    const out = maskClip(s, key, MASK_WINDOW);
+    assert.ok(!out.includes('ab#cd'), `vissza ${back}`);
+    // a vágáspontot metsző kulcs a vágás ELŐTT marad ki (cutPoint), nem csak félbevágott helyőrzőként (replaceRanges)
+    assert.ok(!out.includes('***'), `vissza ${back}: a vágáspont a kulcs elé kerül`);
   }
 });
 

@@ -298,7 +298,9 @@ test("design-assets (vak L4 / L5 / L6, 169cb025): átfedő kulcs, kulcs a vágá
     const start = REDACT_WINDOW - m5 - back;
     const s = "w ".repeat(start).slice(0, start) + key + " " + "v ".repeat(3000);
     assert.ok(s.length > REDACT_WINDOW);
-    assert.equal(redactClip(s, key, REDACT_WINDOW).includes("ab#cd"), false, `vissza ${back}`);
+    const out = redactClip(s, key, REDACT_WINDOW);
+    assert.equal(out.includes("ab#cd"), false, `vissza ${back}`);
+    assert.equal(out.includes("[kulcs]"), false, `vissza ${back}: a vágáspont a kulcs elé kerül`);
   }
   assert.equal(redactClip("MODE: LifeboatBearer\n" + "A".repeat(REDACT_WINDOW + 10), CALLER_KEY, 300), "MODE: LifeboatBearer\n");
 });
