@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -655,4 +655,70 @@ test("R38 / L5: a névfeloldás átmeneti hibája után a „félbehagyva” lev
     setPartialDelay(60_000);
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r38-twice", picks: picks(3), partial: true, fingerprint: "fp-r38-guest" })).json(), { queued: true, partial: true }, "a lezárult ciklus után az első rögzítő nem tartja a kört");
   } finally { setAttributionFault(null); clearPendingPartials(); setPartialDelay(previousDelay); setRetryDelay(previousRetry); }
+});
+
+/* Gépi vak ellenőrzés, 7. kör (GPT-6.2 Sol, 0ec08148, 2026-11-21), terv R41 / R42. */
+test("R41 / L3: leállítás a kapuhiba utáni újrapróba-várakozás alatt → az ürítés előrehozza a halasztott „félbehagyva” levelet (ugyanazon a kapun); a küldés alatt álló levelet is megvárja", async () => {
+  reset();
+  const previousDelay = setPartialDelay(100);
+  const previousRetry = setRetryDelay(10 * 60_000); // a halasztott újrapróba magától a teszt alatt nem futna le
+  const partialMailsOf = (roundId: string) => { const keys = RECIPIENTS.map(to => resultIdempotencyKey(LESSON, "quiz", partialRoundKey(roundId), to)); return sent.filter(mail => keys.includes(mail.key)); };
+  try {
+    clearPendingPartials();
+    // 1. Az időzítő lejár, a kapu átmeneti DB-hibát kap → újrapróba 10 percre; közben leállítás.
+    let left = 1;
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r41-retry", picks: picks(2), partial: true, fingerprint: "fp-r41" })).json(), { queued: true, partial: true });
+    // A kapu hibája a felvétel UTÁN (a felvétel is nézi a véglegesítést), az időzítő lejárta előtt.
+    setFinalizedCheckFault(() => { if (left > 0) { left--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } });
+    assert.ok(await waitFor(() => left === 0, 2000), "a kapu hibát kapott");
+    await sleep(100);
+    assert.equal(pendingPartialCount(), 0, "a kör már nincs a várakozók között");
+    assert.equal(partialMailsOf("round-r41-retry").length, 0);
+    await flushPendingPartials(3_000);
+    assert.equal(partialMailsOf("round-r41-retry").length, 2, "az ürítés kiküldte a halasztott újrapróbát");
+    // 2. A küldés éppen fut (lassú küldő), amikor a leállítás jön → az ürítés megvárja.
+    reset();
+    setFinalizedCheckFault(null);
+    sendDelayMs = 700;
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r41-active", picks: picks(2), partial: true, fingerprint: "fp-r41b" })).json(), { queued: true, partial: true });
+    await sleep(300); // az időzítő lejárt, a küldés fut
+    assert.equal(pendingPartialCount(), 0);
+    await flushPendingPartials(3_000);
+    assert.equal(partialMailsOf("round-r41-active").length, 2, "az ürítés a futó küldés végét megvárta");
+    // 3. A halasztott újrapróba is a kapun megy: véglegesített körre az előrehozott kísérlet sem küld.
+    reset();
+    left = 1;
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r41-final", picks: picks(2), partial: true, fingerprint: "fp-r41c" })).json(), { queued: true, partial: true });
+    // A kapu hibája a felvétel UTÁN (a felvétel is nézi a véglegesítést), az időzítő lejárta előtt.
+    setFinalizedCheckFault(() => { if (left > 0) { left--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } });
+    assert.ok(await waitFor(() => left === 0, 2000));
+    assert.equal((await post({ kind: "quiz", roundId: "round-r41-final", picks: picks(5), fingerprint: "fp-r41c" })).status, 202);
+    assert.ok(await waitFor(() => sent.length === 2), "a végleges levél kiment");
+    await flushPendingPartials(3_000);
+    assert.equal(partialMailsOf("round-r41-final").length, 0, "véglegesített körre az előrehozott újrapróba sem küld");
+  } finally { setFinalizedCheckFault(null); clearPendingPartials(); setPartialDelay(previousDelay); setRetryDelay(previousRetry); }
+});
+
+test("R42 / L4: a tanulófüggetlen végleges jelzősor rögzült, de a kérés a 202 előtt megszakadt → az EREDETI beküldő ismétlése kiküldi a levelet; más kilét továbbra is duplikátum", async () => {
+  reset();
+  const body = { kind: "quiz", roundId: "round-r42-crash", picks: picks(5), fingerprint: "fp-r42" };
+  let left = 1;
+  setFinalClaimFault(() => { if (left > 0) { left--; throw new Error("a folyamat megszakadt"); } });
+  try {
+    const first = await post(body);
+    assert.equal(first.status, 500, "a jelzősor után, a 202 előtt megszakadt kérés");
+    assert.equal(left, 0);
+    const [marker] = await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, LESSON), eq(lessonResultEmails.roundKey, roundKeyOf("final-round", "quiz", "round-r42-crash"))));
+    assert.ok(marker, "a jelzősor rögzült");
+    await sleep(300);
+    assert.equal(sent.length, 0, "levél még nem ment");
+    // Más kilét (fiók) ismétlése: duplikátum, levél nem megy (R27 változatlan).
+    assert.deepEqual(await (await post(body, freshIp(), "u-r42-other")).json(), { queued: false, duplicate: true });
+    await sleep(300);
+    assert.equal(sent.length, 0);
+    // Az eredeti beküldő (ugyanaz az ujjlenyomat) ismétlése folytatja a félbemaradt utat.
+    assert.deepEqual(await (await post(body)).json(), { queued: true });
+    assert.ok(await waitFor(() => sent.length === 2), "az eredeti beküldő levele kiment");
+    assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló")));
+  } finally { setFinalClaimFault(null); }
 });

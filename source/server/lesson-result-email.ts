@@ -128,9 +128,19 @@ type SendSource = SendInput | (() => Promise<SendInput>);
  * Terv R34 (review 4642333345): `onSettled` akkor hívódik (egyszer), amikor a küldési ciklus véget ért — az utolsó kísérlet lefutott, és
  * további újrapróba már nem ütemeződik. A „félbehagyva” levél első rögzítőjének kiléte eddig őrződik.
  */
-export async function sendLessonResult(input: SendSource, retry = true, gate?: SendGate, onSettled?: () => void): Promise<SendOutcome> {
+/**
+ * Terv R41 (7. vak kör L3): az újrapróba ütemezője — alapból `setTimeout`; a „félbehagyva” út a sajátját adja, hogy a halasztott
+ * újrapróba nyilvántartott legyen, és leállításkor előrehozható.
+ */
+export type RetryScheduler = (run: () => Promise<unknown>, delayMs: number) => void;
+export async function sendLessonResult(input: SendSource, retry = true, gate?: SendGate, onSettled?: () => void, schedule?: RetryScheduler): Promise<SendOutcome> {
   let rescheduled = false;
-  const again = () => { rescheduled = true; setTimeout(() => { void sendLessonResult(input, false, gate, onSettled); }, retryDelayMs).unref?.(); };
+  const again = () => {
+    rescheduled = true;
+    const run = () => sendLessonResult(input, false, gate, onSettled, schedule);
+    if (schedule) schedule(run, retryDelayMs);
+    else setTimeout(() => { void run(); }, retryDelayMs).unref?.();
+  };
   try {
     if (!gate) return await attemptLessonResult(input, retry, again);
     try { return await gate(() => attemptLessonResult(input, retry, again)); }
@@ -268,6 +278,28 @@ function markSending(key: string, who: string, version: number): void {
 function settleSending(key: string, version: number): void {
   if (sendingPartials.get(key)?.version === version) sendingPartials.delete(key);
 }
+/**
+ * Terv R41 (7. vak kör L3): a „félbehagyva” levél éppen FUTÓ küldési kísérletei (az időzítő lejártától / az újrapróba indulásától a
+ * végéig) és a HALASZTOTT újrapróbái (60 s-os, R19 kapu-újrapróba) — a leállítás ürítése innen is dolgozik: a halasztottat előrehozza
+ * (ugyanazon a kapun át), a futókat megvárja. Az ürítés alatt keletkező újrapróba azonnal fut.
+ */
+const activePartialSends = new Set<Promise<unknown>>();
+const deferredPartialRetries = new Map<number, { timer: ReturnType<typeof setTimeout>; run: () => Promise<unknown> }>();
+let deferredPartialSeq = 0;
+let flushingPartials = false;
+function trackPartialSend(sending: Promise<unknown>): Promise<unknown> {
+  const tracked = sending.catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${errorClass(error)}`));
+  activePartialSends.add(tracked);
+  void tracked.finally(() => activePartialSends.delete(tracked));
+  return tracked;
+}
+const schedulePartialRetry: RetryScheduler = (run, delayMs) => {
+  if (flushingPartials) { void trackPartialSend(Promise.resolve().then(run)); return; }
+  const id = ++deferredPartialSeq;
+  const timer = setTimeout(() => { deferredPartialRetries.delete(id); void trackPartialSend(run()); }, delayMs);
+  timer.unref?.();
+  deferredPartialRetries.set(id, { timer, run });
+};
 function cancelPartial(key: string): void {
   const entry = pendingPartials.get(key);
   if (entry) { clearTimeout(entry.timer); pendingPartials.delete(key); }
@@ -290,7 +322,8 @@ function schedulePartial(key: string, owner: string, who: string, answered: numb
     markSending(key, best.who, best.version);
     pendingPartials.delete(key);
     // Review K4: csak a hiba osztálya / kódja (`errorClass`) — a lekérdezés hibaüzenete felhasználói azonosítót tartalmazhatna.
-    void best.send().catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${errorClass(error)}`));
+    // R41: a futó küldés nyilvántartott (a leállítás ürítése megvárja).
+    void trackPartialSend(Promise.resolve().then(best.send));
   }, partialDelayMs);
   timer.unref?.();
   pendingPartials.set(key, { timer, ...best });
@@ -326,10 +359,20 @@ export const finalRoundKeyOf = (roundId: string, kind: "tasks" | "quiz" = "quiz"
  * Terv R27 (gépi vak ellenőrzés, 3. célzott kör L3): a tanulófüggetlen végleges-jelzősor mindkét fajtánál — a kvízé egyben az R18 nyoma.
  * Igaz, ha ez az ELSŐ végleges beküldés a körre; ismétlésnél a jelzősor `created_at`-ja frissül (az R18 élettartama), és hamis.
  */
-async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId: string, percent: number): Promise<boolean> {
-  const fresh = await db.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalRoundKeyOf(roundId, kind), percent })
-    .onConflictDoNothing().returning({ id: lessonResultEmails.id });
-  if (fresh.length) return true;
+/**
+ * Terv R42 (7. vak kör L4): a jelzősor ELSŐ rögzítőjének álnevesített tulajdonos-sora (lecke + fajta + kör + kilét; üres kézbesítés). A
+ * jelzősorral egy tranzakcióban jön létre, így ha a kérés a jelzősor után, a saját sor és a 202 előtt megszakad, az eredeti beküldő
+ * ismétlése továbbmehet (más kilét továbbra is duplikátum).
+ */
+export const finalOwnerKeyOf = (who: string, kind: "tasks" | "quiz", roundId: string) => roundKeyOf("final-owner", kind, roundId, who);
+async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId: string, percent: number, who: string): Promise<boolean> {
+  const fresh = await db.transaction(async tx => {
+    const marker = await tx.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalRoundKeyOf(roundId, kind), percent })
+      .onConflictDoNothing().returning({ id: lessonResultEmails.id });
+    if (marker.length) await tx.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalOwnerKeyOf(who, kind, roundId), percent }).onConflictDoNothing();
+    return marker.length > 0;
+  });
+  if (fresh) return true;
   await db.update(lessonResultEmails).set({ createdAt: sql`now()` })
     .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, kind), eq(lessonResultEmails.roundKey, finalRoundKeyOf(roundId, kind))));
   return false;
@@ -339,6 +382,9 @@ let partialIntakeHook: ((who: string) => Promise<void>) | null = null;
 let gateCheckHook: ((lockKey: string) => Promise<void>) | null = null;
 let partialScheduleHook: ((who: string) => Promise<void>) | null = null;
 let attributionFault: (() => void) | null = null;
+let finalClaimFault: (() => void) | null = null;
+/** Teszthez (R42): hibainjektálás a végleges jelzősor rögzítése UTÁN, a háttérküldés és a 202 ELŐTT (megszakadt kérés); `null` kikapcsolja. */
+export function setFinalClaimFault(fault: (() => void) | null): void { finalClaimFault = fault; }
 /** Teszthez (R36): a pillanatkép-felvételben a „már kiment” lekérdezés UTÁN hívódik; `null` kikapcsolja. */
 export function setPartialScheduleHook(hook: ((who: string) => Promise<void>) | null): void { partialScheduleHook = hook; }
 /** Teszthez (R38): hibainjektálás a tanuló nevének lekérdezése elé; `null` kikapcsolja. */
@@ -384,22 +430,40 @@ async function withRoundLock<T>(key: string, run: () => Promise<T>): Promise<T> 
 export function clearFinalizedRounds(): void { finalizedRounds.clear(); }
 
 /** Teszthez: a várakozó pillanatképek eldobása (küldés nélkül). */
-export function clearPendingPartials(): void { for (const key of [...pendingPartials.keys()]) cancelPartial(key); sendingPartials.clear(); }
+export function clearPendingPartials(): void {
+  for (const key of [...pendingPartials.keys()]) cancelPartial(key);
+  sendingPartials.clear();
+  for (const retry of deferredPartialRetries.values()) clearTimeout(retry.timer);
+  deferredPartialRetries.clear();
+  // A futó kísérletek nyilvántartása is ürül (a kísérlet maga lefut; egy korábbi, lefagyott küldés nem tartja a következő ürítést).
+  activePartialSends.clear();
+}
 /**
  * Terv R14 (második vak ellenőrzés K4): leállításkor a várakozó „félbehagyva” levelek a késleltetés kivárása nélkül kimennek, a szokott
  * kapun (kizárás + véglegesítés-ellenőrzés) át, legfeljebb `timeoutMs`-ig. Az időkorlát után visszatér (a leállás folytatódik). Sosem dob.
  */
 export async function flushPendingPartials(timeoutMs: number): Promise<void> {
-  const entries = [...pendingPartials.values()];
-  for (const entry of entries) clearTimeout(entry.timer);
-  pendingPartials.clear();
-  if (!entries.length) return;
-  const sending = Promise.allSettled(entries.map(entry => Promise.resolve().then(entry.send)));
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const limit = new Promise<"timeout">(resolve => { timer = setTimeout(() => resolve("timeout"), timeoutMs); timer.unref?.(); });
-  const outcome = await Promise.race([sending, limit]);
-  clearTimeout(timer);
-  if (outcome === "timeout") logger.warn(`[LESSON-RESULT] leállítás: ${entries.length} várakozó „félbehagyva” levél kiküldése nem fejeződött be ${timeoutMs} ms alatt.`);
+  // R41: az ürítés alatt keletkező újrapróba azonnal fut (nyilvántartva), nem halasztódik a leállás utánra.
+  flushingPartials = true;
+  try {
+    const entries = [...pendingPartials.values()];
+    for (const entry of entries) clearTimeout(entry.timer);
+    pendingPartials.clear();
+    for (const entry of entries) void trackPartialSend(Promise.resolve().then(entry.send));
+    // R41: a halasztott újrapróbák előrehozva — a korábbi időzítő törlődik, a kísérlet ugyanazon a kapun és záron megy.
+    const deferred = [...deferredPartialRetries.values()];
+    deferredPartialRetries.clear();
+    for (const retry of deferred) { clearTimeout(retry.timer); void trackPartialSend(Promise.resolve().then(retry.run)); }
+    if (!activePartialSends.size) return;
+    const total = activePartialSends.size;
+    // A futó kísérletek (és az általuk ütemezett, azonnal induló újrapróbák) végéig, legfeljebb a határidőig.
+    const sending = (async () => { while (activePartialSends.size) await Promise.allSettled([...activePartialSends]); })();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<"timeout">(resolve => { timer = setTimeout(() => resolve("timeout"), timeoutMs); timer.unref?.(); });
+    const outcome = await Promise.race([sending, limit]);
+    clearTimeout(timer);
+    if (outcome === "timeout") logger.warn(`[LESSON-RESULT] leállítás: ${total} „félbehagyva” levél kiküldése nem fejeződött be ${timeoutMs} ms alatt.`);
+  } finally { flushingPartials = false; }
 }
 
 /** POST /api/lessons/:lessonId/results — a feladatok / a helyi kvíz befejezésekor (vendég is). Mindig 202, ha a kérés érvényes. */
@@ -492,7 +556,8 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
       });
       const queued = schedulePartial(lockKey, `${lessonId}|${recorder}`, recorder, snapshot.meta?.partial?.answered ?? 0, version,
         // R38: a név feloldása a küldési kísérleten belül (hibája újrapróbát kap, a ciklus végén az első rögzítő felszabadul).
-        async () => sendLessonResult(async () => ({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }), true, gate, () => settleSending(lockKey, version)));
+        // R41: az újrapróba nyilvántartott ütemezőn át (leállításkor előrehozható).
+        async () => sendLessonResult(async () => ({ lessonId, roundKey: partialRoundKey, ...(await sender()), graded: partialGraded }), true, gate, () => settleSending(lockKey, version), schedulePartialRetry));
       return { queued, partial: true };
     });
     return res.status(202).json(outcome);
@@ -524,12 +589,15 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   // második levél és más név nem megy. Ugyanazon kilét ismétlése a meglévő címzettenkénti pótlásra fut. A jelzősor hibája nem akasztja meg
   // a beküldést (a memóriabeli véglegesítés véd; a hiba osztálya naplózódik).
   try {
-    if (!(await claimFinalRound(lessonId, body.kind, body.roundId, graded.summary.percent))) {
+    if (!(await claimFinalRound(lessonId, body.kind, body.roundId, graded.summary.percent, who))) {
+      // R42: a saját végleges sor VAGY az első rögzítő tulajdonos-sora (a 202 előtt megszakadt első kérés ismétlése).
       const own = await db.select({ id: lessonResultEmails.id }).from(lessonResultEmails)
-        .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, body.kind), eq(lessonResultEmails.roundKey, roundKeyOf(who, body.kind, body.roundId)))).limit(1);
+        .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, body.kind),
+          inArray(lessonResultEmails.roundKey, [roundKeyOf(who, body.kind, body.roundId), finalOwnerKeyOf(who, body.kind, body.roundId)]))).limit(1);
       if (!own.length) return res.status(202).json({ queued: false, duplicate: true });
     }
   } catch (error) { logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`); }
+  finalClaimFault?.();
   if (startedAtOnServer) graded = { ...graded, meta: { ...graded.meta, startedAt: startedAtOnServer } };
   const roundKey = roundKeyOf(who, body.kind, body.roundId);
   // Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény (a levéltől független), utána a szigorítás automatikus lazítása. Nem
