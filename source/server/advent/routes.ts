@@ -241,8 +241,9 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
     return createAdoptionContext({ bank, christmas, season: locals.at.season, learnerId: learner.id, learnerGrade: learner.grade ?? 1, deviceId, now: locals.now });
   };
   /**
-   * A következő kör terve a valódi bankkal (PR-C vak L1), vagy \`null\`, ha ismétlés nélkül már nem építhető fel (a gyerek az évad
-   * korábbi köreiben több kérdést látott, mint amennyi a készletben marad). A kizárólista a megmutatott kérdésekből áll.
+   * A következő kör terve a valódi bankkal (PR-C vak L1). A kizárólista a megmutatott kérdésekből áll; ha ismétlés nélkül nem telne
+   * ki, a hiányzó helyekre a legrégebben látott kérdések kerülnek (tulajdonosi döntés 2026-11-21: „Ismétlés a legrégebbiekből”).
+   * \`null\` csak védőhálóként (hiányos / sérült bank), szabályos játékban nem fordul elő.
    */
   const nextRoundPlan = (row: AdventRow, grade: number, key: string, season: number): AdventPlan | null => {
     const round = row.round + 1;
@@ -501,8 +502,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       const summary = adventSummary(current.doors[current.round] ?? {}, maxRepairs);
       const allowed = summary.answered === ADVENT_DOORS && !summary.passed && summary.repairable === 0 && current.round < maxRounds && !current.passedAt;
       if (!allowed) throw new AdventHttpError(409, "Új kör csak akkor kérhető, ha végigértél, nincs javítható ablakod, és van még kör.");
-      // A következő kör terve a körváltással EGY tranzakcióban készül és mentődik (L1): ha ismétlés nélkül már nem építhető fel, a kör
-      // nem vált (nincs játszhatatlan kör, nincs 503 az első megnyitáskor) — a gyerek eredménye változatlan marad.
+      // A következő kör terve a körváltással EGY tranzakcióban készül és mentődik (L1). Védőháló: ha mégsem építhető fel (hiányos bank),
+      // a kör nem vált (nincs játszhatatlan kör, nincs 503 az első megnyitáskor) — a gyerek eredménye változatlan marad.
       const plan = nextRoundPlan(current, grade, subjectKeyOf(subject), locals.at.season);
       if (!plan) throw new AdventHttpError(409, "Idén már minden kérdést láttál ebből a naptárból — büszke lehetsz magadra!", { noMoreQuestions: true });
       return { patch: { round: current.round + 1, finishedAt: null, plan: { ...current.plan, [current.round + 1]: plan } }, result: null };

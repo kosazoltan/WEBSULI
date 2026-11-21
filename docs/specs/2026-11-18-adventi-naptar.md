@@ -221,7 +221,7 @@ Drizzle-sémáéval azonosak, visszaállítás (`DROP TABLE IF EXISTS advent_pro
 | `POST /api/advent/grade` | évfolyam megadása (csak `player` / `device`, csak az első válasz előtt) | CSRF + IP-korlát |
 | `POST /api/advent/doors/:day/open` | az ablak aktuális kérdése (helyes válasz NÉLKÜL); az első hívás hozza létre a sort és a kiosztást; idempotens | CSRF + IP-korlát |
 | `POST /api/advent/doors/:day/answer` | `{ questionId, pick }` → `{ correct, correctIndex, explanation, door, summary }`; ugyanarra a kérdésre a második beküldés a tárolt eredményt adja | CSRF + IP-korlát; soronkénti zár (`SELECT … FOR UPDATE` tranzakcióban) |
-| `POST /api/advent/round` | új kör (csak ha végigért, nem felelt meg, nincs javítható ablak, és a kör < 3); a következő kör terve ugyanabban a tranzakcióban készül, és ha ismétlés nélkül nem építhető fel, a kör nem vált (409 `noMoreQuestions`; 22.11) | CSRF + IP-korlát |
+| `POST /api/advent/round` | új kör (csak ha végigért, nem felelt meg, nincs javítható ablak, és a kör < 3); a következő kör terve ugyanabban a tranzakcióban készül; ha ismétlés nélkül nem építhető fel, a hiányzó helyekre a legrégebben látott kérdések kerülnek (tulajdonosi döntés 2026-11-21; 22.11) | CSRF + IP-korlát |
 | `POST /api/advent/adopt` | a párosított eszköz függő (a `GET /state`-en `adoptionPending: true` előnézetként mutatott) vendégsorának kifejezett átvétele; idempotens — átvehető sor nélkül a mentett állapotot adja (22.12) | CSRF + IP-korlát |
 | `…/api/admin/advent/preview/*` | ugyanez a router az adminnak, választható dátummal (R9) | `isAuthenticatedAdmin` |
 
@@ -1177,10 +1177,13 @@ Az L1 (friss évfolyam az átvételnél) a fenti 1. pont; a 2/3 PR jelentéséne
 11. **Kizárólista és körváltás (L1):** a korábbi körök kizárólistája a MEGMUTATOTT kérdésekből áll: a próbák és a lecserélt (`retired`)
     tanulói próbák kérdései. A lezárt kör fel nem használt foglalásai (a meg sem nyitott javító kérdések) nem számítanak — a gyerek
     sosem látta őket (a 12.3 „körökön át sem ismétlődik” szabálya a látott kérdésekre vonatkozik). A következő kör terve a körváltással
-    EGY tranzakcióban készül és mentődik; ha ismétlés nélkül már nem építhető fel (a gyerek több kérdést látott, mint amennyi a
-    készletben marad — csak átvétel után, szélső esetben fordulhat elő), az új kör nem ajánlható fel (a zárószöveg „done”), és a
-    `POST /round` 409 `noMoreQuestions`, körváltás nélkül. NYITOTT tulajdonosi kérdés: ilyenkor ismétlés engedése a 2. körben, vagy
-    (jelenlegi, biztonságos alapértelmezés) nincs új kör.
+    EGY tranzakcióban készül és mentődik. **TULAJDONOSI DÖNTÉS 2026-11-21 (űrlap), szó szerint: „Ismétlés a legrégebbiekből”.** Ha
+    ismétlés nélkül már nem építhető fel a következő kör (a gyerek több kérdést látott, mint amennyi a készletben marad — csak átvétel
+    után, szélső esetben fordulhat elő), a terv a még hiányzó helyekre a LEGRÉGEBBEN megmutatott kérdéseket használja (legrégebbi elöl,
+    determinisztikusan; az ablak saját készletéből, a körön belül ismétlés nélkül), így a gyerek továbbjátszhat; a többi hely új kérdés.
+    A sorrend: a lecserélt (`retired`) próbák elöl (az időpontjuk nincs tárolva), utána a próbák időrendben (egyenlő időnél kör, nap,
+    próba). Ahol van elég új kérdés, a terv változatlan. A korábbi „nincs új kör / 409 `noMoreQuestions`” ág csak védőháló (a bank
+    hiányos sérülésére), szabályos játékban nem fordul elő.
 12. **Kész vendégeredmény átvétele (L2):** a `GET /state` párosított eszközön `adoptionPending: true`-val jelzi, ha a nézet egy még nem
     mentett átvétel előnézete; a kliens az összesítés megnyitásakor, illetve végigjátszott körnél kifejezett, CSRF-védett, idempotens
     `POST /adopt` kéréssel menti. A GET mellékhatás nélkül marad.

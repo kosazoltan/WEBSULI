@@ -951,16 +951,33 @@ describe("adventi naptár — végpontok", () => {
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 
-  it("PR-C vak L1: ha ismétlés nélkül már nem építhető fel a 2. kör, nem is ajánljuk fel — a kör nem vált, nincs játszhatatlan kör és nincs 503", async () => {
+  it("PR-C vak L1 (tulajdonosi döntés 2026-11-21: „Ismétlés a legrégebbiekből”): ha ismétlés nélkül nem építhető fel a 2. kör, a hiányzó helyekre a legrégebben látott kérdések kerülnek — van 2. kör, mind a 24 ablak megnyitható, a többi kérdés új", async () => {
     // 22 ablak a 3. próbára (így még nincs meg a 95%): a gyerek ~100 különböző elsős kérdést látott a 150-ből.
     const { learner, phone } = await firstGraderAdoption(3, Array.from({ length: 22 }, (_, i) => i + 1));
     const state = (await phone.state()).json;
-    assert.deepEqual({ solved: state.summary.solved, kind: state.closing.kind }, { solved: 22, kind: "done" }, "nincs „Új naptárat kérek”");
+    assert.deepEqual({ solved: state.summary.solved, kind: state.closing.kind }, { solved: 22, kind: "new-round" }, "felajánlja az új kört");
+    const [before] = await q<{ plan: Json; doors: Json }>(`SELECT plan, doors FROM advent_progress WHERE subject_id = $1`, [learner.id]);
+    // A várt időrend a tárolt sorból, a megvalósítástól függetlenül: lecserélt próbák elöl, utána a próbák időrendben (kör, nap, próba).
+    const timed: { id: string; at: string; day: number; i: number }[] = [];
+    for (const [day, door] of Object.entries(before!.doors["1"] as Record<string, { attempts: { questionId: string; at: string }[] }>)) door.attempts.forEach((a, i) => timed.push({ id: a.questionId, at: a.at, day: Number(day), i }));
+    timed.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.day - b.day || a.i - b.i));
+    const order = [...new Set([...((before!.plan["1"].retired ?? []) as string[]), ...timed.map((t) => t.id)])];
+    const seen = new Set(order);
+    const unseen = CHRISTMAS_ITEMS.filter((c) => c.minGrade <= 1 && 1 <= c.maxGrade && !seen.has(c.id)).length;
+    assert.ok(unseen < 72, `szélső eset (${unseen} új kérdés 72 helyre)`);
     const round = await phone.post("/round");
-    assert.deepEqual({ status: round.status, noMore: round.json.noMoreQuestions }, { status: 409, noMore: true });
-    const [saved] = await q<{ round: number }>(`SELECT round FROM advent_progress WHERE subject_id = $1`, [learner.id]);
-    assert.equal(saved!.round, 1, "a kör nem váltott");
-    assert.equal((await phone.post("/doors/24/open")).status, 200, "a naptár olvasható marad (a végleg hibás ablak tárolt eredménye)");
+    assert.equal(round.status, 200, JSON.stringify(round.json).slice(0, 200));
+    assert.equal(round.json.round, 2);
+    const [saved] = await q<{ plan: Json }>(`SELECT plan FROM advent_progress WHERE subject_id = $1`, [learner.id]);
+    const ids = Object.values(saved!.plan["2"].doors as Record<string, string[]>).flat();
+    assert.equal(new Set(ids).size, 72, "a 2. körön belül nincs ismétlés");
+    const repeated = ids.filter((id) => seen.has(id));
+    assert.equal(repeated.length, 72 - unseen, "csak a hiányzó helyeken ismétel");
+    assert.deepEqual(new Set(repeated), new Set(order.slice(0, 72 - unseen)), "a legrégebben látott kérdések ismétlődnek");
+    for (let day = 1; day <= 24; day++) {
+      const question = await phone.open(day);
+      assert.equal(question.id, saved!.plan["2"].doors[String(day)][0], `a ${day}. ablak kérdése a mentett tervből`);
+    }
     await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 

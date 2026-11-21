@@ -59,11 +59,48 @@ test("L1: a korábbi kör kizárólistája a MEGMUTATOTT kérdésekből áll (pr
   assert.ok(ids.every((id) => !shown.has(id)), "a 2. körben nincs már látott kérdés");
 });
 
-test("L1: a kapacitáson túli 2. kör (a gyerek több kérdést látott, mint amennyi ismétlés nélkül marad) NEM ajánlható fel — a router ezt a kör váltása előtt méri", () => {
-  // Szélső eset: a telefonon mind a 24 ablak a 3. próbára megoldva — a gyerek ~110 különböző elsős kérdést látott a 150-ből.
-  const { merged, grade } = l1Scenario(3, Array.from({ length: 24 }, (_, i) => i + 1));
+test("L1 (tulajdonosi döntés 2026-11-21: „Ismétlés a legrégebbiekből”): a kapacitáson túli 2. kör is felépül — a hiányzó helyeken a legrégebben megmutatott kérdések ismétlődnek (legrégebbi elöl, determinisztikusan), a többi hely új", () => {
+  const grade = 1;
+  const learnerPlan = withPlanMeta(buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 1, subjectKey: "learner:L" }), grade, "learner:L");
+  const devicePlan = withPlanMeta(buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 1, subjectKey: "device:D" }), grade, "device:D");
+  const days = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+  // A tablet (tanuló) minden ablakot végleg elbuk; a 23–24. ablak próbái a LEGKÉSŐBBIEK (december 20.), hogy az időrend ne a napok
+  // sorrendje legyen. A telefon (vendég) a 1–22. ablakot a 3. próbára oldja meg, december 10-én (napról napra későbbi percben).
+  const learnerAt = (day: number) => (day >= 23 ? `2026-12-20T10:${String(day).padStart(2, "0")}:00.000Z` : "2026-12-01T10:00:00.000Z");
+  const failed = (day: number) => ({ attempts: learnerPlan.doors[day]!.map((questionId) => ({ questionId, pick: 0, correct: false, at: learnerAt(day) })) });
+  const learner = emptyRow({ grade, plan: { 1: learnerPlan }, doors: { 1: Object.fromEntries(days(1, 24).map((d) => [d, failed(d)])) } });
+  const deviceAt = (day: number, i: number) => `2026-12-10T${String(10 + Math.floor(day / 10)).padStart(2, "0")}:${String((day % 10) * 5 + i).padStart(2, "0")}:00.000Z`;
+  const solvedOn3 = (day: number) => ({ attempts: devicePlan.doors[day]!.slice(0, 3).map((questionId, i) => ({ questionId, pick: 0, correct: i === 2, at: deviceAt(day, i) })) });
+  const device = emptyRow({ id: "d", subjectKind: "device", subjectId: "D", grade, plan: { 1: devicePlan }, doors: { 1: Object.fromEntries(days(1, 22).map((d) => [d, solvedOn3(d)])) } });
+  const ctx = createAdoptionContext({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, season, learnerId: "L", learnerGrade: grade, deviceId: "D", now: NOW });
+  const merged = mergeAdoption(learner, device, ctx)!;
+  // A várt időrend a tesztben, a megvalósítástól függetlenül: a lecserélt próbák (időpontjuk nincs tárolva → a legrégebbiek), majd a
+  // tárolt próbák időrendben (egyenlő időnél a kör, a nap és a próba sorrendje); egy kérdés az első előfordulásánál számít.
+  const retired = (merged.plan[1] as { retired?: string[] }).retired ?? [];
+  const timed: { id: string; at: string; day: number; i: number }[] = [];
+  for (const [day, door] of Object.entries(merged.doors[1]!)) door.attempts.forEach((a, i) => timed.push({ id: a.questionId, at: a.at, day: Number(day), i }));
+  timed.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.day - b.day || a.i - b.i));
+  const expectedOrder = [...new Set([...retired, ...timed.map((t) => t.id)])];
+  const shown = new Set(expectedOrder);
+  const unseen = CHRISTMAS_ITEMS.filter((c) => c.minGrade <= grade && grade <= c.maxGrade && !shown.has(c.id)).length;
+  assert.ok(unseen < 72, `szélső eset: ${unseen} új kérdés marad 72 helyre`);
   const used = usedInEarlierRounds({ ...merged, round: 2 }, 2, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS);
-  assert.throws(() => buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 2, subjectKey: "learner:L", ...used }), RangeError);
+  assert.deepEqual((used as { repeatable?: string[] }).repeatable, expectedOrder, "az ismételhető kérdések sorrendje: legrégebbi elöl");
+  const build = () => buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 2, subjectKey: "learner:L", ...used });
+  const next = build();
+  const ids = Object.values(next.doors).flat();
+  assert.equal(ids.length, 72);
+  assert.equal(new Set(ids).size, 72, "a 2. körön belül nincs ismétlés");
+  const repeated = ids.filter((id) => shown.has(id));
+  assert.equal(repeated.length, 72 - unseen, "csak a hiányzó helyeken ismétel; minden új kérdés felhasználva");
+  assert.deepEqual(new Set(repeated), new Set(expectedOrder.slice(0, 72 - unseen)), "a legrégebben látott kérdések ismétlődnek");
+  assert.deepEqual(build(), next, "determinisztikus");
+  // Ahol van elég új kérdés, ugyanaz a terv, mint ismétlési lista nélkül (a döntés csak a hiányt pótolja).
+  const { merged: fine } = l1Scenario(1, [1, 2, 3, 4]);
+  const usedFine = usedInEarlierRounds({ ...fine, round: 2 }, 2, GRADE_QUIZ_ITEMS, CHRISTMAS_ITEMS);
+  const withList = buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 2, subjectKey: "learner:L", ...usedFine });
+  const withoutList = buildAdventPlan({ bank: GRADE_QUIZ_ITEMS, christmas: CHRISTMAS_ITEMS, grade, season, round: 2, subjectKey: "learner:L", usedIds: usedFine.usedIds, usedPrompts: usedFine.usedPrompts });
+  assert.deepEqual(withList, withoutList);
   const routes = read("server/advent/routes.ts");
   assert.match(routes, /const nextRoundPlan = /, "a router a következő kör tervét előre megépíti");
   assert.match(routes, /patch: \{ round: current\.round \+ 1, finishedAt: null, plan: /, "a körváltás az új tervet ugyanabban a tranzakcióban menti");

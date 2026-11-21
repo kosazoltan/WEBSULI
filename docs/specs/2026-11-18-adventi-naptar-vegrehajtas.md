@@ -764,12 +764,16 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
 Terv: `docs/specs/2026-11-18-adventi-naptar.md` 22. szakasz, 11–18. pont. Ellenőr-jelentés: NEM, 8 lelet; mind valódinak bizonyult a kódból.
 Új egységteszt-fájl: `source/tests/advent-pr-c-vak.test.ts` (előbb 9/9 bukott, javítás után 9/9 zöld).
 
-- **L1 — javítva (részben; a szélső eset tulajdonosi döntés):** `usedInEarlierRounds` a próbákból és a `retired` listából számol
+- **L1 — javítva:** `usedInEarlierRounds` a próbákból és a `retired` listából számol
   (`server/advent/adoption.ts`); a `POST /round` a következő kör tervét a körváltással egy tranzakcióban építi és menti, építhetetlen
   körnél 409 `noMoreQuestions` körváltás nélkül, és az állapot ilyenkor nem ajánl új kört (`server/advent/routes.ts` `nextRoundPlan`,
-  `stateOf`). Teszt: egység (L1 ×2) + DB („PR-C vak L1” ×2: a 2. kör mind a 24 ablaka megnyitható, nem ismétlés; szélső esetben
-  nincs új kör és nincs 503). Dokumentált teszt-változás: `tests/advent-limits.test.ts` „két MEGVÁLASZOLT példány …” a korábbi kör
-  MEGMUTATOTT kérdéseit zárja ki (terv 22.11). NYITOTT: szélső esetben ismétlés engedése vs. nincs új kör (tulajdonos).
+  `stateOf`). Teszt: egység (L1 ×2) + DB („PR-C vak L1” ×2). Dokumentált teszt-változás: `tests/advent-limits.test.ts` „két
+  MEGVÁLASZOLT példány …” a korábbi kör MEGMUTATOTT kérdéseit zárja ki (terv 22.11).
+  **Szélső eset — TULAJDONOSI DÖNTÉS 2026-11-21: „Ismétlés a legrégebbiekből”** (terv 22.11): `usedInEarlierRounds` a megmutatott
+  kérdések időrendi listáját is adja (`repeatable`, legrégebbi elöl), a `buildAdventPlan` csak a hiányzó helyekre veszi ezekből az ablak
+  készletébe tartozó, a tervben még nem szereplő elsőket (`shared/advent/assignment.ts`). Előbb bukó tesztek: egység („L1 (tulajdonosi
+  döntés …)”, a korábbi „nem ajánlható fel” teszt helyett — dokumentált döntésváltozás) és DB (a szélső esetben van 2. kör, mind a 24
+  ablak megnyitható, csak a legrégebben látott kérdések ismétlődnek, a többi új).
 - **L2 — javítva:** `AdventState.adoptionPending`, `POST /api/advent/adopt` (CSRF, idempotens), a kliens az összesítés megnyitásakor /
   végigjátszott körnél ment (`shouldAdopt`, `AdventCalendar.tsx`). Teszt: DB („PR-C vak L2”: GET nem ír, CSRF nélkül 403, átvétel,
   idempotens ismétlés, másik eszköz és lezárás után is 24/24) + egység (L2). Végpont-leltár: `tests/admin-route-guard.test.ts`.

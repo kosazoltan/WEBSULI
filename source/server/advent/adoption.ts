@@ -72,15 +72,28 @@ export function usedInEarlierRounds(row: AdventRow, round: number, bank: readonl
     const item = findAdventItem(id, bank, christmas);
     if (item) usedPrompts.add(normalizePrompt(item.prompt));
   };
+  const retired: string[] = [];
+  const timed: { id: string; at: string; round: number; day: number; index: number }[] = [];
   for (const [key, doors] of Object.entries(row.doors)) {
     if (Number(key) >= round) continue;
-    for (const door of Object.values(doors)) for (const attempt of door.attempts) add(attempt.questionId);
+    for (const [day, door] of Object.entries(doors)) {
+      door.attempts.forEach((attempt, index) => {
+        add(attempt.questionId);
+        timed.push({ id: attempt.questionId, at: typeof attempt.at === "string" ? attempt.at : "", round: Number(key), day: Number(day), index });
+      });
+    }
   }
   for (const [key, plan] of Object.entries(row.plan)) {
     if (Number(key) >= round) continue;
-    for (const id of (plan as PlanMeta).retired ?? []) add(id);
+    for (const id of (plan as PlanMeta).retired ?? []) { add(id); retired.push(id); }
   }
-  return { usedIds, usedPrompts };
+  // TULAJDONOSI DÖNTÉS 2026-11-21 („Ismétlés a legrégebbiekből”): ha ismétlés nélkül nem építhető fel a kör, a hiányzó helyekre a
+  // LEGRÉGEBBEN megmutatott kérdések kerülnek. Sorrend: a lecserélt próbák elöl (az időpontjuk nincs tárolva, a vendég megoldása előtti
+  // állapotból valók), utána a próbák időrendben; egyenlő időnél a kör, a nap és a próba sorrendje dönt; egy kérdés az első
+  // előfordulásánál számít. Determinisztikus.
+  timed.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.round - b.round || a.day - b.day || a.index - b.index));
+  const repeatable = [...new Set([...retired, ...timed.map((t) => t.id)])];
+  return { usedIds, usedPrompts, repeatable };
 }
 
 /**

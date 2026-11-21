@@ -75,6 +75,12 @@ export type BuildPlanInput = {
   /** Az évad korábbi köreiben már kiosztott azonosítók és normalizált promptok. */
   usedIds?: ReadonlySet<string>;
   usedPrompts?: ReadonlySet<string>;
+  /**
+   * Az évad korábbi köreiben megmutatott kérdések, a LEGRÉGEBBI elöl (tulajdonosi döntés 2026-11-21: „Ismétlés a legrégebbiekből”).
+   * Csak akkor használja, ha egy ablak készletéből ismétlés nélkül már nem telik ki a hely: a hiányzó helyekre ezek közül az ablak
+   * készletébe tartozó, a tervben még nem szereplő első tételek kerülnek. Ahol van elég új kérdés, a terv ugyanaz, mint nélküle.
+   */
+  repeatable?: readonly string[];
 };
 
 const planRng = (season: number, round: number, subjectKey: string, grade: number) => createRng(seedFrom("advent", season, round, subjectKey, clampAdventGrade(grade)));
@@ -112,6 +118,26 @@ export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
     }
     return out;
   };
+  /** Ismétlés a legrégebbiekből (döntés 2026-11-21): a sor tételei közül a legrégebben megmutatottak, a tervben még nem szereplők. */
+  const repeatOrder = input.repeatable ?? [];
+  const planIds = new Set<string>();
+  const planPrompts = new Set<string>();
+  const takeRepeated = (queue: readonly AdventItem[], count: number): string[] => {
+    const out: string[] = [];
+    if (count <= 0 || repeatOrder.length === 0) return out;
+    const inQueue = new Map(queue.map((item) => [item.id, item]));
+    for (const id of repeatOrder) {
+      if (out.length === count) break;
+      const item = inQueue.get(id);
+      if (!item) continue;
+      const prompt = normalizePrompt(item.prompt);
+      if (planIds.has(id) || planPrompts.has(prompt)) continue;
+      planIds.add(id);
+      planPrompts.add(prompt);
+      out.push(id);
+    }
+    return out;
+  };
 
   const christmasQueue = rng.shuffle(input.christmas.filter((c) => c.minGrade <= grade && grade <= c.maxGrade));
   const gradeBank = isLowGrade(grade) ? [] : input.bank.filter((q) => q.grade === grade);
@@ -134,6 +160,7 @@ export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
     let ids: string[];
     if (isChristmasDoor(day, grade)) {
       ids = take(christmasQueue, perDoor);
+      ids.push(...takeRepeated(christmasQueue, perDoor - ids.length));
       doorSubjects[day] = CHRISTMAS_SUBJECT;
     } else {
       if (subjects.length === 0) throw new RangeError(`advent: nincs kérdés a(z) ${grade}. évfolyam bankjában`);
@@ -145,6 +172,16 @@ export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
         if (ids.length === perDoor) break;
         ids.push(...take(cell(subject, tier), perDoor - ids.length));
       }
+      // Csak ha mindhárom szint új tételei elfogytak (a cellák ekkor már mind létrejöttek: a véletlen sorrend nem változik).
+      for (const tier of tierOrder(tierForDay(day))) {
+        if (ids.length === perDoor) break;
+        ids.push(...takeRepeated(cell(subject, tier), perDoor - ids.length));
+      }
+    }
+    for (const id of ids) {
+      planIds.add(id);
+      const item = findAdventItem(id, input.bank, input.christmas);
+      if (item) planPrompts.add(normalizePrompt(item.prompt));
     }
     if (ids.length < perDoor) throw new RangeError(`advent: elfogyott a kérdés (${grade}. évfolyam, ${day}. ablak, ${input.round}. kör)`);
     doors[day] = ids;
