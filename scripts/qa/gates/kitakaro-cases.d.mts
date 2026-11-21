@@ -1,0 +1,8 @@
+export declare const CALLER_KEY: string;
+export declare const SECRET_CASES: Array<{ name: string; raw: string; body: string; keyed?: boolean }>;
+export declare const ENCODINGS: Record<string, (raw: string) => string>;
+export declare function decodeEscapes(s: string): string;
+export declare function leak(out: string, body: string): string | null;
+export declare function clipPlacements(enc: string, limit: number, margin: number, total?: number): Array<{ pos: string; text: string }>;
+export declare const OVERLAP_KEY: string;
+export declare const OVERLAP_TEXT: string;

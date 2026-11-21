@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { buildImageRequest, composePrompt, estimateUsd, loadStyle, redact, redactClip, REDACT_WINDOW, requestImage, type AssetManifest } from "../scripts/design-assets/lib";
 import { designAssetSchema } from "../shared/design-assets";
+import { CALLER_KEY, ENCODINGS, OVERLAP_KEY, OVERLAP_TEXT, SECRET_CASES, clipPlacements, leak } from "../../scripts/qa/gates/kitakaro-cases.mjs";
 import { lessonCoverId } from "../shared/lesson-cover-key";
 import { DESIGN_ASSET_CATALOG } from "../shared/design-asset-catalog";
 
@@ -250,4 +251,54 @@ test("requestImage hibaága: nagy válaszban sincs kulcs, legfeljebb 300 karakte
     assert.ok(e.message.length <= "HTTP 500: ".length + 300);
     return true;
   });
+});
+
+// 2. vak kör (169cb025): ugyanaz a táblázatos tulajdonság-teszt, mint a kapuknál (scripts/qa/gates/kitakaro.test.mjs) —
+// minden forma × alak × út (redact, redactClip rövid / nagy vágási helyzetekkel, requestImage hibaág), átfedés, L5, L6.
+test("design-assets kitakaró: minden forma × alak — redact, rövid redactClip és requestImage hibaág titokmentes", async () => {
+  for (const c of SECRET_CASES) {
+    for (const [encName, enc] of Object.entries(ENCODINGS)) {
+      for (const [fn, out] of [["redact", redact(enc(c.raw), CALLER_KEY)], ["redactClip", redactClip(enc(c.raw), CALLER_KEY, 300)]] as const) {
+        assert.equal(leak(out, c.body), null, `${fn} ${c.name} / ${encName}: ${JSON.stringify(out)}`);
+        assert.ok(out.includes("pre") && out.includes("post"), `${fn} ${c.name} / ${encName}: környezet`);
+      }
+      const fetchImpl = (async () => new Response(enc(c.raw), { status: 401 })) as unknown as typeof fetch;
+      await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key: CALLER_KEY, body: {} }), (e: Error) => {
+        assert.equal(leak(e.message, c.body), null, `requestImage ${c.name} / ${encName}`);
+        return true;
+      });
+    }
+  }
+});
+
+test("design-assets redactClip (nagy): minden forma × alak × vágási helyzet — nincs titokdarab, a kimenet nem üres", () => {
+  const margin = Math.max(64, CALLER_KEY.length);
+  for (const c of SECRET_CASES) {
+    for (const [encName, enc] of Object.entries(ENCODINGS)) {
+      for (const { pos, text } of clipPlacements(enc(c.raw), REDACT_WINDOW, margin)) {
+        const out = redactClip(text, CALLER_KEY, REDACT_WINDOW);
+        assert.equal(leak(out, c.body), null, `${c.name} / ${encName} / ${pos}`);
+        assert.ok(out.length > 1000, `${c.name} / ${encName} / ${pos}: hossz ${out.length}`);
+      }
+    }
+  }
+});
+
+test("design-assets (vak L4 / L5 / L6, 169cb025): átfedő kulcs, kulcs a vágásponton, `Bearer` végű ártalmatlan szó", () => {
+  assert.equal(redact(`pre ${OVERLAP_TEXT} post`, OVERLAP_KEY).includes("RTY#RT"), false);
+  const m4 = Math.max(64, OVERLAP_KEY.length);
+  for (let shift = 1; shift < OVERLAP_TEXT.length; shift++) {
+    const start = REDACT_WINDOW - m4 - shift;
+    const out = redactClip("y".repeat(start - 1) + " " + OVERLAP_TEXT + " " + "z ".repeat(3000), OVERLAP_KEY, REDACT_WINDOW);
+    assert.ok(!out.includes("RTY#RT") && !out.includes("#QWE"), `eltolás ${shift}`);
+  }
+  const key = "ab#cd#" + "ef#01#".repeat(12);
+  const m5 = Math.max(64, key.length);
+  for (const back of [1, 5, 30]) {
+    const start = REDACT_WINDOW - m5 - back;
+    const s = "w ".repeat(start).slice(0, start) + key + " " + "v ".repeat(3000);
+    assert.ok(s.length > REDACT_WINDOW);
+    assert.equal(redactClip(s, key, REDACT_WINDOW).includes("ab#cd"), false, `vissza ${back}`);
+  }
+  assert.equal(redactClip("MODE: LifeboatBearer\n" + "A".repeat(REDACT_WINDOW + 10), CALLER_KEY, 300), "MODE: LifeboatBearer\n");
 });
