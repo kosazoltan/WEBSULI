@@ -116,3 +116,21 @@ Egy kommentsor a tömb fölé: miért korlátos / miért `{n}…*` (a terv hivat
   `[kulcs]`. `scripts/qa/gates/external-review.test.mjs`: ugyanez AIza-mintás kulccsal (regresszióőr).
 - **T7b** `source/scripts/design-assets/lib.ts`: új `safeCut(w, key, margin)` (D3b); `redactClip` = ablak + határ-futás levágása,
   majd `redact(w.slice(0, safeCut(...)), key).slice(0, max)`. Az `external-review.mjs` változatlan (csak rövidít).
+
+## 2026-11-21 — vak kör (a188a33d)
+
+A független vak ellenőr (GPT-6.2 Sol) NEM ítélete, négy lelet; mind valódi, előbb bukó teszttel (`2182c9ee`), majd javítva.
+
+- **L1 (blokkoló)** — a külső ellenőr `maskSecrets` / `maskClip` és a design-assets `redact` / `redactClip` e-mailt és teljes
+  Bearer-tokent (`+ / = ~`) átengedett; a határon `%` / `@` mellett a hosszú helyi rész eleje kint maradt. Javítás (D5, D3c):
+  `maskSecrets` a kapuk `redact`-ját is futtatja; a design-assets `redact` teljes Bearer-készlet + `redactEmails` TS-mása
+  (`[e-mail]`); a vágás az érzékeny futást (`%`, `@` is) és a `Bearer` + szóköz előtagot teljesen eldobja. Tesztek: maszkolás,
+  `generate` újrapróbálási napló + végső hiba, `requestImage` rövid hibaág, határ-e-mail mindkét fájlban.
+- **L2 (blokkoló)** — a kapuk `REDACTIONS`-éből hiányzott az önálló `AIza…` kulcs. Javítás: lineáris `AIza` sor (`<token>`).
+  Teszt: `redact` + `writeLog` visszaolvasva, 10 M-es AIza-futás.
+- **L3 (közepes)** — a határ-futás levágása után a fix sáv az előtte álló sort is eldobta; `max` > ablak esetén a rövidebb
+  bemenet is vágódott. Javítás (D3c): a sáv az EREDETI határhoz mért, `limit = max(ablak, max)`. Teszt mindkét fájlban.
+- **L4 (kicsi)** — nagy bemenet megtartott előtagjának pontos maszkolását nem kényszerítette ki teszt. Új teszt; mutánspróba:
+  a `cut` ágból a `maskSecrets` kivéve → csak ez a teszt bukik (1 fail / 70 pass), visszaállítva.
+- A #521 hat review-szála (Codex 4633480787; Sourcery 4633501833, …847, …861, …869, …883) a fejen már kezelve volt
+  (`3e7b4914` tesztek, `ff3ba86d` javítás); a 4633501833 határ-token tesztjei a D3c-vel is zöldek.

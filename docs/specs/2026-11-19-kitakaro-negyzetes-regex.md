@@ -73,6 +73,16 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
   pontot addig toljuk lejjebb, amíg se teljes kulcs-előfordulást, se token-karakterfutást nem metsz, és csak az így kapott,
   teljes előfordulásokat tartalmazó előtag kerül kitakarásra. Az `external-review` `maskSecrets` csak rövidít (`***`,
   `AIza***`), ott a maszkolt végből dobott sáv a félbevágott kulcsot mindig fedi — ezt regressziós teszt rögzíti.
+- **D3c — vak kör (a188a33d), felülírja a D3 / D3b vágási részét:** mindkét fájlban ugyanaz a `safeCut(text, limit, key,
+  margin)`: `limit = max(64 KB, max)`; ha a szöveg legfeljebb `limit` hosszú, a régi viselkedés (teljes kitakarás, majd vágás).
+  Különben a vágási pont az EREDETI szövegen `limit - max(64, kulcshossz)`-ból indul, és addig lép lejjebb, amíg se teljes
+  kulcs-előfordulást, se érzékeny-karakterfutást (`[A-Za-z0-9._~+/=-]` és az e-mail `%`, `@` jele), se az előtte álló
+  `Bearer` + szóköz előtagot nem metsz. Így a határon átnyúló cím helyi része sem marad, és egy már eldobott hosszú futás nem
+  viszi magával az előtte álló, különálló diagnosztikát (L3). A külön `trimCrossingTokenRun` megszűnt.
+- **D5 — egységes kimeneti szűrő (vak L1 / L2, a188a33d):** a kapuk `redact`-ja az önálló `AIza…` kulcsot is `<token>`-re
+  cseréli; az `external-review` `maskSecrets` a kulcs és az `AIza***` után a kapuk `redact`-ját is futtatja (e-mail, Bearer-,
+  GitHub-, `sk-`-token, DB-URL); a design-assets `redact` a teljes Bearer-karakterkészletet és az e-mail-címet (`[e-mail]`,
+  a `redactEmails` TS-mása) is kitakarja — a `generate.ts` naplója is ezen megy át.
 - **D4:** a `split(key)` cseréje mindkét fájlban megmarad; a helyőrzők (`<email>`, `<token>`, `AIza***`, `***`, `[kulcs]`)
   változatlanok.
 
@@ -98,7 +108,11 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
   karakteres darabját sem hagyni (`external-review` és `design-assets`).
 - WHEN valós e-mail-cím (köztük 64 karakteres helyi rész), DB-URL, GitHub- / Anthropic-token, AWS-kulcs, Bearer-token van a
   szövegben THEN the system SHALL helyőrzőre cserélni, a meglévő tesztek változatlanul zöldek.
-- WHEN a válasz rövidebb a végső hossznál THEN the system SHALL a régi viselkedést adni (`maskClip(s,k,n) === maskSecrets(s,k).slice(0,n)`).
+- WHEN a válasz legfeljebb max(64 KB, végső hossz) hosszú THEN the system SHALL a régi viselkedést adni (`maskClip(s,k,n) === maskSecrets(s,k).slice(0,n)`).
+- WHEN egy szolgáltatói hibaszöveg e-mail-címet, `+ / = ~` karaktert tartalmazó Bearer-tokent vagy önálló `AIza…` kulcsot
+  tartalmaz THEN the system SHALL ezeket a kapunaplóban, a külső ellenőr hiba- és újrapróbálási naplójában és a képgyártó
+  hibájában is helyőrzőre cserélni; az ablakhatáron átnyúló cím helyi része sem maradhat (vak kör, a188a33d).
+- WHEN a határon átnyúló futás előtt különálló, ártalmatlan sor áll THEN the system SHALL azt megtartani (L3).
 
 ## 7. Tesztterv
 
