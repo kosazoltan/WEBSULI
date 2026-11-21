@@ -148,3 +148,18 @@ A hullámok a gépi zár miatt sorosan merge-elnek, de a fejlesztésük párhuza
 - 2026-11-21: a #510, #521, #504 és #418 helyi ágán a review-javítások már megvannak (a régi gépen készültek, push nélkül); csak a
   kapukör hiányzik. A PR-C az élesítés előtti javításokkal egy PR-ban megy (`feat/advent-c-felulet-es-elesites`, a fa bájtra azonos a
   `wip/advent-d-elesites-elott` ággal).
+- 2026-11-21 tulajdonosi döntések (űrlap): advent — ha átvétel után ismétlés nélkül nincs teljes 2. kör, „Ismétlés a legrégebbiekből”;
+  vak futtató — aláírt eredet-igazolás nem kell („Nem, ismert korlát”); #510 szűrő-elutasítás — „Újra, átfogalmazott célfájllal”
+  (sikerült); #418 — futás közbeni memóriafigyelés helyett „Mérés az első éles körben” (450 MB fölötti csúcsnál külön PR).
+- 2026-11-21 vak körök: #504 2. kör IGEN, FELTÉTELLEL (L1–L5 most javul); #521, advent PR-C 2. kör NEM (javítás folyik);
+  #510 3. kör és #418 2. kör a sorban. Költség eddig ≈ 7,85 USD / 30.
+- 2026-11-21 INCIDENS: a #521 fejlesztő alügynöke füstpróbának `npx tsx scripts/design-assets/generate.ts --help`-et futtatott; az
+  eszköz az ismeretlen kapcsolót figyelmen kívül hagyta és jóváhagyás nélkül fizetős képgenerálást indított (1 kép, becsült 0,093 USD,
+  seedream-5-0-pro), leállítva. A fájlok a gitignore-olt `source/design-assets/candidates/` alatt, nem törölve. Teendő: kanban-jegy
+  („a képgyártó ismeretlen kapcsolóra hibát adjon / legyen valódi --help”), csapda, és minden megbízásba: fizetős eszköz semmilyen
+  formában (súgóval, száraz próbának szánva sem) nem indítható.
+- 2026-11-21: a #504 `gate:pr` böngészős lépése 143-as kóddal (SIGTERM) állt le a 74. tesztnél (0 ms) — párhuzamos alügynöki
+  Playwright-futás / port-verseny gyanúja (C-72). Szabály ebben a futásban: PR-kapu böngészős köre csak akkor indul, ha egyetlen
+  fejlesztő alügynök sem futtat e2e-t.
+- Kanbanra (a #418 maradékai): L7 „várakozik / fut” külön állapotjelzés (API-bővítés); L9 ugyanaz a hibás számminta a
+  `source/server/lesson-covers.ts:269`-ben; L1 a hiba előtt beírt, tartalom-hash szerint közös média nem törölhető.
