@@ -1106,3 +1106,15 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-90 — Gépváltás: `core.autocrlf=true` mellett a forrás-szöveget olvasó tesztek sorvég-érzékenyek (2026-11-21)
+
+- **Tünet:** az új gépen a `#510` ágán a `gate:stage` bukott (`source/tests/result-outbox.test.ts`): a `readFileSync`-kel beolvasott
+  forrásra írt `\n`-es regex nem illeszkedett, mert a munkafa CRLF sorvégű (`git ls-files --eol`: `i/lf w/crlf`). A régi gépen és a
+  Linuxos CI-n ugyanez zöld volt. Rosszabb: a `\n`-es `doesNotMatch` állítások CRLF mellett csendben ÁTMENNEK (gyengített teszt).
+- **Szabály:** forrás-szöveget olvasó teszt a beolvasás után normalizálja a sorvéget (`.replace(/\r\n/g, "\n")`), így minden állítás
+  sorvégtől függetlenül, változatlan szigorral fut. Új gépen az első kapukör előtt nézd meg a `git config core.autocrlf` értékét.
+- **Rokon eszközcsapda:** Git Bash heredocban a `\\` egy `\`-re vonódik össze — escape-es kódot Python-szkriptfájlból (vagy `chr(92)`),
+  illetve a Write / Edit eszközzel írj (C-75 3–4. szabály).
+
+Forrás: a gépköltöztetés utáni első kapukör (`docs/specs/2026-11-21-gepkoltoztetes-folytatas.md`), a #510 `0ec08148` commitja.

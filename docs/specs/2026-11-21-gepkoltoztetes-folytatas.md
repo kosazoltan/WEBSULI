@@ -142,3 +142,9 @@ A hullámok a gépi zár miatt sorosan merge-elnek, de a fejlesztésük párhuza
 ## 10. Állapotnapló
 
 - 2026-11-21: leltár és terv kész; a gép-ellenőrzés zöld (3. szakasz).
+- 2026-11-21: a régi gép kapubizonyítékai (`.git/websuli-qa-evidence`, 525 fájl) átjöttek. #523 (advent 2/3) és #524 (1/4096-os
+  ingadozás) beolvasztva, a nyitott review-szálak megválaszolva (`fe123959`, `114eaa63`).
+- 2026-11-21: H0 vak kör a futtatóra (`5c6bceb3`): NEM, 2 blokkoló + 7 közepes + 1 kicsi (0,95 USD) — javítás folyamatban.
+- 2026-11-21: a #510, #521, #504 és #418 helyi ágán a review-javítások már megvannak (a régi gépen készültek, push nélkül); csak a
+  kapukör hiányzik. A PR-C az élesítés előtti javításokkal egy PR-ban megy (`feat/advent-c-felulet-es-elesites`, a fa bájtra azonos a
+  `wip/advent-d-elesites-elott` ággal).
