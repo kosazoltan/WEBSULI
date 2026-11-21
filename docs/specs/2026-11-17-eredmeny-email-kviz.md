@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 6. gépi kör (804569c1) leletei: R35–R38, L2 követő szelet; a 7. gépi kör (0ec08148) leletei: R39–R42, L5 feltétellel dokumentálva; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 6. gépi kör (804569c1) leletei: R35–R38, L2 követő szelet; a 7. gépi kör (0ec08148) leletei: R39–R42, L5 feltétellel dokumentálva; SZŰKÍTÉS (tulajdonos, 2026-11-21): a böngészős tartós sor kapcsoló mögött, alapból KI, véglegesítés a T-3-ban; a 8. gépi kör (e36518e5) leletei: R43–R46, L1 / L4 → T-3; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -404,6 +404,36 @@ Gépi vak ellenőrzés, 7. kör (GPT-6.2 Sol, 0ec08148, 2026-11-21):
   nem mennek ki (ismeretlen korúak, R30 / R31 szerint automatikusan nem is küldhetők biztonságosan) — ez esetben egyszeri, `?` címkés,
   korhatáros migráció kell külön szeletben. Az előnézeti címen maradt régi tömb (csak fejlesztői / ellenőri próbák) elhagyható.
 
+**Szűkítés — tulajdonosi döntés (űrlap, 2026-11-21).** Kilenc vak kör után is NEM ítélet; a tulajdonos választása szó szerint:
+„Szűkítés: tartós sor külön (Javasolt)”. Következmény:
+- A #510-ben marad: a szerveroldali végleges és „félbehagyva” levél (R1–R23, R25, R27, R29, R33, R34, R36, R38, R41, R42 és az alábbi
+  R45–R46), a leállítási ürítés, valamint a kliens AZONNALI beküldése (gomb nélküli teljes kör, pillanatkép, tokenes / `prepare`-es
+  törzsépítés, R39 / R40 a lapon belül).
+- Kapcsoló mögé kerül, ALAPBÓL KI (`client/src/lib/resultOutboxFlag.ts`, élesben csak `VITE_RESULT_OUTBOX_ENABLED=1`; az e2e-buildben
+  futásidejű tesztkapcsoló): a böngészős TARTÓS kimenő sor — `localStorage`-sor (R24, R28, R32), induláskori ürítés (R24), a sor címkéje,
+  lejárata és fülbiztossága a dokumentumok között (R30, R31, R35). KI állásban a beküldő a sort csak memóriában tartja (lapon belüli
+  újrapróba, laponként legfeljebb 3 kísérlet, R26), a tárolóba nem ír, induláskor nem ürít. A véglegesítés a T-3 szeletben, külön PR-ban
+  (`docs/specs/2026-11-20-eredmenylevel-tartos-sor.md`).
+
+Gépi vak ellenőrzés, 8. kör (GPT-6.2 Sol, e36518e5, 2026-11-21) — a KI állásban is élő útra eső leletek:
+- **R43 — a lapon belüli újrapróba sem veszi át egy később más fiókba lépett munkamenet címkéjét (L1, a KI állású memóriasoron).** Ha a
+  címke nélkül felvett bejegyzés első kísérlete tokenválaszig sem jutott (átmeneti tokenhiba), a felvételkori munkamenet folytonossága
+  nem bizonyítható: a címke utólag nem pótolható, a bejegyzés `?`-lel (fiók nélküliként) megy. A tartós soros (BE állású) teljes L1 a
+  T-3 nyitott pontja.
+- **R44 — a lap elhagyásakor küldött pillanatkép-kérésnek határideje van (L2).** Kísérletenként 15 s (az első és a 403 utáni is); utána
+  a kérés megszakad, az állapot nem „úton lévő”, ugyanaz az állapot újra küldhető. A gyorsítótárazott tokennel induló első kérés nem vár
+  előzetes hálózati körre.
+- **R45 — leállítás közben befogadott pillanatkép sem marad ki (L3).** A várakozó kör küldésének egyetlen indító útja van (időzítő és
+  ürítés is: az első rögzítő a „küldés alatt” nyilvántartásba kerül, R34). Az ürítés alatt befogadott pillanatkép azonnal, követve indul;
+  a lezárult ürítés után a felvétel 503-at ad (nincs elfogadó 202, a kliens nem jelöli elküldöttnek).
+- **R46 — a `/api/lessons` közös írási kerete nem írja felül a két eredménykeretet (L5).** A pontos eredmény-POST
+  (`/api/lessons/:lessonId/results`) kimarad a közös 100 / 15 perc / IP keretből (a saját 60 + 60-as kerete és a CSRF-őr érvényes); a
+  kivétel a közös kapuban (`lessonsWriteGate`, `server/lesson-result-limits.ts`), a `server/index.ts` ezt szereli fel.
+- **L1 (tartós soros változat) és L4 (a lejárt, lezárt kör friss időbélyeggel visszakerül a tartós sorba) — T-3 nyitott pontok.** KI
+  állásban a sor nem tartós és induláskor nincs ürítés, így az L4 „lejártnak nyilvánított bejegyzés feltámadása” nem áll elő (a lezárt
+  kör újranyitáskori beküldése az R2 szerinti, a tanuló döntése); a böngészőteszt KI állásban mutatja, hogy nincs tárolóírás és induló
+  ürítés.
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -461,6 +491,13 @@ Elfogadás (S1b):
 - E57. Leállításkor a kapuhiba utáni, halasztott és a küldés alatt álló „félbehagyva” levél is kimegy a határidőn belül, ugyanazon a
   kapun (véglegesített körre nem) (R41).
 - E58. A végleges jelzősor után, a 202 előtt megszakadt kérést az eredeti beküldő megismételve a levél kimegy; más kilét duplikátum (R42).
+- E59. A tartós sor kapcsolója alapból KI: KI állásban a tartós sor kulcsára nincs `localStorage`-írás és induláskor nincs ürítés, a
+  befejezett kör mégis pontosan egyszer kimegy (szűkítés, 2026-11-21).
+- E60. Címke nélkül felvett kör tokenhiba utáni újrapróbája nem kapja meg a közben más fiókba lépett munkamenet címkéjét (R43).
+- E61. A válasz nélkül függő pillanatkép-kérés határideje után ugyanaz az állapot újra elküldhető (R44).
+- E62. Leállítás közben befogadott pillanatkép az ürítéssel kimegy, az első rögzítő őrzött, a lezárult ürítés után a felvétel 503 (R45).
+- E63. Ugyanarról a címről 60 pillanatkép és 60 végleges beküldés a közös írási kapu mögött is átmegy; más lecke-írásra a közös keret
+  érvényes (R46).
 - E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
@@ -533,4 +570,9 @@ Elfogadás (S1b):
 - [ ] E56 – a token alatt lejárt bejegyzés nem megy ki, kikerül (böngésző)
 - [ ] E57 – leállítás: halasztott és futó „félbehagyva” levél is kimegy, a kapun át (valódi DB)
 - [ ] E58 – a 202 előtt megszakadt végleges kérés: az eredeti beküldő pótolja, más kilét duplikátum (valódi DB)
+- [ ] E59 – kapcsoló KI: nincs tárolóírás, nincs induló ürítés, a kör egyszer kimegy (böngésző)
+- [ ] E60 – tokenhiba utáni újrapróba: nem a később belépett fiók címkéje (böngésző)
+- [ ] E61 – függő pillanatkép határideje után újraküldhető (böngésző)
+- [ ] E62 – leállítás közbeni felvétel: kimegy / első rögzítő / 503 (valódi DB)
+- [ ] E63 – közös írási kapu: 60 + 60 átmegy, más írásra a közös keret (egységteszt, valódi HTTP)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)

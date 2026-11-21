@@ -340,6 +340,30 @@ Leletenként előbb BUKÓ teszt, utána a javítás (R26 / R31 / R35 / R10 / R12
 - **L5** kódváltozás nélkül: a 44487292 nem része a főágnak, az előnézeti build más eredetű; a feltétel a tervben (L5 pont) rögzítve.
 - Utána: célzott egységtesztek, `test:learning-db`, az érintett böngészős spec, `gate:stage`.
 
+## 2026-11-21 — szűkítés és 3. vak kör (e36518e5) (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, szűkítés + R43–R46)
+
+Tulajdonosi döntés (űrlap, 2026-11-21): „Szűkítés: tartós sor külön (Javasolt)”. Leletenként előbb BUKÓ teszt, utána a javítás.
+- **Kapcsoló** `client/src/lib/resultOutboxFlag.ts` (`resultOutboxEnabled()`): élesben csak `VITE_RESULT_OUTBOX_ENABLED=1`; az e2e-buildben
+  (`VITE_ENABLE_RUNTIME_PROBE=1`) a `window.__websuliResultOutbox = true` futásidejű horog. `resultReport.ts`: a sor tárolója KI állásban
+  `null` (csak memória, lapon belüli újrapróba); `App.tsx`: KI állásban nincs induló ürítés. A tartós sor tesztjei (`R24 / L2`, `R28 / L4`,
+  `R35 / L1`, `R39 / L1`, `R40 / L2`) `enableOutbox(page)`-dzsel BE állásban futnak; a többi az éles KI állást méri. Új böngészőteszt:
+  „Kapcsoló KI (alap)” — nincs tárolóírás a sor kulcsára, nincs induló ürítés, a kör egyszer kimegy (a régi kóddal piros: induláskor
+  kiürítette a régi bejegyzést).
+- **R43 (L1, KI állás)** `resultReport.ts`: ha a kísérlet tokenválaszig sem jutott, `enqueuedHere.delete` — a címke utólag nem pótolható.
+  Böngészőteszt `R43 / L1` (hamis óra): minden token 502 → B fiók tokenje → a POST `subject: "?"` (régi kóddal: `"fiok-b"`).
+- **R44 (L2)** `queryClient.ts` `sendKeepalive`: kísérletenkénti 15 s-os határidő (`SNAPSHOT_POST_TIMEOUT_MS`, `AbortController` +
+  `setTimeout`). Böngészőteszt `R44 / L2` (hamis óra): az első pillanatkép függ → 16 s előretekerés → ugyanaz az állapot újra elmegy
+  (régi kóddal: 0 kérés).
+- **R45 (L3)** `server/lesson-result-email.ts`: egyetlen indító út (`startPartial`: `markSending` + követett küldés) az időzítőnek és az
+  ürítésnek; `partialShutdown` (`running` → az új felvétel azonnal, követve indul; `done` → a felvétel 503). DB-teszt `R45 / L3`. A meglévő
+  `R14` és `R41` a lezárult ürítés után `clearPendingPartials()`-szal „új példányt” utánoz (különben a felvétel jogosan 503); az R14 második
+  részében a pillanatkép befogadását most explicit `queued: true` állítás ellenőrzi (szigorítás).
+- **R46 (L5)** `server/lesson-result-limits.ts`: `lessonsWriteGate(limiter)` + `isResultPost`; `server/index.ts` ezt szereli fel (a régi
+  beágyazott köztes réteg helyett). Egységteszt valódi HTTP-n: a régi logikával a 41. végleges 429 volt, a kivétellel 60 + 60 átmegy, a 61.
+  végleges 429, más lecke-írás 101.-re 429; forrásőr a felszerelésre.
+- **L1 (tartós soros) és L4** → T-3 nyitott pontok (`docs/specs/2026-11-20-eredmenylevel-tartos-sor.md`, T3-N1 / T3-N2).
+- Utána: célzott egységtesztek, `test:learning-db`, az eredménylevél böngészős specjei, `gate:stage`.
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.
