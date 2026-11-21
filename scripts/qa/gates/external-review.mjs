@@ -25,7 +25,8 @@ import https from "node:https";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { evidenceDir, redact, writeEvidence } from "./lib.mjs";
+import { evidenceDir, writeEvidence } from "./lib.mjs";
+import { clipText, maskText, PH_EXTERNAL, WINDOW } from "./kitakaro.mjs";
 
 export const DEFAULT_MODEL = "gemini-4-carbon";
 // generateContent REST: ThinkingConfig.thinkingLevel enum (MINIMAL/LOW/MEDIUM/HIGH/XHIGH). Tulajdonosi döntés: sima HIGH.
@@ -185,61 +186,23 @@ export function readKeyFromEnvFile(file) {
   }
   return null;
 }
-export function maskSecrets(s, key) {
-  let out = String(s ?? "");
-  if (key) out = out.split(key).join("***");
-  // `{20}…*` a `{20,}` helyett: azonos nyelv, de 20 M karakteren sem dob (docs/specs/2026-11-19-kitakaro-negyzetes-regex.md).
-  out = out.replace(/AIza[0-9A-Za-z_\-]{20}[0-9A-Za-z_\-]*/g, "AIza***");
-  // Vak L1 (a188a33d): a kapuk közös, lineáris szűrője is (e-mail, Bearer- / GitHub- / sk-token, DB-URL) — minden kimeneten.
-  return redact(out);
-}
-
-/** Határ-érzékeny karakter: token-karakter [A-Za-z0-9._~+/=-], valamint az e-mail `%` és `@` jele (vak L1, a188a33d). */
-const isSensitiveChar = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
-  || c === 46 || c === 95 || c === 126 || c === 43 || c === 47 || c === 61 || c === 45 || c === 37 || c === 64;
-const isSpaceChar = (c) => c === 32 || (c >= 9 && c <= 13) || c === 160;
-
 /**
- * Biztonságos vágási pont FORRÁS-koordinátában (vak L1 / L3, a188a33d): `limit - margin`-ből indul (az EREDETI ablakhatárhoz
- * mérve), és addig lép lejjebb, amíg se teljes kulcs-előfordulást (a `split(key)` balról jobbra, átfedés nélküli találatai), se
- * érzékeny-karakterfutást (token / e-mail), se az előtte álló `Bearer` + szóköz előtagot nem metsz. A futást az eredeti szövegen
- * nézi (a `limit`-en túl is). A pont csak csökken, a visszalépések diszjunkt szakaszokon futnak: lineáris.
+ * A kulcs és minden ismert titokforma (AIza, Bearer, GitHub- / sk-token, AWS-kulcs, DB-URL, e-mail) kitakarva — a közös,
+ * lineáris kitakaróval (kitakaro.mjs, D6): a tartományok az eredeti szövegen és JSON-escape-dekódolt nézetén, egyesítve.
  */
-export function safeCut(text, limit, key, margin) {
-  const occ = [];
-  if (key) {
-    const w = text.slice(0, Math.min(text.length, limit + key.length));
-    for (let p = w.indexOf(key); p >= 0; p = w.indexOf(key, p + key.length)) occ.push(p);
-  }
-  let c = Math.max(0, Math.min(text.length, limit) - margin);
-  let j = occ.length - 1;
-  for (;;) {
-    const before = c;
-    while (j >= 0 && occ[j] >= c) j--;
-    if (j >= 0 && occ[j] + key.length > c) c = occ[j];
-    if (c > 0 && isSensitiveChar(text.charCodeAt(c)) && isSensitiveChar(text.charCodeAt(c - 1))) {
-      while (c > 0 && isSensitiveChar(text.charCodeAt(c - 1))) c--;
-      let k = c;
-      while (k > 0 && isSpaceChar(text.charCodeAt(k - 1))) k--;
-      if (k < c && k >= 6 && text.slice(k - 6, k) === "Bearer") c = k - 6;
-    }
-    if (c === before) return c;
-  }
+export function maskSecrets(s, key) {
+  return maskText(s, { keys: key ? [key] : [], ph: PH_EXTERNAL });
 }
 
 /** A maszkolás ablaka: a vágott kimenetű hívók csak ennyit maszkolnak a (akár óriási) válaszból. */
-export const MASK_WINDOW = 64 * 1024;
+export const MASK_WINDOW = WINDOW;
 
 /**
- * Vágás a kitakarás előtt. Ha a szöveg legfeljebb max(MASK_WINDOW, max) hosszú: a régi viselkedés (teljes maszkolás, majd
- * vágás). Különben a forrás a `safeCut` pontjáig marad (az ablak végéről legalább max(64, kulcshossz) karakter, és a határon
- * átnyúló kulcs / token / e-mail teljes hosszában eldobva), csak ez kerül maszkolásra, majd max hosszra vágásra.
+ * Kitakarás és vágás `max` hosszra (kitakaro.mjs `clipText`): legfeljebb max(MASK_WINDOW, max) hosszú szövegen a régi
+ * viselkedés; különben a vágáspont se érzékeny tartományt, se token- / e-mail-futást nem metsz.
  */
 export function maskClip(s, key, max) {
-  const text = String(s ?? "");
-  const limit = Math.max(MASK_WINDOW, max);
-  if (text.length <= limit) return maskSecrets(text, key).slice(0, max);
-  return maskSecrets(text.slice(0, safeCut(text, limit, key, Math.max(64, key ? key.length : 0))), key).slice(0, max);
+  return clipText(s, { keys: key ? [key] : [], ph: PH_EXTERNAL, max });
 }
 
 // ---------------------------------------------------------------- keret

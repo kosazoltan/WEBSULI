@@ -1,4 +1,5 @@
 /** Websuli képkészlet — tiszta, tesztelhető segédfüggvények (docs/specs/2026-10-17-websuli-kepkeszlet.md). */
+import { clipText, maskText, PH_DESIGN, WINDOW } from "../../../scripts/qa/gates/kitakaro.mjs";
 export type AssetKind = "mascot" | "hero" | "icon" | "cover" | "background" | "door" | "scene" | "ornament";
 export type AssetBand = "explorer" | "adventure" | "studio" | "laboratory" | "future" | "advent";
 export type AssetItem = {
@@ -324,104 +325,21 @@ export function provenanceFor(logText: string, relFile: string): GenerationRecor
   throw new Error(`Nincs sikeres generálási naplóbejegyzés ehhez a fájlhoz: ${relFile}`);
 }
 
-const isAlnum = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
-const isLetter = (c: number) => (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
-/** Helyi rész: [A-Za-z0-9._%+-] */
-const isLocalChar = (c: number) => isAlnum(c) || c === 46 || c === 95 || c === 37 || c === 43 || c === 45;
-/** Címke: [A-Za-z0-9-] */
-const isLabelChar = (c: number) => isAlnum(c) || c === 45;
-
-/** A tartomány vége (pont-elválasztott, nem üres címkék; a legutolsó, legalább 2. címke ≥ 2 betűs elejének vége) vagy -1. */
-function domainEnd(s: string, start: number): number {
-  let i = start;
-  let best = -1;
-  for (let label = 0; ; label++) {
-    const ls = i;
-    while (i < s.length && isLabelChar(s.charCodeAt(i))) i++;
-    if (i === ls) break;
-    if (label >= 1) {
-      let k = ls;
-      while (k < i && isLetter(s.charCodeAt(k))) k++;
-      if (k - ls >= 2) best = k;
-    }
-    if (i < s.length && s.charCodeAt(i) === 46) i++;
-    else break;
-  }
-  return best;
-}
-
 /**
- * E-mail-cím → `[e-mail]` (vak L1, a188a33d) — a kapuk `scripts/qa/gates/lib.mjs` `redactEmails` pásztázójának TS-mása: korlát
- * nélkül, lineárisan, regex nélkül (minden `@`-ból visszafelé a helyi rész, előre a tartomány).
+ * A kulcs és minden ismert titokforma (AIza, Bearer, GitHub- / sk- / sk-or-token, AWS-kulcs, DB-URL, e-mail) kitakarása hibából
+ * vagy naplóból — a kapuk közös, lineáris kitakarójával (scripts/qa/gates/kitakaro.mjs, D6), a képgyártó helyőrzőivel.
  */
-function redactEmails(s: string): string {
-  let at = s.indexOf("@");
-  if (at < 0) return s;
-  let out = "";
-  let last = 0;
-  while (at >= 0) {
-    let st = at;
-    while (st > last && isLocalChar(s.charCodeAt(st - 1))) st--;
-    const end = st < at ? domainEnd(s, at + 1) : -1;
-    if (end < 0) { at = s.indexOf("@", at + 1); continue; }
-    out += s.slice(last, st) + "[e-mail]";
-    last = end;
-    at = s.indexOf("@", end);
-  }
-  return out + s.slice(last);
-}
-
-/** A kulcs, bármely Bearer-token (a teljes [A-Za-z0-9._~+/=-] készlettel — vak L1) és e-mail-cím kitakarása hibából vagy naplóból. */
 export function redact(text: string, key: string): string {
-  let out = key ? text.split(key).join("[kulcs]") : text;
-  out = out.replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer [kulcs]").replace(/sk-or-[A-Za-z0-9_-]+/g, "[kulcs]");
-  return redactEmails(out);
+  return maskText(text, { keys: key ? [key] : [], ph: PH_DESIGN });
 }
-
-/** Határ-érzékeny karakter: token-karakter [A-Za-z0-9._~+/=-], valamint az e-mail `%` és `@` jele (vak L1, a188a33d). */
-const isSensitiveChar = (c: number) => isAlnum(c)
-  || c === 46 || c === 95 || c === 126 || c === 43 || c === 47 || c === 61 || c === 45 || c === 37 || c === 64;
-const isSpaceChar = (c: number) => c === 32 || (c >= 9 && c <= 13) || c === 160;
 
 /** A kitakarás ablaka a vágott hibarészletekhez (docs/specs/2026-11-19-kitakaro-negyzetes-regex.md). */
-export const REDACT_WINDOW = 64 * 1024;
+export const REDACT_WINDOW = WINDOW;
 
 /**
- * Biztonságos vágási pont FORRÁS-koordinátában (D3b; vak L1 / L3, a188a33d): a kitakarás hosszabbíthat (`Bearer x` →
- * `Bearer [kulcs]`), ezért a vágás a forrásban történik. `limit - margin`-ből indul (az EREDETI ablakhatárhoz mérve, így egy már
- * eldobott hosszú futás nem viszi magával az előtte álló diagnosztikát), és addig lép lejjebb, amíg se teljes kulcs-előfordulást
- * (a `split(key)` találatai), se érzékeny-karakterfutást (token / e-mail), se az előtte álló `Bearer` + szóköz előtagot nem metsz.
- * A pont csak csökken, a visszalépések diszjunkt szakaszokon futnak: lineáris.
- */
-function safeCut(text: string, limit: number, key: string, margin: number): number {
-  const occ: number[] = [];
-  if (key) {
-    const w = text.slice(0, Math.min(text.length, limit + key.length));
-    for (let p = w.indexOf(key); p >= 0; p = w.indexOf(key, p + key.length)) occ.push(p);
-  }
-  let c = Math.max(0, Math.min(text.length, limit) - margin);
-  let j = occ.length - 1;
-  for (;;) {
-    const before = c;
-    while (j >= 0 && occ[j] >= c) j--;
-    if (j >= 0 && occ[j] + key.length > c) c = occ[j];
-    if (c > 0 && isSensitiveChar(text.charCodeAt(c)) && isSensitiveChar(text.charCodeAt(c - 1))) {
-      while (c > 0 && isSensitiveChar(text.charCodeAt(c - 1))) c--;
-      let k = c;
-      while (k > 0 && isSpaceChar(text.charCodeAt(k - 1))) k--;
-      if (k < c && k >= 6 && text.slice(k - 6, k) === "Bearer") c = k - 6;
-    }
-    if (c === before) return c;
-  }
-}
-
-/**
- * Vágás a kitakarás előtt. Ha a szöveg legfeljebb max(REDACT_WINDOW, max) hosszú: a régi viselkedés (teljes kitakarás, majd
- * vágás). Különben a forrás a `safeCut` pontjáig marad (az ablak végéről legalább max(64, kulcshossz) karakter, és a határon
- * átnyúló kulcs / token / e-mail teljes hosszában eldobva), csak ez kerül kitakarásra, majd max hosszra vágásra.
+ * Kitakarás és vágás `max` hosszra (kitakaro.mjs `clipText`): legfeljebb max(REDACT_WINDOW, max) hosszú szövegen a régi
+ * viselkedés; különben a vágáspont (forrás-koordinátában) se érzékeny tartományt, se token- / e-mail-futást nem metsz.
  */
 export function redactClip(text: string, key: string, max: number): string {
-  const limit = Math.max(REDACT_WINDOW, max);
-  if (text.length <= limit) return redact(text, key).slice(0, max);
-  return redact(text.slice(0, safeCut(text, limit, key, Math.max(64, key.length))), key).slice(0, max);
+  return clipText(text, { keys: key ? [key] : [], ph: PH_DESIGN, max });
 }

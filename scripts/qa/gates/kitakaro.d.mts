@@ -1,0 +1,10 @@
+export type RangeKind = 'key' | 'dburl' | 'token' | 'aws' | 'aiza' | 'bearer' | 'email';
+export type Placeholders = Record<RangeKind, string>;
+export declare const WINDOW: number;
+export declare const PH_GATE: Placeholders;
+export declare const PH_EXTERNAL: Placeholders;
+export declare const PH_DESIGN: Placeholders;
+export declare function findRanges(text: string, keys?: string[]): Array<{ s: number; e: number; kind: RangeKind }>;
+export declare function maskText(text: unknown, opts: { keys?: string[]; ph: Placeholders }): string;
+export declare function cutPoint(text: string, ranges: Array<{ s: number; e: number }>, limit: number, margin: number): number;
+export declare function clipText(text: unknown, opts: { keys?: string[]; ph: Placeholders; max: number }): string;
