@@ -28,17 +28,14 @@ export function startAdventSweeper(deps: AdventSweepDeps, timers: Timers = globa
   const run = async () => {
     const at = now();
     try {
-      const removed = await deps.sweep(at, adventNow(at).season);
-      if (removed.devices || removed.previews || removed.announcements) {
-        logger.info(`[ADVENT] takarítás: ${removed.devices} névtelen sor, ${removed.previews} előnézeti sor, ${removed.announcements} értesítő-foglalás törölve`);
-      }
+      // A modul naplója csak a hiba osztályát írja (A22 forrás-őr); a törölt sorok száma a hívóé (a `sweep` visszatérési értéke).
+      await deps.sweep(at, adventNow(at).season);
     } catch (error) {
       logger.error(`[ADVENT] takarítás hiba: ${errorClass(error)}`);
     }
     if (!deps.closeSeason) return;
     try {
-      const sent = await deps.closeSeason(at);
-      if (sent) logger.info(`[ADVENT] évadzárás: ${sent} szülői levél elküldve`);
+      await deps.closeSeason(at);
     } catch (error) {
       logger.error(`[ADVENT] évadzáró levelek hiba: ${errorClass(error)}`);
     }
