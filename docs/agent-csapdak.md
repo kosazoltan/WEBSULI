@@ -478,6 +478,12 @@ Forrás: tulajdonosi visszajelzés („borzasztó”) → `docs/specs/2026-11-10
   géphez: alfolyamat csúcsmemóriáját mérni kell (`os.wait4` → `ru_maxrss`), nehéz lépés közös sorban, egyesével; nagy fájl lemezre,
   nem memóriába; memóriaőr a kör elején. Új háttérmunka bekapcsolása után az első kört a Render memória- és eseménymérésével
   azonnal ellenőrizni kell, és a kikapcsolásnak egy lépésben meg kell lennie.
+- **Tünet 11 (vak kör, #418):** az „egyszerre egy” korlátok papíron álltak, a kódban nem: (a) a `Promise.all` az első jelenethibára
+  visszatért, a testvérjelenetek tovább költöttek és írtak a következő fejezet mellett; (b) a sorba állító a helyet felszabadította,
+  mielőtt a várakozónak átadta volna — a köztes érkező is elindult (2 egyidejű feladat); (c) a két `-threads 1` mellett az ffmpeg
+  szűrőlánca annyi szálat indított, ahány CPU-t látott.
+- **Megelőzés 11:** egyidejűségi korlátot fail-fast nélküli kivárással (`allSettled` + megszakítójelző) és determinisztikus
+  közbeékelődéses teszttel kell igazolni; sorba állítónál a hely közvetlenül a várakozóé; ffmpeg-nél `-filter_threads 1` is.
 - **Tünet 3:** a hangminőséget az ügynök nem tudja füllel megítélni — a „természetes hang” állítás mérés nélkül feltételezés.
 - **Megelőzés 3:** hangról csak mérhető tényt szabad állítani (elkészült, hossz, modell, hangazonosító); a minőség a tulajdonos szemléje.
 
