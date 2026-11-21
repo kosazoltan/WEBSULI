@@ -193,6 +193,40 @@ test("amíg készülnek a kisfilmek, a lecke újra kérdez, és az új gomb újr
   expect(calls).toBe(2);
 });
 
+test("álló mobilon a „Készülnek a kisfilmek…” jelzés nem nyomja össze és nem fedi a fejezetválasztót (2. vak kör L5)", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await serveV2(page, "adventure");
+  await page.route("**/api/lessons/practice-probe/clips", (route) => route.fulfill({ json: { clips: [], pending: true } }));
+  await page.goto("/__lesson-runtime-probe?fusion=1&practice=1");
+  await expect(page.getByTestId("clip-pending")).toBeVisible();
+  const select = page.getByRole("combobox", { name: "Fejezet" }).first();
+  const boxes = await page.locator(".learning-book-head").first().evaluate((head) => {
+    const sel = head.querySelector("select")!.getBoundingClientRect();
+    const others = [...head.children].filter((c) => !c.contains(head.querySelector("select"))).flatMap((c) => [...c.querySelectorAll("button, [role=status]")]).map((el) => el.getBoundingClientRect());
+    const overlap = others.reduce((max, r) => Math.max(max, Math.max(0, Math.min(r.right, sel.right) - Math.max(r.left, sel.left)) * Math.max(0, Math.min(r.bottom, sel.bottom) - Math.max(r.top, sel.top))), 0);
+    return { width: sel.width, overlap, scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+  });
+  await expect(select).toBeVisible();
+  if (SHOTS) { await select.scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(SHOTS, "mobil-keszulo-kisfilmek.png") }); }
+  expect(boxes.width, "a fejezetválasztó használható szélességű").toBeGreaterThanOrEqual(150);
+  expect(boxes.overlap, "semmi nem fedi a fejezetválasztót").toBe(0);
+  expect(boxes.scroll, "nincs vízszintes görgetés").toBeLessThanOrEqual(0);
+});
+
+test("ha a lekérdezés elakad, a várakozás lejártakor a „Készülnek a kisfilmek…” jelzés eltűnik (2. vak kör L4)", async ({ page }) => {
+  await page.clock.install();
+  let calls = 0;
+  await serveV2(page, "adventure");
+  // Az első válasz `pending: true`, a második soha nem érkezik meg.
+  await page.route("**/api/lessons/practice-probe/clips", (route) => { calls++; return calls === 1 ? route.fulfill({ json: { clips: [], pending: true } }) : new Promise(() => undefined); });
+  await page.goto("/__lesson-runtime-probe?fusion=1&practice=1");
+  await expect(page.getByTestId("clip-pending")).toBeVisible();
+  await page.clock.fastForward(21_000);
+  await expect.poll(() => calls).toBe(2);
+  await page.clock.fastForward(31 * 60_000);
+  await expect(page.getByTestId("clip-pending")).toHaveCount(0);
+});
+
 test("hibás vagy régi formátumú kisfilm-válasz mellett a lecke kisfilm nélkül, hibátlanul megjelenik", async ({ page }) => {
   let body: unknown = null;
   await page.route("**/api/lessons/practice-probe/clips", (route) => (body ? route.fulfill({ json: body }) : route.fulfill({ status: 500, json: { message: "hiba" } })));

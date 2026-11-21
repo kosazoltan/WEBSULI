@@ -20,6 +20,24 @@ export const CLIP_IMAGE_MODEL_OPENROUTER = "bytedance-seed/seedream-5-0-pro";
 const OPENROUTER = "https://openrouter.ai/api/v1";
 const OPENROUTER_ORIGIN = new URL(OPENROUTER).origin;
 /** A szolgáltatói válaszban kapott cím feloldva; csak HTTPS (különben null). */
+/**
+ * Szolgáltatói kérés kézzel követett átirányítással (2. vak kör L7): minden lépés csak HTTPS; a kulcs (Authorization) csak a
+ * szolgáltató saját originjére megy; `sameOrigin` mellett (hitelesített lekérdezés) a lánc nem hagyhatja el a szolgáltatót.
+ */
+export async function safeProviderFetch(url: URL, init: RequestInit & { headers: Record<string, string> }, opts: { sameOrigin: boolean; maxHops?: number }): Promise<Response> {
+  let current = url;
+  for (let hop = 0; ; hop++) {
+    if (current.protocol !== "https:") throw new Error("a szolgáltatói cím nem HTTPS");
+    if (opts.sameOrigin && current.origin !== OPENROUTER_ORIGIN) throw new Error("idegen originre mutató szolgáltatói cím");
+    const headers = current.origin === OPENROUTER_ORIGIN ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
+    const res = await fetch(current, { ...init, headers, redirect: "manual" });
+    const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+    if (!location) return res;
+    await res.body?.cancel().catch(() => undefined);
+    if (hop >= (opts.maxHops ?? 3)) throw new Error("túl sok átirányítás");
+    current = new URL(location, current);
+  }
+}
 function providerUrl(raw: string): URL | null {
   try { const url = new URL(raw, OPENROUTER); return url.protocol === "https:" ? url : null; } catch { return null; }
 }
@@ -102,21 +120,44 @@ async function fetchPatiently(send: () => Promise<Response>, waitMs = 2500): Pro
 export const CLIP_TMP_PREFIX = "websuli-clip-";
 /** A nyers (szolgáltatói) klip legfeljebb ekkora lehet (mérve 4–17 MB) — fölötte a letöltés megszakad, a jelenet állóképes (vak kör L4). */
 export const CLIP_RAW_MAX_BYTES = 40 * 1024 * 1024;
-/** Ennél régebbi saját munkamappa biztosan nem egy futó átkódolásé (a letöltés legfeljebb 3, az átkódolás 1,5 perc). */
+/** A folyamatazonosító nélküli (régi nevű) munkamappa ennél régebben biztosan nem futó munkáé. */
 const STALE_DIR_MS = 60 * 60_000;
+/** Ennél frissebb mappához nem nyúl a söprés (a létrehozás és a nyilvántartásba vétel közti rés). */
+const YOUNG_DIR_MS = 60_000;
+/** A futó letöltések / átkódolások saját munkamappái — a söprés ezeket kíméli (2. vak kör L3). */
+const activeDirs = new Set<string>();
+const processAlive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; } };
 /** Az átkódoló indítása (élesben `execFile`; tesztben csonkolható). */
 export type ExecLike = (file: string, args: string[], options: { timeout: number; killSignal: NodeJS.Signals }, callback: (error: Error | null) => void) => { kill(signal?: NodeJS.Signals): boolean };
 const realExec: ExecLike = (file, args, options, callback) => execFile(file, args, options, (error) => callback(error));
+/** A leállítás jele: minden szolgáltatói kérés és várakozás ezt is figyeli (2. vak kör L2). */
+const shutdown = new AbortController();
+/** Időkorlát + leállítás együtt. */
+const signal = (ms: number) => AbortSignal.any([AbortSignal.timeout(ms), shutdown.signal]);
+/** Várakozás, amely leállításkor azonnal `ClipAbortError`-ral megszakad. */
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (shutdown.signal.aborted) { reject(new ClipAbortError("a szerver leáll")); return; }
+    const onAbort = () => { clearTimeout(timer); reject(new ClipAbortError("a szerver leáll")); };
+    const timer = setTimeout(() => { shutdown.signal.removeEventListener("abort", onAbort); resolve(); }, ms);
+    shutdown.signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 /** A futó átkódolások leállítója (a szerver leállításakor; vak kör L5). */
 const activeTranscodes = new Set<() => void>();
 /** Leállításkor: minden futó átkódolást SIGKILL-lel leállít; a jelenetük `ClipAbortError`-ral (nem állóképesként) zárul. */
 export function abortClipTranscodes(): number {
   shuttingDown = true;
+  shutdown.abort();
   const n = activeTranscodes.size;
   for (const abort of [...activeTranscodes]) abort();
   return n;
 }
-/** Induláskor: a korábbi folyamat (SIGTERM / OOM / `process.exit`) után maradt, régi saját munkamappák törlése. */
+/**
+ * Gyártó módban minden kör előtt (2. vak kör L3): a félbemaradt munkamappák törlése. A mappanév a gyártó folyamat azonosítóját viszi
+ * (`websuli-clip-<pid>-…`): a saját folyamat nem futó munkájának mappája, és a már nem élő folyamat mappája törlődik; az élő idegen
+ * folyamaté és a futó saját munkáé marad. A régi (azonosító nélküli) nevű mappa csak egy óra után törlődik.
+ */
 export function sweepStaleClipDirs(root = tmpdir(), now = Date.now()): number {
   let removed = 0;
   let names: string[];
@@ -126,7 +167,12 @@ export function sweepStaleClipDirs(root = tmpdir(), now = Date.now()): number {
     const dir = path.join(root, name);
     try {
       const info = statSync(dir);
-      if (!info.isDirectory() || now - info.mtimeMs < STALE_DIR_MS) continue;
+      const age = now - info.mtimeMs;
+      if (!info.isDirectory() || age < YOUNG_DIR_MS || activeDirs.has(dir)) continue;
+      const owner = /^(\d+)-/.exec(name.slice(CLIP_TMP_PREFIX.length));
+      const pid = owner ? Number(owner[1]) : null;
+      const stale = pid === null ? age >= STALE_DIR_MS : pid === process.pid || !processAlive(pid);
+      if (!stale) continue;
       rmSync(dir, { recursive: true, force: true });
       removed++;
     } catch (error) {
@@ -165,7 +211,8 @@ let shuttingDown = false;
  */
 export async function downloadAndShrink(download: () => Promise<Response>, ffmpeg = "ffmpeg", timeoutMs = 90_000, opt: { exec?: ExecLike; rss?: () => number; rawMaxBytes?: number } = {}): Promise<Buffer | null> {
   const exec = opt.exec ?? realExec, rss = opt.rss ?? (() => process.memoryUsage().rss), rawMax = opt.rawMaxBytes ?? CLIP_RAW_MAX_BYTES;
-  const dir = await mkdtemp(path.join(tmpdir(), CLIP_TMP_PREFIX));
+  const dir = await mkdtemp(path.join(tmpdir(), `${CLIP_TMP_PREFIX}${process.pid}-`));
+  activeDirs.add(dir);
   let stage: "letöltés" | "átkódolás" = "letöltés";
   try {
     const input = path.join(dir, "in.mp4"), output = path.join(dir, "out.mp4");
@@ -175,7 +222,7 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
       await res.body?.cancel().catch(() => undefined);
       throw new Error(res.ok && res.body ? `a nyers mozgókép nagyobb ${rawMax} bájtnál (${declared})` : `HTTP ${res.status}`);
     }
-    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), byteLimit(rawMax), createWriteStream(input));
+    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), byteLimit(rawMax), createWriteStream(input), { signal: shutdown.signal });
     stage = "átkódolás";
     // A sor a beolvasást is fogja: a következő átkódolás csak a kimenet beolvasása után indul (vak kör L4).
     return await ffmpegQueue(async () => {
@@ -202,6 +249,7 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
     });
   } catch (error) {
     if (error instanceof ClipAbortError) throw error;
+    if (shutdown.signal.aborted) throw new ClipAbortError("a szerver leáll");
     const missing = stage === "átkódolás" && (error as NodeJS.ErrnoException)?.code === "ENOENT";
     const detail = error instanceof Error ? error.message.slice(0, 160) : String(error);
     if (!missing || !warnedNoFfmpeg) logger.warn(`[lesson-clips] ${missing ? "nincs ffmpeg a szerveren (FFMPEG_PATH / PATH) — a kisfilmek mozgókép nélkül készülnek" : `a mozgókép ${stage === "letöltés" ? "letöltése" : "átkódolása"} nem sikerült: ${detail}`}`);
@@ -209,6 +257,7 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
     return null;
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    activeDirs.delete(dir);
   }
 }
 
@@ -225,7 +274,7 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
   const orHeaders = { Authorization: `Bearer ${keys.openRouter}`, "Content-Type": "application/json", "HTTP-Referer": "https://websuli.vip", "X-Title": "WebSuli lesson clips" };
   const dataUrl = (image: { bytes: Buffer; mime: string }) => `data:${image.mime};base64,${image.bytes.toString("base64")}`;
   const orChat = async (system: string, content: unknown, maxTokens: number): Promise<string> => {
-    const res = await fetch(`${OPENROUTER}/chat/completions`, { method: "POST", headers: orHeaders, signal: AbortSignal.timeout(90_000), body: JSON.stringify({ model: CLIP_TEXT_MODEL, max_tokens: maxTokens, temperature: 0.4, messages: [{ role: "system", content: system }, { role: "user", content }] }) });
+    const res = await fetch(`${OPENROUTER}/chat/completions`, { method: "POST", headers: orHeaders, signal: signal(90_000), body: JSON.stringify({ model: CLIP_TEXT_MODEL, max_tokens: maxTokens, temperature: 0.4, messages: [{ role: "system", content: system }, { role: "user", content }] }) });
     const text = await res.text();
     if (!res.ok) throw fail("forgatókönyv", res.status, text);
     const choice = (JSON.parse(text) as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }> }).choices?.[0];
@@ -237,14 +286,14 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
     chat: (system, user) => orChat(system, user, 5000),
     async image(prompt) {
       if (keys.openAi) {
-        const res = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", signal: AbortSignal.timeout(120_000), headers: { Authorization: `Bearer ${keys.openAi}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: CLIP_IMAGE_MODEL_OPENAI, prompt, size: "1280x720", quality: "medium", output_format: "jpeg", n: 1 }) });
+        const res = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", signal: signal(120_000), headers: { Authorization: `Bearer ${keys.openAi}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: CLIP_IMAGE_MODEL_OPENAI, prompt, size: "1280x720", quality: "medium", output_format: "jpeg", n: 1 }) });
         const text = await res.text();
         if (!res.ok) throw fail("kép", res.status, text);
         const b64 = (JSON.parse(text) as { data?: Array<{ b64_json?: string }> }).data?.[0]?.b64_json;
         if (!b64) throw new Error("kép: üres válasz");
         return { bytes: Buffer.from(b64, "base64"), mime: "image/jpeg" };
       }
-      const res = await fetch(`${OPENROUTER}/images`, { method: "POST", headers: orHeaders, signal: AbortSignal.timeout(120_000), body: JSON.stringify({ model: CLIP_IMAGE_MODEL_OPENROUTER, prompt, aspect_ratio: "16:9", resolution: "1K", n: 1 }) });
+      const res = await fetch(`${OPENROUTER}/images`, { method: "POST", headers: orHeaders, signal: signal(120_000), body: JSON.stringify({ model: CLIP_IMAGE_MODEL_OPENROUTER, prompt, aspect_ratio: "16:9", resolution: "1K", n: 1 }) });
       const text = await res.text();
       if (!res.ok) throw fail("kép", res.status, text);
       const img = (JSON.parse(text) as { data?: Array<{ b64_json?: string; media_type?: string }> }).data?.[0];
@@ -259,7 +308,7 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
     still: (image) => sharp(image.bytes).resize(1280, 720, { fit: "cover" }).webp({ quality: 74 }).toBuffer(),
     audioMs: mp3DurationMs,
     async video(image, prompt, seconds) {
-      const submit = await fetch(`${OPENROUTER}/videos`, { method: "POST", headers: orHeaders, signal: AbortSignal.timeout(120_000), body: JSON.stringify({ model: CLIP_VIDEO_MODEL, prompt, duration: seconds, resolution: "720p", aspect_ratio: "16:9", generate_audio: false, frame_images: [{ type: "image_url", image_url: { url: dataUrl(image) }, frame_type: "first_frame" }] }) });
+      const submit = await fetch(`${OPENROUTER}/videos`, { method: "POST", headers: orHeaders, signal: signal(120_000), body: JSON.stringify({ model: CLIP_VIDEO_MODEL, prompt, duration: seconds, resolution: "720p", aspect_ratio: "16:9", generate_audio: false, frame_images: [{ type: "image_url", image_url: { url: dataUrl(image) }, frame_type: "first_frame" }] }) });
       const submitted = await submit.text();
       if (!submit.ok) throw fail("mozgókép", submit.status, submitted);
       let job = JSON.parse(submitted) as { status?: string; polling_url?: string; unsigned_urls?: string[]; error?: unknown };
@@ -269,22 +318,21 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
       const deadline = Date.now() + VIDEO_TIMEOUT_MS;
       while (!["completed", "failed", "cancelled", "expired"].includes(job.status ?? "")) {
         if (Date.now() > deadline) throw new Error("mozgókép: időtúllépés");
-        await new Promise((resolve) => setTimeout(resolve, VIDEO_POLL_MS));
-        const poll = await fetch(pollingUrl, { headers: orHeaders, signal: AbortSignal.timeout(60_000) });
+        await pause(VIDEO_POLL_MS);
+        const poll = await safeProviderFetch(pollingUrl, { headers: orHeaders, signal: signal(60_000) }, { sameOrigin: true });
         if (poll.ok) job = JSON.parse(await poll.text());
       }
       if (job.status !== "completed" || !job.unsigned_urls?.[0]) throw new Error(`mozgókép: ${job.status} ${scrub(JSON.stringify(job.error ?? ""))}`);
       // Letöltés csak HTTPS-ről; a kulcs csak a szolgáltató saját originjére megy, idegen (CDN) címre kulcs nélkül (vak kör L8).
       const url = providerUrl(job.unsigned_urls[0]);
       if (!url) throw new Error("mozgókép: a letöltési cím nem HTTPS");
-      const headers: Record<string, string> = url.origin === OPENROUTER_ORIGIN ? { Authorization: orHeaders.Authorization } : {};
-      return downloadAndShrink(() => fetch(url, { headers, signal: AbortSignal.timeout(180_000) }), keys.ffmpeg);
+      return downloadAndShrink(() => safeProviderFetch(url, { headers: { Authorization: orHeaders.Authorization }, signal: signal(180_000) }, { sameOrigin: false }), keys.ffmpeg);
     },
   };
   if (keys.elevenLabs) {
     const key = keys.elevenLabs;
     deps.speech = async (text, voice) => {
-      const res = await elevenLabsQueue(() => fetchPatiently(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}?output_format=${CLIP_AUDIO_FORMAT}`, { method: "POST", signal: AbortSignal.timeout(60_000), headers: { "xi-api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ text, model_id: voice.model, language_code: "hu" }) })));
+      const res = await elevenLabsQueue(() => fetchPatiently(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}?output_format=${CLIP_AUDIO_FORMAT}`, { method: "POST", signal: signal(60_000), headers: { "xi-api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ text, model_id: voice.model, language_code: "hu" }) })));
       if (!res.ok) throw fail("hang", res.status, await res.text());
       return Buffer.from(await res.arrayBuffer());
     };
@@ -298,7 +346,7 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
         form.append("language_code", "hu");
         return form;
       };
-      const res = await elevenLabsQueue(() => fetchPatiently(() => fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", signal: AbortSignal.timeout(60_000), headers: { "xi-api-key": key }, body: body() })));
+      const res = await elevenLabsQueue(() => fetchPatiently(() => fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", signal: signal(60_000), headers: { "xi-api-key": key }, body: body() })));
       const text = await res.text();
       if (!res.ok) throw fail("hangkapu", res.status, text);
       return String((JSON.parse(text) as { text?: unknown }).text ?? "");
@@ -312,11 +360,21 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
       form.append("file", new Blob([new Uint8Array(audio)], { type: "audio/mpeg" }), "hang.mp3");
       form.append("model", CLIP_HEAR_MODEL_OPENAI);
       form.append("language", "hu");
-      const res = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", signal: AbortSignal.timeout(60_000), headers: { Authorization: `Bearer ${key}` }, body: form });
+      const res = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", signal: signal(60_000), headers: { Authorization: `Bearer ${key}` }, body: form });
       const text = await res.text();
       if (!res.ok) throw fail("hangkapu", res.status, text);
       return String((JSON.parse(text) as { text?: unknown }).text ?? "");
     };
   }
+  // Leállításkor (vagy utána) minden szolgáltatói hiba megszakításként jelez — így a fejezet nem kap hibás sort, és nem kerül be
+  // hiányos (pl. tartalék hangos) kisfilmként (2. vak kör L2).
+  const guarded = <A extends unknown[], R>(fn: (...args: A) => Promise<R>) => async (...args: A): Promise<R> => {
+    if (shutdown.signal.aborted) throw new ClipAbortError("a szerver leáll");
+    try { return await fn(...args); } catch (error) { if (shutdown.signal.aborted && !(error instanceof ClipAbortError)) throw new ClipAbortError("a szerver leáll"); throw error; }
+  };
+  deps.chat = guarded(deps.chat); deps.image = guarded(deps.image); deps.check = guarded(deps.check); deps.still = guarded(deps.still);
+  if (deps.video) deps.video = guarded(deps.video);
+  if (deps.speech) deps.speech = guarded(deps.speech);
+  if (deps.hear) deps.hear = guarded(deps.hear);
   return deps;
 }

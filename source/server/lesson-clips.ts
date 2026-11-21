@@ -40,6 +40,11 @@ function overMemory(rss: number, where: string, now = Date.now()): boolean {
 }
 /** Egy tárolt mozgókép legfeljebb ekkora lehet (átkódolás után) — fölötte a jelenet állóképes marad. */
 export const CLIP_VIDEO_MAX_BYTES = 2_500_000;
+/**
+ * Ennél régebbi, egyetlen kisfilm-sorban sem hivatkozott média árva (megszakított / sikertelen fejezeté): a kör a zár alatt törli,
+ * hogy a tárkeretet ne fogyassza (2. vak kör L6). A türelmi idő egy fejezet gyártási idejének (percek) sokszorosa.
+ */
+export const CLIP_ORPHAN_GRACE_MS = 24 * 3_600_000;
 
 /** A szerver leállása miatt megszakított munka (pl. leállított átkódolás): a fejezet NEM kap hibás sort, a következő induláskor újra próbál. */
 export class ClipAbortError extends Error {}
@@ -76,6 +81,8 @@ export type ClipStore = {
   mediaBytes(): Promise<number>;
   /** Példányok közötti kizárás (advisory lock); foglalt zárnál null, a kör kimarad. */
   exclusive<T>(work: () => Promise<T>): Promise<T | null>;
+  /** A `graceMs`-nél régebbi, sehol nem hivatkozott média törlése (a zár alatt hívandó). */
+  pruneOrphanMedia(graceMs: number): Promise<{ rows: number; bytes: number }>;
 };
 
 export type EligibleSection = { sectionIndex: number; heading: string; source: string; hash: string };
@@ -346,6 +353,8 @@ export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipM
   return store.exclusive(async () => {
     const report: ClipRoundReport = { made: 0, failed: 0, lessons: 0, videos: 0, stoppedByBudget: false, stoppedByMemory: false };
     let stopped = false;
+    const pruned = await store.pruneOrphanMedia(CLIP_ORPHAN_GRACE_MS);
+    if (pruned.rows) logger.info(`[lesson-clips] ${pruned.rows} árva média törölve (${Math.round(pruned.bytes / 1024)} kB)`);
     const today = new Set(await store.lessonsToday());
     for (const lesson of await store.freshLessons(CLIP_FRESH_DAYS)) {
       const parsed = parseLesson(lesson.json);
@@ -382,6 +391,8 @@ export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipM
           logger.info(`[lesson-clips] kész: ${lesson.id} / ${section.sectionIndex + 1}. fejezet — ${result.stats.images} kép (${result.stats.imageRetries} újrapróba), ${result.stats.audio} hang (${result.stats.audioRetries} újrapróba, ${result.stats.audioImperfect} pontatlan), ${result.stats.videos} mozgókép (${result.stats.videoFailures} nélkül), ${Math.round(result.stats.bytes / 1024)} kB`);
           return;
         }
+        // Leállítás közben a hiba többnyire az elvágott kérésé: a fejezet nem kap hibás sort (nem ég el próbálkozás; 2. vak kör L2).
+        if (opts.shouldStop?.()) { stopped = true; return; }
         await store.upsert({ ...base, status: "failed", clip: null });
         report.failed++;
         logger.warn(`[lesson-clips] nem készült el (${lesson.id} / ${section.sectionIndex + 1}. fejezet, ${base.attempts}. kör): ${result.problems.join(" | ").slice(0, 300)}`);
@@ -412,11 +423,11 @@ export async function stopLessonClipWorker(waitMs = 30_000): Promise<void> {
   clearTimeout(timer);
 }
 /** Indítás (csak élesben hívja a szerver). Gyártás csak `auto` módban; különben nem indul időzítő. */
-export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: ClipDeps; model: string }, env: Record<string, string | undefined> = process.env): ClipMode {
+export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: ClipDeps; model: string; maintenance?: () => void }, env: Record<string, string | undefined> = process.env): ClipMode {
   const mode = clipsMode(env);
   if (mode !== "auto" || started) return mode;
   started = true;
-  const { deps, model } = makeDeps();
+  const { deps, model, maintenance } = makeDeps();
   const opts = { dailyLimit: clipDailyLimit(env), mediaBudgetBytes: clipMediaBudgetBytes(env), model, rss: () => process.memoryUsage().rss, shouldStop: () => stopping };
   let running = false;
   const run = async () => {
@@ -425,6 +436,8 @@ export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: 
     let finish: () => void = () => undefined;
     current = new Promise<void>((resolve) => { finish = resolve; });
     try {
+      // Karbantartás (munkamappa-söprés) csak gyártó módban, minden kör előtt (2. vak kör L3).
+      try { maintenance?.(); } catch (error) { logger.warn("[lesson-clips] a karbantartás nem sikerült:", describe(error)); }
       const r = await runClipRound(store, deps, mode, opts);
       if (r && (r.made || r.failed || r.stoppedByBudget || r.stoppedByMemory)) logger.info(`[lesson-clips] kör: ${r.made} kisfilm kész (${r.videos} mozgókép), ${r.failed} sikertelen, ${r.lessons} lecke${r.stoppedByMemory ? " — memóriaőr miatt megállt" : ""}`);
     } catch (error) {

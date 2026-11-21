@@ -13,16 +13,24 @@ test("leállítás: a kisfilmworker időzítői leállnak, új kör nem indul (v
   let rounds = 0;
   const store: ClipStore = {
     lesson: async () => null, freshLessons: async () => [], rows: async () => [], upsert: async () => undefined, lessonsToday: async () => [],
-    putMedia: async () => "id", mediaBytes: async () => 0, exclusive: async (work) => { rounds++; return work(); },
+    putMedia: async () => "id", mediaBytes: async () => 0, exclusive: async (work) => { rounds++; return work(); }, pruneOrphanMedia: async () => ({ rows: 0, bytes: 0 }),
   };
   const deps = { chat: async () => "", image: async () => ({ bytes: Buffer.from("x"), mime: "image/jpeg" }), check: async () => ({ ok: true, note: "" }), still: async () => Buffer.from("x"), audioMs: () => 0 } satisfies ClipDeps;
-  assert.equal(startLessonClipWorker(store, () => ({ deps, model: "m" }), { LESSON_CLIPS_AUTO: "on", OPENROUTER_API_KEY: "k" }), "auto");
+  // Kikapcsolt / csak kiszolgáló módban semmilyen karbantartás (munkamappa-söprés) nem fut (2. vak kör L3).
+  let built = 0, maintenance = 0;
+  assert.equal(startLessonClipWorker(store, () => { built++; return { deps, model: "m", maintenance: () => { maintenance++; } }; }, { LESSON_CLIPS_AUTO: "off", OPENROUTER_API_KEY: "k" }), "idle");
+  t.mock.timers.tick(10 * 60_000);
+  assert.deepEqual([built, maintenance], [0, 0]);
+  assert.equal(startLessonClipWorker(store, () => { built++; return { deps, model: "m", maintenance: () => { maintenance++; } }; }, { LESSON_CLIPS_AUTO: "on", OPENROUTER_API_KEY: "k" }), "auto");
   const settle = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
   t.mock.timers.tick(90_000); await settle();
   assert.equal(rounds, 1, "az első kör elindult");
+  assert.equal(maintenance, 1, "gyártó módban minden kör előtt söpör (nem csak induláskor)");
+  t.mock.timers.tick(3 * 60_000); await settle();
+  assert.deepEqual([rounds, maintenance], [2, 2]);
   await stopLessonClipWorker();
   t.mock.timers.tick(30 * 60_000); await settle();
-  assert.equal(rounds, 1, "leállítás után nincs új kör");
+  assert.equal(rounds, 2, "leállítás után nincs új kör");
 });
 
 test("leállítás: a futó átkódolás SIGKILL-lel leáll, a jelenet megszakítottként (nem állóképesként) jelez; utána új nem indul (vak kör L5)", async () => {

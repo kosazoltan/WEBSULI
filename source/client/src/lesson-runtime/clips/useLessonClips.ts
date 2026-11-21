@@ -35,25 +35,34 @@ export function useLessonClips(lessonId: string | undefined, preset?: LessonClip
   useEffect(() => {
     if (preset) { setState(toState(preset)); return; }
     if (!lessonId) { setState(EMPTY); return; }
-    let stopped = false;
+    let stopped = false, expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
+    const controller = new AbortController();
+    // A lekérésektől független lejárat: ha egy kérés elakad, a jelzés akkor is eltűnik, a kész kisfilmek maradnak (2. vak kör L4).
+    const expiry = setTimeout(() => {
+      expired = true;
+      clearTimeout(timer);
+      controller.abort();
+      setState((old) => (old.pending ? { clips: old.clips, pending: false } : old));
+    }, CLIP_POLL_MAX_MS);
     const load = async () => {
       let next = EMPTY;
       try {
-        const res = await fetch(`/api/lessons/${encodeURIComponent(lessonId)}/clips`, { credentials: "same-origin" });
+        const res = await fetch(`/api/lessons/${encodeURIComponent(lessonId)}/clips`, { credentials: "same-origin", signal: controller.signal });
         if (res.ok) next = toState(await res.json());
       } catch {
-        next = EMPTY; // hálózati hiba: a lecke kisfilm nélkül megy tovább
+        next = EMPTY; // hálózati hiba vagy lejárat: a lecke kisfilm nélkül megy tovább
       }
-      if (stopped) return;
+      if (stopped || expired) return;
       const settled = settleClips(next, Date.now() - started);
       // Hibás lekérés nem törli a már megjelent kisfilmeket.
       setState((old) => (next === EMPTY && old.clips.size ? { clips: old.clips, pending: false } : settled.state));
       if (settled.poll) timer = setTimeout(() => void load(), pollMs);
+      else clearTimeout(expiry);
     };
     void load();
-    return () => { stopped = true; clearTimeout(timer); };
+    return () => { stopped = true; clearTimeout(timer); clearTimeout(expiry); controller.abort(); };
   }, [lessonId, preset, pollMs]);
   return state;
 }

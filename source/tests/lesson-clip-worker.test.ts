@@ -5,12 +5,12 @@ import { lessonSchema } from "../shared/lesson-schema";
 import { clipSource, type Clip2 } from "../shared/lesson-clip";
 import { CLIP_BAND_STYLE, clipBandFor } from "../shared/clip-style";
 import {
-  CLIP_FRESH_DAYS, CLIP_MAX_ATTEMPTS, CLIP_PARALLEL, CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, clipDailyLimit, clipMediaBudgetBytes, clipSourceHash, clipSystemPrompt, clipTodo, clipsMode,
+  CLIP_FRESH_DAYS, CLIP_MAX_ATTEMPTS, CLIP_ORPHAN_GRACE_MS, CLIP_PARALLEL, CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, clipDailyLimit, clipMediaBudgetBytes, clipSourceHash, clipSystemPrompt, clipTodo, clipsMode,
   CLIP_SPEECH_ATTEMPTS, ClipAbortError, eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, speakChecked, speechDistance,
   type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
-import { CLIP_TMP_PREFIX, clipKeys, clipProviders, downloadAndShrink, sweepStaleClipDirs, type ExecLike } from "../server/lesson-clips-providers";
+import { CLIP_TMP_PREFIX, clipKeys, clipProviders, downloadAndShrink, safeProviderFetch, sweepStaleClipDirs, type ExecLike } from "../server/lesson-clips-providers";
 import { settleClips } from "../client/src/lesson-runtime/clips/useLessonClips";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,6 +44,7 @@ function memoryStore(lessons: ClipLesson[], initial: ClipRow[] = []) {
     putMedia: async (kind, mime, bytes) => { const id = mediaId(bytes); media.set(id, { kind, mime, size: bytes.length }); return id; },
     mediaBytes: async () => [...media.values()].reduce((sum, m) => sum + m.size, 0),
     exclusive: async (work) => work(),
+    pruneOrphanMedia: async () => ({ rows: 0, bytes: 0 }),
   };
   return { store, rows, media };
 }
@@ -456,4 +457,86 @@ test("napi plafon és tárkeret: a plafon fölötti lecke kimarad, betelt tárn�
   assert.equal(report!.stoppedByBudget, true);
   assert.equal(report!.made, 1);
   assert.deepEqual([...new Set(full.rows.map((r) => r.lessonId))], ["a"]);
+});
+
+test("a kör a zár alatt, a fejezetek előtt egyszer söpri az árva médiát a türelmi idővel (2. vak kör L6)", async () => {
+  const { store } = memoryStore([makeLesson("pub")]);
+  const events: string[] = [];
+  const traced: ClipStore = { ...store, exclusive: async (work) => { events.push("zár"); return work(); }, pruneOrphanMedia: async (graceMs) => { events.push(`söprés:${graceMs}`); return { rows: 0, bytes: 0 }; } };
+  const deps = fakeDeps({ chat: async () => { events.push("fejezet"); return draft(); } });
+  await runClipRound(traced, deps, "auto", OPTS);
+  assert.deepEqual(events, ["zár", `söprés:${CLIP_ORPHAN_GRACE_MS}`, "fejezet", "fejezet"]);
+  assert.ok(CLIP_ORPHAN_GRACE_MS >= 6 * 3_600_000, "a türelmi idő sokszorosa egy fejezet gyártási idejének");
+});
+
+test("leállításkor a megszakítás miatt sikertelen fejezet sem kap hibás sort (2. vak kör L2)", async () => {
+  const { store, rows } = memoryStore([makeLesson("pub")]);
+  let stopping = false;
+  // Az elvágott szolgáltatói kérés (pl. a kép) a leállítás alatt hibát ad — ez nem a fejezet valódi hibája.
+  const deps = fakeDeps({ image: async () => { stopping = true; throw new Error("This operation was aborted"); } });
+  const report = await runClipRound(store, deps, "auto", { ...OPTS, shouldStop: () => stopping });
+  assert.deepEqual([report!.made, report!.failed, rows.length], [0, 0, 0]);
+});
+
+/** Egy nem futó folyamat azonosítója (a `process.kill(pid, 0)` ESRCH-t ad). */
+function deadPid(): number {
+  for (let pid = 4_194_301; pid > 100_000; pid -= 7) {
+    try { process.kill(pid, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return pid; }
+  }
+  throw new Error("nincs szabad folyamatazonosító");
+}
+
+test("munkamappa-söprés: a saját régi és a halott folyamat mappája törlődik, az élő folyamaté és a futó átkódolásé marad (2. vak kör L3)", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "sweep2-"));
+  const now = Date.now(), old = new Date(now - 5 * 60_000);
+  const make = (name: string, age = old) => { const dir = path.join(root, name); mkdirSync(dir); utimesSync(dir, age, age); return dir; };
+  const ownStale = make(`${CLIP_TMP_PREFIX}${process.pid}-a`), dead = make(`${CLIP_TMP_PREFIX}${deadPid()}-b`);
+  const alive = make(`${CLIP_TMP_PREFIX}${process.ppid}-c`), ownFresh = make(`${CLIP_TMP_PREFIX}${process.pid}-d`, new Date(now));
+  assert.equal(sweepStaleClipDirs(root, now), 2);
+  assert.deepEqual([ownStale, dead, alive, ownFresh].map((d) => existsSync(d)), [false, false, true, true]);
+  rmSync(root, { recursive: true, force: true });
+  // A futó átkódolás saját mappája akkor is marad, ha régi.
+  let finish!: () => void;
+  let workdir = "";
+  const exec: ExecLike = (_file, args, _options, callback) => { workdir = path.dirname(args.at(-1)!); finish = () => callback(new Error("vége")); return { kill: () => true }; };
+  const running = downloadAndShrink(async () => new Response(new Uint8Array([1])), "ffmpeg", 90_000, { exec, rss: () => 0 });
+  while (!workdir) await new Promise((r) => setTimeout(r, 1));
+  assert.ok(path.basename(workdir).startsWith(`${CLIP_TMP_PREFIX}${process.pid}-`), "a munkamappa neve a folyamat azonosítóját viszi");
+  utimesSync(workdir, old, old);
+  sweepStaleClipDirs(tmpdir(), now);
+  assert.equal(existsSync(workdir), true, "a futó átkódolás mappája nem törlődik");
+  finish();
+  assert.equal(await running, null);
+  assert.equal(existsSync(workdir), false);
+});
+
+test("átirányítás: minden lépés csak HTTPS, a kulcs csak a szolgáltató originjére megy, a lekérdezés nem hagyhatja el a szolgáltatót (2. vak kör L7)", async () => {
+  const realFetch = globalThis.fetch;
+  const seen: Array<{ url: string; auth: string | null; redirect?: RequestRedirect }> = [];
+  const routes: Record<string, () => Response> = {
+    "https://cdn.example/a": () => new Response(null, { status: 302, headers: { location: "http://cdn.example/b" } }),
+    "https://openrouter.ai/api/v1/videos/1/content": () => new Response(null, { status: 302, headers: { location: "https://cdn.example/c" } }),
+    "https://cdn.example/c": () => new Response("mp4", { status: 200 }),
+    "https://openrouter.ai/api/v1/videos/1": () => new Response(null, { status: 307, headers: { location: "https://evil.example/poll" } }),
+  };
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    seen.push({ url, auth: new Headers(init?.headers).get("authorization"), redirect: init?.redirect });
+    return (routes[url] ?? (() => new Response("nincs", { status: 404 })))();
+  }) as typeof fetch;
+  const auth = { Authorization: "Bearer titok" };
+  try {
+    await assert.rejects(safeProviderFetch(new URL("https://cdn.example/a"), { headers: {} }, { sameOrigin: false }), /HTTPS/);
+    assert.ok(!seen.some((s) => s.url.startsWith("http:")), "titkosítatlan címre nem megy kérés");
+    seen.length = 0;
+    const res = await safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1/content"), { headers: auth }, { sameOrigin: false });
+    assert.equal(await res.text(), "mp4");
+    assert.deepEqual(seen.map((s) => [s.url, s.auth]), [["https://openrouter.ai/api/v1/videos/1/content", "Bearer titok"], ["https://cdn.example/c", null]], "idegen célra kulcs nélkül");
+    assert.ok(seen.every((s) => s.redirect === "manual"), "az átirányítást a kód követi, nem a fetch");
+    seen.length = 0;
+    await assert.rejects(safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1"), { headers: auth }, { sameOrigin: true }), /idegen/);
+    assert.ok(!seen.some((s) => s.url.startsWith("https://evil.example")), "a lekérdezés nem megy idegen originre");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

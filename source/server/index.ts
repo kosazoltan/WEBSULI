@@ -553,12 +553,13 @@ app.use((req, res, next) => {
       // Spec 2026-11-10-fejezet-kisfilmek-v2: a fejezetek kisfilmjeinek háttérgyártása — csak LESSON_CLIPS_AUTO=on és OpenRouter-kulcs
       // mellett (napi plafon: LESSON_CLIP_DAILY_LIMIT, tárkeret: LESSON_CLIP_MEDIA_MAX_MB). Vészfék: LESSON_CLIPS=0.
       if (process.env.NODE_ENV === "production" && !isE2eMode()) void Promise.all([import("./lesson-clips"), import("./lesson-clips-db"), import("./lesson-clips-providers")]).then(([{ startLessonClipWorker }, { dbClipStore }, { clipKeys, clipProviders, sweepStaleClipDirs, CLIP_VIDEO_MODEL }]) => {
-        // Vak kör L5: az előző folyamat (leállítás / OOM) után maradt régi, saját kisfilm-munkamappák törlése.
-        const swept = sweepStaleClipDirs();
-        if (swept) log(`[lesson-clips] ${swept} régi munkamappa törölve`);
         const keys = clipKeys();
         if (!keys) return;
-        const mode = startLessonClipWorker(dbClipStore, () => ({ deps: clipProviders(keys), model: CLIP_VIDEO_MODEL }));
+        // 2. vak kör L3: a félbemaradt munkamappák söprése csak gyártó módban, minden kör előtt (kikapcsolva nincs fájlrendszer-munka).
+        const mode = startLessonClipWorker(dbClipStore, () => ({ deps: clipProviders(keys), model: CLIP_VIDEO_MODEL, maintenance: () => {
+          const swept = sweepStaleClipDirs();
+          if (swept) log(`[lesson-clips] ${swept} félbemaradt munkamappa törölve`);
+        } }));
         if (mode === "auto") log(`[lesson-clips] a kisfilm-háttérgyártás elindult (hang: ${keys.elevenLabs ? "ElevenLabs" : "tartalék"}, kép: ${keys.openAi ? "OpenAI" : "OpenRouter"})`);
       }, (error) => logger.error("[STARTUP] A kisfilm-háttérfolyamat nem indult:", error));
 
@@ -735,12 +736,13 @@ app.use((req, res, next) => {
         await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
         // Review #365 (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők a pool lezárása előtt (max 15 s).
         await Promise.race([(await import("./daily-reminder")).pendingNewLessonNotifications(), new Promise((resolve) => setTimeout(resolve, 15_000))]).catch((err: unknown) => logger.warn("New lesson notification flush failed", err));
-        // Vak kör L5: a futó kisfilmkör (legfeljebb 60 s, a fenti várakozással párhuzamosan telt); ami ezután is fut, annak az ffmpeg-
-        // gyereke SIGKILL-t kap (a jelenet megszakítottként zárul, a fejezet nem kap hibás sort), majd a kör lezárulására rövid várakozás.
+        // Vak kör L5 + 2. vak kör L2: a futó kisfilmkör (legfeljebb 60 s, a fenti várakozással párhuzamosan telt); ami ezután is fut,
+        // annak MINDEN szolgáltatói várakozása, letöltése és ffmpeg-gyereke megszakad (a fejezet nem kap hibás sort), majd a kör — és
+        // vele az advisory lock DB-kapcsolata — lezárulására rövid várakozás, még a pool lezárása előtt.
         await clipsStopped;
         try {
-          const { abortClipTranscodes } = await import("./lesson-clips-providers");
-          if (abortClipTranscodes()) await import("./lesson-clips").then(({ stopLessonClipWorker }) => stopLessonClipWorker(5_000));
+          (await import("./lesson-clips-providers")).abortClipTranscodes();
+          await (await import("./lesson-clips")).stopLessonClipWorker(10_000);
         } catch (err) { logger.warn("A kisfilm-átkódolások nem állíthatók le", err); }
         await dbPool.end();
         log("Database pool closed");

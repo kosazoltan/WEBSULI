@@ -60,6 +60,16 @@ export const dbClipStore: ClipStore = {
     const { rows } = await db.execute(sql`SELECT coalesce(sum(size), 0)::bigint AS total FROM lesson_clip_media`);
     return Number((rows[0] as { total?: unknown } | undefined)?.total ?? 0);
   },
+  async pruneOrphanMedia(graceMs) {
+    // 2. vak kör L6: a médiaazonosító (32 hex jegy) a kisfilm JSON-jában szövegként szerepel; ami sehol nem szerepel és a türelmi
+    // időnél régebbi, az árva. A kör advisory lockja alatt fut, így más példány épp készülő fejezetét nem érinti.
+    const { rows } = await db.execute(sql`DELETE FROM lesson_clip_media m
+      WHERE m.created_at < now() - make_interval(secs => ${Math.floor(graceMs / 1000)})
+        AND NOT EXISTS (SELECT 1 FROM lesson_clips c WHERE c.clip IS NOT NULL AND position(m.id IN c.clip::text) > 0)
+      RETURNING m.size`);
+    const sizes = (rows as Array<{ size?: unknown }>).map((r) => Number(r.size ?? 0));
+    return { rows: sizes.length, bytes: sizes.reduce((sum, n) => sum + n, 0) };
+  },
   async exclusive(work) {
     const client = await dbPool.connect();
     try {
