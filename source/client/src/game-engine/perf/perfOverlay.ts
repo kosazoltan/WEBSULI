@@ -10,7 +10,7 @@
 import type * as THREE from "three";
 
 import { createGpuTimer } from "./gpuTimer";
-import { FrameWindow, LoopClock, fmt, median, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
+import { DrawnFrameClock, FrameWindow, LoopClock, fmt, median, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
 
 export type PerfResolution = 1 | 0.75 | 0.5;
 
@@ -116,7 +116,12 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   // PR #504 (Codex P2): kontextusvesztéskor a függő lekérdezések érvénytelenek — az időzítő eldobja őket, visszaálláskor a
   // kiterjesztést újra lekéri, így a GPU-sor a visszaállás után is frissül.
   const gpuTimer = createGpuTimer(gl2);
-  const onContextLost = () => gpuTimer.contextLost();
+  const onContextLost = () => {
+    gpuTimer.contextLost();
+    // 2026-11-21 vak kör L2: a vesztés előtti minták és a futó szinkron próba érvénytelenek (a próba eredménye: nincs).
+    frames.clear();
+    if (probeDone) finishProbe(null);
+  };
   const onContextRestored = () => gpuTimer.contextRestored();
   canvas.addEventListener("webglcontextlost", onContextLost);
   canvas.addEventListener("webglcontextrestored", onContextRestored);
@@ -225,12 +230,11 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   // --- Mérés ---
   const frames = new FrameWindow();
   const loopClock = new LoopClock();
+  const drawnClock = new DrawnFrameClock();
   let tStart = 0;
   let tBefore = 0;
   let lastRefresh = 0;
   let renderedFrames = 0;
-  let lastJs = 0;
-  let lastRender = 0;
   let calls = 0;
   let triangles = 0;
 
@@ -429,20 +433,28 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     frameStart(now, restarted = false) {
       tStart = performance.now();
       gpuTimer.poll();
-      const counted = loopClock.frame(now, tStart, restarted);
-      if (counted !== null) frames.push({ dt: counted, js: lastJs, render: lastRender, at: tStart });
+      loopClock.frame(now, tStart, restarted);
+      // 2026-11-21 vak kör L1: a képkocka elején csak az időbélyeg jegyződik; FPS-minta csak a sikeres `afterRender`-ben születik.
+      drawnClock.start(now, restarted);
     },
     beforeRender() {
       tBefore = performance.now();
-      lastJs = tBefore - tStart;
       gpuTimer.begin(probeLeft > 0);
     },
     afterRender() {
       const tAfter = performance.now();
-      lastRender = tAfter - tBefore;
+      gpuTimer.end();
+      // 2026-11-21 vak kör L2: elveszett kontextuson a `render()` rajzolás nélkül tér vissza — nem kirajzolt képkocka, nem
+      // FPS-minta, a futó szinkron próba érvénytelen; visszaállás után az első valódi rajzolástól mér újra.
+      if (gl.isContextLost()) {
+        drawnClock.completed(false);
+        if (probeDone) finishProbe(null);
+        return;
+      }
       loopClock.rendered(tAfter);
       renderedFrames += 1;
-      gpuTimer.end();
+      const dt = drawnClock.completed(true);
+      if (dt !== null) frames.push({ dt, js: tBefore - tStart, render: tAfter - tBefore, at: tAfter });
       calls = renderer.info.render.calls;
       triangles = renderer.info.render.triangles;
       if (probeLeft > 0) {

@@ -175,3 +175,11 @@ a kezdő pályán nincs: NOT RUN. Időjárásos pályák (eső, hó, homokvihar)
 | L4 nincs viselkedés-teszt | böngészős: szünet → „áll” azonnal, folytatás → „fut”, rövid folytatás → szünet → „áll”; méretkövetés három nézetméreten | lásd ott |
 | L5 `render()`-kivétel után beragadt mérés | a `begin` lezárja és eldobja a félbemaradt lekérdezést (torz, két képkockás minta nem kerül az átlagba) | `gpu-timer.test.ts` „kivétel a render() alatt” — a régi kóddal bukott (a torz minta bekerült) |
 | L6 sötét lombbelső | nem változott (a terv vállalja; tulajdonosi ízlés) | — |
+
+### 2026-11-21 — vak kör (86df05ae)
+
+- **L1 (blokkoló) — valódi.** Az FPS-mintát a `frameStart` írta, a megszakadó rajzolás is minta lett. Javítás: `DrawnFrameClock` (`perfStats.ts`), a minta csak a sikeres `afterRender`-ben születik, a köz az előző sikeres kirajzolástól számít, újrainduláskor megszakad. Teszt (előbb bukott): `perf-stats.test.ts` „DrawnFrameClock”; böngészős „megszakadó rajzolásnál …” (draw-kivétel élő rAF mellett; régi kód: 14 minta, 112 FPS).
+- **L2 (közepes) — valódi.** Elveszett kontextuson a `render()` rajzolás nélkül tér vissza, a panel kirajzolt képkockának könyvelte. Javítás: `afterRender` `gl.isContextLost()` esetén nem számol, nem ad mintát, megszakítja a sort és a futó GPU-próbát (`null`); a `webglcontextlost` üríti a mintaablakot. Teszt (előbb bukott): böngészős „WebGL-kontextusvesztéskor …” (`WEBGL_lose_context`; régi kód: a próba 0-t adott).
+- **L3 (közepes) — valódi.** A százalék a plafon ELŐTT szorzott, aktív plafonnál 75 % = 100 %. Javítás: `scaledPixelRatio` (`pixelBudget.ts`), a plafonos 100 %-os arányt skálázza; `BlockCraftQuiz.tsx` ezt hívja. Teszt (előbb bukott): `pixel-budget.test.ts` „scaledPixelRatio”; böngészős „könnyű grafika módban …” (950×1000, 4 GB; régi kód: 75 %-on 251 px-es eltérés).
+- **L4 (kicsi) — valódi.** A panel csak a pályajelző aljához igazodott, a sort törő súgót takarta. Javítás: a felső HUD tárolója `data-testid="bc-top-hud"`, a `getTopInset` ennek az aljához igazít. Teszt (előbb bukott): böngészős „álló 360×640-en …” (régi kód: panel teteje 114, súgó alja 138).
+- Ellenőrzés: `npx tsc --noEmit` zöld; az érintett egységtesztek 77 / 77; `npm run test:e2e -- tests/blockcraft-perf-panel.spec.ts tests/blockcraft-two-finger.spec.ts` → `23 passed`. Valódi Honor Magic V6 mérés továbbra is NOT RUN (fizikai eszköz kell).

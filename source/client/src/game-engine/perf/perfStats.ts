@@ -177,6 +177,36 @@ export function isLoopRunning(sinceLastFrameMs: number, lastFrameDtMs: number): 
 }
 
 /**
+ * FPS-minta csak BEFEJEZETT és ténylegesen kirajzolt képkockából (2026-11-21 vak kör L1, L2). A képkocka elején (`start`) csak
+ * az időbélyeg jegyződik; a minta a `completed(drawn)` hívásakor születik, a köz az előző SIKERES kirajzolástól számít. Ha a
+ * rajzolás kivételt dob, `completed` el sem hangzik — a megszakadt próbálkozás nem minta. `drawn === false` (elveszett
+ * WebGL-kontextus: a `render()` rajzolás nélkül tér vissza) sem minta, és megszakítja a sort; újrainduláskor (szünet után) is
+ * megszakad, így a rés nem képkocka-köz.
+ */
+export class DrawnFrameClock {
+  private lastDrawnNow: number | null = null;
+  private pendingNow: number | null = null;
+
+  start(now: number, restarted: boolean): void {
+    if (restarted) this.lastDrawnNow = null;
+    this.pendingNow = now;
+  }
+
+  completed(drawn: boolean): number | null {
+    const now = this.pendingNow;
+    this.pendingNow = null;
+    if (now === null) return null;
+    if (!drawn) {
+      this.lastDrawnNow = null;
+      return null;
+    }
+    const prev = this.lastDrawnNow;
+    this.lastDrawnNow = now;
+    return prev !== null && now > prev ? now - prev : null;
+  }
+}
+
+/**
  * A képkocka-hurok állapota a panelnek (review #504 L1). Elsődleges forrás a JÁTÉK saját jelzője (`gameRunning`: fut-e a hurok
  * — a Kockavadászban a `runningRef`); a falióra-becslés (`isLoopRunning`) csak akkor dönt, ha a játék nem ad jelzőt.
  * A szünet utáni rés (≥ 1 s) nem képkockaidő: ott a `lastDt` 0, hogy a tartalék becslés ne nyújtsa meg a „fut” időt.

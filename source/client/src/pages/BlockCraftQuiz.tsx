@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { applyRendererLook, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
 import type { PerfControls, PerfOverlay } from "@/game-engine/perf/perfOverlay";
 import { perfEnabledFrom } from "@/game-engine/perf/perfFlag";
-import { isLightGraphicsFrom, isTouchDeviceFrom, LIGHT_GRAPHICS_MAX_PIXELS, pixelRatioForBudget } from "@/game-engine/perf/pixelBudget";
+import { isLightGraphicsFrom, isTouchDeviceFrom, LIGHT_GRAPHICS_MAX_PIXELS, scaledPixelRatio } from "@/game-engine/perf/pixelBudget";
 import { SUN_SHADE_TINT, sunShadeAt, type SunOccluder } from "@/lib/voxelSunShade";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Pause, Blocks } from "lucide-react";
@@ -1954,7 +1954,8 @@ export default function BlockCraftQuiz() {
       if (width === appliedW && height === appliedH) return;
       appliedW = width;
       appliedH = height;
-      const ratio = pixelRatioForBudget(width, height, basePixelRatio * perfScale, lightGraphics ? LIGHT_GRAPHICS_MAX_PIXELS : null);
+      // A panel százaléka a plafonos 100 %-ot skálázza (2026-11-21 vak kör L3): aktív plafonnál is három különböző felbontás.
+      const ratio = scaledPixelRatio(width, height, basePixelRatio, perfScale, lightGraphics ? LIGHT_GRAPHICS_MAX_PIXELS : null);
       if (ratio !== renderer.getPixelRatio()) renderer.setPixelRatio(ratio);
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
@@ -2133,10 +2134,11 @@ export default function BlockCraftQuiz() {
           if (perfDisposed) return;
           perf = mod.createPerfOverlay({ renderer, host, tier, title: "Kockavadász", controls: perfControls, getReactRenders: () => renderCountRef.current,
             isRunning: () => runningRef.current,
-            // A panel a pályajelző (a felső HUD utolsó sora) alá kerül.
+            // A panel a teljes felső HUD alá kerül — a sort törő súgó és bányászjelzés alá is, nem csak a pályajelző alá
+            // (2026-11-21 vak kör L4).
             getTopInset: () => {
-              const chip = host.parentElement?.querySelector('[data-testid="bc-level-chip"]') ?? document.querySelector('[data-testid="bc-level-chip"]');
-              return chip ? chip.getBoundingClientRect().bottom - host.getBoundingClientRect().top + 6 : 4;
+              const hud = host.parentElement?.querySelector('[data-testid="bc-top-hud"]') ?? document.querySelector('[data-testid="bc-top-hud"]');
+              return hud ? hud.getBoundingClientRect().bottom - host.getBoundingClientRect().top + 6 : 4;
             },
           });
         },
@@ -3140,7 +3142,7 @@ export default function BlockCraftQuiz() {
 
             {/* HUD a vászon tetején (S2 GameHud: idő, XP, sorozat, blokk-cél; 48 px-es szünet gomb). */}
             {inRun && (
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col">
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col" data-testid="bc-top-hud">
                 <GameHud
                   stats={hudStats}
                   onPause={pauseGame}

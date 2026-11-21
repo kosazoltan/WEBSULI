@@ -40,3 +40,11 @@ export function pixelRatioForBudget(cssWidth: number, cssHeight: number, basePix
   if (area * basePixelRatio * basePixelRatio <= maxPixels) return basePixelRatio;
   return Math.min(basePixelRatio, Math.sqrt(maxPixels / area));
 }
+
+/**
+ * A `?perf=1` panel felbontás-kapcsolója (E-4) a PLAFONOS 100 %-hoz képest skáláz (2026-11-21 vak kör L3): előbb a plafon dönt
+ * a 100 %-os arányról, utána jön a százalék — különben aktív plafonnál a 75 % és a 100 % ugyanazt a rajzpuffert adhatja.
+ */
+export function scaledPixelRatio(cssWidth: number, cssHeight: number, basePixelRatio: number, scale: number, maxPixels: number | null): number {
+  return pixelRatioForBudget(cssWidth, cssHeight, basePixelRatio, maxPixels) * scale;
+}

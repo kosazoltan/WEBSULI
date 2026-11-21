@@ -382,3 +382,116 @@ test("élő, ≈ 0,8 fps-es hurkon a panel FPS-e is lassú (a lassú képkockák
   expect(f.fpsAvg, `FPS ${f.fpsAvg}`).toBeLessThan(2);
   expect(f.fpsLow1, `1% low ${f.fpsLow1}`).toBeLessThan(2);
 });
+
+type PerfTestWindow = {
+  __websuliPerf: { snapshot: () => Snapshot; runGpuProbe(n: number): Promise<number | null>; controls: { set(p: Record<string, unknown>): void } };
+  __bcDrawAttempts?: number;
+  __bcRafCalls?: number;
+};
+
+test("megszakadó rajzolásnál (minden draw kivételt dob, a rAF él) nincs FPS-minta és kirajzolt képkocka (2026-11-21 vak kör L1)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  // A rAF-ot NEM írjuk felül: a lépés újraütemez, csak a WebGL-rajzolás dob kivételt (a vak próba bemenete).
+  const before = await page.evaluate(() => {
+    const w = window as unknown as PerfTestWindow;
+    w.__bcDrawAttempts = 0;
+    const proto = WebGL2RenderingContext.prototype as unknown as Record<string, unknown>;
+    for (const name of ["drawElements", "drawArrays", "drawElementsInstanced", "drawArraysInstanced"]) {
+      proto[name] = function () {
+        w.__bcDrawAttempts = (w.__bcDrawAttempts ?? 0) + 1;
+        throw new Error("perf-teszt: befecskendezett rajzolási hiba");
+      };
+    }
+    // A kapcsoló üríti a mintaablakot: ezután csak a megszakadó képkockák jönnek.
+    w.__websuliPerf.controls.set({ fog: false });
+    return w.__websuliPerf.snapshot().renderedFrames;
+  });
+  await expect.poll(() => page.evaluate(() => (window as unknown as PerfTestWindow).__bcDrawAttempts ?? 0), { timeout: 60_000 }).toBeGreaterThan(10);
+  const s = await snapshot(page);
+  expect(s.renderedFrames, "nincs befejezett kirajzolás").toBe(before);
+  expect(s.frame, "a megszakadt próbálkozások nem FPS-minták").toBeNull();
+  await expect.poll(async () => (await snapshot(page)).running, { timeout: 10_000 }).toBe(false);
+});
+
+test("WebGL-kontextusvesztéskor nincs „kirajzolt” képkocka, FPS-minta, GPU-próbaeredmény, és a hurok „áll” (2026-11-21 vak kör L2)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  const start = await page.evaluate(() => {
+    const w = window as unknown as PerfTestWindow;
+    const canvas = document.querySelector('[data-testid="bc-perf-panel"]')!.parentElement!.querySelector("canvas")!;
+    const gl = canvas.getContext("webgl2")!;
+    w.__bcRafCalls = 0;
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb: FrameRequestCallback) =>
+      raf((t) => {
+        w.__bcRafCalls = (w.__bcRafCalls ?? 0) + 1;
+        cb(t);
+      });
+    gl.getExtension("WEBGL_lose_context")!.loseContext();
+    w.__websuliPerf.controls.set({ fog: false });
+    return { lost: gl.isContextLost(), frames: w.__websuliPerf.snapshot().renderedFrames };
+  });
+  expect(start.lost).toBe(true);
+  const probe = await page.evaluate(() => (window as unknown as PerfTestWindow).__websuliPerf.runGpuProbe(5));
+  expect(probe, "elveszett kontextuson a GPU-próba nem ad eredményt").toBeNull();
+  await expect.poll(() => page.evaluate(() => (window as unknown as PerfTestWindow).__bcRafCalls ?? 0), { timeout: 60_000 }).toBeGreaterThan(10);
+  const s = await snapshot(page);
+  expect(s.renderedFrames, "rajzolás nélküli visszatérés nem kirajzolt képkocka").toBe(start.frames);
+  expect(s.frame, "nincs FPS-minta").toBeNull();
+  await expect.poll(async () => (await snapshot(page)).running, { timeout: 10_000 }).toBe(false);
+  await expect(page.getByTestId("bc-perf-text")).toContainText("· áll", { timeout: 5_000 });
+});
+
+test("könnyű grafika módban (aktív képpont-plafon) a 100 / 75 / 50 % három különböző rajzpuffer (2026-11-21 vak kör L3, E-4)", async ({ page }) => {
+  test.setTimeout(180_000);
+  // 4 GB-os érintős telefon → könnyű grafika; a 950×1000-es nézet a plafon fölött van (a vak próba esete).
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "deviceMemory", { configurable: true, get: () => 4 });
+  });
+  await page.setViewportSize({ width: 950, height: 1000 });
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  const at100 = await snapshot(page);
+  expect(at100.bufferWidth * at100.bufferHeight, "a plafon 100 %-on él").toBeLessThanOrEqual(1_000_000 + 2 * (at100.bufferWidth + at100.bufferHeight));
+  expect(at100.pixelRatio, "a plafon aktív (az arány a szint 1,5-ös plafonja alatt)").toBeLessThan(1.5);
+  const res = page.getByTestId("bc-perf-res");
+  await res.click();
+  await expect(res).toHaveText("Felbontás: 75%");
+  await expect.poll(async () => Math.abs((await snapshot(page)).bufferWidth - at100.bufferWidth * 0.75), { timeout: 15_000 }).toBeLessThanOrEqual(2);
+  await res.click();
+  await expect(res).toHaveText("Felbontás: 50%");
+  await expect.poll(async () => Math.abs((await snapshot(page)).bufferWidth - at100.bufferWidth * 0.5), { timeout: 15_000 }).toBeLessThanOrEqual(2);
+  expect((await snapshot(page)).cssWidth).toBe(at100.cssWidth);
+});
+
+test("álló 360×640-en a panel a sort törő érintési súgó alatt kezdődik, nem takarja (2026-11-21 vak kör L4)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 360, height: 640 });
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  const hint = page.getByText("Bal: mozgás · jobb: nézelődés", { exact: false });
+  await expect(hint).toBeVisible();
+  // A súgó 6 s után eltűnik — a helyet és a találatot egyszerre, a lapon belül mérjük. A panel helye másodpercenként frissül.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const panel = document.querySelector('[data-testid="bc-perf-panel"]')!.getBoundingClientRect();
+          const tip = Array.from(document.querySelectorAll("span")).find((el) => el.textContent?.startsWith("Bal: mozgás"));
+          if (!tip) return "nincs súgó";
+          const r = tip.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) as HTMLElement | null;
+          if (panel.top < r.bottom) return `a panel teteje (${panel.top}) a súgó alja (${r.bottom}) fölött`;
+          if (hit && hit.closest('[data-testid="bc-perf-panel"]')) return "a súgó közepén a panel van";
+          return "ok";
+        }),
+      { timeout: 4_000 },
+    )
+    .toBe("ok");
+});

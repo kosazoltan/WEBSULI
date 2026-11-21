@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { FrameWindow, LoopClock, fmt, isLoopRunning, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
+import { DrawnFrameClock, FrameWindow, LoopClock, fmt, isLoopRunning, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
 
 /** `?perf=1` diagnosztika — a tiszta számolás (terv: docs/specs/2026-11-17-kockavadasz-telefon.md, 6. szakasz). */
 
@@ -318,5 +318,60 @@ describe("FPS lassú, élő hurkon és megszakadó rajzolásnál (GPT-vak review
     const lastOk = t;
     for (; t < lastOk + 3600; t += 16.7) clock.frame(t, t); // újraütemezett, de megszakadó képkockák
     assert.equal(clock.running(t, true), false);
+  });
+});
+
+describe("DrawnFrameClock — FPS csak BEFEJEZETT, tényleg kirajzolt képkockából (2026-11-21 vak kör L1, L2)", () => {
+  it("L1: a megszakadó (kivételt dobó) képkockák nem adnak mintát", () => {
+    const c = new DrawnFrameClock();
+    c.start(1000, true);
+    assert.equal(c.completed(true), null, "az első kirajzolás csak a sor kezdete");
+    let t = 1000;
+    for (let i = 0; i < 200; i++) {
+      t += 8.3;
+      c.start(t, false); // a rajzolás kivételt dob, completed() nem hívódik
+    }
+    // Új sikeres képkocka: a köz az utolsó SIKERES képtől számít (a megjelenített képek tényleges üteme).
+    t += 8.3;
+    c.start(t, false);
+    const dt = c.completed(true);
+    assert.ok(dt !== null && Math.abs(dt - (t - 1000)) < 1e-6, `dt ${dt}`);
+  });
+
+  it("L1: két egymást követő sikeres képkocka a rAF-közt adja", () => {
+    const c = new DrawnFrameClock();
+    c.start(1000, true);
+    c.completed(true);
+    c.start(1016, false);
+    assert.equal(c.completed(true), 16);
+  });
+
+  it("újraindulásnál a sor megszakad (a szünet nem képkocka-köz)", () => {
+    const c = new DrawnFrameClock();
+    c.start(1000, true);
+    c.completed(true);
+    c.start(9000, true);
+    assert.equal(c.completed(true), null);
+    c.start(9016, false);
+    assert.equal(c.completed(true), 16);
+  });
+
+  it("L2: elveszett kontextusnál (drawn=false) nincs minta, és visszaállás után az első valódi rajzolástól mér újra", () => {
+    const c = new DrawnFrameClock();
+    c.start(1000, true);
+    c.completed(true);
+    for (let t = 1016; t < 6000; t += 16) {
+      c.start(t, false);
+      assert.equal(c.completed(false), null);
+    }
+    c.start(6000, false);
+    assert.equal(c.completed(true), null, "a visszaállás utáni első kép csak a sor kezdete");
+    c.start(6016, false);
+    assert.equal(c.completed(true), 16);
+  });
+
+  it("completed() start() nélkül nem ad mintát", () => {
+    const c = new DrawnFrameClock();
+    assert.equal(c.completed(true), null);
   });
 });
