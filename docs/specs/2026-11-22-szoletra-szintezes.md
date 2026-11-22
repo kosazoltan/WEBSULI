@@ -275,4 +275,3 @@ PR-leírásban (gép által rögzített számláló, nem becslés).
 Mért költség: **7,3048 USD** (77 hívás, a válaszok `usage.cost` mezőjének összege; napló:
 `docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl`). A fr 1. fokozata 295 < 300: a két fokozat külön-külön
 ≥ 300-hoz a fr-nél 305 új szó kellene, a megbízás plafonja nyelvenként +300 (nyitott: +5 fr szó engedélyezése).
-
