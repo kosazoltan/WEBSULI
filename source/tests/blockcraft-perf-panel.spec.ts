@@ -7,7 +7,13 @@ import { devices, expect, test, type Page } from "@playwright/test";
  * Nézet: a kihajtott hajlítható telefon osztálya (827×896 CSS, dpr 2,625, érintés). A `look=medium` a telefonok szintjét
  * kényszeríti (a CI szoftveres WebGL-je különben „low”); a `look=high` az asztali szintet, ahol az árnyéktérkép megmarad.
  */
-test.use({ serviceWorkers: "block", ...devices["Pixel 7"], viewport: { width: 827, height: 896 } });
+test.use({
+  serviceWorkers: "block",
+  ...devices["Pixel 7"],
+  viewport: { width: 827, height: 896 },
+  // CI-reprodukció (2026-11-22): `BC_SOFTWARE_GL=1` → szoftveres WebGL (SwiftShader), mint a Linux CI-n. Alapból valódi GPU.
+  ...(process.env.BC_SOFTWARE_GL === "1" ? { launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] } } : {}),
+});
 
 type Toggles = { shadows: boolean; resolution: number; simpleMaterials: boolean; fog: boolean };
 type Snapshot = {
@@ -189,14 +195,12 @@ test("perf=1: a panel megjelenik a mért sorokkal, és a négy kapcsoló hat a j
   await expect(mat).toHaveText("Anyag: Lambert");
   // 2. vak kör L4: a valódi hatás — a fő renderpassz programjai (nem a felirat).
   const glBase = await glAfterToggle(page);
-  console.log("[gl] alap", JSON.stringify(glBase));
   expect(glBase.lambert, "telefonos alap: Lambert-programmal rajzol").toBeGreaterThan(0);
   expect(glBase.fog, "köd be: ködös programmal rajzol").toBeGreaterThan(0);
   await mat.click();
   await expect(mat).toHaveText("Anyag: PBR");
   expect((await snapshot(page)).toggles.simpleMaterials).toBe(true);
   const glPbr = await glAfterToggle(page);
-  console.log("[gl] PBR", JSON.stringify(glPbr));
   expect(glPbr.std, "PBR-re váltva PBR-programmal rajzol").toBeGreaterThan(glBase.std);
   expect(glPbr.lambert, "a blokkok már nem Lamberttel rajzolódnak").toBeLessThan(glBase.lambert);
 
@@ -206,7 +210,6 @@ test("perf=1: a panel megjelenik a mért sorokkal, és a négy kapcsoló hat a j
   await expect(fog).toHaveText("Köd: ki");
   expect((await snapshot(page)).toggles.fog).toBe(false);
   const glNoFog = await glAfterToggle(page);
-  console.log("[gl] köd ki", JSON.stringify(glNoFog));
   expect(glNoFog.total).toBeGreaterThan(0);
   expect(glNoFog.fog, "köd ki: egyetlen rajzolás sem ködös programmal").toBe(0);
   const last = await snapshot(page);
@@ -240,12 +243,10 @@ test("high szinten az árnyéktérkép megmarad, és a panelről kapcsolható", 
   // E-3: árnyék ki, majd vissza — a jelenet mindkét állapotban rajzol, és (2. vak kör L4) a valódi hatás is mérve: a fő
   // renderpassz programjai árnyékot fogadnak / nem fogadnak, visszakapcsoláskor az árnyéktérkép újra kirajzolódik.
   const glOn = await glAfterToggle(page);
-  console.log("[gl] árnyék be", JSON.stringify(glOn));
   expect(glOn.shadowRecv, "árnyék be: árnyékot fogadó programmal rajzol").toBeGreaterThan(0);
   await shadow.click();
   await expect(shadow).toHaveText("Árnyék: ki");
   const glOff = await glAfterToggle(page);
-  console.log("[gl] árnyék ki", JSON.stringify(glOff));
   expect(glOff.total).toBeGreaterThan(0);
   expect(glOff.shadowRecv, "árnyék ki: egyetlen rajzolás sem árnyékot fogadó programmal").toBe(0);
   expect(glOff.offscreen, "árnyék ki: nincs árnyéktérkép-rajzolás").toBe(0);
@@ -254,7 +255,6 @@ test("high szinten az árnyéktérkép megmarad, és a panelről kapcsolható", 
   await expect(shadow).toHaveText("Árnyék: be");
   await expectFramesAfterToggle(page);
   const glBack = await glCounters(page);
-  console.log("[gl] árnyék vissza", JSON.stringify(glBack));
   expect(glBack.offscreen, "visszakapcsolva az árnyéktérkép újra kirajzolódik").toBeGreaterThan(0);
   expect(glBack.shadowRecv).toBeGreaterThan(0);
   expect(pageErrors, pageErrors.join(" | ")).toEqual([]);
@@ -599,12 +599,33 @@ test("álló 360×640-en a panel a sort törő érintési súgó alatt kezdődik
  * Kézi rAF-vezérlés (2. vak kör): a képkockákat a teszt engedi el egyenként — a sorrend determinisztikus, nem időzítésfüggő.
  * `holdFrames` után minden ütemezett callback várakozik; `releaseFrame` az addig gyűlt összeset egy valódi rAF-ra engedi.
  */
-type RafWindow = { __bcQueue: FrameRequestCallback[]; __bcNativeRaf: (cb: FrameRequestCallback) => number };
+type RafWindow = {
+  __bcQueue: FrameRequestCallback[];
+  __bcNativeRaf: (cb: FrameRequestCallback) => number;
+  /** A visszatartás előtti utolsó képkocka rAF-időbélyege. */
+  __bcLastTs: number;
+  /** Az elengedett képkockák rAF-időbélyegei (elengedésenként egy). */
+  __bcReleasedTs: number[];
+  /** Ha > 0: a következő elengedett képkocka ennyi ms-ig foglalja a főszálat (lassú GPU / shader-fordítás utánzása). */
+  __bcSlowNextMs?: number;
+};
 async function holdFrames(page: Page): Promise<void> {
+  // Előbb rögzítő mód: a visszatartás előtti utolsó képkocka időbélyege mérhető legyen.
+  const before = (await snapshot(page)).renderedFrames;
+  await page.evaluate(() => {
+    const w = window as unknown as RafWindow;
+    w.__bcNativeRaf = window.requestAnimationFrame.bind(window);
+    w.__bcReleasedTs = [];
+    window.requestAnimationFrame = (cb: FrameRequestCallback) =>
+      w.__bcNativeRaf((ts) => {
+        w.__bcLastTs = ts;
+        cb(ts);
+      });
+  });
+  await expect.poll(async () => (await snapshot(page)).renderedFrames, { timeout: 30_000 }).toBeGreaterThan(before + 1);
   await page.evaluate(() => {
     const w = window as unknown as RafWindow;
     w.__bcQueue = [];
-    w.__bcNativeRaf = window.requestAnimationFrame.bind(window);
     window.requestAnimationFrame = (cb: FrameRequestCallback) => {
       w.__bcQueue.push(cb);
       return 0;
@@ -617,7 +638,22 @@ async function releaseFrame(page: Page): Promise<void> {
   const before = (await snapshot(page)).renderedFrames;
   await page.evaluate(() => {
     const w = window as unknown as RafWindow;
-    for (const cb of w.__bcQueue.splice(0)) w.__bcNativeRaf(cb);
+    const cbs = w.__bcQueue.splice(0);
+    let recorded = false;
+    for (const cb of cbs)
+      w.__bcNativeRaf((ts) => {
+        if (!recorded) {
+          recorded = true;
+          w.__bcReleasedTs.push(ts);
+          const slow = w.__bcSlowNextMs ?? 0;
+          w.__bcSlowNextMs = 0;
+          const until = performance.now() + slow;
+          while (performance.now() < until) {
+            // szándékos foglaltság: a CI szoftveres GPU-jának lassú első képe
+          }
+        }
+        cb(ts);
+      });
   });
   await expect.poll(async () => (await snapshot(page)).renderedFrames, { timeout: 30_000 }).toBe(before + 1);
   await expect.poll(() => page.evaluate(() => (window as unknown as RafWindow).__bcQueue.length), { timeout: 30_000 }).toBeGreaterThan(0);
@@ -633,13 +669,29 @@ test("anyagváltás után az első új kép nem ad FPS-mintát, a második az ú
   await page.waitForTimeout(1200);
   await page.evaluate(() => (window as unknown as PerfTestWindow).__websuliPerf.controls.set({ simpleMaterials: true }));
   expect((await snapshot(page)).frame, "váltáskor üres a mintaablak").toBeNull();
+  // Az első új kép lassú (a CI SwiftShaderén a PBR-shaderek fordítása > 1 s — CI-bukás 2026-11-22): minden gépen így mérünk.
+  await page.evaluate(() => {
+    (window as unknown as RafWindow).__bcSlowNextMs = 1100;
+  });
   await releaseFrame(page);
   expect((await snapshot(page)).frame, "az első új kép csak alap, nem minta").toBeNull();
   await releaseFrame(page);
-  const f = (await snapshot(page)).frame as unknown as { frames: number; dtMin: number; dtP95: number };
+  const f = (await snapshot(page)).frame as unknown as { frames: number; fpsAvg: number; dtMin: number; dtP95: number };
   expect(f, "a második új kép adja az első mintát").not.toBeNull();
   expect(f.frames).toBe(1);
-  expect(f.dtP95, `a minta a két új kép köze, nem a váltás előtti várakozás (${f.dtP95} ms)`).toBeLessThan(1000);
+  // A mérce a két új kép SAJÁT rAF-időbélyegének különbsége (CI-bukás 2026-11-22: a szoftveres GPU-n a PBR-re váltás utáni
+  // első kép shader-fordítása > 1 s, ezért abszolút küszöb nem bizonyítja a szabályt). A váltás előtti visszatartás (≥ 1200 ms)
+  // kizárását az mutatja, hogy az ablak ÖSSZES mintájának összege (n × 1000 / fpsAvg) pontosan a két új kép köze, és az utolsó
+  // régi képtől mért köznél legalább 1000 ms-mal rövidebb (a medián / p95 két mintából a kisebbiket adná — ez nem elég).
+  const ts = await page.evaluate(() => {
+    const w = window as unknown as RafWindow;
+    return { t0: w.__bcLastTs, t1: w.__bcReleasedTs[0]!, t2: w.__bcReleasedTs[1]! };
+  });
+  expect(ts.t1 - ts.t0, "a váltás előtti visszatartás megtörtént").toBeGreaterThanOrEqual(1000);
+  expect(ts.t2 - ts.t1, "az első új kép valóban lassú volt (a CI-helyzet)").toBeGreaterThanOrEqual(1000);
+  const sampledMs = (1000 * f.frames) / f.fpsAvg;
+  expect(Math.abs(sampledMs - (ts.t2 - ts.t1)), `a minták összege (${sampledMs} ms) = a két új kép köze (${ts.t2 - ts.t1} ms)`).toBeLessThan(1);
+  expect(sampledMs, `a minták nem tartalmazzák a váltás előtti várakozást (utolsó régi kép óta: ${ts.t2 - ts.t0} ms)`).toBeLessThan(ts.t2 - ts.t0 - 1000);
 });
 
 test("a szülő méretváltozása után az ELSŐ festett kép már az új pufferméretű (2. vak kör L2, G-7)", async ({ page }) => {

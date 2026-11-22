@@ -1136,3 +1136,14 @@ Forrás: #504, a közös gép-zár (`scratchpad\gep-sav\lock`) bevezetésének n
   saját munkafa abszolút útvonala), és leállításkor CSAK erre a jelölőre vagy a pontosan ismert PID-re (és annak gyermekeire)
   szűrj. Közös erőforrás nevére (zár-, sorrend-, napló-mappa), általános parancsnévre (`node`, `bash`, `pre-push-gate`) szűrni tilos.
   Leállítás előtt listázd ki a találatokat, és ha nem mind a tiéd, ne állíts le semmit — jelezd.
+
+## C-78 — Böngészős időmérő teszt: abszolút ms-küszöb helyett a teszt saját időbélyegeihez mérj (2026-11-22)
+
+Forrás: #504, CI `E2E rész (5)` (a 2. vak kör L1 tesztje: helyben zöld, Linux CI-n háromszor bukott).
+
+- **Tünet:** a „minta < 1000 ms” feltétel valódi GPU-n teljesült, a CI SwiftShaderén nem: ott az anyagváltás utáni első kép
+  shader-fordítása > 1 s, így a két kép VALÓDI köze is ennyi. A kód helyes volt, a mérce gépfüggő.
+- **Szabály:** időzítést mérő e2e-ben a teszt rögzítse a vizsgált események saját időbélyegét (pl. a kézzel elengedett rAF-ok
+  `ts`-ét), és a mért értéket ezekhez viszonyítsa; a lassú esetet tegye determinisztikussá (szándékos foglaltság), hogy helyben is
+  fennálljon. Medián / p95 két mintából a kisebbiket adja — a „nincs benne a régi köz” állításhoz az összes minta összegét mérd.
+  A mérce erejét mutánssal igazold (a javítás nélkül bukjon). Helyi CI-szerű futás: `BC_SOFTWARE_GL=1` (SwiftShader).
