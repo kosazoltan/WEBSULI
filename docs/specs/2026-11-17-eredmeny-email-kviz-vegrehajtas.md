@@ -382,6 +382,23 @@ Tervezési szabály (R47) a kilét késői feloldása ellen; előbb BUKÓ teszte
 - Dokumentált spec-változás: a `tests/result-outbox.test.ts` R35 forrásőre az `enqueuedHere`-es pótlás helyett az R47-et nézi (nincs
   utólagos pótlás, a bejegyzés a rögzített címkét viszi) — szigorúbb.
 
+## 2026-11-22 — 5. vak kör (025d3d34) (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R49)
+
+Előbb BUKÓ tesztek (mind piros volt a régi kóddal), utána a javítás.
+- **R49 (a)** `client/src/lesson-runtime/resultReport.ts`: `legacyAllowed(info)` — régi alak csak `entry.subject == null` vagy V2-tokenválasz
+  azonos címkével; különben `OutboxIdentityHold` (a sor szokott újrapróbája, nem küld). A `build` (jelzés nélküli token) és az R10
+  visszalépés is ellenőriz. Böngészőtesztek: `R49 / L1 (a)` 403 → B V2-token → 400 (régi kóddal a 3. kérés címke nélkül ment és a kör
+  elküldöttnek jelölődött); `R49 / L1 (a)` 403 → jelzés nélküli token (régi kóddal címke nélküli kérés).
+- **R49 (b)** ugyanott: a bejegyzés `learnerTag`-et visz (`shared/result-outbox.ts`), a törzs nyers párosító tokent nem; a `build` minden
+  kísérlet előtt `ownerLearner`-rel vet össze. `client/src/lib/queryClient.ts`: a `sendKeepalive` törzse függvény is lehet (a 403 utáni
+  ismétlés előtt újra összeáll); a pillanatkép így küld. Böngészőtesztek: `R49 / L2 (b)` végleges és pillanatkép 403 alatti újrapárosítással
+  (régi kóddal az ismétlés A tokenjével ment).
+- **R49 (c)** `server/lesson-result-email.ts`: a jelzősor-írás hibája best effort marad, de létező jelzősor mellett a tulajdonos-lekérdezés
+  hibája 503; teszthorog `setOwnerCheckFault`. DB-teszt `R49 / L3 (c)` (régi kóddal `202 !== 503`).
+- Tesztcsapda-javítás: a Playwright `toEqual` a tömb `undefined` elemeit figyelmen kívül hagyja — a címke-listákat (`R39`, `R49`)
+  `toStrictEqual` méri (az R39 korábbi állítása így rejthetett volna címke nélküli kérést). Az R35 forrásőr pontosítva: a tokenválasz
+  címkéje nem kerülhet értékadással a kilétbe / `outbox.update` nincs, az összevetés (`info.subject === entry.subject`) kötelező.
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

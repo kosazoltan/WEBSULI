@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 6. gépi kör (804569c1) leletei: R35–R38, L2 követő szelet; a 7. gépi kör (0ec08148) leletei: R39–R42, L5 feltétellel dokumentálva; SZŰKÍTÉS (tulajdonos, 2026-11-21): a böngészős tartós sor kapcsoló mögött, alapból KI, véglegesítés a T-3-ban; a 8. gépi kör (e36518e5) leletei: R43–R46, L1 / L4 → T-3; a 9. gépi kör (87631382): R47 tervezési szabály (kilét rögzítése létrehozáskor) + R48; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 6. gépi kör (804569c1) leletei: R35–R38, L2 követő szelet; a 7. gépi kör (0ec08148) leletei: R39–R42, L5 feltétellel dokumentálva; SZŰKÍTÉS (tulajdonos, 2026-11-21): a böngészős tartós sor kapcsoló mögött, alapból KI, véglegesítés a T-3-ban; a 8. gépi kör (e36518e5) leletei: R43–R46, L1 / L4 → T-3; a 9. gépi kör (87631382): R47 tervezési szabály (kilét rögzítése létrehozáskor) + R48; a 10. gépi kör (025d3d34): R49 (nincs eltérő kilétet engedő út); a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -449,6 +449,19 @@ harmadszor), ezért foltozás helyett tervezési szabály:
   - *Szerver.* A párosítás feloldásának ÁTMENETI hibája nem azonos az érvénytelen tokennel: ekkor a kérés nem rögzül vendégként (se
     várakozó, se jelzősor), hanem újrapróbálható 503-at kap; érvénytelen / visszavont token → névtelen, mint eddig. A fiók egyezését a
     szerver változatlanul a rögzített címkéhez méri (R31): eltérés vagy `?` → a munkamenet fiókja nem kapja meg.
+- **R49 — az R47 kiegészítése (gépi vak kör 10., 025d3d34, 2026-11-22): az eredmény SOHA nem mehet olyan úton, ahol a szerver a
+  rögzítettől eltérő kilétet rendelhet hozzá.**
+  - (a) *Régi (címkét nem ismerő) alak.* A kliens régi alakot (jelzés nélküli tokenválasznál, vagy az R10 400 utáni visszalépésénél)
+    csak akkor küld, ha a kör rögzített fiókcímkéje nincs (`null`), VAGY a küldés tokenválasza igazolja, hogy ugyanaz a munkamenet (V2
+    tokenválasz, azonos címke). Ha ez nem igazolható, a bejegyzés NEM megy el: memóriában vár (a sor szokott kísérletszámáig, majd a
+    lejáratig), utána eldobódik — a vegyes telepítés ritka és rövid, a téves fiókhoz rendelés rosszabb, mint egy elmaradt levél.
+  - (b) *Párosítás minden kísérlet előtt.* A kimenő bejegyzés és a pillanatkép nem visz nyers párosító tokent, csak a rögzített lenyomatot;
+    a mostani token közvetlenül minden tényleges kérés előtt (a 403 utáni tokencserés ismétlésnél is) vetődik össze a lenyomattal,
+    eltérésnél a kérés párosítás nélkül megy.
+  - (c) *Szerver.* Létező végleges jelzősor mellett csak pozitívan igazolt tulajdonos (saját sor vagy R42 tulajdonos-sor) folytathatja; a
+    tulajdonos-lekérdezés átmeneti hibája újrapróbálható 503 a 202 előtt, nem végleges küldés.
+  - Vállalt korlát: a `null` (az első tevékenységkor ismeretlen) fiókcímkéjű kör régi szerver felé címke nélkül megy, és ott a munkamenet
+    fiókja kerülhet hozzá (a tulajdonosi utasítás szerint megengedett eset; csak vegyes telepítésnél vagy visszaállításnál áll elő).
 - **R48 — a késői pillanatkép-válasz nem írja vissza a részleges jelzőt (L4).** Ha a kör végleges jelzője már megvan, a pillanatkép
   késői 202-je nem menti a részleges jelzőt (az R8 takarítása idempotens).
 
@@ -523,6 +536,11 @@ Elfogadás (S1b):
 - E66. AMIKOR a párosítás feloldása átmenetileg hibázik, A RENDSZER 503-at ad, vendégként nem rögzít (se várakozó, se jelzősor); a hiba
   elmúltával az ismétlés átmegy (R47).
 - E67. A véglegesítés utáni késői pillanatkép-válasz nem írja vissza a részleges jelzőt (R48).
+- E68. AMIKOR a rögzített fiókcímke nem igazolható a régi alakot fogadó szerver felé (403 utáni más fiók + 400-as régi példány, vagy
+  jelzés nélküli frissített token), A RENDSZER régi (címke nélküli) alakú kérést nem küld, és a kört nem jelöli elküldöttnek (R49 a).
+- E69. AMIKOR a végleges kérés vagy a pillanatkép 403-a alatt az eszköz újrapárosul, A RENDSZER az ismétlést párosítás nélkül küldi (R49 b).
+- E70. AMIKOR létező végleges jelzősor mellett a tulajdonos-lekérdezés átmenetileg hibázik, A RENDSZER 503-at ad, második levél nem megy;
+  a hiba után más kilét duplikátum-választ kap (R49 c).
 - E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
@@ -604,4 +622,7 @@ Elfogadás (S1b):
 - [ ] E65 – újrapárosítás: nem az új tanulóval; kontroll: változatlan párosítással igen (böngésző)
 - [ ] E66 – párosítás-feloldási DB-hiba: 503, nincs vendég-rögzítés; ismétlés átmegy (valódi DB)
 - [ ] E67 – késői pillanatkép-202 nem írja vissza a részleges jelzőt (böngésző)
+- [ ] E68 – nem igazolható kilét: nincs régi alakú kérés, nincs elküldött-jelző (böngésző, két út)
+- [ ] E69 – 403 alatti újrapárosítás: az ismétlés párosítás nélkül (böngésző, végleges + pillanatkép)
+- [ ] E70 – tulajdonos-lekérdezési hiba: 503, nincs második levél, utána duplikátum (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
