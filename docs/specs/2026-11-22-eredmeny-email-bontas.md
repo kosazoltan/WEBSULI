@@ -1,6 +1,6 @@
 # Spec: az eredmény-e-mail S1b (#510) bontása kis, önállóan ellenőrizhető PR-okra
 
-> Dátum: 2026-11-22 · Szerző: főszál (Claude) · Állapot: VÁZLAT — tulajdonosi jóváhagyásra vár
+> Dátum: 2026-11-22 · Szerző: főszál (Claude) · Állapot: JÓVÁHAGYVA (tulajdonos, űrlap, 2026-11-22: „Jóváhagyom, így”)
 > Szabály: 3+ fájlt érintő feladat csak spec + AI-olvasható végrehajtási utasítás után indul (`docs/agent-haromfazisu-munka.md`).
 > Előzmény: `docs/specs/2026-11-17-eredmeny-email-kviz.md` (R1–R54), `docs/specs/2026-11-20-eredmenylevel-tartos-sor.md`, PR #510.
 

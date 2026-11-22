@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — az eredmény-e-mail S1b (#510) bontása
 
-> Terv: `docs/specs/2026-11-22-eredmeny-email-bontas.md` (kötelező előtte elolvasni). Állapot: VÁZLAT — a terv jóváhagyása után indul.
+> Terv: `docs/specs/2026-11-22-eredmeny-email-bontas.md` (kötelező előtte elolvasni). Állapot: JÓVÁHAGYVA (2026-11-22) — a B1-gyel indul.
 
 ## 0. Közös szabályok (minden szeletre)
 
