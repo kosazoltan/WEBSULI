@@ -141,3 +141,15 @@ test("vak kör 1 L5: a mélységi határ pontosan mérve — 3 szint elfogadva, 
   assert.deepEqual(visualParamProblems("decisionTree", { root: chain(3) }), [], "pontosan 3 szint");
   assert.notDeepEqual(visualParamProblems("decisionTree", { root: chain(4) }), [], "pontosan 4 szint (7 csomópont)");
 });
+
+test("review #533 (Codex, Vercel): a képes kártya rajzának felirata nem lóghat ki a rajzterületről — a gyártási kapu visszaküldi; a megjelenítés nem változik", () => {
+  const art = (x: number, anchor: string) => `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="40" r="25" fill="#d33"/><text x="${x}" y="95" text-anchor="${anchor}">alma</text></svg>`;
+  const ok = { cards: [{ label: "egy", svg: art(50, "middle") }, { label: "kettő", svg: art(50, "middle") }] };
+  const overflow = { cards: [{ label: "egy", svg: art(50, "middle") }, { label: "kettő", svg: art(95, "start") }] };
+  assert.deepEqual(visualParamProblems("pictureCards", ok), []);
+  const problems = visualParamProblems("pictureCards", overflow);
+  assert.equal(problems.length > 0, true, "a kilógó felirat a gyártási kapun bukik");
+  assert.ok(problems.every((p) => p.startsWith("pictureCards.cards.1.svg: ")), JSON.stringify(problems));
+  // A megjelenítő sémája (tárolt lecke olvasása) változatlan: a már tárolt kártya megjelenik.
+  assert.equal(SOURCE_VISUAL_SCHEMA_KINDS.includes("pictureCards"), true);
+});

@@ -240,7 +240,16 @@ export function visualParamProblems(kind: string, params: unknown): string[] {
   const schema = (VISUAL_PARAM_SCHEMAS as Record<string, z.ZodTypeAny>)[kind];
   if (!schema) return [];
   const parsed = schema.safeParse(params);
-  return parsed.success ? [] : parsed.error.issues.map((i) => `${kind}.${i.path.join(".") || "params"}: ${i.message}`);
+  if (!parsed.success) return parsed.error.issues.map((i) => `${kind}.${i.path.join(".") || "params"}: ${i.message}`);
+  // Review #533 (Codex, Vercel): a képes kártya rajza ugyanazt az elrendezés-ellenőrzést kapja, mint az `illustration` ábra — a
+  // rajzterületről kilógó feliratot a kártya levágná. Csak a GYÁRTÁSI kapu része: a tárolt lecke megjelenítése (a séma) nem változik.
+  if (kind === "pictureCards") {
+    return (parsed.data as { cards: Array<{ svg: string }> }).cards.flatMap((card, index) => {
+      const check = sanitizeIllustration(card.svg);
+      return (check.ok ? illustrationLayoutProblems(check.svg) : check.problems).map((p) => `pictureCards.cards.${index}.svg: ${p}`);
+    });
+  }
+  return [];
 }
 
 export function parseVisualParams<K extends VisualParamKind>(kind: K, params: unknown): z.infer<(typeof VISUAL_PARAM_SCHEMAS)[K]> | null {
