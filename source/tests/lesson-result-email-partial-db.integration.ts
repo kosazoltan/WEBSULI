@@ -881,4 +881,3 @@ test("R52: a kilét-rögzítés lejárt sorai adagosan törlődnek, az élők é
   assert.ok((await postClaimRows("round-r52-new")).every(key => left.includes(key)), "a friss kör kilét-sorai megmaradtak");
   assert.ok(finalKeys.every(key => left.includes(key)), "a végleges jelző és a tulajdonos-sor (duplikátum-védelem) nem törlődött");
 });
-
