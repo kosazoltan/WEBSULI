@@ -1,0 +1,15 @@
+# Cogni-format projekt-snapshot (Bookkeeper memory/.cogni mintája)
+# format-version: 1
+# scope: WEBSULI-only
+# Ha a záró hurokban nincs új: a fájl VÉGÉRE `# zaro-hurok: <ISO> nincs-uj`
+
+cogni:
+  kind: project_snapshot
+  name: websuli
+  generated: 2026-11-22
+  source: skeleton
+
+  identity:
+    purpose: ""   # TODO
+  stack: {}
+  entrypoints: []
