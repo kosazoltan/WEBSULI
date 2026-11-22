@@ -42,14 +42,14 @@ egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a
    hogy ki kapcsol vissza `off`-ra. Jóváhagyás nélkül a gyártás NEM kapcsolható be. Két külön határ van:
    - **automatikus memóriaőr** (a kódban, `CLIP_RSS_LIMIT_BYTES` = 320 MiB, a Node-folyamat RSS-e, az ffmpeg-gyerek nélkül): e fölött
      a kör, a következő fejezet és az átkódolás kimarad — ez nem állítja le a már futó lépést;
-   - **kézi kikapcsolási küszöb** (a Render memóriamérése, a gyerekfolyamatokkal együtt): a javaslat 480 MB — **jóváhagyásra vár**.
+   - **kézi kikapcsolási küszöb** (a Render memóriamérése, a gyerekfolyamatokkal együtt): 480 MB — tulajdonosi jóváhagyás 2026-11-22; az első éles kör mérése kötelező (450 MB fölött KI).
 1. A PR összevonása és telepítése (a `0039` migráció magától lefut).
 2. Render Environment: `ELEVENLABS_API_KEY` (megvan), majd — csak a 0. pont jóváhagyása után — `LESSON_CLIPS_AUTO=on`.
 3. Egy új lecke közzététele után a Render-naplóban `[lesson-clips]` sorok: fejezetenként „kész: … N kép, N hang, N mozgókép, … kB”.
    Ha „nincs ffmpeg a szerveren” sor jelenik meg, a kisfilmek állóképesek — ekkor szólni kell.
 4. A lecke megnyitása: a gombok megjelennek, ahogy a fejezetek elkészülnek.
 5. Kikapcsolási feltétel (PR #418): a bekapcsolás utáni első körben a Render memória- és eseménymérését figyelni kell. Ha a példány
-   újraindul, vagy a memória tartósan a 0. pontban jóváhagyott küszöböt (javaslat: 480 MB, az 512 MB-os korlát közele) súrolja, azonnal `LESSON_CLIPS_AUTO=off`, és szólni
+   újraindul, vagy a memória tartósan a 0. pontban jóváhagyott küszöböt (480 MB, az 512 MB-os korlát közele) súrolja, azonnal `LESSON_CLIPS_AUTO=off`, és szólni
    kell. A „memóriaőr miatt megállt” naplósor önmagában nem ok a kikapcsolásra: az a védelem működése.
 6. **Az első éles kör mérése — kötelező (tulajdonosi döntés, 2026-11-21: „Mérés az első éles körben (Javasolt)”).** A kód a már elindult
    átkódolást memória miatt nem állítja le, ezért az első kör teljes ideje alatt a Render memóriamérését (a példány teljes

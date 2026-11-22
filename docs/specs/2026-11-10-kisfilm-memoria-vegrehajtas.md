@@ -184,3 +184,21 @@ A kör minden DB-művelete (írás, olvasás, árvasöprés) a session-szintű a
   (a szabad tár a téves útvonalon hibát jelez), `runClipRound`-ot a valódi adapterrel (szolgáltatócsonkokkal) futtató teszt, a DB-próba
   a `pg_stat_activity`-ben figyelje a blokkolt kapcsolatot, és `finally`-ban engedje fel a teszt tranzakcióját.
 - **K-KL-L3** — a borító napi limitjének túlcsordulása (`server/lesson-covers.ts`).
+- **K-KL-L5 — záró kör L2 (közepes): az integrációs teszt azonnali zárfelengedést vár visszaigazolás nélkül**
+  (`tests/lesson-clips-db.integration.ts`, „leállítási határidő: … MÁSIK kapcsolatról azonnal megszerezhető…”). A régi munkamenet
+  lezárása (DB-oldali leállítás) később is célba érhet, mint az új kapcsolat zárkérése — a teszt CI-ben hamisan bukhat. *Javasolt:* a
+  zár megszerzését korlátos visszapróbálással / a régi backend eltűnésének figyelésével (`pg_stat_activity`) várni; a K-KL-L1
+  visszaigazolásával együtt.
+
+### Záró kör (7403daad) — tulajdonosi döntés: „kis javítás + egy kör”
+
+- **L1 valódi (blokkoló)** — a poolból kikért, zárat tartó kliensen nem volt `error`-figyelő: DB-újraindítás / szakadás elkapatlan
+  kivétellel a teljes szervert leállíthatta. Javítás: a zárkapcsolat kikérésekor `client.on("error", …)` — a zár elvesztése: naplósor,
+  a kör `ClipAbortError`-ral leáll, a kapcsolat pontosan egyszer eldobódik; a release-kor a figyelő lekerül. Teszt: `lesson-clip-lock`
+  „zárkapcsolat-hiba (DB-újraindítás / szakadás)…” (piros: a figyelő nélküli `emit("error")` dob). Osztályszintű átnézés: a kisfilm-úton
+  ez az egyetlen kézzel kikért pool-kliens (`server/lesson-clips-db.ts`, `dbPool.connect()`); a többi DB-hozzáférés a pool / Drizzle
+  kezelt útján megy (`dbPool.query`, `db.transaction`).
+- **L2** — jegy: K-KL-L5.
+- **Memória-kikapcsolási küszöb:** tulajdonosi jóváhagyás 2026-11-22 — „480 MB, mért első kör” (`docs/fejezet-kisfilmek-hasznalat.md`
+  0. pont). Ez a kézi Render-küszöb; a kódbeli automatikus memóriaőr külön határ, változatlan: `CLIP_RSS_LIMIT_BYTES = 320 MiB`
+  (`server/lesson-clips.ts`, Node RSS). Az élesítést (`LESSON_CLIPS_AUTO=on`) a tulajdonos végzi a Renderen.

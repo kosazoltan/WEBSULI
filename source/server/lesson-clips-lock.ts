@@ -1,4 +1,5 @@
 import { ClipAbortError } from "./lesson-clips";
+import { logger } from "./lib/logger";
 
 /**
  * A kisfilm-zár életciklusa (docs/specs/2026-11-10-kisfilm-memoria.md: „a kör minden írása a zárral együtt él és hal”). Adatbázis-
@@ -10,6 +11,9 @@ import { ClipAbortError } from "./lesson-clips";
  */
 export type LockClient = {
   processID?: number;
+  /** A pg kliens eseményei: a kikért (pool által nem figyelt) kliens `error`-ja figyelő nélkül az egész folyamatot leállítaná. */
+  on?(event: "error", listener: (error: Error) => void): unknown;
+  removeListener?(event: "error", listener: (error: Error) => void): unknown;
   query(config: { text: string; values: unknown[]; query_timeout: number }): Promise<{ rows: Array<{ ok?: boolean }> }>;
   /** Hibával: a kapcsolat eldobva (nem kerül vissza a poolba); hiba nélkül: vissza a poolba. */
   release(error?: Error | boolean): void;
@@ -57,6 +61,11 @@ export async function exclusiveWithLock<T>(connect: () => Promise<LockClient>, k
   const lost = new Promise<never>((_resolve, reject) => { rejectLost = reject; });
   lost.catch(noop);
   let released = false;
+  // DB-újraindítás / szakadás: a kikért kliens `error`-ja a zár elvesztése — a kör `ClipAbortError`-ral leáll, a kapcsolat eldobódik.
+  const onError = (error: Error) => {
+    logger.warn(`[lesson-clips] a kisfilm-zárat tartó kapcsolat megszakadt (${error.message.slice(0, 120)}) — a kör leáll`);
+    lease.release(new ClipAbortError("a kisfilm-zárat tartó kapcsolat megszakadt"));
+  };
   const lease: Lease = {
     state: "locking",
     // Pontosan egyszer: vissza a poolba, vagy eldobva (bontás + szerveroldali leállítás → visszagörgetés, zárfelengedés).
@@ -64,12 +73,14 @@ export async function exclusiveWithLock<T>(connect: () => Promise<LockClient>, k
       if (released) return false;
       released = true;
       leases.delete(lease);
+      client.removeListener?.("error", onError);
       if (reason) { rejectLost(reason); if (client.processID) terminate(client.processID); }
       client.release(reason);
       return true;
     },
   };
   leases.add(lease);
+  client.on?.("error", onError);
   const race = <R>(promise: Promise<R>) => { promise.catch(noop); return Promise.race([promise, lost]); };
   const query = (text: string) => race(client.query({ text, values: [key], query_timeout: timeoutMs }));
   let locked: boolean;

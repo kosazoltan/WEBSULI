@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { EventEmitter } from "node:events";
 import assert from "node:assert/strict";
 import { ClipAbortError } from "../server/lesson-clips";
 import { clipLockState, exclusiveWithLock, forceReleaseClipLock, terminateClipBackend, type LockClient } from "../server/lesson-clips-lock";
@@ -86,4 +87,30 @@ test("DB-oldali leállítás: a kérés eredménye és hibája nem vész el csen
     "[lesson-clips] a DB-oldali leállítás nem igazolt (folyamat 4242: a backend nem állt le vagy már nem létezett) — a zár felszabadulása nincs visszaigazolva",
     "[lesson-clips] a DB-oldali leállítás kérése nem sikerült (folyamat 4242: pool timeout) — a zár felszabadulása nincs visszaigazolva",
   ]);
+});
+
+test("zárkapcsolat-hiba (DB-újraindítás / szakadás): az `error` esemény nem dob elkapatlan kivételt, a kör leáll, pontosan egy eldobás, a figyelő lekerül", async () => {
+  const releases: Array<Error | undefined> = [];
+  const pending: Array<(e: Error) => void> = [];
+  const emitter = new EventEmitter();
+  const client = Object.assign(emitter, {
+    processID: 7,
+    query: (config: { text: string }) => new Promise<{ rows: Array<{ ok?: boolean }> }>((resolve, reject) => {
+      if (config.text.includes("unlock")) { pending.push(reject); return; }
+      resolve({ rows: [{ ok: true }] });
+    }),
+    release: (error?: Error | boolean) => { releases.push(error instanceof Error ? error : undefined); for (const reject of pending.splice(0)) reject(new Error("Connection terminated")); },
+  }) as unknown as LockClient & EventEmitter;
+  let finishWork!: () => void;
+  const run = exclusiveWithLock(async () => client, 42, 15_000, async () => { await new Promise<void>((resolve) => { finishWork = resolve; }); return 1; });
+  run.catch(() => undefined);
+  await tick();
+  assert.equal(emitter.listenerCount("error"), 1, "a kikérés után figyelő van a kliensen");
+  assert.doesNotThrow(() => emitter.emit("error", new Error("terminating connection due to administrator command")));
+  await assert.rejects(run, ClipAbortError);
+  finishWork(); await tick();
+  assert.equal(releases.length, 1, "pontosan egy eldobás");
+  assert.ok(releases[0] instanceof Error, "eldobva, nem vissza a poolba");
+  assert.equal(emitter.listenerCount("error"), 0, "a release-kor a figyelő lekerül");
+  assert.equal(forceReleaseClipLock(), false);
 });
