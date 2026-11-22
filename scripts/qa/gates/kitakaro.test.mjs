@@ -182,3 +182,73 @@ test('vak L5 (ac6447f5): escape-sűrű JSON-on a rövid clip csak korlátos elő
   assert.ok(stats.scanned <= WINDOW + 8 * 1024, `vizsgált hossz: ${stats.scanned}`);
   assert.ok(out.startsWith('{"error":"') && out.length <= 160);
 });
+
+// ---- Szűkítés (tulajdonos, 2026-11-22: „Szűkítés + bontás (Javasolt)”) és az 5. vak kör (5c9568c5) -------------------
+
+test('nem gyengébb a főágnál: kapu redact / writeLog — minden eset × alak, a kimaradt titokdarab ≤ a főág redact-jáé', async () => {
+  const { mainRedact } = await import('./kitakaro-main-baseline.mjs');
+  const { leakCount } = await import('./kitakaro-cases.mjs');
+  for (const c of SECRET_CASES.filter((x) => !x.keyed)) {
+    for (const [encName, enc] of Object.entries(ENCODINGS)) {
+      const s = enc(c.raw);
+      const now = leakCount(redact(s), c.body);
+      const base = leakCount(mainRedact(s), c.body);
+      assert.ok(now <= base, `${c.name} / ${encName}: új ${now} > főág ${base}`);
+    }
+  }
+});
+
+test('nem gyengébb a főágnál: külső maskSecrets / maskClip — rövid és nagy (vágási helyzetekkel) bemeneten', async () => {
+  const { mainMaskSecrets } = await import('./kitakaro-main-baseline.mjs');
+  const { leakCount } = await import('./kitakaro-cases.mjs');
+  const margin = Math.max(64, CALLER_KEY.length);
+  for (const c of SECRET_CASES) {
+    for (const [encName, enc] of Object.entries(ENCODINGS)) {
+      const s = enc(c.raw);
+      assert.ok(leakCount(maskSecrets(s, CALLER_KEY), c.body) <= leakCount(mainMaskSecrets(s, CALLER_KEY), c.body), `maskSecrets ${c.name} / ${encName}`);
+      assert.ok(leakCount(maskClip(s, CALLER_KEY, 600), c.body) <= leakCount(mainMaskSecrets(s, CALLER_KEY).slice(0, 600), c.body), `maskClip ${c.name} / ${encName}`);
+      for (const { pos, text } of clipPlacements(s, MASK_WINDOW, margin)) {
+        const base = leakCount(mainMaskSecrets(text, CALLER_KEY).slice(0, MASK_WINDOW), c.body);
+        assert.ok(leakCount(maskClip(text, CALLER_KEY, MASK_WINDOW), c.body) <= base, `maskClip nagy ${c.name} / ${encName} / ${pos}`);
+      }
+    }
+  }
+});
+
+test('lineáris: az esettábla összefűzve ~3 M karakterig — a redact és a maskClip 2 s alatt', () => {
+  const unit = SECRET_CASES.flatMap((c) => Object.values(ENCODINGS).map((enc) => enc(c.raw))).join('\n');
+  const big = unit.repeat(Math.ceil(3_000_000 / unit.length));
+  let t0 = performance.now();
+  redact(big);
+  const ms1 = performance.now() - t0;
+  t0 = performance.now();
+  maskClip(big, CALLER_KEY, 600);
+  const ms2 = performance.now() - t0;
+  assert.ok(ms1 < 2000 && ms2 < 2000, `redact ${ms1.toFixed(0)} ms, maskClip ${ms2.toFixed(0)} ms (${big.length} kar.)`);
+});
+
+test('vak L3 (5c9568c5): a kapulépés többsoros kivétele a teljes üzeneten takart, az első sor kivétele ELŐTT', async () => {
+  const { createGate } = await import('./lib.mjs');
+  const lines = [];
+  const g = createGate('proba', { log: (s) => lines.push(s) });
+  await g.step('dobó lépés', () => { throw new Error(['abcdefghijklmnopqrstuv', 'wx12345678yz'].join('\n')); });
+  g.finish();
+  const text = lines.join('\n');
+  assert.ok(!text.includes('abcdefghij'), text);
+  assert.match(text, /FAIL\s+dobó lépés — <token>/);
+});
+
+test('vak L1 (5c9568c5): a `Bearer-` / `Bearer.` kezdetű hitelesítő takart; a különálló második séma utáni token is', () => {
+  for (const sep of ['-', '.', '/']) {
+    assert.equal(redact(`Authorization: Bearer Bearer${sep}abcdefghij`), 'Authorization: Bearer <token>', sep);
+  }
+  const out = redact(['Auth scheme: Bearer', 'Bearer M4synthetic+/Q8=~Tail'].join('\n'));
+  assert.ok(!out.includes('M4synthetic'), out);
+});
+
+test('vak L4 (5c9568c5): JSON-ban a kitakart, két sorra tördelt token sortörés-escape-je megmarad', () => {
+  const s = JSON.stringify({ error: ['Ab12Cd34Ef56Gh78', 'Ij90Kl12Mn34Op56'].join('\n') });
+  for (const [name, out] of [['redact', redact(s)], ['maskSecrets', maskSecrets(s, CALLER_KEY)], ['maskClip', maskClip(s, CALLER_KEY, 600)]]) {
+    assert.equal(JSON.parse(out).error, '<token>\n<token>', name);
+  }
+});

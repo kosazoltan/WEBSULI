@@ -37,6 +37,8 @@ export const SECRET_CASES = [
   { name: 'L1 két összeírt ghp', raw: J('gh', 'p_', 'C1d2E3f4G5h6'.repeat(2), 'gh', 'p_', 'J7k8L9m0N1p2'.repeat(2)), body: 'J7k8L9m0N1p2'.repeat(2) },
   { name: 'L2 backslash a DB-jelszóban', raw: J('postgres', '://admin:', 'jel', '\\', 'szo_SYNTHETIC_PASSWORD_TAIL', at, '10.0.0.5:5432/db'), body: J('admin:', 'jel', '\\', 'szo_SYNTHETIC_PASSWORD_TAIL') },
   { name: 'L4 cím sortörés után', raw: J('timeout', '\n', 'owner.x', at, 'pelda.hu', '\n', 'keep'), body: J('owner.x', at, 'pelda.hu') },
+  // 5. vak kör (5c9568c5) L1: `Bearer-` kezdetű, csak betűs / kötőjeles hitelesítő (a főág kitakarta).
+  { name: 'L1(5) Bearer- kezdetű hitelesítő', raw: J('Authorization: Bearer ', 'Bearer-', 'abcdefghij', '-klmnopqr'), body: J('abcdefghij', '-klmnopqr') },
 ];
 
 /** Determinisztikus álvéletlen (mulberry32), hogy a tábla minden futáson ugyanaz legyen. */
@@ -93,6 +95,17 @@ export function leak(out, body) {
     if (views.some((v) => v.includes(g))) return g;
   }
   return null;
+}
+
+/** A titok kimaradt, különböző 6 karakteres darabjainak száma (nyersen vagy dekódolva) — a főággal való összevetéshez. */
+export function leakCount(out, body) {
+  const views = [out, decodeEscapes(out)];
+  const seen = new Set();
+  for (let i = 0; i + 6 <= body.length; i++) {
+    const g = body.slice(i, i + 6);
+    if (!seen.has(g) && views.some((v) => v.includes(g))) seen.add(g);
+  }
+  return seen.size;
 }
 
 /**

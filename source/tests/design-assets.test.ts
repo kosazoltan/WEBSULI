@@ -317,3 +317,22 @@ test("design-assets (vak L5 / L6, 25de6739): JSON-hibában a DB-URL határa; nag
     return true;
   });
 });
+
+// Szűkítés (tulajdonos, 2026-11-22): a képgyártó kitakarása a főágénál semmilyen esetben nem gyengébb.
+test("design-assets: nem gyengébb a főágnál — redact / redactClip (rövid és nagy) minden eset × alak esetén", async () => {
+  const { mainDesignRedact } = await import("../../scripts/qa/gates/kitakaro-main-baseline.mjs");
+  const { leakCount } = await import("../../scripts/qa/gates/kitakaro-cases.mjs");
+  const margin = Math.max(64, CALLER_KEY.length);
+  for (const c of SECRET_CASES) {
+    for (const [encName, enc] of Object.entries(ENCODINGS)) {
+      const s = enc(c.raw);
+      const base = mainDesignRedact(s, CALLER_KEY);
+      assert.ok(leakCount(redact(s, CALLER_KEY), c.body) <= leakCount(base, c.body), `redact ${c.name} / ${encName}`);
+      assert.ok(leakCount(redactClip(s, CALLER_KEY, 300), c.body) <= leakCount(base.slice(0, 300), c.body), `redactClip ${c.name} / ${encName}`);
+      for (const { pos, text } of clipPlacements(s, REDACT_WINDOW, margin)) {
+        const b = leakCount(mainDesignRedact(text, CALLER_KEY).slice(0, REDACT_WINDOW), c.body);
+        assert.ok(leakCount(redactClip(text, CALLER_KEY, REDACT_WINDOW), c.body) <= b, `redactClip nagy ${c.name} / ${encName} / ${pos}`);
+      }
+    }
+  }
+});
