@@ -94,3 +94,7 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
   Mutációs ellenpróba (`mutate.mjs` a scratchpadben, szöveges csere + `cmp` visszaállítás): M1 locale → csak O1/L2 bukik; M2
   francia elízió → O1/L3; M3 nyers út mondat=false → O2/L4; M4 régi célrész-szabály → O2/L5; M5 bankközi korlát ki → O2/L1;
   M6 reset sorozat-nullázás nélkül → O4/L7.
+- **Vak kör 2 javítása (PR-1, az e2d8c86d-re építve):** terv 14. szakasz (szerződés, invariáns, osztálytábla). Előbb 5 új
+  teszt bukott (O5 osztály-mérés 4 hibával, O5/L1, O5/L3, O5/L5, O6/L2), majd a határpont-teszt a régi [9, 20] értékkel; a
+  javítás után `npx.cmd tsx --test tests/word-ladder-grading.test.ts` → 23/23, a Szólétra-egységtesztek + `no-repeat` 149/149,
+  `tsc -p tsconfig.test.json` 0 hiba. Mutációs ellenpróba (`mutate2.mjs`): 5/5 mutáns a saját osztálytesztjén bukik.
