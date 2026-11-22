@@ -1,48 +1,55 @@
 # WEBSULI — gépi olvasható projekt-manifest (YAML réteg)
-# Forma: a másik gépről érkezett váz (0645f48f) WEBSULI-változata; terv: docs/specs/2026-11-22-zaro-hurok-websuli.md (D3).
-# Frissítés: a záró hurokban (.agents/skills/websuli-zaro-hurok/SKILL.md), minden lezárt feladat után. Ha nincs új tény:
-#   node scripts/qa/zaro-hurok.mjs nincs-uj --kind yaml   (kanban-változás nélkül: --kind kanban)
+# Forma: a másik gépről érkezett váz (0645f48f) WEBSULI-változata.
+# Szabály: minden aktív hivatkozás ezen a fejen létező fájlra / parancsra mutat (őr: source/tests/memory-layer-refs-guard.test.ts);
+# ami még nincs a repóban, az CSAK a `planned` szakaszban áll, „tervezett” jelöléssel.
 # Titkot (.env-érték, token, jelszó), e-mail-címet, személyes adatot ide írni TILOS.
 # Minden érték forrása a mellette álló megjegyzésben.
 
 project:
   name: WEBSULI
-  domain: "Oktatási platform 6–18 éves diákoknak: HTML-tananyagok kezelése, megtekintése és AI-val való fejlesztése, leckék és játékok"   # memory/projects/websuli/project-overview.md
-  language: "magyar (felhasználói felület és dokumentáció); a kód-azonosítók angolok"   # AGENTS.md (bevezető)
-  runtime: "Node.js 24.x"           # source/package.json engines.node
+  domain: "Oktatási platform 6–18 éves diákoknak: HTML-tananyagok kezelése, megtekintése és AI-val való fejlesztése, leckék és játékok"   # memory/projects/websuli/project-overview.md:14
+  language: "magyar (felhasználói felület és dokumentáció); a kód-azonosítók angolok"   # AGENTS.md:3-4
+  runtime: "Node.js 24.x"           # source/package.json:6-7 (engines.node)
   stack:
-    frontend: "React 18, Vite 5, Tailwind CSS 3, wouter, TanStack Query"   # source/package.json dependencies
+    frontend: "React 18, Vite 5, Tailwind CSS 3, wouter, TanStack Query"   # source/package.json dependencies / devDependencies
     backend: "Express 4 (TypeScript, tsx)"                                 # source/package.json dependencies
-    database: "PostgreSQL (Neon), Drizzle ORM; séma: source/shared/schema.ts, migrációk: source/migrations/"
+    database: "PostgreSQL (Neon), Drizzle ORM"                              # séma: source/shared/schema.ts, migrációk: source/migrations/
     e2e: "Playwright"                                                       # source/package.json devDependencies
-    hosting: "Vercel (SPA) + Render (API) + Neon Postgres"                  # memory/indexes/index.yml procedural_deploy
-  app_root: source/                 # package.json (gyökér) description
+    hosting: "Vercel (SPA) + Render (API) + Neon Postgres"                  # memory/indexes/index.yml:14 (procedural_deploy)
+  app_root: source/                 # package.json:4 (gyökér description)
 
 repository:
-  default_branch: main              # git (origin/HEAD); AGENTS.md „Git”: feature branch → PR → zöld CI → merge
+  default_branch: main              # git: refs/remotes/origin/HEAD → origin/main; AGENTS.md „Git”: feature branch → PR → zöld CI → merge
   workflow: "háromfázisú: terv (docs/specs/) → végrehajtási utasítás (*-vegrehajtas.md) → kód"   # AGENTS.md „Háromfázisú munka”
   kanban:
-    experience_board: "~/.claude/projects/D--repo-WEBSULI/kanban/tapasztalat-kanban.md (a Claude Code saját környezete, nem a Hermes)"   # tulajdonosi döntés 2026-11-22; globális CLAUDE.md
-    check: "npm run zaro:check -- --since <ISO> (alapból ezt a fájlt nézi; --kanban-file felülírja)"
+    environment: claude-code        # a Claude Code saját környezete, NEM a Hermes (globális felhasználói szabály)
+    experience_board: "~/.claude/projects/<proj>/kanban/tapasztalat-kanban.md"
+    # <proj> = a fő munkakönyvtár abszolút útvonala, minden nem betű/számjegy karakter „-”-re cserélve
+    # (példa: D:\repo\WEBSULI → D--repo-WEBSULI); a ~/.claude helyét a CLAUDE_CONFIG_DIR felülírhatja.
 
-memory:                # a memória-rétegek térképe (csak létező WEBSULI-utak)
+memory:                # a memória-rétegek térképe (csak ezen a fejen létező utak)
   yaml_manifest: memory/manifest.yaml
   qmd_index: memory/index.qmd
   cogni: memory/.cogni/
-  notes: memory/notes/              # új jegyzet csak a memory/indexes/index.yml notes gyűjteményével (memory-index-guard)
+  notes: memory/notes/              # új jegyzet csak a memory/indexes/index.yml notes gyűjteményével (source/tests/memory-index-guard.test.ts)
   memory_index: memory/indexes/index.yml
-  trap_table: docs/agent-csapdak.md # az EGYETLEN csapdakatalógus (D1); ágon ideiglenes C-<ág>-N sorszám (D2)
-  skills: .agents/skills/           # forrás; tükör: .claude/skills/ (scripts/qa/gates/skills-sync-check.mjs)
-  retro: docs/handoffs/             # *-retro.md, illetve a terv „Állapotnapló” fejezete
+  trap_table: docs/agent-csapdak.md # az egyetlen WEBSULI-csapdakatalógus
+  skills: .agents/skills/           # forrás
+  skills_mirror: .claude/skills/    # tükör — CSAK a scripts/qa/gates/gates.config.json mirroredSkills listájának skilljei (scripts/qa/gates/skills-sync-check.mjs)
+  retro: docs/handoffs/             # *-retro.md
   knowledge: .hermes/projekt/TUDAS.md
-  vector_index: "nem elérhető — a WEBSULI-környezetben nincs helyi beágyazó; a kapu N/A-t jelent (D12)"
+  vector_index: "nem elérhető — a WEBSULI-környezetben nincs vektoros memória"
 
-quality_gates:         # gyökér package.json scripts; sorrend: AGENTS.md „Minőségkapuk” 4. pont
-  - lint: "npm run gate:lint"
-  - stage: "npm run gate:stage"
-  - push: "npm run gate:push"
-  - pr: "npm run gate:pr -- --body-file <leírás.md>"
-  - merge: "npm run gate:merge -- <PR>"
-  - blind_review: "npm run gate:blind-review — a gépi vak ellenőr futtatója; a főágon még nincs (a chore/vak-ellenor-deepseek ágon; forrás: docs/specs/2026-11-21-gepkoltoztetes-folytatas.md 4. fejezet, a docs/gepkoltoztetes-folytatas ágon)"
-  - close_loop: "npm run zaro:check -- --since <ISO>"
-  - blind_convergence: "node scripts/qa/zaro-hurok.mjs konvergencia"
+quality_gates:         # gyökér package.json:5-18; sorrend: AGENTS.md:157-164 („Minőségkapuk” 1–4. pont)
+  - lint: "npm run gate:lint"                                  # minden kibocsátás előtt (AGENTS.md:157)
+  - stage: "npm run gate:stage"                                # minden fejlesztési szakasz után (AGENTS.md:158-159)
+  - push: "npm run gate:push"                                  # AGENTS.md:162
+  - independent_review: "független ellenőr, ítélet rögzítése: node scripts/qa/gates/record-review.mjs"   # AGENTS.md:160-162 (a push-kapu után, a PR-kapu előtt)
+  - pr: "npm run gate:pr -- --body-file <leírás.md>"           # AGENTS.md:163; a PR-kapu a fejre szóló ítéletet ellenőrzi
+  - ci: "push + PR → zöld CI"                                  # AGENTS.md:163
+  - merge: "npm run gate:merge -- <PR>"                        # közvetlenül a merge előtt (AGENTS.md:163)
+
+planned:               # TERVEZETT — még nincs ezen a fejen; a jelzett PR-ral érkezik, addig nem aktív lépés
+  - close_loop: "tervezett (feat/zaro-hurok-1): záró kapu-szkript és npm-parancs a hét lépéses záró hurokhoz"
+  - blind_convergence: "tervezett (feat/zaro-hurok-1): a vak körök gépi megállási szabálya"
+  - skill: "tervezett (feat/zaro-hurok-3): websuli-zaro-hurok skill és AGENTS.md-szakasz"

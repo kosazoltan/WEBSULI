@@ -1,6 +1,6 @@
 ---
 title: "WEBSULI — projekt-memória belépő"
-subtitle: "Quarto-formátumú navigációs index (QMD réteg; a WEBSULI záró hurka, docs/specs/2026-11-22-zaro-hurok-websuli.md)"
+subtitle: "Quarto-formátumú navigációs index (QMD réteg)"
 format:
   html:
     toc: true
@@ -10,7 +10,8 @@ format:
 # Cél
 
 Gyors válasz arra, hol található a projekt tudása, és melyik eljárást kell követni.
-Minden hivatkozás a repón belülre mutat.
+Minden aktív hivatkozás ezen a fejen létező fájlra mutat (őr: `source/tests/memory-layer-refs-guard.test.ts`); ami még nincs a
+repóban, az csak „tervezett” jelöléssel szerepel.
 
 # Igazságforrások rangja
 
@@ -19,9 +20,10 @@ Minden hivatkozás a repón belülre mutat.
 3. `memory/.cogni/`                       — Cogni-formátumú strukturált memória (projekt, modulok, döntések, séma)
 4. `memory/indexes/index.yml`             — a Markdown-memória (procedural / semantic / projects / episodic / notes) gyűjtemény-indexe
 5. `memory/notes/`                        — kapcsolt jegyzetek (új fájl csak az indexszel együtt)
-6. `docs/agent-csapdak.md`                — az EGYETLEN csapdakatalógus (tünet → gyökérok → szabály)
-7. `.agents/skills/` ↔ `.claude/skills/`  — repó-saját skillek (forrás ↔ tükör)
-8. tapasztalat-kanban                    — `~/.claude/projects/D--repo-WEBSULI/kanban/tapasztalat-kanban.md` (a Claude Code saját környezete)
+6. `docs/agent-csapdak.md`                — a WEBSULI csapdakatalógusa (tünet → gyökérok → szabály)
+7. `.agents/skills/`                      — repó-saját skillek; tükör a `.claude/skills/` alatt, CSAK a `scripts/qa/gates/gates.config.json` `mirroredSkills` listájának skilljeire
+8. tapasztalat-kanban                     — a Claude Code saját környezetében: `~/.claude/projects/<proj>/kanban/tapasztalat-kanban.md`
+   (`<proj>` = a fő munkakönyvtár abszolút útvonala, minden nem betű/számjegy karakter „-”-re cserélve)
 9. `.hermes/projekt/TUDAS.md`             — felhalmozott tudás (Hermes-projekt)
 
 # Modul-térkép
@@ -33,11 +35,11 @@ Minden hivatkozás a repón belülre mutat.
 | Közös réteg | `source/shared/` | Drizzle-séma `schema.ts` (59 tábla), közös szerződések és tiszta segédek (pl. `game-quiz-contract.ts`, `knowledge-map-schema.ts`) |
 | Migrációk | `source/migrations/` | SQL-migrációk; a sémával együtt változnak |
 | Tesztek | `source/tests/` | `node --test` egység- és őr-tesztek (`*-guard.test.ts`); Playwright-konfigok a `source/` gyökerében |
-| Minőségkapuk | `scripts/qa/` | `gates/` (lint / stage / push / pr / merge kapu), `hooks/`, `three-phase-check.mjs`, `zaro-hurok.mjs` (záró kapu) |
+| Minőségkapuk | `scripts/qa/` | `gates/` (lint / stage / push / pr / merge kapu, `record-review.mjs`), `hooks/`, `three-phase-check.mjs` |
 | Tervek | `docs/specs/` | terv + `*-vegrehajtas.md`; sablon `_TEMPLATE.md`, szerződés `contract-template.yaml` |
 | Retrók | `docs/handoffs/` | `*-retro.md` futásonként |
 
 # Záró hurok
 
-Csapda → memóriák (YAML, QMD, Cogni; vektor: nem elérhető) → retró → kanban → skill → ismétlődő hibaosztály → higiénia → tiszta fa.
-Skill: `.agents/skills/websuli-zaro-hurok/SKILL.md`. Kapu: `npm run zaro:check -- --since <ISO>` (exit 0 = zöld).
+Csapda → memóriák (YAML, QMD, Cogni; vektor: nem elérhető) → retró → tapasztalat-kanban → skill → ismétlődő hibaosztály → higiénia →
+tiszta fa. A gépi záró kapu, a hozzá tartozó skill és terv tervezett: a feat/zaro-hurok-1 és a feat/zaro-hurok-3 PR-ral érkezik.
