@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { standardFusionFixture, fusionFixture } from "../shared/fixtures/lesson-fusion";
-import { LESSON_VARIETY_VERSION, carryVarietyMarker, stripLegacyOpener } from "../shared/lesson-feedback-openers";
+import { LESSON_VARIETY_VERSION, carryVarietyMarker, feedbackOpenerKey, feedbackView } from "../shared/lesson-feedback-openers";
+import { fixConceptInConversation, type ConceptFixSource } from "../server/studio/single-run/concept-fix";
 import { effectiveLessonVariety, lessonVarietyForRun, runWithLessonVariety } from "../server/studio/lesson-variety-flag";
 import { bankStaticPrefix } from "../server/studio/experience-builder";
 import { LessonConversation, type ModelClient, type Turn } from "../server/studio/single-run/conversation";
@@ -14,7 +15,8 @@ import type { PipelineStore, JobPatch } from "../server/studio/pipeline-store";
 import type { MapConcept } from "../server/studio/coverage";
 
 // S5a vak kör 1 (L1, L4, L2): a változatossági állapot MINDEN úton egyetlen, a futás elején rögzített döntés; a jelölőt a modell
-// soha nem adhatja; KI állapotban minden út a régi kimenetet adja. A nyitáslevágás képlethez nem nyúl.
+// soha nem adhatja; KI állapotban minden út a régi kimenetet adja. Vak kör 2 + tulajdonosi döntés (2026-11-22): a modell szövegéhez a kód
+// jelölt leckén sem nyúl (a korábbi L2-levágási teszt dokumentált spec-változással kikerült).
 
 const MARK = { version: LESSON_VARIETY_VERSION };
 
@@ -183,16 +185,64 @@ test("L4: KI-ben indult, a bankban megszakadt futás BE környezetben folytatva 
   }
 });
 
-// --- (B) szövegtisztítás: csak az ismert régi nyitás vágódik, képlet és előjel érintetlen (L2) ---
+test("vak kör 2, L2: KI módban a modell jelölője a job egyik mentett leckepéldányába (checkpoint, végső output.lesson) sem kerül", async () => {
+  const off = memory();
+  await withEnv("STUDIO_LESSON_VARIETY", "on", () => runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ modelMarker: true }), off, { lessonVariety: false, sourceVisuals: true })));
+  const withLesson = off.steps.filter((s) => (s.output as { lesson?: unknown } | undefined)?.lesson);
+  assert.ok(withLesson.length >= 2, "a szerző utáni checkpoint és a végső kimenet is mentett leckét hordoz");
+  for (const s of withLesson) assert.equal("variety" in ((s.output as { lesson: object }).lesson), false, `lépés: ${s.step}`);
+  // BE futásban is: a job leckepéldánya a modell jelölőjét nem hordozza (a jelölőt csak a közzétételi mentés írja).
+  const on = memory();
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ modelMarker: true }), on, { lessonVariety: true, sourceVisuals: true }));
+  for (const s of on.steps.filter((x) => (x.output as { lesson?: unknown } | undefined)?.lesson)) assert.equal("variety" in ((s.output as { lesson: object }).lesson), false, `BE lépés: ${s.step}`);
+  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, MARK);
+});
 
-test("L2: a számhoz tapadó vagy szóközzel elválasztott mínusz nem elválasztó; a képlet kisbetűje marad; a hosszú á-s „próbálkozás” is vágódik", () => {
-  assert.equal(stripLegacyOpener("Jó próba -3 az eredmény, nem 3."), "Jó próba -3 az eredmény, nem 3.");
-  assert.equal(stripLegacyOpener("Jó próba – 3 az eredmény, nem 3."), "Jó próba – 3 az eredmény, nem 3.");
-  assert.equal(stripLegacyOpener("Jó próba, de x = -3 a megoldás."), "x = -3 a megoldás.");
-  assert.equal(stripLegacyOpener("Remek, de pH = 7 a semleges oldat."), "pH = 7 a semleges oldat.");
-  assert.equal(stripLegacyOpener("Szuper! -5 °C-on fagy meg a sós víz."), "-5 °C-on fagy meg a sós víz.");
-  assert.equal(stripLegacyOpener("Jó próbálkozás, de a négyzet oldalai egyenlők."), "A négyzet oldalai egyenlők.");
-  assert.equal(stripLegacyOpener("Jó próbálkozás! A zárójel előbb jön, ezért 14."), "A zárójel előbb jön, ezért 14.");
-  // Kódszöveg: a változónév kisbetűs marad.
-  assert.equal(stripLegacyOpener("Ügyes gondolat, de i++ előbb növel, utána olvas."), "i++ előbb növel, utána olvas.");
+// --- a célzott fogalomjavítás (vak kör 2, L3): a tárolt lecke állapota és jelölője ---
+
+const conceptSource: ConceptFixSource = { subject: fixture.subject, classroom: fixture.classroom,
+  concepts: [{ id: "c1", localId: "area", term: "terület", definition: "A síkidom által lefedett rész nagysága.", quote: "A téglalap területe az oldalak szorzata.", examWeight: "core" }] };
+
+async function conceptFixWith(original: typeof fixture) {
+  const { experience: _bank, ...teaching } = fixture;
+  const seen: boolean[] = [];
+  const fake: ModelClient = { model: "claude-opus-5-5", async complete(_system, turns) {
+    seen.push(effectiveLessonVariety());
+    const t = turns.at(-1)!.blocks.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+    let json: unknown = {};
+    if (/^FOGALOMJAVÍTÁS|A PROGRAM ELLENŐRZÉSE \(fogalomjavítás\)/.test(t)) json = { ...teaching, variety: { version: "valtozatossag-1" } };
+    else if (/5\. ÁLLOMÁS/.test(t)) json = structuredClone(fixture.experience);
+    else if (/(^|\n)LEKTORÁLÁS|A PROGRAM ELLENŐRZÉSE \(a javítás lektorálása\)/.test(t)) json = { solutions: [], notes: [], reviewedAll: true };
+    return { text: JSON.stringify(json), model: "claude-opus-5-5", truncated: false };
+  } };
+  const result = await fixConceptInConversation({ original, source: conceptSource, conceptId: "area", conversation: new LessonConversation(singleRunSystemPrompt(), fake, null), fresh: (s) => new LessonConversation(s, fake, null), sourceVisuals: true });
+  assert.equal(result.ok, true, JSON.stringify(result).slice(0, 300));
+  return { seen, variety: result.ok ? (result.candidate as { variety?: unknown }).variety : "hiba" };
+}
+
+test("vak kör 2, L3: fogalomjavítás — jelöletlen lecke BE környezetben KI állapotban fut, a modell jelölője eldobva; jelölt lecke KI környezetben BE marad", async () => {
+  await withEnv("STUDIO_LESSON_VARIETY", "on", async () => {
+    const plain = await conceptFixWith(fixture);
+    assert.equal(plain.variety, undefined);
+    assert.ok(plain.seen.length && plain.seen.every((v) => v === false), JSON.stringify(plain.seen));
+  });
+  await withEnv("STUDIO_LESSON_VARIETY", undefined, async () => {
+    const marked = await conceptFixWith({ ...fixture, variety: MARK } as typeof fixture);
+    assert.deepEqual(marked.variety, MARK);
+    assert.ok(marked.seen.length && marked.seen.every((v) => v === true), JSON.stringify(marked.seen));
+  });
+});
+
+// --- (B) a modell szövege érintetlen (tulajdonosi döntés 2026-11-22, „NINCS LEVÁGÁS”) ---
+
+test("NINCS LEVÁGÁS: jelölt leckén a modell visszajelzés-szövege minden esetben bájtra változatlan (kód, képlet, mínusz, nyitással kezdődő szöveg)", () => {
+  const key = feedbackOpenerKey("m", "q", ["a", "b"]);
+  for (const text of [
+    "Jó próba, de index - 1 adja az előző elem indexét.", "Jó próba -index a változó ellentettje, nem maga az értéke.",
+    "index - 1 adja az előző elem indexét.", "-index a változó ellentettje.", "Jó próba -3 az eredmény, nem 3.", "Jó próba – 3 az eredmény.",
+    "Jó próba, de x = -3 a megoldás.", "Remek, de pH = 7 a semleges oldat.", "Szuper! -5 °C-on fagy meg a sós víz.", "Jó próbálkozás, de a négyzet oldalai egyenlők.",
+    "Ügyes gondolat, de i++ előbb növel.", "Helyes: 45.", "Nem helyes. A szorzás előbb jön.", "Igen.", "  szóközzel kezdődik  ", "a kisbetűs próza.",
+  ]) for (const right of [true, false]) for (const band of ["kid", "teen", "senior"] as const) {
+    assert.equal(feedbackView({ right, text, variety: { marker: MARK, band, key } }).reason, text, `${right}/${band}: ${text}`);
+  }
 });

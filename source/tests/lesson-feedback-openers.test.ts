@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  FEEDBACK_OPENERS, LESSON_VARIETY_VERSION, feedbackOpener, feedbackOpenerKey, feedbackView, stripLegacyOpener, withVarietyMarker,
+  FEEDBACK_OPENERS, LESSON_VARIETY_VERSION, feedbackOpener, feedbackOpenerKey, feedbackView, startsWithLegacyOpener, withVarietyMarker,
 } from "../shared/lesson-feedback-openers";
 import { AGE_BANDS } from "../shared/lesson-schema";
 import { stripVerdictPrefix } from "../shared/lesson-ui-text";
@@ -24,7 +24,7 @@ test("V3: sávonként ≥ 24 hibás- és ≥ 12 helyes-nyitás, ≤ 40 karakter,
         assert.match(o, /[.!?]$/u, `${band}: írásjellel zárul: ${o}`);
         assert.equal(o, o.trim());
         // A kódszótár nem ismételheti a régi, modell írta sablont.
-        assert.equal(stripLegacyOpener(`${o} Ez itt egy hosszabb indoklás.`), `${o} Ez itt egy hosszabb indoklás.`, `${band}: régi sablon: ${o}`);
+        assert.equal(startsWithLegacyOpener(`${o} Ez itt egy hosszabb indoklás.`), false, `${band}: régi sablon: ${o}`);
       }
       const counts = new Map<string, number>();
       for (const o of list) counts.set(firstWord(o), (counts.get(firstWord(o)) ?? 0) + 1);
@@ -78,41 +78,39 @@ test("változatosság mérve: ugyanaz a kérdés, különböző mag (térkép) �
   }
 });
 
-test("régi, modell írta nyitások levágása; tartalmi kezdet és rövid maradék változatlan", () => {
-  const cases: Array<[string, string]> = [
-    ["Jó próba, de itt a szorzás az első lépés.", "Itt a szorzás az első lépés."],
-    ["Jó próba! A zárójel előbb jön, ezért 14.", "A zárójel előbb jön, ezért 14."],
-    ["Szép próbálkozás, de a négyzet oldalai egyenlők.", "A négyzet oldalai egyenlők."],
-    ["Ügyes gondolat, de ez a mondat múlt időben áll.", "Ez a mondat múlt időben áll."],
-    ["Jó gondolat, azonban a víz 100 °C-on forr.", "A víz 100 °C-on forr."],
-    ["Majdnem jó! Ide még egy tizedesjegy kell.", "Ide még egy tizedesjegy kell."],
-    ["Szuper! A háromszög szögeinek összege 180°.", "A háromszög szögeinek összege 180°."],
-  ];
-  for (const [input, expected] of cases) assert.equal(stripLegacyOpener(input), expected, input);
-  for (const keep of [
-    "Jó, hogy a négyzetet választottad, mert minden oldala egyenlő.",
-    "Jóslás helyett számoljunk: 3 · 4 = 12.",
-    "Szépen látszik, hogy a görbe emelkedik.",
-    "Majdnem minden emlős elevenszülő, de a kacsacsőrű emlős tojik.",
-  ]) assert.equal(stripLegacyOpener(keep), keep, keep);
-  // A maradék 12 karakternél rövidebb → az eredeti szöveg marad.
-  assert.equal(stripLegacyOpener("Jó próba, de 14."), "Jó próba, de 14.");
+// Dokumentált spec-változás (tulajdonosi döntés 2026-11-22, „NINCS LEVÁGÁS”): a modell visszajelzés-szövegéhez a kód jelölt leckén
+// nem nyúl; a régi levágási tesztek ezért kikerültek. Helyettük: a régi nyitás felismerése zárt listával, pontos egyezéssel.
+test("a régi nyitás felismerése: zárt lista, pontos (kis- / nagybetűs) egyezés a szöveg elején, utána nem betű áll", () => {
+  for (const text of [
+    "Jó próba, de itt a szorzás az első lépés.", "Jó próba! A zárójel előbb jön.", "Jó próbálkozás, de a négyzet oldalai egyenlők.",
+    "Szép próbálkozás, de a négyzet oldalai egyenlők.", "Ügyes gondolat, de ez múlt idő.", "Pontosan! A zárójel előbb jön.",
+    "Így van: 45.", "Helyes: 45.", "Majdnem jó! Ide még egy tizedesjegy kell.", "Szuper", "Jó próba -3 az eredmény.",
+  ]) assert.equal(startsWithLegacyOpener(text), true, text);
+  for (const text of [
+    "Jó, hogy a négyzetet választottad.", "Jóslás helyett számoljunk: 3 · 4 = 12.", "Szépen látszik, hogy a görbe emelkedik.",
+    "Majdnemhogy elfelejtettük.", "Helyesen: 45.", "jó próba, de kisbetűvel.", "index - 1 adja az előző elemet.", "-index az ellentett.",
+    "Nem a gyökér: az vizet vesz fel.", "",
+  ]) assert.equal(startsWithLegacyOpener(text), false, text);
 });
 
-test("V5: jelöletlen lecke — a mai kimenet; jelölt lecke — ítélet után kódnyitás és a régi előtag nélküli indoklás", () => {
+test("V5: jelöletlen lecke — a mai kimenet; jelölt lecke — a modell szövege BÁJTRA változatlan, a kódnyitás csak nyitás nélküli szöveg elé", () => {
   const legacy = { right: false, text: "Jó próba, de itt a szorzás az első lépés." };
   assert.deepEqual(feedbackView({ ...legacy, variety: undefined }), { reason: stripVerdictPrefix(legacy.text, false) });
   assert.deepEqual(feedbackView({ right: true, text: "Helyes: 45.", variety: undefined }), { reason: "45." });
   const marked = { version: LESSON_VARIETY_VERSION };
   const key = feedbackOpenerKey("m", "q", ["a", "b"]);
-  const view = feedbackView({ ...legacy, variety: { marker: marked, band: "teen", key } });
-  assert.equal(view.reason, "Itt a szorzás az első lépés.");
-  assert.equal(view.opener, feedbackOpener("wrong", "teen", key));
-  const right = feedbackView({ right: true, text: "Pontosan! A zárójel előbb jön.", variety: { marker: marked, band: "kid", key } });
-  assert.equal(right.reason, "A zárójel előbb jön.");
-  assert.equal(right.opener, feedbackOpener("right", "kid", key));
-  // Csak ítéletből álló szöveg: üres indoklás, a nyitás megmarad.
-  assert.deepEqual(feedbackView({ right: true, text: "Igen.", variety: { marker: marked, band: "kid", key } }), { opener: feedbackOpener("right", "kid", key), reason: "" });
+  // Nyitással kezdődő modellszöveg: nincs csere, nincs kódnyitás.
+  assert.deepEqual(feedbackView({ ...legacy, variety: { marker: marked, band: "teen", key } }), { reason: legacy.text });
+  assert.deepEqual(feedbackView({ right: true, text: "Pontosan! A zárójel előbb jön.", variety: { marker: marked, band: "kid", key } }), { reason: "Pontosan! A zárójel előbb jön." });
+  // Nyitás nélküli modellszöveg: elé kerül a kódnyitás, a szöveg bájtra a modellé.
+  for (const [right, text] of [
+    [false, "index - 1 adja az előző elem indexét."], [false, "-index a változó ellentettje, nem maga az értéke."],
+    [false, "x = -3 a megoldás."], [false, "i++ előbb olvas, utána növel."], [true, "a zárójel előbb jön, ezért 14."], [false, "–3 °C-on fagy meg."],
+  ] as const) {
+    const view = feedbackView({ right, text, variety: { marker: marked, band: "teen", key } });
+    assert.equal(view.reason, text, text);
+    assert.equal(view.opener, feedbackOpener(right ? "right" : "wrong", "teen", key));
+  }
 });
 
 test("withVarietyMarker: KI — a jelölő (a modelltől jött is) törlődik; BE — a szerver írja be", () => {

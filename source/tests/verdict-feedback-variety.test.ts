@@ -28,12 +28,15 @@ test("jelöletlen lecke: a kimenet a korábbi (ítélet + ítélet-előtag nélk
   );
 });
 
-test("jelölt lecke: ítélet, kérdésenkénti kódnyitás, levágott régi előtag; kérdés nélkül a régi kimenet", () => {
+// Dokumentált spec-változás (tulajdonosi döntés 2026-11-22, „NINCS LEVÁGÁS”): jelölt leckén a modell szövege bájtra változatlan.
+test("jelölt lecke: ítélet, kérdésenkénti kódnyitás a nyitás nélküli modellszöveg elé, a szöveg bájtra változatlan; kérdés nélkül a régi kimenet", () => {
   const variety = { marker: { version: LESSON_VARIETY_VERSION }, band: "kid" as const, mapId: "map-1" };
   const opener = feedbackOpener("wrong", "kid", feedbackOpenerKey("map-1", question.text, question.options));
-  const out = html(React.createElement(VerdictFeedback, { right: false, text: "Jó próba, de előbb szorzunk, ezért 11.", question }), variety);
-  assert.equal(out, `<p class="lesson-feedback" data-state="wrong"><strong class="lesson-verdict">Még nem helyes.</strong> <span class="lesson-verdict-opener" data-testid="verdict-opener">${opener}</span> Előbb szorzunk, ezért 11.</p>`);
-  assert.doesNotMatch(out, /Jó próba/u);
+  const out = html(React.createElement(VerdictFeedback, { right: false, text: "index - 1 adja az előző elem indexét.", question }), variety);
+  assert.equal(out, `<p class="lesson-feedback" data-state="wrong"><strong class="lesson-verdict">Még nem helyes.</strong> <span class="lesson-verdict-opener" data-testid="verdict-opener">${opener}</span> index - 1 adja az előző elem indexét.</p>`);
+  // Nyitással kezdődő modellszöveg: nincs kódnyitás, nincs csere.
+  const kept = html(React.createElement(VerdictFeedback, { right: false, text: "Jó próba, de előbb szorzunk, ezért 11.", question }), variety);
+  assert.equal(kept, '<p class="lesson-feedback" data-state="wrong"><strong class="lesson-verdict">Még nem helyes.</strong> Jó próba, de előbb szorzunk, ezért 11.</p>');
   // Másik kérdés → (általában) másik nyitás; a kulcs a kérdéstől függ.
   const openers = new Set(Array.from({ length: 30 }, (_, i) => feedbackOpener("wrong", "kid", feedbackOpenerKey("map-1", `${i}. kérdés`, ["a", "b"]))));
   assert.ok(openers.size >= 10, `30 kérdésen csak ${openers.size} különböző nyitás`);
