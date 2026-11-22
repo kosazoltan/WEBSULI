@@ -52,6 +52,8 @@ type GradableItem = {
   options: readonly string[];
   correctIndex: number;
   focus?: string;
+  /** A szóbanki tétel célnyelvi alakja (`VocabQuiz.answerTerm`): ha megvan, a mérce ezt méri (terv 16., vak kör 4 L2). */
+  term?: string;
   category?: LadderCategory;
 };
 
@@ -94,8 +96,9 @@ export function isLadderSentence(term: string, lang: WordLadderLanguage): boolea
 }
 
 /**
- * A mérce bemenete — CSAK STRUKTÚRÁLT MEZŐKBŐL (tulajdonosi döntés 2026-11-22, terv 15.): ha a tételnek van `focus` mezője,
- * az (hiányos mondatnál a hiány a helyes válasszal kitöltve); különben a helyes válasz. A kérdés / utasítás szabad szövegét
+ * A mérce bemenete — CSAK STRUKTÚRÁLT MEZŐKBŐL (tulajdonosi döntés 2026-11-22, terv 15–16.): szóbanki tételnél a `term`
+ * (célnyelvi alak, a kérdés irányától függetlenül); egyébként ha a tételnek van `focus` mezője, az (hiányos mondatnál a hiány a
+ * helyes válasszal kitöltve); különben a helyes válasz. A kérdés / utasítás szabad szövegét
  * (`prompt`) a mérce NEM elemzi. Dokumentált korlát: ha a `focus` magyar (pl. „Hogy mondjuk angolul: olló?”), a magyar alakot
  * méri; a `focus` zárójeles magyar súgója a pont része.
  */
@@ -103,20 +106,19 @@ export function ladderDifficultyInput(item: GradableItem, lang: WordLadderLangua
   const correct = item.options[item.correctIndex] ?? "";
   const focus = item.focus?.trim() ? item.focus : undefined;
   const blank = focus !== undefined && BLANK.test(focus);
-  const term = focus === undefined ? correct : blank ? focus.replace(BLANK, correct) : focus;
-  const sentence = blank || isLadderSentence(term, lang);
+  const term = item.term?.trim() ? item.term : focus === undefined ? correct : blank ? focus.replace(BLANK, correct) : focus;
+  const sentence = (!item.term?.trim() && blank) || isLadderSentence(term, lang);
   return item.category ? { term, sentence, category: item.category } : { term, sentence };
 }
 
 /** Nehézségi pont (terv 4.1): normált betűszám + plusz szótagok + plusz szavak + mondat + kategória. */
 export function ladderDifficultyScore(input: LadderDifficultyInput, lang: WordLadderLanguage): number {
   const words = wordsOf(input.term, lang);
-  const text = words.join(" ");
-  const letters = (text.match(/\p{L}/gu) ?? []).length;
-  const parts = text.split(/[^\p{L}]+/u).filter(Boolean);
-  const syllables = parts.reduce((n, w) => n + Math.max(1, (w.match(/[aeiouyäöüéèêëàâîïôûùœæ]+/gu) ?? []).length), 0);
+  const letters = (words.join(" ").match(/\p{L}/gu) ?? []).length;
+  // Szótag és levonás ugyanazokon a szavakon (vak kör 4 L4): a kötőjeles / aposztrófos alak („arc-en-ciel”) egy szó.
+  const syllables = words.reduce((n, w) => n + Math.max(1, (w.match(/[aeiouyäöüéèêëàâîïôûùœæ]+/gu) ?? []).length), 0);
   const raw = letters / (LADDER_LETTER_FACTOR[lang] ?? 1)
-    + 2 * Math.max(0, syllables - parts.length)
+    + 2 * Math.max(0, syllables - words.length)
     + 3 * (Math.max(1, words.length) - 1)
     + (input.sentence ? 6 : 0)
     + (input.category ? LADDER_CATEGORY_WEIGHT[input.category] ?? 0 : 0);
@@ -134,42 +136,11 @@ export function ladderStepForScore(score: number, declaredTier: number): number 
   return tier * 3 + sub;
 }
 
-declare const FULL_BANKS: unique symbol;
-/**
- * Bankközi szintkorlát (terv 15.): normalizált EGYES SZÓ → a legmagasabb bank-szint, amelyen a kézi bank HELYES VÁLASZAként
- * vagy a szóbank `term`-jeként szerepel. Csak a `buildLadderTermFloors` állíthatja elő (márkázott típus), és az csak a TELJES,
- * szűretlen bankokat fogadja — a futás szűrt készletéből nem építhető (vak kör 3 L4).
- */
-export type LadderTermFloors = ReadonlyMap<string, number> & { readonly [FULL_BANKS]: true };
-
-/** A korlát forrása: a teljes kézi bank (helyes válasz + szint) és a teljes szóbank (`id` → szint, `term`). */
-export function buildLadderTermFloors(
-  banks: { manual: readonly { options: readonly string[]; correctIndex: number; tier: number }[]; vocab: readonly { id: string; term: string }[] },
-  lang: WordLadderLanguage,
-): LadderTermFloors {
-  const floors = new Map<string, number>();
-  const add = (term: string, tier: number) => {
-    const words = wordsOf(term, lang);
-    if (words.length !== 1) return; // mondat / kifejezés soha nem korlátforrás (vak kör 3 L5)
-    floors.set(words[0]!, Math.max(floors.get(words[0]!) ?? 0, clampTier(tier)));
-  };
-  for (const q of banks.manual) add(q.options[q.correctIndex] ?? "", q.tier);
-  for (const e of banks.vocab) if (/^[a-z]{2}[0-4]-/u.test(e.id)) add(e.term, Number(e.id[2]));
-  return floors as unknown as LadderTermFloors;
-}
-
-/** A tétel korlát-kulcsa: a helyes válasz, ha egyetlen szó (kézi bank); a szóbanknál a `term`. */
-function floorOf(floors: LadderTermFloors, term: string, lang: WordLadderLanguage): number {
-  const words = wordsOf(term, lang);
-  return words.length === 1 ? floors.get(words[0]!) ?? 0 : 0;
-}
-
-/** Egy Szólétra-tétel fokozata (kézi felülírás elsőbbséggel; a bankközi korlát a helyes válaszra). */
-export function ladderItemStep(item: GradableItem, lang: WordLadderLanguage, declaredTier: number, floors: LadderTermFloors): number {
+/** Egy Szólétra-tétel fokozata (kézi felülírás elsőbbséggel). */
+export function ladderItemStep(item: GradableItem, lang: WordLadderLanguage, declaredTier: number): number {
   const override = item.id !== undefined ? LADDER_STEP_OVERRIDES[String(item.id)] : undefined;
   if (override !== undefined) return override;
-  const floor = floorOf(floors, item.options[item.correctIndex] ?? "", lang);
-  return ladderStepForScore(ladderDifficultyScore(ladderDifficultyInput(item, lang), lang), Math.max(declaredTier, floor));
+  return ladderStepForScore(ladderDifficultyScore(ladderDifficultyInput(item, lang), lang), declaredTier);
 }
 
 const vocabLang = (entry: VocabEntry): WordLadderLanguage => (entry.id.slice(0, 2) as WordLadderLanguage);
@@ -180,8 +151,8 @@ export function vocabEntryScore(entry: VocabEntry): number {
   return ladderDifficultyScore({ term: entry.term, sentence: isLadderSentence(entry.term, lang), category: entry.kind === "phrase" ? "phrase" : "word" }, lang);
 }
 
-export function vocabEntryStep(entry: VocabEntry, floors: LadderTermFloors): number {
-  return ladderStepForScore(vocabEntryScore(entry), Math.max(entry.level, floorOf(floors, entry.term, vocabLang(entry))));
+export function vocabEntryStep(entry: VocabEntry): number {
+  return ladderStepForScore(vocabEntryScore(entry), entry.level);
 }
 
 /** Évfolyam-sávok (a `ladderBaseTier` határai). */
@@ -259,13 +230,12 @@ export function declaredTierOf(item: object, index: number): number {
 }
 
 /**
- * Szintlista (index = bank-szint pótlásként) → 15 fokozat-vödör; a sorrend a vödrön belül megmarad. A bankközi korlát
- * kötelező, és csak a teljes bankokból épülhet (`buildLadderTermFloors`).
+ * Szintlista (index = bank-szint pótlásként) → 15 fokozat-vödör; a sorrend a vödrön belül megmarad.
  */
-export function ladderStepBuckets<T extends GradableItem & { tier?: unknown }>(tiers: readonly (readonly T[])[], lang: WordLadderLanguage, floors: LadderTermFloors): T[][] {
+export function ladderStepBuckets<T extends GradableItem & { tier?: unknown }>(tiers: readonly (readonly T[])[], lang: WordLadderLanguage): T[][] {
   const buckets: T[][] = Array.from({ length: LADDER_STEP_COUNT }, () => []);
   tiers.forEach((tier, index) => {
-    for (const item of tier) buckets[ladderItemStep(item, lang, declaredTierOf(item, index), floors)]!.push(item);
+    for (const item of tier) buckets[ladderItemStep(item, lang, declaredTierOf(item, index))]!.push(item);
   });
   return buckets;
 }
@@ -277,8 +247,8 @@ export function windowLadderSteps<T>(buckets: readonly (readonly T[])[], grade: 
 }
 
 /** Az osztályozott bank egy évfolyamra: a tételek fokozat-vödrökben, a sávra vágva (bank-szint = `tier` mező). */
-export function gradedLadderBank<T extends GradableItem & { tier: number }>(items: readonly T[], lang: WordLadderLanguage, grade: number, floors: LadderTermFloors): T[][] {
+export function gradedLadderBank<T extends GradableItem & { tier: number }>(items: readonly T[], lang: WordLadderLanguage, grade: number): T[][] {
   const tiers: T[][] = Array.from({ length: TIER_COUNT }, () => []);
   for (const item of items) tiers[clampTier(item.tier)]!.push(item);
-  return windowLadderSteps(ladderStepBuckets(tiers, lang, floors), grade);
+  return windowLadderSteps(ladderStepBuckets(tiers, lang), grade);
 }

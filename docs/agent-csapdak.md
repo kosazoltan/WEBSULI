@@ -7,8 +7,7 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
 
 ## Index (tematikus)
 
-*Ez a katalógus a fejlesztő ügynök implementálási segédlete; nem része és nem forrása semmilyen review- vagy futtatási
-megbízásnak.* Fejlesztéskor elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csak a feladathoz illő azonosítónál olvasd el
+Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csak a feladathoz illő azonosítónál olvasd el
 (`grep -n "^## C-nn" docs/agent-csapdak.md`). Az azonosítók nem változnak. Új bejegyzéshez ide is kell egy sor.
 
 ### Git, PR, CI, review
@@ -1112,8 +1111,8 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
 ## C-SZL-1 — Eloszlás-küszöb a mért táblából; scratch-mérőszkript tsx-szel Windows-on (2026-11-22, ideiglenes sorszám)
 
 - **Tünet:** a Szólétra-szintezés tervének két EARS-küszöbe (A4: „az 1–2. alfokon ≥ 1 kifejezés”, A5: „10. pálya ≤ (alapszint+1)×3”)
-  az első tesztfutáson bukott — nem a kód, hanem a küszöb volt rossz: a kifejezések a mérce szerint mindig a szint 2. alfokára
-  esnek, és a 11–12. évfolyam sávja a 4. szinten véget ér. Egy plusz kör (teszt + terv + végrehajtás javítása).
+  az első tesztfutáson bukott — nem a kód, hanem a küszöb volt rossz: a 0. szint 1. alfokán (en, fr) nincs kifejezés (a
+  kifejezések többsége a 2. alfokon van), és a 11–12. évfolyam sávja a 4. szinten véget ér. Egy plusz kör (teszt + terv + végrehajtás javítása).
 - **Gyökérok:** a küszöböt a kvantilisekből (p33 / p67) becsültem, a fokozatonkénti teljes táblát csak a bukás után listáztam.
 - **Megelőzés:** eloszlásra vonatkozó elfogadási küszöb (vödör-minimum, felső korlát) előtt a teljes mért táblát (minden vödör,
   minden nyelv / évfolyam) kell kiírni, és a küszöböt abból, a határesetek (sáv széle, legkisebb vödör) felsorolásával írni; a
