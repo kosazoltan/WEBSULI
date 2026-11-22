@@ -155,9 +155,11 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
   nyelv minden szintjének minden alfokán SHALL legalább 5 % (és legalább 10) tétel lenni (kézi + szóbank együtt).
 - [ ] A3 — WHEN egy tétel pontja ≥ 20 (≥ 40) THEN fokozatának szintje SHALL ≥ 1 (≥ 2).
 - [ ] A4 — WHEN évfolyam-sávonként (3–4., 5–6., 7–8., 9–10., 11–12.) lekérjük az osztályozott bankot THEN minden nyelven a
-  sáv minden fokozatán SHALL legalább 10 szó- ÉS (a 0. alfok kivételével) legalább 1 kifejezés-tétel lenni.
+  sáv minden fokozatán SHALL legalább 20 tétel lenni; szintenként a 0. alfokon legalább 20 egyes szó, a 2. alfokon legalább
+  20 kifejezés (a kifejezések a mérce szerint a szint 2. alfokára esnek — mért, ld. 11. szakasz), és a sávon kívüli
+  fokozat SHALL üres lenni.
 - [ ] A5 — WHEN az évfolyam ismert THEN az 1. pálya belépő fokozata SHALL az alapszint×3 lenni; a belépő fokozat SHALL pályánként
-  nem csökkenni, és SHALL ≤ (alapszint + 1)×3 maradni.
+  nem csökkenni, és SHALL ≤ min(sáv teteje, (alapszint + 1)×3) maradni.
 - [ ] A6 — WHEN az évfolyam ismeretlen THEN a játék SHALL a 4. évfolyam belépőjével (0. fokozat az 1. pályán) indulni.
 - [ ] A7 — WHEN 3 egymás utáni helyes válasz érkezik THEN a fokozat SHALL eggyel nőni; WHEN 2 egymás utáni hiba THEN SHALL eggyel
   csökkenni; WHEN a sorozatot hiba szakítja meg THEN SHALL NOT nőni; a fokozat SHALL a sávon belül maradni.
@@ -201,3 +203,19 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
 ## 10. Végrehajtási utasítás
 
 - Végrehajtás: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md`
+
+## 11. Mért osztályozás (S1, 2026-11-22) — fokozatonkénti tételszám (kézi + szóbank; „kifejezés” = phrase / everyday)
+
+```
+fokozat:        0   1   2   3   4   5   6   7   8   9  10  11  12  13  14
+en szó:       222 181  74 320 171  17 224 183  72 189 178  40 156 102  28
+en kifejezés:   0   0  99   0 152 202   1 101 158   1 102 126  15  84  93
+de szó:       171 145  25 259 123  25 212 140  22 178 127   9 134  85  14
+de kifejezés:   0   1  94   1  98 184   3  50 141   1  43 132   1  29 111
+fr szó:       109 186  69 213 139  25 186 149  40 156 109  43 128  77  31
+fr kifejezés:   0   0  74   0  72 220   0  22 184   0  21 155   1  32 113
+```
+
+A tervezett „1–2. alfokon ≥ 1 kifejezés” küszöb a 0. szint 1. alfokán (en, fr) nem teljesült: a legrövidebb kifejezés
+(„thank you”) is 15 pont, ezért a kifejezések a szint 2. alfokán gyűlnek — ez a kívánt sorrend (előbb egyes szavak, utána
+kifejezések). Az A4 ennek megfelelően: fokozatonként ≥ 20 tétel, 0. alfok ≥ 20 szó, 2. alfok ≥ 20 kifejezés.

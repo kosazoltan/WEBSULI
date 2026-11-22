@@ -13,7 +13,7 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
    - A1/A3: `ladderItemStep` mindhárom nyelv kézi bankján (`WORD_LADDER_EN/DE/FR`) és szóbankján (`VOCAB_EN/DE/FR`,
      `vocabEntryStep`): véges pont, 0–14, `floor(step/3) ≥ tier`; pont ≥ 20 → szint ≥ 1, ≥ 40 → ≥ 2.
    - A2: fokozat-szintenként az átlagpont szigorúan nő; nyelv × szint × alfok ≥ max(10, 5 %).
-   - A4: `gradedLadderBank(items, grade)` évfolyam-sávonként: a sáv minden fokozatán ≥ 10 szó-tétel, és az 1–2. alfokon ≥ 1
+   - A4: `gradedLadderBank(items, lang, grade)` évfolyam-sávonként: a sáv minden fokozatán ≥ 20 tétel, a 0. alfokon ≥ 20 szó, a 2. alfokon ≥ 20
      kifejezés-tétel (kézi `phrase` / `everyday` kategória, szóbank `kind: "phrase"`).
    - A5/A6: `ladderStartStep(grade, level)`: 1. pálya = alap×3; pályánként nem csökken; ≤ (alap+1)×3; `ladderGradeWindow`.
    - A7: `createLadderStepSession`: 3 jó → +1; 2 rossz → −1; jó-jó-rossz-jó-jó → nem nő; sávban marad (12 jó / 12 rossz).
