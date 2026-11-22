@@ -66,6 +66,7 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "GET /api/design-assets/:id": "nyilvános arculati kép (csak olvasás)",
   "POST /api/lessons/arbiter": "nyilvános döntőbíró — Origin-allowlist + IP-korlát, munkamenet-jog nélkül",
   "POST /api/lessons/:lessonId/results": "tanulói eredmény e-mail az adminoknak — CSRF + korlát",
+  "POST /api/lessons/:lessonId/results/claim": "R51: a kör kilétének szerveres rögzítése az első válasznál (vendég is) — CSRF + saját korlát, csak közzétett lecke, levelet nem küld",
   "GET /api/advent/status": "adventi naptár — a kártya láthatósága; mellékhatás nélkül, flag mögött",
   "GET /api/advent/state": "adventi naptár — saját állapot olvasása; mellékhatás nélkül (sort nem hoz létre), IP-korlát",
   "POST /api/advent/grade": "adventi naptár — saját sor (évfolyam), CSRF + alanyonkénti és IP-korlát",
