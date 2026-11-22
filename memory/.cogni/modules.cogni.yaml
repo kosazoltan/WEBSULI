@@ -1,41 +1,43 @@
-# Cogni-format modulonkénti memória: modul → forrás, szerep, ellenőrzés
-# Frissítés: minden lezárt feladat után (a gépi „nincs új” jelölő tervezett, a feat/zaro-hurok-1 PR-ral érkezik).
+# Cogni modulindex — modul → követett könyvtár, fő fájlok, ellenőrző parancs (csak létező út / npm-parancs).
+# Őr: source/tests/memory-layer-refs-guard.test.ts
 
 cogni:
   kind: module_index
   name: websuli-modules
-  generated: 2026-11-22
-
   modules:
     - id: client
       path: source/client/src/
-      role: "React SPA: oldalak (pages/), komponensek (components/), játékmotor (game-engine/), lecke-futtató (lesson-runtime/)"
-      verify: "npm run gate:stage; UI-változásnál valódi böngészős próba (AGENTS.md)"
+      files:
+        - source/client/src/main.tsx
+        - source/client/src/App.tsx
+      verify: "npm run gate:stage"
     - id: server
       path: source/server/
-      role: "Express API: útvonalak (routes.ts, routes/, app-routes.ts), DB-kapcsolat (db.ts), Stúdió (studio/), adventi naptár (advent/)"
-      verify: "source/tests/*.test.ts (npm run gate:stage a változott fájlok tesztjeivel)"
+      files:
+        - source/server/index.ts
+        - source/server/routes.ts
+        - source/server/db.ts
+      verify: "npm run gate:stage"
     - id: shared
       path: source/shared/
-      role: "közös réteg: Drizzle-séma (schema.ts), szerződések és tiszta segédek"
-      verify: "a migráció és a séma együtt változik (AGENTS.md Review guidelines)"
+      files:
+        - source/shared/schema.ts
+      verify: "npm run check"
     - id: migrations
       path: source/migrations/
-      role: "SQL-migrációk"
-      verify: "migráció ↔ Drizzle-séma egyezés"
     - id: tests
       path: source/tests/
-      role: "egység- és őr-tesztek (*-guard.test.ts), node --test + tsx"
-      verify: "npm run gate:stage minden őr-tesztet futtat"
+      verify: "npm run test"
     - id: qa
       path: scripts/qa/
-      role: "minőségkapuk (gates/, benne record-review.mjs), hookok (hooks/), háromfázis-ellenőrzés"
-      verify: "node --test scripts/qa/*.test.mjs scripts/qa/gates/*.test.mjs scripts/qa/hooks/*.test.mjs"
+      files:
+        - scripts/qa/three-phase-check.mjs
+        - scripts/qa/gates/record-review.mjs
+      verify: "node --test scripts/qa/gates/*.test.mjs scripts/qa/hooks/*.test.mjs"
     - id: specs
       path: docs/specs/
-      role: "terv + végrehajtási utasítás (háromfázisú munka)"
       verify: "node scripts/qa/three-phase-check.mjs"
     - id: skills
       path: .agents/skills/
-      role: "repó-saját skillek; tükör a .claude/skills/ alatt CSAK a scripts/qa/gates/gates.config.json mirroredSkills listájának skilljeire"
+      mirror: .claude/skills/
       verify: "node scripts/qa/gates/skills-sync-check.mjs"
