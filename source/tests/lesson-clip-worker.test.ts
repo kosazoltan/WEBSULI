@@ -629,12 +629,19 @@ test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn 
     lookup: () => new Promise((resolve) => { resolveLookup = resolve; }),
     request: async () => { sent++; return toRaw(new Response("x")); },
   };
-  const started = Date.now();
-  await assert.rejects(safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(50) }, { sameOrigin: false, transport }));
-  assert.ok(Date.now() - started < 2000, `a függő DNS nem tartja fel (${Date.now() - started} ms)`);
-  resolveLookup([{ address: "93.184.216.34", family: 4 }]);
-  await new Promise((r) => setTimeout(r, 10));
-  assert.equal(sent, 0, "a későn beérő feloldás után sem indul kérés");
+  // Az AbortSignal.timeout időzítője nem tartja életben a folyamatot (unref): ha más függő munka nincs, a futás az időkorlát előtt
+  // véget ér, és a teszt „cancelledByParent” lesz (felhős munkamenetben mérve, 2026-11-22). Az életben tartó időzítő ezt kizárja.
+  const keepAlive = setInterval(() => undefined, 1000);
+  try {
+    const started = Date.now();
+    await assert.rejects(safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(50) }, { sameOrigin: false, transport }));
+    assert.ok(Date.now() - started < 2000, `a függő DNS nem tartja fel (${Date.now() - started} ms)`);
+    resolveLookup([{ address: "93.184.216.34", family: 4 }]);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(sent, 0, "a későn beérő feloldás után sem indul kérés");
+  } finally {
+    clearInterval(keepAlive);
+  }
 });
 
 /** Véges, de a korlátnál nagyobb törzs, darabszámlálóval (a korlát nélküli olvasás is befejeződik — a teszt bukik, nem akad el). */
@@ -681,11 +688,17 @@ test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határide
     lookup: async () => [{ address: "93.184.216.34", family: 4 }],
     request: async () => ({ status: 200, headers: {}, body: { [Symbol.asyncIterator]: () => ({ next: () => new Promise<IteratorResult<Uint8Array>>(() => undefined) }) }, destroy: () => { destroyed++; } }),
   };
-  const started = Date.now();
-  const res = await safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(100) }, { sameOrigin: false, transport });
-  await assert.rejects(res.arrayBuffer());
-  assert.ok(Date.now() - started < 2000, `az elakadt törzs nem tartja fel (${Date.now() - started} ms)`);
-  assert.ok(destroyed >= 1, "a kapcsolat lezárul");
+  // Lásd a DNS-tesztet: az AbortSignal.timeout időzítője unref, az életben tartó időzítő nélkül a futás idő előtt véget érhet.
+  const keepAlive = setInterval(() => undefined, 1000);
+  try {
+    const started = Date.now();
+    const res = await safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(100) }, { sameOrigin: false, transport });
+    await assert.rejects(res.arrayBuffer());
+    assert.ok(Date.now() - started < 2000, `az elakadt törzs nem tartja fel (${Date.now() - started} ms)`);
+    assert.ok(destroyed >= 1, "a kapcsolat lezárul");
+  } finally {
+    clearInterval(keepAlive);
+  }
 });
 
 // docs/specs/2026-11-22-kisfilm-videomodell.md — a megszűnt Seedance 1.5 helyett beállítható modell és felbontás.

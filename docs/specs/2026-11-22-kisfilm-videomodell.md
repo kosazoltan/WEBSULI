@@ -55,6 +55,13 @@ a 480p és a 720p képkockája szemre azonos (összevetve). A stílus rajzfilmsz
 - A felhős munkamenetben a gyártósor videólépése a védett letöltő saját DNS-feloldása miatt nem fut (`getaddrinfo ENOTFOUND openrouter.ai` —
   a proxy mögött); ez környezeti korlát, a Renderen nincs ilyen. A modellt ezért közvetlen API-próbával mértük.
 
+- **Tesztstabilitás (mérve, 2026-11-22):** a `lesson-clip-worker.test.ts` két meglévő tesztje („a DNS-feloldás várakozását…”,
+  „az elakadt letöltési törzs…”) csak `AbortSignal.timeout`-ra vár. Ennek az időzítője Node-ban nem tartja életben a folyamatot
+  (unref), ezért függő munka nélkül a futás idő előtt véget ér: a teszt és a mögötte állók „cancelledByParent” lesznek. Felhős
+  munkamenetben a változatlan mainen is mérve (3 lemondott teszt); a CI-ban más függő munka miatt nem jön elő. Javítás: a két teszt
+  a futása alatt egy életben tartó időzítőt tart (`setInterval` + `clearInterval`). Az állítások nem változnak, csak a futás lesz
+  determinisztikus.
+
 ## Elfogadás (EARS)
 
 - AMIKOR nincs `LESSON_CLIP_VIDEO_MODEL`, a beküldés modellje `bytedance/seedance-2.0-mini`, a felbontása `480p`.
