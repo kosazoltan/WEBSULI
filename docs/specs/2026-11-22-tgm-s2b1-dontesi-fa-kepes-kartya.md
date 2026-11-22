@@ -80,3 +80,6 @@ csomópont. `pictureCards` `{ cards: 2..8 × { label ≤ 40, svg ≤ 6000 (a meg
 - **NYITOTT (tulajdonosi döntés):** a forrásleltár fája legfeljebb 4 szint és szintenként 4 ág lehet, a megjelenítő 3 szintet és 13
   csomópontot enged. A nagyobb forrásfa ma nem jeleníthető meg teljesen (a fedettségi kapu élesben `report` módban van, tehát nem
   blokkol). A határok összehangolása vagy a fa bontása az S3a (ábrák a forrásra kötve) tervezési kérdése.
+- **Vak kör 4 (L8) — a gyártási kapu és az olvasási út szétválasztva:** a kilógó felirat ellenőrzése a `visualAuthoringProblems`-ben
+  (az ábrák állomása hívja), NEM a `visualParamProblems`-ben — azt a lejátszó is hívja (`sourceVisualProblems`), ott a hiba a blokk
+  elrejtését jelentené. A hely becslése a tisztító koordinátaszámításával egyezik (`svgLength`: szám, px, em, ex; `dx` / `dy`).

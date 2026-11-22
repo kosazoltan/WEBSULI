@@ -1,5 +1,5 @@
 import DOMPurify from "isomorphic-dompurify";
-import { enforceIllustrationContrast, illustrationTextProblems, ILLUSTRATION_PAPER, themeDependentTexts } from "./svg-contrast";
+import { enforceIllustrationContrast, illustrationTextProblems, ILLUSTRATION_PAPER, svgLength, themeDependentTexts } from "./svg-contrast";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md, 2. szelet): szabad SVG-illusztráció.
@@ -214,9 +214,14 @@ export function illustrationLayoutProblems(svg: string): string[] {
       const content = (part.textContent ?? "").trim();
       if (!content) continue;
       const fs = parseFloat(inherited(part, "font-size") ?? "16");
-      const x = parseFloat(part.getAttribute("x") ?? text.getAttribute("x") ?? "0");
-      const y = parseFloat(part.getAttribute("y") ?? text.getAttribute("y") ?? "0");
-      if (!Number.isFinite(fs) || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (!Number.isFinite(fs)) continue;
+      // Vak kör 4 (L8): a hely a tisztító koordinátaszámításával egyezően — egység nélküli szám, px, em, ex (`svgLength`), és a dx / dy
+      // eltolás is számít. Nem számolható hely (pl. %) → a felirat kimarad a becslésből (nem hamis riasztás).
+      const coord = (name: string) => svgLength(part.getAttribute(name) ?? (part === text ? null : text.getAttribute(name)), fs);
+      const [px, py, dx, dy] = ["x", "y", "dx", "dy"].map(coord);
+      if (px === null || py === null || dx === null || dy === null) continue;
+      const x = (px ?? 0) + (dx ?? 0);
+      const y = (py ?? 0) + (dy ?? 0);
       if (fs * (PHONE_WIDTH_PX / vw) < MIN_FONT_PX) small.add(content);
       const w = content.length * fs * 0.55;
       const anchor = inherited(part, "text-anchor") ?? "start";

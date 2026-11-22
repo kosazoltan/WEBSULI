@@ -253,16 +253,24 @@ export function visualParamProblems(kind: string, params: unknown): string[] {
   const schema = (VISUAL_PARAM_SCHEMAS as Record<string, z.ZodTypeAny>)[kind];
   if (!schema) return [];
   const parsed = schema.safeParse(params);
-  if (!parsed.success) return parsed.error.issues.map((i) => `${kind}.${i.path.join(".") || "params"}: ${i.message}`);
-  // Review #533 (Codex, Vercel): a képes kártya rajza ugyanazt az elrendezés-ellenőrzést kapja, mint az `illustration` ábra — a
-  // rajzterületről kilógó feliratot a kártya levágná. Csak a GYÁRTÁSI kapu része: a tárolt lecke megjelenítése (a séma) nem változik.
-  if (kind === "pictureCards") {
-    return (parsed.data as { cards: Array<{ svg: string }> }).cards.flatMap((card, index) => {
-      const check = sanitizeIllustration(card.svg);
-      return (check.ok ? illustrationLayoutProblems(check.svg) : check.problems).map((p) => `pictureCards.cards.${index}.svg: ${p}`);
-    });
-  }
-  return [];
+  return parsed.success ? [] : parsed.error.issues.map((i) => `${kind}.${i.path.join(".") || "params"}: ${i.message}`);
+}
+
+/**
+ * A GYÁRTÁSI kapu ellenőrzése (az ábrák állomása: `server/studio/visual-patch.ts`): a kirajzolhatóságon (`visualParamProblems`) felül
+ * minőségi szabályok, amelyek NEM érvényesek a tárolt lecke megjelenítésére. Review #533 (Codex, Vercel, Copilot) + vak kör 4 (L8): a
+ * képes kártya rajzának kilógó felirata a gyártásban visszamegy javításra, de a lejátszó (`sourceVisualProblems`) a már tárolt kártyát
+ * emiatt nem rejtheti el — a két út ezért külön függvény.
+ */
+export function visualAuthoringProblems(kind: string, params: unknown): string[] {
+  const problems = visualParamProblems(kind, params);
+  if (problems.length || kind !== "pictureCards") return problems;
+  const parsed = pictureCardsParamsSchema.safeParse(params);
+  if (!parsed.success) return problems;
+  return parsed.data.cards.flatMap((card, index) => {
+    const check = sanitizeIllustration(card.svg);
+    return (check.ok ? illustrationLayoutProblems(check.svg) : check.problems).map((p) => `pictureCards.cards.${index}.svg: ${p}`);
+  });
 }
 
 export function parseVisualParams<K extends VisualParamKind>(kind: K, params: unknown): z.infer<(typeof VISUAL_PARAM_SCHEMAS)[K]> | null {
