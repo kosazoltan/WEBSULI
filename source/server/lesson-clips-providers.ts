@@ -1,7 +1,4 @@
 import { execFile } from "node:child_process";
-import dns from "node:dns";
-import https from "node:https";
-import net from "node:net";
 import { createWriteStream, readdirSync, rmSync, statSync } from "node:fs";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { Readable, Transform } from "node:stream";
@@ -10,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { logger } from "./lib/logger";
-import { checkFetchUrl, isPublicAddress, type ResolvedAddress } from "./studio/safe-fetch";
+import { openPublicResponse, type AddressLookup, type RawRequest, type RawResponse } from "./studio/safe-fetch";
 import { CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, ClipAbortError, type ClipDeps } from "./lesson-clips";
 
 /**
@@ -23,28 +20,29 @@ export const CLIP_IMAGE_MODEL_OPENAI = "gpt-image-2.5-flare";
 export const CLIP_IMAGE_MODEL_OPENROUTER = "bytedance-seed/seedream-5-0-pro";
 const OPENROUTER = "https://openrouter.ai/api/v1";
 const OPENROUTER_ORIGIN = new URL(OPENROUTER).origin;
-/** A szolgáltatói válaszban kapott cím feloldva; csak HTTPS (különben null). */
 /**
- * Szolgáltatói kérés kézzel követett átirányítással (2. vak kör L7): minden lépés csak HTTPS; a kulcs (Authorization) csak a
- * szolgáltató saját originjére megy; `sameOrigin` mellett (hitelesített lekérdezés) a lánc nem hagyhatja el a szolgáltatót.
+ * A szolgáltatói címek szállítása (Copilot-review #418, SSRF; I/O-osztály leltár): a védett út a már élesben futó
+ * `server/studio/safe-fetch.ts` közös magja (`openPublicResponse`) — saját HTTP-adapter nincs. Tesztben a feloldás és a nyers kérés
+ * csonkolható (`AddressLookup`, `RawRequest`); élesben a `safe-fetch` alapértelmezései (`dns.lookup`, rögzített címre menő `https`).
  */
-/**
- * A szolgáltatói címek szállítása (Copilot-review #418, SSRF): `lookup` a gépnév feloldása, `send` a kérés a MÁR ELLENŐRZÖTT címre
- * rögzítve (nincs DNS-rebinding rés). Élesben `dns.lookup` + `https.request` rögzített `lookup`-pal; tesztben csonkolható.
- */
-export type ProviderTransport = {
-  lookup: (host: string) => Promise<ResolvedAddress[]>;
-  send: (url: URL, address: ResolvedAddress, init: RequestInit & { headers: Record<string, string> }) => Promise<Response>;
-};
+export type ProviderTransport = { lookup?: AddressLookup; request?: RawRequest };
+/** A szolgáltatói választörzsek bájtkorlátja (I/O-osztály leltár): JSON-szöveg, kép (base64 JSON), hang. */
+export const CLIP_RESPONSE_LIMITS = { text: 1024 * 1024, image: 24 * 1024 * 1024, audio: 8 * 1024 * 1024 } as const;
+/** A lekérdezés JSON-jának bájtkorlátja (4. vak kör L1). */
+const POLL_LIMIT = 256 * 1024;
 const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
 /**
- * A Node-válasz webes folyamként. 4. vak kör L1: Node 24-en mérve a `Readable.toWeb` alapértelmezése is visszanyom (lassú fogyasztónál
+ * A Node-válasz webes folyamként. 4. vak kör L1: Node 24-en mérve a `Readable.toWeb` alapértelmezése visszanyom (lassú fogyasztónál
  * kb. 32 KiB-ot tölt elő); a teszt ezt a korlátot rögzíti, hogy egy Node-frissítés se tehesse korlátlanná.
  */
 export const webBody = (res: Readable): ReadableStream<Uint8Array> => Readable.toWeb(res) as ReadableStream<Uint8Array>;
-/** A válasz szövege legfeljebb `max` bájtig; fölötte a törzs lezárul és hiba (4. vak kör L1: a lekérdezés JSON-ja). */
+/** A válasz szövege legfeljebb `max` bájtig; fölötte a törzs lezárul és hiba (I/O-osztály leltár: minden szolgáltatói törzs). */
 export async function readLimitedText(res: Response, max: number): Promise<string> {
-  if (!res.body) return "";
+  return (await readLimitedBytes(res, max)).toString("utf8");
+}
+/** A válasz bájtjai legfeljebb `max` bájtig; fölötte a törzs lezárul és hiba. */
+export async function readLimitedBytes(res: Response, max: number): Promise<Buffer> {
+  if (!res.body) return Buffer.alloc(0);
   const reader = res.body.getReader();
   const parts: Uint8Array[] = [];
   let size = 0;
@@ -55,67 +53,35 @@ export async function readLimitedText(res: Response, max: number): Promise<strin
     if (size > max) { await reader.cancel().catch(() => undefined); throw new Error(`a szolgáltatói válasz nagyobb ${max} bájtnál`); }
     parts.push(value);
   }
-  return Buffer.concat(parts).toString("utf8");
+  return Buffer.concat(parts);
 }
-/** Az ígéret várakozása versenyez a megszakítójellel (időkorlát / leállítás) — 4. vak kör L2: a DNS-feloldás sem akaszthat. */
-function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | null | undefined): Promise<T> {
-  if (!signal) return promise;
-  return new Promise<T>((resolve, reject) => {
-    if (signal.aborted) { reject(signal.reason ?? new Error("megszakítva")); return; }
-    const onAbort = () => reject(signal.reason ?? new Error("megszakítva"));
-    signal.addEventListener("abort", onAbort, { once: true });
-    promise.then((value) => { signal.removeEventListener("abort", onAbort); resolve(value); }, (error) => { signal.removeEventListener("abort", onAbort); reject(error); });
-  });
+/** A nyers (Node) válasz webes `Response`-ként; a határidő / leállítás jelére a kapcsolat lezárul, a törzs olvasása hibával áll le. */
+function rawToResponse(raw: RawResponse, signal: AbortSignal): Response {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(raw.headers)) if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+  if (NULL_BODY_STATUS.has(raw.status)) { raw.destroy(); return new Response(null, { status: raw.status, headers }); }
+  const stream = raw.body instanceof Readable ? raw.body : Readable.from(raw.body, { objectMode: false });
+  const onAbort = () => { raw.destroy(); stream.destroy(signal.reason instanceof Error ? signal.reason : new Error("megszakítva")); };
+  if (signal.aborted) onAbort(); else signal.addEventListener("abort", onAbort, { once: true });
+  stream.once("close", () => signal.removeEventListener("abort", onAbort));
+  return new Response(webBody(stream), { status: raw.status, headers });
 }
-export const defaultProviderTransport: ProviderTransport = {
-  lookup: async (host) => (net.isIP(host) ? [{ address: host, family: net.isIP(host) }] : dns.promises.lookup(host, { all: true, verbatim: true })),
-  send: (url, address, init) => new Promise<Response>((resolve, reject) => {
-    const pinnedLookup = (_host: string, options: { all?: boolean } | number, callback: (...args: unknown[]) => void) => {
-      if (typeof options === "object" && options?.all) callback(null, [{ address: address.address, family: address.family }]);
-      else callback(null, address.address, address.family);
-    };
-    const host = url.hostname.replace(/^\[|\]$/g, "");
-    const req = https.request({
-      protocol: "https:", hostname: host, servername: net.isIP(host) ? undefined : host, port: 443, path: `${url.pathname}${url.search}`,
-      method: init.method ?? "GET", headers: init.headers, lookup: pinnedLookup as never, signal: init.signal ?? undefined,
-    }, (res) => {
-      const headers = new Headers();
-      for (const [name, value] of Object.entries(res.headers)) if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
-      const status = res.statusCode ?? 502;
-      if (NULL_BODY_STATUS.has(status)) { res.resume(); resolve(new Response(null, { status, headers })); return; }
-      resolve(new Response(webBody(res), { status, headers }));
-    });
-    req.on("error", reject);
-    req.end();
-  }),
-};
 
 /**
- * Szolgáltatói kérés kézzel követett átirányítással (2. vak kör L7; Copilot-review #418): MINDEN lépés csak HTTPS, alapértelmezett
- * port, hitelesítő adat nélkül, nem belső gépnév (`checkFetchUrl`); a gépnév MINDEN feloldott címe nyilvános (`isPublicAddress`), és a
- * kapcsolat az ellenőrzött címre megy. A kulcs (Authorization) csak a szolgáltató saját originjére; `sameOrigin` mellett (hitelesített
+ * Szolgáltatói kérés a védett úton (2. vak kör L7; Copilot-review #418; 4. vak kör L2): minden lépés (átirányítás is) `checkFetchUrl`,
+ * a feloldott címek mind nyilvánosak, a kapcsolat az ellenőrzött címre rögzítve; a DNS, a kérés és a törzs olvasása a `signal`-lal
+ * (időkorlát + leállítás) megszakad. A kulcs (Authorization) csak a szolgáltató saját originjére; `sameOrigin` mellett (hitelesített
  * lekérdezés) a lánc nem hagyhatja el a szolgáltatót.
  */
-export async function safeProviderFetch(url: URL, init: RequestInit & { headers: Record<string, string> }, opts: { sameOrigin: boolean; maxHops?: number; transport?: ProviderTransport }): Promise<Response> {
-  const transport = opts.transport ?? defaultProviderTransport;
-  let current = url;
-  for (let hop = 0; ; hop++) {
-    if (current.protocol !== "https:") throw new Error("a szolgáltatói cím nem HTTPS");
-    if (opts.sameOrigin && current.origin !== OPENROUTER_ORIGIN) throw new Error("idegen originre mutató szolgáltatói cím");
-    checkFetchUrl(current.href);
-    const host = current.hostname.replace(/^\[|\]$/g, "");
-    const addresses = await untilAborted(transport.lookup(host), init.signal);
-    if (!addresses.length || addresses.some((a) => !isPublicAddress(a.address))) throw new Error(`nem nyilvános címre oldódik fel: ${host}`);
-    const headers = current.origin === OPENROUTER_ORIGIN ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
-    // A későn beérő feloldás után (lejárt időkorlát / leállítás) nem indul kérés.
-    init.signal?.throwIfAborted();
-    const res = await transport.send(current, addresses[0], { ...init, headers });
-    const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
-    if (!location) return res;
-    await res.body?.cancel().catch(() => undefined);
-    if (hop >= (opts.maxHops ?? 3)) throw new Error("túl sok átirányítás");
-    current = new URL(location, current);
-  }
+export async function safeProviderFetch(url: URL, init: { headers: Record<string, string>; signal?: AbortSignal }, opts: { sameOrigin: boolean; maxHops?: number; transport?: ProviderTransport }): Promise<Response> {
+  const signal = init.signal ?? AbortSignal.timeout(60_000);
+  const withoutKey = Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
+  const { response } = await openPublicResponse(url.href, {
+    timeoutMs: 60_000, maxRedirects: opts.maxHops ?? 3, lookup: opts.transport?.lookup, request: opts.transport?.request,
+    allowUrl: opts.sameOrigin ? (next) => next.origin === OPENROUTER_ORIGIN : undefined,
+    headersFor: (next) => (next.origin === OPENROUTER_ORIGIN ? init.headers : withoutKey),
+  }, signal);
+  return rawToResponse(response, signal);
 }
 function providerUrl(raw: string): URL | null {
   try { const url = new URL(raw, OPENROUTER); return url.protocol === "https:" ? url : null; } catch { return null; }
@@ -190,8 +156,9 @@ async function fetchPatiently(send: () => Promise<Response>, waitMs = 2500): Pro
   for (let attempt = 1; ; attempt++) {
     const res = await send();
     if (res.status !== 429 || attempt >= 3) return res;
-    await res.arrayBuffer().catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, waitMs * attempt));
+    await res.body?.cancel().catch(() => undefined);
+    // A várakozás a leállítás jelére azonnal megszakad (I/O-osztály leltár).
+    await pause(waitMs * attempt);
   }
 }
 
@@ -346,16 +313,21 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   try { const v = JSON.parse(text.slice(start, end + 1)); return v && typeof v === "object" && !Array.isArray(v) ? v : null; } catch { return null; }
 }
 
-export function clipProviders(keys: ClipKeys, transport: ProviderTransport = defaultProviderTransport): ClipDeps {
+export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {}): ClipDeps {
   const secrets = [keys.openRouter, keys.openAi, keys.elevenLabs].filter((k): k is string => !!k);
   const scrub = (text: string) => secrets.reduce((out, key) => out.split(key).join("[kulcs]"), text).slice(0, 200);
   const fail = (what: string, status: number, body: string) => new Error(`${what}: HTTP ${status} ${scrub(body)}`);
+  /** A szolgáltatói törzs szövege bájtkorláttal (I/O-osztály leltár); hibás státusznál a (korlátos) törzzsel együtt hiba. */
+  const bodyText = async (what: string, res: Response, max: number = CLIP_RESPONSE_LIMITS.text): Promise<string> => {
+    const text = await readLimitedText(res, max);
+    if (!res.ok) throw fail(what, res.status, text);
+    return text;
+  };
   const orHeaders = { Authorization: `Bearer ${keys.openRouter}`, "Content-Type": "application/json", "HTTP-Referer": "https://websuli.vip", "X-Title": "WebSuli lesson clips" };
   const dataUrl = (image: { bytes: Buffer; mime: string }) => `data:${image.mime};base64,${image.bytes.toString("base64")}`;
   const orChat = async (system: string, content: unknown, maxTokens: number): Promise<string> => {
     const res = await fetch(`${OPENROUTER}/chat/completions`, { method: "POST", headers: orHeaders, signal: signal(90_000), body: JSON.stringify({ model: CLIP_TEXT_MODEL, max_tokens: maxTokens, temperature: 0.4, messages: [{ role: "system", content: system }, { role: "user", content }] }) });
-    const text = await res.text();
-    if (!res.ok) throw fail("forgatókönyv", res.status, text);
+    const text = await bodyText("forgatókönyv", res);
     const choice = (JSON.parse(text) as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }> }).choices?.[0];
     if (choice?.finish_reason === "length") logger.warn("[lesson-clips] a modellválasz csonkolódott (finish_reason=length)");
     return choice?.message?.content ?? "";
@@ -366,15 +338,13 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = def
     async image(prompt) {
       if (keys.openAi) {
         const res = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", signal: signal(120_000), headers: { Authorization: `Bearer ${keys.openAi}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: CLIP_IMAGE_MODEL_OPENAI, prompt, size: "1280x720", quality: "medium", output_format: "jpeg", n: 1 }) });
-        const text = await res.text();
-        if (!res.ok) throw fail("kép", res.status, text);
+        const text = await bodyText("kép", res, CLIP_RESPONSE_LIMITS.image);
         const b64 = (JSON.parse(text) as { data?: Array<{ b64_json?: string }> }).data?.[0]?.b64_json;
         if (!b64) throw new Error("kép: üres válasz");
         return { bytes: Buffer.from(b64, "base64"), mime: "image/jpeg" };
       }
       const res = await fetch(`${OPENROUTER}/images`, { method: "POST", headers: orHeaders, signal: signal(120_000), body: JSON.stringify({ model: CLIP_IMAGE_MODEL_OPENROUTER, prompt, aspect_ratio: "16:9", resolution: "1K", n: 1 }) });
-      const text = await res.text();
-      if (!res.ok) throw fail("kép", res.status, text);
+      const text = await bodyText("kép", res, CLIP_RESPONSE_LIMITS.image);
       const img = (JSON.parse(text) as { data?: Array<{ b64_json?: string; media_type?: string }> }).data?.[0];
       const mime = img?.media_type ?? "image/png";
       if (!img?.b64_json || !/^image\/(jpeg|png|webp)$/.test(mime)) throw new Error("kép: üres vagy nem képtípusú válasz");
@@ -388,8 +358,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = def
     audioMs: mp3DurationMs,
     async video(image, prompt, seconds) {
       const submit = await fetch(`${OPENROUTER}/videos`, { method: "POST", headers: orHeaders, signal: signal(120_000), body: JSON.stringify({ model: CLIP_VIDEO_MODEL, prompt, duration: seconds, resolution: "720p", aspect_ratio: "16:9", generate_audio: false, frame_images: [{ type: "image_url", image_url: { url: dataUrl(image) }, frame_type: "first_frame" }] }) });
-      const submitted = await submit.text();
-      if (!submit.ok) throw fail("mozgókép", submit.status, submitted);
+      const submitted = await bodyText("mozgókép", submit);
       let job = JSON.parse(submitted) as { status?: string; polling_url?: string; unsigned_urls?: string[]; error?: unknown };
       // A hitelesített lekérdezés csak a szolgáltató saját HTTPS-originjére mehet (vak kör L8).
       const pollingUrl = job.polling_url ? providerUrl(job.polling_url) : null;
@@ -399,7 +368,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = def
         if (Date.now() > deadline) throw new Error("mozgókép: időtúllépés");
         await pause(VIDEO_POLL_MS);
         const poll = await safeProviderFetch(pollingUrl, { headers: orHeaders, signal: signal(60_000) }, { sameOrigin: true, transport });
-        if (poll.ok) job = JSON.parse(await readLimitedText(poll, 256 * 1024));
+        if (poll.ok) job = JSON.parse(await readLimitedText(poll, POLL_LIMIT));
         else await poll.body?.cancel().catch(() => undefined);
       }
       if (job.status !== "completed" || !job.unsigned_urls?.[0]) throw new Error(`mozgókép: ${job.status} ${scrub(JSON.stringify(job.error ?? ""))}`);
@@ -413,8 +382,8 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = def
     const key = keys.elevenLabs;
     deps.speech = async (text, voice) => {
       const res = await elevenLabsQueue(() => fetchPatiently(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}?output_format=${CLIP_AUDIO_FORMAT}`, { method: "POST", signal: signal(60_000), headers: { "xi-api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ text, model_id: voice.model, language_code: "hu" }) })));
-      if (!res.ok) throw fail("hang", res.status, await res.text());
-      return Buffer.from(await res.arrayBuffer());
+      if (!res.ok) throw fail("hang", res.status, await readLimitedText(res, CLIP_RESPONSE_LIMITS.text));
+      return readLimitedBytes(res, CLIP_RESPONSE_LIMITS.audio);
     };
     // Hangkapu tartaléka: az ElevenLabs saját felismerője. Mérve 2026-11-10: a saját hangját a független felismerőnél elnézőbben
     // hallja (egy érthetetlen mondatot hibátlannak írt vissza), ezért csak akkor ez a kapu, ha nincs OpenAI-kulcs.
@@ -427,8 +396,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = def
         return form;
       };
       const res = await elevenLabsQueue(() => fetchPatiently(() => fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", signal: signal(60_000), headers: { "xi-api-key": key }, body: body() })));
-      const text = await res.text();
-      if (!res.ok) throw fail("hangkapu", res.status, text);
+      const text = await bodyText("hangkapu", res);
       return String((JSON.parse(text) as { text?: unknown }).text ?? "");
     };
   }
@@ -441,8 +409,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = def
       form.append("model", CLIP_HEAR_MODEL_OPENAI);
       form.append("language", "hu");
       const res = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", signal: signal(60_000), headers: { Authorization: `Bearer ${key}` }, body: form });
-      const text = await res.text();
-      if (!res.ok) throw fail("hangkapu", res.status, text);
+      const text = await bodyText("hangkapu", res);
       return String((JSON.parse(text) as { text?: unknown }).text ?? "");
     };
   }

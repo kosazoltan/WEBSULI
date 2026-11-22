@@ -10,12 +10,15 @@ import {
   type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
-import { CLIP_TMP_PREFIX, clipKeys, clipProviders, downloadAndShrink, readLimitedText, safeProviderFetch, sweepStaleClipDirs, webBody, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
+import { CLIP_TMP_PREFIX, clipKeys, clipProviders, CLIP_RESPONSE_LIMITS, downloadAndShrink, readLimitedText, safeProviderFetch, sweepStaleClipDirs, webBody, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
+import type { RawResponse } from "../server/studio/safe-fetch";
 import { Readable } from "node:stream";
+/** Webes válasz → a `safe-fetch` nyers válasza (a csonkolt szállításhoz). */
+const toRaw = (res: Response): RawResponse => ({ status: res.status, headers: Object.fromEntries(res.headers), body: (res.body as unknown as AsyncIterable<Uint8Array> | null) ?? (async function* () { /* üres törzs */ })(), destroy: () => { void res.body?.cancel().catch(() => undefined); } });
 /** Csonkolt szállítás: nyilvános címre old fel, és a (csonkolt) globális fetch-csel küld — valódi DNS és hálózat nélkül. */
 const testTransport: ProviderTransport = {
   lookup: async () => [{ address: "93.184.216.34", family: 4 }],
-  send: (url, _address, init) => fetch(url, { ...init, redirect: "manual" }),
+  request: async (url, _address, _timeoutMs, signal, headers) => toRaw(await fetch(url, { headers, signal, redirect: "manual" })),
 };
 
 import { settleClips } from "../client/src/lesson-runtime/clips/useLessonClips";
@@ -535,7 +538,7 @@ test("átirányítás: minden lépés csak HTTPS, a kulcs csak a szolgáltató o
   }) as typeof fetch;
   const auth = { Authorization: "Bearer titok" };
   try {
-    await assert.rejects(safeProviderFetch(new URL("https://cdn.example/a"), { headers: {} }, { sameOrigin: false, transport: testTransport }), /HTTPS/);
+    await assert.rejects(safeProviderFetch(new URL("https://cdn.example/a"), { headers: {} }, { sameOrigin: false, transport: testTransport }), /https/i);
     assert.ok(!seen.some((s) => s.url.startsWith("http:")), "titkosítatlan címre nem megy kérés");
     seen.length = 0;
     const res = await safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1/content"), { headers: auth }, { sameOrigin: false, transport: testTransport });
@@ -543,7 +546,7 @@ test("átirányítás: minden lépés csak HTTPS, a kulcs csak a szolgáltató o
     assert.deepEqual(seen.map((s) => [s.url, s.auth]), [["https://openrouter.ai/api/v1/videos/1/content", "Bearer titok"], ["https://cdn.example/c", null]], "idegen célra kulcs nélkül");
     assert.ok(seen.every((s) => s.redirect === "manual"), "az átirányítást a kód követi, nem a fetch");
     seen.length = 0;
-    await assert.rejects(safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1"), { headers: auth }, { sameOrigin: true, transport: testTransport }), /idegen/);
+    await assert.rejects(safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1"), { headers: auth }, { sameOrigin: true, transport: testTransport }), /Nem engedélyezett cél/);
     assert.ok(!seen.some((s) => s.url.startsWith("https://evil.example")), "a lekérdezés nem megy idegen originre");
   } finally {
     globalThis.fetch = realFetch;
@@ -556,10 +559,10 @@ test("SSRF: belső IP-re, belső címre feloldódó gépnévre, nem alapértelme
   const redirects: Record<string, string> = { "https://cdn.example/atiranyit": "https://belso.example/titok", "https://cdn.example/meta": "https://169.254.169.254/latest/meta-data" };
   const transport: ProviderTransport = {
     lookup: async (host) => (dnsTable[host] ?? []).map((address) => ({ address, family: 4 })),
-    send: async (url, address) => {
+    request: async (url, address) => {
       sent.push({ url: url.href, address: address.address });
       const location = redirects[url.href];
-      return location ? new Response(null, { status: 302, headers: { location } }) : new Response("mp4", { status: 200 });
+      return toRaw(location ? new Response(null, { status: 302, headers: { location } }) : new Response("mp4", { status: 200 }));
     },
   };
   const get = (raw: string) => safeProviderFetch(new URL(raw), { headers: {} }, { sameOrigin: false, transport });
@@ -623,7 +626,7 @@ test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn 
   let sent = 0, resolveLookup!: (v: Array<{ address: string; family: number }>) => void;
   const transport: ProviderTransport = {
     lookup: () => new Promise((resolve) => { resolveLookup = resolve; }),
-    send: async () => { sent++; return new Response("x"); },
+    request: async () => { sent++; return toRaw(new Response("x")); },
   };
   const started = Date.now();
   await assert.rejects(safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(50) }, { sameOrigin: false, transport }));
@@ -631,4 +634,55 @@ test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn 
   resolveLookup([{ address: "93.184.216.34", family: 4 }]);
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(sent, 0, "a későn beérő feloldás után sem indul kérés");
+});
+
+/** Véges, de a korlátnál nagyobb törzs, darabszámlálóval (a korlát nélküli olvasás is befejeződik — a teszt bukik, nem akad el). */
+function oversized(bytes: number) {
+  const chunk = 64 * 1024;
+  const state = { pulled: 0 };
+  const stream = new ReadableStream<Uint8Array>({ pull(controller) { if (state.pulled * chunk >= bytes) { controller.close(); return; } state.pulled++; controller.enqueue(new Uint8Array(chunk)); } });
+  return { stream, state, chunk };
+}
+
+test("I/O-leltár: minden szolgáltatói választörzs bájtkorlátos — a korlát fölött az olvasás megáll, a hívás hibával zárul (sikeres és hibás státusznál is)", async () => {
+  const realFetch = globalThis.fetch;
+  const image = { bytes: Buffer.from("x"), mime: "image/jpeg" };
+  const cases: Array<{ name: string; limit: number; status: number; call: () => Promise<unknown> }> = [];
+  const full = clipProviders({ openRouter: "k", openAi: "o", elevenLabs: "e" }, testTransport);
+  const orOnly = clipProviders({ openRouter: "k", elevenLabs: "e" }, testTransport);
+  for (const status of [200, 500]) {
+    cases.push(
+      { name: "forgatókönyv", limit: CLIP_RESPONSE_LIMITS.text, status, call: () => full.chat("s", "u") },
+      { name: "képkapu", limit: CLIP_RESPONSE_LIMITS.text, status, call: () => full.check(image, "jelenet") },
+      { name: "kép (OpenAI)", limit: CLIP_RESPONSE_LIMITS.image, status, call: () => full.image("p") },
+      { name: "kép (OpenRouter)", limit: CLIP_RESPONSE_LIMITS.image, status, call: () => orOnly.image("p") },
+      { name: "mozgókép-beküldés", limit: CLIP_RESPONSE_LIMITS.text, status, call: () => full.video!(image, "p", 5) },
+      { name: "hang", limit: CLIP_RESPONSE_LIMITS.audio, status, call: () => full.speech!("szöveg", STYLE.voice) },
+      { name: "hangkapu (OpenAI)", limit: CLIP_RESPONSE_LIMITS.text, status, call: () => full.hear!(Buffer.from("x")) },
+      { name: "hangkapu (ElevenLabs)", limit: CLIP_RESPONSE_LIMITS.text, status, call: () => orOnly.hear!(Buffer.from("x")) },
+    );
+  }
+  try {
+    for (const c of cases) {
+      const body = oversized(c.limit + 2 * 1024 * 1024);
+      globalThis.fetch = (async () => new Response(body.stream, { status: c.status })) as typeof fetch;
+      await assert.rejects(c.call(), Error, `${c.name} (${c.status})`);
+      assert.ok(body.state.pulled * body.chunk <= c.limit + 4 * body.chunk, `${c.name} (${c.status}): ${body.state.pulled * body.chunk} bájtot olvasott (korlát: ${c.limit})`);
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határideje megszakítja, a kapcsolat lezárul", async () => {
+  let destroyed = 0;
+  const transport: ProviderTransport = {
+    lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+    request: async () => ({ status: 200, headers: {}, body: { [Symbol.asyncIterator]: () => ({ next: () => new Promise<IteratorResult<Uint8Array>>(() => undefined) }) }, destroy: () => { destroyed++; } }),
+  };
+  const started = Date.now();
+  const res = await safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(100) }, { sameOrigin: false, transport });
+  await assert.rejects(res.arrayBuffer());
+  assert.ok(Date.now() - started < 2000, `az elakadt törzs nem tartja fel (${Date.now() - started} ms)`);
+  assert.ok(destroyed >= 1, "a kapcsolat lezárul");
 });

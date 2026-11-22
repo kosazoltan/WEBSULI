@@ -63,3 +63,25 @@ test("a 0044-es migráció és a Drizzle-séma egyezik: lesson_clip_media.orphan
   const { rows } = await db.execute(sql`SELECT data_type, is_nullable FROM information_schema.columns WHERE table_name = 'lesson_clip_media' AND column_name = 'orphaned_at'`);
   assert.deepEqual(rows, [{ data_type: "timestamp with time zone", is_nullable: "YES" }]);
 });
+
+test("I/O-leltár: a kisfilm-adatréteg minden lekérdezése időkorlátos (statement_timeout) — az elakadt lekérdezés megszakad", async () => {
+  const { withClipStatementTimeout } = await import("../server/lesson-clips-db");
+  const started = Date.now();
+  // A Drizzle a Postgres-hibát `cause`-ként csomagolja: az ok a statement_timeout.
+  await assert.rejects(withClipStatementTimeout((tx) => tx.execute(sql`SELECT pg_sleep(5)`), 200), (error: unknown) => /statement timeout/i.test(String((error as { cause?: unknown }).cause ?? error)));
+  assert.ok(Date.now() - started < 3000, `az elakadt lekérdezés nem tartja fel (${Date.now() - started} ms)`);
+  assert.deepEqual((await withClipStatementTimeout((tx) => tx.execute(sql`SELECT 1 AS ok`), 200)).rows, [{ ok: 1 }]);
+});
+
+test("I/O-leltár: a példányok közötti zár nem blokkol — foglalt zárnál a második kör azonnal kimarad, a zár a kör végén felszabadul", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const first = dbClipStore.exclusive(async () => { await held; return "első"; });
+  await new Promise((r) => setTimeout(r, 50));
+  const started = Date.now();
+  assert.equal(await dbClipStore.exclusive(async () => "második"), null, "foglalt zárnál nincs várakozás, a kör kimarad");
+  assert.ok(Date.now() - started < 2000);
+  release();
+  assert.equal(await first, "első");
+  assert.equal(await dbClipStore.exclusive(async () => "harmadik"), "harmadik", "a zár felszabadult");
+});

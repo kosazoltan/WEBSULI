@@ -2,6 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ClipAbortError } from "../server/lesson-clips";
 import { abortClipTranscodes, clipProviders, type ProviderTransport } from "../server/lesson-clips-providers";
+import type { RawResponse } from "../server/studio/safe-fetch";
+
+/** Webes válasz → a `safe-fetch` nyers válasza (a csonkolt szállításhoz). */
+const toRaw = (res: Response): RawResponse => ({ status: res.status, headers: Object.fromEntries(res.headers), body: (res.body as unknown as AsyncIterable<Uint8Array> | null) ?? (async function* () { /* üres törzs */ })(), destroy: () => { void res.body?.cancel().catch(() => undefined); } });
+
 
 // 2. vak kör L2 (docs/specs/2026-11-10-kisfilm-memoria-vegrehajtas.md): a leállítás a szolgáltatói várakozást is megszakítja (nem csak
 // a futó ffmpeg-et), így a kör — és vele az advisory lock DB-kapcsolata — a pool lezárása előtt felszabadul. Külön tesztfájl (külön
@@ -16,7 +21,7 @@ test("leállítás: a mozgókép-lekérdezés várakozása azonnal megszakad, é
   }) as typeof fetch;
   try {
     // A lekérdezés is a csonkolt fetch-re megy, valódi DNS nélkül.
-    const transport: ProviderTransport = { lookup: async () => [{ address: "104.18.2.115", family: 4 }], send: (url, _address, init) => fetch(url, { ...init, redirect: "manual" }) };
+    const transport: ProviderTransport = { lookup: async () => [{ address: "104.18.2.115", family: 4 }], request: async (url, _address, _timeoutMs, signal, headers) => toRaw(await fetch(url, { headers, signal, redirect: "manual" })) };
     const deps = clipProviders({ openRouter: "k" }, transport);
     const started = Date.now();
     const video = deps.video!({ bytes: Buffer.from("x"), mime: "image/jpeg" }, "p", 5);

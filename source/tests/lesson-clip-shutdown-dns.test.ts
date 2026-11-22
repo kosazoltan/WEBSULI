@@ -14,7 +14,7 @@ test("leállítás: a letöltés függő DNS-feloldása azonnal megszakad, kér�
   let sent = 0, lookups = 0;
   const transport: ProviderTransport = {
     lookup: () => { lookups++; return new Promise(() => undefined); },
-    send: async () => { sent++; return new Response("x"); },
+    request: async () => { sent++; throw new Error("nem indulhat kérés"); },
   };
   globalThis.fetch = (async () => new Response(JSON.stringify({ status: "completed", polling_url: "/api/v1/videos/1", unsigned_urls: ["https://cdn.example/v.mp4"] }), { status: 200 })) as typeof fetch;
   const own = () => readdirSync(tmpdir()).filter((name) => name.startsWith(`${CLIP_TMP_PREFIX}${process.pid}-`));
