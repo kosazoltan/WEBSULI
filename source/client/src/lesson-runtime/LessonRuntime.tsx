@@ -510,7 +510,9 @@ export function LessonRuntime({
   const clipHeadings = useMemo(() => lesson.sections.map((s) => s.heading), [lesson.sections]);
   // Változatos képválasztás: a lecke azonosítója szerint rotál (ugyanaz a lecke mindig ugyanazt kapja).
   // Spec 2026-11-20-tgm-valtozatossag-abrak (S5a): csak a változatossági jelölővel mentett leckén ad kódszótári visszajelzés-nyitást.
-  const feedbackVariety = useMemo(() => lesson.variety ? { marker: lesson.variety, band, mapId: lesson.mapId } : null, [lesson.variety, band, lesson.mapId]);
+  // S5a vak kör 1 (L3): a jelölt lecke előre felcsatolt, udvarias élő régiója — ide kerül a friss visszajelzés szövege.
+  const [feedbackAnnouncement, setFeedbackAnnouncement] = useState("");
+  const feedbackVariety = useMemo(() => lesson.variety ? { marker: lesson.variety, band, mapId: lesson.mapId, announce: setFeedbackAnnouncement } : null, [lesson.variety, band, lesson.mapId]);
   const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
   // Ikonkészlet: a mentéskor az adatbázisból rendelt ikon elsőbbséget kap; régi leckénél a katalógus-választás marad.
   // Ha a lecke évfolyama a mentés óta megváltozott (javítás), a más sávú ikon nem jelenik meg.
@@ -567,6 +569,7 @@ export function LessonRuntime({
     <ChoiceLayoutContext.Provider value={choiceLayout}>
     <FeedbackVarietyContext.Provider value={feedbackVariety}>
     <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
+      {feedbackVariety && <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="verdict-announcer">{feedbackAnnouncement}</div>}
       <ClipProvider lessonId={lessonId} headings={clipHeadings} sections={lesson.sections} preset={clipsPreset}>
       <article className="mx-auto py-6 space-y-6" data-testid="lesson-runtime">
         {/* Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a koncepciókép sávfejléce — jelvény, évfolyam, téma, mottó. */}

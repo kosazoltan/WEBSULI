@@ -15,7 +15,7 @@ import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { LESSON_OPENER_LEKTOR_CHECKLIST, lessonOpenerContract, playfulAuthorRules } from "../../shared/lesson-opener";
 import { lessonOpenerEnabled } from "./lesson-opener-flag";
-import { lessonVarietyEnabled } from "./lesson-variety-flag";
+import { effectiveLessonVariety } from "./lesson-variety-flag";
 import { VISUAL_WORLD_IDS, type VisualWorld } from "../../shared/lesson-visuals";
 import { evaluateOpenAnswer, missingAnswerConcepts } from "../../shared/lesson-experience-score";
 import { ownerInstructionPromptBlock, type OwnerInventory } from "../../shared/owner-instruction";
@@ -551,7 +551,7 @@ export function buildAuthorPrompt(
     LESSON_ARC_CONTRACT,
     LESSON_METHOD_CONTRACT,
     // Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2): kapcsolóval (alapból KI) — kikapcsolva a prompt bájtra változatlan.
-    ...(lessonOpenerEnabled() ? [lessonOpenerContract(map.classroom, { section0InScope: !repair || repair.targetSections.includes(0) }), playfulAuthorRules(lessonVarietyEnabled())] : []),
+    ...(lessonOpenerEnabled() ? [lessonOpenerContract(map.classroom, { section0InScope: !repair || repair.targetSections.includes(0) }), playfulAuthorRules(effectiveLessonVariety())] : []),
     // Spec 2026-10-14-tananyag-tomorseg-lefedettseg (S2): a korábbi „Ne rövidítsd vázlattá a bankok kedvéért” a hosszítás felé
     // tolt (mérve: medián 2210 látható szó); a tömörség és a teljesség együtt a mérce.
     "Most kizárólag a Tananyag lapot írd a sections tömbbe a hat megengedett blokktípussal. Az experience bankokat külön lépés gyártja; ha previousLesson experience mezőt tartalmaz, a bankszöveget nem kell újra kiírnod; a javított tanításból frissül.",

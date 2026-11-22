@@ -4,6 +4,8 @@ import { and, eq, ne, inArray } from "drizzle-orm";
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../shared/lesson-schema";
 import { lessonRepairSchema, modelLessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
 import { sourceVisualsEnabled } from "./source-visuals-flag";
+import { runWithLessonVariety } from "./lesson-variety-flag";
+import { carryVarietyMarker, storedVarietyMarker } from "../../shared/lesson-feedback-openers";
 import { drawableCandidate, withDropReason } from "./undrawable-visuals";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
@@ -151,7 +153,15 @@ export type RepairBankGates = (ctx: AnswerKeyContext, lesson: Lesson) => Pick<Ex
  */
 export type RepairBankOptions = { gates?: RepairBankGates; staleConceptIds?: Iterable<string> };
 
-export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } & RepairBankOptions = {}) {
+/**
+ * S5a vak kör 1 (L1 — kapcsoló-szivárgás): a javítás változatossági állapota a TÁROLT lecke jelölője (nem a környezet, nem a modell);
+ * a javítás minden olvasója (szerzői prompt, bank) ezt látja, és a jelölt jelölője is innen jön (`carryVarietyMarker`).
+ */
+export function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } & RepairBankOptions = {}) {
+  return runWithLessonVariety(storedVarietyMarker(original) !== undefined, () => buildStructuredImprovementScoped(original, source, call, instruction, progress, opts));
+}
+
+async function buildStructuredImprovementScoped(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } & RepairBankOptions = {}) {
   await workflowPhase("author");
   // Spec 2026-09-23: the teacher's request may carry documented source corrections and an explicit grade.
   const proposal = instruction || opts.transcript
@@ -230,7 +240,11 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
 }
 
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
-export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, bank: RepairBankOptions = {}) {
+export function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, bank: RepairBankOptions = {}) {
+  return runWithLessonVariety(storedVarietyMarker(original) !== undefined, () => finishStructuredImprovementScoped(original, carryVarietyMarker(candidate, original), source, call, progress, owner, bank));
+}
+
+async function finishStructuredImprovementScoped(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, bank: RepairBankOptions = {}) {
   const classroom = owner?.classroom ?? original.classroom;
   assertRepairTeaching(original, candidate, source, classroom);
   await workflowPhase("banks");
@@ -287,7 +301,8 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     const reviewed = { ...source, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}), concepts: applySourceCorrections(source.concepts, corrections) };
     const coverage = assertRepairCandidate(lessonSchema.parse(current.json), repair.candidate, reviewed, repair.classroom ?? lessonSchema.parse(current.json).classroom);
     // Review #274: az évfolyamot váltó javítás az új sáv arculatát kapja (ugyanaz a normalizálás, mint az upsertLesson-ben).
-    const candidate = await withLessonArt(repair.candidate, current.id, tx);
+    // S5a vak kör 1 (L1): a jelölő a zárolt, tárolt leckéből jön — a javításcsomagban tárolt (modelltől eredő) jelölő nem írható ki.
+    const candidate = await withLessonArt(carryVarietyMarker(repair.candidate, current.json), current.id, tx);
     if (workflowMode() === "apply") await workflowPhase("apply");
     await workflowFence(tx);
     const quiz = await tx.select().from(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));

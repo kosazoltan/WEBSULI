@@ -9,7 +9,7 @@
 import type { AgeBand } from "./lesson-schema";
 import { choiceSeed } from "./option-order";
 import { seedFrom, seededPick } from "./seeded";
-import { stripVerdictPrefix } from "./lesson-ui-text";
+import { capitalizeProse, stripVerdictPrefix } from "./lesson-ui-text";
 
 /** A lecke jelölőjének verziója: a lejátszó ebből tudja, hogy a nyitást a kód adja. */
 export const LESSON_VARIETY_VERSION = "valtozatossag-1";
@@ -80,20 +80,25 @@ export function feedbackOpener(kind: "right" | "wrong", band: AgeBand, key: stri
   return seededPick(FEEDBACK_OPENERS[band][kind], seedFrom(`${kind}\u0001${key}`))!;
 }
 
-// A régi, modell írta nyitás: a bátorító fordulat KÖZVETLENÜL írásjellel (és esetleg „de / azonban / ám” kötéssel) folytatva. A „Jó,
-// hogy…”, „Szépen látszik…”, „Majdnem minden…” tartalmi kezdet, nem vágódik (a fordulat után nem írásjel áll).
+// A régi, modell írta nyitás: CSAK az ismert bátorító fordulatok (zárt lista), KÖZVETLENÜL írásjellel (és esetleg „de / azonban / ám”
+// kötéssel) folytatva. A „Jó, hogy…”, „Szépen látszik…”, „Majdnem minden…” tartalmi kezdet, nem vágódik (a fordulat után nem írásjel áll).
+// S5a vak kör 1 (L2): a gondolatjel / kötőjel csak akkor elválasztó, ha nem szám előjele — „Jó próba -3 az eredmény” és „– 3” érintetlen.
+const SEPARATOR_DASH = String.raw`[–—-](?!\s*\d)`;
 const LEGACY_OPENER = new RegExp(
-  String.raw`^\s*(?:jó\s+próba(?:lkozás)?|szép\s+próbálkozás|ügyes\s+(?:gondolat|próbálkozás|próba)|jó\s+(?:gondolat|ötlet|megérzés|meglátás)` +
+  String.raw`^\s*(?:jó\s+prób(?:a|álkozás)|szép\s+próbálkozás|ügyes\s+(?:gondolat|próbálkozás|próba)|jó\s+(?:gondolat|ötlet|megérzés|meglátás)` +
     String.raw`|majdnem(?:\s+jó)?|szuper|remek|nagyszerű|kiváló|ügyes|szép\s+munka|jól\s+gondoltad)` +
-    String.raw`\s*(?:[,;:–—-]\s*(?:de|azonban|ám)(?=\s)|[.!,;:–—-])\s*`,
+    String.raw`\s*(?:(?:[,;:]|${SEPARATOR_DASH})\s*(?:de|azonban|ám)(?=\s)|[.!,;:]|${SEPARATOR_DASH})\s*`,
   "iu",
 );
 
-/** A régi bátorító előtag levágása; 12 karakternél rövidebb maradéknál az eredeti szöveg marad. A maradék nagybetűvel kezdődik. */
+/**
+ * A régi bátorító előtag levágása; 12 karakternél rövidebb maradéknál az eredeti szöveg marad. A maradék csak prózai szónál kap nagy
+ * kezdőbetűt (`capitalizeProse`, mint az ítélet-előtagnál) — képlet (x = -3, pH), kód (i++) és előjeles szám változatlan.
+ */
 export function stripLegacyOpener(text: string): string {
   const rest = text.replace(LEGACY_OPENER, "");
   if (rest === text || rest.trim().length < 12) return text;
-  return rest.charAt(0).toLocaleUpperCase("hu-HU") + rest.slice(1);
+  return capitalizeProse(rest);
 }
 
 /**
@@ -118,4 +123,23 @@ export function withVarietyMarker<T>(lesson: T, enabled: boolean): T {
   if (!lesson || typeof lesson !== "object" || Array.isArray(lesson)) return lesson;
   const { variety: _dropped, ...rest } = lesson as Record<string, unknown>;
   return (enabled ? { ...rest, variety: { version: LESSON_VARIETY_VERSION } } : rest) as T;
+}
+
+/** A tárolt lecke érvényes jelölője (a `lessonSchema` engedékeny alakja: nem üres, legfeljebb 40 karakteres verzió), különben `undefined`. */
+export function storedVarietyMarker(stored: unknown): LessonVarietyMarker | undefined {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return undefined;
+  const marker = (stored as { variety?: unknown }).variety;
+  const version = marker && typeof marker === "object" ? (marker as { version?: unknown }).version : undefined;
+  return typeof version === "string" && version.trim() && version.trim().length <= 40 ? { version: version.trim() } : undefined;
+}
+
+/**
+ * S5a vak kör 1 (L1): javításnál a jelölt jelölőjének EGYETLEN forrása a tárolt (eredeti) lecke — a modell jelölője mindig eldobva.
+ * Jelöletlen tárolt leckénél a jelölt jelöletlen (KI állapotban a javítás kimenete a régi).
+ */
+export function carryVarietyMarker<T>(candidate: T, stored: unknown): T {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return candidate;
+  const { variety: _dropped, ...rest } = candidate as Record<string, unknown>;
+  const marker = storedVarietyMarker(stored);
+  return (marker ? { ...rest, variety: marker } : rest) as T;
 }

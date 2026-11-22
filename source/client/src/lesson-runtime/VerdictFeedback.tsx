@@ -1,4 +1,4 @@
-import { useContext, type ReactNode } from "react";
+import { useContext, useEffect, type ReactNode } from "react";
 import { VERDICT_TEXT } from "@shared/lesson-ui-text";
 import { feedbackOpenerKey, feedbackView } from "@shared/lesson-feedback-openers";
 import { FeedbackVarietyContext } from "./feedback-variety";
@@ -23,6 +23,11 @@ export function VerdictFeedback({ right, text, className = "lesson-feedback", te
     right, text,
     variety: variety && question ? { marker: variety.marker, band: variety.band, key: feedbackOpenerKey(variety.mapId, question.text, question.options) } : undefined,
   });
+  // S5a vak kör 1 (L3): jelölt leckén a teljes friss visszajelzés egyszer bejelentődik az előre felcsatolt udvarias élő régióban
+  // (fókuszmozgatás nélkül); jelöletlen leckén nincs élő régió és nincs hívás.
+  const announcement = view.opener ? `${right ? VERDICT_TEXT.right : VERDICT_TEXT.wrong} ${view.opener}${view.reason ? ` ${view.reason}` : ""}` : "";
+  const announce = variety?.announce;
+  useEffect(() => { if (announcement && announce) announce(announcement); }, [announcement, announce]);
   return <p className={className} data-state={right ? "right" : "wrong"} data-testid={testId}>
     <strong className="lesson-verdict">{right ? VERDICT_TEXT.right : VERDICT_TEXT.wrong}</strong>
     {view.opener ? <> <span className="lesson-verdict-opener" data-testid="verdict-opener">{view.opener}</span></> : null}

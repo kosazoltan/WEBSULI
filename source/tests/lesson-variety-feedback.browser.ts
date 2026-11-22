@@ -29,6 +29,10 @@ for (const viewport of VIEWPORTS) {
     const wrongText = (await opener.textContent())!;
     expect(FEEDBACK_OPENERS.kid.wrong).toContain(wrongText);
     await expect(feedback).toContainText("Nem a gyökér: az vizet");
+    // S5a vak kör 1 (L3): az előre felcsatolt udvarias élő régió a teljes friss visszajelzést kapja; a fókusz a választott gombon marad.
+    const live = page.getByTestId("verdict-announcer");
+    await expect(live).toHaveAttribute("aria-live", "polite");
+    await expect(live).toHaveText(`Még nem helyes. ${wrongText} ${(await feedback.textContent())!.split(wrongText)[1].trim()}`);
     await feedback.scrollIntoViewIfNeeded();
     await assertLayout(page, feedback, viewport.width);
     await page.screenshot({ path: `test-results/tgm-s5a/tananyag-hibas-${viewport.width}x${viewport.height}.png` });
@@ -67,4 +71,6 @@ test("jelöletlen lecke: nincs kódnyitás (a mai kimenet)", async ({ page }) =>
   await expect(feedback.locator(".lesson-verdict")).toHaveText("Még nem helyes.");
   await expect(feedback.getByTestId("verdict-opener")).toHaveCount(0);
   await expect(feedback).toContainText("Nem a gyökér: az vizet");
+  // Jelöletlen leckén nincs élő régió (a DOM a régi).
+  await expect(page.getByTestId("verdict-announcer")).toHaveCount(0);
 });

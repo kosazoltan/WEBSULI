@@ -49,6 +49,8 @@ import { subjectKeyOf } from "../../../shared/subject-key";
 import { gateMode, type GateMode, type GateName } from "../gates/config";
 import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
+import { lessonVarietyForRun, runWithLessonVariety } from "../lesson-variety-flag";
+import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
 import { cleanModelText, sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual, type SourceVisualsResult } from "../../../shared/source-visuals";
 
@@ -125,6 +127,11 @@ export type SingleRunDeps = {
    * (`sourceVisualsEnabled()`, alapból KI) — KI állapotban a gyártás a kapcsoló előtti állapottal azonos.
    */
   sourceVisuals?: boolean;
+  /**
+   * A tananyag-változatosság állapota az új futásra (teszt, mérőharness); hiányában a környezet (`lessonVarietyEnabled()`, alapból KI).
+   * Folytatásnál nem hat: ott a mentett job-állapot dönt (`lessonVarietyForRun`).
+   */
+  lessonVariety?: boolean;
 };
 
 /**
@@ -551,7 +558,17 @@ export function appendLektorArchive(prev: unknown, round: number, notes: Readonl
   return [...base, ...add].slice(-200);
 }
 
+/**
+ * S5a vak kör 1 (L1, L4 — kapcsoló-szivárgás): a változatossági állapot a futás ELEJÉN dől el (folytatásnál a mentett job-állapotból),
+ * a job kimenetébe kerül (`lessonVariety: true`; KI állapotban a mező nem jön létre — a kimenet a régi), és a futás minden olvasója
+ * (szerzői prompt, bank, mentés) ezt a rögzített értéket látja.
+ */
 export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps): Promise<SingleRunResult> {
+  const varietyOn = lessonVarietyForRun(input, deps.lessonVariety);
+  return runWithLessonVariety(varietyOn, () => runSingleLessonScoped(input, deps, varietyOn));
+}
+
+async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps, varietyOn: boolean): Promise<SingleRunResult> {
   const { conversation, store } = deps;
   const log = (m: string) => deps.log?.(m);
   // Spec 2026-10-16-gyartas-haladas: az utolsó fázis megjegyezve — a bank és a javító forduló részletes jelzése ehhez tartozik.
@@ -611,7 +628,7 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   deps.onJob?.(jobId, mapId);
   // J5: folytatásnál a mentett kimenet megmarad (a helyreállítási jelzők és a régi pillanatképek nélkül); a job újra fut.
   const { recoveryState: _recovery, remanufacturedAs: _remade, singleRun: _run, telemetry: _telemetry, ...kept } = input.resume?.output ?? {};
-  let output: Record<string, unknown> = { ...kept, ...(input.instruction ? { ownerInstruction: input.instruction } : {}), ...(input.targetHtmlFileId ? { targetHtmlFileId: input.targetHtmlFileId, targetBaseline: input.targetBaseline } : {}), ...(corrections.length ? { sourceCorrections: corrections } : {}) };
+  let output: Record<string, unknown> = { ...kept, ...(varietyOn ? { lessonVariety: true } : {}), ...(input.instruction ? { ownerInstruction: input.instruction } : {}), ...(input.targetHtmlFileId ? { targetHtmlFileId: input.targetHtmlFileId, targetBaseline: input.targetBaseline } : {}), ...(corrections.length ? { sourceCorrections: corrections } : {}) };
   const resumeStep = { plan: "pedagogue", author: "author", animator: "animator", bank: "animator", lektor: "lektor", bankRepair: "lektor" } as const;
   // A mentett bank (és benne az ábrák) már kész: a lektorálás vagy a félkész lektori bankjavítás folytatódik.
   const pastBank = resumed?.stage === "lektor" || resumed?.stage === "bankRepair";
@@ -1082,7 +1099,8 @@ export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps
   if (Array.isArray(output.answerKeyArchive)) {
     output = { ...output, answerKeyArchive: finalizeAnswerKeyArchive(output.answerKeyArchive as Array<{ sectionIndex: number; q: string } & Record<string, unknown>>, publishable.experience?.tasks ?? []) };
   }
-  const lessonId = await store.upsertLesson(null, mapId, publishable);
+  // S5a vak kör 1 (L1): a jelölőt a futás rögzített állapota adja — a modell (forrásvizuál BE mellett átengedett) jelölője eldobva.
+  const lessonId = await store.upsertLesson(null, mapId, withVarietyMarker(publishable, varietyOn));
   const published = await store.publishLesson({
     lessonId, mapId, title: publishable.title, classroom: publishable.classroom,
     // S1b: a fedettség-kimenet (`lessons.coverage`) a vizuális tételeket is számolja — leltár nélkül a kulcs elmarad.

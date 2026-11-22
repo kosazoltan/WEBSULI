@@ -6,7 +6,7 @@ import { z } from "zod";
 import { LESSON_BANK_RESERVE, LESSON_BANK_SIZES, LESSON_METHOD_CONTRACT, LESSON_METHOD_VERSION, bankPacketContract, experienceSchema, experiencePacketSchema, experienceTheme, experienceQuizSchema, glossaryEntrySchema, lessonLanguage, methodSchema, openTaskSchema, bankPlanSchema, type LessonExperience } from "../../shared/lesson-experience";
 import { lessonOpenerVersion, playfulQuestioningContract } from "../../shared/lesson-opener";
 import { lessonOpenerEnabled } from "./lesson-opener-flag";
-import { lessonVarietyEnabled } from "./lesson-variety-flag";
+import { effectiveLessonVariety } from "./lesson-variety-flag";
 import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, missingOrder, missingPhrases, normalizeAnswer } from "../../shared/lesson-experience-score";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { planLessonBank, bankUnitQuota } from "../../shared/lesson-bank-plan";
@@ -38,7 +38,8 @@ export function bankStaticPrefix(): string {
   const base = `${roleSkillBlock("bank")}\n${LESSON_METHOD_CONTRACT}\n${OPEN_ANSWER_RULES_HU}`;
   // Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2): kapcsolóval; a bankRequestBlocks ugyanezt hívja, az előtag-egyezés megmarad.
   // Spec 2026-11-20-tgm-valtozatossag-abrak (S5a): a változatossági kapcsolóval a visszajelzés-szabály v2 (KI: bájtra a régi).
-  return lessonOpenerEnabled() ? `${base}\n${playfulQuestioningContract(lessonVarietyEnabled())}` : base;
+  // S5a vak kör 1 (L4): a futás rögzített állapota (`effectiveLessonVariety`), nem a környezet menet közbeni értéke.
+  return lessonOpenerEnabled() ? `${base}\n${playfulQuestioningContract(effectiveLessonVariety())}` : base;
 }
 
 /** Spec 2026-10-21-nyelvlecke-kiejtes: a nyelvlecke csomagjának szószedet-minimuma (a kiejtésgyakorló alapja). */
@@ -525,7 +526,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       ...(deps.memory ? { memory: { version: memoryBlockVersion(deps.memory) } } : {}),
       ...(deps.scoringRules ? { scoringRules: deps.scoringRules } : {}),
       // Review #403 (P2): bekapcsolt nyitómesénél a szerződés verziója a csomag azonosságának része (KI ágon a hash változatlan).
-      ...(lessonOpenerEnabled() ? { opener: lessonOpenerVersion(lessonVarietyEnabled()) } : {}) };
+      ...(lessonOpenerEnabled() ? { opener: lessonOpenerVersion(effectiveLessonVariety()) } : {}) };
     return { taskCount, quizCount, taskTarget, quizTarget, methodKinds, teaching, baseHash: createHash("sha256").update(canonicalJson(teaching)).digest("hex") };
   };
   // Élő futás 67a05970 (2026-09-24): a kifogás fogalom szerint minden olyan csomaghoz eljutott, amely ugyanazt a
@@ -552,13 +553,13 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     let hash = reviewFeedback.length ? createHash("sha256").update(canonicalJson(evidence)).digest("hex") : checkpoint.reviewedHashes?.[baseHash] ?? baseHash;
     unit.sourceHash = hash;
     // Review #403: bekapcsolt nyitómesénél a csomag a szerződés verzióját is hordozza (kikapcsolva a mező nem jön létre — a kimenet változatlan).
-    if (lessonOpenerEnabled()) unit.opener = lessonOpenerVersion(lessonVarietyEnabled());
+    if (lessonOpenerEnabled()) unit.opener = lessonOpenerVersion(effectiveLessonVariety());
     // Spec 2026-11-03-javitas-bank-megorzes: a tanításában változatlan fejezet korábbi csomagja tartalom szerint (nem a konfigfüggő hash szerint).
     const contentKept = reviewFeedback.length ? undefined : unchangedPreviousUnit(deps.previous, deps, lesson, unit);
     // Review #403 (P2): bekapcsolt nyitómesénél a korábbi csomag csak akkor vehető át, ha ugyanazzal a szerződés-verzióval készült (a
     // bankterv egységének `opener` jelölője — a lektorált csomag hash-e nem a tanítás hash-e, ezért nem a hash-egyezés dönt). A kapcsoló
     // előtt gyártott bank így nem kerül át az IQ-kérdezési szabályok nélkül (C döntés: a javított lecke is megkapja).
-    const keptUnit = contentKept && (!lessonOpenerEnabled() || contentKept.opener === lessonOpenerVersion(lessonVarietyEnabled())) ? contentKept : undefined;
+    const keptUnit = contentKept && (!lessonOpenerEnabled() || contentKept.opener === lessonOpenerVersion(effectiveLessonVariety())) ? contentKept : undefined;
     // Spec 2026-09-30 (U2, B4): a csomag mérhető szerződése és a pontozó tényleges szabályai a KÓDBÓL generálva — egy szabály egy helyen.
     const contract = bankPacketContract({ sectionIndex: unit.sectionIndex, conceptIds: unit.conceptIds, methodKinds, taskCount, taskTarget, quizCount, quizTarget, language });
     const signRules = needsSignedNumberRules(lesson.subject, teaching.section) ? `${SIGNED_NUMBER_RULES_HU}\n` : "";
