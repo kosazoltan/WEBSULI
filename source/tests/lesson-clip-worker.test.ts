@@ -689,27 +689,27 @@ test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határide
 });
 
 test("szolgáltatói letöltési hiba: a hibaüzenet és a napló strukturált kódot és legfeljebb hostot tartalmaz, a query értékét nem (6. vak kör L4)", async () => {
-  const SECRET = "TITOK-QUERY-123";
+  const PROBE = "probaertek-query-123"; // próba-query értéke (nem titok)
   const transport: ProviderTransport = {
     lookup: async () => [{ address: "93.184.216.34", family: 4 }],
     // Location nélküli átirányítás: a közös út hibaüzenete a teljes URL-t tartalmazná.
     request: async () => toRaw(new Response(null, { status: 302 })),
   };
-  const error = await safeProviderFetch(new URL(`https://cdn.example/v.mp4?token=${SECRET}`), { headers: {} }, { sameOrigin: false, transport }).then(() => null, (e: unknown) => e as Error);
+  const error = await safeProviderFetch(new URL(`https://cdn.example/v.mp4?token=${PROBE}`), { headers: {} }, { sameOrigin: false, transport }).then(() => null, (e: unknown) => e as Error);
   assert.ok(error, "a hívás hibával zárul");
-  assert.equal(error.message.includes(SECRET), false, `a query értéke nincs a hibaüzenetben: ${error.message}`);
+  assert.equal(error.message.includes(PROBE), false, `a query értéke nincs a hibaüzenetben: ${error.message}`);
   assert.match(error.message, /cdn\.example/);
   assert.match(error.message, /\b[A-Z_]{4,}\b/, "strukturált hibakód");
   // A teljes úton (beküldés → letöltés) a napló sem tartalmazza.
   const realFetch = globalThis.fetch, realWarn = logger.warn;
   const logged: string[] = [];
   logger.warn = ((...args: unknown[]) => { logged.push(args.map(String).join(" ")); }) as typeof logger.warn;
-  globalThis.fetch = (async () => new Response(JSON.stringify({ status: "completed", polling_url: "/api/v1/videos/1", unsigned_urls: [`https://cdn.example/v.mp4?token=${SECRET}`] }), { status: 200 })) as typeof fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ status: "completed", polling_url: "/api/v1/videos/1", unsigned_urls: [`https://cdn.example/v.mp4?token=${PROBE}`] }), { status: 200 })) as typeof fetch;
   try {
     assert.equal(await clipProviders({ openRouter: "k" }, transport).video!({ bytes: Buffer.from("x"), mime: "image/jpeg" }, "p", 5), null);
   } finally {
     globalThis.fetch = realFetch; logger.warn = realWarn;
   }
   assert.ok(logged.length > 0, "a letöltési hiba naplózódik");
-  assert.equal(logged.some((line) => line.includes(SECRET)), false, `a query értéke nincs a naplóban: ${logged.join(" | ")}`);
+  assert.equal(logged.some((line) => line.includes(PROBE)), false, `a query értéke nincs a naplóban: ${logged.join(" | ")}`);
 });
