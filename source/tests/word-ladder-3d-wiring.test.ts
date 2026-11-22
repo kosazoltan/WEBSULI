@@ -24,7 +24,10 @@ test("4. döntés: nyelvválasztó a menüben (wl-lang-<lang>), a bankok a nyelv
 test("6. döntés: pályaválasztó, pályánkénti létrahossz és sáv, haladás wordladder-<lang> gameId-vel", () => {
   assert.match(page, /<GradeLevelPicker\b/);
   assert.match(page, /ladderRungsForLevel\s*\(/);
-  assert.match(page, /createLadderLevelSession\s*\(/);
+  // SPEC-VÁLTOZÁS 2026-11-22 (docs/specs/2026-11-22-szoletra-szintezes.md 4.2–4.3): a futás fokozatát az évfolyam-sávos
+  // `createLadderStepSession` adja (a régi, csak pályából induló `createLadderLevelSession` helyett).
+  assert.match(page, /createLadderStepSession\s*\(/);
+  assert.match(page, /windowLadderSteps\s*\(/);
   assert.match(page, /loadUnlockedLevel\s*\(\s*wordLadderGameId\s*\(/);
   assert.match(page, /unlockNextLevel\s*\(\s*wordLadderGameId\s*\(/);
   assert.match(page, /pickUnseen\s*\(/);

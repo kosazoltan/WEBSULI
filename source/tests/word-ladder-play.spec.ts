@@ -137,3 +137,55 @@ test("Szikla-verseny: egy teljes menet valódi érintéssel, kampó nélkül —
   await expect(result).toBeHidden();
   await expect(page.getByTestId("wl-rung")).toHaveText(/^0\/\d+$/);
 });
+
+/**
+ * Szintezés — terv docs/specs/2026-11-22-szoletra-szintezes.md, A9: egy 3. évfolyamos az 1. pályán végig helyesen válaszol.
+ * Az első kérdés a 0. szintről jön, egyik sem 1. szint fölötti (fokozat ≤ 5), és a helyes sorozatokkal a fokozat emelkedik.
+ * A helyes fogást a teszt-kampós `data-correct` jelöli; a fokozatot a probe `questionStep` / `ladderStep` mezője adja.
+ */
+test("Szintezés A9: 3. évfolyam, 1. pálya, végig helyes válasz — 0. szintről indul, legfeljebb 1. szint, fokozatosan nehezedik", async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.addInitScript(() => {
+    localStorage.setItem("websuli.classroomGrade", "3");
+  });
+  await page.route("**/api/**", async (route) => {
+    const p = new URL(route.request().url()).pathname;
+    let data: unknown = [];
+    if (p === "/api/auth/user") data = null;
+    if (p.includes("quiz-bank") || p.includes("material-quizzes")) data = { items: [], materials: [] };
+    if (p.includes("sync-eligibility")) data = { eligible: false };
+    if (p.includes("leaderboard") || p.includes("/api/games/score")) data = { ok: true };
+    await route.fulfill({ json: data });
+  });
+  await page.goto("/games/word-ladder-hu-en?seed=5&wall=60");
+  await expect(page.getByTestId("wl-grade-picker")).toContainText("3.");
+  await page.getByTestId("wl-start").tap();
+  await expect(page.getByTestId("wl-race")).toBeVisible();
+
+  type Probe = { questionOpen: number; questionId: number | null; questionStep: number; ladderStep: number; clock: number; armedAt: number | null; reveal: number; phase: string };
+  const probe = () => page.evaluate(() => (window as unknown as { __websuliGame: { probe: () => Probe } }).__websuliGame.probe());
+  const steps: number[] = [];
+  const runSteps: number[] = [];
+  let lastId: number | null = null;
+  const deadline = Date.now() + 200_000;
+  while (steps.length < 12 && Date.now() < deadline) {
+    const p = await probe();
+    if (p.phase !== "play") break;
+    if (!p.questionOpen || p.questionId === lastId || p.reveal || p.armedAt === null || p.clock < p.armedAt) {
+      await page.waitForTimeout(80);
+      continue;
+    }
+    lastId = p.questionId;
+    steps.push(p.questionStep);
+    runSteps.push(p.ladderStep);
+    await page.locator('[data-testid^="wl-option-"][data-correct="true"]').first().tap({ timeout: 3_000 }).catch(() => undefined);
+    await expect.poll(async () => (await probe()).reveal, { timeout: 5_000 }).toBe(1).catch(() => undefined);
+  }
+  console.log(`A9|kérdés-fokozatok: ${steps.join(",")} | futás-fokozat: ${runSteps.join(",")}`);
+  expect(steps.length, "legalább 12 megválaszolt kérdés").toBeGreaterThanOrEqual(12);
+  expect(steps.every((s) => s >= 0), "minden kérdés az osztályozott bankból jön").toBe(true);
+  expect(steps[0]!, "az első kérdés a 0. szintről").toBeLessThanOrEqual(2);
+  expect(Math.max(...steps), "3. évfolyamon legfeljebb 1. szint (fokozat ≤ 5)").toBeLessThanOrEqual(5);
+  expect(runSteps[runSteps.length - 1]!, "a helyes sorozatokkal a futás fokozata nő").toBeGreaterThan(runSteps[0]!);
+  expect(Math.max(...steps.slice(-4)), "a futás végén nehezebb kérdés jön, mint az elején").toBeGreaterThan(steps[0]!);
+});

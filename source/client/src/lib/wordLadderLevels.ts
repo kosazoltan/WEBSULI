@@ -1,14 +1,17 @@
 /**
  * Szólétra — pályák (spec docs/specs/2026-09-29-palyak-szoletra-nyelvek.md, 6. döntés; B szelet). Tiszta modul.
  *
- * A pálya két dolgot ad: a létra hosszát (1. pálya rövid, 10. hosszú) és a futás kezdő sávját. A sávot a közös
- * szabály (`nextDifficulty`) mozgatja, a `clampToLevel` a pálya sávja körül tartja, a kérdés szintje pedig a meglévő
- * sáv→szint leképezés (`ladderTierIndex`). Így a 10. pálya minden évfolyamon a legfelső szintről kérdez.
+ * A pálya két dolgot ad: a létra hosszát (1. pálya rövid, 10. hosszú) és a futás belépő fokozatát.
+ *
+ * SPEC-VÁLTOZÁS 2026-11-22 (docs/specs/2026-11-22-szoletra-szintezes.md 4.2): a kérdés fokozatát már az évfolyam-sávos
+ * `createLadderStepSession` (`wordLadderGrading.ts`) adja — az 1. pálya az évfolyam alapszintje, a 10. pálya legfeljebb
+ * egy szinttel feljebb (régen: a 10. pálya minden évfolyamon a legfelső szint). A `createLadderLevelSession` sáv-alapú
+ * régi futás-sávja exportált marad (a közös sáv-szabály tesztje használja), a lap már nem.
  */
 import type { WordLadderLanguage } from "@/data/wordLadder/types";
 import { nextDifficulty } from "@/game-engine/difficulty";
 import { GRADE_LEVEL_COUNT, clampToLevel, levelBand } from "@/game-engine/gradeLevels";
-import { ladderTierIndex } from "@/game-engine/no-repeat";
+import { ladderStartStep } from "@/lib/wordLadderGrading";
 import { LADDER_RUNGS, LADDER_ZONES, zoneForRung, type LadderZone } from "@/lib/wordLadderLogic";
 
 export const LADDER_MIN_RUNGS = 8;
@@ -23,9 +26,9 @@ export function ladderRungsForLevel(level: number): number {
   return Math.round(LADDER_MIN_RUNGS + ((LADDER_MAX_RUNGS - LADDER_MIN_RUNGS) * (l - 1)) / (GRADE_LEVEL_COUNT - 1));
 }
 
-/** A pálya kezdő kérdés-szintje az évfolyamon (a menü felirata és a teszt). */
+/** A pálya belépő kérdés-szintje az évfolyamon (a menü felirata és a teszt): a belépő fokozat szintje. */
 export function ladderTierForLevel(grade: number, level: number): number {
-  return ladderTierIndex(grade, levelBand(level));
+  return Math.floor(ladderStartStep(grade, level) / 3);
 }
 
 /** Haladás-kulcs nyelvenként (`loadUnlockedLevel` / `unlockNextLevel`). */

@@ -14,7 +14,6 @@
  */
 import {
   dedupeTiersByContent,
-  ladderTierIndex,
   LADDER_TIER_LABELS,
   pickUnseen,
   type SeenItem,
@@ -51,8 +50,8 @@ import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import { GAME_TEST_HOOKS_ENABLED, correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
 import { LADDER_ZONES, xpForCorrect } from "@/lib/wordLadderLogic";
+import { createLadderStepSession, ladderStepBuckets, windowLadderSteps } from "@/lib/wordLadderGrading";
 import {
-  createLadderLevelSession,
   ladderRungsForLevel,
   ladderTierForLevel,
   milestoneForProgress,
@@ -463,7 +462,8 @@ export default function WordLadderHuEn() {
                   // szintlista-alakból kimaradnak — azonosító szerint megőrizzük őket.
                   speechByIdRef.current.set(q.id, { speakText: q.speakText, speakAfter: q.speakAfter });
                   if (q.focus) focusByIdRef.current.set(q.id, q.focus);
-                  return vocab.toLadderItem(q);
+                  // A célrész a besoroláshoz is kell (szintezés: a mérce a célrészt méri).
+                  return q.focus ? { ...vocab.toLadderItem(q), focus: q.focus } : vocab.toLadderItem(q);
                 }) : [],
         ),
       );
@@ -502,6 +502,10 @@ export default function WordLadderHuEn() {
   }, [tiers, vocabTiers, vocabMeanings, lang]);
   const tiersRef = useRef(allTiers);
   tiersRef.current = allTiers;
+  /** Az osztályozott bank: a futás minden tétele 15 fokozat-vödörben (docs/specs/2026-11-22-szoletra-szintezes.md 4.1). */
+  const stepBuckets = useMemo(() => ladderStepBuckets(allTiers, lang), [allTiers, lang]);
+  const stepBucketsRef = useRef(stepBuckets);
+  stepBucketsRef.current = stepBuckets;
 
   /** A játszott évfolyam (3–12): a menüben választható, alapértéke az osztály. */
   const [pickedGrade, setPickedGrade] = useState<number | null>(null);
@@ -530,8 +534,8 @@ export default function WordLadderHuEn() {
   const runRef = useRef({ lang, grade: ladderGrade, level, rungs: menuRungs, tempo });
   /** A szabad fogás (kérdés nélkül) üteme a menet tempójában (`ladderFreeGripMs`). */
   const freeGripMsRef = useRef(FREE_GRIP_COOLDOWN_MS);
-  /** A futás sávja: a pálya sávjából indul, a pálya ±0,15-én belül mozog (spec 6. döntés). */
-  const levelSessionRef = useRef(createLadderLevelSession(1));
+  /** A futás fokozata (0–14): évfolyam-sávos belépés, a helyes sorozatokkal emelkedik (docs/specs/2026-11-22-szoletra-szintezes.md). */
+  const stepSessionRef = useRef(createLadderStepSession(4, 1));
   /** A futás ÖSSZES eddigi kérdése (azonosító + prompt) — ezek a futás végéig nem jönnek újra. */
   const seenRef = useRef<SeenItem[]>([]);
 
@@ -636,7 +640,9 @@ export default function WordLadderHuEn() {
         // A meglévő választó: a futás sávjának szintjéről, a futásban még nem látott tétel (#135).
         // A futásban már megjelent szó (más irányú szóbank-kérdésként sem) nem jön újra új tételként. A sávban
         // elolvasható / beférő tétel (J0c-b `accept` = `fitsAllViewports(...).ok`) előbb; ha ilyen nincs, a többi.
-        const tier = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
+        // Szintezés (docs/specs/2026-11-22-szoletra-szintezes.md 4.4): a tételek fokozat-vödrökben, az évfolyam sávjára vágva;
+        // a választó a futás fokozatáról keres (azonos távolságon előbb a könnyebb).
+        const step = stepSessionRef.current.step;
         const pickRandom = () => pickRngRef.current.next();
         const isSeen = (item: { id?: string | number; prompt: string }) => seenRef.current.some((x) => x.id === String(item.id));
         // Minden második új tétel a központi szóbankból jön, ha van (a kézi bank nagyobb, és a gyors tempó mellett
@@ -644,7 +650,7 @@ export default function WordLadderHuEn() {
         const accept = ctx.accept;
         const isVocab = (q: { id?: string | number }) => String(q.id ?? "").startsWith("vocab:");
         const wantVocab = freshCountRef.current % 2 === 1;
-        const tiers = tiersRef.current;
+        const tiers = windowLadderSteps(stepBucketsRef.current, runRef.current.grade);
         const pools: (readonly (readonly (Quiz | LadderItem)[])[])[] = [];
         if (wantVocab) pools.push(tiers.map((t) => t.filter((q) => isVocab(q) && (!accept || accept(q)))));
         if (accept) pools.push(tiers.map((t) => t.filter((q) => accept(q))));
@@ -652,13 +658,13 @@ export default function WordLadderHuEn() {
         for (let attempt = 0; attempt < 8; attempt++) {
           let item: Quiz | LadderItem | null = null;
           for (const pool of pools) {
-            const c = pickUnseen(pool, tier, seenRef.current, pickRandom);
+            const c = pickUnseen(pool, step, seenRef.current, pickRandom);
             if (c && !isSeen(c)) {
               item = c;
               break;
             }
           }
-          if (!item) item = pickUnseen(tiers, tier, seenRef.current, pickRandom);
+          if (!item) item = pickUnseen(tiers, step, seenRef.current, pickRandom) ?? pickUnseen(stepBucketsRef.current, step, seenRef.current, pickRandom);
           if (!item) return null;
           seenRef.current = [...seenRef.current, { id: String(item.id), prompt: item.prompt }];
           const q = toPlayQuestion(item);
@@ -823,7 +829,7 @@ export default function WordLadderHuEn() {
       const st = coreRef.current;
       if (st.phase !== "play") return;
       const correct = o.result === "correct";
-      levelSessionRef.current.answer(correct);
+      stepSessionRef.current.answer(correct);
       if (correct) {
         // A rövidebb nyugodt falon a helyes válasz XP-je a fal-szorzó reciprokával nő (terv C: a nyugodt mód nem büntetés).
         const add = Math.round(xpForCorrect(st.combo.count) * ladderXpScale(runRef.current.tempo));
@@ -954,8 +960,8 @@ export default function WordLadderHuEn() {
     }
     runRef.current = { lang, grade: ladderGradeRef.current, level, rungs: total, tempo: runTempo };
     freeGripMsRef.current = ladderFreeGripMs(FREE_GRIP_COOLDOWN_MS, level, runRef.current.grade, runTempo);
-    levelSessionRef.current.reset(level);
-    runTierRef.current = ladderTierIndex(runRef.current.grade, levelSessionRef.current.band);
+    stepSessionRef.current.reset(runRef.current.grade, level);
+    runTierRef.current = stepSessionRef.current.tier;
     seenRef.current = [];
     wordGuardRef.current.reset();
     freshCountRef.current = 0;
@@ -1197,6 +1203,9 @@ export default function WordLadderHuEn() {
           phase: phaseRef.current === "play" ? st.phase : phaseRef.current,
           questionId: p?.id ?? null,
           questionKey: p?.question.key ?? null,
+          // Szintezés (docs/specs/2026-11-22-szoletra-szintezes.md A9): a futás és a nyitott kérdés fokozata (0–14; −1 = nincs).
+          ladderStep: stepSessionRef.current.step,
+          questionStep: p ? stepBucketsRef.current.findIndex((b) => b.some((q) => String(q.id) === String(p.question.quiz.id))) : -1,
           reveal: ctl?.view().reveal ? 1 : 0,
           paused: pausedRef.current ? 1 : 0,
           clock: clockRef.current,

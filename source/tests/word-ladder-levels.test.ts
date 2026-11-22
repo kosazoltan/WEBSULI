@@ -21,6 +21,7 @@ import {
   wordLadderGameId,
   zoneForProgress,
 } from "../client/src/lib/wordLadderLevels";
+import { createLadderStepSession, ladderGradeWindow, ladderStepBuckets, windowLadderSteps } from "../client/src/lib/wordLadderGrading";
 
 /** Spec 2026-09-29-palyak-szoletra-nyelvek, 4. és 6. döntés (B szelet). */
 
@@ -37,14 +38,44 @@ test("6. döntés: a létra az 1. pályán rövid (8 fok), a 10.-en hosszú (20 
   assert.equal(ladderRungsForLevel(99), 20);
 });
 
-test("6. döntés: a kérdés-szint pályánként nem csökken; 1. pálya ≤ az évfolyam alapszintje; 10. pálya = legfelső szint", () => {
+/**
+ * SPEC-VÁLTOZÁS 2026-11-22 (docs/specs/2026-11-22-szoletra-szintezes.md 4.2, tulajdonosi kérés): a régi 6. döntés „10. pálya =
+ * legfelső szint minden évfolyamon” helyett a pálya az évfolyam sávjában marad — az 1. pálya az évfolyam alapszintje, a
+ * 10. pálya legfeljebb egy szinttel feljebb. (Mérve: a régi szabállyal a 3.-os a 8. pályától B1–B2-t kapott.)
+ */
+test("SPEC-VÁLTOZÁS 2026-11-22: a kérdés-szint pályánként nem csökken; 1. pálya = az évfolyam alapszintje; 10. pálya ≤ alapszint + 1", () => {
   for (const grade of GRADES) {
     const tiers = LEVELS.map((level) => ladderTierForLevel(grade, level));
     for (let i = 1; i < tiers.length; i++) assert.ok(tiers[i]! >= tiers[i - 1]!, `${grade}. évfolyam: ${tiers.join(",")}`);
-    assert.ok(tiers[0]! <= ladderBaseTier(grade), `${grade}. évfolyam 1. pálya: ${tiers[0]}`);
-    assert.equal(tiers[9], 4, `${grade}. évfolyam 10. pálya`);
-    assert.equal(ladderTierForLevel(grade, 1), ladderTierIndex(grade, levelBand(1)), "a meglévő sáv→szint leképezés");
+    assert.equal(tiers[0], ladderBaseTier(grade), `${grade}. évfolyam 1. pálya: ${tiers[0]}`);
+    assert.ok(tiers[9]! <= Math.min(4, ladderBaseTier(grade) + 1), `${grade}. évfolyam 10. pálya: ${tiers[9]}`);
   }
+  assert.equal(ladderTierForLevel(3, 10), 1, "3. évfolyam 10. pálya: legfeljebb A1–A2 (régen B2)");
+});
+
+test("2026-11-22: futáson belül nincs ismétlés az évfolyam-sávos választóval sem, és a kérdés a sávban marad — minden évfolyam × pálya", () => {
+  const buckets = ladderStepBuckets(ladderTiersFromBank(WORD_LADDER_EN), "en");
+  const bad: string[] = [];
+  for (const grade of GRADES) {
+    const windowed = windowLadderSteps(buckets, grade);
+    const win = ladderGradeWindow(grade);
+    const stepOf = new Map(windowed.flatMap((b, step) => b.map((q) => [q.id, step] as const)));
+    for (const level of LEVELS) {
+      const rng = seeded(grade * 100 + level);
+      const session = createLadderStepSession(grade, level);
+      const seen: SeenItem[] = [];
+      for (let i = 0; i < ladderRungsForLevel(level) * 2; i++) {
+        const q = pickUnseen(windowed, session.step, seen, rng);
+        assert.ok(q, "van kérdés");
+        if (seen.some((s) => s.id === q.id || s.prompt === q.prompt)) bad.push(`${grade}/${level}: ismétlés ${q.id}`);
+        const step = stepOf.get(q.id)!;
+        if (step < win.minStep || step > win.maxStep) bad.push(`${grade}/${level}: sávon kívül ${q.id}`);
+        seen.push({ id: q.id, prompt: q.prompt });
+        session.answer(rng() < 0.7);
+      }
+    }
+  }
+  assert.deepEqual(bad, []);
 });
 
 test("a futás sávja a pálya sávjából indul, és a pálya ±0,15-én belül marad", () => {
