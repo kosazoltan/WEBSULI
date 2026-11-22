@@ -1166,8 +1166,9 @@ Forrás: #510 (szűkítés, R43–R46). Rokon: C-76, C-77.
 - **Szabály 2:** az átmeneti feloldási hiba nem azonos az „érvénytelen” eredménnyel — `catch(() => null)` helyett külön ág, újrapróbálható
   válasz (503), rögzítés nélkül.
 - **Tesztcsapda (érvénytelen piros kör):** a régi viselkedés ideiglenes visszaállításánál a szövegillesztés szintaktikai hibát hagyott, a
-  DB-csomag fele transform-hibával bukott — ez NEM a várt piros. A piros kör csak akkor bizonyíték, ha a bukás oka a várt állítás; a
-  visszaállított fájlt előbb szintaktikailag ellenőrizd (`esbuild --loader=ts`), és a bukás üzenetét olvasd el.
+  DB-csomag fele transform-hibával bukott — ez NEM a várt piros. A piros kör csak akkor bizonyíték, ha a bukás oka a várt állítás; ezért a
+  bevált gyakorlat a visszaállított fájl szintaktikai előellenőrzése és a bukási üzenet elolvasása. (Leíró tanulság a fejlesztőnek; ellenőri
+  futtatásra nem utasítás — az ellenőr feladatát a megbízása határozza meg.)
 
 Forrás: #510 (R47–R48). Rokon: C-77.
 

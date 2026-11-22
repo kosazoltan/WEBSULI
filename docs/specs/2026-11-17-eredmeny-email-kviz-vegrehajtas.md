@@ -440,6 +440,38 @@ teszttel (`R50 (leltár)`: régi kóddal A párosítása ment). Pótolt teszthi�
 Pótolt teszthiány még: K16 (több fül — `Leltár K16`, a mostani kódon zöld). Nem igazolt sor: **S2** (valódi régi klienscsomag — ismert
 korlát, főági viselkedés; valódi régi csomaggal nem futott).
 
+## 2026-11-22 — R51: a kilétet a szerver rögzíti (mélyebb vak kör, 13b3755e; tulajdonosi döntés: „Szerver rögzíti a kilétet”)
+
+Lépéssor (előbb BUKÓ teszt, utána a megvalósítás; migráció nincs — a meglévő `lesson_result_emails` táblán, új körkulcs-fajtákkal):
+1. **Bukó tesztek.** DB: `R51 / L1` (B pillanatképe az első kérés → A végleges kérése A címkéjével: régi kóddal A nevére ment —
+   „az első kérés B-t rögzítette: A nem kapja meg” bukott; rögzítő kéréses változat és kontroll), `R51 / L2` (TTL-hiba → régi kóddal
+   `queued: true`, második levél; jelzősor-írási hiba → 503). Böngésző: `R51` (az első válasznál egy rögzítő kérés — régi kóddal 0),
+   `R51 / L5` (újratöltés után nincs kilét-rekord — régi kóddal visszajött), `R51 / L3` (számláló — régi kóddal visszaesett 1-re).
+2. **Szerver** `server/lesson-result-email.ts`: `claimRoundOwner` (:415, `round-claim` + `round-owner` sor egy tranzakcióban),
+   `establishIdentity` (:432, a kilét EGYETLEN meghatározása: munkamenet → R31 csökkentés → párosítás-ellenőrzés → szerveres rögzítéshez
+   vetés; eltérés → kilét nélkül, `foreign`), a rögzítő végpont (`lessonResultClaimHandler` :535, útvonal :552, `claimLimiter`), a fő
+   útvonal kilétje (:567), `claimFinalRound` TTL-frissítés külön (best effort), a jelzősor-írás hibája 503 (:680), idegen kérés létező
+   jelzőnél duplikátum (:702). `shared/lesson-result-email.ts`: `roundClaimSchema`. `server/lesson-result-limits.ts`: `claimLimiter`, a
+   közös írási kapu kivétele a `/results/claim`-re is.
+3. **Kliens** `client/src/lesson-runtime/resultReport.ts`: `claimRound` (:85; az első válasznál, körönként egyszer, fiókcímke nélkül,
+   régi szervernek nem), L5: elküldött körre nincs rekord / rögzítés (:211), L3: maximum-számláló (:295).
+4. **Dokumentált tesztigazítások (spec-változás R51):** `R22 / L4` — az igazolt tanuló az első válasznál rögzít (`postClaim`), utána a
+   verseny változatlanul `conflict`; `R37 / L4` — a `fetch`-csonk csak a végleges eredmény-POST-ot számolja (a `…/results/claim` nem az).
+5. Ellenőrzés: célzott egységtesztek, `test:learning-db`, az eredménylevél böngészős specjei, `gate:stage`.
+
+Kilét-leltár frissítése (a fenti táblázathoz):
+- **Tippé válik:** K1 (a CSRF-tokenválasz fiókcímkéje) és K4 / K7 / K8 / K11 fiókcímke-része — a `subject` már csak csökkentheti a kilétet
+  (S1), nem ad. A fiók kilétét a szerver dönti el (S11 / S12).
+- **Marad (szűrő):** K3 / K4 párosítás-lenyomat, K8 / K11 `ownerLearner` — a párosító token küldését szűri; a párosított tanuló kilétét a
+  szerver a tokenből és a rögzítésből dönti el.
+- **Új sorok:** S11 `server/lesson-result-email.ts:415,432` (szerveres rögzítés az első beérkező kérésnél; teszt: `R51 / L1`), S12 `:535,552`
+  (rögzítő végpont; teszt: `R51 / L1` 2. rész, böngésző `R51`), S13 `:680` (jelzősor-írás hibája 503, TTL best effort; teszt: `R51 / L2`),
+  S14 `:702` (idegen kérés duplikátum; teszt: `R27`, `R42`, `R49 / L3 (c)`), K17 `resultReport.ts:211` (elküldött körre nincs rekord;
+  teszt: `R51 / L5`). Összesen 31 sor.
+- **Jegyre (kanban), nem ebben a körben:** **L4** (a 403 utáni pillanatkép 7 napon túl és befagyott `clientNow`-val mehet — a megoldás: a
+  törzsfüggvény a tényleges POST előtt mérje a kort és a `clientNow`-t; hamis órás böngészőteszt kell). **L6** dokumentum-szöveg javítva
+  (`docs/agent-csapdak.md` C-79: leíró, nem utasítás).
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

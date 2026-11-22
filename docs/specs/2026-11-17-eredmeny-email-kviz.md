@@ -20,6 +20,22 @@ tokencsere; újrapárosítás; fiókváltás (másik fülön be- / kilépés); t
 (korábbi kódverzió, privát mód); szerveres leállítás és ürítés; átmeneti DB-hiba a kilét feloldásakor / ellenőrzésekor; régi
 klienscsomag (ismert korlát: címke nélkül küld, a munkamenet fiókja számít — a főági viselkedés).
 
+**R51 — a kilétet a SZERVER rögzíti (tulajdonosi döntés, űrlap, 2026-11-22, szó szerint: „Szerver rögzíti a kilétet”).** A mélyebb vak kör
+(13b3755e) L1-e: a böngésző által rögzített fiókcímke elavult lehet (a lap gyorsítótára A-é, az első választ már B adja). Ezért:
+- A kör kiléte a SZERVEREN rögzül, a kör ELSŐ beérkező kérésénél: a kliens a kör első válaszánál kilét-rögzítő kérést küld
+  (`POST /api/lessons/:lessonId/results/claim`, CSRF-fel, saját 60 / 15 perc / IP kerettel); ha ez nem ért célba, az első pillanatkép vagy
+  végleges beküldés rögzít. A rögzített kilét a szerver saját munkamenetéből (fiók) és a párosító token általa ellenőrzött állapotából
+  (párosított tanuló) jön, különben „vendég” — a kliens fiókcímkéje ebben nem vesz részt. Tárolás a meglévő táblán, sémaváltozás és
+  migráció nélkül: tanulófüggetlen `round-claim` jelzősor + a rögzített kilét álnevesített `round-owner` sora egy tranzakcióban.
+- Minden későbbi kérés (pillanatkép, végleges) kiléte a szerveres rögzítéshez vetődik: egyezés → az a kilét; eltérés → a kérés kilét
+  nélkül (vendégként) fut, és létező végleges jelzőnél duplikátum (R27). A kilét feloldásának / rögzítésének átmeneti hibája → 503 a 202
+  előtt, rögzítés nélkül.
+- A kliens fiókcímkéje (`subject`) csak csökkentheti a kilétet (R31: eltérésnél fiók nélkül), kilétet nem ad; a kliens kilét-rekordja (R47 /
+  R50) a párosító token küldését szűri (egyező lenyomat), a fiók kilétét nem dönti el.
+- Ugyanebben a körben: **L2** — a létező végleges jelző élettartam-frissítésének hibája nem kerüli meg a tulajdonos-ellenőrzést; a jelzősor
+  írásának hibája (bizonyíthatatlan állapot) 503 a 202 előtt. **L5** — a már elküldött körhöz újratöltéskor nem keletkezik kilét-rekord és
+  kilét-rögzítés. **L3** — a pillanatkép-számláló körönként a legnagyobb elfogadott értéket tartja.
+
 ## Cél
 
 1. A vendég / párosított tanuló HELYI kvízének eredménye akkor is elmenjen, ha a tanuló minden kérdésre válaszolt, de a „Kvíz
@@ -645,4 +661,8 @@ Elfogadás (S1b):
 - [ ] E69 – 403 alatti újrapárosítás: az ismétlés párosítás nélkül (böngésző, végleges + pillanatkép)
 - [ ] E70 – tulajdonos-lekérdezési hiba: 503, nincs második levél, utána duplikátum (valódi DB)
 - [ ] E71 – rekord nélkül helyreállított, megkezdett kör: `?`, párosítás nélkül; a rekord a végleges siker után törlődik (böngésző)
+- [ ] E72 – szerveres kilét-rögzítés: A → B első válasz → A küld friss A-CSRF-fel → nem A nevére (valódi DB, rögzítő kéréssel és nélküle)
+- [ ] E73 – a kliens az első válasznál egyszer küld kilét-rögzítést, fiókcímke nélkül (böngésző)
+- [ ] E74 – létező jelző TTL-hibája: duplikátum; jelzősor-írási hiba: 503 (valódi DB)
+- [ ] E75 – elküldött kör újratöltése: nincs kilét-rekord és rögzítés (böngésző); pillanatkép-számláló nem lép vissza (böngésző)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
