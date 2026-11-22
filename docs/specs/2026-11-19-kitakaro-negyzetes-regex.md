@@ -208,3 +208,19 @@ A következő határesetek nem rontanak a főághoz képest, ezért a #521-ben n
   `"` lezárja a hitelesítő részt; a D7 túltakarása (hash, hosszú azonosító, számos útvonal, sortöréssel tapadó következő sor,
   escape-elt ékezetes szavak); a szóhoz tapadó `…Bearer` nem séma; a képgyártó parancssori eszköze ismeretlen kapcsolóra nem ad
   hibát (`--help` fizetős futást indított — külön jegy).
+
+## 14. „Nem gyengébb a főágnál” — szerkezeti biztosíték (6. vak kör, 485ac4b0; 2026-11-22)
+
+- **D8 — főági kompatibilitási réteg:** minden kimeneti út a saját FŐÁGI mintáit is futtatja, azonos nyelvű lineáris alakban,
+  a nyers szövegen; a tartományok az új tartományokkal egyesülnek (`COMPAT` a `kitakaro.mjs`-ben): a kapunál a főági DB-URL
+  (`[^\s"'`<>]+` — backslash-sel, a query-jelszót is elnyelve), GitHub-, `sk-`-, AWS-, Bearer-minta és a nyers szövegen futó
+  e-mail-pásztázó (a főági regex pontos nyelve); a külső ellenőrnél az AIza; a képgyártónál a `Bearer\s+[A-Za-z0-9._-]+`
+  (szóhatár nélkül) és az `sk-or-`. A nyers tartomány escape-egységet nem vág ketté (az eleje / vége az egység határára tágul).
+- **D9 — főági láthatósági határ a vágott utakon:** a `maskClip` / `redactClip` kimenete nem tartalmazhat forrást a főági hívó
+  (`maskSecrets(…).slice(0, max)`, illetve `redact(…).slice(0, 300)`) láthatósági határa mögül (`mainVisibleEnd`): egy új,
+  rövidítő találat nem hozhat be korábban levágott szöveget.
+- **Következmény (elfogadva a szűkítéssel):** a kapu útján a DB-URL a főághoz hasonlóan a záró határig nyel (JSON-ban a `\n` utáni
+  részt is), a képgyártón a `…Bearer` + szóköz / sortörés + futás hitelesítőnek számít; a rövid vágott kimenet a főági határnál
+  véget ér. Az érintett, korábbi körökben írt olvashatósági tesztelvárások ehhez igazítva (végrehajtási napló).
+- **Nyitott (követő jegy, 13. pont):** 6. kör L6 — átfedésnél a külső ellenőr pontoskulcs-helyőrzője (`***`) helyett a korábban
+  kezdődő tartományé (`Bearer <token>`) jelenik meg; a kulcs takart, csak a jelölés más.

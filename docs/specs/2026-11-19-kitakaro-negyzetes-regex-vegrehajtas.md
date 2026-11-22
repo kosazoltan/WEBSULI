@@ -201,3 +201,21 @@ nem gyengébb kitakarás; a teljesség követő jegy (terv 12–13. pont).
   koordinátor kérésére javítva (a teljes üzenet takarva az első sor előtt). L4 — nem titokszivárgás; javítva (az escape-elt
   sortörés szakaszhatár). L2 — nem gyengébb a főágnál → követő jegy (terv 13. pont).
 - **Zöld:** `node --test scripts/qa/gates/*.test.mjs` 152/152; design-assets 23/23; advent-art 22/22.
+
+## 2026-11-22 — 6. vak kör (485ac4b0)
+
+NEM ítélet (szűkített céllal): 4 blokkoló, 1 közepes, 1 kicsi. A tulajdonosi keret szerinti utolsó javítókör.
+
+- **Tesztek előbb** (`6f0371d5`): `leakSet` / `extraLeaks` (halmaz-orákulum: minden 6 karakteres darab, rövid titoknál a teljes
+  titok; az új látható halmaz részhalmaza a főágénak — L5); új eset: DB-URL query-jelszó és -token backslash-sel (L1);
+  regressziós minták: Windows-út címmel (L2), `authBearer` rövid / hosszú törzzsel és `requestImage`-dzsel (L3), rövidülő előtag
+  a 160 / 400 / 600-as és a 300-as hívóhatárral (L4). Piros: 8 bukás a kapuknál, 3 a design-assetsnél.
+- **Javítás:** `kitakaro.mjs` — főági kompatibilitási réteg (D8: a hívó útjának főági mintái mindig futnak, lineáris alakban, a
+  nyers szövegen; a kapun a nyers e-mail is); a nyers tartomány escape-egységhatárra tágul; a DB-URL nyersen csak érvényes
+  JSON-escape-nél áll meg; főági láthatósági határ a vágott utakon (D9, `mainVisibleEnd`). A hívók `compat` paramétert adnak.
+- **Szűkítés miatti, dokumentált tesztelvárás-változások:** a kapu-`redact` JSON-olvashatósági elvárásai (25de6739 L5,
+  ac6447f5 L2 / L4) a főági viselkedésre (`connect <db-url>`, `dsn "<db-url> rossz`, `timeout<email>\nkeep`); a rövid vágott
+  „környezet” elvárás csak a főági határba férő bemeneten; a képgyártói `LifeboatBearer` sor a főági minta szerint takart.
+- **Mutánspróba:** a kompatibilitási réteg kikapcsolva → a „nem gyengébb” teszt bukik a kapuknál és a design-assetsnél;
+  visszaállítva. **Mérés:** 20 M-es futás `redact` 107 ms; 11 M-es ismételt séma 113 ms; 20 M-es AIza `maskClip` 16 ms.
+- **Nyitott:** 6. kör L6 (helyőrző-jelölés átfedésnél) → követő jegy.
