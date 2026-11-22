@@ -10,7 +10,8 @@ import {
   type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
-import { CLIP_TMP_PREFIX, clipKeys, clipProviders, downloadAndShrink, safeProviderFetch, sweepStaleClipDirs, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
+import { CLIP_TMP_PREFIX, clipKeys, clipProviders, downloadAndShrink, readLimitedText, safeProviderFetch, sweepStaleClipDirs, webBody, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
+import { Readable } from "node:stream";
 /** Csonkolt szállítás: nyilvános címre old fel, és a (csonkolt) globális fetch-csel küld — valódi DNS és hálózat nélkül. */
 const testTransport: ProviderTransport = {
   lookup: async () => [{ address: "93.184.216.34", family: 4 }],
@@ -314,15 +315,17 @@ test("átkódolás: az időkorlát SIGKILL-lel él, a munkamappa hiba és siker 
   assert.equal(existsSync(timedOut.calls[0].workdir), false, "az időkorláttal megölt átkódolás után is törlődik");
 });
 
-test("átkódolás POSIX-on valódi gyerekkel: a SIGTERM-et figyelmen kívül hagyó ffmpeg elindul, az időkorlát megöli, a munkamappa eltűnik (review L1; vak kör L11)", { skip: process.platform === "win32" ? "az ál-ffmpeg POSIX-héjszkript; a Windows-ágat a csonkolt átkódolós teszt fedi" : false }, async () => {
+test("átkódolás POSIX-on valódi gyerekkel: a SIGTERM-et figyelmen kívül hagyó ffmpeg elindul, az időkorlát megöli, a munkamappa eltűnik (review L1; vak kör L11; 4. vak kör L4)", { timeout: 30_000, skip: process.platform === "win32" ? "az ál-ffmpeg POSIX-héjszkript; a Windows-ágat a csonkolt átkódolós teszt fedi" : false }, async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "fake-ffmpeg-"));
   const stubborn = path.join(dir, "ffmpeg"), marker = path.join(dir, "elindult");
   // Az utolsó argumentum a kimenet útvonala: a jelzőfájlba írva igazolja az indulást és megadja a munkamappát.
-  writeFileSync(stubborn, `#!/bin/sh\nfor a; do last="$a"; done\necho "$last" > "${marker}"\ntrap '' TERM\nexec sleep 30\n`);
+  // A jelzőfájl a `trap` UTÁN készül: ha megvan, a gyerek már a SIGTERM-et figyelmen kívül hagyó állapotban volt (4. vak kör L4).
+  writeFileSync(stubborn, `#!/bin/sh\ntrap '' TERM\nfor a; do last="$a"; done\necho "$last" > "${marker}"\nexec sleep 30\n`);
   chmodSync(stubborn, 0o755);
   const started = Date.now();
-  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array([1, 2, 3])), stubborn, 300), null);
-  assert.ok(Date.now() - started < 5000, `a beakadt átkódolás nem tartja fel a sort (${Date.now() - started} ms)`);
+  // 2 s-os időkorlát: terhelt CI-n is bőven elindul a gyerek és beállítja a `trap`-et; a 30 s-os alvásnál jóval előbb kell végeznie.
+  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array([1, 2, 3])), stubborn, 2000, { rss: () => 0 }), null);
+  assert.ok(Date.now() - started < 15_000, `a beakadt átkódolás nem tartja fel a sort (${Date.now() - started} ms)`);
   assert.ok(existsSync(marker), "az ál-ffmpeg ténylegesen elindult");
   assert.equal(existsSync(path.dirname(readFileSync(marker, "utf8").trim())), false, "a munkamappa törlődött");
   rmSync(dir, { recursive: true, force: true });
@@ -593,4 +596,39 @@ test("testvérjelenet hibája után a futó jelenet hangkapuja és újabb hangk�
   assert.ok("problems" in out && /502/.test(out.problems.join(" ")));
   assert.equal(hearCalls, 0, "a hiba után nincs hangkapu-hívás");
   assert.equal(deps.calls.speech.length, speechBefore, "a hiba után nincs újabb hangkérés");
+});
+
+test("a HTTP-adapter választeste bájtalapú, kis sorral jön: lassú fogyasztónál a memóriában pufferelt nyers adat korlátos (4. vak kör L1)", async () => {
+  let produced = 0;
+  // Véges, gyors termelő (4 MiB): korlátlan sorral mind a memóriába kerülne, mielőtt a fogyasztó egy bájtot is kérne.
+  const fast = new Readable({ read() { if (produced >= 4 * 1024 * 1024) { this.push(null); return; } produced += 16 * 1024; this.push(Buffer.alloc(16 * 1024)); } });
+  const body = webBody(fast);
+  // A fogyasztó (a lemezre író pipeline) még nem olvas: ennyit tölt elő az adapter magától.
+  for (let i = 0; i < 50; i++) await new Promise((r) => setImmediate(r));
+  assert.ok(produced <= 256 * 1024, `előtöltve ${produced} bájt (határ: 256 KiB)`);
+  await body.cancel();
+  fast.destroy();
+});
+
+test("a lekérdezés JSON-válasza bájtkorlátos: a túl hosszú törzs olvasása a korlátnál megszakad (4. vak kör L1)", async () => {
+  let pulled = 0;
+  // 2 MiB-os törzs (véges, hogy a korlát nélküli olvasás is befejeződjön, és a teszt bukjon, ne akadjon el).
+  const endless = new ReadableStream<Uint8Array>({ pull(controller) { if (++pulled > 128) { controller.close(); return; } controller.enqueue(new Uint8Array(16 * 1024)); } });
+  await assert.rejects(readLimitedText(new Response(endless), 64 * 1024), /bájt/);
+  assert.ok(pulled <= 8, `a korlát után nem olvas tovább (${pulled} darab)`);
+  assert.equal(await readLimitedText(new Response('{"status":"completed"}'), 64 * 1024), '{"status":"completed"}');
+});
+
+test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn beérő címre nem indul kérés (4. vak kör L2)", async () => {
+  let sent = 0, resolveLookup!: (v: Array<{ address: string; family: number }>) => void;
+  const transport: ProviderTransport = {
+    lookup: () => new Promise((resolve) => { resolveLookup = resolve; }),
+    send: async () => { sent++; return new Response("x"); },
+  };
+  const started = Date.now();
+  await assert.rejects(safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(50) }, { sameOrigin: false, transport }));
+  assert.ok(Date.now() - started < 2000, `a függő DNS nem tartja fel (${Date.now() - started} ms)`);
+  resolveLookup([{ address: "93.184.216.34", family: 4 }]);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(sent, 0, "a későn beérő feloldás után sem indul kérés");
 });

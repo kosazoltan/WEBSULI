@@ -37,6 +37,36 @@ export type ProviderTransport = {
   send: (url: URL, address: ResolvedAddress, init: RequestInit & { headers: Record<string, string> }) => Promise<Response>;
 };
 const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
+/**
+ * A Node-válasz webes folyamként. 4. vak kör L1: Node 24-en mérve a `Readable.toWeb` alapértelmezése is visszanyom (lassú fogyasztónál
+ * kb. 32 KiB-ot tölt elő); a teszt ezt a korlátot rögzíti, hogy egy Node-frissítés se tehesse korlátlanná.
+ */
+export const webBody = (res: Readable): ReadableStream<Uint8Array> => Readable.toWeb(res) as ReadableStream<Uint8Array>;
+/** A válasz szövege legfeljebb `max` bájtig; fölötte a törzs lezárul és hiba (4. vak kör L1: a lekérdezés JSON-ja). */
+export async function readLimitedText(res: Response, max: number): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) { await reader.cancel().catch(() => undefined); throw new Error(`a szolgáltatói válasz nagyobb ${max} bájtnál`); }
+    parts.push(value);
+  }
+  return Buffer.concat(parts).toString("utf8");
+}
+/** Az ígéret várakozása versenyez a megszakítójellel (időkorlát / leállítás) — 4. vak kör L2: a DNS-feloldás sem akaszthat. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | null | undefined): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason ?? new Error("megszakítva")); return; }
+    const onAbort = () => reject(signal.reason ?? new Error("megszakítva"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then((value) => { signal.removeEventListener("abort", onAbort); resolve(value); }, (error) => { signal.removeEventListener("abort", onAbort); reject(error); });
+  });
+}
 export const defaultProviderTransport: ProviderTransport = {
   lookup: async (host) => (net.isIP(host) ? [{ address: host, family: net.isIP(host) }] : dns.promises.lookup(host, { all: true, verbatim: true })),
   send: (url, address, init) => new Promise<Response>((resolve, reject) => {
@@ -53,7 +83,7 @@ export const defaultProviderTransport: ProviderTransport = {
       for (const [name, value] of Object.entries(res.headers)) if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
       const status = res.statusCode ?? 502;
       if (NULL_BODY_STATUS.has(status)) { res.resume(); resolve(new Response(null, { status, headers })); return; }
-      resolve(new Response(Readable.toWeb(res) as ReadableStream<Uint8Array>, { status, headers }));
+      resolve(new Response(webBody(res), { status, headers }));
     });
     req.on("error", reject);
     req.end();
@@ -74,9 +104,11 @@ export async function safeProviderFetch(url: URL, init: RequestInit & { headers:
     if (opts.sameOrigin && current.origin !== OPENROUTER_ORIGIN) throw new Error("idegen originre mutató szolgáltatói cím");
     checkFetchUrl(current.href);
     const host = current.hostname.replace(/^\[|\]$/g, "");
-    const addresses = await transport.lookup(host);
+    const addresses = await untilAborted(transport.lookup(host), init.signal);
     if (!addresses.length || addresses.some((a) => !isPublicAddress(a.address))) throw new Error(`nem nyilvános címre oldódik fel: ${host}`);
     const headers = current.origin === OPENROUTER_ORIGIN ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
+    // A későn beérő feloldás után (lejárt időkorlát / leállítás) nem indul kérés.
+    init.signal?.throwIfAborted();
     const res = await transport.send(current, addresses[0], { ...init, headers });
     const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
     if (!location) return res;
@@ -367,7 +399,8 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = def
         if (Date.now() > deadline) throw new Error("mozgókép: időtúllépés");
         await pause(VIDEO_POLL_MS);
         const poll = await safeProviderFetch(pollingUrl, { headers: orHeaders, signal: signal(60_000) }, { sameOrigin: true, transport });
-        if (poll.ok) job = JSON.parse(await poll.text());
+        if (poll.ok) job = JSON.parse(await readLimitedText(poll, 256 * 1024));
+        else await poll.body?.cancel().catch(() => undefined);
       }
       if (job.status !== "completed" || !job.unsigned_urls?.[0]) throw new Error(`mozgókép: ${job.status} ${scrub(JSON.stringify(job.error ?? ""))}`);
       // Letöltés csak HTTPS-ről; a kulcs csak a szolgáltató saját originjére megy, idegen (CDN) címre kulcs nélkül (vak kör L8).

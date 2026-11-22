@@ -35,7 +35,7 @@ export function useLessonClips(lessonId: string | undefined, preset?: LessonClip
   useEffect(() => {
     if (preset) { setState(toState(preset)); return; }
     if (!lessonId) { setState(EMPTY); return; }
-    let stopped = false, expired = false;
+    let stopped = false, expired = false, knownPending = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
     const controller = new AbortController();
@@ -47,14 +47,19 @@ export function useLessonClips(lessonId: string | undefined, preset?: LessonClip
       setState((old) => (old.pending ? { clips: old.clips, pending: false } : old));
     }, CLIP_POLL_MAX_MS);
     const load = async () => {
-      let next = EMPTY;
+      let next = EMPTY, failed = false;
       try {
         const res = await fetch(`/api/lessons/${encodeURIComponent(lessonId)}/clips`, { credentials: "same-origin", signal: controller.signal });
         if (res.ok) next = toState(await res.json());
+        else failed = true;
       } catch {
-        next = EMPTY; // hálózati hiba vagy lejárat: a lecke kisfilm nélkül megy tovább
+        failed = true; // hálózati hiba vagy lejárat: a lecke kisfilm nélkül megy tovább
       }
       if (stopped || expired) return;
+      // 4. vak kör L3: ha már tudjuk, hogy készülnek a kisfilmek, egy átmeneti hiba nem állítja le a várakozást — az állapot marad,
+      // és visszafogottabban (háromszoros időközzel) újra kérdez, a teljes időkereten belül.
+      if (failed && knownPending) { timer = setTimeout(() => void load(), pollMs * 3); return; }
+      knownPending = next.pending;
       const settled = settleClips(next, Date.now() - started);
       // Hibás lekérés nem törli a már megjelent kisfilmeket.
       setState((old) => (next === EMPTY && old.clips.size ? { clips: old.clips, pending: false } : settled.state));

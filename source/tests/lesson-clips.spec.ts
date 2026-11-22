@@ -227,6 +227,27 @@ test("ha a lekérdezés elakad, a várakozás lejártakor a „Készülnek a kis
   await expect(page.getByTestId("clip-pending")).toHaveCount(0);
 });
 
+test("egy átmeneti 502 nem állítja le a várakozást: a később elkészült kisfilm újratöltés nélkül megjelenik (4. vak kör L3)", async ({ page }) => {
+  await page.clock.install();
+  let calls = 0;
+  await serveV2(page, "adventure");
+  await page.route("**/api/lessons/practice-probe/clips", (route) => {
+    calls++;
+    if (calls === 1) return route.fulfill({ json: { clips: [], pending: true } });
+    if (calls === 2) return route.fulfill({ status: 502, json: { message: "átmeneti hiba" } });
+    return route.fulfill({ json: { clips: [{ sectionIndex: 0, clip: v2Clip("adventure") }], pending: false } });
+  });
+  await page.goto("/__lesson-runtime-probe?fusion=1&practice=1");
+  await expect(page.getByTestId("clip-pending")).toBeVisible();
+  await page.clock.fastForward(21_000);
+  await expect.poll(() => calls).toBe(2);
+  await expect(page.getByTestId("clip-pending"), "az átmeneti hiba alatt a jelzés marad").toBeVisible();
+  await page.clock.fastForward(61_000);
+  await expect.poll(() => calls).toBe(3);
+  await expect(page.getByTestId("clip-play-0")).toBeVisible();
+  await expect(page.getByTestId("clip-pending")).toHaveCount(0);
+});
+
 test("hibás vagy régi formátumú kisfilm-válasz mellett a lecke kisfilm nélkül, hibátlanul megjelenik", async ({ page }) => {
   let body: unknown = null;
   await page.route("**/api/lessons/practice-probe/clips", (route) => (body ? route.fulfill({ json: body }) : route.fulfill({ status: 500, json: { message: "hiba" } })));
