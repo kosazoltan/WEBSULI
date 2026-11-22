@@ -192,6 +192,8 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Reques
     if (!Object.keys(body.picks).length) return res.status(202).json({ queued: false });
     graded = gradeQuiz(experience.quiz, body.picks);
   }
+  // Bontás B1a: a kör kezdete a levél dátumsorához (a hihetőséget a levélépítő ellenőrzi; régi kliensnél hiányzik).
+  if (body.startedAt !== undefined) graded = { ...graded, meta: { startedAt: body.startedAt } };
   // Tanulói profil (S2): a párosított eszköz tanulója (ellenőrzött token). Átfogó review: bejelentkezve is a tanuló naplójába kerül
   // (mint a régi anyagnál); a levél neve bejelentkezve a fiók neve marad.
   const paired = body.learner ? await resolveLearner(body.learner).catch(() => null) : null;

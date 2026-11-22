@@ -22,12 +22,20 @@
 7. **Kapcsoló (B4–B8):** a B4 vezeti be (név a B4 tervezésekor rögzítendő, a `render.yaml`-ba NEM kerül; alapból KI); a B4–B8 minden új
    viselkedése e mögött. KI állásban a viselkedés-lenyomat teszt a főághoz mér.
 
-## 1. B1 — dátum, korhatár, teljes kör szövege (R2, R13 teljes kör, R17)
+## 1. B1a — szerver: opcionális kezdés / utolsó válasz, dátumsor a levélben (R13 teljes kör, R2 szerverrésze)
 
-- Átvétel: `source/shared/quiz-round.ts` (korhatár: `roundActivityAt`, `roundTooOld`, `STALE_ROUND_DAYS`), a `useExperienceRound.ts`
-  `lastAnsweredAt` mezője, a levél dátumsora a `lesson-result-email.ts`-ben.
-- Tesztek: `result-report-complete.test.ts` korhatár-részei, a levélszöveg tesztje.
-- Kész: a teljes kör levele a kitöltés dátumát mutatja; 7 napnál régebbi utolsó válasz után nincs beküldés.
+- `shared/lesson-result-email.ts`: `startedAt` (mindkét fajta) és `lastAnsweredAt` (kvíz) opcionális, pozitív egész; a séma szigorú marad.
+  `formatBudapest`, `plausibleStart`; a levél „Beküldve:” sora mindig, „A kör kezdete:” csak hihető értékkel.
+- `server/lesson-result-email.ts`: a beküldött `startedAt` a pontozott eredmény `meta`-jába.
+- Teszt: `tests/lesson-result-email-date.test.ts` (séma régi / új klienssel, nyári / téli idő, dátumhatár, hihetőség).
+- Kész, ha települt: a B1b csak ezután indul.
+
+## 1b. B1b — kliens: mezők küldése, korhatár (R2)
+
+- Átvétel: `source/shared/quiz-round.ts` (`roundActivityAt`, `roundTooOld`, `STALE_ROUND_DAYS`), a `useExperienceRound.ts` `lastAnsweredAt`
+  mezője és rögzítése válaszkor, a `resultReport.ts` végleges beküldésében a mezők és a korhatár.
+- Tesztek: `result-report-complete.test.ts` korhatár-részei; e2e: a végleges beküldés törzse a két mezővel.
+- Kész: 7 napnál régebbi utolsó válasz után nincs beküldés; a levél mutatja a kör kezdetét.
 
 ## 2. B2 — végleges beküldés hálózati rétege (R4, R8, R9, R23, R26, R37, R46)
 
