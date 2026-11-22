@@ -56,3 +56,23 @@ cogni:
         - AGENTS.md
         - docs/minosegkapuk.md
         - scripts/qa/gates/
+    - id: D-2026-11-22-01
+      date: 2026-11-22
+      title: "Záró hurok minden elvégzett feladat után, saját WEBSULI-változatban"
+      decision: |
+        „minden elvégzett feladat után … trap, QMD, YAML, Cogni, vektoros és kanban memóriák … higiénia … tiszta fával várni a
+        következő feladatot”, és „a több gépen futó záró folyamatokból meríts ötleteket, és alakítsd ki a saját WEBSULI-változatot”.
+      source: "docs/specs/2026-11-22-zaro-hurok-websuli.md:3-5"
+      files:
+        - docs/specs/2026-11-22-zaro-hurok-websuli.md
+        - scripts/qa/zaro-hurok.mjs
+    - id: D-2026-11-22-02
+      date: 2026-11-22
+      title: "Ugyanazt a hibát tilos ugyanúgy újra elkövetni — vak körök gépi megállási szabálya"
+      decision: |
+        tulajdonosi „törvény”: ugyanazt a hibát tilos ugyanúgy újra elkövetni; új vak kör csak szigorúan csökkenő blokkolószámmal és
+        legfeljebb 2 egymást követő NEM után indulhat, különben megközelítésváltás.
+      source: "docs/specs/2026-11-22-zaro-hurok-websuli.md:82-89"
+      files:
+        - docs/specs/2026-11-22-zaro-hurok-websuli.md
+        - scripts/qa/zaro-hurok.mjs

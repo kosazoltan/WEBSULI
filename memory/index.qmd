@@ -35,11 +35,12 @@ repóban, az csak „tervezett” jelöléssel szerepel.
 | Közös réteg | `source/shared/` | Drizzle-séma `schema.ts` (59 tábla), közös szerződések és tiszta segédek (pl. `game-quiz-contract.ts`, `knowledge-map-schema.ts`) |
 | Migrációk | `source/migrations/` | SQL-migrációk; a sémával együtt változnak |
 | Tesztek | `source/tests/` | `node --test` egység- és őr-tesztek (`*-guard.test.ts`); Playwright-konfigok a `source/` gyökerében |
-| Minőségkapuk | `scripts/qa/` | `gates/` (lint / stage / push / pr / merge kapu, `record-review.mjs`), `hooks/`, `three-phase-check.mjs` |
+| Minőségkapuk | `scripts/qa/` | `gates/` (lint / stage / push / pr / merge kapu, `record-review.mjs`), `hooks/`, `three-phase-check.mjs`, `zaro-hurok.mjs` (záró kapu) |
 | Tervek | `docs/specs/` | terv + `*-vegrehajtas.md`; sablon `_TEMPLATE.md`, szerződés `contract-template.yaml` |
 | Retrók | `docs/handoffs/` | `*-retro.md` futásonként |
 
 # Záró hurok
 
 Csapda → memóriák (YAML, QMD, Cogni; vektor: nem elérhető) → retró → tapasztalat-kanban → skill → ismétlődő hibaosztály → higiénia →
-tiszta fa. A gépi záró kapu, a hozzá tartozó skill és terv tervezett: a feat/zaro-hurok-1 és a feat/zaro-hurok-3 PR-ral érkezik.
+tiszta fa. Kapu: `npm run zaro:check -- --since <ISO>` (`scripts/qa/zaro-hurok.mjs`; terv: `docs/specs/2026-11-22-zaro-hurok-websuli.md`).
+A hozzá tartozó skill tervezett: a feat/zaro-hurok-3 PR-ral érkezik.

@@ -32,7 +32,8 @@ meglévő szabályaihoz (egyetlen csapdakatalógus, a Claude Code tapasztalat-ka
 | `.github/workflows/ci.yml` | a `scripts/qa` tesztlépés (29. sor) listájába a `zaro-hurok.test.mjs` |
 | `scripts/qa/gates/gates.config.json` | `mirroredSkills` + `websuli-zaro-hurok` |
 | `scripts/qa/gates/skills-sync-check.test.mjs` | a valódi tükör-teszt darabszáma 5 → 6 (dokumentált spec-változás: új tükrözött skill) |
-| `.agents/skills/websuli-zaro-hurok/SKILL.md` + `.claude/skills/websuli-zaro-hurok/SKILL.md` | ÚJ skill + bájtazonos tükör |
+| `.agents/skills/websuli-zaro-hurok/SKILL.md` + `.claude/skills/websuli-zaro-hurok/SKILL.md` | ÚJ skill + bájtazonos tükör — tervezett, a feat/zaro-hurok-3 PR-ral érkezik |
+| `source/tests/memory-layer-refs-guard.test.ts` | memória-réteg hivatkozás-őr (a feat/zaro-hurok-2-ben): nem létező aktív hivatkozás, fájl:sor nélküli döntés, séma-elcsúszás |
 | `AGENTS.md` | új „Záró hurok (kötelező)” szakasz a kezelt `agentic-qa-kit` blokkon kívül |
 | `docs/agent-csapdak.md` | az ideiglenes sorszám szabálya + egy `C-ZH-1` bejegyzés |
 | `memory/manifest.yaml`, `memory/index.qmd`, `memory/.cogni/*.cogni.yaml` | a TODO-k kitöltése igazolt tényekkel, a térkép a valódi WEBSULI-utakra |
@@ -160,6 +161,10 @@ meglévő szabályaihoz (egyetlen csapdakatalógus, a Claude Code tapasztalat-ka
   `HERMES_KANBAN_CLI` üres), `--kanban-file`-lal a tapasztalat-kanbanra ZÖLD. Ezen a gépen fut helyi Ollama → a vektor-lépés INFO.
   `konvergencia` a valódi bizonyítékokon: `chore/vak-ellenor-deepseek` (4 NEM, 1 → 1) és `fix/kitakaro-negyzetes-regex` (7 NEM) → TILOS;
   `perf/kockavadasz-telefon-gyors` → INDULHAT. Ismert korlát: squash-merge után az ág nem „ős”, ezért a higiénia csak riportolja.
+- 2026-11-22: vak kör a feat/zaro-hurok-2-n (`d87f4c1e`): NEM, 2 blokkoló + 4 közepes + 1 kicsi (L1–L7). Osztályszintű javítás: (A) nem
+  létező hivatkozás → a még nem szállított elem csak „tervezett” jelöléssel; (B) forrás nélküli döntés → a döntés-naplóban csak követett
+  fájl:sor forrás, a költési felhatalmazások kikerültek; (C) pontatlan tényleírás (útvonal-sablon, séma-célok, kapusorrend, tükör
+  hatóköre). Gépi kényszerítés: `source/tests/memory-layer-refs-guard.test.ts`. Ugyanez az átnézés a -1 és a -3 ágon.
 - 2026-11-22: orkesztrátori javítás — a kanban-lépés alapja a Claude Code tapasztalat-kanbanja (D9, E8), a Hermes-tábla nem feltétel;
   bontás három, sorban beolvasztható PR-ra: `feat/zaro-hurok-2` (rétegek) → `feat/zaro-hurok-1` (kapu + teszt + bekötés + terv) →
   `feat/zaro-hurok-3` (skill + tükör + a `gates.config.json` `mirroredSkills` bővítése + a `skills-sync-check.test.mjs` darabszáma + AGENTS.md +
