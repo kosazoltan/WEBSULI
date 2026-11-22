@@ -364,6 +364,24 @@ Tulajdonosi döntés (űrlap, 2026-11-21): „Szűkítés: tartós sor külön (
 - **L1 (tartós soros) és L4** → T-3 nyitott pontok (`docs/specs/2026-11-20-eredmenylevel-tartos-sor.md`, T3-N1 / T3-N2).
 - Utána: célzott egységtesztek, `test:learning-db`, az eredménylevél böngészős specjei, `gate:stage`.
 
+## 2026-11-22 — 4. vak kör (87631382): kilét rögzítése létrehozáskor (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R47–R48)
+
+Tervezési szabály (R47) a kilét késői feloldása ellen; előbb BUKÓ tesztek (mind piros volt a régi kóddal), utána a javítás.
+- **Kliens** `client/src/lesson-runtime/resultReport.ts`: körönkénti kilét-rekord (`bindRoundOwner`, kulcs `…:owner:<kör>`: `subject` a
+  gyorsítótárazott tokenválaszból vagy `null`, `learnerTag` = a párosító token lenyomata `experienceFingerprint`-tel). Rögzítés a kör első
+  tevékenységekor (külön effekt a beküldő előtt); a CSRF-token a lecke megnyitásakor előtöltődik. A végleges bejegyzés és a pillanatkép
+  `subject`-je a rögzített (ismeretlen: `?`), a `learner` csak egyező lenyomatnál (`ownerLearner`). Az `enqueuedHere` utólagos pótlás
+  megszűnt (R31-pótlás / R35 / R43 helyett); a rekord a végleges siker után törlődik.
+  Böngészőtesztek: `R47 / L1` (KI állás, az első token 10 s-ot késik és B fiókjáé → `?`; régi kóddal `"fiok-b"`), `R47 / L2` (újrapárosítás
+  nyitott fül alatt → nincs `learner`; régi kóddal B tokenje), `R47 / kontroll` (változatlan párosítás → A tokenje, `subject: "?"`).
+- **R48 (L4)** ugyanott: a pillanatkép késői 202-je nem menti a részleges jelzőt, ha a végleges jelző megvan. Böngészőteszt `R48 / L4`
+  (régi kóddal a jelző visszajött).
+- **Szerver (L3)** `server/lesson-result-email.ts`: a párosítás feloldásának átmeneti hibája → 503, vendég-rögzítés nélkül; teszthorog
+  `setLearnerResolveFault`. DB-teszt `R47 / L3`: pillanatkép és végleges is 503, várakozó és jelzősor nincs, a hiba után az ismétlés átmegy
+  (a régi elnyelő ággal piros volt).
+- Dokumentált spec-változás: a `tests/result-outbox.test.ts` R35 forrásőre az `enqueuedHere`-es pótlás helyett az R47-et nézi (nincs
+  utólagos pótlás, a bejegyzés a rögzített címkét viszi) — szigorúbb.
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

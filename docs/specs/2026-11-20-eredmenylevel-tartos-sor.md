@@ -79,6 +79,9 @@ R32 (fülbiztosság); a #510-ben BE kapcsolóval futó böngészőtesztjeik: `R2
   első tokenválasz ablaka megmarad. Javítási irány: a felvételkori kilét ellenőrizhető munkamenet-állapotból (pl. a felvételkor kötelező,
   a bejegyzéshez kötött tokenválasz vagy a szerver által aláírt munkamenet-azonosító); ha ez nem bizonyítható, `?`.
   Elfogadás: címke nélküli felvétel → token-502 / késői token → B fiók tokenje ugyanabban a dokumentumban → a levél nem B nevén megy.
+  **Állapot (2026-11-22, #510 R47):** a #510 bevezette a tervezési szabályt — a kilét a kör első tevékenységekor rögzül (fiókcímke +
+  párosító-token lenyomat), utólagos pótlás nincs —, ez a tartós sorra is érvényes (a bejegyzés a létrehozáskori kilétet viszi). Bekapcsolás
+  előtt a T-3-ban ellenőrizendő: a dokumentumok közti (újratöltés utáni) folytonosság és a rekord nélküli régi körök kezelése.
 - **T3-N2 (L4): a lejárt, lezárt kör friss időbélyeggel visszakerül a tartós sorba.** Az induló ürítés törli a 7 napnál régebbi
   bejegyzést, de a lecke újranyitásakor a helyreállított, lezárt kör (`finishedAt`) új bejegyzést kap `Date.now()` aktivitással, és
   elmegy. KI állásban nem áll elő (nincs tartós bejegyzés és induló ürítés). Javítási irány: a lejárati döntés körönkénti megőrzése

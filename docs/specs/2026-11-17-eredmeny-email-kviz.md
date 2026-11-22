@@ -1,6 +1,6 @@
 # Eredmény-e-mail: a kvíz eredménye is menjen el, kérdésenkénti részletezéssel
 
-**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 6. gépi kör (804569c1) leletei: R35–R38, L2 követő szelet; a 7. gépi kör (0ec08148) leletei: R39–R42, L5 feltétellel dokumentálva; SZŰKÍTÉS (tulajdonos, 2026-11-21): a böngészős tartós sor kapcsoló mögött, alapból KI, véglegesítés a T-3-ban; a 8. gépi kör (e36518e5) leletei: R43–R46, L1 / L4 → T-3; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
+**Állapot:** S1a + S1b kész; a vak ellenőrzés (2026-11-18) leleteinek javítása: R1–R8; tulajdonosi döntés és telepítési sorrend: R9–R10 (2026-11-18); a második vak ellenőrzés leletei: R11–R14; a harmadiké: R15–R17; a negyediké: R18; Vercel-lelet: R19; gépi vak ellenőrzés: R20–R29; PR-review (44487292-es fej) leletei: R30–R34; a 6. gépi kör (804569c1) leletei: R35–R38, L2 követő szelet; a 7. gépi kör (0ec08148) leletei: R39–R42, L5 feltétellel dokumentálva; SZŰKÍTÉS (tulajdonos, 2026-11-21): a böngészős tartós sor kapcsoló mögött, alapból KI, véglegesítés a T-3-ban; a 8. gépi kör (e36518e5) leletei: R43–R46, L1 / L4 → T-3; a 9. gépi kör (87631382): R47 tervezési szabály (kilét rögzítése létrehozáskor) + R48; a 202 utáni tartós sor a T-3-ban – ág `fix/eredmeny-email-kviz` (PR #510)
 Végrehajtási utasítás: [`2026-11-17-eredmeny-email-kviz-vegrehajtas.md`](2026-11-17-eredmeny-email-kviz-vegrehajtas.md)
 Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 
@@ -434,6 +434,24 @@ Gépi vak ellenőrzés, 8. kör (GPT-6.2 Sol, e36518e5, 2026-11-21) — a KI ál
   kör újranyitáskori beküldése az R2 szerinti, a tanuló döntése); a böngészőteszt KI állásban mutatja, hogy nincs tárolóírás és induló
   ürítés.
 
+Gépi vak ellenőrzés, 9. kör (GPT-6.2 Sol, 87631382, 2026-11-22) — a kilét késői (küldéskori) feloldásának hibaosztálya (R39 / R43 után
+harmadszor), ezért foltozás helyett tervezési szabály:
+- **R47 — TERVEZÉSI SZABÁLY: a kilét a kör / bejegyzés LÉTREHOZÁSAKOR rögzül, küldéskor nem oldódik fel újra (L1, L2, L3).**
+  - *Kliens.* A kör kiléte a kör ELSŐ tevékenységekor (első kvízválasz / első kitöltött feladat, legkésőbb a lezáráskor) rögzül egy
+    körönkénti kilét-rekordba (`<lecke-tár>:<fajta>:owner:<kör>`; írhatatlan tárolónál memóriában): (a) a fiók álnevesített címkéje
+    (`resultSubject`, a gyorsítótárazott tokenválaszból — ha akkor nem ismert: `null`); (b) a párosító token LENYOMATA (nem maga a titok).
+    A pillanatkép és a végleges bejegyzés ebből épül: a fiók címkéje a rögzített (ismeretlen: `?` — a kérés fiók nélküliként fut), a
+    párosító token csak akkor megy, ha a MOSTANI token lenyomata a rögzítettel egyezik; eltérésnél (újrapárosítás, fiókváltás) a kérés
+    párosítás nélkül megy — az új tanulónak / fióknak nem tulajdonítható. Utólagos címkepótlás nincs (felülírja az R31 pótlását, az R35-öt
+    és az R43-at). A CSRF-token a lecke megnyitásakor előre töltődik, hogy a címke az első válasznál rendszerint már ismert legyen. A
+    rekord a végleges siker után törlődik. Vállalt korlát: a kód előtti (rekord nélküli) helyreállított kör a dokumentumbeli első
+    tevékenységekor kapja a rekordot.
+  - *Szerver.* A párosítás feloldásának ÁTMENETI hibája nem azonos az érvénytelen tokennel: ekkor a kérés nem rögzül vendégként (se
+    várakozó, se jelzősor), hanem újrapróbálható 503-at kap; érvénytelen / visszavont token → névtelen, mint eddig. A fiók egyezését a
+    szerver változatlanul a rögzített címkéhez méri (R31): eltérés vagy `?` → a munkamenet fiókja nem kapja meg.
+- **R48 — a késői pillanatkép-válasz nem írja vissza a részleges jelzőt (L4).** Ha a kör végleges jelzője már megvan, a pillanatkép
+  késői 202-je nem menti a részleges jelzőt (az R8 takarítása idempotens).
+
 Elfogadás (S1b):
 - E8. AMIKOR a lap háttérbe kerül vagy a tanuló elhagyja, és a le nem zárt kvízkörben legalább egy új válasz van, A RENDSZER
   pillanatképet küld (`partial: true`); válasz nélkül vagy változatlan állapotnál nem.
@@ -498,6 +516,13 @@ Elfogadás (S1b):
 - E62. Leállítás közben befogadott pillanatkép az ürítéssel kimegy, az első rögzítő őrzött, a lezárult ürítés után a felvétel 503 (R45).
 - E63. Ugyanarról a címről 60 pillanatkép és 60 végleges beküldés a közös írási kapu mögött is átmegy; más lecke-írásra a közös keret
   érvényes (R46).
+- E64. AMIKOR a kör első tevékenységekor a fiók még nem ismert, és az első (sikeres, de késői) tokenválasz már más fiókjáé, A RENDSZER a
+  kört `?` címkével küldi, nem a később belépett fiók címkéjével (R47).
+- E65. AMIKOR a nyitva hagyott leckefül alatt az eszköz újrapárosul, A RENDSZER a korábbi kör pillanatképét és végleges beküldését nem az
+  új tanuló párosításával küldi; változatlan párosításnál a párosított tanulóval (R47).
+- E66. AMIKOR a párosítás feloldása átmenetileg hibázik, A RENDSZER 503-at ad, vendégként nem rögzít (se várakozó, se jelzősor); a hiba
+  elmúltával az ismétlés átmegy (R47).
+- E67. A véglegesítés utáni késői pillanatkép-válasz nem írja vissza a részleges jelzőt (R48).
 - E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
@@ -575,4 +600,8 @@ Elfogadás (S1b):
 - [ ] E61 – függő pillanatkép határideje után újraküldhető (böngésző)
 - [ ] E62 – leállítás közbeni felvétel: kimegy / első rögzítő / 503 (valódi DB)
 - [ ] E63 – közös írási kapu: 60 + 60 átmegy, más írásra a közös keret (egységteszt, valódi HTTP)
+- [ ] E64 – késői első token más fiókból: `?` címke (böngésző, KI állás)
+- [ ] E65 – újrapárosítás: nem az új tanulóval; kontroll: változatlan párosítással igen (böngésző)
+- [ ] E66 – párosítás-feloldási DB-hiba: 503, nincs vendég-rögzítés; ismétlés átmegy (valódi DB)
+- [ ] E67 – késői pillanatkép-202 nem írja vissza a részleges jelzőt (böngésző)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)
