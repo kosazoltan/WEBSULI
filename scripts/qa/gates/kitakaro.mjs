@@ -25,7 +25,8 @@ const PATTERNS = [
   ['token', /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{16}[A-Za-z0-9_-]*/g],
   ['aws', /(?:AKIA|ASIA)[0-9A-Z]{16}/g],
   ['aiza', /AIza[0-9A-Za-z_-]{20}[0-9A-Za-z_-]*/g],
-  ['bearer', /\bbearer\s+(?!bearer\b)[A-Za-z0-9._~+/=-]+/gi],
+  // 5. vak kör L1: csak a különálló második `Bearer` szó nem token (utána nem token-karakter jön); a `Bearer-…` igen.
+  ['bearer', /\bbearer\s+(?!bearer(?![A-Za-z0-9._~+/=-]))[A-Za-z0-9._~+/=-]+/gi],
 ];
 
 /** Helyőrző-készletek (a régi szerződések; `run` = az osztályszabály találata). */
@@ -205,7 +206,9 @@ function runRanges(s, push, raw) {
             continue;
           }
         }
-        if (e === 110 || e === 114 || e === 116 || e === 98 || e === 102 || e === 47 || e === 92) { j += 2; continue; }
+        // 5. vak kör L4: az escape-elt sortörés (`\n`, `\r`) szakaszhatár — a futás folytatódik, de az escape helyőrzőn kívül marad.
+        if (e === 110 || e === 114) { segs.push(segStart, j); segStart = j + 2; j += 2; continue; }
+        if (e === 116 || e === 98 || e === 102 || e === 47 || e === 92) { j += 2; continue; }
         count++;
         j++;
         continue;

@@ -206,7 +206,8 @@ export function createGate(name, { log = (s) => process.stdout.write(`${s}\n`), 
     async step(stepName, fn) {
       const t0 = now();
       let r;
-      try { r = await fn(); } catch (e) { r = { status: STATUS.FAIL, note: String(e?.message ?? e).split('\n')[0] }; }
+      // 5. vak kör L3: a teljes kivételüzenet takarva, az első sor kivétele ELŐTT (többsoros titok se essen szét).
+      try { r = await fn(); } catch (e) { r = { status: STATUS.FAIL, note: redact(String(e?.message ?? e)).split('\n')[0] }; }
       if (!r || !r.status) r = { status: STATUS.FAIL, note: 'a lépés nem adott eredményt' };
       return record(stepName, r, now() - t0);
     },
