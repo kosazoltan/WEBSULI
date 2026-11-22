@@ -19,7 +19,7 @@ változatlanul** fut, csak egy biztonságos méretű, előre levágott szövegen
 - a képgyártó hibaága (`redact(...).slice(0, 300)`) helyett `redactClip(text, key, 300)`, ugyanígy.
 
 A vágási ponton átnyúló token-karakterfutás (betű, szám, `+ / = _ - . ~ % \ @` — a JSON-escape-ek ebbe esnek) **teljesen**
-kimarad (a vágás lineárisan a futás elejére hátrál, illetve a kapunál a futás / a félbevágott sor végére lép előre); a vágáson
+kimarad (a vágás lineárisan a futás elejére hátrál, illetve a kapunál a vágás utáni első két szót átlépve előre lép); a vágáson
 átnyúló pontos kulcs-előfordulás is. Így a láthatóságon belül a kimenet a főágé (vagy annak előtagja), a vágásnál nem szivárog.
 
 ## 2. NEM cél
@@ -38,7 +38,8 @@ korlátja 32 KB (a főági regex így változatlan maradhat). A főági kód a 3
 ## 4. Edge case-ek
 
 - Korlátnál rövidebb szöveg → bájtra a főági kimenet.
-- A kapunál a vágás után az első (félbevágott) sor kimarad, ha van sortörés; különben a vágáson átnyúló futás.
+- A kapunál a vágás után az első két, szóköz-jellegű karakterrel (szóköz, sortörés) határolt szó kimarad: a vágáson átnyúló szó
+  teljesen, és egy félbevágott `Bearer` + hitelesítő pár hitelesítője sem marad előtag nélkül.
 - A vágott utakon a vágáspontot metsző kulcs-előfordulás, illetve token-futás teljesen kimarad.
 - Üres / `undefined` bemenet → üres szöveg.
 
