@@ -18,7 +18,8 @@ export type RawResponse = {
   body: AsyncIterable<Uint8Array>;
   destroy(): void;
 };
-export type RawRequest = (url: URL, address: ResolvedAddress, timeoutMs: number, signal?: AbortSignal) => Promise<RawResponse>;
+/** `headers`: a kérés fejlécei (elhagyva: a forrásgyűjtő alapfejlécei). Kisfilm-letöltés (PR #418) ugyanezt az utat használja. */
+export type RawRequest = (url: URL, address: ResolvedAddress, timeoutMs: number, signal?: AbortSignal, headers?: Record<string, string>) => Promise<RawResponse>;
 export type PublicPage = { url: string; title: string; text: string };
 
 const V4_BLOCKED: Array<[string, number]> = [
@@ -101,7 +102,7 @@ const defaultLookup: AddressLookup = async (hostname) => {
 };
 
 /** Az alapértelmezett kérés: `https.request` a már ellenőrzött címre rögzített `lookup`-pal (a TLS-név a gépnév marad). */
-const defaultRequest: RawRequest = (url, address, timeoutMs, signal) => new Promise((resolve, reject) => {
+const defaultRequest: RawRequest = (url, address, timeoutMs, signal, headers) => new Promise((resolve, reject) => {
   const pinnedLookup = (_host: string, options: { all?: boolean } | number, callback: (...args: unknown[]) => void) => {
     if (typeof options === "object" && options?.all) callback(null, [{ address: address.address, family: address.family }]);
     else callback(null, address.address, address.family);
@@ -109,7 +110,7 @@ const defaultRequest: RawRequest = (url, address, timeoutMs, signal) => new Prom
   const req = https.request({
     protocol: "https:", hostname: url.hostname.replace(/^\[|\]$/g, ""), servername: net.isIP(url.hostname) ? undefined : url.hostname,
     port: 443, path: `${url.pathname}${url.search}`, method: "GET",
-    headers: { "User-Agent": "WEBSULI-forrasgyujto/1.0 (+oktatasi tananyag)", Accept: "text/html,text/plain;q=0.9", "Accept-Language": "hu,en;q=0.5" },
+    headers: headers ?? { "User-Agent": "WEBSULI-forrasgyujto/1.0 (+oktatasi tananyag)", Accept: "text/html,text/plain;q=0.9", "Accept-Language": "hu,en;q=0.5" },
     lookup: pinnedLookup as never, timeout: timeoutMs, signal,
   }, (res) => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: res, destroy: () => res.destroy() }));
   req.on("timeout", () => req.destroy(new Error(`Időtúllépés (${timeoutMs} ms).`)));
@@ -170,11 +171,22 @@ export async function fetchPublicPage(raw: string, opts: {
   }
 }
 
-async function fetchWithinDeadline(raw: string, opts: Parameters<typeof fetchPublicPage>[1] & object, signal: AbortSignal): Promise<PublicPage> {
-  const timeoutMs = opts.timeoutMs ?? 10_000, maxBytes = opts.maxBytes ?? 2_000_000, maxRedirects = opts.maxRedirects ?? 3;
+export type OpenOptions = {
+  timeoutMs?: number; maxRedirects?: number; lookup?: AddressLookup; request?: RawRequest;
+  /** Review #313: minden lépés (az átirányítás célja is) a kérés ELŐTT ellenőrizve; hamis → hiba, a kérés nem indul el. */
+  allowUrl?: (url: URL) => boolean;
+  /** Lépésenkénti fejlécek (PR #418: a szolgáltatói kulcs csak a saját originjére megy). */
+  headersFor?: (url: URL) => Record<string, string> | undefined;
+};
+
+/**
+ * A védett út közös magja (forrásgyűjtő és kisfilm-letöltés, PR #418): minden lépésnél `checkFetchUrl`, a feloldott címek MIND
+ * nyilvánosak, a kapcsolat az ellenőrzött címre rögzítve, az átirányítás kézi és újraellenőrzött; a DNS és a kérés várakozása a
+ * `signal`-lal megszakítható. Az első nem átirányító választ adja (bármilyen státusszal) — a törzs olvasása és korlátja a hívóé.
+ */
+export async function openPublicResponse(raw: string, opts: OpenOptions, signal: AbortSignal): Promise<{ url: URL; response: RawResponse }> {
+  const timeoutMs = opts.timeoutMs ?? 10_000, maxRedirects = opts.maxRedirects ?? 3;
   const lookup = opts.lookup ?? defaultLookup, request = opts.request ?? defaultRequest;
-  // Review #222: ABSZOLÚT határidő a teljes műveletre (DNS + minden átirányítás + törzsolvasás) — a socket-tétlenségi időkorlát
-  // egy lassan csepegtető oldalnál nem véd; lejáratkor a várakozás és az aktív kérés is megszakad.
   const abortable = <T>(promise: Promise<T>) => new Promise<T>((resolve, reject) => {
     if (signal.aborted) { reject(signal.reason ?? new Error("Megszakítva.")); return; }
     const onAbort = () => reject(signal.reason ?? new Error("Megszakítva."));
@@ -188,7 +200,9 @@ async function fetchWithinDeadline(raw: string, opts: Parameters<typeof fetchPub
     const host = url.hostname.replace(/^\[|\]$/g, "");
     const addresses = await abortable(lookup(host));
     if (!addresses.length || addresses.some((a) => !isPublicAddress(a.address))) throw new Error(`Nem nyilvános címre oldódik fel: ${host}`);
-    const response = await abortable(request(url, addresses[0], timeoutMs, signal));
+    // A későn beérő feloldás után (lejárt határidő / leállítás) nem indul kérés.
+    if (signal.aborted) throw signal.reason ?? new Error("Megszakítva.");
+    const response = await abortable(request(url, addresses[0], timeoutMs, signal, opts.headersFor?.(url)));
     if (response.status >= 300 && response.status < 400) {
       response.destroy();
       const location = response.headers.location;
@@ -197,26 +211,34 @@ async function fetchWithinDeadline(raw: string, opts: Parameters<typeof fetchPub
       current = new URL(location, url).href;
       continue;
     }
-    if (response.status !== 200) { response.destroy(); throw new Error(`HTTP ${response.status}: ${url.href}`); }
-    const contentType = String(response.headers["content-type"] ?? "");
-    if (!/^(text\/html|application\/xhtml\+xml|text\/plain)\b/i.test(contentType)) {
-      response.destroy();
-      throw new Error(`Nem szöveges tartalom (${contentType || "ismeretlen"}): ${url.href}`);
-    }
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    for await (const chunk of response.body) {
-      if (signal.aborted) { response.destroy(); throw new Error(`Időtúllépés (${timeoutMs} ms): ${url.href}`); }
-      size += chunk.byteLength;
-      if (size > maxBytes) { response.destroy(); throw new Error(`Túl nagy oldal (> ${maxBytes} bájt): ${url.href}`); }
-      chunks.push(chunk);
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-    const body = decode(bytes, charsetOf(contentType, bytes));
-    if (/^text\/plain/i.test(contentType)) return { url: url.href, title: url.href, text: body.trim() };
-    const { title, text } = htmlToText(body);
-    return { url: url.href, title: title || url.href, text };
+    return { url, response };
   }
+}
+
+async function fetchWithinDeadline(raw: string, opts: Parameters<typeof fetchPublicPage>[1] & object, signal: AbortSignal): Promise<PublicPage> {
+  const timeoutMs = opts.timeoutMs ?? 10_000, maxBytes = opts.maxBytes ?? 2_000_000;
+  // Review #222: ABSZOLÚT határidő a teljes műveletre (DNS + minden átirányítás + törzsolvasás) — a socket-tétlenségi időkorlát
+  // egy lassan csepegtető oldalnál nem véd; lejáratkor a várakozás és az aktív kérés is megszakad.
+  const { url, response } = await openPublicResponse(raw, opts, signal);
+  if (response.status !== 200) { response.destroy(); throw new Error(`HTTP ${response.status}: ${url.href}`); }
+  const contentType = String(response.headers["content-type"] ?? "");
+  if (!/^(text\/html|application\/xhtml\+xml|text\/plain)\b/i.test(contentType)) {
+    response.destroy();
+    throw new Error(`Nem szöveges tartalom (${contentType || "ismeretlen"}): ${url.href}`);
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of response.body) {
+    if (signal.aborted) { response.destroy(); throw new Error(`Időtúllépés (${timeoutMs} ms): ${url.href}`); }
+    size += chunk.byteLength;
+    if (size > maxBytes) { response.destroy(); throw new Error(`Túl nagy oldal (> ${maxBytes} bájt): ${url.href}`); }
+    chunks.push(chunk);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  const body = decode(bytes, charsetOf(contentType, bytes));
+  if (/^text\/plain/i.test(contentType)) return { url: url.href, title: url.href, text: body.trim() };
+  const { title, text } = htmlToText(body);
+  return { url: url.href, title: title || url.href, text };
 }

@@ -19,8 +19,8 @@ figurával, képi stílussal, mondathosszal és hanggal. Terv: [`docs/specs/2026
 Fejezetenként: forgatókönyv (szövegmodell, a korosztály szabályaival; kapuk: mondathossz, számhűség — új szám az ábrán sem születhet)
 → jelenetenként kezdőkép (képmodell + minőségkapu: szöveg / nem gyerekbarát / nem a jelenet → újrapróba) → hang (ElevenLabs; hangkapu:
 minden mondatot egy független beszédfelismerő visszaír, betűre összeveti, eltérésnél újragyártja) →
-mozgókép a kezdőképből (Seedance 1.5) → átkódolás kicsire (`ffmpeg`) → tárolás. Mért idő: kb. 2–2,5 perc fejezetenként; két fejezet
-készül egyszerre. A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a média a `lesson_clip_media` táblában él.
+mozgókép a kezdőképből (Seedance 1.5) → átkódolás kicsire (`ffmpeg`) → tárolás. Mért idő: kb. 2–2,5 perc fejezetenként; egyszerre
+egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a kör (vagy a következő fejezet) kimarad (az 512 MB-os példány védelme). A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a média a `lesson_clip_media` táblában él.
 
 ## Kapcsolók (Render → `websuli-api-eu` → Environment)
 
@@ -37,11 +37,25 @@ készül egyszerre. A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a 
 
 ## Élesítés lépései
 
+0. **Előfeltétel (a `LESSON_CLIPS_AUTO=on` ELŐTT, vak kör L10):** a tulajdonos írásban jóváhagyja és itt rögzíti a kikapcsolási
+   feltételt: a mért metrikát (a Render-példány memóriája, nem a Node RSS-e), az egységet (MB), a küszöböt, mi számít tartósnak, és
+   hogy ki kapcsol vissza `off`-ra. Jóváhagyás nélkül a gyártás NEM kapcsolható be. Két külön határ van:
+   - **automatikus memóriaőr** (a kódban, `CLIP_RSS_LIMIT_BYTES` = 320 MiB, a Node-folyamat RSS-e, az ffmpeg-gyerek nélkül): e fölött
+     a kör, a következő fejezet és az átkódolás kimarad — ez nem állítja le a már futó lépést;
+   - **kézi kikapcsolási küszöb** (a Render memóriamérése, a gyerekfolyamatokkal együtt): a javaslat 480 MB — **jóváhagyásra vár**.
 1. A PR összevonása és telepítése (a `0039` migráció magától lefut).
-2. Render Environment: `ELEVENLABS_API_KEY` (megvan), majd `LESSON_CLIPS_AUTO=on`.
+2. Render Environment: `ELEVENLABS_API_KEY` (megvan), majd — csak a 0. pont jóváhagyása után — `LESSON_CLIPS_AUTO=on`.
 3. Egy új lecke közzététele után a Render-naplóban `[lesson-clips]` sorok: fejezetenként „kész: … N kép, N hang, N mozgókép, … kB”.
    Ha „nincs ffmpeg a szerveren” sor jelenik meg, a kisfilmek állóképesek — ekkor szólni kell.
 4. A lecke megnyitása: a gombok megjelennek, ahogy a fejezetek elkészülnek.
+5. Kikapcsolási feltétel (PR #418): a bekapcsolás utáni első körben a Render memória- és eseménymérését figyelni kell. Ha a példány
+   újraindul, vagy a memória tartósan a 0. pontban jóváhagyott küszöböt (javaslat: 480 MB, az 512 MB-os korlát közele) súrolja, azonnal `LESSON_CLIPS_AUTO=off`, és szólni
+   kell. A „memóriaőr miatt megállt” naplósor önmagában nem ok a kikapcsolásra: az a védelem működése.
+6. **Az első éles kör mérése — kötelező (tulajdonosi döntés, 2026-11-21: „Mérés az első éles körben (Javasolt)”).** A kód a már elindult
+   átkódolást memória miatt nem állítja le, ezért az első kör teljes ideje alatt a Render memóriamérését (a példány teljes
+   használata, a gyerekfolyamatokkal együtt) figyelni és a csúcsot rögzíteni kell. Ha a csúcs **450 MB fölé** megy: azonnal
+   `LESSON_CLIPS_AUTO=off`, a mért csúcs és időpont a PR-ba / a kanbanra, és a futás közbeni memóriafigyelő külön PR-ban készül el,
+   mielőtt a gyártás újra bekapcsol. 450 MB alatt a gyártás maradhat, a mért csúcsot akkor is rögzíteni kell.
 
 ## Költség és méret (mérve 2026-11-10, két automatikus fejezeten)
 

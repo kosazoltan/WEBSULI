@@ -62,8 +62,10 @@ test("A1, A2 — forrásőr: a fülváltás a közös leállítót hívja; az el
   assert.doesNotMatch(view, /speechSynthesis\.cancel\(\)/);
   const speech = source("../client/src/lesson-runtime/ExperienceSpeech.tsx");
   assert.match(speech, /export function stopSpeech\(\)/);
-  assert.match(speech, /isSoftSpeechError\(e\?\.error\) && started/);
-  assert.match(speech, /utterance\.onboundary = /);
+  // S8d (dokumentált átszervezés): a kimondás lépése a befecskendezett környezetű `speech-player.ts`-be költözött — a minták változatlanok.
+  const player = source("../client/src/lesson-runtime/speech-player.ts");
+  assert.match(player, /isSoftSpeechError\(e\?\.error\) && started/);
+  assert.match(player, /utterance\.onboundary = /);
 });
 
 test("A4 — forrásőr: a hálózati hiba felismerése nem függ a böngésző hibaszövegétől", () => {

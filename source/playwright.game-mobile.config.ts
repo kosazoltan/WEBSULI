@@ -13,7 +13,7 @@ export default defineConfig({
   testMatch: ["game-mobile-quality.spec.ts", "game-meta-quality.spec.ts", "games-lobby-mobile.spec.ts", "block-craft-real-touch.spec.ts", "joystick-response.spec.ts"],
   timeout: 90000,
   workers: 1,
-  use: { channel: "chrome", serviceWorkers: "block", baseURL, screenshot: "only-on-failure" },
+  use: { serviceWorkers: "block", baseURL, screenshot: "only-on-failure" },
   webServer: {
     command: `npx cross-env VITE_ENABLE_RUNTIME_PROBE=1 VITE_ENABLE_GAME_TEST_HOOKS=1 vite --host 127.0.0.1 --port ${port} --strictPort`,
     url: baseURL,

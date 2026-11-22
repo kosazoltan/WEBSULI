@@ -3,7 +3,7 @@ import "./lib/load-env";
 import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
-import { isTtsAudioSubPath } from "../shared/speech-fallback";
+import { mountTtsRateLimits } from "./tts/rate-limits";
 import { clientIpKeyGenerator } from "./lib/client-ip";
 import compression from "compression";
 import helmet from "helmet";
@@ -383,30 +383,6 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true, // Only count failed attempts
 });
 
-// Rate limiter for the public text-to-speech proxy.
-// Without it anyone can use the server as a free, unthrottled Google TTS relay.
-const ttsLimiter = rateLimit({
-  keyGenerator: clientIpKeyGenerator,
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 60,
-  message: "Túl sok felolvasási kérés. Próbáld újra később!",
-  standardHeaders: true,
-  legacyHeaders: false,
-  // A „Meghallgatás” hangtartalékának saját korlátja van (ttsAudioLimiter).
-  skip: (req) => isTtsAudioSubPath(req.path),
-});
-
-// Spec 2026-11-09-felolvasas-tartalek (módosítás): a hangtartalék (≤ 300 karakter, CDN-ből gyorsítótárazva) bővebb keretet kap.
-// Spec 2026-11-10-korlat-kliens-ip: minden IP-alapú korlát kulcsa a valódi kliens címe (lib/client-ip.ts), nem a proxyé.
-const ttsAudioLimiter = rateLimit({
-  keyGenerator: clientIpKeyGenerator,
-  windowMs: 15 * 60 * 1000,
-  max: 600,
-  message: "Túl sok felolvasási kérés. Próbáld újra később!",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // Tételgyár T7.1 (tulajdonosi döntés 2026-10-15): a döntőbíró IP-nként 60 kérés / 15 perc (a napi 2000-es fizetett plafon a szolgáltatásban).
 const arbiterLimiter = rateLimit({
   keyGenerator: clientIpKeyGenerator,
@@ -443,8 +419,7 @@ const gameScoreIpLimiter = rateLimit({
 app.use("/api/games/score", gameScoreIpLimiter); // JM0
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
-app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
-app.use("/api/tts/audio", ttsAudioLimiter);
+mountTtsRateLimits(app); // A felolvasás három független korlátja: általános proxy, szerveres tartalék, hangtár (server/tts/rate-limits.ts)
 app.use("/api/push/subscribe", publicWriteLimiter);
 app.use("/api/push/unsubscribe", publicWriteLimiter);
 
@@ -577,10 +552,14 @@ app.use((req, res, next) => {
       }, (error) => logger.error("[STARTUP] A leckeborító-háttérfolyamat nem indult:", error));
       // Spec 2026-11-10-fejezet-kisfilmek-v2: a fejezetek kisfilmjeinek háttérgyártása — csak LESSON_CLIPS_AUTO=on és OpenRouter-kulcs
       // mellett (napi plafon: LESSON_CLIP_DAILY_LIMIT, tárkeret: LESSON_CLIP_MEDIA_MAX_MB). Vészfék: LESSON_CLIPS=0.
-      if (process.env.NODE_ENV === "production" && !isE2eMode()) void Promise.all([import("./lesson-clips"), import("./lesson-clips-db"), import("./lesson-clips-providers")]).then(([{ startLessonClipWorker }, { dbClipStore }, { clipKeys, clipProviders, CLIP_VIDEO_MODEL }]) => {
+      if (process.env.NODE_ENV === "production" && !isE2eMode()) void Promise.all([import("./lesson-clips"), import("./lesson-clips-db"), import("./lesson-clips-providers")]).then(([{ startLessonClipWorker }, { dbClipStore }, { clipKeys, clipProviders, sweepStaleClipDirs, CLIP_VIDEO_MODEL }]) => {
         const keys = clipKeys();
         if (!keys) return;
-        const mode = startLessonClipWorker(dbClipStore, () => ({ deps: clipProviders(keys), model: CLIP_VIDEO_MODEL }));
+        // 2. vak kör L3: a félbemaradt munkamappák söprése csak gyártó módban, minden kör előtt (kikapcsolva nincs fájlrendszer-munka).
+        const mode = startLessonClipWorker(dbClipStore, () => ({ deps: clipProviders(keys), model: CLIP_VIDEO_MODEL, maintenance: () => {
+          const swept = sweepStaleClipDirs();
+          if (swept) log(`[lesson-clips] ${swept} félbemaradt munkamappa törölve`);
+        } }));
         if (mode === "auto") log(`[lesson-clips] a kisfilm-háttérgyártás elindult (hang: ${keys.elevenLabs ? "ElevenLabs" : "tartalék"}, kép: ${keys.openAi ? "OpenAI" : "OpenRouter"})`);
       }, (error) => logger.error("[STARTUP] A kisfilm-háttérfolyamat nem indult:", error));
 
@@ -732,6 +711,8 @@ app.use((req, res, next) => {
       } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
       // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
       try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
+      // Vak kör L5: a kisfilmworker sem indít új kört / fejezetet; a futó kört a pool lezárása előtt korlátos ideig kivárjuk (lent).
+      const clipsStopped = import("./lesson-clips").then(({ stopLessonClipWorker }) => stopLessonClipWorker(60_000)).catch((err: unknown) => logger.warn("A kisfilmworker nem állítható le", err));
       // JM2 (terv 10.8; orkesztrátori döntés, review #452): a valós idejű réteg RÖVID, rendezett lezárása — új szoba /
       // belépés azonnal tiltva, a futó meccsek azonnal lezárulnak a pillanatnyi állással (részeredmény, „a szerver frissül”);
       // ha volt szoba, a server.close() a legfeljebb MP_DRAIN_WINDOW_MS (alap 2,5 s) üzenet-ablak után jön, különben
@@ -755,6 +736,14 @@ app.use((req, res, next) => {
         await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
         // Review #365 (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők a pool lezárása előtt (max 15 s).
         await Promise.race([(await import("./daily-reminder")).pendingNewLessonNotifications(), new Promise((resolve) => setTimeout(resolve, 15_000))]).catch((err: unknown) => logger.warn("New lesson notification flush failed", err));
+        // Vak kör L5 + 2. vak kör L2: a futó kisfilmkör (legfeljebb 60 s, a fenti várakozással párhuzamosan telt); ami ezután is fut,
+        // annak MINDEN szolgáltatói várakozása, letöltése és ffmpeg-gyereke megszakad (a fejezet nem kap hibás sort), majd a kör — és
+        // vele az advisory lock DB-kapcsolata — lezárulására rövid várakozás, még a pool lezárása előtt.
+        await clipsStopped;
+        try {
+          (await import("./lesson-clips-providers")).abortClipTranscodes();
+          await (await import("./lesson-clips")).stopLessonClipWorker(10_000);
+        } catch (err) { logger.warn("A kisfilm-átkódolások nem állíthatók le", err); }
         await dbPool.end();
         log("Database pool closed");
         log("Graceful shutdown completed");

@@ -258,7 +258,13 @@ export default function LessonRuntimeProbe() {
   // Stable persistId so B7 localStorage round-trips work; no lessonId → no Próba API.
   const practice = new URLSearchParams(window.location.search).get("practice") === "1";
   const lesson = candidate ?? probeLesson(window.location.search);
-  return <LessonRuntime lesson={lesson} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} clipsPreset={wantClips2 ? clips2 ?? undefined : undefined} />;
+  // `&rerender=1`: gomb, amely a szülőt ÚJ lecke-objektumfával rendereli újra — a valódi leckenézet (LessonView) minden rendereléskor
+  // újraértelmezi a leckét, ezt utánozza (S8d vak review B1: az újrarenderelés nem szakíthatja meg a szóló hangot).
+  const rerender = new URLSearchParams(window.location.search).has("rerender");
+  return <>
+    {rerender && candidate && <button type="button" data-testid="probe-rerender" onClick={() => setCandidate(current => current ? lessonSchema.parse(JSON.parse(JSON.stringify(current))) : current)}>Szülő újrarenderelése új lecke-objektummal</button>}
+    <LessonRuntime lesson={lesson} lessonId={practice ? "practice-probe" : undefined} persistId={live ? "local-candidate" : "probe-lesson"} clipsPreset={wantClips2 ? clips2 ?? undefined : undefined} />
+  </>;
 }
 
 
