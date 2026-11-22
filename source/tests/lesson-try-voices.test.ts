@@ -50,7 +50,8 @@ test("V18: tryShare a try-t tartalmazó fejezetek aránya; a motor BE-nél telem
   assert.equal(tryShare(lesson([["explain", "try"], ["try"], ["explain"]])), 0.67);
   assert.equal(tryShare(lesson([])), 0);
   const engine = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
-  assert.match(engine, /if \(lessonVarietyEnabled\(\)\) \{\s*const share = tryShare\(lesson\);\s*telemetry\.gates\.tryShare = share;/u);
+  // S6b-v2 (dokumentált változás az S5a-v2 invariánsa szerint): a jelzés a FUTÁSRA rögzített állapothoz kötött, nem a környezethez.
+  assert.match(engine, /if \(varietyOn\) \{\s*const share = tryShare\(lesson\);\s*telemetry\.gates\.tryShare = share;/u);
   assert.match(engine, /reason: "try_share_low"/u);
 });
 
