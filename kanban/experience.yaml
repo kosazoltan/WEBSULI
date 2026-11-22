@@ -1,0 +1,5 @@
+# Önátanuló tábla (WEBSULI): minden munka közben elkövetett hiba és a megoldása, hogy mindig elérhető legyen.
+# Forrás-minta: otthon_automatizalas kanban/experience.yaml (session-close loop, 2026-11-22).
+# status: observed -> fixed -> rule (a "rule" a TRAP-táblába / skillbe / AGENTS.md-be is bekerül)
+# Új kártya: node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs experience add --repo . --observed ... --fix ... --rule ...
+cards: []
