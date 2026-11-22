@@ -139,3 +139,36 @@ test('elővágás: a korláton belül a kimenet bájtra a főági redact-é; a k
   const out = redact(big);
   assert.ok(out.endsWith(mainRedact(`vége ${fakeMail} ${fakeGh}`)), out.slice(-60));
 });
+
+// ---- 1. vak kör (9effab11) -------------------------------------------------------------------------------------------
+
+test('vak L1 (9effab11): ANSI-színezett DB-URL a kapu vágási pontján — a writeLog naplója a főághoz hasonlóan titokmentes', async () => {
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const E = String.fromCharCode(27);
+  const url = ['postgres', '://', `${E}[1m`, 'admin', `${E}[0m:`, `${E}[33m`, 'titok123', `${E}[0m`, at, `${E}[36m`, 'db.sample.invalid', `${E}[0m`, '/prod'].join('');
+  const dir = mkdtempSync(join(tmpdir(), 'elovagas-l1-'));
+  for (const back of [url.length - 2, url.length - 8, url.length - 15, url.length - 30]) {
+    const tailLen = REDACT_CAP - back;
+    const s = 'q '.repeat(2500) + url + ' z'.repeat(tailLen).slice(0, tailLen);
+    const got = readFileSync(writeLog(dir, 'stage', 'ansi', s), 'utf8');
+    for (const frag of ['titok1', 'sample.inv', 'admin']) assert.ok(!got.includes(frag), `vissza ${back}: ${frag}`);
+  }
+});
+
+test('vak L4 (9effab11): korlátközeli, nehezen maszkolható farok a két kihagyott szó után — < 1 s, a farok megmarad', async () => {
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const s = 'q'.repeat(200) + ' w1 w2 ' + 'a'.repeat(REDACT_CAP - 30);
+  const t0 = performance.now();
+  const out = redact(s);
+  const ms = performance.now() - t0;
+  assert.ok(ms < 1000, `${ms.toFixed(0)} ms`);
+  assert.ok(out.includes('a'.repeat(REDACT_CAP - 30)), 'a korlátközeli farok megmarad (a regex ténylegesen ezen fut)');
+});
+
+test('vak L3 (9effab11): az első hibasor a hosszú stderr-ből — a csonkolásjelző nem helyettesíti', async () => {
+  const { redactFirstLine, REDACT_CAP } = await import('./lib.mjs');
+  const stderr = `HTTP 404: Not Found (repos/x/y) ${fakeMail}\n` + 'd '.repeat(REDACT_CAP);
+  assert.equal(redactFirstLine(stderr), 'HTTP 404: Not Found (repos/x/y) <email>');
+  const long = 'e '.repeat(REDACT_CAP) + 'gh: rate limit exceeded';
+  assert.ok(redactFirstLine(long).endsWith('gh: rate limit exceeded'), 'túl hosszú első sornál a sor vége (a lényeg) látszik');
+});

@@ -182,10 +182,14 @@ test("elővágás (képgyártó): a vágási ponton átnyúló kulcs / Bearer / 
   assert.equal(redactClip(t, key, 300), mainDesignRedact(t, key).slice(0, 300));
 });
 
-test("elővágás (képgyártó): requestImage 20 M karakteres hibatörzzsel — < 1 s, a határon félbevágott kulcs nélkül", async () => {
-  const { requestImage } = await import("../scripts/design-assets/lib");
+// 1. vak kör (9effab11) L4: a maszkolás 1 s-os korlátja külön, a HTTP-próba végponttól végpontig külön (2 s) mérve.
+test("elővágás (képgyártó): 20 M karakteres hibatörzs — a redactClip < 1 s; a requestImage végponttól végpontig < 2 s, kulcs nélkül", async () => {
+  const { requestImage, redactClip } = await import("../scripts/design-assets/lib");
   const key = "kulcs#" + "abcdef0123456789".repeat(2) + "#vege";
   const body = "x ".repeat(160) + key + "z".repeat(20_000_000);
+  const t1 = performance.now();
+  assert.equal(redactClip(body, key, 300).includes("kulcs#"), false);
+  assert.ok(performance.now() - t1 < 1000, "redactClip < 1 s");
   const fetchImpl = (async () => new Response(body, { status: 500 })) as unknown as typeof fetch;
   const t0 = performance.now();
   await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key, body: {} }), (e: Error) => {
@@ -194,4 +198,30 @@ test("elővágás (képgyártó): requestImage 20 M karakteres hibatörzzsel —
     return true;
   });
   assert.ok(performance.now() - t0 < 2000);
+});
+
+// 1. vak kör (9effab11) L2: rövidítő kulcsok után a vágás egy befejezetlen `Bearer` + whitespace-en állna meg — az előtag-szerződés.
+test("elővágás (képgyártó): befejezetlen Bearer-egyezés a vágásnál — a kimenet a főági kimenet előtagja (tab, több szóköz)", async () => {
+  const { redactClip } = await import("../scripts/design-assets/lib");
+  const { mainDesignRedact } = await import("../../scripts/qa/gates/kitakaro-main-baseline.mjs");
+  const key = "kulcs#" + "abcdef0123456789".repeat(2) + "#vege";
+  const margin = Math.max(64, key.length);
+  for (const ws of ["\t".repeat(40), " ".repeat(40), "\t \t".repeat(10)]) {
+    for (const inWs of [1, 10, 25]) {
+      const lead = (key + " ").repeat(6);
+      const p = 300 + margin;
+      const bearerAt = p - 6 - inWs; // a vágás (p) a whitespace-futás belsejébe esik
+      const s = lead + "y ".repeat(bearerAt).slice(0, bearerAt - lead.length) + "Bearer" + ws + "SYNTHETICTOKEN rest " + "z ".repeat(400);
+      const out = redactClip(s, key, 300);
+      assert.ok(mainDesignRedact(s, key).slice(0, 300).startsWith(out), `${JSON.stringify(ws.slice(0, 3))} ${inWs}: ${JSON.stringify(out.slice(-30))}`);
+      assert.equal(out.includes("SYNTHETIC"), false);
+    }
+  }
+});
+
+// 1. vak kör (9effab11) L5: hiányzó szövegre üres eredmény (a spec szerint), nem TypeError.
+test("elővágás (képgyártó): redactClip undefined / null bemenetre üres szöveg", async () => {
+  const { redactClip } = await import("../scripts/design-assets/lib");
+  assert.equal(redactClip(undefined as unknown as string, "k", 300), "");
+  assert.equal(redactClip(null as unknown as string, "k", 300), "");
 });
