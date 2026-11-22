@@ -306,8 +306,8 @@ export function createLadderStepSession(grade: number, level: number) {
  * egy kimerült szint pótlására másik szint készletébe teheti) csak pótlás, szint nélküli tételnél (szerverbank). Így a
  * vödrözés soha nem sorol vissza.
  */
-export function declaredTierOf(item: { tier?: unknown }, index: number): number {
-  const t = item.tier;
+export function declaredTierOf(item: object, index: number): number {
+  const t = (item as { tier?: unknown }).tier;
   return typeof t === "number" && Number.isInteger(t) && t >= 0 && t < TIER_COUNT ? t : clampTier(index);
 }
 
