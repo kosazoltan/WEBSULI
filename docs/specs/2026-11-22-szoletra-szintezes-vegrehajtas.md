@@ -41,7 +41,9 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
    - `levelSessionRef` → `stepSessionRef = useRef(createLadderStepSession(4, 1))`; `onOutcome`: `.answer(correct)`;
      `startGame`: `.reset(grade, level)`, `runTierRef.current = floor(step / 3)`.
    - szóbank-készlet: a `toLadderItem(q)` eredménye a `q.focus`-szal (besoroláshoz).
-   - `stepBuckets = useMemo(ladderStepBuckets(allTiers, lang))`; a választó: `windowLadderSteps(stepBuckets, grade)` vödrökön
+   - `termFloors = buildLadderTermFloors({ manual: WORD_LADDER_BANKS[lang] (TELJES kézi bank), vocab: a TELJES szóbank `{ id, term }` },
+     lang)`; `stepBuckets = useMemo(ladderStepBuckets(allTiers, lang, termFloors))` — a korlát soha nem a szűrt készletből (terv 15.);
+     a választó: `windowLadderSteps(stepBuckets, grade)` vödrökön
      `pickUnseen(..., step, ...)`; tartalék a teljes vödörsor.
    - probe: `ladderStep` (a futás fokozata) és `questionStep` (a nyitott kérdés fokozata, azonosító szerint).
 7. `source/tests/word-ladder-play.spec.ts` új eset (A9): `websuli.classroomGrade = 3`, friss tároló (1. pálya),
@@ -98,3 +100,6 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
   teszt bukott (O5 osztály-mérés 4 hibával, O5/L1, O5/L3, O5/L5, O6/L2), majd a határpont-teszt a régi [9, 20] értékkel; a
   javítás után `npx.cmd tsx --test tests/word-ladder-grading.test.ts` → 23/23, a Szólétra-egységtesztek + `no-repeat` 149/149,
   `tsc -p tsconfig.test.json` 0 hiba. Mutációs ellenpróba (`mutate2.mjs`): 5/5 mutáns a saját osztálytesztjén bukik.
+- **Vak kör 3 → tulajdonosi döntés „CSAK STRUKTÚRÁLT MEZŐK” (PR-1, a 130f18e3-ra építve):** terv 15. szakasz. A heurisztikák
+  kikerültek, a korlát egyes szóra szűkült és márkázott (teljes bankból). `npx.cmd tsx --test tests/word-ladder-grading.test.ts`
+  → 18/18; mutációs ellenpróba (`mutate3.mjs`) 7/7.
