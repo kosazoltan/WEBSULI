@@ -1,0 +1,14 @@
+# Cogni-format döntés-napló: hosszan élő döntések + indoklás + érintett fájlok
+
+cogni:
+  kind: decision_log
+  name: websuli-decisions
+  generated: 2026-11-22
+
+  decisions: []
+  # - id: D-001
+  #   date: ÉÉÉÉ-HH-NN
+  #   title: "..."
+  #   decision: |
+  #     ...
+  #   files: []
