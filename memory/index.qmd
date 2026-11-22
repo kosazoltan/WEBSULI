@@ -31,4 +31,4 @@ Minden hivatkozás a repón belülre mutat.
 # Záró hurok
 
 TRAP → memóriák (YAML, QMD, Cogni, vector) → kanban → skill-ellenőrzés → higiénia → tiszta fa.
-Ellenőrzés: `node D:/repo/agentic-qa-kit/scripts/zaro-hurok.mjs check --repo <út> --since <ISO> --json`.
+Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <út> --since <ISO> --json`.

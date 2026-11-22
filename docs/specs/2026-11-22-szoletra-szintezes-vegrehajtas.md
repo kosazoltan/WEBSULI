@@ -80,11 +80,17 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
   javítva (terv 11. szakasz, csapda C-SZL-1): A4 (kifejezés a 2. alfokon), A5 (10. pálya ≤ min(sáv teteje, (alap+1)×3)).
   Mutációs ellenpróba: a sáv felső korlátja 14-re → A5, A7, A8 bukik; a lépés-szabály 1 jó válaszra → A7 bukik.
   Legkisebb fokozat-vödör (kézi + szóbank): de 11. fokozat 9 szó + 132 kifejezés; minden sáv minden fokozata ≥ 20 tétel.
-- **S2:** `tests/word-ladder-levels.test.ts` — a SPEC-VÁLTOZÁS-teszt az új szabály előtt bukott, utána zöld; az új
+- **S2 (PR-2 ág, nem ez a fej):** `tests/word-ladder-levels.test.ts` — a SPEC-VÁLTOZÁS-teszt az új szabály előtt bukott, utána zöld; az új
   ismétlés-mentességi teszt (évfolyam × pálya, sávon belül) zöld. `tests/word-ladder-3d-wiring.test.ts` a lap új bekötését
   (`createLadderStepSession`, `windowLadderSteps`) követeli (dokumentált spec-változás). A Szólétra 16 egységteszt-fájlja +
   `no-repeat`: 135/135 zöld; `tsc --noEmit` 0 hiba.
-- **Böngésző (A9):** `npm.cmd run test:e2e -- tests/word-ladder-play.spec.ts --workers=1` → 2 passed (2,5 perc); mért sor: `A9|kérdés-fokozatok: 0,0,0,1,1,1,2,2,2,3,3,3 | futás-fokozat: 0,0,0,1,1,1,2,2,2,3,3,3` (3. évf., 1. pálya, 12 helyes válasz: 0. szintről indul, 3 jó után +1 fokozat, max 3 ≤ 5).
+- **Böngésző (A9) — a PR-2 ágon mérve** (`feat/szoletra-szintezes-2`, a mérés idején d1f5dbb3; a `source/` bájtra azonos a
+  61a47716-tal); ezen a PR-1 fejen a lap még nem hívja a modult, az A9 itt NYITOTT: `npm.cmd run test:e2e -- tests/word-ladder-play.spec.ts --workers=1` → 2 passed (2,5 perc); mért sor: `A9|kérdés-fokozatok: 0,0,0,1,1,1,2,2,2,3,3,3 | futás-fokozat: 0,0,0,1,1,1,2,2,2,3,3,3` (3. évf., 1. pálya, 12 helyes válasz: 0. szintről indul, 3 jó után +1 fokozat, max 3 ≤ 5).
 - **`gate:stage`:** a 24 őrteszt közül a `memory-index-guard` („nincs indexeletlen élő memóriafájl”) bukik a
   `memory/notes/00-Index.md` miatt — ezt a `origin/main` 0645f48f (`chore(zaro-hurok)`) hozta be, a munkaág nem érinti a
   `memory/` mappát. Minden más lépés PASS.
+- **Vak kör 1 javítása (PR-1, a 0fe24459-re építve):** terv 13. szakasz — osztálytáblázat. Előbb a bukó tesztek (az új
+  segédek hiánya miatt az egész fájl piros), utána a javítás: `npx.cmd tsx --test tests/word-ladder-grading.test.ts` → 15/15.
+  Mutációs ellenpróba (`mutate.mjs` a scratchpadben, szöveges csere + `cmp` visszaállítás): M1 locale → csak O1/L2 bukik; M2
+  francia elízió → O1/L3; M3 nyers út mondat=false → O2/L4; M4 régi célrész-szabály → O2/L5; M5 bankközi korlát ki → O2/L1;
+  M6 reset sorozat-nullázás nélkül → O4/L7.
