@@ -60,6 +60,24 @@ test("V4: determinisztikus — ugyanarra a kulcsra mindig ugyanaz; a kulcs a té
   assert.notEqual(key, feedbackOpenerKey("map-x", "Mennyi 7 · 9?", ["54", "56", "58"]));
 });
 
+test("változatosság mérve: ugyanaz a kérdés, különböző mag (térkép) → eltérő nyitás, mindig a saját korosztály készletéből", () => {
+  const question = "Mennyi 3 + 4 · 2?", options = ["14", "11", "10"];
+  for (const band of AGE_BANDS) {
+    for (const kind of ["right", "wrong"] as const) {
+      const picks = Array.from({ length: 50 }, (_, i) => feedbackOpener(kind, band, feedbackOpenerKey(`map-${i}`, question, options)));
+      // Korosztályon belül: minden nyitás a sáv saját kódszótárából jön.
+      for (const p of picks) assert.ok(FEEDBACK_OPENERS[band][kind].includes(p), `${band}/${kind}: idegen nyitás: ${p}`);
+      // Eltérő: 50 magon legalább 8 különböző nyitás, és a leggyakoribb sem több 20%-nál.
+      const counts = new Map<string, number>();
+      for (const p of picks) counts.set(p, (counts.get(p) ?? 0) + 1);
+      assert.ok(counts.size >= 8, `${band}/${kind}: csak ${counts.size} különböző nyitás 50 magon`);
+      assert.ok(Math.max(...counts.values()) / picks.length <= 0.2, `${band}/${kind}: a leggyakoribb ${Math.max(...counts.values())}/50`);
+      // Ugyanaz a mag → ugyanaz a nyitás (seed-determinisztikus ujjlenyomat).
+      assert.deepEqual(picks, Array.from({ length: 50 }, (_, i) => feedbackOpener(kind, band, feedbackOpenerKey(`map-${i}`, question, options))));
+    }
+  }
+});
+
 test("régi, modell írta nyitások levágása; tartalmi kezdet és rövid maradék változatlan", () => {
   const cases: Array<[string, string]> = [
     ["Jó próba, de itt a szorzás az első lépés.", "Itt a szorzás az első lépés."],
