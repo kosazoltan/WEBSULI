@@ -44,6 +44,11 @@ ilyenkor elmarad (vállalt korlát, követő PR-jegy).
   elküldöttként), L3 (a véglegesítés 503-a ne dobja el az elfogadott pillanatképet), L4 (E2E-módban kényszerített tesztküldő), valamint a
   korábban jegyre tett 8. vak kör L4 (a 403 utáni pillanatkép korhatára / `clientNow`).
 - Tulajdonosi döntés 2026-11-22: a 403 utáni claim-ismétlés kilét-kockázata (9. kör L1) a követő PR hatóköre; addig vállalt korlát.
+- Tulajdonosi döntés (űrlap, 2026-11-22, szó szerint): „AZ EGÉSZ OSZTÁLY KÖVETŐ PR”. **Az osztály:** közös eszközön, nyitva maradt
+  leckefülben a fiókváltás közbeni kilét — minden olyan eset, amelyben a kör első tevékenysége egy munkamenetben (fiókban) történik, a
+  kilét-rögzítés (claim) nem ér célba vagy nem igazolható, és egy későbbi kérés egy másik munkamenet (friss CSRF-token, egyező régi címke)
+  alapján rendel nevet az eredményhez (a 9. kör L1-e, a 11. kör L1-e és minden további változat). **Az elv a követő PR-ban:** név csak az
+  első tevékenységhez kötött szerveres igazolással, különben vendég. Addig az osztály vállalt korlát.
 - A 9. kör L2-je (a kilét-takarítás adagjai között a jelzősor és a tulajdonos-sor szétválhat) szintén a követő PR jegye; addig vállalt korlát
   (csak a 8 napnál régebben rögzített, közben is folytatott körnél, a napi takarítás pillanatában áll elő).
 - Vállalt korlátok a követő PR-ig (tulajdonosi döntés 2026-11-22, „R53 ÉS R52-SZABÁLY KI”): (1) a lefokozott, 202 előtt megszakadt végleges

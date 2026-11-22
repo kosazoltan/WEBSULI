@@ -545,6 +545,35 @@ Követő PR (további kanban-jegyek):
   rögzíthet. Javítás: a claim a tényleges első tevékenységhez kötve; ha ez nem igazolható, anonim / elutasító ág. Teszt: megnyitás válasz
   nélkül → nincs claim.
 
+## 2026-11-22 — záró kör (db50627a): OSZTÁLY-jegy a követő PR-ba
+
+Tulajdonosi döntés (űrlap, 2026-11-22, szó szerint): „AZ EGÉSZ OSZTÁLY KÖVETŐ PR”. Kód nem változik.
+
+- **követő PR: OSZTÁLY — közös eszközön, nyitott fülben fiókváltás közbeni kilét** (magába foglalja a 9. vak kör L1-et és a 11. vak kör
+  L1-et; minden további változat ide tartozik). Elv: **név csak az első tevékenységhez kötött szerveres igazolással, különben vendég.** A
+  végleges és a részleges kérés szerveroldali, első tevékenységhez kötött bizonyíték hiányában ne jegyezhessen be nevet a jelenlegi
+  munkamenet és egy régi címke egyezése alapján (vendégként küldjön, vagy várjon újrapróbálható állapotban, amíg az eredeti kilét
+  igazolható); a claim ismétlése (403 utáni tokencsere) és a claim nélküli első kérés se pótolja az igazolást egy későbbi munkamenettel.
+  Érintett helyek: `server/lesson-result-email.ts:449–454, 464–470, 598–605, 763–766` (rögzítés claim nélkül az első kérésnél; címke–munkamenet
+  egyezés); `client/src/lesson-runtime/resultReport.ts:64–69, 85–94, 138–145, 209–215`; `client/src/lib/queryClient.ts:294–321`.
+  - *Forgatókönyv 1 (9. kör L1, 403-as claim-ismétlés):* a nyitva maradt fül A tokenjét és címkéjét tartja; B a másik fülön belép, és ő
+    válaszol először; a claim a régi A tokennel indul, B munkamenetében 403-at kap; a lassú 403 és a tokenfrissítés alatt A visszalép; az
+    ismételt claim A friss tokenjével rögzít; lezáráskor az A címke megy → B válasza A nevén.
+  - *Forgatókönyv 2 (11. kör L1, elveszett claim):* A nyitva hagyja a leckét; B másik fülön belép, és ő írja az első (szöveges vagy kvíz)
+    választ; a claimre a proxy 502-t ad, mielőtt a szerverhez ér (nem ismétlődik); A visszalép, és ugyanabban a fülben lezárja a kört; a
+    végleges kérés A friss CSRF-tokenjével és a tárolt A címkével megy; a szerver üres nyilvántartásnál az első kérés munkamenetéből A-t
+    rögzíti → B válasza A nevén.
+  - *Regressziós teszt-sorrendek:* (a) A → B első válasza → késői 403 a claimre → A friss token → lezárás A munkamenetéből; (b) A → B első
+    válasza → **502-es claim** (a szerverig nem jut) → munkamenet-váltás A-ra → lezárás friss A-CSRF-fel; mindkettőnél az **adminlevél
+    névmezője** nem A neve (vendég); kontroll: sikeres első B-claim → a lezárás A munkamenetéből szintén nem A nevére; feladatokra és kvízre
+    is. A meglévő E72 / E73 tesztek (sikeres B-pillanatkép / claim) mellé az üres nyilvántartásos eset.
+- **követő PR: 11. vak kör L2 (közepes)** — a közös CSRF-tokenlekérés `AbortSignal.timeout`-ot használ (`client/src/lib/queryClient.ts:70–75`);
+  ahol a statikus metódus hiányzik (pl. iPadOS 15 Safari), a lekérés el sem indul (az eredmény nem megy, más CSRF-védett írások 403-at
+  kaphatnak). Javítás: `AbortController` + időzítő + `finally` (a választest végéig). A `tests/result-outbox.test.ts` R37 forrásőre helyett
+  viselkedési teszt hiányzó statikus metódussal és elakadt választesttel.
+- **követő PR: 11. vak kör L3 (kicsi)** — a `Retry-After` HTTP-dátum alakja `NaN` (`client/src/lib/queryClient.ts:25–26`), a sor a fejléc nélküli
+  ágra esik, a kísérletek a kapu feloldása előtt elfogyhatnak. Javítás: mindkét formátum olvasása; teszt hamis órával a dátum alakra is.
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.
