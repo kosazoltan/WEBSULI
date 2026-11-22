@@ -32,3 +32,15 @@ token-futás elhagyva, majd `maskSecrets`, majd `slice`); a vágott hívók (`.s
 
 `node --test scripts/qa/gates/*.test.mjs`; `cd source && npx.cmd tsx --test tests/design-assets.test.ts tests/advent-art-pipeline.test.ts`;
 `npm run gate:stage`. Playwright nem fut; fizetős eszköz (a `generate.ts` is) nem fut.
+
+## Napló (2026-11-22)
+
+- T1 tesztek (`ad07332d`), piros a főági kódon: a 300 000-es `'a'`-futás 37,7 s (az 1 s-os korlát felett); a `maskClip` export
+  hiányzik (a külső tesztfájl betöltése bukik); a `redactClip is not a function`; a kapu vágási tesztje bukik.
+- Saját tesztjavítás a zöldítés közben (sosem volt zöld): a kapu vágási tesztje rossz hosszt épített (a korlát alatt maradt, és a
+  páratlan kitöltő `qBearer`-t ragasztott) — a farok most `REDACT_CAP - back` hosszú; a külső bájt-egyezési teszt `"e"×300`
+  futása helyett szavakra tagolt diagnosztika (egy szóköz nélküli hosszú futást a vágás a terv szerint elhagy).
+- A kapu vágása: az első két, szóköz-jellegű karakterrel határolt szó kimarad (az egyszavas futás-szabály egy félbevágott
+  `Bearer` + hitelesítő pár hitelesítőjét előtag nélkül hagyta — a teszt ezt fogta meg).
+- Mutánspróba: a kapu szó-kihagyása kikapcsolva → a vágási teszt bukik; a külső / képgyártói run-hátrálás kikapcsolva → az
+  elöl kulcs-előfordulásokkal rövidített (a `***` / `[kulcs]` csere miatt) bemeneten a vágási teszt bukik; mind visszaállítva.
