@@ -1206,4 +1206,3 @@ Forrás: a „minden legyen lint, push, merge, deploy” kör, felhős munkamene
 - **Tünet 3:** napok után a régi `node_modules` hamis tsc- és rt-teszthibát adott; munkafába symlinkelt `node_modules` mellett a
   `gitignore-guard` bukott. Szabály 3: hosszú szünet után és minden új munkafában `npm ci`; symlinket ne használj.
 - **Tünet 4:** a kibocsátó parancs láncolt parancsban futott, a kapu-hook megtagadta. Szabály 4: külön, egyszerű parancs a gyökérből.
-
