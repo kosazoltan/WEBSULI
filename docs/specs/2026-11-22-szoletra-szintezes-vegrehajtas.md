@@ -106,3 +106,6 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
 - **Vak kör 4 → tulajdonosi döntés „KORLÁT ELHAGYÁSA” (PR-1, a 8c4e0a3c-re építve):** terv 16. szakasz. A korlát és tesztjei
   kikerültek; S6 (szóbanki `term`) és S7 (kötőjeles / aposztrófos szó) előbb bukott, utána zöld:
   `npx.cmd tsx --test tests/word-ladder-grading.test.ts` → 18/18; mutációs ellenpróba (`mutate4.mjs`) 8/8.
+- **PR #528 Copilot-észrevételek (PR-1, a b680efb4-re építve):** terv 17. szakasz. C1 (magánhangzó-osztály) és C2 (felülíró tábla
+  saját kulcsa) előbb bukott (C1: „á: 3 → 5” stb.), utána zöld: `npx.cmd tsx --test tests/word-ladder-grading.test.ts` → 20/20;
+  Szólétra + `no-repeat` 146/146; `tsc` (alkalmazás és tesztek) 0 hiba.

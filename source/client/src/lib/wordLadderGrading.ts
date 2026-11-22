@@ -111,12 +111,18 @@ export function ladderDifficultyInput(item: GradableItem, lang: WordLadderLangua
   return item.category ? { term, sentence, category: item.category } : { term, sentence };
 }
 
+/**
+ * Magánhangzó-csoport (szótag) a kisbetűsített szövegen: angol, magyar (á é í ó ö ő ú ü ű — a magyar `focus` is a mérce
+ * bemenete), német (ä ö ü) és francia (à â æ è é ê ë î ï ô œ ù û ÿ) magánhangzók; PR #528 Copilot-észrevétel.
+ */
+const VOWEL_GROUP = /[aeiouyáéíóöőúüűäàâæèêëìîïòôœùûÿ]+/gu;
+
 /** Nehézségi pont (terv 4.1): normált betűszám + plusz szótagok + plusz szavak + mondat + kategória. */
 export function ladderDifficultyScore(input: LadderDifficultyInput, lang: WordLadderLanguage): number {
   const words = wordsOf(input.term, lang);
   const letters = (words.join(" ").match(/\p{L}/gu) ?? []).length;
   // Szótag és levonás ugyanazokon a szavakon (vak kör 4 L4): a kötőjeles / aposztrófos alak („arc-en-ciel”) egy szó.
-  const syllables = words.reduce((n, w) => n + Math.max(1, (w.match(/[aeiouyäöüéèêëàâîïôûùœæ]+/gu) ?? []).length), 0);
+  const syllables = words.reduce((n, w) => n + Math.max(1, (w.match(VOWEL_GROUP) ?? []).length), 0);
   const raw = letters / (LADDER_LETTER_FACTOR[lang] ?? 1)
     + 2 * Math.max(0, syllables - words.length)
     + 3 * (Math.max(1, words.length) - 1)
@@ -138,8 +144,10 @@ export function ladderStepForScore(score: number, declaredTier: number): number 
 
 /** Egy Szólétra-tétel fokozata (kézi felülírás elsőbbséggel). */
 export function ladderItemStep(item: GradableItem, lang: WordLadderLanguage, declaredTier: number): number {
-  const override = item.id !== undefined ? LADDER_STEP_OVERRIDES[String(item.id)] : undefined;
-  if (override !== undefined) return override;
+  // Csak saját, szám értékű kulcs (PR #528 Copilot-észrevétel): a „constructor” / „__proto__” azonosító nem örökölt találat.
+  const key = item.id !== undefined ? String(item.id) : undefined;
+  const override = key !== undefined && Object.hasOwn(LADDER_STEP_OVERRIDES, key) ? LADDER_STEP_OVERRIDES[key] : undefined;
+  if (typeof override === "number" && Number.isInteger(override) && override >= 0 && override < LADDER_STEP_COUNT) return override;
   return ladderStepForScore(ladderDifficultyScore(ladderDifficultyInput(item, lang), lang), declaredTier);
 }
 
