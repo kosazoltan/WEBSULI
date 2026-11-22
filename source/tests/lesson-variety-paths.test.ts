@@ -246,3 +246,22 @@ test("NINCS LEVÁGÁS: jelölt leckén a modell visszajelzés-szövege minden es
     assert.equal(feedbackView({ right, text, variety: { marker: MARK, band, key } }).reason, text, `${right}/${band}: ${text}`);
   }
 });
+
+test("javítás-artefaktum (Vercel-review #530): a jelölt lecke előnézeti jelöltje megtartja a jelölőt KI forrásábra-kapcsolónál is; a modellé nem megy át", async () => {
+  const { sealLessonRepair } = await import("../shared/lesson-repair");
+  const hash = "a".repeat(64);
+  const base = { kind: "lesson-repair-fusion-1" as const, lessonId: "l1", baseVersion: 1, baselineHash: hash, baselineMaterialHash: hash, sourceHash: hash, reviewNotes: [] };
+  const marked = { ...fusionFixture(), variety: MARK };
+  for (const sourceVisuals of [false, true]) {
+    const sealed = sealLessonRepair(sourceVisuals, { ...base, previousLesson: marked, candidate: { ...fusionFixture(), variety: MARK } });
+    assert.deepEqual(sealed.candidate.variety, MARK, `jelölt lecke, sourceVisuals=${sourceVisuals}: az előnézet = az alkalmazott lecke`);
+    const unmarked = sealLessonRepair(sourceVisuals, { ...base, previousLesson: fusionFixture(), candidate: { ...fusionFixture(), variety: { version: "modell-kéretlen" } } });
+    assert.equal(unmarked.candidate.variety, undefined, `jelöletlen lecke, sourceVisuals=${sourceVisuals}: a modell jelölője eldobva`);
+  }
+});
+
+test("javítás-artefaktum bekötése: a szerver a lezárt (jelölő-visszaírt) artefaktumot adja vissza", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/studio/structured-improvement.ts", import.meta.url), "utf8");
+  assert.match(src, /return markRepairCandidate\(parseArtefact\(\)\);/);
+});

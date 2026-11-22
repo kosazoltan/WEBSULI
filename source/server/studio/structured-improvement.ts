@@ -2,7 +2,7 @@ import { publicationBankProblems } from "../../shared/lesson-experience";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { and, eq, ne, inArray } from "drizzle-orm";
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../shared/lesson-schema";
-import { lessonRepairSchema, modelLessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
+import { lessonRepairSchema, markRepairCandidate, modelLessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
 import { sourceVisualsEnabled } from "./source-visuals-flag";
 import { runWithLessonVariety } from "./lesson-variety-flag";
 import { carryVarietyMarker, storedVarietyMarker } from "../../shared/lesson-feedback-openers";
@@ -100,6 +100,8 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   // Review #379: a lecke utolsó írása óta módosult térképfogalmak egysége nem vehető át (minden fogalomíró út frissíti az updatedAt-et).
   const staleConceptIds = conceptsChangedSince(await db.select({ localId: kmConcepts.localId, updatedAt: kmConcepts.updatedAt }).from(kmConcepts).where(eq(kmConcepts.mapId, row.mapId)), row.updatedAt);
   const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript, gates, staleConceptIds });
+  // Vercel-review #530: a séma (KI ágon) eldobja a jelölőt — a lezárás a tárolt lecke jelölőjét írja vissza a jelöltre (előnézet = alkalmazott).
+  const parseArtefact = (): LessonRepair => {
   return modelLessonRepairSchema(sourceVisualsEnabled()).parse({
     kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
     ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
@@ -108,6 +110,8 @@ export async function generateStructuredImprovement(fileId: string, instruction?
     // Review #331: a lektor által blokkolt és kivett banktételek (a jegyzetek útvonalai a kivétel ELŐTTI indexekre vonatkoznak).
     ...(lektorRemoved?.length ? { lektorRemoved } : {}),
   });
+  };
+  return markRepairCandidate(parseArtefact());
 }
 
 /**
