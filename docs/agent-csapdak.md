@@ -5,6 +5,12 @@ Mért, ismétlődő hibák, amelyek tokent, időt vagy félbehagyott munkát oko
 (önfejlesztési hurok, `AGENTS.md` „Befejezési mandátum”). Bejegyzést törölni csak akkor szabad, ha a
 gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
 
+**Sorszám ágon (2026-11-22, `docs/specs/2026-11-22-zaro-hurok-websuli.md` D2):** a párhuzamos ágak sorszám-ütközése ellen ágon
+IDEIGLENES sorszám jár: `C-<ág-rövidítés>-N` (pl. `C-ZH-1`; a rövidítés 1–8 nagybetű / számjegy). A végleges `C-NN`-t az
+orkesztrátor adja a merge ELŐTT, a főág akkori legnagyobb száma után. A záró kapu (`npm run zaro:check`) a főágon FAIL-lel jelzi a
+bennmaradt ideiglenes számot. Minden új bejegyzés skillre hivatkozik (`.agents/skills/<név>/SKILL.md`) vagy `nincs-skill: <indok>`
+sort kap (a kapu ezt is ellenőrzi). Skill: `.agents/skills/websuli-zaro-hurok/SKILL.md`.
+
 ## Index (tematikus)
 
 Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csak a feladathoz illő azonosítónál olvasd el
@@ -99,6 +105,8 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-02** — A kanban CLI-t a WEBSULI gyökeréből futtasd; üres lista előtt nézd meg, melyik táblát nyitotta meg.
 - **C-05** — Tulajdonosi direktíva egy körben: repó-vezérlőfájl + projektmemória (+ globális CLAUDE.md, ha minden repóra szól).
 - **C-22** — Tulajdonosi vizuális mintához privát Artifact vagy a repó Playwright-konfigja; fontcserénél szóhatáros keresés.
+- **C-ZH-1** — Más eszköz / gép közvetlenül a főágra írt memóriafájlt index nélkül → az őr minden PR-t megállított; a főágra csak PR-on át, memóriafájl csak indexsorral.
+- **C-ZH-2** — Nem konvergáló vak körök: új kör előtt `zaro-hurok.mjs konvergencia`; nem csökkenő blokkolószámnál megközelítésváltás, nem foltozás.
 
 ## C-01 — Más architektúrára települt `node_modules` (2026-11-03)
 
@@ -1106,3 +1114,31 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-ZH-1 — Közvetlenül a főágra írt, indexeletlen memóriafájl megállította az összes PR-t (2026-11-22)
+
+- **Tünet:** egy másik gépen futó záró-hurok eszköz két commitot PR és kapuk nélkül tett a főágra (`edee295f`, `0645f48f`); a
+  `0645f48f` a `memory/notes/00-Index.md`-t a `memory/indexes/index.yml` bejegyzése nélkül hozta. A `source/tests/memory-index-guard.test.ts`
+  („nincs indexeletlen élő memóriafájl”) a főágon bukott, és a C-61 miatt minden nyitott PR push-kapuja megállt.
+- **Gyökérok:** a közvetlen push kikerülte a `gate:stage`-et (az őr-teszteket), és az eszköz nem ismerte a repó memória-index szabályát.
+- **Szabály:** a főágra csak PR-on át (tulajdonosi döntés 2026-11-22: ágvédelem a main-en, a beállítás a tulajdonosé). Új
+  `memory/**/*.md` csak a `memory/indexes/index.yml` sorával együtt. Session elején, amíg az ágvédelem nincs bekapcsolva: `git log
+  origin/main` + a főág őr-tesztjeinek zöldje; PR nélküli commit okozta bukást kis PR-ral kell javítani (`fix/memoria-index-jegyzetek`, `ef757c11`).
+- **Gépi kényszerítés:** `source/tests/memory-index-guard.test.ts` (meglévő őr); a záró kapu a memória-rétegeket ellenőrzi (`scripts/qa/zaro-hurok.mjs`).
+- Skill: `.agents/skills/websuli-zaro-hurok/SKILL.md` (2. lépés, jegyzet csak indexszel).
+
+## C-ZH-2 — Nem konvergáló vak körök: leletenkénti foltozás helyett megközelítésváltás (2026-11-22)
+
+- **Tünet:** 2026-11-21/22-én 32 vak kör futott (a keret 60 USD-re emelve). A nagy PR-okon a blokkoló leletek száma körről körre nem
+  csökkent (a #521-et szűkíteni, a H0 futtatót két PR-ra bontani kellett), a kicsiken 1–2 kör alatt IGEN jött.
+- **Gyökérok:** leletenkénti foltozás — a javítás a jelentett példányt zárja, a hibaosztály többi előfordulását nem, és új felületet
+  hoz, amelyen a következő kör új leletet talál; a nagy diff a vak ellenőrnek is több új felületet ad.
+- **Szabály (gépi megállás):** új vak kör ELŐTT `node scripts/qa/zaro-hurok.mjs konvergencia` (az ág fejeinek `blind-review-<fej>.json`
+  bizonyítékaiból). Új kör csak akkor indulhat, ha a blokkolók száma az utolsó két kör között SZIGORÚAN csökkent, és legfeljebb 2
+  egymást követő NEM áll. Különben (exit 1) megközelítésváltás, ebben a sorrendben: (1) a követelmény / invariáns egy mondatban;
+  (2) hibaosztály-leltár — a diff MINDEN előfordulása táblázatban, javítás közös segéddel; (3) PR-bontás ≤ ~400 sor diff;
+  (4) internetes szakmai forrás (fórum, GitHub, dokumentáció); (5) tulajdonosi döntés űrlapon.
+- **Forrás:** Contrast Security, „When AI reviewers cannot agree”; arXiv 2603.16244 (több kör → kevesebb pontosság) — az orkesztrátor
+  olvasta, rögzítve a projektmemória `vak-kor-konvergencia` bejegyzésében. Mért alap: a 2026-11-21/22-i vak körök (docs/specs/2026-11-21-gepkoltoztetes-folytatas.md 10. fejezet).
+- **Gépi kényszerítés:** `scripts/qa/zaro-hurok.mjs konvergencia` (teszt: `scripts/qa/zaro-hurok.test.mjs`).
+- Skill: `.agents/skills/websuli-zaro-hurok/SKILL.md` („Vak kör előtt — konvergencia” és „Ismétlődő hibaosztály”).

@@ -174,6 +174,17 @@ Skillek (`.agents/skills/` forrás, `.claude/skills/` tükör): `websuli-lint-el
 `websuli-push-elotti-kapu`, `websuli-pr-elotti-kapu`, `websuli-merge-elotti-kapu`. Runbook: [`docs/minosegkapuk.md`](docs/minosegkapuk.md).
 A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 
+## Záró hurok (kötelező, tulajdonosi utasítás 2026-11-22)
+
+Minden lezárt feladat után és minden session végén, a záró jelentés ELŐTT a `websuli-zaro-hurok` skill hét lépése fut
+(`.agents/skills/websuli-zaro-hurok/SKILL.md`): csapda (`docs/agent-csapdak.md`, ágon ideiglenes `C-<ág>-N` sorszám) → memória-rétegek
+(`memory/manifest.yaml`, `memory/index.qmd`, `memory/.cogni/`; vektor: nem elérhető) → retró + tapasztalat-kanban (a Claude Code
+saját környezetében: `~/.claude/projects/D--repo-WEBSULI/kanban/tapasztalat-kanban.md`) → skill-döntés → ismétlődő
+hibaosztály (gépi kényszerítés, nem csak szöveg) → higiénia (alapból csak riport) → tiszta fa. A teljesülést a gép dönti el:
+`npm run zaro:check -- --since <a feladat kezdete, ISO>` → exit 0. Új vak kör előtt: `node scripts/qa/zaro-hurok.mjs konvergencia`.
+Terv: `docs/specs/2026-11-22-zaro-hurok-websuli.md`. A `.hermes.md` markeres záró-hurok blokkja más eszközé, a WEBSULI-ban ez a
+szakasz érvényes. A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
+
 ## Verifikáció
 
 A változáshoz illő legkisebb ellenőrzési kört futtasd: célzott teszt/lint/typecheck
