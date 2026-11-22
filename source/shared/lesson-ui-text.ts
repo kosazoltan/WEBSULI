@@ -32,7 +32,7 @@ export function stripVerdictPrefix(text: string, right?: boolean): string {
  * kisbetűs, legalább 4 betűs szó vagy egy gyakori névelő / kötőszó nagyobbodik, és nem követi egyenlőség vagy műveleti jel.
  */
 const PROSE_START_WORDS = new Set(["a", "az", "egy", "ez", "ezt", "ezért", "de", "és", "ha", "itt", "így", "nem", "jó", "ami", "aki", "mi", "ki", "most"]);
-export function capitalizeProse(text: string): string {
+function capitalizeProse(text: string): string {
   const m = /^([a-záéíóöőúüű]+)(?=[\s,;.!?]|$)(?!\s*[=<>+*/^])/.exec(text);
   if (!m || (m[1].length < 4 && !PROSE_START_WORDS.has(m[1]))) return text;
   return text.charAt(0).toLocaleUpperCase("hu") + text.slice(1);

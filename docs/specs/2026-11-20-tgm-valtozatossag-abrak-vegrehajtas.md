@@ -51,7 +51,7 @@ Fájlok: `shared/seeded.ts` (új), `shared/option-order.ts` (csak a kiemelt seg�
    algoritmus — a `tests/option-order.test.ts` és `tests/quiz-option-order.test.ts` változatlanul zöld).
 3. `shared/lesson-feedback-openers.ts`: `FEEDBACK_OPENERS: Record<AgeBand, { wrong: readonly string[]; right: readonly string[] }>`
    (sávhoz illő hangnem: `kid` meleg, egyszerű; `teen` közvetlen, nem gyerekes; `senior` tárgyszerű); `feedbackOpener(kind, band, key)`;
-   `stripLegacyOpener(text)`; `feedbackOpenerKey(mapId, question, options)` (`choiceSeed`-del); `feedbackView({ right, text, variety })`
+   `startsWithLegacyOpener(text)` (2026-11-22 óta: felismerés levágás helyett, lásd lent); `feedbackOpenerKey(mapId, question, options)` (`choiceSeed`-del); `feedbackView({ right, text, variety })`
    → `{ opener?: string; reason: string }` — jelöletlen leckén `{ reason: stripVerdictPrefix(text, right) }`.
 4. `shared/lesson-schema.ts`: `variety: z.object({ version: z.string().trim().min(1).max(40) }).passthrough().optional().catch(undefined)`
    a `lessonSchema` gyökerén; a bővítés előtti (KI) modell-séma `.omit({ variety: true })` (a főághoz híven elhagyja). A BE ág a teljes
@@ -87,7 +87,7 @@ a régi); BE: `nyitomese-3`; a jelölő verziója `valtozatossag-2`, ha a leját
 (`server/studio/structured-improvement.ts:196`) a meglévő `variety` jelölő megőrzése (a `modelLessonSchema` elhagyja) — teszttel.
 Mérés: 100 magon ≥ 3 nyitásforma és ≥ 25 név; 50 magon az első módszer ≥ 6-féle.
 
-## S5a — vak kör 1 javítása (2026-11-22): hibaosztályok
+## S5a — vak kör 1–2 javítása (2026-11-22): hibaosztályok
 
 Invariáns: a változatossági állapot egy futásra EGY döntés (a futás elején, folytatásnál a mentett job-állapotból, javításnál a tárolt
 leckéből); a jelölőt a modell soha nem adhatja; KI állapotban minden út kimenete a régi. A környezetet csak a `lessonVarietyEnabled()`
@@ -96,6 +96,8 @@ olvassa, a futás olvasói az `effectiveLessonVariety()`-t (a `runWithLessonVari
 | Út | Állapot forrása | Jelölő forrása | KI kimenet | Teszt |
 |---|---|---|---|---|
 | Első gyártás (`runSingleLesson`) | `deps.lessonVariety` ?? környezet, a futás elején | `withVarietyMarker(…, állapot)` a mentés előtt; a modellé eldobva | nincs jelölő, nincs `lessonVariety` a jobon | `lesson-variety-paths` „első gyártás” |
+| Modellkimenet elfogadása a gyártásban (szerző, ábrafolt) — vak kör 2, L2 | — | a modell jelölője az elfogadáskor eldobva (`withVarietyMarker(…, false)`) | a job checkpointja és végső `output.lesson`-je jelölő nélkül (KI és BE) | `lesson-variety-paths` „vak kör 2, L2” |
+| Célzott fogalomjavítás (`fixConceptInConversation`) — vak kör 2, L3 | a tárolt lecke jelölője (`runWithLessonVariety`) | `carryVarietyMarker(jelölt, eredeti)` az elfogadáskor; alkalmazáskor a zárolt sorból | jelöletlen leckén BE környezetben is KI bank | `lesson-variety-paths` „vak kör 2, L3” (két irány) |
 | Folytatás (`resume`) | kizárólag a job kimenetének `lessonVariety` mezője (hiány = KI) | ugyanaz | KI-ben indult futás BE környezetben is KI | `lesson-variety-paths` „L4” (mindkét irány) |
 | Szerzői prompt (`buildAuthorPrompt`) | `effectiveLessonVariety()` | — | `PLAYFUL_AUTHOR_RULES` bájtra | `source-visuals-flag`, `lesson-variety-flag` |
 | Bank (előtag, egységverzió, átvétel) | `effectiveLessonVariety()` | — | `nyitomese-1`, régi előtag | `lesson-variety-paths` „A: hatókör”, `lesson-opener-bank-reuse` |
@@ -105,8 +107,19 @@ olvassa, a futás olvasói az `effectiveLessonVariety()`-t (a `runWithLessonVari
 | Visszaállítás, évfolyamváltás, lazítás | — | a tárolt JSON változatlanul | változatlan | meglévő tesztek |
 | Megjelenítés | a lecke jelölője | — | jelöletlen DOM a régi (élő régió sincs) | `verdict-feedback-variety`, böngészős próba |
 
-Szövegtisztítás (L2): a régi nyitás zárt listája; a gondolatjel / kötőjel szám előtt nem elválasztó; a maradék csak prózai szónál
-nagybetűs (`capitalizeProse`) — képlet, kód, előjeles szám érintetlen. L3: jelölt leckén előre felcsatolt udvarias élő régió.
+**Szövegkezelés — spec-változás (tulajdonosi döntés 2026-11-22, „NINCS LEVÁGÁS”; a vak kör 1 L2-javítását felülírja):** a modell
+visszajelzés-szövegéhez a kód jelölt leckén NEM nyúl (nincs előtag-levágás, nincs nagybetűsítés). A kódszótári nyitás csak akkor kerül
+elé, ha a szöveg nem kezdődik a régi nyitások zárt listájának (`LEGACY_OPENER_PREFIXES`) egyik elemével — pontos, kis- és nagybetűre
+érzékeny egyezés a szöveg elején, utána szövegvég vagy nem betű; ilyenkor nincs csere és nincs kódnyitás. A kódszótár egyetlen eleme sem
+kezdődhet a lista elemével (teszt). A jelöletlen lecke kimenete a korábbi (ítélet-előtag levágása, változatlanul). A levágás kódja és
+tesztjei kikerültek; új teszt: a modell szövege minden esetben bájtra változatlan (kód, képlet, mínusz, nyitással kezdődő szöveg).
+
+**Élő régió:** jelölt leckén előre felcsatolt udvarias élő régió (vak kör 1, L3); csak friss válasz után kap szöveget — a tanuló
+gombnyomása élesíti 2 másodpercre, a mentett válasz felcsatoláskori helyreállítása (újratöltés, rejtett fül) néma (vak kör 2, L4).
+
+**Nyitott jegy (vak kör 2, L5):** a böngészős próba kérdésenként konkrét kódnyitást és újratöltés utáni azonosságot mérjen, a kvízteszt ne
+a teljes szótári uniót használja — a kliensoldali konstanskulcs-mutáció bukjon. (A kanban-CLI ebben a környezetben nem érhető el; a jegyet
+az orkesztrátor veszi fel.)
 
 ## S6a, S6b, S6c, SK2
 

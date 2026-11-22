@@ -158,7 +158,8 @@ export function coveragePatchedLesson(base: Lesson, json: unknown, concepts: Map
   const patched = applyVisualPatch(base, json, concepts, { sourceVisualKinds });
   if (!patched) return { lesson: null, rejected: [] };
   const checked = modelLessonSchema(sourceVisualKinds ?? sourceVisualsEnabled()).safeParse(stripUngroundedAnimateLabels(patched.lesson, concepts).lesson);
-  return { lesson: checked.success && checkAnimatorResult(base, checked.data).ok ? checked.data : null, rejected: patched.rejected };
+  // S5a vak kör 2 (L2): a modell kimenetének elfogadásakor a `variety` jelölő eldobva (a jelölőt csak a közzétételi mentés írja).
+  return { lesson: checked.success && checkAnimatorResult(base, checked.data).ok ? withVarietyMarker(checked.data, false) : null, rejected: patched.rejected };
 }
 
 /**
@@ -769,7 +770,8 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     // megszámolva és naplózva; a kapuk a megmaradt leckét mérik. Ha a kivétel UTÁN kapu bukik, a javító üzenet ELSŐ sora a kivétel
     // oka (vak ellenőr B1) — különben a modell csak a félrevezető következményt látná („egyetlen blokk sem tanít”, „nincs animáció”).
     let droppedNow: DroppedSourceVisual[] = [];
-    const parsed = { data: withoutUndrawableVisuals(strict.data, deps.log, telemetry, (dropped) => { droppedNow = dropped; }) };
+    // S5a vak kör 2 (L2): a modell (forrásvizuál BE mellett átengedett) jelölője már az elfogadáskor eldobva — a checkpointba sem kerül.
+    const parsed = { data: withoutUndrawableVisuals(withVarietyMarker(strict.data, false), deps.log, telemetry, (dropped) => { droppedNow = dropped; }) };
     const dropNotes = undrawableDropNotes(droppedNow);
     const unknown = lessonIdsSubsetOfMap(parsed.data, concepts);
     if (unknown.length) return { ok: false, problems: [...dropNotes, `A tudásbankban nem szereplő fogalomazonosítók: ${unknown.join(", ")}`] };

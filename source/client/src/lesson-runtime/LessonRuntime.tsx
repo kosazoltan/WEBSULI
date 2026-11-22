@@ -512,7 +512,12 @@ export function LessonRuntime({
   // Spec 2026-11-20-tgm-valtozatossag-abrak (S5a): csak a változatossági jelölővel mentett leckén ad kódszótári visszajelzés-nyitást.
   // S5a vak kör 1 (L3): a jelölt lecke előre felcsatolt, udvarias élő régiója — ide kerül a friss visszajelzés szövege.
   const [feedbackAnnouncement, setFeedbackAnnouncement] = useState("");
-  const feedbackVariety = useMemo(() => lesson.variety ? { marker: lesson.variety, band, mapId: lesson.mapId, announce: setFeedbackAnnouncement } : null, [lesson.variety, band, lesson.mapId]);
+  // S5a vak kör 2 (L4): csak FRISS válasz jelentődik be — a bejelentést a tanuló gombnyomása élesíti (rövid ablakra); a mentett válasz
+  // felcsatoláskori helyreállítása (újratöltés, rejtett fül) néma marad.
+  const announceArmedAt = useRef(0);
+  const announceFeedback = useCallback((text: string) => { if (Date.now() - announceArmedAt.current < 2000) { announceArmedAt.current = 0; setFeedbackAnnouncement(text); } }, []);
+  const armAnnouncement = useCallback((event: { target: EventTarget | null }) => { if (event.target instanceof Element && event.target.closest("button")) announceArmedAt.current = Date.now(); }, []);
+  const feedbackVariety = useMemo(() => lesson.variety ? { marker: lesson.variety, band, mapId: lesson.mapId, announce: announceFeedback } : null, [lesson.variety, band, lesson.mapId, announceFeedback]);
   const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
   // Ikonkészlet: a mentéskor az adatbázisból rendelt ikon elsőbbséget kap; régi leckénél a katalógus-választás marad.
   // Ha a lecke évfolyama a mentés óta megváltozott (javítás), a más sávú ikon nem jelenik meg.
@@ -568,8 +573,8 @@ export function LessonRuntime({
     <DesignBandContext.Provider value={designTheme}>
     <ChoiceLayoutContext.Provider value={choiceLayout}>
     <FeedbackVarietyContext.Provider value={feedbackVariety}>
-    <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
-      {feedbackVariety && <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="verdict-announcer">{feedbackAnnouncement}</div>}
+    <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography} onClickCapture={feedbackVariety ? armAnnouncement : undefined}>
+      {feedbackVariety &&<div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="verdict-announcer">{feedbackAnnouncement}</div>}
       <ClipProvider lessonId={lessonId} headings={clipHeadings} sections={lesson.sections} preset={clipsPreset}>
       <article className="mx-auto py-6 space-y-6" data-testid="lesson-runtime">
         {/* Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a koncepciókép sávfejléce — jelvény, évfolyam, téma, mottó. */}

@@ -24,8 +24,9 @@ export function VerdictFeedback({ right, text, className = "lesson-feedback", te
     variety: variety && question ? { marker: variety.marker, band: variety.band, key: feedbackOpenerKey(variety.mapId, question.text, question.options) } : undefined,
   });
   // S5a vak kör 1 (L3): jelölt leckén a teljes friss visszajelzés egyszer bejelentődik az előre felcsatolt udvarias élő régióban
-  // (fókuszmozgatás nélkül); jelöletlen leckén nincs élő régió és nincs hívás.
-  const announcement = view.opener ? `${right ? VERDICT_TEXT.right : VERDICT_TEXT.wrong} ${view.opener}${view.reason ? ` ${view.reason}` : ""}` : "";
+  // (fókuszmozgatás nélkül); jelöletlen leckén nincs élő régió és nincs hívás. Vak kör 2 (L4): hogy friss-e, azt a lejátszó dönti el
+  // (a tanuló gombnyomása élesíti) — a mentett válasz helyreállítása néma.
+  const announcement = variety && question ? [right ? VERDICT_TEXT.right : VERDICT_TEXT.wrong, view.opener, view.reason].filter(Boolean).join(" ") : "";
   const announce = variety?.announce;
   useEffect(() => { if (announcement && announce) announce(announcement); }, [announcement, announce]);
   return <p className={className} data-state={right ? "right" : "wrong"} data-testid={testId}>

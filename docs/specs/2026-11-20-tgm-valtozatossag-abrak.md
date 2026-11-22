@@ -126,19 +126,26 @@ Az S3a / S3b nem előfeltétele a változatosságnak: az S6c „a forráshoz kö
 
 ## 7. Edge case-ek (az S5a-ra; a további szeletekre a TGM-terv 7. szakasza)
 
-- A modell BE kapcsolónál is ír bátorító nyitást → a jelölt leckén a lejátszó levágja (`stripLegacyOpener`), így nincs dupla nyitás.
-- A levágás után 12 karakternél rövidebb maradék → az eredeti szöveg marad (nem csonkolunk értelmetlenre).
-- A modell csak ítéletet írt („Igen.”) → az ítélet-előtag levágása után üres; a lejátszó az ítéletet és a kódnyitást mutatja.
+*Spec-változás 2026-11-22 (tulajdonosi döntés, „NINCS LEVÁGÁS”, a 2. vak kör L1-e után): a modell visszajelzés-szövegéhez a kód jelölt
+leckén nem nyúl. Az alábbi pontok ennek megfelelően:*
+
+- A modell BE kapcsolónál is ír bátorító nyitást → a szöveg a régi nyitások zárt listájának egyik elemével kezdődik
+  (`startsWithLegacyOpener`, pontos egyezés) → a lejátszó NEM tesz elé kódnyitást, a szöveget változatlanul mutatja (nincs dupla nyitás,
+  nincs csere).
+- A modell szövege nem nyitással kezdődik (kód, képlet, előjeles szám, próza) → elé kerül a kódnyitás, a szöveg bájtra a modellé.
+- A modell csak ítéletet írt („Igen.”) → a lista eleme → kódnyitás nélkül, változatlanul.
 - Jelölt lecke régi kliensen → a jelölő elhagyódik, a visszajelzés a modell szövegével (nyitás nélkül) jelenik meg — érthető marad.
-- Kapcsoló BE, nyitókapcsoló KI → a promptban nincs visszajelzési szabály; a jelölő a leckére kerül, a lejátszó kódnyitást ad, a
-  modell esetleges bátorító előtagját levágja.
+- Kapcsoló BE, nyitókapcsoló KI → a promptban nincs visszajelzési szabály; a jelölő a leckére kerül, a lejátszó a fenti szabály szerint ad
+  kódnyitást.
 - A javítási út (`server/studio/structured-improvement.ts`, a tulajdonos indította javítás): *spec-pontosítás 2026-11-22 (vak kör 1,
   L1)* — a jelölt jelölőjének egyetlen forrása a TÁROLT lecke (`carryVarietyMarker`; az előnézetben és az alkalmazáskor a zárolt
   sorból), a modell jelölője mindkét forrásvizuál-ágon eldobva; a javítás változatossági állapota (prompt, bank) is a tárolt jelölő.
 - Megszakadt gyártás folytatása (*vak kör 1, L4*): a futás állapota a job kimenetében (`lessonVariety: true`), folytatáskor kizárólag
   innen; a mező nélküli régi checkpoint KI. A környezet menet közbeni változása a futásra nem hat.
-- Javított (régi) lecke BE kapcsolóval → a bank a verzióemelés miatt újraépül (v2), a nem javított fejezetek régi check-visszajelzését
-  a lejátszó a jelölő miatt levágja + kódnyitással mutatja.
+- Célzott fogalomjavítás (*vak kör 2, L3*): ugyanaz a szabály, mint a leckejavításnál — a változatossági állapot (bank prompt, verzió) és
+  a jelölő a tárolt lecke jelölője; jelöletlen (régi) lecke javítása BE környezetben is KI állapotú, v1 bankkal.
+- A modell kimenetének elfogadásakor a gyártásban (*vak kör 2, L2*) a `variety` mező eldobva — a job checkpointja és végső kimenete sem
+  hordozza; a jelölőt kizárólag a közzétételi mentés írja.
 
 ## 8. Fizetős mérés
 
@@ -151,7 +158,7 @@ indítással (az orkesztrátor kéri).
 ## 9. Döntési pont a lánc végén (a tulajdonosnak, a mért számokkal)
 
 - (a, javasolt) `STUDIO_LESSON_VARIETY=on` élesben az új gyártásra; a régi leckék változatlanok.
-- (b) mint (a), és a régi leckék „Jó próba”-előtagja is levágva + kódnyitás (megjelenítési, adatírás nélküli változás).
+- (b) *(2026-11-22: a „NINCS LEVÁGÁS” döntés miatt nem választható — a modell szövegéhez a kód nem nyúl.)*
 - (c) marad KI.
 
 ## 10. Elfogadási kritériumok (EARS) — S5a
@@ -164,8 +171,9 @@ indítással (az orkesztrátor kéri).
   sáv készletének legfeljebb 15%-a.
 - **V4** — WHEN 200 különböző kérdéskulcsra ugyanabban a sávban nyitás készül, THE leggyakoribb nyitás aránya SHALL 10% alatt lenni; és
   ugyanarra a kulcsra a nyitás SHALL mindig ugyanaz lenni.
-- **V5** — WHEN a lecke jelölt, THE lejátszó SHALL az ítélet után a kódszótári nyitást, majd a régi bátorító előtag nélküli indoklást
-  mutatni; WHEN a lecke jelöletlen, THE lejátszó SHALL a mai kimenetet adni.
+- **V5** — *(spec-változás 2026-11-22, „NINCS LEVÁGÁS”)* WHEN a lecke jelölt, THE lejátszó SHALL a modell szövegét bájtra változatlanul
+  mutatni, és az ítélet után a kódszótári nyitást csak akkor, ha a szöveg nem kezdődik a régi nyitások zárt listájának elemével; WHEN a
+  lecke jelöletlen, THE lejátszó SHALL a mai kimenetet adni.
 - **V6** — THE `shared/option-order.ts` keverése SHALL a kiemelés után is bájtra azonos sorrendet adni (meglévő tesztek).
 - **V7** — UI: a jelölt lecke visszajelzése 360×640, 844×390 és 1280×800 nézetben nem okoz oldalszintű vízszintes görgetést és nem
   vágódik le (böngészős próba, képernyőkép a PR-ben).

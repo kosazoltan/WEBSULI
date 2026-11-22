@@ -9,7 +9,7 @@
 import type { AgeBand } from "./lesson-schema";
 import { choiceSeed } from "./option-order";
 import { seedFrom, seededPick } from "./seeded";
-import { capitalizeProse, stripVerdictPrefix } from "./lesson-ui-text";
+import { stripVerdictPrefix } from "./lesson-ui-text";
 
 /** A lecke jelölőjének verziója: a lejátszó ebből tudja, hogy a nyitást a kód adja. */
 export const LESSON_VARIETY_VERSION = "valtozatossag-1";
@@ -33,8 +33,9 @@ export const FEEDBACK_OPENERS: Record<AgeBand, { wrong: readonly string[]; right
       "Mindjárt kiderül, miért.", "Kövesd velem a nyomot!", "Tanulni épp így kell.", "Örülök, hogy megpróbáltad!",
     ],
     right: [
-      "Eltaláltad!", "Ügyes vagy!", "Hurrá, ez az!", "Remek munka!", "Nagyon jól gondoltad!", "Telitalálat!",
-      "Ez bizony így van!", "Csillagos ötös!", "Jól figyeltél!", "Bravó!", "Kitűnő!", "Pompás, mehetünk tovább!",
+      // Vak kör 2: a régi nyitások zárt listájával kezdődő elemek („Ügyes…”, „Remek…”, „Bravó”) cserélve — a kódnyitás nem lehet „régi”.
+      "Eltaláltad!", "Nagyon ügyes!", "Hurrá, ez az!", "Kiválóan sikerült!", "Nagyon jól gondoltad!", "Telitalálat!",
+      "Ez bizony így van!", "Csillagos ötös!", "Jól figyeltél!", "Hibátlan!", "Kitűnő!", "Pompás, mehetünk tovább!",
       "Ez igen!", "Fantasztikus!", "Hajrá, így tovább!", "Klassz!", "Éljen, sikerült!", "Mesteri!",
     ],
   },
@@ -48,7 +49,7 @@ export const FEEDBACK_OPENERS: Record<AgeBand, { wrong: readonly string[]; right
       "Próbáljuk meg más szemmel.", "Ilyenkor érdemes visszalépni.", "Bontsuk szét a feladatot.", "A részletekben van a válasz.",
     ],
     right: [
-      "Pontos válasz!", "Így kell ezt!", "Remek gondolatmenet!", "Telitalálat!", "Ügyesen kiszúrtad!", "Ez a kulcs!",
+      "Pontos válasz!", "Így kell ezt!", "Elegáns gondolatmenet!", "Telitalálat!", "Ügyesen kiszúrtad!", "Ez a kulcs!",
       "Éles szem!", "Szépen dolgoztál!", "Stimmel!", "Megvan!", "Precíz!", "Kifogástalan!",
       "Profi megoldás!", "Ez ül!", "Le a kalappal!", "Hibátlan!", "Nagyon jó!", "Erős válasz!",
     ],
@@ -63,7 +64,7 @@ export const FEEDBACK_OPENERS: Record<AgeBand, { wrong: readonly string[]; right
       "Figyeljünk a pontos megfogalmazásra.", "Tanulságos eset.", "Rendezzük a gondolatokat.", "Vessük össze a lehetőségeket.",
     ],
     right: [
-      "Pontos.", "Helytálló.", "Korrekt gondolatmenet.", "Megalapozott válasz.", "Precíz megoldás.", "Kiváló érvelés.",
+      "Pontos.", "Helytálló.", "Korrekt gondolatmenet.", "Megalapozott válasz.", "Precíz megoldás.", "Erős érvelés.",
       "Ez a lényeg.", "Jól látod.", "Telitalálat.", "Meggyőző.", "Stimmel.", "Hibátlan.",
       "Logikus következtetés.", "Alapos válasz.", "Világos gondolatmenet.", "Szabatos.", "Lényegre törő.", "Átgondolt válasz.",
     ],
@@ -80,39 +81,35 @@ export function feedbackOpener(kind: "right" | "wrong", band: AgeBand, key: stri
   return seededPick(FEEDBACK_OPENERS[band][kind], seedFrom(`${kind}\u0001${key}`))!;
 }
 
-// A régi, modell írta nyitás: CSAK az ismert bátorító fordulatok (zárt lista), KÖZVETLENÜL írásjellel (és esetleg „de / azonban / ám”
-// kötéssel) folytatva. A „Jó, hogy…”, „Szépen látszik…”, „Majdnem minden…” tartalmi kezdet, nem vágódik (a fordulat után nem írásjel áll).
-// S5a vak kör 1 (L2): a gondolatjel / kötőjel csak akkor elválasztó, ha nem szám előjele — „Jó próba -3 az eredmény” és „– 3” érintetlen.
-const SEPARATOR_DASH = String.raw`[–—-](?!\s*\d)`;
-const LEGACY_OPENER = new RegExp(
-  String.raw`^\s*(?:jó\s+prób(?:a|álkozás)|szép\s+próbálkozás|ügyes\s+(?:gondolat|próbálkozás|próba)|jó\s+(?:gondolat|ötlet|megérzés|meglátás)` +
-    String.raw`|majdnem(?:\s+jó)?|szuper|remek|nagyszerű|kiváló|ügyes|szép\s+munka|jól\s+gondoltad)` +
-    String.raw`\s*(?:(?:[,;:]|${SEPARATOR_DASH})\s*(?:de|azonban|ám)(?=\s)|[.!,;:]|${SEPARATOR_DASH})\s*`,
-  "iu",
-);
-
 /**
- * A régi bátorító előtag levágása; 12 karakternél rövidebb maradéknál az eredeti szöveg marad. A maradék csak prózai szónál kap nagy
- * kezdőbetűt (`capitalizeProse`, mint az ítélet-előtagnál) — képlet (x = -3, pH), kód (i++) és előjeles szám változatlan.
+ * A régi, modell írta nyitások ZÁRT listája (a 03-as jelentés mintái és rokonaik, valamint a modell ítélet-szavai). Tulajdonosi döntés
+ * 2026-11-22 („NINCS LEVÁGÁS”): a lista csak FELISMERÉSRE szolgál — ha a modell szövege ezek egyikével kezdődik, a kód nem tesz elé
+ * nyitást; a szöveghez soha nem nyúl.
  */
-export function stripLegacyOpener(text: string): string {
-  const rest = text.replace(LEGACY_OPENER, "");
-  if (rest === text || rest.trim().length < 12) return text;
-  return capitalizeProse(rest);
+export const LEGACY_OPENER_PREFIXES: readonly string[] = [
+  "Jó próba", "Jó próbálkozás", "Szép próbálkozás", "Ügyes gondolat", "Ügyes próbálkozás", "Ügyes próba", "Jó gondolat", "Jó ötlet",
+  "Jó megérzés", "Jó meglátás", "Majdnem jó", "Majdnem", "Szuper", "Remek", "Nagyszerű", "Kiváló", "Ügyes", "Szép munka", "Jól gondoltad",
+  "Pontosan", "Így van", "Helyes", "Igen", "Bravó",
+];
+
+/** Pontos, kis- és nagybetűre érzékeny egyezés a szöveg legelején; utána a szöveg vége vagy nem betű (szóköz, írásjel) áll. */
+export function startsWithLegacyOpener(text: string): boolean {
+  return LEGACY_OPENER_PREFIXES.some((p) => text.startsWith(p) && (text.length === p.length || !/\p{L}/u.test(text.charAt(p.length))));
 }
 
 /**
- * A visszajelzés megjelenítése. Jelöletlen lecke: a mai kimenet (az ítélet-előtag levágása). Jelölt lecke: a kódszótári nyitás és a
- * régi bátorító előtag nélküli indoklás (a kapcsolóval gyártott leckében a modell nem ír nyitást — ha mégis, itt levágódik).
+ * A visszajelzés megjelenítése. Jelöletlen lecke: a mai kimenet (az ítélet-előtag levágása, változatlanul a korábbi). Jelölt lecke
+ * (tulajdonosi döntés 2026-11-22, „NINCS LEVÁGÁS”): a modell szövege BÁJTRA változatlan; a kódszótári nyitás csak akkor kerül elé, ha
+ * a szöveg nem kezdődik már nyitással (`startsWithLegacyOpener`) — ilyenkor nincs csere, nincs nyitás.
  */
 export function feedbackView(input: {
   right: boolean;
   text: string;
   variety: { marker: LessonVarietyMarker | undefined; band: AgeBand; key: string } | undefined;
 }): { opener?: string; reason: string } {
-  const reason = stripVerdictPrefix(input.text, input.right);
-  if (!input.variety?.marker) return { reason };
-  return { opener: feedbackOpener(input.right ? "right" : "wrong", input.variety.band, input.variety.key), reason: reason ? stripLegacyOpener(reason) : reason };
+  if (!input.variety?.marker) return { reason: stripVerdictPrefix(input.text, input.right) };
+  if (startsWithLegacyOpener(input.text)) return { reason: input.text };
+  return { opener: feedbackOpener(input.right ? "right" : "wrong", input.variety.band, input.variety.key), reason: input.text };
 }
 
 /**

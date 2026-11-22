@@ -203,6 +203,8 @@ async function buildStructuredImprovementScoped(original: Lesson, source: Repair
       // #515 review: a hibás paraméterű (kirajzolhatatlan) új fajtájú ábrablokk a jelölt elfogadása ELŐTT kimarad — a lejátszó
       // elrejtené, a javítás mégis „sikeres” lenne. A kiesés oka a későbbi ellenőrzések hibája elé kerül (a meglévő újrapróbán;
       // új kör ezen túl nem indul). KI állapotban nincs mit kivenni (a séma az új fajtát el sem fogadja).
+      // A jelölő a `finishStructuredImprovement` belépőjén a tárolt leckéé lesz (`carryVarietyMarker`; a modellé eldobva) — ez a sor a
+      // főág őre (source-visuals-flag J2) miatt bájtra marad.
       const drawn = drawableCandidate(modelLessonSchema(sourceVisualsEnabled()).parse(previous), (line) => logger.info(line), "Javítás");
       dropNotes = drawn.notes;
       const parsed = drawn.lesson;
