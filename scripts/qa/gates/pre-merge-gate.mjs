@@ -4,6 +4,8 @@
 //
 // Használat: node scripts/qa/gates/pre-merge-gate.mjs <PR-szám>
 
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, openSync, closeSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   STATUS, createGate, externalResult, isMain, listEvidence, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence,
@@ -190,6 +192,46 @@ export function invalidateMergeEvidence(dir, n) {
 }
 
 /**
+ * Vak kör 2 L2: PR-enkénti zár (`merge-lock-<n>.lock`, kizárólagos létrehozás), hogy a futás-jelölő írása + érvénytelenítés és a
+ * feltételes közzététel ne fedje át egymást. Legfeljebb ~5 s várakozás; utána kivétel (fail-closed: nincs közzététel).
+ */
+function withMergeLock(dir, n, work) {
+  mkdirSync(dir, { recursive: true });
+  const lock = join(dir, `merge-lock-${n}.lock`);
+  let fd = null;
+  for (let i = 0; i < 100 && fd === null; i += 1) {
+    try { fd = openSync(lock, 'wx'); } catch (e) { if (e?.code !== 'EEXIST') throw e; sleepSync(50); }
+  }
+  if (fd === null) throw new Error(`a merge-bizonyíték zárja foglalt (${lock}) — egy másik kapufutás tartja; töröld, ha beragadt`);
+  try { return work(); } finally { closeSync(fd); try { unlinkSync(lock); } catch { /* már nincs */ } }
+}
+
+/**
+ * Vak kör 2 L2: a futás indítása — új futásazonosító a PR jelölőjébe (`merge-run-<n>.json`), és a korábbi bizonyítékok
+ * érvénytelenítése, egy zár alatt. Visszaad: a futásazonosító.
+ */
+export function startMergeRun(dir, n) {
+  return withMergeLock(dir, n, () => {
+    const runId = randomUUID();
+    writeEvidence(dir, `merge-run-${n}`, { runId, startedAt: new Date().toISOString() });
+    invalidateMergeEvidence(dir, n);
+    return runId;
+  });
+}
+
+/**
+ * Vak kör 2 L2: feltételes közzététel — csak a PR-ra LEGUTÓBB indított futás írhat (zár alatt ellenőrzött jelölő); egy régebben indult
+ * futás eredménye nem írhatja felül a frissebb futás (pl. bukott) bizonyítékát. Visszaad: közzétett-e.
+ */
+export function publishMergeEvidence(dir, n, runId, name, record) {
+  return withMergeLock(dir, n, () => {
+    if (readEvidence(dir, `merge-run-${n}`)?.runId !== runId) return false;
+    writeEvidence(dir, name, record);
+    return true;
+  });
+}
+
+/**
  * Vak kör 1 L4: a fájllista minden rekordja nem üres, egyedi `filename`-ot hordoz, és a darabszám PONTOSAN a `changed_files`
  * (ismétlődő / hibás / hiányzó / többlet rekord → kivétel; a régi `previous_filename` ezután számít).
  */
@@ -284,9 +326,11 @@ export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepS
   );
   const mainBranch = gj(['api', `repos/${repo}/branches/main`]);
   let required;
+  let requiredFromBranch = false;
   try {
     required = gj(['api', `repos/${repo}/branches/main/protection`])?.required_status_checks?.contexts ?? [];
   } catch (e) {
+    requiredFromBranch = true;
     log(`[pre-merge-gate] a védelmi végpont nem olvasható (${String(e?.message ?? e).split('\n')[0]}) — a branches/main protection mezőjéből`);
     // A védelmi végpont admin-jogot kér (felhős munkamenetben 403); ugyanez a lista az ág olvasható `protection` mezőjében.
     required = mainBranch?.protection?.required_status_checks?.contexts ?? [];
@@ -326,7 +370,10 @@ export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepS
   const ci = runs.filter((r) => r.name === 'CI').sort((a, b) => b.id - a.id)[0];
   const ciBaseSha = ci?.pull_requests?.[0]?.base?.sha ?? null;
   // L2: a C-61 bemenete a lapozott hívások UTÁN újraolvasott main-csúcs (a korai olvasat csak a védelmi tartalékút forrása).
-  const mainSha = gj(['api', `repos/${repo}/branches/main`])?.commit?.sha;
+  const lateBranch = gj(['api', `repos/${repo}/branches/main`]);
+  const mainSha = lateBranch?.commit?.sha;
+  // Vak kör 2 L1: a 403-as tartalékúton a kötelező lista is a késői ág-válaszból (ugyanabból, amelyből a main-csúcs).
+  if (requiredFromBranch) required = lateBranch?.protection?.required_status_checks?.contexts ?? [];
   // C-61 (kanban #92): a main elmozdulásának fájllistája a compare végpontból; hiba esetén null → a döntés fail-closed.
   const cmpBase = ciBaseSha ?? pr.baseRefOid;
   let mainFiles = null;
@@ -358,9 +405,9 @@ async function main() {
   const ctx = makeContext({});
   const { exec, root, cfg } = ctx;
   const gate = createGate('pre-merge-gate');
-  // L1: a futás eleje minden korábbi merge-bizonyítékot érvénytelenít (megszakítás / korai hiba után sem marad régi zöld).
-  const stale = invalidateMergeEvidence(ctx.evDir, n);
-  if (stale) gate.log(`[pre-merge-gate] ${stale} korábbi merge-bizonyíték érvénytelenítve (új futás)`);
+  // Vak kör 1 L1 + 2 L2: a futás eleje (zár alatt) új futásazonosítót kap, és minden korábbi merge-bizonyítékot érvénytelenít;
+  // a végén csak akkor tesz közzé, ha közben nem indult frissebb futás.
+  const runId = startMergeRun(ctx.evDir, n);
   let pr;
   let seenHead = null;
   try {
@@ -380,8 +427,11 @@ async function main() {
   const code = gate.finish();
   const evHead = pr?.headRefOid ?? seenHead;
   if (evHead) {
-    writeEvidence(ctx.evDir, `merge-${n}-${evHead}`, evidenceRecord('merge', evHead, gate, { pr: Number(n) }));
-    gate.log(`[pre-merge-gate] bizonyíték: merge-${n}-${evHead.slice(0, 12)} (ok=${code === 0}; ${cfg.mergeEvidenceMaxMinutes} percig érvényes). A gh pr merge-et ez a kapu NEM hívja.`);
+    const published = publishMergeEvidence(ctx.evDir, n, runId, `merge-${n}-${evHead}`, evidenceRecord('merge', evHead, gate, { pr: Number(n) }));
+    gate.log(published
+      ? `[pre-merge-gate] bizonyíték: merge-${n}-${evHead.slice(0, 12)} (ok=${code === 0}; ${cfg.mergeEvidenceMaxMinutes} percig érvényes). A gh pr merge-et ez a kapu NEM hívja.`
+      : `[pre-merge-gate] közben frissebb kapufutás indult erre a PR-ra — ennek a futásnak az eredménye NEM került közzétételre.`);
+    if (!published) process.exit(1);
   }
   process.exit(code);
 }

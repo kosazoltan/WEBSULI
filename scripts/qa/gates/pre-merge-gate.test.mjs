@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { STATUS, loadConfig, resolveVerdict } from './lib.mjs';
 import {
   COMPARE_FILE_LIMIT, checkRunsFromPages, collectMergeData, compareFiles, decideMainMoved, decideMerge, flattenPages, prFromRest, requiredChecks,
-  GRAPHQL_MAX_PAGES, invalidateMergeEvidence, mergeSteps, mergeVerdict, rootReviewComments, threadsFromCcr,
+  GRAPHQL_MAX_PAGES, invalidateMergeEvidence, mergeSteps, publishMergeEvidence, startMergeRun, mergeVerdict, rootReviewComments, threadsFromCcr,
 } from './pre-merge-gate.mjs';
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -390,4 +390,29 @@ test('vak kör 1 L3–L5: szigorú alak a REST/GraphQL-határon', () => {
     if (draft === undefined) delete pull.draft;
     assert.throws(() => collect({ pull }).run(), /draft/, `L5: draft=${String(draft)} → kivétel`);
   }
+});
+
+test('vak kör 2 L1: 403-as tartalékúton a kötelező lista a késői ág-válaszból (a main-csúccsal együtt)', () => {
+  let k = 0;
+  const branch = () => { k += 1; return { commit: { sha: MAIN }, protection: { required_status_checks: { contexts: k === 1 ? ['A'] : ['A', 'B'] } } }; };
+  const d = collect({ protection: new Error('HTTP 403'), branch }).run();
+  assert.deepEqual(d.required, ['A', 'B'], 'a késői lista');
+  const steps = decideMerge({ pr: d.pr, required: d.required, checkRuns: d.checkRuns, statuses: d.statuses, threads: [], mainSha: d.mainSha, ciBaseSha: d.ciBaseSha, files: [], verdict: null, guard: { code: 0 }, rt: { json: { mode: 'off' } }, repoWideScopes: cfg.repoWideScopes });
+  assert.equal(steps.find((s) => s.name === 'kötelező ellenőrzések a jelenlegi fejen').status, STATUS.FAIL, 'B nem futott → FAIL');
+});
+
+test('vak kör 2 L2: csak a legutóbb indított futás tehet közzé merge-bizonyítékot (A indul, B indul, B bukik, A zöld → bukott marad)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'merge-run-'));
+  const a = startMergeRun(dir, '9');
+  const b = startMergeRun(dir, '9');
+  assert.notEqual(a, b);
+  assert.equal(publishMergeEvidence(dir, '9', b, `merge-9-${HEAD}`, { head: HEAD, ok: false }), true, 'a legutóbbi futás közzétesz');
+  assert.equal(publishMergeEvidence(dir, '9', a, `merge-9-${HEAD}`, { head: HEAD, ok: true }), false, 'a régebbi futás nem írhat');
+  assert.equal(JSON.parse(readFileSync(join(dir, `merge-9-${HEAD}.json`), 'utf8')).ok, false, 'a bukott eredmény marad');
+  assert.equal(readdirSync(dir).some((f) => f.endsWith('.lock')), false, 'a zár felszabadult');
+  const c = startMergeRun(dir, '9');
+  assert.equal(JSON.parse(readFileSync(join(dir, `merge-9-${HEAD}.json`), 'utf8')).ok, false, 'új futás indulásakor érvénytelenítve');
+  assert.equal(publishMergeEvidence(dir, '9', c, `merge-9-${HEAD}`, { head: HEAD, ok: true }), true);
+  assert.equal(JSON.parse(readFileSync(join(dir, `merge-9-${HEAD}.json`), 'utf8')).ok, true);
+  assert.equal(startMergeRun(dir, '19') !== c && publishMergeEvidence(dir, '9', c, `merge-9-${HEAD}`, { ok: true }), true, 'más PR futása nem zavarja');
 });
