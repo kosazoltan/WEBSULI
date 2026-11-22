@@ -6,7 +6,7 @@ import { answeredCount, OUTBOX_MAX_ATTEMPTS, outboxRetryDelayMs, quizRoundComple
 import { createOutboxStore, outboxEntryExpired, type OutboxEntry } from "@shared/result-outbox";
 import { legacyResultBody } from "@shared/result-compat";
 import { resultOutboxEnabled } from "@/lib/resultOutboxFlag";
-import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
+import { experienceFingerprint, roundIdOf, type ExperienceRound } from "./useExperienceRound";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — „motorháztető alatt”: a kör első lezárásakor
@@ -218,7 +218,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
   // R47: a kör kiléte a kör ELSŐ tevékenységekor rögzül (a beküldő effekt ELŐTT fut, így a lezáráskor legkésőbb rögzül). A CSRF-token a
   // lecke megnyitásakor előre töltődik, hogy a fiók címkéje az első válasznál már ismert legyen.
   useEffect(() => { if (lessonId) warmCsrfToken(); }, [lessonId]);
-  const ownedRoundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
+  const ownedRoundId = roundIdOf(round);
   const roundActive = !!round.finishedAt || (kind === "quiz" ? answeredCount(round) > 0 : Object.values(round.answers).some(answer => answer.trim() !== ""));
   // R50: azok a körök, amelyeket ebben a dokumentumban még tevékenység nélkül láttunk (csak ezek kaphatják a mostani kilétet).
   const seenFresh = useRef(new Set<string>());
@@ -238,7 +238,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     // S1b (review K1) + R2: az a LE NEM ZÁRT kör, amelynek az UTOLSÓ VÁLASZA 7 napnál régebbi, utólag nem megy el (a lezárt kör a tanuló
     // döntése: az megy). A régen megnyitott, de ma megválaszolt kör megy — a korhatár nem a kvíz-fül első megnyitásához mér.
     if (!round.finishedAt && roundTooOld(roundActivityAt(round), Date.now())) return;
-    const roundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
+    const roundId = roundIdOf(round);
     const flag = `${storageKey}:${kind}:sent:${roundId}`;
     try { if (localStorage.getItem(flag)) return; } catch { /* privát módban a szerver egyedi kulcsa véd */ }
     // Terv R24: a törzs VÁRAKOZÁS NÉLKÜL a kimenő sorba kerül (a token és — ha még nincs meg — az ujjlenyomat a küldéskor jön), így az
@@ -287,7 +287,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const sendSnapshot = (current: ExperienceRound) => {
       const count = answeredCount(current);
       if (current.finishedAt || quizRoundComplete(current) || count === 0 || roundTooOld(roundActivityAt(current), Date.now())) return;
-      const roundId = `round-${experienceFingerprint({ ids: current.ids, startedAt: current.startedAt })}`;
+      const roundId = roundIdOf(current);
       const key = `${storageKey}:${kind}:partial:${roundId}`;
       const state = snapshotState.current;
       try {
