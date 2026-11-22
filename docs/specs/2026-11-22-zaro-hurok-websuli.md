@@ -170,3 +170,6 @@ meglévő szabályaihoz (egyetlen csapdakatalógus, a Claude Code tapasztalat-ka
   `feat/zaro-hurok-3` (skill + tükör + a `gates.config.json` `mirroredSkills` bővítése + a `skills-sync-check.test.mjs` darabszáma + AGENTS.md +
   csapdák). Ok: a kapu tesztje a kitöltött rétegeket is ellenőrzi, a skill-tükör a
   `mirroredSkills` bővítését, a csapdák és az AGENTS.md a kapu parancsait — ezért ez a sorrend önállóan zöld.
+- 2026-11-22: 2. vak kör a feat/zaro-hurok-2-n (`a2b70fb2`): NEM, 1 blokkoló + 7 közepes. Megközelítésváltás: a memória-rétegekben csak
+  gépileg igazolt tény marad (követett út, létező parancs, szó szerinti idézet fájl:sorral); a séma-snapshotból mind az 59
+  szabadszöveges célleírás kikerült. Az őr Git-követett hivatkozást, bejegyzésenkénti forrást és szó szerinti idézetet kényszerít.

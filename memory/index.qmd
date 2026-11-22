@@ -9,38 +9,30 @@ format:
 
 # Cél
 
-Gyors válasz arra, hol található a projekt tudása, és melyik eljárást kell követni.
-Minden aktív hivatkozás ezen a fejen létező fájlra mutat (őr: `source/tests/memory-layer-refs-guard.test.ts`); ami még nincs a
-repóban, az csak „tervezett” jelöléssel szerepel.
+Hol található a projekt tudása. Csak a Gitben követett fájlokra és könyvtárakra mutat
+(őr: `source/tests/memory-layer-refs-guard.test.ts`).
 
-# Igazságforrások rangja
+# Források
 
-1. `AGENTS.md`                            — kötelező szabályok (a `.hermes.md` a Hermes-projekt tükre; a markeres blokkja nem a WEBSULI-é)
-2. `memory/manifest.yaml`                 — gépi olvasható projekt-összefoglaló (YAML)
-3. `memory/.cogni/`                       — Cogni-formátumú strukturált memória (projekt, modulok, döntések, séma)
-4. `memory/indexes/index.yml`             — a Markdown-memória (procedural / semantic / projects / episodic / notes) gyűjtemény-indexe
-5. `memory/notes/`                        — kapcsolt jegyzetek (új fájl csak az indexszel együtt)
-6. `docs/agent-csapdak.md`                — a WEBSULI csapdakatalógusa (tünet → gyökérok → szabály)
-7. `.agents/skills/`                      — repó-saját skillek; tükör a `.claude/skills/` alatt, CSAK a `scripts/qa/gates/gates.config.json` `mirroredSkills` listájának skilljeire
-8. tapasztalat-kanban                     — a Claude Code saját környezetében: `~/.claude/projects/<proj>/kanban/tapasztalat-kanban.md`
-   (`<proj>` = a fő munkakönyvtár abszolút útvonala, minden nem betű/számjegy karakter „-”-re cserélve)
-9. `.hermes/projekt/TUDAS.md`             — felhalmozott tudás (Hermes-projekt)
+1. `AGENTS.md` — a repó ügynök-szabálykönyve
+2. `memory/manifest.yaml` — gépi projekt-összefoglaló (YAML)
+3. `memory/.cogni/` — Cogni-réteg (projekt, modulok, döntések, séma)
+4. `memory/indexes/index.yml` — a Markdown-memória gyűjtemény-indexe
+5. `memory/notes/` — jegyzetek
+6. `docs/agent-csapdak.md` — csapdakatalógus
+7. `.agents/skills/` — repó-saját skillek; tükör: `.claude/skills/` (a `scripts/qa/gates/gates.config.json` `mirroredSkills` listája szerint)
+8. `.hermes/projekt/TUDAS.md` — Hermes-projekt tudásfájl
+9. `.agents/skills/websuli-zaro-hurok/SKILL.md` — a záró hurok skillje (AGENTS.md „Záró hurok (kötelező)”)
 
 # Modul-térkép
 
-| Modul | Forrás | Megjegyzés |
-|-------|--------|------------|
-| Kliens (SPA) | `source/client/src/` | React + Vite; belépő `main.tsx`, `App.tsx`; oldalak `pages/`, játékmotor `game-engine/`, lecke-futtató `lesson-runtime/` |
-| Szerver (API) | `source/server/` | Express; belépő `index.ts`, útvonalak `routes.ts` / `app-routes.ts`; DB-kapcsolat `db.ts` |
-| Közös réteg | `source/shared/` | Drizzle-séma `schema.ts` (59 tábla), közös szerződések és tiszta segédek (pl. `game-quiz-contract.ts`, `knowledge-map-schema.ts`) |
-| Migrációk | `source/migrations/` | SQL-migrációk; a sémával együtt változnak |
-| Tesztek | `source/tests/` | `node --test` egység- és őr-tesztek (`*-guard.test.ts`); Playwright-konfigok a `source/` gyökerében |
-| Minőségkapuk | `scripts/qa/` | `gates/` (lint / stage / push / pr / merge kapu, `record-review.mjs`), `hooks/`, `three-phase-check.mjs`, `zaro-hurok.mjs` (záró kapu) |
-| Tervek | `docs/specs/` | terv + `*-vegrehajtas.md`; sablon `_TEMPLATE.md`, szerződés `contract-template.yaml` |
-| Retrók | `docs/handoffs/` | `*-retro.md` futásonként |
-
-# Záró hurok
-
-Csapda → memóriák (YAML, QMD, Cogni; vektor: nem elérhető) → retró → tapasztalat-kanban → skill → ismétlődő hibaosztály → higiénia →
-tiszta fa. Kapu: `npm run zaro:check -- --since <ISO>` (`scripts/qa/zaro-hurok.mjs`; terv: `docs/specs/2026-11-22-zaro-hurok-websuli.md`).
-Skill: `.agents/skills/websuli-zaro-hurok/SKILL.md` (AGENTS.md „Záró hurok (kötelező)”).
+| Modul | Könyvtár | Belépők / fő fájlok |
+|-------|----------|---------------------|
+| Kliens | `source/client/src/` | `source/client/src/main.tsx`, `source/client/src/App.tsx` |
+| Szerver | `source/server/` | `source/server/index.ts`, `source/server/routes.ts`, `source/server/app-routes.ts`, `source/server/db.ts` |
+| Közös réteg | `source/shared/` | `source/shared/schema.ts` |
+| Migrációk | `source/migrations/` | |
+| Tesztek | `source/tests/` | |
+| Minőségkapuk | `scripts/qa/` | `scripts/qa/gates/`, `scripts/qa/hooks/`, `scripts/qa/three-phase-check.mjs`, `scripts/qa/zaro-hurok.mjs` |
+| Tervek | `docs/specs/` | `docs/specs/_TEMPLATE.md`, `docs/specs/contract-template.yaml`, `docs/specs/2026-11-22-zaro-hurok-websuli.md` |
+| Retrók | `docs/handoffs/` | |

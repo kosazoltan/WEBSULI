@@ -178,7 +178,7 @@ A kezelt `agentic-qa-kit` blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja
 
 Minden lezárt feladat után és minden session végén, a záró jelentés ELŐTT a `websuli-zaro-hurok` skill hét lépése fut
 (`.agents/skills/websuli-zaro-hurok/SKILL.md`): csapda (`docs/agent-csapdak.md`, ágon ideiglenes `C-<ág>-N` sorszám) → memória-rétegek
-(`memory/manifest.yaml`, `memory/index.qmd`, `memory/.cogni/`; vektor: nem elérhető) → retró + tapasztalat-kanban (a Claude Code
+(`memory/manifest.yaml`, `memory/index.qmd`, `memory/.cogni/`; repó-saját vektorindex nincs) → retró + tapasztalat-kanban (a Claude Code
 saját környezetében: `~/.claude/projects/<proj>/kanban/tapasztalat-kanban.md`, ahol `<proj>` a fő munkakönyvtár útvonala, minden nem
 betű/számjegy karakter „-”-re cserélve) → skill-döntés → ismétlődő
 hibaosztály (gépi kényszerítés, nem csak szöveg) → higiénia (alapból csak riport) → tiszta fa. A teljesülést a gép dönti el:

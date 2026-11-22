@@ -27,7 +27,7 @@ ez a WEBSULI-rétegeket és -parancsokat rögzíti.
    - jegyzet: `memory/notes/*.md` — új fájl CSAK a `memory/indexes/index.yml` `notes` gyűjteményével együtt (`memory-index-guard`, C-ZH-1).
    Ha egy rétegben nincs új: `node scripts/qa/zaro-hurok.mjs nincs-uj --kind yaml,qmd,cogni` (YAML-ban `# zaro-hurok: <ISO> nincs-uj`,
    Markdown/QMD-ben `<!-- zaro-hurok: <ISO> nincs-uj -->`; fajtánként egy jelölő, a régi cserélődik).
-3. **Vektoros réteg** — a WEBSULI-környezetben nincs vektoros memória; ne állítsd vezetettnek. A kapu a helyi beágyazót (Ollama)
+3. **Vektoros réteg** — a repóban nincs követett, repó-saját vektorindex; a helyi gépállapotot ne rögzítsd projekttényként. A kapu a helyi beágyazót (Ollama)
    próbálja: „nem elérhető” → N/A, nem buktat.
 4. **Retró + kanban** — retró: `docs/handoffs/<dátum>-<téma>-retro.md` vagy a terv „Állapotnapló” fejezete bővül (mért tények:
    mi ment rosszul, mennyibe került, mit javítottunk fájllal). Kanban: a Claude Code saját környezetében vezetett tapasztalat-kanban
