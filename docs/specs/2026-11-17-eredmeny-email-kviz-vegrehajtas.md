@@ -524,6 +524,27 @@ Követő PR (kanban-jegyek, NEM a #510 része):
   adagok közti megállás alatt normál, friss válaszú kérés. Addig vállalt korlát (csak a 8 napnál régebben rögzített, közben is folytatott
   körnél, a napi takarítás pillanatában).
 
+## 2026-11-22 — 10. vak kör (cc332f2e): az R53 és az R52-szabály kivétele
+
+Tulajdonosi döntés (űrlap, 2026-11-22, szó szerint): „R53 ÉS R52-SZABÁLY KI” — a 10. vak kör (cc332f2e) L1 / L2 nyomán az R53 (a lefokozott, megszakadt végleges küldés folytatása) és az R52 „lejárt kör késői kérése → vendég” szabálya kikerült; a takarítás marad.
+- `server/lesson-result-email.ts`: a végleges jelző tulajdonos-sora ismét a beküldő (`who`) kulcsán (nincs `foreign:` kulcs); idegen kérés
+  létező jelzőnél duplikátum (folytatás nincs); az `establishIdentity` ismét csak a munkamenetből / párosításból / rögzítésből dönt (nincs
+  kor-paraméter és „lejárt → vendég” ág, a visszaadott kilét a rögzítés egyezésétől függ). A takarítás (`rc:` / `ro:`, 8 nap, adagos törlés,
+  napi ütemezés, a végleges jelző védelme) változatlan.
+- Dokumentált spec-változás a tesztekben: az `R53 / L1` DB-teszt kikerült; az `R52` tesztből a „lejárt kör késői első kérése → vendég” rész
+  kikerült, a takarítás állításai maradtak.
+
+Követő PR (további kanban-jegyek):
+- **követő PR: vállalt korlát — R53** — a lefokozott, 202 előtt megszakadt végleges kérés ismétlése duplikátum, a levél elmarad. A javításhoz
+  a beküldő igazolása kell (a vendég-ujjlenyomat nem hitelesít); 10. kör L1: közös gépen másik fiók tartalmával is indítható lett volna.
+- **követő PR: vállalt korlát — R52-szabály** — a 8 napon túli kör a takarítás után a következő kérés munkamenetével újra rögzül; a 10. kör L2
+  szerint a „késői kérés → vendég” szabály a 9 napja nyitott, ma kitöltött feladatot is vendéghez sorolta (a feladatok nem visznek
+  utolsó-tevékenység időt). Javítási irány: a kör tényleges első tevékenységének ideje a kérésben / rögzítésben.
+- **követő PR: 10. vak kör L3 (közepes)** — a kör passzív helyreállítása (megnyitás új válasz nélkül) is kilét-rögzítést (claim) indít
+  (`client/src/lesson-runtime/resultReport.ts:214`); ha az első claim nem ért célba vagy a rögzítést takarították, a későbbi munkamenet
+  rögzíthet. Javítás: a claim a tényleges első tevékenységhez kötve; ha ez nem igazolható, anonim / elutasító ág. Teszt: megnyitás válasz
+  nélkül → nincs claim.
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

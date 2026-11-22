@@ -420,8 +420,8 @@ const roundOwnerKeyOf = (kind: "tasks" | "quiz", roundId: string, owner: string)
 export const roundIdentityKeysOf = (kind: "tasks" | "quiz", roundId: string) => [roundClaimKeyOf(kind, roundId), `ro:${roundIdentityPart(kind, roundId).slice(0, 29)}`];
 /**
  * Terv R52: a kilét-rögzítés élettartama — a le nem zárt kör 7 napos korhatára (R2 / R5) után egy nap tartalékkal. Ezután a sorok
- * törlődnek (`pruneRoundIdentity`), és a kör késői első kérése sem kap kilétet: a kör első tevékenysége a rögzítési élettartamon túl
- * volt, a kilét nem igazolható (vendégként fut). A végleges jelző és tulajdonos-sora (duplikátum-védelem, R27 / R42) külön, nem érintett.
+ * törlődnek (`pruneRoundIdentity`). A végleges jelző és tulajdonos-sora (duplikátum-védelem, R27 / R42) külön, nem érintett. Vállalt
+ * korlát (tulajdonosi döntés 2026-11-22): a 8 napon túli kör a takarítás után a következő kérés munkamenetével újra rögzül.
  */
 export const ROUND_IDENTITY_TTL_MS = 8 * 86_400_000;
 const PRUNE_BATCH = 1000;
@@ -461,18 +461,13 @@ type Identity = { userId: string | undefined; paired: Awaited<ReturnType<typeof 
  * ellenőrzése (R47 / L3: átmeneti hiba → dob), majd a kör szerveres kilét-rögzítéséhez vetés: ha a mostani kilét nem a rögzített, a kérés
  * kilét nélkül (vendégként) fut. A hívó a dobásra 503-at ad (nincs rögzítés, nincs 202).
  */
-async function establishIdentity(req: Request, lessonId: string, kind: "tasks" | "quiz", roundId: string, learnerToken: string | undefined, subject: string | undefined, roundActivityAt?: number): Promise<Identity> {
+async function establishIdentity(req: Request, lessonId: string, kind: "tasks" | "quiz", roundId: string, learnerToken: string | undefined, subject: string | undefined): Promise<Identity> {
   const sessionUserId = (req.user as { id?: string } | undefined)?.id;
   const userId = subject !== undefined && subject !== resultSubjectOf(sessionUserId) ? undefined : sessionUserId;
   let paired: Identity["paired"] = null;
   if (learnerToken) { learnerResolveFault?.(); paired = await resolveLearner(learnerToken); }
-  // R52: ha a kör UTOLSÓ tevékenysége is a rögzítési élettartamon túl van, az első tevékenység biztosan — a most születő rögzítés nem
-  // igazolhatja az akkori kilétet: vendégként rögzül (meglévő rögzítésnél a meglévő számít).
-  const stale = roundActivityAt !== undefined && Date.now() - roundActivityAt > ROUND_IDENTITY_TTL_MS;
-  const owner = stale ? "guest" : userId ? `user:${userId}` : paired ? `learner:${paired.id}` : "guest";
-  if (!(await claimRoundOwner(lessonId, kind, roundId, owner))) return { userId: undefined, paired: null, foreign: true };
-  // A visszaadott kilét mindig a rögzítettnek felel meg (a „vendég” rögzítés — pl. lejárt kör — fiókot / párosítást nem ad).
-  return owner === "guest" ? { userId: undefined, paired: null, foreign: false } : { userId, paired, foreign: false };
+  const owner = userId ? `user:${userId}` : paired ? `learner:${paired.id}` : "guest";
+  return (await claimRoundOwner(lessonId, kind, roundId, owner)) ? { userId, paired, foreign: false } : { userId: undefined, paired: null, foreign: true };
 }
 let finalizedCheckFault: (() => void) | null = null;
 let partialIntakeHook: ((who: string) => Promise<void>) | null = null;
@@ -601,10 +596,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   // legfeljebb csökkentheti (eltérésnél fiók nélkül), kilétet nem adhat. Tanulói profil (S2): bejelentkezve is a tanuló naplójába kerül, a
   // levél neve bejelentkezve a fiók neve marad. A kilét-feloldás átmeneti hibája (párosítás, rögzítés) → 503, rögzítés és 202 nélkül.
   let identity: Identity;
-  // R52: a kör UTOLSÓ tevékenysége a szerver órájára számolva (R13: a kliens órájának eltérése a `clientNow`-ból).
-  const lastActivity = (body.kind === "quiz" ? body.lastAnsweredAt : undefined) ?? body.startedAt;
-  const roundActivityAt = lastActivity !== undefined ? lastActivity + (body.clientNow ? Date.now() - body.clientNow : 0) : undefined;
-  try { identity = await establishIdentity(req, req.params.lessonId, body.kind, body.roundId, body.learner, body.subject, roundActivityAt); }
+  try { identity = await establishIdentity(req, req.params.lessonId, body.kind, body.roundId, body.learner, body.subject); }
   catch (error) {
     logger.error(`[LESSON-RESULT] a kilét feloldása nem sikerült: ${errorClass(error)}`);
     return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
@@ -717,11 +709,8 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   // második levél és más név nem megy. Ugyanazon kilét ismétlése a meglévő címzettenkénti pótlásra fut. A jelzősor hibája nem akasztja meg
   // a beküldést (a memóriabeli véglegesítés véd; a hiba osztálya naplózódik).
   // R51 / L2: a jelzősor állapota nem bizonyítható (az írás hibázott) → 503 a 202 előtt; létező jelzőnél a tulajdonos-ellenőrzés mindig fut.
-  // R53: a végleges jelző rögzítője a beküldő ÉS a lefokozottsága — a lefokozott (idegen) kérés tulajdonos-sora külön kulcs, így egy
-  // azonos ujjlenyomatú, de lefokozott kérés nem folytathatja a nem lefokozott beküldő megszakadt kérését (és fordítva).
-  const finalOwner = identity.foreign ? `foreign:${who}` : who;
   let firstFinal: boolean;
-  try { firstFinal = await claimFinalRound(lessonId, body.kind, body.roundId, graded.summary.percent, finalOwner); }
+  try { firstFinal = await claimFinalRound(lessonId, body.kind, body.roundId, graded.summary.percent, who); }
   catch (error) {
     logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`);
     return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
@@ -730,24 +719,20 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     // R42: a saját végleges sor VAGY az első rögzítő tulajdonos-sora (a 202 előtt megszakadt első kérés ismétlése). Terv R49 (10. vak kör
     // L3): létező jelzősor mellett csak POZITÍVAN igazolt tulajdonos folytathatja — a tulajdonos-lekérdezés átmeneti hibája újrapróbálható
     // 503 (a 202 előtt), nem végleges küldés (különben más kézbesítési kulcson második levél mehetne).
-    const deliveryKey = roundKeyOf(who, body.kind, body.roundId);
-    const ownerKey = finalOwnerKeyOf(finalOwner, body.kind, body.roundId);
-    let own: string[];
+    let own: Array<{ id: string }>;
     try {
       ownerCheckFault?.();
-      own = (await db.select({ roundKey: lessonResultEmails.roundKey }).from(lessonResultEmails)
+      own = await db.select({ id: lessonResultEmails.id }).from(lessonResultEmails)
         .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, body.kind),
-          inArray(lessonResultEmails.roundKey, [deliveryKey, ownerKey])))).map(row => row.roundKey);
+          inArray(lessonResultEmails.roundKey, [roundKeyOf(who, body.kind, body.roundId), finalOwnerKeyOf(who, body.kind, body.roundId)]))).limit(1);
     } catch (error) {
       logger.error(`[LESSON-RESULT] a végleges kör tulajdonosának ellenőrzése nem sikerült: ${errorClass(error)}`);
       return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
     }
     // R51: a kör szerveres kilét-rögzítésével nem egyező (idegen) kérés létező végleges jelzőnél duplikátum — akkor is, ha a lefokozott
-    // (vendég) kulcsa egyezne az eredeti vendég-beküldőével (pl. ugyanazon az eszközön fiókba lépve). R53 (7. vak kör L1): kivéve, ha
-    // UGYANEZ a beküldő rögzítette a végleges jelzőt (saját tulajdonos-sora megvan), és a levele még nem indult (nincs kézbesítési sora) —
-    // a 202 előtt megszakadt saját kérését névtelenül folytathatja.
-    const resumesOwnFinal = own.includes(ownerKey) && !own.includes(deliveryKey);
-    if (!own.length || (identity.foreign && !resumesOwnFinal)) return res.status(202).json({ queued: false, duplicate: true });
+    // (vendég) kulcsa egyezne az eredeti vendég-beküldőével (pl. ugyanazon az eszközön fiókba lépve). Vállalt korlát (tulajdonosi döntés
+    // 2026-11-22, „R53 ÉS R52-SZABÁLY KI”): a lefokozott, 202 előtt megszakadt végleges kérés ismétlése is duplikátum — a levél elmarad.
+    if (!own.length || identity.foreign) return res.status(202).json({ queued: false, duplicate: true });
   }
   finalClaimFault?.();
   if (startedAtOnServer) graded = { ...graded, meta: { ...graded.meta, startedAt: startedAtOnServer } };

@@ -36,28 +36,27 @@ klienscsomag (ismert korlát: címke nélkül küld, a munkamenet fiókja szám�
   írásának hibája (bizonyíthatatlan állapot) 503 a 202 előtt. **L5** — a már elküldött körhöz újratöltéskor nem keletkezik kilét-rekord és
   kilét-rögzítés. **L3** — a pillanatkép-számláló körönként a legnagyobb elfogadott értéket tartja.
 
-**R53 — a #510 záró javítása; PR-határ (tulajdonosi döntés, űrlap, 2026-11-22, szó szerint: „BONTÁS: KÉT PR”).** A 7. vak kör (904a3eeb)
-L1-e: a lefokozott („idegen”) első végleges kérés a 202 előtt megszakadt, és ugyanannak a beküldőnek az ismétlése duplikátumot kapott,
-pedig levél nem indult. Javítás: létező jelzőnél az idegen kérés akkor folytathat, ha UGYANAZ a beküldő (`who`) a saját végleges
-tulajdonos-sorát találja, és a kézbesítési sora még nincs meg (a levél nem indult); az attribúció névtelen marad, más beküldő (más `who`)
-ismétlése duplikátum. A vendég-ujjlenyomat más beküldőt nem hitelesít (más ujjlenyomat → más `who`); a „beküldő” a lefokozottságot is
-tartalmazza (a lefokozott kérés végleges tulajdonos-sora külön kulcs), így az azonos ujjlenyomatú, de lefokozott fiók-kérés sem folytathatja
-egy nem lefokozott vendég megszakadt kérését (R42 negatív esete változatlan).
-- **A #510-ben:** S1a / S1b, R1–R53 a fentiek szerint (a tartós kimenő sor kapcsoló mögött, alapból KI).
+**PR-határ (tulajdonosi döntés, űrlap, 2026-11-22, szó szerint: „BONTÁS: KÉT PR”).**
+**R53 — KIVÉVE.** Tulajdonosi döntés (űrlap, 2026-11-22, szó szerint): „R53 ÉS R52-SZABÁLY KI” — a 10. vak kör (cc332f2e) L1 / L2 nyomán az R53 (a lefokozott, megszakadt végleges küldés folytatása) és az R52 „lejárt kör késői kérése → vendég” szabálya kikerült; a takarítás marad. A lefokozott („idegen”) első végleges kérés 202 előtt megszakadt ismétlése duplikátumot kap — a levél
+ilyenkor elmarad (vállalt korlát, követő PR-jegy).
+- **A #510-ben:** S1a / S1b, R1–R52 a fentiek szerint (az R52-ből a takarítás; a tartós kimenő sor kapcsoló mögött, alapból KI).
 - **A követő PR-ban** (a végrehajtási fájl „követő PR” jegyei): a 7. vak kör L2 (a `conflict` pillanatkép-válasz ne rögzüljön
   elküldöttként), L3 (a véglegesítés 503-a ne dobja el az elfogadott pillanatképet), L4 (E2E-módban kényszerített tesztküldő), valamint a
   korábban jegyre tett 8. vak kör L4 (a 403 utáni pillanatkép korhatára / `clientNow`).
 - Tulajdonosi döntés 2026-11-22: a 403 utáni claim-ismétlés kilét-kockázata (9. kör L1) a követő PR hatóköre; addig vállalt korlát.
 - A 9. kör L2-je (a kilét-takarítás adagjai között a jelzősor és a tulajdonos-sor szétválhat) szintén a követő PR jegye; addig vállalt korlát
   (csak a 8 napnál régebben rögzített, közben is folytatott körnél, a napi takarítás pillanatában áll elő).
+- Vállalt korlátok a követő PR-ig (tulajdonosi döntés 2026-11-22, „R53 ÉS R52-SZABÁLY KI”): (1) a lefokozott, 202 előtt megszakadt végleges
+  kérés ismétlése duplikátum, a levél elmarad; (2) a 8 napon túli kör a takarítás után a következő kérés munkamenetével újra rögzül;
+  (3) a 10. vak kör L3-a (passzív helyreállítás is kilét-rögzítést indít) jegyként a követő PR-ban.
 
 **R52 — a szerveres kilét-rögzítés korlátos élettartama (2026-11-22).** A `lesson_result_emails` táblára eddig nem volt takarítás. A
 kilét-rögzítő sorok kulcsa felismerhető előtagot kap (`rc:` jelzősor, `ro:` tulajdonos; a többi körkulcs tiszta hex), és napi, adagos
 takarítás törli őket a rögzítéstől számított 8 nap után (a le nem zárt kör 7 napos korhatára + 1 nap; legfeljebb 50 × 1000 sor
 futásonként; csak élesben, a meglévő cron-útvonalon, a leállítás leállítja). A végleges jelző és tulajdonos-sora (duplikátum-védelem,
-R27 / R42) nem érintett. A lyuk zárása: ha egy kör UTOLSÓ tevékenysége is az élettartamon túl van, a most születő rögzítés nem igazolhatja
-az első tevékenységkori kilétet — vendégként rögzül. Vállalt korlát: a 8 napnál hosszabb ideig nyitott, közben is aktív kör rögzítése a
-takarítás után az első újabb kérésnél újra rögzül.
+R27 / R42) nem érintett. A korábbi „lejárt kör késői kérése → vendég” szabály a tulajdonosi döntéssel („R53 ÉS R52-SZABÁLY KI”,
+2026-11-22) kikerült. Vállalt korlát: a 8 napnál hosszabb ideig nyitott kör rögzítése a takarítás után a következő kérés munkamenetével
+újra rögzül (követő PR-jegy).
 
 ## Cél
 
@@ -688,5 +687,5 @@ Elfogadás (S1b):
 - [ ] E73 – a kliens az első válasznál egyszer küld kilét-rögzítést, fiókcímke nélkül (böngésző)
 - [ ] E74 – létező jelző TTL-hibája: duplikátum; jelzősor-írási hiba: 503 (valódi DB)
 - [ ] E75 – elküldött kör újratöltése: nincs kilét-rekord és rögzítés (böngésző); pillanatkép-számláló nem lép vissza (böngésző)
-- [ ] E76 – kilét-rögzítés takarítása: lejárt sor törlődik, élő és végleges-jelzős nem; lejárt kör késői első kérése vendég (valódi DB)
+- [ ] E76 – kilét-rögzítés takarítása: lejárt sor törlődik, élő és végleges-jelzős nem (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)

@@ -860,13 +860,7 @@ test("R51 / L2: meglévő végleges jelző mellett a TTL-frissítés hibája nem
 });
 
 /* R52 (2026-11-22): a szerveres kilét-rögzítés sorainak korlátos élettartama. */
-test("R52: a kilét-rögzítés lejárt sorai adagosan törlődnek, az élők és a végleges jelzőhöz kötött (duplikátum-védelmi) sorok nem; lejárt kör késői első kérése nem kap kilétet", async () => {
-  reset();
-  // A lejárt kör késői első kérése (a rögzítés már nincs meg): a kilét nem igazolható → nem a mostani fiók nevére.
-  const lateStart = Date.now() - 10 * 86_400_000;
-  assert.equal((await post({ kind: "quiz", roundId: "round-r52-late", picks: picks(5), fingerprint: "fp-r52-late", startedAt: lateStart, clientNow: Date.now() }, freshIp(), "u-r52-late")).status, 202);
-  assert.ok(await waitFor(() => sent.length === 2));
-  assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")), "a kör első tevékenysége a rögzítési élettartamon túl volt: kilét nélkül");
+test("R52: a kilét-rögzítés lejárt sorai adagosan törlődnek, az élők és a végleges jelzőhöz kötött (duplikátum-védelmi) sorok nem", async () => {
   reset();
   // Két kör: az egyik régi (lejárt), a másik friss; a régi körnek végleges jelzője és tulajdonos-sora is van.
   assert.equal((await postClaim({ kind: "quiz", roundId: "round-r52-old", claim: true }, freshIp(), "u-r52")).status, 202);
@@ -888,29 +882,3 @@ test("R52: a kilét-rögzítés lejárt sorai adagosan törlődnek, az élők é
   assert.ok(finalKeys.every(key => left.includes(key)), "a végleges jelző és a tulajdonos-sor (duplikátum-védelem) nem törlődött");
 });
 
-/* 7. vak kör (904a3eeb, 2026-11-22), terv R53 — a #510 záró javítása (tulajdonosi döntés: „BONTÁS: KÉT PR”). */
-test("R53 / L1: lefokozott (idegen) első végleges kérés a 202 előtt megszakad → UGYANAZ a beküldő folytathatja (névtelenül); más beküldő ismétlése duplikátum", async () => {
-  reset();
-  // A kör kiléte A fiókra rögzült; a végleges kérés B munkamenetéből jön (lefokozva vendégre, saját ujjlenyomattal).
-  assert.equal((await postClaim({ kind: "quiz", roundId: "round-r53", claim: true }, freshIp(), "u-r53-a")).status, 202);
-  const body = { kind: "quiz", roundId: "round-r53", picks: picks(5), fingerprint: "fp-r53" };
-  let left = 1;
-  setFinalClaimFault(() => { if (left > 0) { left--; throw new Error("a folyamat megszakadt"); } });
-  try {
-    assert.equal((await post(body, freshIp(), "u-r53-b")).status, 500, "a jelzősor után, a 202 előtt megszakadt kérés");
-    await sleep(300);
-    assert.equal(sent.length, 0, "levél még nem indult");
-    // Negatív kontroll: más beküldő (más ujjlenyomat) ismétlése továbbra is duplikátum.
-    assert.deepEqual(await (await post({ ...body, fingerprint: "fp-r53-other" }, freshIp(), "u-r53-c")).json(), { queued: false, duplicate: true });
-    await sleep(300);
-    assert.equal(sent.length, 0);
-    // Ugyanaz a beküldő (ugyanaz a lefokozott kulcs, a saját tulajdonos-sora megvan, levél nem indult): folytathatja.
-    assert.deepEqual(await (await post(body, freshIp(), "u-r53-b")).json(), { queued: true });
-    assert.ok(await waitFor(() => sent.length === 2), "a levél kiment");
-    assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")), "a névtelen attribúció marad");
-    // A levél elindulása után ugyanaz a lefokozott beküldő sem indít újat (duplikátum).
-    assert.deepEqual(await (await post(body, freshIp(), "u-r53-b")).json(), { queued: false, duplicate: true });
-    await sleep(500);
-    assert.equal(sent.length, 2);
-  } finally { setFinalClaimFault(null); }
-});
