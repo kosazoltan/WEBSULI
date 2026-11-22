@@ -106,6 +106,11 @@ try {
   const ttsAudioMigration = await readFile(new URL("../migrations/0043_lesson_tts_audio.sql", import.meta.url), "utf8");
   await pool.query(ttsAudioMigration);
   await pool.query(ttsAudioMigration);
+  // Copilot-review #418: a kisfilm-média árvasági oszlopa (0044) a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
+  await pool.query("ALTER TABLE lesson_clip_media DROP COLUMN orphaned_at");
+  const clipOrphanMigration = await readFile(new URL("../migrations/0044_lesson_clip_media_orphaned.sql", import.meta.url), "utf8");
+  await pool.query(clipOrphanMigration);
+  await pool.query(clipOrphanMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {

@@ -10,7 +10,13 @@ import {
   type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
-import { CLIP_TMP_PREFIX, clipKeys, clipProviders, downloadAndShrink, safeProviderFetch, sweepStaleClipDirs, type ExecLike } from "../server/lesson-clips-providers";
+import { CLIP_TMP_PREFIX, clipKeys, clipProviders, downloadAndShrink, safeProviderFetch, sweepStaleClipDirs, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
+/** Csonkolt szállítás: nyilvános címre old fel, és a (csonkolt) globális fetch-csel küld — valódi DNS és hálózat nélkül. */
+const testTransport: ProviderTransport = {
+  lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+  send: (url, _address, init) => fetch(url, { ...init, redirect: "manual" }),
+};
+
 import { settleClips } from "../client/src/lesson-runtime/clips/useLessonClips";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -425,7 +431,7 @@ test("szolgáltatói címek: hitelesítés csak a szolgáltató HTTPS-originjér
   };
   const image = { bytes: Buffer.from("x"), mime: "image/jpeg" };
   try {
-    const deps = clipProviders({ openRouter: "titok" });
+    const deps = clipProviders({ openRouter: "titok" }, testTransport);
     globalThis.fetch = reply({ status: "completed", polling_url: "https://evil.example/poll", unsigned_urls: ["https://evil.example/v.mp4"] }) as typeof fetch;
     await assert.rejects(deps.video!(image, "p", 5), /lekérdezési cím/);
     assert.ok(!seen.some((s) => s.url.startsWith("https://evil.example")), "idegen lekérdezési címre semmi nem megy");
@@ -526,17 +532,65 @@ test("átirányítás: minden lépés csak HTTPS, a kulcs csak a szolgáltató o
   }) as typeof fetch;
   const auth = { Authorization: "Bearer titok" };
   try {
-    await assert.rejects(safeProviderFetch(new URL("https://cdn.example/a"), { headers: {} }, { sameOrigin: false }), /HTTPS/);
+    await assert.rejects(safeProviderFetch(new URL("https://cdn.example/a"), { headers: {} }, { sameOrigin: false, transport: testTransport }), /HTTPS/);
     assert.ok(!seen.some((s) => s.url.startsWith("http:")), "titkosítatlan címre nem megy kérés");
     seen.length = 0;
-    const res = await safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1/content"), { headers: auth }, { sameOrigin: false });
+    const res = await safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1/content"), { headers: auth }, { sameOrigin: false, transport: testTransport });
     assert.equal(await res.text(), "mp4");
     assert.deepEqual(seen.map((s) => [s.url, s.auth]), [["https://openrouter.ai/api/v1/videos/1/content", "Bearer titok"], ["https://cdn.example/c", null]], "idegen célra kulcs nélkül");
     assert.ok(seen.every((s) => s.redirect === "manual"), "az átirányítást a kód követi, nem a fetch");
     seen.length = 0;
-    await assert.rejects(safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1"), { headers: auth }, { sameOrigin: true }), /idegen/);
+    await assert.rejects(safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1"), { headers: auth }, { sameOrigin: true, transport: testTransport }), /idegen/);
     assert.ok(!seen.some((s) => s.url.startsWith("https://evil.example")), "a lekérdezés nem megy idegen originre");
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+test("SSRF: belső IP-re, belső címre feloldódó gépnévre, nem alapértelmezett portra — átirányításon át sem — nem megy kérés; a kapcsolat az ellenőrzött címhez rögzített (Copilot 4655721837)", async () => {
+  const sent: Array<{ url: string; address: string }> = [];
+  const dnsTable: Record<string, string[]> = { "cdn.example": ["93.184.216.34"], "belso.example": ["10.0.0.5"], "vegyes.example": ["93.184.216.34", "127.0.0.1"], "openrouter.ai": ["104.18.2.115"] };
+  const redirects: Record<string, string> = { "https://cdn.example/atiranyit": "https://belso.example/titok", "https://cdn.example/meta": "https://169.254.169.254/latest/meta-data" };
+  const transport: ProviderTransport = {
+    lookup: async (host) => (dnsTable[host] ?? []).map((address) => ({ address, family: 4 })),
+    send: async (url, address) => {
+      sent.push({ url: url.href, address: address.address });
+      const location = redirects[url.href];
+      return location ? new Response(null, { status: 302, headers: { location } }) : new Response("mp4", { status: 200 });
+    },
+  };
+  const get = (raw: string) => safeProviderFetch(new URL(raw), { headers: {} }, { sameOrigin: false, transport });
+  for (const raw of ["https://10.0.0.5/v.mp4", "https://[::1]/v.mp4", "https://169.254.169.254/latest", "https://localhost/v.mp4", "https://cdn.example:8443/v.mp4", "https://belso.example/v.mp4", "https://vegyes.example/v.mp4", "https://ismeretlen.example/v.mp4"]) {
+    await assert.rejects(get(raw), Error, raw);
+  }
+  assert.equal(sent.length, 0, "tiltott célra egyetlen kérés sem indult");
+  await assert.rejects(get("https://cdn.example/atiranyit"));
+  await assert.rejects(get("https://cdn.example/meta"));
+  assert.deepEqual(sent.map((s) => s.url), ["https://cdn.example/atiranyit", "https://cdn.example/meta"], "az átirányítás belső célja nem kapott kérést");
+  sent.length = 0;
+  assert.equal(await (await get("https://cdn.example/v.mp4")).text(), "mp4");
+  assert.deepEqual(sent, [{ url: "https://cdn.example/v.mp4", address: "93.184.216.34" }], "a kérés az ellenőrzött címre megy");
+});
+
+test("testvérjelenet hibája után a futó jelenet hangkapuja és újabb hangkérése nem indul (Copilot 4655721937)", async () => {
+  const n = STYLE.narration.scenes[0];
+  let failImage!: () => void, releaseSpeech!: () => void;
+  const imageGate = new Promise<void>((resolve) => { failImage = resolve; });
+  const speechGate = new Promise<void>((resolve) => { releaseSpeech = resolve; });
+  let imageCalls = 0, hearCalls = 0;
+  const deps = fakeDeps({
+    image: async () => { const i = imageCalls++; if (i === 0) { await imageGate; throw new Error("kép: HTTP 502"); } return { bytes: Buffer.from(`kép-${i}`), mime: "image/jpeg" }; },
+    speech: async (text, voice) => { deps.calls.speech.push({ text, voice: voice.name }); await speechGate; return Buffer.from(`hang-${deps.calls.speech.length}`); },
+    hear: async () => { hearCalls++; return SAY; },
+  });
+  const result = makeChapterClip(input(), BAND, deps, memoryStore([]).store.putMedia);
+  while (deps.calls.speech.length < n - 1) await new Promise((r) => setTimeout(r, 1));
+  const speechBefore = deps.calls.speech.length;
+  failImage();
+  await new Promise((r) => setTimeout(r, 10));
+  releaseSpeech();
+  const out = await result;
+  assert.ok("problems" in out && /502/.test(out.problems.join(" ")));
+  assert.equal(hearCalls, 0, "a hiba után nincs hangkapu-hívás");
+  assert.equal(deps.calls.speech.length, speechBefore, "a hiba után nincs újabb hangkérés");
 });

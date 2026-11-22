@@ -5,6 +5,8 @@ import { mediaId, type ClipMedia } from "./lesson-clip-media";
 
 /** A kisfilmek éles adatrétege (docs/specs/2026-11-10-fejezet-kisfilmek-v2.md, 6.). A `lessons` táblát csak olvassa. */
 const CLIP_LOCK_KEY = 7_320_311_10;
+/** Az árva média törlése adagonként ennyi sor, egy söprésben legfeljebb ennyi adag (Copilot-review #418). */
+const CLIP_PRUNE_BATCH = 200, CLIP_PRUNE_MAX_BATCHES = 50;
 
 const toLesson = (r: Record<string, unknown>): ClipLesson => ({
   id: String(r.id), json: r.json,
@@ -53,7 +55,7 @@ export const dbClipStore: ClipStore = {
   async putMedia(kind, mime, bytes) {
     const id = mediaId(bytes);
     await db.execute(sql`INSERT INTO lesson_clip_media (id, kind, mime, bytes, size) VALUES (${id}, ${kind}, ${mime}, ${bytes}, ${bytes.length})
-      ON CONFLICT (id) DO NOTHING`);
+      ON CONFLICT (id) DO UPDATE SET orphaned_at = NULL WHERE lesson_clip_media.orphaned_at IS NOT NULL`);
     return id;
   },
   async mediaBytes() {
@@ -61,14 +63,30 @@ export const dbClipStore: ClipStore = {
     return Number((rows[0] as { total?: unknown } | undefined)?.total ?? 0);
   },
   async pruneOrphanMedia(graceMs) {
-    // 2. vak kör L6: a médiaazonosító (32 hex jegy) a kisfilm JSON-jában szövegként szerepel; ami sehol nem szerepel és a türelmi
-    // időnél régebbi, az árva. A kör advisory lockja alatt fut, így más példány épp készülő fejezetét nem érinti.
-    const { rows } = await db.execute(sql`DELETE FROM lesson_clip_media m
-      WHERE m.created_at < now() - make_interval(secs => ${Math.floor(graceMs / 1000)})
-        AND NOT EXISTS (SELECT 1 FROM lesson_clips c WHERE c.clip IS NOT NULL AND position(m.id IN c.clip::text) > 0)
-      RETURNING m.size`);
-    const sizes = (rows as Array<{ size?: unknown }>).map((r) => Number(r.size ?? 0));
-    return { rows: sizes.length, bytes: sizes.reduce((sum, n) => sum + n, 0) };
+    // 2. vak kör L6 + Copilot-review #418: a hivatkozott médiaazonosítók (32 hex jegy a kisfilm JSON-jában) EGYSZER, egy átmeneti,
+    // elsődleges kulcsos halmazba kerülnek; a jelölés és a törlés ehhez egyenlőséggel (indexen) mér. Az először hivatkozatlanul talált
+    // sor csak árvának jelölődik (orphaned_at), törölni az árvaság türelmi ideje után, korlátos adagokban szabad; az újra hivatkozott
+    // sor jelölése törlődik. A kör advisory lockja alatt fut, így más példány épp készülő fejezetét nem érinti.
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`CREATE TEMP TABLE clip_media_refs (id text PRIMARY KEY) ON COMMIT DROP`);
+      await tx.execute(sql`INSERT INTO clip_media_refs (id)
+        SELECT DISTINCT (regexp_matches(c.clip::text, '[0-9a-f]{32}', 'g'))[1] FROM lesson_clips c WHERE c.clip IS NOT NULL ON CONFLICT DO NOTHING`);
+      await tx.execute(sql`UPDATE lesson_clip_media m SET orphaned_at = NULL
+        WHERE m.orphaned_at IS NOT NULL AND EXISTS (SELECT 1 FROM clip_media_refs r WHERE r.id = m.id::text)`);
+      await tx.execute(sql`UPDATE lesson_clip_media m SET orphaned_at = now()
+        WHERE m.orphaned_at IS NULL AND NOT EXISTS (SELECT 1 FROM clip_media_refs r WHERE r.id = m.id::text)`);
+      let total = 0, bytes = 0;
+      for (let batch = 0; batch < CLIP_PRUNE_MAX_BATCHES; batch++) {
+        const { rows } = await tx.execute(sql`DELETE FROM lesson_clip_media WHERE id IN (
+          SELECT m.id FROM lesson_clip_media m
+          WHERE m.orphaned_at < now() - make_interval(secs => ${Math.floor(graceMs / 1000)})
+            AND NOT EXISTS (SELECT 1 FROM clip_media_refs r WHERE r.id = m.id::text)
+          LIMIT ${CLIP_PRUNE_BATCH}) RETURNING size`);
+        for (const r of rows as Array<{ size?: unknown }>) { total++; bytes += Number(r.size ?? 0); }
+        if (rows.length < CLIP_PRUNE_BATCH) break;
+      }
+      return { rows: total, bytes };
+    });
   },
   async exclusive(work) {
     const client = await dbPool.connect();

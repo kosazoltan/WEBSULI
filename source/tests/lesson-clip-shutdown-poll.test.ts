@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ClipAbortError } from "../server/lesson-clips";
-import { abortClipTranscodes, clipProviders } from "../server/lesson-clips-providers";
+import { abortClipTranscodes, clipProviders, type ProviderTransport } from "../server/lesson-clips-providers";
 
 // 2. vak kör L2 (docs/specs/2026-11-10-kisfilm-memoria-vegrehajtas.md): a leállítás a szolgáltatói várakozást is megszakítja (nem csak
 // a futó ffmpeg-et), így a kör — és vele az advisory lock DB-kapcsolata — a pool lezárása előtt felszabadul. Külön tesztfájl (külön
@@ -15,7 +15,9 @@ test("leállítás: a mozgókép-lekérdezés várakozása azonnal megszakad, é
     return new Response(JSON.stringify({ status: "in_progress", polling_url: "/api/v1/videos/1" }), { status: 200 });
   }) as typeof fetch;
   try {
-    const deps = clipProviders({ openRouter: "k" });
+    // A lekérdezés is a csonkolt fetch-re megy, valódi DNS nélkül.
+    const transport: ProviderTransport = { lookup: async () => [{ address: "104.18.2.115", family: 4 }], send: (url, _address, init) => fetch(url, { ...init, redirect: "manual" }) };
+    const deps = clipProviders({ openRouter: "k" }, transport);
     const started = Date.now();
     const video = deps.video!({ bytes: Buffer.from("x"), mime: "image/jpeg" }, "p", 5);
     await new Promise((r) => setTimeout(r, 50));

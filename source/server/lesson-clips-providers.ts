@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import dns from "node:dns";
+import https from "node:https";
+import net from "node:net";
 import { createWriteStream, readdirSync, rmSync, statSync } from "node:fs";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { Readable, Transform } from "node:stream";
@@ -7,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { logger } from "./lib/logger";
+import { checkFetchUrl, isPublicAddress, type ResolvedAddress } from "./studio/safe-fetch";
 import { CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, ClipAbortError, type ClipDeps } from "./lesson-clips";
 
 /**
@@ -24,13 +28,56 @@ const OPENROUTER_ORIGIN = new URL(OPENROUTER).origin;
  * Szolgáltatói kérés kézzel követett átirányítással (2. vak kör L7): minden lépés csak HTTPS; a kulcs (Authorization) csak a
  * szolgáltató saját originjére megy; `sameOrigin` mellett (hitelesített lekérdezés) a lánc nem hagyhatja el a szolgáltatót.
  */
-export async function safeProviderFetch(url: URL, init: RequestInit & { headers: Record<string, string> }, opts: { sameOrigin: boolean; maxHops?: number }): Promise<Response> {
+/**
+ * A szolgáltatói címek szállítása (Copilot-review #418, SSRF): `lookup` a gépnév feloldása, `send` a kérés a MÁR ELLENŐRZÖTT címre
+ * rögzítve (nincs DNS-rebinding rés). Élesben `dns.lookup` + `https.request` rögzített `lookup`-pal; tesztben csonkolható.
+ */
+export type ProviderTransport = {
+  lookup: (host: string) => Promise<ResolvedAddress[]>;
+  send: (url: URL, address: ResolvedAddress, init: RequestInit & { headers: Record<string, string> }) => Promise<Response>;
+};
+const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
+export const defaultProviderTransport: ProviderTransport = {
+  lookup: async (host) => (net.isIP(host) ? [{ address: host, family: net.isIP(host) }] : dns.promises.lookup(host, { all: true, verbatim: true })),
+  send: (url, address, init) => new Promise<Response>((resolve, reject) => {
+    const pinnedLookup = (_host: string, options: { all?: boolean } | number, callback: (...args: unknown[]) => void) => {
+      if (typeof options === "object" && options?.all) callback(null, [{ address: address.address, family: address.family }]);
+      else callback(null, address.address, address.family);
+    };
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    const req = https.request({
+      protocol: "https:", hostname: host, servername: net.isIP(host) ? undefined : host, port: 443, path: `${url.pathname}${url.search}`,
+      method: init.method ?? "GET", headers: init.headers, lookup: pinnedLookup as never, signal: init.signal ?? undefined,
+    }, (res) => {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(res.headers)) if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+      const status = res.statusCode ?? 502;
+      if (NULL_BODY_STATUS.has(status)) { res.resume(); resolve(new Response(null, { status, headers })); return; }
+      resolve(new Response(Readable.toWeb(res) as ReadableStream<Uint8Array>, { status, headers }));
+    });
+    req.on("error", reject);
+    req.end();
+  }),
+};
+
+/**
+ * Szolgáltatói kérés kézzel követett átirányítással (2. vak kör L7; Copilot-review #418): MINDEN lépés csak HTTPS, alapértelmezett
+ * port, hitelesítő adat nélkül, nem belső gépnév (`checkFetchUrl`); a gépnév MINDEN feloldott címe nyilvános (`isPublicAddress`), és a
+ * kapcsolat az ellenőrzött címre megy. A kulcs (Authorization) csak a szolgáltató saját originjére; `sameOrigin` mellett (hitelesített
+ * lekérdezés) a lánc nem hagyhatja el a szolgáltatót.
+ */
+export async function safeProviderFetch(url: URL, init: RequestInit & { headers: Record<string, string> }, opts: { sameOrigin: boolean; maxHops?: number; transport?: ProviderTransport }): Promise<Response> {
+  const transport = opts.transport ?? defaultProviderTransport;
   let current = url;
   for (let hop = 0; ; hop++) {
     if (current.protocol !== "https:") throw new Error("a szolgáltatói cím nem HTTPS");
     if (opts.sameOrigin && current.origin !== OPENROUTER_ORIGIN) throw new Error("idegen originre mutató szolgáltatói cím");
+    checkFetchUrl(current.href);
+    const host = current.hostname.replace(/^\[|\]$/g, "");
+    const addresses = await transport.lookup(host);
+    if (!addresses.length || addresses.some((a) => !isPublicAddress(a.address))) throw new Error(`nem nyilvános címre oldódik fel: ${host}`);
     const headers = current.origin === OPENROUTER_ORIGIN ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
-    const res = await fetch(current, { ...init, headers, redirect: "manual" });
+    const res = await transport.send(current, addresses[0], { ...init, headers });
     const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
     if (!location) return res;
     await res.body?.cancel().catch(() => undefined);
@@ -267,7 +314,7 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   try { const v = JSON.parse(text.slice(start, end + 1)); return v && typeof v === "object" && !Array.isArray(v) ? v : null; } catch { return null; }
 }
 
-export function clipProviders(keys: ClipKeys): ClipDeps {
+export function clipProviders(keys: ClipKeys, transport: ProviderTransport = defaultProviderTransport): ClipDeps {
   const secrets = [keys.openRouter, keys.openAi, keys.elevenLabs].filter((k): k is string => !!k);
   const scrub = (text: string) => secrets.reduce((out, key) => out.split(key).join("[kulcs]"), text).slice(0, 200);
   const fail = (what: string, status: number, body: string) => new Error(`${what}: HTTP ${status} ${scrub(body)}`);
@@ -319,14 +366,14 @@ export function clipProviders(keys: ClipKeys): ClipDeps {
       while (!["completed", "failed", "cancelled", "expired"].includes(job.status ?? "")) {
         if (Date.now() > deadline) throw new Error("mozgókép: időtúllépés");
         await pause(VIDEO_POLL_MS);
-        const poll = await safeProviderFetch(pollingUrl, { headers: orHeaders, signal: signal(60_000) }, { sameOrigin: true });
+        const poll = await safeProviderFetch(pollingUrl, { headers: orHeaders, signal: signal(60_000) }, { sameOrigin: true, transport });
         if (poll.ok) job = JSON.parse(await poll.text());
       }
       if (job.status !== "completed" || !job.unsigned_urls?.[0]) throw new Error(`mozgókép: ${job.status} ${scrub(JSON.stringify(job.error ?? ""))}`);
       // Letöltés csak HTTPS-ről; a kulcs csak a szolgáltató saját originjére megy, idegen (CDN) címre kulcs nélkül (vak kör L8).
       const url = providerUrl(job.unsigned_urls[0]);
       if (!url) throw new Error("mozgókép: a letöltési cím nem HTTPS");
-      return downloadAndShrink(() => safeProviderFetch(url, { headers: { Authorization: orHeaders.Authorization }, signal: signal(180_000) }, { sameOrigin: false }), keys.ffmpeg);
+      return downloadAndShrink(() => safeProviderFetch(url, { headers: { Authorization: orHeaders.Authorization }, signal: signal(180_000) }, { sameOrigin: false, transport }), keys.ffmpeg);
     },
   };
   if (keys.elevenLabs) {

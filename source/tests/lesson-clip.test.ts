@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { getTableColumns } from "drizzle-orm";
 import { animateBlockIndexes, clip2Schema, clipDraftProblems, clipDraftSchema, clipMediaUrl, clipSource, silentSceneMs, type ClipDraft } from "../shared/lesson-clip";
 import { CLIP_BAND_STYLE } from "../shared/clip-style";
@@ -183,7 +183,10 @@ for (const [file, table, name] of [["0038_lesson_clips.sql", lessonClips, "lesso
   test(`a migráció és a Drizzle-séma oszlopai egyeznek (${name})`, () => {
     const sqlText = readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8");
     const body = sqlText.slice(sqlText.indexOf(`CREATE TABLE IF NOT EXISTS ${name}`), sqlText.indexOf(");"));
-    const inSql = [...body.matchAll(/^\s{2}([a-z_]+)\s+(?:varchar|integer|char|jsonb|timestamp|bytea)/gm)].map((m) => m[1]).sort();
+    // A későbbi, additív migrációk oszlopai is (pl. 0044: lesson_clip_media.orphaned_at — Copilot-review #418).
+    const added = readdirSync(new URL("../migrations/", import.meta.url)).filter((f) => /^\d{4}_.*\.sql$/.test(f) && f > file)
+      .flatMap((f) => [...readFileSync(new URL(`../migrations/${f}`, import.meta.url), "utf8").matchAll(new RegExp(`ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS ([a-z_]+)`, "g"))].map((m) => m[1]));
+    const inSql = [...[...body.matchAll(/^\s{2}([a-z_]+)\s+(?:varchar|integer|char|jsonb|timestamp|bytea)/gm)].map((m) => m[1]), ...added].sort();
     assert.deepEqual(inSql, Object.values(getTableColumns(table)).map((c) => c.name).sort());
   });
 }

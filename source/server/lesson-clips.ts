@@ -241,12 +241,15 @@ export function speechDistance(expected: string, heard: string): number {
 }
 
 /** Egy mondat hangja a hangkapuval: a betűre egyező változat, különben a próbálkozások közül a legpontosabb. */
-export async function speakChecked(say: string, voice: ClipBandStyle["voice"], deps: Pick<ClipDeps, "speech" | "hear">): Promise<{ bytes: Buffer; attempts: number; distance: number | null }> {
+/** `alive`: minden hang- és hangkapuhívás ELŐTT; testvérjelenet hibájakor dob, így nem indul újabb fizetős hívás (Copilot-review #418). */
+export async function speakChecked(say: string, voice: ClipBandStyle["voice"], deps: Pick<ClipDeps, "speech" | "hear">, alive: () => void = () => undefined): Promise<{ bytes: Buffer; attempts: number; distance: number | null }> {
   let best: { bytes: Buffer; distance: number | null } | null = null;
   for (let attempt = 1; attempt <= CLIP_SPEECH_ATTEMPTS; attempt++) {
     // A hangmodell a kiolvasott számot kapja („százhúsz méter”), a felirat a számjegyest mutatja.
+    alive();
     const bytes = await deps.speech!(spokenHu(say), voice);
     if (!deps.hear) return { bytes, attempts: attempt, distance: null };
+    alive();
     let distance: number | null;
     try { distance = speechDistance(say, await deps.hear(bytes)); } catch (error) { logger.warn(`[lesson-clips] a hangkapu nem érhető el, a hang ellenőrzés nélkül megy tovább: ${describe(error)}`); return { bytes, attempts: attempt, distance: null }; }
     if (!best || best.distance === null || distance < best.distance) best = { bytes, distance };
@@ -292,7 +295,7 @@ export async function makeChapterClip(input: ClipInput, band: DesignThemeId, dep
       alive();
       if (deps.speech) {
         try {
-          const spoken = await speakChecked(scene.say, style.voice, deps);
+          const spoken = await speakChecked(scene.say, style.voice, deps, alive);
           const bytes = spoken.bytes;
           stats.audioRetries += spoken.attempts - 1;
           if (spoken.distance) { stats.audioImperfect++; logger.warn(`[lesson-clips] a hang ${spoken.attempts} próbálkozás után sem egyezik betűre (eltérés: ${spoken.distance} betű): „${scene.say.slice(0, 60)}”`); }
