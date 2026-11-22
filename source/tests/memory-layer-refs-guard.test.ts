@@ -8,11 +8,12 @@ import { join } from "node:path";
  * Záró hurok 2/3 — a memória-rétegek (manifest, QMD, Cogni) hibaosztály-őre (vak körök 2026-11-22, L1–L8):
  *  (A) hivatkozás csak a Gitben KÖVETETT fájlra / könyvtárra (a fej fája, nem a helyi lemez), `npm run` csak létező parancsra;
  *      gyökérfájlok és csupasz, backtickes fájlnevek is; „tervezett” jelölés nem ment fel.
- *  (B) minden `source` mező `<követett fájl>:<kezdő>[-<záró>]`, 1 ≤ kezdő ≤ záró ≤ a fájl sorainak száma; a döntés-napló
- *      bejegyzésenként: egyedi `id`, saját `quote` + `source`.
- *  (C) minden `quote` szó szerint (szóköz-normalizálva) megtalálható a `source` sortartományában — értelmezés nem kerülhet be.
- *  (D) a séma-snapshot neve / szimbóluma / sora egyezik a `source/shared/schema.ts`-sel; az idézett komment a táblát KÖZVETLENÜL
- *      megelőző kommentblokkból való.
+ *  (B) minden `source` mező `<követett fájl>[:<kezdő>[-<záró>]]` (1 ≤ kezdő ≤ záró); a döntés-napló bejegyzésenként: egyedi `id`,
+ *      saját `quote` + `source`.
+ *  (C) minden `quote` szó szerint (szóköz-normalizálva) megtalálható a megnevezett FÁJLBAN — értelmezés nem kerülhet be.
+ *  (D) a séma-snapshot csak a forrás-mutatót és táblanevek halmazát tartja; minden állított tábla létezik a sémában.
+ * INVARIÁNS (#527 push-kapu, 2026-11-22): az őr nem bukhat el amiatt, hogy egy MÁSIK PR a hivatkozott forrásfájlt szabályosan
+ * módosítja — ezért a sorszám csak tájékoztató tipp (nem mérjük a fájl hosszához), és új tábla a sémában nem bukás.
  * A YAML-t a szűk részhalmazra írt saját elemző olvassa (nincs YAML-függőség, mint a memory-index-guard-nál).
  */
 
@@ -140,24 +141,35 @@ const basenames = (tracked: Set<string>) => new Set([...tracked].map((t) => t.sp
 const norm = (s: string) => s.replace(/^\s*>\s?/gm, "").replace(/[`*„”"]/g, "").replace(/\s+/g, " ").trim();
 
 /** `source` → hiba szövege vagy null. */
+const SOURCE_RE = /^([\w./-]+)(?::(\d+)(?:-(\d+))?)?$/;
+
+/** `source` → hiba szövege vagy null. A sorszám csak tipp: az alakját nézzük, a fájl hosszához nem mérjük (invariáns). */
 export function checkSource(src: unknown, deps: { tracked: Set<string>; lines: (p: string) => string[] }): string | null {
   if (typeof src !== "string") return "nincs source";
-  const m = /^([\w./-]+):(\d+)(?:-(\d+))?$/.exec(src);
+  const m = SOURCE_RE.exec(src);
   if (!m) return `hibás source-alak: ${src}`;
+  if (m[2] !== undefined) {
+    const a = Number(m[2]);
+    const b = m[3] === undefined ? a : Number(m[3]);
+    if (!(a >= 1 && a <= b)) return `hibás source-alak (1 ≤ kezdő ≤ záró): ${src}`;
+  }
   if (!deps.tracked.has(m[1])) return `nem követett fájl: ${m[1]}`;
-  const a = Number(m[2]);
-  const b = m[3] === undefined ? a : Number(m[3]);
-  const n = deps.lines(m[1]).length;
-  if (!(a >= 1 && a <= b && b <= n)) return `sortartomány kívül esik (1..${n}): ${src}`;
   return null;
 }
+/** Az idézetnek a megnevezett fájlban kell szó szerint (szóköz-normalizálva) szerepelnie; a sorszám nem számít. */
 export function checkQuote(quote: unknown, src: string, deps: { lines: (p: string) => string[] }): string | null {
   if (typeof quote !== "string" || !norm(quote)) return "üres quote (normalizálás után)";
-  const m = /^([\w./-]+):(\d+)(?:-(\d+))?$/.exec(src)!;
-  const a = Number(m[2]);
-  const b = m[3] === undefined ? a : Number(m[3]);
-  const text = norm(deps.lines(m[1]).slice(a - 1, b).join("\n"));
-  return text.includes(norm(quote)) ? null : `a quote nem szó szerinti a ${src} tartományban: ${quote.slice(0, 60)}`;
+  const file = SOURCE_RE.exec(src)![1];
+  return norm(deps.lines(file).join("\n")).includes(norm(quote)) ? null : `a quote nem szó szerinti a(z) ${file} fájlban: ${quote.slice(0, 60)}`;
+}
+/** A Drizzle-séma táblanevei (`pgTable("név"`). */
+export function schemaTables(schema: string): string[] {
+  return [...schema.matchAll(/export const \w+ = pgTable\(\s*"([^"]+)"/g)].map((m) => m[1]);
+}
+/** A snapshot által állított, de a sémában NEM létező táblák (a sémában lévő új tábla nem bukás). */
+export function checkSchemaSnapshot(tables: string[], schema: string): string[] {
+  const real = new Set(schemaTables(schema));
+  return tables.filter((t) => !real.has(t));
 }
 /** Bejárás: minden `source`-os objektum forrása érvényes; ha `quote` is van, szó szerinti. */
 export function checkSourcedObjects(y: Y, deps: { tracked: Set<string>; lines: (p: string) => string[] }, path = "$"): string[] {
@@ -218,14 +230,14 @@ test("pathRefs / nameRefs / npmRefs / isTracked", () => {
   assert.equal(isTracked("a/x.ts", t), false, "a helyben létező, de nem követett fájl nem elég");
 });
 
-test("checkDecisions: áthelyezett forrás, nulladik sor, nem követett fájl, fordított tartomány, duplikált id, hamis idézet → hiba", () => {
+test("checkDecisions: áthelyezett forrás, hibás sorszám-alak, nem követett fájl, duplikált id, hamis idézet → hiba", () => {
   const deps = { tracked: new Set(["F.md"]), lines: () => ["első sor", "második: a döntés szövege", "harmadik"] };
   const ok = parseYaml('cogni:\n  decisions:\n    - id: D1\n      quote: "a döntés szövege"\n      source: "F.md:2"\n');
   assert.deepEqual(checkDecisions(ok, deps), []);
   const moved = parseYaml('cogni:\n  source: "F.md:2"\n  decisions:\n    - id: D1\n      quote: "a döntés szövege"\n');
   assert.match(checkDecisions(moved, deps).join("\n"), /nincs saját source/);
   const cases: [string, RegExp][] = [
-    ['"F.md:0"', /sortartomány/], ['"G.md:1"', /nem követett/], ['"F.md:3-2"', /sortartomány/], ['"F.md:9"', /sortartomány/], ['"F.md"', /source-alak/],
+    ['"F.md:0"', /source-alak/], ['"G.md:1"', /nem követett/], ['"F.md:3-2"', /source-alak/], ['"F.md x"', /source-alak/],
   ];
   for (const [src, re] of cases) {
     const y = parseYaml(`cogni:\n  decisions:\n    - id: D1\n      quote: "a döntés szövege"\n      source: ${src}\n`);
@@ -235,6 +247,30 @@ test("checkDecisions: áthelyezett forrás, nulladik sor, nem követett fájl, f
   assert.match(checkDecisions(dup, deps).join("\n"), /duplikált id/);
   const fake = parseYaml('cogni:\n  decisions:\n    - id: D1\n      quote: "nem hangzott el"\n      source: "F.md:1-3"\n');
   assert.match(checkDecisions(fake, deps).join("\n"), /nem szó szerinti/);
+});
+
+// Invariáns (2026-11-22, #527 push-kapu): a memória-rétegek őre nem bukhat el amiatt, hogy egy MÁSIK PR a hivatkozott forrásfájlt
+// szabályosan módosítja. A sorszám csak tájékoztató tipp; az idézetnek a megnevezett, követett FÁJLBAN kell szó szerint szerepelnie.
+test("sorszám-tűrés: a forrás elejére szúrt sorok nem buktatnak; a hamis idézet és a sor nélküli forrás-alak kezelése", () => {
+  const before = ["első sor", "második: a döntés szövege", "harmadik"];
+  const after = ["# új bevezető 1", "# új bevezető 2", "# új bevezető 3", ...before];
+  const y = parseYaml('cogni:\n  decisions:\n    - id: D1\n      quote: "a döntés szövege"\n      source: "F.md:2"\n');
+  assert.deepEqual(checkDecisions(y, { tracked: new Set(["F.md"]), lines: () => before }), []);
+  assert.deepEqual(checkDecisions(y, { tracked: new Set(["F.md"]), lines: () => after }), [], "a beszúrás után is zöld");
+  const far = parseYaml('cogni:\n  decisions:\n    - id: D1\n      quote: "a döntés szövege"\n      source: "F.md:900"\n');
+  assert.deepEqual(checkDecisions(far, { tracked: new Set(["F.md"]), lines: () => after }), [], "a fájl végén túli sorszám-tipp sem bukás");
+  const fake = parseYaml('cogni:\n  decisions:\n    - id: D1\n      quote: "ilyen mondat nincs a fájlban"\n      source: "F.md:2"\n');
+  assert.match(checkDecisions(fake, { tracked: new Set(["F.md"]), lines: () => after }).join("\n"), /nem szó szerinti/);
+  const bare = parseYaml('cogni:\n  decisions:\n    - id: D1\n      quote: "a döntés szövege"\n      source: "F.md"\n');
+  assert.deepEqual(checkDecisions(bare, { tracked: new Set(["F.md"]), lines: () => after }), [], "sorszám nélküli forrás is elfogadott");
+});
+
+test("séma-halmaz: új tábla a sémában nem buktat; a snapshot csak létező táblát állíthat", () => {
+  const schema = 'export const a = pgTable("alfa", {});\nexport const b = pgTable(\n  "beta", {});\n';
+  assert.deepEqual(schemaTables(schema), ["alfa", "beta"]);
+  assert.deepEqual(checkSchemaSnapshot(["alfa"], schema), [], "a sémában lévő új tábla (beta) nem bukás");
+  assert.deepEqual(checkSchemaSnapshot(["alfa", "beta"], `// új sor\n${schema}`), [], "sorbeszúrás sem bukás");
+  assert.deepEqual(checkSchemaSnapshot(["alfa", "gamma"], schema), ["gamma"], "nem létező tábla állítása bukás");
 });
 
 test("memória-rétegek: érvényes YAML (szűk részhalmaz)", () => {
@@ -278,29 +314,18 @@ test("checkQuote: a normalizálás után üres idézet (pl. ***) nem igazol — 
   assert.equal(checkQuote("forrás", "F.md:1", deps), null);
 });
 
-test("döntés-napló és minden source / quote: követett fájl, érvényes sortartomány, szó szerinti idézet (B, C)", () => {
+test("döntés-napló és minden source / quote: követett fájl, érvényes alak, a fájlban szó szerinti idézet (B, C)", () => {
   assert.deepEqual(checkDecisions(parseYaml(read("memory/.cogni/decisions.cogni.yaml")), DEPS), []);
   const bad = YAMLS.flatMap((f) => checkSourcedObjects(parseYaml(read(f)), DEPS, f));
   assert.deepEqual(bad, []);
 });
 
-test("séma-snapshot: név / szimbólum / sor egyezik; az idézett komment a táblát közvetlenül megelőző blokkból való (D)", () => {
-  const schema = read("source/shared/schema.ts");
-  const sl = schema.split("\n");
-  const real = [...schema.matchAll(/export const (\w+) = pgTable\(\s*"([^"]+)"/g)].map((m) => ({
-    table: m[2], symbol: m[1], line: schema.slice(0, m.index).split("\n").length,
-  }));
+test("séma-snapshot: csak a forrás-mutató és a táblanevek halmaza; minden állított tábla létezik (D)", () => {
   const snap = parseYaml(read("memory/.cogni/schema.cogni.yaml")) as any;
-  const models = snap.cogni.models as any[];
-  assert.deepEqual(models.map((m) => ({ table: m.table, symbol: m.symbol, line: Number(m.line) })), real);
-  assert.equal(Number(snap.cogni.table_count), real.length);
-  for (const m of models) {
-    assert.deepEqual(Object.keys(m).filter((k) => !["table", "symbol", "line", "quote", "source"].includes(k)), [], `${m.table}: csak gépileg igazolt mező`);
-    if (!("source" in m)) continue;
-    const c = /^source\/shared\/schema\.ts:(\d+)$/.exec(m.source);
-    assert.ok(c, `${m.table}: a komment forrása schema.ts:N`);
-    const n = Number(c![1]);
-    assert.ok(n < Number(m.line), `${m.table}: a komment a tábla előtt`);
-    for (let i = n; i < Number(m.line); i += 1) assert.match(sl[i - 1], /^\s*(\/\*\*|\*|\/\/|\*\/)/, `${m.table}: schema.ts:${i} a táblát közvetlenül megelőző kommentblokk része`);
-  }
+  assert.equal(snap.cogni.source_file, "source/shared/schema.ts");
+  assert.ok(TRACKED.has(snap.cogni.source_file));
+  assert.deepEqual(Object.keys(snap.cogni).sort(), ["kind", "name", "source_file", "tables"], "nincs sor-, idézet- vagy darabszám-másolat");
+  const tables = snap.cogni.tables as string[];
+  assert.ok(Array.isArray(tables) && tables.length > 0 && tables.every((t) => typeof t === "string"));
+  assert.deepEqual(checkSchemaSnapshot(tables, read("source/shared/schema.ts")), []);
 });
