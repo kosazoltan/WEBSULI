@@ -1,294 +1,68 @@
-# Cogni séma-snapshot: a source/shared/schema.ts Drizzle-táblái — CSAK gépileg igazolt mezők: név, szimbólum, sor;
-# ha a táblát közvetlenül kommentblokk előzi meg, annak első szöveges sora szó szerint (quote) a forrás sorával (source).
-# Szabadszöveges cél- / kapcsolat- / adatvédelmi leírás NEM kerül ide (őr: source/tests/memory-layer-refs-guard.test.ts).
+# Cogni séma-snapshot: CSAK a forrás-mutató és a Drizzle-táblák nevének halmaza (ábécérendben).
+# Sorszám, idézet és darabszám szándékosan nincs: egy másik PR szabályos sémamódosítása nem teheti hamissá (őr:
+# source/tests/memory-layer-refs-guard.test.ts — csak az a hiba, ha itt olyan tábla áll, amely a sémában nincs).
 
 cogni:
   kind: db_schema_snapshot
   name: websuli-schema
   source_file: source/shared/schema.ts
-  table_count: 59
-
-  models:
-    - table: system_prompts
-      symbol: systemPrompts
-      line: 7
-      quote: "System prompts for AI customization"
-      source: "source/shared/schema.ts:6"
-    - table: users
-      symbol: users
-      line: 27
-      quote: "User storage table"
-      source: "source/shared/schema.ts:26"
-    - table: html_files
-      symbol: htmlFiles
-      line: 46
-      quote: "HTML Files table"
-      source: "source/shared/schema.ts:45"
-    - table: email_subscriptions
-      symbol: emailSubscriptions
-      line: 78
-      quote: "Email Subscriptions table - classrooms as PostgreSQL integer array"
-      source: "source/shared/schema.ts:77"
-    - table: extra_email_addresses
-      symbol: extraEmailAddresses
-      line: 100
-      quote: "Extra email addresses - classrooms as PostgreSQL integer array"
-      source: "source/shared/schema.ts:99"
-    - table: email_logs
-      symbol: emailLogs
-      line: 127
-      quote: "Email Logs table"
-      source: "source/shared/schema.ts:126"
-    - table: ai_generation_requests
-      symbol: aiGenerationRequests
-      line: 146
-      quote: "AI Generation Requests table"
-      source: "source/shared/schema.ts:145"
-    - table: push_subscriptions
-      symbol: pushSubscriptions
-      line: 157
-      quote: "Push Subscriptions table - keys stored as PostgreSQL jsonb"
-      source: "source/shared/schema.ts:156"
-    - table: backups
-      symbol: backups
-      line: 193
-      quote: "Backups table - data stored as PostgreSQL jsonb"
-      source: "source/shared/schema.ts:192"
-    - table: material_views
-      symbol: materialViews
-      line: 210
-      quote: "Material Views table"
-      source: "source/shared/schema.ts:209"
-    - table: tags
-      symbol: tags
-      line: 231
-      quote: "Tags lookup table"
-      source: "source/shared/schema.ts:230"
-    - table: material_tags
-      symbol: materialTags
-      line: 248
-      quote: "Material Tags - Many-to-many"
-      source: "source/shared/schema.ts:247"
-    - table: material_stats
-      symbol: materialStats
-      line: 268
-      quote: "Material Stats"
-      source: "source/shared/schema.ts:267"
-    - table: material_likes
-      symbol: materialLikes
-      line: 286
-      quote: "Material Likes"
-      source: "source/shared/schema.ts:285"
-    - table: material_ratings
-      symbol: materialRatings
-      line: 307
-      quote: "Material Ratings"
-      source: "source/shared/schema.ts:306"
-    - table: scheduled_jobs
-      symbol: scheduledJobs
-      line: 330
-      quote: "Scheduled Jobs - payload as PostgreSQL jsonb"
-      source: "source/shared/schema.ts:329"
-    - table: material_comments
-      symbol: materialComments
-      line: 355
-      quote: "Material Comments"
-      source: "source/shared/schema.ts:354"
-    - table: weekly_email_reports
-      symbol: weeklyEmailReports
-      line: 384
-      quote: "Weekly Email Reports - metrics as PostgreSQL jsonb"
-      source: "source/shared/schema.ts:383"
-    - table: improved_html_files
-      symbol: improvedHtmlFiles
-      line: 402
-      quote: "Improved HTML Files table - for AI-improved materials before applying"
-      source: "source/shared/schema.ts:401"
-    - table: material_improvement_backups
-      symbol: materialImprovementBackups
-      line: 436
-      quote: "Material Improvement Backups table - backups before applying improvements"
-      source: "source/shared/schema.ts:435"
-    - table: games_catalog
-      symbol: gamesCatalog
-      line: 458
-      quote: "Regisztrált játékok metaadatai (Neon) — új játékhoz INSERT a katalógusba"
-      source: "source/shared/schema.ts:457"
-    - table: game_scores
-      symbol: gameScores
-      line: 470
-      quote: "Játékos pontok: Google OAuth + e-mail lista (feliratkozás vagy extra e-mail)"
-      source: "source/shared/schema.ts:469"
-    - table: game_quiz_items
-      symbol: gameQuizItems
-      line: 510
-      quote: "Játék-kvíz bank (Neon): bővíthető SQL-lel vagy későbbi admin felülettel."
-      source: "source/shared/schema.ts:507"
-    - table: error_logs
-      symbol: errorLogs
-      line: 548
-    - table: knowledge_maps
-      symbol: knowledgeMaps
-      line: 593
-      quote: "LS-1 — Tudás-térkép (KnowledgeMap)."
-      source: "source/shared/schema.ts:584"
-    - table: km_concepts
-      symbol: kmConcepts
-      line: 633
-      quote: "Egy fogalom a térképen. A `quote` a forrás SZÓ SZERINTI részlete; a `verbatimOk`"
-      source: "source/shared/schema.ts:629"
-    - table: lessons
-      symbol: lessons
-      line: 678
-      quote: "LS-2 — a strukturált lecke."
-      source: "source/shared/schema.ts:672"
-    - table: lesson_clips
-      symbol: lessonClips
-      line: 708
-      quote: "Fejezetenkénti rajzfilmes kisfilmek (migrations/0038, spec 2026-11-10-fejezet-kisfilmek): jelenet-JSON (shared/lesson-clip.ts)."
-      source: "source/shared/schema.ts:705"
-    - table: arbiter_verdicts
-      symbol: arbiterVerdicts
-      line: 740
-      quote: "Tételgyár T7.1 (docs/specs/2026-10-15-tetelgyar-t7-dontobiro-vegrehajtas.md): a döntőbíró gyorsítótára — kulcs-hash → ítélet."
-      source: "source/shared/schema.ts:737"
-    - table: arbiter_daily_usage
-      symbol: arbiterDailyUsage
-      line: 750
-      quote: "Tételgyár T7.1: a döntőbíró napi hívásszámlálója (a napi plafon atomi foglalásához)."
-      source: "source/shared/schema.ts:749"
-    - table: ocr_transcripts
-      symbol: ocrTranscripts
-      line: 755
-    - table: one_step_runs
-      symbol: oneStepRuns
-      line: 766
-      quote: "#168 — az egylépeses gyártás futás-státusza (a kliens állapotjelzőjéé)."
-      source: "source/shared/schema.ts:762"
-    - table: studio_jobs
-      symbol: studioJobs
-      line: 787
-    - table: lektor_notes
-      symbol: lektorNotes
-      line: 826
-      quote: "A Lektor megállapításai — CSAK adminnak. A `book_probably_wrong` fajta `info`"
-      source: "source/shared/schema.ts:823"
-    - table: reward_policy
-      symbol: rewardPolicy
-      line: 865
-      quote: "LS-3a — a jutalom-politika (D2) hangolható paraméterei."
-      source: "source/shared/schema.ts:860"
-    - table: coupons
-      symbol: coupons
-      line: 885
-      quote: "LS-3a — egy kiadott játékidő-kupon."
-      source: "source/shared/schema.ts:878"
-    - table: lesson_attempts
-      symbol: lessonAttempts
-      line: 917
-    - table: concept_results
-      symbol: conceptResults
-      line: 944
-      quote: "LS-3a — fogalmankénti eredmény, a visszacsatolás nyersanyaga."
-      source: "source/shared/schema.ts:939"
-    - table: catalog_lessons
-      symbol: catalogLessons
-      line: 974
-      quote: "Spec 2026-10-05-s3-katalogus-bank — a régi (szülő-ellenőrzött) és a fúziós leckék tartalom alapú besorolása (S2)."
-      source: "source/shared/schema.ts:971"
-    - table: catalog_items
-      symbol: catalogItems
-      line: 1003
-      quote: "Tantárgyi katalógus-bank tétele: a `subject` a bank (minden tantárgy és ág külön). `status`: active | flagged (gépi lelet,"
-      source: "source/shared/schema.ts:999"
-    - table: catalog_item_outcomes
-      symbol: catalogItemOutcomes
-      line: 1043
-      quote: "Spec 2026-10-06-s8-tanuloi-eredmenyesseg — tételenkénti tanulói eredményesség, a katalógus-tétel tartalmi lenyomatára"
-      source: "source/shared/schema.ts:1040"
-    - table: subject_memory_cards
-      symbol: subjectMemoryCards
-      line: 1060
-      quote: "Spec 2026-10-06-s5-tantargyi-memoria (migráció 0024): tantárgyi memória-kártya = egy tantárgy visszatérő hibaosztálya egy"
-      source: "source/shared/schema.ts:1057"
-    - table: subject_memory_events
-      symbol: subjectMemoryEvents
-      line: 1082
-      quote: "Egy bizonyíték (futás / lektorált job) egy kártyán egyszer számol — az idempotencia alapja."
-      source: "source/shared/schema.ts:1081"
-    - table: review_states
-      symbol: reviewStates
-      line: 1098
-      quote: "Websuli Design §7 — memóriakártya-ismétlés (migrations/0027_review_states.sql). Tanuló × lecke × kártya aktuális állapota és"
-      source: "source/shared/schema.ts:1095"
-    - table: review_events
-      symbol: reviewEvents
-      line: 1112
-    - table: design_assets
-      symbol: designAssets
-      line: 1137
-    - table: lesson_result_emails
-      symbol: lessonResultEmails
-      line: 1161
-      quote: "Tanulói eredmény e-mailben (migrations/0030): körönként egy levél — a (lecke, fajta, kör) egyedi. Tanulói szöveget nem tárol."
-      source: "source/shared/schema.ts:1160"
-    - table: task_results
-      symbol: taskResults
-      line: 1180
-      quote: "Spec 2026-10-20-s4 (S4b, migrations/0037): feladatszintű, NÉVTELEN tanulói eredmény körönként — tanulói szöveg és felhasználó nélkül."
-      source: "source/shared/schema.ts:1177"
-    - table: daily_reminder_emails
-      symbol: dailyReminderEmails
-      line: 1201
-      quote: "Napi tananyag-emlékeztető ismétlésvédelme (migrations/0031): címenként naponta legfeljebb egy levél."
-      source: "source/shared/schema.ts:1200"
-    - table: learners
-      symbol: learners
-      line: 1218
-      quote: "Tanulói profil (migrations/0032): a tanuló egy sor; a személyes link tokenje a token_version-nel vonható vissza."
-      source: "source/shared/schema.ts:1217"
-    - table: learner_newsletters
-      symbol: learnerNewsletters
-      line: 1237
-      quote: "„Mai felfedezés” hírlevél (migrations/0035): tanulónként és naponként egy foglalás → küldés."
-      source: "source/shared/schema.ts:1236"
-    - table: learner_activity
-      symbol: learnerActivity
-      line: 1260
-      quote: "Megtekintés és eredmény tanulónként (migrations/0032); megőrzés 365 nap."
-      source: "source/shared/schema.ts:1259"
-    - table: lesson_clip_media
-      symbol: lessonClipMedia
-      line: 1275
-      quote: "A kisfilmek médiája (migrations/0039): tartalomcímzett kép / hang / mozgókép; a sor soha nem módosul."
-      source: "source/shared/schema.ts:1274"
-    - table: lesson_tts_audio
-      symbol: lessonTtsAudio
-      line: 1288
-      quote: "A nyelvleckék előre gyártott felolvasó hangjai (migrations/0043; terv 2026-11-18-tananyag-gyartas-minoseg, S8b / D4). Az azonosító a"
-      source: "source/shared/schema.ts:1285"
-    - table: player_accounts
-      symbol: playerAccounts
-      line: 1309
-      quote: "JM7a játékos-fiók (migrations/0040; docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4, D11 / D12). SZERKEZETILEG külön a"
-      source: "source/shared/schema.ts:1305"
-    - table: player_auth_codes
-      symbol: playerAuthCodes
-      line: 1330
-      quote: "JM7a egyszeri belépőkódok (migrations/0040): a kód és a link-token csak HMAC-hash-ként; a megerősítendő cím a rekordban"
-      source: "source/shared/schema.ts:1326"
-    - table: player_ban_fingerprints
-      symbol: playerBanFingerprints
-      line: 1357
-      quote: "JM7b-utójavítás K1 (migrations/0041): a TÖRÖLT, de tiltott játékos-fiók címének kulcsolt, visszafejthetetlen ujjlenyomata"
-      source: "source/shared/schema.ts:1353"
-    - table: advent_progress
-      symbol: adventProgress
-      line: 1371
-      quote: "Adventi naptár (migrations/0042; docs/specs/2026-11-18-adventi-naptar.md R7, 16.8): alanyonként és évadonként egy sor."
-      source: "source/shared/schema.ts:1366"
-    - table: advent_announcements
-      symbol: adventAnnouncements
-      line: 1404
-      quote: "Adventi értesítő (migrations/0042; terv 12.4, 16.6): címzettenként és évadonként egy foglalás. A cím NEM tárolódik — csak a"
-      source: "source/shared/schema.ts:1401"
+  tables:
+    - advent_announcements
+    - advent_progress
+    - ai_generation_requests
+    - arbiter_daily_usage
+    - arbiter_verdicts
+    - backups
+    - catalog_item_outcomes
+    - catalog_items
+    - catalog_lessons
+    - concept_results
+    - coupons
+    - daily_reminder_emails
+    - design_assets
+    - email_logs
+    - email_subscriptions
+    - error_logs
+    - extra_email_addresses
+    - game_quiz_items
+    - game_scores
+    - games_catalog
+    - html_files
+    - improved_html_files
+    - km_concepts
+    - knowledge_maps
+    - learner_activity
+    - learner_newsletters
+    - learners
+    - lektor_notes
+    - lesson_attempts
+    - lesson_clip_media
+    - lesson_clips
+    - lesson_result_emails
+    - lesson_tts_audio
+    - lessons
+    - material_comments
+    - material_improvement_backups
+    - material_likes
+    - material_ratings
+    - material_stats
+    - material_tags
+    - material_views
+    - ocr_transcripts
+    - one_step_runs
+    - player_accounts
+    - player_auth_codes
+    - player_ban_fingerprints
+    - push_subscriptions
+    - review_events
+    - review_states
+    - reward_policy
+    - scheduled_jobs
+    - studio_jobs
+    - subject_memory_cards
+    - subject_memory_events
+    - system_prompts
+    - tags
+    - task_results
+    - users
+    - weekly_email_reports
