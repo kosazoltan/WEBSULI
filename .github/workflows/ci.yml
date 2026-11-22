@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: '24'
       - name: Unit test (az ellenőrző saját tesztje)
-        run: node --test scripts/qa/three-phase-check.test.mjs scripts/qa/repo-rules.test.mjs scripts/qa/verify-render-revision.test.mjs scripts/qa/verify-render-settings.test.mjs scripts/qa/set-proxy-secret.test.mjs scripts/qa/e2e-shards.test.mjs
+        run: node --test scripts/qa/three-phase-check.test.mjs scripts/qa/repo-rules.test.mjs scripts/qa/verify-render-revision.test.mjs scripts/qa/verify-render-settings.test.mjs scripts/qa/set-proxy-secret.test.mjs scripts/qa/e2e-shards.test.mjs scripts/qa/zaro-hurok.test.mjs
       # Minőségkapuk (docs/minosegkapuk.md, tulajdonosi utasítás 2026-11-17): a kapuk és a kapu-bizonyíték hook saját tesztjei,
       # valamint a .agents ↔ .claude skill-tükör ellenőrzése (a tartalom nem csúszhat szét).
       - name: Minőségkapuk saját tesztjei

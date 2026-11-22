@@ -14,6 +14,7 @@
     "gate:stage": "node scripts/qa/gates/stage-gate.mjs",
     "gate:push": "node scripts/qa/gates/pre-push-gate.mjs",
     "gate:pr": "node scripts/qa/gates/pre-pr-gate.mjs",
-    "gate:merge": "node scripts/qa/gates/pre-merge-gate.mjs"
+    "gate:merge": "node scripts/qa/gates/pre-merge-gate.mjs",
+    "zaro:check": "node scripts/qa/zaro-hurok.mjs check"
   }
 }
