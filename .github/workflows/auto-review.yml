@@ -71,7 +71,7 @@ jobs:
               stateKey,
               '## :robot: Auto review triggered',
               '',
-              'A review botok most futnak a legfrissebb commit-on:',
+              'Review-kerest kuldtunk az alabbi botoknak a legfrissebb commit-ra:',
               '',
               '- **@sourcery-ai** - statikus analizis, stilus, bug_risk',
               '- **@codex** - javaslatok + P1/P2 badge-ek',
