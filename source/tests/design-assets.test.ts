@@ -321,18 +321,35 @@ test("design-assets (vak L5 / L6, 25de6739): JSON-hibában a DB-URL határa; nag
 // Szűkítés (tulajdonos, 2026-11-22): a képgyártó kitakarása a főágénál semmilyen esetben nem gyengébb.
 test("design-assets: nem gyengébb a főágnál — redact / redactClip (rövid és nagy) minden eset × alak esetén", async () => {
   const { mainDesignRedact } = await import("../../scripts/qa/gates/kitakaro-main-baseline.mjs");
-  const { leakCount } = await import("../../scripts/qa/gates/kitakaro-cases.mjs");
+  // 6. vak kör L5: halmaz-alapú orákulum (rövid titoknál a teljes titok); plusz L3 / L4 regressziós minták.
+  const { extraLeaks, leakSet } = await import("../../scripts/qa/gates/kitakaro-cases.mjs");
+  const sub = (now: string, base: string, body: string, msg: string) =>
+    assert.deepEqual(extraLeaks(leakSet(now, body), leakSet(base, body)), [], msg);
   const margin = Math.max(64, CALLER_KEY.length);
-  for (const c of SECRET_CASES) {
-    for (const [encName, enc] of Object.entries(ENCODINGS)) {
+  const extra = [
+    { name: "L3(6) authBearer", raw: "rejected (authBearer SYNTHETICSECRET)", body: "SYNTHETICSECRET" },
+    { name: "L3(6) rövid", raw: "rejected (authBearer abcde)", body: "abcde" },
+    { name: "L3(6) hosszú törzs", raw: "rejected (authBearer SYNTHETICSECRET)" + " !".repeat(40_000), body: "SYNTHETICSECRET" },
+    { name: "L4(6) rövidülő előtag", raw: "build-id=" + "a1".repeat(160) + "; key prefix kulcs#abcdef0123", body: "kulcs#abcdef0123" },
+  ];
+  for (const c of [...SECRET_CASES, ...extra]) {
+    for (const [encName, enc] of [...Object.entries(ENCODINGS), ["nyers", (r: string) => r] as const]) {
       const s = enc(c.raw);
       const base = mainDesignRedact(s, CALLER_KEY);
-      assert.ok(leakCount(redact(s, CALLER_KEY), c.body) <= leakCount(base, c.body), `redact ${c.name} / ${encName}`);
-      assert.ok(leakCount(redactClip(s, CALLER_KEY, 300), c.body) <= leakCount(base.slice(0, 300), c.body), `redactClip ${c.name} / ${encName}`);
+      sub(redact(s, CALLER_KEY), base, c.body, `redact ${c.name} / ${encName}`);
+      sub(redactClip(s, CALLER_KEY, 300), base.slice(0, 300), c.body, `redactClip ${c.name} / ${encName}`);
+      if (s.length > 20_000) continue;
       for (const { pos, text } of clipPlacements(s, REDACT_WINDOW, margin)) {
-        const b = leakCount(mainDesignRedact(text, CALLER_KEY).slice(0, REDACT_WINDOW), c.body);
-        assert.ok(leakCount(redactClip(text, CALLER_KEY, REDACT_WINDOW), c.body) <= b, `redactClip nagy ${c.name} / ${encName} / ${pos}`);
+        sub(redactClip(text, CALLER_KEY, REDACT_WINDOW), mainDesignRedact(text, CALLER_KEY).slice(0, REDACT_WINDOW), c.body, `redactClip nagy ${c.name} / ${encName} / ${pos}`);
       }
     }
+  }
+  // a teljes HTTP-hibaüzenet (requestImage) rövid és ablaknál hosszabb törzzsel
+  for (const body of ["rejected (authBearer SYNTHETICSECRET)", "rejected (authBearer SYNTHETICSECRET)" + " !".repeat(40_000)]) {
+    const fetchImpl = (async () => new Response(body, { status: 403 })) as unknown as typeof fetch;
+    await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key: CALLER_KEY, body: {} }), (e: Error) => {
+      assert.equal(e.message.includes("SYNTHETICSECRET"), false, e.message.slice(0, 80));
+      return true;
+    });
   }
 });

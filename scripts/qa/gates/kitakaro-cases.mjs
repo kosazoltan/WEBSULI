@@ -39,6 +39,8 @@ export const SECRET_CASES = [
   { name: 'L4 cím sortörés után', raw: J('timeout', '\n', 'owner.x', at, 'pelda.hu', '\n', 'keep'), body: J('owner.x', at, 'pelda.hu') },
   // 5. vak kör (5c9568c5) L1: `Bearer-` kezdetű, csak betűs / kötőjeles hitelesítő (a főág kitakarta).
   { name: 'L1(5) Bearer- kezdetű hitelesítő', raw: J('Authorization: Bearer ', 'Bearer-', 'abcdefghij', '-klmnopqr'), body: J('abcdefghij', '-klmnopqr') },
+  // 6. vak kör (485ac4b0) L1: query-jelszó a DB-URL-ben, literális backslash-sel (a főág az egész URL-t elnyelte).
+  { name: 'L1(6) DB-URL query-jelszó backslash-sel', raw: J('postgres', '://app', at, 'db.pelda.hu/prod?sslmode=require&password=jel', '\\', 'SYNTHETICPASSWORD&token=QUERYTOKENVALUE'), body: J('jel', '\\', 'SYNTHETICPASSWORD&token=QUERYTOKENVALUE') },
 ];
 
 /** Determinisztikus álvéletlen (mulberry32), hogy a tábla minden futáson ugyanaz legyen. */
@@ -95,6 +97,27 @@ export function leak(out, body) {
     if (views.some((v) => v.includes(g))) return g;
   }
   return null;
+}
+
+/**
+ * 6. vak kör L5: a kimenetben (nyersen vagy dekódolva) látható titokrészletek HALMAZA — a titok minden 6 karakteres darabja
+ * (így minden ≥ 6 karakteres részsztringje is), 6-nál rövidebb titoknál maga a teljes titok. A „nem gyengébb” összevetés:
+ * az új halmaz részhalmaza a főágénak.
+ */
+export function leakSet(out, body) {
+  const views = [out, decodeEscapes(out)];
+  const seen = new Set();
+  if (body.length < 6) { if (views.some((v) => v.includes(body))) seen.add(body); return seen; }
+  for (let i = 0; i + 6 <= body.length; i++) {
+    const g = body.slice(i, i + 6);
+    if (!seen.has(g) && views.some((v) => v.includes(g))) seen.add(g);
+  }
+  return seen;
+}
+
+/** Az `a` halmaz azon elemei, amelyek `b`-ben nincsenek (üres = nem gyengébb). */
+export function extraLeaks(a, b) {
+  return [...a].filter((x) => !b.has(x));
 }
 
 /** A titok kimaradt, különböző 6 karakteres darabjainak száma (nyersen vagy dekódolva) — a főággal való összevetéshez. */

@@ -185,34 +185,61 @@ test('vak L5 (ac6447f5): escape-sűrű JSON-on a rövid clip csak korlátos elő
 
 // ---- Szűkítés (tulajdonos, 2026-11-22: „Szűkítés + bontás (Javasolt)”) és az 5. vak kör (5c9568c5) -------------------
 
-test('nem gyengébb a főágnál: kapu redact / writeLog — minden eset × alak, a kimaradt titokdarab ≤ a főág redact-jáé', async () => {
+// 6. vak kör (485ac4b0) L5: az orákulum halmaz-alapú — az új kimenetben látható titokrészletek (minden 6 karakteres darab, rövid
+// titoknál a teljes titok) részhalmaza a főág kimenetében láthatóknak; plusz rögzített regressziós minták (L1–L4).
+const sub = async (now, base, body, msg) => {
+  const { extraLeaks, leakSet } = await import('./kitakaro-cases.mjs');
+  const extra = extraLeaks(leakSet(now, body), leakSet(base, body));
+  assert.deepEqual(extra, [], `${msg}: új, a főágon nem látható részlet: ${JSON.stringify(extra.slice(0, 3))}`);
+};
+
+test('nem gyengébb a főágnál: kapu redact / writeLog — minden eset × alak + regressziós minták, részhalmaz-orákulum', async () => {
   const { mainRedact } = await import('./kitakaro-main-baseline.mjs');
-  const { leakCount } = await import('./kitakaro-cases.mjs');
-  for (const c of SECRET_CASES.filter((x) => !x.keyed)) {
+  const at = '@';
+  const extra = [
+    // 6. kör L2: Windows-út, a cím helyi része escape-szerű (` `) — a főág nyers regexe kitakarta
+    { name: 'L2(6) Windows-út címmel', raw: ['lookup C:', '\\', 'temp', '\\', 'u0020', at, 'pelda.hu'].join(''), body: ['u0020', at, 'pelda.hu'].join('') },
+    { name: 'L2(6) Windows-út címmel 2', raw: ['C:', '\\', 'Users', '\\', 'fiok.tulaj', at, 'pelda.hu.txt'].join(''), body: ['fiok.tulaj', at, 'pelda.hu'].join('') },
+  ];
+  for (const c of [...SECRET_CASES.filter((x) => !x.keyed), ...extra]) {
     for (const [encName, enc] of Object.entries(ENCODINGS)) {
       const s = enc(c.raw);
-      const now = leakCount(redact(s), c.body);
-      const base = leakCount(mainRedact(s), c.body);
-      assert.ok(now <= base, `${c.name} / ${encName}: új ${now} > főág ${base}`);
+      await sub(redact(s), mainRedact(s), c.body, `${c.name} / ${encName}`);
     }
+    await sub(redact(c.raw), mainRedact(c.raw), c.body, `${c.name} / nyers`);
   }
 });
 
-test('nem gyengébb a főágnál: külső maskSecrets / maskClip — rövid és nagy (vágási helyzetekkel) bemeneten', async () => {
+test('nem gyengébb a főágnál: külső maskSecrets / maskClip — rövid, nagy (vágási helyzetekkel) és a 600-as hívóhatár', async () => {
   const { mainMaskSecrets } = await import('./kitakaro-main-baseline.mjs');
-  const { leakCount } = await import('./kitakaro-cases.mjs');
   const margin = Math.max(64, CALLER_KEY.length);
   for (const c of SECRET_CASES) {
     for (const [encName, enc] of Object.entries(ENCODINGS)) {
       const s = enc(c.raw);
-      assert.ok(leakCount(maskSecrets(s, CALLER_KEY), c.body) <= leakCount(mainMaskSecrets(s, CALLER_KEY), c.body), `maskSecrets ${c.name} / ${encName}`);
-      assert.ok(leakCount(maskClip(s, CALLER_KEY, 600), c.body) <= leakCount(mainMaskSecrets(s, CALLER_KEY).slice(0, 600), c.body), `maskClip ${c.name} / ${encName}`);
+      await sub(maskSecrets(s, CALLER_KEY), mainMaskSecrets(s, CALLER_KEY), c.body, `maskSecrets ${c.name} / ${encName}`);
+      await sub(maskClip(s, CALLER_KEY, 600), mainMaskSecrets(s, CALLER_KEY).slice(0, 600), c.body, `maskClip ${c.name} / ${encName}`);
       for (const { pos, text } of clipPlacements(s, MASK_WINDOW, margin)) {
-        const base = leakCount(mainMaskSecrets(text, CALLER_KEY).slice(0, MASK_WINDOW), c.body);
-        assert.ok(leakCount(maskClip(text, CALLER_KEY, MASK_WINDOW), c.body) <= base, `maskClip nagy ${c.name} / ${encName} / ${pos}`);
+        await sub(maskClip(text, CALLER_KEY, MASK_WINDOW), mainMaskSecrets(text, CALLER_KEY).slice(0, MASK_WINDOW), c.body, `maskClip nagy ${c.name} / ${encName} / ${pos}`);
       }
     }
   }
+  // 6. kör L4: a rövidítő találat nem hozhat be szöveget a főág 600-as láthatósági határa mögül
+  const key = 'AIzaSyQWERTYUIOP' + 'B'.repeat(24);
+  const s = 'build-id=' + 'a1'.repeat(310) + '; key prefix AIzaSyQWERTYUIOP';
+  for (const max of [160, 400, 600]) {
+    await sub(maskClip(s, key, max), mainMaskSecrets(s, key).slice(0, max), 'AIzaSyQWERTYUIOP', `L4(6) max ${max}`);
+  }
+});
+
+test('vak L1 (485ac4b0): a DB-URL query-jelszava / -tokenje backslash-sel — kapunapló, külső és JSON-alak', () => {
+  const dsn = ['postgres', '://app', '@', 'db.pelda.hu/prod?sslmode=require&password=jel', '\\', 'SYNTHETICPASSWORD&token=QUERYTOKENVALUE'].join('');
+  const dir = mkdtempSync(join(tmpdir(), 'kitakaro-l1-6-'));
+  const outs = [
+    redact(`connection failed ${dsn}`), maskSecrets(`connection failed ${dsn}`, CALLER_KEY), maskClip(`connection failed ${dsn}`, CALLER_KEY, 600),
+    readFileSync(writeLog(dir, 'stage', 'db', `connection failed ${dsn}`), 'utf8'),
+    redact(JSON.stringify({ error: `connection failed ${dsn}` })), maskClip(JSON.stringify({ error: `connection failed ${dsn}` }), CALLER_KEY, 600),
+  ];
+  for (const out of outs) for (const frag of ['SYNTHETIC', 'PASSWORD', 'QUERYTOKEN']) assert.ok(!out.includes(frag), `${frag}: ${out}`);
 });
 
 test('lineáris: az esettábla összefűzve ~3 M karakterig — a redact és a maskClip 2 s alatt', () => {
