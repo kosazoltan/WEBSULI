@@ -131,3 +131,53 @@ test('vak L6 (25de6739): nagy bemenet — a megtartott előtag pontosan maszkolt
   assert.equal(out, 'pre *** kozte ');
   assert.ok(!out.includes('bbbbbbbb'));
 });
+
+// ---- 4. vak kör (ac6447f5) és a tulajdonosi osztályszabály (2026-11-22, D7) -----------------------------------------
+
+test('D7: az ártalmatlan környezet megmarad (rövid szavak, magyar szöveg, HTTP-státusz, fájl:sor, dátum)', () => {
+  const s = [
+    'HTTP 503: Service Unavailable — a szolgáltató túlterhelt, próbáld újra később.',
+    'Hiba a scripts/qa/gates/lib.mjs:192 sorban; a kitakaro.test.mjs:115 bukott.',
+    'Árvíztűrő tükörfúrógép, 2026-11-22, 14:05, PASS 142 / FAIL 0.',
+  ].join('\n');
+  for (const [name, out] of [['redact', redact(s)], ['maskSecrets', maskSecrets(s, CALLER_KEY)], ['maskClip', maskClip(s, CALLER_KEY, 600)]]) {
+    assert.equal(out, s, name);
+  }
+});
+
+test('vak L3 (ac6447f5): többsoros Bearer-token — a kapu konzolja és a .log is titokmentes (a formázás előtt takar)', async () => {
+  const { createGate, STATUS } = await import('./lib.mjs');
+  const detail = ['✖ failing tests:', 'Authorization: Bearer Ab12Cd34+Ef/Gh', 'Ij56Kl78=Mn90Op', 'vége'].join('\n');
+  const lines = [];
+  const g = createGate('proba', { log: (s) => lines.push(s) });
+  g.add('lépés', STATUS.FAIL, '', detail);
+  const text = lines.join('\n');
+  for (const frag of ['Ab12Cd', 'Ij56Kl', 'Mn90Op']) assert.ok(!text.includes(frag), `konzol: ${frag}`);
+  assert.ok(text.includes('vége') && text.includes('failing tests:'), 'a környezet megmarad');
+  const dir = mkdtempSync(join(tmpdir(), 'kitakaro-l3-'));
+  const got = readFileSync(writeLog(dir, 'stage', 'unit', detail), 'utf8');
+  for (const frag of ['Ab12Cd', 'Ij56Kl', 'Mn90Op']) assert.ok(!got.includes(frag), `napló: ${frag}`);
+});
+
+test('vak L2 / L4 (ac6447f5): JSON-hibában a backslashes DB-jelszó teljesen takart, a cím utáni sortörés-escape ép', () => {
+  const dsn = ['postgres', '://admin:', 'jel', '\\', 'szo_SYNTHETIC_PASSWORD_TAIL', '@', '10.0.0.5:5432/db'].join('');
+  const a = JSON.stringify({ error: `connect ${dsn}\nkeep` });
+  const mail = ['owner.x', 'pelda.hu'].join('@');
+  const b = JSON.stringify({ error: `timeout\n${mail}\nkeep` });
+  for (const [name, fn] of [['redact', (x) => redact(x)], ['maskSecrets', (x) => maskSecrets(x, CALLER_KEY)], ['maskClip', (x) => maskClip(x, CALLER_KEY, 600)]]) {
+    const oa = fn(a);
+    assert.ok(!oa.includes('SYNTHETIC') && !oa.includes('PASSWORD'), `${name}: DB-jelszó`);
+    assert.equal(JSON.parse(oa).error, 'connect <db-url>\nkeep', name);
+    assert.equal(JSON.parse(fn(b)).error, 'timeout\n<email>\nkeep', name);
+  }
+  assert.ok(!redact(`connect ${dsn} kész`).includes('SYNTHETIC'), 'nyers (nem JSON) szövegben is');
+});
+
+test('vak L5 (ac6447f5): escape-sűrű JSON-on a rövid clip csak korlátos előtagot vizsgál', async () => {
+  const { clipText, PH_EXTERNAL, WINDOW } = await import('./kitakaro.mjs');
+  const s = JSON.stringify({ error: '\n'.repeat(10_000_000) });
+  const stats = {};
+  const out = clipText(s, { keys: [CALLER_KEY], ph: PH_EXTERNAL, max: 160, stats });
+  assert.ok(stats.scanned <= WINDOW + 8 * 1024, `vizsgált hossz: ${stats.scanned}`);
+  assert.ok(out.startsWith('{"error":"') && out.length <= 160);
+});

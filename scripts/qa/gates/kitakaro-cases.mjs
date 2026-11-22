@@ -32,7 +32,40 @@ export const SECRET_CASES = [
   { name: 'e-mail tokenalakú helyi résszel', raw: J('AI', 'za', 'Sy', 'M'.repeat(30), at, 'levelezo.pelda.org'), body: J('Sy', 'M'.repeat(30), at, 'levelezo.pelda.org') },
   { name: 'DB-URL', raw: J('postgres', '://admin:', 'titok123', at, 'ep-pelda.neon.tech/db'), body: J('admin:', 'titok123', at, 'ep-pelda.neon.tech/db') },
   { name: 'hívói kulcs', raw: CALLER_KEY, body: CALLER_KEY, keyed: true },
+  // 4. vak kör (ac6447f5): egymást elfedő előtagok, backslash a DB-jelszóban, cím közvetlenül sortörés után.
+  { name: 'L1 Bearer-séma kétszer', raw: J('Auth scheme: Bearer', '\n', 'Bearer ', 'M4synthetic', '+/Q8=~Tail'), body: J('M4synthetic', '+/Q8=~Tail') },
+  { name: 'L1 két összeírt ghp', raw: J('gh', 'p_', 'C1d2E3f4G5h6'.repeat(2), 'gh', 'p_', 'J7k8L9m0N1p2'.repeat(2)), body: 'J7k8L9m0N1p2'.repeat(2) },
+  { name: 'L2 backslash a DB-jelszóban', raw: J('postgres', '://admin:', 'jel', '\\', 'szo_SYNTHETIC_PASSWORD_TAIL', at, '10.0.0.5:5432/db'), body: J('admin:', 'jel', '\\', 'szo_SYNTHETIC_PASSWORD_TAIL') },
+  { name: 'L4 cím sortörés után', raw: J('timeout', '\n', 'owner.x', at, 'pelda.hu', '\n', 'keep'), body: J('owner.x', at, 'pelda.hu') },
 ];
+
+/** Determinisztikus álvéletlen (mulberry32), hogy a tábla minden futáson ugyanaz legyen. */
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// „Általános” sor (tulajdonosi osztályszabály, 2026-11-22): előre ismeretlen formájú, 24–64 karakteres titok a teljes
+// token-karakterkészletből (betű, szám, + / = _ - . ~ % \), legalább egy betűvel és egy számmal; sima és sortöréssel kettévágott alakban.
+const ALPHABET = J('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz', '0123456789', '+/=_-.~%\\');
+{
+  const r = rng(20261122);
+  for (let n = 0; n < 8; n++) {
+    const len = 24 + Math.floor(r() * 41);
+    let s = '';
+    for (let i = 0; i < len; i++) s += ALPHABET[Math.floor(r() * ALPHABET.length)];
+    s = J('Q', s.slice(1, -1), '7'); // legalább egy betű és egy szám
+    SECRET_CASES.push({ name: `általános ${n + 1} (${len})`, raw: s, body: s });
+    const k = 8 + Math.floor(r() * (len - 16));
+    SECRET_CASES.push({ name: `általános ${n + 1} sortöréssel`, raw: J(s.slice(0, k), '\n', s.slice(k)), body: s, split: k });
+  }
+}
 
 const u4 = (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`;
 
