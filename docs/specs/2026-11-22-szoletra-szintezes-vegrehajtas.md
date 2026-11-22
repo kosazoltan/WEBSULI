@@ -120,3 +120,8 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
 - **Vak kör 4 → tulajdonosi döntés „KORLÁT ELHAGYÁSA” (PR-1, a 8c4e0a3c-re építve):** terv 16. szakasz. A korlát és tesztjei
   kikerültek; S6 (szóbanki `term`) és S7 (kötőjeles / aposztrófos szó) előbb bukott, utána zöld:
   `npx.cmd tsx --test tests/word-ladder-grading.test.ts` → 18/18; mutációs ellenpróba (`mutate4.mjs`) 8/8.
+- **PR-2 a „KORLÁT ELHAGYÁSA” döntéssel** (a `feat/szoletra-szintezes-1` beolvasztva): a lap korlát nélkül vödröz
+  (`ladderStepBuckets(allTiers, lang)`), a szóbanki tételnél `term: q.answerTerm`-et ad a mérének (a `3d-wiring` új állításai előbb
+  bukottak, utána zöldek). Szólétra + `no-repeat`: 145/145; `tsc` 0 hiba. Böngésző:
+  `npm.cmd run test:e2e -- tests/word-ladder-play.spec.ts --workers=1` → 2 passed (2,3 perc),
+  `A9|kérdés-fokozatok: 0,0,0,1,1,1,2,2,2,3,3,3 | futás-fokozat: 0,0,0,1,1,1,2,2,2,3,3,3`.

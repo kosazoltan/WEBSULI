@@ -51,7 +51,6 @@ import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import { GAME_TEST_HOOKS_ENABLED, correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
 import { LADDER_ZONES, xpForCorrect } from "@/lib/wordLadderLogic";
 import {
-  buildLadderTermFloors,
   createLadderStepSession,
   ladderStepBuckets,
   windowLadderSteps,
@@ -467,8 +466,8 @@ export default function WordLadderHuEn() {
                   // szintlista-alakból kimaradnak — azonosító szerint megőrizzük őket.
                   speechByIdRef.current.set(q.id, { speakText: q.speakText, speakAfter: q.speakAfter });
                   if (q.focus) focusByIdRef.current.set(q.id, q.focus);
-                  // A célrész a besoroláshoz is kell (szintezés: a mérce a célrészt méri).
-                  return q.focus ? { ...vocab.toLadderItem(q), focus: q.focus } : vocab.toLadderItem(q);
+                  // Szintezés (terv 16.): a mérce a célnyelvi alakot (`term`) méri, a kérdés irányától függetlenül.
+                  return { ...vocab.toLadderItem(q), term: q.answerTerm };
                 }) : [],
         ),
       );
@@ -507,21 +506,8 @@ export default function WordLadderHuEn() {
   }, [tiers, vocabTiers, vocabMeanings, lang]);
   const tiersRef = useRef(allTiers);
   tiersRef.current = allTiers;
-  /**
-   * Bankközi korlát (terv 4.1 / 15.): pontos egyezésű egyes szó a kézi bank helyes válasza és a szóbanki `term` között — a
-   * TELJES, szűretlen bankokból (a kézi bank a regiszterből, a szóbank a betöltött bejegyzésekből; a szint az azonosítóban),
-   * soha nem a futás készletéből: a `mergeVocabTiers` a duplikált szóbanki tételt kiszűri.
-   */
-  const termFloors = useMemo(
-    () =>
-      buildLadderTermFloors(
-        { manual: WORD_LADDER_BANKS[lang] ?? [], vocab: vocabMeanings ? [...vocabMeanings].map(([id, m]) => ({ id, term: m.term })) : [] },
-        lang,
-      ),
-    [vocabMeanings, lang],
-  );
   /** Az osztályozott bank: a futás minden tétele 15 fokozat-vödörben (docs/specs/2026-11-22-szoletra-szintezes.md 4.1). */
-  const stepBuckets = useMemo(() => ladderStepBuckets(allTiers, lang, termFloors), [allTiers, lang, termFloors]);
+  const stepBuckets = useMemo(() => ladderStepBuckets(allTiers, lang), [allTiers, lang]);
   const stepBucketsRef = useRef(stepBuckets);
   stepBucketsRef.current = stepBuckets;
 

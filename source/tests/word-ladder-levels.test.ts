@@ -21,8 +21,7 @@ import {
   wordLadderGameId,
   zoneForProgress,
 } from "../client/src/lib/wordLadderLevels";
-import { VOCAB_EN } from "../client/src/data/vocabBank/vocab-en";
-import { buildLadderTermFloors, createLadderStepSession, ladderGradeWindow, ladderStepBuckets, windowLadderSteps } from "../client/src/lib/wordLadderGrading";
+import { createLadderStepSession, ladderGradeWindow, ladderStepBuckets, windowLadderSteps } from "../client/src/lib/wordLadderGrading";
 
 /** Spec 2026-09-29-palyak-szoletra-nyelvek, 4. és 6. döntés (B szelet). */
 
@@ -55,7 +54,7 @@ test("SPEC-VÁLTOZÁS 2026-11-22: a kérdés-szint pályánként nem csökken; 1
 });
 
 test("2026-11-22: futáson belül nincs ismétlés az évfolyam-sávos választóval sem, és a kérdés a sávban marad — minden évfolyam × pálya", () => {
-  const buckets = ladderStepBuckets(ladderTiersFromBank(WORD_LADDER_EN), "en", buildLadderTermFloors({ manual: WORD_LADDER_EN, vocab: VOCAB_EN }, "en"));
+  const buckets = ladderStepBuckets(ladderTiersFromBank(WORD_LADDER_EN), "en");
   const bad: string[] = [];
   for (const grade of GRADES) {
     const windowed = windowLadderSteps(buckets, grade);

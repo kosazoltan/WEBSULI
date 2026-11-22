@@ -28,12 +28,11 @@ test("6. döntés: pályaválasztó, pályánkénti létrahossz és sáv, halad�
   // `createLadderStepSession` adja (a régi, csak pályából induló `createLadderLevelSession` helyett).
   assert.match(page, /createLadderStepSession\s*\(/);
   assert.match(page, /windowLadderSteps\s*\(/);
-  // SPEC-VÁLTOZÁS 2026-11-22 (terv 15., „CSAK STRUKTÚRÁLT MEZŐK”): a bankközi korlátot a lap a TELJES kézi bankból és a TELJES
-  // szóbankból építi (`buildLadderTermFloors`), soha nem a futás szűrt készletéből (`allTiers`) — a `mergeVocabTiers` a
-  // duplikált szóbanki tételt kiszűri.
-  assert.match(page, /buildLadderTermFloors\s*\(\s*\{\s*manual:\s*WORD_LADDER_BANKS\[lang\]/);
-  assert.doesNotMatch(page, /buildLadderTermFloors\s*\([^)]*allTiers/);
-  assert.match(page, /ladderStepBuckets\s*\(\s*allTiers\s*,\s*lang\s*,\s*termFloors\s*\)/);
+  // SPEC-VÁLTOZÁS 2026-11-22 (terv 16., „KORLÁT ELHAGYÁSA”): bankközi korlát nincs; a szóbanki tételnél a mérce a célnyelvi
+  // `term`-et (`VocabQuiz.answerTerm`) kapja, nem a kérdés irányától függő `focus`-t.
+  assert.match(page, /ladderStepBuckets\s*\(\s*allTiers\s*,\s*lang\s*\)/);
+  assert.match(page, /term:\s*q\.answerTerm/);
+  assert.doesNotMatch(page, /buildLadderTermFloors|termFloors/);
   assert.match(page, /loadUnlockedLevel\s*\(\s*wordLadderGameId\s*\(/);
   assert.match(page, /unlockNextLevel\s*\(\s*wordLadderGameId\s*\(/);
   assert.match(page, /pickUnseen\s*\(/);
