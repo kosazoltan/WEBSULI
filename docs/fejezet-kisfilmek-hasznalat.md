@@ -19,7 +19,7 @@ figurával, képi stílussal, mondathosszal és hanggal. Terv: [`docs/specs/2026
 Fejezetenként: forgatókönyv (szövegmodell, a korosztály szabályaival; kapuk: mondathossz, számhűség — új szám az ábrán sem születhet)
 → jelenetenként kezdőkép (képmodell + minőségkapu: szöveg / nem gyerekbarát / nem a jelenet → újrapróba) → hang (ElevenLabs; hangkapu:
 minden mondatot egy független beszédfelismerő visszaír, betűre összeveti, eltérésnél újragyártja) →
-mozgókép a kezdőképből (Seedance 2.0 Mini, 480p; a Seedance 1.5-öt az OpenRouter 2026-11-22-re megszüntette) → átkódolás kicsire (`ffmpeg`) → tárolás. Mért idő: kb. 2–2,5 perc fejezetenként; egyszerre
+mozgókép a kezdőképből (Seedance 2.0 Mini, 480p; a Seedance 1.5-öt az OpenRouter 2026-11-22-re megszüntette) → átkódolás kicsire (`ffmpeg`) → tárolás. Mért idő: kb. 2–2,5 perc fejezetenként (a Seedance 1.5-tel mérve; a 2.0 Mini 480p-vel még nem mérve — UNVERIFIED); egyszerre
 egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a kör (vagy a következő fejezet) kimarad (az 512 MB-os példány védelme). A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a média a `lesson_clip_media` táblában él.
 
 ## Kapcsolók (Render → `websuli-api-eu` → Environment)
@@ -64,7 +64,7 @@ egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a
 - Mozgókép (Seedance 2.0 Mini, 480p, mérve 2026-11-22): kb. 0,035 USD / mp → 4 jelenet 5–7 mp-es klipekkel kb. 0,70–1,00 USD
   fejezetenként (720p-ben kb. kétszer ennyi). A régi Seedance 1.5 kb. 0,026 USD / mp volt. Kép: kb. 0,01 USD / db.
   Hang: 0,5 kredit / karakter (fejezetenként kb. 150–250 kredit). Szöveg- és képkapu-hívások: fillérek.
-- Tárolt méret: kb. 3,3 MB fejezetenként (a nyers klipek 4–7 MB-osak, átkódolva 0,3–0,7 MB; a hang 128 kbit/s).
+- Tárolt méret: kb. 3,3 MB fejezetenként (a Seedance 1.5 / 720p nyers klipjei 4–7 MB-osak voltak, átkódolva 0,3–0,7 MB; a 2.0 Mini 480p-vel még nem mérve; a hang 128 kbit/s).
 - Egy 12 fejezetes lecke: kb. 9–13 USD és kb. 40 MB.
 
 ## Kipróbálás éles adat írása nélkül

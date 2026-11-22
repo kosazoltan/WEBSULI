@@ -25,6 +25,8 @@ export const CLIP_VIDEO_RESOLUTIONS = ["480p", "720p"] as const;
 export type ClipVideoResolution = (typeof CLIP_VIDEO_RESOLUTIONS)[number];
 export const CLIP_VIDEO_RESOLUTION_DEFAULT: ClipVideoResolution = "480p";
 const VIDEO_MODEL_NAME = /^[a-z0-9._-]+\/[a-z0-9._-]+$/;
+/** A `lesson_clips.model` oszlop varchar(80) — hosszabb név az upsertnél hibát adna, és a kör minden 3 percben újra költene. */
+const VIDEO_MODEL_MAX = 80;
 const warnedVideoSetting = new Set<string>();
 function warnVideoSettingOnce(name: string): void {
   if (warnedVideoSetting.has(name)) return;
@@ -35,7 +37,7 @@ function warnVideoSettingOnce(name: string): void {
 export function clipVideoModel(env: Record<string, string | undefined> = process.env): string {
   const raw = env.LESSON_CLIP_VIDEO_MODEL?.trim();
   if (!raw) return CLIP_VIDEO_MODEL_DEFAULT;
-  if (VIDEO_MODEL_NAME.test(raw)) return raw;
+  if (raw.length <= VIDEO_MODEL_MAX && VIDEO_MODEL_NAME.test(raw)) return raw;
   warnVideoSettingOnce("LESSON_CLIP_VIDEO_MODEL");
   return CLIP_VIDEO_MODEL_DEFAULT;
 }

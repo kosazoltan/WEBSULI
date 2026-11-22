@@ -59,8 +59,10 @@ a 480p és a 720p képkockája szemre azonos (összevetve). A stílus rajzfilmsz
   „az elakadt letöltési törzs…”) csak `AbortSignal.timeout`-ra vár. Ennek az időzítője Node-ban nem tartja életben a folyamatot
   (unref), ezért függő munka nélkül a futás idő előtt véget ér: a teszt és a mögötte állók „cancelledByParent” lesznek. Felhős
   munkamenetben a változatlan mainen is mérve (3 lemondott teszt); a CI-ban más függő munka miatt nem jön elő. Javítás: a két teszt
-  a futása alatt egy életben tartó időzítőt tart (`setInterval` + `clearInterval`). Az állítások nem változnak, csak a futás lesz
-  determinisztikus.
+  a futása alatt egy életben tartó időzítőt tart (`setInterval` + `clearInterval`), és tesztszintű 5 s-os korlátot kap (független
+  review J2: korlát nélkül a megszakítást figyelmen kívül hagyó kód végtelen várakozás lenne, nem bukás). Az állítások nem változnak.
+- **Modellnév hossza:** legfeljebb 80 karakter (a `lesson_clips.model` oszlop `varchar(80)`; hosszabb névnél az upsert hibát adna, a kör
+  sor nélkül bukna, és 3 percenként újra költene — független review J3). Hosszabb név → alapérték.
 
 ## Elfogadás (EARS)
 

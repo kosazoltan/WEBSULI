@@ -623,14 +623,15 @@ test("a lekérdezés JSON-válasza bájtkorlátos: a túl hosszú törzs olvasá
   assert.equal(await readLimitedText(new Response('{"status":"completed"}'), 64 * 1024), '{"status":"completed"}');
 });
 
-test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn beérő címre nem indul kérés (4. vak kör L2)", async () => {
+test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn beérő címre nem indul kérés (4. vak kör L2)", { timeout: 5000 }, async () => {
   let sent = 0, resolveLookup!: (v: Array<{ address: string; family: number }>) => void;
   const transport: ProviderTransport = {
     lookup: () => new Promise((resolve) => { resolveLookup = resolve; }),
     request: async () => { sent++; return toRaw(new Response("x")); },
   };
   // Az AbortSignal.timeout időzítője nem tartja életben a folyamatot (unref): ha más függő munka nincs, a futás az időkorlát előtt
-  // véget ér, és a teszt „cancelledByParent” lesz (felhős munkamenetben mérve, 2026-11-22). Az életben tartó időzítő ezt kizárja.
+  // véget ér, és a teszt „cancelledByParent” lesz (felhős munkamenetben mérve, 2026-11-22). Az életben tartó időzítő ezt kizárja;
+  // a tesztszintű 5 s-os korlát miatt a megszakítást figyelmen kívül hagyó kód bukik, nem lóg.
   const keepAlive = setInterval(() => undefined, 1000);
   try {
     const started = Date.now();
@@ -682,7 +683,7 @@ test("I/O-leltár: minden szolgáltatói választörzs bájtkorlátos — a korl
   }
 });
 
-test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határideje megszakítja, a kapcsolat lezárul", async () => {
+test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határideje megszakítja, a kapcsolat lezárul", { timeout: 5000 }, async () => {
   let destroyed = 0;
   const transport: ProviderTransport = {
     lookup: async () => [{ address: "93.184.216.34", family: 4 }],
@@ -702,12 +703,24 @@ test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határide
 });
 
 // docs/specs/2026-11-22-kisfilm-videomodell.md — a megszűnt Seedance 1.5 helyett beállítható modell és felbontás.
+test("mozgókép hossza: a hang hosszából, 4 és 12 mp közé szorítva (a 2.0 Mini 4–15 mp-et fogad el)", async () => {
+  const { store } = memoryStore([]);
+  for (const [audioMs, expected] of [[1200, 4], [3900, 4], [6400, 7], [12_000, 12], [30_000, 12]] as const) {
+    const deps = fakeDeps({ audioMs: () => audioMs });
+    const result = await makeChapterClip(input(), BAND, deps, store.putMedia);
+    assert.ok("clip" in result, JSON.stringify(result));
+    assert.ok(deps.calls.video.length > 0);
+    assert.ok(deps.calls.video.every((c) => c.seconds === expected), `${audioMs} ms → ${expected} mp (kapott: ${deps.calls.video.map((c) => c.seconds).join(", ")})`);
+  }
+});
+
 test("mozgókép-modell és -felbontás: alapérték, érvényes felülírás, érvénytelen / üres érték → alapérték", () => {
   assert.equal(CLIP_VIDEO_MODEL_DEFAULT, "bytedance/seedance-2.0-mini");
   assert.equal(CLIP_VIDEO_RESOLUTION_DEFAULT, "480p");
   assert.equal(clipVideoModel({}), "bytedance/seedance-2.0-mini");
   assert.equal(clipVideoModel({ LESSON_CLIP_VIDEO_MODEL: " bytedance/seedance-2.5-flash " }), "bytedance/seedance-2.5-flash");
-  for (const bad of ["", "   ", "seedance", "https://evil.example/x", "a/b/c", "Bytedance/Seedance 2"]) assert.equal(clipVideoModel({ LESSON_CLIP_VIDEO_MODEL: bad }), CLIP_VIDEO_MODEL_DEFAULT, `érvénytelen: ${JSON.stringify(bad)}`);
+  assert.equal(clipVideoModel({ LESSON_CLIP_VIDEO_MODEL: `a/${"b".repeat(78)}` }), `a/${"b".repeat(78)}`, "80 karakter még elfogadható");
+  for (const bad of ["", "   ", "seedance", "https://evil.example/x", "a/b/c", "Bytedance/Seedance 2", `a/${"b".repeat(79)}`]) assert.equal(clipVideoModel({ LESSON_CLIP_VIDEO_MODEL: bad }), CLIP_VIDEO_MODEL_DEFAULT, `érvénytelen: ${JSON.stringify(bad)}`);
   assert.equal(clipVideoResolution({}), "480p");
   assert.equal(clipVideoResolution({ LESSON_CLIP_VIDEO_RESOLUTION: "720p" }), "720p");
   for (const bad of ["", "1080p", "4K", "720"]) assert.equal(clipVideoResolution({ LESSON_CLIP_VIDEO_RESOLUTION: bad }), "480p", `érvénytelen: ${JSON.stringify(bad)}`);
