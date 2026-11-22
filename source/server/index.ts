@@ -711,8 +711,15 @@ app.use((req, res, next) => {
       } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
       // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
       try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
-      // Vak kör L5: a kisfilmworker sem indít új kört / fejezetet; a futó kört a pool lezárása előtt korlátos ideig kivárjuk (lent).
-      const clipsStopped = import("./lesson-clips").then(({ stopLessonClipWorker }) => stopLessonClipWorker(60_000)).catch((err: unknown) => logger.warn("A kisfilmworker nem állítható le", err));
+      // Kisfilm (vak kör L5; 6. vak kör L1): új kör / fejezet nem indul; a futó kört legfeljebb 60 s-ig kivárjuk, utána AZONNAL — a
+      // Stúdió-kivárással és az ürítésekkel párhuzamosan, nem utánuk — megszakad minden szolgáltatói várakozás, letöltés és
+      // ffmpeg-gyerek, majd legfeljebb 10 s a kör (és az advisory lock) lezárulására. Kész legkésőbb t = 70 s-kor.
+      // Legrosszabb eset (t = 0 a jel): kisfilm ≤ 70 s (párhuzamos ág); a fő ág: workflow-kivárás ≤ 270 s + 3 s mentési tartalék +
+      // eredményküldés ≤ 10 s + értesítők ≤ 15 s = 298 s — ezt a 295 s-os kényszerkilépés (`force`) vágja el, a Render
+      // maxShutdownDelaySeconds = 300 előtt; a kisfilm-ág addigra (70 s) biztosan lezárult, a `await clipsStopped` már nem vár.
+      const clipsStopped = Promise.all([import("./lesson-clips"), import("./lesson-clips-providers")])
+        .then(([{ shutdownLessonClips }, { abortClipTranscodes }]) => shutdownLessonClips(abortClipTranscodes, 60_000, 10_000))
+        .catch((err: unknown) => logger.warn("A kisfilmworker nem állítható le", err));
       // JM2 (terv 10.8; orkesztrátori döntés, review #452): a valós idejű réteg RÖVID, rendezett lezárása — új szoba /
       // belépés azonnal tiltva, a futó meccsek azonnal lezárulnak a pillanatnyi állással (részeredmény, „a szerver frissül”);
       // ha volt szoba, a server.close() a legfeljebb MP_DRAIN_WINDOW_MS (alap 2,5 s) üzenet-ablak után jön, különben
@@ -736,14 +743,8 @@ app.use((req, res, next) => {
         await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
         // Review #365 (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők a pool lezárása előtt (max 15 s).
         await Promise.race([(await import("./daily-reminder")).pendingNewLessonNotifications(), new Promise((resolve) => setTimeout(resolve, 15_000))]).catch((err: unknown) => logger.warn("New lesson notification flush failed", err));
-        // Vak kör L5 + 2. vak kör L2: a futó kisfilmkör (legfeljebb 60 s, a fenti várakozással párhuzamosan telt); ami ezután is fut,
-        // annak MINDEN szolgáltatói várakozása, letöltése és ffmpeg-gyereke megszakad (a fejezet nem kap hibás sort), majd a kör — és
-        // vele az advisory lock DB-kapcsolata — lezárulására rövid várakozás, még a pool lezárása előtt.
+        // A kisfilm-ág (fent indítva, legfeljebb 70 s) a pool lezárása előtt biztosan lezárult — a kör az advisory lockot elengedte.
         await clipsStopped;
-        try {
-          (await import("./lesson-clips-providers")).abortClipTranscodes();
-          await (await import("./lesson-clips")).stopLessonClipWorker(10_000);
-        } catch (err) { logger.warn("A kisfilm-átkódolások nem állíthatók le", err); }
         await dbPool.end();
         log("Database pool closed");
         log("Graceful shutdown completed");

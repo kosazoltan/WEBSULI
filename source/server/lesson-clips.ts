@@ -425,6 +425,16 @@ export async function stopLessonClipWorker(waitMs = 30_000): Promise<void> {
   await Promise.race([current, new Promise<void>((resolve) => { timer = setTimeout(resolve, waitMs); })]);
   clearTimeout(timer);
 }
+/**
+ * A kisfilmworker teljes leállítása (6. vak kör L1): új kör / fejezet nem indul, a futó kört legfeljebb `waitMs`-ig kivárja, utána
+ * AZONNAL megszakít (`abort`: minden szolgáltatói várakozás, letöltés és ffmpeg-gyerek), majd a kör (és az advisory lock) lezárulását
+ * legfeljebb `finalMs`-ig várja. A szerver a leállítás ELEJÉN indítja, a többi leállítási lépéssel párhuzamosan.
+ */
+export async function shutdownLessonClips(abort: () => void, waitMs = 60_000, finalMs = 10_000): Promise<void> {
+  await stopLessonClipWorker(waitMs);
+  abort();
+  await stopLessonClipWorker(finalMs);
+}
 /** Indítás (csak élesben hívja a szerver). Gyártás csak `auto` módban; különben nem indul időzítő. */
 export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: ClipDeps; model: string; maintenance?: () => void }, env: Record<string, string | undefined> = process.env): ClipMode {
   const mode = clipsMode(env);

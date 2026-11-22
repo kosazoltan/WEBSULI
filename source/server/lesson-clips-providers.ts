@@ -67,6 +67,15 @@ function rawToResponse(raw: RawResponse, signal: AbortSignal): Response {
   return new Response(webBody(stream), { status: raw.status, headers });
 }
 
+/** A védett út hibájának strukturált kódja (a naplóba URL nem kerül). */
+function providerFetchCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const codes: Array<[RegExp, string]> = [
+    [/^Átirányítás cél nélkül/, "REDIRECT_NO_LOCATION"], [/^Túl sok átirányítás/, "TOO_MANY_REDIRECTS"], [/^Nem engedélyezett cél/, "FORBIDDEN_TARGET"],
+    [/^Nem nyilvános/, "NON_PUBLIC_TARGET"], [/^(Érvénytelen URL|Csak https|Csak az alapértelmezett port|URL-be ágyazott)/, "BAD_URL"],
+  ];
+  return codes.find(([pattern]) => pattern.test(message))?.[1] ?? "FETCH_FAILED";
+}
 /**
  * Szolgáltatói kérés a védett úton (2. vak kör L7; Copilot-review #418; 4. vak kör L2): minden lépés (átirányítás is) `checkFetchUrl`,
  * a feloldott címek mind nyilvánosak, a kapcsolat az ellenőrzött címre rögzítve; a DNS, a kérés és a törzs olvasása a `signal`-lal
@@ -76,12 +85,16 @@ function rawToResponse(raw: RawResponse, signal: AbortSignal): Response {
 export async function safeProviderFetch(url: URL, init: { headers: Record<string, string>; signal?: AbortSignal }, opts: { sameOrigin: boolean; maxHops?: number; transport?: ProviderTransport }): Promise<Response> {
   const signal = init.signal ?? AbortSignal.timeout(60_000);
   const withoutKey = Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
-  const { response } = await openPublicResponse(url.href, {
+  const result = await openPublicResponse(url.href, {
     timeoutMs: 60_000, maxRedirects: opts.maxHops ?? 3, lookup: opts.transport?.lookup, request: opts.transport?.request,
     allowUrl: opts.sameOrigin ? (next) => next.origin === OPENROUTER_ORIGIN : undefined,
     headersFor: (next) => (next.origin === OPENROUTER_ORIGIN ? init.headers : withoutKey),
-  }, signal);
-  return rawToResponse(response, signal);
+  }, signal).catch((error: unknown) => {
+    // 6. vak kör L4: a közös út hibaüzenete teljes URL-t (query-vel) is tartalmazhat — tovább csak strukturált kód és a host megy.
+    if (signal.aborted) throw error;
+    throw new Error(`szolgáltatói letöltés: ${providerFetchCode(error)} (${url.hostname})`);
+  });
+  return rawToResponse(result.response, signal);
 }
 function providerUrl(raw: string): URL | null {
   try { const url = new URL(raw, OPENROUTER); return url.protocol === "https:" ? url : null; } catch { return null; }

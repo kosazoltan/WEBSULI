@@ -126,3 +126,28 @@ Változott meglévő tesztek (dokumentált, nem gyengítés): a csonkolt száll�
 `send` helyett; az átirányítás-teszt két üzenet-regexe a közös segéd szövegéhez igazodott (`/https/i`, `/Nem engedélyezett cél/`) — az
 állítások (titkosítatlan / idegen célra nincs kérés) változatlanok. A DB statement_timeout-teszt a Drizzle által csomagolt `cause`-t
 vizsgálja.
+
+## 2026-11-22 — 6. vak kör (91c02d2c, utólagos) — javító PR `fix/kisfilm-leallitas-hatarido`
+
+- **L1 valódi (blokkoló)** — a kemény megszakítás eddig a Stúdió-kivárás és az ürítések UTÁN futott (legrosszabb esetben 298 s után,
+  a 295 s-os kényszerkilépés mögött). Most `shutdownLessonClips(abortClipTranscodes, 60_000, 10_000)` a leállítás elején indul,
+  párhuzamosan: 60 s kivárás → azonnali megszakítás → ≤ 10 s lezárás (kész ≤ 70 s). A legrosszabb esetű időszámítás az `index.ts`-ben
+  a lánc mellett. Teszt: `tests/lesson-clip-shutdown-deadline.test.ts` (a megszakítás 60 s-nál fut, miközben a Stúdió-kivárás tart;
+  forrás-őr: a lánc a `waitForActiveRuns` előtt, utána nincs külön megszakítás).
+- **L4 valódi** — a szolgáltatói letöltés hibája strukturált kódot (`REDIRECT_NO_LOCATION`, `TOO_MANY_REDIRECTS`, `FORBIDDEN_TARGET`,
+  `NON_PUBLIC_TARGET`, `BAD_URL`, `FETCH_FAILED`) és csak a hostot viszi; a query értéke nem kerül hibaüzenetbe és naplóba. Teszt:
+  LW „szolgáltatói letöltési hiba: … a query értékét nem”. Dokumentált változás: az átirányítás-teszt két üzenet-regexe a kódokra vált
+  (`/BAD_URL/`, `/FORBIDDEN_TARGET/`) — az állítás (nincs kérés titkosítatlan / idegen célra) változatlan.
+
+### Kanban-jegyek (ebben a PR-ban nem javítva)
+
+- **K-418-L2 (közepes)** — az árvamédia-söprésnek nincs teljes határideje és leállítási jele: 50 adag × 15 s `statement_timeout`
+  elméletben 750 s; elnémult PG-kapcsolatnál a `statement_timeout` nem korlátozza a Node várakozását; a nyers lock/unlock a
+  határidőn kívül fut. Javasolt: teljes söprési határidő, leállításkor új adag tiltása, kliensoldali megszakítás, a nem megbízható
+  zárkapcsolat eldobása (nem visszaadása a poolnak). Teszt: shutdown közben futó többadagos söprés.
+- **K-418-L3 (közepes)** — a fejezet párhuzamos képválaszaira nincs közös bájtkeret: 4 × 24 MiB törzs + a `Buffer.concat` célbuffer
+  ≈ 120 MiB számított csúcs a képolvasásban (nem mért OOM). Javasolt: közös bájtkeret vagy szűk sor a nagy képolvasásra / dekódolásra,
+  a határokat a példány tartalékából méretezve; mérés több egyidejű szolgáltatói törzzsel.
+- **K-418-L5 (kicsi)** — az első `/clips` kérés átmeneti 502-je után nincs újrapróba (csak ismert `pending` után). Javasolt: az első
+  hálózati / 5xx hibát is korlátosan, csendben újrapróbálni a 30 perces kereten belül; az érvényes `pending:false` lezár. Teszt:
+  Playwright, első kérés 502 → `pending:true` → kész.

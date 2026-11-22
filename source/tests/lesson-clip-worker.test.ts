@@ -13,6 +13,7 @@ import { mediaId } from "../server/lesson-clip-media";
 import { CLIP_TMP_PREFIX, clipKeys, clipProviders, CLIP_RESPONSE_LIMITS, downloadAndShrink, readLimitedText, safeProviderFetch, sweepStaleClipDirs, webBody, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
 import type { RawResponse } from "../server/studio/safe-fetch";
 import { Readable } from "node:stream";
+import { logger } from "../server/lib/logger";
 /** Webes válasz → a `safe-fetch` nyers válasza (a csonkolt szállításhoz). */
 const toRaw = (res: Response): RawResponse => ({ status: res.status, headers: Object.fromEntries(res.headers), body: (res.body as unknown as AsyncIterable<Uint8Array> | null) ?? (async function* () { /* üres törzs */ })(), destroy: () => { void res.body?.cancel().catch(() => undefined); } });
 /** Csonkolt szállítás: nyilvános címre old fel, és a (csonkolt) globális fetch-csel küld — valódi DNS és hálózat nélkül. */
@@ -538,7 +539,7 @@ test("átirányítás: minden lépés csak HTTPS, a kulcs csak a szolgáltató o
   }) as typeof fetch;
   const auth = { Authorization: "Bearer titok" };
   try {
-    await assert.rejects(safeProviderFetch(new URL("https://cdn.example/a"), { headers: {} }, { sameOrigin: false, transport: testTransport }), /https/i);
+    await assert.rejects(safeProviderFetch(new URL("https://cdn.example/a"), { headers: {} }, { sameOrigin: false, transport: testTransport }), /BAD_URL/);
     assert.ok(!seen.some((s) => s.url.startsWith("http:")), "titkosítatlan címre nem megy kérés");
     seen.length = 0;
     const res = await safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1/content"), { headers: auth }, { sameOrigin: false, transport: testTransport });
@@ -546,7 +547,7 @@ test("átirányítás: minden lépés csak HTTPS, a kulcs csak a szolgáltató o
     assert.deepEqual(seen.map((s) => [s.url, s.auth]), [["https://openrouter.ai/api/v1/videos/1/content", "Bearer titok"], ["https://cdn.example/c", null]], "idegen célra kulcs nélkül");
     assert.ok(seen.every((s) => s.redirect === "manual"), "az átirányítást a kód követi, nem a fetch");
     seen.length = 0;
-    await assert.rejects(safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1"), { headers: auth }, { sameOrigin: true, transport: testTransport }), /Nem engedélyezett cél/);
+    await assert.rejects(safeProviderFetch(new URL("https://openrouter.ai/api/v1/videos/1"), { headers: auth }, { sameOrigin: true, transport: testTransport }), /FORBIDDEN_TARGET/);
     assert.ok(!seen.some((s) => s.url.startsWith("https://evil.example")), "a lekérdezés nem megy idegen originre");
   } finally {
     globalThis.fetch = realFetch;
@@ -685,4 +686,30 @@ test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határide
   await assert.rejects(res.arrayBuffer());
   assert.ok(Date.now() - started < 2000, `az elakadt törzs nem tartja fel (${Date.now() - started} ms)`);
   assert.ok(destroyed >= 1, "a kapcsolat lezárul");
+});
+
+test("szolgáltatói letöltési hiba: a hibaüzenet és a napló strukturált kódot és legfeljebb hostot tartalmaz, a query értékét nem (6. vak kör L4)", async () => {
+  const SECRET = "TITOK-QUERY-123";
+  const transport: ProviderTransport = {
+    lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+    // Location nélküli átirányítás: a közös út hibaüzenete a teljes URL-t tartalmazná.
+    request: async () => toRaw(new Response(null, { status: 302 })),
+  };
+  const error = await safeProviderFetch(new URL(`https://cdn.example/v.mp4?token=${SECRET}`), { headers: {} }, { sameOrigin: false, transport }).then(() => null, (e: unknown) => e as Error);
+  assert.ok(error, "a hívás hibával zárul");
+  assert.equal(error.message.includes(SECRET), false, `a query értéke nincs a hibaüzenetben: ${error.message}`);
+  assert.match(error.message, /cdn\.example/);
+  assert.match(error.message, /\b[A-Z_]{4,}\b/, "strukturált hibakód");
+  // A teljes úton (beküldés → letöltés) a napló sem tartalmazza.
+  const realFetch = globalThis.fetch, realWarn = logger.warn;
+  const logged: string[] = [];
+  logger.warn = ((...args: unknown[]) => { logged.push(args.map(String).join(" ")); }) as typeof logger.warn;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ status: "completed", polling_url: "/api/v1/videos/1", unsigned_urls: [`https://cdn.example/v.mp4?token=${SECRET}`] }), { status: 200 })) as typeof fetch;
+  try {
+    assert.equal(await clipProviders({ openRouter: "k" }, transport).video!({ bytes: Buffer.from("x"), mime: "image/jpeg" }, "p", 5), null);
+  } finally {
+    globalThis.fetch = realFetch; logger.warn = realWarn;
+  }
+  assert.ok(logged.length > 0, "a letöltési hiba naplózódik");
+  assert.equal(logged.some((line) => line.includes(SECRET)), false, `a query értéke nincs a naplóban: ${logged.join(" | ")}`);
 });
