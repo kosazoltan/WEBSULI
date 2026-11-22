@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault, sendingPartialWho, setLearnerResolveFault, setOwnerCheckFault } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault, sendingPartialWho, setLearnerResolveFault, setOwnerCheckFault, setFinalMarkerFault } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -56,6 +56,9 @@ let close = () => {};
 let ipCounter = 0;
 const freshIp = () => { ipCounter++; return `10.77.${Math.floor(ipCounter / 250)}.${(ipCounter % 250) + 1}`; };
 const post = (body: object, ip = freshIp(), user?: string) => fetch(`${base}/api/lessons/${LESSON}/results`, { method: "POST",
+  headers: { "content-type": "application/json", [PROXY_SECRET_HEADER]: PROXY_SECRET, "x-forwarded-for": ip, ...(user ? { "x-test-user": user } : {}) }, body: JSON.stringify(body) });
+/** R51: a kör kilét-rögzítő kérése (az első válasznál). */
+const postClaim = (body: object, ip = freshIp(), user?: string) => fetch(`${base}/api/lessons/${LESSON}/results/claim`, { method: "POST",
   headers: { "content-type": "application/json", [PROXY_SECRET_HEADER]: PROXY_SECRET, "x-forwarded-for": ip, ...(user ? { "x-test-user": user } : {}) }, body: JSON.stringify(body) });
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const waitFor = async (pred: () => boolean, ms = 4000) => { for (const end = Date.now() + ms; Date.now() < end && !pred();) await sleep(20); return pred(); };
@@ -492,6 +495,8 @@ test("R22 / L4: párhuzamos pillanatképek — a vendég kérése az utolsó vá
   setPartialIntakeHook(async who => { if (who === "guest:fp-l4-guest") { guestParked = true; await parked; } });
   try {
     clearPendingPartials();
+    // R51 (dokumentált spec-változás): a kör kilétét a szerver az első válasznál rögzíti — itt az igazolt tanuló az első rögzítő.
+    assert.equal((await postClaim({ kind: "quiz", roundId: "round-l4-race", claim: true }, freshIp(), "u-l4")).status, 202);
     const guestRequest = post({ kind: "quiz", roundId: "round-l4-race", picks: picks(4), partial: true, fingerprint: "fp-l4-guest" });
     assert.ok(await waitFor(() => guestParked, 3000), "a vendég kérése az utolsó várakozás után áll");
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-l4-race", picks: picks(2), partial: true }, freshIp(), "u-l4")).json(), { queued: true, partial: true });
@@ -800,4 +805,54 @@ test("R49 / L3 (c): a végleges jelzősor már megvan, más kilét ismétel, a t
     await sleep(500);
     assert.equal(sent.length, 2);
   } finally { setOwnerCheckFault(null); }
+});
+
+/* Mélyebb vak kör (13b3755e, 2026-11-22) — tulajdonosi döntés: „Szerver rögzíti a kilétet”, terv R51. */
+const finalMailsOf = (roundId: string, who: string) => { const keys = RECIPIENTS.map(to => resultIdempotencyKey(LESSON, "quiz", roundKeyOf(who, "quiz", roundId), to)); return sent.filter(mail => keys.includes(mail.key)); };
+
+test("R51 / L1: A → B adja az első választ (másik fülön belépve) → A küld friss A-CSRF-fel és A címkéjével → az eredmény NEM megy A nevére", async () => {
+  reset();
+  // 1. Rögzítő kérés nélkül: az ELSŐ beérkező kérés (B pillanatképe) rögzít; A végleges beküldése ugyanígy nem A nevére megy.
+  const previousDelay = setPartialDelay(60_000);
+  try {
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r51-first", picks: picks(2), partial: true, subject: resultSubjectOf("u-r51-b") }, freshIp(), "u-r51-b")).json(), { queued: true, partial: true });
+    assert.equal((await post({ kind: "quiz", roundId: "round-r51-first", picks: picks(5), fingerprint: "fp-r51b", subject: resultSubjectOf("u-r51-a") }, freshIp(), "u-r51-a")).status, 202);
+    assert.ok(await waitFor(() => sent.length >= 2));
+    assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló")), "az első kérés B-t rögzítette: A nem kapja meg");
+  } finally { clearPendingPartials(); setPartialDelay(previousDelay); }
+  reset();
+  // 2. A kör első válaszánál a szerver a SAJÁT munkamenetéből rögzít (itt: B).
+  assert.equal((await postClaim({ kind: "quiz", roundId: "round-r51-claim", claim: true }, freshIp(), "u-r51-b")).status, 202, "kilét-rögzítés az első válasznál");
+  const late = await post({ kind: "quiz", roundId: "round-r51-claim", picks: picks(5), fingerprint: "fp-r51", subject: resultSubjectOf("u-r51-a") }, freshIp(), "u-r51-a");
+  assert.equal(late.status, 202);
+  assert.ok(await waitFor(() => sent.filter(mail => mail.subject.includes("Kvíz")).length >= 2), "a végleges levél kiment");
+  assert.equal(finalMailsOf("round-r51-claim", "u-r51-a").length, 0, "nem A kulcsán / nevén");
+  assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")), "kilét nélkül (a rögzített B nem igazolható az A munkamenetből)");
+  // 3. Kontroll: A rögzít és A küld → A neve.
+  reset();
+  assert.equal((await postClaim({ kind: "quiz", roundId: "round-r51-same", claim: true }, freshIp(), "u-r51-a")).status, 202);
+  assert.equal((await post({ kind: "quiz", roundId: "round-r51-same", picks: picks(5), subject: resultSubjectOf("u-r51-a") }, freshIp(), "u-r51-a")).status, 202);
+  assert.ok(await waitFor(() => sent.length >= 2));
+  assert.ok(sent.every(mail => mail.html.includes("Bejelentkezett tanuló")), "egyező rögzítésnél a fiók neve");
+});
+
+test("R51 / L2: meglévő végleges jelző mellett a TTL-frissítés hibája nem kerüli meg a tulajdonos-ellenőrzést; a jelzősor-írás hibája 503", async () => {
+  reset();
+  const body = { kind: "quiz", roundId: "round-r51-ttl", picks: picks(5), fingerprint: "fp-r51-ttl" };
+  let stage: "insert" | "ttl" | null = null;
+  setFinalMarkerFault(current => { if (current === stage) { stage = null; throw Object.assign(new Error("canceling statement due to statement timeout"), { code: "57014" }); } });
+  try {
+    assert.equal((await post(body)).status, 202);
+    assert.ok(await waitFor(() => sent.length === 2), "az első (vendég) levél kiment");
+    stage = "ttl";
+    const again = await post(body, freshIp(), "u-r51-other");
+    assert.deepEqual([again.status, await again.json()], [202, { queued: false, duplicate: true }], "a TTL-frissítés hibája után is duplikátum");
+    await sleep(800);
+    assert.equal(sent.length, 2, "nincs második levél");
+    stage = "insert";
+    const unprovable = await post({ ...body, roundId: "round-r51-insert" });
+    assert.equal(unprovable.status, 503, "a jelzősor állapota nem bizonyítható: 503 a 202 előtt");
+    await sleep(500);
+    assert.equal(sent.length, 2);
+  } finally { setFinalMarkerFault(null); }
 });

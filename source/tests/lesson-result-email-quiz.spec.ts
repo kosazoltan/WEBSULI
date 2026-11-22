@@ -824,7 +824,8 @@ test("R37 / L4: a 202-es fejlécek után megakadó választest az időkorláton 
     const originalFetch = window.fetch.bind(window);
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-      if (url.includes("/api/lessons/lesson-q/results") && init?.method === "POST" && typeof init.body === "string" && !(JSON.parse(init.body) as { partial?: boolean }).partial) {
+      // R51: csak a végleges eredmény-POST (a `…/results/claim` kilét-rögzítő kérés nem az).
+      if (/\/api\/lessons\/lesson-q\/results$/.test(url) && init?.method === "POST" && typeof init.body === "string" && !(JSON.parse(init.body) as { partial?: boolean }).partial) {
         state.started++;
         const signal = init.signal;
         const stream = new ReadableStream<Uint8Array>({ start(controller) {
@@ -1188,4 +1189,73 @@ test("Leltár K16: két fül ugyanazon a körön — az első fülön A rögzül
   expect(finalsOf(posts2)[0].body.learner, "a kör A-hoz rögzült: B párosításával nem megy").toBeUndefined();
   expect(finalsOf(posts)).toHaveLength(0);
   await second.close();
+});
+
+/* Mélyebb vak kör (13b3755e, 2026-11-22) — „Szerver rögzíti a kilétet”, terv R51 (+ L3, L5). */
+async function claimsOf(page: Page) {
+  const claims: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results/claim", route => { claims.push(route.request().postDataJSON() as Record<string, unknown>); return route.fulfill({ status: 202, json: { claimed: true } }); });
+  return claims;
+}
+
+test("R51: a kör ELSŐ válaszánál a kliens kilét-rögzítő kérést küld (a szerver a saját munkamenetéből rögzít); körönként egyszer", async ({ page }) => {
+  await page.addInitScript(token => { localStorage.setItem("websuli.learnerToken", token); }, LEARNER_A);
+  await mockWith(page);
+  const claims = await claimsOf(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  await page.waitForTimeout(800);
+  expect(claims, "válasz előtt nincs rögzítés").toHaveLength(0);
+  await quiz.nth(0).locator("button.lesson-option").first().click();
+  await expect.poll(() => claims.length, { message: "az első válasznál rögzít" }).toBe(1);
+  expect(claims[0].claim).toBe(true);
+  expect(claims[0].kind).toBe("quiz");
+  expect(String(claims[0].roundId)).toMatch(/^round-/);
+  expect(claims[0].learner, "a párosítás igazolását a szerver végzi a tokenből").toBe(LEARNER_A);
+  expect(claims[0].subject, "a kliens fiókcímkéje nem dönt kilétet").toBeUndefined();
+  await quiz.nth(1).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  expect(claims, "körönként egyszer").toHaveLength(1);
+});
+
+test("R51 / L5: a már elküldött kör újratöltéskor nem kap kilét-rekordot és nem küld kilét-rögzítést", async ({ page }) => {
+  const posts = await mockWith(page);
+  const claims = await claimsOf(page);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await answerAll(page);
+  await expect.poll(() => finalsOf(posts).length).toBe(1);
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.includes(":owner:")).length)).toBe(0);
+  const claimsBefore = claims.length;
+  await openQuiz(page); // újratöltés: a lezárt (elküldött) kör helyreáll
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes(":owner:"))), "nincs új kilét-rekord").toStrictEqual([]);
+  expect(claims.length, "nincs új kilét-rögzítés").toBe(claimsBefore);
+  expect(finalsOf(posts)).toHaveLength(1);
+});
+
+test("R51 / L3: a korábbi (kisebb) pillanatkép késői 202-je nem tekeri vissza a mentett pillanatkép-számlálót", async ({ page }) => {
+  await mockWith(page);
+  let held: import("@playwright/test").Route | null = null;
+  let partials = 0;
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) return route.fulfill({ status: 202, json: { queued: true } });
+    partials++;
+    if (partials === 1) { held = route; return; } // az egyválaszos pillanatkép válasza késik
+    return route.fulfill({ status: 202, json: { queued: true, partial: true } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  await quiz.nth(0).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await hide(page);
+  await expect.poll(() => held !== null).toBe(true);
+  await quiz.nth(1).locator("button.lesson-option").first().click();
+  await hide(page);
+  await expect.poll(() => partials).toBe(2);
+  const stored = () => page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.includes(":quiz:partial:")).map(([, value]) => value));
+  await expect.poll(stored).toStrictEqual(["2"]);
+  await held!.fulfill({ status: 202, json: { queued: true, partial: true } });
+  await page.waitForTimeout(800);
+  expect(await stored(), "a késői egyválaszos 202 nem írja vissza 1-re").toStrictEqual(["2"]);
 });

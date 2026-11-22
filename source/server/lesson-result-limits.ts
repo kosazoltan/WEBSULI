@@ -24,8 +24,10 @@ export function resetPartialLimiter(): void { void partialLimiterStore.resetAll(
 export const partialLimiter = rateLimit({ store: partialLimiterStore, keyGenerator: clientIpKeyGenerator, windowMs: RESULT_RATE_LIMIT.windowMs, limit: RESULT_RATE_LIMIT.partial, standardHeaders: true, legacyHeaders: false, message,
   skip: req => !isPartialRequest(req) });
 
+/** R51: a kör kilét-rögzítő kérésének saját kerete (körönként egy kérés; ugyanaz az osztályméret, mint a két eredménykeret). */
+export const claimLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: RESULT_RATE_LIMIT.windowMs, limit: RESULT_RATE_LIMIT.partial, standardHeaders: true, legacyHeaders: false, message });
 /** R46: a lecke eredmény-POST útvonala a `/api/lessons` csatolási ponthoz képest (a router: `/:lessonId/results`). */
-const RESULT_POST_PATH = /^\/[A-Za-z0-9_-]{1,64}\/results$/;
+const RESULT_POST_PATH = /^\/[A-Za-z0-9_-]{1,64}\/results(\/claim)?$/;
 export const isResultPost = (req: Request) => req.method === "POST" && RESULT_POST_PATH.test(req.path);
 /**
  * A `/api/lessons` alatti publikus írások közös kerete (a `server/index.ts` szereli fel a `publicWriteLimiter`-rel). A biztonságos

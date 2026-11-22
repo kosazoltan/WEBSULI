@@ -24,6 +24,11 @@ export const resultRequestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner, startedAt, lastAnsweredAt, clientNow, subject, partial: z.boolean().optional() }).strict(),
 ]);
 export type ResultRequest = z.infer<typeof resultRequestSchema>;
+/**
+ * Terv R51 (tulajdonosi döntés 2026-11-22, „Szerver rögzíti a kilétet”): a kör kilét-rögzítő kérése az első válasznál. Kilét-mezőt (fiókcímke)
+ * nem visz: a szerver a saját munkamenetéből és a párosító token általa ellenőrzött állapotából rögzít.
+ */
+export const roundClaimSchema = z.object({ kind: z.enum(["tasks", "quiz"]), roundId, claim: z.literal(true), fingerprint: z.string().max(80).optional(), learner }).strict();
 
 type OpenTask = Parameters<typeof evaluateOpenAnswer>[1] & { id: string; q: string };
 type QuizItem = { id: string; question: string; options: string[]; correctIndex: number };

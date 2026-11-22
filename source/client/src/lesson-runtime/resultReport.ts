@@ -75,6 +75,24 @@ function ownerLearner(owner: Pick<RoundOwner, "learnerTag">): string | undefined
   return token && owner.learnerTag !== null && learnerTagOf(token) === owner.learnerTag ? token : undefined;
 }
 const ownerKeyOf = (storageKey: string, kind: string, roundId: string) => `${storageKey}:${kind}:owner:${roundId}`;
+/**
+ * Terv R51 (tulajdonosi döntés 2026-11-22, „Szerver rögzíti a kilétet”): a kör ELSŐ tevékenységekor a kliens kilét-rögzítő kérést küld; a
+ * SZERVER a saját munkamenetéből (fiók) és a párosító token általa ellenőrzött állapotából rögzíti a kör kilétét, és minden későbbi
+ * beküldést ehhez vet össze. A kliens fiókcímkéje nem megy (nem dönt kilétet). Körönként egyszer dokumentumonként; sikertelenségnél a
+ * szerver az első beérkező kérésnél rögzít. Régi (jelzés nélküli) szervernek nem megy.
+ */
+const claimedHere = new Set<string>();
+function claimRound(lessonId: string, kind: "tasks" | "quiz", roundId: string, owner: RoundOwner): void {
+  const id = `${lessonId}|${kind}|${roundId}`;
+  if (claimedHere.has(id)) return;
+  claimedHere.add(id);
+  void ensureResultApi().then(capable => {
+    if (!capable) return;
+    const learner = ownerLearner(owner);
+    const fingerprint = peekFingerprint();
+    return apiRequest("POST", `/api/lessons/${lessonId}/results/claim`, { kind, roundId, claim: true, ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) }, { retries: 0 });
+  }).catch(() => { /* csendes: a szerver az első beérkező kérésnél rögzít */ });
+}
 /** Kísérletek laponként (memóriában: a kimerült kör a következő oldalbetöltéskor új kísérleteket kap). */
 const outboxAttempts = new Map<string, { attempts: number; nextAt: number }>();
 const outboxInFlight = new Set<string>();
@@ -189,7 +207,11 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
   const seenFresh = useRef(new Set<string>());
   if (!roundActive) seenFresh.current.add(ownedRoundId);
   useEffect(() => {
-    if (lessonId && roundActive) bindRoundOwner(ownerKeyOf(storageKey, kind, ownedRoundId), seenFresh.current.has(ownedRoundId));
+    if (!lessonId || !roundActive) return;
+    // R51 / L5: a már elküldött körhöz nem keletkezik kilét-rekord és kilét-rögzítés (újratöltéskor sem).
+    try { if (localStorage.getItem(`${storageKey}:${kind}:sent:${ownedRoundId}`)) return; } catch { /* privát mód: a szerver egyedi kulcsa véd */ }
+    const owner = bindRoundOwner(ownerKeyOf(storageKey, kind, ownedRoundId), seenFresh.current.has(ownedRoundId));
+    claimRound(lessonId, kind, ownedRoundId, owner);
   }, [lessonId, kind, storageKey, ownedRoundId, roundActive]);
   useEffect(() => {
     // Spec 2026-11-17-eredmeny-email-kviz: a helyi kvíz kérdésenként azonnal visszajelez, a lezáró gombot sokan meg sem nyomják — a
@@ -270,7 +292,8 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         if (!accepted) return; // hálózati hiba / 429 / 5xx: nem rögzül, a következő alkalommal újra megy
         if (state.sent?.roundId !== roundId || state.sent.count < count) state.sent = mark;
         // R48 (9. vak kör L4): a közben véglegesített kör késői 202-je nem írja vissza a részleges jelzőt (R8 takarítása idempotens).
-        try { if (!localStorage.getItem(`${storageKey}:${kind}:sent:${roundId}`)) localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet állapota */ }
+        // R51 / L3: körönként a legnagyobb elfogadott érték marad (a korábbi, kisebb pillanatkép késői 202-je nem tekeri vissza).
+        try { if (!localStorage.getItem(`${storageKey}:${kind}:sent:${roundId}`) && count > (Number(localStorage.getItem(key)) || 0)) localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet állapota */ }
       });
     };
     snapshotRef.current = snapshot;
