@@ -400,6 +400,9 @@ let gateCheckHook: ((lockKey: string) => Promise<void>) | null = null;
 let partialScheduleHook: ((who: string) => Promise<void>) | null = null;
 let attributionFault: (() => void) | null = null;
 let finalClaimFault: (() => void) | null = null;
+let learnerResolveFault: (() => void) | null = null;
+/** Teszthez (R47 / L3): hibainjektálás a párosítás feloldása elé (átmeneti DB-hiba utánzása); `null` kikapcsolja. */
+export function setLearnerResolveFault(fault: (() => void) | null): void { learnerResolveFault = fault; }
 /** Teszthez (R42): hibainjektálás a végleges jelzősor rögzítése UTÁN, a háttérküldés és a 202 ELŐTT (megszakadt kérés); `null` kikapcsolja. */
 export function setFinalClaimFault(fault: (() => void) | null): void { finalClaimFault = fault; }
 /** Teszthez (R36): a pillanatkép-felvételben a „már kiment” lekérdezés UTÁN hívódik; `null` kikapcsolja. */
@@ -500,7 +503,16 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   const userId = body.subject !== undefined && body.subject !== resultSubjectOf(sessionUserId) ? undefined : sessionUserId;
   // Tanulói profil (S2): a párosított eszköz tanulója (ellenőrzött token). Átfogó review: bejelentkezve is a tanuló naplójába kerül
   // (mint a régi anyagnál); a levél neve bejelentkezve a fiók neve marad.
-  const paired = body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
+  // Terv R47 (9. vak kör L3): az érvénytelen / visszavont token `null` (névtelen) — a feloldás ÁTMENETI hibája viszont nem az: ekkor a
+  // kérés nem rögzül vendégként (se várakozó, se jelzősor), hanem újrapróbálható 503-at kap (a kliens nem jelöli elküldöttnek).
+  let paired: Awaited<ReturnType<typeof resolveLearner>> = null;
+  if (body.learner) {
+    try { learnerResolveFault?.(); paired = await resolveLearner(body.learner); }
+    catch (error) {
+      logger.error(`[LESSON-RESULT] a párosítás feloldása nem sikerült: ${errorClass(error)}`);
+      return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
+    }
+  }
   const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? (clientIpKey(req) || "?")}`);
   const lessonId = req.params.lessonId;
   const nameOf = () => (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId));

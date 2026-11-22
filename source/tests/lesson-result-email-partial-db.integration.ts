@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault, sendingPartialWho } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault, sendingPartialWho, setLearnerResolveFault } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -752,4 +752,32 @@ test("R45 / L3: leállítás közben befogadott pillanatkép az ürítéssel kim
     assert.equal(closed.status, 503);
     assert.equal(pendingPartialCount(), 0);
   } finally { sendDelayMs = 0; clearPendingPartials(); setPartialDelay(previousDelay); }
+});
+
+/* Gépi vak ellenőrzés, 9. kör (GPT-6.2 Sol, 87631382, 2026-11-22), terv R47 / L3. */
+test("R47 / L3: a párosítás feloldásának átmeneti DB-hibája nem vendégként rögzít — újrapróbálható 503, várakozó és jelzősor nélkül; utána a kérés rendben átmegy", async () => {
+  reset();
+  const previousDelay = setPartialDelay(60_000);
+  const learner = "tanulo-r47a.1.AAAAAAAAAAAAAAAAAAAAAA";
+  let left = 0;
+  setLearnerResolveFault(() => { if (left > 0) { left--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } });
+  try {
+    clearPendingPartials();
+    // Pillanatkép: átmeneti hiba → 503, nincs (vendég) várakozó.
+    left = 1;
+    const partial = await post({ kind: "quiz", roundId: "round-r47-partial", picks: picks(2), partial: true, learner, fingerprint: "fp-r47" });
+    assert.equal(partial.status, 503, "újrapróbálható hiba, nem elfogadó 202");
+    assert.equal(pendingPartialCount(), 0, "vendégként sem rögzült várakozó");
+    // Végleges: átmeneti hiba → 503, a tanulófüggetlen jelzősor sem íródik, levél nem megy.
+    left = 1;
+    const final = await post({ kind: "quiz", roundId: "round-r47-final", picks: picks(5), learner, fingerprint: "fp-r47" });
+    assert.equal(final.status, 503);
+    const markers = await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, LESSON), eq(lessonResultEmails.roundKey, roundKeyOf("final-round", "quiz", "round-r47-final"))));
+    assert.equal(markers.length, 0, "a jelzősor nem íródott");
+    await sleep(300);
+    assert.equal(sent.length, 0);
+    // A hiba elmúltával az ismétlés rendben fut (a teszt-tokenhez nincs párosított tanuló: vendég).
+    assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r47-final", picks: picks(5), learner, fingerprint: "fp-r47" })).json(), { queued: true });
+    assert.ok(await waitFor(() => sent.length === 2), "az ismételt végleges kérés levele kiment");
+  } finally { setLearnerResolveFault(null); clearPendingPartials(); setPartialDelay(previousDelay); }
 });
