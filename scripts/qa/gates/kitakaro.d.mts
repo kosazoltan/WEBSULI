@@ -1,4 +1,4 @@
-export type RangeKind = 'key' | 'dburl' | 'token' | 'aws' | 'aiza' | 'bearer' | 'email';
+export type RangeKind = 'key' | 'dburl' | 'token' | 'aws' | 'aiza' | 'bearer' | 'email' | 'run';
 export type Placeholders = Record<RangeKind, string>;
 export declare const WINDOW: number;
 export declare const PH_GATE: Placeholders;

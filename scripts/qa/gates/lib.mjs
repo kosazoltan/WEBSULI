@@ -195,7 +195,8 @@ export function createGate(name, { log = (s) => process.stdout.write(`${s}\n`), 
     results.push(item);
     print(`[${name}] ${item.status.padEnd(7)} ${stepName}${item.note ? ` — ${item.note}` : ''}`);
     if (r.detail && (r.status === STATUS.FAIL || r.status === STATUS.WARN || r.status === STATUS.EXCEPTION)) {
-      print(tail(r.detail, 40).split('\n').map((l) => `    | ${l}`).join('\n'));
+      // 4. vak kör L3: a takarás a nyers részleten fut, a `tail` és a soronkénti előtag ELŐTT (többsoros token se essen szét).
+      print(tail(redact(r.detail), 40).split('\n').map((l) => `    | ${l}`).join('\n'));
     }
     return item;
   };
@@ -232,7 +233,7 @@ export function createGate(name, { log = (s) => process.stdout.write(`${s}\n`), 
 /** Egy külső parancs lépés-eredménnyé alakítva (a kimenet csak bukáskor, szűrve). */
 export function cmdResult(r, okNote = '') {
   if (r.code === 0) return { status: STATUS.PASS, note: okNote };
-  const all = `${r.stdout}\n${r.stderr}`;
+  const all = redact(`${r.stdout}\n${r.stderr}`); // a nyers kimeneten, a „failing tests:” kivágása előtt (4. vak kör L3)
   // node:test: a bukások összefoglalója („✖ failing tests:”) a lényeg — azt mutatjuk, ne a futás utolsó, zöld sorait.
   const i = all.indexOf('failing tests:');
   return { status: STATUS.FAIL, note: `kilépési kód ${r.code}`, detail: i >= 0 ? all.slice(Math.max(0, i - 2)) : all };

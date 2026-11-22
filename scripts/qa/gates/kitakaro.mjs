@@ -15,21 +15,23 @@ export const WINDOW = 64 * 1024;
 // 3. vak kör (25de6739): a tokenminták szókarakterhez tapadva is (`field_sk-or-…`, `id_ghp_…_x`) illeszkednek — nincs `\b`
 // horgony; az általános `sk-` csak betű / szám után nem indul (`risk-…` ne legyen találat); `AKIA` mellett `ASIA`; a HTTP-séma
 // kis- és nagybetűs (`bearer`); a DB-URL `\`-nél megáll, hogy JSON-szövegben ne nyelje el a `\n` / `\"` escape-et (L5).
+// 4. vak kör (ac6447f5): a DB-URL külön pásztázóval megy (dburlRanges), a Bearer-minta a második `Bearer` szót nem fogyasztja el.
+// D7 (tulajdonos, 2026-11-22): a mintákon felül OSZTÁLYSZABÁLY — minden ≥ 20 karakteres, betűt ÉS számot is tartalmazó
+// token-futás (runRanges) helyőrzőt kap, formától függetlenül.
 const PATTERNS = [
-  ['dburl', /postgres(?:ql)?:\/\/[^\s"'`<>\\]+/gi],
   ['token', /(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{16}[A-Za-z0-9]*/g],
   ['token', /github_pat_[A-Za-z0-9_]{16}[A-Za-z0-9_]*/g],
   ['token', /sk-(?:ant|or|proj)-[A-Za-z0-9_-]+/g],
   ['token', /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{16}[A-Za-z0-9_-]*/g],
   ['aws', /(?:AKIA|ASIA)[0-9A-Z]{16}/g],
   ['aiza', /AIza[0-9A-Za-z_-]{20}[0-9A-Za-z_-]*/g],
-  ['bearer', /\bbearer\s+[A-Za-z0-9._~+/=-]+/gi],
+  ['bearer', /\bbearer\s+(?!bearer\b)[A-Za-z0-9._~+/=-]+/gi],
 ];
 
-/** Helyőrző-készletek (a régi szerződések). */
-export const PH_GATE = { key: '<token>', dburl: '<db-url>', token: '<token>', aws: '<aws-key>', aiza: '<token>', bearer: 'Bearer <token>', email: '<email>' };
+/** Helyőrző-készletek (a régi szerződések; `run` = az osztályszabály találata). */
+export const PH_GATE = { key: '<token>', dburl: '<db-url>', token: '<token>', aws: '<aws-key>', aiza: '<token>', bearer: 'Bearer <token>', email: '<email>', run: '<token>' };
 export const PH_EXTERNAL = { ...PH_GATE, key: '***', aiza: 'AIza***' };
-export const PH_DESIGN = { key: '[kulcs]', dburl: '[kulcs]', token: '[kulcs]', aws: '[kulcs]', aiza: '[kulcs]', bearer: 'Bearer [kulcs]', email: '[e-mail]' };
+export const PH_DESIGN = { key: '[kulcs]', dburl: '[kulcs]', token: '[kulcs]', aws: '[kulcs]', aiza: '[kulcs]', bearer: 'Bearer [kulcs]', email: '[e-mail]', run: '[kulcs]' };
 
 const isAlnum = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
 const isLetter = (c) => (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
@@ -134,17 +136,113 @@ function decodedView(t) {
   return { d: parts.join(''), map };
 }
 
-/** Tartományok egy szövegen (a `push` a forrás-pozíciókat kapja). */
-function scan(s, keys, push) {
+/** DB-URL határ: szóköz-jellegű karakter, idézőjel, `<`, `>`. */
+const isDbStop = (c) => c <= 32 || c === 34 || c === 39 || c === 96 || c === 60 || c === 62;
+const DB_SCHEME = /postgres(?:ql)?:\/\//gi;
+
+/**
+ * DB-URL (D7, 4. vak kör L2): a séma és a TELJES hitelesítő rész az első `@`-ig — backslash-sel együtt —, utána a gazda / út az
+ * első `\`-ig (JSON-ban a `\n` / `\"` escape nem kerül bele) vagy a határig. Ha nincs `@`, a séma után az első `\`-ig. Lineáris:
+ * a következő séma a tartomány vége után keresendő, és a `@` nélküli szakasz eredménye ugyanabban a szakaszban újrahasznosul.
+ */
+function dburlRanges(s, push) {
+  DB_SCHEME.lastIndex = 0;
+  let noAtUntil = -1; // eddig a pozícióig (a szakasz vége) biztosan nincs `@`
+  for (let m = DB_SCHEME.exec(s); m; m = DB_SCHEME.exec(s)) {
+    const st = m.index;
+    const from = st + m[0].length;
+    let at = -1;
+    let spanEnd = from;
+    if (from < noAtUntil) spanEnd = noAtUntil;
+    else {
+      while (spanEnd < s.length && !isDbStop(s.charCodeAt(spanEnd))) {
+        if (s.charCodeAt(spanEnd) === 64) { at = spanEnd; break; }
+        spanEnd++;
+      }
+      if (at < 0) noAtUntil = spanEnd;
+    }
+    let end = at >= 0 ? at + 1 : from;
+    while (end < s.length && !isDbStop(s.charCodeAt(end)) && s.charCodeAt(end) !== 92) end++;
+    push(st, end, 'dburl');
+    DB_SCHEME.lastIndex = Math.max(end, st + 1);
+  }
+}
+
+/** Az osztályszabály token-karaktere (D7): betű, szám és `+ / = _ - . ~ % \`. */
+const isRunChar = (c) => isAlnum(c) || c === 43 || c === 47 || c === 61 || c === 95 || c === 45 || c === 46 || c === 126
+  || c === 37 || c === 92;
+
+/**
+ * Osztályszabály (D7, tulajdonos, 2026-11-22): minden legalább 20 karakteres, betűt ÉS számot is tartalmazó token-futás → `run`.
+ * A futás egy sortörésen (`\n`, `\r\n`, `\r`) átnyúlik, ha a folytatás token-karakter; a szakaszokat (a sortörés nélkül) külön
+ * tartomány fedi, így a sorszerkezet megmarad. Nyers (escape-es) szövegben (`raw`) a JSON-escape egy egység: a `\uXXXX` egy
+ * karakternek számít (betű / szám a dekódolt érték szerint), a `\n` `\r` `\t` `\b` `\f` `\/` és `\\` folytatja a futást, de nem
+ * számít bele; a `\"` előtt a futás véget ér (az escape nem vágható ketté). Egyszer olvas: lineáris.
+ */
+function runRanges(s, push, raw) {
+  const n = s.length;
+  let i = 0;
+  while (i < n) {
+    if (!isRunChar(s.charCodeAt(i)) || (raw && s.charCodeAt(i) === 92 && s.charCodeAt(i + 1) === 34)) { i++; continue; }
+    const segs = [];
+    let segStart = i;
+    let count = 0;
+    let letter = false;
+    let digit = false;
+    let j = i;
+    for (;;) {
+      const c = j < n ? s.charCodeAt(j) : -1;
+      if (raw && c === 92) {
+        const e = s.charCodeAt(j + 1);
+        if (e === 34) break; // `\"`: a futás itt véget ér
+        if (e === 117 && j + 5 < n) {
+          let v = 0;
+          let ok = true;
+          for (let q = j + 2; q < j + 6; q++) { const h = hexVal(s.charCodeAt(q)); if (h < 0) { ok = false; break; } v = v * 16 + h; }
+          if (ok) {
+            if (isRunChar(v)) { count++; if (isLetter(v)) letter = true; else if (v >= 48 && v <= 57) digit = true; }
+            j += 6;
+            continue;
+          }
+        }
+        if (e === 110 || e === 114 || e === 116 || e === 98 || e === 102 || e === 47 || e === 92) { j += 2; continue; }
+        count++;
+        j++;
+        continue;
+      }
+      if (c >= 0 && isRunChar(c)) {
+        count++;
+        if (isLetter(c)) letter = true; else if (c >= 48 && c <= 57) digit = true;
+        j++;
+        continue;
+      }
+      let k = j;
+      if (c === 13 && s.charCodeAt(j + 1) === 10) k = j + 2; else if (c === 10 || c === 13) k = j + 1;
+      if (k > j && k < n && isRunChar(s.charCodeAt(k)) && !(raw && s.charCodeAt(k) === 92 && s.charCodeAt(k + 1) === 34)) {
+        segs.push(segStart, j);
+        segStart = k;
+        j = k;
+        continue;
+      }
+      break;
+    }
+    segs.push(segStart, j);
+    if (count >= 20 && letter && digit) for (let q = 0; q < segs.length; q += 2) if (segs[q + 1] > segs[q]) push(segs[q], segs[q + 1], 'run');
+    i = Math.max(j, i + 1);
+  }
+}
+
+/** A minták, a kulcs és a DB-URL egy szövegen (a `push` a szöveg pozícióit kapja). */
+function scanPatterns(s, keys, push) {
   for (const key of keys) keyRanges(s, key, push);
   for (const [kind, re] of PATTERNS) {
     re.lastIndex = 0;
     for (const m of s.matchAll(re)) push(m.index, m.index + m[0].length, kind);
   }
-  emailRanges(s, push);
+  dburlRanges(s, push);
 }
 
-const PRIO = { key: 0, dburl: 1, token: 2, aws: 3, aiza: 4, bearer: 5, email: 6 };
+const PRIO = { key: 0, dburl: 1, token: 2, aws: 3, aiza: 4, bearer: 5, email: 6, run: 7 };
 
 /**
  * Az érzékeny tartományok az eredeti szövegen, egyesítve: rendezett, diszjunkt `[{ s, e, kind }]`. A metsző tartományok egybe
@@ -154,9 +252,16 @@ export function findRanges(text, keys = [], before = Infinity) {
   const ks = keys.filter((k) => typeof k === 'string' && k.length > 0);
   const raw = [];
   // `before`: csak az ennél korábban kezdődő tartomány kerül tárolásra (a vágott kimenet eldobott farka nem foglal memóriát).
-  scan(text, ks, (s, e, kind) => { if (s < before) raw.push({ s, e, kind }); });
+  const direct = (s, e, kind) => { if (s < before) raw.push({ s, e, kind }); };
+  scanPatterns(text, ks, direct);
+  runRanges(text, direct, true);
   const v = decodedView(text);
-  if (v) scan(v.d, ks, (s, e, kind) => { const os = v.map[s]; if (os < before) raw.push({ s: os, e: v.map[e], kind }); });
+  if (v) {
+    const mapped = (s, e, kind) => { const os = v.map[s]; if (os < before) raw.push({ s: os, e: v.map[e], kind }); };
+    scanPatterns(v.d, ks, mapped);
+    runRanges(v.d, mapped, false);
+    emailRanges(v.d, mapped); // escape-es szövegben a cím a dekódolt nézetből (a nyers helyi rész escape-be nyúlhatna — L4)
+  } else emailRanges(text, direct);
   raw.sort((a, b) => a.s - b.s || b.e - a.e || PRIO[a.kind] - PRIO[b.kind]);
   const out = [];
   for (const r of raw) {
@@ -221,7 +326,15 @@ export function clipText(text, { keys = [], ph, max, stats }) {
   }
   const margin = Math.max(64, ...ks.map((k) => k.length));
   let end = Math.min(t.length, limit + 6 * margin + 1024);
-  while (end < t.length && (isSensitiveChar(t.charCodeAt(end)) || t.charCodeAt(end) === 92)) end++;
+  // A határon átnyúló token- / escape- / sortöréssel folytatódó futás végéig, de legfeljebb 4096 karakterrel tovább (4. vak kör
+  // L5: escape-sűrű szövegen se a teljes test). Az ennél hosszabb futás vágáspont előtti része a cutPoint futás-visszalépésével
+  // vagy a már az előtagban teljesülő osztályszabállyal esik ki.
+  const cap = Math.min(t.length, end + 4096);
+  while (end < cap) {
+    const c = t.charCodeAt(end);
+    if (isSensitiveChar(c) || c === 92 || ((c === 10 || c === 13) && isRunChar(t.charCodeAt(end + 1)))) end++;
+    else break;
+  }
   const ranges = findRanges(t.slice(0, end), ks, limit);
   if (stats) Object.assign(stats, { scanned: end, stored: ranges.length });
   return replaceRanges(t, ranges, ph, cutPoint(t, ranges, limit, margin)).slice(0, max);
