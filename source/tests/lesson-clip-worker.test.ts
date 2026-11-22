@@ -623,7 +623,7 @@ test("a lekérdezés JSON-válasza bájtkorlátos: a túl hosszú törzs olvasá
   assert.equal(await readLimitedText(new Response('{"status":"completed"}'), 64 * 1024), '{"status":"completed"}');
 });
 
-test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn beérő címre nem indul kérés (4. vak kör L2)", { timeout: 5000 }, async () => {
+test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn beérő címre nem indul kérés (4. vak kör L2)", { timeout: 5000 }, async (t) => {
   let sent = 0, resolveLookup!: (v: Array<{ address: string; family: number }>) => void;
   const transport: ProviderTransport = {
     lookup: () => new Promise((resolve) => { resolveLookup = resolve; }),
@@ -633,6 +633,8 @@ test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn 
   // véget ér, és a teszt „cancelledByParent” lesz (felhős munkamenetben mérve, 2026-11-22). Az életben tartó időzítő ezt kizárja;
   // a tesztszintű 5 s-os korlát miatt a megszakítást figyelmen kívül hagyó kód bukik, nem lóg.
   const keepAlive = setInterval(() => undefined, 1000);
+  // t.after: időtúllépéskor is lefut (a finally nem), így a lejárt teszt után a folyamat kilép, nem lóg (review V1).
+  t.after(() => clearInterval(keepAlive));
   try {
     const started = Date.now();
     await assert.rejects(safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(50) }, { sameOrigin: false, transport }));
@@ -683,7 +685,7 @@ test("I/O-leltár: minden szolgáltatói választörzs bájtkorlátos — a korl
   }
 });
 
-test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határideje megszakítja, a kapcsolat lezárul", { timeout: 5000 }, async () => {
+test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határideje megszakítja, a kapcsolat lezárul", { timeout: 5000 }, async (t) => {
   let destroyed = 0;
   const transport: ProviderTransport = {
     lookup: async () => [{ address: "93.184.216.34", family: 4 }],
@@ -691,6 +693,8 @@ test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határide
   };
   // Lásd a DNS-tesztet: az AbortSignal.timeout időzítője unref, az életben tartó időzítő nélkül a futás idő előtt véget érhet.
   const keepAlive = setInterval(() => undefined, 1000);
+  // t.after: időtúllépéskor is lefut (a finally nem), így a lejárt teszt után a folyamat kilép, nem lóg (review V1).
+  t.after(() => clearInterval(keepAlive));
   try {
     const started = Date.now();
     const res = await safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(100) }, { sameOrigin: false, transport });
