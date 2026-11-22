@@ -54,6 +54,4 @@ close_loop:            # a záró hurok gépi kapuja (docs/specs/2026-11-22-zaro
   no_new: "node scripts/qa/zaro-hurok.mjs nincs-uj --kind <trap,yaml,qmd,cogni,kanban>"
   hygiene: "node scripts/qa/zaro-hurok.mjs hygiene"           # csak riport; --apply csak a beolvasztott ágat / lezárt munkafát
   blind_convergence: "node scripts/qa/zaro-hurok.mjs konvergencia"   # új vak kör előtt; exit 1 = tilos új kör
-
-planned:               # TERVEZETT — még nincs ezen a fejen; a jelzett PR-ral érkezik, addig nem aktív lépés
-  - skill: "tervezett (feat/zaro-hurok-3): websuli-zaro-hurok skill és AGENTS.md-szakasz"
+  skill: .agents/skills/websuli-zaro-hurok/SKILL.md          # a hét lépés; AGENTS.md „Záró hurok (kötelező)” szakasza

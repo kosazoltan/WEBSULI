@@ -1121,16 +1121,19 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   `0645f48f` a `memory/notes/00-Index.md`-t a `memory/indexes/index.yml` bejegyzése nélkül hozta. A `source/tests/memory-index-guard.test.ts`
   („nincs indexeletlen élő memóriafájl”) a főágon bukott, és a C-61 miatt minden nyitott PR push-kapuja megállt.
 - **Gyökérok:** a közvetlen push kikerülte a `gate:stage`-et (az őr-teszteket), és az eszköz nem ismerte a repó memória-index szabályát.
-- **Szabály:** a főágra csak PR-on át (tulajdonosi döntés 2026-11-22: ágvédelem a main-en, a beállítás a tulajdonosé). Új
-  `memory/**/*.md` csak a `memory/indexes/index.yml` sorával együtt. Session elején, amíg az ágvédelem nincs bekapcsolva: `git log
-  origin/main` + a főág őr-tesztjeinek zöldje; PR nélküli commit okozta bukást kis PR-ral kell javítani (`fix/memoria-index-jegyzetek`, `ef757c11`).
-- **Gépi kényszerítés:** `source/tests/memory-index-guard.test.ts` (meglévő őr); a záró kapu a memória-rétegeket ellenőrzi (`scripts/qa/zaro-hurok.mjs`).
+- **Szabály:** a főágra csak PR-on át (AGENTS.md „Git”); a GitHub-ágvédelem bekapcsolása a tulajdonos beállítása. Új
+  `memory/**/*.md` csak a `memory/indexes/index.yml` sorával együtt. Session elején: `git log origin/main` + a főág őr-tesztjeinek
+  zöldje; PR nélküli commit okozta bukást kis PR-ral kell javítani (itt: #526, `34d58a4d`).
+- **Gépi kényszerítés:** `source/tests/memory-index-guard.test.ts` (meglévő őr); `source/tests/memory-layer-refs-guard.test.ts` (a
+  rétegek csak létező fájlra / parancsra hivatkozhatnak, a döntés-napló csak követett fájl:sor forrással); a záró kapu a rétegeket
+  ellenőrzi (`scripts/qa/zaro-hurok.mjs`).
 - Skill: `.agents/skills/websuli-zaro-hurok/SKILL.md` (2. lépés, jegyzet csak indexszel).
 
 ## C-ZH-2 — Nem konvergáló vak körök: leletenkénti foltozás helyett megközelítésváltás (2026-11-22)
 
-- **Tünet:** 2026-11-21/22-én 32 vak kör futott (a keret 60 USD-re emelve). A nagy PR-okon a blokkoló leletek száma körről körre nem
-  csökkent (a #521-et szűkíteni, a H0 futtatót két PR-ra bontani kellett), a kicsiken 1–2 kör alatt IGEN jött.
+- **Tünet:** 2026-11-21/22-én a nagy PR-okon a blokkoló leletek száma körről körre nem csökkent, a kicsiken 1–2 kör alatt IGEN jött.
+  Gépi mérés a közös bizonyítékokon (`docs/specs/2026-11-22-zaro-hurok-websuli.md` Állapotnapló): `fix/kitakaro-negyzetes-regex`
+  7 egymást követő NEM (blokkolók 2-3-2-3-3-4-2), `chore/vak-ellenor-deepseek` 4 NEM (1 → 1) — mindkettő TILOS új kör.
 - **Gyökérok:** leletenkénti foltozás — a javítás a jelentett példányt zárja, a hibaosztály többi előfordulását nem, és új felületet
   hoz, amelyen a következő kör új leletet talál; a nagy diff a vak ellenőrnek is több új felületet ad.
 - **Szabály (gépi megállás):** új vak kör ELŐTT `node scripts/qa/zaro-hurok.mjs konvergencia` (az ág fejeinek `blind-review-<fej>.json`
@@ -1139,6 +1142,6 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   (2) hibaosztály-leltár — a diff MINDEN előfordulása táblázatban, javítás közös segéddel; (3) PR-bontás ≤ ~400 sor diff;
   (4) internetes szakmai forrás (fórum, GitHub, dokumentáció); (5) tulajdonosi döntés űrlapon.
 - **Forrás:** Contrast Security, „When AI reviewers cannot agree”; arXiv 2603.16244 (több kör → kevesebb pontosság) — az orkesztrátor
-  olvasta, rögzítve a projektmemória `vak-kor-konvergencia` bejegyzésében. Mért alap: a 2026-11-21/22-i vak körök (docs/specs/2026-11-21-gepkoltoztetes-folytatas.md 10. fejezet).
+  olvasta, rögzítve a projektmemória `vak-kor-konvergencia` bejegyzésében.
 - **Gépi kényszerítés:** `scripts/qa/zaro-hurok.mjs konvergencia` (teszt: `scripts/qa/zaro-hurok.test.mjs`).
 - Skill: `.agents/skills/websuli-zaro-hurok/SKILL.md` („Vak kör előtt — konvergencia” és „Ismétlődő hibaosztály”).

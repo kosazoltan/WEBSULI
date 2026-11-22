@@ -43,4 +43,4 @@ repóban, az csak „tervezett” jelöléssel szerepel.
 
 Csapda → memóriák (YAML, QMD, Cogni; vektor: nem elérhető) → retró → tapasztalat-kanban → skill → ismétlődő hibaosztály → higiénia →
 tiszta fa. Kapu: `npm run zaro:check -- --since <ISO>` (`scripts/qa/zaro-hurok.mjs`; terv: `docs/specs/2026-11-22-zaro-hurok-websuli.md`).
-A hozzá tartozó skill tervezett: a feat/zaro-hurok-3 PR-ral érkezik.
+Skill: `.agents/skills/websuli-zaro-hurok/SKILL.md` (AGENTS.md „Záró hurok (kötelező)”).

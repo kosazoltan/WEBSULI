@@ -18,6 +18,8 @@ const LAYERS = [
   "memory/manifest.yaml",
   "memory/index.qmd",
   ...readdirSync(join(ROOT, "memory", ".cogni")).filter((f) => f.endsWith(".yaml")).map((f) => `memory/.cogni/${f}`),
+  // Záró hurok 3/3: a skill ugyanennek a hibaosztálynak van kitéve (vak kör L1 / L6).
+  ".agents/skills/websuli-zaro-hurok/SKILL.md",
 ];
 const PLANNED = /tervezett/i;
 const PATH_RE = /(?<![\w./~-])((?:source|scripts|docs|memory|\.agents|\.claude|\.github|\.hermes)\/[\w./-]*[\w-]\/?)/g;

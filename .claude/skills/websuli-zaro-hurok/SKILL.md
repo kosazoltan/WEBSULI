@@ -10,7 +10,8 @@ Terv: `docs/specs/2026-11-22-zaro-hurok-websuli.md` (D1–D14). A hurok teljesü
 ez a WEBSULI-rétegeket és -parancsokat rögzíti.
 
 > A `.hermes.md` végi `agentic-qa-kit:zaro-hurok` markeres blokk egy másik gép eszközéé — NE szerkeszd. A WEBSULI-ban a csapdafájl
-> **`docs/agent-csapdak.md`** (nincs `.hermes/projekt/TRAP.md`), a skillek helye `.agents/skills/` (forrás) ↔ `.claude/skills/` (tükör),
+> **`docs/agent-csapdak.md`** (a `.hermes/projekt/TRAP.md` a Hermes-eszköz táblája, nem a WEBSULI-csapdák helye), a skillek helye `.agents/skills/` (forrás); tükör a `.claude/skills/` alatt CSAK a `scripts/qa/gates/gates.config.json`
+> `mirroredSkills` listájának skilljeire,
 > a kapu `scripts/qa/zaro-hurok.mjs` (nem az agentic-qa-kit szkriptje).
 
 ## A hét lépés (egyik sem hagyható ki; ha egy rétegben nincs új, jelölővel rögzítsd)
@@ -57,7 +58,7 @@ Lépései: `csapda`, `csapda-sorszam`, `yaml`, `qmd`, `cogni` (változott vagy f
 
 ## Vak kör előtt — konvergencia (C-ZH-2)
 
-Új vak kör (`npm run gate:blind-review`) ELŐTT: `node scripts/qa/zaro-hurok.mjs konvergencia` (az aktuális ág fejeinek
+Új vak kör ELŐTT (a gépi vak ellenőr futtatójának ezen a fejen nincs npm-parancsa; a kört az orkesztrátor indítja): `node scripts/qa/zaro-hurok.mjs konvergencia` (az aktuális ág fejeinek
 `blind-review-<fej>.json` bizonyítékaiból; `--heads` / `--reports` is megadható). Exit 1 → TILOS új kör: a blokkolók száma nem
 csökkent szigorúan, vagy 3+ NEM jött egymás után. Ilyenkor megközelítésváltás: követelmény / invariáns egy mondatban →
 hibaosztály-leltár (a diff minden előfordulása táblázatban, közös segéddel) → PR-bontás ≤ ~400 sor → internetes szakmai forrás →
