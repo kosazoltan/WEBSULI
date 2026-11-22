@@ -1,78 +1,36 @@
-# Cogni-format döntés-napló: hosszan élő tulajdonosi döntések + érintett fájlok
-# Szabály: CSAK a repóban követett forrással igazolható döntés kerülhet ide — `source` = <fájl>:<sor>[-<sor>], ezen a fejen létező
-# fájlra és sorra (őr: source/tests/memory-layer-refs-guard.test.ts). A döntés szövege a forrásból szó szerint (idézve).
-# Projektmemóriából vagy chatből származó, a repóban nem rögzített döntés (különösen költési felhatalmazás) ide NEM kerül.
-# Új döntés a lista VÉGÉRE.
+# Cogni döntés-napló: CSAK a repóban követett forrással igazolt tulajdonosi döntés; bejegyzésenként egyedi id, a döntés szó
+# szerinti idézete (quote) és forrása (source = <követett fájl>:<sor>[-<sor>]). Projektmemóriából / chatből jövő döntés,
+# költési felhatalmazás NEM kerül ide. Új döntés a lista VÉGÉRE. Őr: source/tests/memory-layer-refs-guard.test.ts
 
 cogni:
   kind: decision_log
   name: websuli-decisions
-  generated: 2026-11-22
-
   decisions:
     - id: D-2026-09-05-01
-      date: 2026-09-05
-      title: "Aktív munkafázis-követés"
-      decision: |
-        „kiadott munkafázis futása alatt PASSZÍV VÁRAKOZÁS TILOS.”
-      source: "AGENTS.md:194-198"
-      files:
-        - AGENTS.md
+      date: "2026-09-05"
+      quote: "kiadott munkafázis futása alatt PASSZÍV VÁRAKOZÁS TILOS."
+      source: "AGENTS.md:194-197"
     - id: D-2026-09-09-01
-      date: 2026-09-09
-      title: "Háromfázisú munka"
-      decision: |
-        „Háromfázisú munka kötelező (tulajdonosi utasítás 2026-09-09): először terv (docs/specs/), utána mesterséges
-        intelligencia számára olvasható végrehajtási utasítás (*-vegrehajtas.md), majd a javítás / módosítás / bővítés.”
+      date: "2026-09-09"
+      quote: "először terv (docs/specs/), utána mesterséges intelligencia számára olvasható végrehajtási utasítás (*-vegrehajtas.md), majd a javítás / módosítás / bővítés."
       source: "AGENTS.md:12"
-      files:
-        - AGENTS.md
-        - docs/agent-haromfazisu-munka.md
-        - scripts/qa/three-phase-check.mjs
     - id: D-2026-11-01-01
-      date: 2026-11-01
-      title: "Befejezési mandátum"
-      decision: |
-        „Spec, végrehajtási utasítás, javítás, fejlesztés vagy implementáció félbehagyása tilos.”
+      date: "2026-11-01"
+      quote: "Spec, végrehajtási utasítás, javítás, fejlesztés vagy implementáció félbehagyása tilos."
       source: "AGENTS.md:123-125"
-      files:
-        - AGENTS.md
     - id: D-2026-11-03-01
-      date: 2026-11-03
-      title: "ARM64 + x64"
-      decision: |
-        „a program és a fejlesztői eszközlánc mindkét architektúrán fusson.”
-      source: "AGENTS.md:143-146"
-      files:
-        - AGENTS.md
+      date: "2026-11-03"
+      quote: "a program és a fejlesztői eszközlánc mindkét architektúrán fusson."
+      source: "AGENTS.md:143-144"
     - id: D-2026-11-17-01
-      date: 2026-11-17
-      title: "Minőségkapuk"
-      decision: |
-        „Először is bármilyen kibocsátás előtt végig futtasd a saját lint kaput. Másrészt pedig minden fejlesztés után
-        automatikusan egy független alügynök ellenőrizze az elkészült fejlesztést, hogy ne utólag derüljenek ki a hibák.”
+      date: "2026-11-17"
+      quote: "Először is bármilyen kibocsátás előtt végig futtasd a saját lint kaput. Másrészt pedig minden fejlesztés után automatikusan egy független alügynök ellenőrizze az elkészült fejlesztést, hogy ne utólag derüljenek ki a hibák."
       source: "AGENTS.md:152-155"
-      files:
-        - AGENTS.md
-        - docs/minosegkapuk.md
-        - scripts/qa/gates/
     - id: D-2026-11-22-01
-      date: 2026-11-22
-      title: "Záró hurok minden elvégzett feladat után, saját WEBSULI-változatban"
-      decision: |
-        „minden elvégzett feladat után … trap, QMD, YAML, Cogni, vektoros és kanban memóriák … higiénia … tiszta fával várni a
-        következő feladatot”, és „a több gépen futó záró folyamatokból meríts ötleteket, és alakítsd ki a saját WEBSULI-változatot”.
-      source: "docs/specs/2026-11-22-zaro-hurok-websuli.md:3-5"
-      files:
-        - docs/specs/2026-11-22-zaro-hurok-websuli.md
-        - scripts/qa/zaro-hurok.mjs
+      date: "2026-11-22"
+      quote: "minden elvégzett feladat után … trap, QMD, YAML, Cogni, vektoros és kanban memóriák … higiénia … tiszta fával várni a következő feladatot"
+      source: "docs/specs/2026-11-22-zaro-hurok-websuli.md:3-4"
     - id: D-2026-11-22-02
-      date: 2026-11-22
-      title: "Ugyanazt a hibát tilos ugyanúgy újra elkövetni — vak körök gépi megállási szabálya"
-      decision: |
-        tulajdonosi „törvény”: ugyanazt a hibát tilos ugyanúgy újra elkövetni; új vak kör csak szigorúan csökkenő blokkolószámmal és
-        legfeljebb 2 egymást követő NEM után indulhat, különben megközelítésváltás.
-      source: "docs/specs/2026-11-22-zaro-hurok-websuli.md:82-89"
-      files:
-        - docs/specs/2026-11-22-zaro-hurok-websuli.md
-        - scripts/qa/zaro-hurok.mjs
+      date: "2026-11-22"
+      quote: "ugyanazt a hibát tilos ugyanúgy újra elkövetni"
+      source: "docs/specs/2026-11-22-zaro-hurok-websuli.md:82-83"
