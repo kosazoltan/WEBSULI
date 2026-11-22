@@ -5,7 +5,7 @@
  *   node --import tsx scripts/vocab-bank-generate.ts generate --lang <l> --step <0|1> --count <n> --out <jelölt.json> \
  *        --ledger <napló.jsonl> --budget-usd <x> [--model <m>] [--max-tokens <n>] [--exclude-from <a.json,b.json>]
  *   node --import tsx scripts/vocab-bank-generate.ts apply --lang <l> --candidates <a.json,b.json> --take0 <n> --take1 <n> \
- *        --ids-out <id-lista.json> [--dry-run]
+ *        --ids-out <id-lista.json> [--deny <termek.json>] [--dry-run]
  *   node --import tsx scripts/vocab-bank-generate.ts solve --questions <blind.json> --out <answers.json> \
  *        --ledger <napló.jsonl> --budget-usd <x> [--model <m>]
  *
@@ -17,7 +17,8 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { VOCAB_TOPICS } from "../client/src/data/vocabBank/topics";
-import { BLOCKED_TERMS, normalizeTerm, vocabBankProblems } from "../client/src/data/vocabBank/validate";
+import { BLOCKED_TERMS, findFormInText, normalizeTerm, vocabBankProblems } from "../client/src/data/vocabBank/validate";
+import { meaningKeys } from "../client/src/game-engine/vocab/questionGenerator";
 import type { VocabEntry, VocabLang, VocabPos, VocabTopic } from "../client/src/data/vocabBank/types";
 import { VOCAB_EN } from "../client/src/data/vocabBank/vocab-en";
 import { VOCAB_DE } from "../client/src/data/vocabBank/vocab-de";
@@ -73,6 +74,16 @@ export function existingKeys(lang: VocabLang): Set<string> {
   return keys;
 }
 
+/**
+ * Tartalmatlan bejegyzés (a `tests/vocab-bank-cognates.test.ts` szabálya): a `hu` egyik jelentés-kulcsa betűre azonos a
+ * névelő nélküli term-mel, vagy a `hu` szóhatáron tartalmazza a (≥ 3 betűs) term-et — ekkor a kérdés tudás nélkül megoldható.
+ */
+export function isContentless(term: string, hu: string): boolean {
+  const b = term.normalize("NFC").toLowerCase().replace(/^(der|die|das|le|la|les|l'|l’)\s*/iu, "").replace(/[?!.…]+$/u, "").trim();
+  if (meaningKeys(hu).some((k) => k === b)) return true;
+  return b.length >= 3 && Boolean(findFormInText(b, hu) || findFormInText(term, hu));
+}
+
 const POS_WORD = new Set<VocabPos>(["noun", "verb", "adj", "adv", "prep", "pron", "conj", "num", "interj"]);
 
 /** Jelölt → bejegyzés (azonosító nélkül) vagy elutasítási ok. */
@@ -84,6 +95,7 @@ export function screenCandidate(c: Candidate, lang: VocabLang, taken: Set<string
   if (!key || /\s/.test(key)) return { reason: "nem egyes szó" };
   if (taken.has(key)) return { reason: "duplikátum" };
   if (BLOCKED_TERMS[lang].some((b) => normalizeTerm(b) === key)) return { reason: "tiltott" };
+  if (isContentless(c.term, c.hu)) return { reason: "tartalmatlan" };
   const entry: Omit<VocabEntry, "id"> = {
     term: c.term.trim(), hu: c.hu.trim(), kind: "word", level: 0, topic: c.topic as VocabTopic, pos: c.pos as VocabPos,
     example: c.example?.trim() ?? "", exampleHu: c.exampleHu?.trim() ?? "",
@@ -274,6 +286,8 @@ async function main(): Promise<void> {
     const lang = langOf(a);
     const want = [Number(need(a, "take0")), Number(need(a, "take1"))];
     const taken = existingKeys(lang);
+    // Elbírált, elvetett termek (vak megoldó után törölve): a tartalék-jelöltekből se kerüljenek vissza.
+    if (typeof a.deny === "string") for (const t of JSON.parse(readFileSync(a.deny, "utf8")) as string[]) taken.add(dedupKey(t));
     const picked: Array<Omit<VocabEntry, "id">> = [];
     const got = [0, 0];
     const rejected: Record<string, number> = {};

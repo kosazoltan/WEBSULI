@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { VOCAB_DE } from "../client/src/data/vocabBank/vocab-de";
-import { dedupKey, entryLine, existingKeys, ledgerTotal, nextIds, screenCandidate, stepOf, worstCaseCost, wouldExceed } from "../scripts/vocab-bank-generate";
+import { dedupKey, entryLine, existingKeys, isContentless, ledgerTotal, nextIds, screenCandidate, stepOf, worstCaseCost, wouldExceed } from "../scripts/vocab-bank-generate";
 
 /** Szólétra S3 — keretes szóbank-generátor tiszta részei (hálózat nélkül). Végrehajtás: 2026-11-22-szoletra-szintezes-vegrehajtas.md 10. */
 
@@ -51,4 +51,13 @@ test("azonosító: a téma következő sorszáma; a sor visszaolvasható alak", 
   assert.equal(next("animals"), `de0-animals-${String(max + 2).padStart(3, "0")}`);
   const line = entryLine({ id, term: "die Ziege", hu: "kecske", kind: "word", level: 0, topic: "animals", pos: "noun", example: "Die Ziege frisst Gras.", exampleHu: "A kecske füvet eszik." });
   assert.match(line, /^ {2}\{ id: "de0-animals-\d{3}", term: "die Ziege", .* \},$/);
+});
+
+test("tartalmatlan jelölt elutasítva (a cognates-teszt szabálya): der Park = park, le mail ⊂ e-mail; das Auto = autó átmegy", () => {
+  assert.equal(isContentless("der Park", "park"), true);
+  assert.equal(isContentless("le mail", "e-mail"), true);
+  assert.equal(isContentless("steak", "szelet hús, steak"), true);
+  assert.equal(isContentless("das Auto", "autó"), false);
+  const base = { topic: "food", pos: "noun", example: "Die Pizza ist heiß.", exampleHu: "A pizza forró." };
+  assert.equal(screenCandidate({ ...base, term: "die Pizza", hu: "pizza" }, "de", new Set()).reason, "tartalmatlan");
 });
