@@ -57,6 +57,34 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
 9. Commitok (atomi, `git commit -F <scratchpad-fájl>`): docs → S1 → S2. Csapda-bejegyzés `C-SZL-1` ideiglenes sorszámmal a
    `docs/agent-csapdak.md`-be, ha a munka közben hiba / tévút történt.
 
-## Mért számok (kitöltendő a végrehajtás közben)
+## Döntések és PR-bontás (2026-11-22)
 
-- S1: tesztek, a vödör-számok (A2 / A4 legkisebb értéke) — ld. alább.
+- ND-1 (a) évfolyam-sáv, ND-3 (a) a mérce kezeli — DÖNTÖTT (terv 9. szakasz). ND-2 (b) fizetős generálás — S3, csak külön
+  költségkeret-jóváhagyás után (terv 12. szakasz); addig fizetős szolgáltató NEM hívható.
+- **PR-1** `feat/szoletra-szintezes-1`: ez a fájl + a terv + `source/client/src/lib/wordLadderGrading.ts` +
+  `source/tests/word-ladder-grading.test.ts` + C-SZL-1 (`docs/agent-csapdak.md`) — az éles működés változatlan.
+- **PR-2** `feat/szoletra-szintezes-2` (a PR-1-re épül): S2 (4–8. lépés): `wordLadderLevels.ts`, `WordLadderHuEn.tsx`,
+  `word-ladder-levels.test.ts`, `word-ladder-3d-wiring.test.ts`, `word-ladder-play.spec.ts`.
+
+## S3 — sűrűbb kezdő A1 anyag (KERETRE VÁR — végrehajtani TILOS a jóváhagyásig)
+
+10. A keret jóváhagyása után: nyelvenként ~300 új 0. szintű szóbank-bejegyzés a terv 12. szakasza szerint, a meglévő
+    tartalomszelet-úton (`docs/specs/2026-11-15-jatekok-mobil-szobank-vegrehajtas.md`), futáskorláttal; vak megoldó
+    (`node --import tsx scripts/vocab-bank.ts blind-export … / blind-score …`); javító kör.
+11. Ellenőrzés: `npx.cmd tsx --test tests/vocab-bank-validate.test.ts tests/word-ladder-grading.test.ts` zöld; a 0–1. fokozat
+    egyes-szó-száma nyelvenként ≥ 300 (a terv 11. szakaszának táblája újramérve); a tényleges költség a PR-leírásba.
+
+## Mért számok (2026-11-22)
+
+- **S1:** `tests/word-ladder-grading.test.ts` — előbb bukott (hiányzó modul), a kód után 8/8 zöld. Két küszöb a mért táblából
+  javítva (terv 11. szakasz, csapda C-SZL-1): A4 (kifejezés a 2. alfokon), A5 (10. pálya ≤ min(sáv teteje, (alap+1)×3)).
+  Mutációs ellenpróba: a sáv felső korlátja 14-re → A5, A7, A8 bukik; a lépés-szabály 1 jó válaszra → A7 bukik.
+  Legkisebb fokozat-vödör (kézi + szóbank): de 11. fokozat 9 szó + 132 kifejezés; minden sáv minden fokozata ≥ 20 tétel.
+- **S2:** `tests/word-ladder-levels.test.ts` — a SPEC-VÁLTOZÁS-teszt az új szabály előtt bukott, utána zöld; az új
+  ismétlés-mentességi teszt (évfolyam × pálya, sávon belül) zöld. `tests/word-ladder-3d-wiring.test.ts` a lap új bekötését
+  (`createLadderStepSession`, `windowLadderSteps`) követeli (dokumentált spec-változás). A Szólétra 16 egységteszt-fájlja +
+  `no-repeat`: 135/135 zöld; `tsc --noEmit` 0 hiba.
+- **Böngésző (A9):** `npm.cmd run test:e2e -- tests/word-ladder-play.spec.ts --workers=1` → 2 passed (2,5 perc); mért sor: `A9|kérdés-fokozatok: 0,0,0,1,1,1,2,2,2,3,3,3 | futás-fokozat: 0,0,0,1,1,1,2,2,2,3,3,3` (3. évf., 1. pálya, 12 helyes válasz: 0. szintről indul, 3 jó után +1 fokozat, max 3 ≤ 5).
+- **`gate:stage`:** a 24 őrteszt közül a `memory-index-guard` („nincs indexeletlen élő memóriafájl”) bukik a
+  `memory/notes/00-Index.md` miatt — ezt a `origin/main` 0645f48f (`chore(zaro-hurok)`) hozta be, a munkaág nem érinti a
+  `memory/` mappát. Minden más lépés PASS.

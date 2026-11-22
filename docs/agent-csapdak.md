@@ -48,6 +48,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-57** — Meta-képernyő mérése: `scrollIntoView` után az `overflow: hidden` ős se mozduljon; érintéses görgetés CDP touch-sorozattal.
 - **C-64** — Poll-függvényben az állapotot egyetlen `page.evaluate` olvassa, ne több automatikusan váró lokátorhívás.
 - **C-65** — Időtartam-állítást a lapon belül, képkockánként mérj; a lassú CI-hibát CPU-lassítással reprodukáld.
+- **C-SZL-1** — Eloszlásra írt küszöböt (vödör-szám, korlát) a teljes mért táblából írj, a terv EARS-pontja előtt; scratch-mérés tsx-szel: `.mts` + `file:///` import.
 
 ### UI, CSS, mobil
 - **C-07** — Fix magasságú flex-oszlopban minden szinten `min-h-0`; UI-tesztben `elementFromPoint`-takarásvizsgálat 390 px-en is.
@@ -1106,3 +1107,18 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-SZL-1 — Eloszlás-küszöb a mért táblából; scratch-mérőszkript tsx-szel Windows-on (2026-11-22, ideiglenes sorszám)
+
+- **Tünet:** a Szólétra-szintezés tervének két EARS-küszöbe (A4: „az 1–2. alfokon ≥ 1 kifejezés”, A5: „10. pálya ≤ (alapszint+1)×3”)
+  az első tesztfutáson bukott — nem a kód, hanem a küszöb volt rossz: a kifejezések a mérce szerint mindig a szint 2. alfokára
+  esnek, és a 11–12. évfolyam sávja a 4. szinten véget ér. Egy plusz kör (teszt + terv + végrehajtás javítása).
+- **Gyökérok:** a küszöböt a kvantilisekből (p33 / p67) becsültem, a fokozatonkénti teljes táblát csak a bukás után listáztam.
+- **Megelőzés:** eloszlásra vonatkozó elfogadási küszöb (vödör-minimum, felső korlát) előtt a teljes mért táblát (minden vödör,
+  minden nyelv / évfolyam) kell kiírni, és a küszöböt abból, a határesetek (sáv széle, legkisebb vödör) felsorolásával írni; a
+  táblát a terv mért szakaszába kell bemásolni.
+- **Tünet 2 (eszköz):** scratchpadben futtatott `.ts` mérőszkript `npx tsx`-szel: a top-level `await` „cjs output format” hibát
+  ad, az abszolút `D:/…` dinamikus import pedig `ERR_UNSUPPORTED_ESM_URL_SCHEME`-et. **Szabály 2:** a mérőszkript `.mts`
+  kiterjesztésű, a repó-modulokat `file:///D:/…` URL-lel importálja, és a repó `source/` mappájából fut (a `@/` alias így feloldódik).
+
+Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szintezes.md` 11. szakasz). Rokon: C-15.

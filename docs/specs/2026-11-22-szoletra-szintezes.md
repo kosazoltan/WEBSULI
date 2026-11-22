@@ -1,6 +1,6 @@
 # Spec: Szólétra — évfolyamhoz és tudáshoz igazított szintezés, osztályozott szó- és kifejezésbank
 
-> Dátum: 2026-11-22 · Szerző: Claude (fejlesztő alügynök) · Állapot: VÁZLAT → a tulajdonosi kérés alapján végrehajtva
+> Dátum: 2026-11-22 · Szerző: Claude (fejlesztő alügynök) · Állapot: VÉGREHAJTVA (S1 + S2, ág `feat/szoletra-szintezes`); ellenőrzés: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md` „Mért számok”
 > Szabály: 3+ fájlt érintő feladat csak spec + AI-olvasható végrehajtási utasítás után indul (`docs/agent-haromfazisu-munka.md`).
 > Végrehajtás: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md`.
 
@@ -149,28 +149,28 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
 ## 6. Elfogadási kritériumok (EARS)
 
 <!-- acceptance-checklist -->
-- [ ] A1 — WHEN bármely kézi- vagy szóbank-tételre (en / de / fr) a mércét alkalmazzuk THEN the system SHALL véges pontot és
+- [x] A1 — WHEN bármely kézi- vagy szóbank-tételre (en / de / fr) a mércét alkalmazzuk THEN the system SHALL véges pontot és
   0–14 közötti fokozatot adni, és a fokozat szintje SHALL ≥ a bank szintje.
-- [ ] A2 — WHEN a bankokat osztályozzuk THEN a fokozatok átlagpontja SHALL szintenként szigorúan nőni (0 → 4), és minden
+- [x] A2 — WHEN a bankokat osztályozzuk THEN a fokozatok átlagpontja SHALL szintenként szigorúan nőni (0 → 4), és minden
   nyelv minden szintjének minden alfokán SHALL legalább 5 % (és legalább 10) tétel lenni (kézi + szóbank együtt).
-- [ ] A3 — WHEN egy tétel pontja ≥ 20 (≥ 40) THEN fokozatának szintje SHALL ≥ 1 (≥ 2).
-- [ ] A4 — WHEN évfolyam-sávonként (3–4., 5–6., 7–8., 9–10., 11–12.) lekérjük az osztályozott bankot THEN minden nyelven a
+- [x] A3 — WHEN egy tétel pontja ≥ 20 (≥ 40) THEN fokozatának szintje SHALL ≥ 1 (≥ 2).
+- [x] A4 — WHEN évfolyam-sávonként (3–4., 5–6., 7–8., 9–10., 11–12.) lekérjük az osztályozott bankot THEN minden nyelven a
   sáv minden fokozatán SHALL legalább 20 tétel lenni; szintenként a 0. alfokon legalább 20 egyes szó, a 2. alfokon legalább
   20 kifejezés (a kifejezések a mérce szerint a szint 2. alfokára esnek — mért, ld. 11. szakasz), és a sávon kívüli
   fokozat SHALL üres lenni.
-- [ ] A5 — WHEN az évfolyam ismert THEN az 1. pálya belépő fokozata SHALL az alapszint×3 lenni; a belépő fokozat SHALL pályánként
+- [x] A5 — WHEN az évfolyam ismert THEN az 1. pálya belépő fokozata SHALL az alapszint×3 lenni; a belépő fokozat SHALL pályánként
   nem csökkenni, és SHALL ≤ min(sáv teteje, (alapszint + 1)×3) maradni.
-- [ ] A6 — WHEN az évfolyam ismeretlen THEN a játék SHALL a 4. évfolyam belépőjével (0. fokozat az 1. pályán) indulni.
-- [ ] A7 — WHEN 3 egymás utáni helyes válasz érkezik THEN a fokozat SHALL eggyel nőni; WHEN 2 egymás utáni hiba THEN SHALL eggyel
+- [x] A6 — WHEN az évfolyam ismeretlen THEN a játék SHALL a 4. évfolyam belépőjével (0. fokozat az 1. pályán) indulni.
+- [x] A7 — WHEN 3 egymás utáni helyes válasz érkezik THEN a fokozat SHALL eggyel nőni; WHEN 2 egymás utáni hiba THEN SHALL eggyel
   csökkenni; WHEN a sorozatot hiba szakítja meg THEN SHALL NOT nőni; a fokozat SHALL a sávon belül maradni.
-- [ ] A8 — WHEN 3. évfolyamos játszik bármely pályán, bármely válaszsorozattal THEN a kiválasztott tétel fokozata SHALL ≤ 5
+- [x] A8 — WHEN 3. évfolyamos játszik bármely pályán, bármely válaszsorozattal THEN a kiválasztott tétel fokozata SHALL ≤ 5
   (legfeljebb 1. szint) lenni.
-- [ ] A9 — WHEN egy 3. évfolyamos az 1. pályán végig helyesen válaszol (böngészőben) THEN az első kérdés SHALL a 0. szintről jönni,
+- [x] A9 — WHEN egy 3. évfolyamos az 1. pályán végig helyesen válaszol (böngészőben) THEN az első kérdés SHALL a 0. szintről jönni,
   egyik kérdés sem SHALL 1. szint fölötti lenni, és a futás végére a kérdezett fokozat SHALL nagyobb lenni a kezdetinél.
-- [ ] A10 — WHEN az évfolyam × pálya futáson belüli ismétlés-mentessége mért (a meglévő 6. döntés-teszt) THEN SHALL
+- [x] A10 — WHEN az évfolyam × pálya futáson belüli ismétlés-mentessége mért (a meglévő 6. döntés-teszt) THEN SHALL
   ismétlésmentes maradni az új választóval is.
-- [ ] A11 — A pontozás (XP, ranglista-nehézség) és a haladás-kulcsok SHALL változatlanok maradni; a D-05 kiemelés érintetlen.
-- [ ] A12 — A felülíró tábla minden bejegyzése SHALL létező azonosítóra mutatni, 0–14 fokozattal.
+- [x] A11 — A pontozás (XP, ranglista-nehézség) és a haladás-kulcsok SHALL változatlanok maradni; a D-05 kiemelés érintetlen.
+- [x] A12 — A felülíró tábla minden bejegyzése SHALL létező azonosítóra mutatni, 0–14 fokozattal.
 
 ## 7. Tesztterv
 
@@ -189,16 +189,21 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
   (en 0–1. szint ~1400 tétel) bőven elég.
 - Visszavonás: egy commit revertje; a bankfájlok és a tárolt adatok nem változnak.
 
-## 9. NYITOTT DÖNTÉSEK (a javasolt opcióval haladunk, mind visszafordítható)
+## 9. Döntések (tulajdonos, űrlapon, 2026-11-22 — az orkesztrátor közvetítésével)
 
-- **ND-1 — a 10. pálya felső korlátja.** (a) *(Javasolt)* évfolyam-sáv: legfeljebb alapszint + 1 — a tulajdonosi kérés
-  szövegét követi; (b) a régi 6. döntés (10. pálya = B2 minden évfolyamon). Indok: a 3.-osnak a B2 a mérés szerint a
-  „felsőbb szintes” nehéz szó.
-- **ND-2 — kézi bankbővítés.** A mért készlet minden sávban elég (ld. A4-teszt számai), ezért bővítés nem kell. Ha később a
-  tulajdonos sűrűbb A1-szókincset kér: (a) *(Javasolt)* kézi bővítés a szóbank 0. szintjén (ingyenes, lassabb); (b) keretes,
-  jóváhagyott generálás.
-- **ND-3 — kereszt-banki szintellentmondás (22 angol tétel).** (a) *(Javasolt)* marad, a mérce felfelé sorolása kezeli a
-  hosszabbakat; (b) tételenkénti kézi felülírás a `LADDER_STEP_OVERRIDES`-ban.
+- **ND-1 — a 10. pálya felső korlátja: (a) évfolyam-sáv** (legfeljebb alapszint + 1) — DÖNTÖTT, megvalósítva (4.2).
+  Elvetett: (b) a régi 6. döntés (10. pálya = B2 minden évfolyamon).
+- **ND-3 — kereszt-banki szintellentmondás (22 angol tétel): (a) a mérce kezeli** (felfelé sorolás) — DÖNTÖTT; tételenkénti
+  kézi felülírás nincs (`LADDER_STEP_OVERRIDES` üres marad).
+- **ND-2 — sűrűbb kezdő (A1) anyag: (b) fizetős, keretes generálás** — DÖNTÖTT, de **külön költségkeret-jóváhagyásig semmi nem
+  generálható, fizetős szolgáltató nem hívható**. A munka S3 szeletként a tervben (12. szakasz); a keretet az orkesztrátor kéri
+  a tulajdonostól.
+
+**PR-bontás (tulajdonos / orkesztrátor, 2026-11-22): két PR.**
+- PR-1 `feat/szoletra-szintezes-1`: terv + végrehajtás + `wordLadderGrading.ts` + `word-ladder-grading.test.ts` + C-SZL-1 —
+  az éles működést NEM változtatja (a modult a lap még nem hívja).
+- PR-2 `feat/szoletra-szintezes-2` (a PR-1-re épül): S2 bekötés + a két dokumentált teszt-módosítás + e2e A9.
+- S3 (generálás): külön PR, csak a keret jóváhagyása után.
 
 ## 10. Végrehajtási utasítás
 
@@ -219,3 +224,40 @@ fr kifejezés:   0   0  74   0  72 220   0  22 184   0  21 155   1  32 113
 A tervezett „1–2. alfokon ≥ 1 kifejezés” küszöb a 0. szint 1. alfokán (en, fr) nem teljesült: a legrövidebb kifejezés
 („thank you”) is 15 pont, ezért a kifejezések a szint 2. alfokán gyűlnek — ez a kívánt sorrend (előbb egyes szavak, utána
 kifejezések). Az A4 ennek megfelelően: fokozatonként ≥ 20 tétel, 0. alfok ≥ 20 szó, 2. alfok ≥ 20 kifejezés.
+
+## 12. S3 — sűrűbb kezdő A1 anyag nyelvenként (fizetős generálás; KERET-JÓVÁHAGYÁSRA VÁR, végrehajtani TILOS addig)
+
+**Cél:** a 3–4. évfolyam belépő fokozatain (0–1. fokozat: a 0. szint 0–1. alfoka) nyelvenként több rövid, gyakori egyes szó,
+hogy egy kezdő futás ne merítse ki gyorsan a legkönnyebb vödröt, és a 0. alfok ne csak a kézi bank pár száz szavára épüljön.
+
+**Mért kiinduló állapot (tény, 11. szakasz tábla, kézi + szóbank, csak egyes szavak):**
+
+| nyelv | 0. fokozat | 1. fokozat | 2. fokozat (0. szint) |
+|---|---|---|---|
+| en | 222 | 181 | 74 |
+| de | 171 | 145 | 25 |
+| fr | 109 | 186 | 69 |
+
+**Javasolt mennyiség (becslés, UNVERIFIED — a végleges szám a keret függvénye):** nyelvenként +300 új szóbank-bejegyzés a 0.
+szinten (`data/vocabBank/<nyelv>/level-0.ts`), ebből ≥ 80 % egyes szó ≤ 9 pontos mérce-értékkel (a 0–1. fokozatba esik),
+legfeljebb 20 % rövid kifejezés; összesen ~900 bejegyzés. Cél-minimum az elfogadáshoz: nyelvenként a 0. és 1. fokozat
+egyes-szó-száma ≥ 300 (ma en 222 / 181, de 171 / 145, fr 109 / 186).
+
+**A meglévő generáló útvonal (tény):** a szóbank tartalma (#431 angol, 2664 bejegyzés; a német / francia hasonlóan) ügynöki
+tartalomszeletekben készült a `docs/specs/2026-11-15-jatekok-mobil-szobank-vegrehajtas.md` szerint, majd a vak megoldó kör
+(`source/scripts/vocab-bank.ts blind-export` → független megoldó → `blind-score`, kanári-tételekkel) és javító kör követte; a
+szerkezeti őr a `vocabBankProblems` / `minimumProblems`. Bejegyzésenkénti költségmérés NINCS a repóban (UNKNOWN).
+
+**Költségbecslés (UNVERIFIED — tokenbecslés, az USD az aktuális árlistával számolandó):**
+- generálás: ~900 bejegyzés × ~80 kimeneti token ≈ 72 ezer kimeneti token; 50-es kötegekben 18 köteg × ~4 ezer bemeneti token
+  (szabály + téma-kvóta + meglévő termek kizáró listája) ≈ 72 ezer bemeneti token;
+- vak megoldó: ~900 kérdés × ~150 bemeneti / ~30 kimeneti token ≈ 135 ezer bemeneti + 27 ezer kimeneti token;
+- javító kör (a tételek ~30 %-a, a #431 1. körének arányából becsülve: 73 jelzés / ~2664): ≈ +50 ezer bemeneti / +25 ezer
+  kimeneti token;
+- összesen nagyságrendileg **~0,26 M bemeneti + ~0,13 M kimeneti token**; Opus-osztályú modellel nagyságrendileg
+  **5–20 USD** (UNVERIFIED: árlista-feltevés; a pontos összeg = tokenek × a jóváhagyáskori hivatalos ár). Keretjavaslat:
+  **legfeljebb 25 USD**, futáskorláttal (a generáló leáll, ha a mért költség eléri a keretet).
+
+**Elfogadás (S3):** a validátorok (`vocabBankProblems`, `minimumProblems`, `word-ladder-grading.test.ts` A1–A4) zöldek; a vak
+megoldó kanári 10/10, a jelzett tételek javítva; a 0–1. fokozat egyes-szó-száma nyelvenként ≥ 300; a mért tényleges költség a
+PR-leírásban (gép által rögzített számláló, nem becslés).
