@@ -127,70 +127,43 @@ Változott meglévő tesztek (dokumentált, nem gyengítés): a csonkolt száll�
 állítások (titkosítatlan / idegen célra nincs kérés) változatlanok. A DB statement_timeout-teszt a Drizzle által csomagolt `cause`-t
 vizsgálja.
 
-## 2026-11-22 — 6. vak kör (91c02d2c, utólagos) — javító PR `fix/kisfilm-leallitas-hatarido`
+## 2026-11-22 — kisfilm-leállítás javító PR (`fix/kisfilm-leallitas-hatarido`; 6. vak kör 91c02d2c és 3 javító kör)
 
-- **L1 valódi (blokkoló)** — a kemény megszakítás eddig a Stúdió-kivárás és az ürítések UTÁN futott (legrosszabb esetben 298 s után,
-  a 295 s-os kényszerkilépés mögött). Most `shutdownLessonClips(abortClipTranscodes, 60_000, 10_000)` a leállítás elején indul,
-  párhuzamosan: 60 s kivárás → azonnali megszakítás → ≤ 10 s lezárás (kész ≤ 70 s). A legrosszabb esetű időszámítás az `index.ts`-ben
-  a lánc mellett. Teszt: `tests/lesson-clip-shutdown-deadline.test.ts` (a megszakítás 60 s-nál fut, miközben a Stúdió-kivárás tart;
-  forrás-őr: a lánc a `waitForActiveRuns` előtt, utána nincs külön megszakítás).
-- **L4 valódi** — a szolgáltatói letöltés hibája strukturált kódot (`REDIRECT_NO_LOCATION`, `TOO_MANY_REDIRECTS`, `FORBIDDEN_TARGET`,
-  `NON_PUBLIC_TARGET`, `BAD_URL`, `FETCH_FAILED`) és csak a hostot viszi; a query értéke nem kerül hibaüzenetbe és naplóba. Teszt:
-  LW „szolgáltatói letöltési hiba: … a query értékét nem”. Dokumentált változás: az átirányítás-teszt két üzenet-regexe a kódokra vált
-  (`/BAD_URL/`, `/FORBIDDEN_TARGET/`) — az állítás (nincs kérés titkosítatlan / idegen célra) változatlan.
+Invariáns (tulajdonosi döntés 2026-11-22, űrlapon: „szűkítés + DB-oldali védelem”): **a kör minden írása a zárral együtt él és hal.**
+A kör minden DB-művelete (írás, olvasás, árvasöprés) a session-szintű advisory lockot tartó kapcsolaton fut, sorban, tranzakcióban
+(`SET LOCAL statement_timeout` 15 s). A leállítás a határidőkor ezt a kapcsolatot eldobja és a szerveroldali folyamatot leállítja
+(`pg_terminate_backend`): a Postgres a nyitott tranzakciót visszagörgeti és a zárat elengedi — nincs „írás a zár után”.
+
+- **Határidő (6. vak kör L1)** — a kisfilm-ág a leállítás elején, párhuzamosan indul: 60 s kivárás → azonnali megszakítás
+  (szolgáltatói várakozás, letöltés, ffmpeg) → ≤ 10 s; ha a kör még fut, a zárkapcsolat eldobása. Eredmény: `"ended"`, `"forced"` (csak
+  valódi eldobáskor) vagy `"timeout"` (nem volt zárkapcsolat); az `index.ts` csak `"forced"`-nál naplóz „eldobva”-t. A legrosszabb esetű
+  időszámítás a lánc mellett az `index.ts`-ben. Tesztek: `lesson-clip-shutdown-deadline` (60 s-nál megszakít, miközben a Stúdió-kivárás
+  tart; forrás-őr a láncra és a SIGTERM/SIGINT-bekötésre), `lesson-clip-shutdown-timeout`.
+- **Napló (6. vak kör L4, 1. kör L3)** — a szolgáltatói letöltés hibája rögzített kódot és legfeljebb hostot visz (query nem). LW
+  „szolgáltatói letöltési hiba…”, „letöltési napló…”. Az átirányítás-teszt két regexe a kódokra váltott (`/BAD_URL/`, `/FORBIDDEN_TARGET/`).
+- **Zár-életciklus (2. kör L1)** — `server/lesson-clips-lock.ts`: egyetlen, egyszer használható release a zárkéréstől a release-ig;
+  normál feloldás és eldobás is ezen megy át, pontosan egyszer; a nyilvántartásból csak a release után kerül ki.
+
+| Állapot | Kényszerített eldobás | Igazoló teszt |
+|---|---|---|
+| kapcsolatkérés (pool, ≤ 10 s) | nincs mit eldobni → `"timeout"` | `lesson-clip-shutdown-timeout` |
+| zárkérés (`query_timeout` 15 s) | 1 eldobás + backend-leállítás; a munka nem indul | `lesson-clip-lock` „… a(z) zárkérés alatt …” |
+| munka (a kör tranzakciói a zárkapcsolaton) | 1 eldobás + backend-leállítás; a nyitott tranzakció visszagörgetődik | `lesson-clip-lock` „… munka alatt …”; DB „a kör minden írása a zárral együtt él és hal…”, „… MÁSIK kapcsolatról azonnal megszerezhető…” |
+| feloldás (`query_timeout` 15 s) | 1 eldobás; a kész munka eredménye megmarad | `lesson-clip-lock` „… feloldás alatt …”; `lesson-clip-lock-deadline` (a 70. mp-nél pontosan egy eldobás) |
+| release után | nincs második eldobás | `lesson-clip-lock` (minden esetben), „… párhuzamos második hívás …” |
+
+- **3. kör L1 (blokkoló)** — a zár eldobása után egy pool-kapcsolaton már elindult írás még véglegesülhetett. Gyökérok megszüntetve:
+  a kör tára a zárkapcsolathoz kötött (`sessionStore`). Regressziós DB-teszt két (+1) kapcsolattal: feltartott régi írás → a régi
+  zárkapcsolat eldobása → másik kör megszerzi a zárat → a régi írás továbbengedése → a régi írás NEM véglegesült (piros a javítás előtt).
+- **Kivezetve (dokumentált spec-változás):** a tárhívás előtti `abandoned`-őr és a söprés utasításonkénti `alive`-ellenőrzése a
+  gyökérok-megszüntetéssel feleslegessé vált (a zárkapcsolat eldobása a DB-ben görget vissza); a hozzájuk tartozó
+  `lesson-clip-shutdown-forced` és a DB „árvatakarítás a zár elvesztése után…” teszt helyét a fenti regressziós teszt veszi át.
 
 ### Kanban-jegyek (ebben a PR-ban nem javítva)
 
-- **K-418-L2 (közepes)** — az árvamédia-söprésnek nincs teljes határideje és leállítási jele: 50 adag × 15 s `statement_timeout`
-  elméletben 750 s; elnémult PG-kapcsolatnál a `statement_timeout` nem korlátozza a Node várakozását; a nyers lock/unlock a
-  határidőn kívül fut. Javasolt: teljes söprési határidő, leállításkor új adag tiltása, kliensoldali megszakítás, a nem megbízható
-  zárkapcsolat eldobása (nem visszaadása a poolnak). Teszt: shutdown közben futó többadagos söprés.
-- **K-418-L3 (közepes)** — a fejezet párhuzamos képválaszaira nincs közös bájtkeret: 4 × 24 MiB törzs + a `Buffer.concat` célbuffer
-  ≈ 120 MiB számított csúcs a képolvasásban (nem mért OOM). Javasolt: közös bájtkeret vagy szűk sor a nagy képolvasásra / dekódolásra,
-  a határokat a példány tartalékából méretezve; mérés több egyidejű szolgáltatói törzzsel.
-- **K-418-L5 (kicsi)** — az első `/clips` kérés átmeneti 502-je után nincs újrapróba (csak ismert `pending` után). Javasolt: az első
-  hálózati / 5xx hibát is korlátosan, csendben újrapróbálni a 30 perces kereten belül; az érvényes `pending:false` lezár. Teszt:
-  Playwright, első kérés 502 → `pending:true` → kész.
-
-### 1. javító kör (5491f399) — a határidő a zár felszabadulására is vonatkozik
-
-Invariáns: a kisfilm-leállítás csak akkor „kész”, ha a kör valóban véget ért és a zár felszabadult, VAGY a határidőkor a zárat tartó
-DB-kapcsolatot a kód ténylegesen eldobta (így a Postgres a session-zárat biztosan elengedi).
-
-- **L1 valódi (blokkoló)** — `shutdownLessonClips` eredménye `"ended"` / `"forced"`: 60 s kivárás → megszakítás → ≤ 10 s; ha a kör még
-  ekkor is fut, `forceReleaseClipLock()` eldobja a zárat tartó kapcsolatot (`client.release(err)`, nem kerül vissza a poolba), és a kör
-  egy közös őrön át (`abandoned`) semmilyen további DB-műveletet nem indít. A zár- és feloldó lekérdezés kliensoldali 15 s-os
-  `query_timeout`-ot kap; elakadt vagy hibás zárlekérdezésnél a kapcsolat szintén eldobódik. Tesztek:
-  `tests/lesson-clip-shutdown-forced.test.ts` (lassú DB-söprés a határidő után is: 70 s-nál eldobás, eredmény `"forced"`, utána nincs
-  DB-hívás), `tests/lesson-clip-shutdown-deadline.test.ts` (normál út: `"ended"`, nincs eldobás), DB „leállítási határidő: a zárat
-  tartó kapcsolat eldobása után a zár egy MÁSIK kapcsolatról azonnal megszerezhető…”.
-- **L2 részben (közepes)** — a forrás-őr most a jelbekötést is ellenőrzi (`process.on("SIGTERM"/"SIGINT", () => gracefulShutdown(…))`,
-  üres kezelőnél bukik). A teljes `gracefulShutdown` viselkedési teszt (vezérelhető Stúdió- és DB-kapukkal) kanban-jegy: **K-KL-L2**.
-- **L3 valódi (kicsi)** — a letöltési napló a teljes letöltési fázisra rögzített kódot ír (`DOWNLOAD_TOO_LARGE`, `DOWNLOAD_HTTP_<n>`,
-  `DOWNLOAD_FAILED`, illetve a védett út kódja a hosttal); nyers üzenet nem kerül a naplóba. Teszt: LW „letöltési napló: a törzsolvasás
-  és a státusz hibája is rögzített kóddal naplózódik…”.
-
-### 2. javító kör (0e1951fd) — zár-életciklus (egyetlen release-objektum)
-
-Invariáns: a lefoglalt kapcsolatot EGY egyszer használható release-objektum (`ClipLockLease`, `server/lesson-clips-lock.ts`) birtokolja
-a zárkéréstől a release-ig; a normál feloldás és a kényszerített eldobás is ezen megy át, idempotensen (a kapcsolat pontosan egyszer
-kerül ki — vissza a poolba vagy eldobva); az élő objektumok nyilvántartásából (`leases`) csak a release után kerül ki (egy párhuzamos, foglalt zárat kapó második
-hívás sem takarhatja el — ezt a DB-teszt fogta meg, és külön egységteszt is rögzíti). A `shutdownLessonClips` eredménye `"forced"`
-CSAK valódi eldobáskor (a `forceReleaseClipLock()` igaz), egyébként `"timeout"`; az `index.ts` csak `"forced"`-nál naplóz „eldobva”-t.
-
-| Állapot | Mi történik normálisan | Kényszerített eldobás (`forceReleaseClipLock`) | Időkorlát | Igazoló teszt |
-|---|---|---|---|---|
-| kapcsolatkérés (pool) | — | nincs mit eldobni → `false`; a leállítás eredménye `"timeout"` | pool `connectionTimeoutMillis` 10 s | `tests/lesson-clip-shutdown-timeout.test.ts` („eldobható kapcsolat nélkül … »timeout«”; az `index.ts` naplósora) |
-| zárkérés alatt (`locking`) | `pg_try_advisory_lock`; foglaltnál egyszeri visszaadás a poolba, munka nincs | `true`, pontosan egy eldobás, a kör `ClipAbortError`, a munka nem indul | `query_timeout` 15 s (hibánál / időtúllépésnél eldobás) | `tests/lesson-clip-lock.test.ts`: „foglalt zár…”, „kényszerített eldobás a zárkérés alatt…”, „a zár- vagy a feloldó lekérdezés hibája…” |
-| munka alatt (`working`) | a kör fut; minden tárhívás és az árvatakarítás minden utasítása előtt `alive()` | `true`, pontosan egy eldobás, a kör `ClipAbortError`; utána az `alive()` dob → nincs új utasítás és nincs véglegesítés | a leállítás 60 + 10 s; az utasítások 15 s | `lesson-clip-lock.test.ts` „kényszerített eldobás a munka alatt…”; `tests/lesson-clip-shutdown-forced.test.ts`; DB „árvatakarítás a zár elvesztése után…” és „leállítási határidő: … MÁSIK kapcsolatról azonnal megszerezhető…” |
-| feloldás alatt (`unlocking`) | `pg_advisory_unlock`, utána egyszeri visszaadás a poolba | `true`, pontosan egy eldobás (a függő feloldás a bontással hibával zárul); a munka eredménye megmarad | `query_timeout` 15 s; a leállítási határidő (70 s) az eldobással vág | `lesson-clip-lock.test.ts` „a munka kész, a feloldás válasza elakad…”; `tests/lesson-clip-lock-deadline.test.ts` („a 70. mp-nél pontosan egy eldobás, előtte egy sem”) |
-| release után | az objektum kikerült a nyilvántartásból | `false`, nincs második eldobás | — | `lesson-clip-lock.test.ts` „normál út…”, „egy párhuzamos (foglalt zárat kapó) második hívás…” és az eldobásos esetek záró állítása; `lesson-clip-lock-deadline.test.ts` |
-
-- **L1 valódi (blokkoló)** — a régi `exclusive()` a birtokost az aszinkron feloldás ELŐTT nullázta: feloldás közbeni elakadásnál a
-  kényszerített eldobás `false` volt, a hívó mégis „eldobva”-t naplózott. Mutációs ellenpróba: a birtokost a feloldás előtt nullázva a
-  `lesson-clip-lock-deadline` és a „feloldás válasza elakad” teszt bukik (piros), a javított kódon zöld.
-- **L2 valódi (közepes)** — az árvatakarítás minden utasítása előtt ellenőrzi a zár érvényességét (`alive`: a leállítás `abandoned`
-  jelzője és a release-objektum); elvesztéskor nincs új utasítás és nincs véglegesítés (a tranzakció visszagörget). A söprés
-  teljes határidejének (K-418-L2) többi része továbbra is kanbanon.
-- **L3 (kicsi, örökölt)** — a borító napi limitjének túlcsordulása: kanban-jegy **K-KL-L3** (`server/lesson-covers.ts`, a kisfilmnél
-  használt biztonságos egész ellenőrzés átvétele, túlcsordulásos teszttel).
+- **K-418-L2** — az árvasöprés teljes (nem utasításonkénti) határideje; 50 adag × 15 s elméleti keret.
+- **K-418-L3** — a fejezet párhuzamos képválaszaira nincs közös bájtkeret (≈ 120 MiB számított csúcs).
+- **K-418-L5** — az első `/clips` kérés átmeneti 502-je után nincs újrapróba.
+- **K-KL-L2** — a teljes `gracefulShutdown` viselkedési tesztje (vezérelhető Stúdió- és DB-kapukkal); a 3. kör L2-je (a 60/70 s a
+  kisfilm-ág belépésétől, nem a jeltől számít) is ide tartozik.
+- **K-KL-L3** — a borító napi limitjének túlcsordulása (`server/lesson-covers.ts`).

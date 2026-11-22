@@ -106,18 +106,34 @@ test("leállítási határidő: a zárat tartó kapcsolat eldobása után a zár
   assert.equal(forceReleaseClipLock(), false, "nincs több zárat tartó kapcsolat");
 });
 
-test("árvatakarítás a zár elvesztése után: minden utasítás előtt ellenőriz, elvesztéskor nem indít újat és nem véglegesít (visszagörget)", async () => {
+test("a kör minden írása a zárral együtt él és hal: a zárat tartó kapcsolat eldobása után a feltartott régi írás nem véglegesül", async () => {
+  const { forceReleaseClipLock } = await import("../server/lesson-clips-db");
   const { ClipAbortError } = await import("../server/lesson-clips");
-  const ids: string[] = [];
-  for (let i = 0; i < 3; i++) ids.push(await dbClipStore.putMedia("audio", "audio/mpeg", Buffer.from(`zárvesztés-próba ${i}`)));
-  await db.execute(sql`UPDATE lesson_clip_media SET orphaned_at = now() - interval '2 days' WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`);
-  let checks = 0;
-  // A 3. utasítás előtt a zár „elveszett” (a leállítás eldobta a zárkapcsolatot).
-  const alive = () => { if (++checks >= 3) throw new ClipAbortError("a zár elveszett"); };
-  await assert.rejects(dbClipStore.pruneOrphanMedia(24 * 3_600_000, alive), ClipAbortError);
-  assert.equal(checks, 3, "minden utasítás előtt ellenőriz, és a hibánál megáll");
-  const left = Number((await db.execute(sql`SELECT count(*)::int AS n FROM lesson_clip_media WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)).rows[0]?.n);
-  assert.equal(left, 3, "semmi nem törlődött: nincs új DELETE és nincs véglegesítés");
-  // Érvényes zárral a söprés lefut és töröl.
-  assert.ok((await dbClipStore.pruneOrphanMedia(24 * 3_600_000, () => undefined)).rows >= 3);
+  const row = (heading: string) => ({ lessonId: "clipgc-lesson", sectionIndex: 7, heading, sourceHash: "c".repeat(64), status: "failed" as const, clip: null, attempts: 1, model: "teszt" });
+  await dbClipStore.upsert(row("eredeti"));
+  const heading = async () => String((await db.execute(sql`SELECT heading FROM lesson_clips WHERE lesson_id = 'clipgc-lesson' AND section_index = 7`)).rows[0]?.heading);
+  // Egy harmadik kapcsolat sorzárral feltartja a régi kör írását.
+  const blocker = await dbPool.connect();
+  await blocker.query("BEGIN");
+  await blocker.query("SELECT 1 FROM lesson_clips WHERE lesson_id = 'clipgc-lesson' AND section_index = 7 FOR UPDATE");
+  let writing = false;
+  const old = dbClipStore.exclusive(async (scoped) => {
+    const store = typeof scoped === "object" && scoped ? scoped : dbClipStore;
+    writing = true;
+    await store.upsert(row("régi kör"));
+    return "régi";
+  });
+  old.catch(() => undefined);
+  while (!writing) await new Promise((r) => setTimeout(r, 5));
+  await new Promise((r) => setTimeout(r, 300)); // az írás már a sorzárra vár
+  assert.equal(forceReleaseClipLock(), true, "a régi zárat tartó kapcsolat eldobva");
+  await assert.rejects(old, ClipAbortError);
+  let other: string | null = null;
+  for (let i = 0; i < 40 && other === null; i++) { other = await dbClipStore.exclusive(async () => "új kör"); if (other === null) await new Promise((r) => setTimeout(r, 50)); }
+  assert.equal(other, "új kör", "egy másik kör megszerzi a zárat");
+  // A régi írás továbbengedése: a sorzár feloldása.
+  await blocker.query("COMMIT");
+  blocker.release();
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(await heading(), "eredeti", "a régi kör írása NEM véglegesült");
 });

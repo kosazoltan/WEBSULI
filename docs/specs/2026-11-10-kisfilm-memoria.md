@@ -39,11 +39,10 @@ A gyártósor tartalmi lépései, a lejátszó, a séma, a plafonok (napi lecke,
   első éles körben (Javasolt)”. Marad a mostani újramérés (a kör elején, fejezetenként, átkódolás előtt); a már elindult ffmpeg-et
   memória miatt a kód nem állítja le. Az első éles kört a jóváhagyott kézi küszöbbel élőben mérjük; ha a csúcs 450 MB fölé megy,
   külön PR-ban jön a futás közbeni figyelő.
-- **Leállítási határidő (6. vak kör, 2026-11-22):** a kisfilm-ág a szerverleállítás ELEJÉN indul, a többi lépéssel párhuzamosan:
-  legfeljebb 60 s kivárás, utána azonnali megszakítás (szolgáltatói várakozás, letöltés, ffmpeg-gyerek), majd legfeljebb 10 s a kör és a
-  zár lezárulására — kész legkésőbb 70 s-kor, jóval a 295 s-os kényszerkilépés előtt. Ha a kör ekkor is fut (pl. lassú
-  DB-művelet), a zárat tartó kapcsolat eldobódik (a Postgres a zárat elengedi), és a kör további DB-műveletet nem indít. A szolgáltatói letöltés hibaüzenete és naplója
-  csak strukturált hibakódot és hostot tartalmaz (query nem).
+- **Leállítási határidő és zár (2026-11-22; tulajdonosi döntés: „szűkítés + DB-oldali védelem”).** Invariáns: *a kör minden írása
+  a zárral együtt él és hal* — a kör minden DB-művelete az advisory lockot tartó kapcsolaton fut. A kisfilm-ág a szerverleállítás
+  elején, párhuzamosan indul: ≤ 60 s kivárás, megszakítás, ≤ 10 s; ha a kör még fut, a zárkapcsolat eldobódik és a szerveroldali
+  folyamat leáll (visszagörgetés, zárfelengedés) — kész ≤ 70 s-kor. A letöltési hiba naplója csak kódot és hostot tartalmaz.
 - Mérés a javított gyártósorral (valódi szolgáltatók, egy fejezet): a próbafolyamat csúcsmemóriája 144 MB, a fejezet 132 mp alatt kész.
 
 ## 5. Edge case-ek

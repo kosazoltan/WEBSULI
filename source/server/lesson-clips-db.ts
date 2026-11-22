@@ -1,4 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import type { PoolClient } from "pg";
 import { db, dbPool } from "./db";
 import type { ClipLesson, ClipRow, ClipStore } from "./lesson-clips";
 import { exclusiveWithLock, type LockClient } from "./lesson-clips-lock";
@@ -19,6 +21,8 @@ export function withClipStatementTimeout<T>(work: (tx: ClipTx) => Promise<T>, ms
     return work(tx);
   });
 }
+/** Egy tranzakció futtatója (a pool egy kapcsolatán, vagy a kör zárkapcsolatán). */
+type RunTx = <T>(work: (tx: ClipTx) => Promise<T>) => Promise<T>;
 const query = (statement: SQL) => withClipStatementTimeout((tx) => tx.execute(statement));
 /** Az árva média törlése adagonként ennyi sor, egy söprésben legfeljebb ennyi adag (Copilot-review #418). */
 const CLIP_PRUNE_BATCH = 200, CLIP_PRUNE_MAX_BATCHES = 50;
@@ -37,7 +41,13 @@ export async function loadClipMedia(id: string): Promise<ClipMedia | null> {
 
 /** A zár-életciklus a `lesson-clips-lock.ts`-ben (egyetlen release-objektum); a leállítás innen is eléri. */
 export { forceReleaseClipLock } from "./lesson-clips-lock";
-export const dbClipStore: ClipStore = {
+/**
+ * A tár egy tranzakció-futtató fölött: kör nélkül a poolon; a körben a zárat tartó kapcsolaton (`sessionStore`). Minden utasítás
+ * tranzakcióban fut `SET LOCAL statement_timeout`-tal; a körben a tranzakciók sorban, ugyanazon a kapcsolaton.
+ */
+function storeOn(runTx: RunTx): Omit<ClipStore, "exclusive"> {
+  const query = (statement: SQL) => runTx((tx) => tx.execute(statement));
+  return {
   async lesson(id) {
     const { rows } = await query(sql`SELECT id, published_at, json FROM lessons WHERE id = ${id}`);
     return rows[0] ? toLesson(rows[0] as Record<string, unknown>) : null;
@@ -79,14 +89,14 @@ export const dbClipStore: ClipStore = {
     const { rows } = await query(sql`SELECT coalesce(sum(size), 0)::bigint AS total FROM lesson_clip_media`);
     return Number((rows[0] as { total?: unknown } | undefined)?.total ?? 0);
   },
-  async pruneOrphanMedia(graceMs, alive = () => undefined) {
+  async pruneOrphanMedia(graceMs) {
     // 2. vak kör L6 + Copilot-review #418: a hivatkozott médiaazonosítók (32 hex jegy a kisfilm JSON-jában) EGYSZER, egy átmeneti,
     // elsődleges kulcsos halmazba kerülnek; a jelölés és a törlés ehhez egyenlőséggel (indexen) mér. Az először hivatkozatlanul talált
     // sor csak árvának jelölődik (orphaned_at), törölni az árvaság türelmi ideje után, korlátos adagokban szabad; az újra hivatkozott
     // sor jelölése törlődik. A kör advisory lockja alatt fut, így más példány épp készülő fejezetét nem érinti.
-    // Zár-életciklus: MINDEN utasítás előtt a zár érvényessége — elvesztéskor nincs új utasítás és nincs véglegesítés (visszagörgetés).
-    return withClipStatementTimeout(async (tx) => {
-      const run = (statement: SQL) => { alive(); return tx.execute(statement); };
+    // A körben a zárkapcsolaton, EGY tranzakcióban: a kapcsolat eldobásakor a Postgres visszagörgeti (nincs „söprés a zár után”).
+    return runTx(async (tx) => {
+      const run = (statement: SQL) => tx.execute(statement);
       await run(sql`CREATE TEMP TABLE clip_media_refs (id text PRIMARY KEY) ON COMMIT DROP`);
       await run(sql`INSERT INTO clip_media_refs (id)
         SELECT DISTINCT (regexp_matches(c.clip::text, '[0-9a-f]{32}', 'g'))[1] FROM lesson_clips c WHERE c.clip IS NOT NULL ON CONFLICT DO NOTHING`);
@@ -104,13 +114,37 @@ export const dbClipStore: ClipStore = {
         for (const r of rows as Array<{ size?: unknown }>) { total++; bytes += Number(r.size ?? 0); }
         if (rows.length < CLIP_PRUNE_BATCH) break;
       }
-      alive();
       return { rows: total, bytes };
     });
   },
-  exclusive(work) {
-    // A zár- és a feloldó lekérdezés is időkorlátos (kliensoldali `query_timeout`, mint a többi kisfilm-DB-hívásnál a 15 s).
-    return exclusiveWithLock(() => dbPool.connect() as Promise<LockClient>, CLIP_LOCK_KEY, CLIP_STATEMENT_TIMEOUT_MS, work);
-  },
+  };
+}
 
+/**
+ * A kör tára a zárat tartó kapcsolaton („a kör minden írása a zárral együtt él és hal”): a tranzakciók sorban futnak ugyanazon a
+ * kapcsolaton, így a kapcsolat eldobásakor a még nyitott tranzakció visszagörgetődik, és a zár is felenged.
+ */
+function sessionStore(client: PoolClient): ClipStore {
+  const session = drizzle(client);
+  let chain: Promise<unknown> = Promise.resolve();
+  const runTx: RunTx = (work) => {
+    const next = chain.then(() => session.transaction(async (tx) => {
+      await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${CLIP_STATEMENT_TIMEOUT_MS}`));
+      return work(tx as unknown as ClipTx);
+    }));
+    chain = next.catch(() => undefined);
+    return next;
+  };
+  return { ...storeOn(runTx), exclusive: () => Promise.reject(new Error("a körön belül nincs újabb zár")) };
+}
+
+/** Kör nélkül (kiszolgálás) a poolon; az `exclusive` a kört a zárat tartó kapcsolaton futtatja. */
+export const dbClipStore: ClipStore = {
+  ...storeOn(withClipStatementTimeout),
+  exclusive(work) {
+    // A zár- és a feloldó lekérdezés kliensoldali `query_timeout`-tal; eldobáskor a szerveroldali folyamat is leáll (DB-oldali védelem).
+    return exclusiveWithLock(() => dbPool.connect() as Promise<LockClient>, CLIP_LOCK_KEY, CLIP_STATEMENT_TIMEOUT_MS,
+      (client) => work(sessionStore(client as unknown as PoolClient)),
+      (pid) => { void dbPool.query("SELECT pg_terminate_backend($1)", [pid]).catch(() => undefined); });
+  },
 };

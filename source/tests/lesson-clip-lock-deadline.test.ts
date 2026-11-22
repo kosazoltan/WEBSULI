@@ -21,7 +21,7 @@ test("leállítás: a munka kész, az unlock elakad — a 70. mp-nél pontosan e
   const store: ClipStore = {
     lesson: async () => null, freshLessons: async () => [], rows: async () => [], upsert: async () => undefined, lessonsToday: async () => [],
     putMedia: async () => "id", mediaBytes: async () => 0, pruneOrphanMedia: async () => ({ rows: 0, bytes: 0 }),
-    exclusive: (work) => exclusiveWithLock(async () => client, 42, 15_000, work),
+    exclusive: (work) => exclusiveWithLock(async () => client, 42, 15_000, () => work()),
   };
   const deps = { chat: async () => "", image: async () => ({ bytes: Buffer.from("x"), mime: "image/jpeg" }), check: async () => ({ ok: true, note: "" }), still: async () => Buffer.from("x"), audioMs: () => 0 } satisfies ClipDeps;
   startLessonClipWorker(store, () => ({ deps, model: "m" }), { LESSON_CLIPS_AUTO: "on", OPENROUTER_API_KEY: "k" });
