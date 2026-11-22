@@ -1304,3 +1304,45 @@ szakít meg; a motorról a valódi koppintások kimenetele ad — nyelvenkénti,
 3. Szeletes funkció zárása: az utolsó szelet összevonása ELŐTT az egész funkció átfogó reviewja (az `AGENTS.md` „Review
    guidelines” szerint), az eredmény PR-kommentként.
 4. Retro mért tényekből és futás utáni higiénia (memória, skill, kanban, munkafák, ágak) a repó szabályai szerint.
+
+## 2026-11-22 — TGM-leltár a főághoz
+
+Mérve `git log` / `git diff --shortstat` paranccsal, a főág `442a9653` állapotán. A változatossági ágak mind a `d9d1e6c6` főág-állapotról
+indultak (a főág azóta 4 committal előrébb jár), egymásra rakva, a szülő-ág beolvasztásával (merge, nem rebase). „Saját diff” = az ág
+és a közvetlen szülő-ága közti különbség (`git diff <szülő> <ág>`), zárójelben a dokumentáció és a tesztek része.
+
+| Szelet | Hol van | Saját commitok | Saját diff (+/−) | Szülő | Állapot |
+|---|---|---|---|---|---|
+| S1a, S1b, SK1, S2a | főág, #515 (squash; az üzenete szerint #501 + #505 + #507 + S2a), `STUDIO_SOURCE_VISUALS` mögött, alapból KI | — | — | — | kész, beolvasztva |
+| S8a–S8d | főág, #516 (squash) | — | — | — | kész, beolvasztva |
+| S5a | `feat/tgm-s5a-visszajelzes-nyitasok` → **`feat/tgm-s5a-v2`** (friss főágról, cherry-pick) | f2df634a, 9998d4fe, e1eb06ad, f7c93164 | +885 / −34 (docs 281, teszt 337) | `d9d1e6c6` | kész; v2 PR-ra kész, push nélkül |
+| S5b | `feat/tgm-s5b-nyitasformak` | 2ef57e77, 4194703a, bffcf646, a0d26414 | +414 / −30 (docs 79, teszt 192) | S5a | kész helyben, PR nincs |
+| S6a | `feat/tgm-s6a-fejezetiv` | e45e7548, d82519f7, 2db93921 (+ merge) | +335 / −8 (docs 57, teszt 119) | S5b | kész helyben, PR nincs |
+| S6b | `feat/tgm-s6b-try-hang` | e08862b0, 2b477759, c0924a29 (+ merge) | +262 / −27 (docs 50, teszt 105) | S6a | kész helyben, PR nincs |
+| S6c | `feat/tgm-s6c-abrafajta` | 85850874, 8ec3df80, a2e20570, 4c8b34bc (+ merge) | +572 / −101 (docs 58, teszt 142) | S6b | kész helyben, PR nincs |
+| SK2 | `feat/tgm-sk2-valtozatossag-kapu` | 8b7313e4, c208c040, ce6db8a3 (+ merge) | +448 / −3 (docs 66, teszt 105) | S6c | kész helyben, kapu `report` módban |
+| S2b-1 | `feat/tgm-s2b-dontesi-fa-kepes-kartya` | 88f5eb2e, b9e8eb71, 75f95a7d, c0e9f733 (+ merge) | +384 / −12 (docs 50, teszt 121) | SK2 | kész helyben; kódja a főágra / S5a-v2-re ütközés nélkül átvehető (csak a 2026-11-20-as spec két fájlja ütközik) |
+| S2b-2 | `feat/tgm-s2b2-megjelenito-leletek` | 31613031, 56bdbe67, 271009c6, 3e101941 (+ merge) | +247 / −29 (docs 47, teszt 145) | S2b-1 | kész helyben |
+| S3a-1 | `feat/tgm-s3a1-abrakeszito-forrasra` | 3e9d2e4e | +31 (csak docs: S3a / S3b szeletterv) | S2b-2 (a 6feff77a merge) | csak terv, kód nincs |
+| S3a-2, S3b, S4a, S4b, SK3, S10, S7a, S7b, SK4, SK5, S9 | — | — | — | — | nincs elkezdve |
+
+A helyi `feat/tgm-s1b-sk1-forras-fedettseg`, `fix/tgm-sk1b-fedettsegi-kapu-kemenyites`, `feat/tgm-s2a-megjelenitok` és `feat/tgm-s8*` ágak
+a squash-merge miatt „előrébb járónak” látszanak, de tartalmuk a #515 / #516-tal a főágon van — higiéniai jelöltek (törlés csak
+tulajdonosi jóváhagyással). A `higienia-backup/*` távoli ágak a változatossági ágak mentései.
+
+**A változatossági cél mérhetősége (seed-determinisztikus ujjlenyomat-eltérés).** A közös mag a `shared/seeded.ts` (S5a): ugyanarra a
+bemenetre ugyanaz, különböző magra eltérő kiosztás, `Math.random` nélkül. Szeletenként:
+
+- S5a — `tests/lesson-feedback-openers.test.ts`: 200 kulcson a leggyakoribb nyitás < 10%; ugyanaz a kérdés 50 különböző maggal (térkép)
+  ≥ 8 különböző nyitás, mind a saját korosztály kódszótárából; ugyanaz a mag → ugyanaz a nyitás.
+- S5b — `tests/lesson-opening-forms.test.ts`, `tests/lesson-bank-plan-seed.test.ts`: 100 magon ≥ 3 nyitásforma és ≥ 25 hősnév; 50 magon
+  ≥ 6-féle első módszer; mag nélkül a bankterv bájtra a régi.
+- S6a / S6b — `tests/lesson-section-shapes.test.ts`, `scripts/measure/shape-simulation.mts`: a fejezetív-kiosztás szomszéd- és 40%-os
+  szabálya 200 magon; a szimuláció a leggyakoribb minta arányát (< 35%) és az azonos-minta valószínűséget (< 20%) méri modellhívás nélkül.
+- SK2 — `shared/variety-metrics.ts`, `scripts/measure/variety-measure.mts`: az állományszintű mérőszám (alapvonal | most | küszöb); ez a
+  bekapcsolási döntés gépi bizonyítéka. A valódi gyártáson mért eltérés fizetős próbát igényel (a 2026-11-20-as spec 8. szakasza,
+  ≈ 20 USD) — csak tulajdonosi jóváhagyással.
+
+**Javasolt sorrend (önálló, semleges kis PR-ok a friss főágról, cherry-pickkel, rebase nélkül):** S5a-v2 → S2b-1 (kódja a láncra nem
+épül) → S5b → S6a → S6b → S2b-2 → S6c (a sávtokenes ábrák az S2b-re épülnek) → SK2 → S3a-1 kódja → S3a-2 → S3b. Az S6c (+572) és az S5a
+(+885, ebből 281 docs és 337 teszt) a ~400 soros irányelv fölött van: az S6c két részre bontható (sávtokenes ábrák / ábrafajta-terv).
