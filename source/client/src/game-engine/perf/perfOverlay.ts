@@ -10,7 +10,21 @@
 import type * as THREE from "three";
 
 import { createGpuTimer } from "./gpuTimer";
-import { DrawnFrameClock, FrameWindow, LoopClock, fmt, probeLabel, probeOutcome, type ProbeOutcome, megapixels, shortUserAgent, type FrameSummary } from "./perfStats";
+import {
+  DrawnFrameClock,
+  FrameWindow,
+  LoopClock,
+  fmt,
+  longTaskLoad,
+  longTaskObservable,
+  type LongTaskSpan,
+  probeLabel,
+  probeOutcome,
+  type ProbeOutcome,
+  megapixels,
+  shortUserAgent,
+  type FrameSummary,
+} from "./perfStats";
 
 export type PerfResolution = 1 | 0.75 | 0.5;
 
@@ -29,7 +43,7 @@ export type PerfControls = {
 
 export type PerfOverlayOptions = {
   renderer: THREE.WebGLRenderer;
-  /** A vászon pozicionált szülője; a panel ebbe kerül (teljes képernyőn is látszik). */
+  /** A vászon pozicionált szülője; a (`body`-ba rögzített) panel ennek a helyéhez igazodik, és vele együtt rejtett. */
   host: HTMLElement;
   tier: string;
   title: string;
@@ -151,17 +165,20 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     const style = document.createElement("style");
     style.id = "bc-perf-panel-style";
     style.textContent =
-      ".bc-perf-panel{position:absolute;left:50%;transform:translateX(-50%);z-index:60;width:max-content;" +
-      "max-width:min(360px,calc(100% - 8px));pointer-events:none;display:flex;flex-direction:column;gap:3px}" +
+      // PR #504 Copilot: a panel a `body` gyereke, rögzítve a vászon fölé (z 85: a kvízréteg 60-a és a szünetmenü 80-a fölött,
+      // a magyarázókártya 90-e és a kupon-lejárat 95-e alatt) — a `main` z-10-es rétegén belül a párbeszédek eltakarnák.
+      // A szélességkorlátok a vászon szülőjének szélességéhez (`--bc-perf-host-w`) igazodnak, mint korábban a 100 %.
+      ".bc-perf-panel{position:fixed;transform:translateX(-50%);z-index:85;width:max-content;" +
+      "max-width:min(360px,calc(var(--bc-perf-host-w,100vw) - 8px));pointer-events:none;display:flex;flex-direction:column;gap:3px}" +
       // Review #504 (vak, L2): kis fekvő kijelzőn (568×320) se lógjon ki — a gombsor (benne az összecsukó) felül, mindig
       // látszik; a szöveg a maradék magasságban görgethető.
       // 2. vak kör M3: a szövegdoboz NEM érinthető (a „jobb: nézelődés” húzás a vászonhoz jut) — csak a gombok azok; a szöveg a
       // maradék magasságban levágódik (a gombsor felül, az összecsukó mindig elérhető).
       ".bc-perf-panel>pre{min-height:0;overflow:hidden;pointer-events:none}" +
-      "@media (orientation:landscape) and (max-height:600px){.bc-perf-panel{max-width:calc(100% - 340px)}}" +
+      "@media (orientation:landscape) and (max-height:600px){.bc-perf-panel{max-width:calc(var(--bc-perf-host-w,100vw) - 340px)}}" +
       // GPT-vak review #504 L3: „Számok” nézet — a kapcsolók rejtve, a panel a teljes szélességet használja, hogy a mérősorok
       // kis fekvő kijelzőn (568×320) is olvashatók legyenek; a szöveg itt sem érinthető (az érintés a játékhoz jut).
-      ".bc-perf-panel.bc-perf-reading{max-width:calc(100% - 8px)}";
+      ".bc-perf-panel.bc-perf-reading{max-width:calc(var(--bc-perf-host-w,100vw) - 8px)}";
     document.head.append(style);
   }
   // Review #504 (vak, L3): elrendezést a panel NEM olvas a képkocka-hurokban — a helyét és a vászon CSS-méretét a méretfigyelő
@@ -169,10 +186,19 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   let cssWidth = canvas.clientWidth;
   let cssHeight = canvas.clientHeight;
   const placeTop = () => {
+    // A `host` helye a nézetben: a rögzített panel ehhez igazodik. Ha a `host` rejtett (menü, eredményképernyő), a panel is.
+    const r = host.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) {
+      root.style.display = "none";
+      return;
+    }
+    root.style.display = "";
     const inset = opts.getTopInset?.() ?? 4;
     const top = Math.max(4, Math.round(Number.isFinite(inset) ? inset : 4));
-    root.style.top = `${top}px`;
-    root.style.maxHeight = `calc(100% - ${top + 4}px)`;
+    root.style.left = `${Math.round(r.left + r.width / 2)}px`;
+    root.style.top = `${Math.round(r.top) + top}px`;
+    root.style.maxHeight = `${Math.max(0, Math.round(r.height) - top - 4)}px`;
+    root.style.setProperty("--bc-perf-host-w", `${Math.round(r.width)}px`);
   };
   placeTop();
   const sizeObserver =
@@ -218,7 +244,15 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
     for (const b of toggleButtons) b.style.display = reading || collapsed ? "none" : "";
   };
   root.append(row, text);
-  host.append(root);
+  // PR #504 Copilot: a panelből induló keydown (pl. Szóköz a fókuszált gombon) nem jut a játék globális kezelőjéhez — az
+  // ugrásnak venné és `preventDefault`-tal elnyelné a gomb aktiválását. A Tab és az Escape továbbmegy (modális fókuszkezelés,
+  // kvíz / szünet), a keyup is (a játék a felengedést mindig kezelheti).
+  root.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" && e.key !== "Escape") e.stopPropagation();
+  });
+  // PR #504 Copilot: a `body`-ba kerül (nem a `host`-ba), hogy a kvízréteg és a portálos szünetmenü se takarja; nyitott
+  // modális rétegnél a `useModalLayer` a `body` többi gyerekével együtt inertté teszi — látszik, de a fókusz a menüben marad.
+  document.body.append(root);
 
   const syncLabels = () => {
     bShadow.textContent = controls.shadowsAvailable ? `Árnyék: ${toggles.shadows ? "be" : "ki"}` : "Árnyék: nincs";
@@ -249,15 +283,18 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   let probeRequested = 0;
   const probeBuf = new Uint8Array(4);
 
-  const longTasks: { at: number; ms: number }[] = [];
+  const longTasks: LongTaskSpan[] = [];
   let longTaskObserver: PerformanceObserver | null = null;
-  try {
-    longTaskObserver = new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) longTasks.push({ at: e.startTime + e.duration, ms: e.duration });
-    });
-    longTaskObserver.observe({ type: "longtask" });
-  } catch {
-    longTaskObserver = null;
+  // PR #504 Copilot: csak ha a `longtask` támogatott (Safariban az observer van, a bejegyzéstípus nincs → „n. a.”, nem 0).
+  if (typeof PerformanceObserver !== "undefined" && longTaskObservable(PerformanceObserver)) {
+    try {
+      longTaskObserver = new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) longTasks.push({ start: e.startTime, end: e.startTime + e.duration });
+      });
+      longTaskObserver.observe({ type: "longtask" });
+    } catch {
+      longTaskObserver = null;
+    }
   }
 
   let reactLastCount = opts.getReactRenders();
@@ -301,10 +338,11 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
 
   const snapshot = (): PerfSnapshot => {
     const nowMs = performance.now();
-    while (longTasks.length && longTasks[0]!.at < nowMs - WINDOW_MS) longTasks.shift();
+    while (longTasks.length && longTasks[0]!.end < nowMs - WINDOW_MS) longTasks.shift();
     readBufferSize();
     const info = renderer.info;
-    const longMs = longTasks.reduce((sum, t) => sum + t.ms, 0);
+    // PR #504 Copilot: az ablakba csak részben eső feladatnak csak az ablakba eső része számít.
+    const longLoad = longTaskLoad(longTasks, nowMs, WINDOW_MS);
     const gpuAvg = gpuTimer.average();
     return {
       running: loopClock.running(nowMs, opts.isRunning?.()),
@@ -327,8 +365,8 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       cssHeight,
       devicePixelRatio: window.devicePixelRatio || 1,
       pixelRatio: renderer.getPixelRatio(),
-      longTasksPerSec: longTaskObserver ? longTasks.length / (WINDOW_MS / 1000) : null,
-      longTaskMsPerSec: longTaskObserver ? longMs / (WINDOW_MS / 1000) : null,
+      longTasksPerSec: longTaskObserver ? longLoad.count / (WINDOW_MS / 1000) : null,
+      longTaskMsPerSec: longTaskObserver ? longLoad.ms / (WINDOW_MS / 1000) : null,
       reactRendersPerSec: reactPerSec,
       rendererName,
       userAgent,
@@ -378,6 +416,9 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
 
   const runGpuProbe = (count = 40): Promise<number | null> => {
     if (probeDone) finishProbe(null);
+    // PR #504 Copilot: a próba előtti minták ürülnek, a próba alatt nincs FPS-minta (az `afterRender` kihagyja).
+    frames.clear();
+    drawnClock.reset();
     probeSamples = [];
     probeLeft = Math.max(1, Math.floor(count));
     probeRequested = probeLeft;
@@ -466,12 +507,16 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       loopClock.rendered(tAfter);
       renderedFrames += 1;
       const dt = drawnClock.completed(true);
-      if (dt !== null) frames.push({ dt, js: tBefore - tStart, render: tAfter - tBefore, at: tAfter });
+      // PR #504 Copilot: a szinkron próba képkockái (blokkoló `readPixels`) nem FPS-minták.
+      const probing = probeLeft > 0;
+      if (dt !== null && !probing) frames.push({ dt, js: tBefore - tStart, render: tAfter - tBefore, at: tAfter });
       calls = renderer.info.render.calls;
       triangles = renderer.info.render.triangles;
-      if (probeLeft > 0) {
+      if (probing) {
         // A `readPixels` megvárja, amíg a GPU a képkocka minden parancsát végrehajtja → a teljes költség mérhető.
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probeBuf);
+        // Az időalap megszakad: a próba utáni első kép csak új alap, a köz nem nyúlik át a blokkoló képkockán.
+        drawnClock.reset();
         probeSamples.push(performance.now() - tBefore);
         probeLeft -= 1;
         if (probeLeft === 0) finishProbe(probeOutcome(probeSamples, probeRequested));

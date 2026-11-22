@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { DrawnFrameClock, FrameWindow, LoopClock, probeLabel, probeOutcome, fmt, isLoopRunning, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
+import { DrawnFrameClock, FrameWindow, LoopClock, longTaskLoad, longTaskObservable, probeLabel, probeOutcome, fmt, isLoopRunning, median, megapixels, perfEnabledFrom, shortUserAgent } from "../client/src/game-engine/perf/perfStats";
 
 /** `?perf=1` diagnosztika — a tiszta számolás (terv: docs/specs/2026-11-17-kockavadasz-telefon.md, 6. szakasz). */
 
@@ -406,5 +406,26 @@ describe("probeOutcome — teljes / részleges / üres GPU-próba (2. vak kör L
     assert.equal(probeLabel(probeOutcome([3.5], 40)), "részleges 1/40");
     assert.equal(probeLabel(probeOutcome([], 40)), "részleges 0/40");
     assert.equal(probeLabel(null), "–");
+  });
+});
+
+describe("hosszú feladatok — támogatás és ablak (PR #504 Copilot)", () => {
+  it("csak akkor figyel, ha a böngésző a `longtask` bejegyzést támogatja (Safari: van observer, longtask nincs)", () => {
+    assert.equal(longTaskObservable({ supportedEntryTypes: ["longtask", "mark"] }), true);
+    assert.equal(longTaskObservable({ supportedEntryTypes: ["mark", "measure", "navigation"] }), false);
+    assert.equal(longTaskObservable({}), false);
+    assert.equal(longTaskObservable(undefined), false);
+  });
+
+  it("az ablakba csak részben eső feladatnak csak az ablakba eső része számít", () => {
+    // Ablak: [6000, 10000]. Az első feladat 5000–7000 (1000 ms az ablakban), a második teljesen benne (200 ms).
+    const load = longTaskLoad([{ start: 5000, end: 7000 }, { start: 8000, end: 8200 }], 10_000, 4000);
+    assert.equal(load.count, 2);
+    assert.equal(load.ms, 1200);
+  });
+
+  it("az ablak előtt véget ért feladat nem számít; az ablak hossza fölé nem nő", () => {
+    assert.deepEqual(longTaskLoad([{ start: 1000, end: 5999 }], 10_000, 4000), { count: 0, ms: 0 });
+    assert.deepEqual(longTaskLoad([{ start: 0, end: 20_000 }], 10_000, 4000), { count: 1, ms: 4000 });
   });
 });

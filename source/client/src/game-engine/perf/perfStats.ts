@@ -214,6 +214,35 @@ export class DrawnFrameClock {
   }
 }
 
+/**
+ * Figyelhető-e a `longtask` (PR #504 Copilot): Safariban a `PerformanceObserver` létezik, de a `longtask` nem támogatott —
+ * ott a panel „n. a.”-t mutat, nem hamis 0-t. Ismeretlen támogatás (nincs `supportedEntryTypes`) = nem figyelhető.
+ */
+export function longTaskObservable(observer: { supportedEntryTypes?: readonly string[] } | undefined): boolean {
+  const types = observer?.supportedEntryTypes;
+  return Array.isArray(types) && types.includes("longtask");
+}
+
+/** Egy hosszú feladat kezdete és vége (ms, a `performance.now()` óráján). */
+export type LongTaskSpan = { start: number; end: number };
+
+/**
+ * A `[nowMs − windowMs, nowMs]` ablak hosszú feladatai (PR #504 Copilot): az ablakba csak részben eső feladatból csak az
+ * ablakba eső rész számít, így a ms/s érték nem nőhet az ablak hossza fölé.
+ */
+export function longTaskLoad(tasks: readonly LongTaskSpan[], nowMs: number, windowMs: number): { count: number; ms: number } {
+  const from = nowMs - windowMs;
+  let count = 0;
+  let ms = 0;
+  for (const t of tasks) {
+    const overlap = Math.min(t.end, nowMs) - Math.max(t.start, from);
+    if (overlap <= 0) continue;
+    count += 1;
+    ms += overlap;
+  }
+  return { count, ms };
+}
+
 /** A szinkron GPU-próba kimenete (2. vak kör L3): teljes eredmény csak akkor, ha a kért összes minta megvan. */
 export type ProbeOutcome = { value: number | null; samples: number; requested: number; partial: boolean };
 

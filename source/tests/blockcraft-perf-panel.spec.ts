@@ -766,3 +766,105 @@ test("részleges GPU-próba (időtúllépés) nem teljes eredmény: null és „
   const full = await page.evaluate(() => (window as unknown as PerfTestWindow).__websuliPerf.runGpuProbe(3));
   expect(typeof full, "a teljes próba számot ad").toBe("number");
 });
+
+type KeyLogWindow = { __bcKeys: string[] };
+
+test("a panel gombján a Szóköz a gombot nyomja meg, a keydown nem jut a játékhoz; a Tab továbbmegy (PR #504 Copilot 1.)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await page.evaluate(() => {
+    const w = window as unknown as KeyLogWindow;
+    w.__bcKeys = [];
+    window.addEventListener("keydown", (e) => w.__bcKeys.push(e.code));
+  });
+  await page.getByTestId("bc-perf-res").focus();
+  await page.keyboard.press("Space");
+  await expect.poll(async () => (await snapshot(page)).toggles.resolution, { timeout: 5_000 }).toBe(0.75);
+  expect(await page.evaluate(() => (window as unknown as KeyLogWindow).__bcKeys), "a panelből induló Szóköz nem ugrás").toEqual([]);
+  await page.keyboard.press("Tab");
+  expect(await page.evaluate(() => (window as unknown as KeyLogWindow).__bcKeys), "a Tab nem áll meg a panelen").toEqual(["Tab"]);
+});
+
+test("ahol a `longtask` nem támogatott (Safari), a hosszú feladat sora „n. a.”, nem 0 (PR #504 Copilot 2.)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.addInitScript(() => {
+    Object.defineProperty(PerformanceObserver, "supportedEntryTypes", { configurable: true, get: () => Object.freeze(["mark", "measure", "navigation", "resource"]) });
+  });
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  const s = (await snapshot(page)) as Snapshot & { longTasksPerSec: number | null; longTaskMsPerSec: number | null };
+  expect(s.longTasksPerSec).toBeNull();
+  expect(s.longTaskMsPerSec).toBeNull();
+  await expect(page.getByTestId("bc-perf-text")).toContainText("hosszú feladat n. a./s");
+});
+
+test("a GPU-próba képkockái nem kerülnek az FPS-ablakba: a próba végén az ablak üres (PR #504 Copilot 4.)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
+  await expectFramesAfterToggle(page);
+  expect((await snapshot(page)).frame, "a próba előtt van FPS-minta").not.toBeNull();
+  const r = await page.evaluate(async () => {
+    const api = (window as unknown as PerfTestWindow).__websuliPerf;
+    const value = await api.runGpuProbe(6);
+    // A feloldás az utolsó próba-képkocka `afterRender`-jében történik — a következő képkocka előtt olvasunk.
+    return { value, frame: api.snapshot().frame };
+  });
+  expect(typeof r.value, "a próba teljes").toBe("number");
+  expect(r.frame, "a blokkoló próba-képkockák (és a próba előtti minták) nincsenek az ablakban").toBeNull();
+  await expectFramesAfterToggle(page);
+  expect((await snapshot(page)).frame, "a próba után újra mér").not.toBeNull();
+});
+
+test("a panel a kvízréteg és a szünetmenü fölött is látszik; szünetben inert, a fókusz a menüben marad (PR #504 Copilot 5.)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  const panel = page.getByTestId("bc-perf-panel");
+  await expect(panel).toBeVisible({ timeout: 20_000 });
+  const topAt = (testId: string) =>
+    page.evaluate((id) => {
+      const el = document.querySelector(`[data-testid="${id}"]`)!;
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && el.contains(hit);
+    }, testId);
+
+  // Kvíz (z 60-as fedőréteg): a panel gombja legfelül van és működik.
+  await page.evaluate(() => (window as unknown as { __websuliGame: { forceState(p: Record<string, unknown>): void } }).__websuliGame.forceState({ phase: "quiz" }));
+  await expect(page.getByTestId("bc-quiz")).toBeVisible();
+  await expect(panel).toBeVisible();
+  expect(await topAt("bc-perf-res"), "a kvízréteg nem takarja a panelt").toBe(true);
+  await page.getByTestId("bc-perf-res").click();
+  expect((await snapshot(page)).toggles.resolution).toBe(0.75);
+
+  // Szünetmenü (portál, z 80): a panel fölötte rajzolódik, de inert — a menü fókuszkezelése érintetlen.
+  await page.getByTestId("bc-quiz-pause").click();
+  await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+  await expect(panel).toBeVisible();
+  const layer = await page.evaluate(() => {
+    const p = document.querySelector('[data-testid="bc-perf-panel"]') as HTMLElement;
+    const overlay = document.querySelector('[data-testid="game-pause-menu"]')!.parentElement as HTMLElement;
+    return {
+      bodyChild: p.parentElement === document.body,
+      above: Number(getComputedStyle(p).zIndex) > Number(getComputedStyle(overlay).zIndex),
+      inert: p.closest("[inert]") !== null,
+      focusInMenu: !!document.activeElement?.closest('[data-testid="game-pause-menu"]'),
+    };
+  });
+  expect(layer).toEqual({ bodyChild: true, above: true, inert: true, focusInMenu: true });
+  await page.keyboard.press("Tab");
+  expect(await page.evaluate(() => !!document.activeElement?.closest('[data-testid="game-pause-menu"]')), "Tab a menüben marad").toBe(true);
+  await page.getByTestId("game-resume").click();
+  await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+  expect(await page.evaluate(() => document.querySelector('[data-testid="bc-perf-panel"]')!.closest("[inert]") === null), "folytatás után újra kezelhető").toBe(true);
+});
+
+test("menüben (a játék nem fut) a testre helyezett panel rejtve van (PR #504 Copilot 5. — regresszió)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await startGame(page, "&perf=1&look=medium");
+  const panel = page.getByTestId("bc-perf-panel");
+  await expect(panel).toBeVisible({ timeout: 20_000 });
+  await page.evaluate(() => (window as unknown as { __websuliGame: { forceState(p: Record<string, unknown>): void } }).__websuliGame.forceState({ phase: "menu" }));
+  await expect(panel).toBeHidden({ timeout: 3_000 });
+});
