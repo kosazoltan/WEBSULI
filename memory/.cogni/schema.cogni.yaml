@@ -1,9 +1,248 @@
-# Cogni-format adat-/séma-snapshot (ha a repónak nincs adatmodellje: üres marad)
+# Cogni-format adat-/séma-snapshot: a source/shared/schema.ts Drizzle-táblái — CSAK név és cél, adat nincs.
+# A cél a tábla feletti forráskommentből rövidítve; ahol nincs komment, ezt jelzi. Frissítés: a séma változásakor.
+# Ha a záró hurokban nincs új: node scripts/qa/zaro-hurok.mjs nincs-uj --kind cogni
 
 cogni:
   kind: db_schema_snapshot
   name: websuli-schema
   generated: 2026-11-22
+  source: source/shared/schema.ts
+  table_count: 59
 
-  enums: {}
-  models: []
+  models:
+    - table: system_prompts
+      symbol: systemPrompts
+      line: 7
+      purpose: "AI-testreszabás rendszerpromptjai"
+    - table: users
+      symbol: users
+      line: 27
+      purpose: "felhasználók (admin / bejelentkezett)"
+    - table: html_files
+      symbol: htmlFiles
+      line: 46
+      purpose: "a HTML-tananyagok (a leckék is ide kötődnek)"
+    - table: email_subscriptions
+      symbol: emailSubscriptions
+      line: 78
+      purpose: "e-mail feliratkozások osztályokra"
+    - table: extra_email_addresses
+      symbol: extraEmailAddresses
+      line: 100
+      purpose: "további e-mail címek osztályokra"
+    - table: email_logs
+      symbol: emailLogs
+      line: 127
+      purpose: "kiküldött levelek naplója"
+    - table: ai_generation_requests
+      symbol: aiGenerationRequests
+      line: 146
+      purpose: "AI-generálási kérések"
+    - table: push_subscriptions
+      symbol: pushSubscriptions
+      line: 157
+      purpose: "webes push-feliratkozások"
+    - table: backups
+      symbol: backups
+      line: 193
+      purpose: "mentések (jsonb)"
+    - table: material_views
+      symbol: materialViews
+      line: 210
+      purpose: "tananyag-megtekintések"
+    - table: tags
+      symbol: tags
+      line: 231
+      purpose: "címke-szótár"
+    - table: material_tags
+      symbol: materialTags
+      line: 248
+      purpose: "tananyag–címke kapcsolat"
+    - table: material_stats
+      symbol: materialStats
+      line: 268
+      purpose: "tananyag-statisztika"
+    - table: material_likes
+      symbol: materialLikes
+      line: 286
+      purpose: "tananyag-kedvelések"
+    - table: material_ratings
+      symbol: materialRatings
+      line: 307
+      purpose: "tananyag-értékelések"
+    - table: scheduled_jobs
+      symbol: scheduledJobs
+      line: 330
+      purpose: "ütemezett feladatok"
+    - table: material_comments
+      symbol: materialComments
+      line: 355
+      purpose: "tananyag-hozzászólások"
+    - table: weekly_email_reports
+      symbol: weeklyEmailReports
+      line: 384
+      purpose: "heti e-mail jelentések"
+    - table: improved_html_files
+      symbol: improvedHtmlFiles
+      line: 402
+      purpose: "AI-val javított tananyagok alkalmazás előtt"
+    - table: material_improvement_backups
+      symbol: materialImprovementBackups
+      line: 436
+      purpose: "mentés a javítás alkalmazása előtt"
+    - table: games_catalog
+      symbol: gamesCatalog
+      line: 458
+      purpose: "regisztrált játékok metaadatai"
+    - table: game_scores
+      symbol: gameScores
+      line: 470
+      purpose: "játékos pontok"
+    - table: game_quiz_items
+      symbol: gameQuizItems
+      line: 510
+      purpose: "játék-kvíz bank"
+    - table: error_logs
+      symbol: errorLogs
+      line: 548
+      purpose: "hibanapló (nincs forráskomment)"
+    - table: knowledge_maps
+      symbol: knowledgeMaps
+      line: 593
+      purpose: "LS-1 tudás-térkép: a feltöltött forráscsomag strukturált kivonata"
+    - table: km_concepts
+      symbol: kmConcepts
+      line: 633
+      purpose: "a tudás-térkép fogalmai, szó szerinti forrásrészlettel"
+    - table: lessons
+      symbol: lessons
+      line: 678
+      purpose: "LS-2 strukturált lecke (1:1 egy html_files sorral)"
+    - table: lesson_clips
+      symbol: lessonClips
+      line: 708
+      purpose: "fejezetenkénti rajzfilmes kisfilmek"
+    - table: arbiter_verdicts
+      symbol: arbiterVerdicts
+      line: 740
+      purpose: "csővezeték-lépés futása / döntőbírói ítélet"
+    - table: arbiter_daily_usage
+      symbol: arbiterDailyUsage
+      line: 750
+      purpose: "a döntőbíró napi hívásszámlálója"
+    - table: ocr_transcripts
+      symbol: ocrTranscripts
+      line: 755
+      purpose: "OCR-átiratok (nincs forráskomment)"
+    - table: one_step_runs
+      symbol: oneStepRuns
+      line: 766
+      purpose: "az egylépéses gyártás futás-státusza"
+    - table: studio_jobs
+      symbol: studioJobs
+      line: 787
+      purpose: "Stúdió-feladatok (nincs forráskomment)"
+    - table: lektor_notes
+      symbol: lektorNotes
+      line: 826
+      purpose: "a Lektor megállapításai (csak adminnak)"
+    - table: reward_policy
+      symbol: rewardPolicy
+      line: 865
+      purpose: "LS-3a jutalom-politika hangolható paraméterei"
+    - table: coupons
+      symbol: coupons
+      line: 885
+      purpose: "LS-3a kiadott játékidő-kuponok"
+    - table: lesson_attempts
+      symbol: lessonAttempts
+      line: 917
+      purpose: "lecke-kitöltési kísérletek (nincs forráskomment)"
+    - table: concept_results
+      symbol: conceptResults
+      line: 944
+      purpose: "LS-3a fogalmankénti eredmény eseményenként"
+    - table: catalog_lessons
+      symbol: catalogLessons
+      line: 974
+      purpose: "régi és fúziós leckék tartalom alapú besorolása"
+    - table: catalog_items
+      symbol: catalogItems
+      line: 1003
+      purpose: "tantárgyi katalógus-bank tételei"
+    - table: catalog_item_outcomes
+      symbol: catalogItemOutcomes
+      line: 1043
+      purpose: "tételenkénti tanulói eredményesség"
+    - table: subject_memory_cards
+      symbol: subjectMemoryCards
+      line: 1060
+      purpose: "tantárgyi memória-kártyák (visszatérő hibaosztályok)"
+    - table: subject_memory_events
+      symbol: subjectMemoryEvents
+      line: 1082
+      purpose: "a memória-kártyák bizonyítékai (idempotencia)"
+    - table: review_states
+      symbol: reviewStates
+      line: 1098
+      purpose: "memóriakártya-ismétlés aktuális állapota"
+    - table: review_events
+      symbol: reviewEvents
+      line: 1112
+      purpose: "memóriakártya-ismétlés eseményei (nincs forráskomment)"
+    - table: design_assets
+      symbol: designAssets
+      line: 1137
+      purpose: "arculati elemek (nincs forráskomment)"
+    - table: lesson_result_emails
+      symbol: lessonResultEmails
+      line: 1161
+      purpose: "tanulói eredmény e-mailben, körönként egy levél"
+    - table: task_results
+      symbol: taskResults
+      line: 1180
+      purpose: "feladatszintű névtelen tanulói eredmény"
+    - table: daily_reminder_emails
+      symbol: dailyReminderEmails
+      line: 1201
+      purpose: "napi tananyag-emlékeztető ismétlésvédelme"
+    - table: learners
+      symbol: learners
+      line: 1218
+      purpose: "tanulói profil"
+    - table: learner_newsletters
+      symbol: learnerNewsletters
+      line: 1237
+      purpose: "„Mai felfedezés” hírlevél foglalása"
+    - table: learner_activity
+      symbol: learnerActivity
+      line: 1260
+      purpose: "megtekintés és eredmény tanulónként"
+    - table: lesson_clip_media
+      symbol: lessonClipMedia
+      line: 1275
+      purpose: "a kisfilmek tartalomcímzett médiája"
+    - table: lesson_tts_audio
+      symbol: lessonTtsAudio
+      line: 1288
+      purpose: "a nyelvleckék előre gyártott felolvasó hangjai"
+    - table: player_accounts
+      symbol: playerAccounts
+      line: 1309
+      purpose: "játékos-fiókok (külön a users-től)"
+    - table: player_auth_codes
+      symbol: playerAuthCodes
+      line: 1330
+      purpose: "játékos egyszeri belépőkódjai (csak hash)"
+    - table: player_ban_fingerprints
+      symbol: playerBanFingerprints
+      line: 1357
+      purpose: "tiltott játékos-fiók kulcsolt ujjlenyomata"
+    - table: advent_progress
+      symbol: adventProgress
+      line: 1371
+      purpose: "adventi naptár haladása alanyonként és évadonként"
+    - table: advent_announcements
+      symbol: adventAnnouncements
+      line: 1404
+      purpose: "adventi értesítő foglalása címzettenként és évadonként"

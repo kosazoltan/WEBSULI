@@ -1,15 +1,36 @@
-# Cogni-format projekt-snapshot (Bookkeeper memory/.cogni mintája)
+# Cogni-format projekt-snapshot (a 0645f48f váz WEBSULI-kitöltése; terv: docs/specs/2026-11-22-zaro-hurok-websuli.md D3)
 # format-version: 1
 # scope: WEBSULI-only
-# Ha a záró hurokban nincs új: a fájl VÉGÉRE `# zaro-hurok: <ISO> nincs-uj`
+# Ha a záró hurokban nincs új: node scripts/qa/zaro-hurok.mjs nincs-uj --kind cogni
 
 cogni:
   kind: project_snapshot
   name: websuli
   generated: 2026-11-22
-  source: skeleton
+  source: "AGENTS.md, package.json, source/package.json, memory/projects/websuli/project-overview.md"
 
   identity:
-    purpose: ""   # TODO
-  stack: {}
-  entrypoints: []
+    purpose: "Oktatási platform 6–18 éves diákoknak: HTML-tananyagok kezelése, megtekintése és AI-val való fejlesztése, leckék és játékok"
+    language: "magyar felület és dokumentáció, angol kód-azonosítók"
+  stack:
+    runtime: "Node.js 24.x"
+    frontend: "React 18, Vite 5, Tailwind CSS 3"
+    backend: "Express 4, TypeScript"
+    database: "PostgreSQL (Neon), Drizzle ORM"
+    e2e: "Playwright"
+    hosting: "Vercel (SPA) + Render (API)"
+  entrypoints:
+    - path: source/client/src/main.tsx
+      role: "a kliens (SPA) belépője"
+    - path: source/server/index.ts
+      role: "az API-szerver belépője"
+    - path: source/shared/schema.ts
+      role: "a Drizzle adatséma"
+    - path: package.json
+      role: "gyökér-manifest: a kapuk (gate:*) és a zaro:check parancs"
+  rules:
+    - AGENTS.md
+    - docs/agent-haromfazisu-munka.md
+    - docs/minosegkapuk.md
+    - docs/kanban.md
+    - docs/agent-csapdak.md

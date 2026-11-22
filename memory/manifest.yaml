@@ -1,28 +1,48 @@
 # WEBSULI — gépi olvasható projekt-manifest (YAML réteg)
-# Forma: Bookkeeper memory/manifest.yaml mintája (agentic-qa-kit zaro-hurok v1).
-# Frissítés: a záró hurokban, minden lezárt feladat után. Ha nincs új tény, a fájl VÉGÉRE:
-#   # zaro-hurok: <ISO-időpont> nincs-uj
-# Titkot (.env-érték, token, jelszó) ide írni TILOS.
+# Forma: a másik gépről érkezett váz (0645f48f) WEBSULI-változata; terv: docs/specs/2026-11-22-zaro-hurok-websuli.md (D3).
+# Frissítés: a záró hurokban (.agents/skills/websuli-zaro-hurok/SKILL.md), minden lezárt feladat után. Ha nincs új tény:
+#   node scripts/qa/zaro-hurok.mjs nincs-uj --kind yaml   (kanban-változás nélkül: --kind kanban)
+# Titkot (.env-érték, token, jelszó), e-mail-címet, személyes adatot ide írni TILOS.
+# Minden érték forrása a mellette álló megjegyzésben.
 
 project:
   name: WEBSULI
-  domain: ""          # TODO: egy mondat a repó céljáról
-  language: ""        # TODO
-  runtime: ""         # TODO
+  domain: "Oktatási platform 6–18 éves diákoknak: HTML-tananyagok kezelése, megtekintése és AI-val való fejlesztése, leckék és játékok"   # memory/projects/websuli/project-overview.md
+  language: "magyar (felhasználói felület és dokumentáció); a kód-azonosítók angolok"   # AGENTS.md (bevezető)
+  runtime: "Node.js 24.x"           # source/package.json engines.node
+  stack:
+    frontend: "React 18, Vite 5, Tailwind CSS 3, wouter, TanStack Query"   # source/package.json dependencies
+    backend: "Express 4 (TypeScript, tsx)"                                 # source/package.json dependencies
+    database: "PostgreSQL (Neon), Drizzle ORM; séma: source/shared/schema.ts, migrációk: source/migrations/"
+    e2e: "Playwright"                                                       # source/package.json devDependencies
+    hosting: "Vercel (SPA) + Render (API) + Neon Postgres"                  # memory/indexes/index.yml procedural_deploy
+  app_root: source/                 # package.json (gyökér) description
 
 repository:
-  default_branch: ""  # TODO (main/master/dev)
-  kanban_board: websuli
+  default_branch: main              # git (origin/HEAD); AGENTS.md „Git”: feature branch → PR → zöld CI → merge
+  workflow: "háromfázisú: terv (docs/specs/) → végrehajtási utasítás (*-vegrehajtas.md) → kód"   # AGENTS.md „Háromfázisú munka”
+  kanban:
+    experience_board: "~/.claude/projects/D--repo-WEBSULI/kanban/tapasztalat-kanban.md (a Claude Code saját környezete, nem a Hermes)"   # tulajdonosi döntés 2026-11-22; globális CLAUDE.md
+    check: "npm run zaro:check -- --since <ISO> (alapból ezt a fájlt nézi; --kanban-file felülírja)"
 
-memory:                # a memória-rétegek térképe
+memory:                # a memória-rétegek térképe (csak létező WEBSULI-utak)
   yaml_manifest: memory/manifest.yaml
-  machine_facts: .agent/memory/yaml/index.yaml
   qmd_index: memory/index.qmd
   cogni: memory/.cogni/
-  notes: memory/notes/
-  trap_table: .hermes/projekt/TRAP.md
-  skills: .hermes/skills/
-  vector_index: .hermes/projekt/vector/   # gitignore-olt, helyi mxbai-embed-large (Ollama)
+  notes: memory/notes/              # új jegyzet csak a memory/indexes/index.yml notes gyűjteményével (memory-index-guard)
+  memory_index: memory/indexes/index.yml
+  trap_table: docs/agent-csapdak.md # az EGYETLEN csapdakatalógus (D1); ágon ideiglenes C-<ág>-N sorszám (D2)
+  skills: .agents/skills/           # forrás; tükör: .claude/skills/ (scripts/qa/gates/skills-sync-check.mjs)
+  retro: docs/handoffs/             # *-retro.md, illetve a terv „Állapotnapló” fejezete
   knowledge: .hermes/projekt/TUDAS.md
+  vector_index: "nem elérhető — a WEBSULI-környezetben nincs helyi beágyazó; a kapu N/A-t jelent (D12)"
 
-quality_gates: []      # TODO: pl. - test: "npm test"
+quality_gates:         # gyökér package.json scripts; sorrend: AGENTS.md „Minőségkapuk” 4. pont
+  - lint: "npm run gate:lint"
+  - stage: "npm run gate:stage"
+  - push: "npm run gate:push"
+  - pr: "npm run gate:pr -- --body-file <leírás.md>"
+  - merge: "npm run gate:merge -- <PR>"
+  - blind_review: "npm run gate:blind-review — a gépi vak ellenőr futtatója; a főágon még nincs (a chore/vak-ellenor-deepseek ágon; forrás: docs/specs/2026-11-21-gepkoltoztetes-folytatas.md 4. fejezet, a docs/gepkoltoztetes-folytatas ágon)"
+  - close_loop: "npm run zaro:check -- --since <ISO>"
+  - blind_convergence: "node scripts/qa/zaro-hurok.mjs konvergencia"

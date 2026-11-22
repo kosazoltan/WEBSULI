@@ -1,8 +1,41 @@
-# Cogni-format modulonkénti memória: modul → forrás, API, adat, gyakori hibák
+# Cogni-format modulonkénti memória: modul → forrás, szerep, ellenőrzés (terv: docs/specs/2026-11-22-zaro-hurok-websuli.md D3)
+# Ha a záró hurokban nincs új: node scripts/qa/zaro-hurok.mjs nincs-uj --kind cogni
 
 cogni:
   kind: module_index
   name: websuli-modules
   generated: 2026-11-22
 
-  modules: []
+  modules:
+    - id: client
+      path: source/client/src/
+      role: "React SPA: oldalak (pages/), komponensek (components/), játékmotor (game-engine/), lecke-futtató (lesson-runtime/)"
+      verify: "npm run gate:stage; UI-változásnál valódi böngészős próba (AGENTS.md)"
+    - id: server
+      path: source/server/
+      role: "Express API: útvonalak (routes.ts, routes/, app-routes.ts), DB-kapcsolat (db.ts), Stúdió (studio/), adventi naptár (advent/)"
+      verify: "source/tests/*.test.ts (npm run gate:stage a változott fájlok tesztjeivel)"
+    - id: shared
+      path: source/shared/
+      role: "közös réteg: Drizzle-séma (schema.ts), szerződések és tiszta segédek"
+      verify: "a migráció és a séma együtt változik (AGENTS.md Review guidelines)"
+    - id: migrations
+      path: source/migrations/
+      role: "SQL-migrációk"
+      verify: "migráció ↔ Drizzle-séma egyezés"
+    - id: tests
+      path: source/tests/
+      role: "egység- és őr-tesztek (*-guard.test.ts), node --test + tsx"
+      verify: "npm run gate:stage minden őr-tesztet futtat"
+    - id: qa
+      path: scripts/qa/
+      role: "minőségkapuk (gates/), hookok (hooks/), háromfázis-ellenőrzés, záró kapu (zaro-hurok.mjs)"
+      verify: "node --test scripts/qa/*.test.mjs scripts/qa/gates/*.test.mjs scripts/qa/hooks/*.test.mjs"
+    - id: specs
+      path: docs/specs/
+      role: "terv + végrehajtási utasítás (háromfázisú munka)"
+      verify: "node scripts/qa/three-phase-check.mjs"
+    - id: skills
+      path: .agents/skills/
+      role: "repó-saját skillek; tükör: .claude/skills/"
+      verify: "node scripts/qa/gates/skills-sync-check.mjs"
