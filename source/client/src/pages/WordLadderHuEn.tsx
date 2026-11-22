@@ -51,12 +51,9 @@ import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import { GAME_TEST_HOOKS_ENABLED, correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
 import { LADDER_ZONES, xpForCorrect } from "@/lib/wordLadderLogic";
 import {
+  buildLadderTermFloors,
   createLadderStepSession,
-  declaredTierOf,
-  ladderDifficultyInput,
   ladderStepBuckets,
-  ladderTermFloors,
-  vocabFloorSources,
   windowLadderSteps,
 } from "@/lib/wordLadderGrading";
 import {
@@ -510,23 +507,20 @@ export default function WordLadderHuEn() {
   }, [tiers, vocabTiers, vocabMeanings, lang]);
   const tiersRef = useRef(allTiers);
   tiersRef.current = allTiers;
-  /** Az osztályozott bank: a futás minden tétele 15 fokozat-vödörben (docs/specs/2026-11-22-szoletra-szintezes.md 4.1). */
   /**
-   * Bankközi korlát (terv 4.1 / 13., vak kör 1 L1): azonos célnyelvi alak a kézi és a szóbankban a nagyobb bank-szintről
-   * indul. A TELJES szóbankból épül (a szint a bejegyzés-azonosítóban), mert a `mergeVocabTiers` a duplikált szóbanki tételt
-   * kiszűri — a futás készletéből a kézi tétel nem emelkedne.
+   * Bankközi korlát (terv 4.1 / 15.): pontos egyezésű egyes szó a kézi bank helyes válasza és a szóbanki `term` között — a
+   * TELJES, szűretlen bankokból (a kézi bank a regiszterből, a szóbank a betöltött bejegyzésekből; a szint az azonosítóban),
+   * soha nem a futás készletéből: a `mergeVocabTiers` a duplikált szóbanki tételt kiszűri.
    */
   const termFloors = useMemo(
     () =>
-      ladderTermFloors(
-        [
-          ...allTiers.flatMap((tier, index) => tier.map((q) => ({ term: ladderDifficultyInput(q).term, tier: declaredTierOf(q, index) }))),
-          ...(vocabMeanings ? vocabFloorSources([...vocabMeanings].map(([id, m]) => ({ id, term: m.term }))) : []),
-        ],
+      buildLadderTermFloors(
+        { manual: WORD_LADDER_BANKS[lang] ?? [], vocab: vocabMeanings ? [...vocabMeanings].map(([id, m]) => ({ id, term: m.term })) : [] },
         lang,
       ),
-    [allTiers, vocabMeanings, lang],
+    [vocabMeanings, lang],
   );
+  /** Az osztályozott bank: a futás minden tétele 15 fokozat-vödörben (docs/specs/2026-11-22-szoletra-szintezes.md 4.1). */
   const stepBuckets = useMemo(() => ladderStepBuckets(allTiers, lang, termFloors), [allTiers, lang, termFloors]);
   const stepBucketsRef = useRef(stepBuckets);
   stepBucketsRef.current = stepBuckets;

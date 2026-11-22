@@ -28,13 +28,12 @@ test("6. döntés: pályaválasztó, pályánkénti létrahossz és sáv, halad�
   // `createLadderStepSession` adja (a régi, csak pályából induló `createLadderLevelSession` helyett).
   assert.match(page, /createLadderStepSession\s*\(/);
   assert.match(page, /windowLadderSteps\s*\(/);
-  // Vak kör 1 L1 (terv 13.): a bankközi korlátot a lap a TELJES szóbankból építi (a `mergeVocabTiers` a duplikált szóbanki
-  // tételt kiszűri, így a futás saját készletéből a kézi tétel nem emelkedne).
-  assert.match(page, /ladderTermFloors\s*\(/);
-  assert.match(page, /vocabFloorSources\s*\(/);
+  // SPEC-VÁLTOZÁS 2026-11-22 (terv 15., „CSAK STRUKTÚRÁLT MEZŐK”): a bankközi korlátot a lap a TELJES kézi bankból és a TELJES
+  // szóbankból építi (`buildLadderTermFloors`), soha nem a futás szűrt készletéből (`allTiers`) — a `mergeVocabTiers` a
+  // duplikált szóbanki tételt kiszűri.
+  assert.match(page, /buildLadderTermFloors\s*\(\s*\{\s*manual:\s*WORD_LADDER_BANKS\[lang\]/);
+  assert.doesNotMatch(page, /buildLadderTermFloors\s*\([^)]*allTiers/);
   assert.match(page, /ladderStepBuckets\s*\(\s*allTiers\s*,\s*lang\s*,\s*termFloors\s*\)/);
-  // Vak kör 2 L2 (terv 14.2): a korlátforrás is a tétel saját szintjét használja, nem a készlet-indexet.
-  assert.match(page, /declaredTierOf\s*\(\s*q\s*,/);
   assert.match(page, /loadUnlockedLevel\s*\(\s*wordLadderGameId\s*\(/);
   assert.match(page, /unlockNextLevel\s*\(\s*wordLadderGameId\s*\(/);
   assert.match(page, /pickUnseen\s*\(/);

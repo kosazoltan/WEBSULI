@@ -112,3 +112,8 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
 - **Vak kör 3 → tulajdonosi döntés „CSAK STRUKTÚRÁLT MEZŐK” (PR-1, a 130f18e3-ra építve):** terv 15. szakasz. A heurisztikák
   kikerültek, a korlát egyes szóra szűkült és márkázott (teljes bankból). `npx.cmd tsx --test tests/word-ladder-grading.test.ts`
   → 18/18; mutációs ellenpróba (`mutate3.mjs`) 7/7.
+- **PR-2 a „CSAK STRUKTÚRÁLT MEZŐK” döntéssel** (a `feat/szoletra-szintezes-1` beolvasztva): a lap a korlátot
+  `buildLadderTermFloors({ manual: WORD_LADDER_BANKS[lang], vocab: <teljes szóbank> })`-szal építi (a `3d-wiring` új állításai
+  előbb bukottak, utána zöldek). Szólétra + `no-repeat`: 145/145; `tsc` 0 hiba. Böngésző:
+  `npm.cmd run test:e2e -- tests/word-ladder-play.spec.ts --workers=1` → 2 passed (2,4 perc),
+  `A9|kérdés-fokozatok: 0,0,0,1,1,1,2,2,2,3,3,3 | futás-fokozat: 0,0,0,1,1,1,2,2,2,3,3,3`.
