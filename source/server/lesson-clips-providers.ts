@@ -454,5 +454,6 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
   if (deps.video) deps.video = guarded(deps.video);
   if (deps.speech) deps.speech = guarded(deps.speech);
   if (deps.hear) deps.hear = guarded(deps.hear);
+  deps.stopped = () => stopSignal().aborted;
   return deps;
 }

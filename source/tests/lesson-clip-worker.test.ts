@@ -783,3 +783,32 @@ test("körönkénti megszakítás: visszatartott átkódoló + PG `error` — az
   assert.deepEqual(killed, ["SIGKILL"], "az átkódoló megkapja a megszakítást");
   assert.deepEqual(events, ["átkódoló leállt", "kör kész (hibával)"]);
 });
+
+test("leállítás a hangkapu alatt: a ClipAbortError nem nyelődik el, és utána nincs új médiaírás (vak kör 7 L1)", async () => {
+  await assert.rejects(
+    speakChecked("Szia.", STYLE.voice, { speech: async () => Buffer.from("hang"), hear: async () => { throw new ClipAbortError("a kör megszakadt"); } }),
+    (e: unknown) => e instanceof ClipAbortError,
+    "a hangkapu megszakítása továbbmegy",
+  );
+  const { store, media } = memoryStore([]);
+  const before = () => [...media.values()].filter((m) => m.kind === "audio").length;
+  await assert.rejects(
+    makeChapterClip(input(), BAND, fakeDeps({ hear: async () => { throw new ClipAbortError("a kör megszakadt"); } }), store.putMedia),
+    (e: unknown) => e instanceof ClipAbortError,
+    "a fejezet megszakad, nem tartalék hanggal megy tovább",
+  );
+  assert.equal(before(), 0, "nincs hangírás a megszakítás után");
+  await assert.rejects(
+    makeChapterClip(input(), BAND, fakeDeps({ speech: async () => { throw new ClipAbortError("a kör megszakadt"); } }), memoryStore([]).store.putMedia),
+    (e: unknown) => e instanceof ClipAbortError,
+    "a közvetlen hangkérés megszakítását a tartalékhang-ág sem nyeli el",
+  );
+});
+
+test("leállítás egy sikeresen visszatérő lépés után: médiaírás előtt a megállító jel ellenőrzése (vak kör 7 L1)", async () => {
+  let stop = false;
+  const { store, media } = memoryStore([]);
+  const deps = fakeDeps({ still: async () => { stop = true; return Buffer.from("állókép"); }, stopped: () => stop });
+  await assert.rejects(makeChapterClip(input(), BAND, deps, store.putMedia), (e: unknown) => e instanceof ClipAbortError);
+  assert.equal(media.size, 0, "a leállítás után nincs médiaírás");
+});

@@ -153,6 +153,11 @@ export type ClipDeps = {
    * klip soha nem kerül a folyamat memóriájába: a szolgáltató lemezre tölti, és onnan kódolja át.
    */
   video?: (image: { bytes: Buffer; mime: string }, prompt: string, seconds: number) => Promise<Buffer | null>;
+  /**
+   * Igaz, ha a kör megállító jele (leállítás / zárvesztés / körhiba) már kiváltódott (vak kör 7 L1). Minden médiaírás és kisfilmsor-írás
+   * előtt ellenőrizve: egy sikeresen visszatérő lépés után sem indul írás a leállítás után.
+   */
+  stopped?: () => boolean;
 };
 
 const OVERLAYS = `- {"kind":"title","text":"<legfeljebb 70 karakter>"} — a kisfilm címe; az ELSŐ jelenet ábrája mindig ez.
@@ -253,7 +258,7 @@ export async function speakChecked(say: string, voice: ClipBandStyle["voice"], d
     if (!deps.hear) return { bytes, attempts: attempt, distance: null };
     alive();
     let distance: number | null;
-    try { distance = speechDistance(say, await deps.hear(bytes)); } catch (error) { logger.warn(`[lesson-clips] a hangkapu nem érhető el, a hang ellenőrzés nélkül megy tovább: ${describe(error)}`); return { bytes, attempts: attempt, distance: null }; }
+    try { distance = speechDistance(say, await deps.hear(bytes)); } catch (error) { if (error instanceof ClipAbortError) throw error; logger.warn(`[lesson-clips] a hangkapu nem érhető el, a hang ellenőrzés nélkül megy tovább: ${describe(error)}`); return { bytes, attempts: attempt, distance: null }; }
     if (!best || best.distance === null || distance < best.distance) best = { bytes, distance };
     if (distance === 0) return { bytes, attempts: attempt, distance: 0 };
   }
@@ -269,7 +274,12 @@ export async function makeChapterClip(input: ClipInput, band: DesignThemeId, dep
   if ("problems" in written) return written;
   const style = CLIP_BAND_STYLE[band];
   const stats: ChapterStats = { images: 0, imageRetries: 0, audio: 0, audioRetries: 0, audioImperfect: 0, videos: 0, videoFailures: 0, bytes: 0 };
-  const put: PutMedia = async (kind, mime, bytes) => { stats.bytes += bytes.length; return putMedia(kind, mime, bytes); };
+  // Vak kör 7 L1: minden médiaírás előtt a megállító jel — egy sikeresen visszatérő lépés után sem ír a leállított kör.
+  const put: PutMedia = async (kind, mime, bytes) => {
+    if (deps.stopped?.()) throw new ClipAbortError("a kör megszakadt");
+    stats.bytes += bytes.length;
+    return putMedia(kind, mime, bytes);
+  };
   // Egy jelenet hibájakor a testvérjelenetek a következő lépésük előtt leállnak (nem költenek, nem írnak médiát), és a fejezet csak
   // mindegyik lezárulása után tér vissza — így a következő fejezet nem indulhat a régi jelenetek mellett (vak kör L1).
   let failure: { error: unknown } | null = null;
@@ -307,7 +317,8 @@ export async function makeChapterClip(input: ClipInput, band: DesignThemeId, dep
           if (length >= 500) ms = Math.min(60_000, length);
           stats.audio++;
         } catch (error) {
-          if (failure) throw failure.error;
+          // A leállítás (ClipAbortError) és a testvérjelenet hibája megszakítja a jelenetet (vak kör 7 L1); a többi hanghiba tartalék hang.
+          if (error instanceof ClipAbortError || failure) throw failure?.error ?? error;
           logger.warn(`[lesson-clips] a hang nem készült el, a tartalék hang szól: ${describe(error)}`);
         }
       }
@@ -398,6 +409,8 @@ export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipM
           logger.warn(`[lesson-clips] leállítás miatt megszakadt (${lesson.id} / ${section.sectionIndex + 1}. fejezet) — a következő induláskor újra próbál`);
           return;
         }
+        // Vak kör 7 L1: kisfilmsor-írás előtt is a megállító jel (leállítás után nincs új sor).
+        if (deps.stopped?.()) { stopped = true; return; }
         if ("clip" in result) {
           await store.upsert({ ...base, status: "ready", clip: result.clip });
           report.made++; report.videos += result.stats.videos;
