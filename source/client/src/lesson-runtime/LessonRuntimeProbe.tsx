@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { fusionFixture } from "@shared/fixtures/lesson-fusion";
 import { EXPERIENCE_THEMES } from "@shared/lesson-experience";
 import { sourceVisualsFixture } from "@shared/fixtures/lesson-source-visuals";
+import { LESSON_VARIETY_VERSION } from "@shared/lesson-feedback-openers";
 
 /**
  * A fixed lesson used to render the runtime in a browser test (LS-2).
@@ -257,7 +258,9 @@ export default function LessonRuntimeProbe() {
   if (live && !candidate) return <p>{error || "Helyi jelölt betöltése…"}</p>;
   // Stable persistId so B7 localStorage round-trips work; no lessonId → no Próba API.
   const practice = new URLSearchParams(window.location.search).get("practice") === "1";
-  const lesson = candidate ?? probeLesson(window.location.search);
+  const probed = candidate ?? probeLesson(window.location.search);
+  // Spec 2026-11-20-tgm-valtozatossag-abrak (S5a): `&variety=1` — a változatossági jelölővel mentett lecke (kódszótári visszajelzés-nyitás).
+  const lesson = new URLSearchParams(window.location.search).get("variety") === "1" ? { ...probed, variety: { version: LESSON_VARIETY_VERSION } } : probed;
   // `&rerender=1`: gomb, amely a szülőt ÚJ lecke-objektumfával rendereli újra — a valódi leckenézet (LessonView) minden rendereléskor
   // újraértelmezi a leckét, ezt utánozza (S8d vak review B1: az újrarenderelés nem szakíthatja meg a szóló hangot).
   const rerender = new URLSearchParams(window.location.search).has("rerender");
