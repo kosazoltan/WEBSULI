@@ -27,7 +27,7 @@
 4. **Bekötés:** gyökér `package.json` → `"zaro:check"`; `.github/workflows/ci.yml` 29. sor listája + `scripts/qa/zaro-hurok.test.mjs`;
    `gates.config.json` `mirroredSkills` + `websuli-zaro-hurok`; `skills-sync-check.test.mjs` 5 → 6 (a teszt neve is).
    (PR-bontásban a `mirroredSkills` és a darabszám a skillel együtt a `feat/zaro-hurok-3`-ba kerül — a tükör-ellenőrzés különben bukna.)
-5. **Skill:** `.agents/skills/websuli-zaro-hurok/SKILL.md` (frontmatter `name` + `description`), tükör a `node scripts/qa/gates/skills-sync-check.mjs --fix`-szel.
+5. **Skill (a feat/zaro-hurok-3-ban, tervezett):** `.agents/skills/websuli-zaro-hurok/SKILL.md` (frontmatter `name` + `description`), tükör a `node scripts/qa/gates/skills-sync-check.mjs --fix`-szel.
 6. **AGENTS.md:** új „Záró hurok (kötelező, tulajdonosi utasítás 2026-11-22)” szakasz a „Minőségkapuk” után, a kezelt blokkon kívül.
 7. **Memória-rétegek:** a `memory/manifest.yaml`, `memory/index.qmd`, `memory/.cogni/*.cogni.yaml` kitöltése a terv D3 szerint, csak
    igazolt tényekkel (forrás-fájl megjelölve), TODO, titok és e-mail-cím nélkül.

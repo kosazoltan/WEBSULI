@@ -1,5 +1,5 @@
-# Cogni-format modulonkénti memória: modul → forrás, szerep, ellenőrzés (terv: docs/specs/2026-11-22-zaro-hurok-websuli.md D3)
-# Ha a záró hurokban nincs új: node scripts/qa/zaro-hurok.mjs nincs-uj --kind cogni
+# Cogni-format modulonkénti memória: modul → forrás, szerep, ellenőrzés
+# Frissítés: minden lezárt feladat után; ha nincs új: node scripts/qa/zaro-hurok.mjs nincs-uj --kind cogni
 
 cogni:
   kind: module_index
@@ -29,7 +29,7 @@ cogni:
       verify: "npm run gate:stage minden őr-tesztet futtat"
     - id: qa
       path: scripts/qa/
-      role: "minőségkapuk (gates/), hookok (hooks/), háromfázis-ellenőrzés, záró kapu (zaro-hurok.mjs)"
+      role: "minőségkapuk (gates/, benne record-review.mjs), hookok (hooks/), háromfázis-ellenőrzés, záró kapu (zaro-hurok.mjs)"
       verify: "node --test scripts/qa/*.test.mjs scripts/qa/gates/*.test.mjs scripts/qa/hooks/*.test.mjs"
     - id: specs
       path: docs/specs/
@@ -37,5 +37,5 @@ cogni:
       verify: "node scripts/qa/three-phase-check.mjs"
     - id: skills
       path: .agents/skills/
-      role: "repó-saját skillek; tükör: .claude/skills/"
+      role: "repó-saját skillek; tükör a .claude/skills/ alatt CSAK a scripts/qa/gates/gates.config.json mirroredSkills listájának skilljeire"
       verify: "node scripts/qa/gates/skills-sync-check.mjs"

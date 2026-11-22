@@ -1,8 +1,8 @@
-# Cogni-format döntés-napló: hosszan élő tulajdonosi döntések + indoklás + érintett fájlok
-# Szabály: dátum, a döntés szövege a forrásból szó szerint (idézve), a forrás megnevezve. Új döntés a lista VÉGÉRE.
-# Források: docs/specs/2026-11-21-gepkoltoztetes-folytatas.md (a docs/gepkoltoztetes-folytatas ágon, 4. és 10. fejezet),
-#   a WEBSULI projektmemória (gepkoltoztetes-folytatas, main-agvedelem, futas-vegi-hurok), a tulajdonosi kérés 2026-11-22.
-# Ha a záró hurokban nincs új: node scripts/qa/zaro-hurok.mjs nincs-uj --kind cogni
+# Cogni-format döntés-napló: hosszan élő tulajdonosi döntések + érintett fájlok
+# Szabály: CSAK a repóban követett forrással igazolható döntés kerülhet ide — `source` = <fájl>:<sor>[-<sor>], ezen a fejen létező
+# fájlra és sorra (őr: source/tests/memory-layer-refs-guard.test.ts). A döntés szövege a forrásból szó szerint (idézve).
+# Projektmemóriából vagy chatből származó, a repóban nem rögzített döntés (különösen költési felhatalmazás) ide NEM kerül.
+# Új döntés a lista VÉGÉRE.
 
 cogni:
   kind: decision_log
@@ -10,75 +10,69 @@ cogni:
   generated: 2026-11-22
 
   decisions:
-    - id: D-2026-11-21-01
-      date: 2026-11-21
-      title: "Gépköltöztetés utáni sorrend és keret"
+    - id: D-2026-09-05-01
+      date: 2026-09-05
+      title: "Aktív munkafázis-követés"
       decision: |
-        „sorrend H0 futtató → H1 advent → H2 kész PR-ok → H3 TGM → H4–H6; a vak ellenőr köreire ebben a futásban legfeljebb
-        30 USD OpenRouter-keret, elfogyáskor megállás és kérdés; az F1/F2 fájlok nem kerülnek a repóba (munkafa + Drive-mentés),
-        csak személytelen kivonat; az adventi képek fizetős próbaköre a PR-C után, újabb kérdéssel.”
-      source: "docs/specs/2026-11-21-gepkoltoztetes-folytatas.md 4. fejezet (űrlap)"
+        „kiadott munkafázis futása alatt PASSZÍV VÁRAKOZÁS TILOS.”
+      source: "AGENTS.md:194-198"
       files:
-        - docs/specs/2026-11-21-gepkoltoztetes-folytatas.md
-    - id: D-2026-11-21-02
-      date: 2026-11-21
-      title: "Advent-ismétlés, vak futtató eredet-igazolás, #510, #418"
+        - AGENTS.md
+    - id: D-2026-09-09-01
+      date: 2026-09-09
+      title: "Háromfázisú munka"
       decision: |
-        „advent — ha átvétel után ismétlés nélkül nincs teljes 2. kör, »Ismétlés a legrégebbiekből«; vak futtató — aláírt
-        eredet-igazolás nem kell (»Nem, ismert korlát«); #510 szűrő-elutasítás — »Újra, átfogalmazott célfájllal« (sikerült);
-        #418 — futás közbeni memóriafigyelés helyett »Mérés az első éles körben« (450 MB fölötti csúcsnál külön PR).”
-      source: "docs/specs/2026-11-21-gepkoltoztetes-folytatas.md 10. fejezet (Állapotnapló, űrlap)"
+        „Háromfázisú munka kötelező (tulajdonosi utasítás 2026-09-09): először terv (docs/specs/), utána mesterséges
+        intelligencia számára olvasható végrehajtási utasítás (*-vegrehajtas.md), majd a javítás / módosítás / bővítés.”
+      source: "AGENTS.md:12"
       files:
-        - docs/specs/2026-11-21-gepkoltoztetes-folytatas.md
+        - AGENTS.md
+        - docs/agent-haromfazisu-munka.md
+        - scripts/qa/three-phase-check.mjs
+    - id: D-2026-11-01-01
+      date: 2026-11-01
+      title: "Befejezési mandátum"
+      decision: |
+        „Spec, végrehajtási utasítás, javítás, fejlesztés vagy implementáció félbehagyása tilos.”
+      source: "AGENTS.md:123-125"
+      files:
+        - AGENTS.md
+    - id: D-2026-11-03-01
+      date: 2026-11-03
+      title: "ARM64 + x64"
+      decision: |
+        „a program és a fejlesztői eszközlánc mindkét architektúrán fusson.”
+      source: "AGENTS.md:143-146"
+      files:
+        - AGENTS.md
+    - id: D-2026-11-17-01
+      date: 2026-11-17
+      title: "Minőségkapuk"
+      decision: |
+        „Először is bármilyen kibocsátás előtt végig futtasd a saját lint kaput. Másrészt pedig minden fejlesztés után
+        automatikusan egy független alügynök ellenőrizze az elkészült fejlesztést, hogy ne utólag derüljenek ki a hibák.”
+      source: "AGENTS.md:152-155"
+      files:
+        - AGENTS.md
+        - docs/minosegkapuk.md
+        - scripts/qa/gates/
     - id: D-2026-11-22-01
       date: 2026-11-22
-      title: "Vak körök kerete és a nem konvergáló kapu-PR-ok"
+      title: "Záró hurok minden elvégzett feladat után, saját WEBSULI-változatban"
       decision: |
-        „a vak körökre a keret 2026-11-22 óta 60 USD (minden további 10 USD után állapotjelentés)”; „a nem konvergáló kapu-PR-ok
-        (#521 szűkítve, H0 két PR-ra bontva) legfeljebb 2 további kört kapnak”.
-      source: "WEBSULI projektmemória: gepkoltoztetes-folytatas"
-      files:
-        - docs/specs/2026-11-21-gepkoltoztetes-folytatas.md
-    - id: D-2026-11-22-02
-      date: 2026-11-22
-      title: "Ágvédelem a main-en"
-      decision: |
-        „Ágvédelem a main-en (Javasolt)” — a main-re csak PR-on át, kötelező zöld ellenőrzésekkel; a beállítást a tulajdonos
-        kapcsolja be a GitHubon. Ok: két közvetlen push (edee295f, 0645f48f) után a memory-index-guard őr bukott a főágon.
-      source: "WEBSULI projektmemória: main-agvedelem (űrlap)"
-      files:
-        - memory/indexes/index.yml
-        - source/tests/memory-index-guard.test.ts
-    - id: D-2026-11-22-03
-      date: 2026-11-22
-      title: "Futás végi hurok minden feladat után, a saját Claude Code környezetben"
-      decision: |
-        „minden elvégzett feladat után tölteni kell külön repónként a trap fájlokat. QMD, YAML, Cogni, Vectoros és Kanban
-        memóriákat vezetni kell, le kell ellenőrizni a lefutott munka után, hogy ezek megfelelően vezetve vannak.” A hurok a saját
-        Claude Code munkakörnyezetben fut, nem a Hermesben.
-      source: "tulajdonosi kérés 2026-11-22; WEBSULI projektmemória: futas-vegi-hurok"
-      files:
-        - .agents/skills/websuli-zaro-hurok/SKILL.md
-        - scripts/qa/zaro-hurok.mjs
-    - id: D-2026-11-22-04
-      date: 2026-11-22
-      title: "A záró hurok WEBSULI-változata"
-      decision: |
-        „több gépen is fut ugyanaz a feladat a session végi zárófolyamatok létrehozásával. Olvasd be őket, meríts belőle ötleteket
-        és alkalmazd, és alakítsd ki a saját WEBSULI projekten és repón belüli változatodat.” Rögzítve: egyetlen csapdafájl
-        (docs/agent-csapdak.md), ágon ideiglenes C-<ág>-N sorszám, repón belüli záró kapu (npm run zaro:check).
-      source: "tulajdonosi kérés 2026-11-22; docs/specs/2026-11-22-zaro-hurok-websuli.md D1–D14"
+        „minden elvégzett feladat után … trap, QMD, YAML, Cogni, vektoros és kanban memóriák … higiénia … tiszta fával várni a
+        következő feladatot”, és „a több gépen futó záró folyamatokból meríts ötleteket, és alakítsd ki a saját WEBSULI-változatot”.
+      source: "docs/specs/2026-11-22-zaro-hurok-websuli.md:3-5"
       files:
         - docs/specs/2026-11-22-zaro-hurok-websuli.md
-        - docs/agent-csapdak.md
-    - id: D-2026-11-22-05
+        - scripts/qa/zaro-hurok.mjs
+    - id: D-2026-11-22-02
       date: 2026-11-22
-      title: "Ugyanazt a hibát tilos ugyanúgy újra elkövetni"
+      title: "Ugyanazt a hibát tilos ugyanúgy újra elkövetni — vak körök gépi megállási szabálya"
       decision: |
-        „ugyanazokat a hibákat tilos ugyanúgy újra elkövetni, kötelező tanulni belőlük; ha végképp nem megy, internetes szakmai
-        forrásból (fórumok, GitHub) kell megoldást keresni, és a session végén rögzíteni a memóriában, skillben, csapdafájlban,
-        futtatóban”.
-      source: "tulajdonosi utasítás 2026-11-22 (az orkesztrátor közvetítésével)"
+        tulajdonosi „törvény”: ugyanazt a hibát tilos ugyanúgy újra elkövetni; új vak kör csak szigorúan csökkenő blokkolószámmal és
+        legfeljebb 2 egymást követő NEM után indulhat, különben megközelítésváltás.
+      source: "docs/specs/2026-11-22-zaro-hurok-websuli.md:82-89"
       files:
-        - docs/agent-csapdak.md
+        - docs/specs/2026-11-22-zaro-hurok-websuli.md
         - scripts/qa/zaro-hurok.mjs
