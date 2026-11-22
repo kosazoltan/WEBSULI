@@ -29,7 +29,6 @@ import { logger } from "../lib/logger";
 import { repairHash } from "../lib/canonical-hash";
 import { descriptionAfterLessonChange } from "../../shared/lesson-teaser";
 import { withLessonArt } from "../design-assets";
-import { withVarietyMarker } from "../../shared/lesson-feedback-openers";
 import { seedFrom } from "../../shared/seeded";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
