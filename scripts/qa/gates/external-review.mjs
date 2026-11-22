@@ -191,7 +191,7 @@ export function readKeyFromEnvFile(file) {
  * lineáris kitakaróval (kitakaro.mjs, D6): a tartományok az eredeti szövegen és JSON-escape-dekódolt nézetén, egyesítve.
  */
 export function maskSecrets(s, key) {
-  return maskText(s, { keys: key ? [key] : [], ph: PH_EXTERNAL });
+  return maskText(s, { keys: key ? [key] : [], ph: PH_EXTERNAL, compat: 'external' });
 }
 
 /** A maszkolás ablaka: a vágott kimenetű hívók csak ennyit maszkolnak a (akár óriási) válaszból. */
@@ -202,7 +202,7 @@ export const MASK_WINDOW = WINDOW;
  * viselkedés; különben a vágáspont se érzékeny tartományt, se token- / e-mail-futást nem metsz.
  */
 export function maskClip(s, key, max) {
-  return clipText(s, { keys: key ? [key] : [], ph: PH_EXTERNAL, max });
+  return clipText(s, { keys: key ? [key] : [], ph: PH_EXTERNAL, max, compat: 'external' });
 }
 
 // ---------------------------------------------------------------- keret

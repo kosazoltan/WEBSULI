@@ -17,7 +17,7 @@ export const IS_WIN = process.platform === 'win32';
 
 /** Titok, kapcsolati szöveg és e-mail-cím helyőrzőre cserélve — minden kiírás és napló ezen megy át. */
 export function redact(text) {
-  return maskText(text, { ph: PH_GATE });
+  return maskText(text, { ph: PH_GATE, compat: 'gate' });
 }
 
 export function tail(text, n = 40) {

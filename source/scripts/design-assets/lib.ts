@@ -330,7 +330,7 @@ export function provenanceFor(logText: string, relFile: string): GenerationRecor
  * vagy naplóból — a kapuk közös, lineáris kitakarójával (scripts/qa/gates/kitakaro.mjs, D6), a képgyártó helyőrzőivel.
  */
 export function redact(text: string, key: string): string {
-  return maskText(text, { keys: key ? [key] : [], ph: PH_DESIGN });
+  return maskText(text, { keys: key ? [key] : [], ph: PH_DESIGN, compat: "design" });
 }
 
 /** A kitakarás ablaka a vágott hibarészletekhez (docs/specs/2026-11-19-kitakaro-negyzetes-regex.md). */
@@ -341,5 +341,5 @@ export const REDACT_WINDOW = WINDOW;
  * viselkedés; különben a vágáspont (forrás-koordinátában) se érzékeny tartományt, se token- / e-mail-futást nem metsz.
  */
 export function redactClip(text: string, key: string, max: number): string {
-  return clipText(text, { keys: key ? [key] : [], ph: PH_DESIGN, max });
+  return clipText(text, { keys: key ? [key] : [], ph: PH_DESIGN, max, compat: "design" });
 }

@@ -146,7 +146,19 @@ const DB_SCHEME = /postgres(?:ql)?:\/\//gi;
  * első `\`-ig (JSON-ban a `\n` / `\"` escape nem kerül bele) vagy a határig. Ha nincs `@`, a séma után az első `\`-ig. Lineáris:
  * a következő séma a tartomány vége után keresendő, és a `@` nélküli szakasz eredménye ugyanabban a szakaszban újrahasznosul.
  */
-function dburlRanges(s, push) {
+/** `s[i]` egy érvényes JSON-escape kezdő `\`-e (`\n \r \t \b \f \" \\ \/` vagy `\uXXXX`). */
+function isJsonEscapeAt(s, i) {
+  if (s.charCodeAt(i) !== 92) return false;
+  const e = s.charCodeAt(i + 1);
+  if (e === 110 || e === 114 || e === 116 || e === 98 || e === 102 || e === 34 || e === 92 || e === 47) return true;
+  if (e !== 117) return false;
+  for (let q = i + 2; q < i + 6; q++) if (hexVal(s.charCodeAt(q)) < 0) return false;
+  return true;
+}
+
+// 6. vak kör L1: a gazda / út / query a határig tart; nyers szövegben csak egy ÉRVÉNYES JSON-escape `\`-e állítja meg (a `\S`
+// literális backslash a query-jelszó része marad); dekódolt nézetben a `\` mindig az URL része.
+function dburlRanges(s, push, raw = true) {
   DB_SCHEME.lastIndex = 0;
   let noAtUntil = -1; // eddig a pozícióig (a szakasz vége) biztosan nincs `@`
   for (let m = DB_SCHEME.exec(s); m; m = DB_SCHEME.exec(s)) {
@@ -163,7 +175,7 @@ function dburlRanges(s, push) {
       if (at < 0) noAtUntil = spanEnd;
     }
     let end = at >= 0 ? at + 1 : from;
-    while (end < s.length && !isDbStop(s.charCodeAt(end)) && s.charCodeAt(end) !== 92) end++;
+    while (end < s.length && !isDbStop(s.charCodeAt(end)) && !(raw && isJsonEscapeAt(s, end))) end++;
     push(st, end, 'dburl');
     DB_SCHEME.lastIndex = Math.max(end, st + 1);
   }
@@ -236,14 +248,50 @@ function runRanges(s, push, raw) {
 }
 
 /** A minták, a kulcs és a DB-URL egy szövegen (a `push` a szöveg pozícióit kapja). */
-function scanPatterns(s, keys, push) {
+function scanPatterns(s, keys, push, raw) {
   for (const key of keys) keyRanges(s, key, push);
   for (const [kind, re] of PATTERNS) {
     re.lastIndex = 0;
     for (const m of s.matchAll(re)) push(m.index, m.index + m[0].length, kind);
   }
-  dburlRanges(s, push);
+  dburlRanges(s, push, raw);
 }
+
+/**
+ * Főági kompatibilitás (szűkítés, tulajdonos 2026-11-22; 6. vak kör L1–L3): a hívó útjának FŐÁGI mintái — azonos nyelvű,
+ * lineáris alakban (`[x]{n}[x]*` a `{n,}` helyett) — mindig lefutnak a NYERS szövegen, és a tartományaik az új tartományokkal
+ * egyesülnek; így a kimenet a főágénál szerkezetileg nem lehet gyengébb. A kapu útján a főági e-mail-találat is a nyers szövegen
+ * (a D1-pásztázó a főági regex pontos nyelve).
+ */
+const COMPAT = {
+  gate: {
+    patterns: [
+      ['dburl', /postgres(?:ql)?:\/\/[^\s"'`<>]+/gi],
+      ['token', /\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{16}[A-Za-z0-9]*\b/g],
+      ['token', /\bgithub_pat_[A-Za-z0-9_]{16}[A-Za-z0-9_]*\b/g],
+      ['token', /\bsk-(?:ant-)?[A-Za-z0-9_-]{16}[A-Za-z0-9_-]*\b/g],
+      ['aws', /\bAKIA[0-9A-Z]{16}\b/g],
+      ['bearer', /\bBearer\s+[A-Za-z0-9._~+/=-]{8}[A-Za-z0-9._~+/=-]*/g],
+    ],
+    rawEmail: true,
+  },
+  external: { patterns: [['aiza', /AIza[0-9A-Za-z_-]{20}[0-9A-Za-z_-]*/g]], rawEmail: false },
+  design: { patterns: [['bearer', /Bearer\s+[A-Za-z0-9._-]+/g], ['token', /sk-or-[A-Za-z0-9_-]+/g]], rawEmail: false },
+};
+
+/** Annak az escape-egységnek a kezdete, amely a `p` pozíciót belül tartalmazza (a `\` után áll), vagy -1. Legfeljebb 5 lépés. */
+function escapeCovering(t, p) {
+  for (let b = p - 1; b >= 0 && b >= p - 5; b--) {
+    if (t.charCodeAt(b) !== 92) continue;
+    let k = 0;
+    while (b - 1 - k >= 0 && t.charCodeAt(b - 1 - k) === 92) k++;
+    if (k % 2 === 1) continue; // ez a `\` maga is escape-elt
+    const end = t.charCodeAt(b + 1) === 117 && isJsonEscapeAt(t, b) ? b + 6 : b + 2;
+    if (end > p) return b;
+  }
+  return -1;
+}
+const escapeEnd = (t, b) => (t.charCodeAt(b + 1) === 117 && isJsonEscapeAt(t, b) ? b + 6 : b + 2);
 
 const PRIO = { key: 0, dburl: 1, token: 2, aws: 3, aiza: 4, bearer: 5, email: 6, run: 7 };
 
@@ -251,19 +299,37 @@ const PRIO = { key: 0, dburl: 1, token: 2, aws: 3, aiza: 4, bearer: 5, email: 6,
  * Az érzékeny tartományok az eredeti szövegen, egyesítve: rendezett, diszjunkt `[{ s, e, kind }]`. A metsző tartományok egybe
  * olvadnak; a helyőrző fajtája a legkorábban kezdődő (azonosnál a leghosszabb, majd a pontos kulcs) tartományé.
  */
-export function findRanges(text, keys = [], before = Infinity) {
+export function findRanges(text, keys = [], before = Infinity, compat = null) {
   const ks = keys.filter((k) => typeof k === 'string' && k.length > 0);
   const raw = [];
+  const hasBs = text.indexOf('\\') >= 0;
   // `before`: csak az ennél korábban kezdődő tartomány kerül tárolásra (a vágott kimenet eldobott farka nem foglal memóriát).
-  const direct = (s, e, kind) => { if (s < before) raw.push({ s, e, kind }); };
-  scanPatterns(text, ks, direct);
+  // Nyers tartomány escape-egységet nem vághat ketté: az eleje / vége az egység határára tágul (csak bővít).
+  const direct = (s, e, kind) => {
+    if (hasBs) {
+      const bs = escapeCovering(text, s);
+      if (bs >= 0) s = bs;
+      const be = escapeCovering(text, e);
+      if (be >= 0) e = escapeEnd(text, be);
+    }
+    if (s < before) raw.push({ s, e, kind });
+  };
+  scanPatterns(text, ks, direct, true);
   runRanges(text, direct, true);
-  const v = decodedView(text);
+  const c = compat ? COMPAT[compat] : null;
+  if (c) {
+    for (const [kind, re] of c.patterns) {
+      re.lastIndex = 0;
+      for (const m of text.matchAll(re)) direct(m.index, m.index + m[0].length, kind);
+    }
+  }
+  const v = hasBs ? decodedView(text) : null;
   if (v) {
     const mapped = (s, e, kind) => { const os = v.map[s]; if (os < before) raw.push({ s: os, e: v.map[e], kind }); };
-    scanPatterns(v.d, ks, mapped);
+    scanPatterns(v.d, ks, mapped, false);
     runRanges(v.d, mapped, false);
     emailRanges(v.d, mapped); // escape-es szövegben a cím a dekódolt nézetből (a nyers helyi rész escape-be nyúlhatna — L4)
+    if (c && c.rawEmail) emailRanges(text, direct); // a kapu útján a főági nyers találat is (6. vak kör L2)
   } else emailRanges(text, direct);
   raw.sort((a, b) => a.s - b.s || b.e - a.e || PRIO[a.kind] - PRIO[b.kind]);
   const out = [];
@@ -285,10 +351,60 @@ function replaceRanges(text, ranges, ph, upto) {
   return out + text.slice(last, upto);
 }
 
-/** A teljes szöveg kitakarva. */
-export function maskText(text, { keys = [], ph }) {
+/** A teljes szöveg kitakarva (`compat`: a hívó útjának főági mintái is — 'gate' | 'external' | 'design'). */
+export function maskText(text, { keys = [], ph, compat = null }) {
   const t = String(text ?? '');
-  return replaceRanges(t, findRanges(t, keys), ph, t.length);
+  return replaceRanges(t, findRanges(t, keys, Infinity, compat), ph, t.length);
+}
+
+/**
+ * 6. vak kör L4: a főági hívó (`maskSecrets(...).slice(0, max)`, illetve a képgyártói `redact(...).slice(0, 300)`) kimenetében
+ * látható FORRÁS-előtag vége. A főági csere sorrendje szerint: pontos kulcs (balról jobbra, átfedés nélkül), majd a köztes
+ * szakaszokban a minták; a helyőrző, amely nem fér be teljesen, a forrás-tartományát elrejti. Lineáris, és a határ elérésekor megáll.
+ */
+function mainVisibleEnd(t, key, mode, max) {
+  let src = 0;
+  let out = 0;
+  const gap = (to) => { if (out + (to - src) >= max) return src + (max - out); out += to - src; src = to; return -1; };
+  const place = (s, e, len) => { const r = gap(s); if (r >= 0) return r; if (out + len > max) return s; out += len; src = e; return -1; };
+  const segSpans = (a, b) => {
+    const seg = t.slice(a, b);
+    const spans = [];
+    if (mode === 'external') {
+      for (const m of seg.matchAll(/AIza[0-9A-Za-z_-]{20}[0-9A-Za-z_-]*/g)) spans.push([a + m.index, a + m.index + m[0].length, 7]);
+      return spans;
+    }
+    const skor = (x, y) => {
+      for (const m of seg.slice(x, y).matchAll(/sk-or-[A-Za-z0-9_-]+/g)) spans.push([a + x + m.index, a + x + m.index + m[0].length, 7]);
+    };
+    let last = 0;
+    for (const m of seg.matchAll(/Bearer\s+[A-Za-z0-9._-]+/g)) {
+      skor(last, m.index);
+      spans.push([a + m.index, a + m.index + m[0].length, 14]);
+      last = m.index + m[0].length;
+    }
+    skor(last, seg.length);
+    return spans;
+  };
+  const keyLen = mode === 'external' ? 3 : 7;
+  let k = key ? t.indexOf(key) : -1;
+  for (;;) {
+    const segEnd = k >= 0 ? k : t.length;
+    for (const [s, e, len] of segSpans(src, segEnd)) { const r = place(s, e, len); if (r >= 0) return r; }
+    if (k < 0) { const r = gap(t.length); return r >= 0 ? r : t.length; }
+    const r = place(k, k + key.length, keyLen);
+    if (r >= 0) return r;
+    k = t.indexOf(key, k + key.length);
+  }
+}
+
+/** A `c` pont egy tartomány belsejéből a tartomány elejére (a tartományok rendezettek, diszjunktak). */
+function outOfRanges(c, ranges) {
+  for (let j = ranges.length - 1; j >= 0; j--) {
+    if (ranges[j].s >= c) continue;
+    return ranges[j].e > c ? ranges[j].s : c;
+  }
+  return c;
 }
 
 /**
@@ -318,14 +434,16 @@ export function cutPoint(text, ranges, limit, margin) {
  * `cutPoint`-ig marad (az ablak végéről legalább max(64, kulcshossz) karakter); csak az ott teljes tartományok cserélődnek.
  * `stats` (opcionális): `{ scanned, stored }` a mérésekhez.
  */
-export function clipText(text, { keys = [], ph, max, stats }) {
+export function clipText(text, { keys = [], ph, max, stats, compat = null }) {
   const t = String(text ?? '');
   const ks = keys.filter((k) => typeof k === 'string' && k.length > 0);
   const limit = Math.max(WINDOW, max);
+  // 6. vak kör L4: a kimenet nem tartalmazhat forrást a főági hívó láthatósági határa mögül (a rövidítő új találat sem húzhat be).
+  const visible = compat === 'external' || compat === 'design' ? mainVisibleEnd(t, ks[0] ?? '', compat, max) : Infinity;
   if (t.length <= limit) {
-    const all = findRanges(t, ks);
+    const all = findRanges(t, ks, Infinity, compat);
     if (stats) Object.assign(stats, { scanned: t.length, stored: all.length });
-    return replaceRanges(t, all, ph, t.length).slice(0, max);
+    return replaceRanges(t, all, ph, outOfRanges(Math.min(t.length, visible), all)).slice(0, max);
   }
   const margin = Math.max(64, ...ks.map((k) => k.length));
   let end = Math.min(t.length, limit + 6 * margin + 1024);
@@ -338,7 +456,8 @@ export function clipText(text, { keys = [], ph, max, stats }) {
     if (isSensitiveChar(c) || c === 92 || ((c === 10 || c === 13) && isRunChar(t.charCodeAt(end + 1)))) end++;
     else break;
   }
-  const ranges = findRanges(t.slice(0, end), ks, limit);
+  const ranges = findRanges(t.slice(0, end), ks, limit, compat);
   if (stats) Object.assign(stats, { scanned: end, stored: ranges.length });
-  return replaceRanges(t, ranges, ph, cutPoint(t, ranges, limit, margin)).slice(0, max);
+  const cut = outOfRanges(Math.min(cutPoint(t, ranges, limit, margin), visible), ranges);
+  return replaceRanges(t, ranges, ph, cut).slice(0, max);
 }
