@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { WORD_LADDER_DE } from "../client/src/data/wordLadder/de";
 import { WORD_LADDER_EN } from "../client/src/data/wordLadder/en";
@@ -11,8 +13,11 @@ import { VOCAB_EN } from "../client/src/data/vocabBank/vocab-en";
 import { VOCAB_FR } from "../client/src/data/vocabBank/vocab-fr";
 import { ladderTiersFromBank } from "../client/src/data/wordLadder/banks";
 import { ladderBaseTier, pickUnseen, type SeenItem } from "../client/src/game-engine/no-repeat";
+import { splitBankItemsByTier } from "../client/src/lib/mergeGameQuizBank";
+import type { GameQuizBankItemDTO } from "../client/src/types/gameQuiz";
 import {
   LADDER_GRADE_BANDS,
+  LADDER_SUB_CUTS,
   LADDER_STEP_COUNT,
   LADDER_STEP_OVERRIDES,
   createLadderStepSession,
@@ -345,4 +350,150 @@ test("O3/L8: kimerülésnél a kért fokozat (a keresési sorrend első nem üre
   assert.equal(pickUnseen(buckets, 1, seen, () => 0)?.id, "x1a");
   // Ha a kért vödör üres, a keresési sorrend (előbb a könnyebb) következő vödre.
   assert.equal(pickUnseen([[mk("y0")], [], [mk("y2")]], 1, [{ id: "y0", prompt: "y0" }, { id: "y2", prompt: "y2" }], () => 0)?.id, "y0");
+});
+
+/*
+ * Vak kör 2 (2026-11-22) — terv 14. szakasz:
+ *  O5 célrész-kinyerés (L1 focus nélküli szerverbanki mondatkiegészítés, L3 magyar zárójeles súgó, L5 széli írásjel a kulcsban)
+ *  O6 monotonitás (L2 a vödrözés a deklarált szintet használja, L4 fokozatváltás — invariáns minden évfolyam × szomszédos pár).
+ */
+
+/** A migrációs szerverbank Szólétra-tételei (`source/migrations/0005_game_quiz_items.sql`) — a valódi DTO-alak. */
+function serverBankItems(): GameQuizBankItemDTO[] {
+  const sql = readFileSync(fileURLToPath(new URL("../migrations/0005_game_quiz_items.sql", import.meta.url)), "utf8").replace(/\r\n/g, "\n");
+  const rows = [...sql.matchAll(/\('word-ladder-hu-en', '(\w+)', '([^']*)', '((?:[^']|'')*)', '(\[[^\]]*\])'::jsonb, (\d+)\)/gu)];
+  return rows.map((m, i) => ({
+    id: `seed-${i}`, tier: m[1] as GameQuizBankItemDTO["tier"], topic: m[2]!, prompt: m[3]!.replace(/''/g, "'"), options: JSON.parse(m[4]!) as string[],
+    correctIndex: Number(m[5]), explanation: null, sourceMaterialId: null,
+  }));
+}
+
+/** O5 osztály-mérés: a kinyert célrész hibái egy tételen (üres = rendben). */
+function targetProblems(term: string, key: string, correct: string, hadBlank: boolean): string[] {
+  const p: string[] = [];
+  if (/_{3,}/u.test(term)) p.push("a hiány bent maradt");
+  if (hadBlank && normalizeWs(term) === normalizeWs(correct)) p.push("mondatkiegészítésből csak a válasz maradt");
+  if (/\([^)]*[íóúőűÍÓÚŐŰ][^)]*\)/u.test(term)) p.push("magyar zárójeles súgó a célrészben");
+  // A célnyelvi zárójeles pontosítás („achieve (a goal)”) záró zárójele a szerződés szerint marad (terv 14.).
+  const bare = /\([^)]*\)$/u.test(key) ? key.replace(/\)$/u, "x") : key;
+  if (/^[^\p{L}\p{N}(]|[^\p{L}\p{N}]$/u.test(bare)) p.push("széli írásjel a kulcsban");
+  return p;
+}
+const normalizeWs = (s: string) => s.replace(/\s+/gu, " ").trim().toLowerCase();
+
+test("O5: célrész-kinyerés minden forrásfajtán — kézi bankok, szóbank, migrációs szerverbank: 0 hiba (hiány, csak-válasz, magyar súgó, széli írásjel)", () => {
+  const report: string[] = [];
+  for (const lang of LANGS) {
+    for (const q of MANUAL[lang]) {
+      const t = ladderDifficultyInput(q).term;
+      const hadBlank = /_{3,}/u.test(q.focus ?? "") || (!q.focus && /_{3,}/u.test(q.prompt));
+      for (const x of targetProblems(t, ladderTermKey(t, lang), q.options[q.correctIndex]!, hadBlank)) report.push(`${q.id}: ${x}`);
+    }
+    for (const e of VOCAB[lang]) {
+      for (const x of targetProblems(e.term, ladderTermKey(e.term, lang), "", false)) report.push(`${e.id}: ${x}`);
+    }
+  }
+  const server = serverBankItems();
+  assert.equal(server.length, 4, "a migráció 4 Szólétra-tétele");
+  const { easy, medium, hard } = splitBankItemsByTier(server);
+  for (const q of [...easy, ...medium, ...hard]) {
+    const t = ladderDifficultyInput(q).term;
+    for (const x of targetProblems(t, ladderTermKey(t, "en"), q.options[q.correctIndex]!, /_{3,}/u.test(q.prompt))) report.push(`${String(q.id)}: ${x}`);
+  }
+  assert.deepEqual(report, []);
+});
+
+test("O5/L1: focus nélküli szerverbanki mondatkiegészítés — a kitöltött célnyelvi mondat, mint a focus-os alaknál (valódi DTO → adapter → mérce)", () => {
+  const { hard } = splitBankItemsByTier(serverBankItems());
+  const q = hard.find((x) => /She asked me/u.test(x.prompt))!;
+  const input = ladderDifficultyInput(q);
+  assert.equal(input.term, "She asked me to be quiet.");
+  assert.equal(input.sentence, true);
+  const withFocus = { ...q, focus: "She asked me ___ quiet." };
+  assert.equal(ladderItemStep(q, "en", 2), ladderItemStep(withFocus, "en", 2));
+  assert.ok(ladderItemStep(q, "en", 2) >= 7, `nem a 2. szint legkönnyebb alfoka: ${ladderItemStep(q, "en", 2)}`);
+  // A szóbank teljes cloze-alakja: a „(Magyarul: …)” fordítás nem része a célrésznek.
+  const full = ladderDifficultyInput({ prompt: "Melyik illik a mondatba? I _____ to school. (Magyarul: Iskolába megyek.)", options: ["go", "goes", "going", "gone"], correctIndex: 0 });
+  assert.equal(full.term, "I go to school.");
+});
+
+test("O5/L3: a magyar zárójeles súgó nem része a mérce bemenetének; a célnyelvi zárójeles pontosítás igen", () => {
+  const de097 = WORD_LADDER_DE.find((q) => q.id === "de0-097")!;
+  const plain = { ...de097, prompt: de097.prompt.replace(" (ő, lány)", ""), focus: de097.focus!.replace(" (ő, lány)", "") };
+  assert.equal(ladderDifficultyScore(ladderDifficultyInput(de097), "de"), ladderDifficultyScore(ladderDifficultyInput(plain), "de"));
+  assert.equal(ladderItemStep(de097, "de", 0), ladderItemStep(plain, "de", 0));
+  assert.equal(ladderTermKey("to achieve (a goal)", "en"), "achieve (a goal)");
+});
+
+test("O5/L5: széli ellipszis és tipográfiai idézőjel nem része a bankközi kulcsnak", () => {
+  assert.equal(ladderTermKey("À mon avis, …", "fr"), ladderTermKey("à mon avis", "fr"));
+  assert.equal(ladderTermKey("„Good night”", "en"), "good night");
+  assert.equal(ladderTermKey("«bonjour»", "fr"), "bonjour");
+  assert.equal(ladderTermKey("...hello...", "en"), "hello");
+});
+
+test("O6/L2: a vödrözés a tétel deklarált szintjét használja; a készlet-index csak pótlás (szint nélküli tételnél)", () => {
+  const entry = VOCAB_EN.find((e) => e.id === "en2-shopping-010")!;
+  const item: LadderItem = { id: `vocab:${entry.id}:phrase-meaning`, prompt: `Mit jelent ez a mondat? „${entry.example}”`, focus: entry.example, options: ["x", "y", "z", "w"], correctIndex: 0, tier: 2, category: "phrase" };
+  const buckets = ladderStepBuckets([[], [item], [], [], []], "en");
+  const step = buckets.findIndex((b) => b.includes(item));
+  assert.ok(Math.floor(step / 3) >= 2, `a 2. szintű tétel nem sorolódik vissza az 1-es készletből: ${step}`);
+  const untagged = { id: "db:x", prompt: "„Kalap” angolul:", options: ["hat", "hot", "hit", "hut"], correctIndex: 0 };
+  const b2 = ladderStepBuckets([[], [untagged], [], [], []], "en");
+  assert.equal(Math.floor(b2.findIndex((b) => b.includes(untagged)) / 3), 1, "szint nélküli tételnél a készlet-index");
+});
+
+test("O6/L4: monotonitás — minden nyelv × évfolyam × szomszédos fokozatpár a sávban (szinten belül szigorú pont-elválás; szinthatáron azonos alfok mediánja nem csökken)", () => {
+  const report: string[] = [];
+  const median = (a: number[]) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)]! : Number.NaN; };
+  for (const lang of LANGS) {
+    const floors = ladderTermFloors([...ladderFloorSources(MANUAL[lang]), ...vocabFloorSources(VOCAB[lang])], lang);
+    const scored: { step: number; score: number }[] = [
+      ...MANUAL[lang].map((q) => ({ step: ladderItemStep(q, lang, q.tier, floors), score: ladderDifficultyScore(ladderDifficultyInput(q), lang) })),
+      ...VOCAB[lang].map((e) => ({ step: vocabEntryStep(e, floors), score: vocabEntryScore(e) })),
+    ];
+    const byStep = Array.from({ length: LADDER_STEP_COUNT }, (_, s) => scored.filter((x) => x.step === s).map((x) => x.score));
+    for (const grade of GRADES) {
+      const win = ladderGradeWindow(grade);
+      for (let k = win.minStep; k < win.maxStep; k++) {
+        const a = byStep[k]!;
+        const b = byStep[k + 1]!;
+        if (Math.floor(k / 3) === Math.floor((k + 1) / 3)) {
+          if (!(Math.max(...a) < Math.min(...b))) report.push(`${lang} ${grade}. évf. ${k}→${k + 1}: max ${Math.max(...a)} ≥ min ${Math.min(...b)}`);
+        } else {
+          // Szinthatár (2. alfok → következő szint 0. alfoka): a bank szintje elsőbbséget élvez (terv 14.); az elvárás: a
+          // következő szint 0. alfokának mediánja ≥ az előző szint 0. alfokának mediánja, és a szint-átlag szigorúan nő.
+          const prevSub0 = byStep[k - 2]!;
+          if (!(median(b) >= median(prevSub0))) report.push(`${lang} ${grade}. évf. szinthatár ${k}→${k + 1}: medián ${median(b)} < ${median(prevSub0)}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(report, []);
+});
+
+test("O6: a fokozat-határpontok szintenként nem csökkennek (az alfok-sávok a szintek között nem csúsznak lefelé)", () => {
+  for (let t = 1; t < LADDER_SUB_CUTS.length; t++) {
+    const [a0, b0] = LADDER_SUB_CUTS[t - 1]!;
+    const [a1, b1] = LADDER_SUB_CUTS[t]!;
+    assert.ok(a1 >= a0 && b1 >= b0, `${t - 1}. → ${t}. szint: [${a0}, ${b0}] → [${a1}, ${b1}]`);
+    assert.ok(a1 < b1, `${t}. szint: a 0. és 1. alfok határa a 2. előtt`);
+  }
+});
+
+test("O6: a futás fokozata helyes válaszra soha nem csökken, egy válaszra legfeljebb 1-et lép — minden évfolyam × pálya", () => {
+  for (const grade of GRADES) {
+    for (const level of LEVELS) {
+      const s = createLadderStepSession(grade, level);
+      const rng = seeded(grade * 31 + level);
+      let prev = s.step;
+      for (let i = 0; i < 80; i++) {
+        const correct = rng() < 0.6;
+        s.answer(correct);
+        assert.ok(Math.abs(s.step - prev) <= 1, `${grade}/${level}: ugrás ${prev}→${s.step}`);
+        if (correct) assert.ok(s.step >= prev, `${grade}/${level}: helyes válaszra csökkent ${prev}→${s.step}`);
+        prev = s.step;
+      }
+    }
+  }
 });

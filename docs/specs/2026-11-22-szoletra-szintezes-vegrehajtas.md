@@ -98,3 +98,7 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
   építi (`ladderTermFloors` + `vocabFloorSources`; `word-ladder-3d-wiring.test.ts` új állításai előbb bukottak, utána zöldek).
   Egységtesztek (Szólétra + `no-repeat`): 142/142; `tsc` (alkalmazás és tesztek) 0 hiba. Böngésző ezen a fejen:
   `npm.cmd run test:e2e -- tests/word-ladder-play.spec.ts --workers=1` → 2 passed (2,4 perc); `A9|kérdés-fokozatok: 0,0,0,1,1,1,2,2,2,3,3,3 | futás-fokozat: 0,0,0,1,1,1,2,2,2,3,3,3`.
+- **Vak kör 2 javítása (PR-1, az e2d8c86d-re építve):** terv 14. szakasz (szerződés, invariáns, osztálytábla). Előbb 5 új
+  teszt bukott (O5 osztály-mérés 4 hibával, O5/L1, O5/L3, O5/L5, O6/L2), majd a határpont-teszt a régi [9, 20] értékkel; a
+  javítás után `npx.cmd tsx --test tests/word-ladder-grading.test.ts` → 23/23, a Szólétra-egységtesztek + `no-repeat` 149/149,
+  `tsc -p tsconfig.test.json` 0 hiba. Mutációs ellenpróba (`mutate2.mjs`): 5/5 mutáns a saját osztálytesztjén bukik.
