@@ -1279,6 +1279,8 @@ export const lessonClipMedia = pgTable("lesson_clip_media", {
   bytes: bytea("bytes").notNull(),
   size: integer("size").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Az árvaság kezdete (0044): a söprés jelöli, csak a türelmi idő után töröl; újrahivatkozáskor NULL. */
+  orphanedAt: timestamp("orphaned_at", { withTimezone: true }),
 });
 
 /**
