@@ -94,4 +94,3 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
   Mutációs ellenpróba (`mutate.mjs` a scratchpadben, szöveges csere + `cmp` visszaállítás): M1 locale → csak O1/L2 bukik; M2
   francia elízió → O1/L3; M3 nyers út mondat=false → O2/L4; M4 régi célrész-szabály → O2/L5; M5 bankközi korlát ki → O2/L1;
   M6 reset sorozat-nullázás nélkül → O4/L7.
-

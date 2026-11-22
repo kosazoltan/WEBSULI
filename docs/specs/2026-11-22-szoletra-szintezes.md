@@ -307,4 +307,3 @@ Mért hatás (mindhárom nyelv): a bankközi korlát kézi en 39 / de 28 / fr 31
 célnyelvi oldal választása en 95 / de 18 / fr 20 kézi tételnél váltott a magyar kiemelésről a helyes idegen opcióra
 (mintasorok: „Mi a többes száma: box?” → boxes, „Melyik helyes: „A macska …”” → The cat is under the table.). Az A1–A8,
 A12 és az új O-tesztek: 15/15 zöld; mutációs ellenpróba: 6/6 mutáns pontosan a saját osztálytesztjén bukik.
-

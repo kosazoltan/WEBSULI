@@ -301,7 +301,7 @@ test("O2/L5: a mérce a célnyelvi oldalt méri — a magyar kiemelésű „Mely
 test("O2/L1: azonos célnyelvi alak a két bankban azonos szintről indul — a kisebb besorolás emelkedik (scissors / olló)", () => {
   const manual = WORD_LADDER_EN.find((q) => q.id === "en0-097")!;
   const entry = VOCAB_EN.find((e) => e.id === "en1-school-005")!;
-  const floors = ladderTermFloors([...ladderFloorSources(WORD_LADDER_EN, "en"), ...vocabFloorSources(VOCAB_EN)], "en");
+  const floors = ladderTermFloors([...ladderFloorSources(WORD_LADDER_EN), ...vocabFloorSources(VOCAB_EN)], "en");
   assert.equal(floors.get(ladderTermKey("scissors", "en")), 1);
   const a = ladderItemStep(manual, "en", manual.tier, floors);
   const b = vocabEntryStep(entry, floors);
@@ -346,4 +346,3 @@ test("O3/L8: kimerülésnél a kért fokozat (a keresési sorrend első nem üre
   // Ha a kért vödör üres, a keresési sorrend (előbb a könnyebb) következő vödre.
   assert.equal(pickUnseen([[mk("y0")], [], [mk("y2")]], 1, [{ id: "y0", prompt: "y0" }, { id: "y2", prompt: "y2" }], () => 0)?.id, "y0");
 });
-
