@@ -7,6 +7,19 @@ Előzmény: [`2026-10-17-eredmeny-email.md`](2026-10-17-eredmeny-email.md)
 Tulajdonosi hibajelentés (2026-11-17, szó szerint): „Még egy hiba: csak a szöveges feladatok eredményeit küldi el a tananyag a
 szülőknek, a kvíz eredményét nem.”
 
+## Kilét-invariáns (2026-11-22; minden kilétet érintő pont ehhez mérendő)
+
+**Egy eredmény (pillanatkép vagy végleges) CSAK ahhoz a kiléthez — fiókhoz, párosított tanulóhoz — kerülhet, amely a kör első
+tevékenységekor ebben a böngészőben (vagy a szerveres körnél a kör szerveres rekordjában) rögzült; ha ez a küldéskor nem igazolható, az
+eredmény kilét nélkül („Vendég tanuló”) megy, vagy — ha a kilét nélküli út sem garantálható — nem megy el.**
+
+Kilét-források, amelyekre az invariáns vonatkozik (a pontonkénti kezelés: a végrehajtási fájl „2026-11-22 — kilét-osztály leltár”
+táblázata): bejelentkezett fiók (munkamenet-süti, a CSRF-tokenválasz álnevesített címkéje); párosító token (eszközön tárolt, linkkel
+cserélhető); vendég (ujjlenyomat / IP — nem név, csak első rögzítő); régi (címkét nem ismerő) szerver és a 400 utáni visszalépés; 403 utáni
+tokencsere; újrapárosítás; fiókváltás (másik fülön be- / kilépés); több fül ugyanazon a körön; rekord nélkül helyreállított kör
+(korábbi kódverzió, privát mód); szerveres leállítás és ürítés; átmeneti DB-hiba a kilét feloldásakor / ellenőrzésekor; régi
+klienscsomag (ismert korlát: címke nélkül küld, a munkamenet fiókja számít — a főági viselkedés).
+
 ## Cél
 
 1. A vendég / párosított tanuló HELYI kvízének eredménye akkor is elmenjen, ha a tanuló minden kérdésre válaszolt, de a „Kvíz
@@ -462,6 +475,10 @@ harmadszor), ezért foltozás helyett tervezési szabály:
     tulajdonos-lekérdezés átmeneti hibája újrapróbálható 503 a 202 előtt, nem végleges küldés.
   - Vállalt korlát: a `null` (az első tevékenységkor ismeretlen) fiókcímkéjű kör régi szerver felé címke nélkül megy, és ott a munkamenet
     fiókja kerülhet hozzá (a tulajdonosi utasítás szerint megengedett eset; csak vegyes telepítésnél vagy visszaállításnál áll elő).
+- **R50 — kilét-osztály leltár (2026-11-22, saját lelet): rekord nélkül helyreállított, már megkezdett kör kiléte nem igazolható.** A
+  kilét EGYETLEN kliensoldali keletkezési pontja (`bindRoundOwner`) a mostani kilétet csak akkor rögzíti, ha a kört ebben a dokumentumban
+  még tevékenység nélkül láttuk; a már megkezdett, rekord nélküli kör (korábbi kódverzió, privát módú újratöltés) ismeretlenként rögzül
+  (`?`, párosítás nélkül).
 - **R48 — a késői pillanatkép-válasz nem írja vissza a részleges jelzőt (L4).** Ha a kör végleges jelzője már megvan, a pillanatkép
   késői 202-je nem menti a részleges jelzőt (az R8 takarítása idempotens).
 
@@ -541,6 +558,8 @@ Elfogadás (S1b):
 - E69. AMIKOR a végleges kérés vagy a pillanatkép 403-a alatt az eszköz újrapárosul, A RENDSZER az ismétlést párosítás nélkül küldi (R49 b).
 - E70. AMIKOR létező végleges jelzősor mellett a tulajdonos-lekérdezés átmenetileg hibázik, A RENDSZER 503-at ad, második levél nem megy;
   a hiba után más kilét duplikátum-választ kap (R49 c).
+- E71. AMIKOR egy már megkezdett kör kilét-rekord nélkül áll helyre, A RENDSZER a kört `?` címkével és párosítás nélkül küldi; a rekord a
+  végleges siker után törlődik (R50).
 - E34. A kapu átmeneti hibája után a „félbehagyva” levél egy újrapróbával kimegy; ha közben a kör véglegesült, nem megy ki (R19).
 - E33. Véglegesítés és újraindítás után a más kilétű (vendég, ujjlenyomat nélküli, más IP-jű) pillanatkép ugyanarra a körre nem ütemez
   „félbehagyva” levelet; a 24 óránál régebbi jelzősor nem számít (R18).
@@ -625,4 +644,5 @@ Elfogadás (S1b):
 - [ ] E68 – nem igazolható kilét: nincs régi alakú kérés, nincs elküldött-jelző (böngésző, két út)
 - [ ] E69 – 403 alatti újrapárosítás: az ismétlés párosítás nélkül (böngésző, végleges + pillanatkép)
 - [ ] E70 – tulajdonos-lekérdezési hiba: 503, nincs második levél, utána duplikátum (valódi DB)
+- [ ] E71 – rekord nélkül helyreállított, megkezdett kör: `?`, párosítás nélkül; a rekord a végleges siker után törlődik (böngésző)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)

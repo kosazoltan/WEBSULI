@@ -399,6 +399,47 @@ Előbb BUKÓ tesztek (mind piros volt a régi kóddal), utána a javítás.
   `toStrictEqual` méri (az R39 korábbi állítása így rejthetett volna címke nélküli kérést). Az R35 forrásőr pontosítva: a tokenválasz
   címkéje nem kerülhet értékadással a kilétbe / `outbox.update` nincs, az összevetés (`info.subject === entry.subject`) kötelező.
 
+## 2026-11-22 — kilét-osztály leltár (invariáns: a terv „Kilét-invariáns” szakasza)
+
+Tulajdonosi utasítás (2026-11-22): megközelítésváltás — a kilét MINDEN keletkezési / olvasási / továbbítási / feloldási pontja egy
+táblázatban, a közös segédekkel (`bindRoundOwner` + `ownerLearner` + `legacyAllowed` a kliensen; az útvonal-kezelő egyetlen
+`userId` / `paired` / `who` meghatározása a szerveren). Útvonalak a `source/` alatt; „teszt” = az invariánst igazoló, futtatott teszt.
+
+| # | Pont (fájl:sor) | Forrás | Mikor rögzül | Küldéskor mivel veti össze | Eltérésnél | Hibánál | Teszt |
+|---|---|---|---|---|---|---|---|
+| K1 | `server/routes.ts:1010` → `client/src/lib/queryClient.ts:83` | fiók (munkamenet) álnevesített címkéje a CSRF-tokenválaszban | tokenlekéréskor (gyorsítótár) | — (forrás) | — | tokenhiba: nincs token, nincs címke | `R39 / L1`, `R43 / L1` |
+| K2 | `client/src/lib/queryClient.ts:91,268,306` (`getTokenInfo` + `prepare`) | a kérés tokenje és a vele jött képesség / címke | minden kísérletnél (403 után is) | a törzs ugyanabból a válaszból épül | — | `prepare` mellett tokenhiba → nem küld | `R39 / L1`, `R49 / L1 (a)` |
+| K3 | `client/src/lib/learnerProfile.ts:20,38` | párosító token (eszköz, linkkel cserélhető) | a link megnyitásakor | — (forrás) | — | olvashatatlan tároló → nincs párosítás | `R47 / L2` |
+| K4 | `client/src/lesson-runtime/resultReport.ts:64` (`bindRoundOwner`) | fiókcímke + párosítás-lenyomat → kör kilét-rekordja | a kör ELSŐ tevékenységekor, csak ha a kört itt tevékenység nélkül láttuk (R50) | — (egyetlen keletkezési pont) | rekord nélküli megkezdett kör → ismeretlen (`?`, párosítás nélkül) | írhatatlan tároló → memóriabeli rekord | `R47 / L1`, `R50 (leltár)` |
+| K5 | `resultReport.ts:185` | CSRF-token előtöltése a lecke megnyitásakor | lecke megnyitása | — | — | sikertelen előtöltés → a címke ismeretlen (`?`) | `R47 / L1` (késői token → `?`) |
+| K6 | `resultReport.ts:190` (`seenFresh`) | „a kört itt tevékenység nélkül láttuk” bizonyíték | minden megjelenítéskor | K4 használja | — | — | `R50 (leltár)` |
+| K7 | `resultReport.ts:219` (végleges bejegyzés) | rögzített `subject` + `learnerTag`; nyers token nincs a törzsben | a bejegyzés létrehozásakor | K8 | — | — | `R47 / L2`, `R49 / L2 (b)` |
+| K8 | `resultReport.ts:122,126` (`build`) | a végleges kérés kilétmezői | minden kísérlet előtt | `subject` = rögzített; `learner` = `ownerLearner` (mostani token lenyomata = rögzített) | párosítás nélkül; a szerver eltérő címkénél fiók nélkül | — | `R49 / L2 (b)` végleges, `R47 / kontroll` |
+| K9 | `resultReport.ts:128,134,148` (`legacyAllowed`) | régi (címke nélküli) alak: jelzés nélküli token / R10 400 utáni visszalépés | minden kísérletnél | rögzített címke `null`, vagy V2-tokenválasz azonos címkével | NEM küld: `OutboxIdentityHold` (vár, majd lejár) | — | `R49 / L1 (a)` ×2; kontroll (`null` tulajdonos): R12, R10 |
+| K10 | `resultReport.ts:84` (`enqueueResult`) | a sorban álló bejegyzés kiléte | létrehozáskor | — | utólagos pótlás / átírás nincs | — | `result-outbox.test.ts` R35-őr (R47), `R35 / L1` |
+| K11 | `resultReport.ts:263,267` (pillanatkép) | rögzített `subject`; `learner` függvényben | minden kísérlet előtt (403 után is) | `ownerLearner` | párosítás nélkül | — | `R47 / L2`, `R49 / L2 (b)` pillanatkép |
+| K12 | `client/src/lib/queryClient.ts:153,178` (`sendKeepalive`) | pillanatkép-törzs és tokencsere | minden kísérlet előtt | 403 után jelzés nélküli token → nem küld (R23) | — | tokenhiba → `false` (nem rögzül elküldöttként) | `R23 / L3`, `R49 / L2 (b)` |
+| K13 | `client/src/lib/fingerprintCache.ts` | vendég-ujjlenyomat (eszköz, nem név) | első lekérés | — | a szerver vendégnek tekinti | lekérési hiba → IP-kulcs | `R11 / K1` (DB) |
+| K14 | `resultReport.ts:31`, `client/src/App.tsx:134` | tartós sor és induló ürítés (BE kapcsoló) | — | K7–K10 ugyanúgy | — | — | `Kapcsoló KI (alap)`, `R35 / L1`, `R39 / L1` (BE) |
+| K15 | `resultReport.ts:160` | a kilét-rekord törlése | végleges sikerkor | — | — | — | `R47 / kontroll` (K16-állítás) |
+| K16 | több fül ugyanazon a körön | a kilét-rekord a közös tárolóban; a második fül ugyanazt olvassa | az első fül első tevékenységekor | K8 / K11 | párosítás nélkül | — | `Leltár K16` (két fül egy kontextusban; a leltárban pótolva — a mostani kódon elsőre zöld, lefedési teszt) |
+| S1 | `server/lesson-result-email.ts:506` | fiók: a munkamenet `userId`-je csak egyező címkénél | kérés fogadásakor | `body.subject` = `resultSubjectOf(session)` | `?` / eltérő → fiók nélkül | — | `R31` (DB) |
+| S2 | ugyanott, címke NÉLKÜLI kérés | régi alak / régi klienscsomag | kérés fogadásakor | — (nincs mivel) | a munkamenet fiókja (főági viselkedés) | — | kliens oldalon K9 véd; **régi klienscsomag: ismert korlát (UNVERIFIED a valódi régi csomaggal)** |
+| S3 | `server/lesson-result-email.ts:511–516` | párosítás feloldása (`resolveLearner`) | kérés fogadásakor | token aláírás + verzió | érvénytelen / visszavont → névtelen | átmeneti hiba → 503, nincs rögzítés | `R47 / L3` (DB) |
+| S4 | `:519,526` (`who`, `partialWhos`) | első rögzítő kulcsa | kérés fogadásakor | — | — | — | `R11`, `R22`, `R34` (DB) |
+| S5 | `:521–522,578` (név, attribúció) | a rögzített `userId` / `paired` → név a küldési kísérletben | fogadáskor (kilét) / kísérletkor (név) | — | — | névfeloldási hiba → újrapróba, utána az első rögzítő felszabadul | `R38` (DB) |
+| S6 | `:570–577` (első rögzítő, vendég-átvétel) | várakozó / küldés alatti kör első rögzítője | időzítő / ürítés (`startPartial`, `:343`) | `mayActOn` | `conflict`, vendég kör vendég marad | — | `R11/R15/R16`, `R22`, `R34`, `R45 / L3` (DB) |
+| S7 | `:389` (tulajdonos-sor) + `:625–640` | végleges jelzősor első rögzítője | jelzősorral egy tranzakcióban | saját sor VAGY tulajdonos-sor | duplikátum | jelzősor-írás hibája: best effort; tulajdonos-lekérdezés hibája → 503 | `R27`, `R42`, `R49 / L3 (c)` (DB) |
+| S8 | `:671–672` (végleges levél neve) | a rögzített `userId` / `paired` | fogadáskor | — | — | névfeloldási hiba → újrapróba | `R27`, `R31` (DB) |
+| S9 | `:683` (`sendPracticeResult`) | bejelentkezett szerveres kvíz: a kör szerveres rekordjának `userId`-je | a kör indításakor | `withAttempt` tulajdonos-ellenőrzés | 404 (más fiók nem éri el) | — | `tests/learning-db.integration.ts:114` (más fiók 404) |
+| S10 | `:589` + ürítés (R41 / R45) | leállítás: a kilét a felvételkor rögzült lezárásban utazik | felvételkor | — | — | lezárult ürítés után 503 | `R14`, `R41`, `R45 / L3` (DB) |
+
+Összesítés: **26 sor** (16 kliens, 10 szerver). Saját (nem a vak ellenőrtől származó) eltérés: **1** — K4 / K6 (R50): rekord nélkül
+helyreállított, megkezdett kör a mostani kilétet kapta; közös segéddel (`bindRoundOwner` második paramétere) javítva, előbb bukó
+teszttel (`R50 (leltár)`: régi kóddal A párosítása ment). Pótolt teszthiány: K15 (a rekord törlése — az `R47 / kontroll` kiegészítése).
+Pótolt teszthiány még: K16 (több fül — `Leltár K16`, a mostani kódon zöld). Nem igazolt sor: **S2** (valódi régi klienscsomag — ismert
+korlát, főági viselkedés; valódi régi csomaggal nem futott).
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.
