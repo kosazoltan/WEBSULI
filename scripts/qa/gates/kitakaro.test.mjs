@@ -147,7 +147,8 @@ test('D7: az ártalmatlan környezet megmarad (rövid szavak, magyar szöveg, HT
 
 test('vak L3 (ac6447f5): többsoros Bearer-token — a kapu konzolja és a .log is titokmentes (a formázás előtt takar)', async () => {
   const { createGate, STATUS } = await import('./lib.mjs');
-  const detail = ['✖ failing tests:', 'Authorization: Bearer Ab12Cd34+Ef/Gh', 'Ij56Kl78=Mn90Op', 'vége'].join('\n');
+  // a záró sor nem token-karakterrel kezdődik: a D7 szerint a sortörésen átnyúló futás különben ide is átérne
+  const detail = ['✖ failing tests:', 'Authorization: Bearer Ab12Cd34+Ef/Gh', 'Ij56Kl78=Mn90Op', '— vége'].join('\n');
   const lines = [];
   const g = createGate('proba', { log: (s) => lines.push(s) });
   g.add('lépés', STATUS.FAIL, '', detail);

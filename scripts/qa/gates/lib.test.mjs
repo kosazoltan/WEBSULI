@@ -100,14 +100,15 @@ test('redact: lineáris idő hosszú, @ nélküli és tartomány-futáson (300 0
   const inputs = {
     betuk: same('a'.repeat(n)),
     pontsor: same('a.'.repeat(n / 2)),
-    hex: same('0123456789abcdef'.repeat(n / 16)),
+    // D7 (tulajdonos, 2026-11-22, „Óvatos túlkitakarás”): a ≥ 20 karakteres, betűt és számot is tartalmazó futás (hash is) helyőrzőt kap.
+    hex: ['0123456789abcdef'.repeat(n / 16), '<token>'],
     tartomany: same(`x${at}${'a'.repeat(n)}`),
-    cimkek: same(`x${at}${'a.'.repeat(n / 2)}1`),
+    cimkek: [`x${at}${'a.'.repeat(n / 2)}1`, `x${at}<token>`], // D7: a cím nem, de a betű+szám futás igen
     kotojelek: same(`x${at}${'a-'.repeat(n / 2)}`),
     hosszuHelyi: [`${'b'.repeat(n)}${at}pelda.hu`, '<email>'],
     sokCimke: [`x${at}${'a.'.repeat(n / 2)}com`, '<email>'],
     cimAVegen: [`${'a'.repeat(n)} info${at}pelda.hu`, `${'a'.repeat(n)} <email>`],
-    cimAzElejen: [`info${at}pelda.hu ${'0123456789abcdef'.repeat(n / 16)}`, `<email> ${'0123456789abcdef'.repeat(n / 16)}`],
+    cimAzElejen: [`info${at}pelda.hu ${'0123456789abcdef'.repeat(n / 16)}`, '<email> <token>'], // D7
   };
   for (const [name, [s, expected]] of Object.entries(inputs)) {
     const t0 = performance.now();
