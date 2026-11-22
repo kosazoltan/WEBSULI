@@ -741,4 +741,9 @@ export const VOCAB_FR_L0: VocabEntry[] = [
   { id: "fr0-numbers-024", term: "le mètre", hu: "méter", kind: "word", level: 0, topic: "numbers", pos: "noun", example: "La table fait un mètre.", exampleHu: "Az asztal egy méter hosszú.", alt: ["un mètre"] },
   { id: "fr0-animals-066", term: "le loup", hu: "farkas", kind: "word", level: 0, topic: "animals", pos: "noun", example: "Le loup habite dans la forêt.", exampleHu: "A farkas az erdőben lakik." },
   { id: "fr0-animals-067", term: "le coq", hu: "kakas", kind: "word", level: 0, topic: "animals", pos: "noun", example: "Le coq chante le matin.", exampleHu: "A kakas reggel kukorékol." },
+  { id: "fr0-nature-037", term: "la rive", hu: "part (folyóé)", kind: "word", level: 0, topic: "nature", pos: "noun", example: "Les canards sont sur la rive.", exampleHu: "A kacsák a parton vannak." },
+  { id: "fr0-travel-028", term: "la voile", hu: "vitorla", kind: "word", level: 0, topic: "travel", pos: "noun", example: "La voile du bateau est blanche.", exampleHu: "A hajó vitorlája fehér." },
+  { id: "fr0-travel-029", term: "la rame", hu: "evező", kind: "word", level: 0, topic: "travel", pos: "noun", example: "Papa prend la rame.", exampleHu: "Apa fogja az evezőt." },
+  { id: "fr0-animals-068", term: "le dindon", hu: "pulyka", kind: "word", level: 0, topic: "animals", pos: "noun", example: "Le dindon est gros.", exampleHu: "A pulyka nagy." },
+  { id: "fr0-animals-069", term: "la pieuvre", hu: "polip", kind: "word", level: 0, topic: "animals", pos: "noun", example: "La pieuvre vit dans la mer.", exampleHu: "A polip a tengerben él." },
 ];

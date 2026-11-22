@@ -104,7 +104,7 @@ futáskorláttal. Éles DB, `db:push`, e-mail, push / PR / merge, kódellenőri 
     **> 22 USD → STOP** (a teljes futás nem indul, a mért számok jelentésbe).
 12. **Teljes futás:** nyelvenként legfeljebb +300 új 0. szintű egyes szó, a fokozatonkénti hiány szerint elosztva
     (cél: 0. és 1. fokozat külön-külön ≥ 300; en ≥ +78 / +119, de ≥ +129 / +155, fr ≥ +191 / +114 = 305 > 300 — a fr
-    1. fokozata a +300-as plafonon belül legfeljebb 295-ig jut, ezt a jelentés NOT DONE-ként jelzi, ha nincs más döntés).
+    1. fokozata a +300-as plafonon belül legfeljebb 295-ig jut, ezért az orkesztrátor +5 fr szót engedélyezett, 2026-11-22).
     Futáskorlát: `--budget-usd` = 25 − (eddigi napló-összeg), tartalék a vak körre.
 13. **Vak megoldó:** `node --import tsx scripts/vocab-bank.ts blind-export --lang <l> --level 0 --seed 1122 --only <ids> --canary 10 …`
     → `vocab-bank-generate.ts solve` (Opus, csak a kérdésfájlt kapja) → `blind-score` → kanári 10/10 kötelező; a jelzett
@@ -129,7 +129,7 @@ futáskorláttal. Éles DB, `db:push`, e-mail, push / PR / merge, kódellenőri 
   `memory/notes/00-Index.md` miatt — ezt a `origin/main` 0645f48f (`chore(zaro-hurok)`) hozta be, a munkaág nem érinti a
   `memory/` mappát. Minden más lépés PASS.
 - **S3 (2026-11-22, `feat/szoletra-a1-bank`):** próbakör 6 hívás 0,2869 USD (3 csonkolt, C-SZL-2), 36 elfogadott szó →
-  vetítés 7,17 USD ≤ 22; teljes generálás 18 hívás 1,9281 USD; vak megoldó 53 hívás 5,0899 USD; **összesen 7,3048 USD**.
-  0. / 1. fokozat egyes szó: en 372 / 328, de 316 / 300, fr 300 / 295. Kanári 10/10, 10/10, 9/10 (a fr kimaradt kanárija
+  vetítés 7,17 USD ≤ 22; teljes generálás 18 hívás 1,9281 USD; vak megoldó 54 hívás 5,1206 USD; **összesen 7,3355 USD**.
+  0. / 1. fokozat egyes szó: en 372 / 328, de 316 / 300, fr 300 / 300 (fr +5 pótlás, orkesztrátori engedéllyel). Kanári 10/10, 10/10, 9/10 (a fr kimaradt kanárija
   valódi tartalmi hibát jelzett, tétel törölve); utolsó körben valódi hiba 0. A Szólétra / szóbank egységtesztek 221/221
   zöldek, `tsc --noEmit` 0 hiba. Jegyzőkönyv: `docs/measurements/2026-11-22-szoletra-a1-bank.md`.

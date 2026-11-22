@@ -270,8 +270,8 @@ PR-leírásban (gép által rögzített számláló, nem becslés).
 |---|---|---|---|
 | en | 222 → 372 | 181 → 328 | 297 |
 | de | 171 → 316 | 145 → 300 | 300 |
-| fr | 109 → 300 | 186 → 295 | 300 |
+| fr | 109 → 300 | 186 → 300 | 305 |
 
-Mért költség: **7,3048 USD** (77 hívás, a válaszok `usage.cost` mezőjének összege; napló:
-`docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl`). A fr 1. fokozata 295 < 300: a két fokozat külön-külön
-≥ 300-hoz a fr-nél 305 új szó kellene, a megbízás plafonja nyelvenként +300 (nyitott: +5 fr szó engedélyezése).
+Mért költség: **7,3355 USD** (78 hívás, a válaszok `usage.cost` mezőjének összege; napló:
+`docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl`). A fr-nél a két fokozat külön-külön ≥ 300-hoz 305 új szó
+kellett: a +5 tételt az orkesztrátor a kereten belül engedélyezte (tartalék-jelöltekből, rövid vak körrel).
