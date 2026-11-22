@@ -6,11 +6,13 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AssetManifest } from "./lib";
+import { parseSetName, type AssetManifest } from "./lib";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const CANDIDATES = path.join(ROOT, "design-assets", "candidates");
-const manifest = JSON.parse(readFileSync(path.join(ROOT, "design-assets", "prompts.json"), "utf8")) as AssetManifest;
+// Külön készlet (`--set advent`): design-assets/<név>/prompts.json, a jelöltek és a válogatóoldal a nem követett candidates/<név>/ alatt.
+const SET = parseSetName(process.argv.includes("--set") ? (process.argv[process.argv.indexOf("--set") + 1] ?? "") : undefined);
+const CANDIDATES = SET ? path.join(ROOT, "design-assets", "candidates", SET) : path.join(ROOT, "design-assets", "candidates");
+const manifest = JSON.parse(readFileSync(path.join(ROOT, "design-assets", ...(SET ? [SET] : []), "prompts.json"), "utf8")) as AssetManifest;
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 const sections = manifest.items.map(item => {

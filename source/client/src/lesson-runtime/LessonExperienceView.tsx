@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { experienceRoundSizes, type LessonExperience } from "@shared/lesson-experience";
 import { evaluateOpenAnswer, scoreSummary, sampleTaskIds } from "@shared/lesson-experience-score";
 import { CognitiveMethods } from "./CognitiveMethods";
-import { DictationButton, PronounceButton, SpeakButton, stopSpeech } from "./ExperienceSpeech";
+import { DictationButton, PronounceButton, SpeakButton, prepareLessonSpeech, releaseLessonSpeech, stopSpeech } from "./ExperienceSpeech";
 import { ClipPlayAllButton } from "./clips/ClipContext";
 import { useExperienceRound } from "./useExperienceRound";
 import { useResultReport } from "./resultReport";
@@ -90,6 +90,13 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   const quizPoints = quiz.filter(q => quizState.round.picks[q.id] === q.correctIndex).length;
   // Fülváltáskor és a lecke elhagyásakor minden hang leáll — a tartalék MP3 és az indulási őr is (spec 2026-11-10-hibavadaszat A1).
   useEffect(() => () => { stopSpeech(); }, [tab]);
+  // S8d: nyelvleckénél a szószedet hangjai a lecke megnyitásakor a háttérben előtöltődnek (egy jegyzék-kérés, korlátozott párhuzamosság);
+  // a lecke elhagyásakor a letöltések megszakadnak és a hangelemek felszabadulnak.
+  // Az effekt a lecke TARTALMÁTÓL függ (nyelv + szövegek), nem az objektum azonosságától: a szülő minden újrarenderelése új
+  // objektumfát ad — attól a szóló hang nem szakadhat meg, és a pufferek nem dobódhatnak el.
+  const speechKey = e.language ? [e.language, ...e.glossary.flatMap(entry => [entry.word, entry.example])].join("\u0001") : "";
+  useEffect(() => { if (!speechKey) return; const [language, ...texts] = speechKey.split("\u0001"); prepareLessonSpeech(texts, language); }, [speechKey]);
+  useEffect(() => () => releaseLessonSpeech(), []);
   const seconds = (round: typeof taskState.round) => Math.max(0, Math.floor(((round.finishedAt ?? Date.now()) - round.startedAt) / 1000));
   return <div className="fusion-view" data-quiet={quiet} data-quiz-guided={false}>
     <nav className="fusion-tabs" role="tablist" aria-label="A tananyag oldalai" data-tabs={tabs.length}>{tabs.map(({ id, label, icon: Icon }, i) => <button key={id} id={`${prefix}-fusion-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls={`${prefix}-fusion-panel-${id}`} tabIndex={tab === id ? 0 : -1} onClick={() => changeTab(id)} onKeyDown={event => {

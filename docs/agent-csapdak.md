@@ -36,6 +36,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-46** — Unicode-tartomány forrásban `\p{…}` kategóriával, ne `\uXXXX`-szel (az eszközparaméter dekódolja); `cat -A` ellenőrzés.
 - **C-50** — Visszaperjeles szöveg csak Edit/Write-tal; bájtszintű visszaolvasás; szkriptes cserénél `git diff --stat` ellenőrzés.
 - **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
+- **C-95** — Folyamatot csak saját, egyedi jelölő vagy pontos PID alapján állíts le — parancssori mintaillesztéssel soha.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -48,6 +49,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-57** — Meta-képernyő mérése: `scrollIntoView` után az `overflow: hidden` ős se mozduljon; érintéses görgetés CDP touch-sorozattal.
 - **C-64** — Poll-függvényben az állapotot egyetlen `page.evaluate` olvassa, ne több automatikusan váró lokátorhívás.
 - **C-65** — Időtartam-állítást a lapon belül, képkockánként mérj; a lassú CI-hibát CPU-lassítással reprodukáld.
+- **C-94** — A saját, még be nem olvasztott teszted mércéjét se igazítsd az új implementációhoz; ha nem fér össze, az ütközést jelentsd.
 
 ### UI, CSS, mobil
 - **C-07** — Fix magasságú flex-oszlopban minden szinten `min-h-0`; UI-tesztben `elementFromPoint`-takarásvizsgálat 390 px-en is.
@@ -472,6 +474,18 @@ Forrás: tulajdonosi visszajelzés („borzasztó”) → `docs/specs/2026-11-10
   látszottak. **Megelőzés 8:** mérőeszközt a mérés előtt ismert jó mintán kell ellenőrizni; ha a jó minta megbukik, a mérce a hibás.
 - **Tünet 9:** párhuzamos hívások a szolgáltató egyidejűségi korlátjába ütköztek (ElevenLabs: 3; HTTP 429), egy jelenet hang nélkül maradt.
 - **Megelőzés 9:** külső szolgáltató párhuzamos hívásai közös sorba állítóval, a mért korlát alatt; 429-re várakozás és újrapróba.
+- **Tünet 10 (éles hiba):** a gyártás bekapcsolása után az éles szerver 3–4 percenként újraindult: nyolc párhuzamos `ffmpeg`
+  (egyenként 171 MB) betöltötte az 512 MB-os példányt. A helyi próba nem mutatta ki — ott nincs memóriakorlát.
+- **Megelőzés 10:** háttérmunkát az éles példány KORLÁTJÁHOZ kell méretezni (`render.yaml` / a példány terve), nem a fejlesztői
+  géphez: alfolyamat csúcsmemóriáját mérni kell (`os.wait4` → `ru_maxrss`), nehéz lépés közös sorban, egyesével; nagy fájl lemezre,
+  nem memóriába; memóriaőr a kör elején. Új háttérmunka bekapcsolása után az első kört a Render memória- és eseménymérésével
+  azonnal ellenőrizni kell, és a kikapcsolásnak egy lépésben meg kell lennie.
+- **Tünet 11 (vak kör, #418):** az „egyszerre egy” korlátok papíron álltak, a kódban nem: (a) a `Promise.all` az első jelenethibára
+  visszatért, a testvérjelenetek tovább költöttek és írtak a következő fejezet mellett; (b) a sorba állító a helyet felszabadította,
+  mielőtt a várakozónak átadta volna — a köztes érkező is elindult (2 egyidejű feladat); (c) a két `-threads 1` mellett az ffmpeg
+  szűrőlánca annyi szálat indított, ahány CPU-t látott.
+- **Megelőzés 11:** egyidejűségi korlátot fail-fast nélküli kivárással (`allSettled` + megszakítójelző) és determinisztikus
+  közbeékelődéses teszttel kell igazolni; sorba állítónál a hely közvetlenül a várakozóé; ffmpeg-nél `-filter_threads 1` is.
 - **Tünet 3:** a hangminőséget az ügynök nem tudja füllel megítélni — a „természetes hang” állítás mérés nélkül feltételezés.
 - **Megelőzés 3:** hangról csak mérhető tényt szabad állítani (elkészült, hossz, modell, hangazonosító); a minőség a tulajdonos szemléje.
 
@@ -1086,3 +1100,74 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 - **Szabály:** láthatatlan vagy tipográfiai karaktert a forrásban mindig escape-pel írj, és írás után ellenőrizd a fájl nyers
   tartalmát (`python -c "print(ascii(open(f, encoding='utf-8').read()))"` az érintett sorokra). Tesztben a karaktert kódpontból
   állítsd elő (`String.fromCharCode(0x2028)`), ne literálként.
+
+## C-75 — Őrt / kaput érintő PR-ok: soros merge-ablak; a hook bekötését a valódi settings-szel mérd (2026-11-18)
+
+- **Tünet:** két őr-érintő PR nem lehet egyszerre zöld — a C-61 hatókör (a main elmozdulása a repó-szintű ellenőrzés fájlkörében)
+  és a ~2 órás böngészős kör együtt minden mainre kerülő PR után új beolvasztást + új CI-t kényszerít (a #499-nél két extra kör).
+- **Szabály:** az őrt / kaput érintő PR-okat elsőként, egyenként kell beolvasztani; a merge-ablakot az orkesztrátor jelzi, a
+  beolvasztást a fejlesztő a jelre végzi (előtte próbabeolvasztás: `git merge-tree --write-tree HEAD origin/main`).
+- **Tünet 2:** a hook-szkript tesztje zöld volt, a hook mégsem futott alkönyvtárból (relatív útvonal a settings-ben, #490 M1).
+- **Szabály 2:** hookot a VALÓDI `.claude/settings.json` parancsával, több munkakönyvtárból kell tesztelni
+  (`scripts/qa/hooks/settings-hooks.test.mjs`); héj-értelmezést valódi héjjal (Git Bash, PowerShell 7 és 5.1) végzett különbségi
+  próbával (`scripts/qa/hooks/fixtures/quoting-forms.json`).
+- **Tünet 3 (eszközhasználat):** Git Bashben a kettős idézőjeles `node -e "…"` szövegben álló backtick parancshelyettesítésként
+  lefutott (fájlnevek „futtatva”, a beírt szöveg kiürült). **Szabály 3:** backticket tartalmazó szöveget fájlba írj (Write eszköz),
+  és a szkriptet fájlból futtasd — ne kettős idézőjeles parancssorban.
+- **Tünet 4 (eszközhasználat, #506 3. kör):** visszaperjelet (`\\`) tartalmazó tesztkódot heredoc + `sed` láncban fűztem a fájlhoz —
+  az egyik visszaperjel elveszett, a tesztfájl szintaxishibás lett. **Szabály 4:** a 3. szabály a visszaperjelre is áll: regexet,
+  escape-et tartalmazó kódot csak a Write / Edit eszközzel írj; mutációs ellenpróbát JS-szkriptben, szöveges keresés-cserével
+  (nem többszörösen escape-elt héjparancsban).
+
+Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-93 — Gépváltás: a telepített Chrome frissülése elválik a rögzített Playwrighttól (2026-11-22)
+
+- **Tünet:** az új gépen a PR előtti kapu böngészős köre a főág kódjával is bukott: `preview-navigation.spec.ts` „opaque sandbox …” —
+  `Target page, context or browser has been closed`; a `DEBUG=pw:browser` naplóban a Chrome `exitCode=2147483651`-gyel lépett ki.
+  Ok: a konfigurációk `channel: "chrome"`-mal a gép stabil Chrome-ját (158) indították, amelyet a projekt Playwright 1.57-e nem támogat;
+  egy sandboxolt iframe `srcdoc`-ja már üres tartalommal is összeomlasztotta. A Playwright saját Chromiumán hibátlan volt.
+- **Szabály:** a böngészős tesztek a Playwrighthoz rögzített Chromiumon futnak (`channel` nélkül; őr-teszt:
+  `source/tests/playwright-bundled-chromium-guard.test.ts`). Új gépen egyszer: `npx.cmd playwright install chromium` a `source`-ban.
+  Ha egy böngészős teszt helyben „Target page … closed”-dal bukik, előbb `DEBUG=pw:browser`-rel nézd meg a böngésző kilépési kódját.
+
+Forrás: `docs/specs/2026-11-22-playwright-csomagolt-chromium.md`.
+
+## C-94 — A teszt mércéjét ne igazítsd az új implementációhoz — a saját, még be nem olvasztott tesztét sem (2026-11-19)
+
+Forrás: #504 (Kockavadász `?perf=1`), 2. vak kör M1 (blokkoló). Rokon: C-15.
+
+- **Tünet:** a `perf-stats.test.ts` idősor-tesztjei a jelzőt a képkocka-köz közepén és végén olvasták. Az új implementáció ezeken
+  elbukott volna, ezért a fejlesztő az olvasási pontokat „a valós ütemre” igazította (csak közvetlenül a kirajzolás után olvasott),
+  az indoklás pedig csak CPU-kötött huroknál volt igaz — GPU-kötött huroknál (szoftveres WebGL, gyenge telefon-GPU) a régi pontok
+  valós helyzetet modelleztek. A teszt zöld lett, a hiba (hamis „áll” lassú, élő hurkon) megmaradt; a fejkomment ellentmondott a kódnak.
+- **Szabály:** ha az implementáció egy meglévő — akár a saját, ebben a PR-ban írt — tesztállításon bukik, az IMPLEMENTÁCIÓT javítsd.
+  Ha a teszt modellje szerinted hibás, ne írd át csendben: adj MELLÉ új esetet a másik modellel, és a régi maradjon. Ha két állítás
+  elvben nem teljesülhet egyszerre (pl. „egy élő, 2,5 s-os képkocka végén sem áll” és „1,5 s képkocka nélkül már áll”), az
+  követelmény-ütközés: állj meg, és kérj döntést opciókkal — ne a kényelmesebbik tesztet lazítsd.
+- **Ellenőrzés:** a push előtt `git diff <előző visszanézett fej>..HEAD -- source/tests` — minden megváltozott állítás mellé indoklás
+  a commit-üzenetben; elvárás-érték módosítása csak dokumentált spec-döntéssel.
+
+## C-95 — Folyamatot csak saját, egyedi jelölő vagy pontos PID alapján állíts le, mintaillesztéssel soha (2026-11-19)
+
+Forrás: #504, a közös gép-zár (`scratchpad\gep-sav\lock`) bevezetésének napja. Rokon: a memória „TaskStop árva figyelő” bejegyzése.
+
+- **Tünet:** a saját zár-várakozó bash-ciklus leállítása után (Windows alatt a TaskStop a ciklust árván hagyhatja) az ügynök a
+  maradékot `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'gep-sav' -and … -match 'gazda' }` szűrővel
+  kereste és `Stop-Process`-szel leállította — 14 folyamatot, ebből egy volt a sajátja; a többi más munkamenetek ugyanilyen
+  szövegű zár-várakozója volt. Azok sorban állása elveszett, újra kellett indítaniuk.
+- **Szabály:** a háttérbe indított, később esetleg leállítandó parancsba tegyél egyedi jelölőt (pl. `: KV504WAIT;` az elején, vagy a
+  saját munkafa abszolút útvonala), és leállításkor CSAK erre a jelölőre vagy a pontosan ismert PID-re (és annak gyermekeire)
+  szűrj. Közös erőforrás nevére (zár-, sorrend-, napló-mappa), általános parancsnévre (`node`, `bash`, `pre-push-gate`) szűrni tilos.
+  Leállítás előtt listázd ki a találatokat, és ha nem mind a tiéd, ne állíts le semmit — jelezd.
+
+## C-96 — Böngészős időmérő teszt: abszolút ms-küszöb helyett a teszt saját időbélyegeihez mérj (2026-11-22)
+
+Forrás: #504, CI `E2E rész (5)` (a 2. vak kör L1 tesztje: helyben zöld, Linux CI-n háromszor bukott).
+
+- **Tünet:** a „minta < 1000 ms” feltétel valódi GPU-n teljesült, a CI SwiftShaderén nem: ott az anyagváltás utáni első kép
+  shader-fordítása > 1 s, így a két kép VALÓDI köze is ennyi. A kód helyes volt, a mérce gépfüggő.
+- **Szabály:** időzítést mérő e2e-ben a teszt rögzítse a vizsgált események saját időbélyegét (pl. a kézzel elengedett rAF-ok
+  `ts`-ét), és a mért értéket ezekhez viszonyítsa; a lassú esetet tegye determinisztikussá (szándékos foglaltság), hogy helyben is
+  fennálljon. Medián / p95 két mintából a kisebbiket adja — a „nincs benne a régi köz” állításhoz az összes minta összegét mérd.
+  A mérce erejét mutánssal igazold (a javítás nélkül bukjon). Helyi CI-szerű futás: `BC_SOFTWARE_GL=1` (SwiftShader).
