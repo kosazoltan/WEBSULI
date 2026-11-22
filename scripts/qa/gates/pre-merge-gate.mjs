@@ -6,7 +6,7 @@
 
 import { join } from 'node:path';
 import {
-  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence,
+  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, redactFirstLine, resolveVerdict, verdictResult, writeEvidence,
 } from './lib.mjs';
 import { evidenceRecord } from './pre-push-gate.mjs';
 
@@ -121,9 +121,9 @@ export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSh
   return out;
 }
 
-function ghJson(exec, root, args) {
+export function ghJson(exec, root, args) {
   const r = exec('gh', args, { cwd: root, timeoutMs: 60_000 });
-  if (r.code !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')}: ${redact(r.stderr).split('\n')[0]}`);
+  if (r.code !== 0) throw new Error(`gh ${args.slice(0, 3).join(' ')}: ${redactFirstLine(r.stderr)}`);
   return JSON.parse(r.stdout || 'null');
 }
 

@@ -40,11 +40,25 @@ export const isCutRunChar = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) 
 function capTail(text) {
   if (text.length <= REDACT_CAP) return text;
   let s = text.length - REDACT_CAP;
+  // A szóhatár PONTOSAN a regex `\s` halmaza (1. vak kör L1): a főági DB-URL-minta (`[^\s"'`<>]+`) ezen nem lép át, az ANSI
+  // ESC-en (27) és más vezérlőkarakteren viszont igen — ezek a szó részei.
   for (let w = 0; w < 2; w++) {
-    while (s < text.length && text.charCodeAt(s) <= 32) s++;
-    while (s < text.length && text.charCodeAt(s) > 32) s++;
+    while (s < text.length && WS.test(text[s])) s++;
+    while (s < text.length && !WS.test(text[s])) s++;
   }
   return `[… ${s} karakter elhagyva …]\n${text.slice(s)}`;
+}
+const WS = /\s/;
+
+/**
+ * Egy hívó, amely csak az első hibasort írja ki (pl. a merge előtti kapu `gh`-hibája; 1. vak kör L3): a NYERS első sor kitakarva —
+ * nem a teljes szöveg első sora, amely a korlát felett a csonkolásjelző lenne. Túl hosszú első sornál a sor vége látszik.
+ */
+export function redactFirstLine(text) {
+  const t = String(text ?? '');
+  const nl = t.indexOf('\n');
+  const lines = redact(nl >= 0 ? t.slice(0, nl) : t).split('\n');
+  return lines[lines[0].startsWith('[… ') && lines.length > 1 ? 1 : 0];
 }
 
 /** Titok, kapcsolati szöveg és e-mail-cím helyőrzőre cserélve — minden kiírás és napló ezen megy át. */

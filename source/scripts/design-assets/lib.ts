@@ -340,7 +340,9 @@ const isCutRunChar = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90)
  * `max + max(64, kulcshossz)` karakterre vágva; a vágásponton átnyúló pontos kulcs-előfordulás és token-futás teljesen kimarad
  * (lineáris hátrálás), utána a változatlan `redact`, majd `slice(0, max)`. A kimenet a régi kimenet előtagja.
  */
-export function redactClip(text: string, key: string, max: number): string {
+export function redactClip(input: string | null | undefined, keyIn: string | null | undefined, max: number): string {
+  const text = String(input ?? ""); // 1. vak kör L5: hiányzó szöveg → üres eredmény
+  const key = keyIn ?? "";
   let p = max + Math.max(64, key.length);
   if (text.length <= p) return redact(text, key).slice(0, max);
   for (;;) {
@@ -353,6 +355,10 @@ export function redactClip(text: string, key: string, max: number): string {
     if (p > 0 && isCutRunChar(text.charCodeAt(p)) && isCutRunChar(text.charCodeAt(p - 1))) {
       while (p > 0 && isCutRunChar(text.charCodeAt(p - 1))) p--;
     }
+    // 1. vak kör L2: befejezetlen főági Bearer-egyezés (`Bearer` + whitespace a vágás előtt) teljesen kimarad.
+    let k = p;
+    while (k > 0 && /\s/.test(text[k - 1])) k--;
+    if (k < p && k >= 6 && text.slice(k - 6, k) === "Bearer") p = k - 6;
     if (p === before) return redact(text.slice(0, p), key).slice(0, max);
   }
 }
