@@ -66,7 +66,11 @@ test-results/
 source/.catalog/
 
 # Repo-saját kanban-tábla (SQLite, hermes-kanban-workflow CLI) — lokális állapot, nem verziózott
-.hermes/
+.hermes/*
+# záró hurok (2026-11-22): a projekt-tudás, TRAP és repó-skillek VERZIÓKEZELTEK (push → más gépen is elérhetők)
+!.hermes/projekt/
+!.hermes/skills/
+.hermes/projekt/vector/
 
 # Minőségkapuk (docs/minosegkapuk.md, 2026-11-17): a kapu-bizonyíték alapból a közös git-könyvtárban van
 # (<git-common-dir>/websuli-qa-evidence/); ha valaki WEBSULI_QA_EVIDENCE_DIR-rel a munkafába tenné, ne kerüljön commitba.
