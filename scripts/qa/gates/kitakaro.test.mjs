@@ -35,7 +35,9 @@ test('külső maskSecrets / maskClip (rövid): minden forma × alak — nincs ti
     for (const [encName, enc] of Object.entries(ENCODINGS)) {
       for (const [fn, out] of [['maskSecrets', maskSecrets(enc(c.raw), CALLER_KEY)], ['maskClip', maskClip(enc(c.raw), CALLER_KEY, 600)]]) {
         assert.equal(leak(out, c.body), null, `${fn} ${c.name} / ${encName}: ${JSON.stringify(out)}`);
-        assert.ok(ctx(out), `${fn} ${c.name} / ${encName}: környezet`);
+        // szűkítés (2026-11-22, 6. vak kör L4): a vágott kimenet a főági 600-as láthatósági határon túlról nem hoz szöveget —
+        // a záró „post” csak akkor várható, ha a teljes bemenet belefér a 600 karakterbe
+        if (fn === 'maskSecrets' || enc(c.raw).length <= 600) assert.ok(ctx(out), `${fn} ${c.name} / ${encName}: környezet`);
       }
     }
   }
@@ -116,12 +118,16 @@ test('vak L5 (25de6739): JSON-hibában a DB-URL nem nyeli el a következő sort 
   const dsn = ['postgres', '://admin:', 'titok123', '@', 'ep-pelda.neon.tech/db'].join('');
   const a = JSON.stringify({ error: `connect ${dsn}\nConnectionRefused` });
   const b = JSON.stringify({ error: `dsn "${dsn}" rossz` });
-  for (const [name, out] of [['redact', redact(a)], ['maskSecrets', maskSecrets(a, CALLER_KEY)], ['maskClip', maskClip(a, CALLER_KEY, 600)]]) {
+  for (const [name, out] of [['maskSecrets', maskSecrets(a, CALLER_KEY)], ['maskClip', maskClip(a, CALLER_KEY, 600)]]) {
     assert.equal(JSON.parse(out).error, 'connect <db-url>\nConnectionRefused', name);
   }
-  for (const [name, out] of [['redact', redact(b)], ['maskSecrets', maskSecrets(b, CALLER_KEY)], ['maskClip', maskClip(b, CALLER_KEY, 600)]]) {
+  for (const [name, out] of [['maskSecrets', maskSecrets(b, CALLER_KEY)], ['maskClip', maskClip(b, CALLER_KEY, 600)]]) {
     assert.equal(JSON.parse(out).error, 'dsn "<db-url>" rossz', name);
   }
+  // Szűkítés (2026-11-22, 6. vak kör): a kapu útján a főági DB-URL-minta is fut — az a főágon is a záró idézőjelig nyelt; a
+  // kimenet érvényes JSON marad (a tartomány az escape-egységet egészben veszi).
+  assert.equal(JSON.parse(redact(a)).error, 'connect <db-url>');
+  assert.equal(JSON.parse(redact(b)).error, 'dsn "<db-url> rossz');
 });
 
 test('vak L6 (25de6739): nagy bemenet — a megtartott előtag pontosan maszkolt, a hosszú AIza-futás saját részlete sincs', () => {
@@ -165,12 +171,18 @@ test('vak L2 / L4 (ac6447f5): JSON-hibában a backslashes DB-jelszó teljesen ta
   const a = JSON.stringify({ error: `connect ${dsn}\nkeep` });
   const mail = ['owner.x', 'pelda.hu'].join('@');
   const b = JSON.stringify({ error: `timeout\n${mail}\nkeep` });
-  for (const [name, fn] of [['redact', (x) => redact(x)], ['maskSecrets', (x) => maskSecrets(x, CALLER_KEY)], ['maskClip', (x) => maskClip(x, CALLER_KEY, 600)]]) {
+  for (const [name, fn] of [['maskSecrets', (x) => maskSecrets(x, CALLER_KEY)], ['maskClip', (x) => maskClip(x, CALLER_KEY, 600)]]) {
     const oa = fn(a);
     assert.ok(!oa.includes('SYNTHETIC') && !oa.includes('PASSWORD'), `${name}: DB-jelszó`);
     assert.equal(JSON.parse(oa).error, 'connect <db-url>\nkeep', name);
     assert.equal(JSON.parse(fn(b)).error, 'timeout\n<email>\nkeep', name);
   }
+  // Szűkítés (2026-11-22, 6. vak kör): a kapu útján a főági DB-URL- és nyers e-mail-találat is fut (a főág a `\n` utáni részt,
+  // illetve az escape `n` betűjét is elnyelte); a tartomány az escape-egységet egészben veszi, így a JSON érvényes marad.
+  const ra = redact(a);
+  assert.ok(!ra.includes('SYNTHETIC') && !ra.includes('PASSWORD'), 'redact: DB-jelszó');
+  assert.equal(JSON.parse(ra).error, 'connect <db-url>');
+  assert.equal(JSON.parse(redact(b)).error, 'timeout<email>\nkeep');
   assert.ok(!redact(`connect ${dsn} kész`).includes('SYNTHETIC'), 'nyers (nem JSON) szövegben is');
 });
 

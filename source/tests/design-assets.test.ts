@@ -260,7 +260,8 @@ test("design-assets kitakaró: minden forma × alak — redact, rövid redactCli
     for (const [encName, enc] of Object.entries(ENCODINGS)) {
       for (const [fn, out] of [["redact", redact(enc(c.raw), CALLER_KEY)], ["redactClip", redactClip(enc(c.raw), CALLER_KEY, 300)]] as const) {
         assert.equal(leak(out, c.body), null, `${fn} ${c.name} / ${encName}: ${JSON.stringify(out)}`);
-        assert.ok(out.includes("pre") && out.includes("post"), `${fn} ${c.name} / ${encName}: környezet`);
+        // szűkítés (2026-11-22, 6. vak kör L4): a vágott kimenet a főági 300-as határon túlról nem hoz szöveget
+        if (fn === "redact" || enc(c.raw).length <= 300) assert.ok(out.includes("pre") && out.includes("post"), `${fn} ${c.name} / ${encName}: környezet`);
       }
       const fetchImpl = (async () => new Response(enc(c.raw), { status: 401 })) as unknown as typeof fetch;
       await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key: CALLER_KEY, body: {} }), (e: Error) => {
@@ -302,7 +303,10 @@ test("design-assets (vak L4 / L5 / L6, 169cb025): átfedő kulcs, kulcs a vágá
     assert.equal(out.includes("ab#cd"), false, `vissza ${back}`);
     assert.equal(out.includes("[kulcs]"), false, `vissza ${back}: a vágáspont a kulcs elé kerül`);
   }
-  assert.equal(redactClip("MODE: LifeboatBearer\n" + "A".repeat(REDACT_WINDOW + 10), CALLER_KEY, 300), "MODE: LifeboatBearer\n");
+  // Szűkítés (2026-11-22, 6. vak kör L3): a képgyártó főági mintája (`Bearer\s+…`, szóhatár nélkül) a `LifeboatBearer` + sortörés
+  // + futás alakot hitelesítőnek veszi — a főág is kitakarta; a különálló előtag megmarad, a futás nem.
+  const lb = redactClip("MODE: LifeboatBearer\n" + "A".repeat(REDACT_WINDOW + 10), CALLER_KEY, 300);
+  assert.ok(lb.startsWith("MODE: ") && !lb.includes("AAAA"), lb);
 });
 
 test("design-assets (vak L5 / L6, 25de6739): JSON-hibában a DB-URL határa; nagy HTTP-hiba pontos, maszkolt előtagja", async () => {
