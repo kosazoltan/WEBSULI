@@ -1,0 +1,34 @@
+---
+title: "WEBSULI — projekt-memória belépő"
+subtitle: "Quarto-formátumú navigációs index (QMD réteg, agentic-qa-kit zaro-hurok v1)"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+---
+
+# Cél
+
+Gyors válasz arra, hol található a projekt tudása, és melyik eljárást kell követni.
+Minden hivatkozás a repón belülre mutat.
+
+# Igazságforrások rangja
+
+1. `AGENTS.md` / `.hermes.md`             — kötelező szabályok (a `.hermes.md` tükrözi az AGENTS.md-t)
+2. `memory/manifest.yaml`                 — gépi olvasható projekt-összefoglaló (YAML)
+3. `.agent/memory/yaml/index.yaml`        — állandó gépi tények
+4. `memory/.cogni/`                       — Cogni-formátumú strukturált memória (projekt, modulok, döntések, séma)
+5. `memory/notes/`                        — kapcsolt jegyzetek
+6. `.hermes/projekt/TRAP.md`              — mért csapdák (append-only)
+7. `.hermes/projekt/TUDAS.md`             — felhalmozott tudás · `.hermes/skills/` — repó-saját skillek
+
+# Modul-térkép
+
+| Modul | Forrás | Megjegyzés |
+|-------|--------|------------|
+| TODO  |        |            |
+
+# Záró hurok
+
+TRAP → memóriák (YAML, QMD, Cogni, vector) → kanban → skill-ellenőrzés → higiénia → tiszta fa.
+Ellenőrzés: `node D:/repo/agentic-qa-kit/scripts/zaro-hurok.mjs check --repo <út> --since <ISO> --json`.
