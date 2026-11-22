@@ -22,9 +22,34 @@ const REDACTIONS = [
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, '<email>'],
 ];
 
+/**
+ * Elővágás (docs/specs/2026-11-22-kitakaro-elovagas.md): a fenti, változatlan főági regexek legfeljebb ennyi karakteren futnak
+ * (a főági e-mail-regex `'a'×n`-en négyzetes: 32 KB 338 ms, 64 KB 1 320 ms).
+ */
+export const REDACT_CAP = 32 * 1024;
+
+/** Token-karakter az elővágáshoz: betű, szám, `+ / = _ - . ~ % \ @` (a JSON-escape-ek is ebbe esnek). */
+export const isCutRunChar = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+  || c === 43 || c === 47 || c === 61 || c === 95 || c === 45 || c === 46 || c === 126 || c === 37 || c === 92 || c === 64;
+
+/**
+ * A korlát felett az utolsó REDACT_CAP karakter (a napló vége a lényeg), jelzősorral. A vágás után az első KÉT, szóköz-jellegű
+ * karakterrel határolt szó is kimarad: így a vágáson átnyúló szó (token, DB-URL, cím) teljesen, és egy félbevágott
+ * `Bearer` + hitelesítő pár hitelesítője sem marad előtag nélkül — lineáris, előre lépő keresés.
+ */
+function capTail(text) {
+  if (text.length <= REDACT_CAP) return text;
+  let s = text.length - REDACT_CAP;
+  for (let w = 0; w < 2; w++) {
+    while (s < text.length && text.charCodeAt(s) <= 32) s++;
+    while (s < text.length && text.charCodeAt(s) > 32) s++;
+  }
+  return `[… ${s} karakter elhagyva …]\n${text.slice(s)}`;
+}
+
 /** Titok, kapcsolati szöveg és e-mail-cím helyőrzőre cserélve — minden kiírás és napló ezen megy át. */
 export function redact(text) {
-  let out = String(text ?? '');
+  let out = capTail(String(text ?? ''));
   for (const [re, rep] of REDACTIONS) out = out.replace(re, rep);
   return out;
 }
