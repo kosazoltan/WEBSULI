@@ -1130,3 +1130,38 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   Ha egy böngészős teszt helyben „Target page … closed”-dal bukik, előbb `DEBUG=pw:browser`-rel nézd meg a böngésző kilépési kódját.
 
 Forrás: `docs/specs/2026-11-22-playwright-csomagolt-chromium.md`.
+
+## C-94 — Külső modell bekapcsolás előtt: a szolgáltatónál él-e még; unref időkorlát a tesztben (2026-11-22)
+
+Forrás: `docs/specs/2026-11-22-kisfilm-videomodell.md`.
+
+- **Tünet 1:** a kisfilmgyártás bekapcsolása után az első fejezet mind a négy jelenete állóképes lett. Ok: az OpenRouter a 12 nappal
+  korábban mért és jóváhagyott `bytedance/seedance-1-5-pro` modellt megszüntette (404, „No endpoints found”). A bekapcsolás előtt ezt
+  senki nem ellenőrizte; a mozgókép hibája a kisfilmet nem buktatja (szándékosan), ezért a kár csendben, tárolt kisfilmként jelent meg.
+- **Szabály 1:** külső modellre épülő funkció bekapcsolása ELŐTT olcsó elérhetőségi próba (a modellista vagy egy próbahívás). A
+  modellnév legyen környezeti változóval cserélhető (`LESSON_CLIP_VIDEO_MODEL`), hogy a következő megszűnés ne kódváltozás legyen.
+  Bekapcsolás után az első kör naplóját a „N mozgókép (0 nélkül)” sorra is nézd, ne csak a memóriára.
+- **Tünet 2:** a felhős munkamenetben a `lesson-clip-worker.test.ts` a változatlan mainen is bukott (3 teszt „cancelledByParent”). Ok: a
+  tesztek csak `AbortSignal.timeout`-ra vártak, ennek időzítője unref, így függő munka nélkül a futás az időkorlát előtt véget ért. A
+  CI-ban más függő munka elfedte.
+- **Szabály 2:** olyan tesztben, amely csak időkorlátos `AbortSignal`-ra vár, tarts egy életben tartó időzítőt (`setInterval` +
+  `clearInterval` a `finally`-ben). „Promise resolution is still pending but the event loop has already resolved” = ez a minta.
+- **Tünet 3:** a felhős gyártósor-próba videólépése `getaddrinfo ENOTFOUND openrouter.ai`-jal bukott, mert a védett letöltő saját maga
+  old fel és az ellenőrzött IP-hez köt (a proxyt megkerüli). Szabály 3: felhős munkamenetben a modellt közvetlen API-próbával mérd
+  (curl a proxyn át), a teljes gyártósort élesben vagy a fejlesztői gépen.
+- **Tünet 4:** a csapda-bejegyzést heredockal írtam be; a szövegben lévő kibocsátási szó miatt a kapu-hook megtagadta. Szabály 4:
+  dokumentumot az Edit / Write eszközzel írj, ne heredockal (vö. C-29).
+
+## C-95 — Felhős munkamenet a kibocsátási körben: koordináció, kapuk, függőségek (2026-11-18)
+
+Forrás: a „minden legyen lint, push, merge, deploy” kör, felhős munkamenetből; #513.
+
+- **Tünet 1:** a felhős session a PR-listát a rossz gépes sessionnek küldte összevonásra, és feltöltött egy ágat, miközben 51 perce
+  várt rá egy koordinációs üzenet („a kört KIZÁRÓLAG X végzi; csak olvass és jelents”). Szabály 1: több párhuzamos session esetén
+  kibocsátás előtt előbb a beérkezett értesítéseket kell elolvasni; ha nincs kijelölt koordinátor, a tulajdonost kell megkérdezni.
+- **Tünet 2:** felhőből a `gate:merge` a GraphQL- és a `branches/main/protection`-hívásnál 403-at kapott, a futásőr `source/.env`
+  DATABASE_URL-t kért. Szabály 2: a merge előtti kapu REST-en gyűjt (#513); a futásőr felhőből elvből nem fut, ezért a merge a
+  fejlesztői gépen történik — ezt a munka elején kell eldönteni.
+- **Tünet 3:** napok után a régi `node_modules` hamis tsc- és rt-teszthibát adott; munkafába symlinkelt `node_modules` mellett a
+  `gitignore-guard` bukott. Szabály 3: hosszú szünet után és minden új munkafában `npm ci`; symlinket ne használj.
+- **Tünet 4:** a kibocsátó parancs láncolt parancsban futott, a kapu-hook megtagadta. Szabály 4: külön, egyszerű parancs a gyökérből.
