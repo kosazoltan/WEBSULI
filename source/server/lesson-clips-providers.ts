@@ -246,7 +246,7 @@ function byteLimit(max: number): Transform {
   return new Transform({
     transform(chunk: Buffer, _encoding, done) {
       seen += chunk.length;
-      done(seen > max ? new Error(`a nyers mozgókép nagyobb ${max} bájtnál`) : null, chunk);
+      done(seen > max ? new DownloadError("DOWNLOAD_TOO_LARGE") : null, chunk);
     },
   });
 }
@@ -264,6 +264,13 @@ const ffmpegQueue = limiter(1);
 export const FFMPEG_ARGS = (input: string, output: string): string[] => ["-y", "-v", "error", "-filter_threads", "1", "-threads", "1", "-protocol_whitelist", "file", "-i", input, "-t", "15", "-an", "-vf", "scale=960:-2", "-c:v", "libx264", "-threads", "1",
   "-preset", "veryfast", "-x264-params", "rc-lookahead=0:ref=1:bframes=0:sync-lookahead=0", "-b:v", "700k", "-maxrate", "900k", "-bufsize", "1400k", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
 let shuttingDown = false;
+/** A letöltési hiba rögzített kódja (a naplóba nyers üzenet nem kerül). */
+class DownloadError extends Error { constructor(readonly code: string) { super(code); } }
+function downloadCode(error: unknown): string {
+  if (error instanceof DownloadError) return error.code;
+  const provider = error instanceof Error ? /^szolgáltatói letöltés: ([A-Z_]+) \(([^)\s]+)\)$/.exec(error.message) : null;
+  return provider ? `${provider[1]} (${provider[2]})` : "DOWNLOAD_FAILED";
+}
 /**
  * A nyers mozgókép letöltése LEMEZRE (nem a memóriába, kemény bájtkorláttal), majd átkódolás 960 px széles, kb. 700 kbit/s-os, hang
  * nélküli H.264-re. `ffmpeg` hiányában, hibánál, memóriahatár fölött vagy túlméretes kimenetnél null. Leállításkor `ClipAbortError`.
@@ -279,7 +286,7 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
     const declared = Number(res.headers.get("content-length") ?? "");
     if (!res.ok || !res.body || declared > rawMax) {
       await res.body?.cancel().catch(() => undefined);
-      throw new Error(res.ok && res.body ? `a nyers mozgókép nagyobb ${rawMax} bájtnál (${declared})` : `HTTP ${res.status}`);
+      throw new DownloadError(res.ok && res.body ? "DOWNLOAD_TOO_LARGE" : `DOWNLOAD_HTTP_${res.status}`);
     }
     await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), byteLimit(rawMax), createWriteStream(input), { signal: shutdown.signal });
     stage = "átkódolás";
@@ -311,7 +318,9 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
     if (shutdown.signal.aborted) throw new ClipAbortError("a szerver leáll");
     const missing = stage === "átkódolás" && (error as NodeJS.ErrnoException)?.code === "ENOENT";
     const detail = error instanceof Error ? error.message.slice(0, 160) : String(error);
-    if (!missing || !warnedNoFfmpeg) logger.warn(`[lesson-clips] ${missing ? "nincs ffmpeg a szerveren (FFMPEG_PATH / PATH) — a kisfilmek mozgókép nélkül készülnek" : `a mozgókép ${stage === "letöltés" ? "letöltése" : "átkódolása"} nem sikerült: ${detail}`}`);
+    // A letöltés hibája csak rögzített kóddal naplózódik (a nyers üzenet URL-t / query-t is tartalmazhat — 6. vak kör L4, 1. javító kör L3).
+    const reason = stage === "letöltés" ? downloadCode(error) : detail;
+    if (!missing || !warnedNoFfmpeg) logger.warn(`[lesson-clips] ${missing ? "nincs ffmpeg a szerveren (FFMPEG_PATH / PATH) — a kisfilmek mozgókép nélkül készülnek" : `a mozgókép ${stage === "letöltés" ? "letöltése" : "átkódolása"} nem sikerült: ${reason}`}`);
     if (missing) warnedNoFfmpeg = true;
     return null;
   } finally {

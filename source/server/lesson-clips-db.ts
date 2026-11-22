@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
+import type { QueryConfig } from "pg";
 import { db, dbPool } from "./db";
-import type { ClipLesson, ClipRow, ClipStore } from "./lesson-clips";
+import { ClipAbortError, type ClipLesson, type ClipRow, type ClipStore } from "./lesson-clips";
 import { mediaId, type ClipMedia } from "./lesson-clip-media";
 
 /** A kisfilmek éles adatrétege (docs/specs/2026-11-10-fejezet-kisfilmek-v2.md, 6.). A `lessons` táblát csak olvassa. */
@@ -34,6 +35,19 @@ export async function loadClipMedia(id: string): Promise<ClipMedia | null> {
   return row && typeof row.mime === "string" && Buffer.isBuffer(row.bytes) ? { mime: row.mime, bytes: row.bytes } : null;
 }
 
+/** A zárlekérdezés kliensoldali időkorláttal (a `pg` futásidőben ismeri a `query_timeout`-ot, a típusa nem). */
+const timedQuery = (text: string): QueryConfig => ({ text, values: [CLIP_LOCK_KEY], query_timeout: CLIP_STATEMENT_TIMEOUT_MS }) as QueryConfig;
+/** A zárat tartó kapcsolat eldobója (leállítási határidő); null, ha nincs futó kör. */
+let lockHolder: ((reason: Error) => void) | null = null;
+/**
+ * Leállítási határidő: a zárat tartó kapcsolatot ELDOBJA (nem adja vissza a poolnak) — a kapcsolat bontásával a Postgres a session-
+ * szintű advisory lockot biztosan elengedi; a még futó kör `ClipAbortError`-ral zárul. Igaz, ha volt zárat tartó kapcsolat.
+ */
+export function forceReleaseClipLock(): boolean {
+  if (!lockHolder) return false;
+  lockHolder(new ClipAbortError("leállítási határidő: a kisfilm-zárat tartó kapcsolat eldobva"));
+  return true;
+}
 export const dbClipStore: ClipStore = {
   async lesson(id) {
     const { rows } = await query(sql`SELECT id, published_at, json FROM lessons WHERE id = ${id}`);
@@ -104,12 +118,28 @@ export const dbClipStore: ClipStore = {
   },
   async exclusive(work) {
     const client = await dbPool.connect();
+    // A kapcsolat eldobandó (nem kerülhet vissza a poolba), ha a zár- / feloldó lekérdezés elakadt vagy a leállítás eldobta.
+    let discard: Error | undefined;
     try {
-      const { rows } = await client.query<{ ok: boolean }>("SELECT pg_try_advisory_lock($1) AS ok", [CLIP_LOCK_KEY]);
-      if (!rows[0]?.ok) return null;
-      try { return await work(); } finally { await client.query("SELECT pg_advisory_unlock($1)", [CLIP_LOCK_KEY]).catch(() => undefined); }
+      // A zár- és a feloldó lekérdezés is időkorlátos (kliensoldali `query_timeout`, mint a többi kisfilm-DB-hívásnál a 15 s).
+      const locked = await client.query<{ ok: boolean }>(timedQuery("SELECT pg_try_advisory_lock($1) AS ok"))
+        .catch((error: unknown) => { discard = error instanceof Error ? error : new Error(String(error)); throw error; }); // bizonytalan állapotú kapcsolat
+      if (!locked.rows[0]?.ok) return null;
+      let abandon: (reason: Error) => void = () => undefined;
+      const abandoned = new Promise<never>((_resolve, reject) => { abandon = reject; });
+      abandoned.catch(() => undefined);
+      lockHolder = (reason) => { discard = reason; abandon(reason); };
+      try {
+        return await Promise.race([work(), abandoned]);
+      } finally {
+        lockHolder = null;
+        if (!discard) {
+          await client.query(timedQuery("SELECT pg_advisory_unlock($1)"))
+            .catch((error: unknown) => { discard = error instanceof Error ? error : new Error(String(error)); });
+        }
+      }
     } finally {
-      client.release();
+      client.release(discard);
     }
   },
 };

@@ -717,8 +717,11 @@ app.use((req, res, next) => {
       // Legrosszabb eset (t = 0 a jel): kisfilm ≤ 70 s (párhuzamos ág); a fő ág: workflow-kivárás ≤ 270 s + 3 s mentési tartalék +
       // eredményküldés ≤ 10 s + értesítők ≤ 15 s = 298 s — ezt a 295 s-os kényszerkilépés (`force`) vágja el, a Render
       // maxShutdownDelaySeconds = 300 előtt; a kisfilm-ág addigra (70 s) biztosan lezárult, a `await clipsStopped` már nem vár.
-      const clipsStopped = Promise.all([import("./lesson-clips"), import("./lesson-clips-providers")])
-        .then(([{ shutdownLessonClips }, { abortClipTranscodes }]) => shutdownLessonClips(abortClipTranscodes, 60_000, 10_000))
+      // Ha a kör a 70 s után is tart (pl. lassú DB-művelet), a zárat tartó kapcsolat eldobódik (a Postgres a zárat elengedi), és a kör
+      // további DB-műveletet nem indít — az eredmény ilyenkor „forced”, nem hamis „kész”.
+      const clipsStopped = Promise.all([import("./lesson-clips"), import("./lesson-clips-providers"), import("./lesson-clips-db")])
+        .then(([{ shutdownLessonClips }, { abortClipTranscodes }, { forceReleaseClipLock }]) => shutdownLessonClips(abortClipTranscodes, 60_000, 10_000, forceReleaseClipLock))
+        .then((outcome) => { if (outcome === "forced") logger.warn("[lesson-clips] a leállítási határidőn túl futó kör zárkapcsolata eldobva"); })
         .catch((err: unknown) => logger.warn("A kisfilmworker nem állítható le", err));
       // JM2 (terv 10.8; orkesztrátori döntés, review #452): a valós idejű réteg RÖVID, rendezett lezárása — új szoba /
       // belépés azonnal tiltva, a futó meccsek azonnal lezárulnak a pillanatnyi állással (részeredmény, „a szerver frissül”);

@@ -22,8 +22,8 @@ test("leállítás: a megszakítás a worker-kivárás lejártakor fut, akkor is
   const settle = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
   t.mock.timers.tick(90_000); await settle();
   const studioStillWaiting = new Promise<void>(() => undefined); // a Stúdió-kivárás (legfeljebb 270 s) közben végig tart
-  let done = false;
-  const stopped = shutdownLessonClips(() => { aborted++; finishRound(); }, 60_000, 10_000).then(() => { done = true; });
+  let outcome: string | undefined, forced = 0;
+  const stopped = shutdownLessonClips(() => { aborted++; finishRound(); }, 60_000, 10_000, () => { forced++; return true; }).then((result) => { outcome = result; });
   void studioStillWaiting;
   t.mock.timers.tick(59_999); await settle();
   assert.equal(aborted, 0, "a kivárás alatt még nincs megszakítás");
@@ -31,16 +31,19 @@ test("leállítás: a megszakítás a worker-kivárás lejártakor fut, akkor is
   assert.equal(aborted, 1, "a 60 s-os kivárás lejártakor azonnal megszakít");
   await settle();
   await stopped;
-  assert.equal(done, true, "a megszakítás után a kör lezárul, a leállítás továbbléphet");
+  assert.deepEqual([outcome, forced], ["ended", 0], "a megszakítás után a kör valóban lezárul (nincs kapcsolat-eldobás)");
 });
 
 test("szerverleállítás: a kisfilm-megszakítás a leállítás elején indított láncban van, nem a Stúdió-kivárás és az ürítések után", () => {
   const source = readFileSync(new URL("../server/index.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const start = source.indexOf("const gracefulShutdown = async");
   const body = source.slice(start, source.indexOf("process.on(\"SIGTERM\"", start));
-  const chain = body.indexOf("shutdownLessonClips(abortClipTranscodes, 60_000, 10_000)");
+  const chain = body.indexOf("shutdownLessonClips(abortClipTranscodes, 60_000, 10_000, forceReleaseClipLock)");
   const studio = body.indexOf("waitForActiveRuns(");
   assert.ok(chain > 0 && studio > 0 && chain < studio, "a kisfilm-leállítás lánca a Stúdió-kivárás előtt indul");
   assert.equal(body.slice(studio).includes("abortClipTranscodes()"), false, "a Stúdió-kivárás után nincs külön (késő) kisfilm-megszakítás");
   assert.match(body, /legrosszabb eset/i, "a leállítási sorrend legrosszabb esetű időszámítása a kód mellett");
+  // A jelbekötés: a SIGTERM és a SIGINT kezelője ténylegesen a leállítást hívja (üres kezelőnél bukik).
+  assert.match(source, /process\.on\("SIGTERM", \(\) => gracefulShutdown\("SIGTERM"\)\)/);
+  assert.match(source, /process\.on\("SIGINT", \(\) => gracefulShutdown\("SIGINT"\)\)/);
 });

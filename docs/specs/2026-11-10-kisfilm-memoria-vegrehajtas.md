@@ -151,3 +151,21 @@ vizsgálja.
 - **K-418-L5 (kicsi)** — az első `/clips` kérés átmeneti 502-je után nincs újrapróba (csak ismert `pending` után). Javasolt: az első
   hálózati / 5xx hibát is korlátosan, csendben újrapróbálni a 30 perces kereten belül; az érvényes `pending:false` lezár. Teszt:
   Playwright, első kérés 502 → `pending:true` → kész.
+
+### 1. javító kör (5491f399) — a határidő a zár felszabadulására is vonatkozik
+
+Invariáns: a kisfilm-leállítás csak akkor „kész”, ha a kör valóban véget ért és a zár felszabadult, VAGY a határidőkor a zárat tartó
+DB-kapcsolatot a kód ténylegesen eldobta (így a Postgres a session-zárat biztosan elengedi).
+
+- **L1 valódi (blokkoló)** — `shutdownLessonClips` eredménye `"ended"` / `"forced"`: 60 s kivárás → megszakítás → ≤ 10 s; ha a kör még
+  ekkor is fut, `forceReleaseClipLock()` eldobja a zárat tartó kapcsolatot (`client.release(err)`, nem kerül vissza a poolba), és a kör
+  egy közös őrön át (`abandoned`) semmilyen további DB-műveletet nem indít. A zár- és feloldó lekérdezés kliensoldali 15 s-os
+  `query_timeout`-ot kap; elakadt vagy hibás zárlekérdezésnél a kapcsolat szintén eldobódik. Tesztek:
+  `tests/lesson-clip-shutdown-forced.test.ts` (lassú DB-söprés a határidő után is: 70 s-nál eldobás, eredmény `"forced"`, utána nincs
+  DB-hívás), `tests/lesson-clip-shutdown-deadline.test.ts` (normál út: `"ended"`, nincs eldobás), DB „leállítási határidő: a zárat
+  tartó kapcsolat eldobása után a zár egy MÁSIK kapcsolatról azonnal megszerezhető…”.
+- **L2 részben (közepes)** — a forrás-őr most a jelbekötést is ellenőrzi (`process.on("SIGTERM"/"SIGINT", () => gracefulShutdown(…))`,
+  üres kezelőnél bukik). A teljes `gracefulShutdown` viselkedési teszt (vezérelhető Stúdió- és DB-kapukkal) kanban-jegy: **K-KL-L2**.
+- **L3 valódi (kicsi)** — a letöltési napló a teljes letöltési fázisra rögzített kódot ír (`DOWNLOAD_TOO_LARGE`, `DOWNLOAD_HTTP_<n>`,
+  `DOWNLOAD_FAILED`, illetve a védett út kódja a hosttal); nyers üzenet nem kerül a naplóba. Teszt: LW „letöltési napló: a törzsolvasás
+  és a státusz hibája is rögzített kóddal naplózódik…”.

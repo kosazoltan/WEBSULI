@@ -41,7 +41,8 @@ A gyártósor tartalmi lépései, a lejátszó, a séma, a plafonok (napi lecke,
   külön PR-ban jön a futás közbeni figyelő.
 - **Leállítási határidő (6. vak kör, 2026-11-22):** a kisfilm-ág a szerverleállítás ELEJÉN indul, a többi lépéssel párhuzamosan:
   legfeljebb 60 s kivárás, utána azonnali megszakítás (szolgáltatói várakozás, letöltés, ffmpeg-gyerek), majd legfeljebb 10 s a kör és a
-  zár lezárulására — kész legkésőbb 70 s-kor, jóval a 295 s-os kényszerkilépés előtt. A szolgáltatói letöltés hibaüzenete és naplója
+  zár lezárulására — kész legkésőbb 70 s-kor, jóval a 295 s-os kényszerkilépés előtt. Ha a kör ekkor is fut (pl. lassú
+  DB-művelet), a zárat tartó kapcsolat eldobódik (a Postgres a zárat elengedi), és a kör további DB-műveletet nem indít. A szolgáltatói letöltés hibaüzenete és naplója
   csak strukturált hibakódot és hostot tartalmaz (query nem).
 - Mérés a javított gyártósorral (valódi szolgáltatók, egy fejezet): a próbafolyamat csúcsmemóriája 144 MB, a fejezet 132 mp alatt kész.
 

@@ -85,3 +85,23 @@ test("I/O-leltár: a példányok közötti zár nem blokkol — foglalt zárnál
   assert.equal(await first, "első");
   assert.equal(await dbClipStore.exclusive(async () => "harmadik"), "harmadik", "a zár felszabadult");
 });
+
+test("leállítási határidő: a zárat tartó kapcsolat eldobása után a zár egy MÁSIK kapcsolatról azonnal megszerezhető, a kör megszakításként zárul", async () => {
+  const { forceReleaseClipLock } = await import("../server/lesson-clips-db");
+  const { ClipAbortError } = await import("../server/lesson-clips");
+  let entered = false;
+  const hanging = dbClipStore.exclusive(async () => { entered = true; await new Promise(() => undefined); return "soha"; });
+  while (!entered) await new Promise((r) => setTimeout(r, 5));
+  assert.equal(await dbClipStore.exclusive(async () => "közben"), null, "amíg a kör fut, a zár foglalt");
+  assert.equal(forceReleaseClipLock(), true, "volt zárat tartó kapcsolat");
+  await assert.rejects(hanging, ClipAbortError);
+  const other = await dbPool.connect();
+  try {
+    const { rows } = await other.query<{ ok: boolean }>("SELECT pg_try_advisory_lock($1) AS ok", [7_320_311_10]);
+    assert.equal(rows[0]?.ok, true, "a Postgres a session-zárat elengedte");
+    await other.query("SELECT pg_advisory_unlock($1)", [7_320_311_10]);
+  } finally {
+    other.release();
+  }
+  assert.equal(forceReleaseClipLock(), false, "nincs több zárat tartó kapcsolat");
+});

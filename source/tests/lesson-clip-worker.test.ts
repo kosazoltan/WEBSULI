@@ -713,3 +713,21 @@ test("szolgáltatói letöltési hiba: a hibaüzenet és a napló strukturált k
   assert.ok(logged.length > 0, "a letöltési hiba naplózódik");
   assert.equal(logged.some((line) => line.includes(PROBE)), false, `a query értéke nincs a naplóban: ${logged.join(" | ")}`);
 });
+
+test("letöltési napló: a törzsolvasás és a státusz hibája is rögzített kóddal naplózódik (nyers hibaüzenet nélkül)", async () => {
+  const realWarn = logger.warn;
+  const logged: string[] = [];
+  logger.warn = ((...args: unknown[]) => { logged.push(args.map(String).join(" ")); }) as typeof logger.warn;
+  const exec: ExecLike = (_file, _args, _options, callback) => { queueMicrotask(() => callback(null)); return { kill: () => true }; };
+  try {
+    let pulled = 0;
+    const big = new ReadableStream<Uint8Array>({ pull(controller) { if (++pulled > 8) { controller.close(); return; } controller.enqueue(new Uint8Array(64 * 1024)); } });
+    assert.equal(await downloadAndShrink(async () => new Response(big), "ffmpeg", 90_000, { exec, rawMaxBytes: 100_000, rss: () => 0 }), null);
+    assert.equal(await downloadAndShrink(async () => new Response("nincs", { status: 503 }), "ffmpeg", 90_000, { exec, rss: () => 0 }), null);
+    const broken = new ReadableStream<Uint8Array>({ pull(controller) { controller.error(new Error("socket hang up https://cdn.example/v.mp4?sig=probaertek")); } });
+    assert.equal(await downloadAndShrink(async () => new Response(broken), "ffmpeg", 90_000, { exec, rss: () => 0 }), null);
+  } finally {
+    logger.warn = realWarn;
+  }
+  assert.deepEqual(logged.map((line) => line.replace(/^.*a mozgókép letöltése nem sikerült: /, "")), ["DOWNLOAD_TOO_LARGE", "DOWNLOAD_HTTP_503", "DOWNLOAD_FAILED"]);
+});
