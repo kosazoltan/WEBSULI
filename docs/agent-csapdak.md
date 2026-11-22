@@ -1106,3 +1106,15 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
   (nem többszörösen escape-elt héjparancsban).
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
+
+## C-93 — Gépváltás: a telepített Chrome frissülése elválik a rögzített Playwrighttól (2026-11-22)
+
+- **Tünet:** az új gépen a PR előtti kapu böngészős köre a főág kódjával is bukott: `preview-navigation.spec.ts` „opaque sandbox …” —
+  `Target page, context or browser has been closed`; a `DEBUG=pw:browser` naplóban a Chrome `exitCode=2147483651`-gyel lépett ki.
+  Ok: a konfigurációk `channel: "chrome"`-mal a gép stabil Chrome-ját (158) indították, amelyet a projekt Playwright 1.57-e nem támogat;
+  egy sandboxolt iframe `srcdoc`-ja már üres tartalommal is összeomlasztotta. A Playwright saját Chromiumán hibátlan volt.
+- **Szabály:** a böngészős tesztek a Playwrighthoz rögzített Chromiumon futnak (`channel` nélkül; őr-teszt:
+  `source/tests/playwright-bundled-chromium-guard.test.ts`). Új gépen egyszer: `npx.cmd playwright install chromium` a `source`-ban.
+  Ha egy böngészős teszt helyben „Target page … closed”-dal bukik, előbb `DEBUG=pw:browser`-rel nézd meg a böngésző kilépési kódját.
+
+Forrás: `docs/specs/2026-11-22-playwright-csomagolt-chromium.md`.

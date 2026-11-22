@@ -8,7 +8,6 @@ export default defineConfig({
   workers: 1,
   use: {
     ...devices["Desktop Chrome"],
-    channel: "chrome",
     serviceWorkers: "allow",
     baseURL: "http://127.0.0.1:5179",
     screenshot: "only-on-failure",
