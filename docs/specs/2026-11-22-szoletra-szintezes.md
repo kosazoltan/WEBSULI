@@ -198,6 +198,8 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
 - **ND-2 — sűrűbb kezdő (A1) anyag: (b) fizetős, keretes generálás** — DÖNTÖTT, de **külön költségkeret-jóváhagyásig semmi nem
   generálható, fizetős szolgáltató nem hívható**. A munka S3 szeletként a tervben (12. szakasz); a keretet az orkesztrátor kéri
   a tulajdonostól.
+  **Keret: JÓVÁHAGYVA: ≤ 25 USD (tulajdonos, űrlapon, 2026-11-22)**, gépi költségszámlálóval és futáskorláttal (S3, ág
+  `feat/szoletra-a1-bank`).
 
 **PR-bontás (tulajdonos / orkesztrátor, 2026-11-22): két PR.**
 - PR-1 `feat/szoletra-szintezes-1`: terv + végrehajtás + `wordLadderGrading.ts` + `word-ladder-grading.test.ts` + C-SZL-1 —
@@ -225,7 +227,7 @@ A tervezett „1–2. alfokon ≥ 1 kifejezés” küszöb a 0. szint 1. alfoká
 („thank you”) is 15 pont, ezért a kifejezések a szint 2. alfokán gyűlnek — ez a kívánt sorrend (előbb egyes szavak, utána
 kifejezések). Az A4 ennek megfelelően: fokozatonként ≥ 20 tétel, 0. alfok ≥ 20 szó, 2. alfok ≥ 20 kifejezés.
 
-## 12. S3 — sűrűbb kezdő A1 anyag nyelvenként (fizetős generálás; KERET-JÓVÁHAGYÁSRA VÁR, végrehajtani TILOS addig)
+## 12. S3 — sűrűbb kezdő A1 anyag nyelvenként (fizetős generálás; JÓVÁHAGYVA: ≤ 25 USD (tulajdonos, 2026-11-22))
 
 **Cél:** a 3–4. évfolyam belépő fokozatain (0–1. fokozat: a 0. szint 0–1. alfoka) nyelvenként több rövid, gyakori egyes szó,
 hogy egy kezdő futás ne merítse ki gyorsan a legkönnyebb vödröt, és a 0. alfok ne csak a kézi bank pár száz szavára épüljön.

@@ -4,7 +4,7 @@
 `docs/specs/2026-11-22-szoletra-szintezes.md`). **Ág:** `feat/szoletra-szintezes`, munkafa
 `.claude/worktrees/szoletra-szintezes` (`origin/main` 0645f48f-ről). Push / PR / merge: az orkesztrátor.
 
-Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-hívás TILOS.
+Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-hívás TILOS (S1–S2); S3-ban csak a jóváhagyott, gépileg számlált kereten belül (≤ 25 USD).
 
 ## S1 — mérce, osztályozás, évfolyam-sávos bank, lépés-szabály (tiszta modul + teszt)
 
@@ -60,19 +60,59 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
 ## Döntések és PR-bontás (2026-11-22)
 
 - ND-1 (a) évfolyam-sáv, ND-3 (a) a mérce kezeli — DÖNTÖTT (terv 9. szakasz). ND-2 (b) fizetős generálás — S3, csak külön
-  költségkeret-jóváhagyás után (terv 12. szakasz); addig fizetős szolgáltató NEM hívható.
+  költségkeret-jóváhagyás után (terv 12. szakasz). JÓVÁHAGYVA: ≤ 25 USD (tulajdonos, 2026-11-22).
 - **PR-1** `feat/szoletra-szintezes-1`: ez a fájl + a terv + `source/client/src/lib/wordLadderGrading.ts` +
   `source/tests/word-ladder-grading.test.ts` + C-SZL-1 (`docs/agent-csapdak.md`) — az éles működés változatlan.
 - **PR-2** `feat/szoletra-szintezes-2` (a PR-1-re épül): S2 (4–8. lépés): `wordLadderLevels.ts`, `WordLadderHuEn.tsx`,
   `word-ladder-levels.test.ts`, `word-ladder-3d-wiring.test.ts`, `word-ladder-play.spec.ts`.
 
-## S3 — sűrűbb kezdő A1 anyag (KERETRE VÁR — végrehajtani TILOS a jóváhagyásig)
+## S3 — sűrűbb kezdő A1 anyag (JÓVÁHAGYVA: ≤ 25 USD (tulajdonos, 2026-11-22))
 
-10. A keret jóváhagyása után: nyelvenként ~300 új 0. szintű szóbank-bejegyzés a terv 12. szakasza szerint, a meglévő
-    tartalomszelet-úton (`docs/specs/2026-11-15-jatekok-mobil-szobank-vegrehajtas.md`), futáskorláttal; vak megoldó
-    (`node --import tsx scripts/vocab-bank.ts blind-export … / blind-score …`); javító kör.
-11. Ellenőrzés: `npx.cmd tsx --test tests/vocab-bank-validate.test.ts tests/word-ladder-grading.test.ts` zöld; a 0–1. fokozat
-    egyes-szó-száma nyelvenként ≥ 300 (a terv 11. szakaszának táblája újramérve); a tényleges költség a PR-leírásba.
+Ág `feat/szoletra-a1-bank` (a `feat/szoletra-szintezes-1`-ről, 896eef7f), munkafa `.claude/worktrees/szoletra-a1-bank`.
+Keret: **legfeljebb 25 USD összesen** (próbakör + teljes futás + vak megoldó + javító kör), gépi költségszámlálóval és
+futáskorláttal. Éles DB, `db:push`, e-mail, push / PR / merge, kódellenőri vak futtató, képgenerálás: TILOS (orkesztrátor).
+
+**Tények a valódi generáló útvonalról (ellenőrizve 2026-11-22):**
+- A meglévő szóbank ügynöki úton készült: Sonnet-gyártó-alügynök = egy szintfájl, Opus vak megoldó
+  (`docs/specs/2026-11-15-jatekok-mobil-szobank-vegrehajtas.md:667`, `:696–706`). Fizetős API-t hívó szóbank-generátor és
+  költségszámláló a repóban NINCS: a `source/scripts/vocab-bank.ts` parancsai `report`, `blind-export`, `blind-score`
+  (`:1–7`, `:247–267`). A jóváhagyás gépi számlálót kér, ezért S3-hoz új, keretes generátor kell (10. lépés).
+- Kulcs: `OPENROUTER_API_KEY` a környezetből (értéke soha nem íródik ki). Költség: az OpenRouter válasz
+  `usage.cost` mezője (a kérésben `usage: { include: true }`) — becslés nincs; ha a mező hiányzik, a futás megáll.
+- Modellek (OpenRouter `/api/v1/models`, 2026-11-22): gyártó `anthropic/claude-sonnet-5.5` (2 / 10 USD / M token),
+  vak megoldó `anthropic/claude-opus-5.5` (4 / 20 USD / M token) — a 2026-11-15-i Sonnet-gyártó / Opus-megoldó felosztás.
+- Fokozat: `vocabEntryStep` (`source/client/src/lib/wordLadderGrading.ts:124`) — 0. szinten pont ≤ 5 → 0. fokozat,
+  ≤ 9 → 1. fokozat (`LADDER_SUB_CUTS`, `:32–38`; pont: `ladderDifficultyScore`, `:85`).
+- Duplikátum: a validátor a teljes bankon `normalizeTerm` szerint tiltja (`source/client/src/data/vocabBank/validate.ts:10`,
+  `:109–113`); a kézi Szólétra-bankkal (`data/wordLadder/<nyelv>.ts`) a célrész (`ladderDifficultyInput`,
+  `wordLadderGrading.ts:66`) névelő nélkül vetendő össze — ezt a generátor szűri.
+- Szerkezeti őr: `vocabBankProblems` (`validate.ts:72`), `minimumProblems` (`validate.ts:162`; phrase-arány ≥ 30 %).
+  Mért kiindulás (kézi + szóbank, egyes szó): 0. / 1. fokozat en 222 / 181, de 171 / 145, fr 109 / 186; phrase-arány
+  en 34,6 %, de 36,0 %, fr 36,1 % → +300 egyes szó után is ≥ 31 %.
+- Vak megoldó: a `blindExport` (`vocab-bank.ts:158`) a szint MINDEN bejegyzését exportálja (en L0: 554); az új tételekhez
+  `--only <id-lista.json>` kapcsoló kell (a disztraktor-készlet a teljes bank marad); a `blind-score` (`:211`) változatlan.
+
+**Lépések:**
+
+10. `source/scripts/vocab-bank-generate.ts` (új): `generate` (jelöltek nyelvenként, cél-fokozat 0 / 1, kizáró lista =
+    a teljes szóbank + a kézi bank célrészei) és `solve` (vak megoldó a `blind-export` kérdésfájlján). Közös napló
+    (`--ledger`, JSONL: idő, fázis, modell, token, `usage.cost`); minden hívás ELŐTT: napló-összeg + a hívás legrosszabb
+    költsége (bemenet-becslés × bemeneti ár + `max_tokens` × kimeneti ár) > `--budget-usd` → leáll, hívás nélkül.
+    A jelölteket a szkript helyben szűri: fokozat (`vocabEntryStep`), duplikátum, `vocabBankProblems`; azonosító a téma
+    következő sorszáma (`<nyelv>0-<téma>-NNN`); a sorok a `level-0.ts` végére kerülnek, külön blokkban.
+11. **Próbakör:** nyelvenként ~10 elfogadott szó, mért költség. Vetítés = próbakör-költség / elfogadott tétel × 900;
+    **> 22 USD → STOP** (a teljes futás nem indul, a mért számok jelentésbe).
+12. **Teljes futás:** nyelvenként legfeljebb +300 új 0. szintű egyes szó, a fokozatonkénti hiány szerint elosztva
+    (cél: 0. és 1. fokozat külön-külön ≥ 300; en ≥ +78 / +119, de ≥ +129 / +155, fr ≥ +191 / +114 = 305 > 300 — a fr
+    1. fokozata a +300-as plafonon belül legfeljebb 295-ig jut, ezt a jelentés NOT DONE-ként jelzi, ha nincs más döntés).
+    Futáskorlát: `--budget-usd` = 25 − (eddigi napló-összeg), tartalék a vak körre.
+13. **Vak megoldó:** `node --import tsx scripts/vocab-bank.ts blind-export --lang <l> --level 0 --seed 1122 --only <ids> --canary 10 …`
+    → `vocab-bank-generate.ts solve` (Opus, csak a kérdésfájlt kapja) → `blind-score` → kanári 10/10 kötelező; a jelzett
+    tételek elbírálása, javítás (azonosító marad) vagy törlés; a javított tételekre újabb kör, amíg a valódi hiba 0.
+    Jegyzőkönyv: `docs/measurements/2026-11-22-szoletra-a1-bank.md` (költségnapló-összeg, modellek, kanári, jelzések).
+14. Ellenőrzés: `npx.cmd tsx --test tests/vocab-bank-validate.test.ts tests/word-ladder-grading.test.ts` + a többi
+    `tests/vocab-*.test.ts` / `tests/word-ladder-*.test.ts` zöld; a 0–1. fokozat egyes-szó-száma újramérve (előtte / utána
+    tábla a terv 12. szakaszában); a munkafa gyökeréből `npm run gate:stage`. A tényleges költség a PR-leírásba.
 
 ## Mért számok (2026-11-22)
 
