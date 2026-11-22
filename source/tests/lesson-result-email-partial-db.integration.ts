@@ -2,7 +2,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import type { AddressInfo } from "node:net";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { knowledgeMaps, lessonResultEmails, lessons } from "../shared/schema";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 import { experienceRoundSizes } from "../shared/lesson-experience";
@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault, sendingPartialWho, setLearnerResolveFault, setOwnerCheckFault, setFinalMarkerFault } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault, sendingPartialWho, setLearnerResolveFault, setOwnerCheckFault, setFinalMarkerFault, pruneRoundIdentity, roundIdentityKeysOf } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -57,6 +57,8 @@ let ipCounter = 0;
 const freshIp = () => { ipCounter++; return `10.77.${Math.floor(ipCounter / 250)}.${(ipCounter % 250) + 1}`; };
 const post = (body: object, ip = freshIp(), user?: string) => fetch(`${base}/api/lessons/${LESSON}/results`, { method: "POST",
   headers: { "content-type": "application/json", [PROXY_SECRET_HEADER]: PROXY_SECRET, "x-forwarded-for": ip, ...(user ? { "x-test-user": user } : {}) }, body: JSON.stringify(body) });
+/** R52: a kör kilét-rögzítő sorainak kulcsai (a jelzősor + az eddig ismert tulajdonosok). */
+const postClaimRows = async (roundId: string) => (await db.select({ roundKey: lessonResultEmails.roundKey }).from(lessonResultEmails).where(eq(lessonResultEmails.lessonId, LESSON))).map(row => row.roundKey).filter(key => roundIdentityKeysOf("quiz", roundId).some(prefix => key.startsWith(prefix)));
 /** R51: a kör kilét-rögzítő kérése (az első válasznál). */
 const postClaim = (body: object, ip = freshIp(), user?: string) => fetch(`${base}/api/lessons/${LESSON}/results/claim`, { method: "POST",
   headers: { "content-type": "application/json", [PROXY_SECRET_HEADER]: PROXY_SECRET, "x-forwarded-for": ip, ...(user ? { "x-test-user": user } : {}) }, body: JSON.stringify(body) });
@@ -855,4 +857,33 @@ test("R51 / L2: meglévő végleges jelző mellett a TTL-frissítés hibája nem
     await sleep(500);
     assert.equal(sent.length, 2);
   } finally { setFinalMarkerFault(null); }
+});
+
+/* R52 (2026-11-22): a szerveres kilét-rögzítés sorainak korlátos élettartama. */
+test("R52: a kilét-rögzítés lejárt sorai adagosan törlődnek, az élők és a végleges jelzőhöz kötött (duplikátum-védelmi) sorok nem; lejárt kör késői első kérése nem kap kilétet", async () => {
+  reset();
+  // A lejárt kör késői első kérése (a rögzítés már nincs meg): a kilét nem igazolható → nem a mostani fiók nevére.
+  const lateStart = Date.now() - 10 * 86_400_000;
+  assert.equal((await post({ kind: "quiz", roundId: "round-r52-late", picks: picks(5), fingerprint: "fp-r52-late", startedAt: lateStart, clientNow: Date.now() }, freshIp(), "u-r52-late")).status, 202);
+  assert.ok(await waitFor(() => sent.length === 2));
+  assert.ok(sent.every(mail => mail.html.includes("Vendég tanuló") && !mail.html.includes("Bejelentkezett tanuló")), "a kör első tevékenysége a rögzítési élettartamon túl volt: kilét nélkül");
+  reset();
+  // Két kör: az egyik régi (lejárt), a másik friss; a régi körnek végleges jelzője és tulajdonos-sora is van.
+  assert.equal((await postClaim({ kind: "quiz", roundId: "round-r52-old", claim: true }, freshIp(), "u-r52")).status, 202);
+  assert.equal((await post({ kind: "quiz", roundId: "round-r52-old", picks: picks(5), fingerprint: "fp-r52" }, freshIp(), "u-r52")).status, 202);
+  assert.ok(await waitFor(() => sent.length === 2));
+  assert.equal((await postClaim({ kind: "quiz", roundId: "round-r52-new", claim: true }, freshIp(), "u-r52")).status, 202);
+  assert.equal((await postClaimRows("round-r52-old")).length, 2, "a régi kör kilét-sorai (round-claim + round-owner) azonosíthatók");
+  assert.equal((await postClaimRows("round-r52-new")).length, 2);
+  const finalKeys = [roundKeyOf("final-round", "quiz", "round-r52-old"), roundKeyOf("final-owner", "quiz", "round-r52-old", "u-r52")];
+  // A régi kör minden sorát 30 napra visszaállítjuk (a végleges jelzőét is).
+  const old = new Date(Date.now() - 30 * 86_400_000);
+  const oldIdentity = await postClaimRows("round-r52-old");
+  await db.update(lessonResultEmails).set({ createdAt: old }).where(and(eq(lessonResultEmails.lessonId, LESSON), inArray(lessonResultEmails.roundKey, [...oldIdentity, ...finalKeys])));
+  const removed = await pruneRoundIdentity(new Date(), 1);
+  assert.equal(removed, oldIdentity.length, "a lejárt kilét-sorok (egyesével, adagosan) törlődtek");
+  const left = (await db.select({ roundKey: lessonResultEmails.roundKey }).from(lessonResultEmails).where(eq(lessonResultEmails.lessonId, LESSON))).map(row => row.roundKey);
+  assert.ok(oldIdentity.every(key => !left.includes(key)), "a régi kör kilét-sorai nincsenek meg");
+  assert.ok((await postClaimRows("round-r52-new")).every(key => left.includes(key)), "a friss kör kilét-sorai megmaradtak");
+  assert.ok(finalKeys.every(key => left.includes(key)), "a végleges jelző és a tulajdonos-sor (duplikátum-védelem) nem törlődött");
 });

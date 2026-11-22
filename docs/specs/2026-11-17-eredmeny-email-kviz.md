@@ -36,6 +36,14 @@ klienscsomag (ismert korlát: címke nélkül küld, a munkamenet fiókja szám�
   írásának hibája (bizonyíthatatlan állapot) 503 a 202 előtt. **L5** — a már elküldött körhöz újratöltéskor nem keletkezik kilét-rekord és
   kilét-rögzítés. **L3** — a pillanatkép-számláló körönként a legnagyobb elfogadott értéket tartja.
 
+**R52 — a szerveres kilét-rögzítés korlátos élettartama (2026-11-22).** A `lesson_result_emails` táblára eddig nem volt takarítás. A
+kilét-rögzítő sorok kulcsa felismerhető előtagot kap (`rc:` jelzősor, `ro:` tulajdonos; a többi körkulcs tiszta hex), és napi, adagos
+takarítás törli őket a rögzítéstől számított 8 nap után (a le nem zárt kör 7 napos korhatára + 1 nap; legfeljebb 50 × 1000 sor
+futásonként; csak élesben, a meglévő cron-útvonalon, a leállítás leállítja). A végleges jelző és tulajdonos-sora (duplikátum-védelem,
+R27 / R42) nem érintett. A lyuk zárása: ha egy kör UTOLSÓ tevékenysége is az élettartamon túl van, a most születő rögzítés nem igazolhatja
+az első tevékenységkori kilétet — vendégként rögzül. Vállalt korlát: a 8 napnál hosszabb ideig nyitott, közben is aktív kör rögzítése a
+takarítás után az első újabb kérésnél újra rögzül.
+
 ## Cél
 
 1. A vendég / párosított tanuló HELYI kvízének eredménye akkor is elmenjen, ha a tanuló minden kérdésre válaszolt, de a „Kvíz
@@ -665,4 +673,5 @@ Elfogadás (S1b):
 - [ ] E73 – a kliens az első válasznál egyszer küld kilét-rögzítést, fiókcímke nélkül (böngésző)
 - [ ] E74 – létező jelző TTL-hibája: duplikátum; jelzősor-írási hiba: 503 (valódi DB)
 - [ ] E75 – elküldött kör újratöltése: nincs kilét-rekord és rögzítés (böngésző); pillanatkép-számláló nem lép vissza (böngésző)
+- [ ] E76 – kilét-rögzítés takarítása: lejárt sor törlődik, élő és végleges-jelzős nem; lejárt kör késői első kérése vendég (valódi DB)
 - [x] E25 – „régi szerver” csonk mellett a végleges kérés sikerül, a pillanatkép nem degradálódik (böngésző + egységteszt)

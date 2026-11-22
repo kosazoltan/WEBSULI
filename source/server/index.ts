@@ -626,6 +626,8 @@ app.use((req, res, next) => {
       void syncLearners();
       // S4: heti összefoglaló, inaktivitás-riasztás, 365 napos megőrzés (csak élesben)
       setupLearnerReports();
+      // R52 (spec 2026-11-17-eredmeny-email-kviz): a kör kilét-rögzítő sorainak napi, adagos takarítása (csak élesben)
+      void import("./lesson-result-email").then(({ setupResultHousekeeping }) => setupResultHousekeeping());
 
       // Phase 10: Start automatic backup system (daily + event-driven)
       startAutoBackupJob();

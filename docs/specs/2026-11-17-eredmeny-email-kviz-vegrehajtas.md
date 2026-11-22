@@ -472,6 +472,17 @@ Kilét-leltár frissítése (a fenti táblázathoz):
   törzsfüggvény a tényleges POST előtt mérje a kort és a `clientNow`-t; hamis órás böngészőteszt kell). **L6** dokumentum-szöveg javítva
   (`docs/agent-csapdak.md` C-79: leíró, nem utasítás).
 
+## 2026-11-22 — R52: a kilét-rögzítő sorok takarítása (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R52)
+
+- Felderítés: a `lesson_result_emails`-re nem volt takarítás (sem TTL-törlés, sem söprés; csak az R18 olvasáskori 24 órás szűrése).
+- Bukó teszt `R52` (DB): a lejárt kör késői első kérése a régi kóddal a mostani fiók nevére ment („a kör első tevékenysége a rögzítési
+  élettartamon túl volt: kilét nélkül” bukott); a törlés-rész új funkció (régi kóddal nem létezett).
+- `server/lesson-result-email.ts`: `rc:` / `ro:` előtagú kulcsok (`roundClaimKeyOf`, `roundOwnerKeyOf`, `roundIdentityKeysOf`),
+  `ROUND_IDENTITY_TTL_MS` (8 nap), `pruneRoundIdentity` (adagos `DELETE … WHERE id IN (SELECT … LIMIT)`), `setupResultHousekeeping`
+  (napi 03:40 Europe/Budapest, csak élesben); `establishIdentity`: a kör utolsó tevékenysége az élettartamon túl → vendég-rögzítés.
+  `server/index.ts`: a takarítás a meglévő ütemezett feladatok mellé kötve (E2E-ben nem). Migráció nincs.
+- Leltár: új sor S15 (takarítás + lejárt-kör szabály; teszt `R52`).
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

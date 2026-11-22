@@ -2,7 +2,8 @@ import { createHash, createHmac } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { clientIpKey } from "./lib/client-ip";
 import { partialLimiter, resultLimiter } from "./lesson-result-limits";
-import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, like, lt, or, sql } from "drizzle-orm";
+import cron from "node-cron";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
 import { lessonSchema } from "../shared/lesson-schema";
@@ -410,8 +411,39 @@ async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId
  * állapotából. Tanulófüggetlen jelzősor (`round-claim`) + a rögzített kilét álnevesített sora (`round-owner`), egy tranzakcióban (a meglévő
  * táblán, sémaváltozás nélkül). Igaz, ha a mostani kilét a rögzítettel azonos (vagy most rögzült).
  */
-const roundClaimKeyOf = (kind: "tasks" | "quiz", roundId: string) => roundKeyOf("round-claim", kind, roundId);
-const roundOwnerKeyOf = (kind: "tasks" | "quiz", roundId: string, owner: string) => roundKeyOf("round-owner", kind, roundId, owner);
+// R52: a kilét-rögzítő sorok kulcsa felismerhető előtagot visz (`rc:` jelzősor, `ro:` tulajdonos; a többi körkulcs tiszta hex), így
+// korlátos élettartammal takaríthatók; a tulajdonos-kulcs eleje a kört azonosítja (a kör minden tulajdonos-sora előtaggal megtalálható).
+const roundIdentityPart = (kind: "tasks" | "quiz", roundId: string) => roundKeyOf("round-identity", kind, roundId);
+const roundClaimKeyOf = (kind: "tasks" | "quiz", roundId: string) => `rc:${roundIdentityPart(kind, roundId).slice(0, 61)}`;
+const roundOwnerKeyOf = (kind: "tasks" | "quiz", roundId: string, owner: string) => `ro:${roundIdentityPart(kind, roundId).slice(0, 29)}${roundKeyOf("round-owner", owner).slice(0, 32)}`;
+/** Teszthez (R52): a kör kilét-rögzítő sorainak kulcs-előtagjai (jelzősor; tulajdonos-sorok). */
+export const roundIdentityKeysOf = (kind: "tasks" | "quiz", roundId: string) => [roundClaimKeyOf(kind, roundId), `ro:${roundIdentityPart(kind, roundId).slice(0, 29)}`];
+/**
+ * Terv R52: a kilét-rögzítés élettartama — a le nem zárt kör 7 napos korhatára (R2 / R5) után egy nap tartalékkal. Ezután a sorok
+ * törlődnek (`pruneRoundIdentity`), és a kör késői első kérése sem kap kilétet: a kör első tevékenysége a rögzítési élettartamon túl
+ * volt, a kilét nem igazolható (vendégként fut). A végleges jelző és tulajdonos-sora (duplikátum-védelem, R27 / R42) külön, nem érintett.
+ */
+export const ROUND_IDENTITY_TTL_MS = 8 * 86_400_000;
+const PRUNE_BATCH = 1000;
+const PRUNE_MAX_BATCHES = 50;
+/** R52: a lejárt kilét-rögzítő sorok adagos törlése (legfeljebb `PRUNE_MAX_BATCHES` adag futásonként); a törölt sorok számát adja. */
+export async function pruneRoundIdentity(now = new Date(), batch = PRUNE_BATCH): Promise<number> {
+  const before = new Date(now.getTime() - ROUND_IDENTITY_TTL_MS);
+  let removed = 0;
+  for (let i = 0; i < PRUNE_MAX_BATCHES; i++) {
+    const victims = db.select({ id: lessonResultEmails.id }).from(lessonResultEmails)
+      .where(and(lt(lessonResultEmails.createdAt, before), or(like(lessonResultEmails.roundKey, "rc:%"), like(lessonResultEmails.roundKey, "ro:%")))).limit(batch);
+    const gone = await db.delete(lessonResultEmails).where(inArray(lessonResultEmails.id, victims)).returning({ id: lessonResultEmails.id });
+    removed += gone.length;
+    if (gone.length < batch) break;
+  }
+  return removed;
+}
+/** R52: a kilét-rögzítés napi takarítása (csak élesben, E2E-ben nem; a leállítás a cron-feladatokat leállítja). */
+export function setupResultHousekeeping(): void {
+  if (process.env.NODE_ENV !== "production") return;
+  cron.schedule("40 3 * * *", () => { void pruneRoundIdentity().catch(error => logger.warn(`[LESSON-RESULT] a kilét-rögzítés takarítása nem sikerült: ${errorClass(error)}`)); }, { timezone: "Europe/Budapest" });
+}
 async function claimRoundOwner(lessonId: string, kind: "tasks" | "quiz", roundId: string, owner: string): Promise<boolean> {
   return db.transaction(async tx => {
     const claim = await tx.insert(lessonResultEmails).values({ lessonId, kind, roundKey: roundClaimKeyOf(kind, roundId), percent: 0 })
@@ -429,13 +461,18 @@ type Identity = { userId: string | undefined; paired: Awaited<ReturnType<typeof 
  * ellenőrzése (R47 / L3: átmeneti hiba → dob), majd a kör szerveres kilét-rögzítéséhez vetés: ha a mostani kilét nem a rögzített, a kérés
  * kilét nélkül (vendégként) fut. A hívó a dobásra 503-at ad (nincs rögzítés, nincs 202).
  */
-async function establishIdentity(req: Request, lessonId: string, kind: "tasks" | "quiz", roundId: string, learnerToken: string | undefined, subject: string | undefined): Promise<Identity> {
+async function establishIdentity(req: Request, lessonId: string, kind: "tasks" | "quiz", roundId: string, learnerToken: string | undefined, subject: string | undefined, roundActivityAt?: number): Promise<Identity> {
   const sessionUserId = (req.user as { id?: string } | undefined)?.id;
   const userId = subject !== undefined && subject !== resultSubjectOf(sessionUserId) ? undefined : sessionUserId;
   let paired: Identity["paired"] = null;
   if (learnerToken) { learnerResolveFault?.(); paired = await resolveLearner(learnerToken); }
-  const owner = userId ? `user:${userId}` : paired ? `learner:${paired.id}` : "guest";
-  return (await claimRoundOwner(lessonId, kind, roundId, owner)) ? { userId, paired, foreign: false } : { userId: undefined, paired: null, foreign: true };
+  // R52: ha a kör UTOLSÓ tevékenysége is a rögzítési élettartamon túl van, az első tevékenység biztosan — a most születő rögzítés nem
+  // igazolhatja az akkori kilétet: vendégként rögzül (meglévő rögzítésnél a meglévő számít).
+  const stale = roundActivityAt !== undefined && Date.now() - roundActivityAt > ROUND_IDENTITY_TTL_MS;
+  const owner = stale ? "guest" : userId ? `user:${userId}` : paired ? `learner:${paired.id}` : "guest";
+  if (!(await claimRoundOwner(lessonId, kind, roundId, owner))) return { userId: undefined, paired: null, foreign: true };
+  // A visszaadott kilét mindig a rögzítettnek felel meg (a „vendég” rögzítés — pl. lejárt kör — fiókot / párosítást nem ad).
+  return owner === "guest" ? { userId: undefined, paired: null, foreign: false } : { userId, paired, foreign: false };
 }
 let finalizedCheckFault: (() => void) | null = null;
 let partialIntakeHook: ((who: string) => Promise<void>) | null = null;
@@ -564,7 +601,10 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   // legfeljebb csökkentheti (eltérésnél fiók nélkül), kilétet nem adhat. Tanulói profil (S2): bejelentkezve is a tanuló naplójába kerül, a
   // levél neve bejelentkezve a fiók neve marad. A kilét-feloldás átmeneti hibája (párosítás, rögzítés) → 503, rögzítés és 202 nélkül.
   let identity: Identity;
-  try { identity = await establishIdentity(req, req.params.lessonId, body.kind, body.roundId, body.learner, body.subject); }
+  // R52: a kör UTOLSÓ tevékenysége a szerver órájára számolva (R13: a kliens órájának eltérése a `clientNow`-ból).
+  const lastActivity = (body.kind === "quiz" ? body.lastAnsweredAt : undefined) ?? body.startedAt;
+  const roundActivityAt = lastActivity !== undefined ? lastActivity + (body.clientNow ? Date.now() - body.clientNow : 0) : undefined;
+  try { identity = await establishIdentity(req, req.params.lessonId, body.kind, body.roundId, body.learner, body.subject, roundActivityAt); }
   catch (error) {
     logger.error(`[LESSON-RESULT] a kilét feloldása nem sikerült: ${errorClass(error)}`);
     return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
