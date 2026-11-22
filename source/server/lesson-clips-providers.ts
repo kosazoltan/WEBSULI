@@ -15,7 +15,38 @@ import { CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, ClipAbortError, type ClipDe
  * kérés fejlécében élnek: naplóba, hibaüzenetbe nem kerülnek.
  */
 export const CLIP_TEXT_MODEL = "anthropic/claude-haiku-5.5";
-export const CLIP_VIDEO_MODEL = "bytedance/seedance-1-5-pro";
+/**
+ * A mozgókép-modell (docs/specs/2026-11-22-kisfilm-videomodell.md): a korábbi `bytedance/seedance-1-5-pro`-t az OpenRouter
+ * megszüntette (élesben 404, 2026-11-22). Mérve 5 mp-re: 480p 0,177 USD, 720p 0,381 USD; a lejátszó 960 px-es képén a kettő
+ * szemre azonos, ezért 480p. Felülírható: LESSON_CLIP_VIDEO_MODEL, LESSON_CLIP_VIDEO_RESOLUTION.
+ */
+export const CLIP_VIDEO_MODEL_DEFAULT = "bytedance/seedance-2.0-mini";
+export const CLIP_VIDEO_RESOLUTIONS = ["480p", "720p"] as const;
+export type ClipVideoResolution = (typeof CLIP_VIDEO_RESOLUTIONS)[number];
+export const CLIP_VIDEO_RESOLUTION_DEFAULT: ClipVideoResolution = "480p";
+const VIDEO_MODEL_NAME = /^[a-z0-9._-]+\/[a-z0-9._-]+$/;
+const warnedVideoSetting = new Set<string>();
+function warnVideoSettingOnce(name: string): void {
+  if (warnedVideoSetting.has(name)) return;
+  warnedVideoSetting.add(name);
+  logger.warn(`[lesson-clips] érvénytelen ${name} — az alapértéket használom`);
+}
+/** A mozgókép-modell a környezetből (`szolgáltató/név`), különben az alapérték. */
+export function clipVideoModel(env: Record<string, string | undefined> = process.env): string {
+  const raw = env.LESSON_CLIP_VIDEO_MODEL?.trim();
+  if (!raw) return CLIP_VIDEO_MODEL_DEFAULT;
+  if (VIDEO_MODEL_NAME.test(raw)) return raw;
+  warnVideoSettingOnce("LESSON_CLIP_VIDEO_MODEL");
+  return CLIP_VIDEO_MODEL_DEFAULT;
+}
+/** A mozgókép felbontása a környezetből (`480p` | `720p`), különben az alapérték. */
+export function clipVideoResolution(env: Record<string, string | undefined> = process.env): ClipVideoResolution {
+  const raw = env.LESSON_CLIP_VIDEO_RESOLUTION?.trim();
+  if (!raw) return CLIP_VIDEO_RESOLUTION_DEFAULT;
+  if ((CLIP_VIDEO_RESOLUTIONS as readonly string[]).includes(raw)) return raw as ClipVideoResolution;
+  warnVideoSettingOnce("LESSON_CLIP_VIDEO_RESOLUTION");
+  return CLIP_VIDEO_RESOLUTION_DEFAULT;
+}
 export const CLIP_IMAGE_MODEL_OPENAI = "gpt-image-2.5-flare";
 export const CLIP_IMAGE_MODEL_OPENROUTER = "bytedance-seed/seedream-5-0-pro";
 const OPENROUTER = "https://openrouter.ai/api/v1";
@@ -92,7 +123,7 @@ export const CLIP_HEAR_MODEL = "scribe_v1";
 export const CLIP_HEAR_MODEL_OPENAI = "gpt-4o-transcribe";
 const VIDEO_POLL_MS = 6000, VIDEO_TIMEOUT_MS = 6 * 60_000;
 
-export type ClipKeys = { openRouter: string; openAi?: string; elevenLabs?: string; ffmpeg?: string };
+export type ClipKeys = { openRouter: string; openAi?: string; elevenLabs?: string; ffmpeg?: string; videoModel?: string; videoResolution?: ClipVideoResolution };
 export function clipKeys(env: Record<string, string | undefined> = process.env): ClipKeys | null {
   const openRouter = env.OPENROUTER_API_KEY?.trim();
   if (!openRouter) return null;
@@ -101,6 +132,8 @@ export function clipKeys(env: Record<string, string | undefined> = process.env):
     openAi: env.OPENAI_API_KEY?.trim() || env.AI_INTEGRATIONS_OPENAI_API_KEY?.trim() || undefined,
     elevenLabs: env.ELEVENLABS_API_KEY?.trim() || undefined,
     ffmpeg: env.FFMPEG_PATH?.trim() || undefined,
+    videoModel: clipVideoModel(env),
+    videoResolution: clipVideoResolution(env),
   };
 }
 
@@ -357,7 +390,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
     still: (image) => sharp(image.bytes).resize(1280, 720, { fit: "cover" }).webp({ quality: 74 }).toBuffer(),
     audioMs: mp3DurationMs,
     async video(image, prompt, seconds) {
-      const submit = await fetch(`${OPENROUTER}/videos`, { method: "POST", headers: orHeaders, signal: signal(120_000), body: JSON.stringify({ model: CLIP_VIDEO_MODEL, prompt, duration: seconds, resolution: "720p", aspect_ratio: "16:9", generate_audio: false, frame_images: [{ type: "image_url", image_url: { url: dataUrl(image) }, frame_type: "first_frame" }] }) });
+      const submit = await fetch(`${OPENROUTER}/videos`, { method: "POST", headers: orHeaders, signal: signal(120_000), body: JSON.stringify({ model: keys.videoModel ?? CLIP_VIDEO_MODEL_DEFAULT, prompt, duration: seconds, resolution: keys.videoResolution ?? CLIP_VIDEO_RESOLUTION_DEFAULT, aspect_ratio: "16:9", generate_audio: false, frame_images: [{ type: "image_url", image_url: { url: dataUrl(image) }, frame_type: "first_frame" }] }) });
       const submitted = await bodyText("mozgókép", submit);
       let job = JSON.parse(submitted) as { status?: string; polling_url?: string; unsigned_urls?: string[]; error?: unknown };
       // A hitelesített lekérdezés csak a szolgáltató saját HTTPS-originjére mehet (vak kör L8).

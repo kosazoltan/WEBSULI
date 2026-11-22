@@ -10,7 +10,7 @@ import {
   type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
-import { CLIP_TMP_PREFIX, clipKeys, clipProviders, CLIP_RESPONSE_LIMITS, downloadAndShrink, readLimitedText, safeProviderFetch, sweepStaleClipDirs, webBody, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
+import { CLIP_TMP_PREFIX, CLIP_VIDEO_MODEL_DEFAULT, CLIP_VIDEO_RESOLUTION_DEFAULT, clipKeys, clipProviders, clipVideoModel, clipVideoResolution, CLIP_RESPONSE_LIMITS, downloadAndShrink, readLimitedText, safeProviderFetch, sweepStaleClipDirs, webBody, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
 import type { RawResponse } from "../server/studio/safe-fetch";
 import { Readable } from "node:stream";
 /** Webes válasz → a `safe-fetch` nyers válasza (a csonkolt szállításhoz). */
@@ -91,7 +91,8 @@ test("kapcsolók: vészfék, gyártás csak kapcsolóval és kulccsal; plafonok 
   assert.equal(clipMediaBudgetBytes({}), 400 * 1024 * 1024);
   assert.equal(clipMediaBudgetBytes({ LESSON_CLIP_MEDIA_MAX_MB: "50" }), 50 * 1024 * 1024);
   assert.equal(clipKeys({}), null);
-  assert.deepEqual(clipKeys({ OPENROUTER_API_KEY: " or ", ELEVENLABS_API_KEY: "el", OPENAI_API_KEY: "oa", FFMPEG_PATH: "/opt/ffmpeg" }), { openRouter: "or", openAi: "oa", elevenLabs: "el", ffmpeg: "/opt/ffmpeg" });
+  // docs/specs/2026-11-22-kisfilm-videomodell.md: a kulcsok mellett a mozgókép-modell és -felbontás is (alapérték: 2.0 Mini, 480p).
+  assert.deepEqual(clipKeys({ OPENROUTER_API_KEY: " or ", ELEVENLABS_API_KEY: "el", OPENAI_API_KEY: "oa", FFMPEG_PATH: "/opt/ffmpeg" }), { openRouter: "or", openAi: "oa", elevenLabs: "el", ffmpeg: "/opt/ffmpeg", videoModel: "bytedance/seedance-2.0-mini", videoResolution: "480p" });
   assert.equal(clipKeys({ OPENROUTER_API_KEY: "or" })?.elevenLabs, undefined);
 });
 
@@ -685,4 +686,46 @@ test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határide
   await assert.rejects(res.arrayBuffer());
   assert.ok(Date.now() - started < 2000, `az elakadt törzs nem tartja fel (${Date.now() - started} ms)`);
   assert.ok(destroyed >= 1, "a kapcsolat lezárul");
+});
+
+// docs/specs/2026-11-22-kisfilm-videomodell.md — a megszűnt Seedance 1.5 helyett beállítható modell és felbontás.
+test("mozgókép-modell és -felbontás: alapérték, érvényes felülírás, érvénytelen / üres érték → alapérték", () => {
+  assert.equal(CLIP_VIDEO_MODEL_DEFAULT, "bytedance/seedance-2.0-mini");
+  assert.equal(CLIP_VIDEO_RESOLUTION_DEFAULT, "480p");
+  assert.equal(clipVideoModel({}), "bytedance/seedance-2.0-mini");
+  assert.equal(clipVideoModel({ LESSON_CLIP_VIDEO_MODEL: " bytedance/seedance-2.5-flash " }), "bytedance/seedance-2.5-flash");
+  for (const bad of ["", "   ", "seedance", "https://evil.example/x", "a/b/c", "Bytedance/Seedance 2"]) assert.equal(clipVideoModel({ LESSON_CLIP_VIDEO_MODEL: bad }), CLIP_VIDEO_MODEL_DEFAULT, `érvénytelen: ${JSON.stringify(bad)}`);
+  assert.equal(clipVideoResolution({}), "480p");
+  assert.equal(clipVideoResolution({ LESSON_CLIP_VIDEO_RESOLUTION: "720p" }), "720p");
+  for (const bad of ["", "1080p", "4K", "720"]) assert.equal(clipVideoResolution({ LESSON_CLIP_VIDEO_RESOLUTION: bad }), "480p", `érvénytelen: ${JSON.stringify(bad)}`);
+});
+
+test("mozgókép beküldése: a beállított modell és felbontás megy a kérésben, a többi mező változatlan", async () => {
+  const realFetch = globalThis.fetch;
+  const bodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.endsWith("/api/v1/videos")) { bodies.push(JSON.parse(String(init?.body))); return new Response(JSON.stringify({ status: "failed", error: "teszt" }), { status: 200 }); }
+    return new Response("nincs", { status: 404 });
+  }) as typeof fetch;
+  const image = { bytes: Buffer.from("x"), mime: "image/jpeg" };
+  try {
+    const outcome = (deps: ReturnType<typeof clipProviders>) => deps.video!(image, "p", 6).then(() => "kész", (error: unknown) => `hiba: ${String(error)}`);
+    await outcome(clipProviders(clipKeys({ OPENROUTER_API_KEY: "titok" })!, testTransport));
+    await outcome(clipProviders(clipKeys({ OPENROUTER_API_KEY: "titok", LESSON_CLIP_VIDEO_MODEL: "bytedance/seedance-2.5-flash", LESSON_CLIP_VIDEO_RESOLUTION: "720p" })!, testTransport));
+    await outcome(clipProviders({ openRouter: "titok" }, testTransport));
+    assert.deepEqual(bodies.map((b) => [b.model, b.resolution]), [
+      ["bytedance/seedance-2.0-mini", "480p"],
+      ["bytedance/seedance-2.5-flash", "720p"],
+      ["bytedance/seedance-2.0-mini", "480p"],
+    ]);
+    for (const b of bodies) {
+      assert.equal(b.duration, 6);
+      assert.equal(b.aspect_ratio, "16:9");
+      assert.equal(b.generate_audio, false);
+      assert.equal((b.frame_images as Array<{ frame_type: string }>)[0].frame_type, "first_frame");
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

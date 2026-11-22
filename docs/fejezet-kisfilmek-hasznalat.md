@@ -19,7 +19,7 @@ figurával, képi stílussal, mondathosszal és hanggal. Terv: [`docs/specs/2026
 Fejezetenként: forgatókönyv (szövegmodell, a korosztály szabályaival; kapuk: mondathossz, számhűség — új szám az ábrán sem születhet)
 → jelenetenként kezdőkép (képmodell + minőségkapu: szöveg / nem gyerekbarát / nem a jelenet → újrapróba) → hang (ElevenLabs; hangkapu:
 minden mondatot egy független beszédfelismerő visszaír, betűre összeveti, eltérésnél újragyártja) →
-mozgókép a kezdőképből (Seedance 1.5) → átkódolás kicsire (`ffmpeg`) → tárolás. Mért idő: kb. 2–2,5 perc fejezetenként; egyszerre
+mozgókép a kezdőképből (Seedance 2.0 Mini, 480p; a Seedance 1.5-öt az OpenRouter 2026-11-22-re megszüntette) → átkódolás kicsire (`ffmpeg`) → tárolás. Mért idő: kb. 2–2,5 perc fejezetenként; egyszerre
 egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a kör (vagy a következő fejezet) kimarad (az 512 MB-os példány védelme). A lecke szövege érintetlen: a kisfilm a `lesson_clips`, a média a `lesson_clip_media` táblában él.
 
 ## Kapcsolók (Render → `websuli-api-eu` → Environment)
@@ -30,6 +30,8 @@ egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a
 | `LESSON_CLIPS_AUTO=on` | A legfeljebb 3 napja közzétett leckékhez gyárt. Kell hozzá az `OPENROUTER_API_KEY` (megvan). |
 | `ELEVENLABS_API_KEY` | A mesélőhang. Nélküle a kisfilm a felolvasás tartalék (gépies) hangjával szól. |
 | `OPENAI_API_KEY` / `AI_INTEGRATIONS_OPENAI_API_KEY` | A jóváhagyott próba képmodellje ÉS a hangkapu független felismerője. Nélküle a leckeborító képmodellje rajzol, a hangot pedig az ElevenLabs saját (elnézőbb) felismerője ellenőrzi. |
+| `LESSON_CLIP_VIDEO_MODEL` | A mozgókép-modell `szolgáltató/név` alakban (alap: `bytedance/seedance-2.0-mini`). Modellmegszűnéskor (napló: „No endpoints found for …”) ezt kell átírni; érvénytelen érték → alapérték. |
+| `LESSON_CLIP_VIDEO_RESOLUTION` | `480p` (alap) vagy `720p`. Mérve 5 mp-re: 480p 0,177 USD, 720p 0,381 USD; a lejátszó 960 px-es képén szemre azonos. |
 | `LESSON_CLIP_DAILY_LIMIT` | Naponta legfeljebb ennyi lecke kap gyártást (alap: 2). |
 | `LESSON_CLIP_MEDIA_MAX_MB` | A médiatábla mérethatára (alap: 400 MB); fölötte a gyártás megáll, a naplóban jelzi. |
 | `FFMPEG_PATH` | Az `ffmpeg` helye, ha nincs a PATH-on. `ffmpeg` nélkül a kisfilmek állóképesek (a naplóban jelzi). |
@@ -59,10 +61,11 @@ egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a
 
 ## Költség és méret (mérve 2026-11-10, két automatikus fejezeten)
 
-- Mozgókép: kb. 0,026 USD / mp → 4 jelenet 5–7 mp-es klipekkel kb. 0,55–0,70 USD fejezetenként. Kép: kb. 0,01 USD / db.
+- Mozgókép (Seedance 2.0 Mini, 480p, mérve 2026-11-22): kb. 0,035 USD / mp → 4 jelenet 5–7 mp-es klipekkel kb. 0,70–1,00 USD
+  fejezetenként (720p-ben kb. kétszer ennyi). A régi Seedance 1.5 kb. 0,026 USD / mp volt. Kép: kb. 0,01 USD / db.
   Hang: 0,5 kredit / karakter (fejezetenként kb. 150–250 kredit). Szöveg- és képkapu-hívások: fillérek.
 - Tárolt méret: kb. 3,3 MB fejezetenként (a nyers klipek 4–7 MB-osak, átkódolva 0,3–0,7 MB; a hang 128 kbit/s).
-- Egy 12 fejezetes lecke: kb. 7–9 USD és kb. 40 MB.
+- Egy 12 fejezetes lecke: kb. 9–13 USD és kb. 40 MB.
 
 ## Kipróbálás éles adat írása nélkül
 

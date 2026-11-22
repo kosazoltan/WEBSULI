@@ -16,4 +16,4 @@ Terv: `docs/specs/2026-11-22-kisfilm-videomodell.md`. Ág: `fix/kisfilm-videomod
 6. Élesítés a terv szerint: az állóképes fejezet sorának törlése (tulajdonosi jóváhagyással), `LESSON_CLIPS_AUTO=on`, az első kör
    mérése (napló: „N mozgókép (0 nélkül)”, memória 450 MB alatt).
 
-- [x] 1 · [ ] 2 · [ ] 3 · [ ] 4 · [ ] 5 · [ ] 6
+- [x] 1 · [x] 2 · [x] 3 · [x] 4 · [ ] 5 · [ ] 6
