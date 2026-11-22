@@ -991,3 +991,83 @@ test("R44 / L2: a válasz nélkül függő pillanatkép-kérés határideje utá
   await expect.poll(() => partialsOf(posts).length, { message: "a határidő után ugyanaz az állapot újra elment" }).toBe(1);
   expect(answeredIn(partialsOf(posts)[0].body)).toBe(2);
 });
+
+/* Gépi vak ellenőrzés, 9. kör (GPT-6.2 Sol, 87631382, 2026-11-22), terv R47: a kilét a kör első tevékenységekor rögzül. */
+const LEARNER_A = "tanulo-aaaa.1.AAAAAAAAAAAAAAAAAAAAAA";
+const LEARNER_B = "tanulo-bbbb.1.BBBBBBBBBBBBBBBBBBBBBB";
+
+test("R47 / L1 (KI állás): a kör első tevékenységekor még nincs ismert fiók, az első (sikeres, de késői) tokenválasz már B fiókjáé → a kör nem kapja meg B címkéjét", async ({ page }) => {
+  await mockWith(page);
+  let tokenCalls = 0;
+  await page.route("**/api/csrf-token", async route => {
+    tokenCalls++;
+    if (tokenCalls === 1) await new Promise(resolve => setTimeout(resolve, 10_000)); // közben egy másik fülben B fiók lépett be
+    try { await route.fulfill({ json: { csrfToken: "test", resultApi: 2, resultSubject: "fiok-b" } }); } catch { /* a lap közben bezárult */ }
+  });
+  const finals: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) finals.push(body);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await answerAll(page);
+  await expect.poll(() => finals.length, { timeout: 25_000, message: "a lezárt kör kiment" }).toBe(1);
+  expect(finals[0].subject, "a felvételkor ismeretlen kilét nem pótolható a későbbi munkamenetből").toBe("?");
+});
+
+test("R47 / L2: nyitva hagyott leckefül, közben újrapárosítás (B tanuló linkje) → A válaszai nem mennek B párosításával (sem a pillanatkép, sem a végleges)", async ({ page }) => {
+  await page.addInitScript(token => { if (!sessionStorage.getItem("paired")) { sessionStorage.setItem("paired", "1"); localStorage.setItem("websuli.learnerToken", token); } }, LEARNER_A);
+  const posts = await mockWith(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  await quiz.nth(0).locator("button.lesson-option").first().click(); // A első válasza
+  await page.waitForTimeout(800);
+  await page.evaluate(token => localStorage.setItem("websuli.learnerToken", token), LEARNER_B); // B párosító linkje egy másik fülben
+  await page.evaluate(() => { window.dispatchEvent(new Event("pagehide")); });
+  await expect.poll(() => partialsOf(posts).length).toBe(1);
+  expect(partialsOf(posts)[0].body.learner, "a pillanatkép nem B párosításával megy").toBeUndefined();
+  for (let i = 1; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => finalsOf(posts).length).toBe(1);
+  expect(finalsOf(posts)[0].body.learner, "a végleges sem B párosításával megy").toBeUndefined();
+});
+
+test("R47 / kontroll: változatlan párosítás mellett a pillanatkép és a végleges is a párosított tanulóval megy", async ({ page }) => {
+  await page.addInitScript(token => { localStorage.setItem("websuli.learnerToken", token); }, LEARNER_A);
+  const posts = await mockWith(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  await quiz.nth(0).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await page.evaluate(() => { window.dispatchEvent(new Event("pagehide")); });
+  await expect.poll(() => partialsOf(posts).length).toBe(1);
+  expect(partialsOf(posts)[0].body.learner).toBe(LEARNER_A);
+  expect(partialsOf(posts)[0].body.subject, "a mock token címke nélküli: ismeretlen fiók").toBe("?");
+  for (let i = 1; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => finalsOf(posts).length).toBe(1);
+  expect(finalsOf(posts)[0].body.learner).toBe(LEARNER_A);
+});
+
+test("R48 / L4: a pillanatkép késői 202-je a véglegesítés után nem írja vissza a részleges jelzőt", async ({ page }) => {
+  const posts = await mockWith(page);
+  let held: import("@playwright/test").Route | null = null;
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial === true && held === null) { held = route; return; } // az első pillanatkép válasza késik
+    posts.push({ lesson: "lesson-q", body });
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  await quiz.nth(0).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await hide(page);
+  await expect.poll(() => held !== null).toBe(true);
+  for (let i = 1; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => finalsOf(posts).length).toBe(1);
+  const partialKeys = () => page.evaluate(() => Object.keys(localStorage).filter(key => key.includes(":quiz:partial:")));
+  expect(await partialKeys(), "a végleges siker után nincs részleges jelző").toEqual([]);
+  await held!.fulfill({ status: 202, json: { queued: true, partial: true } });
+  await page.waitForTimeout(800);
+  expect(await partialKeys(), "a késői 202 sem írja vissza").toEqual([]);
+});

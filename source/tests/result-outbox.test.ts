@@ -138,8 +138,11 @@ test("R35 (6. kör L1): a felvétel jelzi, hogy új bejegyzés jött-e létre; c
   assert.equal(later.add({ ...entry("a"), subject: "masik-fiok" }), false, "a megmaradt bejegyzés nem az új dokumentumé");
   assert.equal(later.read()[0].subject, null, "a régi bejegyzés címkéje változatlan");
   const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  assert.match(source, /if \(outbox\.add\(entry\)\) enqueuedHere\.add\(entry\.id\);/);
-  assert.doesNotMatch(source, /enqueuedHere\.add\(entry\.id\);\n\s*outbox\.add\(entry\);/);
+  // R47 (9. vak kör, dokumentált spec-változás): utólagos címkepótlás egyáltalán nincs — a bejegyzés a létrehozásakor rögzített kilétet
+  // viszi (a korábbi „csak az ebben a dokumentumban létrehozott kaphat címkét” szabálynál szigorúbb).
+  assert.doesNotMatch(source, /enqueuedHere/, "nincs dokumentumhoz kötött utólagos címkézés");
+  assert.match(source, /const subject = entry\.subject \?\? null;/);
+  assert.doesNotMatch(source, /info\.subject/, "a küldéskori tokenválasz címkéje nem kerül a bejegyzésbe");
 });
 
 test("R37 (6. kör L4): az apiRequest időzítője a törzs olvasásáig él; a tokenlekérésnek saját határideje van", () => {

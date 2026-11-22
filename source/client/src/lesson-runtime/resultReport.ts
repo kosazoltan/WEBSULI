@@ -30,15 +30,53 @@ export const REPORT_FALLBACK_MS = 45_000;
 // érhető el a sor számára, a bejegyzés csak memóriában él (lapon belüli újrapróba), a `localStorage`-ba nem kerül.
 const outbox = createOutboxStore(() => (resultOutboxEnabled() ? localStorage : null));
 const flagSet = (flag: string) => { try { return !!localStorage.getItem(flag); } catch { return false; } };
-/** Terv R31: az ezen a lapon sorba tett bejegyzések — ha a kilét-címke a sorba kerüléskor még nem volt meg, az első küldés előtt pótolható. */
-const enqueuedHere = new Set<string>();
+/**
+ * Terv R47 (9. vak kör L1–L2; tervezési szabály): a kör KILÉTE a kör első tevékenységekor (első válasz / kitöltés, legkésőbb a lezáráskor)
+ * RÖGZÜL, és onnantól nem változik — a küldéskor (és a sorban várakozás alatt) sem pótolható vagy cserélhető a mostani munkamenetből:
+ * - fiók: a gyorsítótárazott tokenválasz álnevesített címkéje (`resultSubject`) — ha akkor nem ismert, `null`, és a kérés `?`-lel
+ *   (fiók nélküliként) megy;
+ * - párosítás: a párosító token LENYOMATA (nem maga a titok) — küldéskor a mostani párosító token csak akkor megy, ha a lenyomata egyezik
+ *   a rögzítettel; eltérésnél (újrapárosítás) a kérés párosítás nélkül megy, az új tanulónak nem tulajdonítható.
+ * A rekord körönként a böngésző tárolójában (`…:owner:<kör>`) áll, írhatatlan tárolónál memóriában; a végleges siker után törlődik.
+ */
+type RoundOwner = { subject: string | null; learnerTag: string | null };
+const owners = new Map<string, RoundOwner>();
+const learnerTagOf = (token: string | null) => (token ? experienceFingerprint({ learner: token }) : null);
+function readOwner(key: string): RoundOwner | null {
+  const known = owners.get(key);
+  if (known) return known;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? "null") as Partial<RoundOwner> | null;
+    if (parsed && (parsed.subject === null || typeof parsed.subject === "string") && (parsed.learnerTag === null || typeof parsed.learnerTag === "string")) {
+      const owner = { subject: parsed.subject, learnerTag: parsed.learnerTag };
+      owners.set(key, owner);
+      return owner;
+    }
+  } catch { /* olvashatatlan tároló: nincs tárolt rekord */ }
+  return null;
+}
+/** R47: a kör kilétének rögzítése (csak ha még nincs rögzítve); a rögzített rekordot adja. */
+export function bindRoundOwner(key: string): RoundOwner {
+  const existing = readOwner(key);
+  if (existing) return existing;
+  const owner: RoundOwner = { subject: resultSubject(), learnerTag: learnerTagOf(getLearnerToken()) };
+  owners.set(key, owner);
+  try { localStorage.setItem(key, JSON.stringify(owner)); } catch { /* a memóriabeli rekord marad */ }
+  return owner;
+}
+/** R47: a mostani párosító token, ha a kör rögzített párosításával egyezik — különben nincs párosítás. */
+function ownerLearner(owner: RoundOwner): string | undefined {
+  const token = getLearnerToken();
+  return token && owner.learnerTag !== null && learnerTagOf(token) === owner.learnerTag ? token : undefined;
+}
+const ownerKeyOf = (storageKey: string, kind: string, roundId: string) => `${storageKey}:${kind}:owner:${roundId}`;
 /** Kísérletek laponként (memóriában: a kimerült kör a következő oldalbetöltéskor új kísérleteket kap). */
 const outboxAttempts = new Map<string, { attempts: number; nextAt: number }>();
 const outboxInFlight = new Set<string>();
 export function enqueueResult(entry: OutboxEntry): void {
-  // R35 (6. kör L1): a címke utólagos pótlása csak az ebben a dokumentumban ÚJONNAN létrehozott bejegyzést illeti — a korábbi dokumentumból
-  // megmaradt (a helyreállított kör újrafelvétele) `?` címkével megy, más munkamenet címkéjét sosem kapja meg.
-  if (outbox.add(entry)) enqueuedHere.add(entry.id);
+  // R47 (felülírja az R31 utólagos pótlását, az R35-öt és az R43-at): a bejegyzés a LÉTREHOZÁSAKOR rögzített kilétet viszi; a már
+  // sorban álló (korábbi dokumentumból megmaradt) bejegyzés nem kerül be újra, a kilétét semmi nem írja át.
+  outbox.add(entry);
 }
 /** A sor ürítése: minden esedékes, nem úton lévő bejegyzés elindul (nem várja meg egymást). */
 export function drainResultOutbox(): void {
@@ -57,8 +95,6 @@ export function drainResultOutbox(): void {
 class OutboxEntryExpired extends Error {}
 async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
   const { lessonId, kind } = entry;
-  /** R43 (8. vak kör L1): a kísérlet eljutott-e egy tokenválaszig (a törzs összeállt). */
-  let tokenReached = false;
   try {
     const fingerprint = entry.body.fingerprint ?? await getFingerprint().catch(() => undefined);
     // Terv R39 (7. vak kör L1): a törzs a token MEGÉRKEZÉSE UTÁN, ugyanabból a tokenválaszból áll össze, amelynek tokenjével a kérés megy
@@ -66,20 +102,13 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     // ismeretlen: a kérés NEM megy el régi alakban — a hiba a sor szokott várakozását kapja (lent), és később próbálkozik.
     let sent: { capable: boolean; body: Record<string, unknown> } | null = null;
     const build = (info: CsrfTokenInfo): Record<string, unknown> => {
-      tokenReached = true;
       // R40: a korhatár a tényleges küldés előtt is (a token / ujjlenyomat várakozása alatt lejárt bejegyzés nem megy ki).
       if (outboxEntryExpired(entry, Date.now())) throw new OutboxEntryExpired();
       // Terv R12: az új mezők CSAK a szerver jelzése mellett mennek; jelzés nélkül a régi alak, egyszer, ismétlés nélkül.
       const capable = info.resultApi;
-      // R31 (review 4642333188): a bejegyzés a sorba kerüléskori kilétéhez kötött — a címke a kérésbe kerül, és a szerver eltérésnél a
-      // mostani munkamenet fiókját nem használja. Ha a sorba kerüléskor még nem volt címke: ezen a lapon most pótlódik (a token ugyanannak a
-      // munkamenetnek a része), korábbi lapról ismeretlen (`?`: soha nem egyezik, a kérés fiók nélküliként fut).
-      let subject = entry.subject ?? null;
-      if (subject === null && enqueuedHere.has(entry.id) && info.subject !== null) {
-        subject = info.subject;
-        entry = { ...entry, subject };
-        outbox.update(entry);
-      }
+      // R31 + R47: a bejegyzés a létrehozásakor rögzített kilétet viszi — a címke a kérésbe kerül (ismeretlen: `?`, soha nem egyezik, a
+      // kérés fiók nélküliként fut), és a szerver eltérésnél a mostani munkamenet fiókját nem használja. Utólagos pótlás nincs.
+      const subject = entry.subject ?? null;
       const full = { ...entry.body, ...(fingerprint ? { fingerprint } : {}), ...(capable ? { clientNow: Date.now(), subject: subject ?? "?" } : {}) };
       const body = capable ? full : (legacyResultBody(full) ?? full);
       sent = { capable, body };
@@ -103,14 +132,14 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
       localStorage.setItem(entry.flag, "1");
       // A véglegesített körnek nincs több pillanatképe: a „részleges” jelzője nem marad a tárolóban.
       localStorage.removeItem(entry.partialKey);
+      // R47: a kör kilét-rekordja sem marad meg a véglegesítés után.
+      localStorage.removeItem(entry.partialKey.replace(":partial:", ":owner:"));
     } catch { /* elég a szerver egyedi kulcsa */ }
+    owners.delete(entry.partialKey.replace(":partial:", ":owner:"));
     outboxAttempts.delete(entry.id);
     outbox.remove(entry.id);
   } catch (error) {
     const e = error as { status?: unknown; retryAfterSec?: unknown } | null;
-    // R43 (8. vak kör L1): ha a kísérlet tokenválaszig sem jutott (átmeneti tokenhiba), a felvételkori munkamenet folytonossága nem
-    // bizonyítható — a címke később sem pótolható egy (közben esetleg más fiókba lépett) munkamenet tokenjéből: a bejegyzés `?`-lel megy.
-    if (!tokenReached) enqueuedHere.delete(entry.id);
     // Érvénytelen kérés — vagy (R40) a küldés pillanatában lejárt bejegyzés: újrapróbának nincs értelme (csendes — a tanuló felülete nem
     // függ a levéltől).
     if (e?.status === 400 || error instanceof OutboxEntryExpired) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
@@ -129,6 +158,14 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const timer = setTimeout(() => setTimedOut(true), REPORT_FALLBACK_MS);
     return () => clearTimeout(timer);
   }, [round.finishedAt, ready]);
+  // R47: a kör kiléte a kör ELSŐ tevékenységekor rögzül (a beküldő effekt ELŐTT fut, így a lezáráskor legkésőbb rögzül). A CSRF-token a
+  // lecke megnyitásakor előre töltődik, hogy a fiók címkéje az első válasznál már ismert legyen.
+  useEffect(() => { if (lessonId) warmCsrfToken(); }, [lessonId]);
+  const ownedRoundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
+  const roundActive = !!round.finishedAt || (kind === "quiz" ? answeredCount(round) > 0 : Object.values(round.answers).some(answer => answer.trim() !== ""));
+  useEffect(() => {
+    if (lessonId && roundActive) bindRoundOwner(ownerKeyOf(storageKey, kind, ownedRoundId));
+  }, [lessonId, kind, storageKey, ownedRoundId, roundActive]);
   useEffect(() => {
     // Spec 2026-11-17-eredmeny-email-kviz: a helyi kvíz kérdésenként azonnal visszajelez, a lezáró gombot sokan meg sem nyomják — a
     // teljesen megválaszolt kör lezárás nélkül is megy (körönként egyszer: a jelző, a kimenő sor és a szerver egyedi kulcsa).
@@ -143,16 +180,19 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     // Terv R24: a törzs VÁRAKOZÁS NÉLKÜL a kimenő sorba kerül (a token és — ha még nincs meg — az ujjlenyomat a küldéskor jön), így az
     // utolsó válasz utáni azonnali lapelhagyás sem veszíti el: a következő oldalbetöltés kiküldi.
     const fingerprint = peekFingerprint();
-    // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi.
-    const learner = getLearnerToken();
+    // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi. R47: csak ha a kör
+    // rögzített párosításával egyezik (újrapárosítás után a korábbi kör nem kerül az új tanulóhoz).
+    const owner = bindRoundOwner(ownerKeyOf(storageKey, kind, roundId));
+    const learner = ownerLearner(owner);
     const fresh = { ...(round.startedAt > 0 ? { startedAt: round.startedAt } : {}), ...(kind === "quiz" && round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
     const body = kind === "tasks"
       ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...fresh }
       // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
       : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...fresh };
-    // R30: a bejegyzés korhatárának alapja — lezárt körnél a sorba kerülés, le nem zártnál a kör utolsó tevékenysége. R31: a kilét-címke.
+    // R30: a bejegyzés korhatárának alapja — lezárt körnél a sorba kerülés, le nem zártnál a kör utolsó tevékenysége. R31 + R47: a kör
+    // rögzített kilét-címkéje (nem a küldéskori munkamenet).
     const activityAt = round.finishedAt ? Date.now() : roundActivityAt(round) || Date.now();
-    enqueueResult({ id: `${lessonId}|${kind}|${roundId}`, lessonId, kind, body, flag, partialKey: `${storageKey}:${kind}:partial:${roundId}`, activityAt, subject: resultSubject() });
+    enqueueResult({ id: `${lessonId}|${kind}|${roundId}`, lessonId, kind, body, flag, partialKey: `${storageKey}:${kind}:partial:${roundId}`, activityAt, subject: owner.subject });
     drainResultOutbox();
   }, [lessonId, kind, round, storageKey, ready, timedOut]);
 
@@ -193,16 +233,19 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         if (stored > 0 && (state.sent?.roundId !== roundId || state.sent.count < stored)) state.sent = { roundId, count: stored };
       } catch { /* privát mód: a munkamenet állapota marad */ }
       if (!snapshotDue(state, roundId, count)) return;
-      const learner = getLearnerToken();
+      // R47: a kör rögzített kiléte — a párosítás csak egyezésnél, a fiók címkéje a rögzített (ismeretlen: `?`).
+      const owner = bindRoundOwner(ownerKeyOf(storageKey, kind, roundId));
+      const learner = ownerLearner(owner);
       const fingerprint = peekFingerprint();
-      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}), clientNow: Date.now(), ...(resultSubject() ? { subject: resultSubject() } : {}) };
+      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}), clientNow: Date.now(), subject: owner.subject ?? "?" };
       const mark = { roundId, count };
       state.pending = mark;
       void sendKeepalive(`/api/lessons/${lessonId}/results`, body).then(accepted => {
         if (state.pending === mark) state.pending = null;
         if (!accepted) return; // hálózati hiba / 429 / 5xx: nem rögzül, a következő alkalommal újra megy
         if (state.sent?.roundId !== roundId || state.sent.count < count) state.sent = mark;
-        try { localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet állapota */ }
+        // R48 (9. vak kör L4): a közben véglegesített kör késői 202-je nem írja vissza a részleges jelzőt (R8 takarítása idempotens).
+        try { if (!localStorage.getItem(`${storageKey}:${kind}:sent:${roundId}`)) localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet állapota */ }
       });
     };
     snapshotRef.current = snapshot;
