@@ -4,8 +4,11 @@ import assert from 'node:assert/strict';
 import { STATUS, loadConfig, resolveVerdict } from './lib.mjs';
 import {
   COMPARE_FILE_LIMIT, checkRunsFromPages, collectMergeData, compareFiles, decideMainMoved, decideMerge, flattenPages, prFromRest, requiredChecks,
-  GRAPHQL_MAX_PAGES, mergeSteps, mergeVerdict, rootReviewComments, threadsFromCcr,
+  GRAPHQL_MAX_PAGES, invalidateMergeEvidence, mergeSteps, mergeVerdict, rootReviewComments, threadsFromCcr,
 } from './pre-merge-gate.mjs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const cfg = loadConfig();
 const HEAD = 'a'.repeat(40);
@@ -269,7 +272,7 @@ function routes(over = {}) {
     [/^api repos\/\{owner\}\/\{repo\}$/, { full_name: 'o/r' }],
     [/^api repos\/o\/r\/pulls\/9$/, over.pull ?? PULL],
     [/--paginate --slurp repos\/o\/r\/pulls\/9\/files/, over.files ?? [[{ filename: 'a.md' }], [{ filename: 'source/b.ts' }]]],
-    [/^api repos\/o\/r\/branches\/main$/, { commit: { sha: MAIN }, protection: { required_status_checks: { contexts: ['B'] } } }],
+    [/^api repos\/o\/r\/branches\/main$/, over.branch ?? { commit: { sha: MAIN }, protection: { required_status_checks: { contexts: ['B'] } } }],
     [/^api repos\/o\/r\/branches\/main\/protection$/, over.protection ?? { required_status_checks: { contexts: ['A'] } }],
     [/--paginate --slurp repos\/o\/r\/commits\/[0-9a-f]+\/check-runs/, [{ total_count: 1, check_runs: [run('A')] }]],
     [/^api repos\/o\/r\/commits\/[0-9a-f]+\/status$/, { statuses: [] }],
@@ -282,7 +285,8 @@ function routes(over = {}) {
 function collect(over = {}) {
   const g = fakeGh(routes(over));
   const sleeps = [];
-  return { g, sleeps, run: () => collectMergeData({ exec: g.exec, root: '.', n: '9', sleep: (ms) => sleeps.push(ms) }) };
+  const heads = [];
+  return { g, sleeps, heads, run: () => collectMergeData({ exec: g.exec, root: '.', n: '9', sleep: (ms) => sleeps.push(ms), onHead: (h) => heads.push(h) }) };
 }
 
 test('K3: collectMergeData bekötése — lapozó kapcsolók, GraphQL-lapozás, a kötelező lista forrása', () => {
@@ -338,4 +342,52 @@ test('K4 + K6: hiányzó changed_files → kivétel; mergeable_state unknown →
   let p = 0;
   assert.throws(() => collect({ graphql: () => { p += 1; return gqlPage([{ isResolved: true }], `c${p}`); }, ccr: new Error('HTTP 404') }).run(), /HTTP 404/, 'végtelen lapozás → GraphQL-hiba → CCR, ott 404');
   assert.equal(p, GRAPHQL_MAX_PAGES, 'a lapozás pontosan a korlátig ment, tovább nem');
+});
+
+test('vak kör 1 L1: a futás eleje érvényteleníti a PR korábbi merge-bizonyítékait; a fej a fájllista előtt ismert', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'merge-ev-'));
+  writeFileSync(join(dir, `merge-9-${HEAD}.json`), JSON.stringify({ kind: 'merge', head: HEAD, ok: true, at: new Date().toISOString() }));
+  writeFileSync(join(dir, `merge-19-${HEAD}.json`), JSON.stringify({ kind: 'merge', head: HEAD, ok: true }));
+  writeFileSync(join(dir, `review-${HEAD}.json`), JSON.stringify({ ok: true }));
+  assert.equal(invalidateMergeEvidence(dir, '9'), 1);
+  const ev = JSON.parse(readFileSync(join(dir, `merge-9-${HEAD}.json`), 'utf8'));
+  assert.equal(ev.ok, false, 'a régi zöld már nem zöld');
+  assert.equal(JSON.parse(readFileSync(join(dir, `merge-19-${HEAD}.json`), 'utf8')).ok, true, 'más PR (19) bizonyítéka érintetlen');
+  assert.equal(JSON.parse(readFileSync(join(dir, `review-${HEAD}.json`), 'utf8')).ok, true, 'a review-bizonyíték érintetlen');
+  writeFileSync(join(dir, `merge-9-${MAIN}.json`), '{ sérült');
+  assert.equal(invalidateMergeEvidence(dir, '9'), 2, 'olvashatatlan rekord is érvénytelenné válik');
+  assert.equal(JSON.parse(readFileSync(join(dir, `merge-9-${MAIN}.json`), 'utf8')).ok, false);
+  assert.equal(readdirSync(dir).length, 4);
+  assert.equal(invalidateMergeEvidence(join(dir, 'nincs'), '9'), 0, 'hiányzó könyvtár: nincs teendő');
+  const c = collect({ files: new Error('HTTP 502') });
+  assert.throws(() => c.run(), /HTTP 502/);
+  assert.deepEqual(c.heads, [HEAD], 'a fej a fájllista-hiba ELŐTT átadva — a hívó erre a fejre írja a bukott bizonyítékot');
+});
+
+test('vak kör 1 L2: a C-61 a lapozott hívások UTÁNI main-csúcsot használja', () => {
+  const NEW = 'c'.repeat(40);
+  let k = 0;
+  const branch = () => { k += 1; return { commit: { sha: k === 1 ? MAIN : NEW }, protection: { required_status_checks: { contexts: ['B'] } } }; };
+  const c = collect({ branch });
+  const g = c.g;
+  const cmp = { files: [{ filename: 'docs/specs/x-vegrehajtas.md', status: 'modified' }] };
+  const d = collectMergeData({ exec: (cmd, args, o) => (args.join(' ').startsWith(`api repos/o/r/compare/${MAIN}...${NEW}`) ? { code: 0, stdout: JSON.stringify(cmp), stderr: '' } : g.exec(cmd, args, o)), root: '.', n: '9', sleep: () => {} });
+  assert.equal(d.mainSha, NEW, 'az új csúcs');
+  assert.deepEqual(d.mainFiles, ['docs/specs/x-vegrehajtas.md'], 'a compare az új csúcsig fut');
+});
+
+test('vak kör 1 L3–L5: szigorú alak a REST/GraphQL-határon', () => {
+  const noFlag = (line) => (/after=c1/.test(line)
+    ? { data: { repository: { pullRequest: { reviewThreads: { nodes: [{ isResolved: false }], pageInfo: { hasNextPage: false, endCursor: null } } } } } }
+    : { data: { repository: { pullRequest: { reviewThreads: { nodes: [{ isResolved: true }], pageInfo: { endCursor: 'c1' } } } } } });
+  assert.throws(() => collect({ graphql: noFlag, ccr: new Error('HTTP 404') }).run(), /HTTP 404/, 'L3: hiányzó hasNextPage nem listavég → tartalékút, ott bukás');
+  assert.equal(collect({ graphql: noFlag, ccr: [[{ resolved: false }]], reviewComments: [[{ id: 1 }]] }).run().threadSource, 'ccr', 'L3: tartalékút');
+  assert.throws(() => collect({ files: [[{ filename: 'a.md' }], [{ filename: 'a.md' }]] }).run(), /ismétlődő/, 'L4: ismétlődő fájlnév');
+  assert.throws(() => collect({ files: [[{ filename: 'a.md' }], [{ status: 'added' }]] }).run(), /fájlnév/, 'L4: fájlnév nélküli rekord');
+  assert.throws(() => collect({ files: [[{ filename: 'a.md' }, { filename: 'b.md' }], [{ filename: 'c.md' }]] }).run(), /3 \/ 2/, 'L4: több rekord, mint changed_files');
+  for (const draft of [undefined, null, 'false', 0]) {
+    const pull = { ...PULL, draft };
+    if (draft === undefined) delete pull.draft;
+    assert.throws(() => collect({ pull }).run(), /draft/, `L5: draft=${String(draft)} → kivétel`);
+  }
 });

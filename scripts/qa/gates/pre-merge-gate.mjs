@@ -6,7 +6,7 @@
 
 import { join } from 'node:path';
 import {
-  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence,
+  STATUS, createGate, externalResult, isMain, listEvidence, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence,
 } from './lib.mjs';
 import { evidenceRecord } from './pre-push-gate.mjs';
 
@@ -156,7 +156,8 @@ export function prFromRest(pull, files = []) {
 /**
  * A felhős REST-út (`pulls/<n>/ccr/review_threads`) szálai (vak review #513 K1, V3; fail-closed): nem lista vagy ismeretlen alakú
  * elem (nem logikai `resolved`) → kivétel. ÜRES lista csak akkor fogadható el, ha a REST független adata szerint sincs szál
- * (`allowEmpty`: 0 gyökér review-komment — szál komment nélkül nincs); különben kivétel → FAIL.
+ * (`allowEmpty`: a TELJES review-kommentlista üres — W2: egy törölt gyökér megmaradt válasza mellett sem elég a 0 gyökér);
+ * különben kivétel → FAIL.
  */
 export function threadsFromCcr(list, { allowEmpty = false } = {}) {
   if (!Array.isArray(list)) throw new Error('a ccr/review_threads válasza nem lista — a szálak állapota nem állapítható meg');
@@ -168,6 +169,37 @@ export function threadsFromCcr(list, { allowEmpty = false } = {}) {
 /** A review-kommentekből (`pulls/<n>/comments`) számolt szálak: a válasz nélküli gyökérkommentek (`in_reply_to_id` nincs). */
 export function rootReviewComments(comments) {
   return (comments ?? []).filter((c) => c && c.in_reply_to_id == null).length;
+}
+
+/**
+ * Vak kör 1 L1 (fail-closed bizonyítéklánc): a kapu MINDEN futása az elején érvényteleníti a PR összes korábbi
+ * `merge-<n>-*.json` rekordját (`ok: false`). Így ha a futás a fej ismerete előtt bukik, megszakad vagy időtúllép, régi ZÖLD nem
+ * maradhat érvényben; zöld csak egy teljesen végigfutott, sikeres futás után lesz. Visszaad: az érvénytelenített rekordok száma.
+ */
+export function invalidateMergeEvidence(dir, n) {
+  const prefix = `merge-${n}-`;
+  let count = 0;
+  for (const f of listEvidence(dir)) {
+    if (!f.startsWith(prefix)) continue;
+    const name = f.slice(0, -'.json'.length);
+    const old = readEvidence(dir, name);
+    writeEvidence(dir, name, { ...(old && typeof old === 'object' ? old : {}), ok: false, invalidatedAt: new Date().toISOString(), note: 'új merge-kapu futás indult — a régi eredmény érvénytelen' });
+    count += 1;
+  }
+  return count;
+}
+
+/**
+ * Vak kör 1 L4: a fájllista minden rekordja nem üres, egyedi `filename`-ot hordoz, és a darabszám PONTOSAN a `changed_files`
+ * (ismétlődő / hibás / hiányzó / többlet rekord → kivétel; a régi `previous_filename` ezután számít).
+ */
+export function filesFromPages(pages, expected) {
+  const all = flattenPages(pages, null, 'fájllista');
+  const names = all.map((f) => f?.filename);
+  if (names.some((x) => typeof x !== 'string' || !x)) throw new Error('a fájllista egy rekordjából hiányzik a fájlnév');
+  if (new Set(names).size !== names.length) throw new Error('a fájllista ismétlődő fájlnevet tartalmaz');
+  if (names.length !== expected) throw new Error(`a fájllista ${names.length < expected ? 'csonka' : 'többletes'} (${names.length} / ${expected})`);
+  return all;
 }
 
 /** `check-runs` lapozott (`--paginate --slurp`) válasza egy listává; csonka (a `total_count`-nál kevesebb) → kivétel (K6). */
@@ -225,7 +257,7 @@ const mergeableKnown = (pull) => typeof pull?.mergeable_state === 'string' && pu
  * `changed_files` = hiba) → kötelező lista (védelmi végpont → `branches/main`) → check-runok (lapozva) → szálak (GraphQL lapozva →
  * felhőben a CCR-út REST-keresztellenőrzéssel) → CI-futás → compare.
  */
-export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepSync, delays = MERGEABLE_RETRY_DELAYS_MS }) {
+export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepSync, delays = MERGEABLE_RETRY_DELAYS_MS, onHead = () => {} }) {
   const gj = (args) => ghJson(exec, root, args);
   // A `{owner}/{repo}` helyőrzőt a gh a helyi git-remote-ból oldja fel.
   const repo = gj(['api', 'repos/{owner}/{repo}'])?.full_name;
@@ -238,14 +270,18 @@ export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepS
     sleep(ms);
     pull = gj(['api', `repos/${repo}/pulls/${n}`]);
   }
+  const head = pull?.head?.sha;
+  if (typeof head !== 'string' || !/^[0-9a-f]{40}$/.test(head)) throw new Error('a PR fej-hash-e nem olvasható');
+  // L1: a validált fejet azonnal átadjuk — egy későbbi gyűjtési hiba is erre a fejre ír bukott bizonyítékot.
+  onHead(head);
+  // L5: a piszkozat-állapot csak explicit logikai mezőből (hiány / null / más típus = ismeretlen → kivétel).
+  if (typeof pull.draft !== 'boolean') throw new Error('a PR-válaszból hiányzik a logikai draft mező — a piszkozat-állapot ismeretlen');
   if (!Number.isInteger(pull?.changed_files)) throw new Error('a PR-válaszból hiányzik a changed_files — a fájllista teljessége nem ellenőrizhető');
   // A PR-kommentek nem ítéletforrások (V1), ezért nem kérjük le őket.
   const pr = prFromRest(
     pull,
-    flattenPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/files?per_page=100`]), pull.changed_files, 'fájllista'),
+    filesFromPages(gj(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/files?per_page=100`]), pull.changed_files),
   );
-  const head = pr.headRefOid;
-  if (typeof head !== 'string' || !/^[0-9a-f]{40}$/.test(head)) throw new Error('a PR fej-hash-e nem olvasható');
   const mainBranch = gj(['api', `repos/${repo}/branches/main`]);
   let required;
   try {
@@ -268,7 +304,9 @@ export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepS
         ?.data?.repository?.pullRequest?.reviewThreads;
       if (!Array.isArray(rt?.nodes) || rt.nodes.some((t) => typeof t?.isResolved !== 'boolean')) throw new Error('a GraphQL review-szál válasz ismeretlen alakú');
       threads.push(...rt.nodes.map((t) => ({ isResolved: t.isResolved })));
-      if (!rt.pageInfo?.hasNextPage) break;
+      // L3: csak az explicit `false` listavég; hiányzó / nem logikai jelző = ismeretlen alak → kivétel → CCR-tartalékút.
+      if (typeof rt.pageInfo?.hasNextPage !== 'boolean') throw new Error('a GraphQL review-szál lapozásából hiányzik a logikai hasNextPage');
+      if (!rt.pageInfo.hasNextPage) break;
       after = rt.pageInfo.endCursor;
       if (typeof after !== 'string' || !after) throw new Error('a GraphQL review-szál lapozásából hiányzik az endCursor');
     }
@@ -284,10 +322,11 @@ export function collectMergeData({ exec, root, n, log = () => {}, sleep = sleepS
     if (roots > threads.length) throw new Error(`a ccr/review_threads csonka: ${threads.length} szál, de a review-kommentekből ${roots} gyökér-szál számolható`);
     threadSource = 'ccr';
   }
-  const mainSha = mainBranch?.commit?.sha;
   const runs = gj(['api', `repos/${repo}/actions/runs?head_sha=${head}&event=pull_request&per_page=20`])?.workflow_runs ?? [];
   const ci = runs.filter((r) => r.name === 'CI').sort((a, b) => b.id - a.id)[0];
   const ciBaseSha = ci?.pull_requests?.[0]?.base?.sha ?? null;
+  // L2: a C-61 bemenete a lapozott hívások UTÁN újraolvasott main-csúcs (a korai olvasat csak a védelmi tartalékút forrása).
+  const mainSha = gj(['api', `repos/${repo}/branches/main`])?.commit?.sha;
   // C-61 (kanban #92): a main elmozdulásának fájllistája a compare végpontból; hiba esetén null → a döntés fail-closed.
   const cmpBase = ciBaseSha ?? pr.baseRefOid;
   let mainFiles = null;
@@ -319,9 +358,13 @@ async function main() {
   const ctx = makeContext({});
   const { exec, root, cfg } = ctx;
   const gate = createGate('pre-merge-gate');
+  // L1: a futás eleje minden korábbi merge-bizonyítékot érvénytelenít (megszakítás / korai hiba után sem marad régi zöld).
+  const stale = invalidateMergeEvidence(ctx.evDir, n);
+  if (stale) gate.log(`[pre-merge-gate] ${stale} korábbi merge-bizonyíték érvénytelenítve (új futás)`);
   let pr;
+  let seenHead = null;
   try {
-    const d = collectMergeData({ exec, root, n, log: (m) => gate.log(m) });
+    const d = collectMergeData({ exec, root, n, log: (m) => gate.log(m), onHead: (h) => { seenHead = h; } });
     pr = d.pr;
     const head = pr.headRefOid;
     const g = exec('bash', [join(root, 'scripts', 'qa', 'active-runs-guard.sh')], { cwd: root, timeoutMs: 90_000 });
@@ -335,9 +378,10 @@ async function main() {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);
   }
   const code = gate.finish();
-  if (pr?.headRefOid) {
-    writeEvidence(ctx.evDir, `merge-${n}-${pr.headRefOid}`, evidenceRecord('merge', pr.headRefOid, gate, { pr: Number(n) }));
-    gate.log(`[pre-merge-gate] bizonyíték: merge-${n}-${pr.headRefOid.slice(0, 12)} (ok=${code === 0}; ${cfg.mergeEvidenceMaxMinutes} percig érvényes). A gh pr merge-et ez a kapu NEM hívja.`);
+  const evHead = pr?.headRefOid ?? seenHead;
+  if (evHead) {
+    writeEvidence(ctx.evDir, `merge-${n}-${evHead}`, evidenceRecord('merge', evHead, gate, { pr: Number(n) }));
+    gate.log(`[pre-merge-gate] bizonyíték: merge-${n}-${evHead.slice(0, 12)} (ok=${code === 0}; ${cfg.mergeEvidenceMaxMinutes} percig érvényes). A gh pr merge-et ez a kapu NEM hívja.`);
   }
   process.exit(code);
 }
