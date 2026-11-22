@@ -1,0 +1,198 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { standardFusionFixture, fusionFixture } from "../shared/fixtures/lesson-fusion";
+import { LESSON_VARIETY_VERSION, carryVarietyMarker, stripLegacyOpener } from "../shared/lesson-feedback-openers";
+import { effectiveLessonVariety, lessonVarietyForRun, runWithLessonVariety } from "../server/studio/lesson-variety-flag";
+import { bankStaticPrefix } from "../server/studio/experience-builder";
+import { LessonConversation, type ModelClient, type Turn } from "../server/studio/single-run/conversation";
+import { runSingleLesson, singleRunSystemPrompt, type SingleRunDeps } from "../server/studio/single-run/engine";
+import { buildStructuredImprovement } from "../server/studio/structured-improvement";
+import { executeWorkflow, workflowPhase } from "../server/workflows/engine";
+import { memoryWorkflows } from "./helpers/workflow-store";
+import type { PipelineStore, JobPatch } from "../server/studio/pipeline-store";
+import type { MapConcept } from "../server/studio/coverage";
+
+// S5a vak kör 1 (L1, L4, L2): a változatossági állapot MINDEN úton egyetlen, a futás elején rögzített döntés; a jelölőt a modell
+// soha nem adhatja; KI állapotban minden út a régi kimenetet adja. A nyitáslevágás képlethez nem nyúl.
+
+const MARK = { version: LESSON_VARIETY_VERSION };
+
+function withEnv<T>(name: string, value: string | undefined, fn: () => Promise<T>): Promise<T> {
+  const before = process.env[name];
+  if (value === undefined) delete process.env[name]; else process.env[name] = value;
+  return fn().finally(() => { if (before === undefined) delete process.env[name]; else process.env[name] = before; });
+}
+
+// --- (A) kapcsoló-szivárgás: a döntés forrása ---
+
+test("A: a futás állapota — új futás: befecskendezett érték, különben a környezet; folytatás: KIZÁRÓLAG a mentett job-állapot", () => {
+  const on = { STUDIO_LESSON_VARIETY: "on" } as NodeJS.ProcessEnv;
+  const off = {} as NodeJS.ProcessEnv;
+  assert.equal(lessonVarietyForRun({}, undefined, on), true);
+  assert.equal(lessonVarietyForRun({}, false, on), false);
+  assert.equal(lessonVarietyForRun({}, true, off), true);
+  // Mező nélküli régi checkpoint → KI, a környezettől függetlenül; a mentett BE állapot KI környezetben is BE marad.
+  assert.equal(lessonVarietyForRun({ resume: { output: {} } }, undefined, on), false);
+  assert.equal(lessonVarietyForRun({ resume: { output: { lessonVariety: true } } }, undefined, off), true);
+  assert.equal(lessonVarietyForRun({ resume: { output: { lessonVariety: "igen" } } }, undefined, on), false);
+});
+
+test("A: a rögzített állapot a hatókörön belül minden olvasásnál ugyanaz (await után is), a környezet nem írja felül", async () => {
+  await withEnv("STUDIO_LESSON_VARIETY", "on", async () => {
+    const offPrefix = await withEnv("STUDIO_LESSON_VARIETY", undefined, async () => bankStaticPrefix());
+    await runWithLessonVariety(false, async () => {
+      assert.equal(effectiveLessonVariety(), false);
+      await new Promise((r) => setTimeout(r, 1));
+      assert.equal(effectiveLessonVariety(), false);
+      assert.equal(bankStaticPrefix(), offPrefix, "KI hatókörben a bank előtagja bájtra a KI állapotú");
+    });
+    assert.equal(effectiveLessonVariety(), true, "hatókörön kívül a környezet");
+  });
+});
+
+test("A (L1): javításnál a jelölő forrása a tárolt lecke — a modell jelölője mindig eldobva", () => {
+  const candidate = { title: "T", variety: { version: "hamis" } };
+  assert.deepEqual(carryVarietyMarker(candidate, { title: "régi" }), { title: "T" });
+  assert.deepEqual(carryVarietyMarker(candidate, { title: "régi", variety: MARK }), { title: "T", variety: MARK });
+  assert.deepEqual(carryVarietyMarker({ title: "T" }, { variety: { version: 5 } }), { title: "T" }, "hibás tárolt jelölő → nincs");
+  assert.deepEqual(carryVarietyMarker({ title: "T" }, null), { title: "T" });
+  assert.equal(carryVarietyMarker(null, { variety: MARK }), null);
+});
+
+// --- a javítási út teljes kódútja (L1) ---
+
+const repairSource = { subject: "matematika", classroom: 7, concepts: [{ localId: "area", term: "terület", definition: "Az alap és a magasság szorzatának fele.", examWeight: "core" as const }] };
+
+async function repairWith(original: ReturnType<typeof fusionFixture>) {
+  const { store } = memoryWorkflows();
+  const e = standardFusionFixture().experience!;
+  const seen: boolean[] = [];
+  let candidateVariety: unknown = "nem futott";
+  await executeWorkflow(store, { id: `repair-${Math.random()}`, owner: "owner", mode: "repair" }, async () => {
+    await workflowPhase("source"); let calls = 0;
+    const result = await buildStructuredImprovement(original, repairSource, async (step) => {
+      seen.push(effectiveLessonVariety());
+      if (step === "lektor") return { notes: [] };
+      // A modell kéretlen jelölőt ad a javított tanításban.
+      return calls++ === 0 ? { ...original, variety: { version: "valtozatossag-1" } } : { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
+    });
+    candidateVariety = (result.candidate as { variety?: unknown }).variety;
+    await workflowPhase("save"); await workflowPhase("readback");
+    return { kind: "candidate", id: "c" };
+  });
+  return { seen, candidateVariety };
+}
+
+test("L1: forrásvizuál BE + változatosság KI, jelöletlen lecke javítása — a modell jelölője nem kerül a jelöltbe, a javítás KI állapotban fut", async () => {
+  await withEnv("STUDIO_SOURCE_VISUALS", "on", () => withEnv("STUDIO_LESSON_VARIETY", undefined, async () => {
+    const { seen, candidateVariety } = await repairWith(fusionFixture());
+    assert.equal(candidateVariety, undefined);
+    assert.ok(seen.length && seen.every((v) => v === false), JSON.stringify(seen));
+  }));
+});
+
+test("L1: a környezet BE, de a tárolt lecke jelöletlen — a javítás a lecke állapotát (KI) viszi végig; jelölt leckénél a tárolt jelölő marad", async () => {
+  await withEnv("STUDIO_SOURCE_VISUALS", "on", () => withEnv("STUDIO_LESSON_VARIETY", "on", async () => {
+    const plain = await repairWith(fusionFixture());
+    assert.equal(plain.candidateVariety, undefined);
+    assert.ok(plain.seen.every((v) => v === false), JSON.stringify(plain.seen));
+    const marked = await repairWith({ ...fusionFixture(), variety: MARK } as ReturnType<typeof fusionFixture>);
+    assert.deepEqual(marked.candidateVariety, MARK);
+    assert.ok(marked.seen.every((v) => v === true), JSON.stringify(marked.seen));
+  }));
+});
+
+// --- az első gyártás és a folytatás teljes kódútja (L4) ---
+
+const fixture = standardFusionFixture();
+const concepts: MapConcept[] = [{ localId: "area", examWeight: "core", term: "terület", definition: "A síkidom által lefedett rész nagysága." }];
+const TRANSCRIPT = "A téglalap területe az oldalak szorzata. A terület mértékegysége a négyzetcentiméter.";
+const outline = { sections: [{ heading: fixture.sections[0].heading, conceptIds: ["area"], plannedBlocks: ["explain", "example", "animate", "recap"], animationSuggestions: [] }], misconceptions: [] };
+
+function client(opts: { failBank?: boolean; modelMarker?: boolean } = {}): ModelClient {
+  const { experience: _bank, ...teaching } = fixture;
+  return {
+    model: "claude-opus-5-5",
+    async complete(_system, turns: Turn[]) {
+      const t = turns.at(-1)!.blocks.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+      const station = /(\d)\. ÁLLOMÁS/.exec(t)?.[1] ?? (/A PROGRAM ELLENŐRZÉSE \((.+?)\)/.exec(t)?.[1] ?? "?");
+      let json: unknown;
+      if (station === "1") json = { title: "Terület", subject: fixture.subject, classroom: fixture.classroom, transcript: TRANSCRIPT,
+        concepts: [{ id: "area", term: "terület", definition: "A síkidom által lefedett rész nagysága.", quote: "A téglalap területe az oldalak szorzata.", type: "concept", examWeight: "core", relatedIds: [] }] };
+      else if (station === "2" || station === "tananyagterv") json = outline;
+      else if (station === "3") json = opts.modelMarker ? { ...teaching, variety: { version: "valtozatossag-1" } } : teaching;
+      else if (station === "4") json = { patches: "nem érvényes ábrafolt" };
+      else if (station === "5") { if (opts.failBank) return { text: "nem JSON", model: "claude-opus-5-5", truncated: false, usage: { input: 1, cachedInput: 0, output: 1 } }; json = structuredClone(fixture.experience); }
+      else if (station === "6" || station === "lektorálás") json = { solutions: [], notes: [], reviewedAll: true };
+      else json = {};
+      return { text: JSON.stringify(json), model: "claude-opus-5-5", truncated: false, usage: { input: 1000, cachedInput: 600, output: 100 } };
+    },
+  };
+}
+
+function memory() {
+  const steps: JobPatch[] = [];
+  const lessons: unknown[] = [];
+  let saved: MapConcept[] | null = null;
+  const store = {
+    async loadMap(id: string) { return id === "m1" ? { meta: { id: "m1", title: "Terület", subject: fixture.subject, classroom: fixture.classroom, sourceText: TRANSCRIPT, visuals: [] }, concepts: saved ?? concepts } : null; },
+    async createJob() { return "job1"; },
+    async saveStep(_id: string, patch: JobPatch) { steps.push(structuredClone(patch)); },
+    async upsertLesson(_lessonId: string | null, _mapId: string, json: unknown) { lessons.push(structuredClone(json)); return "lesson1"; },
+    async publishLesson() { return { htmlFileId: "html1", exportedQuizItems: 3 }; },
+    async loadJob() { return null; }, async loadBlockerNotes() { return []; }, async saveNotes() {},
+  } as unknown as PipelineStore;
+  return { store, steps, lessons, saveConcepts: (c: MapConcept[]) => { saved = c; } };
+}
+
+function runDeps(c: ModelClient, mem: ReturnType<typeof memory>, extra: Partial<SingleRunDeps> = {}, state?: unknown): SingleRunDeps {
+  return {
+    conversation: new LessonConversation(singleRunSystemPrompt(), c, null, state ? { state: state as never } : undefined),
+    fresh: (system) => new LessonConversation(system, c, null),
+    store: mem.store,
+    async saveMap(map) { mem.saveConcepts(map.concepts.map((x) => ({ localId: x.id, examWeight: x.examWeight, term: x.term, definition: x.definition, quote: x.quote }))); return "m1"; },
+    ...extra,
+  };
+}
+
+const files = [{ name: "f.txt", kind: "text" as const, content: TRANSCRIPT }];
+const lastOutput = (mem: ReturnType<typeof memory>) => mem.steps.at(-1)!.output as Record<string, unknown> & { singleRun: { conversation: unknown } };
+
+test("első gyártás: BE → a mentett leckén a szerver jelölője, a job állapotában lessonVariety; KI → egyik sincs (a modell jelölője is eldobva)", async () => {
+  const on = memory();
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client(), on, { lessonVariety: true }));
+  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, MARK);
+  assert.equal(lastOutput(on).lessonVariety, true);
+  const off = memory();
+  await withEnv("STUDIO_LESSON_VARIETY", "on", () => runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ modelMarker: true }), off, { lessonVariety: false, sourceVisuals: true })));
+  assert.equal("variety" in (off.lessons.at(-1) as object), false, "KI: a modell jelölője sem kerül a leckére (forrásvizuál BE mellett sem)");
+  assert.equal("lessonVariety" in lastOutput(off), false, "KI: a job kimenete a régi alakú");
+});
+
+test("L4: KI-ben indult, a bankban megszakadt futás BE környezetben folytatva KI marad (és fordítva)", async () => {
+  for (const [startOn, resumeEnv, expectMarked] of [[false, "on", false], [true, undefined, true]] as const) {
+    const first = memory();
+    await assert.rejects(runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ failBank: true }), first, { lessonVariety: startOn })));
+    const saved = lastOutput(first);
+    const second = memory();
+    await withEnv("STUDIO_LESSON_VARIETY", resumeEnv, () =>
+      runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, runDeps(client(), second, {}, saved.singleRun.conversation)));
+    const lesson = second.lessons.at(-1) as { variety?: unknown };
+    assert.equal(lesson.variety !== undefined, expectMarked, `indulás ${startOn}, folytatás env=${resumeEnv}`);
+  }
+});
+
+// --- (B) szövegtisztítás: csak az ismert régi nyitás vágódik, képlet és előjel érintetlen (L2) ---
+
+test("L2: a számhoz tapadó vagy szóközzel elválasztott mínusz nem elválasztó; a képlet kisbetűje marad; a hosszú á-s „próbálkozás” is vágódik", () => {
+  assert.equal(stripLegacyOpener("Jó próba -3 az eredmény, nem 3."), "Jó próba -3 az eredmény, nem 3.");
+  assert.equal(stripLegacyOpener("Jó próba – 3 az eredmény, nem 3."), "Jó próba – 3 az eredmény, nem 3.");
+  assert.equal(stripLegacyOpener("Jó próba, de x = -3 a megoldás."), "x = -3 a megoldás.");
+  assert.equal(stripLegacyOpener("Remek, de pH = 7 a semleges oldat."), "pH = 7 a semleges oldat.");
+  assert.equal(stripLegacyOpener("Szuper! -5 °C-on fagy meg a sós víz."), "-5 °C-on fagy meg a sós víz.");
+  assert.equal(stripLegacyOpener("Jó próbálkozás, de a négyzet oldalai egyenlők."), "A négyzet oldalai egyenlők.");
+  assert.equal(stripLegacyOpener("Jó próbálkozás! A zárójel előbb jön, ezért 14."), "A zárójel előbb jön, ezért 14.");
+  // Kódszöveg: a változónév kisbetűs marad.
+  assert.equal(stripLegacyOpener("Ügyes gondolat, de i++ előbb növel, utána olvas."), "i++ előbb növel, utána olvas.");
+});
