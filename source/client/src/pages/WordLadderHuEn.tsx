@@ -52,6 +52,7 @@ import { GAME_TEST_HOOKS_ENABLED, correctDataAttrs, installGameTestApi, readGame
 import { LADDER_ZONES, xpForCorrect } from "@/lib/wordLadderLogic";
 import {
   createLadderStepSession,
+  declaredTierOf,
   ladderDifficultyInput,
   ladderStepBuckets,
   ladderTermFloors,
@@ -519,7 +520,7 @@ export default function WordLadderHuEn() {
     () =>
       ladderTermFloors(
         [
-          ...allTiers.flatMap((tier, declared) => tier.map((q) => ({ term: ladderDifficultyInput(q).term, tier: declared }))),
+          ...allTiers.flatMap((tier, index) => tier.map((q) => ({ term: ladderDifficultyInput(q).term, tier: declaredTierOf(q, index) }))),
           ...(vocabMeanings ? vocabFloorSources([...vocabMeanings].map(([id, m]) => ({ id, term: m.term }))) : []),
         ],
         lang,
