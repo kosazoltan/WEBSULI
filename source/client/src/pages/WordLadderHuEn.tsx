@@ -50,7 +50,14 @@ import { splitBankItemsByTier } from "@/lib/mergeGameQuizBank";
 import type { FourChoiceQuiz, GameQuizBankResponse } from "@/types/gameQuiz";
 import { GAME_TEST_HOOKS_ENABLED, correctDataAttrs, installGameTestApi, readGameSeed } from "@/game-engine/game-test-hooks";
 import { LADDER_ZONES, xpForCorrect } from "@/lib/wordLadderLogic";
-import { createLadderStepSession, ladderStepBuckets, windowLadderSteps } from "@/lib/wordLadderGrading";
+import {
+  createLadderStepSession,
+  ladderDifficultyInput,
+  ladderStepBuckets,
+  ladderTermFloors,
+  vocabFloorSources,
+  windowLadderSteps,
+} from "@/lib/wordLadderGrading";
 import {
   ladderRungsForLevel,
   ladderTierForLevel,
@@ -503,7 +510,23 @@ export default function WordLadderHuEn() {
   const tiersRef = useRef(allTiers);
   tiersRef.current = allTiers;
   /** Az osztályozott bank: a futás minden tétele 15 fokozat-vödörben (docs/specs/2026-11-22-szoletra-szintezes.md 4.1). */
-  const stepBuckets = useMemo(() => ladderStepBuckets(allTiers, lang), [allTiers, lang]);
+  /**
+   * Bankközi korlát (terv 4.1 / 13., vak kör 1 L1): azonos célnyelvi alak a kézi és a szóbankban a nagyobb bank-szintről
+   * indul. A TELJES szóbankból épül (a szint a bejegyzés-azonosítóban), mert a `mergeVocabTiers` a duplikált szóbanki tételt
+   * kiszűri — a futás készletéből a kézi tétel nem emelkedne.
+   */
+  const termFloors = useMemo(
+    () =>
+      ladderTermFloors(
+        [
+          ...allTiers.flatMap((tier, declared) => tier.map((q) => ({ term: ladderDifficultyInput(q).term, tier: declared }))),
+          ...(vocabMeanings ? vocabFloorSources([...vocabMeanings].map(([id, m]) => ({ id, term: m.term }))) : []),
+        ],
+        lang,
+      ),
+    [allTiers, vocabMeanings, lang],
+  );
+  const stepBuckets = useMemo(() => ladderStepBuckets(allTiers, lang, termFloors), [allTiers, lang, termFloors]);
   const stepBucketsRef = useRef(stepBuckets);
   stepBucketsRef.current = stepBuckets;
 

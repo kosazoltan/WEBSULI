@@ -94,3 +94,7 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
   Mutációs ellenpróba (`mutate.mjs` a scratchpadben, szöveges csere + `cmp` visszaállítás): M1 locale → csak O1/L2 bukik; M2
   francia elízió → O1/L3; M3 nyers út mondat=false → O2/L4; M4 régi célrész-szabály → O2/L5; M5 bankközi korlát ki → O2/L1;
   M6 reset sorozat-nullázás nélkül → O4/L7.
+- **PR-2 a vak kör 1 javításával** (a `feat/szoletra-szintezes-1` beolvasztva): a lap a bankközi korlátot a teljes szóbankból
+  építi (`ladderTermFloors` + `vocabFloorSources`; `word-ladder-3d-wiring.test.ts` új állításai előbb bukottak, utána zöldek).
+  Egységtesztek (Szólétra + `no-repeat`): 142/142; `tsc` (alkalmazás és tesztek) 0 hiba. Böngésző ezen a fejen:
+  `npm.cmd run test:e2e -- tests/word-ladder-play.spec.ts --workers=1` → 2 passed (2,4 perc); `A9|kérdés-fokozatok: 0,0,0,1,1,1,2,2,2,3,3,3 | futás-fokozat: 0,0,0,1,1,1,2,2,2,3,3,3`.

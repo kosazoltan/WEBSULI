@@ -1,7 +1,7 @@
 # Spec: Szólétra — évfolyamhoz és tudáshoz igazított szintezés, osztályozott szó- és kifejezésbank
 
-> Dátum: 2026-11-22 · Szerző: Claude (fejlesztő alügynök) · Állapot: **S1 végrehajtva ezen az ágon (PR-1, `feat/szoletra-szintezes-1`;
-> a lap még NEM hívja a modult); S2 (bekötés, A9, az új választós A10) a `feat/szoletra-szintezes-2` ágon (PR-2); S3 keretre vár.**
+> Dátum: 2026-11-22 · Szerző: Claude (fejlesztő alügynök) · Állapot: **ezen az ágon (PR-2, `feat/szoletra-szintezes-2`) S1 + S2
+> végrehajtva (a lap az évfolyam-sávos választót és a teljes szóbankból épített bankközi korlátot használja); S3 keretre vár.**
 > Ellenőrzés: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md` „Mért számok” (fejenként jelölve).
 > Szabály: 3+ fájlt érintő feladat csak spec + AI-olvasható végrehajtási utasítás után indul (`docs/agent-haromfazisu-munka.md`).
 > Végrehajtás: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md`.
@@ -181,9 +181,9 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
   csökkenni; WHEN a sorozatot hiba szakítja meg THEN SHALL NOT nőni; a fokozat SHALL a sávon belül maradni.
 - [x] A8 — WHEN 3. évfolyamos játszik bármely pályán, bármely válaszsorozattal THEN a kiválasztott tétel fokozata SHALL ≤ 5
   (legfeljebb 1. szint) lenni.
-- [ ] A9 — *(PR-2: `feat/szoletra-szintezes-2`; ezen a fejen NYITOTT — a lap még nem hívja a modult)* WHEN egy 3. évfolyamos az 1. pályán végig helyesen válaszol (böngészőben) THEN az első kérdés SHALL a 0. szintről jönni,
+- [x] A9 — *(PR-2 ezen az ágon: teljesítve, ld. végrehajtás „Mért számok”)* WHEN egy 3. évfolyamos az 1. pályán végig helyesen válaszol (böngészőben) THEN az első kérdés SHALL a 0. szintről jönni,
   egyik kérdés sem SHALL 1. szint fölötti lenni, és a futás végére a kérdezett fokozat SHALL nagyobb lenni a kezdetinél.
-- [ ] A10 — *(PR-2; ezen a fejen NYITOTT)* WHEN az évfolyam × pálya futáson belüli ismétlés-mentessége mért (a meglévő 6. döntés-teszt) THEN SHALL
+- [x] A10 — *(PR-2 ezen az ágon: teljesítve)* WHEN az évfolyam × pálya futáson belüli ismétlés-mentessége mért (a meglévő 6. döntés-teszt) THEN SHALL
   ismétlésmentes maradni az új választóval is.
 - [x] A11 — *(ezen a fejen: a lap, a pontozás és a haladás diffje üres)* A pontozás (XP, ranglista-nehézség) és a haladás-kulcsok SHALL változatlanok maradni; a D-05 kiemelés érintetlen.
 - [x] A12 — A felülíró tábla minden bejegyzése SHALL létező azonosítóra mutatni, 0–14 fokozattal.

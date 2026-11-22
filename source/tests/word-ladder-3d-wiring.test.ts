@@ -28,6 +28,11 @@ test("6. döntés: pályaválasztó, pályánkénti létrahossz és sáv, halad�
   // `createLadderStepSession` adja (a régi, csak pályából induló `createLadderLevelSession` helyett).
   assert.match(page, /createLadderStepSession\s*\(/);
   assert.match(page, /windowLadderSteps\s*\(/);
+  // Vak kör 1 L1 (terv 13.): a bankközi korlátot a lap a TELJES szóbankból építi (a `mergeVocabTiers` a duplikált szóbanki
+  // tételt kiszűri, így a futás saját készletéből a kézi tétel nem emelkedne).
+  assert.match(page, /ladderTermFloors\s*\(/);
+  assert.match(page, /vocabFloorSources\s*\(/);
+  assert.match(page, /ladderStepBuckets\s*\(\s*allTiers\s*,\s*lang\s*,\s*termFloors\s*\)/);
   assert.match(page, /loadUnlockedLevel\s*\(\s*wordLadderGameId\s*\(/);
   assert.match(page, /unlockNextLevel\s*\(\s*wordLadderGameId\s*\(/);
   assert.match(page, /pickUnseen\s*\(/);
