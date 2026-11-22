@@ -1,6 +1,6 @@
 # Cogni-format adat-/séma-snapshot: a source/shared/schema.ts Drizzle-táblái — CSAK név és cél, adat nincs.
-# A cél a tábla feletti forráskommentből rövidítve; ahol nincs komment, ezt jelzi. Frissítés: a séma változásakor.
-# Ha a záró hurokban nincs új: node scripts/qa/zaro-hurok.mjs nincs-uj --kind cogni
+# A cél a táblát KÖZVETLENÜL megelőző forráskommentből és az oszlopokból rövidítve; ahol nincs komment, ezt jelzi. Frissítés: a séma változásakor.
+# Frissítés: minden lezárt feladat után (a gépi „nincs új” jelölő tervezett, a feat/zaro-hurok-1 PR-ral érkezik).
 
 cogni:
   kind: db_schema_snapshot
@@ -125,7 +125,7 @@ cogni:
     - table: arbiter_verdicts
       symbol: arbiterVerdicts
       line: 740
-      purpose: "csővezeték-lépés futása / döntőbírói ítélet"
+      purpose: "a döntőbíró ítélet-gyorsítótára: gyorsítótár-kulcs (hash) → ítélet, pontszám, indok, modell; a gyerek válaszának szövege nem tárolódik"
     - table: arbiter_daily_usage
       symbol: arbiterDailyUsage
       line: 750
@@ -133,7 +133,7 @@ cogni:
     - table: ocr_transcripts
       symbol: ocrTranscripts
       line: 755
-      purpose: "OCR-átiratok (nincs forráskomment)"
+      purpose: "OCR-átirat gyorsítótár (gyorsítótár-kulcs → szöveg); a leíró #170-es komment nem közvetlenül a tábla felett áll"
     - table: one_step_runs
       symbol: oneStepRuns
       line: 766
@@ -201,7 +201,7 @@ cogni:
     - table: task_results
       symbol: taskResults
       line: 1180
-      purpose: "feladatszintű névtelen tanulói eredmény"
+      purpose: "feladatszintű tanulói eredmény körönként, tanulói szöveg és felhasználó-azonosító nélkül; ÁLNEVESÍTETT, nem névtelen: a contributor a közreműködő (felhasználó / tanuló / vendég-IP) kulcsolt HMAC-lenyomata, így egy közreműködő eredményei összekapcsolhatók"
     - table: daily_reminder_emails
       symbol: dailyReminderEmails
       line: 1201
@@ -233,11 +233,11 @@ cogni:
     - table: player_auth_codes
       symbol: playerAuthCodes
       line: 1330
-      purpose: "játékos egyszeri belépőkódjai (csak hash)"
+      purpose: "játékos egyszeri belépőkódjai: a kód és a link-token csak HMAC-hash; a megerősítendő cím normalizálva a rekordban áll (beváltáskor / lejáratkor törölve), mellette cím- és korlát-hash"
     - table: player_ban_fingerprints
       symbol: playerBanFingerprints
       line: 1357
-      purpose: "tiltott játékos-fiók kulcsolt ujjlenyomata"
+      purpose: "a törölt, de tiltott játékos-fiók címének kulcsolt (HMAC), visszafejthetetlen ujjlenyomata és a tiltás ideje"
     - table: advent_progress
       symbol: adventProgress
       line: 1371
@@ -245,4 +245,4 @@ cogni:
     - table: advent_announcements
       symbol: adventAnnouncements
       line: 1404
-      purpose: "adventi értesítő foglalása címzettenként és évadonként"
+      purpose: "adventi értesítő foglalása címzettenként és évadonként; a cím nem tárolódik, csak kulcsolt lenyomata (HMAC)"

@@ -1,7 +1,7 @@
-# Cogni-format projekt-snapshot (a 0645f48f váz WEBSULI-kitöltése; terv: docs/specs/2026-11-22-zaro-hurok-websuli.md D3)
+# Cogni-format projekt-snapshot (a 0645f48f váz WEBSULI-kitöltése)
 # format-version: 1
 # scope: WEBSULI-only
-# Ha a záró hurokban nincs új: node scripts/qa/zaro-hurok.mjs nincs-uj --kind cogni
+# Frissítés: minden lezárt feladat után (a gépi „nincs új” jelölő tervezett, a feat/zaro-hurok-1 PR-ral érkezik).
 
 cogni:
   kind: project_snapshot
@@ -27,7 +27,7 @@ cogni:
     - path: source/shared/schema.ts
       role: "a Drizzle adatséma"
     - path: package.json
-      role: "gyökér-manifest: a kapuk (gate:*) és a zaro:check parancs"
+      role: "gyökér-manifest: a minőségkapuk (gate:*) parancsai"
   rules:
     - AGENTS.md
     - docs/agent-haromfazisu-munka.md
