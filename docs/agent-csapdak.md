@@ -1154,3 +1154,19 @@ Forrás: #510 (R39–R42). Rokon: C-76.
   `alreadySent`-et ad, mielőtt az első rögzítőt (conflict) nézné — az első rögzítő átadását közvetlenül (teszt-segéddel) mérd.
 
 Forrás: #510 (szűkítés, R43–R46). Rokon: C-76, C-77.
+
+## C-79 — A kilét késői (küldéskori) feloldása: ugyanaz a hibaosztály harmadszor; és az érvénytelen piros kör (2026-11-22)
+
+- **Mi történt:** a #510-ben az R39 és az R43 egy-egy határesetet foltozott (tokenhiba után ne legyen régi alak / ne pótoljon címkét), a
+  következő kör ugyanannak a hibának új változatát találta (késői, de sikeres első token; újrapárosítás nyitott fül alatt; a
+  párosítás-feloldás DB-hibája vendégként). Az ok közös: a kilét a KÜLDÉSKOR oldódott fel.
+- **Szabály 1:** ha ugyanannak a hibaosztálynak a második változata jön, ne foltozz — írj tervezési szabályt (itt R47: a kilét a kör /
+  bejegyzés létrehozásakor rögzül, küldéskor csak egyezést ellenőrzünk; eltérésnél kilét nélkül megy), és a szabályt teszteld több
+  forgatókönyvvel.
+- **Szabály 2:** az átmeneti feloldási hiba nem azonos az „érvénytelen” eredménnyel — `catch(() => null)` helyett külön ág, újrapróbálható
+  válasz (503), rögzítés nélkül.
+- **Tesztcsapda (érvénytelen piros kör):** a régi viselkedés ideiglenes visszaállításánál a szövegillesztés szintaktikai hibát hagyott, a
+  DB-csomag fele transform-hibával bukott — ez NEM a várt piros. A piros kör csak akkor bizonyíték, ha a bukás oka a várt állítás; a
+  visszaállított fájlt előbb szintaktikailag ellenőrizd (`esbuild --loader=ts`), és a bukás üzenetét olvasd el.
+
+Forrás: #510 (R47–R48). Rokon: C-77.
