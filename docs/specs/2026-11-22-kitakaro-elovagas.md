@@ -59,3 +59,9 @@ korlátja 32 KB (a főági regex így változatlan maradhat). A főági kód a 3
 (idő, összeomlás), vágáson átnyúló titok (6 karakteres darab), bájt-egyezés a főági kód másolatával
 (`scripts/qa/gates/kitakaro-main-baseline.mjs`, origin/main 114eaa63). Ellenpróba a főági kódon: a 300 000-es bemenet 37,7 s, a
 `maskClip` / `redactClip` hiányzik.
+
+## 7. Kiegészítés — 1. vak kör (9effab11)
+
+- A kapu szóhatára a regex `\s` halmaza (ANSI ESC és vezérlőkarakter nem határ). Az első sort olvasó hívó (`pre-merge-gate`
+  `ghJson`) a `redactFirstLine`-t használja: a nyers első sor kitakarva, nem a csonkolásjelző.
+- A képgyártói vágás a befejezetlen `Bearer` + whitespace-t is elhagyja (előtag-szerződés); `undefined` / `null` → üres szöveg.

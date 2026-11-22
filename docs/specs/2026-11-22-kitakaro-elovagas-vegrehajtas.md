@@ -44,3 +44,19 @@ token-futás elhagyva, majd `maskSecrets`, majd `slice`); a vágott hívók (`.s
   `Bearer` + hitelesítő pár hitelesítőjét előtag nélkül hagyta — a teszt ezt fogta meg).
 - Mutánspróba: a kapu szó-kihagyása kikapcsolva → a vágási teszt bukik; a külső / képgyártói run-hátrálás kikapcsolva → az
   elöl kulcs-előfordulásokkal rövidített (a `***` / `[kulcs]` csere miatt) bemeneten a vágási teszt bukik; mind visszaállítva.
+
+## 2026-11-22 — 1. vak kör (9effab11)
+
+NEM ítélet: 1 blokkoló, 2 közepes, 2 kicsi; mind valódi. A tulajdonosi keret szerinti utolsó javítókör.
+
+- **Tesztek előbb** (`4b2aafac`), piros: L1 (ANSI-színezett DB-URL a kapu vágási pontján → a `writeLog` naplójában `titok1`),
+  L3 (`ghJson` hosszú stderr-rel → a kivétel a csonkolásjelzőt mutatta; `redactFirstLine` hiányzott), L2 (befejezetlen `Bearer` +
+  tab a vágásnál → a kimenet nem a főági előtagja), L5 (`redactClip(undefined)` → `TypeError`). Az L4 (korlátközeli farok < 1 s;
+  a képgyártó `redactClip` 1 s és a `requestImage` 2 s külön mérve) teszterősítés, a kód mellett is zöld volt.
+- **L1** — `lib.mjs` `capTail`: a szóhatár pontosan a regex `\s` halmaza (a főági DB-URL-minta ezen nem lép át); az ANSI ESC és
+  más vezérlőkarakter a szó része.
+- **L3** — új `redactFirstLine` (`lib.mjs`): a nyers első sor kitakarva; túl hosszú első sornál a sor vége; a `pre-merge-gate`
+  `ghJson`-ja ezt használja (az export a teszthez).
+- **L2** — `design-assets/lib.ts` `redactClip`: a vágás előtt álló, befejezetlen `Bearer` + whitespace teljesen kimarad.
+- **L5** — `redactClip` `undefined` / `null` → üres szöveg.
+- A főági regexek változatlanok.
