@@ -80,3 +80,11 @@
 {"ts":"2026-11-22T12:08:21.153Z","phase":"solve:fr:1","model":"anthropic/claude-opus-5.5","promptTokens":6256,"completionTokens":3765,"costUsd":0.100324,"genId":"gen-1795349277-zCua0Btn5eRTUTsbn9xM"}
 {"ts":"2026-11-22T12:08:28.984Z","phase":"solve:fr:2","model":"anthropic/claude-opus-5.5","promptTokens":1423,"completionTokens":910,"costUsd":0.023892,"genId":"gen-1795349303-mP1JQsqr32t19wDDNZPb"}
 {"ts":"2026-11-22T12:08:50.585Z","phase":"solve:de:1","model":"anthropic/claude-opus-5.5","promptTokens":610,"completionTokens":151,"costUsd":0.00546,"genId":"gen-1795349331-yPa5C4eKEzz84ONGLTIw"}
+{"ts":"2026-11-22T12:12:56.850Z","phase":"generate:en:step1","model":"anthropic/claude-sonnet-5.5","promptTokens":13548,"completionTokens":4094,"costUsd":0.068036,"genId":"gen-1795349546-Yen16GXh4C7K1xkDtrmj"}
+{"ts":"2026-11-22T12:14:14.970Z","phase":"generate:de:step1","model":"anthropic/claude-sonnet-5.5","promptTokens":16009,"completionTokens":10286,"costUsd":0.134878,"genId":"gen-1795349581-g49stpptnkBqWMni97z2"}
+{"ts":"2026-11-22T12:15:01.861Z","phase":"solve:en:1","model":"anthropic/claude-opus-5.5","promptTokens":3237,"completionTokens":1807,"costUsd":0.049088,"genId":"gen-1795349690-ClUZMHfM7eEEQnIDI8kw"}
+{"ts":"2026-11-22T12:15:32.031Z","phase":"solve:de:1","model":"anthropic/claude-opus-5.5","promptTokens":6994,"completionTokens":3991,"costUsd":0.107796,"genId":"gen-1795349705-pQWnGnSKUB1Uv5dm9SQr"}
+{"ts":"2026-11-22T12:15:46.864Z","phase":"solve:de:2","model":"anthropic/claude-opus-5.5","promptTokens":3560,"completionTokens":2015,"costUsd":0.05454,"genId":"gen-1795349734-Blw0nQyXDLsYFTgXqxft"}
+{"ts":"2026-11-22T12:15:51.428Z","phase":"solve:fr:1","model":"anthropic/claude-opus-5.5","promptTokens":566,"completionTokens":226,"costUsd":0.006784,"genId":"gen-1795349750-AXPVAn1WXVVFfQwpROCV"}
+{"ts":"2026-11-22T12:16:27.837Z","phase":"solve:de:1","model":"anthropic/claude-opus-5.5","promptTokens":2214,"completionTokens":1237,"costUsd":0.033596,"genId":"gen-1795349780-kmrYcuHt5zEsTo3Ort9v"}
+{"ts":"2026-11-22T12:18:21.701Z","phase":"solve:de:1","model":"anthropic/claude-opus-5.5","promptTokens":429,"completionTokens":102,"costUsd":0.003756,"genId":"gen-1795349901-G3lJ8dxkOuulgacrJSwI"}

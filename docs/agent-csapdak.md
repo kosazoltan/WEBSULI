@@ -1146,5 +1146,8 @@ Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szinte
   (`vocab-bank-cognates.test.ts`) nem — 35 „pizza = pizza” típusú tétel került be; (b) a vak megoldó után törölt tételek a
   tartalék-jelöltekből a következő pótláskor visszakerültek. **Szabály 2:** generált tartalom szűrője a bank MINDEN őr-tesztjének
   szabályát futtassa (előbb `grep` a `tests/<bank>-*.test.ts`-re); az elbírált, elvetett tételek tiltólistára (`apply --deny`).
+  (c) a vak kör utáni kézi javítást (új példamondat) a validátor futtatása nélkül küldtem újra vakon — a `de0-school-048` új
+  mondata nem tartalmazta a term-et. **Szabály 3:** minden kézi javítás után ELŐBB `tests/vocab-bank-validate.test.ts`, csak
+  utána fizetős vak kör.
 
 Forrás: `feat/szoletra-a1-bank` (végrehajtás: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md` 10–11. lépés). Rokon: C-SZL-1.

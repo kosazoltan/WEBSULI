@@ -288,13 +288,13 @@ bankközi korláttal (`ladderTermFloors`):
 
 | nyelv | 0. fokozat | 1. fokozat | 0. fok. korláttal | 1. fok. korláttal | új 0. szintű egyes szó |
 |---|---|---|---|---|---|
-| en | 222 → 372 | 180 → 327 | 205 → 355 | 149 → 294 | 297 |
-| de | 171 → 317 | 145 → 303 | 154 → 300 | 118 → 276 | 304 |
+| en | 222 → 372 | 180 → 337 | 205 → 355 | 149 → 304 | 307 |
+| de | 171 → 317 | 145 → 333 | 154 → 300 | 118 → 306 | 334 |
 | fr | 111 → 308 | 186 → 318 | 103 → 300 | 168 → 300 | 329 |
 
-Mért költség: **7,4896 USD** (82 hívás, a válaszok `usage.cost` mezőjének összege; napló:
-`docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl`). Nyitott (korláttal mérve): en 1. fokozat −6,
-de 1. fokozat −24 — a tartalék elfogyott, a pótlás fizetős generálást kíván (orkesztrátori döntés).
+Mért költség: **7,9481 USD** (90 hívás, a válaszok `usage.cost` mezőjének összege; napló:
+`docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl`). A korláttal mért 0. és 1. fokozat mindhárom nyelven
+≥ 300 (az en / de 1. fokozat utolsó hiányát orkesztrátori engedéllyel, ≤ 2 USD-s futáskorláttal pótolva: 0,4585 USD).
 
 ## 13. Vak kör 1 (2026-11-22, fej 0fe24459) — osztályszintű javítás
 

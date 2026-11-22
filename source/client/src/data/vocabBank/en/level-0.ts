@@ -879,4 +879,15 @@ export const VOCAB_EN_L0: VocabEntry[] = [
   { id: "en0-school-055", term: "pencils", hu: "ceruzák", kind: "word", level: 0, topic: "school", pos: "noun", example: "I have three pencils.", exampleHu: "Három ceruzám van." },
   { id: "en0-home-058", term: "pan", hu: "serpenyő", kind: "word", level: 0, topic: "home", pos: "noun", example: "Mum cooks eggs in a pan.", exampleHu: "Anya egy serpenyőben süti a tojást." },
   { id: "en0-food-083", term: "ham", hu: "sonka", kind: "word", level: 0, topic: "food", pos: "noun", example: "I like ham on my bread.", exampleHu: "Szeretem a sonkát a kenyeremen." },
+  // ── S3 (2026-11-22): A1-bővítés, 0–1. fokozatú egyes szavak (scripts/vocab-bank-generate.ts) ──
+  { id: "en0-home-059", term: "knife", hu: "kés", kind: "word", level: 0, topic: "home", pos: "noun", example: "Dad cuts the bread with a knife.", exampleHu: "Apa késsel vágja a kenyeret." },
+  { id: "en0-food-084", term: "supper", hu: "vacsora", kind: "word", level: 0, topic: "food", pos: "noun", example: "We have supper at six o'clock.", exampleHu: "Hat órakor vacsorázunk." },
+  { id: "en0-food-085", term: "mango", hu: "mangó", kind: "word", level: 0, topic: "food", pos: "noun", example: "I like a sweet mango.", exampleHu: "Szeretem az édes mangót." },
+  { id: "en0-family-039", term: "daddy", hu: "apuci, apa", kind: "word", level: 0, topic: "family", pos: "noun", example: "My daddy plays with me.", exampleHu: "Apukám játszik velem." },
+  { id: "en0-school-056", term: "study", hu: "tanul", kind: "word", level: 0, topic: "school", pos: "verb", example: "I study English at school.", exampleHu: "Az iskolában angolt tanulok." },
+  { id: "en0-everyday-070", term: "heavy", hu: "nehéz", kind: "word", level: 0, topic: "everyday", pos: "adj", example: "My bag is very heavy.", exampleHu: "A táskám nagyon nehéz." },
+  { id: "en0-culture-023", term: "circus", hu: "cirkusz", kind: "word", level: 0, topic: "culture", pos: "noun", example: "We see a clown at the circus.", exampleHu: "A cirkuszban egy bohócot látunk." },
+  { id: "en0-work-010", term: "sailor", hu: "tengerész, matróz", kind: "word", level: 0, topic: "work", pos: "noun", example: "The sailor has a big ship.", exampleHu: "A tengerésznek nagy hajója van." },
+  { id: "en0-sports-034", term: "cycle", hu: "biciklizik, kerékpározik", kind: "word", level: 0, topic: "sports", pos: "verb", example: "I cycle to school every day.", exampleHu: "Minden nap biciklivel megyek iskolába." },
+  { id: "en0-nature-041", term: "maple", hu: "juharfa", kind: "word", level: 0, topic: "nature", pos: "noun", example: "The maple has red leaves.", exampleHu: "A juharfának vörös levelei vannak." },
 ];
