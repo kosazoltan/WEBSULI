@@ -27,6 +27,7 @@ test("leállítás: eldobható kapcsolat nélkül az eredmény »timeout«, nem 
 
 test("szerverleállítás: „eldobva” naplósor csak valódi eldobáskor (»forced«), »timeout«-nál külön figyelmeztetés", () => {
   const source = readFileSync(new URL("../server/index.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  assert.match(source, /outcome === "forced"\) logger\.warn\("\[lesson-clips\] a leállítási határidőn túl futó kör zárkapcsolata eldobva"\)/);
+  // A „forced” napló nem állíthatja, hogy a DB-zár garantáltan felszabadult (a DB-oldali visszaigazolás követő PR — vállalt korlát).
+  assert.match(source, /outcome === "forced"\) logger\.warn\("\[lesson-clips\] a leállítási határidőn túl futó kör zárkapcsolata helyben eldobva, a DB-oldali leállítás kérve \(a zár felszabadulása nincs visszaigazolva\)"\)/);
   assert.match(source, /outcome === "timeout"\) logger\.warn\(/);
 });

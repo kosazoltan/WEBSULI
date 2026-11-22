@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ClipAbortError } from "../server/lesson-clips";
-import { clipLockState, exclusiveWithLock, forceReleaseClipLock, type LockClient } from "../server/lesson-clips-lock";
+import { clipLockState, exclusiveWithLock, forceReleaseClipLock, terminateClipBackend, type LockClient } from "../server/lesson-clips-lock";
 
 // docs/specs/2026-11-10-kisfilm-memoria-vegrehajtas.md („zár-életciklus”): a zárat tartó kapcsolatot egyetlen, egyszer használható
 // release birtokolja a zárkéréstől a release-ig; normál feloldás és kényszerített eldobás is ezen megy át, pontosan egyszer.
@@ -73,4 +73,17 @@ test("zár-életciklus: a zár- vagy a feloldó lekérdezés hibája a kapcsolat
   await assert.rejects(running, ClipAbortError);
   finishWork(); await tick();
   assert.deepEqual([holder.releases.length, second.releases], [1, [undefined]]);
+});
+
+test("DB-oldali leállítás: a kérés eredménye és hibája nem vész el csendben — figyelmeztetés, ha nem igazolt (vállalt korlát, 4. vak kör L1)", async () => {
+  const warned: string[] = [];
+  const warn = (message: string) => { warned.push(message); };
+  assert.equal(await terminateClipBackend(async () => ({ rows: [{ pg_terminate_backend: true }] }), 4242, warn), true);
+  assert.deepEqual(warned, [], "visszaigazolt leállítás: nincs figyelmeztetés");
+  assert.equal(await terminateClipBackend(async () => ({ rows: [{ pg_terminate_backend: false }] }), 4242, warn), false);
+  assert.equal(await terminateClipBackend(async () => { throw new Error("pool timeout"); }, 4242, warn), false);
+  assert.deepEqual(warned, [
+    "[lesson-clips] a DB-oldali leállítás nem igazolt (folyamat 4242: a backend nem állt le vagy már nem létezett) — a zár felszabadulása nincs visszaigazolva",
+    "[lesson-clips] a DB-oldali leállítás kérése nem sikerült (folyamat 4242: pool timeout) — a zár felszabadulása nincs visszaigazolva",
+  ]);
 });

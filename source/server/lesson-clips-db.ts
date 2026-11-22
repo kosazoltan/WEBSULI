@@ -3,7 +3,8 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import type { PoolClient } from "pg";
 import { db, dbPool } from "./db";
 import type { ClipLesson, ClipRow, ClipStore } from "./lesson-clips";
-import { exclusiveWithLock, type LockClient } from "./lesson-clips-lock";
+import { exclusiveWithLock, terminateClipBackend, type LockClient } from "./lesson-clips-lock";
+import { logger } from "./lib/logger";
 import { mediaId, type ClipMedia } from "./lesson-clip-media";
 
 /** A kisfilmek éles adatrétege (docs/specs/2026-11-10-fejezet-kisfilmek-v2.md, 6.). A `lessons` táblát csak olvassa. */
@@ -145,6 +146,6 @@ export const dbClipStore: ClipStore = {
     // A zár- és a feloldó lekérdezés kliensoldali `query_timeout`-tal; eldobáskor a szerveroldali folyamat is leáll (DB-oldali védelem).
     return exclusiveWithLock(() => dbPool.connect() as Promise<LockClient>, CLIP_LOCK_KEY, CLIP_STATEMENT_TIMEOUT_MS,
       (client) => work(sessionStore(client as unknown as PoolClient)),
-      (pid) => { void dbPool.query("SELECT pg_terminate_backend($1)", [pid]).catch(() => undefined); });
+      (pid) => { void terminateClipBackend((target) => dbPool.query("SELECT pg_terminate_backend($1)", [target]), pid, (message) => logger.warn(message)); });
   },
 };

@@ -35,6 +35,21 @@ export function forceReleaseClipLock(): boolean {
   return discarded;
 }
 
+/**
+ * A zárat tartó szerveroldali folyamat leállításának kérése (`pg_terminate_backend`). VÁLLALT KORLÁT (tulajdonosi döntés 2026-11-22):
+ * a kérés a közös poolon, külön időkorlát és a backend leállásának ellenőrzése nélkül megy — a visszaigazolás a követő PR hatóköre.
+ * Addig az eredmény és a hiba legalább figyelmeztetésként látszik; a zár felszabadulását nem állítjuk garantáltnak.
+ */
+export async function terminateClipBackend(run: (pid: number) => Promise<{ rows: Array<{ pg_terminate_backend?: unknown }> }>, pid: number, warn: (message: string) => void): Promise<boolean> {
+  try {
+    if ((await run(pid)).rows[0]?.pg_terminate_backend === true) return true;
+    warn(`[lesson-clips] a DB-oldali leállítás nem igazolt (folyamat ${pid}: a backend nem állt le vagy már nem létezett) — a zár felszabadulása nincs visszaigazolva`);
+  } catch (error) {
+    warn(`[lesson-clips] a DB-oldali leállítás kérése nem sikerült (folyamat ${pid}: ${asError(error).message.slice(0, 120)}) — a zár felszabadulása nincs visszaigazolva`);
+  }
+  return false;
+}
+
 /** A kör kizárólagos futtatása a zár alatt, a zárat tartó kapcsolaton. Foglalt zárnál null. */
 export async function exclusiveWithLock<T>(connect: () => Promise<LockClient>, key: number, timeoutMs: number, work: (client: LockClient) => Promise<T>, terminate: (pid: number) => void = noop): Promise<T | null> {
   const client = await connect();

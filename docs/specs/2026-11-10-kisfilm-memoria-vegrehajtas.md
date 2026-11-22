@@ -164,6 +164,23 @@ A kör minden DB-művelete (írás, olvasás, árvasöprés) a session-szintű a
 - **K-418-L2** — az árvasöprés teljes (nem utasításonkénti) határideje; 50 adag × 15 s elméleti keret.
 - **K-418-L3** — a fejezet párhuzamos képválaszaira nincs közös bájtkeret (≈ 120 MiB számított csúcs).
 - **K-418-L5** — az első `/clips` kérés átmeneti 502-je után nincs újrapróba.
-- **K-KL-L2** — a teljes `gracefulShutdown` viselkedési tesztje (vezérelhető Stúdió- és DB-kapukkal); a 3. kör L2-je (a 60/70 s a
-  kisfilm-ág belépésétől, nem a jeltől számít) is ide tartozik.
+- **K-KL-L1 — 4. vak kör L1 (blokkoló; tulajdonosi döntés 2026-11-22: követő PR, addig vállalt korlát): a helyi kapcsolat-eldobás nem
+  igazolja a DB-oldali leállást.** A `terminate` (`pg_terminate_backend`) a közös alkalmazáspoolon, saját lekérdezési időkorlát és
+  visszaigazolás nélkül megy; ha a kérés kapcsolatra vár vagy a DB nem válaszol, a régi munkamenet és a zár a helyi eldobás után is
+  élhet, és a válaszra váró pool-kapcsolat a `dbPool.end()`-et is feltarthatja. *Javítási javaslat:* a DB-oldali megszakítást a
+  határidőn belül, a megosztott pool telítettségétől független, időkorlátos vezérlőcsatornán kezdeni; a backend tényleges leállását
+  ellenőrizni (nem csak a jel elküldését); visszaigazolás nélkül külön, látható kimenet; hálózati szakadás mellett kemény határhoz a
+  lejáratot és az írás-kerítést a DB kényszerítse ki. *Teszt-mérce:* telített pool vagy késleltetett vezérlőcsatorna, közben valóban
+  futó DB-utasítás; a mérce másik kapcsolatról a zár és a véglegesített állapot, nem a `release()` hívásszáma. *Ebben a PR-ban:* a
+  kérés eredménye / hibája figyelmeztetésként naplózódik (`terminateClipBackend`, teszt: `lesson-clip-lock` „DB-oldali leállítás: a
+  kérés eredménye és hibája nem vész el csendben…”), és a „forced” napló nem állítja a zár garantált felszabadulását (forrás-őr:
+  `lesson-clip-shutdown-timeout`).
+- **K-KL-L2** — a teljes `gracefulShutdown` viselkedési tesztje (vezérelhető Stúdió- és DB-kapukkal); a 3. kör L2-je és a 4. vak kör
+  L2-je (a 60/70 s órája a kisfilm-ág belépésétől, nem a leállítási jeltől számít; a jelkezelő elején kell a stop-jelzés és az onnan
+  mért abszolút határidő, késleltetett importos orkesztrációs teszttel) is ide tartozik.
+- **K-KL-L4 — 4. vak kör L3 (közepes): a DB-regresszióteszt megkerüli a worker tárváltását.** A teszt maga választja a `scoped` tárat,
+  a worker memóriabeli tárja `scoped` nélkül hív — a `store = scoped ?? store` sor eltávolítását egyik teszt sem fogná meg; a DB-próba
+  fix alvással (nem a tényleges sorzár-várakozás figyelésével) dolgozik. *Javasolt:* külön típussal kötelezővé tenni a zár alatti tárat
+  (a szabad tár a téves útvonalon hibát jelez), `runClipRound`-ot a valódi adapterrel (szolgáltatócsonkokkal) futtató teszt, a DB-próba
+  a `pg_stat_activity`-ben figyelje a blokkolt kapcsolatot, és `finally`-ban engedje fel a teszt tranzakcióját.
 - **K-KL-L3** — a borító napi limitjének túlcsordulása (`server/lesson-covers.ts`).

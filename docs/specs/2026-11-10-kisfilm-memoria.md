@@ -43,6 +43,9 @@ A gyártósor tartalmi lépései, a lejátszó, a séma, a plafonok (napi lecke,
   a zárral együtt él és hal* — a kör minden DB-művelete az advisory lockot tartó kapcsolaton fut. A kisfilm-ág a szerverleállítás
   elején, párhuzamosan indul: ≤ 60 s kivárás, megszakítás, ≤ 10 s; ha a kör még fut, a zárkapcsolat eldobódik és a szerveroldali
   folyamat leáll (visszagörgetés, zárfelengedés) — kész ≤ 70 s-kor. A letöltési hiba naplója csak kódot és hostot tartalmaz.
+  **Tulajdonosi döntés 2026-11-22: a DB-oldali leállás visszaigazolása a követő PR hatóköre; addig vállalt korlát.** (A
+  `pg_terminate_backend` kérés a közös poolon, külön időkorlát és visszaigazolás nélkül megy; eredménye / hibája figyelmeztetésként
+  látszik, a „forced” napló nem állítja a zár garantált felszabadulását.)
 - Mérés a javított gyártósorral (valódi szolgáltatók, egy fejezet): a próbafolyamat csúcsmemóriája 144 MB, a fejezet 132 mp alatt kész.
 
 ## 5. Edge case-ek
