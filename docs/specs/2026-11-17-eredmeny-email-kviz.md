@@ -49,6 +49,12 @@ ilyenkor elmarad (vállalt korlát, követő PR-jegy).
   kilét-rögzítés (claim) nem ér célba vagy nem igazolható, és egy későbbi kérés egy másik munkamenet (friss CSRF-token, egyező régi címke)
   alapján rendel nevet az eredményhez (a 9. kör L1-e, a 11. kör L1-e és minden további változat). **Az elv a követő PR-ban:** név csak az
   első tevékenységhez kötött szerveres igazolással, különben vendég. Addig az osztály vállalt korlát.
+- **R54 — a #510-ben (tulajdonosi döntés, űrlap, 2026-11-22, szó szerint: „KIS JAVÍTÁS + UTOLSÓ KÖR”).** A 12. vak kör L2-je: a falióra
+  visszaugrásakor a 429 utáni egyetlen újrapróba-ébresztő elfogyott, a végleges eredmény beragadt. Javítás osztályszinten: a dokumentumon
+  belüli késleltetések (újrapróba-esedékesség, `nextAt` összevetés) monoton órával (`performance.now()`) mérnek; ha az ürítő az
+  esedékesség előtt fut, újraélesíti az ébresztőt (élő, várakozó bejegyzés nem marad ébresztő nélkül). A 7 napos adatlejárat és a
+  kérésbe kerülő időbélyegek faliórásak maradnak. A 12. kör L1 (sikertelen `sent`-írás utáni ismételt POST) és L3 (idegen vendég-pillanatkép
+  után névtelen részleges levél) a követő PR jegyei.
 - A 9. kör L2-je (a kilét-takarítás adagjai között a jelzősor és a tulajdonos-sor szétválhat) szintén a követő PR jegye; addig vállalt korlát
   (csak a 8 napnál régebben rögzített, közben is folytatott körnél, a napi takarítás pillanatában áll elő).
 - Vállalt korlátok a követő PR-ig (tulajdonosi döntés 2026-11-22, „R53 ÉS R52-SZABÁLY KI”): (1) a lefokozott, 202 előtt megszakadt végleges

@@ -1259,3 +1259,23 @@ test("R51 / L3: a korábbi (kisebb) pillanatkép késői 202-je nem tekeri vissz
   await page.waitForTimeout(800);
   expect(await stored(), "a késői egyválaszos 202 nem írja vissza 1-re").toStrictEqual(["2"]);
 });
+
+/* 12. vak kör (f137e986, 2026-11-22) — tulajdonosi döntés: „KIS JAVÍTÁS + UTOLSÓ KÖR”, terv R54. */
+test("R54 / L2: 429 + Retry-After: 1, közben a falióra 10 s-mal visszaugrik (az időzítők nem) → a végleges eredmény magától elmegy", async ({ page }) => {
+  await mockWith(page);
+  const statuses: number[] = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial === true) return route.fulfill({ status: 202, json: { queued: true, partial: true } });
+    const status = statuses.length === 0 ? 429 : 202;
+    statuses.push(status);
+    return route.fulfill({ status, headers: status === 429 ? { "Retry-After": "1" } : {}, json: status === 429 ? { message: "Túl sok beküldés." } : { queued: true } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await answerAll(page);
+  await expect.poll(() => statuses.length).toBe(1);
+  await page.waitForTimeout(100);
+  // Csak a falióra ugrik vissza (pl. óraszinkron); a dokumentumon belüli időzítők és a monoton óra nem.
+  await page.evaluate(() => { const real = Date.now.bind(Date); Date.now = () => real() - 10_000; });
+  await expect.poll(() => statuses, { timeout: 8000, message: "az újrapróba magától elment" }).toStrictEqual([429, 202]);
+});

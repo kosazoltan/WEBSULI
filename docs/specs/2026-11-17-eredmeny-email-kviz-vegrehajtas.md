@@ -574,6 +574,42 @@ Tulajdonosi döntés (űrlap, 2026-11-22, szó szerint): „AZ EGÉSZ OSZTÁLY K
 - **követő PR: 11. vak kör L3 (kicsi)** — a `Retry-After` HTTP-dátum alakja `NaN` (`client/src/lib/queryClient.ts:25–26`), a sor a fejléc nélküli
   ágra esik, a kísérletek a kapu feloldása előtt elfogyhatnak. Javítás: mindkét formátum olvasása; teszt hamis órával a dátum alakra is.
 
+## 2026-11-22 — 12. vak kör (f137e986): R54, monoton időzítés a dokumentumon belül
+
+Tulajdonosi döntés (űrlap, 2026-11-22, szó szerint): „KIS JAVÍTÁS + UTOLSÓ KÖR”.
+- Bukó böngészőteszt `R54 / L2`: 429 + `Retry-After: 1`, utána csak a `Date.now()` ugrik 10 s-mal vissza (az időzítők nem) → régi kóddal a
+  második POST nem ment el (`[429]`), javítva `[429, 202]`.
+- `client/src/lesson-runtime/resultReport.ts`: `monotonicNow()` (`performance.now()`, tartalékként `Date.now()`), az `outboxAttempts`
+  bejegyzés `nextAt`-ja monoton, a nyilvántartott ébresztő (`wake`, `armOutboxWake`); az ürítő az esedékesség előtt újraélesít.
+- Dokumentált spec-változás: a `tests/request-retry.test.ts` J5 és a `tests/result-report-complete.test.ts` forrásőre az új alakot nézi
+  (a korlátos kísérletszám, a késleltetett újrapróba és az úton lévő kihagyása változatlan szándék).
+
+A `resultReport.ts` idő- és időzítőpontjai (sorszámok az R54 utáni állapotban):
+
+| Sor | Pont | Fajta | Óra |
+|---|---|---|---|
+| 102 | `monotonicNow()` | dokumentumon belüli mérés | monoton (`performance.now()`) |
+| 108 | `armOutboxWake` `setTimeout` | dokumentumon belüli ébresztő | időzítő (relatív késleltetés) |
+| 118 | `drainResultOutbox` `now` → `outboxEntryExpired` | tartós adatlejárat (7 nap, R30) | falióra |
+| 119 | `drainResultOutbox` `mono` → `nextAt` összevetés | dokumentumon belüli esedékesség | monoton |
+| 150 | `build` → `outboxEntryExpired` | tartós adatlejárat a küldés előtt (R40) | falióra |
+| 160 | `build` `clientNow` | a kérésbe kerülő kliens-idő (R13, szerveres órakorrekció) | falióra |
+| 205 | hiba után `nextAt` | dokumentumon belüli esedékesség | monoton |
+| 215 | `REPORT_FALLBACK_MS` `setTimeout` | dokumentumon belüli tartalék (45 s) | időzítő |
+| 240 | lezáratlan kör korhatára (R2) | tartós (a kör tárolt ideje) | falióra |
+| 257 | bejegyzés `activityAt` (R30) | tartós | falióra |
+| 289 | pillanatkép korhatára (R2) | tartós | falióra |
+| 302 | pillanatkép `clientNow` | a kérésbe kerülő kliens-idő | falióra |
+
+Követő PR (jegyek):
+- **követő PR: 12. vak kör L1 (kicsi)** — sikertelen `sent`-írás (tárkvóta) után a memóriabejegyzés törlődik, és a „Kvíz kiértékelése”
+  gomb ugyanazt a kört újra POST-olja (fölösleges kérés, nem mért dupla levél). Javítás: 2xx után memóriabeli sikerjelző is, közös őrrel a
+  felvételnél, ürítésnél és claimnél; az R28 próbájában a `sent` írása is dobjon.
+- **követő PR: 12. vak kör L3 (közepes)** — csak párosított, fiókba nem lépett tanulóknál: ha A claimje sikeres, de előbb egy idegen (vendégre
+  lefokozott) pillanatkép érkezik, A későbbi, több válaszos pillanatképe a vendég-átvétel (`guestTakeover`) miatt „Vendég tanuló” néven megy
+  (`server/lesson-result-email.ts:656–664`). Javítás: a valódi vendég-tulajdonos és a `foreign` vendégként befogadott pillanatkép
+  megkülönböztetése. DB-teszt: A claim → idegen pillanatkép → igazolt A több válasszal → levél A nevével.
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

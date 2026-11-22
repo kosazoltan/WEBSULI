@@ -30,7 +30,9 @@ test("a küldés feltétele: lezárt kör VAGY (csak kvíznél) teljes kör; a f
   assert.match(source, /enqueueResult\(\{ id: `\$\{lessonId\}\|\$\{kind\}\|\$\{roundId\}`/);
   // A körönkénti egyszeri küldés őrei változatlanok: a localStorage-jelző és a folyamatban lévő küldés.
   assert.match(source, /if \(localStorage\.getItem\(flag\)\) return;/);
-  assert.match(source, /if \(outboxInFlight\.has\(entry\.id\) \|\| \(state && \(state\.attempts >= OUTBOX_MAX_ATTEMPTS \|\| state\.nextAt > now\)\)\) continue;/);
+  // R54 (dokumentált spec-változás): a kimerült / úton lévő kihagyása változatlan; a még nem esedékes (monoton óra) bejegyzés újraélesített ébresztővel vár.
+  assert.match(source, /if \(outboxInFlight\.has\(entry\.id\) \|\| \(state && state\.attempts >= OUTBOX_MAX_ATTEMPTS\)\) continue;/);
+  assert.match(source, /if \(state && state\.nextAt > mono\) \{ if \(state\.wake === undefined\) armOutboxWake\(entry\.id, state\.nextAt - mono\); continue; \}/);
 });
 
 test("S1b: answeredCount csak a kör saját kérdéseit számolja; roundTooOld a 7 napos határon", () => {

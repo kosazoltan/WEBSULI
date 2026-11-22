@@ -35,7 +35,8 @@ test("J5 — forrásőr: az eredménybeküldés újrapróbál, az apiRequest a b
   // R39 (7. vak kör L1, dokumentált spec-változás): a törzs a token megérkezése után, `prepare`-ben épül — a feladatok kérése változatlanul
   // belső újrapróba nélküli (0) és nem keepalive.
   assert.match(report, /apiRequest\("POST", url, undefined, \{ retries: 0, prepare: build \}\)/);
-  assert.match(report, /if \(attempts < OUTBOX_MAX_ATTEMPTS\) setTimeout\(drainResultOutbox, delay\);/);
+  // R54 (12. vak kör L2, dokumentált spec-változás): a késleltetett újrapróba nyilvántartott, monoton órás ébresztővel.
+  assert.match(report, /if \(attempts < OUTBOX_MAX_ATTEMPTS\) armOutboxWake\(entry\.id, delay\);/);
   const client = source("../client/src/lib/queryClient.ts");
   assert.match(client, /isRetryableRequestError\(error\)/);
   // az írási műveletek alapértéke változatlanul 0 újrapróbálás (duplikáció ellen)

@@ -93,8 +93,20 @@ function claimRound(lessonId: string, kind: "tasks" | "quiz", roundId: string, o
     return apiRequest("POST", `/api/lessons/${lessonId}/results/claim`, { kind, roundId, claim: true, ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) }, { retries: 0 });
   }).catch(() => { /* csendes: a szerver az első beérkező kérésnél rögzít */ });
 }
-/** Kísérletek laponként (memóriában: a kimerült kör a következő oldalbetöltéskor új kísérleteket kap). */
-const outboxAttempts = new Map<string, { attempts: number; nextAt: number }>();
+/**
+ * Kísérletek laponként (memóriában: a kimerült kör a következő oldalbetöltéskor új kísérleteket kap). Terv R54 (12. vak kör L2): a
+ * dokumentumon belüli esedékesség MONOTON órával mér (`performance.now()`), így a falióra visszaugrása nem tolja el; az ébresztő időzítő
+ * nyilvántartott — ha az ürítő az esedékesség előtt fut, újraélesíti (élő, várakozó bejegyzés nem marad ébresztő nélkül). A 7 napos
+ * adatlejárat (R30) külön, faliórás.
+ */
+const monotonicNow = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
+const outboxAttempts = new Map<string, { attempts: number; nextAt: number; wake?: ReturnType<typeof setTimeout> }>();
+function armOutboxWake(id: string, delayMs: number): void {
+  const state = outboxAttempts.get(id);
+  if (!state) return;
+  if (state.wake !== undefined) clearTimeout(state.wake);
+  state.wake = setTimeout(() => { state.wake = undefined; drainResultOutbox(); }, Math.max(0, delayMs));
+}
 const outboxInFlight = new Set<string>();
 export function enqueueResult(entry: OutboxEntry): void {
   // R47 (felülírja az R31 utólagos pótlását, az R35-öt és az R43-at): a bejegyzés a LÉTREHOZÁSAKOR rögzített kilétet viszi; a már
@@ -104,12 +116,15 @@ export function enqueueResult(entry: OutboxEntry): void {
 /** A sor ürítése: minden esedékes, nem úton lévő bejegyzés elindul (nem várja meg egymást). */
 export function drainResultOutbox(): void {
   const now = Date.now();
+  const mono = monotonicNow();
   for (const entry of outbox.read()) {
     if (flagSet(entry.flag)) { outbox.remove(entry.id); continue; }
     // R30 (review 4642268402): a 7 napnál régebbi tevékenységű bejegyzés küldés nélkül kikerül (a le nem zárt, régi kör nem megy el).
     if (outboxEntryExpired(entry, now)) { outbox.remove(entry.id); continue; }
     const state = outboxAttempts.get(entry.id);
-    if (outboxInFlight.has(entry.id) || (state && (state.attempts >= OUTBOX_MAX_ATTEMPTS || state.nextAt > now))) continue;
+    if (outboxInFlight.has(entry.id) || (state && state.attempts >= OUTBOX_MAX_ATTEMPTS)) continue;
+    // R54: még nem esedékes (monoton óra) — ha nincs élő ébresztője, újraélesítjük, és várunk.
+    if (state && state.nextAt > mono) { if (state.wake === undefined) armOutboxWake(entry.id, state.nextAt - mono); continue; }
     outboxInFlight.add(entry.id);
     void sendOutboxEntry(entry).finally(() => outboxInFlight.delete(entry.id));
   }
@@ -185,8 +200,10 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     if (e?.status === 400 || error instanceof OutboxEntryExpired) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
     const attempts = (outboxAttempts.get(entry.id)?.attempts ?? 0) + 1;
     const delay = outboxRetryDelayMs(attempts, typeof e?.retryAfterSec === "number" ? e.retryAfterSec : undefined);
-    outboxAttempts.set(entry.id, { attempts, nextAt: Date.now() + delay });
-    if (attempts < OUTBOX_MAX_ATTEMPTS) setTimeout(drainResultOutbox, delay);
+    const previous = outboxAttempts.get(entry.id)?.wake;
+    if (previous !== undefined) clearTimeout(previous);
+    outboxAttempts.set(entry.id, { attempts, nextAt: monotonicNow() + delay });
+    if (attempts < OUTBOX_MAX_ATTEMPTS) armOutboxWake(entry.id, delay);
   }
 }
 
