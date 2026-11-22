@@ -186,3 +186,18 @@ NEM ítélet: 3 blokkoló, 2 közepes; mind valódi. Tulajdonosi döntés (űrla
   szerint a sortörésen átnyúló futás része lenne).
 - **Mutánspróba:** az osztályszabály kikapcsolva → a tábla bukik; az „általános” sor 64/64 esete szivárog; visszaállítva.
 - **Mérés:** 20 M-es betű+szám futás `redact` 110 ms; 10 M-es escape-sűrű JSON teljes `redact` 349 ms; 6 M-es egybetűs sorok 92 ms.
+
+## 2026-11-22 — szűkítés és 5. vak kör (5c9568c5)
+
+Tulajdonosi döntés (űrlap, 2026-11-22): „Szűkítés + bontás (Javasolt)” — a #521 célja a lineáris, összeomlás nélküli, a főágnál
+nem gyengébb kitakarás; a teljesség követő jegy (terv 12–13. pont).
+
+- **Tesztek előbb** (`f11d3b4e`): `kitakaro-main-baseline.mjs` — a főág három kitakarója változatlan másolatban (a forrás
+  sorai `diff`-fel bájtra azonosak: REDACTIONS, maskSecrets, design redact); `leakCount`; „nem gyengébb a főágnál” összevetés
+  minden eset × alak × út (és vágási helyzet) esetén, kapuknál és design-assetsnél; ~3 M-es lineáris teszt; L1(5), L3, L4.
+  Piros: 9 bukás a kapuknál (a főág-összevetés: „L1(5) Bearer- kezdetű hitelesítő / sima: új 14 > főág 0”), 3 a design-assetsnél.
+- **5. kör leletei a szűkített cél szerint:** L1 — a főágnál gyengébb volt → javítva (a Bearer-lookahead csak a különálló
+  második `Bearer` szót zárja ki). L3 — a főág ugyanígy az első sort vette (`origin/main lib.mjs:217`), nem gyengébb, de a
+  koordinátor kérésére javítva (a teljes üzenet takarva az első sor előtt). L4 — nem titokszivárgás; javítva (az escape-elt
+  sortörés szakaszhatár). L2 — nem gyengébb a főágnál → követő jegy (terv 13. pont).
+- **Zöld:** `node --test scripts/qa/gates/*.test.mjs` 152/152; design-assets 23/23; advent-art 22/22.

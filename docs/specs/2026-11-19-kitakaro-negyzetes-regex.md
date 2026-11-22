@@ -177,3 +177,34 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
   nyers kimeneten, a „failing tests:” kivágása előtt.
 - **Vágás (L5):** a vizsgált előtag a határon átnyúló futás végéig legfeljebb 4096 karakterrel nyúlik túl.
 - **Határ:** egy szintű escape-dekódolás; a jelszóban álló literális `"` a DB-URL hitelesítő részét lezárja.
+
+## 12. Szűkítés — tulajdonosi döntés (2026-11-22)
+
+> A tulajdonos 2026-11-22-én űrlapon döntött (7 NEM vak kör után), szó szerint: „Szűkítés + bontás (Javasolt)”.
+> A #521 célja vissza: „lineáris, összeomlás nélküli, a főágnál nem gyengébb kitakarás”; a kitakarás teljessége külön jegy.
+> Legfeljebb 2 további vak kör.
+
+**Hatókör (felülírja az 1. pont céljának teljességi részét):** a #521 kötelező célja (a) a lineáris futás, (b) az
+összeomlásmentesség és (c) hogy a kitakarás semmilyen bemeneten ne legyen gyengébb a főágénál. A teljesség (minden tokenforma
+minden kimeneti úton) **NEM cél** — követő jegy (lent). A D1–D7 megvalósítás megmarad; ahol a főágnál erősebb, az többlet, nem
+elfogadási feltétel.
+
+**Elfogadási kritériumok (EARS, a 6. pont kiegészítése és elsőbbséggel):**
+- WHEN a kapu `redact`-ja, a külső ellenőr `maskSecrets` / `maskClip`-je vagy a képgyártó `redact` / `redactClip`-je az
+  esettábla (`scripts/qa/gates/kitakaro-cases.mjs`) bármely esetét kapja bármely alakban (sima, JSON, `\uXXXX`, tapadó) és
+  vágási helyzetben THEN the system SHALL legfeljebb annyi titokdarabot hagyni, mint a főág megfelelő függvénye (rögzített
+  másolat: `scripts/qa/gates/kitakaro-main-baseline.mjs`, origin/main 114eaa63) a hívók régi vágásával.
+- WHEN a bemenet több millió karakter (az esettábla összefűzve ~3 M, illetve a 10 M / 20 M-es futások) THEN the system SHALL
+  lineáris időben (a tesztkorlátokon belül) és kivétel nélkül visszatérni.
+
+## 13. Követő jegy — a kitakarás teljessége (nem a #521 hatóköre)
+
+A következő határesetek nem rontanak a főághoz képest, ezért a #521-ben nyitva maradnak; a teljességi jegy tárgyai:
+- **5. vak kör (5c9568c5):** L2 — a korlátos előtag-vizsgálat (`limit + 6 × margin + 1024 + 4096`) után a vágópont egy
+  csak a plafon mögött besorolható D7-futás első szakaszát, illetve egy plafonon túl nyúló, escape-elt címformát hagyhat
+  (a főág maszkolatlan maradékkal vágott, nem gyengébb). Az L1 (`Bearer-` kezdetű hitelesítő — a főágnál gyengébb volt), az
+  L3 (a kivétel első sora szűrés előtt) és az L4 (JSON sortörés-escape a helyőrzőben) ebben a körben javítva.
+- **Korábbi körök nyitott határai:** egy szintű JSON-escape-dekódolás (a `\u0040` alak nem); a DB-jelszóban álló literális
+  `"` lezárja a hitelesítő részt; a D7 túltakarása (hash, hosszú azonosító, számos útvonal, sortöréssel tapadó következő sor,
+  escape-elt ékezetes szavak); a szóhoz tapadó `…Bearer` nem séma; a képgyártó parancssori eszköze ismeretlen kapcsolóra nem ad
+  hibát (`--help` fizetős futást indított — külön jegy).
