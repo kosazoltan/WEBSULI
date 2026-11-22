@@ -147,7 +147,10 @@ export async function ensureResultApi(): Promise<boolean> {
  * gyorsítótár ürül, új token jön, és a kérés EGYSZER megismétlődik — különben a lap életében minden további pillanatkép 403 lenne. Ha az
  * ismétlésre nincs mód (a lap bezárult, a tokenkérés bukik), hamis: a következő betöltéskor a tárolt kör friss tokennel megy.
  */
-export async function sendKeepalive(url: string, data: unknown): Promise<boolean> {
+export async function sendKeepalive(url: string, data: unknown | (() => unknown)): Promise<boolean> {
+  // Terv R49 (10. vak kör L2): a törzs függvényként is megadható — minden kísérlet (a 403 utáni ismétlés is) előtt újra összeáll, így a
+  // hívó a küldés pillanatában ellenőrizheti a kilétet (pl. a párosítást).
+  const payload = () => (typeof data === "function" ? (data as () => unknown)() : data);
   // Terv R44 (8. vak kör L2): minden kísérletnek (az elsőnek és a 403 utáninak is) határideje van — a választ nem adó kapcsolaton függő
   // kérés nem tarthatja „úton lévőnek” az állapotot, a határidő után ugyanaz az állapot újra küldhető. (A gyorsítótárazott tokennel induló
   // első kérés továbbra sem vár előzetes hálózati körre.)
@@ -156,7 +159,7 @@ export async function sendKeepalive(url: string, data: unknown): Promise<boolean
     const timer = setTimeout(() => controller.abort(), SNAPSHOT_POST_TIMEOUT_MS);
     try {
       return await fetch(url, {
-        method: "POST", keepalive: true, credentials: "include", body: JSON.stringify(data), signal: controller.signal,
+        method: "POST", keepalive: true, credentials: "include", body: JSON.stringify(payload()), signal: controller.signal,
         headers: { "Content-Type": "application/json", "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), "X-CSRF-Token": csrfToken },
       });
     } finally { clearTimeout(timer); }

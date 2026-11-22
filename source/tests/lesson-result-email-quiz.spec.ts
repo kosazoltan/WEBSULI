@@ -880,11 +880,11 @@ test("R39 / L1: az ürítés első tokenkérése átmenetileg bukik (502), a kö
   await page.goto("/");
   await expect.poll(() => tokenCalls, { message: "az ürítés tokent kért" }).toBeGreaterThanOrEqual(1);
   await page.waitForTimeout(2000); // az első (502-es) tokenkérés lezárult
-  expect(finals.map(body => body.subject), "a tokenhiba után nem ment el régi alakban (címke nélkül)").toEqual([]);
+  expect(finals.map(body => body.subject), "a tokenhiba után nem ment el régi alakban (címke nélkül)").toStrictEqual([]);
   await page.clock.fastForward(31_000); // a sor szokott várakozása (30 s) letelik
   await expect.poll(() => finals.length, { timeout: 15_000, message: "a sor a tokenhiba után is kiküldi" }).toBeGreaterThanOrEqual(1);
   await page.waitForTimeout(1500);
-  expect(finals.map(body => body.subject), "minden kérés az eredeti (sorba kerüléskori) címkét viszi — címke nélküli régi alak nem megy").toEqual(["anon"]);
+  expect(finals.map(body => body.subject), "minden kérés az eredeti (sorba kerüléskori) címkét viszi — címke nélküli régi alak nem megy").toStrictEqual(["anon"]);
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("websuli:result-outbox:v1:")).length), "elküldve: kikerült a sorból").toBe(0);
 });
 
@@ -1070,4 +1070,83 @@ test("R48 / L4: a pillanatkép késői 202-je a véglegesítés után nem írja 
   await held!.fulfill({ status: 202, json: { queued: true, partial: true } });
   await page.waitForTimeout(800);
   expect(await partialKeys(), "a késői 202 sem írja vissza").toEqual([]);
+});
+
+/* Gépi vak ellenőrzés, 10. kör (GPT-6.2 Sol, 025d3d34, 2026-11-22), terv R49: az eredmény soha nem mehet olyan úton, ahol a szerver a
+   rögzítettől eltérő kilétet rendelhet hozzá. */
+async function identityMock(page: Page, onFinal: (n: number, body: Record<string, unknown>, state: { subject: string; legacy: boolean }) => Promise<number>) {
+  await mockWith(page);
+  const state = { subject: "anon", legacy: false };
+  await page.route("**/api/csrf-token", route => route.fulfill({ json: state.legacy ? { csrfToken: "legacy" } : { csrfToken: `${state.subject}-token`, resultApi: 2, resultSubject: state.subject } }));
+  const finals: Array<Record<string, unknown>> = [];
+  const partials: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", async route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial === true) { partials.push(body); return route.fulfill({ status: 202, json: { queued: true, partial: true } }); }
+    finals.push(body);
+    const status = await onFinal(finals.length, body, state);
+    return route.fulfill({ status, json: { message: status === 403 ? "Invalid CSRF token" : status === 400 ? "Érvénytelen beküldés." : "ok", ...(status === 202 ? { queued: true } : {}) } });
+  });
+  return { finals, partials, state };
+}
+
+test("R49 / L1 (a): 403 után más fiók V2-tokenje, majd egy régi példány 400-at ad → a régi (címke nélküli) alakú ismétlés NEM megy el", async ({ page }) => {
+  const { finals } = await identityMock(page, async (n, _body, state) => {
+    if (n === 1) { state.subject = "fiok-b"; return 403; } // közben B fiók lépett be egy másik fülön
+    if (n === 2) return 400; // telepítési átfedés: egy még régi példány az új mezőkre
+    return 202;
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await answerAll(page);
+  await expect.poll(() => finals.length).toBeGreaterThanOrEqual(2);
+  await page.waitForTimeout(2500);
+  expect(finals.map(body => body.subject), "csak a rögzített címkével ment; címke nélküli (régi alakú) kérés nincs").toStrictEqual(["anon", "anon"]);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes(":quiz:sent:"))), "nem jelölődött elküldöttnek").toEqual([]);
+});
+
+test("R49 / L1 (a): 403 után a frissített token egy régi (jelzés nélküli) példányé, a kör rögzített fiókcímkéje nem igazolható → nincs régi alakú kérés", async ({ page }) => {
+  const { finals } = await identityMock(page, async (n, _body, state) => {
+    if (n === 1) { state.legacy = true; return 403; }
+    return 202;
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await answerAll(page);
+  await expect.poll(() => finals.length).toBeGreaterThanOrEqual(1);
+  await page.waitForTimeout(2500);
+  expect(finals.map(body => body.subject), "a rögzített címke nem igazolható a régi példány felé: a bejegyzés vár").toStrictEqual(["anon"]);
+});
+
+test("R49 / L2 (b): a végleges kérés 403-a alatt újrapárosul az eszköz → az ismétlés nem a lecserélt (A) párosítással megy", async ({ page }) => {
+  await page.addInitScript(token => { if (!sessionStorage.getItem("paired")) { sessionStorage.setItem("paired", "1"); localStorage.setItem("websuli.learnerToken", token); } }, LEARNER_A);
+  const { finals } = await identityMock(page, async n => {
+    if (n === 1) { await page.evaluate(token => localStorage.setItem("websuli.learnerToken", token), LEARNER_B); return 403; }
+    return 202;
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await answerAll(page);
+  await expect.poll(() => finals.length).toBe(2);
+  expect(finals[0].learner, "az első kérés még A-val (a rögzített párosítás)").toBe(LEARNER_A);
+  expect(finals[1].learner, "a 403 utáni ismétlés a lecserélt A tokent nem küldi újra").toBeUndefined();
+});
+
+test("R49 / L2 (b): a pillanatkép 403-a alatt újrapárosul az eszköz → a pillanatkép ismétlése párosítás nélkül megy", async ({ page }) => {
+  await page.addInitScript(token => { if (!sessionStorage.getItem("paired")) { sessionStorage.setItem("paired", "1"); localStorage.setItem("websuli.learnerToken", token); } }, LEARNER_A);
+  await mockWith(page);
+  await page.route("**/api/csrf-token", route => route.fulfill({ json: { csrfToken: "t", resultApi: 2, resultSubject: "anon" } }));
+  const partials: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", async route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    if (body.partial !== true) return route.fulfill({ status: 202, json: { queued: true } });
+    partials.push(body);
+    if (partials.length === 1) { await page.evaluate(token => localStorage.setItem("websuli.learnerToken", token), LEARNER_B); return route.fulfill({ status: 403, json: { message: "Invalid CSRF token" } }); }
+    return route.fulfill({ status: 202, json: { queued: true, partial: true } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const quiz = await openQuiz(page);
+  await quiz.nth(0).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(800);
+  await page.evaluate(() => { window.dispatchEvent(new Event("pagehide")); });
+  await expect.poll(() => partials.length).toBe(2);
+  expect(partials[0].learner).toBe(LEARNER_A);
+  expect(partials[1].learner, "a 403 utáni ismétlés nem a lecserélt párosítással").toBeUndefined();
 });

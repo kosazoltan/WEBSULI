@@ -65,7 +65,7 @@ export function bindRoundOwner(key: string): RoundOwner {
   return owner;
 }
 /** R47: a mostani párosító token, ha a kör rögzített párosításával egyezik — különben nincs párosítás. */
-function ownerLearner(owner: RoundOwner): string | undefined {
+function ownerLearner(owner: Pick<RoundOwner, "learnerTag">): string | undefined {
   const token = getLearnerToken();
   return token && owner.learnerTag !== null && learnerTagOf(token) === owner.learnerTag ? token : undefined;
 }
@@ -93,6 +93,12 @@ export function drainResultOutbox(): void {
 }
 /** Terv R40 (7. vak kör L2): a bejegyzés a küldés pillanatában (a token megérkezése után) lejárt — küldés nélkül kikerül. */
 class OutboxEntryExpired extends Error {}
+/**
+ * Terv R49 (10. vak kör L1): a bejegyzés nem mehet olyan úton, ahol a szerver a rögzítettől eltérő kilétet rendelhet hozzá. A régi (címkét
+ * nem ismerő) alak csak akkor mehet, ha a kör rögzített fiókcímkéje nincs (`null`), vagy a küldés tokenválasza igazolja, hogy ugyanaz a
+ * munkamenet; különben a bejegyzés VÁR (memóriában, a sor szokott kísérletszámáig, majd a lejáratig) — nem megy el.
+ */
+class OutboxIdentityHold extends Error {}
 async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
   const { lessonId, kind } = entry;
   try {
@@ -109,11 +115,18 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
       // R31 + R47: a bejegyzés a létrehozásakor rögzített kilétet viszi — a címke a kérésbe kerül (ismeretlen: `?`, soha nem egyezik, a
       // kérés fiók nélküliként fut), és a szerver eltérésnél a mostani munkamenet fiókját nem használja. Utólagos pótlás nincs.
       const subject = entry.subject ?? null;
-      const full = { ...entry.body, ...(fingerprint ? { fingerprint } : {}), ...(capable ? { clientNow: Date.now(), subject: subject ?? "?" } : {}) };
+      // R49 (b): a párosító token közvetlenül a kérés előtt (a 403 utáni ismétlésnél is) vetődik össze a rögzített lenyomattal.
+      const stored: Record<string, unknown> = { ...entry.body };
+      delete stored.learner; // korábbi (tartós) bejegyzés nyers tokenje sem megy vakon
+      const learner = ownerLearner({ learnerTag: entry.learnerTag ?? null });
+      const full = { ...stored, ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(capable ? { clientNow: Date.now(), subject: subject ?? "?" } : {}) };
+      if (!capable && !legacyAllowed(info)) throw new OutboxIdentityHold();
       const body = capable ? full : (legacyResultBody(full) ?? full);
       sent = { capable, body };
       return body;
     };
+    // R49 (a): régi alak csak rögzített fiók nélkül, vagy a mostani tokenválasz által igazolt azonos munkamenettel.
+    const legacyAllowed = (info: CsrfTokenInfo) => entry.subject == null || (info.resultApi && info.subject !== null && info.subject === entry.subject);
     // R26 (3. célzott kör L2) + J5: a hálózati / 5xx hibavárakozást CSAK a kimenő sor kezeli (laponként legfeljebb OUTBOX_MAX_ATTEMPTS
     // kísérlet) — az `apiRequest` belső újrapróbája itt 0, különben a kettő szorzódna. R8: a kvíz végleges kérése `keepalive`; a feladatoké
     // nem (a törzsük meghaladhatja a `keepalive` 64 KB-os keretét).
@@ -125,7 +138,11 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
       // R10: ha a jelzést adó új példány mellett egy még régi példány 400-at ad, EGY ismétlés a régi alakkal.
       const last = sent as { capable: boolean; body: Record<string, unknown> } | null;
       if (!last?.capable || (error as { status?: unknown } | null)?.status !== 400 || !legacyResultBody(last.body)) throw error;
-      const legacy = (info: CsrfTokenInfo) => { const body = build(info); return legacyResultBody(body) ?? body; };
+      const legacy = (info: CsrfTokenInfo) => {
+        const body = build(info);
+        if (!legacyAllowed(info)) throw new OutboxIdentityHold();
+        return legacyResultBody(body) ?? body;
+      };
       await apiRequest("POST", url, undefined, { retries: 0, prepare: legacy, ...(kind === "quiz" ? { keepalive: true } : {}) });
     }
     try {
@@ -183,16 +200,15 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi. R47: csak ha a kör
     // rögzített párosításával egyezik (újrapárosítás után a korábbi kör nem kerül az új tanulóhoz).
     const owner = bindRoundOwner(ownerKeyOf(storageKey, kind, roundId));
-    const learner = ownerLearner(owner);
     const fresh = { ...(round.startedAt > 0 ? { startedAt: round.startedAt } : {}), ...(kind === "quiz" && round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
     const body = kind === "tasks"
-      ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...fresh }
+      ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...fresh }
       // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
-      : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...fresh };
+      : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...fresh };
     // R30: a bejegyzés korhatárának alapja — lezárt körnél a sorba kerülés, le nem zártnál a kör utolsó tevékenysége. R31 + R47: a kör
     // rögzített kilét-címkéje (nem a küldéskori munkamenet).
     const activityAt = round.finishedAt ? Date.now() : roundActivityAt(round) || Date.now();
-    enqueueResult({ id: `${lessonId}|${kind}|${roundId}`, lessonId, kind, body, flag, partialKey: `${storageKey}:${kind}:partial:${roundId}`, activityAt, subject: owner.subject });
+    enqueueResult({ id: `${lessonId}|${kind}|${roundId}`, lessonId, kind, body, flag, partialKey: `${storageKey}:${kind}:partial:${roundId}`, activityAt, subject: owner.subject, learnerTag: owner.learnerTag });
     drainResultOutbox();
   }, [lessonId, kind, round, storageKey, ready, timedOut]);
 
@@ -235,11 +251,12 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
       if (!snapshotDue(state, roundId, count)) return;
       // R47: a kör rögzített kiléte — a párosítás csak egyezésnél, a fiók címkéje a rögzített (ismeretlen: `?`).
       const owner = bindRoundOwner(ownerKeyOf(storageKey, kind, roundId));
-      const learner = ownerLearner(owner);
       const fingerprint = peekFingerprint();
-      const body = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}), clientNow: Date.now(), subject: owner.subject ?? "?" };
+      const base = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}), clientNow: Date.now(), subject: owner.subject ?? "?" };
       const mark = { roundId, count };
       state.pending = mark;
+      // R49 (b): a párosítás minden kísérlet előtt (a 403 utáni ismétlésnél is) újra összevetődik a rögzített lenyomattal.
+      const body = () => { const learner = ownerLearner(owner); return { ...base, ...(learner ? { learner } : {}) }; };
       void sendKeepalive(`/api/lessons/${lessonId}/results`, body).then(accepted => {
         if (state.pending === mark) state.pending = null;
         if (!accepted) return; // hálózati hiba / 429 / 5xx: nem rögzül, a következő alkalommal újra megy

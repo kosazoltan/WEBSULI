@@ -142,7 +142,10 @@ test("R35 (6. kör L1): a felvétel jelzi, hogy új bejegyzés jött-e létre; c
   // viszi (a korábbi „csak az ebben a dokumentumban létrehozott kaphat címkét” szabálynál szigorúbb).
   assert.doesNotMatch(source, /enqueuedHere/, "nincs dokumentumhoz kötött utólagos címkézés");
   assert.match(source, /const subject = entry\.subject \?\? null;/);
-  assert.doesNotMatch(source, /info\.subject/, "a küldéskori tokenválasz címkéje nem kerül a bejegyzésbe");
+  // R49: a küldéskori tokenválasz címkéje csak ÖSSZEVETÉSRE használható (a régi alak engedélyezéséhez), a bejegyzésbe nem kerül.
+  assert.doesNotMatch(source, /=\s*info\.subject\b(?!\s*===)/, "a küldéskori tokenválasz címkéje nem kerül értékadással a kilétbe");
+  assert.doesNotMatch(source, /outbox\.update\(/, "a bejegyzés kiléte utólag nem íródik át");
+  assert.match(source, /info\.subject === entry\.subject/, "a régi alak csak igazolt azonos munkamenettel");
 });
 
 test("R37 (6. kör L4): az apiRequest időzítője a törzs olvasásáig él; a tokenlekérésnek saját határideje van", () => {

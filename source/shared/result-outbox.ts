@@ -19,6 +19,11 @@ export type OutboxEntry = {
   activityAt: number;
   /** R31: a sorba kerüléskori kilét-címke (`null`: akkor még nem volt ismert). */
   subject?: string | null;
+  /**
+   * R49 (10. vak kör L2): a kör rögzített párosításának LENYOMATA (nem a token) — a törzs nem visz párosító tokent; küldéskor a mostani token
+   * csak egyező lenyomatnál kerül a kérésbe.
+   */
+  learnerTag?: string | null;
 };
 export type OutboxStorage = {
   getItem(key: string): string | null;
@@ -36,7 +41,8 @@ export function isOutboxEntry(value: unknown): value is OutboxEntry {
   return !!e && typeof e.id === "string" && typeof e.lessonId === "string" && (e.kind === "tasks" || e.kind === "quiz")
     && typeof e.flag === "string" && typeof e.partialKey === "string" && !!e.body && typeof e.body === "object"
     && typeof e.activityAt === "number" && Number.isFinite(e.activityAt) && e.activityAt > 0
-    && (e.subject === undefined || e.subject === null || typeof e.subject === "string");
+    && (e.subject === undefined || e.subject === null || typeof e.subject === "string")
+    && (e.learnerTag === undefined || e.learnerTag === null || typeof e.learnerTag === "string");
 }
 
 /** R32: van-e függő bejegyzés a tárolóban (az alkalmazás induláskor ennek láttán tölti be a beküldőt). Sosem dob. */
