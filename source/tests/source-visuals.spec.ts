@@ -297,14 +297,21 @@ for (const viewport of [{ name: "allo-360", width: 360, height: 640 }, { name: "
       return lists.map((ul) => [...ul.children].filter((c) => c.tagName === "LI").length);
     });
     expect(siblings[0]).toBe(2);
-    await expect(page.locator('figure[data-anim="decisionTree"]')).toHaveCount(2);
+    await expect(page.locator('figure[data-anim="decisionTree"]')).toHaveCount(3);
+    // Vak kör 1 (L1, L3): a kis fa vízszintes (széles nézetben), a beágyazott fák listák; a vízszintes összekötő vonal folytonos
+    // (a testvér-elemek között nincs rés).
+    expect(await page.locator('figure[data-anim="decisionTree"] .sv-tree').evaluateAll((trees) => trees.map((t) => t.className.replace("sv-tree ", "")))).toEqual(["sv-tree--wide", "sv-tree--list", "sv-tree--list"]);
+    if (viewport.width >= 640) {
+      const gaps = await yesNo.evaluate((fig) => { const items = [...fig.querySelectorAll<HTMLElement>(".sv-tree-children > .sv-tree-item")].map((i) => i.getBoundingClientRect()); return items.slice(1).map((r, i) => Math.round(r.left - items[i].right)); });
+      expect(gaps.every((g) => g <= 0), `a testvérágak között rés: ${gaps.join(", ")} px`).toBe(true);
+    }
     await expect(page.locator('figure[data-anim="pictureCards"] .sv-pcard')).toHaveCount(8);
     for (const fig of await page.locator('figure[data-anim="decisionTree"], figure[data-anim="pictureCards"]').all()) {
       await fig.scrollIntoViewIfNeeded();
       const box = await fig.boundingBox();
       expect(box && box.x >= 0 && box.x + box.width <= viewport.width + 0.5).toBe(true);
       // Szöveg nincs levágva a csomópontokban és a kártyákon.
-      const clipped = await fig.evaluate((f) => [...f.querySelectorAll<HTMLElement>(".sv-tree-node, .sv-pcard-label, .sv-pcard-example")]
+      const clipped = await fig.evaluate((f) => [...f.querySelectorAll<HTMLElement>(".sv-tree-node, .sv-tree-branch, .sv-tree-text, .sv-pcard-label, .sv-pcard-example")]
         .filter((n) => n.scrollWidth > n.clientWidth + 1 || n.scrollHeight > n.clientHeight + 1).map((n) => n.textContent));
       expect(clipped).toEqual([]);
     }

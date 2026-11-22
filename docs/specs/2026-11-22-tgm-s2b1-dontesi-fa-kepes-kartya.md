@@ -55,3 +55,15 @@ csomópont. `pictureCards` `{ cards: 2..8 × { label ≤ 40, svg ≤ 6000 (a meg
 - [ ] V30 KI kapcsolónál a modell-séma változatlan
 - [ ] V31 fedettségi kapu: megjelent
 - [ ] V32 DOM-szerkezet és böngészős próba
+
+## Vak kör 1 (2026-11-22) — pontosítások
+
+- **Elrendezés (L1):** vízszintes elágazás csak kis fánál (a gyökér alatt kizárólag levelek, legfeljebb 4 ág) és 640 px fölött; minden
+  más fa behúzott, egymásba ágyazott lista minden szélességen (`decisionTreeLayout`). A böngészős próba 13 csomópontos (4 ág × 2 levél)
+  fát is mér.
+- **Képes kártyák (L2):** a tisztított SVG saját azonosítói és belső hivatkozásai kártyánként névterezve (`namespaceSvgIds`) — két rajz
+  azonos helyi azonosítója nem ütközik.
+- **Vezetővonal (L3):** saját szín (`--sv-tree-line`), a vízszintes összekötő folytonos (a testvérágak között nincs rés).
+- **Ágfelirat (L4, a fenti „vak J12” mondat helyett):** alapértelmezett ágfelirat NINCS — az ág `label` mezője kötelező, a forrásból jön;
+  a `branchYes / branchNo` szótári kulcsok szándékosan törölve.
+- **Mélységi határ (L5):** a teszt pontosan 3 szintet elfogad, pontosan 4 szintet elutasít.

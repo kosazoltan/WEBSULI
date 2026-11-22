@@ -85,3 +85,52 @@ test("V32: a fa egymásba ágyazott lista — a két levél ugyanannak a szülő
   assert.match(c, /role="img" aria-label="alma"/u);
   assert.match(c, /How many apples\?/u);
 });
+
+// ---- Vak kör 1 (2026-11-22) leletei: L1 elrendezés, L2 SVG-azonosítók, L5 mélységi határ ----
+
+test("vak kör 1 L2: a kártyák SVG-azonosítói rajzonként névterezve — azonos helyi azonosító nem ütközik, a belső hivatkozások követik", async () => {
+  const { namespaceSvgIds } = await import("../shared/illustration-svg");
+  const svg = (color: string) => `<svg viewBox="0 0 10 10"><defs><linearGradient id="paint0"><stop offset="0" stop-color="${color}"/></linearGradient><clipPath id="c"><rect width="5" height="5"/></clipPath></defs><rect fill="url(#paint0)" clip-path="url(#c)" width="10" height="10"/><use href="#paint0"/><use xlink:href="#c"/></svg>`;
+  const a = namespaceSvgIds(svg("#f00"), "k1");
+  const b = namespaceSvgIds(svg("#00f"), "k2");
+  assert.match(a, /id="k1-paint0"/);
+  assert.match(a, /fill="url\(#k1-paint0\)"/);
+  assert.match(a, /clip-path="url\(#k1-c\)"/);
+  assert.match(a, / href="#k1-paint0"/);
+  assert.match(a, /xlink:href="#k1-c"/);
+  assert.match(b, /id="k2-paint0"/);
+  assert.doesNotMatch(a, /"paint0"|#paint0\b|#c\)/, "nem marad névtér nélküli azonosító / hivatkozás");
+  assert.equal(namespaceSvgIds("<svg><rect fill=\"#abc\"/></svg>", "k"), "<svg><rect fill=\"#abc\"/></svg>", "azonosító nélkül változatlan (a színkód nem hivatkozás)");
+  assert.match(namespaceSvgIds("<svg><rect fill=\"url(#nincs)\"/></svg>", "k"), /url\(#nincs\)/, "ismeretlen (nem definiált) hivatkozás változatlan");
+  const { PictureCardsAnim } = await import("../client/src/lesson-runtime/blocks/tree-cards");
+  // A DOM-próba rajza a tisztító szabályai szerint feliratos (a tisztító felirat nélküli rajzot nem enged át).
+  const art = (color: string, word: string) => `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="paint0"><stop offset="0" stop-color="${color}"/></linearGradient></defs><rect fill="url(#paint0)" width="100" height="80"/><text x="50" y="95">${word}</text></svg>`;
+  const html = renderToStaticMarkup(React.createElement(PictureCardsAnim, { params: { cards: [{ label: "piros", svg: art("#f00", "piros") }, { label: "kék", svg: art("#00f", "kék") }] }, caption: "" }));
+  assert.equal(html.split("-paint0)").length - 1, 2, "mindkét rajz megjelent, a kitöltés névterezett azonosítóra hivatkozik");
+  assert.equal(html.includes("url(#paint0)"), false, "a DOM-ban nincs névtér nélküli hivatkozás");
+  const ids = [...html.matchAll(/id="([^"]+paint0)"/g)].map((m) => m[1]);
+  assert.equal(ids.length, 2, html.slice(0, 300));
+  assert.notEqual(ids[0], ids[1], "a két kártya színátmenete külön azonosítót kap a DOM-ban");
+});
+
+test("vak kör 1 L1: vízszintes elágazás csak kis fánál (egy szint, legfeljebb 4 ág); különben behúzott lista minden szélességen", async () => {
+  const { decisionTreeLayout } = await import("../shared/source-visual-render");
+  assert.equal(decisionTreeLayout(tree.root), "wide");
+  const four = { text: "r", branches: [1, 2, 3, 4].map((i) => ({ label: `${i}`, node: leaf(`l${i}`) })) };
+  assert.equal(decisionTreeLayout(four), "wide");
+  const nested = { text: "r", branches: [{ label: "a", node: { text: "n", branches: [{ label: "x", node: leaf("1") }, { label: "y", node: leaf("2") }] } }, { label: "b", node: leaf("3") }] };
+  assert.equal(decisionTreeLayout(nested), "list", "beágyazott elágazás → lista");
+  const five = { text: "r", branches: [1, 2, 3, 4, 5].map((i) => ({ label: `${i}`, node: leaf(`l${i}`) })) };
+  assert.equal(decisionTreeLayout(five), "list", "5 ág → lista");
+  const { DecisionTreeAnim } = await import("../client/src/lesson-runtime/blocks/tree-cards");
+  assert.match(renderToStaticMarkup(React.createElement(DecisionTreeAnim, { params: tree, caption: "" })), /class="sv-tree sv-tree--wide"/);
+  assert.match(renderToStaticMarkup(React.createElement(DecisionTreeAnim, { params: { root: nested }, caption: "" })), /class="sv-tree sv-tree--list"/);
+});
+
+test("vak kör 1 L5: a mélységi határ pontosan mérve — 3 szint elfogadva, 4 szint elutasítva (13 csomópont alatt is)", () => {
+  type Node = { text: string; branches?: Array<{ label: string; node: Node }> };
+  const chain = (depth: number): Node =>
+    (depth <= 1 ? leaf("levél") : { text: `szint ${depth}`, branches: [{ label: "a", node: chain(depth - 1) }, { label: "b", node: leaf("más") }] });
+  assert.deepEqual(visualParamProblems("decisionTree", { root: chain(3) }), [], "pontosan 3 szint");
+  assert.notDeepEqual(visualParamProblems("decisionTree", { root: chain(4) }), [], "pontosan 4 szint (7 csomópont)");
+});

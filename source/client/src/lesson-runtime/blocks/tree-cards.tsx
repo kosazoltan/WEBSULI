@@ -1,8 +1,8 @@
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 
 import { parseVisualParams } from "@shared/lesson-visual-params";
-import { sanitizeIllustration } from "@shared/illustration-svg";
-import { normalizeVisualText, type DecisionTreeVisualNode, type VisualTone } from "@shared/source-visual-render";
+import { namespaceSvgIds, sanitizeIllustration } from "@shared/illustration-svg";
+import { decisionTreeLayout, normalizeVisualText, type DecisionTreeVisualNode, type VisualTone } from "@shared/source-visual-render";
 
 /**
  * Spec docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md (S2b-1): a forrás döntési fájának és képes kártyáinak
@@ -50,7 +50,7 @@ export function DecisionTreeAnim({ params, caption }: AnimProps) {
   if (!p) return null;
   return (
     <figure className={FRAME} data-anim="decisionTree">
-      <div className="sv-tree">
+      <div className={`sv-tree sv-tree--${decisionTreeLayout(p.root)}`}>
         <TreeNode node={p.root} />
       </div>
       <Caption caption={caption} shown={[p.root.text]} />
@@ -59,7 +59,10 @@ export function DecisionTreeAnim({ params, caption }: AnimProps) {
 }
 
 function CardArt({ svg, label }: { svg: string; label: string }) {
+  // Vak kör 1 (L2): a rajz saját azonosítói kártyánként névterezve — két rajz azonos helyi azonosítója (színátmenet, vágóalak) nem ütközik.
+  const uid = useId();
   const check = useMemo(() => sanitizeIllustration(svg), [svg]);
+  const html = useMemo(() => (check.ok ? namespaceSvgIds(check.svg, `svp${uid}`) : ""), [check, uid]);
   if (!check.ok) return null;
   return (
     <div
@@ -67,7 +70,7 @@ function CardArt({ svg, label }: { svg: string; label: string }) {
       role="img"
       aria-label={label}
       // A tartalom a shared/illustration-svg.ts allowlistjén átment SVG (nincs script, esemény, link, stílus).
-      dangerouslySetInnerHTML={{ __html: check.svg }}
+      dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }

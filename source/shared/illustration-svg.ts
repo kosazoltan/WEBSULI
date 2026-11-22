@@ -231,3 +231,21 @@ export function illustrationLayoutProblems(svg: string): string[] {
   if (overlaps.length) problems.push(`egymásra csúszó felirat: ${overlaps.slice(0, 3).join("; ")}`);
   return problems;
 }
+
+/**
+ * S2b-1 vak kör 1 (L2): egy dokumentumba több, külön tisztított SVG kerül (képes kártyák) — az azonos helyi azonosítók (pl. két rajz
+ * `paint0` színátmenete) ütköznének, és az egyik rajz a másik kitöltését venné át. A rajz SAJÁT, definiált azonosítóit és a rájuk mutató
+ * belső hivatkozásokat (`url(#…)`, `href="#…"`, `xlink:href="#…"`) együtt előtagozza; a nem definiált hivatkozás és a színkód változatlan.
+ * A bemenet a `sanitizeIllustration` kimenete; az előtag csak betű, szám és kötőjel lehet.
+ */
+export function namespaceSvgIds(svg: string, prefix: string): string {
+  const safe = prefix.replace(/[^A-Za-z0-9-]/g, "");
+  if (!safe) return svg;
+  const ids = new Set([...svg.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+  if (!ids.size) return svg;
+  const renamed = (id: string) => `${safe}-${id}`;
+  return svg
+    .replace(/(\sid=")([^"]+)(")/g, (_all, a: string, id: string, c: string) => `${a}${renamed(id)}${c}`)
+    .replace(/url\(#([^)"'\s]+)\)/g, (all, id: string) => (ids.has(id) ? `url(#${renamed(id)})` : all))
+    .replace(/((?:xlink:)?href=")#([^"]+)(")/g, (all, a: string, id: string, c: string) => (ids.has(id) ? `${a}#${renamed(id)}${c}` : all));
+}

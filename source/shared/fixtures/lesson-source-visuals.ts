@@ -82,6 +82,12 @@ const tree: Lesson["sections"] = [
       { label: "napszak", node: { text: "in", branches: [{ label: "reggel", node: { text: "in the morning" } }, { label: "délután", node: { text: "in the afternoon" } }] } },
       { label: "nap", node: { text: "on", branches: [{ label: "hétköznap", node: { text: "on Monday" } }, { label: "dátum", node: { text: "on 5 May" } }] } },
       { label: "pontos idő", node: { text: "at", branches: [{ label: "óra", node: { text: "at 7 o'clock" } }, { label: "ünnep", node: { text: "at Christmas" } }] } }] } }, "Az időhatározó elöljárószavak."),
+    // Vak kör 1 (L1): a határeset — 13 csomópont, 4 ág × 2 levél (fekvő telefonon a vízszintes elágazás olvashatatlan volt).
+    animate("decisionTree", { root: { text: "Milyen négyszög?", branches: [
+      { label: "minden oldala egyenlő", node: { text: "rombuszféle", branches: [{ label: "derékszögű", node: { text: "négyzet" } }, { label: "ferde", node: { text: "rombusz" } }] } },
+      { label: "szemközti oldalai egyenlők", node: { text: "paralelogramma-féle", branches: [{ label: "derékszögű", node: { text: "téglalap" } }, { label: "ferde", node: { text: "paralelogramma" } }] } },
+      { label: "egy párhuzamos oldalpár", node: { text: "trapézféle", branches: [{ label: "szimmetrikus", node: { text: "húrtrapéz" } }, { label: "általános", node: { text: "trapéz" } }] } },
+      { label: "két-két szomszédos oldal egyenlő", node: { text: "deltoidféle", branches: [{ label: "konvex", node: { text: "deltoid" } }, { label: "konkáv", node: { text: "konkáv deltoid" } }] } }] } }, "A négyszögek osztályozása."),
     animate("pictureCards", { cards: [
       card("apple", '<circle cx="60" cy="40" r="26" fill="#d94841"/><rect x="57" y="8" width="6" height="12" fill="#6b4f2a"/>', "How many apples?"),
       card("milk", '<rect x="42" y="14" width="36" height="54" rx="4" fill="#e9eef5" stroke="#6b7a90"/>', "How much milk?"),
