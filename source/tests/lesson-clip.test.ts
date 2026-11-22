@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { getTableColumns } from "drizzle-orm";
 import { animateBlockIndexes, clip2Schema, clipDraftProblems, clipDraftSchema, clipMediaUrl, clipSource, silentSceneMs, type ClipDraft } from "../shared/lesson-clip";
 import { CLIP_BAND_STYLE } from "../shared/clip-style";
 import { huNumberWords, spokenHu } from "../shared/hu-numbers";
 import { lessonClipMedia, lessonClips } from "../shared/schema";
 import { CLIP_MEDIA_CACHE_CONTROL, mediaId, mediaReply } from "../server/lesson-clip-media";
-import { CLIP_AUDIO_FORMAT, ELEVENLABS_PARALLEL, limiter, mp3DurationMs } from "../server/lesson-clips-providers";
+import { CLIP_AUDIO_FORMAT, ELEVENLABS_PARALLEL, FFMPEG_ARGS, limiter, mp3DurationMs } from "../server/lesson-clips-providers";
 
 // docs/specs/2026-11-10-fejezet-kisfilmek-v2.md — fejezetszöveg, forgatókönyv-kapuk, média, migrációk.
 
@@ -88,6 +88,48 @@ test("a hangkérések sorba állnak: egyszerre legfeljebb annyi fut, amennyit az
   assert.equal(await queue(async () => "megy tovább"), "megy tovább");
 });
 
+test("az átkódolás egy szálon, előretekintés nélkül fut (mérve: így 75 MB, alapbeállítással 171 MB — a példány 512 MB-os)", () => {
+  const args = FFMPEG_ARGS("be.mp4", "ki.mp4");
+  assert.equal(args.filter((a, i) => a === "-threads" && args[i + 1] === "1").length, 2, "a dekódoló és a kódoló is egy szálon");
+  assert.ok(args.includes("-an") && args.includes("scale=960:-2") && args.at(-1) === "ki.mp4");
+  assert.match(args[args.indexOf("-x264-params") + 1], /rc-lookahead=0/);
+});
+
+test("az átkódolás szűrőlánca is egy szálon fut, a bemenet csak helyi fájl, a kimenet legfeljebb 15 mp (vak kör L2, L4, L8)", () => {
+  const args = FFMPEG_ARGS("be.mp4", "ki.mp4");
+  const input = args.indexOf("-i");
+  // Megadás nélkül az ffmpeg a szűrőlánchoz (scale) annyi szálat indít, ahány CPU-t lát — a két `-threads 1` ezt nem fedi.
+  const ft = args.indexOf("-filter_threads");
+  assert.ok(ft >= 0 && ft < input && args[ft + 1] === "1", "globális -filter_threads 1 a bemenet előtt");
+  const proto = args.indexOf("-protocol_whitelist");
+  assert.ok(proto >= 0 && proto < input && args[proto + 1] === "file", "a demuxer csak helyi fájlt nyithat");
+  const t = args.indexOf("-t");
+  assert.ok(t > input && Number(args[t + 1]) <= 15, "a kimenet hossza korlátos (a kért klip legfeljebb 12 mp)");
+});
+
+test("a sor a felszabaduló helyet közvetlenül a várakozónak adja: köztes érkező nem előzhet, és nem lehet két feladat (vak kör L6)", async () => {
+  for (const outcome of ["siker", "hiba"] as const) {
+    const queue = limiter(1);
+    let active = 0, peak = 0;
+    const order: string[] = [];
+    const job = (name: string) => async () => { order.push(name); peak = Math.max(peak, ++active); await new Promise((r) => setTimeout(r, 5)); active--; };
+    let release!: () => void, fail!: (e: Error) => void;
+    const gate = new Promise<void>((resolve, reject) => { release = resolve; fail = reject; });
+    gate.then(() => { active--; }, () => { active--; });
+    // A munka magát a kaput adja vissza: a sor folytatása így pontosan egy mikrofeladattal a kapu után jön.
+    const a = queue(() => { order.push("A"); peak = Math.max(peak, ++active); return gate; });
+    const b = queue(job("B"));
+    let c: Promise<void> | undefined;
+    // A felszabadulása és B folytatása közé érkezik C (a mikrofeladat-sorban A folytatása után, B ébresztése előtt).
+    if (outcome === "siker") release(); else fail(new Error("A hibázik"));
+    queueMicrotask(() => { c = queue(job("C")); });
+    await (outcome === "siker" ? a : assert.rejects(a));
+    await b; await c;
+    assert.deepEqual(order, ["A", "B", "C"], `${outcome}: a sorrend megmarad`);
+    assert.equal(peak, 1, `${outcome}: egyszerre egy feladat`);
+  }
+});
+
 test("a néma jelenet legalább 2,5 mp, hosszabb mondatnál arányosan több", () => {
   assert.equal(silentSceneMs("rövid"), 2500);
   assert.equal(silentSceneMs("a".repeat(100)), 6500);
@@ -141,7 +183,10 @@ for (const [file, table, name] of [["0038_lesson_clips.sql", lessonClips, "lesso
   test(`a migráció és a Drizzle-séma oszlopai egyeznek (${name})`, () => {
     const sqlText = readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8");
     const body = sqlText.slice(sqlText.indexOf(`CREATE TABLE IF NOT EXISTS ${name}`), sqlText.indexOf(");"));
-    const inSql = [...body.matchAll(/^\s{2}([a-z_]+)\s+(?:varchar|integer|char|jsonb|timestamp|bytea)/gm)].map((m) => m[1]).sort();
+    // A későbbi, additív migrációk oszlopai is (pl. 0044: lesson_clip_media.orphaned_at — Copilot-review #418).
+    const added = readdirSync(new URL("../migrations/", import.meta.url)).filter((f) => /^\d{4}_.*\.sql$/.test(f) && f > file)
+      .flatMap((f) => [...readFileSync(new URL(`../migrations/${f}`, import.meta.url), "utf8").matchAll(new RegExp(`ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS ([a-z_]+)`, "g"))].map((m) => m[1]));
+    const inSql = [...[...body.matchAll(/^\s{2}([a-z_]+)\s+(?:varchar|integer|char|jsonb|timestamp|bytea)/gm)].map((m) => m[1]), ...added].sort();
     assert.deepEqual(inSql, Object.values(getTableColumns(table)).map((c) => c.name).sort());
   });
 }
