@@ -40,9 +40,9 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
 6. `source/client/src/pages/WordLadderHuEn.tsx`:
    - `levelSessionRef` → `stepSessionRef = useRef(createLadderStepSession(4, 1))`; `onOutcome`: `.answer(correct)`;
      `startGame`: `.reset(grade, level)`, `runTierRef.current = floor(step / 3)`.
-   - szóbank-készlet: a `toLadderItem(q)` eredménye a `q.focus`-szal (besoroláshoz).
-   - `termFloors = buildLadderTermFloors({ manual: WORD_LADDER_BANKS[lang] (TELJES kézi bank), vocab: a TELJES szóbank `{ id, term }` },
-     lang)`; `stepBuckets = useMemo(ladderStepBuckets(allTiers, lang, termFloors))` — a korlát soha nem a szűrt készletből (terv 15.);
+   - szóbank-készlet: a `toLadderItem(q)` eredménye a `term: q.answerTerm` mezővel (a mérce a célnyelvi alakot méri, terv 16.;
+     a megjelenített `focus` útja változatlan).
+   - `stepBuckets = useMemo(ladderStepBuckets(allTiers, lang))` (bankközi korlát nincs, terv 16.);
      a választó: `windowLadderSteps(stepBuckets, grade)` vödrökön
      `pickUnseen(..., step, ...)`; tartalék a teljes vödörsor.
    - probe: `ladderStep` (a futás fokozata) és `questionStep` (a nyitott kérdés fokozata, azonosító szerint).
@@ -117,3 +117,6 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
   előbb bukottak, utána zöldek). Szólétra + `no-repeat`: 145/145; `tsc` 0 hiba. Böngésző:
   `npm.cmd run test:e2e -- tests/word-ladder-play.spec.ts --workers=1` → 2 passed (2,4 perc),
   `A9|kérdés-fokozatok: 0,0,0,1,1,1,2,2,2,3,3,3 | futás-fokozat: 0,0,0,1,1,1,2,2,2,3,3,3`.
+- **Vak kör 4 → tulajdonosi döntés „KORLÁT ELHAGYÁSA” (PR-1, a 8c4e0a3c-re építve):** terv 16. szakasz. A korlát és tesztjei
+  kikerültek; S6 (szóbanki `term`) és S7 (kötőjeles / aposztrófos szó) előbb bukott, utána zöld:
+  `npx.cmd tsx --test tests/word-ladder-grading.test.ts` → 18/18; mutációs ellenpróba (`mutate4.mjs`) 8/8.

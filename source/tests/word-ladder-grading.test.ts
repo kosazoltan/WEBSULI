@@ -11,12 +11,12 @@ import { VOCAB_EN } from "../client/src/data/vocabBank/vocab-en";
 import { VOCAB_FR } from "../client/src/data/vocabBank/vocab-fr";
 import { ladderTiersFromBank } from "../client/src/data/wordLadder/banks";
 import { ladderBaseTier, pickUnseen, type SeenItem } from "../client/src/game-engine/no-repeat";
+import { generateVocabQuestion } from "../client/src/game-engine/vocab/questionGenerator";
 import {
   LADDER_GRADE_BANDS,
   LADDER_STEP_COUNT,
   LADDER_STEP_OVERRIDES,
   LADDER_SUB_CUTS,
-  buildLadderTermFloors,
   createLadderStepSession,
   gradedLadderBank,
   isLadderSentence,
@@ -30,7 +30,6 @@ import {
   vocabEntryScore,
   vocabEntryStep,
   windowLadderSteps,
-  type LadderTermFloors,
 } from "../client/src/lib/wordLadderGrading";
 
 /**
@@ -38,7 +37,10 @@ import {
  *
  * SPEC-VÁLTOZÁS 2026-11-22 (terv 15., tulajdonosi döntés „CSAK STRUKTÚRÁLT MEZŐK”): a mérce nem elemzi a prompt szövegét. A
  * vak kör 1–2 heurisztikáinak tesztjei (célnyelvi-oldal választó, prompt-hiány kinyerése, magyar-súgó felismerés) helyére a
- * strukturált szerződés tesztjei léptek (S1–S5); a normalizálás, a monotonitás és a lépés-szabály tesztjei maradtak.
+ * strukturált szerződés tesztjei léptek (S1–S3); a normalizálás, a monotonitás és a lépés-szabály tesztjei maradtak.
+ * SPEC-VÁLTOZÁS 2026-11-22 (terv 16., tulajdonosi döntés „KORLÁT ELHAGYÁSA”): a bankközi szintkorlát és tesztjei (S4, S5)
+ * kikerültek; az ND-3 a pontszám-alapú felfelé sorolással teljesül. Új: S6 (szóbanki tételnél a `term` a mérce bemenete),
+ * S7 (kötőjeles / aposztrófos szó egy szó a szótag-levonásban).
  */
 
 const MANUAL: Record<WordLadderLanguage, readonly LadderItem[]> = { en: WORD_LADDER_EN, de: WORD_LADDER_DE, fr: WORD_LADDER_FR };
@@ -46,20 +48,15 @@ const VOCAB: Record<WordLadderLanguage, readonly VocabEntry[]> = { en: VOCAB_EN,
 const LANGS: WordLadderLanguage[] = ["en", "de", "fr"];
 const GRADES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-const FLOORS: Record<WordLadderLanguage, LadderTermFloors> = {
-  en: buildLadderTermFloors({ manual: WORD_LADDER_EN, vocab: VOCAB_EN }, "en"),
-  de: buildLadderTermFloors({ manual: WORD_LADDER_DE, vocab: VOCAB_DE }, "de"),
-  fr: buildLadderTermFloors({ manual: WORD_LADDER_FR, vocab: VOCAB_FR }, "fr"),
-};
 
 type Graded = { step: number; score: number; declared: number };
 function gradedAll(lang: WordLadderLanguage): Graded[] {
   const manual = MANUAL[lang].map((q) => ({
-    step: ladderItemStep(q, lang, q.tier, FLOORS[lang]),
+    step: ladderItemStep(q, lang, q.tier),
     score: ladderDifficultyScore(ladderDifficultyInput(q, lang), lang),
     declared: q.tier,
   }));
-  const vocab = VOCAB[lang].map((e) => ({ step: vocabEntryStep(e, FLOORS[lang]), score: vocabEntryScore(e), declared: e.level }));
+  const vocab = VOCAB[lang].map((e) => ({ step: vocabEntryStep(e), score: vocabEntryScore(e), declared: e.level }));
   return [...manual, ...vocab];
 }
 
@@ -117,7 +114,7 @@ test("A4: évfolyam-sávonként az osztályozott bank minden fokozatán ≥ 20 t
       })),
     ];
     for (const band of LADDER_GRADE_BANDS) {
-      const bank = gradedLadderBank(items, lang, band.grades[0]!, FLOORS[lang]);
+      const bank = gradedLadderBank(items, lang, band.grades[0]!);
       const win = ladderGradeWindow(band.grades[0]!);
       for (let step = win.minStep; step <= win.maxStep; step++) {
         const list = bank[step] ?? [];
@@ -202,7 +199,7 @@ test("A7/L7: a reset minden állapotot nulláz — részleges jó / rossz soroza
 });
 
 test("A8: 3. évfolyamon bármely pályán, bármely válaszsorozattal a választott tétel legfeljebb 1. szintű (fokozat ≤ 5)", () => {
-  const buckets = windowLadderSteps(ladderStepBuckets(ladderTiersFromBank(WORD_LADDER_EN), "en", FLOORS.en), 3);
+  const buckets = windowLadderSteps(ladderStepBuckets(ladderTiersFromBank(WORD_LADDER_EN), "en"), 3);
   const stepOf = new Map(buckets.flatMap((b, step) => b.map((q) => [q.id, step] as const)));
   const bad: string[] = [];
   for (const level of LEVELS) {
@@ -246,8 +243,8 @@ test("S2: a mérce a prompt szövegétől független — ugyanaz a tétel más p
   for (const lang of LANGS) {
     for (const q of MANUAL[lang]) {
       const other = { ...q, prompt: "Melyik helyes? angolul: Mit jelent: „x”? (Magyarul: y)" };
-      const a = [ladderDifficultyScore(ladderDifficultyInput(q, lang), lang), ladderItemStep(q, lang, q.tier, FLOORS[lang])];
-      const b = [ladderDifficultyScore(ladderDifficultyInput(other, lang), lang), ladderItemStep(other, lang, q.tier, FLOORS[lang])];
+      const a = [ladderDifficultyScore(ladderDifficultyInput(q, lang), lang), ladderItemStep(q, lang, q.tier)];
+      const b = [ladderDifficultyScore(ladderDifficultyInput(other, lang), lang), ladderItemStep(other, lang, q.tier)];
       if (a[0] !== b[0] || a[1] !== b[1]) bad.push(`${q.id}: ${a.join("/")} ≠ ${b.join("/")}`);
     }
   }
@@ -256,13 +253,13 @@ test("S2: a mérce a prompt szövegétől független — ugyanaz a tétel más p
 
 test("S3/L3: normalizálás — locale-független kisbetű, nyelvenkénti névelő (francia elízió), széli írásjel; a nem törő szóköz és az önálló írásjel nem szó", () => {
   const entry = VOCAB_DE.find((e) => e.id === "de4-culture-007")!;
-  const before = [vocabEntryScore(entry), vocabEntryStep(entry, FLOORS.de), ladderTermKey("Die Inszenierung", "de")];
+  const before = [vocabEntryScore(entry), vocabEntryStep(entry), ladderTermKey("Die Inszenierung", "de")];
   const original = String.prototype.toLocaleLowerCase;
   String.prototype.toLocaleLowerCase = function (this: string) {
     return original.call(this.replace(/I/g, "ı"), "tr");
   };
   try {
-    assert.deepEqual([vocabEntryScore(entry), vocabEntryStep(entry, FLOORS.de), ladderTermKey("Die Inszenierung", "de")], before);
+    assert.deepEqual([vocabEntryScore(entry), vocabEntryStep(entry), ladderTermKey("Die Inszenierung", "de")], before);
   } finally {
     String.prototype.toLocaleLowerCase = original;
   }
@@ -280,43 +277,16 @@ test("S3/L3: normalizálás — locale-független kisbetű, nyelvenkénti nével
   assert.equal(ladderDifficultyScore({ term: nbsp, sentence: isLadderSentence(nbsp, "fr"), category: "phrase" }, "fr"),
     ladderDifficultyScore({ term: "comment va ta famille", sentence: false, category: "phrase" }, "fr"));
   const fam = VOCAB_FR.find((e) => e.id === "fr1-family-022")!;
-  assert.ok(Math.floor(vocabEntryStep(fam, FLOORS.fr) / 3) <= 1, `fr1-family-022 nem esik ki a tipográfia miatt: ${vocabEntryStep(fam, FLOORS.fr)}`);
-});
-
-test("S4/L1+L5: a bankközi korlát csak pontos egyezésű EGYES SZÓ (kézi helyes válasz = szóbanki term); mondat / kifejezés soha nem forrás", () => {
-  // scissors: kézi en0-097 (0. szint, helyes válasz „scissors”) ↔ szóbank en1-school-005 (1. szint) → a kézi tétel is ≥ 1. szint.
-  const manual = WORD_LADDER_EN.find((q) => q.id === "en0-097")!;
-  assert.ok(Math.floor(ladderItemStep(manual, "en", manual.tier, FLOORS.en) / 3) >= 1);
-  // Mondat / kifejezés nem kulcs: „Do you like pizza?” (en1-023) és „play the piano” (szóbank) sehol nem korlát.
-  const floors = buildLadderTermFloors({ manual: [{ options: ["Do you like pizza?", "x", "y", "z"], correctIndex: 0, tier: 3 }], vocab: [{ id: "en4-x-001", term: "play the piano" }] }, "en");
-  assert.equal(floors.size, 0);
-  const pizza = { prompt: "p", options: ["Do you like pizza?", "a", "b", "c"], correctIndex: 0 };
-  assert.equal(ladderItemStep(pizza, "en", 0, floors), ladderItemStep(pizza, "en", 0, buildLadderTermFloors({ manual: [], vocab: [] }, "en")));
-  // L1 (vak kör 3): az alakfeladat („les jeux”) nem ad hamis korlátot az alapszóra („jeu”).
-  const jeu = VOCAB_FR.find((e) => e.id === "fr0-freetime-001")!;
-  assert.equal(vocabEntryStep(jeu, FLOORS.fr), vocabEntryStep(jeu, buildLadderTermFloors({ manual: [], vocab: [] }, "fr")));
-});
-
-test("S5/L4: a korlát csak a teljes bankokból épülhet — a vödrözés és a besorolás kötelezően a márkázott korlátot kéri", () => {
-  const plain = new Map<string, number>([["scissors", 1]]);
-  const item = WORD_LADDER_EN.find((q) => q.id === "en0-097")!;
-  // Csak típusellenőrzés (a `check:test` futtatja): ha a márkázás vagy a kötelező paraméter megszűnne, a @ts-expect-error bukik.
-  const typeOnly = () => {
-    // @ts-expect-error — sima Map nem korlát: csak a buildLadderTermFloors állíthatja elő (teljes kézi bank + teljes szóbank).
-    ladderItemStep(item, "en", 0, plain);
-    // @ts-expect-error — a vödrözés korlát nélkül nem hívható (a szűrt készletből saját korlátot nem épít).
-    ladderStepBuckets([[item]], "en");
-  };
-  assert.equal(typeof typeOnly, "function");
+  assert.ok(Math.floor(vocabEntryStep(fam) / 3) <= 1, `fr1-family-022 nem esik ki a tipográfia miatt: ${vocabEntryStep(fam)}`);
 });
 
 test("O6/L2: a vödrözés a tétel deklarált szintjét használja; a készlet-index csak pótlás (szint nélküli tételnél)", () => {
   const entry = VOCAB_EN.find((e) => e.id === "en2-shopping-010")!;
   const item: LadderItem = { id: `vocab:${entry.id}:phrase-meaning`, prompt: "p", focus: entry.example, options: ["x", "y", "z", "w"], correctIndex: 0, tier: 2, category: "phrase" };
-  const buckets = ladderStepBuckets([[], [item], [], [], []], "en", FLOORS.en);
+  const buckets = ladderStepBuckets([[], [item], [], [], []], "en");
   assert.ok(Math.floor(buckets.findIndex((b) => b.includes(item)) / 3) >= 2);
   const untagged = { id: "db:x", prompt: "„Kalap” angolul:", options: ["hat", "hot", "hit", "hut"], correctIndex: 0 };
-  const b2 = ladderStepBuckets([[], [untagged], [], [], []], "en", buildLadderTermFloors({ manual: [], vocab: [] }, "en"));
+  const b2 = ladderStepBuckets([[], [untagged], [], [], []], "en");
   assert.equal(Math.floor(b2.findIndex((b) => b.includes(untagged)) / 3), 1, "szint nélküli tételnél a készlet-index");
 });
 
@@ -372,4 +342,36 @@ test("L8: kimerülésnél a kért fokozat (a keresési sorrend első nem üres v
   const seen: SeenItem[] = ["x2", "x1a", "x0", "x1b"].map((id) => ({ id, prompt: id }));
   assert.equal(pickUnseen([[mk("x0")], [mk("x1a"), mk("x1b")], [mk("x2")]], 1, seen, () => 0)?.id, "x1a");
   assert.equal(pickUnseen([[mk("y0")], [], [mk("y2")]], 1, [{ id: "y0", prompt: "y0" }, { id: "y2", prompt: "y2" }], () => 0)?.id, "y0");
+});
+
+test("S6/L2: szóbanki tételnél a mérce a `term`-et (célnyelvi alak) méri — a generált kérdés irányától függetlenül azonos a nyers bejegyzéssel", () => {
+  const bad: string[] = [];
+  let n = 0;
+  for (const lang of LANGS) {
+    const bank = VOCAB[lang];
+    for (const e of bank.filter((_, i) => i % 7 === 0)) {
+      for (const type of ["hu-to-target", "target-to-hu"] as const) {
+        const q = generateVocabQuestion(e, bank, type, seeded(n++));
+        if (!q) continue;
+        const item = { id: q.id, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, focus: q.focus, term: q.answerTerm, category: (e.kind === "phrase" ? "phrase" : "word") as LadderItem["category"] };
+        if (ladderDifficultyScore(ladderDifficultyInput(item, lang), lang) !== vocabEntryScore(e)) bad.push(`${q.id}`);
+        if (ladderItemStep(item, lang, e.level) !== vocabEntryStep(e)) bad.push(`${q.id}: fokozat`);
+      }
+    }
+  }
+  assert.ok(n > 900, `mért kérdés: ${n}`);
+  assert.deepEqual(bad.slice(0, 5), []);
+  const piano = VOCAB_EN.find((e) => e.id === "en0-freetime-019")!;
+  const huToEn = generateVocabQuestion(piano, VOCAB_EN, "hu-to-target", seeded(1))!;
+  assert.equal(ladderDifficultyInput({ ...huToEn, term: huToEn.answerTerm }, "en").term, "play the piano", "nem a magyar „zongorázik”");
+});
+
+test("S7/L4: a szótag-levonás ugyanazokon a szavakon fut, mint a szószám — a kötőjeles / aposztrófos alak egy szó", () => {
+  const rainbow = VOCAB_FR.find((e) => e.id === "fr1-weather-004")!;
+  // „arc-en-ciel”: 9 betű / 1,2 + 2 × (3 magánhangzó-csoport − 1 szó) = 11,5
+  assert.equal(vocabEntryScore(rainbow), 11.5);
+  assert.equal(vocabEntryStep(rainbow), 4);
+  // Aposztrófos szó a szó belsejében (nem névelő): „aujourd'hui” egy szó — 10 betű / 1,2 + 2 × (3 csoport: au, ou, ui − 1).
+  assert.equal(ladderDifficultyScore({ term: "aujourd'hui", sentence: false, category: "word" }, "fr"),
+    Math.round(((10 / 1.2) + 2 * (3 - 1)) * 10) / 10);
 });

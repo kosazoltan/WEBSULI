@@ -89,18 +89,22 @@ mozdítja → **nincs szükség új verziókulcsra** (a D-04 Rúnabánya-minta i
 
 Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhető).
 
-- **Célrész** (`ladderDifficultyInput`) — CSAK STRUKTÚRÁLT MEZŐ (tulajdonosi döntés 2026-11-22, 15. szakasz): a `focus`, ha
-  van (hiányos mondatnál a hiány a helyes válasszal kitöltve, mondat = igen), különben a helyes válasz. A `prompt` szövegét a
-  mérce nem elemzi. Dokumentált korlát: magyar `focus` esetén (pl. „Hogy mondjuk angolul: olló?”) a magyar alakot méri; a
-  `focus` zárójeles magyar súgója a pont része; kiemelés nélküli mondatkiegészítésnél (szerverbank) csak a helyes válasz.
+- **Célrész** (`ladderDifficultyInput`) — CSAK STRUKTÚRÁLT MEZŐ (tulajdonosi döntés 2026-11-22, 15–16. szakasz): szóbanki
+  tételnél a `term` (célnyelvi alak, `VocabQuiz.answerTerm` — a kérdés irányától függetlenül, így azonos a nyers bejegyzéssel);
+  egyébként a `focus`, ha van (hiányos mondatnál a hiány a helyes válasszal kitöltve, mondat = igen), különben a helyes válasz.
+  A `prompt` szövegét a mérce nem elemzi. Dokumentált korlát: magyar `focus` esetén (kézi bank, pl. „Hogy mondjuk angolul:
+  olló?”) a magyar alakot méri; a `focus` zárójeles magyar súgója a pont része; kiemelés nélküli mondatkiegészítésnél
+  (szerverbank) csak a helyes válasz.
 - **Normalizálás**: NFC, nyelvi környezettől független kisbetűsítés (`toLowerCase`), minden szóköz (a nem törő is) egy
   szóközzé, a széli Unicode-írásjel / -szimbólum le (a zárójel kivételével), nyelvenkénti névelő le (en the / a / an / to; de
   der / die / das / den / dem / des / ein…; fr le / la / les / un / une / des / du és az elidált `l'` / `l’` szóköz nélkül).
 - **Szó / mondat** (`isLadderSentence`): szó a normalizált szöveg szóközzel elválasztott, betűt vagy számot tartalmazó tagja
-  (az önálló írásjel nem szó); mondat = legalább 5 szó. A pont, a szószám, a mondat és a korlát-kulcs ugyanebből számol.
+  (az önálló írásjel nem szó; a kötőjeles / aposztrófos alak — „arc-en-ciel” — egy szó); mondat = legalább 5 szó. A betűszám,
+  a szótag (szavanként ≥ 1), a szótag-levonás és a szószám ugyanezeken a szavakon számol.
 - **Pont** = betűszám (névelő nélkül) / nyelvi szorzó (en 1,00 · de 1,35 · fr 1,20 — a szóbank 0. szintjének átlag-betűszáma
   alapján: 6,9 / 9,4 / 8,5) + 2 × (szótag − szó) + 3 × (szó − 1) + 6 (ha mondat) + kategória-súly (word / topic 0, everyday 3,
   phrase 4, regular 5, irregular 7; szóbanknál word 0, phrase 4). Szótag = magánhangzó-csoport (ékezetesekkel), szavanként ≥ 1.
+  A bankközi szintkorlát NINCS (16. szakasz): az ND-3 a pontszám-alapú felfelé sorolással teljesül.
 - **Alsó korlát (felsorolás csak felfelé):** pont ≥ 20 → legalább 1. szint; pont ≥ 40 → legalább 2. szint. Lefelé nem
   sorolunk (a bank szintje a tartalmi tudást — nyelvtan, ritkaság — is hordozza, amit a felszíni mérce nem lát).
   Mért hatás: kézi bank en 51/627, de 36/478, fr 43/490; szóbank en 109/2664, de 71/2080, fr 74/2064 tétel kerül feljebb
@@ -109,11 +113,6 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
   0. szint ≤ 5 / ≤ 9; 1. ≤ 9 / ≤ 21; 2. ≤ 9 / ≤ 21; 3. ≤ 11 / ≤ 21; 4. ≤ 13 / ≤ 24 (különben 2. alfok). Oszloponként nem
   csökkenő (vak kör 2 O6: a 2. szint felső határa 20 → 21).
 - **Fokozat** = szint × 3 + alfok (0–14).
-- **Bankközi korlát** (ND-3 (a) gépi szabályként, 15. szakasz): csak PONTOS egyezésű EGYES SZÓ — a kézi bank normalizált
-  helyes válasza = a szóbank normalizált `term`-je, egy szó; a kettő közül a NAGYOBB bank-szintről indul (a kisebb emelkedik,
-  lefelé soha). Mondat / kifejezés soha nem korlátforrás. A korlát csak a TELJES, szűretlen bankokból épülhet:
-  `buildLadderTermFloors({ manual, vocab }, lang)` márkázott típust ad, a `ladderStepBuckets` / `ladderItemStep` /
-  `gradedLadderBank` kötelezően ezt kéri.
 - **Kézi finomítás:** felülíró tábla (`LADDER_STEP_OVERRIDES`, azonosító → fokozat) — induláskor ÜRES; csak dokumentált,
   tételenkénti indoklással bővíthető (validátor-teszt: létező azonosító, 0–14).
 
@@ -174,7 +173,7 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
 - [x] A3 — WHEN egy tétel pontja ≥ 20 (≥ 40) THEN fokozatának szintje SHALL ≥ 1 (≥ 2).
 - [x] A4 — WHEN évfolyam-sávonként (3–4., 5–6., 7–8., 9–10., 11–12.) lekérjük az osztályozott bankot THEN minden nyelven a
   sáv minden fokozatán SHALL legalább 20 tétel lenni; szintenként a 0. alfokon legalább 20 egyes szó, a 2. alfokon legalább
-  20 kifejezés (a kifejezések a mérce szerint a szint 2. alfokára esnek — mért, ld. 11. szakasz), és a sávon kívüli
+  20 kifejezés (minimum, nem kizárólagosság — mért, ld. 11. szakasz), és a sávon kívüli
   fokozat SHALL üres lenni.
 - [x] A5 — WHEN az évfolyam ismert THEN az 1. pálya belépő fokozata SHALL az alapszint×3 lenni; a belépő fokozat SHALL pályánként
   nem csökkenni, és SHALL ≤ min(sáv teteje, (alapszint + 1)×3) maradni.
@@ -227,23 +226,23 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
 
 - Végrehajtás: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md`
 
-## 11. Mért osztályozás — fokozatonkénti tételszám (kézi + szóbank, teljes bankközi korláttal; „kifejezés” = phrase / everyday)
+## 11. Mért osztályozás — fokozatonkénti tételszám (kézi + szóbank; „kifejezés” = phrase / everyday)
 
-Fejhez kötve: a `feat/szoletra-szintezes-1` 15. szakaszbeli állapota (strukturált mérce). Ez az EGYETLEN tábla, amelyből az
+Fejhez kötve: a `feat/szoletra-szintezes-1` 16. szakaszbeli állapota (strukturált mérce, korlát nélkül). Ez az EGYETLEN tábla, amelyből az
 A4 küszöbök és az S3 hiánya számol.
 
 ```
 fokozat:        0   1   2   3   4   5   6   7   8   9  10  11  12  13  14
-en szó:       200 157  65 351 172  14 236 187  67 192 178  49 156 104  29
-en kifejezés:   0   0  99   0 155 198   1 112 147   0 103 125  15  84  95
-de szó:       170 123  23 258 126  26 224 145  23 184 118  11 139  85  14
-de kifejezés:   0   1  96   1 107 171   3  66 126   1  51 125   1  35 105
-fr szó:       110 179  66 210 137  28 200 144  39 157 106  46 131  77  30
-fr kifejezés:   0   0  77   0  72 215   0  32 176   0  21 155   1  32 113
+en szó:       214 181  83 325 166  16 227 179  73 188 175  44 155 102  29
+en kifejezés:   0   0  99   0 155 198   1 111 149   0 103 126  15  84  93
+de szó:       174 138  27 258 124  27 208 143  23 183 120  11 137  83  13
+de kifejezés:   0   1  97   1 106 172   3  66 126   1  50 125   1  35 105
+fr szó:       111 186  67 210 140  29 189 145  39 154 108  46 130  76  30
+fr kifejezés:   0   0  77   0  72 215   0  31 177   0  21 155   1  32 113
 ```
 
-A kifejezések a szint 2. alfokán gyűlnek (a legrövidebb kifejezés is 15 pont felett van) — előbb egyes szavak, utána
-kifejezések. Az A4: fokozatonként ≥ 20 tétel, 0. alfok ≥ 20 szó, 2. alfok ≥ 20 kifejezés.
+A kifejezések nagyobb része a szint 2. alfokára esik, de az 1–4. szinten az 1. alfokon is van (pl. en 4. fokozat 155); a 0.
+alfokon gyakorlatilag nincs (0–1 tétel). Az A4: fokozatonként ≥ 20 tétel, 0. alfok ≥ 20 szó, 2. alfok ≥ 20 kifejezés.
 
 ## 12. S3 — sűrűbb kezdő A1 anyag nyelvenként (fizetős generálás; KERET-JÓVÁHAGYÁSRA VÁR, végrehajtani TILOS addig)
 
@@ -253,13 +252,13 @@ kifejezések. Az A4: fokozatonként ≥ 20 tétel, 0. alfok ≥ 20 szó, 2. alfo
 
 | nyelv | 0. fokozat | hiány 300-ig | 1. fokozat | hiány 300-ig |
 |---|---|---|---|---|
-| en | 200 | 100 | 157 | 143 |
-| de | 170 | 130 | 123 | 177 |
-| fr | 110 | 190 | 179 | 121 |
+| en | 214 | 86 | 181 | 119 |
+| de | 174 | 126 | 138 | 162 |
+| fr | 111 | 189 | 186 | 114 |
 
-Összes hiány: 0. fokozat 420, 1. fokozat 441 szó. **Javasolt mennyiség (becslés, UNVERIFIED):** nyelvenként ~300 új 0. szintű
-szóbank-bejegyzés (en 300, de 310, fr 310 — a két fokozat hiányának összegéből kerekítve, a mérce szerint ≤ 9 pontos egyes
-szavak; a pontos fokozat-eloszlás a generálás után újramérendő), összesen ~920 bejegyzés.
+Összes hiány: 0. fokozat 401, 1. fokozat 395 szó. **Javasolt mennyiség (becslés, UNVERIFIED):** a két fokozat hiányának
+összege nyelvenként (en 205, de 288, fr 303), a mérce szerint ≤ 9 pontos egyes szavak; összesen ~800 bejegyzés (a pontos
+fokozat-eloszlás a generálás után újramérendő).
 
 **A meglévő generáló útvonal (tény):** a szóbank tartalma (#431 angol, 2664 bejegyzés; a német / francia hasonlóan) ügynöki
 tartalomszeletekben készült a `docs/specs/2026-11-15-jatekok-mobil-szobank-vegrehajtas.md` szerint, majd a vak megoldó kör
@@ -267,12 +266,12 @@ tartalomszeletekben készült a `docs/specs/2026-11-15-jatekok-mobil-szobank-veg
 szerkezeti őr a `vocabBankProblems` / `minimumProblems`. Bejegyzésenkénti költségmérés NINCS a repóban (UNKNOWN).
 
 **Költségbecslés (UNVERIFIED — tokenbecslés, az USD az aktuális árlistával számolandó):**
-- generálás: ~920 bejegyzés × ~80 kimeneti token ≈ 74 ezer kimeneti token; 50-es kötegekben 18 köteg × ~4 ezer bemeneti token
-  (szabály + téma-kvóta + meglévő termek kizáró listája) ≈ 72 ezer bemeneti token;
-- vak megoldó: ~920 kérdés × ~150 bemeneti / ~30 kimeneti token ≈ 135 ezer bemeneti + 27 ezer kimeneti token;
+- generálás: ~800 bejegyzés × ~80 kimeneti token ≈ 64 ezer kimeneti token; 50-es kötegekben 16 köteg × ~4 ezer bemeneti token
+  (szabály + téma-kvóta + meglévő termek kizáró listája) ≈ 64 ezer bemeneti token;
+- vak megoldó: ~800 kérdés × ~150 bemeneti / ~30 kimeneti token ≈ 120 ezer bemeneti + 24 ezer kimeneti token;
 - javító kör (a tételek ~30 %-a, a #431 1. körének arányából becsülve: 73 jelzés / ~2664): ≈ +50 ezer bemeneti / +25 ezer
   kimeneti token;
-- összesen nagyságrendileg **~0,26 M bemeneti + ~0,13 M kimeneti token**; Opus-osztályú modellel nagyságrendileg
+- összesen nagyságrendileg **~0,23 M bemeneti + ~0,11 M kimeneti token**; Opus-osztályú modellel nagyságrendileg
   **5–20 USD** (UNVERIFIED: árlista-feltevés; a pontos összeg = tokenek × a jóváhagyáskori hivatalos ár). Keretjavaslat:
   **legfeljebb 25 USD**, futáskorláttal (a generáló leáll, ha a mért költség eléri a keretet).
 
@@ -304,10 +303,10 @@ elsőbbsége miatt a pont visszaeshet — ott a következő szint 0. alfokának 
 szinthatáron a felszíni pont szükségszerűen visszaeshet (pl. en 2. fokozat medián 14 → 3. fokozat medián 7): a bank szintje a
 tartalmi nehézséget (ritkaság, nyelvtan) hordozza, amit a felszíni mérce nem lát. Ezt a terv vállalja; a fokozat definíciója
 csak annyiban változik, hogy a határpontok oszloponként nem csökkenhetnek (a 2. szint felső határa 20 → 21). Mért mediánok
-fokozatonként (a 15. szakasz állapotában): en 4 7 14 · 7 15 25 · 7 14 39 · 8 15 32 · 11 16 48; de 3 6,4 16,4 · 6,4 14,4 26,1 ·
-6,4 12,9 29,6 · 7,7 14,1 26,1 · 9,9 16,6 33; fr 3,3 6,2 13,7 · 7 11,8 26,5 · 7 11,8 30,2 · 7,8 14,3 29,3 · 9,8 16,8 34,5. A 0. alfok mediánja
+fokozatonként (a 16. szakasz állapotában): en 4 7 14 · 7 15 25 · 7 14 40 · 8 15 31 · 11 16 48; de 3 6,4 16,4 · 6,4 14,4 26,1 ·
+6,4 12,9 29,6 · 7,9 14,2 26,1 · 9,9 16,9 33; fr 3,3 6,2 13,7 · 7 12,3 26,5 · 7 12,3 30,2 · 7,8 14,3 29,3 · 9,8 17,3 34,5. A 0. alfok mediánja
 minden nyelven nem csökken (en 4 → 7 → 7 → 8 → 11); az 1. alfok mediánja az 1. → 2. szinten enyhén csökken (en 15 → 14, de
-14,4 → 12,9; fr 11,8 → 11,8) — ezt a terv nem garantálja (eloszlás, nem határpont).
+14,4 → 12,9; fr 12,3 → 12,3) — ezt a terv nem garantálja (eloszlás, nem határpont).
 
 **L2:** a vödrözés a tétel saját `tier` mezőjét használja (`declaredTierOf`); a készlet-index csak szint nélküli tételnél
 (szerverbank) pótlás — így egy kimerült szint pótlására más készletbe került tétel nem sorolódik vissza.
@@ -323,7 +322,7 @@ L1 „Mi a „” mintára hamis bankközi korlát a „les jeux” alakfeladatb
 - a kiemelés nélküli prompt-hiány kinyerése és a „: ” / „? ” utasításvágás (`fillBlank` a promptból);
 - a magyar zárójeles súgó felismerése és levágása (`stripHungarianGlosses`).
 
-**Szűkítve:** a bankközi korlát csak pontos egyezésű EGYES SZÓRA él (kézi helyes válasz = szóbanki `term`); mondat / kifejezés
+**Szűkítve (a 16. szakasz szerint azóta teljesen kikerült):** a bankközi korlát csak pontos egyezésű EGYES SZÓRA élt (kézi helyes válasz = szóbanki `term`); mondat / kifejezés
 soha nem forrás (vak kör 3 L5); csak a teljes, szűretlen bankokból épülhet, ezt a márkázott típus és a kötelező paraméter
 kényszeríti (L4; a végrehajtási recept is így írja). **Javítva:** a nem törő szóköz és az önálló írásjel nem szó (L3: a
 „comment va ta famille ?” négy szó, nem mondat). **L6:** a fokozat-tábla és az S3 hiánya egyetlen, fejhez kötött táblából
@@ -346,3 +345,32 @@ O5/L3, O2/L1 régi alakja) helyére S1 (strukturált bemenet), S2 (a mérce a pr
 prompttal azonos pontot és fokozatot kap), S3 (normalizálás, nem törő szóköz, önálló írásjel), S4 (korlát csak egyes szóra),
 S5 (márkázott korlát, típusszintű `@ts-expect-error`) lépett; az A1–A8, A12, a monotonitás- és lépés-tesztek maradtak.
 Mutációs ellenpróba: 7/7 mutáns bukik (6 a saját tesztjén, a márka eltávolítása a `check:test`-en: TS2578).
+
+## 16. Tulajdonosi döntés: KORLÁT ELHAGYÁSA (2026-11-22, vak kör 4 után)
+
+**Döntés:** a bankközi szintkorlát teljesen kikerül a PR-1-ből és a PR-2-ből; az ND-3 („a mérce kezeli”) a pontszám-alapú
+felfelé sorolással (20 / 40 pont, 4.1) teljesül.
+
+**Kikerült:** `buildLadderTermFloors`, a márkázott `LadderTermFloors` típus, minden `floors` paraméter (`ladderItemStep`,
+`vocabEntryStep`, `ladderStepBuckets`, `gradedLadderBank`), a lapon a teljes szóbankos korlátépítés, és a korlát tesztjei (S4, S5,
+a márkára épülő `3d-wiring` állítások) — dokumentált spec-változásként. Ezzel a vak kör 4 L1 (a korlát egy bankon belül is
+átsorolt: `de0-093` „ist” a B1-es `de3-044` miatt) és L3 (a márka nem igazolja a teljes bankot) felülete megszűnik.
+
+**Javítva:**
+- **L2:** szóbanki tételnél a mérce a `term`-et (`VocabQuiz.answerTerm`, célnyelvi alak) méri — a lap a besoroláshoz ezt adja
+  (`term` mező), a megjelenített `focus` változatlan. Teszt (S6): mindhárom szóbank minden 7. bejegyzésére a valódi
+  generátorral hu→cél és cél→hu kérdés, a pont és a fokozat azonos a nyers bejegyzésével (`en0-freetime-019`: „play the piano”,
+  nem a magyar „zongorázik”).
+- **L4:** a szótag-minimum és -levonás ugyanazokon a szavakon (`wordsOf`) fut: „l'arc-en-ciel” 11,5 pont / 4. fokozat
+  (korábban 7,5 / 3.); teszt (S7) kötőjeles és aposztrófos alakkal.
+- **L5:** a katalógus és a terv nem állít kizárólagosságot a kifejezések alfokára (a tényleges minimumot nevezi meg).
+- **L6:** a csapdakatalógus bevezetője visszaállt a főág szövegére (nem minősíti a review hatókörét).
+
+**A kereszt-banki eltérések mérve** (az 1.2 szakasz definíciójával: a kézi célrész a szóbankban magasabb szinten szerepel):
+en 36 tétel (ebből a 0. szinten 22 — az 1.2-ben jelentett szám), de 12, fr 24. **A pontszám-alapú felsorolás egyiket sem emeli
+a szóbanki szintre** (en 0 / 36, de 0 / 12, fr 0 / 24): mind rövid egyes szó, 20 pont alatt (pl. `en0-012` „moon”, `de0-055`,
+`fr0-024`). Ez a döntés vállalt következménye: a bank-szint és a mérce együtt dönt, a két bank közti eltérés nem emel.
+
+**Mutációs ellenpróba a maradó szabályokra** (`mutate4.mjs`): 8 / 8 mutáns bukik — prompt-elemzés vissza (A2, S1, S2), szóbanki
+`term` kihagyva (S6), szótag-levonás részszavakon (S7), locale-függő kisbetű (S3), önálló írásjel szóként (S3), vödrözés
+készlet-indexszel (O6/L2), alfok-sorrend felcserélve (O6/L4, S7), pont-alapú felsorolás ki (A1/A3).
