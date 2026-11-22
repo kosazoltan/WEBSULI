@@ -67,3 +67,16 @@ csomópont. `pictureCards` `{ cards: 2..8 × { label ≤ 40, svg ≤ 6000 (a meg
 - **Ágfelirat (L4, a fenti „vak J12” mondat helyett):** alapértelmezett ágfelirat NINCS — az ág `label` mezője kötelező, a forrásból jön;
   a `branchYes / branchNo` szótári kulcsok szándékosan törölve.
 - **Mélységi határ (L5):** a teszt pontosan 3 szintet elfogad, pontosan 4 szintet elutasít.
+
+## Review #533 (2026-11-23) — pontosítások
+
+- **Szöveghatárok (Copilot):** a megjelenítő határai a forrásleltáréval (`shared/source-visuals.ts`) egyeznek — fa: csomópont 160,
+  ágfelirat 60; képes kártya: felirat 60, képaláírás 120, példa 160 karakter. (A korábbi 120 / 40, illetve 40 / 80 / 120 a forrás
+  érvényes feliratát elutasította volna.)
+- **Véges szintű séma (Copilot):** a fa csomópontsémája a megengedett szintekből épül, nem rekurzív — nagyon mély, sérült tárolt fa
+  szabályos paraméterhiba; a szövegbejárás a korlátos olvasón megy (`readDecisionTreeParams`).
+- **Kilógó felirat (Codex, Vercel, Copilot):** a képes kártya rajza a gyártási kapun az `illustrationLayoutProblems` ellenőrzést is
+  megkapja; a tárolt lecke megjelenítése nem változik.
+- **NYITOTT (tulajdonosi döntés):** a forrásleltár fája legfeljebb 4 szint és szintenként 4 ág lehet, a megjelenítő 3 szintet és 13
+  csomópontot enged. A nagyobb forrásfa ma nem jeleníthető meg teljesen (a fedettségi kapu élesben `report` módban van, tehát nem
+  blokkol). A határok összehangolása vagy a fa bontása az S3a (ábrák a forrásra kötve) tervezési kérdése.

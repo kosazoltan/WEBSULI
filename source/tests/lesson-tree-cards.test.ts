@@ -153,3 +153,31 @@ test("review #533 (Codex, Vercel): a képes kártya rajzának felirata nem lógh
   // A megjelenítő sémája (tárolt lecke olvasása) változatlan: a már tárolt kártya megjelenik.
   assert.equal(SOURCE_VISUAL_SCHEMA_KINDS.includes("pictureCards"), true);
 });
+
+test("review #533 (Copilot): nagyon mély, sérült fa nem okoz veremtúlcsordulást — szabályos paraméterhiba, a szövegbejárás korlátos", async () => {
+  const { parseVisualParams } = await import("../shared/lesson-visual-params");
+  let deepNode: Record<string, unknown> = { text: "levél" };
+  for (let i = 0; i < 20_000; i++) deepNode = { text: `n${i}`, branches: [{ label: "a", node: deepNode }, { label: "b", node: { text: "x" } }] };
+  const params = { root: deepNode };
+  assert.doesNotThrow(() => visualParamProblems("decisionTree", params));
+  assert.notDeepEqual(visualParamProblems("decisionTree", params), [], "a mély fa paraméterhiba");
+  assert.equal(parseVisualParams("decisionTree", params), null);
+  let texts: string[] = [];
+  assert.doesNotThrow(() => { texts = renderedVisualTexts("decisionTree", params); });
+  assert.ok(texts.length < 200, `a bejárás korlátos (${texts.length} szöveg)`);
+  // Érvényes fa: a szövegsorrend változatlan (gyökér, ágfelirat, csomópont — mélységi bejárás).
+  assert.deepEqual(renderedVisualTexts("decisionTree", tree), ["Megszámlálható a főnév?", "Igen", "How many?", "Nem", "How much?"]);
+});
+
+test("review #533 (Copilot): a megjelenítő szöveghatárai a forrásleltáréval egyeznek — a forrás érvényes felirata nem bukik a sémán", () => {
+  const s = (n: number) => "x".repeat(n);
+  const treeWith = (label: string, text: string) => ({ root: { text: "gyökér", branches: [{ label, node: leaf(text) }, { label: "b", node: leaf("y") }] } });
+  assert.deepEqual(visualParamProblems("decisionTree", treeWith(s(60), s(160))), [], "ágfelirat 60, csomópont 160 (a forrásleltár határa)");
+  assert.notDeepEqual(visualParamProblems("decisionTree", treeWith(s(61), "y")), [], "61 karakteres ágfelirat");
+  assert.notDeepEqual(visualParamProblems("decisionTree", treeWith("a", s(161))), [], "161 karakteres csomópont");
+  const card = (over: Record<string, string>) => ({ cards: [{ label: "alma", svg: SVG("alma"), ...over }, { label: "víz", svg: SVG("víz") }] });
+  assert.deepEqual(visualParamProblems("pictureCards", card({ label: s(60), caption: s(120), example: s(160) })), [], "kártya: 60 / 120 / 160");
+  assert.notDeepEqual(visualParamProblems("pictureCards", card({ label: s(61) })), []);
+  assert.notDeepEqual(visualParamProblems("pictureCards", card({ caption: s(121) })), []);
+  assert.notDeepEqual(visualParamProblems("pictureCards", card({ example: s(161) })), []);
+});

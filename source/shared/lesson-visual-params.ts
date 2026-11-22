@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { illustrationLayoutProblems, sanitizeIllustration } from "./illustration-svg";
-import type { CompareCardsVisualParams, DecisionTreeVisualParams, PictureCardsVisualParams, RuleBoxVisualParams, TableVisualParams } from "./source-visual-render";
+import { readDecisionTreeParams } from "./source-visual-render";
+import type { CompareCardsVisualParams, DecisionTreeVisualNode, DecisionTreeVisualParams, PictureCardsVisualParams, RuleBoxVisualParams, TableVisualParams } from "./source-visual-render";
 
 /**
  * Spec 2026-09-24 (docs/specs/2026-09-24-magyarazo-abrak.md): a magyarázó ábrák paraméterei.
@@ -153,10 +154,21 @@ export const compareCardsParamsSchema = z.object({
 export const DECISION_TREE_MAX_DEPTH = 3;
 export const DECISION_TREE_MAX_NODES = 13;
 type TreeNode = { text: string; branches?: Array<{ label: string; node: TreeNode }> };
-const treeNodeSchema: z.ZodType<TreeNode> = z.lazy(() => z.object({
-  text: label(120),
-  branches: z.array(z.object({ label: label(40), node: treeNodeSchema }).strict()).min(2).max(4).optional(),
-}).strict());
+/**
+ * Review #533 (Copilot): a csomópontséma VÉGES számú szintből épül (nem rekurzív `z.lazy`) — a legalsó megengedett szint levele
+ * szigorú objektum `branches` nélkül, így a séma a mélységi határon túl be sem járja a bemenetet (nagyon mély, sérült tárolt fa
+ * szabályos paraméterhiba, nem veremtúlcsordulás). A szöveghatárok a forrásleltáréval (`shared/source-visuals.ts`: csomópont 160,
+ * ágfelirat 60) egyeznek — a forrás érvényes felirata nem bukhat a megjelenítő sémáján.
+ */
+const TREE_TEXT_MAX = 160, TREE_BRANCH_LABEL_MAX = 60;
+function treeLevelSchema(levels: number): z.ZodType<TreeNode> {
+  if (levels <= 1) return z.object({ text: label(TREE_TEXT_MAX) }).strict(`legfeljebb ${DECISION_TREE_MAX_DEPTH} szint`);
+  return z.object({
+    text: label(TREE_TEXT_MAX),
+    branches: z.array(z.object({ label: label(TREE_BRANCH_LABEL_MAX), node: treeLevelSchema(levels - 1) }).strict()).min(2).max(4).optional(),
+  }).strict();
+}
+const treeNodeSchema = treeLevelSchema(DECISION_TREE_MAX_DEPTH);
 const treeDepth = (n: TreeNode): number => 1 + Math.max(0, ...(n.branches ?? []).map((b) => treeDepth(b.node)));
 const treeSize = (n: TreeNode): number => 1 + (n.branches ?? []).reduce((a, b) => a + treeSize(b.node), 0);
 export const decisionTreeParamsSchema = z.object({ root: treeNodeSchema }).strict().superRefine((p, ctx) => {
@@ -166,10 +178,11 @@ export const decisionTreeParamsSchema = z.object({ root: treeNodeSchema }).stric
 /** Képes kártyák: 2–8 kártya; a rajz a meglévő illusztráció-tisztítón megy át (csak tisztított, felirattal ellátott SVG rajzolódik). */
 export const pictureCardsParamsSchema = z.object({
   cards: z.array(z.object({
-    label: label(40),
+    // Review #533 (Copilot): a szöveghatárok a forrásleltár `pictureCard` határaival egyeznek (felirat 60, képaláírás 120, példa 160).
+    label: label(60),
     svg: z.string().max(6000).refine((svg) => sanitizeIllustration(svg).ok, { message: "a rajz nem megy át az illusztráció-tisztítón" }),
-    caption: label(80).optional(),
-    example: label(120).optional(),
+    caption: label(120).optional(),
+    example: label(160).optional(),
   }).strict()).min(2).max(8),
 }).strict();
 // Fordítási idejű őr: a séma kimenete a megosztott szerződés alakja (ha a szerződés változik, ez a sor nem fordul le).
@@ -316,7 +329,13 @@ export function renderedVisualTexts(animKind: string, params: unknown): string[]
     case "ruleBox": return [...str(p.heading), ...strings(p.items)];
     case "compareCards": return Array.isArray(p.cards) ? p.cards.flatMap((c) => (c && typeof c === "object" ? [...str((c as Record<string, unknown>).title), ...strings((c as Record<string, unknown>).lines), ...str((c as Record<string, unknown>).example)] : [])) : [];
     // S2b-1: a csomópontok szövege és az ágfeliratok (bejárási sorrendben); a kártya felirata, aláírása, példája és a rajz feliratai.
-    case "decisionTree": { const walk = (n: unknown): string[] => { const o = (n && typeof n === "object" ? n : {}) as Record<string, unknown>; return [...str(o.text), ...(Array.isArray(o.branches) ? o.branches.flatMap((b) => (b && typeof b === "object" ? [...str((b as Record<string, unknown>).label), ...walk((b as Record<string, unknown>).node)] : [])) : [])]; }; return walk(p.root); }
+    // Review #533 (Copilot): a bejárás a korlátos olvasón megy (`readDecisionTreeParams`: mélység- és csomópontkeret) — nyers, nagyon
+    // mély sérült fa sem okoz veremtúlcsordulást; az érvényes fa szövegsorrendje változatlan (gyökér, ágfelirat, csomópont).
+    case "decisionTree": {
+      const tree = readDecisionTreeParams(p);
+      const walk = (n: DecisionTreeVisualNode): string[] => [...str(n.text), ...(n.branches ?? []).flatMap((b) => [...str(b.label), ...walk(b.node)])];
+      return tree ? walk(tree.root) : [];
+    }
     case "pictureCards": return Array.isArray(p.cards) ? p.cards.flatMap((c) => { const o = (c && typeof c === "object" ? c : {}) as Record<string, unknown>; const check = sanitizeIllustration(o.svg); return [...str(o.label), ...str(o.caption), ...str(o.example), ...(check.ok ? check.labels : [])]; }) : [];
     default: return [];
   }
