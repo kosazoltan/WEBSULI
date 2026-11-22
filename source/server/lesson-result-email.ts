@@ -113,7 +113,7 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
       await recordLearnerActivity({ learnerId: input.learnerId, materialId: row.htmlFileId, kind: "result", percent: input.graded.summary.percent,
         summary: `${lesson.data.title} — ${input.graded.kind === "tasks" ? "Feladatok" : "Kvíz"}` });
     }
-    const [claim] = await db.select({ id: lessonResultEmails.id, delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
+    const [claim] = await db.select({ id: lessonResultEmails.id, delivered: lessonResultEmails.delivered, createdAt: lessonResultEmails.createdAt }).from(lessonResultEmails)
       .where(and(eq(lessonResultEmails.lessonId, input.lessonId), eq(lessonResultEmails.kind, input.graded.kind), eq(lessonResultEmails.roundKey, input.roundKey)));
     const recipients = resolveAdminRecipients({ ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_EMAIL: process.env.ADMIN_EMAIL });
     if (!recipients.length) { logger.warn("[LESSON-RESULT] nincs címzett (ADMIN_EMAILS)"); return { sent: 0, duplicate: false }; }
@@ -121,7 +121,9 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
     if (!missing.length) return { sent: 0, duplicate: true };
     // Review K1: a levél a foglalás ELŐTT áll össze — ha az összeállítás dob, nincs mit felszabadítani.
     const mail = buildResultEmail({ lessonTitle: lesson.data.title, classroom: lesson.data.classroom, learner: input.learner, learnerFirst: input.learnerFirst, guest: input.guest,
-      url: row.htmlFileId ? getMaterialPreviewUrl(row.htmlFileId) : "", graded: input.graded });
+      // Codex-review #532: a „Beküldve” ideje a kör ELSŐ beküldéséé (a tárolt sor ideje) — az újrapróba levele így bájtra azonos, és az
+      // idempotencia-kulccsal küldött ismétlést a levélszolgáltató nem utasítja el eltérő tartalom miatt.
+      url: row.htmlFileId ? getMaterialPreviewUrl(row.htmlFileId) : "", graded: input.graded, sentAt: claim.createdAt });
     // Spec 2026-11-17-eredmeny-email-foglalas: atomi FOGLALÁS a küldés előtt — a címzett csak akkor kerül a `delivered` listába, ha még
     // nincs benne; a sorzár miatt két egyidejű hívásból pontosan egy kap sort vissza, az küld (nincs dupla levél).
     const claimed: string[] = [];
