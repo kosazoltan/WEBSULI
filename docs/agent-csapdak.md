@@ -1122,4 +1122,8 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   ad, az abszolút `D:/…` dinamikus import pedig `ERR_UNSUPPORTED_ESM_URL_SCHEME`-et. **Szabály 2:** a mérőszkript `.mts`
   kiterjesztésű, a repó-modulokat `file:///D:/…` URL-lel importálja, és a repó `source/` mappájából fut (a `@/` alias így feloldódik).
 
-Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szintezes.md` 11. szakasz). Rokon: C-15.
+- **Tünet 3 (ismétlődés, vak kör 1 javítása):** a C-75 4. szabálya ellenére `sed -i`-vel cseréltem egy regexet (`\s`) — a
+  visszaperjel elveszett (`[Mm]ire\s` → `[Mm]ires`), a teszt bukott. **Szabály 3:** a C-75-öt itt is kötelező betartani:
+  regexet / visszaperjelet tartalmazó forrást CSAK Edit / Write eszköz vagy fájlból futó szkript módosít, `sed` soha.
+
+Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szintezes.md` 11. és 13. szakasz). Rokon: C-15, C-75.
