@@ -1170,3 +1170,16 @@ Forrás: #510 (szűkítés, R43–R46). Rokon: C-76, C-77.
   visszaállított fájlt előbb szintaktikailag ellenőrizd (`esbuild --loader=ts`), és a bukás üzenetét olvasd el.
 
 Forrás: #510 (R47–R48). Rokon: C-77.
+
+## C-80 — Playwright `toEqual`: a tömb `undefined` eleme láthatatlan; és a kompatibilitási visszalépés mint kilét-kiskapu (2026-11-22)
+
+- **Mi történt:** a `expect(finals.map(b => b.subject)).toEqual(["anon", "anon"])` állítás akkor is zöld volt, amikor egy harmadik,
+  címke NÉLKÜLI kérés is elment (`["anon", "anon", undefined]`) — a `toEqual` a tömb `undefined` elemeit és a ritkaságot figyelmen kívül
+  hagyja. Egy bukó tesztnek szánt próba így hamisan zöld volt a régi kódon; csak a kérésnapló (`page.on("request")`) mutatta meg.
+  Ugyanebben a körben a #510 R10-es régi-alakú visszalépése (és a jelzés nélküli token) megkerülte az R47 kilétvédelmét.
+- **Szabály 1:** opcionális mezők listáját (címke, token) `toStrictEqual`-lal vagy elemszám + elemenkénti állítással mérd; a „régi kódon
+  is zöld” bukó teszt gyanújel — kérésnaplóval derítsd ki, mi ment el valójában.
+- **Szabály 2:** minden kompatibilitási / visszalépő út a védelmi szabály hatálya alá tartozik: ha az út a védő mezőt eldobja, csak akkor
+  szabad rajta küldeni, ha a védelem tárgya bizonyíthatóan nem sérülhet (itt: nincs rögzített fiók, vagy igazoltan azonos munkamenet).
+
+Forrás: #510 (R49). Rokon: C-79.
