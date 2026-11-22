@@ -69,3 +69,60 @@ Független vak ellenőr: NEM (1 blokkoló, 1 közepes, 2 kicsi). Javítás: `f5d
 - **L2 valódi** — a DNS-feloldás versenyez a kérés megszakítójelével (időkorlát + leállítás); a későn beérő feloldás után nem indul kérés (`throwIfAborted`). LW „a DNS-feloldás várakozását az időkorlát megszakítja…” (piros: 15 s-os tesztidőtúllépés), LD „leállítás: a letöltés függő DNS-feloldása azonnal megszakad…” (piros: időtúllépés; zöld: `ClipAbortError` < 2 s, 0 kérés, a munkamappa törlődik).
 - **L3 valódi (örökölt)** — ismert függő állapotnál az átmeneti HTTP- / hálózati hiba után a kliens háromszoros időközzel újra kérdez (a teljes 30 perces kereten belül), a jelzés marad. PW „egy átmeneti 502 nem állítja le a várakozást…” (piros: a jelzés eltűnt).
 - **L4 valódi (időzítési verseny)** — az ál-ffmpeg a `trap` UTÁN írja a jelzőfájlt; 2 s-os gyerek-időkorlát, 30 s-os tesztkeret. Windowson kihagyva: a javított teszt itt nem futott (UNVERIFIED a POSIX CI-ig).
+
+## 2026-11-22 — I/O-osztály leltár
+
+Tulajdonosi utasítás (2026-11-22): megközelítésváltás — a 4 vak kör minden lelete egy hibaosztály: „a kisfilm-folyamat minden
+I/O-várakozása legyen bájtban ÉS időben korlátos, és a leállítás / időkorlát megszakítójelére azonnal álljon le, takarítással”. Az
+alábbi tábla a diff MINDEN ilyen pontja (`source/` alatti útvonal, fej `378abd15`). Közös segédek: a védett út magja
+`server/studio/safe-fetch.ts` `openPublicResponse` (újrahasznosítva — a saját HTTP-adapter megszűnt), `signal(ms)` (időkorlát +
+leállítás), `readLimitedText` / `readLimitedBytes`, `rawToResponse`, `pause`, `withClipStatementTimeout`.
+
+Tesztek: LW = `tests/lesson-clip-worker.test.ts`, LC = `tests/lesson-clip.test.ts`, LS = `tests/lesson-clip-shutdown.test.ts`,
+LP = `…-shutdown-poll`, LD = `…-shutdown-dns`, LR = `…-shutdown-retry`, DB = `tests/lesson-clips-db.integration.ts`,
+PW = `tests/lesson-clips.spec.ts`, WG = `tests/web-gather-gpt.test.ts` (a közös mag eredeti tesztjei, változatlanul zöldek).
+
+| # | Hely (fájl:sor) | Várakozás fajtája | Bájtkorlát | Időkorlát | Megszakítás (leállítás) | Takarítás | Igazoló teszt |
+|---|---|---|---|---|---|---|---|
+| 1 | `server/lesson-clips-providers.ts:329` | forgatókönyv + képkapu (OpenRouter chat) HTTP | 1 MiB (`bodyText`) | 90 s (`signal`) | `signal` + `guarded` → `ClipAbortError` | túllépésnél a törzs lezárul | LW „I/O-leltár: minden szolgáltatói választörzs bájtkorlátos…”; LP |
+| 2 | `…providers.ts:340` | kép (OpenAI) HTTP | 24 MiB | 120 s | mint 1 | mint 1 | LW „I/O-leltár: … bájtkorlátos…” |
+| 3 | `…providers.ts:346` | kép (OpenRouter) HTTP | 24 MiB | 120 s | mint 1 | mint 1 | LW „I/O-leltár: … bájtkorlátos…” |
+| 4 | `…providers.ts:360` | mozgókép-beküldés HTTP | 1 MiB | 120 s | mint 1 | mint 1 | LW „I/O-leltár: … bájtkorlátos…” |
+| 5 | `…providers.ts:369` | lekérdezési szünet | – (nincs adat) | 6 s / lépés, összesen 6 perc (`VIDEO_TIMEOUT_MS`) | `pause` → `ClipAbortError` azonnal | – | LP „a mozgókép-lekérdezés várakozása azonnal megszakad…” |
+| 6 | `…providers.ts:370` | lekérdezés HTTP (védett út, csak a szolgáltató originje) | 256 KiB (`readLimitedText`); hibás státusznál a törzs lezárul | 60 s | `signal` | törzs lezárva | LW „a lekérdezés JSON-válasza bájtkorlátos…”; LW „átirányítás…” (idegen origin tiltva) |
+| 7 | `server/studio/safe-fetch.ts:201` | DNS-feloldás | – | a kérés határideje | `abortable` + későn beérő feloldás után nincs kérés | – | LW „a DNS-feloldás várakozását az időkorlát megszakítja…”; LD; WG (DNS-időtúllépés) |
+| 8 | `safe-fetch.ts:205` (`defaultRequest` `:105`) | kapcsolat + fejlécek (rögzített címre) | – | határidő + 60 s socket-tétlenség | `abortable` + `https` `signal` | `destroy` | LW „SSRF…”; WG |
+| 9 | `safe-fetch.ts:210` | átirányítás | legfeljebb 3 lépés | határidő | lépésenként újraellenőrzés | előző válasz `destroy` | LW „átirányítás…”, „SSRF…” |
+| 10 | `…providers.ts:59` (`rawToResponse`) | választörzs a védett útról | a hívóé (11, 6) | határidő | a jelre a kapcsolat lezárul, az olvasás hibával áll | `destroy` | LW „I/O-leltár: az elakadt letöltési törzs olvasását a kérés határideje megszakítja…” |
+| 11 | `…providers.ts:271` | letöltés → lemez (`pipeline`) | 40 MiB (`byteLimit`) + `content-length` | 180 s (10 útján) | `pipeline` `signal` (leállítás) → `ClipAbortError` | munkamappa `rm` (`:305`) | LW „kemény bájtkorlát…”; LD |
+| 12 | `…providers.ts:38` (`webBody`) | adapter előtöltése | ≈ 32 KiB (mérve, Node 24) | – | – | – | LW „a HTTP-adapter választeste … korlátos” |
+| 13 | `…providers.ts:274` | ffmpeg-sor várakozása | – | tranzitív: 1 hely, a tartó ≤ 90 s + korlátos olvasás; ≤ 5 jelenet / fejezet | leállítás után új nem indul (`shuttingDown`) | – | LC „a sor a felszabaduló helyet közvetlenül a várakozónak adja…”; LS „… utána új nem indul” |
+| 14 | `…providers.ts:283` | ffmpeg-gyerek | kimenet ≤ 2,5 MB (`stat` a beolvasás előtt), `-t 15`, `execFile` stdout ≤ 1 MiB (alap) | 90 s, `SIGKILL` | `abortClipTranscodes` → `SIGKILL` | munkamappa `rm` | LW „az időkorlát SIGKILL-lel él…”, „kemény bájtkorlát…”; LS |
+| 15 | `…providers.ts:292` | kimenet beolvasása | ≤ 2,5 MB (előtte ellenőrizve) | helyi fájl | – | `rm` | LW „kemény bájtkorlát…” (túlméretes / üres) |
+| 16 | `…providers.ts:260`, `:305` | munkamappa létrehozása / törlése | – | helyi | – | `finally` + körönkénti söprés | LW „az időkorlát SIGKILL-lel él… munkamappa…”, „munkamappa-söprés…” |
+| 17 | `…providers.ts:210` | söprés (szinkron, helyi) | – | körönként egyszer | csak gyártó módban | régi / halott mappák | LW „munkamappa-söprés…”, „induláskor a régi…”; LS (idle: 0) |
+| 18 | `…providers.ts:384`, `:398` | ElevenLabs-sor várakozása | – | tranzitív: 2 hely, a tartó ≤ 3 × 60 s + 7,5 s | a tartók `signal`-ja megszakad | – | LC „a sor a felszabaduló helyet…”, „ElevenLabs…” |
+| 19 | `…providers.ts:384` | hang HTTP | 8 MiB (hiba: 1 MiB) | 60 s | mint 1 | mint 1 | LW „I/O-leltár: … bájtkorlátos…” |
+| 20 | `…providers.ts:161` | 429 utáni várakozás | 429-es törzs lezárva (nem puffereli) | 2,5 / 5 s | `pause` → `ClipAbortError` | – | LR „leállítás: a 429 utáni újrapróbára várakozás azonnal megszakad…” |
+| 21 | `…providers.ts:398` | hangkapu (ElevenLabs) HTTP | 1 MiB | 60 s | mint 1 | mint 1 | LW „I/O-leltár: … bájtkorlátos…” |
+| 22 | `…providers.ts:411` | hangkapu (OpenAI) HTTP | 1 MiB | 60 s | mint 1 | mint 1 | LW „I/O-leltár: … bájtkorlátos…” |
+| 23 | `server/lesson-clips-db.ts:21` | minden kisfilm-DB-lekérdezés | sorok kicsik; média ≤ 2,5 MB (14) | 15 s `statement_timeout` | a kört a leállítás kivárja (25) | tranzakció-visszagörgetés | DB „I/O-leltár: a kisfilm-adatréteg minden lekérdezése időkorlátos…” |
+| 24 | `lesson-clips-db.ts:84` | árvamédia-söprés | 200 sor / adag, ≤ 50 adag | 15 s / utasítás | mint 23 | mint 23 | DB „árva kisfilm-média…” (2 teszt) |
+| 25 | `lesson-clips-db.ts:108` | példányok közötti zár | – | nem blokkol (`pg_try_advisory_lock`), kapcsolódás ≤ 10 s | – | `finally` unlock + release | DB „I/O-leltár: a példányok közötti zár nem blokkol…” |
+| 26 | `server/lesson-clips.ts:276` | jelenetek kivárása | – | tranzitív (1–22 sorok) | testvérhibánál `alive()` minden fizetős lépés előtt | – | LW „képhiba után a testvérjelenetek…”, „testvérjelenet hibája után … hangkapuja…” |
+| 27 | `server/index.ts:715`, `:744` | szerverleállítás | – | 60 s + 10 s, a pool zárása előtt | `abortClipTranscodes` (minden jel) + `stopLessonClipWorker` | a kör (és a zár) lezárul | LS „leállítás: a kisfilmworker időzítői leállnak…”; LP, LD, LR — **a `index.ts` bekötése teszttel NEM igazolt** |
+| 28 | `client/src/lesson-runtime/clips/useLessonClips.ts:52` | kliens-lekérdezés | – (saját szerver, fejezetenkénti kisfilmlista) | 30 perces keret, független lejárati időzítő; átmeneti hibánál 60 s-os újrapróba | `AbortController` (lejárat, leválás) | időzítők törölve | PW „ha a lekérdezés elakad…”, „egy átmeneti 502…” |
+
+Összesítés: 28 sor. Teszttel nem igazolt: a 27. sor `index.ts`-bekötése (valódi SIGTERM-próba nincs; a részei — worker-stop,
+megszakítás — tesztelve). Tranzitív időkorlát (a korlát a tartók korlátjából következik, nem saját időzítő): 13, 18, 26. Bájtkorlát
+szándékosan nincs: 28 (saját szerver kis JSON-válasza). A POSIX valódi gyerekes teszt (14) Windowson kihagyva.
+
+**A saját HTTP-adapter cseréje (2. pont):** megtörtént — a `server/studio/safe-fetch.ts` védett útjának magja kiemelve
+(`openPublicResponse`, a `fetchPublicPage` is ezt használja, a WG-tesztek változatlanul zöldek), a nyers kérés elhagyható,
+lépésenkénti fejléceket kap. A szolgáltatók fix végpontjai (1–4, 19, 21, 22) a globális `fetch`-et használják: a címük kódbeli állandó
+(nem szolgáltatói válaszból jön), ezért SSRF-felületük nincs; POST-törzzsel mennek, amit a `safe-fetch` (GET-only) nem támogat.
+
+Változott meglévő tesztek (dokumentált, nem gyengítés): a csonkolt szállítás a `safe-fetch` nyers kérését (`RawRequest`) adja a saját
+`send` helyett; az átirányítás-teszt két üzenet-regexe a közös segéd szövegéhez igazodott (`/https/i`, `/Nem engedélyezett cél/`) — az
+állítások (titkosítatlan / idegen célra nincs kérés) változatlanok. A DB statement_timeout-teszt a Drizzle által csomagolt `cause`-t
+vizsgálja.
