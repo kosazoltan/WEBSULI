@@ -190,6 +190,7 @@ Markdown-alapú, `memory/indexes/index.yml` által irányított tudástár.
 | `semantic_technology` | `memory/semantic/technology/` | termék- és technológiai tervek |
 | `projects_websuli` | `memory/projects/websuli/` | backlog, döntési napló (LEDGER), áttekintés |
 | `episodic_2026` | `memory/episodic/2026/` | munkamenet-naplók |
+| `notes` | `memory/notes/` | jegyzet-index (`00-Index.md`) |
 
 **Az index szerződése:** csak létező, élő fájlt sorolhat fel. Ellenőrzés:
 
