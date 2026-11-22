@@ -1,7 +1,7 @@
 import { useId, useMemo } from "react";
 
 import { parseVisualParams } from "@shared/lesson-visual-params";
-import { namespaceSvgIds, sanitizeIllustration } from "@shared/illustration-svg";
+import { sanitizeIllustration } from "@shared/illustration-svg";
 import { decisionTreeLayout, normalizeVisualText, type DecisionTreeVisualNode, type VisualTone } from "@shared/source-visual-render";
 
 /**
@@ -59,11 +59,12 @@ export function DecisionTreeAnim({ params, caption }: AnimProps) {
 }
 
 function CardArt({ svg, label }: { svg: string; label: string }) {
-  // Vak kör 1 (L2): a rajz saját azonosítói kártyánként névterezve — két rajz azonos helyi azonosítója (színátmenet, vágóalak) nem ütközik.
+  // Vak kör 1–2 (L2, L6): a rajz saját azonosítói kártyánként névterezve (a tisztító DOM-ján, csak attribútumokon) — két rajz azonos
+  // helyi azonosítója (színátmenet, vágóalak) nem ütközik, a rajz felirata érintetlen.
   const uid = useId();
-  const check = useMemo(() => sanitizeIllustration(svg), [svg]);
-  const html = useMemo(() => (check.ok ? namespaceSvgIds(check.svg, `svp${uid}`) : ""), [check, uid]);
+  const check = useMemo(() => sanitizeIllustration(svg, { idPrefix: `svp${uid}` }), [svg, uid]);
   if (!check.ok) return null;
+  const html = check.svg;
   return (
     <div
       className="sv-pcard-art lesson-figure-paper"

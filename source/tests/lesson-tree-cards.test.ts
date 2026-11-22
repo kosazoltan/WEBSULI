@@ -89,19 +89,26 @@ test("V32: a fa egymásba ágyazott lista — a két levél ugyanannak a szülő
 // ---- Vak kör 1 (2026-11-22) leletei: L1 elrendezés, L2 SVG-azonosítók, L5 mélységi határ ----
 
 test("vak kör 1 L2: a kártyák SVG-azonosítói rajzonként névterezve — azonos helyi azonosító nem ütközik, a belső hivatkozások követik", async () => {
-  const { namespaceSvgIds } = await import("../shared/illustration-svg");
-  const svg = (color: string) => `<svg viewBox="0 0 10 10"><defs><linearGradient id="paint0"><stop offset="0" stop-color="${color}"/></linearGradient><clipPath id="c"><rect width="5" height="5"/></clipPath></defs><rect fill="url(#paint0)" clip-path="url(#c)" width="10" height="10"/><use href="#paint0"/><use xlink:href="#c"/></svg>`;
-  const a = namespaceSvgIds(svg("#f00"), "k1");
-  const b = namespaceSvgIds(svg("#00f"), "k2");
-  assert.match(a, /id="k1-paint0"/);
-  assert.match(a, /fill="url\(#k1-paint0\)"/);
-  assert.match(a, /clip-path="url\(#k1-c\)"/);
-  assert.match(a, / href="#k1-paint0"/);
-  assert.match(a, /xlink:href="#k1-c"/);
-  assert.match(b, /id="k2-paint0"/);
-  assert.doesNotMatch(a, /"paint0"|#paint0\b|#c\)/, "nem marad névtér nélküli azonosító / hivatkozás");
-  assert.equal(namespaceSvgIds("<svg><rect fill=\"#abc\"/></svg>", "k"), "<svg><rect fill=\"#abc\"/></svg>", "azonosító nélkül változatlan (a színkód nem hivatkozás)");
-  assert.match(namespaceSvgIds("<svg><rect fill=\"url(#nincs)\"/></svg>", "k"), /url\(#nincs\)/, "ismeretlen (nem definiált) hivatkozás változatlan");
+  const { sanitizeIllustration } = await import("../shared/illustration-svg");
+  // A valódi tisztítón át (vak kör 2: a névterezés a tisztító DOM-ján fut, csak attribútumokon).
+  const drawing = (fill: string, label: string, extra = "") => `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="paint0"><stop offset="0" stop-color="#0a0"/></linearGradient><clipPath id="c"><rect width="50" height="50"/></clipPath></defs><rect fill="${fill}" clip-path="url(#c)" width="100" height="80"/>${extra}<text x="50" y="95">${label}</text></svg>`;
+  const out = (raw: string, idPrefix?: string) => { const r = sanitizeIllustration(raw, idPrefix ? { idPrefix } : {}); assert.ok(r.ok, JSON.stringify(r)); return r.svg; };
+  const a = out(drawing("url(#paint0)", "zöld"), "k1");
+  assert.ok(a.includes('id="k1-paint0"') && a.includes('fill="url(#k1-paint0)"') && a.includes('clip-path="url(#k1-c)"') && a.includes('id="k1-c"'), a);
+  assert.ok(out(drawing("url(#paint0)", "zöld"), "k2").includes('id="k2-paint0"'));
+  // Vak kör 2 L2: a tisztító által megengedett, szóközös hivatkozás is követi a definíciót.
+  const spaced = out(drawing("url( #paint0 )", "zöld"), "k3");
+  assert.ok(spaced.includes('id="k3-paint0"') && spaced.includes('fill="url(#k3-paint0)"'), spaced);
+  assert.equal(spaced.includes("#paint0"), false, "nem marad névtér nélküli hivatkozás");
+  // Vak kör 2 L6: a rajz FELIRATA (szövegtartalom) érintetlen, akkor is, ha hivatkozásnak látszik.
+  const labelled = out(drawing("url(#paint0)", "fill=url(#paint0) id=&quot;paint0&quot;"), "k4");
+  assert.ok(labelled.includes('>fill=url(#paint0) id="paint0"</text>'), labelled);
+  // Nem definiált hivatkozás és névterezés nélküli hívás: változatlan.
+  assert.ok(out(drawing("url(#nincs)", "zöld"), "k5").includes('fill="url(#nincs)"'));
+  const plain = out(drawing("url(#paint0)", "zöld"));
+  assert.ok(plain.includes('id="paint0"') && plain.includes('fill="url(#paint0)"'), "előtag nélkül a kimenet a régi");
+  assert.ok(a.includes('id="websuli-paper"'), "a papír-háttér azonosítója (az újratisztítás kulcsa) változatlan");
+  assert.ok(sanitizeIllustration(a).ok, "a névterezett rajz újratisztítható");
   const { PictureCardsAnim } = await import("../client/src/lesson-runtime/blocks/tree-cards");
   // A DOM-próba rajza a tisztító szabályai szerint feliratos (a tisztító felirat nélküli rajzot nem enged át).
   const art = (color: string, word: string) => `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="paint0"><stop offset="0" stop-color="${color}"/></linearGradient></defs><rect fill="url(#paint0)" width="100" height="80"/><text x="50" y="95">${word}</text></svg>`;
