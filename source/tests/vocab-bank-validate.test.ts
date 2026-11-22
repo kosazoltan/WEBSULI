@@ -196,6 +196,14 @@ test("vak megoldó: az export kulcsot nem tartalmaz, a pontozó a kanárit és a
   assert.equal(empty.canaryFound, 0);
 });
 
+test("vak megoldó --only: csak a megadott azonosítókról kérdez, a disztraktor a teljes bankból jöhet (S3)", () => {
+  const ids = VOCAB_DE.filter(e => e.level === 0).slice(0, 2).map(e => e.id);
+  const { keys } = blindExport("de", VOCAB_DE, 0, 1122, 0, new Set(ids));
+  assert.ok(keys.length >= 4);
+  assert.deepEqual([...new Set(keys.map(k => k.entryId))].sort(), [...ids].sort());
+  assert.deepEqual(blindExport("de", VOCAB_DE, 0, 1122, 0).keys.length > keys.length, true, "only nélkül a teljes szint");
+});
+
 test("loadVocabBank: nyelvenként gyorsítótárazott ígéret, a bank adatát adja", async () => {
   resetVocabBankCache();
   const a = loadVocabBank("de");

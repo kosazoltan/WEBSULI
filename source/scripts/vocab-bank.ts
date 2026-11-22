@@ -3,7 +3,7 @@
  * Futtatás: `cd source && node --import tsx scripts/vocab-bank.ts <parancs> …`
  *
  *   report --lang <en|de|fr> [--terms] [--overlaps]
- *   blind-export --lang <l> --level <n> --seed <s> --out <fájl> --key-out <fájl> [--canary <k>]
+ *   blind-export --lang <l> --level <n> --seed <s> --out <fájl> --key-out <fájl> [--canary <k>] [--only <id-lista.json>]
  *   blind-score --key <fájl> --answers <fájl> --out <fájl>
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -154,13 +154,16 @@ export function reportLines(lang: VocabLang, entries: VocabEntry[], stage: Vocab
   return { lines, problems };
 }
 
-/** A szint minden bejegyzéséből hu→cél és cél→hu (+ hiányos mondat, ha lehet) kérdés; kulcs külön fájlban. */
-export function blindExport(lang: VocabLang, entries: VocabEntry[], level: VocabLevel, seed: number, canary: number):
+/**
+ * A szint minden bejegyzéséből hu→cél és cél→hu (+ hiányos mondat, ha lehet) kérdés; kulcs külön fájlban.
+ * `only`: csak ezekről az azonosítókról kérdez (S3 bővítés: az új tételek), a disztraktor-készlet a teljes bank marad.
+ */
+export function blindExport(lang: VocabLang, entries: VocabEntry[], level: VocabLevel, seed: number, canary: number, only?: ReadonlySet<string>):
   { questions: BlindQuestion[]; keys: BlindKey[]; skipped: string[] } {
   const rng = mulberry32(seed);
   const items: Array<{ q: Omit<BlindQuestion, "ref">; k: Omit<BlindKey, "ref"> }> = [];
   const skipped: string[] = [];
-  for (const entry of entries.filter(e => e.level === level)) {
+  for (const entry of entries.filter(e => e.level === level && (!only || only.has(e.id)))) {
     const types: VocabQuestionType[] = ["hu-to-target", "target-to-hu"];
     if (findTermInExample(entry)) types.push("cloze");
     for (const type of types) {
@@ -249,7 +252,9 @@ function main(): void {
     const level = intArg(args, "level", 0, 4) as VocabLevel;
     const seed = intArg(args, "seed", 0, 2 ** 31 - 1);
     const canary = args.canary === undefined ? 0 : intArg(args, "canary", 0, 1000);
-    const { questions, keys, skipped } = blindExport(lang, BANKS[lang].entries, level, seed, canary);
+    const only = typeof args.only === "string" ? new Set(asArray<string>(JSON.parse(readFileSync(args.only, "utf8")), "ids")) : undefined;
+    if (only && ![...only].every(id => BANKS[lang].entries.some(e => e.id === id))) fail("--only: ismeretlen azonosító a listában");
+    const { questions, keys, skipped } = blindExport(lang, BANKS[lang].entries, level, seed, canary, only);
     writeFileSync(str(args, "out"), `${JSON.stringify({ lang, level, seed, count: questions.length, items: questions }, null, 1)}\n`, "utf8");
     writeFileSync(str(args, "key-out"), `${JSON.stringify({ lang, level, seed, canary, items: keys }, null, 1)}\n`, "utf8");
     process.stdout.write(`kérdés: ${questions.length}, kanári: ${Math.min(canary, keys.length)}, kihagyva: ${skipped.length}${skipped.length ? ` (${skipped.join(", ")})` : ""}\n`);
