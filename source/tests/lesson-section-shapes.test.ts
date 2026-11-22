@@ -117,3 +117,26 @@ test("V15: a pedagógus-prompt KI bájtra a régi; BE fejezettípust kér, és n
     if (saved === undefined) delete process.env.STUDIO_LESSON_VARIETY; else process.env.STUDIO_LESSON_VARIETY = saved;
   }
 });
+
+test("S6a-v2: a pedagógus-prompt a FUTÁSRA rögzített állapotot követi, nem a környezetet (KI-ben indult futás BE környezetben is KI)", async () => {
+  const { buildPedagoguePrompt } = await import("../server/studio/step-io");
+  const { runWithLessonVariety } = await import("../server/studio/lesson-variety-flag");
+  const map = { title: "T", subject: "matematika", classroom: 5, concepts: [] };
+  const saved = process.env.STUDIO_LESSON_VARIETY;
+  try {
+    process.env.STUDIO_LESSON_VARIETY = "on";
+    const offInOnEnv = await runWithLessonVariety(false, async () => buildPedagoguePrompt(map));
+    assert.doesNotMatch(offInOnEnv, /sectionKind/u, "KI futás BE környezetben: a régi prompt");
+    delete process.env.STUDIO_LESSON_VARIETY;
+    const onInOffEnv = await runWithLessonVariety(true, async () => buildPedagoguePrompt(map));
+    assert.match(onInOffEnv, /"sectionKind"/u, "BE futás KI környezetben: fejezettípust kér");
+  } finally {
+    if (saved === undefined) delete process.env.STUDIO_LESSON_VARIETY; else process.env.STUDIO_LESSON_VARIETY = saved;
+  }
+});
+
+test("S6a-v2: a gyártómotor a fejezetív-kiosztáshoz a futás állapotát olvassa (szerkezeti őr)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
+  assert.match(src, /applySectionShapes\(plannedOutline, planned === undefined && varietyOn \? seedFrom\(mapId\) : undefined\)/u);
+});

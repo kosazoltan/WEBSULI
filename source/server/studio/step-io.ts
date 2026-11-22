@@ -373,7 +373,8 @@ const VARIETY_ARC_PLANNING = "- Fogalomcsoportonként egy fejezet. Fejezetenkén
 const VARIETY_ARC_ORDER = "A fogalom-fejezetek végleges plannedBlocks sorrendjét a program osztja ki (minden minta megfelel a fenti ívnek); a különleges záró fejezetekét te adod meg a fenti minta szerint. A vázlat sorrendje lesz a lecke sorrendje.";
 
 export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner?: OwnerContext): string {
-  const variety = lessonVarietyEnabled();
+  // S6a-v2: a futásra rögzített állapot (folytatásnál a mentett job-állapot), nem a környezet.
+  const variety = effectiveLessonVariety();
   return [
     // J4 (átvilágítás L5): egyetlen feladat, magyar állomás-fejléc — más szerepekre / átadásra utaló szöveg nélkül.
     "A FELADAT: tananyagterv (lecke-vázlat) a kurált fogalomtérképből. A lecke ezt a tervet követi, ezért pontos, tömör és teljes legyen.",

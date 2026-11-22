@@ -11,7 +11,6 @@
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { seedFrom } from "../../../shared/seeded";
 import { applySectionShapes } from "../../../shared/lesson-section-shapes";
-import { lessonVarietyEnabled } from "../lesson-variety-flag";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
@@ -727,7 +726,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   });
   // S6a (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 12. szakasz): BE kapcsolónál a modell tervének fogalom-fejezetei a kiosztott
   // fejezetmintát kapják (a tulajdonos jóváhagyott terve nem változik); KI-nél a terv a régi (csak a kéretlen `sectionKind` esik ki).
-  const outline = applySectionShapes(plannedOutline, planned === undefined && lessonVarietyEnabled() ? seedFrom(mapId) : undefined);
+  const outline = applySectionShapes(plannedOutline, planned === undefined && varietyOn ? seedFrom(mapId) : undefined);
   output = { ...output, outline, approvedOutline: outline };
 
   // SK1 — a forrás-fedettségi kapu mérése (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. Független review F12: a
