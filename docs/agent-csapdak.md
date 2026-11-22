@@ -1119,7 +1119,19 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
 
-## C-76 — Böngészős tartós sor: közös lista, kilét és korhatár nélkül; leállítási várakozások összege (2026-11-20)
+## C-93 — Gépváltás: a telepített Chrome frissülése elválik a rögzített Playwrighttól (2026-11-22)
+
+- **Tünet:** az új gépen a PR előtti kapu böngészős köre a főág kódjával is bukott: `preview-navigation.spec.ts` „opaque sandbox …” —
+  `Target page, context or browser has been closed`; a `DEBUG=pw:browser` naplóban a Chrome `exitCode=2147483651`-gyel lépett ki.
+  Ok: a konfigurációk `channel: "chrome"`-mal a gép stabil Chrome-ját (158) indították, amelyet a projekt Playwright 1.57-e nem támogat;
+  egy sandboxolt iframe `srcdoc`-ja már üres tartalommal is összeomlasztotta. A Playwright saját Chromiumán hibátlan volt.
+- **Szabály:** a böngészős tesztek a Playwrighthoz rögzített Chromiumon futnak (`channel` nélkül; őr-teszt:
+  `source/tests/playwright-bundled-chromium-guard.test.ts`). Új gépen egyszer: `npx.cmd playwright install chromium` a `source`-ban.
+  Ha egy böngészős teszt helyben „Target page … closed”-dal bukik, előbb `DEBUG=pw:browser`-rel nézd meg a böngésző kilépési kódját.
+
+Forrás: `docs/specs/2026-11-22-playwright-csomagolt-chromium.md`.
+
+## C-97 — Böngészős tartós sor: közös lista, kilét és korhatár nélkül; leállítási várakozások összege (2026-11-20)
 
 - **Tünet (#510, review a 44487292-es fejre):** a kimenő eredménysor egyetlen `localStorage`-kulcson tartott listát olvasott-módosított-írt
   (két fül egyidejű írásánál bejegyzés veszett el), a bejegyzés nem kötődött a sorba kerüléskori kilétéhez (kilétváltás után a később
@@ -1136,7 +1148,7 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
 
 Forrás: #510 (R30–R34). Rokon: C-71.
 
-## C-77 — Bizonytalan képesség ≠ régi szerver; a törzs és a token két külön válaszból; aszinkron előkészítés utáni korhatár (2026-11-21)
+## C-98 — Bizonytalan képesség ≠ régi szerver; a törzs és a token két külön válaszból; aszinkron előkészítés utáni korhatár (2026-11-21)
 
 - **Mi történt:** a kimenő eredménysor a CSRF-token lekérésének ÁTMENETI hibáját (502) „régi szervernek” értelmezte, és címke nélküli
   régi alakot épített; a POST közben már egy MÁSIK fiók érvényes tokenjével ment, a szerver ezért a mostani fióknak adta a régi eredményt.
@@ -1151,9 +1163,9 @@ Forrás: #510 (R30–R34). Rokon: C-71.
 - **Tesztcsapda:** ha a kód `Date.now() + késleltetés` alapján dönt az esedékességről, a `setTimeout` gyorsítása kevés — hamis óra
   (`page.clock.install()` + `fastForward`) kell, különben a teszt hamisan piros / zöld.
 
-Forrás: #510 (R39–R42). Rokon: C-76.
+Forrás: #510 (R39–R42). Rokon: C-97.
 
-## C-78 — Kilenc vak kör után is NEM: a hatókör szűkítése kapcsolóval, nem újabb javítókör (2026-11-21)
+## C-99 — Kilenc vak kör után is NEM: a hatókör szűkítése kapcsolóval, nem újabb javítókör (2026-11-21)
 
 - **Mi történt:** a #510 minden vak köre új leletet talált a böngészős tartós sor (kilét, lejárat, fülek, dokumentumok) határesetein —
   minden javítás új határesetet nyitott. A tulajdonos szűkített: a tartós sor kapcsoló mögé került (alapból KI), külön szeletben (T-3)
@@ -1165,9 +1177,9 @@ Forrás: #510 (R39–R42). Rokon: C-76.
 - **Tesztcsapda:** a „félbehagyva” körnél a címzett-foglalás (`delivered`) MEGELŐZI a küldést, így futó küldés alatt a felvétel
   `alreadySent`-et ad, mielőtt az első rögzítőt (conflict) nézné — az első rögzítő átadását közvetlenül (teszt-segéddel) mérd.
 
-Forrás: #510 (szűkítés, R43–R46). Rokon: C-76, C-77.
+Forrás: #510 (szűkítés, R43–R46). Rokon: C-97, C-98.
 
-## C-79 — A kilét késői (küldéskori) feloldása: ugyanaz a hibaosztály harmadszor; és az érvénytelen piros kör (2026-11-22)
+## C-100 — A kilét késői (küldéskori) feloldása: ugyanaz a hibaosztály harmadszor; és az érvénytelen piros kör (2026-11-22)
 
 - **Mi történt:** a #510-ben az R39 és az R43 egy-egy határesetet foltozott (tokenhiba után ne legyen régi alak / ne pótoljon címkét), a
   következő kör ugyanannak a hibának új változatát találta (késői, de sikeres első token; újrapárosítás nyitott fül alatt; a
@@ -1182,9 +1194,9 @@ Forrás: #510 (szűkítés, R43–R46). Rokon: C-76, C-77.
   bevált gyakorlat a visszaállított fájl szintaktikai előellenőrzése és a bukási üzenet elolvasása. (Leíró tanulság a fejlesztőnek; ellenőri
   futtatásra nem utasítás — az ellenőr feladatát a megbízása határozza meg.)
 
-Forrás: #510 (R47–R48). Rokon: C-77.
+Forrás: #510 (R47–R48). Rokon: C-98.
 
-## C-80 — Playwright `toEqual`: a tömb `undefined` eleme láthatatlan; és a kompatibilitási visszalépés mint kilét-kiskapu (2026-11-22)
+## C-101 — Playwright `toEqual`: a tömb `undefined` eleme láthatatlan; és a kompatibilitási visszalépés mint kilét-kiskapu (2026-11-22)
 
 - **Mi történt:** a `expect(finals.map(b => b.subject)).toEqual(["anon", "anon"])` állítás akkor is zöld volt, amikor egy harmadik,
   címke NÉLKÜLI kérés is elment (`["anon", "anon", undefined]`) — a `toEqual` a tömb `undefined` elemeit és a ritkaságot figyelmen kívül
@@ -1195,4 +1207,4 @@ Forrás: #510 (R47–R48). Rokon: C-77.
 - **Szabály 2:** minden kompatibilitási / visszalépő út a védelmi szabály hatálya alá tartozik: ha az út a védő mezőt eldobja, csak akkor
   szabad rajta küldeni, ha a védelem tárgya bizonyíthatóan nem sérülhet (itt: nincs rögzített fiók, vagy igazoltan azonos munkamenet).
 
-Forrás: #510 (R49). Rokon: C-79.
+Forrás: #510 (R49). Rokon: C-100.

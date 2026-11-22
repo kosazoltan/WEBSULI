@@ -470,7 +470,7 @@ Kilét-leltár frissítése (a fenti táblázathoz):
   teszt: `R51 / L5`). Összesen 31 sor.
 - **Jegyre (kanban), nem ebben a körben:** **L4** (a 403 utáni pillanatkép 7 napon túl és befagyott `clientNow`-val mehet — a megoldás: a
   törzsfüggvény a tényleges POST előtt mérje a kort és a `clientNow`-t; hamis órás böngészőteszt kell). **L6** dokumentum-szöveg javítva
-  (`docs/agent-csapdak.md` C-79: leíró, nem utasítás).
+  (`docs/agent-csapdak.md` C-100: leíró, nem utasítás).
 
 ## 2026-11-22 — R52: a kilét-rögzítő sorok takarítása (terv: `docs/specs/2026-11-17-eredmeny-email-kviz.md`, R52)
 
