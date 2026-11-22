@@ -135,7 +135,8 @@ futáskorláttal. Éles DB, `db:push`, e-mail, push / PR / merge, kódellenőri 
   francia elízió → O1/L3; M3 nyers út mondat=false → O2/L4; M4 régi célrész-szabály → O2/L5; M5 bankközi korlát ki → O2/L1;
   M6 reset sorozat-nullázás nélkül → O4/L7.
 - **S3 (2026-11-22, `feat/szoletra-a1-bank`):** próbakör 6 hívás 0,2869 USD (3 csonkolt, C-SZL-2), 36 elfogadott szó →
-  vetítés 7,17 USD ≤ 22; teljes generálás 18 hívás 1,9281 USD; vak megoldó 54 hívás 5,1206 USD; **összesen 7,3355 USD**.
-  0. / 1. fokozat egyes szó: en 372 / 328, de 316 / 300, fr 300 / 300 (fr +5 pótlás, orkesztrátori engedéllyel). Kanári 10/10, 10/10, 9/10 (a fr kimaradt kanárija
-  valódi tartalmi hibát jelzett, tétel törölve); utolsó körben valódi hiba 0. A Szólétra / szóbank egységtesztek 221/221
+  vetítés 7,17 USD ≤ 22; teljes generálás 18 hívás 1,9281 USD; vak megoldó 58 hívás 5,2747 USD; **összesen 7,4896 USD**.
+  0. / 1. fokozat egyes szó a e2d8c86d mércéjével, bankközi korláttal: en 355 / 294, de 300 / 276, fr 300 / 300 (korlát
+  nélkül: en 372 / 327, de 317 / 303, fr 308 / 318); fr +29, de +4 tartalékból pótolva; nyitott: en 1. fok. −6, de −24. Kanári 10/10, 10/10, 9/10 (a fr kimaradt kanárija
+  valódi tartalmi hibát jelzett, tétel törölve); utolsó körben valódi hiba 0. A Szólétra / szóbank egységtesztek 228/228
   zöldek, `tsc --noEmit` 0 hiba. Jegyzőkönyv: `docs/measurements/2026-11-22-szoletra-a1-bank.md`.

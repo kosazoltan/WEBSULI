@@ -737,4 +737,9 @@ export const VOCAB_DE_L0: VocabEntry[] = [
   { id: "de0-family-029", term: "der Mann", hu: "férfi, férj", kind: "word", level: 0, topic: "family", pos: "noun", example: "Der Mann ist groß.", exampleHu: "A férfi magas." },
   { id: "de0-animals-069", term: "der Wal", hu: "bálna", kind: "word", level: 0, topic: "animals", pos: "noun", example: "Der Wal lebt im Meer.", exampleHu: "A bálna a tengerben él." },
   { id: "de0-animals-070", term: "der Hai", hu: "cápa", kind: "word", level: 0, topic: "animals", pos: "noun", example: "Der Hai schwimmt schnell.", exampleHu: "A cápa gyorsan úszik." },
+  // ── S3 (2026-11-22): A1-bővítés, 0–1. fokozatú egyes szavak (scripts/vocab-bank-generate.ts) ──
+  { id: "de0-freetime-032", term: "die Wippe", hu: "libikóka", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "Die Wippe steht auf dem Spielplatz.", exampleHu: "A libikóka a játszótéren van." },
+  { id: "de0-freetime-033", term: "die Rutsche", hu: "csúszda", kind: "word", level: 0, topic: "freetime", pos: "noun", example: "Die Kinder lieben die Rutsche.", exampleHu: "A gyerekek szeretik a csúszdát." },
+  { id: "de0-sports-024", term: "der Sattel", hu: "nyereg", kind: "word", level: 0, topic: "sports", pos: "noun", example: "Am Fahrrad ist der Sattel zu hoch.", exampleHu: "A biciklin túl magasan van a nyereg." },
+  { id: "de0-home-053", term: "der Sack", hu: "zsák", kind: "word", level: 0, topic: "home", pos: "noun", example: "Der Sack ist schwer.", exampleHu: "A zsák nehéz." },
 ];

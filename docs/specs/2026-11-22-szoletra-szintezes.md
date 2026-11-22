@@ -282,17 +282,19 @@ szerkezeti őr a `vocabBankProblems` / `minimumProblems`. Bejegyzésenkénti kö
 megoldó kanári 10/10, a jelzett tételek javítva; a 0–1. fokozat egyes-szó-száma nyelvenként ≥ 300; a mért tényleges költség a
 PR-leírásban (gép által rögzített számláló, nem becslés).
 
-**Mért eredmény (S3, 2026-11-22, `feat/szoletra-a1-bank`; jegyzőkönyv: `docs/measurements/2026-11-22-szoletra-a1-bank.md`):**
+**Mért eredmény (S3, 2026-11-22, `feat/szoletra-a1-bank`, a e2d8c86d mércéjével; jegyzőkönyv:
+`docs/measurements/2026-11-22-szoletra-a1-bank.md`):** 0. / 1. fokozat egyes szó (kézi + szóbank), korlát nélkül →
+bankközi korláttal (`ladderTermFloors`):
 
-| nyelv | 0. fokozat előtte → utána | 1. fokozat előtte → utána | új 0. szintű egyes szó |
-|---|---|---|---|
-| en | 222 → 372 | 181 → 328 | 297 |
-| de | 171 → 316 | 145 → 300 | 300 |
-| fr | 109 → 300 | 186 → 300 | 305 |
+| nyelv | 0. fokozat | 1. fokozat | 0. fok. korláttal | 1. fok. korláttal | új 0. szintű egyes szó |
+|---|---|---|---|---|---|
+| en | 222 → 372 | 180 → 327 | 205 → 355 | 149 → 294 | 297 |
+| de | 171 → 317 | 145 → 303 | 154 → 300 | 118 → 276 | 304 |
+| fr | 111 → 308 | 186 → 318 | 103 → 300 | 168 → 300 | 329 |
 
-Mért költség: **7,3355 USD** (78 hívás, a válaszok `usage.cost` mezőjének összege; napló:
-`docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl`). A fr-nél a két fokozat külön-külön ≥ 300-hoz 305 új szó
-kellett: a +5 tételt az orkesztrátor a kereten belül engedélyezte (tartalék-jelöltekből, rövid vak körrel).
+Mért költség: **7,4896 USD** (82 hívás, a válaszok `usage.cost` mezőjének összege; napló:
+`docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl`). Nyitott (korláttal mérve): en 1. fokozat −6,
+de 1. fokozat −24 — a tartalék elfogyott, a pótlás fizetős generálást kíván (orkesztrátori döntés).
 
 ## 13. Vak kör 1 (2026-11-22, fej 0fe24459) — osztályszintű javítás
 

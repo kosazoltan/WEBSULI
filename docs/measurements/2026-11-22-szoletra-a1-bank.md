@@ -8,7 +8,7 @@ végrehajtás: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md` 10–14
 - Eszköz: `source/scripts/vocab-bank-generate.ts` (`generate` / `apply` / `solve`), `source/scripts/vocab-bank.ts`
   (`blind-export --only`, `blind-score`).
 - Költségforrás: a szolgáltató válaszának `usage.cost` mezője, hívásonként a gépi naplóban:
-  `docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl` (78 sor). Becslés nincs.
+  `docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl` (82 sor). Becslés nincs.
 
 ## Költség (mért, a napló összege)
 
@@ -16,23 +16,33 @@ végrehajtás: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md` 10–14
 |---|---|---|
 | Próbakör (nyelvenként 15 jelölt; ebből 3 csonkolt hívás 0,1496 — C-SZL-2) | 6 | 0,2869 |
 | Teljes generálás | 18 | 1,9281 |
-| Vak megoldó (1. kör 2692 kérdés + próba-köteg + pótlások + 2 javító kör + fr +5 kör) | 54 | 5,1206 |
-| **Összesen** | **78** | **7,3355** |
+| Vak megoldó (1. kör 2692 kérdés + próba-köteg + pótlások + javító körök + tartalék-körök) | 58 | 5,2747 |
+| **Összesen** | **82** | **7,4896** |
 
-Token: 646 400 bemeneti, 348 240 kimeneti. Próbakör-vetítés 900 tételre: 7,17 USD (a csonkolt hívásokkal együtt;
-nélkülük 3,43) ≤ 22 USD → a teljes futás indulhatott. A keret 29 %-a fogyott el.
+Token: 656 335 bemeneti, 353 960 kimeneti. Próbakör-vetítés 900 tételre: 7,17 USD (a csonkolt hívásokkal együtt;
+nélkülük 3,43) ≤ 22 USD → a teljes futás indulhatott. A keret 30 %-a fogyott el.
 
-## Tételszám (kézi + szóbank, egyes szó, `wordLadderGrading` mérce)
+## Tételszám (kézi + szóbank, egyes szó)
 
-| Nyelv | 0. fokozat előtte → utána | 1. fokozat előtte → utána | Új 0. szintű tétel | Szóbank összesen | Phrase-arány |
-|---|---|---|---|---|---|
-| en | 222 → 372 | 181 → 328 | 297 | 2664 → 2961 | 34,6 % → 31,1 % |
-| de | 171 → 316 | 145 → 300 | 300 | 2080 → 2380 | 36,0 % → 31,4 % |
-| fr | 109 → 300 | 186 → 300 | 305 | 2064 → 2369 | 36,1 % → 31,5 % |
+Mérce: `source/client/src/lib/wordLadderGrading.ts` a `feat/szoletra-szintezes-1` e2d8c86d fején (locale-független
+normalizálás, nyelvenkénti névelők, célnyelvi oldal választása, bankközi korlát `ladderTermFloors`). „Előtte” = a bank az S3
+tételei nélkül, ugyanezzel a mércével. Két oszloppár: korlát nélkül, és a kézi + szóbank összevont bankközi korlátjával
+(`ladderTermFloors(ladderFloorSources(kézi) + vocabFloorSources(szóbank))` — a szigorúbb).
 
-A fr-nél a két fokozat külön-külön ≥ 300-hoz 305 új szó kellett; a +5 tételt (1. fokozat) az orkesztrátor a kereten belül
-engedélyezte, tartalék-jelöltekből, saját vak körrel (15 kérdés, kanári 2/2, jelzett 0; a „la pieuvre” jelentése utólag
-„polip”-ra pontosítva). Minden új tétel egyes szó, 0. szint, mért fokozata 0 vagy 1.
+| Nyelv | 0. fok. előtte → utána | 1. fok. előtte → utána | 0. fok. korláttal | 1. fok. korláttal | Új 0. szintű szó | Szóbank |
+|---|---|---|---|---|---|---|
+| en | 222 → 372 | 180 → 327 | 205 → 355 | 149 → **294** | 297 | 2664 → 2961 |
+| de | 171 → 317 | 145 → 303 | 154 → 300 | 118 → **276** | 304 | 2080 → 2384 |
+| fr | 111 → 308 | 186 → 318 | 103 → 300 | 168 → 300 | 329 | 2064 → 2393 |
+
+Phrase-arány utána: en 31,1 %, de 31,4 %, fr 31,2 % (≥ 30 %).
+
+- Az új mérce alatt a fr és a de 0. fokozat hiánya a tartalék-jelöltekből pótolva (fr +24, de +4; saját vak kör, 1 javított
+  tétel: `de0-freetime-032` „auf die Wippe” → új példamondat). Fizetős generálás ehhez nem kellett.
+- **Nyitott (korláttal mérve):** en 1. fokozat −6, de 1. fokozat −24. Ehhez a tartalék elfogyott (en 1. fok. 0, de 1. fok.
+  3 jelölt, mind felhasználva); a pótlás fizetős generálást kíván (becslés: 2 generáló + 2 vak hívás, ≈ 0,4 USD, UNVERIFIED).
+  Korlát nélkül mindhárom nyelv mindkét fokozata ≥ 300.
+- Minden új tétel egyes szó, 0. szint, mért fokozata (korlát nélkül és korláttal is) 0 vagy 1.
 
 ## Szűrés (gépi, `apply`)
 
@@ -50,6 +60,8 @@ jelzett; mind törölve és tartalékból pótolva (hibaosztály-javítás, nem 
 | javító 1. | en / de / fr | 31 / 48 / 57 | 3/3 · 3/3 · 3/3 | 0 / 0 / 2 |
 | javító 2. | fr | 2 | 1/1 | 0 |
 | fr +5 | fr | 15 | 2/2 | 0 |
+| tartalék (új mérce) | de / fr | 12 / 72 | 2/2 · 2/2 | 3 (1 tétel) / 0 |
+| javító 3. | de | 3 | 1/1 | 0 |
 
 - fr kanári 9/10: a kimaradt kanári (`fr0-animals-065` „le raton”) kérdésénél a megoldó „egyik sem jó” (null) választ adott
   és megjegyezte: a „mosómedve” franciául „raton laveur” — valódi tartalmi hiba, nem figyelmetlenség; a tétel törölve.
