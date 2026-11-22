@@ -1190,8 +1190,12 @@ Forrás: `docs/specs/2026-11-22-kisfilm-videomodell.md`.
 - **Szabály 2:** olyan tesztben, amely csak időkorlátos `AbortSignal`-ra vár, tarts egy életben tartó időzítőt (`setInterval` +
   `clearInterval` a `finally`-ben). „Promise resolution is still pending but the event loop has already resolved” = ez a minta.
 - **Tünet 3:** a felhős gyártósor-próba videólépése `getaddrinfo ENOTFOUND openrouter.ai`-jal bukott, mert a védett letöltő saját maga
-  old fel és az ellenőrzött IP-hez köt (a proxyt megkerüli). Szabály 3: felhős munkamenetben a modellt közvetlen API-próbával mérd
-  (curl a proxyn át), a teljes gyártósort élesben vagy a fejlesztői gépen.
+  old fel és az ellenőrzött IP-hez köt (a proxyt megkerüli). Megfigyelés 3: felhős munkamenetben a teljes gyártósor-próba ezért nem
+  mér semmit; fizetős modellpróba csak tulajdonosi jóváhagyással, a fejlesztői gépen vagy élesben (lásd a kisfilm-videomodell terv
+  „Élesítés” szakaszának egyklipes próbáját).
+- **Tünet 5 (vak kör 1 L1):** a videóletöltés hibaága a teljes URL-t (aláírt lekérdezéssel) és a nyers szolgáltatói hibaszöveget a
+  szervernaplóba írta. Szabály 5: szolgáltatói út naplóhatárán csak saját lépésnév, HTTP-státusz és rövid gépi hibakód (`clipLogDetail`,
+  `providerErrorCode`); URL-ből legfeljebb a host.
 - **Tünet 4:** a csapda-bejegyzést heredockal írtam be; a szövegben lévő kibocsátási szó miatt a kapu-hook megtagadta. Szabály 4:
   dokumentumot az Edit / Write eszközzel írj, ne heredockal (vö. C-29).
 

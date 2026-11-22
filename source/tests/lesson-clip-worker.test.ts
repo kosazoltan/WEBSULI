@@ -6,7 +6,7 @@ import { clipSource, type Clip2 } from "../shared/lesson-clip";
 import { CLIP_BAND_STYLE, clipBandFor } from "../shared/clip-style";
 import {
   CLIP_FRESH_DAYS, CLIP_MAX_ATTEMPTS, CLIP_ORPHAN_GRACE_MS, CLIP_PARALLEL, CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, clipDailyLimit, clipMediaBudgetBytes, clipSourceHash, clipSystemPrompt, clipTodo, clipsMode,
-  CLIP_SPEECH_ATTEMPTS, ClipAbortError, eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, speakChecked, speechDistance,
+  CLIP_SPEECH_ATTEMPTS, ClipAbortError, clipLogDetail, eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, speakChecked, speechDistance,
   type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
@@ -718,6 +718,48 @@ test("mozgókép hossza: a hang hosszából, 4 és 12 mp közé szorítva (a 2.0
   }
 });
 
+test("naplóbiztos hibaleírás: URL-ből csak a host marad, hitelesítő címkék és értékük kitakarva (#529 vak kör 1 L1)", () => {
+  const out = clipLogDetail(new Error("Átirányítás cél nélkül: https://cdn.example/v/abc.mp4?sig=SECRET123&exp=9 token=tk1 Authorization: Bearer xyz"));
+  for (const bad of ["SECRET123", "sig=", "abc.mp4", "tk1", "xyz"]) assert.ok(!out.includes(bad), `${bad} nem lehet a naplóban: ${out}`);
+  assert.match(out, /Átirányítás cél nélkül/);
+  assert.match(out, /cdn\.example/);
+  assert.ok(clipLogDetail("x".repeat(500)).length <= 200);
+  assert.equal(clipLogDetail({ toString: () => "http://h.example/p?q=1" }).includes("q=1"), false);
+});
+
+test("mozgókép: a szolgáltatói hibaszöveg, a job.error és a letöltési cím nem kerül a hibába / naplóba (#529 vak kör 1 L1)", async () => {
+  const realFetch = globalThis.fetch;
+  const realWarn = console.warn;
+  const warned: string[] = [];
+  console.warn = (...args: unknown[]) => { warned.push(args.map(String).join(" ")); };
+  const image = { bytes: Buffer.from("x"), mime: "image/jpeg" };
+  const deps = () => clipProviders({ openRouter: "titok" }, testTransport);
+  try {
+    globalThis.fetch = (async () => new Response("bad request: https://cdn.example/x?sig=SECRET1 token=TOK1", { status: 400 })) as typeof fetch;
+    const e1 = await deps().video!(image, "p", 6).then(() => "", (e: unknown) => String(e));
+    assert.match(e1, /mozgókép: HTTP 400/);
+    for (const bad of ["SECRET1", "TOK1", "cdn.example"]) assert.ok(!e1.includes(bad), `HTTP-hiba törzse: ${e1}`);
+    globalThis.fetch = (async () => new Response(JSON.stringify({ status: "failed", polling_url: "https://openrouter.ai/api/v1/videos/1", error: { code: "content_policy", message: "see https://cdn.example/y?sig=SECRET2" } }), { status: 200 })) as typeof fetch;
+    const e2 = await deps().video!(image, "p", 6).then(() => "", (e: unknown) => String(e));
+    assert.match(e2, /mozgókép: failed/);
+    assert.match(e2, /content_policy/, "a szolgáltató saját hibakódja megmarad");
+    assert.ok(!e2.includes("SECRET2") && !e2.includes("cdn.example"), `job.error: ${e2}`);
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.endsWith("/api/v1/videos")) return new Response(JSON.stringify({ status: "completed", polling_url: "https://openrouter.ai/api/v1/videos/1", unsigned_urls: ["https://cdn.example/v.mp4?sig=SECRET3"] }), { status: 200 });
+      return new Response(null, { status: 302 });
+    }) as typeof fetch;
+    const r3 = await deps().video!(image, "p", 6);
+    assert.equal(r3, null, "letöltési hiba → nincs mozgókép");
+    const joined = warned.join("\n");
+    assert.match(joined, /letöltése nem sikerült/);
+    assert.ok(!joined.includes("SECRET3") && !joined.includes("v.mp4"), `napló: ${joined}`);
+  } finally {
+    globalThis.fetch = realFetch;
+    console.warn = realWarn;
+  }
+});
+
 test("mozgókép-modell és -felbontás: alapérték, érvényes felülírás, érvénytelen / üres érték → alapérték", () => {
   assert.equal(CLIP_VIDEO_MODEL_DEFAULT, "bytedance/seedance-2.0-mini");
   assert.equal(CLIP_VIDEO_RESOLUTION_DEFAULT, "480p");
@@ -753,7 +795,9 @@ test("mozgókép beküldése: a beállított modell és felbontás megy a kéré
       assert.equal(b.duration, 6);
       assert.equal(b.aspect_ratio, "16:9");
       assert.equal(b.generate_audio, false);
-      assert.equal((b.frame_images as Array<{ frame_type: string }>)[0].frame_type, "first_frame");
+      const frames = b.frame_images as Array<{ type: string; frame_type: string; image_url: { url: string } }>;
+      assert.equal(frames.length, 1, "pontosan egy kezdőkép");
+      assert.deepEqual(frames[0], { type: "image_url", image_url: { url: `data:image/jpeg;base64,${Buffer.from("x").toString("base64")}` }, frame_type: "first_frame" }, "L4: a teljes kezdőkép-objektum");
     }
   } finally {
     globalThis.fetch = realFetch;

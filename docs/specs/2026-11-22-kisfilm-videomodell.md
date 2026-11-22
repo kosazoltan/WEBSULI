@@ -73,6 +73,15 @@ a 480p és a 720p képkockája szemre azonos (összevetve). A stílus rajzfilmsz
 
 ## Élesítés és visszavonás
 
-1. Összevonás + telepítés (a fő szál, `gate:merge`). 2. A tárolt állóképes fejezet sora törlése (`lesson_clips`, lecke `9cf4bda3-…`,
-`section_index` 0) — a következő kör újragyártja; tulajdonosi jóváhagyással. 3. `LESSON_CLIPS_AUTO=on`, az első kör figyelése.
+1. Összevonás + telepítés (a fő szál, `gate:merge`).
+2. **Egyklipes próba a széles bekapcsolás előtt (vak kör 1 L3):** a tényleges modell–felbontás párral EGY jelenet (a várható ár a
+   tulajdonos előtt, jóváhagyással), a teljes letöltés és átkódolás ellenőrzésével. Csak sikeres próba után következik a 3–4. pont.
+   Megállási feltétel: ha az első bekapcsolt kör naplójában a „0 nélkül” helyett mozgóképhiba áll, azonnal `LESSON_CLIPS_AUTO=off`
+   (az állóképes `ready` sorok a modell javításától nem gyártódnak újra).
+3. A tárolt állóképes fejezet sorának törlése (`lesson_clips`, lecke `9cf4bda3-…`, `section_index` 0), tulajdonosi jóváhagyással —
+   **csak ha a lecke a gyártási ablakon belül van (vak kör 1 L2):** a worker a lecke `published_at`-ja szerinti `CLIP_FRESH_DAYS`
+   ablakból válogat; az ablakon kívüli lecke sora törlés után NEM gyártódik újra (a tanuló elveszíti a kisfilmet). Törlés előtt a sor
+   tartalmát menteni kell (visszaállítási pont), és a `published_at`-ot ellenőrizni.
+4. `LESSON_CLIPS_AUTO=on`, az első kör figyelése; a memóriára az első körben a 450 MB-os kézi küszöb érvényes (a tulajdonos által
+   jóváhagyott tartós küszöb 480 MB — a kettő nem azonos).
 Visszavonás: `LESSON_CLIPS_AUTO=off`; modellprobléma esetén `LESSON_CLIP_VIDEO_MODEL` átírása.

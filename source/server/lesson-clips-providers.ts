@@ -8,7 +8,13 @@ import path from "node:path";
 import sharp from "sharp";
 import { logger } from "./lib/logger";
 import { openPublicResponse, type AddressLookup, type RawRequest, type RawResponse } from "./studio/safe-fetch";
-import { CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, ClipAbortError, type ClipDeps } from "./lesson-clips";
+import { CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, ClipAbortError, clipLogDetail, type ClipDeps } from "./lesson-clips";
+
+/** A szolgáltatói `job.error` naplózható része: kizárólag egy rövid, gépi hibakód (`code`); szabad szöveg / URL soha (#529 L1). */
+export function providerErrorCode(error: unknown): string {
+  const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
+  return typeof code === "string" && /^[A-Za-z0-9_.-]{1,40}$/.test(code) ? ` (${code})` : "";
+}
 
 /**
  * A kisfilm-gyártás valódi szolgáltatói (docs/specs/2026-11-10-fejezet-kisfilmek-v2-p1p2-vegrehajtas.md, D2–D6). A kulcsok csak a
@@ -257,7 +263,7 @@ export function sweepStaleClipDirs(root = tmpdir(), now = Date.now()): number {
       rmSync(dir, { recursive: true, force: true });
       removed++;
     } catch (error) {
-      logger.warn(`[lesson-clips] a régi munkamappa nem törölhető (${name}): ${error instanceof Error ? error.message.slice(0, 120) : String(error)}`);
+      logger.warn(`[lesson-clips] a régi munkamappa nem törölhető (${name}): ${clipLogDetail(error).slice(0, 120)}`);
     }
   }
   return removed;
@@ -332,7 +338,7 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
     if (error instanceof ClipAbortError) throw error;
     if (shutdown.signal.aborted) throw new ClipAbortError("a szerver leáll");
     const missing = stage === "átkódolás" && (error as NodeJS.ErrnoException)?.code === "ENOENT";
-    const detail = error instanceof Error ? error.message.slice(0, 160) : String(error);
+    const detail = clipLogDetail(error).slice(0, 160);
     if (!missing || !warnedNoFfmpeg) logger.warn(`[lesson-clips] ${missing ? "nincs ffmpeg a szerveren (FFMPEG_PATH / PATH) — a kisfilmek mozgókép nélkül készülnek" : `a mozgókép ${stage === "letöltés" ? "letöltése" : "átkódolása"} nem sikerült: ${detail}`}`);
     if (missing) warnedNoFfmpeg = true;
     return null;
@@ -349,14 +355,13 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 }
 
 export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {}): ClipDeps {
-  const secrets = [keys.openRouter, keys.openAi, keys.elevenLabs].filter((k): k is string => !!k);
-  const scrub = (text: string) => secrets.reduce((out, key) => out.split(key).join("[kulcs]"), text).slice(0, 200);
-  const fail = (what: string, status: number, body: string) => new Error(`${what}: HTTP ${status} ${scrub(body)}`);
-  /** A szolgáltatói törzs szövege bájtkorláttal (I/O-osztály leltár); hibás státusznál a (korlátos) törzzsel együtt hiba. */
+  // #529 vak kör 1 L1 (hibaosztály): a hibába — és így a naplóba — csak a saját lépésnév és a HTTP-státusz kerül; a nyers szolgáltatói
+  // törzs (benne aláírt cím, hozzáférési adat, visszhangzott kérés) soha.
+  const fail = (what: string, status: number) => new Error(`${what}: HTTP ${status}`);
+  /** A szolgáltatói törzs szövege bájtkorláttal (I/O-osztály leltár); hibás státusznál hiba (a törzs nélkül). */
   const bodyText = async (what: string, res: Response, max: number = CLIP_RESPONSE_LIMITS.text): Promise<string> => {
-    const text = await readLimitedText(res, max);
-    if (!res.ok) throw fail(what, res.status, text);
-    return text;
+    if (!res.ok) { await res.body?.cancel().catch(() => undefined); throw fail(what, res.status); }
+    return readLimitedText(res, max);
   };
   const orHeaders = { Authorization: `Bearer ${keys.openRouter}`, "Content-Type": "application/json", "HTTP-Referer": "https://websuli.vip", "X-Title": "WebSuli lesson clips" };
   const dataUrl = (image: { bytes: Buffer; mime: string }) => `data:${image.mime};base64,${image.bytes.toString("base64")}`;
@@ -406,7 +411,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
         if (poll.ok) job = JSON.parse(await readLimitedText(poll, POLL_LIMIT));
         else await poll.body?.cancel().catch(() => undefined);
       }
-      if (job.status !== "completed" || !job.unsigned_urls?.[0]) throw new Error(`mozgókép: ${job.status} ${scrub(JSON.stringify(job.error ?? ""))}`);
+      if (job.status !== "completed" || !job.unsigned_urls?.[0]) throw new Error(`mozgókép: ${job.status}${providerErrorCode(job.error)}`);
       // Letöltés csak HTTPS-ről; a kulcs csak a szolgáltató saját originjére megy, idegen (CDN) címre kulcs nélkül (vak kör L8).
       const url = providerUrl(job.unsigned_urls[0]);
       if (!url) throw new Error("mozgókép: a letöltési cím nem HTTPS");
@@ -417,7 +422,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
     const key = keys.elevenLabs;
     deps.speech = async (text, voice) => {
       const res = await elevenLabsQueue(() => fetchPatiently(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}?output_format=${CLIP_AUDIO_FORMAT}`, { method: "POST", signal: signal(60_000), headers: { "xi-api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ text, model_id: voice.model, language_code: "hu" }) })));
-      if (!res.ok) throw fail("hang", res.status, await readLimitedText(res, CLIP_RESPONSE_LIMITS.text));
+      if (!res.ok) { await res.body?.cancel().catch(() => undefined); throw fail("hang", res.status); }
       return readLimitedBytes(res, CLIP_RESPONSE_LIMITS.audio);
     };
     // Hangkapu tartaléka: az ElevenLabs saját felismerője. Mérve 2026-11-10: a saját hangját a független felismerőnél elnézőbben
