@@ -1,6 +1,8 @@
 # Spec: Szólétra — évfolyamhoz és tudáshoz igazított szintezés, osztályozott szó- és kifejezésbank
 
-> Dátum: 2026-11-22 · Szerző: Claude (fejlesztő alügynök) · Állapot: VÉGREHAJTVA (S1 + S2, ág `feat/szoletra-szintezes`); ellenőrzés: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md` „Mért számok”
+> Dátum: 2026-11-22 · Szerző: Claude (fejlesztő alügynök) · Állapot: **S1 végrehajtva ezen az ágon (PR-1, `feat/szoletra-szintezes-1`;
+> a lap még NEM hívja a modult); S2 (bekötés, A9, az új választós A10) a `feat/szoletra-szintezes-2` ágon (PR-2); S3 keretre vár.**
+> Ellenőrzés: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md` „Mért számok” (fejenként jelölve).
 > Szabály: 3+ fájlt érintő feladat csak spec + AI-olvasható végrehajtási utasítás után indul (`docs/agent-haromfazisu-munka.md`).
 > Végrehajtás: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md`.
 
@@ -87,9 +89,16 @@ mozdítja → **nincs szükség új verziókulcsra** (a D-04 Rúnabánya-minta i
 
 Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhető).
 
-- **Célrész** (`ladderDifficultyInput`): hiányos mondatnál a mondat a helyes válasszal kitöltve (mondat = igen); „… angolul /
-  németül / franciául” kérdésnél a helyes opció; egyébként a célrész (`focus`); célrész nélkül (helyzet-kérdés) a helyes opció.
-  Mondatnak számít az 5+ szavas célrész is.
+- **Célrész** (`ladderDifficultyInput`) — mindig a CÉLNYELVI oldal (vak kör 1 L5, 13. szakasz): hiányos mondatnál a mondat a
+  helyes válasszal kitöltve (mondat = igen); „… angolul / németül / franciául” kérdésnél a helyes opció; egyébként a kiemelés
+  (`focus`) és a helyes opció közül a kevésbé magyar (csak-magyar betűk í ó ú ő ű a kisbetűs szavakban — a zárójeles magyarázat
+  és a mondat belsejében álló tulajdonnév nem számít — + magyar funkciószavak); egyenlőségnél a kiemelés, ha az utasítás
+  jelentést kérdez („Mit jelent”, „Mire …”, „magyarul” …), különben a helyes opció; kiemelés nélkül a helyes opció. A
+  kiemelés megjelenítése nem változik.
+- **Normalizálás** (O1, 13. szakasz): NFC, nyelvi környezettől független kisbetűsítés (`toLowerCase`), szélső írásjel és
+  nyelvenkénti névelő le (en the / a / an / to; de der / die / das / den / dem / des / ein…; fr le / la / les / un / une / des /
+  du és az elidált `l'` / `l’` szóköz nélkül). A pont, a szószám és a bankközi kulcs ugyanebből számol.
+- **Mondat** (közös felismerő, `isLadderSentence`): 5+ szóközzel elválasztott szó — a nyers szóbanki és a kérdés-úton azonos.
 - **Pont** = betűszám (névelő nélkül) / nyelvi szorzó (en 1,00 · de 1,35 · fr 1,20 — a szóbank 0. szintjének átlag-betűszáma
   alapján: 6,9 / 9,4 / 8,5) + 2 × (szótag − szó) + 3 × (szó − 1) + 6 (ha mondat) + kategória-súly (word / topic 0, everyday 3,
   phrase 4, regular 5, irregular 7; szóbanknál word 0, phrase 4). Szótag = magánhangzó-csoport (ékezetesekkel), szavanként ≥ 1.
@@ -100,6 +109,9 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
 - **Alfok** a (feljebb sorolt) szinten belül, rögzített határokkal (a három nyelv együttes p33 / p67 kvantilisei):
   0. szint ≤ 5 / ≤ 9; 1. ≤ 9 / ≤ 21; 2. ≤ 9 / ≤ 20; 3. ≤ 11 / ≤ 21; 4. ≤ 13 / ≤ 24 (különben 2. alfok).
 - **Fokozat** = szint × 3 + alfok (0–14).
+- **Bankközi korlát** (vak kör 1 L1, ND-3 (a) „a mérce kezeli” gépi szabályként): azonos célnyelvi alak (normalizált kulcs) a
+  kézi és a szóbankban a két bank-szint közül a NAGYOBBRÓL indul — a kisebb emelkedik, lefelé soha; mondat nem számít.
+  (`ladderTermFloors`, `ladderFloorSources`, `vocabFloorSources`; a lap a teljes szóbankból építi — PR-2.)
 - **Kézi finomítás:** felülíró tábla (`LADDER_STEP_OVERRIDES`, azonosító → fokozat) — induláskor ÜRES; csak dokumentált,
   tételenkénti indoklással bővíthető (validátor-teszt: létező azonosító, 0–14).
 
@@ -140,8 +152,12 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
 
 - Évfolyam 3 alatt / 12 fölött / nem szám → a meglévő `clampLadderGrade` (3–12) után számolunk; a modul maga is vág.
 - Pálya NaN / 0 / 99 → 1–10-re vágva.
-- Üres vödör a kért fokozaton → a `pickUnseen` a sávon belül a szomszédba lép; ha a sáv minden tétele látott, a sávon belül a
-  legrégebben látott jön. Ha a sávban egyáltalán nincs tétel (nem fordulhat elő a mért bankokkal), a teljes vödörsor a tartalék.
+- Üres vödör a kért fokozaton → a `pickUnseen` a sávon belül a szomszédba lép (azonos távolságon előbb a könnyebb). Ha a
+  kért fokozat minden tétele látott, de van nem látott a sávban, a keresési sorrend első nem látottat tartalmazó vödre jön.
+  **Teljes kimerülésnél** (a sáv minden tétele látott) a keresési sorrend ELSŐ NEM ÜRES vödrének — jellemzően a kért
+  fokozatnak — a saját legrégebben látott tétele jön, akkor is, ha egy szomszéd vödörben régebbi van (a közös `pickUnseen`
+  szabálya, vak kör 1 L8; teszt: `word-ladder-grading.test.ts` O3/L8). Ha a sávban egyáltalán nincs tétel (a mért bankokkal
+  nem fordul elő), a teljes vödörsor a tartalék.
 - Szerver-bank tétel kategória nélkül → kategória-súly 0.
 - Szóbankos tétel célrésze: a lap a `VocabQuiz.focus`-t a tételre teszi a besoroláshoz (a kiemelés útja változatlan).
 - `?wlItems=` teszt-út: változatlan (nem a választón megy át).
@@ -165,11 +181,11 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
   csökkenni; WHEN a sorozatot hiba szakítja meg THEN SHALL NOT nőni; a fokozat SHALL a sávon belül maradni.
 - [x] A8 — WHEN 3. évfolyamos játszik bármely pályán, bármely válaszsorozattal THEN a kiválasztott tétel fokozata SHALL ≤ 5
   (legfeljebb 1. szint) lenni.
-- [x] A9 — WHEN egy 3. évfolyamos az 1. pályán végig helyesen válaszol (böngészőben) THEN az első kérdés SHALL a 0. szintről jönni,
+- [ ] A9 — *(PR-2: `feat/szoletra-szintezes-2`; ezen a fejen NYITOTT — a lap még nem hívja a modult)* WHEN egy 3. évfolyamos az 1. pályán végig helyesen válaszol (böngészőben) THEN az első kérdés SHALL a 0. szintről jönni,
   egyik kérdés sem SHALL 1. szint fölötti lenni, és a futás végére a kérdezett fokozat SHALL nagyobb lenni a kezdetinél.
-- [x] A10 — WHEN az évfolyam × pálya futáson belüli ismétlés-mentessége mért (a meglévő 6. döntés-teszt) THEN SHALL
+- [ ] A10 — *(PR-2; ezen a fejen NYITOTT)* WHEN az évfolyam × pálya futáson belüli ismétlés-mentessége mért (a meglévő 6. döntés-teszt) THEN SHALL
   ismétlésmentes maradni az új választóval is.
-- [x] A11 — A pontozás (XP, ranglista-nehézség) és a haladás-kulcsok SHALL változatlanok maradni; a D-05 kiemelés érintetlen.
+- [x] A11 — *(ezen a fejen: a lap, a pontozás és a haladás diffje üres)* A pontozás (XP, ranglista-nehézség) és a haladás-kulcsok SHALL változatlanok maradni; a D-05 kiemelés érintetlen.
 - [x] A12 — A felülíró tábla minden bejegyzése SHALL létező azonosítóra mutatni, 0–14 fokozattal.
 
 ## 7. Tesztterv
@@ -213,13 +229,15 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
 
 ```
 fokozat:        0   1   2   3   4   5   6   7   8   9  10  11  12  13  14
-en szó:       222 181  74 320 171  17 224 183  72 189 178  40 156 102  28
-en kifejezés:   0   0  99   0 152 202   1 101 158   1 102 126  15  84  93
-de szó:       171 145  25 259 123  25 212 140  22 178 127   9 134  85  14
-de kifejezés:   0   1  94   1  98 184   3  50 141   1  43 132   1  29 111
-fr szó:       109 186  69 213 139  25 186 149  40 156 109  43 128  77  31
-fr kifejezés:   0   0  74   0  72 220   0  22 184   0  21 155   1  32 113
+en szó:       205 149  57 353 187  10 233 197  64 193 185  38 156 102  28
+en kifejezés:   0   0  95   0 154 192   1 102 167   0 103 128  15  84  93
+de szó:       154 118  18 265 123  25 237 142  25 186 120  11 141  89  15
+de kifejezés:   0   1  89   1 114 165   3  55 143   1  52 124   1  35 105
+fr szó:       103 168  62 227 132  25 202 150  40 162 107  42 133  77  30
+fr kifejezés:   0   0  70   0  74 216   0  25 184   0  21 154   1  33 116
 ```
+
+(A tábla a vak kör 1 javításai után, bankközi korláttal számolva; az első változat: en 222 / 181 / 74 … a 0–2. fokozaton.)
 
 A tervezett „1–2. alfokon ≥ 1 kifejezés” küszöb a 0. szint 1. alfokán (en, fr) nem teljesült: a legrövidebb kifejezés
 („thank you”) is 15 pont, ezért a kifejezések a szint 2. alfokán gyűlnek — ez a kívánt sorrend (előbb egyes szavak, utána
@@ -261,3 +279,32 @@ szerkezeti őr a `vocabBankProblems` / `minimumProblems`. Bejegyzésenkénti kö
 **Elfogadás (S3):** a validátorok (`vocabBankProblems`, `minimumProblems`, `word-ladder-grading.test.ts` A1–A4) zöldek; a vak
 megoldó kanári 10/10, a jelzett tételek javítva; a 0–1. fokozat egyes-szó-száma nyelvenként ≥ 300; a mért tényleges költség a
 PR-leírásban (gép által rögzített számláló, nem becslés).
+
+## 13. Vak kör 1 (2026-11-22, fej 0fe24459) — osztályszintű javítás
+
+Jelentés: 2 blokkoló (L1, L2) + 4 közepes (L3–L6) + 3 kicsi (L7–L9). A konvergencia-törvény szerint hibaOSZTÁLYONKÉNT, a modul
+minden előfordulásán, közös segéddel javítva; minden osztályhoz előbb bukó teszt, utána mutációs ellenpróba (a javítást
+visszafordítva pontosan az osztály tesztje bukik).
+
+| osztály | lelet | előfordulás (`source/client/src/lib/wordLadderGrading.ts`, javítás utáni sor) | érintett? | javítás (közös segéd) | teszt |
+|---|---|---|---|---|---|
+| O1 szöveg-normalizálás / determinizmus | L2 | régi `:86` `toLocaleLowerCase()` a pontban | igen | `normalizeTarget` (`toLowerCase`), `:82` | O1/L2 (török kisbetűsítés-modell) |
+| O1 | L2 | régi `:62` `stripArticle` (kisbetűsítés nélküli névelő-levágás, `i` flag) | igen | `normalizeTarget` | O1/L2, O1/L3 |
+| O1 | — | `:101` `w[0].toLowerCase()` (magyarság-pont, csak nagybetű-próba) | nem (ASCII / ékezetes kezdőbetű, locale-független) | — | O2/L5 |
+| O1 | L3 | régi `:59` közös `ARTICLE` (kötelező szóköz, minden nyelv névelője minden nyelven) | igen | nyelvenkénti `ARTICLES`, francia `l['’]` szóköz nélkül, `:71` | O1/L3 (mindkét aposztróf, „to die”) |
+| O1 | — | szélső írásjel („„scissors””, „Goodbye?”) a kulcsban | igen (új kulcsnál) | `normalizeTarget` | O2/L1 |
+| O2 célrész-szerződés / két besorolási út | L4 | régi `:121` nyers szóbanki út `sentence: false` | igen | `isLadderSentence`, `:94`, `:201` | O2/L4 (minden szóbank-bejegyzés: nyers = cél→hu = hu→cél) |
+| O2 | L4 | régi `:76`, `:79` kérdés-úton névelő utáni szószám | igen | `isLadderSentence` (nyers szóköz-szám), `:127` | O2/L4 |
+| O2 | L5 | régi `:74` kiemelés = célrész, ha nincs „angolul” | igen | célnyelvi oldal választása (`hungarianness`, `ASKS_MEANING`), `:110–129` | O2/L5 (en1-114, en0-008, fr2-086 + osztály-őr: mért célrész csak-magyar betű nélkül, mindhárom kézi bank) |
+| O2 | L1 | régi `:104` fokozat csak a tétel saját szintjéből | igen | bankközi korlát `ladderTermFloors` / `floorFor`, `:165–194`, `:205` | O2/L1 (scissors pár, összevont készlet, lefelé soha) |
+| O2 | L1 | `ladderStepBuckets` / `gradedLadderBank` (a lap és a bank-építő útja) | igen | opcionális `floors`, különben a lista saját korlátja | O2/L1, A4 |
+| O3 dokumentáció-állapot / átadás | L6 | terv fejléc, A9 / A10, végrehajtás „Mért számok” | igen | fejenkénti státusz, A9 / A10 nyitott a PR-1-en, a böngészős mérés fej-hash-sel | — (dokumentum) |
+| O3 | L8 | 5. szakasz kimerülési szabálya ≠ `pickUnseen` | igen | a szabály a `pickUnseen`-hez igazítva (a közös választó változatlan) | O3/L8 |
+| O3 | L9 | `docs/agent-csapdak.md` olvasási útmutató | igen | a fejlécben jelölve: implementálási segédlet, review-megbízást nem helyettesít | — |
+| O4 állapot-visszaállítás tesztfedése | L7 | `reset`: `win`, `step`, `streak` (`:264–268`) | igen (a `streak` nem volt fedve) | — (a kód helyes volt) | O4/L7 (részleges jó / rossz sorozat + új menet; más évfolyam → új sáv) |
+
+Mért hatás (mindhárom nyelv): a bankközi korlát kézi en 39 / de 28 / fr 31, szóbank en 65 / de 70 / fr 38 tételt emel; a
+célnyelvi oldal választása en 95 / de 18 / fr 20 kézi tételnél váltott a magyar kiemelésről a helyes idegen opcióra
+(mintasorok: „Mi a többes száma: box?” → boxes, „Melyik helyes: „A macska …”” → The cat is under the table.). Az A1–A8,
+A12 és az új O-tesztek: 15/15 zöld; mutációs ellenpróba: 6/6 mutáns pontosan a saját osztálytesztjén bukik.
+

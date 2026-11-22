@@ -7,7 +7,8 @@ gyökérokot kód vagy kapu szünteti meg; ezt a bejegyzésben jelölni kell.
 
 ## Index (tematikus)
 
-Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csak a feladathoz illő azonosítónál olvasd el
+*Implementálási segédlet a fejlesztő ügynöknek — független / vak review vagy futtatási megbízás hatókörét NEM szűkíti, az
+ellenőr minden evidenciát olvasson.* Fejlesztéskor elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csak a feladathoz illő azonosítónál olvasd el
 (`grep -n "^## C-nn" docs/agent-csapdak.md`). Az azonosítók nem változnak. Új bejegyzéshez ide is kell egy sor.
 
 ### Git, PR, CI, review

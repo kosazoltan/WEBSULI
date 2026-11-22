@@ -17,6 +17,10 @@ import {
   LADDER_STEP_OVERRIDES,
   createLadderStepSession,
   gradedLadderBank,
+  ladderFloorSources,
+  ladderTermFloors,
+  ladderTermKey,
+  vocabFloorSources,
   ladderDifficultyInput,
   ladderDifficultyScore,
   ladderGradeWindow,
@@ -219,3 +223,127 @@ test("A12: a kézi felülíró tábla létező azonosítókra mutat, 0–14 foko
     assert.ok(Number.isInteger(step) && step >= 0 && step < LADDER_STEP_COUNT, `${id}: ${step}`);
   }
 });
+
+/*
+ * Vak kör 1 (2026-11-22) leletei osztályszinten — terv 13. szakasz:
+ *  O1 szöveg-normalizálás / determinizmus (L2 locale, L3 francia elízió) · O2 célrész-szerződés és a két besorolási út
+ *  egyezése (L1 bankközi, L4 mondat, L5 kérdésirány) · O4 állapot-visszaállítás tesztfedése (L7) · O3 kimerülési szabály (L8).
+ */
+
+test("O1/L2: a pont és a fokozat nem függ a futtató alapértelmezett nyelvi környezetétől (török kisbetűsítés mellett is azonos)", () => {
+  const entry = VOCAB_DE.find((e) => e.id === "de4-culture-007")!;
+  const before = [vocabEntryScore(entry), vocabEntryStep(entry), ladderTermKey("Die Inszenierung", "de")] as const;
+  const original = String.prototype.toLocaleLowerCase;
+  // Török alapértelmezés modellje: a nagy I → pont nélküli ı.
+  String.prototype.toLocaleLowerCase = function (this: string) {
+    return original.call(this.replace(/I/g, "ı"), "tr");
+  };
+  try {
+    assert.deepEqual([vocabEntryScore(entry), vocabEntryStep(entry), ladderTermKey("Die Inszenierung", "de")], [...before]);
+  } finally {
+    String.prototype.toLocaleLowerCase = original;
+  }
+  assert.equal(ladderTermKey("Die Inszenierung", "de"), "inszenierung");
+});
+
+test("O1/L3: a névelő nyelvenként és írásmódonként levágva — francia elízió mindkét aposztróffal, szóköz nélkül", () => {
+  const ami = ladderDifficultyScore({ term: "ami", sentence: false, category: "word" }, "fr");
+  assert.equal(ladderDifficultyScore({ term: "l'ami", sentence: false, category: "word" }, "fr"), ami);
+  assert.equal(ladderDifficultyScore({ term: "l’ami", sentence: false, category: "word" }, "fr"), ami);
+  assert.equal(ladderTermKey("L'ami", "fr"), "ami");
+  assert.equal(ladderTermKey("les amis", "fr"), "amis");
+  assert.equal(ladderTermKey("der Hund", "de"), "hund");
+  assert.equal(ladderTermKey("the cat", "en"), "cat");
+  // Nyelvenkénti: az angol „to die” névelő-levágása nem vágja tovább a német névelőként is olvasható „die”-t.
+  assert.equal(ladderTermKey("to die", "en"), "die");
+  const fr050 = WORD_LADDER_FR.find((q) => q.id === "fr0-050")!;
+  assert.equal(ladderItemStep(fr050, "fr", 0), ladderItemStep({ ...fr050, focus: "ami", prompt: "Mit jelent: „ami”?" }, "fr", 0));
+});
+
+test("O2/L4: azonos célszöveg a nyers szóbanki és a kérdés-úton azonos pontot kap (közös mondatfelismerő)", () => {
+  const bad: string[] = [];
+  for (const lang of LANGS) {
+    for (const e of VOCAB[lang]) {
+      const lang2 = e.id.slice(0, 2) as WordLadderLanguage;
+      const cat = e.kind === "phrase" ? "phrase" : "word";
+      const toHu = ladderDifficultyScore(ladderDifficultyInput({ prompt: `Mit jelent: „${e.term}”?`, focus: e.term, options: [e.hu, "x", "y", "z"], correctIndex: 0, category: cat }), lang2);
+      const toForeign = ladderDifficultyScore(ladderDifficultyInput({ prompt: `„${e.hu}” ${lang2 === "en" ? "angolul" : lang2 === "de" ? "németül" : "franciául"}:`, focus: e.hu, options: [e.term, "x", "y", "z"], correctIndex: 0, category: cat }), lang2);
+      const raw = vocabEntryScore(e);
+      if (toHu !== raw || toForeign !== raw) bad.push(`${e.id}: nyers ${raw}, cél→hu ${toHu}, hu→cél ${toForeign}`);
+    }
+  }
+  assert.deepEqual(bad.slice(0, 5), [], `${bad.length} eltérés`);
+  const dog = VOCAB_DE.find((e) => e.id === "de0-animals-020")!;
+  assert.ok(vocabEntryScore(dog) >= 40, `ötszavas kifejezés mondatként: ${vocabEntryScore(dog)}`);
+});
+
+test("O2/L5: a mérce a célnyelvi oldalt méri — a magyar kiemelésű „Melyik helyes” tételnél a helyes idegen opciót", () => {
+  const en114 = WORD_LADDER_EN.find((q) => q.id === "en1-114")!;
+  assert.equal(ladderDifficultyInput(en114).term, en114.options[en114.correctIndex]);
+  const goodbye = WORD_LADDER_EN.find((q) => q.id === "en0-008")!;
+  assert.equal(ladderDifficultyInput(goodbye).term, "Goodbye");
+  // Helyzetleírás, magyar válasszal („Mire kíváncsi?”): a kiemelt francia kérdés a célnyelvi oldal.
+  const fr086 = WORD_LADDER_FR.find((q) => q.id === "fr2-086")!;
+  assert.equal(ladderDifficultyInput(fr086).term, fr086.focus);
+  // Osztályszintű őr: a mért célrész soha nem tartalmaz csak magyarban előforduló betűt (í, ó, ú, ő, ű).
+  const hungarian: string[] = [];
+  for (const lang of LANGS) {
+    for (const q of MANUAL[lang]) {
+      const t = ladderDifficultyInput(q).term;
+      // A zárójeles magyar magyarázat („Sie (ő, lány) …”) és a mondat belsejében álló tulajdonnév („Győr”) kivétel.
+      const words = t.replace(/\([^)]*\)/gu, " ").split(/\s+/u).filter((w, i) => w && (i === 0 || w[0] === w[0]!.toLowerCase()));
+      if (/[íóúőű]/iu.test(words.join(" "))) hungarian.push(`${q.id}: ${t}`);
+    }
+  }
+  assert.deepEqual(hungarian, []);
+});
+
+test("O2/L1: azonos célnyelvi alak a két bankban azonos szintről indul — a kisebb besorolás emelkedik (scissors / olló)", () => {
+  const manual = WORD_LADDER_EN.find((q) => q.id === "en0-097")!;
+  const entry = VOCAB_EN.find((e) => e.id === "en1-school-005")!;
+  const floors = ladderTermFloors([...ladderFloorSources(WORD_LADDER_EN, "en"), ...vocabFloorSources(VOCAB_EN)], "en");
+  assert.equal(floors.get(ladderTermKey("scissors", "en")), 1);
+  const a = ladderItemStep(manual, "en", manual.tier, floors);
+  const b = vocabEntryStep(entry, floors);
+  assert.equal(a, b, "azonos fokozat");
+  assert.ok(Math.floor(a / 3) >= 1, `legalább 1. szint: ${a}`);
+  // Összevont készletben (gradedLadderBank) is: a 3–4. évfolyam sávjában az 1. szintre kerül.
+  const asItem: LadderItem = { id: "vocab:en1-school-005:target-to-hu", prompt: "Mit jelent: „scissors”?", focus: "scissors", options: ["olló", "a", "b", "c"], correctIndex: 0, tier: 1, category: "word" };
+  const bank = gradedLadderBank([manual, asItem], "en", 3);
+  const stepOf = (id: string) => bank.findIndex((bucket) => bucket.some((q) => q.id === id));
+  assert.equal(stepOf("en0-097"), stepOf(asItem.id));
+  // Lefelé soha: a magasabb besorolás nem csökken.
+  assert.ok(vocabEntryStep(entry, floors) >= vocabEntryStep(entry));
+});
+
+test("O4/L7: a reset minden állapotot nulláz — részleges jó / rossz sorozat után új menetben az első válaszok nem örökölnek", () => {
+  const s = createLadderStepSession(5, 1);
+  s.answer(true);
+  s.answer(true);
+  s.reset(5, 1);
+  s.answer(true);
+  assert.equal(s.step, 3, "két jó + új menet + egy jó: nem emel");
+  s.answer(true);
+  assert.equal(s.step, 3);
+  s.answer(true);
+  assert.equal(s.step, 4, "az új menet saját három jó válasza emel");
+  s.answer(false);
+  s.reset(5, 1);
+  s.answer(false);
+  assert.equal(s.step, 3, "egy hiba + új menet + egy hiba: nem könnyít");
+  s.reset(9, 1);
+  assert.equal(s.step, 9, "más évfolyam: új sáv és belépő");
+  for (let i = 0; i < 60; i++) s.answer(false);
+  assert.equal(s.step, ladderGradeWindow(9).minStep, "a reset a sávot is cseréli");
+});
+
+test("O3/L8: kimerülésnél a kért fokozat (a keresési sorrend első nem üres vödre) legrégebben látott tétele jön", () => {
+  const mk = (id: string) => ({ id, prompt: id, options: ["a", "b", "c", "d"], correctIndex: 0 });
+  const buckets = [[mk("x0")], [mk("x1a"), mk("x1b")], [mk("x2")]];
+  const seen: SeenItem[] = ["x2", "x1a", "x0", "x1b"].map((id) => ({ id, prompt: id }));
+  // A kért 1. fokozat teljesen látott: a saját legrégebbije (x1a), akkor is, ha a szomszédban régebbi (x2) is van.
+  assert.equal(pickUnseen(buckets, 1, seen, () => 0)?.id, "x1a");
+  // Ha a kért vödör üres, a keresési sorrend (előbb a könnyebb) következő vödre.
+  assert.equal(pickUnseen([[mk("y0")], [], [mk("y2")]], 1, [{ id: "y0", prompt: "y0" }, { id: "y2", prompt: "y2" }], () => 0)?.id, "y0");
+});
+
