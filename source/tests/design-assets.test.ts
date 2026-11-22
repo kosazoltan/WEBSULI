@@ -159,3 +159,37 @@ test("sávkép: 9. o. matek → híd, 6–8. o. → Föld; a halloweeni borító
   assert.notEqual(pic("Matematika", "Ismétlődő minta és füzér", "laboratory"), "cover-ismetlodes", "más sáv témaborítója nem jöhet");
   assert.equal(pic("Matematika", "Ismétlődő minta és füzér", "studio"), "cover-ismetlodes", "a saját sávban a kulcsszóra igen");
 });
+
+// docs/specs/2026-11-22-kitakaro-elovagas.md: elővágás a főági képgyártói redact előtt.
+test("elővágás (képgyártó): a vágási ponton átnyúló kulcs / Bearer / sk-or nem marad; a kimenet a főági kimenet előtagja", async () => {
+  const { redactClip } = await import("../scripts/design-assets/lib");
+  const { mainDesignRedact } = await import("../../scripts/qa/gates/kitakaro-main-baseline.mjs");
+  const leak6 = (out: string, body: string) => { for (let i = 0; i + 6 <= body.length; i++) if (out.includes(body.slice(i, i + 6))) return body.slice(i, i + 6); return null; };
+  const key = "kulcs#" + "abcdef0123456789".repeat(2) + "#vege";
+  const margin = Math.max(64, key.length);
+  for (const body of [key, "Bearer Zt0kAbCdPPPPPPPPPPPP", "sk-or-v1-" + "abcd".repeat(8)]) {
+    for (const back of [1, 5, Math.floor(body.length / 2), body.length - 1]) {
+      const start = 300 + margin - back;
+      const s = "y ".repeat(start).slice(0, start) + body + " z".repeat(2000);
+      const out = redactClip(s, key, 300);
+      assert.equal(leak6(out, body.replace(/^Bearer /, "")), null, `${body.slice(0, 8)} vissza ${back}`);
+      assert.ok(mainDesignRedact(s, key).slice(0, 300).startsWith(out));
+    }
+  }
+  const t = `hiba ${key} Bearer abc ` + "z ".repeat(400);
+  assert.equal(redactClip(t, key, 300), mainDesignRedact(t, key).slice(0, 300));
+});
+
+test("elővágás (képgyártó): requestImage 20 M karakteres hibatörzzsel — < 1 s, a határon félbevágott kulcs nélkül", async () => {
+  const { requestImage } = await import("../scripts/design-assets/lib");
+  const key = "kulcs#" + "abcdef0123456789".repeat(2) + "#vege";
+  const body = "x ".repeat(160) + key + "z".repeat(20_000_000);
+  const fetchImpl = (async () => new Response(body, { status: 500 })) as unknown as typeof fetch;
+  const t0 = performance.now();
+  await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key, body: {} }), (e: Error) => {
+    assert.equal(e.message.includes("kulcs#"), false);
+    assert.ok(e.message.length <= "HTTP 500: ".length + 300);
+    return true;
+  });
+  assert.ok(performance.now() - t0 < 2000);
+});

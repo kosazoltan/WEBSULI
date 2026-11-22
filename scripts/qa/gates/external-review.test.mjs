@@ -329,3 +329,49 @@ describe("visszaellenőrzés (a3cf2bbf): C1 és a szigorúbb siker-feltétel", (
     assert.equal(evaluateResponse(stop("## Ítélet\n(egy sor: ÖSSZEVONHATÓ — IGEN / IGEN, FELTÉTELLEL / NEM; …)\n## Blokkoló leletek\n## Egyéb leletek\n## Mit vizsgált")).status, "incomplete");
   });
 });
+
+// ---- docs/specs/2026-11-22-kitakaro-elovagas.md: elővágás a főági maskSecrets előtt ----------------------------------
+import { maskClip } from "./external-review.mjs";
+import { mainMaskSecrets } from "./kitakaro-main-baseline.mjs";
+
+describe("elővágás (külső ellenőr)", () => {
+  const leak6 = (out, body) => { for (let i = 0; i + 6 <= body.length; i++) if (out.includes(body.slice(i, i + 6))) return body.slice(i, i + 6); return null; };
+  it("20 M karakteres AIza-futás: a maskSecrets nem dob (a teljes jelentés-úton sincs vágás), a maskClip < 1 s", () => {
+    const s = "AIza" + "a".repeat(20_000_000);
+    assert.equal(maskSecrets(s, FAKE_KEY), "AIza***");
+    const t0 = performance.now();
+    const c = maskClip(s + " vége", FAKE_KEY, 600);
+    assert.ok(performance.now() - t0 < 1000);
+    assert.ok(!c.includes("aaaaaa"));
+  });
+  it("a vágási ponton átnyúló kulcs / más AIza / Bearer / e-mail egyetlen 6 karakteres darabja sem marad", () => {
+    const key = "kulcs#" + "abcdef0123456789".repeat(2) + "#vege";
+    const others = [key, ["AI", "za", "Sy", "Q".repeat(33)].join(""), "Bearer Zt0k+Ab/Cd=~PPPPPPPPPPPP", ["fiok.tulaj", "pelda.hu"].join("@")];
+    for (const max of [160, 400, 600]) {
+      const margin = Math.max(64, key.length);
+      for (const body of others) {
+        for (const back of [1, 5, Math.floor(body.length / 2), body.length - 1]) {
+          const start = max + margin - back;
+          const s = "y ".repeat(start).slice(0, start) + body + " z".repeat(2000);
+          const out = maskClip(s, key, max);
+          assert.equal(leak6(out, body.replace(/^Bearer /, "")), null, `max ${max} ${body.slice(0, 8)} vissza ${back}`);
+          assert.ok(mainMaskSecrets(s, key).slice(0, max).startsWith(out), "a kimenet a főági kimenet előtagja");
+        }
+      }
+    }
+  });
+  it("a láthatóságon belül bájtra a főági kimenet (rövid bemenet és a határtól távoli titok)", () => {
+    const t = "e".repeat(300) + ` key=${FAKE_KEY} ` + "f ".repeat(900);
+    for (const max of [160, 400, 600]) assert.equal(maskClip(t, FAKE_KEY, max), mainMaskSecrets(t, FAKE_KEY).slice(0, max));
+    assert.equal(maskClip("rövid hiba", FAKE_KEY, 600), "rövid hiba");
+    assert.equal(maskClip(undefined, FAKE_KEY, 10), "");
+  });
+  it("a generate újrapróbálási naplója a vágott úton megy (a határon félbevágott kulcs nem látszik)", async () => {
+    const logs = [];
+    const body = "x ".repeat(80) + FAKE_KEY + " vége";
+    const t = async () => ({ status: 503, text: body, retryAfter: "0" });
+    await assert.rejects(generate({ model: "m", key: FAKE_KEY, systemText: "s", userText: "u", thinking: "high", retries: 1, log: (s) => logs.push(s), transport: t, sleep: async () => {} }));
+    assert.equal(logs.length, 1);
+    assert.equal(leak6(logs[0], FAKE_KEY), null, logs[0]);
+  });
+});

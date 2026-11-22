@@ -90,3 +90,51 @@ test('verdictResult: IGEN → PASS, FELTÉTELLEL → WARN, NEM / hiány → FAIL
   assert.equal(none.status, STATUS.FAIL);
   assert.match(none.note, /record-review\.mjs --head c{12}/);
 });
+
+// ---- docs/specs/2026-11-22-kitakaro-elovagas.md: elővágás a főági kitakaró előtt ------------------------------------
+
+const leak6 = (out, body) => { for (let i = 0; i + 6 <= body.length; i++) if (out.includes(body.slice(i, i + 6))) return body.slice(i, i + 6); return null; };
+
+test('elővágás: 300 000 és 20 M karakteres ellenséges bemenet — nem dob, bemenetenként < 1 s', () => {
+  for (const s of ['a'.repeat(300_000), `x${at}${'a.'.repeat(150_000)}`, 'a'.repeat(20_000_000), `ghp_${'a'.repeat(20_000_000)}_`,
+    `Bearer x${'a'.repeat(20_000_000)}`, `sk-${'-'.repeat(20_000_000)}`, `x${at}${'a.'.repeat(10_000_000)}`]) {
+    const t0 = performance.now();
+    assert.doesNotThrow(() => redact(s), s.slice(0, 10));
+    const ms = performance.now() - t0;
+    assert.ok(ms < 1000, `${s.slice(0, 10)}…: ${ms.toFixed(0)} ms`);
+  }
+});
+
+test('elővágás: a kapu vágási pontján átnyúló titok egyetlen 6 karakteres darabja sem marad (sorral és sor nélkül)', async () => {
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const secrets = [
+    ['Bearer ', 'Ab12Cd34Ef56Gh78Ij90Kl12'], ['', `ghp_${'A1b2C3d4E5f6'.repeat(3)}`], ['', `fiok.tulaj${at}pelda.hu`],
+    ['', ['postgres', '://admin:', 'titok123', at, 'ep-pelda.neon.tech/db'].join('')],
+  ];
+  for (const sep of [' ', '\n']) {
+    for (const [pre, body] of secrets) {
+      const raw = pre + body;
+      const total = REDACT_CAP + 5000;
+      for (const back of [3, Math.floor(raw.length / 2), raw.length - 2]) {
+        const start = total - REDACT_CAP - back;
+        const s = `q${sep}`.repeat(start).slice(0, start) + raw + `${sep}z`.repeat(3000);
+        const out = redact(s);
+        assert.equal(leak6(out, body), null, `${JSON.stringify(sep)} ${body.slice(0, 8)} vissza ${back}`);
+        assert.ok(out.length > 1000 && out.length <= REDACT_CAP + 100);
+      }
+    }
+  }
+});
+
+test('elővágás: a korláton belül a kimenet bájtra a főági redact-é; a korlát felett a megtartott rész is', async () => {
+  const { mainRedact } = await import('./kitakaro-main-baseline.mjs');
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const samples = [
+    `cím ${fakeMail}, db ${fakeDb}, gh ${fakeGh}, ant ${fakeAnt}, aws ${fakeAws}, Authorization: Bearer abcdefgh12345678`,
+    'HTTP 503: Service Unavailable — lib.mjs:192, árvíztűrő tükörfúrógép', `${'a'.repeat(64)}${at}pelda.hu`, `x${at}${'a.'.repeat(5000)}hu`,
+  ];
+  for (const s of samples) assert.equal(redact(s), mainRedact(s));
+  const big = `${'n '.repeat(REDACT_CAP)}\nvége ${fakeMail} ${fakeGh}`;
+  const out = redact(big);
+  assert.ok(out.endsWith(mainRedact(`vége ${fakeMail} ${fakeGh}`)), out.slice(-60));
+});
