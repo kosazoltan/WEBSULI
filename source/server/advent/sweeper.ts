@@ -1,8 +1,8 @@
 /**
  * Adventi naptár — takarító (docs/specs/2026-11-18-adventi-naptar.md E23, 16.6, 18.1; végrehajtás „S6” 3. pont).
  * Induláskor és 24 óránként: a régóta nem használt névtelen (eszköz-) sorok, a régi előnézeti sorok és a korábbi évadok
- * értesítő-foglalásai törlődnek (`store.sweep`); ha a hívó átadja, a lezárt évad levél nélküli tanulói soraira egyszer elmegy a szülői
- * levél (`closeSeason`, terv 18.1 3. pont — az S5 köti be, csak bekapcsolt naptárnál). A kapcsolótól független (kikapcsolt naptár mellett
+ * értesítő-foglalásai törlődnek (`store.sweep`); ha a hívó átadja, a szülői levelek tartós pótlása is fut (`resumeMail`, terv 18.1 —
+ * az S5 köti be, csak bekapcsolt naptárnál; 10 percenként). A kapcsolótól független (kikapcsolt naptár mellett
  * is eltakarítja a maradékot), az időzítő `unref()`-elt (nem tartja életben a folyamatot), e2e-módban a hívó nem indítja (a
  * `server/player/sweeper.ts` mintája). Hiba esetén csak a hiba osztálya kerül a naplóba, a következő kör újra próbálja.
  */
@@ -10,13 +10,18 @@ import { adventNow } from "../../shared/advent/calendar";
 import { logger } from "../lib/logger";
 
 export const ADVENT_SWEEP_INTERVAL_MS = 24 * 60 * 60_000;
+/** A tartós levélpótlás gyakorisága (S5/S6 1. vak L1): a leállás után ennyin belül (+ a bérlet lejárta) folytatódik a kézbesítés. */
+export const ADVENT_MAIL_RESUME_INTERVAL_MS = 10 * 60_000;
 
 type Timers = { setInterval: (fn: () => void, ms: number) => { unref?: () => void } };
 
 export type AdventSweepDeps = {
   sweep: (now: Date, currentSeason: number) => Promise<{ devices: number; previews: number; announcements: number }>;
-  /** A lezárt évad szülői leveleinek pótlása (terv 18.1 3.); a küldött levelek száma. */
-  closeSeason?: (now: Date) => Promise<number>;
+  /**
+   * A szülői levelek tartós pótlása (terv 18.1; S5/S6 1. vak L1): a kézbesítetlen címzettek, a terv nélküli végleges eredmények, lezárt
+   * évadban a megkezdett levél nélküli sorok. Indításkor és `ADVENT_MAIL_RESUME_INTERVAL_MS`-enként; a küldött levelek száma.
+   */
+  resumeMail?: (now: Date) => Promise<number>;
 };
 
 const errorClass = (error: unknown): string => {
@@ -33,14 +38,17 @@ export function startAdventSweeper(deps: AdventSweepDeps, timers: Timers = globa
     } catch (error) {
       logger.error(`[ADVENT] takarítás hiba: ${errorClass(error)}`);
     }
-    if (!deps.closeSeason) return;
+  };
+  const resume = async () => {
+    if (!deps.resumeMail) return;
     try {
-      await deps.closeSeason(at);
+      await deps.resumeMail(now());
     } catch (error) {
-      logger.error(`[ADVENT] évadzáró levelek hiba: ${errorClass(error)}`);
+      logger.error(`[ADVENT] levélpótlás hiba: ${errorClass(error)}`);
     }
   };
-  void run();
+  void run().then(resume);
   timers.setInterval(() => { void run(); }, ADVENT_SWEEP_INTERVAL_MS).unref?.();
-  return run;
+  if (deps.resumeMail) timers.setInterval(() => { void resume(); }, ADVENT_MAIL_RESUME_INTERVAL_MS).unref?.();
+  return async () => { await run(); await resume(); };
 }

@@ -179,16 +179,73 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
     },
 
     /**
-     * Az évad megkezdett, MÉG LEVÉL NÉLKÜLI tanulói sorai (egyetlen `final:` foglalásuk sincs) a tanuló keresztnevével — az évadzáró
-     * szülői levélhez (terv 18.1 3. pont). Írás nélkül.
+     * Tartós levélkézbesítés (terv 18.1; S5/S6 1. vak L1) a sor `mailed_to` listájában, címzett-lenyomatonként (`h` = HMAC, a cím nem
+     * tárolódik):
+     *  - `want:<h>` — a kézbesítési terv: kinek KELL levelet kapnia (az első végleges döntéskor egyszer rögzül; egy később felvett új
+     *    címzett a régi eredményről nem kap levelet);
+     *  - `pending:<h>@<ms>` — lejáró bérlet a küldés idejére (párhuzamos feldolgozók ellen; leállás után a lejárta után folytatható);
+     *  - `final:<h>` — kézbesítve (a szolgáltató elfogadta, és rögzítettük).
+     * A hiányzó `final` a következő pótláskor (`mailCandidates` → `sendAdventResult`) ugyanazzal az idempotencia-kulccsal folytatódik.
      */
-    async unmailedLearnerRows(season: number): Promise<{ row: AdventRow; firstName: string | null }[]> {
+    /** A kézbesítési terv rögzítése, ha még nincs; a sor (most már) érvényes `want:` kulcsai. */
+    async planMail(id: string, wants: string[]): Promise<string[]> {
+      await pool.query(
+        `UPDATE advent_progress SET mailed_to = mailed_to || $2::text[]
+          WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'want:%')`,
+        [id, wants],
+      );
+      const found = await pool.query<{ mailed_to: string[] }>(`SELECT mailed_to FROM advent_progress WHERE id = $1`, [id]);
+      return (found.rows[0]?.mailed_to ?? []).filter((k) => k.startsWith("want:"));
+    },
+
+    /**
+     * Bérlet egy címzettre: csak ha tervezett (`want:`), még nem kézbesített (`final:`), és nincs élő bérlete (`pending:` a `leaseMs`-en
+     * belül). Egy utasítás, soronkénti zárral: két egyidejű feldolgozóból pontosan egy kapja meg.
+     */
+    async leaseMail(id: string, hash: string, nowMs: number, leaseMs: number): Promise<boolean> {
+      const got = await pool.query(
+        `UPDATE advent_progress
+            SET mailed_to = array_append(ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%'), 'pending:' || $2 || '@' || $3::text)
+          WHERE id = $1 AND ('want:' || $2) = ANY(mailed_to) AND NOT (('final:' || $2) = ANY(mailed_to))
+            AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'pending:' || $2 || '@%' AND split_part(k, '@', 2)::bigint > $4::bigint)
+          RETURNING id`,
+        [id, hash, String(nowMs), String(nowMs - leaseMs)],
+      );
+      return got.rows.length > 0;
+    },
+
+    /** Kézbesítve: a bérlet helyére `final:` kerül. */
+    async finishMail(id: string, hash: string): Promise<void> {
+      await pool.query(
+        `UPDATE advent_progress
+            SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%')
+                            || CASE WHEN ('final:' || $2) = ANY(mailed_to) THEN ARRAY[]::text[] ELSE ARRAY['final:' || $2] END
+          WHERE id = $1`,
+        [id, hash],
+      );
+    },
+
+    /** Sikertelen küldés: a bérlet felszabadul (a következő pótlás azonnal újrapróbálhatja). */
+    async releaseLease(id: string, hash: string): Promise<void> {
+      await pool.query(`UPDATE advent_progress SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%') WHERE id = $1`, [id, hash]);
+    },
+
+    /**
+     * A pótlandó tanulói sorok a tanuló keresztnevével (írás nélkül): akiknek van kézbesítetlen tervezett címzettje, vagy még nincs
+     * kézbesítési tervük, de az eredményük végleges lehet (megfelelt / végigért) — lezárt évadban (`includeUnfinished`) minden
+     * terv nélküli tanulói sor (a döntés a `sendAdventResult`-é).
+     */
+    async mailCandidates(season: number, includeUnfinished: boolean): Promise<{ row: AdventRow; firstName: string | null }[]> {
       const found = await pool.query<DbRow & { learner_name: string | null }>(
         `SELECT ${COLUMNS.split(", ").map((c) => `p.${c}`).join(", ")}, l.name AS learner_name
            FROM advent_progress p LEFT JOIN learners l ON l.id = p.learner_id
           WHERE p.season = $1 AND p.subject_kind = 'learner'
-            AND NOT EXISTS (SELECT 1 FROM unnest(p.mailed_to) AS k WHERE k LIKE 'final:%')`,
-        [season],
+            AND (
+              EXISTS (SELECT 1 FROM unnest(p.mailed_to) AS w WHERE w LIKE 'want:%' AND NOT (('final:' || substr(w, 6)) = ANY(p.mailed_to)))
+              OR (NOT EXISTS (SELECT 1 FROM unnest(p.mailed_to) AS w WHERE w LIKE 'want:%')
+                  AND (p.passed_at IS NOT NULL OR p.finished_at IS NOT NULL OR $2::boolean))
+            )`,
+        [season, includeUnfinished],
       );
       return found.rows.map((r) => ({ row: toRow(r), firstName: r.learner_name ? firstNameOf(r.learner_name) : null }));
     },

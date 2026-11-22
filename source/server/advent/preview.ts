@@ -9,7 +9,7 @@
  */
 import { Router, type Request } from "express";
 import type { AdventBankItem, ChristmasItem } from "../../shared/advent/assignment";
-import { budapestMidnightUtc } from "../../shared/advent/calendar";
+import { budapestParts } from "../../shared/advent/calendar";
 import { createAdventRouter } from "./routes";
 import type { AdventStore } from "./store";
 
@@ -27,7 +27,11 @@ export function previewDateFrom(value: unknown): Date | null {
   if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1) return null;
   const probe = new Date(Date.UTC(year, month - 1, day));
   if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null;
-  return new Date(budapestMidnightUtc(year, month, day).getTime() + 12 * 3_600_000);
+  // A zónabeli 12:00 közvetlenül (S5/S6 1. vak L6): óraátállítás napján az éjféltől eltelt 12 óra nem dél. Becslés a téli eltolással,
+  // majd igazítás a budapesti óra szerint.
+  let guess = Date.UTC(year, month - 1, day, 11);
+  for (let i = 0; i < 2; i++) guess += (12 - budapestParts(new Date(guess)).hour) * 3_600_000;
+  return new Date(guess);
 }
 
 const adminIdOf = (req: Request): string | null => {

@@ -36,7 +36,8 @@ test("3. kör L1: a régebbi szerververziójú állás (késve érkező átvéte
   // A szerver minden állapotban és válaszban adja a verziót (a sor utolsó módosításának ideje, írás-sorrendben növekvő óra).
   const routes = read("server/advent/routes.ts");
   assert.match(routes, /version: extra\.version \?\? \(row \? row\.updatedAt\.getTime\(\) : 0\)/);
-  assert.match(routes, /res\.json\(\{ \.\.\.result\.answer, version: row\.updatedAt\.getTime\(\) \}/);
+  // S5/S6 1. vak L4 (dokumentált): a válasz a verzió mellett a szerverpillanatot (asOf) is viszi.
+  assert.match(routes, /res\.json\(\{ \.\.\.result\.answer, version: row\.updatedAt\.getTime\(\), asOf: locals\.now\.getTime\(\) \}/);
   assert.match(read("server/advent/store.ts"), /updated_at = clock_timestamp\(\)/);
 });
 

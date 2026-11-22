@@ -568,6 +568,32 @@ test("PR-C 3. vak L2: az átvétel 503-a után az „Újra” valóban újrakül
   await expect(page.getByTestId("advent-error")).toHaveCount(0);
 });
 
+test("S5/S6 1. vak L3: az átvétel 503-ánál az összesítő modálban is van „Újra” — újraküldi az átvételt, és a mentésig ott látszik a függő állapot", async ({ page }) => {
+  await openCalendar(page, DEC5, 5);
+  const real = await pretendPendingAdoption(page);
+  await page.reload();
+  await expect(page.getByTestId("advent-grid")).toBeVisible();
+  let adopts = 0;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/advent/adopt", async (route) => {
+    adopts++;
+    if (adopts === 1) return route.fulfill({ status: 503, json: { message: "Átmeneti hiba." } });
+    await held;
+    return route.fulfill({ json: { ...real.last(), identity: "learner", adoptionPending: false } });
+  });
+  await page.getByTestId("advent-summary-open").tap();
+  await expect.poll(() => adopts).toBe(1);
+  const summary = page.getByTestId("advent-summary");
+  await expect(summary.getByTestId("advent-summary-retry"), "az aktív modálban").toBeVisible();
+  await summary.getByTestId("advent-summary-retry").tap();
+  await expect.poll(() => adopts).toBe(2);
+  await expect(summary.getByTestId("advent-summary-saving")).toBeVisible();
+  release();
+  await expect(summary.getByTestId("advent-summary-saving")).toHaveCount(0);
+  await expect(summary.getByTestId("advent-summary-retry")).toHaveCount(0);
+});
+
 test("PR-C 3. vak L3: a főoldalról indított nyitás 503-a után az „Újra” friss állapotból megnyitja a mai kérdést (a szándék nem vész el)", async ({ page }) => {
   await openCalendar(page, DEC5, 5);
   let opens = 0;
@@ -788,5 +814,37 @@ test.describe("admin-előnézet (A16, S6)", () => {
     await expect(page.getByTestId("advent-door-5")).toHaveAttribute("data-state", "open");
     await expect(page.getByTestId("advent-door-6")).toHaveAttribute("data-state", "locked");
     await expect(page.getByTestId("advent-preview-banner")).toHaveCount(0);
+  });
+
+  test("S5/S6 1. vak L2: az előnézetből a főoldalra lépve (lapfrissítés nélkül) a kártya és a „Kinyitom” a NORMÁL naptárt használja — nem nyit előnézeti (még zárt) ablakot", async ({ page, request, context }) => {
+    const login = await request.post("/api/login", {
+      headers: { origin: ORIGIN, "x-forwarded-proto": "https", "content-type": "text/plain" },
+      data: JSON.stringify({ email: ADMIN_EMAIL, password: PASSWORD }),
+    });
+    expect(login.status(), "admin-belépés").toBe(200);
+    const cookie = login.headersArray().find((h) => h.name.toLowerCase() === "set-cookie" && h.value.startsWith("connect.sid="));
+    await context.addCookies([{ name: "connect.sid", value: cookie!.value.split(";")[0]!.slice("connect.sid=".length), domain: "localhost", path: "/", httpOnly: true, secure: false, sameSite: "Lax" }]);
+    await setAdventTime(page, DEC5);
+    const opens: string[] = [];
+    page.on("request", (r) => { if (r.method() === "POST" && /\/doors\/\d+\/open/.test(r.url())) opens.push(new URL(r.url()).pathname); });
+    await page.goto("/adventi-naptar?elonezet=2026-12-10");
+    await expect(page.getByTestId("advent-preview-banner")).toBeVisible();
+    if (await page.getByTestId("advent-grade-picker").isVisible()) await chooseGrade(page, 5);
+    await playDoor(page, 10, true);
+    // SPA-navigáció a főoldalra (a fejléc „Vissza” gombja), lapfrissítés nélkül.
+    await page.getByRole("link", { name: "Vissza a főoldalra" }).first().click();
+    await expect(page.getByTestId("advent-home-card")).toBeVisible();
+    await expect(page.getByTestId("advent-home-status")).not.toContainText("10.");
+    opens.length = 0;
+    await page.getByTestId("advent-home-cta").click();
+    await expect(page.getByTestId("advent-page")).toBeVisible();
+    await expect(page.getByTestId("advent-preview-banner"), "paraméter nélkül nincs előnézet").toHaveCount(0);
+    if (await page.getByTestId("advent-grade-picker").isVisible()) await chooseGrade(page, 5);
+    await expect(page.getByTestId("advent-question")).toBeVisible();
+    expect(opens.length).toBeGreaterThan(0);
+    for (const path of opens) {
+      expect(path.startsWith("/api/advent/doors/"), `normál útvonal: ${path}`).toBe(true);
+      expect(Number(/doors\/(\d+)\//.exec(path)![1]), `december 5-én legfeljebb az 5. ablak: ${path}`).toBeLessThanOrEqual(5);
+    }
   });
 });

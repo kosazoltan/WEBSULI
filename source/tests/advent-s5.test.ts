@@ -66,13 +66,27 @@ test("S5: a levél tárgya és törzse — keresztnév HTML-escape-elve, a legjo
   assert.equal(closed.subject, "Adventi naptár: A tanuló — az évad lezárult, 7 / 24");
 });
 
-/** Memóriabeli tároló: a `claimMail` atomi (csak ha még nincs), a `releaseMail` kiveszi. */
+/**
+ * Memóriabeli tároló a tartós kézbesítés API-jával (S5/S6 1. vak L1 — dokumentált teszt-változás: a korábbi claimMail / releaseMail
+ * helyett): terv (`want`), bérlet (`pending`), kézbesítve (`final` — a `claimed` halmaz), felszabadítás.
+ */
 function memoryStore() {
   const claimed = new Set<string>();
+  const wants = new Map<string, string[]>();
+  const leases = new Map<string, number>();
   return {
     claimed,
-    claimMail: async (id: string, key: string) => { const k = `${id}|${key}`; if (claimed.has(k)) return false; claimed.add(k); return true; },
-    releaseMail: async (id: string, key: string) => { claimed.delete(`${id}|${key}`); },
+    planMail: async (id: string, keys: string[]) => { if (!wants.has(id)) wants.set(id, keys); return wants.get(id)!; },
+    leaseMail: async (id: string, hash: string, nowMs: number, leaseMs: number) => {
+      const k = `${id}|${hash}`;
+      if (!wants.get(id)?.includes(`want:${hash}`) || claimed.has(k)) return false;
+      const until = leases.get(k);
+      if (until !== undefined && until > nowMs - leaseMs) return false;
+      leases.set(k, nowMs);
+      return true;
+    },
+    finishMail: async (id: string, hash: string) => { const k = `${id}|${hash}`; leases.delete(k); claimed.add(k); },
+    releaseLease: async (id: string, hash: string) => { leases.delete(`${id}|${hash}`); },
   };
 }
 
@@ -133,7 +147,7 @@ test("S5 (18.1 3.): évadzárás — csak lezárt fázisban, a levél nélküli 
   const sent: string[] = [];
   setAdventSender(async (_s, _h, to) => { sent.push(to); });
   const mem = memoryStore();
-  const store = { ...mem, unmailedLearnerRows: async () => [{ row: row({ id: "a", doors: { 1: roundDoors(5, 1) } }), firstName: "Ada" }, { row: row({ id: "b", doors: {} }), firstName: "Bea" }] };
+  const store = { ...mem, mailCandidates: async () => [{ row: row({ id: "a", doors: { 1: roundDoors(5, 1) } }), firstName: "Ada" }, { row: row({ id: "b", doors: {} }), firstName: "Bea" }] };
   assert.equal(await closeAdventSeason(store, { season: 2026, phase: "catchup" }), 0, "pótlási időszakban nem");
   assert.equal(sent.length, 0);
   assert.equal(await closeAdventSeason(store, { season: 2026, phase: "closed" }), 3, "a megkezdett sorra címzettenként egy; a válasz nélkülire nem");
@@ -145,7 +159,8 @@ test("S5: bekötés — a levél csak a nyilvános (kapcsolós) router útján �
   assert.match(routes, /onResult: \(\{ row, subject, phase \}\) => \{ void sendAdventResult\(\{ store: adventStore, row, phase, firstName: subject\.firstName \}\); \},/);
   assert.equal((routes.match(/onResult:/g) ?? []).length, 1, "egyetlen bekötés (a nyilvános routeré)");
   assert.doesNotMatch(read("server/advent/preview.ts"), /onResult|sendAdventResult/);
-  assert.match(read("server/index.ts"), /closeSeason: async \(now\) => \(adventEnabled\(\) \? closeAdventSeason\(adventStore, adventNow\(now\)\) : 0\),/);
+  // S5/S6 1. vak L1 (dokumentált): az évadzáró lépés helyett a tartós pótlás (benne a lezárt évad) fut, ugyanígy a kapcsoló mögött.
+  assert.match(read("server/index.ts"), /resumeMail: async \(now\) => \(adventEnabled\(\) \? deliverAdventMail\(adventStore, adventNow\(now\)\) : 0\),/);
   const advent = read("server/advent/routes.ts");
   assert.match(advent, /if \(result\.recorded && deps\.onResult\) \{/, "csak rögzített válasz után");
   assert.match(advent, /\/\/ Az átvett \(kész\) vendégeredmény is lehet végleges \(18\.1\)/);

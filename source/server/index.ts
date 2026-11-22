@@ -19,7 +19,7 @@ import { banMaintenanceEnabled } from "./player/account-store";
 import { startAdventSweeper } from "./advent/sweeper";
 import { createAdventStore } from "./advent/store";
 import { adventEnabled } from "./advent/clock";
-import { closeAdventSeason } from "./advent/result-email";
+import { deliverAdventMail } from "./advent/result-email";
 import { adventNow } from "../shared/advent/calendar";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
@@ -652,8 +652,9 @@ app.use((req, res, next) => {
       const adventStore = createAdventStore(dbPool);
       startAdventSweeper({
         sweep: (now, season) => adventStore.sweep(now, season),
-        // S5 (terv 18.1 3.): lezárt évadban a levél nélküli, megkezdett tanulói sorokra egyszer — csak bekapcsolt naptárnál.
-        closeSeason: async (now) => (adventEnabled() ? closeAdventSeason(adventStore, adventNow(now)) : 0),
+        // S5 (terv 18.1; S5/S6 1. vak L1): a szülői levelek tartós pótlása (leállás / részleges siker után; lezárt évadban a levél
+        // nélküli, megkezdett tanulói sorok) — csak bekapcsolt naptárnál.
+        resumeMail: async (now) => (adventEnabled() ? deliverAdventMail(adventStore, adventNow(now)) : 0),
       });
       if (banMaintenanceEnabled() && !process.env.PLAYER_BAN_KEY) {
         logger.info("[PLAYER] PLAYER_BAN_KEY nincs beállítva — a törölt fiókok tiltás-ujjlenyomata a SESSION_SECRET-ből levezetett kulccsal készül (rotációja ezeket érvényteleníti)");

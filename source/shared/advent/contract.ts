@@ -84,6 +84,8 @@ export type AdventState = {
    * verziójú, később kézbesített választ eldobja (PR-C 3. vak L1).
    */
   version: number;
+  /** A válasz szerverpillanata (ms; S5/S6 1. vak L4): egyenlő `version` mellett a régebbi pillanatú állás a régebbi. */
+  asOf: number;
 };
 
 export type AdventOpenResult = {
@@ -113,4 +115,6 @@ export type AdventAnswerResult = {
   closing: AdventClosing;
   /** Az állás szerververziója a válasz után (lásd `AdventState.version`; PR-C 3. vak L1). */
   version: number;
+  /** A válasz szerverpillanata (lásd `AdventState.asOf`). */
+  asOf: number;
 };

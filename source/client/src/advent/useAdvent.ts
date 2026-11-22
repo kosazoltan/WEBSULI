@@ -93,6 +93,10 @@ export function adventPreviewDate(): string | null {
 export function refuseAdventPreview(): void {
   previewRefused = true;
 }
+/** A naptár módja a gyorsítótár-kulcshoz: az előnézet napja, vagy `"normal"` (S5/S6 1. vak L2). */
+export function adventMode(): string {
+  return adventPreviewDate() ?? "normal";
+}
 /** Egy naptár-végpont címe: előnézetben az admin-útvonalon, a dátummal. */
 export function adventUrl(path: string): string {
   const date = adventPreviewDate();
@@ -150,8 +154,10 @@ export const adventApi = {
 export function useAdventState(enabled = true, createDevice = true) {
   const queryClient = useQueryClient();
   const generation = useAdventSubjectGeneration();
+  // A mód a címből, minden rajzoláskor: a főoldal mindig normál, az előnézet külön bejegyzés (S5/S6 1. vak L2).
+  const mode = adventMode();
   const query = useQuery<AdventState | null>({
-    queryKey: adventStateKey(generation),
+    queryKey: adventStateKey(generation, mode),
     queryFn: ({ signal }) => fetchAdventState(createDevice, signal),
     enabled,
     staleTime: 30_000,
@@ -173,7 +179,7 @@ export function useAdventState(enabled = true, createDevice = true) {
     const timer = window.setTimeout(() => { void queryClient.invalidateQueries({ queryKey: ADVENT_STATE_KEY }); }, delay);
     return () => window.clearTimeout(timer);
   }, [wait, at, queryClient]);
-  return { ...query, generation };
+  return { ...query, generation, mode };
 }
 
 // Ugyanaz a jelző, amelyet az alkalmazás profil-lekérdezése állít be, ha a szerver elutasítja a tokent (és törli azt).

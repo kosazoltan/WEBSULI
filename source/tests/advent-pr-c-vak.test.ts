@@ -143,7 +143,8 @@ test("L3: a tanulói kapcsolat / token változása új alany-generációt ad —
   assert.match(read("client/src/lib/learnerProfile.ts"), /dispatchEvent\(new Event\(LEARNER_TOKEN_CHANGED_EVENT\)\)/, "a token törlése / eltárolása jelez");
   assert.match(read("client/src/pages/PlayerAccount.tsx"), /await clearAdventCache\(queryClient\)/, "a tanulói kapcsolat változása üríti az adventi állapotot");
   const hook = read("client/src/advent/useAdvent.ts");
-  assert.match(hook, /queryKey: adventStateKey\(generation\)/, "a lekérdezés kulcsa a generációt is hordozza");
+  // S5/S6 1. vak L2 (dokumentált): a kulcs a generáció mellett a módot (normál / előnézeti nap) is hordozza.
+  assert.match(hook, /queryKey: adventStateKey\(generation, mode\)/, "a lekérdezés kulcsa a generációt is hordozza");
   assert.match(hook, /watchAdventSubject\(window, LEARNER_TOKEN_KEY, LEARNER_TOKEN_CHANGED_EVENT\)/);
   const page = read("client/src/pages/AdventCalendar.tsx");
   // (2026-11-21, PR-C 2. vak L2: az írás a versenyhelyzet-álló applyAdventWrite-on át megy, amely a setAdventStateIfCurrent-et hívja.)

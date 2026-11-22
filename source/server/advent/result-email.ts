@@ -13,7 +13,7 @@
  */
 import { createHash, createHmac } from "node:crypto";
 import type { AdventPhase } from "../../shared/advent/calendar";
-import { ADVENT_DOORS, adventSummary, limitsForGrade, type AdventSummary } from "../../shared/advent/rules";
+import { ADVENT_DOORS, adventSummary, doorState, limitsForGrade, type AdventSummary } from "../../shared/advent/rules";
 import { learnerLinkSecret } from "../lib/learner-token";
 import { isE2eMode } from "../lib/e2e-mode";
 import { logger } from "../lib/logger";
@@ -72,6 +72,31 @@ export function adventResultSummary(row: AdventRow): { bestRound: number; best: 
   return { bestRound, best, rounds: Math.max(row.round, rounds.length ? rounds[rounds.length - 1]! : 1), passed };
 }
 
+/** A tárgyak magyar neve a levélben (a kliens SUBJECT_LABEL-jével egyező). */
+const SUBJECT_LABEL: Record<string, string> = {
+  christmas: "Karácsony", math: "Matematika", english: "Angol", hungarian: "Magyar nyelv", science: "Természetismeret", history: "Történelem",
+};
+
+/** A legjobb kör tantárgyankénti bontása (S5/S6 1. vak L7; terv 4.1 (e), 12.3): tárgy → megoldott / megválaszolt ablak. */
+export function adventSubjectBreakdown(row: AdventRow, round: number): { subject: string; label: string; solved: number; total: number }[] {
+  const { maxRepairs } = limitsForGrade(row.grade ?? 5);
+  const subjects = (row.plan[round]?.subjects ?? {}) as Record<number, string>;
+  const out = new Map<string, { solved: number; total: number }>();
+  for (const [dayKey, record] of Object.entries(row.doors[round] ?? {})) {
+    const attempts = record?.attempts ?? [];
+    if (attempts.length === 0) continue;
+    const subject = subjects[Number(dayKey)] ?? "egyeb";
+    const entry = out.get(subject) ?? { solved: 0, total: 0 };
+    entry.total++;
+    if (doorState({ unlocked: true, attempts, maxRepairs }) === "solved") entry.solved++;
+    out.set(subject, entry);
+  }
+  // Karácsony elöl, utána a többi a magyar név szerint.
+  return [...out.entries()]
+    .map(([subject, v]) => ({ subject, label: SUBJECT_LABEL[subject] ?? "Egyéb", ...v }))
+    .sort((a, b) => (a.subject === "christmas" ? -1 : b.subject === "christmas" ? 1 : a.label.localeCompare(b.label, "hu")));
+}
+
 const escapeHtml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 /** A levél tárgya és törzse (tiszta függvény). A név HTML-escape-elve; token, eszközazonosító, link nincs benne. */
@@ -92,6 +117,7 @@ export function buildAdventResultEmail(input: { firstName: string | null; grade:
     ["Elsőre jó", `${best.firstTry} / ${ADVENT_DOORS}`],
     ["Megfelelt", passed ? "igen" : "nem"],
   ];
+  for (const part of adventSubjectBreakdown(input.row, bestRound)) rows.push([`${part.label}`, `${part.solved} / ${part.total} megoldva`]);
   const table = rows.map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#555">${escapeHtml(k)}</td><td style="padding:4px 0"><strong>${escapeHtml(v)}</strong></td></tr>`).join("");
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#222">`
     + `<h2 style="margin:0 0 8px">Adventi naptár ${escapeHtml(String(input.season))} — ${escapeHtml(name)}</h2>`
@@ -109,11 +135,18 @@ export function adventIdempotencyKey(rowId: string, to: string): string {
   return `advent-result/${createHash("sha256").update([rowId, "final", to.trim().toLowerCase()].join("|")).digest("hex")}`;
 }
 
+/** A bérlet hossza: ennyi ideig egy címzett küldése egy feldolgozóé; leállás után ennyi idő múlva folytatható. */
+export const ADVENT_MAIL_LEASE_MS = 10 * 60_000;
+
+type MailStore = Pick<AdventStore, "planMail" | "leaseMail" | "finishMail" | "releaseLease">;
+
 /**
- * A levél elküldése, ha az eredmény végleges (18.1). Címzettenként: foglalás (`claimMail`) → küldés; hibánál a foglalás felszabadul, és
- * egy késleltetett újrapróba pótolja (egyszer). A már foglalt / kézbesített címzett nem kap másodikat. Sosem dob.
+ * A levél elküldése, ha az eredmény végleges (18.1). Tartós kézbesítés (S5/S6 1. vak L1): az első döntéskor rögzül a kézbesítési
+ * terv (`want:` — a címzettek lenyomata), utána címzettenként bérlet → küldés (stabil idempotencia-kulccsal) → `final:` rögzítése.
+ * Küldési hibánál a bérlet felszabadul (egy késleltetett újrapróba + a takarító pótlása); ha a szolgáltató elfogadta, de a rögzítés
+ * elmaradt (leállás), a bérlet lejárta után a pótlás ugyanazzal a kulccsal küld (a szolgáltató deduplikálja). Sosem dob.
  */
-export async function sendAdventResult(input: { store: Pick<AdventStore, "claimMail" | "releaseMail">; row: AdventRow; phase: AdventPhase; firstName: string | null }, retry = true): Promise<{ sent: number; failed: number; skipped?: "no-recipients" | "no-secret" }> {
+export async function sendAdventResult(input: { store: MailStore; row: AdventRow; phase: AdventPhase; firstName: string | null; nowMs?: number }, retry = true): Promise<{ sent: number; failed: number; skipped?: "no-recipients" | "no-secret" }> {
   try {
     const reason = adventResultFinal(input.row, input.phase);
     if (!reason) return { sent: 0, failed: 0 };
@@ -122,24 +155,33 @@ export async function sendAdventResult(input: { store: Pick<AdventStore, "claimM
     if (!recipients.length) return { sent: 0, failed: 0, skipped: "no-recipients" };
     const secret = learnerLinkSecret();
     if (!secret) return { sent: 0, failed: 0, skipped: "no-secret" };
+    const hashOf = (to: string) => adventMailKey(secret, to).slice("final:".length);
+    const planned = new Set(await input.store.planMail(input.row.id, recipients.map((to) => `want:${hashOf(to)}`)));
     const { subject, html } = buildAdventResultEmail({ firstName: input.firstName, grade: input.row.grade, season: input.row.season, reason, row: input.row });
     let sent = 0;
     let failed = 0;
     for (const to of recipients) {
-      const key = adventMailKey(secret, to);
-      if (input.row.mailedTo.includes(key)) continue;
-      if (!(await input.store.claimMail(input.row.id, key))) continue;
+      const hash = hashOf(to);
+      if (!planned.has(`want:${hash}`)) continue;
+      if (!(await input.store.leaseMail(input.row.id, hash, input.nowMs ?? Date.now(), ADVENT_MAIL_LEASE_MS))) continue;
       try {
         await send(subject, html, to, adventIdempotencyKey(input.row.id, to));
-        sent++;
       } catch (error) {
         failed++;
         logger.error(`[ADVENT] szülői levél küldési hiba: ${errorClass(error)}`);
-        await input.store.releaseMail(input.row.id, key).catch((error: unknown) => logger.error(`[ADVENT] a levél-foglalás felszabadítása nem sikerült: ${errorClass(error)}`));
+        await input.store.releaseLease(input.row.id, hash).catch((error: unknown) => logger.error(`[ADVENT] a levél-bérlet felszabadítása nem sikerült: ${errorClass(error)}`));
+        continue;
+      }
+      try {
+        await input.store.finishMail(input.row.id, hash);
+        sent++;
+      } catch (error) {
+        // A szolgáltató elfogadta, a rögzítés elmaradt: a bérlet marad, a lejárta után a pótlás ugyanazzal a kulccsal küld.
+        logger.error(`[ADVENT] a kézbesítés rögzítése nem sikerült: ${errorClass(error)}`);
       }
     }
     if (failed > 0 && retry) {
-      const timer = setTimeout(() => { void sendAdventResult({ ...input, row: { ...input.row, mailedTo: [] } }, false); }, retryDelayMs);
+      const timer = setTimeout(() => { void sendAdventResult({ ...input, nowMs: undefined }, false); }, retryDelayMs);
       timer.unref?.();
     }
     return { sent, failed };
@@ -149,16 +191,23 @@ export async function sendAdventResult(input: { store: Pick<AdventStore, "claimM
   }
 }
 
+type DeliverStore = MailStore & Pick<AdventStore, "mailCandidates">;
+
 /**
- * Évadzárás (18.1 3. pont; a takarító hívja, csak bekapcsolt naptárnál): lezárt fázisban a megkezdett, MÉG LEVÉL NÉLKÜLI (egyetlen
- * `final:` foglalása sincs) tanulói sorokra egyszer elmegy a levél. A már levelet kapott sor kimarad — egy később felvett új címzett sem
- * kap utólag levelet a régi évadról. A küldött levelek száma.
+ * Tartós pótlás (a takarító hívja indításkor és rendszeresen, csak bekapcsolt naptárnál): minden kézbesítetlen tervezett címzett, és a
+ * terv nélküli végleges eredmények (pl. leállás a válasz és a levél között); lezárt évadban a megkezdett, levél nélküli tanulói sorok is
+ * (18.1 3. pont). A küldött levelek száma.
  */
-export async function closeAdventSeason(store: Pick<AdventStore, "claimMail" | "releaseMail" | "unmailedLearnerRows">, at: { season: number; phase: AdventPhase }): Promise<number> {
-  if (at.phase !== "closed") return 0;
+export async function deliverAdventMail(store: DeliverStore, at: { season: number; phase: AdventPhase }, nowMs: number = Date.now()): Promise<number> {
   let sent = 0;
-  for (const { row, firstName } of await store.unmailedLearnerRows(at.season)) {
-    sent += (await sendAdventResult({ store, row, phase: "closed", firstName })).sent;
+  for (const { row, firstName } of await store.mailCandidates(at.season, at.phase === "closed")) {
+    sent += (await sendAdventResult({ store, row, phase: at.phase, firstName, nowMs }, false)).sent;
   }
   return sent;
+}
+
+/** Évadzárás (18.1 3. pont): csak lezárt fázisban — a pótlás lezárt évadra. */
+export async function closeAdventSeason(store: DeliverStore, at: { season: number; phase: AdventPhase }, nowMs: number = Date.now()): Promise<number> {
+  if (at.phase !== "closed") return 0;
+  return deliverAdventMail(store, at, nowMs);
 }

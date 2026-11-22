@@ -17,7 +17,7 @@ const { learnerTokenFor } = await import("../server/learners");
 const { createPlayerAccountStore } = await import("../server/player/account-store");
 const { createAdventStore } = await import("../server/advent/store");
 const { createAdoptionContext, mergeAdoption } = await import("../server/advent/adoption");
-const { closeAdventSeason, setAdventSender } = await import("../server/advent/result-email");
+const { closeAdventSeason, deliverAdventMail, sendAdventResult, setAdventSender } = await import("../server/advent/result-email");
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Question = { id: string; subject: string; prompt: string; options: string[] };
@@ -1054,8 +1054,10 @@ describe("adventi naptár — végpontok", () => {
     assert.ok(mails.every((m) => /^Adventi naptár: Panni végigért — 23 \/ 24$/.test(m.subject)), mails[0]?.subject);
     assert.ok(mails.every((m) => !m.html.includes(learner.token) && !m.html.includes(k.device)), "token és eszközazonosító nincs a levélben");
     const [stored] = await q<{ mailed_to: string[] }>(`SELECT mailed_to FROM advent_progress WHERE learner_id = $1`, [learner.id]);
-    assert.equal(stored!.mailed_to.length, 3);
-    assert.ok(stored!.mailed_to.every((key) => /^final:[0-9a-f]{32}$/.test(key) && !key.includes("@")), "a foglalás lenyomat, nem cím");
+    // S5/S6 1. vak L1 (dokumentált): a tartós kézbesítés a terv (want:) mellett a kézbesítést (final:) is rögzíti — címzettenként.
+    assert.equal(stored!.mailed_to.filter((key) => key.startsWith("final:")).length, 3);
+    assert.equal(stored!.mailed_to.filter((key) => key.startsWith("want:")).length, 3);
+    assert.ok(stored!.mailed_to.every((key) => /^(final|want):[0-9a-f]{32}$/.test(key) && !key.includes("@")), "a foglalás lenyomat, nem cím; függő bérlet nem maradt");
     // Újabb válasz (a 24. ablak javítása): nincs második levél.
     await k.answer(24, await k.open(24), true);
     await settle(4);
@@ -1070,18 +1072,131 @@ describe("adventi naptár — végpontok", () => {
     await settle(4);
     assert.equal(mails.length, 3, "nem végleges eredményről (és névtelen sorról) nem megy levél");
     const store = createAdventStore(dbPool);
-    const unmailed = await store.unmailedLearnerRows(2026);
+    const unmailed = await store.mailCandidates(2026, true);
     assert.ok(unmailed.some((r) => r.row.subjectId === other.id), "a levél nélküli tanulói sor a listán");
     assert.ok(!unmailed.some((r) => r.row.subjectId === learner.id), "a levelet kapott sor nincs a listán");
     assert.ok(unmailed.every((r) => r.row.subjectKind === "learner"), "névtelen sor soha");
     // Csak a saját két tanulónkra szűkítve (a fájl más esetei is hagyhatnak tanulói sort).
-    const mine = { ...store, unmailedLearnerRows: async (season: number) => (await store.unmailedLearnerRows(season)).filter((r) => r.row.subjectId === other.id || r.row.subjectId === learner.id) };
+    const mine = { ...store, mailCandidates: async (season: number, includeUnfinished: boolean) => (await store.mailCandidates(season, includeUnfinished)).filter((r) => r.row.subjectId === other.id || r.row.subjectId === learner.id) };
     assert.equal(await closeAdventSeason(mine, { season: 2026, phase: "catchup" }), 0, "pótlási időszakban nincs évadzáró levél");
     assert.equal(await closeAdventSeason(mine, { season: 2026, phase: "closed" }), 3, "a levél nélküli, megkezdett sorra címzettenként egy");
     assert.ok(mails.slice(3).every((m) => /^Adventi naptár: Panni — az évad lezárult, 0 \/ 24$/.test(m.subject)), mails[3]?.subject);
     assert.equal(await closeAdventSeason(mine, { season: 2026, phase: "closed" }), 0, "másodszor nincs");
     assert.equal(mails.length, 6);
     await dbPool.query(`DELETE FROM learners WHERE id = ANY($1)`, [[learner.id, other.id]]);
+  });
+  it("S5/S6 1. vak L1: a tartós kézbesítés helyreáll — foglalás utáni leállás, részleges siker, a szolgáltató átvétele utáni leállás, párhuzamos feldolgozók; évadzáráskor a hiányzó címzettek pótlódnak, új címzett nem", async (t) => {
+    const RECIPIENTS = "anya@pelda.hu, apa@pelda.hu, tanar@pelda.hu";
+    const prevEmails = process.env.ADMIN_EMAILS;
+    const mails: { to: string; key: string }[] = [];
+    let failFor: string | null = null;
+    setAdventSender(async (_subject, _html, to, key) => {
+      if (to === failFor) throw new Error("átmeneti szolgáltatói hiba");
+      mails.push({ to, key });
+    });
+    t.after(() => { setAdventSender(null); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+    const store = createAdventStore(dbPool);
+    // Végleges (megfelelt) tanulói sor levél nélkül: címzett nélkül játsszuk végig (nincs kézbesítési terv).
+    const finalRow = async () => {
+      process.env.ADMIN_EMAILS = "";
+      const learner = await newLearner(5);
+      const k = await kid(); k.learner = learner.token; k.now = DEC26;
+      for (let day = 1; day <= 24; day++) await k.answer(day, await k.open(day), day !== 24);
+      const [row] = await q<{ id: string }>(`SELECT id FROM advent_progress WHERE learner_id = $1`, [learner.id]);
+      process.env.ADMIN_EMAILS = RECIPIENTS;
+      return { learner, rowId: row!.id };
+    };
+    const own = (ids: string[]) => ({ ...store, mailCandidates: async (season: number, includeUnfinished: boolean) => (await store.mailCandidates(season, includeUnfinished)).filter((c) => ids.includes(c.row.id)) });
+    const open = { season: 2026, phase: "catchup" as const };
+    const LEASE = 10 * 60_000;
+
+    // 1) Leállás a foglalás után (a kézbesítési terv és a bérlet megvan, levél nem ment): a bérlet lejárta előtt nincs második
+    //    feldolgozó, utána a pótlás mindhárom címzettnek egyszer küld.
+    const a = await finalRow();
+    const [rowA] = (await store.mailCandidates(2026, false)).filter((c) => c.row.id === a.rowId);
+    assert.ok(rowA, "a végleges, levél nélküli sor pótlandó");
+    const { adventMailKey } = await import("../server/advent/result-email");
+    const { learnerLinkSecret } = await import("../server/lib/learner-token");
+    const hashOf = (to: string) => adventMailKey(learnerLinkSecret()!, to).slice("final:".length);
+    const wants = ["anya@pelda.hu", "apa@pelda.hu", "tanar@pelda.hu"].map((to) => "want:" + hashOf(to));
+    await store.planMail(a.rowId, wants);
+    const t0 = Date.now();
+    for (const to of ["anya@pelda.hu", "apa@pelda.hu", "tanar@pelda.hu"]) assert.equal(await store.leaseMail(a.rowId, hashOf(to), t0, LEASE), true);
+    assert.equal(await deliverAdventMail(own([a.rowId]), open, t0 + 1000), 0, "élő bérlet mellett nincs második küldés");
+    assert.equal(mails.length, 0);
+    assert.equal(await deliverAdventMail(own([a.rowId]), open, t0 + LEASE + 1000), 3, "a lejárt bérlet után pótlódik");
+    assert.deepEqual(mails.map((m) => m.to).sort(), ["anya@pelda.hu", "apa@pelda.hu", "tanar@pelda.hu"]);
+    assert.equal(await deliverAdventMail(own([a.rowId]), open, t0 + 3 * LEASE), 0, "kézbesítés után nincs több");
+
+    // 2) Részleges siker: az egyik címzettnél az első küldés (és a memóriabeli újrapróba) is bukik — a tartós pótlás később küld neki,
+    //    a többiek nem kapnak másodikat.
+    mails.length = 0;
+    const b = await finalRow();
+    failFor = "apa@pelda.hu";
+    const rowB = (await store.mailCandidates(2026, false)).find((c) => c.row.id === b.rowId)!;
+    assert.deepEqual(await sendAdventResult({ store, row: rowB.row, phase: "catchup", firstName: rowB.firstName }, false), { sent: 2, failed: 1 });
+    failFor = null;
+    assert.equal(await deliverAdventMail(own([b.rowId]), open), 1);
+    assert.deepEqual(mails.map((m) => m.to).sort(), ["anya@pelda.hu", "apa@pelda.hu", "tanar@pelda.hu"]);
+
+    // 3) Leállás a szolgáltató átvétele UTÁN (a kézbesítés rögzítése elmaradt): a pótlás ugyanazzal az idempotencia-kulccsal küld
+    //    (a szolgáltató ezt deduplikálja), a bérlet lejárta előtt nem.
+    mails.length = 0;
+    const c = await finalRow();
+    const rowC = (await store.mailCandidates(2026, false)).find((r) => r.row.id === c.rowId)!;
+    const crashing = { ...store, finishMail: async () => { throw new Error("leállás a rögzítés előtt"); } };
+    const t1 = Date.now();
+    assert.equal((await sendAdventResult({ store: crashing, row: rowC.row, phase: "catchup", firstName: null, nowMs: t1 }, false)).sent, 0, "rögzítés nélkül nem számít kézbesítettnek");
+    const firstKeys = new Map(mails.map((m) => [m.to, m.key]));
+    assert.equal(firstKeys.size, 3);
+    assert.equal(await deliverAdventMail(own([c.rowId]), open, t1 + 1000), 0, "élő bérlet: nincs azonnali második hívás");
+    assert.equal(await deliverAdventMail(own([c.rowId]), open, t1 + LEASE + 1000), 3);
+    for (const m of mails.slice(3)) assert.equal(m.key, firstKeys.get(m.to), "ugyanaz az idempotencia-kulcs");
+
+    // 4) Párhuzamos feldolgozók: címzettenként pontosan egy hívás.
+    mails.length = 0;
+    const d = await finalRow();
+    const [x, y] = await Promise.all([deliverAdventMail(own([d.rowId]), open), deliverAdventMail(own([d.rowId]), open)]);
+    assert.equal(x + y, 3);
+    assert.deepEqual(mails.map((m) => m.to).sort(), ["anya@pelda.hu", "apa@pelda.hu", "tanar@pelda.hu"]);
+
+    // 5) Évadzárás: a részben kézbesített sor hiányzó címzettjei pótlódnak; a később felvett új címzett a régi eredményről nem kap levelet.
+    mails.length = 0;
+    const e = await finalRow();
+    failFor = "tanar@pelda.hu";
+    const rowE = (await store.mailCandidates(2026, false)).find((r) => r.row.id === e.rowId)!;
+    await sendAdventResult({ store, row: rowE.row, phase: "catchup", firstName: null }, false);
+    failFor = null;
+    process.env.ADMIN_EMAILS = RECIPIENTS + ", uj@pelda.hu";
+    mails.length = 0;
+    assert.equal(await closeAdventSeason(own([e.rowId]), { season: 2026, phase: "closed" }), 1);
+    assert.deepEqual(mails.map((m) => m.to), ["tanar@pelda.hu"]);
+    await dbPool.query(`DELETE FROM learners WHERE id = ANY($1)`, [[a.learner.id, b.learner.id, c.learner.id, d.learner.id, e.learner.id]]);
+  });
+
+  it("S5/S6 1. vak L5: az ablaknyitással mentett (átvétel útján) végleges eredmény is azonnal levelet indít", async (t) => {
+    const prevEmails = process.env.ADMIN_EMAILS;
+    process.env.ADMIN_EMAILS = "anya@pelda.hu, apa@pelda.hu, tanar@pelda.hu";
+    const mails: string[] = [];
+    setAdventSender(async (_s, _h, to) => { mails.push(to); });
+    t.after(() => { setAdventSender(null); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+    const learner = await newLearner(5);
+    const k = await kid(); k.learner = learner.token; k.now = DEC26;
+    // A tanuló: 22 megoldott, a 23. és 24. javítható → nem végleges.
+    for (let day = 1; day <= 24; day++) await k.answer(day, await k.open(day), day <= 22);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.equal(mails.length, 0);
+    // Egy telefon vendégként megoldja a 23. ablakot, majd a tanulói linkkel EGY ABLAKOT NYIT (nem válaszol, nem hív /adopt-ot).
+    const phone = await kid(); phone.now = DEC26;
+    assert.equal((await phone.post("/grade", { grade: 5 })).status, 200);
+    await phone.answer(23, await phone.open(23), true);
+    phone.learner = learner.token;
+    assert.equal((await phone.post("/doors/1/open")).status, 200);
+    const [row] = await q<{ passed: boolean }>(`SELECT passed_at IS NOT NULL AS passed FROM advent_progress WHERE learner_id = $1`, [learner.id]);
+    assert.equal(row!.passed, true, "a megnyitás tranzakciója átvette a megoldást és mentette a megfelelést");
+    for (let i = 0; i < 40 && mails.length < 3; i++) await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(mails.sort(), ["anya@pelda.hu", "apa@pelda.hu", "tanar@pelda.hu"], "a végleges eredménykor (18.1) elment a levél");
+    await dbPool.query(`DELETE FROM learners WHERE id = $1`, [learner.id]);
   });
 });
 
@@ -1141,6 +1256,11 @@ describe("adventi naptár — admin-előnézet (S6, A16; terv 16.5)", () => {
 
   it("érvénytelen vagy hiányzó dátum: 400 (olvasás és írás); nem admin 403, névtelen 401 — az írás sem jut át", async () => {
     const admin = await session(ADMIN.id);
+    // S5/S6 1. vak L8: az előnézeti /status is 400-at ad érvénytelen vagy hiányzó dátumra (nem „kikapcsolt” 200-at).
+    assert.equal((await admin.request("GET", `${P}/status?date=2026-02-30`)).status, 400);
+    assert.equal((await admin.request("GET", `${P}/status`)).status, 400);
+    const okStatus = await admin.request("GET", `${P}/status?date=2026-12-10`);
+    assert.deepEqual({ status: okStatus.status, enabled: (okStatus.json as Json).enabled, openDay: (okStatus.json as Json).openDay }, { status: 200, enabled: true, openDay: 10 });
     for (const bad of ["", "?date=2026-02-30", "?date=2026-12-1", "?date=holnap", "?date=1999-12-10"]) {
       assert.equal((await admin.request("GET", `${P}/state${bad}`)).status, 400, `olvasás: ${bad || "dátum nélkül"}`);
     }
