@@ -1046,6 +1046,8 @@ test("R47 / kontroll: változatlan párosítás mellett a pillanatkép és a vé
   for (let i = 1; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
   await expect.poll(() => finalsOf(posts).length).toBe(1);
   expect(finalsOf(posts)[0].body.learner).toBe(LEARNER_A);
+  // Leltár K16: a kör kilét-rekordja a végleges siker után nem marad a tárolóban.
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.includes(":owner:")).length), { message: "a kilét-rekord törlődött" }).toBe(0);
 });
 
 test("R48 / L4: a pillanatkép késői 202-je a véglegesítés után nem írja vissza a részleges jelzőt", async ({ page }) => {
@@ -1149,4 +1151,41 @@ test("R49 / L2 (b): a pillanatkép 403-a alatt újrapárosul az eszköz → a pi
   await expect.poll(() => partials.length).toBe(2);
   expect(partials[0].learner).toBe(LEARNER_A);
   expect(partials[1].learner, "a 403 utáni ismétlés nem a lecserélt párosítással").toBeUndefined();
+});
+
+/* 2026-11-22 — kilét-osztály leltár (saját lelet, nem a vak ellenőrtől), terv: Kilét-invariáns, R50. */
+test("R50 (leltár): kilét-rekord nélkül helyreállított, már megkezdett kör (pl. telepítés előtti kör, privát mód) nem kapja meg a mostani párosítást / fiókot", async ({ page }) => {
+  await page.addInitScript(token => { localStorage.setItem("websuli.learnerToken", token); }, LEARNER_A);
+  const posts = await mockWith(page);
+  await page.route("**/api/csrf-token", route => route.fulfill({ json: { csrfToken: "t", resultApi: 2, resultSubject: "anon" } }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  let quiz = await openQuiz(page);
+  await quiz.nth(0).locator("button.lesson-option").first().click();
+  await page.waitForTimeout(500);
+  // A kör első tevékenysége EGY KORÁBBI kódverzió alatt történt: nincs kilét-rekord (és a lap újratöltődik).
+  await page.evaluate(() => { for (const key of Object.keys(localStorage)) if (key.includes(":owner:")) localStorage.removeItem(key); });
+  quiz = await openQuiz(page);
+  for (let i = 1; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => finalsOf(posts).length).toBe(1);
+  expect(finalsOf(posts)[0].body.learner, "a kör első tevékenységekori párosítás nem igazolható: párosítás nélkül megy").toBeUndefined();
+  expect(finalsOf(posts)[0].body.subject, "a fiók sem igazolható: `?`").toBe("?");
+});
+
+test("Leltár K16: két fül ugyanazon a körön — az első fülön A rögzül; a második fülön (közben B párosításával) befejezett kör nem B-vel megy", async ({ page, context }) => {
+  await page.addInitScript(token => { if (!sessionStorage.getItem("paired")) { sessionStorage.setItem("paired", "1"); localStorage.setItem("websuli.learnerToken", token); } }, LEARNER_A);
+  const posts = await mockWith(page);
+  await page.setViewportSize({ width: 844, height: 390 });
+  const quiz = await openQuiz(page);
+  await quiz.nth(0).locator("button.lesson-option").first().click(); // A első válasza az első fülön
+  await page.waitForTimeout(800);
+  await page.evaluate(token => localStorage.setItem("websuli.learnerToken", token), LEARNER_B); // B párosító linkje
+  const second = await context.newPage();
+  const posts2 = await mockWith(second);
+  await second.setViewportSize({ width: 844, height: 390 });
+  const quiz2 = await openQuiz(second); // ugyanaz a kör áll helyre a közös tárolóból
+  for (let i = 1; i < 25; i++) await quiz2.nth(i).locator("button.lesson-option").first().click();
+  await expect.poll(() => finalsOf(posts2).length).toBe(1);
+  expect(finalsOf(posts2)[0].body.learner, "a kör A-hoz rögzült: B párosításával nem megy").toBeUndefined();
+  expect(finalsOf(posts)).toHaveLength(0);
+  await second.close();
 });

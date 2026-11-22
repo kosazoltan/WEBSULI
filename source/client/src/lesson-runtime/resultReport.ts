@@ -55,11 +55,16 @@ function readOwner(key: string): RoundOwner | null {
   } catch { /* olvashatatlan tároló: nincs tárolt rekord */ }
   return null;
 }
-/** R47: a kör kilétének rögzítése (csak ha még nincs rögzítve); a rögzített rekordot adja. */
-export function bindRoundOwner(key: string): RoundOwner {
+/**
+ * R47: a kör kilétének rögzítése (csak ha még nincs rögzítve); a rögzített rekordot adja — a kilét EGYETLEN keletkezési pontja a kliensen.
+ * R50 (kilét-osztály leltár): a mostani kilét csak akkor rögzíthető, ha a kör első tevékenysége bizonyíthatóan EBBEN a dokumentumban
+ * történt (`firstActivityHere`: a kört itt még tevékenység nélkül láttuk). Rekord nélkül helyreállított, már megkezdett kör (korábbi
+ * kódverzió, privát módú újratöltés) kiléte nem igazolható: ismeretlenként rögzül (`?`, párosítás nélkül).
+ */
+export function bindRoundOwner(key: string, firstActivityHere: boolean): RoundOwner {
   const existing = readOwner(key);
   if (existing) return existing;
-  const owner: RoundOwner = { subject: resultSubject(), learnerTag: learnerTagOf(getLearnerToken()) };
+  const owner: RoundOwner = firstActivityHere ? { subject: resultSubject(), learnerTag: learnerTagOf(getLearnerToken()) } : { subject: null, learnerTag: null };
   owners.set(key, owner);
   try { localStorage.setItem(key, JSON.stringify(owner)); } catch { /* a memóriabeli rekord marad */ }
   return owner;
@@ -180,8 +185,11 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
   useEffect(() => { if (lessonId) warmCsrfToken(); }, [lessonId]);
   const ownedRoundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
   const roundActive = !!round.finishedAt || (kind === "quiz" ? answeredCount(round) > 0 : Object.values(round.answers).some(answer => answer.trim() !== ""));
+  // R50: azok a körök, amelyeket ebben a dokumentumban még tevékenység nélkül láttunk (csak ezek kaphatják a mostani kilétet).
+  const seenFresh = useRef(new Set<string>());
+  if (!roundActive) seenFresh.current.add(ownedRoundId);
   useEffect(() => {
-    if (lessonId && roundActive) bindRoundOwner(ownerKeyOf(storageKey, kind, ownedRoundId));
+    if (lessonId && roundActive) bindRoundOwner(ownerKeyOf(storageKey, kind, ownedRoundId), seenFresh.current.has(ownedRoundId));
   }, [lessonId, kind, storageKey, ownedRoundId, roundActive]);
   useEffect(() => {
     // Spec 2026-11-17-eredmeny-email-kviz: a helyi kvíz kérdésenként azonnal visszajelez, a lezáró gombot sokan meg sem nyomják — a
@@ -199,7 +207,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const fingerprint = peekFingerprint();
     // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi. R47: csak ha a kör
     // rögzített párosításával egyezik (újrapárosítás után a korábbi kör nem kerül az új tanulóhoz).
-    const owner = bindRoundOwner(ownerKeyOf(storageKey, kind, roundId));
+    const owner = bindRoundOwner(ownerKeyOf(storageKey, kind, roundId), seenFresh.current.has(roundId));
     const fresh = { ...(round.startedAt > 0 ? { startedAt: round.startedAt } : {}), ...(kind === "quiz" && round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
     const body = kind === "tasks"
       ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...fresh }
@@ -250,7 +258,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
       } catch { /* privát mód: a munkamenet állapota marad */ }
       if (!snapshotDue(state, roundId, count)) return;
       // R47: a kör rögzített kiléte — a párosítás csak egyezésnél, a fiók címkéje a rögzített (ismeretlen: `?`).
-      const owner = bindRoundOwner(ownerKeyOf(storageKey, kind, roundId));
+      const owner = bindRoundOwner(ownerKeyOf(storageKey, kind, roundId), seenFresh.current.has(roundId));
       const fingerprint = peekFingerprint();
       const base = { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}), clientNow: Date.now(), subject: owner.subject ?? "?" };
       const mark = { roundId, count };
