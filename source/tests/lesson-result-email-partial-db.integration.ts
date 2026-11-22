@@ -24,7 +24,7 @@ process.env.ADMIN_EMAILS = RECIPIENTS.join(", ");
 const PROXY_SECRET = randomBytes(24).toString("hex");
 process.env[PROXY_SECRET_ENV] = PROXY_SECRET;
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault, sendingPartialWho, setLearnerResolveFault } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, resultIdempotencyKey, setResultSender, setPartialDelay, setRetryDelay, clearPendingPartials, pendingPartialCount, flushPendingPartials, setSendTimeout, clearFinalizedRounds, setFinalizedCheckFault, setPartialIntakeHook, setGateCheckHook, resultSubjectOf, setPartialScheduleHook, setAttributionFault, setFinalClaimFault, sendingPartialWho, setLearnerResolveFault, setOwnerCheckFault } = await import("../server/lesson-result-email");
 const { formatBudapest } = await import("../shared/lesson-result-email");
 /** Terv R11: a pillanatkép körkulcsa a nyilvántartásban tanulótól független (lecke + kör). */
 const partialRoundKey = (roundId: string) => roundKeyOf("partial-round", "quiz-partial", roundId);
@@ -780,4 +780,24 @@ test("R47 / L3: a párosítás feloldásának átmeneti DB-hibája nem vendégk�
     assert.deepEqual(await (await post({ kind: "quiz", roundId: "round-r47-final", picks: picks(5), learner, fingerprint: "fp-r47" })).json(), { queued: true });
     assert.ok(await waitFor(() => sent.length === 2), "az ismételt végleges kérés levele kiment");
   } finally { setLearnerResolveFault(null); clearPendingPartials(); setPartialDelay(previousDelay); }
+});
+
+/* Gépi vak ellenőrzés, 10. kör (GPT-6.2 Sol, 025d3d34, 2026-11-22), terv R49 (c). */
+test("R49 / L3 (c): a végleges jelzősor már megvan, más kilét ismétel, a tulajdonos-lekérdezés átmenetileg hibázik → 503, nincs második levél; utána duplikátum", async () => {
+  reset();
+  const body = { kind: "quiz", roundId: "round-r49-owner", picks: picks(5), fingerprint: "fp-r49" };
+  let left = 0;
+  setOwnerCheckFault(() => { if (left > 0) { left--; throw Object.assign(new Error("connection terminated"), { code: "57P01" }); } });
+  try {
+    assert.equal((await post(body)).status, 202);
+    assert.ok(await waitFor(() => sent.length === 2), "az első (vendég) végleges levél kiment");
+    left = 1;
+    const again = await post(body, freshIp(), "u-r49-other");
+    assert.equal(again.status, 503, "a tulajdonos nem igazolható: újrapróbálható hiba, nem küldés");
+    await sleep(800);
+    assert.equal(sent.length, 2, "nincs második levél");
+    assert.deepEqual(await (await post(body, freshIp(), "u-r49-other")).json(), { queued: false, duplicate: true }, "a hiba után: duplikátum");
+    await sleep(500);
+    assert.equal(sent.length, 2);
+  } finally { setOwnerCheckFault(null); }
 });

@@ -401,6 +401,9 @@ let partialScheduleHook: ((who: string) => Promise<void>) | null = null;
 let attributionFault: (() => void) | null = null;
 let finalClaimFault: (() => void) | null = null;
 let learnerResolveFault: (() => void) | null = null;
+let ownerCheckFault: (() => void) | null = null;
+/** Teszthez (R49 / L3): hibainjektálás a végleges duplikátum-vizsgálat tulajdonos-lekérdezése elé; `null` kikapcsolja. */
+export function setOwnerCheckFault(fault: (() => void) | null): void { ownerCheckFault = fault; }
 /** Teszthez (R47 / L3): hibainjektálás a párosítás feloldása elé (átmeneti DB-hiba utánzása); `null` kikapcsolja. */
 export function setLearnerResolveFault(fault: (() => void) | null): void { learnerResolveFault = fault; }
 /** Teszthez (R42): hibainjektálás a végleges jelzősor rögzítése UTÁN, a háttérküldés és a 202 ELŐTT (megszakadt kérés); `null` kikapcsolja. */
@@ -619,15 +622,25 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   // beküldő saját végleges sora még nincs meg, ez ugyanannak a körnek MÁS kiléttel ismételt beküldése (pl. elveszett 202 után fiókba lépve):
   // második levél és más név nem megy. Ugyanazon kilét ismétlése a meglévő címzettenkénti pótlásra fut. A jelzősor hibája nem akasztja meg
   // a beküldést (a memóriabeli véglegesítés véd; a hiba osztálya naplózódik).
-  try {
-    if (!(await claimFinalRound(lessonId, body.kind, body.roundId, graded.summary.percent, who))) {
-      // R42: a saját végleges sor VAGY az első rögzítő tulajdonos-sora (a 202 előtt megszakadt első kérés ismétlése).
-      const own = await db.select({ id: lessonResultEmails.id }).from(lessonResultEmails)
+  let firstFinal: boolean | null = null;
+  try { firstFinal = await claimFinalRound(lessonId, body.kind, body.roundId, graded.summary.percent, who); }
+  catch (error) { logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`); }
+  if (firstFinal === false) {
+    // R42: a saját végleges sor VAGY az első rögzítő tulajdonos-sora (a 202 előtt megszakadt első kérés ismétlése). Terv R49 (10. vak kör
+    // L3): létező jelzősor mellett csak POZITÍVAN igazolt tulajdonos folytathatja — a tulajdonos-lekérdezés átmeneti hibája újrapróbálható
+    // 503 (a 202 előtt), nem végleges küldés (különben más kézbesítési kulcson második levél mehetne).
+    let own: Array<{ id: string }>;
+    try {
+      ownerCheckFault?.();
+      own = await db.select({ id: lessonResultEmails.id }).from(lessonResultEmails)
         .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, body.kind),
           inArray(lessonResultEmails.roundKey, [roundKeyOf(who, body.kind, body.roundId), finalOwnerKeyOf(who, body.kind, body.roundId)]))).limit(1);
-      if (!own.length) return res.status(202).json({ queued: false, duplicate: true });
+    } catch (error) {
+      logger.error(`[LESSON-RESULT] a végleges kör tulajdonosának ellenőrzése nem sikerült: ${errorClass(error)}`);
+      return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
     }
-  } catch (error) { logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`); }
+    if (!own.length) return res.status(202).json({ queued: false, duplicate: true });
+  }
   finalClaimFault?.();
   if (startedAtOnServer) graded = { ...graded, meta: { ...graded.meta, startedAt: startedAtOnServer } };
   const roundKey = roundKeyOf(who, body.kind, body.roundId);
