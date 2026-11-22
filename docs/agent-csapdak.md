@@ -51,6 +51,8 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-65** — Időtartam-állítást a lapon belül, képkockánként mérj; a lassú CI-hibát CPU-lassítással reprodukáld.
 - **C-94** — A saját, még be nem olvasztott teszted mércéjét se igazítsd az új implementációhoz; ha nem fér össze, az ütközést jelentsd.
 
+- **C-SZL-1** — Eloszlásra írt küszöböt (vödör-szám, korlát) a teljes mért táblából írj, a terv EARS-pontja előtt; scratch-mérés tsx-szel: `.mts` + `file:///` import.
+
 ### UI, CSS, mobil
 - **C-07** — Fix magasságú flex-oszlopban minden szinten `min-h-0`; UI-tesztben `elementFromPoint`-takarásvizsgálat 390 px-en is.
 - **C-32** — Felülírható közös komponens-osztály az `@layer components`-be; `!`-os segédosztály csak indoklással.
@@ -1249,3 +1251,22 @@ Forrás: #510 (R47–R48). Rokon: C-98.
   szabad rajta küldeni, ha a védelem tárgya bizonyíthatóan nem sérülhet (itt: nincs rögzített fiók, vagy igazoltan azonos munkamenet).
 
 Forrás: #510 (R49). Rokon: C-100.
+
+## C-SZL-1 — Eloszlás-küszöb a mért táblából; scratch-mérőszkript tsx-szel Windows-on (2026-11-22, ideiglenes sorszám)
+
+- **Tünet:** a Szólétra-szintezés tervének két EARS-küszöbe (A4: „az 1–2. alfokon ≥ 1 kifejezés”, A5: „10. pálya ≤ (alapszint+1)×3”)
+  az első tesztfutáson bukott — nem a kód, hanem a küszöb volt rossz: a 0. szint 1. alfokán (en, fr) nincs kifejezés (a
+  kifejezések többsége a 2. alfokon van), és a 11–12. évfolyam sávja a 4. szinten véget ér. Egy plusz kör (teszt + terv + végrehajtás javítása).
+- **Gyökérok:** a küszöböt a kvantilisekből (p33 / p67) becsültem, a fokozatonkénti teljes táblát csak a bukás után listáztam.
+- **Megelőzés:** eloszlásra vonatkozó elfogadási küszöb (vödör-minimum, felső korlát) előtt a teljes mért táblát (minden vödör,
+  minden nyelv / évfolyam) kell kiírni, és a küszöböt abból, a határesetek (sáv széle, legkisebb vödör) felsorolásával írni; a
+  táblát a terv mért szakaszába kell bemásolni.
+- **Tünet 2 (eszköz):** scratchpadben futtatott `.ts` mérőszkript `npx tsx`-szel: a top-level `await` „cjs output format” hibát
+  ad, az abszolút `D:/…` dinamikus import pedig `ERR_UNSUPPORTED_ESM_URL_SCHEME`-et. **Szabály 2:** a mérőszkript `.mts`
+  kiterjesztésű, a repó-modulokat `file:///D:/…` URL-lel importálja, és a repó `source/` mappájából fut (a `@/` alias így feloldódik).
+
+- **Tünet 3 (ismétlődés, vak kör 1 javítása):** a C-75 4. szabálya ellenére `sed -i`-vel cseréltem egy regexet (`\s`) — a
+  visszaperjel elveszett (`[Mm]ire\s` → `[Mm]ires`), a teszt bukott. **Szabály 3:** a C-75-öt itt is kötelező betartani:
+  regexet / visszaperjelet tartalmazó forrást CSAK Edit / Write eszköz vagy fájlból futó szkript módosít, `sed` soha.
+
+Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szintezes.md` 11. és 13. szakasz). Rokon: C-15, C-75.
