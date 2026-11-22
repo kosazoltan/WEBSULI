@@ -744,6 +744,16 @@ test("mozgókép: a szolgáltatói hibaszöveg, a job.error és a letöltési c�
     assert.match(e2, /mozgókép: failed/);
     assert.match(e2, /content_policy/, "a szolgáltató saját hibakódja megmarad");
     assert.ok(!e2.includes("SECRET2") && !e2.includes("cdn.example"), `job.error: ${e2}`);
+    // Vak kör 2 L1: címke nélküli, átlátszatlan érték a code mezőben → csak „egyéb” (engedélylista).
+    globalThis.fetch = (async () => new Response(JSON.stringify({ status: "failed", polling_url: "https://openrouter.ai/api/v1/videos/1", error: { code: "FixtureKey9f2" } }), { status: 200 })) as typeof fetch;
+    const e2b = await deps().video!(image, "p", 6).then(() => "", (e: unknown) => String(e));
+    assert.match(e2b, /mozgókép: failed \(egyéb\)/);
+    assert.ok(!e2b.includes("FixtureKey9f2"), `átlátszatlan kód: ${e2b}`);
+    // Vak kör 2 L1: hibás 2xx JSON — a parser üzenete (törzs-idézet) nem kerül a hibába.
+    globalThis.fetch = (async () => new Response("{ /v?sig=FixtureSig49", { status: 200 })) as typeof fetch;
+    const e2c = await deps().video!(image, "p", 6).then(() => "", (e: unknown) => String(e));
+    assert.match(e2c, /mozgókép: hibás JSON-válasz/);
+    assert.ok(!e2c.includes("FixtureSig49") && !e2c.includes("sig="), `hibás JSON: ${e2c}`);
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url = String(input instanceof Request ? input.url : input);
       if (url.endsWith("/api/v1/videos")) return new Response(JSON.stringify({ status: "completed", polling_url: "https://openrouter.ai/api/v1/videos/1", unsigned_urls: ["https://cdn.example/v.mp4?sig=SECRET3"] }), { status: 200 });

@@ -10,10 +10,24 @@ import { logger } from "./lib/logger";
 import { openPublicResponse, type AddressLookup, type RawRequest, type RawResponse } from "./studio/safe-fetch";
 import { CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, ClipAbortError, clipLogDetail, type ClipDeps } from "./lesson-clips";
 
-/** A szolgáltatói `job.error` naplózható része: kizárólag egy rövid, gépi hibakód (`code`); szabad szöveg / URL soha (#529 L1). */
+/**
+ * A szolgáltatói `job.error` naplózható része (#529 vak kör 1–2 L1): KIZÁRÓLAG a tételesen engedélyezett hibakódok egyike; minden más
+ * (szabad szöveg, URL, ismeretlen / átlátszatlan érték — akár hozzáférési adat) helyett „egyéb”.
+ */
+export const PROVIDER_ERROR_CODES: ReadonlySet<string> = new Set([
+  "content_policy", "content_policy_violation", "moderation", "safety", "invalid_request", "invalid_image", "invalid_prompt",
+  "rate_limit", "rate_limited", "quota_exceeded", "insufficient_credits", "timeout", "server_error", "internal_error",
+  "service_unavailable", "model_not_found", "unsupported_resolution", "unsupported_duration", "cancelled", "expired",
+]);
 export function providerErrorCode(error: unknown): string {
-  const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
-  return typeof code === "string" && /^[A-Za-z0-9_.-]{1,40}$/.test(code) ? ` (${code})` : "";
+  if (error === undefined || error === null || error === "") return "";
+  const code = typeof error === "object" ? (error as { code?: unknown }).code : undefined;
+  return ` (${typeof code === "string" && PROVIDER_ERROR_CODES.has(code) ? code : "egyéb"})`;
+}
+
+/** Szolgáltatói JSON-válasz elemzése: hibás JSON-nál fix üzenet (a parser üzenete idézhet a törzsből — #529 vak kör 2 L1). */
+export function providerJson<T>(what: string, text: string): T {
+  try { return JSON.parse(text) as T; } catch { throw new Error(`${what}: hibás JSON-válasz`); }
 }
 
 /**
@@ -368,7 +382,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
   const orChat = async (system: string, content: unknown, maxTokens: number): Promise<string> => {
     const res = await fetch(`${OPENROUTER}/chat/completions`, { method: "POST", headers: orHeaders, signal: signal(90_000), body: JSON.stringify({ model: CLIP_TEXT_MODEL, max_tokens: maxTokens, temperature: 0.4, messages: [{ role: "system", content: system }, { role: "user", content }] }) });
     const text = await bodyText("forgatókönyv", res);
-    const choice = (JSON.parse(text) as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }> }).choices?.[0];
+    const choice = providerJson<{ choices?: Array<{ finish_reason?: string; message?: { content?: string } }> }>("forgatókönyv", text).choices?.[0];
     if (choice?.finish_reason === "length") logger.warn("[lesson-clips] a modellválasz csonkolódott (finish_reason=length)");
     return choice?.message?.content ?? "";
   };
@@ -379,13 +393,13 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
       if (keys.openAi) {
         const res = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", signal: signal(120_000), headers: { Authorization: `Bearer ${keys.openAi}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: CLIP_IMAGE_MODEL_OPENAI, prompt, size: "1280x720", quality: "medium", output_format: "jpeg", n: 1 }) });
         const text = await bodyText("kép", res, CLIP_RESPONSE_LIMITS.image);
-        const b64 = (JSON.parse(text) as { data?: Array<{ b64_json?: string }> }).data?.[0]?.b64_json;
+        const b64 = providerJson<{ data?: Array<{ b64_json?: string }> }>("kép", text).data?.[0]?.b64_json;
         if (!b64) throw new Error("kép: üres válasz");
         return { bytes: Buffer.from(b64, "base64"), mime: "image/jpeg" };
       }
       const res = await fetch(`${OPENROUTER}/images`, { method: "POST", headers: orHeaders, signal: signal(120_000), body: JSON.stringify({ model: CLIP_IMAGE_MODEL_OPENROUTER, prompt, aspect_ratio: "16:9", resolution: "1K", n: 1 }) });
       const text = await bodyText("kép", res, CLIP_RESPONSE_LIMITS.image);
-      const img = (JSON.parse(text) as { data?: Array<{ b64_json?: string; media_type?: string }> }).data?.[0];
+      const img = providerJson<{ data?: Array<{ b64_json?: string; media_type?: string }> }>("kép", text).data?.[0];
       const mime = img?.media_type ?? "image/png";
       if (!img?.b64_json || !/^image\/(jpeg|png|webp)$/.test(mime)) throw new Error("kép: üres vagy nem képtípusú válasz");
       return { bytes: Buffer.from(img.b64_json, "base64"), mime };
@@ -399,7 +413,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
     async video(image, prompt, seconds) {
       const submit = await fetch(`${OPENROUTER}/videos`, { method: "POST", headers: orHeaders, signal: signal(120_000), body: JSON.stringify({ model: keys.videoModel ?? CLIP_VIDEO_MODEL_DEFAULT, prompt, duration: seconds, resolution: keys.videoResolution ?? CLIP_VIDEO_RESOLUTION_DEFAULT, aspect_ratio: "16:9", generate_audio: false, frame_images: [{ type: "image_url", image_url: { url: dataUrl(image) }, frame_type: "first_frame" }] }) });
       const submitted = await bodyText("mozgókép", submit);
-      let job = JSON.parse(submitted) as { status?: string; polling_url?: string; unsigned_urls?: string[]; error?: unknown };
+      let job = providerJson<{ status?: string; polling_url?: string; unsigned_urls?: string[]; error?: unknown }>("mozgókép", submitted);
       // A hitelesített lekérdezés csak a szolgáltató saját HTTPS-originjére mehet (vak kör L8).
       const pollingUrl = job.polling_url ? providerUrl(job.polling_url) : null;
       if (!pollingUrl || pollingUrl.origin !== OPENROUTER_ORIGIN) throw new Error("mozgókép: a válaszban nincs (vagy idegen) lekérdezési cím");
@@ -408,7 +422,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
         if (Date.now() > deadline) throw new Error("mozgókép: időtúllépés");
         await pause(VIDEO_POLL_MS);
         const poll = await safeProviderFetch(pollingUrl, { headers: orHeaders, signal: signal(60_000) }, { sameOrigin: true, transport });
-        if (poll.ok) job = JSON.parse(await readLimitedText(poll, POLL_LIMIT));
+        if (poll.ok) job = providerJson("mozgókép", await readLimitedText(poll, POLL_LIMIT));
         else await poll.body?.cancel().catch(() => undefined);
       }
       if (job.status !== "completed" || !job.unsigned_urls?.[0]) throw new Error(`mozgókép: ${job.status}${providerErrorCode(job.error)}`);
@@ -437,7 +451,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
       };
       const res = await elevenLabsQueue(() => fetchPatiently(() => fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", signal: signal(60_000), headers: { "xi-api-key": key }, body: body() })));
       const text = await bodyText("hangkapu", res);
-      return String((JSON.parse(text) as { text?: unknown }).text ?? "");
+      return String(providerJson<{ text?: unknown }>("hangkapu", text).text ?? "");
     };
   }
   if (keys.openAi) {
@@ -450,7 +464,7 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
       form.append("language", "hu");
       const res = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", signal: signal(60_000), headers: { Authorization: `Bearer ${key}` }, body: form });
       const text = await bodyText("hangkapu", res);
-      return String((JSON.parse(text) as { text?: unknown }).text ?? "");
+      return String(providerJson<{ text?: unknown }>("hangkapu", text).text ?? "");
     };
   }
   // Leállításkor (vagy utána) minden szolgáltatói hiba megszakításként jelez — így a fejezet nem kap hibás sort, és nem kerül be

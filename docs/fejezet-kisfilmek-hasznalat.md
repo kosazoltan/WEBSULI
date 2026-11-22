@@ -30,7 +30,7 @@ egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a
 | `LESSON_CLIPS_AUTO=on` | A legfeljebb 3 napja közzétett leckékhez gyárt. Kell hozzá az `OPENROUTER_API_KEY` (megvan). |
 | `ELEVENLABS_API_KEY` | A mesélőhang. Nélküle a kisfilm a felolvasás tartalék (gépies) hangjával szól. |
 | `OPENAI_API_KEY` / `AI_INTEGRATIONS_OPENAI_API_KEY` | A jóváhagyott próba képmodellje ÉS a hangkapu független felismerője. Nélküle a leckeborító képmodellje rajzol, a hangot pedig az ElevenLabs saját (elnézőbb) felismerője ellenőrzi. |
-| `LESSON_CLIP_VIDEO_MODEL` | A mozgókép-modell `szolgáltató/név` alakban (alap: `bytedance/seedance-2.0-mini`). Modellmegszűnéskor (napló: „No endpoints found for …”) ezt kell átírni; érvénytelen érték → alapérték. |
+| `LESSON_CLIP_VIDEO_MODEL` | A mozgókép-modell `szolgáltató/név` alakban (alap: `bytedance/seedance-2.0-mini`). Modellmegszűnéskor a naplóban „a mozgókép nem készült el … mozgókép: HTTP 404” (vagy „mozgókép: failed (model_not_found)”) áll — a napló szolgáltatói szöveget nem idéz; ekkor ezt kell átírni; érvénytelen érték → alapérték. |
 | `LESSON_CLIP_VIDEO_RESOLUTION` | `480p` (alap) vagy `720p`. Mérve 5 mp-re: 480p 0,177 USD, 720p 0,381 USD; a lejátszó 960 px-es képén szemre azonos. |
 | `LESSON_CLIP_DAILY_LIMIT` | Naponta legfeljebb ennyi lecke kap gyártást (alap: 2). |
 | `LESSON_CLIP_MEDIA_MAX_MB` | A médiatábla mérethatára (alap: 400 MB); fölötte a gyártás megáll, a naplóban jelzi. |
@@ -46,7 +46,12 @@ egy fejezet és egy átkódolás készül, és 320 MB szervermemória fölött a
      a kör, a következő fejezet és az átkódolás kimarad — ez nem állítja le a már futó lépést;
    - **kézi kikapcsolási küszöb** (a Render memóriamérése, a gyerekfolyamatokkal együtt): a javaslat 480 MB — **jóváhagyásra vár**.
 1. A PR összevonása és telepítése (a `0039` migráció magától lefut).
-2. Render Environment: `ELEVENLABS_API_KEY` (megvan), majd — csak a 0. pont jóváhagyása után — `LESSON_CLIPS_AUTO=on`.
+1b. **Egyjelenetes próba — kötelező, a `LESSON_CLIPS_AUTO=on` ELŐTT** (`docs/specs/2026-11-22-kisfilm-videomodell.md` „Élesítés és
+   visszavonás” 2. pont): a tényleges modell–felbontás párral egy jelenet, előre közölt várható árral és tulajdonosi jóváhagyással
+   (a fejlesztői gépen: `scripts/clip-trial.ts`), a teljes letöltés és átkódolás ellenőrzésével. Sikertelen próba után a 2. pont nem
+   következik.
+2. Render Environment: `ELEVENLABS_API_KEY` (megvan), majd — csak a 0. pont jóváhagyása ÉS a sikeres 1b próba után —
+   `LESSON_CLIPS_AUTO=on`. Ha az első kör naplójában mozgóképhiba áll („N mozgókép (M nélkül)”, M > 0), azonnal `off`.
 3. Egy új lecke közzététele után a Render-naplóban `[lesson-clips]` sorok: fejezetenként „kész: … N kép, N hang, N mozgókép, … kB”.
    Ha „nincs ffmpeg a szerveren” sor jelenik meg, a kisfilmek állóképesek — ekkor szólni kell.
 4. A lecke megnyitása: a gombok megjelennek, ahogy a fejezetek elkészülnek.
