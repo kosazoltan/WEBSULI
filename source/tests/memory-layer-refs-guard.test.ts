@@ -126,6 +126,13 @@ export function isTracked(ref: string, tracked: Set<string>): boolean {
   for (const t of tracked) if (t.startsWith(`${r}/`)) return true;
   return false;
 }
+/** YAML-skalár, amely fájlútnak látszik (szóköz és kettőspont nélkül, ismert kiterjesztéssel) — gyökérfájl is (package.json). */
+const FILE_SCALAR_RE = /^[\w.\/-]+\.(?:json|ya?ml|md|qmd|mjs|cjs|js|ts|tsx|sql|toml|txt)\/?$/;
+export function yamlFileRefs(y: Y, path = "$"): { path: string; ref: string }[] {
+  if (typeof y === "string") return FILE_SCALAR_RE.test(y.trim()) ? [{ path, ref: y.trim() }] : [];
+  if (Array.isArray(y)) return y.flatMap((v, i) => yamlFileRefs(v, `${path}[${i}]`));
+  return Object.entries(y).flatMap(([k, v]) => yamlFileRefs(v, `${path}.${k}`));
+}
 const basenames = (tracked: Set<string>) => new Set([...tracked].map((t) => t.split("/").pop()!));
 
 // ---- forrás és idézet ---------------------------------------------------------------------------------------------------
@@ -145,7 +152,7 @@ export function checkSource(src: unknown, deps: { tracked: Set<string>; lines: (
   return null;
 }
 export function checkQuote(quote: unknown, src: string, deps: { lines: (p: string) => string[] }): string | null {
-  if (typeof quote !== "string" || !quote.trim()) return "üres quote";
+  if (typeof quote !== "string" || !norm(quote)) return "üres quote (normalizálás után)";
   const m = /^([\w./-]+):(\d+)(?:-(\d+))?$/.exec(src)!;
   const a = Number(m[2]);
   const b = m[3] === undefined ? a : Number(m[3]);
@@ -241,11 +248,34 @@ test("memória-rétegek: minden hivatkozás a Gitben követett fájlra / parancs
   for (const f of LAYERS) {
     read(f).split("\n").forEach((line, i) => {
       for (const p of pathRefs(line)) if (!isTracked(p, TRACKED)) dead.push(`${f}:${i + 1}: ${p}`);
-      for (const nm of nameRefs(line)) if (!names.has(nm)) dead.push(`${f}:${i + 1}: ${nm}`);
+      for (const nm of nameRefs(line)) {
+        // Gyökérfájl-alakú név (AGENTS.md): a teljes követett útnak kell egyeznie, nem elég egy azonos basename máshol.
+        const ok = /^[A-Z][A-Z0-9_-]+\.md$/.test(nm) ? TRACKED.has(nm) : names.has(nm);
+        if (!ok) dead.push(`${f}:${i + 1}: ${nm}`);
+      }
       for (const s of npmRefs(line)) if (!scripts.includes(s)) dead.push(`${f}:${i + 1}: npm run ${s}`);
     });
   }
   assert.deepEqual(dead, [], `nem követett / nem létező hivatkozás:\n${dead.join("\n")}`);
+});
+
+test("YAML-skalár fájlhivatkozások: a teljes út a Gitben követett (gyökérfájl is) — Copilot #527", () => {
+  assert.deepEqual(yamlFileRefs(parseYaml('a:\n  b: memory/index.qmd\n  l:\n    - package.json\n    - "x y.md"\n  c: "F.md:2"\n')), [
+    { path: "$.a.b", ref: "memory/index.qmd" },
+    { path: "$.a.l[0]", ref: "package.json" },
+  ]);
+  const refs = yamlFileRefs(parseYaml('e:\n  - package.json\n  - nemletezo-package.json\n  - "van szóköz.md"\n  - "F.md:2"\n')).map((r) => r.ref);
+  assert.deepEqual(refs, ["package.json", "nemletezo-package.json"]);
+  assert.equal(isTracked("nemletezo-package.json", TRACKED), false);
+  const dead = YAMLS.flatMap((f) => yamlFileRefs(parseYaml(read(f)), f).filter((r) => !isTracked(r.ref, TRACKED)).map((r) => `${r.path}: ${r.ref}`));
+  assert.deepEqual(dead, [], `nem követett YAML-fájlhivatkozás:\n${dead.join("\n")}`);
+});
+
+test("checkQuote: a normalizálás után üres idézet (pl. ***) nem igazol — Copilot #527", () => {
+  const deps = { lines: () => ["bármilyen forrás"] };
+  assert.match(checkQuote("***", "F.md:1", deps) ?? "", /üres quote/);
+  assert.match(checkQuote("  `` ", "F.md:1", deps) ?? "", /üres quote/);
+  assert.equal(checkQuote("forrás", "F.md:1", deps), null);
 });
 
 test("döntés-napló és minden source / quote: követett fájl, érvényes sortartomány, szó szerinti idézet (B, C)", () => {
