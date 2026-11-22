@@ -1237,3 +1237,20 @@ Az L1 (friss évfolyam az átvételnél) a fenti 1. pont; a 2/3 PR jelentéséne
     Redeploy — a pontos lépések: a végrehajtási utasítás „Bekapcsolás és kikapcsolás lépésről lépésre” része (0. lépés: előnézeti próba;
     az oldal a Vercel-buildhez kötött, ezért a próbához a Vercel-kapcsoló kell előbb — november 24. előtt ez nyilvánosan láthatatlan).
     Határidő: a naptár legkésőbb 2026-11-30-ig bekapcsolható legyen.
+
+**Az S5/S6 szelet 1. vak körének (b0bbadf1, 2026-11-22; ítélet: NEM) feltételei:**
+
+29. **Tartós levélkézbesítés (L1, blokkoló):** a levél címzettenként tartósan nyilvántartott: kézbesítési terv (az első végleges döntéskor
+    rögzül; később felvett új címzett a régi eredményről nem kap levelet), lejáró bérlet a küldés idejére, és kézbesítve-jelzés. Leállás vagy
+    részleges siker után a hiányzó címzettek a pótlásban (induláskor és 10 percenként) folytatódnak; a szolgáltató elfogadása utáni leállásnál
+    ugyanazzal az idempotencia-kulccsal. Párhuzamos feldolgozókból címzettenként egy küld.
+30. **Az előnézet elkülönítése a kliensben (L2):** az állapot gyorsítótára módonként (normál / előnézeti nap) külön; a főoldal és a normál
+    naptár soha nem kapja meg az előnézet állapotát, lapfrissítés nélküli navigációnál sem.
+31. **Újrapróba az aktív modálban (L3):** az átvétel hibájánál az összesítő modálban is van mentetlen-jelzés és működő „Újra”.
+32. **Egyenlő sorverzió (L4):** az állapot és a válasz a szerverpillanatot is adja; egyenlő verziónál a régebbi pillanatú nézet nem írja
+    felül az újabbat (pl. a zárás előtt feldolgozott, később kézbesített válasz).
+33. **Az átvétellel véglegessé váló eredmény levele (L5):** minden írás, amely átvétellel véglegessé teheti az eredményt (megnyitás is),
+    elindítja a levél döntését; a pótlás a terv nélküli végleges sorokat is felveszi.
+34. **Előnézet óraátállás napján (L6):** az előnézet órája a zónabeli 12:00.
+35. **Tantárgyi bontás a levélben (L7):** a legjobb kör tantárgyankénti eredménye, Karácsony sorral (4.1 (e), 12.3).
+36. **Az előnézeti státusz dátuma (L8):** érvénytelen vagy hiányzó dátumra a `/status` is 400.

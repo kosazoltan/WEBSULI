@@ -877,6 +877,33 @@ késleltetett GET miatt nem reprodukált, ezért rögzített, válasz előtti pi
 - Teszt: egység `tests/advent-s5.test.ts` (a 18.1 esetei, a sablon, a foglalás / felszabadítás / pótlás, évadzárás), DB „S5 (A25, A50)” (párosított
   tanuló valódi HTTP-n, három címzett, hamis küldő).
 
+## 2026-11-22 — S5/S6 1. vak köre (b0bbadf1)
+
+Terv: `docs/specs/2026-11-18-adventi-naptar.md` 22. szakasz, 29–36. pont. Ellenőr-jelentés: NEM (1 blokkoló, 4 közepes, 3 kicsi); mind a nyolc
+lelet valódinak bizonyult a kódból. Előbb bukó tesztek: `tests/advent-s6-vak1.test.ts` (5/5 bukott), DB „S5/S6 1. vak L1 / L5” és a
+preview-eset L8 sora (3 bukott), böngésző „S5/S6 1. vak L2 / L3” (2/2 bukott).
+
+- **L1 (blokkoló) — javítva:** tartós kézbesítés a `mailed_to`-ban, migráció nélkül: `want:<h>` (a kézbesítési terv, az első végleges
+  döntéskor egyszer), `pending:<h>@<ms>` (10 perces bérlet), `final:<h>` (kézbesítve); `store.planMail` / `leaseMail` / `finishMail` /
+  `releaseLease` / `mailCandidates`; `result-email.ts` `sendAdventResult` (a szolgáltató elfogadása utáni rögzítési hibánál a bérlet marad, a
+  pótlás ugyanazzal az idempotencia-kulccsal küld), `deliverAdventMail`; a takarító `resumeMail` lépése induláskor és 10 percenként (csak
+  bekapcsolt naptárnál). Teszt: DB „S5/S6 1. vak L1” (leállás a foglalás után, részleges siker, leállás a szolgáltató átvétele után,
+  párhuzamos feldolgozók, évadzárás: hiányzó címzett pótlódik, új címzett nem).
+- **L2 — javítva:** a gyorsítótár-kulcs a módot is hordozza (`adventStateKey(generation, mode)`, `applyAdventWrite(…, mode)`); a naptár
+  módonként külön példány (`AdventCalendarView key={mode}`); a főoldal mindig normál. Teszt: egység („1. vak L2”) + böngésző („S5/S6 1. vak L2”:
+  előnézet → SPA-vissza a főoldalra → „Kinyitom”: csak normál, legfeljebb a mai ablak).
+- **L3 — javítva:** az összesítő modálban `advent-summary-retry` és `advent-summary-saving`. Teszt: egység + böngésző („S5/S6 1. vak L3”).
+- **L4 — javítva:** `AdventState.asOf` / `AdventAnswerResult.asOf` (a válasz szerverpillanata); `isOlderAdventState` egyenlő verziónál a
+  régebbi pillanatot dobja. Teszt: egység („1. vak L4”).
+- **L5 — javítva:** a megnyitás átvétellel (`adopt`) is hívja a levél-döntést (`notifyResult`); a tartós pótlás a terv nélküli végleges
+  sorokat is felveszi. Teszt: DB „S5/S6 1. vak L5”.
+- **L6 — javítva:** `previewDateFrom` a zónabeli 12:00-t számolja (óraátállás napján is). Teszt: egység („1. vak L6”).
+- **L7 — javítva:** `adventSubjectBreakdown` — a levélben a legjobb kör tantárgyankénti bontása, Karácsony elöl. Teszt: egység („1. vak L7”).
+- **L8 — javítva:** az előnézeti `/status` is 400 érvénytelen / hiányzó dátumra. Teszt: DB (az előnézeti „érvénytelen vagy hiányzó dátum” eset).
+- Dokumentált teszt-változások (új API / alak miatt, nem gyengítés): `tests/advent-s5.test.ts` memóriatárolója az új kézbesítési API-t
+  utánozza, a bekötés-őr a `resumeMail`-t keresi; `tests/advent-pr-c-vak.test.ts` L3 kulcs-őre `adventStateKey(generation, mode)`;
+  `tests/advent-pr-c-vak3.test.ts` a válasz `asOf` mezőjét is várja; a DB „S5 (A25, A50)” eset `want:` + `final:` kulcsokat számol.
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.
@@ -920,3 +947,4 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
   `sweeper.ts`, `result-email.ts`, `store.ts` (`deletePreview`, `unmailedLearnerRows`, `clock_timestamp`), `routes.ts` (verzió, sorőr,
   `invalidClock`, `onResult`), kliens (`useAdvent.ts`, `sync.ts`, `AdventCalendar.tsx`); tesztek: `advent-pr-c-vak3`, `advent-s6`, `advent-s5`,
   `admin-route-guard`, DB- és böngészős esetek (a részletek a „2026-11-21 — S5 / S6 …” szakaszban).
+- 2026-11-22 — S5/S6 1. vak köre (b0bbadf1) L1–L8 javítva (tartós levélkézbesítés, módos gyorsítótár-kulcs, modálon belüli újrapróba, `asOf`, átvételes megnyitás levele, zónabeli dél, tantárgyi bontás, előnézeti `/status`); a részletek a „2026-11-22 — S5/S6 1. vak köre” szakaszban.
