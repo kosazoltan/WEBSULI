@@ -504,6 +504,25 @@ Követő PR (kanban-jegyek, NEM a #510 része):
 - **követő PR: 7. vak kör L4** — E2E-módban kényszerített tesztküldő / tiltás a közös levélküldési ponton; a futtató ne örökölje az éles
   szolgáltatói beállításokat.
 - **követő PR: 8. vak kör L4** — a 403 utáni pillanatkép korhatára és `clientNow`-ja a tényleges POST előtt (hamis órás böngészőteszt).
+- **követő PR: 9. vak kör L1 (blokkoló; tulajdonosi döntés 2026-11-22: „KÖVETŐ PR-BA”, addig vállalt korlát)** — a 403 után ismételt
+  kilét-rögzítés a rossz fiókot rögzítheti. Hely: `client/src/lesson-runtime/resultReport.ts:85–94, 209–215`;
+  `client/src/lib/queryClient.ts:294–321`; `server/lesson-result-email.ts:447–475, 579, 778–783`. Forgatókönyv: a nyitva maradt
+  leckefül A CSRF-tokenjét és fiókcímkéjét tartja; B a másik fülön belép, és ő válaszol először; a claim a régi A tokennel indul, a B
+  munkamenetben 403-at kap; ha a lassú 403 és a tokenfrissítés alatt A visszalép, az ismételt claim már A friss tokenjével megy (az
+  `apiRequest` `retries: 0` a 403-as protokollismétlést nem tiltja); lezáráskor a kliens az első válasznál mentett A címkét küldi — a levél
+  A nevére mehet B válaszával. A szöveges feladatok ugyanazt a claim-utat járják.
+  Javítási javaslat: névhez rendelés csak az első tevékenység munkamenetéhez kötött szerveres igazolással; bizonytalanságban anonim út vagy
+  elutasítás. A claim ismétlése (403 utáni tokencsere) és a claim nélküli eredmény-fallback se pótolja az igazolást egy későbbi
+  munkamenettel (pl. a claim 403 után ne ismétlődjön más munkamenet tokenjével; a claim nélküli első végleges / pillanatkép kérés fiókot
+  ne rögzítsen).
+  Regressziós teszt-sorrend: A → B első válasza → késői 403 → A friss token → lezárás A munkamenetéből; a tesztlevél névmezője nem A neve
+  (és a meglévő E72 / E73 tesztek a claim közbeni munkamenet-váltással bővítve).
+- **követő PR: 9. vak kör L2 (közepes)** — a kilét-takarítás adagjai között a jelzősor (`rc:`) és a tulajdonos-sor (`ro:`) szétválhat
+  (`server/lesson-result-email.ts:430–438, 447–454`): ha csak a jelző törlődött, egy új kérés új jelzőt és tulajdonos-sort írhat, miközben a
+  régi tulajdonos-sor fennmarad (két kilét is átmehet); fordítva a jogos kérés névtelenre fokozódhat. Kódjavítás kell (a doksi nem elég):
+  a két sort körönként egy atomi műveletben, a claimmel sorosítva törölni, vagy a tulajdonos-sort a claim generációjához kötni. DB-teszt: az
+  adagok közti megállás alatt normál, friss válaszú kérés. Addig vállalt korlát (csak a 8 napnál régebben rögzített, közben is folytatott
+  körnél, a napi takarítás pillanatában).
 
 ## Kész-feltétel
 

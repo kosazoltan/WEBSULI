@@ -47,6 +47,9 @@ egy nem lefokozott vendég megszakadt kérését (R42 negatív esete változatla
 - **A követő PR-ban** (a végrehajtási fájl „követő PR” jegyei): a 7. vak kör L2 (a `conflict` pillanatkép-válasz ne rögzüljön
   elküldöttként), L3 (a véglegesítés 503-a ne dobja el az elfogadott pillanatképet), L4 (E2E-módban kényszerített tesztküldő), valamint a
   korábban jegyre tett 8. vak kör L4 (a 403 utáni pillanatkép korhatára / `clientNow`).
+- Tulajdonosi döntés 2026-11-22: a 403 utáni claim-ismétlés kilét-kockázata (9. kör L1) a követő PR hatóköre; addig vállalt korlát.
+- A 9. kör L2-je (a kilét-takarítás adagjai között a jelzősor és a tulajdonos-sor szétválhat) szintén a követő PR jegye; addig vállalt korlát
+  (csak a 8 napnál régebben rögzített, közben is folytatott körnél, a napi takarítás pillanatában áll elő).
 
 **R52 — a szerveres kilét-rögzítés korlátos élettartama (2026-11-22).** A `lesson_result_emails` táblára eddig nem volt takarítás. A
 kilét-rögzítő sorok kulcsa felismerhető előtagot kap (`rc:` jelzősor, `ro:` tulajdonos; a többi körkulcs tiszta hex), és napi, adagos
