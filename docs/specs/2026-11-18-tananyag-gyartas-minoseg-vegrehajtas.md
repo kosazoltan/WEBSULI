@@ -1321,7 +1321,7 @@ indultak (a főág azóta 4 committal előrébb jár), egymásra rakva, a szül�
 | S6b | `feat/tgm-s6b-try-hang` | e08862b0, 2b477759, c0924a29 (+ merge) | +262 / −27 (docs 50, teszt 105) | S6a | kész helyben, PR nincs |
 | S6c | `feat/tgm-s6c-abrafajta` | 85850874, 8ec3df80, a2e20570, 4c8b34bc (+ merge) | +572 / −101 (docs 58, teszt 142) | S6b | kész helyben, PR nincs |
 | SK2 | `feat/tgm-sk2-valtozatossag-kapu` | 8b7313e4, c208c040, ce6db8a3 (+ merge) | +448 / −3 (docs 66, teszt 105) | S6c | kész helyben, kapu `report` módban |
-| S2b-1 | `feat/tgm-s2b-dontesi-fa-kepes-kartya` | 88f5eb2e, b9e8eb71, 75f95a7d, c0e9f733 (+ merge) | +384 / −12 (docs 50, teszt 121) | SK2 | kész helyben; kódja a főágra / S5a-v2-re ütközés nélkül átvehető (csak a 2026-11-20-as spec két fájlja ütközik) |
+| S2b-1 | `feat/tgm-s2b-dontesi-fa-kepes-kartya` | 88f5eb2e, b9e8eb71, 75f95a7d, c0e9f733 (+ merge) | +384 / −12 (docs 50, teszt 121) | SK2 | kész helyben; kódja a láncra nem épül, de az átvételkor az `animate-blocks.tsx` importsora és a `lesson-design.css` vége kézi feloldást kér (ott az S6c sorai is állnak), a spec önálló fájlba kerül — `feat/tgm-s2b1-v2` így készült |
 | S2b-2 | `feat/tgm-s2b2-megjelenito-leletek` | 31613031, 56bdbe67, 271009c6, 3e101941 (+ merge) | +247 / −29 (docs 47, teszt 145) | S2b-1 | kész helyben |
 | S3a-1 | `feat/tgm-s3a1-abrakeszito-forrasra` | 3e9d2e4e | +31 (csak docs: S3a / S3b szeletterv) | S2b-2 (a 6feff77a merge) | csak terv, kód nincs |
 | S3a-2, S3b, S4a, S4b, SK3, S10, S7a, S7b, SK4, SK5, S9 | — | — | — | — | nincs elkezdve |
@@ -1329,6 +1329,9 @@ indultak (a főág azóta 4 committal előrébb jár), egymásra rakva, a szül�
 A helyi `feat/tgm-s1b-sk1-forras-fedettseg`, `fix/tgm-sk1b-fedettsegi-kapu-kemenyites`, `feat/tgm-s2a-megjelenitok` és `feat/tgm-s8*` ágak
 a squash-merge miatt „előrébb járónak” látszanak, de tartalmuk a #515 / #516-tal a főágon van — higiéniai jelöltek (törlés csak
 tulajdonosi jóváhagyással). A `higienia-backup/*` távoli ágak a változatossági ágak mentései.
+
+*Helyesbítés (2026-11-22, a leltár után):* az első változat azt írta, hogy az S2b-1 kódja ütközés nélkül átvehető. A próba-cherry-pick
+az első (docs) ütközésnél megállt, a kódcommitok le sem futottak — a próba csak akkor bizonyít ütközésmentességet, ha minden commit lefutott.
 
 **A változatossági cél mérhetősége (seed-determinisztikus ujjlenyomat-eltérés).** A közös mag a `shared/seeded.ts` (S5a): ugyanarra a
 bemenetre ugyanaz, különböző magra eltérő kiosztás, `Math.random` nélkül. Szeletenként:
@@ -1344,5 +1347,5 @@ bemenetre ugyanaz, különböző magra eltérő kiosztás, `Math.random` nélkü
   ≈ 20 USD) — csak tulajdonosi jóváhagyással.
 
 **Javasolt sorrend (önálló, semleges kis PR-ok a friss főágról, cherry-pickkel, rebase nélkül):** S5a-v2 → S2b-1 (kódja a láncra nem
-épül) → S5b → S6a → S6b → S2b-2 → S6c (a sávtokenes ábrák az S2b-re épülnek) → SK2 → S3a-1 kódja → S3a-2 → S3b. Az S6c (+572) és az S5a
+épül; az átvétel kézi ütközésfeloldással, lásd a táblázatot) → S5b → S6a → S6b → S2b-2 → S6c (a sávtokenes ábrák az S2b-re épülnek) → SK2 → S3a-1 kódja → S3a-2 → S3b. Az S6c (+572) és az S5a
 (+885, ebből 281 docs és 337 teszt) a ~400 soros irányelv fölött van: az S6c két részre bontható (sávtokenes ábrák / ábrafajta-terv).

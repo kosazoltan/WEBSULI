@@ -87,6 +87,27 @@ a régi); BE: `nyitomese-3`; a jelölő verziója `valtozatossag-2`, ha a leját
 (`server/studio/structured-improvement.ts:196`) a meglévő `variety` jelölő megőrzése (a `modelLessonSchema` elhagyja) — teszttel.
 Mérés: 100 magon ≥ 3 nyitásforma és ≥ 25 név; 50 magon az első módszer ≥ 6-féle.
 
+## S5a — vak kör 1 javítása (2026-11-22): hibaosztályok
+
+Invariáns: a változatossági állapot egy futásra EGY döntés (a futás elején, folytatásnál a mentett job-állapotból, javításnál a tárolt
+leckéből); a jelölőt a modell soha nem adhatja; KI állapotban minden út kimenete a régi. A környezetet csak a `lessonVarietyEnabled()`
+olvassa, a futás olvasói az `effectiveLessonVariety()`-t (a `runWithLessonVariety` hatóköre).
+
+| Út | Állapot forrása | Jelölő forrása | KI kimenet | Teszt |
+|---|---|---|---|---|
+| Első gyártás (`runSingleLesson`) | `deps.lessonVariety` ?? környezet, a futás elején | `withVarietyMarker(…, állapot)` a mentés előtt; a modellé eldobva | nincs jelölő, nincs `lessonVariety` a jobon | `lesson-variety-paths` „első gyártás” |
+| Folytatás (`resume`) | kizárólag a job kimenetének `lessonVariety` mezője (hiány = KI) | ugyanaz | KI-ben indult futás BE környezetben is KI | `lesson-variety-paths` „L4” (mindkét irány) |
+| Szerzői prompt (`buildAuthorPrompt`) | `effectiveLessonVariety()` | — | `PLAYFUL_AUTHOR_RULES` bájtra | `source-visuals-flag`, `lesson-variety-flag` |
+| Bank (előtag, egységverzió, átvétel) | `effectiveLessonVariety()` | — | `nyitomese-1`, régi előtag | `lesson-variety-paths` „A: hatókör”, `lesson-opener-bank-reuse` |
+| Mentés (`upsertLesson`) | `effectiveLessonVariety()` | szerver | jelölő törölve | `lesson-variety-paths` „első gyártás” |
+| Javítás — előnézet (`buildStructuredImprovement`) | a tárolt lecke jelölője | `carryVarietyMarker(jelölt, eredeti)` | jelöletlen jelölt, KI prompt / bank | `lesson-variety-paths` „L1” (két eset) |
+| Javítás — alkalmazás (`applyStructuredImprovement`) | — | `carryVarietyMarker(jelölt, zárolt sor)` | a modell jelölője nem íródik ki | kódút (DB-integráció nélkül) |
+| Visszaállítás, évfolyamváltás, lazítás | — | a tárolt JSON változatlanul | változatlan | meglévő tesztek |
+| Megjelenítés | a lecke jelölője | — | jelöletlen DOM a régi (élő régió sincs) | `verdict-feedback-variety`, böngészős próba |
+
+Szövegtisztítás (L2): a régi nyitás zárt listája; a gondolatjel / kötőjel szám előtt nem elválasztó; a maradék csak prózai szónál
+nagybetűs (`capitalizeProse`) — képlet, kód, előjeles szám érintetlen. L3: jelölt leckén előre felcsatolt udvarias élő régió.
+
 ## S6a, S6b, S6c, SK2
 
 A TGM-végrehajtás megfelelő fejezetei (795., 829., 850., 873. sortól), a terv 4. szakaszának sorszám-igazításaival és a 0. szakasz

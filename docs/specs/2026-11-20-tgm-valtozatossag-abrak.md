@@ -132,10 +132,11 @@ Az S3a / S3b nem előfeltétele a változatosságnak: az S6c „a forráshoz kö
 - Jelölt lecke régi kliensen → a jelölő elhagyódik, a visszajelzés a modell szövegével (nyitás nélkül) jelenik meg — érthető marad.
 - Kapcsoló BE, nyitókapcsoló KI → a promptban nincs visszajelzési szabály; a jelölő a leckére kerül, a lejátszó kódnyitást ad, a
   modell esetleges bátorító előtagját levágja.
-- A javítási út (`server/studio/structured-improvement.ts`, a tulajdonos indította javítás) a jelölőt nem kezeli: a modell-séma KI
-  ágán (élesben ez az alapérték) a jelölt modell-jelölő elhagyódik, de a meglévő jelölő is elveszhet (`:196` a `modelLessonSchema`-n
-  olvassa a pillanatképet) → a javított leckén a visszajelzés nyitás nélkül, ítélettel jelenik meg. A jelölő megőrzése és a modell
-  jelölőjének kiszűrése a forrásvizuál BE ágán az S5b feladata.
+- A javítási út (`server/studio/structured-improvement.ts`, a tulajdonos indította javítás): *spec-pontosítás 2026-11-22 (vak kör 1,
+  L1)* — a jelölt jelölőjének egyetlen forrása a TÁROLT lecke (`carryVarietyMarker`; az előnézetben és az alkalmazáskor a zárolt
+  sorból), a modell jelölője mindkét forrásvizuál-ágon eldobva; a javítás változatossági állapota (prompt, bank) is a tárolt jelölő.
+- Megszakadt gyártás folytatása (*vak kör 1, L4*): a futás állapota a job kimenetében (`lessonVariety: true`), folytatáskor kizárólag
+  innen; a mező nélküli régi checkpoint KI. A környezet menet közbeni változása a futásra nem hat.
 - Javított (régi) lecke BE kapcsolóval → a bank a verzióemelés miatt újraépül (v2), a nem javított fejezetek régi check-visszajelzését
   a lejátszó a jelölő miatt levágja + kódnyitással mutatja.
 
