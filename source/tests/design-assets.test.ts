@@ -170,7 +170,9 @@ test("elővágás (képgyártó): a vágási ponton átnyúló kulcs / Bearer / 
   for (const body of [key, "Bearer Zt0kAbCdPPPPPPPPPPPP", "sk-or-v1-" + "abcd".repeat(8)]) {
     for (const back of [1, 5, Math.floor(body.length / 2), body.length - 1]) {
       const start = 300 + margin - back;
-      const s = "y ".repeat(start).slice(0, start) + body + " z".repeat(2000);
+      // elöl kulcs-előfordulások: a `[kulcs]` csere rövidít, így a határ közeli forrás a látható részbe kerülne
+      const lead = (key + " ").repeat(4);
+      const s = lead + "y ".repeat(start).slice(0, start - lead.length) + body + " z".repeat(2000);
       const out = redactClip(s, key, 300);
       assert.equal(leak6(out, body.replace(/^Bearer /, "")), null, `${body.slice(0, 8)} vissza ${back}`);
       assert.ok(mainDesignRedact(s, key).slice(0, 300).startsWith(out));

@@ -352,7 +352,9 @@ describe("elővágás (külső ellenőr)", () => {
       for (const body of others) {
         for (const back of [1, 5, Math.floor(body.length / 2), body.length - 1]) {
           const start = max + margin - back;
-          const s = "y ".repeat(start).slice(0, start) + body + " z".repeat(2000);
+          // elöl kulcs-előfordulások: a `***` csere rövidít, így a határ közeli forrás a látható részbe kerülne
+          const lead = (key + " ").repeat(6);
+          const s = lead + "y ".repeat(start).slice(0, start - lead.length) + body + " z".repeat(2000);
           const out = maskClip(s, key, max);
           assert.equal(leak6(out, body.replace(/^Bearer /, "")), null, `max ${max} ${body.slice(0, 8)} vissza ${back}`);
           assert.ok(mainMaskSecrets(s, key).slice(0, max).startsWith(out), "a kimenet a főági kimenet előtagja");
@@ -361,8 +363,11 @@ describe("elővágás (külső ellenőr)", () => {
     }
   });
   it("a láthatóságon belül bájtra a főági kimenet (rövid bemenet és a határtól távoli titok)", () => {
-    const t = "e".repeat(300) + ` key=${FAKE_KEY} ` + "f ".repeat(900);
+    // szavakra tagolt diagnosztika (egy hosszú, szóköz nélküli futást a vágás — helyesen — teljesen elhagy)
+    const t = "e ".repeat(150) + ` key=${FAKE_KEY} ` + "f ".repeat(900);
     for (const max of [160, 400, 600]) assert.equal(maskClip(t, FAKE_KEY, max), mainMaskSecrets(t, FAKE_KEY).slice(0, max));
+    const short = "hiba: " + "g ".repeat(200) + `key=${FAKE_KEY}`;
+    assert.equal(maskClip(short, FAKE_KEY, 600), mainMaskSecrets(short, FAKE_KEY).slice(0, 600), "a határon belüli bemenet");
     assert.equal(maskClip("rövid hiba", FAKE_KEY, 600), "rövid hiba");
     assert.equal(maskClip(undefined, FAKE_KEY, 10), "");
   });

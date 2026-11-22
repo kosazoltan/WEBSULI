@@ -114,10 +114,11 @@ test('elővágás: a kapu vágási pontján átnyúló titok egyetlen 6 karakter
   for (const sep of [' ', '\n']) {
     for (const [pre, body] of secrets) {
       const raw = pre + body;
-      const total = REDACT_CAP + 5000;
       for (const back of [3, Math.floor(raw.length / 2), raw.length - 2]) {
-        const start = total - REDACT_CAP - back;
-        const s = `q${sep}`.repeat(start).slice(0, start) + raw + `${sep}z`.repeat(3000);
+        // a vágás (hossz − REDACT_CAP) pontosan a titok vége előtt `back` karakterre esik
+        const tailLen = REDACT_CAP - back;
+        const s = `q${sep}`.repeat(2500) + raw + `${sep}z`.repeat(tailLen).slice(0, tailLen);
+        assert.equal(s.length - REDACT_CAP, 5000 + raw.length - back);
         const out = redact(s);
         assert.equal(leak6(out, body), null, `${JSON.stringify(sep)} ${body.slice(0, 8)} vissza ${back}`);
         assert.ok(out.length > 1000 && out.length <= REDACT_CAP + 100);
