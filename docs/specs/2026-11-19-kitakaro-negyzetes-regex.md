@@ -156,3 +156,24 @@ egyenértékű `[osztály]{n}[osztály]*` alak 100 M karakteren is lineáris és
 - **D6b — korlátos vágás:** `max(64 KB, max)` feletti szövegnél a `clipText` csak `limit + 6 × margin + 1024` karakteres
   előtagot vizsgál (a határon átnyúló token- / e-mail- / escape-futás végéig meghosszabbítva), és csak a `limit` előtt kezdődő
   tartományokat tárolja; a mérés (`stats`) tesztben rögzített.
+
+## 11. D7 — osztályszabály (tulajdonosi döntés, 2026-11-22)
+
+> A tulajdonos 2026-11-22-én űrlapon döntött, szó szerint: „Óvatos túlkitakarás (Javasolt)”.
+
+- **Szabály:** mintánkénti foltozás helyett a naplóba / kimenetbe kerülő szövegben minden legalább 20 karakteres, betűt ÉS számot
+  is tartalmazó token-futás helyőrzőt kap (`<token>` / `[kulcs]`), típustól függetlenül. Token-karakter: betű, szám és
+  `+ / = _ - . ~ % \`, valamint a JSON-escape-ek (nyers szövegben a `\uXXXX` egy karakter, a dekódolt érték szerint számít; a
+  `\n` `\r` `\t` `\b` `\f` `\/` `\` folytatja a futást, de nem számít bele; a `\"` előtt a futás véget ér). A futás egy
+  sortörésen (és escape-elt sortörésen) átnyúlik, ha a folytatás token-karakter; a szakaszokat külön helyőrző fedi (a
+  sorszerkezet megmarad). Minden e-mail-alakú szöveg helyőrzőt kap (escape-es szövegben a dekódolt nézetből).
+- **Továbbra is kötelező:** a megadott kulcs (minden, átfedő előfordulás) és a DB-URL — a séma és a teljes hitelesítő rész az
+  első `@`-ig, backslash-sel együtt; utána a gazda / út az első `\`-ig (JSON-ban az escape ép marad).
+- **Megmaradnak** a korábbi minták is (AIza, Bearer — a második `Bearer` szót nem fogyasztja —, GitHub, `sk-…`, AWS), mert ezek
+  betűs / rövid alakjait az osztályszabály nem fedi.
+- **Elfogadott mellékhatás:** a kapunaplóban a hash-ek, hosszú azonosítók, számot tartalmazó hosszú útvonalak is helyőrzőt kapnak;
+  egy titok-futáshoz sortöréssel tapadó következő sor eleje is.
+- **Kapu-konzol (4. vak kör L3):** a `createGate` a részletet a `tail` és a soronkénti előtag ELŐTT takarja; a `cmdResult` a
+  nyers kimeneten, a „failing tests:” kivágása előtt.
+- **Vágás (L5):** a vizsgált előtag a határon átnyúló futás végéig legfeljebb 4096 karakterrel nyúlik túl.
+- **Határ:** egy szintű escape-dekódolás; a jelszóban álló literális `"` a DB-URL hitelesítő részét lezárja.

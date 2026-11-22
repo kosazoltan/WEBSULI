@@ -168,3 +168,21 @@ NEM ítélet: 2 blokkoló, 3 közepes, 1 kicsi; mind valódi, mind a közös `ki
 - **L6 mutánspróba:** a vágott ágban `t.slice(0, max)` (maszkolás nélkül) → az új L6-tesztek mindkét fájlban bukták (sok más
   teszttel együtt), visszaállítva.
 - Fizetős külső szolgáltatást hívó eszközt (a `generate.ts`-t sem) ebben a körben nem indítottam.
+
+## 2026-11-22 — 4. vak kör (ac6447f5) és az osztályszabály
+
+NEM ítélet: 3 blokkoló, 2 közepes; mind valódi. Tulajdonosi döntés (űrlap, 2026-11-22): „Óvatos túlkitakarás (Javasolt)” → D7.
+
+- **Tesztek előbb** (`948922bd`): esettábla — L1 (kétszeres Bearer-séma, két összeírt ghp), L2 (backslash a DB-jelszóban),
+  L4 (cím sortörés után) és az „általános” sor (8 determinisztikus, 24–64 karakteres, előre ismeretlen formájú titok a teljes
+  token-készletből, sima és sortöréssel kettévágva, × sima / JSON / \uXXXX / tapadó alak × minden út × vágási helyzet);
+  `kitakaro.test.mjs`: D7 ártalmatlan környezet (magyar szöveg, HTTP-státusz, fájl:sor, dátum változatlan), L3 (`createGate`
+  konzol + `.log`), L2 / L4 `JSON.parse`-szal, L5 escape-sűrű stats-korlát. Piros: 8 / 15 a kapuknál, 2 a design-assetsnél.
+- **Javítás:** `kitakaro.mjs` — osztályszabály (`runRanges`, nyers és dekódolt nézeten), DB-URL-pásztázó (`dburlRanges`),
+  Bearer `(?!bearer\b)`, cím escape-es szövegben csak a dekódolt nézetből, vágási kiterjesztés legfeljebb +4096; `lib.mjs` —
+  takarás a `tail` / előtag / „failing tests:” kivágás előtt.
+- **D7 miatti, dokumentált tesztelvárás-változás:** `lib.test.mjs` 300 000-es teszt: `hex` → `<token>`, `cimkek` → `x@<token>`,
+  `cimAzElejen` → `<email> <token>` (a hash a D7 szerint helyőrzőt kap); az új L3-teszt záró sora `— vége` (a `vége` a D7
+  szerint a sortörésen átnyúló futás része lenne).
+- **Mutánspróba:** az osztályszabály kikapcsolva → a tábla bukik; az „általános” sor 64/64 esete szivárog; visszaállítva.
+- **Mérés:** 20 M-es betű+szám futás `redact` 110 ms; 10 M-es escape-sűrű JSON teljes `redact` 349 ms; 6 M-es egybetűs sorok 92 ms.
