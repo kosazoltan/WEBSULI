@@ -375,3 +375,32 @@ test("S7/L4: a szótag-levonás ugyanazokon a szavakon fut, mint a szószám —
   assert.equal(ladderDifficultyScore({ term: "aujourd'hui", sentence: false, category: "word" }, "fr"),
     Math.round(((10 / 1.2) + 2 * (3 - 1)) * 10) / 10);
 });
+
+/*
+ * PR #528 Copilot-észrevételek (2026-11-22): (1) a szótag-osztály minden érintett nyelv magánhangzóját ismeri (a magyar
+ * `focus` is a mérce bemenete: á í ó ő ú ű); (2) a kézi felülíró táblában csak saját, szám értékű kulcs számít.
+ */
+const VOWELS = ["a", "e", "i", "o", "u", "y", "á", "é", "í", "ó", "ö", "ő", "ú", "ü", "ű", "ä", "à", "â", "æ", "è", "ê", "ë", "ì", "î", "ï", "ò", "ô", "œ", "ù", "û", "ÿ"];
+
+test("C1: a szótag-osztály minden magánhangzót ismer (magyar, német, francia) — egy magánhangzó egy csoport, két elválasztott két csoport", () => {
+  const bad: string[] = [];
+  for (const v of VOWELS) {
+    const one = ladderDifficultyScore({ term: `b${v}b`, sentence: false, category: "word" }, "en");
+    const two = ladderDifficultyScore({ term: `b${v}b${v}b`, sentence: false, category: "word" }, "en");
+    // két további betű (2 pont) + egy plusz szótag (2 pont)
+    if (Math.round((two - one) * 10) / 10 !== 4) bad.push(`${v}: ${one} → ${two}`);
+  }
+  assert.deepEqual(bad, []);
+  const barat = WORD_LADDER_EN.find((q) => q.id === "en0-018")!;
+  assert.equal(ladderDifficultyScore(ladderDifficultyInput(barat, "en"), "en"), 7, "„Barát”: 5 betű + 2 × (2 csoport − 1)");
+  assert.equal(ladderItemStep(barat, "en", 0), 1);
+});
+
+test("C2: a felülíró tábla csak saját, szám értékű kulcsot vesz figyelembe — örökölt tulajdonság-nevű azonosító nem hiba", () => {
+  const base = { prompt: "p", options: ["house", "a", "b", "c"], correctIndex: 0 };
+  const expected = ladderItemStep({ ...base, id: "x-normal" }, "en", 0);
+  for (const id of ["constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"]) {
+    assert.equal(ladderItemStep({ ...base, id }, "en", 0), expected, id);
+  }
+  assert.doesNotThrow(() => ladderStepBuckets([[{ ...base, id: "constructor" }, { ...base, id: "__proto__" }]], "en"));
+});

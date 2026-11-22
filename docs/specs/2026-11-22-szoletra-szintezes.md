@@ -228,17 +228,17 @@ Modul: `source/client/src/lib/wordLadderGrading.ts` (tiszta, node-ból tesztelhe
 
 ## 11. Mért osztályozás — fokozatonkénti tételszám (kézi + szóbank; „kifejezés” = phrase / everyday)
 
-Fejhez kötve: a `feat/szoletra-szintezes-1` 16. szakaszbeli állapota (strukturált mérce, korlát nélkül). Ez az EGYETLEN tábla, amelyből az
+Fejhez kötve: a `feat/szoletra-szintezes-1` 17. szakaszbeli állapota (strukturált mérce, korlát nélkül, teljes magánhangzó-osztály). Ez az EGYETLEN tábla, amelyből az
 A4 küszöbök és az S3 hiánya számol.
 
 ```
 fokozat:        0   1   2   3   4   5   6   7   8   9  10  11  12  13  14
-en szó:       214 181  83 325 166  16 227 179  73 188 175  44 155 102  29
-en kifejezés:   0   0  99   0 155 198   1 111 149   0 103 126  15  84  93
-de szó:       174 138  27 258 124  27 208 143  23 183 120  11 137  83  13
-de kifejezés:   0   1  97   1 106 172   3  66 126   1  50 125   1  35 105
-fr szó:       111 186  67 210 140  29 189 145  39 154 108  46 130  76  30
-fr kifejezés:   0   0  77   0  72 215   0  31 177   0  21 155   1  32 113
+en szó:       205 186  86 322 169  16 224 181  75 188 175  44 155 102  29
+en kifejezés:   0   0  99   0 154 199   1 111 149   0 103 126  15  84  93
+de szó:       169 142  28 255 127  26 207 144  24 181 122  11 134  86  13
+de kifejezés:   0   1  95   1 107 173   3  66 126   1  50 125   1  35 105
+fr szó:       102 194  68 209 140  30 184 150  39 153 109  46 130  76  30
+fr kifejezés:   0   0  77   0  71 216   0  30 178   0  21 155   1  32 113
 ```
 
 A kifejezések nagyobb része a szint 2. alfokára esik, de az 1–4. szinten az 1. alfokon is van (pl. en 4. fokozat 155); a 0.
@@ -252,12 +252,12 @@ alfokon gyakorlatilag nincs (0–1 tétel). Az A4: fokozatonként ≥ 20 tétel,
 
 | nyelv | 0. fokozat | hiány 300-ig | 1. fokozat | hiány 300-ig |
 |---|---|---|---|---|
-| en | 214 | 86 | 181 | 119 |
-| de | 174 | 126 | 138 | 162 |
-| fr | 111 | 189 | 186 | 114 |
+| en | 205 | 95 | 186 | 114 |
+| de | 169 | 131 | 142 | 158 |
+| fr | 102 | 198 | 194 | 106 |
 
-Összes hiány: 0. fokozat 401, 1. fokozat 395 szó. **Javasolt mennyiség (becslés, UNVERIFIED):** a két fokozat hiányának
-összege nyelvenként (en 205, de 288, fr 303), a mérce szerint ≤ 9 pontos egyes szavak; összesen ~800 bejegyzés (a pontos
+Összes hiány: 0. fokozat 424, 1. fokozat 378 szó. **Javasolt mennyiség (becslés, UNVERIFIED):** a két fokozat hiányának
+összege nyelvenként (en 209, de 289, fr 304), a mérce szerint ≤ 9 pontos egyes szavak; összesen ~800 bejegyzés (a pontos
 fokozat-eloszlás a generálás után újramérendő).
 
 **A meglévő generáló útvonal (tény):** a szóbank tartalma (#431 angol, 2664 bejegyzés; a német / francia hasonlóan) ügynöki
@@ -303,10 +303,10 @@ elsőbbsége miatt a pont visszaeshet — ott a következő szint 0. alfokának 
 szinthatáron a felszíni pont szükségszerűen visszaeshet (pl. en 2. fokozat medián 14 → 3. fokozat medián 7): a bank szintje a
 tartalmi nehézséget (ritkaság, nyelvtan) hordozza, amit a felszíni mérce nem lát. Ezt a terv vállalja; a fokozat definíciója
 csak annyiban változik, hogy a határpontok oszloponként nem csökkenhetnek (a 2. szint felső határa 20 → 21). Mért mediánok
-fokozatonként (a 16. szakasz állapotában): en 4 7 14 · 7 15 25 · 7 14 40 · 8 15 31 · 11 16 48; de 3 6,4 16,4 · 6,4 14,4 26,1 ·
-6,4 12,9 29,6 · 7,9 14,2 26,1 · 9,9 16,9 33; fr 3,3 6,2 13,7 · 7 12,3 26,5 · 7 12,3 30,2 · 7,8 14,3 29,3 · 9,8 17,3 34,5. A 0. alfok mediánja
+fokozatonként (a 17. szakasz állapotában): en 4 7 14 · 7 15 25 · 7 14 40 · 8 15 31 · 11 16 48; de 3 6,4 15,7 · 6,4 14,4 26,1 ·
+6,4 12,9 29,8 · 7,9 14,1 26,1 · 9,9 16,6 33; fr 3,3 6,2 13,7 · 7 12,3 26,5 · 7 11,7 30,2 · 7,8 14,3 29,3 · 9,8 17,3 34,5. A 0. alfok mediánja
 minden nyelven nem csökken (en 4 → 7 → 7 → 8 → 11); az 1. alfok mediánja az 1. → 2. szinten enyhén csökken (en 15 → 14, de
-14,4 → 12,9; fr 12,3 → 12,3) — ezt a terv nem garantálja (eloszlás, nem határpont).
+14,4 → 12,9, fr 12,3 → 11,7) — ezt a terv nem garantálja (eloszlás, nem határpont).
 
 **L2:** a vödrözés a tétel saját `tier` mezőjét használja (`declaredTierOf`); a készlet-index csak szint nélküli tételnél
 (szerverbank) pótlás — így egy kimerült szint pótlására más készletbe került tétel nem sorolódik vissza.
@@ -374,3 +374,14 @@ a szóbanki szintre** (en 0 / 36, de 0 / 12, fr 0 / 24): mind rövid egyes szó,
 **Mutációs ellenpróba a maradó szabályokra** (`mutate4.mjs`): 8 / 8 mutáns bukik — prompt-elemzés vissza (A2, S1, S2), szóbanki
 `term` kihagyva (S6), szótag-levonás részszavakon (S7), locale-függő kisbetű (S3), önálló írásjel szóként (S3), vödrözés
 készlet-indexszel (O6/L2), alfok-sorrend felcserélve (O6/L4, S7), pont-alapú felsorolás ki (A1/A3).
+
+## 17. PR #528 Copilot-észrevételek (2026-11-22, a b680efb4-re építve)
+
+- **Szótag-osztály:** a magánhangzó-csoport osztályából hiányzott az á í ó ő ú ű (a magyar `focus` is a mérce bemenete), és a
+  francia ÿ, valamint az ì ò. Javítás: közös `VOWEL_GROUP` (angol + magyar + német + francia, kisbetűs — a normalizálás után
+  nagybetű nem fordul elő). Teszt (C1): minden magánhangzóra „bvb” → „bvbvb” pontosan +2 betű + 1 szótag; `en0-018` „Barát”
+  5 → 7 pont, 0. → 1. fokozat. Mért hatás: a 11. szakasz táblája (előtte en 214 / 181, de 174 / 138, fr 111 / 186 a 0–1.
+  fokozat egyes szavai; utána en 205 / 186, de 169 / 142, fr 102 / 194); az S3 hiánya ebből újraszámolva.
+- **Felülíró tábla:** a `LADDER_STEP_OVERRIDES[String(item.id)]` az örökölt tulajdonságokat (`constructor`, `toString`,
+  `__proto__`) is találatnak vette. Javítás: csak saját kulcs (`Object.hasOwn`) és csak 0–14 közötti egész érték. Teszt (C2):
+  ezekkel az azonosítókkal a fokozat azonos a szokásos azonosítóéval, a vödrözés nem dob.

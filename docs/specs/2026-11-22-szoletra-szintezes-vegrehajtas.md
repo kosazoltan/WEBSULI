@@ -125,3 +125,6 @@ Parancsok a `source/` mappából (Windows: `npx.cmd`, `npm.cmd`). Fizetős AI-h�
   bukottak, utána zöldek). Szólétra + `no-repeat`: 145/145; `tsc` 0 hiba. Böngésző:
   `npm.cmd run test:e2e -- tests/word-ladder-play.spec.ts --workers=1` → 2 passed (2,3 perc),
   `A9|kérdés-fokozatok: 0,0,0,1,1,1,2,2,2,3,3,3 | futás-fokozat: 0,0,0,1,1,1,2,2,2,3,3,3`.
+- **PR #528 Copilot-észrevételek (PR-1, a b680efb4-re építve):** terv 17. szakasz. C1 (magánhangzó-osztály) és C2 (felülíró tábla
+  saját kulcsa) előbb bukott (C1: „á: 3 → 5” stb.), utána zöld: `npx.cmd tsx --test tests/word-ladder-grading.test.ts` → 20/20;
+  Szólétra + `no-repeat` 146/146; `tsc` (alkalmazás és tesztek) 0 hiba.
