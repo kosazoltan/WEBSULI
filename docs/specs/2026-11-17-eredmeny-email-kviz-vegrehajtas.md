@@ -483,6 +483,28 @@ Kilét-leltár frissítése (a fenti táblázathoz):
   `server/index.ts`: a takarítás a meglévő ütemezett feladatok mellé kötve (E2E-ben nem). Migráció nincs.
 - Leltár: új sor S15 (takarítás + lejárt-kör szabály; teszt `R52`).
 
+## 2026-11-22 — 7. vak kör (904a3eeb): záró javítás (R53) és a követő PR jegyei
+
+Tulajdonosi döntés: „BONTÁS: KÉT PR” — a #510-ben CSAK az L1 legkisebb biztonságos javítása.
+- **R53 (L1)** `server/lesson-result-email.ts` (a végleges duplikátum-vizsgálat): a tulajdonos-lekérdezés a sorok kulcsát is visszaadja;
+  a végleges tulajdonos-sor kulcsa a lefokozottságot is viseli (`finalOwner = foreign ? "foreign:" + who : who`);
+  idegen kérés létező jelzőnél csak akkor folytat, ha a saját végleges tulajdonos-sora (`finalOwnerKeyOf(finalOwner)`) megvan ÉS a kézbesítési
+  sora (`roundKeyOf(who)`) még nincs (a levél nem indult). DB-teszt `R53 / L1` (R42-minta, `setFinalClaimFault`): régi kóddal az eredeti
+  beküldő ismétlése duplikátumot kapott; negatív kontroll: más beküldő (más ujjlenyomat) duplikátum; a levél után ugyanaz is duplikátum.
+- Az `index.ts` főág-összefésülés (#418) átnézve: R33 párhuzamos ürítés, utána kisfilm-leállítás; a keretből levont 10 s-os kisfilm-tartalékkal
+  a legrosszabb eset 270 + 3 + 2,5 + ürítés + 10 + 2 ≤ 295 s (a 60 s-os `clipsStopped` a leállás elejétől párhuzamosan fut).
+
+Követő PR (kanban-jegyek, NEM a #510 része):
+- **követő PR: 7. vak kör L2** — `client/src/lib/queryClient.ts` `sendKeepalive` csak `res.ok`-t ad; a pillanatkép `conflict` / `alreadySent` /
+  `finalized` válasza ne rögzüljön elküldöttként (a választest olvasása időkorláttal). Teszt: `conflict` → azonos válaszszám, új elhagyás →
+  második POST.
+- **követő PR: 7. vak kör L3** — `server/lesson-result-email.ts` a végleges ág a tranzakció ELŐTT jelöli véglegesnek és törli a várakozó
+  pillanatképet; a jelzősor-írás 503-a után ez ne vesszen el (a részleges csak sikeres végleges foglaláskor törlődjön). DB-teszt: elfogadott
+  pillanatkép → jelzőírási hiba → 503 → a részleges levél kimegy.
+- **követő PR: 7. vak kör L4** — E2E-módban kényszerített tesztküldő / tiltás a közös levélküldési ponton; a futtató ne örökölje az éles
+  szolgáltatói beállításokat.
+- **követő PR: 8. vak kör L4** — a 403 utáni pillanatkép korhatára és `clientNow`-ja a tényleges POST előtt (hamis órás böngészőteszt).
+
 ## Kész-feltétel
 
 A terv `<!-- acceptance-checklist -->` listájának minden pontja futtatott parancs kimenetével igazolva.

@@ -36,6 +36,18 @@ klienscsomag (ismert korlát: címke nélkül küld, a munkamenet fiókja szám�
   írásának hibája (bizonyíthatatlan állapot) 503 a 202 előtt. **L5** — a már elküldött körhöz újratöltéskor nem keletkezik kilét-rekord és
   kilét-rögzítés. **L3** — a pillanatkép-számláló körönként a legnagyobb elfogadott értéket tartja.
 
+**R53 — a #510 záró javítása; PR-határ (tulajdonosi döntés, űrlap, 2026-11-22, szó szerint: „BONTÁS: KÉT PR”).** A 7. vak kör (904a3eeb)
+L1-e: a lefokozott („idegen”) első végleges kérés a 202 előtt megszakadt, és ugyanannak a beküldőnek az ismétlése duplikátumot kapott,
+pedig levél nem indult. Javítás: létező jelzőnél az idegen kérés akkor folytathat, ha UGYANAZ a beküldő (`who`) a saját végleges
+tulajdonos-sorát találja, és a kézbesítési sora még nincs meg (a levél nem indult); az attribúció névtelen marad, más beküldő (más `who`)
+ismétlése duplikátum. A vendég-ujjlenyomat más beküldőt nem hitelesít (más ujjlenyomat → más `who`); a „beküldő” a lefokozottságot is
+tartalmazza (a lefokozott kérés végleges tulajdonos-sora külön kulcs), így az azonos ujjlenyomatú, de lefokozott fiók-kérés sem folytathatja
+egy nem lefokozott vendég megszakadt kérését (R42 negatív esete változatlan).
+- **A #510-ben:** S1a / S1b, R1–R53 a fentiek szerint (a tartós kimenő sor kapcsoló mögött, alapból KI).
+- **A követő PR-ban** (a végrehajtási fájl „követő PR” jegyei): a 7. vak kör L2 (a `conflict` pillanatkép-válasz ne rögzüljön
+  elküldöttként), L3 (a véglegesítés 503-a ne dobja el az elfogadott pillanatképet), L4 (E2E-módban kényszerített tesztküldő), valamint a
+  korábban jegyre tett 8. vak kör L4 (a 403 utáni pillanatkép korhatára / `clientNow`).
+
 **R52 — a szerveres kilét-rögzítés korlátos élettartama (2026-11-22).** A `lesson_result_emails` táblára eddig nem volt takarítás. A
 kilét-rögzítő sorok kulcsa felismerhető előtagot kap (`rc:` jelzősor, `ro:` tulajdonos; a többi körkulcs tiszta hex), és napi, adagos
 takarítás törli őket a rögzítéstől számított 8 nap után (a le nem zárt kör 7 napos korhatára + 1 nap; legfeljebb 50 × 1000 sor

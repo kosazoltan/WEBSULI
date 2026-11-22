@@ -717,8 +717,11 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   // második levél és más név nem megy. Ugyanazon kilét ismétlése a meglévő címzettenkénti pótlásra fut. A jelzősor hibája nem akasztja meg
   // a beküldést (a memóriabeli véglegesítés véd; a hiba osztálya naplózódik).
   // R51 / L2: a jelzősor állapota nem bizonyítható (az írás hibázott) → 503 a 202 előtt; létező jelzőnél a tulajdonos-ellenőrzés mindig fut.
+  // R53: a végleges jelző rögzítője a beküldő ÉS a lefokozottsága — a lefokozott (idegen) kérés tulajdonos-sora külön kulcs, így egy
+  // azonos ujjlenyomatú, de lefokozott kérés nem folytathatja a nem lefokozott beküldő megszakadt kérését (és fordítva).
+  const finalOwner = identity.foreign ? `foreign:${who}` : who;
   let firstFinal: boolean;
-  try { firstFinal = await claimFinalRound(lessonId, body.kind, body.roundId, graded.summary.percent, who); }
+  try { firstFinal = await claimFinalRound(lessonId, body.kind, body.roundId, graded.summary.percent, finalOwner); }
   catch (error) {
     logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`);
     return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
@@ -727,19 +730,24 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     // R42: a saját végleges sor VAGY az első rögzítő tulajdonos-sora (a 202 előtt megszakadt első kérés ismétlése). Terv R49 (10. vak kör
     // L3): létező jelzősor mellett csak POZITÍVAN igazolt tulajdonos folytathatja — a tulajdonos-lekérdezés átmeneti hibája újrapróbálható
     // 503 (a 202 előtt), nem végleges küldés (különben más kézbesítési kulcson második levél mehetne).
-    let own: Array<{ id: string }>;
+    const deliveryKey = roundKeyOf(who, body.kind, body.roundId);
+    const ownerKey = finalOwnerKeyOf(finalOwner, body.kind, body.roundId);
+    let own: string[];
     try {
       ownerCheckFault?.();
-      own = await db.select({ id: lessonResultEmails.id }).from(lessonResultEmails)
+      own = (await db.select({ roundKey: lessonResultEmails.roundKey }).from(lessonResultEmails)
         .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, body.kind),
-          inArray(lessonResultEmails.roundKey, [roundKeyOf(who, body.kind, body.roundId), finalOwnerKeyOf(who, body.kind, body.roundId)]))).limit(1);
+          inArray(lessonResultEmails.roundKey, [deliveryKey, ownerKey])))).map(row => row.roundKey);
     } catch (error) {
       logger.error(`[LESSON-RESULT] a végleges kör tulajdonosának ellenőrzése nem sikerült: ${errorClass(error)}`);
       return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
     }
     // R51: a kör szerveres kilét-rögzítésével nem egyező (idegen) kérés létező végleges jelzőnél duplikátum — akkor is, ha a lefokozott
-    // (vendég) kulcsa egyezne az eredeti vendég-beküldőével (pl. ugyanazon az eszközön fiókba lépve).
-    if (!own.length || identity.foreign) return res.status(202).json({ queued: false, duplicate: true });
+    // (vendég) kulcsa egyezne az eredeti vendég-beküldőével (pl. ugyanazon az eszközön fiókba lépve). R53 (7. vak kör L1): kivéve, ha
+    // UGYANEZ a beküldő rögzítette a végleges jelzőt (saját tulajdonos-sora megvan), és a levele még nem indult (nincs kézbesítési sora) —
+    // a 202 előtt megszakadt saját kérését névtelenül folytathatja.
+    const resumesOwnFinal = own.includes(ownerKey) && !own.includes(deliveryKey);
+    if (!own.length || (identity.foreign && !resumesOwnFinal)) return res.status(202).json({ queued: false, duplicate: true });
   }
   finalClaimFault?.();
   if (startedAtOnServer) graded = { ...graded, meta: { ...graded.meta, startedAt: startedAtOnServer } };
