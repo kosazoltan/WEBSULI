@@ -80,9 +80,11 @@ export type ClipStore = {
   /** A tárolt média összmérete bájtban — a tárkerethez. */
   mediaBytes(): Promise<number>;
   /** Példányok közötti kizárás (advisory lock); foglalt zárnál null, a kör kimarad. */
-  exclusive<T>(work: () => Promise<T>): Promise<T | null>;
+  /** A `work` a zár érvényesség-ellenőrzőjét kapja (élesben: a release-objektum `alive`-ja; eldobás után dob). */
+  exclusive<T>(work: (alive?: () => void) => Promise<T>): Promise<T | null>;
   /** A `graceMs`-nél régebbi, sehol nem hivatkozott média törlése (a zár alatt hívandó). */
-  pruneOrphanMedia(graceMs: number): Promise<{ rows: number; bytes: number }>;
+  /** `alive`: minden utasítás előtt hívandó; dob, ha a zár elveszett (akkor nincs új utasítás és nincs véglegesítés). */
+  pruneOrphanMedia(graceMs: number, alive?: () => void): Promise<{ rows: number; bytes: number }>;
 };
 
 export type EligibleSection = { sectionIndex: number; heading: string; source: string; hash: string };
@@ -358,11 +360,13 @@ export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipM
   const live = () => { if (opts.abandoned?.()) throw new ClipAbortError("a leállítási határidő lejárt: a kör nem indít DB-műveletet"); };
   const guarded = Object.fromEntries(Object.entries(store).map(([name, fn]) => [name, name === "exclusive" ? fn
     : (...args: unknown[]) => { live(); return (fn as (...a: unknown[]) => unknown).apply(store, args); }])) as ClipStore;
-  return store.exclusive(async () => {
+  return store.exclusive(async (leaseAlive = () => undefined) => {
     const store = guarded;
+    // A zár érvényessége: a leállítás eldobta-e (`abandoned`) VAGY a release-objektum elveszett — a takarítás minden utasítása előtt.
+    const alive = () => { live(); leaseAlive(); };
     const report: ClipRoundReport = { made: 0, failed: 0, lessons: 0, videos: 0, stoppedByBudget: false, stoppedByMemory: false };
     let stopped = false;
-    const pruned = await store.pruneOrphanMedia(CLIP_ORPHAN_GRACE_MS);
+    const pruned = await store.pruneOrphanMedia(CLIP_ORPHAN_GRACE_MS, alive);
     if (pruned.rows) logger.info(`[lesson-clips] ${pruned.rows} árva média törölve (${Math.round(pruned.bytes / 1024)} kB)`);
     const today = new Set(await store.lessonsToday());
     for (const lesson of await store.freshLessons(CLIP_FRESH_DAYS)) {
@@ -438,15 +442,15 @@ export async function stopLessonClipWorker(waitMs = 30_000): Promise<boolean> {
  * AZONNAL megszakít (`abort`: minden szolgáltatói várakozás, letöltés és ffmpeg-gyerek), majd a kör (és az advisory lock) lezárulását
  * legfeljebb `finalMs`-ig várja. A szerver a leállítás ELEJÉN indítja, a többi leállítási lépéssel párhuzamosan.
  */
-export async function shutdownLessonClips(abort: () => void, waitMs = 60_000, finalMs = 10_000, forceRelease: () => boolean = () => false): Promise<"ended" | "forced"> {
+export async function shutdownLessonClips(abort: () => void, waitMs = 60_000, finalMs = 10_000, forceRelease: () => boolean = () => false): Promise<"ended" | "forced" | "timeout"> {
   if (await stopLessonClipWorker(waitMs)) return "ended";
   abort();
   if (await stopLessonClipWorker(finalMs)) return "ended";
   // A kör a határidő után is tart (pl. lassú DB-művelet): további DB-művelet tilos, a zárat tartó kapcsolat eldobva — a Postgres a
   // session-zárat ettől biztosan elengedi. Ez NEM „kész”: a hívó megkülönbözteti.
   abandoned = true;
-  forceRelease();
-  return "forced";
+  // „forced” CSAK valódi eldobáskor; ha nem volt zárat tartó kapcsolat (pl. a kör még a poolra vár), „timeout”.
+  return forceRelease() ? "forced" : "timeout";
 }
 /** Indítás (csak élesben hívja a szerver). Gyártás csak `auto` módban; különben nem indul időzítő. */
 export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: ClipDeps; model: string; maintenance?: () => void }, env: Record<string, string | undefined> = process.env): ClipMode {

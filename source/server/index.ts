@@ -721,7 +721,10 @@ app.use((req, res, next) => {
       // további DB-műveletet nem indít — az eredmény ilyenkor „forced”, nem hamis „kész”.
       const clipsStopped = Promise.all([import("./lesson-clips"), import("./lesson-clips-providers"), import("./lesson-clips-db")])
         .then(([{ shutdownLessonClips }, { abortClipTranscodes }, { forceReleaseClipLock }]) => shutdownLessonClips(abortClipTranscodes, 60_000, 10_000, forceReleaseClipLock))
-        .then((outcome) => { if (outcome === "forced") logger.warn("[lesson-clips] a leállítási határidőn túl futó kör zárkapcsolata eldobva"); })
+        .then((outcome) => {
+          if (outcome === "forced") logger.warn("[lesson-clips] a leállítási határidőn túl futó kör zárkapcsolata eldobva");
+          else if (outcome === "timeout") logger.warn("[lesson-clips] a leállítási határidő lejárt; zárat tartó kapcsolat nem volt (a kör nem tartott zárat)");
+        })
         .catch((err: unknown) => logger.warn("A kisfilmworker nem állítható le", err));
       // JM2 (terv 10.8; orkesztrátori döntés, review #452): a valós idejű réteg RÖVID, rendezett lezárása — új szoba /
       // belépés azonnal tiltva, a futó meccsek azonnal lezárulnak a pillanatnyi állással (részeredmény, „a szerver frissül”);

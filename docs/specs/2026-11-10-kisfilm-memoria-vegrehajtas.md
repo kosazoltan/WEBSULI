@@ -169,3 +169,28 @@ DB-kapcsolatot a kód ténylegesen eldobta (így a Postgres a session-zárat biz
 - **L3 valódi (kicsi)** — a letöltési napló a teljes letöltési fázisra rögzített kódot ír (`DOWNLOAD_TOO_LARGE`, `DOWNLOAD_HTTP_<n>`,
   `DOWNLOAD_FAILED`, illetve a védett út kódja a hosttal); nyers üzenet nem kerül a naplóba. Teszt: LW „letöltési napló: a törzsolvasás
   és a státusz hibája is rögzített kóddal naplózódik…”.
+
+### 2. javító kör (0e1951fd) — zár-életciklus (egyetlen release-objektum)
+
+Invariáns: a lefoglalt kapcsolatot EGY egyszer használható release-objektum (`ClipLockLease`, `server/lesson-clips-lock.ts`) birtokolja
+a zárkéréstől a release-ig; a normál feloldás és a kényszerített eldobás is ezen megy át, idempotensen (a kapcsolat pontosan egyszer
+kerül ki — vissza a poolba vagy eldobva); az élő objektumok nyilvántartásából (`leases`) csak a release után kerül ki (egy párhuzamos, foglalt zárat kapó második
+hívás sem takarhatja el — ezt a DB-teszt fogta meg, és külön egységteszt is rögzíti). A `shutdownLessonClips` eredménye `"forced"`
+CSAK valódi eldobáskor (a `forceReleaseClipLock()` igaz), egyébként `"timeout"`; az `index.ts` csak `"forced"`-nál naplóz „eldobva”-t.
+
+| Állapot | Mi történik normálisan | Kényszerített eldobás (`forceReleaseClipLock`) | Időkorlát | Igazoló teszt |
+|---|---|---|---|---|
+| kapcsolatkérés (pool) | — | nincs mit eldobni → `false`; a leállítás eredménye `"timeout"` | pool `connectionTimeoutMillis` 10 s | `tests/lesson-clip-shutdown-timeout.test.ts` („eldobható kapcsolat nélkül … »timeout«”; az `index.ts` naplósora) |
+| zárkérés alatt (`locking`) | `pg_try_advisory_lock`; foglaltnál egyszeri visszaadás a poolba, munka nincs | `true`, pontosan egy eldobás, a kör `ClipAbortError`, a munka nem indul | `query_timeout` 15 s (hibánál / időtúllépésnél eldobás) | `tests/lesson-clip-lock.test.ts`: „foglalt zár…”, „kényszerített eldobás a zárkérés alatt…”, „a zár- vagy a feloldó lekérdezés hibája…” |
+| munka alatt (`working`) | a kör fut; minden tárhívás és az árvatakarítás minden utasítása előtt `alive()` | `true`, pontosan egy eldobás, a kör `ClipAbortError`; utána az `alive()` dob → nincs új utasítás és nincs véglegesítés | a leállítás 60 + 10 s; az utasítások 15 s | `lesson-clip-lock.test.ts` „kényszerített eldobás a munka alatt…”; `tests/lesson-clip-shutdown-forced.test.ts`; DB „árvatakarítás a zár elvesztése után…” és „leállítási határidő: … MÁSIK kapcsolatról azonnal megszerezhető…” |
+| feloldás alatt (`unlocking`) | `pg_advisory_unlock`, utána egyszeri visszaadás a poolba | `true`, pontosan egy eldobás (a függő feloldás a bontással hibával zárul); a munka eredménye megmarad | `query_timeout` 15 s; a leállítási határidő (70 s) az eldobással vág | `lesson-clip-lock.test.ts` „a munka kész, a feloldás válasza elakad…”; `tests/lesson-clip-lock-deadline.test.ts` („a 70. mp-nél pontosan egy eldobás, előtte egy sem”) |
+| release után | az objektum kikerült a nyilvántartásból | `false`, nincs második eldobás | — | `lesson-clip-lock.test.ts` „normál út…”, „egy párhuzamos (foglalt zárat kapó) második hívás…” és az eldobásos esetek záró állítása; `lesson-clip-lock-deadline.test.ts` |
+
+- **L1 valódi (blokkoló)** — a régi `exclusive()` a birtokost az aszinkron feloldás ELŐTT nullázta: feloldás közbeni elakadásnál a
+  kényszerített eldobás `false` volt, a hívó mégis „eldobva”-t naplózott. Mutációs ellenpróba: a birtokost a feloldás előtt nullázva a
+  `lesson-clip-lock-deadline` és a „feloldás válasza elakad” teszt bukik (piros), a javított kódon zöld.
+- **L2 valódi (közepes)** — az árvatakarítás minden utasítása előtt ellenőrzi a zár érvényességét (`alive`: a leállítás `abandoned`
+  jelzője és a release-objektum); elvesztéskor nincs új utasítás és nincs véglegesítés (a tranzakció visszagörget). A söprés
+  teljes határidejének (K-418-L2) többi része továbbra is kanbanon.
+- **L3 (kicsi, örökölt)** — a borító napi limitjének túlcsordulása: kanban-jegy **K-KL-L3** (`server/lesson-covers.ts`, a kisfilmnél
+  használt biztonságos egész ellenőrzés átvétele, túlcsordulásos teszttel).

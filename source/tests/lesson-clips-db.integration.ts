@@ -105,3 +105,19 @@ test("leállítási határidő: a zárat tartó kapcsolat eldobása után a zár
   }
   assert.equal(forceReleaseClipLock(), false, "nincs több zárat tartó kapcsolat");
 });
+
+test("árvatakarítás a zár elvesztése után: minden utasítás előtt ellenőriz, elvesztéskor nem indít újat és nem véglegesít (visszagörget)", async () => {
+  const { ClipAbortError } = await import("../server/lesson-clips");
+  const ids: string[] = [];
+  for (let i = 0; i < 3; i++) ids.push(await dbClipStore.putMedia("audio", "audio/mpeg", Buffer.from(`zárvesztés-próba ${i}`)));
+  await db.execute(sql`UPDATE lesson_clip_media SET orphaned_at = now() - interval '2 days' WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`);
+  let checks = 0;
+  // A 3. utasítás előtt a zár „elveszett” (a leállítás eldobta a zárkapcsolatot).
+  const alive = () => { if (++checks >= 3) throw new ClipAbortError("a zár elveszett"); };
+  await assert.rejects(dbClipStore.pruneOrphanMedia(24 * 3_600_000, alive), ClipAbortError);
+  assert.equal(checks, 3, "minden utasítás előtt ellenőriz, és a hibánál megáll");
+  const left = Number((await db.execute(sql`SELECT count(*)::int AS n FROM lesson_clip_media WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)).rows[0]?.n);
+  assert.equal(left, 3, "semmi nem törlődött: nincs új DELETE és nincs véglegesítés");
+  // Érvényes zárral a söprés lefut és töröl.
+  assert.ok((await dbClipStore.pruneOrphanMedia(24 * 3_600_000, () => undefined)).rows >= 3);
+});

@@ -1,7 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
-import type { QueryConfig } from "pg";
 import { db, dbPool } from "./db";
-import { ClipAbortError, type ClipLesson, type ClipRow, type ClipStore } from "./lesson-clips";
+import type { ClipLesson, ClipRow, ClipStore } from "./lesson-clips";
+import { exclusiveWithLock, type LockClient } from "./lesson-clips-lock";
 import { mediaId, type ClipMedia } from "./lesson-clip-media";
 
 /** A kisfilmek éles adatrétege (docs/specs/2026-11-10-fejezet-kisfilmek-v2.md, 6.). A `lessons` táblát csak olvassa. */
@@ -35,19 +35,8 @@ export async function loadClipMedia(id: string): Promise<ClipMedia | null> {
   return row && typeof row.mime === "string" && Buffer.isBuffer(row.bytes) ? { mime: row.mime, bytes: row.bytes } : null;
 }
 
-/** A zárlekérdezés kliensoldali időkorláttal (a `pg` futásidőben ismeri a `query_timeout`-ot, a típusa nem). */
-const timedQuery = (text: string): QueryConfig => ({ text, values: [CLIP_LOCK_KEY], query_timeout: CLIP_STATEMENT_TIMEOUT_MS }) as QueryConfig;
-/** A zárat tartó kapcsolat eldobója (leállítási határidő); null, ha nincs futó kör. */
-let lockHolder: ((reason: Error) => void) | null = null;
-/**
- * Leállítási határidő: a zárat tartó kapcsolatot ELDOBJA (nem adja vissza a poolnak) — a kapcsolat bontásával a Postgres a session-
- * szintű advisory lockot biztosan elengedi; a még futó kör `ClipAbortError`-ral zárul. Igaz, ha volt zárat tartó kapcsolat.
- */
-export function forceReleaseClipLock(): boolean {
-  if (!lockHolder) return false;
-  lockHolder(new ClipAbortError("leállítási határidő: a kisfilm-zárat tartó kapcsolat eldobva"));
-  return true;
-}
+/** A zár-életciklus a `lesson-clips-lock.ts`-ben (egyetlen release-objektum); a leállítás innen is eléri. */
+export { forceReleaseClipLock } from "./lesson-clips-lock";
 export const dbClipStore: ClipStore = {
   async lesson(id) {
     const { rows } = await query(sql`SELECT id, published_at, json FROM lessons WHERE id = ${id}`);
@@ -90,22 +79,24 @@ export const dbClipStore: ClipStore = {
     const { rows } = await query(sql`SELECT coalesce(sum(size), 0)::bigint AS total FROM lesson_clip_media`);
     return Number((rows[0] as { total?: unknown } | undefined)?.total ?? 0);
   },
-  async pruneOrphanMedia(graceMs) {
+  async pruneOrphanMedia(graceMs, alive = () => undefined) {
     // 2. vak kör L6 + Copilot-review #418: a hivatkozott médiaazonosítók (32 hex jegy a kisfilm JSON-jában) EGYSZER, egy átmeneti,
     // elsődleges kulcsos halmazba kerülnek; a jelölés és a törlés ehhez egyenlőséggel (indexen) mér. Az először hivatkozatlanul talált
     // sor csak árvának jelölődik (orphaned_at), törölni az árvaság türelmi ideje után, korlátos adagokban szabad; az újra hivatkozott
     // sor jelölése törlődik. A kör advisory lockja alatt fut, így más példány épp készülő fejezetét nem érinti.
+    // Zár-életciklus: MINDEN utasítás előtt a zár érvényessége — elvesztéskor nincs új utasítás és nincs véglegesítés (visszagörgetés).
     return withClipStatementTimeout(async (tx) => {
-      await tx.execute(sql`CREATE TEMP TABLE clip_media_refs (id text PRIMARY KEY) ON COMMIT DROP`);
-      await tx.execute(sql`INSERT INTO clip_media_refs (id)
+      const run = (statement: SQL) => { alive(); return tx.execute(statement); };
+      await run(sql`CREATE TEMP TABLE clip_media_refs (id text PRIMARY KEY) ON COMMIT DROP`);
+      await run(sql`INSERT INTO clip_media_refs (id)
         SELECT DISTINCT (regexp_matches(c.clip::text, '[0-9a-f]{32}', 'g'))[1] FROM lesson_clips c WHERE c.clip IS NOT NULL ON CONFLICT DO NOTHING`);
-      await tx.execute(sql`UPDATE lesson_clip_media m SET orphaned_at = NULL
+      await run(sql`UPDATE lesson_clip_media m SET orphaned_at = NULL
         WHERE m.orphaned_at IS NOT NULL AND EXISTS (SELECT 1 FROM clip_media_refs r WHERE r.id = m.id::text)`);
-      await tx.execute(sql`UPDATE lesson_clip_media m SET orphaned_at = now()
+      await run(sql`UPDATE lesson_clip_media m SET orphaned_at = now()
         WHERE m.orphaned_at IS NULL AND NOT EXISTS (SELECT 1 FROM clip_media_refs r WHERE r.id = m.id::text)`);
       let total = 0, bytes = 0;
       for (let batch = 0; batch < CLIP_PRUNE_MAX_BATCHES; batch++) {
-        const { rows } = await tx.execute(sql`DELETE FROM lesson_clip_media WHERE id IN (
+        const { rows } = await run(sql`DELETE FROM lesson_clip_media WHERE id IN (
           SELECT m.id FROM lesson_clip_media m
           WHERE m.orphaned_at < now() - make_interval(secs => ${Math.floor(graceMs / 1000)})
             AND NOT EXISTS (SELECT 1 FROM clip_media_refs r WHERE r.id = m.id::text)
@@ -113,33 +104,13 @@ export const dbClipStore: ClipStore = {
         for (const r of rows as Array<{ size?: unknown }>) { total++; bytes += Number(r.size ?? 0); }
         if (rows.length < CLIP_PRUNE_BATCH) break;
       }
+      alive();
       return { rows: total, bytes };
     });
   },
-  async exclusive(work) {
-    const client = await dbPool.connect();
-    // A kapcsolat eldobandó (nem kerülhet vissza a poolba), ha a zár- / feloldó lekérdezés elakadt vagy a leállítás eldobta.
-    let discard: Error | undefined;
-    try {
-      // A zár- és a feloldó lekérdezés is időkorlátos (kliensoldali `query_timeout`, mint a többi kisfilm-DB-hívásnál a 15 s).
-      const locked = await client.query<{ ok: boolean }>(timedQuery("SELECT pg_try_advisory_lock($1) AS ok"))
-        .catch((error: unknown) => { discard = error instanceof Error ? error : new Error(String(error)); throw error; }); // bizonytalan állapotú kapcsolat
-      if (!locked.rows[0]?.ok) return null;
-      let abandon: (reason: Error) => void = () => undefined;
-      const abandoned = new Promise<never>((_resolve, reject) => { abandon = reject; });
-      abandoned.catch(() => undefined);
-      lockHolder = (reason) => { discard = reason; abandon(reason); };
-      try {
-        return await Promise.race([work(), abandoned]);
-      } finally {
-        lockHolder = null;
-        if (!discard) {
-          await client.query(timedQuery("SELECT pg_advisory_unlock($1)"))
-            .catch((error: unknown) => { discard = error instanceof Error ? error : new Error(String(error)); });
-        }
-      }
-    } finally {
-      client.release(discard);
-    }
+  exclusive(work) {
+    // A zár- és a feloldó lekérdezés is időkorlátos (kliensoldali `query_timeout`, mint a többi kisfilm-DB-hívásnál a 15 s).
+    return exclusiveWithLock(() => dbPool.connect() as Promise<LockClient>, CLIP_LOCK_KEY, CLIP_STATEMENT_TIMEOUT_MS, work);
   },
+
 };
