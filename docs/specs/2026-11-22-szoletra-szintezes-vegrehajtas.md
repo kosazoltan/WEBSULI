@@ -128,3 +128,8 @@ futáskorláttal. Éles DB, `db:push`, e-mail, push / PR / merge, kódellenőri 
 - **`gate:stage`:** a 24 őrteszt közül a `memory-index-guard` („nincs indexeletlen élő memóriafájl”) bukik a
   `memory/notes/00-Index.md` miatt — ezt a `origin/main` 0645f48f (`chore(zaro-hurok)`) hozta be, a munkaág nem érinti a
   `memory/` mappát. Minden más lépés PASS.
+- **S3 (2026-11-22, `feat/szoletra-a1-bank`):** próbakör 6 hívás 0,2869 USD (3 csonkolt, C-SZL-2), 36 elfogadott szó →
+  vetítés 7,17 USD ≤ 22; teljes generálás 18 hívás 1,9281 USD; vak megoldó 53 hívás 5,0899 USD; **összesen 7,3048 USD**.
+  0. / 1. fokozat egyes szó: en 372 / 328, de 316 / 300, fr 300 / 295. Kanári 10/10, 10/10, 9/10 (a fr kimaradt kanárija
+  valódi tartalmi hibát jelzett, tétel törölve); utolsó körben valódi hiba 0. A Szólétra / szóbank egységtesztek 221/221
+  zöldek, `tsc --noEmit` 0 hiba. Jegyzőkönyv: `docs/measurements/2026-11-22-szoletra-a1-bank.md`.

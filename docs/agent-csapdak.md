@@ -49,6 +49,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-64** — Poll-függvényben az állapotot egyetlen `page.evaluate` olvassa, ne több automatikusan váró lokátorhívás.
 - **C-65** — Időtartam-állítást a lapon belül, képkockánként mérj; a lassú CI-hibát CPU-lassítással reprodukáld.
 - **C-SZL-1** — Eloszlásra írt küszöböt (vödör-szám, korlát) a teljes mért táblából írj, a terv EARS-pontja előtt; scratch-mérés tsx-szel: `.mts` + `file:///` import.
+- **C-SZL-2** — Fizetős LLM-hívás: a nyers választ a feldolgozás ELŐTT mentsd, naplózd a `finish_reason`-t és a gondolkodási tokeneket; a `max_tokens` a gondolkodást is fedezze.
 
 ### UI, CSS, mobil
 - **C-07** — Fix magasságú flex-oszlopban minden szinten `min-h-0`; UI-tesztben `elementFromPoint`-takarásvizsgálat 390 px-en is.
@@ -1122,3 +1123,23 @@ Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`.
   kiterjesztésű, a repó-modulokat `file:///D:/…` URL-lel importálja, és a repó `source/` mappájából fut (a `@/` alias így feloldódik).
 
 Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szintezes.md` 11. szakasz). Rokon: C-15.
+
+## C-SZL-2 — Fizetős LLM-válasz elvesztése: csonkolt kimenet, nyers mentés nélkül (2026-11-22, ideiglenes sorszám)
+
+- **Tünet:** a Szólétra S3 próbakörében (szóbank-generálás, OpenRouter `anthropic/claude-sonnet-5.5`) mindhárom első hívás
+  „a válaszban nincs JSON-tömb” hibával állt le: a kimenet pontosan a `max_tokens`-nél (2300) ért véget. A három kifizetett
+  válasz (mért 0,149 USD a `usage.cost` szerint) elveszett, mert a szkript csak a feldolgozott JSON-t írta ki.
+- **Gyökérok:** a modell alapból gondolkodik; a gondolkodási tokenek a `completion_tokens`-be számítanak, így a
+  „bejegyzésenként 120 token” keret a gondolkodással együtt kevés volt; a nyers választ a szkript nem mentette.
+- **Megelőzés (beépítve: `source/scripts/vocab-bank-generate.ts`):** a nyers válasz a feldolgozás ELŐTT fájlba kerül; a sor a
+  `finish_reason`-t és a `reasoning_tokens`-t is kiírja; `reasoning: { effort: "low" }`; `max_tokens` = 250 × darab + 2000.
+  Fizetős hívásnál előbb EGY hívás, az eredmény ellenőrzése, csak utána a többi nyelv.
+- **Ismétlés (TÖRVÉNY):** ugyanebben a futásban a C-SZL-1 2. szabályát (scratch-mérőszkript `.mts`) is megszegtem — a
+  csapdafájlt a munka előtt nem olvastam el. **Szabály:** új szelet előtt a saját sorozat (`C-SZL-*`) csapdáit el kell olvasni.
+
+- **Tünet 2 (szűrés):** (a) a generátor szűrője a `vocabBankProblems`-t futtatta, de a külön tesztben élő tartalmatlan-szabályt
+  (`vocab-bank-cognates.test.ts`) nem — 35 „pizza = pizza” típusú tétel került be; (b) a vak megoldó után törölt tételek a
+  tartalék-jelöltekből a következő pótláskor visszakerültek. **Szabály 2:** generált tartalom szűrője a bank MINDEN őr-tesztjének
+  szabályát futtassa (előbb `grep` a `tests/<bank>-*.test.ts`-re); az elbírált, elvetett tételek tiltólistára (`apply --deny`).
+
+Forrás: `feat/szoletra-a1-bank` (végrehajtás: `docs/specs/2026-11-22-szoletra-szintezes-vegrehajtas.md` 10–11. lépés). Rokon: C-SZL-1.

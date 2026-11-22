@@ -263,3 +263,16 @@ szerkezeti őr a `vocabBankProblems` / `minimumProblems`. Bejegyzésenkénti kö
 **Elfogadás (S3):** a validátorok (`vocabBankProblems`, `minimumProblems`, `word-ladder-grading.test.ts` A1–A4) zöldek; a vak
 megoldó kanári 10/10, a jelzett tételek javítva; a 0–1. fokozat egyes-szó-száma nyelvenként ≥ 300; a mért tényleges költség a
 PR-leírásban (gép által rögzített számláló, nem becslés).
+
+**Mért eredmény (S3, 2026-11-22, `feat/szoletra-a1-bank`; jegyzőkönyv: `docs/measurements/2026-11-22-szoletra-a1-bank.md`):**
+
+| nyelv | 0. fokozat előtte → utána | 1. fokozat előtte → utána | új 0. szintű egyes szó |
+|---|---|---|---|
+| en | 222 → 372 | 181 → 328 | 297 |
+| de | 171 → 316 | 145 → 300 | 300 |
+| fr | 109 → 300 | 186 → 295 | 300 |
+
+Mért költség: **7,3048 USD** (77 hívás, a válaszok `usage.cost` mezőjének összege; napló:
+`docs/measurements/2026-11-22-szoletra-a1-bank-koltsegnaplo.jsonl`). A fr 1. fokozata 295 < 300: a két fokozat külön-külön
+≥ 300-hoz a fr-nél 305 új szó kellene, a megbízás plafonja nyelvenként +300 (nyitott: +5 fr szó engedélyezése).
+
