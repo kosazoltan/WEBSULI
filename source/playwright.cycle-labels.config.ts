@@ -4,6 +4,6 @@ import { defineConfig, devices } from "@playwright/test";
 const port = Number(process.env.CYCLE_PROBE_PORT ?? 5188);
 export default defineConfig({
   testDir: "./tests", testMatch: ["cycle-labels.spec.ts", "explanatory-visuals.spec.ts"], timeout: 45000,
-  workers: 1, use: { ...devices["Desktop Chrome"], channel: "chrome", serviceWorkers: "block", baseURL: `http://127.0.0.1:${port}` },
+  workers: 1, use: { ...devices["Desktop Chrome"], serviceWorkers: "block", baseURL: `http://127.0.0.1:${port}` },
   webServer: { command: `npx cross-env VITE_ENABLE_RUNTIME_PROBE=1 vite --host 127.0.0.1 --port ${port} --strictPort`, url: `http://127.0.0.1:${port}`, reuseExistingServer: false },
 });

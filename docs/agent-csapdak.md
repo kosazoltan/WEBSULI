@@ -36,7 +36,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-46** — Unicode-tartomány forrásban `\p{…}` kategóriával, ne `\uXXXX`-szel (az eszközparaméter dekódolja); `cat -A` ellenőrzés.
 - **C-50** — Visszaperjeles szöveg csak Edit/Write-tal; bájtszintű visszaolvasás; szkriptes cserénél `git diff --stat` ellenőrzés.
 - **C-72** — Apróságok: időbélyeg-összevetés SQL-ben, `Failed query` oka a `cause`-ban, Playwright PowerShellből, e2e-port a szervertől.
-- **C-77** — Folyamatot csak saját, egyedi jelölő vagy pontos PID alapján állíts le — parancssori mintaillesztéssel soha.
+- **C-95** — Folyamatot csak saját, egyedi jelölő vagy pontos PID alapján állíts le — parancssori mintaillesztéssel soha.
 
 ### Tesztelés, e2e, mérés
 - **C-12** — `content-visibility: auto` mellett elem-képernyőkép + `toBeVisible`; a teljes oldalas kép csak áttekintés.
@@ -49,7 +49,7 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
 - **C-57** — Meta-képernyő mérése: `scrollIntoView` után az `overflow: hidden` ős se mozduljon; érintéses görgetés CDP touch-sorozattal.
 - **C-64** — Poll-függvényben az állapotot egyetlen `page.evaluate` olvassa, ne több automatikusan váró lokátorhívás.
 - **C-65** — Időtartam-állítást a lapon belül, képkockánként mérj; a lassú CI-hibát CPU-lassítással reprodukáld.
-- **C-76** — A saját, még be nem olvasztott teszted mércéjét se igazítsd az új implementációhoz; ha nem fér össze, az ütközést jelentsd.
+- **C-94** — A saját, még be nem olvasztott teszted mércéjét se igazítsd az új implementációhoz; ha nem fér össze, az ütközést jelentsd.
 
 ### UI, CSS, mobil
 - **C-07** — Fix magasságú flex-oszlopban minden szinten `min-h-0`; UI-tesztben `elementFromPoint`-takarásvizsgálat 390 px-en is.
@@ -1121,7 +1121,19 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
 
-## C-76 — A teszt mércéjét ne igazítsd az új implementációhoz — a saját, még be nem olvasztott tesztét sem (2026-11-19)
+## C-93 — Gépváltás: a telepített Chrome frissülése elválik a rögzített Playwrighttól (2026-11-22)
+
+- **Tünet:** az új gépen a PR előtti kapu böngészős köre a főág kódjával is bukott: `preview-navigation.spec.ts` „opaque sandbox …” —
+  `Target page, context or browser has been closed`; a `DEBUG=pw:browser` naplóban a Chrome `exitCode=2147483651`-gyel lépett ki.
+  Ok: a konfigurációk `channel: "chrome"`-mal a gép stabil Chrome-ját (158) indították, amelyet a projekt Playwright 1.57-e nem támogat;
+  egy sandboxolt iframe `srcdoc`-ja már üres tartalommal is összeomlasztotta. A Playwright saját Chromiumán hibátlan volt.
+- **Szabály:** a böngészős tesztek a Playwrighthoz rögzített Chromiumon futnak (`channel` nélkül; őr-teszt:
+  `source/tests/playwright-bundled-chromium-guard.test.ts`). Új gépen egyszer: `npx.cmd playwright install chromium` a `source`-ban.
+  Ha egy böngészős teszt helyben „Target page … closed”-dal bukik, előbb `DEBUG=pw:browser`-rel nézd meg a böngésző kilépési kódját.
+
+Forrás: `docs/specs/2026-11-22-playwright-csomagolt-chromium.md`.
+
+## C-94 — A teszt mércéjét ne igazítsd az új implementációhoz — a saját, még be nem olvasztott tesztét sem (2026-11-19)
 
 Forrás: #504 (Kockavadász `?perf=1`), 2. vak kör M1 (blokkoló). Rokon: C-15.
 
@@ -1136,7 +1148,7 @@ Forrás: #504 (Kockavadász `?perf=1`), 2. vak kör M1 (blokkoló). Rokon: C-15.
 - **Ellenőrzés:** a push előtt `git diff <előző visszanézett fej>..HEAD -- source/tests` — minden megváltozott állítás mellé indoklás
   a commit-üzenetben; elvárás-érték módosítása csak dokumentált spec-döntéssel.
 
-## C-77 — Folyamatot csak saját, egyedi jelölő vagy pontos PID alapján állíts le, mintaillesztéssel soha (2026-11-19)
+## C-95 — Folyamatot csak saját, egyedi jelölő vagy pontos PID alapján állíts le, mintaillesztéssel soha (2026-11-19)
 
 Forrás: #504, a közös gép-zár (`scratchpad\gep-sav\lock`) bevezetésének napja. Rokon: a memória „TaskStop árva figyelő” bejegyzése.
 
@@ -1149,7 +1161,7 @@ Forrás: #504, a közös gép-zár (`scratchpad\gep-sav\lock`) bevezetésének n
   szűrj. Közös erőforrás nevére (zár-, sorrend-, napló-mappa), általános parancsnévre (`node`, `bash`, `pre-push-gate`) szűrni tilos.
   Leállítás előtt listázd ki a találatokat, és ha nem mind a tiéd, ne állíts le semmit — jelezd.
 
-## C-78 — Böngészős időmérő teszt: abszolút ms-küszöb helyett a teszt saját időbélyegeihez mérj (2026-11-22)
+## C-96 — Böngészős időmérő teszt: abszolút ms-küszöb helyett a teszt saját időbélyegeihez mérj (2026-11-22)
 
 Forrás: #504, CI `E2E rész (5)` (a 2. vak kör L1 tesztje: helyben zöld, Linux CI-n háromszor bukott).
 
