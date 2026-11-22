@@ -55,18 +55,12 @@ type GradableItem = {
   category?: LadderCategory;
 };
 
+/** A hiány jele a `focus` mezőben (a bank-validátor szerződése: hiányos mondatnál a célrész tartalmazza a hiányt). */
 const BLANK = /_{3,}/u;
-const TO_FOREIGN = /angolul|németül|franciául/u;
-/** Jelentést kérdező magyar utasítás: ilyenkor a kiemelt rész a célnyelvi (a válasz magyar). */
-const ASKS_MEANING = /[Mm]it jelent|jelentése|[Mm]it kérdez|[Mm]ire\s|magyarul|[Mm]it kér|[Mm]it kell|[Mm]i a „|[Mm]ik az/u;
-/** Csak a magyarban előforduló betűk (az angol / német / francia írás nem használja őket). */
-const HUNGARIAN_ONLY = /[íóúőűÍÓÚŐŰ]/gu;
-/** Gyakori magyar funkciószavak (önálló szóként; az idegen nyelvben is élő „a”, „is”, „ne” nincs köztük). */
-const HUNGARIAN_WORDS = /(?:^|[\s„(])(?:az|egy|és|nem|van|vagy|hogy|ez|meg|vagyok)(?=$|[\s,.!?”)])/gu;
 const SENTENCE_WORDS = 5;
 
 /**
- * Nyelvenkénti névelő (O1, vak kör 1 L3): a francia elidált `l'` / `l’` szóköz nélkül áll. Kisbetűsített szövegen fut.
+ * Nyelvenkénti névelő (vak kör 1 L3): a francia elidált `l'` / `l’` szóköz nélkül áll. Kisbetűsített szövegen fut.
  * Nyelvenként külön, hogy egy másik nyelv névelőjének látszó szó (az angol „to die” → „die”) ne vágódjon tovább.
  */
 const ARTICLES: Record<WordLadderLanguage, RegExp> = {
@@ -76,101 +70,54 @@ const ARTICLES: Record<WordLadderLanguage, RegExp> = {
 };
 
 /**
- * A célnyelvi alak egyetlen normalizálása (O1): NFC, nyelvi környezettől FÜGGETLEN kisbetűsítés (`toLowerCase`, nem
- * `toLocaleLowerCase` — vak kör 1 L2: török alapértelmezésnél az „I” → „ı”), szélső írásjel és nyelvenkénti névelő le.
- * A pont, a szószám és a bankközi kulcs (`ladderTermKey`) is ebből számol.
+ * A mérce egyetlen normalizálása (terv 15.): NFC, nyelvi környezettől FÜGGETLEN kisbetűsítés (`toLowerCase`), minden
+ * szóköz (a nem törő is) egy szóközzé, a széli Unicode-írásjel és -szimbólum le (a zárójel kivételével), nyelvenkénti névelő le.
  */
 function normalizeTarget(term: string, lang: WordLadderLanguage): string {
   const lower = term.normalize("NFC").toLowerCase().replace(/\s+/gu, " ").trim();
-  // Széli írásjel és szimbólum (vak kör 2 L5): ellipszis „…” / „...”, tipográfiai idézőjel, vessző, pont — a névelő előtt és után is.
-  // A zárójel kivétel: a célnyelvi pontosítás („achieve (a goal)”) záró zárójele marad.
   const edge = (s: string) => s.replace(/^(?:(?![()])[\s\p{P}\p{S}])+|(?:(?![()])[\s\p{P}\p{S}])+$/gu, "");
   return edge(edge(lower).replace(ARTICLES[lang] ?? ARTICLES.en, ""));
 }
 
-/** Magyar súgó zárójelben („Sie (ő, lány) hat …”): csak-magyar betű vagy magyar funkciószó a zárójelen belül. */
-const isHungarianGloss = (inner: string) => /[íóúőűÍÓÚŐŰ]/u.test(inner) || new RegExp(HUNGARIAN_WORDS.source, "u").test(` ${inner} `);
+/** Szavak: a normalizált szöveg szóközzel elválasztott tagjai, amelyekben van betű vagy szám (az önálló írásjel nem szó — L3). */
+const wordsOf = (term: string, lang: WordLadderLanguage) =>
+  normalizeTarget(term, lang).split(" ").filter((w) => /[\p{L}\p{N}]/u.test(w));
 
-/**
- * A célrész-kinyerés közös szerződése (terv 14., O5) — a mérce bemenete MINDEN forrásfajtára:
- *  - hiányos mondat (kiemelésben, vagy kiemelés nélkül a promptban — szerverbank): a hiányt tartalmazó mondatrész a helyes
- *    válasszal kitöltve; a magyar utasítás (a hiány előtti utolsó „: ” / „? ” -ig) és a záró „(Magyarul: …)” fordítás nem része;
- *  - a magyar zárójeles súgó (`isHungarianGloss`) kimarad; a célnyelvi zárójeles pontosítás („(a goal)”) marad.
- * A megjelenített kiemelés ettől nem változik — ez csak a mérce bemenete.
- */
-function fillBlank(text: string, correct: string): string {
-  const at = text.search(BLANK);
-  // A magyar utasítás a hiány előtti utolsó „: ” vagy „? ” végéig tart („Melyik illik: …”, „Melyik illik a mondatba? …”).
-  const cut = Math.max(text.lastIndexOf(": ", at), text.lastIndexOf("? ", at));
-  const segment = (cut >= 0 ? text.slice(cut + 2) : text).replace(/\s*\((?:Magyarul|magyarul):[^)]*\)\s*$/u, "");
-  return segment.replace(BLANK, correct).trim();
-}
-
-const stripHungarianGlosses = (s: string) => {
-  let removed = false;
-  const out = s.replace(/\s*\(([^)]*)\)/gu, (whole, inner: string) => (isHungarianGloss(inner) ? ((removed = true), "") : whole));
-  return removed ? out.replace(/\s+/gu, " ").trim() : s;
-};
-
-/** Bankközi kulcs: azonos célnyelvi alak (névelő, kis- / nagybetű, szélső írásjel nélkül). */
+/** Bankközi kulcs: a normalizált alak. */
 export function ladderTermKey(term: string, lang: WordLadderLanguage): string {
   return normalizeTarget(term, lang);
 }
 
-/** Közös mondatfelismerő (O2, vak kör 1 L4): 5+ szóközzel elválasztott szó — a névelő-kezeléstől független. */
-export function isLadderSentence(term: string): boolean {
-  return term.trim().split(/\s+/u).filter(Boolean).length >= SENTENCE_WORDS;
+/** Közös mondatfelismerő: legalább 5 szó (önálló írásjel és névelő nélkül számolva). */
+export function isLadderSentence(term: string, lang: WordLadderLanguage): boolean {
+  return wordsOf(term, lang).length >= SENTENCE_WORDS;
 }
 
-/** Magyarság-pont: csak-magyar betű a kisbetűs szavakban (a zárójeles magyar magyarázat és a mondat belsejében álló tulajdonnév — „Győr” — nem számít) + funkciószavak. */
-const hungarianness = (s: string) => {
-  const plain = s.replace(/\([^)]*\)/gu, " ");
-  const lowerWords = plain.split(/\s+/u).filter((w, i) => w && (i === 0 || w[0] === w[0]!.toLowerCase()));
-  return (lowerWords.join(" ").match(HUNGARIAN_ONLY) ?? []).length + (plain.match(HUNGARIAN_WORDS) ?? []).length;
-};
-
 /**
- * A tétel célnyelvi része (amit a gyereknek tudnia kell), terv 4.1 / 13. (O2, vak kör 1 L5): hiányos mondatnál a kitöltött
- * mondat; „… angolul / németül / franciául” kérdésnél a helyes opció; egyébként a kiemelt rész és a helyes opció közül a
- * célnyelvi — a kevésbé magyar (csak-magyar betűk + magyar funkciószavak); egyenlőségnél a kiemelés, ha az utasítás
- * jelentést kérdez, különben a helyes opció. A kiemelés (megjelenítés) ettől nem változik.
+ * A mérce bemenete — CSAK STRUKTÚRÁLT MEZŐKBŐL (tulajdonosi döntés 2026-11-22, terv 15.): ha a tételnek van `focus` mezője,
+ * az (hiányos mondatnál a hiány a helyes válasszal kitöltve); különben a helyes válasz. A kérdés / utasítás szabad szövegét
+ * (`prompt`) a mérce NEM elemzi. Dokumentált korlát: ha a `focus` magyar (pl. „Hogy mondjuk angolul: olló?”), a magyar alakot
+ * méri; a `focus` zárójeles magyar súgója a pont része.
  */
-export function ladderDifficultyInput(item: GradableItem): LadderDifficultyInput {
+export function ladderDifficultyInput(item: GradableItem, lang: WordLadderLanguage): LadderDifficultyInput {
   const correct = item.options[item.correctIndex] ?? "";
   const focus = item.focus?.trim() ? item.focus : undefined;
-  let term: string;
-  let sentence: boolean;
-  if (focus && BLANK.test(focus)) {
-    term = fillBlank(focus, correct);
-    sentence = true;
-  } else if (!focus && BLANK.test(item.prompt)) {
-    // Kiemelés nélküli mondatkiegészítés (szerverbank, vak kör 2 L1): a mondat a promptból.
-    term = fillBlank(item.prompt, correct);
-    sentence = true;
-  } else {
-    let useFocus = false;
-    if (focus && !TO_FOREIGN.test(item.prompt)) {
-      const hf = hungarianness(focus);
-      const hc = hungarianness(correct);
-      useFocus = hf === hc ? ASKS_MEANING.test(item.prompt.replace(focus, "")) : hf < hc;
-    }
-    term = useFocus && focus ? focus : correct;
-    sentence = isLadderSentence(stripHungarianGlosses(term));
-  }
-  term = stripHungarianGlosses(term);
+  const blank = focus !== undefined && BLANK.test(focus);
+  const term = focus === undefined ? correct : blank ? focus.replace(BLANK, correct) : focus;
+  const sentence = blank || isLadderSentence(term, lang);
   return item.category ? { term, sentence, category: item.category } : { term, sentence };
 }
 
 /** Nehézségi pont (terv 4.1): normált betűszám + plusz szótagok + plusz szavak + mondat + kategória. */
 export function ladderDifficultyScore(input: LadderDifficultyInput, lang: WordLadderLanguage): number {
-  const text = normalizeTarget(input.term, lang);
+  const words = wordsOf(input.term, lang);
+  const text = words.join(" ");
   const letters = (text.match(/\p{L}/gu) ?? []).length;
-  const words = text.split(/[^\p{L}]+/u).filter(Boolean);
-  const syllables = words.reduce((n, w) => n + Math.max(1, (w.match(/[aeiouyäöüéèêëàâîïôûùœæ]+/gu) ?? []).length), 0);
-  const spaced = Math.max(1, text.split(/\s+/u).filter(Boolean).length);
+  const parts = text.split(/[^\p{L}]+/u).filter(Boolean);
+  const syllables = parts.reduce((n, w) => n + Math.max(1, (w.match(/[aeiouyäöüéèêëàâîïôûùœæ]+/gu) ?? []).length), 0);
   const raw = letters / (LADDER_LETTER_FACTOR[lang] ?? 1)
-    + 2 * Math.max(0, syllables - words.length)
-    + 3 * (spaced - 1)
+    + 2 * Math.max(0, syllables - parts.length)
+    + 3 * (Math.max(1, words.length) - 1)
     + (input.sentence ? 6 : 0)
     + (input.category ? LADDER_CATEGORY_WEIGHT[input.category] ?? 0 : 0);
   return Math.round(raw * 10) / 10;
@@ -187,54 +134,54 @@ export function ladderStepForScore(score: number, declaredTier: number): number 
   return tier * 3 + sub;
 }
 
-/** Bankközi szintkorlát: célnyelvi kulcs → a legmagasabb bank-szint, amelyen az alak bármelyik bankban szerepel. */
-export type LadderTermFloors = ReadonlyMap<string, number>;
-
+declare const FULL_BANKS: unique symbol;
 /**
- * O2 / vak kör 1 L1: azonos célnyelvi alak a kézi és a szóbankban azonos szintről induljon — a kisebb besorolás emelkedik,
- * lefelé soha. Csak egyes szó / kifejezés számít (mondat nem: a mondat a saját feladata).
+ * Bankközi szintkorlát (terv 15.): normalizált EGYES SZÓ → a legmagasabb bank-szint, amelyen a kézi bank HELYES VÁLASZAként
+ * vagy a szóbank `term`-jeként szerepel. Csak a `buildLadderTermFloors` állíthatja elő (márkázott típus), és az csak a TELJES,
+ * szűretlen bankokat fogadja — a futás szűrt készletéből nem építhető (vak kör 3 L4).
  */
-export function ladderTermFloors(sources: readonly { term: string; tier: number }[], lang: WordLadderLanguage): Map<string, number> {
+export type LadderTermFloors = ReadonlyMap<string, number> & { readonly [FULL_BANKS]: true };
+
+/** A korlát forrása: a teljes kézi bank (helyes válasz + szint) és a teljes szóbank (`id` → szint, `term`). */
+export function buildLadderTermFloors(
+  banks: { manual: readonly { options: readonly string[]; correctIndex: number; tier: number }[]; vocab: readonly { id: string; term: string }[] },
+  lang: WordLadderLanguage,
+): LadderTermFloors {
   const floors = new Map<string, number>();
-  for (const { term, tier } of sources) {
-    if (isLadderSentence(term) || BLANK.test(term)) continue;
-    const key = normalizeTarget(term, lang);
-    if (!key) continue;
-    floors.set(key, Math.max(floors.get(key) ?? 0, clampTier(tier)));
-  }
-  return floors;
+  const add = (term: string, tier: number) => {
+    const words = wordsOf(term, lang);
+    if (words.length !== 1) return; // mondat / kifejezés soha nem korlátforrás (vak kör 3 L5)
+    floors.set(words[0]!, Math.max(floors.get(words[0]!) ?? 0, clampTier(tier)));
+  };
+  for (const q of banks.manual) add(q.options[q.correctIndex] ?? "", q.tier);
+  for (const e of banks.vocab) if (/^[a-z]{2}[0-4]-/u.test(e.id)) add(e.term, Number(e.id[2]));
+  return floors as unknown as LadderTermFloors;
 }
 
-/** Kézi (vagy kérdés-alakú) tételek forrásai a bankközi korláthoz: a célrész és a bank-szint. */
-export function ladderFloorSources<T extends GradableItem & { tier: number }>(items: readonly T[]): { term: string; tier: number }[] {
-  return items.map((q) => ({ term: ladderDifficultyInput(q).term, tier: q.tier }));
+/** A tétel korlát-kulcsa: a helyes válasz, ha egyetlen szó (kézi bank); a szóbanknál a `term`. */
+function floorOf(floors: LadderTermFloors, term: string, lang: WordLadderLanguage): number {
+  const words = wordsOf(term, lang);
+  return words.length === 1 ? floors.get(words[0]!) ?? 0 : 0;
 }
 
-/** Szóbank-bejegyzések forrásai (a szint az azonosítóból: `<nyelv><szint>-…`, így a lap a `{ id, term }` párból is építheti). */
-export function vocabFloorSources(entries: readonly { id: string; term: string }[]): { term: string; tier: number }[] {
-  return entries.flatMap((e) => (/^[a-z]{2}[0-4]-/u.test(e.id) ? [{ term: e.term, tier: Number(e.id[2]) }] : []));
-}
-
-const floorFor = (floors: LadderTermFloors | undefined, term: string, lang: WordLadderLanguage) =>
-  floors?.get(normalizeTarget(term, lang)) ?? 0;
-
-/** Egy Szólétra-tétel fokozata (kézi felülírás elsőbbséggel; bankközi korláttal, ha meg van adva). */
-export function ladderItemStep(item: GradableItem, lang: WordLadderLanguage, declaredTier: number, floors?: LadderTermFloors): number {
+/** Egy Szólétra-tétel fokozata (kézi felülírás elsőbbséggel; a bankközi korlát a helyes válaszra). */
+export function ladderItemStep(item: GradableItem, lang: WordLadderLanguage, declaredTier: number, floors: LadderTermFloors): number {
   const override = item.id !== undefined ? LADDER_STEP_OVERRIDES[String(item.id)] : undefined;
   if (override !== undefined) return override;
-  const input = ladderDifficultyInput(item);
-  return ladderStepForScore(ladderDifficultyScore(input, lang), Math.max(declaredTier, floorFor(floors, input.term, lang)));
+  const floor = floorOf(floors, item.options[item.correctIndex] ?? "", lang);
+  return ladderStepForScore(ladderDifficultyScore(ladderDifficultyInput(item, lang), lang), Math.max(declaredTier, floor));
 }
 
 const vocabLang = (entry: VocabEntry): WordLadderLanguage => (entry.id.slice(0, 2) as WordLadderLanguage);
 
-/** Szóbank-bejegyzés pontja (a term, szóként vagy kifejezésként; a mondatfelismerő a kérdés-útéval közös). */
+/** Szóbank-bejegyzés pontja (a `term`, szóként vagy kifejezésként; ugyanaz a mondatfelismerő). */
 export function vocabEntryScore(entry: VocabEntry): number {
-  return ladderDifficultyScore({ term: entry.term, sentence: isLadderSentence(entry.term), category: entry.kind === "phrase" ? "phrase" : "word" }, vocabLang(entry));
+  const lang = vocabLang(entry);
+  return ladderDifficultyScore({ term: entry.term, sentence: isLadderSentence(entry.term, lang), category: entry.kind === "phrase" ? "phrase" : "word" }, lang);
 }
 
-export function vocabEntryStep(entry: VocabEntry, floors?: LadderTermFloors): number {
-  return ladderStepForScore(vocabEntryScore(entry), Math.max(entry.level, floorFor(floors, entry.term, vocabLang(entry))));
+export function vocabEntryStep(entry: VocabEntry, floors: LadderTermFloors): number {
+  return ladderStepForScore(vocabEntryScore(entry), Math.max(entry.level, floorOf(floors, entry.term, vocabLang(entry))));
 }
 
 /** Évfolyam-sávok (a `ladderBaseTier` határai). */
@@ -312,14 +259,13 @@ export function declaredTierOf(item: object, index: number): number {
 }
 
 /**
- * Szintlista (index = bank-szint) → 15 fokozat-vödör; a sorrend a vödrön belül megmarad. Bankközi korlát: a megadott
- * `floors`, különben a szintlista saját tételeiből épített (azonos alak a listán belül azonos szintről indul).
+ * Szintlista (index = bank-szint pótlásként) → 15 fokozat-vödör; a sorrend a vödrön belül megmarad. A bankközi korlát
+ * kötelező, és csak a teljes bankokból épülhet (`buildLadderTermFloors`).
  */
-export function ladderStepBuckets<T extends GradableItem & { tier?: unknown }>(tiers: readonly (readonly T[])[], lang: WordLadderLanguage, floors?: LadderTermFloors): T[][] {
-  const own = floors ?? ladderTermFloors(tiers.flatMap((tier, index) => tier.map((q) => ({ term: ladderDifficultyInput(q).term, tier: declaredTierOf(q, index) }))), lang);
+export function ladderStepBuckets<T extends GradableItem & { tier?: unknown }>(tiers: readonly (readonly T[])[], lang: WordLadderLanguage, floors: LadderTermFloors): T[][] {
   const buckets: T[][] = Array.from({ length: LADDER_STEP_COUNT }, () => []);
   tiers.forEach((tier, index) => {
-    for (const item of tier) buckets[ladderItemStep(item, lang, declaredTierOf(item, index), own)]!.push(item);
+    for (const item of tier) buckets[ladderItemStep(item, lang, declaredTierOf(item, index), floors)]!.push(item);
   });
   return buckets;
 }
@@ -331,7 +277,7 @@ export function windowLadderSteps<T>(buckets: readonly (readonly T[])[], grade: 
 }
 
 /** Az osztályozott bank egy évfolyamra: a tételek fokozat-vödrökben, a sávra vágva (bank-szint = `tier` mező). */
-export function gradedLadderBank<T extends GradableItem & { tier: number }>(items: readonly T[], lang: WordLadderLanguage, grade: number, floors?: LadderTermFloors): T[][] {
+export function gradedLadderBank<T extends GradableItem & { tier: number }>(items: readonly T[], lang: WordLadderLanguage, grade: number, floors: LadderTermFloors): T[][] {
   const tiers: T[][] = Array.from({ length: TIER_COUNT }, () => []);
   for (const item of items) tiers[clampTier(item.tier)]!.push(item);
   return windowLadderSteps(ladderStepBuckets(tiers, lang, floors), grade);
