@@ -202,3 +202,26 @@ A kör minden DB-művelete (írás, olvasás, árvasöprés) a session-szintű a
 - **Memória-kikapcsolási küszöb:** tulajdonosi jóváhagyás 2026-11-22 — „480 MB, mért első kör” (`docs/fejezet-kisfilmek-hasznalat.md`
   0. pont). Ez a kézi Render-küszöb; a kódbeli automatikus memóriaőr külön határ, változatlan: `CLIP_RSS_LIMIT_BYTES = 320 MiB`
   (`server/lesson-clips.ts`, Node RSS). Az élesítést (`LESSON_CLIPS_AUTO=on`) a tulajdonos végzi a Renderen.
+
+### Záró kör 2 (fbd403c1) — körönkénti megszakítási jel (tulajdonosi döntés 2026-11-22)
+
+- **L1 valódi (blokkoló)** — a zár elvesztésekor a worker elengedte a helyét, de a futó gyártást (szolgáltatói kérések, letöltés,
+  ffmpeg) nem szakította meg; a `current` vége „ended”-et adhatott futó átkódoló mellett. Javítás: minden kör saját `AbortController`-t
+  kap (`server/lesson-clips-signal.ts`, aszinkron kontextus); a kör végén / zárvesztéskor / körhibánál a jel megszakad, és a
+  `runClipRound` CSAK a kör minden ígéretének (szolgáltatói hívás, gyerekfolyamat) lezárulása után tér vissza — így a `current` és a
+  `shutdownLessonClips` „ended” csak aktív szolgáltatói munka nélkül teljesül. A szolgáltatói réteg egyetlen megállító jelet használ: a
+  globális leállítás és a kör jele együtt (`stopSignal`); az `abortClipTranscodes` csak a globális jelet bontja, az átkódolók ugyanerre
+  a jelre kapnak SIGKILL-t (nincs párhuzamos második mechanizmus).
+
+| Várakozási pont (`server/lesson-clips-providers.ts`) | Figyeli a kör jelét? | Igazoló teszt |
+|---|---|---|
+| minden szolgáltatói `fetch` (forgatókönyv, képkapu, kép, mozgókép-beküldés, hang, hangkapu) — `signal(ms)` | igen (időkorlát + `stopSignal`) | LW „körönkénti megszakítás: visszatartott modellválasz + PG `error`…” |
+| lekérdezési szünet, 429 utáni várakozás — `pause` | igen | LP, LR (globális jel); a kör jele ugyanazon a `stopSignal`-on |
+| lekérdezés és letöltés a védett úton — `safeProviderFetch(…, signal(ms))` | igen | LD, LW „I/O-leltár: az elakadt letöltési törzs…” |
+| letöltés → lemez — `pipeline(…, { signal: stopSignal() })` | igen | LW „kemény bájtkorlát…”, LD |
+| ffmpeg-sor kivétele | igen (megszakított körben nem indul átkódolás) | LS „… utána új nem indul” |
+| ffmpeg-gyerek | igen (`stopSignal` → SIGKILL) | LW „körönkénti megszakítás: visszatartott átkódoló + PG `error`…”, LS |
+| szolgáltatói hiba megszakított körben — `guarded` | igen (`ClipAbortError`, nem állókép / tartalék hang) | LW „… modellválasz …” |
+| a kör vége — `runClipRound` | a jel megszakítása után kivárja a kör ígéreteit | LW „… a kör csak a takarítás után zárul” (mindkét teszt) |
+
+- **L2** — jegy, változatlanul: a záró kör L2-je a K-KL-L5 jegyen.

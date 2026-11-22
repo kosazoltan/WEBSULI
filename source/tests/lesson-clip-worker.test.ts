@@ -14,6 +14,8 @@ import { CLIP_TMP_PREFIX, clipKeys, clipProviders, CLIP_RESPONSE_LIMITS, downloa
 import type { RawResponse } from "../server/studio/safe-fetch";
 import { Readable } from "node:stream";
 import { logger } from "../server/lib/logger";
+import { EventEmitter } from "node:events";
+import { exclusiveWithLock, type LockClient } from "../server/lesson-clips-lock";
 /** Webes válasz → a `safe-fetch` nyers válasza (a csonkolt szállításhoz). */
 const toRaw = (res: Response): RawResponse => ({ status: res.status, headers: Object.fromEntries(res.headers), body: (res.body as unknown as AsyncIterable<Uint8Array> | null) ?? (async function* () { /* üres törzs */ })(), destroy: () => { void res.body?.cancel().catch(() => undefined); } });
 /** Csonkolt szállítás: nyilvános címre old fel, és a (csonkolt) globális fetch-csel küld — valódi DNS és hálózat nélkül. */
@@ -730,4 +732,54 @@ test("letöltési napló: a törzsolvasás és a státusz hibája is rögzített
     logger.warn = realWarn;
   }
   assert.deepEqual(logged.map((line) => line.replace(/^.*a mozgókép letöltése nem sikerült: /, "")), ["DOWNLOAD_TOO_LARGE", "DOWNLOAD_HTTP_503", "DOWNLOAD_FAILED"]);
+});
+
+/** Zárkapcsolat-csonk: a PG `error` eseménye kiváltható; a feloldás azonnal sikerül. */
+function lockedStore(base: ClipStore) {
+  const client = Object.assign(new EventEmitter(), {
+    processID: 9,
+    query: async () => ({ rows: [{ ok: true }] }),
+    release: () => undefined,
+  }) as unknown as LockClient & EventEmitter;
+  return { client, store: { ...base, exclusive: (work) => exclusiveWithLock(async () => client, 42, 15_000, () => work()) } as ClipStore };
+}
+
+test("körönkénti megszakítás: visszatartott modellválasz + PG `error` — a függő kérés megszakad, nincs késői fizetős hívás, a kör csak a takarítás után zárul", async () => {
+  const realFetch = globalThis.fetch;
+  const events: string[] = [];
+  let calls = 0;
+  globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    calls++;
+    init?.signal?.addEventListener("abort", () => { events.push("modellkérés megszakítva"); reject(init.signal!.reason); }, { once: true });
+  })) as typeof fetch;
+  try {
+    const { client, store } = lockedStore(memoryStore([makeLesson("pub")]).store);
+    const round = runClipRound(store, clipProviders({ openRouter: "k" }, testTransport), "auto", OPTS).then(() => events.push("kör kész"), () => events.push("kör kész (hibával)"));
+    while (calls < 1) await new Promise((r) => setTimeout(r, 1));
+    client.emit("error", new Error("terminating connection due to administrator command"));
+    await round;
+    await new Promise((r) => setTimeout(r, 30));
+    assert.deepEqual(events, ["modellkérés megszakítva", "kör kész (hibával)"], "a kör a függő kérés lezárulása után ér véget");
+    assert.equal(calls, 1, "nincs késői fizetős hívás, nem indul új fejezet");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("körönkénti megszakítás: visszatartott átkódoló + PG `error` — az átkódoló SIGKILL-t kap, a kör csak a gyerek kilépése után zárul", async () => {
+  const killed: Array<NodeJS.Signals | undefined> = [];
+  const events: string[] = [];
+  let started = false;
+  const hanging: ExecLike = (_file, _args, _options, callback) => {
+    started = true;
+    return { kill: (signal) => { killed.push(signal); events.push("átkódoló leállt"); queueMicrotask(() => callback(new Error("killed"))); return true; } };
+  };
+  const deps = fakeDeps({ video: () => downloadAndShrink(async () => new Response(new Uint8Array([1])), "ffmpeg", 90_000, { exec: hanging, rss: () => 0 }) });
+  const { client, store } = lockedStore(memoryStore([makeLesson("pub")]).store);
+  const round = runClipRound(store, deps, "auto", OPTS).then(() => events.push("kör kész"), () => events.push("kör kész (hibával)"));
+  while (!started) await new Promise((r) => setTimeout(r, 1));
+  client.emit("error", new Error("server closed the connection unexpectedly"));
+  await round;
+  assert.deepEqual(killed, ["SIGKILL"], "az átkódoló megkapja a megszakítást");
+  assert.deepEqual(events, ["átkódoló leállt", "kör kész (hibával)"]);
 });

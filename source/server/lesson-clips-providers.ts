@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { logger } from "./lib/logger";
+import { currentClipRoundSignal } from "./lesson-clips-signal";
 import { openPublicResponse, type AddressLookup, type RawRequest, type RawResponse } from "./studio/safe-fetch";
 import { CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, ClipAbortError, type ClipDeps } from "./lesson-clips";
 
@@ -191,15 +192,21 @@ export type ExecLike = (file: string, args: string[], options: { timeout: number
 const realExec: ExecLike = (file, args, options, callback) => execFile(file, args, options, (error) => callback(error));
 /** A leállítás jele: minden szolgáltatói kérés és várakozás ezt is figyeli (2. vak kör L2). */
 const shutdown = new AbortController();
-/** Időkorlát + leállítás együtt. */
-const signal = (ms: number) => AbortSignal.any([AbortSignal.timeout(ms), shutdown.signal]);
-/** Várakozás, amely leállításkor azonnal `ClipAbortError`-ral megszakad. */
+/**
+ * A megállító jel: a globális leállítás ÉS az aktuális kör jele (zárvesztés / körhiba / leállítás) együtt — minden szolgáltatói kérés,
+ * várakozás, letöltés és átkódoló ezt figyeli (körönkénti megszakítási jel, 2026-11-22).
+ */
+const stopSignal = (): AbortSignal => { const round = currentClipRoundSignal(); return round ? AbortSignal.any([shutdown.signal, round]) : shutdown.signal; };
+/** Időkorlát + megállító jel együtt. */
+const signal = (ms: number) => AbortSignal.any([AbortSignal.timeout(ms), stopSignal()]);
+/** Várakozás, amely a megállító jelre azonnal `ClipAbortError`-ral megszakad. */
 function pause(ms: number): Promise<void> {
+  const stop = stopSignal();
   return new Promise((resolve, reject) => {
-    if (shutdown.signal.aborted) { reject(new ClipAbortError("a szerver leáll")); return; }
-    const onAbort = () => { clearTimeout(timer); reject(new ClipAbortError("a szerver leáll")); };
-    const timer = setTimeout(() => { shutdown.signal.removeEventListener("abort", onAbort); resolve(); }, ms);
-    shutdown.signal.addEventListener("abort", onAbort, { once: true });
+    if (stop.aborted) { reject(new ClipAbortError("a kör megszakadt")); return; }
+    const onAbort = () => { clearTimeout(timer); reject(new ClipAbortError("a kör megszakadt")); };
+    const timer = setTimeout(() => { stop.removeEventListener("abort", onAbort); resolve(); }, ms);
+    stop.addEventListener("abort", onAbort, { once: true });
   });
 }
 /** A futó átkódolások leállítója (a szerver leállításakor; vak kör L5). */
@@ -207,9 +214,8 @@ const activeTranscodes = new Set<() => void>();
 /** Leállításkor: minden futó átkódolást SIGKILL-lel leállít; a jelenetük `ClipAbortError`-ral (nem állóképesként) zárul. */
 export function abortClipTranscodes(): number {
   shuttingDown = true;
-  shutdown.abort();
   const n = activeTranscodes.size;
-  for (const abort of [...activeTranscodes]) abort();
+  shutdown.abort(); // a futó átkódolók a megállító jelre SIGKILL-t kapnak (egy forrás)
   return n;
 }
 /**
@@ -288,11 +294,12 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
       await res.body?.cancel().catch(() => undefined);
       throw new DownloadError(res.ok && res.body ? "DOWNLOAD_TOO_LARGE" : `DOWNLOAD_HTTP_${res.status}`);
     }
-    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), byteLimit(rawMax), createWriteStream(input), { signal: shutdown.signal });
+    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), byteLimit(rawMax), createWriteStream(input), { signal: stopSignal() });
     stage = "átkódolás";
     // A sor a beolvasást is fogja: a következő átkódolás csak a kimenet beolvasása után indul (vak kör L4).
     return await ffmpegQueue(async () => {
-      if (shuttingDown) throw new ClipAbortError("a szerver leáll");
+      const stop = stopSignal();
+      if (shuttingDown || stop.aborted) throw new ClipAbortError("a kör megszakadt");
       // Újramérés a sorból kivételkor: a fejezet indulása óta nőhetett a memória (vak kör L3).
       const used = rss();
       if (used > CLIP_RSS_LIMIT_BYTES) throw new Error(`memóriaőr: a folyamat memóriája ${Math.round(used / 1048576)} MB, az átkódolás kimarad`);
@@ -302,12 +309,14 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
         let abort = () => undefined as void;
         const child = exec(ffmpeg, FFMPEG_ARGS(input, output), { timeout: timeoutMs, killSignal: "SIGKILL" }, (error) => {
           activeTranscodes.delete(abort);
-          if (aborted) reject(new ClipAbortError("a szerver leáll"));
+          stop.removeEventListener("abort", abort);
+          if (aborted) reject(new ClipAbortError("a kör megszakadt"));
           else if (error) reject(error);
           else resolve();
         });
-        abort = () => { aborted = true; child.kill("SIGKILL"); };
+        abort = () => { if (aborted) return; aborted = true; child.kill("SIGKILL"); };
         activeTranscodes.add(abort);
+        stop.addEventListener("abort", abort, { once: true });
       });
       const { size } = await stat(output);
       if (size <= 0 || size > CLIP_VIDEO_MAX_BYTES) throw new Error(`az átkódolt klip mérete ${size} bájt (határ: ${CLIP_VIDEO_MAX_BYTES})`);
@@ -315,7 +324,7 @@ export async function downloadAndShrink(download: () => Promise<Response>, ffmpe
     });
   } catch (error) {
     if (error instanceof ClipAbortError) throw error;
-    if (shutdown.signal.aborted) throw new ClipAbortError("a szerver leáll");
+    if (stopSignal().aborted) throw new ClipAbortError("a kör megszakadt");
     const missing = stage === "átkódolás" && (error as NodeJS.ErrnoException)?.code === "ENOENT";
     const detail = error instanceof Error ? error.message.slice(0, 160) : String(error);
     // A letöltés hibája csak rögzített kóddal naplózódik (a nyers üzenet URL-t / query-t is tartalmazhat — 6. vak kör L4, 1. javító kör L3).
@@ -438,8 +447,8 @@ export function clipProviders(keys: ClipKeys, transport: ProviderTransport = {})
   // Leállításkor (vagy utána) minden szolgáltatói hiba megszakításként jelez — így a fejezet nem kap hibás sort, és nem kerül be
   // hiányos (pl. tartalék hangos) kisfilmként (2. vak kör L2).
   const guarded = <A extends unknown[], R>(fn: (...args: A) => Promise<R>) => async (...args: A): Promise<R> => {
-    if (shutdown.signal.aborted) throw new ClipAbortError("a szerver leáll");
-    try { return await fn(...args); } catch (error) { if (shutdown.signal.aborted && !(error instanceof ClipAbortError)) throw new ClipAbortError("a szerver leáll"); throw error; }
+    if (stopSignal().aborted) throw new ClipAbortError("a kör megszakadt");
+    try { return await fn(...args); } catch (error) { if (stopSignal().aborted && !(error instanceof ClipAbortError)) throw new ClipAbortError("a kör megszakadt"); throw error; }
   };
   deps.chat = guarded(deps.chat); deps.image = guarded(deps.image); deps.check = guarded(deps.check); deps.still = guarded(deps.still);
   if (deps.video) deps.video = guarded(deps.video);

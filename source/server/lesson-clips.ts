@@ -7,6 +7,7 @@ import { CLIP_BAND_STYLE, clipBandFor, clipImagePrompt, type ClipBandStyle } fro
 import type { DesignThemeId } from "../shared/lesson-design";
 import { spokenHu } from "../shared/hu-numbers";
 import { logger } from "./lib/logger";
+import { runWithClipRoundSignal } from "./lesson-clips-signal";
 import type { ClipMediaKind } from "./lesson-clip-media";
 
 /**
@@ -356,7 +357,12 @@ export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipM
   if (overMemory(rss(), "a kör")) return null;
   // A kör minden DB-művelete a zárat tartó kapcsolaton fut (`scoped`): a zár eldobásakor a Postgres a nyitott tranzakciót
   // visszagörgeti — nincs „írás a zár után” (tulajdonosi döntés 2026-11-22: szűkítés + DB-oldali védelem).
-  return store.exclusive(async (scoped) => {
+  // Körönkénti megszakítási jel (2026-11-22): a zár elvesztése, a leállítás vagy bármely körhiba után a kör jele megszakítja a még futó
+  // szolgáltatói hívásokat, letöltést és átkódolót, és a kör CSAK azok lezárulása után tér vissza — új kör nem fedheti át a régit.
+  const round = new AbortController();
+  let body: Promise<ClipRoundReport> | undefined;
+  try {
+  return await store.exclusive((scoped) => (body = runWithClipRoundSignal(round.signal, async () => {
     store = scoped ?? store;
     const report: ClipRoundReport = { made: 0, failed: 0, lessons: 0, videos: 0, stoppedByBudget: false, stoppedByMemory: false };
     let stopped = false;
@@ -408,7 +414,11 @@ export async function runClipRound(store: ClipStore, deps: ClipDeps, mode: ClipM
       if (report.stoppedByMemory || stopped) break;
     }
     return report;
-  });
+  })));
+  } finally {
+    round.abort(new ClipAbortError("a kör véget ért vagy megszakadt"));
+    await (body as Promise<unknown> | undefined)?.catch(() => undefined);
+  }
 }
 
 const START_DELAY_MS = 90_000, INTERVAL_MS = 3 * 60_000;
