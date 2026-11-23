@@ -151,12 +151,32 @@ async function callModelOnce(url, model, prompt) {
     signal: AbortSignal.timeout(CALL_TIMEOUT_MS), // elakadt Ollama / GPU nem tarthatja fel végtelenül a kaput (PR #541 Sourcery)
     headers: { 'content-type': 'application/json' },
     // num_predict: a 9B modell egy-egy darabon ismétlő hurokba eshet (2026-11-23: AdventHomeCard.tsx → 300 s fölött a Node fetch
-    // fejléc-időkorlátja „fetch failed”); 1500 token bőven elég ~10 lelethez, és a hívás korlátos idejű marad.
-    body: JSON.stringify({ model, stream: false, think: false, format: 'json', options: { num_ctx: 32768, temperature: 0, num_predict: 1500 }, messages: [{ role: 'user', content: prompt }] }),
+    // fejléc-időkorlátja „fetch failed”); 1500 token bőven elég ~10 lelethez, és a hívás korlátos idejű marad. A repeat_penalty a
+    // lelet-szövegen belüli ismétlő hurkot töri meg (2026-11-23, PR-C AdventCalendar.tsx: 1500 tokenes, lezáratlan „issue”).
+    body: JSON.stringify({ model, stream: false, think: false, format: 'json', options: { num_ctx: 32768, temperature: 0, num_predict: 1500, repeat_penalty: 1.15, repeat_last_n: 256, seed: 42 }, messages: [{ role: 'user', content: prompt }] }),
   });
   if (r.status === 404) throw new ModelUnavailable(`a modell nem érhető el: ${model} (ollama HTTP 404)`);
   if (!r.ok) throw new Error(`ollama HTTP ${r.status}`);
   return (await r.json()).message?.content ?? '';
+}
+
+/** Egy darab ellenőrzése: 2 próbálkozás; ha a válasz így is értelmezhetetlen (a 9B modell nagy darabon ismétlő hurokba esik és a
+ * korlát levágja), a darab hunk-határon felezve, legfeljebb 2 szintig (2026-11-23, PR-C: AdventCalendar.tsx). */
+async function reviewChunk(url, model, chunk, depth) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const parsed = parseFindings(await callModel(url, model, buildPrompt(chunk)), chunk.file);
+    if (parsed !== null) return parsed;
+  }
+  if (depth >= 2 || chunk.text.length < 4000) return null;
+  const halves = splitDiff(chunk.text, Math.ceil(chunk.text.length / 2) + 200);
+  if (halves.length < 2) return null;
+  const all = [];
+  for (const h of halves) {
+    const r = await reviewChunk(url, model, h, depth + 1);
+    if (r === null) return null;
+    all.push(...r);
+  }
+  return all;
 }
 
 async function main() {
@@ -188,9 +208,8 @@ async function main() {
   const findings = [];
   for (const [i, c] of chunks.entries()) {
     process.stdout.write(`[local-review] ${i + 1}/${chunks.length} ${c.file}\n`);
-    let parsed = null;
-    for (let attempt = 1; attempt <= 2 && parsed === null; attempt++) parsed = parseFindings(await callModel(url, model, buildPrompt(c)), c.file);
-    // Kétszer értelmezhetetlen válasz → nincs bizonyíték (a sikertelen ellenőrzés nem lehet IGEN; PR #541 P1).
+    const parsed = await reviewChunk(url, model, c, 0);
+    // Felezés után is értelmezhetetlen válasz → nincs bizonyíték (a sikertelen ellenőrzés nem lehet IGEN; PR #541 P1).
     if (parsed === null) { process.stderr.write(`[local-review] HIBA: értelmezhetetlen modellválasz (${c.file}) — nincs ítélet\n`); process.exit(1); }
     for (const f of parsed) findings.push({ ...f, id: findingId(f) });
   }
