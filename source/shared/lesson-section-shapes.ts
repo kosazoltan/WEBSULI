@@ -23,34 +23,57 @@ export const SECTION_SHAPES: readonly SectionShape[] = [
 
 const byId = new Map(SECTION_SHAPES.map((s) => [s.id, s]));
 
+/** A fejezet VÉGLEGES blokksora: a lecke záró fejezete recap-pal zárul (a program hozzáfűzi). */
+export function shapeBlocks(id: string, closing: boolean): string[] {
+  const blocks: string[] = [...byId.get(id)!.blocks];
+  if (closing && blocks.at(-1) !== "recap") blocks.push("recap");
+  return blocks;
+}
+
 /**
- * Mintakiosztás: a típushoz illő minták közül a magból; szomszéd nem azonos; egy minta a fejezetek legfeljebb 40%-a (felfelé
- * kerekítve). Ütközésnél előbb a 40%-os, majd a szomszéd-szabály enged (rövid leckénél és szűk típusnál).
+ * Mintakiosztás a magból. Követelmény (1. vak kör L1, L2): a szabályokat a szerzőnek átadott VÉGLEGES blokksorokon mérjük (a záró
+ * `recap` hozzáfűzése után a `donteshelyzet` sora az `alap` soráéval azonos) — szomszédos fejezet nem kap azonos sort, és egy sor (meg
+ * egy mintaazonosító) a fejezetek legfeljebb 40%-a (felfelé kerekítve); legalább egy fejezet megmutató (animate / try). Ha van a
+ * szabályoknak megfelelő kiosztás, a program megtalálja: determinisztikus visszalépéses keresés, fejezetenként a magból kevert
+ * jelöltsorrenddel (a mohó választás sarokba szorulhatott). Csak ha nincs ilyen kiosztás (rövid lecke, szűk típus), enged előbb a
+ * 40%-os, majd a szomszéd-szabály. `closingLast`: az utolsó kiosztott fejezet a lecke záró fejezete-e (különleges záró fejezet előtt nem).
  */
-export function assignSectionShapes(kinds: readonly SectionKind[], seed: number): string[] {
+export function assignSectionShapes(kinds: readonly SectionKind[], seed: number, closingLast = true): string[] {
+  const n = kinds.length;
+  if (!n) return [];
   const random = mulberry32(seed);
-  const cap = Math.ceil(0.4 * kinds.length);
-  const used = new Map<string, number>();
-  const out: string[] = [];
-  for (const kind of kinds) {
+  const cap = Math.ceil(0.4 * n);
+  const order = kinds.map((kind) => {
     const fitting = SECTION_SHAPES.filter((s) => kind === "any" || s.fits.includes(kind)).map((s) => s.id);
-    const prev = out.at(-1);
-    const strict = fitting.filter((id) => id !== prev && (used.get(id) ?? 0) < cap);
-    const noNeighbour = fitting.filter((id) => id !== prev);
-    const pool = strict.length ? strict : noNeighbour.length ? noNeighbour : fitting;
-    const pick = pool[Math.floor(random() * pool.length)];
-    out.push(pick);
-    used.set(pick, (used.get(pick) ?? 0) + 1);
-  }
-  // Az ívkapu lecke-szintű szabálya: legalább egy animate / try (`no_engagement_layer`). Ha egyik kiosztott minta sem ilyen (csak a
-  // `kerdesfelveto` az), az első fejezet egy illő, megmutató mintát kap — a szomszéd-szabály megtartásával, ha lehet.
-  if (out.length && !out.some(engaging)) {
-    const fitting = SECTION_SHAPES.filter((s) => (kinds[0] === "any" || s.fits.includes(kinds[0])) && engaging(s.id)).map((s) => s.id);
-    const pool = fitting.filter((id) => id !== out[1]);
-    const choice = (pool.length ? pool : fitting)[0];
-    if (choice) out[0] = choice;
-  }
-  return out;
+    for (let i = fitting.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [fitting[i], fitting[j]] = [fitting[j], fitting[i]];
+    }
+    return fitting;
+  });
+  const key = (id: string, i: number) => shapeBlocks(id, closingLast && i === n - 1).join(",");
+  const search = (useCap: boolean, useNeighbour: boolean): string[] | null => {
+    const out: string[] = [];
+    const keys: string[] = [];
+    const count = new Map<string, number>();
+    const bump = (k: string, d: number) => count.set(k, (count.get(k) ?? 0) + d);
+    let budget = 200_000; // 12 fejezet × 6 minta mellett bőven elég; a keresés így mindig véges
+    const step = (i: number): boolean => {
+      if (i === n) return out.some(engaging);
+      for (const id of order[i]) {
+        if (budget-- <= 0) return false;
+        const k = key(id, i);
+        if (useNeighbour && i > 0 && (keys[i - 1] === k || out[i - 1] === id)) continue;
+        if (useCap && ((count.get(`id:${id}`) ?? 0) >= cap || (count.get(k) ?? 0) >= cap)) continue;
+        out.push(id); keys.push(k); bump(`id:${id}`, 1); bump(k, 1);
+        if (step(i + 1)) return true;
+        out.pop(); keys.pop(); bump(`id:${id}`, -1); bump(k, -1);
+      }
+      return false;
+    };
+    return step(0) ? out : null;
+  };
+  return search(true, true) ?? search(false, true) ?? search(false, false) ?? order.map((ids) => ids[0]);
 }
 
 const engaging = (id: string) => byId.get(id)!.blocks.some((b) => b === "animate" || b === "try");
@@ -59,26 +82,43 @@ export type TryKind = "dragSort" | "fillBlank" | "match";
 const TRY_ROTATION: readonly TryKind[] = ["dragSort", "fillBlank", "match"];
 const KIND_TRY: Record<Exclude<SectionKind, "any">, TryKind> = { procedure: "dragSort", comparison: "match", description: "fillBlank" };
 
-export type PlannedSection = { shape: string; blocks: PlannedKind[]; tryKind?: TryKind };
+export type PlannedSection = { shape: string; blocks: string[]; tryKind?: TryKind };
 
 /**
  * S6b (terv 13. szakasz): a minták kiosztása + `try`-minimum (a fejezetek legalább harmada, felfelé kerekítve) + `try`-fajta. Ha a minták
  * kevesebb `try`-t adnak, a magból választott fejezetekbe a `check` elé (ha nincs, a záró recap elé, különben a végére) kerül `try`.
- * Fajta: a típusból; `any`-nél a magból, az előző `try` fajtáját kerülve.
+ * Fajta: a típusból; `any`-nél a magból, az előző `try` fajtáját kerülve. A `blocks` a fejezet VÉGLEGES sora (a záró recap-pal együtt).
+ * Az S6a követelménye a `try` beszúrása UTÁN is áll: a pótlás olyan fejezetbe kerül, ahol a végleges sor nem lesz azonos a szomszédjával,
+ * és nem lépi túl a 40%-ot — csak ha nincs ilyen fejezet, enged a szabály (a `try`-minimum az erősebb).
  */
-export function planSections(kinds: readonly SectionKind[], seed: number): PlannedSection[] {
-  const ids = assignSectionShapes(kinds, seed);
+export function planSections(kinds: readonly SectionKind[], seed: number, closingLast = true): PlannedSection[] {
+  const n = kinds.length;
+  const ids = assignSectionShapes(kinds, seed, closingLast);
   const random = mulberry32(seedFrom(`try\u0001${seed}`));
-  const plan: PlannedSection[] = ids.map((id) => ({ shape: id, blocks: [...byId.get(id)!.blocks] }));
-  const need = Math.ceil(plan.length / 3);
-  const without = plan.map((p, i) => ({ p, i })).filter(({ p }) => !p.blocks.includes("try"));
-  let missing = need - (plan.length - without.length);
-  while (missing > 0 && without.length) {
-    const { p } = without.splice(Math.floor(random() * without.length), 1)[0];
-    const check = p.blocks.indexOf("check");
-    const at = check >= 0 ? check : p.blocks.at(-1) === "recap" ? p.blocks.length - 1 : p.blocks.length;
-    p.blocks.splice(at, 0, "try");
-    missing--;
+  const plan: PlannedSection[] = ids.map((id, i) => ({ shape: id, blocks: shapeBlocks(id, closingLast && i === n - 1) }));
+  const cap = Math.ceil(0.4 * n);
+  const withTry = (blocks: readonly string[]) => {
+    const out = [...blocks];
+    const check = out.indexOf("check");
+    out.splice(check >= 0 ? check : out.at(-1) === "recap" ? out.length - 1 : out.length, 0, "try");
+    return out;
+  };
+  const without = plan.map((_, i) => i).filter((i) => !plan[i].blocks.includes("try"));
+  for (let i = without.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [without[i], without[j]] = [without[j], without[i]];
+  }
+  let missing = Math.ceil(n / 3) - (n - without.length);
+  for (const strict of [true, false]) {
+    for (const i of [...without]) {
+      if (missing <= 0) break;
+      const row = withTry(plan[i].blocks).join(",");
+      const same = plan.filter((p, k) => k !== i && p.blocks.join(",") === row).length;
+      if (strict && (plan[i - 1]?.blocks.join(",") === row || plan[i + 1]?.blocks.join(",") === row || same + 1 > cap)) continue;
+      plan[i].blocks = row.split(",");
+      without.splice(without.indexOf(i), 1);
+      missing--;
+    }
   }
   let previous: TryKind | undefined;
   plan.forEach((p, i) => {
@@ -105,8 +145,8 @@ type OutlineLike = { sections: Array<{ heading: string; plannedBlocks: string[];
 
 /**
  * A terv átírása a kiosztott mintákra (BE kapcsoló: `seed` megadva). A különleges fejezetek (`sectionRoleOf`) változatlanok; az utolsó
- * fejezet recap-pal zárul; a `try`-t tartalmazó fejezet `tryKind`-ot kap (a szerző a vázlat JSON-jában látja). `seed` nélkül (KI)
- * ugyanaz az objektum jön vissza — csak a modell kéretlen `sectionKind` / `tryKind` mezője esik ki. A `sectionKind` sosem megy tovább.
+ * fejezet recap-pal zárul. `seed` nélkül (KI) ugyanaz az objektum jön vissza — csak a modell kéretlen `sectionKind` mezője esik ki.
+ * A `sectionKind` sosem megy tovább (a szerző a kiosztott `plannedBlocks`-ot kapja).
  */
 export function applySectionShapes<T extends OutlineLike>(outline: T, seed: number | undefined): T {
   const strip = <S extends T["sections"][number]>(s: S): S => {
@@ -119,34 +159,35 @@ export function applySectionShapes<T extends OutlineLike>(outline: T, seed: numb
   }
   const regular = outline.sections.map((s, i) => ({ i, s })).filter(({ s }) => sectionRoleOf(s.heading) === null);
   const kinds = regular.map(({ s }) => ((SECTION_KINDS as readonly unknown[]).includes(s.sectionKind) ? s.sectionKind as SectionKind : "any"));
-  const plan = planSections(kinds, seed);
-  const assigned = new Map(regular.map(({ i }, k) => [i, plan[k]]));
   const last = outline.sections.length - 1;
+  const plan = planSections(kinds, seed, regular.at(-1)?.i === last);
+  const assigned = new Map(regular.map(({ i }, k) => [i, plan[k]]));
   const sections = outline.sections.map((s, i) => {
     const planned = assigned.get(i);
     const base = strip(s);
-    if (planned === undefined) return base;
-    const blocks: string[] = [...planned.blocks];
-    if (i === last && blocks.at(-1) !== "recap") blocks.push("recap");
-    return { ...base, plannedBlocks: blocks, ...(planned.tryKind ? { tryKind: planned.tryKind } : {}) };
+    // 1. vak kör (L3): a különleges záró fejezet változatlan, EGY kivétellel — ha a modell terve nem recap-pal zárja a leckét, a program
+    // hozzáfűzi (az ívkapu `no_recap` szabálya; ez az egyetlen automatikus pótlás a különleges fejezeten).
+    if (planned === undefined) return i === last && base.plannedBlocks.at(-1) !== "recap" ? { ...base, plannedBlocks: [...base.plannedBlocks, "recap"] } : base;
+    return { ...base, plannedBlocks: [...planned.blocks], ...(planned.tryKind ? { tryKind: planned.tryKind } : {}) };
   });
   return { ...outline, sections };
 }
 
 /**
- * A kiosztás modellhívás nélküli szimulációja (TGM-terv E19 / V16, V20): minden fejezet `any`, a fejezetszámok a megadott eloszlásból.
+ * A kiosztás modellhívás nélküli szimulációja (TGM-terv E19 / V16): minden fejezet `any`, a fejezetszámok a megadott eloszlásból.
  * Kimenet: a leggyakoribb fejezetminta (blokksor) aránya és két véletlen fejezet azonos mintájának valószínűsége (Σ p²).
  */
 export function shapeSimulation(sectionCounts: readonly number[], lessons: number): { topShare: number; samePatternProbability: number; sections: number } {
+  // 1. vak kör (L5): üres mintán nincs mérés — ne adjon „megfelelt” eredményt.
+  if (!sectionCounts.length || sectionCounts.some((n) => !Number.isInteger(n) || n < 1)) throw new Error("A szimulációhoz legalább egy érvényes (pozitív egész) fejezetszám kell.");
+  if (!Number.isInteger(lessons) || lessons < 1) throw new Error("A szimulációhoz pozitív egész leckeszám kell.");
   const counts = new Map<string, number>();
   let total = 0;
   for (let k = 0; k < lessons; k++) {
     const n = sectionCounts[k % sectionCounts.length];
     const plan = planSections(Array.from({ length: n }, () => "any" as const), seedFrom(`sim\u0001${k}`));
-    plan.forEach((p, i) => {
-      const blocks = [...p.blocks];
-      if (i === n - 1 && blocks.at(-1) !== "recap") blocks.push("recap");
-      const key = blocks.join(",");
+    plan.forEach((p) => {
+      const key = p.blocks.join(",");
       counts.set(key, (counts.get(key) ?? 0) + 1);
       total++;
     });

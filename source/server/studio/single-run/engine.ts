@@ -769,7 +769,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       output = { ...output, openingForm: pick.id };
       setRunOpeningForm(pick);
     } else if (typeof output.openingForm === "string") {
-      const saved = openingFormById(output.openingForm);
+      const saved = openingFormById(output.openingForm, promptMap.classroom);
       if (saved) { assignedForm = saved.id; setRunOpeningForm(saved); }
     }
   }

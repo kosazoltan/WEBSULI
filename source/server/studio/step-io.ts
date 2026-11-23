@@ -371,7 +371,7 @@ function outlineShape(visual: boolean, inventory: boolean, sourceVisuals = false
   return `{ "sections": [{ ${withPoints} }], "misconceptions": [{ "conceptId": string, "text": string }]${visual ? ', "visual": { "world": string }' : ""}${sourceVisuals ? ', "skippedVisuals": [{ "id": string, "reason": string, "duplicateOf"?: string }]' : ""} }`;
 }
 /** S6a (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 12. szakasz): BE kapcsolónál a fogalom-fejezetek ívét a program osztja ki. */
-const VARIETY_ARC_PLANNING = "- Fogalomcsoportonként egy fejezet. Fejezetenként add meg a típusát (sectionKind): procedure = eljárás, lépések; description = leírás, tulajdonságok; comparison = összehasonlítás, két eset; any = egyéb. A fogalom-fejezetek blokksorrendjét (plannedBlocks) a program osztja ki a típusból egy változatos mintakészletből — te egy ívnek megfelelő javaslatot adsz.";
+const VARIETY_ARC_PLANNING = "- Fogalomcsoportonként egy fejezet. Fejezetenként add meg a típusát (sectionKind): procedure = eljárás, lépések; description = leírás, tulajdonságok; comparison = összehasonlítás, két eset; any = egyéb. A fogalom-fejezetek blokksorrendjét (plannedBlocks) a program osztja ki a típusból egy változatos mintakészletből — te egy ívnek megfelelő javaslatot adsz. Ez a pont felülírja a tervkészítő szerepleírás rögzített fejezetívét és JSON-alakját: a fejezet objektuma a `sectionKind` mezőt is tartalmazza.";
 const VARIETY_ARC_ORDER = "A fogalom-fejezetek végleges plannedBlocks sorrendjét a program osztja ki (minden minta megfelel a fenti ívnek); a különleges záró fejezetekét te adod meg a fenti minta szerint. A vázlat sorrendje lesz a lecke sorrendje.";
 
 export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner?: OwnerContext): string {

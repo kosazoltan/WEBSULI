@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SECTION_KINDS, SECTION_SHAPES, applySectionShapes, assignSectionShapes, planSections, shapeSimulation, type SectionKind } from "../shared/lesson-section-shapes";
+import { SECTION_KINDS, SECTION_SHAPES, applySectionShapes, assignSectionShapes, planSections, shapeBlocks, shapeSimulation, type SectionKind } from "../shared/lesson-section-shapes";
 import { checkLessonArc } from "../shared/lesson-arc";
 import { SECTION_ROLE_HEADING } from "../shared/lesson-ui-text";
 import { seedFrom } from "../shared/seeded";
@@ -167,4 +167,95 @@ test("S6b-v2: a try-arány jelzése a futás állapotához kötött (szerkezeti 
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
   assert.ok(src.includes("if (varietyOn) {") && !src.includes("lessonVarietyEnabled()) {"), "a motor nem olvas környezetet a futás közben");
+});
+
+// --- 1. vak kör (L1–L3): a szabályok a szerzőnek átadott VÉGLEGES blokksorokon ---
+
+const finalRows = (kinds: readonly SectionKind[], seed: number, closingLast = true) =>
+  assignSectionShapes(kinds, seed, closingLast).map((id, i) => shapeBlocks(id, closingLast && i === kinds.length - 1).join(","));
+
+test("L1: ha van szabályos kiosztás, a program megtalálja — tíz összehasonlító fejezet a jelentett magon sem lépi túl a 40%-ot", () => {
+  const kinds = Array.from({ length: 10 }, () => "comparison" as const);
+  const ids = assignSectionShapes(kinds, 3379279618);
+  const counts = new Map<string, number>();
+  for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+  assert.ok(Math.max(...counts.values()) <= 4, `mintaszámok: ${JSON.stringify([...counts])}`);
+});
+
+test("L1 / L2: 3…12 fejezet × 200 mag × hat típusminta — a VÉGLEGES sorokban nincs azonos szomszéd, és egy sor ≤ 40% (felfelé kerekítve)", () => {
+  const patterns: Array<(i: number, s: number) => SectionKind> = [
+    () => "any", () => "comparison", () => "description", () => "procedure",
+    (i, s) => SECTION_KINDS[(i + s) % SECTION_KINDS.length], (i) => (i % 2 ? "comparison" : "description"),
+  ];
+  for (const [p, pattern] of patterns.entries()) {
+    for (let n = 3; n <= 12; n++) {
+      for (let s = 0; s < 200; s++) {
+        const kinds = Array.from({ length: n }, (_, i) => pattern(i, s));
+        for (const closingLast of [true, false]) {
+          const rows = finalRows(kinds, seedFrom(`r${s}`), closingLast);
+          for (let i = 1; i < n; i++) assert.notEqual(rows[i], rows[i - 1], `minta ${p}, ${n}/${s}, zárás ${closingLast}: azonos szomszédos sor (${i})`);
+          const counts = new Map<string, number>();
+          for (const row of rows) counts.set(row, (counts.get(row) ?? 0) + 1);
+          assert.ok(Math.max(...counts.values()) <= Math.ceil(0.4 * n), `minta ${p}, ${n}/${s}, zárás ${closingLast}: egy sor ${Math.max(...counts.values())} / ${n}`);
+        }
+      }
+    }
+  }
+});
+
+test("L2: a jelentett eset — négy „any” fejezetnél a záró recap nem olvaszt azonos sorrá két szomszédot, és a terv sorai is különböznek", () => {
+  const seed = seedFrom("00000000-0000-4000-8000-000000000030");
+  const shaped = applySectionShapes(outline(["A", "B", "C", "D"].map((heading) => ({ heading, plannedBlocks: ["explain", "example", "check"], sectionKind: "any" as const }))), seed);
+  const rows = shaped.sections.map((s) => s.plannedBlocks.join(","));
+  for (let i = 1; i < rows.length; i++) assert.notEqual(rows[i], rows[i - 1], `azonos szomszédos sor: ${rows[i]}`);
+  assert.ok(Math.max(...rows.map((r) => rows.filter((x) => x === r).length)) <= 2, `sorok: ${JSON.stringify(rows)}`);
+  assert.equal(shaped.sections.at(-1)!.plannedBlocks.at(-1), "recap");
+});
+
+test("L3: a különleges záró fejezet recap nélküli tervét a program recap-pal zárja; más különleges fejezet és a recap-os zárás változatlan", () => {
+  const seed = seedFrom("map-3");
+  const open = applySectionShapes(outline([
+    { heading: "A tört", plannedBlocks: ["explain", "example", "check"] },
+    { heading: SECTION_ROLE_HEADING.mistakes, plannedBlocks: ["explain", "example", "check"] },
+    { heading: SECTION_ROLE_HEADING.selfCheck, plannedBlocks: ["explain", "animate"] },
+  ]), seed);
+  assert.deepEqual(open.sections[1].plannedBlocks, ["explain", "example", "check"], "nem záró különleges fejezet változatlan");
+  assert.deepEqual(open.sections[2].plannedBlocks, ["explain", "animate", "recap"]);
+  const closed = applySectionShapes(outline([
+    { heading: "A tört", plannedBlocks: ["explain", "example", "check"] },
+    { heading: SECTION_ROLE_HEADING.selfCheck, plannedBlocks: ["explain", "animate", "recap"] },
+  ]), seed);
+  assert.deepEqual(closed.sections[1].plannedBlocks, ["explain", "animate", "recap"]);
+  // A fogalom-fejezet itt NEM a lecke zárása: nem kap pótolt recap-ot (a mintája szerinti sor marad).
+  // S6b (dokumentált spec-változás): a kiosztott sor a `planSections` kimenete (minta + try-minimum), záró recap nélkül.
+  const planned = planSections(["any"], seed, false)[0];
+  assert.deepEqual(closed.sections[0].plannedBlocks, planned.blocks);
+  assert.notEqual(planned.blocks.at(-1) === "recap" && !shapeBlocks(planned.shape, false).includes("recap"), true, "nincs pótolt recap");
+});
+
+test("L5: a szimuláció üres mintára hibát ad (nem „megfelelt”)", () => {
+  assert.throws(() => shapeSimulation([], 400), /fejezetszám/u);
+  assert.throws(() => shapeSimulation([3, 4], 0), /leckeszám/u);
+});
+
+test("S6b + S6a követelmény: a try-pótlás UTÁN is — a végleges sorokban nincs azonos szomszéd, egy sor ≤ 40%, és a try-minimum teljesül", () => {
+  const patterns: Array<(i: number, s: number) => SectionKind> = [
+    () => "any", () => "comparison", () => "description", () => "procedure", (i, s) => SECTION_KINDS[(i + s) % SECTION_KINDS.length],
+  ];
+  for (const [p, pattern] of patterns.entries()) {
+    for (let n = 3; n <= 12; n++) {
+      for (let s = 0; s < 200; s++) {
+        const kinds = Array.from({ length: n }, (_, i) => pattern(i, s));
+        for (const closingLast of [true, false]) {
+          const plan = planSections(kinds, seedFrom(`t${s}`), closingLast);
+          const rows = plan.map((x) => x.blocks.join(","));
+          assert.ok(plan.filter((x) => x.blocks.includes("try")).length >= Math.ceil(n / 3), `minta ${p}, ${n}/${s}: kevés try`);
+          for (let i = 1; i < n; i++) assert.notEqual(rows[i], rows[i - 1], `minta ${p}, ${n}/${s}, zárás ${closingLast}: azonos szomszédos sor (${i}): ${rows[i]}`);
+          const top = Math.max(...rows.map((r) => rows.filter((x) => x === r).length));
+          assert.ok(top <= Math.ceil(0.4 * n), `minta ${p}, ${n}/${s}, zárás ${closingLast}: egy sor ${top} / ${n}`);
+          if (closingLast) assert.equal(plan.at(-1)!.blocks.at(-1), "recap");
+        }
+      }
+    }
+  }
 });
