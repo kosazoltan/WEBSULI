@@ -37,7 +37,7 @@ export const ANIM_LABELS: Readonly<Record<string, string>> = {
   numberLine: "Számegyenes", fraction: "Törtmodell", timeline: "Idővonal", geometry: "Ábra", process: "Folyamat", map: "Térkép",
   wordBuilder: "Szóépítő", sentenceParts: "Mondatelemzés", triangleArea: "Kísérlet", decisionStory: "Döntéshelyzet", cycle: "Körforgás",
   labeledShape: "Feliratos ábra", barChart: "Diagram", venn: "Halmazábra", illustration: "Illusztráció", scene3d: "3D-modell",
-  table: "Táblázat", ruleBox: "Szabály", compareCards: "Hasonlítsd össze!",
+  table: "Táblázat", ruleBox: "Szabály", compareCards: "Hasonlítsd össze!", decisionTree: "Döntési fa", pictureCards: "Képes kártyák",
 };
 
 /**
@@ -57,8 +57,6 @@ export const SOURCE_VISUAL_TEXT = {
   /** Görgő táblánál: érintőképernyőn húzni kell, egérrel / billentyűvel görgetni (a megjelenítő a mutatóeszköz szerint választ). */
   scrollHintTouch: "Húzd oldalra a táblázatot",
   scrollHint: "A táblázat oldalra görgethető",
-  /** Elágazás-alapértelmezés a döntési fához (S2b használja). */
-  branchYes: "Igen", branchNo: "Nem",
 } as const;
 const ruleBoxTone = (params: unknown): RuleBoxTone => { const t = (params as { tone?: unknown } | null)?.tone; return t === "warning" || t === "tip" ? t : "rule"; };
 

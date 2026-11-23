@@ -280,3 +280,42 @@ for (const band of [{ classroom: 2, id: "explorer" }, { classroom: 4, id: "adven
     await page.screenshot({ path: `${SHOTS}/sav-${band.id}-360.png`, fullPage: true });
   });
 }
+
+// Spec docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md (S2b-1; V32): döntési fa és képes kártyák három nézetben.
+for (const viewport of [{ name: "allo-360", width: 360, height: 640 }, { name: "fekvo-844", width: 844, height: 390 }, { name: "asztali-1280", width: 1280, height: 800 }]) {
+  test(`döntési fa és képes kártyák — ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    const errors: string[] = []; page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/__lesson-runtime-probe?source-visuals=tree&classroom=6");
+    await page.locator('figure[data-anim="pictureCards"]').waitFor({ state: "visible", timeout: 30_000 });
+    await page.evaluate(() => document.fonts.ready);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    // A HM-alakú Igen / Nem fa: a két levél UGYANANNAK a szülőnek két gyereke (nem nyíllal összekötött sor).
+    const yesNo = page.locator('figure[data-anim="decisionTree"]').first();
+    const siblings = await yesNo.evaluate((fig) => {
+      const lists = [...fig.querySelectorAll("ul.sv-tree-children")];
+      return lists.map((ul) => [...ul.children].filter((c) => c.tagName === "LI").length);
+    });
+    expect(siblings[0]).toBe(2);
+    await expect(page.locator('figure[data-anim="decisionTree"]')).toHaveCount(3);
+    // Vak kör 1 (L1, L3): a kis fa vízszintes (széles nézetben), a beágyazott fák listák; a vízszintes összekötő vonal folytonos
+    // (a testvér-elemek között nincs rés).
+    expect(await page.locator('figure[data-anim="decisionTree"] .sv-tree').evaluateAll((trees) => trees.map((t) => t.className.replace("sv-tree ", "")))).toEqual(["sv-tree--wide", "sv-tree--list", "sv-tree--list"]);
+    if (viewport.width >= 640) {
+      const gaps = await yesNo.evaluate((fig) => { const items = [...fig.querySelectorAll<HTMLElement>(".sv-tree-children > .sv-tree-item")].map((i) => i.getBoundingClientRect()); return items.slice(1).map((r, i) => Math.round(r.left - items[i].right)); });
+      expect(gaps.every((g) => g <= 0), `a testvérágak között rés: ${gaps.join(", ")} px`).toBe(true);
+    }
+    await expect(page.locator('figure[data-anim="pictureCards"] .sv-pcard')).toHaveCount(8);
+    for (const fig of await page.locator('figure[data-anim="decisionTree"], figure[data-anim="pictureCards"]').all()) {
+      await fig.scrollIntoViewIfNeeded();
+      const box = await fig.boundingBox();
+      expect(box && box.x >= 0 && box.x + box.width <= viewport.width + 0.5).toBe(true);
+      // Szöveg nincs levágva a csomópontokban és a kártyákon.
+      const clipped = await fig.evaluate((f) => [...f.querySelectorAll<HTMLElement>(".sv-tree-node, .sv-tree-branch, .sv-tree-text, .sv-pcard-label, .sv-pcard-example")]
+        .filter((n) => n.scrollWidth > n.clientWidth + 1 || n.scrollHeight > n.clientHeight + 1).map((n) => n.textContent));
+      expect(clipped).toEqual([]);
+    }
+    await page.screenshot({ path: `${SHOTS}/fa-kartya-${viewport.name}.png`, fullPage: true });
+    expect(errors).toEqual([]);
+  });
+}
