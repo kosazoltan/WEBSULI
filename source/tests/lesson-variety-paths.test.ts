@@ -342,7 +342,11 @@ test("S6a V15 a motorban: BE — a mentett terv és a szerzői kérés a kioszto
   await runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ outline: typed, onAuthor: (text) => { request = text; } }), on, { lessonVariety: true }));
   const expected = applySectionShapes(typed, seedFrom("m1")).sections[0].plannedBlocks;
   assert.notDeepEqual(expected, original, "a próba valódi átírást mér");
-  assert.ok(SECTION_SHAPES.some((shape) => shape.fits.includes("procedure") && quoted([...shape.blocks, ...(shape.blocks.at(-1) === "recap" ? [] : ["recap"])]) === quoted(expected)), "a kiosztott minta a típushoz illik");
+  // S6b (dokumentált spec-változás): a kiosztott sor a `planSections` kimenete — a típushoz illő minta + a try-minimum beszúrása.
+  const { planSections } = await import("../shared/lesson-section-shapes");
+  const plannedShape = planSections(["procedure"], seedFrom("m1"))[0];
+  assert.ok(SECTION_SHAPES.some((shape) => shape.id === plannedShape.shape && shape.fits.includes("procedure")), "a kiosztott minta a típushoz illik");
+  assert.deepEqual(expected, plannedShape.blocks);
   assert.deepEqual(plannedOf(on).plannedBlocks, expected, "a mentett terv a kiosztott sor");
   assert.equal("sectionKind" in plannedOf(on), false, "a sectionKind nem megy tovább");
   assert.ok(request.includes(quoted(expected)), "a szerző a kiosztott sort kapja");
