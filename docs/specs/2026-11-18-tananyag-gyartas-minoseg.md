@@ -2,6 +2,7 @@
 
 > Dátum: 2026-11-18 · Szerző: ügynök (tényfeltárás + terv) · Állapot: JÓVÁHAGYVA — tulajdonosi döntések 2026-11-18 (9. szakasz); a D6 egyeztetés alatt
 > Módosítás 2026-11-18: az SK3 a tulajdonos kérdőíves döntéséhez igazítva (D7 — éles gyártásban a költségkeret túllépése csak jelez, nem állít meg; gyártás-stop kapcsoló nem épül).
+> Módosítás 2026-11-23: tulajdonosi döntések átvezetve — P-064 (D8: a néma próbakimondás megszűnése és az abszolút 80 MB-os hangtárplafon jóváhagyva) és P-065 (D9: az SK3 hatóköre — költség- és hibakorlátnál jelzés, vészleállítás csak a próbafutás 30 USD-os kemény keretén; SK3, E41, E42).
 > Végrehajtási utasítás: [`2026-11-18-tananyag-gyartas-minoseg-vegrehajtas.md`](2026-11-18-tananyag-gyartas-minoseg-vegrehajtas.md)
 > Ág: `claude/tananyag-gyartas-minoseg-8fa0b9` (terv); a szeletek saját ágon, saját PR-ban készülnek.
 > Jelölés: **TÉNY** = a kódból / mérésből ellenőrizve · **BECSLÉS** = számolt, nem mért · **UNVERIFIED** = nem ellenőrzött.
@@ -370,7 +371,7 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
   gyorsítótárazható; **cserélhető tároló réteg** (`TtsAudioStore` felület, adatbázisos megvalósítással) — későbbi átköltöztetésnél
   csak a megvalósítás cserélődik, a lecke és a kliens nem; **méretőr**: összméret-plafon (alapérték 40 MB a ~25 MB-os becsléshez),
   fájlonként 300 kB — túllépésnél az írás megtagadva, a gyártás megáll és jelez. Hiba / 404 esetén a kliens a böngészőhangra esik.
-  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** a méretőr KÉT kemény, írást megtagadó plafon együtt — hangverziónként 40 MB és a teljes
+  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; tulajdonos jóváhagyta 2026-11-23 — P-064, D8):** a méretőr KÉT kemény, írást megtagadó plafon együtt — hangverziónként 40 MB és a teljes
   táblára abszolút 80 MB (2 × 40 MB: egy hangcsere átmeneti kettős készlete fér bele, több nem). Írni csak a kódban rögzített aktuális
   hangverzióra (`TTS_VOICE_VERSION`) lehet; a régi verziók sorainak takarítása kifejezett, őrzött művelet a tároló felületén.
   **Spec-pontosítás 2026-11-18 (független review J1–J2):** elérhetőségi jegyzék — `GET /api/tts/lesson-audio/available?keys=…` (csak olvas; csak a 32 hexa jegyes
@@ -397,7 +398,7 @@ Ahol egy szelet a 400 soros irányelvet túllépné, alszeletekre bomlik (a / b 
     is eltolja — éppen a torzítás volt az eredeti panasz), tömörített bájtokat tart a memóriában dekódolt minták helyett, és a lecke
     CSP-jéhez (`default-src 'self'`, `blob:` / `data:` nélkül) nem kell hozzányúlni.
   - **A tartalék-út se várasson — a motorról csak VALÓDI koppintásból tanulunk** (spec-módosítás 2026-11-19, vak review B1–B3;
-    orkesztrátori döntés): kéretlen, nulla hangerejű próba-kimondás NINCS — semmi nem mond ki, nem áll a beszédsorba és nem szakít
+    orkesztrátori döntés; tulajdonos jóváhagyta 2026-11-23 — P-064, D8): kéretlen, nulla hangerejű próba-kimondás NINCS — semmi nem mond ki, nem áll a beszédsorba és nem szakít
     meg kimondást a gyerek kifejezett koppintása nélkül (a lecke „Felolvasás” gombját és a kisfilm narrációját a lejátszó nem
     zavarhatja). Pozitív bizonyíték: ha egy koppintásra a böngészőhang `start` eseménye megjön, az a hang a munkamenetre igazolt, a
     következő koppintásokra közvetlenül az szól. Amíg nincs igazolás, az első koppintásnál az időkorlátos lánc fut — néma motornál ez
@@ -472,6 +473,9 @@ ez a munka nem nyúl). Minden kapu kimenete gépi: `{ gate, ok, problems[], metr
   - *Körszám:* a meglévő plafonok maradnak, ahogy vannak (a mai állandók: 3 javító forduló állomásonként, 2 + 1 lektorkör, 3 + 1
     bankkísérlet). A szelet csak egy helyre gyűjti őket; az értékük és a megállás mai módja nem változik. Új, futásonkénti
     összesített javítókör-plafon és futásidő-plafon NEM készül.
+  - *Hatókör (tulajdonosi megerősítés P-065, 2026-11-23; D9):* a Stúdió költség- és hibakorlátai MINDENHOL jelzést adnak
+    (figyelmeztetés / riasztás: napló, `gateResults`, e-mail); vészleállítás KIZÁRÓLAG a fizetős próbafutás 30 USD-os kemény
+    költségkereténél van. Az SK3-ba nem kerül új megállító korlát sem az éles futásidőre, sem az összesített javítókörre.
   - *Éles gyártás — „Csak jelezzen”:* a token- / költségkeret túllépésekor a futás megy tovább, a program NEM állít meg. A
     túllépésről e-mail megy a tulajdonosnak: futásonként egyszer, amikor a futás számolt költsége átlépi a futásonkénti küszöböt,
     és naponta egyszer (Europe/Budapest naptári nap), amikor az aznapi futások összege átlépi a napi küszöböt. A levél a meglévő,
@@ -558,7 +562,7 @@ tud dönteni — a tartalmi forráshűség megítélése marad a lektornál):
   (kivétel) sem állítja meg a gyártást.
 - **Hangtár:** a plafon elérésekor az írás megtagadva, a gyártás megáll; azonos kulcs ismételt írása nem hiba (`exists`); hangverzió
   cseréje új kulcsokat ad, a régi sorok maradnak (törlésük külön, tulajdonosi döntés).
-  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** hangcsere idejére a tár az abszolút 80 MB-os plafonig nőhet (verziónként 40 MB); a régi
+  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; tulajdonos jóváhagyta 2026-11-23 — P-064, D8):** hangcsere idejére a tár az abszolút 80 MB-os plafonig nőhet (verziónként 40 MB); a régi
   verziók takarítása megtagadva, ha a megtartandó verzió nem az aktuális, vagy még egyetlen sora sincs.
 
 ## 8. Kockázatok, költség- és időhatás, visszavonás
@@ -640,7 +644,7 @@ egysoros változtatással visszavehető.
   lecke, 2 299 fájl), a játék-szóbank nem. Migráció + Drizzle-séma; `db:push` tilos; ügynök éles adatbázist nem ír — az éles
   tömeges hanggyártás admin-végpontról indított, szerveren futó feladat, tulajdonosi indítással. Megjegyzés (TÉNY + BECSLÉS): az
   adatbázis ma 350 MB, a leckék hangja ~25 MB; az adatbázis-csomag keretének pontos értéke UNVERIFIED — ezért kötelező a méretőr.
-  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** az összméret-plafon két kemény plafonra pontosodott — hangverziónként 40 MB + abszolút
+  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; tulajdonos jóváhagyta 2026-11-23 — P-064, D8):** az összméret-plafon két kemény plafonra pontosodott — hangverziónként 40 MB + abszolút
   80 MB a teljes táblára; mindkettő túllépése megtagadja az írást és jelez, a kiszolgálás megy tovább.
 
 **D5 — A döntőbíró fél pontos plafonja**
@@ -664,6 +668,18 @@ egysoros változtatással visszavehető.
 - Következmény: az SK3 a korábbi „megáll a keretnél” tervről jelző őrre változik (6. szakasz, SK3; E41, E42); a más őrök
   (borító-újrapróba, e-mail-visszapattanás webhook, éles adatbázis-írás hook, éjszakai invariáns-söprés, telepítés utáni füstpróba)
   nem tartoznak ehhez a munkához (2. szakasz).
+
+**D8 — Brit TTS: néma próbakimondás és hangtárplafon (tulajdonosi döntés P-064, 2026-11-23)**
+- Mindkettő jóváhagyva: a kéretlen, nulla hangerejű próbakimondás megszűnése marad (a motorról csak valódi koppintásból tanulunk;
+  `source/client/src/lesson-runtime/speech-player.ts`, teszt `source/tests/speech-player.test.ts`), és a hangtár abszolút 80 MB-os
+  plafonja (hangverziónként 40 MB mellett; `source/server/tts/audio-store.ts` `TTS_AUDIO_LIMITS`) marad. A 2026-11-18-i
+  „megerősítésre vár” jelölésű spec-pontosítások ezzel jóváhagyottak.
+
+**D9 — Az SK3 megállító korlátainak hatóköre (tulajdonosi döntés P-065, 2026-11-23)**
+- A Stúdió költség- és hibakorlátai mindenhol jelzést adnak (figyelmeztetés / riasztás); vészleállítás KIZÁRÓLAG a fizetős
+  próbafutás 30 USD-os kemény költségkereténél van.
+- Az SK3-ba nem kerül új megállító korlát az éles futásidőre, sem az összesített javítókörre; a meglévő, állomásonkénti
+  körszám-plafonok változatlanok (D7). Átvezetve: 6. szakasz SK3, E41, E42.
 
 **Orkesztrátori alapértelmezések:** a vizuális tétel önálló, oldalszámmal igazolt tanítható tartalom (5. szakasz 3. pont); a
 változatosság 1–7. javaslata most készül (S5, S6), a 8. (új képgyártás) nem cél.
@@ -753,11 +769,14 @@ Determinisztikus kapuk (SK1–SK5, tulajdonosi elv):
 - [ ] E40 WHEN új lecke készül THEN the system SHALL a változatosság leckeszintű kapuját (kiosztott fejezetminta, modell írta
   bátorító nyitás hiánya) futtatni; a repóban lévő mérő a kiadott állományból mért alapvonalhoz küszöbbel hasonlít.
 - [ ] E41 WHEN egy állomás eléri a meglévő javítókör-korlátját THEN the system SHALL a mai módon zárni (változatlan érték és
-  viselkedés, az állandók egy helyről olvasva); új, futásonkénti összesített kör- vagy időplafont a rendszer nem vezet be (D7).
+  viselkedés, az állandók egy helyről olvasva); új, futásonkénti összesített kör- vagy időplafont, és éles futásidő miatti
+  megállítást a rendszer nem vezet be (D7; P-065 / D9, 2026-11-23).
 - [ ] E42 WHEN egy ÉLES futás számolt költsége átlépi a futásonkénti küszöböt, vagy az aznapi futások összege a napi küszöböt THEN
   the system SHALL a futást FOLYTATNI, és a túllépésről küszöbönként egyszer e-mailt küldeni az adminlevél-úton (`mailto:` nélkül;
   a levél hibája a gyártást nem akasztja meg). WHEN egy PRÓBAFUTÁS (mérőharness) eléri a próbakeretét THEN the system SHALL a
   következő modellhívás ELŐTT megállni és az állapotot menteni. The system SHALL NOT vészleállító / gyártás-stop kapcsolót adni.
+  WHEN egy éles futás költség- vagy hibakorlátot lép át THEN the system SHALL jelezni (figyelmeztetés / riasztás), és SHALL NOT
+  megállítani; leállító költségkorlát kizárólag a próbafutás 30 USD-os kemény kerete (P-065 / D9, 2026-11-23).
 - [ ] E43 WHEN egy lecke közzététel előtt áll THEN the system SHALL a kiadás előtti kaput futtatni (séma, tiltott minták, a
   pontozási szabály lenyomat-őre), és bukásnál nem közzétenni.
 - [ ] E44 WHEN `en-GB` lecke áll közzététel előtt, és a hangfájl-kötelezettség be van kapcsolva THEN the system SHALL a szószedet
@@ -768,7 +787,7 @@ Determinisztikus kapuk (SK1–SK5, tulajdonosi elv):
 - [ ] E47 The system SHALL a modell kimenetéről ott, ahol szkript el tudja dönteni, szkripttel (séma, szabály, mérőszám) ítélni,
   nem másik modellel.
 - [ ] E48 WHEN a hangfájlok összmérete elérné a plafont THEN the system SHALL az írást megtagadni, a gyártást megállítani és jelezni.
-  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** a plafon kettős — hangverziónként 40 MB (`total-exceeded`) és abszolút 80 MB a teljes
+  **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; tulajdonos jóváhagyta 2026-11-23 — P-064, D8):** a plafon kettős — hangverziónként 40 MB (`total-exceeded`) és abszolút 80 MB a teljes
   táblára (`absolute-exceeded`); bármelyik elérése megtagadja az írást, megállítja a gyártást és jelez.
 - [ ] E49 The system SHALL a hangfájlokat cserélhető tároló rétegen át elérni; a tároló cseréje a lecke JSON-ját és a klienst nem
   érinti.
