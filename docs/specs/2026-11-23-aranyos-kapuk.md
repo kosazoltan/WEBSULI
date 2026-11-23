@@ -31,7 +31,7 @@ le fogja futtatni, és 30 sornyi kód legyen a kis javítás határa.”
    fájl, `tsconfig*`, `package.json` változott.
 4. **PR-kapu:** ha ugyanarra a fejre zöld push-bizonyíték van (`pre-push-<fej>.json`, `ok: true`), a push-lépéseket nem ismétli; a
    `git fetch` és a friss-main (C-61) ellenőrzése akkor is lefut. A külön `npm run build` kimarad, ha böngészős út fut (az maga buildel).
-   A DB-integrációs teszt csak tároló / séma / migráció változásnál fut (`dbPatterns` szűkítése); egyéb szerverváltozásnál a CI futtatja.
+   A DB-integrációs teszt kiválasztása változatlan (1. vak kör L7). A push-bizonyíték újrahasználása csak tiszta munkafán.
 5. A dokumentáció (`docs/minosegkapuk.md`, `AGENTS.md`, a `websuli-fejlesztesi-ellenor` skill) a szabályt leírja.
 
 ## Nem-cél
@@ -44,8 +44,15 @@ A CI változtatása; a három-fázis-, titok-, tiltott-minta-, repó-szabály- �
 - Darabolás: a küszöb a TELJES PR éles-kód változására vonatkozik (merge-base óta), nem egy commitra.
 - Átnevezés: `--no-renames`, így az átnevezett fájl törlésként + hozzáadásként számít (nem lesz „kis”).
 - Bináris fájl (`-` a numstatban) a `source/**` alatt: nem kis javítás.
-- Nagy, már ellenőrzött PR utólagos kis javítása (review-lelet, CI-hiba): a legutóbbi ellenőrzött ŐS-commit ítélete átvihető, ha a
-  kettő közti változás a PR saját fájljain kis javítás (A7); a főágból beolvasztott fájlok nem számítanak; `NEM` ítélet nem vihető át.
+- Nagy, már ellenőrzött PR utólagos kis javítása (review-lelet, CI-hiba): EBBEN a szeletben NEM kis javítás (a teljes PR számít). Az
+  ítélet-átvitel (A7) az 1. vak kör után kikerült (L4–L6: a helyi review-rekord nincs PR-hoz kötve; a főágból beolvasztott azonos fájlú
+  változás és egy újabb `NEM` sorrendje nem kezelhető biztonságosan) — külön szelet: PR-hoz kötött ítélet-rekord, a két fej saját
+  foltjának összevetése.
+- Kis javításban csak éles kód (`source/**`), teszt és dokumentáció (`docs/**`, `*.md`) lehet; minden más útvonal (pl. gyökérszintű
+  kapukonfig) kizárja. A számítás NUL-határolt `numstat`-ból (a különleges fájlnév sem esik ki); a merge-kapu a GitHub REST fájllistájából
+  (bináris fájl, az átnevezés régi útja is); hiányzó vagy csonka adatnál nem kis javítás.
+- A DB-integrációs teszt helyi kiválasztása VÁLTOZATLAN marad (minden szerverváltozásnál): a tárolók köre nem fedhető le biztonságosan
+  útvonal-mintával (1. vak kör L7).
 - A push-kapu célzott egységtesztje egy tranzitív függőség bukását elmulaszthatja: a CI teljes készlete fogja meg (vállalt kockázat).
 
 ## Elfogadás (EARS)
@@ -55,9 +62,7 @@ A CI változtatása; a három-fázis-, titok-, tiltott-minta-, repó-szabály- �
 - **A3** — THE merge-kapu SHALL a sorokat a GitHub fájllistájából számolni.
 - **A4** — THE push-kapu SHALL a leképezett és az őr-teszteket futtatni, és SHALL a teljes készletre visszaesni leképezetlen vagy közös fájlnál.
 - **A5** — WHEN zöld push-bizonyíték van ugyanarra a fejre, THE PR-kapu SHALL NOT újrafuttatni a push-lépéseket, de SHALL a C-61-et ellenőrizni.
-- **A6** — THE PR-kapu SHALL NOT külön buildelni böngészős futás mellett; a DB-tesztet SHALL csak tároló / séma / migráció változásnál futtatni.
-- **A7** — WHEN az aktuális fejre nincs ítélet, de a legutóbbi ellenőrzött ős óta a PR saját fájljain ≤ 30 éles sor változott (kizárt útvonal
-  nélkül), THE PR- és merge-kapu SHALL az ős ítéletét átvinni; `NEM` SHALL NOT átvihető lenni.
+- **A6** — THE PR-kapu SHALL NOT külön buildelni böngészős futás mellett.
 
 <!-- acceptance-checklist -->
 - [ ] A1 kis javítás ítélet nélkül
@@ -65,5 +70,4 @@ A CI változtatása; a három-fázis-, titok-, tiltott-minta-, repó-szabály- �
 - [ ] A3 merge-kapu a GitHub adatából
 - [ ] A4 push-kapu célzott + visszaesés
 - [ ] A5 PR-kapu nem ismétel, C-61 marad
-- [ ] A6 build és DB-teszt arányos
-- [ ] A7 ítélet-átvitel kis utólagos javításnál
+- [ ] A6 build arányos
