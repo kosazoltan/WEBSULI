@@ -111,6 +111,26 @@ test("valódi DB (review #280): a meghiúsult címzett pótolható — a másodi
   setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
 });
 
+test("valódi DB (Codex-review #532): az újrapróba levele bájtra azonos az elsővel — a „Beküldve” ideje a kör ELSŐ beküldéséé (az idempotencia-kulcshoz)", async () => {
+  sent.length = 0;
+  let failB = true;
+  setResultSender(async (subject, html, to) => { if (to === "admin-b@example.test" && failB) throw new Error("átmeneti hiba"); sent.push({ subject, html, to }); });
+  try {
+    const q = lesson.experience!.quiz;
+    const graded = gradeQuiz(q, { [q[0].id]: q[0].correctIndex });
+    const roundKey = roundKeyOf("t", "quiz", "round-retry-date");
+    await sendLessonResult({ lessonId: "result-published", roundKey, learner: "Vendég tanuló", graded }, false);
+    // A kör első beküldése óta „eltelt idő”: a tárolt sor ideje a múltba kerül — az újrapróba levele ezt mutassa, ne a mostani percet.
+    await dbPool.query("UPDATE lesson_result_emails SET created_at = '2026-01-05T10:00:00Z' WHERE lesson_id = 'result-published' AND round_key = $1", [roundKey]);
+    failB = false;
+    await sendLessonResult({ lessonId: "result-published", roundKey, learner: "Vendég tanuló", graded }, false);
+    await sendLessonResult({ lessonId: "result-published", roundKey: roundKeyOf("t", "quiz", "round-retry-date-2"), learner: "Vendég tanuló", graded }, false);
+    const b = sent.filter(s => s.to === "admin-b@example.test");
+    assert.ok(b[0].html.includes("Beküldve:</strong> 2026. 01. 05. 11:00 (magyar idő)"), "az újrapróba a kör első beküldésének idejét viszi");
+    assert.ok(!b[1].html.includes("2026. 01. 05. 11:00"), "másik kör: a saját (mostani) ideje");
+  } finally { setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); }); }
+});
+
 /* Spec 2026-11-17-eredmeny-email-foglalas: atomi foglalás a küldés ELŐTT — párhuzamos hívásoknál címzettenként egy levél. */
 test("valódi DB: öt EGYIDEJŰ azonos kör címzettenként pontosan egy levelet küld (foglalás a küldés előtt)", async () => {
   sent.length = 0;
