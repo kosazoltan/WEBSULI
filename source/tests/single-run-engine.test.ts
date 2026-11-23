@@ -723,13 +723,14 @@ test("review U3: az érvényesítő hibája után a leltár üres, a nyers téte
   const ctx = { fileNames: ["forras.txt"], conceptIds: new Set(["area"]) };
   const boom = () => { throw new Error("séma\nösszeomlott"); };
   const judged = judgeSourceVisuals([VISUAL_TABLE, VISUAL_STEPS], ctx, (m) => logs.push(m), boom);
-  assert.deepEqual(judged, { visuals: [], dropped: [{ reason: "az érvényesítő hibája" }, { reason: "az érvényesítő hibája" }], removedConceptRefs: [], truncatedCells: [] });
+  assert.deepEqual(judged, { visuals: [], dropped: [{ reason: "az érvényesítő hibája" }, { reason: "az érvényesítő hibája" }], removedConceptRefs: [], truncatedCells: [], validatorError: true });
   assert.equal(logs.length, 1);
-  assert.match(logs[0], /az érvényesítő hibázott, a leltár üres — séma összeomlott$/);
+  assert.match(logs[0], /az érvényesítő hibázott, a vizuális ellenőrzés elmaradt, a leltár üres — séma összeomlott$/);
   // Nem tömb nyers értéknél nincs megszámolható tétel; a hibaág ekkor sem dob.
   assert.deepEqual(judgeSourceVisuals("nem tömb", ctx, undefined, boom).dropped, []);
   // Mutáció (ellenpróba): hibátlan érvényesítővel ugyanaz a bemenet NEM üres — a hibaág nem nyeli el a jó leltárt.
   assert.deepEqual(judgeSourceVisuals([VISUAL_STEPS], ctx).visuals.map((v) => v.id), ["v2"]);
+  assert.equal(judgeSourceVisuals([VISUAL_STEPS], ctx).validatorError, undefined, "hibátlan érvényesítőnél nincs hibajelző");
 });
 
 test("review U1: a túl hosszú cellájú táblázat a térképre kerül, a csonkolás a telemetriában és a naplóban", async () => {
@@ -987,11 +988,74 @@ test("F12: a kapu hibája (kivétel) sem report, sem enforce módban nem állít
     assert.equal(logs.filter((l) => l.endsWith("a kapu hibázott, a futás megy tovább — kapu összeomlott")).length, 1, mode);
     // A puszta hivatkozást számoló fedettség ettől még mentve (a kapu hibája a közzétett adatot nem torzítja).
     assert.deepEqual(published[0].coverage.visuals, { total: 1, shown: 0, missingIds: ["v2"] });
+    // P-066 (tulajdonosi döntés 2026-11-23): a futás eredménye egyértelműen jelzi, hogy a vizuális ellenőrzés elmaradt — egyszer.
+    assertSkippedOnce(result, mem, mode);
   }
-  // Ellenpróba: hibátlan kapunál nincs hibaszámláló.
+  // Ellenpróba: hibátlan kapunál nincs hibaszámláló és nincs „elmaradt” jelzés.
   const fine = fromMapWithVisuals(coveragePatch());
-  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(fine.client, fine.mem));
+  const fineResult = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, visualDeps(fine.client, fine.mem));
   assert.equal(gatesOf(fine.mem).gateErrors ?? 0, 0);
+  assertSkippedCount(fineResult, fine.mem, 0, "hibátlan kapu");
+});
+
+/* P-066 (tulajdonosi döntés 2026-11-23): a vizuális ellenőrzés technikai hibája nem állítja meg a futást, de a napló és az eredmény
+   (`warnings`, `quality.warnings`, a felületen látható `qualityNotes`) egyértelműen jelzi, hogy az ellenőrzés elmaradt. */
+const SKIPPED_TEXT = "A vizuális (forrás-fedettségi) ellenőrzés technikai hiba miatt elmaradt — a lecke ennélkül készült.";
+type DoneOutput = { quality: { warnings: string[] }; qualityNotes?: Array<{ reason?: string; note?: string }> };
+function assertSkippedCount(result: { warnings: string[] }, mem: ReturnType<typeof memoryStore>, n: number, label: string) {
+  const done = mem.steps.at(-1)!.output as DoneOutput;
+  assert.equal(result.warnings.filter((w) => w === SKIPPED_TEXT).length, n, `${label}: result.warnings ${JSON.stringify(result.warnings)}`);
+  assert.equal(done.quality.warnings.filter((w) => w === SKIPPED_TEXT).length, n, `${label}: quality.warnings`);
+  assert.equal((done.qualityNotes ?? []).filter((q) => q.reason === "visual_check_skipped" && q.note === SKIPPED_TEXT).length, n, `${label}: qualityNotes ${JSON.stringify(done.qualityNotes)}`);
+}
+const assertSkippedOnce = (result: { warnings: string[] }, mem: ReturnType<typeof memoryStore>, label: string) => assertSkippedCount(result, mem, 1, label);
+
+test("P-066: az exportált figyelmeztetés szövege a tulajdonosi döntés szerinti", async () => {
+  const { VISUAL_CHECK_SKIPPED_WARNING } = await import("../server/studio/single-run/engine");
+  assert.equal(VISUAL_CHECK_SKIPPED_WARNING, SKIPPED_TEXT);
+});
+
+test("P-066 (enforce): a pótló forduló utáni mérés kivétele NEM átmenés — a napló „elmaradt”-ot ír, a futás jelzéssel közzétesz", async () => {
+  const { sourceCoverageGate } = await import("../server/studio/gates/source-coverage-gate");
+  let calls = 0;
+  const flaky: typeof sourceCoverageGate = (...args) => { calls += 1; if (calls > 1) throw new Error("második mérés összeomlott"); return sourceCoverageGate(...args); };
+  const { client, mem } = fromMapWithVisuals(JSON.stringify({ nem: "folt" }));
+  const logs: string[] = [];
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(client, mem), gateModes: { sourceCoverage: "enforce" }, coverageGate: flaky, log: (m) => logs.push(m) });
+  assert.equal(result.htmlFileId, "html1", "a futás folytatódik (tulajdonosi döntés)");
+  assert.equal(client.calls.filter((c) => c === "forráspótlás").length, 1, "pontosan egy pótló forduló");
+  assert.equal(gatesOf(mem).gateErrors, 1);
+  assert.equal(logs.filter((l) => l.includes("a pótló forduló utáni mérés elmaradt")).length, 1, JSON.stringify(logs.filter((l) => l.includes("fedettség"))));
+  assertSkippedOnce(result, mem, "pótló forduló utáni kapuhiba");
+});
+
+test("P-066: az 1. állomás érvényesítőjének hibája — a futás megy tovább, a telemetria és az eredmény jelzi az elmaradt ellenőrzést", async () => {
+  const client = withOverride(scriptedClient(), (station) => (station === "1" ? sourceReply([VISUAL_TABLE, VISUAL_STEPS]) : null));
+  const mem = memoryStore();
+  const maps: SingleRunMap[] = [];
+  const logs: string[] = [];
+  const boom = () => { throw new Error("érvényesítő összeomlott"); };
+  const result = await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" },
+    { ...visualDeps(client, mem, maps), visualsValidator: boom, log: (m) => logs.push(m) });
+  assert.equal(result.htmlFileId, "html1");
+  assert.deepEqual(maps[0].visuals, [], "üres leltár");
+  assert.equal(gatesOf(mem).visualsValidatorError, 1);
+  assert.equal(logs.filter((l) => /az érvényesítő hibázott, a vizuális ellenőrzés elmaradt/.test(l)).length, 1, JSON.stringify(logs.filter((l) => l.includes("leltár"))));
+  assertSkippedOnce(result, mem, "érvényesítő hibája");
+  const { telemetryView } = await import("../shared/run-telemetry");
+  assert.ok(telemetryView((mem.steps.at(-1)!.output as { telemetry: RunTelemetry }).telemetry).gates.includes("A forrás vizuális leltárának érvényesítője hibázott — a vizuális ellenőrzés elmaradt"));
+});
+
+test("P-066: folytatott futásban a jelzés egyszer szerepel (a mentett telemetria és minőségi jelzés nem duplázódik)", async () => {
+  const first = fromMapWithVisuals("{}");
+  await assert.rejects(runSingleLesson({ files: [], mapId: "m1", ownerId: "u1" }, { ...visualDeps(first.client, first.mem), gateModes: { sourceCoverage: "enforce" } }));
+  const stopped = first.mem.steps.at(-1)!.output as SavedOutput;
+  const saved = { ...stopped, qualityNotes: [{ reason: "visual_check_skipped", note: SKIPPED_TEXT, round: 0 }],
+    telemetry: { ...stopped.telemetry, gates: { ...stopped.telemetry.gates, visualsValidatorError: 1 } } } as SavedOutput;
+  const again = fromMapWithVisuals(coveragePatch());
+  const result = await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, visualResumeDeps(again.client, again.mem, saved));
+  assert.equal(result.htmlFileId, "html1");
+  assertSkippedOnce(result, again.mem, "folytatás");
 });
 
 test("F8: a pótló forduló foltján is fut a címke-tisztítás — az alá nem támasztott fogalom-címke lekerül, a folt megmarad", async () => {
