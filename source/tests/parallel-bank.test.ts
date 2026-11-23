@@ -16,18 +16,36 @@ const settle = async () => {
   for (let i = 0; i < 50; i++) await new Promise((r) => setImmediate(r));
 };
 
-async function onFakeClock<T>(t: TestContext, run: () => Promise<T>): Promise<T> {
+/*
+ * Review PR #547 (Sourcery): ha a művelet a lépéskorlát után is függőben van (pl. egy időzítő a korláton túl vagy soha nem
+ * jár le), a segéd kifejezett hibával bukik — a hamis órán a teszt különben csendben a node:test időkorlátjáig lógna.
+ */
+async function onFakeClock<T>(t: TestContext, run: () => Promise<T>, maxTicks = 10_000): Promise<T> {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let settled = false;
   const result = run();
   result.then(() => { settled = true; }, () => { settled = true; });
-  for (let step = 0; !settled && step < 10_000; step++) {
+  for (let step = 0; !settled && step < maxTicks; step++) {
     await settle();
     t.mock.timers.tick(1);
   }
   await settle();
+  if (!settled) throw new Error(`onFakeClock: a művelet ${maxTicks} hamis ms után is függőben van`);
   return result;
 }
+
+test("onFakeClock: a lépéskorlát után is függő művelet kifejezett hibával bukik (nem lóg)", async (t) => {
+  // Alteszt esetenként: a hamis óra tesztenként egyszer kapcsolható be.
+  await t.test("soha le nem záruló ígéret", async (st) => {
+    await assert.rejects(onFakeClock(st, () => new Promise<never>(() => {}), 5), /5 hamis ms után is függőben van/);
+  });
+  await t.test("korláton túli időzítő", async (st) => {
+    await assert.rejects(onFakeClock(st, () => new Promise((r) => setTimeout(r, 50)), 5), /függőben van/);
+  });
+  await t.test("korláton belüli időzítő lefut", async (st) => {
+    assert.equal(await onFakeClock(st, () => new Promise<string>((r) => setTimeout(() => r("kész"), 3)), 5), "kész");
+  });
+});
 
 test("a párhuzamosság kapcsolója: alap 3, 1–5 között felülírható, érvénytelen érték → alap", () => {
   assert.equal(SINGLE_RUN_BANK_CONCURRENCY, 3);

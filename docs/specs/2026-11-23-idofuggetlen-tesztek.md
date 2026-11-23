@@ -54,6 +54,7 @@ A felsorolt tesztek eredménye ne függjön a falióra állásától, ugrását�
 - A 15 perces élettartam határa befagyasztott órával pontosan mérhető: 15 perc − 1 ms → érvényes, 15 perc → lejárt (új állítás).
 - A hamis `setTimeout` mellett a `setImmediate` valódi marad (különben a segéd nem tudná kiüríteni a függő munkát).
 - A `parallel-bank` hibaág-tesztje (3.) elutasítással zárul: a segéd a rejected ígéretet is továbbadja.
+- Review PR #547: ha a művelet a lépéskorlát után is függő, a segéd kifejezett hibával bukik (saját teszttel), nem lóg.
 
 ## 6. Elfogadási kritériumok (EARS)
 
@@ -68,6 +69,7 @@ A felsorolt tesztek eredménye ne függjön a falióra állásától, ugrását�
   `admin-access.test.ts` őr- és state-blokkjai zöldek legyenek (javítás előtt 1 + 4 bukás).
 - [x] A5 WHEN az órát a teszt befagyasztja THEN SHALL a 15 perces state-élettartam határa (−1 ms érvényes, 0 lejárt) mindkét
   tárnál bizonyított legyen.
+  (Review PR #547: a játékos-tár határa `support-tamper.test.ts` külön rekordokkal; a `>=` → `>` mutációt elkapja.)
 - [x] A6 WHEN `npm run gate:stage` és `npm run gate:push` fut THEN SHALL mindkettő zöld legyen.
 
 ## 7. Tesztterv
