@@ -298,6 +298,9 @@ Döntések:
 2. Fajta a fejezettípusból: `procedure` → `dragSort`, `comparison` → `match`, `description` → `fillBlank`, `any` → a magból forgatva úgy,
    hogy két egymást követő `try` ne legyen azonos fajtájú. A fajta a terv fejezetén `tryKind` mezőként megy a szerzőhöz (a vázlat
    JSON-jában), a szerző-prompt BE ága egy mondattal kéri a betartását. KI-nél a kéretlen `tryKind` is eldobva.
+   Pontosítás (S6a review #536 hibaosztálya): a beszélgetésben csak a modell EREDETI terve áll, ezért a kiosztott fajtát a szerzői kérés
+   a fejezet végleges blokksora mellett közli (`tryKind: "…"`). A `try` beszúrása UTÁN is áll az S6a szabálya: a végleges sorokban nincs
+   azonos szomszéd, és egy sor ≤ 40% — a pótlás ilyen fejezetbe kerül; csak ha nincs ilyen, enged a szabály (a `try`-minimum az erősebb).
 3. Jelzés, nem kapu: BE kapcsolónál `telemetry.gates.tryShare` (a kész lecke `try`-t tartalmazó fejezeteinek aránya, két tizedes) és
    `qualityNotes` bejegyzés (`try_share_low`), ha 1/3 alatt marad.
 4. Szerzői hang sávonként (`BAND_VOICES`, sávonként 3 leírt hang, 2–3 mondat: mondatritmus, a kérdések aránya, a példák keretezése); a
