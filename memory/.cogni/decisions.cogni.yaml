@@ -6,6 +6,11 @@ cogni:
   generated: 2026-11-22
 
   decisions:
+  - id: 2026-11-23-sql-feladat-nyilvantartas
+    date: 2026-11-23
+    decision: "A feladatok mestere az SQL feladat.tasks (Docker Postgres); a kanban tükör; a záró hurok szinkronizál és takarít"
+    reason: "kanban nem megbízható, feladatok elvesztek (főterv csak ágon)"
+    ref: D:/repo/Hermes-agent/docs/feladat-nyilvantartas.md
   - id: 2026-11-23-vak-kor-kivezetes
     date: 2026-11-23
     decision: "Felhős vak kör (alügynök-review minden fejre) kivezetve; helyette local-review.mjs (helyi Ollama, angol prompt)"

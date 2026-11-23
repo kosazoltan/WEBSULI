@@ -15,3 +15,9 @@ cards:
     observed: "vector-index elavult a záró commit után"
     fix: "vector újraépítés az utolsó commit után"
     rule: "vector mindig utolsó lépés, háttérben"
+  - id: 3
+    status: rule
+    date: "2026-11-23"
+    observed: "feladatok elvesztek kanban/ágak között"
+    fix: "SQL feladat-nyilvántartás + szinkron a higiéniában"
+    rule: "minden teendő azonnal feladat.mjs add"

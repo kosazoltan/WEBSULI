@@ -32,6 +32,7 @@
 ## Buktatók
 - 2026-11-23 — Mem0 (Hermes hosszú távú memória) a helyi Dockerben futó pgvector-on (`hermes-mem0-pg`, 127.0.0.1:55432); ha a `mem0_search` „not initialized” hibát ad: `docker start hermes-mem0-pg` + Ollama fut-e, majd új ülés.
 - A záró vector-index inkrementális; a záró push mindig `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs push --repo D:/repo/WEBSULI` (ez frissíti az indexet), nyers `git push` után a check elavult indexet jelezhet.
+- 2026-11-23 — FELADATOK MESTERE: SQL nyilvántartás (`node D:/repo/Hermes-agent/scripts/feladat.mjs list|add|set --repo D:/repo/WEBSULI`); munka elején list, minden új teendő azonnal add. A kanban csak tükör.
 - A helyi modellel csak angolul — magyar megbízást nem ért megbízhatóan; a 9B modell `high` lelete lehet hamis pozitív → kódból ellenőrizd, hamisnál `--refuted <id> --refuted-reason`.
 
 ## Kapcsolódó
