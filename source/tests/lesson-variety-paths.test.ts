@@ -120,7 +120,7 @@ const concepts: MapConcept[] = [{ localId: "area", examWeight: "core", term: "te
 const TRANSCRIPT = "A téglalap területe az oldalak szorzata. A terület mértékegysége a négyzetcentiméter.";
 const outline = { sections: [{ heading: fixture.sections[0].heading, conceptIds: ["area"], plannedBlocks: ["explain", "example", "animate", "recap"], animationSuggestions: [] }], misconceptions: [] };
 
-function client(opts: { failBank?: boolean; modelMarker?: boolean } = {}): ModelClient {
+function client(opts: { failBank?: boolean; modelMarker?: boolean; outline?: unknown; onAuthor?: (request: string) => void } = {}): ModelClient {
   const { experience: _bank, ...teaching } = fixture;
   return {
     model: "claude-opus-5-5",
@@ -130,8 +130,8 @@ function client(opts: { failBank?: boolean; modelMarker?: boolean } = {}): Model
       let json: unknown;
       if (station === "1") json = { title: "Terület", subject: fixture.subject, classroom: fixture.classroom, transcript: TRANSCRIPT,
         concepts: [{ id: "area", term: "terület", definition: "A síkidom által lefedett rész nagysága.", quote: "A téglalap területe az oldalak szorzata.", type: "concept", examWeight: "core", relatedIds: [] }] };
-      else if (station === "2" || station === "tananyagterv") json = outline;
-      else if (station === "3") json = opts.modelMarker ? { ...teaching, variety: { version: "valtozatossag-1" } } : teaching;
+      else if (station === "2" || station === "tananyagterv") json = opts.outline ?? outline;
+      else if (station === "3") { opts.onAuthor?.(t); json = opts.modelMarker ? { ...teaching, variety: { version: "valtozatossag-1" } } : teaching; }
       else if (station === "4") json = { patches: "nem érvényes ábrafolt" };
       else if (station === "5") { if (opts.failBank) return { text: "nem JSON", model: "claude-opus-5-5", truncated: false, usage: { input: 1, cachedInput: 0, output: 1 } }; json = structuredClone(fixture.experience); }
       else if (station === "6" || station === "lektorálás") json = { solutions: [], notes: [], reviewedAll: true };
@@ -325,4 +325,50 @@ test("review #534 (Codex, Copilot): a jelölő nyitásformája az, amit a szerz�
   const resumedLesson = second.lessons.at(-1) as { variety?: { version?: string; openingForm?: string } };
   assert.equal(resumedLesson.variety?.version, LESSON_VARIETY_VERSION, "a futás BE maradt");
   assert.equal("openingForm" in (resumedLesson.variety ?? {}), false, "régi checkpointból átvett tanításhoz nincs utólagos forma");
+});
+
+// --- S6a review #536 (Copilot): a V15 motorbeli bekötése VISELKEDÉSI teszttel — a mentett terv és a szerzőnek ténylegesen átadott kérés ---
+
+test("S6a V15 a motorban: BE — a mentett terv és a szerzői kérés a kiosztott (típushoz illő) blokksort hordozza; KI, jóváhagyott terv és folytatás — az eredeti sorok", async () => {
+  const { applySectionShapes, SECTION_SHAPES } = await import("../shared/lesson-section-shapes");
+  const typed = { ...outline, sections: outline.sections.map((sec) => ({ ...sec, sectionKind: "procedure" })) };
+  const original = outline.sections[0].plannedBlocks;
+  const plannedOf = (mem: ReturnType<typeof memory>) => (lastOutput(mem).outline as { sections: Array<{ plannedBlocks: string[]; sectionKind?: unknown }> }).sections[0];
+  const quoted = (blocks: readonly string[]) => JSON.stringify(blocks);
+
+  // BE, friss futás: a program kiosztása megy a job állapotába ÉS a szerzőnek.
+  let request = "";
+  const on = memory();
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ outline: typed, onAuthor: (text) => { request = text; } }), on, { lessonVariety: true }));
+  const expected = applySectionShapes(typed, seedFrom("m1")).sections[0].plannedBlocks;
+  assert.notDeepEqual(expected, original, "a próba valódi átírást mér");
+  assert.ok(SECTION_SHAPES.some((shape) => shape.fits.includes("procedure") && quoted([...shape.blocks, ...(shape.blocks.at(-1) === "recap" ? [] : ["recap"])]) === quoted(expected)), "a kiosztott minta a típushoz illik");
+  assert.deepEqual(plannedOf(on).plannedBlocks, expected, "a mentett terv a kiosztott sor");
+  assert.equal("sectionKind" in plannedOf(on), false, "a sectionKind nem megy tovább");
+  assert.ok(request.includes(quoted(expected)), "a szerző a kiosztott sort kapja");
+  assert.equal(request.includes(quoted(original)), false, "a szerző nem a modell eredeti sorát kapja");
+
+  // KI: a modell terve változatlanul megy tovább (csak a kéretlen sectionKind esik ki).
+  request = "";
+  const off = memory();
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ outline: typed, onAuthor: (text) => { request = text; } }), off, { lessonVariety: false }));
+  assert.deepEqual(plannedOf(off).plannedBlocks, original);
+  assert.equal("sectionKind" in plannedOf(off), false);
+  assert.ok(request.length > 0 && !request.includes("VÉGLEGES BLOKKSORA"), "KI: a szerzői kérésben nincs kiosztás (a terv a beszélgetésben a modell eredeti terve)");
+
+  // BE + a tulajdonos jóváhagyott terve: változatlan.
+  request = "";
+  const approved = memory();
+  await runSingleLesson({ files, ownerId: "u1", approvedOutline: outline }, runDeps(client({ onAuthor: (text) => { request = text; } }), approved, { lessonVariety: true }));
+  assert.deepEqual(plannedOf(approved).plannedBlocks, original, "jóváhagyott terv: változatlan");
+  assert.ok(request.length > 0 && !request.includes("VÉGLEGES BLOKKSORA"), "jóváhagyott terv: a szerzői kérésben nincs kiosztás");
+
+  // BE folytatás a terv után megszakadt futásból: a mentett (már kiosztott) terv nem íródik át újra.
+  const first = memory();
+  await assert.rejects(runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ outline: typed, failBank: true }), first, { lessonVariety: true })));
+  const saved = lastOutput(first);
+  assert.deepEqual((saved.outline as { sections: Array<{ plannedBlocks: string[] }> }).sections[0].plannedBlocks, expected);
+  const second = memory();
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, runDeps(client(), second, {}, saved.singleRun.conversation));
+  assert.deepEqual(plannedOf(second).plannedBlocks, expected, "folytatás: a mentett terv sorai változatlanok");
 });

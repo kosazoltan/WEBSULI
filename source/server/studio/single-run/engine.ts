@@ -729,6 +729,12 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // fejezetmintát kapják (a tulajdonos jóváhagyott terve nem változik); KI-nél a terv a régi (csak a kéretlen `sectionKind` esik ki).
   const outline = applySectionShapes(plannedOutline, planned === undefined && varietyOn ? seedFrom(mapId) : undefined);
   output = { ...output, outline, approvedOutline: outline };
+  // Review #536 (Copilot): a program által kiosztott blokksorok a szerzőhöz is eljutnak — a beszélgetésben a modell EREDETI terve áll,
+  // a szerzői kérés ezért kimondja a végleges sorokat. Csak BE futásnál és a modell tervénél (friss vagy folytatott); a tulajdonos
+  // jóváhagyott tervénél és KI állapotban a kérés bájtra a régi.
+  const assignedPlanLines = varietyOn && input.approvedOutline === undefined
+    ? `\nA FEJEZETEK VÉGLEGES BLOKKSORA (a program osztotta ki; ez FELÜLÍRJA a 2. állomás vázlatának plannedBlocks mezőit — minden fejezet blokkjai pontosan ebben a sorrendben követik egymást):\n${outline.sections.map((section, i) => `- [${i}] ${section.heading}: ${JSON.stringify(section.plannedBlocks)}`).join("\n")}`
+    : "";
 
   // SK1 — a forrás-fedettségi kapu mérése (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. Független review F12: a
   // kapu hibája (kivétel) egyik módban sem állítja meg a kifizetett futást — megszámolva, naplózva, `null` ítélettel (nincs következmény).
@@ -780,7 +786,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   phase("author", "A tananyag készül…");
   const authorKnowledge = resumed?.lesson ? "" : await knowledgeBlock("author");
   const authorRequest = (notes: Parameters<typeof buildAuthorPrompt>[2]) =>
-    withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner, { seed: seedFrom(mapId) }), authorKnowledge)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
+    withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner, { seed: seedFrom(mapId) }), authorKnowledge)}${assignedPlanLines}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
   const validateLesson = (json: unknown): { ok: true; value: Lesson } | { ok: false; problems: string[] } => {
     // Funkciókapcsoló (vak ellenőr B1): KI állapotban a modell kimenetét a bővítés ELŐTTI séma méri (`modelLessonSchema(false)`) — az új
     // ábrafajta ugyanazzal a sémahibával, ugyanabban a sorrendben megy javító fordulóra, a kéretlen `sourceVisualId` mező pedig

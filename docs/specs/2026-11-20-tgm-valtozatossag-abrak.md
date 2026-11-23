@@ -261,6 +261,9 @@ Döntések:
    érvényes — a záró `recap` hozzáfűzése után a `donteshelyzet` sora az `alap` soráéval azonos. A kiosztás determinisztikus visszalépéses
    keresés: ha van a szabályoknak megfelelő kiosztás, megtalálja; a szabályok csak akkor engednek, ha nincs ilyen. A különleges záró
    fejezet változatlan, egy kivétellel: ha a modell terve nem `recap`-pal zárja a leckét, a program hozzáfűzi.
+7. Pontosítás (review #536): a kiosztott blokksorokat a szerzői kérés KIMONDJA („A fejezetek végleges blokksora”) — a beszélgetésben a
+   modell eredeti terve áll, a kiosztás e nélkül nem jutna el a szerzőhöz. Csak BE futásnál és a modell tervénél; a tulajdonos jóváhagyott
+   tervénél és KI állapotban a szerzői kérés bájtra a régi.
 
 Elfogadás (EARS):
 
