@@ -16,7 +16,7 @@
 
 ## T2 — `scripts/qa/gates/lib.mjs`
 
-`REDACT_CAP = 32 * 1024`; `capTail(text)`: a korlát felett az utolsó 32 KB, a félbevágott első sor (ha van sortörés), különben a
+`REDACT_CAP = 16 * 1024` (eredetileg 32 KB, ld. a napló végét); `capTail(text)`: a korlát felett az utolsó 16 KB, a félbevágott első sor (ha van sortörés), különben a
 vágáson átnyúló token-futás kimarad, jelzősor elöl; `redact` először ezt hívja, utána a változatlan főági ciklus.
 
 ## T3 — `scripts/qa/gates/external-review.mjs`
@@ -60,3 +60,9 @@ NEM ítélet: 1 blokkoló, 2 közepes, 2 kicsi; mind valódi. A tulajdonosi kere
 - **L2** — `design-assets/lib.ts` `redactClip`: a vágás előtt álló, befejezetlen `Bearer` + whitespace teljesen kimarad.
 - **L5** — `redactClip` `undefined` / `null` → üres szöveg.
 - A főági regexek változatlanok.
+
+## 2026-11-23 — a korlát 16 KB
+
+- A `gate:pr` (main-merge után) a „vak L4” tesztnél bukott: 1109 ms > 1 s (párhuzamos futás; terheletlenül 0,31–0,44 s).
+- Teszt előbb (`b1e78bc9`), piros a 32 KB-os korláton: „legjobb a 3 mérésből: 336 ms (a 4× tartalékhoz < 250 ms kell)”.
+- Javítás: `REDACT_CAP = 16 * 1024` (mérés: 8 KB 20 ms, 16 KB 75 ms, 24 KB 175 ms, 32 KB 311 ms) → a teszt zöld.

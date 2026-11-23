@@ -24,9 +24,10 @@ const REDACTIONS = [
 
 /**
  * Elővágás (docs/specs/2026-11-22-kitakaro-elovagas.md): a fenti, változatlan főági regexek legfeljebb ennyi karakteren futnak
- * (a főági e-mail-regex `'a'×n`-en négyzetes: 32 KB 338 ms, 64 KB 1 320 ms).
+ * (a főági e-mail-regex `'a'×n`-en négyzetes: 16 KB 75 ms, 32 KB 311–440 ms, 64 KB 1 320 ms). 16 KB: a párhuzamos tesztfuttatás
+ * ~3×-os lassulása mellett is bőven 1 s alatt (32 KB-nál a gate:pr-ben 1109 ms lett — ezért nem 32 KB).
  */
-export const REDACT_CAP = 32 * 1024;
+export const REDACT_CAP = 16 * 1024;
 
 /** Token-karakter az elővágáshoz: betű, szám, `+ / = _ - . ~ % \ @` (a JSON-escape-ek is ebbe esnek). */
 export const isCutRunChar = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)

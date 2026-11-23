@@ -138,7 +138,7 @@ test('decideMerge: /api/rt/status — hálózati hiba FAIL, off PASS, aktív mec
 });
 
 // docs/specs/2026-11-22-kitakaro-elovagas.md — 1. vak kör (9effab11) L3: hosszú gh-stderr mellett az ok látszik, nem a csonkolásjelző.
-test('ghJson: nem nulla kód és 32 KB-nál hosszabb stderr → a hiba első, maszkolt sora a kivételben', async () => {
+test('ghJson: nem nulla kód és a korlátnál (REDACT_CAP) hosszabb stderr → a hiba első, maszkolt sora a kivételben', async () => {
   const { ghJson } = await import('./pre-merge-gate.mjs');
   const exec = () => ({ code: 1, stdout: '', stderr: 'HTTP 404: Not Found (repos/x/y/branches/main/protection)\n' + 'diag '.repeat(10_000) });
   assert.throws(() => ghJson(exec, '.', ['api', 'repos/x/y/branches/main/protection']), (e) => {
