@@ -6,7 +6,7 @@
  */
 import { createHash } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { banFingerprint, banKeyId, banRetentionMonths, limitKey, playerBanKey } from "./codes";
+import { accountEmailKey, banFingerprint, banKeyId, banRetentionMonths, limitKey, playerBanKey } from "./codes";
 
 type Db = Pick<Pool, "query" | "connect">;
 
@@ -47,6 +47,19 @@ async function canonicalVariantIds(client: Pick<PoolClient, "query">, normalized
 export async function bannedVariantId(client: Pick<PoolClient, "query">, normalizedEmail: string): Promise<string | null> {
   const ids = await canonicalVariantIds(client, normalizedEmail, true);
   return ids[0] ?? null;
+}
+
+/**
+ * P-020 (tulajdonosi döntés 2026-11-23): a címhez tartozó MEGLÉVŐ fiók a postafiók-kulcs (`email_key` = `accountEmailKey`)
+ * szerint — a kanonikus címzár alatt hívandó (a `limitKey`-zár tágabb, így az azonos kulcsú létrehozások sorosodnak). Ha a
+ * migráció előtti ütközés miatt több sor van, a pontosan egyező cím, különben a legrégebbi; sorzárral. Nincs → null (új fiók).
+ */
+export async function existingAccountIdByMailbox(client: Pick<PoolClient, "query">, normalizedEmail: string): Promise<string | null> {
+  const { rows } = await client.query<{ id: string }>(
+    `SELECT id FROM player_accounts WHERE email_key = $1 ORDER BY (email = $2) DESC, created_at, id LIMIT 1 FOR UPDATE`,
+    [accountEmailKey(normalizedEmail), normalizedEmail],
+  );
+  return rows[0]?.id ?? null;
 }
 
 /**
@@ -106,6 +119,11 @@ const isUniqueViolation = (error: unknown, constraint?: string) =>
   typeof error === "object" && error !== null && (error as { code?: string }).code === "23505"
   && (!constraint || (error as { constraint?: string }).constraint === constraint);
 
+/** P-020: egy postafiók ütköző fiókjai (a cím csak szerveroldalon; a végpont maszkolja). */
+export type EmailCollisionGroup = {
+  accounts: { id: string; email: string; nickname: string | null; createdAt: Date; lastSeenAt: Date | null; banned: boolean }[];
+};
+
 /** A tiltás egységes kifejezése (saját `banned_at` vagy a meglévő admin-tiltás ugyanarra a címre). */
 const BANNED_SQL = `(p.banned_at IS NOT NULL OR EXISTS (SELECT 1 FROM users u WHERE lower(u.email) = p.email AND u.is_banned))`;
 
@@ -135,8 +153,8 @@ export function createPlayerAccountStore(pool: Db) {
   return {
     /**
      * A játékos Google-útja (google.ts): a Google által MEGERŐSÍTETT, normalizált címből és a Google-azonosítóból (`sub`)
-     * játékos-fiók. 1) Ismert `sub` → az a fiók (a címét nem írjuk át). 2) Különben a címre upsert: új fiók, vagy a meglévő
-     * (e-mailes kóddal létrehozott) fiókhoz a `sub` hozzárendelése — de csak ha még nincs más `sub`-ja (különben CONFLICT).
+     * játékos-fiók. 1) Ismert `sub` → az a fiók (a címét nem írjuk át). 2) Különben a postafiók (P-020: `email_key`) meglévő
+     * fiókjához a `sub` hozzárendelése — de csak ha még nincs más `sub`-ja (különben CONFLICT) —, vagy új fiók.
      * A Google-profil neve, képe NEM tárolódik. A `users` táblát nem érinti.
      */
     async upsertGooglePlayer(sub: string, emailNormalized: string): Promise<GoogleUpsert> {
@@ -160,6 +178,17 @@ export function createPlayerAccountStore(pool: Db) {
             await lockBanCanonical(client, emailNormalized);
             const variant = await bannedVariantId(client, emailNormalized);
             await lockDeletedBanRow(client, deletedBanFingerprint(emailNormalized));
+            // P-020: a postafiók meglévő fiókja (alias: gmail-pont, `+címke`, googlemail) — a `sub` ide kötődik, nem nyílik új fiók.
+            const existing = await existingAccountIdByMailbox(client, emailNormalized);
+            if (existing) {
+              const linked = await client.query<{ id: string; google_sub: string | null }>(
+                `UPDATE player_accounts SET google_sub = COALESCE(google_sub, $2), email_verified_at = COALESCE(email_verified_at, now()),
+                        banned_at = COALESCE(banned_at, (SELECT banned_at FROM player_accounts WHERE id = $3::varchar))
+                  WHERE id = $1 RETURNING id, google_sub`,
+                [existing, sub, variant],
+              );
+              return linked.rows[0]!;
+            }
             const { rows } = await client.query<{ id: string; google_sub: string | null }>(
               `INSERT INTO player_accounts (email, email_verified_at, google_sub, banned_at)
                  VALUES ($1, now(), $2, COALESCE((SELECT banned_at FROM player_accounts WHERE id = $3::varchar),
@@ -347,6 +376,29 @@ export function createPlayerAccountStore(pool: Db) {
         id: r.id, email: r.email, nickname: r.nickname, avatarKey: r.avatar_key, createdAt: r.created_at, lastSeenAt: r.last_seen_at,
         banned: r.banned, bannedAt: r.banned_at, googleLinked: r.google, learnerLinked: r.learner,
       }));
+    },
+
+    /**
+     * P-020: a kézi összevonásra váró postafiók-ütközések — az azonos `email_key`-ű, legalább kétsoros csoportok (a migráció előtt
+     * keletkezett aliasfiókok). Semmit nem von össze és nem töröl; a hívó maszkolja a címet. Csoporton belül létrehozás szerint.
+     */
+    async listEmailCollisions(limit = 200): Promise<EmailCollisionGroup[]> {
+      const { rows } = await pool.query<{
+        email_key: string; id: string; email: string; nickname: string | null; created_at: Date; last_seen_at: Date | null; banned: boolean;
+      }>(
+        `SELECT p.email_key, p.id, p.email, p.nickname, p.created_at, p.last_seen_at, ${BANNED_SQL} AS banned
+           FROM player_accounts p
+          WHERE p.email_key IN (SELECT email_key FROM player_accounts GROUP BY email_key HAVING count(*) > 1 ORDER BY min(created_at) LIMIT $1)
+          ORDER BY p.email_key, p.created_at, p.id`,
+        [Math.min(Math.max(limit, 1), 500)],
+      );
+      const groups = new Map<string, EmailCollisionGroup>();
+      for (const r of rows) {
+        const g = groups.get(r.email_key) ?? { accounts: [] };
+        g.accounts.push({ id: r.id, email: r.email, nickname: r.nickname, createdAt: r.created_at, lastSeenAt: r.last_seen_at, banned: r.banned });
+        groups.set(r.email_key, g);
+      }
+      return [...groups.values()];
     },
 
     async playerEmailById(id: string): Promise<string | null> {

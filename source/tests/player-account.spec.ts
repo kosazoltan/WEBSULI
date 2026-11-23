@@ -372,3 +372,30 @@ test("K1: a „törölt, de tiltva maradt” bejegyzés cím nélkül látszik, 
   await expect(page.getByTestId("deleted-bans")).toHaveCount(0);
   expect(unbans).toEqual(["/api/admin/game-accounts/deleted-bans/0123456789abcdef/unban"]);
 });
+
+test("P-020: az azonos postafiókú fiókok csoportja maszkolt címmel listázódik (csak olvasás, nincs összevonó kérés)", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/auth/user", (r) => r.fulfill({ json: { id: "a-1", email: "admin@pelda.hu", isAdmin: true, firstName: "Admin", lastName: "" } }));
+  const writes: string[] = [];
+  await page.route("**/api/admin/game-accounts**", async (r) => {
+    const url = new URL(r.request().url());
+    if (r.request().method() !== "GET") writes.push(url.pathname);
+    if (url.pathname.endsWith("/email-collisions")) {
+      return r.fulfill({ json: { groups: [{ accounts: [
+        { id: "p-old", nickname: "Régi Róka", maskedEmail: "p***@g***.com", createdAt: "2026-11-10T09:00:00Z", lastSeenAt: null, banned: false },
+        { id: "p-new", nickname: null, maskedEmail: "p***@g***.com", createdAt: "2026-11-12T09:00:00Z", lastSeenAt: "2026-11-20T09:00:00Z", banned: true },
+      ] }] } });
+    }
+    if (url.pathname.endsWith("/deleted-bans")) return r.fulfill({ json: { entries: [] } });
+    return r.fulfill({ json: { players: [] } });
+  });
+  await page.goto("/admin?tab=players");
+  const group = page.getByTestId("email-collision-p-old");
+  await expect(group).toBeVisible({ timeout: 15_000 });
+  await expect(group).toContainText("Régi Róka");
+  await expect(group).toContainText("Tiltott");
+  await expect(group).not.toContainText("gmail");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow, "nincs vízszintes görgetés").toBeLessThanOrEqual(1);
+  expect(writes).toEqual([]);
+});

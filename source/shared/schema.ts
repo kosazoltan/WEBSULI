@@ -1311,6 +1311,13 @@ export const lessonTtsAudio = pgTable(
 export const playerAccounts = pgTable("player_accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email", { length: 254 }).notNull().unique(),
+  /**
+   * P-020 (migrations/0045): a postafiók-kulcs (generált; = codes.ts `accountEmailKey`): Gmailen pont / `+címke` / googlemail
+   * nélkül, máshol csak trim + kisbetű. Egyedi, kivéve a migráció előtti, kézi összevonásra jelölt ütközéseket.
+   */
+  emailKey: varchar("email_key", { length: 254 }).generatedAlwaysAs(sql`CASE WHEN split_part(lower(btrim(email)), '@', 2) IN ('gmail.com', 'googlemail.com') THEN replace(split_part(split_part(lower(btrim(email)), '@', 1), '+', 1), '.', '') || '@gmail.com' ELSE lower(btrim(email)) END`),
+  /** P-020: a migráció előtt már ütköző (azonos `email_key`-ű) sor — kézi összevonásra vár; a részleges egyedi index kihagyja. */
+  emailKeyConflict: boolean("email_key_conflict").notNull().default(false),
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   nickname: varchar("nickname", { length: 24 }),
   nicknameKey: varchar("nickname_key", { length: 32 }).unique(),
@@ -1321,7 +1328,9 @@ export const playerAccounts = pgTable("player_accounts", {
   bannedAt: timestamp("banned_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
-});
+}, (table) => ({
+  emailKeyUnique: uniqueIndex("player_accounts_email_key_unique").on(table.emailKey).where(sql`NOT email_key_conflict`),
+}));
 export type PlayerAccount = typeof playerAccounts.$inferSelect;
 
 /**

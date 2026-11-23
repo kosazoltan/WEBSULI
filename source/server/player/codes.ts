@@ -77,6 +77,22 @@ export function limitKey(normalizedEmail: string): string {
   return `${local}@${domain}`;
 }
 
+/**
+ * P-020 (tulajdonosi döntés 2026-11-23): a játékos-fiók KULCSA — postafiókonként egy fiók. Konzervatív szabály: CSAK
+ * `gmail.com` / `googlemail.com` címen vágjuk le a `+címkét`, töröljük a pontokat a helyi részből, és `googlemail.com` →
+ * `gmail.com`; minden más domainen csak trim + kisbetű (ott a `+címke` megmarad, mert nem garantált, hogy ugyanaz a
+ * postafiók). UGYANEZ a szabály SQL-ben a `player_accounts.email_key` generált oszlopban (migrations/0045) — a kettőnek
+ * egyeznie kell (DB-teszt ellenőrzi). Eltér a `limitKey`-től (az a korlátok / tiltás tágabb kulcsa, minden domainen `+` nélkül).
+ */
+export function accountEmailKey(normalizedEmail: string): string {
+  const email = normalizedEmail.trim().toLowerCase();
+  const at = email.lastIndexOf("@");
+  const domain = email.slice(at + 1);
+  if (at < 1 || !GMAIL_DOMAINS.has(domain)) return email;
+  const local = email.slice(0, at).split("+")[0]!.replace(/\./g, "");
+  return `${local}@gmail.com`;
+}
+
 /** A hash-kulcs: HMAC(SESSION_SECRET, "player-auth-v1"). A titok rotációja a függő kódokat érvényteleníti (rövid életűek). */
 export function playerAuthKey(env: NodeJS.ProcessEnv = process.env): Buffer {
   const secret = env.SESSION_SECRET;
