@@ -280,3 +280,22 @@ test("S5b-v2: a javítás megőrzi a tárolt jelölő nyitásformáját; hibás 
   assert.deepEqual(carryVarietyMarker({ title: "T" }, { variety: { version: LESSON_VARIETY_VERSION, openingForm: "<script>" } }), { title: "T", variety: { version: LESSON_VARIETY_VERSION } });
   assert.deepEqual(carryVarietyMarker({ title: "T" }, { variety: { version: LESSON_VARIETY_VERSION, openingForm: 5 } }), { title: "T", variety: { version: LESSON_VARIETY_VERSION } });
 });
+
+test("S5b vak kör 1 L2: évfolyamváltó javításnál a jelölő formája az ÚJ évfolyam kiosztása (ugyanaz, amit a prompt kér); változatlan évfolyamnál a tárolt marad", () => {
+  const stored = { mapId: "m1", classroom: 3, variety: { version: LESSON_VARIETY_VERSION, openingForm: openerVarietyPick(3, seedFrom("m1")).form.id } };
+  const same = carryVarietyMarker({ title: "T", mapId: "m1", classroom: 3 }, stored) as { variety?: { openingForm?: string } };
+  assert.equal(same.variety?.openingForm, stored.variety.openingForm, "változatlan évfolyam: a tárolt forma");
+  const moved = carryVarietyMarker({ title: "T", mapId: "m1", classroom: 12 }, stored) as { variety?: { openingForm?: string; version?: string } };
+  assert.equal(moved.variety?.openingForm, openerVarietyPick(12, seedFrom("m1")).form.id, "új évfolyam: az új kiosztás");
+  assert.equal(moved.variety?.version, LESSON_VARIETY_VERSION);
+  // v1 jelölőjű (forma nélküli) tárolt lecke: évfolyamváltásnál sem kap formát — a javítás promptja sem kér rá újat.
+  const v1 = { mapId: "m1", classroom: 3, variety: { version: "valtozatossag-1" } };
+  assert.deepEqual((carryVarietyMarker({ title: "T", mapId: "m1", classroom: 12 }, v1) as { variety?: unknown }).variety, { version: "valtozatossag-1" });
+});
+
+test("S5b vak kör 1 L2: a javítás promptja csak nyitásformát hordozó (v2) tárolt jelölőnél kér kiosztott formát", async () => {
+  const { repairVarietyOption } = await import("../server/studio/structured-improvement");
+  assert.deepEqual(repairVarietyOption({ mapId: "m1", variety: { version: LESSON_VARIETY_VERSION, openingForm: "rejtely" } }), { seed: seedFrom("m1") });
+  assert.equal(repairVarietyOption({ mapId: "m1", variety: { version: "valtozatossag-1" } }), undefined, "v1: nincs új forma a promptban");
+  assert.equal(repairVarietyOption({ mapId: "m1" }), undefined, "jelöletlen lecke");
+});

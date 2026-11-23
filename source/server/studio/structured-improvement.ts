@@ -38,6 +38,13 @@ export { repairHash };
 const quizHash = (rows: Array<typeof gameQuizItems.$inferSelect>) => repairHash(rows.map(row => ({ ...row, createdAt: undefined })).sort((a, b) => a.id.localeCompare(b.id)));
 export const materialHash = (row: Pick<typeof htmlFiles.$inferSelect, "title" | "content" | "description" | "classroom" | "contentType">) => repairHash({ title: row.title, content: row.content, description: row.description, classroom: row.classroom, contentType: row.contentType });
 type RepairSource = { subject: string; classroom: number; concepts: MapConcept[] };
+/**
+ * S5b vak kör 1 (L2): a javítás szerzői promptja csak akkor kér kiosztott nyitásformát, ha a TÁROLT lecke jelölője már formát hordoz
+ * (v2). A régi (v1) jelölőjű vagy jelöletlen leckénél a javítás nem vezet be új formát — a jelölő és a nyitóblokk fejléce így egyezik.
+ */
+export function repairVarietyOption(original: { mapId: string; variety?: unknown }): { seed: number } | undefined {
+  return storedVarietyMarker(original)?.openingForm ? { seed: seedFrom(original.mapId) } : undefined;
+}
 /** `classroom`: the grade the teacher explicitly asked for (spec 2026-09-23); otherwise the original's. */
 export function assertRepairTeaching(original: Lesson, candidate: Lesson, source: RepairSource, classroom = original.classroom) {
   for (const field of ["mapId", "subject", "sourceOnly"] as const) {
@@ -188,7 +195,7 @@ async function buildStructuredImprovementScoped(original: Lesson, source: Repair
   const added = corrected.concepts.filter(c => c.examWeight !== "extra" && !taught.has(c.localId));
   if (added.length && outline.length) outline[outline.length - 1].conceptIds.push(...added.map(c => c.localId));
   const addedLine = added.length ? ` Új fogalmak a térképen — tanítsd őket a témájuk szerinti fejezetben, a fogalom szavaival: ${added.map(c => `${c.localId} „${c.term}”`).join(", ")}.` : "";
-  const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined, { seed: seedFrom(original.mapId) });
+  const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined, repairVarietyOption(original));
   const gradeLine = owner.classroom !== undefined
     ? `Az évfolyam a tanár kifejezett kérésére ${owner.classroom}. osztály: a classroom mező ${owner.classroom} legyen, a nyelvezet és a mélység ehhez igazodjon.`
     : "Az évfolyamot a program már a forrásból állapította meg, ne változtasd.";

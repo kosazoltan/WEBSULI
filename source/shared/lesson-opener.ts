@@ -75,9 +75,15 @@ const STORY_ARC = "A mini mese PONTOSAN 5 mondat: (1) hős és helyzet; (2) a le
 
 const isYoung = (stage: OpenerStage) => stage === "L1" || stage === "L2" || stage === "L3";
 
-function stageLine(stage: OpenerStage): string {
+/**
+ * `variety` (S5b vak kör 1, L3): BE állapotban a lépcsősor csak a korosztályt, a mondathosszt, a címkéket, a hangnemet és a tanulságot
+ * adja — a nyitás FORMÁJÁT és hosszát kizárólag a kiosztott nyitásforma írja elő (a régi kötött meseforma és az „5. mondat” ellentmondana
+ * neki). KI állapotban a sor bájtra a régi.
+ */
+function stageLine(stage: OpenerStage, variety = false): string {
   const s = OPENER_STAGES[stage];
-  return `Lépcső: ${stage} — ${s.grades}. Mese: ${s.storyForm}; mondatonként legfeljebb ${s.maxSentenceWords} szó. Célkártya-címkék: ${s.goalLabels.join(" / ")}. Hangnem: ${s.tone}. Tanulság: ${s.lesson}.`;
+  const form = variety ? `Mondatonként legfeljebb ${s.maxSentenceWords} szó.` : `Mese: ${s.storyForm}; mondatonként legfeljebb ${s.maxSentenceWords} szó.`;
+  return `Lépcső: ${stage} — ${s.grades}. ${form} Célkártya-címkék: ${s.goalLabels.join(" / ")}. Hangnem: ${s.tone}. Tanulság: ${s.lesson}.`;
 }
 
 function goalCardLines(labels: readonly string[]): string[] {
@@ -154,7 +160,7 @@ export function lessonOpenerContract(classroom: number, opts: { section0InScope?
   const pick = opts.variety ? openerVarietyPick(classroom, opts.variety.seed) : undefined;
   return [
     `CÉLKÁRTYA ÉS MINI MESE (${version}; az 1. fejezet első két blokkja, utána a tanítás):`,
-    `- ${stageLine(stage)}`,
+    `- ${stageLine(stage, Boolean(pick))}`,
     ...goalCardLines(s.goalLabels),
     pick
       ? `- NYITÁS: az 1. fejezet MÁSODIK blokkja egy \`explain\` blokk (depth "core"). Nyitásforma (a program osztotta ki, kötelező): ${OPENING_FORM_LABEL[pick.form.id]} — ${pick.form.description} A hős neve: ${pick.hero}. ${VARIETY_OPENING_ARC} A nyitás a fogalmat természetes szavakkal idézi fel (a pontos nevét, a term-et, nem kell szó szerint beillesztenie, és címszerű alakot ne másolj be idézőjelben), és azt jelöli.`

@@ -146,5 +146,13 @@ export function carryVarietyMarker<T>(candidate: T, stored: unknown): T {
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return candidate;
   const { variety: _dropped, ...rest } = candidate as Record<string, unknown>;
   const marker = storedVarietyMarker(stored);
-  return (marker ? { ...rest, variety: marker } : rest) as T;
+  if (!marker) return rest as T;
+  // S5b vak kör 1 (L2): évfolyamváltó javításnál a szerző promptja az ÚJ évfolyam kiosztott formáját kapja — a jelölő ugyanazt hordozza
+  // (különben a nyitóblokk a régi forma fejlécét kapná). Csak formát már hordozó (v2) jelölőnél; változatlan évfolyamnál a tárolt marad.
+  const was = (stored as { classroom?: unknown }).classroom;
+  const now = rest.classroom;
+  if (marker.openingForm && typeof now === "number" && typeof was === "number" && now !== was && typeof rest.mapId === "string") {
+    return { ...rest, variety: { ...marker, openingForm: openerVarietyPick(now, seedFrom(rest.mapId)).form.id } } as T;
+  }
+  return { ...rest, variety: marker } as T;
 }

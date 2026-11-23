@@ -46,8 +46,11 @@ export function bankUnitQuota(plan: LessonBankPlan, unitIndex: number, seed?: nu
   // nem mindig `prediction`-nel indul; mag nélkül a kiosztás bájtra a régi.
   const order = [...METHOD_KINDS, "gate" as const];
   (seed === undefined ? order : seededShuffle(order, seed)).forEach((kind, i) => kinds[i % kinds.length].push(kind));
+  // S5b vak kör 1 (L4): maggal a kitöltő csak NEM kapu fajtát vesz fel — a keverés már kiosztotta a két kötelező kapukérdést, a kitöltő
+  // egy harmadikat írna elő (a lejátszó minden meg nem oldott kapunál megáll). Mag nélkül (KI) a kitöltő a régi.
+  const fillers = seed === undefined ? METHOD_KINDS : METHOD_KINDS.filter((kind) => kind !== "gate");
   for (const [i, list] of kinds.entries()) {
-    for (let k = i; new Set(list).size < 2; k++) if (!list.includes(METHOD_KINDS[k % METHOD_KINDS.length])) list.push(METHOD_KINDS[k % METHOD_KINDS.length]);
+    for (let k = i; new Set(list).size < 2; k++) if (!list.includes(fillers[k % fillers.length])) list.push(fillers[k % fillers.length]);
   }
   // Spec 2026-09-29-limit-banktetel-kivetel (5. döntés): a *Count az elfogadási minimum (a publikálási 45/75-höz),
   // a *Target a modelltől kért darabszám tartalékkal, hogy a kapu a hibás tételt a minimum megsértése nélkül kivehesse.

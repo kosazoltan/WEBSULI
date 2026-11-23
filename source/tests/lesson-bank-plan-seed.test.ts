@@ -33,3 +33,15 @@ test("V10: maggal mind a tíz fajta és két kapukérdés megmarad, csomagonkén
   }
   assert.ok(first.size >= 6, `az első módszer csak ${first.size}-féle`);
 });
+
+test("S5b vak kör 1 L4: maggal PONTOSAN két kapukérdés — a csomagkitöltő nem ad harmadikat (1–12 csomag, 50 mag)", () => {
+  for (let s = 0; s < 50; s++) {
+    const seed = seedFrom(`map-${s}`);
+    for (let n = 1; n <= 12; n++) {
+      const gates = kinds(n, seed).flat().filter((k) => k === "gate").length;
+      assert.equal(gates, 2, `${n} csomag, map-${s}: ${gates} kapukérdés`);
+    }
+  }
+  // Mag nélkül (KI) a régi kiosztás marad — ott a kitöltő viselkedése változatlan.
+  assert.deepEqual(kinds(10), kinds(10, undefined));
+});

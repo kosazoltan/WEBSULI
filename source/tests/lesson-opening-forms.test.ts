@@ -113,3 +113,30 @@ test("V8/V9 bekötés: a szerzői prompt csak BE változatossági kapcsolónál 
     keys.forEach((k, i) => (saved[i] === undefined ? delete process.env[k] : (process.env[k] = saved[i])));
   }
 });
+
+test("S5b vak kör 1 L1: a kiosztott nyitásforma fejléce akkor is a nyitóblokké, ha a Célkártya és a nyitás közé ábra került", () => {
+  const goal = { kind: "explain" as const, depth: "core" as const, readAloud: false, text: "**Mit tanulunk ma?** A törtet.\n\n**Mi lehet nehéz?** A nevező.\n\n**Miért?** Mert új.\n\n**Így sikerül!** Rajzolj.", coversConceptIds: ["c1"] };
+  const opening = { kind: "explain" as const, depth: "core" as const, readAloud: false, text: "Lili egy furcsa tortaszeletet talált.", coversConceptIds: ["c1"] };
+  const figure = { kind: "animate" as const, animKind: "process" as const, params: { steps: ["a", "b"] }, caption: "ábra", coversConceptIds: ["c1"] };
+  const teach = { kind: "explain" as const, depth: "core" as const, readAloud: false, text: "A tört a rész és az egész viszonya.", coversConceptIds: ["c1"] };
+  const plain = [goal, opening, teach] as never[];
+  const withFigure = [goal, figure, opening, teach] as never[];
+  assert.equal(blockLabel(plain, 1, 0, "kid", 3, false, "rejtely"), OPENING_FORM_LABEL.rejtely);
+  assert.equal(blockLabel(withFigure, 2, 0, "kid", 3, false, "rejtely"), OPENING_FORM_LABEL.rejtely, "ábra után is a nyitóblokk kapja a forma címkéjét");
+  assert.notEqual(blockLabel(withFigure, 3, 0, "kid", 3, false, "rejtely"), OPENING_FORM_LABEL.rejtely, "a tanító blokk nem nyitás");
+  // Jelöletlen (régi) lecke: a régi, pozíciós szabály — közbeillesztett ábra után NEM „Mese”.
+  assert.equal(blockLabel(plain, 1, 0, "kid", 3, false), "Mese");
+  assert.notEqual(blockLabel(withFigure, 2, 0, "kid", 3, false), "Mese");
+});
+
+test("S5b vak kör 1 L3: BE állapotban a lépcsősor nem írja elő a régi kötött meseformát és az 5. mondatot — a formát és a hosszt csak az új szerződés adja", () => {
+  for (const classroom of [2, 3, 4, 6, 9]) {
+    const on = lessonOpenerContract(classroom, { variety: { seed: 7 } });
+    assert.equal(on.includes("az 5. mondat"), false, `${classroom}. évfolyam: nincs „5. mondat”`);
+    assert.equal(/Mese: [^.]*;/u.test(on.split("\n")[1] ?? ""), false, `${classroom}. évfolyam: a lépcsősor nem ad meseformát`);
+    assert.ok(on.includes("Nyitásforma (a program osztotta ki, kötelező)"));
+    assert.ok(on.includes("Célkártya-címkék:") && on.includes("Hangnem:") && on.includes("Tanulság:"), "a korosztály, címkék, hangnem, tanulság megmarad");
+    // KI: bájtra a régi (a meseformával).
+    assert.ok(lessonOpenerContract(classroom).includes("Mese: "));
+  }
+});
