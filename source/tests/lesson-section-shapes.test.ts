@@ -138,7 +138,8 @@ test("S6a-v2: a pedagógus-prompt a FUTÁSRA rögzített állapotot követi, nem
 test("S6a-v2: a gyártómotor a fejezetív-kiosztáshoz a futás állapotát olvassa (szerkezeti őr)", async () => {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
-  assert.match(src, /applySectionShapes\(plannedOutline, planned === undefined && varietyOn \? seedFrom\(mapId\) : undefined\)/u);
+  // 3. vak kör (L7): a feltétel nevesítve (`shapedNow`) — a viselkedést a `lesson-variety-paths` motor-tesztje méri.
+  assert.ok(src.includes("const shapedNow = planned === undefined && varietyOn;") && src.includes("applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined)"));
 });
 
 // --- 1. vak kör (L1–L3): a szabályok a szerzőnek átadott VÉGLEGES blokksorokon ---
