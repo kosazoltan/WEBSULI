@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  STATUS, createGate, parseNumstat, parseUnifiedZero, prodLineStats, readEvidence, redact, resolveVerdict, verdictLine, verdictResult, writeEvidence, writeLog,
+  STATUS, carryVerdict, createGate, parseNumstat, parseUnifiedZero, prodLineStats, readEvidence, redact, resolveVerdict, verdictLine, verdictResult, writeEvidence, writeLog,
   loadConfig,
 } from './lib.mjs';
 
@@ -135,4 +135,23 @@ test('verdictResult kis javítással: ítélet nélkül PASS; NEM mindig FAIL; n
   assert.match(fail.note, /40 éles sor > 30/);
   assert.match(verdictResult(null, h, prodLineStats([{ path: 'scripts/qa/x.mjs', add: 1 }], smallFix)).note, /kizárt útvonal: scripts\/qa\/x\.mjs/);
   assert.equal(verdictResult(null, h).status, STATUS.FAIL, 'a régi hívás (méret nélkül) változatlan');
+});
+
+// --- A7: egy már ellenőrzött PR kis utólagos javítása átviszi az ítéletet ---
+
+test('carryVerdict: a legutóbbi ellenőrzött ős ítélete átvihető, ha azóta ≤ 30 éles sor változott; NEM soha; nagyobb változásnál nincs átvitel', () => {
+  const smallFix = loadConfig().smallFix;
+  const A = 'a'.repeat(40);
+  const B = 'b'.repeat(40);
+  const entries = { [A]: [{ path: 'source/server/a.ts', add: 120, del: 0 }], [B]: [{ path: 'source/server/a.ts', add: 10, del: 5 }, { path: 'source/tests/a.test.ts', add: 90, del: 0 }] };
+  const base = { candidates: [{ head: A, verdict: 'IGEN', at: '2026-11-23T08:00:00Z' }, { head: B, verdict: 'IGEN, FELTÉTELLEL', at: '2026-11-23T09:00:00Z' }], isAncestor: () => true, fixEntries: (sha) => entries[sha], smallFix };
+  const carried = carryVerdict(base);
+  assert.equal(carried.verdict, 'IGEN, FELTÉTELLEL', 'a legutóbbi ellenőrzött ős ítélete');
+  assert.equal(carried.carriedFrom, B);
+  assert.match(carried.source, /átvitt ítélet a bbbbbbbbbbbb fejről \(azóta kis javítás: 15 éles sor\)/);
+  assert.equal(carryVerdict({ ...base, fixEntries: () => [{ path: 'source/server/a.ts', add: 31, del: 0 }] }), null, 'a legutóbbi ős óta nagyobb a változás → új kör (régebbi ősre sem esik vissza)');
+  assert.equal(carryVerdict({ ...base, candidates: [{ head: B, verdict: 'NEM', at: 'x' }] }), null, 'NEM ítélet nem vihető át');
+  assert.equal(carryVerdict({ ...base, isAncestor: () => false }), null, 'nem ős commit ítélete nem számít');
+  assert.equal(carryVerdict({ ...base, fixEntries: () => [{ path: 'scripts/qa/gates/lib.mjs', add: 1, del: 0 }] }), null, 'kapu-fájl változása után nincs átvitel');
+  assert.equal(carryVerdict({ ...base, candidates: [] }), null);
 });

@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import {
-  STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog, parseNumstat, prodLineStats,
+  STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog, parseNumstat, prodLineStats, carryVerdict, carryInputs,
 } from './lib.mjs';
 import { evidenceRecord, freshMainStep, runPrePushSteps } from './pre-push-gate.mjs';
 import { stemOf } from './stage-gate.mjs';
@@ -150,7 +150,8 @@ async function main() {
   const numstat = git.run(['diff', '--numstat', '--no-renames', `${ctx.base}...HEAD`]);
   const small = numstat.code === 0 ? prodLineStats(parseNumstat(numstat.stdout), cfg.smallFix) : null;
   await gate.step('független ellenőr ítélete a fejre', () => verdictResult(
-    resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head, small));
+    resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts })
+      ?? carryVerdict({ ...carryInputs(ctx, head), smallFix: cfg.smallFix }), head, small));
 
   await gate.step('külső (Gemini) ellenőr — második vélemény', () => externalResult(readEvidence(ctx.evDir, `external-${head}`), head));
 

@@ -307,6 +307,42 @@ export function prodLineStats(entries, smallFix) {
   return { lines, files, binary, never: neverHits, max: Number.isFinite(max) ? max : null, small };
 }
 
+/**
+ * Terv docs/specs/2026-11-23-aranyos-kapuk.md (A7): egy már ellenőrzött PR kis utólagos javítása (review-lelet, CI-hiba) ne kérjen új
+ * fizetős kört. Ha az aktuális fejre nincs ítélet, a legutóbbi ellenőrzött ŐS-commit ítélete átvihető, ha a kettő közti változás a PR
+ * saját fájljain (a főág beolvasztott fájljai nélkül) kis javítás. `NEM` ítélet nem vihető át. Tiszta függvény: a git-adatot a hívó adja.
+ * `candidates`: `[{ head, verdict, at }]` a bizonyíték-tárból; `isAncestor(sha)`; `fixEntries(sha)`: a numstat-bejegyzések `sha..HEAD`.
+ * @returns {{ verdict: string, source: string, carriedFrom: string, small: object } | null}
+ */
+/** A `carryVerdict` git-oldali bemenetei egy kapu kontextusából (`ctx`: git, evDir, base). */
+export function carryInputs(ctx, head = 'HEAD') {
+  const { git, evDir, base } = ctx;
+  const candidates = existsSync(evDir) ? readdirSync(evDir).filter((f) => /^review-[0-9a-f]{40}\.json$/.test(f))
+    .map((f) => readEvidence(evDir, f.replace(/\.json$/, ''))).filter(Boolean) : [];
+  const own = git.run(['diff', '--name-only', '--no-renames', `${base}...${head}`]);
+  const files = own.code === 0 ? own.stdout.split(/\r?\n/).filter(Boolean) : [];
+  return {
+    candidates,
+    isAncestor: (sha) => sha !== head && git.run(['merge-base', '--is-ancestor', sha, head]).code === 0,
+    fixEntries: (sha) => {
+      if (!files.length) return [];
+      const r = git.run(['diff', '--numstat', '--no-renames', sha, head, '--', ...files]);
+      return r.code === 0 ? parseNumstat(r.stdout) : [{ path: 'source/ismeretlen', add: 1e9, del: 0 }];
+    },
+  };
+}
+
+export function carryVerdict({ candidates, isAncestor, fixEntries, smallFix }) {
+  const ok = (candidates ?? []).filter((c) => c && VERDICTS.includes(c.verdict) && c.verdict !== 'NEM' && isAncestor(c.head))
+    .sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')));
+  for (const c of ok) {
+    const small = prodLineStats(fixEntries(c.head), smallFix);
+    if (small.small) return { verdict: c.verdict, source: `átvitt ítélet a ${c.head.slice(0, 12)} fejről (azóta kis javítás: ${small.lines} éles sor)`, carriedFrom: c.head, small };
+    return null; // a legutóbbi ellenőrzött ős óta nagyobb a változás — új kör kell
+  }
+  return null;
+}
+
 /** Az ítélet lépés-eredménye. `small`: a `prodLineStats` eredménye — kis javításnál az ítélet hiánya nem bukás. */
 export function verdictResult(v, head, small = null) {
   const how = `node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict IGEN --report <jelentés.md>`;

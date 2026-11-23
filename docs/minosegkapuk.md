@@ -36,6 +36,8 @@ terhelésétől függően ±50%.
   („KIS JAVÍTÁS (N éles sor)”). A merge-kapu a sorokat a GitHub fájllistájából számolja újra. Soha nem kis javítás a kapukat, a CI-t,
   az ügynök-beállítást, a skilleket, a sémát / migrációt, a `package.json`-t vagy a `render.yaml`-t érintő változás, és a bináris éles fájl
   (`gates.config.json` `smallFix`). Ha mégis van ítélet, az számít — a `NEM` kis javításnál is bukás.
+- **Kis utólagos javítás** (review-lelet, CI-hiba egy már ellenőrzött PR-on): a legutóbbi ellenőrzött ős-commit ítélete átvihető, ha azóta a
+  PR saját fájljain legfeljebb 30 éles sor változott — nem kell új fizetős kör. `NEM` ítélet nem vihető át.
 - **A teljes készlet a CI-é:** a helyi push-kapu a kapcsolódó teszteket futtatja; a teljes lint, a teljes egységteszt (x64 és ARM64), a
   build, a teljes böngészős készlet és a DB-integrációs teszt minden PR-on a GitHub CI-ban fut.
 

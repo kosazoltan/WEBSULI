@@ -6,7 +6,7 @@
 
 import { join } from 'node:path';
 import {
-  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence, prodLineStats,
+  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence, prodLineStats, carryVerdict, carryInputs,
 } from './lib.mjs';
 import { evidenceRecord } from './pre-push-gate.mjs';
 
@@ -174,7 +174,7 @@ async function main() {
     }
     const verdict = resolveVerdict({
       head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: [pr.body, ...(pr.comments ?? []).map((c) => c.body)],
-    });
+    }) ?? carryVerdict({ ...carryInputs(ctx, head), smallFix: cfg.smallFix }); // A7: kis utólagos javítás
     const g = exec('bash', [join(root, 'scripts', 'qa', 'active-runs-guard.sh')], { cwd: root, timeoutMs: 90_000 });
     const summary = redact(`${g.stdout}\n${g.stderr}`).split('\n').filter((l) => /^(GUARD|AKTIV)/.test(l)).join(' ').trim();
     const rt = await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl);
