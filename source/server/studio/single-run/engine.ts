@@ -51,7 +51,8 @@ import { subjectKeyOf } from "../../../shared/subject-key";
 import { gateMode, type GateMode, type GateName } from "../gates/config";
 import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
-import { lessonVarietyForRun, runWithLessonVariety } from "../lesson-variety-flag";
+import { lessonVarietyForRun, runWithLessonVariety, setRunOpeningForm } from "../lesson-variety-flag";
+import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opener";
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
 import { cleanModelText, sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual, type SourceVisualsResult } from "../../../shared/source-visuals";
@@ -757,6 +758,21 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       throw new SingleRunError("forrás-fedettség", verdict.problems);
     }
   }
+  // Review #534 (Codex, Copilot): a szerzőnek kiosztott nyitásforma verziózott futásadat. Új szerzői körnél most dől el és a job
+  // állapotába kerül; folytatásnál KIZÁRÓLAG a mentett érték számít — régi (forma nélküli) checkpointból átvett tanításhoz nem keletkezik
+  // utólag forma (a mentett jelölő és a lektor sem állít kiosztást).
+  let assignedForm: string | null = null;
+  if (varietyOn) {
+    if (!resumed?.lesson) {
+      const pick = openerVarietyPick(promptMap.classroom, seedFrom(mapId)).form;
+      assignedForm = pick.id;
+      output = { ...output, openingForm: pick.id };
+      setRunOpeningForm(pick);
+    } else if (typeof output.openingForm === "string") {
+      const saved = openingFormById(output.openingForm);
+      if (saved) { assignedForm = saved.id; setRunOpeningForm(saved); }
+    }
+  }
   if (!resumed?.lesson) await save("author", output);
 
   // 3. Tananyag (tanítás).
@@ -1107,7 +1123,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     output = { ...output, answerKeyArchive: finalizeAnswerKeyArchive(output.answerKeyArchive as Array<{ sectionIndex: number; q: string } & Record<string, unknown>>, publishable.experience?.tasks ?? []) };
   }
   // S5a vak kör 1 (L1): a jelölőt a futás rögzített állapota adja — a modell (forrásvizuál BE mellett átengedett) jelölője eldobva.
-  const lessonId = await store.upsertLesson(null, mapId, withVarietyMarker(publishable, varietyOn));
+  const lessonId = await store.upsertLesson(null, mapId, withVarietyMarker(publishable, varietyOn, assignedForm));
   const published = await store.publishLesson({
     lessonId, mapId, title: publishable.title, classroom: publishable.classroom,
     // S1b: a fedettség-kimenet (`lessons.coverage`) a vizuális tételeket is számolja — leltár nélkül a kulcs elmarad.

@@ -7,7 +7,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { htmlFiles, kmConcepts, knowledgeMaps, lessons } from "../../../shared/schema";
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
-import { runWithLessonVariety } from "../lesson-variety-flag";
+import { adoptStoredOpeningForm, runWithLessonVariety } from "../lesson-variety-flag";
 import { carryVarietyMarker, storedVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { drawableCandidate, withDropReason } from "../undrawable-visuals";
 import type { ExamWeight } from "../../../shared/knowledge-map-schema";
@@ -51,6 +51,8 @@ export function fixConceptInConversation(input: ConceptFixInput): Promise<Concep
 async function fixConceptScoped(input: ConceptFixInput): Promise<ConceptFixOutcome> {
   const { original, source, conceptId, conversation } = input;
   const deps = { conversation, log: input.log };
+  // Review #534 (Copilot): a javítás lektora a tárolt lecke kiosztott formáját kapja konkrét elvárásként.
+  adoptStoredOpeningForm(original);
   // A szűk szerző csak a tanítást szerkeszti; a bank a javított tanításból újraépül, és újra lektorálódik.
   const teaching = { ...original, experience: undefined };
   const { assertRepairCandidate, assertRepairTeaching } = await import("../structured-improvement");
