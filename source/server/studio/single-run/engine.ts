@@ -10,6 +10,7 @@
  */
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { seedFrom } from "../../../shared/seeded";
+import { applySectionShapes, tryShare, tryShareLow, withTryShareNote } from "../../../shared/lesson-section-shapes";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
@@ -716,7 +717,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   await workflowPhase("pedagogue");
   phase("pedagogue", resumed?.outline ? "A mentett tananyagterv ellenőrzése…" : input.approvedOutline ? "A jóváhagyott tanulási terv ellenőrzése…" : "A tananyagterv készül…");
   const planned = resumed?.outline ?? input.approvedOutline;
-  const outline = planned !== undefined ? approvedOutlineOf(planned, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${withKnowledge(buildPedagoguePrompt(promptMap, undefined, owner), await knowledgeBlock("pedagogue"))}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
+  const plannedOutline = planned !== undefined ? approvedOutlineOf(planned, concepts) : await runStation(station, "tananyagterv", withRoleRunbook([text(`2. ÁLLOMÁS — TANANYAGTERV.\n${withKnowledge(buildPedagoguePrompt(promptMap, undefined, owner), await knowledgeBlock("pedagogue"))}\nVálaszolj kizárólag a vázlat JSON-jával.`)], "pedagogue"), (json) => {
     // S1b: a forrás-vizuális hivatkozások tisztítása a fejezet-összevonás UTÁN (az összevont fejezet tételei megmaradnak).
     const fixed = autofixOutlineVisuals(autofixOutline(json, concepts, lessonLengthBudget(promptMap).maxSections).outline, visualIds).outline;
     const parsed = outlineSchema.safeParse(fixed);
@@ -724,7 +725,23 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     const covers = outlineCoversMap(parsed.data.sections, concepts);
     return covers.ok ? { ok: true, value: parsed.data } : { ok: false, problems: [`A vázlat nem fedi le a kötelező fogalmakat: ${JSON.stringify(covers).slice(0, 600)}`] };
   });
-  output = { ...output, outline, approvedOutline: outline };
+  // S6a (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 12. szakasz): BE kapcsolónál a modell tervének fogalom-fejezetei a kiosztott
+  // fejezetmintát kapják (a tulajdonos jóváhagyott terve nem változik); KI-nél a terv a régi (csak a kéretlen `sectionKind` esik ki).
+  const shapedNow = planned === undefined && varietyOn;
+  // S6b 1. vak kör (L1): a terv eredetét a tisztítás ELŐTT állapítjuk meg — a mentett, program által kiosztott terv `tryKind`-ja megmarad.
+  const savedAssigned = varietyOn && resumed?.outline !== undefined && output.sectionShapes === true;
+  const outline = applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined, savedAssigned);
+  // 3. vak kör (L7): a terv EREDETE verziózott futásadat — `sectionShapes: true` csak akkor, ha a sorokat a program osztotta ki (friss
+  // modellterv BE futásban). Folytatásnál kizárólag a mentett jelző számít: a tulajdonos jóváhagyott tervéből indult futás folytatása
+  // (ahol a bemenetben már nincs `approvedOutline`) nem kap kiosztásra hivatkozó szerzői kérést.
+  const programAssigned = shapedNow || savedAssigned;
+  output = { ...output, outline, approvedOutline: outline, ...(programAssigned ? { sectionShapes: true } : {}) };
+  // Review #536 (Copilot): a program által kiosztott blokksorok a szerzőhöz is eljutnak — a beszélgetésben a modell EREDETI terve áll,
+  // a szerzői kérés ezért kimondja a végleges sorokat. Csak a program által kiosztott tervnél (`programAssigned`); a tulajdonos
+  // jóváhagyott tervénél (folytatva is) és KI állapotban a kérés bájtra a régi.
+  const assignedPlanLines = programAssigned
+    ? `\nA FEJEZETEK TANÍTÁSI TÖRZSÉNEK VÉGLEGES BLOKKSORA (a program osztotta ki; ez FELÜLÍRJA a 2. állomás vázlatának plannedBlocks mezőit — a fejezet tanító blokkjai pontosan ebben a sorrendben követik egymást; ha a nyitás szerződése az első fejezet elejére nyitóblokkokat ír elő, azok a sor ELŐTT állnak, a sor utánuk kezdődik):\n${outline.sections.map((section, i) => `- [${i}] ${section.heading}: ${JSON.stringify(section.plannedBlocks)}${section.tryKind ? ` — tryKind: "${section.tryKind}"` : ""}`).join("\n")}`
+    : "";
 
   // SK1 — a forrás-fedettségi kapu mérése (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. Független review F12: a
   // kapu hibája (kivétel) egyik módban sem állítja meg a kifizetett futást — megszámolva, naplózva, `null` ítélettel (nincs következmény).
@@ -765,7 +782,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       output = { ...output, openingForm: pick.id };
       setRunOpeningForm(pick);
     } else if (typeof output.openingForm === "string") {
-      const saved = openingFormById(output.openingForm);
+      const saved = openingFormById(output.openingForm, promptMap.classroom);
       if (saved) { assignedForm = saved.id; setRunOpeningForm(saved); }
     }
   }
@@ -776,7 +793,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   phase("author", "A tananyag készül…");
   const authorKnowledge = resumed?.lesson ? "" : await knowledgeBlock("author");
   const authorRequest = (notes: Parameters<typeof buildAuthorPrompt>[2]) =>
-    withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner, { seed: seedFrom(mapId) }), authorKnowledge)}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
+    withRoleRunbook([text(`3. ÁLLOMÁS — TANANYAG.\n${withKnowledge(buildAuthorPrompt(outline.sections, promptMap, notes, undefined, owner, { seed: seedFrom(mapId) }), authorKnowledge)}${assignedPlanLines}\nVálaszolj kizárólag a teljes lecke JSON-jával (gyakorlóbank nélkül).`)], "author");
   const validateLesson = (json: unknown): { ok: true; value: Lesson } | { ok: false; problems: string[] } => {
     // Funkciókapcsoló (vak ellenőr B1): KI állapotban a modell kimenetét a bővítés ELŐTTI séma méri (`modelLessonSchema(false)`) — az új
     // ábrafajta ugyanazzal a sémahibával, ugyanabban a sorrendben megy javító fordulóra, a kéretlen `sourceVisualId` mező pedig
@@ -843,6 +860,12 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       ? [{ reason: "length_over_budget", note: `A Tananyag lap ${visibleWords} látható szó — a terjedelmi keret legfeljebb ${lengthBudget.maxWords} (cél ${lengthBudget.targetWords}, ${lengthBudget.requiredConcepts} tanítandó fogalom).`, round: 0 }]
       : [];
     telemetry.gates.lengthOverBudget = qualityNotes.length > 0;
+    // S6b (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 13. szakasz): jelzés, nem kapu — a kész lecke try-aránya (BE kapcsolónál).
+    if (varietyOn) {
+      const share = tryShare(lesson);
+      telemetry.gates.tryShare = share;
+      if (tryShareLow(lesson)) qualityNotes.push({ reason: "try_share_low", note: `A fejezetek ${Math.round(share * 100)}%-ában van kipróbálható feladat (try) — a cél legalább a harmaduk.`, round: 0 });
+    }
     output = { ...output, lesson, ...(qualityNotes.length ? { qualityNotes } : {}) };
     await save("animator", output);
   }
@@ -1127,6 +1150,14 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     quizItems: exportQuizItemsForPublish(publishable, lessonId, conceptIdResolver(concepts)),
     ...(typeof output.targetHtmlFileId === "string" ? { targetHtmlFileId: output.targetHtmlFileId, ...(typeof output.targetBaseline === "string" ? { targetBaseline: output.targetBaseline } : {}) } : {}),
   });
+  // S6b 1. vak kör (L4): a `try`-arány és a jelzése a VÉGLEGES (publikált) leckére szól — a lektori tanításcsere és a mentett tanításból
+  // folytatott futás után is; a többi minőségi jelzés változatlan.
+  if (varietyOn) {
+    telemetry.gates.tryShare = tryShare(publishable);
+    const notes = withTryShareNote(Array.isArray(output.qualityNotes) ? output.qualityNotes as Array<{ reason?: unknown }> : [], publishable);
+    const { qualityNotes: _notes, ...withoutNotes } = output;
+    output = notes.length ? { ...withoutNotes, qualityNotes: notes } : withoutNotes;
+  }
   await store.saveStep(jobId, { step: "done", status: "ok", lessonId, finishedAt: new Date(),
     output: { ...output, lesson: publishable, htmlFileId: published.htmlFileId, exportedQuizItems: published.exportedQuizItems, quality: { removed: [], warnings },
       telemetry: telemetry.snapshot(conversation.model), singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } });
