@@ -5,6 +5,8 @@ import { sampleIds } from "@shared/lesson-experience-score";
 const roundSchema = z.object({
   ids: z.array(z.string()), answers: z.record(z.string()).default({}), picks: z.record(z.number().int().min(0).max(3)).default({}),
   sampleViewed: z.array(z.string()).default([]), startedAt: z.number().nonnegative(), finishedAt: z.number().positive().optional(),
+  // Eredmény-e-mail B1b (R2): az utolsó kvízválasz ideje — a beküldés 7 napos korhatára ehhez mér (régebbi tárolt körben nincs: ott a kezdés számít).
+  lastAnsweredAt: z.number().positive().optional(),
 });
 export type ExperienceRound = z.infer<typeof roundSchema>;
 export function experienceFingerprint(value: unknown): string {
