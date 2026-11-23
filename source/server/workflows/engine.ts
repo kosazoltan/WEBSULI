@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
-import { assertWorkflowStep, workflowDefinition, workflowVisitsLeft, WORKFLOW_RESULT_KIND, WORKFLOW_VERSION, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
+import { assertWorkflowStep, workflowDefinition, workflowVisitsLeft, WORKFLOW_RESULT_KIND, WORKFLOW_VERSION, type QuotaFailoverRecord, type WorkflowMode, type WorkflowView } from "../../shared/lesson-workflow";
 import { skillRuleText, type SkillCode, type SkillSnapshot } from "../../shared/lesson-skill";
 import { auditWorkflow, findingsFromError, knownFinding, mergeFindings, unknownSample } from "./learning";
 import { runtimePrompt } from "../../shared/runtime-knowledge";
@@ -312,6 +312,26 @@ export async function workflowUsage(usage: { prompt_tokens?: number; completion_
   // Spec 2026-09-30 (U6, C10): a gyorsítótár-olvasás/-írás a látogatásban — a költségmérés (D) ebből számol.
   if (usage.cachedTokens) visit.cacheReadTokens = (visit.cacheReadTokens ?? 0) + usage.cachedTokens;
   if (usage.cacheWriteTokens) visit.cacheWriteTokens = (visit.cacheWriteTokens ?? 0) + usage.cacheWriteTokens;
+  await persist(ctx);
+}
+
+/** Kanban #10: a futásban legfeljebb ennyi átállás-bejegyzés marad (a legrégebbi esik ki). */
+export const QUOTA_FAILOVER_RECORD_LIMIT = 50;
+/**
+ * Kvóta-átállás könyvelése a futásban (tulajdonosi döntés 2026-11-23, kanban #10): a futás nézetébe a bejegyzés, az aktuális látogatás
+ * `failover` összegzőjébe a tartalék (OpenRouter) tokenjei — a `workflowUsage` a látogatás teljes tokenjét könyveli, ez jelöli, mennyi
+ * ment belőle átállással. Futáson kívül no-op.
+ */
+export async function workflowQuotaFailover(record: QuotaFailoverRecord) {
+  const ctx = context.getStore();
+  if (!ctx) return;
+  const view = ctx.record.view;
+  const visit = view.visits.at(-1);
+  if (visit) {
+    const f = (visit.failover ??= { provider: "openrouter", calls: 0, tokensIn: 0, tokensOut: 0 });
+    f.calls++; f.tokensIn += record.tokensIn ?? 0; f.tokensOut += record.tokensOut ?? 0;
+  }
+  view.quotaFailovers = [...(view.quotaFailovers ?? []), { ...record, ...(visit ? { step: visit.step } : {}) }].slice(-QUOTA_FAILOVER_RECORD_LIMIT);
   await persist(ctx);
 }
 
