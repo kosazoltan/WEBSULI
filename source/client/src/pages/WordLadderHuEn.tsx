@@ -1689,7 +1689,7 @@ export default function WordLadderHuEn() {
         .wl-race-rival { background: #a855f7; }
         /* P-011: árnyék helyett tömör sötét háttér (telefonon az árnyék maszatos); a címkék a pöttyük világos színét kapják, az
            állás-szöveg más színű — a címke és az érték elválik. */
-        .wl-race-text { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 2px 0; padding: 2px 8px; border-radius: 9999px; background: #0f172ae6; font-size: 13px; font-weight: 800; color: #f8fafc; text-shadow: none; }
+        .wl-race-text { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 2px 0; padding: 0 8px; border-radius: 9999px; background: #0f172ae6; font-size: 13px; font-weight: 800; color: #f8fafc; text-shadow: none; }
         .wl-race-key { display: inline-flex; align-items: center; gap: 4px; }
         .wl-race-key-you { color: #7dd3fc; }
         .wl-race-key-rival { color: #d8b4fe; }

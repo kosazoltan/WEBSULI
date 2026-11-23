@@ -36,3 +36,7 @@ munkafa `.claude/worktrees/szoletra-felirat`. **Feladat:** P-011.
 - Képernyőképek (kézzel másolva a teszt kimeneti mappájából): `docs/measurements/jatekok-jatekelmeny/P011-felirat/`
   (kérdés-kártya + verseny-sor, győzelem, vereség; 360×640 és 390×844). A kérdés-kártya és a verseny-sor 360 px-en sem fed és
   nem vág (vizuálisan ellenőrizve; a geometriai mérést a `word-ladder-readability.spec.ts` végzi).
+- **Kapu-lelet (pre-PR, `word-ladder-readability.spec.ts` 844×390, SZ-5 és K2):** a verseny-sor első változata `padding: 2px 8px`
+  volt — a 4 px-szel magasabb sor fekvő nézetben a HUD alját a kérdés-kártya (`--play-question-top: … + 96px`) alá tolta
+  („a kérdés-kártya fedi a HUD-ot”, pl. `en2-023`, `de4-060`). Javítás: magasság-semleges `padding: 0 8px`; utána a 844×390-es
+  readability-esetek és a P-011 e2e 6 / 6 zöld (5,1 perc).
