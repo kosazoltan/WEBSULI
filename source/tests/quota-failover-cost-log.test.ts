@@ -126,3 +126,55 @@ test("E3: munkafolyamat-futásban a meglévő tokenkönyvelés (futás nézete +
   const visit = view.visits.find((v) => v.step === "generate")!;
   assert.deepEqual(visit.failover, { provider: "openrouter", calls: 1, tokensIn: 1200, tokensOut: 340 });
 });
+
+/* Review-szálak (PR #546, Codex/Vercel/Copilot): a tartalék stream megszakításkor `{ type: "error" }` darabot ad (nem dob),
+   a fogyasztó pedig ilyenkor dob vagy kilép a ciklusból → a generátor `return()`-t kap. A könyvelésnek PONTOSAN EGYSZER
+   kell futnia, és a `done` előtti hiba-darab vagy korai lezárás `ok: false`. */
+function streamRouter(chunks: Array<{ type: "content_delta"; content: string } | { type: "error"; message: string } | { type: "done" }>) {
+  return (): IAIProvider => ({
+    name: "OpenRouter", model: "openai/gpt-5.6-terra",
+    async chat() { return { content: "tartalék" }; },
+    async *streamChat() { for (const c of chunks) yield c; },
+    async isAvailable() { return true; },
+  });
+}
+async function memoryProvider(router: () => IAIProvider) {
+  const provider = new QuotaFailoverProvider(quotaFail(), router);
+  await provider.chat(msgs); // kvótahiba → a memória bekapcsol; a stream ezután a tartalékra megy
+  events = []; resetQuotaFailoverCountersForTest();
+  return provider;
+}
+
+test("S1: a végigolvasott hiba-darab (done nélkül) → egyszer, ok: false", async () => {
+  const provider = await memoryProvider(streamRouter([{ type: "content_delta", content: "a" }, { type: "error", message: "Request aborted" }]));
+  const seen: string[] = [];
+  for await (const chunk of provider.streamChat(msgs)) seen.push(chunk.type);
+  assert.deepEqual(seen, ["content_delta", "error"]);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].ok, false);
+  assert.equal(events[0].trigger, "memory");
+  assert.equal(quotaFailoverCounters().failedFallbackCalls, 1);
+});
+
+test("S2: a fogyasztó a hiba-darabnál dob (generátor return()) → egyszer, ok: false", async () => {
+  const provider = await memoryProvider(streamRouter([{ type: "error", message: "Request aborted" }, { type: "done" }]));
+  await assert.rejects((async () => {
+    for await (const chunk of provider.streamChat(msgs)) if (chunk.type === "error") throw new Error(chunk.message);
+  })(), /Request aborted/);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].ok, false);
+});
+
+test("S3: korai kilépés (break a done előtt) → egyszer, ok: false", async () => {
+  const provider = await memoryProvider(streamRouter([{ type: "content_delta", content: "a" }, { type: "content_delta", content: "b" }, { type: "done" }]));
+  for await (const _chunk of provider.streamChat(msgs)) break;
+  assert.equal(events.length, 1);
+  assert.equal(events[0].ok, false);
+});
+
+test("S4: normál befejezés (done) → egyszer, ok: true", async () => {
+  const provider = await memoryProvider(streamRouter([{ type: "content_delta", content: "a" }, { type: "done" }]));
+  for await (const _chunk of provider.streamChat(msgs)) { /* végigolvas */ }
+  assert.equal(events.length, 1);
+  assert.equal(events[0].ok, true);
+});
