@@ -30,6 +30,8 @@ test('parseFindings: hibatűrő (szöveggel körülvett JSON, rossz súlyosság 
   const f = parseFindings('ok: {"verdict":"CONCERNS","findings":[{"line":"3","severity":"HUGE","issue":"x breaks"},{"issue":" "}]}', 'a.ts');
   assert.deepEqual(f, [{ file: 'a.ts', line: 3, severity: 'low', issue: 'x breaks' }]);
   assert.deepEqual(parseFindings('nem json', 'a.ts'), []);
+  const cut = '{"verdict":"BLOCK","findings":[{"line":4,"severity":"high","issue":"guard removed"},{"line":9,"severity":"low","iss';
+  assert.deepEqual(parseFindings(cut, 'b.ts'), [{ file: 'b.ts', line: 4, severity: 'high', issue: 'guard removed' }]);
 });
 
 test('decideVerdict: high → NEM, cáfolt high nem számít, csak low → FELTÉTELLEL, semmi → IGEN', () => {

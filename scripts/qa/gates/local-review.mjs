@@ -60,7 +60,12 @@ export function buildPrompt(chunk) {
 export function parseFindings(content, file) {
   let j;
   try { j = JSON.parse(content); } catch { const m = /\{[\s\S]*\}/.exec(String(content)); try { j = m ? JSON.parse(m[0]) : null; } catch { j = null; } }
-  if (!j || !Array.isArray(j.findings)) return [];
+  if (!j || !Array.isArray(j.findings)) {
+    // Csonka (num_predict-tel levágott) válasz: a teljes, önálló lelet-objektumok kimentése.
+    const salvaged = [...String(content).matchAll(/\{[^{}]*"issue"\s*:\s*"(?:[^"\\]|\\.)*"[^{}]*\}/g)].map((m) => { try { return JSON.parse(m[0]); } catch { return null; } }).filter(Boolean);
+    if (!salvaged.length) return [];
+    j = { findings: salvaged };
+  }
   return j.findings
     .filter((f) => f && typeof f.issue === 'string' && f.issue.trim())
     .map((f) => ({ file, line: Number(f.line) || 0, severity: ['high', 'medium', 'low'].includes(f.severity) ? f.severity : 'low', issue: f.issue.trim() }));
@@ -96,10 +101,23 @@ export function renderReport({ head, base, model, findings, verdict, risky, refu
 }
 
 async function callModel(url, model, prompt) {
+  // Átmeneti Ollama-hiba (2026-11-23 élő futás: „fetch failed” a 15/50. darabnál) → legfeljebb 3 próbálkozás, növekvő várakozással.
+  for (let attempt = 1; ; attempt++) {
+    try { return await callModelOnce(url, model, prompt); } catch (e) {
+      if (attempt >= 3) throw e;
+      process.stderr.write(`[local-review] átmeneti hiba (${e.message}) — újrapróba ${attempt + 1}/3\n`);
+      await new Promise((r) => setTimeout(r, 5000 * attempt));
+    }
+  }
+}
+
+async function callModelOnce(url, model, prompt) {
   const r = await fetch(`${url}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model, stream: false, think: false, format: 'json', options: { num_ctx: 32768, temperature: 0 }, messages: [{ role: 'user', content: prompt }] }),
+    // num_predict: a 9B modell egy-egy darabon ismétlő hurokba eshet (2026-11-23: AdventHomeCard.tsx → 300 s fölött a Node fetch
+    // fejléc-időkorlátja „fetch failed”); 1500 token bőven elég ~10 lelethez, és a hívás korlátos idejű marad.
+    body: JSON.stringify({ model, stream: false, think: false, format: 'json', options: { num_ctx: 32768, temperature: 0, num_predict: 1500 }, messages: [{ role: 'user', content: prompt }] }),
   });
   if (!r.ok) throw new Error(`ollama HTTP ${r.status}`);
   return (await r.json()).message?.content ?? '';
