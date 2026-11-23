@@ -186,7 +186,7 @@ követése (nyitásforma, fejezetminta, try-fajta, hang) NINCS mérve — fizet�
   a leírás frissítése (`pr-leirasok/s6c1-pr-body.md`), `gate:pr`, push, a Copilot-szál (comment id `4663711411`) megválaszolása
   („_🤖 Addressed by …_” zárósorral) és lezárása, CI, `gate:merge`, merge.
 
-### 4.3 Arányos kapuk — még NINCS PR (ág `fix/aranyos-kapuk`, munkafa `aranyos-kapuk`, fej `5317d597`)
+### 4.3 Arányos kapuk — még NINCS PR (ág `fix/aranyos-kapuk`, távolin, munkafa `aranyos-kapuk`, fej `c3fe9f14` = `5317d597` + főág-összefésülés; az 1. vak kör az `5317d597`-re szólt, a 2. kört az aktuális fejre kell futtatni)
 
 - Terv: `docs/specs/2026-11-23-aranyos-kapuk.md` + végrehajtás. Tartalom: kis javítás (≤ 30 sor éles kód; csak éles kód / teszt /
   dokumentáció; NUL-határolt numstat; a merge-kapu a GitHub REST fájllistájából, bináris és átnevezés régi útja is) → ítélet nélkül PASS;
