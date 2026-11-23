@@ -1,4 +1,5 @@
 import type { AgeBand } from "./lesson-schema";
+import { seedFrom, seededPick } from "./seeded";
 
 /**
  * LS-9 — the age-band visual system, data side.
@@ -65,4 +66,32 @@ export function bandRegisterForPrompt(band: AgeBand): string {
     case "senior":
       return "Register: precise academic Hungarian, formal definitions, cause-and-effect reasoning, exam-style examples; animate/try blocks where they clarify a mechanism.";
   }
+}
+
+/**
+ * S6b (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 13. szakasz): author voices per band — the register stays, the voice varies
+ * sentence rhythm, how often the text asks the learner, and how examples are framed. Picked from the map seed (deterministic).
+ */
+export const BAND_VOICES: Record<AgeBand, ReadonlyArray<{ id: string; text: string }>> = {
+  kid: [
+    { id: "storyteller", text: "Voice: a warm storyteller. Short scenes with a named everyday object, then the rule in one plain sentence." },
+    { id: "explorer", text: "Voice: a curious explorer. Ask the learner a small question every few sentences, and let the example answer it." },
+    { id: "coach", text: "Voice: a cheerful coach. Use numbered mini-steps, and frame each example as a little challenge to try." },
+  ],
+  teen: [
+    { id: "reporter", text: "Voice: a clear science reporter. Lead with a surprising fact or everyday situation, then explain the mechanism step by step." },
+    { id: "puzzler", text: "Voice: a puzzle-maker. Pose a short problem first, let the learner think, then reveal the reasoning." },
+    { id: "mentor", text: "Voice: a calm older mentor. Contrast a common wrong idea with the right one, and keep sentences of varied length." },
+  ],
+  senior: [
+    { id: "analyst", text: "Voice: an analyst. State the claim, give the reasoning, then test it on an exam-style case." },
+    { id: "lecturer", text: "Voice: a precise lecturer. Define first, then connect the concept to a broader context or a real application." },
+    { id: "debater", text: "Voice: a fair debater. Present two viewpoints, weigh them, and close with what the source settles." },
+  ],
+};
+
+/** The voice line for the author prompt; it never changes the facts or the wording of the concepts. */
+export function bandVoiceForPrompt(band: AgeBand, seed: number): string {
+  const voice = seededPick(BAND_VOICES[band], seedFrom(`voice\u0001${seed}`))!;
+  return `${voice.text} The voice never changes the facts and the wording of the concepts (terms stay exactly as in the map).`;
 }

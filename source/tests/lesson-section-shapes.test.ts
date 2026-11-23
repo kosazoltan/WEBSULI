@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SECTION_KINDS, SECTION_SHAPES, applySectionShapes, assignSectionShapes, shapeBlocks, shapeSimulation, type SectionKind } from "../shared/lesson-section-shapes";
+import { SECTION_KINDS, SECTION_SHAPES, applySectionShapes, assignSectionShapes, planSections, shapeBlocks, shapeSimulation, type SectionKind } from "../shared/lesson-section-shapes";
 import { checkLessonArc } from "../shared/lesson-arc";
 import { SECTION_ROLE_HEADING } from "../shared/lesson-ui-text";
 import { seedFrom } from "../shared/seeded";
@@ -66,15 +66,18 @@ test("V15: BE — a fogalom-fejezetek a kiosztott mintát kapják; különleges 
   ]);
   const seed = seedFrom("map-1");
   const shaped = applySectionShapes(raw, seed);
-  const ids = assignSectionShapes(["description", "procedure", "comparison", "any"], seed);
-  const blocksOf = (id: string) => [...SECTION_SHAPES.find((s) => s.id === id)!.blocks];
-  assert.deepEqual(shaped.sections[0].plannedBlocks, blocksOf(ids[0]));
-  assert.deepEqual(shaped.sections[1].plannedBlocks, blocksOf(ids[1]));
-  assert.deepEqual(shaped.sections[2].plannedBlocks, blocksOf(ids[2]));
+  // S6b (terv 13. szakasz, dokumentált spec-változás): a kiosztott blokksor a `planSections` kimenete — a minta + a try-minimum beszúrása.
+  const plan = planSections(["description", "procedure", "comparison", "any"], seed);
+  const ids = plan.map((p) => p.shape);
+  assert.deepEqual(ids, assignSectionShapes(["description", "procedure", "comparison", "any"], seed));
+  assert.ok(ids.every((id) => SECTION_SHAPES.some((s) => s.id === id)));
+  assert.deepEqual(shaped.sections[0].plannedBlocks, plan[0].blocks);
+  assert.deepEqual(shaped.sections[1].plannedBlocks, plan[1].blocks);
+  assert.deepEqual(shaped.sections[2].plannedBlocks, plan[2].blocks);
   assert.deepEqual(shaped.sections[3].plannedBlocks, ["explain", "example", "check", "recap"], "különleges fejezet");
   const last = shaped.sections[4].plannedBlocks;
   assert.equal(last.at(-1), "recap");
-  assert.deepEqual(last.filter((_, i) => i < blocksOf(ids[3]).length), blocksOf(ids[3]));
+  assert.deepEqual(last.filter((_, i) => i < plan[3].blocks.length), plan[3].blocks);
   for (const s of shaped.sections) assert.equal("sectionKind" in s, false, "a sectionKind nem megy tovább");
   assert.deepEqual(raw.sections[0].plannedBlocks, ["explain", "example", "check", "recap"], "a bemenet nem mutálódik");
 });
@@ -139,7 +142,32 @@ test("S6a-v2: a gyártómotor a fejezetív-kiosztáshoz a futás állapotát olv
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
   // 3. vak kör (L7): a feltétel nevesítve (`shapedNow`) — a viselkedést a `lesson-variety-paths` motor-tesztje méri.
-  assert.ok(src.includes("const shapedNow = planned === undefined && varietyOn;") && src.includes("applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined)"));
+  assert.ok(src.includes("const shapedNow = planned === undefined && varietyOn;") && src.includes("applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined"));
+});
+
+test("S6b-v2: a szerzői prompt try-fajta mondata és a szerzői hang a FUTÁS állapotát követi (KI futás BE környezetben is a régi prompt)", async () => {
+  const { buildAuthorPrompt } = await import("../server/studio/step-io");
+  const { runWithLessonVariety } = await import("../server/studio/lesson-variety-flag");
+  const map = { title: "T", subject: "matek", classroom: 6, concepts: [{ localId: "c1", examWeight: "core" as const, term: "terület" }] };
+  const sections = [{ heading: "H", conceptIds: ["c1"], plannedBlocks: ["explain" as const], animationSuggestions: [] as string[] }];
+  const saved = process.env.STUDIO_LESSON_VARIETY;
+  try {
+    process.env.STUDIO_LESSON_VARIETY = "on";
+    const offInOnEnv = await runWithLessonVariety(false, async () => buildAuthorPrompt(sections, map, [], undefined, undefined, { seed: 7 }));
+    assert.equal(offInOnEnv.includes("tryKind mezőt ad"), false, "KI futás: nincs try-fajta mondat");
+    delete process.env.STUDIO_LESSON_VARIETY;
+    assert.equal(offInOnEnv, buildAuthorPrompt(sections, map, []), "KI futás BE környezetben: bájtra a régi prompt");
+    const onInOffEnv = await runWithLessonVariety(true, async () => buildAuthorPrompt(sections, map, [], undefined, undefined, { seed: 7 }));
+    assert.ok(onInOffEnv.includes("tryKind mezőt ad"), "BE futás KI környezetben: van try-fajta mondat");
+  } finally {
+    if (saved === undefined) delete process.env.STUDIO_LESSON_VARIETY; else process.env.STUDIO_LESSON_VARIETY = saved;
+  }
+});
+
+test("S6b-v2: a try-arány jelzése a futás állapotához kötött (szerkezeti őr)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
+  assert.ok(src.includes("if (varietyOn) {") && !src.includes("lessonVarietyEnabled()) {"), "a motor nem olvas környezetet a futás közben");
 });
 
 // --- 1. vak kör (L1–L3): a szabályok a szerzőnek átadott VÉGLEGES blokksorokon ---
@@ -200,11 +228,35 @@ test("L3: a különleges záró fejezet recap nélküli tervét a program recap-
   ]), seed);
   assert.deepEqual(closed.sections[1].plannedBlocks, ["explain", "animate", "recap"]);
   // A fogalom-fejezet itt NEM a lecke zárása: nem kap pótolt recap-ot (a mintája szerinti sor marad).
-  const id = assignSectionShapes(["any"], seed, false)[0];
-  assert.deepEqual(closed.sections[0].plannedBlocks, shapeBlocks(id, false));
+  // S6b (dokumentált spec-változás): a kiosztott sor a `planSections` kimenete (minta + try-minimum), záró recap nélkül.
+  const planned = planSections(["any"], seed, false)[0];
+  assert.deepEqual(closed.sections[0].plannedBlocks, planned.blocks);
+  assert.notEqual(planned.blocks.at(-1) === "recap" && !shapeBlocks(planned.shape, false).includes("recap"), true, "nincs pótolt recap");
 });
 
 test("L5: a szimuláció üres mintára hibát ad (nem „megfelelt”)", () => {
   assert.throws(() => shapeSimulation([], 400), /fejezetszám/u);
   assert.throws(() => shapeSimulation([3, 4], 0), /leckeszám/u);
+});
+
+test("S6b + S6a követelmény: a try-pótlás UTÁN is — a végleges sorokban nincs azonos szomszéd, egy sor ≤ 40%, és a try-minimum teljesül", () => {
+  const patterns: Array<(i: number, s: number) => SectionKind> = [
+    () => "any", () => "comparison", () => "description", () => "procedure", (i, s) => SECTION_KINDS[(i + s) % SECTION_KINDS.length],
+  ];
+  for (const [p, pattern] of patterns.entries()) {
+    for (let n = 3; n <= 12; n++) {
+      for (let s = 0; s < 200; s++) {
+        const kinds = Array.from({ length: n }, (_, i) => pattern(i, s));
+        for (const closingLast of [true, false]) {
+          const plan = planSections(kinds, seedFrom(`t${s}`), closingLast);
+          const rows = plan.map((x) => x.blocks.join(","));
+          assert.ok(plan.filter((x) => x.blocks.includes("try")).length >= Math.ceil(n / 3), `minta ${p}, ${n}/${s}: kevés try`);
+          for (let i = 1; i < n; i++) assert.notEqual(rows[i], rows[i - 1], `minta ${p}, ${n}/${s}, zárás ${closingLast}: azonos szomszédos sor (${i}): ${rows[i]}`);
+          const top = Math.max(...rows.map((r) => rows.filter((x) => x === r).length));
+          assert.ok(top <= Math.ceil(0.4 * n), `minta ${p}, ${n}/${s}, zárás ${closingLast}: egy sor ${top} / ${n}`);
+          if (closingLast) assert.equal(plan.at(-1)!.blocks.at(-1), "recap");
+        }
+      }
+    }
+  }
 });
