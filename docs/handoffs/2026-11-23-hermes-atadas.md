@@ -28,11 +28,11 @@
 
 ## 0. Gyors indulás (az első 10 lépés a Hermes számára)
 
-0. **Előfeltétel — ugyanaz a gép (NOT DONE: a munkaágak távoli mentése).** A 26 munkaág (köztük az első két feladat feje és a vak
-   futtató) a leállításkor CSAK ezen a Windows-gépen van: `D:\repo\WEBSULI` munkafái és a helyi köteg-mentés
-   (`C:\Users\kosaz\websuli-mentes\websuli-helyi-agak-2026-11-23.bundle`). A repó (GitHub) önmagában NEM elég a folytatáshoz: új
-   checkoutban ezek a munkák nem állíthatók helyre. A Hermes ezen a gépen fusson; a távoli mentésről a tulajdonos dönt (7.2 D8) — nyers,
-   átnézetlen köteget a repóba feltölteni tilos. Részletek: 13.2.
+0. **A munkaágak helye (tulajdonosi döntés 2026-11-23: „Töltsd fel az ágakat”).** 14 PR nélküli munkaág push-kapuval a GitHubra
+   került — köztük az első feladatok (advent PR-C, advent S5+S6, arányos kapuk) és a vak futtató (`chore/vak-ellenor-konvergencia`).
+   **NOT DONE: 7 ág csak helyben van** (6 kódütközés a főággal + 1 bukó push-kapu), és az 5 nyitott PR ágának helyi többlete sincs
+   fent — ezek CSAK ezen a Windows-gépen érhetők el (`D:\repo\WEBSULI` munkafái, helyi köteg:
+   `C:\Users\kosaz\websuli-mentes\websuli-helyi-agak-2026-11-23.bundle`). A teljes lista: 13.3. Nyers köteget a repóba feltölteni tilos.
 1. Olvasd el az 1. és a 9. fejezetet (szabályok, csapdák) — ezek a hibák TÉNYLEGESEN megtörténtek, ne ismételd őket.
 2. `git -C D:/repo/WEBSULI fetch --prune`, `git -C D:/repo/WEBSULI pull --ff-only` (a fő checkout legyen friss), `gh pr list --state open`.
 3. **Határidő: ADVENT (november 30.).** Első munka: az advent PR-C. A folytatás EGYETLEN forrása a **13.2/1** (a fej a leállításkor
@@ -114,8 +114,8 @@ az agentic-qa-kit ellenőrzőlista; lábléc. Minta: `docs/handoffs/2026-11-23-h
 
 ### 2.3 Vak ellenőr futtató (NINCS a főágon!)
 
-- Helye: munkafa `.claude/worktrees/vak-v2`, ág `chore/vak-ellenor-konvergencia` (fej `3072389a`; CSAK HELYBEN — a push-kapuja
-  nem futott le, lásd 13.). Ez a kanonikus változat (blokkoló-definíció, `--previous` követő kör, beépített
+- Helye: munkafa `.claude/worktrees/vak-v2`, ág `chore/vak-ellenor-konvergencia` (a főág beolvasztása után fej `c51ae12a`; a távolin
+  is, lásd 13.3). Ez a kanonikus változat (blokkoló-definíció, `--previous` követő kör, beépített
   konvergencia-őr). A `chore/vak-ellenor-deepseek`, `chore/vak-futtato-1/2` ágak régebbi alternatívák — a K3 után törölhetők.
 - Futtatás (a `vak-v2` munkafából):
   ```bash
@@ -162,7 +162,7 @@ követése (nyitásforma, fejezetminta, try-fajta, hang) NINCS mérve — fizet�
 
 ## 4. Nyitott PR-ok — állapot és pontos következő lépés
 
-### 4.1 Advent PR-C — még NINCS PR (ág `feat/advent-c-felulet-es-elesites`, munkafa `advent-c`, fej `f6ea03bd`)
+### 4.1 Advent PR-C — még NINCS PR (ág `feat/advent-c-felulet-es-elesites`, távolin, munkafa `advent-c`, fej `f6ea03bd`)
 
 - Tartalom: S3 naptároldal (24 ablak, kérdés, javítás ablakonként legfeljebb 2, összesítés a szó szerinti záró üzenettel), S4 szezonális
   főoldali kártya (telefonon ≤ 132 px), élesítés előtti javítások (terv 22. szakasz). Kapcsoló: `ADVENT_CALENDAR` (élesben KI).
@@ -213,8 +213,8 @@ követése (nyitásforma, fejezetminta, try-fajta, hang) NINCS mérve — fizet�
 
 ## 5. Ág- és munkafa-leltár (leállításkor)
 
-„Távoli” = a távoli ág létezik; zárójelben a helyben előrébb járó commitok száma. A tulajdonos kérésére az ágak push-kapu sorát
-leállítottam (13. fejezet): a távolira EZEN AZ ÁGON KÍVÜL egyetlen munkaág sem került fel. Minden csak helyi ágról helyi köteg-mentés van:
+„Távoli” = a távoli ág létezik; zárójelben a helyben előrébb járó commitok száma. Az alábbi táblázat a leállításkori (feltöltés előtti) állapot;
+**a feltöltés utáni végleges helyet és fejet a 13.3 adja** (az ott „távoli” ágak fent vannak). Minden ágról helyi köteg-mentés is van:
 `C:\Users\kosaz\websuli-mentes\websuli-helyi-agak-2026-11-23.bundle` (236 MB).
 
 | Munkafa | Ág | Fej | Állapot | Tartalom / következő lépés |
@@ -490,5 +490,48 @@ A Hermes saját folyamatait (`hermes_cli … gateway run`) nem érintettem.
 4. **Ez az átadó ág** (`docs/hermes-atadas-2026-11-23`) a távolin van; PR még nincs (a főági PR-kapu ehhez is vak ítéletet kér — a
    tulajdonos döntse el, kell-e PR, vagy elég az ág). Ha PR lesz: `gate:pr -- --body-file <leírás>`, és a PR-méret figyelmeztetést
    (~10 800 sor, szinte csak melléklet) a leírásban indokolni kell.
-5. **NOT DONE — a munkaágak távoli mentése.** Ok: a tulajdonos kérésére a feltöltő sor leállt. Kockázat: a munka csak ezen a gépen él
-   (munkafák + helyi köteg); gépcsere vagy lemezhiba esetén elveszhet. Teendő: D8 döntés, majd a 13.2/2 szerinti szűrt, kapuzott feltöltés.
+5. **Részben kész — a munkaágak távoli mentése** (tulajdonosi döntés: „Töltsd fel az ágakat”): 14 ág fent, 7 ág és az 5 nyitott PR
+   helyi többlete helyben — 13.3.
+
+### 13.3 A munkaágak feltöltése — végleges állapot (2026-11-23 ~13:30)
+
+Módszer: munkafánként `git merge origin/main` (`fcf033ee`), push-kapu, zöldnél önálló push. Ahol csak a `docs/agent-csapdak.md`
+ütközött, mindkét oldal bejegyzése megmaradt (`szkriptek/websuli-keep-both.py`).
+
+**Fent (14 ág, mind zöld push-kapuval, a főág beolvasztva):**
+
+| Ág | Fej | Megjegyzés |
+|---|---|---|
+| feat/advent-c-felulet-es-elesites | f6ea03bd | advent PR-C (4.1, 13.2/1) |
+| feat/advent-s5-s6-elesites | b8de88f3 | advent S5+S6; csapdafájl-ütközés feloldva |
+| fix/aranyos-kapuk | c3fe9f14 | 4.3 |
+| feat/tgm-s6c-v2 | 3adc3245 | az S6c-2 forrása |
+| chore/vak-ellenor-konvergencia | c51ae12a | a vak futtató (2.3) |
+| fix/kisfilm-leallitas-hatarido | 4b56aafd | H5 |
+| chore/vak-futtato-1 | 536d9f73 | régebbi futtató-változat |
+| chore/vak-futtato-2 | 5113b7be | régebbi futtató-változat |
+| chore/vak-ellenor-deepseek | f5a00763 | régebbi futtató-változat |
+| feat/zaro-hurok-3 | 209eb9e0 | a zh-2 (#527) után; csapdafájl-ütközés feloldva |
+| docs/websuli-potlasok | fa804b0a | a pótlási terv eredeti ága |
+| docs/foterv-2026-11-23 | c9a31f6c | a főterv eredeti ága |
+| docs/teljes-revizio | 85a53098 | GPT-revízió |
+| docs/gepkoltoztetes-folytatas | 33b175fc | csapdafájl-ütközés feloldva |
+
+**Csak helyben (NOT DONE) — ok és teendő:**
+
+| Ág | Helyi fej | Ok | Teendő |
+|---|---|---|---|
+| feat/tgm-sk2-v2 | 05e5c569 | kódütközés a főággal (TGM-terv + végrehajtás, `single-run/engine.ts`, `step-io.ts`, `lesson-section-shapes.ts`, `run-telemetry.ts`, két teszt) — a régi egyben-S6c-re épül | az S6c-1 / S6c-2 után átültetni (H2/3) |
+| feat/szoletra-szintezes-2 | 75edf6ca | ütközés: csapdafájl + a Szólétra-terv és -végrehajtás | dokumentum-ütközés feloldása, kapu, push (H7) |
+| feat/szoletra-a1-bank | 459edfbc | ütközés: dokumentumok + `wordLadderGrading.ts` és tesztje | a szintezés-2 után, kódütközés feloldása (H7, D5) |
+| feat/szoletra-szintezes | 3f5717a4 | ugyanaz, mint fent (régi egyben-változat) | a két commitolt munkanapló átvétele a -2 ágra, utána higiéniai jelölt |
+| docs/eredmeny-email-bontas | e84bafd6 | ütközés a bontási terv két fájljában (a főágon már egy újabb változat van) | összevetés; ha nincs új tartalom, higiéniai jelölt |
+| chore/advent-s3c0-kepgyarto | bbabfc49 | kódütközés (`design-assets/generate.ts`, `lib.ts`, teszt) — elavult előd-ág | higiéniai jelölt (a tulajdonos dönt) |
+| fix/kitakaro-elovagas | dbbb83f8 (főág beolvasztva) | a push-kapu teljes egységtesztje bukik: `lesson-clip-worker.test.ts` „átkódolás: az időkorlát SIGKILL-lel él…” — ebben a munkafában külön futtatva 2/3 bukás, a fő checkoutban (főág) 0/3; a teszt körüli forrás azonos, az ok UNVERIFIED (valószínűleg a munkafa `node_modules`-a) | a munkafa `node_modules`-ának újratelepítése (`npm.cmd ci` a `source/`-ban, `--ignore-scripts` NÉLKÜL), majd kapu; ha továbbra is bukik: hibakeresés (H-09) |
+
+**A nyitott PR-ok ágai** (#510, #513, #521, #529, #540): a távoli ág a PR feje; a helyi többlet (13, 29, 32, 4, 3 commit) csak helyben —
+feltöltés csak a teljes javító folyamattal (13.2/2).
+
+**Környezeti csapda (új):** a push-kapu hibaüzenete `npm.cmd ci --prefix source --ignore-scripts`-et javasol (C-38); így a
+`better-sqlite3` natív modulja nem fordul le, és a `native-arch.test.ts` bukik. Kerülőút: `npm.cmd rebuild better-sqlite3` a `source/`-ban
+(a `vak-futtato-2` és a `kitakaro-elovagas` munkafában így javult). Javítandó: a kapu javaslata.
