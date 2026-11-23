@@ -54,7 +54,7 @@ async function openMenuSettings(page: Page): Promise<void> {
 
 /**
  * Valódi érintéses húzás felfelé (a tartalom lefelé görög): CDP `Input.dispatchTouchEvent` touchStart → 10 touchMove →
- * touchEnd — a böngésző ugyanúgy görget, mint ujjal (a `synthesizeScrollGesture` touch módja az emulált profilban nem
+ * 3 álló touchMove (40 ms-onként, az ujj megáll: nincs lendület) → touchEnd — a böngésző ugyanúgy görget, mint ujjal (a `synthesizeScrollGesture` touch módja az emulált profilban nem
  * görgetett, mérve 2026-11-16).
  */
 async function swipeUp(page: Page, x: number, y: number, distance: number): Promise<void> {
@@ -77,9 +77,9 @@ async function swipeUp(page: Page, x: number, y: number, distance: number): Prom
 }
 
 /**
- * A görgetés végéig vár: a lap és minden görgethető elem pozíciója 3 egymást követő mintán (50 ms) azonos.
- * Görgetés KÖZBENI koppintást a böngésző a lendület megállítására használja, nem kattintásra (2026-11-23: lassabb gépen a
- * „Vissza” és az utolsó jármű koppintása rendre elnyelődött; a fix 150 ms-os várakozás csak gyors CI-gépen volt elég).
+ * A görgetés végéig vár: a lap és minden görgethető elem pozíciója 3 egymást követő mintán (50 ms) azonos; ha a határidőig
+ * nem nyugszik meg, hibával áll le (nem koppint mozgó lapra). A lendület (fling) ellen nem ez véd — a határon futó fling a
+ * pozíciót nem mozdítja —, hanem a `swipeUp` álló touchMove-jai.
  */
 async function waitScrollSettled(page: Page, timeoutMs = 3000): Promise<void> {
   const sample = () => page.evaluate(() => {
@@ -98,6 +98,7 @@ async function waitScrollSettled(page: Page, timeoutMs = 3000): Promise<void> {
     stable = now === last ? stable + 1 : 0;
     last = now;
   }
+  if (stable < 3) throw new Error(`a görgetés ${timeoutMs} ms alatt sem nyugodott meg`);
 }
 
 async function atPageBottom(page: Page): Promise<boolean> {
