@@ -135,7 +135,10 @@ test("a táblázat valódi <table>: felirat, oszlopfejléc (scope), sorfejléc 3
   assert.match(two, /<div class="sv-table-scroll">/);
   assert.ok(!/tabindex|role="region"/.test(two), "nem görgő tábla kerete nem fókuszmegálló");
   assert.match(two, /<table class="sv-table" data-cols="2"/);
-  assert.match(two, /<caption>Kérdőszavak<\/caption>/);
+  // S2b-2 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 17. szakasz, vak J2 — dokumentált spec-változás): a látható cím a görgő
+  // kereten KÍVÜL áll, a <caption> a képernyőolvasónak megmarad.
+  assert.match(two, /<caption class="sr-only">Kérdőszavak<\/caption>/);
+  assert.match(two, /<p class="sv-table-title" aria-hidden="true">Kérdőszavak<\/p>/);
   assert.equal((two.match(/<th scope="col"/g) ?? []).length, 2);
   assert.ok(!two.includes('scope="row"'), "kétoszlopos táblában nincs sorfejléc");
   assert.ok(!two.includes("<figcaption"), "a táblázat címével azonos blokkfelirat nem ismétlődik");

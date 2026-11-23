@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Captions, CaptionsOff, ChevronLeft, ChevronRight, Pause, Play, RotateCcw, X } from "lucide-react";
-import { clipMediaUrl, silentSceneMs, type Clip2 } from "@shared/lesson-clip";
+import { clipMediaUrl, clipOverlayRenderable, silentSceneMs, type Clip2 } from "@shared/lesson-clip";
 import { CLIP_BAND_STYLE } from "@shared/clip-style";
 import type { Section } from "@shared/lesson-schema";
 import { ttsAudioUrl } from "@shared/speech-fallback";
@@ -94,7 +94,8 @@ export function Clip2Player({ playlist, audio, onClose }: { playlist: Clip2Playl
         {scene.video && !broken.has(scene.video) && <video key={`v:${chapter}:${sceneIdx}:${run}`} ref={film} className="clip2-film" src={clipMediaUrl(scene.video)} muted playsInline autoPlay preload="auto" aria-hidden
           data-testid="clip-film" onLoadedMetadata={(event) => { const v = event.currentTarget; if (Number.isFinite(v.duration) && v.duration > 0) v.playbackRate = Math.min(1.3, Math.max(0.5, (v.duration * 1000) / ms)); }}
           onError={() => setBroken((old) => new Set([...old, scene.video!]))} />}
-        {scene.overlay && <div className="clip2-panel" data-kind={scene.overlay.kind} key={`${chapter}:${sceneIdx}:${run}`}><ClipOverlay overlay={scene.overlay} ms={ms} section={item.section} /></div>}
+        {/* S2b-2 1. vak kör (L2): ki nem rajzolható (forrás-ábrára mutató) hivatkozásnál a panel sem jön létre — nincs üres fehér csík. */}
+        {scene.overlay && clipOverlayRenderable(scene.overlay, item.section?.blocks) && <div className="clip2-panel" data-kind={scene.overlay.kind} key={`${chapter}:${sceneIdx}:${run}`}><ClipOverlay overlay={scene.overlay} ms={ms} section={item.section} /></div>}
       </div>
       {captions && <p className="clip-caption clip2-caption" data-testid="clip-caption" aria-live="polite">{scene.say}</p>}
       <div className="clip-controls">
