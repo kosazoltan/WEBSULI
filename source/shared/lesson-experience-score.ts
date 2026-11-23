@@ -64,8 +64,20 @@ function unexpectedNegation(answer: string, sample: string): boolean {
     || (negationKind(sample) === "en" && negationKind(answer, { weak: true }) === "none");
 }
 
+/**
+ * Spec 2026-11-23-pontozo-rubrika-visszamasolas (T-2): kisbetűs alak; `keepAccents` = az ékezet megmarad (NFC) — a rövid rubrikaszó
+ * ékezet-összevetéséhez. A két alak tokenjei egy az egyben megfelelnek egymásnak (az NFC ékezetes betű egy betű, a `\p{L}` része).
+ */
+function lowerText(value: string, keepAccents: boolean): string {
+  const lower = value.toLocaleLowerCase("hu");
+  return keepAccents ? lower.normalize("NFC") : lower.normalize("NFD").replace(/\p{M}/gu, "");
+}
+// A `normalizeAnswer` egyparaméteres marad: `.map(normalizeAnswer)` hívással is fut (experience-builder), a második argumentum az index lenne.
 export function normalizeAnswer(value: string): string {
-  const normalized = value.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/(\d)[,.](?=\d)/g, "$1.").replace(/−/g, "-")
+  return normalizeV1(value, false);
+}
+function normalizeV1(value: string, keepAccents: boolean): string {
+  const normalized = lowerText(value, keepAccents).replace(/(\d)[,.](?=\d)/g, "$1.").replace(/−/g, "-")
     // Spec 2026-10-20-v1-kotojeles-szam: a betű / számjegy utáni számjel nem előjel — a „552-270” két szám, nem „552 -270”. Review #348:
     // lookbehind nélkül (a régebbi Safari a lookbehindos regexet be sem tölti) — a jel szóközre cserélődik.
     .replace(/([\p{L}\d])[+-](?=\d)/gu, "$1 ");
@@ -73,11 +85,16 @@ export function normalizeAnswer(value: string): string {
 }
 /** v2: a műveleti jel és a törtvonal is token — a „8 : 2” és a „8 · 2”, a „1/2” és a „2/1” különbözik. */
 export function normalizeAnswerV2(value: string): string {
-  const normalized = value.toLocaleLowerCase("hu").normalize("NFD").replace(/\p{M}/gu, "").replace(/(\d)[,.](?=\d)/g, "$1.").replace(/[−–]/g, "-").replace(/[×*]/g, "·").replace(/÷/g, ":");
+  return normalizeV2(value, false);
+}
+function normalizeV2(value: string, keepAccents: boolean): string {
+  const normalized = lowerText(value, keepAccents).replace(/(\d)[,.](?=\d)/g, "$1.").replace(/[−–]/g, "-").replace(/[×*]/g, "·").replace(/÷/g, ":");
   return (normalized.match(/\d+(?:\.\d+)?(?:\/\d+)?|[\p{L}]+|[+\-·:]/gu) ?? []).join(" ");
 }
 const tokensOf = (s: string) => normalizeAnswer(s).split(/\s+/).filter(Boolean);
 const tokensOfV2 = (s: string) => normalizeAnswerV2(s).split(/\s+/).filter(Boolean);
+const rawTokensOf = (s: string) => normalizeV1(s, true).split(/\s+/).filter(Boolean);
+const rawTokensOfV2 = (s: string) => normalizeV2(s, true).split(/\s+/).filter(Boolean);
 function stem(w: string): string {
   for (const suffix of STEM_SUFFIXES) {
     if (w.length > suffix.length + 3 && w.endsWith(suffix)) return w.slice(0, -suffix.length);
@@ -134,9 +151,65 @@ export function answerTokensCover(candidate: string, covered: string): boolean {
   return need.length > 0 && need.every((word) => have.has(word));
 }
 
-function conceptHit(tokens: string[], alternatives: readonly string[], tokenize: (s: string) => string[] = tokensOf): boolean {
-  return alternatives.some(phrase => tokenize(phrase).every(word => tokens.some(token => wordHit(token, word))));
+/**
+ * Spec 2026-11-23-pontozo-rubrika-visszamasolas (T-2, #132): a válasz ékezetes tokenjei — csak ha a válaszban VAN ékezetes betű (a tanuló
+ * ékezettel ír, tehát a rövid szó ékezete jelentést hordoz: „hát” ≠ „hat”). Ékezet nélküli válasznál null: a mai tűrés marad (nem tudni,
+ * van-e ékezet a tanuló billentyűzetén). Null akkor is, ha a két tokenlista nem felel meg egymásnak (kóbor kombináló jel).
+ */
+function accentedTokens(answer: string, tokens: readonly string[], v2: boolean): string[] | null {
+  if (!/\p{M}/u.test(answer.normalize("NFD"))) return null;
+  const raw = (v2 ? rawTokensOfV2 : rawTokensOf)(answer).slice(0, tokens.length);
+  return raw.length === tokens.length ? raw : null;
 }
+/**
+ * T-2: a rövid (< FORM_MIN_LENGTH betűs) rubrikaszó és a válasz-token KÖZÖS TÖVÉNEK ékezete azonos („kór” ≠ „kor”); a toldalék ékezete
+ * nem számít („szívről” = „szív”, a toldaléklista ékezet nélküli).
+ */
+function accentAgrees(rawToken: string, rawWord: string, token: string, word: string): boolean {
+  const n = Math.min(stem(token).length, stem(word).length);
+  return rawToken.slice(0, n) === rawWord.slice(0, n);
+}
+function conceptHit(tokens: string[], alternatives: readonly string[], tokenize: (s: string) => string[] = tokensOf, raw: readonly string[] | null = null): boolean {
+  return alternatives.some(phrase => {
+    const words = tokenize(phrase);
+    const rawWords = raw ? (tokenize === tokensOfV2 ? rawTokensOfV2 : rawTokensOf)(phrase) : null;
+    const aligned = rawWords && rawWords.length === words.length ? rawWords : null;
+    return words.every((word, k) => tokens.some((token, i) => wordHit(token, word)
+      && (!aligned || !raw || word.length >= FORM_MIN_LENGTH || accentAgrees(raw[i], aligned[k], token, word))));
+  });
+}
+
+/**
+ * T-2 (#130): a „nem tudom” nem válasz — a szavai (a „nem” is) nem adnak rubrika-találatot és nem tagadnak. Vesszővel elválasztva („Nem,
+ * tudom, hogy …”) igen/nem válasz + mondat, nem nem-válasz. Lookbehind nélkül (régebbi Safari): a megelőző nem-betű a találat része.
+ */
+const NON_ANSWER = /(^|[^\p{L}'’])(?:nem\s+(?:tudom|tudok|tudjuk|tudnám|tudnam|tom)|nemtom|fogalmam\s+sincs(?:en)?|i\s+(?:don['’]?t|do\s+not)\s+know|idk)(?=$|[^\p{L}])/giu;
+export function stripNonAnswer(answer: string): string {
+  return answer.normalize("NFC").replace(NON_ANSWER, "$1 ");
+}
+export const QUESTION_COPY_REASON = "A válasz csak a kérdést ismétli. Írd le a saját válaszodat.";
+/**
+ * T-2 (#132): a válasz CSAK a kérdés visszamásolása — minden szava a kérdés legalább 3 szavas, folytonos szakaszaiból áll, és ezek a kérdés
+ * szavainak legalább felét kiadják (a kérdés ≥ 4, a válasz ≥ 3 szó). Az új információt is adó vagy a választó kérdésből csak egy részt
+ * kiemelő válasz nem ilyen.
+ */
+export function copiesQuestionOnly(answer: string, question: string | undefined): boolean {
+  if (!question) return false;
+  const q = tokensOf(question), a = tokensOf(answer).slice(0, 500);
+  if (q.length < 4 || a.length < 3 || a.length * 2 < q.length) return false;
+  const covered = new Array<boolean>(a.length).fill(false);
+  for (let i = 0; i < a.length; i++) {
+    let best = 0;
+    for (let j = 0; j < q.length; j++) {
+      let l = 0;
+      while (i + l < a.length && j + l < q.length && a[i + l] === q[j + l]) l++;
+      best = Math.max(best, l);
+    }
+    if (best >= 3) covered.fill(true, i, i + best);
+  }
+  return covered.every(Boolean);
+}
+const questionCopy = (): AnswerScore => ({ state: "fail", score: 0, reason: QUESTION_COPY_REASON });
 const OPERATOR_TOKEN = /^[+\-·:]$/;
 /**
  * Kategóriakvóta (v2): hány KÜLÖNBÖZŐ csoportot talál a válasz úgy, hogy egy válasz-token csak egy csoportot igazolhat
@@ -162,8 +235,10 @@ function distinctHits(tokens: string[], groups: ReadonlyArray<readonly string[]>
 }
 /** Generation diagnostics use the exact learner-side matcher, not another approximation. */
 export function missingAnswerConcepts(answer: string, task: Pick<OpenTask, "required">): string[][] {
-  const tokens = tokensOf(answer).slice(0, 500);
-  return task.required.filter(group => !conceptHit(tokens, group));
+  const text = stripNonAnswer(answer);
+  const tokens = tokensOf(text).slice(0, 500);
+  const raw = accentedTokens(text, tokens, false);
+  return task.required.filter(group => !conceptHit(tokens, group, tokensOf, raw));
 }
 export type AnswerScore = { state: "ok" | "partial" | "fail"; score: number; reason: string };
 
@@ -246,9 +321,13 @@ export function missingPhrases(answer: string, task: Pick<OpenTask, "requiredPhr
 }
 
 /** v1 — a régi kulcsszó-pontozó, változatlan viselkedéssel (régi leckék, HTML-pontozó paritás). */
-export function evaluateOpenAnswerV1(answer: string, task: OpenTask): AnswerScore {
+export function evaluateOpenAnswerV1(rawAnswer: string, task: OpenTask): AnswerScore {
+  // T-2: a „nem tudom” szavai nem számítanak; a csak a kérdést ismétlő válasz 0; ékezetes válaszban a rövid szó ékezete is számít.
+  const answer = stripNonAnswer(rawAnswer);
+  if (copiesQuestionOnly(answer, task.q)) return questionCopy();
   const tokens = tokensOf(answer).slice(0, 500);
-  const hits = task.required.filter(c => conceptHit(tokens, c)).length;
+  const raw = accentedTokens(answer, tokens, false);
+  const hits = task.required.filter(c => conceptHit(tokens, c, tokensOf, raw)).length;
   if (tokens.length < task.minWords) return shortVerdict(task.required.length > 0 && hits === task.required.length, task.minWords);
   if (hits < Math.ceil(task.required.length / 2)) return { state: "fail", score: 0, reason: "A lényegi fogalmak még hiányoznak." };
   // A correct sentence may use only rubric words. Off-rubric filler cannot prove
@@ -280,14 +359,14 @@ function typedShortFailure(answer: string, task: OpenTask): AnswerScore | null {
  * helyes (és a kvóták megvannak) — a szöveges `required` hiánya itt sem nulláz, ahogy az elég hosszú válasznál sem (lent: a típusos
  * feladat a hiányzó fogalmak miatt nem bukik, csak fél pontra esik). Szöveges feladatnál minden fogalom, kifejezés és a sorrend kell.
  */
-function contentCompleteV2(answer: string, tokens: string[], task: OpenTask): boolean {
+function contentCompleteV2(answer: string, tokens: string[], task: OpenTask, raw: readonly string[] | null): boolean {
   const typed = task.typedAnswers ?? [], distinct = task.requiredDistinct ?? [], phrases = task.requiredPhrases ?? [];
   const hasOrder = Boolean(task.requiredOrder?.length);
   if (!(typed.length + distinct.length + task.required.length + phrases.length + (hasOrder ? 1 : 0))) return false;
   if (typed.length) { const grade = gradeTypedAnswers(answer, typed); if (grade.undecidable || grade.correct < grade.total) return false; }
   if (distinct.some(rule => distinctHits(tokens, rule.from) < rule.count)) return false;
   if (typed.length) return true;
-  if (task.required.some(c => !conceptHit(tokens, c, tokensOfV2)) || phrases.some(g => !phraseHit(tokens, g))) return false;
+  if (task.required.some(c => !conceptHit(tokens, c, tokensOfV2, raw)) || phrases.some(g => !phraseHit(tokens, g))) return false;
   return !hasOrder || orderSatisfied(tokens, task.requiredOrder!);
 }
 
@@ -299,10 +378,13 @@ function contentCompleteV2(answer: string, tokens: string[], task: OpenTask): bo
 export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerScore {
   // Review #159: a v2 tokenlista műveleti jelet is tartalmaz — a szószám (1. szabály: az írásjel 0 szó) és a típusos érték
   // ugyanabból az 500 szavas ablakból számol.
-  const answer = answerWindow(rawAnswer);
+  // T-2: a „nem tudom” szavai nem számítanak; a csak a kérdést ismétlő válasz 0 (a v1-gyel azonos szabály).
+  const answer = answerWindow(stripNonAnswer(rawAnswer));
+  if (copiesQuestionOnly(answer, task.q)) return questionCopy();
   const tokens = tokensOfV2(answer);
+  const raw = accentedTokens(answer, tokens, true);
   const wordCount = tokens.filter(t => !OPERATOR_TOKEN.test(t)).length;
-  if (wordCount < task.minWords) return typedShortFailure(answer, task) ?? shortVerdict(contentCompleteV2(answer, tokens, task), task.minWords);
+  if (wordCount < task.minWords) return typedShortFailure(answer, task) ?? shortVerdict(contentCompleteV2(answer, tokens, task, raw), task.minWords);
   let partialReason: string | null = null;
   if (task.typedAnswers?.length) {
     const grade = gradeTypedAnswers(answer, task.typedAnswers);
@@ -318,7 +400,7 @@ export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerS
   // S5a: a kifejezéscsoportok a kötelező csoportokkal együtt számítanak (fele- és összes-szabály).
   const phraseGroups = task.requiredPhrases ?? [];
   const phraseHits = phraseGroups.filter(g => phraseHit(tokens, g)).length;
-  const conceptHits = task.required.filter(c => conceptHit(tokens, c, tokensOfV2)).length;
+  const conceptHits = task.required.filter(c => conceptHit(tokens, c, tokensOfV2, raw)).length;
   // S6a: a sorrendi szabály EGY kötelező feltétel (fele- és összes-szabály).
   const hasOrder = Boolean(task.requiredOrder?.length);
   const orderHit = hasOrder && orderSatisfied(tokens, task.requiredOrder!);

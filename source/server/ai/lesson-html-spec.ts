@@ -301,8 +301,12 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 - HÁROMÁLLAPOTÚ KIMENET: ✅ Elfogadva (1 pont): minden kötelező fogalom + koherens; 🟡 Részben jó (0.5): a kötelezők fele megvan VAGY minden megvan, de szólista-szerű → „📖 Mintaválasz megnézése" gomb; a minimális szószámnál rövidebb, de minden kötelező fogalmat tartalmazó válasz is 0.5 (teljes pont csak kifejtve); ❌ Hiányos (0): rövid ÉS hiányos, vagy túl kevés kötelező fogalom. A fél pontok beszámítanak.
 - A MOTOR REFERENCIA-IMPLEMENTÁCIÓJA (ES5, az IIFE-be ágyazva, EZT építsd be — ne rögtönözz mást):
 \`\`\`javascript
-function ee_norm(s){
-  s = (s||'').toLocaleLowerCase('hu').normalize('NFD').replace(/\\p{M}/gu,'')
+function ee_norm(s){ return ee_normWith(s, false); }
+/* T-2: ekezetmegtarto (NFC) alak - a rovid rubrikaszo ekezet-osszevetesehez; a tokenek egy az egyben megfelelnek az ee_norm tokenjeinek */
+function ee_normRaw(s){ return ee_normWith(s, true); }
+function ee_normWith(s, keep){
+  s = (s||'').toLocaleLowerCase('hu');
+  s = (keep ? s.normalize('NFC') : s.normalize('NFD').replace(/\\p{M}/gu,''))
     .replace(/(\\d)[,.](?=\\d)/g,'$1.').replace(/\\u2212/g,'-').replace(/([\\p{L}\\d])[+-](?=\\d)/gu,'$1 ');
   return (s.match(/[+-]?\\d+(?:\\.\\d+)?|[\\p{L}]+/gu)||[]).map(function(t){return t.replace(/^\\+(?=\\d)/,'');}).join(' ');
 }
@@ -333,10 +337,18 @@ function ee_lev(a, b){
   return prev[n];
 }
 function ee_tol(len){ return len>8?2:1; }
-function ee_wordHit(answerTokens, answerStems, word){
+/* T-2: ekezetes valaszban a rovid (< 5 betus) rubrikaszo es a token KOZOS TOVENEK ekezete azonos (hat != hát, kor != kór); a toldalek
+   ekezete nem szamit (szívről = szív). answerRaw null, ha a valaszban nincs ekezet: akkor a regi turés marad. */
+function ee_accentOk(answerRaw, t, tok, rawWord, p){
+  if(!answerRaw || !rawWord || p.length >= 5) return true;
+  var n = Math.min(ee_stem(tok).length, ee_stem(p).length);
+  return answerRaw[t].slice(0, n) === rawWord.slice(0, n);
+}
+function ee_wordHit(answerTokens, answerStems, word, answerRaw, rawWord){
   var p = ee_norm(word); var ps = ee_stem(p); var t;
   for(t=0;t<answerTokens.length;t++){
     var tok = answerTokens[t];
+    if(!ee_accentOk(answerRaw, t, tok, rawWord, p)) continue;
     if(tok === p) return true;
     if(/\\d/.test(tok+p) || ['nem','ne','not','no'].indexOf(p)!==-1) continue;
     if(Math.min(tok.length,p.length)>=4 && (answerStems[t]===p || tok===ps || answerStems[t]===ps)) return true;
@@ -371,21 +383,43 @@ function ee_formHit(tok, tokStem, p, ps){
   }
   return Math.min(tokStem.length, ps.length) >= 5 && ee_lev(tokStem, ps) <= ee_tol(Math.max(tokStem.length, ps.length));
 }
-function ee_phraseHit(answerNorm, answerTokens, answerStems, phrase){
+function ee_phraseHit(answerNorm, answerTokens, answerStems, phrase, answerRaw){
   var p = ee_norm(phrase); var parts = p.split(' ');
-  if(parts.length === 1){ return ee_wordHit(answerTokens, answerStems, parts[0]); }
+  var rawParts = answerRaw ? ee_normRaw(phrase).split(' ') : null;
+  if(rawParts && rawParts.length !== parts.length) rawParts = null;
   var i;
   for(i=0;i<parts.length;i++){
-    if(!ee_wordHit(answerTokens, answerStems, parts[i])) return false;
+    if(!ee_wordHit(answerTokens, answerStems, parts[i], answerRaw, rawParts ? rawParts[i] : null)) return false;
   }
   return true;
 }
-function ee_conceptHit(answerNorm, answerTokens, answerStems, concept){
+function ee_conceptHit(answerNorm, answerTokens, answerStems, concept, answerRaw){
   var i;
   for(i=0;i<concept.length;i++){
-    if(ee_phraseHit(answerNorm, answerTokens, answerStems, concept[i])) return true;
+    if(ee_phraseHit(answerNorm, answerTokens, answerStems, concept[i], answerRaw)) return true;
   }
   return false;
+}
+/* T-2: a "nem tudom" nem valasz - a szavai (a "nem" is) nem szamitanak; vesszovel ("Nem, tudom, hogy...") igen. Lookbehind nelkul. */
+var EE_NON_ANSWER = /(^|[^\\p{L}'\u2019])(?:nem\\s+(?:tudom|tudok|tudjuk|tudnám|tudnam|tom)|nemtom|fogalmam\\s+sincs(?:en)?|i\\s+(?:don['\u2019]?t|do\\s+not)\\s+know|idk)(?=$|[^\\p{L}])/giu;
+function ee_stripNonAnswer(s){ return String(s||'').normalize('NFC').replace(EE_NON_ANSWER, '$1 '); }
+/* T-2: a valasz CSAK a kerdes visszamasolasa: minden szava a kerdes >= 3 szavas folytonos szakaszaibol all, es ezek a kerdes szavainak
+   legalabb felet kiadjak (kerdes >= 4, valasz >= 3 szo) */
+function ee_copiesQuestion(tokens, question){
+  var q = ee_norm(question); q = q ? q.split(' ') : [];
+  if(q.length < 4 || tokens.length < 3 || tokens.length * 2 < q.length) return false;
+  var covered = [], i, j, k, l, best;
+  for(i=0;i<tokens.length;i++){
+    best = 0;
+    for(j=0;j<q.length;j++){
+      l = 0;
+      while(i + l < tokens.length && j + l < q.length && tokens[i + l] === q[j + l]) l++;
+      if(l > best) best = l;
+    }
+    if(best >= 3){ for(k=i;k<i+best;k++) covered[k] = true; }
+  }
+  for(i=0;i<tokens.length;i++){ if(!covered[i]) return false; }
+  return true;
 }
 /* tagadas a NYERS szovegbol (ekezet es aposztrof marad): 'en' = not / cannot / mustn't-fele osszevonas / aposztrof nelkuli alak
    (weak: no, never...); 'hu' = nem. A "PIN-t", a "dont" helyett "dönt" es a "legyen t" nem tagadas. */
@@ -409,16 +443,23 @@ function ee_huWeakNeg(text){
   return false;
 }
 function ee_evaluate(answer, task){
+  answer = ee_stripNonAnswer(answer);
   var norm = ee_norm(answer);
   var tokens = norm ? norm.split(' ').slice(0,500) : [];
   var stems = []; var i;
   for(i=0;i<tokens.length;i++){ stems[i]=ee_stem(tokens[i]); }
+  if(ee_copiesQuestion(tokens, task.q)){
+    return {state:'fail', score:0, hitReq:0, totalReq:(task.required||[]).length, hitBonus:0, reason:'A válasz csak a kérdést ismétli. Írd le a saját válaszodat.'};
+  }
+  var rawNorm = /\\p{M}/u.test(answer.normalize('NFD')) ? ee_normRaw(answer) : '';
+  var raw = rawNorm ? rawNorm.split(' ').slice(0, tokens.length) : null;
+  if(raw && raw.length !== tokens.length) raw = null;
   var wordCount = tokens.length;
   var minW = task.minWords || 1;
   var req = task.required || []; var bon = task.bonus || [];
   var hitReq = 0, hitBonus = 0;
-  for(i=0;i<req.length;i++){ if(ee_conceptHit(norm,tokens,stems,req[i])) hitReq++; }
-  for(i=0;i<bon.length;i++){ if(ee_conceptHit(norm,tokens,stems,bon[i])) hitBonus++; }
+  for(i=0;i<req.length;i++){ if(ee_conceptHit(norm,tokens,stems,req[i],raw)) hitReq++; }
+  for(i=0;i<bon.length;i++){ if(ee_conceptHit(norm,tokens,stems,bon[i],raw)) hitBonus++; }
   var totalReq = req.length;
   if(wordCount < minW){
     if(totalReq > 0 && hitReq === totalReq){
