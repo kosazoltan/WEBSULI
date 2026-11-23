@@ -1,5 +1,5 @@
 ---
-description: Kötelező minőségkapuk — szakasz utáni helyi kapu, lint kapu minden kibocsátás előtt, független fejlesztési ellenőr a PR előtt, push / PR / merge előtti kapu.
+description: Kötelező minőségkapuk — szakasz utáni helyi kapu, lint kapu minden kibocsátás előtt, helyi (GPU) fejlesztési ellenőr a PR előtt, push / PR / merge előtti kapu.
 alwaysApply: true
 ---
 
@@ -9,7 +9,7 @@ Runbook: `docs/minosegkapuk.md`. Skillek: `.agents/skills/websuli-{lint-ellenor,
 
 1. Minden fejlesztési szakasz után: `npm run gate:stage` — csak zöld után lépj tovább.
 2. Bármilyen kibocsátás előtt a lint kapu: `npm run gate:lint` (a push-kapu is futtatja).
-3. Push előtt: `npm run gate:push`. PR előtt: független alügynökös ellenőrzés (`websuli-fejlesztesi-ellenor`), ítélet rögzítése
+3. Push előtt: `npm run gate:push`. PR előtt: helyi GPU-ellenőr (`node scripts/qa/gates/local-review.mjs`, felhős vak kör kivezetve 2026-11-23), ítélet rögzítése
    (`node scripts/qa/gates/record-review.mjs …`), majd `npm run gate:pr -- --body-file <leírás.md>`. Merge előtt, közvetlenül:
    `npm run gate:merge -- <PR>`.
 4. A kaput megkerülni tilos, vészkijárat nincs; hibás kapunál a kaput kell javítani (teszttel).
