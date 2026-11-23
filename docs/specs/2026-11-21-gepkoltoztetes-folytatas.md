@@ -161,5 +161,11 @@ A hullámok a gépi zár miatt sorosan merge-elnek, de a fejlesztésük párhuza
 - 2026-11-21: a #504 `gate:pr` böngészős lépése 143-as kóddal (SIGTERM) állt le a 74. tesztnél (0 ms) — párhuzamos alügynöki
   Playwright-futás / port-verseny gyanúja (C-72). Szabály ebben a futásban: PR-kapu böngészős köre csak akkor indul, ha egyetlen
   fejlesztő alügynök sem futtat e2e-t.
+- 2026-11-22 (újraindítás után): #504 és #418 PR-kapu zöld, feltöltve (`d017087a`, `30db697c`); #418 CI zöld, de 4 új Copilot-szál
+  (SSRF belső IP-re, árva média türelmi ideje, szorzatos keresés, hangkapu hiba után) → javítás; #504 CI: az új L1-teszt Linuxon
+  (szoftveres GPU) bukik → javítás. Az advent PR-C PR-kapuja a telepített Chrome 158 + Playwright 1.57 összeomlása miatt bukik a főág
+  kódjával is (C-93) → tulajdonosi döntés: „Csomagolt Chromium (Javasolt)”, külön PR (`fix/playwright-csomagolt-chromium`, `955b42b0`).
+  #521 (7 kör) és H0 (4 kör) nem konvergál → „Szűkítés + bontás (Javasolt)”, legfeljebb 2 további kör; vak keret 60 USD
+  („+30 USD (összesen 60) (Javasolt)”), 11-22 reggelig ≈ 19,6 USD.
 - Kanbanra (a #418 maradékai): L7 „várakozik / fut” külön állapotjelzés (API-bővítés); L9 ugyanaz a hibás számminta a
   `source/server/lesson-covers.ts:269`-ben; L1 a hiba előtt beírt, tartalom-hash szerint közös média nem törölhető.
