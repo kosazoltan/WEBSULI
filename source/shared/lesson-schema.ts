@@ -50,6 +50,9 @@ export const ANIM_KINDS = [
   "table",
   "ruleBox",
   "compareCards",
+  // S2b-1 (docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): elágazó döntési fa, képes kártyák.
+  "decisionTree",
+  "pictureCards",
 ] as const;
 
 /**
@@ -80,7 +83,7 @@ export type AnimKind = (typeof ANIM_KINDS)[number];
  * kimenetében csak a forrás vizuális leltárának funkciókapcsolója mellett fogadja el (spec 2026-11-18-tananyag-gyartas-minoseg, 5. szakasz
  * 14. pont) — KI állapotban a modell ilyen fajtát nem is hall, és a kimenet határa a bővítés előtti hibával utasítja el.
  */
-export const SOURCE_VISUAL_ANIM_KINDS = ["table", "ruleBox", "compareCards"] as const satisfies ReadonlyArray<AnimKind>;
+export const SOURCE_VISUAL_ANIM_KINDS = ["table", "ruleBox", "compareCards", "decisionTree", "pictureCards"] as const satisfies ReadonlyArray<AnimKind>;
 /** A bővítés ELŐTTI ábrafajta-felsorolás (a főág `ANIM_KINDS` listája, ugyanabban a sorrendben). */
 export const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VISUAL_ANIM_KINDS as readonly string[]).includes(k)) as [AnimKind, ...AnimKind[]]);
 
@@ -369,9 +372,16 @@ export const lessonSchema = z.object({
     /** Arculati bank (2026-10-17-arculati-bank): a lecke témakörkulcsa (shared/topic-taxonomy.ts). */
     topic: z.string().regex(/^[a-z0-9-]{2,64}$/).optional(),
   }).strict().optional(),
+  /**
+   * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (5. szakasz 2. pont): a változatossági kapcsolóval gyártott lecke jelölője —
+   * mentéskor KIZÁRÓLAG a szerver írja (a modell kimenetének sémája elhagyja). Engedékeny: hibás alak → elhagyva, a lecke olvasható.
+   */
+  variety: z.object({ version: z.string().trim().min(1).max(40) }).passthrough().optional().catch(undefined),
 });
 
-const legacyLessonSchema = lessonSchema.extend({ sections: z.array(sectionSchema.extend({ blocks: z.array(legacyBlockSchema).min(1) })).min(1) });
+// S5a: a bővítés előtti séma a főághoz híven a `variety` kulcsot sem ismeri (a modell kéretlen jelölője elhagyódik). A BE ág a teljes
+// `lessonSchema` (azonosság-őr: tests/source-visuals-flag.test.ts) — ott a jelölőt a mentés határa (`withVarietyMarker`) írja felül.
+const legacyLessonSchema = lessonSchema.extend({ sections: z.array(sectionSchema.extend({ blocks: z.array(legacyBlockSchema).min(1) })).min(1) }).omit({ variety: true });
 /**
  * A MODELL KIMENETÉNEK sémája (szerzői lecke, ábrafolt blokkja, fogalomjavítás, leckejavítás). `sourceVisuals`: a forrás vizuális
  * leltárának funkciókapcsolója (spec 2026-11-18-tananyag-gyartas-minoseg, 5. szakasz 14. pont) — BE: a teljes séma; KI: a bővítés

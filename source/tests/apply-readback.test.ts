@@ -35,3 +35,12 @@ test("több mentés (alkalmazás + visszaállítás): sorrendtől függetlenül 
   assert.equal(appliedLessonMatches(saved, candidate, [applyBackup, restoreBackup], "fix-1"), true);
   assert.equal(appliedLessonMatches(restored, candidate, [applyBackup, restoreBackup], "fix-1"), false, "visszaállított lecke nem számít alkalmazottnak");
 });
+
+// Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (11. szakasz 6. pont; V12): a változatossági jelölőt a mentés írja (mint az
+// arculatot) — a visszaolvasás nem bukhat rajta, a tartalmi eltérés továbbra is bukik.
+test("V12: eltérő változatossági jelölő, egyező tranzakció-hash → az alkalmazás igazolt", () => {
+  const marked = { ...saved, variety: { version: "valtozatossag-2", openingForm: "eset" } };
+  assert.equal(appliedLessonMatches(marked, candidate, [{ improvedFileId: "fix-1", backupData: { expectedCurrentHash: repairHash(marked) } }], "fix-1"), true);
+  const markedEdited = { ...marked, title: "Más cím" };
+  assert.equal(appliedLessonMatches(markedEdited, candidate, [{ improvedFileId: "fix-1", backupData: { expectedCurrentHash: repairHash(markedEdited) } }], "fix-1"), false);
+});
