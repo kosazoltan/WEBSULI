@@ -38,7 +38,8 @@
 - Kész: 7 napnál régebbi utolsó válasz után nincs beküldés; a levél mutatja a kör kezdetét.
 - **Megvalósítás (2026-11-23, ág `feat/eredmeny-b1b-kliens-mezok`):** előfeltétel teljesült — a B1a (#532) a főágon és élesben van
   (production a `c87d1706` commitról). A `shared/quiz-round.ts` új függvényei: `STALE_ROUND_DAYS`, `roundTooOld`, `roundActivityAt`; a
-  `useExperienceRound.ts` sémája opcionális `lastAnsweredAt` mezőt kap (a régi tárolt kör nélküle is betölt); a kvízválasz rögzíti
+  `useExperienceRound.ts` sémája opcionális `lastAnsweredAt` mezőt kap (a régi tárolt kör nélküle is betölt, és — mivel a válasz kora
+  ismeretlen — NEM minősül elavultnak: a régi küldési viselkedés marad; 1. vak kör L1); a kvízválasz rögzíti
   (`LessonExperienceView.tsx`); a `resultReport.ts` a LE NEM ZÁRT, 7 napnál régebbi utolsó tevékenységű kört nem küldi, a törzsbe a
   `startedAt` (mindkét fajta) és a `lastAnsweredAt` (csak kvíz — a feladat-séma nem fogadja) kerül. A körazonosító és a „már elküldve”
   jelző változatlan. Tesztek: `result-report-complete.test.ts` (korhatár határai, szerkezeti őr), `lesson-result-email-quiz.spec.ts`

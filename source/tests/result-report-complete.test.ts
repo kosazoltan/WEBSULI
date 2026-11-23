@@ -30,10 +30,9 @@ test("a küldés feltétele: lezárt kör VAGY (csak kvíznél) teljes kör; a f
 
 // --- Eredmény-e-mail B1b (R2): korhatár az utolsó válaszhoz ---
 
-test("B1b: roundActivityAt — az utolsó válasz ideje, ennek hiányában a kezdés", () => {
-  assert.equal(roundActivityAt({ startedAt: 100, lastAnsweredAt: 500 }), 500);
-  assert.equal(roundActivityAt({ startedAt: 100 }), 100, "régebbi tárolt kör: a kezdés");
-  assert.equal(roundActivityAt({ startedAt: 0 }), 0);
+test("B1b: roundActivityAt — az utolsó válasz ideje; ennek hiányában ismeretlen (0), nem a kezdés", () => {
+  assert.equal(roundActivityAt({ lastAnsweredAt: 500 }), 500);
+  assert.equal(roundActivityAt({}), 0, "régebbi tárolt kör (nincs rögzített válaszidő): ismeretlen kor");
 });
 
 test("B1b: roundTooOld — pontosan 7 nap még nem régi, egy ezredmásodperccel több már az; kezdés nélküli körre nem vonatkozik", () => {
@@ -45,8 +44,10 @@ test("B1b: roundTooOld — pontosan 7 nap még nem régi, egy ezredmásodperccel
   assert.equal(roundTooOld(now - 1, now), false);
   assert.equal(roundTooOld(0, now), false, "kezdés nélküli kör");
   // A régen megnyitott, de ma megválaszolt kör megy: a korhatár az utolsó válaszhoz mér.
-  assert.equal(roundTooOld(roundActivityAt({ startedAt: now - 30 * day, lastAnsweredAt: now - 1000 }), now), false);
-  assert.equal(roundTooOld(roundActivityAt({ startedAt: now - 30 * day }), now), true);
+  assert.equal(roundTooOld(roundActivityAt({ lastAnsweredAt: now - 1000 }), now), false);
+  assert.equal(roundTooOld(roundActivityAt({ lastAnsweredAt: now - 8 * day }), now), true);
+  // 1. vak kör L1: a régi kliens által tárolt kör (válaszidő nélkül) NEM elavult — a friss válaszú régi kör eredménye nem veszhet el.
+  assert.equal(roundTooOld(roundActivityAt({}), now), false);
 });
 
 test("B1b: a beküldő a korhatárt csak LE NEM ZÁRT körre alkalmazza, és a két időmezőt a törzsbe teszi (szerkezeti őr; a viselkedést a böngészős próba méri)", () => {

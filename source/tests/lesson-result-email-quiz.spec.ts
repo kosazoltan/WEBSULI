@@ -86,11 +86,12 @@ test("hiányos kör lezárása a kihagyásokkal: egy beküldés, a kihagyott ké
 /** A beküldés szervere kapcsolható: hibánál 500-at ad (a kliens újrapróbál, a kör „elküldetlen” marad), különben rögzít és 202-t ad. */
 async function switchableMock(page: Page) {
   const accepted: Array<Record<string, unknown>> = [];
-  const state = { fail: true };
+  const state = { fail: true, attempts: 0 };
   await page.route("**/api/**", async route => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
     if (path === "/api/lessons/lesson-q/results" && req.method() === "POST") {
+      state.attempts++;
       if (state.fail) return route.fulfill({ status: 500, json: { message: "hiba" } });
       accepted.push(req.postDataJSON());
       return route.fulfill({ status: 202, json: { queued: true } });
@@ -105,27 +106,84 @@ async function switchableMock(page: Page) {
   return { accepted, state };
 }
 
+const DAY = 86_400_000;
+const T0 = new Date("2026-11-02T10:00:00+01:00").getTime();
+
+/** Megnyitja a kvízt, megválaszolja mind a 25 kérdést (a szerver ekkor hibázik), majd megvárja, hogy az újrapróbák elfogyjanak. */
+async function answerAllWhileFailing(page: Page, attempts: () => number) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview/quiz-fixture");
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  const quiz = page.locator("[data-quiz-id]");
+  await expect(quiz).toHaveCount(25);
+  return { quiz, finish: async () => { await page.clock.runFor(60_000); expect(attempts(), "az első beküldés megpróbálta, de nem ért célba").toBeGreaterThan(0); } };
+}
+
+async function reloadAndCount(page: Page) {
+  await page.reload();
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  await expect(page.locator("[data-quiz-id]")).toHaveCount(25);
+  await page.clock.runFor(5_000);
+  await page.waitForTimeout(1500);
+}
+
 for (const sample of [{ days: 8, sends: 0, name: "8 nappal az utolsó válasz után a le nem zárt, elküldetlen kör már nem megy el" }, { days: 6, sends: 1, name: "6 nappal az utolsó válasz után az elküldetlen kör még elmegy" }]) {
   test(`B1b korhatár: ${sample.name}`, async ({ page }) => {
     const { accepted, state } = await switchableMock(page);
-    await page.clock.install({ time: new Date("2026-11-02T10:00:00+01:00") });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/preview/quiz-fixture");
-    await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
-    const quiz = page.locator("[data-quiz-id]");
-    await expect(quiz).toHaveCount(25);
+    await page.clock.install({ time: new Date(T0) });
+    const { quiz, finish } = await answerAllWhileFailing(page, () => state.attempts);
     for (let i = 0; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
-    // A szerver hibázik: a teljes kör elküldetlen marad (az újrapróbák is elfogynak).
-    await page.clock.runFor(60_000);
+    await finish();
     expect(accepted).toHaveLength(0);
 
-    await page.clock.setSystemTime(new Date(new Date("2026-11-02T10:00:00+01:00").getTime() + sample.days * 86_400_000));
+    await page.clock.setSystemTime(new Date(T0 + sample.days * DAY));
     state.fail = false;
-    await page.reload();
-    await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
-    await expect(page.locator("[data-quiz-id]")).toHaveCount(25);
-    await page.clock.runFor(5_000);
-    await page.waitForTimeout(1500);
+    const before = state.attempts;
+    await reloadAndCount(page);
     expect(accepted.filter(p => p.kind === "quiz")).toHaveLength(sample.sends);
+    if (!sample.sends) expect(state.attempts, "elavult körnél a kérés el sem indul").toBe(before);
   });
 }
+
+// 1. vak kör L1 + L3: a korhatár az UTOLSÓ VÁLASZHOZ mér, nem a kezdéshez.
+test("B1b korhatár: 8 napja megnyitott, de MA megválaszolt kör elmegy (a kezdés ideje nem számít)", async ({ page }) => {
+  const { accepted, state } = await switchableMock(page);
+  await page.clock.install({ time: new Date(T0) });
+  const { quiz, finish } = await answerAllWhileFailing(page, () => state.attempts);
+  await quiz.nth(0).locator("button.lesson-option").first().click(); // a kör 8 nappal a többi válasz előtt indul
+  await page.clock.setSystemTime(new Date(T0 + 8 * DAY));
+  for (let i = 1; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await finish();
+  state.fail = false;
+  await reloadAndCount(page);
+  const sent = accepted.filter(p => p.kind === "quiz");
+  expect(sent).toHaveLength(1);
+  expect((sent[0].lastAnsweredAt as number) - (sent[0].startedAt as number)).toBeGreaterThanOrEqual(8 * DAY - 60_000);
+});
+
+test("B1b korhatár: a régi kliens által tárolt kör (válaszidő nélkül) 8 nap múlva is elmegy — a kor ismeretlen, nem elavult", async ({ page }) => {
+  const { accepted, state } = await switchableMock(page);
+  await page.clock.install({ time: new Date(T0) });
+  const { quiz, finish } = await answerAllWhileFailing(page, () => state.attempts);
+  for (let i = 0; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+  await finish();
+  // A B1b előtti kliens formátuma: a tárolt körből kivesszük az utolsó válasz idejét.
+  const stripped = await page.evaluate(() => {
+    let n = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)!;
+      try {
+        const value = JSON.parse(localStorage.getItem(key) ?? "null");
+        if (value && typeof value === "object" && "lastAnsweredAt" in value) { delete value.lastAnsweredAt; localStorage.setItem(key, JSON.stringify(value)); n++; }
+      } catch { /* nem JSON érték */ }
+    }
+    return n;
+  });
+  expect(stripped, "volt tárolt kör válaszidővel").toBeGreaterThan(0);
+  await page.clock.setSystemTime(new Date(T0 + 8 * DAY));
+  state.fail = false;
+  await reloadAndCount(page);
+  const sent = accepted.filter(p => p.kind === "quiz");
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).not.toHaveProperty("lastAnsweredAt");
+});

@@ -18,9 +18,10 @@ export function roundTooOld(activityAt: number, now: number): boolean {
 }
 
 /**
- * A kör utolsó tevékenysége: az utolsó kvízválasz ideje; ennek hiányában (régebbi tárolt kör, feladatkör) a kezdés. A 7 napos korhatár
- * EHHEZ mér: a régen megnyitott, de ma megválaszolt kör eredménye megy.
+ * A kör utolsó ISMERT tevékenysége: az utolsó kvízválasz ideje. A 7 napos korhatár EHHEZ mér: a régen megnyitott, de ma megválaszolt
+ * kör eredménye megy. Ha nincs rögzítve (a régi kliens tárolta a kört, vagy feladatkör), a kor ISMERETLEN → 0: az ilyen kör nem
+ * minősül elavultnak, a régi küldési viselkedés marad (1. vak kör L1 — a kezdés ideje nem bizonyítja, hogy a válasz régi).
  */
-export function roundActivityAt(round: { startedAt: number; lastAnsweredAt?: number }): number {
-  return round.lastAnsweredAt ?? round.startedAt;
+export function roundActivityAt(round: { lastAnsweredAt?: number }): number {
+  return round.lastAnsweredAt ?? 0;
 }
