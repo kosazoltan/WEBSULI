@@ -43,3 +43,4 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 - A helyi ellenőr nagy diffen (PR-C, 4900 sor) sok zajos medium/low leletet ad; a high leletet mindig kódból ellenőrizd.
 - PR-kapu böngészős út: 556 teszt / 27 spec egy workerrel >60 perc → WEBSULI_E2E_TIMEOUT_MIN (PR #542). Merge-kapu futásőr: DATABASE_URL a környezetből elsőbbséget kap.
 - Helyi e2e: CDP-swipe után a koppintás nem ad click-et (fling) — a swipe végén álló touchMove kell (PR #543).
+- Teljes hiányleltár (2026-11-23): `docs/specs/2026-11-23-teljes-hianyleltar.md` — hullámok H0–H8, mester: SQL feladat.tasks.

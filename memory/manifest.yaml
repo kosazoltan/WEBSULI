@@ -40,3 +40,4 @@ code_review:
   gate_merge_env: "a Hermes .env DATABASE_URL-je eltávolítva (2026-11-23) — régi folyamatokban env -u DATABASE_URL"
   e2e_gate_timeout: "WEBSULI_E2E_TIMEOUT_MIN; pre-pr-gate 150/160 perc (PR #542)"
   local_review_determinism: "seed 42 + repeat_penalty 1.15; értelmezhetetlen darab felezve (2026-11-23)"
+  inventory: "teljes hiányleltár: docs/specs/2026-11-23-teljes-hianyleltar.md (ág docs/hianyleltar-2026-11-23), SQL-be töltve [P-0NN]/[BL]/[H-]/[KB] előtaggal"
