@@ -3,6 +3,8 @@
  * Tudásbázis: docs/modszertan-nyitomese-jatekos-kerdezes.md. DOM-mentes, környezeti változót nem olvas (a kapcsoló a szerveren:
  * server/studio/lesson-opener-flag.ts).
  */
+import { seedFrom, seededPick } from "./seeded";
+
 export const LESSON_OPENER_VERSION = "nyitomese-1";
 
 export type OpenerStage = "L1" | "L2" | "L3" | "L4" | "L5" | "L6";
@@ -73,9 +75,15 @@ const STORY_ARC = "A mini mese PONTOSAN 5 mondat: (1) hős és helyzet; (2) a le
 
 const isYoung = (stage: OpenerStage) => stage === "L1" || stage === "L2" || stage === "L3";
 
-function stageLine(stage: OpenerStage): string {
+/**
+ * `variety` (S5b vak kör 1, L3): BE állapotban a lépcsősor csak a korosztályt, a mondathosszt, a címkéket, a hangnemet és a tanulságot
+ * adja — a nyitás FORMÁJÁT és hosszát kizárólag a kiosztott nyitásforma írja elő (a régi kötött meseforma és az „5. mondat” ellentmondana
+ * neki). KI állapotban a sor bájtra a régi.
+ */
+function stageLine(stage: OpenerStage, variety = false): string {
   const s = OPENER_STAGES[stage];
-  return `Lépcső: ${stage} — ${s.grades}. Mese: ${s.storyForm}; mondatonként legfeljebb ${s.maxSentenceWords} szó. Célkártya-címkék: ${s.goalLabels.join(" / ")}. Hangnem: ${s.tone}. Tanulság: ${s.lesson}.`;
+  const form = variety ? `Mondatonként legfeljebb ${s.maxSentenceWords} szó.` : `Mese: ${s.storyForm}; mondatonként legfeljebb ${s.maxSentenceWords} szó.`;
+  return `Lépcső: ${stage} — ${s.grades}. ${form} Célkártya-címkék: ${s.goalLabels.join(" / ")}. Hangnem: ${s.tone}. Tanulság: ${s.lesson}.`;
 }
 
 function goalCardLines(labels: readonly string[]): string[] {
@@ -85,18 +93,83 @@ function goalCardLines(labels: readonly string[]): string[] {
   ];
 }
 
+/**
+ * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (11. szakasz): a változatossági kapcsolóval a nyitás formája és a hős neve a
+ * kódból, a térkép magjából (a mért egyhangúság: 15 / 15 lecke ugyanazzal a mesével, 15 hősből 9 ugyanaz a három név).
+ */
+export type OpeningFormGroup = "young" | "middle" | "older";
+export type OpeningForm = { id: string; description: string };
+
+export const OPENING_FORMS: Record<OpeningFormGroup, readonly OpeningForm[]> = {
+  young: [
+    { id: "mese", description: "Állat- vagy fantáziamese bölcs segítővel. A hős elakad a lecke problémájánál, a segítő megmutatja a Célkártya stratégiáját." },
+    { id: "rejtely", description: "Kis rejtély: valami eltűnt, furcsán viselkedik vagy nem stimmel. A hős nyomokat gyűjt, és a lecke tudása kell a megfejtéshez." },
+    { id: "joslas", description: "„Mit gondolsz?” jóslás: a hős két lehetőség közül választana. A nyitás a tanulót is tippelésre hívja, a választ a lecke adja meg." },
+    { id: "helyzet", description: "Hétköznapi helyzet otthon, az iskolában vagy játék közben. A hős valódi gondba kerül, amelyet a lecke tudása old meg." },
+  ],
+  middle: [
+    { id: "helyzet", description: "Életszerű kortárs helyzet (iskola, sport, család, internet). A hős hibázik vagy elakad, a lecke adja a kulcsot." },
+    { id: "rejtely", description: "Nyomozós rejtély vagy meglepő megfigyelés. A szereplő ellentmondást vesz észre, és a magyarázat a lecke tartalmában rejlik." },
+    { id: "joslas", description: "Becslés vagy jóslás: a szereplő (és a tanuló) előre tippel. A nyitás nyitva hagyja, kinek lesz igaza." },
+    { id: "dilemma", description: "Döntés két út között egy csoportban vagy egyedül. A jó döntéshez a lecke tudása kell, a nyitás nem árulja el a választ." },
+  ],
+  older: [
+    { id: "eset", description: "Valósághű esetleírás ütköző nézőpontokkal. A szereplők érvelnek, és a lecke tartalma dönti el, kinek van igaza." },
+    { id: "gondolatkiserlet", description: "Gondolatkísérlet: „Mi történne, ha…?”. A nyitás egy feltevést állít fel, amelynek a következményeit a lecke bontja ki." },
+    { id: "dilemma", description: "Szakmai vagy erkölcsi dilemma, érettségi- vagy életpálya-vonatkozással. A nyitás a döntés tétjét mutatja meg, nem a megoldást." },
+    { id: "megfigyeles", description: "Meglepő megfigyelés vagy adat a hétköznapokból. A nyitás a meglepetést fogalmazza meg, a magyarázatot a lecke adja." },
+  ],
+};
+
+/** A nyitóblokk fejléce a kiosztott formából (kódszótár; a lejátszó a jelölő `openingForm` mezőjéből olvassa). */
+export const OPENING_FORM_LABEL: Record<string, string> = {
+  mese: "Mese", rejtely: "Rejtély", joslas: "Mit gondolsz?", helyzet: "Helyzet", dilemma: "Dilemma", eset: "Eset",
+  gondolatkiserlet: "Gondolatkísérlet", megfigyeles: "Megfigyelés",
+};
+
+/** Vegyes nemű magyar keresztnevek — a mért három leggyakoribb (Bence, Dóra, Dóri) nélkül. */
+export const HERO_NAMES: readonly string[] = [
+  "Anna", "Ábel", "Lili", "Máté", "Zsófi", "Levente", "Emma", "Olivér", "Luca", "Marcell", "Hanna", "Botond", "Réka", "Dániel",
+  "Kata", "Áron", "Noémi", "Gergő", "Panna", "Kristóf", "Flóra", "Milán", "Eszter", "Barnabás", "Boglárka", "Zalán", "Petra", "Vince",
+  "Jázmin", "Tamás", "Nóra", "Benedek", "Csenge", "Ádám", "Virág", "Soma", "Liza", "Kende", "Rozi", "Huba", "Viktória", "Márk",
+];
+
+export function openingFormGroup(classroom: number): OpeningFormGroup {
+  const stage = openerStageForClassroom(classroom);
+  return stage === "L1" || stage === "L2" ? "young" : stage === "L3" || stage === "L4" ? "middle" : "older";
+}
+
+/** Mentett formaazonosító → forma (review #534: a job állapotában rögzített kiosztás visszaolvasása); ismeretlen azonosító → `undefined`. */
+export function openingFormById(id: string): OpeningForm | undefined {
+  return Object.values(OPENING_FORMS).flat().find((f) => f.id === id);
+}
+
+/** A forma és a hős a magból (a mag: `seedFrom(mapId)`) — ugyanaz a térkép mindig ugyanazt kapja. */
+export function openerVarietyPick(classroom: number, seed: number): { form: OpeningForm; hero: string } {
+  return {
+    form: seededPick(OPENING_FORMS[openingFormGroup(classroom)], seedFrom(`form\u0001${seed}`))!,
+    hero: seededPick(HERO_NAMES, seedFrom(`hero\u0001${seed}`))!,
+  };
+}
+
+const VARIETY_OPENING_ARC = "A nyitás 3–6 mondat: hős és helyzet; a lecke tantárgyi problémája és az elakadás; felismerés vagy segítő; a Célkártya stratégiája működés közben; a végén NYITOTT kérdés, amelyre a lecke adja meg a választ. A szerkezetet a kiosztott forma alakítja — nem kell minden elemnek külön mondat.";
+
 /** A Stúdió szerzői promptjának szerződése: Célkártya + 5 mondatos mini mese + visszatérés (évfolyamfüggő). */
-export function lessonOpenerContract(classroom: number, opts: { section0InScope?: boolean } = {}): string {
+export function lessonOpenerContract(classroom: number, opts: { section0InScope?: boolean; variety?: { seed: number } } = {}): string {
+  const version = opts.variety ? LESSON_OPENER_VERSION_VARIETY : LESSON_OPENER_VERSION;
   if (opts.section0InScope === false) {
-    return `CÉLKÁRTYA ÉS MINI MESE (${LESSON_OPENER_VERSION}): ebben a célzott javításban az 1. fejezet nem része a kimenetnek — most nincs Célkártya és mini mese, a meglévőt nem érinted.`;
+    return `CÉLKÁRTYA ÉS MINI MESE (${version}): ebben a célzott javításban az 1. fejezet nem része a kimenetnek — most nincs Célkártya és mini mese, a meglévőt nem érinted.`;
   }
   const stage = openerStageForClassroom(classroom);
   const s = OPENER_STAGES[stage];
+  const pick = opts.variety ? openerVarietyPick(classroom, opts.variety.seed) : undefined;
   return [
-    `CÉLKÁRTYA ÉS MINI MESE (${LESSON_OPENER_VERSION}; az 1. fejezet első két blokkja, utána a tanítás):`,
-    `- ${stageLine(stage)}`,
+    `CÉLKÁRTYA ÉS MINI MESE (${version}; az 1. fejezet első két blokkja, utána a tanítás):`,
+    `- ${stageLine(stage, Boolean(pick))}`,
     ...goalCardLines(s.goalLabels),
-    `- MINI MESE: az 1. fejezet MÁSODIK blokkja egy \`explain\` blokk (depth "core"). ${STORY_ARC} Mese: ${s.storyForm}. A mese a fogalmat természetes szavakkal idézi fel (a pontos nevét, a term-et, nem kell szó szerint beillesztenie, és címszerű alakot ne másolj be idézőjelben), és azt jelöli.${isYoung(stage) ? " Az 5. mondat előtt egy félmondat arról is szólhat, mit érez a hős." : ""}`,
+    pick
+      ? `- NYITÁS: az 1. fejezet MÁSODIK blokkja egy \`explain\` blokk (depth "core"). Nyitásforma (a program osztotta ki, kötelező): ${OPENING_FORM_LABEL[pick.form.id]} — ${pick.form.description} A hős neve: ${pick.hero}. ${VARIETY_OPENING_ARC} A nyitás a fogalmat természetes szavakkal idézi fel (a pontos nevét, a term-et, nem kell szó szerint beillesztenie, és címszerű alakot ne másolj be idézőjelben), és azt jelöli.`
+      : `- MINI MESE: az 1. fejezet MÁSODIK blokkja egy \`explain\` blokk (depth "core"). ${STORY_ARC} Mese: ${s.storyForm}. A mese a fogalmat természetes szavakkal idézi fel (a pontos nevét, a term-et, nem kell szó szerint beillesztenie, és címszerű alakot ne másolj be idézőjelben), és azt jelöli.${isYoung(stage) ? " Az 5. mondat előtt egy félmondat arról is szólhat, mit érez a hős." : ""}`,
     "- Mindkét blokk coversConceptIds-ben az 1. fejezet első fogalmát jelöli; a címkét a fejezet tanító blokkja alapozza meg, amely a fogalom nevét (term) szó szerint kimondja. KIVÉTEL: a prompt későbbi, szó szerinti term-et kérő szabálya („A TÖMÖRÍTÉS NEM BONT KAPUT”) erre a két nyitóblokkra NEM vonatkozik — minden más blokkra igen. A tanítás a HARMADIK blokktól a didaktikai ív szerint halad.",
     `- Két réteg: a hős a lecke saját tantárgyi problémájával találkozik, és közben egy tanulási nehézséggel küzd, ezek közül a tantárgyhoz illővel: ${learningThemesFor(classroom).join("; ")}.`,
     "- A Célkártya és a mese a szókereten BELÜL van: a fejezet bevezető mondatait váltják ki, nem adódnak hozzájuk.",
@@ -118,9 +191,10 @@ export const PLAYFUL_AUTHOR_RULES = [
 /**
  * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S5a): a változatossági kapcsolóval (`STUDIO_LESSON_VARIETY`, a szerveren) a
  * bátorító / megerősítő nyitást a lejátszó adja kódszótárból (`shared/lesson-feedback-openers.ts`) — a modell csak az indoklást írja,
- * a szerződés verziója `nyitomese-2`. KI kapcsolónál a régi konstansok bájtra változatlanok.
+ * a szerződés verziója `nyitomese-3` (S5b óta). KI kapcsolónál a régi konstansok bájtra változatlanok.
  */
-const LESSON_OPENER_VERSION_VARIETY = "nyitomese-2";
+// S5b (terv 11. szakasz 5. pont): nyitásforma + hősnév a kódból → nyitomese-3.
+const LESSON_OPENER_VERSION_VARIETY = "nyitomese-3";
 const VARIETY_FEEDBACK_RULE = "Bátorító vagy megerősítő nyitást NE írj — azt a program adja. Rossz válasznál: mi tévesztett meg, mit kérdezett a kérdés, mi a helyes gondolatmenet. Helyes válasznál: röviden, miért jó.";
 
 export function lessonOpenerVersion(variety: boolean): string {
@@ -148,6 +222,20 @@ export const LESSON_OPENER_LEKTOR_CHECKLIST = [
   "- Hiányzó elem, rossz mondatszám, évfolyamhoz nem illő forma vagy hiányzó visszatérés: age jegyzet „NYITÓMESE:” előtaggal. Egyik sem blokkoló.",
 ].join("\n");
 
+/** S5b: a változatossági kapcsolóval a lektor a kiosztott forma 3–6 mondatos nyitását méri (KI: a régi konstans). */
+/**
+ * `form` (review #534, Copilot): a szerzőnek TÉNYLEG kiosztott nyitásforma — a lektor ehhez mér (címke + leírás). Forma nélkül (régi
+ * checkpointból folytatott futás, régi jelölőjű lecke javítása) a lista nem állít kiosztást: csak a nyitás hosszát méri.
+ */
+export function lessonOpenerLektorChecklist(variety: boolean, form?: OpeningForm): string {
+  if (!variety) return LESSON_OPENER_LEKTOR_CHECKLIST;
+  const label = form ? OPENING_FORM_LABEL[form.id] : undefined;
+  return LESSON_OPENER_LEKTOR_CHECKLIST
+    .replace(`(${LESSON_OPENER_VERSION})`, `(${LESSON_OPENER_VERSION_VARIETY})`)
+    .replace("a második a mini mese.", form && label ? `a második a nyitás — a szerzőnek kiosztott forma: ${label} (${form.description})` : "a második a nyitás.")
+    .replace("a mese pontosan 5 mondat-e,", form && label ? `a nyitás 3–6 mondat-e és a kiosztott formát (${label}) követi-e,` : "a nyitás 3–6 mondat-e,");
+}
+
 /** Játékos (IQ-) kérdezés a bankhoz (statikus: a bank gyorsítótárazott előtagjába kerül, ezért évfolyamfüggetlen). */
 export const PLAYFUL_QUESTIONING_CONTRACT = [
   `JÁTÉKOS (IQ-) KÉRDEZÉS (${LESSON_OPENER_VERSION}; a bank minden tételére):`,
@@ -163,7 +251,9 @@ export const PLAYFUL_QUESTIONING_CONTRACT = [
 
 export function playfulQuestioningContract(variety: boolean): string {
   if (!variety) return PLAYFUL_QUESTIONING_CONTRACT;
-  return withVarietyFeedback(PLAYFUL_QUESTIONING_CONTRACT, lineStarting(PLAYFUL_QUESTIONING_CONTRACT, "- Visszajelzés a KIMENETI KERETEN"),
+  // S5b: a „Peti szerint…” példamondat helyett leírás (a modell különben a példa nevét ismétli).
+  const withoutPeti = PLAYFUL_QUESTIONING_CONTRACT.replace("(pl. „Peti szerint…, de a lecke szerint…”)", "(egy megnevezett szereplő téves állítása és a lecke ténye)");
+  return withVarietyFeedback(withoutPeti, lineStarting(PLAYFUL_QUESTIONING_CONTRACT, "- Visszajelzés a KIMENETI KERETEN"),
     `- Visszajelzés a KIMENETI KERETEN belül (kvízopciónként 1 mondat, ≤ 200 karakter; módszer answer legfeljebb 2 mondat): ${VARIETY_FEEDBACK_RULE}`);
 }
 

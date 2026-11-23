@@ -1,4 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { storedVarietyMarker } from "../../shared/lesson-feedback-openers";
+import { openingFormById } from "../../shared/lesson-opener";
 
 /**
  * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (5. szakasz 1. pont): a tananyag-változatosság kapcsolója — `on` = BE, bármi más
@@ -19,8 +21,35 @@ export function effectiveLessonVariety(): boolean {
   return runScope.getStore() ?? lessonVarietyEnabled();
 }
 
+/**
+ * Review #534 (Codex, Copilot): a futásban a szerzőnek TÉNYLEG kiosztott nyitásforma — a kiosztó állítja be (gyártás: a szerzői prompt
+ * építésekor; javítás: ha a tárolt lecke formát hordoz), a lektor ebből kapja a konkrét elvárást. Régi checkpointból átvett tanításnál
+ * (a szerző kimarad) nincs beállítva: ilyenkor sem a lektor, sem a mentett jelölő nem állít kiosztást.
+ */
+type RunOpeningForm = { id: string; description: string };
+const formScope = new AsyncLocalStorage<{ form?: RunOpeningForm }>();
+export function setRunOpeningForm(form: RunOpeningForm | undefined): void {
+  const holder = formScope.getStore();
+  if (holder) holder.form = form;
+}
+export function runOpeningForm(): RunOpeningForm | undefined {
+  return formScope.getStore()?.form;
+}
+
+/** Javítás / fogalomjavítás: a futás kiosztott formája a TÁROLT (jelölőt hordozó) lecke formája; forma nélküli jelölőnél nincs kiosztás. */
+export function adoptStoredOpeningForm(stored: unknown): void {
+  const id = storedVarietyMarker(stored)?.openingForm;
+  setRunOpeningForm(id ? openingFormById(id) : undefined);
+}
+
+/** A mentés forrása: futáson belül a kiosztott forma azonosítója vagy `null` (nem volt kiosztás); futáson kívül `undefined` (régi út). */
+export function runOpeningFormId(): string | null | undefined {
+  const holder = formScope.getStore();
+  return holder ? holder.form?.id ?? null : undefined;
+}
+
 export function runWithLessonVariety<T>(on: boolean, fn: () => T): T {
-  return runScope.run(on, fn);
+  return runScope.run(on, () => formScope.run({}, fn));
 }
 
 /**

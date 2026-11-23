@@ -1,6 +1,6 @@
 import type { AgeBand, Block } from "./lesson-schema";
 import { BAND_THEME } from "./lesson-band";
-import { OPENER_STAGES } from "./lesson-opener";
+import { OPENER_STAGES, OPENING_FORM_LABEL } from "./lesson-opener";
 
 /**
  * Spec 2026-11-08-borito-blokkcimkek: a blokk fejléce a TARTALOMBÓL — Célkártya, mese, a magyarázat mélysége, az ábra és a feladat fajtája.
@@ -78,13 +78,21 @@ export function checkFormLabel(question: string): string | null {
   return CHECK_FORMS.find(([re]) => re.test(question))?.[1] ?? null;
 }
 
-export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand, classroom?: number, isLastSection?: boolean): string {
+/** `openingForm` (S5b, docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 11. szakasz): a jelölt lecke kiosztott nyitásformája. */
+export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand, classroom?: number, isLastSection?: boolean, openingForm?: string): string {
   const block = blocks[index];
   const theme = BAND_THEME[band];
   switch (block.kind) {
     case "explain": {
       if (sectionIdx === 0 && index === 0 && isGoalCardText(block.text)) return "A lecke célja";
       const prev = blocks[index - 1];
+      // S5b vak kör 1 (L1): jelölt leckén (ismert kiosztott forma) a nyitóblokk a Célkártya utáni ELSŐ explain blokk — az ábrák állomása
+      // a Célkártya után ábrát illeszthet be, a nyitás ettől még nyitás. Jelöletlen leckén a régi, pozíciós szabály marad.
+      // Review #534 (Copilot): a tárolt jelölő további mezői típusellenőrzés nélkül jönnek — nem szöveg formánál a régi címke marad.
+      if (sectionIdx === 0 && index > 0 && typeof openingForm === "string" && Object.prototype.hasOwnProperty.call(OPENING_FORM_LABEL, openingForm)) {
+        const goal = blocks[0];
+        if (goal?.kind === "explain" && isGoalCardText(goal.text) && blocks.findIndex((b, i) => i > 0 && b.kind === "explain") === index) return OPENING_FORM_LABEL[openingForm];
+      }
       if (sectionIdx === 0 && index === 1 && prev?.kind === "explain" && isGoalCardText(prev.text)) {
         // Review #405: „Mese” csak 1–4. évfolyamon; a programozás (0) a kid sávba esik, de 7–8. korcsoport → „Történet”.
         const young = classroom === undefined ? band === "kid" : classroom >= 1 && classroom <= 4;

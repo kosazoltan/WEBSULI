@@ -7,9 +7,10 @@ import { LESSON_BANK_RESERVE, LESSON_BANK_SIZES, LESSON_METHOD_CONTRACT, LESSON_
 import { lessonOpenerVersion, playfulQuestioningContract } from "../../shared/lesson-opener";
 import { lessonOpenerEnabled } from "./lesson-opener-flag";
 import { effectiveLessonVariety } from "./lesson-variety-flag";
+import { seedFrom } from "../../shared/seeded";
 import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, missingOrder, missingPhrases, normalizeAnswer } from "../../shared/lesson-experience-score";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
-import { planLessonBank, bankUnitQuota } from "../../shared/lesson-bank-plan";
+import { planLessonBank, bankUnitQuota, orderMethodsByQuota, gateCountProblem } from "../../shared/lesson-bank-plan";
 import type { Lesson } from "../../shared/lesson-schema";
 import type { MapConcept } from "./coverage";
 import { canonicalJson } from "./step-io";
@@ -517,7 +518,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     return problems;
   };
   const unitTeaching = (unitIndex: number, unit: (typeof plan.units)[number]) => {
-    const { taskCount, quizCount, taskTarget, quizTarget, methodKinds } = bankUnitQuota(plan, unitIndex);
+    // Spec 2026-11-20-tgm-valtozatossag-abrak (11. szakasz 4. pont): BE kapcsolónál a módszersorrend a térkép magjából keveredik.
+    const { taskCount, quizCount, taskTarget, quizTarget, methodKinds } = bankUnitQuota(plan, unitIndex, effectiveLessonVariety() ? seedFrom(lesson.mapId) : undefined);
     const source = concepts.filter(c => unit.conceptIds.includes(c.localId)).sort((a, b) => a.localId.localeCompare(b.localId));
     // Review #359: a kalibráció viselkedésének verziója a csomag hash-ében — a változás előtt mentett (pontos-alak szigorítás nélküli)
     // csomag folytatáskor sem kerül át kalibrálatlanul.
@@ -601,6 +603,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       // Spec 2026-09-29 (egy-helyes-valasz): pontosan egy helyes opció — a kvízben és a választós módszerben is.
       problems.push(...lessonSingleChoiceProblems({ experience: packet }).flatMap(f => f.problems.map(p => `${f.id ?? f.path}: ${p}`)));
       for (const kind of new Set(methodKinds)) if (packet.methods.filter(m => m.kind === kind).length < methodKinds.filter(k => k === kind).length) problems.push('Hiányzó módszer: ' + kind);
+      // Review #534 (Copilot): BE állapotban a kapukérdések száma felülről is korlátos — az új, a mentett és az átvett csomagra is (KI: régi szabály).
+      const gateProblem = gateCountProblem(packet.methods, effectiveLessonVariety() ? methodKinds : undefined);
+      if (gateProblem) problems.push(gateProblem);
       for (const t of packet.tasks) {
         // Spec 2026-09-19 (measured: owner's 49-concept map, job 6cb1bc89 — three packet attempts
         // died on one sample that carried every rubric group and enough words but no word from
@@ -702,7 +707,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
 A fejezet több külön csomagból állhat. MOST KIZÁRÓLAG sectionIndex=${unit.sectionIndex}, allowedConceptIds=${JSON.stringify(unit.conceptIds)} a megengedett csomag. A fejezet többi fogalma itt nem hivatkozható és nem kérdezhető. Bankterven kívüli tételnél az azonosított kérdés tartalmát, mintáját és rubrikáját is ehhez a csomaghoz igazítsd, eredeti ID-val; puszta fogalomcímke-törlés nem tartalmi javítás.
 Darabszám (a BANKCSOMAG-SZERZŐDÉS 1. pontja): ${methodKinds.length}–20 módszer; PONTOSAN ${taskTarget} nyílt feladat; PONTOSAN ${quizTarget} kvíz (a program ennél kevesebbet elutasít — a tartalék kötelező). Ebben a csomagban legalább egy mode="oral" és egy mode="written" feladat.
 ${reviewFeedback.length ? "LEKTORI JAVÍTÁS: a reviewFeedback konkrét hibáit és previousItem adatait vesd össze a tanítással és forrással, és a teljes új csomagban javítsd őket. A kérdés és a pontozás ugyanazt követelje. Több helyes válasz megengedésekor ne csak egy önkényes mintafelsorolást fogadj el: fogalmazz egyértelmű, ezzel a rubrikával igazságosan értékelhető kérdést. A korábbi hibát más szavakkal se ismételd meg. A teljes csomag továbbra is független ellenőrzésre kerül." : ""}
-A csomag kötelező módszerei (ismétlődő típusnál külön kérdésekkel): ${methodKinds.join(", ")}. A módszereket a tényleges tanításhoz igazítsd; idővonal lehet a megoldás vagy történet lépéssora. Mind: id,sectionIndex,coversConceptIds,kind,title,prompt,answer. gate/myth/popup: options és correctIndex. sorting/causeEffect/timeline: steps helyes sorrendben. Ne erőltess idővonalat, ha nincs időbeli folyamat.
+A csomag kötelező módszerei (ismétlődő típusnál külön kérdésekkel): ${methodKinds.join(", ")}.${effectiveLessonVariety() ? ` Kapukérdésből (kind="gate") PONTOSAN ${methodKinds.filter((k) => k === "gate").length} legyen ebben a csomagban — a további módszerek más fajtájúak.` : ""} A módszereket a tényleges tanításhoz igazítsd; idővonal lehet a megoldás vagy történet lépéssora. Mind: id,sectionIndex,coversConceptIds,kind,title,prompt,answer. gate/myth/popup: options és correctIndex. sorting/causeEffect/timeline: steps helyes sorrendben. Ne erőltess idővonalat, ha nincs időbeli folyamat.
 Nyílt feladat mezői: id,sectionIndex,coversConceptIds,q,required:string[][] (szinonimacsoportok),bonus:string[][],minWords,needsSentence,sample,mode; számolós feladatnál typedAnswers:[{part,kind,value,unit?,form?}]; betűs (algebrai) végeredménynél kind:"polynomial", value pl. "x² + 10x + 25", form:"expanded" (kifejtés) vagy "factored" (szorzattá alakítás) — a tagokat NE bontsd required-csoportokba; „N példát” kérő feladatnál requiredDistinct:[{category,from:string[][],count}]; nyelvtani / idegen nyelvi alak- vagy szórend-feladatnál requiredPhrases:string[][] (sorrendérzékeny, pontos kifejezések a sample szövegéből, pl. [["there is a sofa"],["there are many chairs"]]); sorrendi / műveleti sorrend feladatnál requiredOrder:string[][] (2–4 fogalomcsoport a kötelező sorrendben, pl. [["négyzetre","négyzet"],["szorzunk","szoroz"]]). A rubrika és a pontozás szabályai: A NYÍLT FELADAT PONTOZÓJA (rendszerutasítás). A sample természetes, teljes válasz a kérdésre, amely a saját rubrikán teljes pontot ér; minden required csoportban a sample-ben ténylegesen használt alak is szerepeljen (["mag","magra"]). A required csoportok között ÉS, egy csoporton belül VAGY kapcsolat van; a bonus nem helyettesít kötelező csoportot; ne kérj tetszőleges számú példát egy nagyobb halmazból önkényes mintafelsorolással (arra a requiredDistinct való). Az összes fogalmat fedje le; needsSentence csak valódi mondatfeladatnál.
 ${reviewBase ? `TARTALMI LEKTORI JAVÍTÁS: csak ezek az ID-k módosíthatók: ${JSON.stringify([...allowedReviewIds!])}. Ezek kérdését és hibás rubrikáját a forrás szerint összhangba hozhatod; a nem érintett tételeket a program változatlanul megőrzi, azokat ne küldd vissza.` : `A javított required minden korábbi csoportot külön őrizzen meg, annak összes korábbi alakjával. Új szinonimát hozzáadhatsz; csoportot vagy alakot törölni, két kötelező csoportot összevonni tilos. Ezt a program is ellenőrzi. Hibajavításnál a megnevezett csoport jelentését és a kérdés követelményeit őrizd meg; ne töröld a hiányzó fogalmat.${bindingRepairIds.size ? ` Kivétel: a bizonyítottan csomaghatársértő feladatok (${JSON.stringify([...bindingRepairIds])}) kérdését, mintáját és hibás rubrikáját az engedélyezett tanítás szerint együtt javítsd; ezeknél a hibás követelmény cserélhető.` : ""}`}
 Kvíz mezői: id,sectionIndex,coversConceptIds:[egyetlen ID],intent,question,options (3 vagy 4 különböző),correctIndex,feedbackPerOption (minden opcióhoz magyarázat); minden fogalomhoz egy intent=recall és egy intent=apply. Felidézés és valódi alkalmazás külön kérdés, ne csak számot cserélj!
@@ -921,7 +926,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         delete checkpoint.parts[result.hash];
         ({ packet } = await buildUnit(start + i, chunk[i], { methods: [...methods], tasks: [...tasks], quiz: [...quiz] }, { packet: result.raw, issues: conflicts }));
       }
-      methods.push(...packet.methods); tasks.push(...packet.tasks); quiz.push(...packet.quiz); glossary.push(...packet.glossary);
+      // Review #534 (Copilot): BE állapotban a kész bank módszersorrendje a kiosztásé (a magé), nem a modell válaszáé; KI: változatlan.
+      methods.push(...orderMethodsByQuota(packet.methods, effectiveLessonVariety() ? unitTeaching(start + i, chunk[i]).methodKinds : undefined)); tasks.push(...packet.tasks); quiz.push(...packet.quiz); glossary.push(...packet.glossary);
     }
     progress({ done: Math.min(start + chunk.length, plan.units.length), total: plan.units.length });
   }

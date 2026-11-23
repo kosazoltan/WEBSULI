@@ -370,6 +370,8 @@ function LessonSection({
   onTryPersist: (blockIdx: number, snap: TrySnapshot) => void;
 }) {
   const theme = BAND_THEME[band];
+  // S5b (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 11. szakasz): a jelölt lecke nyitóblokkjának fejléce a kiosztott formából.
+  const openingForm = useContext(FeedbackVarietyContext)?.marker.openingForm;
   const [answers, setAnswers] = useState<Record<number, number>>(initialAnswers);
 
   const pick = useCallback(
@@ -414,7 +416,7 @@ function LessonSection({
           onPick={(pickedIndex) => pick(bi, pickedIndex)}
           tryPersisted={tryBlocks[String(bi)]}
           onTryPersist={(snap) => onTryPersist(bi, snap)}
-          label={blockLabel(section.blocks, bi, sectionIdx, band, classroom, isLastSection)}
+          label={blockLabel(section.blocks, bi, sectionIdx, band, classroom, isLastSection, openingForm)}
         />
       ))}
 

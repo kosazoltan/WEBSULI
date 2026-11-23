@@ -9,7 +9,8 @@ import { workflowStore } from "./store";
 
 const withoutArt = (json: unknown) => {
   if (!json || typeof json !== "object" || Array.isArray(json)) return json;
-  const { art: _art, ...rest } = json as Record<string, unknown>;
+  // Spec 2026-11-20-tgm-valtozatossag-abrak (11. szakasz 6. pont): a változatossági jelölőt is a mentés írja, mint az arculatot.
+  const { art: _art, variety: _variety, ...rest } = json as Record<string, unknown>;
   return rest;
 };
 
