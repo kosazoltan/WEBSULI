@@ -6,3 +6,21 @@
 export function quizRoundComplete(round: { ids: readonly string[]; picks: Readonly<Record<string, number>> }): boolean {
   return round.ids.length > 0 && round.ids.every(id => round.picks[id] !== undefined);
 }
+
+/**
+ * Eredmény-e-mail B1b (docs/specs/2026-11-22-eredmeny-email-bontas.md; R2): a 7 napnál régebbi, LE NEM ZÁRT kör utólag nem megy el —
+ * a levele már nem a mostani tanulást mutatná. A hívó a kör utolsó tevékenységét adja át (`roundActivityAt`). Kezdés nélküli (0) körre
+ * nem vonatkozik.
+ */
+export const STALE_ROUND_DAYS = 7;
+export function roundTooOld(activityAt: number, now: number): boolean {
+  return activityAt > 0 && now - activityAt > STALE_ROUND_DAYS * 86_400_000;
+}
+
+/**
+ * A kör utolsó tevékenysége: az utolsó kvízválasz ideje; ennek hiányában (régebbi tárolt kör, feladatkör) a kezdés. A 7 napos korhatár
+ * EHHEZ mér: a régen megnyitott, de ma megválaszolt kör eredménye megy.
+ */
+export function roundActivityAt(round: { startedAt: number; lastAnsweredAt?: number }): number {
+  return round.lastAnsweredAt ?? round.startedAt;
+}
