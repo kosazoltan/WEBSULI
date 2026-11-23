@@ -27,9 +27,10 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium',
-            // A telepített Google Chrome-ot használjuk (helyben és a GitHub ubuntu runneren
-            // is elérhető), hogy ne függjünk a Playwright külön böngésző-letöltésétől.
-            use: { ...devices['Desktop Chrome'], channel: 'chrome' },
+            // A Playwrighthoz rögzített Chromium fut (docs/specs/2026-11-22-playwright-csomagolt-chromium.md): a gépre
+            // telepített Chrome a Playwrighttól függetlenül frissül (Chrome 158 + Playwright 1.57: összeomlás sandboxolt
+            // iframe-nél). Helyben egyszer: `npx.cmd playwright install chromium`; a CI a `playwright install` lépéssel tölti le.
+            use: { ...devices['Desktop Chrome'] },
         },
     ],
 

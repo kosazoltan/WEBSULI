@@ -278,7 +278,12 @@ describe("adventi naptár — végpontok", () => {
     assert.equal(seen.size, 72);
     assert.deepEqual({ answered: last.summary.answered, solved: last.summary.solved, failed: last.summary.failed }, { answered: 24, solved: 0, failed: 24 });
     assert.equal(last.closing.kind, "new-round");
-    assert.equal((await k.post("/doors/1/answer", { questionId: "g09-math-001", pick: 0 })).status, 409, "végleg hibás ablakra nincs több válasz");
+    // Sorsolásfüggetlen (CI-bukás 2026-11-22, 442a9653 és #522): a rögzített „g09-math-001” néha éppen az 1. ablak egyik kérdése volt — arra
+    // a szerver helyesen, idempotens ismétlésként 200-zal a tárolt eredményt adja. Az állítás tárgya az ÚJ válasz elutasítása, ezért a
+    // kör által NEM mutatott kérdéssel kérdezünk.
+    const unseen = GRADE_QUIZ_ITEMS.find((item) => item.id.startsWith("g09-") && !seen.has(item.id))?.id;
+    assert.ok(unseen, "van a körben nem mutatott 9. évfolyamos kérdés");
+    assert.equal((await k.post("/doors/1/answer", { questionId: unseen, pick: 0 })).status, 409, "végleg hibás ablakra nincs több válasz");
     const next = await k.post("/round");
     assert.equal(next.status, 200);
     assert.equal(next.json.round, 2);
