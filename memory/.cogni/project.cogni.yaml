@@ -15,3 +15,4 @@ cogni:
   entrypoints: []
 
 # 2026-11-23: code_review = scripts/qa/gates/local-review.mjs (helyi GPU, angol prompt); felhős vak kör kivezetve (decisions.cogni.yaml)
+# 2026-11-23: Mem0 → Docker pgvector; záró push = zaro-hurok.mjs push (auto vector)

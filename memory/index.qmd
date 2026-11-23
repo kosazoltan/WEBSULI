@@ -37,3 +37,4 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 
 - Kötelező PR előtti ellenőr: `node scripts/qa/gates/local-review.mjs` (helyi GPU, angol prompt). A felhős „vak kör” kivezetve —
   terv és mérés: `docs/specs/2026-11-23-vak-kor-kivezetes.md`; skill: `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
+- Mem0 memória: helyi Docker pgvector (`hermes-mem0-pg`). Záró push: `zaro-hurok.mjs push` (inkrementális vector-frissítéssel).
