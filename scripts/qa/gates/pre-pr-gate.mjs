@@ -30,6 +30,16 @@ export function classifyChanges(changed, cfg) {
 }
 
 /**
+ * Terv docs/specs/2026-11-23-kapu-spec-valasztas-szohatar.md: a tő akkor „említett”, ha ÖNÁLLÓ azonosítóként áll a teszt szövegében —
+ * előtte és utána nem betű, számjegy vagy aláhúzás. A részszó-keresés a `sync` tőre minden `async`-ot tartalmazó tesztet kiválasztott
+ * (83-ból 83), a futás kifutott az időkeretből. A tő szó szerint értendő (a különleges karakterek nem mintaként).
+ */
+export function mentionsStem(text, stem) {
+  const literal = String(stem).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![A-Za-z0-9_-])${literal}(?![A-Za-z0-9_-])`).test(String(text));
+}
+
+/**
  * A futtatandó böngészős csomagok. Játéknál: a mobil mérő a játék-azonosítókra szűrve (külön futás, mert a `--grep` minden
  * spec-re hat), és egy futás a játék saját spec-jeivel + meta-mérő + lejárt-kupon spec. Más UI-nál: a változott komponens
  * nevét említő spec-ek. A változott spec-fájlok mindig benne vannak.
@@ -50,7 +60,7 @@ export function pickE2eSpecs({ classification, specFiles, readSpec, cfg, changed
   }
   if (classification.ui || changedSpecs.length) {
     const stems = changed.filter((f) => /^source\/client\/src\/.+\.(?:tsx?|css)$/.test(f)).map(stemOf).filter((s) => s.length >= 4);
-    const hit = specFiles.filter((s) => stems.some((st) => readSpec(s).includes(st)));
+    const hit = specFiles.filter((s) => { const text = readSpec(s); return stems.some((st) => mentionsStem(text, st)); });
     const specs = [...new Set([...hit, ...changedSpecs])].sort();
     if (specs.length) runs.push({ label: 'UI-spec-ek (a változott komponenseket említők)', specs });
     else return { runs, warning: 'UI-változás, de egyetlen spec sem említi a változott komponenseket — írj böngészős próbát, vagy indokold a PR-ban' };

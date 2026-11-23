@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from './lib.mjs';
-import { checkPrBody, classifyChanges, e2eArgs, pickE2eSpecs, wrapperConfigSource, WRAPPER_CONFIG } from './pre-pr-gate.mjs';
+import { checkPrBody, classifyChanges, e2eArgs, mentionsStem, pickE2eSpecs, wrapperConfigSource, WRAPPER_CONFIG } from './pre-pr-gate.mjs';
 
 const cfg = loadConfig();
 const SPECS = ['coupon-expired-all-games.spec.ts', 'game-meta-quality.spec.ts', 'game-mobile-quality.spec.ts', 'tornado-j7a.spec.ts',
@@ -55,4 +55,29 @@ test('a csomagoló konfig szoftveres WebGL-lel, egy workerrel, .only-tiltással;
   assert.match(src, /from '\.\/playwright\.config\.ts'/);
   assert.match(WRAPPER_CONFIG, /\.local\.mts$/, 'a .gitignore *.local.mts mintája fedi');
   assert.deepEqual(e2eArgs({ specs: ['a.spec.ts'], grep: 'x|y' }), ['--import', 'tsx', 'scripts/run-e2e-tests.ts', '--config', WRAPPER_CONFIG, '--workers=1', '--grep', 'x|y', 'tests/a.spec.ts']);
+});
+
+// Terv docs/specs/2026-11-23-kapu-spec-valasztas-szohatar.md (K1–K3)
+test('mentionsStem: a tő csak önálló azonosítóként egyezik — az „async” nem említi a „sync” fájlt', () => {
+  assert.equal(mentionsStem('test("x", async ({ page }) => { await page.goto("/"); });', 'sync'), false, 'részszó nem egyezik');
+  assert.equal(mentionsStem('import { mergeState } from "../client/src/advent/sync";', 'sync'), true, 'útvonal vége');
+  assert.equal(mentionsStem('// lásd sync.ts', 'sync'), true);
+  assert.equal(mentionsStem('const sync_state = 1; resync(); syncing;', 'sync'), false, 'aláhúzás és betű nem határ');
+  assert.equal(mentionsStem('await page.getByTestId("StudioPanel")', 'StudioPanel'), true);
+  assert.equal(mentionsStem('StudioPanelHeader', 'StudioPanel'), false);
+  assert.equal(mentionsStem('a+b és a.b', 'a.b'), true, 'a különleges karakter szó szerint értendő');
+  assert.equal(mentionsStem('axb', 'a.b'), false);
+  assert.equal(mentionsStem('Sync', 'sync'), false, 'kis- és nagybetű megkülönböztetve');
+  assert.equal(mentionsStem('<div aria-busy="true">', 'busy'), false, 'a kötőjel az azonosító része (kebab-case fájlnevek)');
+  assert.equal(mentionsStem('import "../client/src/advent/tap-guard";', 'tap-guard'), true);
+  assert.equal(mentionsStem('double-tap-guard', 'tap-guard'), false);
+});
+
+test('pickE2eSpecs: rövid tövű fájl (sync.ts) nem választ ki minden async-ot tartalmazó tesztet; a változott spec mindig fut', () => {
+  const specs = ['a.spec.ts', 'b.spec.ts', 'advent-calendar.spec.ts', 'changed.spec.ts'];
+  const text = { 'a.spec.ts': 'test("a", async () => {});', 'b.spec.ts': 'test("b", async () => {});',
+    'advent-calendar.spec.ts': 'test("n", async () => {}); // a kliens advent/sync egyesítése', 'changed.spec.ts': 'test("c", async () => {});' };
+  const changed = ['source/client/src/advent/sync.ts', 'source/tests/changed.spec.ts'];
+  const { runs } = pickE2eSpecs({ classification: classifyChanges(changed, cfg), specFiles: specs, readSpec: (s) => text[s] ?? '', cfg, changed });
+  assert.deepEqual(runs[0].specs, ['advent-calendar.spec.ts', 'changed.spec.ts']);
 });
