@@ -41,3 +41,4 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 - Feladat-nyilvántartás (mester): `node D:/repo/Hermes-agent/scripts/feladat.mjs list --repo D:/repo/WEBSULI` (Docker Postgres);
   a kanban csak tükör. A 2026-11-23-i főterv (ág `docs/foterv-2026-11-23`) tételei bent vannak.
 - A helyi ellenőr nagy diffen (PR-C, 4900 sor) sok zajos medium/low leletet ad; a high leletet mindig kódból ellenőrizd.
+- PR-kapu böngészős út: 556 teszt / 27 spec egy workerrel >60 perc → WEBSULI_E2E_TIMEOUT_MIN (PR #542). Merge-kapu futásőr: DATABASE_URL a környezetből elsőbbséget kap.

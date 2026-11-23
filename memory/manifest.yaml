@@ -37,3 +37,5 @@ code_review:
   closing_push: "node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs push --repo D:/repo/WEBSULI (frissíti a vector-indexet)"
   task_register: "SQL feladat.tasks (Docker hermes-mem0-pg) — node D:/repo/Hermes-agent/scripts/feladat.mjs list --repo D:/repo/WEBSULI; a főterv 2026-11-23 tételei betöltve"
   local_review_limits: "num_predict 1500, 3 újrapróba, csonka JSON kimentése (2026-11-23, PR-C élő fetch failed)"
+  gate_merge_env: "a Hermes .env DATABASE_URL-je eltávolítva (2026-11-23) — régi folyamatokban env -u DATABASE_URL"
+  e2e_gate_timeout: "WEBSULI_E2E_TIMEOUT_MIN; pre-pr-gate 150/160 perc (PR #542)"
