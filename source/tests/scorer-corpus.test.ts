@@ -12,7 +12,7 @@ import type { OpenTask } from "../shared/lesson-experience";
  * pontozó és a HTML-referencia (ee_evaluate) is pontosan az elvárt pontot adja, és minden minta a saját rubrikáján 1 pont.
  */
 
-type Case = { name: string; source: string; task: Pick<OpenTask, "required" | "minWords" | "needsSentence" | "sample">; answer: string; expected: number; knownGap?: boolean; desired?: number };
+type Case = { name: string; source: string; task: Pick<OpenTask, "required" | "minWords" | "needsSentence" | "sample"> & { q?: string }; answer: string; expected: number; knownGap?: boolean; desired?: number };
 const corpus = JSON.parse(fs.readFileSync("tests/fixtures/scorer-corpus.json", "utf8")) as { cases: Case[] };
 const base = { id: "t", sectionIndex: 0, coversConceptIds: ["c"], q: "q", bonus: [], mode: "written" } as unknown as OpenTask;
 
@@ -49,7 +49,7 @@ for (const [label, score] of [["v1 (megosztott)", evaluateOpenAnswer], ["HTML-re
  * Spec 2026-11-20-pontozo-polinom-ket-szam (T-1, #121, #122): a típusos (v2) feladatok korpusza külön tömbben (`typedCases`), mert az
  * `ee_evaluate` HTML-referencia típusos mezőt nem ismer. Minden eset szintetikus; a típusos mező a megosztott pontozót a v2 útra viszi.
  */
-type TypedCase = { name: string; source: string; task: Pick<OpenTask, "required" | "minWords" | "needsSentence" | "sample" | "typedAnswers">; answer: string; expected: number };
+type TypedCase = { name: string; source: string; task: Pick<OpenTask, "required" | "minWords" | "needsSentence" | "sample" | "typedAnswers"> & { q?: string }; answer: string; expected: number };
 const typedCases = (corpus as unknown as { typedCases?: TypedCase[] }).typedCases ?? [];
 
 test("pontozó-korpusz — típusos (v2): minden minta 1 pont, minden válasz az elvárt pont", () => {

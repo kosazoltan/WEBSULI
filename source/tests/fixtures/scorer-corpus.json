@@ -512,6 +512,395 @@
       },
       "answer": "Ez reggel volt.",
       "expected": 0
+    },
+    {
+      "name": "nem-válasz: „nem tudom” igen/nem rubrikán",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Tud-e repülni a pingvin?",
+        "required": [
+          [
+            "nem"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Nem."
+      },
+      "answer": "nem tudom",
+      "expected": 0
+    },
+    {
+      "name": "nem-válasz: „Nem tudom.” nagybetűvel, ponttal",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Tud-e repülni a pingvin?",
+        "required": [
+          [
+            "nem"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Nem."
+      },
+      "answer": "Nem tudom.",
+      "expected": 0
+    },
+    {
+      "name": "nem-válasz: angol „I don't know”",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Tud-e repülni a pingvin?",
+        "required": [
+          [
+            "nem"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Nem."
+      },
+      "answer": "I don't know",
+      "expected": 0
+    },
+    {
+      "name": "ellenpár: valódi rövid „Nem.” igen/nem rubrikán",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Tud-e repülni a pingvin?",
+        "required": [
+          [
+            "nem"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Nem."
+      },
+      "answer": "Nem.",
+      "expected": 1
+    },
+    {
+      "name": "nem-válasz: „nem tudom” kétcsoportos rubrikán (ma fél pont)",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Tud-e repülni a pingvin? Indokold!",
+        "required": [
+          [
+            "nem"
+          ],
+          [
+            "szárny"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Nem, mert kicsi a szárnya."
+      },
+      "answer": "nem tudom",
+      "expected": 0
+    },
+    {
+      "name": "ellenpár: „Nem, tudom, hogy …” vesszővel valódi válasz",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Tud-e repülni a pingvin? Indokold!",
+        "required": [
+          [
+            "nem"
+          ],
+          [
+            "szárny"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Nem, mert kicsi a szárnya."
+      },
+      "answer": "Nem, tudom, hogy kicsi a szárnya.",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: valódi rövid „igaz” állítás",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Igaz-e, hogy a víz 100 fokon forr?",
+        "required": [
+          [
+            "igaz"
+          ],
+          [
+            "forr"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Igaz, a víz 100 fokon forr."
+      },
+      "answer": "Igaz, forr.",
+      "expected": 1
+    },
+    {
+      "name": "ékezet: „hát” nem a „hat” szám",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Hány lába van egy rovarnak?",
+        "required": [
+          [
+            "hat",
+            "6"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "hat"
+      },
+      "answer": "hát",
+      "expected": 0
+    },
+    {
+      "name": "ékezet: „Hát nem tudom” a „hat” számra",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Hány lába van egy rovarnak?",
+        "required": [
+          [
+            "hat",
+            "6"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "hat"
+      },
+      "answer": "Hát nem tudom",
+      "expected": 0
+    },
+    {
+      "name": "ellenpár: „hat” szám",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Hány lába van egy rovarnak?",
+        "required": [
+          [
+            "hat",
+            "6"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "hat"
+      },
+      "answer": "hat",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: „6” számjeggyel",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Hány lába van egy rovarnak?",
+        "required": [
+          [
+            "hat",
+            "6"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "hat"
+      },
+      "answer": "6",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: „Hat lába van.” ékezetes mondatban",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Hány lába van egy rovarnak?",
+        "required": [
+          [
+            "hat",
+            "6"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "hat"
+      },
+      "answer": "Hat lába van.",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: ékezet nélküli válasz „hat” a „hát” rubrikára (tűrés)",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Mit mondott a nagymama?",
+        "required": [
+          [
+            "hát"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "hát"
+      },
+      "answer": "hat",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: a toldalék ékezete nem számít („szívről”)",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Melyik szervről tanultunk?",
+        "required": [
+          [
+            "szív"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "A szívről tanultunk."
+      },
+      "answer": "A szívről beszéltünk.",
+      "expected": 1
+    },
+    {
+      "name": "ékezet: „kor” nem „kór” ékezetes válaszban",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Mi okozza a betegséget?",
+        "required": [
+          [
+            "kór"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Egy kór okozza."
+      },
+      "answer": "A kor számít, ő tudja.",
+      "expected": 0
+    },
+    {
+      "name": "visszamásolás: a kérdés szó szerint",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Miért fontos a fotoszintézis a növények számára?",
+        "required": [
+          [
+            "fotoszintézis"
+          ],
+          [
+            "cukor",
+            "cukrot",
+            "glükóz"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "A fotoszintézis során a növény cukrot állít elő."
+      },
+      "answer": "Miért fontos a fotoszintézis a növények számára?",
+      "expected": 0
+    },
+    {
+      "name": "visszamásolás: a kérdés kérdőjel nélkül, kisbetűvel",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Miért fontos a fotoszintézis a növények számára?",
+        "required": [
+          [
+            "fotoszintézis"
+          ],
+          [
+            "cukor",
+            "cukrot",
+            "glükóz"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "A fotoszintézis során a növény cukrot állít elő."
+      },
+      "answer": "miért fontos a fotoszintézis a növények számára",
+      "expected": 0
+    },
+    {
+      "name": "ellenpár: másolat + új információ",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Miért fontos a fotoszintézis a növények számára?",
+        "required": [
+          [
+            "fotoszintézis"
+          ],
+          [
+            "cukor",
+            "cukrot",
+            "glükóz"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "A fotoszintézis során a növény cukrot állít elő."
+      },
+      "answer": "Miért fontos a fotoszintézis a növények számára? A fotoszintézis során cukrot állít elő.",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: az állítást megismétlő helyes válasz",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Igaz-e, hogy a víz 100 fokon forr?",
+        "required": [
+          [
+            "igaz"
+          ],
+          [
+            "forr"
+          ]
+        ],
+        "minWords": 2,
+        "needsSentence": false,
+        "sample": "Igaz, a víz 100 fokon forr."
+      },
+      "answer": "Igaz, a víz 100 fokon forr.",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: választó kérdésre egy szó",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Forr vagy fagy a víz 100 fokon?",
+        "required": [
+          [
+            "forr"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "forr"
+      },
+      "answer": "forr",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: választó kérdésre a választott részlet",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Forr vagy fagy a víz 100 fokon?",
+        "required": [
+          [
+            "forr"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "forr"
+      },
+      "answer": "a víz 100 fokon forr",
+      "expected": 1
     }
   ],
   "typedCases": [
@@ -857,6 +1246,58 @@
         ]
       },
       "answer": "12 000",
+      "expected": 1
+    },
+    {
+      "name": "visszamásolás (v2): a kérdés kifejezése egyedül",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Számold ki: 30 · 7",
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "30 · 7 = 210",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "number",
+            "value": "30 · 7",
+            "form": "intermediate-step"
+          },
+          {
+            "part": "b",
+            "kind": "number",
+            "value": "210"
+          }
+        ]
+      },
+      "answer": "Számold ki: 30 · 7",
+      "expected": 0
+    },
+    {
+      "name": "ellenpár (v2): a kérdés kifejezése + végeredmény",
+      "source": "#130/#132 (T-2, szintetikus)",
+      "task": {
+        "q": "Számold ki: 30 · 7",
+        "required": [],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "30 · 7 = 210",
+        "typedAnswers": [
+          {
+            "part": "a",
+            "kind": "number",
+            "value": "30 · 7",
+            "form": "intermediate-step"
+          },
+          {
+            "part": "b",
+            "kind": "number",
+            "value": "210"
+          }
+        ]
+      },
+      "answer": "Számold ki: 30 · 7 = 210",
       "expected": 1
     }
   ]
