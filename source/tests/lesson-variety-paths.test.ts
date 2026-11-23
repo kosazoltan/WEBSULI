@@ -346,6 +346,8 @@ test("S6a V15 a motorban: BE — a mentett terv és a szerzői kérés a kioszto
   assert.deepEqual(plannedOf(on).plannedBlocks, expected, "a mentett terv a kiosztott sor");
   assert.equal("sectionKind" in plannedOf(on), false, "a sectionKind nem megy tovább");
   assert.ok(request.includes(quoted(expected)), "a szerző a kiosztott sort kapja");
+  assert.ok(request.includes("TANÍTÁSI TÖRZSÉNEK") && request.includes("nyitóblokkokat"), "L8: a sor a tanítás törzse, a nyitóblokkok előtte állnak");
+  assert.equal(lastOutput(on).sectionShapes, true, "L7: a terv eredete a job állapotában");
   assert.equal(request.includes(quoted(original)), false, "a szerző nem a modell eredeti sorát kapja");
 
   // KI: a modell terve változatlanul megy tovább (csak a kéretlen sectionKind esik ki).
@@ -361,6 +363,15 @@ test("S6a V15 a motorban: BE — a mentett terv és a szerzői kérés a kioszto
   const approved = memory();
   await runSingleLesson({ files, ownerId: "u1", approvedOutline: outline }, runDeps(client({ onAuthor: (text) => { request = text; } }), approved, { lessonVariety: true }));
   assert.deepEqual(plannedOf(approved).plannedBlocks, original, "jóváhagyott terv: változatlan");
+  assert.equal("sectionShapes" in lastOutput(approved), false, "L7: jóváhagyott tervnél nincs kiosztás-jelző");
+  // 3. vak kör (L7): a jóváhagyott tervből indult BE futás a terv mentése UTÁN, a szerző válasza ELŐTT megszakad; a folytatás bemenetében
+  // már nincs approvedOutline — a szerzői kérés ekkor sem hivatkozhat kiosztásra.
+  const { lesson: _l, experience: _e, experienceCheckpoint: _c, ...beforeAuthor } = lastOutput(approved) as Record<string, unknown>;
+  request = "";
+  const resumedApproved = memory();
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: beforeAuthor } }, runDeps(client({ onAuthor: (text) => { request = text; } }), resumedApproved, {}, (beforeAuthor as { singleRun?: { conversation?: unknown } }).singleRun?.conversation));
+  assert.ok(request.length > 0 && !request.includes("VÉGLEGES BLOKKSORA"), "jóváhagyott terv folytatása: a szerzői kérésben nincs kiosztás");
+  assert.deepEqual(plannedOf(resumedApproved).plannedBlocks, original);
   assert.ok(request.length > 0 && !request.includes("VÉGLEGES BLOKKSORA"), "jóváhagyott terv: a szerzői kérésben nincs kiosztás");
 
   // BE folytatás a terv után megszakadt futásból: a mentett (már kiosztott) terv nem íródik át újra.

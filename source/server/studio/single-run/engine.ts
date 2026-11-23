@@ -727,13 +727,18 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   });
   // S6a (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 12. szakasz): BE kapcsolónál a modell tervének fogalom-fejezetei a kiosztott
   // fejezetmintát kapják (a tulajdonos jóváhagyott terve nem változik); KI-nél a terv a régi (csak a kéretlen `sectionKind` esik ki).
-  const outline = applySectionShapes(plannedOutline, planned === undefined && varietyOn ? seedFrom(mapId) : undefined);
-  output = { ...output, outline, approvedOutline: outline };
+  const shapedNow = planned === undefined && varietyOn;
+  const outline = applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined);
+  // 3. vak kör (L7): a terv EREDETE verziózott futásadat — `sectionShapes: true` csak akkor, ha a sorokat a program osztotta ki (friss
+  // modellterv BE futásban). Folytatásnál kizárólag a mentett jelző számít: a tulajdonos jóváhagyott tervéből indult futás folytatása
+  // (ahol a bemenetben már nincs `approvedOutline`) nem kap kiosztásra hivatkozó szerzői kérést.
+  const programAssigned = shapedNow || (varietyOn && resumed?.outline !== undefined && output.sectionShapes === true);
+  output = { ...output, outline, approvedOutline: outline, ...(programAssigned ? { sectionShapes: true } : {}) };
   // Review #536 (Copilot): a program által kiosztott blokksorok a szerzőhöz is eljutnak — a beszélgetésben a modell EREDETI terve áll,
-  // a szerzői kérés ezért kimondja a végleges sorokat. Csak BE futásnál és a modell tervénél (friss vagy folytatott); a tulajdonos
-  // jóváhagyott tervénél és KI állapotban a kérés bájtra a régi.
-  const assignedPlanLines = varietyOn && input.approvedOutline === undefined
-    ? `\nA FEJEZETEK VÉGLEGES BLOKKSORA (a program osztotta ki; ez FELÜLÍRJA a 2. állomás vázlatának plannedBlocks mezőit — minden fejezet blokkjai pontosan ebben a sorrendben követik egymást):\n${outline.sections.map((section, i) => `- [${i}] ${section.heading}: ${JSON.stringify(section.plannedBlocks)}`).join("\n")}`
+  // a szerzői kérés ezért kimondja a végleges sorokat. Csak a program által kiosztott tervnél (`programAssigned`); a tulajdonos
+  // jóváhagyott tervénél (folytatva is) és KI állapotban a kérés bájtra a régi.
+  const assignedPlanLines = programAssigned
+    ? `\nA FEJEZETEK TANÍTÁSI TÖRZSÉNEK VÉGLEGES BLOKKSORA (a program osztotta ki; ez FELÜLÍRJA a 2. állomás vázlatának plannedBlocks mezőit — a fejezet tanító blokkjai pontosan ebben a sorrendben követik egymást; ha a nyitás szerződése az első fejezet elejére nyitóblokkokat ír elő, azok a sor ELŐTT állnak, a sor utánuk kezdődik):\n${outline.sections.map((section, i) => `- [${i}] ${section.heading}: ${JSON.stringify(section.plannedBlocks)}`).join("\n")}`
     : "";
 
   // SK1 — a forrás-fedettségi kapu mérése (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. Független review F12: a

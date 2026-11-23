@@ -263,7 +263,8 @@ Döntések:
    fejezet változatlan, egy kivétellel: ha a modell terve nem `recap`-pal zárja a leckét, a program hozzáfűzi.
 7. Pontosítás (review #536): a kiosztott blokksorokat a szerzői kérés KIMONDJA („A fejezetek végleges blokksora”) — a beszélgetésben a
    modell eredeti terve áll, a kiosztás e nélkül nem jutna el a szerzőhöz. Csak BE futásnál és a modell tervénél; a tulajdonos jóváhagyott
-   tervénél és KI állapotban a szerzői kérés bájtra a régi.
+   tervénél (folytatva is: a terv eredetét a job állapotának `sectionShapes` jelzője őrzi) és KI állapotban a szerzői kérés bájtra a régi.
+   A kimondott sor a fejezet TANÍTÁSI TÖRZSE: a nyitás szerződésének nyitóblokkjai az első fejezetben a sor előtt állnak.
 
 Elfogadás (EARS):
 

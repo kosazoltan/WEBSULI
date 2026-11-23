@@ -1204,7 +1204,7 @@ Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szinte
   vak kör ment rá, végül tulajdonosi döntéssel kikerült. **Szabály 2:** „csak X úton fut” állítás előtt a hívók leltára kötelező;
   szeletben a főág által is használt függvény viselkedése nem változhat; a bot által kért ÚJ ellenőrzés új felület — külön jegy, nem a
   futó szelet része.
-- **Tünet 3:** a vak kör a review-botok leletei előtt indult → elavult fejre szólt. **Szabály 3:** vak kör csak a botok leleteinek
+- **Tünet 3:** a vak kör a review-botok leletei előtt indult → elavult fejre szólt. **Szabály 3 (a kör MEGRENDELŐJÉNEK szóló szervezési ajánlás, nem a megbízott ellenőr előfeltétele):** új vak kört csak a botok leleteinek
   beérkezése és javítása után; futó kapu alatt a munkafát nem szerkesztjük.
 
 Forrás: `feat/tgm-s5b-v2` (#534), `feat/tgm-s2b1-v2` (#533). Rokon: C-61, C-72, C-75.
