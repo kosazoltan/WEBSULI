@@ -165,6 +165,20 @@ test('vak L4 (9effab11): korlátközeli, nehezen maszkolható farok a két kihag
   assert.ok(out.includes('a'.repeat(REDACT_CAP - 30)), 'a korlátközeli farok megmarad (a regex ténylegesen ezen fut)');
 });
 
+test('elővágás: a legrosszabb korlátközeli farok terheletlenül is legalább 4× tartalékot hagy az 1 s-os követelményhez', async () => {
+  // A gate:pr párhuzamos tesztfuttatásában a 32 KB-os korlát legrosszabb esete 1109 ms lett (terheletlenül ~0,3–0,44 s): a
+  // négyzetes főági e-mail-regex miatt a korlátnak akkora tartalék kell, hogy a ~3×-os terhelési lassulás se lépje át az 1 s-ot.
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const s = 'q'.repeat(200) + ' w1 w2 ' + 'a'.repeat(REDACT_CAP - 30);
+  let best = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const t0 = performance.now();
+    redact(s);
+    best = Math.min(best, performance.now() - t0);
+  }
+  assert.ok(best < 250, `legjobb a 3 mérésből: ${best.toFixed(0)} ms (a 4× tartalékhoz < 250 ms kell)`);
+});
+
 test('vak L3 (9effab11): az első hibasor a hosszú stderr-ből — a csonkolásjelző nem helyettesíti', async () => {
   const { redactFirstLine, REDACT_CAP } = await import('./lib.mjs');
   const stderr = `HTTP 404: Not Found (repos/x/y) ${fakeMail}\n` + 'd '.repeat(REDACT_CAP);
