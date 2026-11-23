@@ -347,6 +347,10 @@ test("S6a V15 a motorban: BE — a mentett terv és a szerzői kérés a kioszto
   const plannedShape = planSections(["procedure"], seedFrom("m1"))[0];
   assert.ok(SECTION_SHAPES.some((shape) => shape.id === plannedShape.shape && shape.fits.includes("procedure")), "a kiosztott minta a típushoz illik");
   assert.deepEqual(expected, plannedShape.blocks);
+  // S6b: a kiosztott try-fajta is eljut a szerzőhöz (a beszélgetésben csak a modell eredeti terve áll) és a mentett tervbe.
+  assert.ok(plannedShape.tryKind, "egyfejezetes leckénél a try-minimum miatt van try");
+  assert.ok(request.includes(`tryKind: "${plannedShape.tryKind}"`), "a szerzői kérés közli a try fajtáját");
+  assert.equal((plannedOf(on) as { tryKind?: string }).tryKind, plannedShape.tryKind);
   assert.deepEqual(plannedOf(on).plannedBlocks, expected, "a mentett terv a kiosztott sor");
   assert.equal("sectionKind" in plannedOf(on), false, "a sectionKind nem megy tovább");
   assert.ok(request.includes(quoted(expected)), "a szerző a kiosztott sort kapja");

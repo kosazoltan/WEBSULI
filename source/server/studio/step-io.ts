@@ -554,7 +554,7 @@ export function buildAuthorPrompt(
     // LS-9: a korosztályt nem az osztályszám sejteti, hanem néven nevezve, leírt regiszterrel (spec §3).
     `Korosztály: ${band} (${map.classroom}. osztály). ${bandRegisterForPrompt(band)}${variety && effectiveLessonVariety() ? ` ${bandVoiceForPrompt(band, variety.seed)}` : ""}`,
     // S6b (13. szakasz): a kiosztott try-fajta a vázlat fejezetén (tryKind) — csak BE kapcsolónál van ilyen mező.
-    ...(variety && effectiveLessonVariety() ? ["Ha a vázlat fejezete tryKind mezőt ad, a fejezet try blokkja pontosan ezt a fajtát használja (dragSort, fillBlank vagy match)."] : []),
+    ...(variety && effectiveLessonVariety() ? ["Ha a vázlat fejezete tryKind mezőt ad (a program a fejezet végleges blokksora mellett közli), a fejezet try blokkja pontosan ezt a fajtát használja (dragSort, fillBlank vagy match)."] : []),
     "",
     D1_RULE_TEXT,
     TRANSCRIPTION_RULE_TEXT,
