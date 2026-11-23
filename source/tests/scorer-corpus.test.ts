@@ -49,14 +49,14 @@ for (const [label, score] of [["v1 (megosztott)", evaluateOpenAnswer], ["HTML-re
  * Spec 2026-11-20-pontozo-polinom-ket-szam (T-1, #121, #122): a típusos (v2) feladatok korpusza külön tömbben (`typedCases`), mert az
  * `ee_evaluate` HTML-referencia típusos mezőt nem ismer. Minden eset szintetikus; a típusos mező a megosztott pontozót a v2 útra viszi.
  */
-type TypedCase = { name: string; source: string; task: Pick<OpenTask, "required" | "minWords" | "needsSentence" | "sample" | "typedAnswers"> & { q?: string }; answer: string; expected: number };
+type TypedCase = { name: string; source: string; task: Pick<OpenTask, "required" | "minWords" | "needsSentence" | "sample" | "typedAnswers" | "requiredDistinct"> & { q?: string }; answer: string; expected: number };
 const typedCases = (corpus as unknown as { typedCases?: TypedCase[] }).typedCases ?? [];
 
 test("pontozó-korpusz — típusos (v2): minden minta 1 pont, minden válasz az elvárt pont", () => {
   assert.ok(typedCases.length >= 15, `típusos eset: ${typedCases.length}`);
   const failures: string[] = [];
   for (const c of typedCases) {
-    assert.ok(c.source && c.name && c.task.typedAnswers?.length, JSON.stringify(c));
+    assert.ok(c.source && c.name && (c.task.typedAnswers?.length || c.task.requiredDistinct?.length), JSON.stringify(c));
     const task = { ...base, ...c.task } as OpenTask;
     const sample = evaluateOpenAnswer(task.sample, task).score;
     const answer = evaluateOpenAnswer(c.answer, task).score;

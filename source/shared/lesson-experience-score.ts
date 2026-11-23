@@ -169,13 +169,21 @@ function accentAgrees(rawToken: string, rawWord: string, token: string, word: st
   const n = Math.min(stem(token).length, stem(word).length);
   return rawToken.slice(0, n) === rawWord.slice(0, n);
 }
+/** T-2: a rubrika-alternatíva szavai és (ékezetes válasznál) ékezetes párjuk; `rawWords` null, ha nem kell / nem felel meg. */
+function phraseWords(phrase: string, tokenize: (s: string) => string[], raw: readonly string[] | null): { words: string[]; rawWords: string[] | null } {
+  const words = tokenize(phrase);
+  const rawWords = raw ? (tokenize === tokensOfV2 ? rawTokensOfV2 : rawTokensOf)(phrase) : null;
+  return { words, rawWords: rawWords && rawWords.length === words.length ? rawWords : null };
+}
+/** A válasz `i`. tokenje a rubrika `k`. szava-e — a szóillesztés tűrésével, rövid szónál (ékezetes válaszban) az ékezet-őrrel. */
+function tokenHit(tokens: readonly string[], raw: readonly string[] | null, i: number, words: readonly string[], rawWords: readonly string[] | null, k: number): boolean {
+  const token = tokens[i], word = words[k];
+  return wordHit(token, word) && (!raw || !rawWords || word.length >= FORM_MIN_LENGTH || accentAgrees(raw[i], rawWords[k], token, word));
+}
 function conceptHit(tokens: string[], alternatives: readonly string[], tokenize: (s: string) => string[] = tokensOf, raw: readonly string[] | null = null): boolean {
   return alternatives.some(phrase => {
-    const words = tokenize(phrase);
-    const rawWords = raw ? (tokenize === tokensOfV2 ? rawTokensOfV2 : rawTokensOf)(phrase) : null;
-    const aligned = rawWords && rawWords.length === words.length ? rawWords : null;
-    return words.every((word, k) => tokens.some((token, i) => wordHit(token, word)
-      && (!aligned || !raw || word.length >= FORM_MIN_LENGTH || accentAgrees(raw[i], aligned[k], token, word))));
+    const { words, rawWords } = phraseWords(phrase, tokenize, raw);
+    return words.every((_, k) => tokens.some((_t, i) => tokenHit(tokens, raw, i, words, rawWords, k)));
   });
 }
 
@@ -183,10 +191,18 @@ function conceptHit(tokens: string[], alternatives: readonly string[], tokenize:
  * T-2 (#130): a „nem tudom” nem válasz — a szavai (a „nem” is) nem adnak rubrika-találatot és nem tagadnak. Vesszővel elválasztva („Nem,
  * tudom, hogy …”) igen/nem válasz + mondat, nem nem-válasz. Lookbehind nélkül (régebbi Safari): a megelőző nem-betű a találat része.
  */
-const NON_ANSWER = /(^|[^\p{L}'’])(?:nem\s+(?:tudom|tudok|tudjuk|tudnám|tudnam|tom)|nemtom|fogalmam\s+sincs(?:en)?|i\s+(?:don['’]?t|do\s+not)\s+know|idk)(?=$|[^\p{L}])/giu;
-export function stripNonAnswer(answer: string): string {
-  return answer.normalize("NFC").replace(NON_ANSWER, "$1 ");
+// Review #553 (Copilot): csak a tagmondatot LEZÁRÓ kifejezés nem-válasz (utána szövegvég vagy írásjel) — a „Nem tudok úszni.” érdemi tagadó
+// mondat, nem törlődik.
+const NON_ANSWER = /(^|[^\p{L}'’])(?:nem\s+(?:tudom|tudok|tudjuk|tudnám|tudnam|tom)|nemtom|fogalmam\s+sincs(?:en)?|i\s+(?:don['’]?t|do\s+not)\s+know|idk)(?=\s*(?:$|[.,;:!?…]))/giu;
+/**
+ * Review #553 (Copilot): ha a mintaválaszban is van ilyen kifejezés (fordítás: „Fordítsd angolra: Nem tudom.” → „I don't know.”), az a
+ * feladat elvárt tartalma — ekkor nem törlődik.
+ */
+export function stripNonAnswer(answer: string, sample = ""): string {
+  const text = answer.normalize("NFC");
+  return new RegExp(NON_ANSWER.source, "iu").test(sample.normalize("NFC")) ? text : text.replace(NON_ANSWER, "$1 ");
 }
+const CHOICE_WORDS = new Set(["vagy", "avagy", "or"]);
 export const QUESTION_COPY_REASON = "A válasz csak a kérdést ismétli. Írd le a saját válaszodat.";
 /**
  * T-2 (#132): a válasz CSAK a kérdés visszamásolása — minden szava a kérdés legalább 3 szavas, folytonos szakaszaiból áll, és ezek a kérdés
@@ -197,6 +213,9 @@ export function copiesQuestionOnly(answer: string, question: string | undefined)
   if (!question) return false;
   const q = tokensOf(question), a = tokensOf(answer).slice(0, 500);
   if (q.length < 4 || a.length < 3 || a.length * 2 < q.length) return false;
+  // Review #553 (Codex, Copilot, Vercel): a választó kérdés („Fagy vagy forr a víz 100 fokon?”) egyik lehetőségét kiemelő folytonos részlet
+  // („Forr a víz 100 fokon.”) választás, nem másolat — csak a választó szót („vagy”, „or”) is megismétlő válasz az.
+  if (q.some((w) => CHOICE_WORDS.has(w)) && !a.some((w) => CHOICE_WORDS.has(w))) return false;
   const covered = new Array<boolean>(a.length).fill(false);
   for (let i = 0; i < a.length; i++) {
     let best = 0;
@@ -215,15 +234,17 @@ const OPERATOR_TOKEN = /^[+\-·:]$/;
  * Kategóriakvóta (v2): hány KÜLÖNBÖZŐ csoportot talál a válasz úgy, hogy egy válasz-token csak egy csoportot igazolhat
  * (review #159, P2: az „alma” egyetlen előfordulása nem két példa, ha két csoportban is szerepel).
  */
-function distinctHits(tokens: string[], groups: ReadonlyArray<readonly string[]>): number {
+function distinctHits(tokens: string[], groups: ReadonlyArray<readonly string[]>, raw: readonly string[] | null = null): number {
   const used = new Set<number>();
   let found = 0;
   for (const group of groups) {
     let hit: number[] | null = null;
     for (const phrase of group) {
       const indices: number[] = [];
-      const complete = tokensOfV2(phrase).every(word => {
-        const i = tokens.findIndex((token, k) => !used.has(k) && !indices.includes(k) && wordHit(token, word));
+      // Review #553 (Copilot): a kvóta-illesztés is ékezet-őrzött („bőr” ≠ „bor” ékezetes válaszban), a rubrikával azonos szabállyal.
+      const { words, rawWords } = phraseWords(phrase, tokensOfV2, raw);
+      const complete = words.every((_, w) => {
+        const i = tokens.findIndex((_t, k) => !used.has(k) && !indices.includes(k) && tokenHit(tokens, raw, k, words, rawWords, w));
         if (i >= 0) indices.push(i);
         return i >= 0;
       });
@@ -234,8 +255,8 @@ function distinctHits(tokens: string[], groups: ReadonlyArray<readonly string[]>
   return found;
 }
 /** Generation diagnostics use the exact learner-side matcher, not another approximation. */
-export function missingAnswerConcepts(answer: string, task: Pick<OpenTask, "required">): string[][] {
-  const text = stripNonAnswer(answer);
+export function missingAnswerConcepts(answer: string, task: Pick<OpenTask, "required"> & { sample?: string }): string[][] {
+  const text = stripNonAnswer(answer, task.sample);
   const tokens = tokensOf(text).slice(0, 500);
   const raw = accentedTokens(text, tokens, false);
   return task.required.filter(group => !conceptHit(tokens, group, tokensOf, raw));
@@ -323,7 +344,7 @@ export function missingPhrases(answer: string, task: Pick<OpenTask, "requiredPhr
 /** v1 — a régi kulcsszó-pontozó, változatlan viselkedéssel (régi leckék, HTML-pontozó paritás). */
 export function evaluateOpenAnswerV1(rawAnswer: string, task: OpenTask): AnswerScore {
   // T-2: a „nem tudom” szavai nem számítanak; a csak a kérdést ismétlő válasz 0; ékezetes válaszban a rövid szó ékezete is számít.
-  const answer = stripNonAnswer(rawAnswer);
+  const answer = stripNonAnswer(rawAnswer, task.sample);
   if (copiesQuestionOnly(answer, task.q)) return questionCopy();
   const tokens = tokensOf(answer).slice(0, 500);
   const raw = accentedTokens(answer, tokens, false);
@@ -364,7 +385,7 @@ function contentCompleteV2(answer: string, tokens: string[], task: OpenTask, raw
   const hasOrder = Boolean(task.requiredOrder?.length);
   if (!(typed.length + distinct.length + task.required.length + phrases.length + (hasOrder ? 1 : 0))) return false;
   if (typed.length) { const grade = gradeTypedAnswers(answer, typed); if (grade.undecidable || grade.correct < grade.total) return false; }
-  if (distinct.some(rule => distinctHits(tokens, rule.from) < rule.count)) return false;
+  if (distinct.some(rule => distinctHits(tokens, rule.from, raw) < rule.count)) return false;
   if (typed.length) return true;
   if (task.required.some(c => !conceptHit(tokens, c, tokensOfV2, raw)) || phrases.some(g => !phraseHit(tokens, g))) return false;
   return !hasOrder || orderSatisfied(tokens, task.requiredOrder!);
@@ -379,7 +400,7 @@ export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerS
   // Review #159: a v2 tokenlista műveleti jelet is tartalmaz — a szószám (1. szabály: az írásjel 0 szó) és a típusos érték
   // ugyanabból az 500 szavas ablakból számol.
   // T-2: a „nem tudom” szavai nem számítanak; a csak a kérdést ismétlő válasz 0 (a v1-gyel azonos szabály).
-  const answer = answerWindow(stripNonAnswer(rawAnswer));
+  const answer = answerWindow(stripNonAnswer(rawAnswer, task.sample));
   if (copiesQuestionOnly(answer, task.q)) return questionCopy();
   const tokens = tokensOfV2(answer);
   const raw = accentedTokens(answer, tokens, true);
@@ -393,7 +414,7 @@ export function evaluateOpenAnswerV2(rawAnswer: string, task: OpenTask): AnswerS
     if (grade.correct < grade.total) partialReason = `Részben jó: ${grade.total - grade.correct} részeredmény hibás vagy hiányzik. ${grade.verdicts.find(v => !v.ok)?.reason ?? ""}`.trim();
   }
   for (const rule of task.requiredDistinct ?? []) {
-    const distinct = distinctHits(tokens, rule.from);
+    const distinct = distinctHits(tokens, rule.from, raw);
     if (distinct === 0) return { state: "fail", score: 0, reason: `A(z) „${rule.category}” kategóriából egy példa sincs a válaszban.` };
     if (distinct < rule.count) partialReason ??= `Részben jó: a(z) „${rule.category}” kategóriából ${rule.count} különböző példa kell, ${distinct} van.`;
   }

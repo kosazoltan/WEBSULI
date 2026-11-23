@@ -400,14 +400,23 @@ function ee_conceptHit(answerNorm, answerTokens, answerStems, concept, answerRaw
   }
   return false;
 }
-/* T-2: a "nem tudom" nem valasz - a szavai (a "nem" is) nem szamitanak; vesszovel ("Nem, tudom, hogy...") igen. Lookbehind nelkul. */
-var EE_NON_ANSWER = /(^|[^\\p{L}'\u2019])(?:nem\\s+(?:tudom|tudok|tudjuk|tudnám|tudnam|tom)|nemtom|fogalmam\\s+sincs(?:en)?|i\\s+(?:don['\u2019]?t|do\\s+not)\\s+know|idk)(?=$|[^\\p{L}])/giu;
-function ee_stripNonAnswer(s){ return String(s||'').normalize('NFC').replace(EE_NON_ANSWER, '$1 '); }
+/* T-2: a "nem tudom" nem valasz - a szavai (a "nem" is) nem szamitanak; vesszovel ("Nem, tudom, hogy...") igen. Lookbehind nelkul.
+   Csak a tagmondatot lezaro kifejezes ("Nem tudok uszni." erdemi), es nem, ha a mintavalaszban is van ilyen (forditas: "I don't know."). */
+var EE_NON_ANSWER = /(^|[^\\p{L}'\u2019])(?:nem\\s+(?:tudom|tudok|tudjuk|tudnám|tudnam|tom)|nemtom|fogalmam\\s+sincs(?:en)?|i\\s+(?:don['\u2019]?t|do\\s+not)\\s+know|idk)(?=\\s*(?:$|[.,;:!?\u2026]))/giu;
+function ee_stripNonAnswer(s, sample){
+  var text = String(s||'').normalize('NFC');
+  if(new RegExp(EE_NON_ANSWER.source, 'iu').test(String(sample||'').normalize('NFC'))) return text;
+  return text.replace(EE_NON_ANSWER, '$1 ');
+}
+/* a valaszto kerdes ("Fagy vagy forr a viz 100 fokon?") egyik lehetoseget kiemelo reszlet valasztas, nem masolat */
+var EE_CHOICE = ['vagy','avagy','or'];
+function ee_hasChoice(words){ var i; for(i=0;i<words.length;i++){ if(EE_CHOICE.indexOf(words[i])!==-1) return true; } return false; }
 /* T-2: a valasz CSAK a kerdes visszamasolasa: minden szava a kerdes >= 3 szavas folytonos szakaszaibol all, es ezek a kerdes szavainak
    legalabb felet kiadjak (kerdes >= 4, valasz >= 3 szo) */
 function ee_copiesQuestion(tokens, question){
   var q = ee_norm(question); q = q ? q.split(' ') : [];
   if(q.length < 4 || tokens.length < 3 || tokens.length * 2 < q.length) return false;
+  if(ee_hasChoice(q) && !ee_hasChoice(tokens)) return false;
   var covered = [], i, j, k, l, best;
   for(i=0;i<tokens.length;i++){
     best = 0;
@@ -443,7 +452,7 @@ function ee_huWeakNeg(text){
   return false;
 }
 function ee_evaluate(answer, task){
-  answer = ee_stripNonAnswer(answer);
+  answer = ee_stripNonAnswer(answer, task.sample);
   var norm = ee_norm(answer);
   var tokens = norm ? norm.split(' ').slice(0,500) : [];
   var stems = []; var i;

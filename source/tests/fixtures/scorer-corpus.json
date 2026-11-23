@@ -901,6 +901,118 @@
       },
       "answer": "a víz 100 fokon forr",
       "expected": 1
+    },
+    {
+      "name": "ellenpár: választó kérdés lehetőségét kiemelő folytonos részlet",
+      "source": "#553 review (T-2, szintetikus)",
+      "task": {
+        "q": "Fagy vagy forr a víz 100 fokon?",
+        "required": [
+          [
+            "forr"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "forr"
+      },
+      "answer": "Forr a víz 100 fokon.",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: választó kérdés szórendjét megtartó kiválasztás",
+      "source": "#553 review (T-2, szintetikus)",
+      "task": {
+        "q": "A víz 100 fokon forr vagy fagy?",
+        "required": [
+          [
+            "forr"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "forr"
+      },
+      "answer": "A víz 100 fokon forr.",
+      "expected": 1
+    },
+    {
+      "name": "visszamásolás: a választó kérdés teljes másolata (a „vagy”-gyal)",
+      "source": "#553 review (T-2, szintetikus)",
+      "task": {
+        "q": "Fagy vagy forr a víz 100 fokon?",
+        "required": [
+          [
+            "forr"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "forr"
+      },
+      "answer": "Fagy vagy forr a víz 100 fokon?",
+      "expected": 0
+    },
+    {
+      "name": "ellenpár: érdemi tagadó mondat „Nem tudok úszni.”",
+      "source": "#553 review (T-2, szintetikus)",
+      "task": {
+        "q": "Mit mondanál, ha nem tudsz úszni?",
+        "required": [
+          [
+            "nem"
+          ],
+          [
+            "tudok"
+          ],
+          [
+            "úszni"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "Nem tudok úszni."
+      },
+      "answer": "Nem tudok úszni.",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: fordítási feladat „I don't know.” mintával",
+      "source": "#553 review (T-2, szintetikus)",
+      "task": {
+        "q": "Fordítsd angolra: Nem tudom.",
+        "required": [
+          [
+            "don't",
+            "dont"
+          ],
+          [
+            "know"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "I don't know."
+      },
+      "answer": "I don't know.",
+      "expected": 1
+    },
+    {
+      "name": "ellenpár: „nem tudok” + ige a mondat közepén (a minta nem tartalmazza)",
+      "source": "#553 review (T-2, szintetikus)",
+      "task": {
+        "q": "Miért nem mész a mély vízbe?",
+        "required": [
+          [
+            "úszni"
+          ]
+        ],
+        "minWords": 3,
+        "needsSentence": false,
+        "sample": "Mert még nem tanultam meg úszni."
+      },
+      "answer": "Mert nem tudok úszni.",
+      "expected": 1
     }
   ],
   "typedCases": [
@@ -1298,6 +1410,68 @@
         ]
       },
       "answer": "Számold ki: 30 · 7 = 210",
+      "expected": 1
+    },
+    {
+      "name": "ékezet (v2 kvóta): „bőr” nem a „bor” ékezetes válaszban",
+      "source": "#553 review (T-2, szintetikus)",
+      "task": {
+        "q": "Sorolj fel két italt!",
+        "required": [
+          [
+            "ital"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Ital: bor és sör.",
+        "requiredDistinct": [
+          {
+            "category": "ital",
+            "from": [
+              [
+                "bor"
+              ],
+              [
+                "sör"
+              ]
+            ],
+            "count": 2
+          }
+        ]
+      },
+      "answer": "Ital: bőr, sör.",
+      "expected": 0.5
+    },
+    {
+      "name": "ellenpár (v2 kvóta): „bor, sör” két példa",
+      "source": "#553 review (T-2, szintetikus)",
+      "task": {
+        "q": "Sorolj fel két italt!",
+        "required": [
+          [
+            "ital"
+          ]
+        ],
+        "minWords": 1,
+        "needsSentence": false,
+        "sample": "Ital: bor és sör.",
+        "requiredDistinct": [
+          {
+            "category": "ital",
+            "from": [
+              [
+                "bor"
+              ],
+              [
+                "sör"
+              ]
+            ],
+            "count": 2
+          }
+        ]
+      },
+      "answer": "Ital: bor, sör.",
       "expected": 1
     }
   ]

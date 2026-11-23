@@ -80,6 +80,15 @@ A pontozó ne adjon pontot (fél pontot sem) olyan válaszra, amely nem válasz:
 - A modellnek szóló `OPEN_ANSWER_RULES_HU` szövege NEM változik: bájtra őrzött (`tests/open-answer-short.test.ts` „nincs promptverzió-emelés”);
   a három szabály tanulói oldali őr, a bankgyártásnak nem kell ismernie. Leírása külön promptverzió-emeléssel lehetséges (maradvány).
 
+## Review-kör (PR #553)
+
+- Codex / Copilot / Vercel: a választó kérdés („Fagy vagy forr a víz 100 fokon?”) egyik lehetőségét kiemelő folytonos részlet („Forr a víz
+  100 fokon.”) nem másolat → ha a kérdésben van választó szó („vagy”, „avagy”, „or”), csak az azt is megismétlő válasz másolat.
+- Copilot: a „Nem tudok úszni.” érdemi tagadó mondat → csak a tagmondatot LEZÁRÓ (utána szövegvég / írásjel) kifejezés nem-válasz; a fordítási
+  feladat („Fordítsd angolra: Nem tudom.” → „I don't know.”) → ha a mintában is van ilyen kifejezés, nem törlődik.
+- Copilot: a `requiredDistinct` kvóta-illesztés is ékezet-őrzött („bőr” ≠ „bor” ékezetes válaszban).
+- Mindegyik pozitív + negatív korpuszpárral; mutációs ellenpróba M10–M14 (mindegyikre bukik legalább egy eset).
+
 ## Tulajdonosi döntést igénylő pontok
 
 - Az ékezet nélkül író tanuló „hat” válasza a „hát” rubrikára (és fordítva, ha a rubrika ékezet nélküli): marad a tűrés (nem-cél).
