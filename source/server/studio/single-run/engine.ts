@@ -1156,8 +1156,9 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   if (varietyOn) {
     telemetry.gates.tryShare = tryShare(publishable);
     // S6c-1 (14. szakasz; vak L6): az ábrafajták eloszlása és a 40%-os jelzés is a VÉGLEGES leckén — jelzés, nem kapu.
-    telemetry.gates.visualKinds = visualKindCounts(publishable);
-    const notes = withKindShareNotes(withTryShareNote(Array.isArray(output.qualityNotes) ? output.qualityNotes as Array<{ reason?: unknown }> : [], publishable), publishable);
+    const sourceIds = new Set(visuals.map((v) => v.id));
+    telemetry.gates.visualKinds = visualKindCounts(publishable, sourceIds);
+    const notes = withKindShareNotes(withTryShareNote(Array.isArray(output.qualityNotes) ? output.qualityNotes as Array<{ reason?: unknown }> : [], publishable), publishable, sourceIds);
     const { qualityNotes: _notes, ...withoutNotes } = output;
     output = notes.length ? { ...withoutNotes, qualityNotes: notes } : withoutNotes;
   }

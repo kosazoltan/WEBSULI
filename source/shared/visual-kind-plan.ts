@@ -50,19 +50,23 @@ export function subjectKindHintLine(subject: string, contract: string): string {
 
 type LessonLike = { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string; animKind?: unknown; sourceVisualId?: unknown }> }> };
 
-/** A lecke NEM forráshoz kötött ábráinak fajtánkénti darabszáma (a forráshoz kötött ábra fajtáját a forrás adja). */
-export function visualKindCounts(lesson: LessonLike): Record<string, number> {
+/**
+ * A lecke NEM forráshoz kötött ábráinak fajtánkénti darabszáma (a forráshoz kötött ábra fajtáját a forrás adja). Forráshoz kötött
+ * csak az az ábra, amelynek `sourceVisualId`-ja a futás leltárában LÉTEZIK (review #540: a leltárban nem létező, formailag érvényes
+ * azonosító saját ábrának számít).
+ */
+export function visualKindCounts(lesson: LessonLike, sourceIds: ReadonlySet<string> = new Set()): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const section of lesson.sections) for (const b of section.blocks) {
-    if (b.kind !== "animate" || typeof b.animKind !== "string" || b.sourceVisualId) continue;
+    if (b.kind !== "animate" || typeof b.animKind !== "string" || (typeof b.sourceVisualId === "string" && sourceIds.has(b.sourceVisualId))) continue;
     counts[b.animKind] = (counts[b.animKind] ?? 0) + 1;
   }
   return counts;
 }
 
 /** Jelzés (nem kapu): egy fajta a nem forráshoz kötött ábrák több mint 40%-a, legalább 5 ábránál. */
-export function kindShareProblems(lesson: LessonLike): string[] {
-  const counts = visualKindCounts(lesson);
+export function kindShareProblems(lesson: LessonLike, sourceIds: ReadonlySet<string> = new Set()): string[] {
+  const counts = visualKindCounts(lesson, sourceIds);
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   if (total < 5) return [];
   return Object.entries(counts)
@@ -74,7 +78,7 @@ export function kindShareProblems(lesson: LessonLike): string[] {
  * A fajta-arány minőségi jelzése a megadott (végleges) leckére: a korábbi `visual_kind_share` bejegyzéseket lecseréli vagy törli, a
  * többit megtartja (1. vak kör L6 — a jelzés a publikált leckére szóljon, a lektori csere és a folytatás után is).
  */
-export function withKindShareNotes<N extends { reason?: unknown }>(notes: readonly N[], lesson: LessonLike): Array<N | { reason: "visual_kind_share"; note: string; round: number }> {
+export function withKindShareNotes<N extends { reason?: unknown }>(notes: readonly N[], lesson: LessonLike, sourceIds: ReadonlySet<string> = new Set()): Array<N | { reason: "visual_kind_share"; note: string; round: number }> {
   const others = notes.filter((n) => n?.reason !== "visual_kind_share");
-  return [...others, ...kindShareProblems(lesson).map((note) => ({ reason: "visual_kind_share" as const, note, round: 0 }))];
+  return [...others, ...kindShareProblems(lesson, sourceIds).map((note) => ({ reason: "visual_kind_share" as const, note, round: 0 }))];
 }

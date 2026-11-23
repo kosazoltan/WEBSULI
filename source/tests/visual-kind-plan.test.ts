@@ -75,13 +75,17 @@ test("V23: az ábrakészítő kérése a FUTÁS állapotát követi — KI bájt
 });
 
 test("V24: fajta-arány — a forráshoz kötött ábra nem számít; 5 ábra alatt nincs jelzés; pontosan 40% megfelel, fölötte jelez", () => {
-  assert.deepEqual(visualKindCounts(lesson(["process", "process", "cycle", { animKind: "table", sourceVisualId: "v1" }])), { process: 2, cycle: 1 });
+  assert.deepEqual(visualKindCounts(lesson(["process", "process", "cycle", { animKind: "table", sourceVisualId: "v1" }]), new Set(["v1"])), { process: 2, cycle: 1 });
+  // Review #540: a leltárban NEM létező forrás-azonosító saját ábrának számít (különben elnyomná a jelzést).
+  assert.deepEqual(visualKindCounts(lesson(["process", { animKind: "process", sourceVisualId: "v999" }]), new Set(["v1"])), { process: 2 });
+  const fake = lesson(["process", "process", { animKind: "process", sourceVisualId: "v999" }, "cycle", "venn"]);
+  assert.equal(kindShareProblems(fake, new Set(["v1"])).length, 1, "a kitalált hivatkozás nem nyomja el a 60%-os jelzést");
   assert.deepEqual(kindShareProblems(lesson(["process", "process", "process", "process"])), [], "4 ábra: nincs jelzés");
   assert.deepEqual(kindShareProblems(lesson(["process", "process", "cycle", "venn", "barChart"])), [], "2/5 = 40%: megfelel");
   const over = kindShareProblems(lesson(["process", "process", "process", "cycle", "venn"]));
   assert.equal(over.length, 1);
   assert.match(over[0], /5 ábrájából 3 „process” fajtájú \(60%\)/u);
-  assert.deepEqual(kindShareProblems(lesson(["process", "process", "process", "cycle", "venn", { animKind: "process", sourceVisualId: "v1" }])).length, 1, "a forráshoz kötött ábra a nevezőbe sem számít");
+  assert.deepEqual(kindShareProblems(lesson(["process", "process", "process", "cycle", "venn", { animKind: "process", sourceVisualId: "v1" }]), new Set(["v1"])).length, 1, "a forráshoz kötött ábra a nevezőbe sem számít");
 });
 
 test("vak L6: a jelzés a VÉGLEGES leckére szól — a korábbi jelzés lecserélődik vagy törlődik, a többi megmarad; a motor a publikált leckén mér", () => {
@@ -94,9 +98,9 @@ test("vak L6: a jelzés a VÉGLEGES leckére szól — a korábbi jelzés lecser
   assert.notEqual((still[1] as { note: string }).note, "régi");
   assert.deepEqual(withKindShareNotes([], lesson(["process"])), []);
   const engine = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
-  assert.ok(engine.includes("telemetry.gates.visualKinds = visualKindCounts(publishable);"), "a telemetria a publikált leckéből");
+  assert.ok(engine.includes("telemetry.gates.visualKinds = visualKindCounts(publishable, sourceIds);") && engine.includes("const sourceIds = new Set(visuals.map((v) => v.id));"), "a telemetria a publikált leckéből, a futás leltárával");
   assert.ok(engine.includes("withKindShareNotes(withTryShareNote("), "a jelzés a publikált leckéből, a többi jelzés megtartásával");
-  const start = engine.indexOf("telemetry.gates.visualKinds = visualKindCounts(publishable);");
+  const start = engine.indexOf("telemetry.gates.visualKinds = visualKindCounts(publishable, sourceIds);");
   assert.ok(engine.lastIndexOf("if (varietyOn) {", start) > 0 && start - engine.lastIndexOf("if (varietyOn) {", start) < 800, "csak a futásra rögzített BE állapotnál");
   assert.equal(engine.includes("lessonVarietyEnabled()) {"), false, "a motor futás közben nem olvas környezetet");
 });
