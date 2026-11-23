@@ -260,3 +260,38 @@ test("hibás vagy régi formátumú kisfilm-válasz mellett a lecke kisfilm nél
   await expect(page.getByTestId("lesson-runtime")).toBeVisible();
   await expect(page.locator(".clip-btn")).toHaveCount(0);
 });
+
+// S2b-2 review #535 (Codex): a kizárt (forrás-ábrára mutató) tárolt hivatkozás a tényleges lejátszóban — nincs üres panel, a lejátszó
+// elrendezése ép; érvényes régi ábránál a panel és benne a rajz megmarad. Próbaleckék: forrás-ábrás (0. fejezet 1. blokk: tábla),
+// fúziós (0. fejezet 2. blokk: régi `process` ábra).
+for (const viewport of [{ width: 360, height: 640 }, { width: 844, height: 390 }, { width: 1280, height: 800 }]) {
+  for (const sample of [{ name: "forrás-ábra: nincs panel", url: "/__lesson-runtime-probe?source-visuals=1&clips2=1", blockIndex: 1, panels: 0 }, { name: "régi ábra: a panel megmarad", url: "/__lesson-runtime-probe?fusion=1&clips2=1", blockIndex: 2, panels: 1 }]) {
+    test(`leckeábra a kisfilmben — ${sample.name} (${viewport.width} px)`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      // A séma legalább öt jelenetet vár: a szokásos próbakisfilm második jelenete mutat a lecke ábrájára.
+      const base = v2Clip("adventure");
+      const clip = { ...base, scenes: base.scenes.map((scene, i) => (i === 1 ? { ...scene, say: "A második jelenet a lecke ábrájára mutat.", overlay: { kind: "lessonVisual", blockIndex: sample.blockIndex } } : scene)) };
+      await page.route("**/tmp/lesson-clips2.json", (route) => route.fulfill({ json: { clips: [{ sectionIndex: 0, clip }], pending: false } }));
+      await page.route("**/api/lesson-clips/media/**", (route) => new URL(route.request().url()).pathname.endsWith(MEDIA(7)) ? route.fulfill({ contentType: "audio/wav", body: silentWav() }) : route.fulfill({ contentType: "image/png", body: PIXEL }));
+      await page.route("**/api/design-assets/**", (route) => route.fulfill({ status: 404, json: { message: "teszt" } }));
+      await page.goto(sample.url);
+      await page.getByTestId("clip-play-0").click();
+      await page.getByTestId("clip-toggle").click();
+      await expect(player(page)).toHaveAttribute("data-state", "paused");
+      await page.getByTestId("clip-prev").click();
+      await expect(player(page)).toHaveAttribute("data-scene", "0");
+      await expect(player(page).locator(".clip2-panel")).toHaveCount(1); // a címpanel a nyitójelenetben mindkét esetben megvan
+      await page.getByTestId("clip-next").click();
+      await expect(player(page)).toHaveAttribute("data-scene", "1");
+      await expect(player(page).locator(".clip2-panel")).toHaveCount(sample.panels);
+      if (sample.panels) await expect(player(page).locator(".clip2-panel .clip2-visual > *").first()).toBeVisible();
+      await expect(page.getByTestId("clip-caption")).toBeVisible();
+      const layout = await page.evaluate(() => {
+        const dialog = document.querySelector<HTMLElement>(".clip-player")!.getBoundingClientRect();
+        const caption = document.querySelector<HTMLElement>(".clip-caption")!;
+        return { pageOverflowX: document.documentElement.scrollWidth - window.innerWidth, dialogInside: dialog.left >= -1 && dialog.right <= window.innerWidth + 1 && dialog.bottom <= window.innerHeight + 1, captionOverflow: caption.scrollHeight - caption.clientHeight };
+      });
+      expect(layout).toEqual({ pageOverflowX: 0, dialogInside: true, captionOverflow: 0 });
+    });
+  }
+}

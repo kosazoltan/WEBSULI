@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { fusionFixture } from "@shared/fixtures/lesson-fusion";
 import { EXPERIENCE_THEMES } from "@shared/lesson-experience";
 import { sourceVisualsFixture } from "@shared/fixtures/lesson-source-visuals";
+import { TableAnim } from "./blocks/source-visuals";
 import { LESSON_VARIETY_VERSION } from "@shared/lesson-feedback-openers";
 
 /**
@@ -257,7 +258,26 @@ function withProbeVariety(lesson: Lesson, opening: string | null): Lesson {
   };
 }
 
+/**
+ * S2b-2 review #535 (Copilot; V37): `?source-visuals=headswap` — UGYANAZON táblapéldány fejléceit cseréli változatlan tárolóméret mellett
+ * (a gomb rövidről hosszúra és vissza vált), hogy a böngészős próba a fejléc-illesztés újramérését mérje.
+ */
+function HeadSwapProbe() {
+  const [long, setLong] = useState(false);
+  const headers = long ? ["Megkülönböztethetetlenség", "Összeférhetetlenségi"] : ["A", "B"];
+  return (
+    <div data-band="kid" data-experience="websuli" data-ws-theme="explorer" style={{ width: 300, padding: 8 }}>
+      <button type="button" data-testid="swap-headers" onClick={() => setLong((v) => !v)}>Fejléccsere</button>
+      <TableAnim params={{ headers, rows: [["1", "2"]] }} caption="" />
+    </div>
+  );
+}
+
 export default function LessonRuntimeProbe() {
+  return new URLSearchParams(window.location.search).get("source-visuals") === "headswap" ? <HeadSwapProbe /> : <LessonProbe />;
+}
+
+function LessonProbe() {
   const [candidate, setCandidate] = useState<Lesson | null>(null);
   const [error, setError] = useState("");
   // Spec 2026-11-10-fejezet-kisfilmek-v2 (P0): `&clips2=1` — a helyi jelölt mellé a kisfilmek is helyi fájlból jönnek (`/tmp/lesson-clips2.json`).

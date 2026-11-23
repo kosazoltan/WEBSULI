@@ -351,3 +351,20 @@ test("vak J2 / J7 / J11 — 360 px", async ({ page }) => {
   await page.locator('figure[data-anim="table"]').first().waitFor({ state: "visible", timeout: 30_000 });
   expect(await page.locator(".sv-table-scroll").first().evaluate((n) => getComputedStyle(n).overflowX)).toBe("visible");
 });
+
+// S2b-2 review #535 (Copilot; V37): UGYANAZON táblapéldány fejléceinek cseréje változatlan tárolóméret mellett újraméri a fejléc-illesztést.
+test("V37: a fejlécek cseréje (rövid → hosszú → rövid) újraméri a fejléc-illesztést, a tároló mérete közben nem változik", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.goto("/__lesson-runtime-probe?source-visuals=headswap");
+  const table = page.locator("table.sv-table");
+  const width = async () => Math.round((await page.locator(".sv-table-scroll").boundingBox())!.width);
+  await expect(table.locator("thead th").first()).toHaveText("A");
+  expect(await table.getAttribute("data-head-fit")).toBeNull();
+  const before = await width();
+  await page.getByTestId("swap-headers").click();
+  await expect(table).toHaveAttribute("data-head-fit", /^(fit|break)$/);
+  expect(await width()).toBe(before);
+  await page.getByTestId("swap-headers").click();
+  await expect(table.locator("thead th").first()).toHaveText("A");
+  await expect.poll(() => table.getAttribute("data-head-fit")).toBeNull();
+});

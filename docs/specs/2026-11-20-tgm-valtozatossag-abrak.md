@@ -247,7 +247,7 @@ Alap: TGM-végrehajtás „S2b” vak-leletei (357–413. sor). Megjelenítési 
    a CSS tokenjeiből számol (a `color-mix` 14%-os keverését is).
 3. **J6 — fejezet-kisfilm:** a forrás-ábrafajták (`SOURCE_VISUAL_ANIM_KINDS`) és a hibás paraméterű blokk nem kínálható fel ráúszó
    ábrának (`animateBlockIndexes`), és a lejátszó a régi kisfilm ilyen hivatkozását sem rajzolja ki (görgetés nélküli, levágott keretben
-   olvashatatlan lenne). Böngészős reprodukció nem készült: a kódút egyértelmű (`clips/clip2-overlays.tsx` `lessonVisual` ága +
+   olvashatatlan lenne). Böngészős próba (review #535): `tests/lesson-clips.spec.ts` „leckeábra a kisfilmben” — három nézetben; a kódút (`clips/clip2-overlays.tsx` `lessonVisual` ága +
    `lesson-clips2.css` `overflow: hidden`), a javítás védekező.
 4. **J7 — fölösleges görgetés:** rövid tartalmú (minden cella ≤ 12 karakter) táblánál nincs oszlopszám-alapú legkisebb szélesség
    (`data-compact`), így egy „1 | 2 | 3” tábla 360 px-en sem görög.

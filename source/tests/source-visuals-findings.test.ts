@@ -55,7 +55,10 @@ test("V37: a fejléc-illesztés a fejlécek szövegének változására újramé
 test("1. vak kör L2: ki nem rajzolható (forrás-ábrára mutató) kisfilm-hivatkozásnál a panel sem jön létre; régi ábránál és más ráúszónál megmarad", async () => {
   const { clipOverlayRenderable } = await import("../shared/lesson-clip");
   const tableBlock = { kind: "animate", animKind: "table", caption: "", params: { headers: ["A", "B"], rows: [["1", "2"]] } };
-  const legacy = { kind: "animate", animKind: "numberLine", caption: "", params: { min: 0, max: 10, marks: [3] } };
+  // Review #535 (Copilot): ÉRVÉNYES régi ábra (a megjelenítő tényleg kirajzolja) — a paraméterséma is igazolja.
+  const legacy = { kind: "animate", animKind: "numberLine", caption: "", params: { from: 0, to: 10, marks: [{ value: 3 }] } };
+  const { parseVisualParams } = await import("../shared/lesson-visual-params");
+  assert.ok(parseVisualParams("numberLine", legacy.params), "a pozitív minta érvényes számegyenes");
   const ref = { kind: "lessonVisual", blockIndex: 0 };
   assert.equal(clipOverlayRenderable(ref, [tableBlock]), false, "forrás-ábra: nincs panel");
   assert.equal(clipOverlayRenderable(ref, [{ kind: "explain", text: "x" }]), false, "nem ábra blokk: nincs panel");
