@@ -226,7 +226,9 @@ export function startMergeRun(dir, n) {
 export function publishMergeEvidence(dir, n, runId, name, record) {
   return withMergeLock(dir, n, () => {
     if (readEvidence(dir, `merge-run-${n}`)?.runId !== runId) return false;
-    writeEvidence(dir, name, record);
+    // Copilot #513: a rekord a futásazonosítót hordozza — a hook a `merge-run-<n>` jelölővel veti össze, így egy később indult (akár
+    // félbeszakadt, érvénytelenítés előtt megállt) futás után a régi zöld már nem fogadható el.
+    writeEvidence(dir, name, { ...record, runId });
     return true;
   });
 }

@@ -75,3 +75,5 @@ Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`, „Negyedik és ötödik javí
     eltérő `runId`-jű vagy fennálló zár melletti zöld bizonyíték → a `gh pr merge` tiltva; egyező → engedve.
 25. GREEN: `publishMergeEvidence` a `runId`-t a rekordba írja; a hook a jelölőt és a zárat is ellenőrzi.
 26. Szakasz- és push-kapu, helyi GPU-ellenőr, push, szál-válasz a javító commit SHA-jával.
+
+- [x] 24 · [x] 25 · [ ] 26

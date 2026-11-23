@@ -416,3 +416,12 @@ test('vak kör 2 L2: csak a legutóbb indított futás tehet közzé merge-bizon
   assert.equal(JSON.parse(readFileSync(join(dir, `merge-9-${HEAD}.json`), 'utf8')).ok, true);
   assert.equal(startMergeRun(dir, '19') !== c && publishMergeEvidence(dir, '9', c, `merge-9-${HEAD}`, { ok: true }), true, 'más PR futása nem zavarja');
 });
+
+test('Copilot #513: a közzétett merge-bizonyíték a futásazonosítót hordozza (a hook a jelölővel veti össze)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'merge-run-'));
+  const id = startMergeRun(dir, '9');
+  assert.equal(publishMergeEvidence(dir, '9', id, `merge-9-${HEAD}`, { head: HEAD, ok: true }), true);
+  const rec = JSON.parse(readFileSync(join(dir, `merge-9-${HEAD}.json`), 'utf8'));
+  assert.equal(rec.runId, id, 'a rekordban a futás azonosítója');
+  assert.equal(JSON.parse(readFileSync(join(dir, 'merge-run-9.json'), 'utf8')).runId, id, 'a jelölő ugyanezt mutatja');
+});
