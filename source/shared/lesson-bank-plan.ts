@@ -60,3 +60,32 @@ export function bankUnitQuota(plan: LessonBankPlan, unitIndex: number, seed?: nu
     methodKinds: kinds[unitIndex],
   };
 }
+
+/**
+ * Review #534 (Copilot): a kész csomag módszerei a KIOSZTOTT sorrendbe kerülnek — minden módszer a fajtája legkorábbi, még szabad
+ * kvótahelyére, a fajtán belül az eredeti sorrendben; a kvótán felüli tételek a végére, az eredeti sorrendjükben. Kiosztás nélkül
+ * (`undefined`: KI állapot) a sorrend változatlan.
+ */
+export function orderMethodsByQuota<T extends { kind: string }>(methods: readonly T[], quota: readonly string[] | undefined): T[] {
+  if (!quota) return [...methods];
+  const free = quota.map((kind, slot) => ({ kind, slot, taken: false }));
+  const placed: Array<{ slot: number; item: T }> = [];
+  const rest: T[] = [];
+  for (const item of methods) {
+    const place = free.find((f) => !f.taken && f.kind === item.kind);
+    if (place) { place.taken = true; placed.push({ slot: place.slot, item }); } else rest.push(item);
+  }
+  return [...placed.sort((a, b) => a.slot - b.slot).map((p) => p.item), ...rest];
+}
+
+/**
+ * Review #534 (Copilot): kiosztással (BE állapot) a csomag kapukérdéseinek száma nem lépheti túl a kiosztottat — a lejátszó minden meg
+ * nem oldott kapunál megáll, a lecke a megígért két kaput kapja (a hiányt a „Hiányzó módszer” ellenőrzés jelzi). Kiosztás nélkül
+ * (`undefined`: KI állapot) a régi, csak alsó korlátos szabály él.
+ */
+export function gateCountProblem(methods: ReadonlyArray<{ kind: string }>, quota: readonly string[] | undefined): string | null {
+  if (!quota) return null;
+  const allowed = quota.filter((kind) => kind === "gate").length;
+  const actual = methods.filter((m) => m.kind === "gate").length;
+  return actual > allowed ? `A csomagban legfeljebb ${allowed} kapukérdés (kind="gate") lehet, most ${actual} — a többletet más fajtájú módszerre cseréld.` : null;
+}

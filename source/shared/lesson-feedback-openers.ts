@@ -118,12 +118,15 @@ export function feedbackView(input: {
  * Mentéskor: BE kapcsolónál a szerver írja a jelölőt; KI kapcsolónál a (modelltől esetleg jött) jelölő törlődik — a jelölőt kizárólag
  * a szerver adhatja. Nem lecke alakú bemenetet változatlanul ad vissza.
  */
-export function withVarietyMarker<T>(lesson: T, enabled: boolean): T {
+export function withVarietyMarker<T>(lesson: T, enabled: boolean, openingForm?: string | null): T {
   if (!lesson || typeof lesson !== "object" || Array.isArray(lesson)) return lesson;
   const { variety: _dropped, ...rest } = lesson as Record<string, unknown>;
   if (!enabled) return rest as T;
   // S5b: a nyitásforma ugyanabból a magból (térkép) és évfolyamból, mint a szerző promptjában (`engine.ts` → `lessonOpenerContract`).
-  const form = typeof rest.mapId === "string" && typeof rest.classroom === "number" ? openerVarietyPick(rest.classroom, seedFrom(rest.mapId)).form.id : undefined;
+  // Review #534: a gyártás a szerzőnek TÉNYLEG kiosztott (a job állapotában rögzített) formát adja át; `null` = nem volt kiosztás (régi
+  // checkpointból átvett tanítás) → a jelölő forma nélküli. Paraméter nélkül (más hívók) a régi, magból számolt érték.
+  const form = openingForm !== undefined ? openingForm ?? undefined
+    : typeof rest.mapId === "string" && typeof rest.classroom === "number" ? openerVarietyPick(rest.classroom, seedFrom(rest.mapId)).form.id : undefined;
   return { ...rest, variety: { version: LESSON_VARIETY_VERSION, ...(form ? { openingForm: form } : {}) } } as T;
 }
 

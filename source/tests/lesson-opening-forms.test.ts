@@ -140,3 +140,23 @@ test("S5b vak kör 1 L3: BE állapotban a lépcsősor nem írja elő a régi kö
     assert.ok(lessonOpenerContract(classroom).includes("Mese: "));
   }
 });
+
+test("review #534 (Copilot): hibás alakú openingForm (nem szöveg) nem töri el a megjelenítést — a régi címke marad", () => {
+  const goal = { kind: "explain" as const, depth: "core" as const, readAloud: false, text: "**Mit tanulunk ma?** A törtet.\n\n**Mi lehet nehéz?** A nevező.\n\n**Miért?** Mert új.\n\n**Így sikerül!** Rajzolj.", coversConceptIds: ["c1"] };
+  const opening = { kind: "explain" as const, depth: "core" as const, readAloud: false, text: "Lili tortát talált.", coversConceptIds: ["c1"] };
+  for (const bad of [{ toString: null }, 5, ["rejtely"], null]) {
+    assert.doesNotThrow(() => blockLabel([goal, opening] as never[], 1, 0, "kid", 3, false, bad as never));
+    assert.equal(blockLabel([goal, opening] as never[], 1, 0, "kid", 3, false, bad as never), "Mese");
+  }
+});
+
+test("review #534 (Copilot): a lektor a szerzőnek TÉNYLEG kiosztott nyitásformát kapja (azonosító + leírás), nem csak a formák listáját", () => {
+  const pick = openerVarietyPick(6, 7);
+  const withForm = lessonOpenerLektorChecklist(true, pick.form);
+  assert.ok(withForm.includes(OPENING_FORM_LABEL[pick.form.id]) && withForm.includes(pick.form.description), "a kiosztott forma címkéje és leírása");
+  assert.equal(withForm.includes("mese, rejtély, jóslás"), false, "nem a teljes formalista");
+  // Forma nélkül (régi checkpoint / v1 javítás): nem állít kiosztást; KI: bájtra a régi.
+  assert.equal(lessonOpenerLektorChecklist(true).includes("a kiosztott formát követi-e"), false);
+  assert.equal(lessonOpenerLektorChecklist(false), LESSON_OPENER_LEKTOR_CHECKLIST);
+  assert.equal(lessonOpenerLektorChecklist(false, pick.form), LESSON_OPENER_LEKTOR_CHECKLIST);
+});

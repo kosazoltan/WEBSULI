@@ -139,6 +139,11 @@ export function openingFormGroup(classroom: number): OpeningFormGroup {
   return stage === "L1" || stage === "L2" ? "young" : stage === "L3" || stage === "L4" ? "middle" : "older";
 }
 
+/** Mentett formaazonosító → forma (review #534: a job állapotában rögzített kiosztás visszaolvasása); ismeretlen azonosító → `undefined`. */
+export function openingFormById(id: string): OpeningForm | undefined {
+  return Object.values(OPENING_FORMS).flat().find((f) => f.id === id);
+}
+
 /** A forma és a hős a magból (a mag: `seedFrom(mapId)`) — ugyanaz a térkép mindig ugyanazt kapja. */
 export function openerVarietyPick(classroom: number, seed: number): { form: OpeningForm; hero: string } {
   return {
@@ -218,12 +223,17 @@ export const LESSON_OPENER_LEKTOR_CHECKLIST = [
 ].join("\n");
 
 /** S5b: a változatossági kapcsolóval a lektor a kiosztott forma 3–6 mondatos nyitását méri (KI: a régi konstans). */
-export function lessonOpenerLektorChecklist(variety: boolean): string {
+/**
+ * `form` (review #534, Copilot): a szerzőnek TÉNYLEG kiosztott nyitásforma — a lektor ehhez mér (címke + leírás). Forma nélkül (régi
+ * checkpointból folytatott futás, régi jelölőjű lecke javítása) a lista nem állít kiosztást: csak a nyitás hosszát méri.
+ */
+export function lessonOpenerLektorChecklist(variety: boolean, form?: OpeningForm): string {
   if (!variety) return LESSON_OPENER_LEKTOR_CHECKLIST;
+  const label = form ? OPENING_FORM_LABEL[form.id] : undefined;
   return LESSON_OPENER_LEKTOR_CHECKLIST
     .replace(`(${LESSON_OPENER_VERSION})`, `(${LESSON_OPENER_VERSION_VARIETY})`)
-    .replace("a második a mini mese.", "a második a nyitás (a program által kiosztott forma: mese, rejtély, jóslás, helyzet, dilemma, eset, gondolatkísérlet vagy megfigyelés).")
-    .replace("a mese pontosan 5 mondat-e,", "a nyitás 3–6 mondat-e és a kiosztott formát követi-e,");
+    .replace("a második a mini mese.", form && label ? `a második a nyitás — a szerzőnek kiosztott forma: ${label} (${form.description})` : "a második a nyitás.")
+    .replace("a mese pontosan 5 mondat-e,", form && label ? `a nyitás 3–6 mondat-e és a kiosztott formát (${label}) követi-e,` : "a nyitás 3–6 mondat-e,");
 }
 
 /** Játékos (IQ-) kérdezés a bankhoz (statikus: a bank gyorsítótárazott előtagjába kerül, ezért évfolyamfüggetlen). */

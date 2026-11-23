@@ -4,7 +4,7 @@ import { and, eq, ne, inArray } from "drizzle-orm";
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../shared/lesson-schema";
 import { lessonRepairSchema, markRepairCandidate, modelLessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
 import { sourceVisualsEnabled } from "./source-visuals-flag";
-import { runWithLessonVariety } from "./lesson-variety-flag";
+import { adoptStoredOpeningForm, runWithLessonVariety } from "./lesson-variety-flag";
 import { carryVarietyMarker, storedVarietyMarker } from "../../shared/lesson-feedback-openers";
 import { drawableCandidate, withDropReason } from "./undrawable-visuals";
 import { checkLessonArc } from "../../shared/lesson-arc";
@@ -259,6 +259,8 @@ export function finishStructuredImprovement(original: Lesson, candidate: Lesson,
 }
 
 async function finishStructuredImprovementScoped(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, bank: RepairBankOptions = {}) {
+  // Review #534 (Copilot): a lektor a jelölt (a tárolt leckéből átvitt) jelölőjének formáját kapja konkrét elvárásként.
+  adoptStoredOpeningForm(candidate);
   const classroom = owner?.classroom ?? original.classroom;
   assertRepairTeaching(original, candidate, source, classroom);
   await workflowPhase("banks");

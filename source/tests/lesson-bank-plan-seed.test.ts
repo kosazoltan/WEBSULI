@@ -45,3 +45,16 @@ test("S5b vak kör 1 L4: maggal PONTOSAN két kapukérdés — a csomagkitöltő
   // Mag nélkül (KI) a régi kiosztás marad — ott a kitöltő viselkedése változatlan.
   assert.deepEqual(kinds(10), kinds(10, undefined));
 });
+
+test("review #534 (Copilot): a kész csomag módszerei a kiosztott sorrendbe rendeződnek; a kapuk száma BE állapotban pontos", async () => {
+  const { orderMethodsByQuota, gateCountProblem } = await import("../shared/lesson-bank-plan");
+  const m = (kind: string, id: string) => ({ kind, id });
+  const quota = ["gate", "causeEffect", "popup", "gate"];
+  const model = [m("causeEffect", "a"), m("gate", "g1"), m("popup", "p"), m("gate", "g2")];
+  assert.deepEqual(orderMethodsByQuota(model, quota).map((x) => x.id), ["g1", "a", "p", "g2"], "a kvóta sorrendje, a fajtán belül az eredeti sorrend");
+  assert.deepEqual(orderMethodsByQuota([...model, m("myth", "extra")], quota).map((x) => x.id), ["g1", "a", "p", "g2", "extra"], "a kvótán kívüli tétel a végére");
+  assert.deepEqual(orderMethodsByQuota(model, undefined), model, "kiosztás nélkül (KI) változatlan");
+  assert.equal(gateCountProblem(model, quota), null);
+  assert.match(gateCountProblem([...model, m("gate", "g3")], quota) ?? "", /kapukérdés/u, "harmadik kapu BE állapotban hiba");
+  assert.equal(gateCountProblem([...model, m("gate", "g3")], undefined), null, "KI: a régi (legalább) szabály, itt nincs felső korlát");
+});

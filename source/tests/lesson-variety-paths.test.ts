@@ -299,3 +299,30 @@ test("S5b vak kör 1 L2: a javítás promptja csak nyitásformát hordozó (v2) 
   assert.equal(repairVarietyOption({ mapId: "m1", variety: { version: "valtozatossag-1" } }), undefined, "v1: nincs új forma a promptban");
   assert.equal(repairVarietyOption({ mapId: "m1" }), undefined, "jelöletlen lecke");
 });
+
+test("review #534 (Codex, Copilot): a jelölő nyitásformája az, amit a szerző TÉNYLEG megkapott — régi (forma nélküli) checkpointból folytatva nem keletkezik utólag forma", async () => {
+  // Friss BE futás: a job állapota rögzíti a kiosztott formát, a mentett lecke jelölője ugyanezt hordozza.
+  const fresh = memory();
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client(), fresh, { lessonVariety: true }));
+  const assigned = lastOutput(fresh).openingForm;
+  assert.equal(typeof assigned, "string", "a job állapota rögzíti a szerzőnek kiosztott formát");
+  assert.equal((fresh.lessons.at(-1) as { variety?: { openingForm?: string } }).variety?.openingForm, assigned);
+  // Review #534 (Copilot): a builder VISSZAADOTT bankja — a módszerek a kiosztás (a mag) sorrendjében, csomagonként; nem a modell sorrendjében.
+  const built = (fresh.lessons.at(-1) as { mapId: string; experience: { methods: Array<{ kind: string; sourceHash?: string }>; bankPlan: { units: Array<{ sectionIndex: number; conceptIds: string[]; sourceHash?: string }>; taskRound: number; quizRound: number } } });
+  const { bankUnitQuota } = await import("../shared/lesson-bank-plan");
+  built.experience.bankPlan.units.forEach((unit, i) => {
+    const quota = bankUnitQuota(built.experience.bankPlan, i, seedFrom(built.mapId)).methodKinds;
+    const got = built.experience.methods.filter((m) => m.sourceHash === unit.sourceHash).map((m) => m.kind);
+    assert.deepEqual(got.slice(0, quota.length), quota, `${i}. csomag: a módszerek a kiosztott sorrendben`);
+  });
+  // S5a alatt megkezdett (forma nélküli job-állapotú), a bankban megszakadt BE futás folytatása: a szerző kimarad → nincs forma.
+  const first = memory();
+  await assert.rejects(runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ failBank: true }), first, { lessonVariety: true })));
+  const { openingForm: _dropped, ...legacySaved } = lastOutput(first);
+  assert.ok((legacySaved as { lesson?: unknown }).lesson, "a megszakadt futás már hordoz kész tanítást");
+  const second = memory();
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: legacySaved } }, runDeps(client(), second, {}, legacySaved.singleRun.conversation));
+  const resumedLesson = second.lessons.at(-1) as { variety?: { version?: string; openingForm?: string } };
+  assert.equal(resumedLesson.variety?.version, LESSON_VARIETY_VERSION, "a futás BE maradt");
+  assert.equal("openingForm" in (resumedLesson.variety ?? {}), false, "régi checkpointból átvett tanításhoz nincs utólagos forma");
+});
