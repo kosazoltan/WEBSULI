@@ -36,6 +36,14 @@
   mezője és rögzítése válaszkor, a `resultReport.ts` végleges beküldésében a mezők és a korhatár.
 - Tesztek: `result-report-complete.test.ts` korhatár-részei; e2e: a végleges beküldés törzse a két mezővel.
 - Kész: 7 napnál régebbi utolsó válasz után nincs beküldés; a levél mutatja a kör kezdetét.
+- **Megvalósítás (2026-11-23, ág `feat/eredmeny-b1b-kliens-mezok`):** előfeltétel teljesült — a B1a (#532) a főágon és élesben van
+  (production a `c87d1706` commitról). A `shared/quiz-round.ts` új függvényei: `STALE_ROUND_DAYS`, `roundTooOld`, `roundActivityAt`; a
+  `useExperienceRound.ts` sémája opcionális `lastAnsweredAt` mezőt kap (a régi tárolt kör nélküle is betölt, és — mivel a válasz kora
+  ismeretlen — NEM minősül elavultnak: a régi küldési viselkedés marad; 1. vak kör L1); a kvízválasz rögzíti
+  (`LessonExperienceView.tsx`); a `resultReport.ts` a LE NEM ZÁRT, 7 napnál régebbi utolsó tevékenységű kört nem küldi, a törzsbe a
+  `startedAt` (mindkét fajta) és a `lastAnsweredAt` (csak kvíz — a feladat-séma nem fogadja) kerül. A körazonosító és a „már elküldve”
+  jelző változatlan. Tesztek: `result-report-complete.test.ts` (korhatár határai, szerkezeti őr), `lesson-result-email-quiz.spec.ts`
+  (a törzs megfelel a szerver sémájának; 8 nap után nem megy el, 6 nap után elmegy — a böngésző órájának léptetésével).
 
 ## 2. B2 — végleges beküldés hálózati rétege (R4, R8, R9, R23, R26, R37, R46)
 
