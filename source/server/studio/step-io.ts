@@ -7,6 +7,7 @@ import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
 import { PROMPT_ANIM_KINDS, TRY_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT_LIMITS } from "../../shared/lesson-schema";
 import { VISUAL_PARAMS_CONTRACT } from "../../shared/lesson-visual-params";
+import { subjectKindHintLine } from "../../shared/visual-kind-plan";
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
 import { lessonLengthBudget } from "../../shared/lesson-length";
 import { DEFAULT_REWARD_POLICY } from "../../shared/reward-policy";
@@ -736,6 +737,9 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
   ].join("\n");
 }
 
+/** S6c-1 (vak L2): az ábrakészítőnek elküldött összes paraméterleírás — az ábra-ajánlás csak ezekben szereplő fajtát nevez meg. */
+const ANIMATOR_PARAM_DESCRIPTIONS = [VISUAL_PARAMS_CONTRACT, DECISION_STORY_CONTRACT].join("\n");
+
 /**
  * Animátor: a kész leckébe `animate` blokkokat illeszt a vázlat javaslatai szerint.
  *
@@ -768,6 +772,9 @@ export function buildAnimatorPrompt(lesson: Lesson, map: PromptMap): string {
     "- If a section has nothing drawable (pure definition list), give it no figure rather than a misleading one.",
     `- animKind is one of: ${PROMPT_ANIM_KINDS.join(", ")}.`,
     VISUAL_PARAMS_CONTRACT,
+    // S6c-1 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 14. szakasz): tantárgyi ábra-ajánlás — csak a futásra rögzített BE állapotnál,
+    // és csak az ábrakészítőnek ELKÜLDÖTT paraméterleírásokban szereplő fajtákból; KI állapotban a kérés bájtra a régi.
+    ...(effectiveLessonVariety() && subjectKindHintLine(map.subject, ANIMATOR_PARAM_DESCRIPTIONS) ? [subjectKindHintLine(map.subject, ANIMATOR_PARAM_DESCRIPTIONS)] : []),
     'Geometry params: {"shape":"triangle"|"circle"|"square", "label":"short label"} draws a bare outline only — prefer labeledShape.',
     'triangleArea params: {"base":6,"height":4,"unit":"cm"}; numeric dimensions 0.1–1000, unit cm or m. Use ONLY for triangle area already taught in that section, with base/height from its source example.',
     DECISION_STORY_CONTRACT,
