@@ -9,3 +9,4 @@
 
 | dátum | tünet | gyökérok | megoldás | forrás/commit | skill-hivatkozás |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-23T12:47:59.377Z | Felhős vak kör (friss alügynök-review) minden javító pushra újra lefutott: 45 PR-ra 342 kör, token-égetés | A kapu fej-hashre kulcsolt ítéletet kért, és csak drága felhős alügynök adhatta; minden javítás új teljes kört indított | local-review.mjs: helyi GPU-modell (angol prompt) rögzíti a review-<fej>.json-t; felhős vélemény csak kockázatos fájlnál, egyszer | fcf033ee | .agents/skills/websuli-fejlesztesi-ellenor/SKILL.md |
