@@ -74,7 +74,8 @@ test("V26: a kapu — készleten kívüli váz bukik a fejezet nevével; készle
 
 test("V27: régi bátorító előtag megszámolva (nem bukás); fajta-arány és try-arány jelzés", () => {
   const r = varietyGate({ lesson: L1, visuals: [] });
-  assert.equal(r.metrics.legacyOpeners, 2);
+  // SK2-v2: a mérés az S5a-v2 megjelenítési szabályát használja (`startsWithLegacyOpener`) — a „Pontosan.” is régi előtag, ezért 3.
+  assert.equal(r.metrics.legacyOpeners, 3);
   const kinds = ["process", "process", "process", "process", "process", "cycle", "venn", "barChart", "timeline", "map"];
   const many = lesson(blocks("EXCR".replace("X", "X" + "A".repeat(10)), Object.fromEntries(kinds.map((k, i) => [i + 2, { animKind: k }]))));
   const g = varietyGate({ lesson: many, visuals: [] });
