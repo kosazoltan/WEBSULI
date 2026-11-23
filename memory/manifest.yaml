@@ -36,3 +36,4 @@ code_review:
   mem0_backend: "Docker pgvector hermes-mem0-pg (127.0.0.1:55432) — 2026-11-23"
   closing_push: "node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs push --repo D:/repo/WEBSULI (frissíti a vector-indexet)"
   task_register: "SQL feladat.tasks (Docker hermes-mem0-pg) — node D:/repo/Hermes-agent/scripts/feladat.mjs list --repo D:/repo/WEBSULI; a főterv 2026-11-23 tételei betöltve"
+  local_review_limits: "num_predict 1500, 3 újrapróba, csonka JSON kimentése (2026-11-23, PR-C élő fetch failed)"

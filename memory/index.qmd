@@ -40,3 +40,4 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 - Mem0 memória: helyi Docker pgvector (`hermes-mem0-pg`). Záró push: `zaro-hurok.mjs push` (inkrementális vector-frissítéssel).
 - Feladat-nyilvántartás (mester): `node D:/repo/Hermes-agent/scripts/feladat.mjs list --repo D:/repo/WEBSULI` (Docker Postgres);
   a kanban csak tükör. A 2026-11-23-i főterv (ág `docs/foterv-2026-11-23`) tételei bent vannak.
+- A helyi ellenőr nagy diffen (PR-C, 4900 sor) sok zajos medium/low leletet ad; a high leletet mindig kódból ellenőrizd.
