@@ -127,7 +127,9 @@ for (const viewport of VIEWPORTS) {
         // Review J7: fókuszmegálló és nevesített régió csak a ténylegesen görgő táblán.
         expect(await scroller.getAttribute("tabindex"), "fókuszmegálló csak görgő táblán").toBe(state.wide ? "0" : null);
         expect(await scroller.getAttribute("role")).toBe(state.wide ? "region" : null);
-        const hint = scroller.locator("xpath=following-sibling::p[@data-testid='sv-scroll-hint']");
+        // S2b-2 (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 17. szakasz 1. pont, vak J2 — dokumentált spec-változás): a jelző a SAJÁT
+        // tábla görgő kerete ELŐTT áll (a tábla fölött); a szándék változatlan: görgő táblánál pontosan egy jelző, a helyes táblához.
+        const hint = scroller.locator("xpath=preceding-sibling::p[@data-testid='sv-scroll-hint']");
         await expect(hint).toHaveCount(state.wide ? 1 : 0);
         if (!state.wide) continue;
         // Review J6: egérrel a semleges felirat látszik (a „Húzd oldalra” csak érintőképernyőn).
@@ -263,16 +265,20 @@ for (const band of [{ classroom: 2, id: "explorer" }, { classroom: 4, id: "adven
     const report = await measure(page);
     expect(report.pageOverflow).toBeLessThanOrEqual(0);
     expect(report.problems).toEqual([]);
-    // A fejléc tónusa a sáv tokenjéből jön: az „a” tónusú oszlopfej alsó szegélye a sáv főszíne.
+    // A fejléc tónusa a sáv tokenjéből jön. S2b-2 (17. szakasz 2. pont, vak J5 — dokumentált spec-változás): az „a” tónusú oszlopfej alsó
+    // szegélye a sáv JELZŐ-tokenje (`--ws-mark-a`, alapértéke a főszín; a future sávban világosabb, hogy a sötét fejlécen ≥ 3:1 legyen).
     const tone = await page.locator('figure[data-anim="table"] thead th[data-tone="a"]').first().evaluate((el) => {
-      const probe = document.createElement("span");
-      probe.style.color = "var(--ws-accent)";
-      el.appendChild(probe);
-      const accent = getComputedStyle(probe).color;
-      probe.remove();
-      return { border: getComputedStyle(el).borderBottomColor, accent };
+      const resolve = (value: string) => { const probe = document.createElement("span"); probe.style.color = value; el.appendChild(probe); const c = getComputedStyle(probe).color; probe.remove(); return c; };
+      // A fejléc háttere (color-mix) és a szegély relatív fénysűrűsége → kontraszt (WCAG 2.x képlet).
+      const rgb = (c: string) => { const n = c.match(/[\d.]+/g)!.map(Number); return c.startsWith("color(srgb") ? n.slice(0, 3).map((v) => v * 255) : n.slice(0, 3); };
+      const lum = (c: string) => { const [r, g, b] = rgb(c).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+      const border = getComputedStyle(el).borderBottomColor;
+      const bg = getComputedStyle(el).backgroundColor;
+      const [hi, lo] = [lum(border), lum(bg)].sort((a, b) => b - a);
+      return { border, mark: resolve("var(--ws-mark-a, var(--ws-accent))"), contrast: (hi + 0.05) / (lo + 0.05) };
     });
-    expect(tone.border).toBe(tone.accent);
+    expect(tone.border).toBe(tone.mark);
+    expect(tone.contrast, `${band.id}: a jel kontrasztja a fejléc hátterén`).toBeGreaterThanOrEqual(3);
     // Vak ellenőr J3: 360 px-en, a sáv betűméretével sem törik ketté a fejléc szava (a régi képeken „megszámlál / ható”).
     const head = await headerWords(page);
     expect(head.broken, `${band.id}: a fejléc szavai épek (jelző: ${head.fit}, betű: ${head.headFont}px)`).toEqual([]);
@@ -319,3 +325,46 @@ for (const viewport of [{ name: "allo-360", width: 360, height: 640 }, { name: "
     expect(errors).toEqual([]);
   });
 }
+
+// Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S2b-2, 17. szakasz; V33, V36): jelző a tábla fölött, cím kívül; rövid tábla nem
+// görög 360 px-en; nyomtatásban a görgő keret nem vág.
+test("vak J2 / J7 / J11 — 360 px", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.goto("/__lesson-runtime-probe?source-visuals=max&classroom=6");
+  const wide = page.locator('figure[data-anim="table"]').first();
+  await wide.waitFor({ state: "visible", timeout: 30_000 });
+  await page.evaluate(() => document.fonts.ready);
+  await wide.scrollIntoViewIfNeeded();
+  const hint = wide.getByTestId("sv-scroll-hint");
+  await expect(hint).toBeVisible();
+  const [hintBox, scrollBox, titleBox] = await Promise.all([hint.boundingBox(), wide.locator(".sv-table-scroll").boundingBox(), wide.locator(".sv-table-title").boundingBox()]);
+  expect(hintBox!.y).toBeLessThan(scrollBox!.y);
+  expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(360);
+  expect(await wide.locator(".sv-table-title").evaluate((n) => n.scrollWidth <= n.clientWidth + 1)).toBe(true);
+  await page.screenshot({ path: `${SHOTS}/vak-j2-360.png` });
+  await page.goto("/__lesson-runtime-probe?source-visuals=tree&classroom=6");
+  const compact = page.locator('figure[data-anim="table"]').first();
+  await compact.waitFor({ state: "visible", timeout: 30_000 });
+  expect(await compact.locator(".sv-table-scroll").evaluate((n) => n.scrollWidth <= n.clientWidth + 1)).toBe(true);
+  await page.emulateMedia({ media: "print" });
+  await page.goto("/__lesson-runtime-probe?source-visuals=max&classroom=6");
+  await page.locator('figure[data-anim="table"]').first().waitFor({ state: "visible", timeout: 30_000 });
+  expect(await page.locator(".sv-table-scroll").first().evaluate((n) => getComputedStyle(n).overflowX)).toBe("visible");
+});
+
+// S2b-2 review #535 (Copilot; V37): UGYANAZON táblapéldány fejléceinek cseréje változatlan tárolóméret mellett újraméri a fejléc-illesztést.
+test("V37: a fejlécek cseréje (rövid → hosszú → rövid) újraméri a fejléc-illesztést, a tároló mérete közben nem változik", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.goto("/__lesson-runtime-probe?source-visuals=headswap");
+  const table = page.locator("table.sv-table");
+  const width = async () => Math.round((await page.locator(".sv-table-scroll").boundingBox())!.width);
+  await expect(table.locator("thead th").first()).toHaveText("A");
+  expect(await table.getAttribute("data-head-fit")).toBeNull();
+  const before = await width();
+  await page.getByTestId("swap-headers").click();
+  await expect(table).toHaveAttribute("data-head-fit", /^(fit|break)$/);
+  expect(await width()).toBe(before);
+  await page.getByTestId("swap-headers").click();
+  await expect(table.locator("thead th").first()).toHaveText("A");
+  await expect.poll(() => table.getAttribute("data-head-fit")).toBeNull();
+});
