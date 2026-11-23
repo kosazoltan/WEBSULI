@@ -9,3 +9,9 @@ cards:
     observed: "Felhős vak kör minden javító pushra: 342 kör / 45 PR"
     fix: "local-review.mjs helyi GPU-ellenőr, angol prompt"
     rule: "Kód-review helyben; felhős vélemény csak kockázatos fájlnál, egyszer"
+  - id: 2
+    status: rule
+    date: "2026-11-23"
+    observed: "vector-index elavult a záró commit után"
+    fix: "vector újraépítés az utolsó commit után"
+    rule: "vector mindig utolsó lépés, háttérben"
