@@ -125,6 +125,8 @@ export type SingleRunDeps = {
   gateModes?: Partial<Record<GateName, GateMode>>;
   /** A forrás-fedettségi kapu függvénye — csak a teszt cseréli (a kapu hibaága így mérhető); alapból a `sourceCoverageGate`. */
   coverageGate?: typeof sourceCoverageGate;
+  /** A forrás vizuális leltárának érvényesítője — csak a teszt cseréli (a hibaág így mérhető, P-066); alapból a `sanitizeSourceVisuals`. */
+  visualsValidator?: typeof sanitizeSourceVisuals;
   /**
    * A forrás vizuális leltárának funkciókapcsolója a futásra (teszt, mérőharness). Hiányában a környezet dönt
    * (`sourceVisualsEnabled()`, alapból KI) — KI állapotban a gyártás a kapcsoló előtti állapottal azonos.
@@ -174,7 +176,7 @@ export function checkEffort(env: NodeJS.ProcessEnv = process.env): SingleRunEffo
 }
 
 /** Az állomás-futtató függősége: a beszélgetés, a napló és (ha van) a telemetria gyűjtője. */
-export type StationDeps = Pick<SingleRunDeps, "conversation" | "log" | "sourceVisuals"> & { telemetry?: TelemetryRecorder;
+export type StationDeps = Pick<SingleRunDeps, "conversation" | "log" | "sourceVisuals" | "visualsValidator"> & { telemetry?: TelemetryRecorder;
   /** Spec 2026-10-16-gyartas-haladas: a javító forduló a felületnek is jelzés (az állomás neve, a forduló sorszáma 1-től). */
   onFix?(name: string, round: number): void };
 
@@ -359,12 +361,28 @@ export function sourcePageContext(files: ReadonlyArray<Pick<ExtractorFile, "name
  * Review J3: a fizetett állomás után az érvényesítő váratlan hibája sem állíthatja meg a futást — a leltár üresre esik vissza, a nyers
  * tételek „az érvényesítő hibája” okkal kihagyottnak számítanak. `sanitize`: a tesztben cserélhető (a hibaág így mérhető).
  */
-export function judgeSourceVisuals(rawVisuals: unknown, ctx: Parameters<typeof sanitizeSourceVisuals>[1], log?: (message: string) => void, sanitize: typeof sanitizeSourceVisuals = sanitizeSourceVisuals): SourceVisualsResult {
+export function judgeSourceVisuals(rawVisuals: unknown, ctx: Parameters<typeof sanitizeSourceVisuals>[1], log?: (message: string) => void, sanitize: typeof sanitizeSourceVisuals = sanitizeSourceVisuals): SourceVisualsResult & { validatorError?: true } {
   try { return sanitize(rawVisuals, ctx); }
   catch (error) {
-    log?.(`[EGYFUTÁS] Vizuális leltár: az érvényesítő hibázott, a leltár üres — ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 200)}`);
-    return { visuals: [], dropped: (Array.isArray(rawVisuals) ? rawVisuals : []).map(() => ({ reason: "az érvényesítő hibája" })), removedConceptRefs: [], truncatedCells: [] };
+    // P-066 (tulajdonosi döntés 2026-11-23): a futás megy tovább, de a napló kimondja, hogy a vizuális ellenőrzés elmaradt; a
+    // `validatorError` jelzőből a futás eredményébe is figyelmeztetés kerül (`visualCheckSkippedNotes`).
+    log?.(`[EGYFUTÁS] Vizuális leltár: az érvényesítő hibázott, a vizuális ellenőrzés elmaradt, a leltár üres — ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 200)}`);
+    return { visuals: [], dropped: (Array.isArray(rawVisuals) ? rawVisuals : []).map(() => ({ reason: "az érvényesítő hibája" })), removedConceptRefs: [], truncatedCells: [], validatorError: true };
   }
+}
+
+/** P-066 (tulajdonosi döntés 2026-11-23): a futás eredményének figyelmeztetése, ha a vizuális ellenőrzés technikai hiba miatt elmaradt. */
+export const VISUAL_CHECK_SKIPPED_WARNING = "A vizuális (forrás-fedettségi) ellenőrzés technikai hiba miatt elmaradt — a lecke ennélkül készült.";
+
+/**
+ * P-066: a mentett telemetriából (a fedettségi kapu hibaszámlálója, az érvényesítő hibajelzője) dönt — ezért a folytatott futásban is
+ * él. A `warnings`-ba és a felületen látható `qualityNotes`-ba legfeljebb egyszer kerül a jelzés.
+ */
+export function visualCheckSkippedNotes(gates: { gateErrors?: number; visualsValidatorError?: number }, warnings: string[], qualityNotes: unknown): Array<Record<string, unknown>> | null {
+  const notes = Array.isArray(qualityNotes) ? qualityNotes as Array<Record<string, unknown>> : [];
+  if (!(gates.gateErrors ?? 0) && !gates.visualsValidatorError) return null;
+  if (!warnings.includes(VISUAL_CHECK_SKIPPED_WARNING)) warnings.push(VISUAL_CHECK_SKIPPED_WARNING);
+  return notes.some((n) => n?.reason === "visual_check_skipped") ? null : [...notes, { reason: "visual_check_skipped", note: VISUAL_CHECK_SKIPPED_WARNING, round: 0 }];
 }
 
 /** 1. állomás — a forrás beolvasása, megértése, tudásbank (fogalmak szó szerinti idézettel; az idézetet a program az átiraton méri). */
@@ -442,7 +460,8 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
     // Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a vizuális leltár megítélése az ELFOGADOTT fogalmak után. A hibás tétel kimarad
     // és megszámolódik — a `problems` listába nem kerül, ezért javító fordulót nem indít (az a teljes JSON-t az átirattal kérné újra).
     // Az oldal-környezet és az érvényesítő hibaága: `sourcePageContext`, `judgeSourceVisuals` (review J1, J3).
-    const { visuals, dropped, removedConceptRefs, truncatedCells } = judgeSourceVisuals(raw.visuals, { fileNames: names, conceptIds: ids, ...sourcePageContext(files, real) }, deps.log);
+    const { visuals, dropped, removedConceptRefs, truncatedCells, validatorError } = judgeSourceVisuals(raw.visuals, { fileNames: names, conceptIds: ids, ...sourcePageContext(files, real) }, deps.log, deps.visualsValidator);
+    if (validatorError && deps.telemetry) deps.telemetry.gates.visualsValidatorError = 1;
     const visualsMissing = Array.isArray(raw.visuals) ? 0 : 1;
     const visualsConceptRefsRemoved = removedConceptRefs.reduce((sum, r) => sum + r.conceptIds.length, 0);
     const visualsCellsTruncated = truncatedCells.reduce((sum, t) => sum + t.cells, 0);
@@ -586,7 +605,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   if (input.resume && !input.mapId) throw new SingleRunError("folytatás", ["A folytatáshoz a job térképe szükséges."]);
   // A leltár funkciókapcsolója EGYSZER, a futás elején dől el (befecskendezett érték, különben a környezet; alapból KI).
   const visualsOn = deps.sourceVisuals ?? sourceVisualsEnabled();
-  const station: StationDeps = { conversation, log: deps.log, telemetry, onFix, sourceVisuals: visualsOn };
+  const station: StationDeps = { conversation, log: deps.log, telemetry, onFix, sourceVisuals: visualsOn, ...(deps.visualsValidator ? { visualsValidator: deps.visualsValidator } : {}) };
 
   // 1. Forrás + tudásbank (review #262: meglévő térképnél a gondozott térkép, stabil fogalomazonosítókkal).
   await workflowPhase("source"); await workflowPhase("scope");
@@ -1088,7 +1107,6 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // „error” állapota), `gateStop` a kimenetben, közzététel nincs. Harmadik próba nincs. A kapu hibája egyik módban sem állít meg.
   const firstVerdict = coverageMode === "off" ? null : judgeCoverage(publishable);
   if (firstVerdict) {
-    const judge = (l: Lesson) => judgeCoverage(l) ?? { ...firstVerdict, ok: true, problems: [], missingIds: [] };
     let verdict = firstVerdict;
     // A pótló forduló futásonként EGY: a kapunál már megállt job folytatása (mentett `gateStop`) nem kap újabbat — ha a kapu a
     // folytatáskor is bukik, a futás azonnal megáll.
@@ -1121,10 +1139,13 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
         if (error instanceof WorkflowConflict || error instanceof WorkflowWaiting) throw error;
         log(`[EGYFUTÁS] A forráspótló forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
       }
-      verdict = judge(publishable);
-      if (!verdict.ok) {
-        output = { ...output, gateStop: { gate: "sourceCoverage", missingIds: verdict.missingIds } };
-        throw new SingleRunError("forrás-fedettség", verdict.problems);
+      // P-066: a pótló forduló utáni mérés kivétele NEM átmenés — a mérés elmaradt (a hibaszámláló nőtt, az eredmény jelzi); a futás
+      // a tulajdonosi döntés szerint megy tovább. Ismert bukás (ítélet `ok: false`) enforce módban továbbra is megállít.
+      const recheck = judgeCoverage(publishable);
+      if (!recheck) log("[EGYFUTÁS] Forrás-fedettségi kapu: a pótló forduló utáni mérés elmaradt (a kapu hibája) — NEM átment, a vizuális ellenőrzés kimaradt, a futás megy tovább.");
+      else if (!recheck.ok) {
+        output = { ...output, gateStop: { gate: "sourceCoverage", missingIds: recheck.missingIds } };
+        throw new SingleRunError("forrás-fedettség", recheck.problems);
       }
       output = { ...output, lesson: publishable };
     }
@@ -1135,6 +1156,9 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   const savedRemoved = (output as { lektorRemoved?: unknown }).lektorRemoved;
   if (Array.isArray(savedRemoved) && savedRemoved.length && !warnings.some((w) => w.startsWith("Az utolsó lektorkör hibás tételeit kivettük")))
     warnings.push(`Az utolsó lektorkör hibás tételeit kivettük: ${savedRemoved.join(", ")}`);
+  // P-066 (tulajdonosi döntés 2026-11-23): a technikai hiba miatt elmaradt vizuális ellenőrzés a futás eredményében (egyszer).
+  const skippedNotes = visualCheckSkippedNotes(telemetry.gates, warnings, output.qualityNotes);
+  if (skippedNotes) output = { ...output, qualityNotes: skippedNotes };
   // Spec 2026-10-20-s4 (S4a): a közzétett bank szigorított feladatai (beállítás, nem halmozás — a folytatott futás sem számol kétszer).
   telemetry.gates.rubricTightened = publishable.experience?.tasks.filter((t) => t.tightened?.length || t.tightenedPhrases?.length || t.tightenedOrder).length ?? 0;
   // Review #353: az archívum a végleges feladatokra szűkül (végleges azonosítóval).
