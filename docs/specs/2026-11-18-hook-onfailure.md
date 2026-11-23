@@ -163,3 +163,15 @@ előbb bukó teszttel.
 - [x] F15 WHEN a szöveg-őr ékezetes szóval kezdődő / végződő felszólítást vizsgál THEN SHALL felismerni (önteszt mintamondatokkal),
   és szó belsejében SHALL nem illeszkedni.
 - [x] F16 WHEN a lint-kapu diff-szkennelése a hookot hívja THEN a hook-folyamat környezetében SHALL `WEBSULI_DIFF_SCAN=1` lenni (teszt).
+
+## Kiegészítés 4 — tulajdonosi döntés P-057 (2026-11-23)
+
+Döntés: (1) a projekt-helyi `.claude/settings.json` verziókezelt marad; (2) a hookok szűk matcherrel futnak (egy-egy eszköznév:
+`Bash`, `PowerShell`, `Edit|Write` — üres vagy helyettesítő karakteres matcher nincs); (3) egy hook hibája csak a saját lépését
+tiltja: fail-closed csak a saját lépésén. A `onFailure: "block"` a hookot kiváltó eszközhívást tiltja, és kizárólag a kapu-hookon
+áll (F1); a kapu- és az audit-hook belső hibája csak kapu-köteles / push-parancsot tilt, más parancsot enged (F2–F4, hibás
+bemenet-teszt). A fő ág (`ccc5e99f`) ennek megfelel; a döntést a `scripts/qa/hooks/hook-scope.test.mjs` őr-teszt rögzíti
+(terv: `docs/specs/2026-11-23-h0-dontesek-atvezetese.md`). A `.claude/settings.json` e döntés miatt nem változik.
+
+- [x] F17 WHEN a `.claude/settings.json` nincs verziókezelve vagy ignorált, egy eszköz-esemény hook-csoportjának matchere üres /
+  helyettesítő karakteres / ismeretlen eszköz, vagy `onFailure` nem a kapu-hookon áll THEN a `hook-scope.test.mjs` SHALL bukni.
