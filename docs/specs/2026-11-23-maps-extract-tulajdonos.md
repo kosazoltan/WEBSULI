@@ -33,3 +33,6 @@ visszaadhatja”).
 - [x] E2 WHEN a hívó saját, korábban (régi vagy új lenyomattal) mentett térképe létezik THEN SHALL azt adni vissza `cached: true`-val,
   modellhívás nélkül.
 - [x] E3 THE `singleRunMapHash` értéke SHALL változatlan maradni.
+- [x] E4 (PR #550 review, Sourcery) WHEN ugyanannak a gazdának két átfedő kinyerése ugyanarra a tartalomra fut THEN a második SHALL NOT
+  502-vel bukni az egyedi `input_hash` miatt: az egyedi-kulcs ütközésekor a már mentett saját térkép jön vissza (`cached: true`), és egy
+  folyamaton belül az egyidejű második kérés a futó munkához csatlakozik (egy modellmunka). Teszt: `lesson-draft-db.integration.ts` „PR #550”.

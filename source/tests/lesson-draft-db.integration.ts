@@ -291,6 +291,57 @@ test("#264: ugyanarra a tartalomra mindkét tanár a saját (gazda-kötött leny
   }
 });
 
+// PR #550 review (Sourcery): ugyanannak a gazdának két átfedő kinyerése ugyanarra a tartalomra — a második nem bukhat 502-vel az egyedi
+// `input_hash` miatt, miután a modellmunkát már kifizette.
+const raceFiles = (name: string, content: string) => [{ name, kind: "text" as const, content }];
+const raceMap = (name: string, content: string) => ({ title: "Verseny", subject: "természettudomány", classroom: 6, transcript: content, fileTranscripts: { [name]: content },
+  concepts: [{ id: "c1", term: "kör", definition: "Zárt görbe.", quote: "kör", type: "concept", examWeight: "core" as const, relatedIds: [], verbatimOk: true, sourceFile: name }], corrections: [], visuals: [] });
+
+test("PR #550: ha a mentés előtt egy párhuzamos kérés már elmentette a saját térképet (egyedi lenyomat), a kinyerés azt adja vissza, nem hibát", async () => {
+  const { saveSingleRunMap, singleRunMapHash, ownerMapHash, extractMapSingleRun } = await import("../server/studio/single-run/live");
+  const files = raceFiles("verseny.txt", "A kör egy zárt görbe.");
+  const hash = ownerMapHash(singleRunMapHash(files, "Verseny"), "draft-owner");
+  let rival: string | undefined;
+  try {
+    // A determinisztikus verseny: a gyorsítótár-keresés még üres; a modellmunka alatt a másik kérés menti el ugyanazt a lenyomatot.
+    const result = await extractMapSingleRun({ files, title: "Verseny", ownerId: "draft-owner" }, {
+      readSource: async () => {
+        rival = await saveSingleRunMap(raceMap("verseny.txt", files[0].content), files, "draft-owner", "claude-opus-5-5", { draft: true, inputHash: hash });
+        return { read: raceMap("verseny.txt", files[0].content), model: "claude-opus-5-5" };
+      },
+    });
+    assert.deepEqual(result, { mapId: rival, cached: true });
+    assert.equal((await dbPool.query("SELECT count(*)::int AS n FROM knowledge_maps WHERE input_hash=$1", [hash])).rows[0].n, 1);
+  } finally {
+    await dbPool.query("DELETE FROM km_concepts WHERE map_id IN (SELECT id FROM knowledge_maps WHERE input_hash=$1)", [hash]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE input_hash=$1", [hash]);
+  }
+});
+
+test("PR #550: ugyanannak a gazdának két egyidejű kinyerése ugyanarra a tartalomra egyetlen modellmunkát indít, mindkettő ugyanazt a térképet kapja", async () => {
+  const { singleRunMapHash, ownerMapHash, extractMapSingleRun } = await import("../server/studio/single-run/live");
+  const files = raceFiles("egyideju.txt", "A négyzet négy egyenlő oldalú téglalap.");
+  const hash = ownerMapHash(singleRunMapHash(files, "Verseny"), "draft-owner");
+  let reads = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const readSource = async () => { reads++; await gate; return { read: raceMap("egyideju.txt", files[0].content), model: "claude-opus-5-5" }; };
+  try {
+    const first = extractMapSingleRun({ files, title: "Verseny", ownerId: "draft-owner" }, { readSource });
+    const second = extractMapSingleRun({ files, title: "Verseny", ownerId: "draft-owner" }, { readSource });
+    // Mindkét kérés a modellmunka alatt átfed (egyik sem talál még mentett térképet).
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    assert.equal(reads, 1, "a második kérés nem fizet újra a modellmunkáért");
+    assert.equal(a.mapId, b.mapId);
+    assert.deepEqual([a.cached, b.cached].sort(), [false, true]);
+  } finally {
+    await dbPool.query("DELETE FROM km_concepts WHERE map_id IN (SELECT id FROM knowledge_maps WHERE input_hash=$1)", [hash]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE input_hash=$1", [hash]);
+  }
+});
+
 // J5 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a megállt egyfutásos job a mentett részeiből folytatható, ugyanazon a jobon.
 test("J5: a megállt egyfutásos piszkozat folytatható; a foglalás saját / nem vitt jobra hat; ha a motor el sem indul, a job nem ragad „fut” állapotban", async () => {
   const { resumeSingleRun } = await import("../server/studio/lesson-pipeline-routes");
