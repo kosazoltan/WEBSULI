@@ -44,8 +44,8 @@ Tulajdonosi döntések (2026-11-23), forrás: `docs/websuli-potlasok.md` (ág `d
 
 ## Elfogadás (EARS)
 
-- [ ] H1 WHEN a terv TTS-méretőr pontjait olvassuk THEN „megerősítésre vár” jelölés SHALL nem maradni, és a D8 SHALL rögzíteni a P-064-et.
-- [ ] H2 WHEN az SK3-at és az E41 / E42-t olvassuk THEN SHALL kimondani: költség- és hibakorlátnál jelzés, vészleállítás csak a
+- [x] H1 WHEN a terv TTS-méretőr pontjait olvassuk THEN „megerősítésre vár” jelölés SHALL nem maradni, és a D8 SHALL rögzíteni a P-064-et.
+- [x] H2 WHEN az SK3-at és az E41 / E42-t olvassuk THEN SHALL kimondani: költség- és hibakorlátnál jelzés, vészleállítás csak a
   próbafutás 30 USD-os kemény keretén; új éles futásidő- és összesített javítókör-megállító nem épül (P-065).
-- [ ] H3 WHEN a `.claude/settings.json` nincs verziókezelve, ignorált, egy hook-csoport matchere üres / helyettesítő karakteres /
+- [x] H3 WHEN a `.claude/settings.json` nincs verziókezelve, ignorált, egy hook-csoport matchere üres / helyettesítő karakteres /
   ismeretlen eszköz, vagy `onFailure` nem a kapu-hookon áll THEN a `hook-scope.test.mjs` SHALL bukni (mutációs esetekkel igazolva).
