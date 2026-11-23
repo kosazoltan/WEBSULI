@@ -83,6 +83,11 @@ let quotaExhaustedUntil = 0;
 export function resetQuotaFailoverForTest() { quotaExhaustedUntil = 0; }
 
 /** Ugyanaz a kérés ugyanazzal a modellel a tartalék útvonalon, ha az elsődleges fiók kerete elfogyott. */
+/** A tartalék stream `done` előtt hiba-darabot adott (a könyvelésben csak az osztálynév jelenik meg). */
+class FallbackStreamErrorChunk extends Error {}
+/** A tartalék stream `done` előtt lezárult (a fogyasztó kilépett vagy dobott). */
+class FallbackStreamClosedEarly extends Error {}
+
 export class QuotaFailoverProvider implements IAIProvider {
   readonly name: string;
   readonly model: string;
@@ -132,14 +137,25 @@ export class QuotaFailoverProvider implements IAIProvider {
     if (this.now() < quotaExhaustedUntil) {
       const route = this.route();
       // Kanban #10: a streamelt tartalékhívás is rögzül; a stream-darabok nem hordoznak használatot, ezért tokenek nélkül.
+      // Review #546: az OpenRouter-stream megszakításkor `{ type: "error" }` darabot ad (nem dob), a fogyasztó pedig ilyenkor
+      // dobhat vagy kiléphet (→ `return()`), ezért az állapotot itt követjük, és a könyvelés PONTOSAN EGYSZER, a `finally`-ban fut:
+      // `done` előtti hiba-darab, dobás vagy korai lezárás → `ok: false`.
       const at = this.now();
+      let error: unknown;
+      let done = false;
       try {
-        yield* route.streamChat(messages, signal);
-      } catch (error) {
-        await recordQuotaFailover({ fromModel: this.model, toModel: route.model, trigger: "memory", path: "provider", now: at, error });
-        throw error;
+        for await (const chunk of route.streamChat(messages, signal)) {
+          if (chunk.type === "error" && !done && error === undefined) error = new FallbackStreamErrorChunk();
+          if (chunk.type === "done" && error === undefined) done = true;
+          yield chunk;
+        }
+      } catch (thrown) {
+        if (error === undefined) error = thrown;
+        throw thrown;
+      } finally {
+        if (error === undefined && !done) error = new FallbackStreamClosedEarly();
+        await recordQuotaFailover({ fromModel: this.model, toModel: route.model, trigger: "memory", path: "provider", now: at, ...(error === undefined ? {} : { error }) });
       }
-      await recordQuotaFailover({ fromModel: this.model, toModel: route.model, trigger: "memory", path: "provider", now: at });
       return;
     }
     yield* this.primary.streamChat(messages, signal);
