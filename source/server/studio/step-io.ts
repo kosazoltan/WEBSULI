@@ -15,7 +15,7 @@ import { NOTE_KINDS, type RawNote } from "./lektor";
 import { LESSON_METHOD_CONTRACT } from "../../shared/lesson-experience";
 import { lessonOpenerContract, lessonOpenerLektorChecklist, playfulAuthorRules } from "../../shared/lesson-opener";
 import { lessonOpenerEnabled } from "./lesson-opener-flag";
-import { effectiveLessonVariety } from "./lesson-variety-flag";
+import { effectiveLessonVariety, runOpeningForm } from "./lesson-variety-flag";
 import { VISUAL_WORLD_IDS, type VisualWorld } from "../../shared/lesson-visuals";
 import { evaluateOpenAnswer, missingAnswerConcepts } from "../../shared/lesson-experience-score";
 import { ownerInstructionPromptBlock, type OwnerInventory } from "../../shared/owner-instruction";
@@ -702,7 +702,8 @@ export function buildLektorPrompt(lesson: Lesson, map: PromptMap, previousBlocke
     TRANSCRIPTION_RULE_TEXT,
     // U5 (H8): a minőségi szerződést a runbook adja a lektornak — itt nem ismétlődik (3× volt).
     SOURCE_REVIEW_RULES,
-    ...(lessonOpenerEnabled() ? [lessonOpenerLektorChecklist(effectiveLessonVariety())] : []),
+    // Review #534 (Copilot): a lektor a szerzőnek ténylegesen kiosztott formát kapja (a futás hatóköréből); forma nélkül nem állít kiosztást.
+    ...(lessonOpenerEnabled() ? [lessonOpenerLektorChecklist(effectiveLessonVariety(), runOpeningForm())] : []),
     ...ownerLines(owner),
     "Minden eltéréshez adj konkrét blockPath értéket és ellenőrizhető indokot. A forrásszámok cseréje vagy hibás levezetés source_conflict/contradicts_source; valóban hiányzó tanítás coverage_gap. A látható feladatot és minden válaszhoz tartozó magyarázatot is ellenőrizd.",
     "Az algebrai egyezés mellett az adatok együttes megvalósíthatóságát is vizsgáld. Például a háromszög egyik oldalához tartozó magasság nem lehet nagyobb bármelyik másik oldalnál, és két oldalból T ≤ a·b/2. Ha a lehetetlen adatok már a kurált forrásban is így szerepelnek, konkrét számolással source_conflict/book_probably_wrong adminjegyzetet adj; a forrást és a tanuló leckéjét nem írhatod át. Ha a szerző találta ki az ellentmondást, az contradicts_source hiba.",

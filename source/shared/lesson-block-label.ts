@@ -88,9 +88,14 @@ export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: 
     case "explain": {
       if (sectionIdx === 0 && index === 0 && isGoalCardText(block.text)) return "A lecke célja";
       const prev = blocks[index - 1];
+      // S5b vak kör 1 (L1): jelölt leckén (ismert kiosztott forma) a nyitóblokk a Célkártya utáni ELSŐ explain blokk — az ábrák állomása
+      // a Célkártya után ábrát illeszthet be, a nyitás ettől még nyitás. Jelöletlen leckén a régi, pozíciós szabály marad.
+      // Review #534 (Copilot): a tárolt jelölő további mezői típusellenőrzés nélkül jönnek — nem szöveg formánál a régi címke marad.
+      if (sectionIdx === 0 && index > 0 && typeof openingForm === "string" && Object.prototype.hasOwnProperty.call(OPENING_FORM_LABEL, openingForm)) {
+        const goal = blocks[0];
+        if (goal?.kind === "explain" && isGoalCardText(goal.text) && blocks.findIndex((b, i) => i > 0 && b.kind === "explain") === index) return OPENING_FORM_LABEL[openingForm];
+      }
       if (sectionIdx === 0 && index === 1 && prev?.kind === "explain" && isGoalCardText(prev.text)) {
-        // S5b: a kiosztott forma címkéje (kódszótár); ismeretlen vagy hiányzó formánál a régi szabály.
-        if (openingForm && Object.prototype.hasOwnProperty.call(OPENING_FORM_LABEL, openingForm)) return OPENING_FORM_LABEL[openingForm];
         // Review #405: „Mese” csak 1–4. évfolyamon; a programozás (0) a kid sávba esik, de 7–8. korcsoport → „Történet”.
         const young = classroom === undefined ? band === "kid" : classroom >= 1 && classroom <= 4;
         return young ? "Mese" : "Történet";
