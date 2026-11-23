@@ -92,3 +92,13 @@ export function normalizeVisualText(value: string): string {
   // A csak írásjelből álló szöveg (pl. „?”) nem üresedhet ki: akkor a kisbetűs, szóköz-összevont eredeti a mérce.
   return folded || value.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
 }
+
+/**
+ * S2b-1 vak kör 1 (L1): a döntési fa elrendezése. Vízszintes elágazás („wide”) csak kis fánál — a gyökér alatt kizárólag levelek, és
+ * legfeljebb 4 ág —, mert a beágyazott, egyenlő szélességű oszlopok fekvő telefonon olvashatatlanul szűkre törnek. Minden más fa
+ * behúzott, egymásba ágyazott lista („list”) minden képernyőszélességen.
+ */
+export function decisionTreeLayout(root: DecisionTreeVisualNode): "wide" | "list" {
+  const branches = root.branches ?? [];
+  return branches.length >= 2 && branches.length <= 4 && branches.every((b) => !b.node.branches?.length) ? "wide" : "list";
+}

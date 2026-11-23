@@ -4,23 +4,7 @@
  * hívó az eredeti indexet rögzíti és küldi, így a mentett válasz, a szerveroldali pontozás és a `feedbackPerOption` változatlan.
  */
 
-/** FNV-1a 32 bit — gyors, stabil seed-hash (nincs kriptográfiai igény). */
-function hash32(text: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
-  return h >>> 0;
-}
-
-/** mulberry32 — determinisztikus [0, 1) sorozat a seedből. */
-function mulberry32(seed: number): () => number {
-  let a = seed;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+import { mulberry32, seedFrom as hash32 } from "./seeded";
 
 /** Az eredeti indexek megjelenítési sorrendje (Fisher–Yates a seedből); ugyanaz a seed mindig ugyanaz a permutáció. */
 export function optionOrder(seed: string, count: number): number[] {
