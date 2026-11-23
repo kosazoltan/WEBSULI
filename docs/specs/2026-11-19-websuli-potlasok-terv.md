@@ -268,8 +268,9 @@ munkákra vonatkozott.
 címzettekhez egyszer. EARS (az adventi terv 18.1-e szerint, `docs/specs/2026-11-18-adventi-naptar.md`): WHEN egy `learner` alany eredménye VÉGLEGES — (1)
 megfelelt, (2) az utolsó megengedett körben mind a 24 ablak megválaszolt és nincs javítható ablak, vagy (3) az évad lezárult és
 legalább egy ablakra válaszolt — THEN évadonként és címzettenként pontosan egy levél megy idempotencia-kulccsal (`final:<cím-lenyomat>`);
-WHILE van javítható ablak vagy kérhető új kör THEN levél NEM megy (negatív teszt: 22 megoldott + 2 javítható → nincs levél; a
-`finished_at` beállása önmagában NEM feltétel); WHEN a küldés bukik THEN a foglalás felszabadul és pótolható; `preview` / `device` alanynál soha. Ellenőrzés:
+WHILE a három véglegesítő feltétel EGYIKE SEM teljesül THEN levél NEM megy (a `finished_at` beállása önmagában NEM feltétel). Teszt:
+23 megoldott + 1 javítható (megfelelt) → egy levél; 22 + 2 javítható évadzárás előtt → nincs levél, évadzáráskor → egy levél;
+a levél után újabb válasz → nincs második; WHEN a küldés bukik THEN a foglalás felszabadul és pótolható; `preview` / `device` alanynál soha. Ellenőrzés:
 `test:learning-db`, `no-real-emails-guard.test.ts`. Kockázat: valódi küldés tesztben — csak hamis küldővel (`NODE_ENV === "test"`).
 
 **A-3 — Képgyártó utómunka.** Cél: a 7 USD-os keret valóban kemény legyen, és Ctrl+C után ne kelljen kézzel zárfájlt törölni.

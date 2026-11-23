@@ -11,7 +11,8 @@ for path in sys.argv[1:]:
     nl = '\r\n' if '\r\n' in s else '\n'
     L = s.split(nl)
     if any(l.startswith('||||||| ') or l == '|||||||' for l in L):
-        print(path, 'diff3 alakú ütközés — nem írom; állítsd vissza merge alakra: git checkout --conflict=merge -- <fájl>')
+        print(path, 'diff3 alakú ütközés — nem írom. Kézzel oldd fel (a `|||||||` és a `=======` közötti alapblokk törlésével). '
+              'A `git checkout --conflict=merge` csak ÉRINTETLEN konfliktusfájlon használható: a már kézzel feloldott részeket is felülírja.')
         rc = 1
         continue
     out, i, n, bad = [], 0, 0, False
