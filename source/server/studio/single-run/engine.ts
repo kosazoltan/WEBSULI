@@ -11,6 +11,7 @@
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { seedFrom } from "../../../shared/seeded";
 import { applySectionShapes, tryShare, tryShareLow, withTryShareNote } from "../../../shared/lesson-section-shapes";
+import { visualKindCounts, withKindShareNotes } from "../../../shared/visual-kind-plan";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
 import { checkLessonArc } from "../../../shared/lesson-arc";
@@ -1154,7 +1155,9 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // folytatott futás után is; a többi minőségi jelzés változatlan.
   if (varietyOn) {
     telemetry.gates.tryShare = tryShare(publishable);
-    const notes = withTryShareNote(Array.isArray(output.qualityNotes) ? output.qualityNotes as Array<{ reason?: unknown }> : [], publishable);
+    // S6c-1 (14. szakasz; vak L6): az ábrafajták eloszlása és a 40%-os jelzés is a VÉGLEGES leckén — jelzés, nem kapu.
+    telemetry.gates.visualKinds = visualKindCounts(publishable);
+    const notes = withKindShareNotes(withTryShareNote(Array.isArray(output.qualityNotes) ? output.qualityNotes as Array<{ reason?: unknown }> : [], publishable), publishable);
     const { qualityNotes: _notes, ...withoutNotes } = output;
     output = notes.length ? { ...withoutNotes, qualityNotes: notes } : withoutNotes;
   }
