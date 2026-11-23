@@ -261,6 +261,10 @@ Döntések:
    érvényes — a záró `recap` hozzáfűzése után a `donteshelyzet` sora az `alap` soráéval azonos. A kiosztás determinisztikus visszalépéses
    keresés: ha van a szabályoknak megfelelő kiosztás, megtalálja; a szabályok csak akkor engednek, ha nincs ilyen. A különleges záró
    fejezet változatlan, egy kivétellel: ha a modell terve nem `recap`-pal zárja a leckét, a program hozzáfűzi.
+7. Pontosítás (review #536): a kiosztott blokksorokat a szerzői kérés KIMONDJA („A fejezetek végleges blokksora”) — a beszélgetésben a
+   modell eredeti terve áll, a kiosztás e nélkül nem jutna el a szerzőhöz. Csak BE futásnál és a modell tervénél; a tulajdonos jóváhagyott
+   tervénél (folytatva is: a terv eredetét a job állapotának `sectionShapes` jelzője őrzi) és KI állapotban a szerzői kérés bájtra a régi.
+   A kimondott sor a fejezet TANÍTÁSI TÖRZSE: a nyitás szerződésének nyitóblokkjai az első fejezetben a sor előtt állnak.
 
 Elfogadás (EARS):
 
@@ -315,3 +319,40 @@ Elfogadás (EARS):
 - [ ] V18 tryShare jelzés
 - [ ] V19 hangok, KI bájtra a régi
 - [ ] V20 szimuláció a beszúrással
+
+## 17. S2b-2 — a megjelenítők vak-leletei (vak J2, J5, J6, J7, J11, tt J9)
+
+Alap: TGM-végrehajtás „S2b” vak-leletei (357–413. sor). Megjelenítési változás, adatírás nélkül; a forrás-ábrafajták élesben a
+`STUDIO_SOURCE_VISUALS` (KI) miatt nem keletkeznek, ezért a kiadott leckéken semleges.
+
+1. **J2 — görgetésjelző és táblacím:** a jelző a görgő tábla FÖLÖTT áll; a táblázat címe a görgő kereten kívül, látható címként
+   (`.sv-table-title`) jelenik meg, a `<caption>` képernyőolvasónak megmarad (`sr-only`).
+2. **J5 — kontraszt:** a „Példa” címke a sáv mért gomb-párját kapja (`--ws-strong` / `--ws-strong-ink`, ≥ 4,5:1 minden sávban és a
+   csendes nézetben); a tónusjel és a fejléc alsó vonala saját jelző-tokent (`--sv-mark`: `--ws-mark-a/b/c`, alapértéke a kísérőszín) —
+   a `future` sáv és a csendes nézet saját értéket kap, hogy a jel ≥ 3:1 legyen a fejléc hátterén. Őr: `tests/source-visual-contrast.test.ts`
+   a CSS tokenjeiből számol (a `color-mix` 14%-os keverését is).
+3. **J6 — fejezet-kisfilm:** a forrás-ábrafajták (`SOURCE_VISUAL_ANIM_KINDS`) és a hibás paraméterű blokk nem kínálható fel ráúszó
+   ábrának (`animateBlockIndexes`), és a lejátszó a régi kisfilm ilyen hivatkozását sem rajzolja ki (görgetés nélküli, levágott keretben
+   olvashatatlan lenne). Böngészős próba (review #535): `tests/lesson-clips.spec.ts` „leckeábra a kisfilmben” — három nézetben; a kódút (`clips/clip2-overlays.tsx` `lessonVisual` ága +
+   `lesson-clips2.css` `overflow: hidden`), a javítás védekező.
+4. **J7 — fölösleges görgetés:** rövid tartalmú (minden cella ≤ 12 karakter) táblánál nincs oszlopszám-alapú legkisebb szélesség
+   (`data-compact`), így egy „1 | 2 | 3” tábla 360 px-en sem görög.
+5. **J11 — nyomtatás:** `@media print` — a görgő keret nem vág, a tábla tördelhető, a jelző rejtett.
+6. **tt J9 — `useHeaderFit`:** a mérés a fejlécek szövegének változására is újrafut (a hatás függősége a fejléc-kulcs).
+
+Elfogadás (EARS):
+
+- **V33** — THE görgetésjelző SHALL a tábla fölött állni, és a táblacím SHALL a görgő kereten kívül, görgetés nélkül olvasható lenni.
+- **V34** — THE „Példa” címke SHALL ≥ 4,5:1, a tónusjel SHALL ≥ 3:1 kontrasztú lenni mind az öt sávban és a csendes nézetben.
+- **V35** — THE kisfilm SHALL NOT forrás-ábrafajtát (vagy hibás paraméterű forrás-ábrát) ráúszó ábrának kínálni vagy kirajzolni, és a kizárt
+  hivatkozás helyén SHALL NOT üres panel maradni. (1. vak kör L1: a RÉGI fajták hibás paraméterű blokkjának kiszűrése meglévő hiba, külön jegy.)
+- **V36** — WHEN a tábla minden cellája rövid és legfeljebb négy oszlopa van, THE tábla SHALL NOT görögni 360 px-en; nyomtatásban SHALL NOT
+  levágódni. (1. vak kör L4: a sokoszlopos rövid tábla 360 px-en továbbra is görög — a base-ben is így volt; keskeny nézet külön jegy.)
+- **V37** — WHEN a fejlécek szövege változik, THE fejléc-illesztés SHALL újramérni.
+
+<!-- acceptance-checklist -->
+- [ ] V33 jelző fölül, cím kívül
+- [ ] V34 kontraszt minden sávban és csendes nézetben
+- [ ] V35 kisfilm: nincs forrás-ábra / hibás blokk
+- [ ] V36 rövid tábla nem görög; nyomtatás
+- [ ] V37 fejléc-illesztés újramér
