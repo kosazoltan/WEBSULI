@@ -18,6 +18,8 @@ export type RunGates = {
   outputTruncated?: number;
   /** Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a térkép vizuális leltárának tételszáma. Régi telemetriában hiányzik. */
   visualsFound?: number;
+  /** S6b (2026-11-20-tgm-valtozatossag-abrak, 13. szakasz): a kész lecke try-t tartalmazó fejezeteinek aránya (BE kapcsolónál). */
+  tryShare?: number;
   /** Az 1. állomás leltárából a program által kihagyott hibás tételek (javító forduló nélkül). */
   visualsDropped?: number;
   /** S2a (review B1): a szerző kimenetéből kivett, hibás paraméterű (kirajzolhatatlan) forrás-ábra blokkok száma. */
@@ -32,6 +34,8 @@ export type RunGates = {
   visualsMissing?: number;
   /** Egy determinisztikus gyártási kapu kivételt dobott (a futás ment tovább) — független review F12. Régi telemetriában hiányzik. */
   gateErrors?: number;
+  /** 1, ha a forrás vizuális leltárának érvényesítője kivételt dobott — a vizuális ellenőrzés elmaradt, a futás ment tovább (P-066). */
+  visualsValidatorError?: number;
   /** A Tananyag lap a szókeret fölött maradt (a rövidítő forduló után is). */
   lengthOverBudget: boolean;
   /** A szókeret-túllépés rövidítő fordulója elfogadott, rövidebb leckét adott (J5). */
@@ -103,6 +107,7 @@ export function telemetryView(t: RunTelemetry): TelemetryView {
       ...(g.visualsMissing ? ["A forrás-állomás válaszából hiányzott a vizuális leltár"] : []),
       ...(sourceCoverage && sourceCoverage.metrics.total ? [`Forrás-fedettség (${sourceCoverage.mode === "enforce" ? "éles kapu" : "csak mérés"}): ${sourceCoverage.metrics.shown}/${sourceCoverage.metrics.total - sourceCoverage.metrics.skipped} vizuális tétel jelent meg${sourceCoverage.ok ? "" : " — a kapu szerint hiányos"}`] : []),
       ...(g.gateErrors ? [`Gyártási kapu hibája (a futás ment tovább): ${g.gateErrors}`] : []),
+      ...(g.visualsValidatorError ? ["A forrás vizuális leltárának érvényesítője hibázott — a vizuális ellenőrzés elmaradt"] : []),
       ...(g.lengthShortened ? ["A szókeret-túllépés rövidítő fordulóval javítva"] : []),
       ...(g.lengthOverBudget ? ["A Tananyag lap a szókeret fölött maradt"] : []),
     ],

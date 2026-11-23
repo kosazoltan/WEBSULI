@@ -10,6 +10,12 @@ export const GUEST_PAIRING_HINT_HTML = `<p style="color:#555"><em>Ha ezt egyik g
   + `eszközödön Admin → Tanulók → „Párosító QR-kód”, és a gyerek a telefonja kamerájával a te képernyődről olvassa be (vagy küldd el `
   + `neki üzenetben a párosító linket); utána az eredménye a nevével érkezik, és a profiljában is megjelenik.</em></p>`;
 
+/**
+ * Adventi naptár (tulajdonosi döntés 2026-11-18; docs/specs/2026-11-18-adventi-naptar.md 21.): a párosításkor a vendégként elért
+ * haladás a gyermek profiljához kerül — ezt a szülő a párosítási útmutatóban olvassa.
+ */
+export const ADVENT_GUEST_PROGRESS_NOTE = "Ha a gyermek a személyes linkjével nyitja meg a naptárat azon az eszközön, amelyen addig vendégként játszott, a vendégként elért haladás a gyermek profiljához kerül.";
+
 export function childPairingGuideEmail(input: { firstName: string; pairLink: string }): { subject: string; html: string } {
   const name = esc(input.firstName);
   const link = esc(input.pairLink);
@@ -30,7 +36,8 @@ export function childPairingGuideEmail(input: { firstName: string; pairLink: str
   };
 }
 
-export function parentPairingGuideEmail(input: { names: readonly string[] }): { subject: string; html: string } {
+/** `advent`: a naptár bekapcsolt-e (GPT-vak L5) — kikapcsolt naptárnál a levél nem ígér olyat, ami nem érhető el. */
+export function parentPairingGuideEmail(input: { names: readonly string[] }, opts: { advent?: boolean } = {}): { subject: string; html: string } {
   const list = input.names.length ? `<p><strong>Érintett tanulók:</strong> ${input.names.map(esc).join(", ")}</p>` : "";
   return {
     subject: "[WebSuli] Így párosítsd a gyerekek eszközeit",
@@ -45,7 +52,9 @@ export function parentPairingGuideEmail(input: { names: readonly string[] }): { 
       + `a linket, és küldd el a gyereknek (például Messengeren vagy SMS-ben); a telefonján nyissa meg.</li></ol>`
       + `<p><strong>Ellenőrzés:</strong> párosítás után a WebSuli kezdőlapja a gyerek nevén köszön („Szia, …!”), az eredménylevél a `
       + `nevével érkezik, és a Tanulók fülön látszik a tevékenysége. Ha egy link rossz kézbe került, a „Párosítás visszavonása” gombbal `
-      + `újat kaphatsz (a régi párosítások megszűnnek).</p></div>`,
+      + `újat kaphatsz (a régi párosítások megszűnnek).</p>`
+      + (opts.advent ? `<p><strong>Adventi naptár:</strong> ${esc(ADVENT_GUEST_PROGRESS_NOTE)}</p>` : "")
+      + `</div>`,
   };
 }
 
@@ -56,10 +65,10 @@ export type PlannedMail = { to: string; subject: string; html: string; kind: "ch
  * A kiküldendő levelek: minden címmel és érvényes linkkel rendelkező tanuló minden címére a saját gyereklevele, utána minden admin-
  * címzettnek egy szülőlevél (a tanulók nevével). Link nélküli (titok hiányzik) tanuló nem kap levelet — félrevezető gomb helyett semmit.
  */
-export function planPairingGuides(learnerRows: readonly PairingGuideLearner[], admins: readonly string[], firstNameOf: (full: string) => string): PlannedMail[] {
+export function planPairingGuides(learnerRows: readonly PairingGuideLearner[], admins: readonly string[], firstNameOf: (full: string) => string, opts: { advent?: boolean } = {}): PlannedMail[] {
   const reachable = learnerRows.filter(l => l.emails.length > 0 && l.pairLink);
   const child = reachable.flatMap(l => [...new Set(l.emails.map(e => e.trim().toLowerCase()).filter(Boolean))]
     .map(to => ({ to, kind: "child" as const, ...childPairingGuideEmail({ firstName: firstNameOf(l.name), pairLink: l.pairLink! }) })));
-  const parent = reachable.length ? parentPairingGuideEmail({ names: reachable.map(l => l.name) }) : null;
+  const parent = reachable.length ? parentPairingGuideEmail({ names: reachable.map(l => l.name) }, opts) : null;
   return [...child, ...(parent ? [...new Set(admins)].map(to => ({ to, kind: "parent" as const, ...parent })) : [])];
 }

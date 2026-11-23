@@ -1,0 +1,23 @@
+# Önátanuló tábla (WEBSULI): minden munka közben elkövetett hiba és a megoldása, hogy mindig elérhető legyen.
+# Forrás-minta: otthon_automatizalas kanban/experience.yaml (session-close loop, 2026-11-22).
+# status: observed -> fixed -> rule (a "rule" a TRAP-táblába / skillbe / AGENTS.md-be is bekerül)
+# Új kártya: node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs experience add --repo . --observed ... --fix ... --rule ...
+cards:
+  - id: 1
+    status: rule
+    date: "2026-11-23"
+    observed: "Felhős vak kör minden javító pushra: 342 kör / 45 PR"
+    fix: "local-review.mjs helyi GPU-ellenőr, angol prompt"
+    rule: "Kód-review helyben; felhős vélemény csak kockázatos fájlnál, egyszer"
+  - id: 2
+    status: rule
+    date: "2026-11-23"
+    observed: "vector-index elavult a záró commit után"
+    fix: "vector újraépítés az utolsó commit után"
+    rule: "vector mindig utolsó lépés, háttérben"
+  - id: 3
+    status: rule
+    date: "2026-11-23"
+    observed: "feladatok elvesztek kanban/ágak között"
+    fix: "SQL feladat-nyilvántartás + szinkron a higiéniában"
+    rule: "minden teendő azonnal feladat.mjs add"
