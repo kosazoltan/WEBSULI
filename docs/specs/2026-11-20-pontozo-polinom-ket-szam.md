@@ -1,6 +1,6 @@
 # Pontozó: polinom után álló pontsor / „…”, és két számeredmény műveleti jel után (#121, #122)
 
-**Állapot:** megvalósítás alatt – 2026-11-20, ág `fix/pontozo-polinom-ket-szam`
+**Állapot:** kész, PR-ra vár – 2026-11-23 (T-2-vel közös ág), ág `fix/pontozo-polinom-ket-szam`
 Végrehajtási utasítás: [`2026-11-20-pontozo-polinom-ket-szam-vegrehajtas.md`](2026-11-20-pontozo-polinom-ket-szam-vegrehajtas.md)
 Szülőterv: `docs/specs/2026-11-19-websuli-potlasok-terv.md`, 7.3 „T-1 — Pontozó: polinom végpont, két számeredmény”.
 
@@ -77,5 +77,5 @@ Szülőterv: `docs/specs/2026-11-19-websuli-potlasok-terv.md`, 7.3 „T-1 — Po
 - [x] E3 – „30 · 7 210” 2 / 2 (korpusz)
 - [x] E4 – „12 000” egy szám, „35 + 64 − 12 000” 0 (korpusz + scoring-v2)
 - [x] E5 – „2.5x”, „10x.” változatlan (korpusz)
-- [ ] E6 – meglévő tesztek zöldek (célzott kör 127 / 127 zöld; a teljes `npm test` a gépi záras nehéz körben); mutációs ellenpróba
-  megfogva (M1–M4)
+- [x] E6 – meglévő tesztek zöldek (2026-11-23, `origin/main` merge után: célzott kör 91 / 91, `gate:stage` zöld, `gate:push` a PR-ban); mutációs
+  ellenpróba megfogva (M1–M4; M9 a `starts`-feltételre 2026-11-23-án újra)

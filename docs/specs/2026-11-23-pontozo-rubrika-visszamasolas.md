@@ -1,6 +1,6 @@
 # Pontozó: „nem tudom”, ékezetes rövid szó, kérdés-visszamásolás (T-2, P-027, #130, #132)
 
-**Állapot:** megvalósítás alatt – 2026-11-23, ág `fix/pontozo-polinom-ket-szam` (a T-1 ugyanezen az ágon, közös korpusz)
+**Állapot:** kész, PR-ra vár – 2026-11-23, ág `fix/pontozo-polinom-ket-szam` (a T-1 ugyanezen az ágon, közös korpusz)
 Végrehajtási utasítás: [`2026-11-23-pontozo-rubrika-visszamasolas-vegrehajtas.md`](2026-11-23-pontozo-rubrika-visszamasolas-vegrehajtas.md)
 Szülőterv: `docs/specs/2026-11-19-websuli-potlasok-terv.md` (a `docs/hianyleltar-2026-11-23` ágon), 7.3 „T-2”; P-027.
 Testvérszelet: [`2026-11-20-pontozo-polinom-ket-szam.md`](2026-11-20-pontozo-polinom-ket-szam.md) (T-1: polinom végpont, két szám).
@@ -77,15 +77,18 @@ A pontozó ne adjon pontot (fél pontot sem) olyan válaszra, amely nem válasz:
 - E5: a v1 és az `ee_evaluate` a korpusz minden esetén azonos pontot ad; a meglévő pontozó-tesztek változatlanul zöldek.
 - E6: mutációs ellenpróba — bármelyik szabály kikapcsolására legalább egy új korpuszeset bukik.
 
+- A modellnek szóló `OPEN_ANSWER_RULES_HU` szövege NEM változik: bájtra őrzött (`tests/open-answer-short.test.ts` „nincs promptverzió-emelés”);
+  a három szabály tanulói oldali őr, a bankgyártásnak nem kell ismernie. Leírása külön promptverzió-emeléssel lehetséges (maradvány).
+
 ## Tulajdonosi döntést igénylő pontok
 
 - Az ékezet nélkül író tanuló „hat” válasza a „hát” rubrikára (és fordítva, ha a rubrika ékezet nélküli): marad a tűrés (nem-cél).
 - A másolat + érdemi többlet válasznál a másolt rubrikaszavak számítanak-e (ma: igen). Maradvány.
 
 <!-- acceptance-checklist -->
-- [ ] E1 – „nem tudom” 0 (korpusz)
-- [ ] E2 – „hát” ≠ „hat” ékezetes válaszban; ékezet nélkül tűrés (korpusz)
-- [ ] E3 – kérdés-másolat 0, új információval a mai pont (korpusz)
-- [ ] E4 – valódi rövid igen / nem / szám a mai pont (korpusz + `open-answer-short.test.ts`)
-- [ ] E5 – v1 = `ee_evaluate` a korpuszon; meglévő tesztek zöldek
-- [ ] E6 – mutációs ellenpróba
+- [x] E1 – „nem tudom” 0 (korpusz)
+- [x] E2 – „hát” ≠ „hat” ékezetes válaszban; ékezet nélkül tűrés (korpusz)
+- [x] E3 – kérdés-másolat 0, új információval a mai pont (korpusz)
+- [x] E4 – valódi rövid igen / nem / szám a mai pont (korpusz + `open-answer-short.test.ts`)
+- [x] E5 – v1 = `ee_evaluate` a korpuszon; meglévő tesztek zöldek (célzott kör 91 / 91, `gate:stage` 62 fájl zöld)
+- [x] E6 – mutációs ellenpróba: M5 (nem-válasz) 3, M6 (ékezet) 3, M7 (másolat, v1+v2) 3, M8 (`ee_evaluate` másolat) 2 bukó eset

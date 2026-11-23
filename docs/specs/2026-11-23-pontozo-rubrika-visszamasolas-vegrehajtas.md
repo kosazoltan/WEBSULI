@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — pontozó: „nem tudom”, ékezetes rövid szó, kérdés-visszamásolás (T-2)
 
-**Állapot:** megvalósítás alatt – 2026-11-23, ág `fix/pontozo-polinom-ket-szam`
+**Állapot:** kész – 2026-11-23, ág `fix/pontozo-polinom-ket-szam`
 Terv: `docs/specs/2026-11-23-pontozo-rubrika-visszamasolas.md`
 
 Útvonalak a `source/` alatt. Tesztet gyengíteni tilos; a meglévő korpuszesetek nem módosulnak. Lookbehind tilos. Minden új eset
@@ -22,7 +22,7 @@ szintetikus (valós tanulói adat nem kerül a korpuszba).
   egyezik. `conceptHit` rövid (< 5 betűs) szónál a folded találat mellett a közös tő ékezetét is összeveti (`accentAgrees`).
 - `copiesQuestionOnly(answer, q)`; a v1 és a v2 elején (a nem-válasz törlése után) → `{ state: "fail", score: 0, reason:
   QUESTION_COPY_REASON }`.
-- `OPEN_ANSWER_RULES_HU`: új 10. pont a három szabállyal.
+- `OPEN_ANSWER_RULES_HU`: NEM változik (bájtra őrzött, promptverzió-emelés nélkül — a terv „Nem-cél” része).
 
 ## V3 — HTML-referencia (`server/ai/lesson-html-spec.ts`, `ee_evaluate`)
 

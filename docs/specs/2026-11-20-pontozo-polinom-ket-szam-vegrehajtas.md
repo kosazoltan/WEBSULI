@@ -1,6 +1,6 @@
 # Végrehajtási utasítás — pontozó: polinom pontsorral, két szám műveleti jel után
 
-**Állapot:** megvalósítás alatt – 2026-11-20, ág `fix/pontozo-polinom-ket-szam`
+**Állapot:** kész – 2026-11-23, ág `fix/pontozo-polinom-ket-szam`
 Terv: `docs/specs/2026-11-20-pontozo-polinom-ket-szam.md`
 Szülő: `docs/specs/2026-11-19-websuli-potlasok-terv-vegrehajtas.md`, „T-1” blokk.
 
