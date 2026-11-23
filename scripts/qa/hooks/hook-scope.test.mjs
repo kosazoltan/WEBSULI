@@ -35,6 +35,56 @@ test('P-057 mutáció: onFailure más hookon (a hibája minden munkát megállí
   assert.ok(hookScopeViolations(s).some((x) => /onFailure/.test(x) && /check-destructive/.test(x)));
 });
 
+test('P-057 mutáció (PR #548 Sourcery): a disableAllHooks: true jelzett — minden biztonsági hook kikapcsolna', () => {
+  const s = clone();
+  s.disableAllHooks = true;
+  assert.ok(hookScopeViolations(s).some((x) => /disableAllHooks/.test(x)));
+});
+
+test('P-057 mutáció (PR #548 Sourcery): a romboló/audit/kapu hook PreToolUse-ról áthelyezve jelzett (utólag már nem állít meg)', () => {
+  for (const name of ['check-destructive.mjs', 'check-audit-ok.mjs', 'check-quality-gates.mjs', 'enforce-repo-rules.mjs']) {
+    const s = clone();
+    const moved = s.hooks.PreToolUse.filter((g) => g.hooks.some((h) => h.command.includes(name)));
+    s.hooks.PreToolUse = s.hooks.PreToolUse.filter((g) => !moved.includes(g));
+    s.hooks.PostToolUse = moved;
+    const v = hookScopeViolations(s);
+    assert.ok(v.some((x) => x.includes(name) && /PreToolUse/.test(x)), `nem jelzett áthelyezés: ${name}`);
+  }
+});
+
+test('P-057 mutáció (PR #548 Sourcery): a romboló hook a PowerShell-ágról hiányzik → jelzett', () => {
+  const s = clone();
+  s.hooks.PreToolUse = s.hooks.PreToolUse.filter(
+    (g) => !(g.matcher === 'PowerShell' && g.hooks.some((h) => h.command.includes('check-destructive.mjs'))),
+  );
+  assert.ok(hookScopeViolations(s).some((x) => x.includes('check-destructive.mjs') && /PowerShell/.test(x)));
+});
+
+test('P-057 mutáció (PR #548 Sourcery): onFailure csak a PONTOS kapu-hook parancson; a nevet tartalmazó más parancs jelzett', () => {
+  for (const command of [
+    'node "${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/check-quality-gates.mjs" && node x.mjs',
+    'node "${CLAUDE_PROJECT_DIR}/scripts/qa/hooks/enforce-repo-rules.mjs" # check-quality-gates.mjs',
+    'node other/check-quality-gates.mjs',
+  ]) {
+    const s = clone();
+    s.hooks.PreToolUse.push({ matcher: 'Bash', hooks: [{ type: 'command', command, onFailure: 'block' }] });
+    assert.ok(hookScopeViolations(s).some((x) => /onFailure/.test(x)), `nem jelzett: ${command}`);
+  }
+});
+
+test('P-057 mutáció (PR #548 Sourcery): csak a jóváhagyott egyedi matcherek és az Edit|Write pár — más kombináció jelzett', () => {
+  for (const matcher of ['Bash|PowerShell', 'Bash|Edit', 'Edit|Write|Bash', 'Write|Edit', 'Edit|Write|MultiEdit', 'Bash|Bash']) {
+    const s = clone();
+    s.hooks.PreToolUse[0].matcher = matcher;
+    assert.ok(hookScopeViolations(s).some((x) => /matcher/.test(x)), `nem jelzett matcher: ${matcher}`);
+  }
+  for (const matcher of ['Bash', 'PowerShell', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Edit|Write']) {
+    const s = clone();
+    s.hooks.PreToolUse[2].matcher = matcher;
+    assert.deepEqual(hookScopeViolations(s).filter((x) => /matcher/.test(x)), [], `tévesen jelzett: ${matcher}`);
+  }
+});
+
 test('P-057 mutáció: a PostToolUse-on álló hook is szűk matchert kér', () => {
   const s = clone();
   s.hooks.PostToolUse = [{ matcher: '.*', hooks: [{ type: 'command', command: 'node x.mjs' }] }];
