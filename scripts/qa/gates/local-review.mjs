@@ -32,9 +32,10 @@ const CHUNK_CHARS = 24_000;
 const CALL_TIMEOUT_MS = 240_000;
 
 /** Ezeket a fájlokat nem érdemes modellel nézni (generált / adat / zár). */
-// A repó bankjai: source/client/src/data/vocabBank/…, gradeQuizBank/… (PR #541 Copilot / Vercel). A zárfájl NEM tűnik el nyomtalanul:
+// A repó bankjainak ADATFÁJLJAI (…Bank/…/level-N.ts, grade-NN.ts, *.json) — a bank-könyvtár betöltő- és gyorsítótár-kódja NEM
+// marad ki (PR #541 Copilot / Vercel). A zárfájl NEM tűnik el nyomtalanul:
 // a kihagyott fájlok a jelentésbe kerülnek, és zárfájl-változásnál az ítélet legfeljebb FELTÉTELLEL (PR #541 Sourcery).
-export const SKIP = [/(^|\/)package-lock\.json$/, /\.lock$/, /\.(png|jpe?g|gif|webp|mp4|woff2?|ico|pdf)$/i, /(^|\/)[a-z-]*banks?\//i, /\.min\.js$/];
+export const SKIP = [/(^|\/)package-lock\.json$/, /\.lock$/, /\.(png|jpe?g|gif|webp|mp4|woff2?|ico|pdf)$/i, /(^|\/)[a-z-]*banks?\/(.+\/)?((level|grade)-\d+\.ts|[^/]+\.json)$/i, /\.min\.js$/];
 export const LOCKFILE = /(^|\/)package-lock\.json$|\.lock$/;
 
 /** Kockázatos utak: itt egyszeri felhős (Claude / Gemini) második vélemény AJÁNLOTT — nem kapu. */

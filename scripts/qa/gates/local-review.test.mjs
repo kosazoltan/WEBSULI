@@ -53,6 +53,8 @@ test('PR #541 leletek: bank-kihagyás a valódi utakon, a kihagyott zárfájl je
     'diff --git a/source/package-lock.json b/source/package-lock.json', '+z'].join('\n');
   assert.deepEqual(splitDiff(d, 24_000, skipped), []);
   assert.equal(skipped.length, 3);
+  const kept = splitDiff('diff --git a/source/client/src/data/vocabBank/loader.ts b/source/client/src/data/vocabBank/loader.ts\n+code', 24_000, []);
+  assert.equal(kept.length, 1, 'a bank-könyvtár betöltő kódja NEM marad ki');
   assert.equal(decideVerdict([], new Set(), { unreviewedLockfile: true }), 'IGEN, FELTÉTELLEL');
   const big = ['diff --git a/x.ts b/x.ts', '--- a/x.ts', '+++ b/x.ts', '@@ -1,2 +1,2 @@', '+'.padEnd(60, 'a'), '@@ -50,2 +50,2 @@', '+'.padEnd(60, 'b')].join('\n');
   const parts = splitDiff(big, 200);
