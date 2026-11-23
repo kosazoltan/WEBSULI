@@ -39,7 +39,8 @@ export function runOpeningForm(): RunOpeningForm | undefined {
 /** Javítás / fogalomjavítás: a futás kiosztott formája a TÁROLT (jelölőt hordozó) lecke formája; forma nélküli jelölőnél nincs kiosztás. */
 export function adoptStoredOpeningForm(stored: unknown): void {
   const id = storedVarietyMarker(stored)?.openingForm;
-  setRunOpeningForm(id ? openingFormById(id) : undefined);
+  const classroom = (stored as { classroom?: unknown } | null)?.classroom;
+  setRunOpeningForm(id ? openingFormById(id, typeof classroom === "number" ? classroom : undefined) : undefined);
 }
 
 /** A mentés forrása: futáson belül a kiosztott forma azonosítója vagy `null` (nem volt kiosztás); futáson kívül `undefined` (régi út). */

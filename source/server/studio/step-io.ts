@@ -24,6 +24,7 @@ import { correctionPromptLines, type SourceCorrection } from "./source-correctio
 import { blindSolutionsPromptBlock, type BlindSolutions } from "./blind-solver";
 import { canonicalJson } from "../lib/canonical-hash";
 import { SECTION_ROLE_HEADING } from "../../shared/lesson-ui-text";
+import { SECTION_KINDS } from "../../shared/lesson-section-shapes";
 import { SOURCE_VISUAL_SKIP_REASONS, type SourceVisual } from "../../shared/source-visuals";
 
 /**
@@ -99,6 +100,11 @@ export const outlineSectionSchema = z.object({
    * létező azonosítót az `outline-autofix` törli, a többletet a séma vágja) — formai hiba nem indít fizetős javítókört.
    */
   sourceVisualIds: z.array(z.string()).transform((a) => a.slice(0, OUTLINE_SOURCE_VISUAL_IDS)).optional(),
+  /**
+   * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (12. szakasz): a fejezet típusa a mintakiosztáshoz (BE kapcsolónál kérve).
+   * Engedékeny: hibás érték elhagyva; a motor a kiosztás után (és KI kapcsolónál is) eldobja — a szerzőhöz nem jut.
+   */
+  sectionKind: z.enum(SECTION_KINDS).optional().catch(undefined),
 });
 
 export type OutlineSection = z.infer<typeof outlineSectionSchema>;
@@ -354,14 +360,21 @@ export function visualPlanningLines(world: VisualWorld): string[] {
 
 /** Pedagógus: vázlat a kurált térképből. A teljes térkép bemegy — szó szerint. */
 /** A tervező kimeneti alakja; a pontjegyzékes futás fejezetenként `instructionPointIds`-t is kér (U3). */
-function outlineShape(visual: boolean, inventory: boolean, sourceVisuals = false): string {
+function outlineShape(visual: boolean, inventory: boolean, sourceVisuals = false, variety = false): string {
+  const kind = variety ? ', "sectionKind": "procedure" | "description" | "comparison" | "any"' : "";
   const section = visual
-    ? '"heading": string, "emoji": string, "keyPhrases": string[], "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[]'
-    : '"heading": string, "conceptIds": string[], "plannedBlocks": string[], "animationSuggestions": string[]';
+    ? `"heading": string, "emoji": string, "keyPhrases": string[], "conceptIds": string[], "plannedBlocks": string[]${kind}, "animationSuggestions": string[]`
+    : `"heading": string, "conceptIds": string[], "plannedBlocks": string[]${kind}, "animationSuggestions": string[]`;
   const withPoints = `${inventory ? `${section}, "instructionPointIds": string[]` : section}${sourceVisuals ? ', "sourceVisualIds": string[]' : ""}`;
   return `{ "sections": [{ ${withPoints} }], "misconceptions": [{ "conceptId": string, "text": string }]${visual ? ', "visual": { "world": string }' : ""}${sourceVisuals ? ', "skippedVisuals": [{ "id": string, "reason": string, "duplicateOf"?: string }]' : ""} }`;
 }
+/** S6a (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 12. szakasz): BE kapcsolónál a fogalom-fejezetek ívét a program osztja ki. */
+const VARIETY_ARC_PLANNING = "- Fogalomcsoportonként egy fejezet. Fejezetenként add meg a típusát (sectionKind): procedure = eljárás, lépések; description = leírás, tulajdonságok; comparison = összehasonlítás, két eset; any = egyéb. A fogalom-fejezetek blokksorrendjét (plannedBlocks) a program osztja ki a típusból egy változatos mintakészletből — te egy ívnek megfelelő javaslatot adsz. Ez a pont felülírja a tervkészítő szerepleírás rögzített fejezetívét és JSON-alakját: a fejezet objektuma a `sectionKind` mezőt is tartalmazza.";
+const VARIETY_ARC_ORDER = "A fogalom-fejezetek végleges plannedBlocks sorrendjét a program osztja ki (minden minta megfelel a fenti ívnek); a különleges záró fejezetekét te adod meg a fenti minta szerint. A vázlat sorrendje lesz a lecke sorrendje.";
+
 export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner?: OwnerContext): string {
+  // S6a-v2: a futásra rögzített állapot (folytatásnál a mentett job-állapot), nem a környezet.
+  const variety = effectiveLessonVariety();
   return [
     // J4 (átvilágítás L5): egyetlen feladat, magyar állomás-fejléc — más szerepekre / átadásra utaló szöveg nélkül.
     "A FELADAT: tananyagterv (lecke-vázlat) a kurált fogalomtérképből. A lecke ezt a tervet követi, ezért pontos, tömör és teljes legyen.",
@@ -377,7 +390,9 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     `- Korlátok (a program a túllépést vágja vagy elhagyja, és a jobban jelzi — ne lépd túl): emoji legfeljebb ${OUTLINE_LIMITS.emoji} karakter; keyPhrases legfeljebb ${OUTLINE_LIMITS.keyPhrases} elem, elemenként ${OUTLINE_LIMITS.keyPhrase} karakter; fejezetcím ${LESSON_TEXT_LIMITS.heading} karakter.`,
     "- Semmi próza, magyarázat, kódblokk-jelölés vagy bevezető: a válasz kizárólag az előírt JSON.",
     "",
-    "A körpazarlás elkerülése: fejezetenként add meg a tanítási sorrendet (explain → example lépésekkel → check), az ábra fajtáját és a forrás melyik feladata tartozik oda — így a lecke írásakor nem kell szerkezetet kitalálni, és az ellenőrzés ehhez a tervhez mér.",
+    variety
+      ? "A körpazarlás elkerülése: fejezetenként add meg a fejezet típusát (sectionKind), az ábra fajtáját és a forrás melyik feladata tartozik oda — a blokksorrendet a program osztja ki, így a lecke írásakor nem kell szerkezetet kitalálni, és az ellenőrzés ehhez a tervhez mér."
+      : "A körpazarlás elkerülése: fejezetenként add meg a tanítási sorrendet (explain → example lépésekkel → check), az ábra fajtáját és a forrás melyik feladata tartozik oda — így a lecke írásakor nem kell szerkezetet kitalálni, és az ellenőrzés ehhez a tervhez mér.",
     "",
     "Követelmények:",
     "- Minden `core` fogalom és legalább 90%-a a `supporting` fogalmaknak szerepeljen a vázlat valamelyik szakaszában (conceptIds).",
@@ -393,7 +408,7 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     // Spec 2026-09-19 — the target lesson pattern the owner set as the end goal (2026-10-14 óta a sablon-fejezetek feltételesek).
     "CÉL-TANANYAG MINTA (feltételes — egy elem CSAK akkor kerül a vázlatba, ha a forrás tartalma indokolja):",
     "- A motiváció (miért kell ez a tudás) az első fogalom-fejezet explain blokkjának 1–2 mondata, NEM külön fejezet.",
-    "- Fogalomcsoportonként egy fejezet: explain → example (lépésről lépésre) → check, a végén legfeljebb egy rövid recap.",
+    variety ? VARIETY_ARC_PLANNING : "- Fogalomcsoportonként egy fejezet: explain → example (lépésről lépésre) → check, a végén legfeljebb egy rövid recap.",
     `- „${SECTION_ROLE_HEADING.workedSolution}” külön fejezet CSAK ha a forrásban gyakorlófeladat van (plannedBlocks: explain, example, example…, recap), a forrás feladataival.`,
     // Mérve (run 8, job c3f5265b): explain→check tervnél a kapu ívszabálya („kérdés előtt mutasd meg,
     // hogyan kell megoldani") szerzői kört kért — a hibás és a helyes út összevetése példaként előzi meg a kérdést.
@@ -402,7 +417,7 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     "- Minden fejezet animationSuggestions mezője legalább egy konkrét, a fejezet tanításából rajzolható ábrát nevezzen meg (folyamat lépései, számegyenes, idővonal, térkép…).",
     "",
     LESSON_ARC_CONTRACT,
-    "A plannedBlocks sorrendje EZT az ívet kövesse — a vázlat sorrendje lesz a lecke sorrendje.",
+    variety ? VARIETY_ARC_ORDER : "A plannedBlocks sorrendje EZT az ívet kövesse — a vázlat sorrendje lesz a lecke sorrendje.",
     LESSON_METHOD_CONTRACT,
     "Most csak a Tananyag lap fejezeteit tervezd. A módszerek és feladatbankok külön, kisebb gyártási körökben készülnek el ebből a tanításból.",
     "",
@@ -413,7 +428,7 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
     // U3 (C14): az igazolt pontokat a tervező rendeli fejezethez — a szerző csak ezeket mondja ki, a kapu azonosítónként méri.
     ...(owner?.inventory ? ["PONTJEGYZÉK → FEJEZET: minden IGAZOLT pontot pontosan egy fejezet `instructionPointIds` mezőjébe tegyél (azonosítóval); a nem igazolt pontot ne tervezd be. Igazolt pont fejezet nélkül = hiányos terv.", ""] : []),
     "A válasz CSAK JSON legyen, a következő alakban:",
-    outlineShape(Boolean(visual), Boolean(owner?.inventory), Boolean(map.visuals?.length)),
+    outlineShape(Boolean(visual), Boolean(owner?.inventory), Boolean(map.visuals?.length), variety),
     "",
     "Fogalomtérkép:",
     mapJson(map),
