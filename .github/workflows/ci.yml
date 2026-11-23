@@ -263,6 +263,11 @@ jobs:
         if: matrix.part == 'kiegeszito'
         run: npx playwright test --config playwright.lesson-practice.config.ts
 
+      # docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S5a, V7): kódszótári visszajelzés-nyitás a jelölt leckén, három nézetben.
+      - name: Verify varied feedback openers on a variety-marked lesson
+        if: matrix.part == 'kiegeszito'
+        run: npx playwright test --config playwright.lesson-variety.config.ts
+
       # A számláló-ellenőr bemenete: a rész JSON-jelentése (bukott tesztek mellett is; megszakított futásnál nem).
       - name: Upload the part's JSON report (számláló-ellenőr)
         if: ${{ !cancelled() && matrix.part != 'kiegeszito' }}
