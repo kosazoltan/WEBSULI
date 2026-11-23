@@ -120,16 +120,17 @@ export function planSections(kinds: readonly SectionKind[], seed: number, closin
       missing--;
     }
   }
-  let previous: TryKind | undefined;
-  plan.forEach((p, i) => {
-    if (!p.blocks.includes("try")) return;
-    const kind = kinds[i];
-    if (kind !== "any") p.tryKind = KIND_TRY[kind];
-    else {
-      const pool = TRY_ROTATION.filter((t) => t !== previous);
-      p.tryKind = pool[Math.floor(random() * pool.length)];
-    }
-    previous = p.tryKind;
+  // 1. vak kör (L3): előbb a kötött fajták (a típusból), aztán az `any` fejezetek — az `any` az ELŐZŐ try fajtáját és a KÖVETKEZŐ
+  // kötött try fajtáját is kerüli (három fajtából így mindig marad jelölt), ezért két egymást követő try csak akkor azonos, ha mindkettő
+  // kötött típusú.
+  const carriers = plan.map((p, i) => ({ p, kind: kinds[i] })).filter(({ p }) => p.blocks.includes("try"));
+  for (const { p, kind } of carriers) if (kind !== "any") p.tryKind = KIND_TRY[kind];
+  carriers.forEach(({ p, kind }, k) => {
+    if (kind !== "any") return;
+    const before = carriers[k - 1]?.p.tryKind;
+    const after = carriers[k + 1]?.kind !== "any" ? carriers[k + 1]?.p.tryKind : undefined;
+    const pool = TRY_ROTATION.filter((t) => t !== before && t !== after);
+    p.tryKind = pool[Math.floor(random() * pool.length)];
   });
   return plan;
 }
@@ -141,6 +142,19 @@ export function tryShare(lesson: { sections: ReadonlyArray<{ blocks: ReadonlyArr
   return Math.round(share * 100) / 100;
 }
 
+/** 1. vak kör (L2): a jelzés feltétele a NYERS darabszám (pontosan 1/3 megfelel) — a kerekített `tryShare` csak a telemetria értéke. */
+export function tryShareLow(lesson: { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string }> }> }): boolean {
+  const total = lesson.sections.length;
+  return total > 0 && 3 * lesson.sections.filter((s) => s.blocks.some((b) => b.kind === "try")).length < total;
+}
+
+/** A `try`-arány minőségi jelzése a megadott (végleges) leckére: a korábbi `try_share_low` bejegyzést lecseréli vagy törli, a többit megtartja. */
+export function withTryShareNote<N extends { reason?: unknown }>(notes: readonly N[], lesson: { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string }> }> }): Array<N | { reason: "try_share_low"; note: string; round: number }> {
+  const others = notes.filter((n) => n?.reason !== "try_share_low");
+  if (!tryShareLow(lesson)) return others;
+  return [...others, { reason: "try_share_low", note: `A fejezetek ${Math.round(tryShare(lesson) * 100)}%-ában van kipróbálható feladat (try) — a cél legalább a harmaduk.`, round: 0 }];
+}
+
 type OutlineLike = { sections: Array<{ heading: string; plannedBlocks: string[]; sectionKind?: unknown; tryKind?: unknown }> };
 
 /**
@@ -148,14 +162,19 @@ type OutlineLike = { sections: Array<{ heading: string; plannedBlocks: string[];
  * fejezet recap-pal zárul. `seed` nélkül (KI) ugyanaz az objektum jön vissza — csak a modell kéretlen `sectionKind` mezője esik ki.
  * A `sectionKind` sosem megy tovább (a szerző a kiosztott `plannedBlocks`-ot kapja).
  */
-export function applySectionShapes<T extends OutlineLike>(outline: T, seed: number | undefined): T {
+export function applySectionShapes<T extends OutlineLike>(outline: T, seed: number | undefined, keepAssignedTryKind = false): T {
+  // 1. vak kör (L1): `keepAssignedTryKind` — a MENTETT, program által kiosztott terv folytatásánál (a job `sectionShapes` jelzője) a
+  // `tryKind` a program kiosztása, megmarad; a modell friss tervénél, a jóváhagyott tervnél és KI állapotban kéretlen mező, kiesik.
   const strip = <S extends T["sections"][number]>(s: S): S => {
-    if (!("sectionKind" in s) && !("tryKind" in s)) return s;
-    const { sectionKind: _kind, tryKind: _try, ...rest } = s;
+    const dropTry = !keepAssignedTryKind && "tryKind" in s;
+    if (!("sectionKind" in s) && !dropTry) return s;
+    const { sectionKind: _kind, ...withTry } = s;
+    if (!dropTry) return withTry as S;
+    const { tryKind: _try, ...rest } = withTry;
     return rest as S;
   };
   if (seed === undefined) {
-    return outline.sections.some((s) => "sectionKind" in s || "tryKind" in s) ? { ...outline, sections: outline.sections.map(strip) } : outline;
+    return outline.sections.some((s) => "sectionKind" in s || (!keepAssignedTryKind && "tryKind" in s)) ? { ...outline, sections: outline.sections.map(strip) } : outline;
   }
   const regular = outline.sections.map((s, i) => ({ i, s })).filter(({ s }) => sectionRoleOf(s.heading) === null);
   const kinds = regular.map(({ s }) => ((SECTION_KINDS as readonly unknown[]).includes(s.sectionKind) ? s.sectionKind as SectionKind : "any"));

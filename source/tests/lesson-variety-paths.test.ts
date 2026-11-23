@@ -120,7 +120,7 @@ const concepts: MapConcept[] = [{ localId: "area", examWeight: "core", term: "te
 const TRANSCRIPT = "A téglalap területe az oldalak szorzata. A terület mértékegysége a négyzetcentiméter.";
 const outline = { sections: [{ heading: fixture.sections[0].heading, conceptIds: ["area"], plannedBlocks: ["explain", "example", "animate", "recap"], animationSuggestions: [] }], misconceptions: [] };
 
-function client(opts: { failBank?: boolean; modelMarker?: boolean; outline?: unknown; onAuthor?: (request: string) => void } = {}): ModelClient {
+function client(opts: { failBank?: boolean; failAuthor?: boolean; modelMarker?: boolean; outline?: unknown; onAuthor?: (request: string) => void } = {}): ModelClient {
   const { experience: _bank, ...teaching } = fixture;
   return {
     model: "claude-opus-5-5",
@@ -131,7 +131,7 @@ function client(opts: { failBank?: boolean; modelMarker?: boolean; outline?: unk
       if (station === "1") json = { title: "Terület", subject: fixture.subject, classroom: fixture.classroom, transcript: TRANSCRIPT,
         concepts: [{ id: "area", term: "terület", definition: "A síkidom által lefedett rész nagysága.", quote: "A téglalap területe az oldalak szorzata.", type: "concept", examWeight: "core", relatedIds: [] }] };
       else if (station === "2" || station === "tananyagterv") json = opts.outline ?? outline;
-      else if (station === "3") { opts.onAuthor?.(t); json = opts.modelMarker ? { ...teaching, variety: { version: "valtozatossag-1" } } : teaching; }
+      else if (station === "3") { opts.onAuthor?.(t); if (opts.failAuthor) return { text: "nem JSON", model: "claude-opus-5-5", truncated: false, usage: { input: 1, cachedInput: 0, output: 1 } }; json = opts.modelMarker ? { ...teaching, variety: { version: "valtozatossag-1" } } : teaching; }
       else if (station === "4") json = { patches: "nem érvényes ábrafolt" };
       else if (station === "5") { if (opts.failBank) return { text: "nem JSON", model: "claude-opus-5-5", truncated: false, usage: { input: 1, cachedInput: 0, output: 1 } }; json = structuredClone(fixture.experience); }
       else if (station === "6" || station === "lektorálás") json = { solutions: [], notes: [], reviewedAll: true };
@@ -390,4 +390,38 @@ test("S6a V15 a motorban: BE — a mentett terv és a szerzői kérés a kioszto
   const second = memory();
   await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, runDeps(client(), second, {}, saved.singleRun.conversation));
   assert.deepEqual(plannedOf(second).plannedBlocks, expected, "folytatás: a mentett terv sorai változatlanok");
+});
+
+// --- S6b 1. vak kör (L1; egyben az S6a 4. körének L9 jegye): a szerző ELŐTT megszakadt modellterves BE futás folytatása ---
+
+test("S6b L1: a szerző előtt megszakadt BE futás folytatása — a mentett terv és a szerzői kérés megőrzi a kiosztott blokksort ÉS a try fajtáját", async () => {
+  const typed = { ...outline, sections: outline.sections.map((sec) => ({ ...sec, sectionKind: "procedure" })) };
+  type Planned = { plannedBlocks: string[]; tryKind?: string; sectionKind?: unknown };
+  const plannedOf = (out: Record<string, unknown>) => (out.outline as { sections: Planned[] }).sections[0];
+  const first = memory();
+  await assert.rejects(runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ outline: typed, failAuthor: true }), first, { lessonVariety: true })));
+  const saved = lastOutput(first);
+  assert.equal((saved as { lesson?: unknown }).lesson, undefined, "a megszakadás a szerző válasza ELŐTT történt");
+  assert.equal(saved.sectionShapes, true);
+  const assigned = plannedOf(saved);
+  assert.ok(assigned.tryKind, "a mentett terv hordozza a kiosztott try-fajtát");
+
+  let request = "";
+  const second = memory();
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, runDeps(client({ onAuthor: (text) => { request = text; } }), second, {}, saved.singleRun.conversation));
+  const after = plannedOf(lastOutput(second));
+  assert.deepEqual(after.plannedBlocks, assigned.plannedBlocks, "folytatás: a blokksor változatlan");
+  assert.equal(after.tryKind, assigned.tryKind, "folytatás: a try fajtája megmarad a mentett tervben");
+  assert.ok(request.includes(JSON.stringify(assigned.plannedBlocks)), "folytatás: a szerző megkapja a kiosztott sort");
+  assert.ok(request.includes(`tryKind: "${assigned.tryKind}"`), "folytatás: a szerző megkapja a try fajtáját");
+  assert.equal(lastOutput(second).sectionShapes, true);
+});
+
+test("S6b L1: jóváhagyott tervnél, friss modelltervnél és KI állapotban a kéretlen tryKind továbbra is kiesik", async () => {
+  const { applySectionShapes } = await import("../shared/lesson-section-shapes");
+  const stray = { sections: [{ heading: "A", plannedBlocks: ["explain", "try", "check"], tryKind: "match", sectionKind: "procedure" }] };
+  assert.deepEqual(applySectionShapes(stray, undefined), { sections: [{ heading: "A", plannedBlocks: ["explain", "try", "check"] }] }, "KI / jóváhagyott: mindkét mező kiesik");
+  assert.deepEqual(applySectionShapes(stray, undefined, true), { sections: [{ heading: "A", plannedBlocks: ["explain", "try", "check"], tryKind: "match" }] }, "mentett kiosztás: a tryKind marad, a sectionKind kiesik");
+  const kept = { sections: [{ heading: "A", plannedBlocks: ["explain"], tryKind: "match" }] };
+  assert.equal(applySectionShapes(kept, undefined, true), kept, "nincs mit tisztítani: ugyanaz az objektum");
 });

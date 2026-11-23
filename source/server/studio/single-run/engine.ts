@@ -10,7 +10,7 @@
  */
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { seedFrom } from "../../../shared/seeded";
-import { applySectionShapes, tryShare } from "../../../shared/lesson-section-shapes";
+import { applySectionShapes, tryShare, tryShareLow, withTryShareNote } from "../../../shared/lesson-section-shapes";
 import { kindShareProblems, visualKindCounts } from "../../../shared/visual-kind-plan";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
@@ -729,11 +729,13 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // S6a (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 12. szakasz): BE kapcsolónál a modell tervének fogalom-fejezetei a kiosztott
   // fejezetmintát kapják (a tulajdonos jóváhagyott terve nem változik); KI-nél a terv a régi (csak a kéretlen `sectionKind` esik ki).
   const shapedNow = planned === undefined && varietyOn;
-  const outline = applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined);
+  // S6b 1. vak kör (L1): a terv eredetét a tisztítás ELŐTT állapítjuk meg — a mentett, program által kiosztott terv `tryKind`-ja megmarad.
+  const savedAssigned = varietyOn && resumed?.outline !== undefined && output.sectionShapes === true;
+  const outline = applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined, savedAssigned);
   // 3. vak kör (L7): a terv EREDETE verziózott futásadat — `sectionShapes: true` csak akkor, ha a sorokat a program osztotta ki (friss
   // modellterv BE futásban). Folytatásnál kizárólag a mentett jelző számít: a tulajdonos jóváhagyott tervéből indult futás folytatása
   // (ahol a bemenetben már nincs `approvedOutline`) nem kap kiosztásra hivatkozó szerzői kérést.
-  const programAssigned = shapedNow || (varietyOn && resumed?.outline !== undefined && output.sectionShapes === true);
+  const programAssigned = shapedNow || savedAssigned;
   output = { ...output, outline, approvedOutline: outline, ...(programAssigned ? { sectionShapes: true } : {}) };
   // Review #536 (Copilot): a program által kiosztott blokksorok a szerzőhöz is eljutnak — a beszélgetésben a modell EREDETI terve áll,
   // a szerzői kérés ezért kimondja a végleges sorokat. Csak a program által kiosztott tervnél (`programAssigned`); a tulajdonos
@@ -863,7 +865,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     if (varietyOn) {
       const share = tryShare(lesson);
       telemetry.gates.tryShare = share;
-      if (share < 1 / 3) qualityNotes.push({ reason: "try_share_low", note: `A fejezetek ${Math.round(share * 100)}%-ában van kipróbálható feladat (try) — a cél legalább a harmaduk.`, round: 0 });
+      if (tryShareLow(lesson)) qualityNotes.push({ reason: "try_share_low", note: `A fejezetek ${Math.round(share * 100)}%-ában van kipróbálható feladat (try) — a cél legalább a harmaduk.`, round: 0 });
     }
     output = { ...output, lesson, ...(qualityNotes.length ? { qualityNotes } : {}) };
     await save("animator", output);
@@ -1155,6 +1157,14 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     quizItems: exportQuizItemsForPublish(publishable, lessonId, conceptIdResolver(concepts)),
     ...(typeof output.targetHtmlFileId === "string" ? { targetHtmlFileId: output.targetHtmlFileId, ...(typeof output.targetBaseline === "string" ? { targetBaseline: output.targetBaseline } : {}) } : {}),
   });
+  // S6b 1. vak kör (L4): a `try`-arány és a jelzése a VÉGLEGES (publikált) leckére szól — a lektori tanításcsere és a mentett tanításból
+  // folytatott futás után is; a többi minőségi jelzés változatlan.
+  if (varietyOn) {
+    telemetry.gates.tryShare = tryShare(publishable);
+    const notes = withTryShareNote(Array.isArray(output.qualityNotes) ? output.qualityNotes as Array<{ reason?: unknown }> : [], publishable);
+    const { qualityNotes: _notes, ...withoutNotes } = output;
+    output = notes.length ? { ...withoutNotes, qualityNotes: notes } : withoutNotes;
+  }
   await store.saveStep(jobId, { step: "done", status: "ok", lessonId, finishedAt: new Date(),
     output: { ...output, lesson: publishable, htmlFileId: published.htmlFileId, exportedQuizItems: published.exportedQuizItems, quality: { removed: [], warnings },
       telemetry: telemetry.snapshot(conversation.model), singleRun: { version: SINGLE_RUN_VERSION, conversation: conversation.state() } } });
