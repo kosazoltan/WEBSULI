@@ -3,6 +3,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
 import { quizRoundComplete, roundActivityAt, roundTooOld } from "@shared/quiz-round";
+import { isRetryableRequestError } from "@shared/request-retry";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -13,7 +14,14 @@ import { experienceFingerprint, type ExperienceRound } from "./useExperienceRoun
 /** Review #280: a feladatok beküldése megvárja a döntőbíró ítéleteit (`ready`), hogy a levél ugyanazt a pontot kapja, amit a tanuló lát;
  *  biztonsági háló: a lezárás után legkésőbb 45 s-mal mindenképp beküld (a döntőbíró hibája esetén a pontozó ítélete marad). */
 export const REPORT_FALLBACK_MS = 45_000;
-export const RESULT_REPORT_RETRIES = 3;
+/**
+ * Eredmény-e-mail B2 (docs/specs/2026-11-22-eredmeny-email-bontas.md; #510 R26, dokumentált spec-változás a J5-höz képest): az
+ * eredmény-POST-nak nincs beágyazott újrapróbája — az `apiRequest` belső újrapróbája 0, az újrapróbát EGYETLEN szint, ez a beküldő
+ * végzi. Laponként legfeljebb 3 kérés, csak újrapróbálható hibára (hálózat, időtúllépés, 5xx; a 4xx — a 429 is — nem), azonnali ismétlés
+ * nélkül (30 s, majd 60 s). Ami a lapon nem ment át, a következő betöltéskor újra megy (a „már elküldve” jelző csak 2xx után íródik).
+ */
+export const RESULT_REPORT_ATTEMPTS = 3;
+export const RESULT_REPORT_RETRY_DELAYS_MS = [30_000, 60_000] as const;
 export function useResultReport(lessonId: string | undefined, kind: "tasks" | "quiz", round: ExperienceRound, storageKey: string, ready = true) {
   const sending = useRef(false);
   const [timedOut, setTimedOut] = useState(false);
@@ -46,9 +54,19 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
           ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...times }
           // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
           : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...times };
-        // J5 (spec 2026-11-10-gyartas-meres): ingadozó mobilhálózaton az eredmény ne vesszen el — hálózati hibánál, időtúllépésnél
-        // és 5xx-nél legfeljebb 3 újrapróbálás (növekvő várakozással). Biztonságos: a szerver a kört egyedi kulccsal egyszer rögzíti.
-        await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES });
+        // J5 (spec 2026-11-10-gyartas-meres) + B2 (#510 R26): ingadozó mobilhálózaton az eredmény ne vesszen el — hálózati hibánál,
+        // időtúllépésnél és 5xx-nél újrapróba, de egyetlen szinten (lásd RESULT_REPORT_ATTEMPTS). Biztonságos: a szerver a kört egyedi
+        // kulccsal egyszer rögzíti. B2 (#510 R8): a kvíz végleges kérése `keepalive` (az utolsó válasz utáni lapbezárás nem szakítja meg);
+        // a feladatoké nem, mert a törzsük meghaladhatja a `keepalive` 64 KB-os keretét.
+        for (let attempt = 1; ; attempt++) {
+          try {
+            await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: 0, keepalive: kind === "quiz" });
+            break;
+          } catch (error) {
+            if (attempt >= RESULT_REPORT_ATTEMPTS || !isRetryableRequestError(error)) throw error;
+            await new Promise(resolve => setTimeout(resolve, RESULT_REPORT_RETRY_DELAYS_MS[attempt - 1]));
+          }
+        }
         try { localStorage.setItem(flag, "1"); } catch { /* elég a szerver egyedi kulcsa */ }
       } catch { /* csendes: a tanuló felülete nem függ a levéltől */ }
       finally { sending.current = false; }
