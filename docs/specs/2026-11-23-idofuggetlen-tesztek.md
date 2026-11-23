@@ -68,7 +68,7 @@ A felsorolt tesztek eredménye ne függjön a falióra állásától, ugrását�
   `admin-access.test.ts` őr- és state-blokkjai zöldek legyenek (javítás előtt 1 + 4 bukás).
 - [x] A5 WHEN az órát a teszt befagyasztja THEN SHALL a 15 perces state-élettartam határa (−1 ms érvényes, 0 lejárt) mindkét
   tárnál bizonyított legyen.
-- [ ] A6 WHEN `npm run gate:stage` és `npm run gate:push` fut THEN SHALL mindkettő zöld legyen.
+- [x] A6 WHEN `npm run gate:stage` és `npm run gate:push` fut THEN SHALL mindkettő zöld legyen.
 
 ## 7. Tesztterv
 
