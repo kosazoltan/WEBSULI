@@ -58,15 +58,15 @@ A felsorolt tesztek eredménye ne függjön a falióra állásától, ugrását�
 ## 6. Elfogadási kritériumok (EARS)
 
 <!-- acceptance-checklist -->
-- [ ] A1 WHEN a falióra minden olvasáskor 16 percet ugrik (bizonyító előtöltő) THEN SHALL a bank-invariáns teszt zöld maradjon
+- [x] A1 WHEN a falióra minden olvasáskor 16 percet ugrik (bizonyító előtöltő) THEN SHALL a bank-invariáns teszt zöld maradjon
   (javítás előtt: `a bank-szintű invariáns futásideje 966416 ms` bukás).
-- [ ] A2 WHEN az 5 ms-os időzítők 50 ms-mal később futnak (ütemezési csúszás előtöltő) THEN SHALL a `parallel-bank.test.ts`
+- [x] A2 WHEN az 5 ms-os időzítők 50 ms-mal később futnak (ütemezési csúszás előtöltő) THEN SHALL a `parallel-bank.test.ts`
   minden tesztje zöld legyen (javítás előtt: a „review #265 … befejezési sorrend” teszt bukik).
-- [ ] A3 WHEN a teszt közben 300 ms-os CPU-akadás történik THEN SHALL a liveness „üres blokk” teszt zöld maradjon (javítás
+- [x] A3 WHEN a teszt közben 300 ms-os CPU-akadás történik THEN SHALL a liveness „üres blokk” teszt zöld maradjon (javítás
   előtt: „eltelt: 373 ms” bukás).
-- [ ] A4 WHEN a falióra minden olvasáskor 16 percet ugrik THEN SHALL a `support-tamper.test.ts` OAuth-bizonyítéka és az
+- [x] A4 WHEN a falióra minden olvasáskor 16 percet ugrik THEN SHALL a `support-tamper.test.ts` OAuth-bizonyítéka és az
   `admin-access.test.ts` őr- és state-blokkjai zöldek legyenek (javítás előtt 1 + 4 bukás).
-- [ ] A5 WHEN az órát a teszt befagyasztja THEN SHALL a 15 perces state-élettartam határa (−1 ms érvényes, 0 lejárt) mindkét
+- [x] A5 WHEN az órát a teszt befagyasztja THEN SHALL a 15 perces state-élettartam határa (−1 ms érvényes, 0 lejárt) mindkét
   tárnál bizonyított legyen.
 - [ ] A6 WHEN `npm run gate:stage` és `npm run gate:push` fut THEN SHALL mindkettő zöld legyen.
 

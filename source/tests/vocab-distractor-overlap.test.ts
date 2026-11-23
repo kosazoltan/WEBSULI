@@ -202,8 +202,18 @@ function assertOptionInvariant(options: string[], correctIndex: number, entry: V
 
 const TREE_BANKS: Array<[VocabLang, VocabEntry[]]> = [["en", VOCAB_EN], ["de", VOCAB_DE], ["fr", VOCAB_FR]];
 
+/**
+ * A folyamat saját CPU-ideje ms-ban (user + system). KB #205: a futásidő-korlátot nem falióra-különbséggel mérjük — a teljes
+ * egységkörben (párhuzamos tesztfájlok, terhelt gép) és órakorrekciónál a falióra hamis bukást adott; a CPU-idő csak a saját
+ * munkával nő, így egy valódi algoritmikus lassulást ugyanúgy jelez.
+ */
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+
 test("bank-szintű invariáns minden fában lévő bankra: minden bejegyzés × minden generálható típus × 5 seed", () => {
-  const started = Date.now();
+  const started = cpuMs();
   for (const [lang, bank] of TREE_BANKS) {
     let made = 0;
     let nulls = 0;
@@ -223,8 +233,8 @@ test("bank-szintű invariáns minden fában lévő bankra: minden bejegyzés × 
     // A null nem hiba (kevés jelölt a kind-ban), de a bankok többségéből kérdés kell, hogy legyen.
     assert.ok(nulls <= made, `${lang}: túl sok null (${nulls} / ${made + nulls})`);
   }
-  const ms = Date.now() - started;
-  assert.ok(ms < 60_000, `a bank-szintű invariáns futásideje ${ms} ms`);
+  const ms = Math.round(cpuMs() - started);
+  assert.ok(ms < 60_000, `a bank-szintű invariáns CPU-ideje ${ms} ms`);
 });
 
 test("report: a jelentés-átfedő párok összesítő sora mindig ott van; --overlaps a párokat is listázza; nem hiba", () => {

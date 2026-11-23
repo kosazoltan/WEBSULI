@@ -54,12 +54,15 @@ describe("withDifferentChar (A1, A2)", () => {
 });
 
 describe("a régi hamisítás ütközése, rögzített értékekkel és a valódi szerverkóddal (A3)", () => {
-  it("OAuth state „…xx” végződéssel: a régi `slice(0, -2) + xx` azonos és elfogadott, az új elutasított", () => {
+  it("OAuth state „…xx” végződéssel: a régi `slice(0, -2) + xx` azonos és elfogadott, az új elutasított", (t) => {
+    // KB #212: befagyasztott óra — a bizonyíték nem függhet a falióra állásától vagy ugrásától (a rekord időbélyege és a
+    // PlayerStateStore.verify saját Date.now()-ja ugyanazt a rögzített pillanatot látja).
+    const NOW = 1_800_000_000_000;
+    t.mock.timers.enable({ apis: ["Date"], now: NOW });
     const store = new PlayerStateStore();
     const state = "p.ABCDEFGHIJKLMNOPQRSTUVWXYZ0123xx";
-    // A munkamenet-rekord olyan, amilyet a PlayerStateStore.store ír (verifier, visszatérési cél, időbélyeg); az időbélyeg a
-    // szinkron ellenőrzés előtt készül, így a 15 perces élettartam nem játszik szerepet.
-    const reqWith = () => ({ session: { playerOauthStates: { [state]: { v: "verifier", r: null, t: Date.now() } } } });
+    // A munkamenet-rekord olyan, amilyet a PlayerStateStore.store ír (verifier, visszatérési cél, időbélyeg).
+    const reqWith = () => ({ session: { playerOauthStates: { [state]: { v: "verifier", r: null, t: NOW } } } });
     const verdict = (provided: string) => { let ok: string | false = false; store.verify(reqWith() as never, provided, (_e, v) => { ok = v; }); return ok; };
     assert.equal(verdict(state), "verifier", "az eredeti state érvényes");
     assert.equal(`${state.slice(0, -2)}xx`, state, "a régi hamisítás azonos értéket ad");
