@@ -30,6 +30,17 @@ export function classifyChanges(changed, cfg) {
 }
 
 /**
+ * Terv docs/specs/2026-11-23-kapu-spec-valasztas-szohatar.md: a tő akkor „említett”, ha ÖNÁLLÓ azonosítóként áll a teszt szövegében —
+ * előtte és utána nem betű vagy számjegy (Unicode szerint; a kötőjel és az aláhúzás elválasztó, így a `home-views-nagy.png` és az
+ * `/__admin-tabs-probe` is említés — 1. vak kör L1, L2). A részszó-keresés a `sync` tőre minden `async`-ot tartalmazó tesztet kiválasztott
+ * (83-ból 83), a futás kifutott az időkeretből. A tő szó szerint értendő (a különleges karakterek nem mintaként).
+ */
+export function mentionsStem(text, stem) {
+  const literal = String(stem).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${literal}(?![\\p{L}\\p{N}])`, "u").test(String(text));
+}
+
+/**
  * A futtatandó böngészős csomagok. Játéknál: a mobil mérő a játék-azonosítókra szűrve (külön futás, mert a `--grep` minden
  * spec-re hat), és egy futás a játék saját spec-jeivel + meta-mérő + lejárt-kupon spec. Más UI-nál: a változott komponens
  * nevét említő spec-ek. A változott spec-fájlok mindig benne vannak.
@@ -50,7 +61,7 @@ export function pickE2eSpecs({ classification, specFiles, readSpec, cfg, changed
   }
   if (classification.ui || changedSpecs.length) {
     const stems = changed.filter((f) => /^source\/client\/src\/.+\.(?:tsx?|css)$/.test(f)).map(stemOf).filter((s) => s.length >= 4);
-    const hit = specFiles.filter((s) => stems.some((st) => readSpec(s).includes(st)));
+    const hit = specFiles.filter((s) => { const text = readSpec(s); return stems.some((st) => mentionsStem(text, st)); });
     const specs = [...new Set([...hit, ...changedSpecs])].sort();
     if (specs.length) runs.push({ label: 'UI-spec-ek (a változott komponenseket említők)', specs });
     else return { runs, warning: 'UI-változás, de egyetlen spec sem említi a változott komponenseket — írj böngészős próbát, vagy indokold a PR-ban' };
@@ -67,6 +78,11 @@ export function checkPrBody(body) {
   if (!/nem futtatott|NOT RUN/i.test(b)) missing.push('„Nem futtatott + ok” sor (NOT RUN + ok + kockázat, vagy „nincs”)');
   return missing;
 }
+
+// A böngészős út időkorlátja (2026-11-23, PR-C: 556 teszt / 27 spec egy workerrel a harness 60 perces korlátjába ütközött 549 zöld és
+// 0 bukás mellett): a harness korlátja WEBSULI_E2E_TIMEOUT_MIN-nel nő, a kapu saját korlátja mindig e fölött marad (a harness takarít).
+export const E2E_HARNESS_TIMEOUT_MIN = 150;
+export const E2E_EXEC_TIMEOUT_MS = (E2E_HARNESS_TIMEOUT_MIN + 10) * 60_000;
 
 export function wrapperConfigSource() {
   return `// A scripts/qa/gates/pre-pr-gate.mjs generálja (docs/minosegkapuk.md) — NEM commitolandó (*.local.mts a .gitignore-ban).
@@ -157,7 +173,7 @@ async function main() {
       await gate.step(`böngészős út: ${run.label}`, () => {
         if (!docker) return { status: STATUS.FAIL, note: `NOT RUN → bukás: nincs Docker (az eldobható Postgres kell). Parancs: (cd source && node ${e2eArgs(run).join(' ')})` };
         gate.log(`[pre-pr-gate] futtatás: (cd source && node ${e2eArgs(run).join(' ')})`);
-        const r = exec(node, e2eArgs(run), { cwd: src, timeoutMs: 90 * 60_000 });
+        const r = exec(node, e2eArgs(run), { cwd: src, timeoutMs: E2E_EXEC_TIMEOUT_MS, env: { ...process.env, WEBSULI_E2E_TIMEOUT_MIN: String(E2E_HARNESS_TIMEOUT_MIN) } });
         writeLog(ctx.evDir, 'pre-pr-gate', `e2e-${run.label}`, `${r.stdout}\n${r.stderr}`);
         return cmdResult(r, `${run.specs.length} spec, szoftveres WebGL, buildelt szerver, workers=1`);
       });

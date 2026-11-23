@@ -109,7 +109,7 @@ function makeThemeIndependent(root: Element, viewBox: number[]): string[] {
 }
 
 /** Tisztított SVG és feliratai, vagy az elutasítás okai. */
-export function sanitizeIllustration(raw: unknown): IllustrationCheck {
+export function sanitizeIllustration(raw: unknown, opts: { idPrefix?: string } = {}): IllustrationCheck {
   if (typeof raw !== "string" || !raw.trim()) return { ok: false, problems: ["hiányzó svg"] };
   if (raw.length > ILLUSTRATION_OUTPUT_MAX_CHARS + 1000) return { ok: false, problems: [`túl nagy svg (${raw.length} > ${ILLUSTRATION_MAX_CHARS} karakter)`] };
   const content = withoutPaper(raw);
@@ -156,7 +156,12 @@ export function sanitizeIllustration(raw: unknown): IllustrationCheck {
   // Utómérés: csak akkor ok, ha a javítás után MINDEN felirat ≥ 4,5:1 és a helye számolható.
   const after = illustrationTextProblems(root, ILLUSTRATION_PAPER);
   if (after.length) return { ok: false, problems: after };
-  const svg = root.outerHTML;
+  // Csak megjelenítéshez (több rajz egy dokumentumban): az azonosítók névterezése a kész DOM-on; a méretkorlát a névterezés előtti
+  // tartalomra vonatkozik (az előtag nem a modell tartalma).
+  const plain = root.outerHTML;
+  if (withoutPaper(plain).length > ILLUSTRATION_OUTPUT_MAX_CHARS) return { ok: false, problems: [`túl nagy svg a tisztítás után (${withoutPaper(plain).length} > ${ILLUSTRATION_OUTPUT_MAX_CHARS} karakter)`] };
+  if (opts.idPrefix) { namespaceIds(root, opts.idPrefix); return { ok: true, svg: root.outerHTML, labels, contrastFixes, attrFixes }; }
+  const svg = plain;
   if (withoutPaper(svg).length > ILLUSTRATION_OUTPUT_MAX_CHARS) return { ok: false, problems: [`túl nagy svg a tisztítás után (${withoutPaper(svg).length} > ${ILLUSTRATION_OUTPUT_MAX_CHARS} karakter)`] };
   return { ok: true, svg, labels, contrastFixes, attrFixes };
 }
@@ -230,4 +235,26 @@ export function illustrationLayoutProblems(svg: string): string[] {
   }
   if (overlaps.length) problems.push(`egymásra csúszó felirat: ${overlaps.slice(0, 3).join("; ")}`);
   return problems;
+}
+
+/**
+ * S2b-1 vak kör 1–2 (L2, L6): egy dokumentumba több, külön tisztított SVG kerül (képes kártyák) — az azonos helyi azonosítók (pl. két
+ * rajz `paint0` színátmenete) ütköznének. A névterezés a tisztító DOM-ján fut, KIZÁRÓLAG attribútumokon: a rajz saját `id`-jei és a
+ * rájuk mutató `url(#…)` attribútumértékek (a tisztító által megengedett belső szóközökkel is) együtt kapnak előtagot. Szövegtartalomhoz
+ * (felirat) nem nyúl; a nem definiált hivatkozás változatlan; a saját papír-háttér azonosítója (az újratisztítás kulcsa) változatlan.
+ */
+function namespaceIds(root: Element, prefix: string): void {
+  const safe = prefix.replace(/[^A-Za-z0-9-]/g, "");
+  if (!safe) return;
+  const all = [root, ...Array.from(root.querySelectorAll("*"))];
+  const ids = new Set<string>();
+  for (const el of all) { const id = el.getAttribute("id"); if (id && id !== PAPER_ID) ids.add(id); }
+  if (!ids.size) return;
+  for (const el of all) {
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name === "id") { if (ids.has(attr.value)) el.setAttribute("id", `${safe}-${attr.value}`); continue; }
+      const ref = /^\s*url\(\s*#([\w-]+)\s*\)\s*$/i.exec(attr.value);
+      if (ref && ids.has(ref[1])) el.setAttribute(attr.name, `url(#${safe}-${ref[1]})`);
+    }
+  }
 }
