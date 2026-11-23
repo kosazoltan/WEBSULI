@@ -263,7 +263,29 @@ export function createPlayerAccountStore(pool: Db) {
       const r = rows[0];
       if (!r) return null;
       const codes = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [emailHashesOf(r.email)]);
+      // Adventi naptár (migrations/0042): a fiók saját előrehaladása — belső azonosító nélkül; a megoldott ablakok a legutóbbi körből.
+      const advent = await pool.query<{ season: number; grade: number | null; round: number; finished_at: Date | null; passed_at: Date | null; doors: Record<string, Record<string, { attempts?: Array<{ correct?: boolean }> }>> | null }>(
+        // A tanulóhoz kötött fiók a tanuló naptárát játssza (a sor a tanulóhoz tartozik) — az adatletöltés azt is tartalmazza (E19).
+        `SELECT season, grade, round, finished_at, passed_at, doors FROM advent_progress
+          WHERE player_id = $1 OR learner_id = (SELECT linked_learner_id FROM player_accounts WHERE id = $1)
+          ORDER BY season`,
+        [id],
+      );
+      // Sérült adventi mentés (pl. [null] próba) nem töri el az adatletöltést (GPT-vak 3. kör L5): a sor jelölve, számlálók nélkül.
+      const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+      const doorsAreSound = (doors: unknown): boolean => isObject(doors) && Object.values(doors).every((round) => isObject(round)
+        && Object.values(round).every((door) => isObject(door) && Array.isArray(door.attempts) && door.attempts.every((t) => isObject(t) && typeof t.correct === "boolean")));
       return {
+        adventCalendar: advent.rows.map((a) => {
+          const base = { season: a.season, grade: a.grade, round: a.round, finishedAt: a.finished_at, passedAt: a.passed_at };
+          if (a.doors !== null && !doorsAreSound(a.doors)) return { ...base, corrupt: true as const, answeredDoors: null, solvedDoors: null };
+          const current = Object.values(a.doors?.[String(a.round)] ?? {});
+          return {
+            ...base,
+            answeredDoors: current.filter((d) => (d.attempts?.length ?? 0) > 0).length,
+            solvedDoors: current.filter((d) => d.attempts?.some((t) => t.correct === true)).length,
+          };
+        }),
         account: {
           email: r.email, emailVerifiedAt: r.email_verified_at, nickname: r.nickname, avatar: r.avatar_key,
           googleLinked: r.google, learnerProfileLinked: r.learner, bannedAt: r.banned_at, createdAt: r.created_at, lastSeenAt: r.last_seen_at,
