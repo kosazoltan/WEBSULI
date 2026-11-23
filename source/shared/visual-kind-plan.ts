@@ -27,21 +27,25 @@ export const SUBJECT_KIND_HINTS: Record<CatalogSubject, readonly string[]> = {
   technika: ["process", "scene3d", "labeledShape"],
 };
 
-/** A szerződés szövegében LEÍRT ábrafajták: a fajta neve után „ — ” áll (pl. „cycle — …”, „timeline — …”). */
+/**
+ * A paraméterleírásokban LEÍRT ábrafajták: a fajta neve önállóan áll, utána „ — ” vagy „ params:” (pl. „cycle — …”, „decisionStory
+ * params: …”). Az ábrakészítőnek ténylegesen elküldött leírásokból kell hívni (1. vak kör L2).
+ */
 export function describedKinds(contract: string, kinds: readonly string[]): string[] {
-  return kinds.filter((kind) => new RegExp(`(?<![A-Za-z0-9])${kind} — `).test(contract));
+  return kinds.filter((kind) => new RegExp(`(?<![\\p{L}\\p{N}_])${kind}(?: — | params:)`, "u").test(contract));
 }
 
 /**
  * Az ábrakészítő promptjának tantárgyi sora. Csak olyan fajtát ajánl, amelynek paraméter-alakja a kapott szerződésben le van írva (a
- * leíratlan fajtát a modell nem tudná helyesen kitölteni); ismeretlen tantárgynál vagy kettőnél kevesebb ajánlható fajtánál nincs sor.
+ * leíratlan fajtát a modell nem tudná helyesen kitölteni); ismeretlen tantárgynál vagy ajánlható fajta nélkül nincs sor (1. vak kör L1:
+ * egyetlen ajánlható fajta is ajánlás).
  */
 export function subjectKindHintLine(subject: string, contract: string): string {
   const key = subjectKeyOf(subject);
   if (!key) return "";
   const kinds = describedKinds(contract, SUBJECT_KIND_HINTS[key]);
-  if (kinds.length < 2) return "";
-  return `TANTÁRGYI ÁBRA-AJÁNLÁS (${key}): ebben a tantárgyban ezek a fajták mutatják meg legjobban a tartalmat — ${kinds.join(", ")}. Ahol illik, ezekből válassz, és a lecke ábrái ne ugyanabból a fajtából álljanak (egy fajta legfeljebb az ábrák 40%-a).`;
+  if (!kinds.length) return "";
+  return `TANTÁRGYI ÁBRA-AJÁNLÁS (${key}): ebben a tantárgyban ezek a fajták mutatják meg legjobban a tartalmat — ${kinds.join(", ")}. Ahol illik, ezekből válassz; ha a leckében legalább öt saját (nem forrásból átvett) ábra van, egy fajta lehetőleg ne tegye ki többet az ábrák 40%-ánál (kevesebb ábránál ez nem cél).`;
 }
 
 type LessonLike = { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string; animKind?: unknown; sourceVisualId?: unknown }> }> };

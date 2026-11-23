@@ -24,11 +24,21 @@ test("V23: az ajánlótábla minden katalógus-tantárgyra legalább két, a sé
 test("V23: az ajánlósor CSAK a szerződésben leírt fajtát nevezi meg; kettőnél kevesebb ajánlható fajtánál nincs sor", () => {
   assert.deepEqual(describedKinds(VISUAL_PARAMS_CONTRACT, ["cycle", "timeline", "process", "fraction", "map", "wordBuilder", "sentenceParts"]), ["cycle", "timeline", "process"],
     "a négy leíratlan fajta ma nincs a szerződésben");
+  // 1. vak kör L2: a „params:” alakú leírás (decisionStory) is leírt fajta; a részszó nem.
+  assert.deepEqual(describedKinds("decisionStory params: {title}", ["decisionStory"]), ["decisionStory"]);
+  assert.deepEqual(describedKinds("előprocess — x; micro_map — y", ["process", "map"]), []);
   const math = subjectKindHintLine("Matematika", VISUAL_PARAMS_CONTRACT);
   assert.match(math, /TANTÁRGYI ÁBRA-AJÁNLÁS \(matematika\)/u);
   assert.match(math, /numberLine, labeledShape, barChart, venn/u);
   assert.doesNotMatch(math, /fraction/u, "leíratlan fajta nem kerül a promptba");
-  assert.equal(subjectKindHintLine("magyar nyelvtan", VISUAL_PARAMS_CONTRACT), "", "csak egy leírt fajta maradna → nincs sor");
+  // 1. vak kör L1: egyetlen ajánlható fajta is ajánlás (magyar nyelvtan → venn; angol / német / francia → timeline).
+  assert.match(subjectKindHintLine("magyar nyelvtan", VISUAL_PARAMS_CONTRACT), /— venn\./u);
+  for (const subject of ["angol", "német", "francia"]) assert.match(subjectKindHintLine(subject, VISUAL_PARAMS_CONTRACT), /— timeline\./u, subject);
+  // Minden katalógus-tantárgy kap ajánlást a mai szerződéssel is.
+  for (const subject of CATALOG_SUBJECTS) assert.notEqual(subjectKindHintLine(subject, VISUAL_PARAMS_CONTRACT), "", subject);
+  // 1. vak kör L3: a modellnek mondott cél a szerver mérési szabályát követi (legalább öt saját ábránál), nem kötelező 40% minden leckére.
+  assert.match(math, /legalább öt saját \(nem forrásból átvett\) ábra/u);
+  assert.doesNotMatch(math, /legfeljebb az ábrák 40%-a/u);
   assert.equal(subjectKindHintLine("ismeretlen tárgy", VISUAL_PARAMS_CONTRACT), "");
   // Ha a szerződés később leírja a fajtát (S6c-2), az ajánlás magától bővül.
   const extended = `${VISUAL_PARAMS_CONTRACT}\nfraction — tört\nwordBuilder — szóépítés\nsentenceParts — mondatrészek`;
@@ -56,8 +66,9 @@ test("V23: az ábrakészítő kérése a FUTÁS állapotát követi — KI bájt
     assert.equal(await runWithLessonVariety(false, async () => buildAnimatorPrompt(fixture, map)), off, "KI futás BE környezetben");
     delete process.env.STUDIO_LESSON_VARIETY;
     assert.equal(await runWithLessonVariety(true, async () => buildAnimatorPrompt(fixture, map)), on, "BE futás KI környezetben");
-    // Ajánlható fajta nélküli tantárgynál BE állapotban sincs sor.
-    assert.equal(await runWithLessonVariety(true, async () => buildAnimatorPrompt(fixture, { ...map, subject: "magyar nyelvtan" })), buildAnimatorPrompt(fixture, { ...map, subject: "magyar nyelvtan" }));
+    // 1. vak kör L1 + L2: a magyar nyelvtan BE állapotban is kap ajánlást; a magyar irodalom ajánlásában ott a decisionStory (külön leírás).
+    assert.match(await runWithLessonVariety(true, async () => buildAnimatorPrompt(fixture, { ...map, subject: "magyar nyelvtan" })), /TANTÁRGYI ÁBRA-AJÁNLÁS \(magyar-nyelvtan\)/u);
+    assert.match(await runWithLessonVariety(true, async () => buildAnimatorPrompt(fixture, { ...map, subject: "magyar irodalom" })), /— timeline, decisionStory, illustration\./u);
   } finally {
     if (saved === undefined) delete process.env.STUDIO_LESSON_VARIETY; else process.env.STUDIO_LESSON_VARIETY = saved;
   }

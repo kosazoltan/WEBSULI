@@ -425,3 +425,23 @@ test("S6b L1: jóváhagyott tervnél, friss modelltervnél és KI állapotban a 
   const kept = { sections: [{ heading: "A", plannedBlocks: ["explain"], tryKind: "match" }] };
   assert.equal(applySectionShapes(kept, undefined, true), kept, "nincs mit tisztítani: ugyanaz az objektum");
 });
+
+// --- S6c-1 1. vak kör (L5): a VÉGLEGES mentés méri az ábrafajtákat — a done job telemetriája és jelzése a publikált leckéhez illik ---
+
+test("S6c-1 L5: BE futás végén a mentett telemetria (visualKinds) és a fajta-jelzés a publikált leckéből számol; KI futásban nincs ilyen", async () => {
+  const { visualKindCounts, kindShareProblems } = await import("../shared/visual-kind-plan");
+  const on = memory();
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client(), on, { lessonVariety: true }));
+  const done = on.steps.at(-1)!;
+  assert.equal(done.step, "done");
+  const out = done.output as { telemetry?: { gates?: { visualKinds?: Record<string, number> } }; qualityNotes?: Array<{ reason?: string; note?: string }> };
+  const published = on.lessons.at(-1) as Parameters<typeof visualKindCounts>[0];
+  assert.deepEqual(out.telemetry?.gates?.visualKinds, visualKindCounts(published), "a telemetria a publikált lecke ábráit számolja");
+  const kindNotes = (out.qualityNotes ?? []).filter((n) => n.reason === "visual_kind_share").map((n) => n.note);
+  assert.deepEqual(kindNotes, kindShareProblems(published), "a jelzés a publikált leckére szól");
+  const off = memory();
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client(), off, { lessonVariety: false }));
+  const offOut = off.steps.at(-1)!.output as { telemetry?: { gates?: Record<string, unknown> }; qualityNotes?: Array<{ reason?: string }> };
+  assert.equal("visualKinds" in (offOut.telemetry?.gates ?? {}), false, "KI: nincs új telemetria-mező");
+  assert.equal((offOut.qualityNotes ?? []).some((n) => n.reason === "visual_kind_share"), false);
+});

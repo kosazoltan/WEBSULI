@@ -201,7 +201,7 @@ A TGM-végrehajtás „S2b” fejezete (355. sortól) változatlanul; a `STUDIO_
 **Bontás (2026-11-23):** az alábbi lépések az egyben-változatot írják le; a megvalósítás két PR. **S6c-1** (ág
 `feat/tgm-s6c1-abrafajta-terv`, munkafa `tgm-s6c1`, a főágból): `shared/visual-kind-plan.ts` (új; az ajánlás csak a szerződésben leírt
 fajtákat nevezi meg), `server/studio/step-io.ts` (az ajánlósor a futásra rögzített BE állapotnál), `server/studio/single-run/engine.ts`
-(jelzés a szerzői állomás után ÉS a végleges leckén), `shared/run-telemetry.ts`; teszt: `tests/visual-kind-plan.test.ts`. A
+(jelzés és telemetria KIZÁRÓLAG a végleges, publikált leckén — előzetes mérés nincs; 1. vak kör L4), `shared/run-telemetry.ts`; teszt: `tests/visual-kind-plan.test.ts`. A
 `lesson-visual-params.ts` és a kliens NEM változik. **S6c-2** (a régi `feat/tgm-s6c-v2` ág megjelenítő-része, a vak kör L1–L5
 leleteinek javításával, fajtánkénti böngészős próbával) az S6c-1 után, külön tervkiegészítéssel.
 
