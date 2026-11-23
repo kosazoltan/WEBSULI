@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { SECTION_KINDS, applySectionShapes, planSections, shapeSimulation, tryShare, type SectionKind } from "../shared/lesson-section-shapes";
+import { SECTION_KINDS, applySectionShapes, planSections, shapeSimulation, tryShare, tryShareLow, withTryShareNote, type SectionKind } from "../shared/lesson-section-shapes";
 import { BAND_VOICES, bandVoiceForPrompt } from "../shared/lesson-band";
 import { AGE_BANDS } from "../shared/lesson-schema";
 import { seedFrom } from "../shared/seeded";
@@ -93,4 +93,53 @@ test("V19: a szerző-prompt KI bájtra a régi (mag mellett is); BE a hangot és
 test("V20: a szimuláció a try-beszúrással is a küszöb alatt", () => {
   const sim = shapeSimulation([3, 4, 4, 5, 5, 5, 6, 6, 7, 8, 9, 10, 12], 400);
   assert.ok(sim.topShare < 0.35 && sim.samePatternProbability < 0.2, JSON.stringify(sim));
+});
+
+// --- S6b 1. vak kör (L2, L3, L4) ---
+
+test("L3: két egymást követő try fajtája csak akkor azonos, ha mindkettő kötött típusú — az `any` az előzőt ÉS a következő kötöttet is kerüli", () => {
+  // A jelentett eset: any, procedure, comparison, description a …000002 térkép magján.
+  const reported = planSections(["any", "procedure", "comparison", "description"], seedFrom("00000000-0000-4000-8000-000000000002"));
+  const kindsOf = (plan: ReturnType<typeof planSections>, kinds: readonly SectionKind[]) => plan.map((p, i) => ({ try: p.tryKind, kind: kinds[i] })).filter((x) => x.try);
+  const check = (plan: ReturnType<typeof planSections>, kinds: readonly SectionKind[], label: string) => {
+    const carriers = kindsOf(plan, kinds);
+    for (let k = 1; k < carriers.length; k++) {
+      if (carriers[k].kind === "any" || carriers[k - 1].kind === "any") assert.notEqual(carriers[k].try, carriers[k - 1].try, `${label}: azonos szomszédos try (${k})`);
+    }
+  };
+  check(reported, ["any", "procedure", "comparison", "description"], "jelentett eset");
+  const all: SectionKind[] = ["any", "procedure", "comparison", "description"];
+  for (let n = 2; n <= 12; n++) {
+    for (let s = 0; s < 200; s++) {
+      const kinds = Array.from({ length: n }, (_, i) => all[(i * 7 + s * 3 + (s >> 2)) % all.length]);
+      check(planSections(kinds, seedFrom(`k${s}`)), kinds, `${n}/${s}`);
+    }
+  }
+});
+
+test("L2: a jelzés a nyers darabszámból — pontosan 1/3 megfelel, 1/4 nem; üres lecke nem jelez", () => {
+  const lesson = (rows: string[][]) => ({ sections: rows.map((r) => ({ blocks: r.map((kind) => ({ kind })) })) });
+  assert.equal(tryShareLow(lesson([["explain", "try"], ["explain"], ["explain"]])), false, "1/3: megfelel (a kerekített 0,33 nem dönt)");
+  assert.equal(tryShareLow(lesson([["try"], ["explain"], ["explain"], ["explain"], ["explain"], ["try"]])), false, "2/6");
+  assert.equal(tryShareLow(lesson([["try"], ["explain"], ["explain"], ["explain"]])), true, "1/4");
+  assert.equal(tryShareLow(lesson([["explain"]])), true);
+  assert.equal(tryShareLow(lesson([])), false);
+  const engine = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
+  assert.ok(engine.includes("if (tryShareLow(lesson)) qualityNotes.push("), "a motor a nyers darabszámmal dönt");
+  assert.equal(engine.includes("share < 1 / 3"), false);
+});
+
+test("L4: a végleges leckére szóló jelzés lecseréli vagy törli a korábbit, a többi jelzést megtartja; a motor a publikált leckén mér", () => {
+  const lesson = (rows: string[][]) => ({ sections: rows.map((r) => ({ blocks: r.map((kind) => ({ kind })) })) });
+  const other = { reason: "length_over_budget", note: "hosszú", round: 0 };
+  const stale = { reason: "try_share_low", note: "régi", round: 0 };
+  assert.deepEqual(withTryShareNote([other, stale], lesson([["try"], ["explain"], ["explain"]])), [other], "a végleges lecke megfelel → a régi jelzés törlődik");
+  const low = withTryShareNote([other, stale], lesson([["explain"], ["explain"], ["explain"], ["try"]]));
+  assert.equal(low.length, 2);
+  assert.equal(low[0], other);
+  assert.equal(low[1].reason, "try_share_low");
+  assert.notEqual((low[1] as { note: string }).note, "régi", "a jelzés a végleges arányt írja");
+  assert.deepEqual(withTryShareNote([], lesson([["try"]])), []);
+  const engine = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
+  assert.ok(engine.includes("telemetry.gates.tryShare = tryShare(publishable);") && engine.includes("withTryShareNote("), "a végső mérés a publikált leckén");
 });
