@@ -50,6 +50,9 @@ export const ANIM_KINDS = [
   "table",
   "ruleBox",
   "compareCards",
+  // S2b-1 (docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): elágazó döntési fa, képes kártyák.
+  "decisionTree",
+  "pictureCards",
 ] as const;
 
 /**
@@ -80,7 +83,7 @@ export type AnimKind = (typeof ANIM_KINDS)[number];
  * kimenetében csak a forrás vizuális leltárának funkciókapcsolója mellett fogadja el (spec 2026-11-18-tananyag-gyartas-minoseg, 5. szakasz
  * 14. pont) — KI állapotban a modell ilyen fajtát nem is hall, és a kimenet határa a bővítés előtti hibával utasítja el.
  */
-export const SOURCE_VISUAL_ANIM_KINDS = ["table", "ruleBox", "compareCards"] as const satisfies ReadonlyArray<AnimKind>;
+export const SOURCE_VISUAL_ANIM_KINDS = ["table", "ruleBox", "compareCards", "decisionTree", "pictureCards"] as const satisfies ReadonlyArray<AnimKind>;
 /** A bővítés ELŐTTI ábrafajta-felsorolás (a főág `ANIM_KINDS` listája, ugyanabban a sorrendben). */
 export const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VISUAL_ANIM_KINDS as readonly string[]).includes(k)) as [AnimKind, ...AnimKind[]]);
 
