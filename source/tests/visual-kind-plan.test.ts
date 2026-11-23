@@ -57,3 +57,32 @@ test("V24: fajta-arány jelzés — 10-ből 5 azonos jelez, 4 nem; a forráshoz 
   assert.deepEqual(kindShareProblems(lesson(withSource)), [], "a forráshoz kötött nem számít");
   assert.deepEqual(visualKindCounts(lesson([["process"], ["cycle"], ["process", true]])), { process: 1, cycle: 1 });
 });
+
+// S6c-v2 (a lánc invariánsa az S5a óta): az ábrakészítő kérése és az ábrafajta-jelzés a FUTÁS rögzített állapotát követi, nem a környezetet.
+test("S6c-v2: az ábrakészítő kérése a futás állapotát követi — KI futás BE környezetben bájtra a KI kérés, BE futás KI környezetben a BE kérés", async () => {
+  const { buildAnimatorPrompt } = await import("../server/studio/step-io");
+  const { runWithLessonVariety } = await import("../server/studio/lesson-variety-flag");
+  const { fusionFixture } = await import("../shared/fixtures/lesson-fusion");
+  const lesson = fusionFixture();
+  const map = { title: lesson.title, subject: lesson.subject, classroom: lesson.classroom, concepts: [{ localId: "c1", examWeight: "core" as const, term: "terület" }] };
+  const saved = process.env.STUDIO_LESSON_VARIETY;
+  try {
+    delete process.env.STUDIO_LESSON_VARIETY;
+    const off = buildAnimatorPrompt(lesson, map);
+    process.env.STUDIO_LESSON_VARIETY = "on";
+    const on = buildAnimatorPrompt(lesson, map);
+    assert.notEqual(on, off, "a próba valódi különbséget mér");
+    assert.equal(await runWithLessonVariety(false, async () => buildAnimatorPrompt(lesson, map)), off, "KI futás BE környezetben");
+    delete process.env.STUDIO_LESSON_VARIETY;
+    assert.equal(await runWithLessonVariety(true, async () => buildAnimatorPrompt(lesson, map)), on, "BE futás KI környezetben");
+  } finally {
+    if (saved === undefined) delete process.env.STUDIO_LESSON_VARIETY; else process.env.STUDIO_LESSON_VARIETY = saved;
+  }
+});
+
+test("S6c-v2: a motor ábrafajta-jelzése a futás állapotához kötött (szerkezeti őr)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
+  assert.ok(src.includes("if (!pastAnimator && varietyOn) {"), "a jelzés a futás állapotát olvassa");
+  assert.equal(src.includes("lessonVarietyEnabled()) {"), false, "a motor futás közben nem olvas környezetet");
+});
