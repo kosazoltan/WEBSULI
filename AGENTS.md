@@ -157,16 +157,18 @@ blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
 1. **Lint kapu minden kibocsátás előtt** (commit-sorozat lezárása, push, PR, merge, telepítés): `npm run gate:lint`.
 2. **Szakasz-kapu minden fejlesztési szakasz után:** `npm run gate:stage` (lint gyors mód + a változott fájlok egységtesztjei + minden
    őr-teszt). Csak zöld után lehet továbblépni; előbb a helyi hibát kell javítani.
-3. **Független ellenőr:** minden elkészült fejlesztést egy friss kontextusú, csak olvasó alügynök ellenőriz a PR megnyitása ELŐTT és
-   minden érdemi javító push előtt (a fejlesztő nem ellenőrizheti magát). Az ítéletet a `record-review.mjs` rögzíti.
-4. **A kapuk sorrendje:** `gate:stage` (szakaszonként) → `gate:push` → független ellenőr + `record-review` →
+3. **Független ellenőr = helyi GPU-ellenőr** (tulajdonosi döntés 2026-11-23, `docs/specs/2026-11-23-vak-kor-kivezetes.md`): a PR
+   megnyitása ELŐTT és minden javító push után `node scripts/qa/gates/local-review.mjs` (helyi Ollama-modell, angol megbízás, felhős
+   token nélkül) rögzíti az ítéletet. A felhős „vak kör” (friss alügynök minden fejre, újra-vak körök) **kivezetve**; felhős második
+   vélemény csak a script által kockázatosnak jelölt fájloknál, egyszer / PR, ajánlásként. A `high` leletet a kódból ellenőrizd.
+4. **A kapuk sorrendje:** `gate:stage` (szakaszonként) → `gate:push` → `local-review.mjs` →
    `gate:pr -- --body-file <leírás.md>` → push + PR → zöld CI → közvetlenül a merge előtt `gate:merge -- <PR>`. A `git push`,
    `gh pr create` és `gh pr merge` előtt a `check-quality-gates` hook a zöld bizonyítékot ellenőrzi.
 5. **A kapu megkerülése tilos**, vészkijárat nincs; ha a kapu hibás, a kaput kell javítani (teszttel).
 6. **API-költség elve:** előbb az olcsó helyi ellenőrzés; a független ellenőr (és a CI) csak zöld helyi kapuk után indul — ne a
    drága kör fogja meg az olcsó hibát.
 
-A független ellenőr mellett második, más rendszerű véleményként a külső (Gemini) ellenőr is futtatható
+Kockázatos fájloknál (migráció, auth, fizetés, e-mail, CI) második véleményként a külső (Gemini) ellenőr is futtatható
 (`scripts/qa/gates/external-review.mjs`, kulcs csak `GEMINI_API_KEY`-ből); a jelentését az orkesztrátor a kódból visszaellenőrzi, a
 hiánya nem bukás.
 
