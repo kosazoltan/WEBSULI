@@ -1107,7 +1107,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // „error” állapota), `gateStop` a kimenetben, közzététel nincs. Harmadik próba nincs. A kapu hibája egyik módban sem állít meg.
   const firstVerdict = coverageMode === "off" ? null : judgeCoverage(publishable);
   if (firstVerdict) {
-    let verdict = firstVerdict;
+    const verdict = firstVerdict;
     // A pótló forduló futásonként EGY: a kapunál már megállt job folytatása (mentett `gateStop`) nem kap újabbat — ha a kapu a
     // folytatáskor is bukik, a futás azonnal megáll.
     if (!verdict.ok && coverageMode === "enforce" && stoppedAtCoverage) {
