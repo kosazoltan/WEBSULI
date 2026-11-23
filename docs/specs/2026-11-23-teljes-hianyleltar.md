@@ -133,6 +133,22 @@ Jelölés: KÉSZ / RÉSZ (részben) / ÁG (ágon kész, nincs bent) / NINCS (el 
 - **H7 — kapuk, infrastruktúra:** P-042, P-045…P-047, P-050, P-052, P-054, P-058, P-060, H-11, H-22, H-24, H-25.
 - **H8 — teljesítmény, takarítás, QA:** P-009, P-051, P-053, P-059, BL-tételek.
 
+## 4/a. Tulajdonosi döntések (űrlap, 2026-11-23)
+
+- **P-022** — Admin-próba most, nyilvános élesítés csak a JM3b/JM8 lezárása után (kapcsolók: tulajdonos, Render)
+- **P-020** — Igen: normalizált cím + egyedi index, meglévő ütközések listázva, kézi összevonással
+- **P-063** — Verziózott új skála, a régi rekordok „régi skála”-ként megmaradnak
+- **P-007** — A kompakt kabalasáv kiadható; a maki prototípus elvetve
+- **P-023** — Nincs történetátírás (a jelenlegi kódban a címek már nincsenek) → ELVETVE
+- **P-036** — Helyőrző képekkel indul; végleges képgyártás a 4 próbakép alapján később, tulajdonosi döntéssel
+- **P-056** — Levélküldés csak száraz összesítő után, külön jóváhagyással
+- **P-057** — .claude/settings.json verziókövetve marad; hookok szűk matcherrel; egy hook hibája csak a saját lépését állítja meg
+- **P-064** — Jóváhagyva: néma próbakimondás ki, 80 MB-os abszolút hangtárplafon
+- **P-065** — Jelzés mindenhol, vészleállítás csak a fizetős próbafutás keményplafonjánál
+- **P-066** — Belső kapuhibánál is jelzés (nincs leállítás), a próbafutás keményplafonja kivétel
+- **BL withQuotaFailover** — Marad az OpenRouter-tartalékút, minden átváltás költségnaplóval
+- Titok-rotációk (Google OAuth, 2026-10-14-i szivárgás): a tulajdonos végzi; a kód-oldalon teendő nincs.
+
 ## 5. Minden szeletre érvényes eljárás (a repó szabályai szerint)
 
 Terv + végrehajtási utasítás (`docs/specs/`) → munkafa a főágból → kód + teszt → `gate:stage` → `gate:push` → `local-review.mjs`
