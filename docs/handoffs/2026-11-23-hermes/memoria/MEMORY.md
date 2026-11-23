@@ -1,0 +1,51 @@
+- [Projekt-kötés](projekt-kotes.md) — ez a repó = „WEBSULI” oldalsáv-csoport; új session ide sorolandó
+- [Tudástérkép](projekt-tudasterkep.md) — hol a CLAUDE.md, skillek, retrók, kanban, state (gépi leltár)
+- [Retró-napló](retro-naplo.md) — futásonkénti kumulált tanulságok, legfrissebb felül
+- [Befejezési mandátum](completion-mandate.md) — félbehagyás tilos; session végén tételes teljességellenőrzés (2026-11-01; forrás: AGENTS.md)
+- [Kötelező minőségkapuk](quality-gates-mandate.md) — `npm run gate:stage`/`push`/`pr`/`merge` kötelező; független ellenőr a PR ELŐTT (2026-11-17)
+- [Mindig magyarul](always-hungarian.md) — a tulajdonossal minden üzenet magyar, a CI/review-események utáni összefoglaló is
+- [Push audit-hook](websuli-push-audit-hook.md) — friss .audit-ok külön parancsban a git-gyökérben (worktree-ben ott is); commit-üzenet fájlból
+- [Ellenőrzés-lánc és titok-kimenet](check-chain-and-secret-output.md) — minden ellenőrzés külön kilépési kóddal; titkos parancssor ne kerüljön kimenetbe
+- [Lint: max-warnings 0](lint-max-warnings.md) — push előtt teljes `npm run lint`; egy figyelmeztetés is buktatja a CI-t
+- [Nincs deploy futás közben](no-deploy-during-active-runs.md) — minden merge előtt közvetlenül az aktív-futás őr; csak `source/` változás telepít
+- [TaskStop árva figyelő](taskstop-orphan-monitor.md) — Windows-on a TaskStop a merge-when-ready bash-t nem öli meg; Stop-Process kell
+- [Csak a megválaszolt szálat zárd](resolve-only-answered-threads.md) — review-szál lezárása id-egyezéssel, nem „minden nyitott”
+- [Orkesztrálás tanulságai](orchestration-lessons-games.md) — alügynökös szeletmunka: saját scratchpad, egy push, merge-ablak, friss reviewer; C-azonosítókkal
+- [Docker elérhető](docker-available.md) — saját eldobható Postgres-konténer helyi tesztekhez; a platform-db-dev-et nem piszkáljuk
+- [Lecke-próbaharness](lesson-trial-harness.md) — promptváltozást mért alapvonalhoz (single-run-measure, eldobható DB); ne polírozz végtelen review-körökben
+- [Bankmodell: Opus marad](bank-model-opus-decision.md) — olcsó jelöltek mérve, elvetve (2026-10-16); gyorsítás = párhuzamos bank
+- [Régi anyagok ciklusai](legacy-migration-cycles.md) — 5-ös felülvizsgálati ciklus, tömeges fizetős futás csak egyértelmű „mind” után; lezárva 178/178
+- [Arculati bank döntések](design-bank-decisions.md) — minden díszítőelem előre gyártva, feliratok kódszótárban, bájtok DB-ben (Neon-keret!)
+- [Eredmény e-mailben](lesson-results-email-rule.md) — leckeeredmény az ADMIN_EMAILS-nek (3 címzett) sendResultEmail-lel; mailto tilos
+- [Tanulói link titka](learner-profile-tokens.md) — a ?t= párosítás SESSION_SECRET-ből aláírt; rotáció = újrapárosítás; QR a szülő képernyőjén
+- [Diktálás / TTS / kiejtés](dictation-tts-language-lessons.md) — kereszt-domaines keret: beszédfelismerés csak a hídon; nyelvleckénél kiejtésgyakorló kötelező
+- [YouTube-csatornabank](youtube-channel-bank.md) — hírlevél videó-ajánló a shared/youtube-channels.ts-ből; bővítés csak böngészőben ellenőrzött URL-lel
+- [Codex felhőkörnyezetek](codex-cloud-env-docs.md) — repónkénti docs/codex-felhokornyezet.md; a hiteles doksi a többes számú oldal
+- [Játékos-fiók: diák saját regisztráció](game-accounts-student-self-registration.md) — 2026-11-16: e-mail + becenév, nincs szülői/jogi kapu; ne javasold újra
+- [Közös játék és szerepek](game-multiplayer-decisions.md) — csak online párbaj, hibrid jogosultság, baráti csalásvédelem, joystick marad; nyitott döntések
+- [Takarítás: archívum törlendő](cleanup-delete-archives.md) — kifejezett takarításnál a régi archívum / mentés / nem olvasott adat törlési jelölt; leltár → helyi törlés → visszafordíthatatlan tételek megerősítéssel (2026-11-18)
+- [Szkript-őrök a futó programban](runtime-script-guards.md) — AI-lépést szkript / hook / webhook szabályozzon (kimenet-ellenőr, futáskorlát, mutációs teszt); „kapun átment” ≠ a cél teljesült (2026-11-18)
+- [Háromfázisú ellenőr: tervhivatkozás](three-phase-plan-reference.md) — a -vegrehajtas.md teljes `docs/specs/<név>.md` útvonallal hivatkozzon a tervre, az első kódcommit ELŐTT (2026-11-18)
+- [Vak, hibakereső ellenőr](blind-bug-hunting-reviewer.md) — az ellenőr vak és hibakereső; 2026-11-19 óta a gépi futtató (GPT-6.2 Sol, high) adja az ítéletet; Gemini-sor nincs
+- [Halmozott PR-lánc: önálló beolvaszthatóság](stacked-pr-standalone-neutral.md) — minden PR egyedül is hagyja változatlanul az éles működést; kapcsoló a lánc ALJÁN, alapból KI, prompt-lenyomat teszt a főághoz (2026-11-18)
+- [Prompt-gyorsítótár maximálása](maximize-prompt-cache.md) — meglévő alügynök folytatása új helyett, stabil megbízás-fejléc, célzott olvasás; a vak ellenőrben is (2026-11-18) — KÖTELEZŐ 2026-11-23: minden vak kör után találati arány (cél ≥ 80%, mért átlag 93,3%)
+- [Vak ellenőr futtatója](blind-review-runner.md) — `npm run gate:blind-review`, `openai/gpt-6.2-sol` high, exclusive BE: a futtató ítélete kötelező, Claude-alügynök nem ellenőr (2026-11-19) — a főágon még nincs: a `vak-v2` munkafából fut
+- [Én vezetem a WEBSULI merge-sorát](orchestrator-owns-all-websuli-flows.md) — lint / push / merge / deploy sorrend, más munkamenetekét is; a kapuk megkerülése nélkül (2026-11-18)
+- [Kapugyorsítás döntései](gate-speed-decisions.md) — C-61 gépi összefésült próba, bizonyíték-átvitel, vak körök korlátja (max 3), WIP ≤ 4, gép-zár (2026-11-19)
+- [Pótlási terv és döntések](potlasok-terv-dontesek.md) — GPT-leltár (68 tétel) + 50 szeletes terv; D-01…D-16 (D-08 igen, D-15 törölve); végrehajtás a futó javítások után (2026-11-19)
+- [Tananyag-változatosság előre](lesson-variety-priority.md) — KIEMELT: TGM S5a–SK2 + S2b–S3b előre; P-030 eddig nem valósult meg; fizetős próba csak jóváhagyással (2026-11-20)
+- [A fő munkakönyvtár legyen friss](main-checkout-must-be-current.md) — a hookok onnan futnak minden munkafára; minden merge után `pull --ff-only`, különben régi, beragadó hookok (2026-11-19)
+- [Titokvédő hook](secret-guard-hook.md) — titok soha a chatbe: globális secret-guard hook + Read-tiltások; titkot csak másolni, kiolvasni nem (2026-11-20) — 2026-11-23: visszakötve (egy napig nem volt aktív); beállítás-módosítás után mindig ellenőrizd
+- [Node-csere eltöri a hookokat](node-switch-breaks-hooks.md) — NVM/Node-csere a munkamenetből → node eltűnik a PATH-ról → fail-closed kapu-hook minden shellt tilt; a tulajdonos csinálja + Claude-újraindítás (2026-11-20)
+- [GPT teljesítési szerződés](gpt-completion-contract.md) — GPT korai megállása ellen: szerződés a promptban + gépi teljesség-ellenőrző + automatikus folytatás (max 3) (2026-11-20)
+- [Gépköltöztetés: folytatás](gepkoltoztetes-folytatas.md) — 2026-11-21 leltár+terv helye, sorrend H0→H6, vak-keret ≤30 USD, futtató még csak ágon
+- [Futás végi hurok](futas-vegi-hurok.md) — minden feladat után skill + gépi ellenőrző; tapasztalat-kanban a Claude-környezetben, NEM a Hermesben (2026-11-22)
+- [Main ágvédelem](main-agvedelem.md) — 2026-11-22 közvetlen push eltörte a főágat; döntés: ágvédelem (tulajdonosi beállítás), addig session elején főág-zöld ellenőrzés
+- [Vak kör konvergencia (TÖRVÉNY)](vak-kor-konvergencia.md) — ugyanaz a hiba tilos; konvergencia-őr exit 1 = nincs új kör; követelmény → hibaosztály-leltár → kis PR (2026-11-22)
+- [Kapurendszer-audit](kapurendszer-audit.md) — 123 vak kör, 0 tiszta IGEN; blokkoló-definíció + `--previous` + beépített őr a `vak-v2` munkafában (2026-11-22)
+- [Főszál állapota](foszal-allapot.md) — 2026-11-22 óta a „Felhős szálak összevonása” a főszál; PR-onkénti vak körök, „egy utolsó kör” döntés
+- [Felhős szálak géptelensége](felhos-szalak-geptelenseg.md) — gate:merge felhőből nem fut; gépelérés appbeli engedéllyel; koordinátor = „Felhős szálak összevonása” (2026-11-22)
+- [Parkoló funkciók döntései](parkolo-funkciok-dontesek.md) — kapcsoló mögött KI funkciók leltára; sorban befejezni (advent → TGM → #97); kisfilm 480 MB jóváhagyva; S5/S6 A/B a TGM után (2026-11-22)
+- [Főterv 2026-11-23](foterv-2026-11-23.md) — 9 hullám, advent elöl (nov. 30.); terv a docs/specs alatt, döntési pontok D1–D6
+- [Hosszú futás vezénylése](hosszu-futas-vezenyles.md) — hibajegyzék, websuli-szelet-futoszalag skill, kapusor-zár, helyi ág-mentés helye
+- [Arányos kapuk (2026-11-23)](aranyos-kapuk-2026-11-23.md) — kis javítás ≤ 30 sor éles kód: nincs fizetős vak kör; push-kapu csak kapcsolódó tesztek, teljes készlet a CI-é

@@ -1,0 +1,94 @@
+# Független review — fix/aranyos-kapuk
+Fej: dc17c658404d944cacd411284a5783f96df2affd
+## Ítélet: NEM
+
+A kapuk több valós esetben olyan változást engednek tovább, amelyhez a terv szerint ítélet vagy helyi teszt kell. A két izolált ellenpróba a fej döntési kódját használta mintabemenetekkel; nem futtatott élő GitHub-műveletet. A base: `333a553a0c4f72e2dad398b42d7b25c32b40c69f`.
+
+## Leletek (blokkoló / jegyre menő; fájl:sor, forgatókönyv, evidencia, javítási javaslat)
+
+- **L1 — blokkoló (A2/A3): a merge-kapu a bináris fájlt és az átnevezés régi oldalát elveszíti.** `scripts/qa/gates/pre-merge-gate.mjs:186`. A merge-et végző fejlesztő egy éles PNG-t cserélő PR-t ellenőriz: a GitHub-fájlsor `0/0` sorszáma mellé az adapter nem ad bináris jelzőt. Egy használaton kívüli kapusegéd azonos tartalmú archiválásánál pedig csak az új útvonal jut a `never` ellenőrzéshez. A 3. izolált lépésben az éles PNG és az archiválás kisnek számított, a sima 31 szövegsor nem; ugyanazt a képet helyi `-/-` numstatból a kód kizárta. Az ítélet hiányában `lib.mjs:349` így PASS-t ad a merge-lépésnek. A base összevetésében az új `small` ág még nem létezett. **Javítás:** teljes, az adott PR-fej/base párhoz kötött GitHub-diffből állapítsa meg az átnevezés mindkét oldalát és a bináris állapotot; ha a rendelkezésre álló GitHub-adat ezt nem bizonyítja, ne legyen mentesség. A korábbi nevet ne csak a C-61 compare-adapterében vegye figyelembe.
+- **L2 — blokkoló (A2): a Git által idézett útvonal kiesik a helyi sorszámításból.** `scripts/qa/gates/lib.mjs:280`, hívó: `pre-pr-gate.mjs:161–165`. Linuxon a vezérlőkarakteres fájlnevet a Git C-stílusban idézi; ugyanez előjöhet alapbeállítás mellett ékezetes fájlnévnél. A parser az idézőjelet az út elején hagyja, ezért a `^source/` és a hasonlóan horgonyzott kizáró minták nem illeszkednek. A 4. izolált lépésben a Git-formátumú, tabulátort tartalmazó útvonal 31 sorából 0 lett (`small:true`), az egyszerű nevű kontroll 31 maradt (`small:false`). A base-ben nem volt `numstat`-alapú felmentés. **Javítás:** mind a teljes PR-, mind az ős-diffnél NUL-határolt Git-kimenetet értelmezzen; érvénytelen rekord ne számítson nullának. A teszt valós Git-kimenetet kapjon, ne kézzel tabokra bontott egyszerű útvonalat.
+- **L3 — blokkoló (A2): a gyökérben lévő tényleges kapukonfig kis javításnak számít.** `scripts/qa/gates/gates.config.json:47`. Egy karbantartó az audit jelzőfájlját vagy érvényességét állítja a követett `.agentic-qa-kit.json`-ban. A `scripts/qa/hooks/check-audit-ok.mjs:102–108` és a `pre-push-gate.mjs:90–95` ténylegesen ebből konfigurálja a kaput. A fájl nem `source/` alatti és egyik `never` mintába sem esik; a két módosított diff-sor helyett nulla éles sorként, ítélet nélküli változásnak minősül. Az izolált kontroll a fájl explicit védésével már nem kis javításként döntött. A base mindkét kapunál ítéletet kért. **Javítás:** a ténylegesen olvasott kapu- és ügynökkonfigurációkat listázza a kizárások között; a fogyasztóhoz kössön regressziós tesztet.
+- **L4 — blokkoló (A7): másik PR ítélete átkerülhet az új PR-ra, a merge helyi tárból dönt.** `scripts/qa/gates/lib.mjs:320`, `pre-merge-gate.mjs:175–177`. A fejlesztő egy ellenőrzött ág commitjára épít egy külön PR-t (ilyen egymásra épülő ág dokumentált példája: `docs/specs/ls-3b-game-engine-2026-09-04.md:4`). A közös munkafa-tárban ott a másik PR valódi `IGEN`-je. A kapu az összes helyi review-rekordot olvassa, csak a Git-ősséget vizsgálja; a rekordban sincs PR-azonosító (`record-review.mjs:50`). A 90 éles soros új PR a saját mérete szerint nem kis javítás, de az ős és a fej közti 3 sorra az izolált döntés átvette az `IGEN`-t. A nem ős kontrollt helyesen elutasította; itt valóban ős, de másik PR. A base csak az aktuális fejhez kereste az ítéletet; az új, PR-hoz nem kötött öröklés a diffből jön. **Javítás:** merge-nél a GitHubon azonosított PR saját, korábban ellenőrzött fejét és hiteles ítéletét kösse össze; helyi jelölt ne önmagában igazolja az átvitelt. PR-kapunál is legyen azonosítható review-lánc, ne globális SHA-keresés.
+- **L5 — blokkoló (A7): a main azonos fájlba érkező változását saját utójavításnak számolja.** `scripts/qa/gates/lib.mjs:329`. Egy már ellenőrzött, nagy PR ugyanabban a modulban dolgozik, amelynek egy másik függvényébe párhuzamosan a main 40 sort hoz. A konfliktusmentes main-merge nem módosítja a PR saját foltját, de a PR fájllistája továbbra is tartalmazza a modult; az `ős..fej -- <fájlok>` a main 40 sorát is megszámolja. Az 5. izolált lépésben az ilyen inputra `null` lett az ítélet, a main-sorok nélküli kontroll átvitte az `IGEN`-t. A fej teljes PR-ja ebben az esetben 120 éles sor, így a tévesen elveszített átvitel helyett új fizetős kör kell. A base nem vezette be az A7 számítását. **Javítás:** fájlnévszűrés helyett a két fej saját PR-foltjának változását hasonlítsa; tesztelje a közös fájl külön hunkjait és a main-only merge-et.
+- **L6 — blokkoló (A2/A7): az újabb `NEM`-et kiszűri, majd a régi `IGEN`-t viszi át.** `scripts/qa/gates/lib.mjs:336–340`. Egy nagy PR korábban `IGEN`-t kap az A fejen, a következő kis kódjavítás B fején a visszaellenőr blokkoló hibát talál (`NEM`). Egy új, csak leírást pontosító commit után a hiba érintetlen, de a kiválasztás a B-t még a sorrend megállapítása előtt kidobja. Az izolált próbában B a frissebb ellenőrzött ős, A óta 2 éles sor változott, az eredmény mégis A `IGEN`-je volt. A közvetlenül az aktuális fejre szóló `NEM`-et a meglévő tesztek valóban buktatják; ez a védelem nem az öröklési sorrendre vonatkozik. Base-ben a jelentés nélküli új fej FAIL volt. **Javítás:** előbb azonosítsa a legutóbbi, ezen PR-hoz tartozó ellenőrzött őst, majd annak `NEM`-je állítsa meg az öröklést; ne legyen visszaesés régebbi `IGEN`-re.
+- **L7 — blokkoló (A6): valódi tárolók változása nem indít helyi DB-tesztet.** `scripts/qa/gates/gates.config.json:36–40`. Egy fejlesztő a kuponok vagy a leckekérdések SQL-szűrését javítja a `source/server/rewards/store.ts` fájlban, egyéb változtatás nélkül. Ez tényleges tároló (`store.ts:143–151`); a valódi DB-teszt közvetlenül hívja (`source/tests/learning-db.integration.ts:201–210,225–235`), a futtató pedig felveszi ezt a tesztfájlt (`source/scripts/run-learning-db-tests.ts:118`). Ugyanerre az útlistára a fej `db:false`, a base `db:true` választ adott; `pre-pr-gate.mjs:202–205` az előbbire teszthívás előtt SKIP-et ad. A DB-készlet külön eldobható PostgreSQL-en lefutott; az nem pótolja az új kiválasztó hibáját. **Javítás:** a valódi adattárakat fedő útvonaltérkép vagy ellenőrzött hozzáférés-alapú felismerés, konkrét pozitív tesztekkel (jutalmak, Stúdió-tár), és tisztán nem-DB szervermodullal negatív kontrollként.
+- **L8 — blokkoló (A4): közös fájl törlésénél nem fut a teljes helyi egységteszt.** `scripts/qa/gates/pre-push-gate.mjs:198–201`. A fejlesztő eltávolítja a `source/shared/request-retry.ts` közös modult (például takarítás közben), de a `source/tests/request-retry.test.ts:4` még importálja. A `changedFiles` eleve kizárja a törlést, majd csak létező fájlt ad vissza (`lib.mjs:110–117`). Az izolált láncban törlésre célzott mód és az őr, ugyanazon út módosítására teljes készlet jött ki. Az éles hívó ezen ágakban rendre az őrlistát, illetve a `tests/*.test.ts`-t adja a Node-nak (`pre-push-gate.mjs:203–208`). A base feltétel nélkül a teljes készletet kérte, ezért a bent maradt importot ott a tesztfuttatás észlelte volna. **Javítás:** a visszaeséshez teljes státuszos diff kell, törölt és átnevezett régi útvonalakkal; csak az ESLint bemeneténél legyen követelmény, hogy a fájl létezzen.
+- **L9 — blokkoló (A5 regresszió): a PR-kapu más munkafát tesztelhet, mint amelyik fejre zöld bizonyítékot ír.** `scripts/qa/gates/pre-pr-gate.mjs:114–121`. Egy fejlesztő zöld push-kapu után, commit nélkül javít még egy szerverfájlt, majd ugyanarról a HEAD-ről futtat PR-kaput. Az újrahasználó ág nem nézi a tisztaságot, de az aktuális munkafából veszi a változásokat, ott futtatja a buildet (`:178–182`), és a korábbi HEAD-re írja a bizonyítékot (`:210–214`). Az izolált próba szennyezett munkafával `SKIP,fetch,C-61` utat adott; ugyanilyen fával a nem újrahasznált ág tisztasági kontrollja hamis. A követett tesztben a valós push-lépés a commitolatlan fát FAIL-ra teszi; a base PR-kapu azt mindig meghívta. Így például a munkafában javított, de nem pusholt buildhiba helyben zöld lehet. **Javítás:** a tiszta fa és az állandó HEAD legyen olcsó előfeltétel újrahasználatkor is, és kiírás előtt is ellenőrizze; alternatíva az izolált, azonos commitból épülő munkafa.
+- **L10 — kicsi: a más fejre szóló bizonyíték tesztje nem védi a tartalmi fejellenőrzést.** `scripts/qa/gates/pre-pr-gate.test.mjs:80`. A teszt a másik fej saját fájlnevébe ír, így a kód nem olvassa be az adatot. Ha egy karbantartó elhagyná a `pushed.head === head` védőtagot, az eredeti három fixture döntése az izolált mutációban változatlan (`true,false,false`). Csak az azonos kulcs alatt rossz fejjel megadott kontroll különböztette meg őket. A jelenlegi kód a kontrollt helyesen elutasítja. **Javítás:** legyen külön eset az elvárt fájlnévhez tartozó, eltérő `head` mezőre is.
+- **L11 — kicsi: az ellenőri skill továbbra is minden érdemi utójavításra friss kört kér.** `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md:18–19,157`, ugyanez a `.claude` tükörben. Egy új kontextusú fejlesztő követi a skillt egy már ellenőrzött PR pár soros, zöld CI-javításánál, és fizetős visszaellenőrzést kér akkor is, ha az A7 feltételei teljesülnének. A diff beírta az A1 kivételt, de az utólagos javításról és a jelenlegi fejről szóló szabályt nem igazította hozzá, pedig a runbook már leírja az A7-et (`docs/minosegkapuk.md:39–40`). **Javítás:** mindkét skillben az A1 és az A7 feltételeit külön írja le, a kizárásokkal együtt.
+
+## A hibakereső pontok (ítélet + bizonyíték)
+
+1. **Adatszerződés — talált hiba.** Git idézett útvonal → parser (L2); GitHub útvonal/számlálók → döntés (L1); helyi bizonyíték → HEAD és tesztelt munkafa (L9). Az alkalmazás kliens–szerver szerződését ez a diff nem módosítja.
+2. **Biztonság és adatvédelem — talált hiba.** A kapu integritását érinti L1, L3, L4 és L6. Az aktuális fej ítéletsorának önbevallásos volta és a kommentek szerzőszűrésének hiánya meglévő, dokumentált korlát (`docs/minosegkapuk.md:180–188`), nem az új A7 oka. Új token-, PII- vagy URL-adatfolyamot nem azonosítottam; CSRF/GET-írás ennél a diffnél nem alkalmazható.
+3. **Regresszió — talált hiba.** L7–L9 a meglévő fejlesztői folyamathoz kötődnek. Nincs változtatás alkalmazásoldali vendég-, belépett-, régi anyag- vagy Stúdió-leckeútvonalon. A DB-csomag által futtatott meglévő alkalmazástesztek zöldek.
+4. **Időzóna/dátumhatár — nem alkalmazható a budapesti napváltás.** Az új időrendezés a `record-review.mjs:50` UTC ISO mezőjét hasonlítja; a megmért L6 ugyanazon UTC-napon jelentkezik, az ok a szűrés sorrendje, nem a helyi dátum.
+5. **Migráció/Drizzle, indítás/cron/leállítás, e2e — talált hiba a tesztkiválasztásban.** L7. Alkalmazásoldali séma, cron és leállítás nem változott. Az eldobható PostgreSQL-készlet séma-ellenőrzése, a szerveres tesztek és a konténer takarítása sikeres; a Playwright `webServer` a `build:e2e` parancsot futtatja (`source/playwright.config.ts:51–55`).
+6. **Párhuzamosság/ismétlés — talált hiba.** Azonos commit melletti munkafamódosításra L9. Másik fej fájlnevét és bukott rekordot az A5 követett tesztje helyesen elveti; a C-61 lépést újrahasználatkor látja. Nem állítok teljes egyidejű futási vagy időtúllépési lefedettséget.
+7. **Tesztminőség — talált hiba.** Izolált mutáció (L10): a fej-összehasonlítás nélkül is ugyanolyan a három eredeti kimenet. A merge-teszt kész `small` objektumot ad be, így nem méri a GitHub-adaptert (L1). A natív kivétel meglévő állítását nem törölték vagy lazították: a teszt közös fájl hozzáadásával dokumentáltan a teljes ágra fut (`pre-push-gate.test.mjs:99–112`).
+8. **Feladat-specifikus elfogadás.** **A1:** normál 30 sornál a követett teszt zöld, de a „kis” halmaz hibás (L1–L3). **A2:** 31 normál sor és közvetlen `NEM` helyesen bukik; a kivételek és az öröklési negatív eset hibásak (L1–L3, L6). **A3:** a közvetlen méretbemenet GitHubról jön, de nem őriz meg mindent (L1); az A7 merge-ág helyi igazolásra épít (L4). **A4:** az őr és a módosított közös fájl kontrollja működik, a törlés visszaesése hibás (L8). **A5:** pontos zöld rekordnál fetch és C-61 megmarad; az így vizsgált munkafa ellenőrzése hiányzik (L9). **A6:** a külön build elmarad, ha böngészős futás van; a DB-szűrés hibás (L7). **A7:** az ős-ellenőrzés önmagában működik, de a PR-hatókör, a main-hozzájárulás kiszűrése és a legutóbbi negatív eredmény kezelése nem (L4–L6).
+9. **Egyéb — talált hiba.** A szabályt alkalmazó két skill a működéstől és a runbook A7 pontjától eltér (L11).
+
+## Mit próbáltam megtörni, és nem sikerült
+
+- A sima 30/31 határ, a közvetlen `NEM`, a normál helyi bináris `-/-` és a nem ős review kontrollja a várt eredményt adta. A hibák a fenti adapter- vagy öröklési esetekben jelentkeztek.
+- A követett tesztek ugyanarra a fejre `ok:false`, illetve külön fájlnéven másik fej `ok:true` mellett nem használták újra a push-futást. A zöld ágban a fetch és a C-61 lépés regisztrálódott.
+- A követett hook-tesztek valódi ideiglenes Git-repóval a kimenő commit bizonyítékát ellenőrizték; a merge-head egyezés, a bizonyíték lejárata és a hook git/gh időkeret-védelme a suite-ban zöld maradt.
+
+## Mit NEM vizsgáltam
+
+- Nem nyitottam, nem módosítottam és nem merge-eltem GitHub PR-t; az élő `gh` válasz lapozása és a szolgáltatói szélső esetek **UNVERIFIED**. L1 a normál fájlrekord döntési modelljén, L4–L6 a fej kiválasztó kódján és izolált diff-fixture-ökön alapul.
+- A saját Node CLI-harness nem futott: a futtató Node v24.22.3 alatt nem tudta a hálózatot kizárni, ezért elutasította. A böngészős ellenpróbák a döntési kódot futtatták izoláltan; nem helyettesítenek valós `git`/`gh` gyermekfolyamatot, nem mérik a tényleges dirty fa buildjét vagy a C-61 átmeneti merge-worktree-jének takarítását versenyhelyzetben.
+- Nem futott a teljes Playwright/CI-készlet, valódi Claude Code PreToolUse munkamenet, célzott platformközi fájlnévteszt vagy teljesítmény-benchmark. A böngészőt a döntések futtatására használtam, nem képernyő-összevetésre: a diff nem módosít felületet.
+
+## Megcáfolt gyanúk
+
+- Nem a `NEM` általános `verdictResult` kezelése hibás: ha az aktuális fejhez feloldotta a negatív ítéletet, FAIL marad. L6-ban a frissebb ős kiesik még a feloldás előtt.
+- A C-61 hívása nem tűnt el az újrahasznált útból (`pre-pr-gate.mjs:116–121`); L9 a kihagyott tisztasági ellenőrzés következménye.
+- A tároló DB-tesztje nem hiányzik a készletből: a meglévő integrációs teszt közvetlenül használja a modult, és az eldobható csomag zöld. A helyi kapu dönt hibásan úgy, hogy ne indítsa el.
+
+## Mit futtattam (parancs + eredmény)
+
+- `git diff base...head` (stat és célzott fájldiffek), `git show base` (különösen a teljes régi push-kapu), `git show head` és `git log`: változások és base-okok ellenőrzése.
+- `node --test scripts/qa/gates/lib.test.mjs scripts/qa/gates/pre-merge-gate.test.mjs scripts/qa/gates/pre-pr-gate.test.mjs scripts/qa/gates/pre-push-gate.test.mjs scripts/qa/hooks/check-quality-gates.test.mjs` — 71/71 PASS, exit 0, 7,1 s.
+- `node .blind-review-tmp/gate-review.mjs` — a homokozó előzetesen elutasította; nem tulajdonítottam neki teszteredményt.
+- `run_browser_scenario .blind-review-tmp/gate-decisions.json` — exit 0, 27,6 s; izolált Git/GitHub, A7 és DB-besorolás. Az első, viewport nélküli forgatókönyvet a futtató érvénytelenség miatt futás előtt elutasította.
+- `run_browser_scenario .blind-review-tmp/gate-contracts.json` — exit 0, 20,6 s; izolált konfig, törlés, munkafa és mutáció.
+- `run_db_tests` (`npm run test:learning-db`) — valódi eldobható PostgreSQL 17, 259/259 PASS, exit 0, 148,8 s; `Owned disposable database removed.`
+
+---
+## Gépi összegzés (a futtató írta, nem az ellenőr)
+
+A leletek fájl:sor hivatkozását és idézetét a futtató a vizsgált fej munkafájában ellenőrizte; a „futtatással igazolt” oszlop a
+futtató saját parancsnaplójával egyezik (a parancs, a kimenet-részlet és a próba bemenete); „teljes út” csak böngészős vagy
+adatbázisos futás lehet, a saját homokozós / egységteszt-próba legfeljebb „részben igazolt”. Ez azt igazolja, hogy a lelet valódi
+kódra mutat és a futás megtörtént — a következtetés helyességét nem.
+
+| Súlyosság | Leletek | Igazolt hivatkozás | Futtatással igazolt (teljes út) | Részben igazolt (elszigetelt próba) | Érvénytelen (nem visszaellenőrizhető) |
+| --- | --- | --- | --- | --- | --- |
+| blokkoló | 9 | 9 | 0 | 9 | 0 |
+| közepes | 0 | 0 | 0 | 0 | 0 |
+| kicsi | 2 | 2 | 0 | 1 | 0 |
+
+### Blokkoló és közepes leletek (mind igazolt hivatkozással)
+- **L1** (blokkoló) A merge fájladaptere elveszíti a bináris jelzőt és az átnevezés régi oldalát — `scripts/qa/gates/pre-merge-gate.mjs:186` — hivatkozás igazolt; RÉSZBEN igazolt (elszigetelt próba: scenario)
+- **L2** (blokkoló) Az idézett Git-útvonal 31 éles sora nullának számít — `scripts/qa/gates/lib.mjs:280` — hivatkozás igazolt; RÉSZBEN igazolt (elszigetelt próba: scenario)
+- **L3** (blokkoló) A tényleges gyökérszintű kapukonfigot nem védi a kisjavítás-kizárás — `scripts/qa/gates/gates.config.json:47` — hivatkozás igazolt; RÉSZBEN igazolt (elszigetelt próba: scenario)
+- **L4** (blokkoló) A7: másik PR helyi ítélete átkerülhet az új PR-ra — `scripts/qa/gates/lib.mjs:320` — hivatkozás igazolt; RÉSZBEN igazolt (elszigetelt próba: scenario)
+- **L5** (blokkoló) A7: azonos fájlban a mainből jött sorok is utójavításnak számítanak — `scripts/qa/gates/lib.mjs:329` — hivatkozás igazolt; RÉSZBEN igazolt (elszigetelt próba: scenario)
+- **L6** (blokkoló) A7: az újabb NEM után a régebbi IGEN nyer — `scripts/qa/gates/lib.mjs:336` — hivatkozás igazolt; RÉSZBEN igazolt (elszigetelt próba: scenario)
+- **L7** (blokkoló) A jutalomtároló módosítását kihagyja a helyi DB-kapu — `scripts/qa/gates/gates.config.json:37` — hivatkozás igazolt; RÉSZBEN igazolt (elszigetelt próba: scenario)
+- **L8** (blokkoló) Közös fájl törlése nem vált ki teljes push-egységtesztet — `scripts/qa/gates/pre-push-gate.mjs:198` — hivatkozás igazolt; RÉSZBEN igazolt (elszigetelt próba: scenario)
+- **L9** (blokkoló) Az újrahasznált push-bizonyíték mellől eltűnt a PR-kapu tisztasági feltétele — `scripts/qa/gates/pre-pr-gate.mjs:114` — hivatkozás igazolt; RÉSZBEN igazolt (elszigetelt próba: scenario)
+
+### Érvénytelen leletek
+(nincs)
+
+### Futás
+- modell (a válasz szerint): openai/gpt-6.2-sol; szolgáltató (a válasz szerint): OpenAI; modellhívás: 24 (újrapróba: 0)
+- gondolkodó (reasoning) tokenek összesen: 5994
+- tokenek: 2124895 bemeneti (ebből gyorsítótárból: 1978450, gyorsítótárba írva: 146373), 23666 kimeneti
+- gyorsítótár-találati arány a 2. hívástól: 93.4%; becsült megtakarítás: 7.3717 USD
+- költség (a tényleges usage alapján): 0.8006 USD
+- gépi zár-várakozás összesen: 0.0 perc (a falióra-keretbe nem számít)

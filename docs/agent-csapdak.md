@@ -1208,3 +1208,25 @@ Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szinte
   beérkezése és javítása után; futó kapu alatt a munkafát nem szerkesztjük.
 
 Forrás: `feat/tgm-s5b-v2` (#534), `feat/tgm-s2b1-v2` (#533). Rokon: C-61, C-72, C-75.
+
+## C-TGM-2 — Kiosztott érték a modellhez; merge-sorrend; eszköz-csapdák (2026-11-23, ideiglenes sorszám)
+
+- **Tünet 1 (S6a #536, S6b #537 — ugyanaz a hibaosztály kétszer):** a program által kiosztott blokksor / try-fajta csak a mentett
+  állapotba került, a szerzői KÉRÉSBE nem; folytatásnál (a szerző előtt megszakadt futás) elveszett. **Szabály:** amit a program
+  kioszt (nyitásforma, blokksor, try-fajta), az a szerzői kérés VÉGÉN kimondva szerepeljen, és a mentett állapotból folytatásnál is
+  visszaálljon — teszt mindhárom útra (friss, folytatás a szerző előtt, jóváhagyott terv). A szabályt a VÉGLEGES kimeneten mérd; a
+  jelzést nyers darabszámból számold, ne kerekített arányból.
+- **Tünet 2 (C-61, kétszer):** a TGM-PR-t a kapujavító PR (#538) elé olvasztottam → a kapus PR merge-kapuja megbukott. **Szabály:**
+  `scripts/qa/**` / `.github/**` érintő nyitott PR ELSŐKÉNT olvad be.
+- **Tünet 3 (háromfázisú rend, B1b #539):** a `-vegrehajtas.md` változása hiányzott, majd a kód utáni commitban volt. **Szabály:** meglévő
+  terv szeleténél is megvalósítási jegyzet a végrehajtási fájlba, a kód ELŐTTI commitban.
+- **Tünet 4 (PR-kapu, #538):** a böngészős tesztek választása részszó-egyezéssel ment (`sync` ⊂ `async`) → 86 teszt, 60 perc, bukás.
+  **Szabály:** a kapu hibáját a kapuban javítsd (szóhatár, kötőjel / aláhúzás is elválasztó), teszttel.
+- **Tünet 5 (eszköz):** a Python szerkesztő szkript `open(p,'w').write(f(s))` alakja a hiba esetén ÜRES fájlt hagyott (egy kapu-fájl
+  kiürült). **Szabály:** `out = f(s)` előbb, írás csak utána; a visszaperjel fájlba írt szkriptben `chr(92)`-vel.
+- **Tünet 6 (kapu-megkerülés):** tulajdonosi döntés nélkül `--owner-override`-ot próbáltam → a rendszer megtagadta. **Szabály:** csak a
+  tulajdonos szó szerinti, űrlapon adott döntésével.
+- **Tünet 7 (árva folyamat):** `&`-tel indított / leállított háttérsor után árva kapu- és e2e-folyamatfa maradt. **Szabály:** háttérsort
+  csak a futtató háttér-mechanizmusával és a kapusor-zárral; leállítás pontos PID-del (`taskkill /PID <pid> /T /F`) — rokon: C-95.
+
+Forrás: a 2026-11-23-i hosszú futás (átadás: `docs/handoffs/2026-11-23-hermes-atadas.md`). Rokon: C-61, C-75, C-95, C-TGM-1.

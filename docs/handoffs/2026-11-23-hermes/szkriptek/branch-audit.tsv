@@ -1,0 +1,88 @@
+VAN_UJ	CSAK_HELYI	-	-	2026-11-18	wip/advent-b-olvasas
+VAN_UJ	CSAK_HELYI	-	-	2026-11-20	wip/advent-b-egyesites
+VAN_UJ	CSAK_HELYI	-	-	2026-11-22	feat/zaro-hurok-1
+VAN_UJ	CSAK_HELYI	-	-	2026-11-22	feat/zaro-hurok-websuli
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-21	docs/gepkoltoztetes-folytatas
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	chore/vak-ellenor-konvergencia
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	chore/vak-futtato-1
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	chore/vak-futtato-2
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	docs/eredmeny-email-bontas
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	feat/advent-s5-s6-elesites
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	feat/szoletra-a1-bank
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	feat/szoletra-szintezes
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	feat/szoletra-szintezes-2
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	feat/zaro-hurok-3
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	fix/kisfilm-leallitas-hatarido
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-22	fix/kitakaro-elovagas
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-23	docs/foterv-2026-11-23
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-23	feat/advent-c-felulet-es-elesites
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-23	feat/tgm-s6c-v2
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-23	feat/tgm-sk2-v2
+VAN_UJ	CSAK_HELYI	munkafa	-	2026-11-23	fix/aranyos-kapuk
+VAN_UJ	backup	-	-	2026-11-17	chore/kapu-allitas-ellenor
+VAN_UJ	backup	-	-	2026-11-17	chore/kapu-ingadozo
+VAN_UJ	backup	-	-	2026-11-17	chore/kapu-teszt-integritas
+VAN_UJ	backup	-	-	2026-11-17	chore/kapuk-beepites
+VAN_UJ	backup	-	-	2026-11-17	docs/szkriptkapuk-terv
+VAN_UJ	backup	-	-	2026-11-17	fix/brainrot-e2e-idozites
+VAN_UJ	backup	-	-	2026-11-17	fix/brainrot-kozos-kupon
+VAN_UJ	backup	-	-	2026-11-17	perf/kockavadasz-megjelenites
+VAN_UJ	backup	-	-	2026-11-17	perf/kockavadasz-telefon
+VAN_UJ	backup	-	-	2026-11-18	chore/vak-hibakereso-ellenor
+VAN_UJ	backup	-	-	2026-11-18	docs/adventi-naptar-terv
+VAN_UJ	backup	-	-	2026-11-18	feat/advent-s1-mag
+VAN_UJ	backup	-	-	2026-11-18	feat/advent-s1b-karacsonyi-keszlet
+VAN_UJ	backup	-	-	2026-11-18	feat/advent-s2a-adatmodell
+VAN_UJ	backup	-	-	2026-11-18	feat/advent-s2b-vegpontok
+VAN_UJ	backup	-	-	2026-11-18	feat/advent-s3-naptar-oldal
+VAN_UJ	backup	-	-	2026-11-18	feat/advent-s4-fooldali-kartya
+VAN_UJ	backup	-	-	2026-11-18	feat/jatek-adventi-naptar
+VAN_UJ	backup	-	-	2026-11-18	feat/joystick-jobb-kez
+VAN_UJ	backup	-	-	2026-11-18	kiserlet/kabala-maki
+VAN_UJ	backup	-	-	2026-11-18	tmp/advent-merge
+VAN_UJ	backup	-	-	2026-11-19	chore/allapot-ellenorok
+VAN_UJ	backup	-	-	2026-11-19	feat/advent-s3c-kepek
+VAN_UJ	backup	-	-	2026-11-19	feat/kabala-fooldal
+VAN_UJ	backup	-	-	2026-11-19	fix/gate-pr-celzott-e2e
+VAN_UJ	backup	-	-	2026-11-19	fix/hang-elomelegites
+VAN_UJ	backup	-	-	2026-11-19	fix/idozitesfuggo-tesztek
+VAN_UJ	backup	-	-	2026-11-19	fix/itelet-fej-egyeztetes
+VAN_UJ	backup	-	-	2026-11-19	fix/kapu-gyorsitas
+VAN_UJ	backup	-	-	2026-11-20	chore/szkriptkapuk-p2-bizonyitek-lanc
+VAN_UJ	backup	-	-	2026-11-20	feat/advent-c-felulet
+VAN_UJ	backup	-	-	2026-11-20	feat/gepi-zar
+VAN_UJ	backup	-	-	2026-11-20	feat/gpt-teljesitesi-or
+VAN_UJ	backup	-	-	2026-11-20	feat/session-zaras-kereses-osszevetes
+VAN_UJ	backup	-	-	2026-11-20	feat/tgm-s2b-dontesi-fa-kepes-kartya
+VAN_UJ	backup	-	-	2026-11-20	feat/tgm-s2b2-megjelenito-leletek
+VAN_UJ	backup	-	-	2026-11-20	feat/tgm-s3a1-abrakeszito-forrasra
+VAN_UJ	backup	-	-	2026-11-20	feat/tgm-s5a-visszajelzes-nyitasok
+VAN_UJ	backup	-	-	2026-11-20	feat/tgm-s5b-nyitasformak
+VAN_UJ	backup	-	-	2026-11-20	feat/tgm-s6a-fejezetiv
+VAN_UJ	backup	-	-	2026-11-20	feat/tgm-s6b-try-hang
+VAN_UJ	backup	-	-	2026-11-20	feat/tgm-s6c-abrafajta
+VAN_UJ	backup	-	-	2026-11-20	feat/tgm-sk2-valtozatossag-kapu
+VAN_UJ	backup	-	-	2026-11-20	fix/kliens-ip-cloudflare-ut
+VAN_UJ	backup	-	-	2026-11-20	fix/pontozo-polinom-ket-szam
+VAN_UJ	backup	-	-	2026-11-20	fix/szokoar-tema-es-sebesseg
+VAN_UJ	backup	-	-	2026-11-20	wip/advent-c-javitas
+VAN_UJ	backup	-	-	2026-11-20	wip/advent-d-elesites-elott
+VAN_UJ	backup	munkafa	-	2026-11-18	chore/advent-s3c0-kepgyarto
+VAN_UJ	backup	munkafa	-	2026-11-20	docs/teljes-revizio
+VAN_UJ	backup	munkafa	-	2026-11-22	chore/vak-ellenor-deepseek
+VAN_UJ	backup	munkafa	-	2026-11-22	docs/websuli-potlasok
+VAN_UJ	tavoli	-	-	2026-11-18	feat/tgm-s8a-brit-bongeszohang
+VAN_UJ	tavoli	-	-	2026-11-18	feat/tgm-s8b-hangtar
+VAN_UJ	tavoli	-	-	2026-11-18	feat/tgm-s8b2-lecke-hanglejatszas
+VAN_UJ	tavoli	-	nyitottPR	2026-11-22	feat/zaro-hurok-2
+VAN_UJ	tavoli(+13 helyi)	-	-	2026-11-18	claude/tananyag-gyartas-minoseg-8fa0b9
+VAN_UJ	tavoli(+13 helyi)	munkafa	nyitottPR	2026-11-22	fix/eredmeny-email-kviz
+VAN_UJ	tavoli(+14 helyi)	-	-	2026-11-18	feat/tgm-s1b-sk1-forras-fedettseg
+VAN_UJ	tavoli(+15 helyi)	-	-	2026-11-18	fix/tgm-sk1b-fedettsegi-kapu-kemenyites
+VAN_UJ	tavoli(+29 helyi)	munkafa	nyitottPR	2026-11-22	fix/merge-kapu-rest
+VAN_UJ	tavoli(+3 helyi)	munkafa	nyitottPR	2026-11-23	feat/tgm-s6c1-abrafajta-terv
+VAN_UJ	tavoli(+32 helyi)	munkafa	nyitottPR	2026-11-22	fix/kitakaro-negyzetes-regex
+VAN_UJ	tavoli(+33 helyi)	-	nyitottPR	2026-11-19	feat/jatek-j3a-kockavadasz-runabanya
+VAN_UJ	tavoli(+38 helyi)	-	-	2026-11-20	feat/jatek-j7b-tornado-utelagazas
+VAN_UJ	tavoli(+38 helyi)	-	nyitottPR	2026-11-19	feat/jatek-j6a-aszteroida-kristaly
+VAN_UJ	tavoli(+4 helyi)	munkafa	nyitottPR	2026-11-22	fix/kisfilm-videomodell
