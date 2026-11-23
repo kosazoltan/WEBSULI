@@ -248,6 +248,49 @@ test("S4a: a különálló kinyerés draft térképet ment (jóváhagyásra vár
   }
 });
 
+// #264 / Kanban #11 (docs/specs/2026-11-23-maps-extract-tulajdonos.md): a kinyerés gyorsítótára csak a hívó saját térképét adja vissza.
+test("#264: a kinyerés gyorsítótára nem adja vissza más felhasználó térképét (E1)", async () => {
+  const { saveSingleRunMap, singleRunMapHash, extractMapSingleRun } = await import("../server/studio/single-run/live");
+  const files = [{ name: "idegen.txt", kind: "text" as const, content: "A fotoszintézis: fény, víz, szén-dioxid." }];
+  const map = { title: "Fotó", subject: "természettudomány", classroom: 6, transcript: files[0].content, fileTranscripts: { "idegen.txt": files[0].content },
+    concepts: [{ id: "foto", term: "fotoszintézis", definition: "Fényből cukor.", quote: "fotoszintézis", type: "concept", examWeight: "core" as const, relatedIds: [], verbatimOk: true, sourceFile: "idegen.txt" }], corrections: [], visuals: [] };
+  // A másik tanár térképe a javítás előtti (tartalmi) lenyomattal.
+  const foreign = await saveSingleRunMap(map, files, "draft-other", "claude-opus-5-5", { draft: true, inputHash: singleRunMapHash(files, "Fotó") });
+  // Fizetős hívás nem indulhat: modellkulcs nélkül a saját kinyerés elutasul.
+  const keys = ["AI_INTEGRATIONS_ANTHROPIC_API_KEY", "AI_INTEGRATIONS_OPENAI_API_KEY", "OPENAI_API_KEY"] as const;
+  const savedKeys = keys.map((k) => process.env[k]);
+  for (const k of keys) process.env[k] = "";
+  try {
+    const result = await extractMapSingleRun({ files, title: "Fotó", ownerId: "draft-owner" }).catch((error: unknown) => error);
+    assert.notEqual((result as { mapId?: string }).mapId, foreign, "más felhasználó térképe nem jöhet vissza");
+    assert.ok(result instanceof Error, "a hívó saját kinyerést kap (kulcs nélkül elutasul), nem gyorsítótárat");
+  } finally {
+    keys.forEach((k, i) => { if (savedKeys[i] === undefined) delete process.env[k]; else process.env[k] = savedKeys[i]; });
+    await dbPool.query("DELETE FROM km_concepts WHERE map_id=$1", [foreign]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE id=$1", [foreign]);
+  }
+});
+
+test("#264: ugyanarra a tartalomra mindkét tanár a saját (gazda-kötött lenyomatú) térképét kapja vissza (E1, E2)", async () => {
+  const { saveSingleRunMap, singleRunMapHash, ownerMapHash, extractMapSingleRun } = await import("../server/studio/single-run/live");
+  const files = [{ name: "kozos.txt", kind: "text" as const, content: "A sejt: sejthártya, sejtplazma, sejtmag." }];
+  const map = { title: "Sejt", subject: "természettudomány", classroom: 6, transcript: files[0].content, fileTranscripts: { "kozos.txt": files[0].content },
+    concepts: [{ id: "sejt", term: "sejt", definition: "Az élet egysége.", quote: "sejt", type: "concept", examWeight: "core" as const, relatedIds: [], verbatimOk: true, sourceFile: "kozos.txt" }], corrections: [], visuals: [] };
+  const content = singleRunMapHash(files, "Sejt");
+  assert.notEqual(ownerMapHash(content, "draft-owner"), ownerMapHash(content, "draft-other"), "a lenyomat gazdánként különbözik");
+  assert.equal(ownerMapHash(content, "draft-owner"), ownerMapHash(content, "draft-owner"), "determinisztikus");
+  // Az egyedi `input_hash` mellett is mindkét térkép menthető.
+  const other = await saveSingleRunMap(map, files, "draft-other", "claude-opus-5-5", { draft: true, inputHash: ownerMapHash(content, "draft-other") });
+  const mine = await saveSingleRunMap(map, files, "draft-owner", "claude-opus-5-5", { draft: true, inputHash: ownerMapHash(content, "draft-owner") });
+  try {
+    assert.deepEqual(await extractMapSingleRun({ files, title: "Sejt", ownerId: "draft-owner" }), { mapId: mine, cached: true });
+    assert.deepEqual(await extractMapSingleRun({ files, title: "Sejt", ownerId: "draft-other" }), { mapId: other, cached: true });
+  } finally {
+    await dbPool.query("DELETE FROM km_concepts WHERE map_id = ANY($1)", [[other, mine]]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE id = ANY($1)", [[other, mine]]);
+  }
+});
+
 // J5 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a megállt egyfutásos job a mentett részeiből folytatható, ugyanazon a jobon.
 test("J5: a megállt egyfutásos piszkozat folytatható; a foglalás saját / nem vitt jobra hat; ha a motor el sem indul, a job nem ragad „fut” állapotban", async () => {
   const { resumeSingleRun } = await import("../server/studio/lesson-pipeline-routes");

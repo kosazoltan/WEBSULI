@@ -12,7 +12,7 @@ import { createDrizzlePipelineStore } from "../pipeline-store";
 import { createLessonConversation, type ConversationState, type SingleRunEffort } from "./conversation";
 import { readSourceStation, runSingleLesson, SingleRunError, singleRunResumable, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
-import { eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { SOURCE_VISUALS_SCHEMA_VERSION } from "../../../shared/source-visuals";
 
 
@@ -82,12 +82,24 @@ export function singleRunMapHash(files: ExtractorFile[], title?: string, sourceV
 }
 
 /**
+ * A tárolt lenyomat gazda-kötött változata (#264): két tanár ugyanarra a tartalomra két külön térképet kap (az `input_hash` egyedi),
+ * és egyik sem kaphatja vissza a másikét. A `singleRunMapHash` értéke változatlan (a prompt-ujjlenyomat rögzíti).
+ */
+export function ownerMapHash(contentHash: string, ownerId: string): string {
+  return createHash("sha256").update(JSON.stringify(["owner-map-1", ownerId, contentHash])).digest("hex");
+}
+
+/**
  * Különálló tudástár-kinyerés (S4a): az egyfutásos 1. állomás (forrás és tudásbank) önállóan, egy beszélgetésben; az eredmény
  * draft térkép a tanári jóváhagyáshoz. Idempotens a tartalmi lenyomaton.
  */
 export async function extractMapSingleRun(input: { files: ExtractorFile[]; title?: string; ownerId: string }): Promise<{ mapId: string; cached: boolean }> {
-  const inputHash = singleRunMapHash(input.files, input.title);
-  const [existing] = await db.select({ id: knowledgeMaps.id }).from(knowledgeMaps).where(eq(knowledgeMaps.inputHash, inputHash)).limit(1);
+  // #264 (Kanban #11): a gyorsítótár csak a hívó SAJÁT térképét adhatja vissza — korábban ugyanaz a tartalom más tanár térképét adta.
+  // Új térkép a gazda-kötött lenyomattal mentődik; a javítás előtti (tartalmi lenyomatú) térkép csak a saját gazdájának jön vissza.
+  const contentHash = singleRunMapHash(input.files, input.title);
+  const inputHash = ownerMapHash(contentHash, input.ownerId);
+  const [existing] = await db.select({ id: knowledgeMaps.id }).from(knowledgeMaps)
+    .where(or(eq(knowledgeMaps.inputHash, inputHash), and(eq(knowledgeMaps.inputHash, contentHash), eq(knowledgeMaps.createdBy, input.ownerId)))).limit(1);
   if (existing) return { mapId: existing.id, cached: true };
   const files = await prepareFiles(input.files);
   const conversation = createLessonConversation(singleRunSystemPrompt(), {
