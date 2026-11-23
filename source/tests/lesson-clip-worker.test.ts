@@ -285,7 +285,7 @@ test("átkódolás: hibás letöltésnél null, a hibás válasz törzse lezáru
   let cancelled = false, executed = 0;
   const body = new ReadableStream({ cancel() { cancelled = true; } });
   const exec: ExecLike = (_file, _args, _options, callback) => { executed++; queueMicrotask(() => callback(null)); return { kill: () => true }; };
-  assert.equal(await downloadAndShrink(async () => new Response(body, { status: 500 }), "ffmpeg", 90_000, { exec }), null);
+  assert.equal(await downloadAndShrink(async () => new Response(body, { status: 500 }), "ffmpeg", 90_000, { rss: () => 0, exec }), null);
   assert.equal(cancelled, true, "a hibás válasz törzse lezárul");
   assert.equal(executed, 0, "hibás letöltés után nincs átkódolás");
 });
@@ -308,13 +308,13 @@ function fakeExec(behave: (args: string[], options: { timeout: number; killSigna
 
 test("átkódolás: az időkorlát SIGKILL-lel él, a munkamappa hiba és siker után is eltűnik (vak kör L11)", async () => {
   const ok = fakeExec(() => ({ out: Buffer.from("kicsi mp4") }));
-  const small = await downloadAndShrink(async () => new Response(new Uint8Array([1, 2, 3])), "ffmpeg", 1234, { exec: ok.exec });
+  const small = await downloadAndShrink(async () => new Response(new Uint8Array([1, 2, 3])), "ffmpeg", 1234, { rss: () => 0, exec: ok.exec });
   assert.equal(small?.toString(), "kicsi mp4");
   assert.deepEqual(ok.calls.map((c) => [c.options.timeout, c.options.killSignal]), [[1234, "SIGKILL"]]);
   assert.ok(path.basename(ok.calls[0].workdir).startsWith(CLIP_TMP_PREFIX));
   assert.equal(existsSync(ok.calls[0].workdir), false, "sikeres átkódolás után a munkamappa törlődik");
   const timedOut = fakeExec(() => ({ error: Object.assign(new Error("időtúllépés"), { killed: true, signal: "SIGKILL" }) }));
-  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array([1])), "ffmpeg", 300, { exec: timedOut.exec }), null);
+  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array([1])), "ffmpeg", 300, { rss: () => 0, exec: timedOut.exec }), null);
   assert.equal(existsSync(timedOut.calls[0].workdir), false, "az időkorláttal megölt átkódolás után is törlődik");
 });
 
@@ -346,16 +346,16 @@ test("átkódolás: kemény bájtkorlát a letöltésen, a túlméretes vagy ür
   let pulled = 0;
   const endless = new ReadableStream<Uint8Array>({ pull(controller) { pulled++; controller.enqueue(new Uint8Array(64 * 1024)); } });
   const never = fakeExec(() => ({ out: Buffer.from("x") }));
-  assert.equal(await downloadAndShrink(async () => new Response(endless), "ffmpeg", 90_000, { exec: never.exec, rawMaxBytes: 200_000 }), null);
+  assert.equal(await downloadAndShrink(async () => new Response(endless), "ffmpeg", 90_000, { rss: () => 0, exec: never.exec, rawMaxBytes: 200_000 }), null);
   assert.equal(never.calls.length, 0, "a túl nagy nyers klip nem kerül átkódolásra");
   assert.ok(pulled <= 8, `a letöltés a korlátnál megáll (${pulled} darab)`);
   const declared = fakeExec(() => ({ out: Buffer.from("x") }));
-  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array(10), { headers: { "content-length": "999999999" } }), "ffmpeg", 90_000, { exec: declared.exec, rawMaxBytes: 200_000 }), null, "a bejelentett túl nagy méret el sem kezdődik");
+  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array(10), { headers: { "content-length": "999999999" } }), "ffmpeg", 90_000, { rss: () => 0, exec: declared.exec, rawMaxBytes: 200_000 }), null, "a bejelentett túl nagy méret el sem kezdődik");
   assert.equal(declared.calls.length, 0);
   const huge = fakeExec(() => ({ out: Buffer.alloc(CLIP_VIDEO_MAX_BYTES + 1) }));
-  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array([1])), "ffmpeg", 90_000, { exec: huge.exec }), null, "túlméretes kimenet");
+  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array([1])), "ffmpeg", 90_000, { rss: () => 0, exec: huge.exec }), null, "túlméretes kimenet");
   const empty = fakeExec(() => ({ out: Buffer.alloc(0) }));
-  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array([1])), "ffmpeg", 90_000, { exec: empty.exec }), null, "üres kimenet");
+  assert.equal(await downloadAndShrink(async () => new Response(new Uint8Array([1])), "ffmpeg", 90_000, { rss: () => 0, exec: empty.exec }), null, "üres kimenet");
 });
 
 test("induláskor a régi, saját kisfilm-munkamappák törlődnek, a friss és az idegen mappák maradnak (vak kör L5)", () => {
