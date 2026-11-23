@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { standardFusionFixture, fusionFixture } from "../shared/fixtures/lesson-fusion";
+import { openerVarietyPick } from "../shared/lesson-opener";
+import { seedFrom } from "../shared/seeded";
 import { LESSON_VARIETY_VERSION, carryVarietyMarker, feedbackOpenerKey, feedbackView } from "../shared/lesson-feedback-openers";
 import { fixConceptInConversation, type ConceptFixSource } from "../server/studio/single-run/concept-fix";
 import { effectiveLessonVariety, lessonVarietyForRun, runWithLessonVariety } from "../server/studio/lesson-variety-flag";
@@ -19,6 +21,12 @@ import type { MapConcept } from "../server/studio/coverage";
 // jelölt leckén sem nyúl (a korábbi L2-levágási teszt dokumentált spec-változással kikerült).
 
 const MARK = { version: LESSON_VARIETY_VERSION };
+/** A mentett lecke VÁRT jelölője (S5b): verzió + a térképből és évfolyamból számolt nyitásforma — a kódtól függetlenül újraszámolva. */
+const markerOf = (lesson: unknown) => {
+  const l = lesson as { mapId?: string; classroom?: number };
+  assert.equal(typeof l.mapId, "string", "a mentett leckének van térképe");
+  return { ...MARK, openingForm: openerVarietyPick(l.classroom!, seedFrom(l.mapId!)).form.id };
+};
 
 function withEnv<T>(name: string, value: string | undefined, fn: () => Promise<T>): Promise<T> {
   const before = process.env[name];
@@ -164,7 +172,7 @@ const lastOutput = (mem: ReturnType<typeof memory>) => mem.steps.at(-1)!.output 
 test("első gyártás: BE → a mentett leckén a szerver jelölője, a job állapotában lessonVariety; KI → egyik sincs (a modell jelölője is eldobva)", async () => {
   const on = memory();
   await runSingleLesson({ files, ownerId: "u1" }, runDeps(client(), on, { lessonVariety: true }));
-  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, MARK);
+  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, markerOf(on.lessons.at(-1)));
   assert.equal(lastOutput(on).lessonVariety, true);
   const off = memory();
   await withEnv("STUDIO_LESSON_VARIETY", "on", () => runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ modelMarker: true }), off, { lessonVariety: false, sourceVisuals: true })));
@@ -195,7 +203,7 @@ test("vak kör 2, L2: KI módban a modell jelölője a job egyik mentett leckep�
   const on = memory();
   await runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ modelMarker: true }), on, { lessonVariety: true, sourceVisuals: true }));
   for (const s of on.steps.filter((x) => (x.output as { lesson?: unknown } | undefined)?.lesson)) assert.equal("variety" in ((s.output as { lesson: object }).lesson), false, `BE lépés: ${s.step}`);
-  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, MARK);
+  assert.deepEqual((on.lessons.at(-1) as { variety?: unknown }).variety, markerOf(on.lessons.at(-1)));
 });
 
 // --- a célzott fogalomjavítás (vak kör 2, L3): a tárolt lecke állapota és jelölője ---
@@ -264,4 +272,57 @@ test("javítás-artefaktum bekötése: a szerver a lezárt (jelölő-visszaírt)
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../server/studio/structured-improvement.ts", import.meta.url), "utf8");
   assert.match(src, /return markRepairCandidate\(parseArtefact\(\)\);/);
+});
+
+test("S5b-v2: a javítás megőrzi a tárolt jelölő nyitásformáját; hibás alakú formát nem visz át", () => {
+  const stored = { variety: { version: LESSON_VARIETY_VERSION, openingForm: "rejtely" } };
+  assert.deepEqual(carryVarietyMarker({ title: "T", variety: { version: "modell", openingForm: "mas" } }, stored), { title: "T", variety: { version: LESSON_VARIETY_VERSION, openingForm: "rejtely" } });
+  assert.deepEqual(carryVarietyMarker({ title: "T" }, { variety: { version: LESSON_VARIETY_VERSION, openingForm: "<script>" } }), { title: "T", variety: { version: LESSON_VARIETY_VERSION } });
+  assert.deepEqual(carryVarietyMarker({ title: "T" }, { variety: { version: LESSON_VARIETY_VERSION, openingForm: 5 } }), { title: "T", variety: { version: LESSON_VARIETY_VERSION } });
+});
+
+test("S5b vak kör 1 L2: évfolyamváltó javításnál a jelölő formája az ÚJ évfolyam kiosztása (ugyanaz, amit a prompt kér); változatlan évfolyamnál a tárolt marad", () => {
+  const stored = { mapId: "m1", classroom: 3, variety: { version: LESSON_VARIETY_VERSION, openingForm: openerVarietyPick(3, seedFrom("m1")).form.id } };
+  const same = carryVarietyMarker({ title: "T", mapId: "m1", classroom: 3 }, stored) as { variety?: { openingForm?: string } };
+  assert.equal(same.variety?.openingForm, stored.variety.openingForm, "változatlan évfolyam: a tárolt forma");
+  const moved = carryVarietyMarker({ title: "T", mapId: "m1", classroom: 12 }, stored) as { variety?: { openingForm?: string; version?: string } };
+  assert.equal(moved.variety?.openingForm, openerVarietyPick(12, seedFrom("m1")).form.id, "új évfolyam: az új kiosztás");
+  assert.equal(moved.variety?.version, LESSON_VARIETY_VERSION);
+  // v1 jelölőjű (forma nélküli) tárolt lecke: évfolyamváltásnál sem kap formát — a javítás promptja sem kér rá újat.
+  const v1 = { mapId: "m1", classroom: 3, variety: { version: "valtozatossag-1" } };
+  assert.deepEqual((carryVarietyMarker({ title: "T", mapId: "m1", classroom: 12 }, v1) as { variety?: unknown }).variety, { version: "valtozatossag-1" });
+});
+
+test("S5b vak kör 1 L2: a javítás promptja csak nyitásformát hordozó (v2) tárolt jelölőnél kér kiosztott formát", async () => {
+  const { repairVarietyOption } = await import("../server/studio/structured-improvement");
+  assert.deepEqual(repairVarietyOption({ mapId: "m1", variety: { version: LESSON_VARIETY_VERSION, openingForm: "rejtely" } }), { seed: seedFrom("m1") });
+  assert.equal(repairVarietyOption({ mapId: "m1", variety: { version: "valtozatossag-1" } }), undefined, "v1: nincs új forma a promptban");
+  assert.equal(repairVarietyOption({ mapId: "m1" }), undefined, "jelöletlen lecke");
+});
+
+test("review #534 (Codex, Copilot): a jelölő nyitásformája az, amit a szerző TÉNYLEG megkapott — régi (forma nélküli) checkpointból folytatva nem keletkezik utólag forma", async () => {
+  // Friss BE futás: a job állapota rögzíti a kiosztott formát, a mentett lecke jelölője ugyanezt hordozza.
+  const fresh = memory();
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client(), fresh, { lessonVariety: true }));
+  const assigned = lastOutput(fresh).openingForm;
+  assert.equal(typeof assigned, "string", "a job állapota rögzíti a szerzőnek kiosztott formát");
+  assert.equal((fresh.lessons.at(-1) as { variety?: { openingForm?: string } }).variety?.openingForm, assigned);
+  // Review #534 (Copilot): a builder VISSZAADOTT bankja — a módszerek a kiosztás (a mag) sorrendjében, csomagonként; nem a modell sorrendjében.
+  const built = (fresh.lessons.at(-1) as { mapId: string; experience: { methods: Array<{ kind: string; sourceHash?: string }>; bankPlan: { units: Array<{ sectionIndex: number; conceptIds: string[]; sourceHash?: string }>; taskRound: number; quizRound: number } } });
+  const { bankUnitQuota } = await import("../shared/lesson-bank-plan");
+  built.experience.bankPlan.units.forEach((unit, i) => {
+    const quota = bankUnitQuota(built.experience.bankPlan, i, seedFrom(built.mapId)).methodKinds;
+    const got = built.experience.methods.filter((m) => m.sourceHash === unit.sourceHash).map((m) => m.kind);
+    assert.deepEqual(got.slice(0, quota.length), quota, `${i}. csomag: a módszerek a kiosztott sorrendben`);
+  });
+  // S5a alatt megkezdett (forma nélküli job-állapotú), a bankban megszakadt BE futás folytatása: a szerző kimarad → nincs forma.
+  const first = memory();
+  await assert.rejects(runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ failBank: true }), first, { lessonVariety: true })));
+  const { openingForm: _dropped, ...legacySaved } = lastOutput(first);
+  assert.ok((legacySaved as { lesson?: unknown }).lesson, "a megszakadt futás már hordoz kész tanítást");
+  const second = memory();
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: legacySaved } }, runDeps(client(), second, {}, legacySaved.singleRun.conversation));
+  const resumedLesson = second.lessons.at(-1) as { variety?: { version?: string; openingForm?: string } };
+  assert.equal(resumedLesson.variety?.version, LESSON_VARIETY_VERSION, "a futás BE maradt");
+  assert.equal("openingForm" in (resumedLesson.variety ?? {}), false, "régi checkpointból átvett tanításhoz nincs utólagos forma");
 });

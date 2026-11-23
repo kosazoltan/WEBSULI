@@ -95,6 +95,12 @@ export function isClipVisualBlock(block: unknown): boolean {
   return !!b && b.kind === "animate" && !(SOURCE_VISUAL_ANIM_KINDS as readonly unknown[]).includes(b.animKind) && sourceVisualProblems(b) === null;
 }
 
+/** S2b-2 1. vak kör (L2): a ráúszó panel csak akkor jön létre, ha van mit rajzolni — a ki nem rajzolható lecke-ábra hivatkozásnál nem. */
+export function clipOverlayRenderable(overlay: { kind: string; blockIndex?: number } | null | undefined, blocks: readonly unknown[] | undefined): boolean {
+  if (!overlay) return false;
+  return overlay.kind !== "lessonVisual" || isClipVisualBlock(blocks?.[overlay.blockIndex ?? -1]);
+}
+
 export function animateBlockIndexes(lesson: Pick<Lesson, "sections">, sectionIndex: number): number[] {
   return (lesson.sections[sectionIndex]?.blocks ?? []).flatMap((block, index) => (isClipVisualBlock(block) ? [index] : []));
 }

@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  FEEDBACK_OPENERS, LESSON_VARIETY_VERSION, feedbackOpener, feedbackOpenerKey, feedbackView, startsWithLegacyOpener, withVarietyMarker,
+  FEEDBACK_OPENERS, LESSON_VARIETY_VERSION, type LessonVarietyMarker, feedbackOpener, feedbackOpenerKey, feedbackView, startsWithLegacyOpener, withVarietyMarker,
 } from "../shared/lesson-feedback-openers";
 import { AGE_BANDS } from "../shared/lesson-schema";
 import { stripVerdictPrefix } from "../shared/lesson-ui-text";
+import { openerVarietyPick } from "../shared/lesson-opener";
+import { seedFrom } from "../shared/seeded";
 
 // Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S5a; V3–V5): a bátorító / megerősítő nyitás kódszótárból, korosztályonként,
 // kérdésenként a magból — a változatosság mérhető.
@@ -120,4 +122,10 @@ test("withVarietyMarker: KI — a jelölő (a modelltől jött is) törlődik; B
   assert.deepEqual(withVarietyMarker(lesson, true), { title: "T", variety: { version: LESSON_VARIETY_VERSION } });
   assert.equal(withVarietyMarker(null, true), null);
   assert.deepEqual(withVarietyMarker([1], true), [1]);
+  // S5b (terv 11. szakasz 5. pont): a jelölő a lecke térképéből és évfolyamából a promptéval azonos nyitásformát hordozza.
+  // A bemenet a tárolt lecke alakja (a jelölő opcionális mezője típushelyesen, kasztolás nélkül).
+  const input: { title: string; mapId: string; classroom: number; variety?: LessonVarietyMarker } = { title: "T", mapId: "map-7", classroom: 6 };
+  const full = withVarietyMarker(input, true);
+  assert.equal(full.variety?.version, "valtozatossag-2");
+  assert.equal(full.variety?.openingForm, openerVarietyPick(6, seedFrom("map-7")).form.id);
 });

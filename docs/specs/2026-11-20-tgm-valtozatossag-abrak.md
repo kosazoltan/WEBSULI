@@ -190,6 +190,49 @@ lenyomat-teszt zöld (V1 megfelelője).
 - [ ] V6 opciókeverés változatlan
 - [ ] V7 böngészős próba három nézetben
 
+## 11. S5b — módszersorrend, nyitásformák, névkészlet, a javítási út jelölője
+
+Alap: TGM-terv S5b (TGM-végrehajtás 773. sortól), a 4. szakasz igazításaival. Minden új viselkedés a `STUDIO_LESSON_VARIETY` mögött.
+
+Felülvizsgálat (TÉNY, a mai `main`): a nyitás egyetlen formája a mese (`shared/lesson-opener.ts:72`, `:99`), a hős nevét a modell
+választja (15 hősből 9 Bence / Dóra / Dóri — TGM-terv 3.3); a módszerek körbeosztása (`shared/lesson-bank-plan.ts:44`) minden leckében
+`prediction`-nel indul; a nyitóblokk fejléce csak „Mese” / „Történet” lehet (`shared/lesson-block-label.ts:89-93`).
+
+Döntések:
+
+1. **Nyitásformák lépcsőcsoportonként** (L1–L2, L3–L4, L5–L6; a lépcső a meglévő `openerStageForClassroom`): 3–4 forma, mindegyik 2–3
+   mondatos leírással (pl. mese; kis rejtély / megfigyelés; „mit gondolsz?” jóslás; hétköznapi helyzet; idősebbeknek esetleírás,
+   gondolatkísérlet, dilemma). A nyitás 3–6 mondat (a „PONTOSAN 5” helyett); a Célkártya négy eleme, a biztonsági és a „nincs új tény”
+   szabály változatlan.
+2. **Hősnév a kódból:** legalább 40 vegyes nemű magyar keresztnév, a három leggyakoribb mért név nélkül.
+3. **Mag:** `seedFrom(mapId)` — ugyanaz a térkép mindig ugyanazt a formát és nevet kapja (megismételhető); két különböző térkép ugyanarra
+   a témára (általában) mást.
+4. **Módszersorrend:** maggal a tíz fajta + két kapukérdés keverve osztódik; mag nélkül (KI) a kimenet bájtra a régi.
+5. **Verzió:** BE kapcsolónál a nyitószerződés `nyitomese-3` (az S5a `nyitomese-2` elvárása ezzel dokumentáltan változik); a jelölő
+   `{ version: "valtozatossag-2", openingForm }` — a forma a lecke `mapId`-jából és évfolyamából ugyanúgy számolva, mint a promptban.
+   A lejátszó a nyitóblokk fejlécét a formából veszi (kódszótár, pl. „Rejtély”, „Mit gondolsz?”); jelölő nélkül a régi címke.
+6. **Javítási út:** `server/studio/structured-improvement.ts` a mentés előtt `withVarietyMarker`-t hív (a jelölő a mentéskori kapcsolót
+   tükrözi, a modell jelölője sosem marad meg); a visszaolvasás (`server/workflows/apply.ts` `appliedLessonMatches`) a `variety` kulcsot
+   az `art`-hoz hasonlóan figyelmen kívül hagyja.
+
+Elfogadás (EARS):
+
+- **V8** — WHEN a kapcsoló KI, THE szerző-, lektor- és bankprompt és a bank kvótái SHALL bájtra a korábbiak lenni.
+- **V9** — WHEN a kapcsoló BE, THE nyitás SHALL a lépcsőcsoport 3–4 formájából és a ≥ 40 nevű készletből a magból kiosztva lenni; 100
+  magon csoportonként SHALL ≥ 3 forma és ≥ 25 név előfordulni; a prompt SHALL NOT tartalmazni a „PONTOSAN 5” és a „Peti” szöveget.
+- **V10** — WHEN a kapcsoló BE, THE módszerkiosztás SHALL mind a tíz fajtát és két kapukérdést megtartani, csomagonként ≥ 2 fajtával;
+  50 magon az első módszer SHALL ≥ 6-féle lenni.
+- **V11** — WHEN a lecke jelölője `openingForm`-ot hordoz, THE nyitóblokk fejléce SHALL a forma kódszótári címkéje lenni.
+- **V12** — WHEN a tulajdonos javítást alkalmaz, THE mentett lecke jelölője SHALL a mentéskori kapcsolót tükrözni, és a visszaolvasás
+  SHALL NOT a jelölő miatt bukni.
+
+<!-- acceptance-checklist -->
+- [ ] V8 KI → prompt és kvóta bájtra a régi
+- [ ] V9 formák, nevek, nincs „PONTOSAN 5” / „Peti”
+- [ ] V10 módszerkiosztás maggal
+- [ ] V11 nyitóblokk-címke a formából
+- [ ] V12 javítási út jelölője és visszaolvasás
+
 
 ## 17. S2b-2 — a megjelenítők vak-leletei (vak J2, J5, J6, J7, J11, tt J9)
 
@@ -215,8 +258,10 @@ Elfogadás (EARS):
 
 - **V33** — THE görgetésjelző SHALL a tábla fölött állni, és a táblacím SHALL a görgő kereten kívül, görgetés nélkül olvasható lenni.
 - **V34** — THE „Példa” címke SHALL ≥ 4,5:1, a tónusjel SHALL ≥ 3:1 kontrasztú lenni mind az öt sávban és a csendes nézetben.
-- **V35** — THE kisfilm SHALL NOT forrás-ábrafajtát vagy hibás paraméterű blokkot ráúszó ábrának kínálni vagy kirajzolni.
-- **V36** — WHEN a tábla minden cellája rövid, THE tábla SHALL NOT görögni 360 px-en; nyomtatásban SHALL NOT levágódni.
+- **V35** — THE kisfilm SHALL NOT forrás-ábrafajtát (vagy hibás paraméterű forrás-ábrát) ráúszó ábrának kínálni vagy kirajzolni, és a kizárt
+  hivatkozás helyén SHALL NOT üres panel maradni. (1. vak kör L1: a RÉGI fajták hibás paraméterű blokkjának kiszűrése meglévő hiba, külön jegy.)
+- **V36** — WHEN a tábla minden cellája rövid és legfeljebb négy oszlopa van, THE tábla SHALL NOT görögni 360 px-en; nyomtatásban SHALL NOT
+  levágódni. (1. vak kör L4: a sokoszlopos rövid tábla 360 px-en továbbra is görög — a base-ben is így volt; keskeny nézet külön jegy.)
 - **V37** — WHEN a fejlécek szövege változik, THE fejléc-illesztés SHALL újramérni.
 
 <!-- acceptance-checklist -->

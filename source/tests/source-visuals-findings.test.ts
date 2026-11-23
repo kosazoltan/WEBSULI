@@ -51,3 +51,17 @@ test("V37: a fejléc-illesztés a fejlécek szövegének változására újramé
   assert.match(source, /function useHeaderFit\(scrollRef: \{ current: HTMLElement \| null \}, enabled: boolean, headerKey: string\)/u);
   assert.match(source, /\}, \[scrollRef, enabled, headerKey\]\);/u);
 });
+
+test("1. vak kör L2: ki nem rajzolható (forrás-ábrára mutató) kisfilm-hivatkozásnál a panel sem jön létre; régi ábránál és más ráúszónál megmarad", async () => {
+  const { clipOverlayRenderable } = await import("../shared/lesson-clip");
+  const tableBlock = { kind: "animate", animKind: "table", caption: "", params: { headers: ["A", "B"], rows: [["1", "2"]] } };
+  const legacy = { kind: "animate", animKind: "numberLine", caption: "", params: { min: 0, max: 10, marks: [3] } };
+  const ref = { kind: "lessonVisual", blockIndex: 0 };
+  assert.equal(clipOverlayRenderable(ref, [tableBlock]), false, "forrás-ábra: nincs panel");
+  assert.equal(clipOverlayRenderable(ref, [{ kind: "explain", text: "x" }]), false, "nem ábra blokk: nincs panel");
+  assert.equal(clipOverlayRenderable(ref, undefined), false, "hiányzó fejezet: nincs panel");
+  assert.equal(clipOverlayRenderable(ref, [legacy]), true, "régi ábra: a panel megmarad");
+  assert.equal(clipOverlayRenderable({ kind: "graph" }, undefined), true, "más ráúszó változatlan");
+  assert.equal(clipOverlayRenderable(undefined, [legacy]), false);
+  assert.match(src("../client/src/lesson-runtime/clips/Clip2Player.tsx"), /scene\.overlay && clipOverlayRenderable\(scene\.overlay, item\.section\?\.blocks\) && <div className="clip2-panel"/u, "a lejátszó panelje ezt a feltételt használja");
+});
