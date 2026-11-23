@@ -68,6 +68,7 @@ A pótlási terv 7.1 sorrendje szerint (T-1, I-1, Q-1, Q-2, Q-3, T-2; szólétra
 
 | Dátum | Szelet | PR | Főági commit | Vak körök | Megjegyzés |
 |---|---|---|---|---|---|
+| 2026-11-23 | TGM S6a | #536 | `c87d1706` | 4 (NEM, IGEN F, NEM, IGEN F) | a kiosztott terv a szerzői kérésben; `sectionShapes` eredetjelző; L4, L9 jegyen |
 | 2026-11-23 | TGM S2b-2 | #535 | `f7f94f22` | 3 (mind IGEN F) | 4 követő jegy a PR-ban |
 | 2026-11-23 | TGM S5b | #534 | `412854e3` | 3 | L8 az S6a-ban javítva |
 | 2026-11-23 | TGM S2b-1 | #533 | `ae57953a` | 7 | a kilógófelirat-ellenőrzés kikerült (külön jegy) |
