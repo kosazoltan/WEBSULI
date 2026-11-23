@@ -55,3 +55,16 @@ Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`, „W1”, „V3 → W2”, „
 18. W2: az üres CCR-lista csak teljesen üres review-kommentlistánál megy át, teszttel (csak válasz-komment → FAIL).
 19. W3: a terv „Cél” és EARS pontjai; a javasolt új PR-cím a scratchpad `body-513-uj.md` tetején (a címet a gazda módosítja).
 20. W4: jegy-szöveg a scratchpadba. Ellenőrzés: célzott tesztek, mutáció, szakasz- és push-kapu.
+
+- [x] 17 · [x] 18 · [x] 19 (Cél / EARS a tervben; a PR címe és leírása frissítve) · [x] 20 (W4 → SQL-feladat #399, V5 → #400)
+
+## Negyedik és ötödik javítókör (2026-11-22; vak kör 1 és 2)
+
+Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`, „Negyedik és ötödik javítókör”.
+
+21. Kör 1, L1–L6: induláskori érvénytelenítés, késői main-csúcs a C-61-hez, szigorú REST/GraphQL-alak, runbook (`ccb0ce33`).
+22. Kör 2, L1–L2: késői kötelező lista a 403-as úton, PR-enkénti zár + futásazonosító (`21780cc5`).
+23. `git merge origin/main` (rebase / force nincs); célzott tesztek; szakasz- és push-kapu; helyi GPU-ellenőr
+    (`local-review.mjs`) az új fejre; push; zöld CI; merge-kapu. Az összevonás a gazda dolga.
+
+- [x] 21 · [x] 22 · [ ] 23

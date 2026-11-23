@@ -98,17 +98,29 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
 - **W1:** a `mergeVerdict` a szigorú módot maga is érvényesíti (`exclusive: true` → csak a futtató rekordja, egyező modellel), így a
   `blind` továbbadása ezen az ágon is mérhető; a vak ág `resolveVerdict`-je ugyanezt a szabályt adja, a kettő nem ütközik.
 - **W4 (jegyre):** a PR előtti kapu (`pre-pr-gate.mjs`) még elfogad PR-szöveges ítéletet (a `--body-file`-ból) — a két kapu
-  ítélet-szabályának egységesítése külön jegy.
+  ítélet-szabályának egységesítése külön jegy (SQL-feladat #399).
 - **V4:** hiányzó / nem egész `total_count` a check-run listában → FAIL.
 - **V5 (maradó kockázat, jegyre):** a CCR keresztellenőrzése csak darabszámot véd; egy nyitott szál `resolved: true`-ként jelentését
   vagy kipárnázott listát semmi nem fogja meg — a CCR-válasz valós mintája a repóban nincs. A V1 miatt felhőből úgysem vonható össze
-  PR, így ez ma nem kihasználható.
+  PR, így ez ma nem kihasználható. Jegy: SQL-feladat #400.
 - **K3:** az adatgyűjtés (`collectMergeData`) injektált `exec`-kel tesztelt: a lapozó kapcsolók, a tartalékutak sorrendje (GraphQL →
   CCR; védelmi végpont → `branches/main`), a hiba-ágak.
 - **K4:** a PR-válaszban hiányzó / nem szám `changed_files` → kivétel → FAIL (a csonkolás-ellenőrzés nem maradhat ki).
 - **K6:** a check-run lista lapozva (`total_count`-tal egyeztetve, csonka → FAIL); a GraphQL-szálak lapozva (`pageInfo`,
   legfeljebb 50 oldal, túllépés → FAIL); a fájllista `previous_filename`-je is útvonal; `mergeable_state` `unknown` / hiányzó →
   legfeljebb 3 újrakérés (2 s, 4 s várakozással), utána a meglévő szabály szerint FAIL.
+
+## Negyedik és ötödik javítókör (2026-11-22; vak kör 1: L1–L6, vak kör 2: L1–L2)
+
+- **Kör 1 / L1 (blokkoló):** minden futás az elején érvényteleníti a PR korábbi `merge-<n>-*.json` rekordjait; a validált fej a
+  fájllista lekérése ELŐTT ismert, így egy későbbi gyűjtési hiba is erre a fejre ír `ok: false` bizonyítékot.
+- **Kör 1 / L2:** a C-61 a lapozott hívások UTÁN újraolvasott main-csúcsot használja.
+- **Kör 1 / L3–L5:** a GraphQL-lapozás csak explicit logikai `hasNextPage: false`-nál ér véget (ismeretlen alak → CCR-út); a
+  fájllista minden rekordja nem üres, egyedi fájlnevű, a darabszám pontosan a `changed_files`; a `draft` csak logikai lehet.
+- **Kör 1 / L6:** runbook-sor a W2-szabályhoz.
+- **Kör 2 / L1:** a védelmi végpont 403-ánál a kötelező lista a késői `branches/main` válaszból jön (ugyanabból, mint a C-61 csúcsa).
+- **Kör 2 / L2:** PR-enkénti zár és futásazonosító (`merge-run-<n>.json`): a végső közzététel csak a legutóbb indított futásé.
+- EARS: AMIKOR egy korábban indult futás zöldre végez egy később indult, bukott futás után, a bizonyíték bukott marad (teszt).
 
 ## Visszavonás
 
