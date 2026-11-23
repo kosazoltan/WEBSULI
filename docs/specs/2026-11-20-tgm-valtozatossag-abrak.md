@@ -233,6 +233,95 @@ Elfogadás (EARS):
 - [ ] V11 nyitóblokk-címke a formából
 - [ ] V12 javítási út jelölője és visszaolvasás
 
+## 12. S6a — fejezetív-készlet
+
+Alap: TGM-terv S6a (TGM-végrehajtás 795. sortól). Kapcsoló: `STUDIO_LESSON_VARIETY`.
+
+Felülvizsgálat (TÉNY): a tervező egyetlen ívet kap, kétszer (`server/studio/step-io.ts:395` „explain → example → check, a végén
+legfeljebb egy rövid recap”, `:404` „A plannedBlocks sorrendje EZT az ívet kövesse”), a szerző a terv sorrendjét követi
+(`server/studio/role-skills.ts:116`) → a fejezetek 61,6%-a pontosan azonos blokksorú (TGM-terv 3.3).
+
+Döntések:
+
+1. `shared/lesson-section-shapes.ts`: hat fejezetminta — `alap` (explain, example, animate, check, recap), `megmutatas` (explain,
+   animate, example, try, check), `kerdesfelveto` (explain, example, check, explain, recap), `gyakorlo` (explain, example, try, check,
+   recap), `osszehasonlito` (explain, animate, example, example, check), `donteshelyzet` (explain, example, animate, check). Mind
+   átmegy a `shared/lesson-arc.ts` kapuján (magyarázattal kezd, példa a kérdés előtt, a gyakorlóarány ≤ 75%) — a kapu NEM változik.
+2. A tervező BE kapcsolónál fejezettípust ad (`sectionKind`: `procedure` | `description` | `comparison` | `any`; engedékeny, opcionális
+   mező); a fogalom-fejezetek `plannedBlocks`-át a program a terv elfogadása UTÁN a kiosztott mintára írja át (determinisztikus, modellkör
+   nélkül). A különleges fejezetek (`sectionRoleOf` szerint: kidolgozott feladat, leggyakoribb hibák, ellenőrzés) és a tulajdonos
+   jóváhagyott (`approvedOutline`) terve változatlan. Az utolsó fejezet mindig `recap`-pal zárul (a program hozzáfűzi).
+3. Kiosztás (`assignSectionShapes(kinds, seed)`): a típushoz illő minták közül a magból (`seedFrom(mapId)`); szomszédos fejezet nem kapja
+   ugyanazt; egy minta a fejezetek legfeljebb 40%-a (felfelé kerekítve); ha a szabályok ütköznek, előbb a 40%-os, majd a szomszéd-szabály
+   enged. Illeszkedés: `any` → mind a hat; `procedure` → alap, megmutatás, gyakorló, döntéshelyzet; `description` → alap, megmutatás,
+   kérdésfelvető; `comparison` → összehasonlító, döntéshelyzet, alap.
+4. KI kapcsolónál a terv bájtra a régi (a kéretlen `sectionKind` mező is eldobva), a pedagógus-prompt bájtra a régi.
+5. A kiosztott minták mentése (az SK2 kapujához) az SK2 feladata; addig az SK2 a „bármely készletbeli minta” szabályt méri.
+6. Pontosítás (1. vak kör, L1–L3): a szomszéd- és a 40%-szabály a szerzőnek átadott VÉGLEGES blokksorokra (és a mintaazonosítókra) is
+   érvényes — a záró `recap` hozzáfűzése után a `donteshelyzet` sora az `alap` soráéval azonos. A kiosztás determinisztikus visszalépéses
+   keresés: ha van a szabályoknak megfelelő kiosztás, megtalálja; a szabályok csak akkor engednek, ha nincs ilyen. A különleges záró
+   fejezet változatlan, egy kivétellel: ha a modell terve nem `recap`-pal zárja a leckét, a program hozzáfűzi.
+7. Pontosítás (review #536): a kiosztott blokksorokat a szerzői kérés KIMONDJA („A fejezetek végleges blokksora”) — a beszélgetésben a
+   modell eredeti terve áll, a kiosztás e nélkül nem jutna el a szerzőhöz. Csak BE futásnál és a modell tervénél; a tulajdonos jóváhagyott
+   tervénél (folytatva is: a terv eredetét a job állapotának `sectionShapes` jelzője őrzi) és KI állapotban a szerzői kérés bájtra a régi.
+   A kimondott sor a fejezet TANÍTÁSI TÖRZSE: a nyitás szerződésének nyitóblokkjai az első fejezetben a sor előtt állnak.
+
+Elfogadás (EARS):
+
+- **V13** — THE hat minta SHALL átmenni a `checkLessonArc` kapun (nyitóblokkokkal és záró recap-pal épített ál-leckében).
+- **V14** — WHEN a kiosztás 3…12 fejezetre fut 200 magon, THE szomszédos fejezetek SHALL NOT azonos mintát kapni, és egy minta SHALL
+  legfeljebb a fejezetek 40%-a (felfelé kerekítve) lenni.
+- **V15** — WHEN a kapcsoló BE, THE modell által tervezett fogalom-fejezetek `plannedBlocks`-a SHALL a kiosztott minta lenni, a különleges
+  fejezeteké SHALL változatlan lenni, és az utolsó fejezet SHALL recap-pal zárulni; WHEN KI, THE terv SHALL bájtra a régi lenni.
+- **V16** — WHEN a kiosztás szimulációja (modellhívás nélkül, minden típus `any`, 3–12 fejezet) fut, THE leggyakoribb fejezetminta
+  aránya SHALL < 35% és két véletlen fejezet azonos mintájának valószínűsége SHALL < 20% lenni (alapvonal: 61,6% és 40,4%).
+
+<!-- acceptance-checklist -->
+- [ ] V13 minták az ívkapun
+- [ ] V14 szomszéd- és 40%-szabály
+- [ ] V15 átírás BE-nél, KI bájtra a régi
+- [ ] V16 szimuláció < 35% / < 20%
+
+## 13. S6b — `try` minimum és rotáció, szerzői hangok
+
+Alap: TGM-terv S6b (TGM-végrehajtás 829. sortól). Kapcsoló: `STUDIO_LESSON_VARIETY`.
+
+Felülvizsgálat (TÉNY): a `try` a blokkok 0,7%-a, 239 leckéből 196-ban egy sincs (TGM-terv 3.3); a szerző regiszterét sávonként egyetlen
+mondat adja (`shared/lesson-band.ts:59-68`). Előfeltétel ellenőrizve: a `try` eredménye nem számít bele a pontozásba és a Próbába (a
+`check` számít; `shared/lesson-arc.ts:34` csak a megmutató réteghez sorolja) — a pontozás nem változik.
+
+Döntések:
+
+1. A kiosztás (S6a `applySectionShapes`) a fogalom-fejezetek legalább harmadára (felfelé kerekítve) `try`-t ad: ha a kiosztott minták
+   kevesebbet adnak, a magból választott fejezetek mintájába a `check` elé (ha nincs `check`, a végére, recap elé) `try` kerül. A
+   különleges fejezetek nem változnak; a `try` nem gyakorlóblokk, az ívkapu aránya csak javul.
+2. Fajta a fejezettípusból: `procedure` → `dragSort`, `comparison` → `match`, `description` → `fillBlank`, `any` → a magból forgatva úgy,
+   hogy két egymást követő `try` ne legyen azonos fajtájú. A fajta a terv fejezetén `tryKind` mezőként megy a szerzőhöz (a vázlat
+   JSON-jában), a szerző-prompt BE ága egy mondattal kéri a betartását. KI-nél a kéretlen `tryKind` is eldobva.
+   Pontosítás (S6a review #536 hibaosztálya): a beszélgetésben csak a modell EREDETI terve áll, ezért a kiosztott fajtát a szerzői kérés
+   a fejezet végleges blokksora mellett közli (`tryKind: "…"`). A `try` beszúrása UTÁN is áll az S6a szabálya: a végleges sorokban nincs
+   azonos szomszéd, és egy sor ≤ 40% — a pótlás ilyen fejezetbe kerül; csak ha nincs ilyen, enged a szabály (a `try`-minimum az erősebb).
+3. Jelzés, nem kapu: BE kapcsolónál `telemetry.gates.tryShare` (a kész lecke `try`-t tartalmazó fejezeteinek aránya, két tizedes) és
+   `qualityNotes` bejegyzés (`try_share_low`), ha 1/3 alatt marad.
+4. Szerzői hang sávonként (`BAND_VOICES`, sávonként 3 leírt hang, 2–3 mondat: mondatritmus, a kérdések aránya, a példák keretezése); a
+   magból választva (`bandVoiceForPrompt(band, seed)`), a regisztersor után. A szöveg kimondja: a hang a tényekre és a fogalmak
+   szóhasználatára nem hat.
+
+Elfogadás (EARS):
+
+- **V17** — WHEN a kiosztás 3…12 fogalom-fejezetre fut, THE `try`-t tartalmazó fejezetek aránya SHALL ≥ 1/3 lenni, a fajta SHALL a
+  típushoz illeni, és két egymást követő `try` SHALL NOT azonos fajtájú lenni, ha van választás (`any`).
+- **V18** — WHEN a kapcsoló BE, THE kész lecke `try`-aránya SHALL a telemetriába kerülni, és 1/3 alatt SHALL minőségi jelzést adni
+  (megállás nélkül).
+- **V19** — THE hangkiosztás SHALL determinisztikus lenni, és 50 magon sávonként SHALL ≥ 2 hang előfordulni; KI kapcsolónál a szerző-prompt
+  SHALL bájtra a régi lenni.
+- **V20** — WHEN a szimuláció fut, THE V16 küszöbei SHALL a `try`-beszúrással is teljesülni.
+
+<!-- acceptance-checklist -->
+- [ ] V17 try-minimum, fajta, rotáció
+- [ ] V18 tryShare jelzés
+- [ ] V19 hangok, KI bájtra a régi
+- [ ] V20 szimuláció a beszúrással
 
 ## 17. S2b-2 — a megjelenítők vak-leletei (vak J2, J5, J6, J7, J11, tt J9)
 

@@ -168,6 +168,33 @@ böngészős próbája 360×640, 844×390, 1280×800 nézetben, képernyőképpe
 
 A TGM-végrehajtás „S2b” fejezete (355. sortól) változatlanul; a `STUDIO_SOURCE_VISUALS` kapcsoló érvényes.
 
+## S6a — Fejezetív-készlet (részletes lépések)
+
+Ág: `feat/tgm-s6a-fejezetiv` (az S5b ágáról), munkafa `.claude/worktrees/tgm-s6a`. Terv: `docs/specs/2026-11-20-tgm-valtozatossag-abrak.md`
+12. szakasz. Fájlok: `shared/lesson-section-shapes.ts` (új), `server/studio/step-io.ts` (séma + pedagógus-prompt BE ága),
+`server/studio/single-run/engine.ts` (átírás a terv elfogadása után), `scripts/measure/shape-simulation.mts` (új),
+`tests/lesson-section-shapes.test.ts` (új).
+
+1. Bukó tesztek: V13 (ál-lecke mintánként → `checkLessonArc` ok), V14 (3…12 fejezet × 200 mag), V15 (`applySectionShapes`: BE átír,
+   különleges fejezet és jóváhagyott terv marad, záró recap; KI: ugyanaz az objektum, kéretlen `sectionKind` nélkül; a pedagógus-prompt
+   KI bájtra a régi, BE kéri a `sectionKind`-ot és nem mondja az egyetlen ívet), V16 (`shapeSimulation` < 0,35 / < 0,2).
+2. Kód a fenti fájlokban; a motor: `const outline = planned === undefined ? applySectionShapes(rawOutline, …) : rawOutline`.
+3. Futtasd: `node --import tsx --test tests/lesson-section-shapes.test.ts tests/lesson-arc.test.ts tests/source-visuals-flag.test.ts
+   tests/single-run-engine.test.ts tests/studio-role-skills.test.ts` → pass; `node --import tsx scripts/measure/shape-simulation.mts` →
+   a két szám a PR-be; `tsc --noEmit` 0; eslint 0.
+4. Nehéz kör zárral (`tgm-s6a`).
+
+## S6b — `try` minimum és rotáció, szerzői hangok (részletes lépések)
+
+Ág: `feat/tgm-s6b-try-hang` (az S6a ágáról), munkafa `.claude/worktrees/tgm-s6b`. Terv: `docs/specs/2026-11-20-tgm-valtozatossag-abrak.md`
+13. szakasz. Fájlok: `shared/lesson-section-shapes.ts` (`planSections`, try-beszúrás, `tryKind`, `tryShare`), `shared/lesson-band.ts`
+(`BAND_VOICES`, `bandVoiceForPrompt`), `server/studio/step-io.ts` (séma `tryKind`, szerző-prompt BE sorai), `server/studio/single-run/engine.ts`
+(telemetria + minőségi jelzés), `shared/run-telemetry.ts` (`tryShare`), `tests/lesson-try-voices.test.ts` (új).
+
+1. Bukó tesztek: V17 (3…12 fejezet × 200 mag), V18 (`tryShare` tiszta függvény; a motor bekötése forrásszöveg-őrrel), V19 (hangok, KI
+   prompt), V20 (szimuláció).
+2. Kód; 3. `node --import tsx --test tests/lesson-try-voices.test.ts tests/lesson-section-shapes.test.ts tests/source-visuals-flag.test.ts
+   tests/single-run-engine.test.ts tests/lesson-opening-forms.test.ts` → pass; szimuláció; `tsc` 0; eslint 0. 4. Nehéz kör zárral (`tgm-s6b`).
 
 ## S2b-2 — A megjelenítők vak-leletei (részletes lépések)
 

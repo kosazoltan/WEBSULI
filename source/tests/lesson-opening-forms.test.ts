@@ -160,3 +160,21 @@ test("review #534 (Copilot): a lektor a szerzőnek TÉNYLEG kiosztott nyitásfor
   assert.equal(lessonOpenerLektorChecklist(false), LESSON_OPENER_LEKTOR_CHECKLIST);
   assert.equal(lessonOpenerLektorChecklist(false, pick.form), LESSON_OPENER_LEKTOR_CHECKLIST);
 });
+
+test("S5b 3. vak kör L8: a mentett formaazonosító az évfolyam korcsoportjának leírását adja vissza (azonos azonosító több csoportban)", async () => {
+  const { OPENING_FORMS, openingFormById, openingFormGroup } = await import("../shared/lesson-opener");
+  const { adoptStoredOpeningForm, runOpeningForm, runWithLessonVariety } = await import("../server/studio/lesson-variety-flag");
+  let shared = 0;
+  for (const classroom of [1, 3, 5, 7, 9, 12]) {
+    for (const form of OPENING_FORMS[openingFormGroup(classroom)]) {
+      assert.equal(openingFormById(form.id, classroom), form, `${classroom}. osztály, ${form.id}`);
+      if (openingFormById(form.id) !== form) shared++;
+      runWithLessonVariety(true, () => {
+        adoptStoredOpeningForm({ classroom, variety: { version: "valtozatossag-2", openingForm: form.id } });
+        assert.equal(runOpeningForm(), form, `javítás: ${classroom}. osztály, ${form.id}`);
+      });
+    }
+  }
+  assert.ok(shared > 0, "van több csoportban is szereplő azonosító — a teszt valódi esetet mér");
+  assert.equal(openingFormById("nincs-ilyen", 5), undefined);
+});

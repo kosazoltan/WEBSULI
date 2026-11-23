@@ -1218,3 +1218,19 @@ Forrás: #504, CI `E2E rész (5)` (a 2. vak kör L1 tesztje: helyben zöld, Linu
   regexet / visszaperjelet tartalmazó forrást CSAK Edit / Write eszköz vagy fájlból futó szkript módosít, `sed` soha.
 
 Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szintezes.md` 11. és 13. szakasz). Rokon: C-15, C-75.
+
+## C-TGM-1 — Egy érték írását MINDEN író helyen javítsd; bot kérte új ellenőrzés új felület (2026-11-23, ideiglenes sorszám)
+
+- **Tünet 1 (S5b, review #534):** a lecke jelölőjének nyitásformáját a motorban javítottam (a szerzőnek ténylegesen kiosztott forma),
+  de a tároló (`pipeline-store.upsertLesson`) mentéskor ÚJRASZÁMOLTA a jelölőt — a javítás élesben hatástalan lett volna, miközben a
+  memóriatárolós teszt zöld. **Szabály 1:** adat írásának javítása előtt `grep` az író függvény MINDEN hívójára (itt:
+  `withVarietyMarker(`), és a javítás a legkülső író helyen is érvényesüljön.
+- **Tünet 2 (S2b-1, #533):** egy review-bot kérésére új ellenőrzést (kilógó felirat becslése) vettem fel; előbb állítottam, hogy „csak
+  gyártáskor fut” (a lejátszó olvasási útján is futott), aztán a közös becslőt módosítottam (a KI állapot viselkedése változott) — három
+  vak kör ment rá, végül tulajdonosi döntéssel kikerült. **Szabály 2:** „csak X úton fut” állítás előtt a hívók leltára kötelező;
+  szeletben a főág által is használt függvény viselkedése nem változhat; a bot által kért ÚJ ellenőrzés új felület — külön jegy, nem a
+  futó szelet része.
+- **Tünet 3:** a vak kör a review-botok leletei előtt indult → elavult fejre szólt. **Szabály 3 (a kör MEGRENDELŐJÉNEK szóló szervezési ajánlás, nem a megbízott ellenőr előfeltétele):** új vak kört csak a botok leleteinek
+  beérkezése és javítása után; futó kapu alatt a munkafát nem szerkesztjük.
+
+Forrás: `feat/tgm-s5b-v2` (#534), `feat/tgm-s2b1-v2` (#533). Rokon: C-61, C-72, C-75.

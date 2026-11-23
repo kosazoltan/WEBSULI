@@ -140,8 +140,10 @@ export function openingFormGroup(classroom: number): OpeningFormGroup {
 }
 
 /** Mentett formaazonosító → forma (review #534: a job állapotában rögzített kiosztás visszaolvasása); ismeretlen azonosító → `undefined`. */
-export function openingFormById(id: string): OpeningForm | undefined {
-  return Object.values(OPENING_FORMS).flat().find((f) => f.id === id);
+export function openingFormById(id: string, classroom?: number): OpeningForm | undefined {
+  // S5b 3. vak kör (L8): ugyanaz az azonosító több korcsoportban is szerepel, eltérő leírással — az évfolyam csoportja az első.
+  const own = classroom === undefined ? undefined : OPENING_FORMS[openingFormGroup(classroom)].find((f) => f.id === id);
+  return own ?? Object.values(OPENING_FORMS).flat().find((f) => f.id === id);
 }
 
 /** A forma és a hős a magból (a mag: `seedFrom(mapId)`) — ugyanaz a térkép mindig ugyanazt kapja. */
