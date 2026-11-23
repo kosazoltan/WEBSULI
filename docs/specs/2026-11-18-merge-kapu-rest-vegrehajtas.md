@@ -68,3 +68,10 @@ Terv: `docs/specs/2026-11-18-merge-kapu-rest.md`, „Negyedik és ötödik javí
     (`local-review.mjs`) az új fejre; push; zöld CI; merge-kapu. Az összevonás a gazda dolga.
 
 - [x] 21 · [x] 22 · [ ] 23
+
+## Copilot-javítás (2026-11-23; review a `54a59dca` fejre)
+
+24. RED: `pre-merge-gate.test.mjs` — a közzétett rekord hordozza a `runId`-t; `check-quality-gates.test.mjs` — `runId` nélküli,
+    eltérő `runId`-jű vagy fennálló zár melletti zöld bizonyíték → a `gh pr merge` tiltva; egyező → engedve.
+25. GREEN: `publishMergeEvidence` a `runId`-t a rekordba írja; a hook a jelölőt és a zárat is ellenőrzi.
+26. Szakasz- és push-kapu, helyi GPU-ellenőr, push, szál-válasz a javító commit SHA-jával.

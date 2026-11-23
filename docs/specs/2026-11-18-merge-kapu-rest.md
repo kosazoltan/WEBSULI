@@ -122,6 +122,15 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
 - **Kör 2 / L2:** PR-enkénti zár és futásazonosító (`merge-run-<n>.json`): a végső közzététel csak a legutóbb indított futásé.
 - EARS: AMIKOR egy korábban indult futás zöldre végez egy később indult, bukott futás után, a bizonyíték bukott marad (teszt).
 
+- **Copilot (#513, `54a59dca`) — megszakított futás régi zöldje:** ha egy futás a zöld rekord kiírása után, a zár törlése előtt
+  megszakad (beragadt zár), a következő futás az érvénytelenítés ELŐTT kilép; a futás-jelölő írása és az érvénytelenítés közti
+  megszakítás vagy az érvénytelenítés I/O-hibája is megőrizheti a régi zöldet, amit a hook (csak `ok` + kor) elfogadna. Javítás: a
+  közzétett merge-bizonyíték hordozza a `runId`-t; a hook (`check-quality-gates.mjs`, `gh pr merge`) csak akkor enged, ha a
+  bizonyíték `runId`-je egyezik a `merge-run-<n>.json` jelölőével, és nincs fennálló `merge-lock-<n>.lock` zár. A jelölő az
+  érvénytelenítés ELŐTT íródik, így egy félbeszakadt indulás után a régi zöld már nem egyezik.
+- EARS: AMIKOR a merge-bizonyíték `runId`-je hiányzik vagy eltér a jelölőétől, VAGY a PR zárja fennáll, a hook a `gh pr merge`-et
+  tiltja.
+
 ## Visszavonás
 
 A változtatás visszavonása (`git revert`): a kapu újra csak GraphQL-lel fut.
