@@ -20,7 +20,8 @@ cogni:
     date: 2026-11-23
     decision: "P-064: néma TTS-próbakimondás nincs + abszolút 80 MB hangtárplafon marad; P-065: Stúdió költség/hiba korlátnál csak jelzés, vészleállítás kizárólag a 30 USD próbakereten (SK3-ba nincs új éles futásidő- / összesített javítókör-megállító); P-057: .claude/settings.json verziókezelt, szűk matcherek, hook hibája csak a saját lépését tiltja"
     reason: "tulajdonosi döntés 2026-11-23; a fő ág (ccc5e99f) kódja már megfelelt, a tervek átvezetve, P-057 őr-teszt: scripts/qa/hooks/hook-scope.test.mjs"
-    ref: docs/specs/2026-11-23-h0-dontesek-atvezetese.md (PR #548)
+    ref: "docs/specs/2026-11-23-h0-dontesek-atvezetese.md"
+    pr: 548
   # - id: D-001
   #   date: ÉÉÉÉ-HH-NN
   #   title: "..."
