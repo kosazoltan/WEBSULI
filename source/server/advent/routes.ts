@@ -24,7 +24,7 @@ import { clientIpKeyGenerator } from "../lib/client-ip";
 import { logger } from "../lib/logger";
 import type { AdventResolution, AdventResolvedSubject } from "./identity";
 import { ADVENT_LIMITS, createWindowCounter, type AdventLimits } from "./limits";
-import { createAdoptionContext, mergeAdoption, orderKeyFor, planGradeOf, usedInEarlierRounds, withPlanMeta, type AdoptionContext } from "./adoption";
+import { createAdoptionContext, mergeAdoption, orderKeyFor, planGradeOf, usedForRepair, usedInEarlierRounds, withPlanMeta, type AdoptionContext } from "./adoption";
 import type { AdoptionRequest, AdventRow, AdventStore, AdventSubject } from "./store";
 
 
@@ -403,7 +403,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       }
       const attempts = row.doors[round]?.[day]?.attempts ?? [];
       // E14: a bankból eltűnt, még meg nem válaszolt kérdés pótlása (a megválaszolt kérdés védett).
-      const fixed = repairPlanDoor(plan, day, { bank, christmas, grade, ...usedInEarlierRounds(row, round, bank, christmas), protectedIds: new Set(attempts.map((a) => a.questionId)) });
+      // Az aktuális kör lecserélt (`retired`) kérdései sem jöhetnek vissza pótlásként (PR #544 review).
+      const fixed = repairPlanDoor(plan, day, { bank, christmas, grade, ...usedForRepair(row, round, plan, bank, christmas), protectedIds: new Set(attempts.map((a) => a.questionId)) });
       if (fixed.changed) { plan = fixed.plan; changed = true; }
       const state = doorState({ unlocked: true, attempts, maxRepairs });
       const readOnly = state === "solved" || state === "failed";
