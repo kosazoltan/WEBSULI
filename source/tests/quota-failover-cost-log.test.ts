@@ -10,7 +10,7 @@ import { memoryWorkflows } from "./helpers/workflow-store";
    Terv: docs/specs/2026-11-23-kvota-atallas-koltsegnaplo.md. */
 
 const msgs: AIMessage[] = [{ role: "user", content: "x" }];
-const SECRET = "sk-or-v1-titkos-kulcs-ne-naplozd";
+const ROUTER_KEY_MARKER = "router-kulcs-jelolo-ne-naplozd";
 let events: QuotaFailoverEvent[] = [];
 let lines: string[] = [];
 
@@ -93,12 +93,12 @@ test("E2: a streamelt memória-út is rögzül (tokenek nélkül)", async () => 
 });
 
 test("withQuotaFailover (nyers kliens): a tartalékhívás az OpenAI SDK usage-alakjából könyvel; E4: kulcs nem kerül a naplóba", async () => {
-  const openai: StudioConnection = { vendor: "openai", apiKey: "sk-proj-kozvetlen-titok", model: "gpt-5.6-luna", baseURL: "https://api.openai.com/v1" };
+  const openai: StudioConnection = { vendor: "openai", apiKey: "openai-kulcs-jelolo", model: "gpt-5.6-luna", baseURL: "https://api.openai.com/v1" };
   const run = async (c: StudioConnection) => {
     if (c.vendor === "openai") throw Object.assign(new Error("429 You have no credits remaining."), { status: 429 });
     return { choices: [], usage: { prompt_tokens: 50, completion_tokens: 7 } };
   };
-  await withQuotaFailover(openai, run, { OPENROUTER_API_KEY: SECRET }, () => 1_000);
+  await withQuotaFailover(openai, run, { OPENROUTER_API_KEY: ROUTER_KEY_MARKER }, () => 1_000);
   assert.equal(events.length, 1);
   assert.equal(events[0].path, "direct");
   assert.equal(events[0].trigger, "quota-error");
@@ -106,8 +106,8 @@ test("withQuotaFailover (nyers kliens): a tartalékhívás az OpenAI SDK usage-a
   assert.equal(events[0].tokensIn, 50);
   assert.equal(events[0].tokensOut, 7);
   for (const line of lines) {
-    assert.ok(!line.includes(SECRET), "OpenRouter-kulcs a naplóban");
-    assert.ok(!line.includes("sk-proj"), "OpenAI-kulcs a naplóban");
+    assert.ok(!line.includes(ROUTER_KEY_MARKER), "OpenRouter-kulcs a naplóban");
+    assert.ok(!line.includes("openai-kulcs-jelolo"), "OpenAI-kulcs a naplóban");
   }
 });
 
