@@ -4,6 +4,7 @@ import { ClaudeProvider } from "./ClaudeProvider";
 import { AI_KEY_NAMES, aiKeyStatus, CROSS_FAMILY_FALLBACK_EFFORT, isCrossFamilyFallbackModel, keyNameForModel, providerForModel } from "./models";
 import { AIProviderQuotaError, isQuotaExhausted, type AIMessage, type AIProviderConfig, type AIResponse, type AIStreamChunk, type ChatCallOptions, type IAIProvider } from "./AIProvider";
 import { logger } from "../lib/logger";
+import { recordQuotaFailover } from "./quota-failover-log";
 
 /** Resolve credentials by model, never by whichever key happens to be available. */
 export function studioConnection(model: string, env: Record<string, string | undefined> = process.env) {
@@ -32,14 +33,27 @@ export async function withQuotaFailover<T>(connection: StudioConnection, run: (c
   const routerKey = env[AI_KEY_NAMES.openrouter]?.trim();
   if (connection.vendor !== "openai" || !routerKey) return run(connection);
   const fallback: StudioConnection = { vendor: "openrouter", apiKey: routerKey, model: `openai/${connection.model}`, baseURL: "https://openrouter.ai/api/v1" };
-  if (now() < quotaExhaustedUntil) return run(fallback);
+  if (now() < quotaExhaustedUntil) return runFallback(fallback, run, connection.model, "memory", now);
   try {
     return await run(connection);
   } catch (error) {
     if (!(error instanceof AIProviderQuotaError) && !(error && typeof error === "object" && isQuotaExhausted(error as { status?: number }))) throw error;
     quotaExhaustedUntil = now() + QUOTA_FAILOVER_MEMORY_MS;
     logger.warn(`[AI] OpenAI kerete elfogyott (${connection.model}) — ugyanaz a modell az OpenRouteren át, ${QUOTA_FAILOVER_MEMORY_MS / 60_000} percig (közvetlen kliens).`);
-    return run(fallback);
+    return runFallback(fallback, run, connection.model, "quota-error", now);
+  }
+}
+
+/** Kanban #10 (2026-11-23): a nyers kliens tartalékhívása is költségnaplóba kerül (siker: tokenek; bukás: hibaosztály). */
+async function runFallback<T>(fallback: StudioConnection, run: (connection: StudioConnection) => Promise<T>, fromModel: string, trigger: "quota-error" | "memory", now: () => number): Promise<T> {
+  const at = now();
+  try {
+    const result = await run(fallback);
+    await recordQuotaFailover({ fromModel, toModel: fallback.model, trigger, path: "direct", now: at, result });
+    return result;
+  } catch (error) {
+    await recordQuotaFailover({ fromModel, toModel: fallback.model, trigger, path: "direct", now: at, error });
+    throw error;
   }
 }
 
@@ -91,18 +105,44 @@ export class QuotaFailoverProvider implements IAIProvider {
     return Object.keys(rest).length ? rest : undefined;
   }
   async chat(messages: AIMessage[], signal?: AbortSignal, options?: ChatCallOptions): Promise<AIResponse> {
-    if (this.now() < quotaExhaustedUntil) return this.route().chat(messages, signal, this.fallbackOptions(options));
+    if (this.now() < quotaExhaustedUntil) return this.fallbackChat(messages, signal, options, "memory");
     try {
       return await this.primary.chat(messages, signal, options);
     } catch (error) {
       if (!(error instanceof AIProviderQuotaError)) throw error;
       quotaExhaustedUntil = this.now() + QUOTA_FAILOVER_MEMORY_MS;
       logger.warn(`[AI] ${this.primary.name} kerete elfogyott (${this.model}) — ugyanaz a modell az OpenRouteren át, ${QUOTA_FAILOVER_MEMORY_MS / 60_000} percig.`);
-      return this.route().chat(messages, signal, this.fallbackOptions(options));
+      return this.fallbackChat(messages, signal, options, "quota-error");
+    }
+  }
+  /** Kanban #10 (2026-11-23): minden tartalékhívás költségnaplóba kerül — OpenRouterhez rendelve, átállásként jelölve, tokenekkel. */
+  private async fallbackChat(messages: AIMessage[], signal: AbortSignal | undefined, options: ChatCallOptions | undefined, trigger: "quota-error" | "memory"): Promise<AIResponse> {
+    const route = this.route();
+    const at = this.now();
+    try {
+      const result = await route.chat(messages, signal, this.fallbackOptions(options));
+      await recordQuotaFailover({ fromModel: this.model, toModel: route.model, trigger, path: "provider", now: at, result });
+      return result;
+    } catch (error) {
+      await recordQuotaFailover({ fromModel: this.model, toModel: route.model, trigger, path: "provider", now: at, error });
+      throw error;
     }
   }
   async *streamChat(messages: AIMessage[], signal?: AbortSignal): AsyncGenerator<AIStreamChunk, void, unknown> {
-    yield* (this.now() < quotaExhaustedUntil ? this.route() : this.primary).streamChat(messages, signal);
+    if (this.now() < quotaExhaustedUntil) {
+      const route = this.route();
+      // Kanban #10: a streamelt tartalékhívás is rögzül; a stream-darabok nem hordoznak használatot, ezért tokenek nélkül.
+      const at = this.now();
+      try {
+        yield* route.streamChat(messages, signal);
+      } catch (error) {
+        await recordQuotaFailover({ fromModel: this.model, toModel: route.model, trigger: "memory", path: "provider", now: at, error });
+        throw error;
+      }
+      await recordQuotaFailover({ fromModel: this.model, toModel: route.model, trigger: "memory", path: "provider", now: at });
+      return;
+    }
+    yield* this.primary.streamChat(messages, signal);
   }
   isAvailable(): Promise<boolean> { return this.primary.isAvailable(); }
 }
