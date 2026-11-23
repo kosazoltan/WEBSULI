@@ -80,6 +80,18 @@ test('prePushOrReuse: zöld push-bizonyíték ugyanerre a fejre → csak fetch +
   writeEvidence(other.ctx.evDir, `pre-push-${'e'.repeat(40)}`, { kind: 'pre-push', head: 'e'.repeat(40), ok: true, steps: [] });
   await prePushOrReuse({ gate: other.gate, ctx: other.ctx, head });
   assert.ok(other.gate.results.some((r) => r.name.startsWith('tiszta munkafa')), 'más fejre szóló bizonyíték nem számít');
+
+  // 1. vak kör L10: az elvárt fájlnév alatt, de MÁS fejre szóló tartalom sem számít.
+  const mismatch = fakeCtx({ changed: ['docs/a.md'] });
+  writeEvidence(mismatch.ctx.evDir, `pre-push-${head}`, { kind: 'pre-push', head: 'e'.repeat(40), ok: true, steps: [] });
+  await prePushOrReuse({ gate: mismatch.gate, ctx: mismatch.ctx, head });
+  assert.ok(mismatch.gate.results.some((r) => r.name.startsWith('tiszta munkafa')), 'a bizonyíték fej-mezője is számít');
+
+  // 1. vak kör L9: commitolatlan változásnál nincs újrahasználás — a teljes push-kapu fut (és a tisztasági lépése megbukik).
+  const dirty = fakeCtx({ changed: ['docs/a.md'], dirty: [' M source/server/x.ts'] });
+  writeEvidence(dirty.ctx.evDir, `pre-push-${head}`, { kind: 'pre-push', head, ok: true, steps: [] });
+  await prePushOrReuse({ gate: dirty.gate, ctx: dirty.ctx, head });
+  assert.equal(statusOf(dirty.gate, 'tiszta munkafa'), 'FAIL');
 });
 
 // Terv docs/specs/2026-11-23-kapu-spec-valasztas-szohatar.md (K1–K3)

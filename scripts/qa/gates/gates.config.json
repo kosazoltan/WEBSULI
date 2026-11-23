@@ -34,8 +34,7 @@
     "source/client/index.html"
   ],
   "dbPatterns": [
-    "source/server/storage",
-    "source/server/db",
+    "source/server/",
     "source/shared/schema",
     "source/migrations/"
   ],
@@ -43,6 +42,7 @@
     "$comment": "Terv docs/specs/2026-11-23-aranyos-kapuk.md: kis javítás = legfeljebb ennyi éles kódsor (hozzáadott + törölt, a merge-base óta) — vak ellenőri ítélet nélkül mehet. A never-minták változásánál soha nem kis javítás.",
     "maxProdLines": 30,
     "prodPatterns": ["^source/"],
+    "allowedNonProd": ["^docs/", "\\.md$"],
     "prodExclude": ["^source/tests/", "\\.(test|spec)\\.[cm]?[jt]sx?$", "\\.md$", "package-lock\\.json$", "\\.snap$"],
     "never": ["^scripts/qa/", "^\\.github/", "^\\.claude/", "^\\.agents/", "^source/migrations/", "^source/shared/schema", "(^|/)package\\.json$", "^render\\.yaml$"]
   },

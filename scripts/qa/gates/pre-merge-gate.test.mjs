@@ -151,3 +151,15 @@ test('decideMerge kis javítással: ítélet nélkül PASS (≤ 30 éles sor), 3
   const big = prodLineStats([{ path: 'source/server/a.ts', add: 31 }], smallFix);
   assert.equal(decide({ ...b, verdict: null, small: big }).find((r) => r.name.startsWith('független ellenőr')).status, 'FAIL');
 });
+
+// 1. vak kör L1: a REST fájllista — bináris (patch nélkül) és átnevezett kapu-fájl; csonka lista
+test('smallFromPullFiles: bináris éles fájl, kapu-fájl átnevezése és csonka lista → nem kis javítás; szövegesen ≤ 30 sor → kis javítás', async () => {
+  const { smallFromPullFiles } = await import('./pre-merge-gate.mjs');
+  const smallFix = cfg.smallFix;
+  const f = (filename, additions, deletions, extra = {}) => ({ filename, additions, deletions, status: 'modified', patch: '@@', ...extra });
+  assert.equal(smallFromPullFiles([f('source/server/a.ts', 10, 5)], smallFix).small, true);
+  assert.equal(smallFromPullFiles([f('source/client/logo.png', 0, 0, { patch: undefined })], smallFix).small, false, 'bináris');
+  assert.equal(smallFromPullFiles([f('source/server/x.mjs', 0, 0, { status: 'renamed', previous_filename: 'scripts/qa/gates/x.mjs' })], smallFix).small, false, 'átnevezett kapu-fájl');
+  assert.equal(smallFromPullFiles(Array.from({ length: 100 }, (_, i) => f(`docs/${i}.md`, 1, 0)), smallFix).small, false, 'csonka (100 elemű) lista');
+  assert.equal(smallFromPullFiles(null, smallFix).small, false, 'hiányzó lista');
+});

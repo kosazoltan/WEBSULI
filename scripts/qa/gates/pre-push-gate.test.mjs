@@ -135,3 +135,13 @@ test('runPrePushSteps: célzott változásnál csak a leképezett + őr-tesztek 
   assert.equal(calls.some((c) => c.args.includes('tests/*.test.ts')), false, 'nem fut a teljes készlet');
   assert.equal(calls.some((c) => c.cmd === 'npm' && c.args.join(' ') === 'run lint'), false, 'nincs teljes lint');
 });
+
+// 1. vak kör L8: törölt kódfájl → teljes készlet
+test('pushUnitTests: törölt (vagy átnevezett) kódfájlnál a teljes készlet fut', () => {
+  const cfg = loadConfig();
+  const testFiles = ['tests/request-retry.test.ts', 'tests/no-real-emails-guard.test.ts'];
+  const r = pushUnitTests({ changed: ['docs/a.md'], testFiles, readTest: () => '', cfg, deleted: ['source/client/src/lib/request-retry.ts'] });
+  assert.equal(r.mode, 'full');
+  assert.match(r.reason, /törölt kódfájl/);
+  assert.equal(pushUnitTests({ changed: ['docs/a.md'], testFiles, readTest: () => '', cfg, deleted: ['docs/regi.md'] }).mode, 'targeted', 'törölt dokumentáció: marad célzott');
+});

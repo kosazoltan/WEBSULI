@@ -151,11 +151,14 @@ async function mergedGuardCheck(ctx) {
  * készletre esik vissza, ha van leképezetlen éles kódfájl, vagy közös / szelet-közös fájl, `tsconfig*` / `package.json` változott. A teljes
  * készletet a CI mindig lefuttatja.
  */
-export function pushUnitTests({ changed, testFiles, readTest, cfg }) {
+export function pushUnitTests({ changed, testFiles, readTest, cfg, deleted = [] }) {
   const guards = testFiles.filter((t) => /-guard\.test\.ts$/.test(t));
   const shared = [...(cfg.sharedFiles ?? []), ...(cfg.sliceSharedPatterns ?? [])];
   const wide = changed.filter((f) => shared.some((p) => f === p || f.startsWith(p)) || /(^|\/)(tsconfig[^/]*\.json|package\.json)$/.test(f));
   if (wide.length) return { mode: 'full', reason: `közös fájl változott: ${wide.slice(0, 3).join(', ')}` };
+  // 1. vak kör L8: törölt / átnevezett (régi úton eltűnt) kódfájl → teljes készlet (a bent maradt import csak így derül ki).
+  const gone = deleted.filter((f) => /^source\//.test(f) && /\.(?:ts|tsx|js|mjs|cjs|jsx)$/.test(f));
+  if (gone.length) return { mode: 'full', reason: `törölt kódfájl: ${gone.slice(0, 3).join(', ')}` };
   const { tests, unmapped } = mapTests({ changed, testFiles, readTest, games: cfg.games, sharedGamePatterns: cfg.sharedGamePatterns });
   if (unmapped.length) return { mode: 'full', reason: `leképezetlen éles kódfájl: ${unmapped.slice(0, 3).join(', ')}` };
   return { mode: 'targeted', files: [...new Set([...tests, ...guards])], targeted: tests.length, guards: guards.length };
@@ -198,7 +201,8 @@ export async function runPrePushSteps({ gate, ctx, slice = false }) {
   const { changed } = await runLintSteps({ gate, ctx, mode: 'fast' });
   const testFiles = listFiles(join(src, 'tests'), /\.test\.ts$/).map((f) => `tests/${f}`);
   const readTest = (t) => { try { return readFileSync(join(src, t), 'utf8'); } catch { return ''; } };
-  const unit = pushUnitTests({ changed, testFiles, readTest, cfg });
+  const del = git.run(['diff', '--name-only', '--no-renames', '--diff-filter=D', git.mergeBase(base)]);
+  const unit = pushUnitTests({ changed, testFiles, readTest, cfg, deleted: del.code === 0 ? del.stdout.split(/\r?\n/).filter(Boolean) : ['source/(ismeretlen).ts'] });
 
   const unitName = unit.mode === 'full' ? `teljes egységteszt (${unit.reason})` : `egységtesztek: ${unit.targeted} célzott + ${unit.guards} őr (a teljes készlet a CI-é)`;
   await gate.step(unitName, () => {

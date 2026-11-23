@@ -6,7 +6,7 @@
 
 import { join } from 'node:path';
 import {
-  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence, prodLineStats, carryVerdict, carryInputs,
+  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence, prodLineStats,
 } from './lib.mjs';
 import { evidenceRecord } from './pre-push-gate.mjs';
 
@@ -78,6 +78,18 @@ export function decideMainMoved({ base, mainSha, files = [], mainFiles, mainFile
   const overlap = [...new Set(mainFiles.filter((m) => touched.some((t) => t.scopes.some((re) => re.test(m)))))];
   if (overlap.length) return failMsg(`a main az ellenőrzés által olvasott fájlt változtatott (${overlap.slice(0, 10).join(', ')}${overlap.length > 10 ? ', …' : ''})`);
   return { status: STATUS.WARN, note: `${moved}; a PR repó-szintű ellenőrzést érint (${wide}), de a main ${mainFiles.length} változott fájlja közül egyik sem esik a hatókörébe (pl. ${mainFiles.slice(0, 5).join(', ')})` };
+}
+
+/**
+ * Terv docs/specs/2026-11-23-aranyos-kapuk.md (A3): a kis javítás a GitHub REST fájllistájából. Fail-closed: hiányzó vagy 100 elemű (talán
+ * csonka) lista, változott sor nélküli (bináris / csak módváltó) éles fájl → nem kis javítás. Az átnevezés régi útja is a tiltott mintákhoz megy.
+ */
+export function smallFromPullFiles(files, smallFix) {
+  if (!Array.isArray(files) || files.length >= 100) return { lines: 0, files: 0, binary: true, never: ['(a GitHub fájllistája hiányzik vagy csonka)'], max: smallFix?.maxProdLines ?? null, small: false };
+  return prodLineStats(files.map((f) => ({
+    path: f.filename, previous: f.previous_filename, add: f.additions, del: f.deletions,
+    binary: f.patch === undefined && f.status !== 'removed',
+  })), smallFix);
 }
 
 export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files, verdict, external = null, guard, rt, repoWideScopes, mainFiles = null, mainFilesTruncated = false, small = null }) {
@@ -156,6 +168,9 @@ async function main() {
     const required = protection?.required_status_checks?.contexts ?? [];
     const checkRuns = ghJson(exec, root, ['api', `repos/${repo}/commits/${head}/check-runs?per_page=100`]).check_runs ?? [];
     const statuses = ghJson(exec, root, ['api', `repos/${repo}/commits/${head}/status`]).statuses ?? [];
+    // 1. vak kör L1: a kis javítás a REST fájllistából (státusz, az átnevezés régi útja, a bináris fájl `patch` nélkül jön).
+    let prFiles = null;
+    try { prFiles = ghJson(exec, root, ['api', `repos/${repo}/pulls/${n}/files?per_page=100`]); } catch { prFiles = null; }
     const q = 'query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}';
     const threads = ghJson(exec, root, ['api', 'graphql', '-f', `query=${q}`, '-f', `o=${owner}`, '-f', `r=${name}`, '-F', `n=${n}`])
       .data.repository.pullRequest.reviewThreads.nodes;
@@ -174,7 +189,7 @@ async function main() {
     }
     const verdict = resolveVerdict({
       head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: [pr.body, ...(pr.comments ?? []).map((c) => c.body)],
-    }) ?? carryVerdict({ ...carryInputs(ctx, head), smallFix: cfg.smallFix }); // A7: kis utólagos javítás
+    });
     const g = exec('bash', [join(root, 'scripts', 'qa', 'active-runs-guard.sh')], { cwd: root, timeoutMs: 90_000 });
     const summary = redact(`${g.stdout}\n${g.stderr}`).split('\n').filter((l) => /^(GUARD|AKTIV)/.test(l)).join(' ').trim();
     const rt = await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl);
@@ -183,7 +198,7 @@ async function main() {
       external: readEvidence(ctx.evDir, `external-${head}`), guard: { code: g.code, summary }, rt, repoWideScopes: cfg.repoWideScopes ?? [],
       mainFiles, mainFilesTruncated,
       // Terv docs/specs/2026-11-23-aranyos-kapuk.md (A3): a kis javítást a GitHub fájllistájából számoljuk, a helyi bizonyítéktól függetlenül.
-      small: prodLineStats((pr.files ?? []).map((f) => ({ path: f.path, add: f.additions, del: f.deletions })), cfg.smallFix),
+      small: smallFromPullFiles(prFiles, cfg.smallFix),
     })) gate.add(r.name, r.status, r.note);
   } catch (e) {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);

@@ -272,7 +272,20 @@ export function resolveVerdict({ head, evidence, texts = [] }) {
   return found;
 }
 
-/** `git diff --numstat` kimenete → `[{ path, add, del, binary }]` (a bináris fájl sorai „-”). */
+/**
+ * `git diff --numstat -z --no-renames` kimenete → `[{ path, add, del, binary }]` (1. vak kör L2: NUL-határolt rekordok — a Git a különleges
+ * fájlnevet így nem idézi). Érvénytelen rekord: nagy sorszámú, ismeretlen útként (fail-closed — soha nem számít nullának).
+ */
+export function parseNumstatZ(text) {
+  return String(text ?? '').split('\0').filter(Boolean).map((rec) => {
+    const m = /^(-|\d+)\t(-|\d+)\t([\s\S]+)$/.exec(rec.replace(/^\r?\n/, ''));
+    if (!m) return { path: '(érvénytelen numstat-rekord)', add: 1e9, del: 0, binary: true };
+    const binary = m[1] === '-' || m[2] === '-';
+    return { path: m[3], add: binary ? 0 : Number(m[1]), del: binary ? 0 : Number(m[2]), binary };
+  });
+}
+
+/** `git diff --numstat` (nem -z) kimenete → `[{ path, add, del, binary }]` (a bináris fájl sorai „-”). */
 export function parseNumstat(text) {
   return String(text ?? '').split(/\r?\n/).filter(Boolean).map((line) => {
     const [a, d, ...rest] = line.split('\t');
@@ -291,12 +304,18 @@ export function prodLineStats(entries, smallFix) {
   const prod = re(smallFix?.prodPatterns);
   const exclude = re(smallFix?.prodExclude);
   const never = re(smallFix?.never);
+  const allowed = re(smallFix?.allowedNonProd);
   let lines = 0;
   let files = 0;
   let binary = false;
   const neverHits = [];
   for (const e of entries ?? []) {
-    if (never.some((r) => r.test(e.path))) neverHits.push(e.path);
+    // 1. vak kör L1, L3: a tiltott minták az átnevezés RÉGI útjára is; ami nem éles kód, nem teszt és nem dokumentáció (pl. gyökérszintű
+    // kapukonfig), az sem lehet kis javítás.
+    for (const p of [e.path, e.previous].filter(Boolean)) {
+      const isProd = prod.some((r) => r.test(p));
+      if (never.some((r) => r.test(p)) || (!isProd && !allowed.some((r) => r.test(p)))) neverHits.push(p);
+    }
     if (!prod.some((r) => r.test(e.path)) || exclude.some((r) => r.test(e.path))) continue;
     files += 1;
     if (e.binary) binary = true;
@@ -314,35 +333,6 @@ export function prodLineStats(entries, smallFix) {
  * `candidates`: `[{ head, verdict, at }]` a bizonyíték-tárból; `isAncestor(sha)`; `fixEntries(sha)`: a numstat-bejegyzések `sha..HEAD`.
  * @returns {{ verdict: string, source: string, carriedFrom: string, small: object } | null}
  */
-/** A `carryVerdict` git-oldali bemenetei egy kapu kontextusából (`ctx`: git, evDir, base). */
-export function carryInputs(ctx, head = 'HEAD') {
-  const { git, evDir, base } = ctx;
-  const candidates = existsSync(evDir) ? readdirSync(evDir).filter((f) => /^review-[0-9a-f]{40}\.json$/.test(f))
-    .map((f) => readEvidence(evDir, f.replace(/\.json$/, ''))).filter(Boolean) : [];
-  const own = git.run(['diff', '--name-only', '--no-renames', `${base}...${head}`]);
-  const files = own.code === 0 ? own.stdout.split(/\r?\n/).filter(Boolean) : [];
-  return {
-    candidates,
-    isAncestor: (sha) => sha !== head && git.run(['merge-base', '--is-ancestor', sha, head]).code === 0,
-    fixEntries: (sha) => {
-      if (!files.length) return [];
-      const r = git.run(['diff', '--numstat', '--no-renames', sha, head, '--', ...files]);
-      return r.code === 0 ? parseNumstat(r.stdout) : [{ path: 'source/ismeretlen', add: 1e9, del: 0 }];
-    },
-  };
-}
-
-export function carryVerdict({ candidates, isAncestor, fixEntries, smallFix }) {
-  const ok = (candidates ?? []).filter((c) => c && VERDICTS.includes(c.verdict) && c.verdict !== 'NEM' && isAncestor(c.head))
-    .sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')));
-  for (const c of ok) {
-    const small = prodLineStats(fixEntries(c.head), smallFix);
-    if (small.small) return { verdict: c.verdict, source: `átvitt ítélet a ${c.head.slice(0, 12)} fejről (azóta kis javítás: ${small.lines} éles sor)`, carriedFrom: c.head, small };
-    return null; // a legutóbbi ellenőrzött ős óta nagyobb a változás — új kör kell
-  }
-  return null;
-}
-
 /** Az ítélet lépés-eredménye. `small`: a `prodLineStats` eredménye — kis javításnál az ítélet hiánya nem bukás. */
 export function verdictResult(v, head, small = null) {
   const how = `node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict IGEN --report <jelentés.md>`;

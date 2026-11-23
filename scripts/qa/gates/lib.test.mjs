@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  STATUS, carryVerdict, createGate, parseNumstat, parseUnifiedZero, prodLineStats, readEvidence, redact, resolveVerdict, verdictLine, verdictResult, writeEvidence, writeLog,
+  STATUS, createGate, parseNumstat, parseNumstatZ, parseUnifiedZero, prodLineStats, readEvidence, redact, resolveVerdict, verdictLine, verdictResult, writeEvidence, writeLog,
   loadConfig,
 } from './lib.mjs';
 
@@ -137,21 +137,39 @@ test('verdictResult kis javítással: ítélet nélkül PASS; NEM mindig FAIL; n
   assert.equal(verdictResult(null, h).status, STATUS.FAIL, 'a régi hívás (méret nélkül) változatlan');
 });
 
-// --- A7: egy már ellenőrzött PR kis utólagos javítása átviszi az ítéletet ---
+// --- 1. vak kör (L2, L3): NUL-határolt numstat; csak éles kód, teszt és dokumentáció lehet kis javításban ---
 
-test('carryVerdict: a legutóbbi ellenőrzött ős ítélete átvihető, ha azóta ≤ 30 éles sor változott; NEM soha; nagyobb változásnál nincs átvitel', () => {
+test('parseNumstatZ: a különleges / tabulátoros fájlnév sem esik ki; érvénytelen rekord nem számít nullának', async () => {
+  const z = (...recs) => recs.join('\0') + '\0';
+  assert.deepEqual(parseNumstatZ(z('31\t0\tsource/server/a\tb.ts', '-\t-\tsource/client/x.png')), [
+    { path: 'source/server/a\tb.ts', add: 31, del: 0, binary: false },
+    { path: 'source/client/x.png', add: 0, del: 0, binary: true },
+  ]);
   const smallFix = loadConfig().smallFix;
-  const A = 'a'.repeat(40);
-  const B = 'b'.repeat(40);
-  const entries = { [A]: [{ path: 'source/server/a.ts', add: 120, del: 0 }], [B]: [{ path: 'source/server/a.ts', add: 10, del: 5 }, { path: 'source/tests/a.test.ts', add: 90, del: 0 }] };
-  const base = { candidates: [{ head: A, verdict: 'IGEN', at: '2026-11-23T08:00:00Z' }, { head: B, verdict: 'IGEN, FELTÉTELLEL', at: '2026-11-23T09:00:00Z' }], isAncestor: () => true, fixEntries: (sha) => entries[sha], smallFix };
-  const carried = carryVerdict(base);
-  assert.equal(carried.verdict, 'IGEN, FELTÉTELLEL', 'a legutóbbi ellenőrzött ős ítélete');
-  assert.equal(carried.carriedFrom, B);
-  assert.match(carried.source, /átvitt ítélet a bbbbbbbbbbbb fejről \(azóta kis javítás: 15 éles sor\)/);
-  assert.equal(carryVerdict({ ...base, fixEntries: () => [{ path: 'source/server/a.ts', add: 31, del: 0 }] }), null, 'a legutóbbi ős óta nagyobb a változás → új kör (régebbi ősre sem esik vissza)');
-  assert.equal(carryVerdict({ ...base, candidates: [{ head: B, verdict: 'NEM', at: 'x' }] }), null, 'NEM ítélet nem vihető át');
-  assert.equal(carryVerdict({ ...base, isAncestor: () => false }), null, 'nem ős commit ítélete nem számít');
-  assert.equal(carryVerdict({ ...base, fixEntries: () => [{ path: 'scripts/qa/gates/lib.mjs', add: 1, del: 0 }] }), null, 'kapu-fájl változása után nincs átvitel');
-  assert.equal(carryVerdict({ ...base, candidates: [] }), null);
+  assert.equal(prodLineStats(parseNumstatZ(z('31\t0\tsource/server/a\tb.ts')), smallFix).small, false, 'a 31 sor nem tűnik el');
+  assert.equal(prodLineStats(parseNumstatZ('szemét\0'), smallFix).small, false, 'érvénytelen rekord: fail-closed');
+  // Valódi git-kimenet: a nem -z alak idézi a különleges nevet — a -z alak nem.
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+  const dir = mkdtempSync(join(tmpdir(), 'numstat-'));
+  const git = (...a) => execFileSync('git', ['-C', dir, '-c', 'user.email=t@example.com', '-c', 'user.name=t', '-c', 'core.quotepath=true', ...a], { encoding: 'utf8' });
+  git('init', '-q');
+  git('commit', '-q', '--allow-empty', '-m', 'a');
+  mkdirSync(join(dir, 'source', 'server'), { recursive: true });
+  writeFileSync(join(dir, 'source', 'server', 'ékezet.ts'), Array.from({ length: 31 }, (_, i) => `export const x${i} = ${i};`).join('\n') + '\n');
+  git('add', '.');
+  git('commit', '-q', '-m', 'b');
+  const parsed = parseNumstatZ(git('diff', '--numstat', '-z', '--no-renames', 'HEAD~1', 'HEAD'));
+  assert.deepEqual(parsed, [{ path: 'source/server/ékezet.ts', add: 31, del: 0, binary: false }]);
+  assert.equal(prodLineStats(parsed, smallFix).small, false);
+});
+
+test('prodLineStats: éles kódon, teszten és dokumentáción kívüli útvonal (gyökérszintű kapukonfig) és az átnevezés régi útja kizárja a kis javítást', () => {
+  const smallFix = loadConfig().smallFix;
+  assert.equal(prodLineStats([{ path: '.agentic-qa-kit.json', add: 2, del: 2 }], smallFix).small, false, 'a ténylegesen olvasott kapukonfig nem kis javítás');
+  assert.equal(prodLineStats([{ path: 'source/server/a.ts', add: 1, del: 1 }, { path: '.gitattributes', add: 1, del: 0 }], smallFix).small, false);
+  assert.equal(prodLineStats([{ path: 'docs/a.md', add: 1 }, { path: 'README.md', add: 1 }, { path: 'source/server/a.ts', add: 3 }], smallFix).small, true, 'dokumentáció és éles kód: rendben');
+  const renamed = prodLineStats([{ path: 'source/server/regi-kapu.mjs', previous: 'scripts/qa/gates/regi.mjs', add: 0, del: 0 }], smallFix);
+  assert.equal(renamed.small, false, 'a kapu-fájl kiarchiválása átnevezéssel sem kis javítás');
+  assert.ok(renamed.never.includes('scripts/qa/gates/regi.mjs'));
 });

@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import {
-  STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog, parseNumstat, prodLineStats, carryVerdict, carryInputs,
+  STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog, parseNumstatZ, prodLineStats,
 } from './lib.mjs';
 import { evidenceRecord, freshMainStep, runPrePushSteps } from './pre-push-gate.mjs';
 import { stemOf } from './stage-gate.mjs';
@@ -111,7 +111,10 @@ export function e2eArgs(run) {
 export async function prePushOrReuse({ gate, ctx, head, slice = false }) {
   const { git } = ctx;
   const pushed = readEvidence(ctx.evDir, `pre-push-${head}`);
-  if (!(pushed?.ok === true && pushed.head === head)) return runPrePushSteps({ gate, ctx, slice });
+  // 1. vak kör L9: csak TISZTA fán (nincs commitolatlan és nem követett fájl) hivatkozhatunk a fejre szóló bizonyítékra — különben a
+  // kapu mást tesztelne, mint amire a bizonyítékot írja; ilyenkor a teljes push-kapu fut (és a tisztasági lépése megbukik).
+  const clean = git.trackedDirty().length === 0 && git.untracked().length === 0;
+  if (!(clean && pushed?.ok === true && pushed.head === head)) return runPrePushSteps({ gate, ctx, slice });
   gate.add('push-kapu lépései', STATUS.SKIP, `zöld push-bizonyíték ugyanerre a fejre (${String(pushed.at ?? '').slice(0, 16)}) — nem ismételjük`);
   await gate.step('git fetch', () => {
     const r = git.run(['fetch', ctx.base.split('/')[0], '--quiet']);
@@ -158,11 +161,10 @@ async function main() {
   });
 
   // Terv docs/specs/2026-11-23-aranyos-kapuk.md (A1, A2): kis javításnál (≤ 30 éles sor) az ítélet nem kötelező.
-  const numstat = git.run(['diff', '--numstat', '--no-renames', `${ctx.base}...HEAD`]);
-  const small = numstat.code === 0 ? prodLineStats(parseNumstat(numstat.stdout), cfg.smallFix) : null;
+  const numstat = git.run(['diff', '--numstat', '-z', '--no-renames', `${ctx.base}...HEAD`]);
+  const small = numstat.code === 0 ? prodLineStats(parseNumstatZ(numstat.stdout), cfg.smallFix) : null;
   await gate.step('független ellenőr ítélete a fejre', () => verdictResult(
-    resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts })
-      ?? carryVerdict({ ...carryInputs(ctx, head), smallFix: cfg.smallFix }), head, small));
+    resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head, small));
 
   await gate.step('külső (Gemini) ellenőr — második vélemény', () => externalResult(readEvidence(ctx.evDir, `external-${head}`), head));
 

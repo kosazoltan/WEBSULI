@@ -36,8 +36,8 @@ terhelésétől függően ±50%.
   („KIS JAVÍTÁS (N éles sor)”). A merge-kapu a sorokat a GitHub fájllistájából számolja újra. Soha nem kis javítás a kapukat, a CI-t,
   az ügynök-beállítást, a skilleket, a sémát / migrációt, a `package.json`-t vagy a `render.yaml`-t érintő változás, és a bináris éles fájl
   (`gates.config.json` `smallFix`). Ha mégis van ítélet, az számít — a `NEM` kis javításnál is bukás.
-- **Kis utólagos javítás** (review-lelet, CI-hiba egy már ellenőrzött PR-on): a legutóbbi ellenőrzött ős-commit ítélete átvihető, ha azóta a
-  PR saját fájljain legfeljebb 30 éles sor változott — nem kell új fizetős kör. `NEM` ítélet nem vihető át.
+- Kis javításban csak éles kód, teszt és dokumentáció lehet — bármely más útvonal (pl. gyökérszintű kapukonfig) kizárja. Egy már
+  ellenőrzött PR utólagos javításánál a teljes PR számít (ítélet-átvitel még nincs; külön szelet).
 - **A teljes készlet a CI-é:** a helyi push-kapu a kapcsolódó teszteket futtatja; a teljes lint, a teljes egységteszt (x64 és ARM64), a
   build, a teljes böngészős készlet és a DB-integrációs teszt minden PR-on a GitHub CI-ban fut.
 
@@ -47,7 +47,7 @@ terhelésétől függően ±50%.
 | Lint, teljes | `npm run gate:lint` | a fenti + teljes `npm run lint` + mindkét `tsc` | 146 s (lint 12 s, check 45 s, check:test 40–70 s) |
 | Szakasz | `npm run gate:stage` | lint gyors + a változott fájlokhoz leképezett egységtesztek + minden `*-guard.test.ts` (23 db) + a `scripts/qa` tesztjei, ha érintett | 47 s (tsc nélkül); tsc-vel ~115 s |
 | Push előtt | `npm run gate:push` | tiszta fa; `git fetch`; lint GYORS mód (a változott fájlok ESLintje; `tsc` változott `.ts` / teszt esetén); egységteszt: a leképezett tesztek + minden őr — TELJES készlet csak leképezetlen éles kódfájlnál vagy közös fájl (`sharedFiles`, `sliceSharedPatterns`, `tsconfig*`, `package.json`) változásánál; háromfázisú rend; PR-méret; friss main; közös fájlok; `.audit-ok`; „zöld CI utáni push” | ~40–60 s célzottan (2026-11-23-ig a teljes egységteszttel ~125 s) |
-| PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet (kis javításnál nem kötelező); a push-kapu lépései — ha ugyanerre a fejre zöld push-bizonyíték van, csak `git fetch` + C-61; játék / UI: a változott komponenst említő böngészős út (az buildel); `npm run build` csak böngészős út nélkül; DB: `test:learning-db` csak tároló / séma / migráció változásnál | push-bizonyítékkal ~1–3 perc + a böngészős út |
+| PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet (kis javításnál nem kötelező); a push-kapu lépései — ha ugyanerre a fejre zöld push-bizonyíték van, csak `git fetch` + C-61; játék / UI: a változott komponenst említő böngészős út (az buildel); `npm run build` csak böngészős út nélkül; DB: `test:learning-db` szerver / séma / migráció változásnál | push-bizonyítékkal ~1–3 perc + a böngészős út |
 | Merge előtt | `npm run gate:merge -- <PR>` | CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
 
 ### Külső (Gemini) ellenőr — második vélemény
