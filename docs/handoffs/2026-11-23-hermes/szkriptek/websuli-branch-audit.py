@@ -1,10 +1,28 @@
-"""Csak olvasó ág-osztályozás: van-e új tartalom a főághoz képest, hol létezik az ág. Kimenet: branch-audit.tsv a szkript mellett."""
+"""Csak olvasó ág-osztályozás: van-e új tartalom a főághoz képest, hol létezik az ág.
+
+Használat: python websuli-branch-audit.py <repó-útvonal> <kimeneti.tsv>
+A verziózott mintát (branch-audit.tsv) NEM írja felül; parancshibánál (git / gh) leáll, és nem ír kimenetet (1. vak kör L10).
+A „backup” jelölés csak azt mondja, hogy van ilyen nevű távoli mentő-ág, NEM igazolja, hogy a helyi fej benne van.
+"""
 import json, os, subprocess, sys
 
-REPO = r'D:\repo\WEBSULI'
+if len(sys.argv) != 3:
+    sys.exit('Használat: python websuli-branch-audit.py <repó-útvonal> <kimeneti.tsv>')
+REPO, OUT = sys.argv[1], os.path.abspath(sys.argv[2])
+if os.path.basename(OUT) == 'branch-audit.tsv' and os.path.dirname(OUT) == os.path.dirname(os.path.abspath(__file__)):
+    sys.exit('A verziózott branch-audit.tsv nem írható felül — adj meg más kimenetet.')
+
 
 def git(*args):
-    return subprocess.run(['git', '-C', REPO, *args], capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.strip()
+    r = subprocess.run(['git', '-C', REPO, *args], capture_output=True, text=True, encoding='utf-8', errors='replace')
+    if r.returncode != 0:
+        sys.exit(f'git {" ".join(args)} hibával állt le ({r.returncode}): {r.stderr.strip()[:300]}')
+    return r.stdout.strip()
+
+
+def git_soft(*args):
+    r = subprocess.run(['git', '-C', REPO, *args], capture_output=True, text=True, encoding='utf-8', errors='replace')
+    return r.returncode, r.stdout.strip()
 
 main_tree = git('rev-parse', 'origin/main^{tree}')
 remote = {r[len('origin/'):] for r in git('branch', '-r', '--format=%(refname:short)').splitlines() if r.startswith('origin/')}
@@ -12,15 +30,18 @@ worktree_branches = set()
 for line in git('worktree', 'list', '--porcelain').splitlines():
     if line.startswith('branch '):
         worktree_branches.add(line.split(' ', 1)[1].replace('refs/heads/', ''))
-open_prs = subprocess.run(['gh', 'pr', 'list', '--repo', 'kosazoltan/WEBSULI', '--state', 'open', '--json', 'headRefName'], capture_output=True, text=True, encoding='utf-8').stdout
-open_heads = {p['headRefName'] for p in json.loads(open_prs or '[]')}
+gh = subprocess.run(['gh', 'pr', 'list', '--repo', 'kosazoltan/WEBSULI', '--state', 'open', '--json', 'headRefName'], capture_output=True, text=True, encoding='utf-8')
+if gh.returncode != 0:
+    sys.exit(f'gh pr list hibával állt le: {gh.stderr.strip()[:300]}')
+open_heads = {p['headRefName'] for p in json.loads(gh.stdout or '[]')}
 
 rows = []
 for b in git('branch', '--format=%(refname:short)').splitlines():
     if b == 'main':
         continue
-    merged = git('merge-tree', '--write-tree', 'origin/main', b).splitlines()
-    content = 'NINCS_UJ' if merged and merged[0] == main_tree else 'VAN_UJ'
+    code, mt = git_soft('merge-tree', '--write-tree', 'origin/main', b)  # 1 = ütközés: ettől még van új tartalom
+    merged = mt.splitlines()
+    content = 'NINCS_UJ' if code == 0 and merged and merged[0] == main_tree else 'VAN_UJ'
     if b in remote:
         ahead = git('rev-list', '--count', f'origin/{b}..{b}')
         where = 'tavoli' if ahead == '0' else f'tavoli(+{ahead} helyi)'
@@ -31,10 +52,12 @@ for b in git('branch', '--format=%(refname:short)').splitlines():
     date = git('log', '-1', '--format=%cs', b)
     rows.append((content, where, 'munkafa' if b in worktree_branches else '-', 'nyitottPR' if b in open_heads else '-', date, b))
 
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'branch-audit.tsv')
-with open(out, 'w', encoding='utf-8') as f:
+out = OUT
+tmp = out + '.tmp'
+with open(tmp, 'w', encoding='utf-8') as f:
     for r in sorted(rows):
         f.write('\t'.join(r) + '\n')
+os.replace(tmp, out)
 from collections import Counter
 c = Counter((r[0], r[1].split('(')[0]) for r in rows)
 for k, v in sorted(c.items()):

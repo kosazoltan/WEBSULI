@@ -4,7 +4,6 @@ description: "Minden generált tananyag szöveges feladat- és kvízeredménye e
 metadata:
   node_type: memory
   type: project
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-17T15:35:29.023Z
 ---
 

@@ -4,7 +4,6 @@ description: "A WEBSULI main-re csak PR-on át — tulajdonosi döntés 2026-11-
 metadata:
   node_type: memory
   type: project
-  originSessionId: 5e40d429-1a44-43d0-a815-181a3773f233
   modified: 2026-11-22T10:29:16.642Z
 ---
 

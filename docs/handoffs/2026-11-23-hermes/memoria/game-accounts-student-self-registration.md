@@ -4,7 +4,6 @@ description: "Játékos-fiók döntés (2026-11-16) — a diákok saját e-mail-
 metadata:
   node_type: memory
   type: project
-  originSessionId: 99a9b29f-318a-40fe-a572-f8ecf28ad2ae
   modified: 2026-11-16T06:00:53.208Z
 ---
 

@@ -4,7 +4,6 @@ description: "A push előtti ellenőrzést külön, kilépési kóddal jelentve 
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-22T05:38:44.805Z
 ---
 

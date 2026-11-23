@@ -4,7 +4,6 @@ description: "A tananyagok változatossága és a szebb ábrák KIEMELT priorit�
 metadata:
   node_type: memory
   type: project
-  originSessionId: 99a9b29f-318a-40fe-a572-f8ecf28ad2ae
   modified: 2026-11-20T05:58:25.379Z
 ---
 

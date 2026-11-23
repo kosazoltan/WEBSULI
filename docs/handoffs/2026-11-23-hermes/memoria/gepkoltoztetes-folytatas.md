@@ -4,7 +4,6 @@ description: "2026-11-21 gépköltöztetés után — hol a leltár és a terv, 
 metadata:
   node_type: memory
   type: project
-  originSessionId: 5e40d429-1a44-43d0-a815-181a3773f233
   modified: 2026-11-22T07:50:32.209Z
 ---
 

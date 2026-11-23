@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
+# A nyitott PR-ok ágai (#510, #513, #521, #529, #540) SZÁNDÉKOSAN nincsenek a listában: rájuk érdemi javító push csak a
+# teljes javító folyamattal (fejazonos vak ítélet) mehet — átadó dokumentum 4. és 13.2 fejezet.
 # Átadás előtti push-kapu sor: főág-összefésülés (ütközésnél visszavonás), node_modules, gate:push. Eredmény: push-eredmeny.tsv
 S=${S:-$HOME/websuli-atadas-naplok}; mkdir -p "$S"
 OUT=$S/push-eredmeny.tsv
-source ~/.claude/scripts/websuli-kapusor.sh
+# 1. vak kör L6: a segéd a szkript mellől töltődik; a zárat CSAK a segéd saját EXIT-trapje engedi fel (felülírni tilos).
+REPO="${WEBSULI_ROOT:-/d/repo/WEBSULI}"
+git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || { echo "nem git-repó: $REPO (WEBSULI_ROOT)"; exit 2; }
+git -C "$REPO" remote get-url origin | grep -q 'kosazoltan/WEBSULI' || { echo "nem a WEBSULI repó: $REPO"; exit 2; }
+source "$(dirname "$(readlink -f "$0")")/websuli-kapusor.sh"
 kapusor_be "atadas push-kapu sor" || exit 1
-trap 'rm -rf /c/Users/kosaz/.claude/websuli-kapusor.lock' EXIT
-for n in advent-c advent-s6 tgm-s6c1 aranyos-kapuk tgm-s6c tgm-sk2 vak-v2 zaro-hurok szoletra-szintezes-2 szoletra-a1-bank szoletra-szintezes kitakaro-elovagas kisfilm-leallitas eredmeny-510 kisfilm-videomodell merge-kapu-rest kitakaro-521 vak-futtato-1 vak-futtato-2 vak-ellenor-deepseek docs-potlasok eredmeny-bontas foterv gepkoltoztetes-folytatas teljes-revizio advent-kepgyarto; do
-  w=/d/repo/WEBSULI/.claude/worktrees/$n
+for n in advent-c advent-s6 aranyos-kapuk tgm-s6c tgm-sk2 vak-v2 zaro-hurok szoletra-szintezes-2 szoletra-a1-bank szoletra-szintezes kitakaro-elovagas kisfilm-leallitas vak-futtato-1 vak-futtato-2 vak-ellenor-deepseek docs-potlasok eredmeny-bontas foterv gepkoltoztetes-folytatas teljes-revizio advent-kepgyarto; do
+  w=$REPO/.claude/worktrees/$n
   cd "$w" || { printf '%s\t-\t-\tNINCS_MUNKAFA\n' "$n" >>"$OUT"; continue; }
   b=$(git branch --show-current)
   if [ -n "$(git status --porcelain)" ]; then printf '%s\t%s\t%s\tPISZKOS_FA\n' "$n" "$b" "$(git rev-parse --short HEAD)" >>"$OUT"; continue; fi

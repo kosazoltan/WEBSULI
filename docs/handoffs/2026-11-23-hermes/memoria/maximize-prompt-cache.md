@@ -4,7 +4,6 @@ description: "A prompt- / KV-gyorsítótár maximális kihasználása a saját m
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: 99a9b29f-318a-40fe-a572-f8ecf28ad2ae
   modified: 2026-11-18T18:58:24.811Z
 ---
 

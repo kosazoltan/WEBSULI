@@ -4,7 +4,6 @@ description: A napi hírlevél YouTube-csatornabankja a source/shared/youtube-ch
 metadata:
   node_type: memory
   type: project
-  originSessionId: 75b01830-51a8-4bc9-ac55-a1649f4a26a1
   modified: 2026-10-31T14:36:00.197Z
 ---
 

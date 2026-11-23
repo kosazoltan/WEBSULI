@@ -4,7 +4,6 @@ description: A gyakorlóbank modellje marad az Opus 5.5 — olcsóbb OpenRouter-
 metadata:
   node_type: memory
   type: project
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-16T18:18:17.146Z
 ---
 

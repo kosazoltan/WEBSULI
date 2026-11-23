@@ -4,14 +4,13 @@ description: "A WEBSULI főszála 2026-11-22 óta a „Felhős szálak összevon
 metadata:
   node_type: memory
   type: project
-  originSessionId: d097beb9-f3f3-4a20-9287-4601fbd79418
   modified: 2026-11-23T02:12:06.526Z
 ---
 
 2026-11-22 este a tulajdonos döntése: „Te vagy a főszál” → a fejlesztés a „Felhős szálak összevonása” sessionben fut. A régi főszál
 („Websuli fejlesztés leltározása”, session 5e40d429) a gép újraindításakor leállt, átadó jegyzet nélkül. Az állapotot a munkafákból
 és a `websuli-qa-evidence`-ből raktam össze. A régi szál riportjai a régi scratchpadban vannak:
-`C:\Users\kosaz\AppData\Local\Temp\claude\ae863587c521e3ec\5e40d429-1a44-43d0-a815-181a3773f233\scratchpad\review-*`.
+`C:\Users\kosaz\AppData\Local\Temp\claude\ae863587c521e3ec\<azonosító>\scratchpad\review-*`.
 
 Vak körök (2026-11-22): #510 12 kör (az utolsó 4 NEM), TGM S5a 2 kör NEM, kisfilm-leállítás (fix/kisfilm-leallitas-hatarido) 6 kör NEM,
 #513 1 kör NEM, #522 1. kör IGEN FELTÉTELLEL (feltételek L1–L3 jegyre: eseményszűrő-őr, címzés-őr, komment szövege).

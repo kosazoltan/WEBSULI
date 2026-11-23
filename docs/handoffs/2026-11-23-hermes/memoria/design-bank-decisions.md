@@ -4,7 +4,6 @@ description: "Tulajdonosi döntések az előre gyártott arculati bankról (2026
 metadata:
   node_type: memory
   type: project
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-17T08:13:49.380Z
 ---
 

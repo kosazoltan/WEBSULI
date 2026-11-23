@@ -4,7 +4,6 @@ description: "Mandátum (2026-11-01) — spec, javítás, fejlesztés, implement
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: 73646714-abe4-4b5d-b3f0-4a1249d602f1
   modified: 2026-11-17T08:00:00.000Z
 ---
 

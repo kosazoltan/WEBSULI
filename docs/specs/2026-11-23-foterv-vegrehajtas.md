@@ -34,8 +34,9 @@ tartalmát a saját tervük (hivatkozva).
 
 ### H2 — TGM-lánc (terv: `docs/specs/2026-11-20-tgm-valtozatossag-abrak.md` 12–15. szakasz; `2026-11-18-tananyag-gyartas-minoseg.md`)
 
-- **T1** #536 (S6a): zöld CI → merge.
-- **T2** S6b: `feat/tgm-s6b-v2` (munkafa `tgm-s6b`), cél: scratchpad `cel-s6b.md`.
+- **T1** #536 (S6a): KÉSZ (`c87d1706`).
+- **T2** S6b: KÉSZ (#537, `49397146`).
+- **T2b** S6c-1 (#540, `feat/tgm-s6c1-abrafajta-terv`): követő vak kör → merge (átadás 4.2).
 - **T3** S6c: `feat/tgm-s6c-v2` (munkafa `tgm-s6c`); a T2 beolvadása után `git merge origin/main`.
 - **T4** SK2: `feat/tgm-sk2-v2` (munkafa `tgm-sk2`); a T3 után.
 - **T5** D2 űrlap → mért próbagyártás (`scripts/measure/variety-measure.mts`).
@@ -53,7 +54,7 @@ tartalmát a saját tervük (hivatkozva).
 
 ### H4 — Eredmény-e-mail (terv: `docs/specs/2026-11-22-eredmeny-email-bontas.md`)
 
-B1b → B2 → B3 → B4 → B5a → B5b → B6 → B7 → B8, mindegyik a főágból, a `fix/eredmeny-email-kviz` ág fájljaiból kézi átvétellel.
+B1b (KÉSZ, #539) → B2 → B3 → B4 → B5a → B5b → B6 → B7 → B8, mindegyik a főágból, a `fix/eredmeny-email-kviz` ág fájljaiból kézi átvétellel.
 
 ### H5 — Kisfilm
 
@@ -68,6 +69,9 @@ A pótlási terv 7.1 sorrendje szerint (T-1, I-1, Q-1, Q-2, Q-3, T-2; szólétra
 
 | Dátum | Szelet | PR | Főági commit | Vak körök | Megjegyzés |
 |---|---|---|---|---|---|
+| 2026-11-23 | (leállítás) | — | — | — | a futás leállítva, átadás: `docs/handoffs/2026-11-23-hermes-atadas.md`; az aktív sorrend ott a 6. fejezet |
+| 2026-11-23 | Eredmény-e-mail B1b | #539 | `fcf033ee` | 2 (NEM, IGEN F) | korhatár az utolsó válaszhoz; L2 a B2-ben |
+| 2026-11-23 | Kapujavítás: böngészős tesztek szóhatárral | #538 | `333a553a` | 3 | adventi PR-re 83 → 27 teszt |
 | 2026-11-23 | TGM S6b | #537 | `49397146` | 2 (NEM, IGEN F) | a mentett try-fajta megmarad folytatáskor; jelzés a nyers darabszámból, a végleges leckén |
 | 2026-11-23 | TGM S6a | #536 | `c87d1706` | 4 (NEM, IGEN F, NEM, IGEN F) | a kiosztott terv a szerzői kérésben; `sectionShapes` eredetjelző; L4, L9 jegyen |
 | 2026-11-23 | TGM S2b-2 | #535 | `f7f94f22` | 3 (mind IGEN F) | 4 követő jegy a PR-ban |

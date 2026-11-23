@@ -186,7 +186,7 @@ A 2026-11-15T21:13-i videós kérés (korábban K-09) kikerült: nem WEBSULI-fel
 
 | # | Szelet | Prio | Tételek | Függőség |
 |---|---|---|---|---|
-| 1 | A-1 Advent S6: admin-előnézet, 60 napos takarító, bekapcsolás | P1 | P-038, #155(S6), #172, #166, #171 | PR-B, PR-C (fut); a tulajdonos előnézeti próbája (D-11); **határidő: november 30.** |
+| 1 | A-1 Advent S6: admin-előnézet, 60 napos takarító, bekapcsolás | P1 | P-038, #155(S6), #172, #166, #171 | PR-B, PR-C (fut); **határidő: november 30.** A sorrendet a főterv H1 igazította: S5/S6 beolvasztása KI állapotban → előnézeti próba → tulajdonosi döntés (D-11) → külön bekapcsoló PR |
 | 2 | A-2 Advent S5: eredménylevél az adminoknak | P1 | P-038, #155(S5) | PR-B |
 | 3 | T-1 Pontozó: polinom végpont, két számeredmény | P1 | P-027, #121, #122 | — |
 | 4 | T-2 Pontozó: igen/nem/szám rubrika, kérdés-visszamásolás | P1 | P-027, #130, #132 | T-1 (ugyanaz a korpusz) |
@@ -259,11 +259,17 @@ munkákra vonatkozott.
 - EARS: WHEN az admin az `?elonezet=2026-12-05` címet nyitja THEN a naptár a december 5-i állapotot mutatja; WHEN a flag BE
   THEN a szerver indulásakor és 24 óránként fut a `store.sweep`; WHEN nem admin kéri az előnézetet THEN 401/403 és nincs mellékhatás.
 - Ellenőrzés: `admin-route-guard.test.ts`, `advent-calendar.spec.ts`, `test:learning-db` (gépi zárral), mobil 360×640 és 844×390.
-- Kockázat: a flag bekapcsolása éles viselkedés — a PR-leírásban külön kiemelve, a merge előtt a tulajdonos előnézeti próbája és jóváhagyása (D-11 (a)); a bekapcsolás az A-1 beolvadásával, legkésőbb november 30-án.
+- Kockázat: a flag bekapcsolása éles viselkedés. Sorrend (a főterv H1, `docs/specs/2026-11-23-foterv.md`, felülírja a korábbi „a
+  bekapcsolás az A-1 beolvadásával” megfogalmazást; a tulajdonosi jóváhagyás feltétele változatlan): az A-1 KI állapotban olvad be (a
+  `render.yaml` nem változik) → a tulajdonos az előnézetben megnézi → D-11 jóváhagyás → külön, egysoros bekapcsoló PR, legkésőbb
+  november 30-án.
 
 **A-2 — S5: eredménylevél.** Részletek: ugyanott „S5” (290–311. sor) + „Kiegészítés 5”. Cél: a végigért kör eredménye eljusson a
-címzettekhez egyszer. EARS: WHEN egy `learner` alany első `finished_at` értéke beáll THEN címzettenként pontosan egy levél megy
-idempotencia-kulccsal; WHEN a küldés bukik THEN a foglalás felszabadul és pótolható; `preview` / `device` alanynál soha. Ellenőrzés:
+címzettekhez egyszer. EARS (az adventi terv 18.1-e szerint, `docs/specs/2026-11-18-adventi-naptar.md`): WHEN egy `learner` alany eredménye VÉGLEGES — (1)
+megfelelt, (2) az utolsó megengedett körben mind a 24 ablak megválaszolt és nincs javítható ablak, vagy (3) az évad lezárult és
+legalább egy ablakra válaszolt — THEN évadonként és címzettenként pontosan egy levél megy idempotencia-kulccsal (`final:<cím-lenyomat>`);
+WHILE van javítható ablak vagy kérhető új kör THEN levél NEM megy (negatív teszt: 22 megoldott + 2 javítható → nincs levél; a
+`finished_at` beállása önmagában NEM feltétel); WHEN a küldés bukik THEN a foglalás felszabadul és pótolható; `preview` / `device` alanynál soha. Ellenőrzés:
 `test:learning-db`, `no-real-emails-guard.test.ts`. Kockázat: valódi küldés tesztben — csak hamis küldővel (`NODE_ENV === "test"`).
 
 **A-3 — Képgyártó utómunka.** Cél: a 7 USD-os keret valóban kemény legyen, és Ctrl+C után ne kelljen kézzel zárfájlt törölni.

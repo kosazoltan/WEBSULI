@@ -4,7 +4,6 @@ description: "Lecke-promptváltozást mért alapvonalhoz mérj (a régi próbaha
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-19T04:35:11.704Z
 ---
 

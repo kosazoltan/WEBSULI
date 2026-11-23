@@ -4,7 +4,6 @@ description: "Minden feladat után kötelező futás végi hurok a Claude-körny
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: 5e40d429-1a44-43d0-a815-181a3773f233
   modified: 2026-11-22T08:55:07.125Z
 ---
 

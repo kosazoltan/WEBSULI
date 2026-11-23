@@ -4,7 +4,6 @@ description: "WEBSULI halmozott PR-lánc — minden PR önállóan beolvadva is 
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: 45fed2a4-e600-47d6-b718-a81d6bd486cb
   modified: 2026-11-18T17:15:59.416Z
 ---
 

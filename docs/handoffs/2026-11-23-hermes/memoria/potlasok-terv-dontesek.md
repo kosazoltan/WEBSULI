@@ -4,7 +4,6 @@ description: "WEBSULI pótlási terv (2026-11-19): GPT-6.2 Sol leltár (docs/web
 metadata:
   node_type: memory
   type: project
-  originSessionId: 99a9b29f-318a-40fe-a572-f8ecf28ad2ae
   modified: 2026-11-19T17:57:30.803Z
 ---
 

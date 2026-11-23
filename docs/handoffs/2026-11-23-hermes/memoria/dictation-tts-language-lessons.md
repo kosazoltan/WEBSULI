@@ -4,7 +4,6 @@ description: Diktálás / felolvasás / kiejtésgyakorlás — a kereszt-domaine
 metadata:
   node_type: memory
   type: project
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-21T13:30:05.567Z
 ---
 

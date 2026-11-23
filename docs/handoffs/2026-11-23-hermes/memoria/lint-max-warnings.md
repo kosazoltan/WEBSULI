@@ -4,7 +4,6 @@ description: "A WEBSULI CI-lintje `--max-warnings 0` — push előtt `npm run li
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-21T14:54:09.346Z
 ---
 

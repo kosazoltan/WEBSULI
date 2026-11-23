@@ -4,7 +4,6 @@ description: "A független ellenőr VAK és hibakereső; 2026-11-19 óta a gépi
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: 99a9b29f-318a-40fe-a572-f8ecf28ad2ae
   modified: 2026-11-19T15:52:40.684Z
 ---
 

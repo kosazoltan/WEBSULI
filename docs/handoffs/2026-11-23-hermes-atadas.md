@@ -28,11 +28,16 @@
 
 ## 0. Gyors indulás (az első 10 lépés a Hermes számára)
 
+0. **Előfeltétel — ugyanaz a gép (NOT DONE: a munkaágak távoli mentése).** A 26 munkaág (köztük az első két feladat feje és a vak
+   futtató) a leállításkor CSAK ezen a Windows-gépen van: `D:\repo\WEBSULI` munkafái és a helyi köteg-mentés
+   (`C:\Users\kosaz\websuli-mentes\websuli-helyi-agak-2026-11-23.bundle`). A repó (GitHub) önmagában NEM elég a folytatáshoz: új
+   checkoutban ezek a munkák nem állíthatók helyre. A Hermes ezen a gépen fusson; a távoli mentésről a tulajdonos dönt (7.2 D8) — nyers,
+   átnézetlen köteget a repóba feltölteni tilos. Részletek: 13.2.
 1. Olvasd el az 1. és a 9. fejezetet (szabályok, csapdák) — ezek a hibák TÉNYLEGESEN megtörténtek, ne ismételd őket.
 2. `git -C D:/repo/WEBSULI fetch --prune`, `git -C D:/repo/WEBSULI pull --ff-only` (a fő checkout legyen friss), `gh pr list --state open`.
-3. **Határidő: ADVENT (november 30.).** Első munka: az advent PR-C (4.1 / 6. H1 A1). **FIGYELEM: a fej a leállításkor `f6ea03bd` lett (főág-összefésülés) — a pontos lépések a 13.2/1-ben; az alábbi régi fejre szóló ítélet erre nem érvényes.** A fej (`448d4c5a`) 5. vak köre IGEN, FELTÉTELLEL, az
-   ítélet rögzítve; a PR-kapu futás közben állt le → újrafuttatni (`npm run gate:pr -- --body-file docs/handoffs/2026-11-23-hermes/pr-leirasok/advc-pr-body.md`),
-   majd push + PR. Utána advent S5+S6, utána a tulajdonos előnézeti próbája (döntési pont D1), utána egysoros bekapcsoló PR.
+3. **Határidő: ADVENT (november 30.).** Első munka: az advent PR-C. A folytatás EGYETLEN forrása a **13.2/1** (a fej a leállításkor
+   `f6ea03bd`; a régi `448d4c5a` fejre rögzített ítélet erre nem érvényes, új vak kör kell). Utána advent S5+S6, utána a tulajdonos
+   előnézeti próbája (döntési pont D1), utána egysoros bekapcsoló PR.
 4. A #540 (S6c-1) befejezése (4.2): követő vak kör a javított fejre, rögzítés, PR-kapu, push, a Copilot-szál megválaszolása és lezárása, CI, merge.
 5. Az arányos kapuk PR-ja (`fix/aranyos-kapuk`, 4.3): push-kapu, 2. vak kör (`--previous` az 1. kör jelentésével), PR — ez repó-szintű
    kaput érint, ezért nyitáskor ELSŐKÉNT olvad be (C-61), addig más ne menjen a főágba.
@@ -149,25 +154,29 @@ az agentic-qa-kit ellenőrzőlista; lábléc. Minta: `docs/handoffs/2026-11-23-h
 | #538 | kapujavítás: a PR-kapu a böngészős teszteket szóhatárral választja (az adventi PR-re 86 → 27 teszt) | `333a553a` | 3 |
 | #539 | eredmény-e-mail **B1b** — a kliens elküldi a kör kezdetét / utolsó válasz idejét; 7 napos korhatár az utolsó válaszhoz | `fcf033ee` | 2 |
 
-Minden TGM-szelet a `STUDIO_LESSON_VARIETY` kapcsoló mögött van (élesben KI): a kiadott leckéken semmi nem változott. A modell
+Kapcsolók (élesben mind KI, a kiadott leckéken semmi nem változott): S5a, S5b, S6a, S6b → `STUDIO_LESSON_VARIETY`; S2b-1, S2b-2
+(forrás-ábrák) → `STUDIO_SOURCE_VISUALS` (`source/server/studio/source-visuals-flag.ts`) — a két kapcsoló független. A modell
 követése (nyitásforma, fejezetminta, try-fajta, hang) NINCS mérve — fizetős próbagyártás kell (döntési pont D2).
 
 ---
 
 ## 4. Nyitott PR-ok — állapot és pontos következő lépés
 
-### 4.1 Advent PR-C — még NINCS PR (ág `feat/advent-c-felulet-es-elesites`, munkafa `advent-c`, fej `448d4c5a`)
+### 4.1 Advent PR-C — még NINCS PR (ág `feat/advent-c-felulet-es-elesites`, munkafa `advent-c`, fej `f6ea03bd`)
 
 - Tartalom: S3 naptároldal (24 ablak, kérdés, javítás ablakonként legfeljebb 2, összesítés a szó szerinti záró üzenettel), S4 szezonális
   főoldali kártya (telefonon ≤ 132 px), élesítés előtti javítások (terv 22. szakasz). Kapcsoló: `ADVENT_CALENDAR` (élesben KI).
 - Vak körök: 1. NEM (2 blokkoló) → 2. NEM (1) → 3. IGEN F (`d53178ef`) → 4. IGEN F (`1adcfef5`) → a #538 beolvasztása után 5. IGEN F
   (`448d4c5a`, rögzítve: `review-448d4c5a…`). A négy nyitott feltétel (L1–L4: késve érkező átvételi válasz, az „Újra” átvétel-ismétlése,
   átmeneti hibánál elvesző ablaknyitási szándék, a kirajzolhatatlan ablakrácsot átengedő sorőr) az S5+S6 ágon javítva.
-- A PR-kapu 2026-11-23-án kétszer bukott, mindkétszer a KAPU hibája miatt (részszó-egyezés → 83/86 böngészős teszt, 60 perces keret).
-  A #538 ezt javította. A 3. futás (27 teszt) a leállításkor futott — **újrafuttatni**:
-  `cd .claude/worktrees/advent-c && npm run gate:pr -- --body-file <docs/handoffs/2026-11-23-hermes/pr-leirasok/advc-pr-body.md>`
-  (a leírás ítélet-sora a `448d4c5af940` fejre szól). Zöld → `touch .audit-ok` (munkafa + fő gyökér) → `git push -u origin feat/advent-c-felulet-es-elesites`
-  → `gh pr create --base main --head feat/advent-c-felulet-es-elesites --title "…" --body-file …` → botok → CI → `gate:merge` → merge.
+- A PR-kapu 2026-11-23-án kétszer bukott, mindkétszer a KAPU hibája miatt (részszó-egyezés → 83/86 böngészős teszt, 60 perces keret);
+  a #538 ezt javította. A 3. futás (27 teszt) a leállításkor futott, utána a főág beolvadt (`f6ea03bd`).
+- **A teendők sorrendje: 13.2/1** (push-kapu, követő vak kör az új fejre, rögzítés, PR-leírás, PR-kapu, feltöltés, PR, botok, CI,
+  `gate:merge`, merge).
+- A PR-leírás mintája (`docs/handoffs/2026-11-23-hermes/pr-leirasok/advc-pr-body.md`) ebben az átadó ágban van (a beolvadás után a
+  főágon), a PR-C munkafában NINCS. Másold a munkamenet scratchpadjába, írd át az ítélet-sort az új fejre és az új ítéletre (a minta
+  `448d4c5af940`-re szól), és abszolút úttal add át a `gate:pr`-nek a `--body-file` kapcsolóval. A kapu a fájl létezését és az
+  aktuális fejre szóló ítéletet ellenőrzi.
 
 ### 4.2 #540 — TGM S6c-1 ábrafajta-terv (ág `feat/tgm-s6c1-abrafajta-terv`, munkafa `tgm-s6c1`)
 
@@ -210,7 +219,7 @@ leállítottam (13. fejezet): a távolira EZEN AZ ÁGON KÍVÜL egyetlen munkaá
 
 | Munkafa | Ág | Fej | Állapot | Tartalom / következő lépés |
 |---|---|---|---|---|
-| advent-c | feat/advent-c-felulet-es-elesites | 448d4c5a | csak helyi | advent PR-C (4.1) |
+| advent-c | feat/advent-c-felulet-es-elesites | f6ea03bd | csak helyi | advent PR-C (4.1, 13.2/1); a `448d4c5a` + főág-összefésülés |
 | advent-s6 | feat/advent-s5-s6-elesites | 33d70e72 | csak helyi | advent S5 eredménylevél + S6 admin-előnézet és takarító; ráépül az advent-c-re; 1 vak kör; a `render.yaml` szándékosan nem változik |
 | aranyos-kapuk | fix/aranyos-kapuk | 5317d597 | csak helyi | arányos kapuk (4.3) |
 | tgm-s6c1 | feat/tgm-s6c1-abrafajta-terv | 8e5618cf | távoli (+3) | #540 (4.2) |
@@ -244,7 +253,8 @@ Régi, munkafa nélküli helyi ágak (a köteg-mentésben benne vannak): pl. `fi
 
 ## 6. A főterv (H1–H9) és a részletes következő szeletek
 
-Forrás: `docs/specs/2026-11-23-foterv.md` + `-vegrehajtas.md` (ezzel az átadással a főágra kerül). Sorrend-elv: a határidős hullám elöl;
+Forrás: `docs/specs/2026-11-23-foterv.md` + `-vegrehajtas.md` (ezzel az átadással a főágra kerül). A végrehajtási fájl 1. szakasza a
+terv készítésekori pillanatkép (pl. a #536, #537, #539 azóta beolvadt) — az AKTÍV sorrend ez a fejezet. Sorrend-elv: a határidős hullám elöl;
 egy gép = egy kapusor; közös fájlt (terv-dokumentum, `docs/agent-csapdak.md`) érintő PR beolvadása ELŐTT nem indul vak kör a következőn;
 repó-szintű kaput érintő PR ELSŐKÉNT olvad be.
 
@@ -332,6 +342,7 @@ Szintezés 2/2 (`feat/szoletra-szintezes-2`; a `feat/szoletra-szintezes` két co
 | D5 | H7 | A Szólétra A1-bank fizetős futásának kerete (ha nincs rögzített jóváhagyás) | a már elköltött 7,34 USD utólagos jóváhagyása + keret |
 | D6 | zárás | A beolvadt távoli ágak törlése | igen, a beolvadtakra |
 | D7 | — | A globális `CLAUDE.md` „minden fejlesztést független ellenőr néz át” sorának igazítása az arányos kapukhoz | igen (kis javítás kivétellel) |
+| D8 | most | A csak helyi munkaágak távoli mentése: szűrt (titok- és személyesadat-mentes), push-kapun átment ágak feltöltése, vagy maradjanak helyben a helyi köteggel | szűrt, kapuzott feltöltés ágonként (13.2/2), a nyitott PR-ok ágai csak a teljes javító folyamattal |
 
 ---
 
@@ -460,19 +471,24 @@ A Hermes saját folyamatait (`hermes_cli … gateway run`) nem érintettem.
    `npm run gate:push` a munkafában; vak kör a `f6ea03bd` fejre `--previous review-advc/jelentes4.md,review-advc/jelentes5.md`
    kapcsolóval (a követő kör a változásra és a nyitott feltételekre szűkít, olcsóbb); `record-review`; a PR-leírás ítélet-sorában az új fej
    első 12 jegye; `gate:pr`; feltöltés; PR.
-2. **A többi munkaág feltöltése** (mentésként, PR nélkül is): munkafánként `git merge origin/main` (ütközésnél `git merge --abort`; az ág
-   ilyenkor helyben marad — feljegyezni), `npm.cmd ci --prefix source --ignore-scripts`, ha nincs `source/node_modules`, `npm run gate:push`,
-   zöldnél `touch .audit-ok` (munkafa + fő gyökér), majd önálló parancsként `git push -u origin <ág>`. A sor gépesítve:
-   `bash docs/handoffs/2026-11-23-hermes/szkriptek/atadas-push-kapu-sor.sh` (a naplók helye `$S`, alapból `~/websuli-atadas-naplok`;
-   az eredmény a `push-eredmeny.tsv`-ben; a feltöltést a szkript szándékosan NEM végzi). Javasolt sorrend (a szkriptben is): advent-c,
-   advent-s6, tgm-s6c1, aranyos-kapuk, tgm-s6c, tgm-sk2, vak-v2, zaro-hurok, szoletra-szintezes-2, szoletra-a1-bank, szoletra-szintezes,
-   kitakaro-elovagas, kisfilm-leallitas, eredmeny-510, kisfilm-videomodell, merge-kapu-rest, kitakaro-521, vak-futtato-1, vak-futtato-2,
-   vak-ellenor-deepseek, docs-potlasok, eredmeny-bontas, foterv, gepkoltoztetes-folytatas, teljes-revizio, advent-kepgyarto.
-   Időigény ágonként ~3–5 perc (`npm ci` nélkül ~2 perc). Figyelem: a nyitott PR-ok ágaira (eredmeny-510 = #510, kisfilm-videomodell =
-   #529, merge-kapu-rest = #513, kitakaro-521 = #521, tgm-s6c1 = #540) a feltöltés CI-t és review-botokat indít, és a C-62 lépés előtte
-   zöld CI-t kérhet.
+2. **A többi (PR nélküli) munkaág feltöltése** (mentésként; D8 tulajdonosi döntés után): munkafánként `git merge origin/main`
+   (ütközésnél `git merge --abort`; az ág ilyenkor helyben marad — feljegyezni), `npm.cmd ci --prefix source --ignore-scripts`, ha nincs
+   `source/node_modules`, `npm run gate:push`, zöldnél `touch .audit-ok` (munkafa + fő gyökér), majd önálló parancsként
+   `git push -u origin <ág>`. A sor gépesítve: `bash docs/handoffs/2026-11-23-hermes/szkriptek/atadas-push-kapu-sor.sh` (repó:
+   `WEBSULI_ROOT`, alapból `/d/repo/WEBSULI`; a naplók helye `$S`, alapból `~/websuli-atadas-naplok`; az eredmény a
+   `push-eredmeny.tsv`-ben; a feltöltést a szkript szándékosan NEM végzi). Sorrend (a szkriptben is): advent-c, advent-s6, aranyos-kapuk,
+   tgm-s6c, tgm-sk2, vak-v2, zaro-hurok, szoletra-szintezes-2, szoletra-a1-bank, szoletra-szintezes, kitakaro-elovagas, kisfilm-leallitas,
+   vak-futtato-1, vak-futtato-2, vak-ellenor-deepseek, docs-potlasok, eredmeny-bontas, foterv, gepkoltoztetes-folytatas, teljes-revizio,
+   advent-kepgyarto. Időigény ágonként ~3–5 perc. Az `advent-c`-t és az `aranyos-kapuk`-at a mentés után is a saját teljes folyamata
+   (4.1, 4.3) viszi PR-ig.
+   **A nyitott PR-ok ágai NINCSENEK ebben a sorban** (eredmeny-510 = #510, kisfilm-videomodell = #529, merge-kapu-rest = #513,
+   kitakaro-521 = #521, tgm-s6c1 = #540): a feltöltés ezeken ugyanazt a PR-t frissítené, a helyi többletük érdemi javítás, ezért csak a
+   teljes javító folyamattal (fejazonos vak ítélet, `AGENTS.md` „Minőségkapuk” 3. pont) mehetnek fel — 4.2 és 4.4. Puszta archiválásuk
+   (pl. külön mentő-ágnévre) csak a tulajdonossal egyeztetve; a push-hook a `higienia-backup/` alakot tiltja.
 3. **Commitolatlan munka mentése** (a leállítás előtt elvégezve, csak helyben): `gepkoltoztetes-folytatas` → `30bef7bc`,
    `szoletra-szintezes` → `3f5717a4` (mindkettő csak a saját `docs/specs` munkanaplója).
 4. **Ez az átadó ág** (`docs/hermes-atadas-2026-11-23`) a távolin van; PR még nincs (a főági PR-kapu ehhez is vak ítéletet kér — a
    tulajdonos döntse el, kell-e PR, vagy elég az ág). Ha PR lesz: `gate:pr -- --body-file <leírás>`, és a PR-méret figyelmeztetést
    (~10 800 sor, szinte csak melléklet) a leírásban indokolni kell.
+5. **NOT DONE — a munkaágak távoli mentése.** Ok: a tulajdonos kérésére a feltöltő sor leállt. Kockázat: a munka csak ezen a gépen él
+   (munkafák + helyi köteg); gépcsere vagy lemezhiba esetén elveszhet. Teendő: D8 döntés, majd a 13.2/2 szerinti szűrt, kapuzott feltöltés.

@@ -4,7 +4,6 @@ description: "Parkoló (kapcsoló mögött KI) WEBSULI-funkciók leltára és a 
 metadata:
   node_type: memory
   type: project
-  originSessionId: 5e40d429-1a44-43d0-a815-181a3773f233
   modified: 2026-11-22T17:42:29.184Z
 ---
 

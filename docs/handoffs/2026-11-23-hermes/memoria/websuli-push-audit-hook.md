@@ -4,7 +4,6 @@ description: A WEBSULI push-hookja friss .audit-ok sentinelt kér (10 perc) a `g
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-17T04:06:02.185Z
 ---
 

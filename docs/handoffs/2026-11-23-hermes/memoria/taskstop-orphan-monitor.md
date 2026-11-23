@@ -4,7 +4,6 @@ description: Windows-on a TaskStop a Monitor bash-gyerekfolyamatát nem öli meg
 metadata:
   node_type: memory
   type: project
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-11-17T13:49:07.990Z
 ---
 

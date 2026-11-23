@@ -4,7 +4,6 @@ description: "Codex felhőkörnyezetek (2026-10-18): repónkénti docs/codex-fel
 metadata:
   node_type: memory
   type: project
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-18T21:23:51.899Z
 ---
 

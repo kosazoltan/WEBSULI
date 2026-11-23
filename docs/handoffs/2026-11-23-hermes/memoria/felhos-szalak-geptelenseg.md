@@ -4,7 +4,6 @@ description: "Felhős WEBSULI-szálak nem tudnak merge-kaput futtatni és a gép
 metadata:
   node_type: memory
   type: project
-  originSessionId: d097beb9-f3f3-4a20-9287-4601fbd79418
   modified: 2026-11-22T18:15:21.247Z
 ---
 

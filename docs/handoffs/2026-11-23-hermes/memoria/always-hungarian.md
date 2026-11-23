@@ -4,7 +4,6 @@ description: A tulajdonossal MINDIG magyarul — az automatikus CI/review-esemé
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-21T09:52:49.488Z
 ---
 

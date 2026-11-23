@@ -4,7 +4,6 @@ description: "A hookok a fő munkakönyvtárból (D:\\repo\\WEBSULI) futnak mind
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: 99a9b29f-318a-40fe-a572-f8ecf28ad2ae
   modified: 2026-11-19T12:39:35.144Z
 ---
 

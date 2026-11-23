@@ -81,8 +81,9 @@ eltávolítva; távoli ág csak jóváhagyással).
 
 ### A-1 — Advent S6: admin-előnézet, takarító, bekapcsolás
 
-- Előfeltétel: a PR-B és a PR-C beolvadt. Határidő: a merge legkésőbb november 30. (D-11 (a): a bekapcsolás az A-1 beolvadásával,
-  a tulajdonos előnézeti próbája után).
+- Előfeltétel: a PR-B és a PR-C beolvadt (az előnézeti próba NEM előfeltétel: az előnézetet ez a szelet hozza létre). Határidő:
+  november 30. Sorrend (főterv H1, felülírja a D-11 (a) korábbi „bekapcsolás az A-1 beolvadásával” részét; a jóváhagyás feltétele
+  változatlan): KI állapotú beolvasztás → előnézeti próba → tulajdonosi döntés → külön bekapcsoló PR.
 - Ág: `feat/advent-s6-elonezet-takarito`.
 - Lépések:
   1. Hajtsd végre a `docs/specs/2026-11-18-adventi-naptar-vegrehajtas.md` „S6” fejezetét (313–341. sor) a „Kiegészítés 5”
@@ -93,13 +94,14 @@ eltávolítva; távoli ág csak jóváhagyással).
   3. #171: az adventi terv E21 szövegét igazítsd: kikapcsolt flagnél a CSRF nélküli POST 403 (mellékhatás nélkül).
   4. #166: a `source/tests/advent-calendar.spec.ts`-ben (a PR-C / S6 hozza létre; a mainen még nincs) bejelentkezett játékos esete; ha az e2e-szerveren a `PLAYER_ACCOUNTS` csak
      specenként kapcsolható, kapcsold BE abban a specben; ha nem lehetséges, NOT RUN + ok a PR-ben, és a HTTP-szintű DB-teszt fedje.
-  5. A `render.yaml`-ba `ADVENT_CALENDAR=on` kerül ebben a PR-ban (D-11 (a)); a merge csak a tulajdonos előnézeti próbája után,
-     legkésőbb november 30-án; a PR-leírás első sora: „ÉLES BEKAPCSOLÁS — tulajdonosi
-     jóváhagyás kell a merge előtt”.
+  5. A `render.yaml` ebben a PR-ban NEM változik (a flag KI marad). A bekapcsolás külön, egysoros PR a tulajdonos előnézeti próbája
+     és jóváhagyása után, legkésőbb november 30-án; annak a leírása kezdődik így: „ÉLES BEKAPCSOLÁS — tulajdonosi jóváhagyás kell a
+     merge előtt”.
 - Ellenőrzés (a `source/`-ból): `node --import tsx --test tests/admin-route-guard.test.ts tests/advent-flag-sweeper-guard.test.ts` →
   `fail 0`; `node --import tsx scripts/run-e2e-tests.ts tests/advent-calendar.spec.ts` (gépi zárral) → minden `passed`;
   `npm.cmd run test:learning-db` (gépi zárral) → `fail 0`.
-- Kész, ha: 0.5 + a tulajdonos az előnézetben megnézte a december 1-jei és a 24-i állapotot, és a merge-et jóváhagyta.
+- Kész, ha: 0.5 + a szelet KI állapotban beolvadt; a bekapcsoló PR akkor kész, ha a tulajdonos az előnézetben megnézte a december
+  1-jei és a 24-i állapotot, és a bekapcsolást jóváhagyta.
 
 ### A-2 — Advent S5: eredménylevél
 

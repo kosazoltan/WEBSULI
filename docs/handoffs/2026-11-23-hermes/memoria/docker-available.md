@@ -4,7 +4,6 @@ description: "A gépen fut a Docker (29.8.1), használható eldobható Postgres-
 metadata:
   node_type: memory
   type: reference
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-10-15T09:56:59.850Z
 ---
 

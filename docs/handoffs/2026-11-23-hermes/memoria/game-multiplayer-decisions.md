@@ -4,7 +4,6 @@ description: "Tulajdonosi döntések a játékok közös módjáról és a szere
 metadata:
   node_type: memory
   type: project
-  originSessionId: 99a9b29f-318a-40fe-a572-f8ecf28ad2ae
   modified: 2026-11-17T08:00:00.000Z
 ---
 

@@ -4,7 +4,6 @@ description: Node-telepítés/csere (NVM for Windows) futó Claude-munkamenetben
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: 9173a69f-6a53-4550-bde0-effa8e467042
   modified: 2026-11-20T17:07:13.393Z
 ---
 

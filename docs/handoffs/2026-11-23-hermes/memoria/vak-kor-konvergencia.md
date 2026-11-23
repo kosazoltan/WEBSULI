@@ -4,7 +4,6 @@ description: "TÖRVÉNY (tulajdonos 2026-11-22) — ugyanazt a hibát tilos újr
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: 5e40d429-1a44-43d0-a815-181a3773f233
   modified: 2026-11-22T09:33:47.191Z
 ---
 

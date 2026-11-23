@@ -4,7 +4,6 @@ description: "2026-11-22 audit — miért bukott sok vak kör (123 kör, 76 NEM,
 metadata:
   node_type: memory
   type: project
-  originSessionId: d097beb9-f3f3-4a20-9287-4601fbd79418
   modified: 2026-11-22T21:10:32.232Z
 ---
 

@@ -4,7 +4,6 @@ description: Titok soha nem kerülhet a chatbe — globális secret-guard hook +
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: 6412743b-9003-4769-b466-6e2fb97c5d99
   modified: 2026-11-20T15:40:48.209Z
 ---
 

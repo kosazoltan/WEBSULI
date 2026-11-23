@@ -4,7 +4,6 @@ description: "WEBSULI — merge a main-be (= Render autodeploy, szerver-újraind
 metadata:
   node_type: memory
   type: feedback
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-11-17T08:00:00.000Z
 ---
 

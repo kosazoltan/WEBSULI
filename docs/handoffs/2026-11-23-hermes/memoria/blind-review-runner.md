@@ -5,7 +5,6 @@ metadata:
   node_type: memory
   type: feedback
   modified: 2026-11-19T15:52:35.091Z
-  originSessionId: 99a9b29f-318a-40fe-a572-f8ecf28ad2ae
 ---
 
 **ÉRVÉNYES ÁLLAPOT (2026-11-23):** a futtató a FŐÁGON NINCS (`npm run gate:blind-review` és a `websuli-vak-ellenor` skill sem). Indítás a `vak-v2` munkafából (ág `chore/vak-ellenor-konvergencia`): `node scripts/qa/gates/blind-review/blind-review.mjs --base origin/main --head <sha> --spec … --goal … --out … [--previous …] --node-modules /d/repo/WEBSULI/source/node_modules`. A `vak-ellenor-deepseek` munkafa NEM a kanonikus. Főágra vitel: főterv H3 K3.

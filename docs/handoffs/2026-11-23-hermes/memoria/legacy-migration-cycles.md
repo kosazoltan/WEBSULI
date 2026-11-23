@@ -4,7 +4,6 @@ description: "Régi anyagok Stúdió-átalakítása — 5-ös ciklusok felülviz
 metadata:
   node_type: memory
   type: project
-  originSessionId: cce0558c-83f4-47c2-beaa-003dce27b7c3
   modified: 2026-11-17T08:00:00.000Z
 ---
 
