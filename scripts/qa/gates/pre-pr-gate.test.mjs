@@ -1,4 +1,5 @@
 // docs/specs/2026-11-17-minosegkapuk.md E7, E8, D11: a PR előtti kapu felismerése és ellenőrzései.
+import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from './lib.mjs';
@@ -62,15 +63,20 @@ test('mentionsStem: a tő csak önálló azonosítóként egyezik — az „asyn
   assert.equal(mentionsStem('test("x", async ({ page }) => { await page.goto("/"); });', 'sync'), false, 'részszó nem egyezik');
   assert.equal(mentionsStem('import { mergeState } from "../client/src/advent/sync";', 'sync'), true, 'útvonal vége');
   assert.equal(mentionsStem('// lásd sync.ts', 'sync'), true);
-  assert.equal(mentionsStem('const sync_state = 1; resync(); syncing;', 'sync'), false, 'aláhúzás és betű nem határ');
+  assert.equal(mentionsStem('resync(); syncing; asyncFn', 'sync'), false, 'betű nem határ');
+  assert.equal(mentionsStem('const sync_state = 1;', 'sync'), true, 'az aláhúzás elválasztó');
   assert.equal(mentionsStem('await page.getByTestId("StudioPanel")', 'StudioPanel'), true);
   assert.equal(mentionsStem('StudioPanelHeader', 'StudioPanel'), false);
   assert.equal(mentionsStem('a+b és a.b', 'a.b'), true, 'a különleges karakter szó szerint értendő');
   assert.equal(mentionsStem('axb', 'a.b'), false);
   assert.equal(mentionsStem('Sync', 'sync'), false, 'kis- és nagybetű megkülönböztetve');
-  assert.equal(mentionsStem('<div aria-busy="true">', 'busy'), false, 'a kötőjel az azonosító része (kebab-case fájlnevek)');
+  assert.equal(mentionsStem('<div aria-busy="true">', 'busy'), true, 'a kötőjel elválasztó: inkább több teszt fusson, mint hogy valós kimaradjon');
   assert.equal(mentionsStem('import "../client/src/advent/tap-guard";', 'tap-guard'), true);
-  assert.equal(mentionsStem('double-tap-guard', 'tap-guard'), false);
+  assert.equal(mentionsStem('double-tap-guard', 'tap-guard'), true);
+  // 1. vak kör L2: a határ Unicode szerint betű / számjegy — az ékezetes betű és a nem ASCII számjegy sem elválasztó.
+  assert.equal(mentionsStem('ésync', 'sync'), false);
+  assert.equal(mentionsStem('sync７', 'sync'), false);
+  assert.equal(mentionsStem('szinkron: sync.', 'sync'), true);
 });
 
 test('pickE2eSpecs: rövid tövű fájl (sync.ts) nem választ ki minden async-ot tartalmazó tesztet; a változott spec mindig fut', () => {
@@ -80,4 +86,17 @@ test('pickE2eSpecs: rövid tövű fájl (sync.ts) nem választ ki minden async-o
   const changed = ['source/client/src/advent/sync.ts', 'source/tests/changed.spec.ts'];
   const { runs } = pickE2eSpecs({ classification: classifyChanges(changed, cfg), specFiles: specs, readSpec: (s) => text[s] ?? '', cfg, changed });
   assert.deepEqual(runs[0].specs, ['advent-calendar.spec.ts', 'changed.spec.ts']);
+});
+
+// 1. vak kör L1: a VALÓDI spec-szövegekkel — a csak képfájlnévben / próbaútvonalban említett modul tesztje nem maradhat ki.
+test('pickE2eSpecs a valódi spec-eken: admin-tabs, home-views, curriculum-order módosítása beválogatja a saját próbáját; a sync.ts nem választ ki mindent', () => {
+  const dir = new URL('../../../source/tests/', import.meta.url);
+  const specFiles = readdirSync(dir).filter((f) => f.endsWith('.spec.ts'));
+  const readSpec = (s) => readFileSync(new URL(s, dir), 'utf8');
+  const pickReal = (changed) => (pickE2eSpecs({ classification: classifyChanges(changed, cfg), specFiles, readSpec, cfg, changed }).runs[0]?.specs ?? []);
+  assert.ok(pickReal(['source/client/src/lib/admin-tabs.ts']).includes('admin-korszerusites.spec.ts'));
+  assert.ok(pickReal(['source/client/src/lib/home-views.ts']).includes('home-views.spec.ts'));
+  assert.ok(pickReal(['source/client/src/lib/curriculum-order.ts']).includes('curriculum-order.spec.ts'));
+  const forSync = pickReal(['source/client/src/advent/sync.ts']);
+  assert.ok(forSync.length < specFiles.length / 2, `a sync.ts ${forSync.length} / ${specFiles.length} tesztet választ`);
 });

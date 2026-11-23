@@ -31,12 +31,13 @@ export function classifyChanges(changed, cfg) {
 
 /**
  * Terv docs/specs/2026-11-23-kapu-spec-valasztas-szohatar.md: a tő akkor „említett”, ha ÖNÁLLÓ azonosítóként áll a teszt szövegében —
- * előtte és utána nem betű, számjegy vagy aláhúzás. A részszó-keresés a `sync` tőre minden `async`-ot tartalmazó tesztet kiválasztott
+ * előtte és utána nem betű vagy számjegy (Unicode szerint; a kötőjel és az aláhúzás elválasztó, így a `home-views-nagy.png` és az
+ * `/__admin-tabs-probe` is említés — 1. vak kör L1, L2). A részszó-keresés a `sync` tőre minden `async`-ot tartalmazó tesztet kiválasztott
  * (83-ból 83), a futás kifutott az időkeretből. A tő szó szerint értendő (a különleges karakterek nem mintaként).
  */
 export function mentionsStem(text, stem) {
   const literal = String(stem).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?<![A-Za-z0-9_-])${literal}(?![A-Za-z0-9_-])`).test(String(text));
+  return new RegExp(`(?<![\\p{L}\\p{N}])${literal}(?![\\p{L}\\p{N}])`, "u").test(String(text));
 }
 
 /**

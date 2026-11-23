@@ -16,7 +16,9 @@ komponens nevét ÖNÁLLÓ azonosítóként említik.
 
 ## Döntés
 
-A tő akkor „említett”, ha a teszt szövegében azonosító-határok között áll: előtte és utána nem betű, számjegy, aláhúzás vagy kötőjel (a fájlnevek kebab-case alakja miatt: `aria-busy` ≠ `busy`)
+A tő akkor „említett”, ha a teszt szövegében azonosító-határok között áll: előtte és utána nem betű vagy számjegy (Unicode szerint). A kötőjel és az aláhúzás ELVÁLASZTÓ: a modult csak képfájlnévben
+(`home-views-nagy.png`) vagy próbaútvonalban (`/__admin-tabs-probe`) említő teszt is kiválasztódik (1. vak kör L1) — inkább több teszt
+fusson (`aria-busy` → `busy`), mint hogy egy valós kimaradjon
 (`async` ≠ `sync`; `advent/sync`, `"sync.ts"`, `useAdvent(` egyezik). A játékszeletek kiválasztása, a változott spec-fájlok kötelező
 futtatása és a „nincs egy spec sem” figyelmeztetés nem változik.
 
@@ -37,7 +39,7 @@ A `run-e2e-tests.ts` időkerete, a szálak száma, a játék-ág kiválasztása,
 - **K2** — WHEN a tő önálló azonosítóként (útvonalban, idézőjelben, hívásban) szerepel, THE kapu SHALL kiválasztani a tesztet.
 - **K3** — THE változott spec-fájlok SHALL továbbra is mindig futni; a játék-ág kiválasztása SHALL változatlan maradni.
 - **K4** — WHEN az adventi PR-C változott fájllistájára fut a kiválasztás a főág tesztjein, THE kiválasztott tesztek száma SHALL a
-  korábbi 83 töredéke lenni (mérve 2026-11-23-án: 83 → 6 — a három adventi teszt, `lesson-contrast`, `studio-ui`, `websuli`).
+  korábbi 83 töredéke lenni (mérve 2026-11-23-án: 83 → 27).
 
 <!-- acceptance-checklist -->
 - [ ] K1 részszó nem egyezik
