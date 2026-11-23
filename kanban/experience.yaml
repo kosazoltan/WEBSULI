@@ -2,4 +2,10 @@
 # Forrás-minta: otthon_automatizalas kanban/experience.yaml (session-close loop, 2026-11-22).
 # status: observed -> fixed -> rule (a "rule" a TRAP-táblába / skillbe / AGENTS.md-be is bekerül)
 # Új kártya: node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs experience add --repo . --observed ... --fix ... --rule ...
-cards: []
+cards:
+  - id: 1
+    status: rule
+    date: "2026-11-23"
+    observed: "Felhős vak kör minden javító pushra: 342 kör / 45 PR"
+    fix: "local-review.mjs helyi GPU-ellenőr, angol prompt"
+    rule: "Kód-review helyben; felhős vélemény csak kockázatos fájlnál, egyszer"

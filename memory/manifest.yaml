@@ -26,3 +26,10 @@ memory:                # a memória-rétegek térképe
   knowledge: .hermes/projekt/TUDAS.md
 
 quality_gates: []      # TODO: pl. - test: "npm test"
+
+# 2026-11-23 — kód-review: felhős vak kör kivezetve
+code_review:
+  local_reviewer: scripts/qa/gates/local-review.mjs   # helyi Ollama (Ornith-1.5-9B Q8_0), ANGOL prompt
+  evidence: "<git-common-dir>/websuli-qa-evidence/review-<fej>.json"
+  cloud_second_opinion: "csak kockázatos fájlnál (migráció/auth/fizetés/e-mail/CI), egyszer / PR, nem kapu"
+  decision_doc: docs/specs/2026-11-23-vak-kor-kivezetes.md

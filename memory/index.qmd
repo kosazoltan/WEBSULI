@@ -32,3 +32,8 @@ Minden hivatkozás a repón belülre mutat.
 
 TRAP → memóriák (YAML, QMD, Cogni, vector) → kanban → skill-ellenőrzés → higiénia → tiszta fa.
 Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <út> --since <ISO> --json`.
+
+# Kód-review (2026-11-23)
+
+- Kötelező PR előtti ellenőr: `node scripts/qa/gates/local-review.mjs` (helyi GPU, angol prompt). A felhős „vak kör” kivezetve —
+  terv és mérés: `docs/specs/2026-11-23-vak-kor-kivezetes.md`; skill: `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
