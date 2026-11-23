@@ -13,7 +13,7 @@ olcsó, helyi, determinisztikus ellenőrzés fut előbb és gyakran; a drága k�
 ## A sorrend
 
 ```text
-szerkesztés → gate:stage (minden szakasz után) → … → gate:push → független ellenőr + record-review
+szerkesztés → gate:stage (minden szakasz után) → … → gate:push → local-review.mjs (helyi GPU-ellenőr; a felhős vak kör 2026-11-23 óta kivezetve)
             → gate:pr -- --body-file <leírás.md> → .audit-ok → push + gh pr create → zöld CI
             → (közvetlenül a merge előtt) gate:merge -- <PR> → gh pr merge
 ```
@@ -161,7 +161,7 @@ viszi bukásra.
 | 10 | Alügynök közös fájlhoz nyúl / a D:\ gyökerébe ír / `git checkout`-tal állít vissza | Részben | `pre-push-gate` közös-fájl figyelmeztetés (`--slice`: a közös modulok is); a nem követett fájl figyelmeztetés; a gyökérbe írást és a `git checkout`-ot csak a fejlesztési ellenőr 4.B/16 és a skillek szabálya fedi |
 
 Őszintén: a játéklogikai hibák (1, 4, 5, 6) jellemzően szándék- és állapottér-hibák; ezeket determinisztikus kapu általánosan nem
-ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy az ellenőr ne az olcsó hibákra költsön.
+ismeri fel. Ezért kötelező a független ellenőr (2026-11-23 óta a helyi GPU-ellenőr: `scripts/qa/gates/local-review.mjs`; a mérés és a döntés: `docs/specs/2026-11-23-vak-kor-kivezetes.md`) — a kapuk feladata, hogy az ellenőr ne az olcsó hibákra költsön.
 
 ## Ismert korlátok (maradó kockázat)
 
