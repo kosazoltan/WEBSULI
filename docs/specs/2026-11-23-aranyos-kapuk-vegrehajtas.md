@@ -12,6 +12,8 @@ Terv: `docs/specs/2026-11-23-aranyos-kapuk.md`. Ág: `fix/aranyos-kapuk`, munkaf
 4. `scripts/qa/gates/pre-pr-gate.mjs`: a kis javítás számítása (`git diff --numstat --no-renames <base>...HEAD`) és átadása az
    ítélet-lépésnek; zöld push-bizonyítéknál a push-lépések helyett `git fetch` + `freshMainStep`; build kihagyása böngészős futás mellett.
 5. `scripts/qa/gates/pre-merge-gate.mjs`: a kis javítás a `pr.files` (`additions`, `deletions`) alapján, `decideMerge` → `verdictResult`.
+5b. A7: `lib.mjs` `carryVerdict` (tiszta) + `carryInputs(ctx, head)` (a bizonyíték-tár `review-<sha>.json` fájljai, `merge-base --is-ancestor`,
+   `git diff --numstat <ős> <fej> -- <a PR saját fájljai>`); a PR- és a merge-kapu ítélet hiányában ezt próbálja.
 6. Tesztek: `lib.test.mjs` (numstat, sorszámítás, küszöb, kizárt útvonal, bináris, `verdictResult` kis javítással), `pre-push-gate.test.mjs`
    (célzott / visszaesés; a meglévő natív-kivétel teszt a teljes ágon), `pre-pr-gate.test.mjs` (nem ismétel zöld push-bizonyítéknál),
    `pre-merge-gate.test.mjs` (kis javítás ítélet nélkül PASS, 31 sor FAIL).

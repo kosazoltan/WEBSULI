@@ -44,7 +44,8 @@ A CI változtatása; a három-fázis-, titok-, tiltott-minta-, repó-szabály- �
 - Darabolás: a küszöb a TELJES PR éles-kód változására vonatkozik (merge-base óta), nem egy commitra.
 - Átnevezés: `--no-renames`, így az átnevezett fájl törlésként + hozzáadásként számít (nem lesz „kis”).
 - Bináris fájl (`-` a numstatban) a `source/**` alatt: nem kis javítás.
-- Nagy, már ellenőrzött PR utólagos kis javítása: nem kis javítás (a teljes diff számít) — visszaellenőrzés kell.
+- Nagy, már ellenőrzött PR utólagos kis javítása (review-lelet, CI-hiba): a legutóbbi ellenőrzött ŐS-commit ítélete átvihető, ha a
+  kettő közti változás a PR saját fájljain kis javítás (A7); a főágból beolvasztott fájlok nem számítanak; `NEM` ítélet nem vihető át.
 - A push-kapu célzott egységtesztje egy tranzitív függőség bukását elmulaszthatja: a CI teljes készlete fogja meg (vállalt kockázat).
 
 ## Elfogadás (EARS)
@@ -55,6 +56,8 @@ A CI változtatása; a három-fázis-, titok-, tiltott-minta-, repó-szabály- �
 - **A4** — THE push-kapu SHALL a leképezett és az őr-teszteket futtatni, és SHALL a teljes készletre visszaesni leképezetlen vagy közös fájlnál.
 - **A5** — WHEN zöld push-bizonyíték van ugyanarra a fejre, THE PR-kapu SHALL NOT újrafuttatni a push-lépéseket, de SHALL a C-61-et ellenőrizni.
 - **A6** — THE PR-kapu SHALL NOT külön buildelni böngészős futás mellett; a DB-tesztet SHALL csak tároló / séma / migráció változásnál futtatni.
+- **A7** — WHEN az aktuális fejre nincs ítélet, de a legutóbbi ellenőrzött ős óta a PR saját fájljain ≤ 30 éles sor változott (kizárt útvonal
+  nélkül), THE PR- és merge-kapu SHALL az ős ítéletét átvinni; `NEM` SHALL NOT átvihető lenni.
 
 <!-- acceptance-checklist -->
 - [ ] A1 kis javítás ítélet nélkül
@@ -63,3 +66,4 @@ A CI változtatása; a három-fázis-, titok-, tiltott-minta-, repó-szabály- �
 - [ ] A4 push-kapu célzott + visszaesés
 - [ ] A5 PR-kapu nem ismétel, C-61 marad
 - [ ] A6 build és DB-teszt arányos
+- [ ] A7 ítélet-átvitel kis utólagos javításnál
