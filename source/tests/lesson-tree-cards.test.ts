@@ -193,11 +193,25 @@ test("vak kör 4 L8: a kilógó felirat ellenőrzése CSAK gyártási kapu — a
     assert.deepEqual(visualParamProblems("pictureCards", cardsOf(attrs)), [], `olvasás: ${attrs}`);
     assert.equal(sourceVisualProblems({ kind: "animate", animKind: "pictureCards", params: cardsOf(attrs) }), null, `a lejátszó nem rejti el: ${attrs}`);
   }
-  // Gyártási kapu: az egyenértékű em-es és egység nélküli hely egyaránt rendben; a dy-nal kitolt és a rajzon kívüli felirat bukik.
+  // Gyártási kapu (vak kör 5, L9 után): csak a biztosan kiszámolható helyet ítéli meg — egység nélküli, eltolás nélküli koordináta.
   assert.deepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="28.8"')), []);
-  assert.deepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="1.44em"')), [], "em egység: ugyanaz a hely, nem hiba");
-  assert.notDeepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="212" dy="52"')), [], "dy-nal a rajz alá tolt felirat");
-  assert.notDeepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="500"')), [], "a rajzon kívüli felirat");
+  assert.notDeepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="500"')), [], "a rajzon kívüli felirat bukik");
+  // Amit a közös becslő nem tud biztosan kiszámolni, azt a kapu NEM ítéli meg (nincs hamis riasztás; ismert korlát, a tervben rögzítve).
+  assert.deepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="1.44em"')), [], "em egység: nem ítélt");
+  assert.deepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="212" dy="52"')), [], "dy eltolás: nem ítélt");
   // A többi fajtánál a gyártási ellenőrzés azonos az olvasásival.
   assert.deepEqual(visualAuthoringProblems("decisionTree", tree), visualParamProblems("decisionTree", tree));
+});
+
+test("vak kör 5 L9: a régi `illustration` ábra helybecslése a főágéval azonos — közös <text dy> alatti, abszolút y-ú tspan-ok nem „kilógók”", async () => {
+  const { illustrationLayoutProblems, sanitizeIllustration } = await import("../shared/illustration-svg");
+  const svg = `<svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg"><polygon points="60,200 340,200 200,40" fill="#cde" stroke="#345"/><text x="200" dy="32" font-size="20" text-anchor="middle"><tspan x="200" y="150">Magasság</tspan><tspan x="200" y="220">Alap</tspan></text></svg>`;
+  const check = sanitizeIllustration(svg);
+  assert.ok(check.ok, JSON.stringify(check));
+  assert.deepEqual(illustrationLayoutProblems(check.svg).filter((p) => p.includes("kilógó")), [], "a főág becslése szerint nincs kilógó felirat");
+  assert.deepEqual(visualParamProblems("illustration", { svg }).filter((p) => p.includes("kilógó")), []);
+  // Szerkezeti őr: a közös becslő a főág egyszerű olvasását használja (a szelet nem módosítja).
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../shared/illustration-svg.ts", import.meta.url), "utf8");
+  assert.ok(src.includes('const y = parseFloat(part.getAttribute("y") ?? text.getAttribute("y") ?? "0");'));
 });

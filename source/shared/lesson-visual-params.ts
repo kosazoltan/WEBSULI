@@ -269,9 +269,16 @@ export function visualAuthoringProblems(kind: string, params: unknown): string[]
   if (!parsed.success) return problems;
   return parsed.data.cards.flatMap((card, index) => {
     const check = sanitizeIllustration(card.svg);
-    return (check.ok ? illustrationLayoutProblems(check.svg) : check.problems).map((p) => `pictureCards.cards.${index}.svg: ${p}`);
+    if (!check.ok) return check.problems.map((p) => `pictureCards.cards.${index}.svg: ${p}`);
+    // Vak kör 5 (L9): a közös helybecslő (`illustrationLayoutProblems`) változatlan — csak egység nélküli, eltolás nélküli helyet tud
+    // megítélni. Amit nem tud biztosan kiszámolni (em / ex / px / % egység, dx / dy eltolás), azt itt NEM ítéljük meg (nincs hamis
+    // riasztás, és a kilógást ilyenkor nem állítjuk) — a rajz megjelenik, az ellenőrzés kimarad.
+    if (!PLAIN_TEXT_POSITIONS.test(check.svg)) return [];
+    return illustrationLayoutProblems(check.svg).map((p) => `pictureCards.cards.${index}.svg: ${p}`);
   });
 }
+/** Igaz, ha a rajzban nincs `dx` / `dy` attribútum, és minden `x` / `y` attribútum egység nélküli szám (vagy számlista). */
+const PLAIN_TEXT_POSITIONS = /^(?![\s\S]*\s(?:dx|dy)=)(?![\s\S]*\s[xy]="[^"]*[A-Za-z%][^"]*")[\s\S]*$/;
 
 export function parseVisualParams<K extends VisualParamKind>(kind: K, params: unknown): z.infer<(typeof VISUAL_PARAM_SCHEMAS)[K]> | null {
   const parsed = VISUAL_PARAM_SCHEMAS[kind].safeParse(params);

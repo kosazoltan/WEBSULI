@@ -83,3 +83,7 @@ csomópont. `pictureCards` `{ cards: 2..8 × { label ≤ 40, svg ≤ 6000 (a meg
 - **Vak kör 4 (L8) — a gyártási kapu és az olvasási út szétválasztva:** a kilógó felirat ellenőrzése a `visualAuthoringProblems`-ben
   (az ábrák állomása hívja), NEM a `visualParamProblems`-ben — azt a lejátszó is hívja (`sourceVisualProblems`), ott a hiba a blokk
   elrejtését jelentené. A hely becslése a tisztító koordinátaszámításával egyezik (`svgLength`: szám, px, em, ex; `dx` / `dy`).
+- **Vak kör 5 (L9) — a közös helybecslő változatlan:** az `illustrationLayoutProblems` (a régi `illustration` ábra is ezt használja) a
+  főág szerinti marad; a szelet nem módosítja (a KI állapot főági azonossága). A képes kártyák gyártási ellenőrzése csak a biztosan
+  kiszámolható helyet ítéli meg (egység nélküli `x` / `y`, nincs `dx` / `dy`). **Ismert korlát:** az `em` / `ex` / `px` / `%` egységgel
+  vagy eltolással pozicionált kártyafelirat kilógását a kapu nem ítéli meg — pontos méréshez böngészős `getBBox` kellene (külön jegy).

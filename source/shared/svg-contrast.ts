@@ -397,7 +397,7 @@ type TextPart = { el: Element; text: string; point: Point };
  * Hossz felhasználói egységben: szám, px, em (× betűméret), ex (× fél betűméret). `undefined` = nincs megadva,
  * `null` = nem támogatott (pl. %) — ilyenkor a felirat helye nem számolható, a tisztító elutasít.
  */
-export function svgLength(value: string | null, fontSize: number): number | null | undefined {
+function lengthOf(value: string | null, fontSize: number): number | null | undefined {
   if (value === null || !value.trim()) return undefined;
   const m = /^([-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?)(px|em|ex)?$/i.exec(value.trim().split(/[\s,]+/)[0]);
   if (!m) return null;
@@ -421,7 +421,7 @@ function textParts(text: Element, root: Element, unsupported?: string[]): TextPa
   let bad = false;
   const position = (el: Element): boolean => {
     const fs = fontSize(el);
-    const [x, y, dx, dy] = ["x", "y", "dx", "dy"].map((name) => svgLength(el.getAttribute(name), fs));
+    const [x, y, dx, dy] = ["x", "y", "dx", "dy"].map((name) => lengthOf(el.getAttribute(name), fs));
     if ([x, y, dx, dy].some((v) => v === null)) bad = true;
     if (typeof x === "number") cursor.x = x;
     if (typeof y === "number") cursor.y = y;
