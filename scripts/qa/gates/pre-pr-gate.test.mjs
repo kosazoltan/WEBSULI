@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from './lib.mjs';
-import { checkPrBody, classifyChanges, e2eArgs, pickE2eSpecs, wrapperConfigSource, WRAPPER_CONFIG } from './pre-pr-gate.mjs';
+import { checkPrBody, classifyChanges, e2eArgs, pickE2eSpecs, prePushOrReuse, wrapperConfigSource, WRAPPER_CONFIG } from './pre-pr-gate.mjs';
 
 const cfg = loadConfig();
 const SPECS = ['coupon-expired-all-games.spec.ts', 'game-meta-quality.spec.ts', 'game-mobile-quality.spec.ts', 'tornado-j7a.spec.ts',
@@ -55,4 +55,28 @@ test('a csomagoló konfig szoftveres WebGL-lel, egy workerrel, .only-tiltással;
   assert.match(src, /from '\.\/playwright\.config\.ts'/);
   assert.match(WRAPPER_CONFIG, /\.local\.mts$/, 'a .gitignore *.local.mts mintája fedi');
   assert.deepEqual(e2eArgs({ specs: ['a.spec.ts'], grep: 'x|y' }), ['--import', 'tsx', 'scripts/run-e2e-tests.ts', '--config', WRAPPER_CONFIG, '--workers=1', '--grep', 'x|y', 'tests/a.spec.ts']);
+});
+
+// Terv docs/specs/2026-11-23-aranyos-kapuk.md (A5): a PR-kapu nem ismétli a push-kaput ugyanarra a fejre.
+test('prePushOrReuse: zöld push-bizonyíték ugyanerre a fejre → csak fetch + C-61; más fejre / bukott bizonyítéknál a teljes push-kapu', async () => {
+  const { fakeCtx, statusOf } = await import('./_fake.mjs');
+  const { writeEvidence } = await import('./lib.mjs');
+  const head = 'f'.repeat(40);
+  const reuse = fakeCtx({ changed: ['docs/a.md'] });
+  writeEvidence(reuse.ctx.evDir, `pre-push-${head}`, { kind: 'pre-push', head, ok: true, at: '2026-11-23T10:00:00Z', steps: [] });
+  await prePushOrReuse({ gate: reuse.gate, ctx: reuse.ctx, head });
+  assert.equal(statusOf(reuse.gate, 'push-kapu lépései'), 'SKIP');
+  assert.equal(statusOf(reuse.gate, 'git fetch'), 'PASS');
+  assert.ok(reuse.gate.results.some((r) => r.name.includes('(C-61)')), 'a C-61 akkor is lefut');
+  assert.equal(reuse.gate.results.some((r) => r.name.startsWith('tiszta munkafa')), false, 'a push-lépések nem ismétlődnek');
+
+  const failed = fakeCtx({ changed: ['docs/a.md'] });
+  writeEvidence(failed.ctx.evDir, `pre-push-${head}`, { kind: 'pre-push', head, ok: false, steps: [] });
+  await prePushOrReuse({ gate: failed.gate, ctx: failed.ctx, head });
+  assert.ok(failed.gate.results.some((r) => r.name.startsWith('tiszta munkafa')), 'bukott bizonyítéknál a teljes push-kapu fut');
+
+  const other = fakeCtx({ changed: ['docs/a.md'] });
+  writeEvidence(other.ctx.evDir, `pre-push-${'e'.repeat(40)}`, { kind: 'pre-push', head: 'e'.repeat(40), ok: true, steps: [] });
+  await prePushOrReuse({ gate: other.gate, ctx: other.ctx, head });
+  assert.ok(other.gate.results.some((r) => r.name.startsWith('tiszta munkafa')), 'más fejre szóló bizonyíték nem számít');
 });

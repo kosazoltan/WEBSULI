@@ -5,7 +5,8 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  STATUS, createGate, parseUnifiedZero, readEvidence, redact, resolveVerdict, verdictLine, verdictResult, writeEvidence, writeLog,
+  STATUS, createGate, parseNumstat, parseUnifiedZero, prodLineStats, readEvidence, redact, resolveVerdict, verdictLine, verdictResult, writeEvidence, writeLog,
+  loadConfig,
 } from './lib.mjs';
 
 // A szintetikus titkokat / címeket futásidőben rakjuk össze, hogy a repó saját őrei (no-real-emails-guard, lint-gate) ne lássák.
@@ -89,4 +90,49 @@ test('verdictResult: IGEN → PASS, FELTÉTELLEL → WARN, NEM / hiány → FAIL
   const none = verdictResult(null, h);
   assert.equal(none.status, STATUS.FAIL);
   assert.match(none.note, /record-review\.mjs --head c{12}/);
+});
+
+// --- Terv docs/specs/2026-11-23-aranyos-kapuk.md (A1, A2): kis javítás ---
+
+test('parseNumstat: sorszámok, bináris fájl, tabulátoros út', () => {
+  assert.deepEqual(parseNumstat('3\t1\tsource/server/a.ts\n-\t-\tsource/client/x.png\n'), [
+    { path: 'source/server/a.ts', add: 3, del: 1, binary: false },
+    { path: 'source/client/x.png', add: 0, del: 0, binary: true },
+  ]);
+  assert.deepEqual(parseNumstat(''), []);
+});
+
+test('prodLineStats: csak az éles kód számít; ≤ 30 sor kis javítás, 31 nem; kizárt útvonal és bináris soha', () => {
+  const smallFix = loadConfig().smallFix;
+  const e = (path, add, del = 0, binary = false) => ({ path, add, del, binary });
+  const ok = prodLineStats([e('source/server/a.ts', 20, 10), e('source/tests/a.test.ts', 300), e('docs/specs/x.md', 80), e('source/client/src/b.spec.ts', 50)], smallFix);
+  assert.equal(ok.lines, 30);
+  assert.equal(ok.files, 1);
+  assert.equal(ok.small, true, '30 éles sor: kis javítás');
+  assert.equal(prodLineStats([e('source/server/a.ts', 31)], smallFix).small, false, '31 éles sor: nem kis javítás');
+  const never = prodLineStats([e('source/server/a.ts', 2), e('scripts/qa/gates/lib.mjs', 1)], smallFix);
+  assert.equal(never.small, false, 'kapu-fájl: soha nem kis javítás');
+  assert.deepEqual(never.never, ['scripts/qa/gates/lib.mjs']);
+  for (const p of ['.github/workflows/ci.yml', 'source/package.json', 'source/migrations/0050_x.sql', 'source/shared/schema.ts', 'render.yaml', '.claude/settings.json', '.agents/skills/a/SKILL.md']) {
+    assert.equal(prodLineStats([e(p, 1)], smallFix).small, false, p);
+  }
+  assert.equal(prodLineStats([e('source/client/src/logo.png', 0, 0, true)], smallFix).small, false, 'bináris éles fájl: fail-closed');
+  assert.equal(prodLineStats([e('docs/a.md', 500), e('source/tests/x.test.ts', 400)], smallFix).small, true, 'csak teszt és dokumentáció: 0 éles sor');
+  assert.equal(prodLineStats([e('source/server/a.ts', 1)], undefined).small, false, 'konfiguráció nélkül soha nem kis javítás');
+});
+
+test('verdictResult kis javítással: ítélet nélkül PASS; NEM mindig FAIL; nem kis javításnál a hiány FAIL, megnevezett okkal', () => {
+  const h = 'a'.repeat(40);
+  const smallFix = loadConfig().smallFix;
+  const small = prodLineStats([{ path: 'source/server/a.ts', add: 5, del: 2 }], smallFix);
+  const pass = verdictResult(null, h, small);
+  assert.equal(pass.status, STATUS.PASS);
+  assert.match(pass.note, /KIS JAVÍTÁS \(7 éles sor ≤ 30/);
+  assert.equal(verdictResult({ verdict: 'NEM', source: 's' }, h, small).status, STATUS.FAIL, 'kis javításnál is: a NEM ítélet bukás');
+  const big = prodLineStats([{ path: 'source/server/a.ts', add: 40 }], smallFix);
+  const fail = verdictResult(null, h, big);
+  assert.equal(fail.status, STATUS.FAIL);
+  assert.match(fail.note, /40 éles sor > 30/);
+  assert.match(verdictResult(null, h, prodLineStats([{ path: 'scripts/qa/x.mjs', add: 1 }], smallFix)).note, /kizárt útvonal: scripts\/qa\/x\.mjs/);
+  assert.equal(verdictResult(null, h).status, STATUS.FAIL, 'a régi hívás (méret nélkül) változatlan');
 });

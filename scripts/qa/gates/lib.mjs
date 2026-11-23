@@ -272,10 +272,49 @@ export function resolveVerdict({ head, evidence, texts = [] }) {
   return found;
 }
 
-/** Az ítélet lépés-eredménye. */
-export function verdictResult(v, head) {
+/** `git diff --numstat` kimenete → `[{ path, add, del, binary }]` (a bináris fájl sorai „-”). */
+export function parseNumstat(text) {
+  return String(text ?? '').split(/\r?\n/).filter(Boolean).map((line) => {
+    const [a, d, ...rest] = line.split('\t');
+    const binary = a === '-' || d === '-';
+    return { path: rest.join('\t'), add: binary ? 0 : Number(a) || 0, del: binary ? 0 : Number(d) || 0, binary };
+  });
+}
+
+/**
+ * Terv docs/specs/2026-11-23-aranyos-kapuk.md: a változás éles kódsorai és a „kis javítás” döntés. `entries`: `[{ path, add, del,
+ * binary? }]` (a helyi numstatból vagy a GitHub fájllistájából). Kis javítás: legfeljebb `maxProdLines` éles sor, nincs `never`-mintás
+ * útvonal és nincs bináris éles fájl (fail-closed). Hiányzó konfigurációnál soha nem kis javítás.
+ */
+export function prodLineStats(entries, smallFix) {
+  const re = (list) => (list ?? []).map((p) => new RegExp(p));
+  const prod = re(smallFix?.prodPatterns);
+  const exclude = re(smallFix?.prodExclude);
+  const never = re(smallFix?.never);
+  let lines = 0;
+  let files = 0;
+  let binary = false;
+  const neverHits = [];
+  for (const e of entries ?? []) {
+    if (never.some((r) => r.test(e.path))) neverHits.push(e.path);
+    if (!prod.some((r) => r.test(e.path)) || exclude.some((r) => r.test(e.path))) continue;
+    files += 1;
+    if (e.binary) binary = true;
+    lines += (Number(e.add) || 0) + (Number(e.del) || 0);
+  }
+  const max = Number(smallFix?.maxProdLines);
+  const small = Number.isFinite(max) && max > 0 && !binary && neverHits.length === 0 && lines <= max;
+  return { lines, files, binary, never: neverHits, max: Number.isFinite(max) ? max : null, small };
+}
+
+/** Az ítélet lépés-eredménye. `small`: a `prodLineStats` eredménye — kis javításnál az ítélet hiánya nem bukás. */
+export function verdictResult(v, head, small = null) {
   const how = `node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict IGEN --report <jelentés.md>`;
-  if (!v) return { status: STATUS.FAIL, note: `nincs független ellenőr-ítélet a ${head.slice(0, 12)} fejre — futtasd a websuli-fejlesztesi-ellenor skill szerint, majd: ${how}` };
+  if (!v && small?.small) return { status: STATUS.PASS, note: `KIS JAVÍTÁS (${small.lines} éles sor ≤ ${small.max}, ${small.files} fájl) — vak ellenőri kör nem kötelező (docs/specs/2026-11-23-aranyos-kapuk.md)` };
+  if (!v) {
+    const why = small ? ` (nem kis javítás: ${small.never.length ? `kizárt útvonal: ${small.never.slice(0, 3).join(', ')}` : small.binary ? 'bináris éles fájl' : `${small.lines} éles sor > ${small.max}`})` : '';
+    return { status: STATUS.FAIL, note: `nincs független ellenőr-ítélet a ${head.slice(0, 12)} fejre${why} — futtasd a websuli-fejlesztesi-ellenor skill szerint, majd: ${how}` };
+  }
   if (v.verdict === 'NEM') return { status: STATUS.FAIL, note: `a független ellenőr ítélete NEM (${v.source}) — javítsd a blokkoló leleteket, és kérj visszaellenőrzést ugyanattól az ellenőrtől` };
   if (v.verdict === 'IGEN, FELTÉTELLEL') return { status: STATUS.WARN, note: `IGEN, FELTÉTELLEL (${v.source}) — a feltételek jegyre / a PR-leírásba kerüljenek` };
   return { status: STATUS.PASS, note: `IGEN (${v.source})` };

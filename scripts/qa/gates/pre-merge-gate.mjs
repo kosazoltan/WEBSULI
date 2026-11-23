@@ -6,7 +6,7 @@
 
 import { join } from 'node:path';
 import {
-  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence,
+  STATUS, createGate, externalResult, isMain, makeContext, readEvidence, redact, resolveVerdict, verdictResult, writeEvidence, prodLineStats,
 } from './lib.mjs';
 import { evidenceRecord } from './pre-push-gate.mjs';
 
@@ -80,7 +80,7 @@ export function decideMainMoved({ base, mainSha, files = [], mainFiles, mainFile
   return { status: STATUS.WARN, note: `${moved}; a PR repó-szintű ellenőrzést érint (${wide}), de a main ${mainFiles.length} változott fájlja közül egyik sem esik a hatókörébe (pl. ${mainFiles.slice(0, 5).join(', ')})` };
 }
 
-export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files, verdict, external = null, guard, rt, repoWideScopes, mainFiles = null, mainFilesTruncated = false }) {
+export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files, verdict, external = null, guard, rt, repoWideScopes, mainFiles = null, mainFilesTruncated = false, small = null }) {
   const out = [];
   const add = (name, status, note = '') => out.push({ name, status, note });
 
@@ -102,7 +102,7 @@ export function decideMerge({ pr, required, checkRuns, statuses, threads, mainSh
   const c61 = decideMainMoved({ base, mainSha, files, mainFiles, mainFilesTruncated, repoWideScopes });
   add('main elmozdulása a PR CI-ja óta (C-61)', c61.status, c61.note);
 
-  out.push({ name: 'független ellenőr ítélete a fejre', ...verdictResult(verdict, pr.headRefOid) });
+  out.push({ name: 'független ellenőr ítélete a fejre', ...verdictResult(verdict, pr.headRefOid, small) });
   out.push({ name: 'külső (Gemini) ellenőr — második vélemény', ...externalResult(external, pr.headRefOid) });
 
   if (guard.code === 0) add('futásőr (active-runs-guard.sh)', STATUS.PASS, guard.summary || 'nincs aktív futás');
@@ -182,6 +182,8 @@ async function main() {
       pr, required, checkRuns, statuses, threads, mainSha, ciBaseSha, files: (pr.files ?? []).map((f) => f.path), verdict,
       external: readEvidence(ctx.evDir, `external-${head}`), guard: { code: g.code, summary }, rt, repoWideScopes: cfg.repoWideScopes ?? [],
       mainFiles, mainFilesTruncated,
+      // Terv docs/specs/2026-11-23-aranyos-kapuk.md (A3): a kis javítást a GitHub fájllistájából számoljuk, a helyi bizonyítéktól függetlenül.
+      small: prodLineStats((pr.files ?? []).map((f) => ({ path: f.path, add: f.additions, del: f.deletions })), cfg.smallFix),
     })) gate.add(r.name, r.status, r.note);
   } catch (e) {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);

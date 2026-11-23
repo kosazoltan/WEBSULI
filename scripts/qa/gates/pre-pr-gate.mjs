@@ -10,9 +10,9 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import {
-  STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog,
+  STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog, parseNumstat, prodLineStats,
 } from './lib.mjs';
-import { evidenceRecord, runPrePushSteps } from './pre-push-gate.mjs';
+import { evidenceRecord, freshMainStep, runPrePushSteps } from './pre-push-gate.mjs';
 import { stemOf } from './stage-gate.mjs';
 
 export const WRAPPER_CONFIG = 'playwright.gate.local.mts';
@@ -93,6 +93,23 @@ export function e2eArgs(run) {
     ...(run.grep ? ['--grep', run.grep] : []), ...run.specs.map((s) => `tests/${s}`)];
 }
 
+/**
+ * Terv docs/specs/2026-11-23-aranyos-kapuk.md (A5): ha ugyanerre a fejre zöld push-bizonyíték van, a push-lépéseket nem ismételjük —
+ * csak a `git fetch` és a friss main (C-61) ellenőrzése fut, mert a main közben mozdulhatott. Különben a push-kapu minden lépése.
+ */
+export async function prePushOrReuse({ gate, ctx, head, slice = false }) {
+  const { git } = ctx;
+  const pushed = readEvidence(ctx.evDir, `pre-push-${head}`);
+  if (!(pushed?.ok === true && pushed.head === head)) return runPrePushSteps({ gate, ctx, slice });
+  gate.add('push-kapu lépései', STATUS.SKIP, `zöld push-bizonyíték ugyanerre a fejre (${String(pushed.at ?? '').slice(0, 16)}) — nem ismételjük`);
+  await gate.step('git fetch', () => {
+    const r = git.run(['fetch', ctx.base.split('/')[0], '--quiet']);
+    return r.code === 0 ? { status: STATUS.PASS } : { status: STATUS.FAIL, note: 'a fetch nem sikerült (hálózat?)', detail: r.stderr };
+  });
+  await freshMainStep({ gate, ctx });
+  return { changed: git.changedFiles(ctx.base, ctx.root) };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const strict = args.includes('--strict');
@@ -129,24 +146,30 @@ async function main() {
     return missing.length ? { status: STATUS.FAIL, note: `hiányzik (${from}): ${missing.join('; ')}` } : { status: STATUS.PASS, note: from };
   });
 
+  // Terv docs/specs/2026-11-23-aranyos-kapuk.md (A1, A2): kis javításnál (≤ 30 éles sor) az ítélet nem kötelező.
+  const numstat = git.run(['diff', '--numstat', '--no-renames', `${ctx.base}...HEAD`]);
+  const small = numstat.code === 0 ? prodLineStats(parseNumstat(numstat.stdout), cfg.smallFix) : null;
   await gate.step('független ellenőr ítélete a fejre', () => verdictResult(
-    resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head));
+    resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head, small));
 
   await gate.step('külső (Gemini) ellenőr — második vélemény', () => externalResult(readEvidence(ctx.evDir, `external-${head}`), head));
 
-  // 2) A push előtti kapu minden lépése.
-  const { changed } = await runPrePushSteps({ gate, ctx, slice: args.includes('--slice') });
-
-  await gate.step('npm run build', () => {
-    const r = exec('npm', ['run', 'build'], { cwd: src, timeoutMs: 20 * 60_000 });
-    writeLog(ctx.evDir, 'pre-pr-gate', 'build', `${r.stdout}\n${r.stderr}`);
-    return cmdResult(r);
-  });
+  // 2) A push előtti kapu lépései — A5: ha ugyanerre a fejre zöld push-bizonyíték van, nem ismételjük (csak fetch + C-61).
+  const { changed } = await prePushOrReuse({ gate, ctx, head, slice: args.includes('--slice') });
 
   const cls = classifyChanges(changed, cfg);
   const dockerOk = () => exec('docker', ['version', '--format', '{{.Server.Version}}'], { cwd: root, timeoutMs: 30_000 }).code === 0;
   const specFiles = readdirSync(join(src, 'tests')).filter((f) => f.endsWith('.spec.ts')).sort();
   const { runs, warning } = pickE2eSpecs({ classification: cls, specFiles, readSpec: (s) => { /* olvashatatlan spec → '' → legfeljebb kevesebb UI-spec + WARN (ártalmatlan) */ try { return readFileSync(join(src, 'tests', s), 'utf8'); } catch { return ''; } }, cfg, changed });
+
+  // A6: a böngészős út maga buildel (playwright webServer) — külön build csak akkor, ha nincs böngészős futás és kód változott.
+  await gate.step('npm run build', () => {
+    if (runs.length) return { status: STATUS.SKIP, note: 'a böngészős út buildel' };
+    if (!changed.some((f) => /^source\/(client|server|shared)\//.test(f))) return { status: STATUS.SKIP, note: 'nincs kliens- / szerver- / közös kód változás' };
+    const r = exec('npm', ['run', 'build'], { cwd: src, timeoutMs: 20 * 60_000 });
+    writeLog(ctx.evDir, 'pre-pr-gate', 'build', `${r.stdout}\n${r.stderr}`);
+    return cmdResult(r);
+  });
 
   if (warning) gate.add('böngészős út (UI)', STATUS.WARN, warning);
   if (!runs.length && !warning) gate.add('böngészős út (CI-azonos)', STATUS.SKIP, 'nincs játék- / UI-változás');
@@ -165,7 +188,7 @@ async function main() {
   }
 
   await gate.step('DB-integrációs teszt (test:learning-db)', () => {
-    if (!cls.db) return { status: STATUS.SKIP, note: 'nincs szerver / séma / migráció változás' };
+    if (!cls.db) return { status: STATUS.SKIP, note: 'nincs tároló / séma / migráció változás (a CI mindig futtatja)' };
     if (!dockerOk()) return { status: STATUS.NOT_RUN, note: 'nincs Docker — az eldobható Postgres nem indítható; kockázat: a DB-út csak a CI-ban fut' };
     const r = exec('npm', ['run', 'test:learning-db'], { cwd: src, timeoutMs: 30 * 60_000 });
     writeLog(ctx.evDir, 'pre-pr-gate', 'learning-db', `${r.stdout}\n${r.stderr}`);

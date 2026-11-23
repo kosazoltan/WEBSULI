@@ -29,13 +29,23 @@ Minden parancs a munkafa gyökeréből fut (`npm run gate:<x>`, vagy `node scrip
 Mért idők: 2026-11-17, ezen a fejlesztői gépen (Windows x64, Node 26), a saját ágon, párhuzamosan futó más ügynökök mellett — a gép
 terhelésétől függően ±50%.
 
+### Arányosság és kis javítás (tulajdonosi döntés 2026-11-23; terv `docs/specs/2026-11-23-aranyos-kapuk.md`)
+
+- **Kis javítás** = a PR éles kódja (a `source/**` nem teszt / nem dokumentáció fájljai) legfeljebb **30 sor** (hozzáadott + törölt)
+  a merge-base óta. Kis javításnál a független (vak) ellenőri kör NEM kötelező: a PR- és a merge-kapu ítélet nélkül PASS-t ad
+  („KIS JAVÍTÁS (N éles sor)”). A merge-kapu a sorokat a GitHub fájllistájából számolja újra. Soha nem kis javítás a kapukat, a CI-t,
+  az ügynök-beállítást, a skilleket, a sémát / migrációt, a `package.json`-t vagy a `render.yaml`-t érintő változás, és a bináris éles fájl
+  (`gates.config.json` `smallFix`). Ha mégis van ítélet, az számít — a `NEM` kis javításnál is bukás.
+- **A teljes készlet a CI-é:** a helyi push-kapu a kapcsolódó teszteket futtatja; a teljes lint, a teljes egységteszt (x64 és ARM64), a
+  build, a teljes böngészős készlet és a DB-integrációs teszt minden PR-on a GitHub CI-ban fut.
+
 | Kapu | Parancs | Mit futtat | Mért idő |
 |---|---|---|---|
 | Lint, gyors | `npm run gate:lint -- --fast` | `git diff --check`; nem követett fájlok; ESLint a változott `source/client/src` + `source/server` fájlokra; `tsc` csak változott `.ts`-nél, a teszt-`tsc` csak változott tesztnél; repó-szabályok a diffre (`repo-rules.json` + az `enforce-repo-rules` hook a hozzáadott sorokra); tiltott minták; `no-real-emails-guard`; skill-tükör | 11 s (tsc nélkül); változott `.ts`-sel ~60–90 s |
 | Lint, teljes | `npm run gate:lint` | a fenti + teljes `npm run lint` + mindkét `tsc` | 146 s (lint 12 s, check 45 s, check:test 40–70 s) |
 | Szakasz | `npm run gate:stage` | lint gyors + a változott fájlokhoz leképezett egységtesztek + minden `*-guard.test.ts` (23 db) + a `scripts/qa` tesztjei, ha érintett | 47 s (tsc nélkül); tsc-vel ~115 s |
-| Push előtt | `npm run gate:push` | tiszta fa; `git fetch`; lint teljes; teljes egységteszt; háromfázisú rend; PR-méret; friss main (ha nincs beolvasztva: őr-tesztek az összefésült állapoton); közös fájlok; `.audit-ok`; „zöld CI utáni push” | 251 s (ebből a teljes egységteszt 132 s) |
-| PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet; a push-kapu minden lépése; `npm run build`; játék / UI: CI-azonos böngészős út; DB: `test:learning-db` | 214 s böngészős út nélkül (build 20 s); böngészős futásonként + ~160 s (füstpróba: 1 spec, 11 eset, 164 s) |
+| Push előtt | `npm run gate:push` | tiszta fa; `git fetch`; lint GYORS mód (a változott fájlok ESLintje; `tsc` változott `.ts` / teszt esetén); egységteszt: a leképezett tesztek + minden őr — TELJES készlet csak leképezetlen éles kódfájlnál vagy közös fájl (`sharedFiles`, `sliceSharedPatterns`, `tsconfig*`, `package.json`) változásánál; háromfázisú rend; PR-méret; friss main; közös fájlok; `.audit-ok`; „zöld CI utáni push” | ~40–60 s célzottan (2026-11-23-ig a teljes egységteszttel ~125 s) |
+| PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet (kis javításnál nem kötelező); a push-kapu lépései — ha ugyanerre a fejre zöld push-bizonyíték van, csak `git fetch` + C-61; játék / UI: a változott komponenst említő böngészős út (az buildel); `npm run build` csak böngészős út nélkül; DB: `test:learning-db` csak tároló / séma / migráció változásnál | push-bizonyítékkal ~1–3 perc + a böngészős út |
 | Merge előtt | `npm run gate:merge -- <PR>` | CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
 
 ### Külső (Gemini) ellenőr — második vélemény

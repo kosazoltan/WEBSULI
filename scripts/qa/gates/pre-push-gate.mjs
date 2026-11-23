@@ -12,7 +12,7 @@ import {
   STATUS, argValue, cmdResult, createGate, isMain, makeContext, writeEvidence, writeLog,
 } from './lib.mjs';
 import { runLintSteps } from './lint-gate.mjs';
-import { listFiles } from './stage-gate.mjs';
+import { listFiles, mapTests } from './stage-gate.mjs';
 
 export const NATIVE_ARCH_TEST = 'native-arch.test.ts';
 
@@ -146,6 +146,33 @@ async function mergedGuardCheck(ctx) {
 }
 
 /** A push előtti kapu lépései (a PR előtti kapu is ezt hívja). */
+/**
+ * Terv docs/specs/2026-11-23-aranyos-kapuk.md (A4): a push-kapu egységtesztje a szakasz-kapu leképezése + minden őr-teszt; a teljes
+ * készletre esik vissza, ha van leképezetlen éles kódfájl, vagy közös / szelet-közös fájl, `tsconfig*` / `package.json` változott. A teljes
+ * készletet a CI mindig lefuttatja.
+ */
+export function pushUnitTests({ changed, testFiles, readTest, cfg }) {
+  const guards = testFiles.filter((t) => /-guard\.test\.ts$/.test(t));
+  const shared = [...(cfg.sharedFiles ?? []), ...(cfg.sliceSharedPatterns ?? [])];
+  const wide = changed.filter((f) => shared.some((p) => f === p || f.startsWith(p)) || /(^|\/)(tsconfig[^/]*\.json|package\.json)$/.test(f));
+  if (wide.length) return { mode: 'full', reason: `közös fájl változott: ${wide.slice(0, 3).join(', ')}` };
+  const { tests, unmapped } = mapTests({ changed, testFiles, readTest, games: cfg.games, sharedGamePatterns: cfg.sharedGamePatterns });
+  if (unmapped.length) return { mode: 'full', reason: `leképezetlen éles kódfájl: ${unmapped.slice(0, 3).join(', ')}` };
+  return { mode: 'targeted', files: [...new Set([...tests, ...guards])], targeted: tests.length, guards: guards.length };
+}
+
+/** A friss main ellenőrzése (C-61) — a push- és a PR-kapu közös lépése. */
+export async function freshMainStep({ gate, ctx }) {
+  const { git, base } = ctx;
+  await gate.step(`friss ${base} beolvasztva (C-61)`, async () => {
+    const r = git.run(['merge-base', '--is-ancestor', base, 'HEAD']);
+    if (r.code === 0) return { status: STATUS.PASS, note: 'a friss main a HEAD őse' };
+    const merged = await mergedGuardCheck(ctx);
+    if (merged.status === STATUS.PASS) return { status: STATUS.WARN, note: `a ${base} nincs beolvasztva (git merge ${base} ajánlott); ${merged.note}` };
+    return merged;
+  });
+}
+
 export async function runPrePushSteps({ gate, ctx, slice = false }) {
   const { exec, git, root, src, base, cfg, node } = ctx;
 
@@ -167,11 +194,18 @@ export async function runPrePushSteps({ gate, ctx, slice = false }) {
     return r.code === 0 ? { status: STATUS.PASS } : { status: STATUS.FAIL, note: 'a fetch nem sikerült (hálózat?) — friss main nélkül nem igazolható', detail: r.stderr };
   });
 
-  const { changed } = await runLintSteps({ gate, ctx, mode: 'full' });
+  // A4: a teljes `npm run lint` a CI-é; a változott fájlok ESLintje és a tsc (ha .ts / teszt változott) itt is fut.
+  const { changed } = await runLintSteps({ gate, ctx, mode: 'fast' });
+  const testFiles = listFiles(join(src, 'tests'), /\.test\.ts$/).map((f) => `tests/${f}`);
+  const readTest = (t) => { try { return readFileSync(join(src, t), 'utf8'); } catch { return ''; } };
+  const unit = pushUnitTests({ changed, testFiles, readTest, cfg });
 
-  await gate.step('teljes egységteszt (npm test)', () => {
+  const unitName = unit.mode === 'full' ? `teljes egységteszt (${unit.reason})` : `egységtesztek: ${unit.targeted} célzott + ${unit.guards} őr (a teljes készlet a CI-é)`;
+  await gate.step(unitName, () => {
     if (!existsSync(join(src, 'node_modules'))) return { status: STATUS.FAIL, note: 'nincs source/node_modules' };
-    const r = exec(node, ['--import', 'tsx', '--test', '--test-reporter=tap', 'tests/*.test.ts'], { cwd: src, timeoutMs: 40 * 60_000 });
+    const targets = unit.mode === 'full' ? ['tests/*.test.ts'] : unit.files;
+    if (!targets.length) return { status: STATUS.SKIP, note: 'nincs futtatandó egységteszt' };
+    const r = exec(node, ['--import', 'tsx', '--test', '--test-reporter=tap', ...targets], { cwd: src, timeoutMs: 40 * 60_000 });
     writeLog(ctx.evDir, 'pre-push-gate', 'npm-test', `${r.stdout}\n${r.stderr}`);
     const total = /^# tests (\d+)/m.exec(r.stdout)?.[1];
     if (r.code === 0) return { status: STATUS.PASS, note: total ? `${total} teszt` : '' };
@@ -203,13 +237,7 @@ export async function runPrePushSteps({ gate, ctx, slice = false }) {
       : { status: STATUS.PASS, note: line.replace(/^\[pr-size\]\s*/, '') };
   });
 
-  await gate.step(`friss ${base} beolvasztva (C-61)`, async () => {
-    const r = git.run(['merge-base', '--is-ancestor', base, 'HEAD']);
-    if (r.code === 0) return { status: STATUS.PASS, note: 'a friss main a HEAD őse' };
-    const merged = await mergedGuardCheck(ctx);
-    if (merged.status === STATUS.PASS) return { status: STATUS.WARN, note: `a ${base} nincs beolvasztva (git merge ${base} ajánlott); ${merged.note}` };
-    return merged;
-  });
+  await freshMainStep({ gate, ctx });
 
   await gate.step('közös / tiltott fájlok érintése', () => {
     const hits = sharedTouched(changed, cfg, slice);

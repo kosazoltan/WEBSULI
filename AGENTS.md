@@ -159,6 +159,8 @@ blokkon KÍVÜL áll, hogy egy kitfrissítés ne írja felül.
    őr-teszt). Csak zöld után lehet továbblépni; előbb a helyi hibát kell javítani.
 3. **Független ellenőr:** minden elkészült fejlesztést egy friss kontextusú, csak olvasó alügynök ellenőriz a PR megnyitása ELŐTT és
    minden érdemi javító push előtt (a fejlesztő nem ellenőrizheti magát). Az ítéletet a `record-review.mjs` rögzíti.
+   **Kivétel — kis javítás** (tulajdonosi döntés 2026-11-23): legfeljebb 30 sor éles kód (teszt és dokumentáció nem számít) esetén a vak
+   ellenőri kör nem kötelező; a kapuk ezt a GitHub / git sorszámából maguk döntik el (`docs/minosegkapuk.md` „Arányosság és kis javítás”).
 4. **A kapuk sorrendje:** `gate:stage` (szakaszonként) → `gate:push` → független ellenőr + `record-review` →
    `gate:pr -- --body-file <leírás.md>` → push + PR → zöld CI → közvetlenül a merge előtt `gate:merge -- <PR>`. A `git push`,
    `gh pr create` és `gh pr merge` előtt a `check-quality-gates` hook a zöld bizonyítékot ellenőrzi.

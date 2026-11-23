@@ -13,6 +13,8 @@ UTÁN talált blokkoló hibát; minden ilyen kör 1–1,5 óra CI + egy újabb r
 ## 1. Mikor kötelező
 
 - Minden fejlesztés / javítás elkészültekor, a PR megnyitása ELŐTT (a `pre-pr-gate` és a `gh pr create` hook ítélet nélkül nem enged).
+- **Kivétel — kis javítás** (tulajdonosi döntés 2026-11-23): legfeljebb 30 sor éles kód (teszt és dokumentáció nem számít) — ilyenkor
+  NEM indul fizetős ellenőri kör; a `pre-pr-gate` és a `pre-merge-gate` ezt maga állapítja meg (`docs/minosegkapuk.md`, „Arányosság és kis javítás”).
 - Minden érdemi javító push előtt (review-lelet, CI-hiba javítása): visszaellenőrzés ugyanattól az ellenőrtől, az új fejre.
 - A merge előtt az ítéletnek a PR JELENLEGI fejére kell szólnia (`pre-merge-gate`).
 - A fejlesztő (vagy az az ügynök, amelyik a kódot írta) nem lehet a saját ellenőre.
@@ -23,7 +25,7 @@ Az ellenőr NE olcsó hibákra pazarolja a keretet. Indítás előtt zöldnek ke
 
 ```bash
 npm run gate:stage          # szakasz-kapu (gyors)
-npm run gate:push           # teljes helyi kapu: lint, tsc, teljes unit, háromfázisú rend, friss main
+npm run gate:push           # helyi kapu: a változott fájlok lintje, tsc, a kapcsolódó + őr-tesztek, háromfázisú rend, friss main (a teljes készlet a CI-é)
 ```
 
 Játék- / UI-szeletnél a CI-azonos böngészős utat is futtasd le előbb (a `pre-pr-gate` futtatja; a pontos parancsot kiírja), hogy az

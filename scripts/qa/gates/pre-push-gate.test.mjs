@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUS, loadConfig } from './lib.mjs';
-import { auditStatus, decideNativeArch, parseTapFailures, rollupState, runPrePushSteps, sharedTouched, NATIVE_ARCH_TEST } from './pre-push-gate.mjs';
+import { auditStatus, decideNativeArch, parseTapFailures, rollupState, pushUnitTests, runPrePushSteps, sharedTouched, NATIVE_ARCH_TEST } from './pre-push-gate.mjs';
 import { fakeCtx, statusOf } from './_fake.mjs';
 
 const TAP = [
@@ -96,8 +96,11 @@ test('review J7 / J13: nem követett fájl → FAIL; scripts/qa változásnál a
   assert.ok(calls.some((c) => c.cmd === 'node' && c.args[0] === '--test'));
 });
 
-test('runPrePushSteps: native-arch az egyetlen bukás + bukó doctor:arch → KIVÉTEL, a kapu zöld marad', async () => {
+test('runPrePushSteps: native-arch az egyetlen bukás + bukó doctor:arch → KIVÉTEL, a kapu zöld marad (teljes ág: közös fájl változott)', async () => {
+  // Terv docs/specs/2026-11-23-aranyos-kapuk.md (A4, dokumentált változás): a teljes egységteszt csak visszaeséskor fut — itt egy
+  // szelet-közös fájl (source/shared/) változása váltja ki.
   const { ctx, gate } = prePushFake({
+    changed: ['source/shared/kozos.ts'],
     respond: (cmd, args) => {
       if (cmd === 'node' && args.includes('--test-reporter=tap')) return { code: 1, stdout: TAP };
       if (cmd === 'npm' && args.join(' ') === 'run doctor:arch') return { code: 1 };
@@ -107,4 +110,28 @@ test('runPrePushSteps: native-arch az egyetlen bukás + bukó doctor:arch → KI
   await runPrePushSteps({ gate, ctx });
   assert.equal(statusOf(gate, 'teljes egységteszt'), STATUS.EXCEPTION);
   assert.equal(gate.finish(), 0);
+});
+
+// --- Terv docs/specs/2026-11-23-aranyos-kapuk.md (A4): célzott push-egységteszt ---
+
+test('pushUnitTests: leképezett változás → célzott + minden őr; leképezetlen vagy közös fájl → teljes készlet', () => {
+  const cfg = loadConfig();
+  const testFiles = ['tests/quiz-round.test.ts', 'tests/no-real-emails-guard.test.ts', 'tests/egyeb.test.ts'];
+  const readTest = (t) => (t === 'tests/egyeb.test.ts' ? 'import { x } from "../shared/masik";' : '');
+  const targeted = pushUnitTests({ changed: ['source/shared/quiz-round.ts', 'docs/a.md'].filter((f) => !f.startsWith('source/shared/')).concat(['source/client/src/lib/quiz-round.ts']), testFiles, readTest, cfg });
+  assert.equal(targeted.mode, 'targeted');
+  assert.deepEqual(targeted.files, ['tests/quiz-round.test.ts', 'tests/no-real-emails-guard.test.ts']);
+  assert.equal(pushUnitTests({ changed: ['source/client/src/lib/nincs-tesztje.ts'], testFiles, readTest, cfg }).mode, 'full', 'leképezetlen fájl');
+  assert.match(pushUnitTests({ changed: ['source/shared/barmi.ts'], testFiles, readTest, cfg }).reason, /közös fájl/);
+  assert.equal(pushUnitTests({ changed: ['source/tsconfig.json'], testFiles, readTest, cfg }).mode, 'full', 'tsconfig');
+  const docsOnly = pushUnitTests({ changed: ['docs/a.md'], testFiles, readTest, cfg });
+  assert.deepEqual(docsOnly, { mode: 'targeted', files: ['tests/no-real-emails-guard.test.ts'], targeted: 0, guards: 1 }, 'csak dokumentáció: az őrök futnak');
+});
+
+test('runPrePushSteps: célzott változásnál csak a leképezett + őr-tesztek futnak, a teljes `npm run lint` nem (a CI-é)', async () => {
+  const { ctx, gate, calls } = prePushFake({ changed: ['docs/a.md'] });
+  await runPrePushSteps({ gate, ctx });
+  assert.ok(gate.results.some((r) => r.name.startsWith('egységtesztek: 0 célzott')), gate.results.map((r) => r.name).join(' | '));
+  assert.equal(calls.some((c) => c.args.includes('tests/*.test.ts')), false, 'nem fut a teljes készlet');
+  assert.equal(calls.some((c) => c.cmd === 'npm' && c.args.join(' ') === 'run lint'), false, 'nincs teljes lint');
 });

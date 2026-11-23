@@ -136,3 +136,18 @@ test('decideMerge: /api/rt/status — hálózati hiba FAIL, off PASS, aktív mec
   assert.equal(st(decideMerge(base({ rt: { json: { mode: 'on', activeMatches: 0 } } })), 'valós idejű'), STATUS.PASS);
   assert.equal(st(decideMerge(base({ rt: { json: { mode: 'admin', activeMatches: 2 } } })), 'valós idejű'), STATUS.FAIL);
 });
+
+// --- Terv docs/specs/2026-11-23-aranyos-kapuk.md (A3): a merge-kapu a kis javítást a GitHub fájllistájából számolja ---
+
+test('decideMerge kis javítással: ítélet nélkül PASS (≤ 30 éles sor), 31 sornál FAIL', async () => {
+  const { decideMerge: decide } = await import('./pre-merge-gate.mjs');
+  const { prodLineStats, loadConfig } = await import('./lib.mjs');
+  const smallFix = loadConfig().smallFix;
+  const b = base();
+  const small = prodLineStats([{ path: 'source/server/a.ts', add: 10, del: 5 }, { path: 'source/tests/a.test.ts', add: 200, del: 0 }], smallFix);
+  const pass = decide({ ...b, verdict: null, small }).find((r) => r.name.startsWith('független ellenőr'));
+  assert.equal(pass.status, 'PASS');
+  assert.match(pass.note, /KIS JAVÍTÁS \(15 éles sor/);
+  const big = prodLineStats([{ path: 'source/server/a.ts', add: 31 }], smallFix);
+  assert.equal(decide({ ...b, verdict: null, small: big }).find((r) => r.name.startsWith('független ellenőr')).status, 'FAIL');
+});
