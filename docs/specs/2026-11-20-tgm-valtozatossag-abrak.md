@@ -257,6 +257,10 @@ Döntések:
    kérdésfelvető; `comparison` → összehasonlító, döntéshelyzet, alap.
 4. KI kapcsolónál a terv bájtra a régi (a kéretlen `sectionKind` mező is eldobva), a pedagógus-prompt bájtra a régi.
 5. A kiosztott minták mentése (az SK2 kapujához) az SK2 feladata; addig az SK2 a „bármely készletbeli minta” szabályt méri.
+6. Pontosítás (1. vak kör, L1–L3): a szomszéd- és a 40%-szabály a szerzőnek átadott VÉGLEGES blokksorokra (és a mintaazonosítókra) is
+   érvényes — a záró `recap` hozzáfűzése után a `donteshelyzet` sora az `alap` soráéval azonos. A kiosztás determinisztikus visszalépéses
+   keresés: ha van a szabályoknak megfelelő kiosztás, megtalálja; a szabályok csak akkor engednek, ha nincs ilyen. A különleges záró
+   fejezet változatlan, egy kivétellel: ha a modell terve nem `recap`-pal zárja a leckét, a program hozzáfűzi.
 
 Elfogadás (EARS):
 
