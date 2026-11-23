@@ -142,20 +142,6 @@ test("vak kör 1 L5: a mélységi határ pontosan mérve — 3 szint elfogadva, 
   assert.notDeepEqual(visualParamProblems("decisionTree", { root: chain(4) }), [], "pontosan 4 szint (7 csomópont)");
 });
 
-test("review #533 (Codex, Vercel): a képes kártya rajzának felirata nem lóghat ki a rajzterületről — a gyártási kapu visszaküldi; a megjelenítés nem változik", async () => {
-  const { visualAuthoringProblems } = await import("../shared/lesson-visual-params");
-  const art = (x: number, anchor: string) => `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="40" r="25" fill="#d33"/><text x="${x}" y="95" text-anchor="${anchor}">alma</text></svg>`;
-  const ok = { cards: [{ label: "egy", svg: art(50, "middle") }, { label: "kettő", svg: art(50, "middle") }] };
-  const overflow = { cards: [{ label: "egy", svg: art(50, "middle") }, { label: "kettő", svg: art(95, "start") }] };
-  assert.deepEqual(visualAuthoringProblems("pictureCards", ok), []);
-  const problems = visualAuthoringProblems("pictureCards", overflow);
-  assert.equal(problems.length > 0, true, "a kilógó felirat a gyártási kapun bukik");
-  assert.ok(problems.every((p) => p.startsWith("pictureCards.cards.1.svg: ")), JSON.stringify(problems));
-  // Az olvasási út (a lejátszó) a már tárolt kártyát emiatt NEM rejti el (vak kör 4, L8).
-  assert.deepEqual(visualParamProblems("pictureCards", overflow), []);
-  assert.equal(sourceVisualProblems({ kind: "animate", animKind: "pictureCards", params: overflow }), null);
-});
-
 test("review #533 (Copilot): nagyon mély, sérült fa nem okoz veremtúlcsordulást — szabályos paraméterhiba, a szövegbejárás korlátos", async () => {
   const { parseVisualParams } = await import("../shared/lesson-visual-params");
   let deepNode: Record<string, unknown> = { text: "levél" };
@@ -184,25 +170,6 @@ test("review #533 (Copilot): a megjelenítő szöveghatárai a forrásleltárév
   assert.notDeepEqual(visualParamProblems("pictureCards", card({ example: s(161) })), []);
 });
 
-test("vak kör 4 L8: a kilógó felirat ellenőrzése CSAK gyártási kapu — a tárolt lecke megjelenítése (olvasási út) nem rejti el a blokkot", async () => {
-  const { visualAuthoringProblems } = await import("../shared/lesson-visual-params");
-  const art = (attrs: string) => `<svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg"><circle cx="200" cy="120" r="60" fill="#d33"/><text x="200" ${attrs} font-size="20" text-anchor="middle">Nap</text></svg>`;
-  const cardsOf = (attrs: string) => ({ cards: [{ label: "egy", svg: art('y="28.8"') }, { label: "kettő", svg: art(attrs) }] });
-  // Olvasási út: a sémán átmenő kártya MINDIG megjelenik (akkor is, ha a gyártási kapu ma visszaküldené).
-  for (const attrs of ['y="28.8"', 'y="1.44em"', 'y="212" dy="52"', 'y="500"']) {
-    assert.deepEqual(visualParamProblems("pictureCards", cardsOf(attrs)), [], `olvasás: ${attrs}`);
-    assert.equal(sourceVisualProblems({ kind: "animate", animKind: "pictureCards", params: cardsOf(attrs) }), null, `a lejátszó nem rejti el: ${attrs}`);
-  }
-  // Gyártási kapu (vak kör 5, L9 után): csak a biztosan kiszámolható helyet ítéli meg — egység nélküli, eltolás nélküli koordináta.
-  assert.deepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="28.8"')), []);
-  assert.notDeepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="500"')), [], "a rajzon kívüli felirat bukik");
-  // Amit a közös becslő nem tud biztosan kiszámolni, azt a kapu NEM ítéli meg (nincs hamis riasztás; ismert korlát, a tervben rögzítve).
-  assert.deepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="1.44em"')), [], "em egység: nem ítélt");
-  assert.deepEqual(visualAuthoringProblems("pictureCards", cardsOf('y="212" dy="52"')), [], "dy eltolás: nem ítélt");
-  // A többi fajtánál a gyártási ellenőrzés azonos az olvasásival.
-  assert.deepEqual(visualAuthoringProblems("decisionTree", tree), visualParamProblems("decisionTree", tree));
-});
-
 test("vak kör 5 L9: a régi `illustration` ábra helybecslése a főágéval azonos — közös <text dy> alatti, abszolút y-ú tspan-ok nem „kilógók”", async () => {
   const { illustrationLayoutProblems, sanitizeIllustration } = await import("../shared/illustration-svg");
   const svg = `<svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg"><polygon points="60,200 340,200 200,40" fill="#cde" stroke="#345"/><text x="200" dy="32" font-size="20" text-anchor="middle"><tspan x="200" y="150">Magasság</tspan><tspan x="200" y="220">Alap</tspan></text></svg>`;
@@ -214,4 +181,19 @@ test("vak kör 5 L9: a régi `illustration` ábra helybecslése a főágéval az
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../shared/illustration-svg.ts", import.meta.url), "utf8");
   assert.ok(src.includes('const y = parseFloat(part.getAttribute("y") ?? text.getAttribute("y") ?? "0");'));
+});
+
+test("vak kör 6: a képes kártya rajzának feliratelrendezését EZ a szelet nem ítéli meg — sem a lejátszó, sem a gyártás (külön jegy, böngészős méréssel)", async () => {
+  const art = (attrs: string) => `<svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg"><circle cx="200" cy="120" r="60" fill="#d33"/><text x="200" ${attrs} font-size="20" text-anchor="middle">Nap</text></svg>`;
+  for (const attrs of ['y="28.8"', 'y="1.44em"', 'y="212" dy="52"', 'y="500"']) {
+    const params = { cards: [{ label: "egy", svg: art('y="28.8"') }, { label: "kettő", svg: art(attrs) }] };
+    assert.deepEqual(visualParamProblems("pictureCards", params), [], attrs);
+    assert.equal(sourceVisualProblems({ kind: "animate", animKind: "pictureCards", params }), null, `a lejátszó megjeleníti: ${attrs}`);
+  }
+  // A közös (a főágon is használt) helybecslő és az ábrák állomása ebben a szeletben változatlan.
+  const { readFileSync } = await import("node:fs");
+  const svgSrc = readFileSync(new URL("../shared/illustration-svg.ts", import.meta.url), "utf8");
+  assert.ok(svgSrc.includes('const y = parseFloat(part.getAttribute("y") ?? text.getAttribute("y") ?? "0");'));
+  const patch = readFileSync(new URL("../server/studio/visual-patch.ts", import.meta.url), "utf8");
+  assert.ok(patch.includes("const problems = visualParamProblems(v.animKind, v.params);"));
 });

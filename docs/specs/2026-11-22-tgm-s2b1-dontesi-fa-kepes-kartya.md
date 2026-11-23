@@ -87,3 +87,8 @@ csomópont. `pictureCards` `{ cards: 2..8 × { label ≤ 40, svg ≤ 6000 (a meg
   főág szerinti marad; a szelet nem módosítja (a KI állapot főági azonossága). A képes kártyák gyártási ellenőrzése csak a biztosan
   kiszámolható helyet ítéli meg (egység nélküli `x` / `y`, nincs `dx` / `dy`). **Ismert korlát:** az `em` / `ex` / `px` / `%` egységgel
   vagy eltolással pozicionált kártyafelirat kilógását a kapu nem ítéli meg — pontos méréshez böngészős `getBBox` kellene (külön jegy).
+- **Vak kör 6 — a kártyák feliratelrendezésének ellenőrzése KIKERÜLT ebből a szeletből (tulajdonosi döntés 2026-11-23):** három
+  egymást követő körben a szöveges becslés mindig új hibát hozott (olvasási út, közös becslő, díszítő elem koordinátája). A fenti három
+  bejegyzés (review #533 „kilógó felirat”, vak kör 4 L8, vak kör 5 L9) ezzel tárgytalan: sem a lejátszó, sem a gyártás nem ítéli meg a
+  kártya rajzának feliratelrendezését; a közös `illustrationLayoutProblems` és az ábrák állomása (`visual-patch.ts`) a főág szerinti.
+  **Követő jegy:** kártya-feliratelrendezés böngészős méréssel (`getBBox`), saját tervvel és PR-ral.

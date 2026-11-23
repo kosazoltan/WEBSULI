@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ANIM_KINDS, legacyAnimKindSchema, modelBlockSchema, type Block, type Lesson } from "../../shared/lesson-schema";
-import { renderedVisualTexts, visualAuthoringProblems } from "../../shared/lesson-visual-params";
+import { renderedVisualTexts, visualParamProblems } from "../../shared/lesson-visual-params";
 import { sanitizeIllustration, ungroundedLabels } from "../../shared/illustration-svg";
 import { blockText, checkGrounding } from "./grounding";
 import type { MapConcept } from "./coverage";
@@ -66,8 +66,7 @@ export function applyVisualPatch(original: Lesson, json: unknown, concepts: Read
       if (!parsed.success) { rejected.push(`${where}: ${parsed.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`); continue; }
       const v = parsed.data;
       const sourceVisualId = "sourceVisualId" in v ? v.sourceVisualId : undefined;
-      // Gyártási kapu: a kirajzolhatóságon felül a gyártás minőségi szabályai (pl. a képes kártya kilógó felirata).
-      const problems = visualAuthoringProblems(v.animKind, v.params);
+      const problems = visualParamProblems(v.animKind, v.params);
       let params = v.params;
       let contrastNote: string | null = null;
       if (v.animKind === "illustration" && !problems.length) {

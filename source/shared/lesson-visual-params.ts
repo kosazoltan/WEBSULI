@@ -256,29 +256,6 @@ export function visualParamProblems(kind: string, params: unknown): string[] {
   return parsed.success ? [] : parsed.error.issues.map((i) => `${kind}.${i.path.join(".") || "params"}: ${i.message}`);
 }
 
-/**
- * A GYÁRTÁSI kapu ellenőrzése (az ábrák állomása: `server/studio/visual-patch.ts`): a kirajzolhatóságon (`visualParamProblems`) felül
- * minőségi szabályok, amelyek NEM érvényesek a tárolt lecke megjelenítésére. Review #533 (Codex, Vercel, Copilot) + vak kör 4 (L8): a
- * képes kártya rajzának kilógó felirata a gyártásban visszamegy javításra, de a lejátszó (`sourceVisualProblems`) a már tárolt kártyát
- * emiatt nem rejtheti el — a két út ezért külön függvény.
- */
-export function visualAuthoringProblems(kind: string, params: unknown): string[] {
-  const problems = visualParamProblems(kind, params);
-  if (problems.length || kind !== "pictureCards") return problems;
-  const parsed = pictureCardsParamsSchema.safeParse(params);
-  if (!parsed.success) return problems;
-  return parsed.data.cards.flatMap((card, index) => {
-    const check = sanitizeIllustration(card.svg);
-    if (!check.ok) return check.problems.map((p) => `pictureCards.cards.${index}.svg: ${p}`);
-    // Vak kör 5 (L9): a közös helybecslő (`illustrationLayoutProblems`) változatlan — csak egység nélküli, eltolás nélküli helyet tud
-    // megítélni. Amit nem tud biztosan kiszámolni (em / ex / px / % egység, dx / dy eltolás), azt itt NEM ítéljük meg (nincs hamis
-    // riasztás, és a kilógást ilyenkor nem állítjuk) — a rajz megjelenik, az ellenőrzés kimarad.
-    if (!PLAIN_TEXT_POSITIONS.test(check.svg)) return [];
-    return illustrationLayoutProblems(check.svg).map((p) => `pictureCards.cards.${index}.svg: ${p}`);
-  });
-}
-/** Igaz, ha a rajzban nincs `dx` / `dy` attribútum, és minden `x` / `y` attribútum egység nélküli szám (vagy számlista). */
-const PLAIN_TEXT_POSITIONS = /^(?![\s\S]*\s(?:dx|dy)=)(?![\s\S]*\s[xy]="[^"]*[A-Za-z%][^"]*")[\s\S]*$/;
 
 export function parseVisualParams<K extends VisualParamKind>(kind: K, params: unknown): z.infer<(typeof VISUAL_PARAM_SCHEMAS)[K]> | null {
   const parsed = VISUAL_PARAM_SCHEMAS[kind].safeParse(params);
