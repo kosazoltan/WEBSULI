@@ -1366,16 +1366,19 @@ describe("P-020 — játékos-fiók postafiókonként egyedi (normalizált Gmail
       const migration = readFileSync(new URL("../migrations/0045_player_email_key.sql", import.meta.url), "utf8");
       await client.query(migration);
       await client.query(migration);
-      const rows = (await client.query<{ email: string; email_key: string; email_key_conflict: boolean }>(
-        `SELECT email, email_key, email_key_conflict FROM player_accounts ORDER BY email`)).rows;
+      const rows = (await client.query<{ email: string; email_key: string; email_key_dup: number }>(
+        `SELECT email, email_key, email_key_dup FROM player_accounts ORDER BY email`)).rows;
       assert.equal(rows.length, seed.length, "egyetlen sor sem törlődött / olvadt össze");
       for (const r of rows) assert.equal(r.email_key, accountEmailKey(r.email), `SQL ↔ TS kulcs: ${r.email}`);
-      assert.deepEqual(rows.filter((r) => r.email_key_conflict).map((r) => r.email).sort(),
-        ["p.020utkozes@gmail.com", "p020utkozes+x@googlemail.com", "p020utkozes@gmail.com"], "csak a Gmail-ütközés jelölt");
+      const group = rows.filter((r) => r.email_key === "p020utkozes@gmail.com");
+      assert.deepEqual(group.map((r) => r.email_key_dup).sort(), [0, 1, 2], "a Gmail-ütközés sorszámot kap (a legrégebbi 0)");
+      assert.deepEqual(rows.filter((r) => r.email_key !== "p020utkozes@gmail.com").map((r) => r.email_key_dup), [0, 0, 0], "a többi sor 0");
       const idx = (await client.query<{ indexdef: string }>(`SELECT indexdef FROM pg_indexes WHERE schemaname = 'p020_mig' AND indexname = 'player_accounts_email_key_unique'`)).rows;
       assert.equal(idx.length, 1);
-      assert.match(idx[0]!.indexdef, /UNIQUE INDEX[\s\S]*WHERE \(NOT email_key_conflict\)/);
-      await assert.rejects(client.query(`INSERT INTO player_accounts (email) VALUES ('p020-egyedi@pelda.hu')`), (e: { code?: string }) => e.code === "23505");
+      assert.match(idx[0]!.indexdef, /UNIQUE INDEX[\s\S]*\(email_key, email_key_dup\)$/);
+      // Copilot review #554: a meglévő ütköző csoport MELLÉ sem fér új alias (közvetlen INSERT / régi alkalmazáspéldány sem).
+      await assert.rejects(client.query(`INSERT INTO player_accounts (email) VALUES ('p020utkozes+y@gmail.com')`), (e: { code?: string }) => e.code === "23505");
+      await assert.rejects(client.query(`INSERT INTO player_accounts (email) VALUES ('P020-Egyedi@pelda.hu ')`), (e: { code?: string }) => e.code === "23505");
     } finally {
       await client.query("RESET search_path; DROP SCHEMA IF EXISTS p020_mig CASCADE").catch(() => undefined);
       client.release();
@@ -1384,13 +1387,14 @@ describe("P-020 — játékos-fiók postafiókonként egyedi (normalizált Gmail
 
   it("E6: meglévő ütközés → admin-lista (maszkolt, csoportonként), a belépés a legrégebbire old fel, új fiók nem jön létre; nem admin 401", async () => {
     await dbPool.query(
-      `INSERT INTO player_accounts (email, email_verified_at, created_at, email_key_conflict) VALUES
-         ('p.020admin@gmail.com', now(), now() - interval '2 days', true), ('p020admin+r@gmail.com', now(), now() - interval '1 day', true)`,
+      `INSERT INTO player_accounts (email, email_verified_at, created_at, email_key_dup) VALUES
+         ('p.020admin@gmail.com', now(), now() - interval '2 days', 0), ('p020admin+r@gmail.com', now(), now() - interval '1 day', 1)`,
     );
     const [oldest] = await q<{ id: string }>(`SELECT id FROM player_accounts WHERE email = 'p.020admin@gmail.com'`);
     assert.equal(await loginId("p020admin@gmail.com"), oldest!.id, "a legrégebbi ütköző fiók");
     assert.equal(await loginId("p020admin+r@gmail.com"), (await q<{ id: string }>(`SELECT id FROM player_accounts WHERE email = 'p020admin+r@gmail.com'`))[0]!.id, "pontos egyezés előnyben");
     assert.equal((await rowsByKey("p020admin@gmail.com")).length, 2, "nincs új (harmadik) fiók, nincs összevonás");
+    await assert.rejects(dbPool.query(`INSERT INTO player_accounts (email) VALUES ('p020admin+z@gmail.com')`), (e: { code?: string }) => e.code === "23505", "a csoport mellé közvetlen INSERT sem");
     const admin = await adminClient();
     const r = await admin.request("GET", "/api/admin/game-accounts/email-collisions");
     assert.equal(r.status, 200, r.text);
@@ -1403,6 +1407,49 @@ describe("P-020 — játékos-fiók postafiókonként egyedi (normalizált Gmail
     const guest = new Client(app.base);
     await guest.fetchCsrf();
     assert.equal((await guest.request("GET", "/api/admin/game-accounts/email-collisions")).status, 401);
+  });
+
+  it("Codex / Copilot / Vercel review #554: a `users` admin-tiltás a POSTAFIÓKRA hat — aliasra oldódó fiók belépéskor ÉS a későbbi kéréseknél is tiltott (kód és Google)", async () => {
+    const key = playerAuthKey();
+    const email = normalizeEmail("p020.userban+a@gmail.com")!;
+    const eh = emailHash(key, email);
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, "20202021"), linkHash: linkHash(key, generateLinkToken()) });
+    const c = new Client(app.base);
+    assert.equal((await c.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "20202021" })).status, 200);
+    await c.fetchCsrf();
+    assert.equal((await c.request("GET", "/api/player/me")).status, 200, "még nem tiltott");
+    await dbPool.query(`INSERT INTO users (id, email, password, is_admin, is_banned) VALUES ('p020-userban', 'P020UserBan@GoogleMail.com', 'x', false, true)`);
+    try {
+      assert.equal((await c.request("GET", "/api/player/me")).status, 403, "a meglévő munkamenet a következő kérésnél tiltott");
+      const viaCanonical = new Client(app.base);
+      const eh2 = emailHash(key, "p020userban@gmail.com");
+      await createPlayerStore(dbPool).insertCode({ emailNormalized: "p020userban@gmail.com", emailHash: eh2, limitHash: limitHash(key, "p020userban@gmail.com"), codeHash: codeHash(key, eh2, "20202022"), linkHash: linkHash(key, generateLinkToken()) });
+      assert.equal((await viaCanonical.request("POST", "/api/player/auth/verify", { kind: "code", email: "p020userban@gmail.com", code: "20202022" })).status, 403);
+      await viaCanonical.fetchCsrf();
+      assert.equal((await viaCanonical.request("GET", "/api/player/me")).status, 403, "a belépés utáni munkamenet sem használható");
+      const g = await createPlayerAccountStore(dbPool).upsertGooglePlayer("g-sub-p020-userban", "p020userban@gmail.com");
+      assert.deepEqual([g.kind, g.kind === "OK" && g.banned], ["OK", true], "Google-út: tiltott");
+      assert.equal((await rowsByKey("p020userban@gmail.com")).length, 1, "egy fiók");
+    } finally {
+      await dbPool.query(`DELETE FROM users WHERE id = 'p020-userban'`);
+    }
+  });
+
+  it("Codex review #554: a fióktörlés a postafiók ALIASAIRA kért, függő belépőkódokat / linkeket is visszavonja", async () => {
+    const key = playerAuthKey();
+    const id = await loginId("p020torles@gmail.com");
+    const alias = "p.020torles+x@googlemail.com";
+    const ah = emailHash(key, alias);
+    const token = generateLinkToken();
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: alias, emailHash: ah, limitHash: limitHash(key, alias), codeHash: codeHash(key, ah, "20202023"), linkHash: linkHash(key, token) });
+    const other = "p020-idegen-kod@pelda.hu";
+    const oh = emailHash(key, other);
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: other, emailHash: oh, limitHash: limitHash(key, other), codeHash: codeHash(key, oh, "20202024"), linkHash: linkHash(key, generateLinkToken()) });
+    const deleted = await createPlayerAccountStore(dbPool).deleteAccount(id, (e) => allPurposeEmailHashes(key, e));
+    assert.equal(deleted?.account, 1);
+    assert.equal((await q(`SELECT 1 FROM player_auth_codes WHERE link_hash = $1`, [linkHash(key, token)])).length, 0, "az alias függő linkje törölve");
+    assert.equal((await q(`SELECT 1 FROM player_auth_codes WHERE email_hash = $1`, [oh])).length, 1, "idegen cím kódja érintetlen");
+    assert.equal((await rowsByKey("p020torles@gmail.com")).length, 0);
   });
 });
 

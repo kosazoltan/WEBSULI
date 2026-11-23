@@ -8,10 +8,11 @@
 import type { Pool, PoolClient } from "pg";
 import {
   CODE_RETENTION_MS, CODE_TTL_MS, DAY_MS, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
-  START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_WINDOW_MS, loginEmailDailyMax,
+  START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_WINDOW_MS, accountEmailKey, loginEmailDailyMax, mailboxKeySql,
 } from "./codes";
 import {
   bannedVariantId, countForeignBanKeys, createPlayerAccountStore, deletedBanFingerprint, existingAccountIdByMailbox, lockBanCanonical, lockDeletedBanRow,
+  userBannedSql,
 } from "./account-store";
 
 export type CodeInput = { emailNormalized: string; emailHash: string; limitHash: string; codeHash: string; linkHash: string };
@@ -48,8 +49,9 @@ const since = (param: string) => `created_at > now() - (${param}::int * interval
 export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
   async function userBannedByEmail(emailNormalized: string): Promise<boolean> {
     const { rows } = await pool.query<{ banned: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM users WHERE lower(email) = $1 AND is_banned) AS banned`,
-      [emailNormalized],
+      // P-020: a postafiókra (gmail-pont, `+címke`, googlemail) — ugyanaz a kulcs, mint a fiók `email_key`-e.
+      `SELECT EXISTS (SELECT 1 FROM users WHERE is_banned AND ${mailboxKeySql("email")} = $1) AS banned`,
+      [accountEmailKey(emailNormalized)],
     );
     return rows[0]?.banned === true;
   }
@@ -215,9 +217,8 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
         );
         return rows[0]!;
       });
-      // A meglévő admin-tiltás (`users.is_banned`) a megadott ÉS a fiók tárolt címére is (P-020: a kettő aliasként eltérhet).
-      const banned = row.banned_at !== null || (await userBannedByEmail(emailNormalized))
-        || (row.email !== emailNormalized && (await userBannedByEmail(row.email)));
+      // A meglévő admin-tiltás (`users.is_banned`) a postafiókra (P-020: a megadott és a tárolt cím aliasként eltérhet).
+      const banned = row.banned_at !== null || (await userBannedByEmail(emailNormalized));
       return { id: row.id, nickname: row.nickname, banned };
     },
 
@@ -225,7 +226,7 @@ export function createPlayerStore(pool: Pick<Pool, "query" | "connect">) {
     async getPlayer(id: string): Promise<PlayerRow | null> {
       const { rows } = await pool.query<{ id: string; nickname: string | null; banned: boolean }>(
         `SELECT p.id, p.nickname,
-                (p.banned_at IS NOT NULL OR EXISTS (SELECT 1 FROM users u WHERE lower(u.email) = p.email AND u.is_banned)) AS banned
+                (p.banned_at IS NOT NULL OR ${userBannedSql("p")}) AS banned
            FROM player_accounts p WHERE p.id = $1`,
         [id],
       );

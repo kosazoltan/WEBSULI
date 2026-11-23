@@ -6,7 +6,7 @@
  */
 import { createHash } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { accountEmailKey, banFingerprint, banKeyId, banRetentionMonths, limitKey, playerBanKey } from "./codes";
+import { accountEmailKey, banFingerprint, banKeyId, banRetentionMonths, limitKey, mailboxKeySql, playerBanKey } from "./codes";
 
 type Db = Pick<Pool, "query" | "connect">;
 
@@ -124,8 +124,16 @@ export type EmailCollisionGroup = {
   accounts: { id: string; email: string; nickname: string | null; createdAt: Date; lastSeenAt: Date | null; banned: boolean }[];
 };
 
-/** A tiltás egységes kifejezése (saját `banned_at` vagy a meglévő admin-tiltás ugyanarra a címre). */
-const BANNED_SQL = `(p.banned_at IS NOT NULL OR EXISTS (SELECT 1 FROM users u WHERE lower(u.email) = p.email AND u.is_banned))`;
+/**
+ * A meglévő admin-tiltás (`users.is_banned`) a játékos-fiók POSTAFIÓKJÁRA (P-020, Codex / Copilot / Vercel review #554): a
+ * `users.email` kanonikus kulcsa (`mailboxKeySql`) = a fiók `email_key`-e — így egy tiltott Gmail-cím aliasra oldódó fiókja is
+ * tiltott (belépéskor ÉS minden későbbi kérésnél, `getPlayer`). `alias`: a `player_accounts` tábla aliasa a lekérdezésben.
+ */
+export const userBannedSql = (alias: string) =>
+  `EXISTS (SELECT 1 FROM users u WHERE u.is_banned AND ${mailboxKeySql("u.email")} = ${alias}.email_key)`;
+
+/** A tiltás egységes kifejezése (saját `banned_at` vagy a meglévő admin-tiltás ugyanarra a postafiókra). */
+const BANNED_SQL = `(p.banned_at IS NOT NULL OR ${userBannedSql("p")})`;
 
 export type AccountView = {
   id: string; email: string; nickname: string | null; avatarKey: string | null; googleLinked: boolean;
@@ -349,7 +357,13 @@ export function createPlayerAccountStore(pool: Db) {
             [deletedBanFingerprint(email), banKeyId(playerBanKey()), id],
           );
         }
-        const codes = await client.query(`DELETE FROM player_auth_codes WHERE email_hash = ANY($1::text[])`, [emailHashesOf(email)]);
+        // P-020 (Codex review #554): a postafiók ALIASAIRA kért, még be nem váltott kódok / linkek is (a nyílt cím beváltásig
+        // megvan), különben egy függő alias-link a törlés után új fiókot nyithatna.
+        const codes = await client.query(
+          `DELETE FROM player_auth_codes WHERE email_hash = ANY($1::text[])
+              OR (used_at IS NULL AND email_normalized <> '' AND ${mailboxKeySql("email_normalized")} = $2)`,
+          [emailHashesOf(email), accountEmailKey(email)],
+        );
         const sessions = await client.query(`DELETE FROM session WHERE sess -> 'player' ->> 'id' = $1`, [id]);
         const account = await client.query(`DELETE FROM player_accounts WHERE id = $1`, [id]);
         return { account: account.rowCount ?? 0, codes: codes.rowCount ?? 0, sessions: sessions.rowCount ?? 0 };

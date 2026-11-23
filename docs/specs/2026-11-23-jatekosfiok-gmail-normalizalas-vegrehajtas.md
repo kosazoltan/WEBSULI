@@ -25,3 +25,7 @@
 ## Végrehajtási napló
 
 - 2026-11-23 — terv + végrehajtási utasítás kész; RED/GREEN eredmények a PR-leírásban.
+- 2026-11-23 — review #554 (Codex P1/P2, Copilot, Vercel): (1) `users` admin-tiltás postafiókra (`userBannedSql`,
+  `mailboxKeySql`) belépéskor és kérésenként; (2) törléskor az alias függő kódjai is; (3) részleges index helyett
+  (email_key, email_key_dup) egyedi index — a jelölt csoport mellé sem fér új alias, és a keresést is kiszolgálja. RED: a két
+  új DB-teszt a régi szerverkóddal bukott; GREEN: `test:learning-db` 267/267.

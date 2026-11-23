@@ -23,17 +23,22 @@ vonja össze és NEM törli automatikusan, hanem listázza kézi összevonáshoz
    (a `+címke` MEGMARAD, mert más szolgáltatóknál nem garantált, hogy ugyanaz a postafiók). A `limitKey` változatlan
    (korlátok / tiltás továbbra is a tágabb kulcson).
 2. **Séma (migráció 0045)**: `email_key` GENERÁLT (`GENERATED ALWAYS AS (…) STORED`) oszlop ugyanazzal a szabállyal SQL-ben —
-   nem felejthető el beírni, a régi kód beszúrása is kitölti, a visszatöltés automatikus. `email_key_conflict boolean NOT NULL
-   DEFAULT false`: a migráció a meglévő ütköző sorokat `true`-ra jelöli. Egyedi RÉSZLEGES index:
-   `player_accounts_email_key_unique ON (email_key) WHERE NOT email_key_conflict` — meglévő ütközésen nem bukik, új ütközést
-   nem enged.
+   nem felejthető el beírni, a régi kód beszúrása is kitölti, a visszatöltés automatikus. `email_key_dup smallint NOT NULL
+   DEFAULT 0`: a migráció a meglévő ütköző csoport sorait sorszámozza (legrégebbi 0, a többi 1, 2, …). Egyedi index a PÁRON:
+   `player_accounts_email_key_unique ON (email_key, email_key_dup)` — meglévő ütközésen nem bukik, de minden új sor (0) ütközik
+   a csoport legrégebbi sorával, így új alias adatbázis-szinten sem jöhet létre (a régi alkalmazáspéldányból sem); a kulcs
+   szerinti keresést is kiszolgálja. (Az első változat részleges indexe — `WHERE NOT email_key_conflict` — a jelölt csoport
+   mellé engedett volna új sort; Copilot review #554.)
 3. **Belépés**: a fiók feloldása `email_key` szerint (a kanonikus zár alatt). Van már fiók → AZ a fiók (a tárolt `email` nem
    íródik át; ütköző csoportnál a pontosan egyező cím, különben a legrégebbi); nincs → új sor. Google-út ugyanígy (ismert
    `sub` → az a fiók; különben `email_key` szerinti fiók, `google_sub` csak ha még nincs).
 4. **Ütközés-lista**: admin végpont `GET /api/admin/game-accounts/email-collisions` — csoportonként a fiókok (azonosító,
    becenév, MASZKOLT cím, létrehozás, utolsó belépés, tiltott-e). A kulcs maga nem megy ki (cím-tartalmú). Kézi összevonás után
    a megmaradt sor jelölője maradhat (a lista csak a ≥ 2 sorú csoportokat mutatja).
-5. Naplóba valódi cím nem kerül; a tesztek szintetikus címekkel (`pelda.hu`, engedélylistás szintetikus Gmail-szavak).
+5. **Admin-tiltás postafiókra** (review #554): a `users.is_banned` összevetése a `users.email` kanonikus kulcsán
+   (`mailboxKeySql`) = a fiók `email_key`-e — belépéskor, a kérésenkénti őrben (`getPlayer`), az admin-listában és az adventi
+   alany-feloldásban is. **Törlés**: a postafiók aliasaira kért, még be nem váltott kódok / linkek is törlődnek.
+6. Naplóba valódi cím nem kerül; a tesztek szintetikus címekkel (`pelda.hu`, engedélylistás szintetikus Gmail-szavak).
 
 ## Elfogadás
 
@@ -48,4 +53,4 @@ vonja össze és NEM törli automatikusan, hanem listázza kézi összevonáshoz
 ## Kockázat / visszaállítás
 
 Additív migráció. Down: `DROP INDEX IF EXISTS player_accounts_email_key_unique; ALTER TABLE player_accounts DROP COLUMN
-IF EXISTS email_key_conflict, DROP COLUMN IF EXISTS email_key;` — csak a kód visszavonásával együtt.
+IF EXISTS email_key_dup, DROP COLUMN IF EXISTS email_key;` — csak a kód visszavonásával együtt.

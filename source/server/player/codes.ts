@@ -93,6 +93,15 @@ export function accountEmailKey(normalizedEmail: string): string {
   return `${local}@gmail.com`;
 }
 
+/**
+ * P-020: az `accountEmailKey` SQL-megfelelője egy oszlop-kifejezésre (a 0045 generált oszlopa ugyanezt a szöveget tartalmazza —
+ * egységteszt ellenőrzi). A `users` admin-tiltásának postafiók-szintű összevetéséhez (`users.email` nem kanonikus).
+ */
+export function mailboxKeySql(column: string): string {
+  const e = `lower(btrim(${column}))`;
+  return `CASE WHEN split_part(${e}, '@', 2) IN ('gmail.com', 'googlemail.com') THEN replace(split_part(split_part(${e}, '@', 1), '+', 1), '.', '') || '@gmail.com' ELSE ${e} END`;
+}
+
 /** A hash-kulcs: HMAC(SESSION_SECRET, "player-auth-v1"). A titok rotációja a függő kódokat érvényteleníti (rövid életűek). */
 export function playerAuthKey(env: NodeJS.ProcessEnv = process.env): Buffer {
   const secret = env.SESSION_SECRET;

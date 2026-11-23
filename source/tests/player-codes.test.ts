@@ -9,7 +9,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   CODE_PATTERN, CODE_TTL_MS, DEFAULT_LOGIN_EMAIL_DAILY_MAX, LINK_TOKEN_PATTERN, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
-  START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, VERIFY_PER_IP_MAX, accountEmailKey, limitKey, loginEmailDailyMax,
+  START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, VERIFY_PER_IP_MAX, accountEmailKey, limitKey, loginEmailDailyMax, mailboxKeySql,
   banFingerprint, banRetentionMonths, codeHash, emailHash, generateCode, generateLinkToken, linkHash, normalizeEmail, playerAuthKey,
 } from "../server/player/codes";
 import { buildPlayerLoginEmail, playerLinkBaseUrl, playerLoginLink } from "../server/player/email-template";
@@ -227,10 +227,13 @@ describe("P-020 — migráció 0045 (postafiók-kulcs, ütközés-biztos egyedi 
     assert.match(sqlText, /Visszaállítás \(down\)[\s\S]*DROP INDEX IF EXISTS player_accounts_email_key_unique/);
   });
 
-  it("a kulcs generált oszlop, az egyedi index részleges (a jelölt, meglévő ütközéseken nem bukik)", () => {
-    assert.match(code, /ADD COLUMN IF NOT EXISTS email_key varchar\(254\) GENERATED ALWAYS AS/);
-    assert.match(code, /CREATE UNIQUE INDEX IF NOT EXISTS player_accounts_email_key_unique ON player_accounts \(email_key\) WHERE NOT email_key_conflict/);
-    assert.match(code, /'gmail\.com', 'googlemail\.com'/);
+  it("a kulcs generált oszlop (= mailboxKeySql, a Drizzle-sémában is); az egyedi index a (kulcs, sorszám) páron — új alias nem fér be", () => {
+    assert.ok(code.includes(`ADD COLUMN IF NOT EXISTS email_key varchar(254) GENERATED ALWAYS AS (${mailboxKeySql("email")}) STORED`), "SQL = mailboxKeySql");
+    const schemaText = readFileSync(new URL("../shared/schema.ts", import.meta.url), "utf8");
+    assert.ok(schemaText.includes(mailboxKeySql("email")), "a Drizzle-séma generált kifejezése = mailboxKeySql");
+    assert.match(code, /ADD COLUMN IF NOT EXISTS email_key_dup smallint NOT NULL DEFAULT 0/);
+    assert.match(code, /CREATE UNIQUE INDEX IF NOT EXISTS player_accounts_email_key_unique ON player_accounts \(email_key, email_key_dup\)/);
+    assert.doesNotMatch(code, /UNIQUE INDEX[^;]*WHERE/, "nem részleges: a jelölt csoport mellé sem fér új sor");
   });
 });
 

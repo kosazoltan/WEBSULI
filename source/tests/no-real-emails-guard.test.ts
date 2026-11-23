@@ -82,7 +82,7 @@ const SYNTHETIC_GMAIL_LOCALS = new Set([
   // #475 (fix/jatek-fiok-tiltas-kulcsrotacio) új címei:
   "k1baliaselotte", "k1ketpeldany", "k1zaralias", "aliasproba", "limitp", "rotgoogle", "rotkod",
   // P-020 (feat/jatekosfiok-gmail-normalizalas) új címei:
-  "p020proba", "p020probab", "p020probaidx", "p020google", "p020utkozes", "p020admin",
+  "p020proba", "p020probab", "p020probaidx", "p020google", "p020utkozes", "p020admin", "p020userban", "p020torles",
 ]);
 const GMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
 

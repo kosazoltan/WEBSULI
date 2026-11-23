@@ -8,6 +8,7 @@ import type { Pool } from "pg";
 import { firstNameOf } from "../../shared/daily-reminder";
 import { adventDeviceId } from "../../shared/advent/contract";
 import { resolveLearner, type ResolvedLearner } from "../learners";
+import { userBannedSql } from "../player/account-store";
 import { playerAccountsEnabled } from "../player/require-player";
 import { getPlayerSessionId } from "../player/session";
 import type { AdventSubjectKind } from "./store";
@@ -46,7 +47,7 @@ export function defaultAdventIdentityDeps(pool: Pick<Pool, "query">): AdventIden
         `SELECT p.id, l.id AS learner_id, l.name AS learner_name, l.grade AS learner_grade
            FROM player_accounts p LEFT JOIN learners l ON l.id = p.linked_learner_id
           WHERE p.id = $1 AND p.banned_at IS NULL
-            AND NOT EXISTS (SELECT 1 FROM users u WHERE lower(u.email) = p.email AND u.is_banned)`,
+            AND NOT ${userBannedSql("p")}`,
         [playerId],
       );
       const row = found.rows[0];
