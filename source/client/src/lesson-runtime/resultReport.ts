@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
-import { quizRoundComplete } from "@shared/quiz-round";
+import { quizRoundComplete, roundActivityAt, roundTooOld } from "@shared/quiz-round";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -28,6 +28,9 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     // teljesen megválaszolt kör lezárás nélkül is megy (körönként egyszer: a jelző és a szerver egyedi kulcsa változatlan).
     const done = !!round.finishedAt || (kind === "quiz" && quizRoundComplete(round));
     if (!lessonId || !done || sending.current || !(ready || timedOut)) return;
+    // B1b (R2): az a LE NEM ZÁRT kör, amelynek az UTOLSÓ VÁLASZA 7 napnál régebbi, utólag nem megy el (a lezárt kör a tanuló döntése: az
+    // megy). A régen megnyitott, de ma megválaszolt kör megy — a korhatár nem a kvíz-fül első megnyitásához mér.
+    if (!round.finishedAt && roundTooOld(roundActivityAt(round), Date.now())) return;
     const roundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
     const flag = `${storageKey}:${kind}:sent:${roundId}`;
     try { if (localStorage.getItem(flag)) return; } catch { /* privát módban a szerver egyedi kulcsa véd */ }
@@ -37,10 +40,12 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         const fingerprint = await getFingerprint().catch(() => undefined);
         // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi.
         const learner = getLearnerToken();
+        // B1b: a kör kezdete és (kvíznél) az utolsó válasz ideje — a szerver (B1a, #532) opcionális mezőként fogadja, a levél dátumsorához.
+        const times = { ...(round.startedAt > 0 ? { startedAt: round.startedAt } : {}), ...(kind === "quiz" && round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
         const body = kind === "tasks"
-          ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) }
+          ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...times }
           // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
-          : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) };
+          : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...times };
         // J5 (spec 2026-11-10-gyartas-meres): ingadozó mobilhálózaton az eredmény ne vesszen el — hálózati hibánál, időtúllépésnél
         // és 5xx-nél legfeljebb 3 újrapróbálás (növekvő várakozással). Biztonságos: a szerver a kört egyedi kulccsal egyszer rögzíti.
         await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: RESULT_REPORT_RETRIES });

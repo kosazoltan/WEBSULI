@@ -1,0 +1,8 @@
+# Cogni-format modulonkénti memória: modul → forrás, API, adat, gyakori hibák
+
+cogni:
+  kind: module_index
+  name: websuli-modules
+  generated: 2026-11-22
+
+  modules: []

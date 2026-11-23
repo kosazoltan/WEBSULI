@@ -43,6 +43,7 @@ import "./lesson-design.css";
 import { DESIGN_THEMES, DESIGN_TOPBAR_TAGLINE, designThemeForClassroom } from "@shared/lesson-design";
 import { BAND_ICON } from "@/lib/band-icons";
 import { VerdictFeedback } from "./VerdictFeedback";
+import { FeedbackVarietyContext } from "./feedback-variety";
 import { explainIsLong, explainParts } from "./explain-paragraphs";
 import { displayHeading } from "@shared/lesson-ui-text";
 
@@ -243,7 +244,7 @@ function CheckBlock({
 
       {/* Feedback is written per option, so a wrong pick teaches instead of just failing. */}
       {picked !== null && (
-        <VerdictFeedback right={picked === block.correctIndex} text={block.feedbackPerOption[picked]} testId="check-feedback" />
+        <VerdictFeedback right={picked === block.correctIndex} text={block.feedbackPerOption[picked]} testId="check-feedback" question={{ text: block.question, options: block.options }} />
       )}
 
       {block.hint && !correct && (
@@ -369,6 +370,8 @@ function LessonSection({
   onTryPersist: (blockIdx: number, snap: TrySnapshot) => void;
 }) {
   const theme = BAND_THEME[band];
+  // S5b (docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 11. szakasz): a jelölt lecke nyitóblokkjának fejléce a kiosztott formából.
+  const openingForm = useContext(FeedbackVarietyContext)?.marker.openingForm;
   const [answers, setAnswers] = useState<Record<number, number>>(initialAnswers);
 
   const pick = useCallback(
@@ -413,7 +416,7 @@ function LessonSection({
           onPick={(pickedIndex) => pick(bi, pickedIndex)}
           tryPersisted={tryBlocks[String(bi)]}
           onTryPersist={(snap) => onTryPersist(bi, snap)}
-          label={blockLabel(section.blocks, bi, sectionIdx, band, classroom, isLastSection)}
+          label={blockLabel(section.blocks, bi, sectionIdx, band, classroom, isLastSection, openingForm)}
         />
       ))}
 
@@ -508,6 +511,15 @@ export function LessonRuntime({
   const designTheme = designThemeForClassroom(lesson.classroom);
   const clipHeadings = useMemo(() => lesson.sections.map((s) => s.heading), [lesson.sections]);
   // Változatos képválasztás: a lecke azonosítója szerint rotál (ugyanaz a lecke mindig ugyanazt kapja).
+  // Spec 2026-11-20-tgm-valtozatossag-abrak (S5a): csak a változatossági jelölővel mentett leckén ad kódszótári visszajelzés-nyitást.
+  // S5a vak kör 1 (L3): a jelölt lecke előre felcsatolt, udvarias élő régiója — ide kerül a friss visszajelzés szövege.
+  const [feedbackAnnouncement, setFeedbackAnnouncement] = useState("");
+  // S5a vak kör 2 (L4): csak FRISS válasz jelentődik be — a bejelentést a tanuló gombnyomása élesíti (rövid ablakra); a mentett válasz
+  // felcsatoláskori helyreállítása (újratöltés, rejtett fül) néma marad.
+  const announceArmedAt = useRef(0);
+  const announceFeedback = useCallback((text: string) => { if (Date.now() - announceArmedAt.current < 2000) { announceArmedAt.current = 0; setFeedbackAnnouncement(text); } }, []);
+  const armAnnouncement = useCallback((event: { target: EventTarget | null }) => { if (event.target instanceof Element && event.target.closest("button")) announceArmedAt.current = Date.now(); }, []);
+  const feedbackVariety = useMemo(() => lesson.variety ? { marker: lesson.variety, band, mapId: lesson.mapId, announce: announceFeedback } : null, [lesson.variety, band, lesson.mapId, announceFeedback]);
   const art = useMemo(() => lessonArtFor({ ...lesson, seed: lessonId ?? persistId ?? lesson.title }, designTheme), [lesson, designTheme, lessonId, persistId]);
   // Ikonkészlet: a mentéskor az adatbázisból rendelt ikon elsőbbséget kap; régi leckénél a katalógus-választás marad.
   // Ha a lecke évfolyama a mentés óta megváltozott (javítás), a más sávú ikon nem jelenik meg.
@@ -562,7 +574,9 @@ export function LessonRuntime({
     // nem jelenik meg (tulajdonosi döntés 2026-10-16) — a `data-experience` állandó, így a régi téma- és világszabályok nem illeszkednek.
     <DesignBandContext.Provider value={designTheme}>
     <ChoiceLayoutContext.Provider value={choiceLayout}>
-    <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography}>
+    <FeedbackVarietyContext.Provider value={feedbackVariety}>
+    <div className="min-h-full" data-band={band} data-learning-age={learningAgeGroup(lesson.classroom)} data-experience="websuli" data-ws-theme={designTheme} style={typography} onClickCapture={feedbackVariety ? armAnnouncement : undefined}>
+      {feedbackVariety &&<div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="verdict-announcer">{feedbackAnnouncement}</div>}
       <ClipProvider lessonId={lessonId} headings={clipHeadings} sections={lesson.sections} preset={clipsPreset}>
       <article className="mx-auto py-6 space-y-6" data-testid="lesson-runtime">
         {/* Websuli lecke-hős (docs/specs/2026-10-17-websuli-lecke-hos.md): a koncepciókép sávfejléce — jelvény, évfolyam, téma, mottó. */}
@@ -631,6 +645,7 @@ export function LessonRuntime({
       </article>
       </ClipProvider>
     </div>
+    </FeedbackVarietyContext.Provider>
     </ChoiceLayoutContext.Provider>
     </DesignBandContext.Provider>
   );

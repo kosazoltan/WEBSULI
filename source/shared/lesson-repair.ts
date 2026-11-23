@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { lessonSchema, modelLessonSchema } from "./lesson-schema";
+import { carryVarietyMarker } from "./lesson-feedback-openers";
 
 /** A reviewable candidate, never HTML disguised as a structured lesson. */
 export const lessonRepairSchema = z.object({
@@ -40,6 +41,17 @@ export type LessonRepair = z.infer<typeof lessonRepairSchema>;
  */
 export function modelLessonRepairSchema(sourceVisuals: boolean): z.ZodType<LessonRepair, z.ZodTypeDef, unknown> {
   return sourceVisuals ? lessonRepairSchema : lessonRepairSchema.extend({ candidate: modelLessonSchema(false) });
+}
+/**
+ * A frissen épített javítás lezárása (Vercel-review #530): a séma-ellenőrzés UTÁN a jelölt változatossági jelölője a TÁROLT lecke
+ * (`previousLesson`) jelölője lesz — a KI forrásábra-ág sémája a jelölőt eldobja, így nélküle a jelölt lecke előnézete eltérne az
+ * alkalmazott leckétől (az alkalmazás a jelölőt visszaírja). A modell kéretlen jelölője soha nem megy át.
+ */
+export function markRepairCandidate(repair: LessonRepair): LessonRepair {
+  return { ...repair, candidate: carryVarietyMarker(repair.candidate, repair.previousLesson) };
+}
+export function sealLessonRepair(sourceVisuals: boolean, input: unknown): LessonRepair {
+  return markRepairCandidate(modelLessonRepairSchema(sourceVisuals).parse(input));
 }
 export function parseLessonRepair(content?: string): LessonRepair | null {
   if (!content?.trim().startsWith("{")) return null;
