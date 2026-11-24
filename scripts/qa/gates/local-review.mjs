@@ -42,6 +42,43 @@ export const LOCKFILE = /(^|\/)package-lock\.json$|\.lock$/;
 /** Kockázatos utak: itt egyszeri felhős (Claude / Gemini) második vélemény AJÁNLOTT — nem kapu. */
 export const RISK = [/migrations?\//i, /schema\.ts$/, /auth|session|csrf|password|token|secret/i, /payment|stripe|billing/i, /email|mailer/i, /\.github\/workflows\//];
 
+/**
+ * A darabméretnél nagyobb hunk SORHATÁRON bomlik; minden töredék saját, számolt `@@ -régi,db +új,db @@` fejlécet és
+ * `töredék i/n` jelölést kap (docs/specs/2026-11-25-helyi-ellenor-toredek.md) — a karakterpozíciós vágás „csonka fájl” hamis
+ * leleteket szült (#587). Egyetlen, a keretnél hosszabb sor szélsőségként karakterre vágódik, de az is megjelölt töredék.
+ */
+export function splitHunk(hunk, max) {
+  const nlAt = hunk.indexOf('\n');
+  const head = nlAt < 0 ? hunk : hunk.slice(0, nlAt);
+  const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(head);
+  if (!m) { const out = []; for (let i = 0; i < hunk.length; i += max) out.push(hunk.slice(i, i + max)); return out; }
+  let oldLn = Number(m[1]); let newLn = Number(m[2]);
+  if (oldLn === 0) oldLn = 1; // új fájl: a 0,0 régi oldal után az első sor az 1.
+  const lines = hunk.slice(nlAt + 1).split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  const budget = Math.max(max - 80, 40);
+  const pieces = []; // { oStart, oCount, nStart, nCount, body }
+  let cur = null;
+  const flush = () => { if (cur && cur.body.length) pieces.push(cur); cur = null; };
+  for (const raw of lines) {
+    const segs = raw.length > budget ? Array.from({ length: Math.ceil(raw.length / budget) }, (_, i) => raw.slice(i * budget, (i + 1) * budget)) : [raw];
+    for (const [si, seg] of segs.entries()) {
+      if (!cur || cur.size + seg.length + 1 > budget) { flush(); cur = { oStart: oldLn, oCount: 0, nStart: newLn, nCount: 0, body: [], size: 0 }; }
+      cur.body.push(seg); cur.size += seg.length + 1;
+      if (si === segs.length - 1) { // a sor a végén számít egynek
+        const t = raw[0];
+        if (t === '+') { cur.nCount++; newLn++; } else if (t === '-') { cur.oCount++; oldLn++; } else if (t !== '\\') { cur.oCount++; cur.nCount++; oldLn++; newLn++; }
+      }
+    }
+  }
+  flush();
+  const n = pieces.length;
+  return pieces.map((p, i) => {
+    const o = p.oCount === 0 && Number(m[1]) === 0 ? '0,0' : `${p.oStart},${p.oCount}`;
+    return `@@ -${o} +${p.nStart},${p.nCount} @@ töredék ${i + 1}/${n} — a hunk a szomszédos darabban folytatódik${m[3]}\n${p.body.join('\n')}\n`;
+  });
+}
+
 /** Egységes diff → fájlonkénti darabok ({ file, text }). A túl nagy fájl-diff hunk-határokon bomlik, minden darab a fájl-fejléccel
  * kezdődik, így a modell a `@@ … +új,sor @@` fejlécből valós sorszámot ad (PR #541 Sourcery). Egyetlen óriás hunk karakterre vágva. */
 export function splitDiff(diff, max = CHUNK_CHARS, skipped = []) {
@@ -56,8 +93,8 @@ export function splitDiff(diff, max = CHUNK_CHARS, skipped = []) {
     for (const h of hunks) {
       if (cur.length + h.length > max && cur !== header) { out.push({ file, text: cur }); cur = header; }
       if (header.length + h.length > max) {
-        const step = Math.max(max - header.length, Math.ceil(max / 2)); // túl hosszú fejlécnél is pozitív lépés
-        for (let i = 0; i < h.length; i += step) out.push({ file, text: header + h.slice(i, i + step) });
+        if (cur !== header) { out.push({ file, text: cur }); cur = header; }
+        for (const piece of splitHunk(h, Math.max(max - header.length, Math.ceil(max / 2)))) out.push({ file, text: header + piece });
         continue;
       }
       cur += h;
@@ -80,6 +117,8 @@ export function buildPrompt(chunk) {
     'security issues (secrets, injection, auth bypass, personal data in logs/URLs), broken data contracts, timezone/date bugs,',
     'tests that were weakened or became tautological. Ignore style, naming, formatting, comments and Hungarian text content.',
     'Do NOT invent code that is not shown. If unsure, use severity "low". Use "high" only for a concrete, likely bug.',
+    'If the hunk header says "töredék i/n", this is a line-aligned slice of a larger hunk: the code continues in the neighbouring slices.',
+    'A missing start or end at a slice boundary is expected — never report truncation, unterminated expressions or syntax errors caused by it.',
     'Reply with JSON only: {"verdict":"PASS|CONCERNS|BLOCK","findings":[{"line":<new-file line or 0>,"severity":"high|medium|low","issue":"<one sentence: scenario and effect>"}]}',
     '',
     `FILE: ${chunk.file}`,

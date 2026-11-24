@@ -12,7 +12,9 @@ const DIFF = [
 test('splitDiff: fájlonként bont, a zárfájlt kihagyja, a nagy diffet darabolja', () => {
   const c = splitDiff(DIFF);
   assert.deepEqual(c.map((x) => x.file), ['src/a.ts', 'server/db/migrations/0001.sql']);
-  assert.equal(splitDiff(DIFF, 20).filter((x) => x.file === 'src/a.ts').length > 1, true);
+  // A töredékezés sorhatáron vág (2026-11-25-helyi-ellenor-toredek): a darabolás több soros hunkon mérhető.
+  const many = ['diff --git a/src/a.ts b/src/a.ts', '--- a/src/a.ts', '+++ b/src/a.ts', '@@ -1,6 +1,6 @@', ...Array.from({ length: 6 }, (_, i) => `+sor${i}`.padEnd(30, 'y'))].join('\n');
+  assert.equal(splitDiff(many, 120).filter((x) => x.file === 'src/a.ts').length > 1, true);
 });
 
 test('riskyFiles: a migráció kockázatos, a sima forrás és a dokumentáció nem', () => {
