@@ -4,14 +4,28 @@
  * ehhez vetődik, eltérésnél (újrapárosítás, kilépés) a kérés párosítás nélkül megy — a kör az új tanulónak nem tulajdonítható. A fiók
  * címkéje (R31) a szerveroldali támogatással együtt (B7) kerül ide. Tiszta modul: a tároló és a token-forrás befecskendezett (tesztelhető).
  */
+import { sha256Hex } from "./sha256";
+
 export type RoundOwner = { learnerTag: string | null };
+/** PR #574 review: kriptográfiai erősségű tokenlenyomat (SHA-256, előtaggal); a korábbi rövid lenyomatú rekord ismeretlennek számít. */
+export const learnerTagOf = (token: string) => `s256:${sha256Hex(`websuli-learner|${token}`)}`;
+const TAG_SHAPE = /^s256:[0-9a-f]{64}$/;
 type OwnerStorage = { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void };
 
-export function roundHasActivity(kind: "tasks" | "quiz", round: { picks: Record<string, number>; answers: Record<string, string> }): boolean {
-  return kind === "quiz" ? Object.keys(round.picks).length > 0 : Object.values(round.answers).some(a => a.trim() !== "");
+type RoundShape = { picks: Record<string, number>; answers: Record<string, string>; sampleViewed?: readonly string[]; startedAt?: number };
+/** Tevékenység: kvíz — van válasz; feladat — van nem üres válasz VAGY megnézett mintaválasz (PR #574 review). */
+export function roundHasActivity(kind: "tasks" | "quiz", round: RoundShape): boolean {
+  return kind === "quiz" ? Object.keys(round.picks).length > 0 : Object.values(round.answers).some(a => a.trim() !== "") || (round.sampleViewed?.length ?? 0) > 0;
+}
+/**
+ * R50 (PR #574 review): a kör CSAK akkor friss, ha még el sem kezdődött (`startedAt === 0`) és nincs rajta tevékenység — a visszatöltött,
+ * korábban megkezdett, majd kiürített kör nem friss (nem a válaszok ürességéből következtetünk).
+ */
+export function isFreshRound(kind: "tasks" | "quiz", round: RoundShape): boolean {
+  return !(round.startedAt ?? 0) && !roundHasActivity(kind, round);
 }
 
-export function createRoundOwners(storage: () => OwnerStorage | null, currentToken: () => string | null, tagOf: (token: string) => string) {
+export function createRoundOwners(storage: () => OwnerStorage | null, currentToken: () => string | null, tagOf: (token: string) => string = learnerTagOf) {
   const memory = new Map<string, RoundOwner>();
   const read = (key: string): RoundOwner | null => {
     const known = memory.get(key);
@@ -19,7 +33,8 @@ export function createRoundOwners(storage: () => OwnerStorage | null, currentTok
     try {
       const parsed = JSON.parse(storage()?.getItem(key) ?? "null") as Partial<RoundOwner> | null;
       if (parsed && (parsed.learnerTag === null || typeof parsed.learnerTag === "string")) {
-        const owner = { learnerTag: parsed.learnerTag };
+        // a korábbi (rövid, ütközésre hajlamos) lenyomat ismeretlennek számít
+        const owner = { learnerTag: parsed.learnerTag !== null && tagOf === learnerTagOf && !TAG_SHAPE.test(parsed.learnerTag) ? null : parsed.learnerTag };
         memory.set(key, owner);
         return owner;
       }

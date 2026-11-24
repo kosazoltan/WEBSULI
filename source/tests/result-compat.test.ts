@@ -26,7 +26,7 @@ test("B3: a végleges törzs új mezői (startedAt, lastAnsweredAt) csak jelzés
   assert.doesNotMatch(bodyBlock, /\.\.\.times/, "a törzs alapból régi alakú");
   assert.match(report, /resultTimes: times/, "az időbélyegek külön opcióként mennek az apiRequest-nek");
   const client = read("client/src/lib/queryClient.ts");
-  assert.match(client, /return \{ token: data\.csrfToken, resultApi: supportsResultApi\(data\) \};/);
+  assert.match(client, /return \{ token: data\.csrfToken, resultApi: supportsResultApi\(data\), ownerBinding: data\.resultOwnerBinding === true \};/);
   assert.match(client, /capable && addsFields \?/, "a mezők csak képes szervernél olvadnak a törzsbe");
   assert.match(client, /await sendOnce\(capable, controller\.signal\)/);
   assert.match(client, /await sendOnce\(newCsrfToken\.resultApi, retryController\.signal\)/, "a CSRF-újrapróba a friss token jelzését követi");
