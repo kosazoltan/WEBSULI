@@ -14,7 +14,7 @@ SELECT l.relation,s.kind,s.ref,s.date,s.title FROM requirement_links l JOIN sour
  JOIN requirements r ON r.id=l.requirement_id WHERE r.code='W1' ORDER BY s.date;
 
 -- kapcsolók: kód-alap vs. élő
-SELECT name,code_default,live_value,code_ref FROM flags ORDER BY name;
+SELECT name,code_default,live_value,state,live_checked_at,stale,code_ref FROM flags ORDER BY name;
 
 -- nyitott leletek súlyosság szerint
 SELECT f.kind,f.severity,r.code,f.detail,f.proposed_slice FROM findings f JOIN requirements r ON r.id=f.requirement_id
@@ -34,14 +34,15 @@ SELECT date,substr(raw_excerpt,1,400) FROM sources WHERE kind='session' AND date
 
 | kind | szabály | tipikus szelet |
 |---|---|---|
-| kapcsolo_ki | a kurált tétel `rule.flag` élő értéke ≠ elvárt, és a kód kész (`kesz`/`kapcsolo_ki`); vagy kódban kész, élesben KI kapcsoló követelmény nélkül (K-077 alatt) | élesítési döntés űrlapon → élesítő szelet |
+| kapcsolo_ki | a kurált tétel kapcsolójának `flags.state` értéke `ki`/`reszleges` (a kapcsoló saját bekapcsolási szabálya szerint), és a kód kész; vagy kódban kész, élesben KI kapcsoló követelmény nélkül (K-077 alatt). `nem_ellenorzott`, `nem_logikai` és elavult (`stale=1`) sor SOHA nem KI | élesítési döntés űrlapon → élesítő szelet |
 | felkesz | `reszben`/`felkesz` státusz, nyitott PR-ok listájával | PR beolvasztása / hátralévő szelet |
 | elfelejtett | `elvart` és ≥3 napja (`--napok`) nincs commit/PR-link; vagy `ismeretlen` kurált/P-tétel ≥14 napja nyom nélkül (alacsony, igazolandó) | spec → végrehajtás → RED → kód |
 | regressziot | `kesz` tétel `rule.grep` mintája eltűnt a main-ről | `git log -S` → visszaállító szelet |
-| felulirt_de_nem_atvezetve | felülírt tétel, amelynek az új változata nem `kesz`; vagy `rule.old_grep` régi minta még él; vagy élő env-változó, amit a kód nem olvas | az új elvárás szeletei / docs-takarítás |
+| felulirt_de_nem_atvezetve | felülírt tétel, amelynek az új változata nem `kesz`; vagy `rule.old_grep` régi minta még él; vagy logikai értékű élő env-változó, amit a kód (friss `git grep -w`) nem olvas — numerikus/nem logikai sosem árva | az új elvárás szeletei / docs-takarítás |
 | hianyzo | csak kézi (`lelet-add`): igazoltan nincs meg a kódban | új szelet |
 
-Az automatikus leletek kulcsa `auto:<req>:<kind>`: ismételt futás frissíti, a meg nem ismétlődő `megszunt` lesz. Kézi lelet: `kezi:…`,
+Az automatikus leletek kulcsa `auto:<req>:<kind>`: ismételt futás frissíti, a sikeresen mért, de meg nem ismétlődő `megszunt` lesz;
+a nem mért (git-hiba, nem ellenőrzött kapcsoló) a korábbi állapotában marad. `origin/main` hiánya vagy hibás `--fetch` → a revízió leáll. Kézi lelet: `kezi:…`,
 a gyűjtő és az `ellenoriz` nem módosítja; javítás után `UPDATE findings SET status='javitva' WHERE id=…` (bizonyítékkal az `evidence`-ben).
 
 ## Státusz-becslés korlátai

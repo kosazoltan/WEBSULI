@@ -8,7 +8,8 @@ description: Use when closing a WEBSULI work batch. Run full revision.
 Cél: minden tulajdonosi elvárás (kérés, döntés, feladat) egy helyen; a munka végén a valós működést (main-kód, élő kapcsolók,
 beolvadt PR-ok, tesztek) összevetjük vele, és az eltérést leletként visszaírjuk. Ebből lesz a szeletenkénti javítási terv.
 Adatbázis: `%LOCALAPPDATA%\hermes\projekt-tudas\websuli\kovetelmenyek.db` (repón kívül). Eszközök: `scripts/kovetelmeny/`
-(`gyujt.py`, `revizio.py`, `kovetelmenyek.json`, `README.md` — séma és források).
+(`gyujt.py`, `revizio.py`, `maszk.py`, `kovetelmenyek.json`, `README.md` — séma és források). A skill forrása
+`.agents/skills/websuli-kovetelmeny-revizio` (tükör: `.claude/skills/…`, `.hermes/skills/…` — bájtazonos).
 
 ## Mikor
 
@@ -20,16 +21,19 @@ Adatbázis: `%LOCALAPPDATA%\hermes\projekt-tudas\websuli\kovetelmenyek.db` (rep�
 
 1. **Új kérések felvétele**: a mostani munkamenet tulajdonosi kéréseit vedd fel a `kovetelmenyek.json`-ba (egy tétel = egy tesztelhető
    elvárás; név, e-mail, titok nélkül). Újabb utasítás a régit felülírja: a régi tétel `superseded_by` = az új kód.
-2. **Gyűjtés**: `python scripts/kovetelmeny/gyujt.py --fetch -q` (idempotens, ~30 s). A `meta` „nem elérhető” listáját jelentsd.
+2. **Gyűjtés**: `python scripts/kovetelmeny/gyujt.py --fetch -q` (idempotens, ~30 s). A `meta` „nem elérhető” listáját jelentsd;
+   nem elérhető forrás semmit nem töröl és nem fokoz le (a kapcsolatok a DB-ben tárolt forrásokból épülnek).
 3. **Lekérdezés**: `python scripts/kovetelmeny/revizio.py allapot`, majd
    `revizio.py lista --nyitott --limit 80` és `revizio.py felulirasok`.
 4. **Automatikus összevetés**: `revizio.py ellenoriz` → kapcsoló (Render env vs. elvárt), félkész (nyitott PR, `reszben`), elfelejtett
-   (régóta `elvart`, nincs commit/PR-nyom), kódjelenlét (`grep` a main-en), felülírt-de-nem-átvezetett.
+   (régóta `elvart`, nincs commit/PR-nyom), kódjelenlét (`grep` a main-en), felülírt-de-nem-átvezetett. A „nem mért”
+   ellenőrzés (nem ellenőrzött kapcsoló, git-hiba) a korábbi leletet megőrzi — ezt a listát is jelentsd; hibás fetch → leáll.
 5. **Kézi igazolás** minden nem `kesz` vagy `ismeretlen` tételnél, amit a mostani munka érintett vagy a lista elején áll:
    - kód: `git grep -n <minta> origin/main -- source/…` vagy a célzott teszt futtatása;
-   - kapcsoló: `flags` tábla / Render env (csak on/off/hiányzik — értéket soha ne írj ki);
+   - kapcsoló: `flags.state` (be/ki/reszleges/nem_ellenorzott/nem_logikai, a kapcsoló saját szabálya szerint) — értéket ne írj ki;
    - PR: `gh pr view <n> --json state,mergedAt,headRefOid`; élő viselkedés, ahol mérhető (csak olvasva).
-   Igazolt állapot: `revizio.py allit <code> <status> --evidence "<commit/PR/fájl:sor/mérés>"`.
+   Igazolt állapot: `revizio.py allit <code> <status> --evidence "<commit/PR/fájl:sor/mérés>"` (`manual_evidence`, maszkolva;
+   újragyűjtéskor megmarad).
    Hiány: `revizio.py lelet-add --code <c> --kind hianyzo|felkesz|elfelejtett|kapcsolo_ki|regressziot|felulirt_de_nem_atvezetve
    --detail … --evidence … --severity magas|kozepes|alacsony --slice "<javasolt szelet>"`.
 6. **Felülírások**: mindig a lánc legújabb eleme számít. Ha a régi megoldás még él, és az új nincs átvezetve → lelet
