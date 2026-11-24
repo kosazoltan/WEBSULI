@@ -16,7 +16,7 @@ import type { AttemptAnswer, AttemptQuestion } from "../shared/lesson-attempt";
 import { logger } from "./lib/logger";
 import { recordLearnerActivity, resolveLearner } from "./learners";
 import { contributorKey, maybeRelaxTightening, recordTaskResults } from "./task-results";
-import { isTwoPartExperience, markPairDelivered, pairOrPark, resultCombinedEmailEnabled, takeParkedForLegacy, type PairedParts, type PendingLearner } from "./lesson-result-combine";
+import { isTwoPartExperience, markPairDelivered, markPartDelivered, pairOrPark, resultCombinedEmailEnabled, takeParkedForLegacy, type PairedParts, type PendingLearner } from "./lesson-result-combine";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — „motorháztető alatt”: a tanuló felülete
@@ -494,9 +494,14 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   }
   if (!combinedOn && isTwoPartExperience(experience)) {
     // Review #586 (kapcsoló-időszakok): KI állásban a korábban (BE alatt) félretett részek a régi úton, egyrészes levélként mennek.
-    void takeParkedForLegacy(lessonIdF, who).then(parts => Promise.all(parts.map(p => sendLessonResult({ lessonId: lessonIdF,
-      roundKey: roundKeyOf(who, p.graded.kind, p.roundId), learner: p.learner.learner, ...(p.learner.learnerFirst ? { learnerFirst: p.learner.learnerFirst } : {}),
-      ...(p.learner.learnerId ? { learnerId: p.learner.learnerId } : {}), guest: p.learner.guest, graded: p.graded }))))
+    void takeParkedForLegacy(lessonIdF, who).then(parts => Promise.all(parts.map(async p => {
+      const report = { failed: 0 };
+      const r = await sendLessonResult({ lessonId: lessonIdF,
+        roundKey: roundKeyOf(who, p.graded.kind, p.roundId), learner: p.learner.learner, ...(p.learner.learnerFirst ? { learnerFirst: p.learner.learnerFirst } : {}),
+        ...(p.learner.learnerId ? { learnerId: p.learner.learnerId } : {}), guest: p.learner.guest, graded: p.graded }, true, report);
+      // Review #586: a kézbesítés nyoma csak sikeres küldés után — a kézbesítetlen sort a söprő (U4c) pótolja.
+      if (report.failed === 0 && (r.sent > 0 || r.duplicate)) await markPartDelivered(lessonIdF, who, p.roundId, p.graded.kind);
+    })))
       .catch(error => logger.error("[LESSON-RESULT] félretett részek kiürítése hiba:", error));
   }
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
