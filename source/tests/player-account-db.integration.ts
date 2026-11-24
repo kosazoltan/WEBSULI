@@ -5,6 +5,7 @@
  * (tests/support/player-google-stub.ts) — a szerver saját stratégiája, state- / PKCE-ellenőrzése és visszahívása fut.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { after, before, describe, it } from "node:test";
 import bcrypt from "bcryptjs";
 import { Client, dbPool, injectSession, startApp } from "./support/authz-db-harness";
@@ -13,7 +14,7 @@ import { withDifferentChar } from "./support/tamper";
 
 const { emailHash, playerAuthKey, codeHash, limitHash, deleteLimitHash, linkHash, generateLinkToken, purposeEmailHash, allPurposeEmailHashes, MAX_FAILED_ATTEMPTS_PER_DAY } = await import("../server/player/codes");
 const { createPlayerStore } = await import("../server/player/store");
-const { banFingerprint, banKeyId, normalizeEmail, playerBanKey } = await import("../server/player/codes");
+const { accountEmailKey, banFingerprint, banKeyId, normalizeEmail, playerBanKey } = await import("../server/player/codes");
 const { banLockKey, createPlayerAccountStore } = await import("../server/player/account-store");
 const { learnerTokenFor, rotateLearnerToken } = await import("../server/learners");
 const { logger } = await import("../server/lib/logger");
@@ -758,7 +759,8 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
     const r = await c.request("POST", "/api/player/account/delete", { confirm: "TÖRLÖM", code: "86429753" });
     assert.equal(r.status, 200, r.text);
   }
-  const idOf = async (email: string) => (await q<{ id: string }>(`SELECT id FROM player_accounts WHERE email = $1`, [normalizeEmail(email)!]))[0]?.id;
+  // P-020: a fiók a postafiók-kulcson (`email_key`) azonosítható — Gmail-alias ugyanaz a fiók, más domainen = a pontos cím.
+  const idOf = async (email: string) => (await q<{ id: string }>(`SELECT id FROM player_accounts WHERE email_key = $1`, [accountEmailKey(normalizeEmail(email)!)]))[0]?.id;
 
   it("tiltott saját törlés → ugyanaz a cím (és kis- / nagybetű, gmail-pont, +alias változata) újra belépve TILTOTT marad", async () => {
     const admin = await adminClient();
@@ -775,7 +777,8 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
       const again = await codeLogin(variant);
       assert.deepEqual([again.status, again.body], [403, BANNED_BODY], variant);
       assert.equal((await again.client.request("POST", "/api/player/profile", { nickname: "Újra Itt" })).status, 403, `${variant}: profil tiltva`);
-      const row = (await q<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE email = $1`, [normalizeEmail(variant)!]))[0]!;
+      // P-020: a Gmail-változatok ugyanarra a (tiltottként újra létrejött) fiókra oldódnak fel.
+      const row = (await q<{ banned_at: Date | null }>(`SELECT banned_at FROM player_accounts WHERE email_key = $1`, [accountEmailKey(normalizeEmail(variant)!)]))[0]!;
       assert.ok(row.banned_at !== null, `${variant}: az új fiók tiltottként jött létre`);
     }
   });
@@ -1087,7 +1090,8 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
     assert.deepEqual([(await codeLogin("k1.felold2@gmail.com")).status], [403], "a harmadik változat is tiltott");
     const ref = fp(email).slice(0, 16);
     const unban = await admin.request("POST", `/api/admin/game-accounts/deleted-bans/${ref}/unban`, {});
-    assert.deepEqual([unban.status, (unban.json as { unbannedAccounts: number }).unbannedAccounts], [200, 2], "mindkét élő változat feloldva");
+    // SPEC-VÁLTOZÁS P-020 (2026-11-23): a Gmail-változatok EGY fiók (korábban: 2 élő változat-fiók) → 1 feloldott fiók.
+    assert.deepEqual([unban.status, (unban.json as { unbannedAccounts: number }).unbannedAccounts], [200, 1], "az (egyetlen) élő fiók feloldva");
     const normal = await codeLogin(variant);
     assert.equal(normal.status, 200, "a játékos rendesen belép");
     assert.equal((await normal.client.request("POST", "/api/player/profile", { nickname: "Feloldott Fóka" })).status, 200);
@@ -1296,6 +1300,170 @@ describe("JM7b-utójavítás K1 — a tiltás megmarad a fiók törlése után (
       assert.equal((await c.request("POST", `/api/admin/game-accounts/deleted-bans/${ref}/unban`, {})).status, 401);
     }
     assert.equal((await fpRows(email)).length, 1);
+  });
+});
+
+describe("P-020 — játékos-fiók postafiókonként egyedi (normalizált Gmail-kulcs + egyedi index; tulajdonosi döntés 2026-11-23)", () => {
+  /** VALÓDI kódos beváltás; a munkamenet játékos-azonosítóját adja. */
+  async function loginId(raw: string): Promise<string> {
+    const key = playerAuthKey();
+    const email = normalizeEmail(raw)!;
+    const eh = emailHash(key, email);
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, "20202020"), linkHash: linkHash(key, generateLinkToken()) });
+    const c = new Client(app.base);
+    const r = await c.request("POST", "/api/player/auth/verify", { kind: "code", email: raw, code: "20202020" });
+    assert.equal(r.status, 200, r.text);
+    await c.fetchCsrf();
+    const me = await c.request("GET", "/api/player/me");
+    return (me.json as { id: string }).id;
+  }
+  const rowsByKey = (k: string) => q<{ id: string; email: string; email_key: string }>(`SELECT id, email, email_key FROM player_accounts WHERE email_key = $1`, [k]);
+
+  it("E2: Gmail-aliassal (pont, +címke, googlemail, nagybetű) belépve UGYANAZ a fiók; a tárolt cím nem íródik át", async () => {
+    const id = await loginId("p020proba@gmail.com");
+    for (const v of ["p.020.proba@gmail.com", "p020proba+jatek@gmail.com", "P020.Proba@GoogleMail.com", "p020proba+x@googlemail.com"]) {
+      assert.equal(await loginId(v), id, v);
+    }
+    const rows = await rowsByKey("p020proba@gmail.com");
+    assert.equal(rows.length, 1, "egyetlen fiók a postafiókra");
+    assert.equal(rows[0]!.email, "p020proba@gmail.com", "az első (eredeti) cím marad");
+  });
+
+  it("E1 (konzervatív): nem Gmail domainen a +címke KÜLÖN fiók marad (csak trim + kisbetű)", async () => {
+    const a = await loginId("p020-mas@pelda.hu");
+    assert.equal(await loginId("P020-Mas@Pelda.hu"), a, "kis- / nagybetű ugyanaz");
+    assert.notEqual(await loginId("p020-mas+x@pelda.hu"), a, "+címke más domainen külön fiók");
+  });
+
+  it("E3: a Google-út aliasos címmel a meglévő fiókhoz kötődik (nem nyit új fiókot)", async () => {
+    const id = await loginId("p020google@gmail.com");
+    const accounts = createPlayerAccountStore(dbPool);
+    const g = await accounts.upsertGooglePlayer("g-sub-p020", "p.020.google+g@googlemail.com");
+    assert.deepEqual([g.kind, g.kind === "OK" && g.id], ["OK", id]);
+    const rows = await q<{ google_sub: string | null }>(`SELECT google_sub FROM player_accounts WHERE email_key = 'p020google@gmail.com'`);
+    assert.deepEqual(rows, [{ google_sub: "g-sub-p020" }]);
+    // Fordított sorrend: előbb Google (alias), utána kódos belépés a kanonikus címmel → ugyanaz.
+    const g2 = await accounts.upsertGooglePlayer("g-sub-p020-b", "p020.proba.b+g@gmail.com");
+    assert.equal(g2.kind, "OK");
+    assert.equal(await loginId("p020probab@gmail.com"), g2.kind === "OK" ? g2.id : "");
+  });
+
+  it("E4: az egyedi index új ütközést nem enged (közvetlen INSERT a kódot megkerülve sem)", async () => {
+    await dbPool.query(`INSERT INTO player_accounts (email) VALUES ('p020proba.idx@gmail.com')`);
+    await assert.rejects(
+      dbPool.query(`INSERT INTO player_accounts (email) VALUES ('p020probaidx+2@googlemail.com')`),
+      (e: { code?: string; constraint?: string }) => e.code === "23505" && e.constraint === "player_accounts_email_key_unique",
+    );
+  });
+
+  it("E5 + E7: a 0045 meglévő ütközésen nem bukik, semmit nem töröl / von össze, jelöl; kétszer futtatva is; SQL-kulcs = accountEmailKey", async () => {
+    const client = await dbPool.connect();
+    try {
+      await client.query("DROP SCHEMA IF EXISTS p020_mig CASCADE; CREATE SCHEMA p020_mig; SET search_path TO p020_mig, public");
+      await client.query(readFileSync(new URL("../migrations/0040_player_accounts.sql", import.meta.url), "utf8"));
+      const seed = ["p020utkozes@gmail.com", "p.020utkozes@gmail.com", "p020utkozes+x@googlemail.com", "p020-egyedi@pelda.hu", "p020-egyedi+x@pelda.hu", "P020-Nagy@Pelda.hu"];
+      for (const e of seed) await client.query(`INSERT INTO player_accounts (email) VALUES ($1)`, [e]);
+      const migration = readFileSync(new URL("../migrations/0045_player_email_key.sql", import.meta.url), "utf8");
+      await client.query(migration);
+      await client.query(migration);
+      const rows = (await client.query<{ email: string; email_key: string; email_key_dup: number }>(
+        `SELECT email, email_key, email_key_dup FROM player_accounts ORDER BY email`)).rows;
+      assert.equal(rows.length, seed.length, "egyetlen sor sem törlődött / olvadt össze");
+      for (const r of rows) assert.equal(r.email_key, accountEmailKey(r.email), `SQL ↔ TS kulcs: ${r.email}`);
+      const group = rows.filter((r) => r.email_key === "p020utkozes@gmail.com");
+      assert.deepEqual(group.map((r) => r.email_key_dup).sort(), [0, 1, 2], "a Gmail-ütközés sorszámot kap (a legrégebbi 0)");
+      assert.deepEqual(rows.filter((r) => r.email_key !== "p020utkozes@gmail.com").map((r) => r.email_key_dup), [0, 0, 0], "a többi sor 0");
+      const idx = (await client.query<{ indexdef: string }>(`SELECT indexdef FROM pg_indexes WHERE schemaname = 'p020_mig' AND indexname = 'player_accounts_email_key_unique'`)).rows;
+      assert.equal(idx.length, 1);
+      assert.match(idx[0]!.indexdef, /UNIQUE INDEX[\s\S]*\(email_key, email_key_dup\)$/);
+      // Copilot review #554: a meglévő ütköző csoport MELLÉ sem fér új alias (közvetlen INSERT / régi alkalmazáspéldány sem).
+      await assert.rejects(client.query(`INSERT INTO player_accounts (email) VALUES ('p020utkozes+y@gmail.com')`), (e: { code?: string }) => e.code === "23505");
+      await assert.rejects(client.query(`INSERT INTO player_accounts (email) VALUES ('P020-Egyedi@pelda.hu ')`), (e: { code?: string }) => e.code === "23505");
+    } finally {
+      await client.query("RESET search_path; DROP SCHEMA IF EXISTS p020_mig CASCADE").catch(() => undefined);
+      client.release();
+    }
+  });
+
+  it("E6: meglévő ütközés → admin-lista (maszkolt, csoportonként), a belépés a legrégebbire old fel, új fiók nem jön létre; nem admin 401", async () => {
+    await dbPool.query(
+      `INSERT INTO player_accounts (email, email_verified_at, created_at, email_key_dup) VALUES
+         ('p.020admin@gmail.com', now(), now() - interval '2 days', 0), ('p020admin+r@gmail.com', now(), now() - interval '1 day', 1)`,
+    );
+    const [oldest] = await q<{ id: string }>(`SELECT id FROM player_accounts WHERE email = 'p.020admin@gmail.com'`);
+    assert.equal(await loginId("p020admin@gmail.com"), oldest!.id, "a legrégebbi ütköző fiók");
+    assert.equal(await loginId("p020admin+r@gmail.com"), (await q<{ id: string }>(`SELECT id FROM player_accounts WHERE email = 'p020admin+r@gmail.com'`))[0]!.id, "pontos egyezés előnyben");
+    assert.equal((await rowsByKey("p020admin@gmail.com")).length, 2, "nincs új (harmadik) fiók, nincs összevonás");
+    await assert.rejects(dbPool.query(`INSERT INTO player_accounts (email) VALUES ('p020admin+z@gmail.com')`), (e: { code?: string }) => e.code === "23505", "a csoport mellé közvetlen INSERT sem");
+    const admin = await adminClient();
+    const r = await admin.request("GET", "/api/admin/game-accounts/email-collisions");
+    assert.equal(r.status, 200, r.text);
+    const groups = (r.json as { groups: { accounts: { id: string; maskedEmail: string }[] }[] }).groups;
+    const mine = groups.find((g) => g.accounts.some((a) => a.id === oldest!.id));
+    assert.ok(mine, "a csoport listázva");
+    assert.equal(mine.accounts.length, 2);
+    assert.ok(!r.text.includes("p020admin") && !r.text.includes("p.020admin"), "a teljes cím / kulcs nem megy ki");
+    assert.ok(!groups.some((g) => g.accounts.length < 2), "csak a ≥ 2 soros csoportok");
+    const guest = new Client(app.base);
+    await guest.fetchCsrf();
+    assert.equal((await guest.request("GET", "/api/admin/game-accounts/email-collisions")).status, 401);
+  });
+
+  it("Codex / Copilot / Vercel review #554: a `users` admin-tiltás a POSTAFIÓKRA hat — aliasra oldódó fiók belépéskor ÉS a későbbi kéréseknél is tiltott (kód és Google)", async () => {
+    const key = playerAuthKey();
+    const email = normalizeEmail("p020.userban+a@gmail.com")!;
+    const eh = emailHash(key, email);
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: email, emailHash: eh, limitHash: limitHash(key, email), codeHash: codeHash(key, eh, "20202021"), linkHash: linkHash(key, generateLinkToken()) });
+    const c = new Client(app.base);
+    assert.equal((await c.request("POST", "/api/player/auth/verify", { kind: "code", email, code: "20202021" })).status, 200);
+    await c.fetchCsrf();
+    assert.equal((await c.request("GET", "/api/player/me")).status, 200, "még nem tiltott");
+    await dbPool.query(`INSERT INTO users (id, email, password, is_admin, is_banned) VALUES ('p020-userban', 'P020UserBan@GoogleMail.com', 'x', false, true)`);
+    try {
+      assert.equal((await c.request("GET", "/api/player/me")).status, 403, "a meglévő munkamenet a következő kérésnél tiltott");
+      const viaCanonical = new Client(app.base);
+      const eh2 = emailHash(key, "p020userban@gmail.com");
+      await createPlayerStore(dbPool).insertCode({ emailNormalized: "p020userban@gmail.com", emailHash: eh2, limitHash: limitHash(key, "p020userban@gmail.com"), codeHash: codeHash(key, eh2, "20202022"), linkHash: linkHash(key, generateLinkToken()) });
+      assert.equal((await viaCanonical.request("POST", "/api/player/auth/verify", { kind: "code", email: "p020userban@gmail.com", code: "20202022" })).status, 403);
+      await viaCanonical.fetchCsrf();
+      assert.equal((await viaCanonical.request("GET", "/api/player/me")).status, 403, "a belépés utáni munkamenet sem használható");
+      const g = await createPlayerAccountStore(dbPool).upsertGooglePlayer("g-sub-p020-userban", "p020userban@gmail.com");
+      assert.deepEqual([g.kind, g.kind === "OK" && g.banned], ["OK", true], "Google-út: tiltott");
+      assert.equal((await rowsByKey("p020userban@gmail.com")).length, 1, "egy fiók");
+    } finally {
+      await dbPool.query(`DELETE FROM users WHERE id = 'p020-userban'`);
+    }
+  });
+
+  it("Vercel review #554: ütköző csoport 0-s sorszámú fiókjának törlése után a megmaradt sorok újraszámozódnak — új alias akkor sem fér be", async () => {
+    await dbPool.query(
+      `INSERT INTO player_accounts (email, email_verified_at, created_at, email_key_dup) VALUES
+         ('p020renum@gmail.com', now(), now() - interval '3 days', 0), ('p.020renum@gmail.com', now(), now() - interval '2 days', 1),
+         ('p020renum+c@googlemail.com', now(), now() - interval '1 day', 2)`,
+    );
+    const [first] = await q<{ id: string }>(`SELECT id FROM player_accounts WHERE email = 'p020renum@gmail.com'`);
+    const deleted = await createPlayerAccountStore(dbPool).deleteAccount(first!.id, (e) => allPurposeEmailHashes(playerAuthKey(), e));
+    assert.equal(deleted?.account, 1);
+    const left = await q<{ email: string; email_key_dup: number }>(`SELECT email, email_key_dup FROM player_accounts WHERE email_key = 'p020renum@gmail.com' ORDER BY email_key_dup`);
+    assert.deepEqual(left, [{ email: "p.020renum@gmail.com", email_key_dup: 0 }, { email: "p020renum+c@googlemail.com", email_key_dup: 1 }], "a sorrend megmarad, 0-tól folytonos");
+    await assert.rejects(dbPool.query(`INSERT INTO player_accounts (email) VALUES ('p020renum+uj@gmail.com')`), (e: { code?: string }) => e.code === "23505", "új alias nem fér be");
+  });
+
+  it("Codex review #554: a fióktörlés a postafiók ALIASAIRA kért, függő belépőkódokat / linkeket is visszavonja", async () => {
+    const key = playerAuthKey();
+    const id = await loginId("p020torles@gmail.com");
+    const alias = "p.020torles+x@googlemail.com";
+    const ah = emailHash(key, alias);
+    const token = generateLinkToken();
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: alias, emailHash: ah, limitHash: limitHash(key, alias), codeHash: codeHash(key, ah, "20202023"), linkHash: linkHash(key, token) });
+    const other = "p020-idegen-kod@pelda.hu";
+    const oh = emailHash(key, other);
+    await createPlayerStore(dbPool).insertCode({ emailNormalized: other, emailHash: oh, limitHash: limitHash(key, other), codeHash: codeHash(key, oh, "20202024"), linkHash: linkHash(key, generateLinkToken()) });
+    const deleted = await createPlayerAccountStore(dbPool).deleteAccount(id, (e) => allPurposeEmailHashes(key, e));
+    assert.equal(deleted?.account, 1);
+    assert.equal((await q(`SELECT 1 FROM player_auth_codes WHERE link_hash = $1`, [linkHash(key, token)])).length, 0, "az alias függő linkje törölve");
+    assert.equal((await q(`SELECT 1 FROM player_auth_codes WHERE email_hash = $1`, [oh])).length, 1, "idegen cím kódja érintetlen");
+    assert.equal((await rowsByKey("p020torles@gmail.com")).length, 0);
   });
 });
 

@@ -4,6 +4,7 @@
  * A teljes cím csak külön gombnyomásra töltődik le (admin-végpont), és csak ezen a képernyőn látszik.
  * A becenév szövegként jelenik meg (React-szövegcsomópont).
  * N2 (tulajdonosi döntés 2026-11-16): VÉGLEGES törlés megerősítő párbeszéddel (a beírt „TÖRLÉS” szó nélkül nem küldhető).
+ * P-020 (2026-11-23): az azonos postafiókú (Gmail-alias) fiókcsoportok listája kézi összevonáshoz (csak olvasás).
  */
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -22,6 +23,11 @@ import { useToast } from "@/hooks/use-toast";
 
 /** K1: a törölt, de tiltva maradt fiók bejegyzése — cím és maszk nélkül. */
 type DeletedBan = { ref: string; bannedAt: string; deletedAt: string };
+
+/** P-020: azonos postafiókú (Gmail-alias) fiókok csoportja — kézi összevonásra; a cím maszkolt. */
+type EmailCollisionGroup = {
+  accounts: { id: string; nickname: string | null; maskedEmail: string; createdAt: string; lastSeenAt: string | null; banned: boolean }[];
+};
 
 type AdminPlayer = {
   id: string; nickname: string | null; avatar: string | null; maskedEmail: string; createdAt: string; lastSeenAt: string | null;
@@ -71,6 +77,12 @@ export default function PlayersPanel() {
   const deletedBans = useQuery<{ entries: DeletedBan[] }>({
     queryKey: ["/api/admin/game-accounts", { deletedBans: true }],
     queryFn: () => apiRequest("GET", "/api/admin/game-accounts/deleted-bans"),
+  });
+  // P-020 (tulajdonosi döntés 2026-11-23): a bevezetés előtt keletkezett, azonos postafiókú fiókok — csak lista, automatikus
+  // összevonás / törlés nincs; a belépés a csoport legrégebbi (vagy pontosan egyező című) fiókjába visz.
+  const collisions = useQuery<{ groups: EmailCollisionGroup[] }>({
+    queryKey: ["/api/admin/game-accounts", { emailCollisions: true }],
+    queryFn: () => apiRequest("GET", "/api/admin/game-accounts/email-collisions"),
   });
   const unbanDeleted = useMutation({
     mutationFn: (e: DeletedBan) => apiRequest("POST", `/api/admin/game-accounts/deleted-bans/${encodeURIComponent(e.ref)}/unban`, {}),
@@ -176,6 +188,32 @@ export default function PlayersPanel() {
                     onClick={() => unbanDeleted.mutate(e)} data-testid={`button-deleted-ban-unban-${e.ref}`}>
                     <RotateCcw className="h-4 w-4" /> Feloldás
                   </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {(collisions.data?.groups?.length ?? 0) > 0 && (
+          <section className="space-y-2" data-testid="email-collisions">
+            <h3 className="text-sm font-semibold">Azonos postafiókú fiókok (kézi összevonásra)</h3>
+            <p className="text-xs text-muted-foreground">
+              Ezek a fiókok ugyanannak a Gmail-postafióknak a változatai (pont, +címke, googlemail), és még a postafiókonkénti egyediség
+              bevezetése előtt jöttek létre. A rendszer nem vonja össze és nem törli őket; a belépés a legrégebbi (vagy a pontosan
+              egyező című) fiókba visz. Az összevonás kézi döntés.
+            </p>
+            <ul className="space-y-2">
+              {(collisions.data?.groups ?? []).map((g) => (
+                <li key={g.accounts[0]?.id} className="rounded-md border p-2 text-sm" data-testid={`email-collision-${g.accounts[0]?.id}`}>
+                  <ul className="divide-y">
+                    {g.accounts.map((a) => (
+                      <li key={a.id} className="flex flex-wrap items-center gap-3 py-1">
+                        <span className="font-medium">{a.nickname ?? "— becenév nélkül —"}</span>
+                        <span className="text-muted-foreground">{a.maskedEmail}</span>
+                        <span className="text-xs text-muted-foreground">létrehozva: {fmt(a.createdAt)} · utoljára: {fmt(a.lastSeenAt)}</span>
+                        {a.banned && <Badge variant="destructive">Tiltott</Badge>}
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>
