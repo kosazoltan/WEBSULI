@@ -236,7 +236,7 @@ test("L2: a függő átvétel jelzése és a megtekintési útról induló kifej
   assert.equal(should(st, { summaryOpen: true, roundOver: true, blocked: true }), false, "lejárt párosításnál nincs írás");
   // S6 (2026-11-21, dokumentált): a cím az `adventUrl`-ből jön (admin-előnézetben az előnézeti út), különben változatlanul /api/advent/adopt.
   const hook = read("client/src/advent/useAdvent.ts");
-  assert.match(hook, /adopt: \(\) => previewAware\(\(\) => apiRequest<AdventState>\("POST", adventUrl\("\/adopt"\), identity\(\)/);
+  assert.match(hook, /adopt: \(\) => \{ const url = adventUrl\("\/adopt"\); return previewAware\(\(\) => apiRequest<AdventState>\("POST", url, identity\(\)/);
   assert.match(hook, /return date \? `\/api\/admin\/advent\/preview\$\{path\}\?date=\$\{date\}` : `\/api\/advent\$\{path\}`;/);
   assert.match(read("shared/advent/contract.ts"), /adoptionPending: boolean;/);
 });

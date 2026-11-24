@@ -481,10 +481,17 @@ function AdventCalendarView() {
     );
   }
   if (!state) return <Shell><div className="advent-message"><p>A naptár most nem érhető el.</p><BackHome /></div></Shell>;
-  if (state.phase === "before") return <Shell><div className="advent-message"><p>Még nincs itt az advent — gyere vissza december 1-jén!</p><BackHome /></div></Shell>;
+  if (state.phase === "before") return (
+    <Shell>
+      {/* Admin-előnézet (A16, S6): a szezon előtti fázisban is jelöljük, hogy előnézetben vagyunk (Thread 5). */}
+      {state.identity === "preview" ? <PreviewBanner state={state} busy={busy} onReset={() => void resetPreview()} /> : null}
+      <div className="advent-message"><p>Még nincs itt az advent — gyere vissza december 1-jén!</p><BackHome /></div>
+    </Shell>
+  );
   if (state.phase === "teaser") {
     return (
       <Shell>
+        {state.identity === "preview" ? <PreviewBanner state={state} busy={busy} onReset={() => void resetPreview()} /> : null}
         <div className="advent-message" data-testid="advent-teaser">
           <h2>Hamarosan!</h2>
           <p>{state.closing.text}</p>
@@ -536,12 +543,7 @@ function AdventCalendarView() {
         </div>
       ) : null}
       {/* Admin-előnézet (A16, S6): a megadott nap szerinti naptár a saját előnézeti soron — levél nem megy ki róla. */}
-      {state.identity === "preview" ? (
-        <div className="advent-banner advent-banner--preview" role="status" data-testid="advent-preview-banner">
-          <span><strong>ELŐNÉZET</strong> — {adventDateLabel(state.today)} szerint; a válaszaid csak az előnézetben mentődnek, levél nem megy ki.</span>
-          <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-preview-reset" disabled={busy} onClick={() => void resetPreview()}>Előnézet törlése</button>
-        </div>
-      ) : null}
+      {state.identity === "preview" ? <PreviewBanner state={state} busy={busy} onReset={() => void resetPreview()} /> : null}
       {volatileDevice ? <p className="advent-banner" role="status">Ezen az eszközön nem tudjuk megjegyezni a naptáradat.</p> : null}
       {closed ? <p className="advent-banner" role="status" data-testid="advent-closed">{state.closing.text}</p> : null}
       {state.closing.kind === "gift" ? (
@@ -766,6 +768,16 @@ function returnFocus(target: HTMLElement | null | undefined): void {
       if ((!active || active === document.body) && !document.querySelector("[role=\"dialog\"], [role=\"alertdialog\"]")) target.focus();
     }, delay);
   }
+}
+
+/** Admin-előnézet jelölése (A16, S6): minden fázisban — a szezon előtti és teaser nézetnél is (Thread 5). */
+function PreviewBanner({ state, busy, onReset }: { state: AdventState; busy: boolean; onReset: () => void }) {
+  return (
+    <div className="advent-banner advent-banner--preview" role="status" data-testid="advent-preview-banner">
+      <span><strong>ELŐNÉZET</strong> — {adventDateLabel(state.today)} szerint; a válaszaid csak az előnézetben mentődnek, levél nem megy ki.</span>
+      <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-preview-reset" disabled={busy} onClick={onReset}>Előnézet törlése</button>
+    </div>
+  );
 }
 
 function BackHome() {

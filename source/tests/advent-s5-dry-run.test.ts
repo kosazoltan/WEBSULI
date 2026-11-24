@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { adventMailMode, adventMailReport, deliverAdventMail, sendAdventResult, setAdventSender } from "../server/advent/result-email";
+import { adventMailKey, adventMailMode, adventMailReport, deliverAdventMail, sendAdventResult, setAdventSender } from "../server/advent/result-email";
 import { createAdventMailReportRouter } from "../server/advent/mail-report";
 import type { AdventRow } from "../server/advent/store";
 
@@ -89,8 +89,9 @@ test("P-056: a száraz összesítő — a kiküldendő levelek tanulónként, a 
     { row: row({ id: "a", doors: { 1: roundDoors(23, 0, 1) } }), firstName: "Ada" },
     { row: row({ id: "b", doors: { 1: roundDoors(22, 2) } }), firstName: "Bea" },
     { row: row({ id: "c", round: 3, doors: { 1: roundDoors(20, 0, 4), 2: roundDoors(21, 0, 3), 3: roundDoors(20, 0, 4) } }), firstName: "Cili" },
-    // Részben kézbesített (korábbi „send” mód): csak a hiányzó címzett számít.
-    { row: row({ id: "d", doors: { 1: roundDoors(24) }, mailedTo: ["want:h1", "want:h2", "final:h1"] }), firstName: "Dóri" },
+    // Thread 9: részben kézbesített (korábbi „send” mód): csak a JELENLEGI címzettek kézbesítetlen terve számít.
+    // A hash-ek a valódi `adventMailKey`-ből, mint a produkciós kódban.
+    { row: row({ id: "d", doors: { 1: roundDoors(24) }, mailedTo: [`want:${adventMailKey("websuli-dev-learner-link", "anya@pelda.hu").slice("final:".length)}`, `want:${adventMailKey("websuli-dev-learner-link", "apa@pelda.hu").slice("final:".length)}`, `final:${adventMailKey("websuli-dev-learner-link", "anya@pelda.hu").slice("final:".length)}`] }), firstName: "Dóri" },
   ]);
   const report = await adventMailReport(store, { season: 2026, phase: "open" });
   assert.equal(report.mode, "dry-run");

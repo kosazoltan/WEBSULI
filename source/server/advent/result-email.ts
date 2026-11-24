@@ -142,9 +142,15 @@ export function buildAdventResultEmail(input: { firstName: string | null; grade:
 export function adventMailKey(secret: string, to: string): string {
   return `final:${createHmac("sha256", secret).update(to.trim().toLowerCase()).digest("hex").slice(0, 32)}`;
 }
-/** A szolgáltatónak adott idempotencia-kulcs: soronként és címzettenként mindig ugyanaz (cím nélkül). */
-export function adventIdempotencyKey(rowId: string, to: string): string {
-  return `advent-result/${createHash("sha256").update([rowId, "final", to.trim().toLowerCase()].join("|")).digest("hex")}`;
+/** A szolgáltatónak adott idempotencia-kulcs: soronként, címzettenként ÉS tartalmanként egyedi (Thread 2/6). Ha a tanuló
+ * a 23/24-es eredmény után 24/24-re javít és a korábbi `finishMail` elmaradt, a pótlás már más tartalmú levelet küld —
+ * azonos kulccsal a Resend 409-et adna. A tárgy hash-je a kulcsban biztosítja, hogy a Resend az új tartalmat elfogadja.
+ *
+ * ISMERT KORLÁT (Thread 7): a Resend 24 óráig őrzi az idempotencia-kulcsot. Ha a `finishMail` sikertelen volt, és a pótlás
+ * >24 óra múlva fut AZONOS tartalommal, a kulcs már lejárt, és dupla levél mehet. Ez elfogadható: (a) a tartalom azonos,
+ * (b) a valószínűség alacsony (finishMail-hiba + >24h kiesés), (c) a levél tájékoztató jellegű, nem tranzakciós. */
+export function adventIdempotencyKey(rowId: string, to: string, subject: string): string {
+  return `advent-result/${createHash("sha256").update([rowId, "final", to.trim().toLowerCase(), subject].join("|")).digest("hex")}`;
 }
 
 /** A bérlet hossza: ennyi ideig egy címzett küldése egy feldolgozóé; leállás után ennyi idő múlva folytatható. */
@@ -177,9 +183,11 @@ export async function sendAdventResult(input: { store: MailStore; row: AdventRow
     for (const to of recipients) {
       const hash = hashOf(to);
       if (!planned.has(`want:${hash}`)) continue;
-      if (!(await input.store.leaseMail(input.row.id, hash, input.nowMs ?? Date.now(), ADVENT_MAIL_LEASE_MS))) continue;
+      // A bérlet a JELENLEGI időpillanathoz kötött (Thread 8): hosszú kézbesítési körben a korábbi `nowMs` elavulttá válna,
+      // és a késői bérletek megszerzésükkor már közel lennének a lejárathoz.
+      if (!(await input.store.leaseMail(input.row.id, hash, Date.now(), ADVENT_MAIL_LEASE_MS))) continue;
       try {
-        await send(subject, html, to, adventIdempotencyKey(input.row.id, to));
+        await send(subject, html, to, adventIdempotencyKey(input.row.id, to, subject));
       } catch (error) {
         failed++;
         logger.error(`[ADVENT] szülői levél küldési hiba: ${errorClass(error)}`);
@@ -247,13 +255,25 @@ export type AdventMailReport = {
  * (korábbi „send” mód) a még kézbesítetlen tervezett címzettek száma számít.
  */
 export async function adventMailReport(store: Pick<AdventStore, "mailCandidates">, at: { season: number; phase: AdventPhase }): Promise<AdventMailReport> {
-  const recipients = resolveAdminRecipients({ ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_EMAIL: process.env.ADMIN_EMAIL }).length;
+  const currentRecipients = resolveAdminRecipients({ ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_EMAIL: process.env.ADMIN_EMAIL });
+  const recipients = currentRecipients.length;
+  const secret = learnerLinkSecret();
   const results: AdventMailReportItem[] = [];
   for (const { row, firstName } of await store.mailCandidates(at.season, at.phase === "closed")) {
     const reason = adventResultFinal(row, at.phase);
     if (!reason) continue;
     const wants = row.mailedTo.filter((k) => k.startsWith("want:")).map((k) => k.slice("want:".length));
-    const pendingRecipients = wants.length ? wants.filter((h) => !row.mailedTo.includes(`final:${h}`)).length : recipients;
+    const finals = new Set(row.mailedTo.filter((k) => k.startsWith("final:")).map((k) => k.slice("final:".length)));
+    // Thread 9: a tervezett címzetteket a jelenlegi ADMIN_EMAILS-szel metszve számoljuk; a már eltávolított címzett `want:` bejegyzése
+    // nem számít kiküldendőnek (a küldő is csak a jelenlegi listáról dolgozik — sendAdventResult L175).
+    let pendingRecipients: number;
+    if (wants.length && secret) {
+      // A jelenlegi címzettek hash-eiből csak azokat számoljuk, amelyekre van `want:` és nincs `final:`.
+      const currentHashes = new Set(currentRecipients.map((to) => adventMailKey(secret, to).slice("final:".length)));
+      pendingRecipients = wants.filter((h) => currentHashes.has(h) && !finals.has(h)).length;
+    } else {
+      pendingRecipients = wants.length ? wants.filter((h) => !finals.has(h)).length : recipients;
+    }
     if (pendingRecipients === 0) continue;
     const { bestRound, best, rounds, passed } = adventResultSummary(row);
     results.push({ firstName, grade: row.grade, reason, bestRound, rounds, solved: best.solved, firstTry: best.firstTry, passed, pendingRecipients });

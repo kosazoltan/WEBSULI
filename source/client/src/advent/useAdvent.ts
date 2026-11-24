@@ -102,13 +102,19 @@ export function adventUrl(path: string): string {
   const date = adventPreviewDate();
   return date ? `/api/admin/advent/preview${path}?date=${date}` : `/api/advent${path}`;
 }
-const refusedPreview = (status: unknown): boolean => adventPreviewDate() !== null && (status === 401 || status === 403);
-/** Előnézetben a 401 / 403 írásnál is kikapcsolja az előnézetet (a hívó utána frissít, és a normál naptár töltődik). */
+/**
+ * Az előnézet elutasítása: OLVASÁSNÁL (GET /state) a 401 és 403 is az admin-munkamenet hiányát jelenti, ezért mindkettő kikapcsolja
+ * az előnézetet. ÍRÁSNÁL viszont a 403 lehet MŰKÖDÉSI hiba (pl. zárt ablak nyitásakor — routes.ts:418), ahol az admin-jogosultság
+ * rendben van; itt CSAK a 401 kapcsolja ki az előnézetet, és a 403 hibát a hívó kezeli (Thread 4).
+ */
+const refusedPreviewRead = (status: unknown): boolean => adventPreviewDate() !== null && (status === 401 || status === 403);
+const refusedPreviewWrite = (status: unknown): boolean => adventPreviewDate() !== null && status === 401;
+/** Előnézetben a 401 írásnál kikapcsolja az előnézetet (a hívó utána frissít, és a normál naptár töltődik). */
 async function previewAware<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (error) {
-    if (refusedPreview((error as { status?: unknown } | null)?.status)) refuseAdventPreview();
+    if (refusedPreviewWrite((error as { status?: unknown } | null)?.status)) refuseAdventPreview();
     throw error;
   }
 }
@@ -129,7 +135,7 @@ export async function fetchAdventState(createDevice = true, signal?: AbortSignal
   if (learner) headers["X-Learner-Token"] = learner;
   const res = await fetch(adventUrl("/state"), { credentials: "same-origin", headers, signal });
   // Nem admin (vagy lejárt admin-munkamenet) előnézeti címmel: a paraméter figyelmen kívül marad, a normál naptár töltődik (A16).
-  if (refusedPreview(res.status)) { refuseAdventPreview(); return fetchAdventState(createDevice, signal); }
+  if (refusedPreviewRead(res.status)) { refuseAdventPreview(); return fetchAdventState(createDevice, signal); }
   if (res.status === 404) return null;
   // A státuszkód és a gépi jelző a hibán marad (429: betelt olvasási keret → csak sáv; 409 corrupt → célzott, gondozóhoz irányító
   // üzenet — PR-C vak L7).
@@ -138,14 +144,18 @@ export async function fetchAdventState(createDevice = true, signal?: AbortSignal
 }
 
 export const adventApi = {
-  grade: (grade: number) => previewAware(() => apiRequest<AdventState>("POST", adventUrl("/grade"), { ...identity(), grade }, { timeout: ADVENT_TIMEOUT_MS })),
-  open: (day: number) => previewAware(() => apiRequest<AdventOpenResult>("POST", adventUrl(`/doors/${day}/open`), identity(), { timeout: ADVENT_TIMEOUT_MS })),
-  answer: (day: number, questionId: string, pick: number) =>
+  // Az URL-t EAGERLY rögzítjük (a hívás pillanatában): ha a 429 utáni újrapróba (`retryWhenBusy`) közben az admin az előnézeti
+  // címről a normálra navigál, a rögzített URL továbbra is az előnézeti végpontra mutat — nem módosítja a valódi naptárat (Thread 1/3).
+  grade: (grade: number) => { const url = adventUrl("/grade"); return previewAware(() => apiRequest<AdventState>("POST", url, { ...identity(), grade }, { timeout: ADVENT_TIMEOUT_MS })); },
+  open: (day: number) => { const url = adventUrl(`/doors/${day}/open`); return previewAware(() => apiRequest<AdventOpenResult>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
+  answer: (day: number, questionId: string, pick: number) => {
     // Az újraküldés biztonságos: ugyanarra a kérdésre a szerver a tárolt eredményt adja.
-    previewAware(() => apiRequest<AdventAnswerResult>("POST", adventUrl(`/doors/${day}/answer`), { ...identity(), questionId, pick }, { retries: 1, timeout: ADVENT_TIMEOUT_MS })),
-  round: () => previewAware(() => apiRequest<AdventState>("POST", adventUrl("/round"), identity(), { timeout: ADVENT_TIMEOUT_MS })),
+    const url = adventUrl(`/doors/${day}/answer`);
+    return previewAware(() => apiRequest<AdventAnswerResult>("POST", url, { ...identity(), questionId, pick }, { retries: 1, timeout: ADVENT_TIMEOUT_MS }));
+  },
+  round: () => { const url = adventUrl("/round"); return previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
   /** A függő (előnézetként mutatott) átvétel kifejezett mentése a megtekintési útról — idempotens (PR-C vak L2). */
-  adopt: () => previewAware(() => apiRequest<AdventState>("POST", adventUrl("/adopt"), identity(), { timeout: ADVENT_TIMEOUT_MS })),
+  adopt: () => { const url = adventUrl("/adopt"); return previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
   /** Az admin saját előnézeti sorának törlése („Előnézet törlése”, S6) — CSRF-tokenes DELETE. */
   resetPreview: () => previewAware(() => apiRequest<{ removed: number }>("DELETE", "/api/admin/advent/preview", undefined, { timeout: ADVENT_TIMEOUT_MS })),
 };

@@ -56,9 +56,10 @@ test("S6: bekötés — az előnézet az admin-őr mögött, a kapcsoló nélkü
   const index = read("server/index.ts");
   const block = index.slice(index.indexOf("if (!e2e) {"), index.indexOf("// Express error handler"));
   assert.match(block, /startAdventSweeper\(\{\s+sweep: \(now, season\) => adventStore\.sweep\(now, season\)/, "a takarító csak az E2E-n kívüli ágban indul");
-  // A kliens előnézeti útja: 401 / 403 → normál naptár; a sáv és a törlés gombja.
+  // A kliens előnézeti útja: 401 / 403 olvasásnál → normál naptár; írásnál csak 401 (Thread 4); a sáv és a törlés gombja.
   const hook = read("client/src/advent/useAdvent.ts");
-  assert.match(hook, /if \(refusedPreview\(res\.status\)\) \{ refuseAdventPreview\(\); return fetchAdventState\(createDevice, signal\); \}/);
+  assert.match(hook, /if \(refusedPreviewRead\(res\.status\)\) \{ refuseAdventPreview\(\); return fetchAdventState\(createDevice, signal\); \}/);
+  assert.match(hook, /refusedPreviewWrite.*status === 401/, "írásnál csak a 401 kapcsolja ki az előnézetet");
   const page = read("client/src/pages/AdventCalendar.tsx");
   assert.match(page, /data-testid="advent-preview-banner"/);
   assert.match(page, /data-testid="advent-preview-reset"/);

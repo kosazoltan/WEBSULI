@@ -761,8 +761,11 @@ test.describe("asztali nézet 1366×768", () => {
  * normál naptárat kapja (a valódi — itt a teszt — dátum szerint).
  */
 test.describe("admin-előnézet (A16, S6)", () => {
-  const ADMIN_EMAIL = "e2e-allowlisted-admin@websuli.example";
-  const ADMIN_ID = "advent-e2e-preview-admin";
+  // Thread 10: párhuzamos workerenként egyedi admin-fixtúra, hogy a tesztek ne írják felül egymás jelszavát és ne töröljék egymás adatát.
+  // A `randomBytes` a jelszóban és az azonosítóban is biztosítja az egyediséget workerek között.
+  const WORKER_SUFFIX = randomBytes(4).toString("hex");
+  const ADMIN_EMAIL = `e2e-preview-admin-${WORKER_SUFFIX}@websuli.example`;
+  const ADMIN_ID = `advent-e2e-preview-${WORKER_SUFFIX}`;
   const PASSWORD = `Adv-${randomBytes(9).toString("hex")}`;
   const ORIGIN = `https://localhost:${process.env.WEBSULI_E2E_PORT ?? "5000"}`;
   let pool: pg.Pool;
