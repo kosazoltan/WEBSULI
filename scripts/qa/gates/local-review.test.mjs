@@ -1,7 +1,7 @@
 // docs/specs/2026-11-23-vak-kor-kivezetes.md: a helyi (GPU) ellenőr tiszta függvényei.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildPrompt, decideVerdict, DEFAULT_MODEL, findingId, isLocalUrl, ollamaUrl, parseFindings, riskyFiles, splitDiff } from './local-review.mjs';
+import { buildPrompt, decideVerdict, DEFAULT_MODEL, findingId, isLocalUrl, ollamaUrl, parseFindings, riskyFiles, splitDiff, splitHunk } from './local-review.mjs';
 
 const DIFF = [
   'diff --git a/src/a.ts b/src/a.ts', '--- a/src/a.ts', '+++ b/src/a.ts', '@@ -1 +1 @@', '-x', '+y',
@@ -110,6 +110,28 @@ test('töredék: a nagy új-fájl hunk sorhatáron, összefüggő @@ fejlécekke
     next += Number(m[2]);
   }
   assert.equal(next, 41, 'a darabok lefedik az 1..40 tartományt');
-  assert.match(buildPrompt(parts[0]), /töredék/i);
-  assert.match(buildPrompt(parts[0]), /never report truncation/i);
+  // review #588: a töredéktörzsek összefűzve pontosan, sorrendben adják vissza a bemenetet (nincs ismétlés / kiesés).
+  const bodies = parts.flatMap((c) => c.text.split('\n').slice(c.text.split('\n').findIndex((l) => l.startsWith('@@ ')) + 1).filter(Boolean));
+  assert.deepEqual(bodies, body);
+  assert.match(parts[0].text, /töredék 1\/\d+; eleje: hunk eleje; vége: vágott/);
+  assert.match(parts.at(-1).text, /eleje: vágott; vége: hunk vége/);
+  const prompt = buildPrompt(parts[0]);
+  assert.match(prompt, /never report truncation, unterminated expressions or syntax errors caused by that cut edge/i);
+  assert.match(prompt, /genuine syntax errors and unterminated constructs MUST be reported/i);
+});
+
+test('töredék (review #588): vegyes hunk nulla oldala a megelőző sorhoz horgonyoz; a túl hosszú sor egészben, típusjellel marad', () => {
+  const ctx = Array.from({ length: 10 }, (_, i) => ` k${i + 1}`.padEnd(30, 'c'));
+  const add = Array.from({ length: 10 }, (_, i) => `+u${i + 1}`.padEnd(30, 'a'));
+  const h = ['@@ -1,10 +1,20 @@', ...ctx, ...add].join('\n') + '\n';
+  const pieces = splitHunk(h, 120 + 340);
+  const addOnly = pieces.find((x) => /^@@ -\d+,0 /.test(x));
+  assert.ok(addOnly, 'van csak hozzáadást tartalmazó töredék');
+  assert.match(addOnly, /^@@ -10,0 \+11,/, 'a nulla hosszú régi oldal a 10. sorhoz horgonyoz (nem -11,0)');
+  const long = '+' + 'z'.repeat(2000);
+  const lp = splitHunk(['@@ -0,0 +1,3 @@', '+a', long, '+b'].join('\n') + '\n', 300);
+  const all = lp.flatMap((x) => x.split('\n').slice(1).filter(Boolean));
+  assert.deepEqual(all, ['+a', long, '+b'], 'a hosszú sor egészben, egyszer, a + jellel');
+  const counts = lp.map((x) => Number(/\+\d+,(\d+) @@/.exec(x)[1]));
+  assert.equal(counts.reduce((a, b) => a + b, 0), 3);
 });
