@@ -10,6 +10,13 @@
  * Valódi levél csak a bekapcsolt naptár útjain indulhat (a nyilvános router és a takarító évadzáró lépése a kapcsoló mögött); teszt- és
  * e2e-módban CSAK a teszt által beállított hamis küldőn át (`setAdventSender`). A levélben token, eszközazonosító, link-paraméter nincs;
  * a naplóba cím és név nem kerül.
+ *
+ * Kézbesítési jelölők a `mailed_to` listában (`sent:` és `check:` a >24h bizonytalan kézbesítés ellen):
+ *  - `want:<h>` — terv (kinek kell levelet kapnia),
+ *  - `pending:<h>@<ms>` — lejáró bérlet a küldés idejére,
+ *  - `sent:<h>@<ms>` — a szolgáltató elfogadta, de a `finishMail` nem sikerült (≤24h a Resend idempotencia-ablakban),
+ *  - `final:<h>` — kézbesítve (a szolgáltató elfogadta ÉS rögzítve),
+ *  - `check:<h>` — a szolgáltató elfogadta >24h-ja, de a `finishMail` nem sikerült; ellenőrizendő, NEM automatikusan újraküldendő.
  */
 import { createHash, createHmac } from "node:crypto";
 import type { AdventPhase } from "../../shared/advent/calendar";
@@ -151,8 +158,8 @@ export function adventMailKey(secret: string, to: string): string {
  * - Ha a kulcs tartalomfüggő lenne, a tartalom változása (23→24 megoldott) új kulcsot adna, és a Resend is elfogadná a második levelet.
  *
  * A >24h lejárat kezelése: ha a szolgáltató elfogadta a levelet, de a `finishMail` nem mentette a `final:` jelölést, és a pótlás
- * >24 óra múlva fut, a Resend kulcs már lejárt. Ezt a `sent:<hash>@<ms>` jelölő kezeli: >24h-nál a pótlás `check:` jelölővé
- * alakítja (ellenőrizendő, nem automatikusan újraküldendő), <24h-nál a stabil kulcs a Resend-nél deduplikál.
+ * >24 óra múlva fut, a Resend kulcs már lejárt. Ezt a `sent:<hash>@<ms>` jelölő kezeli: a `recoverSent` ≤24h-nál `final:`-ra,
+ * >24h-nál `check:`-ra alakítja (ellenőrizendő, nem automatikusan újraküldendő). A `check:` jelölő megakadályozza a bérletszerzést.
  */
 export function adventIdempotencyKey(rowId: string, to: string): string {
   return `advent-result/${createHash("sha256").update([rowId, "final", to.trim().toLowerCase()].join("|")).digest("hex")}`;
@@ -200,8 +207,21 @@ export async function sendAdventResult(input: { store: MailStore; row: AdventRow
         continue;
       }
       // A szolgáltató elfogadta: azonnal jelöljük `sent:`-tel, mielőtt a `finishMail` meghiúsulhatna (Thread 7 javítás).
-      // Ha a `finishMail` sikertelen, a `sent:` jelölő megakadályozza az újraküldést — a pótlás csak a `finishMail`-t próbálja újra.
-      await input.store.markSent(input.row.id, hash, Date.now()).catch((error: unknown) => logger.error(`[ADVENT] sent jelölő mentése nem sikerült: ${errorClass(error)}`));
+      // Ha a `markSent` is hibázik (pl. teljes DB-kiesés), a levél elment de nincs DB-bejegyzés — a `failed` számláló nő,
+      // és az újrapróba a stabil idempotencia-kulccsal deduplikál a Resend-nél (Thread 2 javítás: a vak küldés `failed`).
+      try {
+        await input.store.markSent(input.row.id, hash, Date.now());
+      } catch (error) {
+        // A levél elment, de nincs sem `sent:`, sem `final:` jelölő: a `finishMail` is hiába próbálkozna (ugyanaz a DB).
+        // A pótlás a Resend 24h-s idempotencia-ablakában ugyanazzal a kulccsal deduplikál; >24h-nál a leaseMail megkapja
+        // a bérletet (nincs sent:/final:), de a Resend már elfelejtette a kulcsot → egy levél még elmehet.
+        // A `failed` számlálóba kerül: a hívó naplózza, az adminnak a report mutatja (Thread 2 javítás).
+        logger.error(`[ADVENT] sent jelölő mentése nem sikerült — a levél elment, de nincs DB-bejegyzés: ${errorClass(error)}`);
+        // A bérletet felszabadítjuk, hogy a következő pótlás újra próbálhassa (a Resend 24h-n belül deduplikál).
+        await input.store.releaseLease(input.row.id, hash).catch((error: unknown) => logger.error(`[ADVENT] bérlet felszabadítása nem sikerült: ${errorClass(error)}`));
+        failed++;
+        continue;
+      }
       try {
         await input.store.finishMail(input.row.id, hash);
         sent++;
@@ -290,7 +310,9 @@ export async function adventMailReport(store: Pick<AdventStore, "mailCandidates"
     const finals = new Set(row.mailedTo.filter((k) => k.startsWith("final:")).map((k) => k.slice("final:".length)));
     // A `sent:` jelölő is kézbesítettnek számít (a szolgáltató elfogadta; Thread 7 javítás).
     const sentHashes = new Set(row.mailedTo.filter((k) => k.startsWith("sent:")).map((k) => k.slice("sent:".length).split("@")[0]!));
-    const delivered = new Set([...finals, ...sentHashes]);
+    // A `check:` jelölő is kézbesítettnek számít (>24h bizonytalan, de a szolgáltató elfogadta; Thread 7 >24h javítás).
+    const checkHashes = new Set(row.mailedTo.filter((k) => k.startsWith("check:")).map((k) => k.slice("check:".length)));
+    const delivered = new Set([...finals, ...sentHashes, ...checkHashes]);
     // Thread 9: a tervezett címzetteket a jelenlegi ADMIN_EMAILS-szel metszve számoljuk; a már eltávolított címzett `want:` bejegyzése
     // nem számít kiküldendőnek (a küldő is csak a jelenlegi listáról dolgozik — sendAdventResult L175).
     let pendingRecipients: number;

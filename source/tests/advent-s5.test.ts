@@ -82,11 +82,13 @@ test("S5: a levél tárgya és törzse — keresztnév HTML-escape-elve, a legjo
  */
 function memoryStore() {
   const claimed = new Set<string>();
+  const checked = new Set<string>(); // >24h bizonytalan kézbesítés (check: jelölő)
   const wants = new Map<string, string[]>();
   const leases = new Map<string, number>();
   const sentMarkers = new Map<string, number>(); // key → timestamp (service accepted, finishMail failed)
   return {
     claimed,
+    checked,
     sentMarkers,
     planMail: async (id: string, keys: string[]) => { if (!wants.has(id)) wants.set(id, keys); return wants.get(id)!; },
     leaseMail: async (id: string, hash: string, nowMs: number, leaseMs: number) => {
@@ -94,6 +96,8 @@ function memoryStore() {
       if (!wants.get(id)?.includes(`want:${hash}`) || claimed.has(k)) return false;
       // A `sent:` jelölő megakadályozza az újbóli bérletszerzést (Thread 7 javítás).
       if (sentMarkers.has(k)) return false;
+      // A `check:` jelölő is megakadályozza (>24h bizonytalan kézbesítés, Thread 7 >24h javítás).
+      if (checked.has(k)) return false;
       const until = leases.get(k);
       if (until !== undefined && until > nowMs - leaseMs) return false;
       leases.set(k, nowMs);
@@ -102,11 +106,16 @@ function memoryStore() {
     finishMail: async (id: string, hash: string) => { const k = `${id}|${hash}`; leases.delete(k); sentMarkers.delete(k); claimed.add(k); },
     releaseLease: async (id: string, hash: string) => { leases.delete(`${id}|${hash}`); },
     markSent: async (id: string, hash: string, _nowMs: number) => { sentMarkers.set(`${id}|${hash}`, _nowMs); },
-    recoverSent: async () => {
+    recoverSent: async (nowMs: number = Date.now()) => {
+      const IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60_000;
       let recovered = 0;
-      for (const [k] of sentMarkers) {
+      for (const [k, sentAt] of sentMarkers) {
         sentMarkers.delete(k);
-        claimed.add(k);
+        if (sentAt > 0 && (nowMs - sentAt) <= IDEMPOTENCY_WINDOW_MS) {
+          claimed.add(k);
+        } else {
+          checked.add(k);
+        }
         recovered++;
       }
       return recovered;
@@ -305,4 +314,98 @@ test("S5 (Thread 7): több worker — a sent: jelölő megvédi a párhuzamos k�
   sent.length = 0;
   await sendAdventResult({ store, row: passed, phase: "open", firstName: "Bence" }, false);
   assert.equal(sent.length, 0, "a 2. worker nem küld, a sent: jelölő blokkolja");
+});
+
+// === Thread 2 javítás: markSent hiba → failed (vak küldés) ===
+
+test("S5 (Thread 2): szolgáltató elfogadta, markSent is elbukott (teljes DB-kiesés) → failed, nincs finishMail kísérlet", async (t) => {
+  sendMode(t);
+  const prevEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "anya@pelda.hu";
+  const prevDelay = setAdventRetryDelay(5);
+  t.after(() => { setAdventSender(null); setAdventRetryDelay(prevDelay); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+  const sent: string[] = [];
+  setAdventSender(async (_s, _h, to) => { sent.push(to); });
+  const store = memoryStore();
+  // Mind a markSent, mind a finishMail hibázik (teljes DB-kiesés).
+  let finishCalled = false;
+  store.markSent = async () => { throw new Error("DB-kiesés: markSent"); };
+  store.finishMail = async () => { finishCalled = true; };
+  const passed = row({ doors: { 1: roundDoors(23, 0, 1) } });
+  const r = await sendAdventResult({ store, row: passed, phase: "open", firstName: "Panni" }, false);
+  assert.equal(sent.length, 1, "a levél elment a szolgáltatónak");
+  assert.equal(r.sent, 0, "sent=0, mert a DB-rögzítés nem sikerült");
+  assert.equal(r.failed, 1, "failed=1 — a vak küldés hibásnak számít");
+  assert.equal(finishCalled, false, "a finishMail nem hívódott meg (markSent már hibázott, ugyanaz a DB)");
+  assert.equal(store.sentMarkers.size, 0, "nincs sent: jelölő (markSent hibázott)");
+  assert.equal(store.claimed.size, 0, "nincs final: jelölő sem");
+});
+
+test("S5 (Thread 2): markSent hiba után a 24h-s idempotencia-ablakban az újrapróba deduplikál", async (t) => {
+  sendMode(t);
+  const prevEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "anya@pelda.hu";
+  const prevDelay = setAdventRetryDelay(5);
+  t.after(() => { setAdventSender(null); setAdventRetryDelay(prevDelay); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+  const sent: { to: string; key: string }[] = [];
+  setAdventSender(async (_s, _h, to, key) => { sent.push({ to, key }); });
+  const store = memoryStore();
+  // 1. hívás: markSent hibázik.
+  let markSentFails = true;
+  const origMark = store.markSent;
+  store.markSent = async (id: string, hash: string, nowMs: number) => {
+    if (markSentFails) throw new Error("DB-kiesés");
+    return origMark(id, hash, nowMs);
+  };
+  const passed = row({ doors: { 1: roundDoors(23, 0, 1) } });
+  await sendAdventResult({ store, row: passed, phase: "open", firstName: "Panni" }, false);
+  assert.equal(sent.length, 1, "1. levél elment");
+  // 2. hívás: DB helyrejött, markSent sikerül — UGYANAZZAL az idempotencia-kulccsal.
+  markSentFails = false;
+  sent.length = 0;
+  await sendAdventResult({ store, row: passed, phase: "open", firstName: "Panni" }, false);
+  assert.equal(sent.length, 1, "2. levél is elment (a helyi dedup nincs, a Resend deduplikál 24h-n belül)");
+  assert.equal(sent[0]!.key, adventIdempotencyKey("row-1", "anya@pelda.hu"), "ugyanaz az idempotencia-kulcs mindkét hívásban");
+});
+
+// === Thread 7 >24h javítás: recoverSent ≤24h → final:, >24h → check: ===
+
+test("S5 (Thread 7 >24h): recoverSent ≤24h-nál final:-ra, >24h-nál check:-ra alakít; check: megakadályozza az újraküldést", async (t) => {
+  sendMode(t);
+  const prevEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "anya@pelda.hu, apa@pelda.hu";
+  const prevDelay = setAdventRetryDelay(5);
+  t.after(() => { setAdventSender(null); setAdventRetryDelay(prevDelay); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+  const sent: string[] = [];
+  setAdventSender(async (_s, _h, to) => { sent.push(to); });
+  const store = memoryStore();
+  // Mindkét címzettnél finishMail hibázik: sent: jelölő rögzül különböző időpontokban.
+  let finishFails = true;
+  const originalFinish = store.finishMail;
+  store.finishMail = async (id: string, hash: string) => {
+    if (finishFails) throw new Error("DB-hiba");
+    return originalFinish(id, hash);
+  };
+  const passed = row({ doors: { 1: roundDoors(23, 0, 1) } });
+  // A küldés két különböző időpontban szimulálva: az egyiknél <24h, a másiknál >24h a sent: jelölő.
+  const NOW = Date.now();
+  const HOUR_23 = NOW - 23 * 60 * 60_000; // 23 órája küldve (≤24h ablakban)
+  const HOUR_25 = NOW - 25 * 60 * 60_000; // 25 órája küldve (>24h ablakon kívül)
+  // Kézzel beállítjuk a sent jelölőket.
+  await store.planMail("row-1", ["want:hash-anya", "want:hash-apa"]);
+  store.sentMarkers.set("row-1|hash-anya", HOUR_23);
+  store.sentMarkers.set("row-1|hash-apa", HOUR_25);
+  assert.equal(store.sentMarkers.size, 2);
+  // recoverSent a jelenlegi idővel.
+  await store.recoverSent(NOW);
+  assert.equal(store.sentMarkers.size, 0, "mindkét sent: jelölő feldolgozva");
+  assert.ok(store.claimed.has("row-1|hash-anya"), "≤24h → final: (claimed)");
+  assert.ok(!store.claimed.has("row-1|hash-apa"), ">24h → NEM final:");
+  assert.ok(store.checked.has("row-1|hash-apa"), ">24h → check: (ellenőrizendő)");
+  assert.ok(!store.checked.has("row-1|hash-anya"), "≤24h → NEM check:");
+  // A check: jelölő megakadályozza az újraküldést (leaseMail false-t ad).
+  finishFails = false;
+  sent.length = 0;
+  const leaseResult = await store.leaseMail("row-1", "hash-apa", NOW, 10 * 60_000);
+  assert.equal(leaseResult, false, "a check: jelölő blokkolja a bérletszerzést");
 });

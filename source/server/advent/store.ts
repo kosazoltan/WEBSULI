@@ -200,7 +200,8 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
 
     /**
      * Bérlet egy címzettre: csak ha tervezett (`want:`), még nem kézbesített (`final:`), a szolgáltató nem fogadta még el
-     * (`sent:` — Thread 7 javítás), és nincs élő bérlete (`pending:` a `leaseMs`-en belül). Egy utasítás, soronkénti zárral:
+     * (`sent:` — Thread 7 javítás), nincs ellenőrizendő jelölője (`check:` — >24h bizonytalan kézbesítés, Thread 7 >24h javítás),
+     * és nincs élő bérlete (`pending:` a `leaseMs`-en belül). Egy utasítás, soronkénti zárral:
      * két egyidejű feldolgozóból pontosan egy kapja meg.
      */
     async leaseMail(id: string, hash: string, nowMs: number, leaseMs: number): Promise<boolean> {
@@ -208,6 +209,7 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
         `UPDATE advent_progress
             SET mailed_to = array_append(ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%'), 'pending:' || $2 || '@' || $3::text)
           WHERE id = $1 AND ('want:' || $2) = ANY(mailed_to) AND NOT (('final:' || $2) = ANY(mailed_to))
+            AND NOT (('check:' || $2) = ANY(mailed_to))
             AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'sent:' || $2 || '@%')
             AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'pending:' || $2 || '@%' AND split_part(k, '@', 2)::bigint > $4::bigint)
           RETURNING id`,
@@ -275,11 +277,12 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
     },
 
     /**
-     * A `sent:` → `final:` helyreállítás (Thread 7 javítás): a szolgáltató elfogadta a levelet, de a `finishMail` nem mentette
-     * a `final:` jelölőt. A `sent:` jelölőt átírjuk `final:`-ra. A levelet NEM küldjük újra. Az átalakított jelölők száma.
+     * A `sent:` helyreállítás (Thread 7 + Thread 7 >24h javítás): a szolgáltató elfogadta a levelet, de a `finishMail` nem mentette
+     * a `final:` jelölőt. ≤24h: `sent:` → `final:` (a Resend idempotencia-kulcs még véd). >24h: `sent:` → `check:` (ellenőrizendő,
+     * nem automatikusan újraküldendő — a Resend kulcs lejárt, az automatikus újraküldés dupla levelet küldhetne).
      */
-    async recoverSent(): Promise<number> {
-      // Minden sort, amelyben van `sent:` jelölő, egyszerre frissítünk: `sent:<hash>@<ms>` → `final:<hash>`.
+    async recoverSent(nowMs: number = Date.now()): Promise<number> {
+      const IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60_000;
       const got = await pool.query<{ id: string; mailed_to: string[] }>(
         `SELECT id, mailed_to FROM advent_progress WHERE EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'sent:%')`,
       );
@@ -287,14 +290,18 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
       for (const r of got.rows) {
         const sentEntries = (r.mailed_to ?? []).filter((k) => k.startsWith("sent:"));
         for (const entry of sentEntries) {
-          // sent:<hash>@<ms> → final:<hash>
-          const hash = entry.slice("sent:".length).split("@")[0]!;
+          // sent:<hash>@<ms> → final:<hash> (≤24h) vagy check:<hash> (>24h)
+          const parts = entry.slice("sent:".length).split("@");
+          const hash = parts[0]!;
+          const sentAtMs = Number(parts[1] ?? "0");
+          const withinWindow = sentAtMs > 0 && (nowMs - sentAtMs) <= IDEMPOTENCY_WINDOW_MS;
+          const target = withinWindow ? "final" : "check";
           await pool.query(
             `UPDATE advent_progress
                 SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k != $2)
-                                || CASE WHEN ('final:' || $3) = ANY(mailed_to) THEN ARRAY[]::text[] ELSE ARRAY['final:' || $3] END
+                                || CASE WHEN ($4 || ':' || $3) = ANY(mailed_to) THEN ARRAY[]::text[] ELSE ARRAY[$4 || ':' || $3] END
               WHERE id = $1`,
-            [r.id, entry, hash],
+            [r.id, entry, hash, target],
           );
           recovered++;
         }
