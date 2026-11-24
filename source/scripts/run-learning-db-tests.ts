@@ -126,6 +126,10 @@ try {
   const pendingMigration = await readFile(new URL("../migrations/0047_lesson_result_pending.sql", import.meta.url), "utf8");
   await pool.query(pendingMigration);
   await pool.query(pendingMigration);
+  // U4b review #586: a kézbesítés tartós nyoma (0048), kétszer — idempotens.
+  const deliveryMigration = await readFile(new URL("../migrations/0048_lesson_result_pending_delivery.sql", import.meta.url), "utf8");
+  await pool.query(deliveryMigration);
+  await pool.query(deliveryMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {

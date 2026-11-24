@@ -13,10 +13,12 @@ assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 process.env.ADMIN_EMAILS = "admin-a@example.test, admin-b@example.test";
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, sendPracticeResult, setResultSender } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, sendPracticeResult, setResultSender, setRetryDelay } = await import("../server/lesson-result-email");
 
 const sent: Array<{ subject: string; html: string; to: string }> = [];
-setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
+let failing = false;
+setResultSender(async (subject, html, to) => { if (failing) throw new Error("átmeneti hiba"); sent.push({ subject, html, to }); });
+setRetryDelay(50);
 const lesson = fusionFixture();
 const ex = lesson.experience!;
 let base = "";
@@ -38,8 +40,12 @@ before(async () => {
   close = () => server.close();
 });
 after(async () => { close(); setResultSender(null); delete process.env.RESULT_COMBINED_EMAIL; await dbPool.end(); });
-beforeEach(() => { sent.length = 0; process.env.RESULT_COMBINED_EMAIL = "on"; });
-const settle = () => new Promise(r => setTimeout(r, 400));
+beforeEach(() => { sent.length = 0; failing = false; process.env.RESULT_COMBINED_EMAIL = "on"; });
+// Review #586: rögzített alvás helyett korlátos várakozás a várt levélszámra, utána rövid türelmi idő a fölösleges levél elkapására.
+const settle = async (expected = 0) => {
+  for (let i = 0; i < 100 && sent.length < expected; i++) await new Promise(r => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 250));
+};
 const post = async (lessonId: string, body: Record<string, unknown>, user?: string) => {
   const r = await fetch(`${base}/api/lessons/${lessonId}/results`, { method: "POST", headers: { "content-type": "application/json", ...(user ? { "x-test-user": user } : {}) }, body: JSON.stringify(body) });
   return { status: r.status, body: await r.json() as Record<string, unknown> };
@@ -61,7 +67,7 @@ test("E2 + E3 + E10: csak a kvíz → nincs levél, awaiting: tasks; a feladatok
   assert.equal(t.status, 202);
   assert.equal(t.body.awaiting, undefined);
   assert.equal(t.body.combined, true);
-  await settle();
+  await settle(2);
   assert.equal(sent.length, 2, "egy összevont levél mindkét adminnak");
   assert.match(sent[0].subject, / — Feladatok \+ kvíz — /);
   assert.ok(sent[0].html.includes("<h3>Feladatok") && sent[0].html.includes("<h3>Kvíz"));
@@ -89,7 +95,7 @@ test("E6: kapcsoló KI → a régi kétlevelű viselkedés (azonnal megy, nincs 
   process.env.RESULT_COMBINED_EMAIL = "off";
   const r = await post("comb-two", quizBody("fp-c", "c-q1"));
   assert.equal(r.body.awaiting, undefined);
-  await settle();
+  await settle(2);
   assert.equal(sent.length, 2);
   assert.match(sent[0].subject, / — Kvíz — /);
   assert.deepEqual(await open("guest:fp-c"), []);
@@ -100,7 +106,7 @@ test("E8: üres várakozóállapotból a két rész egyszerre (két kapcsolat) �
   assert.equal(a.status, 202);
   assert.equal(b.status, 202);
   assert.equal([a.body.combined, b.body.combined].filter(Boolean).length, 1, "pontosan az egyik párosít");
-  await settle();
+  await settle(2);
   assert.equal(sent.length, 2);
   assert.match(sent[0].subject, /Feladatok \+ kvíz/);
   assert.deepEqual(await open("guest:fp-d"), []);
@@ -115,8 +121,74 @@ test("E9: a bejelentkezett tanuló gyakorlóköre (sendPracticeResult) ugyanazon
   const answers = Object.fromEntries(questions.map(q => [q.id, { pickedIndex: q.correctIndex }]));
   const res = await sendPracticeResult({ userId: "comb-user", attemptId: "att-u1", lessonId: "comb-two", questions: questions as never, answers: answers as never });
   assert.equal(res?.awaiting ?? null, null);
-  await settle();
+  await settle(2);
   assert.equal(sent.length, 2);
   assert.match(sent[0].subject, /Feladatok \+ kvíz/);
   assert.deepEqual(await open("comb-user"), []);
+});
+
+// Review #586 — a kézbesítés tartóssága, a kilét és a kapcsoló-időszakok.
+const delivered = async (owner: string) => (await dbPool.query(`SELECT kind, delivered_at IS NOT NULL AS d FROM lesson_result_pending WHERE owner_key = $1 AND sent_reason = 'pair' ORDER BY kind`, [owner])).rows;
+
+test("R1: a sikertelen kézbesítés után a pár nincs lezárva; a kör ismételt beküldése újrakézbesít, utána delivered_at íródik", async () => {
+  await post("comb-two", quizBody("fp-r1", "r1-q"));
+  failing = true;
+  const t = await post("comb-two", tasksBody("fp-r1", "r1-t"));
+  assert.equal(t.body.combined, true);
+  await new Promise(r => setTimeout(r, 600));
+  assert.equal(sent.length, 0);
+  assert.deepEqual(await delivered("guest:fp-r1"), [{ kind: "quiz", d: false }, { kind: "tasks", d: false }]);
+  failing = false;
+  const again = await post("comb-two", tasksBody("fp-r1", "r1-t"));
+  assert.equal(again.body.alreadySent, true);
+  await settle(2);
+  assert.equal(sent.length, 2);
+  assert.match(sent[0].subject, /Feladatok \+ kvíz/);
+  assert.deepEqual(await delivered("guest:fp-r1"), [{ kind: "quiz", d: true }, { kind: "tasks", d: true }]);
+  sent.length = 0;
+  await post("comb-two", quizBody("fp-r1", "r1-q"));
+  await settle();
+  assert.equal(sent.length, 0, "a kézbesített pár nem megy újra");
+});
+
+test("R2: ujjlenyomat nélküli vendég (kétértelmű kilét) nem párosul — a régi egyrészes út", async () => {
+  const { fingerprint: _omit, ...body } = quizBody("x", "r2-q");
+  const r = await post("comb-two", body);
+  assert.equal(r.body.awaiting, undefined);
+  await settle(2);
+  assert.equal(sent.length, 2);
+  assert.match(sent[0].subject, / — Kvíz — /);
+});
+
+test("R3: a régebbi kör (kezdési idő szerint) ismétlése nem írja felül az újabb félretett kört", async () => {
+  await post("comb-two", { ...quizBody("fp-r3", "r3-new"), startedAt: Date.now() - 1_000 });
+  await post("comb-two", { ...quizBody("fp-r3", "r3-old"), startedAt: Date.now() - 60_000 });
+  assert.deepEqual(await open("guest:fp-r3"), [{ kind: "quiz", round_id: "r3-new" }]);
+});
+
+test("R4: 7 napnál régebbi félretett rész nem párosul (a söprő kezeli)", async () => {
+  await dbPool.query(`INSERT INTO lesson_result_pending (lesson_id, owner_key, kind, round_id, graded, learner, created_at)
+    VALUES ('comb-two', 'guest:fp-r4', 'quiz', 'r4-old', '{"kind":"quiz"}', '{"learner":"Vendég","guest":true}', now() - interval '8 days')`);
+  const t = await post("comb-two", tasksBody("fp-r4", "r4-t"));
+  assert.equal(t.body.awaiting, "quiz");
+  await settle();
+  assert.equal(sent.length, 0);
+  assert.equal((await open("guest:fp-r4")).length, 2, "az elavult kvíz és az új feladat is nyitott");
+});
+
+test("R5: a kapcsoló KI állásában a korábban félretett rész a régi úton, egyrészes levélként megy (nem marad elavult pár)", async () => {
+  await post("comb-two", quizBody("fp-r5", "r5-q"));
+  process.env.RESULT_COMBINED_EMAIL = "off";
+  await post("comb-two", tasksBody("fp-r5", "r5-t"));
+  await settle(4);
+  assert.equal(sent.length, 4, "a feladat és a félretett kvíz is külön levélben");
+  assert.ok(sent.some(m => / — Kvíz — /.test(m.subject)) && sent.some(m => / — Feladatok — /.test(m.subject)));
+  assert.deepEqual(await open("guest:fp-r5"), []);
+});
+
+test("R6: a fiókos gyakorlókör azonosítója vendégként újraküldve sem képez új párt", async () => {
+  const r = await post("comb-two", quizBody("fp-r6", "att-u1"));
+  assert.equal(r.body.alreadySent, true);
+  await settle();
+  assert.equal(sent.length, 0);
 });

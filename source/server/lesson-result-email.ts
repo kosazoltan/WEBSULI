@@ -16,7 +16,7 @@ import type { AttemptAnswer, AttemptQuestion } from "../shared/lesson-attempt";
 import { logger } from "./lib/logger";
 import { recordLearnerActivity, resolveLearner } from "./learners";
 import { contributorKey, maybeRelaxTightening, recordTaskResults } from "./task-results";
-import { isTwoPartExperience, pairOrPark, resultCombinedEmailEnabled, type PendingLearner } from "./lesson-result-combine";
+import { isTwoPartExperience, markPairDelivered, pairOrPark, resultCombinedEmailEnabled, takeParkedForLegacy, type PairedParts, type PendingLearner } from "./lesson-result-combine";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — „motorháztető alatt”: a tanuló felülete
@@ -469,14 +469,35 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   const finalizing = once && graded.kind === "quiz";
   if (finalizing) { markFinalized(lockKey); cancelPartial(lockKey); partialVersions.delete(lockKey); forgetPartial(lockKey); }
   const lessonIdF = req.params.lessonId;
-  if (combinedOn) {
+  // Review #586: vendégnél csak egyértelmű (ujjlenyomatos) kilét párosít — a közös tartalék-kilét (IP / „?”) nem keverheti össze
+  // különböző vendégek eredményét; ilyenkor a régi egyrészes út megy.
+  if (combinedOn && (userId || paired || body.fingerprint)) {
     const learner: PendingLearner = { learner: paired && !userId ? paired.name : await learnerName(userId),
       ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), guest: !userId && !paired };
-    const outcome = await pairOrPark({ lessonId: lessonIdF, ownerKey: who, kind: graded.kind, roundId: body.roundId, graded, learner });
-    if (outcome.type === "alreadySent") return res.status(202).json({ queued: false, alreadySent: true });
+    let part: GradedTasks | GradedQuiz = graded;
+    if (graded.kind === "quiz" && resultPartialEmailEnabled()) {
+      // Review #586: mindkét kapcsoló BE — a korábban kiment „félbehagyva” levél felülírásának jelzése az összevont levélben is.
+      let superseded: boolean | null = null;
+      try { superseded = await partialAlreadySent(lessonIdF, body.roundId); } catch (error) { logger.warn(`[LESSON-RESULT] a felülírás-ellenőrzés hibázott: ${errorClass(error)}`); }
+      const supersedes: boolean | "unknown" = superseded === null ? "unknown" : superseded;
+      if (supersedes) part = { ...graded, meta: { ...graded.meta, supersedesPartial: supersedes } };
+    }
+    const outcome = await pairOrPark({ lessonId: lessonIdF, ownerKey: who, kind: part.kind, roundId: body.roundId, graded: part, learner });
+    if (outcome.type === "alreadySent") {
+      // Review #586: a kézbesítetlen pár (leállás, szolgáltatói hiba, nincs címzett) a kör ismételt beküldésére újra kézbesül.
+      if (outcome.redeliver) void deliverCombined(lessonIdF, outcome.redeliver, false).catch(error => logger.error("[LESSON-RESULT] összevont újrakézbesítés hiba:", error));
+      return res.status(202).json({ queued: false, alreadySent: true });
+    }
     if (outcome.type === "parked") return res.status(202).json({ queued: false, awaiting: outcome.awaiting });
-    void deliverCombined(lessonIdF, outcome).catch(error => logger.error("[LESSON-RESULT] összevont háttérküldés hiba:", error));
+    void deliverCombined(lessonIdF, outcome, true).catch(error => logger.error("[LESSON-RESULT] összevont háttérküldés hiba:", error));
     return res.status(202).json({ queued: true, combined: true });
+  }
+  if (!combinedOn && isTwoPartExperience(experience)) {
+    // Review #586 (kapcsoló-időszakok): KI állásban a korábban (BE alatt) félretett részek a régi úton, egyrészes levélként mennek.
+    void takeParkedForLegacy(lessonIdF, who).then(parts => Promise.all(parts.map(p => sendLessonResult({ lessonId: lessonIdF,
+      roundKey: roundKeyOf(who, p.graded.kind, p.roundId), learner: p.learner.learner, ...(p.learner.learnerFirst ? { learnerFirst: p.learner.learnerFirst } : {}),
+      ...(p.learner.learnerId ? { learnerId: p.learner.learnerId } : {}), guest: p.learner.guest, graded: p.graded }))))
+      .catch(error => logger.error("[LESSON-RESULT] félretett részek kiürítése hiba:", error));
   }
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
   void (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => {
@@ -521,9 +542,19 @@ export async function sendPracticeResult(input: { userId: string; attemptId: str
     const [row] = await db.select({ json: lessons.json }).from(lessons).where(eq(lessons.id, input.lessonId));
     const lesson = row ? lessonSchema.safeParse(row.json) : null;
     if (lesson?.success && isTwoPartExperience(lesson.data.experience)) {
-      const outcome = await pairOrPark({ lessonId: input.lessonId, ownerKey: input.userId, kind: "quiz", roundId: input.attemptId, graded, learner: { learner, guest: false } });
-      if (outcome.type === "parked") return { awaiting: outcome.awaiting };
-      if (outcome.type === "paired") await deliverCombined(input.lessonId, outcome);
+      // Review #586: az átmeneti DB-hiba nem veszítheti el a kész gyakorlókört — korlátos újrapróba (a hívó csak naplóz).
+      let outcome: Awaited<ReturnType<typeof pairOrPark>> | null = null;
+      for (let attempt = 0; attempt < PRACTICE_PAIR_ATTEMPTS && !outcome; attempt++) {
+        try { outcome = await pairOrPark({ lessonId: input.lessonId, ownerKey: input.userId, kind: "quiz", roundId: input.attemptId, graded, learner: { learner, guest: false } }); }
+        catch (error) {
+          logger.warn(`[LESSON-RESULT] gyakorlókör-párosítás átmeneti hiba (${attempt + 1}. próba): ${errorClass(error)}`);
+          if (attempt + 1 === PRACTICE_PAIR_ATTEMPTS) throw error;
+          await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+        }
+      }
+      if (outcome!.type === "parked") return { awaiting: outcome!.awaiting };
+      if (outcome!.type === "paired") await deliverCombined(input.lessonId, outcome!, true);
+      if (outcome!.type === "alreadySent" && outcome!.redeliver) await deliverCombined(input.lessonId, outcome!.redeliver, false);
       return { awaiting: null };
     }
   }
@@ -531,9 +562,28 @@ export async function sendPracticeResult(input: { userId: string; attemptId: str
   return { awaiting: null };
 }
 
-/** U4b: a párosított két rész EGY levélben — a két körből képzett körkulccsal (idempotencia: ugyanaz a pár ugyanazt a kulcsot adja). */
-async function deliverCombined(lessonId: string, pair: Extract<Awaited<ReturnType<typeof pairOrPark>>, { type: "paired" }>) {
-  await sendLessonResult({ lessonId, roundKey: roundKeyOf("combined", pair.tasksRound, pair.quizRound), learner: pair.learner.learner,
-    ...(pair.learner.learnerFirst ? { learnerFirst: pair.learner.learnerFirst } : {}), ...(pair.learner.learnerId ? { learnerId: pair.learner.learnerId } : {}),
-    guest: pair.learner.guest, graded: pair.tasks, combined: { tasks: pair.tasks, quiz: pair.quiz } });
+const PRACTICE_PAIR_ATTEMPTS = 3;
+
+/**
+ * U4b: a párosított két rész EGY levélben — a pár kulcsával (a tulajdonost is tartalmazza; idempotencia: ugyanaz a pár ugyanazt a
+ * kulcsot adja, a kézbesítési napló és a szolgáltatói kulcs nem duplikál). A `delivered_at` csak a teljes kézbesítés után íródik
+ * (review #586); kézbesítetlen pár a kör ismételt beküldésére és a söprővel (U4c) pótolható.
+ */
+async function deliverCombined(lessonId: string, pair: PairedParts, firstTime: boolean) {
+  // A levél neve: a kilétet hordozó rész (a fiókos / párosított adat elsőbbséget kap a vendéggel szemben).
+  const who = pair.tasksLearner.learnerId || !pair.tasksLearner.guest ? pair.tasksLearner : pair.quizLearner;
+  const report = { failed: 0 };
+  const result = await sendLessonResult({ lessonId, roundKey: pair.pairKey, learner: who.learner,
+    ...(who.learnerFirst ? { learnerFirst: who.learnerFirst } : {}), ...(pair.tasksLearner.learnerId ? { learnerId: pair.tasksLearner.learnerId } : {}),
+    guest: who.guest, graded: pair.tasks, combined: { tasks: pair.tasks, quiz: pair.quiz } }, true, report);
+  if (report.failed === 0 && (result.sent > 0 || result.duplicate)) await markPairDelivered(pair.pairKey);
+  // Review #586: a kvízrész is a tanulói naplóba (a jelzősor a feladatrészé, az a sendLessonResult-ban naplózódik) — egyszer, a párosításkor.
+  if (firstTime && pair.quizLearner.learnerId) await recordQuizActivity(lessonId, pair.quizLearner.learnerId, pair.quiz.summary.percent);
+}
+
+async function recordQuizActivity(lessonId: string, learnerId: string, percent: number) {
+  const [row] = await db.select({ json: lessons.json, htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, lessonId));
+  const lesson = row ? lessonSchema.safeParse(row.json) : null;
+  if (!row || !lesson?.success) return;
+  await recordLearnerActivity({ learnerId, materialId: row.htmlFileId, kind: "result", percent, summary: `${lesson.data.title} — Kvíz` });
 }
