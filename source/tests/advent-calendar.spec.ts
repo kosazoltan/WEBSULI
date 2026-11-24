@@ -761,11 +761,12 @@ test.describe("asztali nézet 1366×768", () => {
  * normál naptárat kapja (a valódi — itt a teszt — dátum szerint).
  */
 test.describe("admin-előnézet (A16, S6)", () => {
-  // Thread 10: párhuzamos workerenként egyedi admin-fixtúra, hogy a tesztek ne írják felül egymás jelszavát és ne töröljék egymás adatát.
-  // A `randomBytes` a jelszóban és az azonosítóban is biztosítja az egyediséget workerek között.
-  const WORKER_SUFFIX = randomBytes(4).toString("hex");
-  const ADMIN_EMAIL = `e2e-preview-admin-${WORKER_SUFFIX}@websuli.example`;
-  const ADMIN_ID = `advent-e2e-preview-${WORKER_SUFFIX}`;
+  // Thread 10 + Vercel-szál: saját, a playwright-szerver ADMIN_ALLOWLIST-jén szereplő cím (nem az admin-allowlist.spec.ts adminja), és a
+  // blokk egy workerben, sorban fut — így a két teszt nem írja felül egymás jelszavát és nem törli egymás fixtúráját; véletlen cím nem
+  // lehet, mert az engedélylistán nem szereplő admin 403-at kapna.
+  test.describe.configure({ mode: "serial" });
+  const ADMIN_EMAIL = "e2e-advent-preview-admin@websuli.example";
+  const ADMIN_ID = "advent-e2e-preview-admin";
   const PASSWORD = `Adv-${randomBytes(9).toString("hex")}`;
   const ORIGIN = `https://localhost:${process.env.WEBSULI_E2E_PORT ?? "5000"}`;
   let pool: pg.Pool;
