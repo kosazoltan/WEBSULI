@@ -9,7 +9,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   CODE_PATTERN, CODE_TTL_MS, DEFAULT_LOGIN_EMAIL_DAILY_MAX, LINK_TOKEN_PATTERN, LINK_TTL_MS, MAX_CODE_ATTEMPTS, MAX_FAILED_ATTEMPTS_PER_DAY,
-  START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, VERIFY_PER_IP_MAX, limitKey, loginEmailDailyMax,
+  START_PER_EMAIL_DAILY_MAX, START_PER_EMAIL_MAX, START_PER_IP_DAILY_MAX, START_PER_IP_MAX, VERIFY_PER_IP_MAX, accountEmailKey, limitKey, loginEmailDailyMax, mailboxKeySql,
   banFingerprint, banRetentionMonths, codeHash, emailHash, generateCode, generateLinkToken, linkHash, normalizeEmail, playerAuthKey,
 } from "../server/player/codes";
 import { buildPlayerLoginEmail, playerLinkBaseUrl, playerLoginLink } from "../server/player/email-template";
@@ -61,6 +61,15 @@ describe("JM7a — normalizálás és korlátok", () => {
     assert.equal(limitKey("anna+suli@pelda.hu"), "anna@pelda.hu");
     assert.equal(limitKey("a.nna@pelda.hu"), "a.nna@pelda.hu", "nem Gmail: a pont jelentéses");
     assert.equal(normalizeEmail("A.B+X@Gmail.com"), "a.b+x@gmail.com", "a tárolt / fiók-cím nem kanonizált");
+  });
+
+  it("P-020: fiókkulcs — CSAK Gmailen (pont, +címke, googlemail) összevonva; más domainen csak trim + kisbetű", () => {
+    for (const v of ["p020proba@gmail.com", "p.0.2.0.proba@gmail.com", "p020proba+jatek@gmail.com", "P020.Proba+X@GoogleMail.com", " p020proba@googlemail.com "]) {
+      assert.equal(accountEmailKey(v), "p020proba@gmail.com", v);
+    }
+    assert.equal(accountEmailKey("anna+suli@pelda.hu"), "anna+suli@pelda.hu", "nem Gmail: a +címke megmarad (konzervatív)");
+    assert.equal(accountEmailKey("A.Nna@Pelda.hu"), "a.nna@pelda.hu", "nem Gmail: a pont megmarad, csak kisbetű");
+    assert.notEqual(accountEmailKey("anna+suli@pelda.hu"), limitKey("anna+suli@pelda.hu"), "a fiókkulcs szűkebb, mint a korlát-kulcs");
   });
 
   it("review #445 (K2): a belépő levelek napi plafonja környezetből, biztonságos alapértékkel", () => {
@@ -188,7 +197,10 @@ describe("JM7a — migráció 0040 ↔ Drizzle-séma", () => {
       const start = sqlText.indexOf(`CREATE TABLE IF NOT EXISTS ${name} (`);
       assert.ok(start >= 0, `CREATE TABLE ${name}`);
       const body = sqlText.slice(start, sqlText.indexOf("\n);", start));
-      const inSql = [...body.matchAll(/^\s{2}([a-z_]+)\s+(?:varchar|integer|char|timestamp)/gm)].map((m) => m[1]).sort();
+      // P-020: a későbbi, additív migrációk oszlopai is (0045: player_accounts.email_key, email_key_conflict).
+      const added = readdirSync(new URL("../migrations/", import.meta.url)).filter((f) => /^\d{4}_.*\.sql$/.test(f) && f > "0040_player_accounts.sql")
+        .flatMap((f) => [...readFileSync(new URL(`../migrations/${f}`, import.meta.url), "utf8").matchAll(new RegExp(`ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS ([a-z_]+)`, "g"))].map((m) => m[1]));
+      const inSql = [...[...body.matchAll(/^\s{2}([a-z_]+)\s+(?:varchar|integer|char|timestamp)/gm)].map((m) => m[1]), ...added].sort();
       const inSchema = Object.values(getTableColumns(table)).map((c) => c.name).sort();
       assert.deepEqual(inSql, inSchema);
       assert.ok(!inSchema.some((c) => /admin|role|password/.test(c)), "a játékos-fiók szerkezetileg nem kaphat jogot / jelszót");
@@ -201,6 +213,27 @@ describe("JM7a — migráció 0040 ↔ Drizzle-séma", () => {
     assert.doesNotMatch(code, /\bDROP\b/i);
     assert.equal((code.match(/CREATE (?:TABLE|INDEX) (?!IF NOT EXISTS)/g) ?? []).length, 0);
     assert.match(sqlText, /Visszaállítás \(down\)/);
+  });
+});
+
+describe("P-020 — migráció 0045 (postafiók-kulcs, ütközés-biztos egyedi index)", () => {
+  const sqlText = readFileSync(new URL("../migrations/0045_player_email_key.sql", import.meta.url), "utf8");
+  const code = sqlText.replace(/^\s*--.*$/gm, "");
+
+  it("additív és idempotens: nincs DROP / DELETE; minden ADD COLUMN / INDEX IF NOT EXISTS; a visszaállás le van írva", () => {
+    assert.doesNotMatch(code, /\b(DROP|DELETE|TRUNCATE)\b/i, "meglévő fiókot nem töröl / von össze");
+    assert.equal((code.match(/ADD COLUMN (?!IF NOT EXISTS)/g) ?? []).length, 0);
+    assert.equal((code.match(/CREATE (?:UNIQUE )?INDEX (?!IF NOT EXISTS)/g) ?? []).length, 0);
+    assert.match(sqlText, /Visszaállítás \(down\)[\s\S]*DROP INDEX IF EXISTS player_accounts_email_key_unique/);
+  });
+
+  it("a kulcs generált oszlop (= mailboxKeySql, a Drizzle-sémában is); az egyedi index a (kulcs, sorszám) páron — új alias nem fér be", () => {
+    assert.ok(code.includes(`ADD COLUMN IF NOT EXISTS email_key varchar(254) GENERATED ALWAYS AS (${mailboxKeySql("email")}) STORED`), "SQL = mailboxKeySql");
+    const schemaText = readFileSync(new URL("../shared/schema.ts", import.meta.url), "utf8");
+    assert.ok(schemaText.includes(mailboxKeySql("email")), "a Drizzle-séma generált kifejezése = mailboxKeySql");
+    assert.match(code, /ADD COLUMN IF NOT EXISTS email_key_dup smallint NOT NULL DEFAULT 0/);
+    assert.match(code, /CREATE UNIQUE INDEX IF NOT EXISTS player_accounts_email_key_unique ON player_accounts \(email_key, email_key_dup\)/);
+    assert.doesNotMatch(code, /UNIQUE INDEX[^;]*WHERE/, "nem részleges: a jelölt csoport mellé sem fér új sor");
   });
 });
 
