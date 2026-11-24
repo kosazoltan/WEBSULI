@@ -45,6 +45,18 @@ cards:
     observed: "Évadonként egy levél szerződés: elfogadás után kiesett jelölés + 24 h-s Resend-ablak lejárta = második levél"
     fix: "try:<h>@<első ms> jelölő, 23 órás újrapróba-ablak, utána check:; Resend 409 invalid_idempotent_request = kézbesítve"
     rule: "idempotencia-kulcsos küldésnél az ELSŐ kísérlet idejét őrizd; az ablakon túl automatikus ismétlés helyett kézi egyeztetés"
+  - id: 11
+    status: rule
+    date: "2026-11-24"
+    observed: "Duplikátum-válasz korai return-je a levéltől független mellékhatást (feladatmérés) is kihagyta; üres pontozás lefoglalta a kört (PR #571 review)"
+    fix: "duplicate jelző, a független ág előtte fut; üres graded.rows → queued:false a jelző előtt"
+    rule: "dedup-ágnál a korai return csak azt tiltsa, amit dedupál; foglalás csak érdemi (nem üres) tartalomra"
+  - id: 10
+    status: rule
+    date: "2026-11-24"
+    observed: "DB-teszt hamis bukás: az előző teszt késői aszinkron levele a következő teszt számlálójába esett"
+    fix: "minden teszt megvárja a saját háttér-mellékhatását, a számlálás tárgy szerint szűr"
+    rule: "202-es háttérmunkát indító tesztben a teszt végéig várd meg a saját mellékhatást; a waitFor lejárta nem bukás — utána assert"
   - id: 6
     status: rule
     date: "2026-11-24"

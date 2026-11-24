@@ -46,7 +46,7 @@ import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
 import { SPEECH_BRIDGE_SCRIPT } from "./lib/speech-bridge";
-import { lessonResultsRouter } from "./lesson-result-email";
+import { lessonResultsRouter, resultPartialEmailEnabled } from "./lesson-result-email";
 import { createAdventRouter } from "./advent/routes";
 import { createAdventStore } from "./advent/store";
 import { createAdventPreviewRouter } from "./advent/preview";
@@ -1020,7 +1020,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Frontend fetches this token and includes it in all mutating requests (POST/PUT/DELETE)
   app.get('/api/csrf-token', (req: Request, res) => {
     const csrfToken = generateToken(req);
-    res.json({ csrfToken });
+    // Eredmény-e-mail B4b: a kör-kilét kötését (a kliens csak a rögzített párosítással egyező tokent küldi) a B4 kapcsolója hirdeti.
+    res.json({ csrfToken, ...(resultPartialEmailEnabled() ? { resultOwnerBinding: true } : {}) });
   });
 
   // HEALTH CHECK endpoint - Fast response for Autoscale deployment health checks
