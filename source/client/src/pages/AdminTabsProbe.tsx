@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { ADMIN_TABS_LAYOUT, AdminTabBar } from "@/components/AdminTabBar";
+import { ADMIN_TABS_LAYOUT, AdminTabBar, useAdminTabsOrientation } from "@/components/AdminTabBar";
 
 /**
  * Az admin menü és a fájlkereső mérőoldala (spec 2026-10-18-admin-korszerusites). Csak a teszt-buildben létezik
@@ -10,9 +10,10 @@ import { ADMIN_TABS_LAYOUT, AdminTabBar } from "@/components/AdminTabBar";
  */
 export default function AdminTabsProbe() {
   const [tab, setTab] = useState("files");
+  const orientation = useAdminTabsOrientation();
   return (
     <div className="container mx-auto px-2 py-2 max-w-full" data-testid="admin-panel">
-      <Tabs value={tab} onValueChange={setTab} className={ADMIN_TABS_LAYOUT}>
+      <Tabs value={tab} onValueChange={setTab} orientation={orientation} className={ADMIN_TABS_LAYOUT}>
         <AdminTabBar />
         {/* #1985: a tartalompanel a menü mellett — magas töltelékkel a ragadós menü méréséhez. */}
         <div role="tabpanel" data-testid="probe-panel">

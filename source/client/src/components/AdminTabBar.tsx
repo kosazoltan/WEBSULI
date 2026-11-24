@@ -9,6 +9,27 @@ import { ADMIN_TAB_GROUPS } from "@/lib/admin-tabs";
  */
 export const ADMIN_TABS_LAYOUT = "w-full lg:flex lg:items-start lg:gap-3 [&>[role=tabpanel]]:min-w-0 lg:[&>[role=tabpanel]]:flex-1";
 
+/** Az oldalmenü töréspontja (Tailwind `lg`): ettől a menü függőleges. */
+const SIDE_NAV_QUERY = "(min-width: 1024px)";
+
+/**
+ * A `Tabs` gyökér orientációja a töréspont szerint (review #578): a Radix a gyökér `orientation`-jéből állítja a lista
+ * `aria-orientation`-jét ÉS a nyílbillentyű-kezelést — függőleges menüben Fel/Le, a keskeny csoportsorban Bal/Jobb léptet.
+ */
+export function useAdminTabsOrientation(): "vertical" | "horizontal" {
+  const read = () => (typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(SIDE_NAV_QUERY).matches ? "vertical" : "horizontal");
+  const [orientation, setOrientation] = useState<"vertical" | "horizontal">(read);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(SIDE_NAV_QUERY);
+    const on = () => setOrientation(mq.matches ? "vertical" : "horizontal");
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return orientation;
+}
+
 const COLLAPSED_KEY = "websuli.admin.nav.collapsed";
 
 function readCollapsed(): boolean {
@@ -58,7 +79,6 @@ export function AdminTabBar({ hidden = false }: { hidden?: boolean }) {
       </div>
       <TabsList
         id="admin-tab-groups"
-        aria-orientation="vertical"
         className="flex flex-wrap items-start justify-start gap-x-4 gap-y-2 h-auto w-full p-2 bg-transparent lg:flex-col lg:flex-nowrap lg:gap-3"
         data-testid="admin-tab-groups"
       >

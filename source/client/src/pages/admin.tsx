@@ -80,7 +80,7 @@ import type { HtmlFileApi } from "@/components/AdminFileDashboard";
 import EmailSendDialog from "@/components/EmailSendDialog";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { resolveAdminTab } from "@/lib/admin-tabs";
-import { ADMIN_TABS_LAYOUT, AdminTabBar } from "@/components/AdminTabBar";
+import { ADMIN_TABS_LAYOUT, AdminTabBar, useAdminTabsOrientation } from "@/components/AdminTabBar";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { AuthStatus } from "@/components/AuthStatus";
 import { useAuth } from "@/hooks/useAuth";
@@ -366,6 +366,7 @@ export default function Admin() {
   
   // URL query paraméter kezelés: /admin?tab=emails
   const [activeTab, setActiveTab] = useState(() => resolveAdminTab(new URLSearchParams(window.location.search).get("tab")));
+  const tabsOrientation = useAdminTabsOrientation();
   // A ?tab=knowledge-maps hívás a haladó blokkot NYITVA nyissa meg.
   const [studioAdvancedInitial] = useState(
     () => new URLSearchParams(window.location.search).get("tab") === "knowledge-maps",
@@ -737,7 +738,7 @@ export default function Admin() {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className={ADMIN_TABS_LAYOUT}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} orientation={tabsOrientation} className={ADMIN_TABS_LAYOUT}>
           {/* Spec 2026-10-18-admin-korszerusites: csoportos menü egyetlen forrásból (lib/admin-tabs.ts). */}
           <AdminTabBar hidden={isMobile} />
 
