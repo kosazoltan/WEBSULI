@@ -152,7 +152,7 @@ function AdminFilesTab({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
         try { await apiRequest("PUT", `/api/html-files/${id}/tracks`, { tracks }); }
         catch (error) {
           if (!Object.keys(rest).length) throw error;
-          throw new Error(`A többi mező mentődött, a csoporttagság nem: ${error instanceof Error ? error.message : String(error)}`);
+          throw new Error(`A többi mező mentődött, a csoporttagság nem: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
         }
       }
       return null;
