@@ -110,10 +110,10 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
   present but this platform needs `@esbuild/win32-x64`”.
 - **Gyökérok:** a `source/node_modules` egy ARM64-es gépen települt, és x64-en (AMD64) futott. A
   natív csomagok (esbuild, rollup, sharp, better-sqlite3) csak a telepítő CPU-jára kerülnek fel.
-- **Megelőzés:** a program ARM64-en és x64-en is fut, de a `node_modules` gépenként települ:
+- **Megelőzés:** a Windows fejlesztési cél x64; a `node_modules` gépenként települ:
   `npm.cmd ci` a `source/`-ban, másolni/szinkronizálni tilos. Első lépés gyanús hibánál:
   `npm run doctor:arch` (`source/scripts/check-native-arch.mjs`); a `npm test` a
-  `tests/native-arch.test.ts`-sel, a CI a `native-arch` jobbal (Windows x64 + ARM64) kapja el.
+  `tests/native-arch.test.ts`-sel, a CI a `native-arch` jobbal (Windows x64) kapja el.
 
 ## C-02 — Elavult kanban-útvonal a doksiban (2026-11-03)
 

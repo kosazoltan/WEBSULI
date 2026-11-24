@@ -1,5 +1,7 @@
 # Végrehajtás: befejezési mandátum, önfejlesztés, ARM64 + x64 (terv: `docs/specs/2026-11-03-befejezes-onfejlesztes-dual-arch.md`)
 
+> Történeti terv: a Windows célarchitektúrára vonatkozó részt felülírja a [Windows x64 döntés](2026-11-24-windows-x64.md).
+
 Munkakönyvtár: repó gyökér, a Node-lépések `source/`-ban. Ág: `chore/befejezes-onfejlesztes-dual-arch`.
 
 ## T1: natív-architektúra ellenőrző — `source/scripts/check-native-arch.mjs`
