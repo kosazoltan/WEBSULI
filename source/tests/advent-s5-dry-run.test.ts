@@ -39,6 +39,8 @@ function countingStore(candidates: { row: AdventRow; firstName: string | null }[
     leaseMail: async () => { calls.push("leaseMail"); return true; },
     finishMail: async () => { calls.push("finishMail"); },
     releaseLease: async () => { calls.push("releaseLease"); },
+    markSent: async () => { calls.push("markSent"); },
+    recoverSent: async () => { calls.push("recoverSent"); return 0; },
     mailCandidates: async () => { calls.push("mailCandidates"); return candidates; },
   };
 }
@@ -69,7 +71,7 @@ test("P-056: száraz futásban a végleges eredmény sem küld és nem foglal �
   // A pótlás (takarító) is száraz.
   const store2 = countingStore([{ row: passed, firstName: "Panni" }]);
   assert.equal(await deliverAdventMail(store2, { season: 2026, phase: "open" }), 0);
-  assert.deepEqual(store2.calls, ["mailCandidates"], "a pótlás csak olvas");
+  assert.deepEqual(store2.calls, ["recoverSent", "mailCandidates"], "a pótlás olvas és recover-t futtat");
   assert.deepEqual(sent, []);
 });
 

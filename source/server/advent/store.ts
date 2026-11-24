@@ -199,14 +199,16 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
     },
 
     /**
-     * Bérlet egy címzettre: csak ha tervezett (`want:`), még nem kézbesített (`final:`), és nincs élő bérlete (`pending:` a `leaseMs`-en
-     * belül). Egy utasítás, soronkénti zárral: két egyidejű feldolgozóból pontosan egy kapja meg.
+     * Bérlet egy címzettre: csak ha tervezett (`want:`), még nem kézbesített (`final:`), a szolgáltató nem fogadta még el
+     * (`sent:` — Thread 7 javítás), és nincs élő bérlete (`pending:` a `leaseMs`-en belül). Egy utasítás, soronkénti zárral:
+     * két egyidejű feldolgozóból pontosan egy kapja meg.
      */
     async leaseMail(id: string, hash: string, nowMs: number, leaseMs: number): Promise<boolean> {
       const got = await pool.query(
         `UPDATE advent_progress
             SET mailed_to = array_append(ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%'), 'pending:' || $2 || '@' || $3::text)
           WHERE id = $1 AND ('want:' || $2) = ANY(mailed_to) AND NOT (('final:' || $2) = ANY(mailed_to))
+            AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'sent:' || $2 || '@%')
             AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'pending:' || $2 || '@%' AND split_part(k, '@', 2)::bigint > $4::bigint)
           RETURNING id`,
         [id, hash, String(nowMs), String(nowMs - leaseMs)],
@@ -218,10 +220,24 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
     async finishMail(id: string, hash: string): Promise<void> {
       await pool.query(
         `UPDATE advent_progress
-            SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%')
+            SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%' AND k NOT LIKE 'sent:' || $2 || '@%')
                             || CASE WHEN ('final:' || $2) = ANY(mailed_to) THEN ARRAY[]::text[] ELSE ARRAY['final:' || $2] END
           WHERE id = $1`,
         [id, hash],
+      );
+    },
+
+    /**
+     * A szolgáltató elfogadta a levelet, de a `finishMail` nem sikerült: `sent:<hash>@<ms>` jelölő (Thread 7 javítás).
+     * Ez megakadályozza, hogy a pótlás újra elküldje a levelet: a `leaseMail` a `sent:` jelölőt is ellenőrzi.
+     * A következő pótláskor a sweeper megpróbálja a `finishMail`-t újra; ha az sem sikerül, a `sent:` jelölő marad.
+     */
+    async markSent(id: string, hash: string, nowMs: number): Promise<void> {
+      await pool.query(
+        `UPDATE advent_progress
+            SET mailed_to = array_append(ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'sent:' || $2 || '@%'), 'sent:' || $2 || '@' || $3::text)
+          WHERE id = $1 AND NOT (('final:' || $2) = ANY(mailed_to))`,
+        [id, hash, String(nowMs)],
       );
     },
 
@@ -231,9 +247,10 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
     },
 
     /**
-     * A pótlandó tanulói sorok a tanuló keresztnevével (írás nélkül): akiknek van kézbesítetlen tervezett címzettje, vagy még nincs
-     * kézbesítési tervük, de az eredményük végleges lehet (megfelelt / végigért) — lezárt évadban (`includeUnfinished`) minden
-     * terv nélküli tanulói sor (a döntés a `sendAdventResult`-é).
+     * A pótlandó tanulói sorok a tanuló keresztnevével (írás nélkül): akiknek van kézbesítetlen tervezett címzettje (beleértve
+     * a `sent:` jelölővel rendelkezőket, ahol a `finishMail` nem sikerült), vagy még nincs kézbesítési tervük, de az eredményük
+     * végleges lehet (megfelelt / végigért) — lezárt évadban (`includeUnfinished`) minden terv nélküli tanulói sor (a döntés
+     * a `sendAdventResult`-é).
      */
     async mailCandidates(season: number, includeUnfinished: boolean): Promise<{ row: AdventRow; firstName: string | null }[]> {
       const found = await pool.query<DbRow & { learner_name: string | null }>(
@@ -242,6 +259,7 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
           WHERE p.season = $1 AND p.subject_kind = 'learner'
             AND (
               EXISTS (SELECT 1 FROM unnest(p.mailed_to) AS w WHERE w LIKE 'want:%' AND NOT (('final:' || substr(w, 6)) = ANY(p.mailed_to)))
+              OR EXISTS (SELECT 1 FROM unnest(p.mailed_to) AS w WHERE w LIKE 'sent:%')
               OR (NOT EXISTS (SELECT 1 FROM unnest(p.mailed_to) AS w WHERE w LIKE 'want:%')
                   AND (p.passed_at IS NOT NULL OR p.finished_at IS NOT NULL OR $2::boolean))
             )`,
@@ -254,6 +272,34 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
     async deletePreview(adminId: string): Promise<number> {
       const removed = await pool.query(`DELETE FROM advent_progress WHERE subject_kind = 'preview' AND subject_id = $1`, [adminId]);
       return removed.rowCount ?? 0;
+    },
+
+    /**
+     * A `sent:` → `final:` helyreállítás (Thread 7 javítás): a szolgáltató elfogadta a levelet, de a `finishMail` nem mentette
+     * a `final:` jelölőt. A `sent:` jelölőt átírjuk `final:`-ra. A levelet NEM küldjük újra. Az átalakított jelölők száma.
+     */
+    async recoverSent(): Promise<number> {
+      // Minden sort, amelyben van `sent:` jelölő, egyszerre frissítünk: `sent:<hash>@<ms>` → `final:<hash>`.
+      const got = await pool.query<{ id: string; mailed_to: string[] }>(
+        `SELECT id, mailed_to FROM advent_progress WHERE EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'sent:%')`,
+      );
+      let recovered = 0;
+      for (const r of got.rows) {
+        const sentEntries = (r.mailed_to ?? []).filter((k) => k.startsWith("sent:"));
+        for (const entry of sentEntries) {
+          // sent:<hash>@<ms> → final:<hash>
+          const hash = entry.slice("sent:".length).split("@")[0]!;
+          await pool.query(
+            `UPDATE advent_progress
+                SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k != $2)
+                                || CASE WHEN ('final:' || $3) = ANY(mailed_to) THEN ARRAY[]::text[] ELSE ARRAY['final:' || $3] END
+              WHERE id = $1`,
+            [r.id, entry, hash],
+          );
+          recovered++;
+        }
+      }
+      return recovered;
     },
 
     /**

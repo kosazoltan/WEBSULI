@@ -142,21 +142,26 @@ export function buildAdventResultEmail(input: { firstName: string | null; grade:
 export function adventMailKey(secret: string, to: string): string {
   return `final:${createHmac("sha256", secret).update(to.trim().toLowerCase()).digest("hex").slice(0, 32)}`;
 }
-/** A szolgáltatónak adott idempotencia-kulcs: soronként, címzettenként ÉS tartalmanként egyedi (Thread 2/6). Ha a tanuló
- * a 23/24-es eredmény után 24/24-re javít és a korábbi `finishMail` elmaradt, a pótlás már más tartalmú levelet küld —
- * azonos kulccsal a Resend 409-et adna. A tárgy hash-je a kulcsban biztosítja, hogy a Resend az új tartalmat elfogadja.
+/**
+ * A szolgáltatónak adott idempotencia-kulcs: soronként, címzettenként STABIL (Thread 2/6 javítás).
  *
- * ISMERT KORLÁT (Thread 7): a Resend 24 óráig őrzi az idempotencia-kulcsot. Ha a `finishMail` sikertelen volt, és a pótlás
- * >24 óra múlva fut AZONOS tartalommal, a kulcs már lejárt, és dupla levél mehet. Ez elfogadható: (a) a tartalom azonos,
- * (b) a valószínűség alacsony (finishMail-hiba + >24h kiesés), (c) a levél tájékoztató jellegű, nem tranzakciós. */
-export function adventIdempotencyKey(rowId: string, to: string, subject: string): string {
-  return `advent-result/${createHash("sha256").update([rowId, "final", to.trim().toLowerCase(), subject].join("|")).digest("hex")}`;
+ * A kulcs NEM tartalmazza a levél tartalmát (tárgyát), mert:
+ * - Az „évadonként, címzettenként pontosan EGY levél" szerződés a `mailed_to` lista `final:<hash>` bejegyzésével érvényesül (DB-szintű dedup).
+ * - A Resend idempotencia-kulcs csak 24 órás biztonsági háló a `send` ↔ `finishMail` közötti szűk ablakra.
+ * - Ha a kulcs tartalomfüggő lenne, a tartalom változása (23→24 megoldott) új kulcsot adna, és a Resend is elfogadná a második levelet.
+ *
+ * A >24h lejárat kezelése: ha a szolgáltató elfogadta a levelet, de a `finishMail` nem mentette a `final:` jelölést, és a pótlás
+ * >24 óra múlva fut, a Resend kulcs már lejárt. Ezt a `sent:<hash>@<ms>` jelölő kezeli: >24h-nál a pótlás `check:` jelölővé
+ * alakítja (ellenőrizendő, nem automatikusan újraküldendő), <24h-nál a stabil kulcs a Resend-nél deduplikál.
+ */
+export function adventIdempotencyKey(rowId: string, to: string): string {
+  return `advent-result/${createHash("sha256").update([rowId, "final", to.trim().toLowerCase()].join("|")).digest("hex")}`;
 }
 
 /** A bérlet hossza: ennyi ideig egy címzett küldése egy feldolgozóé; leállás után ennyi idő múlva folytatható. */
 export const ADVENT_MAIL_LEASE_MS = 10 * 60_000;
 
-type MailStore = Pick<AdventStore, "planMail" | "leaseMail" | "finishMail" | "releaseLease">;
+type MailStore = Pick<AdventStore, "planMail" | "leaseMail" | "finishMail" | "releaseLease" | "markSent">;
 
 /**
  * A levél elküldése, ha az eredmény végleges (18.1). Tartós kézbesítés (S5/S6 1. vak L1): az első döntéskor rögzül a kézbesítési
@@ -187,19 +192,23 @@ export async function sendAdventResult(input: { store: MailStore; row: AdventRow
       // és a késői bérletek megszerzésükkor már közel lennének a lejárathoz.
       if (!(await input.store.leaseMail(input.row.id, hash, Date.now(), ADVENT_MAIL_LEASE_MS))) continue;
       try {
-        await send(subject, html, to, adventIdempotencyKey(input.row.id, to, subject));
+        await send(subject, html, to, adventIdempotencyKey(input.row.id, to));
       } catch (error) {
         failed++;
         logger.error(`[ADVENT] szülői levél küldési hiba: ${errorClass(error)}`);
         await input.store.releaseLease(input.row.id, hash).catch((error: unknown) => logger.error(`[ADVENT] a levél-bérlet felszabadítása nem sikerült: ${errorClass(error)}`));
         continue;
       }
+      // A szolgáltató elfogadta: azonnal jelöljük `sent:`-tel, mielőtt a `finishMail` meghiúsulhatna (Thread 7 javítás).
+      // Ha a `finishMail` sikertelen, a `sent:` jelölő megakadályozza az újraküldést — a pótlás csak a `finishMail`-t próbálja újra.
+      await input.store.markSent(input.row.id, hash, Date.now()).catch((error: unknown) => logger.error(`[ADVENT] sent jelölő mentése nem sikerült: ${errorClass(error)}`));
       try {
         await input.store.finishMail(input.row.id, hash);
         sent++;
       } catch (error) {
-        // A szolgáltató elfogadta, a rögzítés elmaradt: a bérlet marad, a lejárta után a pótlás ugyanazzal a kulccsal küld.
-        logger.error(`[ADVENT] a kézbesítés rögzítése nem sikerült: ${errorClass(error)}`);
+        // A szolgáltató elfogadta, a `final:` rögzítése elmaradt, de a `sent:` jelölő megvédi az újraküldéstől.
+        // A következő pótláskor a `recoverSentMail` megpróbálja a `finishMail`-t újra.
+        logger.error(`[ADVENT] a kézbesítés rögzítése nem sikerült (sent: jelölő megőrzi): ${errorClass(error)}`);
       }
     }
     if (failed > 0 && retry) {
@@ -213,19 +222,34 @@ export async function sendAdventResult(input: { store: MailStore; row: AdventRow
   }
 }
 
-type DeliverStore = MailStore & Pick<AdventStore, "mailCandidates">;
+type DeliverStore = MailStore & Pick<AdventStore, "mailCandidates" | "recoverSent">;
 
 /**
  * Tartós pótlás (a takarító hívja indításkor és rendszeresen, csak bekapcsolt naptárnál): minden kézbesítetlen tervezett címzett, és a
  * terv nélküli végleges eredmények (pl. leállás a válasz és a levél között); lezárt évadban a megkezdett, levél nélküli tanulói sorok is
- * (18.1 3. pont). A küldött levelek száma.
+ * (18.1 3. pont). A küldött levelek száma. ELŐTTE a `sent:` jelölők helyreállítása (`recoverSent`).
  */
 export async function deliverAdventMail(store: DeliverStore, at: { season: number; phase: AdventPhase }, nowMs: number = Date.now()): Promise<number> {
+  // Thread 7 javítás: a `sent:` jelölők → `final:` (a szolgáltató már elfogadta, csak a DB-rögzítés maradt el).
+  await recoverSentMail(store);
   let sent = 0;
   for (const { row, firstName } of await store.mailCandidates(at.season, at.phase === "closed")) {
     sent += (await sendAdventResult({ store, row, phase: at.phase, firstName, nowMs }, false)).sent;
   }
   return sent;
+}
+
+/**
+ * A `sent:` jelölők helyreállítása: a szolgáltató elfogadta a levelet, de a `finishMail` nem sikerült.
+ * A `sent:` → `final:` átalakítás (Thread 7 javítás): a levelet NEM küldi újra.
+ */
+async function recoverSentMail(store: Pick<AdventStore, "recoverSent">): Promise<number> {
+  try {
+    return await store.recoverSent();
+  } catch (error) {
+    logger.error(`[ADVENT] sent → final helyreállítás hiba: ${errorClass(error)}`);
+    return 0;
+  }
 }
 
 /** Évadzárás (18.1 3. pont): csak lezárt fázisban — a pótlás lezárt évadra. */
@@ -264,15 +288,18 @@ export async function adventMailReport(store: Pick<AdventStore, "mailCandidates"
     if (!reason) continue;
     const wants = row.mailedTo.filter((k) => k.startsWith("want:")).map((k) => k.slice("want:".length));
     const finals = new Set(row.mailedTo.filter((k) => k.startsWith("final:")).map((k) => k.slice("final:".length)));
+    // A `sent:` jelölő is kézbesítettnek számít (a szolgáltató elfogadta; Thread 7 javítás).
+    const sentHashes = new Set(row.mailedTo.filter((k) => k.startsWith("sent:")).map((k) => k.slice("sent:".length).split("@")[0]!));
+    const delivered = new Set([...finals, ...sentHashes]);
     // Thread 9: a tervezett címzetteket a jelenlegi ADMIN_EMAILS-szel metszve számoljuk; a már eltávolított címzett `want:` bejegyzése
     // nem számít kiküldendőnek (a küldő is csak a jelenlegi listáról dolgozik — sendAdventResult L175).
     let pendingRecipients: number;
     if (wants.length && secret) {
-      // A jelenlegi címzettek hash-eiből csak azokat számoljuk, amelyekre van `want:` és nincs `final:`.
+      // A jelenlegi címzettek hash-eiből csak azokat számoljuk, amelyekre van `want:` és nincs `final:` vagy `sent:`.
       const currentHashes = new Set(currentRecipients.map((to) => adventMailKey(secret, to).slice("final:".length)));
-      pendingRecipients = wants.filter((h) => currentHashes.has(h) && !finals.has(h)).length;
+      pendingRecipients = wants.filter((h) => currentHashes.has(h) && !delivered.has(h)).length;
     } else {
-      pendingRecipients = wants.length ? wants.filter((h) => !finals.has(h)).length : recipients;
+      pendingRecipients = wants.length ? wants.filter((h) => !delivered.has(h)).length : recipients;
     }
     if (pendingRecipients === 0) continue;
     const { bestRound, best, rounds, passed } = adventResultSummary(row);

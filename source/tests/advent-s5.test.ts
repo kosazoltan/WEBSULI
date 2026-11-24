@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import {
-  adventMailKey, adventResultFinal, buildAdventResultEmail, closeAdventSeason, sendAdventResult, setAdventRetryDelay, setAdventSender,
+  adventIdempotencyKey, adventMailKey, adventResultFinal, buildAdventResultEmail, closeAdventSeason,
+  deliverAdventMail, sendAdventResult, setAdventRetryDelay, setAdventSender,
 } from "../server/advent/result-email";
 import type { AdventRow } from "../server/advent/store";
 
@@ -83,19 +84,33 @@ function memoryStore() {
   const claimed = new Set<string>();
   const wants = new Map<string, string[]>();
   const leases = new Map<string, number>();
+  const sentMarkers = new Map<string, number>(); // key → timestamp (service accepted, finishMail failed)
   return {
     claimed,
+    sentMarkers,
     planMail: async (id: string, keys: string[]) => { if (!wants.has(id)) wants.set(id, keys); return wants.get(id)!; },
     leaseMail: async (id: string, hash: string, nowMs: number, leaseMs: number) => {
       const k = `${id}|${hash}`;
       if (!wants.get(id)?.includes(`want:${hash}`) || claimed.has(k)) return false;
+      // A `sent:` jelölő megakadályozza az újbóli bérletszerzést (Thread 7 javítás).
+      if (sentMarkers.has(k)) return false;
       const until = leases.get(k);
       if (until !== undefined && until > nowMs - leaseMs) return false;
       leases.set(k, nowMs);
       return true;
     },
-    finishMail: async (id: string, hash: string) => { const k = `${id}|${hash}`; leases.delete(k); claimed.add(k); },
+    finishMail: async (id: string, hash: string) => { const k = `${id}|${hash}`; leases.delete(k); sentMarkers.delete(k); claimed.add(k); },
     releaseLease: async (id: string, hash: string) => { leases.delete(`${id}|${hash}`); },
+    markSent: async (id: string, hash: string, _nowMs: number) => { sentMarkers.set(`${id}|${hash}`, _nowMs); },
+    recoverSent: async () => {
+      let recovered = 0;
+      for (const [k] of sentMarkers) {
+        sentMarkers.delete(k);
+        claimed.add(k);
+        recovered++;
+      }
+      return recovered;
+    },
   };
 }
 
@@ -176,4 +191,118 @@ test("S5: bekötés — a levél csak a nyilvános (kapcsolós) router útján �
   const advent = read("server/advent/routes.ts");
   assert.match(advent, /if \(result\.recorded && deps\.onResult\) \{/, "csak rögzített válasz után");
   assert.match(advent, /\/\/ Az átvett \(kész\) vendégeredmény is lehet végleges \(18\.1\)/);
+});
+
+// === Thread 2/6 javítás: stabil idempotencia-kulcs (nem tartalomfüggő) ===
+
+test("S5 (Thread 2/6): az idempotencia-kulcs tartalomfüggetlen — a tárgy változása NEM ad új kulcsot", () => {
+  const key1 = adventIdempotencyKey("row-1", "anya@pelda.hu");
+  const key2 = adventIdempotencyKey("row-1", "anya@pelda.hu");
+  assert.equal(key1, key2, "azonos sor + cím → azonos kulcs");
+  // A kulcs determinisztikus, nem tartalmaz címet, és az 'advent-result/' előtaggal indul.
+  assert.match(key1, /^advent-result\/[0-9a-f]{64}$/);
+  assert.ok(!key1.includes("@"), "a kulcsban nincs e-mail-cím");
+  // Más sor → más kulcs.
+  assert.notEqual(adventIdempotencyKey("row-2", "anya@pelda.hu"), key1);
+  // Más címzett → más kulcs.
+  assert.notEqual(adventIdempotencyKey("row-1", "apa@pelda.hu"), key1);
+});
+
+// === Thread 7 javítás: finishMail hiba → sent: jelölő megvédi az újraküldéstől ===
+
+test("S5 (Thread 7): szolgáltató elfogadta, finishMail elbukott → sent: jelölő, nincs újraküldés; a pótlás recoverSent-tel javít", async (t) => {
+  sendMode(t);
+  const prevEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "anya@pelda.hu";
+  const prevDelay = setAdventRetryDelay(5);
+  t.after(() => { setAdventSender(null); setAdventRetryDelay(prevDelay); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+  const sent: string[] = [];
+  setAdventSender(async (_s, _h, to) => { sent.push(to); });
+  const store = memoryStore();
+  // A finishMail hibát dob: a szolgáltató elfogadta, de a DB rögzítés elmaradt.
+  let finishFails = true;
+  const originalFinish = store.finishMail;
+  store.finishMail = async (id: string, hash: string) => {
+    if (finishFails) throw new Error("DB-hiba: finishMail");
+    return originalFinish(id, hash);
+  };
+  const passed = row({ doors: { 1: roundDoors(23, 0, 1) } });
+  // Az első hívás: a levél elmegy, a finishMail hibázik, de a sent: jelölő megőrzi.
+  const r1 = await sendAdventResult({ store, row: passed, phase: "open", firstName: "Panni" }, false);
+  assert.equal(r1.sent, 0, "a finishMail hibája miatt sent=0 (de a levél elment)");
+  assert.equal(sent.length, 1, "pontosan egy levél ment el a szolgáltatónak");
+  assert.equal(store.sentMarkers.size, 1, "a sent: jelölő rögzült");
+  assert.equal(store.claimed.size, 0, "a final: jelölő NEM rögzült");
+
+  // Második hívás: a sent: jelölő megakadályozza az újraküldést.
+  sent.length = 0;
+  const r2 = await sendAdventResult({ store, row: passed, phase: "open", firstName: "Panni" }, false);
+  assert.equal(r2.sent, 0);
+  assert.equal(sent.length, 0, "NEM ment újabb levél a sent: jelölő miatt");
+
+  // A pótlás (deliverAdventMail) meghívja a recoverSent-et: sent: → final:.
+  finishFails = false;
+  const deliverStore = {
+    ...store,
+    mailCandidates: async () => [{ row: passed, firstName: "Panni" }],
+  };
+  await deliverAdventMail(deliverStore, { season: 2026, phase: "open" });
+  assert.equal(store.sentMarkers.size, 0, "a sent: jelölő eltűnt (recoverSent)");
+  assert.equal(store.claimed.size, 1, "a final: jelölő rögzült (recoverSent)");
+  assert.equal(sent.length, 0, "NEM ment újabb levél a recoverSent során");
+});
+
+test("S5 (Thread 7): szöveg változott (23→24), de a sent: jelölő megakadályozza az újraküldést", async (t) => {
+  sendMode(t);
+  const prevEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "anya@pelda.hu";
+  const prevDelay = setAdventRetryDelay(5);
+  t.after(() => { setAdventSender(null); setAdventRetryDelay(prevDelay); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+  const sent: { to: string; subject: string }[] = [];
+  setAdventSender(async (subject, _h, to) => { sent.push({ to, subject }); });
+  const store = memoryStore();
+  // A finishMail hibát dob.
+  let finishFails = true;
+  const originalFinish = store.finishMail;
+  store.finishMail = async (id: string, hash: string) => {
+    if (finishFails) throw new Error("DB-hiba");
+    return originalFinish(id, hash);
+  };
+  // 1. küldés: 23/24-es eredmény (a finishMail hibázik).
+  const passed23 = row({ doors: { 1: roundDoors(23, 0, 1) } });
+  await sendAdventResult({ store, row: passed23, phase: "open", firstName: "Zsófi" }, false);
+  assert.equal(sent.length, 1, "1. levél elment");
+  assert.match(sent[0]!.subject, /23 \/ 24/);
+
+  // 2. a tanuló javít 24/24-re → más tárgy, de a sent: jelölő megvédi.
+  sent.length = 0;
+  const passed24 = row({ doors: { 1: roundDoors(24) } });
+  await sendAdventResult({ store, row: passed24, phase: "open", firstName: "Zsófi" }, false);
+  assert.equal(sent.length, 0, "NEM ment második levél, mert a sent: jelölő él");
+});
+
+test("S5 (Thread 7): több worker — a sent: jelölő megvédi a párhuzamos küldéstől is", async (t) => {
+  sendMode(t);
+  const prevEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "anya@pelda.hu";
+  const prevDelay = setAdventRetryDelay(5);
+  t.after(() => { setAdventSender(null); setAdventRetryDelay(prevDelay); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+  const sent: string[] = [];
+  setAdventSender(async (_s, _h, to) => { sent.push(to); });
+  const store = memoryStore();
+  // A finishMail hibát dob: a sent: jelölő rögzül.
+  let finishFails = true;
+  const originalFinish = store.finishMail;
+  store.finishMail = async (id: string, hash: string) => {
+    if (finishFails) throw new Error("DB-hiba");
+    return originalFinish(id, hash);
+  };
+  const passed = row({ doors: { 1: roundDoors(24) } });
+  // 1. worker: elküldi, finishMail hibázik, sent: jelölő rögzül.
+  await sendAdventResult({ store, row: passed, phase: "open", firstName: "Bence" }, false);
+  assert.equal(sent.length, 1);
+  // 2. worker (párhuzamos): a sent: jelölő miatt nem kap bérletet → nem küld.
+  sent.length = 0;
+  await sendAdventResult({ store, row: passed, phase: "open", firstName: "Bence" }, false);
+  assert.equal(sent.length, 0, "a 2. worker nem küld, a sent: jelölő blokkolja");
 });
