@@ -42,3 +42,4 @@ code_review:
   local_review_determinism: "seed 42 + repeat_penalty 1.15; értelmezhetetlen darab felezve (2026-11-23)"
   inventory: "teljes hiányleltár: docs/specs/2026-11-23-teljes-hianyleltar.md (ág docs/hianyleltar-2026-11-23), SQL-be töltve [P-0NN]/[BL]/[H-]/[KB] előtaggal"
   open_prs_2026_11_23: "#541 (vak kör kivezetés), #544 (advent PR-C), #545 (hiányleltár docs); merged: #542, #543"
+# zaro-hurok: 2026-11-24T01:35:38.457Z nincs-uj

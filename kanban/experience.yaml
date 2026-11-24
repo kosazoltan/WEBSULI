@@ -21,3 +21,9 @@ cards:
     observed: "feladatok elvesztek kanban/ágak között"
     fix: "SQL feladat-nyilvántartás + szinkron a higiéniában"
     rule: "minden teendő azonnal feladat.mjs add"
+  - id: 4
+    status: rule
+    date: "2026-11-24"
+    observed: "Időkorlátos teszt abszolút ms-küszöbbel gépenként/terhelésenként eltérő eredményt adott (#557)"
+    fix: "Gépfüggetlen arány-teszt a főági referenciához mérve; REDACT_CAP 8 KB"
+    rule: "Teljesítménytesztben ugyanazon a gépen mért arány, ne abszolút ms-küszöb"

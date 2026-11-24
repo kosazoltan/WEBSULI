@@ -45,3 +45,4 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 - Helyi e2e: CDP-swipe után a koppintás nem ad click-et (fling) — a swipe végén álló touchMove kell (PR #543).
 - Teljes hiányleltár (2026-11-23): `docs/specs/2026-11-23-teljes-hianyleltar.md` — hullámok H0–H8, mester: SQL feladat.tasks.
 - 2026-11-23: #542, #543 beolvadt; #544 (advent PR-C) és #545 (hiányleltár) nyitva.
+<!-- zaro-hurok: 2026-11-24T01:35:38.457Z nincs-uj -->

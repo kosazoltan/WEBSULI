@@ -21,3 +21,4 @@ cogni:
 # 2026-11-23: PR #543 (garázs-teszt lendület); local-review determinisztikus (seed)
 # 2026-11-23: teljes hiányleltár újraellenőrizve (68 P + BL + H + KB), 86 sor SQL-ben
 # 2026-11-23: #543 merged; #544, #545 megnyitva
+# zaro-hurok: 2026-11-24T01:35:38.457Z nincs-uj
