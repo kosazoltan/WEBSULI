@@ -260,7 +260,9 @@ def collect_prs(db: Db, since: str, ok: dict, unavailable: list, use_gh: bool):
         mc = (p.get("mergeCommit") or {}) or {}
         db.source("pr", f"#{p['number']}", (p.get("createdAt") or "")[:10], p["title"], cut(p.get("body"), 3000),
                   {"state": p["state"], "mergedAt": p.get("mergedAt"), "head": p.get("headRefName"), "mergeCommit": mc.get("oid"),
-                   "number": p["number"]})
+                   "number": p["number"],
+                   # review #587: a 3000 karakteres csonkolás után álló hivatkozások se vesszenek el (a kapcsolatépítés ebből is dolgozik)
+                   "refs": sorted(set(REF_RE.findall(p.get("body") or "")))})
         n += 1
         if p["state"] == "OPEN":
             opened.append(p["number"])
@@ -697,6 +699,8 @@ def collect_flags(db: Db, repo: str, ok: dict, unavailable: list, use_render: bo
 # ---------------------------------------------------------------- követelmények (a DB-ben tárolt forrásokból)
 STATUS_MAP = {"KÉSZ": "kesz", "RÉSZ": "reszben", "ÁG": "felkesz", "NINCS": "elvart", "DÖNT": "elvart", "ELAV": "elvetve"}
 IMPL_RE = re.compile(r"^(feat|fix|perf|refactor|test|ci|chore\(qa\))", re.I)
+# A PR-törzs teljes hivatkozáslistája (spec-fájl, P-/K-tétel, döntés) — a csonkolt kivonat mellé, az `extra.refs`-be.
+REF_RE = re.compile(r"docs/specs/[\w.-]+\.md|\b(?:P|K)-\d{3}\b|\bDONTES:P-\d{3}\b|\bFOTERV-D\d\b")
 SPEC_RE = re.compile(r"docs/specs/([\w.-]+?)(?:-vegrehajtas)?\.md")
 
 
@@ -719,7 +723,7 @@ def load_sources(c) -> dict:
         if ":szal:" in ref:
             threads.setdefault(int(ref[1:].split(":")[0]), []).append((sid, e))
         else:
-            prs[int(ref[1:])] = {"sid": sid, "title": title or "", "body": raw or "", "state": e.get("state"),
+            prs[int(ref[1:])] = {"sid": sid, "title": title or "", "body": (raw or "") + "\n" + " ".join(e.get("refs") or []), "state": e.get("state"),
                                  "head": e.get("head"), "date": date}
     for sid, title, raw, ex in c.execute("SELECT id, title, raw_excerpt, extra FROM sources WHERE kind='commit'"):
         commits.append((sid, title or "", raw or "", bool(json.loads(ex or "{}").get("main"))))
