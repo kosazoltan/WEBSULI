@@ -15,7 +15,7 @@ assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 process.env.ADMIN_EMAILS = "admin-a@example.test, admin-b@example.test";
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, sendLessonResult, sendPracticeResult, setResultSender } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, sendLessonResult, sendPracticeResult, setResultSender, setFinalMarkerFault, setOwnerCheckFault, setFinalClaimFault, setPairingFault } = await import("../server/lesson-result-email");
 
 const sent: Array<{ subject: string; html: string; to: string }> = [];
 /** S4: a fixture első feladata gépileg szigorított csoporttal (a minta egy szava kötelező, `tightened`-ként jelölve). */
@@ -391,4 +391,86 @@ test("S4c: a küszöb alatt nincs lazítás; ≥ 20 kör és ≥ 40 % téves elu
   assert.equal((await db.select().from(lessons).where(eq(lessons.id, "result-tightened")))[0].version, 2);
   const runs = await db.execute(sql`select snapshot->>'state' as state, snapshot->'definition'->>'mode' as mode from lesson_workflow_runs where owner_id = 's4c-owner'`);
   assert.ok(runs.rows.some((r) => (r as { mode: string; state: string }).mode === "relax" && (r as { state: string }).state === "done"), JSON.stringify(runs.rows));
+});
+
+/* Bontás B4a (#510 R27, R42, R47 szerver, R49 c): körönként egy végleges levél, kiléttől függetlenül — a `RESULT_PARTIAL_EMAIL` kapcsoló mögött. */
+const postQuiz = (roundId: string, fingerprint: string, extra: Record<string, unknown> = {}) => {
+  const q = lesson.experience!.quiz;
+  return fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind: "quiz", roundId, picks: { [q[0].id]: q[0].correctIndex }, fingerprint, ...extra }) });
+};
+const withFlag = async (value: string | undefined, fn: () => Promise<void>) => {
+  const previous = process.env.RESULT_PARTIAL_EMAIL;
+  if (value === undefined) delete process.env.RESULT_PARTIAL_EMAIL; else process.env.RESULT_PARTIAL_EMAIL = value;
+  try { await fn(); } finally { if (previous === undefined) delete process.env.RESULT_PARTIAL_EMAIL; else process.env.RESULT_PARTIAL_EMAIL = previous; }
+};
+
+test("B4a: kapcsoló KI — a főági viselkedés változatlan (két kilét két levélpár, jelzősor nem íródik)", async () => {
+  await withFlag(undefined, async () => {
+    sent.length = 0;
+    assert.equal((await postQuiz("b4-off", "fp-a")).status, 202);
+    await waitFor(() => sent.length === 2);
+    const res = await postQuiz("b4-off", "fp-b");
+    assert.deepEqual(await res.json(), { queued: true });
+    await waitFor(() => sent.length === 4);
+    assert.equal(sent.length, 4);
+    const marker = await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, "result-published"), eq(lessonResultEmails.roundKey, roundKeyOf("final-round", "quiz", "b4-off"))));
+    assert.equal(marker.length, 0, "KI állásban nem íródik végleges jelzősor");
+  });
+});
+
+test("B4a (R27): kapcsoló BE — ugyanannak a körnek más kilétű ismétlése duplikátum, második levél nem megy; azonos kilét a pótlásra fut", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    assert.deepEqual(await (await postQuiz("b4-on", "fp-a")).json(), { queued: true });
+    await waitFor(() => sent.length === 2);
+    assert.deepEqual(await (await postQuiz("b4-on", "fp-b")).json(), { queued: false, duplicate: true });
+    assert.deepEqual(await (await postQuiz("b4-on", "fp-a")).json(), { queued: true }, "azonos kilét: a címzettenkénti pótlásra fut");
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(sent.length, 2, "egy levélpár a körre");
+  });
+});
+
+test("B4a (R42): a jelzősor után, a 202 előtt megszakadt első kérés — az eredeti beküldő ismétlése küld, más kilét duplikátum", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    setFinalClaimFault(() => { throw new Error("megszakadt"); });
+    try { assert.equal((await postQuiz("b4-r42", "fp-a")).status, 500); } finally { setFinalClaimFault(null); }
+    assert.deepEqual(await (await postQuiz("b4-r42", "fp-b")).json(), { queued: false, duplicate: true });
+    assert.deepEqual(await (await postQuiz("b4-r42", "fp-a")).json(), { queued: true });
+    await waitFor(() => sent.length === 2);
+    assert.equal(sent.length, 2);
+  });
+});
+
+test("B4a (R49 c, R51 L2): a jelzősor írásának és a tulajdonos-lekérdezésnek az átmeneti hibája 503 a 202 előtt; az élettartam-frissítés hibája nem", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    setFinalMarkerFault(stage => { if (stage === "insert") throw new Error("db"); });
+    try { assert.equal((await postQuiz("b4-503", "fp-a")).status, 503); } finally { setFinalMarkerFault(null); }
+    assert.deepEqual(await (await postQuiz("b4-503", "fp-a")).json(), { queued: true }, "a hiba után rögzítés nélkül újrapróbálható");
+    await waitFor(() => sent.length === 2);
+    setOwnerCheckFault(() => { throw new Error("db"); });
+    try { assert.equal((await postQuiz("b4-503", "fp-b")).status, 503); } finally { setOwnerCheckFault(null); }
+    setFinalMarkerFault(stage => { if (stage === "ttl") throw new Error("db"); });
+    try { assert.deepEqual(await (await postQuiz("b4-503", "fp-b")).json(), { queued: false, duplicate: true }, "a tulajdonos-ellenőrzés a ttl-hiba után is fut"); }
+    finally { setFinalMarkerFault(null); }
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(sent.length, 2);
+  });
+});
+
+test("B4a (R47 szerver): a párosítás feloldásának átmeneti hibája BE állásban 503 (nem vendég); KI állásban a régi vendég-út", async () => {
+  setPairingFault(() => { throw new Error("db"); });
+  try {
+    await withFlag("on", async () => {
+      sent.length = 0;
+      assert.equal((await postQuiz("b4-pair", "fp-a", { learner: "token-xyz" })).status, 503);
+      await new Promise(r => setTimeout(r, 200));
+      assert.equal(sent.length, 0, "rögzítés és levél nélkül");
+    });
+    await withFlag(undefined, async () => {
+      assert.deepEqual(await (await postQuiz("b4-pair-off", "fp-a", { learner: "token-xyz" })).json(), { queued: true });
+    });
+  } finally { setPairingFault(null); }
 });
