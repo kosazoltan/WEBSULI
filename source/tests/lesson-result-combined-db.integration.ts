@@ -210,3 +210,80 @@ test("R6: a fiókos gyakorlókör azonosítója vendégként újraküldve sem k�
   await settle();
   assert.equal(sent.length, 0);
 });
+
+// U4c — söprő (végrehajtás 3. pont): S1 = E4, az óra paraméterként.
+const sweeper = () => import("../server/lesson-result-sweeper");
+const rowsOf = async (owner: string) => (await dbPool.query(`SELECT kind, sent_reason, delivered_at IS NOT NULL AS d, graded IS NULL AS scrubbed
+  FROM lesson_result_pending WHERE owner_key = $1 ORDER BY kind`, [owner])).rows;
+
+test("S1 (E4): 7 napnál régebbi pár nélküli rész → egy jelölt részleges levél, timeout, kézbesítve, tartalom törölve", async () => {
+  const { sweepPendingResults } = await sweeper();
+  await post("comb-two", quizBody("fp-s1", "s1-q"));
+  await dbPool.query(`UPDATE lesson_result_pending SET created_at = now() - interval '8 days' WHERE owner_key = 'guest:fp-s1'`);
+  await sweepPendingResults({ now: new Date() });
+  await settle(2);
+  assert.equal(sent.length, 2, "egy levél mindkét adminnak");
+  assert.match(sent[0].subject, /Kvíz \(részleges: a feladatok hiányoznak\)/);
+  assert.match(sent[0].html, /Részleges eredmény/);
+  assert.deepEqual(await rowsOf("guest:fp-s1"), [{ kind: "quiz", sent_reason: "timeout", d: true, scrubbed: true }]);
+  sent.length = 0;
+  await sweepPendingResults({ now: new Date() });
+  await settle();
+  assert.equal(sent.length, 0, "S2: az újrafuttatás (újraindulás) nem küld újra");
+});
+
+test("S3: a 6 napos nyitott rész marad (a határ a paraméterként adott óra szerint számít)", async () => {
+  const { sweepPendingResults } = await sweeper();
+  await post("comb-two", quizBody("fp-s3", "s3-q"));
+  await dbPool.query(`UPDATE lesson_result_pending SET created_at = now() - interval '6 days' WHERE owner_key = 'guest:fp-s3'`);
+  await sweepPendingResults({ now: new Date() });
+  await settle();
+  assert.equal(sent.length, 0);
+  assert.equal((await open("guest:fp-s3")).length, 1);
+  await sweepPendingResults({ now: new Date(Date.now() + 2 * 86_400_000) });
+  await settle(2);
+  assert.equal(sent.length, 2, "két nappal később már lejárt");
+});
+
+test("S4: a kézbesítetlen pár (szolgáltatói hiba után) a söprővel pótlódik", async () => {
+  const { sweepPendingResults } = await sweeper();
+  await post("comb-two", quizBody("fp-s4", "s4-q"));
+  failing = true;
+  await post("comb-two", tasksBody("fp-s4", "s4-t"));
+  await new Promise(r => setTimeout(r, 600));
+  failing = false;
+  assert.equal(sent.length, 0);
+  await dbPool.query(`UPDATE lesson_result_pending SET sent_at = now() - interval '20 minutes' WHERE owner_key = 'guest:fp-s4'`);
+  await sweepPendingResults({ now: new Date() });
+  await settle(2);
+  assert.equal(sent.length, 2);
+  assert.match(sent[0].subject, /Feladatok \+ kvíz/);
+  assert.deepEqual((await rowsOf("guest:fp-s4")).map(r => r.d), [true, true]);
+});
+
+test("S5: a kiürített (KI állás) rész kézbesítetlen timeout sora a régi levélformával pótlódik", async () => {
+  const { sweepPendingResults } = await sweeper();
+  await post("comb-two", quizBody("fp-s5", "s5-q"));
+  process.env.RESULT_COMBINED_EMAIL = "off";
+  failing = true;
+  await post("comb-two", tasksBody("fp-s5", "s5-t"));
+  await new Promise(r => setTimeout(r, 700));
+  failing = false;
+  sent.length = 0;
+  await dbPool.query(`UPDATE lesson_result_pending SET sent_at = now() - interval '20 minutes' WHERE owner_key = 'guest:fp-s5'`);
+  await sweepPendingResults({ now: new Date() });
+  await settle(2);
+  assert.equal(sent.length, 2);
+  assert.match(sent[0].subject, / — Kvíz — /, "a kiürítés régi (egyrészes) levélformája");
+  assert.deepEqual((await rowsOf("guest:fp-s5")).map(r => r.d), [true]);
+});
+
+test("S6: két egyidejű söprés ugyanarra a lejárt részre pontosan egy levelet küld", async () => {
+  const { sweepPendingResults } = await sweeper();
+  await post("comb-two", tasksBody("fp-s6", "s6-t"));
+  await dbPool.query(`UPDATE lesson_result_pending SET created_at = now() - interval '9 days' WHERE owner_key = 'guest:fp-s6'`);
+  await Promise.all([sweepPendingResults({ now: new Date() }), sweepPendingResults({ now: new Date() })]);
+  await settle(2);
+  assert.equal(sent.length, 2, "egy levél (két admin)");
+  assert.match(sent[0].subject, /Feladatok \(részleges: a kvíz hiányzik\)/);
+});
