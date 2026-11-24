@@ -4,4 +4,4 @@
 -- Additív, idempotens. Visszaállítás (down): ALTER TABLE lesson_result_pending DROP COLUMN IF EXISTS pair_key, DROP COLUMN IF EXISTS delivered_at;
 ALTER TABLE lesson_result_pending ADD COLUMN IF NOT EXISTS pair_key char(64);
 ALTER TABLE lesson_result_pending ADD COLUMN IF NOT EXISTS delivered_at timestamp with time zone;
-CREATE INDEX IF NOT EXISTS lesson_result_pending_undelivered ON lesson_result_pending(sent_at) WHERE sent_reason = 'pair' AND delivered_at IS NULL;
+CREATE INDEX IF NOT EXISTS lesson_result_pending_undelivered ON lesson_result_pending(sent_at) WHERE sent_at IS NOT NULL AND delivered_at IS NULL;

@@ -1210,7 +1210,7 @@ export const lessonResultPending = pgTable(
     openHasContent: check("lesson_result_pending_open_has_content", sql`${table.sentAt} IS NOT NULL OR (${table.graded} IS NOT NULL AND ${table.learner} IS NOT NULL)`),
     openUnique: uniqueIndex("lesson_result_pending_open_unique").on(table.lessonId, table.ownerKey, table.kind).where(sql`sent_at IS NULL`),
     openAge: index("lesson_result_pending_open_age").on(table.createdAt).where(sql`sent_at IS NULL`),
-    undelivered: index("lesson_result_pending_undelivered").on(table.sentAt).where(sql`sent_reason = 'pair' AND delivered_at IS NULL`),
+    undelivered: index("lesson_result_pending_undelivered").on(table.sentAt).where(sql`sent_at IS NOT NULL AND delivered_at IS NULL`),
   }),
 );
 

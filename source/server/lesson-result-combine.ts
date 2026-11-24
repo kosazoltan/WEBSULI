@@ -100,6 +100,12 @@ export async function markPairDelivered(pairKey: string): Promise<void> {
   await db.execute(sql`UPDATE lesson_result_pending SET delivered_at = now() WHERE pair_key = ${pairKey} AND delivered_at IS NULL`);
 }
 
+/** Egy kiürített (régi úton küldött) rész sikeres kézbesítésének nyoma (review #586). */
+export async function markPartDelivered(lessonId: string, ownerKey: string, roundId: string, kind: "tasks" | "quiz"): Promise<void> {
+  await db.execute(sql`UPDATE lesson_result_pending SET delivered_at = now() WHERE lesson_id = ${lessonId} AND owner_key = ${ownerKey}
+    AND kind = ${kind} AND round_id = ${roundId} AND sent_reason = 'timeout' AND delivered_at IS NULL`);
+}
+
 /**
  * Review #586 (kapcsoló-időszakok): ha a kapcsoló KI, a (lecke, tulajdonos) korábban — BE állásban — félretett nyitott részei nem
  * maradhatnak bent (egy későbbi BE állás alatt elavult párt képeznének): a régi út egyrészes levélként küldi őket. A hívó küld; ez
@@ -108,7 +114,9 @@ export async function markPairDelivered(pairKey: string): Promise<void> {
 export async function takeParkedForLegacy(lessonId: string, ownerKey: string): Promise<Array<{ graded: GradedTasks | GradedQuiz; learner: PendingLearner; roundId: string }>> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${lessonId}|${ownerKey}`}))`);
-    const rows = (await tx.execute(sql`UPDATE lesson_result_pending SET sent_at = now(), sent_reason = 'timeout', delivered_at = now()
+    // Review #586: a delivered_at itt NEM íródik — csak a sikeres régi úti küldés után (markPartDelivered); a kézbesítetlen
+    // `timeout` sort a söprő (U4c) pótolja.
+    const rows = (await tx.execute(sql`UPDATE lesson_result_pending SET sent_at = now(), sent_reason = 'timeout'
       WHERE lesson_id = ${lessonId} AND owner_key = ${ownerKey} AND sent_at IS NULL RETURNING round_id, graded, learner`)).rows as Array<{ round_id: string; graded: GradedTasks | GradedQuiz; learner: PendingLearner }>;
     return rows.map(r => ({ graded: r.graded, learner: r.learner, roundId: r.round_id }));
   });

@@ -184,6 +184,19 @@ test("R5: a kapcsoló KI állásában a korábban félretett rész a régi úton
   assert.equal(sent.length, 4, "a feladat és a félretett kvíz is külön levélben");
   assert.ok(sent.some(m => / — Kvíz — /.test(m.subject)) && sent.some(m => / — Feladatok — /.test(m.subject)));
   assert.deepEqual(await open("guest:fp-r5"), []);
+  await new Promise(r => setTimeout(r, 200));
+  const rows = (await dbPool.query(`SELECT delivered_at IS NOT NULL AS d FROM lesson_result_pending WHERE owner_key = 'guest:fp-r5'`)).rows;
+  assert.deepEqual(rows, [{ d: true }], "a kiürített rész csak sikeres küldés után kap delivered_at-et");
+});
+
+test("R7: a kiürített rész sikertelen küldés után kézbesítetlen marad (a söprő pótolja)", async () => {
+  await post("comb-two", quizBody("fp-r7", "r7-q"));
+  process.env.RESULT_COMBINED_EMAIL = "off";
+  failing = true;
+  await post("comb-two", tasksBody("fp-r7", "r7-t"));
+  await new Promise(r => setTimeout(r, 700));
+  const rows = (await dbPool.query(`SELECT sent_reason, delivered_at IS NOT NULL AS d FROM lesson_result_pending WHERE owner_key = 'guest:fp-r7'`)).rows;
+  assert.deepEqual(rows, [{ sent_reason: "timeout", d: false }]);
 });
 
 test("R6: a fiókos gyakorlókör azonosítója vendégként újraküldve sem képez új párt", async () => {
