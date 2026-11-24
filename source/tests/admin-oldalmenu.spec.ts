@@ -14,11 +14,12 @@ test.describe("asztal 1366×768", () => {
     await page.evaluate(() => localStorage.removeItem("websuli.admin.nav.collapsed"));
     await page.reload();
     const nav = page.getByTestId("admin-tab-groups");
+    const side = page.getByTestId("admin-side-nav");
     const panel = page.getByTestId("probe-panel");
     await expect(nav).toBeVisible();
     await expect(panel).toBeVisible();
 
-    const n = (await nav.boundingBox())!;
+    const n = (await side.boundingBox())!;
     const p = (await panel.boundingBox())!;
     expect(n.x + n.width, "a menü a tartalomtól balra").toBeLessThanOrEqual(p.x + 1);
     expect(Math.abs(n.y - p.y), "a menü és a tartalom teteje egy vonalban").toBeLessThanOrEqual(8);
@@ -29,7 +30,7 @@ test.describe("asztal 1366×768", () => {
     // ragadós: legörgetve is látszik
     await page.mouse.wheel(0, 2500);
     await page.waitForTimeout(200);
-    const scrolled = (await nav.boundingBox())!;
+    const scrolled = (await side.boundingBox())!;
     expect(scrolled.y, "görgetés után is a nézetben").toBeGreaterThanOrEqual(-1);
     expect(scrolled.y).toBeLessThan(80);
     await expect(nav.getByTestId("tab-users")).toBeInViewport();
@@ -41,7 +42,8 @@ test.describe("asztal 1366×768", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    const nc = (await nav.boundingBox())!;
+    await expect.poll(async () => (await side.boundingBox())!.width, { message: "összecsukva keskeny ikonsáv (az átmenet után)" }).toBeLessThanOrEqual(72);
+    const nc = (await side.boundingBox())!;
     const pc = (await panel.boundingBox())!;
     expect(nc.width, "összecsukva keskeny ikonsáv").toBeLessThanOrEqual(72);
     expect(pc.width, "a tartalom kiszélesedett").toBeGreaterThanOrEqual(p.width + 140);

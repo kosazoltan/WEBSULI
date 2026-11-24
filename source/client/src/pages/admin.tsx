@@ -80,7 +80,7 @@ import type { HtmlFileApi } from "@/components/AdminFileDashboard";
 import EmailSendDialog from "@/components/EmailSendDialog";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { resolveAdminTab } from "@/lib/admin-tabs";
-import { AdminTabBar } from "@/components/AdminTabBar";
+import { ADMIN_TABS_LAYOUT, AdminTabBar } from "@/components/AdminTabBar";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { AuthStatus } from "@/components/AuthStatus";
 import { useAuth } from "@/hooks/useAuth";
@@ -737,7 +737,7 @@ export default function Admin() {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className={ADMIN_TABS_LAYOUT}>
           {/* Spec 2026-10-18-admin-korszerusites: csoportos menü egyetlen forrásból (lib/admin-tabs.ts). */}
           <AdminTabBar hidden={isMobile} />
 
