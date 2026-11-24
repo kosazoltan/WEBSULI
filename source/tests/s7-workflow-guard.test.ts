@@ -31,6 +31,7 @@ const ALLOWLIST: Record<string, Allowed> = {
   "route:POST /api/html-files@server/routes.ts": { category: "manual-admin", reason: "Kézi anyagfeltöltés: a tanár által adott HTML kerül be, modell nem állít elő tartalmat." },
   "route:PATCH /api/html-files/:id@server/routes.ts": { category: "manual-admin", reason: "Kézi metaadat-szerkesztés (cím, leírás, osztály); a tartalom nem változik (updateHtmlFile)." },
   "route:POST /api/html-files/reorder@server/routes.ts": { category: "manual-admin", reason: "Kézi sorrendezés (displayOrder); a tananyag tartalma nem változik." },
+  "route:PUT /api/html-files/:id/tracks@server/tracks-routes.ts": { category: "manual-admin", reason: "Kézi csoporttagság (tracks, #1986): az admin a fájlszerkesztőben teszi csoportba az anyagot; a tartalom nem változik." },
   "route:DELETE /api/html-files/:id@server/routes.ts": { category: "manual-admin", reason: "Kézi anyagtörlés az admin felületről; nincs gépi tartalom-módosítás." },
   "route:POST /materials/bulk-delete@server/routes.ts": { category: "manual-admin", reason: "Kézi tömeges törlés az admin felületről; nincs gépi tartalom-módosítás." },
   "route:POST /materials/bulk-move@server/routes.ts": { category: "manual-admin", reason: "Kézi tömeges áthelyezés (osztály); a tananyag tartalma nem változik." },

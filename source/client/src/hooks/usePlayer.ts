@@ -141,6 +141,9 @@ export const playerAccountKey = (playerId: string) => [PLAYER_ACCOUNT_KEY[0], pl
  */
 export async function clearPlayerCache(queryClient: QueryClient): Promise<void> {
   queryClient.removeQueries({ queryKey: PLAYER_ACCOUNT_KEY });
+  // #1986 (review #582): a saját tananyagcsoportok is fiókhoz kötöttek.
+  await queryClient.cancelQueries({ queryKey: ["/api/tracks/mine"] });
+  queryClient.removeQueries({ queryKey: ["/api/tracks/mine"] });
   // Az adventi naptár állapota is az előző alanyé lehet (élesítés előtti L2) — törlődik, a függő kérés megszakad.
   await clearAdventCache(queryClient);
   await queryClient.resetQueries({ queryKey: PLAYER_ME_KEY });

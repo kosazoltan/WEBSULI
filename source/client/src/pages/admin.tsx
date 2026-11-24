@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { trackOption } from "@shared/tracks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -81,6 +82,7 @@ import EmailSendDialog from "@/components/EmailSendDialog";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { resolveAdminTab } from "@/lib/admin-tabs";
 import { ADMIN_TABS_LAYOUT, AdminTabBar, useAdminTabsOrientation } from "@/components/AdminTabBar";
+import { TrackAssignmentsCard } from "@/components/TrackAssignmentsCard";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { AuthStatus } from "@/components/AuthStatus";
 import { useAuth } from "@/hooks/useAuth";
@@ -142,11 +144,29 @@ function AdminFilesTab({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
   });
 
   const editMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: { title?: string; description?: string; classroom?: number } }) => {
-      return apiRequest("PATCH", `/api/html-files/${id}`, updates);
+    mutationFn: async ({ id, updates }: { id: string; updates: { title?: string; description?: string; classroom?: number; tracks?: string[] } }) => {
+      // #1986: a csoporttagság külön, admin-végponton (PUT …/tracks); a többi mező a megszokott PATCH-csel. A sorrend a szerver
+      // évfolyam-feltételéhez igazodik (review #582): ha az új tagság az új évfolyamot kívánja (csoportba tétel), előbb a PATCH;
+      // egyébként (kivétel a csoportból, pl. évfolyamváltás előtt) előbb a PUT. Részleges siker esetén a hiba megnevezi, mi mentődött.
+      const { tracks, ...rest } = updates;
+      const patch = Object.keys(rest).length ? () => apiRequest("PATCH", `/api/html-files/${id}`, rest) : null;
+      const put = tracks ? () => apiRequest("PUT", `/api/html-files/${id}/tracks`, { tracks }) : null;
+      const patchFirst = (tracks ?? []).some((t) => trackOption(t)?.contentGrade === rest.classroom);
+      const steps: Array<[string, () => Promise<unknown>]> = [];
+      if (patch) steps.push(["a többi mező", patch]);
+      if (put) steps[patchFirst ? "push" : "unshift"](["a csoporttagság", put]);
+      for (let i = 0; i < steps.length; i += 1) {
+        try { await steps[i][1](); }
+        catch (error) {
+          if (i === 0) throw error;
+          throw new Error(`${steps[0][0][0].toUpperCase()}${steps[0][0].slice(1)} mentődött, ${steps[i][0]} nem: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+        }
+      }
+      return null;
     },
+    // A lista a hiba esetén is frissül (részleges mentés).
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["/api/html-files"] }); },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       setEditingFile(null);
       toast({
         title: "Módosítva",
@@ -259,7 +279,7 @@ function AdminFilesTab({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
     }
   };
 
-  const handleEdit = (id: string, updates: { title?: string; description?: string; classroom?: number }) => {
+  const handleEdit = (id: string, updates: { title?: string; description?: string; classroom?: number; tracks?: string[] }) => {
     editMutation.mutate({ id, updates });
   };
 
@@ -908,6 +928,7 @@ export default function Admin() {
       </TabsContent>
 
       <TabsContent value="learners" className="space-y-2">
+        {activeTab === "learners" && <TrackAssignmentsCard />}
         {activeTab === "learners" && <LearnersPanel />}
       </TabsContent>
 

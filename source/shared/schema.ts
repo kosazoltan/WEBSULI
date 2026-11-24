@@ -50,6 +50,8 @@ export const htmlFiles = pgTable("html_files", {
   content: text("content").notNull(),
   description: text("description"),
   classroom: integer("classroom").notNull().default(1),
+  /** #1986 (migrations/0046): külön tananyagcsoport-tagság (shared/tracks.ts), pl. ["gimi6"]. */
+  tracks: text("tracks").array().notNull().default(sql`'{}'::text[]`),
   contentType: varchar("content_type").notNull().default('html'),
   displayOrder: integer("display_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -245,6 +247,13 @@ export type InsertTag = z.infer<typeof insertTagSchema>;
 export type Tag = typeof tags.$inferSelect;
 
 // Material Tags - Many-to-many
+/** #1986 (migrations/0046): fiók–csoport hozzárendelés a P-020 fiókkulcsán (Google- és játékos-fiók). */
+export const trackAssignments = pgTable("track_assignments", {
+  track: varchar("track", { length: 32 }).notNull(),
+  emailKey: varchar("email_key", { length: 254 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({ pk: primaryKey({ columns: [table.track, table.emailKey] }) }));
+
 export const materialTags = pgTable("material_tags", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   materialId: varchar("material_id").notNull().references(() => htmlFiles.id),
