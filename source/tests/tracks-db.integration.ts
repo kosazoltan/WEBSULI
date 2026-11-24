@@ -109,4 +109,35 @@ describe("gimi felvételi csoport (#1986)", () => {
     const r = await new Client(app.base, await injectSession({ passport: { user: "tr-marcel" } })).request("GET", "/api/tracks/mine");
     assert.deepEqual((r.json as { tracks: string[] }).tracks, []);
   });
+  // Review #582: a csoport tartalmi évfolyama kötelező (gimi6 → 6. osztály), a mentés-visszaállítás és a fióktörlés megőrzi / takarítja.
+  it("E8: a csoporttagság csak a csoport évfolyamán menthető, és a csoportos anyag évfolyama nem állítható el", async () => {
+    const admin = new Client(app.base);
+    await admin.fetchCsrf();
+    assert.equal((await admin.request("POST", "/api/login", { email: ADMIN_EMAIL, password: ADMIN_PASSWORD })).status, 200);
+    await admin.fetchCsrf();
+    await dbPool.query(`INSERT INTO html_files (id, title, content, classroom) VALUES ('tr-4th', '4. osztályos', 'x', 4)`);
+    const bad = await admin.request("PUT", "/api/html-files/tr-4th/tracks", { tracks: [GIMI6_TRACK] });
+    assert.equal(bad.status, 400, bad.text);
+    assert.deepEqual((await dbPool.query<{ tracks: string[] }>(`SELECT tracks FROM html_files WHERE id = 'tr-4th'`)).rows[0]!.tracks, []);
+    const move = await admin.request("PATCH", "/api/html-files/tr-gimi-math", { classroom: 5 });
+    assert.equal(move.status, 400, move.text);
+    assert.equal((await dbPool.query<{ classroom: number }>(`SELECT classroom FROM html_files WHERE id = 'tr-gimi-math'`)).rows[0]!.classroom, 6);
+    assert.equal((await admin.request("PATCH", "/api/html-files/tr-gimi-math", { title: "Gimi felvételi — törtek 2" })).status, 200, "más mező szabadon menthető");
+  });
+
+  it("E9: a mentés visszaállítása megtartja a csoporttagságot", async () => {
+    const { storage } = await import("../server/storage");
+    const backup = await storage.createBackup("tracks-teszt", "tr-admin");
+    await dbPool.query(`UPDATE html_files SET tracks = '{}' WHERE id = 'tr-gimi-math'`);
+    assert.equal(await storage.restoreBackup(backup.id), true);
+    assert.deepEqual((await dbPool.query<{ tracks: string[] }>(`SELECT tracks FROM html_files WHERE id = 'tr-gimi-math'`)).rows[0]!.tracks, [GIMI6_TRACK]);
+  });
+
+  it("E10: a játékosfiók törlése a postafiók csoport-hozzárendelését is törli", async () => {
+    await dbPool.query(`INSERT INTO track_assignments (track, email_key) VALUES ($1, 'kisdiak@gmail.com') ON CONFLICT DO NOTHING`, [GIMI6_TRACK]);
+    const { createPlayerAccountStore } = await import("../server/player/account-store");
+    const deleted = await createPlayerAccountStore(dbPool).deleteAccount("tr-player-marcel", () => []);
+    assert.ok(deleted && deleted.account === 1);
+    assert.equal((await dbPool.query(`SELECT 1 FROM track_assignments WHERE email_key = 'kisdiak@gmail.com'`)).rowCount, 0);
+  });
 });

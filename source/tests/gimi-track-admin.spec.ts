@@ -33,3 +33,29 @@ test("admin: a fájlszerkesztő csoport-jelölője a PUT /tracks végpontra ment
   await expect.poll(() => writes().length).toBeGreaterThan(0);
   expect(writes()).toEqual([{ method: "PUT", path: "/api/html-files/f-6/tracks", body: { tracks: ["gimi6"] } }]);
 });
+
+test("admin: más évfolyamú anyagot a csoportba téve az évfolyam 6.-ra vált, és előbb az évfolyam mentődik (PATCH), utána a tagság (PUT)", async ({ page }) => {
+  const now = new Date().toISOString();
+  const files = [{ id: "f-4", userId: null, title: "4. osztály — Szorzás", content: "", description: null, classroom: 4, tracks: [], contentType: "html", createdAt: now }];
+  const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  await page.route("**/api/**", (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    if (req.method() !== "GET") { calls.push({ method: req.method(), path, body: req.postDataJSON() }); return route.fulfill({ json: { ok: true } }); }
+    if (path === "/api/auth/user") return route.fulfill({ json: { id: "admin-fixture", isAdmin: true, firstName: "Kósa", email: "admin@example.test" } });
+    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "probe" } });
+    if (path === "/api/html-files") return route.fulfill({ json: files });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto("/admin?tab=files");
+  await page.getByTestId("button-edit-file").first().click();
+  await page.getByTestId("checkbox-edit-track-gimi6").click();
+  await expect(page.getByTestId("select-edit-classroom")).toContainText("6");
+  await page.getByTestId("button-save-edit").click();
+  const writes = () => calls.filter((c) => c.path.startsWith("/api/html-files/"));
+  await expect.poll(() => writes().length).toBe(2);
+  expect(writes()).toEqual([
+    { method: "PATCH", path: "/api/html-files/f-4", body: { classroom: 6 } },
+    { method: "PUT", path: "/api/html-files/f-4/tracks", body: { tracks: ["gimi6"] } },
+  ]);
+});
