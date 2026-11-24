@@ -298,3 +298,12 @@ kézzel; csak markerelt blokkban frissíthető.
 - Záró válaszban sorold fel: módosított fájlok, futtatott ellenőrzések
   PASS/FAIL eredménnyel, nem futtatott ellenőrzések oka és maradó kockázat.
 <!-- CODEX_SHARED_QUALITY_RULES_END v1 -->
+
+## GPT goal contract (Hermes owner directive 2026-11-24)
+<!-- hermes-gpt-cel:v1 -->
+Applies to any GPT model working in this repo - orchestrator, sub-agent, or after a fallback switch:
+1. Before acting, state the goal and a measurable DONE list (files, commands with expected exit codes, PR point).
+2. Keep working until every DONE item is verified; do not stop with a plan or a "shall I continue?".
+3. Loop plan -> act -> verify; a claim or a clean exit is not delivery.
+4. Stop only for an owner decision, a forbidden bypass or safety/approval rule, or a real blocker after one tried in-scope alternative.
+5. Report measured facts vs "not measured" and name every open item. No lies, no hallucination, no lost requirement, no over-polish.
