@@ -79,6 +79,7 @@ import { createPlayerAdminRouter } from "./player/admin-routes";
 import { playerLinkBaseUrl } from "./player/email-template";
 import { playerAccountsEnabled } from "./player/require-player";
 import { getPlayerSessionId } from "./player/session";
+import { registerTrackRoutes } from "./tracks-routes";
 import { getRealtime } from "./realtime";
 import { createRtRouter } from "./routes/rt";
 import { ViewDedup } from "./lib/view-dedup";
@@ -1920,6 +1921,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN-ONLY route - Update material
+  // #1986: külön tananyagcsoportok (6-osztályos gimnáziumi felvételi) — saját csoportok és admin-tagság.
+  registerTrackRoutes(app, { pool: dbPool, isAdmin: isAuthenticatedAdmin, invalidateFiles: invalidateHtmlFilesCache });
+
   app.patch("/api/html-files/:id", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
       // Admin authentication required

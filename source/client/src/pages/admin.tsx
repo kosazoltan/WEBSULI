@@ -81,6 +81,7 @@ import EmailSendDialog from "@/components/EmailSendDialog";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { resolveAdminTab } from "@/lib/admin-tabs";
 import { ADMIN_TABS_LAYOUT, AdminTabBar, useAdminTabsOrientation } from "@/components/AdminTabBar";
+import { TrackAssignmentsCard } from "@/components/TrackAssignmentsCard";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { AuthStatus } from "@/components/AuthStatus";
 import { useAuth } from "@/hooks/useAuth";
@@ -142,8 +143,11 @@ function AdminFilesTab({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
   });
 
   const editMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: { title?: string; description?: string; classroom?: number } }) => {
-      return apiRequest("PATCH", `/api/html-files/${id}`, updates);
+    mutationFn: async ({ id, updates }: { id: string; updates: { title?: string; description?: string; classroom?: number; tracks?: string[] } }) => {
+      // #1986: a csoporttagság külön, admin-végponton (PUT …/tracks); a többi mező a megszokott PATCH-csel.
+      const { tracks, ...rest } = updates;
+      if (tracks) await apiRequest("PUT", `/api/html-files/${id}/tracks`, { tracks });
+      return Object.keys(rest).length ? apiRequest("PATCH", `/api/html-files/${id}`, rest) : null;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
@@ -259,7 +263,7 @@ function AdminFilesTab({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
     }
   };
 
-  const handleEdit = (id: string, updates: { title?: string; description?: string; classroom?: number }) => {
+  const handleEdit = (id: string, updates: { title?: string; description?: string; classroom?: number; tracks?: string[] }) => {
     editMutation.mutate({ id, updates });
   };
 
@@ -908,6 +912,7 @@ export default function Admin() {
       </TabsContent>
 
       <TabsContent value="learners" className="space-y-2">
+        {activeTab === "learners" && <TrackAssignmentsCard />}
         {activeTab === "learners" && <LearnersPanel />}
       </TabsContent>
 

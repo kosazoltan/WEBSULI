@@ -36,6 +36,8 @@ export interface HtmlFileApi {
   content: string;
   description: string | null;
   classroom: number;
+  /** #1986: külön tananyagcsoport-tagság (shared/tracks.ts). */
+  tracks?: string[];
   contentType?: string;
   createdAt: string;
   displayOrder?: number;

@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useRef, memo, type CSSProperties } from "react";
-import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight, Gamepad2, RefreshCw, Sparkles, Layers } from "lucide-react";
+import { Fragment, useState, useMemo, useEffect, useRef, memo, type CSSProperties } from "react";
+import { Search, FileCode, ShieldCheck, BookOpen, ArrowRight, Gamepad2, RefreshCw, Sparkles, Layers, Star } from "lucide-react";
 import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { useAuth } from "@/hooks/useAuth";
+import { GIMI6_TRACK, trackOption } from "@shared/tracks";
 import { filterHomeFiles, groupBySubject, HOME_VIEW_STORAGE_KEY, newestFirst, NEWEST_STRIP, parseHomeView, type HomeView } from "@/lib/home-views";
 
 /** A /api/materials/likes/batch szerveroldali korlátja (server/lib/public-input.ts MAX_MATERIAL_ID_BATCH). */
@@ -43,6 +44,8 @@ interface HtmlFileApi {
   coverThumb?: string;
   /** Spec 2026-11-03-fooldal-nezetek: tantárgy-kulcs a „Tantárgyanként” nézethez (null / régi szerver: „Egyéb”). */
   subject?: string | null;
+  /** #1986: külön tananyagcsoport-tagság (shared/tracks.ts); régi szervernél hiányzik. */
+  tracks?: string[];
 }
 
 interface UserFileListProps {
@@ -87,6 +90,22 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
     // Review #291: törölt évfolyamnál vagy anyag nélküli évfolyamnál „Mind” (nem ragad az előző szűrőn).
     setSelectedClassroom(learnerGrade != null && files.some((f) => (f.classroom ?? 1) === learnerGrade) ? learnerGrade : null);
   }, [learnerGrade, files, isAdmin]);
+  // #1986 (docs/specs/2026-11-24-gimi-felveteli-csoport.md): a „Gimi felv.” csoport külön szűrő; az évfolyam-szűrővel kizárják egymást.
+  const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
+  const pickClassroom = (classroom: number | null) => { setSelectedTrack(null); setSelectedClassroom(classroom); };
+  const { data: mineData } = useQuery<{ tracks?: string[] }>({
+    queryKey: ["/api/tracks/mine"],
+    queryFn: async () => {
+      const r = await fetch("/api/tracks/mine", { credentials: "include" });
+      return r.ok ? r.json() : { tracks: [] };
+    },
+    staleTime: 60_000,
+  });
+  const myTracks = Array.isArray(mineData?.tracks) ? mineData!.tracks! : [];
+  const inTrack = (f: HtmlFileApi, track: string) => Array.isArray(f.tracks) && f.tracks.includes(track);
+  const gimiOption = trackOption(GIMI6_TRACK)!;
+  const gimiAssigned = myTracks.includes(GIMI6_TRACK);
+  const showGimiChip = gimiAssigned || files.some((f) => inTrack(f, GIMI6_TRACK));
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   // Spec 2026-11-03-fooldal-nezetek: „Legfrissebb” és „Tantárgyanként” — külön (VAGY) és együtt (ÉS); eszközönként megmarad.
   const [view, setView] = useState<HomeView>(() => {
@@ -114,7 +133,11 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   const today = todayPosition();
   // Cím, leírás, tantárgynév és osztály, ékezettől függetlenül (spec 2026-11-03-fooldal-nezetek, 2026-11-17-tananyag-cim-osztaly).
   // Ha a kifejezés a szűrőtől eltérő osztályt nevez meg, a keresés minden osztályban fut (a szűrő állapota nem változik).
-  const searched = useMemo(() => filterHomeFiles(files, searchQuery, selectedClassroom), [files, searchQuery, selectedClassroom]);
+  const searched = useMemo(
+    () => (selectedTrack ? filterHomeFiles(files.filter((f) => inTrack(f, selectedTrack)), searchQuery, null) : filterHomeFiles(files, searchQuery, selectedClassroom)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [files, searchQuery, selectedClassroom, selectedTrack],
+  );
   const searchAllClassrooms = searched.allClassrooms;
   const filteredFiles = useMemo(() => {
     const filtered = searched.files;
@@ -309,6 +332,32 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
     );
   }
 
+  // #1986: a „Gimi felv.” csip a „Prog.” után (anyag nélkül is látszik a hozzárendelt fióknak); kiemelve a hozzárendelt fióknál.
+  const gimiChip = showGimiChip ? (
+    <Badge
+      variant={selectedTrack === GIMI6_TRACK ? "default" : "outline"}
+      className={`cursor-pointer text-xs py-0.5 px-2.5 font-semibold border-2 inline-flex items-center gap-1 transition-colors duration-200 ${
+        selectedTrack === GIMI6_TRACK
+          ? "bg-gradient-to-r from-fuchsia-700 to-purple-700 text-white border-fuchsia-300 shadow-md"
+          : gimiAssigned
+            ? "bg-fuchsia-500/30 hover:bg-fuchsia-500/45 text-white border-fuchsia-300 shadow-[0_0_0_2px_rgba(240,171,252,0.35)]"
+            : "bg-white/15 hover:bg-white/25 text-white border-fuchsia-300/70"
+      }`}
+      onClick={() => { setSelectedClassroom(null); setSelectedTrack(GIMI6_TRACK); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedClassroom(null); setSelectedTrack(GIMI6_TRACK); } }}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selectedTrack === GIMI6_TRACK}
+      aria-label={gimiAssigned ? `${gimiOption.label} — Neked` : gimiOption.label}
+      title={gimiOption.label}
+      data-assigned={gimiAssigned ? "true" : undefined}
+      data-testid={`button-filter-track-${GIMI6_TRACK}`}
+    >
+      {gimiAssigned && <Star className="w-3 h-3" fill="currentColor" aria-hidden="true" />}
+      {gimiOption.shortLabel}
+    </Badge>
+  ) : null;
+
   return (
     <div className="min-h-screen relative">
       <div className="container py-3 relative z-10">
@@ -333,13 +382,13 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
         <div className="mb-3">
           <div className="flex flex-wrap gap-1.5 justify-center items-center">
             <Button
-              variant={selectedClassroom === null ? "default" : "outline"}
+              variant={selectedClassroom === null && !selectedTrack ? "default" : "outline"}
               size="sm"
-              onClick={() => setSelectedClassroom(null)}
-              aria-pressed={selectedClassroom === null}
+              onClick={() => pickClassroom(null)}
+              aria-pressed={selectedClassroom === null && !selectedTrack}
               data-testid="button-filter-all"
               className={`h-7 px-3 text-xs font-semibold ${
-                selectedClassroom === null
+                selectedClassroom === null && !selectedTrack
                   ? "bg-gradient-to-r from-[#FB923C] to-[#EAB308] text-white border-0 shadow-md"
                   : "bg-white/20 hover:bg-white/30 text-white border-white/40"
               }`}
@@ -347,28 +396,32 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               Mind
             </Button>
             {/* Spec 2026-10-18-nyilvanos-oldal-udvozlo: csak az anyaggal bíró évfolyamok — a „(0)” jelvények zaja megszűnt. */}
+            {!availableClassrooms.includes(0) && gimiChip}
             {CLASSROOM_VALUES.filter((classroom) => availableClassrooms.includes(classroom)).map((classroom) => (
+              <Fragment key={classroom}>
               <Badge
                 key={classroom}
-                variant={selectedClassroom === classroom ? "default" : "outline"}
+                variant={selectedClassroom === classroom && !selectedTrack ? "default" : "outline"}
                 // Spec 2026-11-03-fooldal-boritokartyak: a chip a sáv színét viseli (aktívan a mért strong / strongInk pár).
-                style={selectedClassroom === classroom
+                style={selectedClassroom === classroom && !selectedTrack
                   ? { background: homeCardTheme(classroom).strong, color: homeCardTheme(classroom).strongInk, borderColor: homeCardTheme(classroom).strong }
                   : { borderColor: homeCardTheme(classroom).accent }}
                 className={`cursor-pointer text-xs py-0.5 px-2.5 font-semibold border-2 ${
-                  selectedClassroom === classroom
+                  selectedClassroom === classroom && !selectedTrack
                     ? "shadow-md"
                     : "bg-white/15 hover:bg-white/25 text-white"
                 } transition-colors duration-200`}
-                onClick={() => setSelectedClassroom(classroom)}
+                onClick={() => pickClassroom(classroom)}
                 // a11y (2026-09-02): kattintható jelvény → gomb-szerep és toggle-állapot gép által olvasható
                 role="button"
                 tabIndex={0}
-                aria-pressed={selectedClassroom === classroom}
+                aria-pressed={selectedClassroom === classroom && !selectedTrack}
                 data-testid={`button-filter-classroom-${classroom}`}
               >
                 {getClassroomLabel(classroom, true)}
               </Badge>
+              {classroom === 0 && gimiChip}
+              </Fragment>
             ))}
           </div>
         </div>

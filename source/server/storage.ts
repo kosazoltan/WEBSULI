@@ -413,6 +413,7 @@ export class DatabaseStorage implements IStorage {
         content: sql<string>`''`.as('content'), // Empty content for list view optimization
         description: htmlFiles.description,
         classroom: htmlFiles.classroom,
+        tracks: htmlFiles.tracks, // #1986: csoporttagság a főoldali „Gimi felv.” szűrőhöz
         contentType: htmlFiles.contentType,
         displayOrder: htmlFiles.displayOrder,
         createdAt: htmlFiles.createdAt
