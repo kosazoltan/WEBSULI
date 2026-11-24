@@ -45,3 +45,9 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 - Helyi e2e: CDP-swipe után a koppintás nem ad click-et (fling) — a swipe végén álló touchMove kell (PR #543).
 - Teljes hiányleltár (2026-11-23): `docs/specs/2026-11-23-teljes-hianyleltar.md` — hullámok H0–H8, mester: SQL feladat.tasks.
 - 2026-11-23: #542, #543 beolvadt; #544 (advent PR-C) és #545 (hiányleltár) nyitva.
+
+# Eredmény-e-mail B2 (2026-11-24)
+
+- PR #556: keepalive kvíz-POST, CSRF-403 kezelés, egyszintű újrapróba (3 / kör / lap), törzsig élő időkorlát, 60 + 60-as IP-keret
+  (`source/server/lesson-result-limits.ts`). Végrehajtás: `docs/specs/2026-11-22-eredmeny-email-bontas-vegrehajtas.md` 2. pont.
+- WEBSULI e2e helyben csak `npm run test:e2e -- <spec>` harnesszel (eldobható DB); lapon belüli állapotot mérő lépések között nincs navigáció.

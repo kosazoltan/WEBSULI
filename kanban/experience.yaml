@@ -21,3 +21,9 @@ cards:
     observed: "feladatok elvesztek kanban/ágak között"
     fix: "SQL feladat-nyilvántartás + szinkron a higiéniában"
     rule: "minden teendő azonnal feladat.mjs add"
+  - id: 4
+    status: rule
+    date: "2026-11-24"
+    observed: "e2e teszt a főágon hamisan zöld: két lépés között navigált, elveszett a lapon belüli állapot"
+    fix: "navigáció nélküli segédfüggvény (answerAllHere), RED újramérve a főágon"
+    rule: "lapon belüli állapotot mérő e2e-ben nincs page.goto a lépések között; RED mindig mérve"
