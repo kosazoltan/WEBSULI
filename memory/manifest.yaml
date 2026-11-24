@@ -50,3 +50,14 @@ result_email_b2:
   client_retry: "resultReport.ts: RESULT_REPORT_ATTEMPTS 3 / kör / lap (pageAttempts), 30 s + 60 s, apiRequest retries 0 (R26)"
   next_slice: "B3 — képesség-jelzés (R10, R12)"
 # zaro-hurok: 2026-11-24T01:35:38.457Z nincs-uj
+# 2026-11-24 — Advent A2 (#562) review-kör, B3 (#564), kapu-W4 (#565), lesson-fusion flaky (#566)
+advent_a2_mail:
+  pr: "#562 (feat/advent-s5-s6-elesites)"
+  markers: "want:, pending:<h>@<ms>, try:<h>@<első ms>, sent:<h>@<ms>, final:, check: — ADVENT_RESEND_WINDOW_MS = 23 h, ADVENT_MAIL_LEASE_MS = 10 perc (store.ts)"
+  resend_conflict: "server/resend.ts: invalid_idempotent_request → ResendIdempotencyConflict = kézbesítve"
+result_email_b3:
+  pr: "#564 (feat/eredmeny-email-b3)"
+  contract: "shared/result-compat.ts RESULT_API_VERSION 2; a szerver még nem hirdet (B5a); jelzés+400 → egy régi alakú ismétlés"
+qa_gates:
+  w4: "#565 — pre-pr-gate ítélet csak helyi review-<fej>.json (prVerdict)"
+  flaky_fusion: "#566 — lesson-fusion audios rendezése az első valódi lejátszás szerint"
