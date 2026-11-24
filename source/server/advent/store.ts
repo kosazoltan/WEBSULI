@@ -70,6 +70,20 @@ export type AdoptionRequest = { deviceId: string; merge: AdoptionMerge };
 
 export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
   return {
+    /**
+     * A tanulói és az eszköz sora EGY lekérdezésből (PR-B 4. kör L2): egy utasítás egy pillanatkép, így egy közben commitolt átvétel
+     * nem adhat „mindkettő hiányzik” állapotot (az előnézet sem lehet átmenetileg üres). Írás és zár nélkül.
+     */
+    async readPair(season: number, learnerId: string, deviceId: string): Promise<{ learner: AdventRow | null; device: AdventRow | null }> {
+      const found = await pool.query<DbRow>(
+        `SELECT ${COLUMNS} FROM advent_progress
+          WHERE season = $1 AND ((subject_kind = 'learner' AND subject_id = $2) OR (subject_kind = 'device' AND subject_id = $3))`,
+        [season, learnerId, deviceId],
+      );
+      const rows = found.rows.map(toRow);
+      return { learner: rows.find((r) => r.subjectKind === "learner") ?? null, device: rows.find((r) => r.subjectKind === "device") ?? null };
+    },
+
     /** Olvasás írás nélkül: a sor, vagy null, ha az alany még nem kezdte el a naptárat. */
     async read(season: number, subject: AdventSubject): Promise<AdventRow | null> {
       const found = await pool.query<DbRow>(`SELECT ${COLUMNS} FROM advent_progress WHERE season = $1 AND subject_kind = $2 AND subject_id = $3`, [season, subject.kind, subject.id]);

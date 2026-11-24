@@ -221,7 +221,8 @@ Drizzle-sémáéval azonosak, visszaállítás (`DROP TABLE IF EXISTS advent_pro
 | `POST /api/advent/grade` | évfolyam megadása (csak `player` / `device`, csak az első válasz előtt) | CSRF + IP-korlát |
 | `POST /api/advent/doors/:day/open` | az ablak aktuális kérdése (helyes válasz NÉLKÜL); az első hívás hozza létre a sort és a kiosztást; idempotens | CSRF + IP-korlát |
 | `POST /api/advent/doors/:day/answer` | `{ questionId, pick }` → `{ correct, correctIndex, explanation, door, summary }`; ugyanarra a kérdésre a második beküldés a tárolt eredményt adja | CSRF + IP-korlát; soronkénti zár (`SELECT … FOR UPDATE` tranzakcióban) |
-| `POST /api/advent/round` | új kör (csak ha végigért, nem felelt meg, nincs javítható ablak, és a kör < 3) | CSRF + IP-korlát |
+| `POST /api/advent/round` | új kör (csak ha végigért, nem felelt meg, nincs javítható ablak, és a kör < 3); a következő kör terve ugyanabban a tranzakcióban készül; ha ismétlés nélkül nem építhető fel, a hiányzó helyekre a legrégebben látott kérdések kerülnek (tulajdonosi döntés 2026-11-21; 22.11) | CSRF + IP-korlát |
+| `POST /api/advent/adopt` | a párosított eszköz függő (a `GET /state`-en `adoptionPending: true` előnézetként mutatott) vendégsorának kifejezett átvétele; idempotens — átvehető sor nélkül a mentett állapotot adja (22.12) | CSRF + IP-korlát |
 | `…/api/admin/advent/preview/*` | ugyanez a router az adminnak, választható dátummal (R9) | `isAuthenticatedAdmin` |
 
 Az író kérések a tanulói tokent és az eszközazonosítót a kérés TÖRZSÉBEN viszik (mint a lecke-eredmény), URL-be egyik sem kerül.
@@ -795,6 +796,9 @@ sorban, alatta / mellette a gomb.
 
 - Látszik: november 24–30. „Hamarosan”; december 1. – január 6. aktív; január 7-től és november 24. előtt nem látszik. Az
   `ADVENT_CALENDAR` flag kikapcsolt állapotában nem látszik.
+- **PONTOSÍTVA 2026-11-18 (20. szakasz, orkesztrátori döntés a vak ellenőr K2 lelete után):** a „látszik-e a kártya” döntés az első
+  rajzolás ELŐTT a kliens-buildbe égetett `VITE_ADVENT_CALENDAR` kapcsolóból és a böngésző órájából (Europe/Budapest) születik; a
+  `GET /api/advent/status` csak felülbírál. Cél: CLS ≤ 0,02 MINDEN betöltésnél, első látogatáskor is.
 - **Elrendezés-ugrás (CLS) nélkül:** a kártya dobozát a kliens AZONNAL lefoglalja, ha a böngésző órája szerint (`adventNow(new Date())`,
   a közös tiszta függvény) a fázis `teaser`, `open` vagy `catchup` — a tartalom a `GET /api/advent/status` és `/state` megérkezésekor
   töltődik bele ugyanabba a fix magasságú dobozba. A szerver marad a tekintély: ha a `status` szerint a naptár nem él (kikapcsolt
@@ -837,6 +841,8 @@ Költség: + 4 kép × 0,09 + 4 × 0,003 = + 0,37 USD → **első kör: 94 kép 
   `/games` lista, valamint a főoldali játék-rács SOHA nem tartalmazhatja a naptárat.
 - [ ] A47 WHEN a főoldal a szezonban betölt THEN the system SHALL a kártya helyét a tartalom megérkezése előtt lefoglalni
   (a tananyaglista nem ugrik el a kártya és a banner betöltésekor), és a bannert elsőbbséggel, nem lustán tölteni.
+  PONTOSÍTVA 2026-11-18 (20. szakasz): mérce a `layout-shift` megfigyelővel mért CLS ≤ 0,02 a kártya miatt, első látogatáskor is,
+  360×640, 390×844 és 1366×768 méreten; kikapcsolt kapcsolónál és szezonon kívül a kártya semmit nem rajzol és semmit nem kér le.
 - [ ] A48 WHEN a kártya megjelenik THEN the system SHALL a főoldal meglévő tesztjeit (nézetek, címek, osztályjelvény, kereső,
   szűrő) változtatás nélkül teljesíteni.
 
@@ -1038,6 +1044,36 @@ nyílik az első ablak!”. Lezárt naptárnál, ha a tanuló egy ablakot sem ol
   válasz után nem olvas külön állapotot (az eredményből frissít), 429-nél pedig megtartja a látható naptárat.
 - **C6 lezárva (2026-11-18):** a DB-kör terheletlen gépen 300 s a 480 s-os korlátból (37% tartalék), párhuzamos kliensekkel.
 
+## 20. A főoldali kártya megjelenésének döntése (2026-11-18, orkesztrátori technikai döntés; a vak ellenőr K2 lelete)
+
+**Tény (ellenőrizve 2026-11-18):** élesben az `index.html`-t a Vercel adja a SAJÁT statikus buildjéből (`source/vercel.json`:
+`buildCommand: npm run build:client`, `outputDirectory: dist/public`, utolsó átírás `/:path*` → `/index.html`; az éles
+válasz fejlécei: `Server: Vercel`, `X-Vercel-Cache: HIT`, `Cache-Control: public, max-age=0, must-revalidate`). A Renderhez
+csak az `/api`, `/auth`, `/dev` és néhány további útvonal megy. A szerver tehát NEM tud kérésenként állapotot írni a HTML-be.
+
+**Döntés:**
+
+- A kliens-buildbe égetett `VITE_ADVENT_CALENDAR=on` + a böngésző órája (Europe/Budapest, a közös `adventNow`) dönt arról, hogy a
+  kártya megjelenik-e — az első rajzolás előtt, hálózati kör nélkül. Bekapcsolt kapcsolónál a szezonban (november 24. – január 6.)
+  a kártya AZONNAL a végleges méretén jelenik meg (a „Hamarosan” időszakban gomb nélkül, utána a „Kinyitom” gombbal).
+- A `GET /api/advent/status` felülbíráló marad: ha a szerver szerint a naptár nem él, a kártya összecsukódik. Rendes üzemben ez
+  nem fordul elő — csak hibás bekapcsolási sorrendnél (lásd a végrehajtási utasítás 7. kiegészítését) vagy elállított eszközóránál.
+- Kikapcsolt kapcsolónál és szezonon kívül a komponens semmit nem rajzol és semmit nem kér le.
+- Elállított eszközóra: a kártya legrosszabb esetben megjelenik, majd összecsukódik, vagy nem jelenik meg — a naptároldalon
+  mindig a szerver dönt.
+- **A kapcsoló két helyen él:** Render futásidő (`ADVENT_CALENDAR`) és Vercel build (`VITE_ADVENT_CALENDAR`). Bekapcsolás: előbb
+  Render, utána Vercel-újraépítés; kikapcsolás fordítva.
+- **Tesztelés (ez FELÜLÍRJA a 16.5 „a kliensben nincs e2e-ág” mondatát):** az e2e-buildben a kapcsoló BE van égetve, de a kliens
+  szezon-számítása teszt-kampós buildben (`VITE_ENABLE_GAME_TEST_HOOKS=1`) CSAK akkor ad időt, ha a teszt a lap betöltése előtt
+  beadja (`window.__websuliAdventTestNow`) — ugyanaz az elv, mint a szerveren („érvényes tesztidő nélkül a naptár kikapcsolt”).
+  Így a többi főoldali teszt november 24. után is változatlan lapot lát, az adventi teszt pedig az éles utat méri. Az éles
+  buildben a kampó nem létezik (őr-teszt).
+- A korábbi megoldás (a hely csak a visszatérő látogatónál foglalt, helyi jelzővel) megszűnik.
+
+**S3c-hez (jogos felvetés, 2026-11-18):** a naptár képei (`client/public/advent/2026/`) élesben szintén a Vercel statikus
+buildjéből mennek ki, ezért az `immutable`, egyéves gyorsítótárhoz (A41) a `source/vercel.json`-ba `/advent/(.*)`
+fejléc-szabály kell — minden látogatót érintő fájl, őr-teszttel (a `tests/vercel-lesson-csp.test.ts` mintájára).
+
 ## 21. A kéréskorlátok második méretezése és a kizárás elleni védelem (2026-11-18, orkesztrátori döntés; a vak ellenőr K1 / K2 lelete)
 
 A tulajdonos szándéka „iskolai méret”: egy iskola egyszerre, egy hálózati címről. A 19. szakasz számai ezt nem fedték le (a
@@ -1105,3 +1141,75 @@ meg a naptárat azon az eszközön, amelyen addig vendégként játszott, a vend
 
 **Évfolyam (vak ellenőr k6):** az évfolyam az első VÁLASZNÁL rögzül, nem a megnyitáskor (R6, E10); az első válaszig a profil
 változása új tervet ad. **Sérült sor (k3):** 500 helyett érthető 409 (\`corrupt: true\`) minden végponton.
+
+## 22. Élesítés előtti javítások (a 3/3 PR GPT-vak ítélete, 2026-11-20 — a kapcsoló bekapcsolásának feltétele)
+
+Külön, a 3/3 PR-re halmozott ágon (`wip/advent-d-elesites-elott`); a 3/3 PR feje változatlan marad.
+
+1. **Átvétel és javított évfolyam (L1):** rögzítetlen évfolyamnál az átvétel a tanuló FRISS profiljának évfolyamát használja; a még meg
+   nem válaszolt, más évfolyamra készült saját terv a vendégmegoldások illesztése ELŐTT újraépül. Az átvett vendégablak kérdéssora
+   csak azonos évfolyamnál marad meg kérdésként a tervben (a próba és az eredmény mindig átkerül).
+2. **Alanyváltás az SPA-ban (L2):** az adventi állapot a kliens gyorsítótárában az alanyhoz kötött; játékos be- és kilépéskor (és a
+   tanulói link változásakor) a korábbi adat törlődik, a függőben lévő régi kérés nem töltheti vissza.
+3. **Lezárt évad (L3):** lezárt évadban az olvasás NEM mutat egyesített előnézetet: a mentett tanulói állás látszik (a lezárás után
+   átvétel nincs).
+4. **Éjféli frissítés eltérő eszközórával (L4):** az állapot a szerver által számolt várakozást is adja (`nextOpensInMs`); a kliens a
+   frissítést ehhez, a válasz érkezésének pillanatától ütemezi — az eszköz órája nem számít.
+5. **Átmeneti szerverhiba a főoldalon (L5):** a státusz HTTP-hibája nem azonos a hiteles „kikapcsolt” válasszal: hiba esetén a kártya
+   a helyén marad az alapfelirattal és a belépővel, a státusz újrapróbálható.
+6. **Két eszköz, egy tanuló (L6):** a válasz a teljes, azonos állapotú ablaklistát is visszaadja (`doors`); a kliens az összesítéssel
+   együtt az összes ablakot cseréli.
+
+**A 2/3 PR 4. GPT-körének feltételei (2026-11-20, ugyanezen az ágon):**
+
+7. **Átmenetileg üres párosított olvasás (L2):** a tanulói és a vendégsor egy lekérdezésből (egy pillanatkép) — egy közben commitolt
+   átvétel nem adhat üres nézetet.
+8. **Lecserélt tanulói próba (L3):** ha átvételkor a vendég jobb eredménye felülírja a tanuló egy ablakát, a tanuló ottani próbáinak
+   kérdései a terv `retired` listájára kerülnek: sem az egyesített terv játszható helyein, sem a későbbi körökben nem jönnek újra.
+9. **Vegyes évfolyamú pótlás (L4):** a karácsonyi tárgyú hely pótlása a karácsonyi készletből jön, akkor is, ha a tanuló évfolyamán
+   az a nap bankos nap.
+10. **Hiányzó napkulcs (L5):** a meglévő körterv minden napja megvan, legalább egy kérdéssel; különben 409 corrupt (olvasás és írás),
+    változatlan sorral. Az első megnyitás előtti üres terv megengedett.
+Az L1 (friss évfolyam az átvételnél) a fenti 1. pont; a 2/3 PR jelentésének forgatókönyve is tesztelt.
+
+**A PR-C vak körének (efa4c580, 2026-11-21) feltételei:**
+
+11. **Kizárólista és körváltás (L1):** a korábbi körök kizárólistája a MEGMUTATOTT kérdésekből áll: a próbák és a lecserélt (`retired`)
+    tanulói próbák kérdései. A lezárt kör fel nem használt foglalásai (a meg sem nyitott javító kérdések) nem számítanak — a gyerek
+    sosem látta őket (a 12.3 „körökön át sem ismétlődik” szabálya a látott kérdésekre vonatkozik). A következő kör terve a körváltással
+    EGY tranzakcióban készül és mentődik. **TULAJDONOSI DÖNTÉS 2026-11-21 (űrlap), szó szerint: „Ismétlés a legrégebbiekből”.** Ha
+    ismétlés nélkül már nem építhető fel a következő kör (a gyerek több kérdést látott, mint amennyi a készletben marad — csak átvétel
+    után, szélső esetben fordulhat elő), a terv a még hiányzó helyekre a LEGRÉGEBBEN megmutatott kérdéseket használja (legrégebbi elöl,
+    determinisztikusan; az ablak saját készletéből, a körön belül ismétlés nélkül), így a gyerek továbbjátszhat; a többi hely új kérdés.
+    A sorrend: a lecserélt (`retired`) próbák elöl (az időpontjuk nincs tárolva), utána a próbák időrendben (egyenlő időnél kör, nap,
+    próba). Ahol van elég új kérdés, a terv változatlan. A korábbi „nincs új kör / 409 `noMoreQuestions`” ág csak védőháló (a bank
+    hiányos sérülésére), szabályos játékban nem fordul elő.
+12. **Kész vendégeredmény átvétele (L2):** a `GET /state` párosított eszközön `adoptionPending: true`-val jelzi, ha a nézet egy még nem
+    mentett átvétel előnézete; a kliens az összesítés megnyitásakor, illetve végigjátszott körnél kifejezett, CSRF-védett, idempotens
+    `POST /adopt` kéréssel menti. A GET mellékhatás nélkül marad.
+13. **Alany-generáció a kliensben (L3):** az adventi állapot gyorsítótár-kulcsa nem titkos alany-generációt hordoz; a tanulói kapcsolat
+    kötése / bontása, a token eltárolása / törlése / elutasítása és a másik lapon változott token új generációt ad, a nyitott kérdés
+    bezárul, és a régi generációval indult GET / POST eredménye nem kerül a gyorsítótárba.
+14. **Éjféli frissítés horgonya (L4):** a frissítés a szerverminta érkezéséhez horgonyzott; a válasz helyi állapotírása nem tolja el.
+15. **Más évfolyamú vendégablak (L5):** az átvett ablak terve a próbák kérdéseit (történeti helyek) és a tanuló saját tervének többi
+    helyét és tárgyát kapja; a vendég fel nem használt kérdéssora és tárgya nem kerül át; a sorrend magja a vendégé.
+16. **Lejárt párosítás (L6):** minden író belépő (automatikus nyitás is) szinkron ellenőrzi az állapot `pairing: invalid` jelzését, a
+    munkameneti jelzőt és a választási kényszert; az automatikus nyitás szándéka a gyerek döntéséig megmarad.
+17. **Sérült mentés a kliensben (L7):** a `409 corrupt` olvasási hiba célzott, felnőtthöz irányító üzenetet ad, újrapróba nélkül.
+18. **A karácsonyfa csillaga (L8, A43):** a 24. ablak `solved` állapotát követi (nem a pontszámot), a felgyulladáskor egyszer (1,2 s)
+    felfénylik; csökkentett mozgásnál animáció nélkül világít.
+
+**A PR-C 2. vak körének (058986b7, 2026-11-21) feltételei:**
+
+19. **Késve érkező válasz alanyváltás után (L1):** minden kliensművelet (nyitás, válasz, évfolyam, új kör, átvétel) az indító
+    alany-generációhoz kötött: váltás után sem az eredménye, sem a hibája, sem a `finally` ága nem módosítja az új nézetet, a nyitott
+    kérdés nem nyílik meg, és a 429 utáni újrapróba elmarad (nem ír az új alany nevében).
+20. **Régi olvasás a sikeres írás után (L2):** az írás eredményének alkalmazása előtt a függő (az írás előtt indult) állapotolvasás
+    megszakad; ha futott, az írás után friss olvasás indul.
+21. **Fázisváltás a nyitva hagyott lapon (L3):** az állapot a következő állapotváltásig (ablaknyitás vagy fázishatár: november 24.,
+    december 1., december 25., január 7.) hátralévő időt is adja (`refreshInMs`); a kliens ehhez ütemezi a frissítést, így január 7-én
+    éjfélkor újratöltés nélkül lezártra vált.
+22. **Újrapárosítás másik lapon (L4):** az aktuális generáció igazolt `pairing: ok` válasza feloldja a lejárt link tiltását; a
+    „Folytatom vendégként” csak a figyelmeztetés generációjának tokenjét felejti el.
+23. **A csillag helye (L5):** a fejlécben a csillag önálló, nem zsugorodó helyen áll; csak a cím szövege csonkolódhat (360 px-en is
+    teljesen látszik).
