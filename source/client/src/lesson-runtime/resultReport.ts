@@ -4,6 +4,7 @@ import { getFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
 import { quizRoundComplete, roundActivityAt, roundTooOld } from "@shared/quiz-round";
 import { isRetryableRequestError } from "@shared/request-retry";
+import { createRoundOwners, roundHasActivity } from "@shared/round-owner";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -25,8 +26,24 @@ export const RESULT_REPORT_RETRY_DELAYS_MS = [30_000, 60_000] as const;
 /** PR #556 review: a kísérletek száma körönként (a „már elküldve” jelző kulcsán), a lap élete alatt — az effekt újrafutása (pl. a kör
  *  lezárása, új `round` érték) nem nyit új keretet. */
 const pageAttempts = new Map<string, number>();
+/**
+ * B4b (#510 R47, R49 b, R50): a kör párosítási kiléte az első tevékenységkor rögzül (`…:owner:<kör>`, a token lenyomata); a beküldés minden
+ * kísérlete előtt a mostani token ehhez vetődik. Írhatatlan tárolónál memóriában.
+ */
+const roundOwners = createRoundOwners(() => { try { return localStorage; } catch { return null; } }, getLearnerToken, token => experienceFingerprint({ learner: token }));
+const ownerKeyOf = (storageKey: string, kind: string, roundId: string) => `${storageKey}:${kind}:owner:${roundId}`;
 export function useResultReport(lessonId: string | undefined, kind: "tasks" | "quiz", round: ExperienceRound, storageKey: string, ready = true) {
   const sending = useRef(false);
+  /** R50: azok a körök (kérdéssor szerint), amelyeket EBBEN a dokumentumban még tevékenység nélkül láttunk. */
+  const seenFresh = useRef(new Set<string>());
+  useEffect(() => {
+    const fresh = experienceFingerprint({ ids: round.ids });
+    if (!roundHasActivity(kind, round)) { seenFresh.current.add(fresh); return; }
+    const roundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
+    // L5: a már elküldött körhöz (újratöltéskor) nem keletkezik kilét-rekord.
+    try { if (localStorage.getItem(`${storageKey}:${kind}:sent:${roundId}`)) return; } catch { /* privát mód: memóriában rögzül */ }
+    roundOwners.bind(ownerKeyOf(storageKey, kind, roundId), seenFresh.current.has(fresh));
+  }, [kind, round, storageKey]);
   const [timedOut, setTimedOut] = useState(false);
   useEffect(() => {
     setTimedOut(false);
@@ -46,15 +63,18 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const flag = `${storageKey}:${kind}:sent:${roundId}`;
     try { if (localStorage.getItem(flag)) return; } catch { /* privát módban a szerver egyedi kulcsa véd */ }
     if ((pageAttempts.get(flag) ?? 0) >= RESULT_REPORT_ATTEMPTS) return;
+    // R47: legkésőbb a lezáráskor rögzül (ha a tevékenység-effekt még nem futott le).
+    const ownerKey = ownerKeyOf(storageKey, kind, roundId);
+    const owner = roundOwners.bind(ownerKey, seenFresh.current.has(experienceFingerprint({ ids: round.ids })));
     sending.current = true;
     void (async () => {
       try {
         const fingerprint = await getFingerprint().catch(() => undefined);
-        // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi.
-        const learner = getLearnerToken();
         // B1b: a kör kezdete és (kvíznél) az utolsó válasz ideje — a szerver (B1a, #532) opcionális mezőként fogadja, a levél dátumsorához.
         const times = { ...(round.startedAt > 0 ? { startedAt: round.startedAt } : {}), ...(kind === "quiz" && round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
-        const body = kind === "tasks"
+        // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi. B4b (R47, R49 b):
+        // csak ha a mostani token a kör rögzített párosításával egyezik; minden kísérlet előtt újra (a várakozás alatti újrapárosítás sem öröklődik).
+        const bodyFor = (learner: string | undefined) => kind === "tasks"
           ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) }
           // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
           : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) };
@@ -66,7 +86,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
           const attempt = (pageAttempts.get(flag) ?? 0) + 1;
           pageAttempts.set(flag, attempt);
           try {
-            await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { resultTimes: times, retries: 0, keepalive: kind === "quiz" });
+            await apiRequest("POST", `/api/lessons/${lessonId}/results`, bodyFor(roundOwners.learnerFor(owner)), { resultTimes: times, retries: 0, keepalive: kind === "quiz" });
             break;
           } catch (error) {
             if (attempt >= RESULT_REPORT_ATTEMPTS || !isRetryableRequestError(error)) throw error;
@@ -77,6 +97,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
           }
         }
         try { localStorage.setItem(flag, "1"); } catch { /* elég a szerver egyedi kulcsa */ }
+        roundOwners.clear(ownerKey);
       } catch { /* csendes: a tanuló felülete nem függ a levéltől */ }
       finally { sending.current = false; }
     })();
