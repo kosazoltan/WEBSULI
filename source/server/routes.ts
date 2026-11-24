@@ -79,6 +79,8 @@ import { createPlayerAdminRouter } from "./player/admin-routes";
 import { playerLinkBaseUrl } from "./player/email-template";
 import { playerAccountsEnabled } from "./player/require-player";
 import { getPlayerSessionId } from "./player/session";
+import { registerTrackRoutes } from "./tracks-routes";
+import { trackOption } from "@shared/tracks";
 import { getRealtime } from "./realtime";
 import { createRtRouter } from "./routes/rt";
 import { ViewDedup } from "./lib/view-dedup";
@@ -1920,6 +1922,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN-ONLY route - Update material
+  // #1986: külön tananyagcsoportok (6-osztályos gimnáziumi felvételi) — saját csoportok és admin-tagság.
+  registerTrackRoutes(app, { pool: dbPool, invalidateFiles: invalidateHtmlFilesCache });
+
   app.patch("/api/html-files/:id", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
       // Admin authentication required
@@ -1942,6 +1947,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({
             message: "Az osztály értékének 0 és 12 között kell lennie"
           });
+        }
+        // #1986 (review #582): csoportos anyag évfolyama nem állítható el a csoport tartalmi évfolyamáról (gimi6 → 6.).
+        const tracked = await dbPool.query<{ tracks: string[] }>(`SELECT tracks FROM html_files WHERE id = $1`, [req.params.id]);
+        const clash = (tracked.rows[0]?.tracks ?? []).map((t) => trackOption(t)).find((o) => o && o.contentGrade !== classroom);
+        if (clash) {
+          return res.status(400).json({ message: `Ez az anyag a(z) „${clash.label}” csoportban van, ezért ${clash.contentGrade}. osztályos marad — előbb vedd ki a csoportból.` });
         }
         updates.classroom = classroom;
       }

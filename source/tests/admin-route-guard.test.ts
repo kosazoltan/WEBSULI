@@ -37,6 +37,7 @@ const PINNED_ADMIN_ENDPOINTS = [
   "GET /api/static-audit",
   "POST /api/html-files",
   "PATCH /api/html-files/:id",
+  "PUT /api/html-files/:id/tracks", // #1986: anyag csoporttagsága (kézi admin-írás)
   "POST /api/html-files/reorder",
   "DELETE /api/html-files/:id",
   "POST /api/html-files/:id/send-email",
@@ -56,6 +57,7 @@ const PINNED_ADMIN_ENDPOINTS = [
 const OWN_DATA = new Set(["POST /api/player/export", "POST /api/player/account/delete/start", "POST /api/player/account/delete"]);
 
 const PUBLIC_ENDPOINTS: Record<string, string> = {
+  "GET /api/tracks/mine": "#1986: a bejelentkezett fiók saját csoportjai (vendégnek üres lista; csak a munkamenet saját fiókkulcsa)",
   "GET /auth/google": "Google-belépés indítása (OAuth)",
   "GET /auth/google/callback": "Google OAuth visszahívás (Passport, session-regenerate)",
   "POST /api/login": "helyi belépés — Origin-allowlist + login-korlát",
