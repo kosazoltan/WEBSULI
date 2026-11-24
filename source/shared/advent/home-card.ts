@@ -23,6 +23,41 @@ export function homeCardReserve(now: Date): boolean {
   return phase === "teaser" || phase === "open" || phase === "catchup";
 }
 
+/** A kártya órájának legritkább újraértékelése (ms): így a november 24-i megjelenés és minden határ legfeljebb egy perc késéssel él. */
+export const HOME_CARD_TICK_MS = 60_000;
+
+/**
+ * Mennyi idő múlva nézzen újra az órára a nyitva hagyott főoldal (PR #544 review): a következő állapotváltás (fázishatár vagy napi nyitás)
+ * után közvetlenül, de legfeljebb percenként. A ránézés nem hálózati kör — csak a böngésző órája.
+ */
+export function homeCardTickDelay(now: Date | null): number {
+  if (!now) return HOME_CARD_TICK_MS;
+  const until = adventNow(now).refreshInMs;
+  // +250 ms: a határ UTÁN fusson, ne pont rajta (az időzítő pár ms-mal korábban is elsülhet).
+  return until === null ? HOME_CARD_TICK_MS : Math.min(HOME_CARD_TICK_MS, until + 250);
+}
+
+/** A kártya „határkulcsa”: fázis + budapesti nap; `null`, ha a kártya nem látszik. Ha változik, a szerver státuszát újra kell kérni. */
+export function homeCardBoundary(now: Date | null): string | null {
+  if (!now || !homeCardReserve(now)) return null;
+  const at = adventNow(now);
+  return `${at.phase}/${at.today}`;
+}
+
+/** Átlépte-e az óra a határt két kiértékelés között. Az első kiértékelés és a kártya eltűnése nem váltás (nincs mit újrakérni). */
+export function homeCardBoundaryCrossed(prev: string | null, next: string | null): boolean {
+  return prev !== null && next !== null && prev !== next;
+}
+
+/**
+ * Kérjen-e a kártya személyes állapotot: van MÁR azonosító (eszköz vagy tanulói link), vagy bejelentkezett, nem tiltott játékos
+ * (a szerver a munkamenetéből azonosítja — új böngészőben is, eszközazonosító nélkül). Senkinek nem hoz létre azonosítót.
+ */
+export function homeCardWantsPersonal(input: { identity: boolean; player: unknown; banned: boolean }): boolean {
+  if (input.identity) return true;
+  return input.player != null && !input.banned;
+}
+
 /**
  * A kártya „mostja” (terv 20.): null, ha a kártya biztosan nem látszik. Kikapcsolt build-kapcsolónál mindig null.
  * Teszt-kampós buildben (e2e) CSAK a teszt által beadott, érvényes időpont számít — nélküle null, mint a szerveren

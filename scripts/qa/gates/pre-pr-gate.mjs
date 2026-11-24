@@ -79,6 +79,11 @@ export function checkPrBody(body) {
   return missing;
 }
 
+// A böngészős út időkorlátja (2026-11-23, PR-C: 556 teszt / 27 spec egy workerrel a harness 60 perces korlátjába ütközött 549 zöld és
+// 0 bukás mellett): a harness korlátja WEBSULI_E2E_TIMEOUT_MIN-nel nő, a kapu saját korlátja mindig e fölött marad (a harness takarít).
+export const E2E_HARNESS_TIMEOUT_MIN = 150;
+export const E2E_EXEC_TIMEOUT_MS = (E2E_HARNESS_TIMEOUT_MIN + 10) * 60_000;
+
 export function wrapperConfigSource() {
   return `// A scripts/qa/gates/pre-pr-gate.mjs generálja (docs/minosegkapuk.md) — NEM commitolandó (*.local.mts a .gitignore-ban).
 // CI-azonos böngészős út: szoftveres WebGL (SwiftShader), egy worker, .only tiltva; a szervert a harness buildeli és saját porton indítja.
@@ -168,7 +173,7 @@ async function main() {
       await gate.step(`böngészős út: ${run.label}`, () => {
         if (!docker) return { status: STATUS.FAIL, note: `NOT RUN → bukás: nincs Docker (az eldobható Postgres kell). Parancs: (cd source && node ${e2eArgs(run).join(' ')})` };
         gate.log(`[pre-pr-gate] futtatás: (cd source && node ${e2eArgs(run).join(' ')})`);
-        const r = exec(node, e2eArgs(run), { cwd: src, timeoutMs: 90 * 60_000 });
+        const r = exec(node, e2eArgs(run), { cwd: src, timeoutMs: E2E_EXEC_TIMEOUT_MS, env: { ...process.env, WEBSULI_E2E_TIMEOUT_MIN: String(E2E_HARNESS_TIMEOUT_MIN) } });
         writeLog(ctx.evDir, 'pre-pr-gate', `e2e-${run.label}`, `${r.stdout}\n${r.stderr}`);
         return cmdResult(r, `${run.specs.length} spec, szoftveres WebGL, buildelt szerver, workers=1`);
       });

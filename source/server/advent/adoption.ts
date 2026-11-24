@@ -97,6 +97,22 @@ export function usedInEarlierRounds(row: AdventRow, round: number, bank: readonl
 }
 
 /**
+ * A pótlás és az ütközésmentesítés kizárólistája (PR #544 review): az évad korábbi köreiben megmutatott kérdések
+ * (\`usedInEarlierRounds\`) ÉS az aktuális kör tervének lecserélt (\`retired\`) kérdései — azonosító és normalizált szöveg szerint. A
+ * lecserélt kérdés az átvétel óta nem játszható, ezért pótlásként sem jöhet vissza. Az ismétlési sorrendbe (\`repeatable\`) viszont
+ * NEM kerül: az csak a korábbi körökből jön (tulajdonosi döntés 2026-11-21).
+ */
+export function usedForRepair(row: AdventRow, round: number, plan: AdventPlan | undefined, bank: readonly AdventBankItem[], christmas: readonly ChristmasItem[]) {
+  const used = usedInEarlierRounds(row, round, bank, christmas);
+  for (const id of (plan as PlanMeta | undefined)?.retired ?? []) {
+    used.usedIds.add(id);
+    const item = findAdventItem(id, bank, christmas);
+    if (item) used.usedPrompts.add(normalizePrompt(item.prompt));
+  }
+  return used;
+}
+
+/**
  * Az egyesítés teljes környezete egy tanulóhoz a valódi kérdésbankokkal: a tanulói terv a tanuló profiljának évfolyamára készül (ha
  * még nincs), és az egyesített terv ütközésmentesítve (L3). A router és a tesztek ugyanezt használják.
  */
@@ -112,12 +128,7 @@ export function createAdoptionContext(input: {
     maxRepairs: (grade) => limitsForGrade(grade).maxRepairs,
     buildPlan: (row, round, grade) => withPlanMeta(buildAdventPlan({ bank, christmas, grade, season, round, subjectKey: learnerKey, ...usedInEarlierRounds(row, round, bank, christmas) }), grade, learnerKey),
     dedupe: (plan, row, round, grade, historicalByDay) => {
-      const used = usedInEarlierRounds(row, round, bank, christmas);
-      for (const id of (plan as PlanMeta).retired ?? []) {
-        used.usedIds.add(id);
-        const item = findAdventItem(id, bank, christmas);
-        if (item) used.usedPrompts.add(normalizePrompt(item.prompt));
-      }
+      const used = usedForRepair(row, round, plan, bank, christmas);
       return dedupePlanDoors(plan, { bank, christmas, grade, ...used, historicalByDay }).plan;
     },
     now: input.now,

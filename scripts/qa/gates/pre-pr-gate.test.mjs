@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from './lib.mjs';
-import { checkPrBody, classifyChanges, e2eArgs, mentionsStem, pickE2eSpecs, wrapperConfigSource, WRAPPER_CONFIG } from './pre-pr-gate.mjs';
+import { checkPrBody, classifyChanges, E2E_EXEC_TIMEOUT_MS, E2E_HARNESS_TIMEOUT_MIN, e2eArgs, mentionsStem, pickE2eSpecs, wrapperConfigSource, WRAPPER_CONFIG } from './pre-pr-gate.mjs';
 
 const cfg = loadConfig();
 const SPECS = ['coupon-expired-all-games.spec.ts', 'game-meta-quality.spec.ts', 'game-mobile-quality.spec.ts', 'tornado-j7a.spec.ts',
@@ -99,4 +99,14 @@ test('pickE2eSpecs a valódi spec-eken: admin-tabs, home-views, curriculum-order
   assert.ok(pickReal(['source/client/src/lib/curriculum-order.ts']).includes('curriculum-order.spec.ts'));
   const forSync = pickReal(['source/client/src/advent/sync.ts']);
   assert.ok(forSync.length < specFiles.length / 2, `a sync.ts ${forSync.length} / ${specFiles.length} tesztet választ`);
+});
+
+test('böngészős út időkorlát: a kapu a harness korlátját emeli, és a saját korlátja e fölött marad (PR-C: 556 teszt / 60 perc)', () => {
+  assert.ok(E2E_HARNESS_TIMEOUT_MIN > 60, 'a harness alapértelmezett 60 perce kevés egy teljes UI-spec futáshoz');
+  assert.ok(E2E_EXEC_TIMEOUT_MS > E2E_HARNESS_TIMEOUT_MIN * 60_000, 'a kapu ne vágja el a harnesst a takarítás előtt');
+  const harness = readFileSync(new URL('../../../source/scripts/run-e2e-tests.ts', import.meta.url), 'utf8');
+  assert.match(harness, /WEBSULI_E2E_TIMEOUT_MIN/, 'a harness olvassa a korlát-felülírást');
+  assert.match(harness, /playwrightTimeoutMs\(\), "Playwright"/, 'a Playwright-futás a felülírható korlátot használja');
+  const gate = readFileSync(new URL('./pre-pr-gate.mjs', import.meta.url), 'utf8');
+  assert.match(gate, /WEBSULI_E2E_TIMEOUT_MIN: String\(E2E_HARNESS_TIMEOUT_MIN\)/, 'a kapu átadja a korlátot a harnessnek');
 });

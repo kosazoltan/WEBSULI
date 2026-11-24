@@ -54,12 +54,15 @@ describe("withDifferentChar (A1, A2)", () => {
 });
 
 describe("a régi hamisítás ütközése, rögzített értékekkel és a valódi szerverkóddal (A3)", () => {
-  it("OAuth state „…xx” végződéssel: a régi `slice(0, -2) + xx` azonos és elfogadott, az új elutasított", () => {
+  it("OAuth state „…xx” végződéssel: a régi `slice(0, -2) + xx` azonos és elfogadott, az új elutasított", (t) => {
+    // KB #212: befagyasztott óra — a bizonyíték nem függhet a falióra állásától vagy ugrásától (a rekord időbélyege és a
+    // PlayerStateStore.verify saját Date.now()-ja ugyanazt a rögzített pillanatot látja).
+    const NOW = 1_800_000_000_000;
+    t.mock.timers.enable({ apis: ["Date"], now: NOW });
     const store = new PlayerStateStore();
     const state = "p.ABCDEFGHIJKLMNOPQRSTUVWXYZ0123xx";
-    // A munkamenet-rekord olyan, amilyet a PlayerStateStore.store ír (verifier, visszatérési cél, időbélyeg); az időbélyeg a
-    // szinkron ellenőrzés előtt készül, így a 15 perces élettartam nem játszik szerepet.
-    const reqWith = () => ({ session: { playerOauthStates: { [state]: { v: "verifier", r: null, t: Date.now() } } } });
+    // A munkamenet-rekord olyan, amilyet a PlayerStateStore.store ír (verifier, visszatérési cél, időbélyeg).
+    const reqWith = () => ({ session: { playerOauthStates: { [state]: { v: "verifier", r: null, t: NOW } } } });
     const verdict = (provided: string) => { let ok: string | false = false; store.verify(reqWith() as never, provided, (_e, v) => { ok = v; }); return ok; };
     assert.equal(verdict(state), "verifier", "az eredeti state érvényes");
     assert.equal(`${state.slice(0, -2)}xx`, state, "a régi hamisítás azonos értéket ad");
@@ -87,5 +90,26 @@ describe("a régi hamisítás ütközése, rögzített értékekkel és a valód
     assert.equal(`${token.slice(0, -4)}AAAA`, token, "a régi hamisítás azonos tokent ad");
     assert.deepEqual(parseLearnerToken(`${token.slice(0, -4)}AAAA`, SECRET), { id: "jm7b-learner-1", version: 1 }, "…és a szerver jogosan elfogadja");
     assert.equal(parseLearnerToken(withDifferentChar(token, -1), SECRET), null, "az új hamisítás elutasított");
+  });
+});
+
+describe("a játékos-tár state-élettartamának határa befagyasztott órán (A5, review PR #547)", () => {
+  it("PlayerStateStore.verify: 15 perc − 1 ms érvényes, pontosan 15 perc lejárt (külön rekordokkal)", (t) => {
+    // Az admin-tár határa az admin-access.test.ts-ben bizonyított; ez a játékos-tár (server/player/google.ts) párja.
+    // A „pontosan 15 perc” eset elkapja a `>=` → `>` mutációt (azzal a lejárt rekord elfogadott lenne).
+    const NOW = 1_800_000_000_000;
+    const TTL = 15 * 60_000;
+    t.mock.timers.enable({ apis: ["Date"], now: NOW });
+    const store = new PlayerStateStore();
+    const verdict = (state: string, age: number) => {
+      const req = { session: { playerOauthStates: { [state]: { v: `verifier-${state}`, r: null, t: NOW - age } } } };
+      let ok: string | false | undefined;
+      store.verify(req as never, state, (_e, v) => { ok = v; });
+      assert.deepEqual(req.session.playerOauthStates, {}, "a rekord egyszer használatos — ellenőrzéskor törlődik");
+      return ok;
+    };
+    assert.equal(verdict("p.friss", TTL - 1), "verifier-p.friss", "15 perc − 1 ms: érvényes");
+    assert.equal(verdict("p.lejart", TTL), false, "pontosan 15 perc: lejárt");
+    assert.equal(verdict("p.regi", TTL + 1), false, "15 perc + 1 ms: lejárt");
   });
 });
