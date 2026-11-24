@@ -114,7 +114,8 @@ function rowWithRetired(): AdventRow {
   // próbáját lecserélte (a vendég jobb eredményére) — az a kérdés a bankban van, és azonosító szerint ELSŐ pótlási jelölt lenne.
   const doors = Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 1, [`other-${i + 1}`]]));
   doors[1] = ["gone"];
-  const plan = { round: 1, layout: [1], doors, subjects: { 1: "matek" }, grade: 5, seedKey: `device:${DEVICE}`, retired: ["a-retired"] };
+  // Ép ablakrács (1…24 permutáció): a PR-C 3. vak L4 sorőre a csonka `layout`-ot sérültnek (409) veszi.
+  const plan = { round: 1, layout: Array.from({ length: 24 }, (_, i) => i + 1), doors, subjects: { 1: "matek" }, grade: 5, seedKey: `device:${DEVICE}`, retired: ["a-retired"] };
   return {
     id: "r", season: 2026, subjectKind: "device", subjectId: DEVICE, grade: 5, round: 1, plan: { 1: plan }, doors: { 1: {} },
     finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0),

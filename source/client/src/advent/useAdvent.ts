@@ -77,6 +77,48 @@ const identity = () => {
 
 export type AdventStatus = { enabled: boolean; phase?: AdventState["phase"]; season?: number; openDay?: number; daysUntilStart?: number };
 
+/**
+ * Admin-előnézet (terv 16.5, A16; végrehajtás S6): a naptár címében `elonezet=ÉÉÉÉ-HH-NN` — ekkor minden kérés az admin-őrzött
+ * `/api/admin/advent/preview` útra megy, `?date=` paraméterrel (a dátum nem titok; token és eszközazonosító továbbra sem kerül URL-be).
+ * Ha a szerver 401-et / 403-at ad (nem admin), a paraméter erre az oldalbetöltésre kikapcsol, és a normál naptár töltődik.
+ */
+const PREVIEW_PARAM = "elonezet";
+let previewRefused = false;
+export function adventPreviewDate(): string | null {
+  if (previewRefused || typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get(PREVIEW_PARAM);
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+/** Az előnézet elutasítása (401 / 403): innentől a normál naptár. */
+export function refuseAdventPreview(): void {
+  previewRefused = true;
+}
+/** A naptár módja a gyorsítótár-kulcshoz: az előnézet napja, vagy `"normal"` (S5/S6 1. vak L2). */
+export function adventMode(): string {
+  return adventPreviewDate() ?? "normal";
+}
+/** Egy naptár-végpont címe: előnézetben az admin-útvonalon, a dátummal. */
+export function adventUrl(path: string): string {
+  const date = adventPreviewDate();
+  return date ? `/api/admin/advent/preview${path}?date=${date}` : `/api/advent${path}`;
+}
+/**
+ * Az előnézet elutasítása: OLVASÁSNÁL (GET /state) a 401 és 403 is az admin-munkamenet hiányát jelenti, ezért mindkettő kikapcsolja
+ * az előnézetet. ÍRÁSNÁL viszont a 403 lehet MŰKÖDÉSI hiba (pl. zárt ablak nyitásakor — routes.ts:418), ahol az admin-jogosultság
+ * rendben van; itt CSAK a 401 kapcsolja ki az előnézetet, és a 403 hibát a hívó kezeli (Thread 4).
+ */
+const refusedPreviewRead = (status: unknown): boolean => adventPreviewDate() !== null && (status === 401 || status === 403);
+const refusedPreviewWrite = (status: unknown): boolean => adventPreviewDate() !== null && status === 401;
+/** Előnézetben a 401 írásnál kikapcsolja az előnézetet (a hívó utána frissít, és a normál naptár töltődik). */
+async function previewAware<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (refusedPreviewWrite((error as { status?: unknown } | null)?.status)) refuseAdventPreview();
+    throw error;
+  }
+}
+
 export async function fetchAdventStatus(): Promise<AdventStatus> {
   const res = await fetch("/api/advent/status", { credentials: "same-origin", headers: { accept: "application/json" } });
   // A HTTP-hiba nem „kikapcsolt” (élesítés előtti L5): hibát dob, a lekérdezés újrapróbálja, a kártya a helyén marad.
@@ -91,7 +133,9 @@ export async function fetchAdventState(createDevice = true, signal?: AbortSignal
   const headers: Record<string, string> = { accept: "application/json" };
   if (device) headers["X-Advent-Device"] = device;
   if (learner) headers["X-Learner-Token"] = learner;
-  const res = await fetch("/api/advent/state", { credentials: "same-origin", headers, signal });
+  const res = await fetch(adventUrl("/state"), { credentials: "same-origin", headers, signal });
+  // Nem admin (vagy lejárt admin-munkamenet) előnézeti címmel: a paraméter figyelmen kívül marad, a normál naptár töltődik (A16).
+  if (refusedPreviewRead(res.status)) { refuseAdventPreview(); return fetchAdventState(createDevice, signal); }
   if (res.status === 404) return null;
   // A státuszkód és a gépi jelző a hibán marad (429: betelt olvasási keret → csak sáv; 409 corrupt → célzott, gondozóhoz irányító
   // üzenet — PR-C vak L7).
@@ -100,22 +144,43 @@ export async function fetchAdventState(createDevice = true, signal?: AbortSignal
 }
 
 export const adventApi = {
-  grade: (grade: number) => apiRequest<AdventState>("POST", "/api/advent/grade", { ...identity(), grade }, { timeout: ADVENT_TIMEOUT_MS }),
-  open: (day: number) => apiRequest<AdventOpenResult>("POST", `/api/advent/doors/${day}/open`, identity(), { timeout: ADVENT_TIMEOUT_MS }),
-  answer: (day: number, questionId: string, pick: number) =>
+  // Thread 1/3 javítás: az URL-t a HÍVÁS pillanatában rögzítjük. A `retryWhenBusy` hívónak a `pinned()` gyárat kell adnia,
+  // hogy a 429 utáni újrapróba ugyanazt a végpontot célozza (lásd AdventCalendar.tsx `patient`).
+  grade: (grade: number) => { const url = adventUrl("/grade"); return previewAware(() => apiRequest<AdventState>("POST", url, { ...identity(), grade }, { timeout: ADVENT_TIMEOUT_MS })); },
+  open: (day: number) => { const url = adventUrl(`/doors/${day}/open`); return previewAware(() => apiRequest<AdventOpenResult>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
+  answer: (day: number, questionId: string, pick: number) => {
     // Az újraküldés biztonságos: ugyanarra a kérdésre a szerver a tárolt eredményt adja.
-    apiRequest<AdventAnswerResult>("POST", `/api/advent/doors/${day}/answer`, { ...identity(), questionId, pick }, { retries: 1, timeout: ADVENT_TIMEOUT_MS }),
-  round: () => apiRequest<AdventState>("POST", "/api/advent/round", identity(), { timeout: ADVENT_TIMEOUT_MS }),
+    const url = adventUrl(`/doors/${day}/answer`);
+    return previewAware(() => apiRequest<AdventAnswerResult>("POST", url, { ...identity(), questionId, pick }, { retries: 1, timeout: ADVENT_TIMEOUT_MS }));
+  },
+  round: () => { const url = adventUrl("/round"); return previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
   /** A függő (előnézetként mutatott) átvétel kifejezett mentése a megtekintési útról — idempotens (PR-C vak L2). */
-  adopt: () => apiRequest<AdventState>("POST", "/api/advent/adopt", identity(), { timeout: ADVENT_TIMEOUT_MS }),
+  adopt: () => { const url = adventUrl("/adopt"); return previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
+  /** Az admin saját előnézeti sorának törlése („Előnézet törlése", S6) — CSRF-tokenes DELETE. */
+  resetPreview: () => previewAware(() => apiRequest<{ removed: number }>("DELETE", "/api/admin/advent/preview", undefined, { timeout: ADVENT_TIMEOUT_MS })),
+};
+
+/**
+ * URL-rögzített gyár: a hívás pillanatában rögzíti az URL-t (előnézet vs. normál), és egy olyan függvényt ad vissza,
+ * amelyet többször is meghívhat a `retryWhenBusy` anélkül, hogy a közben megváltozott előnézeti állapot másik végpontra
+ * irányítaná az újrapróbát (Thread 1/3).
+ */
+export const adventApiPinned = {
+  grade: (grade: number) => { const url = adventUrl("/grade"); return () => previewAware(() => apiRequest<AdventState>("POST", url, { ...identity(), grade }, { timeout: ADVENT_TIMEOUT_MS })); },
+  open: (day: number) => { const url = adventUrl(`/doors/${day}/open`); return () => previewAware(() => apiRequest<AdventOpenResult>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
+  answer: (day: number, questionId: string, pick: number) => { const url = adventUrl(`/doors/${day}/answer`); return () => previewAware(() => apiRequest<AdventAnswerResult>("POST", url, { ...identity(), questionId, pick }, { retries: 1, timeout: ADVENT_TIMEOUT_MS })); },
+  round: () => { const url = adventUrl("/round"); return () => previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
+  adopt: () => { const url = adventUrl("/adopt"); return () => previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
 };
 
 /** Az állapot lekérdezése: frissül fókuszra, és magától a következő ablak nyitásának pillanatában. */
 export function useAdventState(enabled = true, createDevice = true) {
   const queryClient = useQueryClient();
   const generation = useAdventSubjectGeneration();
+  // A mód a címből, minden rajzoláskor: a főoldal mindig normál, az előnézet külön bejegyzés (S5/S6 1. vak L2).
+  const mode = adventMode();
   const query = useQuery<AdventState | null>({
-    queryKey: adventStateKey(generation),
+    queryKey: adventStateKey(generation, mode),
     queryFn: ({ signal }) => fetchAdventState(createDevice, signal),
     enabled,
     staleTime: 30_000,
@@ -137,7 +202,7 @@ export function useAdventState(enabled = true, createDevice = true) {
     const timer = window.setTimeout(() => { void queryClient.invalidateQueries({ queryKey: ADVENT_STATE_KEY }); }, delay);
     return () => window.clearTimeout(timer);
   }, [wait, at, queryClient]);
-  return { ...query, generation };
+  return { ...query, generation, mode };
 }
 
 // Ugyanaz a jelző, amelyet az alkalmazás profil-lekérdezése állít be, ha a szerver elutasítja a tokent (és törli azt).
