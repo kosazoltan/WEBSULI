@@ -364,25 +364,28 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
     <div className="min-h-screen relative">
       <div className="container py-3 relative z-10">
         {connectionError}
-        {/* Hero Section */}
-        <HeroSection
-          totalFiles={totalFiles}
-          totalClassrooms={totalClassrooms}
-          showEmailSubscribe={true}
-        />
+        {/* Felső régió (tulajdonosi kérés 2026-11-24, #1984): a Hero mellett négyzetes támogatói csempe; telefonon egymás alatt. */}
+        <div className="home-top" data-testid="home-top">
+          <HeroSection
+            totalFiles={totalFiles}
+            totalClassrooms={totalClassrooms}
+            showEmailSubscribe={true}
+          />
+          {/* Támogatók (docs/specs/2026-11-03-szponzor-fejlec.md) — csempe-változat a Hero mellett. */}
+          <SponsorBar variant="tile" />
+        </div>
 
         {/* Adventi naptár (docs/specs/2026-11-18-adventi-naptar.md 14.): a Hero alatt, a tananyagok fölött; szezonon kívül nem látszik. */}
         <AdventHomeSlot />
 
-        {/* Támogatók (docs/specs/2026-11-03-szponzor-fejlec.md) */}
-        <SponsorBar />
-
         {/* Személyes üdvözlő ajánló (docs/specs/2026-10-18-nyilvanos-oldal-udvozlo.md) */}
         <WelcomeCard files={files} onViewFile={onViewFile} />
 
+        {/* Eszközsor (#1984): osztályválasztó + kereső + nézetváltó egy sorban, teljes szélességben (keskeny kijelzőn egymás alatt). */}
+        <div className="home-toolbar" data-testid="home-toolbar">
         {/* Classroom Filter */}
-        <div className="mb-3">
-          <div className="flex flex-wrap gap-1.5 justify-center items-center">
+        <div className="home-toolbar-filter" data-testid="home-classroom-filter">
+          <div className="flex flex-wrap gap-1.5 justify-center lg:justify-start items-center">
             <Button
               variant={selectedClassroom === null && !selectedTrack ? "default" : "outline"}
               size="sm"
@@ -429,7 +432,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
         </div>
 
         {/* Search + Frissítés (spec 2026-09-20) */}
-        <div className="max-w-md mx-auto mb-4 flex items-center gap-2">
+        <div className="home-toolbar-search flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/70 z-10" />
             <Input
@@ -455,14 +458,8 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
             </Button>
           )}
         </div>
-        {searchAllClassrooms && (
-          <p className="-mt-2 mb-4 text-center text-xs font-semibold text-white/90" role="status" data-testid="search-all-classrooms">
-            Keresés minden osztályban — a keresett osztály nem a kiválasztott.
-          </p>
-        )}
-
         {/* Nézetválasztó (spec 2026-11-03-fooldal-nezetek): két független kapcsoló — külön és együtt is. */}
-        <div className="mb-3 flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Nézet" data-testid="home-view-switch">
+        <div className="home-toolbar-views flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Nézet" data-testid="home-view-switch">
           <span className="text-xs font-semibold text-white/80">Nézet:</span>
           {([
             { key: "newest", label: "Legfrissebb", Icon: Sparkles, testId: "home-view-newest" },
@@ -487,8 +484,14 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
               {label}
             </Button>
           ))}
-          <span className="w-full text-center text-[11px] text-white/70 sm:w-auto">Egyszerre mindkettő is bekapcsolható.</span>
+          <span className="w-full text-center text-[11px] text-white/70 sm:w-auto lg:sr-only">Egyszerre mindkettő is bekapcsolható.</span>
         </div>
+        </div>
+        {searchAllClassrooms && (
+          <p className="-mt-1 mb-4 text-center text-xs font-semibold text-white/90" role="status" data-testid="search-all-classrooms">
+            Keresés minden osztályban — a keresett osztály nem a kiválasztott.
+          </p>
+        )}
 
         {/* Tananyagok */}
         {filteredFiles.length > 0 ? (

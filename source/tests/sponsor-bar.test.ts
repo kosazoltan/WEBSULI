@@ -23,7 +23,11 @@ test("a logó link új lapon, sponsored rel-lel, elérhető névvel; a főoldal 
   assert.match(bar, /alt=\{s\.name\}/);
   assert.match(bar, /aria-label="Támogatóink"/);
   const list = read("client/src/components/UserFileList.tsx");
-  assert.ok(list.indexOf("<SponsorBar />") > list.indexOf("<HeroSection"), "a fejléc után");
+  // SPEC-VÁLTOZÁS 2026-11-24 (#1984; docs/specs/2026-11-24-fooldal-felso-regio.md): csempe-változat a Hero mellett, ugyanabban
+  // a rácssorban (home-top), az adventi kártya előtt.
+  const tile = list.indexOf("<SponsorBar variant=\"tile\" />");
+  assert.ok(tile > list.indexOf("<HeroSection"), "a fejléc után");
+  assert.ok(tile > list.indexOf('data-testid="home-top"') && tile < list.indexOf("<AdventHomeSlot />", tile), "a Hero sorában, az advent előtt");
   assert.ok(list.indexOf("<SponsorBar />") < list.indexOf("<WelcomeCard"), "az üdvözlő kártya előtt");
 });
 
