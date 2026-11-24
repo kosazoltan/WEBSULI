@@ -167,6 +167,8 @@ export function adventIdempotencyKey(rowId: string, to: string): string {
 
 /** A bérlet hossza: ennyi ideig egy címzett küldése egy feldolgozóé; leállás után ennyi idő múlva folytatható. */
 export { ADVENT_MAIL_LEASE_MS };
+/** A `server/resend.ts` hibaneve, ha az idempotencia-kulccsal 24 órán belül már ment levél (Resend `invalid_idempotent_request`). */
+export const ADVENT_IDEMPOTENCY_CONFLICT = "ResendIdempotencyConflict";
 
 type MailStore = Pick<AdventStore, "planMail" | "leaseMail" | "finishMail" | "releaseLease" | "markSent">;
 
@@ -205,10 +207,15 @@ export async function sendAdventResult(input: { store: MailStore; row: AdventRow
       try {
         await send(subject, html, to, adventIdempotencyKey(input.row.id, to));
       } catch (error) {
-        failed++;
-        logger.error(`[ADVENT] szülői levél küldési hiba: ${errorClass(error)}`);
-        await input.store.releaseLease(input.row.id, hash).catch((error: unknown) => logger.error(`[ADVENT] a levél-bérlet felszabadítása nem sikerült: ${errorClass(error)}`));
-        continue;
+        // A szolgáltató 409-cel jelzi, hogy ezzel a kulccsal (más tartalommal — pl. a pótlásig változott az eredmény) 24 órán belül
+        // már küldött levelet: ez kézbesítés, nem hiba — ugyanúgy rögzítjük, második levél nem megy (#562 A2, Vercel-szál).
+        if (errorClass(error) !== ADVENT_IDEMPOTENCY_CONFLICT) {
+          failed++;
+          logger.error(`[ADVENT] szülői levél küldési hiba: ${errorClass(error)}`);
+          await input.store.releaseLease(input.row.id, hash).catch((error: unknown) => logger.error(`[ADVENT] a levél-bérlet felszabadítása nem sikerült: ${errorClass(error)}`));
+          continue;
+        }
+        logger.warn(`[ADVENT] a szolgáltató ezzel a kulccsal már küldött levelet, kézbesítettként rögzítve: ${errorClass(error)}`);
       }
       // A szolgáltató elfogadta: azonnal jelöljük `sent:`-tel, mielőtt a `finishMail` meghiúsulhatna (Thread 7 javítás).
       // Ha a `markSent` is hibázik (pl. teljes DB-kiesés), a levél elment de nincs DB-bejegyzés — a `failed` számláló nő,

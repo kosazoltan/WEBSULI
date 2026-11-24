@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   adventIdempotencyKey, adventMailKey, adventResultFinal, buildAdventResultEmail, closeAdventSeason,
-  deliverAdventMail, sendAdventResult, setAdventRetryDelay, setAdventSender,
+  ADVENT_IDEMPOTENCY_CONFLICT, deliverAdventMail, sendAdventResult, setAdventRetryDelay, setAdventSender,
 } from "../server/advent/result-email";
 import { ADVENT_RESEND_WINDOW_MS, type AdventRow } from "../server/advent/store";
 
@@ -456,4 +456,28 @@ test("S5 (#562 A2): elfogadás után kiesett jelölés — az ablakon belül azo
   assert.equal(b.claimed.size, 0);
   assert.equal(await deliverAdventMail({ ...b, mailCandidates: async () => [{ row: passed, firstName: "Panni" }] }, { season: 2026, phase: "open" }, T0 + 48 * HOUR), 0);
   assert.equal(sent.length, 1);
+});
+
+test("S5 (#562 A2, Vercel-szál): a pótlás tartalma változott, a szolgáltató 409-cel jelzi a már elküldött kulcsot → kézbesítettként rögzül, nincs hiba, nincs új levél", async (t) => {
+  sendMode(t);
+  const prevEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "anya@pelda.hu";
+  const prevDelay = setAdventRetryDelay(5);
+  t.after(() => { setAdventSender(null); setAdventRetryDelay(prevDelay); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+  const delivered: { key: string; subject: string }[] = [];
+  setAdventSender(async (subject, _h, _to, key) => {
+    const earlier = delivered.find((d) => d.key === key);
+    if (earlier && earlier.subject !== subject) { const e = new Error("Resend error: same key, different payload"); e.name = ADVENT_IDEMPOTENCY_CONFLICT; throw e; }
+    if (!earlier) delivered.push({ key, subject });
+  });
+  const store = memoryStore();
+  const T0 = 1_800_000_000_000;
+  const dbDown = { ...store, markSent: async () => { throw new Error("DB-kiesés"); } };
+  await sendAdventResult({ store: dbDown, row: row({ doors: { 1: roundDoors(23, 0, 1) } }), phase: "open", firstName: "Panni", nowMs: T0 }, false);
+  assert.equal(delivered.length, 1);
+  // A pótlásig a tanuló a 24. ablakot is megoldotta: más tárgy, ugyanaz a kulcs.
+  const later = row({ doors: { 1: roundDoors(24) } });
+  assert.deepEqual(await sendAdventResult({ store, row: later, phase: "open", firstName: "Panni", nowMs: T0 + 60 * 60_000 }, false), { sent: 1, failed: 0 });
+  assert.equal(delivered.length, 1, "nincs második levél");
+  assert.equal(store.claimed.size, 1, "final: rögzült");
 });
