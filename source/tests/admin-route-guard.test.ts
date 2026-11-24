@@ -72,6 +72,7 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "POST /api/advent/doors/:day/open": "adventi naptár — saját sor (kérdés megnyitása), CSRF + alanyonkénti és IP-korlát",
   "POST /api/advent/doors/:day/answer": "adventi naptár — saját sor (válasz), CSRF + alanyonkénti és IP-korlát",
   "POST /api/advent/round": "adventi naptár — saját sor (új kör), CSRF + alanyonkénti és IP-korlát",
+  "POST /api/advent/adopt": "adventi naptár — a saját vendégsor átvétele a tanulóhoz (idempotens), CSRF + alanyonkénti és IP-korlát",
   "POST /api/lessons/practice/:lessonId/start": "gyakorlás — bejelentkezett users-felhasználó (saját sor)",
   "GET /api/lessons/practice/:lessonId/review": "gyakorlás — saját adat",
   "GET /api/lessons/practice/:id": "gyakorlás — saját adat",

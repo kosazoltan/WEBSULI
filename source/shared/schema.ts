@@ -588,7 +588,10 @@ export const errorLogs = pgTable("error_logs", {
  * ami visszavezethető egy itteni fogalomra.
  *
  * `inputHash` = sha256(rendezett fájltartalmak + hatókör) — ugyanarra a feltöltésre
- * nem indul újra a drága vision-hívás.
+ * nem indul újra a drága vision-hívás. A különálló kinyerés (`/maps/extract`,
+ * `extractMapSingleRun`) útján a lenyomat gazda-kötött (`ownerMapHash`: a tartalmi
+ * lenyomat + `created_by`), így két tanár ugyanarra a tartalomra két térképet kap;
+ * a javítás előtti, tartalmi lenyomatú sor csak ugyanannak a gazdának jön vissza.
  */
 export const knowledgeMaps = pgTable(
   "knowledge_maps",

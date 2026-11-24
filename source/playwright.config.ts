@@ -71,6 +71,9 @@ export default defineConfig({
             ADMIN_ALLOWLIST: 'e2e-allowlisted-admin@websuli.example',
             GOOGLE_CLIENT_ID: 'e2e-google-client-id',
             GOOGLE_CLIENT_SECRET: 'e2e-google-client-secret',
+            // Adventi naptár (terv 16.5): a flag be van kapcsolva, de e2e-módban a naptár CSAK az X-Advent-Test-Now fejléccel
+            // érkező kérésekre él — a többi teszt (fejléc nélkül) decemberben is változatlan főoldalt lát.
+            ADVENT_CALENDAR: 'on',
         },
     },
 });
