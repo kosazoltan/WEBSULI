@@ -111,6 +111,11 @@ try {
   const clipOrphanMigration = await readFile(new URL("../migrations/0044_lesson_clip_media_orphaned.sql", import.meta.url), "utf8");
   await pool.query(clipOrphanMigration);
   await pool.query(clipOrphanMigration);
+  // P-020: a postafiók-kulcs (generált oszlop) + ütközés-jelölő + részleges egyedi index (0045) a migrációs fájlból, kétszer —
+  // idempotens. A player_accounts a 0040-ből jött létre (fent), így az oszlopok itt, a migrációból kerülnek rá.
+  const emailKeyMigration = await readFile(new URL("../migrations/0045_player_email_key.sql", import.meta.url), "utf8");
+  await pool.query(emailKeyMigration);
+  await pool.query(emailKeyMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
