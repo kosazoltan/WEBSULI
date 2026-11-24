@@ -187,4 +187,35 @@ describe("adventi naptár — adatmodell és tároló", () => {
     const [row] = await q<{ status: string }>(`SELECT status FROM advent_announcements WHERE recipient_hash = $1`, ["c".repeat(64)]);
     assert.equal(row?.status, "pending");
   });
+  it("levél-kézbesítés >24h bizonytalanság: az első kísérlet ideje (`try:`) megmarad; 23 óra után nincs új bérlet, a pótlás `check:`-re jelöl (#562 A2)", async () => {
+    const { row } = await store.mutate(SEASON, device(), () => ({ patch: null, result: null }));
+    const h = "abc123";
+    const T0 = 1_800_000_000_000;
+    const HOUR = 60 * 60_000;
+    const LEASE = 10 * 60_000;
+    const keys = async () => ((await store.read(SEASON, { kind: "device", id: row.subjectId }))?.mailedTo ?? []).slice().sort();
+    await store.planMail(row.id, [`want:${h}`]);
+    assert.equal(await store.leaseMail(row.id, h, T0, LEASE), true, "első bérlet");
+    assert.ok((await keys()).includes(`try:${h}@${T0}`), "az első kísérlet ideje rögzül");
+    // Leállás a szolgáltatói elfogadás és bármilyen jelölő között: a bérlet lejár, 1 óra múlva ugyanazzal a kulccsal pótolható.
+    assert.equal(await store.leaseMail(row.id, h, T0 + HOUR, LEASE), true, "lejárt bérlet után a Resend-ablakon belül újrapróbálható");
+    await store.releaseLease(row.id, h);
+    const afterRelease = await keys();
+    assert.ok(afterRelease.includes(`try:${h}@${T0}`), "a felszabadítás után is az ELSŐ kísérlet ideje marad");
+    assert.equal(afterRelease.filter((k) => k.startsWith("try:")).length, 1);
+    // 25 óra múlva a szolgáltató már nem deduplikál: automatikus küldés tilos.
+    assert.equal(await store.leaseMail(row.id, h, T0 + 25 * HOUR, LEASE), false, "a bizonytalan kézbesítés nem küldhető újra automatikusan");
+    await store.recoverSent(T0 + 25 * HOUR);
+    const flagged = await keys();
+    assert.ok(flagged.includes(`check:${h}`), "ellenőrizendőnek jelölve");
+    assert.ok(!flagged.some((k) => k.startsWith("try:") || k.startsWith("pending:")), "a try:/pending: jelölő eltűnik");
+    assert.equal(await store.leaseMail(row.id, h, T0 + 26 * HOUR, LEASE), false);
+    // Sikeres kézbesítésnél a try: jelölő törlődik, csak final: marad.
+    const h2 = "def456";
+    await dbPool.query(`UPDATE advent_progress SET mailed_to = array_append(mailed_to, $2) WHERE id = $1`, [row.id, `want:${h2}`]);
+    assert.equal(await store.leaseMail(row.id, h2, T0, LEASE), true);
+    await store.finishMail(row.id, h2);
+    const done = await keys();
+    assert.ok(done.includes(`final:${h2}`) && !done.some((k) => k.startsWith(`try:${h2}`) || k.startsWith(`pending:${h2}`)));
+  });
 });

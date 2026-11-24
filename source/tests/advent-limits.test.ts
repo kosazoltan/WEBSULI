@@ -444,7 +444,9 @@ test("a sorőr a próbák és a terv belső alakját is nézi: [null], hiányzó
   const base = { id: "x", season: 2026, subjectKind: "device" as const, subjectId: "d", grade: 5, round: 1, finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0) };
   // A körterv mind a 24 napot tartalmazza (PR-B 4. kör L5: a hiányzó nap sérült sor).
   const fullDoors = Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 1, ["q" + (i + 1)]]));
-  const ok = { ...base, plan: { 1: { round: 1, layout: [1], doors: fullDoors, subjects: {} } }, doors: { 1: { 1: { attempts: [{ questionId: "q1", pick: 0, correct: true, at: "" }] } } } } as unknown as AdventRow;
+  // A rács az 1…24 permutációja (PR-C 3. vak L4: a korábbi egyelemű `layout: [1]` a szigorúbb szabály szerint sérült — dokumentált fixture-változás).
+  const fullLayout = Array.from({ length: 24 }, (_, i) => i + 1);
+  const ok = { ...base, plan: { 1: { round: 1, layout: fullLayout, doors: fullDoors, subjects: {} } }, doors: { 1: { 1: { attempts: [{ questionId: "q1", pick: 0, correct: true, at: "" }] } } } } as unknown as AdventRow;
   assert.equal(adventRowIsSound(ok), true);
   const bad = (doors: unknown, plan: unknown = ok.plan) => adventRowIsSound({ ...ok, doors, plan } as unknown as AdventRow);
   assert.equal(bad({ 1: { 1: { attempts: [null] } } }), false);
@@ -452,7 +454,7 @@ test("a sorőr a próbák és a terv belső alakját is nézi: [null], hiányzó
   assert.equal(bad({ 1: { 1: { attempts: [{ questionId: 5, pick: 0, correct: true, at: "" }] } } }), false);
   assert.equal(bad({ 1: { 1: { attempts: [{ questionId: "q1", pick: "0", correct: true, at: "" }] } } }), false);
   assert.equal(bad({ 1: { 1: { attempts: [{ questionId: "q1", pick: 0, correct: "igen", at: "" }] } } }), false);
-  assert.equal(bad(ok.doors, { 1: { round: 1, layout: [1], doors: { ...fullDoors, 1: [null] }, subjects: {} } }), false);
+  assert.equal(bad(ok.doors, { 1: { round: 1, layout: fullLayout, doors: { ...fullDoors, 1: [null] }, subjects: {} } }), false);
 });
 
 test("két MEGVÁLASZOLT példány ugyanabból a kérdésből (tanuló az A., vendég a B. ablakban): mindkét megoldás megmarad, de a játszható terv egyedi, és nem tartalmaz korábbi körös kérdést (GPT-vak 3. kör L2)", () => {
@@ -509,8 +511,10 @@ test("a sorőr a terv subjects mezőjét is megköveteli (objektum, szöveges é
   const doors = { 1: { 1: { attempts: [{ questionId: "q1", pick: 0, correct: true, at: "" }] } } };
   const withPlan = (plan: unknown) => adventRowIsSound({ ...base, plan: { 1: plan }, doors } as unknown as AdventRow);
   const all = Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 1, ["q" + (i + 1)]]));
-  assert.equal(withPlan({ round: 1, layout: [1], doors: all, subjects: { 1: "matek" } }), true);
-  assert.equal(withPlan({ round: 1, layout: [1], doors: all }), false, "hiányzó subjects");
-  assert.equal(withPlan({ round: 1, layout: [1], doors: all, subjects: [] }), false, "tömb subjects");
-  assert.equal(withPlan({ round: 1, layout: [1], doors: all, subjects: { 1: 5 } }), false, "nem szöveges tárgy");
+  // A rács az 1…24 permutációja (PR-C 3. vak L4 — dokumentált fixture-változás: a korábbi `layout: [1]` ma sérült sor).
+  const layout = Array.from({ length: 24 }, (_, i) => i + 1);
+  assert.equal(withPlan({ round: 1, layout, doors: all, subjects: { 1: "matek" } }), true);
+  assert.equal(withPlan({ round: 1, layout, doors: all }), false, "hiányzó subjects");
+  assert.equal(withPlan({ round: 1, layout, doors: all, subjects: [] }), false, "tömb subjects");
+  assert.equal(withPlan({ round: 1, layout, doors: all, subjects: { 1: 5 } }), false, "nem szöveges tárgy");
 });
