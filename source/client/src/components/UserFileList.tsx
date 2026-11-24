@@ -135,7 +135,6 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   // Ha a kifejezés a szűrőtől eltérő osztályt nevez meg, a keresés minden osztályban fut (a szűrő állapota nem változik).
   const searched = useMemo(
     () => (selectedTrack ? filterHomeFiles(files.filter((f) => inTrack(f, selectedTrack)), searchQuery, null) : filterHomeFiles(files, searchQuery, selectedClassroom)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [files, searchQuery, selectedClassroom, selectedTrack],
   );
   const searchAllClassrooms = searched.allClassrooms;
