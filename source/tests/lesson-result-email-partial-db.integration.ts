@@ -14,11 +14,12 @@ assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a
 process.env.ADMIN_EMAILS = "admin-a@example.test, admin-b@example.test";
 process.env.RESULT_PARTIAL_EMAIL = "on";
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, setResultSender, setPartialDelay, setRetryDelay, pendingPartialCount, finalRoundKeyOf } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, setResultSender, setPartialDelay, setRetryDelay, pendingPartialCount, finalRoundKeyOf, setRoundStateFault } = await import("../server/lesson-result-email");
 
 const sent: Array<{ subject: string; html: string; to: string }> = [];
 let failing = false;
-setResultSender(async (subject, html, to) => { if (failing) throw new Error("átmeneti hiba"); sent.push({ subject, html, to }); });
+let attempts = 0; // minden küldési kísérlet (a bukott is) — az időzítés helyett erre várnak a tesztek
+setResultSender(async (subject, html, to) => { attempts += 1; if (failing) throw new Error("átmeneti hiba"); sent.push({ subject, html, to }); });
 const lesson = fusionFixture();
 const q = lesson.experience!.quiz;
 let base = "";
@@ -60,9 +61,12 @@ test("B5a-1 (E9): a pillanatkép a késleltetés után EGY „félbehagyva” le
 
 test("B5a-1 (E9, R15): a késleltetésen belüli végleges beküldés elnyomja a pillanatképet — csak a végleges levél megy, felülíró mondat nélkül", async () => {
   sent.length = 0;
-  await post("p-cancel", { picks: picksOf(3), partial: true });
-  assert.deepEqual((await post("p-cancel", { picks: picksOf(25) })).json, { queued: true });
-  await sleep(500);
+  const delay = setPartialDelay(2000); // terhelt gépen is a késleltetésen BELÜL érkezik a végleges
+  try {
+    await post("p-cancel", { picks: picksOf(3), partial: true });
+    assert.deepEqual((await post("p-cancel", { picks: picksOf(25) })).json, { queued: true });
+  } finally { setPartialDelay(delay); }
+  await sleep(2300);
   assert.equal(partialMails().length, 0);
   assert.equal(finalMails().length, 2);
   assert.doesNotMatch(finalMails()[0].html, /helyébe lép/);
@@ -103,11 +107,15 @@ test("B5a-1 (R7): a több választ tartalmazó pillanatkép marad; (R5) a 7 napn
 test("B5a-1 (E17, R1 b, R21): a bukott „félbehagyva” küldés újrapróbája a véglegesítés után SEM megy ki", async () => {
   sent.length = 0;
   failing = true;
-  await post("p-retry", { picks: picksOf(3), partial: true });
-  await sleep(250); // az első kísérlet lefutott és bukott
-  failing = false;
-  await post("p-retry", { picks: picksOf(25) });
-  await sleep(600); // az újrapróba ideje is letelt
+  const retry = setRetryDelay(1500); // az újrapróba terhelt gépen is a véglegesítés UTÁN esedékes
+  const before = attempts;
+  try {
+    await post("p-retry", { picks: picksOf(3), partial: true });
+    await waitFor(() => attempts > before); // az első kísérlet lefutott és bukott
+    failing = false;
+    await post("p-retry", { picks: picksOf(25) });
+    await sleep(1900); // az újrapróba ideje is letelt
+  } finally { setRetryDelay(retry); failing = false; }
   assert.equal(partialMails().length, 0, "véglegesített körre „félbehagyva” levél soha");
   assert.equal(finalMails().length, 2);
   assert.doesNotMatch(finalMails()[0].html, /helyébe lép/, "részleges levél nem ment ki — nincs felülíró mondat");
@@ -138,4 +146,76 @@ test("B5a-1 (R18, kizárás a küldési kísérletben): ha a kört MÁSIK péld�
   await db.insert(lessonResultEmails).values({ lessonId: "partial-lesson", kind: "quiz", roundKey: finalRoundKeyOf("p-other", "quiz"), percent: 100 });
   await sleep(500);
   assert.equal(partialMails().length, 0, "a küldési kísérlet a kizárás alatt a tartós jelzőt is ellenőrzi");
+});
+
+// ---- PR #577 review ----
+const postTo = async (lessonId: string, roundId: string, body: Record<string, unknown>) => {
+  const res = await fetch(`${base}/api/lessons/${lessonId}/results`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind: "quiz", roundId, fingerprint: "fp-p", ...body }) });
+  return { status: res.status, json: await res.json() as Record<string, unknown> };
+};
+
+test("#577 (kapuhiba = sikertelen kísérlet): ha a küldési kísérlet állapot-lekérdezése átmenetileg hibázik, az egyetlen újrapróba elküldi", async () => {
+  sent.length = 0;
+  let faults = 1;
+  try {
+    await post("p-gate-fault", { picks: picksOf(3), partial: true, lastAnsweredAt: Date.now() });
+    // a kérés már nyugtázva (202); a hiba a 150 ms-os időzítő utáni küldési kísérlet kapujában jön
+    setRoundStateFault((stage) => { if (stage === "finalized" && faults > 0) { faults -= 1; throw new Error("átmeneti DB-hiba"); } });
+    await waitFor(() => partialMails().length === 2);
+    assert.equal(partialMails().length, 2, "a kapu hibája után az újrapróba kiküldte a levélpárt");
+  } finally { setRoundStateFault(null); }
+});
+
+test("#577 (R7 küldés közben): bukott ötválaszos küldés után érkező kétválaszos pillanatkép nem írja felül — öt válaszról megy levél", async () => {
+  sent.length = 0;
+  failing = true;
+  const retry = setRetryDelay(1500);
+  const before = attempts;
+  try {
+    await post("p-r7-retry", { picks: picksOf(5), partial: true, lastAnsweredAt: Date.now() });
+    await waitFor(() => attempts > before); // az első kísérlet lefutott és bukott; az újrapróba még vár
+    await post("p-r7-retry", { picks: picksOf(2), partial: true, lastAnsweredAt: Date.now() });
+  } finally { failing = false; setRetryDelay(retry); }
+  await waitFor(() => partialMails().length === 2);
+  await sleep(200);
+  assert.equal(partialMails().length, 2);
+  assert.match(partialMails()[0].subject, /félbehagyva: 5 \/ 25/, "a legtöbb választ tartalmazó állapot ment ki");
+});
+
+test("#577 (R5): az ismeretlen válaszidő nem elavult — régen kezdett kör lastAnsweredAt nélkül is ütemeződik", async () => {
+  sent.length = 0;
+  const r = await post("p-old-start", { picks: picksOf(2), partial: true, startedAt: Date.now() - 9 * 86_400_000 });
+  assert.deepEqual(r.json, { queued: true, partial: true });
+  await waitFor(() => partialMails().length === 2);
+});
+
+test("#577 (leckénkénti korlát): ugyanaz a tanuló négy KÜLÖN leckét hagy félbe — mind a négy várakozó megmarad", async () => {
+  sent.length = 0;
+  for (const id of ["partial-lesson-b", "partial-lesson-c", "partial-lesson-d"]) {
+    await db.insert(lessons).values({ id, mapId: "partial-map", json: lesson, version: 1, publishedAt: new Date() }).onConflictDoNothing();
+  }
+  const delay = setPartialDelay(800);
+  try {
+    for (const id of ["partial-lesson", "partial-lesson-b", "partial-lesson-c", "partial-lesson-d"]) {
+      assert.deepEqual((await postTo(id, "p-many-lessons", { picks: picksOf(2), partial: true, lastAnsweredAt: Date.now() })).json, { queued: true, partial: true });
+    }
+    assert.equal(pendingPartialCount(), 4, "a korlát leckénként (lecke|tanuló) számol, nem tanulónként");
+  } finally { setPartialDelay(delay); }
+  await waitFor(() => partialMails().length === 8);
+  assert.equal(partialMails().length, 8);
+});
+
+test("#577 (R1 a ismeretlen állapotban): a felülírás-ellenőrzés átmeneti hibája után sem megy felülíró mondat nélküli végleges levél", async () => {
+  sent.length = 0;
+  await post("p-supersede-fault", { picks: picksOf(3), partial: true, lastAnsweredAt: Date.now() });
+  await waitFor(() => partialMails().length === 2);
+  let faults = 2;
+  setRoundStateFault((stage) => { if (stage === "partialSent" && faults > 0) { faults -= 1; throw new Error("átmeneti DB-hiba"); } });
+  try {
+    await post("p-supersede-fault", { picks: picksOf(25) });
+    await waitFor(() => finalMails().length === 2);
+    assert.equal(finalMails().length, 2);
+    assert.ok(finalMails().every(m => /helyébe lép/.test(m.html)), "a végleges levél a felülíró mondattal ment ki");
+  } finally { setRoundStateFault(null); }
 });

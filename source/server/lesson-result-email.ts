@@ -54,6 +54,8 @@ export function resultIdempotencyKey(lessonId: string, kind: string, roundKey: s
 /** Az újrapróba késleltetése (a meghiúsult címzett és a váratlan kivétel után is). */
 let retryDelayMs = 60_000;
 /** Teszthez: a késleltetés rövidítése; a korábbi értéket adja vissza. */
+/** PR #577 review: a végleges levél felülírás-ellenőrzésének korlátos próbaszáma (átmeneti DB-hiba). */
+const SUPERSEDE_CHECK_ATTEMPTS = 4;
 export function setRetryDelay(ms: number): number { const previous = retryDelayMs; retryDelayMs = ms; return previous; }
 
 /**
@@ -123,6 +125,9 @@ export function setFinalClaimFault(fault: (() => void) | null): void { finalClai
 let pairingFault: (() => void) | null = null;
 /** Teszthez (R47 szerver): a párosítás feloldásának átmeneti (adatbázis-) hibája. */
 export function setPairingFault(fault: (() => void) | null): void { pairingFault = fault; }
+let roundStateFault: ((stage: "finalized" | "partialSent") => void) | null = null;
+/** Teszt-kampó (PR #577 review): a kör-állapot lekérdezéseinek (véglegesített? / kiment a részleges?) átmeneti hibája. */
+export function setRoundStateFault(fault: ((stage: "finalized" | "partialSent") => void) | null): void { roundStateFault = fault; }
 
 /**
  * #510 R27 + R42: a jelzősor és a tulajdonos-sor egy tranzakcióban. Igaz, ha ez az ELSŐ végleges beküldés a körre. Ismétlésnél a jelzősor
@@ -247,6 +252,7 @@ function markFinalized(key: string, now = Date.now()): void {
 /** Teszthez (újraindítás szimulálása): a memóriabeli véglegesítés-jelzők törlése. */
 export function clearFinalizedRounds(): void { finalizedRounds.clear(); }
 async function roundFinalized(lessonId: string, roundId: string, now = Date.now()): Promise<boolean> {
+  roundStateFault?.("finalized");
   const until = finalizedRounds.get(`${lessonId}|${roundId}`);
   if (until !== undefined && until > now) return true;
   const rows = await db.select({ createdAt: lessonResultEmails.createdAt }).from(lessonResultEmails)
@@ -254,6 +260,7 @@ async function roundFinalized(lessonId: string, roundId: string, now = Date.now(
   return rows.some(row => now - row.createdAt.getTime() < FINALIZED_TTL_MS);
 }
 async function partialAlreadySent(lessonId: string, roundId: string): Promise<boolean> {
+  roundStateFault?.("partialSent");
   const rows = await db.select({ delivered: lessonResultEmails.delivered }).from(lessonResultEmails)
     .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, "quiz"), eq(lessonResultEmails.roundKey, partialRoundKeyOf(roundId))));
   return rows.some(row => row.delivered.length > 0);
@@ -270,10 +277,19 @@ async function withRoundLock<T>(key: string, run: () => Promise<T>): Promise<T> 
   try { return await run(); }
   finally { release(); if (roundLocks.get(key) === chained) roundLocks.delete(key); }
 }
+/**
+ * PR #577 review (R7 a küldés és az újrapróba alatt is): körönként a LEGTÖBB választ tartalmazó pillanatkép — a várakozó törlése
+ * (az időzítő lejárta, bukott küldés + függő újrapróba) után is megmarad, amíg a kör nem véglegesül / a részleges ki nem ment.
+ */
+const bestPartials = new Map<string, { answered: number; owner: string; send: (version: number) => Promise<void> }>();
+function forgetPartial(key: string): void { bestPartials.delete(key); }
 function schedulePartial(key: string, owner: string, answered: number, send: (version: number) => Promise<void>): void {
   // R7: a LEGTÖBB választ tartalmazó pillanatkép marad (sorrendcsere, két fül); az időzítő ettől még újraindul.
-  const waiting = pendingPartials.get(key);
+  const waiting = pendingPartials.get(key) ?? bestPartials.get(key);
   const keep = waiting && waiting.answered > answered ? { answered: waiting.answered, owner: waiting.owner, send: waiting.send } : { answered, owner, send };
+  bestPartials.delete(key);
+  if (bestPartials.size >= MAX_FINALIZED_ROUNDS) bestPartials.delete(bestPartials.keys().next().value!);
+  bestPartials.set(key, keep);
   cancelPartial(key);
   const own = [...pendingPartials.entries()].filter(([, e]) => e.owner === keep.owner).map(([k]) => k);
   if (own.length >= MAX_PENDING_PER_LEARNER) { cancelPartial(own[0]); logger.warn("[LESSON-RESULT] a tanuló legrégebbi várakozó félbehagyott köre kiszorult (tanulónkénti korlát)."); }
@@ -297,13 +313,16 @@ function schedulePartial(key: string, owner: string, answered: number, send: (ve
  */
 async function attemptPartial(lessonId: string, roundId: string, version: number, input: Parameters<typeof sendLessonResult>[0], retryLeft: number): Promise<void> {
   const key = `${lessonId}|${roundId}`;
+  // PR #577 review: a kapu (állapot-lekérdezés) átmeneti hibája is sikertelen kísérlet — az egyetlen újrapróba ugyanezen a kapun
+  // (változat + véglegesítés) megy át újra, így a 202-vel nyugtázott pillanatkép nem vész el egy pillanatnyi DB-hiba miatt.
   const outcome = await withRoundLock(key, async () => {
     if (partialVersions.get(key) !== version) return null;
-    if (await roundFinalized(lessonId, roundId)) return null;
+    if (await roundFinalized(lessonId, roundId)) { forgetPartial(key); return null; }
     const report = { failed: 0 };
     await sendLessonResult(input, false, report);
+    if (report.failed === 0) forgetPartial(key);
     return report;
-  });
+  }).catch((error) => { logger.warn(`[LESSON-RESULT] a félbehagyott kvíz kísérletének kapuja átmenetileg hibázott: ${errorClass(error)}`); return { failed: 1 }; });
   if (outcome && outcome.failed !== 0 && retryLeft > 0) {
     setTimeout(() => { void attemptPartial(lessonId, roundId, version, input, retryLeft - 1).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz újrapróbája nem sikerült: ${errorClass(error)}`)); }, retryDelayMs).unref?.();
   }
@@ -348,7 +367,8 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   } else {
     if (partialOn) {
       // B5a-1 (R5): a 7 napnál régebbi utolsó tevékenységű pillanatkép nem fogadható el; az „összes” a szerveroldali körméret.
-      if (roundTooOld(body.lastAnsweredAt ?? body.startedAt ?? 0, Date.now())) return res.status(202).json({ queued: false, partial: true, stale: true });
+      // PR #577 review: csak az ISMERT utolsó válasz kora számít (shared/quiz-round.ts) — a kör kezdete nem; hiányában nem elavult.
+      if (roundTooOld(body.lastAnsweredAt ?? 0, Date.now())) return res.status(202).json({ queued: false, partial: true, stale: true });
       const partialGraded = gradePartialQuiz(experience.quiz, body.picks, experienceRoundSizes(experience).quizRound);
       if (!partialGraded) return res.status(202).json({ queued: false, partial: true });
       graded = partialGraded;
@@ -383,9 +403,11 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     const partialGraded = graded as GradedQuiz;
     const lessonId = req.params.lessonId;
     const roundId = body.roundId;
-    const learnerP = paired && !userId ? Promise.resolve(paired.name) : learnerName(userId);
-    schedulePartial(lockKey, who, partialGraded.meta?.partial?.answered ?? 0, async version => {
-      const learner = await learnerP;
+    // PR #577 review: a név a küldési callbackben, hibakezelés alatt kérdeződik le (nincs kezeletlen elutasítás törölt várakozónál);
+    // a tanulónkénti korlát leckénként számol (`lecke|tanuló`, #510 forrásspec 240–242).
+    const pairedName = paired && !userId ? paired.name : null;
+    schedulePartial(lockKey, `${lessonId}|${who}`, partialGraded.meta?.partial?.answered ?? 0, async version => {
+      const learner = pairedName ?? await learnerName(userId);
       await attemptPartial(lessonId, roundId, version, { lessonId, roundKey: partialRoundKeyOf(roundId), learner,
         ...(paired && !userId ? { learnerFirst: paired.firstName } : {}), guest: !userId && !paired, graded: partialGraded }, 1);
     });
@@ -437,7 +459,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   // B5a-1 (R1, R15): a kvíz véglegesítése SZINKRON jelölődik (innentől „félbehagyva” kísérlet nem küld), a várakozó pillanatkép törlődik;
   // hogy a részleges levél korábban kiment-e (felülíró mondat), az a kör kizárása alatt dől el, a háttérben.
   const finalizing = once && graded.kind === "quiz";
-  if (finalizing) { markFinalized(lockKey); cancelPartial(lockKey); partialVersions.delete(lockKey); }
+  if (finalizing) { markFinalized(lockKey); cancelPartial(lockKey); partialVersions.delete(lockKey); forgetPartial(lockKey); }
   const lessonIdF = req.params.lessonId;
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
   void (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => {
@@ -445,7 +467,18 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
       ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), guest: !userId && !paired, graded: g });
     if (!finalizing) return deliver(graded);
     return withRoundLock(lockKey, async () => {
-      const superseded = await partialAlreadySent(lessonIdF, body.roundId).catch(() => false);
+      // PR #577 review (R1 a / E10): ismeretlen állapotban NEM küldünk felülíró mondat nélkül — korlátos újrapróba a kizárás alatt;
+      // ha az állapot végig bizonyíthatatlan, a végleges levél nem megy ki (naplózott hiba), mint a B4a 503-as elve.
+      let superseded: boolean | null = null;
+      for (let attempt = 0; attempt < SUPERSEDE_CHECK_ATTEMPTS && superseded === null; attempt++) {
+        try { superseded = await partialAlreadySent(lessonIdF, body.roundId); }
+        catch (error) {
+          logger.warn(`[LESSON-RESULT] a felülírás-ellenőrzés átmenetileg hibázott (${attempt + 1}. próba): ${errorClass(error)}`);
+          await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+        }
+      }
+      if (superseded === null) { logger.error("[LESSON-RESULT] a végleges levél felülírási állapota bizonyíthatatlan — a levél nem ment ki."); return; }
+      forgetPartial(lockKey);
       return deliver(superseded ? { ...graded, meta: { ...graded.meta, supersedesPartial: true } } : graded);
     });
   }).catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
