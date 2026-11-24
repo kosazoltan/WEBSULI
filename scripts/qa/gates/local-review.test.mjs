@@ -89,3 +89,25 @@ test('alapértelmezett modell: gemma4:26b (E2)', () => {
   if (process.env.WEBSULI_LOCAL_REVIEW_MODEL) return;
   assert.equal(DEFAULT_MODEL, 'gemma4:26b');
 });
+
+test('töredék: a nagy új-fájl hunk sorhatáron, összefüggő @@ fejlécekkel, megjelölve bomlik; a prompt kimondja a darabhatár-szabályt', () => {
+  const body = Array.from({ length: 40 }, (_, i) => `+const sor${i + 1} = ${i + 1}; // ${'x'.repeat(20)}`);
+  const big = ['diff --git a/n.py b/n.py', 'new file mode 100644', '--- /dev/null', '+++ b/n.py', '@@ -0,0 +1,40 @@', ...body].join('\n');
+  const parts = splitDiff(big, 600);
+  assert.ok(parts.length >= 3, 'több darab');
+  let next = 1;
+  for (const [i, c] of parts.entries()) {
+    const m = /^@@ -0,0 \+(\d+),(\d+) @@ töredék (\d+)\/(\d+)/m.exec(c.text);
+    assert.ok(m, `a(z) ${i + 1}. darabnak saját, megjelölt hunk-fejléce van`);
+    assert.equal(Number(m[1]), next, 'összefüggő új sorszámok');
+    assert.equal(Number(m[3]), i + 1);
+    assert.equal(Number(m[4]), parts.length);
+    const lines = c.text.split('\n').slice(c.text.split('\n').findIndex((l) => l.startsWith('@@ ')) + 1).filter(Boolean);
+    assert.equal(lines.length, Number(m[2]), 'a fejléc darabszáma egyezik a darab soraival');
+    assert.ok(lines.every((l) => /^\+const sor\d+ = \d+; \/\/ x{20}$/.test(l)), 'csak teljes sorok (sorhatáron vágva)');
+    next += Number(m[2]);
+  }
+  assert.equal(next, 41, 'a darabok lefedik az 1..40 tartományt');
+  assert.match(buildPrompt(parts[0]), /töredék/i);
+  assert.match(buildPrompt(parts[0]), /never report truncation/i);
+});
