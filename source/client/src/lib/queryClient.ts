@@ -27,6 +27,9 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
   }
 }
 
+/** Eredmény-e-mail B2 (#510 R37): a CSRF-token lekérésének saját határideje (a válasz törzsének olvasásával együtt). */
+const CSRF_TOKEN_TIMEOUT_MS = 15_000;
+
 // SECURITY: CSRF Token Manager
 // Fetches and caches CSRF token for protecting mutating requests
 class CSRFTokenManager {
@@ -55,16 +58,26 @@ class CSRFTokenManager {
   }
   
   private async fetchTokenFromServer(): Promise<string> {
-    const res = await fetch('/api/csrf-token', {
-      credentials: 'include',
-    });
-    
-    if (!res.ok) {
-      throw new Error('Failed to fetch CSRF token');
+    // B2 (#510 R37): a megakadt tokenlekérés nem tarthatja végtelenül a várakozó írást. Időzített AbortController (nem
+    // `AbortSignal.timeout`): a határidő így a már kezelt, újrapróbálhatónak ismert `AbortError`-t adja, nem `TimeoutError`-t
+    // (PR #556 review) — és a törzs olvasását is fedi.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CSRF_TOKEN_TIMEOUT_MS);
+    try {
+      const res = await fetch('/api/csrf-token', {
+        credentials: 'include',
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to fetch CSRF token');
+      }
+
+      const data = await res.json();
+      return data.csrfToken;
+    } finally {
+      clearTimeout(timer);
     }
-    
-    const data = await res.json();
-    return data.csrfToken;
   }
   
   // Invalidate cached token (e.g., when CSRF error occurs)
@@ -125,10 +138,13 @@ export async function apiRequest<T = unknown>(
   method: string,
   url: string,
   data?: unknown | undefined,
-  options?: { retries?: number; timeout?: number }
+  options?: { retries?: number; timeout?: number; keepalive?: boolean }
 ): Promise<T> {
   const retries = options?.retries ?? 0; // No automatic retries for write operations (causes duplicates)
   const timeout = options?.timeout ?? 60000; // 60 second default timeout
+  // Eredmény-e-mail B2 (#510 R8 / R4): `keepalive` — a kérés (és a 403 utáni ismétlése) a lap bezárása után is célba ér; csak kis
+  // törzsű írásnál használható (64 KB a böngésző kerete).
+  const keepalive = options?.keepalive ? { keepalive: true } : {};
   
   return retryWithBackoff(
     async () => {
@@ -159,9 +175,11 @@ export async function apiRequest<T = unknown>(
           body: data ? JSON.stringify(data) : undefined,
           credentials: "include",
           signal: controller.signal,
+          ...keepalive,
         });
 
-        clearTimeout(timeoutId);
+        // B2 (#510 R37): az időzítő a válasz törzsének beolvasásáig él (a lenti `finally` törli) — a fejlécek után megakadó választest
+        // sem vonja ki a kérést az időkorlát alól.
         debugLog(`[API REQUEST] ${method} ${url} → ${res.status} ${res.statusText}`);
 
         // SECURITY: If CSRF token invalid (403 Forbidden), refresh token and retry ONCE
@@ -189,9 +207,12 @@ export async function apiRequest<T = unknown>(
                 body: data ? JSON.stringify(data) : undefined,
                 credentials: "include",
                 signal: retryController.signal,
+                ...keepalive,
               });
               
               debugLog(`[API REQUEST RETRY] ${method} ${url} → ${retryRes.status} ${retryRes.statusText}`);
+              // B2 (#510 R23): ha a friss token is 403-at kap, az sem marad a gyorsítótárban — a következő írás megint frisset kér.
+              if (retryRes.status === 403) csrfTokenManager.invalidate();
               await throwIfResNotOk(retryRes);
               
               if (retryRes.status === 204) {
@@ -215,8 +236,6 @@ export async function apiRequest<T = unknown>(
         const result = await res.json();
         return result;
       } catch (error) {
-        clearTimeout(timeoutId);
-        
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error('[API REQUEST] Timeout after', timeout, 'ms');
           throw new Error(`A kérés túllépte az időkorlátot (${timeout / 1000}s). Kérlek ellenőrizd az internetkapcsolatot!`, { cause: error });
@@ -229,6 +248,8 @@ export async function apiRequest<T = unknown>(
         }
         
         throw error;
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
     retries,

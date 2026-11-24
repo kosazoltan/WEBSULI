@@ -28,10 +28,16 @@ test("J5 — isRetryableRequestError: a becsomagolt hálózati hiba és időtúl
   assert.equal(isRetryableRequestError(a), false);
 });
 
-test("J5 — forrásőr: az eredménybeküldés újrapróbál, az apiRequest a becsomagolt hibát is felismeri", () => {
+test("J5 + B2 (R26) — forrásőr: az eredménybeküldés EGY szinten próbál újra (nincs beágyazott apiRequest-újrapróba), az apiRequest a becsomagolt hibát is felismeri", () => {
   const report = source("../client/src/lesson-runtime/resultReport.ts");
-  assert.match(report, /export const RESULT_REPORT_RETRIES = [1-5];/);
-  assert.match(report, /\/results`, body, \{ retries: RESULT_REPORT_RETRIES \}\)/);
+  // Eredmény-e-mail B2 (docs/specs/2026-11-22-eredmeny-email-bontas.md; #510 R26, dokumentált spec-változás): az eredmény-POST
+  // apiRequest-je belső újrapróba nélkül megy, az újrapróbát egyetlen szint, a resultReport végzi — laponként legfeljebb 3 kérés,
+  // csak újrapróbálható hibára, azonnali ismétlés nélkül. (Korábban 1 + 3 gyors belső újrapróba: folyamatos 503-nál 4 POST.)
+  assert.match(report, /export const RESULT_REPORT_ATTEMPTS = 3;/);
+  assert.match(report, /export const RESULT_REPORT_RETRY_DELAYS_MS = \[30_000, 60_000\] as const;/);
+  assert.match(report, /\/results`, body, \{ retries: 0, keepalive: kind === "quiz" \}\)/);
+  assert.match(report, /if \(attempt >= RESULT_REPORT_ATTEMPTS \|\| !isRetryableRequestError\(error\)\) throw error;/);
+  assert.doesNotMatch(report, /RESULT_REPORT_RETRIES/, "a régi, beágyazott újrapróba-szám nem maradhat");
   const client = source("../client/src/lib/queryClient.ts");
   assert.match(client, /isRetryableRequestError\(error\)/);
   // az írási műveletek alapértéke változatlanul 0 újrapróbálás (duplikáció ellen)

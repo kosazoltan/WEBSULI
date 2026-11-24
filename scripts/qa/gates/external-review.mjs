@@ -25,7 +25,7 @@ import https from "node:https";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { evidenceDir, writeEvidence } from "./lib.mjs";
+import { evidenceDir, isCutRunChar, writeEvidence } from "./lib.mjs";
 
 export const DEFAULT_MODEL = "gemini-4-carbon";
 // generateContent REST: ThinkingConfig.thinkingLevel enum (MINIMAL/LOW/MEDIUM/HIGH/XHIGH). Tulajdonosi döntés: sima HIGH.
@@ -188,7 +188,31 @@ export function readKeyFromEnvFile(file) {
 export function maskSecrets(s, key) {
   let out = String(s ?? "");
   if (key) out = out.split(key).join("***");
-  return out.replace(/AIza[0-9A-Za-z_\-]{20,}/g, "AIza***");
+  // `{20}…*` a `{20,}` helyett: azonos nyelv és kimenet, de 20 M karakteren sem dob (docs/specs/2026-11-22-kitakaro-elovagas.md).
+  return out.replace(/AIza[0-9A-Za-z_\-]{20}[0-9A-Za-z_\-]*/g, "AIza***");
+}
+
+/**
+ * Elővágás a vágott kimenetű hívóknak (a régi `maskSecrets(s, key).slice(0, max)` helyett): a forrás `max + max(64, kulcshossz)`
+ * karakterre vágva; a vágásponton átnyúló pontos kulcs-előfordulás és token-futás teljesen kimarad (lineáris hátrálás), utána a
+ * változatlan `maskSecrets`, majd `slice(0, max)`. A kimenet a régi kimenet előtagja; rövid bemeneten azonos vele.
+ */
+export function maskClip(s, key, max) {
+  const text = String(s ?? "");
+  let p = max + Math.max(64, key ? key.length : 0);
+  if (text.length <= p) return maskSecrets(text, key).slice(0, max);
+  for (;;) {
+    const before = p;
+    if (key) {
+      const from = Math.max(0, p - key.length + 1);
+      const q = text.slice(from, p + key.length - 1).indexOf(key);
+      if (q >= 0 && from + q < p) p = from + q;
+    }
+    if (p > 0 && isCutRunChar(text.charCodeAt(p)) && isCutRunChar(text.charCodeAt(p - 1))) {
+      while (p > 0 && isCutRunChar(text.charCodeAt(p - 1))) p--;
+    }
+    if (p === before) return maskSecrets(text.slice(0, p), key).slice(0, max);
+  }
 }
 
 // ---------------------------------------------------------------- keret
@@ -322,7 +346,7 @@ function postJson(url, key, body, timeoutMs) {
 }
 export async function countTokens(model, key, systemText, userText) {
   const r = await postJson(`${API}${model}:countTokens`, key, { contents: [{ role: "user", parts: [{ text: `${systemText}\n\n${userText}` }] }] }, 120_000);
-  if (r.status !== 200) return { error: `HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 400)}` };
+  if (r.status !== 200) return { error: `HTTP ${r.status}: ${maskClip(r.text, key, 400)}` };
   return { totalTokens: JSON.parse(r.text).totalTokens };
 }
 /**
@@ -417,9 +441,9 @@ export async function generate({ model, key, systemText, userText, thinking, max
       return { ...p, attempts };
     }
     const cls = classifyHttp(r.status, r.text);
-    last = Object.assign(new Error(`HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 600)}`), { code: cls, attempts });
+    last = Object.assign(new Error(`HTTP ${r.status}: ${maskClip(r.text, key, 600)}`), { code: cls, attempts });
     if (cls !== "retry") throw last;
-    if (attempt < retries) { const w = Math.max(retryWaitMs(r), 15_000 * 2 ** attempt); log(`újrapróbálás ${attempt + 1}/${retries} ${w / 1000} s múlva: ${maskSecrets(last.message, key).slice(0, 160)}`); await sleep(w); }
+    if (attempt < retries) { const w = Math.max(retryWaitMs(r), 15_000 * 2 ** attempt); log(`újrapróbálás ${attempt + 1}/${retries} ${w / 1000} s múlva: ${maskClip(last.message, key, 160)}`); await sleep(w); }
   }
   throw last;
 }
@@ -465,7 +489,7 @@ export async function generateInteraction({ model, key, systemText, userText, th
         .catch((e) => { throw Object.assign(new Error(maskSecrets(e.message, key)), { code: e.code ?? "CONN", attempts }); });
       if (r.status === 200) { id = JSON.parse(r.text).id; break; }
       const cls = classifyHttp(r.status, r.text);
-      const err = Object.assign(new Error(`HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 600)}`), { code: cls, attempts });
+      const err = Object.assign(new Error(`HTTP ${r.status}: ${maskClip(r.text, key, 600)}`), { code: cls, attempts });
       if (cls !== "retry" || attempt === retries) throw err;
       const w = Math.max(retryWaitMs(r), 15_000 * 2 ** attempt); log(`újrapróbálás ${attempt + 1}/${retries} ${w / 1000} s múlva: ${err.message.slice(0, 160)}`); await new Promise((res) => setTimeout(res, w));
     }
@@ -479,7 +503,7 @@ export async function generateInteraction({ model, key, systemText, userText, th
     let r;
     try { r = await reqJson("GET", `${B}/${encodeURIComponent(id)}`, key); } catch (e) { if (++pollErrors > 10) throw Object.assign(new Error(maskSecrets(e.message, key)), { code: "CONN", attempts, interactionId: id }); continue; }
     if (r.status !== 200) { if (r.status >= 500 || r.status === 429) { if (++pollErrors > 10) throw Object.assign(new Error(`lekérdezés: HTTP ${r.status}`), { code: "CONN", attempts, interactionId: id }); continue; }
-      throw Object.assign(new Error(`lekérdezés: HTTP ${r.status}: ${maskSecrets(r.text, key).slice(0, 400)}`), { code: "fatal", attempts, interactionId: id }); }
+      throw Object.assign(new Error(`lekérdezés: HTTP ${r.status}: ${maskClip(r.text, key, 400)}`), { code: "fatal", attempts, interactionId: id }); }
     const j = JSON.parse(r.text);
     if (["in_progress", "queued"].includes(j.status)) continue;
     const p = parseInteraction(j);
