@@ -42,7 +42,7 @@ export function decideNativeArch({ failures, doctorCode }) {
   if (!failures.length) return { status: STATUS.FAIL, note: 'a tesztfutás bukott, de a bukó teszt nem azonosítható (nézd a naplót)' };
   if (failures.length === 1 && failures[0] === NATIVE_ARCH_TEST) {
     if (doctorCode !== 0) {
-      return { status: STATUS.EXCEPTION, note: 'ismert helyi kivétel: native-arch (C-38) — a doctor:arch is bukik (a natív kötés helyben nem épült fel); a CI native-arch jobja x64-en és ARM64-en futtatja' };
+      return { status: STATUS.EXCEPTION, note: 'ismert helyi kivétel: native-arch (C-38) — a doctor:arch is bukik (a natív kötés helyben nem épült fel); a CI native-arch jobja Windows x64-en futtatja' };
     }
     return { status: STATUS.FAIL, note: 'a native-arch teszt bukik, de a doctor:arch zöld — ez NEM az ismert környezeti hiba' };
   }

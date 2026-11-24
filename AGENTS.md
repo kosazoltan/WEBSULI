@@ -140,10 +140,7 @@ Spec, végrehajtási utasítás, javítás, fejlesztés vagy implementáció **f
   döntésből ugyanabban a körben csapda-bejegyzés lesz a [`docs/agent-csapdak.md`](docs/agent-csapdak.md)
   katalógusban, és ha kell, javul a skill / runbook / kanban-leírás / memória. Várakozás (háttérfolyamat,
   CI, alügynök) alatt ez a kitöltő munka — passzív várakozás helyett.
-- **ARM64 + x64 (tulajdonosi utasítás 2026-11-03):** a program és a fejlesztői eszközlánc mindkét
-  architektúrán fusson. A `node_modules` gépenként települ (`npm.cmd ci`), másolni tilos; gyanús natív
-  hibánál első lépés `npm run doctor:arch`. Architektúra-függő útvonal vagy bináris nem kerülhet kódba;
-  a CI `native-arch` jobja Windows x64-en és ARM64-en is fut.
+- **Windows fejlesztés: kizárólag x64.** A `source/` mappában gépenként `npm.cmd ci`; a `node_modules` másolása tilos. Gyanús natív hibánál `npm run doctor:arch`. A CI `native-arch` jobja x64-en ténylegesen betölti a natív kötéseket, tesztel és buildel.
 
 A mandátum a háromfázisú rend mindhárom fázisára és a kanban-jegyekre is vonatkozik
 (`docs/agent-haromfazisu-munka.md`, `docs/kanban.md`). A kezelt `agentic-qa-kit`
