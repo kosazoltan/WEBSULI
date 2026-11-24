@@ -47,3 +47,10 @@ _Generált (helyi LLM retrókból, deduplikálva, legújabb elöl; max. 40)._
 
 - (még nincs retró)
 <!-- GEN:END tanulsagok -->
+
+## Tulajdonosi döntések — 2026-11-23 (H0, első kör)
+- Biztonsági szűrő: a „refused by the model's safety filter" a szolgáltató (Claude bemeneti osztályozó) téves riasztása OpenRouteren át; Hermes-ből nem kikapcsolható. Megkerülés: `model.aliases.mentes = openrouter/google/gemini-2.5-pro` — blokknál `/model mentes` egy üzenetre, az Opus marad az alap.
+- P-022: nyilvános élesítés az admin-próba után azonnal (PLAYER_ACCOUNTS, MP_MODE a Renderen).
+- P-020: játékosfiók egyediség postafiók szerint — normalizált cím (Gmail-pont és +címke levágva) + egyedi index.
+- P-063: Kockavadász J3a verziózott új pontskála; a régi ranglista/rekord külön, verziózva marad.
+- P-007: a kompakt kabalasáv ÉS a maki prototípus is marad kísérletként.

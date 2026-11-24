@@ -92,3 +92,7 @@ közös tárolóval, már elküldött kör, két külön kör azonos kérdéssor
 ## 9. Végrehajtási utasítás
 
 - Végrehajtás: `docs/specs/2026-11-22-eredmeny-email-bontas-vegrehajtas.md`
+
+### B3 / B5a — a képesség hirdetésének feltétele
+
+B3 csak olvassa a numerikus `resultApi: 2` jelzést; azt kizárólag tesztfixture adja. Jelzés nélkül a végleges kérés a régi alakban megy, új küldési út nélkül. B5a elfogadási feltétele: a szerver csak a teljes V2-törzs (a `partial` és `clientNow` mezőket is beleértve) tényleges feldolgozását igazoló integrációs teszt után hirdethet V2-t. Addig a teljes R12 nincs kész; a séma lazítása vagy a kérés feldolgozás nélküli nyugtázása nem teljesítés.

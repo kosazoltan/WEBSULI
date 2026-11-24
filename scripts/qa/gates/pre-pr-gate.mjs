@@ -70,6 +70,15 @@ export function pickE2eSpecs({ classification, specFiles, readSpec, cfg, changed
 }
 
 /** A PR-leírás kötelező részei; a hiányzók listája. */
+/**
+ * W4 (SQL #399; docs/specs/2026-11-18-merge-kapu-rest.md): a független ellenőr ítélete CSAK a helyi bizonyítékból
+ * (`review-<fej>.json`, local-review.mjs / record-review.mjs) — ugyanaz a szabály, mint a merge-kapu V1-é. A PR-leírás vagy -komment
+ * `Független ellenőr ítélete: …` sora tájékoztató, nem bizonyíték (bárki beírhatja).
+ */
+export function prVerdict({ head, evidence }) {
+  return resolveVerdict({ head, evidence, texts: [] });
+}
+
 export function checkPrBody(body) {
   const b = String(body ?? '');
   const missing = [];
@@ -146,7 +155,7 @@ async function main() {
   });
 
   await gate.step('független ellenőr ítélete a fejre', () => verdictResult(
-    resolveVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`), texts: prTexts }), head));
+    prVerdict({ head, evidence: readEvidence(ctx.evDir, `review-${head}`) }), head));
 
   await gate.step('külső (Gemini) ellenőr — második vélemény', () => externalResult(readEvidence(ctx.evDir, `external-${head}`), head));
 
