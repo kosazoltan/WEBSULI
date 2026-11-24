@@ -219,3 +219,16 @@ test("#577 (R1 a ismeretlen állapotban): a felülírás-ellenőrzés átmeneti 
     assert.ok(finalMails().every(m => /helyébe lép/.test(m.html)), "a végleges levél a felülíró mondattal ment ki");
   } finally { setRoundStateFault(null); }
 });
+
+test("#577 / 35501fd3: a felülírás-ellenőrzés tartós hibájánál a végleges levél nem vész el — feltételes felülíró mondattal megy ki", async () => {
+  sent.length = 0;
+  await post("p-supersede-down", { picks: picksOf(3), partial: true, lastAnsweredAt: Date.now() });
+  await waitFor(() => partialMails().length === 2);
+  setRoundStateFault((stage) => { if (stage === "partialSent") throw new Error("tartós DB-hiba"); });
+  try {
+    await post("p-supersede-down", { picks: picksOf(25) });
+    await waitFor(() => finalMails().length === 2);
+    assert.equal(finalMails().length, 2, "a végleges levélpár kiment");
+    assert.ok(finalMails().every(m => /ha erről a körről korábban/.test(m.html)), "feltételes felülíró mondat");
+  } finally { setRoundStateFault(null); }
+});

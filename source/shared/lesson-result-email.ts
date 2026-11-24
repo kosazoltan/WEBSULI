@@ -41,7 +41,7 @@ export function rubricHash(task: OpenTask): string {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 /** Bontás B1a: a levél kísérő adatai — a kör kezdete (a kliens küldi a B1b-től; hiányában nincs „A kör kezdete” sor). */
-export type ResultMeta = { startedAt?: number; lastAnsweredAt?: number; partial?: { answered: number; total: number }; supersedesPartial?: boolean };
+export type ResultMeta = { startedAt?: number; lastAnsweredAt?: number; partial?: { answered: number; total: number }; supersedesPartial?: boolean | "unknown" };
 export type GradedTasks = { kind: "tasks"; rows: GradedTaskRow[]; summary: ReturnType<typeof scoreSummary>; meta?: ResultMeta };
 /** Spec 2026-11-17-eredmeny-email-kviz: `rows` a kör MINDEN kérdése (a levél kérdésenkénti listája); a `wrong` a hibás / kihagyott részhalmaz. */
 export type GradedQuizRow = { question: string; picked: string | null; correct: string; ok: boolean };
@@ -146,7 +146,7 @@ export function buildResultEmail(input: { lessonTitle: string; classroom: number
   const head = `<h2>${esc(input.lessonTitle)} — ${part}</h2>
 <p><strong>Tanuló:</strong> ${esc(input.learner)}<br><strong>Évfolyam:</strong> ${input.classroom}. osztály<br>
 ${dateLine}${started ? `<br><strong>A kör kezdete:</strong> ${formatBudapest(started)}` : ""}<br>
-${meta.partial ? `<strong>Állapot:</strong> félbehagyva — ${meta.partial.answered} / ${meta.partial.total} kérdésre válaszolt; a pont a megválaszolt kérdésekre vonatkozik.<br>\n` : ""}${meta.supersedesPartial ? "<strong>Állapot:</strong> ez a befejezett kör eredménye — a korábbi, „félbehagyva” jelzésű levél helyébe lép.<br>\n" : ""}<strong>Eredmény:</strong> ${s.points} / ${s.total} pont — ${s.percent}% — ${s.grade} (${esc(s.label)})</p>`;
+${meta.partial ? `<strong>Állapot:</strong> félbehagyva — ${meta.partial.answered} / ${meta.partial.total} kérdésre válaszolt; a pont a megválaszolt kérdésekre vonatkozik.<br>\n` : ""}${meta.supersedesPartial === "unknown" ? "<strong>Állapot:</strong> ez a befejezett kör eredménye — ha erről a körről korábban „félbehagyva” jelzésű levél érkezett, ez lép a helyébe.<br>\n" : meta.supersedesPartial ? "<strong>Állapot:</strong> ez a befejezett kör eredménye — a korábbi, „félbehagyva” jelzésű levél helyébe lép.<br>\n" : ""}<strong>Eredmény:</strong> ${s.points} / ${s.total} pont — ${s.percent}% — ${s.grade} (${esc(s.label)})</p>`;
   const body = graded.kind === "tasks"
     // Spec 2026-11-17-eredmeny-email-kviz: a feladat alatt a mintaválasz; a kvíz MINDEN kérdése a gyerek válaszával és a helyessel.
     ? `<ol>${graded.rows.map(r => `<li><p><strong>${esc(r.q)}</strong></p><p>${MARK[r.state]} ${r.answer ? esc(r.answer) : "<em>(nem válaszolt)</em>"}</p>${r.sample ? `<p><em>Mintaválasz:</em> ${esc(r.sample)}</p>` : ""}</li>`).join("")}</ol>`

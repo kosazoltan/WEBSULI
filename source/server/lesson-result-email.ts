@@ -477,9 +477,12 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
           await new Promise(resolve => setTimeout(resolve, retryDelayMs));
         }
       }
-      if (superseded === null) { logger.error("[LESSON-RESULT] a végleges levél felülírási állapota bizonyíthatatlan — a levél nem ment ki."); return; }
+      // Helyi ellenőr 35501fd3: a végleges levél nem veszhet el (a 202 már kiment) — bizonyíthatatlan állapotban a FELTÉTELES felülíró
+      // mondattal megy ki („ha … érkezett, ez lép a helyébe”), így sem a levél nem vész el, sem félrevezető állítás nem kerül bele.
+      if (superseded === null) logger.error("[LESSON-RESULT] a felülírási állapot bizonyíthatatlan — a végleges levél feltételes mondattal megy ki.");
       forgetPartial(lockKey);
-      return deliver(superseded ? { ...graded, meta: { ...graded.meta, supersedesPartial: true } } : graded);
+      const supersedes: boolean | "unknown" = superseded === null ? "unknown" : superseded;
+      return deliver(supersedes ? { ...graded, meta: { ...graded.meta, supersedesPartial: supersedes } } : graded);
     });
   }).catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
   return res.status(202).json({ queued: true });
