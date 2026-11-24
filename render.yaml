@@ -60,3 +60,7 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      # Adventi naptár (docs/specs/2026-11-18-adventi-naptar-vegrehajtas.md „Bekapcsolás” 1. lépés) — CSAK a tulajdonos előnézeti
+      # jóváhagyása (D-11 / D1) után. A szülői levél ettől sem megy ki: a levélküldés alapból száraz futás, külön tulajdonosi lépés (P-056).
+      - key: ADVENT_CALENDAR
+        value: "on"
