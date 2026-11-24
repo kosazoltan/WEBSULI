@@ -22,6 +22,12 @@ cogni:
     reason: "tulajdonosi döntés 2026-11-23; a fő ág (ccc5e99f) kódja már megfelelt, a tervek átvezetve, P-057 őr-teszt: scripts/qa/hooks/hook-scope.test.mjs"
     ref: "docs/specs/2026-11-23-h0-dontesek-atvezetese.md"
     pr: 548
+  - id: 2026-11-23-p010-kupon-hatarido
+    date: 2026-11-23
+    decision: "Kupon módban a hibázott lecke-tétel a hiba utáni legfeljebb LATE_RETURN_MAX (10.) kérdésként visszajön, ha a menetben még nem tért vissza MAX_RETURNS_PER_RUN-szor; a határidős visszatérés a 30%-os ismétlési arány előtt jön. A plafon fölötti hiba a körforgással jön (mért ≤ 3n)."
+    reason: "plafon nélküli határidővel csupa rossz válasznál 12+ tételes lecke nem halad (minden hely visszatérés); 10–12 tételnél a régi rangsor-sáv 11–16+ kérdéses késést adott"
+    ref: "docs/specs/2026-11-23-kuponos-ismetles-hatarido.md"
+    pr: 558
   # - id: D-001
   #   date: ÉÉÉÉ-HH-NN
   #   title: "..."
