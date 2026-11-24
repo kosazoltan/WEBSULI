@@ -994,6 +994,15 @@ körönkénti vagy külön „megfelelt” levél NINCS. Teszt: 22 megoldott + 2
 1. kör sikertelen, de van 2. kör → nincs levél; az utolsó kör sikertelen lezárása → egy levél; a levél után újabb válasz vagy
 évadzárás → nincs második; évadzáráskor a levél nélküli, megkezdett tanulói sor → egy levél; névtelen és előnézeti sor soha.
 
+**Kiegészítés — tulajdonosi P-056 (2026-11-23): „Levélküldés csak száraz összesítő után, külön jóváhagyással.”** A kód alapból
+SZÁRAZ FUTÁSBAN van: a végleges eredmény sem foglal (`mailed_to` érintetlen) és nem küld. Valódi küldés kizárólag a pontos
+`ADVENT_RESULT_EMAIL_MODE=send` értékkel (Render-környezet; minden más érték — hiányzó, elírt, `on`, `1` — száraz). A száraz összesítő:
+`GET /api/admin/advent/mail-report` (admin-őr mögött, a naptár kapcsolójától függetlenül; csak olvas): a mód, az évad és a fázis, a
+címzettek SZÁMA (cím nélkül), és tanulónként a keresztnév, az ok (`passed` / `last-round` / `season-closed`), a legjobb kör, a megoldott és
+az elsőre jó ablakok, a kiküldendő levelek száma. Jóváhagyás után a takarító pótlása (10 percenként) a már végleges eredményekről is
+kiküldi az egyetlen levelet — ugyanazzal a foglalással, címzettenként egyszer. Teszt: `tests/advent-s5-dry-run.test.ts`, DB „P-056”.
+A bekapcsolás a naptár kapcsolójától (`ADVENT_CALENDAR`, A4) KÜLÖN tulajdonosi lépés; a `render.yaml` ehhez sem változik.
+
 ### 18.2 D2 — alanyonkénti korlát
 
 A 16.1 értéke 200 írás / 15 perc / alany (a szabályos legrosszabb eset 144). A teszt a 144-es esetet méri.

@@ -660,12 +660,17 @@ Bekapcsolás:
 1. **Render** (a webszolgáltatás — `websuli-api-eu` — „Environment” lapja; vagy KÜLÖN, egysoros PR a `render.yaml` `envVars`
    listájába: `- key: ADVENT_CALENDAR` / `value: "on"`, a PR leírásában a tulajdonos előnézeti jóváhagyására hivatkozva):
    `ADVENT_CALENDAR` = `on` → mentés → a szolgáltatás újraindul. Ellenőrzés: `https://websuli.vip/api/advent/status` → `"enabled": true`.
-   Ettől kezdve a végleges eredménynél a szülői levél (S5, terv 18.1) élesben kimegy az `ADMIN_EMAILS` címeire.
+   **P-056 (2026-11-23):** a naptár bekapcsolása önmagában NEM küld levelet — a szülői levél (S5, terv 18.1) alapból száraz futás.
+1b. **Szülői levél jóváhagyása (külön tulajdonosi lépés, P-056):** admin-fiókkal `https://websuli.vip/api/admin/advent/mail-report`
+   (JSON: mód, címzettek száma, tanulónként az ok és az eredmény — cím nélkül). Ha a tulajdonos jóváhagyja: Render → `ADVENT_RESULT_EMAIL_MODE`
+   = `send` → mentés (újraindul). Ettől kezdve a végleges eredménynél élesben kimegy a levél az `ADMIN_EMAILS` címeire, és a takarító
+   pótlása (10 percen belül) a jóváhagyás előtt már végleges eredményekről is egyszer kiküldi. Visszavonás: a változó törlése.
 2. **Vercel** (a projekt „Settings → Environment Variables” lapja, Production környezet): `VITE_ADVENT_CALENDAR` = `on` → mentés →
    „Deployments” → a legutóbbi éles telepítés „Redeploy” (a kapcsoló a BUILDBE ég, új build nélkül nem hat).
    Ellenőrzés: a főoldalon (november 24-től) megjelenik a kártya; `/adventi-naptar` betölt.
 
 Kikapcsolás (fordított sorrend):
+0. **Szülői levél:** az `ADVENT_RESULT_EMAIL_MODE` törlése (Render) → száraz futás (a foglalás nélküli eredmények később pótolhatók).
 1. **Vercel:** a `VITE_ADVENT_CALENDAR` törlése (vagy `off`) → Redeploy. Ellenőrzés: a főoldalon nincs kártya.
 2. **Render:** `ADVENT_CALENDAR` törlése (vagy `off`). Ellenőrzés: `/api/advent/status` → `"enabled": false`.
 
@@ -948,3 +953,8 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
   `invalidClock`, `onResult`), kliens (`useAdvent.ts`, `sync.ts`, `AdventCalendar.tsx`); tesztek: `advent-pr-c-vak3`, `advent-s6`, `advent-s5`,
   `admin-route-guard`, DB- és böngészős esetek (a részletek a „2026-11-21 — S5 / S6 …” szakaszban).
 - 2026-11-22 — S5/S6 1. vak köre (b0bbadf1) L1–L8 javítva (tartós levélkézbesítés, módos gyorsítótár-kulcs, modálon belüli újrapróba, `asOf`, átvételes megnyitás levele, zónabeli dél, tantárgyi bontás, előnézeti `/status`); a részletek a „2026-11-22 — S5/S6 1. vak köre” szakaszban.
+- 2026-11-24 — P-056 (tulajdonosi döntés 2026-11-23): a szülői levél alapból SZÁRAZ FUTÁS (`adventMailMode`, `ADVENT_RESULT_EMAIL_MODE=send`
+  nélkül se foglalás, se küldés), száraz összesítő `server/advent/mail-report.ts` → `GET /api/admin/advent/mail-report` (admin-őr, címek
+  nélkül). Előbb bukó teszt: `tests/advent-s5-dry-run.test.ts` (a modul hiányzott); a küldést mérő meglévő esetek kifejezett `send` módot
+  kapnak (az alapértelmezés változott, a mérce nem); DB „P-056” (száraz → összesítő → `send` → a pótlás címzettenként egyszer).
+  P-036: a naptár a helyőrző képekkel indul (`art-manifest.ts` üres), a végleges képek külön tulajdonosi döntéssel.

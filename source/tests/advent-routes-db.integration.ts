@@ -17,7 +17,7 @@ const { learnerTokenFor } = await import("../server/learners");
 const { createPlayerAccountStore } = await import("../server/player/account-store");
 const { createAdventStore } = await import("../server/advent/store");
 const { createAdoptionContext, mergeAdoption } = await import("../server/advent/adoption");
-const { closeAdventSeason, deliverAdventMail, sendAdventResult, setAdventSender } = await import("../server/advent/result-email");
+const { adventMailReport, closeAdventSeason, deliverAdventMail, sendAdventResult, setAdventSender } = await import("../server/advent/result-email");
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Question = { id: string; subject: string; prompt: string; options: string[] };
@@ -1042,7 +1042,9 @@ describe("adventi naptár — végpontok", () => {
     process.env.ADMIN_EMAILS = "anya@pelda.hu, apa@pelda.hu, tanar@pelda.hu";
     const mails: { to: string; subject: string; html: string }[] = [];
     setAdventSender(async (subject, html, to) => { mails.push({ to, subject, html }); });
-    t.after(() => { setAdventSender(null); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+    const prevMode = process.env.ADVENT_RESULT_EMAIL_MODE;
+    process.env.ADVENT_RESULT_EMAIL_MODE = "send"; // P-056: a jóváhagyás utáni út (alapból száraz futás)
+    t.after(() => { setAdventSender(null); if (prevMode === undefined) delete process.env.ADVENT_RESULT_EMAIL_MODE; else process.env.ADVENT_RESULT_EMAIL_MODE = prevMode; if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
     const settle = async (count: number) => {
       for (let i = 0; i < 40 && mails.length < count; i++) await new Promise((resolve) => setTimeout(resolve, 50));
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1090,6 +1092,39 @@ describe("adventi naptár — végpontok", () => {
     assert.equal(mails.length, 6);
     await dbPool.query(`DELETE FROM learners WHERE id = ANY($1)`, [[learner.id, other.id]]);
   });
+  it("P-056: alapból száraz futás — a megfelelt tanulóról nincs levél és nincs foglalás; a száraz összesítő címek nélkül mutatja; „send” mód után a pótlás címzettenként egyszer küld", async (t) => {
+    const prevEmails = process.env.ADMIN_EMAILS;
+    const prevMode = process.env.ADVENT_RESULT_EMAIL_MODE;
+    process.env.ADMIN_EMAILS = "anya@pelda.hu, apa@pelda.hu, tanar@pelda.hu";
+    delete process.env.ADVENT_RESULT_EMAIL_MODE;
+    const mails: string[] = [];
+    setAdventSender(async (_s, _h, to) => { mails.push(to); });
+    t.after(() => { setAdventSender(null); if (prevMode === undefined) delete process.env.ADVENT_RESULT_EMAIL_MODE; else process.env.ADVENT_RESULT_EMAIL_MODE = prevMode; if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+    const learner = await newLearner(5);
+    const k = await kid(); k.learner = learner.token; k.now = DEC26;
+    for (let day = 1; day <= 24; day++) await k.answer(day, await k.open(day), day <= 23);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.deepEqual(mails, [], "száraz futásban a végleges eredményről sem megy levél");
+    const [stored] = await q<{ mailed_to: string[]; passed_at: Date | null }>(`SELECT mailed_to, passed_at FROM advent_progress WHERE learner_id = $1`, [learner.id]);
+    assert.ok(stored!.passed_at, "megfelelt");
+    assert.deepEqual(stored!.mailed_to, [], "száraz futásban nincs foglalás (want / pending / final)");
+    const store = createAdventStore(dbPool);
+    const mine = { ...store, mailCandidates: async (season: number, includeUnfinished: boolean) => (await store.mailCandidates(season, includeUnfinished)).filter((r) => r.row.subjectId === learner.id) };
+    const report = await adventMailReport(mine, { season: 2026, phase: "open" });
+    assert.equal(report.mode, "dry-run");
+    assert.deepEqual(report.results.map((r) => [r.firstName, r.reason, r.solved, r.pendingRecipients]), [["Panni", "passed", 23, 3]]);
+    assert.doesNotMatch(JSON.stringify(report), /@/, "cím nincs az összesítőben");
+    // A száraz pótlás sem küld.
+    assert.equal(await deliverAdventMail(mine, { season: 2026, phase: "open" }), 0);
+    assert.deepEqual(mails, []);
+    // Tulajdonosi jóváhagyás után („send”): a pótlás a már végleges eredményről címzettenként egyszer küld, másodszor nem.
+    process.env.ADVENT_RESULT_EMAIL_MODE = "send";
+    assert.equal(await deliverAdventMail(mine, { season: 2026, phase: "open" }), 3);
+    assert.equal(await deliverAdventMail(mine, { season: 2026, phase: "open" }), 0);
+    assert.deepEqual(mails.sort(), ["anya@pelda.hu", "apa@pelda.hu", "tanar@pelda.hu"]);
+    assert.deepEqual((await adventMailReport(mine, { season: 2026, phase: "open" })).results, [], "kézbesítés után az összesítő üres");
+    await dbPool.query(`DELETE FROM learners WHERE id = ANY($1)`, [[learner.id]]);
+  });
   it("S5/S6 1. vak L1: a tartós kézbesítés helyreáll — foglalás utáni leállás, részleges siker, a szolgáltató átvétele utáni leállás, párhuzamos feldolgozók; évadzáráskor a hiányzó címzettek pótlódnak, új címzett nem", async (t) => {
     const RECIPIENTS = "anya@pelda.hu, apa@pelda.hu, tanar@pelda.hu";
     const prevEmails = process.env.ADMIN_EMAILS;
@@ -1099,7 +1134,9 @@ describe("adventi naptár — végpontok", () => {
       if (to === failFor) throw new Error("átmeneti szolgáltatói hiba");
       mails.push({ to, key });
     });
-    t.after(() => { setAdventSender(null); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+    const prevMode = process.env.ADVENT_RESULT_EMAIL_MODE;
+    process.env.ADVENT_RESULT_EMAIL_MODE = "send"; // P-056: a jóváhagyás utáni út (alapból száraz futás)
+    t.after(() => { setAdventSender(null); if (prevMode === undefined) delete process.env.ADVENT_RESULT_EMAIL_MODE; else process.env.ADVENT_RESULT_EMAIL_MODE = prevMode; if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
     const store = createAdventStore(dbPool);
     // Végleges (megfelelt) tanulói sor levél nélkül: címzett nélkül játsszuk végig (nincs kézbesítési terv).
     const finalRow = async () => {
@@ -1184,7 +1221,9 @@ describe("adventi naptár — végpontok", () => {
     process.env.ADMIN_EMAILS = "anya@pelda.hu, apa@pelda.hu, tanar@pelda.hu";
     const mails: string[] = [];
     setAdventSender(async (_s, _h, to) => { mails.push(to); });
-    t.after(() => { setAdventSender(null); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+    const prevMode = process.env.ADVENT_RESULT_EMAIL_MODE;
+    process.env.ADVENT_RESULT_EMAIL_MODE = "send"; // P-056: a jóváhagyás utáni út (alapból száraz futás)
+    t.after(() => { setAdventSender(null); if (prevMode === undefined) delete process.env.ADVENT_RESULT_EMAIL_MODE; else process.env.ADVENT_RESULT_EMAIL_MODE = prevMode; if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
     const learner = await newLearner(5);
     const k = await kid(); k.learner = learner.token; k.now = DEC26;
     // A tanuló: 22 megoldott, a 23. és 24. javítható → nem végleges.

@@ -50,6 +50,7 @@ import { lessonResultsRouter } from "./lesson-result-email";
 import { createAdventRouter } from "./advent/routes";
 import { createAdventStore } from "./advent/store";
 import { createAdventPreviewRouter } from "./advent/preview";
+import { createAdventMailReportRouter } from "./advent/mail-report";
 import { sendAdventResult } from "./advent/result-email";
 import { adventClock, adventEnabled } from "./advent/clock";
 import { defaultAdventIdentityDeps, resolveAdventSubject } from "./advent/identity";
@@ -912,6 +913,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     bank: SERVER_GRADE_BANK,
     christmas: CHRISTMAS_ITEMS,
   }));
+  // Adventi naptár — a szülői levelek száraz összesítője (tulajdonosi P-056): az admin-őr mögött, a kapcsolótól függetlenül; csak olvas,
+  // címet nem ad ki. A valódi küldés alapból KI (`ADVENT_RESULT_EMAIL_MODE=send` nélkül a végleges eredmény sem küld és nem foglal).
+  app.use("/api/admin/advent/mail-report", isAuthenticatedAdmin, createAdventMailReportRouter({ store: adventStore }));
   app.use("/api/lessons", lessonPublicRouter);
   // Spec 2026-11-10-fejezet-kisfilmek-v2 (6.): a kisfilmek tartalomcímzett médiája (kép, hang, mozgókép) — azonos eredet, korlátlanul gyorsítótárazható.
   registerLessonClipMedia(app, loadClipMedia);

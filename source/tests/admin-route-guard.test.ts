@@ -167,12 +167,12 @@ describe("JM7a — admin-útvonal regressziós őr", () => {
     assert.ok(adminCount >= 90, `legalább 90 admin-előtagú végpont várt, ennyi lett: ${adminCount}`);
   });
 
-  it("adventi naptár S6 (A16): az admin-előnézet minden végpontja — az olvasás, az írások és a saját előnézeti sor törlése (DELETE) — admin előtag alatt, isAuthenticatedAdmin-nal", () => {
+  it("adventi naptár S6 (A16): az admin-előnézet minden végpontja — az olvasás, az írások és a saját előnézeti sor törlése (DELETE), valamint a levelek száraz összesítője (P-056) — admin előtag alatt, isAuthenticatedAdmin-nal", () => {
     const byKey = new Map(inventory.map((e) => [key(e), e]));
     const expected = [
       "GET /api/admin/advent/preview/status", "GET /api/admin/advent/preview/state", "POST /api/admin/advent/preview/grade",
       "POST /api/admin/advent/preview/doors/:day/open", "POST /api/admin/advent/preview/doors/:day/answer",
-      "POST /api/admin/advent/preview/round", "POST /api/admin/advent/preview/adopt", "DELETE /api/admin/advent/preview",
+      "POST /api/admin/advent/preview/round", "POST /api/admin/advent/preview/adopt", "DELETE /api/admin/advent/preview", "GET /api/admin/advent/mail-report",
     ];
     for (const k of expected) {
       const e = byKey.get(k);

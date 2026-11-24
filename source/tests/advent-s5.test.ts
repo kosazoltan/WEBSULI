@@ -28,6 +28,15 @@ function row(over: Partial<AdventRow> & { doors: AdventRow["doors"] }): AdventRo
   return { id: "row-1", season: 2026, subjectKind: "learner", subjectId: "L", grade: 5, round: 1, plan: {}, finishedAt: null, passedAt: null, mailedTo: [], createdAt: new Date(0), updatedAt: new Date(0), ...over };
 }
 const RECIPIENTS = "anya@pelda.hu, apa@pelda.hu, tanar@pelda.hu";
+/**
+ * A küldést kipróbáló esetek a jóváhagyás utáni utat mérik: kifejezett `ADVENT_RESULT_EMAIL_MODE=send` (P-056 — alapból száraz futás,
+ * lásd tests/advent-s5-dry-run.test.ts). Dokumentált teszt-változás: az alapértelmezés változott, a mérce nem.
+ */
+function sendMode(t: { after: (fn: () => void) => void }): void {
+  const prev = process.env.ADVENT_RESULT_EMAIL_MODE;
+  process.env.ADVENT_RESULT_EMAIL_MODE = "send";
+  t.after(() => { if (prev === undefined) delete process.env.ADVENT_RESULT_EMAIL_MODE; else process.env.ADVENT_RESULT_EMAIL_MODE = prev; });
+}
 
 test("S5 (18.1): a végleges eredmény oka — csak tanulói sor, csak a három feltétel valamelyikénél", () => {
   // 22 megoldott + 2 javítható → nincs levél.
@@ -91,6 +100,7 @@ function memoryStore() {
 }
 
 test("S5: címzettenként pontosan egy levél; ismételt hívás nem küld újra; bukó küldő felszabadít és pótolható; nem végleges / nincs címzett → 0", async (t) => {
+  sendMode(t);
   const prevEmails = process.env.ADMIN_EMAILS;
   process.env.ADMIN_EMAILS = RECIPIENTS;
   const prevDelay = setAdventRetryDelay(5);
@@ -129,6 +139,7 @@ test("S5: címzettenként pontosan egy levél; ismételt hívás nem küld újra
 });
 
 test("S5: teszt-módban valódi levél soha — hamis küldő nélkül a küldés hibára fut, a foglalás felszabadul", async (t) => {
+  sendMode(t);
   const prevEmails = process.env.ADMIN_EMAILS;
   const prevEnv = process.env.NODE_ENV;
   process.env.ADMIN_EMAILS = "anya@pelda.hu";
@@ -141,6 +152,7 @@ test("S5: teszt-módban valódi levél soha — hamis küldő nélkül a küldé
 });
 
 test("S5 (18.1 3.): évadzárás — csak lezárt fázisban, a levél nélküli tanulói sorokra, egyszer", async (t) => {
+  sendMode(t);
   const prevEmails = process.env.ADMIN_EMAILS;
   process.env.ADMIN_EMAILS = RECIPIENTS;
   t.after(() => { setAdventSender(null); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });

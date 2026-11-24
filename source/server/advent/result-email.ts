@@ -20,6 +20,18 @@ import { logger } from "../lib/logger";
 import { resolveAdminRecipients } from "../lib/material-result";
 import type { AdventRow, AdventStore } from "./store";
 
+/**
+ * A levélmód (tulajdonosi P-056, 2026-11-23: „Levélküldés csak száraz összesítő után, külön jóváhagyással”). Alapból SZÁRAZ FUTÁS:
+ * a végleges eredmény nem foglal (`mailed_to` érintetlen) és nem küld — így a jóváhagyás után a takarító pótlása (`deliverAdventMail`)
+ * a már végleges eredményekről is kiküldi az egyetlen levelet. Valódi küldés KIZÁRÓLAG a pontos `ADVENT_RESULT_EMAIL_MODE=send`
+ * értékkel (kis- / nagybetű és szóköz mindegy); minden más (hiányzó, elírt, „on”, „1”) száraz futás. A száraz összesítő:
+ * `adventMailReport` (admin-végpont: `/api/admin/advent/mail-report`).
+ */
+export type AdventMailMode = "dry-run" | "send";
+export function adventMailMode(env: Record<string, string | undefined> = process.env): AdventMailMode {
+  return env.ADVENT_RESULT_EMAIL_MODE?.trim().toLowerCase() === "send" ? "send" : "dry-run";
+}
+
 export type AdventSender = (subject: string, html: string, to: string, idempotencyKey: string) => Promise<unknown>;
 let sender: AdventSender | null = null;
 /** Teszthez: a valódi Resend-küldő helyett (a `setResultSender` mintája). */
@@ -146,10 +158,12 @@ type MailStore = Pick<AdventStore, "planMail" | "leaseMail" | "finishMail" | "re
  * Küldési hibánál a bérlet felszabadul (egy késleltetett újrapróba + a takarító pótlása); ha a szolgáltató elfogadta, de a rögzítés
  * elmaradt (leállás), a bérlet lejárta után a pótlás ugyanazzal a kulccsal küld (a szolgáltató deduplikálja). Sosem dob.
  */
-export async function sendAdventResult(input: { store: MailStore; row: AdventRow; phase: AdventPhase; firstName: string | null; nowMs?: number }, retry = true): Promise<{ sent: number; failed: number; skipped?: "no-recipients" | "no-secret" }> {
+export async function sendAdventResult(input: { store: MailStore; row: AdventRow; phase: AdventPhase; firstName: string | null; nowMs?: number }, retry = true): Promise<{ sent: number; failed: number; skipped?: "dry-run" | "no-recipients" | "no-secret" }> {
   try {
     const reason = adventResultFinal(input.row, input.phase);
     if (!reason) return { sent: 0, failed: 0 };
+    // P-056: száraz futásban se foglalás, se küldés — a tétel a száraz összesítőben látszik, a jóváhagyás után a pótlás küldi.
+    if (adventMailMode() !== "send") return { sent: 0, failed: 0, skipped: "dry-run" };
     const recipients = resolveAdminRecipients({ ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_EMAIL: process.env.ADMIN_EMAIL });
     // A modul naplója csak a hiba osztályát írja (A22 forrás-őr): a kihagyás okát a visszatérési érték mondja meg.
     if (!recipients.length) return { sent: 0, failed: 0, skipped: "no-recipients" };
@@ -210,4 +224,43 @@ export async function deliverAdventMail(store: DeliverStore, at: { season: numbe
 export async function closeAdventSeason(store: DeliverStore, at: { season: number; phase: AdventPhase }, nowMs: number = Date.now()): Promise<number> {
   if (at.phase !== "closed") return 0;
   return deliverAdventMail(store, at, nowMs);
+}
+
+/** A száraz összesítő egy tétele (P-056): a tanuló keresztneve és eredménye — e-mail-cím, token, eszközazonosító nélkül. */
+export type AdventMailReportItem = {
+  firstName: string | null; grade: number | null; reason: AdventFinalReason; bestRound: number; rounds: number; solved: number; firstTry: number;
+  passed: boolean; pendingRecipients: number;
+};
+export type AdventMailReport = {
+  mode: AdventMailMode; season: number; phase: AdventPhase;
+  /** A címzettek SZÁMA (az `ADMIN_EMAILS` listából; maguk a címek nem kerülnek az összesítőbe). */
+  recipients: number;
+  /** Van-e a lenyomatokhoz titok (nélküle „send” módban sem menne levél). */
+  secretConfigured: boolean;
+  results: AdventMailReportItem[];
+  totals: { results: number; mails: number; passed: number; lastRound: number; seasonClosed: number };
+};
+
+/**
+ * Száraz összesítő (P-056): mely tanulókról menne most levél, ha a küldés be lenne kapcsolva — a takarító pótlásával azonos jelöltekből
+ * (`mailCandidates`) és azonos döntéssel (`adventResultFinal`), csak olvasva (a `mailed_to` érintetlen). Részben kézbesített sornál
+ * (korábbi „send” mód) a még kézbesítetlen tervezett címzettek száma számít.
+ */
+export async function adventMailReport(store: Pick<AdventStore, "mailCandidates">, at: { season: number; phase: AdventPhase }): Promise<AdventMailReport> {
+  const recipients = resolveAdminRecipients({ ADMIN_EMAILS: process.env.ADMIN_EMAILS, ADMIN_EMAIL: process.env.ADMIN_EMAIL }).length;
+  const results: AdventMailReportItem[] = [];
+  for (const { row, firstName } of await store.mailCandidates(at.season, at.phase === "closed")) {
+    const reason = adventResultFinal(row, at.phase);
+    if (!reason) continue;
+    const wants = row.mailedTo.filter((k) => k.startsWith("want:")).map((k) => k.slice("want:".length));
+    const pendingRecipients = wants.length ? wants.filter((h) => !row.mailedTo.includes(`final:${h}`)).length : recipients;
+    if (pendingRecipients === 0) continue;
+    const { bestRound, best, rounds, passed } = adventResultSummary(row);
+    results.push({ firstName, grade: row.grade, reason, bestRound, rounds, solved: best.solved, firstTry: best.firstTry, passed, pendingRecipients });
+  }
+  const count = (reason: AdventFinalReason) => results.filter((r) => r.reason === reason).length;
+  return {
+    mode: adventMailMode(), season: at.season, phase: at.phase, recipients, secretConfigured: Boolean(learnerLinkSecret()), results,
+    totals: { results: results.length, mails: results.reduce((n, r) => n + r.pendingRecipients, 0), passed: count("passed"), lastRound: count("last-round"), seasonClosed: count("season-closed") },
+  };
 }
