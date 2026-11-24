@@ -50,6 +50,35 @@
 - Átvétel: `queryClient.ts` (keepalive, CSRF-érvénytelenítés, törzsolvasásig élő időkorlát, nincs beágyazott újrapróba),
   `lesson-result-limits.ts` (osztálykeret), `routes.ts` / `index.ts` keret-bekötés.
 - Tesztek: `request-retry.test.ts`, `lesson-result-limits.test.ts`, `review-rate-limit.test.ts`.
+- **Végrehajtási jegyzet (2026-11-23, ág `feat/eredmeny-email-b2`, előfeltétel: a B1a #532 és a B1b #539 a főágon):**
+  - Hatókör (a B3–B8 előtt, kapcsoló nélkül): csak a VÉGLEGES beküldés útja. A pillanatkép (`partial`), a `sendKeepalive`, a
+    képesség-jelzés (`resultApi`, R12), a kilét-címke (R31), a token-válaszhoz kötött törzs (`prepare`, R39) és a kör-tulajdonos
+    keret (`claimLimiter`, R51) NEM kerül át — azok a B3 / B4 / B5b / B7 szeletekben jönnek.
+  - R4: az `apiRequest` CSRF-403 utáni egyszeri tokenfrissítése a `keepalive` jelzőt is megtartja; gyorsítótárazott tokennel előzetes
+    hálózati kör nélkül küld, token nélkül előbb kér egyet (változatlan).
+  - R23 (hálózati rész): ha a friss tokennel ismételt kérés is 403-at kap, a token sem marad a gyorsítótárban — a következő kísérlet
+    friss tokent kér. A képesség-jelzéses feltétel (új token régi példánytól → nincs ismétlés) a pillanatképhez tartozik; a B3
+    (képesség-jelzés) és a B5b (pillanatkép-kliens) hozza.
+  - R8: a kvíz végleges kérése `keepalive: true`; a feladatoké nem (64 KB-os keret). A „…:partial:<kör> kulcs törlése” a B5b-vel jön
+    (a főágon még nincs ilyen kulcs).
+  - R9: új `server/lesson-result-limits.ts` — `RESULT_RATE_LIMIT = { windowMs: 15 perc, final: 60, partial: 60 }`, két független
+    keret (`resultLimiter` a pillanatképet kihagyja, `partialLimiter` csak azt számolja), kulcs a `clientIpKeyGenerator`. A
+    `lesson-result-email.ts` 20-as kerete helyett ez kerül a routerre. A főág szigorú sémája a `partial` mezőt ma 400-zal utasítja el,
+    így a pillanatkép-keret a B5a-ig csak a hibás kéréseket számolja (semleges).
+  - R46: `lessonsWriteGate(limiter)` a `/api/lessons` közös írási kapuja; a biztonságos metódus, a `/review/` és a pontos
+    `POST /:lessonId/results` kimarad a közös 100-as keretből (a CSRF-őr változatlan). A `server/index.ts` ezt szereli fel.
+  - R26: az eredmény-POST `apiRequest`-je belső újrapróba nélkül (`retries: 0`) megy; az újrapróbát EGYETLEN szint, a
+    `resultReport.ts` végzi: laponként legfeljebb `RESULT_REPORT_ATTEMPTS = 3` kérés, csak újrapróbálható hibára (hálózat,
+    időtúllépés, 5xx), azonnali ismétlés nélkül (30 s, majd 60 s késleltetés — az R24 ütemezése; a tartós sor, a 429 /
+    `Retry-After` kezelése a B7). Folyamatos 503 mellett így laponként legfeljebb 3 POST megy (a főágon 4 volt, gyors egymásutánban).
+  - R37: az `apiRequest` időzítője a válasz törzsének beolvasásáig él (`finally`); a `/api/csrf-token` lekérése saját 15 s-os
+    határidőt kap (`AbortSignal.timeout`).
+  - PR #556 bot-review (Codex, Vercel, Copilot) javításai: (1) a tokenlekérés határideje időzített `AbortController` — `AbortError`, így
+    a 403 utáni frissítés időtúllépése is újrapróbálható (az `AbortSignal.timeout` `TimeoutError`-t adott, amit a predikátum nem ismer);
+    (2) a 3 kísérletes keret körönként, a lap élete alatt él (`pageAttempts`, a „már elküldve” jelző kulcsán) — a kör lezárása nem nyit
+    új keretet; (3) a B1b korhatárát minden újrapróba előtt újra nézi (a várakozás alatt elavult, le nem zárt kör nem megy el).
+  - Tesztek: `tests/lesson-result-limits.test.ts` (R9, R46 valódi HTTP-n), `tests/review-rate-limit.test.ts` (a kapu viselkedése),
+    `tests/request-retry.test.ts` (R26 forrásőr), `tests/lesson-result-email-quiz.spec.ts` B2-esetei (R4, R8, R26, R37 böngészőben).
 
 ## 3. B3 — képesség-jelzés (R10, R12)
 
