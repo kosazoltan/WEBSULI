@@ -13,9 +13,10 @@ diagnosztikai / félkész változások commit nélkül elveszhetnek vagy rossz �
 
 1. **Bukó tesztek (RED)** — a szelet elfogadási tételeihez teszt, a megvalósítás ELŐTT; mérd, hogy bukik. → commit (`test: … (RED)`).
 2. **Zöldre hozás egységenként (GREEN)** — egy egység = egy elfogadási tétel / egy logikai változás; minden egység után a hozzá tartozó
-   tesztek zöldek. → commit egységenként.
+   tesztek zöldek, és az egység után — a következő előtt — lefut a szakaszkapu (`npm run gate:stage`, az őr-tesztekkel; AGENTS.md
+   „minden logikai szakasz után”). → commit egységenként. A végső kapulánc ezt NEM helyettesíti.
 3. **Próbahibás ellenőrzés** — a kész megvalósításba szándékos hibát teszel (pl. a feltétel megfordítása, a javítás egy sorának
-   visszaállítása `git stash -- <fájl>` vagy ideiglenes szerkesztés), és megméred, hogy a teszt bukik; utána visszaállítod. Az eredmény
+   visszaállítása) TÉNYLEGES ideiglenes szerkesztéssel — a már commitolt javításon a `git stash` nem csinál semmit —, és megméred, hogy a teszt bukik; utána visszaállítod. Az eredmény
    (melyik teszt bukott, mire) a commit-üzenetbe / PR-leírásba kerül. Ha nem bukik: a teszt nem véd — javítsd, mielőtt továbblépsz.
 4. **Kapulánc** — `npm run gate:stage` → `npm run gate:push` → `node scripts/qa/gates/local-review.mjs` (high leletet kódból igazolni /
    cáfolni) → `npm run gate:pr -- --body-file <út>`. Megkerülni tilos.
