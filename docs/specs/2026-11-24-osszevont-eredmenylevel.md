@@ -13,8 +13,15 @@ Előzmény: `docs/specs/2026-11-17-eredmeny-email-kviz.md` és a B-szeletek (`20
 3. **Kétrészes lecke, a második rész is kész** (ugyanaz a tanuló, ugyanaz a lecke, 7 napon belül). Egyetlen **összevont levél** megy két szakasszal (Feladatok és Kvíz), közös összesítővel. Mindkét félretett sor `sent`.
 4. **7 nap után sincs párja.** Egy tartós söprő (óránként és induláskor) elküldi a félretett részt egyedül, jelöléssel: „Csak a kvíz készült el — a szöveges feladatok hiányoztak” (vagy fordítva).
 5. **Ismétlés.** Ha a tanuló ugyanabból a részből újabb végleges kört ad be, mielőtt a pár elkészült, a **legutóbbi** kör marad félretéve. Az összevont levél a legutóbbi két részt viszi.
-6. **Azonosság és idempotencia.** A tanuló a meglévő tulajdonoskulcs (`who`). A körönkénti egyszeri levelet a B4 `claimFinalRound` és `finalOwnerKeyOf` garantálja, ez változatlan. Az összevont levél idempotencia-kulcsa a két kör kulcsából képződik.
-7. **Kapcsoló:** `RESULT_COMBINED_EMAIL`. Az explicit `on` vagy `off` mindig nyer; beállítás nélkül élesben (`NODE_ENV=production`) **BE**, tesztben KI. KI állapotban a régi kétlevelű viselkedés bájtra marad.
+6. **Azonosság és idempotencia** (review #583).
+   - A tanuló a meglévő tulajdonoskulcs (`who`). Mindkét beküldési út ugyanazt a kulcsot adja a párosítónak: a vendég és a fiók nélküli `POST …/result`, valamint a bejelentkezett tanuló gyakorlókör-útja (`sendPracticeResult`).
+   - Az összevont út a B5a kapcsolójától (`RESULT_PARTIAL_EMAIL`) **függetlenül** mindig lefuttatja a tulajdonos-ellenőrzést.
+   - A körök felhasználását tartósan rögzíti: a félretett sor `sent_at` után is megmarad, a kör azonosítójával együtt. Egy már elküldött párban szereplő kör ismételt beküldése nem képez új párt; a válasz `alreadySent`.
+   - Az összevont levél idempotencia-kulcsa a két kör kulcsából képződik. A kézbesítés pótlása ugyanezzel a kulccsal megy, a szolgáltatói deduplikáció is erre épül.
+   - **Zárolás:** a félretétel, a párosítás és a söprő ugyanazt a tranzakciós zárat veszi fel a `(lesson_id, owner_key)` párra (`pg_advisory_xact_lock`). Így két egyszerre, két külön példányon érkező első beküldés sem zárulhat mindkettő pár nélkül. Sorzár (`FOR UPDATE`) nem elég, mert üres várakozóállapotból nincs mit zárolni.
+7. **Kapcsoló:** `RESULT_COMBINED_EMAIL`. KI állapotban a régi kétlevelű viselkedés bájtra marad.
+   - Az U4b–U4d szeletek alatt az alapérték mindenhol **KI**. Így a félkész folyamat (söprő és figyelmeztetés nélkül) nem élesedik (review #583).
+   - Az **U4e** szelet állítja át az alapértéket: élesben (`NODE_ENV=production`) beállítás nélkül BE. Az explicit `on` vagy `off` mindig nyer.
 8. A „félbehagyva” kvíz-pillanatkép (B5a, `RESULT_PARTIAL_EMAIL`) független marad. Ez nem végleges eredmény, és nem vesz részt a párosításban.
 
 ## Adatmodell
@@ -34,4 +41,6 @@ A migráció additív. Valódi cím nem kerül a repóba (nyilvános repó).
 - E5: WHEN ugyanabból a részből újabb kör érkezik THEN a nyitott sor a legutóbbira cserélődik; az összevont levél a legutóbbit viszi.
 - E6: WHEN a kapcsoló KI THEN a régi kétlevelű viselkedés (a meglévő tesztek változatlanul zöldek).
 - E7: A kliens `awaiting` esetén a lecke végén és tetején figyelmeztet; a másik rész kész jelzése után a figyelmeztetés eltűnik.
-- E8: Versenyhelyzet: két rész egyszerre érkezik, két példányban → pontosan egy összevont levél (DB-zárolás a soron).
+- E8: Versenyhelyzet: üres várakozóállapotból két rész egyszerre érkezik, két külön DB-kapcsolaton → pontosan egy összevont levél, egyik rész sem marad pár nélkül (közös tanácsadó zár).
+- E9: A bejelentkezett tanuló gyakorlókör-útja (`sendPracticeResult`) ugyanazon a párosítón megy át, ugyanazzal a tulajdonoskulccsal: a fiókos feladat + kvíz pontosan egy összevont levél, és a kliens az `awaiting`-et is megkapja.
+- E10: WHEN egy már elküldött párban szereplő kört újra beküldenek, akár egy új másik résszel THEN nincs új összevont levél, a válasz `alreadySent`.
