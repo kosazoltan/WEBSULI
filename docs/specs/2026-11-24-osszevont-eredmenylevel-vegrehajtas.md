@@ -7,13 +7,21 @@ Terv: `docs/specs/2026-11-24-osszevont-eredmenylevel.md`. Szeletek, mindegyik k�
    - `buildCombinedResultEmail` (két szakasz, közös összesítő, részleges jelölés).
    - Tesztek: egységteszt a sablonra; DB-teszt a migrációra és a részenként egy nyitott sor egyediségére.
    - Részletek: migráció `0047_lesson_result_pending.sql` (az U3 a 0046-ot foglalja); a tanulói tartalom (`graded`, `learner`) nyitott sorban kötelező, elküldés után törölhető (CHECK); a rész törzse közös segéd (`gradedBodyHtml`), az egyrészes levél bájtra változatlan.
-   - Állapot: folyamatban (PR: `feat/u4a-osszevont-sablon-v2`).
+   - Állapot: kész (#585).
 2. **U4b — szerverút** (a kapcsoló alapértéke KI; a zárolás és az utak a terv 6. pontja szerint).
    - Kapcsoló (`resultCombinedEmailEnabled`); a lecke részeinek megállapítása (van-e nyitott feladat, illetve kvíz).
    - Kétrészes leckénél a végleges eredmény félretétele vagy párosítása `SELECT … FOR UPDATE`-tel; `awaiting` a válaszban.
    - Közös `(lesson_id, owner_key)` tanácsadó zár (`pg_advisory_xact_lock`), ezt a söprő is felveszi.
    - A `sendPracticeResult` útja is a párosítón megy át, ugyanazzal a tulajdonoskulccsal.
    - Tesztek: DB-teszt E1–E3, E5, E6, E8 (két külön DB-kapcsolat, üres várakozóállapot), E9 (fiókos út) és E10. Valódi levél nincs: hamis küldő (`setResultSender`).
+   - Részletek (U4b):
+     - `resultCombinedEmailEnabled(env)` = `RESULT_COMBINED_EMAIL === "on"` (alapból KI; az U4e élesít).
+     - Kétrészes lecke = a tapasztalatban van szöveges feladat ÉS kvíz is; egyrészes leckénél a régi út változatlan.
+     - `pairOrPark` (új, `server/lesson-result-combine.ts`): egy tranzakcióban `pg_advisory_xact_lock(hashtext(lecke|tulajdonos))`; ha a kör már elküldött párban szerepel → `alreadySent`; ha van nyitott másik rész → mindkét sor `sent_at`/`pair`, és a tranzakció után EGY összevont levél (`sendLessonResult` `combined` móddal, a két kör kulcsából képzett körkulccsal és idempotencia-kulccsal); különben a rész nyitott sora (az újabb kör felülírja) és `awaiting`.
+     - Az összevont úton a B4 tulajdonos-ellenőrzés (`claimFinalRound` + tulajdonos-sor) a `RESULT_PARTIAL_EMAIL`-től függetlenül fut.
+     - A `sendPracticeResult` ugyanazt a párosítót hívja a fiók azonosítójával (`who` = a felhasználó azonosítója, mint a POST-ban), és visszaadja az `awaiting`-et.
+     - Az elküldött sorok tanulói tartalmának törlése (graded/learner → NULL) a söprő (U4c) dolga, a sikeres kézbesítés után.
+   - Állapot: folyamatban (PR: `feat/u4b-osszevont-szerverut`).
 3. **U4c — söprő.**
    - Óránként és induláskor fut; a 7 napnál régebbi nyitott sorokból jelölt részleges levél megy.
    - Teszt: DB-teszt E4, az óra paraméterként.
