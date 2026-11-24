@@ -1185,6 +1185,31 @@ export const lessonResultEmails = pgTable(
   (table) => ({ roundUnique: uniqueIndex("lesson_result_emails_round_unique").on(table.lessonId, table.kind, table.roundKey) }),
 );
 
+/** U4 (docs/specs/2026-11-24-osszevont-eredmenylevel.md): a kétrészes lecke félretett végleges részeredménye (0047). */
+export const lessonResultPending = pgTable(
+  "lesson_result_pending",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+    ownerKey: varchar("owner_key", { length: 128 }).notNull(),
+    kind: varchar("kind", { length: 8 }).notNull().$type<"tasks" | "quiz">(),
+    roundId: varchar("round_id", { length: 128 }).notNull(),
+    graded: jsonb("graded"),
+    learner: jsonb("learner"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    sentReason: varchar("sent_reason", { length: 8 }).$type<"pair" | "timeout">(),
+  },
+  (table) => ({
+    // Review #585: a 0047-es migráció CHECK-jei azonos néven (sémaexportból létrehozott táblán is éljenek).
+    kindCheck: check("lesson_result_pending_kind_check", sql`${table.kind} IN ('tasks', 'quiz')`),
+    sentReasonCheck: check("lesson_result_pending_sent_reason_check", sql`${table.sentReason} IN ('pair', 'timeout')`),
+    openHasContent: check("lesson_result_pending_open_has_content", sql`${table.sentAt} IS NOT NULL OR (${table.graded} IS NOT NULL AND ${table.learner} IS NOT NULL)`),
+    openUnique: uniqueIndex("lesson_result_pending_open_unique").on(table.lessonId, table.ownerKey, table.kind).where(sql`sent_at IS NULL`),
+    openAge: index("lesson_result_pending_open_age").on(table.createdAt).where(sql`sent_at IS NULL`),
+  }),
+);
+
 /**
  * Spec 2026-10-20-s4 (S4b, migrations/0037): feladatszintű, NÉVTELEN tanulói eredmény körönként — tanulói szöveg és felhasználó nélkül.
  * A gépi rubrika-szigorítás (S3c) mérése és automatikus lazítása (S4c) ebből számol.
