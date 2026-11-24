@@ -11,10 +11,19 @@ import { standardFusionFixture } from "../shared/fixtures/lesson-fusion";
 // Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (5. szakasz 1–2. pont; V1, V2): a változatossági kapcsoló alapból KI, és KI
 // állapotban a prompt bájtra a régi.
 
-test("V1: a kapcsoló alapból KI; csak az „on” kapcsolja be", () => {
+test("V1: nem éles környezetben a kapcsoló alapból KI; csak az „on” kapcsolja be", () => {
   for (const value of [undefined, "", "off", "1", "true", "yes", "onn"]) assert.equal(lessonVarietyEnabled({ STUDIO_LESSON_VARIETY: value } as NodeJS.ProcessEnv), false, String(value));
   for (const value of ["on", " ON ", "On"]) assert.equal(lessonVarietyEnabled({ STUDIO_LESSON_VARIETY: value } as NodeJS.ProcessEnv), true, value);
   assert.equal(lessonVarietyEnabled({} as NodeJS.ProcessEnv), false);
+});
+
+// Tulajdonosi döntés 2026-11-24 (docs/specs/2026-11-24-valtozatossag-alapbol-be.md): élesben azonnal minden új leckére.
+test("V0: élesben (NODE_ENV=production) beállítás nélkül BE; az explicit „off” vészfék, az „on” mindig BE", () => {
+  const prod = (v?: string) => lessonVarietyEnabled({ NODE_ENV: "production", STUDIO_LESSON_VARIETY: v } as NodeJS.ProcessEnv);
+  for (const value of [undefined, "", "1", "true", "onn"]) assert.equal(prod(value), true, String(value));
+  for (const value of ["off", " OFF ", "Off"]) assert.equal(prod(value), false, value);
+  assert.equal(prod("on"), true);
+  for (const nodeEnv of ["development", "test", "", undefined]) assert.equal(lessonVarietyEnabled({ NODE_ENV: nodeEnv } as NodeJS.ProcessEnv), false, String(nodeEnv));
 });
 
 test("V1: KI állapotban a szerző- és a bankszabály bájtra a régi konstans, a verzió nyitomese-1", () => {
