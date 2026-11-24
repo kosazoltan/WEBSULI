@@ -335,7 +335,7 @@ SELECT id, step, status FROM studio_jobs WHERE status NOT IN ('ok','error');  --
 - Éles adatot módosító próbát futtatni, ha nem az a feladat — Dominik játszik rajta.
 - Ugyanazt a bukó parancsot változatlan bemenettel újrafuttatni.
 - Megkezdett specet, javítást, implementációt félbehagyni (befejezési mandátum, `AGENTS.md`).
-- `node_modules`-t gépek vagy architektúrák (ARM64 ↔ x64) között másolni — gépenként `npm.cmd ci`.
+- `node_modules`-t gépek vagy architektúrák között másolni — gépenként `npm.cmd ci`.
 
 ---
 
@@ -349,5 +349,5 @@ SELECT id, step, status FROM studio_jobs WHERE status NOT IN ('ok','error');  --
 | „Üres a tudástár" | van-e kliens-űrlap ahhoz a végponthoz, amire az üres állapot mutat |
 | „Elszállt az admin oldal" | hook korai `return` után; parse-őr + inkognitó próba |
 | „Zöld a teszt, mégis rossz" | reverz-mutáció; a zöld suite nem bizonyíték |
-| „You installed esbuild for another platform” | `npm run doctor:arch`, majd `npm.cmd ci` a `source/`-ban (ARM64/x64 keveredés) |
+| „You installed esbuild for another platform” | `npm run doctor:arch`, majd `npm.cmd ci` a `source/`-ban (másik gépről másolt függőségek) |
 | Ismétlődő ügynökhiba | `docs/agent-csapdak.md` — van-e már bejegyzés; ha nincs, most kerüljön bele |
