@@ -89,6 +89,18 @@
 
 - Átvétel: a végleges jelzősor (`claimFinalRound`, `finalRoundKeyOf`, `finalOwnerKeyOf`), a kör-tulajdonos rögzítése (`claimRoundOwner`).
 - A kapcsoló bevezetése itt. DB-integrációs teszt: `lesson-result-email-db.integration.ts` megfelelő esetei.
+- **Bontás (2026-11-24, a 400 soros keret miatt, kód előtt):**
+  - **B4a — szerver** (ez a szelet): kapcsoló `RESULT_PARTIAL_EMAIL` (`on` = BE; minden más / hiány = KI, a főági viselkedés változatlan;
+    a B5a–B6 ugyanezt használja). BE állásban: (R27) a végleges beküldés tanulófüggetlen jelzősort (`finalRoundKeyOf`) és EGY
+    tranzakcióban a beküldő tulajdonos-sorát (`finalOwnerKeyOf`, R42) írja; létező jelzőnél csak a saját kézbesítési sor vagy a saját
+    tulajdonos-sor birtokosa folytathatja, más kilét `202 { queued: false, duplicate: true }` (második levél nem megy); (R49 c) a jelzősor
+    írásának és a tulajdonos-lekérdezésnek az átmeneti hibája 503 a 202 előtt; a meglévő jelző élettartam-frissítése best effort;
+    (R47 szerver) a párosítás feloldásának átmeneti (adatbázis-) hibája 503, nem vendég. KI állásban egyik sem fut (a jelzősor sem íródik).
+    A szerveres kilét-rögzítés (`claimRoundOwner`, `round-claim`, R51 / R52) a B5a-val jön (a pillanatkép első rögzítőjéhez kötött).
+    Tesztek: `lesson-result-email-db.integration.ts` „B4a” esetei (kapcsoló KI: két kilét két levél — változatlan; BE: más kilét duplikátum,
+    azonos kilét pótol, R42 megszakadt első kérés folytatása, 503-utak hibainjektálással).
+  - **B4b — kliens** (a B4a után): a körönkénti kilét-rekord (`bindRoundOwner`, R47 kliens, R50), a párosító token lenyomat-szűrése minden
+    kísérlet előtt (R49 b) és a régi alak feltétele (R49 a).
 
 ## 5. B5a / B5b — „félbehagyva” pillanatkép (szerver / kliens)
 
