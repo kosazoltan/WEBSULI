@@ -17,7 +17,8 @@ import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { argValue, isMain, makeContext, verdictLine, writeEvidence } from './lib.mjs';
 
-export const DEFAULT_MODEL = process.env.WEBSULI_LOCAL_REVIEW_MODEL || 'hf.co/ornith-ai/Ornith-1.5-9B-GGUF:Q8_0';
+// 2026-11-24 tulajdonosi döntés (docs/specs/2026-11-24-helyi-ellenor-gemma.md): Gemma 4 26B A4B — 27/27 vs 25/27, 195 vs 74 tok/s.
+export const DEFAULT_MODEL = process.env.WEBSULI_LOCAL_REVIEW_MODEL || 'gemma4:26b';
 /** OLLAMA_HOST → URL: a megadott séma megmarad (https marad https), séma nélkül http (PR #541 Copilot / Sourcery). */
 export function ollamaUrl(host = process.env.OLLAMA_HOST) {
   if (!host) return 'http://localhost:11434';
@@ -92,6 +93,8 @@ export function buildPrompt(chunk) {
 export function parseFindings(content, file) {
   let j;
   try { j = JSON.parse(content); } catch { const m = /\{[\s\S]*\}/.exec(String(content)); try { j = m ? JSON.parse(m[0]) : null; } catch { j = null; } }
+  // Gemma 4: a lelet nélküli PASS `findings` kulcs nélkül is jöhet → üres lista; CONCERNS / BLOCK lelet nélkül csonka (alább null).
+  if (j && j.verdict === 'PASS' && j.findings === undefined) return [];
   if (!j || !Array.isArray(j.findings)) {
     // Csonka (num_predict-tel levágott) válasz: a teljes, önálló lelet-objektumok kimentése.
     const salvaged = [...String(content).matchAll(/\{[^{}]*"issue"\s*:\s*"(?:[^"\\]|\\.)*"[^{}]*\}/g)].map((m) => { try { return JSON.parse(m[0]); } catch { return null; } }).filter(Boolean);
@@ -151,10 +154,10 @@ async function callModelOnce(url, model, prompt) {
     method: 'POST',
     signal: AbortSignal.timeout(CALL_TIMEOUT_MS), // elakadt Ollama / GPU nem tarthatja fel végtelenül a kaput (PR #541 Sourcery)
     headers: { 'content-type': 'application/json' },
-    // num_predict: a 9B modell egy-egy darabon ismétlő hurokba eshet (2026-11-23: AdventHomeCard.tsx → 300 s fölött a Node fetch
+    // 2026-11-24: a repeat_penalty kikerült — a Gemma a JSON-kulcsot („findings”) is kiírta tőle. num_predict: a 9B modell egy-egy darabon ismétlő hurokba eshet (2026-11-23: AdventHomeCard.tsx → 300 s fölött a Node fetch
     // fejléc-időkorlátja „fetch failed”); 1500 token bőven elég ~10 lelethez, és a hívás korlátos idejű marad. A repeat_penalty a
     // lelet-szövegen belüli ismétlő hurkot töri meg (2026-11-23, PR-C AdventCalendar.tsx: 1500 tokenes, lezáratlan „issue”).
-    body: JSON.stringify({ model, stream: false, think: false, format: 'json', options: { num_ctx: 32768, temperature: 0, num_predict: 1500, repeat_penalty: 1.15, repeat_last_n: 256, seed: 42 }, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model, stream: false, think: false, format: 'json', options: { num_ctx: 32768, temperature: 0, num_predict: 1500, seed: 42 }, messages: [{ role: 'user', content: prompt }] }),
   });
   if (r.status === 404) throw new ModelUnavailable(`a modell nem érhető el: ${model} (ollama HTTP 404)`);
   if (!r.ok) throw new Error(`ollama HTTP ${r.status}`);

@@ -31,7 +31,10 @@ test('parseFindings: hibatűrő (szöveggel körülvett JSON, rossz súlyosság 
   assert.deepEqual(f, [{ file: 'a.ts', line: 3, severity: 'low', issue: 'x breaks' }]);
   assert.equal(parseFindings('nem json', 'a.ts'), null, 'értelmezhetetlen válasz → null, nem üres lelet');
   assert.equal(parseFindings('', 'a.ts'), null);
-  assert.equal(parseFindings('{"verdict":"PASS"}', 'a.ts'), null, 'findings nélküli séma → null');
+  // SPEC-VÁLTOZÁS 2026-11-24 (docs/specs/2026-11-24-helyi-ellenor-gemma.md): a lelet nélküli PASS a Gemma 4 rendes válaszalakja → [];
+  // a PR #541 P1 védelme a CONCERNS / BLOCK ítéletre marad (findings nélkül → null).
+  assert.deepEqual(parseFindings('{"verdict":"PASS"}', 'a.ts'), [], 'PASS findings nélkül → üres lista');
+  assert.equal(parseFindings('{"verdict":"CONCERNS"}', 'a.ts'), null, 'CONCERNS findings nélkül → null');
   assert.deepEqual(parseFindings('{"verdict":"PASS","findings":[]}', 'a.ts'), [], 'valódi üres lista → []');
   const cut = '{"verdict":"BLOCK","findings":[{"line":4,"severity":"high","issue":"guard removed"},{"line":9,"severity":"low","iss';
   assert.deepEqual(parseFindings(cut, 'b.ts'), [{ file: 'b.ts', line: 4, severity: 'high', issue: 'guard removed' }]);
