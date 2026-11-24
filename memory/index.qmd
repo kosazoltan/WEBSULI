@@ -55,3 +55,11 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
   (`source/server/lesson-result-limits.ts`). Végrehajtás: `docs/specs/2026-11-22-eredmeny-email-bontas-vegrehajtas.md` 2. pont.
 - WEBSULI e2e helyben csak `npm run test:e2e -- <spec>` harnesszel (eldobható DB); lapon belüli állapotot mérő lépések között nincs navigáció.
 <!-- zaro-hurok: 2026-11-24T01:35:38.457Z nincs-uj -->
+
+# Advent A2 levél, B3, kapuk (2026-11-24)
+
+- #562: legfeljebb egy levél / évad / címzett — `try:` az első kísérlet idejével, 23 órás ablak, utána `check:`; Resend `invalid_idempotent_request` (→ `ResendIdempotencyConflict`) = kézbesítve — más 409 / hiba NEM;
+  a pótlás és a küldés futó órája a befecskendezett `nowMs`-től halad. Advent-változásnál push előtt `test:learning-db`.
+- #564: B3 képesség-jelzés (`resultApi: 2`), jelzés nélkül régi alak; V2 + 400 → egy régi alakú ismétlés.
+- #565: a PR előtti kapu ítélete csak helyi bizonyíték. #566: lesson-fusion ritka indexcsere-bukás javítva.
+- Tulajdonosi utasítás: zöld CI + pre-merge után merge/deploy engedély nélkül.

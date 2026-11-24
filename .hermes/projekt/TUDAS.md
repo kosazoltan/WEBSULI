@@ -35,6 +35,12 @@
 - 2026-11-23 — FELADATOK MESTERE: SQL nyilvántartás (`node D:/repo/Hermes-agent/scripts/feladat.mjs list|add|set --repo D:/repo/WEBSULI`); munka elején list, minden új teendő azonnal add. A kanban csak tükör.
 - 2026-11-23 — 11 tulajdonosi döntés (P-007, P-020, P-022, P-023 elvetve, P-036/P-056, P-057, P-063…P-066, withQuotaFailover): lásd `docs/specs/2026-11-23-teljes-hianyleltar.md` 4/a (ág docs/hianyleltar-2026-11-23) és az SQL-tételek jegyzetei.
 - A helyi modellel csak angolul — magyar megbízást nem ért megbízhatóan; a 9B modell `high` lelete lehet hamis pozitív → kódból ellenőrizd, hamisnál `--refuted <id> --refuted-reason`.
+- 2026-11-24 — Tulajdonosi kötelező utasítás: ha a CI és a pre-merge kapu zöld, a lint → push → merge → deploy engedélykérés nélkül végrehajtható (`gh pr merge --squash --match-head-commit <teljes SHA>`, előtte futásőr).
+- 2026-11-24 — Advent levél (#562): `mailed_to` jelölők `want:` / `pending:<h>@<ms>` / `try:<h>@<első ms>` / `sent:<h>@<ms>` / `final:` / `check:`; az első kísérlettől 23 órán (`ADVENT_RESEND_WINDOW_MS`) túl nincs automatikus levél, a `check:` kézi egyeztetés. Advent tároló/levél-változásnál push előtt `npm run test:learning-db` (Docker) is.
+- 2026-11-24 — E2E admin-fixtúra csak a `playwright.config.ts` `ADMIN_ALLOWLIST`-jén szereplő címmel (fail-open őr: listás admin mellett a listán kívüli admin 403).
+- 2026-11-24 — Őr-tesztet érintő PR-nál push ELŐTT `git merge origin/main` (különben a merge-kapu C-61 FAIL → újabb ~1 órás CI). Egy másik PR beolvasztása után a még futó CI-jű PR-ba azonnal olvaszd be a maint.
+- 2026-11-24 — A `local-review.mjs` (helyi 9B modell) ugyanarra a kódra futásonként új, gyakran spekulatív high-t ad. Minden high-t kódból ellenőrizz (AGENTS.md): igazolt hibánál javítás + új ellenőrzés; `--refuted ... --refuted-reason` KIZÁRÓLAG kódhivatkozással bizonyított hamis pozitívra; új fejen a korábbi cáfolat érvényességét újra ellenőrizd, mielőtt átviszed.
+- 2026-11-24 — A zárási TRAP-sort linked worktree-ből a `zaro-hurok.mjs trap add` a FŐ checkoutba írja (mainWorktree) — tudás-ágon a sort kézzel kell átvinni, a fő checkoutot visszaállítani.
 
 ## Kapcsolódó
 - Hermes-projekt: `websuli` (mappa: `WEBSULI`) · Kanban-tábla: `websuli`
@@ -47,3 +53,10 @@ _Generált (helyi LLM retrókból, deduplikálva, legújabb elöl; max. 40)._
 
 - (még nincs retró)
 <!-- GEN:END tanulsagok -->
+
+## Tulajdonosi döntések — 2026-11-23 (H0, első kör)
+- Biztonsági szűrő: a „refused by the model's safety filter" a szolgáltató (Claude bemeneti osztályozó) téves riasztása OpenRouteren át; Hermes-ből nem kikapcsolható. Megkerülés: `model.aliases.mentes = openrouter/google/gemini-2.5-pro` — blokknál `/model mentes` egy üzenetre, az Opus marad az alap.
+- P-022: nyilvános élesítés az admin-próba után azonnal (PLAYER_ACCOUNTS, MP_MODE a Renderen).
+- P-020: játékosfiók egyediség postafiók szerint — normalizált cím (Gmail-pont és +címke levágva) + egyedi index.
+- P-063: Kockavadász J3a verziózott új pontskála; a régi ranglista/rekord külön, verziózva marad.
+- P-007: a kompakt kabalasáv ÉS a maki prototípus is marad kísérletként.
