@@ -31,7 +31,8 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
 /** Eredmény-e-mail B2 (#510 R37): a CSRF-token lekérésének saját határideje (a válasz törzsének olvasásával együtt). */
 const CSRF_TOKEN_TIMEOUT_MS = 15_000;
 
-type TokenInfo = { token: string; resultApi: boolean };
+/** B4b: `ownerBinding` — a szerver hirdeti a kör-kilét kötését (a B4 kapcsolója, `resultOwnerBinding: true`). */
+type TokenInfo = { token: string; resultApi: boolean; ownerBinding: boolean };
 
 // SECURITY: CSRF Token Manager
 // Fetches and caches CSRF token for protecting mutating requests
@@ -77,7 +78,7 @@ class CSRFTokenManager {
       }
 
       const data = await res.json();
-      return { token: data.csrfToken, resultApi: supportsResultApi(data) };
+      return { token: data.csrfToken, resultApi: supportsResultApi(data), ownerBinding: data.resultOwnerBinding === true };
     } finally {
       clearTimeout(timer);
     }
@@ -140,7 +141,8 @@ async function retryWithBackoff<T>(
 export async function apiRequest<T = unknown>(
   method: string,
   url: string,
-  data?: unknown | undefined,
+  /** B4b (PR #574 review): függvény is lehet — minden tényleges `fetch` előtt hívódik a token képességeivel (pl. kilét-szűrés). */
+  data?: unknown | ((ctx: { ownerBinding: boolean }) => unknown) | undefined,
   options?: { retries?: number; timeout?: number; keepalive?: boolean; resultTimes?: { startedAt?: number; lastAnsweredAt?: number } }
 ): Promise<T> {
   const retries = options?.retries ?? 0; // No automatic retries for write operations (causes duplicates)
@@ -157,12 +159,14 @@ export async function apiRequest<T = unknown>(
       }, timeout);
 
       try {
-        debugLog(`[API REQUEST] ${method} ${url}, size: ${data ? JSON.stringify(data).length : 0} bytes`);
+        let ownerBinding = false;
+        const body = (): unknown => (typeof data === "function" ? (data as (ctx: { ownerBinding: boolean }) => unknown)({ ownerBinding }) : data);
+        debugLog(`[API REQUEST] ${method} ${url}`);
         
         // SECURITY: Fetch CSRF token for mutating requests (POST/PUT/PATCH/DELETE)
         // Spec 2026-09-30 (U1, §C-V/1): a kliens közli a támogatott pontozó-verziót; a kiszolgáló az újabb leckét 409-cel utasítja el.
-        const addsFields = Boolean(options?.resultTimes && Object.keys(options.resultTimes).length && data && typeof data === "object");
-        const serialize = (capable: boolean) => data ? JSON.stringify(capable && addsFields ? { ...(data as object), ...options!.resultTimes } : data) : undefined;
+        const addsFields = Boolean(options?.resultTimes && Object.keys(options.resultTimes).length && data && (typeof data === "object" || typeof data === "function"));
+        const serialize = (capable: boolean) => { const d = body(); return d ? JSON.stringify(capable && addsFields ? { ...(d as object), ...options!.resultTimes } : d) : undefined; };
         // #510 R10 / R12 (PR #564 review): ha a V2-t hirdető token után a kérés egy régi, szigorú sémájú példányhoz ér, az új mezőkre
         // 400 jön — ilyenkor EGY ismétlés a régi alakkal (ugyanazzal a tokennel). Jelzés vagy új mező nélkül változatlanul egy kérés.
         const sendOnce = async (capable: boolean, signal: AbortSignal) => {
@@ -179,6 +183,7 @@ export async function apiRequest<T = unknown>(
             const csrfToken = await csrfTokenManager.getToken();
             headers['X-CSRF-Token'] = csrfToken.token;
             capable = csrfToken.resultApi;
+            ownerBinding = csrfToken.ownerBinding;
           } catch (error) {
             logger.warn('[CSRF] Failed to fetch CSRF token, continuing without it:', error);
             // Continue anyway - backend will reject if CSRF required
@@ -205,6 +210,7 @@ export async function apiRequest<T = unknown>(
             // Retry with new token (fresh controller in case original timed out)
             const newCsrfToken = await csrfTokenManager.getToken();
             headers['X-CSRF-Token'] = newCsrfToken.token;
+            ownerBinding = newCsrfToken.ownerBinding;
             
             const retryController = new AbortController();
             const retryTimeoutId = setTimeout(() => retryController.abort(), timeout);
