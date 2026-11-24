@@ -1149,6 +1149,23 @@ Forrás: `wip/advent-c-javitas`, ec22e759. Rokon: C-61.
   fájlból (a mintát a szkript építi össze karakterekből), utána `git diff --stat` ellenőrzés a várt sorszámra.
 
 Forrás: `feat/advent-c-felulet-es-elesites`, a PR-C vak körének javítása.
+
+## C-91 — Admin-útvonal bemenet-ellenőrzése köztes lépésben bukta a jogosultsági mátrixot; „git stash push” a push-kapu hookján (2026-11-21)
+
+- **Tünet 1:** az adventi admin-előnézet (`/api/admin/advent/preview`) dátum-ellenőrzése a router ELEJÉN, köztes lépésként adott 400-at.
+  A `tests/admin-authz-matrix-db.integration.ts` őr-menete a végső kezelőt csonkolja, és elvárja, hogy az admin paraméter nélkül is eljusson
+  hozzá (csonk-státusz) — a köztes 400 miatt 14 végpont bukott.
+- **Szabály 1:** admin-előtagú útvonalon a jogosultság UTÁNI bemenet-ellenőrzés a VÉGSŐ kezelőben legyen (az adventi routerben: `invalidClock`
+  a `wrap`-ben), ne köztes `router.use(...)` lépésben; új admin-útvonal után a `test:learning-db` (benne a mátrix) a PR előtt fusson.
+- **Tünet 2 (eszközhasználat):** egy teszt bukó-ellenpróbájához a `git stash push <fájl>` parancsot a minőségkapu hookja push-parancsnak
+  vette, és megtagadta. **Szabály 2:** ideiglenes félretételhez `git stash -- <fájl>` / `git stash pop` (a „push” szó nélkül), külön
+  parancsokban; a kapu megkerülése tilos, ez nem az.
+- **Tünet 3 (eszközhasználat):** vegyes (két szeletet érintő) munkafa szétválasztásához a második szelet módosító szkriptjét fordítva
+  (új → régi) futtattam, a közös fájlok mentésével; a visszaállítás után az első szelet közben tett javítását (`invalidClock`) a második
+  szelet fájljaiba újra rá kellett vezetni. **Szabály 3:** szeletenként commitolj, MIELŐTT a következő szelet ugyanazokat a fájlokat
+  módosítja.
+
+Forrás: `feat/advent-s5-s6-elesites`. Rokon: C-61, C-90.
 ## C-93 — Gépváltás: a telepített Chrome frissülése elválik a rögzített Playwrighttól (2026-11-22)
 
 - **Tünet:** az új gépen a PR előtti kapu böngészős köre a főág kódjával is bukott: `preview-navigation.spec.ts` „opaque sandbox …” —

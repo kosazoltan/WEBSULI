@@ -1,4 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import bcrypt from "bcryptjs";
+import pg from "pg";
 
 import { ADVENT_GIFT_MESSAGE } from "../shared/advent/rules";
 import { chooseGrade, clearAdventTime, contrastOf, pickOption, playDoor, proxyHeaders, seedProgress, setAdventServerTime, setAdventTime, settle, shot, tapDoor } from "./support/advent-e2e";
@@ -499,6 +502,114 @@ test("PR-C 2. vak L5: 360 px-en a fejléc csillaga teljes egészében látszik �
   expect(box.hit, "a csillag nincs levágva / eltakarva").toBe(true);
 });
 
+/**
+ * PR-C 3. vak: a párosított tanuló függő átvételét (`adoptionPending`) a teszt a valódi szerverválasz IGAZÍTÁSÁVAL állítja elő (a
+ * böngészőnek nincs valódi tanulói linkje); minden más kérés — évfolyam, nyitás, válasz — a valódi szerverhez megy.
+ */
+async function pretendPendingAdoption(page: import("@playwright/test").Page): Promise<{ last: () => Record<string, unknown> }> {
+  let last: Record<string, unknown> = {};
+  await page.route("**/api/advent/state", async (route) => {
+    const response = await route.fetch({ headers: proxyHeaders(route.request().headers()) });
+    last = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({ response, json: { ...last, identity: "learner", adoptionPending: true } });
+  });
+  return { last: () => last };
+}
+
+test("PR-C 3. vak L1: az összesítés késve érkező átvételi válasza nem festi vissza a közben megoldott ablakot (a régebbi szerververzió eldobva)", async ({ page }) => {
+  await setAdventTime(page, DEC5);
+  await page.goto("/adventi-naptar");
+  const gradeResponse = page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith("/api/advent/grade"));
+  await chooseGrade(page, 5);
+  // A régi pillanatkép: az évfolyam mentése utáni állás (0 megoldott ablak, régebbi szerververzió).
+  const snapshot = (await (await gradeResponse).json()) as Record<string, unknown>;
+  await pretendPendingAdoption(page);
+  await page.reload();
+  await expect(page.getByTestId("advent-grid")).toBeVisible();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/advent/adopt", async (route) => { await held; await route.fulfill({ json: { ...snapshot, identity: "learner", adoptionPending: false } }); });
+  const adoptSent = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/api/advent/adopt"));
+  await page.getByTestId("advent-summary-open").tap();
+  await adoptSent;
+  await page.getByTestId("advent-summary-close").tap();
+  await expect(page.getByTestId("advent-summary")).toHaveCount(0);
+  await playDoor(page, 1, true);
+  await expect(page.getByTestId("advent-progress")).toContainText("1 / 24");
+  release();
+  await page.waitForTimeout(600);
+  await expect(page.getByTestId("advent-door-1")).toHaveAttribute("data-state", "solved");
+  await expect(page.getByTestId("advent-progress")).toContainText("1 / 24");
+});
+
+test("PR-C 3. vak L2: az átvétel 503-a után az „Újra” valóban újraküldi az átvételt (POST /adopt), és a mentésig látható a függő állapot", async ({ page }) => {
+  await openCalendar(page, DEC5, 5);
+  const real = await pretendPendingAdoption(page);
+  await page.reload();
+  await expect(page.getByTestId("advent-grid")).toBeVisible();
+  let adopts = 0;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/advent/adopt", async (route) => {
+    adopts++;
+    if (adopts === 1) return route.fulfill({ status: 503, json: { message: "Átmeneti hiba." } });
+    await held;
+    return route.fulfill({ json: { ...real.last(), identity: "learner", adoptionPending: false } });
+  });
+  await page.getByTestId("advent-summary-open").tap();
+  await expect.poll(() => adopts).toBe(1);
+  await page.getByTestId("advent-summary-close").tap();
+  await expect(page.getByTestId("advent-error")).toBeVisible();
+  await page.getByTestId("advent-error-retry").tap();
+  await expect.poll(() => adopts, { message: "az „Újra” az átvételt küldi újra, nem csak állapotot olvas" }).toBe(2);
+  await expect(page.getByTestId("advent-saving")).toBeVisible();
+  release();
+  await expect(page.getByTestId("advent-saving")).toHaveCount(0);
+  await expect(page.getByTestId("advent-error")).toHaveCount(0);
+});
+
+test("S5/S6 1. vak L3: az átvétel 503-ánál az összesítő modálban is van „Újra” — újraküldi az átvételt, és a mentésig ott látszik a függő állapot", async ({ page }) => {
+  await openCalendar(page, DEC5, 5);
+  const real = await pretendPendingAdoption(page);
+  await page.reload();
+  await expect(page.getByTestId("advent-grid")).toBeVisible();
+  let adopts = 0;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/advent/adopt", async (route) => {
+    adopts++;
+    if (adopts === 1) return route.fulfill({ status: 503, json: { message: "Átmeneti hiba." } });
+    await held;
+    return route.fulfill({ json: { ...real.last(), identity: "learner", adoptionPending: false } });
+  });
+  await page.getByTestId("advent-summary-open").tap();
+  await expect.poll(() => adopts).toBe(1);
+  const summary = page.getByTestId("advent-summary");
+  await expect(summary.getByTestId("advent-summary-retry"), "az aktív modálban").toBeVisible();
+  await summary.getByTestId("advent-summary-retry").tap();
+  await expect.poll(() => adopts).toBe(2);
+  await expect(summary.getByTestId("advent-summary-saving")).toBeVisible();
+  release();
+  await expect(summary.getByTestId("advent-summary-saving")).toHaveCount(0);
+  await expect(summary.getByTestId("advent-summary-retry")).toHaveCount(0);
+});
+
+test("PR-C 3. vak L3: a főoldalról indított nyitás 503-a után az „Újra” friss állapotból megnyitja a mai kérdést (a szándék nem vész el)", async ({ page }) => {
+  await openCalendar(page, DEC5, 5);
+  let opens = 0;
+  await page.route("**/api/advent/doors/*/open", (route) => {
+    opens++;
+    return opens === 1 ? route.fulfill({ status: 503, json: { message: "Átmeneti hiba." } }) : route.fallback();
+  });
+  await page.goto("/adventi-naptar?nyit=ma");
+  await expect(page.getByTestId("advent-error")).toBeVisible();
+  await expect(page.getByTestId("advent-dialog")).toHaveCount(0);
+  expect(opens).toBe(1);
+  await page.getByTestId("advent-error-retry").tap();
+  await expect(page.getByTestId("advent-question"), "a kérdés külön ablakkoppintás nélkül nyílik").toBeVisible();
+  expect(opens).toBe(2);
+});
+
 test("szezon: november 29. „Hamarosan”; január 7. lezárt; tesztidő nélkül a naptár nem érhető el (A14, A15, A51)", async ({ page }) => {
   await openCalendar(page, "2026-11-29T10:00:00Z");
   await expect(page.getByTestId("advent-teaser")).toContainText("Hamarosan");
@@ -641,5 +752,103 @@ test.describe("asztali nézet 1366×768", () => {
     await expect(page.getByTestId("advent-gift-message")).toHaveText(ADVENT_GIFT_MESSAGE);
     await settle(page);
     await shot(page, "d-ajandek-uzenet");
+  });
+});
+
+/**
+ * S6 / A16 — admin-előnézet valódi böngészőben: valódi jelszavas admin-belépés (a playwright-környezet engedélylistás címével, mint az
+ * `admin-allowlist.spec.ts`), az előnézet a megadott nap szerinti naptárat mutatja „ELŐNÉZET” jelöléssel; nem admin ugyanazzal a címmel a
+ * normál naptárat kapja (a valódi — itt a teszt — dátum szerint).
+ */
+test.describe("admin-előnézet (A16, S6)", () => {
+  // Thread 10 + Vercel-szál: saját, a playwright-szerver ADMIN_ALLOWLIST-jén szereplő cím (nem az admin-allowlist.spec.ts adminja), és a
+  // blokk egy workerben, sorban fut — így a két teszt nem írja felül egymás jelszavát és nem törli egymás fixtúráját; véletlen cím nem
+  // lehet, mert az engedélylistán nem szereplő admin 403-at kapna.
+  test.describe.configure({ mode: "serial" });
+  const ADMIN_EMAIL = "e2e-advent-preview-admin@websuli.example";
+  const ADMIN_ID = "advent-e2e-preview-admin";
+  const PASSWORD = `Adv-${randomBytes(9).toString("hex")}`;
+  const ORIGIN = `https://localhost:${process.env.WEBSULI_E2E_PORT ?? "5000"}`;
+  let pool: pg.Pool;
+  test.beforeAll(async () => {
+    pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+    const hash = await bcrypt.hash(PASSWORD, 4);
+    // Az engedélylistás cím egyedi: egy korábbi (más tesztfájl által létrehozott) sor helyére a saját, ismert jelszavú admin kerül.
+    await pool.query(`DELETE FROM users WHERE email = $1 AND id <> $2`, [ADMIN_EMAIL, ADMIN_ID]);
+    await pool.query(
+      `INSERT INTO users (id, email, password, is_admin, is_banned) VALUES ($1, $2, $3, true, false)
+       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, password = EXCLUDED.password, is_admin = true, is_banned = false`,
+      [ADMIN_ID, ADMIN_EMAIL, hash],
+    );
+  });
+  test.afterAll(async () => {
+    await pool.query(`DELETE FROM advent_progress WHERE subject_kind = 'preview' AND subject_id = $1`, [ADMIN_ID]);
+    await pool.query(`DELETE FROM users WHERE id = $1`, [ADMIN_ID]);
+    await pool.end();
+  });
+
+  test("admin belépve: ?elonezet=2026-12-10 → „ELŐNÉZET” sáv, a 10. ablak nyitható, a 11. zárt, játszható; „Előnézet törlése” után friss előnézet — kilépve ugyanez a cím a normál naptár (A16)", async ({ page, request, context }) => {
+    const login = await request.post("/api/login", {
+      headers: { origin: ORIGIN, "x-forwarded-proto": "https", "content-type": "text/plain" },
+      data: JSON.stringify({ email: ADMIN_EMAIL, password: PASSWORD }),
+    });
+    expect(login.status(), "admin-belépés").toBe(200);
+    const cookie = login.headersArray().find((h) => h.name.toLowerCase() === "set-cookie" && h.value.startsWith("connect.sid="));
+    expect(cookie, "munkamenet-süti").toBeTruthy();
+    await context.addCookies([{ name: "connect.sid", value: cookie!.value.split(";")[0]!.slice("connect.sid=".length), domain: "localhost", path: "/", httpOnly: true, secure: false, sameSite: "Lax" }]);
+    // A nyilvános naptár órája december 5. (a teszt fejléce); az előnézet a saját dátumát használja.
+    await setAdventTime(page, DEC5);
+    await page.goto("/adventi-naptar?elonezet=2026-12-10");
+    await expect(page.getByTestId("advent-preview-banner")).toBeVisible();
+    await expect(page.getByTestId("advent-preview-banner")).toContainText("ELŐNÉZET");
+    await chooseGrade(page, 5);
+    await expect(page.getByTestId("advent-door-10")).toHaveAttribute("data-state", "open");
+    await expect(page.getByTestId("advent-door-11")).toHaveAttribute("data-state", "locked");
+    await playDoor(page, 10, true);
+    await expect(page.getByTestId("advent-door-10")).toHaveAttribute("data-state", "solved");
+    await expect(page.getByTestId("advent-progress")).toContainText("1 / 24");
+    await page.getByTestId("advent-preview-reset").tap();
+    await expect(page.getByTestId("advent-grade-picker"), "a törölt előnézet újra évfolyamot kér").toBeVisible();
+    // Kilépve (munkamenet nélkül) ugyanez a cím: nincs előnézet, a normál naptár a valódi (teszt)dátum szerint — december 5.
+    await context.clearCookies();
+    await page.reload();
+    await expect(page.getByTestId("advent-page")).toBeVisible();
+    await expect(page.getByTestId("advent-preview-banner")).toHaveCount(0);
+    await chooseGrade(page, 5);
+    await expect(page.getByTestId("advent-door-5")).toHaveAttribute("data-state", "open");
+    await expect(page.getByTestId("advent-door-6")).toHaveAttribute("data-state", "locked");
+    await expect(page.getByTestId("advent-preview-banner")).toHaveCount(0);
+  });
+
+  test("S5/S6 1. vak L2: az előnézetből a főoldalra lépve (lapfrissítés nélkül) a kártya és a „Kinyitom” a NORMÁL naptárt használja — nem nyit előnézeti (még zárt) ablakot", async ({ page, request, context }) => {
+    const login = await request.post("/api/login", {
+      headers: { origin: ORIGIN, "x-forwarded-proto": "https", "content-type": "text/plain" },
+      data: JSON.stringify({ email: ADMIN_EMAIL, password: PASSWORD }),
+    });
+    expect(login.status(), "admin-belépés").toBe(200);
+    const cookie = login.headersArray().find((h) => h.name.toLowerCase() === "set-cookie" && h.value.startsWith("connect.sid="));
+    await context.addCookies([{ name: "connect.sid", value: cookie!.value.split(";")[0]!.slice("connect.sid=".length), domain: "localhost", path: "/", httpOnly: true, secure: false, sameSite: "Lax" }]);
+    await setAdventTime(page, DEC5);
+    const opens: string[] = [];
+    page.on("request", (r) => { if (r.method() === "POST" && /\/doors\/\d+\/open/.test(r.url())) opens.push(new URL(r.url()).pathname); });
+    await page.goto("/adventi-naptar?elonezet=2026-12-10");
+    await expect(page.getByTestId("advent-preview-banner")).toBeVisible();
+    if (await page.getByTestId("advent-grade-picker").isVisible()) await chooseGrade(page, 5);
+    await playDoor(page, 10, true);
+    // SPA-navigáció a főoldalra (a fejléc „Vissza” gombja), lapfrissítés nélkül.
+    await page.getByRole("link", { name: "Vissza a főoldalra" }).first().click();
+    await expect(page.getByTestId("advent-home-card")).toBeVisible();
+    await expect(page.getByTestId("advent-home-status")).not.toContainText("10.");
+    opens.length = 0;
+    await page.getByTestId("advent-home-cta").click();
+    await expect(page.getByTestId("advent-page")).toBeVisible();
+    await expect(page.getByTestId("advent-preview-banner"), "paraméter nélkül nincs előnézet").toHaveCount(0);
+    if (await page.getByTestId("advent-grade-picker").isVisible()) await chooseGrade(page, 5);
+    await expect(page.getByTestId("advent-question")).toBeVisible();
+    expect(opens.length).toBeGreaterThan(0);
+    for (const path of opens) {
+      expect(path.startsWith("/api/advent/doors/"), `normál útvonal: ${path}`).toBe(true);
+      expect(Number(/doors\/(\d+)\//.exec(path)![1]), `december 5-én legfeljebb az 5. ablak: ${path}`).toBeLessThanOrEqual(5);
+    }
   });
 });
