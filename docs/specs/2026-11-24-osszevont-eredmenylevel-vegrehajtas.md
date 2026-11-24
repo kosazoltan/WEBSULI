@@ -6,6 +6,8 @@ Terv: `docs/specs/2026-11-24-osszevont-eredmenylevel.md`. Szeletek, mindegyik k�
    - Migráció: `lesson_result_pending`.
    - `buildCombinedResultEmail` (két szakasz, közös összesítő, részleges jelölés).
    - Tesztek: egységteszt a sablonra; DB-teszt a migrációra és a részenként egy nyitott sor egyediségére.
+   - Részletek: migráció `0047_lesson_result_pending.sql` (az U3 a 0046-ot foglalja); a tanulói tartalom (`graded`, `learner`) nyitott sorban kötelező, elküldés után törölhető (CHECK); a rész törzse közös segéd (`gradedBodyHtml`), az egyrészes levél bájtra változatlan.
+   - Állapot: folyamatban (PR: `feat/u4a-osszevont-sablon-v2`).
 2. **U4b — szerverút** (a kapcsoló alapértéke KI; a zárolás és az utak a terv 6. pontja szerint).
    - Kapcsoló (`resultCombinedEmailEnabled`); a lecke részeinek megállapítása (van-e nyitott feladat, illetve kvíz).
    - Kétrészes leckénél a végleges eredmény félretétele vagy párosítása `SELECT … FOR UPDATE`-tel; `awaiting` a válaszban.

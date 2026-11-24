@@ -11,6 +11,7 @@ diagnosztikai / félkész változások commit nélkül elveszhetnek vagy rossz �
 
 ## Sorrend (kötött)
 
+0. **Végrehajtási utasítás a PR-ben, a kód ELŐTT** — a `three-phase-check` minden kód-PR-ben (`source/server|shared|client/src`) megköveteli, hogy a PR diffje tartalmazzon `docs/specs/*-vegrehajtas.md` fájlt, amely létező tervre hivatkozik, és az ELSŐ kódcommit előtti commitban került be. Többszeletes tervnél a szelet PR-jának ELSŐ commitja a közös végrehajtási utasítás szeletpontját frissíti (részletek + „Állapot: folyamatban”). A már beolvadt utasítás NEM elég; utólag pótolva sem (a sorrendet nézi) → ág újraépítése új néven.
 1. **Bukó tesztek (RED)** — a szelet elfogadási tételeihez teszt, a megvalósítás ELŐTT; mérd, hogy bukik. → commit (`test: … (RED)`).
 2. **Zöldre hozás egységenként (GREEN)** — egy egység = egy elfogadási tétel / egy logikai változás; minden egység után a hozzá tartozó
    tesztek zöldek, és az egység után — a következő előtt — lefut a szakaszkapu (`npm run gate:stage`, az őr-tesztekkel; AGENTS.md
