@@ -13,3 +13,13 @@ cogni:
     purpose: ""   # TODO
   stack: {}
   entrypoints: []
+
+# 2026-11-23: code_review = scripts/qa/gates/local-review.mjs (helyi GPU, angol prompt); felhős vak kör kivezetve (decisions.cogni.yaml)
+# 2026-11-23: Mem0 → Docker pgvector; záró push = zaro-hurok.mjs push (auto vector)
+# 2026-11-23: local-review korlátos generálás + újrapróba; PR-C (advent) kapui folyamatban
+# 2026-11-23: PR #542 (e2e időkorlát, kisfilm-teszt); local-review bot-leletek javítva; Hermes .env DATABASE_URL törölve
+# 2026-11-23: PR #543 (garázs-teszt lendület); local-review determinisztikus (seed)
+# 2026-11-23: teljes hiányleltár újraellenőrizve (68 P + BL + H + KB), 86 sor SQL-ben
+# 2026-11-23: #543 merged; #544, #545 megnyitva
+# 2026-11-24: eredmény-e-mail B2 → PR #556 (lesson-result-limits.ts, egyszintű újrapróba); következő szelet B3 a beolvadás után
+# zaro-hurok: 2026-11-24T01:35:38.457Z nincs-uj

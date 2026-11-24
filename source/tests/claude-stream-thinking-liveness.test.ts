@@ -21,8 +21,11 @@ const textTail = [
   ev("message_stop"),
 ];
 
-/** SSE fetch-mock: a keretek (szöveg) és szünetek (ms) sorrendben; `stall` → a végén nem zár (csak a megszakítás). */
-function mockClaude(t: TestContext, frames: Array<string | number>, opts: { stall?: boolean } = {}) {
+/**
+ * SSE fetch-mock: a keretek (szöveg) és szünetek (ms) sorrendben; `stall` → a végén nem zár (csak a megszakítás); `onFrame` →
+ * minden ténylegesen elküldött szöveges keret után.
+ */
+function mockClaude(t: TestContext, frames: Array<string | number>, opts: { stall?: boolean; onFrame?: (frame: string) => void } = {}) {
   const bodies: Array<Record<string, unknown>> = [];
   t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
     bodies.push(JSON.parse(String(init?.body)));
@@ -33,7 +36,7 @@ function mockClaude(t: TestContext, frames: Array<string | number>, opts: { stal
         const enc = new TextEncoder();
         for (const f of frames) {
           if (closed) return;
-          if (typeof f === "number") await sleep(f); else controller.enqueue(enc.encode(f));
+          if (typeof f === "number") await sleep(f); else { controller.enqueue(enc.encode(f)); opts.onFrame?.(f); }
         }
         if (!opts.stall && !closed) controller.close();
       },
@@ -72,13 +75,16 @@ test("A4: a valódi elakadás védett — gondolkodás-kezdet után csak ping (a
 });
 
 test("review #212: ismételt ÜRES szövegblokk-kezdet/-vég (nem gondolkodás) nem tartja életben az elakadt streamet", async (t) => {
-  // 10 × 30 ms üres blokk ≈ 300 ms: ha a blokk-vég életjel volna, a hiba csak ezután (+80 ms) jönne; helyesen ~80 ms után jön.
+  // 10 × 30 ms üres blokk: ha a blokk-vég életjel volna, a tétlenségi hiba csak a 10. blokk UTÁN jöhetne; helyesen előbb jön.
+  // KB #206 (303. megj.): falióra-korlát (`Date.now() - t0 < 250`) helyett eseményszámlálás — terhelés alatt a helyes kód is
+  // 250 ms fölé csúszott. A sorrend órafüggetlen: a 80 ms-os tétlenségi határidő a láncolt 30 ms-os várakozások közül legfeljebb
+  // a 3. előtt lejár, és a terhelés a láncot csak tovább késlelteti.
   const emptyText = (i: number) => [30, ev("content_block_start", { index: i, content_block: { type: "text", text: "" } }), ev("content_block_stop", { index: i })];
-  mockClaude(t, [start, ...Array.from({ length: 10 }, (_, i) => emptyText(i)).flat()], { stall: true });
+  let stops = 0;
+  mockClaude(t, [start, ...Array.from({ length: 10 }, (_, i) => emptyText(i)).flat()], { stall: true, onFrame: (f) => { if (f.startsWith("event: content_block_stop")) stops++; } });
   const p = new ClaudeProvider({ apiKey: "test-placeholder", model: "claude-opus-5-5", maxTokens: 1000 });
-  const t0 = Date.now();
   await assert.rejects(p.chat(msgs, undefined, { stream: { idleMs: 80 } }), (e: unknown) => e instanceof AIProviderIdleTimeoutError);
-  assert.ok(Date.now() - t0 < 250, `a nem-gondolkodási blokk-vég nem életjel (eltelt: ${Date.now() - t0} ms)`);
+  assert.ok(stops < 10, `a nem-gondolkodási blokk-vég nem életjel (a hiba előtt elküldött blokk-vég: ${stops} / 10)`);
 });
 
 test("review #212: a Haiku 5.5 és a Mythos 5 effort nélkül is summarized gondolkodást kér", async (t) => {

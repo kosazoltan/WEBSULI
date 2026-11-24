@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, text, integer, index, uniqueIndex, boolean, timestamp, jsonb, real, primaryKey, date, char, customType, check } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, integer, smallint, index, uniqueIndex, boolean, timestamp, jsonb, real, primaryKey, date, char, customType, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -588,7 +588,10 @@ export const errorLogs = pgTable("error_logs", {
  * ami visszavezethető egy itteni fogalomra.
  *
  * `inputHash` = sha256(rendezett fájltartalmak + hatókör) — ugyanarra a feltöltésre
- * nem indul újra a drága vision-hívás.
+ * nem indul újra a drága vision-hívás. A különálló kinyerés (`/maps/extract`,
+ * `extractMapSingleRun`) útján a lenyomat gazda-kötött (`ownerMapHash`: a tartalmi
+ * lenyomat + `created_by`), így két tanár ugyanarra a tartalomra két térképet kap;
+ * a javítás előtti, tartalmi lenyomatú sor csak ugyanannak a gazdának jön vissza.
  */
 export const knowledgeMaps = pgTable(
   "knowledge_maps",
@@ -1311,6 +1314,16 @@ export const lessonTtsAudio = pgTable(
 export const playerAccounts = pgTable("player_accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email", { length: 254 }).notNull().unique(),
+  /**
+   * P-020 (migrations/0045): a postafiók-kulcs (generált; = codes.ts `accountEmailKey`): Gmailen pont / `+címke` / googlemail
+   * nélkül, máshol csak trim + kisbetű. Egyedi az `email_key_dup` sorszámmal együtt (a migráció előtti ütközések miatt).
+   */
+  emailKey: varchar("email_key", { length: 254 }).generatedAlwaysAs(sql`CASE WHEN split_part(lower(btrim(email)), '@', 2) IN ('gmail.com', 'googlemail.com') THEN replace(split_part(split_part(lower(btrim(email)), '@', 1), '+', 1), '.', '') || '@gmail.com' ELSE lower(btrim(email)) END`),
+  /**
+   * P-020: a migráció előtt már ütköző (azonos `email_key`-ű) sorok sorszáma (legrégebbi 0, kézi összevonásra vár); új sor
+   * mindig 0 → az (email_key, email_key_dup) egyedi index új aliast nem enged.
+   */
+  emailKeyDup: smallint("email_key_dup").notNull().default(0),
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   nickname: varchar("nickname", { length: 24 }),
   nicknameKey: varchar("nickname_key", { length: 32 }).unique(),
@@ -1321,7 +1334,9 @@ export const playerAccounts = pgTable("player_accounts", {
   bannedAt: timestamp("banned_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
-});
+}, (table) => ({
+  emailKeyUnique: uniqueIndex("player_accounts_email_key_unique").on(table.emailKey, table.emailKeyDup),
+}));
 export type PlayerAccount = typeof playerAccounts.$inferSelect;
 
 /**

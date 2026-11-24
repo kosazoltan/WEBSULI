@@ -110,10 +110,10 @@ Elég ezt az indexet beolvasni; a részletet (tünet, gyökérok, parancsok) csa
   present but this platform needs `@esbuild/win32-x64`”.
 - **Gyökérok:** a `source/node_modules` egy ARM64-es gépen települt, és x64-en (AMD64) futott. A
   natív csomagok (esbuild, rollup, sharp, better-sqlite3) csak a telepítő CPU-jára kerülnek fel.
-- **Megelőzés:** a program ARM64-en és x64-en is fut, de a `node_modules` gépenként települ:
+- **Megelőzés:** a Windows fejlesztési cél x64; a `node_modules` gépenként települ:
   `npm.cmd ci` a `source/`-ban, másolni/szinkronizálni tilos. Első lépés gyanús hibánál:
   `npm run doctor:arch` (`source/scripts/check-native-arch.mjs`); a `npm test` a
-  `tests/native-arch.test.ts`-sel, a CI a `native-arch` jobbal (Windows x64 + ARM64) kapja el.
+  `tests/native-arch.test.ts`-sel, a CI a `native-arch` jobbal (Windows x64) kapja el.
 
 ## C-02 — Elavult kanban-útvonal a doksiban (2026-11-03)
 
@@ -1123,6 +1123,32 @@ Forrás: SK1b (`shared/source-visual-render.ts`, a szöveg-normalizáló regulá
 
 Forrás: #490, #499, #506; retro: `docs/handoffs/2026-11-18-kapu-hook-retro.md`. Rokon: C-61.
 
+## C-89 — Ingadozó fókuszteszt: előbb napló (ki viszi a fókuszt), csak utána javítás; Radix-réteg Escape-vaksága (2026-11-20)
+
+- **Tünet:** az adventi `toBeFocused()` 10-ből 2, majd 20-ból 5 bukás; három vak javítás (ismételt fókusz-visszaadás 0–200 ms,
+  generációszámláló, „más elemről is visszaveszi”) nem segített — a harmadik ÚJ hibát hozott (a szándékosan áthelyezett fókuszt
+  visszarántotta, az Enter rossz gombot nyomott).
+- **Gyökérok (mérve):** ideiglenes diagnosztikai spec `addInitScript`-tel — `HTMLElement.prototype.focus` hívási verem + `focusin`,
+  `keydown`, `click` időbélyeggel, a napló kiírása bukáskor. Kiderült: a „más elemen álló fókusz” valójában a NYITVA MARADT
+  párbeszédablak belseje; a Radix DismissableLayer a frissen megnyílt réteget csak egy későbbi, nem szinkron renderelés után tekinti
+  legfelsőnek, addig az Escape-et eldobja (a `:focus-within` várakozás ezt nem fedi le).
+- **Szabály 1:** ingadozó fókusz-/eseményteszt javítása ELŐTT eseménynapló kell a böngészőből (ki hívta a `focus()`-t, mi volt az
+  utolsó billentyű, nyitva van-e még a réteg); a „fókusz máshol” állítás mellé az `activeElement` pontos neve kerüljön.
+- **Szabály 2:** Radix párbeszédablakban az Escape-et a tartalom `onKeyDown`-ja is kezelje, ha a könyvtár nem tette meg
+  (`client/src/advent/dialog-escape.ts`); a fókusz-visszaadás ismétlése csak az ELVESZETT (body) fókuszt adhatja vissza.
+
+Forrás: `wip/advent-c-javitas`, ec22e759. Rokon: C-61.
+
+## C-90 — `sed -i` visszaper-backtick mintával a Bash eszközből: minden sor elé backtick került (2026-11-21)
+
+- **Tünet:** a megjegyzésekbe került `\`` (visszaper + backtick) kiírtására futtatott `sed -i 's/\`/`/g' <fájlok>` négy forrásfájl
+  MINDEN sora elé egy backtick-et írt (a minta az eszköz shell-rétegén át sor eleji illesztéssé torzult); a diff fájlnyi lett.
+- **Javítás:** Python-szkript a scratchpadben (a sor eleji backtick eltávolítása, ellenőrizve, hogy minden sor érintett volt), utána a
+  diff újra csak a szándékos sorokat mutatta.
+- **Szabály:** backtick-et, visszapert vagy `$`-t tartalmazó csere NEM megy `sed`-del / heredoc-kal a Bash eszközből — Python-szkript
+  fájlból (a mintát a szkript építi össze karakterekből), utána `git diff --stat` ellenőrzés a várt sorszámra.
+
+Forrás: `feat/advent-c-felulet-es-elesites`, a PR-C vak körének javítása.
 ## C-93 — Gépváltás: a telepített Chrome frissülése elválik a rögzített Playwrighttól (2026-11-22)
 
 - **Tünet:** az új gépen a PR előtti kapu böngészős köre a főág kódjával is bukott: `preview-navigation.spec.ts` „opaque sandbox …” —

@@ -159,3 +159,69 @@ test("sávkép: 9. o. matek → híd, 6–8. o. → Föld; a halloweeni borító
   assert.notEqual(pic("Matematika", "Ismétlődő minta és füzér", "laboratory"), "cover-ismetlodes", "más sáv témaborítója nem jöhet");
   assert.equal(pic("Matematika", "Ismétlődő minta és füzér", "studio"), "cover-ismetlodes", "a saját sávban a kulcsszóra igen");
 });
+
+// docs/specs/2026-11-22-kitakaro-elovagas.md: elővágás a főági képgyártói redact előtt.
+test("elővágás (képgyártó): a vágási ponton átnyúló kulcs / Bearer / sk-or nem marad; a kimenet a főági kimenet előtagja", async () => {
+  const { redactClip } = await import("../scripts/design-assets/lib");
+  const { mainDesignRedact } = await import("../../scripts/qa/gates/kitakaro-main-baseline.mjs");
+  const leak6 = (out: string, body: string) => { for (let i = 0; i + 6 <= body.length; i++) if (out.includes(body.slice(i, i + 6))) return body.slice(i, i + 6); return null; };
+  const key = "kulcs#" + "abcdef0123456789".repeat(2) + "#vege";
+  const margin = Math.max(64, key.length);
+  for (const body of [key, "Bearer Zt0kAbCdPPPPPPPPPPPP", "sk-or-v1-" + "abcd".repeat(8)]) {
+    for (const back of [1, 5, Math.floor(body.length / 2), body.length - 1]) {
+      const start = 300 + margin - back;
+      // elöl kulcs-előfordulások: a `[kulcs]` csere rövidít, így a határ közeli forrás a látható részbe kerülne
+      const lead = (key + " ").repeat(4);
+      const s = lead + "y ".repeat(start).slice(0, start - lead.length) + body + " z".repeat(2000);
+      const out = redactClip(s, key, 300);
+      assert.equal(leak6(out, body.replace(/^Bearer /, "")), null, `${body.slice(0, 8)} vissza ${back}`);
+      assert.ok(mainDesignRedact(s, key).slice(0, 300).startsWith(out));
+    }
+  }
+  const t = `hiba ${key} Bearer abc ` + "z ".repeat(400);
+  assert.equal(redactClip(t, key, 300), mainDesignRedact(t, key).slice(0, 300));
+});
+
+// 1. vak kör (9effab11) L4: a maszkolás 1 s-os korlátja külön, a HTTP-próba végponttól végpontig külön (2 s) mérve.
+test("elővágás (képgyártó): 20 M karakteres hibatörzs — a redactClip < 1 s; a requestImage végponttól végpontig < 2 s, kulcs nélkül", async () => {
+  const { requestImage, redactClip } = await import("../scripts/design-assets/lib");
+  const key = "kulcs#" + "abcdef0123456789".repeat(2) + "#vege";
+  const body = "x ".repeat(160) + key + "z".repeat(20_000_000);
+  const t1 = performance.now();
+  assert.equal(redactClip(body, key, 300).includes("kulcs#"), false);
+  assert.ok(performance.now() - t1 < 1000, "redactClip < 1 s");
+  const fetchImpl = (async () => new Response(body, { status: 500 })) as unknown as typeof fetch;
+  const t0 = performance.now();
+  await assert.rejects(requestImage(fetchImpl, { endpoint: "https://example.invalid/images", key, body: {} }), (e: Error) => {
+    assert.equal(e.message.includes("kulcs#"), false);
+    assert.ok(e.message.length <= "HTTP 500: ".length + 300);
+    return true;
+  });
+  assert.ok(performance.now() - t0 < 2000);
+});
+
+// 1. vak kör (9effab11) L2: rövidítő kulcsok után a vágás egy befejezetlen `Bearer` + whitespace-en állna meg — az előtag-szerződés.
+test("elővágás (képgyártó): befejezetlen Bearer-egyezés a vágásnál — a kimenet a főági kimenet előtagja (tab, több szóköz)", async () => {
+  const { redactClip } = await import("../scripts/design-assets/lib");
+  const { mainDesignRedact } = await import("../../scripts/qa/gates/kitakaro-main-baseline.mjs");
+  const key = "kulcs#" + "abcdef0123456789".repeat(2) + "#vege";
+  const margin = Math.max(64, key.length);
+  for (const ws of ["\t".repeat(40), " ".repeat(40), "\t \t".repeat(10)]) {
+    for (const inWs of [1, 10, 25]) {
+      const lead = (key + " ").repeat(6);
+      const p = 300 + margin;
+      const bearerAt = p - 6 - inWs; // a vágás (p) a whitespace-futás belsejébe esik
+      const s = lead + "y ".repeat(bearerAt).slice(0, bearerAt - lead.length) + "Bearer" + ws + "SYNTHETICTOKEN rest " + "z ".repeat(400);
+      const out = redactClip(s, key, 300);
+      assert.ok(mainDesignRedact(s, key).slice(0, 300).startsWith(out), `${JSON.stringify(ws.slice(0, 3))} ${inWs}: ${JSON.stringify(out.slice(-30))}`);
+      assert.equal(out.includes("SYNTHETIC"), false);
+    }
+  }
+});
+
+// 1. vak kör (9effab11) L5: hiányzó szövegre üres eredmény (a spec szerint), nem TypeError.
+test("elővágás (képgyártó): redactClip undefined / null bemenetre üres szöveg", async () => {
+  const { redactClip } = await import("../scripts/design-assets/lib");
+  assert.equal(redactClip(undefined as unknown as string, "k", 300), "");
+  assert.equal(redactClip(null as unknown as string, "k", 300), "");
+});

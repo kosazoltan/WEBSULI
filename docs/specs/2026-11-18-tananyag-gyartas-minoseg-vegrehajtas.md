@@ -8,7 +8,10 @@ Sorrend (tulajdonosi döntések 2026-11-18 után): **S1a → S1b → SK1 → S2a
 mérés) → S5a → S5b → S6a → S6b → S6c → SK2 → S7a → S7b → S8a → S8b → S8c → SK4 → SK5 → S9 → S10/2 (záró mérés).** Egy alszelet =
 egy ág = egy PR. Döntések: D1 újrarajzolás · D2 30 USD próbakeret · D3 ElevenLabs előre gyártva · D4 hangfájlok az adatbázisban,
 csak a leckék · D5 fél pontos plafon igen · D6 egyeztetés alatt (az S7a nem indul, amíg nincs döntés) · D7 éles gyártásban a
-költségkeret túllépése csak jelez (e-mail), nem állít meg; gyártás-stop kapcsoló nem épül; a 30 USD próbakeret kemény plafon marad.
+költségkeret túllépése csak jelez (e-mail), nem állít meg; gyártás-stop kapcsoló nem épül; a 30 USD próbakeret kemény plafon marad ·
+D8 (P-064, 2026-11-23) a néma próbakimondás megszűnése és az abszolút 80 MB-os hangtárplafon jóváhagyva · D9 (P-065, 2026-11-23)
+költség- és hibakorlátnál mindenhol jelzés, vészleállítás csak a próbafutás 30 USD-os kemény keretén; új éles futásidő- és összesített
+javítókör-megállító nem épül.
 
 ## 0. Közös szabályok (minden szeletre)
 
@@ -604,6 +607,10 @@ minden más és a hiány = KI). Minden szeletre érvényes szabályok:
 > **Tulajdonosi döntés (D7, kérdőív, 2026-11-18) — ez a fejezet ehhez igazodik:** éles gyártásban a token- / költségkeret
 > túllépése „Csak jelezzen” (a futás megy tovább, e-mail megy; NEM állít meg); vészleállító / egységes gyártás-stop kapcsoló „Nem
 > kell” (ne épüljön); a meglévő körszám-plafon marad, ahogy van; a 30 USD-os próbakeret kemény plafon marad.
+>
+> **Tulajdonosi megerősítés (P-065, 2026-11-23; terv D9):** a költség- és hibakorlátok MINDENHOL jelzést adnak (figyelmeztetés /
+> riasztás); vészleállítás KIZÁRÓLAG a fizetős próbafutás 30 USD-os kemény költségkereténél. Ebbe a szeletbe NEM kerül új megállító
+> korlát sem az éles futásidőre, sem az összesített javítókörre (a 6. lépés éles tesztje ezt rögzíti: a hívásszám nem csökken).
 
 Ág: `feat/futaskeret-sk3`. Fájlok: `shared/run-budget.ts` (új), `server/studio/single-run/telemetry.ts`,
 `server/studio/single-run/engine.ts`, `server/studio/single-run/budget-alert.ts` (új), `server/studio/experience-builder.ts` (csak
@@ -1027,7 +1034,7 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    környezeti változóval csak lefelé állítható; felfelé kódváltozás, tehát review kell); ha `totalBytes() + size >
    maxTotalBytes` vagy a fájl túl nagy → `TtsStorageLimitError`, írás nincs. A `put` ellenőrzi, hogy `mime === "audio/mpeg"`, a
    `size` egyezik a bájtok hosszával, és az `id` 32 hexa jegy.
-   **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** a megvalósított méretőr `TTS_AUDIO_LIMITS = { maxTotalBytes: 40 MB (hangverziónként),
+   **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; tulajdonos jóváhagyta 2026-11-23 — P-064, D8):** a megvalósított méretőr `TTS_AUDIO_LIMITS = { maxTotalBytes: 40 MB (hangverziónként),
    maxAbsoluteBytes: 80 MB (a teljes tábla), maxFileBytes: 300 KB }` — mindkét összplafon kemény (`total-exceeded` /
    `absolute-exceeded`), az abszolút plafon környezeti változóval nem állítható; a `put` csak az aktuális `TTS_VOICE_VERSION`-re ír;
    a felületen `usage()` és őrzött `purgeOtherVersions()` is van (megtagad, ha a megtartandó verzió nem az aktuális vagy nincs sora).
@@ -1162,7 +1169,7 @@ szerintem amikor megnyitja az adott tananyagot, pufferelje a hangokat a diáknak
    sizes, saveData, effectiveType })` → az előtöltendő kulcsok sorrendben (plafonok, adatkímélő / 2g: csak az első szakasz);
    `nextPreloads(állapot)` → a következő indítható letöltések (párhuzamosság, előre vett kulcs); `retryDelayMs(próbálkozás)`;
    a hangmotor munkamenet-ismerete KIZÁRÓLAG valódi koppintásokból (spec-módosítás 2026-11-19, vak review B1–B3 — a nulla hangerejű
-   próba-kimondás megszűnt): `engineAfter(ismeret, hang, kimenet)` — a `start` esemény igazolja a hangot és törli a negatív
+   próba-kimondás megszűnt; tulajdonos jóváhagyta 2026-11-23 — P-064, D8): `engineAfter(ismeret, hang, kimenet)` — a `start` esemény igazolja a hangot és törli a negatív
    ítéleteit; a kemény hiba / esemény nélküli lejárat `NEGATIVE_VERDICT_TAPS` (2) koppintásra szóló, lejáró ítélet;
    `engineAfterRound` — néma motor (minden próbált hang esemény nélkül járt le), szintén 2 koppintásra; `engineAged` — a koppintás
    „elhasználja” az ítélet egy egységét. A megszakítás (`interrupted` / `canceled`) és a `not-allowed` nem kerül az ismeretbe.

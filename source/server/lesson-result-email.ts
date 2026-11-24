@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
-import rateLimit from "express-rate-limit";
-import { clientIpKey, clientIpKeyGenerator } from "./lib/client-ip";
+import { clientIpKey } from "./lib/client-ip";
+import { partialLimiter, resultLimiter } from "./lesson-result-limits";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
@@ -164,11 +164,10 @@ async function learnerName(userId: string | undefined): Promise<string> {
   return name || "Bejelentkezett tanuló";
 }
 
-export const resultLimiter = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok beküldés." } });
-
+// Eredmény-e-mail B2 (#510 R9): a két eredménykeret (végleges / pillanatkép, 60 + 60 / 15 perc / IP) a `lesson-result-limits.ts`-ben.
 /** POST /api/lessons/:lessonId/results — a feladatok / a helyi kvíz befejezésekor (vendég is). Mindig 202, ha a kérés érvényes. */
 export const lessonResultsRouter = Router();
-lessonResultsRouter.post("/:lessonId/results", resultLimiter, async (req: Request, res: Response, next: NextFunction) => {
+lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, async (req: Request, res: Response, next: NextFunction) => {
   // Review #280: az Express 4 nem továbbítja az async hibát — a handler maga adja át (next).
   try {
   const parsed = resultRequestSchema.safeParse(req.body);

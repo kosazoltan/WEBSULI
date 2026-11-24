@@ -1,6 +1,6 @@
 // Minőségkapuk közös könyvtára (docs/specs/2026-11-17-minosegkapuk.md, D1–D5).
 // Lépésenkénti futtató külön kilépési kóddal, összesítő tábla, kimenet-szűrés, git-segédek, bizonyíték-tár.
-// Függőség nélküli Node ESM; Windows (x64, ARM64) és Linux.
+// Függőség nélküli Node ESM; Windows x64 és Linux.
 
 import { spawnSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
@@ -22,9 +22,49 @@ const REDACTIONS = [
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, '<email>'],
 ];
 
+/**
+ * Elővágás (docs/specs/2026-11-22-kitakaro-elovagas.md): a fenti, változatlan főági regexek legfeljebb ennyi karakteren futnak
+ * (a főági e-mail-regex `'a'×n`-en négyzetes: 8 KB 20 ms, 16 KB 75 ms, 32 KB 311–440 ms helyben; a CI-futón ~5×-ös). 8 KB: a CI-futó
+ * és a párhuzamos tesztfuttatás lassulása mellett is bőven 1 s alatt (32 KB a gate:pr-ben 1109 ms, 16 KB a CI-n 451 ms volt).
+ */
+export const REDACT_CAP = 8 * 1024;
+
+/** Token-karakter az elővágáshoz: betű, szám, `+ / = _ - . ~ % \ @` (a JSON-escape-ek is ebbe esnek). */
+export const isCutRunChar = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+  || c === 43 || c === 47 || c === 61 || c === 95 || c === 45 || c === 46 || c === 126 || c === 37 || c === 92 || c === 64;
+
+/**
+ * A korlát felett az utolsó REDACT_CAP karakter (a napló vége a lényeg), jelzősorral. A vágás után az első KÉT, szóköz-jellegű
+ * karakterrel határolt szó is kimarad: így a vágáson átnyúló szó (token, DB-URL, cím) teljesen, és egy félbevágott
+ * `Bearer` + hitelesítő pár hitelesítője sem marad előtag nélkül — lineáris, előre lépő keresés.
+ */
+function capTail(text) {
+  if (text.length <= REDACT_CAP) return text;
+  let s = text.length - REDACT_CAP;
+  // A szóhatár PONTOSAN a regex `\s` halmaza (1. vak kör L1): a főági DB-URL-minta (`[^\s"'`<>]+`) ezen nem lép át, az ANSI
+  // ESC-en (27) és más vezérlőkarakteren viszont igen — ezek a szó részei.
+  for (let w = 0; w < 2; w++) {
+    while (s < text.length && WS.test(text[s])) s++;
+    while (s < text.length && !WS.test(text[s])) s++;
+  }
+  return `[… ${s} karakter elhagyva …]\n${text.slice(s)}`;
+}
+const WS = /\s/;
+
+/**
+ * Egy hívó, amely csak az első hibasort írja ki (pl. a merge előtti kapu `gh`-hibája; 1. vak kör L3): a NYERS első sor kitakarva —
+ * nem a teljes szöveg első sora, amely a korlát felett a csonkolásjelző lenne. Túl hosszú első sornál a sor vége látszik.
+ */
+export function redactFirstLine(text) {
+  const t = String(text ?? '');
+  const nl = t.indexOf('\n');
+  const lines = redact(nl >= 0 ? t.slice(0, nl) : t).split('\n');
+  return lines[lines[0].startsWith('[… ') && lines.length > 1 ? 1 : 0];
+}
+
 /** Titok, kapcsolati szöveg és e-mail-cím helyőrzőre cserélve — minden kiírás és napló ezen megy át. */
 export function redact(text) {
-  let out = String(text ?? '');
+  let out = capTail(String(text ?? ''));
   for (const [re, rep] of REDACTIONS) out = out.replace(re, rep);
   return out;
 }
@@ -275,8 +315,8 @@ export function resolveVerdict({ head, evidence, texts = [] }) {
 /** Az ítélet lépés-eredménye. */
 export function verdictResult(v, head) {
   const how = `node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict IGEN --report <jelentés.md>`;
-  if (!v) return { status: STATUS.FAIL, note: `nincs független ellenőr-ítélet a ${head.slice(0, 12)} fejre — futtasd a websuli-fejlesztesi-ellenor skill szerint, majd: ${how}` };
-  if (v.verdict === 'NEM') return { status: STATUS.FAIL, note: `a független ellenőr ítélete NEM (${v.source}) — javítsd a blokkoló leleteket, és kérj visszaellenőrzést ugyanattól az ellenőrtől` };
+  if (!v) return { status: STATUS.FAIL, note: `nincs független ellenőr-ítélet a ${head.slice(0, 12)} fejre — futtasd: node scripts/qa/gates/local-review.mjs (helyi GPU-ellenőr; tartalék: ${how})` };
+  if (v.verdict === 'NEM') return { status: STATUS.FAIL, note: `a független ellenőr ítélete NEM (${v.source}) — javítsd a blokkoló leleteket, és futtasd újra a local-review.mjs-t az új fejre` };
   if (v.verdict === 'IGEN, FELTÉTELLEL') return { status: STATUS.WARN, note: `IGEN, FELTÉTELLEL (${v.source}) — a feltételek jegyre / a PR-leírásba kerüljenek` };
   return { status: STATUS.PASS, note: `IGEN (${v.source})` };
 }

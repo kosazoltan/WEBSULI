@@ -13,7 +13,7 @@ olcsó, helyi, determinisztikus ellenőrzés fut előbb és gyakran; a drága k�
 ## A sorrend
 
 ```text
-szerkesztés → gate:stage (minden szakasz után) → … → gate:push → független ellenőr + record-review
+szerkesztés → gate:stage (minden szakasz után) → … → gate:push → local-review.mjs (helyi GPU-ellenőr; a felhős vak kör 2026-11-23 óta kivezetve)
             → gate:pr -- --body-file <leírás.md> → .audit-ok → push + gh pr create → zöld CI
             → (közvetlenül a merge előtt) gate:merge -- <PR> → gh pr merge
 ```
@@ -36,7 +36,7 @@ terhelésétől függően ±50%.
 | Szakasz | `npm run gate:stage` | lint gyors + a változott fájlokhoz leképezett egységtesztek + minden `*-guard.test.ts` (23 db) + a `scripts/qa` tesztjei, ha érintett | 47 s (tsc nélkül); tsc-vel ~115 s |
 | Push előtt | `npm run gate:push` | tiszta fa; `git fetch`; lint teljes; teljes egységteszt; háromfázisú rend; PR-méret; friss main (ha nincs beolvasztva: őr-tesztek az összefésült állapoton); közös fájlok; `.audit-ok`; „zöld CI utáni push” | 251 s (ebből a teljes egységteszt 132 s) |
 | PR előtt | `npm run gate:pr -- --body-file <út>` | PR-leírás sablon; ítélet; a push-kapu minden lépése; `npm run build`; játék / UI: CI-azonos böngészős út; DB: `test:learning-db` | 214 s böngészős út nélkül (build 20 s); böngészős futásonként + ~160 s (füstpróba: 1 spec, 11 eset, 164 s) |
-| Merge előtt | `npm run gate:merge -- <PR>` | CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet; futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
+| Merge előtt | `npm run gate:merge -- <PR>` | (REST-ről gyűjt: fájllista és check-runok lapozva, csonka / számláló nélküli válasz FAIL; a szálak GraphQL-ről lapozva, ha az tiltott, a `pulls/<n>/ccr/review_threads` útról lapozva — üres lista csak TELJESEN üres review-kommentlista mellett — egy törölt gyökér megmaradt válasza mellett sem —, egyébként és ismeretlen alaknál FAIL; minden futás az elején érvényteleníti a PR korábbi merge-bizonyítékait, és a fájllista, a lapozási jelző és a `draft` alakját szigorúan ellenőrzi; a kötelező lista a védelmi végpont 403-ánál a `branches/main` `protection` mezőjéből; `mergeable_state` `unknown`-ra legfeljebb két újrakérés, ~6 s) CLEAN; kötelező ellenőrzések a jelenlegi fejen; nyitott szálak; main-elmozdulás (C-61); ítélet KIZÁRÓLAG helyi bizonyítékból (`review-<fej>.json`; a PR-leírás és a kommentek nem ítéletforrások — felhős munkamenetből ezért nem vonható össze); futásőr; telepítés-jelzés; `/api/rt/status` | 36 s (gh-lekérdezések + futásőr + rt-végpont) |
 
 ### Külső (Gemini) ellenőr — második vélemény
 
@@ -65,7 +65,7 @@ viszi bukásra.
 
 - **`native-arch` (C-38):** friss munkafában (`npm ci --ignore-scripts`) a `better-sqlite3` natív kötése nem épül fel, ezért a
   `native-arch.test.ts` és a `doctor:arch` helyben bukik. A push-kapu ezt `KIVÉTEL`-ként jelzi, de CSAK akkor, ha (a) ez az egyetlen
-  bukó tesztfájl és (b) a `doctor:arch` is bukik. A CI `native-arch` jobja x64-en és ARM64-en futtatja. Más bukás mellett, vagy zöld
+  bukó tesztfájl és (b) a `doctor:arch` is bukik. A CI `native-arch` jobja Windows x64-en futtatja. Más bukás mellett, vagy zöld
   `doctor:arch` mellett: `FAIL`.
 
 ### A bizonyíték és a hook
@@ -161,7 +161,7 @@ viszi bukásra.
 | 10 | Alügynök közös fájlhoz nyúl / a D:\ gyökerébe ír / `git checkout`-tal állít vissza | Részben | `pre-push-gate` közös-fájl figyelmeztetés (`--slice`: a közös modulok is); a nem követett fájl figyelmeztetés; a gyökérbe írást és a `git checkout`-ot csak a fejlesztési ellenőr 4.B/16 és a skillek szabálya fedi |
 
 Őszintén: a játéklogikai hibák (1, 4, 5, 6) jellemzően szándék- és állapottér-hibák; ezeket determinisztikus kapu általánosan nem
-ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy az ellenőr ne az olcsó hibákra költsön.
+ismeri fel. Ezért kötelező a független ellenőr (2026-11-23 óta a helyi GPU-ellenőr: `scripts/qa/gates/local-review.mjs`; a mérés és a döntés: `docs/specs/2026-11-23-vak-kor-kivezetes.md`) — a kapuk feladata, hogy az ellenőr ne az olcsó hibákra költsön.
 
 ## Ismert korlátok (maradó kockázat)
 
@@ -172,8 +172,10 @@ ismeri fel. Ezért kötelező a független ellenőr — a kapuk feladata, hogy a
   `git add . && git commit -m "push fix"`) — a commit-üzenetet fájlból add (`git commit -F <fájl>`), a kibocsátást külön parancsban.
 - **A main-elmozdulás mérése** a CI-futás `base.sha`-ján alapul; ha az üres, a PR `baseRefOid`-jára esik vissza (UNVERIFIED, hogy
   minden esetben a CI alapja-e — jegyre javasolt).
-- **A merge-kapu a PR-kommentek szerzőjét nem szűri** (nyilvános repó: bárki írhat ítélet-sort) — a helyi `review-<fej>.json` a
-  megbízható forrás.
+- **A merge-kapu ítéletet csak a helyi `review-<fej>.json`-ból fogad el** (2026-11-19, #513 V1): a PR-leírás és a kommentek ítélet-sora
+  nem számít, mert minden ügynök a tulajdonos fiókjával ír (szerző szerint az önigazolás nem szűrhető). Maradó kockázat: a fejlesztő
+  munkamenet a `record-review`-val maga is írhat helyi bizonyítékot — ezt csak a vak ellenőr futtatójának szigorú módja
+  (`blindReview.exclusive` BE) zárja ki. A felhős CCR-szál-út megbízhatósága (mért válaszminta nincs) szintén maradó kockázat.
 - **Git-alias** (`git config alias.p push`): `git p` nem ismerhető fel olcsón — a hook nem biztonsági határ (lásd fent).
 - A hook csak a Claude Code munkamenetekre hat; Codex / Cursor / ember a skillek és az `AGENTS.md` szerint futtatja a kapukat.
 
