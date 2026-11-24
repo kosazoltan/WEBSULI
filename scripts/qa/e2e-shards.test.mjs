@@ -276,7 +276,7 @@ test('ci.yml: pontosan egy „Playwright E2E” nevű job van, always() feltéte
   assert.equal(ci.match(/^\s+name: Playwright E2E\s*$/gm)?.length, 1);
   const summary = jobBlock('e2e-tests');
   assert.match(summary, /^    name: Playwright E2E$/m);
-  assert.match(summary, /^    needs: \[lint-typecheck, e2e-parts\]$/m);
+  assert.match(summary, /^    needs: \[lint-typecheck, e2e-parts, native-arch\]$/m);
   assert.match(summary, /^    if: \$\{\{ always\(\) \}\}$/m);
   assert.match(summary, /PARTS_RESULT: \$\{\{ needs\.e2e-parts\.result \}\}/);
   assert.match(summary, /test "\$PARTS_RESULT" = "success"/);

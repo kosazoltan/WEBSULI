@@ -65,7 +65,7 @@ viszi bukásra.
 
 - **`native-arch` (C-38):** friss munkafában (`npm ci --ignore-scripts`) a `better-sqlite3` natív kötése nem épül fel, ezért a
   `native-arch.test.ts` és a `doctor:arch` helyben bukik. A push-kapu ezt `KIVÉTEL`-ként jelzi, de CSAK akkor, ha (a) ez az egyetlen
-  bukó tesztfájl és (b) a `doctor:arch` is bukik. A CI `native-arch` jobja x64-en és ARM64-en futtatja. Más bukás mellett, vagy zöld
+  bukó tesztfájl és (b) a `doctor:arch` is bukik. A CI `native-arch` jobja Windows x64-en futtatja. Más bukás mellett, vagy zöld
   `doctor:arch` mellett: `FAIL`.
 
 ### A bizonyíték és a hook
