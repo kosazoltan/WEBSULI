@@ -21,3 +21,9 @@ cards:
     observed: "feladatok elvesztek kanban/ágak között"
     fix: "SQL feladat-nyilvántartás + szinkron a higiéniában"
     rule: "minden teendő azonnal feladat.mjs add"
+  - id: 4
+    status: rule
+    date: "2026-11-24"
+    observed: "P-010: a 'felső határ' konstans csak rangsorolt, nem kényszerített; plafon nélküli kényszerítésnél csupa rossz válasznál a lecke megállt"
+    fix: "határidő a 30%-os arány előtt, de csak a menetenkénti plafon alatti hibára; mérés 400 seeden a döntés előtt"
+    rule: "ütemező-garanciát előbb seedelt próba-szkripttel mérj (több leckeméret × pontosság), és nézd a mellékhatást (haladás) is, mielőtt szerződést írsz"
