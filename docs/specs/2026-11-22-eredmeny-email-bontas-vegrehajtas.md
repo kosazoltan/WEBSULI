@@ -96,6 +96,11 @@
   `lesson-result-email-partial-db.integration.ts` megfelelő esetei.
 - B5b: kliensoldal (R3, R20, R44, R13 részleges szöveg); e2e: `lesson-result-email-quiz.spec.ts` pillanatkép-esetei.
 - Ha a B5a 400 sor fölé menne: B5a-1 (ütemezés + egyetlen indító út) és B5a-2 (elnyomás, első rögzítő, attribúció).
+- **B5a-0 (2026-11-24, kód előtt kiválasztva — kapcsolótól független, biztonságos előfeltétel):** a kvízséma opcionális `partial`
+  jelzője; `gradePartialQuiz` (R5: csak a megválaszolt kérdések, az „összes” a szerveroldali körméret, nem kisebb a megválaszoltnál); a
+  „félbehagyva” levél tárgya / állapotsora / „Utolsó válasz” dátumsora és a végleges levél felülíró mondata (R13, R1 a) a `meta`
+  jelzései szerint. A szerver a pillanatképet a B5a-1-ig NEM pontozza véglegesként: `202 { queued: false, partial: true }`, kör-kulcs
+  és levél nélkül (a kliens a B5b-ig nem is küld ilyet). Tesztek: `lesson-result-email-partial.test.ts`, DB-teszt „B5a-0”.
 
 ## 6. B6 — leállításkori ürítés (R14, R33, R41)
 
