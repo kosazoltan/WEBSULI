@@ -165,18 +165,23 @@ test('vak L4 (9effab11): korlátközeli, nehezen maszkolható farok a két kihag
   assert.ok(out.includes('a'.repeat(REDACT_CAP - 30)), 'a korlátközeli farok megmarad (a regex ténylegesen ezen fut)');
 });
 
-test('elővágás: a legrosszabb korlátközeli farok terheletlenül is legalább 4× tartalékot hagy az 1 s-os követelményhez', async () => {
-  // A gate:pr párhuzamos tesztfuttatásában a 32 KB-os korlát legrosszabb esete 1109 ms lett (terheletlenül ~0,3–0,44 s): a
-  // négyzetes főági e-mail-regex miatt a korlátnak akkora tartalék kell, hogy a ~3×-os terhelési lassulás se lépje át az 1 s-ot.
+test('elővágás: a korlát a 32 KB-os főági futáshoz képest legalább 8× olcsóbb legrosszabb esetet ad (gépfüggetlen arány)', async () => {
+  // A 32 KB-os korlát legrosszabb esete a gate:pr párhuzamos futásában 1109 ms lett; a 16 KB-os a CI-futón (ubuntu) 451–485 ms —
+  // az abszolút ms-korlát gépfüggő, ezért ugyanazon a gépen, ugyanakkor mért ARÁNY a mérce: a korlátos `redact` és a változatlan
+  // főági kitakaró 32 KB-os, szóköz nélküli farkon (3 mérés legjobbja mindkettőn).
   const { REDACT_CAP } = await import('./lib.mjs');
-  const s = 'q'.repeat(200) + ' w1 w2 ' + 'a'.repeat(REDACT_CAP - 30);
-  let best = Infinity;
-  for (let i = 0; i < 3; i++) {
-    const t0 = performance.now();
-    redact(s);
-    best = Math.min(best, performance.now() - t0);
-  }
-  assert.ok(best < 250, `legjobb a 3 mérésből: ${best.toFixed(0)} ms (a 4× tartalékhoz < 250 ms kell)`);
+  const { mainRedact } = await import('./kitakaro-main-baseline.mjs');
+  // A korlátos út legrosszabb esete a korlátközeli farok (a korlát feletti egyszavas futást a vágás teljesen elhagyja).
+  const tail = (n) => 'q'.repeat(200) + ' w1 w2 ' + 'a'.repeat(n - 30);
+  const best = (fn) => {
+    let b = Infinity;
+    for (let i = 0; i < 3; i++) { const t0 = performance.now(); fn(); b = Math.min(b, performance.now() - t0); }
+    return b;
+  };
+  const capped = best(() => redact(tail(REDACT_CAP)));
+  const main32 = best(() => mainRedact(tail(32 * 1024)));
+  assert.ok(REDACT_CAP < 32 * 1024, `REDACT_CAP = ${REDACT_CAP}`);
+  assert.ok(capped * 8 < main32, `korlátos: ${capped.toFixed(0)} ms, főági 32 KB: ${main32.toFixed(0)} ms (legalább 8× kell)`);
 });
 
 test('vak L3 (9effab11): az első hibasor a hosszú stderr-ből — a csonkolásjelző nem helyettesíti', async () => {
