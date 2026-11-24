@@ -548,18 +548,10 @@ export async function sendPracticeResult(input: { userId: string; attemptId: str
     const lesson = row ? lessonSchema.safeParse(row.json) : null;
     if (lesson?.success && isTwoPartExperience(lesson.data.experience)) {
       // Review #586: az átmeneti DB-hiba nem veszítheti el a kész gyakorlókört — korlátos újrapróba (a hívó csak naplóz).
-      let outcome: Awaited<ReturnType<typeof pairOrPark>> | null = null;
-      for (let attempt = 0; attempt < PRACTICE_PAIR_ATTEMPTS && !outcome; attempt++) {
-        try { outcome = await pairOrPark({ lessonId: input.lessonId, ownerKey: input.userId, kind: "quiz", roundId: input.attemptId, graded, learner: { learner, guest: false } }); }
-        catch (error) {
-          logger.warn(`[LESSON-RESULT] gyakorlókör-párosítás átmeneti hiba (${attempt + 1}. próba): ${errorClass(error)}`);
-          if (attempt + 1 === PRACTICE_PAIR_ATTEMPTS) throw error;
-          await new Promise(resolve => setTimeout(resolve, retryDelayMs));
-        }
-      }
-      if (outcome!.type === "parked") return { awaiting: outcome!.awaiting };
-      if (outcome!.type === "paired") await deliverCombined(input.lessonId, outcome!, true);
-      if (outcome!.type === "alreadySent" && outcome!.redeliver) await deliverCombined(input.lessonId, outcome!.redeliver, false);
+      const outcome = await pairWithRetry({ lessonId: input.lessonId, ownerKey: input.userId, kind: "quiz", roundId: input.attemptId, graded, learner: { learner, guest: false } });
+      if (outcome.type === "parked") return { awaiting: outcome.awaiting };
+      if (outcome.type === "paired") await deliverCombined(input.lessonId, outcome, true);
+      if (outcome.type === "alreadySent" && outcome.redeliver) await deliverCombined(input.lessonId, outcome.redeliver, false);
       return { awaiting: null };
     }
   }
@@ -568,6 +560,18 @@ export async function sendPracticeResult(input: { userId: string; attemptId: str
 }
 
 const PRACTICE_PAIR_ATTEMPTS = 3;
+
+/** Korlátos újrapróba átmeneti DB-hibára (a gyakorlókör útja); az utolsó próba hibáját továbbdobja — sosem ad vissza üres eredményt. */
+async function pairWithRetry(input: Parameters<typeof pairOrPark>[0]): Promise<Awaited<ReturnType<typeof pairOrPark>>> {
+  for (let attempt = 1; ; attempt++) {
+    try { return await pairOrPark(input); }
+    catch (error) {
+      logger.warn(`[LESSON-RESULT] gyakorlókör-párosítás átmeneti hiba (${attempt}. próba): ${errorClass(error)}`);
+      if (attempt >= PRACTICE_PAIR_ATTEMPTS) throw error;
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+    }
+  }
+}
 
 /**
  * U4b: a párosított két rész EGY levélben — a pár kulcsával (a tulajdonost is tartalmazza; idempotencia: ugyanaz a pár ugyanazt a
