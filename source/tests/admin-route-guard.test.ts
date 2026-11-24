@@ -235,6 +235,7 @@ describe("JM7a — admin-útvonal regressziós őr", () => {
     const admin = inventory.filter((e) => e.path.startsWith("/api/admin/game-accounts"));
     assert.deepEqual(admin.map(key).sort(), [
       "GET /api/admin/game-accounts", "GET /api/admin/game-accounts/:id/email", "GET /api/admin/game-accounts/deleted-bans",
+      "GET /api/admin/game-accounts/email-collisions", // P-020: azonos postafiókú fiókok listája (csak olvasás)
       "POST /api/admin/game-accounts/:id/ban", "POST /api/admin/game-accounts/:id/delete", "POST /api/admin/game-accounts/:id/unban",
       "POST /api/admin/game-accounts/:id/unlink-learner", "POST /api/admin/game-accounts/deleted-bans/:ref/unban",
     ]);

@@ -252,17 +252,18 @@ describe("JM7a — HTTP: flag BE", () => {
     assert.equal(sent.length, START_PER_EMAIL_MAX, "legfeljebb a keretnyi levél");
   });
 
-  it("review #445 (K2): Gmail-aliasok (pontok, +címke, googlemail) KÖZÖS keretből fogyasztanak, de külön fiókok maradnak", async () => {
+  it("review #445 (K2) + P-020: Gmail-aliasok (pontok, +címke, googlemail) KÖZÖS keretből fogyasztanak, és EGY fiókot adnak", async () => {
     const { sent, start, close } = await routerApp();
     const aliases = ["kisdiak+1@gmail.com", "kis.diak+2@gmail.com", "k.i.s.diak@googlemail.com", "kisdiak@gmail.com", "kisdiak+5@gmail.com"];
     for (const a of aliases) assert.equal((await start(a)).status, 202);
     await close();
     assert.equal(await codeRows("kisdiak@gmail.com"), START_PER_EMAIL_MAX, "a kanonizált kulcson legfeljebb 3 kód");
     assert.equal(sent.length, START_PER_EMAIL_MAX);
-    // A fiók a megadott (normalizált) cím: két alias két külön fiók lehet.
+    // SPEC-VÁLTOZÁS P-020 (tulajdonosi döntés 2026-11-23): a fiók postafiókonként egyedi — a két Gmail-alias UGYANAZ a fiók
+    // (korábban: két külön fiók lehetett).
     const a = await store.confirmVerifiedEmail("a.b+x@gmail.com");
     const b = await store.confirmVerifiedEmail("ab@gmail.com");
-    assert.notEqual(a.id, b.id);
+    assert.equal(a.id, b.id);
   });
 
   it("review #445 (K2): korlát-kulcsonként naponta legfeljebb 10 kódkérés (az ablakok kitolásával sem több)", async () => {

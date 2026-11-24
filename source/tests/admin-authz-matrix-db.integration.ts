@@ -173,7 +173,7 @@ describe("JM7a — admin-jogosultsági mátrix", () => {
   it("a generált végpontlista lefedi az admin felületet", () => {
     assert.ok(adminEndpoints.length >= 100, `legalább 100 adminvégpont várt, ennyi lett: ${adminEndpoints.length}`);
     const keys = new Set(adminEndpoints.map(label));
-    for (const k of ["GET /api/admin/users", "PUT /api/admin/users/:id/toggle-admin", "POST /api/admin/game-accounts/:id/delete", "GET /api/admin/game-accounts/deleted-bans", "POST /api/admin/game-accounts/deleted-bans/:ref/unban", "POST /api/studio/lessons/one-step", "POST /api/html-files", "GET /download-source-static", "GET /api/static-audit"]) {
+    for (const k of ["GET /api/admin/users", "PUT /api/admin/users/:id/toggle-admin", "POST /api/admin/game-accounts/:id/delete", "GET /api/admin/game-accounts/deleted-bans", "GET /api/admin/game-accounts/email-collisions", "POST /api/admin/game-accounts/deleted-bans/:ref/unban", "POST /api/studio/lessons/one-step", "POST /api/html-files", "GET /download-source-static", "GET /api/static-audit"]) {
       assert.ok(keys.has(k), `hiányzik: ${k}`);
     }
     // Írja ki a lefedettséget (a záró jelentéshez): végpontok × szerepek.

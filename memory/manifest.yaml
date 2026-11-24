@@ -43,3 +43,10 @@ code_review:
   inventory: "teljes hiányleltár: docs/specs/2026-11-23-teljes-hianyleltar.md (ág docs/hianyleltar-2026-11-23), SQL-be töltve [P-0NN]/[BL]/[H-]/[KB] előtaggal"
   open_prs_2026_11_23: "#541 (vak kör kivezetés), #544 (advent PR-C), #545 (hiányleltár docs); merged: #542, #543"
   coupon_repeat_bound: "P-010 (PR #558): kupon módban a plafon alatti hibázott tétel ≤ LATE_RETURN_MAX (10) kérdésen belül visszajön (couponDeadline, questionDirector.ts); szerződés-teszt: source/tests/game-question-director-kupon.test.ts"
+# 2026-11-24 — eredmény-e-mail B2 (a #510 bontásának 3. szelete)
+result_email_b2:
+  pr: "#556 beolvasztva (407224d5, 2026-11-24)"
+  limits_module: "source/server/lesson-result-limits.ts — RESULT_RATE_LIMIT 60 + 60 / 15 perc / IP; lessonsWriteGate (R46)"
+  client_retry: "resultReport.ts: RESULT_REPORT_ATTEMPTS 3 / kör / lap (pageAttempts), 30 s + 60 s, apiRequest retries 0 (R26)"
+  next_slice: "B3 — képesség-jelzés (R10, R12)"
+# zaro-hurok: 2026-11-24T01:35:38.457Z nincs-uj
