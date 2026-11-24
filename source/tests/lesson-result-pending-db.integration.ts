@@ -40,6 +40,11 @@ test("elküldés után a sor megmarad, és mellette új nyitott sor lehet; ismer
   await assert.rejects(dbPool.query(`UPDATE lesson_result_pending SET graded = NULL WHERE round_id = 'r3'`), (err: { code?: string }) => err.code === "23514", "nyitott sorban kötelező a graded");
 });
 
+test("a három CHECK a migrációval azonos néven él (a sémaexport is ugyanígy hozza létre)", async () => {
+  const { rows } = await dbPool.query(`SELECT conname FROM pg_constraint WHERE conrelid = 'lesson_result_pending'::regclass AND contype = 'c' ORDER BY conname`);
+  assert.deepEqual(rows.map((r) => r.conname), ["lesson_result_pending_kind_check", "lesson_result_pending_open_has_content", "lesson_result_pending_sent_reason_check"]);
+});
+
 test("a lecke törlése a félretett sorokat is törli", async () => {
   await dbPool.query(`DELETE FROM lessons WHERE id = 'pending-lesson'`);
   const left = await dbPool.query(`SELECT count(*)::int AS n FROM lesson_result_pending`);

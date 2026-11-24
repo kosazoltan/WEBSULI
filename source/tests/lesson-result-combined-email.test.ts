@@ -56,3 +56,24 @@ test("a szakaszok tartalma bájtra a meglévő egyrészes levél törzse (felada
 test("legalább egy rész kötelező", () => {
   assert.throws(() => buildCombinedResultEmail({ ...base, tasks: null, quiz: null }));
 });
+
+// Review #585: a tárgysor a 200 karakteres keretben is megtartja a részjelölést és a százalékot (csak a név/cím rövidül);
+// a „félbehagyva” pillanatkép helyébe lépő kvíz szakasza ezt közli (true és "unknown" is).
+test("hosszú (255 karakteres) cím: a tárgy ≤ 200, a részleges jelölés és a százalék megmarad, a cím rövidül", () => {
+  const long = "Á".repeat(255);
+  const mail = buildCombinedResultEmail({ ...base, lessonTitle: long, tasks: null, quiz });
+  assert.ok(mail.subject.length <= 200, String(mail.subject.length));
+  assert.ok(mail.subject.endsWith(` — Kvíz (részleges: a feladatok hiányoznak) — ${quiz.summary.percent}% (${quiz.summary.label})`), mail.subject);
+  assert.ok(mail.subject.startsWith("[WebSuli eredmény] Marci – ÁÁ"));
+  assert.ok(mail.subject.includes("…"));
+  const short = buildCombinedResultEmail({ ...base, tasks, quiz });
+  assert.ok(!short.subject.includes("…"), "rövid címnél nincs rövidítés");
+});
+
+test("a félbehagyott pillanatkép helyébe lépő kvíz: a kvíz szakaszában a megfelelő állapotszöveg", () => {
+  const sure = buildCombinedResultEmail({ ...base, tasks, quiz: { ...quiz, meta: { supersedesPartial: true } } });
+  assert.match(sure.html, /<h3>Kvíz[^<]*<\/h3>\n<p><strong>Állapot:<\/strong> ez a befejezett kör eredménye — a korábbi, „félbehagyva” jelzésű levél helyébe lép\.<br>/);
+  const maybe = buildCombinedResultEmail({ ...base, tasks, quiz: { ...quiz, meta: { supersedesPartial: "unknown" } } });
+  assert.match(maybe.html, /ha erről a körről korábban „félbehagyva” jelzésű levél érkezett, ez lép a helyébe\./);
+  assert.ok(!/Állapot:/.test(buildCombinedResultEmail({ ...base, tasks, quiz }).html));
+});
