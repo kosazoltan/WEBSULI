@@ -47,6 +47,7 @@ import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
 import { SPEECH_BRIDGE_SCRIPT } from "./lib/speech-bridge";
 import { lessonResultsRouter, resultPartialEmailEnabled } from "./lesson-result-email";
+import { resultCombinedEmailEnabled } from "./lesson-result-combine";
 import { createAdventRouter } from "./advent/routes";
 import { createAdventStore } from "./advent/store";
 import { createAdventPreviewRouter } from "./advent/preview";
@@ -1023,7 +1024,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/csrf-token', (req: Request, res) => {
     const csrfToken = generateToken(req);
     // Eredmény-e-mail B4b: a kör-kilét kötését (a kliens csak a rögzített párosítással egyező tokent küldi) a B4 kapcsolója hirdeti.
-    res.json({ csrfToken, ...(resultPartialEmailEnabled() ? { resultOwnerBinding: true } : {}) });
+    // Review #586: az összevont levél (U4b) is kikényszeríti a kötést — azt is hirdetni kell.
+    res.json({ csrfToken, ...(resultPartialEmailEnabled() || resultCombinedEmailEnabled() ? { resultOwnerBinding: true } : {}) });
   });
 
   // HEALTH CHECK endpoint - Fast response for Autoscale deployment health checks

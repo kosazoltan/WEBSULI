@@ -1199,6 +1199,9 @@ export const lessonResultPending = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     sentReason: varchar("sent_reason", { length: 8 }).$type<"pair" | "timeout">(),
+    /** U4b review #586 (0048): a pár közös kulcsa és a sikeres kézbesítés ideje (kézbesítetlen pár újrapróbálható). */
+    pairKey: char("pair_key", { length: 64 }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   },
   (table) => ({
     // Review #585: a 0047-es migráció CHECK-jei azonos néven (sémaexportból létrehozott táblán is éljenek).
@@ -1207,6 +1210,7 @@ export const lessonResultPending = pgTable(
     openHasContent: check("lesson_result_pending_open_has_content", sql`${table.sentAt} IS NOT NULL OR (${table.graded} IS NOT NULL AND ${table.learner} IS NOT NULL)`),
     openUnique: uniqueIndex("lesson_result_pending_open_unique").on(table.lessonId, table.ownerKey, table.kind).where(sql`sent_at IS NULL`),
     openAge: index("lesson_result_pending_open_age").on(table.createdAt).where(sql`sent_at IS NULL`),
+    undelivered: index("lesson_result_pending_undelivered").on(table.sentAt).where(sql`sent_at IS NOT NULL AND delivered_at IS NULL`),
   }),
 );
 
