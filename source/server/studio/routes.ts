@@ -189,8 +189,9 @@ studioRouter.get("/maps/:id", async (req: Request, res: Response) => {
 /**
  * POST /api/studio/maps/extract — build (or reuse) a map from uploaded sources.
  *
- * Idempotent by content: the same files with the same scope return the stored map
- * instead of paying for the vision call twice.
+ * Idempotent per owner and content: the same caller with the same files and scope gets
+ * its own stored map back instead of paying for the vision call twice (owner-scoped
+ * `ownerMapHash`; another teacher's map is never returned).
  */
 studioRouter.post("/maps/extract", async (req: Request, res: Response) => {
   const parsed = parseOneStepRequest(req.body);
