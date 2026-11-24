@@ -9,6 +9,21 @@ test.use({ serviceWorkers: "block" });
 test.describe("asztal 1366×768", () => {
   test.use({ viewport: { width: 1366, height: 768 } });
 
+  // review #578: a függőleges menüben a Fel/Le nyíl lépteti a füleket (a Radix Tabs gyökerének orientációja), nem csak az ARIA
+  test("billentyűzet: Le / Fel nyíl vált fület, a lista függőlegesnek jelzett", async ({ page }) => {
+    await page.goto("/__admin-tabs-probe");
+    const nav = page.getByTestId("admin-tab-groups");
+    await expect(nav).toHaveAttribute("aria-orientation", "vertical");
+    const tabs = nav.getByRole("tab");
+    await tabs.nth(0).click();
+    const first = await page.getByTestId("probe-active-tab").textContent();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByTestId("probe-active-tab")).not.toHaveText(first ?? "");
+    await expect(tabs.nth(1)).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(page.getByTestId("probe-active-tab")).toHaveText(first ?? "");
+  });
+
   test("oldalsó, ragadós menü; összecsukva a tartalom kiszélesedik; az állapot megmarad", async ({ page }) => {
     await page.goto("/__admin-tabs-probe");
     await page.evaluate(() => localStorage.removeItem("websuli.admin.nav.collapsed"));
