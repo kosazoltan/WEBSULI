@@ -22,6 +22,9 @@ export const REPORT_FALLBACK_MS = 45_000;
  */
 export const RESULT_REPORT_ATTEMPTS = 3;
 export const RESULT_REPORT_RETRY_DELAYS_MS = [30_000, 60_000] as const;
+/** PR #556 review: a kísérletek száma körönként (a „már elküldve” jelző kulcsán), a lap élete alatt — az effekt újrafutása (pl. a kör
+ *  lezárása, új `round` érték) nem nyit új keretet. */
+const pageAttempts = new Map<string, number>();
 export function useResultReport(lessonId: string | undefined, kind: "tasks" | "quiz", round: ExperienceRound, storageKey: string, ready = true) {
   const sending = useRef(false);
   const [timedOut, setTimedOut] = useState(false);
@@ -42,6 +45,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const roundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
     const flag = `${storageKey}:${kind}:sent:${roundId}`;
     try { if (localStorage.getItem(flag)) return; } catch { /* privát módban a szerver egyedi kulcsa véd */ }
+    if ((pageAttempts.get(flag) ?? 0) >= RESULT_REPORT_ATTEMPTS) return;
     sending.current = true;
     void (async () => {
       try {
@@ -58,13 +62,18 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         // időtúllépésnél és 5xx-nél újrapróba, de egyetlen szinten (lásd RESULT_REPORT_ATTEMPTS). Biztonságos: a szerver a kört egyedi
         // kulccsal egyszer rögzíti. B2 (#510 R8): a kvíz végleges kérése `keepalive` (az utolsó válasz utáni lapbezárás nem szakítja meg);
         // a feladatoké nem, mert a törzsük meghaladhatja a `keepalive` 64 KB-os keretét.
-        for (let attempt = 1; ; attempt++) {
+        for (;;) {
+          const attempt = (pageAttempts.get(flag) ?? 0) + 1;
+          pageAttempts.set(flag, attempt);
           try {
             await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: 0, keepalive: kind === "quiz" });
             break;
           } catch (error) {
             if (attempt >= RESULT_REPORT_ATTEMPTS || !isRetryableRequestError(error)) throw error;
             await new Promise(resolve => setTimeout(resolve, RESULT_REPORT_RETRY_DELAYS_MS[attempt - 1]));
+            // PR #556 review (B1b R2): a korhatár minden kísérlet előtt újra — a várakozás alatt (pl. felfüggesztett gépen) elavult, le nem
+            // zárt kör nem megy el; a lezárt és a válaszidő nélküli régi kör kivétele (roundActivityAt) változatlan.
+            if (!round.finishedAt && roundTooOld(roundActivityAt(round), Date.now())) return;
           }
         }
         try { localStorage.setItem(flag, "1"); } catch { /* elég a szerver egyedi kulcsa */ }

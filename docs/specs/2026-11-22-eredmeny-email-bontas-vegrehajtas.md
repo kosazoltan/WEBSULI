@@ -73,6 +73,10 @@
     `Retry-After` kezelése a B7). Folyamatos 503 mellett így laponként legfeljebb 3 POST megy (a főágon 4 volt, gyors egymásutánban).
   - R37: az `apiRequest` időzítője a válasz törzsének beolvasásáig él (`finally`); a `/api/csrf-token` lekérése saját 15 s-os
     határidőt kap (`AbortSignal.timeout`).
+  - PR #556 bot-review (Codex, Vercel, Copilot) javításai: (1) a tokenlekérés határideje időzített `AbortController` — `AbortError`, így
+    a 403 utáni frissítés időtúllépése is újrapróbálható (az `AbortSignal.timeout` `TimeoutError`-t adott, amit a predikátum nem ismer);
+    (2) a 3 kísérletes keret körönként, a lap élete alatt él (`pageAttempts`, a „már elküldve” jelző kulcsán) — a kör lezárása nem nyit
+    új keretet; (3) a B1b korhatárát minden újrapróba előtt újra nézi (a várakozás alatt elavult, le nem zárt kör nem megy el).
   - Tesztek: `tests/lesson-result-limits.test.ts` (R9, R46 valódi HTTP-n), `tests/review-rate-limit.test.ts` (a kapu viselkedése),
     `tests/request-retry.test.ts` (R26 forrásőr), `tests/lesson-result-email-quiz.spec.ts` B2-esetei (R4, R8, R26, R37 böngészőben).
 

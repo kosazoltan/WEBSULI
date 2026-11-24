@@ -310,6 +310,52 @@ test("B2 / R26: folyamatos 503 mellett nincs beágyazott újrapróba — laponk�
   await page.clock.runFor(10 * 60_000);
   await page.waitForTimeout(500);
   expect(finals, "a harmadik kísérlet után a lapon nincs több (a következő betöltéskor a kör újra megy)").toBe(3);
+  // PR #556 review (Copilot): a kör lezárása (új `round` érték, az effekt újrafut) sem nyit új, háromkísérletes keretet ugyanarra a körre.
+  await page.getByRole("button", { name: "Kvíz kiértékelése" }).click();
+  await expect(page.locator(".fusion-panel-quiz")).toHaveAttribute("data-finished", "true");
+  await page.clock.runFor(10 * 60_000);
+  await page.waitForTimeout(500);
+  expect(finals, "a lezárás után sem indul újabb kísérlet ezen a lapon").toBe(3);
+});
+
+test("B2 / R2 + R26 (PR #556 review): az újrapróba várakozása alatt elavult (8 napja megválaszolt, le nem zárt) kör nem megy el", async ({ page }) => {
+  const { accepted, state } = await switchableMock(page);
+  await page.clock.install({ time: new Date(T0) });
+  await answerAll(page);
+  await expect.poll(() => state.attempts).toBe(1);
+  // A lap az újrapróba várakozása alatt „alszik” (pl. felfüggesztett laptop), közben a szerver helyreáll.
+  await page.clock.setSystemTime(new Date(T0 + 8 * DAY));
+  state.fail = false;
+  await page.clock.runFor(2 * 60_000);
+  await page.waitForTimeout(500);
+  expect(state.attempts, "a korhatárt minden kísérlet előtt újra nézi").toBe(1);
+  expect(accepted).toHaveLength(0);
+});
+
+test("B2 / R26 + R37 (PR #556 review): a 403 utáni tokenfrissítés 15 s-os határideje újrapróbálható hiba — a kör a következő kísérlettel elmegy", async ({ page }) => {
+  await mock(page);
+  const state = { tokenCalls: 0, hang: true, accepted: [] as string[], rejected: [] as string[] };
+  await page.route("**/api/csrf-token", route => {
+    state.tokenCalls++;
+    if (state.tokenCalls === 1) return route.fulfill({ json: { csrfToken: "t1" } });
+    if (state.hang) return; // a frissítés nem válaszol
+    return route.fulfill({ json: { csrfToken: `t${state.tokenCalls}` } });
+  });
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const token = route.request().headers()["x-csrf-token"] ?? "";
+    if (token === "t1") { state.rejected.push(token); return route.fulfill({ status: 403, json: { message: "invalid csrf token" } }); }
+    state.accepted.push(token);
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await page.clock.install({ time: new Date(T0) });
+  await answerAll(page);
+  await expect.poll(() => state.tokenCalls).toBe(2);
+  expect(state.rejected).toEqual(["t1"]);
+  await page.clock.runFor(16_000); // a frissítés határideje lejár
+  state.hang = false;
+  await page.clock.runFor(31_000); // az első újrapróba (30 s)
+  await expect.poll(() => state.accepted.length).toBe(1);
+  expect(state.accepted[0], "az újrapróba friss tokennel ment").toMatch(/^t[3-9]$/);
 });
 
 test("B2 / R37: a 202-es fejlécek után megakadó választest olvasását az időkorlát megszakítja", async ({ page }) => {

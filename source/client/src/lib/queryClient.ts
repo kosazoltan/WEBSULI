@@ -58,18 +58,26 @@ class CSRFTokenManager {
   }
   
   private async fetchTokenFromServer(): Promise<string> {
-    // B2 (#510 R37): a megakadt tokenlekérés nem tarthatja végtelenül a várakozó írást.
-    const res = await fetch('/api/csrf-token', {
-      credentials: 'include',
-      signal: AbortSignal.timeout(CSRF_TOKEN_TIMEOUT_MS),
-    });
-    
-    if (!res.ok) {
-      throw new Error('Failed to fetch CSRF token');
+    // B2 (#510 R37): a megakadt tokenlekérés nem tarthatja végtelenül a várakozó írást. Időzített AbortController (nem
+    // `AbortSignal.timeout`): a határidő így a már kezelt, újrapróbálhatónak ismert `AbortError`-t adja, nem `TimeoutError`-t
+    // (PR #556 review) — és a törzs olvasását is fedi.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CSRF_TOKEN_TIMEOUT_MS);
+    try {
+      const res = await fetch('/api/csrf-token', {
+        credentials: 'include',
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to fetch CSRF token');
+      }
+
+      const data = await res.json();
+      return data.csrfToken;
+    } finally {
+      clearTimeout(timer);
     }
-    
-    const data = await res.json();
-    return data.csrfToken;
   }
   
   // Invalidate cached token (e.g., when CSRF error occurs)
