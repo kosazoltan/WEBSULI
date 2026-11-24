@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { ArrowLeft, Check, Hourglass, Lock, Volume2, VolumeX, Wrench, X } from "lucide-react";
 import type { AdventAnswerResult, AdventDoorView, AdventQuestion, AdventState } from "@shared/advent/contract";
 import { doorArtId } from "@shared/advent/art";
@@ -19,7 +19,7 @@ import { ADVENT_BUSY_WAITING_TEXT, adventErrorText, retryWhenBusy } from "@/adve
 import { escapeMissedByLayer } from "@/advent/dialog-escape";
 import { guardSwallows, type GuardPoint } from "@/advent/tap-guard";
 import {
-  ADVENT_STATE_KEY, adventApi, adventDevice, clearPairingLost, forgetLearnerPairing, isPairingLost, markPairingLost, useAdventState,
+  ADVENT_STATE_KEY, adventApi, adventApiPinned, adventDevice, adventMode, clearPairingLost, forgetLearnerPairing, isPairingLost, markPairingLost, useAdventState,
 } from "@/advent/useAdvent";
 import { adventStateKey, adventSubjectGeneration, adventWriteBlocked, applyAdventWrite, applyAnswerResult, pairingRecovered, shouldAdopt } from "@/advent/sync";
 import "@/advent/advent.css";
@@ -76,15 +76,31 @@ function useLandscape(): boolean {
   return landscape;
 }
 
+/**
+ * A naptár módonként (normál / előnézeti nap) KÜLÖN példány (S5/S6 1. vak L2): módváltáskor (pl. az előnézetből lapfrissítés nélkül
+ * a normál címre) a helyi állapot (nyitott kérdés, szándék, hibák) nem öröklődik.
+ */
 export default function AdventCalendar() {
+  // A cím keresőrészének figyelése: változáskor újrarajzol, és a mód (a címből) újraszámolódik.
+  useSearch();
+  const mode = adventMode();
+  return <AdventCalendarView key={mode} />;
+}
+
+function AdventCalendarView() {
   const queryClient = useQueryClient();
-  const { data: state, isLoading, isError, error: loadError, refetch, generation } = useAdventState();
+  // A mód a lekérdezésé (minden rajzoláskor a címből; egy elutasított előnézet után már „normal”) — az írások ugyanide kerülnek.
+  const { data: state, isLoading, isError, error: loadError, refetch, generation, mode } = useAdventState();
   const [open, setOpen] = useState<Open | null>(null);
   const [busy, setBusy] = useState(false);
   // Melyik ablak nyílik éppen (lassú hálózaton azonnali jelzés az ablakon), és kiírjuk-e már szöveggel is.
   const [openingDay, setOpeningDay] = useState<number | null>(null);
   const [openingSlow, setOpeningSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A meghiúsult írás fajtája (PR-C 3. vak L2, L3): az „Újra” ezt indítja újra (az átvételt, illetve a főoldalról indított nyitást) —
+  // nem csak állapotot olvas. `saving`: az átvétel igazolt mentéséig látható jelzés.
+  const [failedWrite, setFailedWrite] = useState<"adopt" | "auto-open" | null>(null);
+  const [saving, setSaving] = useState(false);
   // Rövid, látható (és felolvasott) üzenet a lap alján — nem tolja el a rácsot. Az `n` miatt ugyanaz a szöveg újra megjelenik.
   const [notice, setNotice] = useState<{ text: string; n: number } | null>(null);
   // 429 („most sokan vagyunk”): rövid várakozás alatt barátságos üzenet, utána egy automatikus újrapróba.
@@ -163,6 +179,8 @@ export default function AdventCalendar() {
     setOpeningDay(null);
     setWaiting(false);
     setError(null);
+    setFailedWrite(null);
+    setSaving(false);
   }, [generation]);
 
   // A karácsonyfa csillaga a 24. ablak megoldását követi (A43, PR-C vak L8), nem a pontszámot; a felgyulladáskor egyszer felfénylik.
@@ -209,7 +227,7 @@ export default function AdventCalendar() {
 
   // Az írás eredménye csak a kérés indításakori alany-generációra kerül a gyorsítótárba (PR-C vak L3), és a függő régebbi olvasás nem
   // írhatja felül (PR-C 2. vak L2).
-  const setState = useCallback((generation: number, next: AdventState) => applyAdventWrite(queryClient, generation, () => next), [queryClient]);
+  const setState = useCallback((generation: number, next: AdventState) => applyAdventWrite(queryClient, generation, () => next, mode), [queryClient, mode]);
   const refresh = useCallback(() => queryClient.invalidateQueries({ queryKey: ADVENT_STATE_KEY }), [queryClient]);
 
   /**
@@ -217,7 +235,7 @@ export default function AdventCalendar() {
    * közben más törölhette) és a választási kényszer — a renderelt értéktől függetlenül. Tiltásnál a választás azonnal megjelenik.
    */
   const writeBlocked = useCallback((): boolean => {
-    const current = queryClient.getQueryData<AdventState | null>(adventStateKey(adventSubjectGeneration()));
+    const current = queryClient.getQueryData<AdventState | null>(adventStateKey(adventSubjectGeneration(), mode));
     const blocked = adventWriteBlocked({ mustChoose: mustChooseRef.current, lost: isPairingLost(), pairing: current?.pairing });
     if (blocked && !mustChooseRef.current) {
       if (current?.pairing === "invalid") markPairingLost();
@@ -225,25 +243,29 @@ export default function AdventCalendar() {
       setMustChoose(true);
     }
     return blocked;
-  }, [queryClient]);
+  }, [queryClient, mode]);
 
   const openDoor = useCallback(async (day: number, opener: HTMLElement | null, repair = false) => {
     if (writeBlocked()) { say(CHOOSE_FIRST_TEXT); return; }
     const started = generation;
     questionOpener.current = opener;
     setError(null);
+    setFailedWrite(null);
     setBusy(true);
     setOpeningDay(day);
     try {
-      const res = await patient(() => adventApi.open(day), started);
+      const res = await patient(adventApiPinned.open(day), started);
       if (!isCurrent(started)) return;
       if (!res.question) { say("Ez a kérdés már nem érhető el, de az eredményed megmaradt."); return; }
       if (!muted) sfxClick();
       setOpen({ day, question: res.question, result: res.answered, readOnly: res.answered !== null, repair, picked: res.answered ? res.answered.pick : null });
+      return true;
     } catch (e) {
       if (!isCurrent(started)) return;
       setError(adventErrorText(e, "Most nem sikerült kinyitni az ablakot. Próbáld meg újra!"));
       void refresh();
+      // A hívó (a főoldalról indított automatikus nyitás) ebből tudja, hogy a szándék még nem teljesült (PR-C 3. vak L3).
+      return false;
     } finally {
       if (isCurrent(started)) { setBusy(false); setOpeningDay(null); }
     }
@@ -269,7 +291,7 @@ export default function AdventCalendar() {
     setBusy(true);
     setError(null);
     try {
-      const result = await patient(() => adventApi.answer(day, question.id, pick), started);
+      const result = await patient(adventApiPinned.answer(day, question.id, pick), started);
       // Ha a gyerek közben bezárta a kérdést, az eredmény megérkezése nem nyitja újra. A jelölés a RÖGZÍTETT választ mutatja
       // (másik lapon / eszközön már megválaszolt kérdésnél az nem a mostani koppintás).
       if (adventSubjectGeneration() !== started) return;
@@ -279,9 +301,9 @@ export default function AdventCalendar() {
       // A teljes ablaklista az összesítéssel együtt (élesítés előtti L6: a másik eszközön megoldott ablak is világít); a függő régebbi
       // olvasás megszakad, és nem írja vissza a régi állást (PR-C 2. vak L2).
       await applyAdventWrite(queryClient, started, (latest) => {
-        const current = (latest ?? queryClient.getQueryData<AdventState | null>(adventStateKey(started))) as AdventState | null;
+        const current = (latest ?? queryClient.getQueryData<AdventState | null>(adventStateKey(started, mode))) as AdventState | null;
         return current ? applyAnswerResult(current, result) : null;
-      });
+      }, mode);
     } catch (e) {
       if (!isCurrent(started)) return;
       setError(adventErrorText(e, "Most nem sikerült elküldeni a válaszodat. Próbáld meg újra — nem veszett el semmi!"));
@@ -313,7 +335,7 @@ export default function AdventCalendar() {
     const started = generation;
     setBusy(true);
     setError(null);
-    try { await setState(started, await patient(() => adventApi.grade(pendingGrade), started)); if (isCurrent(started)) { setPendingGrade(null); setChangingGrade(false); } }
+    try { await setState(started, await patient(adventApiPinned.grade(pendingGrade), started)); if (isCurrent(started)) { setPendingGrade(null); setChangingGrade(false); } }
     catch (e) { if (isCurrent(started)) setError(adventErrorText(e, "Most nem sikerült menteni az évfolyamot. Próbáld meg újra!")); }
     finally { if (isCurrent(started)) setBusy(false); }
   };
@@ -323,9 +345,24 @@ export default function AdventCalendar() {
     const started = generation;
     setBusy(true);
     setError(null);
-    try { await setState(started, await patient(() => adventApi.round(), started)); if (isCurrent(started)) setSummaryOpen(false); }
+    try { await setState(started, await patient(adventApiPinned.round(), started)); if (isCurrent(started)) setSummaryOpen(false); }
     catch (e) { if (isCurrent(started)) setError(adventErrorText(e, "Most nem sikerült új naptárat kérni. Próbáld meg újra!")); }
     finally { if (isCurrent(started)) setBusy(false); }
+  };
+
+  /** „Előnézet törlése” (S6): az admin saját előnézeti sora törlődik, utána friss (évfolyamot kérő) előnézet töltődik. */
+  const resetPreview = async () => {
+    const started = generation;
+    setBusy(true);
+    setError(null);
+    setOpen(null);
+    setSummaryOpen(false);
+    try { await adventApi.resetPreview(); }
+    catch (e) { if (isCurrent(started)) setError(adventErrorText(e, "Most nem sikerült törölni az előnézetet. Próbáld meg újra!")); }
+    finally {
+      if (isCurrent(started)) { setBusy(false); setPendingGrade(null); setChangingGrade(false); }
+      await refresh();
+    }
   };
 
   const continueAsGuest = () => {
@@ -347,30 +384,77 @@ export default function AdventCalendar() {
     url.searchParams.delete("nyit");
     window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
   }, []);
+  /**
+   * A főoldalról indított nyitás végrehajtása egy (friss) állapotból. A szándékot csak a siker vagy a szándékos megszakítás fogyasztja
+   * el: átmeneti hibánál (pl. 503) „auto-open” jelölés marad, és az „Újra” friss állapotból folytatja a kérdésnyitást (PR-C 3. vak L3).
+   */
+  const autoOpen = useCallback(async (current: AdventState) => {
+    const day = nextDoorToOpen(current);
+    // A megnyitó a soron következő ablak gombja: bezárás után oda tér vissza a fókusz, nem a lap aljára (vak ellenőr KICSI-3).
+    const opener = day !== null ? document.querySelector<HTMLElement>(`[data-testid="advent-door-${day}"]`) : null;
+    if (day !== null) {
+      const started = adventSubjectGeneration();
+      const ok = await openDoor(day, opener, current.doors[day - 1]?.state === "repairable");
+      if (ok === false && isCurrent(started)) setFailedWrite("auto-open");
+    } else if (roundIsOver(current)) setSummaryOpen(true);
+  }, [openDoor]);
   useEffect(() => {
     // Lejárt párosításnál a szándék MEGMARAD a gyerek döntéséig (PR-C vak L6): az őr szinkron, a renderelt értéktől függetlenül.
     if (!state || !wantsAuto.current || state.needsGrade || writeBlocked()) return;
     wantsAuto.current = false;
-    const day = nextDoorToOpen(state);
-    // A megnyitó a soron következő ablak gombja: bezárás után oda tér vissza a fókusz, nem a lap aljára (vak ellenőr KICSI-3).
-    const opener = day !== null ? document.querySelector<HTMLElement>(`[data-testid="advent-door-${day}"]`) : null;
-    if (day !== null) void openDoor(day, opener, state.doors[day - 1]?.state === "repairable");
-    else if (roundIsOver(state)) setSummaryOpen(true);
-  }, [state, openDoor, mustChoose, writeBlocked]);
+    void autoOpen(state);
+  }, [state, autoOpen, mustChoose, writeBlocked]);
+  /** Az automatikus nyitás újrapróbája: előbb friss állapot (az ablak állapota közben változhatott), utána a nyitás abból (L3). */
+  const retryAutoOpen = async () => {
+    const started = adventSubjectGeneration();
+    const fresh = await refetch();
+    if (!isCurrent(started)) return;
+    if (fresh.isError || !fresh.data) {
+      setError("Most nem sikerült elérni a naptárat. Próbáld meg újra!");
+      setFailedWrite("auto-open");
+      return;
+    }
+    // Évfolyamválasztás vagy lejárt link miatt még nem nyitható: a szándék megmarad, a fenti őr a gyerek döntése után folytatja.
+    if (fresh.data.needsGrade || writeBlocked()) { wantsAuto.current = true; return; }
+    void autoOpen(fresh.data);
+  };
 
   // A függő átvétel kifejezett mentése a megtekintési útról (PR-C vak L2): az összesítés megnyitásakor, vagy végigjátszott körnél (akkor
   // nincs más író kérés). A GET mellékhatás nélkül marad; az átvétel idempotens, CSRF-védett POST.
   const adopting = useRef(false);
+  /**
+   * Az átvétel (tényleges, az aktuális alanyhoz kötött POST /adopt). Hibánál az „Újra” EZT indítja újra (PR-C 3. vak L2), és az
+   * igazolt mentésig látható a függő állapot (`advent-saving`, illetve a hibasáv) — a hiba eltűnése nem tűnhet sikernek.
+   */
+  const runAdopt = useCallback(async () => {
+    if (adopting.current || writeBlocked()) return;
+    adopting.current = true;
+    const started = adventSubjectGeneration();
+    setSaving(true);
+    try {
+      await setState(started, await adventApi.adopt());
+    } catch (e) {
+      if (isCurrent(started)) { setError(adventErrorText(e, "Most nem sikerült elmenteni az eredményedet. Próbáld meg újra!")); setFailedWrite("adopt"); }
+    } finally {
+      adopting.current = false;
+      if (isCurrent(started)) setSaving(false);
+    }
+  }, [writeBlocked, setState]);
   useEffect(() => {
     if (!state || adopting.current) return;
     if (!shouldAdopt(state, { summaryOpen, roundOver: roundIsOver(state), blocked: writeBlocked() })) return;
-    adopting.current = true;
-    const started = generation;
-    void adventApi.adopt()
-      .then((next) => setState(started, next))
-      .catch((e: unknown) => { if (isCurrent(started)) setError(adventErrorText(e, "Most nem sikerült elmenteni az eredményedet. Próbáld meg újra!")); })
-      .finally(() => { adopting.current = false; });
-  }, [state, summaryOpen, generation, writeBlocked, setState]);
+    void runAdopt();
+  }, [state, summaryOpen, generation, writeBlocked, runAdopt]);
+
+  /** Az „Újra”: a meghiúsult írást indítja újra (átvétel / automatikus nyitás), különben friss állapotot olvas (L2, L3). */
+  const retryFailed = () => {
+    const failed = failedWrite;
+    setError(null);
+    setFailedWrite(null);
+    if (failed === "adopt") { void runAdopt(); return; }
+    if (failed === "auto-open") { void retryAutoOpen(); return; }
+    void refresh();
+  };
 
   if (isLoading) return <Shell><p className="advent-message" role="status">Betöltjük a naptárat…</p></Shell>;
   // Sérült mentés: célzott, gondozóhoz irányító üzenet újrapróba nélkül — ugyanarra a sorra az „Újra” sem segítene (PR-C vak L7).
@@ -397,10 +481,17 @@ export default function AdventCalendar() {
     );
   }
   if (!state) return <Shell><div className="advent-message"><p>A naptár most nem érhető el.</p><BackHome /></div></Shell>;
-  if (state.phase === "before") return <Shell><div className="advent-message"><p>Még nincs itt az advent — gyere vissza december 1-jén!</p><BackHome /></div></Shell>;
+  if (state.phase === "before") return (
+    <Shell>
+      {/* Admin-előnézet (A16, S6): a szezon előtti fázisban is jelöljük, hogy előnézetben vagyunk (Thread 5). */}
+      {state.identity === "preview" ? <PreviewBanner state={state} busy={busy} onReset={() => void resetPreview()} /> : null}
+      <div className="advent-message"><p>Még nincs itt az advent — gyere vissza december 1-jén!</p><BackHome /></div>
+    </Shell>
+  );
   if (state.phase === "teaser") {
     return (
       <Shell>
+        {state.identity === "preview" ? <PreviewBanner state={state} busy={busy} onReset={() => void resetPreview()} /> : null}
         <div className="advent-message" data-testid="advent-teaser">
           <h2>Hamarosan!</h2>
           <p>{state.closing.text}</p>
@@ -451,6 +542,8 @@ export default function AdventCalendar() {
           <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-continue-guest" onClick={continueAsGuest}>Folytatom vendégként</button>
         </div>
       ) : null}
+      {/* Admin-előnézet (A16, S6): a megadott nap szerinti naptár a saját előnézeti soron — levél nem megy ki róla. */}
+      {state.identity === "preview" ? <PreviewBanner state={state} busy={busy} onReset={() => void resetPreview()} /> : null}
       {volatileDevice ? <p className="advent-banner" role="status">Ezen az eszközön nem tudjuk megjegyezni a naptáradat.</p> : null}
       {closed ? <p className="advent-banner" role="status" data-testid="advent-closed">{state.closing.text}</p> : null}
       {state.closing.kind === "gift" ? (
@@ -472,7 +565,7 @@ export default function AdventCalendar() {
       {error && !mustChoose && open === null ? (
         <div className="advent-banner advent-banner--error" role="alert" data-testid="advent-error">
           <span>{error}</span>
-          <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-error-retry" onClick={() => { setError(null); void refresh(); }}>Újra</button>
+          <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-error-retry" onClick={retryFailed}>Újra</button>
         </div>
       ) : null}
 
@@ -504,7 +597,9 @@ export default function AdventCalendar() {
       ) : (
         <ol className="advent-grid" data-testid="advent-grid" aria-label="A naptár 24 ablaka" data-busy={busy ? "true" : "false"} data-guard={guarded ? "true" : "false"} aria-busy={busy}>
           {state.layout.map((day) => {
-            const door = doorsByDay.get(day)!;
+            const door = doorsByDay.get(day);
+            // Védőháló (PR-C 3. vak L4): a szerver sorőre a rácsot az 1…24 permutációjára szűri; ismeretlen napot nem rajzolunk.
+            if (!door) return null;
             const shown = shownState(door, closed);
             const opening = openingDay === day;
             return (
@@ -536,6 +631,7 @@ export default function AdventCalendar() {
       {/* Rövid állapotüzenetek a lap alján, a rács eltolása nélkül: várakozás, lassú nyitás, zárt ablak. */}
       <div className="advent-toasts" aria-live="polite">
         {waiting && open === null ? <p className="advent-toast" role="status" data-testid="advent-busy">{ADVENT_BUSY_WAITING_TEXT}</p> : null}
+        {saving ? <p className="advent-toast" role="status" data-testid="advent-saving">Mentjük az eredményedet… egy pillanat!</p> : null}
         {showOpening ? <p className="advent-toast" role="status" data-testid="advent-opening">Nyitjuk {articleFor(openingDay)} {openingDay}. ablakot… egy pillanat!</p> : null}
         {notice ? <p key={notice.n} className="advent-toast" role="status" data-testid="advent-notice">{notice.text}</p> : null}
       </div>
@@ -634,6 +730,11 @@ export default function AdventCalendar() {
               <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-new-round" disabled={busy} onClick={() => void newRound()}>Új naptárat kérek</button>
             ) : null}
             {error ? <p className="advent-banner advent-banner--error" role="alert">{error}</p> : null}
+            {/* Az átvétel hibája az aktív modálban is újrapróbálható, és a mentésig itt is látszik a függő állapot (S5/S6 1. vak L3). */}
+            {failedWrite === "adopt" && !saving ? (
+              <button type="button" className="advent-btn advent-btn--primary" data-testid="advent-summary-retry" onClick={retryFailed}>Újra — mentsük el az eredményemet</button>
+            ) : null}
+            {saving ? <p className="advent-banner" role="status" data-testid="advent-summary-saving">Mentjük az eredményedet… egy pillanat!</p> : null}
             <Dialog.Close asChild><button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-summary-close">Bezárás</button></Dialog.Close>
           </Dialog.Content>
         </Dialog.Portal>
@@ -667,6 +768,16 @@ function returnFocus(target: HTMLElement | null | undefined): void {
       if ((!active || active === document.body) && !document.querySelector("[role=\"dialog\"], [role=\"alertdialog\"]")) target.focus();
     }, delay);
   }
+}
+
+/** Admin-előnézet jelölése (A16, S6): minden fázisban — a szezon előtti és teaser nézetnél is (Thread 5). */
+function PreviewBanner({ state, busy, onReset }: { state: AdventState; busy: boolean; onReset: () => void }) {
+  return (
+    <div className="advent-banner advent-banner--preview" role="status" data-testid="advent-preview-banner">
+      <span><strong>ELŐNÉZET</strong> — {adventDateLabel(state.today)} szerint; a válaszaid csak az előnézetben mentődnek, levél nem megy ki.</span>
+      <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-preview-reset" disabled={busy} onClick={onReset}>Előnézet törlése</button>
+    </div>
+  );
 }
 
 function BackHome() {

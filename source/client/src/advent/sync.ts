@@ -37,10 +37,37 @@ export async function clearAdventCache(queryClient: QueryClient): Promise<void> 
 /** L6 — a válasz alkalmazása: a teljes ablaklista (ha a szerver adja) az összesítéssel együtt cserélődik; régi válasznál a megválaszolt ablak. */
 export function applyAnswerResult<D extends { day: number }, T extends { doors: D[]; summary: unknown; closing: unknown }>(
   state: T,
-  result: { door: D; doors?: D[]; summary: T["summary"]; closing: T["closing"] },
+  result: { door: D; doors?: D[]; summary: T["summary"]; closing: T["closing"]; version?: number; asOf?: number },
 ): T {
   const doors = Array.isArray(result.doors) && result.doors.length > 0 ? result.doors : state.doors.map((d) => (d.day === result.door.day ? result.door : d));
-  return { ...state, doors, summary: result.summary, closing: result.closing };
+  // A válasz utáni szerververzió is átkerül (PR-C 3. vak L1): egy később kézbesített régebbi írás ehhez mérődik.
+  return {
+    ...state, doors, summary: result.summary, closing: result.closing,
+    ...(typeof result.version === "number" ? { version: result.version } : {}),
+    // A válasz szerverpillanata is (S5/S6 1. vak L4): egyenlő verziónál ez dönti el, melyik a frissebb nézet.
+    ...(typeof result.asOf === "number" ? { asOf: result.asOf } : {}),
+  };
+}
+
+/**
+ * PR-C 3. vak L1 — régebbi-e a bejövő állás a gyorsítótárban lévőnél: mindkettő szerververziója szám, és a bejövőé kisebb. (Verzió nélküli
+ * — régi szervertől jövő — állásnál nincs összevetés.) A szerver a sor módosítási idejét adja, amely a soronkénti zár miatt az írások
+ * sorrendjében nő; így egy korábban feldolgozott, de később kézbesített válasz (pl. az összesítés átvétele) nem festi vissza a már
+ * megoldott ablakot.
+ */
+export function isOlderAdventState(next: unknown, current: unknown): boolean {
+  const numberOf = (value: unknown, field: "version" | "asOf"): number | null => {
+    const v = typeof value === "object" && value !== null ? (value as Record<string, unknown>)[field] : undefined;
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  const a = numberOf(next, "version");
+  const b = numberOf(current, "version");
+  if (a === null || b === null) return false;
+  if (a !== b) return a < b;
+  // Egyenlő sorverzió (S5/S6 1. vak L4): a régebbi szerverpillanatú nézet (pl. a zárás előtt feldolgozott, később kézbesített válasz) a régebbi.
+  const p = numberOf(next, "asOf");
+  const q = numberOf(current, "asOf");
+  return p !== null && q !== null && p < q;
 }
 
 /**
@@ -66,15 +93,19 @@ export function bumpAdventSubject(): number {
   return subjectGeneration;
 }
 
-/** Az állapot gyorsítótár-kulcsa egy generációhoz (a `clearAdventCache` és az érvénytelenítés az előtag szerint mindet eléri). */
-export function adventStateKey(generation: number = subjectGeneration): readonly [typeof ADVENT_STATE_KEY[0], number] {
-  return [ADVENT_STATE_KEY[0], generation] as const;
+/**
+ * Az állapot gyorsítótár-kulcsa egy generációhoz és MÓDHOZ (a `clearAdventCache` és az érvénytelenítés az előtag szerint mindet eléri).
+ * A mód: `"normal"`, vagy az admin-előnézet napja (`ÉÉÉÉ-HH-NN`) — a kettő soha nem osztozik bejegyzésen (S5/S6 1. vak L2: a főoldal és a
+ * normál naptár nem kaphatja meg az előnézet állapotát).
+ */
+export function adventStateKey(generation: number = subjectGeneration, mode: string = "normal"): readonly [typeof ADVENT_STATE_KEY[0], number, string] {
+  return [ADVENT_STATE_KEY[0], generation, mode] as const;
 }
 
 /** Írás a gyorsítótárba CSAK akkor, ha a kérés indításakori generáció még az aktuális (a késve érkező régi POST nem írhat). */
-export function setAdventStateIfCurrent(queryClient: QueryClient, generation: number, next: unknown): boolean {
+export function setAdventStateIfCurrent(queryClient: QueryClient, generation: number, next: unknown, mode: string = "normal"): boolean {
   if (generation !== subjectGeneration) return false;
-  queryClient.setQueryData(adventStateKey(generation), next);
+  queryClient.setQueryData(adventStateKey(generation, mode), next);
   return true;
 }
 
@@ -134,15 +165,21 @@ export async function adventStateError(res: { status: number; json: () => Promis
  * ELŐTT indult, régi pillanatképet hozó) állapotolvasás megszakad, hogy ne írhassa vissza a régebbi állást. Ha olvasás futott, az írás
  * után egy friss olvasás indul (az már az írás utáni állapotot látja). Régi generációnál nem ír.
  */
-export async function applyAdventWrite(queryClient: QueryClient, generation: number, update: (current: unknown) => unknown): Promise<boolean> {
+export async function applyAdventWrite(queryClient: QueryClient, generation: number, update: (current: unknown) => unknown, mode: string = "normal"): Promise<boolean> {
   if (generation !== subjectGeneration) return false;
-  const key = adventStateKey(generation);
+  const key = adventStateKey(generation, mode);
   const reading = queryClient.isFetching({ queryKey: key }) > 0;
   await queryClient.cancelQueries({ queryKey: key });
   if (generation !== subjectGeneration) return false;
-  const next = update(queryClient.getQueryData(key));
+  const current = queryClient.getQueryData(key);
+  const next = update(current);
   if (next === undefined || next === null) return false;
-  setAdventStateIfCurrent(queryClient, generation, next);
+  // A régebbi szerververziójú állás eldobása (PR-C 3. vak L1): a később kézbesített régi válasz nem írja felül az újabbat.
+  if (isOlderAdventState(next, current)) {
+    if (reading) void queryClient.invalidateQueries({ queryKey: key });
+    return false;
+  }
+  setAdventStateIfCurrent(queryClient, generation, next, mode);
   if (reading) void queryClient.invalidateQueries({ queryKey: key });
   return true;
 }
