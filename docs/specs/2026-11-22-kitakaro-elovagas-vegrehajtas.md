@@ -16,7 +16,7 @@
 
 ## T2 — `scripts/qa/gates/lib.mjs`
 
-`REDACT_CAP = 16 * 1024` (eredetileg 32 KB, ld. a napló végét); `capTail(text)`: a korlát felett az utolsó 16 KB, a félbevágott első sor (ha van sortörés), különben a
+`REDACT_CAP = 8 * 1024` (eredetileg 32 KB, ld. a napló végét); `capTail(text)`: a korlát felett az utolsó 8 KB, a félbevágott első sor (ha van sortörés), különben a
 vágáson átnyúló token-futás kimarad, jelzősor elöl; `redact` először ezt hívja, utána a változatlan főági ciklus.
 
 ## T3 — `scripts/qa/gates/external-review.mjs`
@@ -66,3 +66,11 @@ NEM ítélet: 1 blokkoló, 2 közepes, 2 kicsi; mind valódi. A tulajdonosi kere
 - A `gate:pr` (main-merge után) a „vak L4” tesztnél bukott: 1109 ms > 1 s (párhuzamos futás; terheletlenül 0,31–0,44 s).
 - Teszt előbb (`b1e78bc9`), piros a 32 KB-os korláton: „legjobb a 3 mérésből: 336 ms (a 4× tartalékhoz < 250 ms kell)”.
 - Javítás: `REDACT_CAP = 16 * 1024` (mérés: 8 KB 20 ms, 16 KB 75 ms, 24 KB 175 ms, 32 KB 311 ms) → a teszt zöld.
+
+## 2026-11-23 — a korlát 8 KB (CI)
+
+- A PR CI-jének „Háromfázisú rend” jobja a 16 KB-os tartaléktesztnél bukott: „legjobb a 3 mérésből: 451 ms (< 250 ms kell)” — az
+  abszolút ms-korlát gépfüggő.
+- Teszt előbb (`8cc83bdc`): gépfüggetlen arány — a korlátos legrosszabb eset × 8 < a főági kitakaró 32 KB-os farkon; piros 16 KB-on
+  („korlátos: 148 ms, főági 32 KB: 640 ms”).
+- Javítás: `REDACT_CAP = 8 * 1024` → a teszt zöld.

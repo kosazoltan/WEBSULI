@@ -13,7 +13,7 @@ A kimeneti utak kitakarása **lineáris / korlátos idejű és összeomlásmente
 változatlanul** fut, csak egy biztonságos méretű, előre levágott szövegen:
 
 - a kapuk `redact`-ja (minden kiírás: `writeLog`, `createGate`, `cmdResult` → `tail`, git-stderr) legfeljebb `REDACT_CAP`
-  (16 KB; eredetileg 32 KB, ld. 8. pont) karakteren fut — nagyobb szövegnél az utolsó 16 KB marad (a napló vége a lényeg), egy jelzősorral;
+  (8 KB; eredetileg 32 KB, ld. 8. pont) karakteren fut — nagyobb szövegnél az utolsó 8 KB marad (a napló vége a lényeg), egy jelzősorral;
 - a külső ellenőr vágott hívói (`maskSecrets(...).slice(0, n)`, n = 160 / 400 / 600) helyett `maskClip(s, key, n)`: a forrás
   `n + max(64, kulcshossz)` karakterre vágva, majd a főági `maskSecrets`, majd `.slice(0, n)`;
 - a képgyártó hibaága (`redact(...).slice(0, 300)`) helyett `redactClip(text, key, 300)`, ugyanígy.
@@ -66,9 +66,11 @@ korlátja 32 KB (a főági regex így változatlan maradhat). A főági kód a 3
   `ghJson`) a `redactFirstLine`-t használja: a nyers első sor kitakarva, nem a csonkolásjelző.
 - A képgyártói vágás a befejezetlen `Bearer` + whitespace-t is elhagyja (előtag-szerződés); `undefined` / `null` → üres szöveg.
 
-## 8. Kiegészítés — a korlát 16 KB (2026-11-23)
+## 8. Kiegészítés — a korlát 8 KB (2026-11-23)
 
-A 32 KB-os korlát legrosszabb esete (korlátközeli, szóköz nélküli farok a négyzetes főági e-mail-regexen) terheletlenül 0,31–0,44 s,
+A 32 KB-os korlát legrosszabb esete (korlátközeli, szóköz nélküli farok a négyzetes főági e-mail-regexen) helyben 0,31–0,44 s,
 a `gate:pr` párhuzamos tesztfuttatásában viszont 1109 ms lett — az 1 s-os elfogadási feltétel így terhelés alatt nem teljesült.
-16 KB-on a legrosszabb eset 75 ms (13× tartalék). Új teszt: a legrosszabb eset terheletlenül < 250 ms (4× tartalék, 3 mérés
-legjobbja). A kapunaplók így az utolsó 16 KB-ot tartják meg; a főági regexek továbbra is változatlanok.
+Az első javítás (16 KB, abszolút < 250 ms-os tartalékteszttel) a CI-futón (ubuntu) bukott: ott a 16 KB-os legrosszabb eset 451 ms.
+Végleges: 8 KB (helyben 20–22 ms). A tartalékteszt gépfüggetlen: a korlátos legrosszabb eset legalább 8×-ször olcsóbb, mint a
+változatlan főági kitakaró ugyanazon a gépen egy 32 KB-os farkon (3 mérés legjobbja). A kapunaplók így az utolsó 8 KB-ot
+tartják meg (a hibaösszesítő a napló végén van); a főági regexek továbbra is változatlanok.

@@ -132,8 +132,10 @@ test('elővágás: a korláton belül a kimenet bájtra a főági redact-é; a k
   const { REDACT_CAP } = await import('./lib.mjs');
   const samples = [
     `cím ${fakeMail}, db ${fakeDb}, gh ${fakeGh}, ant ${fakeAnt}, aws ${fakeAws}, Authorization: Bearer abcdefgh12345678`,
-    'HTTP 503: Service Unavailable — lib.mjs:192, árvíztűrő tükörfúrógép', `${'a'.repeat(64)}${at}pelda.hu`, `x${at}${'a.'.repeat(5000)}hu`,
+    'HTTP 503: Service Unavailable — lib.mjs:192, árvíztűrő tükörfúrógép', `${'a'.repeat(64)}${at}pelda.hu`, `x${at}${'a.'.repeat(3000)}hu`,
   ];
+  // A minták a korláton belül vannak (a 8 KB-os korlát óta a régi 10 004 karakteres minta már vágódna).
+  for (const s of samples) assert.ok(s.length <= REDACT_CAP, `${s.length} > ${REDACT_CAP}`);
   for (const s of samples) assert.equal(redact(s), mainRedact(s));
   const big = `${'n '.repeat(REDACT_CAP)}\nvége ${fakeMail} ${fakeGh}`;
   const out = redact(big);
