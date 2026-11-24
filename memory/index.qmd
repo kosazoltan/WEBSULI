@@ -51,3 +51,4 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 - PR #556: keepalive kvíz-POST, CSRF-403 kezelés, egyszintű újrapróba (3 / kör / lap), törzsig élő időkorlát, 60 + 60-as IP-keret
   (`source/server/lesson-result-limits.ts`). Végrehajtás: `docs/specs/2026-11-22-eredmeny-email-bontas-vegrehajtas.md` 2. pont.
 - WEBSULI e2e helyben csak `npm run test:e2e -- <spec>` harnesszel (eldobható DB); lapon belüli állapotot mérő lépések között nincs navigáció.
+<!-- zaro-hurok: 2026-11-24T01:35:38.457Z nincs-uj -->
