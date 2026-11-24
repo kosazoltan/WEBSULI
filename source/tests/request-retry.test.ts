@@ -35,7 +35,7 @@ test("J5 + B2 (R26) — forrásőr: az eredménybeküldés EGY szinten próbál 
   // csak újrapróbálható hibára, azonnali ismétlés nélkül. (Korábban 1 + 3 gyors belső újrapróba: folyamatos 503-nál 4 POST.)
   assert.match(report, /export const RESULT_REPORT_ATTEMPTS = 3;/);
   assert.match(report, /export const RESULT_REPORT_RETRY_DELAYS_MS = \[30_000, 60_000\] as const;/);
-  assert.match(report, /\/results`, body, \{ resultTimes: times, retries: 0, keepalive: kind === "quiz" \}\)/);
+  assert.match(report, /\/results`, \(ctx: \{ ownerBinding: boolean \}\) => bodyFor\(learnerNow\(ctx\)\), \{ resultTimes: times, retries: 0, keepalive: kind === "quiz" \}\)/);
   assert.match(report, /if \(attempt >= RESULT_REPORT_ATTEMPTS \|\| !isRetryableRequestError\(error\)\) throw error;/);
   assert.doesNotMatch(report, /RESULT_REPORT_RETRIES/, "a régi, beágyazott újrapróba-szám nem maradhat");
   const client = source("../client/src/lib/queryClient.ts");
