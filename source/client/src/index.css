@@ -2102,7 +2102,9 @@ a.game-card:focus-visible { outline: 3px solid #fde68a; outline-offset: 2px; }
 .home-toolbar-search { width: 100%; max-width: 28rem; margin: 0 auto; }
 @media (min-width: 1024px) {
   .home-toolbar { flex-direction: row; align-items: center; gap: 16px; }
-  .home-toolbar-filter { flex: 0 0 auto; max-width: 52%; }
-  .home-toolbar-search { flex: 1 1 auto; max-width: none; margin: 0; min-width: 240px; }
+  /* review #579: a szűrő zsugorodhat (a csipek belül tördelnek), a 240 px-es minimum a keresőmezőt védi, nem a közös konténert. */
+  .home-toolbar-filter { flex: 0 1 auto; min-width: 0; max-width: 52%; }
+  .home-toolbar-search { flex: 1 1 0; max-width: none; margin: 0; }
+  .home-toolbar-search input { min-width: 240px; }
   .home-toolbar-views { flex: 0 0 auto; flex-wrap: nowrap; }
 }
