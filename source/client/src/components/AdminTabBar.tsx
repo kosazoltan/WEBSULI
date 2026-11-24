@@ -1,6 +1,9 @@
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ADMIN_TAB_GROUPS } from "@/lib/admin-tabs";
 
+/** A `Tabs` szülő elrendezése (#1985 — RED: még a régi, fülsoros elrendezés). */
+export const ADMIN_TABS_LAYOUT = "w-full";
+
 /** Az admin csoportos fülsora (spec 2026-10-18-admin-korszerusites); egy `Tabs` szülőn belül renderelendő. */
 export function AdminTabBar({ hidden = false }: { hidden?: boolean }) {
   return (
