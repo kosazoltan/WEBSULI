@@ -58,7 +58,7 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 
 # Advent A2 levél, B3, kapuk (2026-11-24)
 
-- #562: legfeljebb egy levél / évad / címzett — `try:` az első kísérlet idejével, 23 órás ablak, utána `check:`; Resend 409 = kézbesítve;
+- #562: legfeljebb egy levél / évad / címzett — `try:` az első kísérlet idejével, 23 órás ablak, utána `check:`; Resend `invalid_idempotent_request` (→ `ResendIdempotencyConflict`) = kézbesítve — más 409 / hiba NEM;
   a pótlás és a küldés futó órája a befecskendezett `nowMs`-től halad. Advent-változásnál push előtt `test:learning-db`.
 - #564: B3 képesség-jelzés (`resultApi: 2`), jelzés nélkül régi alak; V2 + 400 → egy régi alakú ismétlés.
 - #565: a PR előtti kapu ítélete csak helyi bizonyíték. #566: lesson-fusion ritka indexcsere-bukás javítva.

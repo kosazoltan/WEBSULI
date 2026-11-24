@@ -39,7 +39,7 @@
 - 2026-11-24 — Advent levél (#562): `mailed_to` jelölők `want:` / `pending:<h>@<ms>` / `try:<h>@<első ms>` / `sent:<h>@<ms>` / `final:` / `check:`; az első kísérlettől 23 órán (`ADVENT_RESEND_WINDOW_MS`) túl nincs automatikus levél, a `check:` kézi egyeztetés. Advent tároló/levél-változásnál push előtt `npm run test:learning-db` (Docker) is.
 - 2026-11-24 — E2E admin-fixtúra csak a `playwright.config.ts` `ADMIN_ALLOWLIST`-jén szereplő címmel (fail-open őr: listás admin mellett a listán kívüli admin 403).
 - 2026-11-24 — Őr-tesztet érintő PR-nál push ELŐTT `git merge origin/main` (különben a merge-kapu C-61 FAIL → újabb ~1 órás CI). Egy másik PR beolvasztása után a még futó CI-jű PR-ba azonnal olvaszd be a maint.
-- 2026-11-24 — A `local-review.mjs` (helyi 9B modell) ugyanarra a kódra futásonként új, gyakran spekulatív high-t ad: mindet kódból cáfold, és a cáfolatlistát (`--refuted ... --refuted-reason`) vidd át az új fejekre.
+- 2026-11-24 — A `local-review.mjs` (helyi 9B modell) ugyanarra a kódra futásonként új, gyakran spekulatív high-t ad. Minden high-t kódból ellenőrizz (AGENTS.md): igazolt hibánál javítás + új ellenőrzés; `--refuted ... --refuted-reason` KIZÁRÓLAG kódhivatkozással bizonyított hamis pozitívra; új fejen a korábbi cáfolat érvényességét újra ellenőrizd, mielőtt átviszed.
 - 2026-11-24 — A zárási TRAP-sort linked worktree-ből a `zaro-hurok.mjs trap add` a FŐ checkoutba írja (mainWorktree) — tudás-ágon a sort kézzel kell átvinni, a fő checkoutot visszaállítani.
 
 ## Kapcsolódó
