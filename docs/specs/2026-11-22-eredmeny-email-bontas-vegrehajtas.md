@@ -101,6 +101,11 @@
     azonos kilét pótol, R42 megszakadt első kérés folytatása, 503-utak hibainjektálással).
   - **B4b — kliens** (a B4a után): a körönkénti kilét-rekord (`bindRoundOwner`, R47 kliens, R50), a párosító token lenyomat-szűrése minden
     kísérlet előtt (R49 b) és a régi alak feltétele (R49 a).
+    Megvalósítás (2026-11-24): `shared/round-owner.ts` (tiszta, befecskendezett tároló / token-forrás), a beküldő a rekordon át adja a
+    tokent minden kísérlet előtt; a végleges siker után a rekord törlődik; a már elküldött körhöz nem keletkezik rekord (L5). A fiók
+    címkéje (`resultSubject`) és vele az R49 a (régi alak csak igazolt azonos munkamenettel) a szerveroldali R31-támogatással (B7) jön —
+    a főág szervere címkét nem fogad, így ma nincs mihez kötni. Tesztek: `round-owner.test.ts` (6), `lesson-result-email-quiz.spec.ts`
+    „B4b (R47)” (3 böngészős eset; RED: a régi beküldővel 2 bukik).
 
 ## 5. B5a / B5b — „félbehagyva” pillanatkép (szerver / kliens)
 

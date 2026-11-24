@@ -454,3 +454,29 @@ test("B3 / R10: jelzés nélkül a 400 nem ismétlődik (egy kérés)", async ({
   await page.waitForTimeout(2000);
   expect(finals).toBe(1);
 });
+
+// --- Eredmény-e-mail B4b (#510 R47, R49 b): a kör párosítási kiléte az első tevékenységkor rögzül ---
+const TOKEN_A = "learner-a.1.AAAAAAAAAAAAAAAAAAAAAA";
+const TOKEN_B = "learner-b.1.BBBBBBBBBBBBBBBBBBBBBB";
+for (const sample of [
+  { name: "azonos párosítás végig → a token megy", start: TOKEN_A, later: TOKEN_A, expected: TOKEN_A },
+  { name: "újrapárosítás a kör közben → párosítás nélkül", start: TOKEN_A, later: TOKEN_B, expected: undefined },
+  { name: "párosítás nélkül kezdett kör, közben párosítva → párosítás nélkül", start: null, later: TOKEN_B, expected: undefined },
+]) {
+  test(`B4b (R47): ${sample.name}`, async ({ page }) => {
+    const posts = await mock(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/preview/quiz-fixture");
+    await page.evaluate(token => { if (token) localStorage.setItem("websuli.learnerToken", token); else localStorage.removeItem("websuli.learnerToken"); }, sample.start);
+    await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+    const quiz = page.locator("[data-quiz-id]");
+    await expect(quiz).toHaveCount(25);
+    await quiz.nth(0).locator("button.lesson-option").first().click();
+    await page.evaluate(token => localStorage.setItem("websuli.learnerToken", token), sample.later);
+    for (let i = 1; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+    await expect.poll(() => quizPosts(posts).length).toBe(1);
+    expect(quizPosts(posts)[0].learner).toBe(sample.expected);
+    // A végleges siker után a kilét-rekord törlődik (nem halmozódik a tárolóban).
+    await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(k => k.includes(":quiz:owner:")).length)).toBe(0);
+  });
+}
