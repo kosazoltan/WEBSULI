@@ -226,6 +226,9 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   const experience = lesson?.success ? lesson.data.experience : undefined;
   if (!experience) return res.status(404).json({ message: "Ez a lecke nem érhető el." });
   const body = parsed.data;
+  // B5a-0: a pillanatkép (`partial: true`) SOHA nem végleges beküldés — a „félbehagyva” út (B5a-1, kapcsoló mögött) nélkül csak nyugtázzuk:
+  // nem pontozódik, nem foglal kör-kulcsot, levél nem megy (a kliens 2xx után nem küldi újra; a végleges beküldés ettől függetlenül megy).
+  if (body.kind === "quiz" && body.partial) return res.status(202).json({ queued: false, partial: true });
   const userId = (req.user as { id?: string } | undefined)?.id;
   let graded: GradedTasks | GradedQuiz;
   if (body.kind === "tasks") {

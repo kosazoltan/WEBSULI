@@ -519,3 +519,24 @@ test("B4a (PR #571 review, vállalt átmenet): a KI alatt elküldött kör BE-n 
     assert.equal(sent.length, 4, "az eredeti kilét mindkét címzettje már kézbesített — nincs újabb levél");
   });
 });
+
+test("B5a-0: kapcsoló nélkül a pillanatkép (`partial: true`) NEM végleges — 202 { queued: false }, levél és kézbesítési sor nélkül", async () => {
+  const previous = process.env.RESULT_PARTIAL_EMAIL;
+  delete process.env.RESULT_PARTIAL_EMAIL;
+  try {
+    sent.length = 0;
+    const q = lesson.experience!.quiz;
+    const res = await fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "quiz", roundId: "b5a0-partial", picks: { [q[0].id]: q[0].correctIndex }, fingerprint: "fp-p", partial: true }) });
+    assert.equal(res.status, 202);
+    assert.deepEqual(await res.json(), { queued: false, partial: true });
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(sent.length, 0);
+    const rows = await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, "result-published"), eq(lessonResultEmails.roundKey, roundKeyOf("guest:fp-p", "quiz", "b5a0-partial"))));
+    assert.equal(rows.length, 0, "a kör kulcsa nem foglalódik le — a későbbi végleges beküldés küldhet");
+    assert.equal((await fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "quiz", roundId: "b5a0-partial", picks: { [q[0].id]: q[0].correctIndex }, fingerprint: "fp-p" }) })).status, 202);
+    await waitFor(() => sent.length === 2);
+    assert.equal(sent.length, 2, "a végleges beküldés a pillanatkép után is küld");
+  } finally { if (previous === undefined) delete process.env.RESULT_PARTIAL_EMAIL; else process.env.RESULT_PARTIAL_EMAIL = previous; }
+});
