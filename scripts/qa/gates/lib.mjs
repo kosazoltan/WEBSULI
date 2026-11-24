@@ -1,6 +1,6 @@
 // Minőségkapuk közös könyvtára (docs/specs/2026-11-17-minosegkapuk.md, D1–D5).
 // Lépésenkénti futtató külön kilépési kóddal, összesítő tábla, kimenet-szűrés, git-segédek, bizonyíték-tár.
-// Függőség nélküli Node ESM; Windows (x64, ARM64) és Linux.
+// Függőség nélküli Node ESM; Windows x64 és Linux.
 
 import { spawnSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
