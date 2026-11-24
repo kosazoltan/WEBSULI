@@ -16,7 +16,7 @@ Terv: `docs/specs/2026-11-24-osszevont-eredmenylevel.md`. Szeletek, mindegyik k�
    - Tesztek: DB-teszt E1–E3, E5, E6, E8 (két külön DB-kapcsolat, üres várakozóállapot), E9 (fiókos út) és E10. Valódi levél nincs: hamis küldő (`setResultSender`).
    - Részletek (U4b):
      - `resultCombinedEmailEnabled(env)` = `RESULT_COMBINED_EMAIL === "on"` (alapból KI; az U4e élesít).
-     - Kétrészes lecke = a tapasztalatban van szöveges feladat ÉS kvíz is; egyrészes leckénél a régi út változatlan.
+     - Kétrészes lecke = a tapasztalatban van szöveges feladat ÉS kvíz is; egyrészes leckénél a régi út változatlan. A lecke sémája (shared/lesson-experience.ts) minden tapasztalatban ≥1 feladatot és ≥2 kvízkérdést ír elő, így a mai adatban minden tapasztalatos lecke kétrészes; az E1 egységtesztként a hiányos / régi adatot védi.
      - `pairOrPark` (új, `server/lesson-result-combine.ts`): egy tranzakcióban `pg_advisory_xact_lock(hashtext(lecke|tulajdonos))`; ha a kör már elküldött párban szerepel → `alreadySent`; ha van nyitott másik rész → mindkét sor `sent_at`/`pair`, és a tranzakció után EGY összevont levél (`sendLessonResult` `combined` móddal, a két kör kulcsából képzett körkulccsal és idempotencia-kulccsal); különben a rész nyitott sora (az újabb kör felülírja) és `awaiting`.
      - Az összevont úton a B4 tulajdonos-ellenőrzés (`claimFinalRound` + tulajdonos-sor) a `RESULT_PARTIAL_EMAIL`-től függetlenül fut.
      - A `sendPracticeResult` ugyanazt a párosítót hívja a fiók azonosítójával (`who` = a felhasználó azonosítója, mint a POST-ban), és visszaadja az `awaiting`-et.

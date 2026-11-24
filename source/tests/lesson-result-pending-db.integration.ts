@@ -26,7 +26,7 @@ test("részenként egy nyitott sor; másik rész és másik tanuló külön", as
   await assert.rejects(insert("tasks", "r2"), (err: { code?: string }) => err.code === "23505");
   await insert("quiz", "q1");
   await insert("tasks", "r1", "owner-b");
-  const open = await dbPool.query(`SELECT count(*)::int AS n FROM lesson_result_pending WHERE sent_at IS NULL`);
+  const open = await dbPool.query(`SELECT count(*)::int AS n FROM lesson_result_pending WHERE lesson_id = 'pending-lesson' AND sent_at IS NULL`);
   assert.equal(open.rows[0].n, 3);
 });
 
@@ -47,6 +47,6 @@ test("a három CHECK a migrációval azonos néven él (a sémaexport is ugyaní
 
 test("a lecke törlése a félretett sorokat is törli", async () => {
   await dbPool.query(`DELETE FROM lessons WHERE id = 'pending-lesson'`);
-  const left = await dbPool.query(`SELECT count(*)::int AS n FROM lesson_result_pending`);
+  const left = await dbPool.query(`SELECT count(*)::int AS n FROM lesson_result_pending WHERE lesson_id = 'pending-lesson'`);
   assert.equal(left.rows[0].n, 0);
 });

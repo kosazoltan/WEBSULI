@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { knowledgeMaps, lessons, users } from "../shared/schema";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 
-// U4b (docs/specs/2026-11-24-osszevont-eredmenylevel.md, E1–E3, E5, E6, E8–E10): kétrészes leckénél a szöveges feladatok és a kvíz
+// U4b (docs/specs/2026-11-24-osszevont-eredmenylevel.md, E2, E3, E5, E6, E8–E10): kétrészes leckénél a szöveges feladatok és a kvíz
 // végleges eredménye EGY levélben megy; az első rész félreteendő (`awaiting`), a második párosít — eldobható Postgresben, hamis küldővel.
 const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
 assert.equal(url.hostname, "127.0.0.1");
@@ -18,7 +18,6 @@ const { lessonResultsRouter, sendPracticeResult, setResultSender } = await impor
 const sent: Array<{ subject: string; html: string; to: string }> = [];
 setResultSender(async (subject, html, to) => { sent.push({ subject, html, to }); });
 const lesson = fusionFixture();
-const quizOnly = () => { const l = structuredClone(fusionFixture()); l.experience!.tasks = []; return l; };
 const ex = lesson.experience!;
 let base = "";
 let close = () => {};
@@ -26,7 +25,6 @@ before(async () => {
   await db.insert(knowledgeMaps).values({ id: "comb-map", title: "Összevont", subject: "matematika", classroom: 6, sourceFiles: [], inputHash: "combined-integration-only" });
   await db.insert(lessons).values([
     { id: "comb-two", mapId: "comb-map", json: lesson, version: 1, publishedAt: new Date() },
-    { id: "comb-one", mapId: "comb-map", json: quizOnly(), version: 1, publishedAt: new Date() },
   ]);
   await db.insert(users).values({ id: "comb-user", email: "comb-user@example.test", firstName: "Teszt", lastName: "Tanuló" });
   const app = express();
@@ -48,17 +46,9 @@ const post = async (lessonId: string, body: Record<string, unknown>, user?: stri
 };
 const quizBody = (fp: string, roundId: string) => ({ kind: "quiz", roundId, fingerprint: fp, picks: { [ex.quiz[0].id]: ex.quiz[0].correctIndex, [ex.quiz[1].id]: ex.quiz[1].correctIndex } });
 const tasksBody = (fp: string, roundId: string) => ({ kind: "tasks", roundId, fingerprint: fp, answers: { [ex.tasks[0].id]: ex.tasks[0].sample } });
+// E1 (egyrészes lecke): a lecke sémája minden tapasztalatban legalább 1 feladatot és 2 kvízkérdést ír elő (shared/lesson-experience.ts),
+// így az összevont út minden tapasztalatos leckére vonatkozik; az `isTwoPartExperience` a régi / hiányos adatot védi (egységteszt).
 const open = async (owner: string) => (await dbPool.query(`SELECT kind, round_id FROM lesson_result_pending WHERE lesson_id = 'comb-two' AND owner_key = $1 AND sent_at IS NULL`, [owner])).rows;
-
-test("E1: egyrészes lecke → azonnal a régi egyrészes levél, nincs félretétel", async () => {
-  const r = await post("comb-one", quizBody("fp-e1", "e1-q"));
-  assert.equal(r.status, 202);
-  assert.equal(r.body.awaiting, undefined);
-  await settle();
-  assert.equal(sent.length, 2);
-  assert.match(sent[0].subject, / — Kvíz — /);
-  assert.equal((await dbPool.query(`SELECT 1 FROM lesson_result_pending WHERE lesson_id = 'comb-one'`)).rowCount, 0);
-});
 
 test("E2 + E3 + E10: csak a kvíz → nincs levél, awaiting: tasks; a feladatok után EGY összevont levél; a felhasznált kör újraküldése alreadySent", async () => {
   const q = await post("comb-two", quizBody("fp-a", "a-q1"));
