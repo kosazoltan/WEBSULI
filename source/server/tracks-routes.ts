@@ -1,9 +1,10 @@
-import type { Express, Request, RequestHandler } from "express";
+import type { Express, Request } from "express";
 import type { Pool } from "pg";
 import { accountEmailKey } from "./player/codes";
 import { getPlayerSessionId } from "./player/session";
 import { normalizeTracks, isTrackId, type TrackId } from "@shared/tracks";
 import { logger } from "./lib/logger";
+import { isAuthenticatedAdmin } from "./auth";
 
 /**
  * Külön tananyagcsoportok végpontjai (docs/specs/2026-11-24-gimi-felveteli-csoport.md; #1986).
@@ -12,8 +13,8 @@ import { logger } from "./lib/logger";
  * - `GET|POST|DELETE /api/admin/track-assignments` (admin): fiók–csoport hozzárendelések (a cím a P-020 fiókkulcsára
  *   normalizálva; a repó nyilvános, ezért valódi cím csak itt, az adatbázisban él — tulajdonosi döntés 2026-11-24).
  */
-export function registerTrackRoutes(app: Express, deps: { pool: Pool; isAdmin: RequestHandler; invalidateFiles: () => Promise<void> }) {
-  const { pool, isAdmin, invalidateFiles } = deps;
+export function registerTrackRoutes(app: Express, deps: { pool: Pool; invalidateFiles: () => Promise<void> }) {
+  const { pool, invalidateFiles } = deps;
 
   async function sessionEmailKeys(req: Request): Promise<string[]> {
     const keys = new Set<string>();
@@ -40,7 +41,7 @@ export function registerTrackRoutes(app: Express, deps: { pool: Pool; isAdmin: R
     }
   });
 
-  app.put("/api/html-files/:id/tracks", isAdmin, async (req, res) => {
+  app.put("/api/html-files/:id/tracks", isAuthenticatedAdmin, async (req, res) => {
     const tracks = normalizeTracks((req.body as { tracks?: unknown } | undefined)?.tracks);
     if (!tracks) return res.status(400).json({ message: "Ismeretlen tananyagcsoport" });
     try {
@@ -55,7 +56,7 @@ export function registerTrackRoutes(app: Express, deps: { pool: Pool; isAdmin: R
   });
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  app.get("/api/admin/track-assignments", isAdmin, async (_req, res) => {
+  app.get("/api/admin/track-assignments", isAuthenticatedAdmin, async (_req, res) => {
     res.set("Cache-Control", "private, no-store");
     try {
       const { rows } = await pool.query<{ track: string; email_key: string; created_at: Date }>(
@@ -67,7 +68,7 @@ export function registerTrackRoutes(app: Express, deps: { pool: Pool; isAdmin: R
     }
   });
 
-  app.post("/api/admin/track-assignments", isAdmin, async (req, res) => {
+  app.post("/api/admin/track-assignments", isAuthenticatedAdmin, async (req, res) => {
     const body = (req.body ?? {}) as { track?: unknown; email?: unknown };
     const email = typeof body.email === "string" ? body.email.trim() : "";
     if (!isTrackId(body.track)) return res.status(400).json({ message: "Ismeretlen tananyagcsoport" });
@@ -82,7 +83,7 @@ export function registerTrackRoutes(app: Express, deps: { pool: Pool; isAdmin: R
     }
   });
 
-  app.delete("/api/admin/track-assignments", isAdmin, async (req, res) => {
+  app.delete("/api/admin/track-assignments", isAuthenticatedAdmin, async (req, res) => {
     const body = (req.body ?? {}) as { track?: unknown; emailKey?: unknown };
     if (!isTrackId(body.track) || typeof body.emailKey !== "string" || !body.emailKey) return res.status(400).json({ message: "Hiányos kérés" });
     try {

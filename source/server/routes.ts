@@ -1922,7 +1922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ADMIN-ONLY route - Update material
   // #1986: külön tananyagcsoportok (6-osztályos gimnáziumi felvételi) — saját csoportok és admin-tagság.
-  registerTrackRoutes(app, { pool: dbPool, isAdmin: isAuthenticatedAdmin, invalidateFiles: invalidateHtmlFilesCache });
+  registerTrackRoutes(app, { pool: dbPool, invalidateFiles: invalidateHtmlFilesCache });
 
   app.patch("/api/html-files/:id", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
