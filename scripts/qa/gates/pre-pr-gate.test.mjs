@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from './lib.mjs';
-import { checkPrBody, classifyChanges, E2E_EXEC_TIMEOUT_MS, E2E_HARNESS_TIMEOUT_MIN, e2eArgs, mentionsStem, pickE2eSpecs, wrapperConfigSource, WRAPPER_CONFIG } from './pre-pr-gate.mjs';
+import { checkPrBody, classifyChanges, prVerdict, E2E_EXEC_TIMEOUT_MS, E2E_HARNESS_TIMEOUT_MIN, e2eArgs, mentionsStem, pickE2eSpecs, wrapperConfigSource, WRAPPER_CONFIG } from './pre-pr-gate.mjs';
 
 const cfg = loadConfig();
 const SPECS = ['coupon-expired-all-games.spec.ts', 'game-meta-quality.spec.ts', 'game-mobile-quality.spec.ts', 'tornado-j7a.spec.ts',
@@ -109,4 +109,15 @@ test('böngészős út időkorlát: a kapu a harness korlátját emeli, és a sa
   assert.match(harness, /playwrightTimeoutMs\(\), "Playwright"/, 'a Playwright-futás a felülírható korlátot használja');
   const gate = readFileSync(new URL('./pre-pr-gate.mjs', import.meta.url), 'utf8');
   assert.match(gate, /WEBSULI_E2E_TIMEOUT_MIN: String\(E2E_HARNESS_TIMEOUT_MIN\)/, 'a kapu átadja a korlátot a harnessnek');
+});
+
+test('W4 (SQL #399, merge-kapu V1): a PR előtti kapu ítélete CSAK a helyi bizonyítékból jön — a PR-leírás ítéletsora nem elég', () => {
+  const head = 'abcdef1234567890abcdef1234567890abcdef12';
+  const body = 'Független ellenőr ítélete: IGEN (fej: abcdef123456)';
+  assert.equal(prVerdict({ head, evidence: null, texts: [body] }), null, 'szöveges ítélet helyi bizonyíték nélkül nem fogadható el');
+  assert.deepEqual(prVerdict({ head, evidence: { head, verdict: 'IGEN, FELTÉTELLEL' }, texts: [] }), { verdict: 'IGEN, FELTÉTELLEL', source: 'helyi bizonyíték (record-review)' });
+  assert.equal(prVerdict({ head, evidence: { head: 'masik', verdict: 'IGEN' }, texts: [body] }), null, 'más fejre szóló bizonyíték sem');
+  const src = readFileSync(new URL('./pre-pr-gate.mjs', import.meta.url), 'utf8');
+  assert.match(src, /verdictResult\(\s*prVerdict\(/, 'a kapu lépése a prVerdict-et használja');
+  assert.doesNotMatch(src, /texts: prTexts/);
 });

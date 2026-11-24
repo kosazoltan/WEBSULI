@@ -21,8 +21,12 @@ test('a kitöltetlen vázlat NEM megy át a PR előtti kapu leírás-ellenőrzé
   const body = buildPrBody({ head: HEAD, base: 'origin/main', prePush });
   assert.ok(body.includes(TODO));
   assert.ok(checkPrBody(body).some((m) => /elfogadási lista/.test(m)), 'jelölőnégyzetes elfogadási tétel nélkül bukik');
-  const filled = body.replace(/## Elfogadás\n[^\n]*/, '## Elfogadás\n- [x] E1 WHEN a THEN b SHALL c (teszt)');
-  assert.deepEqual(checkPrBody(filled), []);
+  const accOnly = body.replace(/## Elfogadás\n[^\n]*/, '## Elfogadás\n- [x] E1 WHEN a THEN b SHALL c (teszt)');
+  assert.ok(checkPrBody(accOnly).some((m) => /KITÖLTENDŐ/.test(m)), 'PR #570 review: csak az elfogadás kitöltve, a többi KITÖLTENDŐ marad → bukik');
+  const fromCommit = buildPrBody({ head: HEAD, base: 'origin/main', commits: ['[x] fix: x'], prePush });
+  assert.ok(checkPrBody(fromCommit).some((m) => /KITÖLTENDŐ/.test(m)), 'a commitcímből lett jelölőnégyzet nem engedi át a kitöltetlen vázlatot');
+  const filled = accOnly.replaceAll(TODO, 'kitöltve');
+  assert.deepEqual(checkPrBody(filled), [], 'a teljesen kitöltött leírás átmegy');
 });
 
 test('gateLine: bukott kapu a FAIL lépésekkel', () => {
