@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, openSync, closeSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  STATUS, createGate, externalResult, isMain, listEvidence, makeContext, readEvidence, redact, redactFirstLine, resolveVerdict, verdictResult, writeEvidence,
+  STATUS, createGate, externalResult, isMain, listEvidence, makeContext, readEvidence, redact, redactFirstLine, resolveVerdict, transferReviewEvidence, verdictResult, writeEvidence,
 } from './lib.mjs';
 import { evidenceRecord } from './pre-push-gate.mjs';
 
@@ -420,7 +420,7 @@ async function main() {
     const summary = redact(`${g.stdout}\n${g.stderr}`).split('\n').filter((l) => /^(GUARD|AKTIV)/.test(l)).join(' ').trim();
     const rt = await fetchRt(process.env.WEBSULI_RT_STATUS_URL || cfg.rtStatusUrl);
     for (const r of mergeSteps({
-      data: d, evidence: readEvidence(ctx.evDir, `review-${head}`), external: readEvidence(ctx.evDir, `external-${head}`),
+      data: d, evidence: readEvidence(ctx.evDir, `review-${head}`) ?? transferReviewEvidence({ evDir: ctx.evDir, head, base: 'origin/main', exec, cwd: root }), external: readEvidence(ctx.evDir, `external-${head}`),
       guard: { code: g.code, summary }, rt, cfg,
     })) gate.add(r.name, r.status, r.note);
   } catch (e) {

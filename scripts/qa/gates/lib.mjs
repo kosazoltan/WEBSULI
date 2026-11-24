@@ -302,7 +302,12 @@ export function verdictLine(verdict, head) {
  * @returns {{ verdict: string, source: string } | null}
  */
 export function resolveVerdict({ head, evidence, texts = [] }) {
-  if (evidence && evidence.head === head && VERDICTS.includes(evidence.verdict)) return { verdict: evidence.verdict, source: 'helyi bizonyíték (record-review)' };
+  if (evidence && evidence.head === head && VERDICTS.includes(evidence.verdict)) {
+    const source = evidence.transferredFrom
+      ? `átvett helyi bizonyíték (${String(evidence.transferredFrom).slice(0, 12)} → azonos kód-patch-id, K2)`
+      : 'helyi bizonyíték (record-review)';
+    return { verdict: evidence.verdict, source };
+  }
   let found = null;
   for (const [i, t] of texts.entries()) {
     for (const m of String(t ?? '').matchAll(VERDICT_LINE)) {
@@ -310,6 +315,43 @@ export function resolveVerdict({ head, evidence, texts = [] }) {
     }
   }
   return found;
+}
+
+// ---- K2: bizonyíték-átvitel azonos kódra (docs/specs/2026-11-23-foterv-vegrehajtas.md H3) -----------------------------------
+
+/** A kód-patch-id-ból kimaradó (dokumentum- és tudás-) útvonalak: ezek változása nem érvényteleníti a kódra adott ítéletet. */
+export const K2_NON_CODE = [':(exclude)docs/**', ':(exclude)*.md', ':(exclude)**/*.md', ':(exclude).hermes/**', ':(exclude)memory/**', ':(exclude)kanban/**', ':(exclude).agent/**'];
+
+/**
+ * A fej SAJÁT kódváltozásának azonosítója: `git diff <merge-base(base, fej)> <fej>` a nem-kód útvonalak nélkül → `git patch-id --stable`.
+ * A main beolvasztása (ütközés nélkül) és a dokumentum-változás nem módosítja. Üres kód-diff vagy git-hiba → null (nincs mihez kötni).
+ */
+export function codePatchId(exec, cwd, base, head) {
+  const mb = exec('git', ['merge-base', base, head], { cwd, timeoutMs: 60_000 });
+  if (mb.code !== 0 || !mb.stdout.trim()) return null;
+  const diff = exec('git', ['diff', '--no-color', '--no-ext-diff', mb.stdout.trim(), head, '--', '.', ...K2_NON_CODE], { cwd, timeoutMs: 120_000 });
+  if (diff.code !== 0 || !diff.stdout.trim()) return null;
+  const pid = exec('git', ['patch-id', '--stable'], { cwd, input: diff.stdout, timeoutMs: 60_000 });
+  const id = pid.code === 0 ? pid.stdout.trim().split(/\s+/)[0] : '';
+  return /^[0-9a-f]{40}$/.test(id) ? id : null;
+}
+
+/**
+ * Ha a fejre nincs saját `review-<fej>.json`, egy korábbi fej IGEN / IGEN, FELTÉTELLEL ítélete átvihető, ha a kód-patch-id-juk azonos.
+ * A visszaadott rekord az eredeti mezőit (futtató, modell) megtartja, `head` = az új fej, `transferredFrom` = a megítélt fej.
+ * NEM-ítélet és ismeretlen ítélet nem vihető át. Találat nélkül null.
+ */
+export function transferReviewEvidence({ evDir, head, base = 'origin/main', exec = realExec, cwd }) {
+  let current;
+  for (const name of listEvidence(evDir)) {
+    if (!/^review-[0-9a-f]{40}\.json$/.test(name)) continue;
+    const ev = readEvidence(evDir, name.slice(0, -'.json'.length));
+    if (!ev || typeof ev.head !== 'string' || ev.head === head || !['IGEN', 'IGEN, FELTÉTELLEL'].includes(ev.verdict)) continue;
+    if (current === undefined) current = codePatchId(exec, cwd, base, head);
+    if (!current) return null;
+    if (codePatchId(exec, cwd, base, ev.head) === current) return { ...ev, head, transferredFrom: ev.head };
+  }
+  return null;
 }
 
 /** Az ítélet lépés-eredménye. */
