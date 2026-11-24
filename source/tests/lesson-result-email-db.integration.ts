@@ -471,6 +471,51 @@ test("B4a (R47 szerver): a párosítás feloldásának átmeneti hibája BE áll
     });
     await withFlag(undefined, async () => {
       assert.deepEqual(await (await postQuiz("b4-pair-off", "fp-a", { learner: "token-xyz" })).json(), { queued: true });
+      await waitFor(() => sent.length === 2);
     });
   } finally { setPairingFault(null); }
+});
+
+test("B4a (PR #571 review): BE állásban csak ismeretlen azonosítójú beküldés nem foglal jelzőt — egy későbbi más kilétű érvényes beküldés küld", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    const res = await fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "quiz", roundId: "b4-empty", picks: { "nincs-ilyen": 0 }, fingerprint: "fp-x" }) });
+    assert.deepEqual(await res.json(), { queued: false });
+    assert.deepEqual(await (await postQuiz("b4-empty", "fp-y")).json(), { queued: true });
+    await waitFor(() => sent.length === 2);
+    assert.equal(sent.length, 2);
+  });
+});
+
+test("B4a (PR #571 review): a duplikátum a levéltől független feladatmérést nem hagyja ki", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    const task = lesson.experience!.tasks[0];
+    const post = (fp: string, ip: string) => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify({ kind: "tasks", roundId: "b4-tasks-dup", answers: { [task.id]: task.sample }, fingerprint: fp }) });
+    assert.deepEqual(await (await post("fp-t1", "10.0.0.1")).json(), { queued: true });
+    assert.deepEqual(await (await post("fp-t2", "10.0.0.2")).json(), { queued: false, duplicate: true });
+    await new Promise(r => setTimeout(r, 600));
+    const rows = await db.select().from(taskResults).where(eq(taskResults.lessonId, "result-published"));
+    const keys = new Set(rows.filter(r => r.roundKey === roundKeyOf("guest:fp-t1", "tasks", "b4-tasks-dup") || r.roundKey === roundKeyOf("guest:fp-t2", "tasks", "b4-tasks-dup")).map(r => r.roundKey));
+    assert.equal(keys.size, 2, "mindkét beküldő feladateredménye rögzül");
+    assert.equal(sent.filter(m => /— Feladatok —/.test(m.subject)).length, 2, `levélpár csak egy: ${JSON.stringify(sent.map(m => m.subject.slice(0, 80)))}`);
+  });
+});
+
+test("B4a (PR #571 review, vállalt átmenet): a KI alatt elküldött kör BE-n — legfeljebb egy további levélpár (az új kilét rögzít), utána duplikátum", async () => {
+  await withFlag(undefined, async () => {
+    sent.length = 0;
+    await postQuiz("b4-transition", "fp-old");
+    await waitFor(() => sent.length === 2);
+  });
+  await withFlag("on", async () => {
+    assert.deepEqual(await (await postQuiz("b4-transition", "fp-new")).json(), { queued: true });
+    await waitFor(() => sent.length === 4);
+    assert.deepEqual(await (await postQuiz("b4-transition", "fp-third")).json(), { queued: false, duplicate: true });
+    assert.deepEqual(await (await postQuiz("b4-transition", "fp-old")).json(), { queued: true }, "az eredeti kilét a saját során fut (pótlás)");
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(sent.length, 4, "az eredeti kilét mindkét címzettje már kézbesített — nincs újabb levél");
+  });
 });

@@ -259,10 +259,17 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   }
   const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? (clientIpKey(req) || "?")}`);
   const roundKey = roundKeyOf(who, body.kind, body.roundId);
+  let duplicate = false;
   if (once) {
     // B4a (#510 R27, R42, R49 c): körönként egy végleges levél, kiléttől függetlenül. Létező jelzőnél csak a saját kézbesítési sor vagy a
     // saját (R42) tulajdonos-sor birtokosa folytathatja; más kilét duplikátum. A jelzősor írásának és a tulajdonos-lekérdezésnek az
     // átmeneti hibája 503 a 202 előtt (bizonyíthatatlan állapotban nem megy végleges levél).
+    // PR #571 review: pontozott sor nélküli beküldés (csak ismeretlen azonosítók) nem foglalhatja le a kört.
+    if (!graded.rows.length) return res.status(202).json({ queued: false });
+    // Vállalt átmeneti korlát (PR #571 review): a garancia a BE állásban először véglegesített körökre szól. A KI alatt már elküldött körnek
+    // nincs jelzője (a régi kézbesítési kulcs kilétfüggő, körszinten nem kereshető): ha ugyanazt a kört a bekapcsolás után más kilét küldi be,
+    // az ő beküldése rögzíti a jelzőt (legfeljebb egy további levélpár), minden további kilét duplikátum; az eredeti kilét a saját során
+    // csak a hiányzó címzettjeit pótolja. A bekapcsolás előtti körök a kliens „elküldve” jelzője miatt jellemzően nem jönnek újra.
     let first: boolean;
     try { first = await claimFinalRound(req.params.lessonId, body.kind, body.roundId, graded.summary.percent, who); }
     catch (error) { logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`); return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." }); }
@@ -277,9 +284,9 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
         logger.error(`[LESSON-RESULT] a végleges kör tulajdonosának ellenőrzése nem sikerült: ${errorClass(error)}`);
         return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
       }
-      if (!own.length) return res.status(202).json({ queued: false, duplicate: true });
+      duplicate = own.length === 0;
     }
-    finalClaimFault?.();
+    if (!duplicate) finalClaimFault?.();
   }
   // Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény (a levéltől független), utána a szigorítás automatikus lazítása. Nem
   // várjuk meg; a hiba csak napló.
@@ -292,6 +299,9 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
       .then(() => maybeRelaxTightening(req.params.lessonId, tightened))
       .catch(error => logger.error("[S4] feladatszintű eredmény / lazítás hiba:", error));
   }
+  // PR #571 review: a duplikátum csak a második levelet tiltja — a levéltől független feladatmérés (fent, saját idempotenciával és
+  // közreműködőnkénti számlálással) ettől még fut.
+  if (duplicate) return res.status(202).json({ queued: false, duplicate: true });
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
   void (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey, learner,
     ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), guest: !userId && !paired, graded }))
