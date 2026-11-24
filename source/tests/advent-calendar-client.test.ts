@@ -177,3 +177,21 @@ test("kapcsoló KI mellett a fő csomagban nincs adventi kód és CSS, és a /ad
   assert.match(app, /const AdventCalendar = ADVENT_BUILD_FLAG \? lazy\(\(\) => import\("@\/pages\/AdventCalendar"\)\) : null;/);
   assert.match(app, /\{AdventCalendar \? <Route path="\/adventi-naptar" component=\{AdventCalendar\} \/> : null\}/);
 });
+
+test("#562 Thread 1/3: a 429 utáni újrapróba a hívás pillanatában rögzített végpontot hívja — minden írás a `patient` mögött rögzített gyárral", async () => {
+  const page = read("client/src/pages/AdventCalendar.tsx");
+  const calls = page.match(/patient\(([^,]+),/g) ?? [];
+  assert.ok(calls.length >= 4, `a patient-hívások száma: ${calls.length}`);
+  for (const call of calls) assert.match(call, /^patient\(adventApiPinned\.\w+\(/, `nem rögzített végpont az újrapróbában: ${call}`);
+  const hook = read("client/src/advent/useAdvent.ts");
+  const pinned = hook.slice(hook.indexOf("export const adventApiPinned"), hook.indexOf("};", hook.indexOf("export const adventApiPinned")));
+  for (const op of ["grade", "open", "answer", "round", "adopt"]) {
+    assert.match(pinned, new RegExp(`${op}: \\([^)]*\\) => \\{ const url = adventUrl\\([^;]+\\); return \\(\\) => previewAware\\(\\(\\) => apiRequest<[^>]+>\\("POST", url,`), `${op}: az URL a gyár hívásakor rögzül, az újrapróba függvény már csak a rögzített url-t használja`);
+  }
+  // Viselkedés: a retryWhenBusy ugyanazt a (rögzített) függvényt hívja újra; a közben megváltozott mód nem számít.
+  let mode = "elonezet";
+  const urls: string[] = [];
+  const factory = () => { const url = mode === "elonezet" ? "/api/admin/advent/preview/round?date=2026-12-10" : "/api/advent/round"; return async () => { urls.push(url); if (urls.length === 1) { mode = "normal"; throw Object.assign(new Error("busy"), { status: 429 }); } return "ok"; }; };
+  assert.equal(await retryWhenBusy(factory(), { sleep: async () => {} }), "ok");
+  assert.deepEqual(urls, ["/api/admin/advent/preview/round?date=2026-12-10", "/api/admin/advent/preview/round?date=2026-12-10"]);
+});

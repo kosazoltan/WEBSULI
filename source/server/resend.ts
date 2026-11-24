@@ -248,7 +248,10 @@ export async function sendAdminNotification(
     }, opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : undefined);
 
     if (result && 'error' in result && result.error) {
-      throw new Error(`Resend error: ${result.error.message || 'Unknown error'}`);
+      const failure = new Error(`Resend error: ${result.error.message || 'Unknown error'}`);
+      // Ugyanaz az idempotencia-kulcs más tartalommal: a szolgáltató ezzel a kulccsal 24 órán belül már küldött levelet.
+      if (result.error.name === 'invalid_idempotent_request') failure.name = 'ResendIdempotencyConflict';
+      throw failure;
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

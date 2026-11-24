@@ -335,8 +335,9 @@ Idő és szezon:
   mutatni; WHEN január 7. vagy későbbi THEN the system SHALL az írást elutasítani és a saját összesítést mutatni.
 - [ ] A15 WHEN a fázis `before` vagy `closed`, vagy a flag ki van kapcsolva THEN the system SHALL nem mutatni a szezonális
   kártyát a játéklistán és a főoldalon; WHEN `teaser` THEN the system SHALL „Hamarosan” kártyát mutatni visszaszámlálással.
-- [ ] A16 WHEN az admin a `?elonezet=ÉÉÉÉ-HH-NN` címet nyitja THEN the system SHALL a megadott nap szerinti naptárat mutatni
+- [x] A16 WHEN az admin a `?elonezet=ÉÉÉÉ-HH-NN` címet nyitja THEN the system SHALL a megadott nap szerinti naptárat mutatni
   „ELŐNÉZET” jelöléssel, levélküldés nélkül; WHEN nem admin teszi THEN the system SHALL a valódi dátumot használni.
+  Bizonyíték (2026-11-21, S6): böngésző `tests/advent-calendar.spec.ts` „admin-előnézet (A16, S6)” (admin belépve / kilépve); DB `tests/advent-routes-db.integration.ts` „admin-előnézet (S6, A16; terv 16.5)” (3 eset: kikapcsolt naptár mellett is, levélfoglalás nélkül; 400 / 401 / 403; „Előnézet törlése” CSRF-fel); `tests/admin-route-guard.test.ts` „adventi naptár S6 (A16)”; `tests/advent-s6.test.ts`.
 
 Azonosítás, adat, biztonság:
 - [ ] A17 WHEN párosított tanuló játszik THEN the system SHALL a `learners.grade` évfolyamot használni és az előrehaladást a
@@ -356,8 +357,9 @@ Azonosítás, adat, biztonság:
   Drizzle-definícióval egyezni.
 
 Szülői levél (E1 — ha a tulajdonos kéri):
-- [ ] A25 WHEN egy azonosított tanuló mind a 24 ablakra választ adott THEN the system SHALL címzettenként pontosan egy levelet
+- [x] A25 WHEN egy azonosított tanuló mind a 24 ablakra választ adott THEN the system SHALL címzettenként pontosan egy levelet
   küldeni az `ADMIN_EMAILS` listára az eredménnyel; WHEN névtelen vagy előnézet THEN the system SHALL nem küldeni.
+  Bizonyíték (2026-11-21, S5 — a pillanat a 18.1 szerint: a VÉGLEGES eredménykor, évadonként egy levél): DB `tests/advent-routes-db.integration.ts` „S5 (A25, A50; terv 18.1)” (három címzett → három levél, ismétlésre nincs több, névtelen sorról soha); egység `tests/advent-s5.test.ts` (előnézeti / játékos- / névtelen sor soha, bukó küldő felszabadít és pótol).
 
 Mobil, akadálymentesség, teljesítmény:
 - [ ] A26 WHEN a naptár 360×640, 390×844 vagy 844×390 nézetben fut (naptár, kérdés, visszajelzés, összesítés állapotban)
@@ -959,9 +961,10 @@ leírásban indokolva); (3) S3c-0; (4) S1b. Mindegyik külön ág a közös ágr
   system SHALL a továbbiakat 429-cel és `Retry-After` fejléccel elutasítani — párhuzamos kéréseknél is; az érvénytelen kérés a hálózati
   keretet nem fogyaszthatja. (FELÜLÍRVA 2026-11-18, 21. szakasz: korábban „90-nél több”.) (FELÜLÍRVA 2026-11-18, tulajdonosi döntés, 19. szakasz:
   eredetileg „30-nál több”.)
-- [ ] A50 WHEN a tanuló eredménye még nem végleges (van javítható ablaka vagy további köre, és nem felelt meg) THEN the system
+- [x] A50 WHEN a tanuló eredménye még nem végleges (van javítható ablaka vagy további köre, és nem felelt meg) THEN the system
   SHALL szülői levelet nem küldeni; WHEN az eredmény végleges (18.1) THEN the system SHALL évadonként és címzettenként pontosan
   egy levelet küldeni, és utána többet nem.
+  Bizonyíték (2026-11-21, S5): egység `tests/advent-s5.test.ts` „S5 (18.1): a végleges eredmény oka …” (22 + 2 javítható → nincs; megfelelt → van; 1. kör sikertelen, van 2. kör → nincs; utolsó kör lezárva → van; lezárt évad → van) és „… címzettenként pontosan egy levél …”; DB „S5 (A25, A50; terv 18.1)” (javítás utáni megfelelés → egy levél címzettenként; újabb válasz és évadzárás → nincs második; évadzáráskor a levél nélküli tanulói sor egyszer).
 - [ ] A51 WHEN a szerver e2e-módban fut és a kérés nem hoz érvényes tesztidő-fejlécet THEN the system SHALL a naptárat
   kikapcsoltnak mutatni a valódi dátumtól függetlenül.
 - [ ] A52 WHEN a naptár lezárt vagy pótlási időszakban van THEN the system SHALL nem mutatni „gyere vissza holnap” szöveget, és
@@ -990,6 +993,15 @@ Amíg egyik sem teljesül (van javítható ablak, vagy kérhet új kört), levé
 körönkénti vagy külön „megfelelt” levél NINCS. Teszt: 22 megoldott + 2 javítható → nincs levél; javítás után megfelel → egy levél;
 1. kör sikertelen, de van 2. kör → nincs levél; az utolsó kör sikertelen lezárása → egy levél; a levél után újabb válasz vagy
 évadzárás → nincs második; évadzáráskor a levél nélküli, megkezdett tanulói sor → egy levél; névtelen és előnézeti sor soha.
+
+**Kiegészítés — tulajdonosi P-056 (2026-11-23): „Levélküldés csak száraz összesítő után, külön jóváhagyással.”** A kód alapból
+SZÁRAZ FUTÁSBAN van: a végleges eredmény sem foglal (`mailed_to` érintetlen) és nem küld. Valódi küldés kizárólag a pontos
+`ADVENT_RESULT_EMAIL_MODE=send` értékkel (Render-környezet; minden más érték — hiányzó, elírt, `on`, `1` — száraz). A száraz összesítő:
+`GET /api/admin/advent/mail-report` (admin-őr mögött, a naptár kapcsolójától függetlenül; csak olvas): a mód, az évad és a fázis, a
+címzettek SZÁMA (cím nélkül), és tanulónként a keresztnév, az ok (`passed` / `last-round` / `season-closed`), a legjobb kör, a megoldott és
+az elsőre jó ablakok, a kiküldendő levelek száma. Jóváhagyás után a takarító pótlása (10 percenként) a már végleges eredményekről is
+kiküldi az egyetlen levelet — ugyanazzal a foglalással, címzettenként egyszer. Teszt: `tests/advent-s5-dry-run.test.ts`, DB „P-056”.
+A bekapcsolás a naptár kapcsolójától (`ADVENT_CALENDAR`, A4) KÜLÖN tulajdonosi lépés; a `render.yaml` ehhez sem változik.
 
 ### 18.2 D2 — alanyonkénti korlát
 
@@ -1213,3 +1225,41 @@ Az L1 (friss évfolyam az átvételnél) a fenti 1. pont; a 2/3 PR jelentéséne
     „Folytatom vendégként” csak a figyelmeztetés generációjának tokenjét felejti el.
 23. **A csillag helye (L5):** a fejlécben a csillag önálló, nem zsugorodó helyen áll; csak a cím szövege csonkolódhat (360 px-en is
     teljesen látszik).
+
+**A PR-C 3. vak körének (d53178ef, 2026-11-21; ítélet: IGEN, FELTÉTELLEL) feltételei:**
+
+24. **Késve kézbesített régi válasz (L1):** az állapot és a válasz a szerververziót is adja (a sor módosítási ideje, írás-sorrendben növő
+    óra); a kliens a már alkalmazottnál régebbi verziójú állást eldobja — egy korábban feldolgozott, de később kézbesített átvételi válasz
+    nem festi vissza a közben megoldott ablakot.
+25. **Átvétel újrapróbája (L2):** az átvétel hibája után az „Újra” tényleges, az aktuális alanyhoz kötött `POST /adopt` kérést küld; az
+    igazolt mentésig látható függő állapot jelzi, hogy az eredmény még nincs elmentve.
+26. **A főoldalról indított nyitás szándéka (L3):** átmeneti hibánál nem vész el — az „Újra” friss állapotból folytatja a kérdésnyitást;
+    csak a siker (vagy szándékos megszakítás) fogyasztja el.
+27. **Kirajzolható ablakrács (L4):** a tárolt körterv `layout` mezője az 1…24 permutációja; minden más (tartományon kívüli, ismétlődő,
+    hiányzó elem, üres tömb) sérült sor: 409 corrupt olvasáskor és íráskor, változatlan sorral.
+
+**A bekapcsolás rendje (tulajdonosi D-11, 2026-11-21):**
+
+28. **Bekapcsolás csak a tulajdonos előnézeti jóváhagyása után, KÜLÖN, egysoros PR-ral.** Az S5 / S6 PR a kapcsolót nem kapcsolja be (a
+    `render.yaml` változatlan). A tulajdonos az admin-előnézetben (`/adventi-naptar?elonezet=ÉÉÉÉ-HH-NN`) kipróbálja a naptárat; a
+    jóváhagyása után a Render `ADVENT_CALENDAR=on` (dashboard, vagy egysoros `render.yaml` PR), majd a Vercel `VITE_ADVENT_CALENDAR=on` +
+    Redeploy — a pontos lépések: a végrehajtási utasítás „Bekapcsolás és kikapcsolás lépésről lépésre” része (0. lépés: előnézeti próba;
+    az oldal a Vercel-buildhez kötött, ezért a próbához a Vercel-kapcsoló kell előbb — november 24. előtt ez nyilvánosan láthatatlan).
+    Határidő: a naptár legkésőbb 2026-11-30-ig bekapcsolható legyen.
+
+**Az S5/S6 szelet 1. vak körének (b0bbadf1, 2026-11-22; ítélet: NEM) feltételei:**
+
+29. **Tartós levélkézbesítés (L1, blokkoló):** a levél címzettenként tartósan nyilvántartott: kézbesítési terv (az első végleges döntéskor
+    rögzül; később felvett új címzett a régi eredményről nem kap levelet), lejáró bérlet a küldés idejére, és kézbesítve-jelzés. Leállás vagy
+    részleges siker után a hiányzó címzettek a pótlásban (induláskor és 10 percenként) folytatódnak; a szolgáltató elfogadása utáni leállásnál
+    ugyanazzal az idempotencia-kulccsal. Párhuzamos feldolgozókból címzettenként egy küld.
+30. **Az előnézet elkülönítése a kliensben (L2):** az állapot gyorsítótára módonként (normál / előnézeti nap) külön; a főoldal és a normál
+    naptár soha nem kapja meg az előnézet állapotát, lapfrissítés nélküli navigációnál sem.
+31. **Újrapróba az aktív modálban (L3):** az átvétel hibájánál az összesítő modálban is van mentetlen-jelzés és működő „Újra”.
+32. **Egyenlő sorverzió (L4):** az állapot és a válasz a szerverpillanatot is adja; egyenlő verziónál a régebbi pillanatú nézet nem írja
+    felül az újabbat (pl. a zárás előtt feldolgozott, később kézbesített válasz).
+33. **Az átvétellel véglegessé váló eredmény levele (L5):** minden írás, amely átvétellel véglegessé teheti az eredményt (megnyitás is),
+    elindítja a levél döntését; a pótlás a terv nélküli végleges sorokat is felveszi.
+34. **Előnézet óraátállás napján (L6):** az előnézet órája a zónabeli 12:00.
+35. **Tantárgyi bontás a levélben (L7):** a legjobb kör tantárgyankénti eredménye, Karácsony sorral (4.1 (e), 12.3).
+36. **Az előnézeti státusz dátuma (L8):** érvénytelen vagy hiányzó dátumra a `/status` is 400.
