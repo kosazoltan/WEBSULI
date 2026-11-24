@@ -481,3 +481,24 @@ test("S5 (#562 A2, Vercel-szál): a pótlás tartalma változott, a szolgáltat�
   assert.equal(delivered.length, 1, "nincs második levél");
   assert.equal(store.claimed.size, 1, "final: rögzült");
 });
+
+test("S5 (#562 Vercel-szál): tíz percnél hosszabb pótlásban a később feldolgozott tanuló bérlete az eltelt idővel halad", async (t) => {
+  sendMode(t);
+  const prevEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = "anya@pelda.hu";
+  t.after(() => { setAdventSender(null); if (prevEmails === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEmails; });
+  const T0 = 1_800_000_000_000;
+  t.mock.timers.enable({ apis: ["Date"], now: T0 });
+  // Minden levél „11 percig tart”.
+  setAdventSender(async () => { t.mock.timers.tick(11 * 60_000); });
+  const store = memoryStore();
+  const leasedAt: number[] = [];
+  const recording = { ...store, leaseMail: async (id: string, hash: string, nowMs: number, leaseMs: number) => { leasedAt.push(nowMs); return store.leaseMail(id, hash, nowMs, leaseMs); } };
+  const a = row({ id: "row-a", doors: { 1: roundDoors(23, 0, 1) } });
+  const b = row({ id: "row-b", doors: { 1: roundDoors(23, 0, 1) } });
+  const sent = await deliverAdventMail({ ...recording, mailCandidates: async () => [{ row: a, firstName: "A" }, { row: b, firstName: "B" }] }, { season: 2026, phase: "open" }, T0);
+  assert.equal(sent, 2);
+  assert.equal(leasedAt.length, 2);
+  assert.equal(leasedAt[0], T0);
+  assert.ok(leasedAt[1]! >= T0 + 11 * 60_000, `a második bérlet ideje a valós eltelt időt követi (${leasedAt[1]! - T0} ms)`);
+});

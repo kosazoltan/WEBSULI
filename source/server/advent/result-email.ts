@@ -264,8 +264,11 @@ export async function deliverAdventMail(store: DeliverStore, at: { season: numbe
   // Thread 7 javítás: a `sent:` jelölők → `final:` (a szolgáltató már elfogadta, csak a DB-rögzítés maradt el).
   await recoverSentMail(store, nowMs);
   let sent = 0;
+  // A pótlás saját futó órája (#562 Vercel-szál): a később sorra kerülő tanulók a kör kezdete óta eltelt idővel kapják a bérletet,
+  // különben egy tíz percnél hosszabb pótlásban a bérlet már létrehozásakor lejárt időponttal kerülne az adatbázisba.
+  const startedAt = Date.now();
   for (const { row, firstName } of await store.mailCandidates(at.season, at.phase === "closed")) {
-    sent += (await sendAdventResult({ store, row, phase: at.phase, firstName, nowMs }, false)).sent;
+    sent += (await sendAdventResult({ store, row, phase: at.phase, firstName, nowMs: nowMs + (Date.now() - startedAt) }, false)).sent;
   }
   return sent;
 }
