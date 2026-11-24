@@ -144,8 +144,8 @@ export async function fetchAdventState(createDevice = true, signal?: AbortSignal
 }
 
 export const adventApi = {
-  // Az URL-t EAGERLY rögzítjük (a hívás pillanatában): ha a 429 utáni újrapróba (`retryWhenBusy`) közben az admin az előnézeti
-  // címről a normálra navigál, a rögzített URL továbbra is az előnézeti végpontra mutat — nem módosítja a valódi naptárat (Thread 1/3).
+  // Thread 1/3 javítás: az URL-t a HÍVÁS pillanatában rögzítjük. A `retryWhenBusy` hívónak a `pinned()` gyárat kell adnia,
+  // hogy a 429 utáni újrapróba ugyanazt a végpontot célozza (lásd AdventCalendar.tsx `patient`).
   grade: (grade: number) => { const url = adventUrl("/grade"); return previewAware(() => apiRequest<AdventState>("POST", url, { ...identity(), grade }, { timeout: ADVENT_TIMEOUT_MS })); },
   open: (day: number) => { const url = adventUrl(`/doors/${day}/open`); return previewAware(() => apiRequest<AdventOpenResult>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
   answer: (day: number, questionId: string, pick: number) => {
@@ -156,8 +156,21 @@ export const adventApi = {
   round: () => { const url = adventUrl("/round"); return previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
   /** A függő (előnézetként mutatott) átvétel kifejezett mentése a megtekintési útról — idempotens (PR-C vak L2). */
   adopt: () => { const url = adventUrl("/adopt"); return previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
-  /** Az admin saját előnézeti sorának törlése („Előnézet törlése”, S6) — CSRF-tokenes DELETE. */
+  /** Az admin saját előnézeti sorának törlése („Előnézet törlése", S6) — CSRF-tokenes DELETE. */
   resetPreview: () => previewAware(() => apiRequest<{ removed: number }>("DELETE", "/api/admin/advent/preview", undefined, { timeout: ADVENT_TIMEOUT_MS })),
+};
+
+/**
+ * URL-rögzített gyár: a hívás pillanatában rögzíti az URL-t (előnézet vs. normál), és egy olyan függvényt ad vissza,
+ * amelyet többször is meghívhat a `retryWhenBusy` anélkül, hogy a közben megváltozott előnézeti állapot másik végpontra
+ * irányítaná az újrapróbát (Thread 1/3).
+ */
+export const adventApiPinned = {
+  grade: (grade: number) => { const url = adventUrl("/grade"); return () => previewAware(() => apiRequest<AdventState>("POST", url, { ...identity(), grade }, { timeout: ADVENT_TIMEOUT_MS })); },
+  open: (day: number) => { const url = adventUrl(`/doors/${day}/open`); return () => previewAware(() => apiRequest<AdventOpenResult>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
+  answer: (day: number, questionId: string, pick: number) => { const url = adventUrl(`/doors/${day}/answer`); return () => previewAware(() => apiRequest<AdventAnswerResult>("POST", url, { ...identity(), questionId, pick }, { retries: 1, timeout: ADVENT_TIMEOUT_MS })); },
+  round: () => { const url = adventUrl("/round"); return () => previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
+  adopt: () => { const url = adventUrl("/adopt"); return () => previewAware(() => apiRequest<AdventState>("POST", url, identity(), { timeout: ADVENT_TIMEOUT_MS })); },
 };
 
 /** Az állapot lekérdezése: frissül fókuszra, és magától a következő ablak nyitásának pillanatában. */

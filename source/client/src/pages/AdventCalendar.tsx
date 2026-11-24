@@ -19,7 +19,7 @@ import { ADVENT_BUSY_WAITING_TEXT, adventErrorText, retryWhenBusy } from "@/adve
 import { escapeMissedByLayer } from "@/advent/dialog-escape";
 import { guardSwallows, type GuardPoint } from "@/advent/tap-guard";
 import {
-  ADVENT_STATE_KEY, adventApi, adventDevice, adventMode, clearPairingLost, forgetLearnerPairing, isPairingLost, markPairingLost, useAdventState,
+  ADVENT_STATE_KEY, adventApi, adventApiPinned, adventDevice, adventMode, clearPairingLost, forgetLearnerPairing, isPairingLost, markPairingLost, useAdventState,
 } from "@/advent/useAdvent";
 import { adventStateKey, adventSubjectGeneration, adventWriteBlocked, applyAdventWrite, applyAnswerResult, pairingRecovered, shouldAdopt } from "@/advent/sync";
 import "@/advent/advent.css";
@@ -254,7 +254,7 @@ function AdventCalendarView() {
     setBusy(true);
     setOpeningDay(day);
     try {
-      const res = await patient(() => adventApi.open(day), started);
+      const res = await patient(adventApiPinned.open(day), started);
       if (!isCurrent(started)) return;
       if (!res.question) { say("Ez a kérdés már nem érhető el, de az eredményed megmaradt."); return; }
       if (!muted) sfxClick();
@@ -291,7 +291,7 @@ function AdventCalendarView() {
     setBusy(true);
     setError(null);
     try {
-      const result = await patient(() => adventApi.answer(day, question.id, pick), started);
+      const result = await patient(adventApiPinned.answer(day, question.id, pick), started);
       // Ha a gyerek közben bezárta a kérdést, az eredmény megérkezése nem nyitja újra. A jelölés a RÖGZÍTETT választ mutatja
       // (másik lapon / eszközön már megválaszolt kérdésnél az nem a mostani koppintás).
       if (adventSubjectGeneration() !== started) return;
@@ -335,7 +335,7 @@ function AdventCalendarView() {
     const started = generation;
     setBusy(true);
     setError(null);
-    try { await setState(started, await patient(() => adventApi.grade(pendingGrade), started)); if (isCurrent(started)) { setPendingGrade(null); setChangingGrade(false); } }
+    try { await setState(started, await patient(adventApiPinned.grade(pendingGrade), started)); if (isCurrent(started)) { setPendingGrade(null); setChangingGrade(false); } }
     catch (e) { if (isCurrent(started)) setError(adventErrorText(e, "Most nem sikerült menteni az évfolyamot. Próbáld meg újra!")); }
     finally { if (isCurrent(started)) setBusy(false); }
   };
@@ -345,7 +345,7 @@ function AdventCalendarView() {
     const started = generation;
     setBusy(true);
     setError(null);
-    try { await setState(started, await patient(() => adventApi.round(), started)); if (isCurrent(started)) setSummaryOpen(false); }
+    try { await setState(started, await patient(adventApiPinned.round(), started)); if (isCurrent(started)) setSummaryOpen(false); }
     catch (e) { if (isCurrent(started)) setError(adventErrorText(e, "Most nem sikerült új naptárat kérni. Próbáld meg újra!")); }
     finally { if (isCurrent(started)) setBusy(false); }
   };
