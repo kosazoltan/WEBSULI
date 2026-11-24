@@ -45,6 +45,9 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 - Helyi e2e: CDP-swipe után a koppintás nem ad click-et (fling) — a swipe végén álló touchMove kell (PR #543).
 - Teljes hiányleltár (2026-11-23): `docs/specs/2026-11-23-teljes-hianyleltar.md` — hullámok H0–H8, mester: SQL feladat.tasks.
 - 2026-11-23: #542, #543 beolvadt; #544 (advent PR-C) és #545 (hiányleltár) nyitva.
+- P-010 kuponos ismétlés (PR #558, nyitva): a `LATE_RETURN_MAX` kupon módban határidő (nem csak rangsor-sáv); a megszakított
+  visszatérés nem számít a menetenkénti plafonba. Terv: `docs/specs/2026-11-23-kuponos-ismetles-hatarido.md` (K1–K6).
+  A `brainrot-play.spec.ts:113` „kampó nélkül … elkapás” e2e a PR-kapu hosszú futásában ingadozó (önállóan 21/21 zöld).
 
 # Eredmény-e-mail B2 (2026-11-24)
 

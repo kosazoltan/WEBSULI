@@ -42,6 +42,7 @@ code_review:
   local_review_determinism: "seed 42 + repeat_penalty 1.15; értelmezhetetlen darab felezve (2026-11-23)"
   inventory: "teljes hiányleltár: docs/specs/2026-11-23-teljes-hianyleltar.md (ág docs/hianyleltar-2026-11-23), SQL-be töltve [P-0NN]/[BL]/[H-]/[KB] előtaggal"
   open_prs_2026_11_23: "#541 (vak kör kivezetés), #544 (advent PR-C), #545 (hiányleltár docs); merged: #542, #543"
+  coupon_repeat_bound: "P-010 (PR #558): kupon módban a plafon alatti hibázott tétel ≤ LATE_RETURN_MAX (10) kérdésen belül visszajön (couponDeadline, questionDirector.ts); szerződés-teszt: source/tests/game-question-director-kupon.test.ts"
 # 2026-11-24 — eredmény-e-mail B2 (a #510 bontásának 3. szelete)
 result_email_b2:
   pr: "#556 beolvasztva (407224d5, 2026-11-24)"
