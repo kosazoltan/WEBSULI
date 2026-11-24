@@ -50,3 +50,10 @@ test("B5a-0 (R1 a): a végleges levél felülíró mondata csak jelzéssel; jelz
   assert.match(sup.html, /ez a befejezett kör eredménye — a korábbi, „félbehagyva” jelzésű levél helyébe lép\./);
   assert.match(sup.subject, /— Kvíz — /, "a végleges levél tárgya nem „félbehagyva”");
 });
+
+test("#577 / 35501fd3: bizonyíthatatlan felülírási állapot → feltételes mondat (nem állít, nem hallgat el)", () => {
+  const g = gradePartialQuiz(q, { [q[0].id]: q[0].correctIndex }, 1)!;
+  const html = buildResultEmail({ lessonTitle: "Lecke", classroom: 7, learner: "X", url: "", graded: { ...g, meta: { supersedesPartial: "unknown" } }, sentAt: new Date("2026-11-17T20:00:00Z") }).html;
+  assert.match(html, /ha erről a körről korábban „félbehagyva” jelzésű levél érkezett, ez lép a helyébe/);
+  assert.doesNotMatch(html, /a korábbi, „félbehagyva” jelzésű levél helyébe lép/);
+});
