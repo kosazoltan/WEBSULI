@@ -27,6 +27,7 @@ function repo() {
 }
 
 const evidenceDir = (records) => {
+  // `at`: a rekordok időrendje (a legújabb dönt)
   const dir = mkdtempSync(join(tmpdir(), 'k2-ev-'));
   for (const r of records) writeFileSync(join(dir, `review-${r.head}.json`), JSON.stringify(r));
   return dir;
@@ -83,5 +84,43 @@ test('K2: csak dokumentumot érintő ág (üres kód-diff) ítélete nem visz á
 
 test('K2: a merge-kapu saját bizonyíték híján az átvitelt kéri', () => {
   const src = readFileSync(new URL('./pre-merge-gate.mjs', import.meta.url), 'utf8');
-  assert.match(src, /readEvidence\(ctx\.evDir, `review-\$\{head\}`\) \?\? transferReviewEvidence\(\{ evDir: ctx\.evDir, head, base: 'origin\/main', exec, cwd: root \}\)/);
+  assert.match(src, /readEvidence\(ctx\.evDir, `review-\$\{head\}`\) \?\? transferReviewEvidence\(\{ evDir: ctx\.evDir, head, base: 'origin\/main', exec, cwd: root, accept: \(ev\) => mergeVerdict\(/, 'a kapu alkalmassági feltétele (vak-mód) a keresésnek is szól');
+});
+
+test('K2 (PR #568 review): sztringliterál szóköz-változása más kód → nincs átvitel', () => {
+  const { dir, git, write, reviewed } = repo();
+  write('src/a.ts', "export const label = 'a b';\n"); git('add', '-A'); git('commit', '-q', '-m', 'címke');
+  const withSpace = git('rev-parse', 'HEAD');
+  write('src/a.ts', "export const label = 'ab';\n"); git('add', '-A'); git('commit', '-q', '-m', 'szóköz nélkül');
+  const head = git('rev-parse', 'HEAD');
+  assert.notEqual(codePatchId(realExec, dir, 'main', head), codePatchId(realExec, dir, 'main', withSpace));
+  assert.equal(transferReviewEvidence({ evDir: evidenceDir([{ head: withSpace, verdict: 'IGEN' }]), head, base: 'main', exec: realExec, cwd: dir }), null);
+  void reviewed;
+});
+
+test('K2 (PR #568 review): a main ugyanabban a fájlban, szomszédos sorban változik — tiszta merge után is átvihető', () => {
+  const { dir, git, write } = repo();
+  git('checkout', '-q', 'main');
+  write('src/big.ts', ['// 1', '// 2', '// 3', '// 4', '// 5', '// 6', '// 7', '// 8'].join('\n') + '\n'); git('add', '-A'); git('commit', '-q', '-m', 'nagy fájl');
+  git('checkout', '-q', 'feat'); git('merge', '-q', '--no-edit', 'main');
+  write('src/big.ts', ['// 1', '// 2', '// 3', '// 4 PR', '// 5', '// 6', '// 7', '// 8'].join('\n') + '\n'); git('add', '-A'); git('commit', '-q', '-m', 'PR-sor');
+  const reviewed = git('rev-parse', 'HEAD');
+  git('checkout', '-q', 'main');
+  write('src/big.ts', ['// 1', '// 2', '// 3', '// 4', '// 5', '// 6 main', '// 7', '// 8'].join('\n') + '\n'); git('add', '-A'); git('commit', '-q', '-m', 'main-sor');
+  git('checkout', '-q', 'feat'); git('merge', '-q', '--no-edit', 'main');
+  const head = git('rev-parse', 'HEAD');
+  assert.equal(codePatchId(realExec, dir, 'main', head), codePatchId(realExec, dir, 'main', reviewed));
+});
+
+test('K2 (PR #568 review): az azonos kódú legújabb ítélet dönt — NEM után nincs visszaesés egy régebbi IGEN-re; az alkalmatlan rekordot kihagyja', () => {
+  const { dir, git, write, reviewed } = repo();
+  write('docs/x.md', '# h2\n'); git('add', '-A'); git('commit', '-q', '-m', 'doksi 2');
+  const h2 = git('rev-parse', 'HEAD');
+  write('docs/x.md', '# h3\n'); git('add', '-A'); git('commit', '-q', '-m', 'doksi 3');
+  const h3 = git('rev-parse', 'HEAD');
+  const ev = evidenceDir([{ head: reviewed, verdict: 'IGEN', at: '2026-11-24T08:00:00Z' }, { head: h2, verdict: 'NEM', at: '2026-11-24T09:00:00Z' }]);
+  assert.equal(transferReviewEvidence({ evDir: ev, head: h3, base: 'main', exec: realExec, cwd: dir }), null);
+  const blind = evidenceDir([{ head: reviewed, verdict: 'IGEN', at: '2026-11-24T08:00:00Z', reviewer: 'local-review' }, { head: h2, verdict: 'IGEN, FELTÉTELLEL', at: '2026-11-24T07:00:00Z', reviewer: 'blind-review' }]);
+  const got = transferReviewEvidence({ evDir: blind, head: h3, base: 'main', exec: realExec, cwd: dir, accept: (e) => e.reviewer === 'blind-review' });
+  assert.equal(got?.transferredFrom, h2, 'a kapu feltételét nem teljesítő (újabb) rekord után a megfelelőt találja');
 });

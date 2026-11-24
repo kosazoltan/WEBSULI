@@ -323,35 +323,43 @@ export function resolveVerdict({ head, evidence, texts = [] }) {
 export const K2_NON_CODE = [':(exclude)docs/**', ':(exclude)*.md', ':(exclude)**/*.md', ':(exclude).hermes/**', ':(exclude)memory/**', ':(exclude)kanban/**', ':(exclude).agent/**'];
 
 /**
- * A fej SAJÁT kódváltozásának azonosítója: `git diff <merge-base(base, fej)> <fej>` a nem-kód útvonalak nélkül → `git patch-id --stable`.
- * A main beolvasztása (ütközés nélkül) és a dokumentum-változás nem módosítja. Üres kód-diff vagy git-hiba → null (nincs mihez kötni).
+ * A fej SAJÁT kódváltozásának azonosítója: `git diff -U0 <merge-base(base, fej)> <fej>` a nem-kód útvonalak nélkül →
+ * `git patch-id --verbatim`. A `--verbatim` a szóközt is megtartja (egy sztringliterál szóköz-változása más program — PR #568 review);
+ * a `-U0` miatt a main által (ütközés nélkül) módosított szomszédos sorok, mint kontextus, nem változtatják meg. A fájlnév és a
+ * hozzáadott / törölt sorok számítanak; ugyanazon fájlon belüli áthelyezést nem különböztet meg (ismert, szándékos korlát).
+ * Üres kód-diff vagy git-hiba → null (nincs mihez kötni).
  */
 export function codePatchId(exec, cwd, base, head) {
   const mb = exec('git', ['merge-base', base, head], { cwd, timeoutMs: 60_000 });
   if (mb.code !== 0 || !mb.stdout.trim()) return null;
-  const diff = exec('git', ['diff', '--no-color', '--no-ext-diff', mb.stdout.trim(), head, '--', '.', ...K2_NON_CODE], { cwd, timeoutMs: 120_000 });
+  const diff = exec('git', ['diff', '--no-color', '--no-ext-diff', '-U0', mb.stdout.trim(), head, '--', '.', ...K2_NON_CODE], { cwd, timeoutMs: 120_000 });
   if (diff.code !== 0 || !diff.stdout.trim()) return null;
-  const pid = exec('git', ['patch-id', '--stable'], { cwd, input: diff.stdout, timeoutMs: 60_000 });
+  const pid = exec('git', ['patch-id', '--verbatim'], { cwd, input: diff.stdout, timeoutMs: 60_000 });
   const id = pid.code === 0 ? pid.stdout.trim().split(/\s+/)[0] : '';
   return /^[0-9a-f]{40}$/.test(id) ? id : null;
 }
 
 /**
- * Ha a fejre nincs saját `review-<fej>.json`, egy korábbi fej IGEN / IGEN, FELTÉTELLEL ítélete átvihető, ha a kód-patch-id-juk azonos.
- * A visszaadott rekord az eredeti mezőit (futtató, modell) megtartja, `head` = az új fej, `transferredFrom` = a megítélt fej.
- * NEM-ítélet és ismeretlen ítélet nem vihető át. Találat nélkül null.
+ * Ha a fejre nincs saját `review-<fej>.json`, egy korábbi fej ítélete átvihető, ha a kód-patch-id-juk azonos. Az azonos kódú, a hívó
+ * feltételének (`accept`, pl. a merge-kapu vak-módja) megfelelő rekordok közül a LEGÚJABB dönt: ha az NEM (vagy ismeretlen), nincs
+ * átvitel — egy régebbi IGEN-re sem esik vissza (PR #568 review). A visszaadott rekord az eredeti mezőit megtartja, `head` = az új
+ * fej, `transferredFrom` = a megítélt fej. Találat nélkül null.
  */
-export function transferReviewEvidence({ evDir, head, base = 'origin/main', exec = realExec, cwd }) {
+export function transferReviewEvidence({ evDir, head, base = 'origin/main', exec = realExec, cwd, accept = () => true }) {
   let current;
+  const same = [];
   for (const name of listEvidence(evDir)) {
     if (!/^review-[0-9a-f]{40}\.json$/.test(name)) continue;
     const ev = readEvidence(evDir, name.slice(0, -'.json'.length));
-    if (!ev || typeof ev.head !== 'string' || ev.head === head || !['IGEN', 'IGEN, FELTÉTELLEL'].includes(ev.verdict)) continue;
+    if (!ev || typeof ev.head !== 'string' || ev.head === head || !VERDICTS.includes(ev.verdict) || !accept(ev)) continue;
     if (current === undefined) current = codePatchId(exec, cwd, base, head);
     if (!current) return null;
-    if (codePatchId(exec, cwd, base, ev.head) === current) return { ...ev, head, transferredFrom: ev.head };
+    if (codePatchId(exec, cwd, base, ev.head) === current) same.push(ev);
   }
-  return null;
+  if (!same.length) return null;
+  same.sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')));
+  const newest = same[0];
+  return ['IGEN', 'IGEN, FELTÉTELLEL'].includes(newest.verdict) ? { ...newest, head, transferredFrom: newest.head } : null;
 }
 
 /** Az ítélet lépés-eredménye. */
