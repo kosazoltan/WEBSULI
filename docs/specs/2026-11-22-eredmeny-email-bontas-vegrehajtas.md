@@ -117,3 +117,7 @@
 
 - Záró táblázat: R1–R54 → szelet → teszt (fájl:teszt neve). Hiányzó sor = nyitott munka.
 - A #510 lezárása merge nélkül, a szelet-PR-ok listájával; a `fix/eredmeny-email-kviz` ág törlése csak tulajdonosi jóváhagyással.
+
+### B3 / B5a — a képesség hirdetésének feltétele
+
+B3 csak olvassa a numerikus `resultApi: 2` jelzést; azt kizárólag tesztfixture adja. Jelzés nélkül a végleges kérés a régi alakban megy, új küldési út nélkül. B5a elfogadási feltétele: a szerver csak a teljes V2-törzs (a `partial` és `clientNow` mezőket is beleértve) tényleges feldolgozását igazoló integrációs teszt után hirdethet V2-t. Addig a teljes R12 nincs kész; a séma lazítása vagy a kérés feldolgozás nélküli nyugtázása nem teljesítés.

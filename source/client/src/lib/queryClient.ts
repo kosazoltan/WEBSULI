@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { supportsResultApi } from "@shared/result-compat";
 import { logger } from "./logger";
 import { LESSON_SCORING_VERSION } from "@shared/answer-value";
 import { isRetryableRequestError } from "@shared/request-retry";
@@ -30,13 +31,15 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
 /** Eredmény-e-mail B2 (#510 R37): a CSRF-token lekérésének saját határideje (a válasz törzsének olvasásával együtt). */
 const CSRF_TOKEN_TIMEOUT_MS = 15_000;
 
+type TokenInfo = { token: string; resultApi: boolean };
+
 // SECURITY: CSRF Token Manager
 // Fetches and caches CSRF token for protecting mutating requests
 class CSRFTokenManager {
-  private token: string | null = null;
-  private fetchPromise: Promise<string> | null = null;
+  private token: TokenInfo | null = null;
+  private fetchPromise: Promise<TokenInfo> | null = null;
   
-  async getToken(): Promise<string> {
+  async getToken(): Promise<TokenInfo> {
     // Return cached token if available
     if (this.token) {
       return this.token;
@@ -57,7 +60,7 @@ class CSRFTokenManager {
     }
   }
   
-  private async fetchTokenFromServer(): Promise<string> {
+  private async fetchTokenFromServer(): Promise<TokenInfo> {
     // B2 (#510 R37): a megakadt tokenlekérés nem tarthatja végtelenül a várakozó írást. Időzített AbortController (nem
     // `AbortSignal.timeout`): a határidő így a már kezelt, újrapróbálhatónak ismert `AbortError`-t adja, nem `TimeoutError`-t
     // (PR #556 review) — és a törzs olvasását is fedi.
@@ -74,7 +77,7 @@ class CSRFTokenManager {
       }
 
       const data = await res.json();
-      return data.csrfToken;
+      return { token: data.csrfToken, resultApi: supportsResultApi(data) };
     } finally {
       clearTimeout(timer);
     }
@@ -138,7 +141,7 @@ export async function apiRequest<T = unknown>(
   method: string,
   url: string,
   data?: unknown | undefined,
-  options?: { retries?: number; timeout?: number; keepalive?: boolean }
+  options?: { retries?: number; timeout?: number; keepalive?: boolean; resultTimes?: { startedAt?: number; lastAnsweredAt?: number } }
 ): Promise<T> {
   const retries = options?.retries ?? 0; // No automatic retries for write operations (causes duplicates)
   const timeout = options?.timeout ?? 60000; // 60 second default timeout
@@ -158,25 +161,31 @@ export async function apiRequest<T = unknown>(
         
         // SECURITY: Fetch CSRF token for mutating requests (POST/PUT/PATCH/DELETE)
         // Spec 2026-09-30 (U1, §C-V/1): a kliens közli a támogatott pontozó-verziót; a kiszolgáló az újabb leckét 409-cel utasítja el.
+        const addsFields = Boolean(options?.resultTimes && Object.keys(options.resultTimes).length && data && typeof data === "object");
+        const serialize = (capable: boolean) => data ? JSON.stringify(capable && addsFields ? { ...(data as object), ...options!.resultTimes } : data) : undefined;
+        // #510 R10 / R12 (PR #564 review): ha a V2-t hirdető token után a kérés egy régi, szigorú sémájú példányhoz ér, az új mezőkre
+        // 400 jön — ilyenkor EGY ismétlés a régi alakkal (ugyanazzal a tokennel). Jelzés vagy új mező nélkül változatlanul egy kérés.
+        const sendOnce = async (capable: boolean, signal: AbortSignal) => {
+          const init = { method, headers, credentials: "include" as const, signal, ...keepalive };
+          const first = await fetch(url, { ...init, body: serialize(capable) });
+          if (first.status !== 400 || !capable || !addsFields) return first;
+          debugLog(`[API REQUEST] ${method} ${url} → 400 az új mezőkre, ismétlés a régi alakkal`);
+          return fetch(url, { ...init, body: serialize(false) });
+        };
+        let capable = false;
         const headers: Record<string, string> = { "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), ...(data ? { "Content-Type": "application/json" } : {}) };
         if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
           try {
             const csrfToken = await csrfTokenManager.getToken();
-            headers['X-CSRF-Token'] = csrfToken;
+            headers['X-CSRF-Token'] = csrfToken.token;
+            capable = csrfToken.resultApi;
           } catch (error) {
             logger.warn('[CSRF] Failed to fetch CSRF token, continuing without it:', error);
             // Continue anyway - backend will reject if CSRF required
           }
         }
         
-        const res = await fetch(url, {
-          method,
-          headers,
-          body: data ? JSON.stringify(data) : undefined,
-          credentials: "include",
-          signal: controller.signal,
-          ...keepalive,
-        });
+        const res = await sendOnce(capable, controller.signal);
 
         // B2 (#510 R37): az időzítő a válasz törzsének beolvasásáig él (a lenti `finally` törli) — a fejlécek után megakadó választest
         // sem vonja ki a kérést az időkorlát alól.
@@ -195,20 +204,13 @@ export async function apiRequest<T = unknown>(
             
             // Retry with new token (fresh controller in case original timed out)
             const newCsrfToken = await csrfTokenManager.getToken();
-            headers['X-CSRF-Token'] = newCsrfToken;
+            headers['X-CSRF-Token'] = newCsrfToken.token;
             
             const retryController = new AbortController();
             const retryTimeoutId = setTimeout(() => retryController.abort(), timeout);
             
             try {
-              const retryRes = await fetch(url, {
-                method,
-                headers,
-                body: data ? JSON.stringify(data) : undefined,
-                credentials: "include",
-                signal: retryController.signal,
-                ...keepalive,
-              });
+              const retryRes = await sendOnce(newCsrfToken.resultApi, retryController.signal);
               
               debugLog(`[API REQUEST RETRY] ${method} ${url} → ${retryRes.status} ${retryRes.statusText}`);
               // B2 (#510 R23): ha a friss token is 403-at kap, az sem marad a gyorsítótárban — a következő írás megint frisset kér.
