@@ -73,6 +73,28 @@ for (const vp of [{ width: 1440, height: 900 }, { width: 1100, height: 900 }]) t
   });
 });
 
+// review #579: teljes 0–12-es évfolyamkatalógussal, 1024 px-en az eszközsor nem lóghat ki (a külső elem overflow-hidden,
+// ezért a dokumentum-túlgörgetés nem elég): mindhárom vezérlő a sávon belül, a keresőmező legalább 240 px.
+test.describe("asztal 1024×800, minden évfolyam", () => {
+  test.use({ viewport: { width: 1024, height: 800 } });
+
+  test("13 évfolyam-csip mellett is a sávon belül marad a szűrő, a kereső (≥240 px) és a nézetváltó", async ({ page }) => {
+    const files = Array.from({ length: 13 }, (_, g) => ({ id: `g${g}`, userId: null, title: `${g}. évfolyam anyaga`, content: "", description: null, classroom: g, createdAt: "2026-11-01T10:00:00Z" }));
+    await page.route("**/api/html-files", (route) => route.fulfill({ json: files }));
+    await page.goto("/");
+    const toolbar = await bb(page.getByTestId("home-toolbar"));
+    await expect(page.getByTestId("home-classroom-filter")).toBeVisible();
+    for (const id of ["home-classroom-filter", "input-search", "home-view-switch"]) {
+      const b = await bb(page.getByTestId(id));
+      expect(b.x, `${id}: bal széle a sávon belül`).toBeGreaterThanOrEqual(toolbar.x - 1);
+      expect(b.x + b.width, `${id}: jobb széle a sávon belül`).toBeLessThanOrEqual(toolbar.x + toolbar.width + 1);
+    }
+    const content = await contentBox(page);
+    expect(toolbar.width, "az eszközsor nem szélesebb a tartalomsávnál").toBeLessThanOrEqual(content.width + 2);
+    expect((await bb(page.getByTestId("input-search"))).width, "a keresőmező legalább 240 px").toBeGreaterThanOrEqual(240);
+  });
+});
+
 test.describe("telefon 390×844", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
