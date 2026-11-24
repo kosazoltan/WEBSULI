@@ -28,6 +28,81 @@ test.beforeEach(async ({ page }) => {
 
 const drones = (page: Page) => page.locator('[data-testid="sq-answers"] [data-correct]');
 
+/**
+ * #1730 (gyökérok, terhelt futtatón diagnosztikával mérve, 2026-11-24): a koppintás célba ér és a válasz rögzül (`pick` → `correct`), de a
+ * jó válasz kijelzése csak `REVEAL_CORRECT_MS` (0,9 s játékidő) — a Playwright-oldali ellenőrzés terhelés alatt a kijelzés vége UTÁN ért
+ * oda, amikor már a következő feladat tétlen drónjai látszottak. Ritkábban a koppintás a kérdés ablakán (≈ 6 s) TÚL érkezett: ekkor a
+ * játék helyesen „Lejárt az idő”-t ad (a jó drón ilyenkor is zöld — kijelzés —, de pont nincs). A rövid életű állapotot ezért a LAPON
+ * BELÜL rögzítjük a koppintás ELŐTT bekapcsolt MutationObserverrel: a drónok kimeneteli állapotát (elemenként egyszer) és a feladat
+ * státuszsorát (`play-question-status`: dicséret / „A jó válasz: …” / „Lejárt az idő …”), és ezekre teszünk állítást.
+ */
+type Outcome = "correct" | "wrong" | "timeout";
+type Recorded = { correctDrone: number; wrongDrones: number; outcome: Outcome | null };
+async function recordRound(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    type Rec = { correctDrone: number; wrongDrones: number; outcome: "correct" | "wrong" | "timeout" | null };
+    const w = window as unknown as { __sqRec?: Rec; __sqObs?: MutationObserver };
+    w.__sqObs?.disconnect();
+    const rec: Rec = { correctDrone: 0, wrongDrones: 0, outcome: null };
+    w.__sqRec = rec;
+    // drónonként (helye szerint: `sq-drone-<i>`) egyszer — a React újrarajzolása új elemet adhat ugyanarra a drónra
+    const seen = new Set<string>();
+    // a felvétel előtti (előző feladatból maradt) státusz nem kimenetel — csak az utána megjelenő számít
+    const statusEl0 = document.querySelector('[data-testid="play-question-status"]');
+    const initial = `${statusEl0?.getAttribute("data-tone") ?? ""}|${statusEl0?.textContent ?? ""}`;
+    const drone = (el: Element) => {
+      const state = el.getAttribute("data-state");
+      if (!el.closest('[data-testid="sq-answers"]')) return; // a kérdéssáv válaszgombjai is hordozzák a data-correct-et — csak a drónok
+      const key = `${el.getAttribute("data-testid") ?? ""}|${state}`;
+      if ((state !== "correct" && state !== "wrong") || seen.has(key)) return; // tétlen / halványított („dim”) nem kimenetel
+      seen.add(key);
+      if (el.getAttribute("data-correct") === "true") { if (state === "correct") rec.correctDrone += 1; }
+      else if (state === "wrong") rec.wrongDrones += 1;
+    };
+    const status = () => {
+      if (rec.outcome) return;
+      const el = document.querySelector('[data-testid="play-question-status"]');
+      const tone = el?.getAttribute("data-tone");
+      const text = el?.textContent ?? "";
+      if (`${tone ?? ""}|${text}` === initial) return;
+      if (tone === "good") rec.outcome = "correct";
+      else if (tone === "bad") rec.outcome = /Lejárt az idő/.test(text) ? "timeout" : "wrong";
+    };
+    const obs = new MutationObserver(records => {
+      for (const m of records) {
+        if (m.type === "attributes" && m.target instanceof Element && m.target.hasAttribute("data-correct")) drone(m.target);
+        if (m.type === "childList") m.addedNodes.forEach(n => { if (n instanceof Element) { if (n.hasAttribute("data-correct")) drone(n); n.querySelectorAll("[data-correct]").forEach(drone); } });
+      }
+      status();
+    });
+    obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["data-state", "data-tone"] });
+    w.__sqObs = obs;
+  });
+}
+const recorded = (page: Page) => page.evaluate(() => (window as unknown as { __sqRec: Recorded }).__sqRec);
+
+/**
+ * Egy feladat megválaszolása valódi érintéssel (jó vagy rossz drón), a kimenetel laponbelüli rögzítésével. Ha a koppintás a kérdés
+ * ablakán túl érkezett (terhelt futtató: „Lejárt az idő” — a játék helyes viselkedése, nem a koppintás hibája), a következő feladaton
+ * újra próbálja, legfeljebb háromszor; a kimenetelt adja vissza (a hívó állít rá).
+ */
+async function answerRound(page: Page, correct: boolean, beforeTap?: () => Promise<void>): Promise<Recorded> {
+  const selector = `[data-testid="sq-answers"] [data-correct="${correct}"]`;
+  for (let attempt = 1; ; attempt++) {
+    await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
+    const wave = await drones(page).elementHandles();
+    await recordRound(page);
+    await beforeTap?.();
+    await tapCenter(page, selector);
+    await expect.poll(async () => (await recorded(page)).outcome, { timeout: 10_000, message: "a feladat kimenetele (státuszsor)" }).not.toBeNull();
+    const rec = await recorded(page);
+    if (rec.outcome !== "timeout" || attempt >= 3) { await Promise.all(wave.map(n => n.dispose())); return rec; }
+    // a lejárt feladat kijelzése után új négy drón jön — a régi négy elem eltűnése tartósan ellenőrizhető
+    await expect.poll(() => page.evaluate(nodes => nodes.filter(node => node.isConnected).length, wave), { timeout: 15_000 }).toBe(0);
+    await Promise.all(wave.map(n => n.dispose()));
+  }
+}
+
 /** Koppintás egy elem közepére valódi érintéssel (a lebegő drón dobozán belül). */
 async function tapCenter(page: Page, selector: string): Promise<void> {
   const el = page.locator(selector).first();
@@ -42,8 +117,12 @@ async function tapCenter(page: Page, selector: string): Promise<void> {
     await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
     // Ha az ellenfél közepe fedte a drónt, ez szabályosan lövés volt. Egyetlen új érintés
     // ugyanazon a még választható drónon, másik ponton; új kérdésre nem válaszolunk helyette.
+    // #1730: csak ha a laponbelüli napló szerint a feladat még nem kapott választ (különben a második koppintás a következő
+    // feladat drónjára eshetne).
     const next = await original.evaluate(async node => {
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const rec = (window as unknown as { __sqRec?: { outcome: string | null } }).__sqRec;
+      if (rec?.outcome) return null;
       if (!node.isConnected || node.getAttribute("data-state") !== "idle" || node.getAttribute("aria-disabled") === "true") return null;
       const r = node.getBoundingClientRect();
       return { x: r.left + r.width * 0.2, y: r.top + r.height / 2 };
@@ -81,8 +160,10 @@ test.describe("valódi érintés", () => {
     const firstWave = await drones(page).elementHandles();
     expect(firstWave).toHaveLength(4);
     await expect(page.getByTestId("play-question-more"), "a feladat koppintás nélkül olvasható").toHaveCount(0);
-    await tapCenter(page, '[data-testid="sq-answers"] [data-correct="true"]');
-    await expect(page.locator('[data-testid="sq-answers"] [data-correct="true"]')).toHaveAttribute("data-state", "correct");
+    const first = await answerRound(page, true);
+    expect(first.outcome, "a jó drón érintése helyes válasz").toBe("correct");
+    expect(first.correctDrone, "a jó drón zöldre vált").toBe(1);
+    expect(first.wrongDrones, "jó válasznál egyik rossz drón sem vált pirosra").toBe(0);
     await expect.poll(async () => Number((await page.getByTestId("sq-score").innerText()).replace(/\D/g, "")), { timeout: 5_000 }).toBeGreaterThan(0);
     await shot(page, "touch-correct.jpg");
 
@@ -90,12 +171,12 @@ test.describe("valódi érintés", () => {
     // A „Miért?” a kijelzés alatt áll egy helyben; a kijelzés végén a kártya „Miért?”-csippé, majd új feladattá alakul, és a
     // gomb elmozdul — a main CI-n (43943054869, 1. és 3. próba) a koppintás erre a váltásra esett, és a gomb mellé ment.
     // A régi négy DOM-elem eltűnése tartósan ellenőrizhető akkor is, ha a két mérés között már az új négy drón megjelent.
-    await expect.poll(() => page.evaluate(nodes => nodes.filter(node => node.isConnected).length, firstWave), { timeout: 5_000 }).toBe(0);
+    await expect.poll(() => page.evaluate(nodes => nodes.filter(node => node.isConnected).length, firstWave), { timeout: 15_000 }).toBe(0);
     await Promise.all(firstWave.map(node => node.dispose()));
-    await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
-    await tapCenter(page, '[data-testid="sq-answers"] [data-correct="false"]');
-    await expect(page.locator('[data-testid="sq-answers"] [data-correct="true"]')).toHaveAttribute("data-state", "correct");
-    await expect(page.locator('[data-testid="sq-answers"] [data-state="wrong"]')).toHaveCount(1);
+    const second = await answerRound(page, false);
+    expect(second.outcome, "a rossz drón érintése hibás válasz").toBe("wrong");
+    expect(second.correctDrone, "a helyes drón zölden látszik").toBe(1);
+    expect(second.wrongDrones, "pontosan a koppintott rossz drón vált pirosra").toBe(1);
     expect(await page.locator('[role="dialog"]').count(), "a hibás válasz nem nyit blokkoló kártyát").toBe(0);
     await shot(page, "touch-wrong.jpg");
     await page.getByTestId("play-why").tap();
@@ -111,7 +192,7 @@ test.describe("valódi érintés", () => {
     // a mérés a már lezárt kijelzést nézte. A mérce (≥ 1,8 mp) változatlan; ugyanez a minta: game-explanation-pause.spec.ts.
     await expect(page.locator('[data-testid="sq-answers"] [data-state="correct"]')).toHaveCount(0, { timeout: 15_000 });
     await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
-    await page.evaluate(() => {
+    const armReveal = () => page.evaluate(() => {
       const w = window as unknown as { __sqReveal?: { start: number | null; end: number | null } };
       w.__sqReveal = { start: null, end: null };
       const tick = () => {
@@ -124,9 +205,10 @@ test.describe("valódi érintés", () => {
       requestAnimationFrame(tick);
     });
     const reveal = () => page.evaluate(() => (window as unknown as { __sqReveal: { start: number | null; end: number | null } }).__sqReveal);
-    await tapCenter(page, '[data-testid="sq-answers"] [data-correct="false"]');
+    const third = await answerRound(page, false, armReveal);
+    expect(third.outcome, "a rossz drón érintése hibás válasz").toBe("wrong");
+    expect(third.wrongDrones, "pontosan a koppintott rossz drón vált pirosra").toBe(1);
     await expect.poll(async () => (await reveal()).start !== null, { timeout: 5_000 }).toBe(true);
-    await expect(page.locator('[data-testid="sq-answers"] [data-state="wrong"]')).toHaveCount(1);
     await expect.poll(async () => (await reveal()).end !== null, { timeout: 20_000 }).toBe(true);
     const r = await reveal();
     expect(r.end! - r.start!, "a megoldás ≥ 1,8 mp-ig látszik").toBeGreaterThanOrEqual(1_800);
