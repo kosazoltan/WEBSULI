@@ -65,7 +65,10 @@ test("a naptár NEM kerül a játékok közé: a játéklista és a főoldali j�
   // A kártya a lusta foglalatán át kerül a lapra (vak ellenőr K1: külön darab) — a helye ugyanaz.
   const card = list.indexOf("<AdventHomeSlot />", hero);
   assert.ok(hero > 0 && card > hero, "a kártya a Hero után");
-  assert.ok(card < list.indexOf("<SponsorBar />", hero), "a kártya a támogatói sáv előtt");
+  // SPEC-VÁLTOZÁS 2026-11-24 (tulajdonosi kérés, #1984; docs/specs/2026-11-24-fooldal-felso-regio.md): a támogatói csempe a Hero
+  // MELLÉ került (azonos sorban), ezért a kártya a csempe UTÁN, a „Szia” kártya és a szűrő előtt áll.
+  assert.ok(card > list.indexOf("<SponsorBar variant=\"tile\" />", hero), "a kártya a Hero melletti támogatói csempe után");
+  assert.ok(card < list.indexOf("<WelcomeCard", hero), "a kártya a Szia-kártya előtt");
   assert.ok(card < list.indexOf("data-testid=\"button-filter-all\"", hero), "a kártya a szűrő előtt");
 });
 
