@@ -144,13 +144,22 @@ function AdminFilesTab({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
 
   const editMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: { title?: string; description?: string; classroom?: number; tracks?: string[] } }) => {
-      // #1986: a csoporttagság külön, admin-végponton (PUT …/tracks); a többi mező a megszokott PATCH-csel.
+      // #1986: a csoporttagság külön, admin-végponton (PUT …/tracks); a többi mező a megszokott PATCH-csel. Review #582: előbb a
+      // PATCH (az évfolyam-váltás a csoport feltétele), utána a PUT; részleges siker esetén a hiba megnevezi, mi mentődött.
       const { tracks, ...rest } = updates;
-      if (tracks) await apiRequest("PUT", `/api/html-files/${id}/tracks`, { tracks });
-      return Object.keys(rest).length ? apiRequest("PATCH", `/api/html-files/${id}`, rest) : null;
+      if (Object.keys(rest).length) await apiRequest("PATCH", `/api/html-files/${id}`, rest);
+      if (tracks) {
+        try { await apiRequest("PUT", `/api/html-files/${id}/tracks`, { tracks }); }
+        catch (error) {
+          if (!Object.keys(rest).length) throw error;
+          throw new Error(`A többi mező mentődött, a csoporttagság nem: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      return null;
     },
+    // A lista a hiba esetén is frissül (részleges mentés).
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["/api/html-files"] }); },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/html-files"] });
       setEditingFile(null);
       toast({
         title: "Módosítva",

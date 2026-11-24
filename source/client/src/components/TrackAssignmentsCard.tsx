@@ -17,7 +17,7 @@ export function TrackAssignmentsCard() {
   const [track, setTrack] = useState<string>(TRACKS[0]?.id ?? "");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const { data: rows = [], isLoading } = useQuery<Assignment[]>({ queryKey: KEY });
+  const { data: rows = [], isLoading, isError, refetch } = useQuery<Assignment[]>({ queryKey: KEY });
   const add = useMutation({
     mutationFn: async () => apiRequest("POST", "/api/admin/track-assignments", { track, email }),
     onSuccess: () => { setEmail(""); setError(null); queryClient.invalidateQueries({ queryKey: KEY }); },
@@ -25,7 +25,8 @@ export function TrackAssignmentsCard() {
   });
   const remove = useMutation({
     mutationFn: async (a: Assignment) => apiRequest("DELETE", "/api/admin/track-assignments", { track: a.track, emailKey: a.emailKey }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+    onSuccess: () => { setError(null); queryClient.invalidateQueries({ queryKey: KEY }); },
+    onError: (e: unknown) => setError(e instanceof Error ? `A törlés nem sikerült: ${e.message}` : "A törlés nem sikerült"),
   });
   const label = (id: string) => TRACKS.find((t) => t.id === id)?.label ?? id;
 
@@ -46,7 +47,12 @@ export function TrackAssignmentsCard() {
         <Button type="submit" size="sm" disabled={!email.trim() || add.isPending} data-testid="button-track-assign-add">Hozzárendelés</Button>
       </form>
       {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
-      {isLoading ? <p className="text-xs text-muted-foreground">Betöltés…</p> : rows.length === 0 ? (
+      {isLoading ? <p className="text-xs text-muted-foreground">Betöltés…</p> : isError ? (
+        <p role="alert" className="flex items-center gap-2 text-xs text-red-600" data-testid="track-assign-load-error">
+          A hozzárendelések betöltése nem sikerült.
+          <Button type="button" variant="outline" size="sm" onClick={() => refetch()} data-testid="button-track-assign-retry">Újra</Button>
+        </p>
+      ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground" data-testid="track-assign-empty">Még nincs hozzárendelés.</p>
       ) : (
         <ul className="divide-y text-sm" data-testid="track-assign-list">

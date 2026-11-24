@@ -18,7 +18,7 @@ Forrás: tulajdonosi kérés (2026-11-24, feladat #1986), döntések az űrlapon
 - **Főoldal:** a „Prog.” után megjelenik a „Gimi felv.” csip; csak akkor, ha van anyag a csoportban, vagy a látogató hozzá van rendelve. Kiválasztva csak a csoport anyagai látszanak. A hozzárendelt fióknál a csip kiemelt, csillagot és „Neked” jelzést visel.
 - **`GET /api/tracks/mine`:** a bejelentkezett fiók (Google-munkamenet vagy játékosmunkamenet) csoportjai. Vendégnek `[]`.
 - **Admin, Tanulók → „Csoport-hozzárendelések” kártya:** csoport és e-mail-cím megadása, a felvett hozzárendelések listája és törlése. Végpontok (admin): `GET`, `POST {track, email}` és `DELETE {track, emailKey}` a `/api/admin/track-assignments`-en. A cím a fiókkulcsra normalizálódik.
-- **Admin, Fájlok:** a szerkesztésnél egy jelölőnégyzettel tehető a csoportba. A tananyagkészítőben választható „Gimi felvételi (6. o.)” cél: évfolyam 6, tantárgy matematika vagy magyar; közzétételkor `tracks = ['gimi6']`.
+- **Admin, Fájlok:** a szerkesztésnél egy jelölőnégyzettel tehető a csoportba. A csoportba tett anyag a csoport tartalmi évfolyamára kerül; a szerver a 6. osztálytól eltérő évfolyamú anyagot nem engedi a csoportba, és a csoportos anyag évfolyamát sem engedi elállítani (review #582).
 
 ## Elfogadás
 
@@ -29,3 +29,8 @@ Forrás: tulajdonosi kérés (2026-11-24, feladat #1986), döntések az űrlapon
 - E5: WHEN az admin felvesz egy címet THEN a fiókkulcs mentődik (Gmailnél pontok és `+címke` nélkül). Az ismétlés idempotens, a hibás csoport vagy cím 400, nem adminnak tiltott.
 - E6: WHEN az admin törli a hozzárendelést THEN a fiók `/api/tracks/mine` válasza `[]`.
 - E7: Az admin-kártya listázza, felveszi és törli a hozzárendeléseket (e2e).
+- E8: WHEN a csoport évfolyamától eltérő anyagot tesz a csoportba, vagy a csoportos anyag évfolyamát állítja el THEN 400, és nem mentődik.
+- E9: A mentés visszaállítása megtartja a csoporttagságot. E10: A játékosfiók törlése a postafiók hozzárendelését is törli.
+
+## Később (U3b, külön szelet)
+- A tananyagkészítőben „Gimi felvételi (6. o.)” gyártási cél (évfolyam 6, matematika vagy magyar), közzétételkor `tracks = ['gimi6']`. Addig az anyag a fájlszerkesztő jelölőjével kerül a csoportba.

@@ -112,7 +112,12 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
             <Label htmlFor="edit-classroom">Osztály *</Label>
             <Select 
               value={classroom.toString()} 
-              onValueChange={(value) => setClassroom(parseInt(value, 10))}
+              onValueChange={(value) => {
+                const next = parseInt(value, 10);
+                setClassroom(next);
+                // Review #582: a csoport anyaga a csoport évfolyamán van — más évfolyamra váltva a csoporttagság kikerül.
+                setTracks((cur) => cur.filter((id) => TRACKS.find((t) => t.id === id)?.contentGrade === next));
+              }}
             >
               <SelectTrigger data-testid="select-edit-classroom">
                 <SelectValue placeholder="Válassz osztályt" />
@@ -137,7 +142,11 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
               <label key={t.id} className="flex items-start gap-2 text-sm cursor-pointer">
                 <Checkbox
                   checked={tracks.includes(t.id)}
-                  onCheckedChange={(v) => setTracks((cur) => (v === true ? [...new Set([...cur, t.id])] : cur.filter((x) => x !== t.id)))}
+                  onCheckedChange={(v) => {
+                    setTracks((cur) => (v === true ? [...new Set([...cur, t.id])] : cur.filter((x) => x !== t.id)));
+                    // Review #582: a csoportba tett anyag a csoport tartalmi évfolyamára kerül (gimi6 → 6.).
+                    if (v === true) setClassroom(t.contentGrade);
+                  }}
                   data-testid={`checkbox-edit-track-${t.id}`}
                 />
                 <span>

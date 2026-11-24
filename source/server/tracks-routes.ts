@@ -2,7 +2,7 @@ import type { Express, Request } from "express";
 import type { Pool } from "pg";
 import { accountEmailKey } from "./player/codes";
 import { getPlayerSessionId } from "./player/session";
-import { normalizeTracks, isTrackId, type TrackId } from "@shared/tracks";
+import { normalizeTracks, isTrackId, trackOption, type TrackId } from "@shared/tracks";
 import { logger } from "./lib/logger";
 import { isAuthenticatedAdmin } from "./auth";
 
@@ -45,8 +45,16 @@ export function registerTrackRoutes(app: Express, deps: { pool: Pool; invalidate
     const tracks = normalizeTracks((req.body as { tracks?: unknown } | undefined)?.tracks);
     if (!tracks) return res.status(400).json({ message: "Ismeretlen tananyagcsoport" });
     try {
-      const { rowCount } = await pool.query(`UPDATE html_files SET tracks = $2::text[] WHERE id = $1`, [req.params.id, tracks]);
-      if (!rowCount) return res.status(404).json({ message: "Nincs ilyen tananyag" });
+      // Review #582: a csoport anyaga a csoport tartalmi évfolyamán van (gimi6 → 6.); eltérésnél 400, a tagság nem mentődik.
+      const grades = [...new Set(tracks.map((t) => trackOption(t)!.contentGrade))];
+      const { rowCount } = await pool.query(
+        `UPDATE html_files SET tracks = $2::text[] WHERE id = $1 AND (cardinality($3::int[]) = 0 OR classroom = ALL($3::int[]))`,
+        [req.params.id, tracks, grades]);
+      if (!rowCount) {
+        const exists = await pool.query(`SELECT 1 FROM html_files WHERE id = $1`, [req.params.id]);
+        if (!exists.rowCount) return res.status(404).json({ message: "Nincs ilyen tananyag" });
+        return res.status(400).json({ message: `A csoport anyagának ${grades.join(", ")}. osztályosnak kell lennie — előbb az évfolyamot állítsd át.` });
+      }
       await invalidateFiles();
       res.json({ id: req.params.id, tracks });
     } catch (error) {

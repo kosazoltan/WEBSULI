@@ -22,6 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { useAuth } from "@/hooks/useAuth";
+import { usePlayer } from "@/hooks/usePlayer";
 import { GIMI6_TRACK, trackOption } from "@shared/tracks";
 import { filterHomeFiles, groupBySubject, HOME_VIEW_STORAGE_KEY, newestFirst, NEWEST_STRIP, parseHomeView, type HomeView } from "@/lib/home-views";
 
@@ -71,7 +72,7 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   const { grade: learnerGrade } = useClassroomGrade();
   // Spec 2026-11-03-udvozlo-jatekkartyak-szulo: az admin (szülő) mindig az összes tananyaggal nyit — a tanulóhoz párosított
   // eszközön is (az eszköz évfolyama a gyereké).
-  const { isAdmin } = useAuth();
+  const { isAdmin, user: authUser } = useAuth();
   const hasGrade = (g: number | null) => g != null && files.some((f) => (f.classroom ?? 1) === g);
   const [selectedClassroom, setSelectedClassroom] = useState<number | null>(() => (!isAdmin && hasGrade(learnerGrade) ? learnerGrade : null));
   // Csak az évfolyam változására (és az első betöltésre) vált — a lista frissítése nem írja felül a tanuló „Mind” választását.
@@ -93,8 +94,10 @@ function UserFileList({ files, isLoading, isError = false, isRetrying = false, o
   // #1986 (docs/specs/2026-11-24-gimi-felveteli-csoport.md): a „Gimi felv.” csoport külön szűrő; az évfolyam-szűrővel kizárják egymást.
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
   const pickClassroom = (classroom: number | null) => { setSelectedTrack(null); setSelectedClassroom(classroom); };
+  // Review #582: a kulcs a bejelentkezett kilétet is tartalmazza (Google-fiók + játékos), így fiókváltás után nem a régi válasz látszik.
+  const { player } = usePlayer();
   const { data: mineData } = useQuery<{ tracks?: string[] }>({
-    queryKey: ["/api/tracks/mine"],
+    queryKey: ["/api/tracks/mine", authUser?.id ?? null, player?.id ?? null],
     queryFn: async () => {
       const r = await fetch("/api/tracks/mine", { credentials: "include" });
       return r.ok ? r.json() : { tracks: [] };
