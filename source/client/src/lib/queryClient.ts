@@ -161,7 +161,17 @@ export async function apiRequest<T = unknown>(
         
         // SECURITY: Fetch CSRF token for mutating requests (POST/PUT/PATCH/DELETE)
         // Spec 2026-09-30 (U1, §C-V/1): a kliens közli a támogatott pontozó-verziót; a kiszolgáló az újabb leckét 409-cel utasítja el.
-        const serialize = (capable: boolean) => data ? JSON.stringify(capable && options?.resultTimes && typeof data === "object" ? { ...data, ...options.resultTimes } : data) : undefined;
+        const addsFields = Boolean(options?.resultTimes && Object.keys(options.resultTimes).length && data && typeof data === "object");
+        const serialize = (capable: boolean) => data ? JSON.stringify(capable && addsFields ? { ...(data as object), ...options!.resultTimes } : data) : undefined;
+        // #510 R10 / R12 (PR #564 review): ha a V2-t hirdető token után a kérés egy régi, szigorú sémájú példányhoz ér, az új mezőkre
+        // 400 jön — ilyenkor EGY ismétlés a régi alakkal (ugyanazzal a tokennel). Jelzés vagy új mező nélkül változatlanul egy kérés.
+        const sendOnce = async (capable: boolean, signal: AbortSignal) => {
+          const init = { method, headers, credentials: "include" as const, signal, ...keepalive };
+          const first = await fetch(url, { ...init, body: serialize(capable) });
+          if (first.status !== 400 || !capable || !addsFields) return first;
+          debugLog(`[API REQUEST] ${method} ${url} → 400 az új mezőkre, ismétlés a régi alakkal`);
+          return fetch(url, { ...init, body: serialize(false) });
+        };
         let capable = false;
         const headers: Record<string, string> = { "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), ...(data ? { "Content-Type": "application/json" } : {}) };
         if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
@@ -175,14 +185,7 @@ export async function apiRequest<T = unknown>(
           }
         }
         
-        const res = await fetch(url, {
-          method,
-          headers,
-          body: serialize(capable),
-          credentials: "include",
-          signal: controller.signal,
-          ...keepalive,
-        });
+        const res = await sendOnce(capable, controller.signal);
 
         // B2 (#510 R37): az időzítő a válasz törzsének beolvasásáig él (a lenti `finally` törli) — a fejlécek után megakadó választest
         // sem vonja ki a kérést az időkorlát alól.
@@ -207,14 +210,7 @@ export async function apiRequest<T = unknown>(
             const retryTimeoutId = setTimeout(() => retryController.abort(), timeout);
             
             try {
-              const retryRes = await fetch(url, {
-                method,
-                headers,
-                body: serialize(newCsrfToken.resultApi),
-                credentials: "include",
-                signal: retryController.signal,
-                ...keepalive,
-              });
+              const retryRes = await sendOnce(newCsrfToken.resultApi, retryController.signal);
               
               debugLog(`[API REQUEST RETRY] ${method} ${url} → ${retryRes.status} ${retryRes.statusText}`);
               // B2 (#510 R23): ha a friss token is 403-at kap, az sem marad a gyorsítótárban — a következő írás megint frisset kér.

@@ -247,12 +247,14 @@ async function submitTasks(page: Page) {
 }
 
 /** R4: munkamenethez kötött CSRF-token utánzása — a tokenek sorszámozottak (t1, t2, …); a szerver csak az érvényeset fogadja el. */
-async function mockCsrf(page: Page) {
-  const state = { valid: "t2", tokenCalls: 0, rejected: [] as string[], accepted: [] as Array<{ token: string; kind: string }> };
+async function mockCsrf(page: Page, capableTokens: readonly string[] = []) {
+  const state = { valid: "t2", tokenCalls: 0, rejected: [] as string[], accepted: [] as Array<{ token: string; kind: string }>, bodies: [] as Array<{ token: string; body: Record<string, unknown> }> };
   await mock(page);
-  await page.route("**/api/csrf-token", route => { state.tokenCalls++; return route.fulfill({ json: { csrfToken: `t${state.tokenCalls}` } }); });
+  // B3: tokenenként állítható képesség-jelzés (a 403 utáni friss token más példánytól jöhet).
+  await page.route("**/api/csrf-token", route => { state.tokenCalls++; const csrfToken = `t${state.tokenCalls}`; return route.fulfill({ json: { csrfToken, ...(capableTokens.includes(csrfToken) ? { resultApi: 2 } : {}) } }); });
   await page.route("**/api/lessons/lesson-q/results", route => {
     const token = route.request().headers()["x-csrf-token"] ?? "";
+    state.bodies.push({ token, body: route.request().postDataJSON() as Record<string, unknown> });
     if (token !== state.valid) { state.rejected.push(token); return route.fulfill({ status: 403, json: { message: "invalid csrf token" } }); }
     state.accepted.push({ token, kind: String((route.request().postDataJSON() as { kind?: string }).kind) });
     return route.fulfill({ status: 202, json: { queued: true } });
@@ -405,4 +407,50 @@ test("B2 / R37: a választ nem adó CSRF-token-lekérésnek saját, 15 s-os hat�
   await page.waitForTimeout(5_000);
   expect(quizPosts(posts), "a határidő előtt még vár a tokenre").toHaveLength(0);
   await expect.poll(() => quizPosts(posts).length, { timeout: 25_000, message: "a határidő után a kérés elindul (a szerver dönt a token nélküli kérésről)" }).toBe(1);
+});
+
+// B3 (PR #564 review): a 403 utáni friss token képessége dönt — az ismételt kérés a FRISS token jelzése szerint küldi / hagyja el az
+// időbélyegeket, a friss CSRF-fejléccel, és pontosan egy beküldés sikerül.
+for (const sample of [{ name: "V2 → régi", capable: ["t1"], first: true, second: false }, { name: "régi → V2", capable: ["t2"], first: false, second: true }]) {
+  test(`B3: képességváltás a 403 utáni tokenfrissítéskor (${sample.name})`, async ({ page }) => {
+    const state = await mockCsrf(page, sample.capable);
+    await answerAll(page);
+    await expect.poll(() => state.accepted.length).toBe(1);
+    await page.waitForTimeout(1500);
+    const quiz = state.bodies.filter(b => b.body.kind === "quiz");
+    expect(quiz.map(b => b.token)).toEqual(["t1", "t2"]);
+    expect("startedAt" in quiz[0]!.body, "az első kérés a t1 jelzése szerint").toBe(sample.first);
+    expect("startedAt" in quiz[1]!.body, "az ismétlés a friss (t2) token jelzése szerint").toBe(sample.second);
+    expect(state.accepted).toEqual([{ token: "t2", kind: "quiz" }]);
+  });
+}
+
+// B3 / R10 (PR #564 review): V2-t hirdető token után régi, szigorú sémájú példány — az új mezőkre 400; egyetlen ismétlés régi alakkal.
+test("B3 / R10: a V2-t hirdető token után a régi példány 400-at ad az új mezőkre → egy ismétlés időbélyegek nélkül, egy elfogadott beküldés", async ({ page }) => {
+  await mock(page, true);
+  const bodies: Array<Record<string, unknown>> = [];
+  await page.route("**/api/lessons/lesson-q/results", route => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    bodies.push(body);
+    if ("startedAt" in body || "lastAnsweredAt" in body) return route.fulfill({ status: 400, json: { message: "Érvénytelen kérés" } });
+    return route.fulfill({ status: 202, json: { queued: true } });
+  });
+  await answerAll(page);
+  await expect.poll(() => bodies.filter(b => b.kind === "quiz").length).toBe(2);
+  await page.waitForTimeout(1500);
+  const quiz = bodies.filter(b => b.kind === "quiz");
+  expect(quiz).toHaveLength(2);
+  expect("startedAt" in quiz[0]!).toBe(true);
+  expect("startedAt" in quiz[1]! || "lastAnsweredAt" in quiz[1]!, "az ismétlés régi alakú").toBe(false);
+  expect(resultRequestSchema.safeParse(quiz[1]).success).toBe(true);
+});
+
+test("B3 / R10: jelzés nélkül a 400 nem ismétlődik (egy kérés)", async ({ page }) => {
+  await mock(page);
+  let finals = 0;
+  await page.route("**/api/lessons/lesson-q/results", route => { finals++; return route.fulfill({ status: 400, json: { message: "Érvénytelen kérés" } }); });
+  await answerAll(page);
+  await expect.poll(() => finals).toBe(1);
+  await page.waitForTimeout(2000);
+  expect(finals).toBe(1);
 });

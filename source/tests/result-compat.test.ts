@@ -27,9 +27,10 @@ test("B3: a végleges törzs új mezői (startedAt, lastAnsweredAt) csak jelzés
   assert.match(report, /resultTimes: times/, "az időbélyegek külön opcióként mennek az apiRequest-nek");
   const client = read("client/src/lib/queryClient.ts");
   assert.match(client, /return \{ token: data\.csrfToken, resultApi: supportsResultApi\(data\) \};/);
-  assert.match(client, /capable && options\?\.resultTimes/, "a mezők csak képes szervernél olvadnak a törzsbe");
-  assert.match(client, /body: serialize\(capable\)/);
-  assert.match(client, /body: serialize\(newCsrfToken\.resultApi\)/, "a CSRF-újrapróba a friss token jelzését követi");
+  assert.match(client, /capable && addsFields \?/, "a mezők csak képes szervernél olvadnak a törzsbe");
+  assert.match(client, /await sendOnce\(capable, controller\.signal\)/);
+  assert.match(client, /await sendOnce\(newCsrfToken\.resultApi, retryController\.signal\)/, "a CSRF-újrapróba a friss token jelzését követi");
+  assert.match(client, /if \(first\.status !== 400 \|\| !capable \|\| !addsFields\) return first;/, "R10: régi alakú ismétlés csak jelzéssel és új mezővel");
 });
 
 test("B3: a szerver még nem hirdeti a V2-t (a hirdetés a B5a elfogadási feltétele)", () => {
