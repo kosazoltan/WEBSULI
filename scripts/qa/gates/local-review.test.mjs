@@ -135,3 +135,14 @@ test('töredék (review #588): vegyes hunk nulla oldala a megelőző sorhoz horg
   const counts = lp.map((x) => Number(/\+\d+,(\d+) @@/.exec(x)[1]));
   assert.equal(counts.reduce((a, b) => a + b, 0), 3);
 });
+
+test('töredék (review #588): a középső töredék újradarabolása megtartja a vágott éleket, a régi jelölés nem duplázódik', () => {
+  const body = Array.from({ length: 30 }, (_, i) => `+s${i + 1}`.padEnd(30, 'q'));
+  const mid = splitHunk(['@@ -0,0 +1,30 @@', ...body].join('\n') + '\n', 120 + 340)[1];
+  assert.match(mid, /eleje: vágott; vége: vágott/);
+  const again = splitHunk(mid, 120 + 160);
+  assert.ok(again.length >= 2);
+  assert.match(again[0], /töredék 1\/\d+; eleje: vágott; vége: vágott/, 'az örökölt vágott eleje megmarad');
+  assert.match(again.at(-1), /eleje: vágott; vége: vágott/, 'az örökölt vágott vége megmarad');
+  assert.ok(again.every((x) => (x.split('\n')[0].match(/töredék/g) || []).length === 1), 'egy jelölés fejlécenként');
+});

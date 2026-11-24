@@ -54,6 +54,11 @@ export function splitHunk(hunk, max) {
   const head = nlAt < 0 ? hunk : hunk.slice(0, nlAt);
   const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(head);
   if (!m) return [hunk];
+  // Review #588: egy már töredékként vágott darab újradarabolásakor (értelmezhetetlen modellválasz után) az örökölt vágott él
+  // vágott marad — a régi jelölés lekerül, az új töredékek külső élei az örökölt állapotot viszik tovább.
+  const prev = /^ töredék \d+\/\d+; eleje: (vágott|hunk eleje); vége: (vágott|hunk vége)(.*)$/.exec(m[3]);
+  const startCut = prev?.[1] === 'vágott'; const endCut = prev?.[2] === 'vágott';
+  const tail = prev ? prev[3] : m[3];
   const oldEmpty = Number(m[1]) === 0; const newEmpty = Number(m[2]) === 0;
   let oldLn = oldEmpty ? 1 : Number(m[1]); let newLn = newEmpty ? 1 : Number(m[2]);
   const lines = hunk.slice(nlAt + 1).split('\n');
@@ -74,8 +79,8 @@ export function splitHunk(hunk, max) {
   const n = pieces.length;
   const side = (empty, start, count) => (count === 0 ? (empty ? '0,0' : `${start - 1},0`) : `${start},${count}`);
   return pieces.map((p, i) => {
-    const edges = `eleje: ${i === 0 ? 'hunk eleje' : 'vágott'}; vége: ${i === n - 1 ? 'hunk vége' : 'vágott'}`;
-    return `@@ -${side(oldEmpty, p.oStart, p.oCount)} +${side(newEmpty, p.nStart, p.nCount)} @@ töredék ${i + 1}/${n}; ${edges}${m[3]}\n${p.body.join('\n')}\n`;
+    const edges = `eleje: ${i === 0 && !startCut ? 'hunk eleje' : 'vágott'}; vége: ${i === n - 1 && !endCut ? 'hunk vége' : 'vágott'}`;
+    return `@@ -${side(oldEmpty, p.oStart, p.oCount)} +${side(newEmpty, p.nStart, p.nCount)} @@ töredék ${i + 1}/${n}; ${edges}${tail}\n${p.body.join('\n')}\n`;
   });
 }
 
