@@ -289,6 +289,9 @@ eltávolítva; távoli ág csak jóváhagyással).
 
 ### G-3 — Főoldali maki
 
+> **Pontosítva (2026-11-23, H0 P-007 — `docs/specs/2026-11-23-teljes-hianyleltar.md` 4. pont):** a kompakt kabalasáv ÉS a maki
+> prototípus is marad kísérletként; a `HOME_MASCOT` bekapcsolása továbbra is kizárólag tulajdonosi lépés.
+
 - Előfeltétel: nincs (D-12 eldöntve). Ág: a meglévő `feat/kabala-fooldal` friss mainnel.
 - Lépések: `git merge origin/main`; a `docs/specs/2026-11-18-kabala-fooldal.md` 10. szakaszába a D-12 (a) válasz (a 2. és 3. kérdés:
   bekapcsolás ellenőrzés után, körbevezetés csak az első látogatáskor); az orr környéke képernyőképen (álló kép + 3 képkocka) a
@@ -419,7 +422,8 @@ meglévő ütköző fiókokat NEM módosítja, csak listázza (admin-panel lista
 Alszeletenként külön ág és PR, a terv 7.6 sorrendjében, a `docs/specs/2026-11-18-tananyag-gyartas-minoseg-vegrehajtas.md` 0. fejezete
 (közös szabályok, 0.6 szkript-ellenőr, 0.7 kapcsoló) és a saját fejezete szerint. Kiegészítések: SK3 előtt a TGM-terv SK3 szakaszának
 igazítása (külön docs-commit, D-02 (a): új futásidő- és összesített körszám-megállító NEM készül); S10/1 fizetős (≤ 30 USD,
-eldobható DB, előtte futásőr); SK1c-ben D-03 (a): `enforce` módban a kapu saját hibájánál a lecke vázlat marad (nem publikálódik), és
+eldobható DB, előtte futásőr); SK1c-ben D-03 (a) — **FELÜLÍRVA (P-066, 2026-11-23): belső kapuhibánál a feldolgozás folytatódik, a naplóban és az eredményben
+jelzés („az ellenőrzés nem történt meg”), leállítás csak a fizetős próbafutás keményplafonjánál** — a korábbi szöveg: `enforce` módban a kapu saját hibájánál a lecke vázlat marad (nem publikálódik), és
 e-mail megy az adminoknak (bukó teszt ELŐBB: a kapu kivételt dob → a lecke állapota vázlat, egy értesítés ment ki hamis küldővel);
 S8c gyártás a tulajdonos indításával; S9-ben a `.agents/skills/websuli-gyartas-analitika/SKILL.md` forrás pótlása
 (`node scripts/qa/gates/skills-sync-check.mjs` → zöld) és a D-01 (a) jóváhagyás (néma próbakimondás nélkül; 40 MB / hangverzió + 80 MB

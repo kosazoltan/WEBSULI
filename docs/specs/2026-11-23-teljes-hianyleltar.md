@@ -83,7 +83,7 @@ Jelölés: KÉSZ / RÉSZ (részben) / ÁG (ágon kész, nincs bent) / NINCS (el 
 | P-049 Kitakaró #521 | ÁG | rebase, CI, merge | H2 |
 | P-050 CI E2E hangolás | RÉSZ | TTS súly, SHA-rögzítés | H7 |
 | P-051 Ügynökvezérlés 2. lépcső | RÉSZ | függőségek, márkanév, VPS-doksik | H8 |
-| P-052 Aktívfutás-őr, éles konfig | RÉSZ | deploy-útba kötés | H7 |
+| P-052 Aktívfutás-őr, éles konfig | RÉSZ | deploy-útba kötés; **I-1 / #169 kliens-IP**: igazolatlan `CF-Connecting-IP` figyelmen kívül (szintetikus egységteszttel, `docs/specs/2026-11-19-websuli-potlasok-terv.md` 7.8) — a deploy-őr bekötése önmagában nem zárja le | H7 |
 | P-053 Havi perf-audit | RÉSZ | sitemap, admin lapozás… | H8 |
 | P-054 Szkript-őrök J3–J10 | NINCS | őrök | H7 |
 | P-055 Advent vendéghaladás | KÉSZ (#523) | helyi ág takarítása | H1 |
@@ -135,10 +135,10 @@ Jelölés: KÉSZ / RÉSZ (részben) / ÁG (ágon kész, nincs bent) / NINCS (el 
 
 ## 4/a. Tulajdonosi döntések (űrlap, 2026-11-23)
 
-- **P-022** — Admin-próba most, nyilvános élesítés csak a JM3b/JM8 lezárása után (kapcsolók: tulajdonos, Render)
+- **P-022** — Nyilvános élesítés az admin-próba után azonnal (kapcsolók: tulajdonos, Render — `PLAYER_ACCOUNTS`, `MP_MODE`). *Felülírva a H0 első körében (2026-11-23, `.hermes/projekt/TUDAS.md` „Tulajdonosi döntések”): a korábbi „csak a JM3b/JM8 lezárása után” változat érvénytelen.*
 - **P-020** — Igen: normalizált cím + egyedi index, meglévő ütközések listázva, kézi összevonással
 - **P-063** — Verziózott új skála, a régi rekordok „régi skála”-ként megmaradnak
-- **P-007** — A kompakt kabalasáv kiadható; a maki prototípus elvetve
+- **P-007** — A kompakt kabalasáv ÉS a maki prototípus is marad kísérletként. *Felülírva a H0 első körében (2026-11-23, TUDAS.md): a korábbi „maki prototípus elvetve” érvénytelen.*
 - **P-023** — Nincs történetátírás (a jelenlegi kódban a címek már nincsenek) → ELVETVE
 - **P-036** — Helyőrző képekkel indul; végleges képgyártás a 4 próbakép alapján később, tulajdonosi döntéssel
 - **P-056** — Levélküldés csak száraz összesítő után, külön jóváhagyással
@@ -151,7 +151,7 @@ Jelölés: KÉSZ / RÉSZ (részben) / ÁG (ágon kész, nincs bent) / NINCS (el 
 
 ## 5. Minden szeletre érvényes eljárás (a repó szabályai szerint)
 
-Terv + végrehajtási utasítás (`docs/specs/`) → munkafa a főágból → kód + teszt → `gate:stage` → `gate:push` → `local-review.mjs`
+Terv + végrehajtási utasítás (`docs/specs/`) → munkafa a főágból → kód + teszt → `gate:stage` → `gate:push` → `local-review.mjs` (a #541 óta a főágon)
 (high leletet kódból ellenőrizni) → `gate:pr` → PR → botszálak javítása / megválaszolása → zöld CI → `gate:merge` (DATABASE_URL nélkül) →
 merge → SQL-tétel lezárása (PR + commit hivatkozással) → záró hurok. A „KÉSZ” állítás csak lefuttatott parancs kimenetével igazolt.
 
