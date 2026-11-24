@@ -1,5 +1,7 @@
 # Befejezési mandátum, önfejlesztési hurok és ARM64 + x64 futás
 
+> Történeti terv: a Windows célarchitektúrára vonatkozó részt felülírja a [Windows x64 döntés](2026-11-24-windows-x64.md).
+
 **Dátum:** 2026-11-03 · **Tier:** M · **Ág:** `chore/befejezes-onfejlesztes-dual-arch`
 **Forrás:** tulajdonosi utasítás (2026-11-03, chat): félbehagyás tilos, minden session végén
 teljességellenőrzés; minden hibából csapda/memória/runbook/skill-javítás; „mind ARM64-en, mind

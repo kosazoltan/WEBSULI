@@ -9,7 +9,7 @@ const PROBES = ["esbuild", "tsx", "tsx/esbuild", "rollup", "sharp", "better-sqli
 
 // The checker runs in its own process: loading every native module inside the test runner's child crashed it
 // silently on the Windows CI runner (no TAP output, exit 1), while the same check as a process passed (PR #391).
-test("a natív függőségek az aktuális architektúrához települtek (ARM64 és x64)", () => {
+test("a natív függőségek az aktuális architektúrához települtek", () => {
   const run = spawnSync(process.execPath, [path.join(sourceDir, "scripts/check-native-arch.mjs")], {
     cwd: sourceDir,
     encoding: "utf8",

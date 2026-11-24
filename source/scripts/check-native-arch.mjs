@@ -1,5 +1,5 @@
-// ARM64 + x64: the native dependencies must be installed for the CPU this Node runs on.
-// A node_modules copied between machines (e.g. win32-arm64 -> win32-x64) breaks every tsx test
+// Windows x64: the native dependencies must be installed for the CPU this Node runs on.
+// A node_modules copied between machines breaks every tsx test
 // with "You installed esbuild for another platform". This check loads each native module for real.
 //
 // Every module is probed in its own Node process. Loading both esbuild services, rollup's addon and
