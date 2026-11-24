@@ -28,7 +28,9 @@ vonja össze és NEM törli automatikusan, hanem listázza kézi összevonáshoz
    `player_accounts_email_key_unique ON (email_key, email_key_dup)` — meglévő ütközésen nem bukik, de minden új sor (0) ütközik
    a csoport legrégebbi sorával, így új alias adatbázis-szinten sem jöhet létre (a régi alkalmazáspéldányból sem); a kulcs
    szerinti keresést is kiszolgálja. (Az első változat részleges indexe — `WHERE NOT email_key_conflict` — a jelölt csoport
-   mellé engedett volna új sort; Copilot review #554.)
+   mellé engedett volna új sort; Copilot review #554.) Egy csoporttag alkalmazáson belüli törlése (`deleteAccount`, saját és
+   admin) után a megmaradt sorok sorszáma 0-tól újraszámozódik (Vercel review #554), hogy a 0-s hely ne szabaduljon fel.
+   Alkalmazáson KÍVÜLI kézi SQL-törlésnél ezt az üzemeltetőnek kell megtennie (ugyanaz a két lépés, mint `renumberMailboxDuplicates`).
 3. **Belépés**: a fiók feloldása `email_key` szerint (a kanonikus zár alatt). Van már fiók → AZ a fiók (a tárolt `email` nem
    íródik át; ütköző csoportnál a pontosan egyező cím, különben a legrégebbi); nincs → új sor. Google-út ugyanígy (ismert
    `sub` → az a fiók; különben `email_key` szerinti fiók, `google_sub` csak ha még nincs).

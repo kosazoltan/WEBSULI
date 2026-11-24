@@ -1435,6 +1435,20 @@ describe("P-020 — játékos-fiók postafiókonként egyedi (normalizált Gmail
     }
   });
 
+  it("Vercel review #554: ütköző csoport 0-s sorszámú fiókjának törlése után a megmaradt sorok újraszámozódnak — új alias akkor sem fér be", async () => {
+    await dbPool.query(
+      `INSERT INTO player_accounts (email, email_verified_at, created_at, email_key_dup) VALUES
+         ('p020renum@gmail.com', now(), now() - interval '3 days', 0), ('p.020renum@gmail.com', now(), now() - interval '2 days', 1),
+         ('p020renum+c@googlemail.com', now(), now() - interval '1 day', 2)`,
+    );
+    const [first] = await q<{ id: string }>(`SELECT id FROM player_accounts WHERE email = 'p020renum@gmail.com'`);
+    const deleted = await createPlayerAccountStore(dbPool).deleteAccount(first!.id, (e) => allPurposeEmailHashes(playerAuthKey(), e));
+    assert.equal(deleted?.account, 1);
+    const left = await q<{ email: string; email_key_dup: number }>(`SELECT email, email_key_dup FROM player_accounts WHERE email_key = 'p020renum@gmail.com' ORDER BY email_key_dup`);
+    assert.deepEqual(left, [{ email: "p.020renum@gmail.com", email_key_dup: 0 }, { email: "p020renum+c@googlemail.com", email_key_dup: 1 }], "a sorrend megmarad, 0-tól folytonos");
+    await assert.rejects(dbPool.query(`INSERT INTO player_accounts (email) VALUES ('p020renum+uj@gmail.com')`), (e: { code?: string }) => e.code === "23505", "új alias nem fér be");
+  });
+
   it("Codex review #554: a fióktörlés a postafiók ALIASAIRA kért, függő belépőkódokat / linkeket is visszavonja", async () => {
     const key = playerAuthKey();
     const id = await loginId("p020torles@gmail.com");

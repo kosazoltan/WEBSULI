@@ -63,6 +63,24 @@ export async function existingAccountIdByMailbox(client: Pick<PoolClient, "query
 }
 
 /**
+ * P-020 (Vercel review #554): egy régi ütköző csoport tagjának törlése (kézi összevonás) után a megmaradt sorok `email_key_dup`
+ * sorszáma 0-tól folytonos lesz (a sorrend marad) — különben a 0-s sor törlése után az (email_key, email_key_dup) egyedi index
+ * egy új, 0-s sorszámú aliast újra beengedne. Két lépésben (negatív átmeneti értékkel), mert az egyedi index soronként ellenőriz.
+ * A kanonikus címzár alatt hívandó. Ütközés nélküli postafióknál (≤ 1 sor, sorszám 0) nem ír.
+ */
+export async function renumberMailboxDuplicates(client: Pick<PoolClient, "query">, key: string): Promise<void> {
+  const { rows } = await client.query<{ n: string }>(`SELECT count(*)::text AS n FROM player_accounts WHERE email_key = $1 AND email_key_dup > 0`, [key]);
+  if (rows[0]!.n === "0") return;
+  await client.query(
+    `UPDATE player_accounts p SET email_key_dup = -r.n
+       FROM (SELECT id, row_number() OVER (ORDER BY email_key_dup, created_at, id) AS n FROM player_accounts WHERE email_key = $1) r
+      WHERE r.id = p.id`,
+    [key],
+  );
+  await client.query(`UPDATE player_accounts SET email_key_dup = -email_key_dup - 1 WHERE email_key = $1 AND email_key_dup < 0`, [key]);
+}
+
+/**
  * (B) Fiók-létrehozáskor (a kanonikus címzár alatt, az INSERT ELŐTT): a törölt-tiltott sor `FOR SHARE` olvasása — egy
  * párhuzamos törölt-tiltott feloldással (sorzáras DELETE) így sorosodik (#475 ellenőrző kör, Ú-a). A tiltás idejét a hívó
  * INSERT-je a saját, új pillanatképéből veszi át (mikroszekundumra pontosan).
@@ -366,6 +384,7 @@ export function createPlayerAccountStore(pool: Db) {
         );
         const sessions = await client.query(`DELETE FROM session WHERE sess -> 'player' ->> 'id' = $1`, [id]);
         const account = await client.query(`DELETE FROM player_accounts WHERE id = $1`, [id]);
+        await renumberMailboxDuplicates(client, accountEmailKey(email));
         return { account: account.rowCount ?? 0, codes: codes.rowCount ?? 0, sessions: sessions.rowCount ?? 0 };
       });
     },

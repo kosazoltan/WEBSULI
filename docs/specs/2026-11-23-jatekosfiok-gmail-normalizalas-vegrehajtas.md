@@ -29,3 +29,5 @@
   `mailboxKeySql`) belépéskor és kérésenként; (2) törléskor az alias függő kódjai is; (3) részleges index helyett
   (email_key, email_key_dup) egyedi index — a jelölt csoport mellé sem fér új alias, és a keresést is kiszolgálja. RED: a két
   új DB-teszt a régi szerverkóddal bukott; GREEN: `test:learning-db` 267/267.
+- 2026-11-23 — Vercel review #554 (2. kör): a 0-s sorszámú csoporttag törlése után újraszámozás (`renumberMailboxDuplicates`
+  a `deleteAccount`-ban). RED: az új teszt a javítás nélkül [1, 2] sorszámot mért; GREEN a javítással.
