@@ -107,7 +107,8 @@ async function switchableMock(page: Page) {
       return route.fulfill({ status: 202, json: { queued: true } });
     }
     if (path === "/api/auth/user") return route.fulfill({ json: null });
-    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test" } });
+    // B3: a B1b korhatár-esetek az időbélyeges (V2-t hirdető) szervert modellezik; a jelzés nélküli régi alak külön teszt.
+    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test", resultApi: 2 } });
     if (path === "/api/html-files/quiz-fixture") return route.fulfill({ json: { id: "quiz-fixture", title: "Lecke", contentType: "lesson", classroom: 7 } });
     if (path === "/api/lessons/by-file/quiz-fixture") return route.fulfill({ json: { lessonId: "lesson-q", version: 1, lesson: fusionFixture() } });
     if (path.startsWith("/api/design-assets/")) return route.fulfill({ status: 404, json: {} });
