@@ -2,7 +2,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import type { AddressInfo } from "node:net";
-import { knowledgeMaps, lessons } from "../shared/schema";
+import { knowledgeMaps, lessonResultEmails, lessons } from "../shared/schema";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 
 // Eredmény-e-mail B5a-1 (docs/specs/2026-11-22-eredmeny-email-bontas-vegrehajtas.md 5. pont; #510 S1b R1, R5–R7, R15, R18, R21): a
@@ -14,7 +14,7 @@ assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a
 process.env.ADMIN_EMAILS = "admin-a@example.test, admin-b@example.test";
 process.env.RESULT_PARTIAL_EMAIL = "on";
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, setResultSender, setPartialDelay, setRetryDelay, pendingPartialCount } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, setResultSender, setPartialDelay, setRetryDelay, pendingPartialCount, finalRoundKeyOf } = await import("../server/lesson-result-email");
 
 const sent: Array<{ subject: string; html: string; to: string }> = [];
 let failing = false;
@@ -129,4 +129,13 @@ test("B5a-1 (R1): versenyhelyzet — 20 kör, a pillanatkép időzítője és a 
     const superseding = finals.filter(m => /helyébe lép/.test(m.html)).length / 2;
     assert.equal(superseding, partials, "pontosan annyi felülíró végleges, ahány részleges kiment");
   } finally { setPartialDelay(150); }
+});
+
+test("B5a-1 (R18, kizárás a küldési kísérletben): ha a kört MÁSIK példány véglegesítette (csak a tartós jelzősor létezik), a várakozó pillanatkép nem megy ki", async () => {
+  sent.length = 0;
+  await post("p-other", { picks: picksOf(3), partial: true });
+  // a másik példány véglegesítése: csak a tartós, tanulófüggetlen jelzősor (ennek a példánynak a memóriája nem tud róla)
+  await db.insert(lessonResultEmails).values({ lessonId: "partial-lesson", kind: "quiz", roundKey: finalRoundKeyOf("p-other", "quiz"), percent: 100 });
+  await sleep(500);
+  assert.equal(partialMails().length, 0, "a küldési kísérlet a kizárás alatt a tartós jelzőt is ellenőrzi");
 });
