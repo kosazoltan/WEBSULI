@@ -7,13 +7,13 @@ CREATE TABLE IF NOT EXISTS lesson_result_pending (
   id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
   lesson_id varchar NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
   owner_key varchar(128) NOT NULL,
-  kind varchar(8) NOT NULL CHECK (kind IN ('tasks', 'quiz')),
+  kind varchar(8) NOT NULL CONSTRAINT lesson_result_pending_kind_check CHECK (kind IN ('tasks', 'quiz')),
   round_id varchar(128) NOT NULL,
   graded jsonb,
   learner jsonb,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   sent_at timestamp with time zone,
-  sent_reason varchar(8) CHECK (sent_reason IN ('pair', 'timeout')),
+  sent_reason varchar(8) CONSTRAINT lesson_result_pending_sent_reason_check CHECK (sent_reason IN ('pair', 'timeout')),
   CONSTRAINT lesson_result_pending_open_has_content CHECK (sent_at IS NOT NULL OR (graded IS NOT NULL AND learner IS NOT NULL))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS lesson_result_pending_open_unique ON lesson_result_pending(lesson_id, owner_key, kind) WHERE sent_at IS NULL;

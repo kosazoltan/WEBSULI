@@ -1201,6 +1201,10 @@ export const lessonResultPending = pgTable(
     sentReason: varchar("sent_reason", { length: 8 }).$type<"pair" | "timeout">(),
   },
   (table) => ({
+    // Review #585: a 0047-es migráció CHECK-jei azonos néven (sémaexportból létrehozott táblán is éljenek).
+    kindCheck: check("lesson_result_pending_kind_check", sql`${table.kind} IN ('tasks', 'quiz')`),
+    sentReasonCheck: check("lesson_result_pending_sent_reason_check", sql`${table.sentReason} IN ('pair', 'timeout')`),
+    openHasContent: check("lesson_result_pending_open_has_content", sql`${table.sentAt} IS NOT NULL OR (${table.graded} IS NOT NULL AND ${table.learner} IS NOT NULL)`),
     openUnique: uniqueIndex("lesson_result_pending_open_unique").on(table.lessonId, table.ownerKey, table.kind).where(sql`sent_at IS NULL`),
     openAge: index("lesson_result_pending_open_age").on(table.createdAt).where(sql`sent_at IS NULL`),
   }),

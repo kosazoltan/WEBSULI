@@ -164,6 +164,11 @@ function gradedBodyHtml(graded: GradedTasks | GradedQuiz): string {
     : `${graded.wrong.length ? "" : meta.partial ? "<p>Minden megválaszolt kérdésre helyes választ adott.</p>" : "<p>Minden kérdésre helyes választ adott.</p>"}${graded.rows.length ? `<ol>${graded.rows.map(quizRowHtml).join("")}</ol>` : ""}`;
 }
 
+// A „félbehagyva” pillanatkép helyébe lépő végleges eredmény jelzése — az egyrészes levél szövegével azonos (review #585).
+const supersedesLine = (meta: ResultMeta | undefined) => meta?.supersedesPartial === "unknown"
+  ? "<strong>Állapot:</strong> ez a befejezett kör eredménye — ha erről a körről korábban „félbehagyva” jelzésű levél érkezett, ez lép a helyébe.<br>\n"
+  : meta?.supersedesPartial ? "<strong>Állapot:</strong> ez a befejezett kör eredménye — a korábbi, „félbehagyva” jelzésű levél helyébe lép.<br>\n" : "";
+
 const resultLine = (s: GradedTasks["summary"]) => `${s.points} / ${s.total} pont — ${s.percent}% — ${s.grade} (${esc(s.label)})`;
 
 /**
@@ -178,7 +183,11 @@ export function buildCombinedResultEmail(input: { lessonTitle: string; classroom
   const sentAt = input.sentAt ?? new Date();
   const missing = !input.tasks ? "tasks" : !input.quiz ? "quiz" : null;
   const part = missing === "tasks" ? "Kvíz (részleges: a feladatok hiányoznak)" : missing === "quiz" ? "Feladatok (részleges: a kvíz hiányzik)" : "Feladatok + kvíz";
-  const subject = `[WebSuli eredmény] ${input.learnerFirst ? `${input.learnerFirst} – ` : ""}${input.lessonTitle} — ${part} — ${all.percent}% (${all.label})`.slice(0, 200);
+  // Review #585: a 200 karakteres keretből előbb a részjelölés és a pontszám helye; csak a név + cím rövidül („…”).
+  const suffix = ` — ${part} — ${all.percent}% (${all.label})`;
+  const lead = `${input.learnerFirst ? `${input.learnerFirst} – ` : ""}${input.lessonTitle}`;
+  const room = 200 - "[WebSuli eredmény] ".length - suffix.length;
+  const subject = `[WebSuli eredmény] ${lead.length > room ? `${lead.slice(0, Math.max(0, room - 1))}…` : lead}${suffix}`;
   const missingLine = missing === "tasks" ? "<strong>Részleges eredmény:</strong> a szöveges feladatok 7 napon belül nem készültek el.<br>\n"
     : missing === "quiz" ? "<strong>Részleges eredmény:</strong> a kvíz 7 napon belül nem készült el.<br>\n" : "";
   const head = `<h2>${esc(input.lessonTitle)} — ${missing ? "Részleges eredmény" : "Feladatok és kvíz"}</h2>
@@ -186,7 +195,7 @@ export function buildCombinedResultEmail(input: { lessonTitle: string; classroom
 <strong>Beküldve:</strong> ${formatBudapest(sentAt)} (magyar idő)<br>
 ${missingLine}<strong>Összesítve:</strong> ${resultLine(all)}</p>`;
   const sections = parts.map((g) => `<h3>${g.kind === "tasks" ? "Feladatok" : "Kvíz"} — ${g.summary.percent}%</h3>
-<p><strong>Eredmény:</strong> ${resultLine(g.summary)}</p>${gradedBodyHtml(g)}`).join("");
+<p>${supersedesLine(g.meta)}<strong>Eredmény:</strong> ${resultLine(g.summary)}</p>${gradedBodyHtml(g)}`).join("");
   const guestHint = input.guest ? GUEST_PAIRING_HINT_HTML : "";
   return { subject, html: `${head}${sections}${guestHint}<p><a href="${esc(input.url)}">A lecke megnyitása</a></p>` };
 }
