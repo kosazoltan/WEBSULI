@@ -113,6 +113,13 @@
   „félbehagyva” levél tárgya / állapotsora / „Utolsó válasz” dátumsora és a végleges levél felülíró mondata (R13, R1 a) a `meta`
   jelzései szerint. A szerver a pillanatképet a B5a-1-ig NEM pontozza véglegesként: `202 { queued: false, partial: true }`, kör-kulcs
   és levél nélkül (a kliens a B5b-ig nem is küld ilyet). Tesztek: `lesson-result-email-partial.test.ts`, DB-teszt „B5a-0”.
+- **B5a-1 (2026-11-24; a B4a + B5a-0 után):** `RESULT_PARTIAL_EMAIL=on` mellett a pillanatkép ütemeződik: (R5) 7 napnál régebbi
+  tevékenység `stale`, az „összes” a szerveroldali körméret; (P4 / R18) véglegesített kör (memória 24 óra + a B4a tartós jelzősora)
+  `finalized`; (R6) kiment részleges levél után `alreadySent`; (R7) a legtöbb választ tartalmazó marad, az időzítő újraindul; tanulónként
+  3 / összesen 5000 várakozó. Küldés a kör kizárása alatt (R1), változat-ellenőrzéssel (R21), egyetlen kapuzott újrapróbával (E17). A kvíz
+  végleges beküldése szinkron véglegesít + törli a várakozót (R15), a felülíró mondat a kizárás alatt dől el. Vállalt korlát: újraindításkor
+  a várakozó elvész; a kizárás példányon belüli. A B5a-2-be marad: R16 / R22 / R34 (első rögzítő, attribúció), R19, R25, R29, R36, R38, R45, R48.
+  Tesztek: `lesson-result-email-partial-db.integration.ts` (7 eset, 20 körös versenyhelyzettel).
 
 ## 6. B6 — leállításkori ürítés (R14, R33, R41)
 
