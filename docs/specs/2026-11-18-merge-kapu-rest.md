@@ -98,7 +98,8 @@ jelenleg egyetlen PR sem vonható össze szabályosan.
 - **W1:** a `mergeVerdict` a szigorú módot maga is érvényesíti (`exclusive: true` → csak a futtató rekordja, egyező modellel), így a
   `blind` továbbadása ezen az ágon is mérhető; a vak ág `resolveVerdict`-je ugyanezt a szabályt adja, a kettő nem ütközik.
 - **W4 (jegyre):** a PR előtti kapu (`pre-pr-gate.mjs`) még elfogad PR-szöveges ítéletet (a `--body-file`-ból) — a két kapu
-  ítélet-szabályának egységesítése külön jegy (SQL-feladat #399).
+  ítélet-szabályának egységesítése külön jegy (SQL-feladat #399). **Megoldva (2026-11-24):** a `pre-pr-gate.mjs` `prVerdict()`-je csak a helyi
+  `review-<fej>.json`-t fogadja el (`pre-pr-gate.test.mjs` „W4”).
 - **V4:** hiányzó / nem egész `total_count` a check-run listában → FAIL.
 - **V5 (maradó kockázat, jegyre):** a CCR keresztellenőrzése csak darabszámot véd; egy nyitott szál `resolved: true`-ként jelentését
   vagy kipárnázott listát semmi nem fogja meg — a CCR-válasz valós mintája a repóban nincs. A V1 miatt felhőből úgysem vonható össze
