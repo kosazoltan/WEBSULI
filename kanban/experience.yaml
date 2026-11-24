@@ -27,3 +27,15 @@ cards:
     observed: "P-010: a 'felső határ' konstans csak rangsorolt, nem kényszerített; plafon nélküli kényszerítésnél csupa rossz válasznál a lecke megállt"
     fix: "határidő a 30%-os arány előtt, de csak a menetenkénti plafon alatti hibára; mérés 400 seeden a döntés előtt"
     rule: "ütemező-garanciát előbb seedelt próba-szkripttel mérj (több leckeméret × pontosság), és nézd a mellékhatást (haladás) is, mielőtt szerződést írsz"
+  - id: 6
+    status: rule
+    date: "2026-11-24"
+    observed: "e2e teszt a főágon hamisan zöld: két lépés között navigált, elveszett a lapon belüli állapot"
+    fix: "navigáció nélküli segédfüggvény (answerAllHere), RED újramérve a főágon"
+    rule: "lapon belüli állapotot mérő e2e-ben nincs page.goto a lépések között; RED mindig mérve"
+  - id: 5
+    status: rule
+    date: "2026-11-24"
+    observed: "Időkorlátos teszt abszolút ms-küszöbbel gépenként/terhelésenként eltérő eredményt adott (#557)"
+    fix: "Gépfüggetlen arány-teszt a főági referenciához mérve; REDACT_CAP 8 KB"
+    rule: "Teljesítménytesztben ugyanazon a gépen mért arány, ne abszolút ms-küszöb"
