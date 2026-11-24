@@ -9,14 +9,22 @@ import { resultRequestSchema } from "../shared/lesson-result-email";
  */
 test.use({ serviceWorkers: "block" });
 
-async function mock(page: Page) {
+test("B3: a jelenlegi szerver nem hirdeti a teljes V2 eredmény-API-t", async ({ request }) => {
+  const response = await request.get("/api/csrf-token");
+  expect(response.ok()).toBe(true);
+  const token = await response.json();
+  expect(typeof token.csrfToken).toBe("string");
+  expect(token).not.toHaveProperty("resultApi");
+});
+
+async function mock(page: Page, capable = false) {
   const posts: Array<Record<string, unknown>> = [];
   await page.route("**/api/**", async route => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
     if (path === "/api/lessons/lesson-q/results" && req.method() === "POST") { posts.push(req.postDataJSON()); return route.fulfill({ status: 202, json: { queued: true } }); }
     if (path === "/api/auth/user") return route.fulfill({ json: null });
-    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test" } });
+    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test", ...(capable ? { resultApi: 2 } : {}) } });
     if (path === "/api/html-files/quiz-fixture") return route.fulfill({ json: { id: "quiz-fixture", title: "Lecke", contentType: "lesson", classroom: 7 } });
     if (path === "/api/lessons/by-file/quiz-fixture") return route.fulfill({ json: { lessonId: "lesson-q", version: 1, lesson: fusionFixture() } });
     if (path.startsWith("/api/design-assets/")) return route.fulfill({ status: 404, json: {} });
@@ -28,7 +36,7 @@ async function mock(page: Page) {
 const quizPosts = (posts: Array<Record<string, unknown>>) => posts.filter(p => p.kind === "quiz");
 
 test("minden kérdés megválaszolva: a kvíz a lezáró gomb nélkül, pontosan egyszer megy el", async ({ page }) => {
-  const posts = await mock(page);
+  const posts = await mock(page, true);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/preview/quiz-fixture");
   await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
@@ -74,6 +82,8 @@ test("hiányos kör lezárása a kihagyásokkal: egy beküldés, a kihagyott ké
   await page.getByRole("button", { name: "Kvíz kiértékelése" }).click();
   await page.getByRole("button", { name: "Lezárom a kihagyásokkal", exact: true }).click();
   await expect.poll(() => quizPosts(posts).length).toBe(1);
+  expect(quizPosts(posts)[0]).not.toHaveProperty("startedAt");
+  expect(quizPosts(posts)[0]).not.toHaveProperty("lastAnsweredAt");
   const picks = Object.values(quizPosts(posts)[0].picks as Record<string, number>);
   expect(picks).toHaveLength(25);
   expect(picks.filter(pick => pick === -1)).toHaveLength(22);

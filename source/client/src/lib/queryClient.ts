@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { supportsResultApi } from "@shared/result-compat";
 import { logger } from "./logger";
 import { LESSON_SCORING_VERSION } from "@shared/answer-value";
 import { isRetryableRequestError } from "@shared/request-retry";
@@ -30,13 +31,15 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
 /** Eredmény-e-mail B2 (#510 R37): a CSRF-token lekérésének saját határideje (a válasz törzsének olvasásával együtt). */
 const CSRF_TOKEN_TIMEOUT_MS = 15_000;
 
+type TokenInfo = { token: string; resultApi: boolean };
+
 // SECURITY: CSRF Token Manager
 // Fetches and caches CSRF token for protecting mutating requests
 class CSRFTokenManager {
-  private token: string | null = null;
-  private fetchPromise: Promise<string> | null = null;
+  private token: TokenInfo | null = null;
+  private fetchPromise: Promise<TokenInfo> | null = null;
   
-  async getToken(): Promise<string> {
+  async getToken(): Promise<TokenInfo> {
     // Return cached token if available
     if (this.token) {
       return this.token;
@@ -57,7 +60,7 @@ class CSRFTokenManager {
     }
   }
   
-  private async fetchTokenFromServer(): Promise<string> {
+  private async fetchTokenFromServer(): Promise<TokenInfo> {
     // B2 (#510 R37): a megakadt tokenlekérés nem tarthatja végtelenül a várakozó írást. Időzített AbortController (nem
     // `AbortSignal.timeout`): a határidő így a már kezelt, újrapróbálhatónak ismert `AbortError`-t adja, nem `TimeoutError`-t
     // (PR #556 review) — és a törzs olvasását is fedi.
@@ -74,7 +77,7 @@ class CSRFTokenManager {
       }
 
       const data = await res.json();
-      return data.csrfToken;
+      return { token: data.csrfToken, resultApi: supportsResultApi(data) };
     } finally {
       clearTimeout(timer);
     }
@@ -138,7 +141,7 @@ export async function apiRequest<T = unknown>(
   method: string,
   url: string,
   data?: unknown | undefined,
-  options?: { retries?: number; timeout?: number; keepalive?: boolean }
+  options?: { retries?: number; timeout?: number; keepalive?: boolean; resultTimes?: { startedAt?: number; lastAnsweredAt?: number } }
 ): Promise<T> {
   const retries = options?.retries ?? 0; // No automatic retries for write operations (causes duplicates)
   const timeout = options?.timeout ?? 60000; // 60 second default timeout
@@ -158,11 +161,14 @@ export async function apiRequest<T = unknown>(
         
         // SECURITY: Fetch CSRF token for mutating requests (POST/PUT/PATCH/DELETE)
         // Spec 2026-09-30 (U1, §C-V/1): a kliens közli a támogatott pontozó-verziót; a kiszolgáló az újabb leckét 409-cel utasítja el.
+        const serialize = (capable: boolean) => data ? JSON.stringify(capable && options?.resultTimes && typeof data === "object" ? { ...data, ...options.resultTimes } : data) : undefined;
+        let capable = false;
         const headers: Record<string, string> = { "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), ...(data ? { "Content-Type": "application/json" } : {}) };
         if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
           try {
             const csrfToken = await csrfTokenManager.getToken();
-            headers['X-CSRF-Token'] = csrfToken;
+            headers['X-CSRF-Token'] = csrfToken.token;
+            capable = csrfToken.resultApi;
           } catch (error) {
             logger.warn('[CSRF] Failed to fetch CSRF token, continuing without it:', error);
             // Continue anyway - backend will reject if CSRF required
@@ -172,7 +178,7 @@ export async function apiRequest<T = unknown>(
         const res = await fetch(url, {
           method,
           headers,
-          body: data ? JSON.stringify(data) : undefined,
+          body: serialize(capable),
           credentials: "include",
           signal: controller.signal,
           ...keepalive,
@@ -195,7 +201,7 @@ export async function apiRequest<T = unknown>(
             
             // Retry with new token (fresh controller in case original timed out)
             const newCsrfToken = await csrfTokenManager.getToken();
-            headers['X-CSRF-Token'] = newCsrfToken;
+            headers['X-CSRF-Token'] = newCsrfToken.token;
             
             const retryController = new AbortController();
             const retryTimeoutId = setTimeout(() => retryController.abort(), timeout);
@@ -204,7 +210,7 @@ export async function apiRequest<T = unknown>(
               const retryRes = await fetch(url, {
                 method,
                 headers,
-                body: data ? JSON.stringify(data) : undefined,
+                body: serialize(newCsrfToken.resultApi),
                 credentials: "include",
                 signal: retryController.signal,
                 ...keepalive,
