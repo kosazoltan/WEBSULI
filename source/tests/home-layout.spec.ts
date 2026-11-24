@@ -20,8 +20,8 @@ const contentBox = async (page: Page) => {
   return { x: box.x, width: box.width - pad };
 };
 
-test.describe("asztal 1440×900", () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+for (const vp of [{ width: 1440, height: 900 }, { width: 1100, height: 900 }]) test.describe(`asztal ${vp.width}×${vp.height}`, () => {
+  test.use({ viewport: vp });
 
   test("támogatói csempe a Hero mellett, alatta advent, Szia, majd egy sorban szűrő + kereső + nézet", async ({ page }) => {
     await setAdventTime(page, DEC3);
