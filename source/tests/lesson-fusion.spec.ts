@@ -269,7 +269,10 @@ async function preparedAudioPage(page: import("@playwright/test").Page, options:
     const c = (window as unknown as { __chain: ChainLog }).__chain;
     // `played`: a valódi lejátszási kísérletek; `unlocked`: a mozdulatnál „megérintett”, azonnal szüneteltetett letöltések (ezekből hang nem szólhat).
     const real = c.played.filter(p => !p.unlock);
-    const audible = c.audios.filter((a, i) => c.played.some(p => !p.unlock && p.path === new URL(a.src || location.href).pathname) || i < 0);
+    // Az `audios` sorrendje az ELSŐ VALÓDI lejátszásé (nem a `c.audios`-ba kerülésé): az előtöltés alatti feloldás („megérintés”) korábban
+    // is hozzáadhatja a később koppintott szó elemét, és akkor a [0] / [1] index felcserélődött (ritka, terhelés alatti CI-bukás, #1729).
+    const firstReal = (a: HTMLAudioElement) => c.played.findIndex(p => !p.unlock && p.path === new URL(a.src || location.href).pathname);
+    const audible = c.audios.filter(a => firstReal(a) >= 0).sort((x, y) => firstReal(x) - firstReal(y));
     return { speech: c.speech, played: real.map(({ unlock: _unlock, ...rest }) => rest), unlocked: c.played.filter(p => p.unlock).map(p => ({ path: p.path, playingAt: p.playingAt })), audios: audible.map(a => ({ paused: a.paused, ended: a.ended })) };
   });
   const say = (text: string) => page.getByRole("button", { name: `${text} meghallgatása`, exact: true }).click();
@@ -579,7 +582,8 @@ test.describe("prepared audio", () => {
     await say("triangle");
     await say("This is a triangle.");
     await expect.poll(async () => (await log()).played.map(p => p.path)).toEqual([word, sentence]);
-    await expect.poll(async () => (await log()).audios[1], { timeout: 4000 }).toEqual({ paused: true, ended: true });
+    // 0,1 mp-es hang: terhelt futtatón a lejátszás vége késhet — a mérce a végállapot, nem az idő (#1729).
+    await expect.poll(async () => (await log()).audios[1], { timeout: 10_000 }).toEqual({ paused: true, ended: true });
     await page.waitForTimeout(1800);
     const state = await log();
     expect(state.audios[0], "az első koppintás hangja leállítva, nem játszott végig").toEqual({ paused: true, ended: false });
