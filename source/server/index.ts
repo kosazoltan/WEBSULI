@@ -33,6 +33,7 @@ import { setupLearnerReports } from "./learner-reports";
 import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
 import { GAME_SCORE_IP_MAX, GAME_SCORE_LIMIT_MESSAGE, GAME_SCORE_WINDOW_MS } from "./lib/game-score-limits";
+import { lessonsWriteGate } from "./lesson-result-limits";
 import { runMigrations } from "./migrate";
 import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
@@ -432,14 +433,9 @@ app.use("/api/push/unsubscribe", publicWriteLimiter);
 // (képernyőidőt) osztanak — a szórásos újrapróbálkozást itt is fojtjuk. A GET
 // /coupons/active minden HUD-frissítéskor lefut, ezért az kimarad.
 app.use("/api/lessons/arbiter", arbiterLimiter);
-app.use("/api/lessons", (req, res, next) => {
-  const isSafeMethod =
-    req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS";
-  if (isSafeMethod) return next();
-  // Review #268: a bejelentkezett tanuló ismétlése saját, tanulónkénti keretet kap (server/rewards/review-router.ts).
-  if (req.path.startsWith("/review/")) return next();
-  return publicWriteLimiter(req, res, next);
-});
+// Review #268 (ismétlés: saját keret) és eredmény-e-mail B2 / #510 R46 (eredmény-POST: saját két keret) — a kivételek a közös kapuban:
+// server/lesson-result-limits.ts.
+app.use("/api/lessons", lessonsWriteGate(publicWriteLimiter));
 
 // Public comment/like writes live under /api/materials/*. Only real writes are throttled:
 // safe methods and the two read-only POST lookups (likes/check and likes/batch, used on
