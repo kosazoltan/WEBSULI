@@ -95,6 +95,55 @@ function withSendTimeout<T>(sending: Promise<T>): Promise<T> {
 export const roundKeyOf = (...parts: string[]) => createHash("sha256").update(parts.join("|")).digest("hex");
 
 /**
+ * Bontás B4a: a „félbehagyva” / körönként-egy-levél szerveroldal kapcsolója (`RESULT_PARTIAL_EMAIL=on`). Minden más érték vagy hiány = KI:
+ * a főági viselkedés változatlan (a jelzősor sem íródik). Minden kérésnél frissen olvasva (a teszt és az élesítés is átállíthatja).
+ */
+export const resultPartialEmailEnabled = (env: NodeJS.ProcessEnv = process.env) => env.RESULT_PARTIAL_EMAIL === "on";
+/**
+ * #510 R18 / R27: a véglegesítés tartós, tanulófüggetlen jelzősora a kézbesítés-nyilvántartásban (sémaváltozás nélkül: ez a körkulcs, üres
+ * `delivered`) — újraindítás után, más példányon és bármely kilétnél is megfogja ugyanannak a körnek az ismételt végleges beküldését.
+ */
+export const finalRoundKeyOf = (roundId: string, kind: "tasks" | "quiz" = "quiz") => roundKeyOf("final-round", kind, roundId);
+/**
+ * #510 R42: a jelzősor ELSŐ rögzítőjének álnevesített tulajdonos-sora (lecke + fajta + kör + kilét; üres kézbesítés), a jelzősorral egy
+ * tranzakcióban — ha a kérés a jelzősor után, a 202 előtt megszakad, az eredeti beküldő ismétlése továbbmehet (más kilét duplikátum).
+ */
+export const finalOwnerKeyOf = (who: string, kind: "tasks" | "quiz", roundId: string) => roundKeyOf("final-owner", kind, roundId, who);
+let finalMarkerFault: ((stage: "insert" | "ttl") => void) | null = null;
+/** Teszthez: hibainjektálás a végleges jelzősor írása (`insert`) vagy élettartam-frissítése (`ttl`) elé; `null` kikapcsolja. */
+export function setFinalMarkerFault(fault: ((stage: "insert" | "ttl") => void) | null): void { finalMarkerFault = fault; }
+let ownerCheckFault: (() => void) | null = null;
+/** Teszthez: hibainjektálás a végleges kör tulajdonos-lekérdezése elé. */
+export function setOwnerCheckFault(fault: (() => void) | null): void { ownerCheckFault = fault; }
+let finalClaimFault: (() => void) | null = null;
+/** Teszthez (R42): a jelzősor UTÁN, a 202 előtt megszakadó kérés szimulálása. */
+export function setFinalClaimFault(fault: (() => void) | null): void { finalClaimFault = fault; }
+let pairingFault: (() => void) | null = null;
+/** Teszthez (R47 szerver): a párosítás feloldásának átmeneti (adatbázis-) hibája. */
+export function setPairingFault(fault: (() => void) | null): void { pairingFault = fault; }
+
+/**
+ * #510 R27 + R42: a jelzősor és a tulajdonos-sor egy tranzakcióban. Igaz, ha ez az ELSŐ végleges beküldés a körre. Ismétlésnél a jelzősor
+ * `created_at`-ja best effort frissül (R51 L2: a hibája nem kerüli meg a hívó tulajdonos-ellenőrzését); az írás hibája a hívóhoz jut (503).
+ */
+async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId: string, percent: number, who: string): Promise<boolean> {
+  finalMarkerFault?.("insert");
+  const fresh = await db.transaction(async tx => {
+    const marker = await tx.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalRoundKeyOf(roundId, kind), percent })
+      .onConflictDoNothing().returning({ id: lessonResultEmails.id });
+    if (marker.length) await tx.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalOwnerKeyOf(who, kind, roundId), percent }).onConflictDoNothing();
+    return marker.length > 0;
+  });
+  if (fresh) return true;
+  try {
+    finalMarkerFault?.("ttl");
+    await db.update(lessonResultEmails).set({ createdAt: sql`now()` })
+      .where(and(eq(lessonResultEmails.lessonId, lessonId), eq(lessonResultEmails.kind, kind), eq(lessonResultEmails.roundKey, finalRoundKeyOf(roundId, kind))));
+  } catch (error) { logger.error(`[LESSON-RESULT] a végleges jelző élettartama nem frissült: ${errorClass(error)}`); }
+  return false;
+}
+
+/**
  * Küldés a címzettlistának; körönként (lecke, fajta, roundKey) egy levél címzettenként. Review #280: a kézbesítés címzettenként
  * nyilvántartott (`delivered`: kézbesítve VAGY éppen küldés alatt — a foglalás a küldés ELŐTT, atomi módosítással történik) — a
  * meghiúsult címzett a következő azonos hívással és egy 60 s-os automatikus újrapróbálással pótolódik, a már kézbesített (vagy más
@@ -197,9 +246,48 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   if (body.startedAt !== undefined) graded = { ...graded, meta: { startedAt: body.startedAt } };
   // Tanulói profil (S2): a párosított eszköz tanulója (ellenőrzött token). Átfogó review: bejelentkezve is a tanuló naplójába kerül
   // (mint a régi anyagnál); a levél neve bejelentkezve a fiók neve marad.
-  const paired = body.learner ? await resolveLearner(body.learner).catch(() => null) : null;
+  const once = resultPartialEmailEnabled();
+  let paired: Awaited<ReturnType<typeof resolveLearner>> = null;
+  if (body.learner) {
+    try { pairingFault?.(); paired = await resolveLearner(body.learner); }
+    catch (error) {
+      // B4a (#510 R47 szerver): az átmeneti feloldási hiba nem azonos az érvénytelen tokennel — BE állásban nem rögzül vendégként (se
+      // jelzősor, se levél), hanem újrapróbálható 503-at kap; KI állásban a főági vendég-út.
+      if (once) { logger.error(`[LESSON-RESULT] a párosítás feloldása átmenetileg nem sikerült: ${errorClass(error)}`); return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." }); }
+      paired = null;
+    }
+  }
   const who = userId ?? (paired ? `learner:${paired.id}` : `guest:${body.fingerprint ?? (clientIpKey(req) || "?")}`);
   const roundKey = roundKeyOf(who, body.kind, body.roundId);
+  let duplicate = false;
+  if (once) {
+    // B4a (#510 R27, R42, R49 c): körönként egy végleges levél, kiléttől függetlenül. Létező jelzőnél csak a saját kézbesítési sor vagy a
+    // saját (R42) tulajdonos-sor birtokosa folytathatja; más kilét duplikátum. A jelzősor írásának és a tulajdonos-lekérdezésnek az
+    // átmeneti hibája 503 a 202 előtt (bizonyíthatatlan állapotban nem megy végleges levél).
+    // PR #571 review: pontozott sor nélküli beküldés (csak ismeretlen azonosítók) nem foglalhatja le a kört.
+    if (!graded.rows.length) return res.status(202).json({ queued: false });
+    // Vállalt átmeneti korlát (PR #571 review): a garancia a BE állásban először véglegesített körökre szól. A KI alatt már elküldött körnek
+    // nincs jelzője (a régi kézbesítési kulcs kilétfüggő, körszinten nem kereshető): ha ugyanazt a kört a bekapcsolás után más kilét küldi be,
+    // az ő beküldése rögzíti a jelzőt (legfeljebb egy további levélpár), minden további kilét duplikátum; az eredeti kilét a saját során
+    // csak a hiányzó címzettjeit pótolja. A bekapcsolás előtti körök a kliens „elküldve” jelzője miatt jellemzően nem jönnek újra.
+    let first: boolean;
+    try { first = await claimFinalRound(req.params.lessonId, body.kind, body.roundId, graded.summary.percent, who); }
+    catch (error) { logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`); return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." }); }
+    if (!first) {
+      let own: string[];
+      try {
+        ownerCheckFault?.();
+        own = (await db.select({ roundKey: lessonResultEmails.roundKey }).from(lessonResultEmails)
+          .where(and(eq(lessonResultEmails.lessonId, req.params.lessonId), eq(lessonResultEmails.kind, body.kind),
+            inArray(lessonResultEmails.roundKey, [roundKey, finalOwnerKeyOf(who, body.kind, body.roundId)])))).map(row => row.roundKey);
+      } catch (error) {
+        logger.error(`[LESSON-RESULT] a végleges kör tulajdonosának ellenőrzése nem sikerült: ${errorClass(error)}`);
+        return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." });
+      }
+      duplicate = own.length === 0;
+    }
+    if (!duplicate) finalClaimFault?.();
+  }
   // Spec 2026-10-20-s4 (S4b + S4c): feladatszintű, névtelen eredmény (a levéltől független), utána a szigorítás automatikus lazítása. Nem
   // várjuk meg; a hiba csak napló.
   if (graded.kind === "tasks") {
@@ -211,6 +299,9 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
       .then(() => maybeRelaxTightening(req.params.lessonId, tightened))
       .catch(error => logger.error("[S4] feladatszintű eredmény / lazítás hiba:", error));
   }
+  // PR #571 review: a duplikátum csak a második levelet tiltja — a levéltől független feladatmérés (fent, saját idempotenciával és
+  // közreműködőnkénti számlálással) ettől még fut.
+  if (duplicate) return res.status(202).json({ queued: false, duplicate: true });
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
   void (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => sendLessonResult({ lessonId: req.params.lessonId, roundKey, learner,
     ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), guest: !userId && !paired, graded }))
