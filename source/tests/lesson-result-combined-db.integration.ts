@@ -218,6 +218,9 @@ const rowsOf = async (owner: string) => (await dbPool.query(`SELECT kind, sent_r
 
 test("S1 (E4): 7 napnál régebbi pár nélküli rész → egy jelölt részleges levél, timeout, kézbesítve, tartalom törölve", async () => {
   const { sweepPendingResults } = await sweeper();
+  // A korábbi tesztek szándékosan hagyott maradéka (R4 elavult sora, R7 kézbesítetlen sora) ne keveredjen a söprő-tesztekbe.
+  await dbPool.query(`UPDATE lesson_result_pending SET sent_at = coalesce(sent_at, now()), sent_reason = coalesce(sent_reason, 'timeout'),
+    delivered_at = coalesce(delivered_at, now())`);
   await post("comb-two", quizBody("fp-s1", "s1-q"));
   await dbPool.query(`UPDATE lesson_result_pending SET created_at = now() - interval '8 days' WHERE owner_key = 'guest:fp-s1'`);
   await sweepPendingResults({ now: new Date() });
@@ -242,7 +245,7 @@ test("S3: a 6 napos nyitott rész marad (a határ a paraméterként adott óra s
   assert.equal((await open("guest:fp-s3")).length, 1);
   await sweepPendingResults({ now: new Date(Date.now() + 2 * 86_400_000) });
   await settle(2);
-  assert.equal(sent.length, 2, "két nappal később már lejárt");
+  assert.equal(sent.length, 2, "két nappal későbbi órával már lejárt");
 });
 
 test("S4: a kézbesítetlen pár (szolgáltatói hiba után) a söprővel pótlódik", async () => {

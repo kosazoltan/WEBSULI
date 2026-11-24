@@ -116,7 +116,9 @@ export async function takeParkedForLegacy(lessonId: string, ownerKey: string): P
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${lessonId}|${ownerKey}`}))`);
     // Review #586: a delivered_at itt NEM íródik — csak a sikeres régi úti küldés után (markPartDelivered); a kézbesítetlen
     // `timeout` sort a söprő (U4c) pótolja.
-    const rows = (await tx.execute(sql`UPDATE lesson_result_pending SET sent_at = now(), sent_reason = 'timeout'
+    // U4c: a régi út körkulcsa (= roundKeyOf(tulajdonos, rész, kör)) a pair_key-ben — a söprő ebből tudja, hogy a pótlás a régi levélforma.
+    const rows = (await tx.execute(sql`UPDATE lesson_result_pending SET sent_at = now(), sent_reason = 'timeout',
+      pair_key = encode(sha256(convert_to(owner_key || '|' || kind || '|' || round_id, 'UTF8')), 'hex')
       WHERE lesson_id = ${lessonId} AND owner_key = ${ownerKey} AND sent_at IS NULL RETURNING round_id, graded, learner`)).rows as Array<{ round_id: string; graded: GradedTasks | GradedQuiz; learner: PendingLearner }>;
     return rows.map(r => ({ graded: r.graded, learner: r.learner, roundId: r.round_id }));
   });

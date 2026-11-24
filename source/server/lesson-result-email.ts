@@ -159,7 +159,7 @@ async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId
  */
 export async function sendLessonResult(input: { lessonId: string; roundKey: string; learner: string; learnerFirst?: string; learnerId?: string; guest?: boolean; graded: GradedTasks | GradedQuiz;
   /** U4b: összevont levél (a két rész egy levélben); a jelzősor a `graded` (feladat-) részé, a körkulcs a két körből képzett. */
-  combined?: { tasks: GradedTasks; quiz: GradedQuiz } }, retry = true, report?: { failed: number }): Promise<{ sent: number; duplicate: boolean }> {
+  combined?: { tasks: GradedTasks | null; quiz: GradedQuiz | null } }, retry = true, report?: { failed: number }): Promise<{ sent: number; duplicate: boolean }> {
   try {
     const [row] = await db.select({ json: lessons.json, htmlFileId: lessons.htmlFileId }).from(lessons).where(eq(lessons.id, input.lessonId));
     const lesson = row ? lessonSchema.safeParse(row.json) : null;
@@ -578,7 +578,7 @@ async function pairWithRetry(input: Parameters<typeof pairOrPark>[0]): Promise<A
  * kulcsot adja, a kézbesítési napló és a szolgáltatói kulcs nem duplikál). A `delivered_at` csak a teljes kézbesítés után íródik
  * (review #586); kézbesítetlen pár a kör ismételt beküldésére és a söprővel (U4c) pótolható.
  */
-async function deliverCombined(lessonId: string, pair: PairedParts, firstTime: boolean) {
+export async function deliverCombined(lessonId: string, pair: PairedParts, firstTime: boolean) {
   // A levél neve: a kilétet hordozó rész (a fiókos / párosított adat elsőbbséget kap a vendéggel szemben).
   const who = pair.tasksLearner.learnerId || !pair.tasksLearner.guest ? pair.tasksLearner : pair.quizLearner;
   const report = { failed: 0 };
@@ -588,6 +588,23 @@ async function deliverCombined(lessonId: string, pair: PairedParts, firstTime: b
   if (report.failed === 0 && (result.sent > 0 || result.duplicate)) await markPairDelivered(pair.pairKey);
   // Review #586: a kvízrész is a tanulói naplóba (a jelzősor a feladatrészé, az a sendLessonResult-ban naplózódik) — egyszer, a párosításkor.
   if (firstTime && pair.quizLearner.learnerId) await recordQuizActivity(lessonId, pair.quizLearner.learnerId, pair.quiz.summary.percent);
+}
+
+/**
+ * U4c: egy tárolt `timeout` sor (kézbesítése). Ha a sor kulcsa a régi út körkulcsa (KI állású kiürítés, `takeParkedForLegacy`), a régi
+ * egyrészes levél megy; különben (söprő: 7 nap pár nélkül) a jelölt részleges összevont levél. A kézbesítés nyoma csak siker után.
+ */
+export async function deliverStoredPart(lessonId: string, row: { id: string; owner_key: string; kind: "tasks" | "quiz"; round_id: string;
+  graded: GradedTasks | GradedQuiz | null; learner: PendingLearner | null; pair_key: string | null }): Promise<boolean> {
+  if (!row.graded || !row.learner || !row.pair_key) return false;
+  const legacy = row.pair_key === roundKeyOf(row.owner_key, row.kind, row.round_id);
+  const report = { failed: 0 };
+  const r = await sendLessonResult({ lessonId, roundKey: row.pair_key, learner: row.learner.learner, ...(row.learner.learnerFirst ? { learnerFirst: row.learner.learnerFirst } : {}),
+    ...(row.learner.learnerId ? { learnerId: row.learner.learnerId } : {}), guest: row.learner.guest, graded: row.graded,
+    ...(legacy ? {} : { combined: row.graded.kind === "tasks" ? { tasks: row.graded as GradedTasks, quiz: null } : { tasks: null, quiz: row.graded as GradedQuiz } }) }, false, report);
+  if (report.failed !== 0 || !(r.sent > 0 || r.duplicate)) return false;
+  await db.execute(sql`UPDATE lesson_result_pending SET delivered_at = now() WHERE id = ${row.id} AND delivered_at IS NULL`);
+  return true;
 }
 
 async function recordQuizActivity(lessonId: string, learnerId: string, percent: number) {
