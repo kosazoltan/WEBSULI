@@ -184,8 +184,13 @@ test("R5: a kapcsoló KI állásában a korábban félretett rész a régi úton
   assert.equal(sent.length, 4, "a feladat és a félretett kvíz is külön levélben");
   assert.ok(sent.some(m => / — Kvíz — /.test(m.subject)) && sent.some(m => / — Feladatok — /.test(m.subject)));
   assert.deepEqual(await open("guest:fp-r5"), []);
-  await new Promise(r => setTimeout(r, 200));
-  const rows = (await dbPool.query(`SELECT delivered_at IS NOT NULL AS d FROM lesson_result_pending WHERE owner_key = 'guest:fp-r5'`)).rows;
+  // A kézbesítés nyoma a háttérküldés UTÁN íródik — korlátos várakozás (CI-terhelés alatt lassabb), nem fix alvás.
+  let rows: Array<{ d: boolean }> = [];
+  for (let i = 0; i < 60; i++) {
+    rows = (await dbPool.query(`SELECT delivered_at IS NOT NULL AS d FROM lesson_result_pending WHERE owner_key = 'guest:fp-r5'`)).rows;
+    if (rows.every(r => r.d)) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
   assert.deepEqual(rows, [{ d: true }], "a kiürített rész csak sikeres küldés után kap delivered_at-et");
 });
 
