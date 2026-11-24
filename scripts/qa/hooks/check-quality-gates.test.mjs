@@ -163,11 +163,30 @@ test('gh pr merge: a PR jelenlegi fejére szóló, ≤ 15 perces zöld merge-biz
   const plan = { kind: 'pr-merge', target: '7', repoFlag: null };
   const now = Date.parse('2026-11-17T10:00:00Z');
   assert.match(checkAction(plan, r.wt, { now, ghView: view }), /npm run gate:merge -- 7/);
-  writeEv(r.ev, `merge-7-${head}`, { ok: true, at: '2026-11-17T09:50:00Z' });
+  writeEv(r.ev, 'merge-run-7', { runId: 'r1' });
+  writeEv(r.ev, `merge-7-${head}`, { ok: true, at: '2026-11-17T09:50:00Z', runId: 'r1' });
   assert.equal(checkAction(plan, r.wt, { now, ghView: view }), null);
   assert.match(checkAction(plan, r.wt, { now: now + 6 * 60000, ghView: view }), /16 perces/);
   assert.match(checkAction(plan, r.wt, { now, ghView: () => ({ number: 7, headRefOid: 'e'.repeat(40) }) }), /jelenlegi fejére/);
   assert.match(checkAction(plan, r.wt, { now, ghView: () => null }), /nem olvasható/);
+});
+
+test('Copilot #513: gh pr merge — a zöld merge-bizonyíték csak a legutóbb indított futásé lehet, fennálló zár mellett nem', () => {
+  const r = makeRepo();
+  const head = 'd'.repeat(40);
+  const view = () => ({ number: 7, headRefOid: head });
+  const plan = { kind: 'pr-merge', target: '7', repoFlag: null };
+  const now = Date.parse('2026-11-17T10:00:00Z');
+  writeEv(r.ev, `merge-7-${head}`, { ok: true, at: '2026-11-17T09:50:00Z' });
+  assert.match(checkAction(plan, r.wt, { now, ghView: view }) ?? '', /futás/, 'futásazonosító nélküli (régi alakú) zöld → tiltás');
+  writeEv(r.ev, `merge-7-${head}`, { ok: true, at: '2026-11-17T09:50:00Z', runId: 'r1' });
+  assert.match(checkAction(plan, r.wt, { now, ghView: view }) ?? '', /futás/, 'jelölő nélkül → tiltás');
+  writeEv(r.ev, 'merge-run-7', { runId: 'r2' });
+  assert.match(checkAction(plan, r.wt, { now, ghView: view }) ?? '', /futás/, 'egy később indult (félbeszakadt) futás jelölője → a régi zöld érvénytelen');
+  writeEv(r.ev, 'merge-run-7', { runId: 'r1' });
+  assert.equal(checkAction(plan, r.wt, { now, ghView: view }), null, 'egyező futás → engedve');
+  writeFileSync(join(r.ev, 'merge-lock-7.lock'), '');
+  assert.match(checkAction(plan, r.wt, { now, ghView: view }) ?? '', /zár/, 'fennálló (beragadt) zár → tiltás');
 });
 
 test('más repó: nincs kimenet (láncolva sem) — kivéve, ha a parancs a WEBSULI-ra mutat', () => {
