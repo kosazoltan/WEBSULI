@@ -37,6 +37,13 @@ export type AdventPatch = Partial<Pick<AdventRow, "grade" | "round" | "plan" | "
 
 export const DEVICE_ROW_RETENTION_DAYS = 60;
 export const PREVIEW_ROW_RETENTION_DAYS = 7;
+/** A levél-bérlet hossza: ennyi ideig nem veheti át más feldolgozó a küldést (leállás után ennyi idő múlva folytatható). */
+export const ADVENT_MAIL_LEASE_MS = 10 * 60_000;
+/**
+ * Az első küldési kísérlettől eddig szabad automatikusan (ugyanazzal az idempotencia-kulccsal) újrapróbálni: a szolgáltató (Resend)
+ * 24 óráig deduplikál, az 1 óra tartalék a bérlet hosszát és az órák eltérését fedi. Utána a kézbesítetlen címzett `check:` lesz.
+ */
+export const ADVENT_RESEND_WINDOW_MS = 23 * 60 * 60_000;
 
 type DbRow = {
   id: string; season: number; subject_kind: AdventSubjectKind; subject_id: string; grade: number | null; round: number;
@@ -200,29 +207,34 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
 
     /**
      * Bérlet egy címzettre: csak ha tervezett (`want:`), még nem kézbesített (`final:`), a szolgáltató nem fogadta még el
-     * (`sent:` — Thread 7 javítás), nincs ellenőrizendő jelölője (`check:` — >24h bizonytalan kézbesítés, Thread 7 >24h javítás),
-     * és nincs élő bérlete (`pending:` a `leaseMs`-en belül). Egy utasítás, soronkénti zárral:
-     * két egyidejű feldolgozóból pontosan egy kapja meg.
+     * (`sent:`), nincs ellenőrizendő jelölője (`check:`), nincs élő bérlete (`pending:` a `leaseMs`-en belül), és az ELSŐ
+     * küldési kísérlete (`try:<h>@<ms>`) óta még nem telt el az `ADVENT_RESEND_WINDOW_MS` (a szolgáltató idempotencia-ablakán
+     * belül vagyunk, egy esetleg már elfogadott levél ismétlését ugyanazzal a kulccsal deduplikálja). Az első bérlet rögzíti a
+     * `try:` jelölőt; a további bérletek és a felszabadítás nem írják át. Egy utasítás, soronkénti zárral: két egyidejű
+     * feldolgozóból pontosan egy kapja meg.
      */
     async leaseMail(id: string, hash: string, nowMs: number, leaseMs: number): Promise<boolean> {
       const got = await pool.query(
         `UPDATE advent_progress
             SET mailed_to = array_append(ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%'), 'pending:' || $2 || '@' || $3::text)
+                            || CASE WHEN EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'try:' || $2 || '@%') THEN ARRAY[]::text[]
+                                    ELSE ARRAY['try:' || $2 || '@' || $3::text] END
           WHERE id = $1 AND ('want:' || $2) = ANY(mailed_to) AND NOT (('final:' || $2) = ANY(mailed_to))
             AND NOT (('check:' || $2) = ANY(mailed_to))
             AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'sent:' || $2 || '@%')
             AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'pending:' || $2 || '@%' AND split_part(k, '@', 2)::bigint > $4::bigint)
+            AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'try:' || $2 || '@%' AND split_part(k, '@', 2)::bigint <= $5::bigint)
           RETURNING id`,
-        [id, hash, String(nowMs), String(nowMs - leaseMs)],
+        [id, hash, String(nowMs), String(nowMs - leaseMs), String(nowMs - ADVENT_RESEND_WINDOW_MS)],
       );
       return got.rows.length > 0;
     },
 
-    /** Kézbesítve: a bérlet helyére `final:` kerül. */
+    /** Kézbesítve: a bérlet (és az első kísérlet `try:` jelölője) helyére `final:` kerül. */
     async finishMail(id: string, hash: string): Promise<void> {
       await pool.query(
         `UPDATE advent_progress
-            SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%' AND k NOT LIKE 'sent:' || $2 || '@%')
+            SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'pending:' || $2 || '@%' AND k NOT LIKE 'sent:' || $2 || '@%' AND k NOT LIKE 'try:' || $2 || '@%')
                             || CASE WHEN ('final:' || $2) = ANY(mailed_to) THEN ARRAY[]::text[] ELSE ARRAY['final:' || $2] END
           WHERE id = $1`,
         [id, hash],
@@ -298,12 +310,39 @@ export function createAdventStore(pool: Pick<Pool, "query" | "connect">) {
           const target = withinWindow ? "final" : "check";
           await pool.query(
             `UPDATE advent_progress
-                SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k != $2)
+                SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k != $2 AND k NOT LIKE 'try:' || $3 || '@%')
                                 || CASE WHEN ($4 || ':' || $3) = ANY(mailed_to) THEN ARRAY[]::text[] ELSE ARRAY[$4 || ':' || $3] END
               WHERE id = $1`,
             [r.id, entry, hash, target],
           );
           recovered++;
+        }
+      }
+      // Bizonytalan kézbesítés (#562 A2): az első kísérlet óta letelt a szolgáltatói idempotencia-ablak, nincs `final:`/`sent:`/`check:`
+      // és élő bérlet sem — lehet, hogy a levél elment (leállás az elfogadás és a jelölés között), de az ismétlést a szolgáltató már
+      // nem szűrné ki. Automatikus küldés helyett `check:` (ellenőrizendő; kézi egyeztetés), a `try:`/`pending:` jelölő törlődik.
+      const stale = await pool.query<{ id: string; mailed_to: string[] }>(
+        `SELECT id, mailed_to FROM advent_progress WHERE EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'try:%')`,
+      );
+      for (const r of stale.rows) {
+        const list = r.mailed_to ?? [];
+        for (const entry of list.filter((k) => k.startsWith("try:"))) {
+          const [hash, at] = entry.slice("try:".length).split("@");
+          const firstMs = Number(at ?? "0");
+          if (!hash || nowMs - firstMs < ADVENT_RESEND_WINDOW_MS) continue;
+          if (list.includes(`final:${hash}`) || list.includes(`check:${hash}`) || list.some((k) => k.startsWith(`sent:${hash}@`))) continue;
+          if (list.some((k) => k.startsWith(`pending:${hash}@`) && Number(k.split("@")[1]) > nowMs - ADVENT_MAIL_LEASE_MS)) continue;
+          const flagged = await pool.query(
+            `UPDATE advent_progress
+                SET mailed_to = ARRAY(SELECT k FROM unnest(mailed_to) AS k WHERE k NOT LIKE 'try:' || $2 || '@%' AND k NOT LIKE 'pending:' || $2 || '@%')
+                                || ARRAY['check:' || $2]
+              WHERE id = $1 AND $3 = ANY(mailed_to) AND NOT (('final:' || $2) = ANY(mailed_to)) AND NOT (('check:' || $2) = ANY(mailed_to))
+                AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'sent:' || $2 || '@%')
+                AND NOT EXISTS (SELECT 1 FROM unnest(mailed_to) AS k WHERE k LIKE 'pending:' || $2 || '@%' AND split_part(k, '@', 2)::bigint > $4::bigint)
+              RETURNING id`,
+            [r.id, hash, entry, String(nowMs - ADVENT_MAIL_LEASE_MS)],
+          );
+          recovered += flagged.rows.length;
         }
       }
       return recovered;

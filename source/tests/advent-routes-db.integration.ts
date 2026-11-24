@@ -1181,19 +1181,44 @@ describe("adventi naptár — végpontok", () => {
     assert.equal(await deliverAdventMail(own([b.rowId]), open), 1);
     assert.deepEqual(mails.map((m) => m.to).sort(), ["anya@pelda.hu", "apa@pelda.hu", "tanar@pelda.hu"]);
 
-    // 3) Leállás a szolgáltató átvétele UTÁN (a kézbesítés rögzítése elmaradt): a pótlás ugyanazzal az idempotencia-kulccsal küld
-    //    (a szolgáltató ezt deduplikálja), a bérlet lejárta előtt nem.
+    // 3) Leállás a szolgáltató átvétele UTÁN. Dokumentált teszt-változás (#562 A2, „évadonként és címzettenként legfeljebb egy levél”):
+    //    a) a `sent:` jelölő már rögzült, csak a `final:` maradt el → a pótlás NEM küld újra, hanem lezárja (`final:`);
+    //    b) a jelölő sem rögzült (DB-kiesés) → az első kísérlettől számított ablakon belül ugyanazzal a kulccsal pótol (a szolgáltató
+    //       deduplikál); c) az ablak letelte után automatikus levél nem megy, a címzett `check:` (ellenőrizendő).
     mails.length = 0;
     const c = await finalRow();
     const rowC = (await store.mailCandidates(2026, false)).find((r) => r.row.id === c.rowId)!;
     const crashing = { ...store, finishMail: async () => { throw new Error("leállás a rögzítés előtt"); } };
     const t1 = Date.now();
     assert.equal((await sendAdventResult({ store: crashing, row: rowC.row, phase: "catchup", firstName: null, nowMs: t1 }, false)).sent, 0, "rögzítés nélkül nem számít kézbesítettnek");
+    assert.equal(mails.length, 3);
+    assert.equal(await deliverAdventMail(own([c.rowId]), open, t1 + 1000), 0, "a sent: jelölő után nincs második hívás");
+    assert.equal(await deliverAdventMail(own([c.rowId]), open, t1 + LEASE + 1000), 0, "a bérlet lejárta után sincs");
+    assert.equal(mails.length, 3, "címzettenként egy levél");
+    const keysOf = async (id: string) => (await q<{ mailed_to: string[] }>(`SELECT mailed_to FROM advent_progress WHERE id = $1`, [id]))[0]!.mailed_to;
+    assert.equal((await keysOf(c.rowId)).filter((k) => k.startsWith("final:")).length, 3, "a pótlás lezárta (final:)");
+
+    mails.length = 0;
+    const c2 = await finalRow();
+    const rowC2 = (await store.mailCandidates(2026, false)).find((r) => r.row.id === c2.rowId)!;
+    const dbDown = { ...crashing, markSent: async () => { throw new Error("DB-kiesés"); } };
+    const t2 = Date.now();
+    assert.deepEqual(await sendAdventResult({ store: dbDown, row: rowC2.row, phase: "catchup", firstName: null, nowMs: t2 }, false), { sent: 0, failed: 3 });
     const firstKeys = new Map(mails.map((m) => [m.to, m.key]));
-    assert.equal(firstKeys.size, 3);
-    assert.equal(await deliverAdventMail(own([c.rowId]), open, t1 + 1000), 0, "élő bérlet: nincs azonnali második hívás");
-    assert.equal(await deliverAdventMail(own([c.rowId]), open, t1 + LEASE + 1000), 3);
+    assert.equal(await deliverAdventMail(own([c2.rowId]), open, t2 + 60 * 60_000), 3, "az ablakon belül ugyanazzal a kulccsal pótol");
     for (const m of mails.slice(3)) assert.equal(m.key, firstKeys.get(m.to), "ugyanaz az idempotencia-kulcs");
+
+    mails.length = 0;
+    const c3 = await finalRow();
+    const rowC3 = (await store.mailCandidates(2026, false)).find((r) => r.row.id === c3.rowId)!;
+    const t3 = Date.now();
+    await sendAdventResult({ store: dbDown, row: rowC3.row, phase: "catchup", firstName: null, nowMs: t3 }, false);
+    assert.equal(mails.length, 3);
+    assert.equal(await deliverAdventMail(own([c3.rowId]), open, t3 + 25 * 60 * 60_000), 0, "az ablak letelte után nincs automatikus második levél");
+    assert.equal(mails.length, 3);
+    const flagged = await keysOf(c3.rowId);
+    assert.equal(flagged.filter((k) => k.startsWith("check:")).length, 3, "bizonytalan kézbesítés → ellenőrizendő");
+    assert.equal(flagged.filter((k) => k.startsWith("final:")).length, 0);
 
     // 4) Párhuzamos feldolgozók: címzettenként pontosan egy hívás.
     mails.length = 0;

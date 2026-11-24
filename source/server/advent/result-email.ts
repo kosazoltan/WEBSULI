@@ -25,7 +25,7 @@ import { learnerLinkSecret } from "../lib/learner-token";
 import { isE2eMode } from "../lib/e2e-mode";
 import { logger } from "../lib/logger";
 import { resolveAdminRecipients } from "../lib/material-result";
-import type { AdventRow, AdventStore } from "./store";
+import { ADVENT_MAIL_LEASE_MS, type AdventRow, type AdventStore } from "./store";
 
 /**
  * A levélmód (tulajdonosi P-056, 2026-11-23: „Levélküldés csak száraz összesítő után, külön jóváhagyással”). Alapból SZÁRAZ FUTÁS:
@@ -166,7 +166,7 @@ export function adventIdempotencyKey(rowId: string, to: string): string {
 }
 
 /** A bérlet hossza: ennyi ideig egy címzett küldése egy feldolgozóé; leállás után ennyi idő múlva folytatható. */
-export const ADVENT_MAIL_LEASE_MS = 10 * 60_000;
+export { ADVENT_MAIL_LEASE_MS };
 
 type MailStore = Pick<AdventStore, "planMail" | "leaseMail" | "finishMail" | "releaseLease" | "markSent">;
 
@@ -174,7 +174,8 @@ type MailStore = Pick<AdventStore, "planMail" | "leaseMail" | "finishMail" | "re
  * A levél elküldése, ha az eredmény végleges (18.1). Tartós kézbesítés (S5/S6 1. vak L1): az első döntéskor rögzül a kézbesítési
  * terv (`want:` — a címzettek lenyomata), utána címzettenként bérlet → küldés (stabil idempotencia-kulccsal) → `final:` rögzítése.
  * Küldési hibánál a bérlet felszabadul (egy késleltetett újrapróba + a takarító pótlása); ha a szolgáltató elfogadta, de a rögzítés
- * elmaradt (leállás), a bérlet lejárta után a pótlás ugyanazzal a kulccsal küld (a szolgáltató deduplikálja). Sosem dob.
+ * elmaradt (leállás), a bérlet lejárta után a pótlás ugyanazzal a kulccsal küld (a szolgáltató deduplikálja) — de csak az első
+ * kísérlettől számított `ADVENT_RESEND_WINDOW_MS`-en belül; utána a címzett `check:` (ellenőrizendő), automatikus levél nem megy. Sosem dob.
  */
 export async function sendAdventResult(input: { store: MailStore; row: AdventRow; phase: AdventPhase; firstName: string | null; nowMs?: number }, retry = true): Promise<{ sent: number; failed: number; skipped?: "dry-run" | "no-recipients" | "no-secret" }> {
   try {
@@ -192,12 +193,15 @@ export async function sendAdventResult(input: { store: MailStore; row: AdventRow
     const { subject, html } = buildAdventResultEmail({ firstName: input.firstName, grade: input.row.grade, season: input.row.season, reason, row: input.row });
     let sent = 0;
     let failed = 0;
+    // Futó óra (Thread 8): a megadott `nowMs`-től (pótlás, tesztek) a valós eltelt idővel halad, így hosszú körben sem avul el a
+    // bérlet ideje, és a befecskendezett időpont (pl. lejárt bérlet, letelt idempotencia-ablak) is érvényesül.
+    const startedAt = Date.now();
+    const clock = () => (input.nowMs ?? startedAt) + (Date.now() - startedAt);
     for (const to of recipients) {
       const hash = hashOf(to);
       if (!planned.has(`want:${hash}`)) continue;
-      // A bérlet a JELENLEGI időpillanathoz kötött (Thread 8): hosszú kézbesítési körben a korábbi `nowMs` elavulttá válna,
-      // és a késői bérletek megszerzésükkor már közel lennének a lejárathoz.
-      if (!(await input.store.leaseMail(input.row.id, hash, Date.now(), ADVENT_MAIL_LEASE_MS))) continue;
+      // A bérlet a futó órához kötött (Thread 8): hosszú kézbesítési körben a késői bérletek sem születnek lejárt időponttal.
+      if (!(await input.store.leaseMail(input.row.id, hash, clock(), ADVENT_MAIL_LEASE_MS))) continue;
       try {
         await send(subject, html, to, adventIdempotencyKey(input.row.id, to));
       } catch (error) {
@@ -210,11 +214,11 @@ export async function sendAdventResult(input: { store: MailStore; row: AdventRow
       // Ha a `markSent` is hibázik (pl. teljes DB-kiesés), a levél elment de nincs DB-bejegyzés — a `failed` számláló nő,
       // és az újrapróba a stabil idempotencia-kulccsal deduplikál a Resend-nél (Thread 2 javítás: a vak küldés `failed`).
       try {
-        await input.store.markSent(input.row.id, hash, Date.now());
+        await input.store.markSent(input.row.id, hash, clock());
       } catch (error) {
         // A levél elment, de nincs sem `sent:`, sem `final:` jelölő: a `finishMail` is hiába próbálkozna (ugyanaz a DB).
-        // A pótlás a Resend 24h-s idempotencia-ablakában ugyanazzal a kulccsal deduplikál; >24h-nál a leaseMail megkapja
-        // a bérletet (nincs sent:/final:), de a Resend már elfelejtette a kulcsot → egy levél még elmehet.
+        // A pótlás az első kísérlettől (`try:`) számított ablakon belül ugyanazzal a kulccsal próbál (a szolgáltató deduplikál);
+        // az ablak letelte után a `leaseMail` nem ad bérletet, a pótlás `check:`-re jelöli (ellenőrizendő, nincs második levél).
         // A `failed` számlálóba kerül: a hívó naplózza, az adminnak a report mutatja (Thread 2 javítás).
         logger.error(`[ADVENT] sent jelölő mentése nem sikerült — a levél elment, de nincs DB-bejegyzés: ${errorClass(error)}`);
         // A bérletet felszabadítjuk, hogy a következő pótlás újra próbálhassa (a Resend 24h-n belül deduplikál).
@@ -251,7 +255,7 @@ type DeliverStore = MailStore & Pick<AdventStore, "mailCandidates" | "recoverSen
  */
 export async function deliverAdventMail(store: DeliverStore, at: { season: number; phase: AdventPhase }, nowMs: number = Date.now()): Promise<number> {
   // Thread 7 javítás: a `sent:` jelölők → `final:` (a szolgáltató már elfogadta, csak a DB-rögzítés maradt el).
-  await recoverSentMail(store);
+  await recoverSentMail(store, nowMs);
   let sent = 0;
   for (const { row, firstName } of await store.mailCandidates(at.season, at.phase === "closed")) {
     sent += (await sendAdventResult({ store, row, phase: at.phase, firstName, nowMs }, false)).sent;
@@ -263,9 +267,9 @@ export async function deliverAdventMail(store: DeliverStore, at: { season: numbe
  * A `sent:` jelölők helyreállítása: a szolgáltató elfogadta a levelet, de a `finishMail` nem sikerült.
  * A `sent:` → `final:` átalakítás (Thread 7 javítás): a levelet NEM küldi újra.
  */
-async function recoverSentMail(store: Pick<AdventStore, "recoverSent">): Promise<number> {
+async function recoverSentMail(store: Pick<AdventStore, "recoverSent">, nowMs: number): Promise<number> {
   try {
-    return await store.recoverSent();
+    return await store.recoverSent(nowMs);
   } catch (error) {
     logger.error(`[ADVENT] sent → final helyreállítás hiba: ${errorClass(error)}`);
     return 0;
