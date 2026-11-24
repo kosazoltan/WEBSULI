@@ -5,9 +5,10 @@ import { SPONSORS } from "@shared/sponsors";
  * Spec 2026-11-03-szponzor-fejlec: vékony, ízléses támogatói sáv a főoldal fejléce alatt — a logó a cég honlapjára visz, új lapon
  * (`rel="sponsored"`). Nincs animáció és külső szkript; a hover-emelés csak `prefers-reduced-motion: no-preference` mellett.
  */
-export default function SponsorBar() {
+export default function SponsorBar({ variant = "bar" }: { variant?: "bar" | "tile" } = {}) {
   return (
-    <aside className="sponsor-bar" aria-label="Támogatóink" data-testid="sponsor-bar">
+    // `tile`: négyzetes csempe a főoldali Hero mellett (tulajdonosi kérés 2026-11-24, #1984) — felirat fölül, a logók egymás alatt.
+    <aside className={variant === "tile" ? "sponsor-bar sponsor-bar--tile" : "sponsor-bar"} aria-label="Támogatóink" data-testid="sponsor-bar">
       <span className="sponsor-bar-label">
         <Heart aria-hidden="true" fill="currentColor" />
         A tananyagkészítést támogatja
