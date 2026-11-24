@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { trackOption } from "@shared/tracks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -144,15 +145,21 @@ function AdminFilesTab({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
 
   const editMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: { title?: string; description?: string; classroom?: number; tracks?: string[] } }) => {
-      // #1986: a csoporttagság külön, admin-végponton (PUT …/tracks); a többi mező a megszokott PATCH-csel. Review #582: előbb a
-      // PATCH (az évfolyam-váltás a csoport feltétele), utána a PUT; részleges siker esetén a hiba megnevezi, mi mentődött.
+      // #1986: a csoporttagság külön, admin-végponton (PUT …/tracks); a többi mező a megszokott PATCH-csel. A sorrend a szerver
+      // évfolyam-feltételéhez igazodik (review #582): ha az új tagság az új évfolyamot kívánja (csoportba tétel), előbb a PATCH;
+      // egyébként (kivétel a csoportból, pl. évfolyamváltás előtt) előbb a PUT. Részleges siker esetén a hiba megnevezi, mi mentődött.
       const { tracks, ...rest } = updates;
-      if (Object.keys(rest).length) await apiRequest("PATCH", `/api/html-files/${id}`, rest);
-      if (tracks) {
-        try { await apiRequest("PUT", `/api/html-files/${id}/tracks`, { tracks }); }
+      const patch = Object.keys(rest).length ? () => apiRequest("PATCH", `/api/html-files/${id}`, rest) : null;
+      const put = tracks ? () => apiRequest("PUT", `/api/html-files/${id}/tracks`, { tracks }) : null;
+      const patchFirst = (tracks ?? []).some((t) => trackOption(t)?.contentGrade === rest.classroom);
+      const steps: Array<[string, () => Promise<unknown>]> = [];
+      if (patch) steps.push(["a többi mező", patch]);
+      if (put) steps[patchFirst ? "push" : "unshift"](["a csoporttagság", put]);
+      for (let i = 0; i < steps.length; i += 1) {
+        try { await steps[i][1](); }
         catch (error) {
-          if (!Object.keys(rest).length) throw error;
-          throw new Error(`A többi mező mentődött, a csoporttagság nem: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+          if (i === 0) throw error;
+          throw new Error(`${steps[0][0][0].toUpperCase()}${steps[0][0].slice(1)} mentődött, ${steps[i][0]} nem: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
         }
       }
       return null;
