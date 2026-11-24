@@ -80,6 +80,9 @@ test('parseFindings: {"verdict":"PASS"} lelet nélkül = üres lista; CONCERNS /
   assert.deepEqual(parseFindings('{"verdict":"PASS"}', 'a.ts'), []);
   assert.equal(parseFindings('{"verdict":"BLOCK"}', 'a.ts'), null, 'csonka BLOCK nem fedheti el a leletet');
   assert.equal(parseFindings('{"verdict":"CONCERNS"}', 'a.ts'), null);
+  // review #581: hibás sémájú (findings helyett finding), de leletet hordozó PASS → a lelet kimentődik, nem üres lista
+  assert.deepEqual(parseFindings('{"verdict":"PASS","finding":[{"line":4,"severity":"high","issue":"guard removed"}]}', 'a.ts'),
+    [{ file: 'a.ts', line: 4, severity: 'high', issue: 'guard removed' }]);
 });
 
 test('alapértelmezett modell: gemma4:26b (E2)', () => {

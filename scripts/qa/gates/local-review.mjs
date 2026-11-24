@@ -93,12 +93,12 @@ export function buildPrompt(chunk) {
 export function parseFindings(content, file) {
   let j;
   try { j = JSON.parse(content); } catch { const m = /\{[\s\S]*\}/.exec(String(content)); try { j = m ? JSON.parse(m[0]) : null; } catch { j = null; } }
-  // Gemma 4: a lelet nélküli PASS `findings` kulcs nélkül is jöhet → üres lista; CONCERNS / BLOCK lelet nélkül csonka (alább null).
-  if (j && j.verdict === 'PASS' && j.findings === undefined) return [];
   if (!j || !Array.isArray(j.findings)) {
     // Csonka (num_predict-tel levágott) válasz: a teljes, önálló lelet-objektumok kimentése.
     const salvaged = [...String(content).matchAll(/\{[^{}]*"issue"\s*:\s*"(?:[^"\\]|\\.)*"[^{}]*\}/g)].map((m) => { try { return JSON.parse(m[0]); } catch { return null; } }).filter(Boolean);
-    if (!salvaged.length) return null;
+    // Gemma 4: a lelet nélküli PASS `findings` kulcs nélkül is jöhet → üres lista — de csak ha a mentés sem talált leletet
+    // (review #581: hibás sémájú, leletet hordozó PASS nem adhat IGEN-t); CONCERNS / BLOCK lelet nélkül csonka → null.
+    if (!salvaged.length) return j && j.verdict === 'PASS' && j.findings === undefined ? [] : null;
     j = { findings: salvaged };
   }
   return j.findings
