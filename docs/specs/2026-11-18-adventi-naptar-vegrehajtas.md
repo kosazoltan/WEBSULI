@@ -609,6 +609,56 @@ Felülírja az S3a útvonalát és az S4 kártya-részét. A `client/src/pages/G
   Teljes kör (válogatás után): `npx.cmd tsx scripts/design-assets/generate.ts --set advent --max 94 --max-usd 7 --ref advent-bg-portrait=advent-bg-portrait/<a kiválasztott fájl>`
 - **S5 / S6:** a levél szabálya a terv 18.1; az évadzáró küldés a takarító része (`closed` fázisban, egyszer).
 
+## Kiegészítés 7 — a kártya megjelenésének döntése, a bekapcsolás lépései, vercel.json (2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 20. szakasz)
+
+### K2 — a kártya az első rajzolás előtt dönt
+
+Fájlok: `source/client/src/advent/season-flag.ts` (új), `source/shared/advent/home-card.ts`, `source/client/src/components/AdventHomeCard.tsx`,
+`source/package.json` (`build:e2e`), `source/tests/support/advent-e2e.ts`, `source/tests/advent-home-card.spec.ts`,
+`source/tests/advent-home-card.test.ts`.
+
+1. `shared/advent/home-card.ts`: tiszta `homeCardClock({ flag, testHooks, hookValue, realNow })` → `Date | null`: kikapcsolt
+   kapcsolónál `null`; teszt-kampós buildben csak érvényes kampó-értéknél ad időt; különben a valódi idő.
+2. `client/src/advent/season-flag.ts`: a két build-idejű kapcsoló (`VITE_ADVENT_CALENDAR === "on"`,
+   `VITE_ENABLE_GAME_TEST_HOOKS === "1"`) és `window.__websuliAdventTestNow` olvasása — a kampót CSAK a teszt-kampós ág olvassa.
+3. `AdventHomeCard.tsx`: `null` idő vagy szezonon kívül → semmi (lekérdezés sem indul). Különben a kártya azonnal a végleges
+   méretén: „Hamarosan” gomb nélkül, egyébként általános szöveg + „Kinyitom”; a `status` csak felülbírál (nem élő → összecsukódik);
+   a helyi „már láttam” jelző megszűnik.
+4. `package.json` `build:e2e`: `VITE_ADVENT_CALENDAR=on`. `tests/support/advent-e2e.ts` `setAdventTime`: a lap betöltése előtt
+   beállítja a kampót is (`addInitScript`); `clearAdventTime` törli.
+5. Tesztek: CLS `layout-shift` megfigyelővel első látogatásra, 360×640 / 390×844 / 1366×768 — a kártya miatti többlet ≤ 0,02
+   (alapvonal: szezonon kívüli betöltés), késleltetett `status` mellett; mutációs ellenpróba (ha a kártya csak a `status` után
+   jelenik meg, a teszt bukik). Tesztidő nélkül (a többi főoldali teszt helyzete): nincs kártya és nincs `/api/advent` kérés.
+   Elállított óra mindkét irányban. Őr-teszt: a kampó olvasása csak a teszt-kampós ágban van.
+
+| Parancs | Várt kimenet |
+|---|---|
+| `node --import tsx --test tests/advent-home-card.test.ts` | `fail 0` |
+| `node --import tsx scripts/run-e2e-tests.ts tests/advent-home-card.spec.ts --workers=1` | minden teszt `passed` |
+| `npm.cmd run build`, majd keresés a `dist/public` alatt a `__websuliAdventTestNow` szóra | 0 találat |
+
+### Bekapcsolás és kikapcsolás lépésről lépésre (az S6 része; TULAJDONOSI teendő az élesítéskor)
+
+A kapcsoló KÉT helyen él. A sorrend számít: ha a Vercel-build előbb kapcsol be, mint a Render, a kártya megjelenik, majd
+összecsukódik, és a gombja „A naptár most nem érhető el” oldalra visz.
+
+Bekapcsolás:
+1. **Render** (a webszolgáltatás — `websuli-api-eu` — „Environment” lapja, vagy a `render.yaml` `envVars` listája az S6 PR-ban):
+   `ADVENT_CALENDAR` = `on` → mentés → a szolgáltatás újraindul. Ellenőrzés: `https://websuli.vip/api/advent/status` → `"enabled": true`.
+2. **Vercel** (a projekt „Settings → Environment Variables” lapja, Production környezet): `VITE_ADVENT_CALENDAR` = `on` → mentés →
+   „Deployments” → a legutóbbi éles telepítés „Redeploy” (a kapcsoló a BUILDBE ég, új build nélkül nem hat).
+   Ellenőrzés: a főoldalon (november 24-től) megjelenik a kártya; `/adventi-naptar` betölt.
+
+Kikapcsolás (fordított sorrend):
+1. **Vercel:** a `VITE_ADVENT_CALENDAR` törlése (vagy `off`) → Redeploy. Ellenőrzés: a főoldalon nincs kártya.
+2. **Render:** `ADVENT_CALENDAR` törlése (vagy `off`). Ellenőrzés: `/api/advent/status` → `"enabled": false`.
+
+### S3c kiegészítése — `source/vercel.json`
+
+A `headers` listába: `{ "source": "/advent/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] }`
+(a képek tartalom-hashes néven állnak); őr-teszt a `tests/vercel-lesson-csp.test.ts` mintájára: a szabály megvan, és a többi
+szabály változatlan. A `server/vite.ts` `/advent` statikus mappája csak a helyi és az e2e-kiszolgálást szolgálja.
+
 ## Kiegészítés 8 — a 2/3 PR vak ellenőri leletei (2026-11-18; terv `docs/specs/2026-11-18-adventi-naptar.md` 21. szakasz)
 
 Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `source/tests/advent-limits.test.ts`, `source/tests/advent-routes-db.integration.ts`.
@@ -686,6 +736,84 @@ Fájlok: `source/server/advent/limits.ts`, `source/server/advent/routes.ts`, `so
 5. L5 — `account-store.exportAccount`: sérült adventi sor `corrupt: true`, számlálók nélkül; az alap-export megy. Teszt (DB, KI / BE).
 6. L6 — az újsor-korlát mutációs ellenpróbája ugyanazzal a 90-es kerettel, a hibás ág túllépését és a foglalás pontosságát méri.
 
+## Kiegészítés 15 — élesítés előtti javítások (2026-11-20; terv `docs/specs/2026-11-18-adventi-naptar.md` 22.)
+
+Ág: `wip/advent-d-elesites-elott` (a 3/3 PR `ebd03a42` fejére halmozva). Minden pont előbb bukó teszttel.
+
+1. L1 — `adoption.ts` `mergeAdoption`: `grade = base.grade ?? ctx.learnerGrade`; a válasz nélküli, más évfolyamú saját terv újraépül; a
+   vendég kérdéssora csak azonos évfolyamnál kerül a tervbe. Teszt: egység + DB (két eszköz, profiljavítás, a 2. ablak kérdése).
+2. L2 — `usePlayer.ts` `clearPlayerCache`: az adventi állapot is törlődik (előtte a függő kérés megszakítva); a lekérdezés a
+   `signal`-t továbbadja. Teszt: egység (QueryClient, késleltetett válasz).
+3. L3 — `routes.ts` `GET /state`: előnézet csak írható fázisban. Teszt: DB (január 7., párosított olvasás a mentett állással).
+4. L4 — `calendar.ts` `adventNow` `nextOpensInMs`; `buildAdventState` továbbadja; `useAdvent.ts` `refreshDelayMs`. Teszt: egység.
+5. L5 — `fetchAdventStatus`: nem sikeres HTTP-válasz hibát dob (a sikeres `enabled: false` ettől különül); a kártya hibánál marad.
+   Teszt: egység (álfetch) + a kártya forrás-őre.
+6. L6 — `AdventAnswerResult.doors`; `applyAnswerResult` (kliens): az összes ablak cseréje. Teszt: DB (két eszköz) + egység.
+
+## Kiegészítés 16 — a 2/3 PR 4. GPT-körének feltételei a D ágon (2026-11-20; terv `docs/specs/2026-11-18-adventi-naptar.md` 22. 7–10.)
+
+1. L1 — ellenőrzés a 2/3 PR jelentésének forgatókönyvével (DB-teszt; a javítás a 15. kiegészítés 1. pontja).
+2. L2 — `store.readPair`; a `GET /state` párosított írható fázisban ezt használja. Teszt: DB.
+3. L3 — `PlanMeta.retired`; `mergeAdoption` gyűjti; `usedInEarlierRounds` és a dedupe kizárja. Teszt: egység (xmas-002 / xmas-003).
+4. L4 — `replacementCandidates`: karácsonyi tárgynál a karácsonyi készlet. Teszt: egység (3. évfolyam, bankos nap).
+5. L5 — `adventRowIsSound`: mind a 24 nap kulcsa, nem üres sorral. Teszt: egység + DB. A korábbi sorőr-tesztek egynapos terve
+   teljes, 24 napos tervre bővült (a szigorúbb szabály miatt; dokumentált fixture-változás).
+
+## 2026-11-21 — a PR-C vak köre (efa4c580) L1–L8
+
+Terv: `docs/specs/2026-11-18-adventi-naptar.md` 22. szakasz, 11–18. pont. Ellenőr-jelentés: NEM, 8 lelet; mind valódinak bizonyult a kódból.
+Új egységteszt-fájl: `source/tests/advent-pr-c-vak.test.ts` (előbb 9/9 bukott, javítás után 9/9 zöld).
+
+- **L1 — javítva:** `usedInEarlierRounds` a próbákból és a `retired` listából számol
+  (`server/advent/adoption.ts`); a `POST /round` a következő kör tervét a körváltással egy tranzakcióban építi és menti, építhetetlen
+  körnél 409 `noMoreQuestions` körváltás nélkül, és az állapot ilyenkor nem ajánl új kört (`server/advent/routes.ts` `nextRoundPlan`,
+  `stateOf`). Teszt: egység (L1 ×2) + DB („PR-C vak L1” ×2). Dokumentált teszt-változás: `tests/advent-limits.test.ts` „két
+  MEGVÁLASZOLT példány …” a korábbi kör MEGMUTATOTT kérdéseit zárja ki (terv 22.11).
+  **Szélső eset — TULAJDONOSI DÖNTÉS 2026-11-21: „Ismétlés a legrégebbiekből”** (terv 22.11): `usedInEarlierRounds` a megmutatott
+  kérdések időrendi listáját is adja (`repeatable`, legrégebbi elöl), a `buildAdventPlan` csak a hiányzó helyekre veszi ezekből az ablak
+  készletébe tartozó, a tervben még nem szereplő elsőket (`shared/advent/assignment.ts`). Előbb bukó tesztek: egység („L1 (tulajdonosi
+  döntés …)”, a korábbi „nem ajánlható fel” teszt helyett — dokumentált döntésváltozás) és DB (a szélső esetben van 2. kör, mind a 24
+  ablak megnyitható, csak a legrégebben látott kérdések ismétlődnek, a többi új).
+- **L2 — javítva:** `AdventState.adoptionPending`, `POST /api/advent/adopt` (CSRF, idempotens), a kliens az összesítés megnyitásakor /
+  végigjátszott körnél ment (`shouldAdopt`, `AdventCalendar.tsx`). Teszt: DB („PR-C vak L2”: GET nem ír, CSRF nélkül 403, átvétel,
+  idempotens ismétlés, másik eszköz és lezárás után is 24/24) + egység (L2). Végpont-leltár: `tests/admin-route-guard.test.ts`.
+- **L3 — javítva:** alany-generáció a kulcsban (`client/src/advent/sync.ts` `adventStateKey`, `watchAdventSubject`,
+  `setAdventStateIfCurrent`; `clearAdventCache` is új generáció), a token-változás jelzése (`lib/learnerProfile.ts`
+  `LEARNER_TOKEN_CHANGED_EVENT`), a fiókoldal a kapcsolat változásakor üríti (`PlayerAccount.tsx`); generációváltáskor a nyitott kérdés
+  bezárul. Teszt: egység (L3).
+- **L4 — javítva:** `nextRefreshAnchor` (a horgony csak új szervermintánál mozdul), `useAdvent.ts`. Teszt: egység (L4) + böngésző
+  („PR-C vak L4”: léptetett óra, válasz éjfél előtt, az 5. ablak újratöltés nélkül nyílik).
+- **L5 — javítva:** `mergeAdoption` más évfolyamnál csak a próbák kérdéseit (történeti helyek) veszi át, a többi hely és a tárgy a
+  tanulóé, a sorrend magja a vendégé. Teszt: egység (L5).
+- **L6 — javítva:** `adventWriteBlocked` + `writeBlocked()` minden író belépőben (nyitás, válasz, évfolyam, új kör, átvétel, automatikus
+  nyitás); az automatikus nyitás szándéka megmarad. Teszt: egység (L6, tiszta segéd + bekötés-őr). A böngészős versenyhelyzet
+  időzített reprodukciója NOT RUN (a lelet is UNVERIFIED-ként adta; az őr szinkron, renderfüggetlen).
+- **L7 — javítva:** `adventStateError` megőrzi a `corrupt` jelzőt; az oldal célzott, felnőtthöz irányító üzenetet ad „Újra” nélkül, és a
+  lekérdezés nem próbálja újra. Teszt: egység (L7) + böngésző („PR-C vak L7”).
+- **L8 — javítva:** `advent-tree-star` a fejlécben, a 24. ablak `solved` állapotát követi, egyszeri 1,2 s-os felfénylés, csökkentett
+  mozgásnál animáció nélkül (`advent.css`). Teszt: egység (L8) + böngésző („PR-C vak L8”: 22/24 mellett is felgyullad, ajándéküzenet
+  nélkül; csökkentett mozgásnál `animation-name: none`).
+
+## 2026-11-21 — a PR-C 2. vak köre (058986b7)
+
+Terv: `docs/specs/2026-11-18-adventi-naptar.md` 22. szakasz, 19–23. pont. Ellenőr-jelentés: NEM (1 blokkoló, 3 közepes, 1 kicsi); mind
+valódinak bizonyult a kódból. Új egységteszt-fájl: `source/tests/advent-pr-c-vak2.test.ts` (előbb 5/5 bukott); böngésző:
+`tests/advent-calendar.spec.ts` „PR-C 2. vak L1–L5” (a javítás előtt 5/5 bukott — az L2 első változata a valódi szerverhez szóló
+késleltetett GET miatt nem reprodukált, ezért rögzített, válasz előtti pillanatképpel fut).
+
+- **L1 (blokkoló) — javítva:** `AdventCalendar.tsx` `isCurrent(started)` minden művelet eredmény / hiba / `finally` ágában;
+  generációváltáskor a busy / nyitás / várakozás / hiba jelző visszaáll; `busy.ts` `retryWhenBusy` `cancelled` opció (nincs újrapróba
+  más nevében). Teszt: egység + böngésző (késleltetett nyitás, 429-várakozás közbeni váltás).
+- **L2 — javítva:** `sync.ts` `applyAdventWrite` (függő olvasás megszakítása, utána friss olvasás); minden írás ezen megy. Teszt: egység
+  (késve feloldott fetch) + böngésző (léptetett óra, éjféli GET a válasz után érkezik). A `tests/advent-pr-c-vak.test.ts` L3 forrás-őre
+  a bekötés új nevére (`applyAdventWrite`) állt át — dokumentált, a szigorúbb út.
+- **L3 — javítva:** `shared/advent/calendar.ts` `refreshInMs` (következő állapotváltás), `contract.ts`, `routes.ts`, `useAdvent.ts`.
+  Teszt: egység (határidők) + böngésző (január 6. → 7. újratöltés nélkül; a javítás szervert érint, DB-kör lefutott).
+- **L4 — javítva:** `pairingRecovered` + a figyelmeztetés generációja (`warnedGeneration`). Teszt: egység + böngésző (új token jelzése után
+  a tiltás és a munkameneti jelző eltűnik).
+- **L5 — javítva:** `advent-hud__name` csonkolható szöveg, a csillag `flex: 0 0 auto`. Teszt: egység + böngésző (360 px: a csillag a
+  címen és a nézeten belül, nincs eltakarva).
+
 ## Állapotnapló
 
 A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló mindig a fájl utolsó szakasza.
@@ -698,6 +826,19 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
 - 2026-11-18 — S2b KÉSZ: `server/advent/clock.ts` (flag, óra), `identity.ts` (alany), `routes.ts` (hat végpont a `/api/advent` alatt, alanyonkénti
   200 / 15 perc, IP 1500 / 15 perc, új névtelen sor 90 / óra — JAVÍTVA 2026-11-18, tulajdonosi döntés, terv 19.; eredetileg 600 és 30), bekötés a `server/routes.ts`-be, játékos-adatletöltés (`adventCalendar`),
   végpont-leltár, `tests/advent-routes-db.integration.ts`, `tests/advent-source-guard.test.ts`; a DB-kör időkorlátja 300 s → 480 s.
+- 2026-11-18 — S3 KÉSZ (az S3a és az S3b EGY szeletben, mert a kérdés-párbeszédablak és az összesítés ugyanazt az oldalt és
+  állapotot használja): `client/src/pages/AdventCalendar.tsx`, `client/src/advent/` (`useAdvent.ts`, `AdventArt.tsx` helyőrzővel,
+  `Snowfall.tsx`, `advent.css`), `shared/advent/art.ts`, `art-manifest.ts` (üres: a képek az S3c-ben jönnek), `home-card.ts`, útvonal
+  `/adventi-naptar` az `App.tsx`-ben, `ADVENT_CALENDAR` az e2e-szerver környezetében; `tests/advent-calendar.spec.ts` (22 böngészős
+  eset, köztük három méretű mobil mérés és az S2b C5 szerződése: `question: null`, `correctIndex: -1`), `tests/advent-calendar-client.test.ts` (8; a 429-es újrapróbával, az asztali nézettel és a független ellenőr leleteinek tesztjeivel: kontraszt, élesítés, lejárt link, megtartott állapot),
+  `tests/support/advent-e2e.ts`. A képgyártó `prompts.json` és a képhelyek azonosító-egyezésének tesztje az S3c-be kerül (ott van együtt a két fájl).
+- 2026-11-18 — S4 KÉSZ: `client/src/components/AdventHomeCard.tsx` a `UserFileList.tsx`-ben a Hero és a támogatói sáv / tananyagok
+  között (üres listánál is); `tests/advent-home-card.spec.ts` (9 böngészős eset; a kártya csak az állapot után jelenik meg — ellenőri lelet F1), `tests/advent-home-card.test.ts` (4). Mért: telefonon 132 px magas kártya, a lista 144 px-lel
+  lejjebb; asztalon 160 px, a lista 172 px-lel lejjebb (terv 14.2 határa: 144 / 172).
+- 2026-11-19 — 3/3 PR vak ellenőr 1. köre (terv `docs/specs/2026-11-18-adventi-naptar.md` 20.): a főoldali kártya és a CSS-e külön, lusta
+  darab (`AdventHomeSlot`; kikapcsolt build-kapcsolónál a lusta import sincs a buildben, a foglalat a kártya méretén áll — CLS);
+  a `/adventi-naptar` útvonal a build-kapcsolóhoz kötött; `?nyit=ma` után a megnyitó a mai ablak (fókusz); a „Tovább” utáni
+  védőidő csak az azonos pontot védi (`client/src/advent/tap-guard.ts`). Előbb bukó tesztek (egység + böngésző).
 - 2026-11-18 — S3c-0 KÉSZ (képgyártó előkészítés és költségvédelmek, hívás nélkül): `scripts/design-assets/generate.ts` (`--set`, `--max`,
   `--max-usd`, `--ref`, száraz futás), `lib.ts` (hívásonkénti és összesített keret, költségkönyv, naplóhiba-őr), `run-lock.ts` (futás-zár),
   `review-page.ts --set`, `design-assets/advent/prompts.json` + `style.md`, `tests/advent-art-pipeline.test.ts`. A fizetős kör a
@@ -709,3 +850,6 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
   jelölteket és a tervet a futás-zár megszerzése UTÁN olvassa újra (`runUnderLock`, `takeSnapshot`) — a másodikként zároló futás nem
   dolgozik elavult pillanatképből (nem költ a plafon fölé, nem gyárt újra kész jelöltet). Előbb bukó teszt: két átfedő futás hamis
   hálózattal (`tests/advent-art-pipeline.test.ts`).
+- 2026-11-20 — 3/3 PR, vak ellenőr 2. kör KÖZEPES-A (fókusz az összesítés után): a szigorított teszt 10-ből 2-szer bukott (Escape után az
+  összesítés nyitva maradt). Javítás: az összesítés a kérdés-ablak TELJES bezárása után nyílik (`onCloseAutoFocus`), a fókusz-visszaadás
+  korlátos időzítő-sorral ismétel (0–200 ms; A31: nincs képkocka-hurok).

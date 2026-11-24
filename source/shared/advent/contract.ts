@@ -57,6 +57,10 @@ export type AdventState = {
   today: string;
   openDay: number;
   nextOpensAt: string | null;
+  /** A következő nyitásig hátralévő idő a szerver órájából (ms), vagy null (élesítés előtti L4). */
+  nextOpensInMs: number | null;
+  /** A következő állapotváltásig (ablaknyitás vagy fázisváltás) hátralévő idő a szerver órájából (ms), vagy null (PR-C 2. vak L3). */
+  refreshInMs: number | null;
   daysUntilStart: number;
   identity: "learner" | "player" | "device" | "preview" | null;
   /** `invalid`: a kérés tanulói tokent hozott, de az érvénytelen — a felület újrapárosítást kér (terv 16.5). */
@@ -70,6 +74,11 @@ export type AdventState = {
   doors: AdventDoorView[];
   summary: AdventSummary;
   closing: AdventClosing;
+  /**
+   * Párosított eszközön a nézet egy még NEM mentett átvétel előnézete (a vendégsor még létezik). A kliens a megtekintési útról
+   * (összesítés, végigjátszott kör) a `POST /adopt` kéréssel menti el (PR-C vak L2); a GET mellékhatás nélkül marad.
+   */
+  adoptionPending: boolean;
 };
 
 export type AdventOpenResult = {
@@ -85,7 +94,16 @@ export type AdventAnswerResult = {
   /** A helyes válasz indexe a kliensnek adott (kevert) sorrendben; -1, ha a kérdés már nem érhető el. */
   correctIndex: number;
   explanation: string;
+  /** A rögzített próba választása a kliensnek adott sorrendben (a saját válasz jelöléséhez). */
+  pick: number;
+  /**
+   * `false`: ez a kérdés már korábban meg volt válaszolva (másik lap / eszköz / újraküldés) — a TÁROLT eredmény jön vissza, a
+   * mostani választás nem számít. A felület ilyenkor ezt mondja ki, nem a mostani koppintást minősíti.
+   */
+  recorded: boolean;
   door: AdventDoorView;
+  /** A teljes, a válasszal azonos állapotú ablaklista (élesítés előtti L6: két eszköz, egy tanuló). */
+  doors: AdventDoorView[];
   summary: AdventSummary;
   closing: AdventClosing;
 };

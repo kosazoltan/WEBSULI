@@ -95,6 +95,78 @@ képcsere), #155 (S5, S6, S8), #156 (ágak rebase-e a friss mainre push előtt).
 - **Felülírt szám a terv eredeti helyén (U3):** a tulajdonosi döntés először csak új szakaszba került. **Tanulság:** felülírt
   értéket a HELYÉN kell jelölni (dátum + hivatkozás), nem csak a döntési szakaszban.
 
+## 8. Kiegészítés — felület (S3, S4) és a kibocsátás átszervezése (2026-11-18)
+
+- **Szelet tesztje a következő szelet fájlját olvasta.** Az S3 ág `gate:push` futása megfogta: a tiszta logika tesztje az S4
+  kártyafájlját és a képgyártó ág `prompts.json` fájlját is olvasta. Ár: egy kapufutás (~7 perc) és a két ág újraépítése.
+  **Javítás:** a teszt kettévált (`source/tests/advent-calendar-client.test.ts`, `source/tests/advent-home-card.test.ts`); a
+  készlet-leíró egyezésének tesztje az S3c-be kerül (kanban #161). **Tanulság:** szelet-ágon a kaput a SZELET fáján kell futtatni,
+  nem az integrációs ágon — ott minden fájl megvan, és a hiány nem látszik.
+- **Félig áttűnt képernyőkép és mérés.** A 300 ms-os megnyíló animáció közben készült kép alig látszott, a méret-mérés pedig a
+  kicsinyített gombot mérte (46 px a 48 helyett). **Javítás:** `source/tests/support/advent-e2e.ts` `settle()` — a véges animációk
+  végét megvárja mérés és kép előtt.
+- **`aria-disabled` gomb és a Playwright.** A zárt ablak koppintása a „engedélyezett” várakozáson akadt el. **Javítás:** a tesztben
+  `tap({ force: true })` — a gyerek valóban rákoppinthat, a felület ilyenkor megmondja, mikor nyílik.
+- **E2E, Secure süti és az Origin.** Az `X-Forwarded-Proto: https` minden kérésre téve a lapot is elrontotta; csak az API-kérésekre
+  téve az Origin-ellenőrzés bukott. **Javítás:** `proxyHeaders()` — csak a teszt API-kérésein, https-re igazított Originnel (a bevett
+  minta szerint). Ár: három teljes böngészős futás (~8 perc).
+- **429 a gyereknek (M1).** A betelt keret nyers üzenete helyett rövid várakozás, egy automatikus újrapróba és barátságos szöveg:
+  `source/client/src/advent/busy.ts`, egység- és böngészőteszttel.
+- **Hét egymásra épülő ág helyett három PR.** A CI böngészős köre ~90 perc, a squash-merge minden ráépülő ágon ütközést okoz.
+  **Javítás:** a három ág a friss főágról épült fel fájlkészletek szerint, a tartalmi egyezést `git diff` igazolja. **Tanulság:**
+  hosszú CI mellett a szeleteket eleve 2–3 PR-ra érdemes tervezni, a kis szelet a commit, nem a PR.
+- Kanban: #161 (készlet-leíró egyezésének tesztje az S3c-ben), #162 (az eltűnt kérdés és a zárt ablak üzenete látható is legyen).
+
+## 9. Kiegészítés — a felület független ellenőrzése (S3: NEM, S4: IGEN, FELTÉTELLEL; 2026-11-18)
+
+- **Blokkoló, amelyet a fejlesztő a saját képernyőképein nem vett észre (B1).** A naptár színváltozói csak a `.advent-page`
+  elemen éltek, a párbeszédablakok viszont portálban, a `<body>` alatt jelennek meg: a fő gombok sötét szöveggel a sötét lapon
+  álltak, az arany keret, a cím és az ajándék-üzenet színe elveszett, a fókuszkeret eltűnt. A hiba a leadott képeken látszott;
+  a fejlesztő a képeket megnézte, de csak azt ellenőrizte, hogy a tartalom megjelenik-e. Ár: egy NEM ítélet, egy teljes
+  ellenőri kör, és a tulajdonos öt hibás állapotú képet kapott. **Javítás ebben a futásban:**
+  `source/client/src/advent/advent.css` (a változók a párbeszédablak gyökerén is), `source/tests/support/advent-e2e.ts`
+  `contrastOf()` és a `source/tests/advent-calendar.spec.ts` kontrasztesete (számított színekből: gombok és üzenet ≥ 4,5:1, arany
+  keret, látható fókuszkeret), mutációs ellenpróbával; forrás-őr a `source/tests/advent-calendar-client.test.ts`-ben.
+  **Tanulság:** portálban megjelenő felületnél (párbeszédablak, menü) a színt és a kontrasztot SZÁMÍTOTT értékből kell mérni; a
+  képernyőképet a fejlesztő a tulajdonos szemével nézze végig (látszik-e a fő gomb?), mielőtt továbbadja.
+- **Véletlen válasz (K1).** A válaszgombok azonnal éltek, a fókusz az első válaszon állt. **Javítás:** 400 ms élesítés, a fókusz
+  a kérdésen, `aria-describedby` — `source/client/src/pages/AdventCalendar.tsx`, böngészőteszttel.
+- **Lejárt tanulói link (K2).** A token törlése és a naptár állapot-lekérdezése versenyzett, a naptár csendben vendégként
+  indulhatott. **Javítás:** a token elutasítását a forrásnál jelöljük (`source/client/src/lib/learnerProfile.ts`), a naptár a
+  jelző alapján a gyerek döntéséig nem ír; böngészőteszt valódi, a szerver által elutasított tokennel.
+- **Visszatérő gyerek és az eredmény (K3, F2).** A végigjátszott naptárnál az üzenet a rács fölött állandóan látszik; a főoldali
+  „Megnézem” az összesítést nyitja.
+- **Átmeneti hiba és olvasási keret (K4).** Megtartott állapot mellett a hiba csak sáv; a válasz után nincs külön olvasás (az
+  eredményből frissül az állapot). Az olvasási keret tulajdonosi döntésre 400 / perc / IP lett (a 2/3 PR-ban).
+- **Kártya kikapcsolt naptárnál (F1).** Előbb az állapot, utána a megjelenítés: kikapcsolt naptárnál a kártya egy pillanatra sem
+  kerül a lapra; a helyet csak a visszatérő látogatónál foglaljuk előre. **Ára:** az évad első látogatásakor a kártya a státusz
+  megérkezésekor jelenik meg, és a lista EGYSZER lejjebb csúszik (144 / 172 px) — ez tudatos csere a felvillanás ellen.
+- **Teszt-előkészítés tévedése:** 23 megoldott ablak már megfelel (95%), ezért a „javítható” állapothoz KÉT hibás ablak kell —
+  a kontrasztteszt első változata emiatt bukott. A 95%-os határ a tesztadatnál is számít.
+- **Heredoc-csapda harmadszor:** a visszaperjel a sablonszövegben elveszett (`\d` → `d`), az egységteszt fogta meg. **Szabály:** a
+  generáló szkript fájlba íródik (nem heredocba), reguláris kifejezést tartalmazó szöveg `String.raw`-val.
+
+## 10. Kiegészítés — a vak, hibakereső ellenőr 1. köre a felületen (IGEN, FELTÉTELLEL; 2026-11-18)
+
+- **Mi ment rosszul:** a hibaszöveg-szűrés csak a 429-et kezelte, minden más hiba nyers szerverszövege (proxy-HTML, angol
+  „Internal Server Error”, JSON) a gyerek elé került (K1). A saját tesztjeim csak a naptár saját magyar 4xx üzeneteivel futottak,
+  a „hibás” válaszokat soha nem hamisítottam meg. **Javítás:** `source/client/src/advent/busy.ts` (`adventErrorText`: csak a naptár
+  saját 400 / 403 / 409 mondata megy ki), `source/tests/advent-robustness.spec.ts` (502 HTML, 403 JSON, 500 angol, üres törzs).
+  **Tanulság:** gyerekeknek szóló felületnél a hibautakat elfogott 5xx / nem JSON válaszokkal is ki kell próbálni.
+- **Feltételezett kiszolgálási út (K2):** a főoldali kártya helyfoglalására először szerveroldali HTML-sablonozást javasoltam,
+  és csak a koordinátor kérésére néztem meg, hogy élesben a HTML-t a Vercel statikus buildje adja (`source/vercel.json`,
+  `curl -sI https://websuli.vip/`: `Server: Vercel`, `X-Vercel-Cache: HIT`). Ár: egy fölösleges terv-kör. **Javítás:** a döntés a
+  buildbe égetett `VITE_ADVENT_CALENDAR` kapcsolóból és a böngésző órájából születik
+  (`source/client/src/advent/season-flag.ts`, `source/shared/advent/home-card.ts` `homeCardClock`); e2e-ben csak beadott tesztidővel.
+  **Tanulság:** kiszolgálási útra (ki adja a HTML-t, mi a gyorsítótár) építő javaslat ELŐTT a telepítési beállítást és az éles
+  fejléceket kell megnézni.
+- **Az évfolyam egy koppintásra rögzült (K3), az ablakképek helye nem illett a képhez (K4), lassú hálózaton nem volt jelzés (K5).**
+  Mindegyiket előbb bukó böngészőteszt reprodukálta a régi kódon (14 bukásból 12 a lelet miatt; 2 saját teszthiba volt: a kétlapos
+  eset a háttérlap animáció-szüneteltetése miatt akadt el, a tanulói esetnél rossz nevet vártam).
+- **DB-kör időtúllépése terhelt gépen:** a PR-B beolvasztás utáni fején a DB-kör 480 s után megállt (159 / 230 teszt kész,
+  közben több idegen tesztkonténer futott). A korlátot NEM emeltem; az újrafutás nyugodt gépen történik.
+- Kanban: a bejelentkezett játékos böngészős tesztje NOT RUN (a `PLAYER_ACCOUNTS` az e2e-szerveren kikapcsolt).
+
 ## 11. Kiegészítés — a 2/3 PR vak, hibakereső ellenőrzése (IGEN, FELTÉTELLEL; 2026-11-18)
 
 - **Mi ment rosszul:** a hálózati (IP-) keretek a bemenet-ellenőrzés ELŐTT számoltak, ezért 1500 érvénytelen kérés 5,4 mp alatt 15
