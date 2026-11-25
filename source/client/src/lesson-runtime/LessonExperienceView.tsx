@@ -9,6 +9,7 @@ import { ClipPlayAllButton } from "./clips/ClipContext";
 import { useExperienceRound } from "./useExperienceRound";
 import { useResultReport } from "./resultReport";
 import { ResultAwaitingNotice, useResultAwaiting } from "./resultAwaiting";
+import { StreakBand, streakBadgeEnabled, useLessonStreak } from "./streakBadge";
 import { LearningMode, LearningPager, useLearningPreference } from "./LearningControls";
 import "./lesson-experience.css";
 import { PracticeAccess } from "./SavedLessonQuiz";
@@ -91,6 +92,9 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   // U4d: az összevont eredménylevél a másik részre vár — figyelmeztetés a lecke tetején és a kész rész alatt.
   const awaiting = useResultAwaiting(lessonId);
   const quizPoints = quiz.filter(q => quizState.round.picks[q.id] === q.correctIndex).length;
+  // V5c (docs/specs/2026-11-25-v5c-sorozatjelveny.md): sorozatjelvény a kvíz végén — csak kapcsolóval, csak megjelenítés.
+  const quizDone = !!quizState.round.finishedAt || (quiz.length > 0 && quiz.every(q => quizState.round.picks[q.id] !== undefined));
+  const streak = useLessonStreak(streakBadgeEnabled(), quizDone, lessonId ?? storageKey, `${storageKey}|${quizState.round.startedAt}|${quizState.round.ids.join(",")}`, quiz.length ? Math.round((quizPoints / quiz.length) * 100) : 0);
   // Fülváltáskor és a lecke elhagyásakor minden hang leáll — a tartalék MP3 és az indulási őr is (spec 2026-11-10-hibavadaszat A1).
   useEffect(() => () => { stopSpeech(); }, [tab]);
   // S8d: nyelvleckénél a szószedet hangjai a lecke megnyitásakor a háttérben előtöltődnek (egy jegyzék-kérés, korlátozott párhuzamosság);
@@ -175,6 +179,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
         const element = question && quizElements.current.get(question.id);
         element?.scrollIntoView({ block: "center" }); element?.focus({ preventScroll: true });
       }} onFinish={() => quizState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Kvíz kiértékelése</FinishPracticeButton> : <Result title="Kvíz" points={quizPoints} total={quiz.length} seconds={seconds(quizState.round)} answers={quiz.map(q => ({ question: q.question, pickedIndex: quizState.round.picks[q.id] ?? null, correctIndex: q.correctIndex }))} />}
+      {streak && <StreakBand view={streak} />}
       </PracticeAccess>
       {awaiting === "tasks" && <ResultAwaitingNotice awaiting={awaiting} onGo={changeTab} />}
     </div>
