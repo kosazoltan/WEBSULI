@@ -11,5 +11,22 @@ Terv: `docs/specs/2026-11-25-d1h-kivagott-kep.md`.
    `migrations/0049_lesson_source_images.sql` + `shared/schema.ts`, `server/source-images.ts` (tárolás + végpont), kliens megjelenítő.
 3. Próbahiba commit után; kapulánc; PR.
 
-## D1H-2 … D1H-4
-A D1H-1 beolvadása után, ugyanebben a fájlban részletezve.
+## D1H-1 — kész (#594, 8a83c4c3)
+
+## D1H-2 — fénykép / nehezen rajzolható ábra kivágása KÉP forrásból
+1. RED: `source/tests/source-image-crops.test.ts`:
+   - leltár: a `photo` fajta (`data.depicts`) és a nem kötelező `crop` ({x, y, w, h}, 0–1 arányok; hibás alak → a keret elmarad,
+     a tétel marad); a leltár-szerződés kimondja a `photo`-t és a `crop`-ot; a rajzoló promptok leltára a `photo` tételt nem kapja;
+   - `placeSourceImages`: képfájlból a keret szerinti rész kivágva (WEBP, ≤ 1600 px), a tárba téve, a `sourceImage` blokk a
+     fogalmakat tanító fejezetbe kerül `sourceVisualId`-val; forrásmegjelölés: webes forrásnál a W1b fejlécéből (URL + cím), feltöltöttnél
+     a fájlnév; keret nélküli tétel, PDF-forrás (D1H-3) és a már megrajzolt ábra kimarad; legfeljebb 6 kép; a lecke sémája érvényes;
+   - `dropUnknownSourceImages`: a tárban nem létező azonosítójú `sourceImage` blokk eldobva (a modell által kitalált azonosító);
+   - forrásfedettség: a `photo` és a `diagram` tétel a rá hivatkozó `sourceImage` blokkal „megjelent”;
+   - kapcsoló: `STUDIO_SOURCE_IMAGES` csak pontos `on`-ra BE.
+2. GREEN: `shared/source-visuals.ts`, `server/studio/source-image-crops.ts`, `server/source-images.ts` (létező azonosítók),
+   `server/studio/step-io.ts` (prompt-leltár), `server/studio/gates/source-coverage-gate.ts`, `server/studio/single-run/engine.ts`
+   (az ábra-forduló után, kapcsoló + forrásvizuál BE mellett), `server/studio/pipeline-store.ts` (mentési határ).
+3. Próbahiba commit után; kapulánc; PR.
+
+## D1H-3 … D1H-4
+A D1H-2 beolvadása után, ugyanebben a fájlban részletezve.
