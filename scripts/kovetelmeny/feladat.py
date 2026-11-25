@@ -279,8 +279,14 @@ def set_status(c, code: str, new: str, *, actor: str = "kezi", evidence=None, fo
     if new not in STATUSES:
         raise AllapotHiba(f"ismeretlen állapot: {new} (lehetséges: {', '.join(STATUSES)})")
     old = t["status"]
-    if old == new:
-        return False
+    if old == new:  # nincs átmenet, de az explicit blokkoló-módosítás (új szöveg vagy "" = törlés) érvényes
+        nb = m(blocker) if blocker is not None else t["blocker"]
+        if nb == t["blocker"]:
+            return False
+        c.execute("UPDATE tasks SET blocker=?, updated_at=? WHERE id=?", (nb, now(), t["id"]))
+        add_event(c, code, "blokkolo", f"blokkoló: {nb or '—'}", actor=actor, evidence=evidence, at=at)
+        fts_refresh(c, t["id"])
+        return True
     if not can_transition(old, new):
         if not force:
             raise AllapotHiba(f"{code}: tiltott átmenet {old} → {new}" + (" (lezárt: --force --indok)" if old in LEZART else ""))
@@ -704,7 +710,10 @@ def sync_requirements(c) -> dict:
         rep["uj"] += 1
         rep["valtozas"] += 1
     by = {r["code"]: r for r in reqs}
-    for t in _rows(c.execute("SELECT code,status,requirement_code FROM tasks WHERE origin LIKE 'kovetelmeny:%'")):
+    # csak a kézzel NEM érintett, nem blokkolt, követelményből képzett feladat követi a követelményt (spec D6, 4. pont):
+    # a kézi újranyitás / blokkolás (status_source='kezi', status='blokkolt') felülbírálja a követelmény-DB állapotát
+    for t in _rows(c.execute("SELECT code,status,requirement_code FROM tasks WHERE origin LIKE 'kovetelmeny:%' "
+                             "AND status_source IN ('kovetelmeny','szinkron') AND status <> 'blokkolt'")):
         r = by.get(t["requirement_code"])
         if not r or t["status"] in LEZART:
             continue
@@ -854,10 +863,14 @@ def sync_gh(c, gh_prs, gh_threads, rep: dict) -> list[dict]:
                 if "gh-szalak" not in rep["nem_elerheto"]:
                     rep["nem_elerheto"].append("gh-szalak")
         for code in sorted(codes):
+            prev = c.execute("SELECT l.state FROM task_links l JOIN tasks t ON t.id=l.task_id WHERE t.code=? AND l.kind='pr' "
+                             "AND l.ref=?", (code, n)).fetchone()
             ch = link(c, code, "pr", n, state=st, extra=extra)
             if st == "OPEN":
                 ch |= _advance(c, code, "review", evidence=f"PR #{n} nyitott")
-            elif st == "MERGED":
+            elif st == "MERGED" and not (prev and prev[0] == "MERGED"):
+                # csak a merge ÉSZLELÉSEKOR léptet; a már ismert, régi merge történeti bizonyíték — egy regresszió miatt
+                # kézzel újranyitott feladatot nem állít vissza beolvadt-ra
                 ch |= _advance(c, code, "beolvadt", evidence=f"PR #{n} beolvadt ({(merge or '?')[:12]})")
                 if merge:
                     ch |= link(c, code, "commit", merge, state="main")  # extra: a git-ág tölti (dátum, tárgy)
