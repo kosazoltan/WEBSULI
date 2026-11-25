@@ -10,12 +10,12 @@ import type { SourceVisual } from "../shared/source-visuals";
 /** D1H-3 (docs/specs/2026-11-25-d1h-kivagott-kep-vegrehajtas.md): kivágás PDF-oldalból. */
 
 /** Kétoldalas, 400×300 pt-os PDF: az 1. oldal jobb fele kék téglalap, a 2. oldal bal fele piros. */
-function pdf(): Buffer {
+function pdf(w = 400, h = 300): Buffer {
   const content = (op: string) => `<< /Length ${op.length} >>\nstream\n${op}\nendstream`;
   const objs = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Contents 4 0 R >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Contents 4 0 R >>`,
     content("0 0 1 rg 200 0 200 300 re f"),
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Contents 6 0 R >>",
     content("1 0 0 rg 0 0 200 300 re f"),
@@ -58,4 +58,12 @@ test("placeSourceImages PDF-forrásból: a keret szerinti rész a megadott oldal
   assert.ok(dominant.r > 150 && dominant.b < 80, "a 2. oldal bal (piros) fele");
   assert.equal(stored[0].meta.page, 2);
   assert.match(String(stored[0].meta.credit), /Feltöltött forrás: tankonyv\.pdf/);
+});
+
+test("review #597: a 2400 pt-nál nagyobb oldal is a plafonon belül (kicsinyítve); az octet-stream fejlécű PDF is elfogadott", async () => {
+  const png = await renderPdfPage(dataUrl(pdf(4000, 3000)), 1);
+  const meta = await sharp(png).metadata();
+  assert.ok(Math.max(meta.width ?? 0, meta.height ?? 0) <= PDF_RENDER_MAX_EDGE, `${meta.width}×${meta.height}`);
+  const octet = `data:application/octet-stream;base64,${pdf().toString("base64")}`;
+  assert.equal((await sharp(await renderPdfPage(octet, 1)).metadata()).format, "png");
 });

@@ -22,7 +22,8 @@ function standardFontDataUrl(): string {
 
 export async function renderPdfPage(dataUrl: string, page: number): Promise<Buffer> {
   const comma = dataUrl.indexOf(",");
-  if (!dataUrl.startsWith("data:application/pdf;base64,") || comma < 0) throw new Error("nem PDF adat-URL");
+  // Review #597: a PDF-előkészítéssel azonosan bármely base64 adat-URL fejléc (pl. application/octet-stream) — a tartalmat a pdfjs ellenőrzi.
+  if (!/^data:[^;,]*;base64,/.test(dataUrl) || comma < 0) throw new Error("nem base64 adat-URL");
   const bytes = Buffer.from(dataUrl.slice(comma + 1), "base64");
   if (bytes.length > PDF_MAX_BYTES) throw new Error("a PDF túl nagy a raszterizáláshoz");
   const canvasModule = await import("@napi-rs/canvas");
@@ -43,7 +44,8 @@ export async function renderPdfPage(dataUrl: string, page: number): Promise<Buff
     if (!Number.isInteger(page) || page < 1 || page > doc.numPages) throw new Error(`nem létező oldal: ${page} (a PDF ${doc.numPages} oldalas)`);
     const p = await doc.getPage(page);
     const base = p.getViewport({ scale: 1 });
-    const scale = Math.max(1, Math.min(4, PDF_RENDER_MAX_EDGE / Math.max(base.width, base.height)));
+    // Review #597: a plafon kötelező — a nagy oldal 1 alatti skálával KICSINYÜL (a vászon sosem nagyobb 2400 px-nél).
+    const scale = Math.min(4, PDF_RENDER_MAX_EDGE / Math.max(base.width, base.height, 1));
     const viewport = p.getViewport({ scale });
     const target = factory.create(Math.floor(viewport.width), Math.floor(viewport.height));
     await p.render({ canvasContext: target.context, viewport, canvasFactory: factory } as never).promise;
