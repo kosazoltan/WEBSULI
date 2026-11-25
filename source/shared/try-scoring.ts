@@ -105,6 +105,17 @@ export function scoreEstimate(spec: unknown, value: number | null | undefined): 
   return score(rel <= 0.05 + 1e-9 ? 2 : rel <= 0.15 + 1e-9 ? 1 : 0, 2);
 }
 
+/**
+ * Review #609/#615/#617: a csúszka csak a `min + k·step` (≤ max) értékeket engedi — elérhető-e így teljes pontot érő válasz?
+ * A célhoz legközelebbi két rácspontot vizsgálja (a pontozás a céltól mért távolság monoton függvénye).
+ */
+export function sliderHasFullScore(min: number, max: number, step: number, target: number, full: (v: number) => boolean): boolean {
+  if (!(step > 0) || !(min < max) || !Number.isFinite(target)) return false;
+  const last = Math.floor((max - min) / step + 1e-9);
+  const k = Math.floor((target - min) / step + 1e-9);
+  return [k, k + 1].map((x) => min + Math.min(last, Math.max(0, x)) * step).some(full);
+}
+
 /** A séma (írás) szabályai fajtánként — üres lista: érvényes. Ismeretlen fajtára üres (azt a `tryKind` enum szűri). */
 export function trySpecProblems(kind: string, spec: unknown): string[] {
   const p: string[] = [];
@@ -128,11 +139,15 @@ export function trySpecProblems(kind: string, spec: unknown): string[] {
     if (num(s.min) === undefined || num(s.max) === undefined || n.min >= n.max) p.push("A számegyenesnek min < max kell.");
     if (!Number.isFinite(n.target) || n.target < n.min || n.target > n.max) p.push("A cél a számegyenesen belül legyen.");
     if (!(n.tolerance > 0) || n.tolerance > (n.max - n.min) / 4) p.push("A tűrés pozitív, és legfeljebb a tartomány negyede.");
+    else if (p.length === 0 && !sliderHasFullScore(n.min, n.max, n.step, n.target, (v) => scoreNumberLine(spec, v).verdict === "teljes"))
+      p.push("A csúszka lépésközével nem érhető el teljes pontot érő érték — a lépésköz legfeljebb a tűrés kétszerese legyen, és a cél essen rácspont közelébe.");
   } else if (kind === "estimate") {
     const e = readEstimate(spec);
     const s = (spec ?? {}) as Record<string, unknown>;
     if (num(s.min) === undefined || num(s.max) === undefined || e.min >= e.max) p.push("A becslésnek min < max kell.");
     if (!Number.isFinite(e.answer) || e.answer < e.min || e.answer > e.max) p.push("A helyes érték a csúszka tartományán belül legyen.");
+    else if (p.length === 0 && !sliderHasFullScore(e.min, e.max, e.step, e.answer, (v) => scoreEstimate(spec, v).verdict === "teljes"))
+      p.push("A csúszka lépésközével nem érhető el teljes pontot érő becslés (±5%) — kisebb lépésköz vagy más helyes érték kell.");
   }
   return p;
 }

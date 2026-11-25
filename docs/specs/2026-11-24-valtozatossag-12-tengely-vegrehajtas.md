@@ -130,3 +130,10 @@ Fajták és DOKUMENTÁLT pontozás (`shared/try-scoring.ts`, determinisztikus):
 2. GREEN: `shared/try-scoring.ts`, `shared/lesson-schema.ts`, `client/src/lesson-runtime/blocks/try-blocks.tsx`,
    `client/src/lesson-runtime/useLessonProgress.ts`, `shared/lesson-block-label.ts`, `server/studio/grounding.ts`, `server/studio/step-io.ts`.
 3. Próbahiba, kapulánc, PR.
+
+### V2a — review #615 / #609 / #617 (2026-11-25)
+- **Megoldhatatlan csúszka:** a séma (`trySpecProblems`) a számegyenesnél és a becslésnél is ellenőrzi, hogy a `min + k·step` rácson (≤ max) van-e teljes pontot érő érték (`sliderHasFullScore`, a célhoz legközelebbi két rácspont); ha nincs, elutasít.
+- **Célszám:** a prompt nélküli számegyenes alaputasítása kiírja a célszámot; ha a prompt nem tartalmazza, zárójelben hozzáfűződik.
+- **Rádiócsoport:** `RadioRow` — egy Tab-megálló (kijelölt / első), a nyilak léptetnek és választanak; az igaz/hamis és a kategorizálás ezt használja (a V3a döntési kártyái is).
+- **Bővült feladat mentése:** az igaz/hamis és a kategorizálás mentése csak egyező elemszámnál áll vissza; eltérésnél az állapot (válaszok + ellenőrzött) újraindul.
+- Tesztek: `try-scoring.test.ts` (megoldhatatlan/megoldható esetek), `lesson-try-v2.spec.ts` (+3 böngészős teszt); RED `d202fa52`. Teljes egységteszt 4729/0, e2e 5 passed.

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { CheckCircle2, CircleDot, RotateCcw, XCircle } from "lucide-react";
 
 import {
@@ -41,13 +41,45 @@ function Empty({ kind }: { kind: string }) {
   return <div className="text-sm text-muted-foreground border rounded-lg p-4" data-try={kind}>Ehhez a gyakorlathoz nincs megadott elem.</div>;
 }
 
-function Choice({ label, checked, onSelect }: { label: string; checked: boolean; onSelect: () => void }) {
+/**
+ * Review #609/#617: valódi rádiócsoport-kezelés — egyetlen Tab-megálló (a kijelölt, ennek hiányában az első opció), a nyilak a
+ * csoporton belül léptetnek ÉS választanak (WAI-ARIA radio group). A V3a döntési kártyái is ezt használják.
+ */
+export function RadioRow<T>({ label, options, value, onSelect, optionLabel, className }: {
+  label: string; options: readonly T[]; value: T | null | undefined; onSelect: (v: T) => void; optionLabel: (v: T) => string; className?: string;
+}) {
+  const selected = options.findIndex((o) => o === value);
+  const stop = selected >= 0 ? selected : 0;
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const delta = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!delta || !options.length) return;
+    e.preventDefault();
+    const from = selected >= 0 ? selected : stop;
+    const next = (from + delta + options.length) % options.length;
+    onSelect(options[next]);
+    (e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next])?.focus();
+  };
   return (
-    <button type="button" role="radio" aria-checked={checked} onClick={onSelect}
+    <div role="radiogroup" aria-label={label} className={cn("flex gap-2", className)} onKeyDown={onKeyDown}>
+      {options.map((o, i) => (
+        <Choice key={optionLabel(o)} label={optionLabel(o)} checked={i === selected} tabIndex={i === stop ? 0 : -1} onSelect={() => onSelect(o)} />
+      ))}
+    </div>
+  );
+}
+
+function Choice({ label, checked, onSelect, tabIndex }: { label: string; checked: boolean; onSelect: () => void; tabIndex: number }) {
+  return (
+    <button type="button" role="radio" aria-checked={checked} tabIndex={tabIndex} onClick={onSelect}
       className={cn("min-h-11 px-3 rounded-md border text-sm", checked ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 hover:bg-muted")}>
       {label}
     </button>
   );
+}
+
+/** Review #609/#617: a mentés csak akkor áll vissza, ha az elemszám egyezik (egy javítás bővíthette a feladatot ugyanazzal a leckeazonosítóval). */
+function sameLength<T>(saved: T[] | undefined, n: number): saved is T[] {
+  return Array.isArray(saved) && saved.length === n;
 }
 
 function Shell({ kind, title, children }: { kind: string; title?: string; children: ReactNode }) {
@@ -56,7 +88,7 @@ function Shell({ kind, title, children }: { kind: string; title?: string; childr
 
 export function TrueFalseSeries({ spec, persisted, onPersist }: TryProps) {
   const { statements } = readTrueFalse(spec);
-  const restored = persisted?.kind === "trueFalseSeries" ? persisted : null;
+  const restored = persisted?.kind === "trueFalseSeries" && sameLength(persisted.answers, statements.length) ? persisted : null;
   const [answers, setAnswers] = useState<Array<boolean | null>>(() => restored?.answers ?? statements.map(() => null));
   const [checked, setChecked] = useState(() => restored?.checked ?? false);
   if (!statements.length) return <Empty kind="trueFalseSeries" />;
@@ -68,11 +100,8 @@ export function TrueFalseSeries({ spec, persisted, onPersist }: TryProps) {
         {statements.map((s, i) => (
           <li key={i} className="flex flex-wrap items-center gap-2">
             <span className="flex-1 min-w-[12rem] text-sm">{s.text}</span>
-            <div role="radiogroup" aria-label={s.text} className="flex gap-2">
-              {([true, false] as const).map((v) => (
-                <Choice key={String(v)} label={v ? "Igaz" : "Hamis"} checked={answers[i] === v} onSelect={() => save(answers.map((a, j) => (j === i ? v : a)), false)} />
-              ))}
-            </div>
+            <RadioRow label={s.text} options={[true, false] as const} value={answers[i]} optionLabel={(v) => (v ? "Igaz" : "Hamis")}
+              onSelect={(v) => save(answers.map((a, j) => (j === i ? v : a)), false)} />
             {checked && s.explanation && answers[i] !== s.answer && <span className="w-full text-xs text-muted-foreground">{s.explanation}</span>}
           </li>
         ))}
@@ -118,7 +147,7 @@ export function Highlight({ spec, persisted, onPersist }: TryProps) {
 
 export function Categorize({ spec, persisted, onPersist }: TryProps) {
   const c = readCategorize(spec);
-  const restored = persisted?.kind === "categorize" ? persisted : null;
+  const restored = persisted?.kind === "categorize" && sameLength(persisted.picks, c.items.length) ? persisted : null;
   const [picks, setPicks] = useState<Array<string | null>>(() => restored?.picks ?? c.items.map(() => null));
   const [checked, setChecked] = useState(() => restored?.checked ?? false);
   if (c.categories.length < 2 || !c.items.length) return <Empty kind="categorize" />;
@@ -130,9 +159,8 @@ export function Categorize({ spec, persisted, onPersist }: TryProps) {
         {c.items.map((it, i) => (
           <li key={i} className="flex flex-wrap items-center gap-2">
             <span className="flex-1 min-w-[8rem] text-sm font-medium">{it.text}</span>
-            <div role="radiogroup" aria-label={it.text} className="flex flex-wrap gap-2">
-              {c.categories.map((cat) => <Choice key={cat} label={cat} checked={picks[i] === cat} onSelect={() => save(picks.map((p, j) => (j === i ? cat : p)), false)} />)}
-            </div>
+            <RadioRow label={it.text} options={c.categories} value={picks[i]} optionLabel={(cat) => cat} className="flex-wrap"
+              onSelect={(cat) => save(picks.map((p, j) => (j === i ? cat : p)), false)} />
           </li>
         ))}
       </ul>
@@ -168,7 +196,7 @@ export function NumberLine({ spec, persisted, onPersist }: TryProps) {
   if (!(n.min < n.max) || !Number.isFinite(n.target)) return <Empty kind="numberLine" />;
   const save = (v: number, c: boolean) => { setValue(v); setChecked(c); onPersist?.({ kind: "numberLine", value: v, checked: c }); };
   return (
-    <SliderTask kind="numberLine" prompt={n.prompt ?? "Helyezd el a számot a számegyenesen:"} min={n.min} max={n.max} step={n.step} value={value} onChange={(v) => save(v, false)}
+    <SliderTask kind="numberLine" prompt={n.prompt ? (n.prompt.includes(String(n.target)) ? n.prompt : `${n.prompt} (${n.target})`) : `Helyezd el a számegyenesen ezt a számot: ${n.target}`} min={n.min} max={n.max} step={n.step} value={value} onChange={(v) => save(v, false)}
       footer={<Footer result={checked ? scoreNumberLine(spec, value) : null} onCheck={() => save(value, true)} onReset={() => save(midpoint(n.min, n.max, n.step), false)} />} />
   );
 }
