@@ -187,3 +187,11 @@ test("review #596: az engine a kapuk előtt szűr, és a tanításcsere után vi
   assert.ok(src.includes("restoreSourceImages(rewritten, keptImages)"));
   assert.ok(src.includes("visualsOn ? sourceVisualsContract(sourceImagesEnabled()) : \"\""));
 });
+
+test("review #596: azonos képazonosítójú, de különböző leltártételű blokkok a visszaállításkor mind megmaradnak", () => {
+  const l = lesson();
+  const concept = conceptOf(l, 0);
+  for (const id of ["v1", "v2"]) l.sections[0].blocks.push({ kind: "animate", animKind: "sourceImage", caption: `Kép ${id}.`, coversConceptIds: [concept], sourceVisualId: id, params: { imageId: "e".repeat(64), alt: "Kép", credit: "Forrás" } } as never);
+  const restored = restoreSourceImages(lesson(), sourceImageBlocks(l));
+  assert.deepEqual(sourceImageBlocks(restored).map((b) => (b as { sourceVisualId?: string }).sourceVisualId).sort(), ["v1", "v2"]);
+});

@@ -122,10 +122,12 @@ export const sourceImageBlocks = (lesson: Lesson): AnyBlock[] => lesson.sections
  * a válasz nem hozott vissza) duplikálás nélkül visszakerülnek a fogalmaikat tanító fejezetbe. Sémahiba → az adott kép kimarad.
  */
 export function restoreSourceImages(lesson: Lesson, kept: ReadonlyArray<AnyBlock>): Lesson {
-  const present = new Set(sourceImageBlocks(lesson).map((b) => (b as { params?: { imageId?: string } }).params?.imageId));
+  // Review #596: a kulcs a leltár-azonosító ÉS a kép — két tétel azonos kivágása (azonos imageId) két külön blokk marad.
+  const keyOf = (b: AnyBlock) => `${(b as { sourceVisualId?: string }).sourceVisualId ?? ""}|${(b as { params?: { imageId?: string } }).params?.imageId ?? ""}`;
+  const present = new Set(sourceImageBlocks(lesson).map(keyOf));
   let current = lesson;
   for (const block of kept) {
-    if (present.has((block as { params?: { imageId?: string } }).params?.imageId)) continue;
+    if (present.has(keyOf(block))) continue;
     const { index, concepts } = targetSection(current, conceptsOf(block));
     if (!concepts.length) continue;
     const next = structuredClone(current);
@@ -135,7 +137,7 @@ export function restoreSourceImages(lesson: Lesson, kept: ReadonlyArray<AnyBlock
     while (at < blocks.length && isSourceImage(blocks[at])) at++;
     blocks.splice(at, 0, { ...structuredClone(block), coversConceptIds: concepts } as AnyBlock);
     const checked = lessonSchema.safeParse(next);
-    if (checked.success) { current = checked.data; present.add((block as { params?: { imageId?: string } }).params?.imageId); }
+    if (checked.success) { current = checked.data; present.add(keyOf(block)); }
   }
   return current;
 }
