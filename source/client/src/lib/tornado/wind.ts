@@ -132,9 +132,15 @@ export function advanceWind(prev: WindState, step: WindStep): WindState {
   };
 }
 
+/**
+ * Kanban #83 L1: a szélállóság e fölött már nem csökkenti a szélsodrást (a kitettség 15%-on telít). A garázs sávja
+ * (`effectiveStats.windResistance`) ezért ennél levágva mutat — a sáv a valódi hatást mutatja.
+ */
+export const WIND_RESISTANCE_CAP = 0.85 * 130;
+
 /** Sideways force pushing the vehicle, scaled by its wind resistance stat. */
 export function windForceOn(wind: WindState, windResistance: number): number {
-  const exposure = 1 - Math.min(0.85, windResistance / 130);
+  const exposure = 1 - Math.min(WIND_RESISTANCE_CAP, windResistance) / 130;
   return (wind.currentWindSpeed / 100) * exposure;
 }
 

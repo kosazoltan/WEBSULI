@@ -1961,7 +1961,7 @@ A mért előtte / utána tábla a PR-leírásban.
 
 ## J7 — Tornado Hunter 200: üldözés kérdés-útjelzőkkel (J7a, J7b, J7c)
 
-**Állapot (J7a):** folyamatban – 2026-11-17, ág feat/jatek-j7a-tornado-javitasok, munkafa .claude/worktrees/jatek-j7a, kanban #82 · **Állapot (J7b):** nem kezdődött · **Állapot (J7c):** nem kezdődött
+**Állapot (J7a):** folyamatban – 2026-11-17, ág feat/jatek-j7a-tornado-javitasok, munkafa .claude/worktrees/jatek-j7a, kanban #82 · **Állapot (J7b):** folyamatban – 2026-11-17, ág feat/jatek-j7b-tornado-utelagazas, munkafa .claude/worktrees/jatek-j7b, kanban #87 · **Állapot (J7c):** nem kezdődött
 **Függ:** J0c merge (4. hullám). **Elfogadás:** J-TH, J1–J10, J12, J16, M1–M12. Terv: 5.7.
 
 ### Fájlok
@@ -2013,6 +2013,160 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
 5. Tesztek: `T/tornado-junctions.test.ts` (elágazás-ütemezés, a helyes út rövidebb, 3 opció visszaképezhető), sim
    (J2 ≥ 4/perc, J3 ≤ 20 mp).
 
+#### J7b döntések (2026-11-17, a kód előtt; kanban #87, a szelethez csatolt #84, #83)
+
+1. **Elágazás = virtuális kapu (U-J7-2).** A `world.ts`-ben nincs út-gráf (300 egységes útrács, elágazás-pont nincs), ezért a
+   kérdés megjelenésekor a jármű előtt, a menetirányra merőleges vonalon három kapu áll (bal / egyenes / jobb, 20 egység
+   oldaltávolság); a vonal távolsága `|sebesség| × ablak × 0,85`, 30–110 egység közé vágva. A választás az áthajtás
+   oldaliránya (szektor) → `director.answer`. A kapu ↔ opció hozzárendelés a director seedelt keverése (a helyes kapu helye
+   véletlen): a „helyes a célirány felé” szó szerint elárulná a választ (a tornádó felé kormányzás = jó válasz). A „rövidebb
+   út” a hatásban jelenik meg: helyes = rövidítés + turbó (3 mp nitró); hibás = kerülő (seedelt 8–12 mp: a menet órája ÉS a
+   tölcsér élettartama ennyivel előrébb lép, „Kerülő: −9 mp” felirat); lejárat (nem hajtott át egyik kapun) = külön büntetés
+   nélkül, a tétel az ismétlési sorba kerül.
+2. **Táblák:** a világban 3D oszlop + színes jelölő; a felirat DOM-címke a tábla vetített képernyőhelyén (éles, ≥ 14 px,
+   fekvő nézetben olvasható; a címkék nem fedik egymást), képkockánként közvetlen stílusírással (KSZ-9, nincs `setState`).
+3. **Turbópad (Q3):** seedelten 25–30 mp-enként izzó pad a jármű előtt (45 egység); elérésekor `request("trigger")`,
+   `mode="buttons"`; jó válasz = 3 mp nitró; a pad 12 mp után eltűnik. A közös fekvő elrendezés a válaszokat a két szélre
+   teszi — a jobb oldali, kétoszlopos hüvelykujj-zóna `index.css`-változást kívánna (ORKESZTRÁTOR-KÉRÉS a jelentésben).
+4. **Horgony-kérdés:** a megállító overlay megszűnik; a horgony-kérdés is a kérdés-sávon jön (`request("trigger")`,
+   `mode="buttons"`), a szimuláció nem áll. A J7c teszi Műszer-kalibrálássá.
+5. **Tartás:** horgonyzott állapotban és a mérési sávban nem indul elágazás / turbó (`frame(…, { hold })`).
+6. **Fix lépés:** a lap rAF-je a közös `createFixedLoop`-ot hajtja (1/60 s); a lépésben a fizika és a közös mag
+   (`createChaseCore`, `L/tornado/sim.ts`, a node-szimuláció UGYANEZT hívja), a képkockában a rajz. Interpoláció nincs
+   (a legutolsó lépés állapota rajzolódik) — K.4/9 részben, a J7c-ben pótolható.
+7. **Seed:** `readGameSeed() ?? seedFrom(GAME_ID, nap)`, menetenként `seedFrom(alap, futás)`; a lapon nincs `Math.random`
+   (a szél, a tornádó kezdőszöge és a kérdés-sorsolás a menet RNG-jéből, a villám külön seedelt `fxRng`-ből); a lap a
+   `GAME_PAGE_ALLOW` őr alá kerül.
+8. **#83:** L1 — a szélállóság a `WIND_RESISTANCE_CAP` (110,5) felett nem hat, ezért az `effectiveStats.windResistance`
+   ennél levágva, a garázs sávja ezt mutatja. L2 — a jármű ALAP stabilitása és horgonyereje a játékban nem hat (a hatás a
+   fejlesztésből jön), és ennek bevezetése minden jármű alap-viselkedését megváltoztatná: a garázs ezért a ténylegesen
+   ható számot mutatja — „Stabilitás” = ütközés-tűrés (100 / `crashLossFactor`), „Horgony” = rögzítési gyorsaság
+   (100 × 2600 / `anchorHoldMs`). L3 — a pozíció-bónusz a horgonyzás pillanatának távolságából számol.
+9. **#84:** a `material-quizzes` tétel opcionális `subject` mezőt kap: kanonikus tételnél a lecke `quizTopic(subject)`-je,
+   régi exportnál a lecke (közvetlenül vagy az anyagán át) tudástérképének tantárgya `quizTopic`-pal, a generátor
+   `english` / `math` / `nature` / `hungarian` témájú régi sorainál a téma; egyébként a mező hiányzik. A quiz-bank
+   végpont (gyorsítótár, lenyomat) nem változik. A Tornado a `subject`-et használja; a cím-heurisztika csak tantárgy
+   nélküli tételnél marad, szigorítva (üres téma + „X magyarul:” nem biztos angol; matek-előtag mellett más tantárgy
+   szava → bizonytalan).
+10. **Pontszámítás:** a győzelmi jutalom a `sim.ts` `winReward`-ja (alap sáv, horgonyzáskori távolság), a lap ezt hívja;
+    a K2 viselkedési teszt minden műszer-szinten.
+11. **Director:** `optionCount: 3`, `minGapMs: 1500`, `maxGapMs: 20000`, `targetPerMin: 4`, `baseWindowMs: 5500`,
+    `slowMo: 1`, `readingAware`, `promptFits` (a Matek mintájára); az ütemezett kérdés az elágazás, legkorábban 15–20 mp-cel
+    (seedelt) az előző elágazás után (`calm`), legkésőbb a director `maxGapMs` kényszere szerint.
+
+#### J7b döntések — a PR előtti független ellenőrzés után (2026-11-17, a kód előtt; az 1. és 3. pontot pontosítják)
+
+12. **Szándék (B1, a Szökőár D-J1a-13 mintájára):** válasz csak SZÁNDÉKOS bemenetből lesz a kérdés megjelenése óta:
+    kormány- / tárcsa-elmozdulás a megjelenéskori értéktől > 0,3, előre-hátra gáz / fék-váltás, 1–3 billentyű, koppintás egy
+    táblára. Szándék nélkül nincs kapuátlépés (lásd 13.): a kérdés lejár, a nyilvántartásba „lejárt”-ként kerül (ismétlési sor,
+    statisztika, `recordRun`), kupon-bónusz nincs, a tétel visszatér; játékbeli büntetés nincs.
+13. **Olvasási idő (M1) — „várakozó táblák” (az ellenőr B változata):** a három tábla a megjelenéskori menetirányban a jármű
+    előtt ÁLLANDÓ távolságban halad vele, amíg a gyerek nem jelez szándékot; a szándék pillanatában rögzül, a vonal a
+    pillanatnyi (nitróval együtt vett) sebességgel ≥ 2,4 s-ra kerül (+10 egység). Így a gyerek a kérdés teljes ablakában olvashat,
+    és a döntés után mindig marad idő a kormányzásra; ha a döntés túl későn jön, a kapu az ablak vége után érne — ez lejárat,
+    nem rossz válasz. Indok a teljes-ablaknyi távolság (A) és a kérdés-lassítás (C) helyett: (A) 30 egység/s × 9,4 s = 280
+    egység, a tábla a ködben láthatatlan és sokszor akadály / pályaszél mögé esik; (C) a vezetés lassítása töri a játékérzetet
+    (a terv szerint a vezetés nem áll). A tábla koppintással is választható (mozgó cél: `pointerTapHandlers`), így az
+    elágazás a közös mobil mérő hatókörébe kerül vissza.
+14. **Akadály (M2):** a táblák csak olyan helyre rögzülhetnek, ahová a jármű helyéről mindhárom kapuhoz ütközőmentes egyenes
+    folyosó vezet (a világ ütközői, a jármű fél szélességével bővítve); ha a próbált távolságok (+0…+48 egység) és
+    kapu-közök (20 / 16 / 13) egyike sem szabad, a táblák tovább várnak (a kérdés későbbi rögzüléssel / lejárattal folytatódik).
+15. **Hosszú válasz (M3):** a tábla felirata szóközépen nem törik; ha bármely válasz a tábla valódi szélességén (15 px) 2 sornál
+    hosszabb, a táblák csak a jelet (szám + szín) mutatják, és a kérdés-kártya alatt a teljes válaszok listája jelenik meg
+    ugyanazzal a jelöléssel.
+16. **Kerülő (K1):** a rossz kapu kerülője nem okozhat azonnali vereséget: a menet órája és a tölcsér élettartama legfeljebb úgy
+    lép előre, hogy legalább 5 s maradjon (a megoldás-kijelzés ≥ 1,8 s látszik). Szándék nélküli átlépés nincs (12–13.).
+17. **Fék nitró alatt (K2):** a tárcsa / billentyű hátrahúzása (gáz < −0,2) vagy a fék a nitrót megszakítja.
+18. **Horgony-kérdés (K3):** amíg a horgony-kérdés nyitva van (és a kijelzése tart), a jármű áll a ⚓-kori helyén, és a vereség
+    feltételei nem teljesülhetnek (a kérdés a horgonyzás része).
+19. **Forrás nélkül (K4):** ha a turbópadon a director 1,5 s alatt sem ad kérdést (üres kupon-lecke, kérdés nélküli mód), a pad
+    kérdés nélkül ad nitrót és eltűnik — nem ragad be.
+20. **Teljesítmény (K5):** a gamepadet képkockánként egyszer olvassuk, a fix lépés nem foglal új objektumot a lap kódjában; a
+    nehéz, propjaikban nem változó gyermekek memózva. A K.4/8 (0 hosszú feladat 4× lassítással) a mainen sem teljesül — NOT DONE,
+    jegy.
+
+#### J7b döntések — a második ellenőrzés után (2026-11-17; orkesztrátori döntés: R1 „A”; a 12–14. pontot pontosítják)
+
+21. **Kormány-szándék (R1):** a kormány csak a kérdés megjelenése után ≥ 1 s-mal (minimális olvasás) számít, és FENNTARTOTT
+    kitérés kell hozzá: a megjelenéskori értéktől ≥ 0,6, ugyanabba az irányba, ≥ 0,5 s-ig (a vezetés közbeni rezgés / úttartás
+    nem választ). Koppintás, 1–3 billentyű, fék és a hátrahúzott gáz (R5) azonnal szándék. Rögzüléskor a kapuk a pillanatnyi
+    menetirányhoz igazodnak (a középső egyenesen előre); kormány-szándéknál a fenntartott kitérés KEZDETEKORI irányhoz — a már
+    megkezdett kanyar így a választott oldalkapu felé visz. Az egyenes (középső) kapu koppintással / billentyűvel választható.
+22. **Határidő (R2):** rögzüléskor a nyitott kérdés ablaka legalább a kapuig érés + 0,4 s-ig tart (a mag a közös
+    `QuestionPresentation.windowMs`-t növeli — a kérdés-sáv, a lejárat és az áramlat ugyanazt az értéket olvassa); a kormányzással
+    válaszoló így nem kap rövidebb időt.
+23. **Rögzülés költsége (R3):** sikertelen próba után növekvő várakozás (3, 6, 9 … ≤ 30 lépés), és egy próba csak egy
+    vonal-távolságot néz (a keresés képkockák közé osztva).
+24. **Fekvő lista (R4):** alacsony fekvő nézetben a teljes válaszok listája a bal oldalon áll (a bal felső panel helyén), nem a
+    jármű és az út fölött; a lista méretét kérdésenként egyszer mérjük (nincs képkockánkénti layout-olvasás).
+
+#### J7b döntések — a harmadik ellenőrzés után (2026-11-17; orkesztrátori döntés: (B) opció; a 12., 21. és 22. pontot felülírják)
+
+25. **Szándék csak egyértelmű gesztus (V1, a 21. pont helyett):** a VÁLASZT koppintás egy táblára (az a tábla a válasz) vagy az
+    1–3 billentyű adja azonnal. A kapukat a kérdés megjelenése után ≥ 1 s-mal (minimális olvasás) LENYOMOTT fék vagy hátrahúzott
+    gáz rögzíti (felfutó él: a megjelenés előtt / az első 1 s-ban lenyomott és tovább tartott fék vagy tolatás nem szándék — az
+    akadály miatti fékezés nem válaszol), a pillanatnyi menetirányhoz igazítva; utána a kormány visz a kiválasztott kapuhoz. A
+    kormánymozdulat ÖNMAGÁBAN soha nem szándék és nem rögzít (kanyar, úttartás, egyenesítés, rezgés nem válaszolhat). A
+    feladat-felirat egy sorban megmondja: „koppints a jó táblára, vagy fékezz, és hajts át a kapuján” (a súgóban is).
+26. **Határidő (R2 maradéka, a 22. pont pontosítása):** rögzüléskor az ablak legalább a LEGTÁVOLABBI kapuig vezető út
+    (egyenes táv × 1,3 a fordulás miatt) ideje + 0,6 s; az érkezést legalább 8 egység/s-mal számoljuk, és a hosszabbítás
+    legfeljebb +5 s (álló járműnél nem nő az ablak korlátlanul, Ú5). A rögzítés után a jó kapu felé kormányzó bot nem jár le.
+27. **Időcsík (R2-mellékhatás):** a hosszabbítás a közös `QuestionPresentation.windowMs`-t írja (a lejárat, a `pick` és az
+    áramlat ugyanazt olvassa). A csík nem töltődik vissza: rögzüléskor a lap a csík teljes hosszát úgy számolja (`barWindowMs` =
+    maradék_új × ablak_régi / maradék_régi), hogy a csík a rögzülés pillanatában ugyanott álljon, és simán a végső határidőn
+    fogyjon el. A másodperc-kijelzés a valódi maradékot mutatja.
+28. **Teszt-integritás (V2):** a K4 elvárása (minden modellnél kérdéssel ≥ kérdés nélkül, 20 seed) változatlanul visszaáll; a
+    gyenge modell vereségének okát a játékban javítjuk, nem a tesztben.
+29. **Sim-botok (Ú4, Ú8):** a nem olvasó vezető botok a kérdés ALATT is vezetnek (rezgés, a kérdéssel induló kanyar +
+    egyenesítés, 7 s-onkénti útkanyar, véletlen kormány, az olvasási küszöb előtti fékezés / tolatás) — véletlen válasz 0. A mindig
+    jót választó bot két úton mér: koppintás (közvetlen válasz, mint a lapon) és fék + kormány (rögzítés, áthajtás).
+30. **A kérdés-sáv levélben renderel (orkesztrátori döntés, a `joystick-response` lelete):** a `usePlayQuestion` horga és az
+    `InlineQuestion` a `TornadoQuestionLayer` levél-komponensbe kerül; a ≈ 10 Hz-es időcsík ott renderel, a lap csak a kérdés
+    eseményeire (nyílás, megoldás-kijelzés, lezárás: `presentation` / `reveal` tükör). A horog API-ja a `qRef`-ben. A mag, a
+    sim és a határidő (26.) változatlan. A közös `joystick-response.spec.ts`-hez nem nyúlunk.
+31. **Böngészős keret:** a `tornado-play.spec.ts` 60 s-os tesztkeretet kap (a rögzítés előtti ≥ 1 s olvasás miatt a rossz kapus
+    eset a 30 s-os alapkeret szélére ért); a tényleges futásidőt mérjük, > 40 s külön lelet.
+32. **Alapablak (a 11. pont pontosítása, utólag rögzítve):** `baseWindowMs` 5500 → 6000 (`TORNADO_BASE_WINDOW_MS`, commit
+    `1147b9e9`, az első ellenőrzés M1 lelete): a mindig jót választó bot lassú (8 e/s) tempónál 5,5 s-os ablakkal lejárt a
+    kapu elérése előtt; a 6 s-os alap a director 9 s-os plafonján belül marad, és a J2 / J3 küszöbök teljesülnek.
+
+#### J7b döntések — a vak, hibakereső ellenőrzés után (2026-11-19; a 25. és a 26. pontot pontosítják)
+
+33. **Áthajtás csak oldalsó kapu folyosóján (K1):** a mért hiba: az olvasási küszöb UTÁN, akadály miatt lenyomott fék rögzítette a
+    táblákat, és az egyenes továbbhaladás a középső kaput „választotta” (20 seed × 180 s, 3 s-onként 0,25 s fék: 260 kérdésből 80
+    olvasás nélküli válasz, pont + nitró vagy 8–12 s kerülő). Mostantól a rögzült vonal átlépése csak akkor válasz, ha egy kapu
+    FOLYOSÓJÁN (a kapu közepétől ≤ 4,5 egység) ÉS az egyenestől (a rögzüléskori menetiránytól) ≥ 6 egységgel oldalra történik
+    (`gateAtLateral`). Következmények: az egyenes továbbhaladás, a kapuk közötti és a szélső kapun kívüli átlépés soha nem válasz (a
+    szélső szektor nem tart a végtelenig); az akadály-kerülő kitérés (~2–3 egység) nem éri el a folyosót; a középső (egyenes) kapu
+    csak koppintással / „2” billentyűvel választható (a 21. pont eredeti szabálya tér vissza). A fék a táblákat továbbra is
+    rögzíti (a 25. pont szerint), de a rögzítés önmagában nem válasz és nem büntetés. A feladat-felirat: „koppints a jó táblára, vagy
+    fékezz, és kanyarodj át a bal / jobb kapun”; a súgó: „…egyenesen továbbhajtva nem választasz”. **A 26. pont pontosítása:** a
+    táblák csak olyan elrendezésben rögzülnek, amelynek a legtávolabbi kapuja a hosszabbítási plafonon (eredeti ablak + 5 s) belül
+    elérhető (`freezeJunction` `fits` próbája) — különben tovább várnak; így „a rögzítés után a jó kapu felé kormányzó nem jár le”
+    a messzire tolt (akadály miatti +40 egységes) vonalnál is igaz. Sim-elvárás (új minták: `brake-periodic`, `brake-after`,
+    egyenesen / kitéréssel / a tölcsér felé kormányozva, 15 és 22 e/s): 0 nyilvántartott válasz, 0 kerülő, és van rögzülés (a minta
+    valóban a küszöb utáni utat járja). A fék + kormány úton válaszoló bot a középső kaput koppintással választja.
+34. **Tájékozódás a kérdés alatt (K2):** a céljelző nyíl (G-9b) és a horgony-útmutató nyitott kérdés alatt sem tűnik el: kérdés
+    nélkül a megszokott helyén áll, nyitott kérdésnél egy alsó sávban (`tornado-question-nav`) — álló nézetben és asztalon a
+    vezérlősáv fölött, a kérdés fajtájával egy sorban; alacsony fekvőn legalul, a vezérlők között. A sáv tetejét a lap kérdésenként /
+    tartalomváltáskor egyszer méri (nem képkockánként), és a táblák ennél feljebb rajzolódnak. Böngészős elvárás mind a 4 nézetben
+    (360×640, 390×844, 844×390, 1366×768): a céljelző és az útmutató látszik, és a sáv, a táblák, a kártya, a fajta-címke nem fedik
+    egymást.
+35. **Gomb-módú kérdés álló nézetben (K3):** a turbó- / horgony-kérdés kártyája álló nézetben a képernyő tetején áll (nem a
+    jármű fölött), rövid válaszoknál (a közös elrendezés 2 oszlopos esete) a három gomb egy sorban a kártya alatt — lapra szűkített
+    CSS-felülírás, a közös `index.css` nem változik. Álló nézetben ezért gomb-módban is rejtett a bal felső panel (a kártya helyén
+    állna), és a kérdés fajtája lent, a tájékozódó sávban látszik. Fekvőn a közös elrendezés marad (a gombok a két szélen). Böngészős elvárás
+    360×640-en és 390×844-en: a jármű vetített doboza (`getVehicleScreenBox` teszt-kampó) és előtte egy jármű-magasságnyi (≥ 48 px)
+    út nem esik a kártya vagy a gombok alá.
+36. **Apróságok (a vak ellenőrzés KICSI 1–6):** (1) alacsony fekvőn a kérdés fajta-címkéje legalul áll, nem a táblák alatt; (2) a
+    „Kerülő” / „Rövidítés — turbó!” felirat tömör emerald-700 / orange-700 alapon (fehér 14 px-es szövegnél ≥ 4,5:1); (3) a
+    determinizmus-őr a Tornado `junctions.ts`, `collision.ts` és `world.ts` fájlját is fedi; (4) **a kód a tervhez igazodik** (nem a
+    terv a kódhoz): az alap kapuköz 20, a próbák 20 / 16 / 13 (1., 14. pont), a rögzülő vonal |v| × 2,4 s + 10 (13. pont) — a sim és
+    az M2-mérés ezzel is teljesül (400 útpozícióból 381 rögzül, elzárt kapu 0); (5) a „kérdés nélküli mód — vesztési feltétel” teszt
+    mozdulatlan járművel (`botSpeed: 0`) a vereség útját futtatja, és `won() === false`-t vár; (6) a kérdés-sáv beállítása
+    (`questionSetup`) memózott, a levél renderszámát a teszt-kampós build méri (`countRender("tornado-question-layer")`): kérdés
+    nélkül a levél nem renderel a lap HUD-renderjével, nyitott kérdésnél csak a saját ≈ 10 Hz-es időcsíkja szerint.
+
 ### J7c — zaj-alapú tornádópálya, Műszer-kalibrálás (Q2), szupercella (Opus)
 
 1. Állapot-sor commit.
@@ -2028,8 +2182,8 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
 
 #### #84 — a `material-quizzes` tétel valódi tantárgya (a J7b-hez csatolt kiegészítés, külön PR)
 
-**Állapot (#84):** folyamatban – 2026-11-17, ág fix/material-quizzes-subject, munkafa .claude/worktrees/jatek-j7b-84, kanban #84
-(a J7b — `feat/jatek-j7b-tornado-utelagazas` — erre épül; a méret miatt külön, első PR).
+**Állapot (#84):** kész — #487 (25fc2841, 2026-11-17), kanban #84; a review alacsony leletei (L1, L2 rögzítése, L4, I1, I2) a
+J7b PR-ban (5. pont).
 
 1. **Tünet:** a végpont csak `topic`-ot ad, ami a régi Stúdió-exportoknál a lecke CÍME — a J7a óta a Tornado „csak matek” /
    „csak angol” módja konzervatív, így a címmel exportált valódi matek / angol leckék csak vegyes módban jönnek; a
@@ -2047,6 +2201,11 @@ teszt zöld marad; ami a roam-kvízt vagy a horgony-kvízt rögzíti, azt olvasd
    `lessonId`-n át, kanonikusan, generátor-témából; tantárgy nélküli régi sor → a mező hiányzik, a route JSON-jában is);
    kliens (`T/tornado-material-subject.test.ts`: a J7a 22 cím-témája és 15 téma / kérdés esete a `subject`-tel; a két
    hamis pozitív `T/tornado-math4.test.ts`-ben SPEC-VÁLTOZÁS jelöléssel, szigorúbb elvárással).
+5. **Review #487 utómunka (a J7b PR-ban):** L1 — a tantárgy-keresés csak KÖZZÉTETT leckét néz, a `latestPublishedRows`
+   rendezésével (`version DESC, published_at DESC`); L2 — rögzített döntés: a lecke tudástérképének tantárgya elsőbb a
+   generátor tételenkénti témájánál (a tétel abból a leckéből jön; konzervatív); I1 — DB-teszt a `lessonId` ↔ anyag
+   elsőbbségre, a több leckés anyagra, a generátor ↔ térkép ütközésre és a nem közzétett lecke kizárására; I2 — üres témánál
+   a kérdés címkéje a szerver tantárgya (`questionSubjectLabel`: „Természet”, bizonytalannál „Kvíz”, nem „Matek”).
 
 ### Elfogadás (J7)
 
@@ -3154,3 +3313,13 @@ beállítása (közvetlen WebSocket, kisebb késés) — a terv nélküle is mű
 ### J6a — review #486, 3. kör (2026-11-25)
 - A már rögzített menet (a megoldás-kijelzésre váró utolsó élet) alatt a szünet menü „Kör vége” pontja azonnal az eredményképernyőt nyitja; az eredmény nem íródik át. Ok: az `endRound` a kijelzés-várót is törli, a `runEndedRef` őr pedig korábban csendben visszatért.
 - Teszt: `space-asteroid-play.spec.ts` „review #486 (Vercel) … „Kör vége” pontja azonnal az eredményképernyőt nyitja” (RED `3a76d23b`).
+
+### J7b — review #610 (2026-11-25)
+- Turbópad: a már elért pad a tartás (horgonyzás / mérési sáv) alatt sem kérdez; a tartás elengedése után igen (`sim.ts`, teszt: `tornado-junctions.test.ts`).
+- A tábla-koppintás a kibontott („Mutasd”) kérdés alatt tiltott, mint a közös kérdéskomponensben (különben a kibontás beragad és a mag 0-s időskálán áll).
+- A menet vége kifuttatja a futó megoldás-kijelzést: a mag áll, a kérdés-sáv lezárul, az eredmény a `settled()` után jelenik meg; az újrakezdés törli a halasztást.
+- A „Miért?” / „Mutasd” olvasása alatt a játékóra is áll (a horgonyzás utáni győzelmi időzítő nem zárja be olvasás közben a magyarázatot).
+
+### J7b — review #610, Vercel P1 (2026-11-25)
+- A megoldás-kijelzés alatti menetvég elhalasztott eredménye megakadt: a mag a menet végén áll (0-s időskála), így a kijelzés órája sem haladt, a `settled()` sosem teljesült. Javítás: az elhalasztás alatt a kijelzés óráját a képkocka a valós idővel lépteti (`frame(…, { tick: false, hold: true })`), új kérdés nem indul.
+- Teszt: `tornado-play.spec.ts` „review #610 (Vercel P1) …” (RED `8f436291`, három nézetben bukott); tornado e2e 40 passed + 1 terhelés-érzékeny K3 (külön 6/6 zöld), egységtesztek 259/0.

@@ -67,7 +67,13 @@ test("visszajelzés: rezgés jó / rossz válaszra és befogásra", () => {
 });
 
 test("elavult időzítők: a fázisváltás játékórán fut, az újrakezdés érvényteleníti a függő időzítőket", () => {
-  assert.match(page, /scheduleGame\(advance,\s*750\)/, "a jó válasz utáni továbblépés nem a játékórán fut");
+  // SPEC-VÁLTOZÁS 2026-11-17 (terv 5.7, 9.; végrehajtás J7b 3.: a roam-kvíz és a megállító overlay megszűnt): a válasz utáni
+  // továbblépés nincs többé a lapon — a kérdés-sáv állapotgépe (`usePlayQuestion` → `createQuestionUi`) a kérdés-órán méri a
+  // megoldás-kijelzést, és ez az óra a közös fix lépésű hurokkal együtt szünetben áll. A régi valós idejű időzítőre ezért
+  // továbbra sem szabad továbblépni.
+  assert.match(page, /usePlayQuestion\(\{/, "a lap nem a közös kérdés-sávot használja");
+  assert.match(page, /drv\.loop\.setTimeScale\(playing && !feedbackRef\.current/, "a kérdés-óra (fix lépés) szünetben is fut");
+  assert.doesNotMatch(page, /scheduleTimeout\(\s*\(\)\s*=>\s*(advance|answer)/);
   // SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 5.7 „Javítás”, J7a): a horgony-fejlesztés
   // a készenléti időt adja — a 2600 ms az alap (`ANCHOR_HOLD_BASE_MS`, `T/tornado-upgrades-effect.test.ts`), a hívás
   // továbbra is játékórán fut és a friss finishRun-t hívja.
@@ -85,7 +91,8 @@ test("elavult időzítők: a fázisváltás játékórán fut, az újrakezdés �
   assert.match(restart, /clearPendingTimers\(\)/, "az újrakezdés nem törli a függő időzítőket");
   const step = block(page, "stepRef.current = (dt: number) => {", "const sc = sceneRef.current;");
   assert.match(step, /const halted = pausedRef\.current \|\| rotateBlockRef\.current;/, "a futás-megállítás nem a szünetből / forgatási kérésből számol");
-  assert.match(step, /if \(!halted\)/, "a játékóra szünetben is halad");
+  // SPEC-VÁLTOZÁS 2026-11-25 (review #610): a játékóra a „Miért?” / „Mutasd” olvasása alatt is áll (`!reading`).
+  assert.match(step, /if \(!halted && !reading\)/, "a játékóra szünetben is halad");
   assert.match(step, /t\.run === run/, "egy előző futás időzítője is lefuthat");
 });
 
@@ -97,7 +104,9 @@ test("review #433: a lap minden haladás-mentése funkcionális frissítés (nin
 
 test("szünet mindig elérhető: a kvíz-réteg a HUD alatti sávban van, a magyarázó kártya szünetben rejtve", () => {
   const hud = page.indexOf("<GameHud");
-  const quiz = page.indexOf('data-testid="tornado-quiz"');
+  // SPEC-VÁLTOZÁS 2026-11-17 (terv 9. „a meglévő testid-ek maradnak”; végrehajtás J7b 3.): a kvíz-réteg a közös
+  // `InlineQuestion` a régi `tornado-quiz` azonosítóval (a `testId` propon át), továbbra is a HUD után.
+  const quiz = page.indexOf('testId="tornado-quiz"');
   assert.ok(hud >= 0 && quiz > hud, "a kvíz-réteg nem a HUD után (alatta lévő sávban) áll");
   assert.match(page, /\{feedback && !paused && <QuizFeedbackCard\b/);
 });

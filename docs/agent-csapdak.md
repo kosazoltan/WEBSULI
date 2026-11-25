@@ -1306,3 +1306,22 @@ Forrás: `feat/tgm-s5b-v2` (#534), `feat/tgm-s2b1-v2` (#533). Rokon: C-61, C-72,
   kódban nincs lookbehind.
 
 Forrás: #486, #607, #608, B8 (`feat/eredmeny-email-b8-v2`). Skill: `websuli-kapulanc`. Rokon: C-61, C-75.
+
+## C-100 — Sim-teszt csak a küszöb ELŐTTI eseményt mérte: a „véletlen válasz 0” a választott mintákra volt szabva (2026-11-19)
+
+Forrás: J7b Tornádó útelágazás, vak ellenőrzés K1 (`source/tests/tornado-sim.test.ts`, `source/client/src/lib/tornado/junctions.ts`).
+
+- **Tünet:** a „nem olvasó vezető” sim-minták mind a kérdés után 0,3 s-mal KEZDŐDŐ (az 1 s-os olvasási küszöb előtti) fékkel /
+  tolatással mértek, ezért zöldek voltak — a küszöb UTÁN lenyomott akadály-fék viszont rögzítette a táblákat, és az egyenes
+  továbbhaladás a középső kaput „választotta”: 260 kérdésből 80 olvasás nélküli válasz (pont + nitró vagy 8–12 s kerülő). A
+  tulajdonosi elvárás („válasz nélkül nincs pont”) erre az útra nem teljesült, a teszt mégis zöld volt.
+- **Szabály:** ha egy szabálynak küszöbe van (idő, távolság, sebesség), a viselkedési teszt mintái a küszöb MINDKÉT oldalát fedjék
+  (előtte kezdett, átnyúló, utána kezdett, periodikus — a kérdéstől függetlenül is), és a teszt igazolja, hogy a minta tényleg
+  elérte a vizsgált ágat (itt: `frozen > 0` mellett 0 válasz, 0 kerülő). A „0 hiba” állítás csak a lefedett mintákra érvényes —
+  a jelentésben a mintákat is nevezd meg.
+- **Javítás iránya, ha a bemenet nem árulja el a szándékot:** a jutalom / büntetés olyan mozdulathoz kötődjön, amelyet a nem olvasó
+  játékos nem tesz meg véletlenül (itt: oldalsó kapu folyosója ≥ 6 egységgel az egyenestől; a középső kapu csak koppintással).
+- Rokon apróság (ugyanebben a futásban): Git Bashből `npm.cmd run test:e2e -- … -g "a|b"` a cmd.exe-n át fut, amely a `|`-t
+  csővezetéknek, a szóközös argumentumot több argumentumnak veszi — a böngészős kör azonnal EXIT 255-tel állt le, és elveszett egy
+  gép-zár-sáv. Szűrős / szóközös argumentumnál a harnesst közvetlenül hívd: `node --import tsx scripts/run-e2e-tests.ts <spec> -g "…"`.
+  A futó várakozó-szkript fájlját se írd felül (a bash menet közben olvassa) — mindig új fájlnév.

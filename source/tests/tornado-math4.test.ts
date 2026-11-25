@@ -107,7 +107,7 @@ test("tananyag-sor tárgya: csak a bizonyítható téma számít biztosnak, mind
     ["matematika", "Mennyi 2 + 2?", "math", true],
     ["english", "Weather magyarul:", "english", true],
     ["Angol nyelv", "Weather magyarul:", "english", true],
-    // SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md „J7b döntések” 9., kanban #84 — a review
+    // SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny-vegrehajtas.md „#84 — a `material-quizzes` tétel valódi tantárgya” 3. pont és „J7b döntések” 9., kanban #84 — a review
     // két maradék hamis pozitívja): az „X magyarul:” kérdés-alak nem bizonyít angolt (a „Hund magyarul:” német), és a
     // matek-előtag mellett más tantárgy szava bizonytalan. A szigor nő: kevesebb tétel számít biztosnak; a tantárgyat a szerver adja.
     ["", "Tempête magyarul:", "math", false],

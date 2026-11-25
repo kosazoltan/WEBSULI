@@ -20,13 +20,18 @@ async function playReady(page: Page): Promise<void> {
   }
 }
 
-/** Rossz válasz (M9, M10): a teszt-kampó kvízt dob fel, és az első rossz válaszgombra koppint. */
+/**
+ * Rossz válasz (M9, M10, K1/K3): a teszt-kampó kérdést nyit (J7b: turbó-kérdés a nem blokkoló kérdés-sávon, gomb-mód),
+ * a gyerek az első rossz válaszra koppint. A magyarázókártya (`quiz-feedback`) már NEM nyílik magától (terv 9., J5) — a
+ * „Miért?” gomb nyitja, szünettel; a K1/K3 mérés így a „Miért?” kártyán fut.
+ */
 async function answerWrong(page: Page): Promise<void> {
   await page.waitForFunction(() => typeof (window as unknown as GameTestWindow).__websuliGame?.forceState === "function");
   await page.evaluate(() => (window as unknown as GameTestWindow).__websuliGame?.forceState({ screen: "play", phase: "quiz" }));
   const quiz = page.getByTestId("tornado-quiz");
   await expect(quiz).toBeVisible({ timeout: 10_000 });
   await quiz.locator('[data-correct="false"]').first().click();
+  await page.getByTestId("play-why").click();
 }
 
 export const CASE: GameMobileCase = {
@@ -40,8 +45,12 @@ export const CASE: GameMobileCase = {
   touchControlsTestId: "tornado-touch-controls",
   resultForce: { screen: "play", phase: "result_win" },
   resultTestId: "th-result",
-  quizScope: '[data-testid="tornado-quiz"]',
-  quizForce: { screen: "play", phase: "quiz" },
+  // J7b (a független ellenőrzés M3 lelete után): a mért kérdés-állapot az ELÁGAZÁS a bank leghosszabb válaszaival
+  // (`forceState({ junction: "long" })`) — a koppintható, a kamerával együtt mozgó táblák (`quizMoving`): érintési méret,
+  // képernyőn belül, nem fedik egymást; a betűméret (M3) a táblákon és a teljes válaszok listáján is mérve.
+  quizScope: '[data-tornado-signs="open"]',
+  quizForce: { screen: "play", junction: "long" },
+  quizMoving: true,
   answerWrong,
   orientation: "landscape",
 };

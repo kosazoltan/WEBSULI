@@ -72,6 +72,11 @@ function simFiles(): string[] {
     // A Brain Rot `pacing.ts`-e (válaszidő, review L7): a Brain Rot sim importálja, ezért ugyanaz a tilalom vonatkozik rá.
     // Csak ez: a Szólétra `pacing.ts`-e a tempó tárolásához (localStorage) jogosan használ `window`-t, és azt a sim nem hívja.
     join(root, "client/src/lib/brainRot/pacing.ts"),
+    // J7b (vak ellenőrzés KICSI 3): a Tornado sim az elágazás / turbópad geometriáját (`junctions.ts`) és azon át az ütközőket
+    // (`collision.ts`) és a világot (`world.ts`) hívja — a mag része, ugyanaz a tilalom vonatkozik rájuk.
+    join(root, "client/src/lib/tornado/junctions.ts"),
+    join(root, "client/src/lib/tornado/collision.ts"),
+    join(root, "client/src/lib/tornado/world.ts"),
   ];
 }
 
@@ -94,6 +99,13 @@ test("az őr érzékeny: minden tiltott mintát elkap, a kommentet és a hasonl�
 test("a J0a-fájlok léteznek és az őr alá esnek (az őr nem üres halmazon fut)", () => {
   const files = simFiles().map((f) => relative(root, f).replace(/\\/g, "/"));
   for (const must of ["shared/game-rng.ts", "client/src/game-engine/play/loop.ts", "client/src/game-engine/play/director.ts"]) {
+    assert.ok(files.includes(must), `${must} hiányzik az őrzött fájlok közül`);
+  }
+});
+
+test("J7b (vak ellenőrzés KICSI 3): a Tornado sim által importált pálya-magfájlok (elágazás, ütközés, világ) is az őr alá esnek", () => {
+  const files = simFiles().map((f) => relative(root, f).replace(/\\/g, "/"));
+  for (const must of ["client/src/lib/tornado/junctions.ts", "client/src/lib/tornado/collision.ts", "client/src/lib/tornado/world.ts"]) {
     assert.ok(files.includes(must), `${must} hiányzik az őrzött fájlok közül`);
   }
 });
@@ -131,6 +143,9 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
   ],
   // J5a: a Brain Rot lapján nincs kivétel (a tétel-sorsolás a menet seedelt RNG-jéből: `pickRngRef`; a világ a magban).
   "BrainRotSteal.tsx": [],
+  // J7b: a Tornado lapján nincs kivétel (a szél, a tölcsér kezdőszöge és a kérdés-sorsolás a menet seedelt RNG-jéből, a villám
+  // külön seedelt `fxRng`-ből).
+  "TornadoHunter200.tsx": [],
   // J6a: az Aszteroida lapján nincs kivétel (hullám-érkezés, hasadás, pickup, vadászgép-lövés a menet `world` RNG-jéből; a kérdés-kristályok
   // és az évfolyam-bank választás a `crystal` / `pick` RNG-ből; a kozmetika a `fx` RNG-ből: `cosmeticRandom`).
   "SpaceAsteroidQuiz.tsx": [],

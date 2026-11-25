@@ -1,8 +1,10 @@
 import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
-import { createGradeQuizSeen, markGradeQuizSeen } from "@/game-engine/gradeQuiz";
+import { createGradeQuizSeen, isGradeQuizSeen, markGradeQuizSeen } from "@/game-engine/gradeQuiz";
 import {
+  memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -29,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import { Card, CardContent } from "@/components/ui/card";
-import { correctDataAttrs, installGameTestApi, GAME_TEST_HOOKS_ENABLED } from "@/game-engine/game-test-hooks";
+import { correctDataAttrs, installGameTestApi, readGameSeed, GAME_TEST_HOOKS_ENABLED } from "@/game-engine/game-test-hooks";
 import AudioToggleButton from "@/components/AudioToggleButton";
 import AchievementToast from "@/components/AchievementToast";
 import GamePedagogyPanel from "@/components/GamePedagogyPanel";
@@ -65,7 +67,22 @@ import {
   useTouchCapable,
   type GameScreenState,
 } from "@/game-engine/mobile";
-import { useVocabQuizSource, vocabLevelForGrade } from "@/game-engine/vocab";
+import { useVocabQuizSource, vocabLevelForGrade, type VocabQuiz } from "@/game-engine/vocab";
+import {
+  InlineQuestion,
+  ResultReview,
+  createPointerTapTracker,
+  estimateLines,
+  pointerTapHandlers,
+  bankPlayQuestion,
+  materialPlayQuestion,
+  restoreReviewQuestion,
+  usePlayQuestion,
+  vocabPlayQuestion,
+  type PlayQuestion,
+  type QuestionProvider,
+} from "@/game-engine/play";
+import { createRng, seedFrom, type Rng as SeededRng } from "@shared/game-rng";
 import {
   sfxSuccess,
   sfxError,
@@ -94,14 +111,12 @@ import {
 } from "@/lib/tornado/levels";
 import {
   pickQuestion,
-  shuffleOptions,
   materialToQuestions,
-  shouldFireRoamQuiz,
   resolveGrades,
   schoolLevelLabel,
   QUIZ_MODE_LABEL,
-  SUBJECT_LABEL,
   isVocabQuestion,
+  questionSubjectLabel,
   vocabToQuestion,
   type Question,
   type SchoolLevel,
@@ -122,7 +137,6 @@ import {
   breakdownRows,
   createStreakTracker,
   freeRoamAnswerScore,
-  interceptReward,
   recordStreak,
   type RewardResult,
 } from "@/lib/tornado/scoring";
@@ -157,6 +171,9 @@ import {
 } from "@/lib/tornado/controls";
 import { shouldDisposeGeometry } from "@/tornado/meshLifetime";
 import { applyRunResult } from "@/lib/tornado/runResult";
+import { advanceTornado, couponRepeat, createChaseDriver, detourWithGrace, tornadoDirectorConfig, winReward, type ChaseDriver, type ChaseEvent, type QuestionKind } from "@/lib/tornado/sim";
+import type { QuestionOutcome, QuestionPresentation } from "@/game-engine/play";
+import { NITRO_ACCEL_FACTOR, NITRO_SPEED_FACTOR, TURBO_PAD_RADIUS, gatePoint, type Junction, type TurboPad } from "@/lib/tornado/junctions";
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
 import {
   loadProgress,
@@ -232,7 +249,6 @@ import {
 
 type Screen = "menu" | "garage" | "levels" | "settings" | "highscore" | "stats" | "play";
 type PlayPhase = "seeking" | "approach" | "quiz" | "paused" | "result_win" | "result_lose";
-type QuizReason = "anchor" | "roam";
 
 const GAME_ID = "tornado-hunter-200";
 
@@ -279,11 +295,15 @@ export default function TornadoHunter200() {
   const [forceQuiz, setForceQuiz] = useState(0);
   /** J7a teszt-kampó: a játékos a tölcsértől ennyi km-re kerül (a mérési sávba állításhoz); `n` a jelző sorszáma. */
   const [forceNear, setForceNear] = useState<{ n: number; km: number }>({ n: 0, km: 0 });
+  /** J7b teszt-kampó: azonnali elágazás (`long`: a bank leghosszabb válaszaival — a tábla-beférés mérése). */
+  const [forceJunction, setForceJunction] = useState<{ n: number; long: boolean }>({ n: 0, long: false });
   /** A közös keret állapota játék közben (játszik / szünet / eredmény) — a PlayScreen jelenti. */
   const [playState, setPlayState] = useState<GameScreenState>("playing");
   /** A „Következő szint” új futást indít: a kulcs váltása újraszereli a PlayScreent. */
   const [playKey, setPlayKey] = useState(0);
   const autoPauseRef = useRef<() => void>(() => {});
+  /** K.2 teszt-kampó: a futó PlayScreen méri ki (`probe()` kötelező mezői), a lap szintű API ide hív. */
+  const probeRef = useRef<(() => Record<string, number | string | null>) | null>(null);
   const best = useBestScore(GAME_ID);
   const [, setLocation] = useLocation();
   // Spec 2026-09-29-palyak-szoletra-nyelvek (E szelet, D6): 10 pálya az évfolyam AUTO-tartományában. Évfolyam: a
@@ -314,15 +334,22 @@ export default function TornadoHunter200() {
           setScreen("play");
           setForceResult((n) => n + 1);
         }
-        if (patch.phase === "quiz") {
+        // K.2: a `question: true` azonnal kérdést nyit; a `phase: "quiz"` ennek kompatibilis álneve (terv 9.).
+        if (patch.phase === "quiz" || patch.question === true) {
           setScreen("play");
           setForceQuiz((n) => n + 1);
+        }
+        const junction = (patch as { junction?: unknown }).junction;
+        if (junction === true || junction === "long") {
+          setScreen("play");
+          setForceJunction((cur) => ({ n: cur.n + 1, long: junction === "long" }));
         }
         const nearKm = (patch as { nearTornadoKm?: unknown }).nearTornadoKm;
         if (typeof nearKm === "number" && Number.isFinite(nearKm) && nearKm > 0) {
           setForceNear((cur) => ({ n: cur.n + 1, km: nearKm }));
         }
       },
+      probe: () => probeRef.current?.() ?? { simTime: 0, questionOpen: 0, questionsAnswered: 0, questionsCorrect: 0, fps: 0, band: null, intensity: null },
     });
   }, []);
 
@@ -332,6 +359,7 @@ export default function TornadoHunter200() {
       setForceResult(0);
       setForceQuiz(0);
       setForceNear({ n: 0, km: 0 });
+      setForceJunction({ n: 0, long: false });
       setPlayState("playing");
     }
   }, [screen]);
@@ -513,6 +541,7 @@ export default function TornadoHunter200() {
             forceResult={forceResult}
             forceQuiz={forceQuiz}
             forceNear={forceNear}
+            forceJunction={forceJunction}
             gradeLevel={runGradeLevel}
             onGradeLevelWin={() => {
               if (runGradeLevel != null) levels.complete(runGradeLevel);
@@ -527,6 +556,7 @@ export default function TornadoHunter200() {
             onSubmitBest={best.submit}
             onShellState={setPlayState}
             autoPauseRef={autoPauseRef}
+            probeRef={probeRef}
           />
         )}
       </main>
@@ -784,9 +814,11 @@ function GarageScreen(props: {
         <StatBar label="Gyorsulás" value={detailStats.acceleration} max={130} />
         <StatBar label="Irányítás" value={detailStats.handling} max={130} />
         <StatBar label="Tapadás" value={detailStats.grip} max={130} />
-        <StatBar label="Stabilitás" value={detailStats.stability} max={130} />
+        {/* Kanban #83 (J7b): a sáv a játékban ténylegesen ható számot mutatja — Stabilitás = ütközés-tűrés, Horgony =
+            rögzítési gyorsaság (a jármű alap stabilitása / horgonyereje nem hat), a szélállóság a telítési pontig. */}
+        <StatBar label="Stabilitás" value={detailStats.crashTolerance} max={130} />
         <StatBar label="Szélállóság" value={detailStats.windResistance} max={130} />
-        <StatBar label="Horgony" value={detailStats.anchorPower} max={130} />
+        <StatBar label="Horgony" value={detailStats.anchorSpeed} max={130} />
         <StatBar label="Mérősáv" value={detailStats.instruments} max={130} />
       </div>
 
@@ -1159,6 +1191,8 @@ function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoP
           <p>W/S — gáz/fék · A/D — kormány · Szóköz — kézifék · F — horgony · C — kamera · Esc — menü</p>
           <p className="font-semibold text-white/70 mt-2 mb-1">Mobil</p>
           <p>Bal: kormány · Jobb: gáz, fék, horgony. A gombok az irányítás-móddal oldalt válthatók.</p>
+          <p className="font-semibold text-white/70 mt-2 mb-1">Elágazás</p>
+          <p>Koppints a jó táblára (vagy 1–3). A bal vagy a jobb tábla kapuján fékezés után át is hajthatsz — egyenesen továbbhajtva nem választasz.</p>
         </div>
       </CardContent>
     </Card>
@@ -1303,6 +1337,8 @@ function PlayScreen(props: {
   forceQuiz: number;
   /** J7a teszt-kampó: `n` > 0 és változik → a játékos `km` távolságra kerül a tölcsértől. */
   forceNear: { n: number; km: number };
+  /** J7b teszt-kampó: `n` > 0 és változik → azonnali elágazás; `long` → a leghosszabb válaszú teszt-tétel. */
+  forceJunction: { n: number; long: boolean };
   /** A menü pályaválasztójából indított futás pályája (1–10), különben `null`. */
   gradeLevel: number | null;
   onGradeLevelWin: () => void;
@@ -1320,6 +1356,8 @@ function PlayScreen(props: {
   onShellState: (state: GameScreenState) => void;
   /** A közös keret automatikus szünete (háttérbe kerülés, elforgatás) ezt hívja. */
   autoPauseRef: React.MutableRefObject<() => void>;
+  /** K.2 teszt-kampó: a `probe()` mérője (a futás alatt ez a PlayScreen tölti ki). */
+  probeRef: React.MutableRefObject<(() => Record<string, number | string | null>) | null>;
 }) {
   const spec = useMemo<LevelSpec>(() => levelSpec(props.level), [props.level]);
   /** Pályás futásban a sáv mérsékelten szűkíti/bővíti az időkeretet (E szelet, D6); a „Szintek”-ből indítva a régi. */
@@ -1366,20 +1404,27 @@ function PlayScreen(props: {
     timeLeft: runTimeLimit,
     stormPct: 0,
     score: 0,
+    /** J7b: nitró fut (jó válasz az elágazásnál / a turbópadon). */
+    nitro: false,
   });
-  const [activeQuiz, setActiveQuiz] = useState<Question | null>(null);
   /**
-   * G-1: a rossz válasz magyarázata.
-   *
-   * Eddig 750 ms villanás jelezte a helyes választ, aztán ment tovább a játék.
-   * Ennyi idő alatt a gyerek látja, MELYIK volt a jó, de azt nem tudja meg, hogy
-   * MIÉRT — a téves fogalom megmarad. A kártya addig áll, amíg be nem zárja.
+   * G-1 → J7b (terv 9., J5): a hibás válasz NEM nyit magától kártyát — a helyes megoldás a játéktérben (kapu-tábla, sáv)
+   * ≥ 1,8 mp-ig látszik, a tétel az ismétlési sorba kerül, és a „Miért?” gomb nyitja a teljes magyarázatot. Amíg a kártya
+   * nyitva van, áll a játék és a kérdés-óra.
    */
   const [feedback, setFeedback] = useState<FeedbackCard | null>(null);
-  const pendingResolveRef = useRef<(() => void) | null>(null);
-  const [quizReason, setQuizReason] = useState<QuizReason>("roam");
-  const [quizFlash, setQuizFlash] = useState<{ idx: number; correct: boolean } | null>(null);
+  const feedbackRef = useRef<FeedbackCard | null>(null);
+  feedbackRef.current = feedback;
+  /** A kérdés-sáv „Mutasd” (kinyitott hosszú kérdés) — amíg nyitva, áll a játék (terv 8.9). */
+  const expandedRef = useRef(false);
+  /** Review #610: a menet vége a futó megoldás-kijelzés lefutásáig halasztva (a győzelem / vereség jelzője). */
+  const deferredFinishRef = useRef<boolean | null>(null);
+  /** Review #610 (Vercel P1): az elhalasztott menetvég kezdete — a mag áll, a megoldás-kijelzés órája innen a valós idővel halad. */
+  const deferredRevealRef = useRef<{ clockMs: number; frameMs: number } | null>(null);
+  const expandedIdRef = useRef<number | null>(null);
   const [anchorMsg, setAnchorMsg] = useState<string | null>(null);
+  /** J7b: az elágazás / turbó következménye („Rövidítés — turbó!”, „Kerülő: −9 mp”), a sáv alatt. */
+  const [chaseMsg, setChaseMsg] = useState<{ text: string; tone: "good" | "bad" } | null>(null);
   const [result, setResult] = useState<{
     score: number;
     coins: number;
@@ -1425,7 +1470,14 @@ function PlayScreen(props: {
   /* ------- refs mirrored from state for the animation loop ------- */
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
-  const rngRef = useRef({ next: 0 });
+  /* ------- J7b: seed (K.4/12–13, KSZ-2/3) ------- */
+  /** A menet seedje: `?seed=` (teszt-kampó) vagy a nap + a szint; menetenként `seedFrom(alap, futás)`. */
+  const seedBase = useMemo(() => readGameSeed() ?? seedFrom(GAME_ID, new Date().toISOString().slice(0, 10), props.level), [props.level]);
+  const runIndexRef = useRef(0);
+  const runSeedRef = useRef<string>(seedFrom(seedBase, 0));
+  /** A menet játékmenet-RNG-je (kérdés-sorsolás, a tölcsér kezdőszöge, a szél) és a kozmetikai `fxRng` (villám). */
+  const worldRngRef = useRef<SeededRng>(createRng(seedFrom(runSeedRef.current, "world")));
+  const fxRngRef = useRef<SeededRng>(createRng(seedFrom(runSeedRef.current, "fx")));
   const playerRef = useRef<PlayerState>({ x: fromKm(0.02) * 0, z: HALF_WORLD * 0, heading: 0, speed: 0, anchored: false });
   const tornadoPosRef = useRef({ x: 0, z: 0, angle: 0, born: 0, alive: true });
   const windRef = useRef<WindState>(initialWind(spec));
@@ -1436,8 +1488,6 @@ function PlayScreen(props: {
   /** J7a: a menet legjobb helyes-válasz sorozata (`runStreak` a ranglistára, `maxStreak` az eredményekhez). */
   const streakRef = useRef(createStreakTracker());
   const anchorAttemptsRef = useRef(1);
-  const lastQuizAtRef = useRef(0);
-  const lastEvalAtRef = useRef(-Infinity);
   const elapsedRef = useRef(0);
   const distanceTravelledRef = useRef(0);
   const timeoutsRef = useRef<number[]>([]);
@@ -1484,7 +1534,6 @@ function PlayScreen(props: {
   /** Spec 2026-09-29: a futásban feltett kérdések — a 7–12. évfolyamos közös bank nem ismétel. */
   const gradeSeenRef = useRef(createGradeQuizSeen());
   const adaptiveRef = useRef(createAdaptiveSession(primaryGrade, props.gradeLevel));
-  const answerLockedRef = useRef(false);
   const keysRef = useRef({ fwd: false, back: false, left: false, right: false, brake: false });
   /** Analog stick input (spec 2026-09-29-tornado-ut-kormanyzas D3). */
   const touchRef = useRef<TouchDrive>({ throttle: 0, steer: 0 });
@@ -1525,7 +1574,14 @@ function PlayScreen(props: {
     postFx: PostFx;
     dust: SparkleField;
     dustCarry: number;
+    /** J7b: a három elágazás-tábla (oszlop + tábla) és a turbópad — előre létrehozva, újrahasznosítva (KSZ-6). */
+    signs: THREE.Group[];
+    pad: THREE.Mesh;
   } | null>(null);
+  /** A vászon CSS-mérete (a táblafeliratok vetítéséhez). */
+  const sizeRef = useRef({ w: 640, h: 480, top: 0 });
+  /** A kérdés-sáv kártyájának alja (képernyő-px, 10 Hz-en mérve): a táblafeliratok ez alá kerülnek, nem a kártya mögé. */
+  const cardBottomRef = useRef(0);
 
   const rafRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
@@ -1536,59 +1592,168 @@ function PlayScreen(props: {
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
 
-  /* ------- deterministic-ish RNG for quiz draws ------- */
-  const drawRng = useCallback(() => {
-    // xorshift on a per-run seed derived from the level; good enough for variety.
-    let x = (rngRef.current.next = (rngRef.current.next * 1664525 + 1013904223 + props.level * 7919) >>> 0);
-    x ^= x << 13;
-    x ^= x >>> 17;
-    x ^= x << 5;
-    return ((x >>> 0) % 100000) / 100000;
-  }, [props.level]);
+  /* ------- J7b: a menet seedelt RNG-je a kérdés-sorsoláshoz ------- */
+  const drawRng = useCallback(() => worldRngRef.current.next(), []);
 
-  const raiseQuiz = useCallback(
-    (reason: QuizReason) => {
-      answerLockedRef.current = false;
-      const vocabNow = vocabRef.current;
-      const q = pickQuestion({
-        adaptiveBand: adaptiveRef.current.band,
-        level: props.level,
-        school: settingsRef.current.school,
-        mode: props.coupon.active ? "mixed" : settingsRef.current.quizMode,
-        materialOnly: props.coupon.active,
-        material: materialRef.current,
-        recent: recentQuizRef.current,
-        gradeSeen: gradeSeenRef.current,
-        rng: drawRng,
-        vocab: vocabNow
-          ? {
-              next: () => {
-                const vq = vocabNow.next(vocabLevelForGrade(primaryGradeRef.current, adaptiveRef.current.band));
-                return vq ? vocabToQuestion(vq, primaryGradeRef.current) : null;
-              },
-            }
-          : undefined,
-      });
-      // Kézi (nem szóbankos) angol kérdés helyes válasza a közös naplóba: ugyanaz a szó ne jöjjön vissza a bankból.
-      if (q.subject === "english" && q.source === "bank" && !isVocabQuestion(q)) {
-        vocabRef.current?.markExternal(q.options[q.correctIndex]!);
-      }
-      const shuffled = shuffleOptions(q, drawRng);
-      recentQuizRef.current = [...recentQuizRef.current.slice(-8), q.id];
-      markGradeQuizSeen(gradeSeenRef.current, q);
-      lastQuizAtRef.current = elapsedRef.current;
-      setQuizReason(reason);
-      setActiveQuiz(shuffled);
-      setPhase("quiz");
-    },
-    [drawRng, props.level],
+  /* ------- J7b: kérdésforrás (a meglévő választó), a közös kérdés-sáv és a közös mag ------- */
+  const couponRef = useRef(props.coupon);
+  couponRef.current = props.coupon;
+  /** A director kulcsa → a Tornado-tétel (a kérdés-fajta címkéjének témája / tantárgya). */
+  const questionMetaRef = useRef(new Map<string, Question>());
+  const couponRepeatRef = useRef(0);
+  /** Teszt-kampó: a következő új tétel (a leghosszabb válaszú mérő-tétel). */
+  const forcedQuizRef = useRef<Question | null>(null);
+  const quizModeNow = (): QuizMode => (couponRef.current.active ? "mixed" : settingsRef.current.quizMode);
+  const provider = useMemo<QuestionProvider>(() => {
+    const asQuiz = (q: Question) => ({ id: q.id, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, explanation: q.explanation ?? undefined });
+    const toPlay = (q: Question, vq: VocabQuiz | null): PlayQuestion => {
+      const play =
+        vq && vq.id === q.id
+          ? vocabPlayQuestion(vq)
+          : q.source === "material"
+            ? // A bizonytalan tantárgyú tananyag tárgy nélkül kerül az ismétlési sorba (a „csak matek” mód ne hozza vissza).
+              materialPlayQuestion(asQuiz(q), { subject: q.certain === false ? undefined : q.subject, coupon: couponRef.current.active })
+            : bankPlayQuestion(GAME_ID, asQuiz(q), q.subject, q.grade);
+      questionMetaRef.current.set(play.key, q);
+      return play;
+    };
+    return {
+      get couponOnly() {
+        return couponRef.current.active;
+      },
+      // Forrásrend (K.2): nem látott tananyag, a mód tantárgyával (a bizonytalan tantárgyú csak vegyes / kupon módban).
+      material: (ctx) => {
+        const mode = quizModeNow();
+        const seen = gradeSeenRef.current;
+        const pool = materialRef.current.filter((m) => (mode === "mixed" || (m.subject === mode && m.certain !== false)) && !isGradeQuizSeen(seen, m));
+        if (pool.length === 0) {
+          // Kupon (lecke-jutalom) módban csak tananyag jöhet: a kis lecke se fogyjon el — körönként újra, saját kulccsal
+          // (a director egy menetben egy kulcsot csak egyszer ad; kupon módban ismétlési sor nincs).
+          const again = couponRef.current.active ? couponRepeat(materialRef.current, couponRepeatRef.current) : null;
+          if (!again) return null;
+          couponRepeatRef.current += 1;
+          const play = toPlay(again.item, null);
+          const key = `${play.key}${again.keySuffix}`;
+          questionMetaRef.current.set(key, again.item);
+          return { ...play, key };
+        }
+        const fits = ctx?.accept ? pool.filter((m) => ctx.accept!(asQuiz(m))) : [];
+        const from = fits.length > 0 ? fits : pool;
+        const picked = from[Math.floor(drawRng() * from.length) % from.length]!;
+        markGradeQuizSeen(seen, picked);
+        return toPlay(picked, null);
+      },
+      // Új tétel: a Tornado meglévő választója (szóbank / évfolyam-bank / kézi bank, a pálya sávja szerint).
+      fresh: () => {
+        const forced = forcedQuizRef.current;
+        if (forced) {
+          forcedQuizRef.current = null;
+          return toPlay(forced, null);
+        }
+        const vocabNow = vocabRef.current;
+        const held: { vq: VocabQuiz | null } = { vq: null };
+        const q = pickQuestion({
+          adaptiveBand: adaptiveRef.current.band,
+          level: props.level,
+          school: settingsRef.current.school,
+          mode: quizModeNow(),
+          material: [],
+          recent: recentQuizRef.current,
+          gradeSeen: gradeSeenRef.current,
+          rng: drawRng,
+          vocab: vocabNow
+            ? {
+                next: () => {
+                  const vq = vocabNow.next(vocabLevelForGrade(primaryGradeRef.current, adaptiveRef.current.band));
+                  held.vq = vq;
+                  return vq ? vocabToQuestion(vq, primaryGradeRef.current) : null;
+                },
+              }
+            : undefined,
+        });
+        // Kézi (nem szóbankos) angol kérdés helyes válasza a közös naplóba: ugyanaz a szó ne jöjjön vissza a bankból.
+        if (q.subject === "english" && q.source === "bank" && !isVocabQuestion(q)) {
+          vocabRef.current?.markExternal(q.options[q.correctIndex]!);
+        }
+        recentQuizRef.current = [...recentQuizRef.current.slice(-8), q.id];
+        markGradeQuizSeen(gradeSeenRef.current, q);
+        return toPlay(q, held.vq);
+      },
+      // Az ismétlési sor KÖZÖS a hét játékban: csak a módnak megfelelő saját / tananyag / angol szóbanki tétel jön vissza.
+      restore: (item) => {
+        const mode = quizModeNow();
+        const pl = item.payload;
+        if (pl.kind === "vocab") return pl.lang === "en" && mode !== "math" ? restoreReviewQuestion(item, { vocab: () => vocabRef.current }) : null;
+        if (pl.kind !== "quiz" || !(mode === "mixed" || pl.subject === mode)) return null;
+        return item.key.startsWith(`bank:${GAME_ID}:`) || item.key.startsWith("mat:") ? restoreReviewQuestion(item, {}) : null;
+      },
+    };
+  }, [props.level, drawRng]);
+
+  const directorConfig = useMemo(() => tornadoDirectorConfig(primaryGrade), [primaryGrade]);
+  const qRef = useRef<ReturnType<typeof usePlayQuestion>>(null as unknown as ReturnType<typeof usePlayQuestion>);
+  const driverRef = useRef<ChaseDriver | null>(null);
+  const onOutcomeRef = useRef<(o: QuestionOutcome, p: QuestionPresentation) => void>(() => {});
+  // A kérdés-sáv horga a levél-komponensben (`TornadoQuestionLayer`) él: a ≈ 10 Hz-es időcsík ott renderel, a lap csak a
+  // kérdés eseményeire (nyílás, kijelzés, lezárás) — a lapszintű időzített újrarenderelés a telefonos akadás forrása.
+  // A horog API-ja a `qRef`-ben (a levél minden renderje után frissíti), a lap a `qView` tükrön át renderel.
+  // Vak ellenőrzés KICSI 6: a beállítás objektuma memózva — különben minden lap-render új objektumot adna, és a memózott levél
+  // (`TornadoQuestionLayer`) a lap ~9 Hz-es HUD-renderjével együtt rajzolódna újra. A horog a beállítást csak létrehozáskor és
+  // `reset`-kor olvassa (az újrakezdés seedjét / sávját a `reset` kapja), így a memó viselkedést nem változtat.
+  const setupBand = adaptiveRef.current.band;
+  const setupSeed = runSeedRef.current;
+  const questionSetup = useMemo(() => ({ config: directorConfig, provider, startBand: setupBand, seed: setupSeed }), [directorConfig, provider, setupBand, setupSeed]);
+  const onQuestionShow = useCallback((p: QuestionPresentation) => driverRef.current?.core.onShow(p), []);
+  const onQuestionOutcome = useCallback((o: QuestionOutcome, p: QuestionPresentation) => onOutcomeRef.current(o, p), []);
+  const [qView, setQView] = useState<TornadoQuestionView>(EMPTY_QUESTION_VIEW);
+  const onQuestionView = useCallback(
+    (v: TornadoQuestionView) => setQView((cur) => (cur.presentation === v.presentation && cur.reveal === v.reveal ? cur : v)),
+    [],
   );
+  const barWindowFor = useCallback((id: number) => {
+    const j = junctionRef.current;
+    return j && j.questionId === id ? j.barWindowMs : 0;
+  }, []);
+  /** A fix lépésű szimuláció egy lépése (a jármű, a tölcsér, a szél) — lent definiálva, a meghajtó ezt hívja. */
+  const simStepRef = useRef<(dt: number) => { x: number; z: number; heading: number; speed: number; hold: boolean }>(() => ({ x: 0, z: 0, heading: 0, speed: 0, hold: true }));
+  const makeDriver = (seed: string): ChaseDriver =>
+    createChaseDriver({
+      seed,
+      questions: {
+        frame: (c, ctx) => qRef.current.frame(c, ctx),
+        request: (reason, c) => qRef.current.request(reason, c),
+        pick: (i, c) => qRef.current.pick(i, c),
+        active: () => qRef.current.active(),
+        abort: () => qRef.current.abort(),
+        canAsk: () => qRef.current.canAsk(),
+        pending: () => qRef.current.view().pending !== null,
+      },
+      physics: (dt) => simStepRef.current(dt),
+    });
+  if (!driverRef.current) driverRef.current = makeDriver(runSeedRef.current);
+  /** A kijelzett elágazás (a táblák a megoldás-kijelzés végéig maradnak) és a turbópad — a rajzoló hurok olvassa. */
+  const junctionRef = useRef<Junction | null>(null);
+  const padRef = useRef<TurboPad | null>(null);
+  /** A horgonyzás pillanatának távolsága (#83 L3: a pozíció-bónusz ebből számol). */
+  const anchoredKmRef = useRef<number | null>(null);
+  const fpsRef = useRef(60);
+  const frameClockRef = useRef(0);
+  const signRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const answersRef = useRef<HTMLOListElement | null>(null);
+  /** A válaszlista magassága (kérdésenként egyszer mérve) és utoljára írt helye — a rajzoló hurok nem olvas layoutot. */
+  const answersHRef = useRef(0);
+  const answersTopRef = useRef(-1);
+  /** A kérdés-alatti tájékozódó sáv (K2) és a táblák rétege; a sáv teteje a réteghez mérve (−1 = nincs sáv). */
+  const navRowRef = useRef<HTMLDivElement | null>(null);
+  const signLayerRef = useRef<HTMLDivElement | null>(null);
+  const navTopRef = useRef(-1);
+  /** A mozgó táblák koppintás-követője (felengedéskor a cél aktuális dobozán belül = válasz; elhúzás nem). */
+  const signTracker = useMemo(() => createPointerTapTracker(), []);
 
   /* ------- reset the run on mount / level change ------- */
   useEffect(() => {
     finishedRef.current = false;
-    rngRef.current.next = (props.level * 2654435761) >>> 0;
-    // Player starts a few km from the funnel; tornado near the map centre.
+    // Player starts a few km from the funnel; tornado near the map centre. A kezdőszög a menet seedelt RNG-jéből (K.4/13).
     tornadoPosRef.current = { x: 0, z: 0, angle: drawRng() * Math.PI * 2, born: 0, alive: true };
     playerRef.current = { x: 0, z: fromKm(3.4), heading: Math.PI, speed: 0, anchored: false };
     // Review PR #140: a kamera ne a régi hely magasságáról siklódjon át — NaN → a következő képkocka azonnal az új talajon.
@@ -1600,15 +1765,13 @@ function PlayScreen(props: {
     wrongRef.current = 0;
     streakRef.current = createStreakTracker();
     anchorAttemptsRef.current = 1;
-    lastQuizAtRef.current = 0;
-    lastEvalAtRef.current = -Infinity;
     elapsedRef.current = 0;
     distanceTravelledRef.current = 0;
     recentQuizRef.current = [];
     gradeSeenRef.current = createGradeQuizSeen();
+    anchoredKmRef.current = null;
     setResult(null);
     setAnchorMsg(null);
-    setActiveQuiz(null);
     setPhase("seeking");
   }, [props.level]);
 
@@ -1720,6 +1883,30 @@ function PlayScreen(props: {
     rain.visible = false;
     scene.add(rain);
 
+    // J7b: elágazás-táblák (3) és turbópad — egyszer létrehozva, láthatóság / hely / szín képkockánként (KSZ-5, KSZ-6).
+    const poleGeo = new THREE.CylinderGeometry(0.28, 0.28, 7, 8);
+    const boardGeo = new THREE.PlaneGeometry(4.2, 1.8);
+    const poleMat = new THREE.MeshStandardMaterial({ color: "#334155" });
+    const signs: THREE.Group[] = [];
+    for (let i = 0; i < 3; i++) {
+      const g = new THREE.Group();
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.y = 3.5;
+      const board = new THREE.Mesh(boardGeo, new THREE.MeshBasicMaterial({ color: SIGN_COLORS.idle, side: THREE.DoubleSide }));
+      board.position.y = 7.2;
+      g.add(pole, board);
+      g.visible = false;
+      scene.add(g);
+      signs.push(g);
+    }
+    const padMesh = new THREE.Mesh(
+      new THREE.CircleGeometry(TURBO_PAD_RADIUS, 32),
+      new THREE.MeshBasicMaterial({ color: "#22d3ee", transparent: true, opacity: 0.6, depthWrite: false }),
+    );
+    padMesh.rotation.x = -Math.PI / 2;
+    padMesh.visible = false;
+    scene.add(padMesh);
+
     // Por a kerekek mögött: egyetlen pontfelhő, normál (nem additív) keveréssel.
     const dust = new SparkleField(scene, Math.round(320 * LOOK_BUDGET[quality].particleScale), THREE.NormalBlending);
     // HIGH: enyhe ragyogás (fényszórók, napfény); más szinten sima render.
@@ -1740,6 +1927,8 @@ function PlayScreen(props: {
       postFx,
       dust,
       dustCarry: 0,
+      signs,
+      pad: padMesh,
     };
 
     const handleResize = () => {
@@ -1747,6 +1936,7 @@ function PlayScreen(props: {
       const w = Math.max(1, Math.floor(rect?.width ?? 640));
       const h = Math.max(1, Math.floor(rect?.height ?? 480));
       renderer.setSize(w, h, false);
+      sizeRef.current = { w, h, top: rect?.top ?? 0 };
       postFx.setSize(w, h);
       dust.setViewportHeight(h * renderer.getPixelRatio(), camera.fov);
       camera.aspect = w / h;
@@ -1819,8 +2009,48 @@ function PlayScreen(props: {
         timeLimit: runTimeLimit,
         tornadoSpeed: spec.tornadoSpeed,
       }),
-      suppressQuiz: () => {
-        lastQuizAtRef.current = elapsedRef.current;
+      /** J7b: a nyitott elágazás geometriája (a böngészős próba ezzel hajt át egy kapun). */
+      getJunction: () => (junctionRef.current ? { ...junctionRef.current } : null),
+      getPad: () => (padRef.current ? { ...padRef.current } : null),
+      /**
+       * Vak ellenőrzés K3: a jármű vetített doboza a nézetablakban (CSS px) — a böngészős mérő ebből nézi, hogy a kérdés kártyája /
+       * gombjai nem takarják-e a járművet és az előtte lévő utat.
+       */
+      getVehicleScreenBox: () => {
+        // A KAROSSZÉRIA (alváz + fülke) orientált doboza — a tengelyre igazított `Box3` a jármű forgatása, az árnyék-folt és az
+        // antenna miatt a valódi képnél jóval nagyobb dobozt adna. `aheadTop`: az előtte lévő út (1,5 járműhossz) vetített teteje.
+        const sc = sceneRef.current;
+        const canvas = canvasRef.current;
+        if (!sc || !canvas) return null;
+        const rect = canvas.getBoundingClientRect();
+        const size = sc.vehicle.userData.size as { width: number; length: number; height?: number } | undefined;
+        const p = playerRef.current;
+        const hw = (size?.width ?? 2.4) / 2;
+        const hl = (size?.length ?? 5.2) / 2;
+        const top = (size?.height ?? 1.6) * 1.4 + 0.62;
+        const gy = sc.vehicle.position.y;
+        const fx = Math.sin(p.heading);
+        const fz = -Math.cos(p.heading);
+        const v = new THREE.Vector3();
+        const toScreen = (x: number, y: number, z: number) => {
+          v.set(x, y, z).project(sc.camera);
+          return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
+        };
+        let left = Infinity;
+        let right = -Infinity;
+        let boxTop = Infinity;
+        let bottom = -Infinity;
+        for (let k = 0; k < 8; k++) {
+          const f = k & 1 ? hl : -hl;
+          const r = k & 2 ? hw : -hw;
+          const s = toScreen(p.x + fx * f - fz * r, gy + (k & 4 ? top : 0), p.z + fz * f + fx * r);
+          left = Math.min(left, s.x);
+          right = Math.max(right, s.x);
+          boxTop = Math.min(boxTop, s.y);
+          bottom = Math.max(bottom, s.y);
+        }
+        const ahead = toScreen(p.x + fx * hl * 3, gy, p.z + fz * hl * 3);
+        return { left, right, top: boxTop, bottom, aheadTop: Math.min(boxTop, ahead.y) };
       },
     };
     const w = window as unknown as { __websuliTornado?: typeof api };
@@ -1829,6 +2059,41 @@ function PlayScreen(props: {
       if (w.__websuliTornado === api) delete w.__websuliTornado;
     };
   }, []);
+
+  /* ------- K.2 teszt-kampó: `probe()` (a kötelező mezők + a J7b mérései) ------- */
+  useEffect(() => {
+    const ref = props.probeRef;
+    ref.current = () => {
+      const ctl = qRef.current;
+      const d = driverRef.current;
+      const st = ctl.director?.stats(d?.core.clockMs() ?? 0);
+      const shown = ctl.view().presentation;
+      const p = playerRef.current;
+      return {
+        simTime: d?.loop.simTimeMs() ?? 0,
+        questionOpen: ctl.active() ? 1 : 0,
+        questionsAnswered: st?.answered ?? 0,
+        questionsCorrect: st?.correct ?? 0,
+        fps: Math.round(fpsRef.current),
+        band: ctl.director?.band() ?? null,
+        intensity: ctl.director?.intensity() ?? null,
+        questionKind: shown ? d?.core.kindOf(shown.id) ?? null : null,
+        questionId: shown?.id ?? null,
+        reveal: ctl.view().reveal ? 1 : 0,
+        nitroMs: d?.core.nitroLeftMs() ?? 0,
+        junctionFrozen: d?.core.junction()?.frozen ? 1 : 0,
+        intent: d?.core.intentSeen() ? 1 : 0,
+        detourSec: d?.core.detourTotalSec() ?? 0,
+        x: p.x,
+        z: p.z,
+        speed: p.speed,
+        phase: phaseRef.current,
+      };
+    };
+    return () => {
+      ref.current = null;
+    };
+  }, [props.probeRef]);
 
   /* ------- keyboard ------- */
   useEffect(() => {
@@ -1925,22 +2190,42 @@ function PlayScreen(props: {
   };
 
   const pendingAnchorRef = useRef<{ distanceKm: number } | null>(null);
+  /**
+   * J7b: a horgony-kérdés a közös kérdés-sávon jön (gomb-mód), a megállító overlay megszűnt; a nyitott elágazás / turbó
+   * kérdést a mag megszakítja (nem hiba, nem ismétlés). Ha épp megoldás-kijelzés fut, a kérés a kijelzés végén indul.
+   */
+  const raiseQuiz = (_reason: "anchor") => {
+    if (driverRef.current?.core.requestAnchor()) return;
+    if (qRef.current.view().pending !== null) return;
+    // A director most nem adott kérdést (min. rés / megoldás-kijelzés / üres forrás): a fix lépés újrapróbálja.
+    anchorWantRef.current = driverRef.current?.core.clockMs() ?? 0;
+  };
+  /** A függő horgony-kérés kezdete (kérdés-óra ms), vagy null. */
+  const anchorWantRef = useRef<number | null>(null);
 
   const finishRun = useCallback(
     (won: boolean) => {
       if (finishedRef.current) return;
       finishedRef.current = true;
+      // Review #610: a futó megoldás-kijelzés (≥ 1,8 s) kifut — a mag áll (finishedRef → 0-s időskála), a kérdés-sáv lezárul,
+      // és az eredmény csak a `settled()` után jelenik meg (a képkocka hívja újra a befejezést).
+      if (qRef.current.view().reveal && !qRef.current.settled()) {
+        qRef.current.finish();
+        deferredFinishRef.current = won;
+        deferredRevealRef.current = { clockMs: driverRef.current?.core.clockMs() ?? 0, frameMs: frameClockRef.current };
+        return;
+      }
       const p = playerRef.current;
       const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
       const reward = won
-        ? interceptReward({
-            // Review K2: a pozíció-bónusz az ALAP sávhoz mér — a műszer-fejlesztés csak a sáv elérhetőségét
-            // könnyíti, a ranglista-pontot nem emeli (azonos távolság → azonos pont).
-            spec,
+        ? winReward({
+            // Review K2: a pozíció-bónusz az ALAP sávhoz mér (a `winReward` szintszámot kap, szélesített sávot nem
+            // kaphat); #83 L3: a horgonyzás pillanatának távolságából (a rögzítés után a tölcsér tovább mozog).
+            level: props.level,
             secondsUsed: elapsedRef.current,
             anchorAttempts: anchorAttemptsRef.current,
             peakWind: windRef.current.maximumWindSpeed,
-            distanceKm: distKm,
+            anchoredDistanceKm: anchoredKmRef.current ?? distKm,
             correctAnswers: correctRef.current,
             wrongAnswers: wrongRef.current,
           })
@@ -1951,17 +2236,22 @@ function PlayScreen(props: {
       pausedRef.current = false;
       setPaused(false);
       setFeedback(null);
-      // S13 / C9: egy ütemezett eredmény alatt nyitva maradt kvíz ne maradjon az eredményképernyő alatt.
-      setActiveQuiz(null);
+      // S13 / C9 → J7b: a menet vége lezárja a kérdés-sávot — a nyitott kérdés „megszakítva” (nem hiba, nem ismétlés), és
+      // a sáv nem marad az eredményképernyő alatt.
+      const stats = qRef.current.director?.stats(driverRef.current?.core.clockMs() ?? 0) ?? null;
+      qRef.current.finish();
+      qRef.current.abort();
+      junctionRef.current = null;
+      padRef.current = null;
       pendingAnchorRef.current = null;
-      pendingResolveRef.current = null;
       const bestNow = props.onSubmitBest(reward.score);
       setResult({
         score: reward.score,
         coins: reward.coins,
         won,
-        correct: correctRef.current,
-        total: correctRef.current + wrongRef.current,
+        // K.2: a valós kérdés-statisztika a directorból.
+        correct: stats?.correct ?? correctRef.current,
+        total: stats ? stats.correct + stats.wrong + stats.timeouts : correctRef.current + wrongRef.current,
         best: bestNow.best,
         isNewBest: bestNow.isNewBest,
         breakdown: won ? reward.breakdown : null,
@@ -2017,20 +2307,24 @@ function PlayScreen(props: {
           .catch(() => {});
       }
     },
-    [props, spec],
+    [props],
   );
 
   // Teszt-kampók: csak a jelző VÁLTOZÁSÁRA futnak (a régi `forceResult === true` minden renderkor újra lefutott,
   // így az „Újra” után azonnal visszaugrott az eredményre).
   const finishRunRef = useRef(finishRun);
   finishRunRef.current = finishRun;
-  const raiseQuizRef = useRef(raiseQuiz);
-  raiseQuizRef.current = raiseQuiz;
   useEffect(() => {
     if (props.forceResult > 0) finishRunRef.current(true);
   }, [props.forceResult]);
   useEffect(() => {
-    if (props.forceQuiz > 0 && !finishedRef.current) raiseQuizRef.current("roam");
+    if (props.forceJunction.n <= 0 || finishedRef.current) return;
+    if (props.forceJunction.long) forcedQuizRef.current = LONG_ANSWER_FIXTURE;
+    driverRef.current?.core.forceJunction();
+  }, [props.forceJunction.n]);
+  // K.2: `forceState({ question: true })` / `phase: "quiz"` → azonnali kérdés (turbó-kérdés, gomb-mód).
+  useEffect(() => {
+    if (props.forceQuiz > 0 && !finishedRef.current) driverRef.current?.core.forceTurbo();
   }, [props.forceQuiz]);
   useEffect(() => {
     if (props.forceNear.n <= 0 || finishedRef.current) return;
@@ -2054,6 +2348,7 @@ function PlayScreen(props: {
 
       if (outcome.ok) {
         playerRef.current.anchored = true;
+        anchoredKmRef.current = pending?.distanceKm ?? toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
         const sc = sceneRef.current;
         if (sc) {
           setAnchorsVisible(sc.vehicle, true);
@@ -2076,88 +2371,72 @@ function PlayScreen(props: {
     [bandSpec, finishRun, haptics, quality],
   );
 
-  /* ------- answer handling ------- */
-  const answerQuiz = useCallback(
-    (idx: number) => {
-      const quiz = activeQuiz;
-      if (!quiz || answerLockedRef.current || pausedRef.current) return;
-      answerLockedRef.current = true;
-      const correct = idx === quiz.correctIndex;
-      adaptiveRef.current.answer(correct);
-      streakRef.current = recordStreak(streakRef.current, correct);
-      setQuizFlash({ idx, correct });
-      if (correct) {
+  /* ------- J7b: a kérdés kimenete (a kérdés-sáv hívja; ≤ 2 s játékbeli következmény a magban, K.4/23) ------- */
+  onOutcomeRef.current = (o, p) => {
+    const core = driverRef.current?.core ?? null;
+    const kind = core?.kindOf(p.id) ?? null;
+    if (o.result !== "aborted") {
+      const good = o.result === "correct";
+      adaptiveRef.current.answer(good);
+      streakRef.current = recordStreak(streakRef.current, good);
+      if (good) {
         correctRef.current += 1;
-        scoreRef.current += quizReason === "roam" ? freeRoamAnswerScore(spec) : 0;
-        sfxSuccess();
+        if (kind !== "anchor") scoreRef.current += freeRoamAnswerScore(spec);
         haptics("success");
       } else {
         wrongRef.current += 1;
-        sfxError();
         haptics("error");
       }
-      props.onProgress((latest) => recordAnswer(latest, correct));
+      props.onProgress((latest) => recordAnswer(latest, good));
+      // Kupon-bónusz: a valós (eredeti indexű) választás; lejáratnál nincs választás.
+      if (o.pickedOriginalIndex !== null) maybeClaimCouponBonus(props.coupon, p.question.quiz.id, o.pickedOriginalIndex);
+    }
+    core?.onOutcome(o, p);
+  };
 
-      maybeClaimCouponBonus(props.coupon, quiz.id, quiz.optionIndices?.[idx] ?? idx);
-
-      const advance = () => {
-        setQuizFlash(null);
-        setActiveQuiz(null);
-        if (quizReason === "anchor") {
-          resolveAnchor(correct);
-        } else {
-          setPhase("approach");
-        }
-      };
-
-      if (correct) {
-        scheduleGame(advance, 750);
-        return;
-      }
-
-      // Rossz válasz: a továbblépést a magyarázó kártya bezárása intézi, nem az
-      // óra. A gyereknek olvasnia kell, és arra nem lehet 750 ms-ot adni.
-      pendingResolveRef.current = advance;
-      setFeedback(
-        buildFeedback({
-          quiz: {
-            prompt: quiz.prompt,
-            options: quiz.options,
-            correctIndex: quiz.correctIndex,
-            explanation: quiz.explanation ?? undefined,
-          },
-          chosenIndex: idx,
-          attempt: 1, // vezetés közben nincs újrapróbálkozás: a vihar nem áll meg
-          ageBand: "kid",
-        }),
-      );
-    },
-    [activeQuiz, quizReason, spec, props.coupon, props.progress, haptics],
-  );
-
-  const dismissFeedback = useCallback(() => {
-    setFeedback(null);
-    const resolve = pendingResolveRef.current;
-    pendingResolveRef.current = null;
-    resolve?.();
+  /** „Miért?”: szünet + a valódi magyarázókártya a legutóbbi hibához (terv 9.; G-1 őr: `buildFeedback` + `<QuizFeedbackCard`). */
+  const openWhy = useCallback(() => {
+    const item = qRef.current.view().whyItem;
+    if (!item) return;
+    setFeedback(
+      buildFeedback({
+        quiz: item.quiz,
+        chosenIndex: item.pickedOriginalIndex,
+        attempt: 1, // vezetés közben nincs újrapróbálkozás: a vihar nem áll meg
+        ageBand: "kid",
+      }),
+    );
   }, []);
+  const closeWhy = useCallback(() => setFeedback(null), []);
 
   const restartRef = useRef<() => void>(() => {});
   restartRef.current = () => {
     // Az előző futás minden függő időzítője és félbehagyott kvíze érvénytelen (review-lelet #426).
     runIdRef.current += 1;
+    deferredFinishRef.current = null;
+    deferredRevealRef.current = null;
     clearPendingTimers();
     pendingAnchorRef.current = null;
-    pendingResolveRef.current = null;
     setFeedback(null);
-    setQuizFlash(null);
+    setChaseMsg(null);
     pausedRef.current = false;
     setPaused(false);
     burstRef.current = 0;
     adaptiveRef.current.reset(primaryGrade, props.gradeLevel);
-    answerLockedRef.current = false;
     finishedRef.current = false;
-    rngRef.current.next = (props.level * 2654435761 + Math.floor(Math.random() * 9973)) >>> 0;
+    // J7b: új menet = új seed (K.4/13): a kérdés-sor, a pálya és a mag mind ebből; nincs `Math.random`.
+    runIndexRef.current += 1;
+    runSeedRef.current = seedFrom(seedBase, runIndexRef.current);
+    worldRngRef.current = createRng(seedFrom(runSeedRef.current, "world"));
+    fxRngRef.current = createRng(seedFrom(runSeedRef.current, "fx"));
+    driverRef.current = makeDriver(runSeedRef.current);
+    junctionRef.current = null;
+    padRef.current = null;
+    anchoredKmRef.current = null;
+    anchorWantRef.current = null;
+    couponRepeatRef.current = 0;
+    expandedRef.current = false;
+    qRef.current.reset(runSeedRef.current, adaptiveRef.current.band);
     tornadoPosRef.current = { x: 0, z: 0, angle: drawRng() * Math.PI * 2, born: 0, alive: true };
     playerRef.current = { x: 0, z: fromKm(3.4), heading: Math.PI, speed: 0, anchored: false };
     // Review PR #140: a kamera ne a régi hely magasságáról siklódjon át — NaN → a következő képkocka azonnal az új talajon.
@@ -2169,8 +2448,6 @@ function PlayScreen(props: {
     wrongRef.current = 0;
     streakRef.current = createStreakTracker();
     anchorAttemptsRef.current = 1;
-    lastQuizAtRef.current = 0;
-    lastEvalAtRef.current = -Infinity;
     elapsedRef.current = 0;
     distanceTravelledRef.current = 0;
     recentQuizRef.current = [];
@@ -2179,8 +2456,307 @@ function PlayScreen(props: {
     if (sc) setAnchorsVisible(sc.vehicle, false);
     setResult(null);
     setAnchorMsg(null);
-    setActiveQuiz(null);
     setPhase("seeking");
+  };
+
+  /* ------- J7b: a mag eseményei (elágazás, turbópad, horgony-válasz) — a fix lépés elején dolgozzuk fel ------- */
+  const showChaseMsg = (text: string, tone: "good" | "bad") => {
+    setChaseMsg({ text, tone });
+    scheduleTimeout(() => setChaseMsg((cur) => (cur?.text === text ? null : cur)), 1800);
+  };
+  const applyChaseEventRef = useRef<(e: ChaseEvent) => void>(() => {});
+  applyChaseEventRef.current = (e) => {
+    switch (e.kind) {
+      case "junction":
+        junctionRef.current = e.junction;
+        break;
+      case "junction-done":
+        // Terv 5.7 Q1: a helyes úton rövidítés + turbó, a rosszon kerülő — a menet órája és a tölcsér élettartama előrébb lép.
+        // K1 (J7b döntések 16.): a kerülő nem okozhat azonnali vereséget — mindkét órából legalább 5 s marad.
+        if (e.detourSec > 0) {
+          const sec = detourWithGrace(e.detourSec, spec.tornadoLifetime - tornadoPosRef.current.born, runTimeLimit - elapsedRef.current);
+          elapsedRef.current += sec;
+          tornadoPosRef.current.born += sec;
+          showChaseMsg(sec > 0 ? `Kerülő: −${Math.round(sec)} mp` : "Kerülő — de még elkaphatod!", "bad");
+        } else if (e.nitroMs > 0) {
+          showChaseMsg("Rövidítés — turbó!", "good");
+          sfxPickup();
+        }
+        break;
+      case "pad":
+        padRef.current = e.pad;
+        break;
+      case "pad-gone":
+        padRef.current = null;
+        break;
+      case "pad-free":
+        // K4: nincs kérdés-forrás — a pad kérdés nélkül ad nitrót.
+        padRef.current = null;
+        showChaseMsg("Turbó — nitró 3 mp!", "good");
+        sfxPickup();
+        break;
+      case "turbo-done":
+        padRef.current = null;
+        if (e.nitroMs > 0) {
+          showChaseMsg("Turbó — nitró 3 mp!", "good");
+          sfxPickup();
+        }
+        break;
+      case "anchor-answer":
+        if (e.result === "aborted") pendingAnchorRef.current = null;
+        else resolveAnchor(e.result === "correct");
+        break;
+    }
+  };
+
+  /** A fix lépés kimenete — egyetlen, újrahasznált objektum (K5: a lépésben nincs foglalás). */
+  const simOutRef = useRef({ x: 0, z: 0, heading: 0, speed: 0, brake: false, reverse: false, hold: false });
+  const vehicleDimsRef = useRef(vehicleDimensions(props.vehicle.silhouette));
+  vehicleDimsRef.current = vehicleDimensions(props.vehicle.silhouette);
+  /** A gamepad képkockánként egyszer olvasva (K5). */
+  const padStateRef = useRef(readStandardGamepad(null));
+  /** Nyitva van-e (vagy kijelzés alatt) a horgony-kérdés (K3). */
+  const anchorQuestionOpen = (): boolean => {
+    const view = qRef.current.view();
+    const shown = view.presentation;
+    return shown !== null && driverRef.current?.core.kindOf(shown.id) === "anchor";
+  };
+
+  /* ------- J7b: egy fix szimulációs lépés (1/60 s) — a közös meghajtó hívja, a node-szimuláció ugyanígy ------- */
+  simStepRef.current = (dtSec) => {
+    const d = driverRef.current!;
+    for (const e of d.core.drainEvents()) applyChaseEventRef.current(e);
+    const dt = dtSec;
+    const ph = phaseRef.current;
+    const out = simOutRef.current;
+    if (finishedRef.current || !(ph === "seeking" || ph === "approach")) {
+      const p0 = playerRef.current;
+      out.x = p0.x;
+      out.z = p0.z;
+      out.heading = p0.heading;
+      out.speed = p0.speed;
+      out.brake = false;
+      out.reverse = false;
+      out.hold = true;
+      return out;
+    }
+    elapsedRef.current += dt;
+    timeLeftRef.current = Math.max(0, runTimeLimit - elapsedRef.current);
+    // Függő horgony-kérés: újrapróba; ha 2 mp alatt sem jön kérdés és nincs nyitott / függő kérdés, a forrás üres (terv
+    // 8.1: a játék kérdés nélkül is fut) — a horgony kérdés nélkül dől el.
+    const want = anchorWantRef.current;
+    if (want !== null && pendingAnchorRef.current) {
+      if (d.core.requestAnchor()) anchorWantRef.current = null;
+      else if (d.core.clockMs() - want >= 2000 && qRef.current.canAsk() && qRef.current.view().pending === null) {
+        anchorWantRef.current = null;
+        resolveAnchor(true);
+      }
+    } else anchorWantRef.current = null;
+
+    // --- vehicle control ---
+    const p = playerRef.current;
+    const stats = effRef.current;
+    const vehicleDims = vehicleDimsRef.current;
+
+    const k = keysRef.current;
+    const t = touchRef.current;
+    // K5: a gamepadet a képkocka olvassa egyszer (`padStateRef`), a fix lépés csak a kész értéket használja.
+    const pad = padStateRef.current;
+
+    // Keyboard stays digital; the touch stick and the gamepad are analog.
+    const rawThrottle = clampStick((k.fwd ? 1 : 0) - (k.back ? 1 : 0) + t.throttle + pad.throttle);
+    const brake = k.brake || pad.brake;
+    // K2 (J7b döntések 17.): a fék vagy a tárcsa / billentyű hátrahúzása megszakítja a nitrót — érintőn is lehet fékezni.
+    if (d.core.nitroLeftMs() > 0 && (brake || rawThrottle < -0.2)) d.core.cancelNitro();
+    const nitro = d.core.nitroLeftMs() > 0;
+    // Nitró alatt (jó válasz az elágazásnál / a turbópadon) a jármű előrelendül.
+    const throttle = nitro ? Math.max(rawThrottle, 0.85) : rawThrottle;
+    const steer = clampStick((k.right ? 1 : 0) - (k.left ? 1 : 0) + t.steer + pad.steer);
+    // K3 (J7b döntések 18.): a horgony-kérdés alatt (és a kijelzéséig) a jármű a ⚓-kori helyén áll, és nem veszíthet.
+    const anchorAsking = anchorQuestionOpen();
+
+    if (anchorAsking) {
+      p.speed = 0;
+    } else if (!p.anchored) {
+      // J7a: az alváz (stabilitás) a szélsodrást is csökkenti — a garázs „Szélállóság” sávja ugyanezt a számot mutatja.
+      const windPush = windDriftUnits(windForceOn(windRef.current, stats.windResistance));
+      const windAngle = (windRef.current.windDirection * Math.PI) / 180;
+      // Spec 2026-09-29-tornado-ut-kormanyzas D5: a lépés ≤ 1/60 s (a fix lépés pontosan ennyi: egy rész-lépés).
+      const steps = driveSubsteps(dtSec);
+      for (let i = 0; i < steps; i++) {
+        // A rész-lépés hossza (a fix lépésnél egy rész: 1/60 s); az ütközésfeloldás ugyanezzel a dt-vel fut.
+        const dt = dtSec / steps;
+        const next = stepVehicle(
+          p,
+          { throttle, steer, brake },
+          dt,
+          {
+            speedKmh: props.vehicle.speed * (nitro ? NITRO_SPEED_FACTOR : 1),
+            acceleration: stats.acceleration * (nitro ? NITRO_ACCEL_FACTOR : 1),
+            handling: stats.handling,
+            // J7a: a gumik a talaj tapadását szorozzák (sáron, füvön kisebb a kanyar-csúszás).
+            grip: effectiveSurfaceGrip(gripAt(p.x, p.z), stats.gripFactor),
+            windPush,
+            windAngle,
+          },
+        );
+        // Spec 2026-09-29-tornado-fizika H2: houses, trees, poles and bridge railings are solid.
+        // The step's dt: the scrape friction is per second (30/60/144 Hz must slow alike).
+        const solid = resolveVehicleCollisions(next, vehicleDims, collidersNear(next.x, next.z), dt);
+        const nx = clampToWorld(solid.x);
+        const nz = clampToWorld(solid.z);
+        const moved = Math.hypot(nx - p.x, nz - p.z);
+        distanceTravelledRef.current += toKm(moved);
+        p.x = nx;
+        p.z = nz;
+        p.heading = next.heading;
+        // J7a: az alváz tompítja az ütközés sebességvesztését (a hely-kitolás nem változik).
+        p.speed = softenImpact(next.speed, solid.speed, stats.crashLossFactor);
+      }
+    } else {
+      p.speed = 0;
+    }
+
+    // --- tornado motion --- (a lap és a node-szimuláció közös képlete)
+    const tp = tornadoPosRef.current;
+    advanceTornado(tp, spec, dt);
+
+    // --- distance & wind ---
+    const dxu = p.x - tp.x;
+    const dzu = p.z - tp.z;
+    const distKm = toKm(Math.hypot(dxu, dzu));
+    const bearing = bearingBetween(p.x, p.z, tp.x, tp.z);
+    windRef.current = advanceWind(windRef.current, {
+      distanceKm: distKm,
+      peak: spec.windPeak,
+      tornadoIntensity: spec.tornadoIntensity,
+      dt,
+      bearingDeg: bearing,
+      // K.4/12: a szél „lélegzése” is a menet seedelt RNG-jéből (nincs `Math.random` a játékmenetben).
+      rng: drawRng,
+    });
+
+    // Approach phase once within 2 km.
+    if (ph === "seeking" && distKm < 2) setPhase("approach");
+
+    // --- lose conditions --- (K3: a horgony-kérdés alatt nem teljesülhetnek)
+    if (!anchorAsking) {
+      if (timeLeftRef.current <= 0 || tp.born > spec.tornadoLifetime) {
+        if (!p.anchored) finishRun(false);
+      }
+      // Too close, un-anchored, in a strong storm = thrown → lose.
+      if (!p.anchored && distKm < bandSpecRef.current.anchorBand.min * 0.4 && windRef.current.currentWindSpeed > spec.windPeak * 0.8) {
+        finishRun(false);
+      }
+    }
+
+    // A rögzítő szándékhoz a lépés bemenete (J7b döntések 25.): fék és hátrahúzott gáz — a mag felfutó élt néz a minimális
+    // olvasás után; a kormány nem szándék. A választ a mag csak rögzült kapunál fogadja el (a táblára koppintás közvetlen).
+    out.x = p.x;
+    out.z = p.z;
+    out.heading = p.heading;
+    out.speed = p.speed;
+    out.brake = brake;
+    out.reverse = rawThrottle < -0.2;
+    out.hold = anchorAsking || p.anchored || anchorBandState(distKm, bandSpecRef.current.anchorBand) === "in_band";
+    return out;
+  };
+
+  /* ------- J7b: táblák és turbópad a világban + a táblák feliratai (DOM, vetített helyen; KSZ-9: közvetlen stílusírás) ------- */
+  const updateChaseMarkers = (sc: NonNullable<typeof sceneRef.current>) => {
+    const view = qRef.current.view();
+    let j = junctionRef.current;
+    // A táblák a kérdés megoldás-kijelzésének végéig látszanak (a helyes tábla zölden ≥ 1,8 mp — terv 4.1/2), utána eltűnnek.
+    if (j && view.presentation?.id !== j.questionId) {
+      junctionRef.current = null;
+      j = null;
+    }
+    const reveal = j ? view.reveal : null;
+    const w = sizeRef.current.w;
+    const h = sizeRef.current.h;
+    const compact = answersRef.current !== null;
+    const labelW = compact ? 48 : Math.min(w * 0.26, 180);
+    // A teljes válaszok listája (hosszú válasznál): állón a kérdés-kártya alatt, alacsony fekvőn a bal oldalon (R4). A lista
+    // magasságát kérdésenként egyszer mérjük (`answersHRef`, layout-effektben) — itt csak írunk, nem olvasunk layoutot (K5).
+    const sideList = h < 520 && w > h;
+    let answersBottom = 0;
+    if (answersRef.current) {
+      const top = sideList ? 64 : Math.max(90, cardBottomRef.current - sizeRef.current.top + 6);
+      if (answersTopRef.current !== top) {
+        answersTopRef.current = top;
+        answersRef.current.style.top = `${top}px`;
+      }
+      const vis = j ? "visible" : "hidden";
+      if (answersRef.current.style.visibility !== vis) answersRef.current.style.visibility = vis;
+      answersBottom = j && !sideList ? top + answersHRef.current : 0;
+    }
+    for (let i = 0; i < sc.signs.length; i++) {
+      const sign = sc.signs[i]!;
+      const el = signRefs.current[i] ?? null;
+      const on = j !== null && i < j.gates;
+      sign.visible = on;
+      if (!on || !j) {
+        if (el) el.style.visibility = "hidden";
+        signX[i] = Number.NaN;
+        continue;
+      }
+      const g = gatePoint(j, i);
+      const gy = groundHeight(g.x, g.z);
+      sign.position.set(g.x, gy, g.z);
+      sign.rotation.y = Math.atan2(-j.fx, -j.fz);
+      const board = sign.children[1] as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+      board.material.color.setHex(
+        !reveal ? SIGN_COLORS.marks[i] ?? SIGN_COLORS.idle : i === reveal.correctOptionIndex ? SIGN_COLORS.correct : i === reveal.pickedOptionIndex ? SIGN_COLORS.wrong : SIGN_COLORS.dim,
+      );
+      signTmp.set(g.x, gy + 8.2, g.z).project(sc.camera);
+      signX[i] = signTmp.z < 1 ? ((signTmp.x + 1) / 2) * w : Number.NaN;
+      signY[i] = ((1 - signTmp.y) / 2) * h;
+    }
+    // A feliratok nem fedhetik egymást: képernyő-x szerint rendezve legalább egy címke-szélességnyi távolság.
+    signOrder.length = 0;
+    for (let i = 0; i < sc.signs.length; i++) if (Number.isFinite(signX[i]!)) signOrder.push(i);
+    signOrder.sort((a, b) => signX[a]! - signX[b]!);
+    // R4: fekvőn a bal oldali válaszlista mellett (a lista ≤ min(28vw, 236) széles) kezdődnek a táblák.
+    // Alacsony fekvőn a tárcsa (bal alsó sarok, ≤ ~140 px széles) mellett kezdődnek — a magas kártya alá tolt tábla se lógjon rá (A3).
+    const left = (sideList && compact ? Math.min(w * 0.28, 236) + 16 : sideList ? 150 : 4) + labelW / 2;
+    const right = w - labelW / 2 - 4;
+    const spread = () => {
+      for (let k = 1; k < signOrder.length; k++) {
+        const prev = signX[signOrder[k - 1]!]!;
+        if (signX[signOrder[k]!]! < prev + labelW + 6) signX[signOrder[k]!] = prev + labelW + 6;
+      }
+    };
+    if (signOrder.length) {
+      if (signX[signOrder[0]!]! < left) signX[signOrder[0]!] = left;
+      spread();
+      const overflow = signX[signOrder[signOrder.length - 1]!]! - right;
+      if (overflow > 0) for (const i of signOrder) signX[i] = signX[i]! - overflow;
+      if (signX[signOrder[0]!]! < left) {
+        signX[signOrder[0]!] = left;
+        spread();
+      }
+    }
+    for (const i of signOrder) {
+      const el = signRefs.current[i];
+      if (!el) continue;
+      const x = signX[i]!;
+      // A3: a felirat alja a vezérlősáv (tárcsa) fölött marad; K2 / KICSI 1: a kérdés-alatti tájékozódó sáv (és benne a kérdés
+      // fajtája) fölött is.
+      const navTop = navTopRef.current;
+      const floor = Math.min(h - (h < 520 && w > h ? 180 : 130), navTop > 0 ? navTop - 6 : Number.POSITIVE_INFINITY);
+      const y = Math.max(96, cardBottomRef.current - sizeRef.current.top + 64, answersBottom + 54, Math.min(floor, signY[i]!));
+      el.style.visibility = "visible";
+      el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
+    }
+    for (let i = 0; i < sc.signs.length; i++) {
+      if (!Number.isFinite(signX[i]!)) {
+        const el = signRefs.current[i];
+        if (el) el.style.visibility = "hidden";
+      }
+    }
+    const pad = padRef.current;
+    sc.pad.visible = pad !== null;
+    if (pad) sc.pad.position.set(pad.x, groundHeight(pad.x, pad.z) + 0.15, pad.z);
   };
 
   /* ------- the frame step ------- */
@@ -2193,8 +2769,11 @@ function PlayScreen(props: {
       rotateBlockRef.current = typeof document !== "undefined" && document.querySelector('[data-testid="game-rotate-hint"]') != null;
     }
     const halted = pausedRef.current || rotateBlockRef.current;
+    // Review #610: a „Miért?” / „Mutasd” olvasása alatt a játékóra is áll (pl. a horgonyzás utáni győzelmi időzítő nem zárja be
+    // olvasás közben a magyarázatot).
+    const reading = !!feedbackRef.current || expandedRef.current;
     // Játékóra + a fázisváltó időzítők: szünetben állnak, és csak a saját futásuk időzítői futnak le.
-    if (!halted) {
+    if (!halted && !reading) {
       gameClockRef.current += dt;
       const timers = gameTimersRef.current;
       if (timers.length > 0) {
@@ -2212,6 +2791,47 @@ function PlayScreen(props: {
     const { camera, vehicle, tornado, rain, lightning } = sc;
     const ph = phaseRef.current;
     const playing = (ph === "seeking" || ph === "approach") && !halted;
+    // J7b (K.4/9, KSZ-4): a szimuláció a közös fix lépésű hurkon fut (1/60 s, `createChaseDriver`); szünetben, a „Miért?”
+    // kártya alatt, a forgatási kérésnél és a menet végén áll (időskála 0). A kérdés alatt NEM lassul (`slowMo: 1`).
+    const drv = driverRef.current!;
+    if (playing) {
+      // K5: a gamepad képkockánként egyszer.
+      const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
+      const rawPad = pads[0] ?? pads[1] ?? null;
+      const pad = readStandardGamepad(padGateRef.current(rawPad) ? rawPad : null);
+      padStateRef.current = pad;
+      if (pad.anchor && !padAnchorPrevRef.current) tryAnchorRef.current();
+      padAnchorPrevRef.current = pad.anchor;
+    }
+    // A1: a kibontott („Mutasd”) kérdés megszakítása / cseréje után a kibontás nem fagyaszthatja le a játékot.
+    const shownId = qRef.current.view().presentation?.id ?? null;
+    if (shownId !== expandedIdRef.current) {
+      expandedIdRef.current = shownId;
+      expandedRef.current = false;
+    }
+    // A megállítási okok egymástól függetlenek: a szünet feloldása a „Miért?” / „Mutasd” alatt sem indítja el.
+    drv.loop.setTimeScale(playing && !feedbackRef.current && !expandedRef.current && !finishedRef.current ? 1 : 0);
+    frameClockRef.current += dt * 1000;
+    drv.frame(frameClockRef.current);
+    // Review #610: a menet végén elhalasztott eredmény a megoldás-kijelzés lefutása után.
+    // Review #610 (Vercel P1): a mag a menet végén áll (0-s időskála), ezért a kijelzés óráját itt a valós idő lépteti — különben
+    // a `settled()` sosem teljesülne, és a futás végleg megakadna. Új kérdés nem indul (`tick: false`, `hold`).
+    const deferredReveal = deferredRevealRef.current;
+    if (deferredFinishRef.current !== null && deferredReveal) {
+      if (reading) {
+        deferredRevealRef.current = { clockMs: deferredReveal.clockMs, frameMs: deferredReveal.frameMs + dt * 1000 };
+      } else {
+        qRef.current.frame(deferredReveal.clockMs + Math.max(0, frameClockRef.current - deferredReveal.frameMs), { tick: false, hold: true });
+      }
+    }
+    if (deferredFinishRef.current !== null && !reading && qRef.current.settled()) {
+      const won = deferredFinishRef.current;
+      deferredFinishRef.current = null;
+      deferredRevealRef.current = null;
+      finishedRef.current = false;
+      finishRunRef.current(won);
+    }
+    if (dt > 0) fpsRef.current = fpsRef.current * 0.9 + Math.min(240, 1 / dt) * 0.1;
 
     // Always spin the funnel and rain so paused screens still feel alive. Befogáskor (600 ms) a tölcsér
     // felpörög; csökkentett mozgásnál a kitörés 0,4-szeres.
@@ -2220,74 +2840,9 @@ function PlayScreen(props: {
     animateTornado(tornado, dt, spec.tornadoIntensity, (reducedMotionRef.current ? 0.35 : 1) * (1 + burstBoost));
 
     if (playing) {
-      elapsedRef.current += dt;
-      timeLeftRef.current = Math.max(0, runTimeLimit - elapsedRef.current);
-
-      // --- vehicle control ---
+      // A fix lépés (`simStepRef`) már léptette a járművet, a tölcsért és a szelet; itt csak a rajz frissül.
       const p = playerRef.current;
-      const stats = effRef.current;
-      const vehicleDims = vehicleDimensions(props.vehicle.silhouette);
-
-      const k = keysRef.current;
-      const t = touchRef.current;
-      const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
-      const rawPad = pads[0] ?? pads[1] ?? null;
-      const pad = readStandardGamepad(padGateRef.current(rawPad) ? rawPad : null);
-      if (pad.anchor && !padAnchorPrevRef.current) tryAnchorRef.current();
-      padAnchorPrevRef.current = pad.anchor;
-
-      // Keyboard stays digital; the touch stick and the gamepad are analog.
-      const throttle = clampStick((k.fwd ? 1 : 0) - (k.back ? 1 : 0) + t.throttle + pad.throttle);
-      const steer = clampStick((k.right ? 1 : 0) - (k.left ? 1 : 0) + t.steer + pad.steer);
-
-      if (!p.anchored) {
-        // J7a: az alváz (stabilitás) a szélsodrást is csökkenti — a garázs „Szélállóság” sávja ugyanezt a számot mutatja.
-        const windPush = windDriftUnits(windForceOn(windRef.current, stats.windResistance));
-        const windAngle = (windRef.current.windDirection * Math.PI) / 180;
-        const brake = k.brake || pad.brake;
-        // One vehicle step of `dt` seconds: drive, then the collision pass with that same dt.
-        const driveStep = (dt: number) => {
-          const next = stepVehicle(
-            p,
-            { throttle, steer, brake },
-            dt,
-            {
-              speedKmh: props.vehicle.speed,
-              acceleration: stats.acceleration,
-              handling: stats.handling,
-              // J7a: a gumik a talaj tapadását szorozzák (sáron, füvön kisebb a kanyar-csúszás).
-              grip: effectiveSurfaceGrip(gripAt(p.x, p.z), stats.gripFactor),
-              windPush,
-              windAngle,
-            },
-          );
-          // Spec 2026-09-29-tornado-fizika H2: houses, trees, poles and bridge railings are solid.
-          // The step's dt: the scrape friction is per second (30/60/144 Hz must slow alike).
-          const solid = resolveVehicleCollisions(next, vehicleDims, collidersNear(next.x, next.z), dt);
-          const nx = clampToWorld(solid.x);
-          const nz = clampToWorld(solid.z);
-          const moved = Math.hypot(nx - p.x, nz - p.z);
-          distanceTravelledRef.current += toKm(moved);
-          p.x = nx;
-          p.z = nz;
-          p.heading = next.heading;
-          // J7a: az alváz tompítja az ütközés sebességvesztését (a hely-kitolás nem változik).
-          p.speed = softenImpact(next.speed, solid.speed, stats.crashLossFactor);
-        };
-        // Spec 2026-09-29-tornado-ut-kormanyzas D5: a slow frame is split into ≤ 1/60 s steps, so a fast
-        // car cannot jump through a fence in one go.
-        const steps = driveSubsteps(dt);
-        for (let i = 0; i < steps; i++) driveStep(dt / steps);
-      } else {
-        p.speed = 0;
-      }
-
-      // --- tornado motion ---
       const tp = tornadoPosRef.current;
-      tp.born += dt;
-      tp.angle += dt * 0.15;
-      tp.x = clampToWorld(tp.x + Math.cos(tp.angle) * spec.tornadoSpeed * dt);
-      tp.z = clampToWorld(tp.z + Math.sin(tp.angle) * spec.tornadoSpeed * dt);
       tornado.group.position.set(tp.x, 0, tp.z);
       tornado.group.scale.setScalar(spec.tornadoScale);
       // A szuperfelhő a tölcsér fölött marad, és lassan forog. A kupola a
@@ -2295,45 +2850,6 @@ function PlayScreen(props: {
       sc.stormCloud.group.position.set(tp.x, 0, tp.z);
       animateStormCloud(sc.stormCloud, dt, reducedMotionRef.current ? 0.25 : 1);
       sc.skyDome.position.set(camera.position.x, 0, camera.position.z);
-
-      // --- distance & wind ---
-      const dxu = p.x - tp.x;
-      const dzu = p.z - tp.z;
-      const distKm = toKm(Math.hypot(dxu, dzu));
-      const bearing = bearingBetween(p.x, p.z, tp.x, tp.z);
-      windRef.current = advanceWind(windRef.current, {
-        distanceKm: distKm,
-        peak: spec.windPeak,
-        tornadoIntensity: spec.tornadoIntensity,
-        dt,
-        bearingDeg: bearing,
-        rng: Math.random,
-      });
-
-      // Approach phase once within 2 km.
-      if (ph === "seeking" && distKm < 2) setPhase("approach");
-
-      // --- autonomous free-roam quiz (at most one eval / second) ---
-      if (!p.anchored) {
-        const decision = shouldFireRoamQuiz({
-          elapsed: elapsedRef.current,
-          lastQuizAt: lastQuizAtRef.current,
-          lastEvalAt: lastEvalAtRef.current,
-          alreadyPending: Boolean(activeQuiz) || phaseRef.current === "quiz",
-          rng: drawRng,
-        });
-        lastEvalAtRef.current = decision.lastEvalAt;
-        if (decision.fire) raiseQuiz("roam");
-      }
-
-      // --- lose conditions ---
-      if (timeLeftRef.current <= 0 || tp.born > spec.tornadoLifetime) {
-        if (!p.anchored) finishRun(false);
-      }
-      // Too close, un-anchored, in a strong storm = thrown → lose.
-      if (!p.anchored && distKm < bandSpec.anchorBand.min * 0.4 && windRef.current.currentWindSpeed > spec.windPeak * 0.8) {
-        finishRun(false);
-      }
 
       // --- vehicle transform ---
       vehicle.position.set(p.x, groundHeight(p.x, p.z), p.z);
@@ -2353,9 +2869,11 @@ function PlayScreen(props: {
       // --- weather visuals ---
       rain.visible = spec.rainIntensity > 0.15;
       if (rain.visible) animateRain(rain, dt, p.x, p.z, spec.rainIntensity);
-      if (Math.random() < spec.lightningRate * dt * 0.6) {
+      // Kozmetikai villám: külön seedelt `fxRng` (KSZ-2) — a játékmenet RNG-jét nem fogyasztja.
+      const fx = fxRngRef.current;
+      if (fx.next() < spec.lightningRate * dt * 0.6) {
         lightning.intensity = 6;
-        lightning.position.set(tp.x + (Math.random() - 0.5) * 200, 180, tp.z + (Math.random() - 0.5) * 200);
+        lightning.position.set(tp.x + (fx.next() - 0.5) * 200, 180, tp.z + (fx.next() - 0.5) * 200);
       } else {
         lightning.intensity *= 1 - Math.min(1, dt * 6);
       }
@@ -2390,12 +2908,17 @@ function PlayScreen(props: {
     sc.sun.target.position.set(p.x, ground, p.z);
     sc.sun.position.set(p.x, ground, p.z).addScaledVector(SUN_DIRECTION, 150);
 
+    // J7b: az elágazás táblái (a megoldás-kijelzés végéig) és a turbópad — a kamera helyzete után, a rajz előtt.
+    updateChaseMarkers(sc);
+
     sc.postFx.render();
 
     // --- push HUD (throttled to ~10 fps to avoid re-render storms) ---
     hudTickRef.current += dt;
     if (hudTickRef.current > 0.1) {
       hudTickRef.current = 0;
+      const card = junctionRef.current ? document.querySelector('[data-testid="tornado-quiz"] .play-question-card') : null;
+      cardBottomRef.current = card ? card.getBoundingClientRect().bottom : 0;
       const w = windRef.current;
       const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
       const targetBearing = bearingBetween(p.x, p.z, tornadoPosRef.current.x, tornadoPosRef.current.z);
@@ -2412,12 +2935,62 @@ function PlayScreen(props: {
         timeLeft: timeLeftRef.current,
         stormPct: Math.min(100, (w.currentWindSpeed / spec.windPeak) * 100),
         score: Math.round(scoreRef.current),
+        nitro: (driverRef.current?.core.nitroLeftMs() ?? 0) > 0,
       });
     }
   };
   const hudTickRef = useRef(0);
 
   const compass = compassFor(hud.windDir);
+  // K5: stabil visszahívások — a memózott érintővezérlő a kérdés-sáv 10 Hz-es frissítésénél nem rajzolódik újra.
+  const onTouchAnchor = useCallback(() => tryAnchorRef.current(), []);
+  const onTouchCamera = useCallback(() => {
+    const next = toggleCamera(settingsRef.current.cameraMode);
+    settingsRef.current = { ...settingsRef.current, cameraMode: next };
+    onProgressRef.current((latest) => updateSettings(latest, { cameraMode: next }));
+  }, []);
+  /** J7b: a kérdés-sáv állapota (≈ 10 Hz + eseményre) és a kérdés fajtája (elágazás: sáv mód; turbó / horgony: gomb mód). */
+  const pres = qView.presentation;
+  const qKind: QuestionKind | null = pres ? driverRef.current?.core.kindOf(pres.id) ?? "junction" : null;
+  const qMeta = pres ? questionMetaRef.current.get(pres.question.key) : undefined;
+  /**
+   * Alacsony fekvő nézetben (a közös kérdés-sáv itt a két szélre teszi a gombokat, középre fent a kártyát) a kérdés
+   * fajtája lent középen áll, és gomb-módban a bal felső panel elrejtve — különben a bal gombsor alá kerülne.
+   */
+  const shortLandscape = typeof window !== "undefined" && window.matchMedia?.("(orientation: landscape) and (max-height: 520px)").matches === true;
+  /** Álló nézet: a gomb-módú kérdés is fent áll (K3, J7b döntések 35.), ezért ott a bal felső panel helyén a kártya van. */
+  const portrait = typeof window !== "undefined" && window.matchMedia?.("(orientation: portrait)").matches === true;
+  /**
+   * A kérdés fajtájának helye: alacsony fekvőn lent középen; állón (mindkét módban) és asztali sáv-módban lent balra; asztali
+   * gomb-módban (a kártya lent) a bal felső panelben.
+   */
+  const chipSpot: "panel" | "bottom-center" | "bottom-left" | null = !qKind ? null : shortLandscape ? "bottom-center" : qKind === "junction" || portrait ? "bottom-left" : "panel";
+  /**
+   * J7b döntések 15. (M3): befér-e minden válasz a tábla VALÓDI szélességén (15 px, legfeljebb 2 sor, szóközépi törés
+   * nélkül)? Ha nem, a táblák csak a jelet mutatják, és a teljes válaszok a kártya alatti listában látszanak.
+   */
+  const compactSigns = (() => {
+    if (!pres || qKind !== "junction" || typeof window === "undefined") return false;
+    const textW = Math.min(window.innerWidth * 0.26, 180) - 2 * 8 - 2 * 2 - 28;
+    return pres.options.some((o) => {
+      const longestWord = o.label.split(/\s+/).reduce((m, w) => Math.max(m, w.length), 0);
+      return estimateLines(o.label, textW, 15) > 2 || longestWord * 15 * 0.6 > textW;
+    });
+  })();
+  /** A bal felső panel ott rejtett, ahol a kérdés-sáv kártyája / gombsora alá kerülne (R4: fekvőn a válaszlista helyén is). */
+  const hidePanel = qKind !== null && (shortLandscape ? qKind !== "junction" || compactSigns : qKind === "junction" || portrait);
+  // K5: a válaszlista magassága kérdésenként egyszer (a rajzoló hurok ebből számol, képkockánként nem olvas layoutot).
+  useLayoutEffect(() => {
+    answersTopRef.current = -1;
+    answersHRef.current = answersRef.current ? answersRef.current.offsetHeight : 0;
+  }, [pres?.id, compactSigns]);
+  const kindChip =
+    pres && qKind ? (
+      <div data-testid="tornado-question-kind" data-kind={qKind} className="px-2 py-1 rounded-lg bg-amber-400/90 text-slate-950 text-xs font-bold">
+        {(shortLandscape ? QUESTION_KIND_SHORT : QUESTION_KIND_LABEL)[qKind]} · {quizTopicLabelHu(qMeta?.topic ?? null, questionSubjectLabel(qMeta))}
+        {qMeta?.source === "material" ? " · tananyag" : ""}
+      </div>
+    ) : null;
 
   const stage = stageForLevel(props.level);
   const timeTone = hud.timeLeft <= 10 ? "bad" : hud.timeLeft <= 30 ? "warn" : "default";
@@ -2431,12 +3004,105 @@ function PlayScreen(props: {
     ? "calc(max(8px, var(--game-safe-bottom)) + 2 * var(--game-action-size) + 12px)"
     : "max(8px, var(--game-safe-bottom))";
   const next = result?.won ? props.next : null;
+  /**
+   * Tájékozódás (G-9b céljelző + horgony-útmutató). Vak ellenőrzés K2 (J7b döntések 34.): a kérdés alatt is látszik — kérdés
+   * nélkül a megszokott helyén, nyitott kérdésnél egy alsó sávban (a kérdés fajtájával egy sorban), a táblák fölötte maradnak.
+   */
+  const navOn = (phase === "seeking" || phase === "approach") && !result;
+  const marker = navOn ? targetMarker({ heading: 0, targetBearing: hud.targetRelDeg, halfFovDeg: 16.5 }) : null;
+  const guidanceText = playerRef.current.anchored
+    ? "Horgony rögzítve — tartsd ki a vihart!"
+    : hud.anchorReady
+      ? touch
+        ? "Jó pozíció! Nyomd a ⚓ gombot!"
+        : "Jó pozíció! Nyomd az F / Horgony gombot!"
+      : hud.distanceKm > bandSpec.anchorBand.max
+        ? "Menj közelebb a tornádóhoz!"
+        : hud.distanceKm < bandSpec.anchorBand.min
+          ? "Túl közel! Állj meg biztonságos sávban."
+          : "Keresd a tornádót, közelítsd meg és állj meg!";
+  const questionNav = navOn && pres !== null;
+  const chipInNav = questionNav && (chipSpot === "bottom-left" || (chipSpot === "bottom-center" && !compactSigns));
+  // A kérdés-alatti sáv teteje a táblák rétegéhez mérve (a rajzoló hurok ennél feljebb tartja a táblákat — KICSI 1 / K2). Csak a
+  // sáv tartalmának változásakor mérünk (nem képkockánként, K5).
+  const viewKey = typeof window !== "undefined" ? `${window.innerWidth}x${window.innerHeight}` : "";
+  useLayoutEffect(() => {
+    const row = navRowRef.current;
+    const layer = signLayerRef.current;
+    navTopRef.current = questionNav && row && layer ? row.getBoundingClientRect().top - layer.getBoundingClientRect().top : -1;
+  }, [questionNav, pres?.id, guidanceText, marker?.visible, marker?.side, chipInNav, compactSigns, viewKey]);
 
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden" data-tornado-play>
+      {/* J7b: a gomb-módú kérdés a vezérlősáv (a tárcsa = 2 × akciógomb magas) FÖLÖTT álljon — a közös alapérték csak egy
+          akciógombnyit hagy, álló telefonon a gombsor a tárcsára lógott. Lapra szűkített változó-felülírás (a közös CSS-t nem érinti). */}
+      {/* Vak ellenőrzés K3 (J7b döntések 35.): álló nézetben a gomb-módú (turbó / horgony) kérdés a képernyő TETEJÉN áll, rövid
+          válaszoknál a három gomb egy sorban a kártya alatt — a jármű és az előtte lévő út szabadon marad (a vezetés nem áll). */}
+      <style>{`.play-question[data-testid="tornado-quiz"] { --play-question-bottom: calc(max(8px, var(--game-safe-bottom)) + 2 * var(--game-action-size) + 16px); }
+@media (orientation: portrait) {
+  .play-question[data-testid="tornado-quiz"][data-mode="buttons"] { justify-content: flex-start; }
+  .play-question[data-testid="tornado-quiz"][data-mode="buttons"][data-count="3"][data-cols="2"] .play-question-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .play-question[data-testid="tornado-quiz"][data-mode="buttons"][data-count="3"][data-cols="2"] .play-question-col[data-side="right"] > :only-child { grid-column: auto; }
+}`}</style>
       {/* Teljes képernyős 3D jelenet: a HUD és a vezérlők áttetszően fölötte (mobiljáték-elrendezés). */}
       <div className="absolute inset-0 bg-black">
         <canvas ref={canvasRef} className="w-full h-full block touch-none" />
+      </div>
+      {/* J7b: az elágazás táblái — a feliratuk a tábla vetített helyén (a helyzetet a rajzoló hurok írja, React-állapot nélkül).
+          Koppintással is választhatók (mozgó cél: `pointerTapHandlers`, J7b döntések 13.); hosszú válasznál a tábla csak a jelet
+          mutatja, a teljes válaszok a kártya alatti listában (15.). */}
+      <div ref={signLayerRef} className="absolute inset-0 z-20 pointer-events-none overflow-hidden" data-tornado-signs={pres && qKind === "junction" ? "open" : undefined}>
+        {pres && qKind === "junction" && compactSigns && (
+          <ol
+            ref={answersRef}
+            data-testid="tornado-sign-answers"
+            className={`absolute top-0 rounded-xl bg-slate-950/85 p-2 flex flex-col gap-1 text-[15px] font-bold text-white ${
+              shortLandscape ? "left-2 w-[min(28vw,236px)]" : "left-1/2 -translate-x-1/2 w-[min(92vw,560px)]"
+            }`}
+            style={{ visibility: "hidden" }}
+            aria-label="A táblák válaszai"
+          >
+            {pres.options.map((opt, i) => (
+              <li key={`${pres.id}-a${i}`} className="flex items-start gap-2 leading-snug">
+                <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-[14px] font-black text-slate-950 ${SIGN_MARK_CLASS[i] ?? SIGN_MARK_CLASS[0]}`}>{i + 1}</span>
+                <span>{opt.label}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+        {pres && qKind === "junction" &&
+          pres.options.map((opt, i) => {
+            const rv = qView.reveal;
+            const st = !rv ? "idle" : i === rv.correctOptionIndex ? "correct" : i === rv.pickedOptionIndex ? "wrong" : "dim";
+            const tap = pointerTapHandlers(signTracker, i, () => {
+              // Review #610: a kibontott („Mutasd”) kérdés alatt a tábla sem választ — mint a közös kérdéskomponens.
+              if (pausedRef.current || feedbackRef.current || expandedRef.current) return;
+              qRef.current.pick(i);
+            });
+            return (
+              <button
+                type="button"
+                key={`${pres.id}-${i}`}
+                ref={(el) => {
+                  signRefs.current[i] = el;
+                }}
+                data-testid={`tornado-sign-${i}`}
+                data-state={st}
+                aria-label={`${i + 1}. tábla: ${opt.label}`}
+                {...correctDataAttrs(opt.correct)}
+                {...tap}
+                className={`absolute left-0 top-0 pointer-events-auto touch-manipulation min-h-[48px] flex items-center justify-center gap-1 rounded-xl border-2 px-2 py-1.5 text-center text-[15px] font-extrabold leading-tight text-slate-950 shadow-[0_6px_18px_rgba(0,0,0,0.45)] hyphens-none [overflow-wrap:normal] ${
+                  compactSigns ? "w-12" : "w-[min(26vw,180px)]"
+                } ${
+                  st === "correct" ? "border-emerald-200 bg-emerald-400" : st === "wrong" ? "border-orange-200 bg-orange-400" : st === "dim" ? "border-slate-400 bg-slate-300/80" : `border-white/70 ${SIGN_MARK_CLASS[i] ?? SIGN_MARK_CLASS[0]}`
+                }`}
+                style={{ visibility: "hidden" }}
+              >
+                <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-slate-950/80 px-1 text-[14px] text-white">{i + 1}</span>
+                {!compactSigns && <span>{opt.label}</span>}
+              </button>
+            );
+          })}
       </div>
       {/* Felső sötétítés: a HUD felirata (pl. „Vihar 12%”) világos égbolt előtt is olvasható marad. */}
       <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-slate-950/70 via-slate-950/30 to-transparent pointer-events-none" aria-hidden="true" />
@@ -2453,7 +3119,7 @@ function PlayScreen(props: {
 
       <div className="relative flex-1 min-h-0">
           {/* Szint / szél / horgony kijelző */}
-          <div className="absolute top-2 left-2 flex flex-col items-start gap-1 text-xs font-bold pointer-events-none max-w-[70%] z-10">
+          <div className={`absolute top-2 left-2 flex flex-col items-start gap-1 text-xs font-bold pointer-events-none max-w-[70%] z-10 ${hidePanel ? "hidden" : ""}`}>
             <div className="px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm" style={{ color: stage.color }}>
               SZINT {props.level}/200 · VIHAR: {stormLabel(props.level)}
             </div>
@@ -2472,29 +3138,28 @@ function PlayScreen(props: {
               <Anchor className="w-3.5 h-3.5" /> HORGONY: {hud.anchorReady ? "KÉSZ" : playerRef.current.anchored ? "RÖGZÍTVE" : "…"} ·{" "}
               {SURFACE_LABEL[hud.surface]}
             </div>
+            {chipSpot === "panel" && kindChip}
+            {hud.nitro && (
+              <div data-testid="tornado-nitro" className="px-2 py-1 rounded-lg bg-cyan-400/90 text-slate-950">
+                ⚡ TURBÓ
+              </div>
+            )}
           </div>
 
-          {/* Vehicle name — alacsony fekvő nézetben elhagyva, ott minden képpont a jeleneté. */}
-          <div
+          {/* Vehicle name — alacsony fekvő nézetben elhagyva, ott minden képpont a jeleneté; kérdés alatt a helyén a kérdés fajtája. */}
+          {!pres && <div
             className="absolute left-2 px-2 py-1 rounded-lg bg-black/60 text-xs font-semibold pointer-events-none z-10 [@media(max-height:500px)]:hidden"
             style={{ bottom: aboveControls }}
           >
             {props.vehicle.name.toUpperCase()}
-          </div>
+          </div>}
 
           {/* G-9b: céljelző nyíl.
               Mérve (Pixel 7, 1. pálya): a cél 3,25 km-re volt, az álló telefon
               vízszintes látószöge viszont csak ~33°. A gyerek azt olvasta, hogy
               „Menj közelebb a tornádóhoz!", de azt nem tudhatta, merre forduljon —
               húsz másodperc alatt 0,2 km-t közeledett, félig véletlenül. */}
-          {(phase === "seeking" || phase === "approach") && !activeQuiz && !result && (() => {
-            const marker = targetMarker({
-              heading: 0,
-              targetBearing: hud.targetRelDeg,
-              halfFovDeg: 16.5,
-            });
-            if (!marker.visible) return null;
-            return (
+          {navOn && !pres && marker?.visible && (
               <div
                 className={`absolute top-[40%] [@media(max-height:500px)]:top-[34%] -translate-y-1/2 ${marker.side === "right" ? "right-2" : "left-2"} z-10 pointer-events-none flex flex-col items-center gap-1`}
                 data-testid="tornado-target-marker"
@@ -2513,11 +3178,10 @@ function PlayScreen(props: {
                   {hud.distanceKm.toFixed(1)} km
                 </span>
               </div>
-            );
-          })()}
+          )}
 
           {/* Anchor guidance */}
-          {(phase === "seeking" || phase === "approach") && !activeQuiz && !result && (
+          {navOn && !pres && (
             <div
               data-testid="tornado-anchor-guidance"
               className={`absolute right-2 px-3 py-1.5 rounded-lg text-sm font-bold pointer-events-none max-w-[60%] text-right z-10 transition-colors ${
@@ -2525,17 +3189,43 @@ function PlayScreen(props: {
               }`}
               style={{ bottom: aboveControls }}
             >
-              {playerRef.current.anchored
-                ? "Horgony rögzítve — tartsd ki a vihart!"
-                : hud.anchorReady
-                  ? touch
-                    ? "Jó pozíció! Nyomd a ⚓ gombot!"
-                    : "Jó pozíció! Nyomd az F / Horgony gombot!"
-                  : hud.distanceKm > bandSpec.anchorBand.max
-                    ? "Menj közelebb a tornádóhoz!"
-                    : hud.distanceKm < bandSpec.anchorBand.min
-                      ? "Túl közel! Állj meg biztonságos sávban."
-                      : "Keresd a tornádót, közelítsd meg és állj meg!"}
+              {guidanceText}
+            </div>
+          )}
+
+          {/* K2 (J7b döntések 34.): nyitott kérdés alatt a céljelző és a horgony-útmutató egy alsó sávban marad látható (a kérdés
+              fajtájával egy sorban; alacsony fekvőn a vezérlők között, legalul). A táblák ennél feljebb rajzolódnak. */}
+          {questionNav && (
+            <div
+              ref={navRowRef}
+              data-testid="tornado-question-nav"
+              className={`absolute flex items-end gap-2 pointer-events-none z-10 ${
+                shortLandscape ? "left-1/2 -translate-x-1/2 w-max max-w-[calc(100%-22rem)]" : "inset-x-2"
+              }`}
+              style={{ bottom: shortLandscape ? "max(8px, var(--game-safe-bottom))" : aboveControls }}
+            >
+              {chipInNav && kindChip && <div className={`min-w-0 ${shortLandscape ? "shrink-0 whitespace-nowrap" : "flex-1"}`}>{kindChip}</div>}
+              <div className={`flex items-center gap-1 shrink-0 ${shortLandscape ? "" : "ml-auto max-w-[52%]"}`}>
+                {marker?.visible && (
+                  <div
+                    data-testid="tornado-target-marker"
+                    data-side={marker.side}
+                    data-compact="1"
+                    className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500 text-slate-950 text-sm font-black leading-none shadow-[0_0_12px_rgba(245,158,11,0.6)]"
+                  >
+                    <span aria-hidden="true">{marker.side === "right" ? "▶" : "◀"}</span>
+                    <span data-testid="tornado-target-marker-km" className="text-xs font-extrabold">
+                      {hud.distanceKm.toFixed(1)} km
+                    </span>
+                  </div>
+                )}
+                <div
+                  data-testid="tornado-anchor-guidance"
+                  className={`min-w-0 px-2 py-1 rounded-lg text-xs font-bold leading-snug ${hud.anchorReady ? "bg-emerald-700 text-white" : "bg-sky-900/85 text-white"}`}
+                >
+                  {guidanceText}
+                </div>
+              </div>
             </div>
           )}
 
@@ -2548,54 +3238,47 @@ function PlayScreen(props: {
           )}
 
           {/* Szünet alatt a magyarázó kártya rejtve: a z-[90]-es kártya különben a szünet menü fölé kerülne. */}
-          {feedback && !paused && <QuizFeedbackCard card={feedback} onDismiss={dismissFeedback} />}
+          {feedback && !paused && <QuizFeedbackCard card={feedback} onDismiss={closeWhy} />}
 
-          {/* Quiz overlay — a HUD alatti sávban, így a szünet gomb kvíz közben is elérhető. */}
-          {activeQuiz && (
-            <div className="absolute inset-0 z-40 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-3">
+          {/* Fekvőn a teljes válaszok listája (hosszú válasz) középen áll — ott a fajta-címke elmarad (a lista maga mutatja). */}
+          {!chipInNav && (chipSpot === "bottom-left" || (chipSpot === "bottom-center" && !compactSigns)) && kindChip && (
+            <div
+              className={`absolute inset-x-2 flex pointer-events-none z-10 ${chipSpot === "bottom-center" ? "justify-center" : "justify-start"}`}
+              // KICSI 1: alacsony fekvőn legalul (a vezérlők között), nem a táblák alatt.
+              style={{ bottom: chipSpot === "bottom-center" ? "max(8px, var(--game-safe-bottom))" : aboveControls }}
+            >
+              <div className={chipSpot === "bottom-center" ? "max-w-[40vw] text-center whitespace-nowrap" : "max-w-[70%]"}>{kindChip}</div>
+            </div>
+          )}
+          {chaseMsg && (
+            <div className="absolute inset-x-0 top-[56%] flex justify-center pointer-events-none z-10" role="status" aria-live="polite">
               <div
-                data-testid="tornado-quiz"
-                className="w-full max-w-md sm:max-w-2xl max-h-full overflow-y-auto rounded-2xl border border-sky-400/50 bg-slate-900/95 p-3 sm:p-4 shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
+                data-testid="tornado-chase-msg"
+                className={`px-3 py-1.5 rounded-lg text-sm font-extrabold border ${
+                  // KICSI 2: tömör, sötétebb alap — fehér 14 px-es szövegnél ≥ 4,5:1 (emerald-700 ≈ 5,5:1, orange-700 ≈ 5,2:1).
+                  chaseMsg.tone === "good" ? "bg-emerald-700 border-emerald-200 text-white" : "bg-orange-700 border-orange-200 text-white"
+                }`}
               >
-                <p className="text-xs font-bold uppercase tracking-wide text-sky-300 mb-1">
-                  {quizReason === "anchor" ? "⚓ Horgonyzási kérdés" : "🌪 Viharkérdés"} · {quizTopicLabelHu(activeQuiz.topic, SUBJECT_LABEL[activeQuiz.subject])}
-                  {activeQuiz.source === "material" ? " · tananyag" : ""}
-                </p>
-                <p className="text-lg font-extrabold mb-2 sm:mb-3 text-white leading-snug">{activeQuiz.prompt}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {activeQuiz.options.map((opt, i) => {
-                    const isFlash = quizFlash?.idx === i;
-                    const showCorrect = quizFlash && i === activeQuiz.correctIndex;
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        disabled={Boolean(quizFlash)}
-                        onClick={() => answerQuiz(i)}
-                        className={`game-answer-btn text-left rounded-xl border-2 px-3 py-2 font-bold text-white transition-[transform,background-color,border-color] duration-150 active:scale-[0.98] ${
-                          showCorrect
-                            ? "border-emerald-300 bg-emerald-600/60 motion-safe:scale-[1.02]"
-                            : isFlash && !quizFlash?.correct
-                              ? "border-rose-300 bg-rose-700/60"
-                              : "border-white/15 bg-slate-800/80 hover:border-sky-400/70 hover:bg-slate-700/80"
-                        }`}
-                        {...correctDataAttrs(i === activeQuiz.correctIndex)}
-                      >
-                        <span className="mr-2 inline-flex h-[1.75rem] w-[1.75rem] items-center justify-center rounded-lg bg-white/10 text-base">
-                          {String.fromCharCode(65 + i)}
-                        </span>
-                        {opt}
-                      </button>
-                    );
-                  })}
-                </div>
-                {quizReason === "anchor" && (
-                  <p className="text-sm text-white/65 mt-2">Helyes válasz = sikeres horgonyzás. Hibás válasz = új kérdés.</p>
-                )}
+                {chaseMsg.text}
               </div>
             </div>
           )}
       </div>
+
+      {/* J7b (terv 5.7, 9.): a megállító overlay megszűnt — nem blokkoló kérdés-sáv; a vezetés közben megy tovább.
+          Elágazás: sáv (a válasz az áthajtott tábla), turbó / horgony: nagy gombok. A régi `tornado-quiz` azonosító marad. */}
+      <TornadoQuestionLayer
+        setup={questionSetup}
+        onShow={onQuestionShow}
+        onOutcome={onQuestionOutcome}
+        apiRef={qRef}
+        onView={onQuestionView}
+        barWindowFor={barWindowFor}
+        mode={qKind === "junction" ? "bar" : "buttons"}
+        disabled={paused || feedback !== null}
+        onWhy={openWhy}
+        expandedRef={expandedRef}
+      />
 
       {touch && (
         <TouchControls
@@ -2604,12 +3287,8 @@ function PlayScreen(props: {
           resetSignal={touchReset}
           anchorReady={hud.anchorReady && !playerRef.current.anchored}
           anchorEnabled={hud.inBand && !playerRef.current.anchored}
-          onAnchor={() => tryAnchorRef.current()}
-          onCamera={() => {
-            const next = toggleCamera(settingsRef.current.cameraMode);
-            settingsRef.current = { ...settingsRef.current, cameraMode: next };
-            props.onProgress((latest) => updateSettings(latest, { cameraMode: next }));
-          }}
+          onAnchor={onTouchAnchor}
+          onCamera={onTouchCamera}
         />
       )}
 
@@ -2688,6 +3367,7 @@ function PlayScreen(props: {
                   ))}
                 </dl>
               )}
+              <ResultReview items={qRef.current?.director?.wrongList() ?? []} />
               {next && (
                 <button type="button" data-testid="tornado-next-level" className="game-btn game-btn-secondary w-full" onClick={next.go}>
                   Tovább: {next.label}
@@ -2701,6 +3381,45 @@ function PlayScreen(props: {
     </div>
   );
 }
+
+/**
+ * J7b teszt-kampó (M3): a kézi bank három leghosszabb válasza egy tételben — a tábla-beférés és a teljes válaszlista mérése
+ * mindhárom nézetben (`forceState({ junction: "long" })`).
+ */
+const LONG_ANSWER_FIXTURE: Question = {
+  id: "tornado-fixture-long-answers",
+  subject: "english",
+  grade: 6,
+  prompt: "Melyik a leghosszabb válasz? (mérő-tétel)",
+  options: ["maradj a helyeden fedezékben", "If I were there, I would help.", "az oldalfelező merőlegesek"],
+  correctIndex: 1,
+  explanation: "A második válasz a helyes feltételes mondat.",
+  difficulty: 3,
+  source: "bank",
+};
+
+/** J7b: a kérdés fajtájának felirata (a kérdés-sáv mellett, a bal felső panelben). */
+const QUESTION_KIND_LABEL: Record<QuestionKind, string> = {
+  junction: "🔀 Elágazás — koppints a jó táblára, vagy fékezz, és kanyarodj át a bal / jobb kapun",
+  turbo: "⚡ Turbópad",
+  anchor: "⚓ Horgonyzási kérdés",
+};
+
+/** Alacsony fekvő nézetben egysoros felirat (a táblák fölötte, a vezérlősáv alatta). */
+const QUESTION_KIND_SHORT: Record<QuestionKind, string> = {
+  junction: "🔀 Elágazás",
+  turbo: "⚡ Turbópad",
+  anchor: "⚓ Horgonyzási kérdés",
+};
+
+/* ------- J7b: elágazás-táblák (modul-szintű ideiglenesek: a képkocka-hurok nem foglal, KSZ-5) ------- */
+const SIGN_COLORS = { idle: 0xf59e0b, marks: [0xfcd34d, 0x7dd3fc, 0xf9a8d4], correct: 0x22c55e, wrong: 0xf97316, dim: 0x475569 } as const;
+/** A táblák jelölő színe (a lista és a tábla ugyanazzal a számmal + színnel — J7b döntések 15.). */
+const SIGN_MARK_CLASS = ["bg-amber-300", "bg-sky-300", "bg-pink-300"] as const;
+const signTmp = new THREE.Vector3();
+const signX = [Number.NaN, Number.NaN, Number.NaN];
+const signY = [0, 0, 0];
+const signOrder: number[] = [];
 
 /* ------- wheel dust (imperative, no React) ------- */
 const DUST_COLORS: Record<string, string> = {
@@ -2873,7 +3592,69 @@ function streamChunks(sc: StreamScene, x: number, z: number, quality: GraphicsQu
 }
 
 /* ------- touch controls ------- */
-function TouchControls(props: {
+/** K5: memózva — a propjai (a jelzőkön kívül) stabilak, így a lap kérdés-sáv miatti újrarajzolása nem éri el. */
+/** A lap által tükrözött, eseményszintű kérdés-állapot (az időcsík maradéka NEM része: az a levélben renderel). */
+type PlayQuestionApi = ReturnType<typeof usePlayQuestion>;
+type TornadoQuestionView = Pick<PlayQuestionApi["state"], "presentation" | "reveal">;
+const EMPTY_QUESTION_VIEW: TornadoQuestionView = { presentation: null, reveal: null };
+
+/**
+ * A kérdés-sáv levél-komponense: itt él a `usePlayQuestion` (≈ 10 Hz-es állapot), és itt renderel az `InlineQuestion`. A lapnak
+ * csak eseményre jelez (`onView`: új / lezárt kérdés, megoldás-kijelzés) — az időcsík fogyása nem rendereli újra a lapot.
+ * J7b döntések 27.: rögzülés után a csík a rögzüléskori helyéről simán a meghosszabbított határidőn fogy el (`barWindowFor`).
+ */
+const TornadoQuestionLayer = memo(function TornadoQuestionLayer(props: {
+  setup: Parameters<typeof usePlayQuestion>[0]["setup"];
+  onShow: (p: QuestionPresentation) => void;
+  onOutcome: (o: QuestionOutcome, p: QuestionPresentation) => void;
+  apiRef: React.MutableRefObject<PlayQuestionApi>;
+  onView: (v: TornadoQuestionView) => void;
+  barWindowFor: (presentationId: number) => number;
+  mode: "bar" | "buttons";
+  disabled: boolean;
+  onWhy: () => void;
+  expandedRef: React.MutableRefObject<boolean>;
+}) {
+  // Mérő-kampó (csak teszt-kampós buildben): a levél renderszáma — a böngészős teszt ebből igazolja, hogy a lap HUD-renderje
+  // nem rajzolja újra a kérdés-sávot (vak ellenőrzés KICSI 6).
+  countRender("tornado-question-layer");
+  const q = usePlayQuestion({
+    setup: props.setup,
+    // A rezgést a lap adja a játékbeli következménnyel együtt (egy kimenet = egy visszajelzés).
+    haptics: false,
+    onShow: props.onShow,
+    onOutcome: props.onOutcome,
+  });
+  const { apiRef, onView, expandedRef } = props;
+  useLayoutEffect(() => {
+    apiRef.current = q;
+  });
+  const { presentation, reveal } = q.state;
+  useLayoutEffect(() => {
+    onView({ presentation, reveal });
+  }, [presentation, reveal, onView]);
+  const bar = presentation ? props.barWindowFor(presentation.id) : 0;
+  return (
+    <InlineQuestion
+      {...q.bind}
+      presentation={presentation && bar > 0 ? { ...presentation, windowMs: bar } : presentation}
+      mode={props.mode}
+      skin="storm"
+      disabled={props.disabled}
+      onWhy={props.onWhy}
+      testId="tornado-quiz"
+      onExpand={() => {
+        expandedRef.current = true;
+      }}
+      onCollapse={() => {
+        expandedRef.current = false;
+      }}
+    />
+  );
+});
+
+const TouchControls = memo(TouchControlsImpl);
+function TouchControlsImpl(props: {
   leftHanded: boolean;
   touchRef: React.MutableRefObject<TouchDrive>;
   resetSignal: number;
