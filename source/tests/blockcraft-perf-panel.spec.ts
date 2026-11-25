@@ -548,6 +548,14 @@ test("WebGL-kontextusvesztéskor nincs „kirajzolt” képkocka, FPS-minta, GPU
   expect(s.frame, "nincs FPS-minta").toBeNull();
   await expect.poll(async () => (await snapshot(page)).running, { timeout: 10_000 }).toBe(false);
   await expect(page.getByTestId("bc-perf-text")).toContainText("· áll", { timeout: 5_000 });
+  // Review #484 (BlockCraftQuiz.tsx:1987 / 4299): a szünetmenü NEM takarja el (és nem teszi inert-té) a helyreállító réteget —
+  // a „Grafika újraindítása” gomb közvetlenül kattintható, a „Folytatás” nem kell előtte.
+  await expect(page.getByRole("dialog"), "a helyreállító réteg alatt nincs nyitott szünetmenü").toHaveCount(0);
+  const restore = page.getByRole("button", { name: "Grafika újraindítása" });
+  await restore.click({ trial: true, timeout: 5_000 });
+  // Review #484 (BlockCraftQuiz.tsx:1996): a gomb ténylegesen helyreállít — a kiterjesztés az ÉLŐ kontextustól, előre lekérve.
+  await restore.click();
+  await expect(page.getByTestId("bc-gl-lost"), "a kontextus visszaállt, a réteg eltűnt").toHaveCount(0, { timeout: 15_000 });
 });
 
 test("könnyű grafika módban (aktív képpont-plafon) a 100 / 75 / 50 % három különböző rajzpuffer (2026-11-21 vak kör L3, E-4)", async ({ page }) => {
