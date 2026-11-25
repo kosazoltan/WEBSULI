@@ -48,7 +48,9 @@ export function candidateUrls(output: readonly ResponsesOutputItem[], max = GPT_
 
 /** A letöltött oldal a Claude-úttal azonos szabállyal forrás-e (min. 80 karakter, nem hibaoldal). */
 export function usableSource(page: PublicPage): FetchedTeachingSource | undefined {
-  const source = { url: page.url, title: page.title || page.url, text: page.text };
+  const source: FetchedTeachingSource = { url: page.url, title: page.title || page.url, text: page.text,
+    // Review #592: a dokumentum-mód metaadatai (formátum, képek, szkennelt rész) a W1b-nek megmaradnak.
+    ...(page.format ? { format: page.format } : {}), ...(page.images?.length ? { images: page.images } : {}), ...(page.needsOcr ? { needsOcr: true } : {}) };
   return source.text.trim().length >= MIN_SOURCE_CHARS && !sourceIsErrorPage(source) ? source : undefined;
 }
 
@@ -107,7 +109,8 @@ export async function gatherWebSourcesGpt(input: WebResearchChatRequest, opts: {
     await workflowUsage({ input_tokens: response.usage?.input_tokens, output_tokens: response.usage?.output_tokens });
     const candidates = candidateUrls(response.output);
     opts.onEvent?.({ type: "status", message: `Tartalék forrásgyűjtés: ${candidates.length} találat letöltése…` });
-    const download = opts.download ?? ((url: string, signal?: AbortSignal) => fetchPublicPage(url, { signal }));
+    // W1a: dokumentum-mód — a talált PDF / irodai dokumentum / prezentáció / MHT / kép is letöltve (docs/specs/2026-11-25-w1-forrasformatumok.md).
+    const download = opts.download ?? ((url: string, signal?: AbortSignal) => fetchPublicPage(url, { signal, documents: true }));
     const sources: FetchedTeachingSource[] = [];
     for (let i = 0; i < candidates.length && sources.length < GPT_GATHER_MAX_SOURCES; i += GPT_GATHER_CONCURRENCY) {
       opts.signal?.throwIfAborted();

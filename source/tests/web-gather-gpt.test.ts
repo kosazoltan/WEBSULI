@@ -172,3 +172,23 @@ test("review #222: folytatáskor a mentett GPT-forrás nyer (nincs új hálózat
   const record = await store.read("web-resume", "a");
   assert.equal(hasSavedResearchTurn(record!, input), true);
 });
+
+// W1a (A4, A5): dokumentum-mód — a PDF / kép elfogadva, a régi (hírlevél) alapmód változatlanul csak szöveget fogad.
+test("A4: fetchPublicPage dokumentum-módban a PDF-et és a képet is elfogadja (képpel), alapból elutasítja", async () => {
+  const pdfBytes = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n", "latin1");
+  await assert.rejects(fetchPublicPage("https://www.nkp.hu/a.pdf", { lookup: publicLookup, request: async () => response(200, { "content-type": "application/pdf" }, pdfBytes) }), /Nem szöveges/);
+  const png = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082", "hex");
+  const img = await fetchPublicPage("https://www.nkp.hu/k.png", { documents: true, lookup: publicLookup, request: async () => response(200, { "content-type": "image/png" }, png) });
+  assert.equal(img.format, "image");
+  assert.equal(img.images?.length, 1);
+});
+
+test("A5: a gyűjtő dokumentum-módban tölt; szöveg nélküli (kép / szkennelt) forrás W1b nélkül nem kerül a listába", () => {
+  assert.equal(usableSource({ url: "https://a.hu/k.png", title: "k", text: "", format: "image", images: [] }), undefined);
+  // Review #592: az elfogadott dokumentum képei, formátuma és szkennelt-jele a W1b-nek megmarad.
+  const img = { mime: "image/png", dataUrl: "data:image/png;base64,AA==", bytes: 1, sourceUrl: "https://a.hu/d.pdf" };
+  const kept = usableSource({ url: "https://a.hu/d.pdf", title: "d", text: "x".repeat(400), format: "pdf", images: [img], needsOcr: true });
+  assert.deepEqual({ format: kept?.format, images: kept?.images, needsOcr: kept?.needsOcr }, { format: "pdf", images: [img], needsOcr: true });
+  const src = readFileSync(new URL("../server/studio/web-gather-gpt.ts", import.meta.url), "utf8");
+  assert.match(src, /fetchPublicPage\(url, \{ signal, documents: true \}\)/);
+});

@@ -20,7 +20,13 @@ export type RawResponse = {
 };
 /** `headers`: a kérés fejlécei (elhagyva: a forrásgyűjtő alapfejlécei). Kisfilm-letöltés (PR #418) ugyanezt az utat használja. */
 export type RawRequest = (url: URL, address: ResolvedAddress, timeoutMs: number, signal?: AbortSignal, headers?: Record<string, string>) => Promise<RawResponse>;
-export type PublicPage = { url: string; title: string; text: string };
+/**
+ * W1a: dokumentum-módban (`documents: true`) a PDF / DOCX / PPTX / PPT / ODP / ODT / MHT / kép is forrás: `format`, a kinyert szöveg,
+ * a megőrzött képek (`images`) és a szövegréteg nélküli forrás jele (`needsOcr`, W1b írja át).
+ */
+export type PublicPage = { url: string; title: string; text: string; format?: import("./web-document").WebFormat; images?: import("./web-document").WebImage[]; needsOcr?: boolean };
+/** W1a: dokumentum-módban a letöltés méretkorlátja (a HTML-oldal korlátja 2 MB marad). */
+export const DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
 
 const V4_BLOCKED: Array<[string, number]> = [
   ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
@@ -155,6 +161,8 @@ export function decode(bytes: Uint8Array, charset: string): string {
 
 export async function fetchPublicPage(raw: string, opts: {
   timeoutMs?: number; maxBytes?: number; maxRedirects?: number; signal?: AbortSignal;
+  /** W1a: a nem HTML / szöveg formátumok (PDF, irodai dokumentum, prezentáció, MHT, kép) is elfogadva — alapból KI (hírlevél). */
+  documents?: boolean;
   lookup?: AddressLookup; request?: RawRequest;
   /** Review #313: minden lépés (az átirányítás célja is) a kérés ELŐTT ellenőrizve; hamis → hiba, a kérés nem indul el. */
   allowUrl?: (url: URL) => boolean;
@@ -216,13 +224,13 @@ export async function openPublicResponse(raw: string, opts: OpenOptions, signal:
 }
 
 async function fetchWithinDeadline(raw: string, opts: Parameters<typeof fetchPublicPage>[1] & object, signal: AbortSignal): Promise<PublicPage> {
-  const timeoutMs = opts.timeoutMs ?? 10_000, maxBytes = opts.maxBytes ?? 2_000_000;
+  const timeoutMs = opts.timeoutMs ?? 10_000, maxBytes = opts.maxBytes ?? (opts.documents ? DOCUMENT_MAX_BYTES : 2_000_000);
   // Review #222: ABSZOLÚT határidő a teljes műveletre (DNS + minden átirányítás + törzsolvasás) — a socket-tétlenségi időkorlát
   // egy lassan csepegtető oldalnál nem véd; lejáratkor a várakozás és az aktív kérés is megszakad.
   const { url, response } = await openPublicResponse(raw, opts, signal);
   if (response.status !== 200) { response.destroy(); throw new Error(`HTTP ${response.status}: ${url.href}`); }
   const contentType = String(response.headers["content-type"] ?? "");
-  if (!/^(text\/html|application\/xhtml\+xml|text\/plain)\b/i.test(contentType)) {
+  if (!opts.documents && !/^(text\/html|application\/xhtml\+xml|text\/plain)\b/i.test(contentType)) {
     response.destroy();
     throw new Error(`Nem szöveges tartalom (${contentType || "ismeretlen"}): ${url.href}`);
   }
@@ -237,6 +245,11 @@ async function fetchWithinDeadline(raw: string, opts: Parameters<typeof fetchPub
   const bytes = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  if (opts.documents) {
+    const { readWebDocument } = await import("./web-document");
+    const doc = await readWebDocument(Buffer.from(bytes), contentType, url.href);
+    return { url: url.href, title: doc.title || url.href, text: doc.text, format: doc.format, images: doc.images, needsOcr: doc.needsOcr };
+  }
   const body = decode(bytes, charsetOf(contentType, bytes));
   if (/^text\/plain/i.test(contentType)) return { url: url.href, title: url.href, text: body.trim() };
   const { title, text } = htmlToText(body);
