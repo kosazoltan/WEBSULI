@@ -420,3 +420,308 @@ def parse_allapot(text: str) -> list[dict]:
         out.append({"szelet": mm["sz"], "fazis": (mm["faz"] or "").strip(), "k": int(mm["k"]), "n": int(mm["n"]),
                     "kovetkezo": mm["kov"].strip()})
     return out
+
+
+# ---------------------------------------------------------------- kimenet
+def _cut(t, n: int) -> str:
+    t = (t or "").replace("\n", " ")
+    return t if len(t) <= n else t[: n - 1] + "…"
+
+
+def _pr_cell(r) -> str:
+    if not r["pr"]:
+        return ""
+    s = f"#{r['pr']}" + (f" {r['pr_state'].lower()}" if r["pr_state"] else "")
+    return s + (f" {r['szalak']}sz" if r["szalak"] else "")
+
+
+def _out(a, obj, text_fn):
+    if a.json:
+        print(json.dumps(obj, ensure_ascii=False, default=str))
+    else:
+        text_fn()
+
+
+def _rows(cur) -> list[dict]:
+    return [dict(r) for r in cur]
+
+
+def _ts(s) -> float:
+    try:
+        return dt.datetime.fromisoformat(str(s)[:19]).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _order(rows: list[dict]) -> list[dict]:
+    return sorted(rows, key=lambda r: (RANG.get(r["status"], 9), r["priority"], -_ts(r["updated_at"])))
+
+
+# ---------------------------------------------------------------- parancsok
+def cmd_migral(c, a):
+    _out(a, {"sema_verzio": SEMA_VERZIO}, lambda: print(f"séma rendben (verzió {SEMA_VERZIO})"))
+
+
+def cmd_uj(c, a):
+    new_task(c, a.code, a.cim, goal=a.cel, origin=a.forras, requirement_code=a.kovetelmeny, parent=a.szulo,
+             priority=a.prio, status=a.allapot, szelet=a.szelet, next_step=a.kovetkezo, branch=a.ag, spec=a.spec)
+    if a.spec:
+        link(c, a.code, "spec", a.spec)
+    if a.kovetelmeny:
+        link(c, a.code, "requirement", a.kovetelmeny)
+    _out(a, get_task(c, a.code), lambda: print(f"új feladat: {a.code} ({get_task(c, a.code)['status']})"))
+
+
+def cmd_terv(c, a):
+    for t in a.egyseg or []:
+        add_unit(c, a.code, t)
+    for t in a.kriterium or []:
+        add_criterion(c, a.code, t)
+    if (a.egyseg or a.kriterium) and get_task(c, a.code)["status"] == "beadva":
+        set_status(c, a.code, "tervezve", actor="kezi")
+    _out(a, progress(c, a.code), lambda: print(f"{a.code}: {progress(c, a.code)}"))
+
+
+def cmd_egyseg(c, a):
+    set_unit(c, a.code, a.seq, a.kesz, evidence=a.bizonyitek)
+    _out(a, progress(c, a.code), lambda: print(f"{a.code}: {progress(c, a.code)}"))
+
+
+def cmd_kriterium(c, a):
+    set_criterion(c, a.code, a.seq, a.teljesult, evidence=a.bizonyitek)
+    _out(a, progress(c, a.code), lambda: print(f"{a.code}: {progress(c, a.code)}"))
+
+
+def cmd_allapot(c, a):
+    if a.uj:
+        set_status(c, a.code, a.uj, actor="kezi", evidence=a.bizonyitek, force=a.force, reason=a.indok,
+                   blocker=a.blokkolo)
+    elif a.blokkolo is not None:
+        update_fields(c, a.code, blocker=a.blokkolo)
+    if a.kovetkezo is not None:
+        update_fields(c, a.code, next_step=a.kovetkezo)
+    t = get_task(c, a.code)
+    _out(a, t, lambda: print(f"{a.code}: {t['status']} | köv.: {t['next_step'] or '—'} | blokkoló: {t['blocker'] or '—'}"))
+
+
+def cmd_esemeny(c, a):
+    add_event(c, a.code, a.fajta, a.szoveg, actor="kezi", evidence=a.bizonyitek)
+    _out(a, {"ok": True}, lambda: print("esemény rögzítve"))
+
+
+def cmd_kapcsol(c, a):
+    ch = link(c, a.code, a.fajta, a.ref, state=a.allapot)
+    _out(a, {"valtozott": ch}, lambda: print(f"{a.code} ↔ {a.fajta}:{a.ref} ({'új/változott' if ch else 'változatlan'})"))
+
+
+def cmd_kapcsolo(c, a):
+    if a.nev:
+        if not a.ertek or not a.forras:
+            raise AllapotHiba("kapcsoló-döntéshez: <NÉV> <érték> --forras <ki/hol döntött>")
+        flag_decision(c, a.nev, a.ertek, a.datum or now()[:10], source=a.forras, task_code=a.feladat)
+    rows = _rows(c.execute("SELECT * FROM v_kapcsolo_dontesek ORDER BY name"))
+
+    def txt():
+        for r in rows:
+            el = {None: "nem mért", 0: "egyezik", 1: "ELTÉR"}[r["eltérés"]]
+            print(f"{r['name']:<26} döntés={r['dontes']:<6} ({r['decided_at']}, {_cut(r['source'], 30)}) | élő: {r['elo'] or '—'} "
+                  f"[{r['allapot'] or '—'}] → {el}" + (f" | {r['task_code']}" if r["task_code"] else ""))
+    _out(a, rows, txt)
+
+
+def cmd_lista(c, a):
+    q, p = ("SELECT t.code,t.title,t.status,t.priority,k.pct,k.alap,t.next_step,t.blocker,t.updated_at FROM tasks t "
+            "JOIN v_keszultseg k ON k.task_id=t.id WHERE 1=1"), []
+    if a.nyitott:
+        q += f" AND t.status NOT IN ({_in(LEZART)})"
+    if a.allapot:
+        st = a.allapot.split(",")
+        q += f" AND t.status IN ({','.join('?' * len(st))})"  # csak '?'-helyőrzők
+        p += st
+    rows = _order(_rows(c.execute(q, p)))[: a.limit]
+
+    def txt():
+        for r in rows:
+            print(f"{r['code']} | {r['status']} | {r['pct']}% | p{r['priority']} | {_cut(r['title'], 80)}")
+    _out(a, rows, txt)
+
+
+def cmd_tetel(c, a):
+    t = get_task(c, a.code)
+    if not t:
+        raise AllapotHiba(f"nincs ilyen feladat: {a.code}")
+    tid = t["id"]
+    d = {"task": t, "progress": progress(c, a.code),
+         "units": _rows(c.execute("SELECT seq,title,done,done_at,evidence FROM task_units WHERE task_id=? ORDER BY seq", (tid,))),
+         "criteria": _rows(c.execute("SELECT seq,text,met,met_at,evidence FROM task_criteria WHERE task_id=? ORDER BY seq",
+                                     (tid,))),
+         "links": _rows(c.execute("SELECT kind,ref,state,extra FROM task_links WHERE task_id=? ORDER BY kind,ref", (tid,))),
+         "events": _rows(c.execute("SELECT at,actor,kind,detail,evidence FROM task_events WHERE task_id=? "
+                                   "ORDER BY at DESC, id DESC LIMIT ?", (tid, a.limit))),
+         "children": _rows(c.execute("SELECT t.code,t.status,k.pct FROM tasks t JOIN v_keszultseg k ON k.task_id=t.id "
+                                     "WHERE t.parent=? ORDER BY t.code", (a.code,)))}
+    if t["requirement_code"]:
+        r = c.execute("SELECT code,status,title FROM requirements WHERE code=?", (t["requirement_code"],)).fetchone()
+        d["requirement"] = dict(r) if r else None
+
+    def txt():
+        p = d["progress"]
+        print(f"{t['code']} — {t['title']}\n  állapot: {t['status']} ({t['status_source']}) | {p['pct']}% ({p['alap']}; egység "
+              f"{p['egyseg']}, feltétel {p['feltetel']}) | prio {t['priority']}")
+        for k in ("goal", "requirement_code", "parent", "szelet", "branch", "spec", "next_step", "blocker", "origin", "notes"):
+            if t[k]:
+                print(f"  {k}: {t[k]}")
+        if d.get("requirement"):
+            print(f"  követelmény: {d['requirement']['code']} = {d['requirement']['status']}")
+        for u in d["units"]:
+            print(f"  [{'x' if u['done'] else ' '}] E{u['seq']} {u['title']}" + (f" — {u['evidence']}" if u["evidence"] else ""))
+        for k in d["criteria"]:
+            print(f"  [{'x' if k['met'] else ' '}] F{k['seq']} {k['text']}" + (f" — {k['evidence']}" if k["evidence"] else ""))
+        for ln in d["links"]:
+            print(f"  ↔ {ln['kind']}:{_cut(ln['ref'], 60)}" + (f" [{ln['state']}]" if ln["state"] else "")
+                  + (f" {ln['extra']}" if ln["extra"] else ""))
+        for ch in d["children"]:
+            print(f"  ⤷ {ch['code']} {ch['status']} {ch['pct']}%")
+        for e in d["events"]:
+            print(f"  {e['at'][:16]} {e['actor']}/{e['kind']}: {_cut(e['detail'], 110)}")
+    _out(a, d, txt)
+
+
+def cmd_attekintes(c, a):
+    rows = _order(_rows(c.execute("SELECT * FROM v_nyitott")))
+    osszes = dict(c.execute("SELECT status, count(*) FROM tasks GROUP BY 1").fetchall())
+    meta = c.execute("SELECT value FROM feladat_meta WHERE key='utolso_szinkron'").fetchone()
+    sz = json.loads(meta[0]) if meta else None
+    shown = rows if a.minden else rows[: a.limit]
+    if a.json:
+        print(json.dumps({"nyitott": shown, "osszes": osszes, "utolso_szinkron": sz}, ensure_ascii=False, default=str))
+        return
+    nyitott = {s: n for s, n in osszes.items() if s not in LEZART}
+    lezart = sum(n for s, n in osszes.items() if s in LEZART)
+    szt = f"{sz['ido'][:16]}, nem elérhető: {', '.join(sz['nem_elerheto']) or '—'}" if sz else "még nem futott"
+    print(f"Nyitott feladat: {len(rows)} (" + ", ".join(f"{s} {nyitott[s]}" for s in sorted(nyitott, key=lambda s: RANG.get(s, 9)))
+          + f") | lezárt: {lezart} | szinkron: {szt}")
+    w = min(max([len(r["code"]) for r in shown] + [4]), 22)
+    print(f"{'KÓD':<{w}} {'ÁLLAPOT':<12} {'%':>5} {'PR':<15} {'KÖVETKEZŐ LÉPÉS':<44} BLOKKOLÓ")
+    for r in shown:
+        pct = f"{r['pct']}%" + ("~" if r["alap"] == "allapot" else " ")
+        print(f"{_cut(r['code'], w):<{w}} {r['status']:<12} {pct:>5} {_pr_cell(r):<15} {_cut(r['next_step'], 44):<44} "
+              f"{_cut(r['blocker'], 40) or '—'}")
+    if len(rows) > len(shown):
+        print(f"… +{len(rows) - len(shown)} további nyitott (lista --nyitott / attekintes --minden); ~ = állapotból becsült %")
+
+
+def cmd_kereses(c, a):
+    try:
+        rows = _rows(c.execute("SELECT t.code,t.status,t.title FROM tasks_fts f JOIN tasks t ON t.id=f.rowid "
+                               "WHERE tasks_fts MATCH ? ORDER BY rank LIMIT ?", (a.q, a.limit)))
+    except sqlite3.OperationalError:  # FTS-szintaxishiba: egyszerű részszöveg-keresés
+        like = f"%{a.q}%"
+        rows = _rows(c.execute("SELECT code,status,title FROM tasks WHERE code LIKE ? OR title LIKE ? OR goal LIKE ? LIMIT ?",
+                               (like, like, like, a.limit)))
+
+    def txt():
+        for r in rows:
+            print(f"{r['code']} | {r['status']} | {_cut(r['title'], 100)}")
+    _out(a, rows, txt)
+
+
+COMMANDS: dict = {}
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="feladat.py", description=__doc__.split("\n")[0])
+    ap.add_argument("--db", default=os.environ.get("KOVETELMENY_DB", str(DEFAULT_DB)))
+    ap.add_argument("--repo", default=os.environ.get("WEBSULI_REPO") or str(HERE.parent.parent))
+    ap.add_argument("--json", action="store_true", help="gépi (JSON) kimenet")
+    ap.add_argument("--ha-van-db", action="store_true", help="ha a DB nem létezik, csendben kilép (kapukból, CI-ben)")
+    ap.add_argument("-q", action="store_true", help="tömör kimenet")
+    sp = ap.add_subparsers(dest="cmd", required=True)
+
+    def add(name, fn, help_):
+        COMMANDS[name] = fn
+        return sp.add_parser(name, help=help_)
+
+    add("migral", cmd_migral, "séma létrehozása / frissítése")
+    p = add("uj", cmd_uj, "új feladat")
+    p.add_argument("code")
+    p.add_argument("cim")
+    for o in ("--cel", "--szelet", "--szulo", "--kovetelmeny", "--forras", "--ag", "--spec", "--kovetkezo"):
+        p.add_argument(o)
+    p.add_argument("--prio", type=int, default=3)
+    p.add_argument("--allapot", default="beadva", choices=STATUSES)
+    p = add("terv", cmd_terv, "egységek / elfogadási feltételek hozzáadása")
+    p.add_argument("code")
+    p.add_argument("--egyseg", action="append")
+    p.add_argument("--kriterium", action="append")
+    for name, fn, flag in (("egyseg", cmd_egyseg, "kesz"), ("kriterium", cmd_kriterium, "teljesult")):
+        p = add(name, fn, f"{name} állítása")
+        p.add_argument("code")
+        p.add_argument("seq", type=int)
+        g = p.add_mutually_exclusive_group(required=True)
+        g.add_argument(f"--{flag}", dest=flag, action="store_true")
+        g.add_argument("--nyitott", dest=flag, action="store_false")
+        p.add_argument("--bizonyitek")
+    p = add("allapot", cmd_allapot, "állapot / következő lépés / blokkoló")
+    p.add_argument("code")
+    p.add_argument("uj", nargs="?", choices=STATUSES)
+    for o in ("--kovetkezo", "--blokkolo", "--bizonyitek", "--indok"):
+        p.add_argument(o)
+    p.add_argument("--force", action="store_true")
+    p = add("esemeny", cmd_esemeny, "idővonal-bejegyzés")
+    p.add_argument("code")
+    p.add_argument("szoveg")
+    p.add_argument("--fajta", default="megjegyzes")
+    p.add_argument("--bizonyitek")
+    p = add("kapcsol", cmd_kapcsol, "hivatkozás (PR, commit, spec, kanban, lelet, kapcsoló…)")
+    p.add_argument("code")
+    p.add_argument("fajta", choices=LINK_KINDS)
+    p.add_argument("ref")
+    p.add_argument("--allapot")
+    p = add("kapcsolo", cmd_kapcsolo, "tulajdonosi kapcsoló-döntés / döntések az élő értékkel")
+    p.add_argument("nev", nargs="?")
+    p.add_argument("ertek", nargs="?")
+    for o in ("--forras", "--feladat", "--datum"):
+        p.add_argument(o)
+    p = add("lista", cmd_lista, "feladatlista")
+    p.add_argument("--nyitott", action="store_true")
+    p.add_argument("--allapot")
+    p.add_argument("--limit", type=int, default=60)
+    p = add("tetel", cmd_tetel, "egy feladat részletesen")
+    p.add_argument("code")
+    p.add_argument("--limit", type=int, default=15)
+    p = add("attekintes", cmd_attekintes, "egy képernyős áttekintés")
+    p.add_argument("--limit", type=int, default=25)
+    p.add_argument("--minden", action="store_true")
+    p = add("kereses", cmd_kereses, "FTS-keresés")
+    p.add_argument("q")
+    p.add_argument("--limit", type=int, default=20)
+    return ap
+
+
+def main(argv=None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except (ValueError, OSError):
+            pass
+    a = build_parser().parse_args(argv)
+    if a.ha_van_db and not Path(a.db).exists():
+        if not a.q:
+            print("feladat-nyilvántartás: nincs DB — kihagyva")
+        return 0
+    c = connect(a.db)
+    try:
+        COMMANDS[a.cmd](c, a)
+        c.commit()
+        return 0
+    except AllapotHiba as e:
+        c.rollback()
+        print(f"HIBA: {safe(e)}", file=sys.stderr)
+        return 2
+    finally:
+        c.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
