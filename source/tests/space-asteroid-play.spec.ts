@@ -1,0 +1,1065 @@
+import { mkdirSync } from "node:fs";
+
+import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank";
+import { join } from "node:path";
+
+import { expect, test, type Page } from "@playwright/test";
+
+import { hideAndShowPage } from "./support/game-mobile-quality";
+
+/**
+ * J6a — Galaktikus Aszteroida valódi érintéssel (végrehajtás J6a 5.; terv J1, J5, J9, J-SA; K.4/13–18, 23–25).
+ *
+ * Az ELSŐ eset szándékosan KAMPÓ NÉLKÜLI: se `forceState`, se `probe` — csak a felhasználó útja érintéssel (a Kockavadásznál a
+ * kampós teszt elfedte a valódi út hibáját). A kristályok helyét a DOM adja (a `data-correct` a teszt-buildben a jó / rossz
+ * kristályt jelöli, a választás érintéssel történik). A második eset a kampót használja a mérésekhez (szimuláció-idő,
+ * ütközés, kérdés/perc a lapon).
+ *
+ * Képernyőkép: ha az `SA_SHOT_DIR` meg van adva, oda (JPEG 70).
+ */
+
+test.use({ serviceWorkers: "block" });
+
+test.beforeEach(async ({ page }) => {
+  // `SA_CPU_THROTTLE=4`: a teljes eset 4x CPU-lassítással fut (a K.4/6 „lassú eszköz” próba; review #486).
+  const throttle = Number(process.env.SA_CPU_THROTTLE || 1);
+  if (throttle > 1) {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: throttle });
+  }
+  await page.addInitScript(() => {
+    localStorage.setItem("websuli.classroomGrade", "5");
+    localStorage.setItem("websuli.spaceQuiz.grade", "5");
+  });
+  await page.route("**/api/**", async (route) => {
+    const p = new URL(route.request().url()).pathname;
+    let data: unknown = [];
+    if (p === "/api/auth/user") data = null;
+    if (p.includes("material-quizzes")) data = { items: [], materials: [] };
+    if (p.includes("sync-eligibility")) data = { eligible: false };
+    await route.fulfill({ json: data });
+  });
+});
+
+/** Rövid, kristályra férő tétel a kampós (kényszerített) kérdésekhez: a hosszú válaszú tétel a listát magától megnyitja (a világ áll). */
+const SHORT_ITEM = { id: "short-q", prompt: "Mennyi 6 × 7?", options: ["36", "42", "48", "54"], correctIndex: 1 };
+
+/** Ha a természetes kérdés hosszú válaszú volt, a „Válaszok” lista magától nyílt: bezárjuk (az élesítés ezután indul újra). */
+async function closeList(page: Page): Promise<void> {
+  const close = page.getByTestId("sa-answers-close");
+  if (await close.isVisible().catch(() => false)) await close.click();
+}
+
+const crystals = (page: Page) => page.locator('[data-testid="sa-crystals"] [data-correct]');
+type Probe = Record<string, number | string | null>;
+const probe = (page: Page) => page.evaluate(() => (window as unknown as { __websuliGame: { probe: () => Probe } }).__websuliGame.probe());
+const force = (page: Page, patch: Record<string, unknown>) =>
+  page.evaluate((p) => (window as unknown as { __websuliGame: { forceState: (x: object) => void } }).__websuliGame.forceState(p), patch);
+
+/** Koppintás egy elem közepére valódi érintéssel (a kristály a helyén áll; a zónát a mag egyszer dönti el, az élesítés 500 ms). */
+async function tapCenter(page: Page, selector: string): Promise<void> {
+  const el = page.locator(selector).first();
+  await expect(page.getByTestId("sa-crystals")).toBeVisible({ timeout: 15_000 });
+  await closeList(page);
+  await expect(el).toBeVisible({ timeout: 15_000 });
+  // FELTÉTELES várakozás (fix idő helyett): a kristályok élesedtek (500 ms), és a gomb két mintavétel között nem mozdul.
+  await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 15_000 });
+  await expect(el).toBeEnabled();
+  let prev = await el.boundingBox();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(60);
+    const cur = await el.boundingBox();
+    if (prev && cur && Math.abs(prev.x - cur.x) < 0.5 && Math.abs(prev.y - cur.y) < 0.5) break;
+    prev = cur;
+  }
+  const box = await el.boundingBox();
+  expect(box, `${selector} doboza`).not.toBeNull();
+  await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
+}
+
+async function shot(page: Page, name: string): Promise<void> {
+  const dir = process.env.SA_SHOT_DIR;
+  if (!dir) return;
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({ path: join(dir, name), type: "jpeg", quality: 70, scale: "css" });
+}
+
+test.describe("valódi érintés", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("kampó nélkül: azonnali indulás kapu nélkül, magától érkező kristály-kérdés, jó és rossz kristály, „Miért?”", async ({ page }) => {
+    test.setTimeout(240_000);
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    // J-SA: a menet AZONNAL indul — nincs induló kvíz, semmilyen blokkoló réteg; a HUD hullám / élet, nincs „mp”.
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+    await expect(page.getByTestId("sa-wave-banner")).toContainText("HULLÁM 1");
+    await expect(page.locator("[data-game-hud]")).toContainText("1/8");
+    await expect(page.locator("[data-game-hud]")).not.toContainText(/\d+ mp/);
+    await shot(page, "play-start.jpg");
+
+    // Az ütemező a bemelegítés (10 mp) után magától kristály-kérdést ad (nyugodt pillanatban), blokkoló réteg nélkül.
+    await expect(crystals(page)).toHaveCount(4, { timeout: 60_000 });
+    expect(await page.locator('[role="dialog"]').count(), "a kérdés nem modális").toBe(0);
+    await expect(page.getByTestId("sa-prompt")).toBeVisible();
+    await shot(page, "play-question.jpg");
+
+    // 1. kérdés: a JÓ kristály érintéssel → fejlesztés (felirat), a kristály zöld, a pont nő.
+    await tapCenter(page, '[data-testid="sa-crystals"] [data-correct="true"]');
+    await expect(page.locator('[data-testid="sa-crystals"] [data-correct="true"]')).toHaveAttribute("data-state", "correct");
+    await expect(page.getByText(/Pajzs!|Hármas lövés!|Bomba a tárba!/)).toBeVisible({ timeout: 5_000 });
+    await expect.poll(async () => Number((await page.locator('[data-hud-stat="score"]').innerText()).replace(/\D/g, "")), { timeout: 5_000 }).toBeGreaterThanOrEqual(50);
+    await shot(page, "play-correct.jpg");
+
+    // 2. kérdés (magától): a ROSSZ kristály → nincs dialógus, a helyes kristály zölden látszik, „Miért?” → kártya újrapróba nélkül.
+    await expect(crystals(page)).toHaveCount(0, { timeout: 5_000 });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 60_000 });
+    await tapCenter(page, '[data-testid="sa-crystals"] [data-correct="false"]');
+    await expect(page.locator('[data-testid="sa-crystals"] [data-correct="true"]')).toHaveAttribute("data-state", "correct");
+    expect(await page.locator('[role="dialog"]').count(), "a hibás válasz nem nyit blokkoló kártyát").toBe(0);
+    await shot(page, "play-wrong.jpg");
+    await page.getByTestId("play-why").tap();
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+    await expect(page.getByTestId("quiz-feedback")).toHaveAttribute("data-outcome", "wrong");
+    await expect(page.getByTestId("quiz-feedback-retry")).toHaveCount(0);
+    await page.getByTestId("quiz-feedback-dismiss").tap();
+    await expect(page.getByTestId("quiz-feedback")).toHaveCount(0);
+    expect(errors.filter((e) => !/401|Failed to fetch/i.test(e))).toEqual([]);
+  });
+
+  test("kampóval: a világ a kérdés alatt fut (≥ 0,35×), a „Miért?” alatt áll; a rossz kristály 3 sziklát ad; ütközés = élet −1 kvíz nélkül", async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+
+    // J1: nyitott kérdés alatt a szimuláció-idő / valós idő ≥ 0,35 (a lapon belül, egyetlen page.evaluate-ben mérve, C-64 / C-65).
+    await force(page, { question: true, questionItem: SHORT_ITEM });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    const open = await page.evaluate(
+      () =>
+        new Promise<{ ratio: number; open: number; real: number }>((resolve) => {
+          const api = (window as unknown as { __websuliGame: { probe: () => Record<string, number> } }).__websuliGame;
+          const s0 = api.probe().simTime!;
+          const t0 = performance.now();
+          let stillOpen = 1;
+          const tick = () => {
+            if (!api.probe().questionOpen) stillOpen = 0;
+            if (performance.now() - t0 < 1500) requestAnimationFrame(tick);
+            else resolve({ ratio: (api.probe().simTime! - s0) / (performance.now() - t0), open: stillOpen, real: performance.now() - t0 });
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    console.log(`[space-asteroid-play] nyitott kérdés alatt: szimuláció / valós idő = ${open.ratio.toFixed(2)} (a kérdés végig nyitva: ${open.open})`);
+    expect(open.ratio, "a szimuláció a kérdés alatt fut (≥ 0,35×)").toBeGreaterThanOrEqual(0.35);
+    expect(open.ratio, "a szimuláció a kérdés alatt soha nem áll").toBeGreaterThan(0);
+
+    // J5: hibás válasz → nincs dialógus, 3 apró szikla jelenik meg a hajó felé (az ellenfelek száma +3), a világ teljes sebességen fut.
+    const before = await probe(page);
+    await tapCenter(page, '[data-testid="sa-crystals"] [data-correct="false"]');
+    await expect.poll(async () => (await probe(page)).reveal, { timeout: 3_000 }).toBe(1);
+    expect(await page.locator('[role="dialog"]').count()).toBe(0);
+    const after = await probe(page);
+    expect((after.enemies as number) - (before.enemies as number), "a rossz kristály 3 apró sziklára hasad (a közben érkező ellenfelekkel együtt ≥ 3)").toBeGreaterThanOrEqual(3 - 1);
+    const full = await page.evaluate(
+      () =>
+        new Promise<number>((resolve) => {
+          const api = (window as unknown as { __websuliGame: { probe: () => Record<string, number> } }).__websuliGame;
+          const s0 = api.probe().simTime!;
+          const t0 = performance.now();
+          const tick = () => {
+            if (performance.now() - t0 < 1000) requestAnimationFrame(tick);
+            else resolve((api.probe().simTime! - s0) / (performance.now() - t0));
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    console.log(`[space-asteroid-play] hibás válasz utáni kijelzés alatt: szimuláció / valós idő = ${full.toFixed(2)}`);
+    expect(full, "a megoldás-kijelzés alatt a világ fut").toBeGreaterThanOrEqual(0.35);
+
+    // „Miért?”: a kártya megnyílik, és amíg nyitva van, a szimuláció-idő nem nő; bezárás után újra nő.
+    await page.getByTestId("play-why").tap();
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+    const t1 = (await probe(page)).simTime as number;
+    // review (#486, Vercel): a „Miért?” kártya olvasása közben megnyomott P NEM oldhatja fel a játékot a kártya mögött
+    await page.keyboard.press("p");
+    await page.waitForTimeout(700);
+    const t2 = (await probe(page)).simTime as number;
+    expect(t2 - t1, "a „Miért?” alatt áll a szimuláció (a P billentyű sem indítja újra)").toBeLessThanOrEqual(34);
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+    await expect(page.getByTestId("game-pause-menu"), "a P a kártya alatt nem nyit szünet menüt").toHaveCount(0);
+    // lapváltás (automatikus szünet) + folytatás a menüből: a kártya nyitva marad, ezért a játék tovább áll (a folytatás csak a saját okát oldja fel)
+    await hideAndShowPage(page);
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    await page.getByTestId("game-resume").tap();
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+    const lives0 = (await probe(page)).lives as number;
+    const t3 = (await probe(page)).simTime as number;
+    await page.waitForTimeout(800);
+    const after2 = await probe(page);
+    expect((after2.simTime as number) - t3, "a folytatás után a nyitott kártya mögött a világ áll").toBeLessThanOrEqual(34);
+    expect(after2.lives, "az életek a kártya alatt nem változnak").toBe(lives0);
+    await expect(page.getByTestId("quiz-feedback")).toBeVisible();
+    await page.getByTestId("quiz-feedback-dismiss").tap();
+    await expect(page.getByTestId("quiz-feedback")).toHaveCount(0);
+    await expect.poll(async () => ((await probe(page)).simTime as number) - t2, { timeout: 3_000 }).toBeGreaterThan(300);
+
+    // J-SA: az ütközés CSAK élet −1 és sérthetetlenség — a hajó mozdulatlanul áll, a szikla előbb-utóbb eltalálja; nincs kvíz-réteg.
+    await expect.poll(async () => (await probe(page)).lives as number, { timeout: 150_000, intervals: [1_000] }).toBeLessThan(3);
+    const hit = await probe(page);
+    expect(hit.over, "egy ütközés nem a menet vége").toBe(0);
+    expect(hit.invuln as number, "az ütközés után ≤ 2 mp sérthetetlenség").toBeLessThanOrEqual(2);
+    expect(await page.locator('[role="dialog"]').count(), "az ütközés nem nyit kvíz-réteget").toBe(0);
+  });
+
+  test("a lapon mért kérdés/perc: a magától érkező kristály-kérdések ütemezése (a jó kristályt megérintve), eredmény, nincs automatikus újraindítás", async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    const started = Date.now();
+    const RUN_MS = 90_000;
+    let answered = 0;
+    while (Date.now() - started < RUN_MS) {
+      await closeList(page);
+      const good = page.locator('[data-testid="sa-crystals"][data-armed="true"] [data-correct="true"][data-state="idle"]').first();
+      if (await good.isVisible().catch(() => false)) {
+        const box = await good.boundingBox().catch(() => null);
+        if (box) {
+          await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+          answered++;
+        }
+      }
+      if ((await probe(page)).over === 1) break;
+      await page.waitForTimeout(300);
+    }
+    const p = await probe(page);
+    const minutes = (Date.now() - started) / 60_000;
+    const asked = (p.questionsAnswered as number) ?? 0;
+    console.log(
+      `[space-asteroid-play] ${minutes.toFixed(2)} perc alatt ${asked} megválaszolt kérdés (${(asked / minutes).toFixed(2)} / perc; érintések: ${answered}), hullám ${p.wave}, élet ${p.lives}`,
+    );
+    // A bemelegítés (10 mp) után ≥ 4/perc a cél (terv J2, a node-szimuláció méri pontosan); a lapon a CI lassúsága és a
+    // sérülés utáni „nem nyugodt” szakaszok miatt a küszöb lazább: legalább 2/perc.
+    expect(asked / minutes, "kérdés/perc a lapon").toBeGreaterThanOrEqual(2);
+    await force(page, { phase: "over", gameWon: false });
+    await expect(page.getByTestId("sa-over")).toBeVisible();
+    await shot(page, "play-result.jpg");
+    await page.waitForTimeout(2_000);
+    await expect(page.getByTestId("sa-over"), "a menet vége után nincs automatikus újraindítás").toBeVisible();
+    await page.getByRole("button", { name: "Új kör" }).tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible();
+    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+  });
+});
+
+test.describe("grafika", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("WebGL-környezet elvesztése (K.4/7): szünet + „Grafika újraindítása”, a menet és a kérdés-kristályok utána is működnek", async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await page.waitForTimeout(1_200);
+    const lost = await page.evaluate(() => {
+      const canvas = document.querySelector("canvas");
+      const gl = (canvas?.getContext("webgl2") ?? canvas?.getContext("webgl")) as WebGLRenderingContext | null | undefined;
+      const ext = gl?.getExtension("WEBGL_lose_context");
+      ext?.loseContext();
+      return Boolean(ext);
+    });
+    // A teszt MINDIG fut és állít: a WEBGL_lose_context minden vizsgált Chrome-háttéren (GPU, SwiftShader) elérhető; ha nem az,
+    // az a teszt-környezet hibája, nem csendes kihagyás.
+    expect(lost, "a WEBGL_lose_context kiterjesztés elérhető (a környezet előfeltétele)").toBe(true);
+    // szünet + újraindító gomb; a menet áll
+    await expect(page.getByTestId("sa-gfx-lost")).toBeVisible({ timeout: 5_000 });
+    const t1 = (await probe(page)).simTime as number;
+    await page.waitForTimeout(600);
+    expect(((await probe(page)).simTime as number) - t1, "a grafika-hiba alatt áll a menet").toBeLessThanOrEqual(34);
+    await page.getByTestId("sa-gfx-restart").tap();
+    await expect(page.getByTestId("sa-gfx-lost")).toHaveCount(0);
+    // az újraindítás után a szünet menü vár (a gyerek dönt a folytatásról), a menet állapota megmaradt
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    await page.getByTestId("game-resume").tap();
+    await expect.poll(async () => ((await probe(page)).simTime as number) - t1, { timeout: 5_000 }).toBeGreaterThan(500);
+    // az új jeleneten a kérdés-kristályok is megjelennek
+    await force(page, { question: true, questionItem: SHORT_ITEM });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    // K.4/2, K.4/7: a rajzolási hívások és a GPU-memória korlátos
+    const info = await probe(page);
+    expect(info.drawCalls as number, "rajzolási hívások (medium tier ≤ 200)").toBeLessThanOrEqual(200);
+    expect(errors.filter((e) => !/401|Failed to fetch|WebGL|context/i.test(e))).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------------------------------------------------------ */
+/* Review #486: győzelem-véglegesség (M1), élesítés és tartott tűz (M2), hosszú válaszok, rajz-arány                      */
+/* ------------------------------------------------------------------------------------------------------------------ */
+
+test.describe("review #486 — M1: a főellenfél legyőzése végleges", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("egy élettel, a főellenfél halála után még repülő ellenséges lövedék nem veszi el a győzelmet", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { bossFinale: true });
+    await expect.poll(async () => (await probe(page)).bossDefeated, { timeout: 2_000 }).toBe(1);
+    // az 1,5 mp-es robbanás-ablak alatt a hajón repülő ellenséges lövedék NEM sebez (1 élet: a régi kód itt „Kör vége”-t adott)
+    await expect(page.getByTestId("sa-over")).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByTestId("sa-over")).toContainText("Legyőzted a főellenfelet!");
+    await expect(page.getByTestId("sa-over")).not.toContainText("Kör vége");
+  });
+});
+
+test.describe("review #486 — M2: élesítés és tartott tűz (billentyűzet)", () => {
+  test.use({ viewport: { width: 844, height: 600 } });
+
+  test("az 1–4 billentyű válaszol; a tartott tűz, söprő hajóval sem válaszol, az új nyomás igen", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+
+    // 1) az 1–4 billentyű szándékos, azonnali válasz (az élesítés a lövedékre vonatkozik)
+    await force(page, { question: true, questionItem: SHORT_ITEM });
+    await expect(page.getByTestId("sa-crystals")).toBeVisible({ timeout: 5_000 });
+    await page.keyboard.press("1");
+    await expect.poll(async () => (await probe(page)).questionsAnswered, { timeout: 3_000 }).toBe(1);
+
+    // 2) tartott tűz a kérdés előtt kezdve, a hajó végigsöpör a sávon: a kérdés nyitva marad
+    await expect(crystals(page)).toHaveCount(0, { timeout: 8_000 });
+    await page.keyboard.down("Space");
+    await force(page, { question: true, questionItem: SHORT_ITEM });
+    await expect(page.getByTestId("sa-crystals")).toBeVisible({ timeout: 5_000 });
+    await page.keyboard.down("ArrowRight");
+    await page.waitForTimeout(1_500);
+    await page.keyboard.up("ArrowRight");
+    const held = await probe(page);
+    expect(held.questionOpen, "a tartott tűz (söprő hajóval) nem válaszolt").toBe(1);
+    expect(held.questionsAnswered, "a tartott tűz nem válaszolt").toBe(1);
+    // kis UX: a lövedék átment a kristályon → rövid szöveges jelzés jelenik meg
+    await expect(page.getByTestId("sa-hold-hint")).toHaveAttribute("data-visible", "true", { timeout: 1_500 });
+    await expect(page.getByTestId("sa-hold-hint")).toContainText("lőj újra");
+
+    // 3) szándékos új nyomás (elengedés + újra), söprő hajóval: válaszol
+    await page.keyboard.up("Space");
+    await page.waitForTimeout(150); // a valódi elengedés legalább egy fix lépésnyi (a játék a nyomás ÉLVÁLTÁSÁT figyeli)
+    await page.keyboard.down("ArrowLeft");
+    await page.keyboard.down("Space");
+    await expect.poll(async () => (await probe(page)).questionsAnswered, { timeout: 2_500 }).toBe(2);
+    // a szándékos lövéses válasz után a jelzés eltűnik (és nem tér vissza)
+    await expect(page.getByTestId("sa-hold-hint")).toHaveAttribute("data-visible", "false", { timeout: 1_500 });
+    await page.keyboard.up("ArrowLeft");
+    await page.keyboard.up("Space");
+  });
+});
+
+for (const vp of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+] as const)
+test.describe(`review #486 — hosszú válaszok és rajz-arány (${vp.width}×${vp.height})`, () => {
+  test.use({ viewport: { width: vp.width, height: vp.height }, hasTouch: true, isMobile: true });
+
+  test("a leghosszabb banki válaszú tétel: a kristályon sorszám, a teljes szöveg nem blokkoló jelmagyarázatban, a világ fut; lövéssel / koppintással választható", async ({ page }) => {
+    test.setTimeout(120_000);
+    // a legnagyobb összhosszú válaszú tétel a bankban (programozottan keresve)
+    const item = [...GRADE_QUIZ_ITEMS].sort((a, b) => b.options.reduce((n, o) => n + o.length, 0) - a.options.reduce((n, o) => n + o.length, 0))[0]!;
+    const longest = Math.max(...item.options.map((o) => o.length));
+    expect(longest, "a legrosszabb tétel valóban hosszú válaszú").toBeGreaterThan(22);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { questionItem: { id: "long-answers", prompt: item.prompt, options: [...item.options], correctIndex: item.correctIndex }, question: true });
+    // Vak L1: hosszú válasznál a teljes szövegek NEM blokkoló jelmagyarázatban látszanak a számozott kristályokkal EGYSZERRE; a világ fut
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-long", "true", { timeout: 5_000 });
+    const legend = page.getByTestId("sa-legend");
+    await expect(legend).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId("sa-answers")).toHaveCount(0);
+    await expect(crystals(page)).toHaveCount(4);
+    const t0 = (await probe(page)).simTime as number;
+    await page.waitForTimeout(700);
+    expect(((await probe(page)).simTime as number) - t0, "a jelmagyarázat nyitva: a világ NEM áll meg (a megállított világ <= 34 ms-ot lépne)").toBeGreaterThan(50);
+    const info = await page.evaluate(() => {
+      const box = document.querySelector<HTMLElement>('[data-testid="sa-legend"]')!;
+      const texts = [...box.querySelectorAll<HTMLElement>(".sa-legend-text")];
+      const r = box.getBoundingClientRect();
+      const chips = [...document.querySelectorAll<HTMLElement>('[data-testid="sa-crystals"] .sa-crystal')];
+      return {
+        texts: texts.map((t) => t.textContent?.trim() ?? ""),
+        clipped: texts.map((t) => t.scrollHeight > t.clientHeight + 1),
+        inView: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight,
+        passesPointer: getComputedStyle(box).pointerEvents === "none",
+        chipsVisible: chips.map((ch) => getComputedStyle(ch).visibility),
+        overflowX: document.documentElement.scrollWidth > innerWidth,
+      };
+    });
+    expect([...info.texts].sort(), "a jelmagyarázat minden válasz TELJES szövegét mutatja").toEqual([...item.options].sort());
+    expect(info.clipped.some(Boolean), "a jelmagyarázat szövege nincs levágva").toBe(false);
+    expect(info.inView, "a jelmagyarázat a nézeten belül van").toBe(true);
+    expect(info.passesPointer, "a jelmagyarázat nem blokkoló (a lövés / koppintás átmegy rajta)").toBe(true);
+    expect(info.chipsVisible.every((v) => v === "visible"), "a számozott kristályok ugyanekkor látszanak").toBe(true);
+    expect(info.overflowX, "nincs vízszintes görgetősáv").toBe(false);
+    console.log(`[space-asteroid-play] hosszú válaszok (${longest} karakter): jelmagyarázat + kristályok egyszerre, a világ fut`);
+    await shot(page, `play-long-answers-${vp.width}x${vp.height}.jpg`);
+    // a kézi lista („Válaszok” gomb) továbbra is megáll, amíg nyitva van, és válaszol
+    await page.getByTestId("sa-answers-open").tap();
+    const list = page.getByTestId("sa-answers");
+    await expect(list).toBeVisible();
+    const t1 = (await probe(page)).simTime as number;
+    await page.waitForTimeout(600);
+    expect(((await probe(page)).simTime as number) - t1, "a kézi lista nyitva: a világ áll").toBeLessThanOrEqual(34);
+    await page.getByTestId("sa-answers-close").click();
+    await expect(list).toHaveCount(0);
+    // olvasás ÉS lövés ugyanazon az állapoton: az élesedés után a számozott helyes kristályra koppintva a válasz rögzül
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 4_000 });
+    await tapCenter(page, '[data-testid="sa-crystals"] [data-correct="true"]');
+    await expect.poll(async () => (await probe(page)).questionsCorrect, { timeout: 3_000 }).toBe(1);
+    await expect.poll(async () => ((await probe(page)).simTime as number) - t0, { timeout: 4_000 }).toBeGreaterThan(400);
+  });
+
+  test("a rajz-arány (interpolált rajz): a meghajtó 0..1 közti arányt ad", async ({ page }) => {
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    const alphas = await page.evaluate(
+      () =>
+        new Promise<number[]>((resolve) => {
+          const api = (window as unknown as { __websuliGame: { probe: () => Record<string, number> } }).__websuliGame;
+          const out: number[] = [];
+          const tick = () => {
+            out.push(api.probe().renderAlpha!);
+            if (out.length < 90) requestAnimationFrame(tick);
+            else resolve(out);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    expect(alphas.every((a) => Number.isFinite(a) && a >= 0 && a <= 1), "a rajz-arány mindig 0..1").toBe(true);
+    console.log(`[space-asteroid-play] rajz-arány: ${alphas.length} minta, ${new Set(alphas.map((a) => a.toFixed(2))).size} különböző érték`);
+  });
+});
+
+/**
+ * Vak 3./4. kör L1 + L6 — a jelmagyarázat, a „Válaszok” gomb, a VALÓDI kérdéskártya (`.play-question-card`, nem a nézetet fedő gyökér)
+ * és a kristályok páronként nem fedhetik egymást; minden kristály közepén a kristály a találat-cél. Teljes mondatos tananyag-válaszok,
+ * hosszú prompttal és a banki leghosszabb tétellel, 4 nézetben.
+ */
+const LESSON_ITEM = {
+  id: "ov-lesson",
+  prompt: "Melyik állítás igaz a honfoglaló magyarok életmódjára, a törzsszövetségre és a letelepedés körülményeire vonatkozóan?",
+  options: [
+    "A honfoglaló magyarok félnomád állattartók voltak, és a telet kötött telepeken töltötték el.",
+    "A honfoglaló magyarok kizárólag földművelésből éltek, és állandó kőházakban laktak végig az évben.",
+    "A törzsszövetséget a mai értelemben vett király vezette, és a törzsek önállóan semmit nem döntöttek.",
+    "A magyarok a Kárpát-medencébe a IX. század végén érkeztek a keleti szomszédok felől, több hullámban.",
+  ],
+  correctIndex: 0,
+};
+type Box = { l: number; t: number; r: number; b: number };
+/** A mérő: a jelmagyarázat szövegsorai (`Range.getClientRects`), a gomb, a VALÓDI kártya és a kristályok dobozai + a találat-cél. */
+async function measureLayout(page: Page) {
+  return page.evaluate(() => {
+    const rect = (r: DOMRect) => ({ l: r.left, t: r.top, r: r.right, b: r.bottom });
+    const lines: { what: string; r: ReturnType<typeof rect> }[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>('[data-testid="sa-legend"] .sa-legend-text, [data-testid="sa-legend"] .sa-legend-key')) {
+      const list = el.closest<HTMLElement>(".sa-legend-list")!.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      // a görgetett lista kilógó sorai nem láthatók: csak a lista látható sávjába eső részt mérjük
+      for (const cr of range.getClientRects()) {
+        if (cr.width <= 0.5 || cr.height <= 0.5) continue;
+        const r = rect(cr);
+        if (r.b <= list.top || r.t >= list.bottom) continue;
+        lines.push({ what: el.className, r: { ...r, t: Math.max(r.t, list.top), b: Math.min(r.b, list.bottom) } });
+      }
+    }
+    const cardEl = document.querySelector<HTMLElement>('[data-testid="sa-question"] .play-question-card');
+    const btn = document.querySelector<HTMLElement>('[data-testid="sa-answers-open"]')!.getBoundingClientRect();
+    const chips = [...document.querySelectorAll<HTMLElement>('[data-testid="sa-crystals"] .sa-crystal')].map((c) => {
+      const r = c.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { idx: Number(c.dataset.optionIndex), r: rect(r), hitIdx: hit?.closest<HTMLElement>(".sa-crystal")?.dataset.optionIndex ?? null };
+    });
+    const compact = document.querySelector<HTMLElement>('[data-testid="sa-legend"]')?.dataset.compact === "true";
+    return { lines, btn: rect(btn), card: cardEl ? rect(cardEl.getBoundingClientRect()) : null, chips, vw: innerWidth, vh: innerHeight, overflowX: document.documentElement.scrollWidth > innerWidth, compact };
+  });
+}
+const boxesHit = (a: Box, b: Box) => a.l < b.r - 0.5 && a.r > b.l + 0.5 && a.t < b.b - 0.5 && a.b > b.t + 0.5;
+/** A mért állapot hibái (üres = nincs fedés). */
+function layoutProblems(m: Awaited<ReturnType<typeof measureLayout>>, label: string): string[] {
+  const out: string[] = [];
+  if (!m.card) return [`${label}: nincs .play-question-card`];
+  // SPEC-VÁLTOZÁS 2026-11-25 (review #486, #679yp8): helyhiánynál tömör mód — a kártya alatt nincs lista (a válaszok a gombbal nyíló
+  // panelen), ezért szövegsor sincs; a gomb ↔ kristály / kártya fedés továbbra is mért.
+  if (!m.compact && m.lines.length <= 3) out.push(`${label}: nincs mért szövegsor`);
+  if (m.chips.length !== 4) out.push(`${label}: ${m.chips.length} kristály`);
+  for (const ln of m.lines) {
+    for (const ch of m.chips) if (boxesHit(ln.r, ch.r)) out.push(`${label}: jelmagyarázat-sor (${ln.what}) ↔ kristály ${ch.idx + 1}`);
+    if (boxesHit(ln.r, m.btn)) out.push(`${label}: jelmagyarázat-sor ↔ „Válaszok” gomb`);
+    if (boxesHit(ln.r, m.card)) out.push(`${label}: jelmagyarázat-sor ↔ kérdéskártya`);
+    if (!(ln.r.l >= 0 && ln.r.r <= m.vw && ln.r.t >= 0 && ln.r.b <= m.vh)) out.push(`${label}: a sor a nézeten kívül`);
+  }
+  for (const ch of m.chips) {
+    if (boxesHit(m.btn, ch.r)) out.push(`${label}: gomb ↔ kristály ${ch.idx + 1}`);
+    if (boxesHit(m.card, ch.r)) out.push(`${label}: kérdéskártya ↔ kristály ${ch.idx + 1}`);
+    if (ch.hitIdx !== String(ch.idx)) out.push(`${label}: a kristály ${ch.idx + 1} közepén nem a kristály a találat-cél`);
+  }
+  if (boxesHit(m.btn, m.card)) out.push(`${label}: gomb ↔ kérdéskártya`);
+  if (!(m.btn.r - m.btn.l >= 44 && m.btn.b - m.btn.t >= 44)) out.push(`${label}: a gomb érintési célja < 44 px`);
+  if (m.overflowX) out.push(`${label}: vízszintes görgetősáv`);
+  return out;
+}
+async function openLongQuestion(page: Page, item: { id: string; prompt: string; options: string[]; correctIndex: number }): Promise<void> {
+  await page.goto("/games/space-asteroid-quiz");
+  await page.getByTestId("sa-start").tap();
+  await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+  await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+  await force(page, { noEnemies: true });
+  await force(page, { questionItem: item, question: true });
+  await expect(page.getByTestId("sa-legend")).toHaveCount(1, { timeout: 5_000 });
+  await expect(page.getByTestId("sa-answers-open")).toBeVisible();
+  await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+  // a kristályok a helyükön (két mintavétel között nem mozdulnak)
+  const snap = () => page.locator('[data-testid="sa-crystals"] .sa-crystal').evaluateAll((els) => JSON.stringify(els.map((e) => e.getBoundingClientRect())));
+  let prev = await snap();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(60);
+    const cur = await snap();
+    if (cur === prev) break;
+    prev = cur;
+  }
+}
+for (const vp of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+  { width: 412, height: 915 },
+  { width: 844, height: 390 },
+] as const)
+  test.describe(`vak 3./4. kör L1 + L6 — jelmagyarázat, gomb, kártya és kristályok nem fednek (${vp.width}×${vp.height})`, () => {
+    test.use({ viewport: { width: vp.width, height: vp.height }, hasTouch: true, isMobile: true });
+
+    for (const which of [0, 1] as const)
+      test(`${which === 0 ? "teljes mondatos tananyag-válaszok, hosszú prompt" : "a leghosszabb banki tétel"}: páronként nincs fedés; minden kristály találat-cél`, async ({ page }) => {
+        test.setTimeout(120_000);
+        const bank = [...GRADE_QUIZ_ITEMS].sort((a, b) => b.options.reduce((n, o) => n + o.length, 0) - a.options.reduce((n, o) => n + o.length, 0))[0]!;
+        const item = which === 0 ? LESSON_ITEM : { id: "ov-bank", prompt: bank.prompt, options: [...bank.options], correctIndex: bank.correctIndex };
+        await openLongQuestion(page, item);
+        const m = await measureLayout(page);
+        expect(layoutProblems(m, `${vp.width}×${vp.height}`), "a mért elrendezés hibái").toEqual([]);
+        // a kártya valódi, nem a nézetet fedő gyökér (L6): a magassága a nézetnél jóval kisebb
+        expect(m.card!.b - m.card!.t, "a mért kártya a valódi kártya, nem a teljes nézet").toBeLessThan(vp.height * 0.6);
+        await shot(page, `play-legend-overlap-${vp.width}x${vp.height}-${which}.jpg`);
+      });
+
+    test("a mérő érzékeny (kontroll): az ismert fedés — a jelmagyarázat a kristályra tolva — elbukik, a jó elrendezés átmegy", async ({ page }) => {
+      test.setTimeout(120_000);
+      await openLongQuestion(page, LESSON_ITEM);
+      expect(layoutProblems(await measureLayout(page), "kontroll-jó")).toEqual([]);
+      // mutáció: a jelmagyarázatot a legfelső kristály fölé kényszerítjük (a régi hiba)
+      await page.evaluate(() => {
+        const chip = document.querySelector<HTMLElement>('[data-testid="sa-crystals"] .sa-crystal')!.getBoundingClientRect();
+        const lg = document.querySelector<HTMLElement>('[data-testid="sa-legend"]')!;
+        if (lg.dataset.compact === "true") {
+          // tömör mód: a gombot toljuk a kristályra (a régi fedés megfelelője)
+          const b = lg.querySelector<HTMLElement>('[data-testid="sa-answers-open"]')!;
+          b.style.top = `${chip.top}px`;
+          b.style.bottom = "auto";
+          b.style.left = `${chip.left}px`;
+          b.style.transform = "none";
+          return;
+        }
+        lg.style.position = "fixed";
+        lg.style.top = `${chip.top - 4}px`;
+        lg.style.left = `${Math.max(0, chip.left - 10)}px`;
+        lg.style.right = "auto";
+        lg.style.width = "320px";
+      });
+      const bad = layoutProblems(await measureLayout(page), "kontroll-rossz");
+      expect(bad.length, "a mérő a kényszerített fedést észleli").toBeGreaterThan(0);
+    });
+  });
+
+test.describe("review #486 — elforgatás nyitott kérdésnél", () => {
+  // fekvőben indul: az álló nézet keskenyebb, ott a régi (széles) helyen maradó kristály kilógna
+  test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+  test("álló ↔ fekvő váltás: minden kristály-gomb a vásznon belül, a kirajzolt hely a mag találati helye; az élesítés újraindul", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { question: true, questionItem: SHORT_ITEM });
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    const px = async () => JSON.parse(String((await probe(page)).crystalPx)) as Array<[number, number] | null>;
+    const geometry = async () =>
+      page.evaluate(() => {
+        const chips = [...document.querySelectorAll<HTMLElement>('[data-testid="sa-crystals"] .sa-crystal')];
+        return {
+          iw: innerWidth,
+          ih: innerHeight,
+          boxes: chips.map((c) => {
+            const r = c.getBoundingClientRect();
+            return { l: r.left, r: r.right, t: r.top, b: r.bottom, cx: r.left + r.width / 2, cy: r.top + r.height / 2, vis: getComputedStyle(c).visibility };
+          }),
+        };
+      });
+    for (const vp of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+      { width: 360, height: 640 },
+    ]) {
+      const before = JSON.stringify(await px());
+      const shownBefore = (await probe(page)).crystalShownAt as number;
+      await page.setViewportSize(vp);
+      // előbb megvárjuk, hogy a geometria TÉNYLEG megváltozzon (a találati hely új aréna-méretből számolódik)
+      await expect.poll(async () => JSON.stringify(await px()), { timeout: 5_000 }).not.toBe(before);
+      await expect.poll(async () => (await probe(page)).crystalShownAt as number, { timeout: 3_000, message: "érdemi elmozdulásnál az élesítés újraindul" }).toBeGreaterThan(shownBefore);
+      await expect.poll(async () => (await probe(page)).crystalsArmed, { timeout: 3_000 }).toBe(1);
+      // a gomb-helyek a következő képkockára követik a magot
+      await expect
+        .poll(
+          async () => {
+            const [g, hits] = [await geometry(), await px()];
+            return g.boxes.every((b, i) => {
+              const h = hits[i];
+              return !!h && Math.abs(b.cx - h[0]) <= 3 && Math.abs(b.cy - h[1]) <= 3 && b.vis === "visible";
+            });
+          },
+          { timeout: 5_000 },
+        )
+        .toBe(true);
+      const g = await geometry();
+      expect(g.boxes.length).toBe(4);
+      for (const b of g.boxes) {
+        expect(b.l, `${vp.width}×${vp.height}: gomb a vásznon belül (bal)`).toBeGreaterThanOrEqual(0);
+        expect(b.r, "jobb").toBeLessThanOrEqual(g.iw);
+        expect(b.t, "felső").toBeGreaterThanOrEqual(0);
+        expect(b.b, "alsó").toBeLessThanOrEqual(g.ih);
+      }
+    }
+  });
+});
+
+test.describe("a kör végén nyomva tartott tűzgomb (közös HoldButton, kanban #98)", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("a következő kör nem tüzel magától: a vezérlők a kör végén és indulásakor nullázódnak", async ({ page }) => {
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    // a tűzgomb lenyomva, felengedés nélkül (a lecsatolás nem küld felengedést)
+    const fire = (await page.getByRole("button", { name: "Tűz" }).boundingBox())!;
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: fire.x + fire.width / 2, y: fire.y + fire.height / 2, id: 7 }] });
+    await expect.poll(async () => (await probe(page)).firing).toBe(1);
+    await force(page, { phase: "over", gameWon: false });
+    await expect(page.getByTestId("sa-over")).toBeVisible();
+    expect((await probe(page)).firing, "a kör végén a tűz nullázódik").toBe(0);
+    await page.getByRole("button", { name: "Új kör" }).tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible();
+    await page.waitForTimeout(500);
+    expect((await probe(page)).firing, "az új kör nem tüzel magától").toBe(0);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  });
+});
+
+test.describe("review #486 L1 — hármas lövés: a célzott kristály válaszol, nem a szomszéd", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("üres pályán, hármas lövéssel a felső sor célzott kristálya alól lőve a célzott (helyes) kristály válaszol — nem a szomszéd rossz", async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true, powerLevel: 1 });
+    type World = Array<[number, number, number, number]>;
+    const world = async () => JSON.parse(String((await probe(page)).crystalWorld)) as World;
+    let target = -1;
+    for (let attempt = 0; attempt < 8 && target < 0; attempt++) {
+      await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: `l1-${attempt}`, options: attempt % 2 ? ["36", "48", "54", "42"] : ["42", "36", "48", "54"], correctIndex: attempt % 2 ? 3 : 0 }, noEnemies: true, powerLevel: 1 });
+      await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+      await closeList(page);
+      await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+      const w = await world();
+      // a felső sor a páros indexű kristályok; a helyes köztük van-e (a szomszéd az alsó sorban rossz)
+      const top = [0, 2].find((i) => w[i]![2] === 1);
+      if (top !== undefined) target = top;
+      else {
+        // nem a felső sorban van a helyes: a kérdést megválaszoljuk (billentyű), és újat kérünk
+        await page.keyboard.press("1");
+        await expect(crystals(page)).toHaveCount(0, { timeout: 6_000 });
+      }
+    }
+    expect(target, "a helyes kristály a felső sorba került valamelyik kísérletben").toBeGreaterThanOrEqual(0);
+    const before = await probe(page);
+    // a hajó DETERMINISZTIKUSAN a célzott kristály alá (teszt-kampó `shipX`; nincs mozgatási ciklus, nincs sodródás), majd ellenőrzés
+    const tx = (await world())[target]![0] as number;
+    await force(page, { shipX: tx });
+    await page.waitForTimeout(80);
+    const placed = await probe(page);
+    expect(Math.abs((placed.shipX as number) - tx), "a hajó a célzott kristály alatt áll (<= 0,1 egység)").toBeLessThanOrEqual(0.1);
+    expect(placed.questionOpen, "a kérdés a lövéskor még nyitva van").toBe(1);
+    expect(placed.crystalsArmed, "a kristályok élesek").toBe(1);
+    // szándékos (élesítés utáni, új) nyomás: egyetlen lövés, hármas lövéssel
+    await page.keyboard.down("Space");
+    await page.waitForTimeout(160); // legalább egy fix lépés: a játék a nyomás ÉLVÁLTÁSÁT figyeli
+    await page.keyboard.up("Space");
+    await expect.poll(async () => (await probe(page)).questionsAnswered, { timeout: 4_000 }).toBe((before.questionsAnswered as number) + 1);
+    const after = await probe(page);
+    expect(after.questionsCorrect, "a célzott (helyes) kristály válaszolt, nem a szomszéd rossz").toBe((before.questionsCorrect as number) + 1);
+  });
+});
+
+test.describe("review #486 L5 — a rossz válasz nem jutalmaz", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("rossz kristály: nincs pajzs / hármas lövés / bomba / pont; a jó kristály fejleszt (kontroll)", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    const reward = async () => {
+      const p = await probe(page);
+      return { power: p.powerLevel as number, shield: p.shieldTimer as number, bombs: p.bombs as number, score: p.score as number };
+    };
+    // 1) ROSSZ válasz
+    await force(page, { question: true, questionItem: SHORT_ITEM, powerLevel: 0 });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    const base = await reward();
+    await page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first().click();
+    await expect.poll(async () => (await probe(page)).reveal, { timeout: 3_000 }).toBe(1);
+    await page.waitForTimeout(400);
+    expect(await reward(), "rossz válasz: semmi jutalom (pajzs / hármas lövés / bomba / pont)").toEqual(base);
+    // 2) kontroll: a JÓ válasz fejleszt és pontot ad
+    await expect(crystals(page)).toHaveCount(0, { timeout: 8_000 });
+    await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: "l5-ctrl" } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    const base2 = await reward();
+    await page.locator('[data-testid="sa-crystals"] [data-correct="true"]').first().click();
+    await expect.poll(async () => (await probe(page)).reveal, { timeout: 3_000 }).toBe(1);
+    await expect.poll(async () => (await reward()).score, { timeout: 2_000 }).toBeGreaterThan(base2.score);
+    const got = await reward();
+    expect(got.power + got.shield + got.bombs, "jó válasz: fejlesztés").toBeGreaterThan(base2.power + base2.shield + base2.bombs);
+  });
+});
+
+test.describe("vak 3. kör L2 — a csak szilánkokat leölő bomba nem ad combót", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("rossz kristály → 3 szilánk; a bomba lelövi őket, de a combo marad 0 (a jutalmat nem adja)", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    await expect.poll(async () => (await probe(page)).enemies, { timeout: 5_000 }).toBe(0);
+    await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: "l2-bomb" } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    // új ellenfél nem érkezik (`noSpawn`), a szilánkokat viszont már nem törli a kampó: csak a szilánkok lesznek a pályán
+    // (review #486, CI: a régi `noEnemies: false` után a spawn újraindult — a „kiürült hullám” feltevés nem tartott)
+    await force(page, { noEnemies: false, noSpawn: true });
+    await page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first().click();
+    await expect.poll(async () => (await probe(page)).shards, { timeout: 3_000 }).toBe(3);
+    const before = await probe(page);
+    expect(before.enemies, "a pályán csak a három szilánk van").toBe(3);
+    expect(before.combo, "a menet elején nincs combo").toBe(0);
+    await force(page, { bombs: 1 });
+    await page.keyboard.press("b");
+    await expect.poll(async () => (await probe(page)).shards, { timeout: 3_000 }).toBe(0);
+    const after = await probe(page);
+    expect(after.bombs, "a bomba elfogyott").toBe(0);
+    expect(after.combo, "csak szilánkot leölő bomba nem emeli a combót").toBe(0);
+    expect(after.score, "a szilánk nem ad pontot").toBe(before.score);
+  });
+});
+
+test.describe("vak 3. kör L6 — az utolsó élet elvesztése megvárja a megoldás-kijelzést", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("rossz válasz utáni kijelzés közben elvesztett utolsó élet: az eredmény nem nyílik azonnal; a helyes válasz ≥ 1,8 mp-ig látszik", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: "l6-last" } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    const t0 = Date.now();
+    await page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first().click();
+    await expect.poll(async () => (await probe(page)).reveal, { timeout: 3_000 }).toBe(1);
+    await force(page, { lastLife: true });
+    const mid = await probe(page);
+    expect(mid.over, "az eredmény rögzült (nincs több sebzés)").toBe(1);
+    await expect(page.getByTestId("sa-over"), "a kijelzés közben az eredményképernyő még nincs nyitva").toHaveCount(0);
+    await expect(page.locator('[data-testid="sa-crystals"] [data-state="correct"]'), "a helyes kristály zölden látszik").toBeVisible();
+    await expect(page.getByTestId("sa-over")).toBeVisible({ timeout: 6_000 });
+    expect(Date.now() - t0, "a helyes válasz legalább 1,8 mp-ig látható volt (mérési ráhagyással)").toBeGreaterThanOrEqual(1780);
+  });
+
+  test("review #486 (Vercel): a már lezárt menet kijelzése alatt a szünet menü „Kör vége” pontja azonnal az eredményképernyőt nyitja", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: "l6-exit" } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    await page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first().click();
+    await expect.poll(async () => (await probe(page)).reveal, { timeout: 3_000 }).toBe(1);
+    await force(page, { lastLife: true });
+    expect((await probe(page)).over, "az eredmény rögzült").toBe(1);
+    await page.keyboard.press("p");
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    await page.getByTestId("game-exit").click();
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+    // a „Kör vége” törli a függő időzítőket (a kijelzés-várót is) — az eredményképernyőnek ettől még meg kell nyílnia
+    await expect(page.getByTestId("sa-over"), "a szünet menüből kilépve az eredményképernyő megnyílik").toBeVisible({ timeout: 3_000 });
+    await expect(page.getByTestId("sa-over")).toContainText("Kör vége");
+  });
+});
+
+/* L2 (review #486): a leghosszabb szavú, még a kristályra férő (≤ 22 karakteres) válaszok nem csonkulnak és nem törnek szó közepén */
+const FITTING = GRADE_QUIZ_ITEMS.filter((q) => q.options.every((o) => o.length <= 22));
+const longestWord = (q: (typeof FITTING)[number]): number => Math.max(...q.options.flatMap((o) => o.split(/[\s-]+/u).map((w) => w.length)));
+const LABEL_ITEMS = [
+  ...[...FITTING].sort((a, b) => longestWord(b) - longestWord(a)).slice(0, 5),
+  ...["paradicsom", "Dunántúli-középhegység"].map((t) => FITTING.find((q) => q.options.includes(t))).filter((q): q is (typeof FITTING)[number] => !!q),
+];
+
+for (const vp of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+] as const)
+  test.describe(`review #486 L2 — kristály-feliratok (${vp.width}×${vp.height})`, () => {
+    test.use({ viewport: { width: vp.width, height: vp.height }, hasTouch: true, isMobile: true });
+
+    test("a leghosszabb szavú banki opciók: nincs csonkolás, nincs szó közepi törés, a gombok nem fedik egymást és a vásznon belül vannak", async ({ page }) => {
+      test.setTimeout(240_000);
+      expect(LABEL_ITEMS.length, "van mért tétel").toBeGreaterThanOrEqual(5);
+      await page.goto("/games/space-asteroid-quiz");
+      await page.getByTestId("sa-start").tap();
+      await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+      await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+      for (const [i, item] of LABEL_ITEMS.entries()) {
+        // az ütemező két kérdés közt rövid szünetet tart: a kérést addig ismételjük, amíg a kristályok meg nem jelennek
+        await expect
+          .poll(
+            async () => {
+              await force(page, { question: true, questionItem: { id: `l2-${i}`, prompt: item.prompt, options: [...item.options], correctIndex: item.correctIndex } });
+              await page.waitForTimeout(700);
+              return crystals(page).count();
+            },
+            { timeout: 20_000, intervals: [0] },
+          )
+          .toBe(4);
+        await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 6_000 });
+        await page.waitForTimeout(250); // a gombok helye beáll
+        const m = await page.evaluate(() => {
+          const chips = [...document.querySelectorAll<HTMLElement>('[data-testid="sa-crystals"] .sa-crystal')];
+          const rects = chips.map((c) => c.getBoundingClientRect());
+          const labels = chips.map((c) => c.querySelector<HTMLElement>(".sa-crystal-label")!);
+          let overlaps = 0;
+          for (let a = 0; a < rects.length; a++)
+            for (let b = a + 1; b < rects.length; b++) {
+              const x = Math.min(rects[a]!.right, rects[b]!.right) - Math.max(rects[a]!.left, rects[b]!.left);
+              const y = Math.min(rects[a]!.bottom, rects[b]!.bottom) - Math.max(rects[a]!.top, rects[b]!.top);
+              if (x > 1 && y > 1) overlaps++;
+            }
+          return {
+            text: labels.map((l) => l.textContent?.trim() ?? ""),
+            dims: labels.map((l) => `${l.textContent?.trim()} sh${l.scrollHeight}/ch${l.clientHeight} sw${l.scrollWidth}/cw${l.clientWidth} ${getComputedStyle(l).fontSize}`),
+            clippedY: labels.map((l) => l.scrollHeight > l.clientHeight + 1),
+            clippedX: labels.map((l) => l.scrollWidth > l.clientWidth + 1),
+            inView: rects.every((r) => r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight),
+            overlaps,
+          };
+        });
+        const ctx = `${vp.width}×${vp.height} «${item.options.join(" | ")}»`;
+        expect(m.clippedY.some(Boolean), `${ctx}: a felirat függőlegesen csonkul ${JSON.stringify(m.dims)}`).toBe(false);
+        expect(m.clippedX.some(Boolean), `${ctx}: a felirat szó közepén törik / kilóg`).toBe(false);
+        expect(m.overlaps, `${ctx}: a kristály-gombok fedik egymást`).toBe(0);
+        expect(m.inView, `${ctx}: a gomb kilóg a vászonból`).toBe(true);
+        await page.keyboard.press("1");
+        await expect(crystals(page)).toHaveCount(0, { timeout: 8_000 });
+      }
+    });
+  });
+
+/* Vak L5: a beférés a VALÓDI szélességgel számol — a széles, törhetetlen szó nem csonkul, hanem a számozott kristály + jelmagyarázat jön */
+for (const vp of [
+  { width: 360, height: 640 },
+  { width: 844, height: 390 },
+] as const)
+  test.describe(`vak L5 — mért beférés (${vp.width}×${vp.height})`, () => {
+    test.use({ viewport: { width: vp.width, height: vp.height }, hasTouch: true, isMobile: true });
+
+    test("22 × W / 22 × M (törhetetlen, széles) → jelmagyarázat és sorszám, nincs levágott kristály-felirat; a banki szavak továbbra is a kristályon", async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.goto("/games/space-asteroid-quiz");
+      await page.getByTestId("sa-start").tap();
+      await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+      await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+      const ask = async (id: string, options: string[]) => {
+        await expect
+          .poll(
+            async () => {
+              await force(page, { question: true, questionItem: { id, prompt: "Melyik a megfelelő?", options, correctIndex: 0 } });
+              await page.waitForTimeout(600);
+              return crystals(page).count();
+            },
+            { timeout: 20_000, intervals: [0] },
+          )
+          .toBe(4);
+      };
+      await ask("l5-wide", ["W".repeat(22), "M".repeat(22), "kör", "négyzet"]);
+      await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-long", "true");
+      await expect(page.getByTestId("sa-legend")).toBeVisible();
+      await expect(page.getByTestId("sa-legend")).toContainText("W".repeat(22));
+      await page.keyboard.press("1");
+      await expect(crystals(page)).toHaveCount(0, { timeout: 8_000 });
+      // kontroll: a banki szó a kristályon marad, jelmagyarázat nélkül
+      await ask("l5-ctrl", ["paradicsom", "kör", "négyzet", "háromszög"]);
+      await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-long", "false");
+      await expect(page.getByTestId("sa-legend")).toHaveCount(0);
+    });
+  });
+
+test.describe("vak 4. kör L2 — az élesítés előtt lenyomott tűz nem válaszol (képkockahatáron sem)", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("a nyomás 495 ms-os kristály-korral, két képkocka közt érkezik, és tartva marad: a lövés nem válasz", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: "l2-arm" } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    const world = JSON.parse(String((await probe(page)).crystalWorld)) as Array<[number, number, number, number]>;
+    const target = world.find((c) => c[2] === 1)!;
+    await force(page, { shipX: target[0] });
+    // EGY feladatban: a kristályok kora 495 ms (a következő képkocka az 500 ms fölé viszi), és ugyanebben a feladatban érkezik a nyomás
+    await page.evaluate(() => {
+      const g = (window as unknown as { __websuliGame: { forceState: (x: object) => void } }).__websuliGame;
+      g.forceState({ crystalAgeMs: 495 });
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+    });
+    await page.waitForTimeout(900);
+    await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true })));
+    const p = await probe(page);
+    expect(p.questionsAnswered, "a nyomás az élesítés előtti: a tartott tűz egyetlen lövedéke sem válasz").toBe(0);
+    expect(p.questionOpen, "a kérdés nyitva marad").toBe(1);
+  });
+});
+
+test.describe("vak 4. kör L5 — a főellenfél legyőzése után is végigmegy a megoldás-kijelzés", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("rossz válasz, majd a főellenfél elesik: a győzelmi eredmény nem vágja le a helyes válasz ≥ 1,8 mp-es kijelzését", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: "l5-boss" } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    const t0 = Date.now();
+    await page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first().click();
+    await expect.poll(async () => (await probe(page)).reveal, { timeout: 3_000 }).toBe(1);
+    await force(page, { bossFinale: true });
+    await expect.poll(async () => (await probe(page)).bossDefeated, { timeout: 3_000 }).toBe(1);
+    await expect(page.getByTestId("sa-over")).toBeVisible({ timeout: 8_000 });
+    expect(Date.now() - t0, "a helyes válasz legalább 1,8 mp-ig látható volt (mérési ráhagyással)").toBeGreaterThanOrEqual(1780);
+  });
+});
+
+test.describe("review #486 (#679pgR) — a kijelzés közben elvesztett menetet semmi nem fordítja győzelemre", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("rossz válasz → kijelzés → utolsó élet elfogy → közben a főellenfél elesik: az eredmény „Kör vége” marad", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: "r486-lost" } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    await page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first().click();
+    await expect.poll(async () => (await probe(page)).reveal, { timeout: 3_000 }).toBe(1);
+    await force(page, { lastLife: true });
+    expect((await probe(page)).over).toBe(1);
+    await force(page, { bossFinale: true });
+    await expect(page.getByTestId("sa-over")).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByTestId("sa-over")).toContainText("Kör vége");
+  });
+});
+
+test.describe("review #486 (#679yp8) — 360×640, hosszú kérdés és jelmagyarázat: tömör, fedésmentes elrendezés", () => {
+  test.use({ viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true });
+
+  test("a „Válaszok” gomb nem fedi a kristályokat, a kártyát és a vezérlőket; megnyitva a teljes válaszlista olvasható", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    const prompt = "Melyik állítás igaz a magyar történelem egyik legfontosabb eseményére, az 1848-as forradalomra és szabadságharcra, amely Pesten kezdődött március tizenötödikén, és amelynek következményei a mai napig hatnak az ország politikai és kulturális életére?";
+    await force(page, { question: true, questionItem: { id: "r486-compact", prompt, options: ["W".repeat(22), "M".repeat(22), "kör", "négyzet"], correctIndex: 2 } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 8_000 });
+    await expect(page.getByTestId("sa-legend")).toHaveAttribute("data-compact", "true");
+    await page.waitForTimeout(400);
+    const rects = await page.evaluate(() => {
+      const r = (el: Element | null) => { if (!el) return null; const b = el.getBoundingClientRect(); return [b.left, b.top, b.right, b.bottom]; };
+      return {
+        button: r(document.querySelector('[data-testid="sa-answers-open"]')),
+        chips: [...document.querySelectorAll('[data-testid="sa-crystals"] .sa-crystal')].map(r),
+        controls: [...document.querySelectorAll('[data-testid="sa-touch-controls"] button, [data-testid="sa-touch-controls"] [role="slider"], .sa-joystick, .sa-fire')].map(r).filter((x) => x && x[2] > x[0]),
+        list: r(document.querySelector('[data-testid="sa-legend-list"]')),
+      };
+    });
+    const hit = (a: number[], b: number[]) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+    expect(rects.button, "a „Válaszok” gomb látszik").not.toBeNull();
+    for (const c of rects.chips) expect(hit(rects.button!, c!), `a gomb ${JSON.stringify(rects.button)} nem fedi a kristályt ${JSON.stringify(c)}`).toBe(false);
+    for (const c of rects.controls) expect(hit(rects.button!, c!), `a gomb ${JSON.stringify(rects.button)} nem fedi a vezérlőt ${JSON.stringify(c)}`).toBe(false);
+    expect(rects.button![3] <= 640 && rects.button![0] >= 0 && rects.button![2] <= 360, "a gomb a nézeten belül").toBe(true);
+    await page.getByTestId("sa-answers-open").tap();
+    await expect(page.getByTestId("sa-answers")).toBeVisible();
+    await expect(page.getByTestId("sa-answers")).toContainText("W".repeat(22));
+  });
+});

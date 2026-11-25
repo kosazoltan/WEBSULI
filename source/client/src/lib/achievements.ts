@@ -45,6 +45,8 @@ export type LifetimeStats = {
   totalGames: number;
   totalCorrectAnswers: number;
   totalWrongAnswers: number;
+  /** Kihagyott (lejárt) kérdések összesen; régi mentésben hiányzik → 0. */
+  totalTimeouts: number;
   bestStreak: number;
   // Játék-specifikus
   blocksMined: number;
@@ -64,6 +66,7 @@ const DEFAULT_STATS: LifetimeStats = {
   totalGames: 0,
   totalCorrectAnswers: 0,
   totalWrongAnswers: 0,
+  totalTimeouts: 0,
   bestStreak: 0,
   blocksMined: 0,
   enemiesKilled: 0,
@@ -227,6 +230,8 @@ export type RunStats = {
   xpGained: number;
   correctAnswers: number;
   wrongAnswers: number;
+  /** Opcionális: a kihagyott (lejárt) kérdések száma — NEM rossz válasz; hiányzó mező = 0 / nem számolt. */
+  timeouts?: number;
   /** Maximum streak a futásban. */
   maxStreak: number;
   // Játék-specifikus, opcionális:
@@ -253,6 +258,7 @@ export function recordRun(run: RunStats): Achievement[] {
   stats.totalGames += 1;
   stats.totalCorrectAnswers += run.correctAnswers;
   stats.totalWrongAnswers += run.wrongAnswers;
+  if (typeof run.timeouts === "number" && Number.isFinite(run.timeouts) && run.timeouts > 0) stats.totalTimeouts += Math.floor(run.timeouts);
   if (run.maxStreak > stats.bestStreak) stats.bestStreak = run.maxStreak;
   if (run.blocksMined) stats.blocksMined += run.blocksMined;
   if (run.diamondsMined) stats.diamondsMined += run.diamondsMined;

@@ -131,6 +131,9 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
   ],
   // J5a: a Brain Rot lapján nincs kivétel (a tétel-sorsolás a menet seedelt RNG-jéből: `pickRngRef`; a világ a magban).
   "BrainRotSteal.tsx": [],
+  // J6a: az Aszteroida lapján nincs kivétel (hullám-érkezés, hasadás, pickup, vadászgép-lövés a menet `world` RNG-jéből; a kérdés-kristályok
+  // és az évfolyam-bank választás a `crystal` / `pick` RNG-ből; a kozmetika a `fx` RNG-ből: `cosmeticRandom`).
+  "SpaceAsteroidQuiz.tsx": [],
 };
 
 const PAGE_FORBIDDEN = FORBIDDEN.filter(({ name }) => name === "Math.random" || name === "Date.now");

@@ -19,10 +19,13 @@ export function safeLocalStorage(): StorageLike | null {
  * ilyenkor a meglévő kézi bankkal megy (terv 5. szakasz). A hibaágon nincs konzolírás (az e2e konzolhiba-mérés
  * miatt). A szóbank bekötése ezzel az egy hívással kapcsolható ki.
  *
+ * Az opcionális `rng` (a lap menet-magjából, pl. `() => run.vocab.next()`) a szó- és elterelő-választást determinisztikussá
+ * teszi (azonos mag → azonos kérdés); nélküle a forrás `Math.random`-ot használ (a többi játék így marad).
+ *
  * A hiányos mondat itt a rövid JÁTÉK-ALAKÚ (`clozeStyle: "game"`, kanban #50): fordítás nélkül, a 9 mp-es válaszablakban
  * olvasható, egyértelmű elterelőkkel — a hét játék ezen a hookon át kapja.
  */
-export function useVocabQuizSource(lang: VocabLang, enabled: boolean = true): VocabSource | null {
+export function useVocabQuizSource(lang: VocabLang, enabled: boolean = true, rng?: () => number): VocabSource | null {
   const [source, setSource] = useState<VocabSource | null>(null);
 
   useEffect(() => {
@@ -34,7 +37,7 @@ export function useVocabQuizSource(lang: VocabLang, enabled: boolean = true): Vo
     setSource(null);
     loadVocabBank(lang).then(
       entries => {
-        if (!cancelled) setSource(createVocabSource({ lang, entries, history: createSeenHistory(safeLocalStorage()), clozeStyle: "game" }));
+        if (!cancelled) setSource(createVocabSource({ lang, entries, history: createSeenHistory(safeLocalStorage()), clozeStyle: "game", rng }));
       },
       () => {
         if (!cancelled) setSource(null);
