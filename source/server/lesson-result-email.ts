@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { clientIpKey } from "./lib/client-ip";
-import { partialLimiter, resultLimiter } from "./lesson-result-limits";
+import { partialLimiter, resultLimiter, statusLimiter } from "./lesson-result-limits";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
@@ -352,7 +352,7 @@ const awaitingStatusSchema = z.object({ fingerprint: z.string().max(80).optional
  * azonos tulajdonoskulccsal (fiók / párosított tanuló / ujjlenyomatos vendég). Kapcsoló KI, kétértelmű vendég vagy 7 napnál régebbi
  * nyitott rész → `null`. A kliens ezt kérdezi betöltéskor, fókuszkor és minden beküldés után (nincs helyi, kilét nélküli tár).
  */
-lessonResultsRouter.post("/:lessonId/results/status", resultLimiter, async (req: Request, res: Response, next: NextFunction) => {
+lessonResultsRouter.post("/:lessonId/results/status", statusLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = awaitingStatusSchema.safeParse(req.body ?? {});
     if (!parsed.success || !/^[A-Za-z0-9_-]{1,64}$/.test(req.params.lessonId)) return res.status(400).json({ message: "Érvénytelen kérés." });

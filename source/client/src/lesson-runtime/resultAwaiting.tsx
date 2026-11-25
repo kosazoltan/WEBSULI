@@ -34,7 +34,12 @@ export function useResultAwaiting(lessonId: string | undefined): AwaitingPart | 
     const set = listeners.get(lessonId) ?? new Set(); set.add(setValue); listeners.set(lessonId, set);
     setValue(current.get(lessonId) ?? null);
     void refreshResultAwaiting(lessonId);
-    const onFocus = () => { if (document.visibilityState !== "hidden") void refreshResultAwaiting(lessonId); };
+    // Review #591: a fókusz / láthatóvá válás legfeljebb 30 s-onként kérdez (a beküldés utáni lekérdezés ettől független).
+    let lastFocus = 0;
+    const onFocus = () => {
+      if (document.visibilityState === "hidden" || Date.now() - lastFocus < 30_000) return;
+      lastFocus = Date.now(); void refreshResultAwaiting(lessonId);
+    };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
     return () => { set.delete(setValue); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); };
