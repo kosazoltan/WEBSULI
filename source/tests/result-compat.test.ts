@@ -26,7 +26,8 @@ test("B3: a végleges törzs új mezői (startedAt, lastAnsweredAt) csak jelzés
   assert.doesNotMatch(bodyBlock, /\.\.\.times/, "a törzs alapból régi alakú");
   assert.match(report, /resultTimes: times/, "az időbélyegek külön opcióként mennek az apiRequest-nek");
   const client = read("client/src/lib/queryClient.ts");
-  assert.match(client, /return \{ token: data\.csrfToken, resultApi: supportsResultApi\(data\), ownerBinding: data\.resultOwnerBinding === true \};/);
+  // B5b (dokumentált spec-változás: docs/specs/2026-11-25-eredmeny-email-b5b.md 1. pont): a token a pillanatkép jelzését is hordozza.
+  assert.match(client, /return \{ token: data\.csrfToken, resultApi: supportsResultApi\(data\), ownerBinding: data\.resultOwnerBinding === true, partial: data\.resultPartial === true \};/);
   assert.match(client, /capable && addsFields \?/, "a mezők csak képes szervernél olvadnak a törzsbe");
   assert.match(client, /await sendOnce\(capable, controller\.signal\)/);
   assert.match(client, /await sendOnce\(newCsrfToken\.resultApi, retryController\.signal\)/, "a CSRF-újrapróba a friss token jelzését követi");
@@ -35,4 +36,11 @@ test("B3: a végleges törzs új mezői (startedAt, lastAnsweredAt) csak jelzés
 
 test("B3: a szerver még nem hirdeti a V2-t (a hirdetés a B5a elfogadási feltétele)", () => {
   assert.doesNotMatch(read("server/routes.ts"), /resultApi\s*:/);
+});
+
+test("B5b: a szerver a pillanatkép képességét CSAK a RESULT_PARTIAL_EMAIL kapcsolóval hirdeti (resultPartial: true)", () => {
+  const routes = read("server/routes.ts");
+  const csrf = routes.slice(routes.indexOf("app.get('/api/csrf-token'"), routes.indexOf("app.get('/api/csrf-token'") + 900);
+  assert.match(csrf, /resultPartialEmailEnabled\(\) \? \{ resultPartial: true \} : \{\}/);
+  assert.doesNotMatch(csrf, /resultApi/, "a teljes V2-t a B5b nem hirdeti");
 });
