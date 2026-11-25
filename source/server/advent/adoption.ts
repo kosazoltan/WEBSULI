@@ -1,0 +1,215 @@
+/**
+ * Adventi naptár — névtelen → párosított átmenet: ABLAKONKÉNTI EGYESÍTÉS (tulajdonosi döntés 2026-11-19, kérdőív; terv 21.).
+ * Átvételkor minden naptárablaknál a jobb eredmény marad meg, és semmi nem vész el a tanuló sorából: a körszám, a korábbi körök,
+ * a megfelelés időpontja és a szülői levél foglalásai a tanulói sorban maradnak; az eszköz sora az egyesítés után törlődik (a jobb
+ * ablakai a tanuló sorában élnek tovább).
+ *
+ * A válaszlehetőségek sorrendje (vak ellenőr K1): a sorrend magja a TERVHEZ kötött kulcs (\`seedKey\`, ablakonként felülírható:
+ * \`doorSeeds\`), nem a pillanatnyi alany — így átvétel után a tárolt választás, a helyes válasz jelölése és a pontozás ugyanaz marad,
+ * és a vendégként megnyitott kérdés a tokennel érkező válasznál is a gyereknek mutatott sorrendben pontozódik.
+ *
+ * Tiszta modul: az adatbázis-tranzakciót a \`store.adopt\`, az előnézetet a \`GET /state\` használja ugyanerre a függvényre.
+ */
+import { buildAdventPlan, dedupePlanDoors, findAdventItem, normalizePrompt, type AdventBankItem, type AdventPlan, type ChristmasItem } from "../../shared/advent/assignment";
+import { ADVENT_DOORS, adventSummary, clampAdventGrade, doorState, limitsForGrade, type DoorRecord } from "../../shared/advent/rules";
+import type { AdventRow } from "./store";
+
+/** A tervvel együtt tárolt meta: tervezési évfolyam, a sorrend magja, és az átvett ablakok saját magja. */
+export type PlanMeta = AdventPlan & {
+  grade?: number; seedKey?: string; doorSeeds?: Record<number, string>;
+  /** Az átvételkor lecserélt (a vendég jobb eredményével felülírt) tanulói próbák kérdései: többé nem játszhatók (PR-B 4. kör L3). */
+  retired?: string[];
+};
+
+export const withPlanMeta = (plan: AdventPlan, grade: number, seedKey: string): AdventPlan => ({ ...plan, grade, seedKey } as PlanMeta);
+
+export const planGradeOf = (plan: AdventPlan | undefined): number | undefined => {
+  const grade = (plan as PlanMeta | undefined)?.grade;
+  return typeof grade === "number" ? grade : undefined;
+};
+
+/** A válaszsorrend magja egy ablakhoz: az ablak átvett magja, különben a terv magja, különben (régi terv) a megadott alany-kulcs. */
+export function orderKeyFor(plan: AdventPlan | undefined, day: number, fallbackSubjectKey: string): string {
+  const meta = plan as PlanMeta | undefined;
+  return meta?.doorSeeds?.[day] ?? meta?.seedKey ?? fallbackSubjectKey;
+}
+
+/**
+ * Egy ablak eredményének rangja (vak ellenőr 3. kör KÖZEPES-A): megoldva (2) > érintetlen vagy még javítható (1) > végleg elbukott (0).
+ * Az elbukott próba nem „jobb”, mint a még meglévő lehetőség.
+ */
+export function doorRank(record: DoorRecord | undefined, maxRepairs: number): 0 | 1 | 2 {
+  const attempts = record?.attempts ?? [];
+  const state = doorState({ unlocked: true, attempts, maxRepairs });
+  return state === "solved" ? 2 : state === "failed" ? 0 : 1;
+}
+
+export type AdoptionContext = {
+  learnerId: string;
+  deviceKey: string;
+  learnerKey: string;
+  /** A tanuló profiljának évfolyama (ebből készül a tanulói terv, ha még nincs). */
+  learnerGrade: number;
+  maxRepairs: (grade: number) => number;
+  /** A tanuló adott körének terve (meta-val), ha a sorában még nincs. */
+  buildPlan: (row: AdventRow, round: number, grade: number) => AdventPlan;
+  /** Ütközésmentesítés az egyesített terven (GPT-vak L3): a megválaszolt kérdések védettek. Hiányában nincs ilyen lépés. */
+  dedupe?: (plan: AdventPlan, row: AdventRow, round: number, grade: number, historicalByDay: ReadonlyMap<number, number>) => AdventPlan;
+  now: Date;
+};
+
+/**
+ * Az évad korábbi köreiben MEGMUTATOTT kérdések azonosítói és normalizált szövegei (a tervezés és a pótlás kizárólistája): a próbák
+ * kérdései és a lecserélt (\`retired\`) tanulói próbák kérdései. A lezárt kör fel nem használt foglalásai (a meg sem nyitott javító
+ * kérdések) NEM számítanak — a gyerek sosem látta őket, és a kis készletű évfolyamon a következő kör bankját fognák (PR-C vak L1).
+ * Lezárt körben minden ablak megoldott vagy végleg hibás, így a megmutatott kérdés = a megválaszolt kérdés.
+ */
+export function usedInEarlierRounds(row: AdventRow, round: number, bank: readonly AdventBankItem[], christmas: readonly ChristmasItem[]) {
+  const usedIds = new Set<string>();
+  const usedPrompts = new Set<string>();
+  const add = (id: string) => {
+    usedIds.add(id);
+    const item = findAdventItem(id, bank, christmas);
+    if (item) usedPrompts.add(normalizePrompt(item.prompt));
+  };
+  const retired: string[] = [];
+  const timed: { id: string; at: string; round: number; day: number; index: number }[] = [];
+  for (const [key, doors] of Object.entries(row.doors)) {
+    if (Number(key) >= round) continue;
+    for (const [day, door] of Object.entries(doors)) {
+      door.attempts.forEach((attempt, index) => {
+        add(attempt.questionId);
+        timed.push({ id: attempt.questionId, at: typeof attempt.at === "string" ? attempt.at : "", round: Number(key), day: Number(day), index });
+      });
+    }
+  }
+  for (const [key, plan] of Object.entries(row.plan)) {
+    if (Number(key) >= round) continue;
+    for (const id of (plan as PlanMeta).retired ?? []) { add(id); retired.push(id); }
+  }
+  // TULAJDONOSI DÖNTÉS 2026-11-21 („Ismétlés a legrégebbiekből”): ha ismétlés nélkül nem építhető fel a kör, a hiányzó helyekre a
+  // LEGRÉGEBBEN megmutatott kérdések kerülnek. Sorrend: a lecserélt próbák elöl (az időpontjuk nincs tárolva, a vendég megoldása előtti
+  // állapotból valók), utána a próbák időrendben; egyenlő időnél a kör, a nap és a próba sorrendje dönt; egy kérdés az első
+  // előfordulásánál számít. Determinisztikus.
+  timed.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.round - b.round || a.day - b.day || a.index - b.index));
+  const repeatable = [...new Set([...retired, ...timed.map((t) => t.id)])];
+  return { usedIds, usedPrompts, repeatable };
+}
+
+/**
+ * A pótlás és az ütközésmentesítés kizárólistája (PR #544 review): az évad korábbi köreiben megmutatott kérdések
+ * (\`usedInEarlierRounds\`) ÉS az aktuális kör tervének lecserélt (\`retired\`) kérdései — azonosító és normalizált szöveg szerint. A
+ * lecserélt kérdés az átvétel óta nem játszható, ezért pótlásként sem jöhet vissza. Az ismétlési sorrendbe (\`repeatable\`) viszont
+ * NEM kerül: az csak a korábbi körökből jön (tulajdonosi döntés 2026-11-21).
+ */
+export function usedForRepair(row: AdventRow, round: number, plan: AdventPlan | undefined, bank: readonly AdventBankItem[], christmas: readonly ChristmasItem[]) {
+  const used = usedInEarlierRounds(row, round, bank, christmas);
+  for (const id of (plan as PlanMeta | undefined)?.retired ?? []) {
+    used.usedIds.add(id);
+    const item = findAdventItem(id, bank, christmas);
+    if (item) used.usedPrompts.add(normalizePrompt(item.prompt));
+  }
+  return used;
+}
+
+/**
+ * Az egyesítés teljes környezete egy tanulóhoz a valódi kérdésbankokkal: a tanulói terv a tanuló profiljának évfolyamára készül (ha
+ * még nincs), és az egyesített terv ütközésmentesítve (L3). A router és a tesztek ugyanezt használják.
+ */
+export function createAdoptionContext(input: {
+  bank: readonly AdventBankItem[]; christmas: readonly ChristmasItem[]; season: number;
+  learnerId: string; learnerGrade: number; deviceId: string; now: Date;
+}): AdoptionContext {
+  const learnerKey = `learner:${input.learnerId}`;
+  const { bank, christmas, season } = input;
+  return {
+    learnerId: input.learnerId, deviceKey: `device:${input.deviceId}`, learnerKey,
+    learnerGrade: clampAdventGrade(input.learnerGrade),
+    maxRepairs: (grade) => limitsForGrade(grade).maxRepairs,
+    buildPlan: (row, round, grade) => withPlanMeta(buildAdventPlan({ bank, christmas, grade, season, round, subjectKey: learnerKey, ...usedInEarlierRounds(row, round, bank, christmas) }), grade, learnerKey),
+    dedupe: (plan, row, round, grade, historicalByDay) => {
+      const used = usedForRepair(row, round, plan, bank, christmas);
+      return dedupePlanDoors(plan, { bank, christmas, grade, ...used, historicalByDay }).plan;
+    },
+    now: input.now,
+  };
+}
+
+/**
+ * Az egyesített tanulói sor, vagy \`null\`, ha az eszköz sorában nincs egyetlen válasz sem (nincs mit átvinni — az eszköz sora
+ * egyszerűen törlődik). Csak az eszköz AKTUÁLIS körének ablakai kerülnek a tanuló aktuális körébe (korábbi kör kudarca soha), ablakonként
+ * akkor, ha MEGOLDOTTAK és a tanulóé nem az (`doorRank`); minden más esetben a tanulóé marad. Próba nélküli eszköz-ablak soha nem
+ * töröl a tanuló sorából. Az átvett ablakkal a kérdéssora és a sorrend magja is átkerül (a jelölés így változatlan).
+ */
+export function mergeAdoption(learner: AdventRow | null, device: AdventRow, ctx: AdoptionContext): AdventRow | null {
+  const deviceDoors = device.doors[device.round] ?? {};
+  if (!Object.values(deviceDoors).some((door) => door.attempts.length > 0)) return null;
+  const base: AdventRow = learner ?? {
+    id: "", season: device.season, subjectKind: "learner", subjectId: ctx.learnerId, grade: null, round: 1, plan: {}, doors: {},
+    finishedAt: null, passedAt: null, mailedTo: [], createdAt: ctx.now, updatedAt: ctx.now,
+  };
+  const round = base.round;
+  // Rögzítetlen évfolyamnál a FRISS profil évfolyama számít (élesítés előtti L1; R6 / E10): a még meg nem válaszolt, más évfolyamra
+  // készült saját terv a vendégmegoldások illesztése ELŐTT újraépül.
+  const grade = base.grade ?? ctx.learnerGrade;
+  const learnerAnswered = Object.values(base.doors[round] ?? {}).some((door) => door.attempts.length > 0);
+  const storedPlan = base.plan[round] as PlanMeta | undefined;
+  const stalePlan = storedPlan !== undefined && base.grade == null && !learnerAnswered && planGradeOf(storedPlan) !== undefined && planGradeOf(storedPlan) !== grade;
+  const existingPlan = stalePlan ? undefined : storedPlan;
+  const plan: PlanMeta = existingPlan ? { ...existingPlan, doors: { ...existingPlan.doors }, subjects: { ...existingPlan.subjects }, doorSeeds: { ...(existingPlan.doorSeeds ?? {}) } }
+    : { ...(ctx.buildPlan(base, round, grade) as PlanMeta) };
+  plan.doorSeeds ??= {};
+  const doors: Record<number, DoorRecord> = { ...(base.doors[round] ?? {}) };
+  const devicePlan = device.plan[device.round] as PlanMeta | undefined;
+  const repairs = ctx.maxRepairs(grade);
+  for (let day = 1; day <= ADVENT_DOORS; day++) {
+    const theirs = deviceDoors[day];
+    const mine = doors[day];
+    if (!theirs?.attempts.length && !mine?.attempts.length) {
+      // Senki nem válaszolt még: azonos évfolyamnál a vendég (épp ezen az eszközön mutatott) kérdéssora és magja marad, hogy a
+      // megnyitott kérdésre érkező válasz ne legyen elavult; eltérő évfolyamnál a tanuló saját terve.
+      if (devicePlan?.doors[day] && (planGradeOf(devicePlan) ?? device.grade) === grade) {
+        plan.doors[day] = [...devicePlan.doors[day]!];
+        if (devicePlan.subjects?.[day]) plan.subjects[day] = devicePlan.subjects[day]!;
+        plan.doorSeeds[day] = orderKeyFor(devicePlan, day, ctx.deviceKey);
+      }
+      continue;
+    }
+    // Felülírni csak MEGOLDOTT ablak tud (és csak nem megoldottat): a vendég rontott / javítható próbája sem az érintetlen, sem a
+    // tanuló végleg elbukott ablakát nem váltja le — a gyerek vendégként nem „állíthatja vissza” a saját kudarcát (döntés 2026-11-19).
+    if (!theirs?.attempts.length || doorRank(theirs, repairs) !== 2 || doorRank(mine, repairs) === 2) continue;
+    // A tanuló itteni (most lecserélt) próbáinak kérdései többé nem játszhatók (PR-B 4. kör L3).
+    if (mine?.attempts.length) plan.retired = [...new Set([...(plan.retired ?? []), ...mine.attempts.map((a) => a.questionId)])];
+    doors[day] = { attempts: theirs!.attempts.map((attempt) => ({ ...attempt })) };
+    if ((planGradeOf(devicePlan) ?? device.grade) === grade) {
+      if (devicePlan?.doors[day]) plan.doors[day] = [...devicePlan.doors[day]!];
+      if (devicePlan?.subjects?.[day]) plan.subjects[day] = devicePlan.subjects[day]!;
+    } else {
+      // Más évfolyamú vendég (terv 22.1, PR-C vak L5): csak az EREDMÉNY kerül át — a terv történeti helyei a próbák kérdései (így a
+      // kizárásukat maguk a próbák adják), a többi hely és az ablak tárgya a tanuló saját (az ő évfolyamára készült) tervéé marad.
+      const historical = doors[day]!.attempts.map((attempt) => attempt.questionId);
+      plan.doors[day] = [...historical, ...(plan.doors[day] ?? []).slice(historical.length)];
+    }
+    // A sorrend magja mindig a vendégé: a tárolt választás és a helyes válasz jelölése így változatlan.
+    plan.doorSeeds[day] = orderKeyFor(devicePlan, day, ctx.deviceKey);
+  }
+  // Ütközésmentesítés (L3): a két terv egyesítése után ugyanaz a kérdés ne kerülhessen két ablakba; a megválaszolt kérdések védettek.
+  if (ctx.dedupe) {
+    // A terv első N helye történeti (a megválaszolt próbák); a próba és a visszajelzése a próbából olvasódik.
+    const historicalByDay = new Map<number, number>();
+    for (const [day, record] of Object.entries(doors)) historicalByDay.set(Number(day), record.attempts.length);
+    const deduped = ctx.dedupe(plan, base, round, grade, historicalByDay) as PlanMeta;
+    plan.doors = deduped.doors;
+  }
+  const summary = adventSummary(doors, ctx.maxRepairs(grade));
+  const answeredAny = Object.values(doors).some((door) => door.attempts.length > 0);
+  return {
+    ...base,
+    // Az évfolyam a tanuló profiljából (vagy a már rögzített), NEM a vendégként választott (vak ellenőr KICSI-6); válasz után rögzül.
+    grade: base.grade ?? (answeredAny ? grade : null),
+    plan: { ...base.plan, [round]: plan },
+    doors: { ...base.doors, [round]: doors },
+    finishedAt: base.finishedAt ?? (summary.answered === ADVENT_DOORS ? ctx.now : null),
+    passedAt: base.passedAt ?? (summary.passed ? ctx.now : null),
+  };
+}

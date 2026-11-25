@@ -22,7 +22,9 @@
  * - Egy tétel menetenként legfeljebb 2-szer tér vissza (menet közbeni ismétlésként); utána a következő menet
  *   menetek közötti soraiba kerül (az ismétlési sor `startRun`-ja nullázza a menet közbeni esedékességet).
  * - Egy menetben ugyanaz a kulcs csak ismétlésként jöhet újra: a tananyag / új tétel, amelynek kulcsa már elhangzott,
- *   kimarad (új tételnél legfeljebb 8 próbálkozás). Kupon módban csak `material()` ad kérdést, ismétlés nincs.
+ *   kimarad (új tételnél legfeljebb 8 próbálkozás). Kupon módban csak a lecke tételei jönnek (`material()` + a menetben
+ *   feltett lecke-tétel ismétlése); a plafon alatti hibázott lecke-tétel a hiba utáni legfeljebb `LATE_RETURN_MAX`.
+ *   kérdésként visszajön, ehhez a határidős visszatérés a 30%-os arányt is átlépheti (P-010, `couponDeadline`).
  * - A provider a visszaadott tételt maga jelöli látottnak (pl. `pickUnseenMaterial` + `markGradeQuizSeen`, a szóbank
  *   `next()`-je naplóz); a director egy hívásonként egy tételt kér.
  *
@@ -136,7 +138,10 @@ export const DEFAULT_WARMUP_MS = 10_000;
 export const REVIEW_SHARE_MAX = 0.3;
 /** Egy tétel menetenként legfeljebb ennyiszer tér vissza menet közbeni ismétlésként. */
 export const MAX_RETURNS_PER_RUN = 2;
-/** A késő visszatérés felső határa: a hiba utáni 10. kérdés (terv 6.2 „a többi ≤ 10 kérdésen belül”). */
+/**
+ * A késő visszatérés felső határa: a hiba utáni 10. kérdés (terv 6.2 „a többi ≤ 10 kérdésen belül”). Nem kupon módban
+ * rangsor-sáv (`inRunCandidates`); kupon módban kényszerített határidő a plafon alatti hibázott tételre (P-010).
+ */
 export const LATE_RETURN_MAX = 10;
 const FRESH_ATTEMPTS = 8;
 const EMPTY_BACKOFF_MS = 1000;
@@ -203,7 +208,7 @@ export function createQuestionDirector(opts: {
   let nextId = 0;
   /** A menetben eddig feltett kérdések száma = a következő kérdés sorszáma (az ismétlési sor `runIndex`-e). */
   let position = 0;
-  let active: { p: QuestionPresentation; position: number } | null = null;
+  let active: { p: QuestionPresentation; position: number; inRunReturn: boolean } | null = null;
   let lastStartMs: number | null = null;
   let lastEndMs = warmupMs;
   let reviewsAsked = 0;
@@ -272,8 +277,31 @@ export function createQuestionDirector(opts: {
     return null;
   }
 
+  /**
+   * P-010 (kupon mód, felső határ): az a plafon alatti hibázott lecke-tétel, amelynek legutóbbi hibája óta már `LATE_RETURN_MAX − 1`
+   * kérdés elhangzott — a mostani kérdés a hiba utáni `LATE_RETURN_MAX`. (utolsó megengedett hely), vagy már túl is
+   * van rajta (pl. a visszatérése megszakadt). A legkorábbi hiba megy elöl. A hibák különböző sorszámon történnek, így
+   * egy helyre legfeljebb egy határidő esik: a kényszerítés mindig teljesíthető, és nem tolja ki a többi tétel határidejét.
+   */
+  function couponDeadline(): PlayQuestion | null {
+    let best: { q: PlayQuestion; missAt: number } | null = null;
+    for (const it of review.snapshot()) {
+      if (it.dueInRun === null) continue;
+      const missAt = lastMissPos.get(it.key);
+      const asked = couponAsked.get(it.key);
+      if (missAt === undefined || !asked || position - missAt < LATE_RETURN_MAX) continue;
+      if ((returns.get(it.key) ?? 0) >= MAX_RETURNS_PER_RUN) continue;
+      if (!best || missAt < best.missAt) best = { q: asked.q, missAt };
+    }
+    return best?.q ?? null;
+  }
+
   function choose(): Pick | null {
     if (provider.couponOnly) {
+      // P-010: a határidős visszatérés megelőzi a 30%-os arány-korlátot és a menetenkénti visszatérési plafont is — kupon
+      // módban a hibázott tétel így a hiba utáni `LATE_RETURN_MAX` kérdésen belül biztosan visszajön.
+      const forced = couponDeadline();
+      if (forced) return { q: forced, isReview: true, inRun: true };
       // J1a / review #483 (M2): kupon módban is jár a menet közbeni ismétlés (a hibázott lecke-tétel), és a lecke kimerülése
       // után a menetben legrégebben feltett lecke-tétel jön újra — a kérdés nem fogy el. Csak az aktuális lecke tananyaga:
       // menetek közötti ismétlés itt nincs.
@@ -354,7 +382,7 @@ export function createQuestionDirector(opts: {
       startedAtSimMs: simNowMs,
       reason,
     };
-    active = { p, position };
+    active = { p, position, inRunReturn: isReview && pick.inRun };
     runStats.onAsk(p, simNowMs);
     askedKeys.add(q.key);
     lastAskedKey = q.key;
@@ -371,8 +399,11 @@ export function createQuestionDirector(opts: {
 
   function finish(result: QuestionOutcome["result"], picked: number | null, endMs: number): QuestionOutcome | null {
     if (!active) return null;
-    const { p, position: pos } = active;
+    const { p, position: pos, inRunReturn } = active;
     active = null;
+    // P-010 (K6): a megszakított (kuponlejárat / kilépés) menetközi ismétlés nem visszatérés — a menetenkénti plafonba nem
+    // számít bele, a tétel hibája és határideje megmarad (`review.record` az `aborted`-ot nem rögzíti).
+    if (result === "aborted" && inRunReturn) returns.set(p.question.key, Math.max(0, (returns.get(p.question.key) ?? 1) - 1));
     const quiz = p.question.quiz;
     const outcome: QuestionOutcome = {
       id: p.id,

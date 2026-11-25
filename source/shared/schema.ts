@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, text, integer, index, uniqueIndex, boolean, timestamp, jsonb, real, primaryKey, date, char, customType } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, integer, smallint, index, uniqueIndex, boolean, timestamp, jsonb, real, primaryKey, date, char, customType, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -50,6 +50,8 @@ export const htmlFiles = pgTable("html_files", {
   content: text("content").notNull(),
   description: text("description"),
   classroom: integer("classroom").notNull().default(1),
+  /** #1986 (migrations/0046): külön tananyagcsoport-tagság (shared/tracks.ts), pl. ["gimi6"]. */
+  tracks: text("tracks").array().notNull().default(sql`'{}'::text[]`),
   contentType: varchar("content_type").notNull().default('html'),
   displayOrder: integer("display_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -245,6 +247,13 @@ export type InsertTag = z.infer<typeof insertTagSchema>;
 export type Tag = typeof tags.$inferSelect;
 
 // Material Tags - Many-to-many
+/** #1986 (migrations/0046): fiók–csoport hozzárendelés a P-020 fiókkulcsán (Google- és játékos-fiók). */
+export const trackAssignments = pgTable("track_assignments", {
+  track: varchar("track", { length: 32 }).notNull(),
+  emailKey: varchar("email_key", { length: 254 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({ pk: primaryKey({ columns: [table.track, table.emailKey] }) }));
+
 export const materialTags = pgTable("material_tags", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   materialId: varchar("material_id").notNull().references(() => htmlFiles.id),
@@ -588,7 +597,10 @@ export const errorLogs = pgTable("error_logs", {
  * ami visszavezethető egy itteni fogalomra.
  *
  * `inputHash` = sha256(rendezett fájltartalmak + hatókör) — ugyanarra a feltöltésre
- * nem indul újra a drága vision-hívás.
+ * nem indul újra a drága vision-hívás. A különálló kinyerés (`/maps/extract`,
+ * `extractMapSingleRun`) útján a lenyomat gazda-kötött (`ownerMapHash`: a tartalmi
+ * lenyomat + `created_by`), így két tanár ugyanarra a tartalomra két térképet kap;
+ * a javítás előtti, tartalmi lenyomatú sor csak ugyanannak a gazdának jön vissza.
  */
 export const knowledgeMaps = pgTable(
   "knowledge_maps",
@@ -603,7 +615,7 @@ export const knowledgeMaps = pgTable(
     status: varchar("status", { length: 16 }).notNull().default("draft"),
     sourceFiles: jsonb("source_files")
       .notNull()
-      .$type<Array<{ name: string; kind: string; pages?: number; extractedText?: string }>>(),
+      .$type<Array<{ name: string; kind: string; pages?: number; extractedText?: string; visuals?: import("./source-visuals").SourceVisual[] }>>(),
     /** A kivonatolt nyers forrásszöveg — ehhez mérjük a szó szerinti idézeteket (D1). */
     sourceText: text("source_text"),
     classification: jsonb("classification").$type<import("./source-classification").ScopeClassification>(),
@@ -1173,6 +1185,47 @@ export const lessonResultEmails = pgTable(
   (table) => ({ roundUnique: uniqueIndex("lesson_result_emails_round_unique").on(table.lessonId, table.kind, table.roundKey) }),
 );
 
+/** U4 (docs/specs/2026-11-24-osszevont-eredmenylevel.md): a kétrészes lecke félretett végleges részeredménye (0047). */
+/** D1H-1 (migrations/0049): a forrás kivágott képei, tartalomcímzetten (sha256). */
+export const lessonSourceImages = pgTable("lesson_source_images", {
+  id: char("id", { length: 64 }).primaryKey(),
+  mime: varchar("mime", { length: 32 }).notNull(),
+  bytes: bytea("bytes").notNull(),
+  sourceUrl: text("source_url"),
+  sourceFile: text("source_file"),
+  page: smallint("page"),
+  credit: text("credit").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const lessonResultPending = pgTable(
+  "lesson_result_pending",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+    ownerKey: varchar("owner_key", { length: 128 }).notNull(),
+    kind: varchar("kind", { length: 8 }).notNull().$type<"tasks" | "quiz">(),
+    roundId: varchar("round_id", { length: 128 }).notNull(),
+    graded: jsonb("graded"),
+    learner: jsonb("learner"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    sentReason: varchar("sent_reason", { length: 8 }).$type<"pair" | "timeout">(),
+    /** U4b review #586 (0048): a pár közös kulcsa és a sikeres kézbesítés ideje (kézbesítetlen pár újrapróbálható). */
+    pairKey: char("pair_key", { length: 64 }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  },
+  (table) => ({
+    // Review #585: a 0047-es migráció CHECK-jei azonos néven (sémaexportból létrehozott táblán is éljenek).
+    kindCheck: check("lesson_result_pending_kind_check", sql`${table.kind} IN ('tasks', 'quiz')`),
+    sentReasonCheck: check("lesson_result_pending_sent_reason_check", sql`${table.sentReason} IN ('pair', 'timeout')`),
+    openHasContent: check("lesson_result_pending_open_has_content", sql`${table.sentAt} IS NOT NULL OR (${table.graded} IS NOT NULL AND ${table.learner} IS NOT NULL)`),
+    openUnique: uniqueIndex("lesson_result_pending_open_unique").on(table.lessonId, table.ownerKey, table.kind).where(sql`sent_at IS NULL`),
+    openAge: index("lesson_result_pending_open_age").on(table.createdAt).where(sql`sent_at IS NULL`),
+    undelivered: index("lesson_result_pending_undelivered").on(table.sentAt).where(sql`sent_at IS NOT NULL AND delivered_at IS NULL`),
+  }),
+);
+
 /**
  * Spec 2026-10-20-s4 (S4b, migrations/0037): feladatszintű, NÉVTELEN tanulói eredmény körönként — tanulói szöveg és felhasználó nélkül.
  * A gépi rubrika-szigorítás (S3c) mérése és automatikus lazítása (S4c) ebből számol.
@@ -1279,7 +1332,29 @@ export const lessonClipMedia = pgTable("lesson_clip_media", {
   bytes: bytea("bytes").notNull(),
   size: integer("size").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Az árvaság kezdete (0044): a söprés jelöli, csak a türelmi idő után töröl; újrahivatkozáskor NULL. */
+  orphanedAt: timestamp("orphaned_at", { withTimezone: true }),
 });
+
+/**
+ * A nyelvleckék előre gyártott felolvasó hangjai (migrations/0043; terv 2026-11-18-tananyag-gyartas-minoseg, S8b / D4). Az azonosító a
+ * (hangverzió, nyelv, normalizált szöveg) lenyomata (shared/tts-audio-key.ts); a szöveg nem tárolódik, a sor soha nem módosul.
+ */
+export const lessonTtsAudio = pgTable(
+  "lesson_tts_audio",
+  {
+    id: char("id", { length: 32 }).primaryKey(),
+    voiceVersion: varchar("voice_version", { length: 16 }).notNull(),
+    language: varchar("language", { length: 8 }).notNull(),
+    mime: varchar("mime", { length: 40 }).notNull(),
+    bytes: bytea("bytes").notNull(),
+    // A migráció `CHECK (size > 0)` megkötését a séma — a repó meglévő tábláinak mintájára (pl. lesson_clip_media) — nem fejezi ki;
+    // az érvényes méretet az írás előtt a tároló réteg ellenőrzi (server/tts/audio-store.ts).
+    size: integer("size").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ voiceLanguage: index("lesson_tts_audio_voice_language_idx").on(table.voiceVersion, table.language) }),
+);
 
 /**
  * JM7a játékos-fiók (migrations/0040; docs/specs/2026-11-16-jatekok-jatekelmeny.md 10.4, D11 / D12). SZERKEZETILEG külön a
@@ -1289,6 +1364,16 @@ export const lessonClipMedia = pgTable("lesson_clip_media", {
 export const playerAccounts = pgTable("player_accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email", { length: 254 }).notNull().unique(),
+  /**
+   * P-020 (migrations/0045): a postafiók-kulcs (generált; = codes.ts `accountEmailKey`): Gmailen pont / `+címke` / googlemail
+   * nélkül, máshol csak trim + kisbetű. Egyedi az `email_key_dup` sorszámmal együtt (a migráció előtti ütközések miatt).
+   */
+  emailKey: varchar("email_key", { length: 254 }).generatedAlwaysAs(sql`CASE WHEN split_part(lower(btrim(email)), '@', 2) IN ('gmail.com', 'googlemail.com') THEN replace(split_part(split_part(lower(btrim(email)), '@', 1), '+', 1), '.', '') || '@gmail.com' ELSE lower(btrim(email)) END`),
+  /**
+   * P-020: a migráció előtt már ütköző (azonos `email_key`-ű) sorok sorszáma (legrégebbi 0, kézi összevonásra vár); új sor
+   * mindig 0 → az (email_key, email_key_dup) egyedi index új aliast nem enged.
+   */
+  emailKeyDup: smallint("email_key_dup").notNull().default(0),
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   nickname: varchar("nickname", { length: 24 }),
   nicknameKey: varchar("nickname_key", { length: 32 }).unique(),
@@ -1299,7 +1384,9 @@ export const playerAccounts = pgTable("player_accounts", {
   bannedAt: timestamp("banned_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
-});
+}, (table) => ({
+  emailKeyUnique: uniqueIndex("player_accounts_email_key_unique").on(table.emailKey, table.emailKeyDup),
+}));
 export type PlayerAccount = typeof playerAccounts.$inferSelect;
 
 /**
@@ -1341,3 +1428,56 @@ export const playerBanFingerprints = pgTable("player_ban_fingerprints", {
   bannedAt: timestamp("banned_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Adventi naptár (migrations/0042; docs/specs/2026-11-18-adventi-naptar.md R7, 16.8): alanyonként és évadonként egy sor.
+ * Alany: párosított tanuló (`learner`), játékos-fiók (`player`), névtelen eszköz (`device`) vagy admin előnézet (`preview`).
+ * A `plan` (kiosztás) és a `doors` (válaszok) körönként tárolt JSON; név, token, e-mail-cím nincs a sorban. A `mailed_to` a szülői
+ * levél foglalásai (`<kör>:<fajta>:<cím-lenyomat>`).
+ */
+export const adventProgress = pgTable(
+  "advent_progress",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    season: integer("season").notNull(),
+    subjectKind: varchar("subject_kind", { length: 8 }).notNull().$type<"learner" | "player" | "device" | "preview">(),
+    subjectId: varchar("subject_id", { length: 64 }).notNull(),
+    learnerId: varchar("learner_id").references(() => learners.id, { onDelete: "cascade" }),
+    playerId: varchar("player_id").references(() => playerAccounts.id, { onDelete: "cascade" }),
+    grade: integer("grade"),
+    round: integer("round").notNull().default(1),
+    plan: jsonb("plan").notNull().default(sql`'{}'::jsonb`),
+    doors: jsonb("doors").notNull().default(sql`'{}'::jsonb`),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    passedAt: timestamp("passed_at", { withTimezone: true }),
+    mailedTo: text("mailed_to").array().notNull().default(sql`'{}'::text[]`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    subjectUnique: uniqueIndex("advent_progress_subject_unique").on(table.season, table.subjectKind, table.subjectId),
+    kindUpdatedIdx: index("advent_progress_kind_updated_idx").on(table.subjectKind, table.updatedAt),
+    kindCheck: check("advent_progress_kind_check", sql`${table.subjectKind} IN ('learner', 'player', 'device', 'preview')`),
+    learnerCheck: check("advent_progress_learner_check", sql`(${table.subjectKind} = 'learner') = (${table.learnerId} IS NOT NULL)`),
+    playerCheck: check("advent_progress_player_check", sql`(${table.subjectKind} = 'player') = (${table.playerId} IS NOT NULL)`),
+  }),
+);
+export type AdventProgressRow = typeof adventProgress.$inferSelect;
+
+/**
+ * Adventi értesítő (migrations/0042; terv 12.4, 16.6): címzettenként és évadonként egy foglalás. A cím NEM tárolódik — csak a
+ * szerver titkával kulcsolt lenyomata (HMAC); a sorokat a takarító az évad után törli.
+ */
+export const adventAnnouncements = pgTable(
+  "advent_announcements",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    season: integer("season").notNull(),
+    recipientHash: char("recipient_hash", { length: 64 }).notNull(),
+    source: varchar("source", { length: 16 }).notNull(),
+    status: varchar("status", { length: 8 }).notNull().default("pending").$type<"pending" | "sent" | "failed">(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({ recipientUnique: uniqueIndex("advent_announcements_recipient_unique").on(table.season, table.recipientHash) }),
+);

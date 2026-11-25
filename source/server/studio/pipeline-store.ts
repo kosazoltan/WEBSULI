@@ -8,6 +8,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { catalogItems, gameQuizItems, htmlFiles, kmConcepts, knowledgeMaps, lessons, materialImprovementBackups, studioJobs, type InsertGameQuizItem } from "../../shared/schema";
 import type { ExamWeight } from "../../shared/knowledge-map-schema";
 import { deepWellFormed } from "../../shared/well-formed";
+import { visualsOfSourceFiles, type SourceVisual } from "../../shared/source-visuals";
 import { getHtmlFilesCache } from "../cache/HtmlFilesCache";
 import { logger } from "../lib/logger";
 import { isE2eMode } from "../lib/e2e-mode";
@@ -15,9 +16,13 @@ import { workflowFence, workflowSerialized } from "../workflows/engine";
 import type { Coverage, MapConcept } from "./coverage";
 import type { StudioStep } from "./pipeline";
 import { withLessonArt } from "../design-assets";
+import { withVarietyMarker } from "../../shared/lesson-feedback-openers";
+import { effectiveLessonVariety, runOpeningFormId } from "./lesson-variety-flag";
 import { LESSON_PLACEHOLDER_DESCRIPTION, lessonTeaser } from "../../shared/lesson-teaser";
 import type { CatalogRowLike } from "../catalog/retrieval";
 import type { MemoryCard } from "../memory/subject-memory";
+import { dropUnknownSourceImages } from "./source-image-crops";
+import { existingSourceImageIds } from "../source-images";
 
 /** Spec 2026-09-19: csak a forrásból igazolt (megtartott / szerkesztett) fogalmak taníthatók. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
@@ -35,6 +40,8 @@ export type MapMeta = {
   id: string; title: string; subject: string; classroom: number;
   /** Spec 2026-09-24: a kivonatolt forrásszöveg a vak megoldóhoz (a lektor független bizonyítéka). */
   sourceText?: string | null;
+  /** Spec 2026-11-18-tananyag-gyartas-minoseg (S1a): a forrás vizuális leltára a térkép `source_files` elemeiből (nincs → üres). */
+  visuals?: SourceVisual[];
 };
 
 /** What the deterministic gate hands to the store when a lesson passes. */
@@ -145,6 +152,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
           subject: knowledgeMaps.subject,
           classroom: knowledgeMaps.classroom,
           sourceText: knowledgeMaps.sourceText,
+          sourceFiles: knowledgeMaps.sourceFiles,
         })
         .from(knowledgeMaps)
         .where(eq(knowledgeMaps.id, mapId))
@@ -176,7 +184,7 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
 
       return {
         // Spec 2026-09-24: a forrásszöveg a vak megoldóhoz kell (élő mérés: nélküle a vak megoldó nem futott).
-        meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom, sourceText: map.sourceText },
+        meta: { id: map.id, title: map.title, subject: map.subject, classroom: map.classroom, sourceText: map.sourceText, visuals: visualsOfSourceFiles(map.sourceFiles) },
         concepts: concepts.map((c) => ({
           id: c.id,
           localId: c.localId,
@@ -303,7 +311,11 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       // Ikonkészlet + lecke megnyitása: a tantárgy és az évfolyam ekkor ismert — az arculat (ikon, kép, kabala) az adatbázisból
       // kerül a leckébe, a lejátszó már nem számolja. Új leckénél a seed a térkép és a cím (az azonosító még nincs meg).
       const title = (input as { title?: unknown } | null)?.title;
-      const json = await withLessonArt(input, lessonId ?? `${mapId}:${typeof title === "string" ? title : ""}`);
+      // Spec 2026-11-20-tgm-valtozatossag-abrak (S5a): a változatossági jelölőt kizárólag a szerver írja (KI kapcsolónál törli) — a futás
+      // rögzített állapota szerint (S5a vak kör 1, L4), nem a környezet mentéskori értéke szerint.
+      // D1H-2 mentési határ: a tárban nem létező azonosítójú kivágott forráskép (pl. a modell által kitalált) nem kerül a leckébe.
+      const verified = await dropUnknownSourceImages(input, existingSourceImageIds);
+      const json = await withLessonArt(withVarietyMarker(verified, effectiveLessonVariety(), runOpeningFormId()),lessonId ?? `${mapId}:${typeof title === "string" ? title : ""}`);
       if (lessonId) {
         await db.update(lessons).set({ json: json as never, updatedAt: new Date() }).where(eq(lessons.id, lessonId));
         return lessonId;

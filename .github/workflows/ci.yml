@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # A böngészős kör szeleteinek száma (docs/specs/2026-11-18-ci-e2e-szeleteles.md). Az `e2e-parts` mátrix számozott részei
+  # 1…E2E_SHARDS; az egyezést a scripts/qa/e2e-shards.test.mjs őrzi, futás közben a záró „Playwright E2E” job számláló-ellenőre.
+  E2E_SHARDS: 6
+
 jobs:
   # Tulajdonosi döntés 2026-10-15 (docs/specs/2026-10-15-haromfazis-ci-ellenorzes.md): terv → végrehajtási utasítás → kód, kikényszerítve.
   three-phase:
@@ -21,7 +26,7 @@ jobs:
         with:
           node-version: '24'
       - name: Unit test (az ellenőrző saját tesztje)
-        run: node --test scripts/qa/three-phase-check.test.mjs scripts/qa/repo-rules.test.mjs scripts/qa/verify-render-revision.test.mjs scripts/qa/verify-render-settings.test.mjs scripts/qa/set-proxy-secret.test.mjs
+        run: node --test scripts/qa/three-phase-check.test.mjs scripts/qa/repo-rules.test.mjs scripts/qa/verify-render-revision.test.mjs scripts/qa/verify-render-settings.test.mjs scripts/qa/set-proxy-secret.test.mjs scripts/qa/e2e-shards.test.mjs
       # Minőségkapuk (docs/minosegkapuk.md, tulajdonosi utasítás 2026-11-17): a kapuk és a kapu-bizonyíték hook saját tesztjei,
       # valamint a .agents ↔ .claude skill-tükör ellenőrzése (a tartalom nem csúszhat szét).
       - name: Minőségkapuk saját tesztjei
@@ -112,15 +117,11 @@ jobs:
       - name: Run database integration tests
         run: npm run test:learning-db
 
-  # docs/specs/2026-11-03-befejezes-onfejlesztes-dual-arch.md: a program és a fejlesztés ARM64-en és x64-en is fusson.
+  # A Windows fejlesztési cél x64. A kötelező összesítő ennek az eredményét is ellenőrzi.
   native-arch:
-    name: Natív futás (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Natív futás (Windows x64)
+    runs-on: windows-latest
     needs: lint-typecheck
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, windows-11-arm]
     defaults:
       run:
         working-directory: source
@@ -132,6 +133,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          architecture: x64
           cache: 'npm'
           cache-dependency-path: source/package-lock.json
 
@@ -139,7 +141,7 @@ jobs:
         run: npm ci
 
       - name: Platform
-        run: node -p "process.platform + '-' + process.arch"
+        run: node -e "if (process.platform !== 'win32' || process.arch !== 'x64') process.exit(1); console.log(process.platform, process.arch)"
 
       - name: Native dependencies load on this CPU
         run: npm run doctor:arch
@@ -150,12 +152,21 @@ jobs:
       - name: Build
         run: npm run build
 
-  e2e-tests:
-    name: Playwright E2E
+  # docs/specs/2026-11-18-ci-e2e-szeleteles.md: a böngészős kör egy szálon 78–92 percig futott. Most hat súlyozott szeletben fut
+  # (mindegyik saját Postgres-konténerrel, migrációval, seeddel és szerverrel; a szeleten belül marad az egy worker és a két
+  # újrapróba), a hetedik rész az öt kiegészítő konfig. A kötelező ellenőrzés nevét („Playwright E2E”) a záró `e2e-tests` job viseli.
+  e2e-parts:
+    name: E2E rész (${{ matrix.part }})
     # Rögzített futtatókép: az ubuntu-latest már Ubuntu 26.04, amit a Playwright 1.57 nem támogat
     # (`playwright install --with-deps` elbukik). A rögzítés a Playwright frissítéséig marad.
     runs-on: ubuntu-24.04
     needs: lint-typecheck
+    timeout-minutes: 60
+    strategy:
+      # Egy rész bukása nem állítja le a többit: egy körben minden bukás látszik.
+      fail-fast: false
+      matrix:
+        part: ['1', '2', '3', '4', '5', '6', 'kiegeszito']
     defaults:
       run:
         working-directory: source
@@ -184,6 +195,7 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/websuli
       SESSION_SECRET: test-session-secret-ci
       CI: "true"
+      E2E_PART: ${{ matrix.part }}
 
     steps:
       - uses: actions/checkout@v4
@@ -212,31 +224,125 @@ jobs:
       - name: Seed one public material for the list tests
         run: node --import tsx tests/e2e-seed.ts
 
-      - name: Run Playwright tests (webServer starts dist/index.js)
-        run: npx playwright test
+      # A teljes listából minden rész ugyanazt a felosztást számolja ki (tiszta függvény), és a sajátját futtatja.
+      # A --list módban a JSON a szabványos kimenetre megy (a PLAYWRIGHT_JSON_OUTPUT_NAME ott nem ír fájlt).
+      - name: Szelet kijelölése (súlyozott felosztás a teljes tesztlistából)
+        if: matrix.part != 'kiegeszito'
+        run: |
+          npx playwright test --list --reporter=json > "$RUNNER_TEMP/e2e-list.json"
+          node ../scripts/qa/e2e-shards.mjs plan --list "$RUNNER_TEMP/e2e-list.json" --weights ../scripts/qa/e2e-shard-weights.json --total "$E2E_SHARDS" --part "$E2E_PART" --out "$RUNNER_TEMP/e2e-shard.txt"
+
+      - name: Run Playwright tests (a szelet tesztjei; webServer starts dist/index.js)
+        if: matrix.part != 'kiegeszito'
+        run: npx playwright test --test-list "$RUNNER_TEMP/e2e-shard.txt" --reporter=dot,html,json
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-report-${{ matrix.part }}.json
 
       - name: Verify scored HTML banks and reload persistence
+        if: matrix.part == 'kiegeszito'
         run: npx playwright test --config playwright.html-persistence.config.ts
 
       - name: Verify the open-answer arbiter in both lesson players (T7.2)
+        if: matrix.part == 'kiegeszito'
         run: npx playwright test --config playwright.lesson-arbiter.config.ts
 
       - name: Verify service worker install keeps the previous offline cache (#207)
+        if: matrix.part == 'kiegeszito'
         run: npx playwright test --config playwright.service-worker.config.ts
 
       # docs/specs/2026-11-02-maradek-kockazatok.md: ez a két böngészős konfig nem futott a CI-ben, ezért észrevétlenül
       # elavult (borító-spec 2026-10-17, válaszkeverés 2026-11-02). Most minden PR-on futnak.
       - name: Verify lesson cover, continuous exercise lists and the fusion lesson (learning flow)
+        if: matrix.part == 'kiegeszito'
         run: npx playwright test --config playwright.learning-flow.config.ts
 
       - name: Verify saved practice rounds (first answer, retry, reload, reward)
+        if: matrix.part == 'kiegeszito'
         run: npx playwright test --config playwright.lesson-practice.config.ts
 
-      - name: Upload Playwright report on failure
+      # docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (S5a, V7): kódszótári visszajelzés-nyitás a jelölt leckén, három nézetben.
+      - name: Verify varied feedback openers on a variety-marked lesson
+        if: matrix.part == 'kiegeszito'
+        run: npx playwright test --config playwright.lesson-variety.config.ts
+
+      # A számláló-ellenőr bemenete: a rész JSON-jelentése (bukott tesztek mellett is; megszakított futásnál nem).
+      - name: Upload the part's JSON report (számláló-ellenőr)
+        if: ${{ !cancelled() && matrix.part != 'kiegeszito' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-json-${{ matrix.part }}
+          path: source/e2e-report-${{ matrix.part }}.json
+          # Hiányzó jelentés → a rész bukik: újrafuttatásnál egy korábbi kísérlet elavult jelentése nem kerülhet az ellenőrbe.
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+      - name: Upload Playwright report and traces on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
-          path: source/playwright-report
+          name: playwright-report-${{ matrix.part }}
+          path: |
+            source/playwright-report
+            source/test-results
+          overwrite: true
           retention-days: 7
 
+  # A főág védelmében és a pre-merge-gate listájában szereplő kötelező ellenőrzés: EGY, változatlan nevű job. Csak akkor zöld,
+  # ha minden rész zöld (a kihagyott / megszakított rész is bukás — ezért always()), és a számláló-ellenőr szerint a részekben
+  # lefutott és átment tesztek (+ a listában is deklarált kihagyások) összege = a teljes tesztlista.
+  e2e-tests:
+    name: Playwright E2E
+    runs-on: ubuntu-24.04
+    needs: [lint-typecheck, e2e-parts, native-arch]
+    if: ${{ always() }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: source
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Minden rész zöld?
+        run: |
+          echo "e2e-parts: $PARTS_RESULT"
+          test "$PARTS_RESULT" = "success"
+          test "$NATIVE_RESULT" = "success"
+        env:
+          PARTS_RESULT: ${{ needs.e2e-parts.result }}
+          NATIVE_RESULT: ${{ needs.native-arch.result }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: source/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download the parts' JSON reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: e2e-json-*
+          path: ${{ runner.temp }}/e2e-reports
+          merge-multiple: true
+
+      - name: Számláló-ellenőr (a részekben lefutott tesztek összege = a teljes lista)
+        run: |
+          npx playwright test --list --reporter=json > "$RUNNER_TEMP/e2e-list.json"
+          node ../scripts/qa/e2e-shards.mjs check --list "$RUNNER_TEMP/e2e-list.json" --reports "$RUNNER_TEMP/e2e-reports" --total "$E2E_SHARDS" --weights ../scripts/qa/e2e-shard-weights.json --weights-out "$RUNNER_TEMP/e2e-shard-weights.measured.json"
+        env:
+          CI: "true"
+
+      - name: Upload the measured shard weights
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-shard-weights-measured
+          path: ${{ runner.temp }}/e2e-shard-weights.measured.json
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 14

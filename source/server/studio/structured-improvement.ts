@@ -1,13 +1,18 @@
 import { publicationBankProblems } from "../../shared/lesson-experience";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { and, eq, ne, inArray } from "drizzle-orm";
-import { lessonSchema, type Lesson } from "../../shared/lesson-schema";
-import { lessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
+import { lessonSchema, modelLessonSchema, type Lesson } from "../../shared/lesson-schema";
+import { lessonRepairSchema, markRepairCandidate, modelLessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
+import { sourceVisualsEnabled } from "./source-visuals-flag";
+import { adoptStoredOpeningForm, runWithLessonVariety } from "./lesson-variety-flag";
+import { carryVarietyMarker, storedVarietyMarker } from "../../shared/lesson-feedback-openers";
+import { drawableCandidate, withDropReason } from "./undrawable-visuals";
 import { checkLessonArc } from "../../shared/lesson-arc";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { gameQuizItems, htmlFiles, improvedHtmlFiles, kmConcepts, knowledgeMaps, lessons, materialImprovementBackups, studioJobs } from "../../shared/schema";
 import type { MapConcept } from "./coverage";
-import { checkCoverageGate } from "./coverage";
+import { checkCoverageGate, withVisualCoverage } from "./coverage";
+import { visualsOfSourceFiles } from "../../shared/source-visuals";
 import { buildAuthorPrompt, buildLektorPrompt, lektorReportSchema } from "./step-io";
 import { classifyNotes } from "./lektor";
 import { removeLektorBlockers } from "./choice-gate";
@@ -24,6 +29,7 @@ import { logger } from "../lib/logger";
 import { repairHash } from "../lib/canonical-hash";
 import { descriptionAfterLessonChange } from "../../shared/lesson-teaser";
 import { withLessonArt } from "../design-assets";
+import { seedFrom } from "../../shared/seeded";
 import { requireRoleForStep, type PromptRole } from "../../shared/instruction-bundles/roles";
 import { withRoleSkill } from "./role-skills";
 import { applySourceCorrections, arithmeticSourceCorrections, correctionReasonCode, explicitClassroomOf, mergeCorrections, proposeSourceCorrections, type SourceCorrection } from "./source-corrections";
@@ -32,6 +38,13 @@ export { repairHash };
 const quizHash = (rows: Array<typeof gameQuizItems.$inferSelect>) => repairHash(rows.map(row => ({ ...row, createdAt: undefined })).sort((a, b) => a.id.localeCompare(b.id)));
 export const materialHash = (row: Pick<typeof htmlFiles.$inferSelect, "title" | "content" | "description" | "classroom" | "contentType">) => repairHash({ title: row.title, content: row.content, description: row.description, classroom: row.classroom, contentType: row.contentType });
 type RepairSource = { subject: string; classroom: number; concepts: MapConcept[] };
+/**
+ * S5b vak kör 1 (L2): a javítás szerzői promptja csak akkor kér kiosztott nyitásformát, ha a TÁROLT lecke jelölője már formát hordoz
+ * (v2). A régi (v1) jelölőjű vagy jelöletlen leckénél a javítás nem vezet be új formát — a jelölő és a nyitóblokk fejléce így egyezik.
+ */
+export function repairVarietyOption(original: { mapId: string; variety?: unknown }): { seed: number } | undefined {
+  return storedVarietyMarker(original)?.openingForm ? { seed: seedFrom(original.mapId) } : undefined;
+}
 /** `classroom`: the grade the teacher explicitly asked for (spec 2026-09-23); otherwise the original's. */
 export function assertRepairTeaching(original: Lesson, candidate: Lesson, source: RepairSource, classroom = original.classroom) {
   for (const field of ["mapId", "subject", "sourceOnly"] as const) {
@@ -95,7 +108,9 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   // Review #379: a lecke utolsó írása óta módosult térképfogalmak egysége nem vehető át (minden fogalomíró út frissíti az updatedAt-et).
   const staleConceptIds = conceptsChangedSince(await db.select({ localId: kmConcepts.localId, updatedAt: kmConcepts.updatedAt }).from(kmConcepts).where(eq(kmConcepts.mapId, row.mapId)), row.updatedAt);
   const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript, gates, staleConceptIds });
-  return lessonRepairSchema.parse({
+  // Vercel-review #530: a séma (KI ágon) eldobja a jelölőt — a lezárás a tárolt lecke jelölőjét írja vissza a jelöltre (előnézet = alkalmazott).
+  const parseArtefact = (): LessonRepair => {
+  return modelLessonRepairSchema(sourceVisualsEnabled()).parse({
     kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
     ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
     // Review #164: az eldöntetlen régi-alak jelöltek a javítás-artefaktumban maradnak (admin-nézet), nem csak a naplóban.
@@ -103,6 +118,8 @@ export async function generateStructuredImprovement(fileId: string, instruction?
     // Review #331: a lektor által blokkolt és kivett banktételek (a jegyzetek útvonalai a kivétel ELŐTTI indexekre vonatkoznak).
     ...(lektorRemoved?.length ? { lektorRemoved } : {}),
   });
+  };
+  return markRepairCandidate(parseArtefact());
 }
 
 /**
@@ -148,7 +165,15 @@ export type RepairBankGates = (ctx: AnswerKeyContext, lesson: Lesson) => Pick<Ex
  */
 export type RepairBankOptions = { gates?: RepairBankGates; staleConceptIds?: Iterable<string> };
 
-export async function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } & RepairBankOptions = {}) {
+/**
+ * S5a vak kör 1 (L1 — kapcsoló-szivárgás): a javítás változatossági állapota a TÁROLT lecke jelölője (nem a környezet, nem a modell);
+ * a javítás minden olvasója (szerzői prompt, bank) ezt látja, és a jelölt jelölője is innen jön (`carryVarietyMarker`).
+ */
+export function buildStructuredImprovement(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } & RepairBankOptions = {}) {
+  return runWithLessonVariety(storedVarietyMarker(original) !== undefined, () => buildStructuredImprovementScoped(original, source, call, instruction, progress, opts));
+}
+
+async function buildStructuredImprovementScoped(original: Lesson, source: RepairSource, call: RepairCall, instruction?: string, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, opts: { transcript?: boolean } & RepairBankOptions = {}) {
   await workflowPhase("author");
   // Spec 2026-09-23: the teacher's request may carry documented source corrections and an explicit grade.
   const proposal = instruction || opts.transcript
@@ -170,7 +195,7 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
   const added = corrected.concepts.filter(c => c.examWeight !== "extra" && !taught.has(c.localId));
   if (added.length && outline.length) outline[outline.length - 1].conceptIds.push(...added.map(c => c.localId));
   const addedLine = added.length ? ` Új fogalmak a térképen — tanítsd őket a témájuk szerinti fejezetben, a fogalom szavaival: ${added.map(c => `${c.localId} „${c.term}”`).join(", ")}.` : "";
-  const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined);
+  const prompt = buildAuthorPrompt(outline, corrected, [], undefined, owner.instruction || owner.corrections.length ? { instruction: owner.instruction, corrections: owner.corrections } : undefined, repairVarietyOption(original));
   const gradeLine = owner.classroom !== undefined
     ? `Az évfolyam a tanár kifejezett kérésére ${owner.classroom}. osztály: a classroom mező ${owner.classroom} legyen, a nyelvezet és a mélység ehhez igazodjon.`
     : "Az évfolyamot a program már a forrásból állapította meg, ne változtasd.";
@@ -184,9 +209,17 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
   const sourceWords = sourceWordSet(source.concepts, owner.corrections);
   for (let attempt = 0; attempt < 2; attempt++) {
     // Spec 2026-09-23: the repair skill at the start of the system prompt, its checklist at the end of the user message.
+    let dropNotes: string[] = [];
     previous = await call("author", withRepairSkill(prompt), (correction ? `${request}\nEllenőrzési hibák: ${correction}\nElőző jelölt (adat): ${JSON.stringify(previous)}` : request) + repairChecklistTail(owner.corrections), "repair");
     try {
-      const parsed = lessonSchema.parse(previous);
+      // #515 review: a hibás paraméterű (kirajzolhatatlan) új fajtájú ábrablokk a jelölt elfogadása ELŐTT kimarad — a lejátszó
+      // elrejtené, a javítás mégis „sikeres” lenne. A kiesés oka a későbbi ellenőrzések hibája elé kerül (a meglévő újrapróbán;
+      // új kör ezen túl nem indul). KI állapotban nincs mit kivenni (a séma az új fajtát el sem fogadja).
+      // A jelölő a `finishStructuredImprovement` belépőjén a tárolt leckéé lesz (`carryVarietyMarker`; a modellé eldobva) — ez a sor a
+      // főág őre (source-visuals-flag J2) miatt bájtra marad.
+      const drawn = drawableCandidate(modelLessonSchema(sourceVisualsEnabled()).parse(previous), (line) => logger.info(line), "Javítás");
+      dropNotes = drawn.notes;
+      const parsed = drawn.lesson;
       assertRepairTeaching(original, parsed, corrected, classroom);
       const stale = staleFormProblems(parsed, owner.corrections, sourceWords);
       if (stale.length) throw new Error(stale.join("; "));
@@ -212,7 +245,7 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
       break;
     } catch (error) {
       await workflowValidationFailure(error);
-      correction = error instanceof Error ? error.message : "Érvénytelen tanítás.";
+      correction = withDropReason(dropNotes, error instanceof Error ? error.message : "Érvénytelen tanítás.");
       if (attempt === 1) throw new Error(`A javított tanítás ellenőrzése sikertelen; bankgyártás nem indult: ${correction}`, { cause: error });
     }
   }
@@ -221,7 +254,13 @@ export async function buildStructuredImprovement(original: Lesson, source: Repai
 }
 
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
-export async function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, bank: RepairBankOptions = {}) {
+export function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, bank: RepairBankOptions = {}) {
+  return runWithLessonVariety(storedVarietyMarker(original) !== undefined, () => finishStructuredImprovementScoped(original, carryVarietyMarker(candidate, original), source, call, progress, owner, bank));
+}
+
+async function finishStructuredImprovementScoped(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, bank: RepairBankOptions = {}) {
+  // Review #534 (Copilot): a lektor a jelölt (a tárolt leckéből átvitt) jelölőjének formáját kapja konkrét elvárásként.
+  adoptStoredOpeningForm(candidate);
   const classroom = owner?.classroom ?? original.classroom;
   assertRepairTeaching(original, candidate, source, classroom);
   await workflowPhase("banks");
@@ -278,7 +317,8 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
     const reviewed = { ...source, ...(repair.classroom !== undefined ? { classroom: repair.classroom } : {}), concepts: applySourceCorrections(source.concepts, corrections) };
     const coverage = assertRepairCandidate(lessonSchema.parse(current.json), repair.candidate, reviewed, repair.classroom ?? lessonSchema.parse(current.json).classroom);
     // Review #274: az évfolyamot váltó javítás az új sáv arculatát kapja (ugyanaz a normalizálás, mint az upsertLesson-ben).
-    const candidate = await withLessonArt(repair.candidate, current.id, tx);
+    // S5a vak kör 1 (L1): a jelölő a zárolt, tárolt leckéből jön — a javításcsomagban tárolt (modelltől eredő) jelölő nem írható ki.
+    const candidate = await withLessonArt(carryVarietyMarker(repair.candidate, current.json), current.id, tx);
     if (workflowMode() === "apply") await workflowPhase("apply");
     await workflowFence(tx);
     const quiz = await tx.select().from(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
@@ -291,7 +331,13 @@ export async function applyStructuredImprovement(improvementId: string, userId: 
       await tx.update(kmConcepts).set({ ...(fix.term !== undefined ? { term: fix.term } : {}), ...(fix.definition !== undefined ? { definition: fix.definition } : {}), ...(row.reviewState === "kept" ? { reviewState: "edited" } : {}), verbatimReason: correctionReasonCode(fix), updatedAt: new Date() }).where(eq(kmConcepts.id, row.id));
     }
     if (repair.classroom !== undefined) await tx.update(knowledgeMaps).set({ classroom: repair.classroom, updatedAt: new Date() }).where(eq(knowledgeMaps.id, current.mapId));
-    const [written] = await tx.update(lessons).set({ json: candidate, coverage, version: current.version + 1, updatedAt: new Date() }).where(eq(lessons.id, current.id)).returning();
+    // Független review F16: a javított lecke tárolt fedettsége a vizuális tételeket is számolja (a térkép leltárából újramérve) —
+    // a `coverage.visuals` kulcs a javításnál nem tűnik el. A leltár külön olvasva: a `source` (és a lenyomata) nem változik.
+    // Funkciókapcsoló: KI állapotban nincs többlet lekérdezés, és a tárolt fedettség a kapcsoló előtti alakú (nincs `visuals` kulcs írva).
+    const visualsOn = sourceVisualsEnabled();
+    const [inventory] = visualsOn ? await tx.select({ sourceFiles: knowledgeMaps.sourceFiles }).from(knowledgeMaps).where(eq(knowledgeMaps.id, current.mapId)) : [];
+    const storedCoverage = visualsOn ? withVisualCoverage(coverage, candidate, visualsOfSourceFiles(inventory?.sourceFiles)) : coverage;
+    const [written] = await tx.update(lessons).set({ json: candidate, coverage: storedCoverage, version: current.version + 1, updatedAt: new Date() }).where(eq(lessons.id, current.id)).returning();
     if (repairHash(written.json) !== repairHash(candidate)) throw new Error("A lecke visszaolvasása eltérést mutat.");
     await tx.delete(gameQuizItems).where(eq(gameQuizItems.lessonId, current.id));
     const exports = exportQuizItemsForPublish(candidate, current.id, conceptIdResolver(source.concepts));

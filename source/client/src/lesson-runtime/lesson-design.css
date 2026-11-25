@@ -63,6 +63,8 @@
   --ws-surface: #132540; --ws-accent: #0C929C; --ws-ink: #EFF8FF; --ws-panel: #233956; --ws-soft: #1B3150; --ws-deep: #0B1A2E;
   --ws-muted: #BCD0E4; --ws-line: #35506E; --ws-strong: #0C929C; --ws-strong-ink: #061A22; --grade-size: 16px;
   --ws-title: var(--ws-ink);
+  /* S2b-2 (vak J5): a forrás-ábrák tónusjele a sötét fejlécen ≥ 3:1 (a főszín 2,69:1 lenne) — csak a jelző, a főszín marad. */
+  --ws-mark-a: #33C3CD;
   /* A sín a csempe színe: a főszín-kitöltés rajta 3,13:1 (a grafikus állapotjelző minimuma 3:1, §2.6). */
   --ws-secondary-bg: #2C4566; --ws-secondary-ink: #EFF8FF; --ws-track: #233956;
   --lesson-ok-bg: #12291B; --lesson-ok-bg-ink: #D9FFE4; --lesson-ok: #86EFAC; --lesson-ok-ink: #062A1C;
@@ -74,6 +76,8 @@
 [data-band][data-experience][data-ws-theme]:has(.fusion-view[data-quiet="true"]) {
   --ws-surface: #F7F6F2; --ws-panel: #FFFEFA; --ws-ink: #28313A; --ws-muted: #535D68; --ws-line: #D5D8D8; --ws-soft: #EEEFEA;
   --ws-accent: #384F68; --ws-deep: #384F68; --ws-strong: #384F68; --ws-strong-ink: #FFFFFF; --ws-title: var(--ws-deep);
+  /* S2b-2 (vak J5): a forrás-ábrák tónusjelei a halk, világos felületen is ≥ 3:1 (a sötét sáv kísérőszínei itt 1,8–2,1:1 lennének). */
+  --ws-mark-a: #384F68; --ws-mark-b: #5E4AA0; --ws-mark-c: #76561A;
   --ws-secondary-bg: #EAF0F6; --ws-secondary-ink: #24435D; --ws-track: #DCE6ED;
   --lesson-ok-bg: #E0F6EC; --lesson-ok-bg-ink: #145537; --lesson-ok: #146B44; --lesson-ok-ink: #FFFFFF;
   --lesson-warn-bg: #FFF3CF; --lesson-warn-ink: #6D4800; --lesson-error: #9C213A;
@@ -277,3 +281,154 @@
 [data-band][data-experience][data-ws-theme] .learning-quiet[data-on="true"] {
   background: var(--ws-strong); color: var(--ws-strong-ink); border-color: var(--ws-strong);
 }
+
+/* ---------- Spec 2026-11-18 (tananyaggyártás minősége, S2a): a forrás ábráinak újrarajzolása — táblázat, szabálydoboz,
+   összehasonlító kártyák (blocks/source-visuals.tsx). Szín KIZÁRÓLAG a sáv tokenjeiből (rögzített színkód nincs); a tónus mellett
+   mindig áll alakjel / ikon / felirat is. A széles táblázat a SAJÁT keretén belül görög vízszintesen — az oldal soha. ---------- */
+[data-ws-theme] .sv-figure {
+  --sv-tone: var(--ws-muted);
+  background: var(--lesson-surface); color: var(--lesson-ink); min-width: 0; max-width: 100%;
+  font-size: max(15px, calc(var(--grade-size, 16px) * 0.92)); line-height: 1.45;
+}
+[data-ws-theme] .sv-tone-a { --sv-tone: var(--ws-accent); --sv-mark: var(--ws-mark-a, var(--ws-accent)); }
+[data-ws-theme] .sv-tone-b { --sv-tone: var(--ws-accent-2); --sv-mark: var(--ws-mark-b, var(--ws-accent-2)); }
+[data-ws-theme] .sv-tone-c { --sv-tone: var(--ws-accent-3); --sv-mark: var(--ws-mark-c, var(--ws-accent-3)); }
+[data-ws-theme] .sv-tone-neutral { --sv-tone: var(--ws-muted); --sv-mark: var(--ws-muted); }
+/* S2b-2 (vak J5): a jel és a fejléc alsó vonala a jelző-tokent kapja (≥ 3:1 a fejléc hátterén — tests/source-visual-contrast.test.ts). */
+[data-ws-theme] .sv-tone-mark { color: var(--sv-mark); margin-right: 0.4em; font-size: 0.8em; }
+
+[data-ws-theme] .sv-table-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--lesson-line); border-radius: 12px; overscroll-behavior-x: contain; }
+[data-ws-theme] .sv-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: calc(var(--sv-cols, 2) * 6.5em); }
+/* S2b-2 (vak J7): rövid tartalmú tábla — a legkisebb szélesség a tartalomból (a megjelenítő méri: minden cella ≤ 12 karakter). */
+[data-ws-theme] .sv-table[data-compact] { min-width: 0; }
+[data-ws-theme] .sv-table[data-compact] :is(th, td) { min-width: 0; }
+/* S2b-2 (vak J2): a táblacím a görgő kereten kívül, teljes szélességben olvasható. */
+[data-ws-theme] .sv-table-title { margin: 0 0 8px; font-weight: 800; color: var(--ws-title); overflow-wrap: anywhere; }
+[data-ws-theme] .sv-table caption { caption-side: top; text-align: left; padding: 10px 12px; font-weight: 800; color: var(--ws-title); background: var(--ws-soft); overflow-wrap: anywhere; }
+[data-ws-theme] .sv-table :is(th, td) {
+  padding: 9px 12px; text-align: left; vertical-align: top; overflow-wrap: break-word; min-width: 5.5em;
+  border-bottom: 1px solid var(--lesson-line); border-right: 1px solid var(--lesson-line);
+}
+[data-ws-theme] .sv-table :is(th, td):last-child { border-right: 0; }
+[data-ws-theme] .sv-table tbody tr:last-child > * { border-bottom: 0; }
+[data-ws-theme] .sv-table thead th {
+  font-weight: 800; color: var(--ws-title); border-bottom: 3px solid var(--sv-mark, var(--sv-tone));
+  background: color-mix(in srgb, var(--sv-tone) 14%, var(--lesson-surface));
+}
+[data-ws-theme] .sv-table tbody tr:nth-child(even) > * { background: color-mix(in srgb, var(--ws-soft) 55%, var(--lesson-surface)); }
+[data-ws-theme] .sv-table tbody tr:nth-child(odd) > * { background: var(--lesson-surface); }
+[data-ws-theme] .sv-table tbody th[scope="row"] { font-weight: 700; color: var(--ws-title); }
+/* Görgetéskor az első oszlop (a sorfejléc) a helyén marad — tömör háttérrel, hogy a mögé csúszó cella ne üssön át. */
+[data-ws-theme] .sv-table-scroll[data-overflowing] .sv-table[data-row-headers] :is(tbody th[scope="row"], td[data-first], thead th:first-child) {
+  position: sticky; left: 0; z-index: 1; box-shadow: 1px 0 0 var(--lesson-line);
+}
+/* Kétoszlopos tábla: telefonon se kényszerüljön görgetésre egy törhetetlen szó miatt — a szó a cellán belül törik (review J5). */
+[data-ws-theme] .sv-table[data-cols="1"] :is(th, td), [data-ws-theme] .sv-table[data-cols="2"] :is(th, td) { overflow-wrap: anywhere; min-width: 4.5em; }
+[data-ws-theme] .sv-table[data-cols="1"], [data-ws-theme] .sv-table[data-cols="2"] { min-width: 0; table-layout: fixed; }
+/* Vak ellenőr J3: a fejléc szava ne törjön ketté, amíg kisebb térközzel kifér (a jelzőt a megjelenítő méri — `useHeaderFit`).
+   `fit`: szűkebb belső margó, a tónusjel külön sorban, a fejléc szava nem törhet, az oszlopok a fejléc szavaihoz igazodnak (a törzs
+   cellái továbbra is bárhol törhetnek, így a tábla nem görög). `break` (végső eset): fele-fele oszlopok, a szó elválasztással törik. */
+[data-ws-theme] .sv-table[data-head-fit="fit"] { table-layout: auto; }
+[data-ws-theme] .sv-table[data-head-fit="fit"] :is(th, td) { padding-left: 6px; padding-right: 6px; }
+[data-ws-theme] .sv-table[data-head-fit="fit"] thead th { overflow-wrap: normal; word-break: normal; hyphens: manual; font-size: 14px; letter-spacing: -0.01em; }
+[data-ws-theme] .sv-table[data-head-fit="fit"] thead th .sv-tone-mark { display: block; margin: 0 0 2px; }
+[data-ws-theme] .sv-table[data-head-fit="break"] thead th { hyphens: auto; }
+/* Asztali nézet (review J2): a tábla, a kártyák és a szabálydoboz ugyanahhoz a tartalomszélességhez igazodik — a régi ábrafajták
+   920 px-es korlátja (lesson-experience.css) rájuk nem érvényes, a többi fajtán változatlan. */
+[data-band][data-experience][data-ws-theme] figure.sv-figure > :is(.sv-table-scroll, .sv-cards, .sv-rule, .sv-scroll-hint) { max-width: 100%; }
+[data-ws-theme] .sv-hint-touch { display: none; }
+@media (pointer: coarse) {
+  [data-ws-theme] .sv-hint-touch { display: inline; }
+  [data-ws-theme] .sv-hint-pointer { display: none; }
+}
+[data-ws-theme] .sv-scroll-hint { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--ws-muted); }
+/* S2b-2 (vak J11): nyomtatásban a görgő keret nem vág, a tábla tördelhető, a jelző rejtett. */
+@media print {
+  [data-ws-theme] .sv-table-scroll { overflow: visible; border: 0; }
+  [data-ws-theme] .sv-table { min-width: 0; }
+  [data-ws-theme] .sv-table :is(th, td) { min-width: 0; overflow-wrap: anywhere; }
+  [data-ws-theme] .sv-scroll-hint { display: none; }
+}
+
+[data-ws-theme] .sv-figure[data-anim="ruleBox"] { padding: 0; border: 0; background: transparent; box-shadow: none; }
+[data-ws-theme] .sv-rule {
+  --sv-rule: var(--ws-accent); --sv-rule-bg: var(--ws-soft); --sv-rule-ink: var(--lesson-ink);
+  border: 2px solid var(--sv-rule); border-left-width: 8px; border-radius: 14px; padding: 14px 16px; background: var(--sv-rule-bg); color: var(--sv-rule-ink);
+}
+[data-ws-theme] .sv-figure[data-tone="warning"] .sv-rule { --sv-rule: var(--lesson-warn-ink); --sv-rule-bg: var(--lesson-warn-bg); --sv-rule-ink: var(--lesson-warn-ink); }
+[data-ws-theme] .sv-figure[data-tone="tip"] .sv-rule { --sv-rule: var(--lesson-ok); --sv-rule-bg: var(--lesson-ok-bg); --sv-rule-ink: var(--lesson-ok-bg-ink); }
+[data-ws-theme] .sv-rule-head { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 0.95em; font-weight: 800; letter-spacing: 0.01em; overflow-wrap: anywhere; }
+[data-ws-theme] .sv-rule-title { margin: 0 0 8px; font-size: 1.08em; overflow-wrap: anywhere; }
+/* A blokk felirata a kereten belül, a doboz lábjegyzeteként (kívül a következő blokk alcímének látszana). */
+[data-band] figure.sv-figure[data-anim="ruleBox"] .sv-rule-note { margin: 10px 0 0; padding: 8px 0 0; border-top: 1px solid color-mix(in srgb, var(--sv-rule) 35%, transparent); font-size: 0.9em; color: inherit; }
+[data-ws-theme] .sv-rule-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--sv-rule); color: var(--sv-rule-bg); }
+[data-ws-theme] .sv-rule-items { margin: 0; padding-left: 1.3em; list-style: disc; display: grid; gap: 6px; }
+[data-ws-theme] .sv-rule-items li { white-space: pre-line; overflow-wrap: anywhere; }
+[data-ws-theme] .sv-rule-items:has(> li:only-child) { list-style: none; padding-left: 0; }
+
+[data-ws-theme] .sv-cards { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 640px) {
+  [data-ws-theme] .sv-cards[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-ws-theme] .sv-cards[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+[data-ws-theme] .sv-card {
+  min-width: 0; border: 1px solid var(--lesson-line); border-top: 6px solid var(--sv-tone); border-radius: 14px; padding: 12px 14px;
+  background: color-mix(in srgb, var(--sv-tone) 8%, var(--lesson-surface));
+}
+[data-ws-theme] .sv-card-title { margin: 0 0 8px; font-weight: 800; font-size: 1.05em; color: var(--ws-title); overflow-wrap: anywhere; }
+[data-ws-theme] .sv-card-lines { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+[data-ws-theme] .sv-card-lines li { padding-top: 6px; border-top: 1px dashed var(--lesson-line); white-space: pre-line; overflow-wrap: anywhere; }
+[data-ws-theme] .sv-card-lines li:first-child { padding-top: 0; border-top: 0; }
+[data-ws-theme] .sv-card-example { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--lesson-surface); border: 1px solid var(--lesson-line); overflow-wrap: anywhere; }
+[data-ws-theme] .sv-example-label { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.8em; font-weight: 800; background: var(--ws-strong); color: var(--ws-strong-ink); }
+
+/* Felsorolás a magyarázatban (E8): a „•” / „-” kezdetű sorok valódi lista. */
+[data-ws-theme] .lesson-explain-list { margin: 4px 0; padding-left: 1.3em; list-style: disc; display: grid; gap: 4px; }
+
+/* S2b-1 (docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): döntési fa és képes kártyák — a sáv tokenjeivel. */
+/* Döntési fa: behúzott, egymásba ágyazott lista függőleges vezetővonallal; vízszintes elágazás csak kis fánál (.sv-tree--wide: egy
+   szint, legfeljebb 4 ág) és 640 px fölött — a beágyazott fa fekvő telefonon olvashatatlanul szűk oszlopokra törne (vak kör 1, L1).
+   A vezetővonal saját, a felülettől legalább 3:1 kontrasztú színt kap (--sv-tree-line; L3). */
+[data-ws-theme] .sv-tree { --sv-tree-line: color-mix(in srgb, var(--ws-ink) 62%, var(--lesson-surface)); }
+[data-ws-theme] .sv-tree { min-width: 0; overflow-x: auto; }
+[data-ws-theme] .sv-tree-node {
+  display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; max-width: 100%; min-width: 0;
+  padding: 8px 12px; border-radius: 12px; border: 2px solid var(--ws-line); background: var(--lesson-surface);
+  font-weight: 600; overflow-wrap: anywhere;
+}
+[data-ws-theme] .sv-tree-leaf { border-color: var(--sv-tone); background: color-mix(in srgb, var(--sv-tone) 14%, var(--lesson-surface)); }
+[data-ws-theme] .sv-tree-branch {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8em; font-weight: 700;
+  color: var(--ws-strong-ink); background: var(--ws-strong);
+}
+[data-ws-theme] .sv-tree-text { min-width: 0; }
+[data-ws-theme] .sv-tree-children { list-style: none; margin: 8px 0 0 14px; padding: 0 0 0 14px; border-left: 3px solid var(--sv-tree-line); display: grid; gap: 8px; }
+[data-ws-theme] .sv-tree-item { position: relative; min-width: 0; }
+[data-ws-theme] .sv-tree-item::before { content: ""; position: absolute; left: -14px; top: 18px; width: 12px; border-top: 3px solid var(--sv-tree-line); }
+@media (min-width: 640px) {
+  [data-ws-theme] .sv-tree--wide { text-align: center; }
+  /* A testvérágak között nincs rés (a köz az elemek belső margója), így a vízszintes összekötő vonal folytonos (L3). */
+  [data-ws-theme] .sv-tree--wide .sv-tree-children {
+    margin: 0; padding: 18px 0 0; border-left: 0; display: flex; justify-content: center; gap: 0; position: relative;
+  }
+  [data-ws-theme] .sv-tree--wide .sv-tree-children::before { content: ""; position: absolute; top: 0; left: 50%; height: 18px; border-left: 3px solid var(--sv-tree-line); }
+  [data-ws-theme] .sv-tree--wide .sv-tree-item { flex: 1 1 0; padding: 18px 7px 0; text-align: center; }
+  [data-ws-theme] .sv-tree--wide .sv-tree-item::before { left: 0; right: 0; top: 0; width: auto; border-top: 3px solid var(--sv-tree-line); }
+  [data-ws-theme] .sv-tree--wide .sv-tree-item:first-child::before { left: 50%; }
+  [data-ws-theme] .sv-tree--wide .sv-tree-item:last-child::before { right: 50%; }
+  [data-ws-theme] .sv-tree--wide .sv-tree-item::after { content: ""; position: absolute; top: 0; left: 50%; height: 18px; border-left: 3px solid var(--sv-tree-line); }
+  [data-ws-theme] .sv-tree--wide .sv-tree-item:only-child::before { display: none; }
+}
+
+/* Képes kártyák: 360 px-en 2, széles nézetben 4 oszlop. */
+[data-ws-theme] .sv-pcards-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 900px) { [data-ws-theme] .sv-pcards-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+[data-ws-theme] .sv-pcard {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 8px; border-radius: 14px;
+  border: 2px solid color-mix(in srgb, var(--sv-tone) 55%, var(--ws-line)); background: var(--lesson-surface);
+}
+[data-ws-theme] .sv-pcard-art { border-radius: 10px; overflow: hidden; }
+[data-ws-theme] .sv-pcard-art > svg { display: block; width: 100%; height: auto; }
+[data-ws-theme] .sv-pcard-label { font-weight: 800; font-size: 1.05em; overflow-wrap: anywhere; color: var(--ws-title, var(--ws-ink)); }
+[data-ws-theme] .sv-pcard-caption { font-size: 0.88em; color: var(--ws-muted); overflow-wrap: anywhere; }
+[data-ws-theme] .sv-pcard-example { font-size: 0.88em; font-style: italic; overflow-wrap: anywhere; }

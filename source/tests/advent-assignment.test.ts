@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank/index";
-import {
+import { adventLayout,
   buildAdventPlan,
   findAdventItem,
   gradePick,
@@ -226,4 +226,13 @@ test("E14: a már megválaszolt kérdés helye nem cserélődik, és a tárgyat 
   // A pótlás promptja sem egyezhet a tervben már szereplő kérdésével.
   const planPrompts = new Set(Object.values(p.doors).flat().map((id) => normalizePrompt(item(id).prompt)));
   assert.ok(!planPrompts.has(normalizePrompt(item(viaPlan.plan.doors[1]![0]!).prompt)));
+});
+
+test("az elrendezés terv nélkül is ugyanaz, mint amit a terv tárol — a rács az első megnyitás után sem rendeződik át (vak ellenőr S1)", () => {
+  for (const [grade, subjectKey, round] of [[1, "device:a", 1], [5, "device:b", 1], [5, "device:b", 2], [12, "learner:c", 1]] as const) {
+    const built = buildAdventPlan({ bank: BANK, christmas: CHRISTMAS, grade, season: 2026, round, subjectKey });
+    assert.deepEqual(adventLayout(2026, round, subjectKey, grade), built.layout, subjectKey + " / " + grade + ". évfolyam / " + round + ". kör");
+  }
+  assert.notDeepEqual(adventLayout(2026, 1, "device:a", 5), Array.from({ length: 24 }, (_, i) => i + 1), "kevert sorrend");
+  assert.deepEqual([...adventLayout(2026, 1, "device:a", 5)].sort((x, y) => x - y), Array.from({ length: 24 }, (_, i) => i + 1));
 });

@@ -33,7 +33,7 @@ tiszta munkafa → `git fetch` → teljes lint kapu (`--full`) → teljes egysé
 
 - Összesítő tábla, `ZÖLD` / `BUKOTT`; zöld esetben bizonyíték a fej-commitra (`pre-push-<fej>.json`).
 - `KIVÉTEL ismert helyi kivétel: native-arch (C-38)`: CSAK a `native-arch.test.ts` bukik, és a `doctor:arch` is bukik (friss
-  munkafában a `better-sqlite3` natív kötése nem épült fel, `--ignore-scripts`). A CI `native-arch` jobja x64-en és ARM64-en futtatja.
+  munkafában a `better-sqlite3` natív kötése nem épült fel, `--ignore-scripts`). A CI `native-arch` jobja Windows x64-en futtatja.
   Ha más teszt is bukik, vagy a `doctor:arch` zöld: `FAIL`.
 - `WARN A … TÁVOLI FEJÉNEK CI-JA ZÖLD — EZ A PUSH ÚJRAINDÍTJA AZ ~1 ÓRÁS PLAYWRIGHT E2E-T (C-62)`: zöld CI után nincs push (doksi sem);
   csak valódi javításért, egy pushban.

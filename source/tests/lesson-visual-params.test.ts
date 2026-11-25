@@ -63,14 +63,15 @@ test("folyamat és idővonal: kitalált alaplépés helyett legalább két való
   assert.deepEqual(visualParamProblems("geometry", {}), [], "séma nélküli régi fajta átmegy (a rajzolója dönt)");
 });
 
-test("régi kliens: az ismeretlen ábrafajtájú blokk kimarad, a lecke többi része megmarad", () => {
+test("régi kliens: az ismeretlen ábrafajtájú blokk helyén frissítésre kérő magyarázat (az index nem csúszik), a lecke többi része megmarad", () => {
   const lesson = { title: "t", sections: [{ heading: "h", blocks: [
     { kind: "explain", text: "x" },
     { kind: "animate", animKind: "hologram3d", params: {} },
     { kind: "animate", animKind: ANIM_KINDS[0], params: {} },
   ] }] };
   const out = dropUnknownAnimateBlocks(lesson) as typeof lesson;
-  assert.deepEqual(out.sections[0].blocks.map((b) => (b as { animKind?: string }).animKind ?? b.kind), ["explain", ANIM_KINDS[0]]);
+  assert.deepEqual(out.sections[0].blocks.map((b) => (b as { animKind?: string }).animKind ?? b.kind), ["explain", "explain", ANIM_KINDS[0]]);
+  assert.match(String((out.sections[0].blocks[1] as { text?: string }).text), /frissítsd az oldalt/i);
   assert.equal(dropUnknownAnimateBlocks(null), null);
 });
 

@@ -9,6 +9,7 @@
  *   POST /api/admin/game-accounts/:id/unlink-learner → a tanulói profil kapcsolatának bontása (review #449 K2)
  *   POST /api/admin/game-accounts/:id/delete { confirm: "TÖRLÉS" } → VÉGLEGES törlés (N2), a saját törléssel azonos művelet
  *   GET  /api/admin/game-accounts/deleted-bans        → a törölt, de tiltva maradt bejegyzések (K1) — cím és maszk nélkül
+ *   GET  /api/admin/game-accounts/email-collisions    → P-020: azonos postafiókú (alias) fiókcsoportok kézi összevonáshoz, maszkolt cím
  *   POST /api/admin/game-accounts/deleted-bans/:ref/unban → a bejegyzés feloldása (az ujjlenyomat törlése)
  * A flagtől független (az admin a kikapcsolt bevezetés alatt is látja / tilthatja a fiókokat).
  */
@@ -44,6 +45,25 @@ export function createPlayerAdminRouter(accounts: PlayerAccountStore): Router {
     } catch (error) {
       logger.error("[PLAYER-ADMIN] lista hiba:", errMsg(error));
       return res.status(500).json({ message: "Hiba a játékosok lekérésekor" });
+    }
+  });
+
+  // P-020 (tulajdonosi döntés 2026-11-23): a migráció előtt keletkezett, azonos postafiókú fiókok — NEM vonjuk össze automatikusan,
+  // csak listázzuk (maszkolt cím; a teljes cím a meglévő `/:id/email` végponton kérhető le fiókonként).
+  router.get("/email-collisions", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const groups = await accounts.listEmailCollisions();
+      return res.json({
+        groups: groups.map((g) => ({
+          accounts: g.accounts.map((a) => ({
+            id: a.id, nickname: a.nickname, maskedEmail: maskEmail(a.email), createdAt: a.createdAt, lastSeenAt: a.lastSeenAt, banned: a.banned,
+          })),
+        })),
+      });
+    } catch (error) {
+      logger.error("[PLAYER-ADMIN] ütközés-lista hiba:", errMsg(error));
+      return res.status(500).json({ message: "Hiba az ütközés-lista lekérésekor" });
     }
   });
 

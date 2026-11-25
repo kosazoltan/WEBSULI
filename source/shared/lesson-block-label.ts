@@ -1,6 +1,6 @@
 import type { AgeBand, Block } from "./lesson-schema";
 import { BAND_THEME } from "./lesson-band";
-import { OPENER_STAGES } from "./lesson-opener";
+import { OPENER_STAGES, OPENING_FORM_LABEL } from "./lesson-opener";
 
 /**
  * Spec 2026-11-08-borito-blokkcimkek: a blokk fejléce a TARTALOMBÓL — Célkártya, mese, a magyarázat mélysége, az ábra és a feladat fajtája.
@@ -37,7 +37,28 @@ export const ANIM_LABELS: Readonly<Record<string, string>> = {
   numberLine: "Számegyenes", fraction: "Törtmodell", timeline: "Idővonal", geometry: "Ábra", process: "Folyamat", map: "Térkép",
   wordBuilder: "Szóépítő", sentenceParts: "Mondatelemzés", triangleArea: "Kísérlet", decisionStory: "Döntéshelyzet", cycle: "Körforgás",
   labeledShape: "Feliratos ábra", barChart: "Diagram", venn: "Halmazábra", illustration: "Illusztráció", scene3d: "3D-modell",
+  table: "Táblázat", ruleBox: "Szabály", compareCards: "Hasonlítsd össze!", decisionTree: "Döntési fa", pictureCards: "Képes kártyák",
 };
+
+/**
+ * Spec 2026-11-18 (tananyaggyártás minősége, S2a): a forrás-ábrák megjelenítőinek feliratai — KÓDSZÓTÁR, nem modellkimenet. A
+ * blokkfejléc korosztályonként; a megjelenítőn belüli feliratok (a tónus neve, „Példa”, a görgetés jelzése) sávfüggetlenek.
+ */
+export type RuleBoxTone = "rule" | "warning" | "tip";
+export const SOURCE_VISUAL_HEAD_LABELS: Readonly<Record<AgeBand, { table: string; compareCards: string; ruleBox: Record<RuleBoxTone, string> }>> = {
+  kid: { table: "Táblázat", compareCards: "Hasonlítsd össze!", ruleBox: { rule: "Jegyezd meg!", warning: "Figyelj!", tip: "Tipp" } },
+  teen: { table: "Táblázat", compareCards: "Hasonlítsd össze!", ruleBox: { rule: "Szabály", warning: "Figyelj!", tip: "Tipp" } },
+  senior: { table: "Táblázat", compareCards: "Összehasonlítás", ruleBox: { rule: "Szabály", warning: "Figyelem", tip: "Tipp" } },
+};
+export const SOURCE_VISUAL_TEXT = {
+  ruleBoxTone: { rule: "Szabály", warning: "Figyelj!", tip: "Tipp" } as Readonly<Record<RuleBoxTone, string>>,
+  example: "Példa",
+  tableFallbackName: "Táblázat",
+  /** Görgő táblánál: érintőképernyőn húzni kell, egérrel / billentyűvel görgetni (a megjelenítő a mutatóeszköz szerint választ). */
+  scrollHintTouch: "Húzd oldalra a táblázatot",
+  scrollHint: "A táblázat oldalra görgethető",
+} as const;
+const ruleBoxTone = (params: unknown): RuleBoxTone => { const t = (params as { tone?: unknown } | null)?.tone; return t === "warning" || t === "tip" ? t : "rule"; };
 
 export const TRY_LABELS: Readonly<Record<string, string>> = { dragSort: "Rendezd sorba", fillBlank: "Egészítsd ki", match: "Párosítsd" };
 
@@ -57,13 +78,21 @@ export function checkFormLabel(question: string): string | null {
   return CHECK_FORMS.find(([re]) => re.test(question))?.[1] ?? null;
 }
 
-export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand, classroom?: number, isLastSection?: boolean): string {
+/** `openingForm` (S5b, docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 11. szakasz): a jelölt lecke kiosztott nyitásformája. */
+export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: number, band: AgeBand, classroom?: number, isLastSection?: boolean, openingForm?: string): string {
   const block = blocks[index];
   const theme = BAND_THEME[band];
   switch (block.kind) {
     case "explain": {
       if (sectionIdx === 0 && index === 0 && isGoalCardText(block.text)) return "A lecke célja";
       const prev = blocks[index - 1];
+      // S5b vak kör 1 (L1): jelölt leckén (ismert kiosztott forma) a nyitóblokk a Célkártya utáni ELSŐ explain blokk — az ábrák állomása
+      // a Célkártya után ábrát illeszthet be, a nyitás ettől még nyitás. Jelöletlen leckén a régi, pozíciós szabály marad.
+      // Review #534 (Copilot): a tárolt jelölő további mezői típusellenőrzés nélkül jönnek — nem szöveg formánál a régi címke marad.
+      if (sectionIdx === 0 && index > 0 && typeof openingForm === "string" && Object.prototype.hasOwnProperty.call(OPENING_FORM_LABEL, openingForm)) {
+        const goal = blocks[0];
+        if (goal?.kind === "explain" && isGoalCardText(goal.text) && blocks.findIndex((b, i) => i > 0 && b.kind === "explain") === index) return OPENING_FORM_LABEL[openingForm];
+      }
       if (sectionIdx === 0 && index === 1 && prev?.kind === "explain" && isGoalCardText(prev.text)) {
         // Review #405: „Mese” csak 1–4. évfolyamon; a programozás (0) a kid sávba esik, de 7–8. korcsoport → „Történet”.
         const young = classroom === undefined ? band === "kid" : classroom >= 1 && classroom <= 4;
@@ -80,7 +109,12 @@ export function blockLabel(blocks: readonly Block[], index: number, sectionIdx: 
       const lastRecap = isLastSection && !blocks.slice(index + 1).some((b) => b.kind === "recap");
       return lastRecap ? "A lecke tanulsága" : theme.labels.recap;
     }
-    case "animate": return ANIM_LABELS[block.animKind] ?? "Ábra";
+    case "animate": {
+      const own = SOURCE_VISUAL_HEAD_LABELS[band];
+      if (block.animKind === "ruleBox") return own.ruleBox[ruleBoxTone(block.params)];
+      if (block.animKind === "table" || block.animKind === "compareCards") return own[block.animKind];
+      return ANIM_LABELS[block.animKind] ?? "Ábra";
+    }
     case "try": return TRY_LABELS[block.tryKind] ?? "Próbáld ki";
   }
 }

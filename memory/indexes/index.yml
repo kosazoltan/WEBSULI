@@ -56,6 +56,13 @@ collections:
       - session-dev-log.md
     tags: [session-log]
 
+  notes:
+    path: memory/notes/
+    description: "Kapcsolt jegyzetek (Obsidian-kompatibilis), témánként egy fájl; belépő: memory/index.qmd"
+    files:
+      - 00-Index.md
+    tags: [notes, index]
+
 # Archivált (halott infrastruktúra, nem törölve — csak kivezetve):
 #   docs/archive/memory-dead-vps-20260906/  (29 fájl: Hostinger, VPS, SSH,
 #   Cloudflare, MCP-config, GitHub-Actions-VPS deploy)

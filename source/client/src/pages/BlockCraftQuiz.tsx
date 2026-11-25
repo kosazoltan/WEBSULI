@@ -15,6 +15,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import * as THREE from "three";
 import { createGameRenderer, createGradientSky, detectLookTier, disposeObjectTree, LOOK_BUDGET, SparkleField } from "@/game-engine/three-look";
+import type { PerfControls, PerfOverlay } from "@/game-engine/perf/perfOverlay";
+import { perfEnabledFrom } from "@/game-engine/perf/perfFlag";
+import { isLightGraphicsFrom, isTouchDeviceFrom, LIGHT_GRAPHICS_MAX_PIXELS, scaledPixelRatio } from "@/game-engine/perf/pixelBudget";
+import { SUN_SHADE_TINT, sunShadeAt, type SunOccluder } from "@/lib/voxelSunShade";
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Blocks, Gem, Pause, RefreshCw } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
@@ -535,25 +539,39 @@ function buildPureDirtPattern(): string[][] {
  *
  * Box face order: +X, -X, +Y (top), -Y (bottom), +Z, -Z.
  */
-function makeBlockMaterials() {
+type BlockMaterial = THREE.MeshStandardMaterial | THREE.MeshLambertMaterial | THREE.MeshPhongMaterial;
+
+/**
+ * `lite` (telefonos szint: low / medium — terv: docs/specs/2026-11-17-kockavadasz-telefon-gyors.md, 3/b, 3/d): a PBR helyett olcsó
+ * Lambert-árnyalás ugyanazzal a textúrával és önvilágítással; a lomb átlátszatlan (a textúrája teljesen fedő), a víz Phong
+ * (megmarad a csillanás). `lite === false` (high szint) a korábbi anyagokat adja, változatlanul.
+ */
+function makeBlockMaterials(lite = false) {
   const buildTex = (t: number, c = 0, r = 0) => gridToTexture(mcBlockPatternBuild(t, c, r));
 
   const stdMat = (
     tex: THREE.Texture,
     options: Partial<THREE.MeshStandardMaterialParameters> = {},
-  ) =>
-    new THREE.MeshStandardMaterial({
+  ): BlockMaterial => {
+    if (lite) {
+      const m = new THREE.MeshLambertMaterial({ map: tex });
+      if (options.emissive !== undefined) m.emissive.set(options.emissive);
+      if (options.emissiveIntensity !== undefined) m.emissiveIntensity = options.emissiveIntensity;
+      return m;
+    }
+    return new THREE.MeshStandardMaterial({
       map: tex,
       roughness: 0.92,
       metalness: 0.02,
       ...options,
     });
+  };
 
   // GRASS — per-face textúra: top=fű, sides=fű+dirt, bottom=dirt.
   const grassTopTex = gridToTexture(buildGrassTopPattern());
   const grassSideTex = buildTex(GRASS);
   const dirtTex = gridToTexture(buildPureDirtPattern());
-  const grassMaterials: THREE.MeshStandardMaterial[] = [
+  const grassMaterials: BlockMaterial[] = [
     stdMat(grassSideTex), // +X (right side)
     stdMat(grassSideTex), // -X (left side)
     stdMat(grassTopTex),  // +Y (top — tiszta fű)
@@ -578,18 +596,18 @@ function makeBlockMaterials() {
     }
   }
   const logTopTex = gridToTexture(logTopGrid);
-  const logMaterials: THREE.MeshStandardMaterial[] = [
+  const logMaterials: BlockMaterial[] = [
     stdMat(logSideTex), stdMat(logSideTex),
     stdMat(logTopTex),  stdMat(logTopTex),
     stdMat(logSideTex), stdMat(logSideTex),
   ];
 
-  const map = new Map<number, THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[]>();
+  const map = new Map<number, BlockMaterial | BlockMaterial[]>();
   map.set(GRASS, grassMaterials);
   map.set(LOG, logMaterials);
   map.set(DIRT, stdMat(dirtTex));
   map.set(STONE, stdMat(buildTex(STONE)));
-  map.set(LEAVES, stdMat(buildTex(LEAVES), { transparent: true, opacity: 0.93, alphaTest: 0.05 }));
+  map.set(LEAVES, lite ? stdMat(buildTex(LEAVES)) : stdMat(buildTex(LEAVES), { transparent: true, opacity: 0.93, alphaTest: 0.05 }));
   map.set(COAL, stdMat(buildTex(COAL), { emissive: new THREE.Color("#111111"), emissiveIntensity: 0.20 }));
   map.set(IRON, stdMat(buildTex(IRON), { emissive: new THREE.Color("#8a4f24"), emissiveIntensity: 0.20 }));
   map.set(DIAMOND, stdMat(buildTex(DIAMOND), { emissive: new THREE.Color("#2dd4e8"), emissiveIntensity: 0.50 }));
@@ -600,7 +618,12 @@ function makeBlockMaterials() {
   const waterTex = buildTex(WATER);
   waterTex.wrapS = THREE.RepeatWrapping;
   waterTex.wrapT = THREE.RepeatWrapping;
-  map.set(WATER, stdMat(waterTex, { transparent: true, opacity: 0.78, roughness: 0.15, metalness: 0.1 }));
+  map.set(
+    WATER,
+    lite
+      ? new THREE.MeshPhongMaterial({ map: waterTex, transparent: true, opacity: 0.78, shininess: 90, specular: 0x8fb8d8 })
+      : stdMat(waterTex, { transparent: true, opacity: 0.78, roughness: 0.15, metalness: 0.1 }),
+  );
   map.set(ZOMBIE, stdMat(buildTex(ZOMBIE), { emissive: new THREE.Color("#1a3a1f"), emissiveIntensity: 0.28 }));
   map.set(SKELETON, stdMat(buildTex(SKELETON), { emissive: new THREE.Color("#7a7870"), emissiveIntensity: 0.18 }));
   map.set(SPIDER, stdMat(buildTex(SPIDER), { emissive: new THREE.Color("#3a0a06"), emissiveIntensity: 0.24 }));
@@ -1943,7 +1966,10 @@ export default function BlockCraftQuiz() {
     // KSZ-8 / K.4/1: a közös `createGameRenderer` (ACES, sRGB, a tier pixelarány-plafonja, low tieren antialias nélkül).
     const tier = detectLookTier();
     const budget = LOOK_BUDGET[tier];
-    const created = createGameRenderer(canvas, tier, { exposure: 1.0 });
+    // Telefonos szint (low / medium): nincs árnyéktérkép (képpontonként 5 mintavétel volt), olcsó anyag, kisebb anizotrópia —
+    // a kép mélységét sütött blokk-árnyék adja (lásd `shadeCell`). A high szint változatlan (#504).
+    const lite = tier !== "high";
+    const created = createGameRenderer(canvas, tier, { exposure: 1.0, shadows: !lite });
     if (!created) {
       // WebGL nélkül nincs 3D jelenet: a „Grafika újraindítása” réteg jelzi (a menü és a kilépés elérhető marad).
       setGlLost(true);
@@ -1977,7 +2003,8 @@ export default function BlockCraftQuiz() {
     const scene = new THREE.Scene();
     const skyColor = new THREE.Color(cfg0.skyTint.day);
     scene.background = skyColor;
-    scene.fog = new THREE.FogExp2(skyColor, cfg0.weather === "sandstorm" ? 0.035 : 0.022);
+    const fog = new THREE.FogExp2(skyColor, cfg0.weather === "sandstorm" ? 0.035 : 0.022);
+    scene.fog = fog;
 
     // Meleg, barátságos fénymérleg: égbolt-kék felülről, meleg föld-visszaverődés alulról,
     // plusz oldalról-felülről érkező napfény — a kocka oldalai így jól elkülönülnek.
@@ -2034,25 +2061,55 @@ export default function BlockCraftQuiz() {
     const bufferSize = new THREE.Vector2();
     let appliedW = 0;
     let appliedH = 0;
+    // A felbontás alapértéke a szint dpr-plafonja (nem csökken). Képpontszám-plafon csak „könnyű grafika” módban van (gyenge
+    // eszköz jelei — a Szökőár `isLowEnd` szabálya), a `?perf=1` panel pedig kézzel skálázhat (`perfScale`).
+    const basePixelRatio = renderer.getPixelRatio();
+    let perfScale = 1;
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    const touchDevice = isTouchDeviceFrom(typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches, Math.min(window.screen?.width ?? 0, window.screen?.height ?? 0));
+    const lightGraphics = lite && isLightGraphicsFrom({ tier, touchDevice, reducedMotion: reducedMotionRef.current, memoryGb: typeof deviceMemory === "number" ? deviceMemory : null });
     const syncSize = () => {
       const { width, height } = desiredCanvasCssSize(canvas);
       if (width === appliedW && height === appliedH) return;
       appliedW = width;
       appliedH = height;
+      // A panel százaléka a plafonos 100 %-ot skálázza (2026-11-21 vak kör L3): aktív plafonnál is három különböző felbontás.
+      const ratio = scaledPixelRatio(width, height, basePixelRatio, perfScale, lightGraphics ? LIGHT_GRAPHICS_MAX_PIXELS : null);
+      if (ratio !== renderer.getPixelRatio()) renderer.setPixelRatio(ratio);
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       sparkles.setViewportHeight(renderer.getDrawingBufferSize(bufferSize).y, camera.fov);
     };
     syncSize();
+    // A képkocka-hurok nem olvas elrendezést: a méretet a megfigyelő jelzésére számoljuk újra (forgatás, kihajtás, menü → játék).
+    let sizeDirty = true;
+    const markSizeDirty = () => {
+      sizeDirty = true;
+    };
+    // 2. vak kör L2 (G-7): a megfigyelő az adott képkocka rAF-lépése UTÁN, a festés ELŐTT jelez — az a kép még a régi pufferrel
+    // készült. Futó hurokban itt (a friss elrendezésből, képkockánkénti olvasás nélkül) azonnal alkalmazzuk az új méretet és
+    // újrarajzolunk, így a festett első kép már az új méretű.
+    const onParentResize = () => {
+      sizeDirty = true;
+      if (disposed || !runningRef.current || lastTRef.current === null) return;
+      sizeDirty = false;
+      const prevW = appliedW;
+      const prevH = appliedH;
+      syncSize();
+      if (appliedW !== prevW || appliedH !== prevH) renderer.render(scene, camera);
+    };
+    const sizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(onParentResize);
+    if (sizeObserver && canvas.parentElement) sizeObserver.observe(canvas.parentElement);
+    window.addEventListener("resize", markSizeDirty);
 
     const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const blockMaterials = makeBlockMaterials();
+    const blockMaterials = makeBlockMaterials(lite);
     // Éles közeli pixelek (Nearest nagyítás), de a távoli kockák ne „zajosodjanak”:
     // mipmap + anizotróp szűrés kicsinyítéskor (a képpont-rajzolat olvasható marad).
-    const maxAniso = tier === "low" ? 1 : Math.min(8, renderer.capabilities.getMaxAnisotropy());
-    const waterMats: THREE.MeshStandardMaterial[] = [];
-    blockMaterials.forEach((mat, t) => {
+    const maxAniso = tier === "low" ? 1 : Math.min(lite ? 2 : 8, renderer.capabilities.getMaxAnisotropy());
+    const waterMats: BlockMaterial[] = [];
+    const prepareMaterials = (set: Map<number, BlockMaterial | BlockMaterial[]>) => set.forEach((mat, t) => {
       for (const m of Array.isArray(mat) ? mat : [mat]) {
         if (m.map) {
           m.map.generateMipmaps = true;
@@ -2085,6 +2142,10 @@ export default function BlockCraftQuiz() {
         m.customProgramCacheKey = () => "bc-block-ao";
       }
     });
+    prepareMaterials(blockMaterials);
+    // `?perf=1` „Anyag” kapcsoló: a másik anyagkészlet (telefonon PBR, high szinten Lambert) lustán épül.
+    let altMaterials: Map<number, BlockMaterial | BlockMaterial[]> | null = null;
+    let activeMaterials = blockMaterials;
 
     // --- Instanced voxel-renderelés (exposed-culling) ---
     // Review #484 M1: blokktípusonként EGY InstancedMesh (a draw call-ok száma nem nő), de a bányászás / lerakás / rúnaérc
@@ -2097,6 +2158,21 @@ export default function BlockCraftQuiz() {
     /** Szabad ég alatti vízfelszín-cellák (x, y, z hármasok) a csillanásokhoz (teljes újraépítéskor számolva — kozmetika). */
     const waterTops: number[] = [];
     const tmpMat = new THREE.Matrix4();
+    // Sütött blokk-árnyék (#504, árnyéktérkép nélküli szinten): a példányszín a nap felőli átló takarásából. A J3a inkrementális
+    // frissítése miatt cellánként számoljuk: új / áthelyezett példánynál, és a változott cella alatti átló celláinál.
+    const shadeColor = new THREE.Color();
+    const bakeShade = !shadowsOn;
+    const occluderAt = (x: number, y: number, z: number): SunOccluder => {
+      if (x < 0 || y < 0 || z < 0 || x >= WX || y >= WY || z >= WZ) return 0;
+      const ot = worldRef.current[vIdx(x, y, z)]!;
+      return ot === AIR || ot === WATER ? 0 : ot === LEAVES ? 1 : 2;
+    };
+    const shadeSlot = (tm: TypeMesh, t: number, slot: number, x: number, y: number, z: number) => {
+      if (!bakeShade || t === WATER) return;
+      const tint = SUN_SHADE_TINT[sunShadeAt(occluderAt, x, y, z, WY)]!;
+      tm.mesh.setColorAt(slot, shadeColor.setRGB(tint[0], tint[1], tint[2]));
+      if (tm.mesh.instanceColor) tm.mesh.instanceColor.needsUpdate = true;
+    };
     const disposeTypeMeshes = () => {
       typeMeshes.forEach((tm) => {
         scene.remove(tm.mesh);
@@ -2105,10 +2181,13 @@ export default function BlockCraftQuiz() {
       typeMeshes.clear();
     };
     const makeTypeMesh = (t: number, capacity: number): TypeMesh | null => {
-      const mat = blockMaterials.get(t);
+      const mat = activeMaterials.get(t);
       if (!mat) return null;
-      const mesh = new THREE.InstancedMesh(blockGeometry, mat as THREE.Material | THREE.Material[], Math.max(16, capacity));
+      const cap = Math.max(16, capacity);
+      const mesh = new THREE.InstancedMesh(blockGeometry, mat as THREE.Material | THREE.Material[], cap);
       mesh.count = 0;
+      // A példányszín-attribútum az első rajzolás előtt létezik (különben a shader példányszín nélkül fordulna le).
+      if (bakeShade && t !== WATER) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
       // A példányok a világ bármely pontjára kerülhetnek: a (lusta) befoglaló gömb elavulna → nincs mesh-szintű vágás.
       mesh.frustumCulled = false;
       if (t === WATER || t === LEAVES) mesh.renderOrder = 1;
@@ -2140,6 +2219,11 @@ export default function BlockCraftQuiz() {
         const moved = tm.cells[last]!;
         tm.mesh.getMatrixAt(last, tmpMat);
         tm.mesh.setMatrixAt(slot, tmpMat);
+        if (tm.mesh.instanceColor) {
+          tm.mesh.getColorAt(last, shadeColor);
+          tm.mesh.setColorAt(slot, shadeColor);
+          tm.mesh.instanceColor.needsUpdate = true;
+        }
         tm.cells[slot] = moved;
         cellSlot[moved] = slot;
       }
@@ -2160,7 +2244,12 @@ export default function BlockCraftQuiz() {
         for (let i = 0; i < tm.mesh.count; i++) {
           tm.mesh.getMatrixAt(i, tmpMat);
           grown.mesh.setMatrixAt(i, tmpMat);
+          if (tm.mesh.instanceColor && grown.mesh.instanceColor) {
+            tm.mesh.getColorAt(i, shadeColor);
+            grown.mesh.setColorAt(i, shadeColor);
+          }
         }
+        if (grown.mesh.instanceColor) grown.mesh.instanceColor.needsUpdate = true;
         grown.mesh.count = tm.mesh.count;
         grown.cells = tm.cells;
         scene.remove(tm.mesh);
@@ -2176,6 +2265,19 @@ export default function BlockCraftQuiz() {
       tm.mesh.instanceMatrix.needsUpdate = true;
       cellSlot[idx] = slot;
       cellType[idx] = t;
+      shadeSlot(tm, t, slot, x, y, z);
+    };
+    /** A (x, y, z) változása a nap felőli átlón alatta lévő cellák árnyalatát érinti: (x, y − k, z + k). */
+    const reshadeBelow = (x: number, y: number, z: number) => {
+      if (!bakeShade) return;
+      for (let k = 1; y - k >= 0 && z + k < WZ; k++) {
+        const ci = vIdx(x, y - k, z + k);
+        const ct = cellType[ci]!;
+        if (ct === 0) continue;
+        const tm = typeMeshes.get(ct);
+        const slot = cellSlot[ci]!;
+        if (tm && slot >= 0) shadeSlot(tm, ct, slot, x, y - k, z + k);
+      }
     };
     const refreshCell = (w: VoxelWorld, x: number, y: number, z: number) => {
       if (x < 0 || y < 0 || z < 0 || x >= WX || y >= WY || z >= WZ) return;
@@ -2232,11 +2334,66 @@ export default function BlockCraftQuiz() {
         refreshCell(w, x, y - 1, z);
         refreshCell(w, x, y, z + 1);
         refreshCell(w, x, y, z - 1);
+        reshadeBelow(x, y, z);
       }
       renderer.shadowMap.needsUpdate = true;
       rebuildBeacons();
     };
     let builtVersion = -1;
+
+    // --- `?perf=1`: eszközön belüli mérőpanel (terv: docs/specs/2026-11-17-kockavadasz-telefon.md, 6. szakasz) ---
+    // A modul csak a paraméterrel töltődik be; nélküle a hurokban három `null`-ellenőrzés a többlet.
+    let perfDisposed = false;
+    const perfControls: PerfControls = {
+      shadowsAvailable: shadowsOn,
+      simpleLabel: lite ? ["Lambert", "PBR"] : ["PBR", "Lambert"],
+      setShadows(on) {
+        sun.castShadow = on;
+        renderer.shadowMap.needsUpdate = true;
+      },
+      setResolution(scale) {
+        perfScale = scale;
+        appliedW = 0;
+        syncSize();
+      },
+      setSimpleMaterials(on) {
+        if (on && !altMaterials) {
+          altMaterials = makeBlockMaterials(!lite);
+          prepareMaterials(altMaterials);
+        }
+        activeMaterials = on && altMaterials ? altMaterials : blockMaterials;
+        // Review #504 (vak, L5): a víz-animáció csak az aktív készlet vízanyagát lépteti (a lista nem halmozódik).
+        waterMats.length = 0;
+        const water = activeMaterials.get(WATER);
+        if (water) waterMats.push(...(Array.isArray(water) ? water : [water]));
+        // A típusonkénti példányhálók az új anyaggal épülnek újra (teljes újraépítés).
+        worldFullRef.current = true;
+        builtVersion = -1;
+      },
+      setFog(on) {
+        scene.fog = on ? fog : null;
+      },
+    };
+    let perf: PerfOverlay | null = null;
+    if (perfEnabledFrom(window.location.search) && canvas.parentElement) {
+      const host = canvas.parentElement;
+      import("@/game-engine/perf/perfOverlay").then(
+        (mod) => {
+          if (perfDisposed) return;
+          perf = mod.createPerfOverlay({ renderer, host, tier, title: "Kockavadász", controls: perfControls, getReactRenders: () => renderCountRef.current,
+            isRunning: () => runningRef.current,
+            // A panel a teljes felső HUD alá kerül — a sort törő súgó és bányászjelzés alá is (2026-11-21 vak kör L4).
+            getTopInset: () => {
+              const hud = host.parentElement?.querySelector('[data-testid="bc-top-hud"]') ?? document.querySelector('[data-testid="bc-top-hud"]');
+              return hud ? hud.getBoundingClientRect().bottom - host.getBoundingClientRect().top + 6 : 4;
+            },
+          });
+        },
+        () => {
+          // A mérőpanel nélkül a játék változatlanul fut.
+        },
+      );
+    }
 
     // --- Cél-keret (sárga, pulzáló) a crosshair-blokkon ---
     const hlGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004));
@@ -2508,7 +2665,6 @@ export default function BlockCraftQuiz() {
       (u.horizonColor.value as THREE.Color).copy(horizon);
       (u.bottomColor.value as THREE.Color).copy(horizon).multiplyScalar(0.85);
       skyColor.copy(horizon);
-      const fog = scene.fog as THREE.FogExp2;
       fog.color.copy(horizon);
       fog.density = cfg.weather === "sandstorm" ? 0.035 : 0.022;
       hemi.color.copy(horizon).lerp(white, 0.35);
@@ -2603,6 +2759,10 @@ export default function BlockCraftQuiz() {
       const realMs = Math.min(250, Math.max(0, now - last));
       // A kozmetika (felhő, por, időjárás) változó dt-vel fut; a JÁTÉKMENET a mag fix lépésű hurkában (K.4/9, KSZ-4).
       const dt = Math.min(0.05, Math.max(0.0001, realMs / 1000));
+      // A hurok (újra)indulása (szünet / folytatás) a `lastTRef === null` — a panel ebből tudja, hogy a rés nem képkocka (L1).
+      perf?.frameStart(now, lastTRef.current === null);
+      // A hurok (újra)indulásának első képkockáján is mérünk: a vászon szülője ekkor válik láthatóvá.
+      const restarted = lastTRef.current === null;
       lastTRef.current = now;
       fpsAcc += realMs;
       fpsFrames += 1;
@@ -2611,7 +2771,10 @@ export default function BlockCraftQuiz() {
         fpsAcc = 0;
         fpsFrames = 0;
       }
-      syncSize();
+      if (sizeDirty || !sizeObserver || restarted) {
+        sizeDirty = false;
+        syncSize();
+      }
 
       // Új pálya → új égbolt/köd/időjárás (a scene egyszer épül, a pálya viszont váltakozik).
       if (lookLevel !== activeLevelRef.current) applyLevelLook(activeLevelRef.current);
@@ -2818,7 +2981,9 @@ export default function BlockCraftQuiz() {
         b.mat.opacity = Math.min(1, b.life / 0.35);
       }
 
+      perf?.beforeRender();
       renderer.render(scene, camera);
+      perf?.afterRender();
     };
     lastTRef.current = null;
     // G1: a loop indítását/leállítását a phase-vezérelt effect végzi (lentebb).
@@ -2827,6 +2992,17 @@ export default function BlockCraftQuiz() {
 
     return () => {
       disposed = true;
+      perfDisposed = true;
+      perf?.dispose();
+      perf = null;
+      sizeObserver?.disconnect();
+      window.removeEventListener("resize", markSizeDirty);
+      altMaterials?.forEach((mat) => {
+        for (const m of Array.isArray(mat) ? mat : [mat]) {
+          m.map?.dispose();
+          m.dispose();
+        }
+      });
       runningRef.current = false;
       stepRef.current = null;
       cancelGameFrame(rafRef.current);
@@ -3819,7 +3995,7 @@ export default function BlockCraftQuiz() {
 
             {/* HUD a vászon tetején (S2 GameHud: idő, XP, rúnaérc-cél, kombó, kristály; 48 px-es szünet gomb). */}
             {inRun && (
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col">
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col" data-testid="bc-top-hud">
                 <GameHud
                   stats={hudStats}
                   onPause={pauseGame}

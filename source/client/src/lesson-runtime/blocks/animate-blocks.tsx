@@ -5,6 +5,9 @@ import { TriangleAreaLab } from "./TriangleAreaLab";
 import { DecisionStory } from "./DecisionStory";
 import { BarChartAnim, CycleAnim, IllustrationAnim, LabeledShapeAnim, RichNumberLineAnim, VennAnim } from "./explanatory-visuals";
 import { Scene3dAnim } from "./scene3d-anim";
+import { CompareCardsAnim, RuleBoxAnim, TableAnim } from "./source-visuals";
+import { DecisionTreeAnim, PictureCardsAnim } from "./tree-cards";
+import { SourceImageAnim } from "./source-image";
 
 /**
  * LS-4 — the eight planned animation kinds (master plan §4).
@@ -17,7 +20,7 @@ import { Scene3dAnim } from "./scene3d-anim";
  * just without movement.
  */
 
-type AnimProps = { params: Record<string, unknown>; caption: string };
+type AnimProps = { params: Record<string, unknown>; caption: string; label?: string };
 
 function str(v: unknown, fallback: string): string {
   return typeof v === "string" && v.length > 0 ? v : fallback;
@@ -202,4 +205,10 @@ export const ANIMATE_REGISTRY: Record<AnimKind, ComponentType<AnimProps>> = {
   venn: VennAnim,
   illustration: IllustrationAnim,
   scene3d: Scene3dAnim,
+  table: TableAnim,
+  ruleBox: RuleBoxAnim,
+  compareCards: CompareCardsAnim,
+  decisionTree: DecisionTreeAnim,
+  pictureCards: PictureCardsAnim,
+  sourceImage: SourceImageAnim,
 };

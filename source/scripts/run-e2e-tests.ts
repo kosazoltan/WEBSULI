@@ -18,6 +18,12 @@ delete env.DATABASE_URL; delete env.DEV_DATABASE_URL; delete env.NEON_DATABASE_U
 function command(file: string, args: string[]) {
   return execFileSync(file, args, { cwd, env, encoding: "utf8", windowsHide: true, timeout: 60_000, maxBuffer: 8 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }).trim();
 }
+// The whole Playwright run is bounded (default 60 min). The local PR gate runs every UI spec that names a changed component in ONE
+// worker (2026-11-23: 556 tests / 27 specs hit the 60-min cap with 549 passed and 0 failed) and raises it via WEBSULI_E2E_TIMEOUT_MIN.
+export function playwrightTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const minutes = Number(env.WEBSULI_E2E_TIMEOUT_MIN);
+  return (Number.isFinite(minutes) && minutes > 0 ? minutes : 60) * 60_000;
+}
 function run(args: string[], childEnv: NodeJS.ProcessEnv, timeoutMs: number, label: string) {
   return new Promise<number>((resolve, reject) => {
     const child = spawn(process.execPath, args, { cwd, env: childEnv, windowsHide: true, stdio: "inherit" });
@@ -85,7 +91,7 @@ try {
   if (await run(["--import", "tsx", "tests/e2e-seed.ts"], dbEnv, 60_000, "E2E seed") !== 0) throw new Error("E2E seed failed");
   process.exitCode = await run(["node_modules/@playwright/test/cli.js", "test", ...process.argv.slice(2)], {
     ...dbEnv, WEBSULI_E2E: "1", WEBSULI_E2E_PORT: String(await freePort()), SESSION_SECRET: randomBytes(32).toString("hex"), PW_TEST_HTML_REPORT_OPEN: "never",
-  }, 60 * 60_000, "Playwright");
+  }, playwrightTimeoutMs(), "Playwright");
 } catch (error) {
   // Do not print an error object that could include a child environment/connection URL.
   console.error(error instanceof Error ? error.message.replaceAll(password, "[redacted]") : "E2E harness failed");

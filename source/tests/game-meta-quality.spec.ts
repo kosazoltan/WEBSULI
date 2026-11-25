@@ -54,7 +54,7 @@ async function openMenuSettings(page: Page): Promise<void> {
 
 /**
  * Valódi érintéses húzás felfelé (a tartalom lefelé görög): CDP `Input.dispatchTouchEvent` touchStart → 10 touchMove →
- * touchEnd — a böngésző ugyanúgy görget, mint ujjal (a `synthesizeScrollGesture` touch módja az emulált profilban nem
+ * 3 álló touchMove (40 ms-onként, az ujj megáll: nincs lendület) → touchEnd — a böngésző ugyanúgy görget, mint ujjal (a `synthesizeScrollGesture` touch módja az emulált profilban nem
  * görgetett, mérve 2026-11-16).
  */
 async function swipeUp(page: Page, x: number, y: number, distance: number): Promise<void> {
@@ -63,9 +63,42 @@ async function swipeUp(page: Page, x: number, y: number, distance: number): Prom
   for (let i = 1; i <= 10; i++) {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - (distance * i) / 10 }] });
   }
+  // Az ujj a végén megáll (mint egy gondos kéz): nulla sebességnél nincs lendület (fling). Lendület közben a Chromium a következő
+  // koppintást a fling megállítására használja és nem ad `click`-et — a lap aljánál a fling a határon „fut”, a pozíció nem változik,
+  // ezért pozíció-figyeléssel nem várható ki (2026-11-23: lassabb gépen a Vissza és az utolsó jármű koppintása elnyelődött).
+  const endY = y - distance;
+  for (let i = 0; i < 3; i++) {
+    await page.waitForTimeout(40);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: endY }] });
+  }
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await cdp.detach();
-  await page.waitForTimeout(150);
+  await waitScrollSettled(page);
+}
+
+/**
+ * A görgetés végéig vár: a lap és minden görgethető elem pozíciója 3 egymást követő mintán (50 ms) azonos; ha a határidőig
+ * nem nyugszik meg, hibával áll le (nem koppint mozgó lapra). A lendület (fling) ellen nem ez véd — a határon futó fling a
+ * pozíciót nem mozdítja —, hanem a `swipeUp` álló touchMove-jai.
+ */
+async function waitScrollSettled(page: Page, timeoutMs = 3000): Promise<void> {
+  const sample = () => page.evaluate(() => {
+    const pos = [window.scrollX, window.scrollY];
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
+      if (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) pos.push(el.scrollTop, el.scrollLeft);
+    }
+    return pos.join(",");
+  });
+  const deadline = Date.now() + timeoutMs;
+  let last = await sample();
+  let stable = 0;
+  while (stable < 3 && Date.now() < deadline) {
+    await page.waitForTimeout(50);
+    const now = await sample();
+    stable = now === last ? stable + 1 : 0;
+    last = now;
+  }
+  if (stable < 3) throw new Error(`a görgetés ${timeoutMs} ms alatt sem nyugodott meg`);
 }
 
 async function atPageBottom(page: Page): Promise<boolean> {

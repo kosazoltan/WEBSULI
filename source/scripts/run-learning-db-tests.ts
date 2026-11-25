@@ -89,21 +89,66 @@ try {
   const taskResultsMigration = await readFile(new URL("../migrations/0037_task_results.sql", import.meta.url), "utf8");
   await pool.query(taskResultsMigration);
   await pool.query(taskResultsMigration);
+  // Adventi naptár S2a: az adventi táblák (0042) a player_accounts-ra hivatkoznak, ezért az eldobható adatbázisban előbb ezek
+  // törlődnek; a 0040 után a 0042 migrációs fájl hozza létre őket újra.
+  await pool.query("DROP TABLE advent_announcements; DROP TABLE advent_progress");
   // JM7a: a játékos-fiók táblái (0040) a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
   await pool.query("DROP TABLE player_auth_codes; DROP TABLE player_accounts");
   const playerMigration = await readFile(new URL("../migrations/0040_player_accounts.sql", import.meta.url), "utf8");
   await pool.query(playerMigration);
   await pool.query(playerMigration);
+  // Adventi naptár S2a: az előrehaladás és az értesítő-foglalás táblái (0042) a migrációs fájlból, kétszer — idempotens.
+  const adventMigration = await readFile(new URL("../migrations/0042_advent_progress.sql", import.meta.url), "utf8");
+  await pool.query(adventMigration);
+  await pool.query(adventMigration);
+  // S8b: a leckehangok táblája (0043) a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
+  await pool.query("DROP TABLE lesson_tts_audio");
+  const ttsAudioMigration = await readFile(new URL("../migrations/0043_lesson_tts_audio.sql", import.meta.url), "utf8");
+  await pool.query(ttsAudioMigration);
+  await pool.query(ttsAudioMigration);
+  // Copilot-review #418: a kisfilm-média árvasági oszlopa (0044) a migrációs fájlból (nem a séma-exportból), kétszer — idempotens.
+  await pool.query("ALTER TABLE lesson_clip_media DROP COLUMN orphaned_at");
+  const clipOrphanMigration = await readFile(new URL("../migrations/0044_lesson_clip_media_orphaned.sql", import.meta.url), "utf8");
+  await pool.query(clipOrphanMigration);
+  await pool.query(clipOrphanMigration);
+  // P-020: a postafiók-kulcs (generált oszlop) + ütközés-jelölő + részleges egyedi index (0045) a migrációs fájlból, kétszer —
+  // idempotens. A player_accounts a 0040-ből jött létre (fent), így az oszlopok itt, a migrációból kerülnek rá.
+  const emailKeyMigration = await readFile(new URL("../migrations/0045_player_email_key.sql", import.meta.url), "utf8");
+  await pool.query(emailKeyMigration);
+  await pool.query(emailKeyMigration);
+  // #1986: a tananyagcsoportok (0046) a migrációs fájlból (a tulajdonosi hozzárendeléssel együtt), kétszer — idempotens.
+  await pool.query("DROP TABLE track_assignments; ALTER TABLE html_files DROP COLUMN tracks");
+  const tracksMigration = await readFile(new URL("../migrations/0046_material_tracks.sql", import.meta.url), "utf8");
+  await pool.query(tracksMigration);
+  await pool.query(tracksMigration);
+  // U4a: az összevont eredménylevél félretételi táblája (0047) a migrációs fájlból, kétszer — idempotens.
+  await pool.query("DROP TABLE lesson_result_pending");
+  const pendingMigration = await readFile(new URL("../migrations/0047_lesson_result_pending.sql", import.meta.url), "utf8");
+  await pool.query(pendingMigration);
+  await pool.query(pendingMigration);
+  // U4b review #586: a kézbesítés tartós nyoma (0048), kétszer — idempotens.
+  const deliveryMigration = await readFile(new URL("../migrations/0048_lesson_result_pending_delivery.sql", import.meta.url), "utf8");
+  await pool.query(deliveryMigration);
+  await pool.query(deliveryMigration);
+  // D1H-1: a forrás kivágott képei (0049) a migrációs fájlból, kétszer — idempotens.
+  await pool.query("DROP TABLE lesson_source_images");
+  const sourceImagesMigration = await readFile(new URL("../migrations/0049_lesson_source_images.sql", import.meta.url), "utf8");
+  await pool.query(sourceImagesMigration);
+  await pool.query(sourceImagesMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
     // The reconciler intentionally scans all workflow rows; isolate suite-owned lifecycle tests.
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/daily-reminder-db.integration.ts", "tests/newsletter-db.integration.ts", "tests/admin-authz-matrix-db.integration.ts", "tests/player-auth-db.integration.ts", "tests/player-account-db.integration.ts", "tests/material-classroom-db.integration.ts", "tests/admin-allowlist-db.integration.ts", "tests/set-admin-script-db.integration.ts", "tests/quiz-bank-scale-db.integration.ts", "tests/blockcraft-score-version-db.integration.ts"], {
+    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/blockcraft-score-version-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/lesson-result-email-partial-db.integration.ts", "tests/daily-reminder-db.integration.ts", "tests/newsletter-db.integration.ts", "tests/admin-authz-matrix-db.integration.ts", "tests/player-auth-db.integration.ts", "tests/player-account-db.integration.ts", "tests/material-classroom-db.integration.ts", "tests/admin-allowlist-db.integration.ts", "tests/set-admin-script-db.integration.ts", "tests/quiz-bank-scale-db.integration.ts", "tests/advent-db.integration.ts", "tests/advent-routes-db.integration.ts", "tests/tts-audio-db.integration.ts", "tests/lesson-clips-db.integration.ts", "tests/tracks-db.integration.ts", "tests/lesson-result-pending-db.integration.ts", "tests/lesson-result-combined-db.integration.ts", "tests/source-images-db.integration.ts"], {
       cwd, env: { ...env, DATABASE_URL: databaseUrl, NODE_ENV: "test", WEBSULI_DISPOSABLE_DB: name },
       windowsHide: true, stdio: "inherit",
     });
     // JM7a: az admin-jogosultsági mátrix (~110 végpont × 7 szerep × 2 menet, valódi HTTP) miatt 120 s → 300 s.
-    const timeout = setTimeout(() => { child.kill(); reject(new Error("Database integration tests timed out")); }, 300_000);
+    // Adventi naptár S2b: a kör az S2a után 286 s volt (mérve, 2026-11-18); a végpont-tesztek (valódi HTTP, a 144 írásos
+    // legrosszabb esettel) ~50 s-ot adnak hozzá → 300 s → 480 s. Mérve 2026-11-18 (S2b 2. visszanézés után, terheletlen gépen):
+    // 226 teszt 300 s (a teljes parancs 306 s) → 37% tartalék. Ha a tartalék 15% alá megy, a teszteket kell gyorsítani
+    // (kevesebb kliens azonos fedéssel, párhuzamos kérések), NEM a korlátot emelni.
+    const timeout = setTimeout(() => { child.kill(); reject(new Error("Database integration tests timed out")); }, 480_000);
     child.once("error", error => { clearTimeout(timeout); reject(error); });
     child.once("exit", status => { clearTimeout(timeout); resolve(status ?? 1); });
   });

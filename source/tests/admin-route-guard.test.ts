@@ -37,6 +37,7 @@ const PINNED_ADMIN_ENDPOINTS = [
   "GET /api/static-audit",
   "POST /api/html-files",
   "PATCH /api/html-files/:id",
+  "PUT /api/html-files/:id/tracks", // #1986: anyag csoporttagsága (kézi admin-írás)
   "POST /api/html-files/reorder",
   "DELETE /api/html-files/:id",
   "POST /api/html-files/:id/send-email",
@@ -56,6 +57,7 @@ const PINNED_ADMIN_ENDPOINTS = [
 const OWN_DATA = new Set(["POST /api/player/export", "POST /api/player/account/delete/start", "POST /api/player/account/delete"]);
 
 const PUBLIC_ENDPOINTS: Record<string, string> = {
+  "GET /api/tracks/mine": "#1986: a bejelentkezett fiók saját csoportjai (vendégnek üres lista; csak a munkamenet saját fiókkulcsa)",
   "GET /auth/google": "Google-belépés indítása (OAuth)",
   "GET /auth/google/callback": "Google OAuth visszahívás (Passport, session-regenerate)",
   "POST /api/login": "helyi belépés — Origin-allowlist + login-korlát",
@@ -64,8 +66,17 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "POST /api/client-error": "böngészős hibajelentés — Origin-allowlist + IP-korlát + napi plafon",
   "GET /api/design-assets/:id/thumb": "nyilvános arculati kép (csak olvasás)",
   "GET /api/design-assets/:id": "nyilvános arculati kép (csak olvasás)",
+  "GET /api/source-images/:id": "D1H: a lecke kivágott forrásképe (nyilvános, tartalomcímzett, csak olvasás)",
   "POST /api/lessons/arbiter": "nyilvános döntőbíró — Origin-allowlist + IP-korlát, munkamenet-jog nélkül",
   "POST /api/lessons/:lessonId/results": "tanulói eredmény e-mail az adminoknak — CSRF + korlát",
+  "POST /api/lessons/:lessonId/results/status": "U4d: a saját várakozó eredményrész lekérdezése (a beküldéssel azonos kilét, csak tasks/quiz/null) — CSRF + korlát",
+  "GET /api/advent/status": "adventi naptár — a kártya láthatósága; mellékhatás nélkül, flag mögött",
+  "GET /api/advent/state": "adventi naptár — saját állapot olvasása; mellékhatás nélkül (sort nem hoz létre), IP-korlát",
+  "POST /api/advent/grade": "adventi naptár — saját sor (évfolyam), CSRF + alanyonkénti és IP-korlát",
+  "POST /api/advent/doors/:day/open": "adventi naptár — saját sor (kérdés megnyitása), CSRF + alanyonkénti és IP-korlát",
+  "POST /api/advent/doors/:day/answer": "adventi naptár — saját sor (válasz), CSRF + alanyonkénti és IP-korlát",
+  "POST /api/advent/round": "adventi naptár — saját sor (új kör), CSRF + alanyonkénti és IP-korlát",
+  "POST /api/advent/adopt": "adventi naptár — a saját vendégsor átvétele a tanulóhoz (idempotens), CSRF + alanyonkénti és IP-korlát",
   "POST /api/lessons/practice/:lessonId/start": "gyakorlás — bejelentkezett users-felhasználó (saját sor)",
   "GET /api/lessons/practice/:lessonId/review": "gyakorlás — saját adat",
   "GET /api/lessons/practice/:id": "gyakorlás — saját adat",
@@ -123,6 +134,8 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "GET /api/html-files/search": "publikus keresés",
   "GET /api/html-files/:id": "publikus tananyag",
   "GET /api/tts/audio": "felolvasás — korlát",
+  "GET /api/tts/lesson-audio/:id": "S8b: előre gyártott leckehang — csak olvasás, tartalomcímzett, korlát",
+  "GET /api/tts/lesson-audio/available": "S8b: a hangtár elérhetőségi jegyzéke — csak olvasás, csak kulcsformátum, darabszám-plafon, korlát",
   "POST /api/tts": "felolvasás — CSRF + korlát",
   "POST /api/push/subscribe": "push-feliratkozás — CSRF + korlát",
   "POST /api/push/unsubscribe": "push-leiratkozás — CSRF + korlát",
@@ -156,6 +169,22 @@ describe("JM7a — admin-útvonal regressziós őr", () => {
     }
     const adminCount = inventory.filter((e) => isUnderAdminPrefix(e.path)).length;
     assert.ok(adminCount >= 90, `legalább 90 admin-előtagú végpont várt, ennyi lett: ${adminCount}`);
+  });
+
+  it("adventi naptár S6 (A16): az admin-előnézet minden végpontja — az olvasás, az írások és a saját előnézeti sor törlése (DELETE), valamint a levelek száraz összesítője (P-056) — admin előtag alatt, isAuthenticatedAdmin-nal", () => {
+    const byKey = new Map(inventory.map((e) => [key(e), e]));
+    const expected = [
+      "GET /api/admin/advent/preview/status", "GET /api/admin/advent/preview/state", "POST /api/admin/advent/preview/grade",
+      "POST /api/admin/advent/preview/doors/:day/open", "POST /api/admin/advent/preview/doors/:day/answer",
+      "POST /api/admin/advent/preview/round", "POST /api/admin/advent/preview/adopt", "DELETE /api/admin/advent/preview", "GET /api/admin/advent/mail-report",
+    ];
+    for (const k of expected) {
+      const e = byKey.get(k);
+      assert.ok(e, `hiányzik a leltárból: ${k}`);
+      assert.ok(e.chain.includes(isAuthenticatedAdmin), `${k}: hiányzik az isAuthenticatedAdmin`);
+    }
+    // A nyilvános naptár és az előnézet külön útvonal: a nyilvános /api/advent/* nem kerül admin előtag alá (és fordítva).
+    assert.ok(inventory.filter((e) => e.path.startsWith("/api/advent/")).every((e) => !e.chain.includes(isAuthenticatedAdmin)));
   });
 
   it("az admin előtagok alatt MINDEN végpont isAuthenticatedAdmin-nal védett", () => {
@@ -226,6 +255,7 @@ describe("JM7a — admin-útvonal regressziós őr", () => {
     const admin = inventory.filter((e) => e.path.startsWith("/api/admin/game-accounts"));
     assert.deepEqual(admin.map(key).sort(), [
       "GET /api/admin/game-accounts", "GET /api/admin/game-accounts/:id/email", "GET /api/admin/game-accounts/deleted-bans",
+      "GET /api/admin/game-accounts/email-collisions", // P-020: azonos postafiókú fiókok listája (csak olvasás)
       "POST /api/admin/game-accounts/:id/ban", "POST /api/admin/game-accounts/:id/delete", "POST /api/admin/game-accounts/:id/unban",
       "POST /api/admin/game-accounts/:id/unlink-learner", "POST /api/admin/game-accounts/deleted-bans/:ref/unban",
     ]);

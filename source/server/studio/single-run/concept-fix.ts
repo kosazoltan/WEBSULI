@@ -5,7 +5,11 @@
  */
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { htmlFiles, kmConcepts, knowledgeMaps, lessons } from "../../../shared/schema";
-import { lessonSchema, type Lesson } from "../../../shared/lesson-schema";
+import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
+import { sourceVisualsEnabled } from "../source-visuals-flag";
+import { adoptStoredOpeningForm, runWithLessonVariety } from "../lesson-variety-flag";
+import { carryVarietyMarker, storedVarietyMarker } from "../../../shared/lesson-feedback-openers";
+import { drawableCandidate, withDropReason } from "../undrawable-visuals";
 import type { ExamWeight } from "../../../shared/knowledge-map-schema";
 import { getHtmlFilesCache } from "../../cache/HtmlFilesCache";
 import { workflowPhase } from "../../workflows/engine";
@@ -25,15 +29,30 @@ const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
  * A javítás magja (adatbázis nélkül, tesztelhető): szerzői javítás (a beszélgetésben) → bank → lektor (friss beszélgetésben) → kapu.
  * Hibánál `{ ok: false }` az okkal; siker esetén a jelölt és a lektor jegyzetei (a mentést a hívó végzi).
  */
-export async function fixConceptInConversation(input: {
+type ConceptFixInput = {
   original: Lesson; source: ConceptFixSource; conceptId: string; conversation: LessonConversation; log?: (m: string) => void;
   /** J2: friss, előzmény nélküli beszélgetés (bank, lektor) — ugyanaz a modellpár. */
   fresh: (system: string, opts?: { effort?: import("./conversation").SingleRunEffort }) => LessonConversation;
   /** Review #263: a forrás átirata (a térkép `sourceText`-je) — a friss lektor ehhez is mér, mint a gyártásban. */
   sourceText?: string | null;
-}): Promise<{ ok: true; candidate: Lesson; report: LektorReport } | { ok: false; error: string }> {
+  /** A forrás vizuális leltárának funkciókapcsolója (teszt); hiányában a környezet dönt — KI: a modell leckéjét a bővítés előtti séma méri. */
+  sourceVisuals?: boolean;
+};
+type ConceptFixOutcome = { ok: true; candidate: Lesson; report: LektorReport } | { ok: false; error: string };
+
+/**
+ * S5a vak kör 2 (L3 — kapcsoló-szivárgás): a célzott fogalomjavítás változatossági állapota a TÁROLT lecke jelölője (mint a
+ * leckejavításé) — a bank prompt és verzió ezt követi, nem a környezetet; a jelölt jelölője is a tárolt leckéé (a modellé eldobva).
+ */
+export function fixConceptInConversation(input: ConceptFixInput): Promise<ConceptFixOutcome> {
+  return runWithLessonVariety(storedVarietyMarker(input.original) !== undefined, () => fixConceptScoped(input));
+}
+
+async function fixConceptScoped(input: ConceptFixInput): Promise<ConceptFixOutcome> {
   const { original, source, conceptId, conversation } = input;
   const deps = { conversation, log: input.log };
+  // Review #534 (Copilot): a javítás lektora a tárolt lecke kiosztott formáját kapja konkrét elvárásként.
+  adoptStoredOpeningForm(original);
   // A szűk szerző csak a tanítást szerkeszti; a bank a javított tanításból újraépül, és újra lektorálódik.
   const teaching = { ...original, experience: undefined };
   const { assertRepairCandidate, assertRepairTeaching } = await import("../structured-improvement");
@@ -41,14 +60,20 @@ export async function fixConceptInConversation(input: {
     await workflowPhase("author");
     const prompt = buildConceptFixPrompt(teaching, source, conceptId);
     const candidate = await runStation(deps, "fogalomjavítás", withRoleRunbook([{ type: "text", text: `FOGALOMJAVÍTÁS (${conceptId}).\n${prompt}\nVálaszolj kizárólag a teljes lecke JSON-jával.` }], "author"), (json) => {
-      const parsed = lessonSchema.safeParse(json);
+      const parsed = modelLessonSchema(input.sourceVisuals ?? sourceVisualsEnabled()).safeParse(json);
       if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
-      const check = checkConceptFixResult(teaching, { ...parsed.data, experience: undefined }, conceptId);
-      if (!check.ok) return { ok: false, problems: check.reasons.map((r) => `A javítás túllépett a célfogalmon: ${r}`) };
-      // Review #261: a tanítás kapui (fedettség, megalapozottság, ív) már itt — javító forduló jár rájuk, nem a bank után derülnek ki.
-      try { assertRepairTeaching(original, { ...parsed.data, experience: undefined }, source); }
+      // #515 review: a hibás paraméterű (kirajzolhatatlan) új fajtájú ábrablokk a jelölt elfogadása ELŐTT kimarad — a lejátszó
+      // elrejtené, a javítás mégis „sikeres” lenne. Ha a kiesés után a jelölt bukik, a hiba a kiesés okát is megnevezi (a meglévő
+      // javító fordulón; új kör ezen túl nem indul). KI állapotban nincs mit kivenni (a séma az új fajtát el sem fogadja).
+      let drawn: ReturnType<typeof drawableCandidate>;
+      try { drawn = drawableCandidate(carryVarietyMarker(parsed.data, original), input.log, "Fogalomjavítás"); }
       catch (error) { return { ok: false, problems: [error instanceof Error ? error.message : String(error)] }; }
-      return { ok: true, value: parsed.data };
+      const check = checkConceptFixResult(teaching, { ...drawn.lesson, experience: undefined }, conceptId);
+      if (!check.ok) return { ok: false, problems: check.reasons.map((r) => withDropReason(drawn.notes, `A javítás túllépett a célfogalmon: ${r}`)) };
+      // Review #261: a tanítás kapui (fedettség, megalapozottság, ív) már itt — javító forduló jár rájuk, nem a bank után derülnek ki.
+      try { assertRepairTeaching(original, { ...drawn.lesson, experience: undefined }, source); }
+      catch (error) { return { ok: false, problems: [withDropReason(drawn.notes, error instanceof Error ? error.message : String(error))] }; }
+      return { ok: true, value: drawn.lesson };
     });
     await workflowPhase("banks");
     candidate.experience = await buildLessonExperience(candidate, source.concepts, { call: freshBankCall(input.fresh), concurrency: 1 });

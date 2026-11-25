@@ -10,6 +10,7 @@
 //   git push <remote> --delete <ág>                               → kapu nélkül (távoli ág törlése)
 //   gh pr create [ismert kapcsolók]                               → zöld `pre-pr-<fej>`                            (npm run gate:pr)
 //   gh pr merge [<szám>|<URL>|<ág>] [ismert kapcsolók]            → zöld, ≤ 15 perces `merge-<n>-<PR-fej>`        (npm run gate:merge -- <n>)
+//     (a bizonyíték `runId`-je = a `merge-run-<n>` jelölőé, és nincs fennálló `merge-lock-<n>.lock` zár — Copilot #513)
 // A bizonyíték a közös git-könyvtárban van (`<git-common-dir>/websuli-qa-evidence/`): a fő checkout és minden munkafa ugyanazt látja.
 // A hook NEM biztonsági határ a szándékos megkerülés ellen (pl. a hook kikapcsolása) — a figyelmetlen hibát fogja meg; a megkerülés
 // tilos, és az orkesztrátor a pre-merge-gate-et mindenképp lefuttatja.
@@ -31,14 +32,37 @@ function deny(reason) {
   process.exit(0);
 }
 
-/** Van-e a parancs szövegében BÁRHOL kapu-köteles művelet (szándékosan tág: kétség esetén a szigorú ág fut). */
-// Önálló szó: nem része útvonalnak / névnek (`.git/`, `pre-push-gate`, `gate:push` nem számít).
-const W = (x) => `(?<![\\w./:-])${x}(?![\\w./:-])`;
-const GIT_PUSH = new RegExp(`${W('git(?:\\.exe)?')}[\\s\\S]*${W('push')}`, 'i');
-// Útvonallal megadott git (`C:/…/git.exe' push`, `/usr/bin/git push`): a név után idézőjel és / vagy szóköz jön.
-const GIT_PATH_PUSH = new RegExp(`git(?:\\.exe)?['"]?\\s[\\s\\S]*${W('push')}`, 'i');
-// Útvonallal megadott gh (`/usr/bin/gh pr merge`, `"…/GitHub CLI/gh.exe" pr merge`) — visszaellenőrzés Z1.
-const GH_PATH_PR = new RegExp(`gh(?:\\.exe)?['"]?\\s[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
+/**
+ * Van-e a parancs szövegében BÁRHOL kapu-köteles művelet (szándékosan tág: kétség esetén a szigorú ág fut).
+ * Önálló szó: a `[\w./:-]` karakterek egy teljes futama (nem része útvonalnak / névnek: `.git/`, `pre-push-gate`, `gate:push`
+ * nem számít). L1 (vak ellenőr, 2026-11-18): a felismerés LINEÁRIS — a futamokat egyszer bejárva sorrend-állapotgép
+ * (`git` → `push`; `gh` → `pr` → `create|merge`); a korábbi `[\s\S]*…[\s\S]*` minták nagy szövegen szuperlineárisak voltak.
+ */
+const WORD_RUN = /[\w./:-]+/g;
+const isGit = (w) => w === 'git' || w === 'git.exe';
+const isGh = (w) => w === 'gh' || w === 'gh.exe';
+const isPush = (w) => w === 'push';
+const isPr = (w) => w === 'pr';
+const isCreateOrMerge = (w) => w === 'create' || w === 'merge';
+// Útvonallal megadott git / gh (`C:/…/git.exe' push`, `"…/GitHub CLI/gh.exe" pr merge`): a név után idézőjel és / vagy szóköz jön.
+const GIT_PATH = /git(?:\.exe)?['"]?\s/i;
+const GH_PATH = /gh(?:\.exe)?['"]?\s/i;
+/** A futamok (kisbetűvel) és a kezdő pozíciójuk — egyetlen, lineáris bejárás. */
+function wordRuns(s) {
+  const out = [];
+  for (const m of s.matchAll(WORD_RUN)) out.push({ w: m[0].toLowerCase(), at: m.index });
+  return out;
+}
+/** A `from` pozíciótól a lépések egymás utáni teljesülése (lineáris). */
+function inOrder(runs, from, steps) {
+  let k = 0;
+  for (const r of runs) {
+    if (r.at < from || !steps[k](r.w)) continue;
+    k += 1;
+    if (k === steps.length) return true;
+  }
+  return false;
+}
 // ENGEDŐ lista (visszaellenőrzés AA1): csak ezek a NEM futtató eszközök kaphatnak „git push” / „gh pr merge” szöveget idézett
 // argumentumban; minden más fej (értelmező, burkoló, ismeretlen eszköz) + kapu-köteles szöveg → fail-closed DENY.
 const INTERPRETERS = new Set(['node', 'python', 'python3', 'py', 'deno', 'bun', 'perl', 'ruby']);
@@ -46,10 +70,15 @@ const SCRIPT_FILE = /^[^-][^\s]*\.(?:mjs|cjs|js|ts|mts|py|pl|rb)$/i;
 const EVAL_FLAGS = new Set(['-e', '-p', '--eval', '--print', '-c', '-E', '-pe', '-ne', 'eval', 'run', '-r', '--require', '--import', '--loader']);
 const NON_EXEC = new Set(['echo', 'printf', 'grep', 'egrep', 'fgrep', 'rg', 'cat', 'head', 'tail', 'wc', 'less', 'more', 'findstr',
   'write-output', 'write-host', 'select-string', 'get-content', 'type', 'sls', 'gc']);
-const GH_PR = new RegExp(`${W('gh(?:\\.exe)?')}[\\s\\S]*${W('pr')}[\\s\\S]*${W('(?:create|merge)')}`, 'i');
 export function detectGated(raw) {
   const s = String(raw ?? '');
-  return GIT_PUSH.test(s) || GIT_PATH_PUSH.test(s) || GH_PR.test(s) || GH_PATH_PR.test(s) || /\/pulls\/\d+\/merge\b/i.test(s);
+  const runs = wordRuns(s);
+  if (inOrder(runs, 0, [isGit, isPush]) || inOrder(runs, 0, [isGh, isPr, isCreateOrMerge])) return true;
+  const gp = GIT_PATH.exec(s);
+  if (gp && inOrder(runs, gp.index + gp[0].length, [isPush])) return true;
+  const hp = GH_PATH.exec(s);
+  if (hp && inOrder(runs, hp.index + hp[0].length, [isPr, isCreateOrMerge])) return true;
+  return /\/pulls\/\d+\/merge\b/i.test(s);
 }
 
 // PowerShell idézőjel-karakterei (a tipográfiaiak is idézőjelek ott); Bash-ben ezek közönséges karakterek.
@@ -289,6 +318,9 @@ export function noAnswer(e) {
 
 export class NoAnswerError extends Error {}
 
+/** A „nem válaszolt” tiltás teendője (kanban #100: a tiltás megmondja, mit tegyen az ügynök). */
+export const RETRY_HINT = 'próbáld újra néhány másodperc múlva ugyanazt az egyszerű parancsot; ha tartósan fennáll: docs/minosegkapuk.md — „A kapu-hook hibája”';
+
 /**
  * Futtató-környezet: `exec` befecskendezhető (tesztek), a határidő a hook teljes keretéből fogy. A „nem válaszolt” hibát
  * `NoAnswerError`-ra fordítja (→ DENY a main catch-ében); a gyors, nem nulla kilépést eredeti hibaként adja tovább.
@@ -297,12 +329,12 @@ export function makeRunner({ exec = execFileSync, now = Date.now, cfg = hookConf
   const deadline = now() + cfg.budgetMs;
   return function run(file, args, cwd, kind = 'git') {
     const left = deadline - now() - 500;
-    if (left <= 0) throw new NoAnswerError(`a minőségkapu-hook ideje elfogyott (${Math.round(cfg.budgetMs / 1000)} s) — próbáld újra`);
+    if (left <= 0) throw new NoAnswerError(`a minőségkapu-hook ideje elfogyott (${Math.round(cfg.budgetMs / 1000)} s) — ${RETRY_HINT}`);
     const timeout = Math.min(kind === 'gh' ? cfg.ghMs : cfg.gitMs, left);
     try {
       return String(exec(file, args, { cwd, encoding: 'utf8', timeout, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })).trim();
     } catch (e) {
-      if (noAnswer(e)) throw new NoAnswerError(`a repó állapota nem állapítható meg (a(z) ${file} nem válaszolt ${Math.round(timeout / 1000)} s alatt) — próbáld újra`);
+      if (noAnswer(e)) throw new NoAnswerError(`a repó állapota nem állapítható meg (a(z) ${file} nem válaszolt ${Math.round(timeout / 1000)} s alatt) — ${RETRY_HINT}`);
       throw e;
     }
   };
@@ -403,6 +435,16 @@ export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '', run
     if (!ev || ev.ok !== true) {
       return `A merge előtti kapu nem zöld a #${view.number} jelenlegi fejére (${view.headRefOid.slice(0, 12)})${ev ? ' — az utolsó futás BUKOTT' : ''}. Futtasd közvetlenül a merge előtt: npm run gate:merge -- ${view.number}.`;
     }
+    // Copilot #513: beragadt / fennálló zár mellett egy kapufutás félbemaradt vagy még tart → nincs merge. A zöld csak a PR-ra
+    // LEGUTÓBB indított futásé lehet (a bizonyíték `runId`-je = a `merge-run-<n>` jelölőé); egy később indult, érvénytelenítés előtt
+    // megszakadt futás után a régi zöld így nem érvényes.
+    if (existsSync(join(info.evDir, `merge-lock-${view.number}.lock`))) {
+      return `A #${view.number} merge-kapujának zárja fennáll (merge-lock-${view.number}.lock) — egy kapufutás tart vagy félbemaradt. Ha nem fut kapu, töröld a zárat, és futtasd újra: npm run gate:merge -- ${view.number}.`;
+    }
+    const marker = readEv(info.evDir, `merge-run-${view.number}`);
+    if (typeof ev.runId !== 'string' || !ev.runId || ev.runId !== marker?.runId) {
+      return `A #${view.number} zöld merge-bizonyítéka nem a legutóbb indított kapufutásé (futásazonosító-eltérés). Futtasd újra: npm run gate:merge -- ${view.number}.`;
+    }
     const age = (now - Date.parse(ev.at)) / 60000;
     if (!(age <= info.maxMin)) return `A #${view.number} merge-bizonyítéka ${Number.isFinite(age) ? Math.round(age) : '?'} perces (legfeljebb ${info.maxMin} perc; a futásőr „közvetlenül előtte” szabálya). Futtasd újra: npm run gate:merge -- ${view.number}.`;
     return null;
@@ -421,16 +463,19 @@ function main() {
   let raw = '';
   let tool = 'Bash';
   let cwd = process.cwd();
+  let text = '';
+  try { text = readFileSync(0, 'utf8'); } catch { /* nincs olvasható bemenet → üres szöveg, lent enged */ }
   try {
-    const payload = JSON.parse(readFileSync(0, 'utf8') || '{}');
+    const payload = JSON.parse(text || '{}');
     // Kanban #100, 4. kör: ismeretlen héj-eszköz parancsa is vizsgálva (mindkét héj szabálya szerint, a szigorúbb dönt).
     if (typeof payload.tool_input?.command !== 'string') process.exit(0);
     tool = payload.tool_name === 'Bash' || payload.tool_name === 'PowerShell' ? payload.tool_name : 'unknown';
     raw = String(payload.tool_input?.command ?? '');
     cwd = payload.cwd || cwd;
   } catch {
-    // Értelmezhetetlen hook-bemenet: a Claude Code mindig JSON-t ad; ha mégsem, a parancs nem olvasható — itt a tiltás MINDEN
-    // eszközhívást megállítana, ezért enged (dokumentált kivétel). A merge-kaput az orkesztrátor ettől függetlenül lefuttatja.
+    // Értelmezhetetlen hook-bemenet (a Claude Code mindig JSON-t ad). Ha a nyers szövegben kapu-köteles művelet van → TILT
+    // (kanban #100); különben enged — itt a tiltás MINDEN eszközhívást megállítana.
+    if (detectGated(text)) deny(`A hook-bemenet nem értelmezhető, de kapu-köteles műveletet tartalmaz — ${RETRY_HINT}.`);
     process.exit(0);
   }
   let reason;

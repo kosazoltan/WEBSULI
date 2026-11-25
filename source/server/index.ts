@@ -3,7 +3,7 @@ import "./lib/load-env";
 import { randomBytes } from "node:crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
-import { isTtsAudioSubPath } from "../shared/speech-fallback";
+import { mountTtsRateLimits } from "./tts/rate-limits";
 import { clientIpKeyGenerator } from "./lib/client-ip";
 import compression from "compression";
 import helmet from "helmet";
@@ -16,6 +16,11 @@ import { ticketSecret } from "./realtime/ticket";
 import { startPlayerCodeSweeper } from "./player/sweeper";
 import { createPlayerStore } from "./player/store";
 import { banMaintenanceEnabled } from "./player/account-store";
+import { startAdventSweeper } from "./advent/sweeper";
+import { createAdventStore } from "./advent/store";
+import { adventEnabled } from "./advent/clock";
+import { deliverAdventMail } from "./advent/result-email";
+import { adventNow } from "../shared/advent/calendar";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
@@ -28,6 +33,7 @@ import { setupLearnerReports } from "./learner-reports";
 import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
 import { GAME_SCORE_IP_MAX, GAME_SCORE_LIMIT_MESSAGE, GAME_SCORE_WINDOW_MS } from "./lib/game-score-limits";
+import { lessonsWriteGate } from "./lesson-result-limits";
 import { runMigrations } from "./migrate";
 import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
@@ -383,30 +389,6 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true, // Only count failed attempts
 });
 
-// Rate limiter for the public text-to-speech proxy.
-// Without it anyone can use the server as a free, unthrottled Google TTS relay.
-const ttsLimiter = rateLimit({
-  keyGenerator: clientIpKeyGenerator,
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 60,
-  message: "Túl sok felolvasási kérés. Próbáld újra később!",
-  standardHeaders: true,
-  legacyHeaders: false,
-  // A „Meghallgatás” hangtartalékának saját korlátja van (ttsAudioLimiter).
-  skip: (req) => isTtsAudioSubPath(req.path),
-});
-
-// Spec 2026-11-09-felolvasas-tartalek (módosítás): a hangtartalék (≤ 300 karakter, CDN-ből gyorsítótárazva) bővebb keretet kap.
-// Spec 2026-11-10-korlat-kliens-ip: minden IP-alapú korlát kulcsa a valódi kliens címe (lib/client-ip.ts), nem a proxyé.
-const ttsAudioLimiter = rateLimit({
-  keyGenerator: clientIpKeyGenerator,
-  windowMs: 15 * 60 * 1000,
-  max: 600,
-  message: "Túl sok felolvasási kérés. Próbáld újra később!",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // Tételgyár T7.1 (tulajdonosi döntés 2026-10-15): a döntőbíró IP-nként 60 kérés / 15 perc (a napi 2000-es fizetett plafon a szolgáltatásban).
 const arbiterLimiter = rateLimit({
   keyGenerator: clientIpKeyGenerator,
@@ -443,8 +425,7 @@ const gameScoreIpLimiter = rateLimit({
 app.use("/api/games/score", gameScoreIpLimiter); // JM0
 app.use("/api/subscribe-email", subscriptionLimiter);
 app.use("/api/login", loginLimiter); // Brute force protection
-app.use("/api/tts", ttsLimiter); // Public TTS proxy abuse protection
-app.use("/api/tts/audio", ttsAudioLimiter);
+mountTtsRateLimits(app); // A felolvasás három független korlátja: általános proxy, szerveres tartalék, hangtár (server/tts/rate-limits.ts)
 app.use("/api/push/subscribe", publicWriteLimiter);
 app.use("/api/push/unsubscribe", publicWriteLimiter);
 
@@ -452,14 +433,9 @@ app.use("/api/push/unsubscribe", publicWriteLimiter);
 // (képernyőidőt) osztanak — a szórásos újrapróbálkozást itt is fojtjuk. A GET
 // /coupons/active minden HUD-frissítéskor lefut, ezért az kimarad.
 app.use("/api/lessons/arbiter", arbiterLimiter);
-app.use("/api/lessons", (req, res, next) => {
-  const isSafeMethod =
-    req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS";
-  if (isSafeMethod) return next();
-  // Review #268: a bejelentkezett tanuló ismétlése saját, tanulónkénti keretet kap (server/rewards/review-router.ts).
-  if (req.path.startsWith("/review/")) return next();
-  return publicWriteLimiter(req, res, next);
-});
+// Review #268 (ismétlés: saját keret) és eredmény-e-mail B2 / #510 R46 (eredmény-POST: saját két keret) — a kivételek a közös kapuban:
+// server/lesson-result-limits.ts.
+app.use("/api/lessons", lessonsWriteGate(publicWriteLimiter));
 
 // Public comment/like writes live under /api/materials/*. Only real writes are throttled:
 // safe methods and the two read-only POST lookups (likes/check and likes/batch, used on
@@ -577,10 +553,14 @@ app.use((req, res, next) => {
       }, (error) => logger.error("[STARTUP] A leckeborító-háttérfolyamat nem indult:", error));
       // Spec 2026-11-10-fejezet-kisfilmek-v2: a fejezetek kisfilmjeinek háttérgyártása — csak LESSON_CLIPS_AUTO=on és OpenRouter-kulcs
       // mellett (napi plafon: LESSON_CLIP_DAILY_LIMIT, tárkeret: LESSON_CLIP_MEDIA_MAX_MB). Vészfék: LESSON_CLIPS=0.
-      if (process.env.NODE_ENV === "production" && !isE2eMode()) void Promise.all([import("./lesson-clips"), import("./lesson-clips-db"), import("./lesson-clips-providers")]).then(([{ startLessonClipWorker }, { dbClipStore }, { clipKeys, clipProviders, CLIP_VIDEO_MODEL }]) => {
+      if (process.env.NODE_ENV === "production" && !isE2eMode()) void Promise.all([import("./lesson-clips"), import("./lesson-clips-db"), import("./lesson-clips-providers")]).then(([{ startLessonClipWorker }, { dbClipStore }, { clipKeys, clipProviders, sweepStaleClipDirs, CLIP_VIDEO_MODEL }]) => {
         const keys = clipKeys();
         if (!keys) return;
-        const mode = startLessonClipWorker(dbClipStore, () => ({ deps: clipProviders(keys), model: CLIP_VIDEO_MODEL }));
+        // 2. vak kör L3: a félbemaradt munkamappák söprése csak gyártó módban, minden kör előtt (kikapcsolva nincs fájlrendszer-munka).
+        const mode = startLessonClipWorker(dbClipStore, () => ({ deps: clipProviders(keys), model: CLIP_VIDEO_MODEL, maintenance: () => {
+          const swept = sweepStaleClipDirs();
+          if (swept) log(`[lesson-clips] ${swept} félbemaradt munkamappa törölve`);
+        } }));
         if (mode === "auto") log(`[lesson-clips] a kisfilm-háttérgyártás elindult (hang: ${keys.elevenLabs ? "ElevenLabs" : "tartalék"}, kép: ${keys.openAi ? "OpenAI" : "OpenRouter"})`);
       }, (error) => logger.error("[STARTUP] A kisfilm-háttérfolyamat nem indult:", error));
 
@@ -667,6 +647,18 @@ app.use((req, res, next) => {
       // K1b: a tiltás-karbantartás (kulcsrotáció-egyeztetés, megőrzés) csak élesben / PLAYER_BAN_MAINTENANCE=on mellett.
       const playerStore = createPlayerStore(dbPool);
       startPlayerCodeSweeper(() => playerStore.purgeOldCodes(), globalThis, banMaintenanceEnabled() ? playerStore.banMaintenance : null);
+      // U4c: az összevont eredménylevél söprője (lejárt rész jelölt levele, kézbesítetlen pótlása) — kapcsolótól függetlenül, E2E-ben nem.
+      const { startLessonResultSweeper } = await import("./lesson-result-sweeper");
+      startLessonResultSweeper();
+      // Adventi naptár (terv E23, 16.6; végrehajtás S6): a régi névtelen / előnézeti sorok és a korábbi évadok értesítő-foglalásainak
+      // takarítása induláskor és 24 óránként — a kapcsolótól függetlenül, E2E-ben nem.
+      const adventStore = createAdventStore(dbPool);
+      startAdventSweeper({
+        sweep: (now, season) => adventStore.sweep(now, season),
+        // S5 (terv 18.1; S5/S6 1. vak L1): a szülői levelek tartós pótlása (leállás / részleges siker után; lezárt évadban a levél
+        // nélküli, megkezdett tanulói sorok) — csak bekapcsolt naptárnál.
+        resumeMail: async (now) => (adventEnabled() ? deliverAdventMail(adventStore, adventNow(now)) : 0),
+      });
       if (banMaintenanceEnabled() && !process.env.PLAYER_BAN_KEY) {
         logger.info("[PLAYER] PLAYER_BAN_KEY nincs beállítva — a törölt fiókok tiltás-ujjlenyomata a SESSION_SECRET-ből levezetett kulccsal készül (rotációja ezeket érvényteleníti)");
       }
@@ -732,6 +724,8 @@ app.use((req, res, next) => {
       } catch (err) { logger.warn("Scheduled jobs could not be stopped", err); }
       // Spec 2026-10-20-regi-anyag-studio-atalakitas (review #349): a régi anyagok sora sem indít új gyártást a leálló példányon.
       try { (await import("./studio/legacy-migration")).stopLegacyMigration(); } catch (err) { logger.warn("A régi anyagok sora nem állítható le", err); }
+      // Vak kör L5: a kisfilmworker sem indít új kört / fejezetet; a futó kört a pool lezárása előtt korlátos ideig kivárjuk (lent).
+      const clipsStopped = import("./lesson-clips").then(({ stopLessonClipWorker }) => stopLessonClipWorker(60_000)).catch((err: unknown) => logger.warn("A kisfilmworker nem állítható le", err));
       // JM2 (terv 10.8; orkesztrátori döntés, review #452): a valós idejű réteg RÖVID, rendezett lezárása — új szoba /
       // belépés azonnal tiltva, a futó meccsek azonnal lezárulnak a pillanatnyi állással (részeredmény, „a szerver frissül”);
       // ha volt szoba, a server.close() a legfeljebb MP_DRAIN_WINDOW_MS (alap 2,5 s) üzenet-ablak után jön, különben
@@ -755,6 +749,14 @@ app.use((req, res, next) => {
         await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
         // Review #365 (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők a pool lezárása előtt (max 15 s).
         await Promise.race([(await import("./daily-reminder")).pendingNewLessonNotifications(), new Promise((resolve) => setTimeout(resolve, 15_000))]).catch((err: unknown) => logger.warn("New lesson notification flush failed", err));
+        // Vak kör L5 + 2. vak kör L2: a futó kisfilmkör (legfeljebb 60 s, a fenti várakozással párhuzamosan telt); ami ezután is fut,
+        // annak MINDEN szolgáltatói várakozása, letöltése és ffmpeg-gyereke megszakad (a fejezet nem kap hibás sort), majd a kör — és
+        // vele az advisory lock DB-kapcsolata — lezárulására rövid várakozás, még a pool lezárása előtt.
+        await clipsStopped;
+        try {
+          (await import("./lesson-clips-providers")).abortClipTranscodes();
+          await (await import("./lesson-clips")).stopLessonClipWorker(10_000);
+        } catch (err) { logger.warn("A kisfilm-átkódolások nem állíthatók le", err); }
         await dbPool.end();
         log("Database pool closed");
         log("Graceful shutdown completed");
