@@ -445,3 +445,27 @@ test("S6c-1 L5: BE futás végén a mentett telemetria (visualKinds) és a fajta
   assert.equal("visualKinds" in (offOut.telemetry?.gates ?? {}), false, "KI: nincs új telemetria-mező");
   assert.equal((offOut.qualityNotes ?? []).some((n) => n.reason === "visual_kind_share"), false);
 });
+
+test("V1 sorozatszabály a teljes kódúton: az előző lecke azonos kiosztása → következő forma / téma / összefoglaló; a szerző és a jelölő ezt kapja; hibás előzmény-lekérés nem állít meg", async () => {
+  const { pickVarietyAxes } = await import("../shared/lesson-variety-axes");
+  const seed = seedFrom("m1");
+  const base = { form: openerVarietyPick(fixture.classroom, seed).form.id, ...pickVarietyAxes(seed, 1) };
+  const requests: string[] = [];
+  const mem = memory();
+  (mem.store as { loadPreviousSeriesVariety?: unknown }).loadPreviousSeriesVariety = async (subject: string, classroom: number, exclude: string) => {
+    assert.equal(subject, fixture.subject); assert.equal(classroom, fixture.classroom); assert.equal(exclude, "m1");
+    return { openingForm: base.form, exampleTheme: base.exampleTheme.id, recapForm: base.recapForm.id };
+  };
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ onAuthor: (r) => requests.push(r) }), mem, { lessonVariety: true }));
+  const out = lastOutput(mem);
+  assert.notEqual(out.openingForm, base.form);
+  assert.notEqual(out.exampleTheme, base.exampleTheme.id);
+  assert.notEqual(out.recapForm, base.recapForm.id);
+  assert.ok(Array.isArray(out.lengthBands));
+  assert.ok(requests.some((r) => r.includes("PÉLDÁK TÉMAKÖRE") && r.includes("ÖSSZEFOGLALÓ FORMÁJA")), "a szerző megkapja a tengelyeket");
+  assert.equal((mem.lessons.at(-1) as { variety?: { openingForm?: string } }).variety?.openingForm, out.openingForm, "a jelölő a ténylegesen kiosztott formát hordozza");
+  const failing = memory();
+  (failing.store as { loadPreviousSeriesVariety?: unknown }).loadPreviousSeriesVariety = async () => { throw new Error("adatbázis nem elérhető"); };
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client(), failing, { lessonVariety: true }));
+  assert.equal(lastOutput(failing).openingForm, base.form, "hibás előzménynél a mag dönt");
+});
