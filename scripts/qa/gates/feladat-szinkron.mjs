@@ -23,7 +23,10 @@ export function feladatSzinkron({ exec, root, env = process.env, timeoutMs = 120
     let last = null;
     for (const [cmd, ...pre] of PYTHONS) {
       const r = exec(cmd, [...pre, '-B', script, '--db', db, '--repo', root, '-q', 'szinkron'], { cwd: root, timeoutMs });
-      if (r.code === 127) { last = r; continue; } // nincs ilyen értelmező → a következő jelölt
+      // csak a ténylegesen hiányzó értelmező (ENOENT) után próbálunk másikat; a realExec időtúllépésnél is 127-et ad
+      // (lib.mjs realExec: r.status ?? (r.error ? 127 : 1)) — az egyszeri, nem blokkoló hiba, nincs újraindítás
+      if (/ETIMEDOUT|timed out/i.test(`${r.stderr ?? ''}`)) return { ran: true, ok: false, note: `szinkron időtúllépés (${Math.round(timeoutMs / 1000)} s, nem blokkoló)` };
+      if (r.code === 127 && /ENOENT|not found|nem található/i.test(`${r.stderr ?? ''}`)) { last = r; continue; }
       const out = `${r.stdout ?? ''}`.trim().split('\n').filter(Boolean).pop() ?? '';
       if (r.code === 0) return { ran: true, ok: true, note: out || 'szinkron kész' };
       const err = `${r.stderr ?? ''}`.trim().split('\n').filter(Boolean)[0] ?? `kilépési kód ${r.code}`;
