@@ -86,5 +86,27 @@ class LeletZar(unittest.TestCase):
         self.assertEqual(self.row()[0], "nyitott")
 
 
+class LeletZarReview601(unittest.TestCase):
+    """Review #601: üres bizonyíték elutasítva; a sikertelen lezárás régi sémán sem ír (nincs migráció)."""
+    setUp, tearDown, row = LeletZar.setUp, LeletZar.tearDown, LeletZar.row
+
+    def test_ures_vagy_szokozos_bizonyitek_elutasitva_iras_nelkul(self):
+        for ev in ("", "   ", "\t"):
+            r = run(self.db, "lelet-zar", str(self.fid), "--evidence", ev)
+            self.assertNotEqual(r.returncode, 0, ev)
+            self.assertEqual(self.row(), ("nyitott", "kód"))
+
+    def test_regi_semán_a_sikertelen_lezaras_nem_migral(self):
+        c = sqlite3.connect(self.db)
+        c.execute("ALTER TABLE requirements DROP COLUMN manual_evidence")
+        c.commit()
+        c.close()
+        self.assertNotEqual(run(self.db, "lelet-zar", "99999", "--evidence", "x").returncode, 0)
+        c = sqlite3.connect(self.db)
+        cols = {r[1] for r in c.execute("PRAGMA table_info(requirements)")}
+        c.close()
+        self.assertNotIn("manual_evidence", cols, "a sikertelen lezárás nem módosíthatja a sémát")
+
+
 if __name__ == "__main__":
     unittest.main()
