@@ -1,6 +1,6 @@
 # K-FELADATDB — folyamatos SQL feladat-nyilvántartás a helyi követelmény-adatbázisban
 
-**Állapot:** folyamatban – 2026-11-25, ág `feat/feladat-nyilvantartas` (követelmény-kód: `K-FELADATDB`)
+**Állapot:** kész, PR-ra vár – 2026-11-25, ág `feat/feladat-nyilvantartas` (követelmény-kód: `K-FELADATDB`)
 
 ## Cél
 

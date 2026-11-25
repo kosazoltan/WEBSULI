@@ -21,3 +21,17 @@ integráció → próbahiba + zárás.
    `feladat-szinkron.mjs` bekötése a `pre-pr-gate` és `pre-merge-gate` végére (nem blokkoló).
 8. Próbahiba a commit után, tiszta munkafán (`git status --porcelain` üres): az állapotgép-őr kikapcsolása → teszt bukik →
    `git checkout` visszaállítás; eredmény ebbe a fájlba. Push / PR / merge a szülő kapuláncával.
+
+## Eredmény (2026-11-25)
+
+- Tesztek: `python -B -m unittest discover -s scripts/kovetelmeny -p "test_*.py"` — 24/24 zöld; `node --test scripts/qa/gates/*.test.mjs
+  scripts/qa/hooks/*.test.mjs scripts/qa/three-phase-check.test.mjs scripts/qa/repo-rules.test.mjs` — 254/254 zöld.
+- Próbahiba (a 7/8 commit után, tiszta munkafán, `git checkout` visszaállítással; utána a fa ismét tiszta, a tesztek zöldek):
+  1. `can_transition`: a hátralépés-őr helyett `return True` → 3 bukás (`Allapotgep.test_ervenyes_es_ervenytelen_atmenetek`,
+     `Allapotgep.test_set_status_tilt_es_naploz`, `Cli.test_ervenytelen_atmenet_nem_nulla_kilepes`).
+  2. `sync_git`: a commit-esemény `dedupe` kulcsa nélkül → `Szinkron.test_allapot_sorok_pr_es_idempotencia` bukik (a második futás
+     új eseményeket írna).
+  3. `feladat-szinkron.mjs`: a 127-es (nincs értelmező) továbblépés nélkül → „hiányzó python3 → a következő jelölttel” bukik.
+- Valódi DB (mentés `kovetelmenyek.db.bak-20261125-071646`): a régi táblák sorszáma előtte = utána; `szinkron` és `visszatoltes`
+  másodszor futtatva 0 változás.
+- Push / PR / merge: a szülő kapuláncával (`gate:stage` → `gate:push` → `local-review` → `gate:pr`).
