@@ -21,13 +21,22 @@ const tag = randomUUID().slice(0, 8);
 const oldPlayer = `qa-d04-old-${tag}`;
 const newPlayer = `qa-d04-new-${tag}`;
 
+// A közös, eldobható DB-n más tesztfájlok (pl. learning-db) ütközés-kezelés nélkül töltik a katalógust: a teszt csak a
+// saját maga által létrehozott katalógussorokat takarítja el, így a futási sorrendtől függetlenül tiszta állapotot hagy.
+const createdCatalogIds: string[] = [];
+
 after(async () => {
   await dbPool.query("DELETE FROM game_scores WHERE user_id = ANY($1)", [[oldPlayer, newPlayer]]);
   await dbPool.query("DELETE FROM users WHERE id = ANY($1)", [[oldPlayer, newPlayer]]);
+  if (createdCatalogIds.length > 0) {
+    await dbPool.query("DELETE FROM games_catalog WHERE id = ANY($1)", [createdCatalogIds]);
+  }
   await dbPool.end();
 });
 
 test("D-04: a migráció kétszer futtatható, a pontkulcs nem külön játék a lobbiban", async () => {
+  const existing = (await dbPool.query("SELECT id FROM games_catalog WHERE id = ANY($1)", [[LEGACY, NEW]])).rows.map((r) => r.id);
+  createdCatalogIds.push(...[LEGACY, NEW].filter((id) => !existing.includes(id)));
   // A régi játék sora (a séma-export katalógussorokat nem tölt; az éles adatbázisban a 0003 tette be).
   await dbPool.query(
     `INSERT INTO games_catalog (id, title, description, sort_order) VALUES ($1, 'Kockavadász kvíz', 'régi', 4) ON CONFLICT (id) DO NOTHING`,
