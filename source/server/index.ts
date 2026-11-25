@@ -553,11 +553,11 @@ app.use((req, res, next) => {
       }, (error) => logger.error("[STARTUP] A leckeborító-háttérfolyamat nem indult:", error));
       // Spec 2026-11-10-fejezet-kisfilmek-v2: a fejezetek kisfilmjeinek háttérgyártása — csak LESSON_CLIPS_AUTO=on és OpenRouter-kulcs
       // mellett (napi plafon: LESSON_CLIP_DAILY_LIMIT, tárkeret: LESSON_CLIP_MEDIA_MAX_MB). Vészfék: LESSON_CLIPS=0.
-      if (process.env.NODE_ENV === "production" && !isE2eMode()) void Promise.all([import("./lesson-clips"), import("./lesson-clips-db"), import("./lesson-clips-providers")]).then(([{ startLessonClipWorker }, { dbClipStore }, { clipKeys, clipProviders, sweepStaleClipDirs, CLIP_VIDEO_MODEL }]) => {
+      if (process.env.NODE_ENV === "production" && !isE2eMode()) void Promise.all([import("./lesson-clips"), import("./lesson-clips-db"), import("./lesson-clips-providers")]).then(([{ startLessonClipWorker }, { dbClipStore }, { clipKeys, clipProviders, sweepStaleClipDirs, CLIP_VIDEO_MODEL_DEFAULT }]) => {
         const keys = clipKeys();
         if (!keys) return;
         // 2. vak kör L3: a félbemaradt munkamappák söprése csak gyártó módban, minden kör előtt (kikapcsolva nincs fájlrendszer-munka).
-        const mode = startLessonClipWorker(dbClipStore, () => ({ deps: clipProviders(keys), model: CLIP_VIDEO_MODEL, maintenance: () => {
+        const mode = startLessonClipWorker(dbClipStore, () => ({ deps: clipProviders(keys), model: keys.videoModel ?? CLIP_VIDEO_MODEL_DEFAULT, maintenance: () => {
           const swept = sweepStaleClipDirs();
           if (swept) log(`[lesson-clips] ${swept} félbemaradt munkamappa törölve`);
         } }));
