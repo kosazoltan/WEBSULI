@@ -6,11 +6,11 @@ import { clipSource, type Clip2 } from "../shared/lesson-clip";
 import { CLIP_BAND_STYLE, clipBandFor } from "../shared/clip-style";
 import {
   CLIP_FRESH_DAYS, CLIP_MAX_ATTEMPTS, CLIP_ORPHAN_GRACE_MS, CLIP_PARALLEL, CLIP_RSS_LIMIT_BYTES, CLIP_VIDEO_MAX_BYTES, clipDailyLimit, clipMediaBudgetBytes, clipSourceHash, clipSystemPrompt, clipTodo, clipsMode,
-  CLIP_SPEECH_ATTEMPTS, ClipAbortError, eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, speakChecked, speechDistance,
+  CLIP_SPEECH_ATTEMPTS, ClipAbortError, clipLogDetail, eligibleSections, lessonClipsResponse, makeChapterClip, runClipRound, servableClips, speakChecked, speechDistance,
   type ClipDeps, type ClipLesson, type ClipRow, type ClipStore,
 } from "../server/lesson-clips";
 import { mediaId } from "../server/lesson-clip-media";
-import { CLIP_TMP_PREFIX, clipKeys, clipProviders, CLIP_RESPONSE_LIMITS, downloadAndShrink, readLimitedText, safeProviderFetch, sweepStaleClipDirs, webBody, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
+import { CLIP_TMP_PREFIX, CLIP_VIDEO_MODEL_DEFAULT, CLIP_VIDEO_RESOLUTION_DEFAULT, clipKeys, clipProviders, clipVideoModel, clipVideoResolution, CLIP_RESPONSE_LIMITS, downloadAndShrink, readLimitedText, safeProviderFetch, sweepStaleClipDirs, webBody, type ExecLike, type ProviderTransport } from "../server/lesson-clips-providers";
 import type { RawResponse } from "../server/studio/safe-fetch";
 import { Readable } from "node:stream";
 /** Webes válasz → a `safe-fetch` nyers válasza (a csonkolt szállításhoz). */
@@ -91,7 +91,8 @@ test("kapcsolók: vészfék, gyártás csak kapcsolóval és kulccsal; plafonok 
   assert.equal(clipMediaBudgetBytes({}), 400 * 1024 * 1024);
   assert.equal(clipMediaBudgetBytes({ LESSON_CLIP_MEDIA_MAX_MB: "50" }), 50 * 1024 * 1024);
   assert.equal(clipKeys({}), null);
-  assert.deepEqual(clipKeys({ OPENROUTER_API_KEY: " or ", ELEVENLABS_API_KEY: "el", OPENAI_API_KEY: "oa", FFMPEG_PATH: "/opt/ffmpeg" }), { openRouter: "or", openAi: "oa", elevenLabs: "el", ffmpeg: "/opt/ffmpeg" });
+  // docs/specs/2026-11-22-kisfilm-videomodell.md: a kulcsok mellett a mozgókép-modell és -felbontás is (alapérték: 2.0 Mini, 480p).
+  assert.deepEqual(clipKeys({ OPENROUTER_API_KEY: " or ", ELEVENLABS_API_KEY: "el", OPENAI_API_KEY: "oa", FFMPEG_PATH: "/opt/ffmpeg" }), { openRouter: "or", openAi: "oa", elevenLabs: "el", ffmpeg: "/opt/ffmpeg", videoModel: "bytedance/seedance-2.0-mini", videoResolution: "480p" });
   assert.equal(clipKeys({ OPENROUTER_API_KEY: "or" })?.elevenLabs, undefined);
 });
 
@@ -622,18 +623,28 @@ test("a lekérdezés JSON-válasza bájtkorlátos: a túl hosszú törzs olvasá
   assert.equal(await readLimitedText(new Response('{"status":"completed"}'), 64 * 1024), '{"status":"completed"}');
 });
 
-test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn beérő címre nem indul kérés (4. vak kör L2)", async () => {
+test("a DNS-feloldás várakozását az időkorlát megszakítja, és a későn beérő címre nem indul kérés (4. vak kör L2)", { timeout: 5000 }, async (t) => {
   let sent = 0, resolveLookup!: (v: Array<{ address: string; family: number }>) => void;
   const transport: ProviderTransport = {
     lookup: () => new Promise((resolve) => { resolveLookup = resolve; }),
     request: async () => { sent++; return toRaw(new Response("x")); },
   };
-  const started = Date.now();
-  await assert.rejects(safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(50) }, { sameOrigin: false, transport }));
-  assert.ok(Date.now() - started < 2000, `a függő DNS nem tartja fel (${Date.now() - started} ms)`);
-  resolveLookup([{ address: "93.184.216.34", family: 4 }]);
-  await new Promise((r) => setTimeout(r, 10));
-  assert.equal(sent, 0, "a későn beérő feloldás után sem indul kérés");
+  // Az AbortSignal.timeout időzítője nem tartja életben a folyamatot (unref): ha más függő munka nincs, a futás az időkorlát előtt
+  // véget ér, és a teszt „cancelledByParent” lesz (felhős munkamenetben mérve, 2026-11-22). Az életben tartó időzítő ezt kizárja;
+  // a tesztszintű 5 s-os korlát miatt a megszakítást figyelmen kívül hagyó kód bukik, nem lóg.
+  const keepAlive = setInterval(() => undefined, 1000);
+  // t.after: időtúllépéskor is lefut (a finally nem), így a lejárt teszt után a folyamat kilép, nem lóg (review V1).
+  t.after(() => clearInterval(keepAlive));
+  try {
+    const started = Date.now();
+    await assert.rejects(safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(50) }, { sameOrigin: false, transport }));
+    assert.ok(Date.now() - started < 2000, `a függő DNS nem tartja fel (${Date.now() - started} ms)`);
+    resolveLookup([{ address: "93.184.216.34", family: 4 }]);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(sent, 0, "a későn beérő feloldás után sem indul kérés");
+  } finally {
+    clearInterval(keepAlive);
+  }
 });
 
 /** Véges, de a korlátnál nagyobb törzs, darabszámlálóval (a korlát nélküli olvasás is befejeződik — a teszt bukik, nem akad el). */
@@ -674,15 +685,131 @@ test("I/O-leltár: minden szolgáltatói választörzs bájtkorlátos — a korl
   }
 });
 
-test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határideje megszakítja, a kapcsolat lezárul", async () => {
+test("I/O-leltár: az elakadt letöltési törzs olvasását a kérés határideje megszakítja, a kapcsolat lezárul", { timeout: 5000 }, async (t) => {
   let destroyed = 0;
   const transport: ProviderTransport = {
     lookup: async () => [{ address: "93.184.216.34", family: 4 }],
     request: async () => ({ status: 200, headers: {}, body: { [Symbol.asyncIterator]: () => ({ next: () => new Promise<IteratorResult<Uint8Array>>(() => undefined) }) }, destroy: () => { destroyed++; } }),
   };
-  const started = Date.now();
-  const res = await safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(100) }, { sameOrigin: false, transport });
-  await assert.rejects(res.arrayBuffer());
-  assert.ok(Date.now() - started < 2000, `az elakadt törzs nem tartja fel (${Date.now() - started} ms)`);
-  assert.ok(destroyed >= 1, "a kapcsolat lezárul");
+  // Lásd a DNS-tesztet: az AbortSignal.timeout időzítője unref, az életben tartó időzítő nélkül a futás idő előtt véget érhet.
+  const keepAlive = setInterval(() => undefined, 1000);
+  // t.after: időtúllépéskor is lefut (a finally nem), így a lejárt teszt után a folyamat kilép, nem lóg (review V1).
+  t.after(() => clearInterval(keepAlive));
+  try {
+    const started = Date.now();
+    const res = await safeProviderFetch(new URL("https://cdn.example/v.mp4"), { headers: {}, signal: AbortSignal.timeout(100) }, { sameOrigin: false, transport });
+    await assert.rejects(res.arrayBuffer());
+    assert.ok(Date.now() - started < 2000, `az elakadt törzs nem tartja fel (${Date.now() - started} ms)`);
+    assert.ok(destroyed >= 1, "a kapcsolat lezárul");
+  } finally {
+    clearInterval(keepAlive);
+  }
+});
+
+// docs/specs/2026-11-22-kisfilm-videomodell.md — a megszűnt Seedance 1.5 helyett beállítható modell és felbontás.
+test("mozgókép hossza: a hang hosszából, 4 és 12 mp közé szorítva (a 2.0 Mini 4–15 mp-et fogad el)", async () => {
+  const { store } = memoryStore([]);
+  for (const [audioMs, expected] of [[1200, 4], [3900, 4], [6400, 7], [12_000, 12], [30_000, 12]] as const) {
+    const deps = fakeDeps({ audioMs: () => audioMs });
+    const result = await makeChapterClip(input(), BAND, deps, store.putMedia);
+    assert.ok("clip" in result, JSON.stringify(result));
+    assert.ok(deps.calls.video.length > 0);
+    assert.ok(deps.calls.video.every((c) => c.seconds === expected), `${audioMs} ms → ${expected} mp (kapott: ${deps.calls.video.map((c) => c.seconds).join(", ")})`);
+  }
+});
+
+test("naplóbiztos hibaleírás: URL-ből csak a host marad, hitelesítő címkék és értékük kitakarva (#529 vak kör 1 L1)", () => {
+  const out = clipLogDetail(new Error("Átirányítás cél nélkül: https://cdn.example/v/abc.mp4?sig=SECRET123&exp=9 token=tk1 Authorization: Bearer xyz"));
+  for (const bad of ["SECRET123", "sig=", "abc.mp4", "tk1", "xyz"]) assert.ok(!out.includes(bad), `${bad} nem lehet a naplóban: ${out}`);
+  assert.match(out, /Átirányítás cél nélkül/);
+  assert.match(out, /cdn\.example/);
+  assert.ok(clipLogDetail("x".repeat(500)).length <= 200);
+  assert.equal(clipLogDetail({ toString: () => "http://h.example/p?q=1" }).includes("q=1"), false);
+});
+
+test("mozgókép: a szolgáltatói hibaszöveg, a job.error és a letöltési cím nem kerül a hibába / naplóba (#529 vak kör 1 L1)", async () => {
+  const realFetch = globalThis.fetch;
+  const realWarn = console.warn;
+  const warned: string[] = [];
+  console.warn = (...args: unknown[]) => { warned.push(args.map(String).join(" ")); };
+  const image = { bytes: Buffer.from("x"), mime: "image/jpeg" };
+  const deps = () => clipProviders({ openRouter: "titok" }, testTransport);
+  try {
+    globalThis.fetch = (async () => new Response("bad request: https://cdn.example/x?sig=SECRET1 token=TOK1", { status: 400 })) as typeof fetch;
+    const e1 = await deps().video!(image, "p", 6).then(() => "", (e: unknown) => String(e));
+    assert.match(e1, /mozgókép: HTTP 400/);
+    for (const bad of ["SECRET1", "TOK1", "cdn.example"]) assert.ok(!e1.includes(bad), `HTTP-hiba törzse: ${e1}`);
+    globalThis.fetch = (async () => new Response(JSON.stringify({ status: "failed", polling_url: "https://openrouter.ai/api/v1/videos/1", error: { code: "content_policy", message: "see https://cdn.example/y?sig=SECRET2" } }), { status: 200 })) as typeof fetch;
+    const e2 = await deps().video!(image, "p", 6).then(() => "", (e: unknown) => String(e));
+    assert.match(e2, /mozgókép: failed/);
+    assert.match(e2, /content_policy/, "a szolgáltató saját hibakódja megmarad");
+    assert.ok(!e2.includes("SECRET2") && !e2.includes("cdn.example"), `job.error: ${e2}`);
+    // Vak kör 2 L1: címke nélküli, átlátszatlan érték a code mezőben → csak „egyéb” (engedélylista).
+    globalThis.fetch = (async () => new Response(JSON.stringify({ status: "failed", polling_url: "https://openrouter.ai/api/v1/videos/1", error: { code: "FixtureKey9f2" } }), { status: 200 })) as typeof fetch;
+    const e2b = await deps().video!(image, "p", 6).then(() => "", (e: unknown) => String(e));
+    assert.match(e2b, /mozgókép: failed \(egyéb\)/);
+    assert.ok(!e2b.includes("FixtureKey9f2"), `átlátszatlan kód: ${e2b}`);
+    // Vak kör 2 L1: hibás 2xx JSON — a parser üzenete (törzs-idézet) nem kerül a hibába.
+    globalThis.fetch = (async () => new Response("{ /v?sig=FixtureSig49", { status: 200 })) as typeof fetch;
+    const e2c = await deps().video!(image, "p", 6).then(() => "", (e: unknown) => String(e));
+    assert.match(e2c, /mozgókép: hibás JSON-válasz/);
+    assert.ok(!e2c.includes("FixtureSig49") && !e2c.includes("sig="), `hibás JSON: ${e2c}`);
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.endsWith("/api/v1/videos")) return new Response(JSON.stringify({ status: "completed", polling_url: "https://openrouter.ai/api/v1/videos/1", unsigned_urls: ["https://cdn.example/v.mp4?sig=SECRET3"] }), { status: 200 });
+      return new Response(null, { status: 302 });
+    }) as typeof fetch;
+    const r3 = await deps().video!(image, "p", 6);
+    assert.equal(r3, null, "letöltési hiba → nincs mozgókép");
+    const joined = warned.join("\n");
+    assert.match(joined, /letöltése nem sikerült/);
+    assert.ok(!joined.includes("SECRET3") && !joined.includes("v.mp4"), `napló: ${joined}`);
+  } finally {
+    globalThis.fetch = realFetch;
+    console.warn = realWarn;
+  }
+});
+
+test("mozgókép-modell és -felbontás: alapérték, érvényes felülírás, érvénytelen / üres érték → alapérték", () => {
+  assert.equal(CLIP_VIDEO_MODEL_DEFAULT, "bytedance/seedance-2.0-mini");
+  assert.equal(CLIP_VIDEO_RESOLUTION_DEFAULT, "480p");
+  assert.equal(clipVideoModel({}), "bytedance/seedance-2.0-mini");
+  assert.equal(clipVideoModel({ LESSON_CLIP_VIDEO_MODEL: " bytedance/seedance-2.5-flash " }), "bytedance/seedance-2.5-flash");
+  assert.equal(clipVideoModel({ LESSON_CLIP_VIDEO_MODEL: `a/${"b".repeat(78)}` }), `a/${"b".repeat(78)}`, "80 karakter még elfogadható");
+  for (const bad of ["", "   ", "seedance", "https://evil.example/x", "a/b/c", "Bytedance/Seedance 2", `a/${"b".repeat(79)}`]) assert.equal(clipVideoModel({ LESSON_CLIP_VIDEO_MODEL: bad }), CLIP_VIDEO_MODEL_DEFAULT, `érvénytelen: ${JSON.stringify(bad)}`);
+  assert.equal(clipVideoResolution({}), "480p");
+  assert.equal(clipVideoResolution({ LESSON_CLIP_VIDEO_RESOLUTION: "720p" }), "720p");
+  for (const bad of ["", "1080p", "4K", "720"]) assert.equal(clipVideoResolution({ LESSON_CLIP_VIDEO_RESOLUTION: bad }), "480p", `érvénytelen: ${JSON.stringify(bad)}`);
+});
+
+test("mozgókép beküldése: a beállított modell és felbontás megy a kérésben, a többi mező változatlan", async () => {
+  const realFetch = globalThis.fetch;
+  const bodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.endsWith("/api/v1/videos")) { bodies.push(JSON.parse(String(init?.body))); return new Response(JSON.stringify({ status: "failed", error: "teszt" }), { status: 200 }); }
+    return new Response("nincs", { status: 404 });
+  }) as typeof fetch;
+  const image = { bytes: Buffer.from("x"), mime: "image/jpeg" };
+  try {
+    const outcome = (deps: ReturnType<typeof clipProviders>) => deps.video!(image, "p", 6).then(() => "kész", (error: unknown) => `hiba: ${String(error)}`);
+    await outcome(clipProviders(clipKeys({ OPENROUTER_API_KEY: "titok" })!, testTransport));
+    await outcome(clipProviders(clipKeys({ OPENROUTER_API_KEY: "titok", LESSON_CLIP_VIDEO_MODEL: "bytedance/seedance-2.5-flash", LESSON_CLIP_VIDEO_RESOLUTION: "720p" })!, testTransport));
+    await outcome(clipProviders({ openRouter: "titok" }, testTransport));
+    assert.deepEqual(bodies.map((b) => [b.model, b.resolution]), [
+      ["bytedance/seedance-2.0-mini", "480p"],
+      ["bytedance/seedance-2.5-flash", "720p"],
+      ["bytedance/seedance-2.0-mini", "480p"],
+    ]);
+    for (const b of bodies) {
+      assert.equal(b.duration, 6);
+      assert.equal(b.aspect_ratio, "16:9");
+      assert.equal(b.generate_audio, false);
+      const frames = b.frame_images as Array<{ type: string; frame_type: string; image_url: { url: string } }>;
+      assert.equal(frames.length, 1, "pontosan egy kezdőkép");
+      assert.deepEqual(frames[0], { type: "image_url", image_url: { url: `data:image/jpeg;base64,${Buffer.from("x").toString("base64")}` }, frame_type: "first_frame" }, "L4: a teljes kezdőkép-objektum");
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
