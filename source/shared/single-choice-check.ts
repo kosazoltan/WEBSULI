@@ -40,7 +40,8 @@ function integerOf(option: string): number | null {
  */
 const UNIT_TAIL = /\s*[\p{L}%°²³/·][\p{L}%°²³/·\s]*$/u;
 export function isNumericOption(option: string): boolean {
-  const number = option.normalize("NFC").trim().replace(UNIT_TAIL, "").trim();
+  // Review #603: a pozitív előjel („+5”, „+5 °C”) is szám — az értelmező csak a negatív előjelet ismeri, ezért a „+” leválik.
+  const number = option.normalize("NFC").trim().replace(UNIT_TAIL, "").trim().replace(/^\+(?=\d)/, "");
   return number.length > 0 && (integerOf(number) !== null || numberOf(number) !== null);
 }
 

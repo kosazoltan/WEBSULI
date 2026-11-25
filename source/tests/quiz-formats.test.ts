@@ -55,7 +55,7 @@ test("a szerződés a típusokat és a keverést kéri (változatosság BE); a s
 });
 
 test("review #603: a számolós opció tört, vegyes tört és tagolt egész is lehet (mértékegységgel is)", () => {
-  for (const options of [["1/2", "1/3", "2/3"], ["1/2 kg", "1/4 kg", "3/4 kg"], ["1 000", "10 000", "100"], ["2 1/2", "1 1/2", "3"], ["−3,5 °C", "3,5 °C", "0 °C"], ["5 km/h", "10 km/h", "15 km/h"]]) {
+  for (const options of [["1/2", "1/3", "2/3"], ["1/2 kg", "1/4 kg", "3/4 kg"], ["1 000", "10 000", "100"], ["2 1/2", "1 1/2", "3"], ["−3,5 °C", "3,5 °C", "0 °C"], ["5 km/h", "10 km/h", "15 km/h"], ["+5", "−5", "0"], ["+5 °C", "−2 °C", "0 °C"]]) {
     const r = experienceQuizSchema.safeParse({ ...base, format: "number", options, question: "Mennyi?" });
     assert.equal(r.success, true, `${options.join(" | ")}: ${r.success ? "" : r.error.issues.map(i => i.message).join("; ")}`);
   }
