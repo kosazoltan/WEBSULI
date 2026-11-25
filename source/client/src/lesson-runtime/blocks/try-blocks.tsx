@@ -8,6 +8,7 @@ import { textAnswerMatches } from "@shared/text-answer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TrySnapshot } from "../useLessonProgress";
+import { Categorize, Estimate, Highlight, NumberLine, TrueFalseSeries } from "./try-blocks-v2";
 
 /**
  * LS-4 — the three planned hands-on kinds (master plan §4).
@@ -266,4 +267,10 @@ export const TRY_REGISTRY: Record<TryKind, ComponentType<TryProps>> = {
   dragSort: DragSort,
   fillBlank: FillBlank,
   match: Match,
+  // V2a
+  trueFalseSeries: TrueFalseSeries,
+  highlight: Highlight,
+  categorize: Categorize,
+  numberLine: NumberLine,
+  estimate: Estimate,
 };

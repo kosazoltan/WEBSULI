@@ -112,3 +112,28 @@ kapcsolónál; KI állapotban a prompt bájtra változatlan.
 - A szerzői szerződés a futás KIOSZTOTT nyitásformáját írja elő (a sorozatszabállyal eltoltat is); a hős a magból marad — a szerző, a lektor és a jelölő ugyanazt a formát kapja.
 - Eltérő blokkváz: korlátos (1–12), determinisztikus só-keresés a végleges aláírás ellenőrzésével (`seriesShapeSalt`); ha nincs eltérő, a váz marad (naplózva). A só a job állapotába kerül.
 - A szerzői állomáson (lecke nélkül) megszakadt futás folytatása a mentett tengelyeket tölti vissza; új előzmény-lekérés és újraosztás nincs.
+
+## V2a — végrehajtás (2026-11-25): öt új feladatfajta — séma, pontozó, megjelenítő (gyártás nélkül)
+Előfeltétel: a V-kompat élesítése (a régi kliens az ismeretlen `tryKind` helyén frissítésre kérő magyarázatot mutat). A V2a a fajtákat
+NEM hirdeti a modellnek (a szerzői katalógus és a vázlat `tryKind`-ja a régi hármas — `PROMPT_TRY_KINDS`); a gyártási prompt és a kapu
+a V2b.
+Fajták és DOKUMENTÁLT pontozás (`shared/try-scoring.ts`, determinisztikus):
+- `trueFalseSeries` — 2–8 állítás igaz/hamis jelöléssel: pont = helyes jelölések száma, max = állítások száma.
+- `highlight` (szókiemelés) — szöveg + 1–8 célszó (a szöveg szavai): pont = max(0, eltalált − téves kijelölés), max = célszavak száma.
+- `categorize` — 2–4 kategória, 3–12 elem: pont = helyesen besorolt elemek, max = elemek száma.
+- `numberLine` — min < cél < max, tűrés: |érték − cél| ≤ tűrés → 2 pont; ≤ 2×tűrés → 1 pont; különben 0 (max 2).
+- `estimate` (becslés csúszkával) — relatív eltérés ≤ 5% → 2 pont; ≤ 15% → 1 pont; különben 0 (max 2).
+Ítélet: max pont = „teljes”, 0 < pont < max = „részleges”, 0 = „rossz”.
+1. RED: `source/tests/try-scoring.test.ts` (mind az öt pontozó teljes / részleges / rossz válaszra; a séma a hibás specifikációt elutasítja, a
+   helyeset elfogadja; a modellnek hirdetett fajták a régi hármas), `source/tests/lesson-try-v2.spec.ts` (e2e: billentyűzettel kezelhető
+   mind az öt, a visszajelzés megjelenik, az állapot újratöltés után visszaáll).
+2. GREEN: `shared/try-scoring.ts`, `shared/lesson-schema.ts`, `client/src/lesson-runtime/blocks/try-blocks.tsx`,
+   `client/src/lesson-runtime/useLessonProgress.ts`, `shared/lesson-block-label.ts`, `server/studio/grounding.ts`, `server/studio/step-io.ts`.
+3. Próbahiba, kapulánc, PR.
+
+### V2a — review #615 / #609 / #617 (2026-11-25)
+- **Megoldhatatlan csúszka:** a séma (`trySpecProblems`) a számegyenesnél és a becslésnél is ellenőrzi, hogy a `min + k·step` rácson (≤ max) van-e teljes pontot érő érték (`sliderHasFullScore`, a célhoz legközelebbi két rácspont); ha nincs, elutasít.
+- **Célszám:** a prompt nélküli számegyenes alaputasítása kiírja a célszámot; ha a prompt nem tartalmazza, zárójelben hozzáfűződik.
+- **Rádiócsoport:** `RadioRow` — egy Tab-megálló (kijelölt / első), a nyilak léptetnek és választanak; az igaz/hamis és a kategorizálás ezt használja (a V3a döntési kártyái is).
+- **Bővült feladat mentése:** az igaz/hamis és a kategorizálás mentése csak egyező elemszámnál áll vissza; eltérésnél az állapot (válaszok + ellenőrzött) újraindul.
+- Tesztek: `try-scoring.test.ts` (megoldhatatlan/megoldható esetek), `lesson-try-v2.spec.ts` (+3 böngészős teszt); RED `d202fa52`. Teljes egységteszt 4729/0, e2e 5 passed.

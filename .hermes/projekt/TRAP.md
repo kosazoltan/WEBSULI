@@ -55,3 +55,5 @@
 | 2026-11-25T19:30:00.000Z | Futó D:/tmp láncszkript helyben javítása után szemétsor futott („ile: command not found”, merge-one már beolvadt PR-ra) | A bash a futó fájlt bájt-eltolással olvassa | Lánc csak futásonkénti másolatból: lanc-futtat.sh; C-99 |
 | 2026-11-25T19:30:00.000Z | B8 push-kapu three-phase-check FAIL: az első kódcommit a B5b-é (halmozott ág a squash-beolvadások után) | Egymásra épített szelet-ág | halmozott-ag.sh indulás előtt; -v2 ág origin/main-ről, docs → RED → kód; C-99 |
 | 2026-11-25T19:30:00.000Z | no-lookbehind-client.test.ts piros: (?<=-) a kliens feliratbeférés-ellenőrzésében | Lookbehind a kliens kódban (régi Safari) | split('-') alapú tördelés; C-99 |
+
+| 2026-11-25T20:15:38.086Z | A futó merge-lánc KÓD-ÜTKÖZÉSE a DB-tesztlistában | Mindkét oldal csak új bejegyzést tett ugyanabba a spawn-listába (J3a blockcraft, main lesson-result-shutdown); a merge-main.sh a kód-ütközést abortálja. | A feloldás a két új fájl uniója, nem az egyik oldal választása; utána a lánc újraindítható (eb78f885). | ea8721d3 | nincs-skill: nincs megadva |
