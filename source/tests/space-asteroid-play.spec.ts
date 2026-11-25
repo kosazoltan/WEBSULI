@@ -822,6 +822,29 @@ test.describe("vak 3. kör L6 — az utolsó élet elvesztése megvárja a megol
     await expect(page.getByTestId("sa-over")).toBeVisible({ timeout: 6_000 });
     expect(Date.now() - t0, "a helyes válasz legalább 1,8 mp-ig látható volt (mérési ráhagyással)").toBeGreaterThanOrEqual(1780);
   });
+
+  test("review #486 (Vercel): a már lezárt menet kijelzése alatt a szünet menü „Kör vége” pontja azonnal az eredményképernyőt nyitja", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: "l6-exit" } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    await page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first().click();
+    await expect.poll(async () => (await probe(page)).reveal, { timeout: 3_000 }).toBe(1);
+    await force(page, { lastLife: true });
+    expect((await probe(page)).over, "az eredmény rögzült").toBe(1);
+    await page.keyboard.press("p");
+    await expect(page.getByTestId("game-pause-menu")).toBeVisible();
+    await page.getByTestId("game-exit").click();
+    await expect(page.getByTestId("game-pause-menu")).toHaveCount(0);
+    // a „Kör vége” törli a függő időzítőket (a kijelzés-várót is) — az eredményképernyőnek ettől még meg kell nyílnia
+    await expect(page.getByTestId("sa-over"), "a szünet menüből kilépve az eredményképernyő megnyílik").toBeVisible({ timeout: 3_000 });
+    await expect(page.getByTestId("sa-over")).toContainText("Kör vége");
+  });
 });
 
 /* L2 (review #486): a leghosszabb szavú, még a kristályra férő (≤ 22 karakteres) válaszok nem csonkulnak és nem törnek szó közepén */
