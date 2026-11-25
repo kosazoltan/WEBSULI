@@ -16,7 +16,7 @@ const up = (w: string) => w.trim().normalize("NFC").toLocaleUpperCase("hu");
 
 export function WordSearch({ spec, persisted, onPersist }: TryProps) {
   const { words } = readWordSearch(spec);
-  const ws = useMemo(() => buildWordSearch(words), [words.join("\u0001")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ws = useMemo(() => buildWordSearch(words), [words.join("\u0001")]);
   const [found, setFound] = useState<string[]>(() => (persisted?.kind === "wordSearch" ? persisted.found : []));
   const [start, setStart] = useState<{ r: number; c: number } | null>(null);
   const [focus, setFocus] = useState({ r: 0, c: 0 });
@@ -71,7 +71,7 @@ export function WordSearch({ spec, persisted, onPersist }: TryProps) {
 
 export function CrosswordBlock({ spec, persisted, onPersist }: TryProps) {
   const { entries } = readCrossword(spec);
-  const cw = useMemo(() => buildCrossword(entries), [JSON.stringify(entries)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cw = useMemo(() => buildCrossword(entries), [JSON.stringify(entries)]);
   const restored = persisted?.kind === "crossword" ? persisted : null;
   const [answers, setAnswers] = useState<string[]>(() => entries.map((_, i) => restored?.answers[i] ?? ""));
   const [checked, setChecked] = useState(() => restored?.checked ?? false);
