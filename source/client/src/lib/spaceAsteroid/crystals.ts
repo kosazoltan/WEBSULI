@@ -1,0 +1,510 @@
+/**
+ * Galaktikus Aszteroida — a Kristály-válasz tiszta magja (végrehajtás J6a; terv 5.6 „Q1 Kristály-válasz”).
+ *
+ * A kérdés a játék világában érkezik: 3–4 feliratozott kristály-aszteroida lebeg be a felső sávba (a játékos fölé, a
+ * képernyő felső harmadába), és a válasz maga a célpont — a helyes kristály kilövése fejlesztést ad, a rossz kristály
+ * apró sziklákra hasad (veszély, nem menetvég). A kristályok lassan, a saját „sávjukban” lebegnek, ezért soha nem
+ * fedik egymást (a mobil mérő M2 pontja: a válaszcélok nem takarhatják egymást), és soha nem érnek a játékos mozgássávjába.
+ *
+ * Tiszta TypeScript: nincs DOM, three.js, React, óra, `Math.random` (őr: `T/game-sim-determinism-guard.test.ts`, KSZ-1/2).
+ * A lap rajzol és vetít; a node-szimuláció (`sim.ts`) ugyanezt a modult hívja. A célzássegéd (`aimAssist.ts`) a kristályokra
+ * NEM vonatkozik (U-J6-1): a lap a célzássegédnek csak az ellenfeleket adja át — a kristály kiválasztása a játékosé.
+ */
+
+import { estimateLines, promptLayout, type PromptViewport } from "@/game-engine/play/promptFit";
+
+import { CAMERA_FOV_DEG, CAMERA_LOOK_Y, CAMERA_Y, CAMERA_Z, GAME_H, GAME_W, PLAYER_Y_MAX, visibleHalfWidth, type RockShard } from "./physics";
+
+/** A kristály látványának sugara (játékegység). */
+export const CRYSTAL_RADIUS = 0.9;
+/** A találati gömb a látványnál nagyobb (KSZ-12: +15–25%): megbocsátóbb a célzás ujjal. */
+export const CRYSTAL_HIT_FACTOR = 1.2;
+/**
+ * A kristály KÖZÉPPONTJA legalább ennyivel a játékos legfelső hajó-helye (`PLAYER_Y_MAX`) fölött marad (a hajó orra +0,7, a
+ * kristály fél magassága ~0,9): ha a zónának van helye, a kristály soha nem ér a hajó sávjába.
+ */
+export const CRYSTAL_FLOOR_CLEARANCE = 1.6;
+/**
+ * A zóna legkisebb magassága (játékegység ≈ 64 px): a kérdés-kártya alatti hely keskeny telefonon kicsi, hosszú kérdésnél
+ * a zóna LEJJEBB csúszik (a hajó felső sávjába) — a gomb (≥ 48 px) és a lebegés mindig belefér.
+ */
+export const CRYSTAL_MIN_ZONE_HEIGHT = 3.0;
+/**
+ * Lebegés: a sávon belüli vízszintes / függőleges kitérés felső korlátja (játékegység). ALAPÉRTÉK 0: a válaszcél a
+ * logikai helyén ÁLL — ujjal így könnyebb eltalálni / megérinteni, a kristályok soha nem fedik egymást, és a mobil mérők
+ * (M2, a joystick-mérő) stabil dobozt várnak. A „lebegés” a NÉZETÉ: a 3D kristály ring és a gomb fénye lassan billeg
+ * (csökkentett mozgásnál nem). A modul a nem nulla kitérést is helyesen kezeli (a tesztek mindkettőt mérik).
+ */
+export const CRYSTAL_DRIFT_X = 0;
+export const CRYSTAL_DRIFT_Y = 0;
+/**
+ * Egy opció felirata legfeljebb ennyi karakter: a keskeny (360 px-es) nézetben a kristály-gomb ~76 px széles, a felirat ≤ 2
+ * sor 12–14 px-en. A hosszabb feliratú tételt a forrás hátrébb sorolja (`asteroidDirectorConfig.promptFits`).
+ */
+export const CRYSTAL_LABEL_MAX_CHARS = 22;
+
+/**
+ * A kristály-felirat méret-foka a leghosszabb SZÓ szerint (a szó nem törhet közepén, és a felirat nem csonkulhat — review #486 L2):
+ * `normal` (≤ 8 karakteres szó, 14 px), `long` (9–12, 12 px), `wide` (13–16, 11 px, szélesebb gomb), `xwide` (≥ 17, 10 px, szélesebb gomb).
+ * A kötőjel törési hely (a „Dunántúli-középhegység” két szóként számít).
+ */
+export type CrystalLabelTier = "normal" | "long" | "wide" | "xwide";
+export function crystalLabelTier(label: string): CrystalLabelTier {
+  const longest = label.split(/[\s-]+/u).reduce((m, w) => Math.max(m, w.length), 0);
+  return longest >= 17 ? "xwide" : longest >= 13 ? "wide" : longest >= 9 ? "long" : "normal";
+}
+
+/** A felirat betűmérete (px) a méret-fok szerint (a lap CSS-ének tükre). */
+export const CRYSTAL_TIER_FONT_PX: Record<CrystalLabelTier, number> = { normal: 14, long: 12, wide: 11, xwide: 10 };
+
+/**
+ * A felirat leghosszabb SZAVA befér-e a gomb szövegszélességébe a VALÓDI betűszélességgel (vak ellenőrzés L5): `measure(szó, px)` a
+ * lap `canvas.measureText`-je (a teszt modellt ad). A gomb max-szélessége a CSS-ből: normal 98 px, long min(116, 32vw), wide / xwide
+ * min(150, 40vw); a belső térköz 26 / 26 / 18 px.
+ */
+export function labelFitsChip(label: string, measure: (word: string, px: number) => number, viewportWidthPx: number): boolean {
+  const tier = crystalLabelTier(label);
+  const maxWidth = tier === "normal" ? 98 : tier === "long" ? Math.min(116, 0.32 * viewportWidthPx) : Math.min(150, 0.4 * viewportWidthPx);
+  const inner = maxWidth - (tier === "wide" || tier === "xwide" ? 18 : 26);
+  const px = CRYSTAL_TIER_FONT_PX[tier];
+  if (!label.split(/[\s-]+/u).every((w) => measure(w, px) <= inner)) return false;
+  // Review #486 (#679ypC): a SOR-szám is számít — mohó tördelés a mért szóközzel; a kötőjel törési hely (a kötőjel az előző sorban
+  // marad). A lap legfeljebb CRYSTAL_LABEL_MAX_LINES sort mutat (`-webkit-line-clamp`), több sornál a jelmagyarázat jön.
+  // (lookbehind nélkül: a régi Safari nem ismeri — no-lookbehind-client.test.ts)
+  const tokens = label.trim().split(/\s+/u).flatMap((word) => {
+    const parts = word.split("-");
+    return parts.map((p, i) => ({ part: i < parts.length - 1 ? `${p}-` : p, glued: i > 0 })).filter((t) => t.part.length > 0);
+  });
+  const space = measure(" ", px);
+  let lines = 1;
+  let width = 0;
+  for (const { part, glued } of tokens) {
+    const w = measure(part, px);
+    const add = width === 0 ? w : width + (glued ? 0 : space) + w;
+    if (width > 0 && add > inner) { lines += 1; width = w; } else width = add;
+  }
+  return lines <= CRYSTAL_LABEL_MAX_LINES;
+}
+/** A kristály-felirat legfeljebb ennyi sor (a lap `-webkit-line-clamp: 3`-a). */
+export const CRYSTAL_LABEL_MAX_LINES = 3;
+
+/**
+ * Beférnek-e az opciók a kristály-feliratba (a forrás-választás szűrője; tiszta, olcsó): karakterszám ÉS — ha a hívó ad — a mért
+ * szélesség (`fits`, pl. `labelFitsChip`). Ha nem férnek be, a számozott kristályok + a teljes szövegű jelmagyarázat jön.
+ */
+export function crystalLabelsFit(options: readonly string[], fits?: (label: string) => boolean): boolean {
+  return options.every((o) => o.length <= CRYSTAL_LABEL_MAX_CHARS && (fits ? fits(o) : true));
+}
+
+/** A rossz kristályból ennyi apró szikla hasad. */
+export const CRYSTAL_SHARD_COUNT = 3;
+/** A hasadék-szikla kezdő lefelé sebessége (egység / mp, a játékos felé): a veszély látható, de kitérhető. */
+export const CRYSTAL_SHARD_VY_MIN = -3.4;
+export const CRYSTAL_SHARD_VY_MAX = -2.4;
+
+/** A kristályzóna a játéksíkon (világkoordináta). */
+export type CrystalBounds = { minX: number; maxX: number; minY: number; maxY: number };
+
+export type Crystal = {
+  /** Menetenként / kérdésenként egyedi azonosító (a bemutatott kérdés azonosítójából és az opció-indexből). */
+  id: number;
+  /** A `QuestionPresentation.options` indexe — ez a válasz. */
+  optionIndex: number;
+  /** Az opció felirata (a lap a DOM-gombra írja). */
+  label: string;
+  /** A tárolt helyes / rossz jelölés (a `hitCrystal` ebből ítél; a lap a megoldás-kijelzéshez is ezt olvassa). */
+  correct: boolean;
+  x: number;
+  y: number;
+  /** A sáv közepe, amely körül a kristály lebeg. */
+  homeX: number;
+  homeY: number;
+  /** A lebegés fázisa (rad), fázis-eltolás és kitérés — seedelt. */
+  phase: number;
+  driftX: number;
+  driftY: number;
+  /** false: már eltalálták (egyszer lehet válaszolni). */
+  alive: boolean;
+};
+
+export type CrystalPresentation = {
+  id: number;
+  options: ReadonlyArray<{ label: string; correct: boolean }>;
+};
+
+/** A hasadék-sziklák helyi alakja (a lap `EnemyState`-té alakítja). */
+export type CrystalShard = RockShard;
+
+const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+
+/**
+ * A kristályzóna: `halfWidth` a LÁTHATÓ félszélesség a játéksíkon (kamera), `minY` / `maxY` a kért alsó / felső perem
+ * (a lap a kérdés-kártya alatti sávot kéri). Az alsó perem nem lehet a hajó legfelső helye fölötti `CRYSTAL_FLOOR_CLEARANCE`
+ * alatt — kivéve, ha ettől a zóna `minHeight`-nál alacsonyabb lenne: akkor a zóna a felső pereméből lefelé nyúlik.
+ */
+export function crystalBounds(args: { halfWidth: number; minY: number; maxY: number; margin?: number; minHeight?: number }): CrystalBounds {
+  const margin = args.margin ?? 0.4;
+  const minHeight = args.minHeight ?? CRYSTAL_MIN_ZONE_HEIGHT;
+  const half = Number.isFinite(args.halfWidth) && args.halfWidth > 0 ? args.halfWidth : 9;
+  const floor = PLAYER_Y_MAX + CRYSTAL_FLOOR_CLEARANCE;
+  const top = Math.min(Number.isFinite(args.maxY) ? args.maxY : 6, GAME_H / 2 - CRYSTAL_RADIUS);
+  let bottom = Math.max(Number.isFinite(args.minY) ? args.minY : 0, floor);
+  if (top - bottom < minHeight) bottom = top - minHeight;
+  const side = Math.max(CRYSTAL_RADIUS * 2, half - margin);
+  return { minX: -side, maxX: side, minY: bottom, maxY: top };
+}
+
+/** A lebegés kitérése (játékegység); alapértéke `CRYSTAL_DRIFT_X / Y` (0: a cél áll), a tesztek nem nullát is kérhetnek. */
+export type CrystalDrift = { x?: number; y?: number };
+
+/** A sávok elrendezése: sávszélesség, megengedett kitérés és a két sor magassága (páros: fent, páratlan: lent). */
+function layout(bounds: CrystalBounds, n: number, drift?: CrystalDrift) {
+  const lane = (bounds.maxX - bounds.minX) / n;
+  const driftX = Math.max(0, Math.min(drift?.x ?? CRYSTAL_DRIFT_X, lane / 2 - CRYSTAL_RADIUS * 1.15));
+  const height = Math.max(0, bounds.maxY - bounds.minY);
+  const driftY = Math.min(drift?.y ?? CRYSTAL_DRIFT_Y, height / 4);
+  return { lane, driftX, driftY, rowLow: bounds.minY + driftY, rowHigh: bounds.maxY - driftY };
+}
+
+/**
+ * 3–4 kristály a kérdés opcióiból: az opció-sorrend a director által seedelten kevert sorrend, a sávok balról jobbra
+ * követik. Páros / páratlan sávok váltakozó magasságon (a feliratok így sem fedik egymást keskeny nézetben), a lebegés
+ * fázisa és kitérése seedelt. A kitérés sávon belül marad: két szomszéd kristály közepe soha nincs `2 × sugár`-nál közelebb.
+ */
+export function spawnCrystals(presentation: CrystalPresentation, bounds: CrystalBounds, rng: () => number, drift?: CrystalDrift): Crystal[] {
+  const n = presentation.options.length;
+  if (n < 2) return [];
+  const { lane, driftX, driftY, rowLow, rowHigh } = layout(bounds, n, drift);
+  const out: Crystal[] = [];
+  for (let i = 0; i < n; i++) {
+    const opt = presentation.options[i]!;
+    const homeX = bounds.minX + lane * (i + 0.5);
+    const homeY = i % 2 === 0 ? rowHigh : rowLow;
+    const c: Crystal = {
+      id: presentation.id * 8 + i,
+      optionIndex: i,
+      label: opt.label,
+      correct: opt.correct,
+      x: homeX,
+      y: homeY,
+      homeX,
+      homeY,
+      phase: rng() * Math.PI * 2,
+      driftX: driftX * (0.55 + 0.45 * rng()),
+      driftY: driftY * (0.55 + 0.45 * rng()),
+      alive: true,
+    };
+    placeCrystal(c);
+    out.push(c);
+  }
+  return out;
+}
+
+/** A kristály helye a fázisából: a sáv közepe + lassú, egymástól független 8-as mozgás (korlátos kitérés). */
+function placeCrystal(c: Crystal): void {
+  c.x = c.homeX + c.driftX * Math.sin(c.phase);
+  c.y = c.homeY + c.driftY * Math.sin(c.phase * 1.45 + 0.7);
+}
+
+/**
+ * A zóna megváltozott (a kérdés-kártya magassága a hosszú prompttól / a megoldás-sortól függ): a sávok közepe `ease`
+ * (0..1) arányban az új helyre húzódik — a kristályok nem ugranak. Az `ease = 1` azonnal átrendez.
+ */
+export function rezoneCrystals(crystals: Crystal[], bounds: CrystalBounds, ease = 1, drift?: CrystalDrift): void {
+  const n = crystals.length;
+  if (n < 2) return;
+  const k = Math.min(1, Math.max(0, ease));
+  const { lane, driftX, driftY, rowLow, rowHigh } = layout(bounds, n, drift);
+  for (const c of crystals) {
+    const i = c.optionIndex;
+    const targetX = bounds.minX + lane * (i + 0.5);
+    const targetY = i % 2 === 0 ? rowHigh : rowLow;
+    c.homeX += (targetX - c.homeX) * k;
+    c.homeY += (targetY - c.homeY) * k;
+    c.driftX = Math.min(c.driftX, driftX);
+    c.driftY = Math.min(c.driftY, driftY);
+    placeCrystal(c);
+  }
+}
+
+/** Lépteti a lebegést (`dtSec` játékidő). */
+export function stepCrystals(crystals: Crystal[], dtSec: number): void {
+  if (!(dtSec > 0)) return;
+  for (const c of crystals) {
+    if (!c.alive) continue;
+    // A fázis tolódik, a hely a fázisból jön: nincs állapot-torzulás hosszú futásnál, és a kitérés korlátos marad.
+    c.phase += dtSec * 0.55;
+    placeCrystal(c);
+  }
+}
+
+export type CrystalHit = { crystal: Crystal; correct: boolean };
+
+/**
+ * A kristály-azonosító szerinti találat: a helyes választ a kristály maga hordozza, a modul semmit nem kérdez vissza.
+ * Idempotens: ugyanarra a kristályra a második hívás `null` (két ujj / két lövedék egy képkockában — csak az első számít,
+ * K.2). A találat után a kristály `alive = false`.
+ */
+export function hitCrystal(crystals: Crystal[], id: number): CrystalHit | null {
+  const c = crystals.find((x) => x.id === id);
+  if (!c || !c.alive) return null;
+  c.alive = false;
+  return { crystal: c, correct: c.correct };
+}
+
+/** Az élő kristály, amelynek (megnagyobbított) találati gömbjébe esik a pont — lövedék-ütközés. */
+export function crystalAt(crystals: readonly Crystal[], x: number, y: number, bulletRadius = 0.12): Crystal | null {
+  const r = CRYSTAL_RADIUS * CRYSTAL_HIT_FACTOR + bulletRadius;
+  let best: Crystal | null = null;
+  let bestD = Infinity;
+  for (const c of crystals) {
+    if (!c.alive) continue;
+    const dx = c.x - x;
+    const dy = c.y - y;
+    const d = dx * dx + dy * dy;
+    if (d < r * r && d < bestD) {
+      best = c;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * A rossz kristály hasadéka: `CRYSTAL_SHARD_COUNT` apró (1-es méretű) szikla, a hajó felé hullva. A `splitRock`
+ * mintájára (`physics.ts`): egymástól szétnyíló vízszintes sebesség, a lefelé sebesség alulról korlátos.
+ */
+export function crystalShards(at: { x: number; y: number }, rng: () => number): CrystalShard[] {
+  const out: CrystalShard[] = [];
+  for (let k = 0; k < CRYSTAL_SHARD_COUNT; k++) {
+    const side = k - (CRYSTAL_SHARD_COUNT - 1) / 2; // -1, 0, 1
+    out.push({
+      x: at.x + side * 0.45,
+      y: at.y - 0.2 - Math.abs(side) * 0.15,
+      vx: side * (1.5 + rng() * 0.8) + (rng() - 0.5) * 0.6,
+      vy: clamp(CRYSTAL_SHARD_VY_MIN + rng() * (CRYSTAL_SHARD_VY_MAX - CRYSTAL_SHARD_VY_MIN), CRYSTAL_SHARD_VY_MIN, CRYSTAL_SHARD_VY_MAX),
+      size: 1,
+    });
+  }
+  return out;
+}
+
+/* ----------------------- élesítés és szándékos célzás (review #486 M2) ----------------------- */
+
+/** A kristály a megjelenése után ennyi ms-ig „élesedik”: nem választható (KSZ-11: ≥ 400 ms előjelzés a kérdés-kapu előtt). */
+export const CRYSTAL_ARM_MS = 500;
+
+/**
+ * Választ-e a lövedék a kristályon. Csak akkor, ha (1) a kérdés megjelenése + élesítés után telt el az idő, ÉS (2) a lövedék tűz-
+ * megnyomása (`pressAtMs`) ezután történt: a tartott tűz és a kérdés előtt kilőtt lövedék soha nem „válaszol” — a gyerek olvasás
+ * nélkül, véletlenül nem lő rossz választ. Az idők a kérdés-óra ms-ai.
+ */
+export function bulletCountsAsAnswer(a: { nowMs: number; shownAtMs: number; pressAtMs: number; /** a hármas lövés oldalsó lövedéke: soha nem válaszol (L1) */ side?: boolean }): boolean {
+  if (a.side === true) return false;
+  const armedAt = a.shownAtMs + CRYSTAL_ARM_MS;
+  return a.nowMs >= armedAt && a.pressAtMs >= armedAt;
+}
+
+/* ----------------------- a zóna meghatározása a magban (review #486, KSZ-1) ----------------------- */
+
+/**
+ * A játéksík y-koordinátája a vászon függőleges hányadánál (0 = felső, 1 = alsó él): a `three.js` kamera `unproject`
+ * számítása tisztán, a kamera-állandókból (a lap `CAMERA_*` értékei). A rajz nem számol, csak olvassa az eredményt.
+ */
+export function worldYAtScreenFrac(frac: number): number {
+  const fy = CAMERA_LOOK_Y - CAMERA_Y;
+  const fz = -CAMERA_Z;
+  const flen = Math.hypot(fy, fz);
+  const f = { y: fy / flen, z: fz / flen };
+  // a kamera „fel” vektora: merőleges az előre-vektorra, +y felé
+  const u = { y: -f.z, z: f.y };
+  const k = Math.tan((CAMERA_FOV_DEG * Math.PI) / 360);
+  const ndc = 1 - 2 * frac;
+  const dy = f.y + ndc * k * u.y;
+  const dz = f.z + ndc * k * u.z;
+  if (Math.abs(dz) < 1e-6) return CAMERA_LOOK_Y;
+  const t = -CAMERA_Z / dz;
+  return CAMERA_Y + dy * t;
+}
+
+/** A kérdés-kártya fix részei (px): fejléc (jelvény + időcsík + szünet), lábléc (állapot-sor) és a belső térközök. */
+export const PLAY_QUESTION_CARD_CHROME_PX = 92;
+/**
+ * A kártya a nézet tetejétől ennyi px-re kezdődik. A játék SAJÁT kártya-teteje (`SpaceAsteroidQuiz.tsx`:
+ * `.play-question[data-skin="space"] { --play-question-top: biztonsági sáv + 96px }`) felülírja a közös `index.css` értékét
+ * (+80; fekvőn +60) — review #486 (CI 844×390): a régi becslés 36 px-szel magasabbra tette a kártyát, a kristály-sor alá csúszott.
+ */
+export const SPACE_QUESTION_TOP_OFFSET_PX = 96;
+export function playQuestionTopPx(vp: PromptViewport, safeTopPx: number): number {
+  void vp;
+  return Math.max(4, safeTopPx) + SPACE_QUESTION_TOP_OFFSET_PX;
+}
+
+/** Fekvő telefon (a lap `@media (orientation: landscape) and (max-height: 520px)` ága). */
+export const isLandscapePhone = (vp: PromptViewport): boolean => vp.width > vp.height && vp.height <= 520;
+/** Fekvőn a „Válaszok” gomb a nézet alján, `bottom: 8px` (a lap CSS-e): a kristály-sor alja e fölött marad. */
+export const LANDSCAPE_ANSWERS_BUTTON_BOTTOM_PX = 8;
+
+/** A kártya becsült magassága (px): a prompt becsült sorai + a fix részek. Óvatos (a becslő széles betűt feltételez). */
+export function estimateCardHeightPx(prompt: string, vp: PromptViewport): number {
+  const { textWidthPx, fontPx, lineHeightPx } = promptLayout(vp, prompt.length);
+  const lines = Math.min(7, Math.max(1, estimateLines(prompt, textWidthPx, fontPx)));
+  return PLAY_QUESTION_CARD_CHROME_PX + lines * lineHeightPx;
+}
+
+/** A kérdés-kártya becsült alsó pereme a nézetben (px): a teteje + a becsült magasság. */
+export function cardBottomPxFor(vp: PromptViewport, safeTopPx: number, prompt: string): number {
+  return playQuestionTopPx(vp, safeTopPx) + estimateCardHeightPx(prompt, vp);
+}
+
+/** A kristály-gomb fél magassága (px): 48 px a legkisebb érintési cél + a lebegés ráhagyása. */
+export const CRYSTAL_CHIP_HALF_PX = 26;
+/** A két kristály-sor legkisebb függőleges távolsága (px). */
+export const CRYSTAL_MIN_ROW_GAP_PX = 72;
+/** A zóna legalsó pereme a vászon magasságának ennyi hányadánál (a kártya alatti sáv alja, ha több hely van). */
+export const CRYSTAL_ZONE_BOTTOM_FRAC = 0.52;
+
+/**
+ * A kristály-zóna a játéksíkon, a kérdés bemutatásakor EGYSZER eldöntve (nincs képkockánkénti újramérés). Bemenet: a
+ * vászon mérete és a nézethez képesti helye (`boxTopPx`), a kérdés prompt-ja és a nézet (a kártya becsült magasságához),
+ * a biztonsági sáv. Kimenet: `CrystalBounds`, amelyet a lap csak olvas.
+ */
+export function crystalZoneFor(args: {
+  boxWidthPx: number;
+  boxHeightPx: number;
+  boxTopPx: number;
+  viewport: PromptViewport;
+  prompt: string;
+  safeTopPx: number;
+  /** A kártya alatt a jelmagyarázat által elfoglalt hely (px; `legendLayoutFor().reservePx`): a kristály-sorok ez alatt kezdődnek. */
+  reservePx?: number;
+  /** Jelmagyarázat-mód (hosszú válaszok): fekvőn lent középen a „Válaszok” gomb áll, a kristály (csak szám, 64 px) e fölött marad. */
+  answersButton?: boolean;
+}): CrystalBounds {
+  const h = Math.max(1, args.boxHeightPx);
+  const reserve = Math.max(0, args.reservePx ?? 0);
+  const cardBottom = cardBottomPxFor(args.viewport, args.safeTopPx, args.prompt) + reserve;
+  const topFrac = Math.min(reserve > 0 ? LEGEND_ZONE_TOP_MAX_FRAC : 0.7, Math.max(0.05, (cardBottom + 10 + CRYSTAL_CHIP_HALF_PX - args.boxTopPx) / h));
+  const bottomFrac = Math.min(0.85, Math.max(topFrac + CRYSTAL_MIN_ROW_GAP_PX / h, CRYSTAL_ZONE_BOTTOM_FRAC));
+  const aspect = args.boxWidthPx / h;
+  const halfWidth = Math.min(GAME_W / 2, visibleHalfWidth(CAMERA_FOV_DEG, aspect, CAMERA_Z));
+  if (args.answersButton === true && isLandscapePhone(args.viewport)) {
+    // Review #486 (CI 844×390): fekvőn a kártya és a lent középen álló „Válaszok” gomb közti sáv alacsony. A kristály-sorok ebbe a
+    // sávba kerülnek; ha két sor (≥ CRYSTAL_MIN_ROW_GAP_PX) nem fér, EGY sor (a fekvő nézet elég széles négy gombnak).
+    const lowestFrac = (args.viewport.height - LANDSCAPE_ANSWERS_BUTTON_BOTTOM_PX - LEGEND_BUTTON_PX - 6 - CRYSTAL_CHIP_HALF_PX - args.boxTopPx) / h;
+    if (bottomFrac > lowestFrac) {
+      // a kártya alatti sor helye a 70%-os korlát NÉLKÜL (fekvőn a korlát a kártyára tolná a sort)
+      const underCard = Math.max(0.05, (cardBottom + 10 + CRYSTAL_CHIP_HALF_PX - args.boxTopPx) / h);
+      const twoRows = lowestFrac - underCard >= CRYSTAL_MIN_ROW_GAP_PX / h;
+      const rowFrac = Math.min(underCard, lowestFrac);
+      const upper = worldYAtScreenFrac(twoRows ? underCard : rowFrac);
+      const lower = worldYAtScreenFrac(twoRows ? lowestFrac : rowFrac);
+      return crystalBounds({ halfWidth, minY: lower, maxY: upper, minHeight: Math.max(0, upper - lower) });
+    }
+  }
+  const topY = worldYAtScreenFrac(topFrac);
+  const bottomY = worldYAtScreenFrac(bottomFrac);
+  return crystalBounds({
+    halfWidth,
+    minY: bottomY,
+    maxY: topY,
+    minHeight: Math.max(CRYSTAL_MIN_ZONE_HEIGHT, topY - worldYAtScreenFrac(topFrac + CRYSTAL_MIN_ROW_GAP_PX / h)),
+  });
+}
+
+/* --------------------- jelmagyarázat-elrendezés (vak 3. kör L1) --------------------- */
+
+/**
+ * A hosszú válaszok jelmagyarázata HELYET FOGLAL: álló nézetben közvetlenül a kérdés-kártya ALATT áll (a kristály-zóna ez alatt
+ * kezdődik, `crystalZoneFor({ reservePx })`), fekvő nézetben a kártya MELLETT, a kártya magasságában (a kristály-sorok a kártya
+ * alatt vannak). A lista magassága korlátos: ha a becsült szöveg nem fér, a lista BELÜL görgethető — a szöveg nem nő rá a
+ * kristályokra / a kártyára. Tiszta számítás: a lap a kérdés bemutatásakor EGYSZER hívja (nincs képkockánkénti mérés).
+ */
+export const LEGEND_FONT_PX = 12;
+export const LEGEND_LINE_PX = 15;
+export const LEGEND_LANDSCAPE_FONT_PX = 11;
+export const LEGEND_LANDSCAPE_LINE_PX = 13.5;
+/** Egy betű átlagos szélessége a félkövér betűtípusnál (em): óvatos (széles) becslés. */
+export const LEGEND_CHAR_EM = 0.68;
+export const LEGEND_ITEM_GAP_PX = 4;
+export const LEGEND_PAD_PX = 12;
+export const LEGEND_BUTTON_PX = 44;
+export const LEGEND_GAP_PX = 6;
+export const LEGEND_MIN_LIST_PX = 44;
+/** Az álló jelmagyarázat listája legfeljebb a nézet ekkora hányada (a többi görgethető). */
+export const LEGEND_MAX_LIST_FRAC = 0.28;
+/** A kristály-zóna teteje legfeljebb a doboz ekkora hányadánál kezdődhet (a jelmagyarázat nélküli zóna korlátjával azonos). */
+export const LEGEND_ZONE_TOP_MAX_FRAC = 0.7;
+/** Fekvőn a két oszlop szélessége a nézet szélességének hányada (a kártya a középen áll). */
+export const LEGEND_LANDSCAPE_COL_FRAC = 0.27;
+
+export type LegendLayout = {
+  landscape: boolean;
+  /** A jelmagyarázat teteje a NÉZETBEN (px). */
+  topPx: number;
+  /** A vászon-doboz teteje a nézetben (px): az álló nézet a dobozhoz képest pozicionál. */
+  boxTopPx: number;
+  /** A lista (görgethető rész) magassága (px). */
+  listPx: number;
+  /** A lista görgethető-e (a becsült szöveg magasabb a hasznos helynél). */
+  scroll: boolean;
+  /** A kártya alatt foglalt hely (px, álló nézet) — a kristály-zóna bemenete; fekvőn 0. */
+  reservePx: number;
+  /** Review #486 (#679yp8): tömör mód (álló nézet, helyhiány) — nincs lista a kártya alatt, a gomb az alsó sávban. */
+  compact: boolean;
+};
+
+function legendLines(label: string, textWidthPx: number, fontPx: number): number {
+  const perLine = Math.max(4, Math.floor(textWidthPx / (fontPx * LEGEND_CHAR_EM)));
+  return Math.max(1, Math.ceil(label.length / perLine));
+}
+
+export function legendLayoutFor(args: {
+  labels: readonly string[];
+  viewport: PromptViewport;
+  safeTopPx: number;
+  prompt: string;
+  boxTopPx: number;
+  boxHeightPx: number;
+}): LegendLayout {
+  const vp = args.viewport;
+  const landscape = vp.width > vp.height && vp.height <= 520;
+  const cardTop = playQuestionTopPx(vp, args.safeTopPx);
+  const cardBottom = cardBottomPxFor(vp, args.safeTopPx, args.prompt);
+  if (landscape) {
+    const est = landscapeLegendHeightPx(args.labels, vp.width);
+    const topPx = cardTop + 2;
+    const avail = Math.max(LEGEND_MIN_LIST_PX, cardBottom - topPx);
+    const listPx = Math.min(est, avail);
+    return { landscape, topPx, boxTopPx: args.boxTopPx, listPx, scroll: est > listPx + 0.5, reservePx: 0, compact: false };
+  }
+  const textW = vp.width - 12 - 18 - 24;
+  const est = args.labels.reduce((n, l) => n + legendLines(l, textW, LEGEND_FONT_PX) * LEGEND_LINE_PX, 0) + LEGEND_ITEM_GAP_PX * Math.max(0, args.labels.length - 1) + LEGEND_PAD_PX;
+  const header = LEGEND_BUTTON_PX + LEGEND_ITEM_GAP_PX;
+  const topPx = cardBottom + LEGEND_GAP_PX;
+  // a legalsó megengedett perem: itt kezdődik a legfelső kristály-gomb teteje (zóna teteje − fél gomb) mínusz a 10 px ráhagyás
+  const lowest = args.boxTopPx + LEGEND_ZONE_TOP_MAX_FRAC * Math.max(1, args.boxHeightPx) - CRYSTAL_CHIP_HALF_PX - 10;
+  // Review #486 (#679yp8): ha a kártya és a kristályok közt a gomb + a legkisebb lista sem fér el, a 44 px-es minimum fedést okozna —
+  // helyette TÖMÖR mód: a kártya alatt nincs lista és nincs helyfoglalás, a „Válaszok” gomb a vezérlők közti alsó sávba kerül, a
+  // teljes válaszlista a gombbal nyílik (a kristályok akkor rejtettek).
+  if (lowest - topPx - header < LEGEND_MIN_LIST_PX) return { landscape, topPx, boxTopPx: args.boxTopPx, listPx: 0, scroll: false, reservePx: 0, compact: true };
+  const avail = Math.max(LEGEND_MIN_LIST_PX, lowest - topPx - header);
+  const listPx = Math.min(est, Math.max(LEGEND_MIN_LIST_PX, Math.min(avail, vp.height * LEGEND_MAX_LIST_FRAC)));
+  return { landscape, topPx, boxTopPx: args.boxTopPx, listPx, scroll: est > listPx + 0.5, reservePx: LEGEND_GAP_PX + header + listPx, compact: false };
+}
+
+/**
+ * Review #486 (#679ype): a fekvő jelmagyarázat becsült magassága. A lista közös sorokból álló CSS-rács (1–2. a bal, 3–4. a jobb
+ * oszlopban; az 1. és a 3., illetve a 2. és a 4. elem egy sorban), ezért soronként a két elem MAXIMUMA számít; egy elem legalább a
+ * 18 px-es sorszámjel magas (+ 8 px belső térköz).
+ */
+export function landscapeLegendHeightPx(labels: readonly string[], viewportWidthPx: number): number {
+  const textW = viewportWidthPx * LEGEND_LANDSCAPE_COL_FRAC - 12 - 24; // belső térköz + sorszám
+  const item = (i: number): number => (i < labels.length ? Math.max(LEGEND_KEY_PX, legendLines(labels[i] ?? "", textW, LEGEND_LANDSCAPE_FONT_PX) * LEGEND_LANDSCAPE_LINE_PX) + 8 : 0);
+  const rows = Math.ceil(Math.min(labels.length, 4) / 2);
+  let total = 0;
+  for (let r = 0; r < rows; r++) total += Math.max(item(r), item(r + 2));
+  return total + LEGEND_ITEM_GAP_PX * Math.max(0, rows - 1);
+}
+/** A jelmagyarázat sorszámjelének mérete (a lap CSS-e: 18 × 18 px). */
+export const LEGEND_KEY_PX = 18;
