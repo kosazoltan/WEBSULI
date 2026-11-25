@@ -8,6 +8,7 @@ import {
   cardBottomPxFor,
   crystalZoneFor,
   legendLayoutFor,
+  playQuestionTopPx,
 } from "../client/src/lib/spaceAsteroid/crystals";
 import { PLAYER_Y_MAX, CAMERA_FOV_DEG, CAMERA_Z } from "../client/src/lib/spaceAsteroid/physics";
 import { worldYAtScreenFrac } from "../client/src/lib/spaceAsteroid/crystals";
@@ -70,4 +71,37 @@ test("ha a szöveg nem fér a helyre, a lista BELÜL görgethető (nem nő rá a
   const lay = legendLayoutFor({ labels: huge, viewport: vp, safeTopPx: 0, prompt: PROMPT_LONG, boxTopPx: 0, boxHeightPx: 640 });
   assert.equal(lay.scroll, true);
   assert.ok(lay.listPx <= 640 * 0.28 + 0.5, "a lista magassága korlátos");
+});
+
+/** A zóna határa (játéksík y) → képernyő-px a dobozban (bisekció a `worldYAtScreenFrac` fölött). */
+function screenPxOf(worldY: number, boxTopPx: number, boxHeightPx: number): number {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if (worldYAtScreenFrac(mid) > worldY) lo = mid; else hi = mid;
+  }
+  return boxTopPx + hi * boxHeightPx;
+}
+
+test("review #486 (CI 844×390): a kártya becsült teteje a játék saját CSS-e (`--play-question-top` = biztonsági sáv + 96 px)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(new URL("../client/src/pages/SpaceAsteroidQuiz.tsx", import.meta.url), "utf8");
+  const m = /\.play-question\[data-skin="space"\]\s*\{\s*--play-question-top:\s*calc\(max\(4px, var\(--game-safe-top\)\) \+ (\d+)px\)/.exec(page);
+  assert.ok(m, "a space skin kártya-teteje a lapon");
+  for (const vp of VIEWPORTS) assert.equal(playQuestionTopPx(vp, 0), 4 + Number(m![1]), `${vp.width}×${vp.height}`);
+});
+
+test("review #486 (CI 844×390): fekvőn a kristály-sor(ok) a kártya ALATT és a „Válaszok” gomb FÖLÖTT", () => {
+  const vp = { width: 844, height: 390 };
+  for (const prompt of ["Melyik állítás igaz?", PROMPT_LONG]) {
+    for (const boxTopPx of [0]) {
+      const boxHeightPx = vp.height - boxTopPx;
+      const zone = crystalZoneFor({ boxWidthPx: vp.width, boxHeightPx, boxTopPx, viewport: vp, prompt, safeTopPx: 0 });
+      const upperTop = screenPxOf(zone.maxY, boxTopPx, boxHeightPx) - CRYSTAL_CHIP_HALF_PX;
+      const lowerBottom = screenPxOf(zone.minY, boxTopPx, boxHeightPx) + CRYSTAL_CHIP_HALF_PX;
+      const buttonTop = vp.height - 8 - LEGEND_BUTTON_PX;
+      assert.ok(upperTop >= cardBottomPxFor(vp, 0, prompt), `a felső sor teteje (${upperTop.toFixed(0)}) a kártya alja (${cardBottomPxFor(vp, 0, prompt).toFixed(0)}) alatt`);
+      assert.ok(lowerBottom <= buttonTop, `az alsó sor alja (${lowerBottom.toFixed(0)}) a gomb teteje (${buttonTop}) fölött`);
+    }
+  }
 });
