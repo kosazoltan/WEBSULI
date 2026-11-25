@@ -12,6 +12,7 @@ import { ResultAwaitingNotice, useResultAwaiting } from "./resultAwaiting";
 import { LearningMode, LearningPager, useLearningPreference } from "./LearningControls";
 import "./lesson-experience.css";
 import { PracticeAccess } from "./SavedLessonQuiz";
+import { GapQuestion, QUIZ_FORMAT_LABEL, type QuizFormatLookup } from "./quizFormat";
 import { FinishPracticeButton } from "./FinishPracticeButton";
 import { bestVerdict, useArbiterVerdicts, type ArbiterSource } from "./arbiter";
 import { lessonFlashcards } from "@shared/lesson-flashcards";
@@ -40,9 +41,15 @@ function Result({ title, points, total, seconds, answers }: { title: string; poi
   </section>;
 }
 
+
+/** V4: a kvíztípusok címkéje (a sima egyválasztósnak nincs). */
+/** V4: kiegészítő kérdés — a hiányba a választott opció kerül. */
+
 export function LessonExperienceView({ experience: e, storageKey, reviewKey, headings, lessonId, arbiterSource, children }: { experience: LessonExperience; storageKey: string; reviewKey?: string; headings: string[]; lessonId?: string; arbiterSource?: ArbiterSource; children: (section: number | null) => ReactNode }) {
   const prefix = useId();
   const cards = useMemo(() => lessonFlashcards({ experience: e }), [e]);
+  // V4, review #603: a mentett (bejelentkezett) kvíz típusa a lecke azonos kérdéséből.
+  const quizFormats = useMemo<QuizFormatLookup>(() => Object.fromEntries(e.quiz.filter(q => q.format && q.format !== "choice").map(q => [q.id, { format: q.format!, question: q.question }])), [e]);
   const tabs = TABS.filter(t => (t.id !== "review" || cards.length > 0) && (t.id !== "pronounce" || !!e.language));
   // Spec 2026-10-21-nyelvlecke-kiejtes: nyelvleckén a feladatok diktálása alapból a lecke nyelvén (az angol válasz magyar felismerővel értelmetlen).
   const [dictationLanguage, setDictationLanguage] = useState(e.language ?? "hu-HU");
@@ -161,11 +168,13 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
       {awaiting === "quiz" && <ResultAwaitingNotice awaiting={awaiting} onGo={changeTab} />}
     </div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-quiz`} aria-labelledby={`${prefix}-fusion-tab-quiz`} hidden={tab !== "quiz"} className="fusion-panel fusion-panel-quiz" data-overview={true} data-finished={savedFinished ?? !!quizState.round.finishedAt}>
-      <PracticeAccess lessonId={lessonId} enabled={tab === "quiz"} onFinished={setSavedFinished} onReview={id => jumpToTeaching(e.quiz.find(q => q.id === id)?.sectionIndex ?? 0)}>
+      <PracticeAccess lessonId={lessonId} enabled={tab === "quiz"} formats={quizFormats} onFinished={setSavedFinished} onReview={id => jumpToTeaching(e.quiz.find(q => q.id === id)?.sectionIndex ?? 0)}>
       <div className="fusion-round-head"><div><span className="fusion-eyebrow">Helyi önellenőrzés</span><h2>Kvíz</h2><p>{quizRound} kérdés a {e.quiz.length}-ből · {Object.keys(quizState.round.picks).length} megválaszolva · {quizPoints} pont</p></div><div className="learning-round-actions"><button className="lesson-outline-btn" onClick={() => setResetTarget("quiz")}><RotateCcw size={17} /> Új kvíz</button></div></div>
       {quiz.map((q, index) => {
         const pick = quizState.round.picks[q.id];
-        return <section className="lesson-block fusion-quiz" key={q.id} data-quiz-id={q.id} tabIndex={-1} ref={element => { if (element) quizElements.current.set(q.id, element); else quizElements.current.delete(q.id); }}><span className="fusion-eyebrow">{index + 1}. kérdés</span><h3>{q.question}</h3><div className="fusion-choices">{/* Spec 2026-11-02-valasz-keveres: shuffled display order, `i` stays the stored index. */}{(quizLayout.get(choiceSeed(q.question, q.options)) ?? displayOrder(choiceSeed(q.question, q.options), q.options, q.feedbackPerOption)).map((i, position) => <button className="lesson-option" key={i} disabled={pick !== undefined || !!quizState.round.finishedAt} aria-pressed={pick === i} data-state={pick === i ? i === q.correctIndex ? "right" : "wrong" : undefined} onClick={() => quizState.setRound(old => old.picks[q.id] !== undefined ? old : ({ ...old, picks: { ...old.picks, [q.id]: i }, lastAnsweredAt: Date.now() }))}><span className="lesson-option-key">{"ABCD"[position]}</span>{q.options[i]}</button>)}</div>
+        // V4: a kvíztípus címkéje és a kiegészítés hiánya (index-alapú; docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md).
+        const format = q.format ?? "choice";
+        return <section className="lesson-block fusion-quiz" key={q.id} data-quiz-id={q.id} data-quiz-format={format} tabIndex={-1} ref={element => { if (element) quizElements.current.set(q.id, element); else quizElements.current.delete(q.id); }}><span className="fusion-eyebrow">{index + 1}. kérdés{QUIZ_FORMAT_LABEL[format] ? ` · ${QUIZ_FORMAT_LABEL[format]}` : ""}</span><h3>{format === "fillGap" ? <GapQuestion text={q.question} fill={pick !== undefined ? q.options[pick] : undefined} /> : q.question}</h3><div className="fusion-choices">{/* Spec 2026-11-02-valasz-keveres: shuffled display order, `i` stays the stored index. */}{(quizLayout.get(choiceSeed(q.question, q.options)) ?? displayOrder(choiceSeed(q.question, q.options), q.options, q.feedbackPerOption)).map((i, position) => <button className="lesson-option" key={i} disabled={pick !== undefined || !!quizState.round.finishedAt} aria-pressed={pick === i} data-state={pick === i ? i === q.correctIndex ? "right" : "wrong" : undefined} onClick={() => quizState.setRound(old => old.picks[q.id] !== undefined ? old : ({ ...old, picks: { ...old.picks, [q.id]: i }, lastAnsweredAt: Date.now() }))}><span className="lesson-option-key">{"ABCD"[position]}</span>{q.options[i]}</button>)}</div>
           {pick !== undefined && <VerdictFeedback right={pick === q.correctIndex} text={q.feedbackPerOption[pick]} question={{ text: q.question, options: q.options }} />}
           {quizState.round.finishedAt && pick === undefined && <p>Nem válaszoltál · 0 pont. Helyes válasz: {q.options[q.correctIndex]}. {stripVerdictPrefix(q.feedbackPerOption[q.correctIndex], true)}</p>}
         </section>;
