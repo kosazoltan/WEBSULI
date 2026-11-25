@@ -473,16 +473,26 @@ export const AUTHOR_BLOCK_CATALOG = [
   VISUAL_PARAMS_CONTRACT,
   'Geometriai körvonalhoz animKind="geometry". Ne találj ki új animKind értéket (például triangleHeightCases).',
   '- { "kind": "check", "question": string, "options": string[2..5], "correctIndex": number, "feedbackPerOption": string[ugyanannyi mint options], "hint"?: string, "coversConceptIds": string[] }',
-  `- { "kind": "try", "tryKind": ${PROMPT_TRY_KINDS.map((k) => JSON.stringify(k)).join("|")}, "spec": object, "coversConceptIds": string[] }`,
+  '- { "kind": "try", "tryKind": "dragSort"|"fillBlank"|"match", "spec": object, "coversConceptIds": string[] }',
   'A try.spec PONTOS alakja: fillBlank: {"text":"Mondat ___ hiánnyal", "answers":["megoldás"]}, ugyanannyi answers, mint ___; match: {"pairs":[{"left":"fogalom", "right":"jelentés"}]}; dragSort: {"items":["második","első"], "correctOrder":["első","második"]}, azonos elemekkel, eltérő sorrendben. Ne használj helyettük prompt, blanks vagy solution mezőt.',
-  // V2b: az öt új gyakorlófajta PONTOS spec-alakja (a séma ellenőrzi: shared/try-scoring.ts).
-  'Új gyakorlófajták (V2b) try.spec alakja: trueFalseSeries: {"statements":[{"text":"állítás","answer":true,"explanation":"miért"}]} 2–8 állítással, igaz és hamis is legyen köztük; highlight: {"prompt":"Jelöld ki a …!","text":"a kiemelendő szöveg","targets":["szó"]} 1–8 célszóval, mindegyik a text egy szava pontosan; categorize: {"categories":["A","B"],"items":[{"text":"elem","category":"A"}]} 2–4 kategória, 3–12 elem, minden kategória az items-ben előforduló; numberLine: {"prompt":"Hol van a …?","min":0,"max":10,"step":1,"target":7,"tolerance":0.5} (min < target < max, a tűrés a tartomány negyedénél kisebb) — CSAK számos tartalomhoz; estimate: {"prompt":"Becsüld meg …!","min":0,"max":1000,"step":10,"answer":400,"unit":"m"} — CSAK a forrásban szereplő, ellenőrizhető mennyiséghez. A helyes válasz (answer, target, category, targets) mindig a forrásból / a fejezet tanításából következik.',
   'A geometry params PONTOS alakja: {"shape":"triangle"|"circle"|"square", "label":"rövid cím"}. Ez egyszerű körvonalat rajzol. A caption csak ezt ígérheti: nincs benne magasságvonal, körcikk, jelölt szög vagy mozgatás. Bonyolultabb összefüggést example/explain blokkban vezess le.',
   'A triangleArea params PONTOS alakja: {"base":6,"height":4,"unit":"cm"}. base/height: 0.1–1000 közötti szám, unit: cm vagy m. Kizárólag a fejezetben ténylegesen tanított háromszög-területhez, a forrás példájának alap/magasság adataival. Jóslás, oldalirányú csúcsmozgatás, merőleges magasság és területváltozás, önálló magyarázat. A laborban mozgatott változatok szemléltető kísérletek, nem új forrásadatok; az eredeti kidolgozott példát őrizd meg.',
   DECISION_STORY_CONTRACT,
   '- { "kind": "recap", "bullets": string[], "nextLessonId"?: string } (fogalom-hivatkozás nélkül)',
   'Más kind (pl. "text", "quiz", "video") ÉRVÉNYTELEN, a lecke elutasításra kerül.',
 ].join("\n");
+
+/**
+ * V2b (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md): az új gyakorlófajták katalógus-kiegészítése — CSAK BE
+ * változatossági kapcsolónál kerül a szerzői promptba (KI kapcsolónál a prompt bájtra a régi: tests/source-visuals-flag.test.ts).
+ */
+export const AUTHOR_BLOCK_CATALOG_VARIETY = [
+  `A VÁLTOZATOSSÁG mellett a try blokk tryKind értéke ezek egyike is lehet: ${PROMPT_TRY_KINDS.filter((k) => !["dragSort", "fillBlank", "match"].includes(k)).map((k) => JSON.stringify(k)).join("|")}.`,
+  'Új gyakorlófajták (V2b) try.spec alakja: trueFalseSeries: {"statements":[{"text":"állítás","answer":true,"explanation":"miért"}]} 2–8 állítással, igaz és hamis is legyen köztük; highlight: {"prompt":"Jelöld ki a …!","text":"a kiemelendő szöveg","targets":["szó"]} 1–8 célszóval, mindegyik a text egy szava pontosan; categorize: {"categories":["A","B"],"items":[{"text":"elem","category":"A"}]} 2–4 kategória, 3–12 elem, minden kategória az items-ben előforduló; numberLine: {"prompt":"Hol van a …?","min":0,"max":10,"step":1,"target":7,"tolerance":0.5} (min < target < max, a tűrés a tartomány negyedénél kisebb) — CSAK számos tartalomhoz; estimate: {"prompt":"Becsüld meg …!","min":0,"max":1000,"step":10,"answer":400,"unit":"m"} — CSAK a forrásban szereplő, ellenőrizhető mennyiséghez. A helyes válasz (answer, target, category, targets) mindig a forrásból / a fejezet tanításából következik.',
+].join("\n");
+
+/** A szerzői katalógus a futás kapcsolója szerint (BE változatosság: a kiegészítéssel). */
+export const authorBlockCatalog = (): string => (effectiveLessonVariety() ? `${AUTHOR_BLOCK_CATALOG}\n${AUTHOR_BLOCK_CATALOG_VARIETY}` : AUTHOR_BLOCK_CATALOG);
 
 /** Shared author/reviewer evidence policy; examples are source data, never instructions. */
 export const SOURCE_REVIEW_RULES = [
@@ -503,7 +513,7 @@ export function buildSchemaRetryUser(zodIssues: string, repair?: { targetSection
     repair ? "A válaszod NEM felelt meg a CÉLZOTT JAVÍTÁS szerződésének vagy a Lesson sémának. Pontos hibák:" : "A válaszod NEM felelt meg a Lesson sémának. Pontos hibák:",
     zodIssues,
     "",
-    AUTHOR_BLOCK_CATALOG,
+    authorBlockCatalog(),
     "",
     // U4 (C4/H5): célzott módban az újrakérés is folt-alakot kér — a „teljes leckét” kérés ↔ folt-egyesítés ellentmondás megszűnt.
     repair
@@ -571,7 +581,7 @@ export function buildAuthorPrompt(
     TEACHING_CONTRACT,
     `A használható fogalom-azonosítók (coversConceptIds) KIZÁRÓLAG: ${conceptIds.join(", ")}`,
     "",
-    AUTHOR_BLOCK_CATALOG,
+    authorBlockCatalog(),
     "",
     LESSON_ARC_CONTRACT,
     LESSON_METHOD_CONTRACT,
