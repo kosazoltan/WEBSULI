@@ -231,13 +231,25 @@ def fts_refresh(c, task_id: int):
 def add_event(c, code: str, kind: str, detail, actor: str = "kezi", evidence=None, dedupe: str | None = None,
               at: str | None = None) -> bool:
     cur = c.execute("INSERT OR IGNORE INTO task_events(task_id,at,actor,kind,detail,evidence,dedupe) VALUES(?,?,?,?,?,?,?)",
-                    (_tid(c, code), at or now(), actor, kind, m(detail), m(evidence), dedupe))
+                    (_tid(c, code), at or now(), m(actor), m(kind) or "?", m(detail), m(evidence), dedupe))
     return cur.rowcount > 0
+
+
+IDENT_FIELDS = ("code", "requirement_code", "parent", "szelet", "branch", "spec")
+
+
+def _ident(name: str, v) -> None:
+    """Azonosítóként használt mező (kód, ág, spec-út…): érzékeny tartalom esetén ELUTASÍTÁS, nem maszkolás — a maszkolt
+    azonosító eltörné a kapcsolatokat (ág ↔ PR, szelet ↔ Állapot-sor). Az üzenet az értéket nem ismétli meg."""
+    if v is not None and mask(str(v)) != str(v):
+        raise AllapotHiba(f"érzékeny adat (e-mail-cím / titok) a(z) {name} mezőben — elutasítva")
 
 
 def new_task(c, code: str, title: str, *, goal=None, origin=None, requirement_code=None, parent=None, priority: int = 3,
              status: str = "beadva", szelet=None, next_step=None, blocker=None, branch=None, spec=None, notes=None,
              source: str = "kezi", actor: str = "kezi") -> int:
+    for name, v in zip(IDENT_FIELDS, (code, requirement_code, parent, szelet, branch, spec)):
+        _ident(name, v)
     if get_task(c, code):
         raise AllapotHiba(f"már létezik: {code}")
     if status not in STATUSES:
@@ -318,6 +330,8 @@ def update_fields(c, code: str, **kw) -> bool:
             raise AllapotHiba(f"ismeretlen mező: {k}")
         if k in ("title", "goal", "origin", "next_step", "blocker", "notes"):
             v = m(v)
+        elif k in IDENT_FIELDS:
+            _ident(k, v)
         if t[k] != v:
             ch[k] = v
     if not ch:
@@ -398,6 +412,7 @@ def link(c, code: str, kind: str, ref, state=None, extra: dict | None = None) ->
         raise AllapotHiba(f"ismeretlen hivatkozásfajta: {kind} (lehetséges: {', '.join(LINK_KINDS)})")
     tid = _tid(c, code)
     ref = m(str(ref))
+    state = m(state) if state is not None else None  # szabad szöveg (kapcsol --allapot) is lehet
     ex = json.dumps(mask_obj(extra), ensure_ascii=False, sort_keys=True) if extra is not None else None
     r = c.execute("SELECT state, extra FROM task_links WHERE task_id=? AND kind=? AND ref=?", (tid, kind, ref)).fetchone()
     if not r:
@@ -421,11 +436,21 @@ def progress(c, code: str) -> dict:
 
 
 def flag_decision(c, name: str, value: str, decided_at: str, source=None, task_code=None) -> bool:
-    cur = c.execute("INSERT OR IGNORE INTO flag_decisions(name,value,decided_at,source,task_code) VALUES(?,?,?,?,?)",
-                    (name.strip().upper(), m(value), decided_at, m(source), task_code))
-    if cur.rowcount and task_code and get_task(c, task_code):
-        link(c, task_code, "flag", name.strip().upper(), state=m(value))
-    return cur.rowcount > 0
+    """Upsert (name, decided_at) kulcson: azonos értékkel no-op (a visszatöltés idempotens marad), új értékkel felülír —
+    az aznapi / azonos időpontú új döntés nem vész el. A kézi CLI másodperc-pontos időbélyeget ad (cmd_kapcsolo)."""
+    name = name.strip().upper()
+    _ident("kapcsoló", name)
+    _ident("feladat", task_code)
+    val, src = m(value), m(source)
+    r = c.execute("SELECT value, source, task_code FROM flag_decisions WHERE name=? AND decided_at=?", (name, decided_at)).fetchone()
+    if r and (r[0], r[1], r[2]) == (val, src, task_code):
+        return False
+    c.execute("INSERT INTO flag_decisions(name,value,decided_at,source,task_code) VALUES(?,?,?,?,?) "
+              "ON CONFLICT(name, decided_at) DO UPDATE SET value=excluded.value, source=excluded.source, task_code=excluded.task_code",
+              (name, val, decided_at, src, task_code))
+    if task_code and get_task(c, task_code):
+        link(c, task_code, "flag", name, state=val)
+    return True
 
 
 # ---------------------------------------------------------------- Állapot-sor
@@ -532,14 +557,14 @@ def cmd_esemeny(c, a):
 
 def cmd_kapcsol(c, a):
     ch = link(c, a.code, a.fajta, a.ref, state=a.allapot)
-    _out(a, {"valtozott": ch}, lambda: print(f"{a.code} ↔ {a.fajta}:{a.ref} ({'új/változott' if ch else 'változatlan'})"))
+    _out(a, {"valtozott": ch}, lambda: print(safe(f"{a.code} ↔ {a.fajta}:{a.ref} ({'új/változott' if ch else 'változatlan'})")))
 
 
 def cmd_kapcsolo(c, a):
     if a.nev:
         if not a.ertek or not a.forras:
             raise AllapotHiba("kapcsoló-döntéshez: <NÉV> <érték> --forras <ki/hol döntött>")
-        flag_decision(c, a.nev, a.ertek, a.datum or now()[:10], source=a.forras, task_code=a.feladat)
+        flag_decision(c, a.nev, a.ertek, a.datum or now(), source=a.forras, task_code=a.feladat)  # másodperc-pontos
     rows = _rows(c.execute("SELECT * FROM v_kapcsolo_dontesek ORDER BY name"))
 
     def txt():
@@ -843,11 +868,12 @@ def sync_gh(c, gh_prs, gh_threads, rep: dict) -> list[dict]:
     for pr in prs:
         n, st = str(pr["number"]), pr["state"]
         codes = set(by_pr.get(n, ())) | set(by_branch.get(pr.get("headRefName") or "", ()))
+        head = pr.get("headRefName")
         if not codes and st == "OPEN":
             code = f"PR-{n}"
             if not get_task(c, code):
                 new_task(c, code, pr["title"], origin="gh:pr", requirement_code=f"PR#{n}", status="review",
-                         branch=pr.get("headRefName"), source="szinkron", actor="szinkron")
+                         branch=head if head and mask(head) == head else None, source="szinkron", actor="szinkron")
                 rep["uj"] += 1
                 rep["valtozas"] += 1
             codes = {code}
