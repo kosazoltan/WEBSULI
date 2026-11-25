@@ -417,4 +417,3 @@ test("vak 3. kör L4: a lecke-kupon bónusz a lejárt kérdésre -1-et kap, a me
   assert.equal(couponClaimIndex({ result: "correct", pickedOriginalIndex: 0 }), 0, "a 0. index is érvényes választás");
   assert.equal(couponClaimIndex({ result: "wrong", pickedOriginalIndex: null }), null);
 });
-
